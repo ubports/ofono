@@ -1,0 +1,265 @@
+/*
+ *
+ *  oFono - Open Source Telephony
+ *
+ *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program; if not, write to the Free Software
+ *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+ *
+ */
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
+
+#include <glib.h>
+#include <gdbus.h>
+
+#include "ofono.h"
+
+#define DBUS_GSM_ERROR_INTERFACE "org.ofono.Error"
+
+static DBusConnection *g_connection;
+
+static void append_variant(DBusMessageIter *iter,
+				int type, void *value)
+{
+	char sig[2];
+	DBusMessageIter valueiter;
+
+	sig[0] = type;
+	sig[1] = 0;
+
+	dbus_message_iter_open_container(iter, DBUS_TYPE_VARIANT,
+						sig, &valueiter);
+
+	dbus_message_iter_append_basic(&valueiter, type, value);
+
+	dbus_message_iter_close_container(iter, &valueiter);
+}
+
+void ofono_dbus_dict_append(DBusMessageIter *dict,
+			const char *key, int type, void *value)
+{
+	DBusMessageIter keyiter;
+
+	if (type == DBUS_TYPE_STRING) {
+		const char *str = *((const char **) value);
+		if (str == NULL)
+			return;
+	}
+
+	dbus_message_iter_open_container(dict, DBUS_TYPE_DICT_ENTRY,
+							NULL, &keyiter);
+
+	dbus_message_iter_append_basic(&keyiter, DBUS_TYPE_STRING, &key);
+
+	append_variant(&keyiter, type, value);
+
+	dbus_message_iter_close_container(dict, &keyiter);
+}
+
+static void append_array_variant(DBusMessageIter *iter, int type, void *val)
+{
+	DBusMessageIter variant, array;
+	char typesig[2];
+	char arraysig[3];
+	const char **str_array = *(const char ***)val;
+	int i;
+
+	arraysig[0] = DBUS_TYPE_ARRAY;
+	arraysig[1] = typesig[0] = type;
+	arraysig[2] = typesig[1] = '\0';
+
+	dbus_message_iter_open_container(iter, DBUS_TYPE_VARIANT,
+						arraysig, &variant);
+
+	dbus_message_iter_open_container(&variant, DBUS_TYPE_ARRAY,
+						typesig, &array);
+
+	for (i = 0; str_array[i]; i++)
+		dbus_message_iter_append_basic(&array, type,
+						&(str_array[i]));
+
+	dbus_message_iter_close_container(&variant, &array);
+
+	dbus_message_iter_close_container(iter, &variant);
+}
+
+void ofono_dbus_dict_append_array(DBusMessageIter *dict, const char *key,
+				int type, void *val)
+{
+	DBusMessageIter entry;
+
+	dbus_message_iter_open_container(dict, DBUS_TYPE_DICT_ENTRY,
+						NULL, &entry);
+
+	dbus_message_iter_append_basic(&entry, DBUS_TYPE_STRING, &key);
+
+	append_array_variant(&entry, type, val);
+
+	dbus_message_iter_close_container(dict, &entry);
+}
+
+int ofono_dbus_signal_property_changed(DBusConnection *conn,
+					const char *path,
+					const char *interface,
+					const char *name,
+					int type, void *value)
+{
+	DBusMessage *signal;
+	DBusMessageIter iter;
+
+	signal = dbus_message_new_signal(path, interface, "PropertyChanged");
+
+	if (!signal) {
+		ofono_error("Unable to allocate new %s.PropertyChanged signal",
+				interface);
+		return -1;
+	}
+
+	dbus_message_iter_init_append(signal, &iter);
+
+	dbus_message_iter_append_basic(&iter, DBUS_TYPE_STRING, &name);
+
+	append_variant(&iter, type, value);
+
+	return g_dbus_send_message(conn, signal);
+}
+
+int ofono_dbus_signal_array_property_changed(DBusConnection *conn,
+						const char *path,
+						const char *interface,
+						const char *name,
+						int type, void *value)
+
+{
+	DBusMessage *signal;
+	DBusMessageIter iter;
+
+	signal = dbus_message_new_signal(path, interface, "PropertyChanged");
+
+	if (!signal) {
+		ofono_error("Unable to allocate new %s.PropertyChanged signal",
+				interface);
+		return -1;
+	}
+
+	dbus_message_iter_init_append(signal, &iter);
+
+	dbus_message_iter_append_basic(&iter, DBUS_TYPE_STRING, &name);
+
+	append_array_variant(&iter, type, value);
+
+	return g_dbus_send_message(conn, signal);
+}
+
+DBusMessage *__ofono_error_invalid_args(DBusMessage *msg)
+{
+	return g_dbus_create_error(msg, DBUS_GSM_ERROR_INTERFACE
+					".InvalidArguments",
+					"Invalid arguments in method call");
+}
+
+DBusMessage *__ofono_error_invalid_format(DBusMessage *msg)
+{
+	return g_dbus_create_error(msg, DBUS_GSM_ERROR_INTERFACE
+					".InvalidFormat",
+					"Argument format is not recognized");
+}
+
+DBusMessage *__ofono_error_not_implemented(DBusMessage *msg)
+{
+	return g_dbus_create_error(msg, DBUS_GSM_ERROR_INTERFACE
+					".NotImplemented",
+					"Implementation not provided");
+}
+
+DBusMessage *__ofono_error_failed(DBusMessage *msg)
+{
+	return g_dbus_create_error(msg, DBUS_GSM_ERROR_INTERFACE ".Failed",
+					"Operation failed");
+}
+
+DBusMessage *__ofono_error_busy(DBusMessage *msg)
+{
+	return g_dbus_create_error(msg, DBUS_GSM_ERROR_INTERFACE ".InProgress",
+					"Operation already in progress");
+}
+
+DBusMessage *__ofono_error_not_found(DBusMessage *msg)
+{
+	return g_dbus_create_error(msg, DBUS_GSM_ERROR_INTERFACE ".NotFound",
+			"Object is not found or not valid for this operation");
+}
+
+DBusMessage *__ofono_error_not_active(DBusMessage *msg)
+{
+	return g_dbus_create_error(msg, DBUS_GSM_ERROR_INTERFACE ".NotActive",
+			"Operation is not active or in progress");
+}
+
+DBusMessage *__ofono_error_not_supported(DBusMessage *msg)
+{
+	return g_dbus_create_error(msg, DBUS_GSM_ERROR_INTERFACE
+					".NotSupported",
+					"Operation is not supported by the"
+					" network / modem");
+}
+
+DBusMessage *__ofono_error_timed_out(DBusMessage *msg)
+{
+	return g_dbus_create_error(msg, DBUS_GSM_ERROR_INTERFACE ".Timedout",
+			"Operation failure due to timeout");
+}
+
+void __ofono_dbus_pending_reply(DBusMessage **msg, DBusMessage *reply)
+{
+	DBusConnection *conn = ofono_dbus_get_connection();
+
+	g_dbus_send_message(conn, reply);
+
+	dbus_message_unref(*msg);
+	*msg = NULL;
+}
+
+DBusConnection *ofono_dbus_get_connection()
+{
+	return g_connection;
+}
+
+static void dbus_gsm_set_connection(DBusConnection *conn)
+{
+	if (conn && g_connection != NULL)
+		ofono_error("Setting a connection when it is not NULL");
+
+	g_connection = conn;
+}
+
+int __ofono_dbus_init(DBusConnection *conn)
+{
+	dbus_gsm_set_connection(conn);
+
+	return 0;
+}
+
+void __ofono_dbus_cleanup(void)
+{
+	DBusConnection *conn = ofono_dbus_get_connection();
+
+	if (!conn || !dbus_connection_get_is_connected(conn))
+		return;
+
+	dbus_gsm_set_connection(NULL);
+}
