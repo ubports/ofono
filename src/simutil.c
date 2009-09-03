@@ -27,7 +27,7 @@
 
 #include <glib.h>
 
-#include "driver.h"
+#include <ofono/types.h>
 #include "simutil.h"
 #include "util.h"
 #include "smsutil.h"
@@ -403,16 +403,20 @@ const struct sim_eons_operator_info *sim_eons_lookup_with_lac(
 }
 
 gboolean sim_adn_parse(const unsigned char *data, int length,
-			struct ofono_phone_number *ph)
+			struct ofono_phone_number *ph, char **identifier)
 {
 	int number_len;
 	int ton_npi;
+	const unsigned char *alpha;
+	int alpha_length;
 
 	if (length < 14)
 		return FALSE;
 
-	/* Skip Alpha-Identifier field */
-	data += length - 14;
+	alpha = data;
+	alpha_length = length - 14;
+
+	data += alpha_length;
 
 	number_len = *data++;
 	ton_npi = *data++;
@@ -423,22 +427,50 @@ gboolean sim_adn_parse(const unsigned char *data, int length,
 	ph->type = ton_npi;
 
 	/* BCD coded, however the TON/NPI is given by the first byte */
-	number_len = (number_len - 1) * 2;
-
+	number_len -= 1;
 	extract_bcd_number(data, number_len, ph->number);
+
+	if (identifier == NULL)
+		return TRUE;
+
+	/* Alpha-Identifier field */
+	if (alpha_length > 0)
+		*identifier = sim_string_to_utf8(alpha, alpha_length);
+	else
+		*identifier = NULL;
 
 	return TRUE;
 }
 
 void sim_adn_build(unsigned char *data, int length,
-			const struct ofono_phone_number *ph)
+			const struct ofono_phone_number *ph,
+			const char *identifier)
 {
 	int number_len = strlen(ph->number);
+	unsigned char *gsm_identifier = NULL;
+	long gsm_bytes;
+	long alpha_length;
+
+	alpha_length = length - 14;
 
 	/* Alpha-Identifier field */
-	if (length > 14) {
-		memset(data, 0xff, length - 14);
-		data += length - 14;
+	if (alpha_length > 0) {
+		memset(data, 0xff, alpha_length);
+
+		if (identifier)
+			gsm_identifier = convert_utf8_to_gsm(identifier,
+					-1, NULL, &gsm_bytes, 0);
+
+		if (gsm_identifier) {
+			memcpy(data, gsm_identifier,
+				MIN(gsm_bytes, alpha_length));
+			g_free(gsm_identifier);
+		}
+
+		/* TODO: figure out when the identifier needs to
+		 * be encoded in UCS2 and do this.
+		 */
+		data += alpha_length;
 	}
 
 	number_len = (number_len + 1) / 2;

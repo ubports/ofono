@@ -26,11 +26,12 @@
 #include <string.h>
 #include <glib.h>
 
+#define OFONO_API_SUBJECT_TO_CHANGE
 #include <ofono/plugin.h>
 #include <ofono/log.h>
 #include <ofono/history.h>
+#include <ofono/types.h>
 
-#include "driver.h"
 #include "common.h"
 
 static int example_history_probe(struct ofono_history_context *context)

@@ -112,6 +112,59 @@ void ofono_dbus_dict_append_array(DBusMessageIter *dict, const char *key,
 	dbus_message_iter_close_container(dict, &entry);
 }
 
+static void append_dict_variant(DBusMessageIter *iter, int type, void *val)
+{
+	DBusMessageIter variant, array, entry;
+	char typesig[5];
+	char arraysig[6];
+	const void **val_array = *(const void ***)val;
+	int i;
+
+	arraysig[0] = DBUS_TYPE_ARRAY;
+	arraysig[1] = typesig[0] = DBUS_DICT_ENTRY_BEGIN_CHAR;
+	arraysig[2] = typesig[1] = DBUS_TYPE_STRING;
+	arraysig[3] = typesig[2] = type;
+	arraysig[4] = typesig[3] = DBUS_DICT_ENTRY_END_CHAR;
+	arraysig[5] = typesig[4] = '\0';
+
+	dbus_message_iter_open_container(iter, DBUS_TYPE_VARIANT,
+						arraysig, &variant);
+
+	dbus_message_iter_open_container(&variant, DBUS_TYPE_ARRAY,
+						typesig, &array);
+
+	for (i = 0; val_array[i]; i += 2) {
+		dbus_message_iter_open_container(&array, DBUS_TYPE_DICT_ENTRY,
+							NULL, &entry);
+
+		dbus_message_iter_append_basic(&entry, DBUS_TYPE_STRING,
+						&(val_array[i + 0]));
+		dbus_message_iter_append_basic(&entry, type,
+						&(val_array[i + 1]));
+
+		dbus_message_iter_close_container(&array, &entry);
+	}
+
+	dbus_message_iter_close_container(&variant, &array);
+
+	dbus_message_iter_close_container(iter, &variant);
+}
+
+void ofono_dbus_dict_append_dict(DBusMessageIter *dict, const char *key,
+				int type, void *val)
+{
+	DBusMessageIter entry;
+
+	dbus_message_iter_open_container(dict, DBUS_TYPE_DICT_ENTRY,
+						NULL, &entry);
+
+	dbus_message_iter_append_basic(&entry, DBUS_TYPE_STRING, &key);
+
+	append_dict_variant(&entry, type, val);
+
+	dbus_message_iter_close_container(dict, &entry);
+}
+
 int ofono_dbus_signal_property_changed(DBusConnection *conn,
 					const char *path,
 					const char *interface,
@@ -161,6 +214,33 @@ int ofono_dbus_signal_array_property_changed(DBusConnection *conn,
 	dbus_message_iter_append_basic(&iter, DBUS_TYPE_STRING, &name);
 
 	append_array_variant(&iter, type, value);
+
+	return g_dbus_send_message(conn, signal);
+}
+
+int ofono_dbus_signal_dict_property_changed(DBusConnection *conn,
+						const char *path,
+						const char *interface,
+						const char *name,
+						int type, void *value)
+
+{
+	DBusMessage *signal;
+	DBusMessageIter iter;
+
+	signal = dbus_message_new_signal(path, interface, "PropertyChanged");
+
+	if (!signal) {
+		ofono_error("Unable to allocate new %s.PropertyChanged signal",
+				interface);
+		return -1;
+	}
+
+	dbus_message_iter_init_append(signal, &iter);
+
+	dbus_message_iter_append_basic(&iter, DBUS_TYPE_STRING, &name);
+
+	append_dict_variant(&iter, type, value);
 
 	return g_dbus_send_message(conn, signal);
 }
@@ -224,6 +304,12 @@ DBusMessage *__ofono_error_timed_out(DBusMessage *msg)
 			"Operation failure due to timeout");
 }
 
+DBusMessage *__ofono_error_sim_not_ready(DBusMessage *msg)
+{
+	return g_dbus_create_error(msg, DBUS_GSM_ERROR_INTERFACE ".SimNotReady",
+			"SIM is not ready or not inserted");
+}
+
 void __ofono_dbus_pending_reply(DBusMessage **msg, DBusMessage *reply)
 {
 	DBusConnection *conn = ofono_dbus_get_connection();
@@ -232,6 +318,50 @@ void __ofono_dbus_pending_reply(DBusMessage **msg, DBusMessage *reply)
 
 	dbus_message_unref(*msg);
 	*msg = NULL;
+}
+
+gboolean __ofono_dbus_valid_object_path(const char *path)
+{
+	unsigned int i;
+	char c = '\0';
+
+	if (path == NULL)
+		return FALSE;
+
+	if (path[0] == '\0')
+		return FALSE;
+
+	if (path[0] && !path[1] && path[0] == '/')
+		return TRUE;
+
+	if (path[0] != '/')
+		return FALSE;
+
+	for (i = 0; path[i]; i++) {
+		if (path[i] == '/' && c == '/')
+			return FALSE;
+
+		c = path[i];
+
+		if (path[i] >= 'a' && path[i] <= 'z')
+			continue;
+
+		if (path[i] >= 'A' && path[i] <= 'Z')
+			continue;
+
+		if (path[i] >= '0' && path[i] <= '9')
+			continue;
+
+		if (path[i] == '_' || path[i] == '/')
+			continue;
+
+		return FALSE;
+	}
+
+	if (path[i-1] == '/')
+		return FALSE;
+
+	return TRUE;
 }
 
 DBusConnection *ofono_dbus_get_connection()

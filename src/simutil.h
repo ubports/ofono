@@ -22,12 +22,15 @@
 enum sim_fileid {
 	SIM_EFMSISDN_FILEID = 0x6f40,
 	SIM_EFSPN_FILEID = 0x6f46,
+	SIM_EFSDN_FILEID = 0x6f49,
+	SIM_EFAD_FILEID = 0x6fad,
 	SIM_EFPNN_FILEID = 0x6fc5,
 	SIM_EFOPL_FILEID = 0x6fc6,
 	SIM_EFMBDN_FILEID = 0x6fc7,
 	SIM_EFMBI_FILEID = 0x6fc9,
 	SIM_EFMWIS_FILEID = 0x6fca,
 	SIM_EFSPDI_FILEID = 0x6fcd,
+	SIM_EFECC_FILEID = 0x6fb7,
 };
 
 /* 51.011 Section 9.3 */
@@ -81,6 +84,7 @@ static inline enum sim_file_access file_access_condition_decode(int bcd)
 }
 
 gboolean sim_adn_parse(const unsigned char *data, int length,
-			struct ofono_phone_number *ph);
+			struct ofono_phone_number *ph, char **identifier);
 void sim_adn_build(unsigned char *data, int length,
-			const struct ofono_phone_number *ph);
+			const struct ofono_phone_number *ph,
+			const char *identifier);

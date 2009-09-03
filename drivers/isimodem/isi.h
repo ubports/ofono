@@ -26,16 +26,21 @@
 	e.type = OFONO_ERROR_TYPE_FAILURE;	\
 	e.error = 0				\
 
-struct isi_data {
-	struct ofono_modem *modem;
-	struct netreg_data *netreg;
-};
+#define DECLARE_SUCCESS(e) 			\
+	struct ofono_error e;			\
+	e.type = OFONO_ERROR_TYPE_NO_ERROR;	\
+	e.error = 0				\
 
 struct isi_cb_data {
 	void *cb;
 	void *data;
 	struct ofono_modem *modem;
 	void *user;
+};
+
+struct isi_version {
+	unsigned short major;
+	unsigned short minor;
 };
 
 static inline struct isi_cb_data *isi_cb_data_new(struct ofono_modem *modem,
@@ -53,4 +58,50 @@ static inline struct isi_cb_data *isi_cb_data_new(struct ofono_modem *modem,
 	return ret;
 }
 
-void dump_msg(const unsigned char *msg, size_t len);
+static inline void dump_msg(const unsigned char *msg, size_t len)
+{
+	char dumpstr[len * 5 + len / 10 + 1];
+	size_t i;
+
+	for (i = 0; i < len; i++)
+		sprintf(dumpstr + i * 5, "0x%02x%s",
+			msg[i], (i + 1) % 10 == 0 ? "\n" : " ");
+
+	DBG("\n%s\n", dumpstr);
+}
+
+extern void isi_phonebook_init();
+extern void isi_phonebook_exit();
+
+extern void isi_devinfo_init();
+extern void isi_devinfo_exit();
+
+extern void isi_netreg_init();
+extern void isi_netreg_exit();
+
+extern void isi_voicecall_init();
+extern void isi_voicecall_exit();
+
+extern void isi_sms_init();
+extern void isi_sms_exit();
+
+extern void isi_sim_init();
+extern void isi_sim_exit();
+
+extern void isi_ussd_init();
+extern void isi_ussd_exit();
+
+extern void isi_ssn_init();
+extern void isi_ssn_exit();
+
+extern void isi_call_forwarding_init();
+extern void isi_call_forwarding_exit();
+
+extern void isi_call_settings_init();
+extern void isi_call_settings_exit();
+
+extern void isi_call_barring_init();
+extern void isi_call_barring_exit();
+
+extern void isi_call_meter_init();
+extern void isi_call_meter_exit();

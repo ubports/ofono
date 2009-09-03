@@ -30,6 +30,7 @@ extern "C" {
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <gisi/modem.h>
 
 struct _GIsiClient;
 typedef struct _GIsiClient GIsiClient;
@@ -45,9 +46,15 @@ typedef void (*GIsiIndicationFunc) (GIsiClient *client,
 		const void *restrict data, size_t len,
 		uint16_t object, void *opaque);
 
-GIsiClient *g_isi_client_create(uint8_t resource);
+typedef void (*GIsiDebugFunc) (const void *restrict data, size_t len,
+		void *opaque);
+
+GIsiClient *g_isi_client_create(GIsiModem *modem, uint8_t resource);
 
 uint8_t g_isi_client_resource(GIsiClient *client);
+
+void g_isi_client_set_debug(GIsiClient *client, GIsiDebugFunc func,
+				void *opaque);
 
 void g_isi_client_destroy(GIsiClient *client);
 

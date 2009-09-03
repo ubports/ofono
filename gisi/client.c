@@ -41,6 +41,7 @@
 
 struct _GIsiClient {
 	uint8_t resource;
+	GIsiModem *modem;
 
 	/* Requests */
 	int fd;
@@ -58,6 +59,10 @@ struct _GIsiClient {
 		GIsiIndicationFunc func[256];
 		void *data[256];
 	} ind;
+
+	/* Debugging */
+	GIsiDebugFunc debug_func;
+	void *debug_data;
 };
 
 static gboolean g_isi_callback(GIOChannel *channel, GIOCondition cond,
@@ -84,7 +89,7 @@ static inline GIsiClient *g_isi_cl(void *ptr)
  * @param resource PhoNet resource ID for the client
  * @return NULL on error (see errno), a GIsiClient pointer on success,
  */
-GIsiClient *g_isi_client_create(uint8_t resource)
+GIsiClient *g_isi_client_create(GIsiModem *modem, uint8_t resource)
 {
 	void *ptr;
 	GIsiClient *cl;
@@ -95,6 +100,7 @@ GIsiClient *g_isi_client_create(uint8_t resource)
 		abort();
 	cl = ptr;
 	cl->resource = resource;
+	cl->modem = modem;
 	memset(cl->timeout, 0, sizeof(cl->timeout));
 	for (i = 0; i < 256; i++) {
 		cl->data[i] = cl->ind.data[i] = NULL;
@@ -112,7 +118,7 @@ GIsiClient *g_isi_client_create(uint8_t resource)
 	cl->next[254] = 0;
 	cl->prev[255] = cl->next[255] = 255;
 
-	channel = phonet_new(resource);
+	channel = phonet_new(modem, resource);
 	if (channel == NULL) {
 		free(cl);
 		return NULL;
@@ -133,6 +139,23 @@ GIsiClient *g_isi_client_create(uint8_t resource)
 uint8_t g_isi_client_resource(GIsiClient *client)
 {
 	return client->resource;
+}
+
+/**
+ * Set a debugging function for @a client. This function will be
+ * called whenever an ISI protocol message is sent or received.
+ * @param client client to debug
+ * @param func debug function
+ * @param opaque user data
+ */
+void g_isi_client_set_debug(GIsiClient *client, GIsiDebugFunc func,
+				void *opaque)
+{
+	if (!client)
+		return;
+
+	client->debug_func = func;
+	client->debug_data = opaque;
 }
 
 /**
@@ -202,6 +225,9 @@ GIsiRequest *g_isi_request_make(GIsiClient *cl,	const void *__restrict buf,
 		return NULL;
 	}
 
+	if (cl->debug_func)
+		cl->debug_func(buf, len, cl->debug_data);
+
 	cl->func[id] = cb;
 	cl->data[id] = opaque;
 
@@ -264,7 +290,7 @@ static int g_isi_indication_init(GIsiClient *cl)
 	uint8_t msg[] = {
 		0, PNS_SUBSCRIBED_RESOURCES_IND, 1, cl->resource,
 	};
-	GIOChannel *channel = phonet_new(PN_COMMGR);
+	GIOChannel *channel = phonet_new(cl->modem, PN_COMMGR);
 
 	if (channel == NULL)
 		return errno;
@@ -360,11 +386,17 @@ static gboolean g_isi_callback(GIOChannel *channel, GIOCondition cond,
 			return TRUE;
 
 		msg = (uint8_t *)buf;
+
 		if (indication) {
 			/* Message ID at offset 1 */
 			id = msg[1];
 			if (cl->ind.func[id] == NULL)
 				return TRUE; /* Unsubscribed indication */
+
+			if (cl->debug_func)
+				cl->debug_func(msg + 1, len - 1,
+						cl->debug_data);
+
 			cl->ind.func[id](cl, msg + 1, len - 1, obj,
 						cl->ind.data[id]);
 		} else {
@@ -372,6 +404,11 @@ static gboolean g_isi_callback(GIOChannel *channel, GIOCondition cond,
 			id = msg[0];
 			if (cl->func[id] == NULL)
 				return TRUE; /* Bad transaction ID */
+
+			if (cl->debug_func)
+				cl->debug_func(msg + 1, len - 1,
+						cl->debug_data);
+
 			if ((cl->func[id])(cl, msg + 1, len - 1, obj,
 						cl->data[id]))
 				g_isi_request_cancel(g_isi_req(cl, id));

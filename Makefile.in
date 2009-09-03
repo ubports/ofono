@@ -14,6 +14,9 @@
 # PARTICULAR PURPOSE.
 
 @SET_MAKE@
+
+
+
 VPATH = @srcdir@
 pkgdatadir = $(datadir)/@PACKAGE@
 pkgincludedir = $(includedir)/@PACKAGE@
@@ -33,11 +36,54 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
+@UDEV_TRUE@am__append_1 = udev
+@UDEV_TRUE@am__append_2 = plugins/udev.c
+@UDEV_TRUE@am__append_3 = @UDEV_CFLAGS@
+@UDEV_TRUE@am__append_4 = @UDEV_LIBS@
+@ISIMODEM_TRUE@am__append_5 = isimodem
+@ISIMODEM_TRUE@am__append_6 = $(gisi_sources) drivers/isimodem/isi.h \
+@ISIMODEM_TRUE@				drivers/isimodem/isimodem.c \
+@ISIMODEM_TRUE@				drivers/isimodem/phonebook.c \
+@ISIMODEM_TRUE@				drivers/isimodem/devinfo.c \
+@ISIMODEM_TRUE@				drivers/isimodem/network-registration.c \
+@ISIMODEM_TRUE@				drivers/isimodem/voicecall.c \
+@ISIMODEM_TRUE@				drivers/isimodem/sms.c \
+@ISIMODEM_TRUE@				drivers/isimodem/sim.c \
+@ISIMODEM_TRUE@				drivers/isimodem/ssn.c \
+@ISIMODEM_TRUE@				drivers/isimodem/ussd.c \
+@ISIMODEM_TRUE@				drivers/isimodem/call-forwarding.c \
+@ISIMODEM_TRUE@				drivers/isimodem/call-settings.c \
+@ISIMODEM_TRUE@				drivers/isimodem/call-barring.c \
+@ISIMODEM_TRUE@				drivers/isimodem/call-meter.c
+
+@ATMODEM_TRUE@am__append_7 = atmodem modemconf phonesim mbm g1
+@ATMODEM_TRUE@am__append_8 = $(gatchat_sources) drivers/atmodem/at.h \
+@ATMODEM_TRUE@	drivers/atmodem/atmodem.c \
+@ATMODEM_TRUE@	drivers/atmodem/call-settings.c \
+@ATMODEM_TRUE@	drivers/atmodem/sms.c \
+@ATMODEM_TRUE@	drivers/atmodem/call-forwarding.c \
+@ATMODEM_TRUE@	drivers/atmodem/call-meter.c \
+@ATMODEM_TRUE@	drivers/atmodem/network-registration.c \
+@ATMODEM_TRUE@	drivers/atmodem/sim.c drivers/atmodem/ussd.c \
+@ATMODEM_TRUE@	drivers/atmodem/voicecall.c \
+@ATMODEM_TRUE@	drivers/atmodem/call-barring.c \
+@ATMODEM_TRUE@	drivers/atmodem/phonebook.c \
+@ATMODEM_TRUE@	drivers/atmodem/ssn.c drivers/atmodem/devinfo.c \
+@ATMODEM_TRUE@	drivers/atmodem/vendor.h plugins/modemconf.c \
+@ATMODEM_TRUE@	plugins/phonesim.c plugins/mbm.c plugins/g1.c
+@ATMODEM_TRUE@@DATAFILES_TRUE@am__append_9 = plugins/modem.conf
+@MAINTAINER_MODE_TRUE@am__append_10 = example_history
+@MAINTAINER_MODE_TRUE@am__append_11 = plugins/example_history.c
+sbin_PROGRAMS = src/ofonod$(EXEEXT)
+noinst_PROGRAMS = unit/test-common$(EXEEXT) unit/test-util$(EXEEXT) \
+	unit/test-sms$(EXEEXT) unit/test-simutil$(EXEEXT)
 subdir = .
-DIST_COMMON = README $(am__configure_deps) $(srcdir)/Makefile.am \
-	$(srcdir)/Makefile.in $(srcdir)/config.h.in \
-	$(top_srcdir)/configure AUTHORS COPYING ChangeLog INSTALL NEWS \
-	config.guess config.sub depcomp install-sh ltmain.sh missing
+DIST_COMMON = README $(am__configure_deps) $(dist_man_MANS) \
+	$(include_HEADERS) $(srcdir)/Makefile.am $(srcdir)/Makefile.in \
+	$(srcdir)/config.h.in $(top_srcdir)/configure \
+	$(top_srcdir)/include/version.h.in AUTHORS COPYING ChangeLog \
+	INSTALL NEWS compile config.guess config.sub depcomp \
+	install-sh ltmain.sh missing
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/acinclude.m4 \
 	$(top_srcdir)/configure.ac
@@ -47,31 +93,184 @@ am__CONFIG_DISTCLEAN_FILES = config.status config.cache config.log \
  configure.lineno config.status.lineno
 mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = config.h
-CONFIG_CLEAN_FILES =
+CONFIG_CLEAN_FILES = include/version.h
 CONFIG_CLEAN_VPATH_FILES =
-AM_V_GEN = $(am__v_GEN_$(V))
-am__v_GEN_ = $(am__v_GEN_$(AM_DEFAULT_VERBOSITY))
-am__v_GEN_0 = @echo "  GEN   " $@;
+am__installdirs = "$(DESTDIR)$(sbindir)" "$(DESTDIR)$(man8dir)" \
+	"$(DESTDIR)$(confdir)" "$(DESTDIR)$(dbusdir)" \
+	"$(DESTDIR)$(statedir)" "$(DESTDIR)$(includedir)" \
+	"$(DESTDIR)$(includedir)"
+PROGRAMS = $(noinst_PROGRAMS) $(sbin_PROGRAMS)
+am__src_ofonod_SOURCES_DIST = gdbus/gdbus.h gdbus/mainloop.c \
+	gdbus/object.c gdbus/watch.c plugins/udev.c gisi/phonet.h \
+	gisi/modem.h gisi/netlink.h gisi/netlink.c gisi/socket.h \
+	gisi/socket.c gisi/client.h gisi/client.c gisi/pep.h \
+	gisi/pep.c gisi/pipe.h gisi/pipe.c drivers/isimodem/isi.h \
+	drivers/isimodem/isimodem.c drivers/isimodem/phonebook.c \
+	drivers/isimodem/devinfo.c \
+	drivers/isimodem/network-registration.c \
+	drivers/isimodem/voicecall.c drivers/isimodem/sms.c \
+	drivers/isimodem/sim.c drivers/isimodem/ssn.c \
+	drivers/isimodem/ussd.c drivers/isimodem/call-forwarding.c \
+	drivers/isimodem/call-settings.c \
+	drivers/isimodem/call-barring.c drivers/isimodem/call-meter.c \
+	gatchat/gatchat.h gatchat/gatchat.c gatchat/gatresult.h \
+	gatchat/gatresult.c gatchat/gatsyntax.h gatchat/gatsyntax.c \
+	gatchat/ringbuffer.h gatchat/ringbuffer.c drivers/atmodem/at.h \
+	drivers/atmodem/atmodem.c drivers/atmodem/call-settings.c \
+	drivers/atmodem/sms.c drivers/atmodem/call-forwarding.c \
+	drivers/atmodem/call-meter.c \
+	drivers/atmodem/network-registration.c drivers/atmodem/sim.c \
+	drivers/atmodem/ussd.c drivers/atmodem/voicecall.c \
+	drivers/atmodem/call-barring.c drivers/atmodem/phonebook.c \
+	drivers/atmodem/ssn.c drivers/atmodem/devinfo.c \
+	drivers/atmodem/vendor.h plugins/modemconf.c \
+	plugins/phonesim.c plugins/mbm.c plugins/g1.c \
+	plugins/example_history.c src/main.c src/ofono.h src/log.c \
+	src/plugin.c src/modem.c src/common.h src/common.c \
+	src/manager.c src/dbus.c src/util.h src/util.c src/network.c \
+	src/voicecall.c src/ussd.c src/sms.c src/call-settings.c \
+	src/call-forwarding.c src/call-meter.c src/smsutil.h \
+	src/smsutil.c src/ssn.c src/call-barring.c src/sim.c \
+	src/phonebook.c src/history.c src/message-waiting.c \
+	src/simutil.h src/simutil.c
+am__dirstamp = $(am__leading_dot)dirstamp
+am__objects_1 = gdbus/mainloop.$(OBJEXT) gdbus/object.$(OBJEXT) \
+	gdbus/watch.$(OBJEXT)
+@UDEV_TRUE@am__objects_2 = plugins/udev.$(OBJEXT)
+am__objects_3 = gisi/netlink.$(OBJEXT) gisi/socket.$(OBJEXT) \
+	gisi/client.$(OBJEXT) gisi/pep.$(OBJEXT) gisi/pipe.$(OBJEXT)
+@ISIMODEM_TRUE@am__objects_4 = $(am__objects_3) \
+@ISIMODEM_TRUE@	drivers/isimodem/isimodem.$(OBJEXT) \
+@ISIMODEM_TRUE@	drivers/isimodem/phonebook.$(OBJEXT) \
+@ISIMODEM_TRUE@	drivers/isimodem/devinfo.$(OBJEXT) \
+@ISIMODEM_TRUE@	drivers/isimodem/network-registration.$(OBJEXT) \
+@ISIMODEM_TRUE@	drivers/isimodem/voicecall.$(OBJEXT) \
+@ISIMODEM_TRUE@	drivers/isimodem/sms.$(OBJEXT) \
+@ISIMODEM_TRUE@	drivers/isimodem/sim.$(OBJEXT) \
+@ISIMODEM_TRUE@	drivers/isimodem/ssn.$(OBJEXT) \
+@ISIMODEM_TRUE@	drivers/isimodem/ussd.$(OBJEXT) \
+@ISIMODEM_TRUE@	drivers/isimodem/call-forwarding.$(OBJEXT) \
+@ISIMODEM_TRUE@	drivers/isimodem/call-settings.$(OBJEXT) \
+@ISIMODEM_TRUE@	drivers/isimodem/call-barring.$(OBJEXT) \
+@ISIMODEM_TRUE@	drivers/isimodem/call-meter.$(OBJEXT)
+am__objects_5 = gatchat/gatchat.$(OBJEXT) gatchat/gatresult.$(OBJEXT) \
+	gatchat/gatsyntax.$(OBJEXT) gatchat/ringbuffer.$(OBJEXT)
+@ATMODEM_TRUE@am__objects_6 = $(am__objects_5) \
+@ATMODEM_TRUE@	drivers/atmodem/atmodem.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/atmodem/call-settings.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/atmodem/sms.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/atmodem/call-forwarding.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/atmodem/call-meter.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/atmodem/network-registration.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/atmodem/sim.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/atmodem/ussd.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/atmodem/voicecall.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/atmodem/call-barring.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/atmodem/phonebook.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/atmodem/ssn.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/atmodem/devinfo.$(OBJEXT) \
+@ATMODEM_TRUE@	plugins/modemconf.$(OBJEXT) \
+@ATMODEM_TRUE@	plugins/phonesim.$(OBJEXT) plugins/mbm.$(OBJEXT) \
+@ATMODEM_TRUE@	plugins/g1.$(OBJEXT)
+@MAINTAINER_MODE_TRUE@am__objects_7 =  \
+@MAINTAINER_MODE_TRUE@	plugins/example_history.$(OBJEXT)
+am__objects_8 = $(am__objects_2) $(am__objects_4) $(am__objects_6) \
+	$(am__objects_7)
+am_src_ofonod_OBJECTS = $(am__objects_1) $(am__objects_8) \
+	src/main.$(OBJEXT) src/log.$(OBJEXT) src/plugin.$(OBJEXT) \
+	src/modem.$(OBJEXT) src/common.$(OBJEXT) src/manager.$(OBJEXT) \
+	src/dbus.$(OBJEXT) src/util.$(OBJEXT) src/network.$(OBJEXT) \
+	src/voicecall.$(OBJEXT) src/ussd.$(OBJEXT) src/sms.$(OBJEXT) \
+	src/call-settings.$(OBJEXT) src/call-forwarding.$(OBJEXT) \
+	src/call-meter.$(OBJEXT) src/smsutil.$(OBJEXT) \
+	src/ssn.$(OBJEXT) src/call-barring.$(OBJEXT) src/sim.$(OBJEXT) \
+	src/phonebook.$(OBJEXT) src/history.$(OBJEXT) \
+	src/message-waiting.$(OBJEXT) src/simutil.$(OBJEXT)
+src_ofonod_OBJECTS = $(am_src_ofonod_OBJECTS)
+am__DEPENDENCIES_1 =
+am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1)
+AM_V_lt = $(am__v_lt_$(V))
+am__v_lt_ = $(am__v_lt_$(AM_DEFAULT_VERBOSITY))
+am__v_lt_0 = --silent
+src_ofonod_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
+	$(src_ofonod_LDFLAGS) $(LDFLAGS) -o $@
+am_unit_test_common_OBJECTS = unit/test-common.$(OBJEXT) \
+	src/common.$(OBJEXT)
+unit_test_common_OBJECTS = $(am_unit_test_common_OBJECTS)
+unit_test_common_DEPENDENCIES =
+am_unit_test_simutil_OBJECTS = unit/test-simutil.$(OBJEXT) \
+	src/util.$(OBJEXT) src/simutil.$(OBJEXT) src/smsutil.$(OBJEXT)
+unit_test_simutil_OBJECTS = $(am_unit_test_simutil_OBJECTS)
+unit_test_simutil_DEPENDENCIES =
+am_unit_test_sms_OBJECTS = unit/test-sms.$(OBJEXT) src/util.$(OBJEXT) \
+	src/smsutil.$(OBJEXT)
+unit_test_sms_OBJECTS = $(am_unit_test_sms_OBJECTS)
+unit_test_sms_DEPENDENCIES =
+am_unit_test_util_OBJECTS = unit/test-util.$(OBJEXT) \
+	src/util.$(OBJEXT)
+unit_test_util_OBJECTS = $(am_unit_test_util_OBJECTS)
+unit_test_util_DEPENDENCIES =
+DEFAULT_INCLUDES = -I.@am__isrc@
+depcomp = $(SHELL) $(top_srcdir)/depcomp
+am__depfiles_maybe = depfiles
+am__mv = mv -f
+COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
+	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
+LTCOMPILE = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) \
+	$(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) \
+	$(AM_CFLAGS) $(CFLAGS)
+AM_V_CC = $(am__v_CC_$(V))
+am__v_CC_ = $(am__v_CC_$(AM_DEFAULT_VERBOSITY))
+am__v_CC_0 = @echo "  CC    " $@;
 AM_V_at = $(am__v_at_$(V))
 am__v_at_ = $(am__v_at_$(AM_DEFAULT_VERBOSITY))
 am__v_at_0 = @
-SOURCES =
-DIST_SOURCES =
-RECURSIVE_TARGETS = all-recursive check-recursive dvi-recursive \
-	html-recursive info-recursive install-data-recursive \
-	install-dvi-recursive install-exec-recursive \
-	install-html-recursive install-info-recursive \
-	install-pdf-recursive install-ps-recursive install-recursive \
-	installcheck-recursive installdirs-recursive pdf-recursive \
-	ps-recursive uninstall-recursive
-RECURSIVE_CLEAN_TARGETS = mostlyclean-recursive clean-recursive	\
-  distclean-recursive maintainer-clean-recursive
-AM_RECURSIVE_TARGETS = $(RECURSIVE_TARGETS:-recursive=) \
-	$(RECURSIVE_CLEAN_TARGETS:-recursive=) tags TAGS ctags CTAGS \
-	distdir dist dist-all distcheck
+CCLD = $(CC)
+LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
+	$(AM_LDFLAGS) $(LDFLAGS) -o $@
+AM_V_CCLD = $(am__v_CCLD_$(V))
+am__v_CCLD_ = $(am__v_CCLD_$(AM_DEFAULT_VERBOSITY))
+am__v_CCLD_0 = @echo "  CCLD  " $@;
+AM_V_GEN = $(am__v_GEN_$(V))
+am__v_GEN_ = $(am__v_GEN_$(AM_DEFAULT_VERBOSITY))
+am__v_GEN_0 = @echo "  GEN   " $@;
+SOURCES = $(src_ofonod_SOURCES) $(unit_test_common_SOURCES) \
+	$(unit_test_simutil_SOURCES) $(unit_test_sms_SOURCES) \
+	$(unit_test_util_SOURCES)
+DIST_SOURCES = $(am__src_ofonod_SOURCES_DIST) \
+	$(unit_test_common_SOURCES) $(unit_test_simutil_SOURCES) \
+	$(unit_test_sms_SOURCES) $(unit_test_util_SOURCES)
+am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
+am__vpath_adj = case $$p in \
+    $(srcdir)/*) f=`echo "$$p" | sed "s|^$$srcdirstrip/||"`;; \
+    *) f=$$p;; \
+  esac;
+am__strip_dir = f=`echo $$p | sed -e 's|^.*/||'`;
+am__install_max = 40
+am__nobase_strip_setup = \
+  srcdirstrip=`echo "$(srcdir)" | sed 's/[].[^$$\\*|]/\\\\&/g'`
+am__nobase_strip = \
+  for p in $$list; do echo "$$p"; done | sed -e "s|$$srcdirstrip/||"
+am__nobase_list = $(am__nobase_strip_setup); \
+  for p in $$list; do echo "$$p $$p"; done | \
+  sed "s| $$srcdirstrip/| |;"' / .*\//!s/ .*/ ./; s,\( .*\)/[^/]*$$,\1,' | \
+  $(AWK) 'BEGIN { files["."] = "" } { files[$$2] = files[$$2] " " $$1; \
+    if (++n[$$2] == $(am__install_max)) \
+      { print $$2, files[$$2]; n[$$2] = 0; files[$$2] = "" } } \
+    END { for (dir in files) print dir, files[dir] }'
+am__base_list = \
+  sed '$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;s/\n/ /g' | \
+  sed '$$!N;$$!N;$$!N;$$!N;s/\n/ /g'
+man8dir = $(mandir)/man8
+NROFF = nroff
+MANS = $(dist_man_MANS)
+DATA = $(conf_DATA) $(dbus_DATA) $(state_DATA)
+HEADERS = $(include_HEADERS) $(nodist_include_HEADERS)
 ETAGS = etags
 CTAGS = ctags
-DIST_SUBDIRS = $(SUBDIRS)
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 distdir = $(PACKAGE)-$(VERSION)
 top_distdir = $(distdir)
@@ -79,31 +278,6 @@ am__remove_distdir = \
   { test ! -d "$(distdir)" \
     || { find "$(distdir)" -type d ! -perm -200 -exec chmod u+w {} ';' \
          && rm -fr "$(distdir)"; }; }
-am__relativize = \
-  dir0=`pwd`; \
-  sed_first='s,^\([^/]*\)/.*$$,\1,'; \
-  sed_rest='s,^[^/]*/*,,'; \
-  sed_last='s,^.*/\([^/]*\)$$,\1,'; \
-  sed_butlast='s,/*[^/]*$$,,'; \
-  while test -n "$$dir1"; do \
-    first=`echo "$$dir1" | sed -e "$$sed_first"`; \
-    if test "$$first" != "."; then \
-      if test "$$first" = ".."; then \
-        dir2=`echo "$$dir0" | sed -e "$$sed_last"`/"$$dir2"; \
-        dir0=`echo "$$dir0" | sed -e "$$sed_butlast"`; \
-      else \
-        first2=`echo "$$dir2" | sed -e "$$sed_first"`; \
-        if test "$$first2" = "$$first"; then \
-          dir2=`echo "$$dir2" | sed -e "$$sed_rest"`; \
-        else \
-          dir2="../$$dir2"; \
-        fi; \
-        dir0="$$dir0"/"$$first"; \
-      fi; \
-    fi; \
-    dir1=`echo "$$dir1" | sed -e "$$sed_rest"`; \
-  done; \
-  reldir="$$dir2"
 DIST_ARCHIVES = $(distdir).tar.gz
 GZIP_ENV = --best
 distuninstallcheck_listfiles = find . -type f -print
@@ -135,12 +309,6 @@ ECHO_T = @ECHO_T@
 EGREP = @EGREP@
 EXEEXT = @EXEEXT@
 FGREP = @FGREP@
-GATCHAT_CFLAGS = @GATCHAT_CFLAGS@
-GATCHAT_LIBS = @GATCHAT_LIBS@
-GDBUS_CFLAGS = @GDBUS_CFLAGS@
-GDBUS_LIBS = @GDBUS_LIBS@
-GISI_CFLAGS = @GISI_CFLAGS@
-GISI_LIBS = @GISI_LIBS@
 GLIB_CFLAGS = @GLIB_CFLAGS@
 GLIB_LIBS = @GLIB_LIBS@
 GREP = @GREP@
@@ -181,6 +349,9 @@ SED = @SED@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
 STRIP = @STRIP@
+UDEV_CFLAGS = @UDEV_CFLAGS@
+UDEV_DATADIR = @UDEV_DATADIR@
+UDEV_LIBS = @UDEV_LIBS@
 VERSION = @VERSION@
 abs_builddir = @abs_builddir@
 abs_srcdir = @abs_srcdir@
@@ -211,7 +382,7 @@ host_cpu = @host_cpu@
 host_os = @host_os@
 host_vendor = @host_vendor@
 htmldir = @htmldir@
-includedir = @includedir@
+includedir = @includedir@/ofono
 infodir = @infodir@
 install_sh = @install_sh@
 libdir = @libdir@
@@ -234,31 +405,124 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-SUBDIRS = gdbus gatchat gisi include plugins drivers unit src doc
+AM_MAKEFLAGS = --no-print-directory
+include_HEADERS = include/log.h include/plugin.h include/history.h \
+			include/dbus.h include/modem.h include/types.h \
+			include/call-barring.h include/call-forwarding.h \
+			include/call-meter.h include/call-settings.h \
+			include/phonebook.h include/ssn.h include/ussd.h \
+			include/sms.h include/sim.h include/message-waiting.h \
+			include/netreg.h include/voicecall.h include/devinfo.h
+
+nodist_include_HEADERS = include/version.h
+local_headers = $(foreach file,$(include_HEADERS) $(nodist_include_HEADERS), \
+					include/ofono/$(notdir $(file)))
+
+@DATAFILES_TRUE@dbusdir = @DBUS_DATADIR@
+@DATAFILES_TRUE@dbus_DATA = src/ofono.conf
+@DATAFILES_TRUE@confdir = $(sysconfdir)/ofono
+@DATAFILES_TRUE@conf_DATA = $(am__append_9)
+@DATAFILES_TRUE@statedir = $(localstatedir)/lib/ofono
+@DATAFILES_TRUE@state_DATA = 
+builtin_modules = $(am__append_1) $(am__append_5) $(am__append_7) \
+	$(am__append_10)
+builtin_sources = $(am__append_2) $(am__append_6) $(am__append_8) \
+	$(am__append_11)
+builtin_libadd = $(am__append_4)
+builtin_cflags = $(am__append_3)
+gdbus_sources = gdbus/gdbus.h gdbus/mainloop.c gdbus/object.c gdbus/watch.c
+gisi_sources = gisi/phonet.h gisi/modem.h gisi/netlink.h gisi/netlink.c \
+		gisi/socket.h gisi/socket.c gisi/client.h gisi/client.c \
+		gisi/pep.h gisi/pep.c gisi/pipe.h gisi/pipe.c
+
+gatchat_sources = gatchat/gatchat.h gatchat/gatchat.c \
+				gatchat/gatresult.h gatchat/gatresult.c \
+				gatchat/gatsyntax.h gatchat/gatsyntax.c \
+				gatchat/ringbuffer.h gatchat/ringbuffer.c
+
+src_ofonod_SOURCES = $(gdbus_sources) $(builtin_sources) \
+			src/main.c src/ofono.h src/log.c src/plugin.c \
+			src/modem.c src/common.h src/common.c \
+			src/manager.c src/dbus.c src/util.h src/util.c \
+			src/network.c src/voicecall.c src/ussd.c src/sms.c \
+			src/call-settings.c src/call-forwarding.c \
+			src/call-meter.c src/smsutil.h src/smsutil.c \
+			src/ssn.c src/call-barring.c src/sim.c \
+			src/phonebook.c src/history.c src/message-waiting.c \
+			src/simutil.h src/simutil.c
+
+src_ofonod_LDADD = $(builtin_libadd) \
+			@GLIB_LIBS@ @GTHREAD_LIBS@ @DBUS_LIBS@ -ldl
+
+src_ofonod_LDFLAGS = -Wl,--export-dynamic -Wl,--version-script=src/ofono.ver
+src_ofonod_DEPENDENCIES = src/ofono.ver
+CLEANFILES = src/ofono.ver src/ofono.exp src/builtin.h $(local_headers)
+plugindir = $(libdir)/ofono/plugins
+@MAINTAINER_MODE_FALSE@build_plugindir = $(plugindir)
+@MAINTAINER_MODE_TRUE@build_plugindir = $(abs_top_srcdir)/plugins/.libs
+AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @GTHREAD_CFLAGS@ \
+					$(builtin_cflags) \
+					-DOFONO_PLUGIN_BUILTIN \
+					-DPLUGINDIR=\""$(build_plugindir)"\"
+
+INCLUDES = -I$(builddir)/include -I$(builddir)/src -I$(srcdir)/src \
+			-I$(srcdir)/gdbus -I$(srcdir)/gisi -I$(srcdir)/gatchat
+
+doc_files = doc/overview.txt \
+		doc/manager-api.txt doc/modem-api.txt doc/network-api.txt \
+			doc/voicecallmanager-api.txt doc/voicecall-api.txt \
+			doc/call-forwarding-api.txt doc/call-settings-api.txt \
+			doc/call-meter-api.txt
+
+test_files = test/test-manager test/test-modem test/test-voicecall \
+		test/test-network-registration test/test-phonebook \
+		test/test-advice-of-charge test/test-call-settings \
+		test/test-call-forwarding test/test-call-barring \
+		test/test-ss-control-cb test/test-ss-control-cf \
+		test/test-ss-control-cs \
+		test/monitor-ofono test/list-modems test/enable-modem \
+		test/list-operators
+
+conf_files = src/ofono.conf plugins/modem.conf
+EXTRA_DIST = src/genbuiltin $(doc_files) $(test_files) $(conf_files)
+dist_man_MANS = doc/ofonod.8
+unit_objects = $(unit_test_common_OBJECTS) $(unit_test_utils_OBJECTS) \
+	$(unit_test_sms_OBJECTS) $(unit_test_simutil_OBJECTS)
+unit_test_common_SOURCES = unit/test-common.c src/common.c
+unit_test_common_LDADD = @GLIB_LIBS@
+unit_test_util_SOURCES = unit/test-util.c src/util.c
+unit_test_util_LDADD = @GLIB_LIBS@
+unit_test_sms_SOURCES = unit/test-sms.c src/util.c src/smsutil.c
+unit_test_sms_LDADD = @GLIB_LIBS@
+unit_test_simutil_SOURCES = unit/test-simutil.c src/util.c \
+						src/simutil.c src/smsutil.c
+
+unit_test_simutil_LDADD = @GLIB_LIBS@
 DISTCHECK_CONFIGURE_FLAGS = --disable-datafiles
 MAINTAINERCLEANFILES = Makefile.in \
 	aclocal.m4 configure config.h.in config.sub config.guess \
-	ltmain.sh depcomp missing install-sh mkinstalldirs
+	ltmain.sh depcomp compile missing install-sh mkinstalldirs
 
 all: config.h
-	$(MAKE) $(AM_MAKEFLAGS) all-recursive
+	$(MAKE) $(AM_MAKEFLAGS) all-am
 
 .SUFFIXES:
+.SUFFIXES: .c .lo .o .obj
 am--refresh:
 	@:
 $(srcdir)/Makefile.in: @MAINTAINER_MODE_TRUE@ $(srcdir)/Makefile.am  $(am__configure_deps)
 	@for dep in $?; do \
 	  case '$(am__configure_deps)' in \
 	    *$$dep*) \
-	      echo ' cd $(srcdir) && $(AUTOMAKE) --gnu'; \
-	      $(am__cd) $(srcdir) && $(AUTOMAKE) --gnu \
+	      echo ' cd $(srcdir) && $(AUTOMAKE) --foreign'; \
+	      $(am__cd) $(srcdir) && $(AUTOMAKE) --foreign \
 		&& exit 0; \
 	      exit 1;; \
 	  esac; \
 	done; \
-	echo ' cd $(top_srcdir) && $(AUTOMAKE) --gnu Makefile'; \
+	echo ' cd $(top_srcdir) && $(AUTOMAKE) --foreign Makefile'; \
 	$(am__cd) $(top_srcdir) && \
-	  $(AUTOMAKE) --gnu Makefile
+	  $(AUTOMAKE) --foreign Makefile
 .PRECIOUS: Makefile
 Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
 	@case '$?' in \
@@ -295,85 +559,592 @@ $(srcdir)/config.h.in: @MAINTAINER_MODE_TRUE@ $(am__configure_deps)
 
 distclean-hdr:
 	-rm -f config.h stamp-h1
+include/version.h: $(top_builddir)/config.status $(top_srcdir)/include/version.h.in
+	cd $(top_builddir) && $(SHELL) ./config.status $@
+
+clean-noinstPROGRAMS:
+	@list='$(noinst_PROGRAMS)'; test -n "$$list" || exit 0; \
+	echo " rm -f" $$list; \
+	rm -f $$list || exit $$?; \
+	test -n "$(EXEEXT)" || exit 0; \
+	list=`for p in $$list; do echo "$$p"; done | sed 's/$(EXEEXT)$$//'`; \
+	echo " rm -f" $$list; \
+	rm -f $$list
+install-sbinPROGRAMS: $(sbin_PROGRAMS)
+	@$(NORMAL_INSTALL)
+	test -z "$(sbindir)" || $(MKDIR_P) "$(DESTDIR)$(sbindir)"
+	@list='$(sbin_PROGRAMS)'; test -n "$(sbindir)" || list=; \
+	for p in $$list; do echo "$$p $$p"; done | \
+	sed 's/$(EXEEXT)$$//' | \
+	while read p p1; do if test -f $$p || test -f $$p1; \
+	  then echo "$$p"; echo "$$p"; else :; fi; \
+	done | \
+	sed -e 'p;s,.*/,,;n;h' -e 's|.*|.|' \
+	    -e 'p;x;s,.*/,,;s/$(EXEEXT)$$//;$(transform);s/$$/$(EXEEXT)/' | \
+	sed 'N;N;N;s,\n, ,g' | \
+	$(AWK) 'BEGIN { files["."] = ""; dirs["."] = 1 } \
+	  { d=$$3; if (dirs[d] != 1) { print "d", d; dirs[d] = 1 } \
+	    if ($$2 == $$4) files[d] = files[d] " " $$1; \
+	    else { print "f", $$3 "/" $$4, $$1; } } \
+	  END { for (d in files) print "f", d, files[d] }' | \
+	while read type dir files; do \
+	    if test "$$dir" = .; then dir=; else dir=/$$dir; fi; \
+	    test -z "$$files" || { \
+	    echo " $(INSTALL_PROGRAM_ENV) $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=install $(INSTALL_PROGRAM) $$files '$(DESTDIR)$(sbindir)$$dir'"; \
+	    $(INSTALL_PROGRAM_ENV) $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=install $(INSTALL_PROGRAM) $$files "$(DESTDIR)$(sbindir)$$dir" || exit $$?; \
+	    } \
+	; done
+
+uninstall-sbinPROGRAMS:
+	@$(NORMAL_UNINSTALL)
+	@list='$(sbin_PROGRAMS)'; test -n "$(sbindir)" || list=; \
+	files=`for p in $$list; do echo "$$p"; done | \
+	  sed -e 'h;s,^.*/,,;s/$(EXEEXT)$$//;$(transform)' \
+	      -e 's/$$/$(EXEEXT)/' `; \
+	test -n "$$list" || exit 0; \
+	echo " ( cd '$(DESTDIR)$(sbindir)' && rm -f" $$files ")"; \
+	cd "$(DESTDIR)$(sbindir)" && rm -f $$files
+
+clean-sbinPROGRAMS:
+	@list='$(sbin_PROGRAMS)'; test -n "$$list" || exit 0; \
+	echo " rm -f" $$list; \
+	rm -f $$list || exit $$?; \
+	test -n "$(EXEEXT)" || exit 0; \
+	list=`for p in $$list; do echo "$$p"; done | sed 's/$(EXEEXT)$$//'`; \
+	echo " rm -f" $$list; \
+	rm -f $$list
+gdbus/$(am__dirstamp):
+	@$(MKDIR_P) gdbus
+	@: > gdbus/$(am__dirstamp)
+gdbus/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) gdbus/$(DEPDIR)
+	@: > gdbus/$(DEPDIR)/$(am__dirstamp)
+gdbus/mainloop.$(OBJEXT): gdbus/$(am__dirstamp) \
+	gdbus/$(DEPDIR)/$(am__dirstamp)
+gdbus/object.$(OBJEXT): gdbus/$(am__dirstamp) \
+	gdbus/$(DEPDIR)/$(am__dirstamp)
+gdbus/watch.$(OBJEXT): gdbus/$(am__dirstamp) \
+	gdbus/$(DEPDIR)/$(am__dirstamp)
+plugins/$(am__dirstamp):
+	@$(MKDIR_P) plugins
+	@: > plugins/$(am__dirstamp)
+plugins/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) plugins/$(DEPDIR)
+	@: > plugins/$(DEPDIR)/$(am__dirstamp)
+plugins/udev.$(OBJEXT): plugins/$(am__dirstamp) \
+	plugins/$(DEPDIR)/$(am__dirstamp)
+gisi/$(am__dirstamp):
+	@$(MKDIR_P) gisi
+	@: > gisi/$(am__dirstamp)
+gisi/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) gisi/$(DEPDIR)
+	@: > gisi/$(DEPDIR)/$(am__dirstamp)
+gisi/netlink.$(OBJEXT): gisi/$(am__dirstamp) \
+	gisi/$(DEPDIR)/$(am__dirstamp)
+gisi/socket.$(OBJEXT): gisi/$(am__dirstamp) \
+	gisi/$(DEPDIR)/$(am__dirstamp)
+gisi/client.$(OBJEXT): gisi/$(am__dirstamp) \
+	gisi/$(DEPDIR)/$(am__dirstamp)
+gisi/pep.$(OBJEXT): gisi/$(am__dirstamp) \
+	gisi/$(DEPDIR)/$(am__dirstamp)
+gisi/pipe.$(OBJEXT): gisi/$(am__dirstamp) \
+	gisi/$(DEPDIR)/$(am__dirstamp)
+drivers/isimodem/$(am__dirstamp):
+	@$(MKDIR_P) drivers/isimodem
+	@: > drivers/isimodem/$(am__dirstamp)
+drivers/isimodem/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) drivers/isimodem/$(DEPDIR)
+	@: > drivers/isimodem/$(DEPDIR)/$(am__dirstamp)
+drivers/isimodem/isimodem.$(OBJEXT): drivers/isimodem/$(am__dirstamp) \
+	drivers/isimodem/$(DEPDIR)/$(am__dirstamp)
+drivers/isimodem/phonebook.$(OBJEXT):  \
+	drivers/isimodem/$(am__dirstamp) \
+	drivers/isimodem/$(DEPDIR)/$(am__dirstamp)
+drivers/isimodem/devinfo.$(OBJEXT): drivers/isimodem/$(am__dirstamp) \
+	drivers/isimodem/$(DEPDIR)/$(am__dirstamp)
+drivers/isimodem/network-registration.$(OBJEXT):  \
+	drivers/isimodem/$(am__dirstamp) \
+	drivers/isimodem/$(DEPDIR)/$(am__dirstamp)
+drivers/isimodem/voicecall.$(OBJEXT):  \
+	drivers/isimodem/$(am__dirstamp) \
+	drivers/isimodem/$(DEPDIR)/$(am__dirstamp)
+drivers/isimodem/sms.$(OBJEXT): drivers/isimodem/$(am__dirstamp) \
+	drivers/isimodem/$(DEPDIR)/$(am__dirstamp)
+drivers/isimodem/sim.$(OBJEXT): drivers/isimodem/$(am__dirstamp) \
+	drivers/isimodem/$(DEPDIR)/$(am__dirstamp)
+drivers/isimodem/ssn.$(OBJEXT): drivers/isimodem/$(am__dirstamp) \
+	drivers/isimodem/$(DEPDIR)/$(am__dirstamp)
+drivers/isimodem/ussd.$(OBJEXT): drivers/isimodem/$(am__dirstamp) \
+	drivers/isimodem/$(DEPDIR)/$(am__dirstamp)
+drivers/isimodem/call-forwarding.$(OBJEXT):  \
+	drivers/isimodem/$(am__dirstamp) \
+	drivers/isimodem/$(DEPDIR)/$(am__dirstamp)
+drivers/isimodem/call-settings.$(OBJEXT):  \
+	drivers/isimodem/$(am__dirstamp) \
+	drivers/isimodem/$(DEPDIR)/$(am__dirstamp)
+drivers/isimodem/call-barring.$(OBJEXT):  \
+	drivers/isimodem/$(am__dirstamp) \
+	drivers/isimodem/$(DEPDIR)/$(am__dirstamp)
+drivers/isimodem/call-meter.$(OBJEXT):  \
+	drivers/isimodem/$(am__dirstamp) \
+	drivers/isimodem/$(DEPDIR)/$(am__dirstamp)
+gatchat/$(am__dirstamp):
+	@$(MKDIR_P) gatchat
+	@: > gatchat/$(am__dirstamp)
+gatchat/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) gatchat/$(DEPDIR)
+	@: > gatchat/$(DEPDIR)/$(am__dirstamp)
+gatchat/gatchat.$(OBJEXT): gatchat/$(am__dirstamp) \
+	gatchat/$(DEPDIR)/$(am__dirstamp)
+gatchat/gatresult.$(OBJEXT): gatchat/$(am__dirstamp) \
+	gatchat/$(DEPDIR)/$(am__dirstamp)
+gatchat/gatsyntax.$(OBJEXT): gatchat/$(am__dirstamp) \
+	gatchat/$(DEPDIR)/$(am__dirstamp)
+gatchat/ringbuffer.$(OBJEXT): gatchat/$(am__dirstamp) \
+	gatchat/$(DEPDIR)/$(am__dirstamp)
+drivers/atmodem/$(am__dirstamp):
+	@$(MKDIR_P) drivers/atmodem
+	@: > drivers/atmodem/$(am__dirstamp)
+drivers/atmodem/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) drivers/atmodem/$(DEPDIR)
+	@: > drivers/atmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/atmodem/atmodem.$(OBJEXT): drivers/atmodem/$(am__dirstamp) \
+	drivers/atmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/atmodem/call-settings.$(OBJEXT):  \
+	drivers/atmodem/$(am__dirstamp) \
+	drivers/atmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/atmodem/sms.$(OBJEXT): drivers/atmodem/$(am__dirstamp) \
+	drivers/atmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/atmodem/call-forwarding.$(OBJEXT):  \
+	drivers/atmodem/$(am__dirstamp) \
+	drivers/atmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/atmodem/call-meter.$(OBJEXT): drivers/atmodem/$(am__dirstamp) \
+	drivers/atmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/atmodem/network-registration.$(OBJEXT):  \
+	drivers/atmodem/$(am__dirstamp) \
+	drivers/atmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/atmodem/sim.$(OBJEXT): drivers/atmodem/$(am__dirstamp) \
+	drivers/atmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/atmodem/ussd.$(OBJEXT): drivers/atmodem/$(am__dirstamp) \
+	drivers/atmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/atmodem/voicecall.$(OBJEXT): drivers/atmodem/$(am__dirstamp) \
+	drivers/atmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/atmodem/call-barring.$(OBJEXT):  \
+	drivers/atmodem/$(am__dirstamp) \
+	drivers/atmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/atmodem/phonebook.$(OBJEXT): drivers/atmodem/$(am__dirstamp) \
+	drivers/atmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/atmodem/ssn.$(OBJEXT): drivers/atmodem/$(am__dirstamp) \
+	drivers/atmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/atmodem/devinfo.$(OBJEXT): drivers/atmodem/$(am__dirstamp) \
+	drivers/atmodem/$(DEPDIR)/$(am__dirstamp)
+plugins/modemconf.$(OBJEXT): plugins/$(am__dirstamp) \
+	plugins/$(DEPDIR)/$(am__dirstamp)
+plugins/phonesim.$(OBJEXT): plugins/$(am__dirstamp) \
+	plugins/$(DEPDIR)/$(am__dirstamp)
+plugins/mbm.$(OBJEXT): plugins/$(am__dirstamp) \
+	plugins/$(DEPDIR)/$(am__dirstamp)
+plugins/g1.$(OBJEXT): plugins/$(am__dirstamp) \
+	plugins/$(DEPDIR)/$(am__dirstamp)
+plugins/example_history.$(OBJEXT): plugins/$(am__dirstamp) \
+	plugins/$(DEPDIR)/$(am__dirstamp)
+src/$(am__dirstamp):
+	@$(MKDIR_P) src
+	@: > src/$(am__dirstamp)
+src/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) src/$(DEPDIR)
+	@: > src/$(DEPDIR)/$(am__dirstamp)
+src/main.$(OBJEXT): src/$(am__dirstamp) src/$(DEPDIR)/$(am__dirstamp)
+src/log.$(OBJEXT): src/$(am__dirstamp) src/$(DEPDIR)/$(am__dirstamp)
+src/plugin.$(OBJEXT): src/$(am__dirstamp) \
+	src/$(DEPDIR)/$(am__dirstamp)
+src/modem.$(OBJEXT): src/$(am__dirstamp) src/$(DEPDIR)/$(am__dirstamp)
+src/common.$(OBJEXT): src/$(am__dirstamp) \
+	src/$(DEPDIR)/$(am__dirstamp)
+src/manager.$(OBJEXT): src/$(am__dirstamp) \
+	src/$(DEPDIR)/$(am__dirstamp)
+src/dbus.$(OBJEXT): src/$(am__dirstamp) src/$(DEPDIR)/$(am__dirstamp)
+src/util.$(OBJEXT): src/$(am__dirstamp) src/$(DEPDIR)/$(am__dirstamp)
+src/network.$(OBJEXT): src/$(am__dirstamp) \
+	src/$(DEPDIR)/$(am__dirstamp)
+src/voicecall.$(OBJEXT): src/$(am__dirstamp) \
+	src/$(DEPDIR)/$(am__dirstamp)
+src/ussd.$(OBJEXT): src/$(am__dirstamp) src/$(DEPDIR)/$(am__dirstamp)
+src/sms.$(OBJEXT): src/$(am__dirstamp) src/$(DEPDIR)/$(am__dirstamp)
+src/call-settings.$(OBJEXT): src/$(am__dirstamp) \
+	src/$(DEPDIR)/$(am__dirstamp)
+src/call-forwarding.$(OBJEXT): src/$(am__dirstamp) \
+	src/$(DEPDIR)/$(am__dirstamp)
+src/call-meter.$(OBJEXT): src/$(am__dirstamp) \
+	src/$(DEPDIR)/$(am__dirstamp)
+src/smsutil.$(OBJEXT): src/$(am__dirstamp) \
+	src/$(DEPDIR)/$(am__dirstamp)
+src/ssn.$(OBJEXT): src/$(am__dirstamp) src/$(DEPDIR)/$(am__dirstamp)
+src/call-barring.$(OBJEXT): src/$(am__dirstamp) \
+	src/$(DEPDIR)/$(am__dirstamp)
+src/sim.$(OBJEXT): src/$(am__dirstamp) src/$(DEPDIR)/$(am__dirstamp)
+src/phonebook.$(OBJEXT): src/$(am__dirstamp) \
+	src/$(DEPDIR)/$(am__dirstamp)
+src/history.$(OBJEXT): src/$(am__dirstamp) \
+	src/$(DEPDIR)/$(am__dirstamp)
+src/message-waiting.$(OBJEXT): src/$(am__dirstamp) \
+	src/$(DEPDIR)/$(am__dirstamp)
+src/simutil.$(OBJEXT): src/$(am__dirstamp) \
+	src/$(DEPDIR)/$(am__dirstamp)
+src/ofonod$(EXEEXT): $(src_ofonod_OBJECTS) $(src_ofonod_DEPENDENCIES) src/$(am__dirstamp)
+	@rm -f src/ofonod$(EXEEXT)
+	$(AM_V_CCLD)$(src_ofonod_LINK) $(src_ofonod_OBJECTS) $(src_ofonod_LDADD) $(LIBS)
+unit/$(am__dirstamp):
+	@$(MKDIR_P) unit
+	@: > unit/$(am__dirstamp)
+unit/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) unit/$(DEPDIR)
+	@: > unit/$(DEPDIR)/$(am__dirstamp)
+unit/test-common.$(OBJEXT): unit/$(am__dirstamp) \
+	unit/$(DEPDIR)/$(am__dirstamp)
+unit/test-common$(EXEEXT): $(unit_test_common_OBJECTS) $(unit_test_common_DEPENDENCIES) unit/$(am__dirstamp)
+	@rm -f unit/test-common$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(unit_test_common_OBJECTS) $(unit_test_common_LDADD) $(LIBS)
+unit/test-simutil.$(OBJEXT): unit/$(am__dirstamp) \
+	unit/$(DEPDIR)/$(am__dirstamp)
+unit/test-simutil$(EXEEXT): $(unit_test_simutil_OBJECTS) $(unit_test_simutil_DEPENDENCIES) unit/$(am__dirstamp)
+	@rm -f unit/test-simutil$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(unit_test_simutil_OBJECTS) $(unit_test_simutil_LDADD) $(LIBS)
+unit/test-sms.$(OBJEXT): unit/$(am__dirstamp) \
+	unit/$(DEPDIR)/$(am__dirstamp)
+unit/test-sms$(EXEEXT): $(unit_test_sms_OBJECTS) $(unit_test_sms_DEPENDENCIES) unit/$(am__dirstamp)
+	@rm -f unit/test-sms$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(unit_test_sms_OBJECTS) $(unit_test_sms_LDADD) $(LIBS)
+unit/test-util.$(OBJEXT): unit/$(am__dirstamp) \
+	unit/$(DEPDIR)/$(am__dirstamp)
+unit/test-util$(EXEEXT): $(unit_test_util_OBJECTS) $(unit_test_util_DEPENDENCIES) unit/$(am__dirstamp)
+	@rm -f unit/test-util$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(unit_test_util_OBJECTS) $(unit_test_util_LDADD) $(LIBS)
+
+mostlyclean-compile:
+	-rm -f *.$(OBJEXT)
+	-rm -f drivers/atmodem/atmodem.$(OBJEXT)
+	-rm -f drivers/atmodem/call-barring.$(OBJEXT)
+	-rm -f drivers/atmodem/call-forwarding.$(OBJEXT)
+	-rm -f drivers/atmodem/call-meter.$(OBJEXT)
+	-rm -f drivers/atmodem/call-settings.$(OBJEXT)
+	-rm -f drivers/atmodem/devinfo.$(OBJEXT)
+	-rm -f drivers/atmodem/network-registration.$(OBJEXT)
+	-rm -f drivers/atmodem/phonebook.$(OBJEXT)
+	-rm -f drivers/atmodem/sim.$(OBJEXT)
+	-rm -f drivers/atmodem/sms.$(OBJEXT)
+	-rm -f drivers/atmodem/ssn.$(OBJEXT)
+	-rm -f drivers/atmodem/ussd.$(OBJEXT)
+	-rm -f drivers/atmodem/voicecall.$(OBJEXT)
+	-rm -f drivers/isimodem/call-barring.$(OBJEXT)
+	-rm -f drivers/isimodem/call-forwarding.$(OBJEXT)
+	-rm -f drivers/isimodem/call-meter.$(OBJEXT)
+	-rm -f drivers/isimodem/call-settings.$(OBJEXT)
+	-rm -f drivers/isimodem/devinfo.$(OBJEXT)
+	-rm -f drivers/isimodem/isimodem.$(OBJEXT)
+	-rm -f drivers/isimodem/network-registration.$(OBJEXT)
+	-rm -f drivers/isimodem/phonebook.$(OBJEXT)
+	-rm -f drivers/isimodem/sim.$(OBJEXT)
+	-rm -f drivers/isimodem/sms.$(OBJEXT)
+	-rm -f drivers/isimodem/ssn.$(OBJEXT)
+	-rm -f drivers/isimodem/ussd.$(OBJEXT)
+	-rm -f drivers/isimodem/voicecall.$(OBJEXT)
+	-rm -f gatchat/gatchat.$(OBJEXT)
+	-rm -f gatchat/gatresult.$(OBJEXT)
+	-rm -f gatchat/gatsyntax.$(OBJEXT)
+	-rm -f gatchat/ringbuffer.$(OBJEXT)
+	-rm -f gdbus/mainloop.$(OBJEXT)
+	-rm -f gdbus/object.$(OBJEXT)
+	-rm -f gdbus/watch.$(OBJEXT)
+	-rm -f gisi/client.$(OBJEXT)
+	-rm -f gisi/netlink.$(OBJEXT)
+	-rm -f gisi/pep.$(OBJEXT)
+	-rm -f gisi/pipe.$(OBJEXT)
+	-rm -f gisi/socket.$(OBJEXT)
+	-rm -f plugins/example_history.$(OBJEXT)
+	-rm -f plugins/g1.$(OBJEXT)
+	-rm -f plugins/mbm.$(OBJEXT)
+	-rm -f plugins/modemconf.$(OBJEXT)
+	-rm -f plugins/phonesim.$(OBJEXT)
+	-rm -f plugins/udev.$(OBJEXT)
+	-rm -f src/call-barring.$(OBJEXT)
+	-rm -f src/call-forwarding.$(OBJEXT)
+	-rm -f src/call-meter.$(OBJEXT)
+	-rm -f src/call-settings.$(OBJEXT)
+	-rm -f src/common.$(OBJEXT)
+	-rm -f src/dbus.$(OBJEXT)
+	-rm -f src/history.$(OBJEXT)
+	-rm -f src/log.$(OBJEXT)
+	-rm -f src/main.$(OBJEXT)
+	-rm -f src/manager.$(OBJEXT)
+	-rm -f src/message-waiting.$(OBJEXT)
+	-rm -f src/modem.$(OBJEXT)
+	-rm -f src/network.$(OBJEXT)
+	-rm -f src/phonebook.$(OBJEXT)
+	-rm -f src/plugin.$(OBJEXT)
+	-rm -f src/sim.$(OBJEXT)
+	-rm -f src/simutil.$(OBJEXT)
+	-rm -f src/sms.$(OBJEXT)
+	-rm -f src/smsutil.$(OBJEXT)
+	-rm -f src/ssn.$(OBJEXT)
+	-rm -f src/ussd.$(OBJEXT)
+	-rm -f src/util.$(OBJEXT)
+	-rm -f src/voicecall.$(OBJEXT)
+	-rm -f unit/test-common.$(OBJEXT)
+	-rm -f unit/test-simutil.$(OBJEXT)
+	-rm -f unit/test-sms.$(OBJEXT)
+	-rm -f unit/test-util.$(OBJEXT)
+
+distclean-compile:
+	-rm -f *.tab.c
+
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/atmodem.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/call-barring.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/call-forwarding.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/call-meter.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/call-settings.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/devinfo.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/network-registration.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/phonebook.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/sim.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/sms.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/ssn.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/ussd.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/voicecall.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/isimodem/$(DEPDIR)/call-barring.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/isimodem/$(DEPDIR)/call-forwarding.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/isimodem/$(DEPDIR)/call-meter.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/isimodem/$(DEPDIR)/call-settings.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/isimodem/$(DEPDIR)/devinfo.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/isimodem/$(DEPDIR)/isimodem.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/isimodem/$(DEPDIR)/network-registration.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/isimodem/$(DEPDIR)/phonebook.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/isimodem/$(DEPDIR)/sim.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/isimodem/$(DEPDIR)/sms.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/isimodem/$(DEPDIR)/ssn.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/isimodem/$(DEPDIR)/ussd.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/isimodem/$(DEPDIR)/voicecall.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/gatchat.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/gatresult.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/gatsyntax.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/ringbuffer.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@gdbus/$(DEPDIR)/mainloop.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@gdbus/$(DEPDIR)/object.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@gdbus/$(DEPDIR)/watch.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@gisi/$(DEPDIR)/client.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@gisi/$(DEPDIR)/netlink.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@gisi/$(DEPDIR)/pep.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@gisi/$(DEPDIR)/pipe.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@gisi/$(DEPDIR)/socket.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/example_history.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/g1.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/mbm.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/modemconf.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/phonesim.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/udev.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/call-barring.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/call-forwarding.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/call-meter.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/call-settings.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/common.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/dbus.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/history.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/log.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/main.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/manager.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/message-waiting.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/modem.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/network.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/phonebook.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/plugin.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/sim.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/simutil.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/sms.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/smsutil.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/ssn.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/ussd.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/util.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/voicecall.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@unit/$(DEPDIR)/test-common.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@unit/$(DEPDIR)/test-simutil.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@unit/$(DEPDIR)/test-sms.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@unit/$(DEPDIR)/test-util.Po@am__quote@
+
+.c.o:
+@am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\
+@am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
+@am__fastdepCC_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
+@am__fastdepCC_FALSE@	$(AM_V_CC) @AM_BACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(COMPILE) -c -o $@ $<
+
+.c.obj:
+@am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.obj$$||'`;\
+@am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ `$(CYGPATH_W) '$<'` &&\
+@am__fastdepCC_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
+@am__fastdepCC_FALSE@	$(AM_V_CC) @AM_BACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(COMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
+
+.c.lo:
+@am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.lo$$||'`;\
+@am__fastdepCC_TRUE@	$(LTCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
+@am__fastdepCC_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Plo
+@am__fastdepCC_FALSE@	$(AM_V_CC) @AM_BACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(LTCOMPILE) -c -o $@ $<
 
 mostlyclean-libtool:
 	-rm -f *.lo
 
 clean-libtool:
 	-rm -rf .libs _libs
+	-rm -rf src/.libs src/_libs
+	-rm -rf unit/.libs unit/_libs
 
 distclean-libtool:
 	-rm -f libtool config.lt
+install-man8: $(dist_man_MANS)
+	@$(NORMAL_INSTALL)
+	test -z "$(man8dir)" || $(MKDIR_P) "$(DESTDIR)$(man8dir)"
+	@list=''; test -n "$(man8dir)" || exit 0; \
+	{ for i in $$list; do echo "$$i"; done; \
+	l2='$(dist_man_MANS)'; for i in $$l2; do echo "$$i"; done | \
+	  sed -n '/\.8[a-z]*$$/p'; \
+	} | while read p; do \
+	  if test -f $$p; then d=; else d="$(srcdir)/"; fi; \
+	  echo "$$d$$p"; echo "$$p"; \
+	done | \
+	sed -e 'n;s,.*/,,;p;h;s,.*\.,,;s,^[^8][0-9a-z]*$$,8,;x' \
+	      -e 's,\.[0-9a-z]*$$,,;$(transform);G;s,\n,.,' | \
+	sed 'N;N;s,\n, ,g' | { \
+	list=; while read file base inst; do \
+	  if test "$$base" = "$$inst"; then list="$$list $$file"; else \
+	    echo " $(INSTALL_DATA) '$$file' '$(DESTDIR)$(man8dir)/$$inst'"; \
+	    $(INSTALL_DATA) "$$file" "$(DESTDIR)$(man8dir)/$$inst" || exit $$?; \
+	  fi; \
+	done; \
+	for i in $$list; do echo "$$i"; done | $(am__base_list) | \
+	while read files; do \
+	  test -z "$$files" || { \
+	    echo " $(INSTALL_DATA) $$files '$(DESTDIR)$(man8dir)'"; \
+	    $(INSTALL_DATA) $$files "$(DESTDIR)$(man8dir)" || exit $$?; }; \
+	done; }
 
-# This directory's subdirectories are mostly independent; you can cd
-# into them and run `make' without going through this Makefile.
-# To change the values of `make' variables: instead of editing Makefiles,
-# (1) if the variable is set in `config.status', edit `config.status'
-#     (which will cause the Makefiles to be regenerated when you run `make');
-# (2) otherwise, pass the desired values on the `make' command line.
-$(RECURSIVE_TARGETS):
-	@failcom='exit 1'; \
-	for f in x $$MAKEFLAGS; do \
-	  case $$f in \
-	    *=* | --[!k]*);; \
-	    *k*) failcom='fail=yes';; \
-	  esac; \
-	done; \
-	dot_seen=no; \
-	target=`echo $@ | sed s/-recursive//`; \
-	list='$(SUBDIRS)'; for subdir in $$list; do \
-	  echo "Making $$target in $$subdir"; \
-	  if test "$$subdir" = "."; then \
-	    dot_seen=yes; \
-	    local_target="$$target-am"; \
-	  else \
-	    local_target="$$target"; \
-	  fi; \
-	  ($(am__cd) $$subdir && $(MAKE) $(AM_MAKEFLAGS) $$local_target) \
-	  || eval $$failcom; \
-	done; \
-	if test "$$dot_seen" = "no"; then \
-	  $(MAKE) $(AM_MAKEFLAGS) "$$target-am" || exit 1; \
-	fi; test -z "$$fail"
+uninstall-man8:
+	@$(NORMAL_UNINSTALL)
+	@list=''; test -n "$(man8dir)" || exit 0; \
+	files=`{ for i in $$list; do echo "$$i"; done; \
+	l2='$(dist_man_MANS)'; for i in $$l2; do echo "$$i"; done | \
+	  sed -n '/\.8[a-z]*$$/p'; \
+	} | sed -e 's,.*/,,;h;s,.*\.,,;s,^[^8][0-9a-z]*$$,8,;x' \
+	      -e 's,\.[0-9a-z]*$$,,;$(transform);G;s,\n,.,'`; \
+	test -z "$$files" || { \
+	  echo " ( cd '$(DESTDIR)$(man8dir)' && rm -f" $$files ")"; \
+	  cd "$(DESTDIR)$(man8dir)" && rm -f $$files; }
+install-confDATA: $(conf_DATA)
+	@$(NORMAL_INSTALL)
+	test -z "$(confdir)" || $(MKDIR_P) "$(DESTDIR)$(confdir)"
+	@list='$(conf_DATA)'; test -n "$(confdir)" || list=; \
+	for p in $$list; do \
+	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+	  echo "$$d$$p"; \
+	done | $(am__base_list) | \
+	while read files; do \
+	  echo " $(INSTALL_DATA) $$files '$(DESTDIR)$(confdir)'"; \
+	  $(INSTALL_DATA) $$files "$(DESTDIR)$(confdir)" || exit $$?; \
+	done
 
-$(RECURSIVE_CLEAN_TARGETS):
-	@failcom='exit 1'; \
-	for f in x $$MAKEFLAGS; do \
-	  case $$f in \
-	    *=* | --[!k]*);; \
-	    *k*) failcom='fail=yes';; \
-	  esac; \
-	done; \
-	dot_seen=no; \
-	case "$@" in \
-	  distclean-* | maintainer-clean-*) list='$(DIST_SUBDIRS)' ;; \
-	  *) list='$(SUBDIRS)' ;; \
-	esac; \
-	rev=''; for subdir in $$list; do \
-	  if test "$$subdir" = "."; then :; else \
-	    rev="$$subdir $$rev"; \
-	  fi; \
-	done; \
-	rev="$$rev ."; \
-	target=`echo $@ | sed s/-recursive//`; \
-	for subdir in $$rev; do \
-	  echo "Making $$target in $$subdir"; \
-	  if test "$$subdir" = "."; then \
-	    local_target="$$target-am"; \
-	  else \
-	    local_target="$$target"; \
-	  fi; \
-	  ($(am__cd) $$subdir && $(MAKE) $(AM_MAKEFLAGS) $$local_target) \
-	  || eval $$failcom; \
-	done && test -z "$$fail"
-tags-recursive:
-	list='$(SUBDIRS)'; for subdir in $$list; do \
-	  test "$$subdir" = . || ($(am__cd) $$subdir && $(MAKE) $(AM_MAKEFLAGS) tags); \
+uninstall-confDATA:
+	@$(NORMAL_UNINSTALL)
+	@list='$(conf_DATA)'; test -n "$(confdir)" || list=; \
+	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
+	test -n "$$files" || exit 0; \
+	echo " ( cd '$(DESTDIR)$(confdir)' && rm -f" $$files ")"; \
+	cd "$(DESTDIR)$(confdir)" && rm -f $$files
+install-dbusDATA: $(dbus_DATA)
+	@$(NORMAL_INSTALL)
+	test -z "$(dbusdir)" || $(MKDIR_P) "$(DESTDIR)$(dbusdir)"
+	@list='$(dbus_DATA)'; test -n "$(dbusdir)" || list=; \
+	for p in $$list; do \
+	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+	  echo "$$d$$p"; \
+	done | $(am__base_list) | \
+	while read files; do \
+	  echo " $(INSTALL_DATA) $$files '$(DESTDIR)$(dbusdir)'"; \
+	  $(INSTALL_DATA) $$files "$(DESTDIR)$(dbusdir)" || exit $$?; \
 	done
-ctags-recursive:
-	list='$(SUBDIRS)'; for subdir in $$list; do \
-	  test "$$subdir" = . || ($(am__cd) $$subdir && $(MAKE) $(AM_MAKEFLAGS) ctags); \
+
+uninstall-dbusDATA:
+	@$(NORMAL_UNINSTALL)
+	@list='$(dbus_DATA)'; test -n "$(dbusdir)" || list=; \
+	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
+	test -n "$$files" || exit 0; \
+	echo " ( cd '$(DESTDIR)$(dbusdir)' && rm -f" $$files ")"; \
+	cd "$(DESTDIR)$(dbusdir)" && rm -f $$files
+install-stateDATA: $(state_DATA)
+	@$(NORMAL_INSTALL)
+	test -z "$(statedir)" || $(MKDIR_P) "$(DESTDIR)$(statedir)"
+	@list='$(state_DATA)'; test -n "$(statedir)" || list=; \
+	for p in $$list; do \
+	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+	  echo "$$d$$p"; \
+	done | $(am__base_list) | \
+	while read files; do \
+	  echo " $(INSTALL_DATA) $$files '$(DESTDIR)$(statedir)'"; \
+	  $(INSTALL_DATA) $$files "$(DESTDIR)$(statedir)" || exit $$?; \
 	done
+
+uninstall-stateDATA:
+	@$(NORMAL_UNINSTALL)
+	@list='$(state_DATA)'; test -n "$(statedir)" || list=; \
+	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
+	test -n "$$files" || exit 0; \
+	echo " ( cd '$(DESTDIR)$(statedir)' && rm -f" $$files ")"; \
+	cd "$(DESTDIR)$(statedir)" && rm -f $$files
+install-includeHEADERS: $(include_HEADERS)
+	@$(NORMAL_INSTALL)
+	test -z "$(includedir)" || $(MKDIR_P) "$(DESTDIR)$(includedir)"
+	@list='$(include_HEADERS)'; test -n "$(includedir)" || list=; \
+	for p in $$list; do \
+	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+	  echo "$$d$$p"; \
+	done | $(am__base_list) | \
+	while read files; do \
+	  echo " $(INSTALL_HEADER) $$files '$(DESTDIR)$(includedir)'"; \
+	  $(INSTALL_HEADER) $$files "$(DESTDIR)$(includedir)" || exit $$?; \
+	done
+
+uninstall-includeHEADERS:
+	@$(NORMAL_UNINSTALL)
+	@list='$(include_HEADERS)'; test -n "$(includedir)" || list=; \
+	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
+	test -n "$$files" || exit 0; \
+	echo " ( cd '$(DESTDIR)$(includedir)' && rm -f" $$files ")"; \
+	cd "$(DESTDIR)$(includedir)" && rm -f $$files
+install-nodist_includeHEADERS: $(nodist_include_HEADERS)
+	@$(NORMAL_INSTALL)
+	test -z "$(includedir)" || $(MKDIR_P) "$(DESTDIR)$(includedir)"
+	@list='$(nodist_include_HEADERS)'; test -n "$(includedir)" || list=; \
+	for p in $$list; do \
+	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+	  echo "$$d$$p"; \
+	done | $(am__base_list) | \
+	while read files; do \
+	  echo " $(INSTALL_HEADER) $$files '$(DESTDIR)$(includedir)'"; \
+	  $(INSTALL_HEADER) $$files "$(DESTDIR)$(includedir)" || exit $$?; \
+	done
+
+uninstall-nodist_includeHEADERS:
+	@$(NORMAL_UNINSTALL)
+	@list='$(nodist_include_HEADERS)'; test -n "$(includedir)" || list=; \
+	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
+	test -n "$$files" || exit 0; \
+	echo " ( cd '$(DESTDIR)$(includedir)' && rm -f" $$files ")"; \
+	cd "$(DESTDIR)$(includedir)" && rm -f $$files
 
 ID: $(HEADERS) $(SOURCES) $(LISP) $(TAGS_FILES)
 	list='$(SOURCES) $(HEADERS) $(LISP) $(TAGS_FILES)'; \
@@ -385,23 +1156,10 @@ ID: $(HEADERS) $(SOURCES) $(LISP) $(TAGS_FILES)
 	mkid -fID $$unique
 tags: TAGS
 
-TAGS: tags-recursive $(HEADERS) $(SOURCES) config.h.in $(TAGS_DEPENDENCIES) \
+TAGS:  $(HEADERS) $(SOURCES) config.h.in $(TAGS_DEPENDENCIES) \
 		$(TAGS_FILES) $(LISP)
 	set x; \
 	here=`pwd`; \
-	if ($(ETAGS) --etags-include --version) >/dev/null 2>&1; then \
-	  include_option=--etags-include; \
-	  empty_fix=.; \
-	else \
-	  include_option=--include; \
-	  empty_fix=; \
-	fi; \
-	list='$(SUBDIRS)'; for subdir in $$list; do \
-	  if test "$$subdir" = .; then :; else \
-	    test ! -f $$subdir/TAGS || \
-	      set "$$@" "$$include_option=$$here/$$subdir/TAGS"; \
-	  fi; \
-	done; \
 	list='$(SOURCES) $(HEADERS) config.h.in $(LISP) $(TAGS_FILES)'; \
 	unique=`for i in $$list; do \
 	    if test -f "$$i"; then echo $$i; else echo $(srcdir)/$$i; fi; \
@@ -420,7 +1178,7 @@ TAGS: tags-recursive $(HEADERS) $(SOURCES) config.h.in $(TAGS_DEPENDENCIES) \
 	  fi; \
 	fi
 ctags: CTAGS
-CTAGS: ctags-recursive $(HEADERS) $(SOURCES) config.h.in $(TAGS_DEPENDENCIES) \
+CTAGS:  $(HEADERS) $(SOURCES) config.h.in $(TAGS_DEPENDENCIES) \
 		$(TAGS_FILES) $(LISP)
 	list='$(SOURCES) $(HEADERS) config.h.in $(LISP) $(TAGS_FILES)'; \
 	unique=`for i in $$list; do \
@@ -441,6 +1199,19 @@ distclean-tags:
 	-rm -f TAGS ID GTAGS GRTAGS GSYMS GPATH tags
 
 distdir: $(DISTFILES)
+	@list='$(MANS)'; if test -n "$$list"; then \
+	  list=`for p in $$list; do \
+	    if test -f $$p; then d=; else d="$(srcdir)/"; fi; \
+	    if test -f "$$d$$p"; then echo "$$d$$p"; else :; fi; done`; \
+	  if test -n "$$list" && \
+	    grep 'ab help2man is required to generate this page' $$list >/dev/null; then \
+	    echo "error: found man pages containing the \`missing help2man' replacement text:" >&2; \
+	    grep -l 'ab help2man is required to generate this page' $$list | sed 's/^/         /' >&2; \
+	    echo "       to fix them, install help2man, remove and regenerate the man pages;" >&2; \
+	    echo "       typically \`make maintainer-clean' will remove them" >&2; \
+	    exit 1; \
+	  else :; fi; \
+	else :; fi
 	$(am__remove_distdir)
 	test -d "$(distdir)" || mkdir "$(distdir)"
 	@srcdirstrip=`echo "$(srcdir)" | sed 's/[].[^$$\\*]/\\\\&/g'`; \
@@ -470,34 +1241,6 @@ distdir: $(DISTFILES)
 	    test -f "$(distdir)/$$file" \
 	    || cp -p $$d/$$file "$(distdir)/$$file" \
 	    || exit 1; \
-	  fi; \
-	done
-	@list='$(DIST_SUBDIRS)'; for subdir in $$list; do \
-	  if test "$$subdir" = .; then :; else \
-	    test -d "$(distdir)/$$subdir" \
-	    || $(MKDIR_P) "$(distdir)/$$subdir" \
-	    || exit 1; \
-	  fi; \
-	done
-	@list='$(DIST_SUBDIRS)'; for subdir in $$list; do \
-	  if test "$$subdir" = .; then :; else \
-	    dir1=$$subdir; dir2="$(distdir)/$$subdir"; \
-	    $(am__relativize); \
-	    new_distdir=$$reldir; \
-	    dir1=$$subdir; dir2="$(top_distdir)"; \
-	    $(am__relativize); \
-	    new_top_distdir=$$reldir; \
-	    echo " (cd $$subdir && $(MAKE) $(AM_MAKEFLAGS) top_distdir="$$new_top_distdir" distdir="$$new_distdir" \\"; \
-	    echo "     am__remove_distdir=: am__skip_length_check=: am__skip_mode_fix=: distdir)"; \
-	    ($(am__cd) $$subdir && \
-	      $(MAKE) $(AM_MAKEFLAGS) \
-	        top_distdir="$$new_top_distdir" \
-	        distdir="$$new_distdir" \
-		am__remove_distdir=: \
-		am__skip_length_check=: \
-		am__skip_mode_fix=: \
-	        distdir) \
-	      || exit 1; \
 	  fi; \
 	done
 	-test -n "$(am__skip_mode_fix)" \
@@ -615,19 +1358,21 @@ distcleancheck: distclean
 	       $(distcleancheck_listfiles) ; \
 	       exit 1; } >&2
 check-am: all-am
-check: check-recursive
-all-am: Makefile config.h
-installdirs: installdirs-recursive
-installdirs-am:
-install: install-recursive
-install-exec: install-exec-recursive
-install-data: install-data-recursive
-uninstall: uninstall-recursive
+check: check-am
+all-am: Makefile $(PROGRAMS) $(MANS) $(DATA) $(HEADERS) config.h
+installdirs:
+	for dir in "$(DESTDIR)$(sbindir)" "$(DESTDIR)$(man8dir)" "$(DESTDIR)$(confdir)" "$(DESTDIR)$(dbusdir)" "$(DESTDIR)$(statedir)" "$(DESTDIR)$(includedir)" "$(DESTDIR)$(includedir)"; do \
+	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
+	done
+install: install-am
+install-exec: install-exec-am
+install-data: install-data-am
+uninstall: uninstall-am
 
 install-am: all-am
 	@$(MAKE) $(AM_MAKEFLAGS) install-exec-am install-data-am
 
-installcheck: installcheck-recursive
+installcheck: installcheck-am
 install-strip:
 	$(MAKE) $(AM_MAKEFLAGS) INSTALL_PROGRAM="$(INSTALL_STRIP_PROGRAM)" \
 	  install_sh_PROGRAM="$(INSTALL_STRIP_PROGRAM)" INSTALL_STRIP_FLAG=-s \
@@ -636,104 +1381,164 @@ install-strip:
 mostlyclean-generic:
 
 clean-generic:
+	-test -z "$(CLEANFILES)" || rm -f $(CLEANFILES)
 
 distclean-generic:
 	-test -z "$(CONFIG_CLEAN_FILES)" || rm -f $(CONFIG_CLEAN_FILES)
 	-test . = "$(srcdir)" || test -z "$(CONFIG_CLEAN_VPATH_FILES)" || rm -f $(CONFIG_CLEAN_VPATH_FILES)
+	-rm -f drivers/atmodem/$(DEPDIR)/$(am__dirstamp)
+	-rm -f drivers/atmodem/$(am__dirstamp)
+	-rm -f drivers/isimodem/$(DEPDIR)/$(am__dirstamp)
+	-rm -f drivers/isimodem/$(am__dirstamp)
+	-rm -f gatchat/$(DEPDIR)/$(am__dirstamp)
+	-rm -f gatchat/$(am__dirstamp)
+	-rm -f gdbus/$(DEPDIR)/$(am__dirstamp)
+	-rm -f gdbus/$(am__dirstamp)
+	-rm -f gisi/$(DEPDIR)/$(am__dirstamp)
+	-rm -f gisi/$(am__dirstamp)
+	-rm -f plugins/$(DEPDIR)/$(am__dirstamp)
+	-rm -f plugins/$(am__dirstamp)
+	-rm -f src/$(DEPDIR)/$(am__dirstamp)
+	-rm -f src/$(am__dirstamp)
+	-rm -f unit/$(DEPDIR)/$(am__dirstamp)
+	-rm -f unit/$(am__dirstamp)
 
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
 	@echo "it deletes files that may require special tools to rebuild."
 	-test -z "$(MAINTAINERCLEANFILES)" || rm -f $(MAINTAINERCLEANFILES)
-clean: clean-recursive
+clean: clean-am
 
-clean-am: clean-generic clean-libtool mostlyclean-am
+clean-am: clean-generic clean-libtool clean-local clean-noinstPROGRAMS \
+	clean-sbinPROGRAMS mostlyclean-am
 
-distclean: distclean-recursive
+distclean: distclean-am
 	-rm -f $(am__CONFIG_DISTCLEAN_FILES)
+	-rm -rf drivers/atmodem/$(DEPDIR) drivers/isimodem/$(DEPDIR) gatchat/$(DEPDIR) gdbus/$(DEPDIR) gisi/$(DEPDIR) plugins/$(DEPDIR) src/$(DEPDIR) unit/$(DEPDIR)
 	-rm -f Makefile
-distclean-am: clean-am distclean-generic distclean-hdr \
-	distclean-libtool distclean-tags
+distclean-am: clean-am distclean-compile distclean-generic \
+	distclean-hdr distclean-libtool distclean-tags
 
-dvi: dvi-recursive
+dvi: dvi-am
 
 dvi-am:
 
-html: html-recursive
+html: html-am
 
 html-am:
 
-info: info-recursive
+info: info-am
 
 info-am:
 
-install-data-am:
+install-data-am: install-confDATA install-dbusDATA \
+	install-includeHEADERS install-man \
+	install-nodist_includeHEADERS install-stateDATA
 
-install-dvi: install-dvi-recursive
+install-dvi: install-dvi-am
 
 install-dvi-am:
 
-install-exec-am:
+install-exec-am: install-sbinPROGRAMS
 
-install-html: install-html-recursive
+install-html: install-html-am
 
 install-html-am:
 
-install-info: install-info-recursive
+install-info: install-info-am
 
 install-info-am:
 
-install-man:
+install-man: install-man8
 
-install-pdf: install-pdf-recursive
+install-pdf: install-pdf-am
 
 install-pdf-am:
 
-install-ps: install-ps-recursive
+install-ps: install-ps-am
 
 install-ps-am:
 
 installcheck-am:
 
-maintainer-clean: maintainer-clean-recursive
+maintainer-clean: maintainer-clean-am
 	-rm -f $(am__CONFIG_DISTCLEAN_FILES)
 	-rm -rf $(top_srcdir)/autom4te.cache
+	-rm -rf drivers/atmodem/$(DEPDIR) drivers/isimodem/$(DEPDIR) gatchat/$(DEPDIR) gdbus/$(DEPDIR) gisi/$(DEPDIR) plugins/$(DEPDIR) src/$(DEPDIR) unit/$(DEPDIR)
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 
-mostlyclean: mostlyclean-recursive
+mostlyclean: mostlyclean-am
 
-mostlyclean-am: mostlyclean-generic mostlyclean-libtool
+mostlyclean-am: mostlyclean-compile mostlyclean-generic \
+	mostlyclean-libtool
 
-pdf: pdf-recursive
+pdf: pdf-am
 
 pdf-am:
 
-ps: ps-recursive
+ps: ps-am
 
 ps-am:
 
-uninstall-am:
+uninstall-am: uninstall-confDATA uninstall-dbusDATA \
+	uninstall-includeHEADERS uninstall-man \
+	uninstall-nodist_includeHEADERS uninstall-sbinPROGRAMS \
+	uninstall-stateDATA
 
-.MAKE: $(RECURSIVE_CLEAN_TARGETS) $(RECURSIVE_TARGETS) all \
-	ctags-recursive install-am install-strip tags-recursive
+uninstall-man: uninstall-man8
 
-.PHONY: $(RECURSIVE_CLEAN_TARGETS) $(RECURSIVE_TARGETS) CTAGS GTAGS \
-	all all-am am--refresh check check-am clean clean-generic \
-	clean-libtool ctags ctags-recursive dist dist-all dist-bzip2 \
-	dist-gzip dist-lzma dist-shar dist-tarZ dist-xz dist-zip \
-	distcheck distclean distclean-generic distclean-hdr \
+.MAKE: all install-am install-strip
+
+.PHONY: CTAGS GTAGS all all-am am--refresh check check-am clean \
+	clean-generic clean-libtool clean-local clean-noinstPROGRAMS \
+	clean-sbinPROGRAMS ctags dist dist-all dist-bzip2 dist-gzip \
+	dist-lzma dist-shar dist-tarZ dist-xz dist-zip distcheck \
+	distclean distclean-compile distclean-generic distclean-hdr \
 	distclean-libtool distclean-tags distcleancheck distdir \
 	distuninstallcheck dvi dvi-am html html-am info info-am \
-	install install-am install-data install-data-am install-dvi \
-	install-dvi-am install-exec install-exec-am install-html \
-	install-html-am install-info install-info-am install-man \
+	install install-am install-confDATA install-data \
+	install-data-am install-dbusDATA install-dvi install-dvi-am \
+	install-exec install-exec-am install-html install-html-am \
+	install-includeHEADERS install-info install-info-am \
+	install-man install-man8 install-nodist_includeHEADERS \
 	install-pdf install-pdf-am install-ps install-ps-am \
-	install-strip installcheck installcheck-am installdirs \
-	installdirs-am maintainer-clean maintainer-clean-generic \
-	mostlyclean mostlyclean-generic mostlyclean-libtool pdf pdf-am \
-	ps ps-am tags tags-recursive uninstall uninstall-am
+	install-sbinPROGRAMS install-stateDATA install-strip \
+	installcheck installcheck-am installdirs maintainer-clean \
+	maintainer-clean-generic mostlyclean mostlyclean-compile \
+	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
+	tags uninstall uninstall-am uninstall-confDATA \
+	uninstall-dbusDATA uninstall-includeHEADERS uninstall-man \
+	uninstall-man8 uninstall-nodist_includeHEADERS \
+	uninstall-sbinPROGRAMS uninstall-stateDATA
 
+
+src/plugin.$(OBJEXT): src/builtin.h
+
+src/builtin.h: src/genbuiltin $(builtin_sources)
+	$(AM_V_GEN)$(srcdir)/src/genbuiltin $(builtin_modules) > $@
+
+src/ofono.exp: $(src_ofonod_OBJECTS)
+	$(AM_V_GEN)$(NM) $^ | $(AWK) '{ print $$3 }' | sort -u | \
+				$(EGREP) -e '^ofono_' -e '^g_dbus_' > $@
+
+src/ofono.ver: src/ofono.exp
+	$(AM_V_at)echo "{ global:" > $@
+	$(AM_V_GEN)$(SED) -e "s/\(.*\)/\1;/" $< >> $@
+	$(AM_V_at)echo "local: *; };" >> $@
+
+$(src_ofonod_OBJECTS) $(unit_objects): $(local_headers)
+
+include/ofono/version.h: include/version.h
+	$(AM_V_at)$(MKDIR_P) include/ofono
+	$(AM_V_GEN)$(LN_S) $(abs_top_builddir)/$< $@
+
+include/ofono/%.h: include/%.h
+	$(AM_V_at)$(MKDIR_P) include/ofono
+	$(AM_V_GEN)$(LN_S) $(abs_top_srcdir)/$< $@
+
+clean-local: include/ofono
+	@$(RM) -r $<
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

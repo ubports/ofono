@@ -24,11 +24,6 @@ struct at_data {
 	struct ofono_modem *modem;
 	GIOChannel *io;
 	char *driver;
-
-	struct netreg_data *netreg;
-	struct voicecall_data *voicecall;
-	struct sms_data *sms;
-	struct pb_data *pb;
 };
 
 void decode_at_error(struct ofono_error *error, const char *final);
@@ -37,12 +32,10 @@ void dump_response(const char *func, gboolean ok, GAtResult *result);
 struct cb_data {
 	void *cb;
 	void *data;
-	struct ofono_modem *modem;
 	void *user;
 };
 
-static inline struct cb_data *cb_data_new(struct ofono_modem *modem,
-						void *cb, void *data)
+static inline struct cb_data *cb_data_new(void *cb, void *data)
 {
 	struct cb_data *ret;
 
@@ -53,7 +46,6 @@ static inline struct cb_data *cb_data_new(struct ofono_modem *modem,
 
 	ret->cb = cb;
 	ret->data = data;
-	ret->modem = modem;
 
 	return ret;
 }
@@ -65,32 +57,38 @@ static inline struct cb_data *cb_data_new(struct ofono_modem *modem,
 
 extern struct ofono_error g_ok;
 
-extern void at_network_registration_init(struct ofono_modem *modem);
-extern void at_network_registration_exit(struct ofono_modem *modem);
+extern void at_netreg_init();
+extern void at_netreg_exit();
 
-extern void at_call_forwarding_init(struct ofono_modem *modem);
-extern void at_call_forwarding_exit(struct ofono_modem *modem);
+extern void at_call_forwarding_init();
+extern void at_call_forwarding_exit();
 
-extern void at_call_settings_init(struct ofono_modem *modem);
-extern void at_call_settings_exit(struct ofono_modem *modem);
+extern void at_call_settings_init();
+extern void at_call_settings_exit();
 
-extern void at_ussd_init(struct ofono_modem *modem);
-extern void at_ussd_exit(struct ofono_modem *modem);
+extern void at_ussd_init();
+extern void at_ussd_exit();
 
-extern void at_voicecall_init(struct ofono_modem *modem);
-extern void at_voicecall_exit(struct ofono_modem *modem);
+extern void at_voicecall_init();
+extern void at_voicecall_exit();
 
-extern void at_call_meter_init(struct ofono_modem *modem);
-extern void at_call_meter_exit(struct ofono_modem *modem);
+extern void at_call_meter_init();
+extern void at_call_meter_exit();
 
-extern void at_call_barring_init(struct ofono_modem *modem);
-extern void at_call_barring_exit(struct ofono_modem *modem);
+extern void at_call_barring_init();
+extern void at_call_barring_exit();
 
-extern void at_sim_init(struct ofono_modem *modem);
-extern void at_sim_exit(struct ofono_modem *modem);
+extern void at_sim_init();
+extern void at_sim_exit();
 
-extern void at_sms_init(struct ofono_modem *modem);
-extern void at_sms_exit(struct ofono_modem *modem);
+extern void at_sms_init();
+extern void at_sms_exit();
 
-extern void at_phonebook_init(struct ofono_modem *modem);
-extern void at_phonebook_exit(struct ofono_modem *modem);
+extern void at_phonebook_init();
+extern void at_phonebook_exit();
+
+extern void at_ssn_init();
+extern void at_ssn_exit();
+
+extern void at_devinfo_init();
+extern void at_devinfo_exit();

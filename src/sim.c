@@ -37,11 +37,9 @@
 
 #include "ofono.h"
 
-#include "driver.h"
 #include "common.h"
 #include "util.h"
 #include "smsutil.h"
-#include "sim.h"
 #include "simutil.h"
 
 #ifdef TEMP_FAILURE_RETRY
@@ -57,9 +55,11 @@
 #define SIM_CACHE_PATH_LEN(imsilen) (strlen(SIM_CACHE_PATH) - 2 + imsilen)
 #define SIM_CACHE_HEADER_SIZE 6
 
+static GSList *g_drivers = NULL;
+
 static gboolean sim_op_next(gpointer user_data);
 static gboolean sim_op_retrieve_next(gpointer user);
-static void sim_own_numbers_update(struct ofono_modem *modem);
+static void sim_own_numbers_update(struct ofono_sim *sim);
 
 struct sim_file_op {
 	int id;
@@ -74,25 +74,42 @@ struct sim_file_op {
 	void *userdata;
 };
 
-struct sim_manager_data {
-	struct ofono_sim_ops *ops;
+struct ofono_sim {
 	char *imsi;
+	unsigned char mnc_length;
 	GSList *own_numbers;
 	GSList *new_numbers;
-	GSList *ready_notify;
+	GSList *service_numbers;
+	gboolean sdn_ready;
 	gboolean ready;
 	GQueue *simop_q;
 	gint simop_source;
-
 	unsigned char efmsisdn_length;
 	unsigned char efmsisdn_records;
+	unsigned int next_ready_watch_id;
+	GSList *ready_watches;
+	const struct ofono_sim_driver *driver;
+	void *driver_data;
+	struct ofono_atom *atom;
 };
 
 struct msisdn_set_request {
-	struct ofono_modem *modem;
+	struct ofono_sim *sim;
 	int pending;
 	int failed;
 	DBusMessage *msg;
+};
+
+struct sim_ready_watch {
+	unsigned int id;
+	ofono_sim_ready_notify_cb_t notify;
+	void *data;
+	ofono_destroy_func destroy;
+};
+
+struct service_number {
+	char *id;
+	struct ofono_phone_number ph;
 };
 
 static char **get_own_numbers(GSList *own_numbers)
@@ -117,53 +134,48 @@ static char **get_own_numbers(GSList *own_numbers)
 	return ret;
 }
 
+static char **get_service_numbers(GSList *service_numbers)
+{
+	int nelem;
+	GSList *l;
+	struct service_number *num;
+	char **ret;
+
+	nelem = g_slist_length(service_numbers) * 2;
+
+	ret = g_new0(char *, nelem + 1);
+
+	nelem = 0;
+	for (l = service_numbers; l; l = l->next) {
+		num = l->data;
+
+		ret[nelem++] = g_strdup(num->id);
+		ret[nelem++] = g_strdup(phone_number_to_string(&num->ph));
+	}
+
+	return ret;
+}
+
 static void sim_file_op_free(struct sim_file_op *node)
 {
 	g_free(node);
 }
 
-static struct sim_manager_data *sim_manager_create()
+static void service_number_free(struct service_number *num)
 {
-	return g_try_new0(struct sim_manager_data, 1);
-}
-
-static void sim_manager_destroy(gpointer userdata)
-{
-	struct ofono_modem *modem = userdata;
-	struct sim_manager_data *data = modem->sim_manager;
-
-	if (data->imsi) {
-		g_free(data->imsi);
-		data->imsi = NULL;
-	}
-
-	if (data->own_numbers) {
-		g_slist_foreach(data->own_numbers, (GFunc)g_free, NULL);
-		g_slist_free(data->own_numbers);
-		data->own_numbers = NULL;
-	}
-
-	if (data->simop_source) {
-		g_source_remove(data->simop_source);
-		data->simop_source = 0;
-	}
-
-	if (data->simop_q) {
-		g_queue_foreach(data->simop_q, (GFunc)sim_file_op_free, NULL);
-		g_queue_free(data->simop_q);
-		data->simop_q = NULL;
-	}
+	g_free(num->id);
+	g_free(num);
 }
 
 static DBusMessage *sim_get_properties(DBusConnection *conn,
 					DBusMessage *msg, void *data)
 {
-	struct ofono_modem *modem = data;
-	struct sim_manager_data *sim = modem->sim_manager;
+	struct ofono_sim *sim = data;
 	DBusMessage *reply;
 	DBusMessageIter iter;
 	DBusMessageIter dict;
 	char **own_numbers;
+	char **service_numbers;
 
 	reply = dbus_message_new_method_return(msg);
 	if (!reply)
@@ -179,11 +191,24 @@ static DBusMessage *sim_get_properties(DBusConnection *conn,
 		ofono_dbus_dict_append(&dict, "SubscriberIdentity",
 					DBUS_TYPE_STRING, &sim->imsi);
 
+	if (sim->mnc_length)
+		ofono_dbus_dict_append(&dict, "MobileNetworkCodeLength",
+					DBUS_TYPE_BYTE, &sim->mnc_length);
+
 	own_numbers = get_own_numbers(sim->own_numbers);
 
 	ofono_dbus_dict_append_array(&dict, "SubscriberNumbers",
 					DBUS_TYPE_STRING, &own_numbers);
 	g_strfreev(own_numbers);
+
+	if (sim->service_numbers && sim->sdn_ready) {
+		service_numbers = get_service_numbers(sim->service_numbers);
+
+		ofono_dbus_dict_append_dict(&dict, "ServiceDiallingNumbers",
+						DBUS_TYPE_STRING,
+						&service_numbers);
+		g_strfreev(service_numbers);
+	}
 
 	dbus_message_iter_close_container(&iter, &dict);
 
@@ -202,12 +227,12 @@ static void msisdn_set_done(struct msisdn_set_request *req)
 	__ofono_dbus_pending_reply(&req->msg, reply);
 
 	/* Re-read the numbers and emit signal if needed */
-	sim_own_numbers_update(req->modem);
+	sim_own_numbers_update(req->sim);
 
 	g_free(req);
 }
 
-static void msisdn_set_cb(struct ofono_modem *modem, int ok, void *data)
+static void msisdn_set_cb(int ok, void *data)
 {
 	struct msisdn_set_request *req = data;
 
@@ -220,10 +245,9 @@ static void msisdn_set_cb(struct ofono_modem *modem, int ok, void *data)
 		msisdn_set_done(req);
 }
 
-static gboolean set_own_numbers(struct ofono_modem *modem,
+static gboolean set_own_numbers(struct ofono_sim *sim,
 				GSList *new_numbers, DBusMessage *msg)
 {
-	struct sim_manager_data *sim = modem->sim_manager;
 	struct msisdn_set_request *req;
 	int record;
 	unsigned char efmsisdn[255];
@@ -234,18 +258,19 @@ static gboolean set_own_numbers(struct ofono_modem *modem,
 
 	req = g_new0(struct msisdn_set_request, 1);
 
-	req->modem = modem;
+	req->sim = sim;
 	req->msg = dbus_message_ref(msg);
 
 	for (record = 1; record <= sim->efmsisdn_records; record++) {
 		if (new_numbers) {
 			number = new_numbers->data;
-			sim_adn_build(efmsisdn, sim->efmsisdn_length, number);
+			sim_adn_build(efmsisdn, sim->efmsisdn_length,
+					number, NULL);
 			new_numbers = new_numbers->next;
 		} else
 			memset(efmsisdn, 0xff, sim->efmsisdn_length);
 
-		if (ofono_sim_write(req->modem, SIM_EFMSISDN_FILEID,
+		if (ofono_sim_write(req->sim, SIM_EFMSISDN_FILEID,
 				msisdn_set_cb, OFONO_SIM_FILE_STRUCTURE_FIXED,
 				record, efmsisdn,
 				sim->efmsisdn_length, req) == 0)
@@ -263,8 +288,7 @@ static gboolean set_own_numbers(struct ofono_modem *modem,
 static DBusMessage *sim_set_property(DBusConnection *conn, DBusMessage *msg,
 					void *data)
 {
-	struct ofono_modem *modem = data;
-	struct sim_manager_data *sim = modem->sim_manager;
+	struct ofono_sim *sim = data;
 	DBusMessageIter iter;
 	DBusMessageIter var;
 	DBusMessageIter var_elem;
@@ -321,7 +345,7 @@ static DBusMessage *sim_set_property(DBusConnection *conn, DBusMessage *msg,
 		}
 
 		own_numbers = g_slist_reverse(own_numbers);
-		set_ok = set_own_numbers(modem, own_numbers, msg);
+		set_ok = set_own_numbers(sim, own_numbers, msg);
 
 error:
 		g_slist_foreach(own_numbers, (GFunc) g_free, 0);
@@ -334,14 +358,14 @@ error:
 	return __ofono_error_invalid_args(msg);
 }
 
-static GDBusMethodTable sim_manager_methods[] = {
+static GDBusMethodTable sim_methods[] = {
 	{ "GetProperties",	"",	"a{sv}",	sim_get_properties	},
 	{ "SetProperty",	"sv",	"",		sim_set_property,
 							G_DBUS_METHOD_FLAG_ASYNC },
 	{ }
 };
 
-static GDBusSignalTable sim_manager_signals[] = {
+static GDBusSignalTable sim_signals[] = {
 	{ "PropertyChanged",	"sv" },
 	{ }
 };
@@ -368,13 +392,13 @@ static gboolean numbers_list_equal(GSList *a, GSList *b)
 	return TRUE;
 }
 
-static void sim_msisdn_read_cb(struct ofono_modem *modem, int ok,
+static void sim_msisdn_read_cb(int ok,
 				enum ofono_sim_file_structure structure,
 				int length, int record,
 				const unsigned char *data,
 				int record_length, void *userdata)
 {
-	struct sim_manager_data *sim = userdata;
+	struct ofono_sim *sim = userdata;
 	int total;
 	struct ofono_phone_number ph;
 
@@ -392,7 +416,7 @@ static void sim_msisdn_read_cb(struct ofono_modem *modem, int ok,
 	sim->efmsisdn_length = record_length;
 	sim->efmsisdn_records = total;
 
-	if (sim_adn_parse(data, record_length, &ph) == TRUE) {
+	if (sim_adn_parse(data, record_length, &ph, NULL) == TRUE) {
 		struct ofono_phone_number *own;
 
 		own = g_new(struct ofono_phone_number, 1);
@@ -409,6 +433,7 @@ check:
 		sim->new_numbers = g_slist_reverse(sim->new_numbers);
 
 	if (!numbers_list_equal(sim->new_numbers, sim->own_numbers)) {
+		const char *path = __ofono_atom_get_path(sim->atom);
 		char **own_numbers;
 		DBusConnection *conn = ofono_dbus_get_connection();
 
@@ -418,7 +443,7 @@ check:
 
 		own_numbers = get_own_numbers(sim->own_numbers);
 
-		ofono_dbus_signal_array_property_changed(conn, modem->path,
+		ofono_dbus_signal_array_property_changed(conn, path,
 							SIM_MANAGER_INTERFACE,
 							"SubscriberNumbers",
 							DBUS_TYPE_STRING,
@@ -432,22 +457,144 @@ check:
 	sim->new_numbers = NULL;
 }
 
-static void sim_own_numbers_update(struct ofono_modem *modem)
+static void sim_ad_read_cb(int ok,
+				enum ofono_sim_file_structure structure,
+				int length, int record,
+				const unsigned char *data,
+				int record_length, void *userdata)
 {
-	ofono_sim_read(modem, SIM_EFMSISDN_FILEID,
-			sim_msisdn_read_cb, modem->sim_manager);
+	struct ofono_sim *sim = userdata;
+	DBusConnection *conn = ofono_dbus_get_connection();
+	const char *path = __ofono_atom_get_path(sim->atom);
+	int new_mnc_length;
+
+	if (!ok)
+		return;
+
+	if (structure != OFONO_SIM_FILE_STRUCTURE_TRANSPARENT)
+		return;
+
+	if (length < 4)
+		return;
+
+	new_mnc_length = data[3] & 0xf;
+
+	if (sim->mnc_length == new_mnc_length)
+		return;
+
+	sim->mnc_length = new_mnc_length;
+
+	ofono_dbus_signal_property_changed(conn, path,
+					SIM_MANAGER_INTERFACE,
+					"MobileNetworkCodeLength",
+					DBUS_TYPE_BYTE, &sim->mnc_length);
 }
 
-static void sim_ready(struct ofono_modem *modem)
+static gint service_number_compare(gconstpointer a, gconstpointer b)
 {
-	sim_own_numbers_update(modem);
+	const struct service_number *sdn = a;
+	const char *id = b;
+
+	return strcmp(sdn->id, id);
+}
+
+static void sim_sdn_read_cb(int ok,
+				enum ofono_sim_file_structure structure,
+				int length, int record,
+				const unsigned char *data,
+				int record_length, void *userdata)
+{
+	struct ofono_sim *sim = userdata;
+	DBusConnection *conn = ofono_dbus_get_connection();
+	const char *path = __ofono_atom_get_path(sim->atom);
+	int total;
+	struct ofono_phone_number ph;
+	char *alpha;
+	struct service_number *sdn;
+
+	if (!ok)
+		goto check;
+
+	if (structure != OFONO_SIM_FILE_STRUCTURE_FIXED)
+		return;
+
+	if (record_length < 14 || length < record_length)
+		return;
+
+	total = length / record_length;
+
+	if (sim_adn_parse(data, record_length, &ph, &alpha) == FALSE)
+		goto out;
+
+
+	/* Use phone number if Id is unavailable */
+	if (alpha && alpha[0] == '\0') {
+		g_free(alpha);
+		alpha = NULL;
+	}
+
+	if (alpha == NULL)
+		alpha = g_strdup(phone_number_to_string(&ph));
+
+	if (sim->service_numbers &&
+			g_slist_find_custom(sim->service_numbers,
+				alpha, service_number_compare)) {
+		ofono_error("Duplicate EFsdn entries for `%s'\n",
+				alpha);
+		g_free(alpha);
+
+		goto out;
+	}
+
+	sdn = g_new(struct service_number, 1);
+	sdn->id = alpha;
+	memcpy(&sdn->ph, &ph, sizeof(struct ofono_phone_number));
+
+	sim->service_numbers = g_slist_prepend(sim->service_numbers, sdn);
+
+out:
+	if (record != total)
+		return;
+
+check:
+	/* All records retrieved */
+	if (sim->service_numbers) {
+		char **service_numbers;
+
+		sim->service_numbers = g_slist_reverse(sim->service_numbers);
+		sim->sdn_ready = TRUE;
+
+		service_numbers = get_service_numbers(sim->service_numbers);
+
+		ofono_dbus_signal_dict_property_changed(conn, path,
+						SIM_MANAGER_INTERFACE,
+						"ServiceDiallingNumbers",
+						DBUS_TYPE_STRING,
+						&service_numbers);
+		g_strfreev(service_numbers);
+	}
+}
+
+static void sim_own_numbers_update(struct ofono_sim *sim)
+{
+	ofono_sim_read(sim, SIM_EFMSISDN_FILEID,
+			sim_msisdn_read_cb, sim);
+}
+
+static void sim_ready(void *user)
+{
+	struct ofono_sim *sim = user;
+
+	sim_own_numbers_update(sim);
+
+	ofono_sim_read(sim, SIM_EFAD_FILEID, sim_ad_read_cb, sim);
+	ofono_sim_read(sim, SIM_EFSDN_FILEID, sim_sdn_read_cb, sim);
 }
 
 static void sim_imsi_cb(const struct ofono_error *error, const char *imsi,
 		void *data)
 {
-	struct ofono_modem *modem = data;
-	struct sim_manager_data *sim = modem->sim_manager;
+	struct ofono_sim *sim = data;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
 		ofono_error("Unable to read IMSI, emergency calls only");
@@ -456,20 +603,18 @@ static void sim_imsi_cb(const struct ofono_error *error, const char *imsi,
 
 	sim->imsi = g_strdup(imsi);
 
-	ofono_sim_set_ready(modem);
+	ofono_sim_set_ready(sim);
 }
 
-static void sim_retrieve_imsi(struct ofono_modem *modem)
+static void sim_retrieve_imsi(struct ofono_sim *sim)
 {
-	struct sim_manager_data *sim = modem->sim_manager;
-
-	if (!sim->ops->read_imsi) {
+	if (!sim->driver->read_imsi) {
 		ofono_error("IMSI retrieval not implemented,"
 				" only emergency calls will be available");
 		return;
 	}
 
-	sim->ops->read_imsi(modem, sim_imsi_cb, modem);
+	sim->driver->read_imsi(sim, sim_imsi_cb, sim);
 }
 
 static int create_dirs(const char *filename, const mode_t mode)
@@ -500,20 +645,19 @@ static int create_dirs(const char *filename, const mode_t mode)
 	return 0;
 }
 
-static void sim_op_error(struct ofono_modem *modem)
+static void sim_op_error(struct ofono_sim *sim)
 {
-	struct sim_manager_data *sim = modem->sim_manager;
 	struct sim_file_op *op = g_queue_pop_head(sim->simop_q);
 
 	if (g_queue_get_length(sim->simop_q) > 0)
-		sim->simop_source = g_timeout_add(0, sim_op_next, modem);
+		sim->simop_source = g_timeout_add(0, sim_op_next, sim);
 
 	if (op->is_read == TRUE)
 		((ofono_sim_file_read_cb_t) op->cb)
-			(modem, 0, 0, 0, 0, 0, 0, op->userdata);
+			(0, 0, 0, 0, 0, 0, op->userdata);
 	else
 		((ofono_sim_file_write_cb_t) op->cb)
-			(modem, 0, op->userdata);
+			(0, op->userdata);
 
 	sim_file_op_free(op);
 }
@@ -546,19 +690,18 @@ static gboolean cache_record(const char *path, int current, int record_len,
 static void sim_op_retrieve_cb(const struct ofono_error *error,
 				const unsigned char *data, int len, void *user)
 {
-	struct ofono_modem *modem = user;
-	struct sim_manager_data *sim = modem->sim_manager;
+	struct ofono_sim *sim = user;
 	struct sim_file_op *op = g_queue_peek_head(sim->simop_q);
 	int total = op->length / op->record_length;
 	ofono_sim_file_read_cb_t cb = op->cb;
 	char *imsi = sim->imsi;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
-		sim_op_error(modem);
+		sim_op_error(sim);
 		return;
 	}
 
-	cb(modem, 1, op->structure, op->length, op->current,
+	cb(1, op->structure, op->length, op->current,
 		data, op->record_length, op->userdata);
 
 	if (op->cache && imsi) {
@@ -575,52 +718,49 @@ static void sim_op_retrieve_cb(const struct ofono_error *error,
 		sim_file_op_free(op);
 
 		if (g_queue_get_length(sim->simop_q) > 0)
-			sim->simop_source = g_timeout_add(0, sim_op_next,
-								modem);
+			sim->simop_source = g_timeout_add(0, sim_op_next, sim);
 	} else {
 		op->current += 1;
-		sim->simop_source = g_timeout_add(0, sim_op_retrieve_next,
-							modem);
+		sim->simop_source = g_timeout_add(0, sim_op_retrieve_next, sim);
 	}
 }
 
 static gboolean sim_op_retrieve_next(gpointer user)
 {
-	struct ofono_modem *modem = user;
-	struct sim_manager_data *sim = modem->sim_manager;
+	struct ofono_sim *sim = user;
 	struct sim_file_op *op = g_queue_peek_head(sim->simop_q);
 
 	sim->simop_source = 0;
 
 	switch (op->structure) {
 	case OFONO_SIM_FILE_STRUCTURE_TRANSPARENT:
-		if (!sim->ops->read_file_transparent) {
-			sim_op_error(modem);
+		if (!sim->driver->read_file_transparent) {
+			sim_op_error(sim);
 			return FALSE;
 		}
 
-		sim->ops->read_file_transparent(modem, op->id, 0, op->length,
-						sim_op_retrieve_cb, modem);
+		sim->driver->read_file_transparent(sim, op->id, 0, op->length,
+						sim_op_retrieve_cb, sim);
 		break;
 	case OFONO_SIM_FILE_STRUCTURE_FIXED:
-		if (!sim->ops->read_file_linear) {
-			sim_op_error(modem);
+		if (!sim->driver->read_file_linear) {
+			sim_op_error(sim);
 			return FALSE;
 		}
 
-		sim->ops->read_file_linear(modem, op->id, op->current,
+		sim->driver->read_file_linear(sim, op->id, op->current,
 						op->record_length,
-						sim_op_retrieve_cb, modem);
+						sim_op_retrieve_cb, sim);
 		break;
 	case OFONO_SIM_FILE_STRUCTURE_CYCLIC:
-		if (!sim->ops->read_file_cyclic) {
-			sim_op_error(modem);
+		if (!sim->driver->read_file_cyclic) {
+			sim_op_error(sim);
 			return FALSE;
 		}
 
-		sim->ops->read_file_cyclic(modem, op->id, op->current,
+		sim->driver->read_file_cyclic(sim, op->id, op->current,
 						op->record_length,
-						sim_op_retrieve_cb, modem);
+						sim_op_retrieve_cb, sim);
 		break;
 	default:
 		ofono_error("Unrecognized file structure, this can't happen");
@@ -661,8 +801,7 @@ static void sim_op_info_cb(const struct ofono_error *error, int length,
 				int record_length,
 				const unsigned char access[3], void *data)
 {
-	struct ofono_modem *modem = data;
-	struct sim_manager_data *sim = modem->sim_manager;
+	struct ofono_sim *sim = data;
 	struct sim_file_op *op = g_queue_peek_head(sim->simop_q);
 	char *imsi = sim->imsi;
 	enum sim_file_access update;
@@ -670,7 +809,7 @@ static void sim_op_info_cb(const struct ofono_error *error, int length,
 	enum sim_file_access rehabilitate;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
-		sim_op_error(modem);
+		sim_op_error(sim);
 		return;
 	}
 
@@ -696,7 +835,7 @@ static void sim_op_info_cb(const struct ofono_error *error, int length,
 
 	op->current = 1;
 
-	sim->simop_source = g_timeout_add(0, sim_op_retrieve_next, modem);
+	sim->simop_source = g_timeout_add(0, sim_op_retrieve_next, sim);
 
 	if (op->cache && imsi) {
 		char *path = g_strdup_printf(SIM_CACHE_PATH, imsi, op->id);
@@ -717,25 +856,23 @@ static void sim_op_info_cb(const struct ofono_error *error, int length,
 
 static void sim_op_write_cb(const struct ofono_error *error, void *data)
 {
-	struct ofono_modem *modem = data;
-	struct sim_manager_data *sim = modem->sim_manager;
+	struct ofono_sim *sim = data;
 	struct sim_file_op *op = g_queue_pop_head(sim->simop_q);
 	ofono_sim_file_write_cb_t cb = op->cb;
 
 	if (g_queue_get_length(sim->simop_q) > 0)
-		sim->simop_source = g_timeout_add(0, sim_op_next, modem);
+		sim->simop_source = g_timeout_add(0, sim_op_next, sim);
 
 	if (error->type == OFONO_ERROR_TYPE_NO_ERROR)
-		cb(modem, 1, op->userdata);
+		cb(1, op->userdata);
 	else
-		cb(modem, 0, op->userdata);
+		cb(0, op->userdata);
 
 	sim_file_op_free(op);
 }
 
-static gboolean sim_op_check_cached(struct ofono_modem *modem)
+static gboolean sim_op_check_cached(struct ofono_sim *sim)
 {
-	struct sim_manager_data *sim = modem->sim_manager;
 	char *imsi = sim->imsi;
 	struct sim_file_op *op = g_queue_peek_head(sim->simop_q);
 	ofono_sim_file_read_cb_t cb = op->cb;
@@ -786,7 +923,7 @@ static gboolean sim_op_check_cached(struct ofono_modem *modem)
 
 	if (error_type != OFONO_ERROR_TYPE_NO_ERROR) {
 		ret = TRUE;
-		cb(modem, 0, 0, 0, 0, 0, 0, 0);
+		cb(0, 0, 0, 0, 0, 0, 0);
 		goto cleanup;
 	}
 
@@ -798,7 +935,7 @@ static gboolean sim_op_check_cached(struct ofono_modem *modem)
 		goto cleanup;
 
 	for (record = 0; record < file_length / record_length; record++) {
-		cb(modem, 1, structure, file_length, record + 1,
+		cb(1, structure, file_length, record + 1,
 			&buffer[record * record_length], record_length,
 			op->userdata);
 	}
@@ -816,8 +953,7 @@ cleanup:
 
 static gboolean sim_op_next(gpointer user_data)
 {
-	struct ofono_modem *modem = user_data;
-	struct sim_manager_data *sim = modem->sim_manager;
+	struct ofono_sim *sim = user_data;
 	struct sim_file_op *op;
 
 	sim->simop_source = 0;
@@ -828,35 +964,35 @@ static gboolean sim_op_next(gpointer user_data)
 	op = g_queue_peek_head(sim->simop_q);
 
 	if (op->is_read == TRUE) {
-		if (sim_op_check_cached(modem)) {
+		if (sim_op_check_cached(sim)) {
 			op = g_queue_pop_head(sim->simop_q);
 
 			sim_file_op_free(op);
 
 			if (g_queue_get_length(sim->simop_q) > 0)
 				sim->simop_source =
-					g_timeout_add(0, sim_op_next, modem);
+					g_timeout_add(0, sim_op_next, sim);
 
 			return FALSE;
 		}
 
-		sim->ops->read_file_info(modem, op->id, sim_op_info_cb, modem);
+		sim->driver->read_file_info(sim, op->id, sim_op_info_cb, sim);
 	} else {
 		switch (op->structure) {
 		case OFONO_SIM_FILE_STRUCTURE_TRANSPARENT:
-			sim->ops->write_file_transparent(modem, op->id, 0,
+			sim->driver->write_file_transparent(sim, op->id, 0,
 					op->length, op->buffer,
-					sim_op_write_cb, modem);
+					sim_op_write_cb, sim);
 			break;
 		case OFONO_SIM_FILE_STRUCTURE_FIXED:
-			sim->ops->write_file_linear(modem, op->id, op->current,
+			sim->driver->write_file_linear(sim, op->id, op->current,
 					op->length, op->buffer,
-					sim_op_write_cb, modem);
+					sim_op_write_cb, sim);
 			break;
 		case OFONO_SIM_FILE_STRUCTURE_CYCLIC:
-			sim->ops->write_file_cyclic(modem, op->id,
+			sim->driver->write_file_cyclic(sim, op->id,
 					op->length, op->buffer,
-					sim_op_write_cb, modem);
+					sim_op_write_cb, sim);
 			break;
 		default:
 			ofono_error("Unrecognized file structure, "
@@ -869,22 +1005,21 @@ static gboolean sim_op_next(gpointer user_data)
 	return FALSE;
 }
 
-int ofono_sim_read(struct ofono_modem *modem, int id,
+int ofono_sim_read(struct ofono_sim *sim, int id,
 			ofono_sim_file_read_cb_t cb, void *data)
 {
-	struct sim_manager_data *sim = modem->sim_manager;
 	struct sim_file_op *op;
 
 	if (!cb)
 		return -1;
 
-	if (modem->sim_manager == NULL)
+	if (sim == NULL)
 		return -1;
 
-	if (!sim->ops)
+	if (!sim->driver)
 		return -1;
 
-	if (!sim->ops->read_file_info)
+	if (!sim->driver->read_file_info)
 		return -1;
 
 	/* TODO: We must first check the EFust table to see whether
@@ -904,17 +1039,16 @@ int ofono_sim_read(struct ofono_modem *modem, int id,
 	g_queue_push_tail(sim->simop_q, op);
 
 	if (g_queue_get_length(sim->simop_q) == 1)
-		sim->simop_source = g_timeout_add(0, sim_op_next, modem);
+		sim->simop_source = g_timeout_add(0, sim_op_next, sim);
 
 	return 0;
 }
 
-int ofono_sim_write(struct ofono_modem *modem, int id,
+int ofono_sim_write(struct ofono_sim *sim, int id,
 			ofono_sim_file_write_cb_t cb,
 			enum ofono_sim_file_structure structure, int record,
 			const unsigned char *data, int length, void *userdata)
 {
-	struct sim_manager_data *sim = modem->sim_manager;
 	struct sim_file_op *op;
 	gconstpointer fn = NULL;
 
@@ -924,18 +1058,18 @@ int ofono_sim_write(struct ofono_modem *modem, int id,
 	if (sim == NULL)
 		return -1;
 
-	if (!sim->ops)
+	if (!sim->driver)
 		return -1;
 
 	switch (structure) {
 	case OFONO_SIM_FILE_STRUCTURE_TRANSPARENT:
-		fn = sim->ops->write_file_transparent;
+		fn = sim->driver->write_file_transparent;
 		break;
 	case OFONO_SIM_FILE_STRUCTURE_FIXED:
-		fn = sim->ops->write_file_linear;
+		fn = sim->driver->write_file_linear;
 		break;
 	case OFONO_SIM_FILE_STRUCTURE_CYCLIC:
-		fn = sim->ops->write_file_cyclic;
+		fn = sim->driver->write_file_cyclic;
 		break;
 	default:
 		ofono_error("Unrecognized file structure, this can't happen");
@@ -961,33 +1095,265 @@ int ofono_sim_write(struct ofono_modem *modem, int id,
 	g_queue_push_tail(sim->simop_q, op);
 
 	if (g_queue_get_length(sim->simop_q) == 1)
-		sim->simop_source = g_timeout_add(0, sim_op_next, modem);
+		sim->simop_source = g_timeout_add(0, sim_op_next, sim);
 
 	return 0;
 }
 
-static void initialize_sim_manager(struct ofono_modem *modem)
+const char *ofono_sim_get_imsi(struct ofono_sim *sim)
+{
+	if (sim == NULL)
+		return NULL;
+
+	return sim->imsi;
+}
+
+static void remove_all_watches(struct ofono_sim *sim)
+{
+	struct sim_ready_watch *watch;
+	GSList *c;
+
+	for (c = sim->ready_watches; c; c = c->next) {
+		watch = c->data;
+
+		if (watch->destroy)
+			watch->destroy(watch->data);
+
+		g_free(watch);
+	}
+
+	g_slist_free(sim->ready_watches);
+	sim->ready_watches = NULL;
+}
+
+unsigned int ofono_sim_add_ready_watch(struct ofono_sim *sim,
+				ofono_sim_ready_notify_cb_t notify,
+				void *data, ofono_destroy_func destroy)
+{
+	struct sim_ready_watch *watch;
+
+	DBG("%p", sim);
+
+	if (sim == NULL)
+		return 0;
+
+	if (notify == NULL)
+		return 0;
+
+	watch = g_new0(struct sim_ready_watch, 1);
+
+	watch->id = ++sim->next_ready_watch_id;
+	watch->notify = notify;
+	watch->destroy = destroy;
+	watch->data = data;
+
+	sim->ready_watches = g_slist_prepend(sim->ready_watches, watch);
+
+	DBG("id: %u", watch->id);
+
+	return watch->id;
+}
+
+void ofono_sim_remove_ready_watch(struct ofono_sim *sim, unsigned int id)
+{
+	struct sim_ready_watch *watch;
+	GSList *p;
+	GSList *c;
+
+	if (sim == NULL)
+		return;
+
+	DBG("%p, %u", sim, id);
+
+	p = NULL;
+	c = sim->ready_watches;
+
+	while (c) {
+		watch = c->data;
+
+		if (watch->id != id) {
+			p = c;
+			c = c->next;
+			continue;
+		}
+
+		if (p)
+			p->next = c->next;
+		else
+			sim->ready_watches = c->next;
+
+		if (watch->destroy)
+			watch->destroy(watch->data);
+
+		g_free(watch);
+		g_slist_free_1(c);
+
+		return;
+	}
+}
+
+int ofono_sim_get_ready(struct ofono_sim *sim)
+{
+	if (sim == NULL)
+		return 0;
+
+	if (sim->ready == TRUE)
+		return 1;
+
+	return 0;
+}
+
+void ofono_sim_set_ready(struct ofono_sim *sim)
+{
+	GSList *l;
+
+	if (sim == NULL)
+		return;
+
+	if (sim->ready == TRUE)
+		return;
+
+	sim->ready = TRUE;
+
+	for (l = sim->ready_watches; l; l = l->next) {
+		struct sim_ready_watch *watch = l->data;
+
+		watch->notify(watch->data);
+	}
+}
+
+int ofono_sim_driver_register(const struct ofono_sim_driver *d)
+{
+	DBG("driver: %p, name: %s", d, d->name);
+
+	if (d->probe == NULL)
+		return -EINVAL;
+
+	g_drivers = g_slist_prepend(g_drivers, (void *)d);
+
+	return 0;
+}
+
+void ofono_sim_driver_unregister(const struct ofono_sim_driver *d)
+{
+	DBG("driver: %p, name: %s", d, d->name);
+
+	g_drivers = g_slist_remove(g_drivers, (void *)d);
+}
+
+static void sim_unregister(struct ofono_atom *atom)
 {
 	DBusConnection *conn = ofono_dbus_get_connection();
+	struct ofono_modem *modem = __ofono_atom_get_modem(atom);
+	const char *path = __ofono_atom_get_path(atom);
 
-	if (!g_dbus_register_interface(conn, modem->path,
+	remove_all_watches(__ofono_atom_get_data(atom));
+
+	g_dbus_unregister_interface(conn, path,
+					SIM_MANAGER_INTERFACE);
+	ofono_modem_remove_interface(modem, SIM_MANAGER_INTERFACE);
+}
+
+static void sim_remove(struct ofono_atom *atom)
+{
+	struct ofono_sim *sim = __ofono_atom_get_data(atom);
+
+	DBG("atom: %p", atom);
+
+	if (sim == NULL)
+		return;
+
+	if (sim->driver && sim->driver->remove)
+		sim->driver->remove(sim);
+
+	if (sim->imsi) {
+		g_free(sim->imsi);
+		sim->imsi = NULL;
+	}
+
+	if (sim->own_numbers) {
+		g_slist_foreach(sim->own_numbers, (GFunc)g_free, NULL);
+		g_slist_free(sim->own_numbers);
+		sim->own_numbers = NULL;
+	}
+
+	if (sim->service_numbers) {
+		g_slist_foreach(sim->service_numbers,
+				(GFunc)service_number_free, NULL);
+		g_slist_free(sim->service_numbers);
+		sim->service_numbers = NULL;
+	}
+
+	if (sim->simop_source) {
+		g_source_remove(sim->simop_source);
+		sim->simop_source = 0;
+	}
+
+	if (sim->simop_q) {
+		g_queue_foreach(sim->simop_q, (GFunc)sim_file_op_free, NULL);
+		g_queue_free(sim->simop_q);
+		sim->simop_q = NULL;
+	}
+
+	g_free(sim);
+}
+
+struct ofono_sim *ofono_sim_create(struct ofono_modem *modem,
+					unsigned int vendor,
+					const char *driver,
+					void *data)
+{
+	struct ofono_sim *sim;
+	GSList *l;
+
+	if (driver == NULL)
+		return NULL;
+
+	sim = g_try_new0(struct ofono_sim, 1);
+
+	if (sim == NULL)
+		return NULL;
+
+	sim->atom = __ofono_modem_add_atom(modem, OFONO_ATOM_TYPE_SIM,
+						sim_remove, sim);
+
+	for (l = g_drivers; l; l = l->next) {
+		const struct ofono_sim_driver *drv = l->data;
+
+		if (g_strcmp0(drv->name, driver))
+			continue;
+
+		if (drv->probe(sim, vendor, data) < 0)
+			continue;
+
+		sim->driver = drv;
+		break;
+	}
+
+	return sim;
+}
+
+void ofono_sim_register(struct ofono_sim *sim)
+{
+	DBusConnection *conn = ofono_dbus_get_connection();
+	struct ofono_modem *modem = __ofono_atom_get_modem(sim->atom);
+	const char *path = __ofono_atom_get_path(sim->atom);
+
+	if (!g_dbus_register_interface(conn, path,
 					SIM_MANAGER_INTERFACE,
-					sim_manager_methods,
-					sim_manager_signals,
-					NULL, modem,
-					sim_manager_destroy)) {
-		ofono_error("Could not register SIMManager interface");
-		sim_manager_destroy(modem);
+					sim_methods, sim_signals, NULL,
+					sim, NULL)) {
+		ofono_error("Could not create %s interface",
+				SIM_MANAGER_INTERFACE);
 
 		return;
 	}
 
-	ofono_debug("SIMManager interface for modem: %s created",
-			modem->path);
-
 	ofono_modem_add_interface(modem, SIM_MANAGER_INTERFACE);
 
-	ofono_sim_ready_notify_register(modem, sim_ready);
+	__ofono_atom_register(sim->atom, sim_unregister);
+
+	ofono_sim_add_ready_watch(sim, sim_ready, sim, NULL);
 
 	/* Perform SIM initialization according to 3GPP 31.102 Section 5.1.1.2
 	 * The assumption here is that if sim manager is being initialized,
@@ -1007,107 +1373,20 @@ static void initialize_sim_manager(struct ofono_modem *modem)
 	 * arbitrary files to be written or read, assuming their presence
 	 * in the EFust
 	 */
-	sim_retrieve_imsi(modem);
+	sim_retrieve_imsi(sim);
 }
 
-const char *ofono_sim_get_imsi(struct ofono_modem *modem)
+void ofono_sim_remove(struct ofono_sim *sim)
 {
-	if (modem->sim_manager == NULL)
-		return NULL;
-
-	return modem->sim_manager->imsi;
+	__ofono_atom_free(sim->atom);
 }
 
-int ofono_sim_ready_notify_register(struct ofono_modem *modem,
-					ofono_sim_ready_notify_cb_t cb)
+void ofono_sim_set_data(struct ofono_sim *sim, void *data)
 {
-	if (modem->sim_manager == NULL)
-		return -1;
-
-	modem->sim_manager->ready_notify =
-		g_slist_append(modem->sim_manager->ready_notify, cb);
-
-	return 0;
+	sim->driver_data = data;
 }
 
-void ofono_sim_ready_notify_unregister(struct ofono_modem *modem,
-					ofono_sim_ready_notify_cb_t cb)
+void *ofono_sim_get_data(struct ofono_sim *sim)
 {
-	if (modem->sim_manager == NULL)
-		return;
-
-	modem->sim_manager->ready_notify =
-		g_slist_remove(modem->sim_manager->ready_notify, cb);
-}
-
-int ofono_sim_get_ready(struct ofono_modem *modem)
-{
-	if (modem->sim_manager == NULL)
-		return 0;
-
-	if (modem->sim_manager->ready == TRUE)
-		return 1;
-
-	return 0;
-}
-
-void ofono_sim_set_ready(struct ofono_modem *modem)
-{
-	GSList *l;
-
-	if (modem->sim_manager == NULL)
-		return;
-
-	if (modem->sim_manager->ready == TRUE)
-		return;
-
-	modem->sim_manager->ready = TRUE;
-
-	for (l = modem->sim_manager->ready_notify; l; l = l->next) {
-		ofono_sim_ready_notify_cb_t cb = l->data;
-
-		cb(modem);
-	}
-}
-
-int ofono_sim_manager_register(struct ofono_modem *modem,
-					struct ofono_sim_ops *ops)
-{
-	if (modem == NULL)
-		return -1;
-	if (modem->sim_manager == NULL)
-		return -1;
-
-	if (ops == NULL)
-		return -1;
-
-	modem->sim_manager->ops = ops;
-
-	initialize_sim_manager(modem);
-
-	return 0;
-}
-
-void ofono_sim_manager_unregister(struct ofono_modem *modem)
-{
-	DBusConnection *conn = ofono_dbus_get_connection();
-
-	g_dbus_unregister_interface(conn, modem->path,
-					SIM_MANAGER_INTERFACE);
-	ofono_modem_remove_interface(modem, SIM_MANAGER_INTERFACE);
-}
-
-void ofono_sim_manager_init(struct ofono_modem *modem)
-{
-	modem->sim_manager = sim_manager_create();
-}
-
-void ofono_sim_manager_exit(struct ofono_modem *modem)
-{
-	if (modem->sim_manager == NULL)
-		return;
-
-	g_free(modem->sim_manager);
-
-	modem->sim_manager = NULL;
+	return sim->driver_data;
 }

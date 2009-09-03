@@ -32,6 +32,11 @@ extern "C" {
 #define OFONO_MANAGER_INTERFACE "org.ofono.Manager"
 #define OFONO_MANAGER_PATH "/"
 #define OFONO_MODEM_INTERFACE "org.ofono.Modem"
+#define OFONO_CALL_BARRING_INTERFACE "org.ofono.CallBarring"
+#define OFONO_CALL_FORWARDING_INTERFACE "org.ofono.CallForwarding"
+#define OFONO_CALL_METER_INTERFACE "org.ofono.CallMeter"
+#define OFONO_PHONEBOOK_INTERFACE "org.ofono.Phonebook"
+#define OFONO_CALL_SETTINGS_INTERFACE "org.ofono.CallSettings"
 
 /* Essentially a{sv} */
 #define OFONO_PROPERTIES_ARRAY_SIGNATURE DBUS_DICT_ENTRY_BEGIN_CHAR_AS_STRING \
@@ -47,11 +52,20 @@ void ofono_dbus_dict_append(DBusMessageIter *dict, const char *key, int type,
 void ofono_dbus_dict_append_array(DBusMessageIter *dict, const char *key,
 					int type, void *val);
 
+void ofono_dbus_dict_append_dict(DBusMessageIter *dict, const char *key,
+					int type, void *val);
+
 int ofono_dbus_signal_property_changed(DBusConnection *conn, const char *path,
 					const char *interface, const char *name,
 					int type, void *value);
 
 int ofono_dbus_signal_array_property_changed(DBusConnection *conn,
+						const char *path,
+						const char *interface,
+						const char *name, int type,
+						void *value);
+
+int ofono_dbus_signal_dict_property_changed(DBusConnection *conn,
 						const char *path,
 						const char *interface,
 						const char *name, int type,

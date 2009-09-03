@@ -21,7 +21,9 @@
  *
  */
 
-GIOChannel *phonet_new(uint8_t resource);
+#include "modem.h"
+
+GIOChannel *phonet_new(GIsiModem *, uint8_t resource);
 size_t phonet_peek_length(GIOChannel *io);
 ssize_t phonet_read(GIOChannel *io, void *restrict buf, size_t len,
 			uint16_t *restrict obj, uint8_t *restrict res);
