@@ -49,90 +49,6 @@
 
 #include <drivers/atmodem/vendor.h>
 
-/* Supply our own syntax parser */
-
-enum G1_STATE_ {
-	G1_STATE_IDLE = 0,
-	G1_STATE_RESPONSE,
-	G1_STATE_GUESS_PDU,
-	G1_STATE_PDU,
-	G1_STATE_PROMPT,
-};
-
-static void g1_hint(GAtSyntax *syntax, GAtSyntaxExpectHint hint)
-{
-	if (hint == G_AT_SYNTAX_EXPECT_PDU)
-		syntax->state = G1_STATE_GUESS_PDU;
-}
-
-static GAtSyntaxResult g1_feed(GAtSyntax *syntax,
-		const char *bytes, gsize *len)
-{
-	gsize i = 0;
-	GAtSyntaxResult res = G_AT_SYNTAX_RESULT_UNSURE;
-
-	while (i < *len) {
-		char byte = bytes[i];
-
-		switch (syntax->state) {
-		case G1_STATE_IDLE:
-			if (byte == '\r' || byte == '\n')
-				/* ignore */;
-			else if (byte == '>')
-				syntax->state = G1_STATE_PROMPT;
-			else
-				syntax->state = G1_STATE_RESPONSE;
-			break;
-
-		case G1_STATE_RESPONSE:
-			if (byte == '\r') {
-				syntax->state = G1_STATE_IDLE;
-
-				i += 1;
-				res = G_AT_SYNTAX_RESULT_LINE;
-				goto out;
-			}
-			break;
-
-		case G1_STATE_GUESS_PDU:
-			/* keep going until we find a LF that leads the PDU */
-			if (byte == '\n')
-				syntax->state = G1_STATE_PDU;
-			break;
-
-		case G1_STATE_PDU:
-			if (byte == '\r') {
-				syntax->state = G1_STATE_IDLE;
-
-				i += 1;
-				res = G_AT_SYNTAX_RESULT_PDU;
-				goto out;
-			}
-			break;
-
-		case G1_STATE_PROMPT:
-			if (byte == ' ') {
-				syntax->state = G1_STATE_IDLE;
-				i += 1;
-				res = G_AT_SYNTAX_RESULT_PROMPT;
-				goto out;
-			}
-
-			syntax->state = G1_STATE_RESPONSE;
-			return G_AT_SYNTAX_RESULT_UNSURE;
-
-		default:
-			break;
-		};
-
-		i += 1;
-	}
-
-out:
-	*len = i;
-	return res;
-}
-
 static void g1_debug(const char *str, void *data)
 {
 	DBG("%s", str);
@@ -151,7 +67,7 @@ static int g1_probe(struct ofono_modem *modem)
 	if (device == NULL)
 		return -EINVAL;
 
-	syntax = g_at_syntax_new_full(g1_feed, g1_hint, G1_STATE_IDLE);
+	syntax = g_at_syntax_new_gsm_permissive();
 	chat = g_at_chat_new_from_tty(device, syntax);
 	g_at_syntax_unref(syntax);
 
@@ -224,20 +140,28 @@ static int g1_disable(struct ofono_modem *modem)
 	return 0;
 }
 
-static void g1_populate(struct ofono_modem *modem)
+static void g1_pre_sim(struct ofono_modem *modem)
+{
+	GAtChat *chat = ofono_modem_get_data(modem);
+
+	DBG("");
+
+	ofono_devinfo_create(modem, 0, "atmodem", chat);
+	ofono_sim_create(modem, 0, "atmodem", chat);
+	ofono_voicecall_create(modem, 0, "atmodem", chat);
+}
+
+static void g1_post_sim(struct ofono_modem *modem)
 {
 	GAtChat *chat = ofono_modem_get_data(modem);
 	struct ofono_message_waiting *mw;
 
 	DBG("");
 
-	ofono_devinfo_create(modem, 0, "atmodem", chat);
 	ofono_ussd_create(modem, 0, "atmodem", chat);
-	ofono_sim_create(modem, 0, "atmodem", chat);
 	ofono_call_forwarding_create(modem, 0, "atmodem", chat);
 	ofono_call_settings_create(modem, 0, "atmodem", chat);
 	ofono_netreg_create(modem, 0, "atmodem", chat);
-	ofono_voicecall_create(modem, 0, "atmodem", chat);
 	ofono_call_meter_create(modem, 0, "atmodem", chat);
 	ofono_call_barring_create(modem, 0, "atmodem", chat);
 	ofono_ssn_create(modem, 0, "atmodem", chat);
@@ -255,7 +179,8 @@ static struct ofono_modem_driver g1_driver = {
 	.remove		= g1_remove,
 	.enable		= g1_enable,
 	.disable	= g1_disable,
-	.populate	= g1_populate,
+	.pre_sim	= g1_pre_sim,
+	.post_sim	= g1_post_sim,
 };
 
 static int g1_init(void)

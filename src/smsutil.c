@@ -23,15 +23,35 @@
 #include <config.h>
 #endif
 
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <dirent.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
 #include <glib.h>
 
 #include "util.h"
+#include "storage.h"
 #include "smsutil.h"
 
 #define uninitialized_var(x) x = x
+
+#define SMS_BACKUP_MODE 0600
+#define SMS_BACKUP_PATH STORAGEDIR "/%s/sms"
+#define SMS_BACKUP_PATH_DIR SMS_BACKUP_PATH "/%s-%i-%i"
+#define SMS_BACKUP_PATH_FILE SMS_BACKUP_PATH_DIR "/%03i"
+
+#define SMS_ADDR_FMT "%24[0-9A-F]"
+
+static GSList *sms_assembly_add_fragment_backup(struct sms_assembly *assembly,
+					const struct sms *sms, time_t ts,
+					const struct sms_address *addr,
+					guint16 ref, guint8 max, guint8 seq,
+					gboolean backup);
 
 void extract_bcd_number(const unsigned char *buf, int len, char *out)
 {
@@ -1936,6 +1956,59 @@ gboolean sms_extract_concatenation(const struct sms *sms, guint16 *ref_num,
 	return TRUE;
 }
 
+gboolean sms_extract_language_variant(const struct sms *sms, guint8 *locking,
+					guint8 *single)
+{
+	struct sms_udh_iter iter;
+	enum sms_iei iei;
+	guint8 variant;
+
+	/* We must ignore the entire user_data header here:
+	 * If the length of the User Data Header is such that there
+	 * are too few or too many octets in the final Information
+	 * Element then the whole User Data Header shall be ignored.
+	 */
+	if (!sms_udh_iter_init(sms, &iter))
+		return FALSE;
+
+	/* According to the specification, we have to use the last
+	 * useable header:
+	 * In the event that IEs determined as not repeatable are
+	 * duplicated, the last occurrence of the IE shall be used.
+	 * In the event that two or more IEs occur which have mutually
+	 * exclusive meanings (e.g. an 8bit port address and a 16bit
+	 * port address), then the last occurring IE shall be used.
+	 */
+	while ((iei = sms_udh_iter_get_ie_type(&iter)) !=
+			SMS_IEI_INVALID) {
+		switch (iei) {
+		case SMS_IEI_NATIONAL_LANGUAGE_SINGLE_SHIFT:
+			if (sms_udh_iter_get_ie_length(&iter) != 1)
+				break;
+
+			sms_udh_iter_get_ie_data(&iter, &variant);
+			if (single)
+				*single = variant;
+			break;
+
+		case SMS_IEI_NATIONAL_LANGUAGE_LOCKING_SHIFT:
+			if (sms_udh_iter_get_ie_length(&iter) != 1)
+				break;
+
+			sms_udh_iter_get_ie_data(&iter, &variant);
+			if (locking)
+				*locking = variant;
+			break;
+		default:
+			break;
+		}
+
+		sms_udh_iter_next(&iter);
+	}
+
+	return TRUE;
+}
+
 /*!
  * Decodes a list of SMSes that contain a datagram.  The list must be
  * sorted in order of the sequence number.  This function assumes that
@@ -2063,6 +2136,8 @@ char *sms_decode_text(GSList *sms_list)
 		if (charset == SMS_CHARSET_7BIT) {
 			unsigned char buf[160];
 			long written;
+			guint8 locking_shift = 0;
+			guint8 single_shift = 0;
 			int max_chars = sms_text_capacity_gsm(udl, taken);
 
 			unpack_7bit_own_buf(ud + taken, udl_in_bytes - taken,
@@ -2073,8 +2148,20 @@ char *sms_decode_text(GSList *sms_list)
 			if (buf[written-1] == 0x1b)
 				written = written - 1;
 
-			converted = convert_gsm_to_utf8(buf, written,
-							NULL, NULL, 0);
+			sms_extract_language_variant(sms, &locking_shift, &single_shift);
+
+			/* If language is not defined in 3GPP TS 23.038,
+	 		 * implementations are instructed to ignore it' */
+			if (locking_shift >= GSM_DIALECT_INVALID)
+				locking_shift = GSM_DIALECT_DEFAULT;
+
+			if (single_shift >= GSM_DIALECT_INVALID)
+				single_shift = GSM_DIALECT_DEFAULT;
+
+			converted = convert_gsm_to_utf8_with_lang(buf, written,
+								NULL, NULL, 0,
+								locking_shift,
+								single_shift);
 		} else {
 			const gchar *from = (const gchar *)(ud + taken);
 			/* According to the spec: A UCS2 character shall not be
@@ -2106,9 +2193,214 @@ char *sms_decode_text(GSList *sms_list)
 	return utf8;
 }
 
-struct sms_assembly *sms_assembly_new()
+static int sms_serialize(unsigned char *buf, const struct sms *sms)
 {
-	return g_new0(struct sms_assembly, 1);
+	int len, tpdu_len;
+
+	sms_encode(sms, &len, &tpdu_len, buf + 1);
+	buf[0] = tpdu_len;
+
+	return len + 1;
+}
+
+static gboolean sms_deserialize(const unsigned char *buf,
+		struct sms *sms, int len)
+{
+	if (len < 1)
+		return FALSE;
+
+	return sms_decode(buf + 1, len - 1, FALSE, buf[0], sms);
+}
+
+static gboolean sms_assembly_extract_address(const char *straddr,
+						struct sms_address *out)
+{
+	unsigned char pdu[12];
+	long len;
+	int offset = 0;
+
+	if (decode_hex_own_buf(straddr, -1, &len, 0, pdu) == NULL)
+		return FALSE;
+
+	return sms_decode_address_field(pdu, len, &offset, FALSE, out);
+}
+
+static gboolean sms_assembly_encode_address(const struct sms_address *in,
+						char *straddr)
+{
+	unsigned char pdu[12];
+	int offset = 0;
+
+	if (sms_encode_address_field(in, FALSE, pdu, &offset) == FALSE)
+		return FALSE;
+
+	if (encode_hex_own_buf(pdu, offset, 0, straddr) == NULL)
+		return FALSE;
+
+	straddr[offset * 2 + 1] = '\0';
+
+	return TRUE;
+}
+
+static void sms_assembly_load(struct sms_assembly *assembly,
+				const struct dirent *dir)
+{
+	struct sms_address addr;
+	char straddr[25];
+	guint16 ref;
+	guint8 max;
+	guint8 seq;
+	char *path;
+	int len;
+	struct stat segment_stat;
+	struct dirent **segments;
+	char *endp;
+	int r;
+	int i;
+	unsigned char buf[177];
+	struct sms segment;
+
+	if (dir->d_type != DT_DIR)
+		return;
+
+	/* Max of SMS address size is 12 bytes, hex encoded */
+	if (sscanf(dir->d_name, SMS_ADDR_FMT "-%hi-%hhi",
+				straddr, &ref, &max) < 3)
+		return;
+
+	if (sms_assembly_extract_address(straddr, &addr) == FALSE)
+		return;
+
+	path = g_strdup_printf(SMS_BACKUP_PATH "/%s",
+			assembly->imsi, dir->d_name);
+	len = scandir(path, &segments, NULL, versionsort);
+	g_free(path);
+
+	if (len < 0)
+		return;
+
+	for (i = 0; i < len; i++) {
+		if (segments[i]->d_type != DT_REG)
+			continue;
+
+		seq = strtol(segments[i]->d_name, &endp, 10);
+		if (*endp != '\0')
+			continue;
+
+		r = read_file(buf, sizeof(buf), SMS_BACKUP_PATH "/%s/%s",
+				assembly->imsi,
+				dir->d_name, segments[i]->d_name);
+		if (r < 0)
+			continue;
+
+		if (!sms_deserialize(buf, &segment, r))
+			continue;
+
+		path = g_strdup_printf(SMS_BACKUP_PATH "/%s/%s",
+				assembly->imsi,
+				dir->d_name, segments[i]->d_name);
+		r = stat(path, &segment_stat);
+		g_free(path);
+
+		if (r != 0)
+			continue;
+
+		/* Errors cannot occur here */
+		sms_assembly_add_fragment_backup(assembly, &segment,
+						segment_stat.st_mtime,
+						&addr, ref, max, seq, FALSE);
+	}
+
+	for (i = 0; i < len; i++)
+		free(segments[i]);
+
+	free(segments);
+}
+
+static gboolean sms_assembly_store(struct sms_assembly *assembly,
+				struct sms_assembly_node *node,
+				const struct sms *sms, guint8 seq)
+{
+	unsigned char buf[177];
+	int len;
+	char straddr[25];
+
+	if (!assembly->imsi)
+		return FALSE;
+
+	if (sms_assembly_encode_address(&node->addr, straddr) == FALSE)
+		return FALSE;
+
+	len = sms_serialize(buf, sms);
+
+	if (write_file(buf, len, SMS_BACKUP_MODE,
+				SMS_BACKUP_PATH_FILE, assembly->imsi, straddr,
+				node->ref, node->max_fragments, seq) != len)
+		return FALSE;
+
+	return TRUE;
+}
+
+static void sms_assembly_backup_free(struct sms_assembly *assembly,
+					struct sms_assembly_node *node)
+{
+	char *path;
+	int seq;
+	char straddr[25];
+
+	if (!assembly->imsi)
+		return;
+
+	if (sms_assembly_encode_address(&node->addr, straddr) == FALSE)
+		return;
+
+	for (seq = 0; seq < node->max_fragments; seq++) {
+		int offset = seq / 32;
+		int bit = 1 << (seq % 32);
+
+		if (node->bitmap[offset] & bit) {
+			path = g_strdup_printf(SMS_BACKUP_PATH_FILE,
+					assembly->imsi, straddr,
+					node->ref, node->max_fragments, seq);
+			unlink(path);
+			g_free(path);
+		}
+	}
+
+	path = g_strdup_printf(SMS_BACKUP_PATH_DIR, assembly->imsi, straddr,
+				node->ref, node->max_fragments);
+	rmdir(path);
+	g_free(path);
+}
+
+struct sms_assembly *sms_assembly_new(const char *imsi)
+{
+	struct sms_assembly *ret = g_new0(struct sms_assembly, 1);
+	char *path;
+	struct dirent **entries;
+	int len;
+
+	if (imsi) {
+		ret->imsi = imsi;
+
+		/* Restore state from backup */
+
+		path = g_strdup_printf(SMS_BACKUP_PATH, imsi);
+		len = scandir(path, &entries, NULL, alphasort);
+		g_free(path);
+
+		if (len < 0)
+			return ret;
+
+		while (len--) {
+			sms_assembly_load(ret, entries[len]);
+			free(entries[len]);
+		}
+
+		free(entries);
+	}
+
+	return ret;
 }
 
 void sms_assembly_free(struct sms_assembly *assembly)
@@ -2131,6 +2423,16 @@ GSList *sms_assembly_add_fragment(struct sms_assembly *assembly,
 					const struct sms *sms, time_t ts,
 					const struct sms_address *addr,
 					guint16 ref, guint8 max, guint8 seq)
+{
+	return sms_assembly_add_fragment_backup(assembly, sms,
+						ts, addr, ref, max, seq, TRUE);
+}
+
+static GSList *sms_assembly_add_fragment_backup(struct sms_assembly *assembly,
+					const struct sms *sms, time_t ts,
+					const struct sms_address *addr,
+					guint16 ref, guint8 max, guint8 seq,
+					gboolean backup)
 {
 	int offset = seq / 32;
 	int bit = 1 << (seq % 32);
@@ -2205,10 +2507,16 @@ out:
 	node->bitmap[offset] |= bit;
 	node->num_fragments += 1;
 
-	if (node->num_fragments < node->max_fragments)
+	if (node->num_fragments < node->max_fragments) {
+		if (backup)
+			sms_assembly_store(assembly, node, sms, seq);
+
 		return NULL;
+	}
 
 	completed = node->fragment_list;
+
+	sms_assembly_backup_free(assembly, node);
 
 	if (prev)
 		prev->next = l->next;
@@ -2242,6 +2550,8 @@ void sms_assembly_expire(struct sms_assembly *assembly, time_t before)
 			cur = cur->next;
 			continue;
 		}
+
+		sms_assembly_backup_free(assembly, node);
 
 		g_slist_foreach(node->fragment_list, (GFunc)g_free, 0);
 		g_slist_free(node->fragment_list);
@@ -2601,7 +2911,7 @@ gboolean cbs_extract_app_port(const struct cbs *cbs, int *dst, int *src,
 	return extract_app_port_common(&iter, dst, src, is_8bit);
 }
 
-static gboolean iso639_2_from_language(enum cbs_language lang, char *iso639)
+gboolean iso639_2_from_language(enum cbs_language lang, char *iso639)
 {
 	switch (lang) {
 	case CBS_LANGUAGE_GERMAN:
@@ -2987,7 +3297,7 @@ static void cbs_assembly_expire(struct cbs_assembly *assembly,
 	}
 }
 
-void cbs_assembly_location_changed(struct cbs_assembly *assembly,
+void cbs_assembly_location_changed(struct cbs_assembly *assembly, gboolean plmn,
 					gboolean lac, gboolean ci)
 {
 	/* Location Area wide (in GSM) (which means that a CBS message with the
@@ -3003,6 +3313,15 @@ void cbs_assembly_location_changed(struct cbs_assembly *assembly,
 	 * NOTE 4: According to 3GPP TS 23.003 [2] a Service Area consists of
 	 * one cell only.
 	 */
+
+	if (plmn) {
+		lac = TRUE;
+		g_slist_free(assembly->recv_plmn);
+		assembly->recv_plmn = NULL;
+
+		cbs_assembly_expire(assembly, cbs_compare_node_by_gs,
+				GUINT_TO_POINTER(CBS_GEO_SCOPE_PLMN));
+	}
 
 	if (lac) {
 		/* If LAC changed, then cell id has changed */
@@ -3125,4 +3444,225 @@ out:
 	*recv = g_slist_prepend(*recv, GUINT_TO_POINTER(new_serial));
 
 	return completed;
+}
+
+static inline int skip_to_next_field(const char *str, int pos, int len)
+{
+	if (pos < len && str[pos] == ',')
+		pos += 1;
+
+	while (pos < len && str[pos] == ' ')
+		pos += 1;
+
+	return pos;
+}
+
+static gboolean next_range(const char *str, int *offset, gint *min, gint *max)
+{
+	int pos;
+	int end;
+	int len;
+	int low = 0;
+	int high = 0;
+
+	len = strlen(str);
+
+	pos = *offset;
+
+	while (pos < len && str[pos] == ' ')
+		pos += 1;
+
+	end = pos;
+
+	while (str[end] >= '0' && str[end] <= '9') {
+		low = low * 10 + (int)(str[end] - '0');
+		end += 1;
+	}
+
+	if (pos == end)
+		return FALSE;
+
+	if (str[end] != '-') {
+		high = low;
+		goto out;
+	}
+
+	pos = end = end + 1;
+
+	while (str[end] >= '0' && str[end] <= '9') {
+		high = high * 10 + (int)(str[end] - '0');
+		end += 1;
+	}
+
+	if (pos == end)
+		return FALSE;
+
+out:
+	*offset = skip_to_next_field(str, end, len);
+
+	if (min)
+		*min = low;
+
+	if (max)
+		*max = high;
+
+	return TRUE;
+}
+
+static GSList *cbs_optimize_ranges(GSList *ranges)
+{
+	struct cbs_topic_range *range;
+	unsigned char bitmap[125];
+	GSList *l;
+	unsigned short i;
+	GSList *ret = NULL;
+
+	memset(bitmap, 0, sizeof(bitmap));
+
+	for (l = ranges; l; l = l->next) {
+		range = l->data;
+
+		for (i = range->min; i <= range->max; i++) {
+			int byte_offset = i / 8;
+			int bit = i % 8;
+
+			bitmap[byte_offset] |= 1 << bit;
+		}
+	}
+
+	range = NULL;
+
+	for (i = 0; i <= 999; i++) {
+		int byte_offset = i / 8;
+		int bit = i % 8;
+
+		if (is_bit_set(bitmap[byte_offset], bit) == FALSE) {
+			if (range) {
+				ret = g_slist_prepend(ret, range);
+				range = NULL;
+			}
+
+			continue;
+		}
+
+		if (range) {
+			range->max = i;
+			continue;
+		}
+
+		range = g_new0(struct cbs_topic_range, 1);
+		range->min = i;
+		range->max = i;
+	}
+
+	if (range != NULL)
+		ret = g_slist_prepend(ret, range);
+
+	ret = g_slist_reverse(ret);
+
+	return ret;
+}
+
+GSList *cbs_extract_topic_ranges(const char *ranges)
+{
+	int min;
+	int max;
+	int offset = 0;
+	GSList *ret = NULL;
+	GSList *tmp;
+
+	while (next_range(ranges, &offset, &min, &max) == TRUE) {
+		if (min < 0 || min > 999)
+			return NULL;
+
+		if (max < 0 || max > 999)
+			return NULL;
+
+		if (max < min)
+			return NULL;
+	}
+
+	if (ranges[offset] != '\0')
+		return NULL;
+
+	offset = 0;
+
+	while (next_range(ranges, &offset, &min, &max) == TRUE) {
+		struct cbs_topic_range *range = g_new0(struct cbs_topic_range, 1);
+
+		range->min = min;
+		range->max = max;
+
+		ret = g_slist_prepend(ret, range);
+	}
+
+	tmp = cbs_optimize_ranges(ret);
+	g_slist_foreach(ret, (GFunc)g_free, NULL);
+	g_slist_free(ret);
+
+	return tmp;
+}
+
+static inline int element_length(unsigned short element)
+{
+	if (element <= 9)
+		return 1;
+
+	if (element <= 99)
+		return 2;
+
+	if (element <= 999)
+		return 3;
+
+	if (element <= 9999)
+		return 4;
+
+	return 5;
+}
+
+static inline int range_length(struct cbs_topic_range *range)
+{
+	if (range->min == range->max)
+		return element_length(range->min);
+
+	return element_length(range->min) + element_length(range->max) + 1;
+}
+
+char *cbs_topic_ranges_to_string(GSList *ranges)
+{
+	int len = 0;
+	int nelem = 0;
+	struct cbs_topic_range *range;
+	GSList *l;
+	char *ret;
+
+	if (ranges == NULL)
+		return g_new0(char, 1);
+
+	for (l = ranges; l; l = l->next) {
+		range = l->data;
+
+		len += range_length(range);
+		nelem += 1;
+	}
+
+	/* Space for ranges, commas and terminator null */
+	ret = g_new(char, len + nelem);
+
+	len = 0;
+
+	for (l = ranges; l; l = l->next) {
+		range = l->data;
+
+		if (range->min != range->max)
+			len += sprintf(ret + len, "%hu-%hu",
+					range->min, range->max);
+		else
+			len += sprintf(ret + len, "%hu", range->min);
+
+		if (l->next != NULL)
+			ret[len++] = ',';
+	}
+
+	return ret;
 }

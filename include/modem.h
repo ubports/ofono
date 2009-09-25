@@ -26,6 +26,8 @@
 extern "C" {
 #endif
 
+#include <stdbool.h>
+
 #include <ofono/types.h>
 
 struct ofono_modem;
@@ -56,6 +58,10 @@ int ofono_modem_set_integer(struct ofono_modem *modem,
 				const char *key, int value);
 int ofono_modem_get_integer(struct ofono_modem *modem, const char *key);
 
+int ofono_modem_set_boolean(struct ofono_modem *modem,
+				const char *key, bool value);
+bool ofono_modem_get_boolean(struct ofono_modem *modem, const char *key);
+
 struct ofono_modem_driver {
 	const char *name;
 
@@ -72,8 +78,11 @@ struct ofono_modem_driver {
 	/* Power down device */
 	int (*disable)(struct ofono_modem *modem);
 
-	/* Populate the atoms supported by this device */
-	void (*populate)(struct ofono_modem *modem);
+	/* Populate the atoms available without SIM / Locked SIM */
+	void (*pre_sim)(struct ofono_modem *modem);
+
+	/* Populate the atoms that are available with SIM / Unlocked SIM*/
+	void (*post_sim)(struct ofono_modem *modem);
 };
 
 int ofono_modem_driver_register(const struct ofono_modem_driver *);

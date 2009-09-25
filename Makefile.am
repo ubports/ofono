@@ -9,7 +9,8 @@ include_HEADERS = include/log.h include/plugin.h include/history.h \
 			include/call-meter.h include/call-settings.h \
 			include/phonebook.h include/ssn.h include/ussd.h \
 			include/sms.h include/sim.h include/message-waiting.h \
-			include/netreg.h include/voicecall.h include/devinfo.h
+			include/netreg.h include/voicecall.h include/devinfo.h \
+			include/cbs.h
 
 nodist_include_HEADERS = include/version.h
 
@@ -40,29 +41,42 @@ gdbus_sources = gdbus/gdbus.h gdbus/mainloop.c gdbus/object.c gdbus/watch.c
 
 gisi_sources = gisi/phonet.h gisi/modem.h gisi/netlink.h gisi/netlink.c \
 		gisi/socket.h gisi/socket.c gisi/client.h gisi/client.c \
-		gisi/pep.h gisi/pep.c gisi/pipe.h gisi/pipe.c
+		gisi/pep.h gisi/pep.c gisi/pipe.h gisi/pipe.c gisi/iter.h \
+		gisi/iter.c gisi/verify.c
 
 gatchat_sources = gatchat/gatchat.h gatchat/gatchat.c \
 				gatchat/gatresult.h gatchat/gatresult.c \
 				gatchat/gatsyntax.h gatchat/gatsyntax.c \
-				gatchat/ringbuffer.h gatchat/ringbuffer.c
+				gatchat/ringbuffer.h gatchat/ringbuffer.c \
+				gatchat/gatmux.h gatchat/gatmux.c \
+				gatchat/gsm0710.h gatchat/gsm0710.c
+
+udev_files = plugins/ofono.rules
 
 if UDEV
 builtin_modules += udev
 builtin_sources += plugins/udev.c
 builtin_cflags += @UDEV_CFLAGS@
 builtin_libadd += @UDEV_LIBS@
+
+if DATAFILES
+rulesdir = @UDEV_DATADIR@
+
+rules_DATA = $(foreach file,$(udev_files), plugins/97-$(notdir $(file)))
+endif
 endif
 
 if ISIMODEM
 builtin_modules += isimodem
-builtin_sources += $(gisi_sources) drivers/isimodem/isi.h \
+builtin_sources += $(gisi_sources) \
+				drivers/isimodem/isi.h \
 				drivers/isimodem/isimodem.c \
 				drivers/isimodem/phonebook.c \
 				drivers/isimodem/devinfo.c \
 				drivers/isimodem/network-registration.c \
 				drivers/isimodem/voicecall.c \
 				drivers/isimodem/sms.c \
+				drivers/isimodem/cbs.c \
 				drivers/isimodem/sim.c \
 				drivers/isimodem/ssn.c \
 				drivers/isimodem/ussd.c \
@@ -74,10 +88,12 @@ endif
 
 if ATMODEM
 builtin_modules += atmodem
-builtin_sources += $(gatchat_sources) drivers/atmodem/at.h \
+builtin_sources += $(gatchat_sources) \
+				drivers/atmodem/atmodem.h \
 				drivers/atmodem/atmodem.c \
 				drivers/atmodem/call-settings.c \
 				drivers/atmodem/sms.c \
+				drivers/atmodem/cbs.c \
 				drivers/atmodem/call-forwarding.c \
 				drivers/atmodem/call-meter.c \
 				drivers/atmodem/network-registration.c \
@@ -88,7 +104,15 @@ builtin_sources += $(gatchat_sources) drivers/atmodem/at.h \
 				drivers/atmodem/phonebook.c \
 				drivers/atmodem/ssn.c \
 				drivers/atmodem/devinfo.c \
-				drivers/atmodem/vendor.h
+				drivers/atmodem/vendor.h \
+				drivers/atmodem/atutil.h \
+				drivers/atmodem/atutil.c
+
+builtin_modules += calypsomodem
+builtin_sources += drivers/atmodem/atutil.h \
+			drivers/calypsomodem/calypsomodem.h \
+			drivers/calypsomodem/calypsomodem.c \
+			drivers/calypsomodem/voicecall.c
 
 builtin_modules += modemconf
 builtin_sources += plugins/modemconf.c
@@ -100,11 +124,26 @@ endif
 builtin_modules += phonesim
 builtin_sources += plugins/phonesim.c
 
-builtin_modules += mbm
-builtin_sources += plugins/mbm.c
+builtin_modules += atgen
+builtin_sources += plugins/atgen.c
 
 builtin_modules += g1
 builtin_sources += plugins/g1.c
+
+builtin_modules += calypso
+builtin_sources += plugins/calypso.c
+
+builtin_modules += mbm
+builtin_sources += plugins/mbm.c
+
+builtin_modules += hso
+builtin_sources += plugins/hso.c
+
+builtin_modules += huawei
+builtin_sources += plugins/huawei.c
+
+builtin_modules += novatel
+builtin_sources += plugins/novatel.c
 endif
 
 if MAINTAINER_MODE
@@ -123,7 +162,8 @@ src_ofonod_SOURCES = $(gdbus_sources) $(builtin_sources) \
 			src/call-meter.c src/smsutil.h src/smsutil.c \
 			src/ssn.c src/call-barring.c src/sim.c \
 			src/phonebook.c src/history.c src/message-waiting.c \
-			src/simutil.h src/simutil.c
+			src/simutil.h src/simutil.c src/storage.h \
+			src/storage.c src/cbs.c src/watch.c
 
 src_ofonod_LDADD = $(builtin_libadd) \
 			@GLIB_LIBS@ @GTHREAD_LIBS@ @DBUS_LIBS@ -ldl
@@ -132,7 +172,8 @@ src_ofonod_LDFLAGS = -Wl,--export-dynamic -Wl,--version-script=src/ofono.ver
 
 src_ofonod_DEPENDENCIES = src/ofono.ver
 
-CLEANFILES = src/ofono.ver src/ofono.exp src/builtin.h $(local_headers)
+CLEANFILES = src/ofono.ver src/ofono.exp src/builtin.h \
+					$(local_headers) $(rules_DATA)
 
 plugindir = $(libdir)/ofono/plugins
 
@@ -150,7 +191,7 @@ AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @GTHREAD_CFLAGS@ \
 INCLUDES = -I$(builddir)/include -I$(builddir)/src -I$(srcdir)/src \
 			-I$(srcdir)/gdbus -I$(srcdir)/gisi -I$(srcdir)/gatchat
 
-doc_files = doc/overview.txt \
+doc_files = doc/overview.txt doc/ofono-paper.txt \
 		doc/manager-api.txt doc/modem-api.txt doc/network-api.txt \
 			doc/voicecallmanager-api.txt doc/voicecall-api.txt \
 			doc/call-forwarding-api.txt doc/call-settings-api.txt \
@@ -167,7 +208,8 @@ test_files = test/test-manager test/test-modem test/test-voicecall \
 
 conf_files = src/ofono.conf plugins/modem.conf
 
-EXTRA_DIST = src/genbuiltin $(doc_files) $(test_files) $(conf_files)
+EXTRA_DIST = src/genbuiltin $(doc_files) \
+				$(test_files) $(conf_files) $(udev_files)
 
 dist_man_MANS = doc/ofonod.8
 
@@ -175,7 +217,7 @@ dist_man_MANS = doc/ofonod.8
 unit_objects =
 
 noinst_PROGRAMS = unit/test-common unit/test-util \
-					unit/test-sms unit/test-simutil
+			unit/test-sms unit/test-simutil unit/test-mux
 
 unit_test_common_SOURCES = unit/test-common.c src/common.c
 unit_test_common_LDADD = @GLIB_LIBS@
@@ -185,14 +227,19 @@ unit_test_util_SOURCES = unit/test-util.c src/util.c
 unit_test_util_LDADD = @GLIB_LIBS@
 unit_objects += $(unit_test_utils_OBJECTS)
 
-unit_test_sms_SOURCES = unit/test-sms.c src/util.c src/smsutil.c
+unit_test_sms_SOURCES = unit/test-sms.c src/util.c src/smsutil.c src/storage.c
 unit_test_sms_LDADD = @GLIB_LIBS@
 unit_objects += $(unit_test_sms_OBJECTS)
 
 unit_test_simutil_SOURCES = unit/test-simutil.c src/util.c \
-						src/simutil.c src/smsutil.c
+						src/simutil.c src/smsutil.c \
+						src/storage.c
 unit_test_simutil_LDADD = @GLIB_LIBS@
 unit_objects += $(unit_test_simutil_OBJECTS)
+
+unit_test_mux_SOURCES = unit/test-mux.c $(gatchat_sources)
+unit_test_mux_LDADD = @GLIB_LIBS@
+unit_objects += $(unit_test_mux_OBJECTS)
 
 
 DISTCHECK_CONFIGURE_FLAGS = --disable-datafiles
@@ -215,6 +262,9 @@ src/ofono.ver: src/ofono.exp
 	$(AM_V_at)echo "{ global:" > $@
 	$(AM_V_GEN)$(SED) -e "s/\(.*\)/\1;/" $< >> $@
 	$(AM_V_at)echo "local: *; };" >> $@
+
+plugins/%.rules:
+	$(AM_V_GEN)cp $(subst 97-,,$@) $@
 
 $(src_ofonod_OBJECTS) $(unit_objects): $(local_headers)
 

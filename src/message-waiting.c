@@ -54,8 +54,6 @@ struct ofono_message_waiting {
 	gboolean mbdn_not_provided;
 	struct ofono_phone_number mailbox_number[5];
 	struct ofono_sim *sim;
-	unsigned int sim_watch;
-	unsigned int sim_ready_watch;
 	struct ofono_atom *atom;
 };
 
@@ -211,7 +209,7 @@ static DBusMessage *set_mbdn(struct ofono_message_waiting *mw, int mailbox,
 	req->mw = mw;
 	req->mailbox = mailbox;
 	string_to_phone_number(number, &req->number);
-	req->msg = dbus_message_ref(msg);
+	req->msg = msg ? dbus_message_ref(msg) : NULL;
 
 	sim_adn_build(efmbdn, req->mw->efmbdn_length, &req->number, NULL);
 
@@ -468,7 +466,7 @@ static void mw_set_indicator(struct ofono_message_waiting *mw, int profile,
 		indication = present;
 		mw->messages[type].indication = present;
 
-		if (!mw_message_waiting_property_name[type])
+		if (mw_message_waiting_property_name[type])
 			ofono_dbus_signal_property_changed(conn, path,
 					MESSAGE_WAITING_INTERFACE,
 					mw_message_waiting_property_name[type],
@@ -480,7 +478,7 @@ static void mw_set_indicator(struct ofono_message_waiting *mw, int profile,
 
 		mw->messages[type].message_count = messages;
 
-		if (!mw_message_waiting_property_name[type])
+		if (mw_message_waiting_property_name[type])
 			ofono_dbus_signal_property_changed(conn, path,
 					MESSAGE_WAITING_INTERFACE,
 					mw_message_count_property_name[type],
@@ -554,7 +552,7 @@ static void handle_enhanced_voicemail_iei(struct ofono_message_waiting *mw,
 		/* 9.2.3.24.13.1 Enhanced Voice Mail Notification */
 
 		/* MULTIPLE_SUBSCRIBER_PROFILE */
-		profile = (iei[0] >> 2) & 3;
+		profile = ((iei[0] >> 2) & 3) + 1;
 
 		/* SM_STORAGE */
 		if (discard)
@@ -570,14 +568,17 @@ static void handle_enhanced_voicemail_iei(struct ofono_message_waiting *mw,
 
 		/* Other parameters currently not supported */
 
-		set = iei[n + 2] > 0 ? TRUE : FALSE;
+		if (length < n + 3)
+			return;
+
+		set = iei[n + 1] > 0 ? TRUE : FALSE;
 		mw_set_indicator(mw, profile, SMS_MWI_TYPE_VOICE,
-					set, iei[n + 2]);
+					set, iei[n + 1]);
 	} else {
 		/* 9.2.3.24.13.2 Enhanced Voice Delete Confirmation */
 
 		/* MULTIPLE_SUBSCRIBER_PROFILE */
-		profile = (iei[0] >> 2) & 3;
+		profile = ((iei[0] >> 2) & 3) + 1;
 
 		/* SM_STORAGE */
 		if (discard)
@@ -591,9 +592,12 @@ static void handle_enhanced_voicemail_iei(struct ofono_message_waiting *mw,
 
 		/* Other parameters currently not supported */
 
-		set = iei[n + 2] > 0 ? TRUE : FALSE;
+		if (length < n + 3)
+			return;
+
+		set = iei[n + 1] > 0 ? TRUE : FALSE;
 		mw_set_indicator(mw, profile, SMS_MWI_TYPE_VOICE,
-					set, iei[n + 2]);
+					set, iei[n + 1]);
 	}
 
 	if (mailbox_address.address[0] != '\0')
@@ -699,55 +703,15 @@ void __ofono_message_waiting_mwi(struct ofono_message_waiting *mw,
 		return;
 }
 
-static void message_waiting_sim_ready(void *userdata)
-{
-	struct ofono_message_waiting *mw = userdata;
-
-	/* Loads MWI states and MBDN from SIM */
-	ofono_sim_read(mw->sim, SIM_EFMWIS_FILEID, mw_mwis_read_cb, mw);
-	ofono_sim_read(mw->sim, SIM_EFMBI_FILEID, mw_mbi_read_cb, mw);
-}
-
 static void message_waiting_unregister(struct ofono_atom *atom)
 {
-	struct ofono_message_waiting *mw = __ofono_atom_get_data(atom);
 	DBusConnection *conn = ofono_dbus_get_connection();
 	struct ofono_modem *modem = __ofono_atom_get_modem(atom);
 	const char *path = __ofono_atom_get_path(atom);
 
-	if (mw->sim_watch) {
-		__ofono_modem_remove_atom_watch(modem, mw->sim_watch);
-		mw->sim_watch = 0;
-	}
-
-	if (mw->sim_ready_watch) {
-		ofono_sim_remove_ready_watch(mw->sim, mw->sim_ready_watch);
-		mw->sim_ready_watch = 0;
-		mw->sim = NULL;
-	}
-
 	g_dbus_unregister_interface(conn, path,
 					MESSAGE_WAITING_INTERFACE);
 	ofono_modem_remove_interface(modem, MESSAGE_WAITING_INTERFACE);
-}
-
-static void sim_watch(struct ofono_atom *atom,
-			enum ofono_atom_watch_condition cond, void *data)
-{
-	struct ofono_message_waiting *mw = data;
-
-	if (cond == OFONO_ATOM_WATCH_CONDITION_UNREGISTERED) {
-		mw->sim = NULL;
-		mw->sim_ready_watch = 0;
-		return;
-	}
-
-	mw->sim = __ofono_atom_get_data(atom);
-	mw->sim_ready_watch = ofono_sim_add_ready_watch(mw->sim,
-				message_waiting_sim_ready, mw, NULL);
-
-	if (ofono_sim_get_ready(mw->sim))
-		message_waiting_sim_ready(mw);
 }
 
 void ofono_message_waiting_register(struct ofono_message_waiting *mw)
@@ -769,14 +733,16 @@ void ofono_message_waiting_register(struct ofono_message_waiting *mw)
 
 	ofono_modem_add_interface(modem, MESSAGE_WAITING_INTERFACE);
 
-	mw->sim_watch = __ofono_modem_add_atom_watch(modem,
-					OFONO_ATOM_TYPE_SIM,
-					sim_watch, mw, NULL);
-
 	sim_atom = __ofono_modem_find_atom(modem, OFONO_ATOM_TYPE_SIM);
 
-	if (sim_atom && __ofono_atom_get_registered(sim_atom))
-		sim_watch(sim_atom, OFONO_ATOM_WATCH_CONDITION_REGISTERED, mw);
+	if (sim_atom) {
+		/* Assume that if sim atom exists, it is ready */
+		mw->sim = __ofono_atom_get_data(sim_atom);
+
+		/* Loads MWI states and MBDN from SIM */
+		ofono_sim_read(mw->sim, SIM_EFMWIS_FILEID, mw_mwis_read_cb, mw);
+		ofono_sim_read(mw->sim, SIM_EFMBI_FILEID, mw_mbi_read_cb, mw);
+	}
 
 	__ofono_atom_register(mw->atom, message_waiting_unregister);
 }

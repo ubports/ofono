@@ -40,7 +40,7 @@
 #include "gatchat.h"
 #include "gatresult.h"
 
-#include "at.h"
+#include "atmodem.h"
 
 static const char *csca_prefix[] = { "+CSCA:", NULL };
 static const char *csms_prefix[] = { "+CSMS:", NULL };
@@ -48,10 +48,12 @@ static const char *cmgf_prefix[] = { "+CMGF:", NULL };
 static const char *cpms_prefix[] = { "+CPMS:", NULL };
 static const char *cnmi_prefix[] = { "+CNMI:", NULL };
 static const char *cmgs_prefix[] = { "+CMGS:", NULL };
+static const char *cmgl_prefix[] = { "+CMGL:", NULL };
 static const char *none_prefix[] = { NULL };
 
 static gboolean set_cmgf(gpointer user_data);
 static gboolean set_cpms(gpointer user_data);
+static void at_cmgl_set_cpms(struct ofono_sms *sms, int store);
 
 #define MAX_CMGF_RETRIES 10
 #define MAX_CPMS_RETRIES 10
@@ -116,10 +118,7 @@ error:
 	if (cbd)
 		g_free(cbd);
 
-	{
-		DECLARE_FAILURE(error);
-		cb(&error, user_data);
-	}
+	CALLBACK_WITH_FAILURE(cb, user_data);
 }
 
 static void at_csca_query_cb(gboolean ok, GAtResult *result, gpointer user_data)
@@ -165,10 +164,7 @@ static void at_csca_query_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	return;
 
 err:
-	{
-		DECLARE_FAILURE(error);
-		cb(&error, NULL, cbd->data);
-	}
+	CALLBACK_WITH_FAILURE(cb, NULL, cbd->data);
 }
 
 static void at_csca_query(struct ofono_sms *sms, ofono_sms_sca_query_cb_t cb,
@@ -188,10 +184,7 @@ error:
 	if (cbd)
 		g_free(cbd);
 
-	{
-		DECLARE_FAILURE(error);
-		cb(&error, NULL, user_data);
-	}
+	CALLBACK_WITH_FAILURE(cb, NULL, user_data);
 }
 
 static void at_cmgs_cb(gboolean ok, GAtResult *result, gpointer user_data)
@@ -224,10 +217,7 @@ static void at_cmgs_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	return;
 
 err:
-	{
-		DECLARE_FAILURE(error);
-		cb(&error, -1, cbd->data);
-	}
+	CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
 }
 
 static void at_cmgs(struct ofono_sms *sms, unsigned char *pdu, int pdu_len,
@@ -259,10 +249,7 @@ error:
 	if (cbd)
 		g_free(cbd);
 
-	{
-		DECLARE_FAILURE(error);
-		cb(&error, -1, user_data);
-	}
+	CALLBACK_WITH_FAILURE(cb, -1, user_data);
 }
 
 static void at_cnma_cb(gboolean ok, GAtResult *result, gpointer user_data)
@@ -291,21 +278,6 @@ static gboolean at_parse_pdu_common(GAtResult *result, const char *prefix,
 	*pdu = g_at_result_pdu(result);
 
 	return TRUE;
-}
-
-static void at_cbm_notify(GAtResult *result, gpointer user_data)
-{
-	int pdulen;
-	const char *pdu;
-
-	dump_response("at_cbm_notify", TRUE, result);
-
-	if (!at_parse_pdu_common(result, "+CBM:", &pdu, &pdulen)) {
-		ofono_error("Unable to parse CBM notification");
-		return;
-	}
-
-	ofono_debug("Got new Cell Broadcast via CBM: %s, %d", pdu, pdulen);
 }
 
 static void at_cds_notify(GAtResult *result, gpointer user_data)
@@ -342,13 +314,18 @@ static void at_cmt_notify(GAtResult *result, gpointer user_data)
 	const char *hexpdu;
 	long pdu_len;
 	int tpdu_len;
-	unsigned char pdu[164];
+	unsigned char pdu[176];
 	char buf[256];
 
 	dump_response("at_cmt_notify", TRUE, result);
 
 	if (!at_parse_pdu_common(result, "+CMT:", &hexpdu, &tpdu_len)) {
 		ofono_error("Unable to parse CMT notification");
+		return;
+	}
+
+	if (strlen(hexpdu) > sizeof(pdu) * 2) {
+		ofono_error("Bad PDU length in CMT notification");
 		return;
 	}
 
@@ -372,7 +349,7 @@ static void at_cmgr_notify(GAtResult *result, gpointer user_data)
 	struct ofono_sms *sms = user_data;
 	GAtResultIter iter;
 	const char *hexpdu;
-	unsigned char pdu[164];
+	unsigned char pdu[176];
 	long pdu_len;
 	int tpdu_len;
 
@@ -393,6 +370,9 @@ static void at_cmgr_notify(GAtResult *result, gpointer user_data)
 		goto err;
 
 	hexpdu = g_at_result_pdu(result);
+
+	if (strlen(hexpdu) > sizeof(pdu) * 2)
+		goto err;
 
 	ofono_debug("Got PDU: %s, with len: %d", hexpdu, tpdu_len);
 
@@ -499,6 +479,126 @@ err:
 	ofono_error("Unable to parse CMTI notification");
 }
 
+static void at_cmgl_done(struct ofono_sms *sms)
+{
+	struct sms_data *data = ofono_sms_get_data(sms);
+
+	if (data->incoming == MT_STORE && data->store == ME_STORE)
+		at_cmgl_set_cpms(sms, SM_STORE);
+}
+
+static void at_cmgl_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_sms *sms = user_data;
+	struct sms_data *data = ofono_sms_get_data(sms);
+	GAtResultIter iter;
+	const char *hexpdu;
+	unsigned char pdu[176];
+	long pdu_len;
+	int tpdu_len;
+	int index;
+	int status;
+	char buf[16];
+
+	dump_response("at_cmgl_notify", TRUE, result);
+
+	g_at_result_iter_init(&iter, result);
+
+	while (g_at_result_iter_next(&iter, "+CMGL:")) {
+		if (!g_at_result_iter_next_number(&iter, &index))
+			goto err;
+
+		if (!g_at_result_iter_next_number(&iter, &status))
+			goto err;
+
+		if (!g_at_result_iter_skip_next(&iter))
+			goto err;
+
+		if (!g_at_result_iter_next_number(&iter, &tpdu_len))
+			goto err;
+
+		/* Only MT messages */
+		if (status != 0 && status != 1)
+			continue;
+
+		hexpdu = g_at_result_pdu(result);
+
+		ofono_debug("Found an old SMS PDU: %s, with len: %d",
+				hexpdu, tpdu_len);
+
+		if (strlen(hexpdu) > sizeof(pdu) * 2)
+			continue;
+
+		decode_hex_own_buf(hexpdu, -1, &pdu_len, 0, pdu);
+		ofono_sms_deliver_notify(sms, pdu, pdu_len, tpdu_len);
+
+		/* We don't buffer SMS on the SIM/ME, send along a CMGD */
+		sprintf(buf, "AT+CMGD=%d", index);
+		g_at_chat_send(data->chat, buf, none_prefix,
+				at_cmgd_cb, NULL, NULL);
+	}
+	return;
+
+err:
+	ofono_error("Unable to parse CMGL response");
+}
+
+static void at_cmgl_cb(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct ofono_sms *sms = user_data;
+
+	if (!ok)
+		ofono_error("Initial listing SMS storage failed!");
+
+	at_cmgl_done(sms);
+}
+
+static void at_cmgl_cpms_cb(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct cpms_request *req = user_data;
+	struct ofono_sms *sms = req->sms;
+	struct sms_data *data = ofono_sms_get_data(sms);
+
+	if (!ok) {
+		ofono_error("Initial CPMS request failed");
+		at_cmgl_done(sms);
+		return;
+	}
+
+	data->store = req->store;
+
+	g_at_chat_send_pdu_listing(data->chat, "AT+CMGL=4", cmgl_prefix,
+					at_cmgl_notify, at_cmgl_cb, sms, NULL);
+}
+
+static void at_cmgl_set_cpms(struct ofono_sms *sms, int store)
+{
+	struct sms_data *data = ofono_sms_get_data(sms);
+
+	if (store == data->store) {
+		struct cpms_request req;
+
+		req.sms = sms;
+		req.store = store;
+
+		at_cmgl_cpms_cb(TRUE, NULL, &req);
+	} else {
+		char buf[128];
+		const char *readwrite = storages[store];
+		const char *incoming = storages[data->incoming];
+		struct cpms_request *req = g_new(struct cpms_request, 1);
+
+		req->sms = sms;
+		req->store = store;
+
+		sprintf(buf, "AT+CPMS=\"%s\",\"%s\",\"%s\"",
+			readwrite, readwrite, incoming);
+
+		g_at_chat_send(data->chat, buf, cpms_prefix, at_cmgl_cpms_cb,
+				req, g_free);
+	}
+}
+
 static void at_sms_initialized(struct ofono_sms *sms)
 {
 	struct sms_data *data = ofono_sms_get_data(sms);
@@ -509,12 +609,16 @@ static void at_sms_initialized(struct ofono_sms *sms)
 				sms, NULL);
 	g_at_chat_register(data->chat, "+CDS:", at_cds_notify, TRUE,
 				sms, NULL);
-	g_at_chat_register(data->chat, "+CBM:", at_cbm_notify, TRUE,
-				sms, NULL);
 
 	/* We treat CMGR just like a notification */
 	g_at_chat_register(data->chat, "+CMGR:", at_cmgr_notify, TRUE,
 				sms, NULL);
+
+	/* Inspect and free the incoming SMS storage */
+	if (data->incoming == MT_STORE)
+		at_cmgl_set_cpms(sms, ME_STORE);
+	else
+		at_cmgl_set_cpms(sms, data->incoming);
 
 	ofono_sms_register(sms);
 }

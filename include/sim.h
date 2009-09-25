@@ -37,6 +37,26 @@ enum ofono_sim_file_structure {
 	OFONO_SIM_FILE_STRUCTURE_CYCLIC = 3
 };
 
+enum ofono_sim_password_type {
+	OFONO_SIM_PASSWORD_NONE = 0,
+	OFONO_SIM_PASSWORD_SIM_PIN,
+	OFONO_SIM_PASSWORD_PHSIM_PIN,
+	OFONO_SIM_PASSWORD_PHFSIM_PIN,
+	OFONO_SIM_PASSWORD_SIM_PIN2,
+	OFONO_SIM_PASSWORD_PHNET_PIN,
+	OFONO_SIM_PASSWORD_PHNETSUB_PIN,
+	OFONO_SIM_PASSWORD_PHSP_PIN,
+	OFONO_SIM_PASSWORD_PHCORP_PIN,
+	OFONO_SIM_PASSWORD_SIM_PUK,
+	OFONO_SIM_PASSWORD_PHFSIM_PUK,
+	OFONO_SIM_PASSWORD_SIM_PUK2,
+	OFONO_SIM_PASSWORD_PHNET_PUK,
+	OFONO_SIM_PASSWORD_PHNETSUB_PUK,
+	OFONO_SIM_PASSWORD_PHSP_PUK,
+	OFONO_SIM_PASSWORD_PHCORP_PUK,
+	OFONO_SIM_PASSWORD_INVALID,
+};
+
 typedef void (*ofono_sim_file_info_cb_t)(const struct ofono_error *error,
 					int filelength,
 					enum ofono_sim_file_structure structure,
@@ -64,6 +84,16 @@ typedef void (*ofono_sim_file_read_cb_t)(int ok,
 
 typedef void (*ofono_sim_file_write_cb_t)(int ok, void *userdata);
 
+typedef void (*ofono_sim_passwd_cb_t)(const struct ofono_error *error,
+					enum ofono_sim_password_type type,
+					void *data);
+
+typedef void (*ofono_sim_lock_unlock_cb_t)(const struct ofono_error *error,
+					void *data);
+
+typedef void (*ofono_sim_locked_cb_t)(const struct ofono_error *error,
+					int locked, void *data);
+
 struct ofono_sim_driver {
 	const char *name;
 	int (*probe)(struct ofono_sim *sim, unsigned int vendor, void *data);
@@ -90,6 +120,23 @@ struct ofono_sim_driver {
 			ofono_sim_write_cb_t cb, void *data);
 	void (*read_imsi)(struct ofono_sim *sim,
 			ofono_sim_imsi_cb_t cb, void *data);
+	void (*query_passwd_state)(struct ofono_sim *sim,
+			ofono_sim_passwd_cb_t cb, void *data);
+	void (*send_passwd)(struct ofono_sim *sim, const char *passwd,
+			ofono_sim_lock_unlock_cb_t cb, void *data);
+	void (*reset_passwd)(struct ofono_sim *sim, const char *puk,
+			const char *passwd,
+			ofono_sim_lock_unlock_cb_t cb, void *data);
+	void (*change_passwd)(struct ofono_sim *sim,
+			enum ofono_sim_password_type type,
+			const char *old, const char *new,
+			ofono_sim_lock_unlock_cb_t cb, void *data);
+	void (*lock)(struct ofono_sim *sim, enum ofono_sim_password_type type,
+			int enable, const char *passwd,
+			ofono_sim_lock_unlock_cb_t cb, void *data);
+	void (*query_locked)(struct ofono_sim *sim,
+			enum ofono_sim_password_type type,
+			ofono_sim_locked_cb_t cb, void *data);
 };
 
 int ofono_sim_driver_register(const struct ofono_sim_driver *d);

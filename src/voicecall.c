@@ -287,7 +287,7 @@ static DBusMessage *voicecall_hangup(DBusConnection *conn,
 	if (call->status == CALL_STATUS_DISCONNECTED)
 		return __ofono_error_failed(msg);
 
-	if (!vc->driver->release_specific)
+	if (!vc->driver->release_specific || !vc->driver->hangup)
 		return __ofono_error_not_implemented(msg);
 
 	if (vc->flags & VOICECALLS_FLAG_PENDING)
@@ -296,7 +296,10 @@ static DBusMessage *voicecall_hangup(DBusConnection *conn,
 	vc->flags |= VOICECALLS_FLAG_PENDING;
 	vc->pending = dbus_message_ref(msg);
 
-	vc->driver->release_specific(vc, call->id,
+	if (call->status == CALL_STATUS_INCOMING)
+		vc->driver->hangup(vc, generic_callback, vc);
+	else
+		vc->driver->release_specific(vc, call->id,
 						generic_callback, vc);
 
 	return NULL;
@@ -1249,7 +1252,9 @@ void ofono_voicecall_disconnected(struct ofono_voicecall *vc, int id,
 
 	__ofono_modem_release_callid(modem, id);
 
-	voicecall_emit_disconnect_reason(call, reason);
+	if (reason != OFONO_DISCONNECT_REASON_UNKNOWN)
+		voicecall_emit_disconnect_reason(call, reason);
+
 	voicecall_set_call_status(call, CALL_STATUS_DISCONNECTED);
 
 	if (prev_status == CALL_STATUS_INCOMING ||
@@ -1454,7 +1459,8 @@ static void dial_callback(const struct ofono_error *error, void *data)
 		struct voicecall *v = l->data;
 
 		if (v->call->status == CALL_STATUS_DIALING ||
-			v->call->status == CALL_STATUS_ALERTING)
+				v->call->status == CALL_STATUS_ALERTING ||
+				v->call->status == CALL_STATUS_ACTIVE)
 			break;
 	}
 

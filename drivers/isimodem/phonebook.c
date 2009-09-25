@@ -32,6 +32,7 @@
 
 #include <glib.h>
 #include <gisi/client.h>
+#include <gisi/iter.h>
 
 #include <ofono/log.h>
 #include <ofono/modem.h>
@@ -70,179 +71,131 @@ enum pb_tag {
 };
 
 enum pb_status {
-	SIM_SERV_OK = 0x01
+	SIM_SERV_OK = 0x01,
+	SIM_SERV_NO_MATCH = 0x16
 };
 
 struct pb_data {
 	GIsiClient *client;
 };
 
-static char *ucs2_to_utf8(const unsigned char *str, long len)
-{
-	char *utf8;
-	utf8 = g_convert((const char *)str, len, "UTF-8//TRANSLIT", "UCS-2BE",
-				NULL, NULL, NULL);
-	return utf8;
-}
-
 static int decode_read_response(const unsigned char *msg, size_t len,
 				struct ofono_phonebook *pb)
 {
-	int retval = -1;
-
-	unsigned int i;
-	unsigned int p;
+	GIsiSubBlockIter iter;
 
 	char *name = NULL;
 	char *number = NULL;
-	char *adn = NULL;
-	char *snr = NULL;
+	char *sne= NULL;
+	char *anr = NULL;
 	char *email = NULL;
 
-	unsigned int location = 0;
-	unsigned int status = 0;
+	int location = -1;
+	guint8 status = 0;
 
-	unsigned int messageid;
-	unsigned int servicetype;
-	unsigned int num_subblocks;
+	if (len < 3 || msg[0] != SIM_PB_RESP_SIM_PB_READ)
+		goto error;
 
-	if (len < 3)
-		goto cleanup;
+	if (msg[1] != SIM_PB_READ)
+		goto error;
 
-	messageid = msg[0];
-	servicetype = msg[1];
-	num_subblocks = msg[2];
+	if (!g_isi_sb_iter_init(msg+3, len-3, &iter, true))
+		goto error;
 
-	if (messageid != SIM_PB_RESP_SIM_PB_READ || servicetype != SIM_PB_READ)
-		goto cleanup;
+	while (g_isi_sb_iter_is_valid(&iter)) {
 
-	p = 3;
-	for (i=0; i < num_subblocks; i++) {
-		unsigned int subblock_type;
-		unsigned int subblock_len;
-
-		if (p + 4 > len)
-			goto cleanup;
-
-		subblock_type = (msg[p] << 8) + msg[p + 1];
-		subblock_len = (msg[p + 2] << 8) + msg[p + 3];
-
-		switch (subblock_type) {
+		switch (g_isi_sb_iter_get_id(&iter)) {
 
 		case SIM_PB_ADN: {
-			unsigned int namelength;
-			unsigned int numberlength;
+			guint16 loc;
+			guint8 namelen;
+			guint8 numberlen;
 
-			if (p + 8 > len)
-				goto cleanup;
+			if (!g_isi_sb_iter_get_word(&iter, &loc, 4) ||
+				!g_isi_sb_iter_get_byte(&iter, &namelen, 6) ||
+				!g_isi_sb_iter_get_byte(&iter, &numberlen, 7))
+				goto error;
 
-			location = (msg[p + 4] << 8) + msg[p + 5];
-			namelength = msg[p + 6];
-			numberlength = msg[p + 7];
+			if (!g_isi_sb_iter_get_alpha_tag(&iter, &name,
+						namelen * 2, 8))
+				goto error;
 
-			if (p + 8 + namelength * 2 + numberlength * 2 > len)
-				goto cleanup;
+			if (!g_isi_sb_iter_get_alpha_tag(&iter, &number,
+						numberlen * 2, 8 + namelen * 2))
+				goto error;
 
-			name = ucs2_to_utf8(msg + p + 8, namelength * 2);
-			number = ucs2_to_utf8(msg + p + 8 + namelength * 2,
-						numberlength * 2);
-			DBG("ADN subblock: name %s number %s location %i",
-				name, number, location);
+			location = loc;
 			break;
 		}
 
 		case SIM_PB_SNE: {
-			unsigned int locsne;
-			unsigned int snelength;
-			unsigned int snefiller;
+			guint8 snelen;
 
-			if (p + 8 > len)
-				goto cleanup;
+			if (!g_isi_sb_iter_get_byte(&iter, &snelen, 6))
+				goto error;
 
-			locsne = (msg[p + 4] << 8) + msg[p + 5];
-			snelength = msg[p + 6];
-			snefiller = msg[p + 7];
-
-			if (p + 8 + snelength * 2 > len)
-				goto cleanup;
-
-			adn = ucs2_to_utf8(msg + p + 8, snelength * 2);
-			DBG("SNE subblock: name %s", adn);
+			if (!g_isi_sb_iter_get_alpha_tag(&iter, &sne,
+						snelen * 2, 8))
+				goto error;
 			break;
 		}
 
 		case SIM_PB_ANR: {
-			unsigned int locanr;
-			unsigned int anrlength;
-			unsigned int anrfiller;
+			guint8 anrlen;
 
-			if (p + 8 > len)
-				goto cleanup;
+			if (!g_isi_sb_iter_get_byte(&iter, &anrlen, 6))
+				goto error;
 
-			locanr = (msg[p + 4] << 8) + msg[p + 5];
-			anrlength = msg[p + 6];
-			anrfiller = msg[p + 7];
-
-			if (p + 8 + anrlength * 2 > len)
-				goto cleanup;
-
-			snr = ucs2_to_utf8(msg + p + 8, anrlength * 2);
-			DBG("ANR subblock: number %s", snr);
+			if (!g_isi_sb_iter_get_alpha_tag(&iter, &anr,
+						anrlen * 2, 8))
+				goto error;
 			break;
 		}
 
 		case SIM_PB_EMAIL: {
-			unsigned int locemail;
-			unsigned int emaillength;
-			unsigned int emailfiller;
+			guint8 emaillen;
 
-			if (p + 8 > len)
-				goto cleanup;
+			if (!g_isi_sb_iter_get_byte(&iter, &emaillen, 6))
+				goto error;
 
-			locemail = (msg[p + 4] << 8) + msg[p + 5];
-			emaillength = msg[p + 6];
-			emailfiller = msg[p + 7];
-
-			if (p + 8 + emaillength * 2 > len)
-				goto cleanup;
-
-			email = ucs2_to_utf8(msg + p + 8, emaillength * 2);
-			DBG("EMAIL subblock: email %s", email);
+			if (!g_isi_sb_iter_get_alpha_tag(&iter, &email,
+						emaillen * 2, 8))
+				goto error;
 			break;
 		}
 
 		case SIM_PB_STATUS:
-			if (p + 5 > len)
-				goto cleanup;
 
-			status = msg[p + 4];
-			DBG("STATUS subblock: status %i", status);
+			if (!g_isi_sb_iter_get_byte(&iter, &status, 4))
+				 goto error;
+
 			break;
 
 		default:
-			DBG("Unknown subblock in read response: type %i length %i",
-				subblock_type, subblock_len);
+			DBG("Skipping sub-block: 0x%04X (%zu bytes)",
+				g_isi_sb_iter_get_id(&iter),
+				g_isi_sb_iter_get_len(&iter));
 			break;
 		}
-
-		p += subblock_len;
+		g_isi_sb_iter_next(&iter);
 	}
 
-	if (status == SIM_SERV_OK) {
-		
-		ofono_phonebook_entry(pb, -1, number, -1, name, -1, NULL,
-					snr, -1, adn, email, NULL, NULL);
-		retval = location;
+	if (status != SIM_SERV_OK) {
+		DBG("PB read returned status: 0x%02X", status);
+		goto error;
 	}
 
-cleanup:
+	ofono_phonebook_entry(pb, -1, number, -1, name, -1, NULL,
+				anr, -1, sne, email, NULL, NULL);
+
+error:
 	g_free(name);
 	g_free(number);
-	g_free(adn);
-	g_free(snr);
+	g_free(sne);
+	g_free(anr);
 	g_free(email);
 
-	return retval;
+	return location;
 }
 
 static void read_next_entry(GIsiClient *client, int location, GIsiResponseFunc read_cb, struct isi_cb_data *cbd)
@@ -278,11 +231,8 @@ static void read_next_entry(GIsiClient *client, int location, GIsiResponseFunc r
 		return;
 
 error:
-	{
-		DECLARE_FAILURE(error);
-		cb(&error, cbd->data);
-		g_free(cbd);
-	}
+	CALLBACK_WITH_FAILURE(cb, cbd->data);
+	g_free(cbd);
 }
 
 static bool read_resp_cb(GIsiClient *client, const void *restrict data,
@@ -304,17 +254,11 @@ static bool read_resp_cb(GIsiClient *client, const void *restrict data,
 		return true;
 	}
 
-	{
-		DECLARE_SUCCESS(error);
-		cb(&error, cbd->data);
-		goto out;
-	}
+	CALLBACK_WITH_SUCCESS(cb, cbd->data);
+	goto out;
 
 error:
-	{
-		DECLARE_FAILURE(error);
-		cb(&error, cbd->data);
-	}
+	CALLBACK_WITH_FAILURE(cb, cbd->data);
 
 out:
 	g_free(cbd);
@@ -325,7 +269,7 @@ static void isi_export_entries(struct ofono_phonebook *pb, const char *storage,
 				ofono_phonebook_cb_t cb, void *data)
 {
 	struct pb_data *pbd = ofono_phonebook_get_data(pb);
-	struct isi_cb_data *cbd = isi_cb_data_new(NULL, cb, data);
+	struct isi_cb_data *cbd = isi_cb_data_new(pb, cb, data);
 	const unsigned char msg[] = {
 		SIM_PB_REQ_SIM_PB_READ,
 		SIM_PB_READ,
@@ -333,7 +277,7 @@ static void isi_export_entries(struct ofono_phonebook *pb, const char *storage,
 		0, SIM_PB_LOCATION,		/* subblock id */
 		0, 8,				/* subblock size */
 		0, SIM_PB_ADN,
-		0xFF, 0xFF,			/* read first entry in the phonebook */
+		0xFF, 0xFF,			/* read first entry in pb */
 		0, SIM_PB_INFO_REQUEST,		/* subblock id */
 		0, 16,				/* subblock size */
 		4,				/* number of tags */
@@ -351,8 +295,6 @@ static void isi_export_entries(struct ofono_phonebook *pb, const char *storage,
 	if (strcmp(storage, "SM"))
 		goto error;
 
-	cbd->user = pb;
-
 	if (g_isi_request_make(pbd->client, msg, sizeof(msg), PHONEBOOK_TIMEOUT,
 				read_resp_cb, cbd))
 		return;
@@ -361,10 +303,7 @@ error:
 	if (cbd)
 		g_free(cbd);
 
-	{
-		DECLARE_FAILURE(error);
-		cb(&error, data);
-	}
+	CALLBACK_WITH_FAILURE(cb, data);
 }
 
 static gboolean isi_phonebook_register(gpointer user)
@@ -376,6 +315,21 @@ static gboolean isi_phonebook_register(gpointer user)
 	return FALSE;
 }
 
+static void reachable_cb(GIsiClient *client, bool alive, void *opaque)
+{
+	struct ofono_phonebook *pb = opaque;
+
+	if (alive == true) {
+		DBG("Resource 0x%02X, with version %03d.%03d reachable",
+			g_isi_client_resource(client),
+			g_isi_version_major(client),
+			g_isi_version_minor(client));
+		g_idle_add(isi_phonebook_register, pb);
+		return;
+	}
+	DBG("Unable to bootsrap phonebook driver");
+}
+
 static int isi_phonebook_probe(struct ofono_phonebook *pb, unsigned int vendor,
 				void *user)
 {
@@ -385,8 +339,6 @@ static int isi_phonebook_probe(struct ofono_phonebook *pb, unsigned int vendor,
 	if (!data)
 		return -ENOMEM;
 
-	DBG("idx=%p", idx);
-
 	data->client = g_isi_client_create(idx, PN_SIM);
 	if (!data->client) {
 		g_free(data);
@@ -395,10 +347,8 @@ static int isi_phonebook_probe(struct ofono_phonebook *pb, unsigned int vendor,
 
 	ofono_phonebook_set_data(pb, data);
 
-	/* FIXME: If this is running on a phone itself, phonebook
-	 * initialization needs to be done here */
-
-	g_idle_add(isi_phonebook_register, pb);
+	if (!g_isi_verify(data->client, reachable_cb, pb))
+		DBG("Unable to verify reachability");
 
 	return 0;
 }
