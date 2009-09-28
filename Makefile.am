@@ -204,11 +204,12 @@ test_files = test/test-manager test/test-modem test/test-voicecall \
 		test/test-ss-control-cb test/test-ss-control-cf \
 		test/test-ss-control-cs \
 		test/monitor-ofono test/list-modems test/enable-modem \
-		test/list-operators
+		test/list-operators test/dial-number test/hangup-all \
+		test/receive-sms test/send-sms
 
 conf_files = src/ofono.conf plugins/modem.conf
 
-EXTRA_DIST = src/genbuiltin $(doc_files) \
+EXTRA_DIST = src/genbuiltin plugins/example_history.c $(doc_files) \
 				$(test_files) $(conf_files) $(udev_files)
 
 dist_man_MANS = doc/ofonod.8
@@ -240,6 +241,13 @@ unit_objects += $(unit_test_simutil_OBJECTS)
 unit_test_mux_SOURCES = unit/test-mux.c $(gatchat_sources)
 unit_test_mux_LDADD = @GLIB_LIBS@
 unit_objects += $(unit_test_mux_OBJECTS)
+
+
+noinst_PROGRAMS += gatchat/gsmdial
+
+gatchat_gsmdial_SOURCES = gatchat/gsmdial.c $(gatchat_sources)
+
+gatchat_gsmdial_LDADD = @GLIB_LIBS@
 
 
 DISTCHECK_CONFIGURE_FLAGS = --disable-datafiles

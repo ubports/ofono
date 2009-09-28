@@ -90,7 +90,7 @@ host_triplet = @host@
 sbin_PROGRAMS = src/ofonod$(EXEEXT)
 noinst_PROGRAMS = unit/test-common$(EXEEXT) unit/test-util$(EXEEXT) \
 	unit/test-sms$(EXEEXT) unit/test-simutil$(EXEEXT) \
-	unit/test-mux$(EXEEXT)
+	unit/test-mux$(EXEEXT) gatchat/gsmdial$(EXEEXT)
 subdir = .
 DIST_COMMON = README $(am__configure_deps) $(dist_man_MANS) \
 	$(include_HEADERS) $(srcdir)/Makefile.am $(srcdir)/Makefile.in \
@@ -114,6 +114,17 @@ am__installdirs = "$(DESTDIR)$(sbindir)" "$(DESTDIR)$(man8dir)" \
 	"$(DESTDIR)$(rulesdir)" "$(DESTDIR)$(statedir)" \
 	"$(DESTDIR)$(includedir)" "$(DESTDIR)$(includedir)"
 PROGRAMS = $(noinst_PROGRAMS) $(sbin_PROGRAMS)
+am__dirstamp = $(am__leading_dot)dirstamp
+am__objects_1 = gatchat/gatchat.$(OBJEXT) gatchat/gatresult.$(OBJEXT) \
+	gatchat/gatsyntax.$(OBJEXT) gatchat/ringbuffer.$(OBJEXT) \
+	gatchat/gatmux.$(OBJEXT) gatchat/gsm0710.$(OBJEXT)
+am_gatchat_gsmdial_OBJECTS = gatchat/gsmdial.$(OBJEXT) \
+	$(am__objects_1)
+gatchat_gsmdial_OBJECTS = $(am_gatchat_gsmdial_OBJECTS)
+gatchat_gsmdial_DEPENDENCIES =
+AM_V_lt = $(am__v_lt_$(V))
+am__v_lt_ = $(am__v_lt_$(AM_DEFAULT_VERBOSITY))
+am__v_lt_0 = --silent
 am__src_ofonod_SOURCES_DIST = gdbus/gdbus.h gdbus/mainloop.c \
 	gdbus/object.c gdbus/watch.c plugins/udev.c gisi/phonet.h \
 	gisi/modem.h gisi/netlink.h gisi/netlink.c gisi/socket.h \
@@ -156,14 +167,13 @@ am__src_ofonod_SOURCES_DIST = gdbus/gdbus.h gdbus/mainloop.c \
 	src/sim.c src/phonebook.c src/history.c src/message-waiting.c \
 	src/simutil.h src/simutil.c src/storage.h src/storage.c \
 	src/cbs.c src/watch.c
-am__dirstamp = $(am__leading_dot)dirstamp
-am__objects_1 = gdbus/mainloop.$(OBJEXT) gdbus/object.$(OBJEXT) \
+am__objects_2 = gdbus/mainloop.$(OBJEXT) gdbus/object.$(OBJEXT) \
 	gdbus/watch.$(OBJEXT)
-@UDEV_TRUE@am__objects_2 = plugins/udev.$(OBJEXT)
-am__objects_3 = gisi/netlink.$(OBJEXT) gisi/socket.$(OBJEXT) \
+@UDEV_TRUE@am__objects_3 = plugins/udev.$(OBJEXT)
+am__objects_4 = gisi/netlink.$(OBJEXT) gisi/socket.$(OBJEXT) \
 	gisi/client.$(OBJEXT) gisi/pep.$(OBJEXT) gisi/pipe.$(OBJEXT) \
 	gisi/iter.$(OBJEXT) gisi/verify.$(OBJEXT)
-@ISIMODEM_TRUE@am__objects_4 = $(am__objects_3) \
+@ISIMODEM_TRUE@am__objects_5 = $(am__objects_4) \
 @ISIMODEM_TRUE@	drivers/isimodem/isimodem.$(OBJEXT) \
 @ISIMODEM_TRUE@	drivers/isimodem/phonebook.$(OBJEXT) \
 @ISIMODEM_TRUE@	drivers/isimodem/devinfo.$(OBJEXT) \
@@ -178,10 +188,7 @@ am__objects_3 = gisi/netlink.$(OBJEXT) gisi/socket.$(OBJEXT) \
 @ISIMODEM_TRUE@	drivers/isimodem/call-settings.$(OBJEXT) \
 @ISIMODEM_TRUE@	drivers/isimodem/call-barring.$(OBJEXT) \
 @ISIMODEM_TRUE@	drivers/isimodem/call-meter.$(OBJEXT)
-am__objects_5 = gatchat/gatchat.$(OBJEXT) gatchat/gatresult.$(OBJEXT) \
-	gatchat/gatsyntax.$(OBJEXT) gatchat/ringbuffer.$(OBJEXT) \
-	gatchat/gatmux.$(OBJEXT) gatchat/gsm0710.$(OBJEXT)
-@ATMODEM_TRUE@am__objects_6 = $(am__objects_5) \
+@ATMODEM_TRUE@am__objects_6 = $(am__objects_1) \
 @ATMODEM_TRUE@	drivers/atmodem/atmodem.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/atmodem/call-settings.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/atmodem/sms.$(OBJEXT) \
@@ -207,9 +214,9 @@ am__objects_5 = gatchat/gatchat.$(OBJEXT) gatchat/gatresult.$(OBJEXT) \
 @ATMODEM_TRUE@	plugins/novatel.$(OBJEXT)
 @MAINTAINER_MODE_TRUE@am__objects_7 =  \
 @MAINTAINER_MODE_TRUE@	plugins/example_history.$(OBJEXT)
-am__objects_8 = $(am__objects_2) $(am__objects_4) $(am__objects_6) \
+am__objects_8 = $(am__objects_3) $(am__objects_5) $(am__objects_6) \
 	$(am__objects_7)
-am_src_ofonod_OBJECTS = $(am__objects_1) $(am__objects_8) \
+am_src_ofonod_OBJECTS = $(am__objects_2) $(am__objects_8) \
 	src/main.$(OBJEXT) src/log.$(OBJEXT) src/plugin.$(OBJEXT) \
 	src/modem.$(OBJEXT) src/common.$(OBJEXT) src/manager.$(OBJEXT) \
 	src/dbus.$(OBJEXT) src/util.$(OBJEXT) src/network.$(OBJEXT) \
@@ -223,9 +230,6 @@ am_src_ofonod_OBJECTS = $(am__objects_1) $(am__objects_8) \
 src_ofonod_OBJECTS = $(am_src_ofonod_OBJECTS)
 am__DEPENDENCIES_1 =
 am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1)
-AM_V_lt = $(am__v_lt_$(V))
-am__v_lt_ = $(am__v_lt_$(AM_DEFAULT_VERBOSITY))
-am__v_lt_0 = --silent
 src_ofonod_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
 	$(src_ofonod_LDFLAGS) $(LDFLAGS) -o $@
@@ -233,7 +237,7 @@ am_unit_test_common_OBJECTS = unit/test-common.$(OBJEXT) \
 	src/common.$(OBJEXT)
 unit_test_common_OBJECTS = $(am_unit_test_common_OBJECTS)
 unit_test_common_DEPENDENCIES =
-am_unit_test_mux_OBJECTS = unit/test-mux.$(OBJEXT) $(am__objects_5)
+am_unit_test_mux_OBJECTS = unit/test-mux.$(OBJEXT) $(am__objects_1)
 unit_test_mux_OBJECTS = $(am_unit_test_mux_OBJECTS)
 unit_test_mux_DEPENDENCIES =
 am_unit_test_simutil_OBJECTS = unit/test-simutil.$(OBJEXT) \
@@ -275,13 +279,14 @@ am__v_CCLD_0 = @echo "  CCLD  " $@;
 AM_V_GEN = $(am__v_GEN_$(V))
 am__v_GEN_ = $(am__v_GEN_$(AM_DEFAULT_VERBOSITY))
 am__v_GEN_0 = @echo "  GEN   " $@;
-SOURCES = $(src_ofonod_SOURCES) $(unit_test_common_SOURCES) \
-	$(unit_test_mux_SOURCES) $(unit_test_simutil_SOURCES) \
-	$(unit_test_sms_SOURCES) $(unit_test_util_SOURCES)
-DIST_SOURCES = $(am__src_ofonod_SOURCES_DIST) \
+SOURCES = $(gatchat_gsmdial_SOURCES) $(src_ofonod_SOURCES) \
 	$(unit_test_common_SOURCES) $(unit_test_mux_SOURCES) \
 	$(unit_test_simutil_SOURCES) $(unit_test_sms_SOURCES) \
 	$(unit_test_util_SOURCES)
+DIST_SOURCES = $(gatchat_gsmdial_SOURCES) \
+	$(am__src_ofonod_SOURCES_DIST) $(unit_test_common_SOURCES) \
+	$(unit_test_mux_SOURCES) $(unit_test_simutil_SOURCES) \
+	$(unit_test_sms_SOURCES) $(unit_test_util_SOURCES)
 am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
 am__vpath_adj = case $$p in \
     $(srcdir)/*) f=`echo "$$p" | sed "s|^$$srcdirstrip/||"`;; \
@@ -530,10 +535,11 @@ test_files = test/test-manager test/test-modem test/test-voicecall \
 		test/test-ss-control-cb test/test-ss-control-cf \
 		test/test-ss-control-cs \
 		test/monitor-ofono test/list-modems test/enable-modem \
-		test/list-operators
+		test/list-operators test/dial-number test/hangup-all \
+		test/receive-sms test/send-sms
 
 conf_files = src/ofono.conf plugins/modem.conf
-EXTRA_DIST = src/genbuiltin $(doc_files) \
+EXTRA_DIST = src/genbuiltin plugins/example_history.c $(doc_files) \
 				$(test_files) $(conf_files) $(udev_files)
 
 dist_man_MANS = doc/ofonod.8
@@ -553,6 +559,8 @@ unit_test_simutil_SOURCES = unit/test-simutil.c src/util.c \
 unit_test_simutil_LDADD = @GLIB_LIBS@
 unit_test_mux_SOURCES = unit/test-mux.c $(gatchat_sources)
 unit_test_mux_LDADD = @GLIB_LIBS@
+gatchat_gsmdial_SOURCES = gatchat/gsmdial.c $(gatchat_sources)
+gatchat_gsmdial_LDADD = @GLIB_LIBS@
 DISTCHECK_CONFIGURE_FLAGS = --disable-datafiles
 MAINTAINERCLEANFILES = Makefile.in \
 	aclocal.m4 configure config.h.in config.sub config.guess \
@@ -668,6 +676,29 @@ clean-sbinPROGRAMS:
 	list=`for p in $$list; do echo "$$p"; done | sed 's/$(EXEEXT)$$//'`; \
 	echo " rm -f" $$list; \
 	rm -f $$list
+gatchat/$(am__dirstamp):
+	@$(MKDIR_P) gatchat
+	@: > gatchat/$(am__dirstamp)
+gatchat/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) gatchat/$(DEPDIR)
+	@: > gatchat/$(DEPDIR)/$(am__dirstamp)
+gatchat/gsmdial.$(OBJEXT): gatchat/$(am__dirstamp) \
+	gatchat/$(DEPDIR)/$(am__dirstamp)
+gatchat/gatchat.$(OBJEXT): gatchat/$(am__dirstamp) \
+	gatchat/$(DEPDIR)/$(am__dirstamp)
+gatchat/gatresult.$(OBJEXT): gatchat/$(am__dirstamp) \
+	gatchat/$(DEPDIR)/$(am__dirstamp)
+gatchat/gatsyntax.$(OBJEXT): gatchat/$(am__dirstamp) \
+	gatchat/$(DEPDIR)/$(am__dirstamp)
+gatchat/ringbuffer.$(OBJEXT): gatchat/$(am__dirstamp) \
+	gatchat/$(DEPDIR)/$(am__dirstamp)
+gatchat/gatmux.$(OBJEXT): gatchat/$(am__dirstamp) \
+	gatchat/$(DEPDIR)/$(am__dirstamp)
+gatchat/gsm0710.$(OBJEXT): gatchat/$(am__dirstamp) \
+	gatchat/$(DEPDIR)/$(am__dirstamp)
+gatchat/gsmdial$(EXEEXT): $(gatchat_gsmdial_OBJECTS) $(gatchat_gsmdial_DEPENDENCIES) gatchat/$(am__dirstamp)
+	@rm -f gatchat/gsmdial$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(gatchat_gsmdial_OBJECTS) $(gatchat_gsmdial_LDADD) $(LIBS)
 gdbus/$(am__dirstamp):
 	@$(MKDIR_P) gdbus
 	@: > gdbus/$(am__dirstamp)
@@ -749,24 +780,6 @@ drivers/isimodem/call-barring.$(OBJEXT):  \
 drivers/isimodem/call-meter.$(OBJEXT):  \
 	drivers/isimodem/$(am__dirstamp) \
 	drivers/isimodem/$(DEPDIR)/$(am__dirstamp)
-gatchat/$(am__dirstamp):
-	@$(MKDIR_P) gatchat
-	@: > gatchat/$(am__dirstamp)
-gatchat/$(DEPDIR)/$(am__dirstamp):
-	@$(MKDIR_P) gatchat/$(DEPDIR)
-	@: > gatchat/$(DEPDIR)/$(am__dirstamp)
-gatchat/gatchat.$(OBJEXT): gatchat/$(am__dirstamp) \
-	gatchat/$(DEPDIR)/$(am__dirstamp)
-gatchat/gatresult.$(OBJEXT): gatchat/$(am__dirstamp) \
-	gatchat/$(DEPDIR)/$(am__dirstamp)
-gatchat/gatsyntax.$(OBJEXT): gatchat/$(am__dirstamp) \
-	gatchat/$(DEPDIR)/$(am__dirstamp)
-gatchat/ringbuffer.$(OBJEXT): gatchat/$(am__dirstamp) \
-	gatchat/$(DEPDIR)/$(am__dirstamp)
-gatchat/gatmux.$(OBJEXT): gatchat/$(am__dirstamp) \
-	gatchat/$(DEPDIR)/$(am__dirstamp)
-gatchat/gsm0710.$(OBJEXT): gatchat/$(am__dirstamp) \
-	gatchat/$(DEPDIR)/$(am__dirstamp)
 drivers/atmodem/$(am__dirstamp):
 	@$(MKDIR_P) drivers/atmodem
 	@: > drivers/atmodem/$(am__dirstamp)
@@ -959,6 +972,7 @@ mostlyclean-compile:
 	-rm -f gatchat/gatresult.$(OBJEXT)
 	-rm -f gatchat/gatsyntax.$(OBJEXT)
 	-rm -f gatchat/gsm0710.$(OBJEXT)
+	-rm -f gatchat/gsmdial.$(OBJEXT)
 	-rm -f gatchat/ringbuffer.$(OBJEXT)
 	-rm -f gdbus/mainloop.$(OBJEXT)
 	-rm -f gdbus/object.$(OBJEXT)
@@ -1052,6 +1066,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/gatresult.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/gatsyntax.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/gsm0710.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/gsmdial.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/ringbuffer.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gdbus/$(DEPDIR)/mainloop.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gdbus/$(DEPDIR)/object.Po@am__quote@
@@ -1138,6 +1153,7 @@ mostlyclean-libtool:
 
 clean-libtool:
 	-rm -rf .libs _libs
+	-rm -rf gatchat/.libs gatchat/_libs
 	-rm -rf src/.libs src/_libs
 	-rm -rf unit/.libs unit/_libs
 
