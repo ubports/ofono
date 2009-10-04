@@ -28,6 +28,7 @@
 
 #include <glib.h>
 #include <gatchat.h>
+#include <gattty.h>
 
 #define OFONO_API_SUBJECT_TO_CHANGE
 #include <ofono/plugin.h>
@@ -57,39 +58,14 @@ static void g1_debug(const char *str, void *data)
 /* Detect hardware, and initialize if found */
 static int g1_probe(struct ofono_modem *modem)
 {
-	GAtSyntax *syntax;
-	GAtChat *chat;
-	const char *device;
-
 	DBG("");
-
-	device = ofono_modem_get_string(modem, "Device");
-	if (device == NULL)
-		return -EINVAL;
-
-	syntax = g_at_syntax_new_gsm_permissive();
-	chat = g_at_chat_new_from_tty(device, syntax);
-	g_at_syntax_unref(syntax);
-
-	if (chat == NULL)
-		return -EIO;
-
-	if (getenv("OFONO_AT_DEBUG") != NULL)
-		g_at_chat_set_debug(chat, g1_debug, NULL);
-
-	ofono_modem_set_data(modem, chat);
 
 	return 0;
 }
 
 static void g1_remove(struct ofono_modem *modem)
 {
-	GAtChat *chat = ofono_modem_get_data(modem);
-
 	DBG("");
-
-	ofono_modem_set_data(modem, NULL);
-	g_at_chat_unref(chat);
 }
 
 static void cfun_set_on_cb(gboolean ok, GAtResult *result, gpointer user_data)
@@ -105,9 +81,33 @@ static void cfun_set_on_cb(gboolean ok, GAtResult *result, gpointer user_data)
 /* power up hardware */
 static int g1_enable(struct ofono_modem *modem)
 {
-	GAtChat *chat = ofono_modem_get_data(modem);
+	GAtSyntax *syntax;
+	GIOChannel *channel;
+	GAtChat *chat;
+	const char *device;
 
 	DBG("");
+
+	device = ofono_modem_get_string(modem, "Device");
+	if (device == NULL)
+		return -EINVAL;
+
+	channel = g_at_tty_open(device, NULL);
+	if (channel == NULL)
+		return -EIO;
+
+	syntax = g_at_syntax_new_gsm_permissive();
+	chat = g_at_chat_new(channel, syntax);
+	g_io_channel_unref(channel);
+	g_at_syntax_unref(syntax);
+
+	if (chat == NULL)
+		return -EIO;
+
+	if (getenv("OFONO_AT_DEBUG") != NULL)
+		g_at_chat_set_debug(chat, g1_debug, NULL);
+
+	ofono_modem_set_data(modem, chat);
 
 	/* ensure modem is in a known state; verbose on, echo/quiet off */
 	g_at_chat_send(chat, "ATE0Q0V1", NULL, NULL, NULL, NULL);
@@ -136,6 +136,9 @@ static int g1_disable(struct ofono_modem *modem)
 
 	/* power down modem */
 	g_at_chat_send(chat, "AT+CFUN=0", NULL, cfun_set_off_cb, modem, NULL);
+
+	g_at_chat_unref(chat);
+	ofono_modem_set_data(modem, NULL);
 
 	return 0;
 }

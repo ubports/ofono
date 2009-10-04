@@ -10,7 +10,7 @@ include_HEADERS = include/log.h include/plugin.h include/history.h \
 			include/phonebook.h include/ssn.h include/ussd.h \
 			include/sms.h include/sim.h include/message-waiting.h \
 			include/netreg.h include/voicecall.h include/devinfo.h \
-			include/cbs.h
+			include/cbs.h include/call-volume.h
 
 nodist_include_HEADERS = include/version.h
 
@@ -49,7 +49,8 @@ gatchat_sources = gatchat/gatchat.h gatchat/gatchat.c \
 				gatchat/gatsyntax.h gatchat/gatsyntax.c \
 				gatchat/ringbuffer.h gatchat/ringbuffer.c \
 				gatchat/gatmux.h gatchat/gatmux.c \
-				gatchat/gsm0710.h gatchat/gsm0710.c
+				gatchat/gsm0710.h gatchat/gsm0710.c \
+				gatchat/gattty.h gatchat/gattty.c
 
 udev_files = plugins/ofono.rules
 
@@ -104,6 +105,7 @@ builtin_sources += $(gatchat_sources) \
 				drivers/atmodem/phonebook.c \
 				drivers/atmodem/ssn.c \
 				drivers/atmodem/devinfo.c \
+				drivers/atmodem/call-volume.c \
 				drivers/atmodem/vendor.h \
 				drivers/atmodem/atutil.h \
 				drivers/atmodem/atutil.c
@@ -163,7 +165,7 @@ src_ofonod_SOURCES = $(gdbus_sources) $(builtin_sources) \
 			src/ssn.c src/call-barring.c src/sim.c \
 			src/phonebook.c src/history.c src/message-waiting.c \
 			src/simutil.h src/simutil.c src/storage.h \
-			src/storage.c src/cbs.c src/watch.c
+			src/storage.c src/cbs.c src/watch.c src/call-volume.c
 
 src_ofonod_LDADD = $(builtin_libadd) \
 			@GLIB_LIBS@ @GTHREAD_LIBS@ @DBUS_LIBS@ -ldl

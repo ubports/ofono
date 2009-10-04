@@ -24,12 +24,11 @@
 #endif
 
 #include <stdio.h>
-#include <fcntl.h>
 #include <unistd.h>
 #include <string.h>
 #include <assert.h>
-#include <termios.h>
 #include <ctype.h>
+#include <errno.h>
 
 #include <glib.h>
 
@@ -960,47 +959,6 @@ error:
 	return NULL;
 }
 
-static int open_device(const char *device)
-{
-	struct termios ti;
-	int fd;
-
-	fd = open(device, O_RDWR | O_NOCTTY);
-	if (fd < 0)
-		return -1;
-
-	tcflush(fd, TCIOFLUSH);
-
-	/* Switch TTY to raw mode */
-	memset(&ti, 0, sizeof(ti));
-	cfmakeraw(&ti);
-
-	tcsetattr(fd, TCSANOW, &ti);
-
-	return fd;
-}
-
-GAtChat *g_at_chat_new_from_tty(const char *device, GAtSyntax *syntax)
-{
-	GIOChannel *channel;
-	int fd;
-	GAtChat *chat;
-
-	fd = open_device(device);
-	if (fd < 0)
-		return NULL;
-
-	channel = g_io_channel_unix_new(fd);
-	if (!channel) {
-		close(fd);
-		return NULL;
-	}
-
-	chat = g_at_chat_new(channel, syntax);
-	g_io_channel_unref(channel);
-	return chat;
-}
-
 GAtChat *g_at_chat_ref(GAtChat *chat)
 {
 	if (chat == NULL)
@@ -1041,6 +999,18 @@ gboolean g_at_chat_shutdown(GAtChat *chat)
 
 	if (chat->write_watch)
 		g_source_remove(chat->write_watch);
+
+	return TRUE;
+}
+
+gboolean g_at_chat_set_syntax(GAtChat *chat, GAtSyntax *syntax)
+{
+	if (chat == NULL)
+		return FALSE;
+
+	g_at_syntax_unref(chat->syntax);
+
+	chat->syntax = g_at_syntax_ref(syntax);
 
 	return TRUE;
 }

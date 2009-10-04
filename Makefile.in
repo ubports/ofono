@@ -73,6 +73,7 @@ host_triplet = @host@
 @ATMODEM_TRUE@	drivers/atmodem/call-barring.c \
 @ATMODEM_TRUE@	drivers/atmodem/phonebook.c \
 @ATMODEM_TRUE@	drivers/atmodem/ssn.c drivers/atmodem/devinfo.c \
+@ATMODEM_TRUE@	drivers/atmodem/call-volume.c \
 @ATMODEM_TRUE@	drivers/atmodem/vendor.h \
 @ATMODEM_TRUE@	drivers/atmodem/atutil.h \
 @ATMODEM_TRUE@	drivers/atmodem/atutil.c \
@@ -117,7 +118,8 @@ PROGRAMS = $(noinst_PROGRAMS) $(sbin_PROGRAMS)
 am__dirstamp = $(am__leading_dot)dirstamp
 am__objects_1 = gatchat/gatchat.$(OBJEXT) gatchat/gatresult.$(OBJEXT) \
 	gatchat/gatsyntax.$(OBJEXT) gatchat/ringbuffer.$(OBJEXT) \
-	gatchat/gatmux.$(OBJEXT) gatchat/gsm0710.$(OBJEXT)
+	gatchat/gatmux.$(OBJEXT) gatchat/gsm0710.$(OBJEXT) \
+	gatchat/gattty.$(OBJEXT)
 am_gatchat_gsmdial_OBJECTS = gatchat/gsmdial.$(OBJEXT) \
 	$(am__objects_1)
 gatchat_gsmdial_OBJECTS = $(am_gatchat_gsmdial_OBJECTS)
@@ -144,16 +146,17 @@ am__src_ofonod_SOURCES_DIST = gdbus/gdbus.h gdbus/mainloop.c \
 	gatchat/gatresult.c gatchat/gatsyntax.h gatchat/gatsyntax.c \
 	gatchat/ringbuffer.h gatchat/ringbuffer.c gatchat/gatmux.h \
 	gatchat/gatmux.c gatchat/gsm0710.h gatchat/gsm0710.c \
-	drivers/atmodem/atmodem.h drivers/atmodem/atmodem.c \
-	drivers/atmodem/call-settings.c drivers/atmodem/sms.c \
-	drivers/atmodem/cbs.c drivers/atmodem/call-forwarding.c \
-	drivers/atmodem/call-meter.c \
+	gatchat/gattty.h gatchat/gattty.c drivers/atmodem/atmodem.h \
+	drivers/atmodem/atmodem.c drivers/atmodem/call-settings.c \
+	drivers/atmodem/sms.c drivers/atmodem/cbs.c \
+	drivers/atmodem/call-forwarding.c drivers/atmodem/call-meter.c \
 	drivers/atmodem/network-registration.c drivers/atmodem/sim.c \
 	drivers/atmodem/ussd.c drivers/atmodem/voicecall.c \
 	drivers/atmodem/call-barring.c drivers/atmodem/phonebook.c \
 	drivers/atmodem/ssn.c drivers/atmodem/devinfo.c \
-	drivers/atmodem/vendor.h drivers/atmodem/atutil.h \
-	drivers/atmodem/atutil.c drivers/calypsomodem/calypsomodem.h \
+	drivers/atmodem/call-volume.c drivers/atmodem/vendor.h \
+	drivers/atmodem/atutil.h drivers/atmodem/atutil.c \
+	drivers/calypsomodem/calypsomodem.h \
 	drivers/calypsomodem/calypsomodem.c \
 	drivers/calypsomodem/voicecall.c plugins/modemconf.c \
 	plugins/phonesim.c plugins/atgen.c plugins/g1.c \
@@ -166,7 +169,7 @@ am__src_ofonod_SOURCES_DIST = gdbus/gdbus.h gdbus/mainloop.c \
 	src/smsutil.h src/smsutil.c src/ssn.c src/call-barring.c \
 	src/sim.c src/phonebook.c src/history.c src/message-waiting.c \
 	src/simutil.h src/simutil.c src/storage.h src/storage.c \
-	src/cbs.c src/watch.c
+	src/cbs.c src/watch.c src/call-volume.c
 am__objects_2 = gdbus/mainloop.$(OBJEXT) gdbus/object.$(OBJEXT) \
 	gdbus/watch.$(OBJEXT)
 @UDEV_TRUE@am__objects_3 = plugins/udev.$(OBJEXT)
@@ -203,6 +206,7 @@ am__objects_4 = gisi/netlink.$(OBJEXT) gisi/socket.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/atmodem/phonebook.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/atmodem/ssn.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/atmodem/devinfo.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/atmodem/call-volume.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/atmodem/atutil.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/calypsomodem/calypsomodem.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/calypsomodem/voicecall.$(OBJEXT) \
@@ -226,7 +230,8 @@ am_src_ofonod_OBJECTS = $(am__objects_2) $(am__objects_8) \
 	src/ssn.$(OBJEXT) src/call-barring.$(OBJEXT) src/sim.$(OBJEXT) \
 	src/phonebook.$(OBJEXT) src/history.$(OBJEXT) \
 	src/message-waiting.$(OBJEXT) src/simutil.$(OBJEXT) \
-	src/storage.$(OBJEXT) src/cbs.$(OBJEXT) src/watch.$(OBJEXT)
+	src/storage.$(OBJEXT) src/cbs.$(OBJEXT) src/watch.$(OBJEXT) \
+	src/call-volume.$(OBJEXT)
 src_ofonod_OBJECTS = $(am_src_ofonod_OBJECTS)
 am__DEPENDENCIES_1 =
 am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1)
@@ -457,7 +462,7 @@ include_HEADERS = include/log.h include/plugin.h include/history.h \
 			include/phonebook.h include/ssn.h include/ussd.h \
 			include/sms.h include/sim.h include/message-waiting.h \
 			include/netreg.h include/voicecall.h include/devinfo.h \
-			include/cbs.h
+			include/cbs.h include/call-volume.h
 
 nodist_include_HEADERS = include/version.h
 local_headers = $(foreach file,$(include_HEADERS) $(nodist_include_HEADERS), \
@@ -486,7 +491,8 @@ gatchat_sources = gatchat/gatchat.h gatchat/gatchat.c \
 				gatchat/gatsyntax.h gatchat/gatsyntax.c \
 				gatchat/ringbuffer.h gatchat/ringbuffer.c \
 				gatchat/gatmux.h gatchat/gatmux.c \
-				gatchat/gsm0710.h gatchat/gsm0710.c
+				gatchat/gsm0710.h gatchat/gsm0710.c \
+				gatchat/gattty.h gatchat/gattty.c
 
 udev_files = plugins/ofono.rules
 @DATAFILES_TRUE@@UDEV_TRUE@rulesdir = @UDEV_DATADIR@
@@ -501,7 +507,7 @@ src_ofonod_SOURCES = $(gdbus_sources) $(builtin_sources) \
 			src/ssn.c src/call-barring.c src/sim.c \
 			src/phonebook.c src/history.c src/message-waiting.c \
 			src/simutil.h src/simutil.c src/storage.h \
-			src/storage.c src/cbs.c src/watch.c
+			src/storage.c src/cbs.c src/watch.c src/call-volume.c
 
 src_ofonod_LDADD = $(builtin_libadd) \
 			@GLIB_LIBS@ @GTHREAD_LIBS@ @DBUS_LIBS@ -ldl
@@ -696,6 +702,8 @@ gatchat/gatmux.$(OBJEXT): gatchat/$(am__dirstamp) \
 	gatchat/$(DEPDIR)/$(am__dirstamp)
 gatchat/gsm0710.$(OBJEXT): gatchat/$(am__dirstamp) \
 	gatchat/$(DEPDIR)/$(am__dirstamp)
+gatchat/gattty.$(OBJEXT): gatchat/$(am__dirstamp) \
+	gatchat/$(DEPDIR)/$(am__dirstamp)
 gatchat/gsmdial$(EXEEXT): $(gatchat_gsmdial_OBJECTS) $(gatchat_gsmdial_DEPENDENCIES) gatchat/$(am__dirstamp)
 	@rm -f gatchat/gsmdial$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(gatchat_gsmdial_OBJECTS) $(gatchat_gsmdial_LDADD) $(LIBS)
@@ -818,6 +826,9 @@ drivers/atmodem/ssn.$(OBJEXT): drivers/atmodem/$(am__dirstamp) \
 	drivers/atmodem/$(DEPDIR)/$(am__dirstamp)
 drivers/atmodem/devinfo.$(OBJEXT): drivers/atmodem/$(am__dirstamp) \
 	drivers/atmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/atmodem/call-volume.$(OBJEXT):  \
+	drivers/atmodem/$(am__dirstamp) \
+	drivers/atmodem/$(DEPDIR)/$(am__dirstamp)
 drivers/atmodem/atutil.$(OBJEXT): drivers/atmodem/$(am__dirstamp) \
 	drivers/atmodem/$(DEPDIR)/$(am__dirstamp)
 drivers/calypsomodem/$(am__dirstamp):
@@ -899,6 +910,8 @@ src/storage.$(OBJEXT): src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
 src/cbs.$(OBJEXT): src/$(am__dirstamp) src/$(DEPDIR)/$(am__dirstamp)
 src/watch.$(OBJEXT): src/$(am__dirstamp) src/$(DEPDIR)/$(am__dirstamp)
+src/call-volume.$(OBJEXT): src/$(am__dirstamp) \
+	src/$(DEPDIR)/$(am__dirstamp)
 src/ofonod$(EXEEXT): $(src_ofonod_OBJECTS) $(src_ofonod_DEPENDENCIES) src/$(am__dirstamp)
 	@rm -f src/ofonod$(EXEEXT)
 	$(AM_V_CCLD)$(src_ofonod_LINK) $(src_ofonod_OBJECTS) $(src_ofonod_LDADD) $(LIBS)
@@ -942,6 +955,7 @@ mostlyclean-compile:
 	-rm -f drivers/atmodem/call-forwarding.$(OBJEXT)
 	-rm -f drivers/atmodem/call-meter.$(OBJEXT)
 	-rm -f drivers/atmodem/call-settings.$(OBJEXT)
+	-rm -f drivers/atmodem/call-volume.$(OBJEXT)
 	-rm -f drivers/atmodem/cbs.$(OBJEXT)
 	-rm -f drivers/atmodem/devinfo.$(OBJEXT)
 	-rm -f drivers/atmodem/network-registration.$(OBJEXT)
@@ -971,6 +985,7 @@ mostlyclean-compile:
 	-rm -f gatchat/gatmux.$(OBJEXT)
 	-rm -f gatchat/gatresult.$(OBJEXT)
 	-rm -f gatchat/gatsyntax.$(OBJEXT)
+	-rm -f gatchat/gattty.$(OBJEXT)
 	-rm -f gatchat/gsm0710.$(OBJEXT)
 	-rm -f gatchat/gsmdial.$(OBJEXT)
 	-rm -f gatchat/ringbuffer.$(OBJEXT)
@@ -999,6 +1014,7 @@ mostlyclean-compile:
 	-rm -f src/call-forwarding.$(OBJEXT)
 	-rm -f src/call-meter.$(OBJEXT)
 	-rm -f src/call-settings.$(OBJEXT)
+	-rm -f src/call-volume.$(OBJEXT)
 	-rm -f src/cbs.$(OBJEXT)
 	-rm -f src/common.$(OBJEXT)
 	-rm -f src/dbus.$(OBJEXT)
@@ -1036,6 +1052,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/call-forwarding.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/call-meter.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/call-settings.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/call-volume.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/cbs.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/devinfo.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/network-registration.Po@am__quote@
@@ -1065,6 +1082,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/gatmux.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/gatresult.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/gatsyntax.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/gattty.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/gsm0710.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/gsmdial.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/ringbuffer.Po@am__quote@
@@ -1093,6 +1111,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/call-forwarding.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/call-meter.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/call-settings.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/call-volume.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/cbs.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/common.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/dbus.Po@am__quote@

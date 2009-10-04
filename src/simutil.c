@@ -24,6 +24,7 @@
 #endif
 
 #include <string.h>
+#include <stdlib.h>
 
 #include <glib.h>
 
@@ -50,6 +51,68 @@ struct opl_operator {
 	guint16 lac_tac_low;
 	guint16 lac_tac_high;
 	guint8 id;
+};
+
+#define BINARY 0
+#define RECORD 1
+#define CYCLIC 3
+
+#define ALW	0
+#define PIN	1
+#define PIN2	2
+#define ADM	4
+#define NEV	15
+
+static struct sim_ef_info ef_db[] = {
+{	0x2F05, ROOTMF, BINARY, 0,	ALW,	PIN	},
+{	0x2F06, ROOTMF, RECORD, 0,	ALW,	PIN	},
+{	0x2FE2, ROOTMF, BINARY, 10,	ALW,	NEV 	},
+{	0x6F05, 0x7F20, BINARY, 0,	ALW,	PIN	},
+{	0x6F06, 0x0000, RECORD, 0,	ALW,	ADM	},
+{	0x6F2C, 0x7F20, BINARY, 16,	PIN,	PIN	},
+{	0x6F30, 0x7F20, BINARY, 0,	PIN,	PIN	},
+{	0x6F32, 0x7F20, BINARY, 0,	PIN,	ADM	},
+{	0x6F37, 0x7F20, BINARY, 3,	PIN,	PIN2	},
+{	0x6F38, 0x7F20, BINARY, 0,	PIN,	ADM	},
+{	0x6F39, 0x7F20, CYCLIC, 3,	PIN,	PIN2	},
+{	0x6F3B, 0x7F10, RECORD, 0,	PIN,	PIN2	},
+{	0x6F3E, 0x7F20, BINARY, 0,	PIN,	ADM	},
+{	0x6F3F, 0x7F20, BINARY, 0,	PIN,	ADM	},
+{	0x6F40, 0x7F10, RECORD, 0,	PIN,	PIN	},
+{	0x6F41, 0x7F20, BINARY, 5,	PIN,	PIN2	},
+{	0x6F42, 0x7F10, RECORD, 0,	PIN,	PIN	},
+{	0x6F44, 0x7F10, CYCLIC, 0,	PIN,	PIN	},
+{	0x6F45, 0x7F20, BINARY, 0,	PIN,	PIN	},
+{	0x6F46, 0x7F20, BINARY, 17,	ALW,	ADM	},
+{	0x6F48, 0x7F20, BINARY, 0,	PIN,	ADM	},
+{	0x6F49, 0x7F10, RECORD, 0,	PIN,	ADM	},
+{	0x6F4D, 0x7F20, RECORD, 0,	PIN,	PIN2	},
+{	0x6F50, 0x7F20, BINARY, 0,	PIN,	PIN	},
+{	0x6F51, 0x7F20, RECORD, 0,	PIN,	ADM	},
+{	0x6F53, 0x7F20, BINARY, 14,	PIN,	PIN	},
+{	0x6F56, 0x0000, BINARY, 0,	PIN,	PIN2	},
+{	0x6F60, 0x7F20, BINARY, 0,	PIN,	PIN	},
+{	0x6F61, 0x7F20, BINARY, 0,	PIN,	ADM	},
+{	0x6F62, 0x7F20, BINARY, 0,	PIN,	ADM	},
+{	0x6F73, 0x0000, BINARY, 14,	PIN,	PIN	},
+{	0x6F7B, 0x7F20, BINARY, 0,	PIN,	PIN	},
+{	0x6F7E, 0x7F20, BINARY, 11,	PIN,	PIN	},
+{	0x6FAD, 0x7F20, BINARY, 0,	ALW,	ADM	},
+{	0x6FAE, 0x7F20, BINARY, 1,	ALW,	ADM	},
+{	0x6FB7, 0x7F20, BINARY, 0,	ALW,	ADM	},
+{	0x6FC5, 0x7F20, RECORD, 0,	ALW,	ADM	},
+{	0x6FC6, 0x7F20, RECORD, 0,	ALW,	ADM	},
+{	0x6FC7, 0x7F20, RECORD, 0,	PIN,	PIN	},
+{	0x6FC9, 0x7F20, RECORD, 0,	PIN,	PIN	},
+{	0x6FCA, 0x7F20, RECORD, 0,	PIN,	PIN	},
+{	0x6FCB, 0x7F20, RECORD, 16,	PIN,	PIN	},
+{	0x6FCD, 0x7F20, BINARY, 0,	PIN,	ADM	},
+{	0x6FD9, 0x0000, BINARY, 0,	PIN,	ADM	},
+{	0x6FDB, 0x0000, BINARY, 1,	PIN,	ADM	},
+{	0x6FDC, 0x0000, BINARY, 1,	PIN,	ADM	},
+{	0x6FDE, 0x0000, BINARY, 0,	ALW,	ADM	},
+{	0x6FDF, 0x0000, RECORD, 0,	ALW,	ADM	},
+{	0x6FE3, 0x0000, BINARY, 18,	PIN,	PIN	},
 };
 
 /* Parse ASN.1 Basic Encoding Rules TLVs per ISO/IEC 7816 */
@@ -490,4 +553,157 @@ void sim_adn_build(unsigned char *data, int length,
 	*data++ = 0xff;
 	/* Ext1 unused */
 	*data++ = 0xff;
+}
+
+static int find_ef_by_id(const void *key, const void *value)
+{
+	unsigned short id = GPOINTER_TO_UINT(key);
+	const struct sim_ef_info *info = value;
+
+	return id - info->id;
+}
+
+struct sim_ef_info *sim_ef_db_lookup(unsigned short id)
+{
+	struct sim_ef_info *result;
+	unsigned int nelem = sizeof(ef_db) / sizeof(struct sim_ef_info);
+
+	result = bsearch(GUINT_TO_POINTER((unsigned int) id), ef_db, nelem,
+				sizeof(struct sim_ef_info), find_ef_by_id);
+
+	return result;
+}
+
+gboolean sim_parse_3g_get_response(const unsigned char *data, int len,
+					int *file_len, int *record_len,
+					int *structure, unsigned char *access,
+					unsigned short *efid)
+{
+	const unsigned char *fcp;
+	int fcp_length;
+	const unsigned char *tlv;
+	int tlv_length;
+	int i;
+	int flen, rlen, str;
+	unsigned short id;
+	unsigned char acc[3];
+	struct sim_ef_info *info;
+
+	fcp = ber_tlv_find_by_tag(data, 0x62, len, &fcp_length);
+
+	if (fcp == NULL)
+		return FALSE;
+
+	/* Find the file size tag 0x80 according to
+	 * ETSI 102.221 Section 11.1.1.3.2 */
+	tlv = ber_tlv_find_by_tag(fcp, 0x80, fcp_length, &tlv_length);
+
+	if (!tlv || tlv_length < 2)
+		return FALSE;
+
+	flen = tlv[0];
+	for (i = 1; i < tlv_length; i++)
+		flen = (flen << 8) | tlv[i];
+
+	tlv = ber_tlv_find_by_tag(fcp, 0x83, fcp_length, &tlv_length);
+
+	if (!tlv || tlv_length != 2)
+		return FALSE;
+
+	id = (tlv[0] << 8) | tlv[1];
+
+	tlv = ber_tlv_find_by_tag(fcp, 0x82, fcp_length, &tlv_length);
+
+	if (!tlv || (tlv_length != 2 && tlv_length != 5))
+		return FALSE;
+
+	if (tlv[1] != 0x21)
+		return FALSE;
+
+	switch (tlv[0] & 0x3) {
+	case 1:	/* Transparent */
+		str = 0x00;
+		break;
+	case 2: /* Linear Fixed */
+		str = 0x01;
+		break;
+	case 6: /* Cyclic */
+		str = 0x03;
+		break;
+	default:
+		return FALSE;
+	};
+
+	/* For cyclic or linear fixed we need record size & num records */
+	if (str != 0x00 && tlv_length != 5)
+		return FALSE;
+
+	/* strictly speaking the record length is 16 bit, but the valid
+	 * range is 0x01 to 0xFF according to 102.221 */
+	if (str != 0x00)
+		rlen = tlv[3];
+	else
+		rlen = 0;
+
+	/* The 3G response data contains references to EFarr which actually
+	 * contains the security attributes.  These are usually not carried
+	 * along with the response data unlike in 2G.  Instead of querying
+	 * this, we simply look it up in our database.  We fudge it somewhat
+	 * and guess if the file isn't found.
+	 */
+	info = sim_ef_db_lookup(id);
+
+	if (str == 0x03)
+		acc[1] = 0x1f;
+	else
+		acc[1] = 0xff;
+
+	acc[2] = 0x44;
+
+	if (!info)
+		acc[0] = 0x11;
+	else
+		acc[0] = (info->perm_read << 4) | info->perm_update;
+
+	if (file_len)
+		*file_len = flen;
+
+	if (record_len)
+		*record_len = rlen;
+
+	if (efid)
+		*efid = id;
+
+	if (structure)
+		*structure = str;
+
+	if (access)
+		memcpy(access, acc, 3);
+
+	return TRUE;
+}
+
+gboolean sim_parse_2g_get_response(const unsigned char *response, int len,
+					int *file_len, int *record_len,
+					int *structure, unsigned char *access)
+{
+	if (len < 14 || response[6] != 0x04)
+		return FALSE;
+
+	if ((response[13] == 0x01 || response[13] == 0x03) && len < 15)
+		return FALSE;
+
+	*file_len = (response[2] << 8) | response[3];
+	*structure = response[13];
+
+	access[0] = response[8];
+	access[1] = response[9];
+	access[2] = response[10];
+
+	if (response[13] == 0x01 || response[13] == 0x03)
+		*record_len = response[14];
+	else
+		*record_len = 0;
+
+	return TRUE;
 }

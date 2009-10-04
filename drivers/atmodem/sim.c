@@ -36,6 +36,7 @@
 
 #include "gatchat.h"
 #include "gatresult.h"
+#include "simutil.h"
 
 #include "atmodem.h"
 
@@ -50,7 +51,7 @@ static void at_crsm_info_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	const guint8 *response;
 	gint sw1, sw2, len;
 	int flen, rlen;
-	enum ofono_sim_file_structure str;
+	int str;
 	unsigned char access[3];
 
 	dump_response("at_crsm_info_cb", ok, result);
@@ -63,38 +64,34 @@ static void at_crsm_info_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 	g_at_result_iter_init(&iter, result);
 
-	if (!g_at_result_iter_next(&iter, "+CRSM:")) {
-		CALLBACK_WITH_FAILURE(cb, -1, -1, -1, NULL, cbd->data);
-		return;
-	}
+	if (!g_at_result_iter_next(&iter, "+CRSM:"))
+		goto error;
 
 	g_at_result_iter_next_number(&iter, &sw1);
 	g_at_result_iter_next_number(&iter, &sw2);
 
 	if (!g_at_result_iter_next_hexstring(&iter, &response, &len) ||
 			(sw1 != 0x90 && sw1 != 0x91 && sw1 != 0x92) ||
-			(sw1 == 0x90 && sw2 != 0x00) ||
-			len < 14 || response[6] != 0x04 ||
-			(response[13] == 0x01 && len < 15)) {
-		CALLBACK_WITH_FAILURE(cb, -1, -1, -1, NULL, cbd->data);
-		return;
-	}
+			(sw1 == 0x90 && sw2 != 0x00))
+		goto error;
 
 	ofono_debug("crsm_info_cb: %02x, %02x, %i", sw1, sw2, len);
 
-	flen = (response[2] << 8) | response[3];
-	str = response[13];
-
-	access[0] = response[8];
-	access[1] = response[9];
-	access[2] = response[10];
-
-	if (str == 0x01 || str == 0x03)
-		rlen = response[14];
+	if (response[0] == 0x62)
+		ok = sim_parse_3g_get_response(response, len, &flen, &rlen,
+						&str, access, NULL);
 	else
-		rlen = 0;
+		ok = sim_parse_2g_get_response(response, len, &flen, &rlen,
+						&str, access);
+
+	if (!ok)
+		goto error;
 
 	cb(&error, flen, str, rlen, access, cbd->data);
+	return;
+
+error:
+	CALLBACK_WITH_FAILURE(cb, -1, -1, -1, NULL, cbd->data);
 }
 
 static void at_sim_read_info(struct ofono_sim *sim, int fileid,
@@ -108,7 +105,7 @@ static void at_sim_read_info(struct ofono_sim *sim, int fileid,
 	if (!cbd)
 		goto error;
 
-	snprintf(buf, sizeof(buf), "AT+CRSM=192,%i,0,0,15", fileid);
+	snprintf(buf, sizeof(buf), "AT+CRSM=192,%i", fileid);
 
 	if (g_at_chat_send(chat, buf, crsm_prefix,
 				at_crsm_info_cb, cbd, g_free) > 0)
