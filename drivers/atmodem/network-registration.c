@@ -37,7 +37,8 @@
 #include "gatchat.h"
 #include "gatresult.h"
 
-#include "at.h"
+#include "atmodem.h"
+#include "vendor.h"
 
 static const char *none_prefix[] = { NULL };
 static const char *creg_prefix[] = { "+CREG:", NULL };
@@ -48,6 +49,7 @@ struct netreg_data {
 	GAtChat *chat;
 	char mcc[OFONO_MAX_MCC_LENGTH + 1];
 	char mnc[OFONO_MAX_MNC_LENGTH + 1];
+	unsigned int vendor;
 };
 
 static void extract_mcc_mnc(const char *str, char *mcc, char *mnc)
@@ -82,9 +84,7 @@ static void at_creg_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	g_at_result_iter_init(&iter, result);
 
 	if (!g_at_result_iter_next(&iter, "+CREG:")) {
-		DECLARE_FAILURE(e);
-
-		cb(&e, -1, -1, -1, -1, cbd->data);
+		CALLBACK_WITH_FAILURE(cb, -1, -1, -1, -1, cbd->data);
 		return;
 	}
 
@@ -129,10 +129,7 @@ error:
 	if (cbd)
 		g_free(cbd);
 
-	{
-		DECLARE_FAILURE(error);
-		cb(&error, -1, -1, -1, -1, data);
-	}
+	CALLBACK_WITH_FAILURE(cb, -1, -1, -1, -1, data);
 }
 
 static void cops_cb(gboolean ok, GAtResult *result, gpointer user_data)
@@ -195,11 +192,7 @@ out:
 	return;
 
 error:
-	{
-		DECLARE_FAILURE(e);
-
-		cb(&e, NULL, cbd->data);
-	}
+	CALLBACK_WITH_FAILURE(cb, NULL, cbd->data);
 
 	g_free(cbd);
 }
@@ -278,10 +271,7 @@ error:
 	if (cbd)
 		g_free(cbd);
 
-	{
-		DECLARE_FAILURE(error);
-		cb(&error, NULL, data);
-	}
+	CALLBACK_WITH_FAILURE(cb, NULL, data);
 }
 
 static void cops_list_cb(gboolean ok, GAtResult *result, gpointer user_data)
@@ -313,8 +303,7 @@ static void cops_list_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	list = g_try_new0(struct ofono_network_operator, num);
 
 	if (!list) {
-		DECLARE_FAILURE(e);
-		cb(&e, 0, NULL, cbd->data);
+		CALLBACK_WITH_FAILURE(cb, 0, NULL, cbd->data);
 		return;
 	}
 
@@ -404,10 +393,7 @@ error:
 	if (cbd)
 		g_free(cbd);
 
-	{
-		DECLARE_FAILURE(error);
-		cb(&error, 0, NULL, data);
-	}
+	CALLBACK_WITH_FAILURE(cb, 0, NULL, data);
 }
 
 static void register_cb(gboolean ok, GAtResult *result, gpointer user_data)
@@ -439,10 +425,7 @@ error:
 	if (cbd)
 		g_free(cbd);
 
-	{
-		DECLARE_FAILURE(error);
-		cb(&error, data);
-	}
+	CALLBACK_WITH_FAILURE(cb, data);
 }
 
 static void at_register_manual(struct ofono_netreg *netreg,
@@ -466,10 +449,7 @@ error:
 	if (cbd)
 		g_free(cbd);
 
-	{
-		DECLARE_FAILURE(error);
-		cb(&error, data);
-	}
+	CALLBACK_WITH_FAILURE(cb, data);
 }
 
 static void at_deregister(struct ofono_netreg *netreg,
@@ -489,10 +469,20 @@ error:
 	if (cbd)
 		g_free(cbd);
 
-	{
-		DECLARE_FAILURE(error);
-		cb(&error, data);
-	}
+	CALLBACK_WITH_FAILURE(cb, data);
+}
+
+static inline void report_signal_strength(struct ofono_netreg *netreg,
+						int strength)
+{
+	ofono_debug("csq_notify: %d", strength);
+
+	if (strength == 99)
+		strength = -1;
+	else
+		strength = (strength * 100) / 31;
+
+	ofono_netreg_strength_notify(netreg, strength);
 }
 
 static void csq_notify(GAtResult *result, gpointer user_data)
@@ -511,14 +501,26 @@ static void csq_notify(GAtResult *result, gpointer user_data)
 	if (!g_at_result_iter_next_number(&iter, &strength))
 		return;
 
-	ofono_debug("csq_notify: %d", strength);
+	report_signal_strength(netreg, strength);
+}
 
-	if (strength == 99)
-		strength = -1;
-	else
-		strength = strength * 100 / 31;
+static void calypso_csq_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_netreg *netreg = user_data;
+	int strength;
+	GAtResultIter iter;
 
-	ofono_netreg_strength_notify(netreg, strength);
+	dump_response("calypso_csq_notify", TRUE, result);
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "%CSQ:"))
+		return;
+
+	if (!g_at_result_iter_next_number(&iter, &strength))
+		return;
+
+	report_signal_strength(netreg, strength);
 }
 
 static void csq_cb(gboolean ok, GAtResult *result, gpointer user_data)
@@ -540,9 +542,7 @@ static void csq_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	g_at_result_iter_init(&iter, result);
 
 	if (!g_at_result_iter_next(&iter, "+CSQ:")) {
-		DECLARE_FAILURE(e);
-
-		cb(&e, -1, cbd->data);
+		CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
 		return;
 	}
 
@@ -553,7 +553,7 @@ static void csq_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	if (strength == 99)
 		strength = -1;
 	else
-		strength = strength * 100 / 31;
+		strength = (strength * 100) / 31;
 
 	cb(&error, strength, cbd->data);
 }
@@ -575,10 +575,7 @@ error:
 	if (cbd)
 		g_free(cbd);
 
-	{
-		DECLARE_FAILURE(error);
-		cb(&error, -1, data);
-	}
+	CALLBACK_WITH_FAILURE(cb, -1, data);
 }
 
 static void creg_notify(GAtResult *result, gpointer user_data)
@@ -633,6 +630,10 @@ static void at_network_registration_initialized(gboolean ok, GAtResult *result,
 	g_at_chat_register(nd->chat, "+CSQ:",
 				csq_notify, FALSE, netreg, NULL);
 
+	if (nd->vendor == OFONO_VENDOR_CALYPSO)
+		g_at_chat_register(nd->chat, "%CSQ:", calypso_csq_notify,
+					FALSE, netreg, NULL);
+
 	ofono_netreg_register(netreg);
 }
 
@@ -645,7 +646,11 @@ static int at_netreg_probe(struct ofono_netreg *netreg, unsigned int vendor,
 	nd = g_new0(struct netreg_data, 1);
 
 	nd->chat = chat;
+	nd->vendor = vendor;
 	ofono_netreg_set_data(netreg, nd);
+
+	if (nd->vendor == OFONO_VENDOR_CALYPSO)
+		g_at_chat_send(chat, "AT%CSQ=1", NULL, NULL, NULL, NULL);
 
 	g_at_chat_send(chat, "AT+CREG=2", NULL,
 				at_network_registration_initialized,

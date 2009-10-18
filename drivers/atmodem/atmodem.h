@@ -19,43 +19,7 @@
  *
  */
 
-struct at_data {
-	GAtChat *parser;
-	struct ofono_modem *modem;
-	GIOChannel *io;
-	char *driver;
-};
-
-void decode_at_error(struct ofono_error *error, const char *final);
-void dump_response(const char *func, gboolean ok, GAtResult *result);
-
-struct cb_data {
-	void *cb;
-	void *data;
-	void *user;
-};
-
-static inline struct cb_data *cb_data_new(void *cb, void *data)
-{
-	struct cb_data *ret;
-
-	ret = g_try_new0(struct cb_data, 1);
-
-	if (!ret)
-		return ret;
-
-	ret->cb = cb;
-	ret->data = data;
-
-	return ret;
-}
-
-#define DECLARE_FAILURE(e) 			\
-	struct ofono_error e;			\
-	e.type = OFONO_ERROR_TYPE_FAILURE;	\
-	e.error = 0				\
-
-extern struct ofono_error g_ok;
+#include "atutil.h"
 
 extern void at_netreg_init();
 extern void at_netreg_exit();
@@ -92,3 +56,9 @@ extern void at_ssn_exit();
 
 extern void at_devinfo_init();
 extern void at_devinfo_exit();
+
+extern void at_cbs_init();
+extern void at_cbs_exit();
+
+extern void at_call_volume_init();
+extern void at_call_volume_exit();

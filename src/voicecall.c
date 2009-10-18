@@ -138,7 +138,7 @@ static const char *call_status_to_string(int status)
 	case CALL_STATUS_DIALING:
 		return "dialing";
 	case CALL_STATUS_ALERTING:
-	return "alerting";
+		return "alerting";
 	case CALL_STATUS_INCOMING:
 		return "incoming";
 	case CALL_STATUS_WAITING:
@@ -287,7 +287,7 @@ static DBusMessage *voicecall_hangup(DBusConnection *conn,
 	if (call->status == CALL_STATUS_DISCONNECTED)
 		return __ofono_error_failed(msg);
 
-	if (!vc->driver->release_specific)
+	if (!vc->driver->release_specific || !vc->driver->hangup)
 		return __ofono_error_not_implemented(msg);
 
 	if (vc->flags & VOICECALLS_FLAG_PENDING)
@@ -296,7 +296,10 @@ static DBusMessage *voicecall_hangup(DBusConnection *conn,
 	vc->flags |= VOICECALLS_FLAG_PENDING;
 	vc->pending = dbus_message_ref(msg);
 
-	vc->driver->release_specific(vc, call->id,
+	if (call->status == CALL_STATUS_INCOMING)
+		vc->driver->hangup(vc, generic_callback, vc);
+	else
+		vc->driver->release_specific(vc, call->id,
 						generic_callback, vc);
 
 	return NULL;
@@ -548,7 +551,7 @@ static gboolean voicecalls_have_active(struct ofono_voicecall *vc)
 	return FALSE;
 }
 
-static gboolean voicecalls_have_connected(struct ofono_voicecall *vc)
+static gboolean voicecalls_can_dtmf(struct ofono_voicecall *vc)
 {
 	GSList *l;
 	struct voicecall *v;
@@ -557,6 +560,10 @@ static gboolean voicecalls_have_connected(struct ofono_voicecall *vc)
 		v = l->data;
 
 		if (v->call->status == CALL_STATUS_ACTIVE)
+			return TRUE;
+
+		/* Connected for 2nd stage dialing */
+		if (v->call->status == CALL_STATUS_ALERTING)
 			return TRUE;
 	}
 
@@ -832,10 +839,30 @@ static DBusMessage *manager_transfer(DBusConnection *conn,
 	return NULL;
 }
 
+static DBusMessage *manager_swap_without_accept(DBusConnection *conn,
+						DBusMessage *msg, void *data)
+{
+	struct ofono_voicecall *vc = data;
+
+	if (vc->flags & VOICECALLS_FLAG_PENDING)
+		return __ofono_error_busy(msg);
+
+	vc->flags |= VOICECALLS_FLAG_PENDING;
+	vc->pending = dbus_message_ref(msg);
+
+	vc->driver->swap_without_accept(vc, generic_callback, vc);
+
+	return NULL;
+}
+
+
 static DBusMessage *manager_swap_calls(DBusConnection *conn,
 					DBusMessage *msg, void *data)
 {
 	struct ofono_voicecall *vc = data;
+
+	if (vc->driver->swap_without_accept)
+		return manager_swap_without_accept(conn, msg, data);
 
 	if (vc->flags & VOICECALLS_FLAG_PENDING)
 		return __ofono_error_busy(msg);
@@ -1073,7 +1100,7 @@ static DBusMessage *manager_tone(DBusConnection *conn,
 		return __ofono_error_not_implemented(msg);
 
 	/* Send DTMFs only if we have at least one connected call */
-	if (!voicecalls_have_connected(vc))
+	if (!voicecalls_can_dtmf(vc))
 		return __ofono_error_failed(msg);
 
 	if (dbus_message_get_args(msg, NULL, DBUS_TYPE_STRING, &in_tones,
@@ -1249,7 +1276,9 @@ void ofono_voicecall_disconnected(struct ofono_voicecall *vc, int id,
 
 	__ofono_modem_release_callid(modem, id);
 
-	voicecall_emit_disconnect_reason(call, reason);
+	if (reason != OFONO_DISCONNECT_REASON_UNKNOWN)
+		voicecall_emit_disconnect_reason(call, reason);
+
 	voicecall_set_call_status(call, CALL_STATUS_DISCONNECTED);
 
 	if (prev_status == CALL_STATUS_INCOMING ||
@@ -1454,7 +1483,8 @@ static void dial_callback(const struct ofono_error *error, void *data)
 		struct voicecall *v = l->data;
 
 		if (v->call->status == CALL_STATUS_DIALING ||
-			v->call->status == CALL_STATUS_ALERTING)
+				v->call->status == CALL_STATUS_ALERTING ||
+				v->call->status == CALL_STATUS_ACTIVE)
 			break;
 	}
 
@@ -1699,8 +1729,7 @@ static void set_new_ecc(struct ofono_voicecall *vc)
 	emit_en_list_changed(vc);
 }
 
-static void ecc_read_cb(int ok, enum ofono_sim_file_structure structure,
-			int total_length, int record, const unsigned char *data,
+static void ecc_read_cb(int ok, int total_length, int record, const unsigned char *data,
 			int record_length, void *userdata)
 {
 	struct ofono_voicecall *vc = userdata;
@@ -1712,8 +1741,7 @@ static void ecc_read_cb(int ok, enum ofono_sim_file_structure structure,
 	if (!ok)
 		goto check;
 
-	if (structure != OFONO_SIM_FILE_STRUCTURE_FIXED ||
-		record_length < 4 || total_length < record_length) {
+	if (record_length < 4 || total_length < record_length) {
 		ofono_error("Unable to read emergency numbers from SIM");
 		return;
 	}
@@ -1857,7 +1885,8 @@ static void sim_watch(struct ofono_atom *atom,
 		return;
 	}
 
-	ofono_sim_read(sim, SIM_EFECC_FILEID, ecc_read_cb, vc);
+	ofono_sim_read(sim, SIM_EFECC_FILEID, OFONO_SIM_FILE_STRUCTURE_FIXED,
+			ecc_read_cb, vc);
 }
 
 void ofono_voicecall_register(struct ofono_voicecall *vc)

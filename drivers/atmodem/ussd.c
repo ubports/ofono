@@ -38,7 +38,7 @@
 #include "gatchat.h"
 #include "gatresult.h"
 
-#include "at.h"
+#include "atmodem.h"
 
 static const char *none_prefix[] = { NULL };
 
@@ -59,7 +59,7 @@ static void at_ussd_request(struct ofono_ussd *ussd, const char *str,
 {
 	GAtChat *chat = ofono_ussd_get_data(ussd);
 	struct cb_data *cbd = cb_data_new(cb, data);
-	unsigned char *converted;
+	unsigned char *converted = NULL;
 	int dcs;
 	int max_len;
 	long written;
@@ -83,7 +83,10 @@ static void at_ussd_request(struct ofono_ussd *ussd, const char *str,
 	if (written > max_len)
 		goto error;
 
-	sprintf(buf, "AT+CUSD=1,\"%s\",%d", converted, dcs);
+	sprintf(buf, "AT+CUSD=1,\"%*s\",%d", (int) written, converted, dcs);
+
+	g_free(converted);
+	converted = NULL;
 
 	if (g_at_chat_send(chat, buf, none_prefix,
 				cusd_request_cb, cbd, g_free) > 0)
@@ -93,10 +96,10 @@ error:
 	if (cbd)
 		g_free(cbd);
 
-	{
-		DECLARE_FAILURE(error);
-		cb(&error, data);
-	}
+	if (converted)
+		g_free(converted);
+
+	CALLBACK_WITH_FAILURE(cb, data);
 }
 
 static void cusd_cancel_cb(gboolean ok, GAtResult *result, gpointer user_data)
@@ -128,10 +131,7 @@ error:
 	if (cbd)
 		g_free(cbd);
 
-	{
-		DECLARE_FAILURE(error);
-		cb(&error, data);
-	}
+	CALLBACK_WITH_FAILURE(cb, data);
 }
 
 static gboolean at_ussd_register(gpointer user)

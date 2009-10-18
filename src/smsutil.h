@@ -360,6 +360,7 @@ struct sms_assembly_node {
 };
 
 struct sms_assembly {
+	const char *imsi;
 	GSList *assembly_list;
 };
 
@@ -385,6 +386,11 @@ struct cbs_assembly {
 	GSList *recv_plmn;
 	GSList *recv_loc;
 	GSList *recv_cell;
+};
+
+struct cbs_topic_range {
+	unsigned short min;
+	unsigned short max;
 };
 
 static inline gboolean is_bit_set(unsigned char oct, int bit)
@@ -450,11 +456,13 @@ gboolean sms_extract_app_port(const struct sms *sms, int *dst, int *src,
 				gboolean *is_8bit);
 gboolean sms_extract_concatenation(const struct sms *sms, guint16 *ref_num,
 					guint8 *max_msgs, guint8 *seq_num);
+gboolean sms_extract_language_variant(const struct sms *sms, guint8 *locking,
+					guint8 *single);
 
 unsigned char *sms_decode_datagram(GSList *sms_list, long *out_len);
 char *sms_decode_text(GSList *sms_list);
 
-struct sms_assembly *sms_assembly_new();
+struct sms_assembly *sms_assembly_new(const char *imsi);
 void sms_assembly_free(struct sms_assembly *assembly);
 GSList *sms_assembly_add_fragment(struct sms_assembly *assembly,
 					const struct sms *sms, time_t ts,
@@ -469,6 +477,7 @@ gboolean cbs_dcs_decode(guint8 dcs, gboolean *udhi, enum sms_class *cls,
 			enum sms_charset *charset, gboolean *compressed,
 			enum cbs_language *language, gboolean *iso639);
 
+gboolean iso639_2_from_language(enum cbs_language lang, char *iso639);
 gboolean cbs_decode(const unsigned char *pdu, int len, struct cbs *out);
 gboolean cbs_encode(const struct cbs *cbs, int *len, unsigned char *pdu);
 gboolean cbs_extract_app_port(const struct cbs *cbs, int *dst, int *src,
@@ -480,5 +489,8 @@ struct cbs_assembly *cbs_assembly_new();
 void cbs_assembly_free(struct cbs_assembly *assembly);
 GSList *cbs_assembly_add_page(struct cbs_assembly *assembly,
 				const struct cbs *cbs);
-void cbs_assembly_location_changed(struct cbs_assembly *assembly,
+void cbs_assembly_location_changed(struct cbs_assembly *assembly, gboolean plmn,
 					gboolean lac, gboolean ci);
+
+char *cbs_topic_ranges_to_string(GSList *ranges);
+GSList *cbs_extract_topic_ranges(const char *ranges);

@@ -19,6 +19,10 @@
  *
  */
 
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
+
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -585,7 +589,7 @@ static void test_udh_iter()
 	g_free(utf8);
 }
 
-static const char *assembly_pdu1 = "038121F350048155550119906041001222048C0500"
+static const char *assembly_pdu1 = "038121F340048155550119906041001222048C0500"
 					"031E0301041804420430043A002C002004100"
 					"43B0435043A04410430043D04340440002000"
 					"200441043B044304480430043B00200437043"
@@ -596,7 +600,7 @@ static const char *assembly_pdu1 = "038121F350048155550119906041001222048C0500"
 					"000200433043D0435";
 static int assembly_pdu_len1 = 155;
 
-static const char *assembly_pdu2 = "038121F350048155550119906041001222048C0500"
+static const char *assembly_pdu2 = "038121F340048155550119906041001222048C0500"
 					"031E03020432043E043C002E000A041D04300"
 					"43A043E043D04350446002C0020043D043500"
 					"200432002004410438043B043004450020043"
@@ -607,7 +611,7 @@ static const char *assembly_pdu2 = "038121F350048155550119906041001222048C0500"
 					"004320020043A043E";
 static int assembly_pdu_len2 = 155;
 
-static const char *assembly_pdu3 = "038121F350048155550119906041001222044A0500"
+static const char *assembly_pdu3 = "038121F340048155550119906041001222044A0500"
 					"031E0303043C043D043004420443002C00200"
 					"43F043E043704300431044B0432000A043404"
 					"3004360435002C002004470442043E0020002"
@@ -616,10 +620,10 @@ static int assembly_pdu_len3 = 89;
 
 static void test_assembly()
 {
-	unsigned char pdu[164];
+	unsigned char pdu[176];
 	long pdu_len;
 	struct sms sms;
-	struct sms_assembly *assembly = sms_assembly_new();
+	struct sms_assembly *assembly = sms_assembly_new(NULL);
 	guint16 ref;
 	guint8 max;
 	guint8 seq;
@@ -776,7 +780,7 @@ static void test_prepare_concat()
 	struct sms *sms;
 	struct sms decoded;
 	int pdu_len, tpdu_len;
-	struct sms_assembly *assembly = sms_assembly_new();
+	struct sms_assembly *assembly = sms_assembly_new(NULL);
 	guint16 ref;
 	guint8 max;
 	guint8 seq;
@@ -962,7 +966,7 @@ static void test_cbs_assembly()
 	l = cbs_assembly_add_page(assembly, &dec1);
 	g_assert(l == NULL);
 
-	cbs_assembly_location_changed(assembly, TRUE, TRUE);
+	cbs_assembly_location_changed(assembly, TRUE, TRUE, TRUE);
 	g_assert(assembly->recv_cell == NULL);
 
 	dec1.update_number = 9;
@@ -1003,6 +1007,97 @@ static void test_cbs_assembly()
 	cbs_assembly_free(assembly);
 }
 
+static void test_serialize_assembly()
+{
+	unsigned char pdu[176];
+	long pdu_len;
+	struct sms sms;
+	struct sms_assembly *assembly = sms_assembly_new("1234");
+	guint16 ref;
+	guint8 max;
+	guint8 seq;
+	GSList *l;
+
+	decode_hex_own_buf(assembly_pdu1, -1, &pdu_len, 0, pdu);
+	sms_decode(pdu, pdu_len, FALSE, assembly_pdu_len1, &sms);
+
+	sms_extract_concatenation(&sms, &ref, &max, &seq);
+	l = sms_assembly_add_fragment(assembly, &sms, time(NULL),
+					&sms.deliver.oaddr, ref, max, seq);
+
+	if (g_test_verbose()) {
+		g_print("Ref: %u\n", ref);
+		g_print("Max: %u\n", max);
+		g_print("From: %s\n",
+				sms_address_to_string(&sms.deliver.oaddr));
+	}
+
+	g_assert(g_slist_length(assembly->assembly_list) == 1);
+	g_assert(l == NULL);
+
+	decode_hex_own_buf(assembly_pdu2, -1, &pdu_len, 0, pdu);
+	sms_decode(pdu, pdu_len, FALSE, assembly_pdu_len2, &sms);
+
+	sms_extract_concatenation(&sms, &ref, &max, &seq);
+	l = sms_assembly_add_fragment(assembly, &sms, time(NULL),
+					&sms.deliver.oaddr, ref, max, seq);
+	g_assert(l == NULL);
+
+	sms_assembly_free(assembly);
+
+	assembly = sms_assembly_new("1234");
+
+	decode_hex_own_buf(assembly_pdu3, -1, &pdu_len, 0, pdu);
+	sms_decode(pdu, pdu_len, FALSE, assembly_pdu_len3, &sms);
+
+	sms_extract_concatenation(&sms, &ref, &max, &seq);
+	l = sms_assembly_add_fragment(assembly, &sms, time(NULL),
+					&sms.deliver.oaddr, ref, max, seq);
+
+	g_assert(l != NULL);
+
+	sms_assembly_free(assembly);
+}
+
+static const char *ranges[] = { "1-5, 2, 3, 600, 569-900, 999",
+				"0-20, 33, 44, 50-60, 20-50, 1-5, 5, 3, 5",
+				NULL };
+static const char *inv_ranges[] = { "1-5, 3333", "1-5, afbcd", "1-5, 3-5,,",
+					"1-5, 3-5, c", NULL };
+
+static void test_range_minimizer()
+{
+	int i = 0;
+
+	while (inv_ranges[i]) {
+		GSList *l = cbs_extract_topic_ranges(inv_ranges[i]);
+
+		g_assert(l == NULL);
+		i++;
+	}
+
+	i = 0;
+
+	while (ranges[i]) {
+		GSList *r = cbs_extract_topic_ranges(ranges[i]);
+		char *rangestr;
+
+		g_assert(r != NULL);
+		i++;
+
+		rangestr = cbs_topic_ranges_to_string(r);
+
+		g_assert(rangestr);
+
+		if (g_test_verbose())
+			g_print("range: %s\n", rangestr);
+
+		g_free(rangestr);
+		g_slist_foreach(r, (GFunc)g_free, NULL);
+		g_slist_free(r);
+	}
+}
+
 int main(int argc, char **argv)
 {
 	g_test_init(&argc, &argv, NULL);
@@ -1020,6 +1115,11 @@ int main(int argc, char **argv)
 	g_test_add_func("/testsms/Test CBS Encode / Decode",
 			test_cbs_encode_decode);
 	g_test_add_func("/testsms/Test CBS Assembly", test_cbs_assembly);
+
+	g_test_add_func("/testsms/Test SMS Assembly Serialize",
+			test_serialize_assembly);
+
+	g_test_add_func("/testsms/Range minimizer", test_range_minimizer);
 
 	return g_test_run();
 }

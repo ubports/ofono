@@ -57,6 +57,7 @@ struct ofono_sms {
 	gint tx_source;
 	struct ofono_message_waiting *mw;
 	unsigned int mw_watch;
+	struct ofono_sim *sim;
 	const struct ofono_sms_driver *driver;
 	void *driver_data;
 	struct ofono_atom *atom;
@@ -773,18 +774,12 @@ void ofono_sms_driver_unregister(const struct ofono_sms_driver *d)
 
 static void sms_unregister(struct ofono_atom *atom)
 {
-	struct ofono_sms *sms = __ofono_atom_get_data(atom);
 	DBusConnection *conn = ofono_dbus_get_connection();
 	struct ofono_modem *modem = __ofono_atom_get_modem(atom);
 	const char *path = __ofono_atom_get_path(atom);
 
 	g_dbus_unregister_interface(conn, path, SMS_MANAGER_INTERFACE);
 	ofono_modem_remove_interface(modem, SMS_MANAGER_INTERFACE);
-
-	if (sms->mw_watch) {
-		__ofono_modem_remove_atom_watch(modem, sms->mw_watch);
-		sms->mw_watch = 0;
-	}
 }
 
 static void sms_remove(struct ofono_atom *atom)
@@ -836,7 +831,6 @@ struct ofono_sms *ofono_sms_create(struct ofono_modem *modem,
 
 	sms->sca.type = 129;
 	sms->ref = 1;
-	sms->assembly = sms_assembly_new();
 	sms->txq = g_queue_new();
 	sms->atom = __ofono_modem_add_atom(modem, OFONO_ATOM_TYPE_SMS,
 						sms_remove, sms);
@@ -876,6 +870,7 @@ void ofono_sms_register(struct ofono_sms *sms)
 	struct ofono_modem *modem = __ofono_atom_get_modem(sms->atom);
 	const char *path = __ofono_atom_get_path(sms->atom);
 	struct ofono_atom *mw_atom;
+	struct ofono_atom *sim_atom;
 
 	if (!g_dbus_register_interface(conn, path,
 					SMS_MANAGER_INTERFACE,
@@ -898,6 +893,21 @@ void ofono_sms_register(struct ofono_sms *sms)
 
 	if (mw_atom && __ofono_atom_get_registered(mw_atom))
 		mw_watch(mw_atom, OFONO_ATOM_WATCH_CONDITION_REGISTERED, sms);
+
+	sim_atom = __ofono_modem_find_atom(modem, OFONO_ATOM_TYPE_SIM);
+
+	/* If we have a sim atom, we can uniquely identify the SIM,
+	 * otherwise create an sms assembly which doesn't backup the fragment
+	 * store.
+	 */
+	if (sim_atom) {
+		const char *imsi;
+
+		sms->sim = __ofono_atom_get_data(sim_atom);
+		imsi = ofono_sim_get_imsi(sms->sim);
+		sms->assembly = sms_assembly_new(imsi);
+	} else
+		sms->assembly = sms_assembly_new(NULL);
 
 	__ofono_atom_register(sms->atom, sms_unregister);
 }

@@ -38,21 +38,33 @@ static GSList *modem_list = NULL;
 static int set_address(struct ofono_modem *modem,
 					GKeyFile *keyfile, const char *group)
 {
-	char *address, *port;
+	char *value;
 
-	address = g_key_file_get_string(keyfile, group, "Address", NULL);
-	if (address) {
-		ofono_modem_set_string(modem, "Address", address);
-		g_free(address);
+	value = g_key_file_get_string(keyfile, group, "Address", NULL);
+	if (value) {
+		ofono_modem_set_string(modem, "Address", value);
+		g_free(value);
 	} else
 		ofono_modem_set_string(modem, "Address", "127.0.0.1");
 
-	port = g_key_file_get_string(keyfile, group, "Port", NULL);
-	if (port) {
-		ofono_modem_set_integer(modem, "Port", atoi(port));
-		g_free(port);
+	value = g_key_file_get_string(keyfile, group, "Port", NULL);
+	if (value) {
+		ofono_modem_set_integer(modem, "Port", atoi(value));
+		g_free(value);
 	} else
 		ofono_modem_set_integer(modem, "Port", 12345);
+
+	value = g_key_file_get_string(keyfile, group, "Modem", NULL);
+	if (value) {
+		ofono_modem_set_string(modem, "Modem", value);
+		g_free(value);
+	}
+
+	value = g_key_file_get_string(keyfile, group, "Multiplexer", NULL);
+	if (value) {
+		ofono_modem_set_string(modem, "Multiplexer", value);
+		g_free(value);
+	}
 
 	return 0;
 }
@@ -87,7 +99,8 @@ static struct ofono_modem *create_modem(GKeyFile *keyfile, const char *group)
 	if (!g_strcmp0(driver, "phonesim"))
 		set_address(modem, keyfile, group);
 
-	if (!g_strcmp0(driver, "g1") || !g_strcmp0(driver, "mbm"))
+	if (!g_strcmp0(driver, "atgen") || !g_strcmp0(driver, "g1") ||
+						!g_strcmp0(driver, "calypso"))
 		set_device(modem, keyfile, group);
 
 	g_free(driver);

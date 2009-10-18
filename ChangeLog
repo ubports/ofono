@@ -1,3 +1,37 @@
+ver 0.8:
+	Fix crash when internal structures differ.
+	Fix issues with handling empty text messages.
+	Add driver model for TTY multiplexer support.
+	Add support for multiplexer usage with Calypso modems.
+	Add support for PhoNet/ISI call barring, forwarding and waiting.
+	Add support for PhoNet/ISI voice call handling.
+
+ver 0.7:
+	Fix handling of empty SMS text messages.
+	Fix GAtChat's next_hexstring to handle optional quotes.
+	Fix generic SIM driver to work correctly with 3G SIM cards.
+	Add utility functions to parse 2G and 3G get response data.
+	Add call volume interface to adjust speaker and mic volume.
+	Add support for basic elementary file database.
+
+ver 0.6:
+	Fix build issue with example history plugin.
+	Fix segmentation fault from SIM reading on Calypso modem.
+	Add more scripts for SMS and voice call testing.
+
+ver 0.5:
+	Fix reading of left overs in ME storage on startup.
+	Fix parsing of Enhanced Voicemail notifications.
+	Add reading of various CBS related EFs.
+	Add ability to expire PLMN wide messages.
+	Add support for national language variants.
+	Add support for PIN and PUK handling.
+	Add support for TI Calypso modem.
+	Add initial support for Novatel based devices.
+	Add initial support for Huawei based devices.
+	Add initial support for Option HSO based devices.
+	Add initial support for TTY multiplexing.
+
 ver 0.4:
 	Add atom framework and update all drivers.
 	Add support for modem driver framework.

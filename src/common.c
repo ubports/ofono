@@ -25,7 +25,7 @@
 
 #define _GNU_SOURCE
 #include <string.h>
-#include <ctype.h>
+#include <errno.h>
 
 #include <glib.h>
 
@@ -280,14 +280,14 @@ const char *telephony_error_to_str(const struct ofono_error *error)
 		maxentries = sizeof(ceer_errors) / sizeof(struct error_entry);
 		break;
 	default:
-		return 0;
+		return "Unknown error type";
 	}
 
 	for (i = 0; i < maxentries; i++)
 		if (e[i].error == error->error)
 			return e[i].str;
 
-	return 0;
+	return "Unknown error";
 }
 
 int mmi_service_code_to_bearer_class(int code)
@@ -527,7 +527,7 @@ gboolean parse_ss_control_string(char *str, int *ss_type,
 		goto out;
 
 	for (i = 0; i < strlen(*sc); i++)
-		if (!isdigit((*sc)[i]))
+		if (!g_ascii_isdigit((*sc)[i]))
 			goto out;
 
 	NEXT_FIELD(c, *sia);
@@ -584,6 +584,10 @@ gboolean is_valid_pin(const char *pin)
 {
 	unsigned int i;
 
+	/* Pin must not be empty */
+	if (pin == NULL || pin[0] == '\0')
+		return FALSE;
+
 	for (i = 0; i < strlen(pin); i++)
 		if (pin[i] < '0' || pin[i] > '9')
 			return FALSE;
@@ -592,4 +596,48 @@ gboolean is_valid_pin(const char *pin)
 		return FALSE;
 
 	return TRUE;
+}
+
+const char *registration_status_to_string(int status)
+{
+	switch (status) {
+	case NETWORK_REGISTRATION_STATUS_NOT_REGISTERED:
+		return "unregistered";
+	case NETWORK_REGISTRATION_STATUS_REGISTERED:
+		return "registered";
+	case NETWORK_REGISTRATION_STATUS_SEARCHING:
+		return "searching";
+	case NETWORK_REGISTRATION_STATUS_DENIED:
+		return "denied";
+	case NETWORK_REGISTRATION_STATUS_UNKNOWN:
+		return "unknown";
+	case NETWORK_REGISTRATION_STATUS_ROAMING:
+		return "roaming";
+	}
+
+	return "";
+}
+
+const char *registration_tech_to_string(int tech)
+{
+	switch (tech) {
+	case ACCESS_TECHNOLOGY_GSM:
+		return "GSM";
+	case ACCESS_TECHNOLOGY_GSM_COMPACT:
+		return "GSMCompact";
+	case ACCESS_TECHNOLOGY_UTRAN:
+		return "UTRAN";
+	case ACCESS_TECHNOLOGY_GSM_EGPRS:
+		return "GSM+EGPRS";
+	case ACCESS_TECHNOLOGY_UTRAN_HSDPA:
+		return "UTRAN+HSDPA";
+	case ACCESS_TECHNOLOGY_UTRAN_HSUPA:
+		return "UTRAN+HSUPA";
+	case ACCESS_TECHNOLOGY_UTRAN_HSDPA_HSUPA:
+		return "UTRAN+HSDPA+HSUPA";
+	case ACCESS_TECHNOLOGY_EUTRAN:
+		return "EUTRAN";
+	default:
+		return "";
+	}
 }

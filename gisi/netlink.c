@@ -38,6 +38,9 @@
 #endif
 #include "phonet.h"
 #include <linux/rtnetlink.h>
+#include <sys/ioctl.h>
+#include <net/if.h>
+#include <errno.h>
 #include <glib.h>
 
 #include "netlink.h"
@@ -51,6 +54,20 @@ struct _GPhonetNetlink {
 static inline GIsiModem *make_modem(unsigned idx)
 {
 	return (void *)(uintptr_t)idx;
+}
+
+static void bring_up(unsigned ifindex)
+{
+	struct ifreq req = { .ifr_ifindex = ifindex, };
+	int fd = socket(PF_LOCAL, SOCK_DGRAM, 0);
+
+	if (ioctl(fd, SIOCGIFNAME, &req) ||
+	    ioctl(fd, SIOCGIFFLAGS, &req))
+		goto error;
+	req.ifr_flags |= IFF_UP | IFF_RUNNING;
+	ioctl(fd, SIOCSIFFLAGS, &req);
+error:
+	close(fd);
 }
 
 /* Parser Netlink messages */
@@ -113,6 +130,8 @@ static gboolean g_pn_nl_process(GIOChannel *channel, GIOCondition cond,
 						rta = RTA_NEXT(rta, len))
 			if (rta->rta_type == IFA_LOCAL)
 				memcpy(&addr, RTA_DATA(rta), 1);
+		if (up)
+			bring_up(ifa->ifa_index);
 		self->callback(up, addr,
 				make_modem(ifa->ifa_index), self->opaque);
 	}

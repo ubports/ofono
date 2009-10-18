@@ -24,12 +24,11 @@
 #endif
 
 #include <stdio.h>
-#include <fcntl.h>
 #include <unistd.h>
 #include <string.h>
 #include <assert.h>
-#include <termios.h>
 #include <ctype.h>
+#include <errno.h>
 
 #include <glib.h>
 
@@ -78,7 +77,6 @@ struct _GAtChat {
 	gpointer user_disconnect_data;		/* user disconnect data */
 	struct ring_buffer *buf;		/* Current read buffer */
 	guint read_so_far;			/* Number of bytes processed */
-	gboolean disconnecting;			/* Whether we're disconnecting */
 	GAtDebugFunc debugf;			/* debugging output function */
 	gpointer debug_data;			/* Data to pass to debug func */
 	char *pdu_notify;			/* Unsolicited Resp w/ PDU */
@@ -243,20 +241,21 @@ static void g_at_chat_cleanup(GAtChat *chat)
 		chat->wakeup_timer = 0;
 	}
 
+	if (chat->timeout_source) {
+		g_source_remove(chat->timeout_source);
+		chat->timeout_source = 0;
+	}
+
 	g_at_syntax_unref(chat->syntax);
 	chat->syntax = NULL;
+
+	chat->channel = NULL;
 }
 
 static void read_watcher_destroy_notify(GAtChat *chat)
 {
-	chat->read_watch = 0;
-
-	if (chat->disconnecting)
-		return;
-
-	chat->channel = NULL;
-
 	g_at_chat_cleanup(chat);
+	chat->read_watch = 0;
 
 	if (chat->user_disconnect)
 		chat->user_disconnect(chat->user_disconnect_data);
@@ -324,34 +323,36 @@ static void g_at_chat_finish_command(GAtChat *p, gboolean ok,
 						char *final)
 {
 	struct at_command *cmd = g_queue_pop_head(p->command_queue);
+	GSList *response_lines;
 
 	/* Cannot happen, but lets be paranoid */
 	if (!cmd)
 		return;
 
-	if (cmd->callback) {
-		GAtResult result;
-
-		p->response_lines = g_slist_reverse(p->response_lines);
-
-		result.final_or_pdu = final;
-		result.lines = p->response_lines;
-
-		cmd->callback(ok, &result, cmd->user_data);
-	}
-
-	g_slist_foreach(p->response_lines, (GFunc)g_free, NULL);
-	g_slist_free(p->response_lines);
-	p->response_lines = NULL;
-
-	g_free(final);
-
-	at_command_destroy(cmd);
-
 	p->cmd_bytes_written = 0;
 
 	if (g_queue_peek_head(p->command_queue))
 		g_at_chat_wakeup_writer(p);
+
+	response_lines = p->response_lines;
+	p->response_lines = NULL;
+
+	if (cmd->callback) {
+		GAtResult result;
+
+		response_lines = g_slist_reverse(response_lines);
+
+		result.final_or_pdu = final;
+		result.lines = response_lines;
+
+		cmd->callback(ok, &result, cmd->user_data);
+	}
+
+	g_slist_foreach(response_lines, (GFunc)g_free, NULL);
+	g_slist_free(response_lines);
+
+	g_free(final);
+	at_command_destroy(cmd);
 }
 
 struct terminator_info {
@@ -628,7 +629,7 @@ static void new_bytes(GAtChat *p)
 
 	/* We're overflowing the buffer, shutdown the socket */
 	if (ring_buffer_avail(p->buf) == 0)
-		g_at_chat_shutdown(p);
+		g_source_remove(p->read_watch);
 }
 
 static void debug_chat(GAtChat *chat, gboolean in, const char *str, gsize len)
@@ -856,7 +857,7 @@ static gboolean can_write_data(GIOChannel *channel, GIOCondition cond,
 			&bytes_written);
 
 	if (err != G_IO_ERROR_NONE) {
-		g_at_chat_shutdown(chat);
+		g_source_remove(chat->read_watch);
 		return FALSE;
 	}
 
@@ -958,42 +959,12 @@ error:
 	return NULL;
 }
 
-static int open_device(const char *device)
+GIOChannel *g_at_chat_get_channel(GAtChat *chat)
 {
-	struct termios ti;
-	int fd;
-
-	fd = open(device, O_RDWR | O_NOCTTY);
-	if (fd < 0)
-		return -1;
-
-	tcflush(fd, TCIOFLUSH);
-
-	/* Switch TTY to raw mode */
-	memset(&ti, 0, sizeof(ti));
-	cfmakeraw(&ti);
-
-	tcsetattr(fd, TCSANOW, &ti);
-
-	return fd;
-}
-
-GAtChat *g_at_chat_new_from_tty(const char *device, GAtSyntax *syntax)
-{
-	GIOChannel *channel;
-	int fd;
-
-	fd = open_device(device);
-	if (fd < 0)
+	if (chat == NULL)
 		return NULL;
 
-	channel = g_io_channel_unix_new(fd);
-	if (!channel) {
-		close(fd);
-		return NULL;
-	}
-
-	return g_at_chat_new(channel, syntax);
+	return chat->channel;
 }
 
 GAtChat *g_at_chat_ref(GAtChat *chat)
@@ -1015,12 +986,11 @@ void g_at_chat_unref(GAtChat *chat)
 
 	is_zero = g_atomic_int_dec_and_test(&chat->ref_count);
 
-	if (is_zero) {
-		g_at_chat_shutdown(chat);
+	if (is_zero == FALSE)
+		return;
 
-		g_at_chat_cleanup(chat);
-		g_free(chat);
-	}
+	g_at_chat_shutdown(chat);
+	g_free(chat);
 }
 
 gboolean g_at_chat_shutdown(GAtChat *chat)
@@ -1028,18 +998,27 @@ gboolean g_at_chat_shutdown(GAtChat *chat)
 	if (chat->channel == NULL)
 		return FALSE;
 
-	if (chat->timeout_source) {
-		g_source_remove(chat->timeout_source);
-		chat->timeout_source = 0;
-	}
-
-	chat->disconnecting = TRUE;
+	/* Don't trigger user disconnect on shutdown */
+	chat->user_disconnect = NULL;
+	chat->user_disconnect_data = NULL;
 
 	if (chat->read_watch)
 		g_source_remove(chat->read_watch);
 
 	if (chat->write_watch)
 		g_source_remove(chat->write_watch);
+
+	return TRUE;
+}
+
+gboolean g_at_chat_set_syntax(GAtChat *chat, GAtSyntax *syntax)
+{
+	if (chat == NULL)
+		return FALSE;
+
+	g_at_syntax_unref(chat->syntax);
+
+	chat->syntax = g_at_syntax_ref(syntax);
 
 	return TRUE;
 }

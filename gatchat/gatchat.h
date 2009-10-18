@@ -40,12 +40,15 @@ typedef void (*GAtDisconnectFunc)(gpointer user_data);
 typedef void (*GAtDebugFunc)(const char *str, gpointer user_data);
 
 GAtChat *g_at_chat_new(GIOChannel *channel, GAtSyntax *syntax);
-GAtChat *g_at_chat_new_from_tty(const char *device, GAtSyntax *syntax);
+
+GIOChannel *g_at_chat_get_channel(GAtChat *chat);
 
 GAtChat *g_at_chat_ref(GAtChat *chat);
 void g_at_chat_unref(GAtChat *chat);
 
 gboolean g_at_chat_shutdown(GAtChat *chat);
+
+gboolean g_at_chat_set_syntax(GAtChat *chat, GAtSyntax *syntax);
 
 gboolean g_at_chat_set_disconnect_function(GAtChat *chat,
 			GAtDisconnectFunc disconnect, gpointer user_data);
