@@ -48,6 +48,18 @@
 #include <ofono/ussd.h>
 #include <ofono/voicecall.h>
 
+static const char *tty_opts[] = {
+	"Baud",
+	"Read",
+	"Local",
+	"StopBits",
+	"DataBits",
+	"Parity",
+	"XonXoff",
+	"RtsCts",
+	NULL,
+};
+
 static int atgen_probe(struct ofono_modem *modem)
 {
 	return 0;
@@ -68,6 +80,9 @@ static int atgen_enable(struct ofono_modem *modem)
 	GIOChannel *channel;
 	GAtSyntax *syntax;
 	const char *device;
+	const char *value;
+	GHashTable *options;
+	int i;
 
 	DBG("%p", modem);
 
@@ -75,11 +90,40 @@ static int atgen_enable(struct ofono_modem *modem)
 	if (!device)
 		return -EINVAL;
 
-	channel = g_at_tty_open(device, NULL);
-	if (!channel)
-		return -EIO;
+	options = g_hash_table_new_full(g_str_hash, g_str_equal,
+					g_free, g_free);
+	if (!options)
+		return -ENOMEM;
 
-	syntax = g_at_syntax_new_gsmv1();
+	for (i = 0; tty_opts[i]; i++) {
+		value = ofono_modem_get_string(modem, tty_opts[i]);
+
+		if (value == NULL)
+			continue;
+
+		g_hash_table_insert(options, g_strdup(tty_opts[i]),
+					g_strdup(value));
+	}
+
+	channel = g_at_tty_open(device, options);
+
+	g_hash_table_destroy(options);
+
+	if (!channel) {
+		return -EIO;
+	}
+
+	value = ofono_modem_get_string(modem, "GsmSyntax");
+	if (value) {
+		if (g_str_equal(value, "V1"))
+			syntax = g_at_syntax_new_gsmv1();
+		else if (g_str_equal(value, "Permissive"))
+			syntax = g_at_syntax_new_gsm_permissive();
+		else
+			return -EINVAL;
+	} else
+		syntax = g_at_syntax_new_gsmv1();
+
 	chat = g_at_chat_new(channel, syntax);
 	g_at_syntax_unref(syntax);
 	g_io_channel_unref(channel);

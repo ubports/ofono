@@ -50,6 +50,7 @@ DBusMessage *__ofono_error_not_active(DBusMessage *msg);
 DBusMessage *__ofono_error_not_supported(DBusMessage *msg);
 DBusMessage *__ofono_error_timed_out(DBusMessage *msg);
 DBusMessage *__ofono_error_sim_not_ready(DBusMessage *msg);
+DBusMessage *__ofono_error_in_use(DBusMessage *msg);
 
 void __ofono_dbus_pending_reply(DBusMessage **msg, DBusMessage *reply);
 
@@ -106,6 +107,8 @@ enum ofono_atom_type {
 	OFONO_ATOM_TYPE_MESSAGE_WAITING = 13,
 	OFONO_ATOM_TYPE_CBS = 14,
 	OFONO_ATOM_TYPES_CALL_VOLUME = 15,
+	OFONO_ATOM_TYPE_GPRS = 16,
+	OFONO_ATOM_TYPE_GPRS_CONTEXT = 17,
 };
 
 enum ofono_atom_watch_condition {
@@ -160,6 +163,8 @@ void __ofono_atom_free(struct ofono_atom *atom);
 #include <ofono/sms.h>
 #include <ofono/sim.h>
 #include <ofono/voicecall.h>
+#include <ofono/gprs.h>
+#include <ofono/gprs-context.h>
 
 #include <ofono/ssn.h>
 
@@ -203,7 +208,7 @@ void __ofono_ussd_passwd_unregister(struct ofono_ussd *ussd, const char *sc);
 #include <ofono/netreg.h>
 
 typedef void (*ofono_netreg_status_notify_cb_t)(int status, int lac, int ci,
-			int tech, const struct ofono_network_operator *op,
+			int tech, const char *mcc, const char *mnc,
 			void *data);
 
 unsigned int __ofono_netreg_add_status_watch(struct ofono_netreg *netreg,

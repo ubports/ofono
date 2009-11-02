@@ -82,8 +82,8 @@ struct ofono_netreg_driver {
 	void (*register_auto)(struct ofono_netreg *netreg,
 			ofono_netreg_register_cb_t cb, void *data);
 	void (*register_manual)(struct ofono_netreg *netreg,
-			const struct ofono_network_operator *oper,
-			ofono_netreg_register_cb_t cb, void *data);
+				const char *mcc, const char *mnc,
+				ofono_netreg_register_cb_t cb, void *data);
 	void (*deregister)(struct ofono_netreg *netreg,
 			ofono_netreg_register_cb_t cb, void *data);
 	void (*strength)(struct ofono_netreg *netreg,
@@ -112,8 +112,8 @@ int ofono_netreg_get_location(struct ofono_netreg *netreg);
 int ofono_netreg_get_cellid(struct ofono_netreg *netreg);
 int ofono_netreg_get_status(struct ofono_netreg *netreg);
 int ofono_netreg_get_technology(struct ofono_netreg *netreg);
-const struct ofono_network_operator *
-	ofono_netreg_get_operator(struct ofono_netreg *netreg);
+const char *ofono_netreg_get_mcc(struct ofono_netreg *netreg);
+const char *ofono_netreg_get_mnc(struct ofono_netreg *netreg);
 
 #ifdef __cplusplus
 }

@@ -48,6 +48,8 @@ static int atmodem_init(void)
 	at_netreg_init();
 	at_cbs_init();
 	at_call_volume_init();
+	at_gprs_init();
+	at_gprs_context_init();
 
 	return 0;
 }
@@ -68,6 +70,8 @@ static void atmodem_exit(void)
 	at_voicecall_exit();
 	at_cbs_exit();
 	at_call_volume_exit();
+	at_gprs_exit();
+	at_gprs_context_exit();
 }
 
 OFONO_PLUGIN_DEFINE(atmodem, "AT modem driver", VERSION,

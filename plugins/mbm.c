@@ -44,12 +44,15 @@
 #include <ofono/voicecall.h>
 #include <ofono/phonebook.h>
 #include <ofono/message-waiting.h>
-#include <ofono/call-barring.h>
-#include <ofono/call-forwarding.h>
 #include <ofono/call-meter.h>
 #include <ofono/call-settings.h>
 #include <ofono/call-volume.h>
+#include <ofono/gprs.h>
+#include <ofono/gprs-context.h>
 #include <ofono/log.h>
+
+static const char *cfun_prefix[] = { "+CFUN:", NULL };
+static const char *none_prefix[] = { NULL };
 
 struct mbm_data {
 	GAtChat *chat;
@@ -92,8 +95,58 @@ static void cfun_enable(gboolean ok, GAtResult *result, gpointer user_data)
 
 	DBG("");
 
-	if (ok)
-		ofono_modem_set_powered(modem, TRUE);
+	if (!ok)
+		ofono_modem_set_powered(modem, FALSE);
+
+	ofono_modem_set_powered(modem, TRUE);
+}
+
+static void cfun_query(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct ofono_modem *modem = user_data;
+	struct mbm_data *data = ofono_modem_get_data(modem);
+	GAtResultIter iter;
+	int status;
+
+	DBG("");
+
+	g_at_result_iter_init(&iter, result);
+
+	if (g_at_result_iter_next(&iter, "+CFUN:") == FALSE)
+		return;
+
+	g_at_result_iter_next_number(&iter, &status);
+
+	if (status == 4) {
+		g_at_chat_send(data->chat, "AT+CFUN=1", none_prefix,
+				cfun_enable, modem, NULL);
+		return;
+	}
+
+	ofono_modem_set_powered(modem, TRUE);
+}
+
+static void emrdy_notifier(GAtResult *result, gpointer user_data)
+{
+	struct ofono_modem *modem = user_data;
+	struct mbm_data *data = ofono_modem_get_data(modem);
+	GAtResultIter iter;
+	int status;
+
+	DBG("");
+
+	g_at_result_iter_init(&iter, result);
+
+	if (g_at_result_iter_next(&iter, "*EMRDY:") == FALSE)
+		return;
+
+	g_at_result_iter_next_number(&iter, &status);
+
+	if (status != 1)
+		return;
+
+	g_at_chat_send(data->chat, "AT+CFUN?", cfun_prefix,
+					cfun_query, modem, NULL);
 }
 
 static int mbm_enable(struct ofono_modem *modem)
@@ -127,10 +180,14 @@ static int mbm_enable(struct ofono_modem *modem)
 	if (getenv("OFONO_AT_DEBUG"))
 		g_at_chat_set_debug(data->chat, mbm_debug, NULL);
 
-	g_at_chat_send(data->chat, "AT+CFUN=1", NULL,
-					cfun_enable, modem, NULL);
+	g_at_chat_register(data->chat, "*EMRDY:", emrdy_notifier,
+					FALSE, modem, NULL);
 
-	return 0;
+	g_at_chat_send(data->chat, "AT&F E0 V1 X4 &C1 +CMEE=1", NULL,
+					NULL, NULL, NULL);
+	g_at_chat_send(data->chat, "AT*EMRDY?", none_prefix, NULL, NULL, NULL);
+
+	return -EINPROGRESS;
 }
 
 static void cfun_disable(gboolean ok, GAtResult *result, gpointer user_data)
@@ -152,7 +209,7 @@ static int mbm_disable(struct ofono_modem *modem)
 	if (!data->chat)
 		return 0;
 
-	g_at_chat_send(data->chat, "AT+CFUN=0", NULL,
+	g_at_chat_send(data->chat, "AT+CFUN=4", NULL,
 					cfun_disable, modem, NULL);
 
 	g_at_chat_shutdown(data->chat);
@@ -160,7 +217,7 @@ static int mbm_disable(struct ofono_modem *modem)
 	g_at_chat_unref(data->chat);
 	data->chat = NULL;
 
-	return 0;
+	return -EINPROGRESS;
 }
 
 static void mbm_pre_sim(struct ofono_modem *modem)
@@ -178,13 +235,13 @@ static void mbm_post_sim(struct ofono_modem *modem)
 {
 	struct mbm_data *data = ofono_modem_get_data(modem);
 	struct ofono_message_waiting *mw;
+	struct ofono_gprs *gprs;
+	struct ofono_gprs_context *gc;
 
 	DBG("%p", modem);
 
-	ofono_call_forwarding_create(modem, 0, "atmodem", data->chat);
 	ofono_call_settings_create(modem, 0, "atmodem", data->chat);
 	ofono_call_meter_create(modem, 0, "atmodem", data->chat);
-	ofono_call_barring_create(modem, 0, "atmodem", data->chat);
 	ofono_call_volume_create(modem, 0, "atmodem", data->chat);
 
 	ofono_ussd_create(modem, 0, "atmodem", data->chat);
@@ -193,6 +250,12 @@ static void mbm_post_sim(struct ofono_modem *modem)
 	ofono_ssn_create(modem, 0, "atmodem", data->chat);
 	ofono_sms_create(modem, 0, "atmodem", data->chat);
 	ofono_cbs_create(modem, 0, "atmodem", data->chat);
+
+	gprs = ofono_gprs_create(modem, 0, "atmodem", data->chat);
+	gc = ofono_gprs_context_create(modem, 0, "mbm", data->chat);
+
+	if (gprs && gc)
+		ofono_gprs_add_context(gprs, gc);
 
 	mw = ofono_message_waiting_create(modem);
 	if (mw)

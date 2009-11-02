@@ -35,6 +35,19 @@
 
 static GSList *modem_list = NULL;
 
+static const char *tty_opts[] = {
+	"Baud",
+	"Read",
+	"Local",
+	"StopBits",
+	"DataBits",
+	"Parity",
+	"XonXoff",
+	"RtsCts",
+	"GsmSyntax",
+	NULL,
+};
+
 static int set_address(struct ofono_modem *modem,
 					GKeyFile *keyfile, const char *group)
 {
@@ -73,6 +86,8 @@ static int set_device(struct ofono_modem *modem,
 					GKeyFile *keyfile, const char *group)
 {
 	char *device;
+	char *value;
+	int i;
 
 	device = g_key_file_get_string(keyfile, group, "Device", NULL);
 	if (!device)
@@ -81,6 +96,17 @@ static int set_device(struct ofono_modem *modem,
 	ofono_modem_set_string(modem, "Device", device);
 
 	g_free(device);
+
+	for (i = 0; tty_opts[i]; i++) {
+		value = g_key_file_get_string(keyfile, group,
+						tty_opts[i], NULL);
+
+		if (value == NULL)
+			continue;
+
+		ofono_modem_set_string(modem, tty_opts[i], value);
+		g_free(value);
+	}
 
 	return 0;
 }
@@ -100,7 +126,8 @@ static struct ofono_modem *create_modem(GKeyFile *keyfile, const char *group)
 		set_address(modem, keyfile, group);
 
 	if (!g_strcmp0(driver, "atgen") || !g_strcmp0(driver, "g1") ||
-						!g_strcmp0(driver, "calypso"))
+						!g_strcmp0(driver, "calypso") ||
+						!g_strcmp0(driver, "hfp"))
 		set_device(modem, keyfile, group);
 
 	g_free(driver);

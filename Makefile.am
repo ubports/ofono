@@ -10,7 +10,8 @@ include_HEADERS = include/log.h include/plugin.h include/history.h \
 			include/phonebook.h include/ssn.h include/ussd.h \
 			include/sms.h include/sim.h include/message-waiting.h \
 			include/netreg.h include/voicecall.h include/devinfo.h \
-			include/cbs.h include/call-volume.h
+			include/cbs.h include/call-volume.h \
+			include/gprs.h include/gprs-context.h
 
 nodist_include_HEADERS = include/version.h
 
@@ -111,13 +112,27 @@ builtin_sources += $(gatchat_sources) \
 				drivers/atmodem/call-volume.c \
 				drivers/atmodem/vendor.h \
 				drivers/atmodem/atutil.h \
-				drivers/atmodem/atutil.c
+				drivers/atmodem/atutil.c \
+				drivers/atmodem/gprs.c \
+				drivers/atmodem/gprs-context.c
 
 builtin_modules += calypsomodem
 builtin_sources += drivers/atmodem/atutil.h \
 			drivers/calypsomodem/calypsomodem.h \
 			drivers/calypsomodem/calypsomodem.c \
 			drivers/calypsomodem/voicecall.c
+
+builtin_modules += hfpmodem
+builtin_sources += drivers/atmodem/atutil.h \
+			drivers/hfpmodem/hfpmodem.h \
+			drivers/hfpmodem/hfpmodem.c \
+			drivers/hfpmodem/voicecall.c
+
+builtin_modules += mbmmodem
+builtin_sources += drivers/atmodem/atutil.h \
+			drivers/mbmmodem/mbmmodem.h \
+			drivers/mbmmodem/mbmmodem.c \
+			drivers/mbmmodem/gprs-context.c
 
 builtin_modules += modemconf
 builtin_sources += plugins/modemconf.c
@@ -149,6 +164,9 @@ builtin_sources += plugins/huawei.c
 
 builtin_modules += novatel
 builtin_sources += plugins/novatel.c
+
+builtin_modules += hfp
+builtin_sources += plugins/hfp.c
 endif
 
 if MAINTAINER_MODE
@@ -168,7 +186,8 @@ src_ofonod_SOURCES = $(gdbus_sources) $(builtin_sources) \
 			src/ssn.c src/call-barring.c src/sim.c \
 			src/phonebook.c src/history.c src/message-waiting.c \
 			src/simutil.h src/simutil.c src/storage.h \
-			src/storage.c src/cbs.c src/watch.c src/call-volume.c
+			src/storage.c src/cbs.c src/watch.c src/call-volume.c \
+			src/gprs.c
 
 src_ofonod_LDADD = $(builtin_libadd) \
 			@GLIB_LIBS@ @GTHREAD_LIBS@ @DBUS_LIBS@ -ldl
@@ -200,7 +219,8 @@ doc_files = doc/overview.txt doc/ofono-paper.txt \
 		doc/manager-api.txt doc/modem-api.txt doc/network-api.txt \
 			doc/voicecallmanager-api.txt doc/voicecall-api.txt \
 			doc/call-forwarding-api.txt doc/call-settings-api.txt \
-			doc/call-meter-api.txt
+			doc/call-meter-api.txt \
+			doc/dataconnectionmanager-api.txt
 
 test_files = test/test-manager test/test-modem test/test-voicecall \
 		test/test-network-registration test/test-phonebook \
@@ -210,7 +230,8 @@ test_files = test/test-manager test/test-modem test/test-voicecall \
 		test/test-ss-control-cs \
 		test/monitor-ofono test/list-modems test/enable-modem \
 		test/list-operators test/dial-number test/hangup-all \
-		test/receive-sms test/send-sms
+		test/receive-sms test/send-sms test/list-contexts \
+		test/create-context test/activate-context
 
 conf_files = src/ofono.conf plugins/modem.conf
 

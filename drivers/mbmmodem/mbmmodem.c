@@ -19,23 +19,31 @@
  *
  */
 
-#ifdef TEMP_FAILURE_RETRY
-#define TFR TEMP_FAILURE_RETRY
-#else
-#define TFR
+#ifdef HAVE_CONFIG_H
+#include <config.h>
 #endif
 
-#include <fcntl.h>
+#include <glib.h>
+#include <gatchat.h>
 
-int create_dirs(const char *filename, const mode_t mode);
+#define OFONO_API_SUBJECT_TO_CHANGE
+#include <ofono/plugin.h>
+#include <ofono/types.h>
 
-ssize_t read_file(unsigned char *buffer, size_t len,
-			const char *path_fmt, ...);
+#include "mbmmodem.h"
 
-ssize_t write_file(const unsigned char *buffer, size_t len, mode_t mode,
-			const char *path_fmt, ...);
+static int mbmmodem_init(void)
+{
+	mbm_gprs_context_init();
 
-GKeyFile *storage_open(const char *imsi, const char *store);
-void storage_sync(const char *imsi, const char *store, GKeyFile *keyfile);
-void storage_close(const char *imsi, const char *store, GKeyFile *keyfile,
-			gboolean save);
+	return 0;
+}
+
+static void mbmmodem_exit(void)
+{
+	mbm_gprs_context_exit();
+}
+
+OFONO_PLUGIN_DEFINE(mbmmodem, "MBM modem driver", VERSION,
+			OFONO_PLUGIN_PRIORITY_DEFAULT,
+			mbmmodem_init, mbmmodem_exit)

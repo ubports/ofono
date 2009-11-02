@@ -61,8 +61,9 @@ host_triplet = @host@
 @ISIMODEM_TRUE@				drivers/isimodem/call-barring.c \
 @ISIMODEM_TRUE@				drivers/isimodem/call-meter.c
 
-@ATMODEM_TRUE@am__append_7 = atmodem calypsomodem modemconf phonesim \
-@ATMODEM_TRUE@	atgen g1 calypso mbm hso huawei novatel
+@ATMODEM_TRUE@am__append_7 = atmodem calypsomodem hfpmodem mbmmodem \
+@ATMODEM_TRUE@	modemconf phonesim atgen g1 calypso mbm hso \
+@ATMODEM_TRUE@	huawei novatel hfp
 @ATMODEM_TRUE@am__append_8 = $(gatchat_sources) \
 @ATMODEM_TRUE@	drivers/atmodem/atmodem.h \
 @ATMODEM_TRUE@	drivers/atmodem/atmodem.c \
@@ -79,15 +80,24 @@ host_triplet = @host@
 @ATMODEM_TRUE@	drivers/atmodem/call-volume.c \
 @ATMODEM_TRUE@	drivers/atmodem/vendor.h \
 @ATMODEM_TRUE@	drivers/atmodem/atutil.h \
-@ATMODEM_TRUE@	drivers/atmodem/atutil.c \
+@ATMODEM_TRUE@	drivers/atmodem/atutil.c drivers/atmodem/gprs.c \
+@ATMODEM_TRUE@	drivers/atmodem/gprs-context.c \
 @ATMODEM_TRUE@	drivers/atmodem/atutil.h \
 @ATMODEM_TRUE@	drivers/calypsomodem/calypsomodem.h \
 @ATMODEM_TRUE@	drivers/calypsomodem/calypsomodem.c \
 @ATMODEM_TRUE@	drivers/calypsomodem/voicecall.c \
+@ATMODEM_TRUE@	drivers/atmodem/atutil.h \
+@ATMODEM_TRUE@	drivers/hfpmodem/hfpmodem.h \
+@ATMODEM_TRUE@	drivers/hfpmodem/hfpmodem.c \
+@ATMODEM_TRUE@	drivers/hfpmodem/voicecall.c \
+@ATMODEM_TRUE@	drivers/atmodem/atutil.h \
+@ATMODEM_TRUE@	drivers/mbmmodem/mbmmodem.h \
+@ATMODEM_TRUE@	drivers/mbmmodem/mbmmodem.c \
+@ATMODEM_TRUE@	drivers/mbmmodem/gprs-context.c \
 @ATMODEM_TRUE@	plugins/modemconf.c plugins/phonesim.c \
 @ATMODEM_TRUE@	plugins/atgen.c plugins/g1.c plugins/calypso.c \
 @ATMODEM_TRUE@	plugins/mbm.c plugins/hso.c plugins/huawei.c \
-@ATMODEM_TRUE@	plugins/novatel.c
+@ATMODEM_TRUE@	plugins/novatel.c plugins/hfp.c
 @ATMODEM_TRUE@@DATAFILES_TRUE@am__append_9 = plugins/modem.conf
 @MAINTAINER_MODE_TRUE@am__append_10 = example_history
 @MAINTAINER_MODE_TRUE@am__append_11 = plugins/example_history.c
@@ -160,20 +170,24 @@ am__src_ofonod_SOURCES_DIST = gdbus/gdbus.h gdbus/mainloop.c \
 	drivers/atmodem/ssn.c drivers/atmodem/devinfo.c \
 	drivers/atmodem/call-volume.c drivers/atmodem/vendor.h \
 	drivers/atmodem/atutil.h drivers/atmodem/atutil.c \
+	drivers/atmodem/gprs.c drivers/atmodem/gprs-context.c \
 	drivers/calypsomodem/calypsomodem.h \
 	drivers/calypsomodem/calypsomodem.c \
-	drivers/calypsomodem/voicecall.c plugins/modemconf.c \
+	drivers/calypsomodem/voicecall.c drivers/hfpmodem/hfpmodem.h \
+	drivers/hfpmodem/hfpmodem.c drivers/hfpmodem/voicecall.c \
+	drivers/mbmmodem/mbmmodem.h drivers/mbmmodem/mbmmodem.c \
+	drivers/mbmmodem/gprs-context.c plugins/modemconf.c \
 	plugins/phonesim.c plugins/atgen.c plugins/g1.c \
 	plugins/calypso.c plugins/mbm.c plugins/hso.c plugins/huawei.c \
-	plugins/novatel.c plugins/example_history.c src/main.c \
-	src/ofono.h src/log.c src/plugin.c src/modem.c src/common.h \
-	src/common.c src/manager.c src/dbus.c src/util.h src/util.c \
-	src/network.c src/voicecall.c src/ussd.c src/sms.c \
+	plugins/novatel.c plugins/hfp.c plugins/example_history.c \
+	src/main.c src/ofono.h src/log.c src/plugin.c src/modem.c \
+	src/common.h src/common.c src/manager.c src/dbus.c src/util.h \
+	src/util.c src/network.c src/voicecall.c src/ussd.c src/sms.c \
 	src/call-settings.c src/call-forwarding.c src/call-meter.c \
 	src/smsutil.h src/smsutil.c src/ssn.c src/call-barring.c \
 	src/sim.c src/phonebook.c src/history.c src/message-waiting.c \
 	src/simutil.h src/simutil.c src/storage.h src/storage.c \
-	src/cbs.c src/watch.c src/call-volume.c
+	src/cbs.c src/watch.c src/call-volume.c src/gprs.c
 am__objects_2 = gdbus/mainloop.$(OBJEXT) gdbus/object.$(OBJEXT) \
 	gdbus/watch.$(OBJEXT)
 @UDEV_TRUE@am__objects_3 = plugins/udev.$(OBJEXT)
@@ -213,14 +227,20 @@ am__objects_4 = gisi/netlink.$(OBJEXT) gisi/socket.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/atmodem/devinfo.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/atmodem/call-volume.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/atmodem/atutil.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/atmodem/gprs.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/atmodem/gprs-context.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/calypsomodem/calypsomodem.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/calypsomodem/voicecall.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/hfpmodem/hfpmodem.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/hfpmodem/voicecall.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/mbmmodem/mbmmodem.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/mbmmodem/gprs-context.$(OBJEXT) \
 @ATMODEM_TRUE@	plugins/modemconf.$(OBJEXT) \
 @ATMODEM_TRUE@	plugins/phonesim.$(OBJEXT) \
 @ATMODEM_TRUE@	plugins/atgen.$(OBJEXT) plugins/g1.$(OBJEXT) \
 @ATMODEM_TRUE@	plugins/calypso.$(OBJEXT) plugins/mbm.$(OBJEXT) \
 @ATMODEM_TRUE@	plugins/hso.$(OBJEXT) plugins/huawei.$(OBJEXT) \
-@ATMODEM_TRUE@	plugins/novatel.$(OBJEXT)
+@ATMODEM_TRUE@	plugins/novatel.$(OBJEXT) plugins/hfp.$(OBJEXT)
 @MAINTAINER_MODE_TRUE@am__objects_7 =  \
 @MAINTAINER_MODE_TRUE@	plugins/example_history.$(OBJEXT)
 am__objects_8 = $(am__objects_3) $(am__objects_5) $(am__objects_6) \
@@ -236,7 +256,7 @@ am_src_ofonod_OBJECTS = $(am__objects_2) $(am__objects_8) \
 	src/phonebook.$(OBJEXT) src/history.$(OBJEXT) \
 	src/message-waiting.$(OBJEXT) src/simutil.$(OBJEXT) \
 	src/storage.$(OBJEXT) src/cbs.$(OBJEXT) src/watch.$(OBJEXT) \
-	src/call-volume.$(OBJEXT)
+	src/call-volume.$(OBJEXT) src/gprs.$(OBJEXT)
 src_ofonod_OBJECTS = $(am_src_ofonod_OBJECTS)
 am__DEPENDENCIES_1 =
 am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1)
@@ -467,7 +487,8 @@ include_HEADERS = include/log.h include/plugin.h include/history.h \
 			include/phonebook.h include/ssn.h include/ussd.h \
 			include/sms.h include/sim.h include/message-waiting.h \
 			include/netreg.h include/voicecall.h include/devinfo.h \
-			include/cbs.h include/call-volume.h
+			include/cbs.h include/call-volume.h \
+			include/gprs.h include/gprs-context.h
 
 nodist_include_HEADERS = include/version.h
 local_headers = $(foreach file,$(include_HEADERS) $(nodist_include_HEADERS), \
@@ -512,7 +533,8 @@ src_ofonod_SOURCES = $(gdbus_sources) $(builtin_sources) \
 			src/ssn.c src/call-barring.c src/sim.c \
 			src/phonebook.c src/history.c src/message-waiting.c \
 			src/simutil.h src/simutil.c src/storage.h \
-			src/storage.c src/cbs.c src/watch.c src/call-volume.c
+			src/storage.c src/cbs.c src/watch.c src/call-volume.c \
+			src/gprs.c
 
 src_ofonod_LDADD = $(builtin_libadd) \
 			@GLIB_LIBS@ @GTHREAD_LIBS@ @DBUS_LIBS@ -ldl
@@ -537,7 +559,8 @@ doc_files = doc/overview.txt doc/ofono-paper.txt \
 		doc/manager-api.txt doc/modem-api.txt doc/network-api.txt \
 			doc/voicecallmanager-api.txt doc/voicecall-api.txt \
 			doc/call-forwarding-api.txt doc/call-settings-api.txt \
-			doc/call-meter-api.txt
+			doc/call-meter-api.txt \
+			doc/dataconnectionmanager-api.txt
 
 test_files = test/test-manager test/test-modem test/test-voicecall \
 		test/test-network-registration test/test-phonebook \
@@ -547,7 +570,8 @@ test_files = test/test-manager test/test-modem test/test-voicecall \
 		test/test-ss-control-cs \
 		test/monitor-ofono test/list-modems test/enable-modem \
 		test/list-operators test/dial-number test/hangup-all \
-		test/receive-sms test/send-sms
+		test/receive-sms test/send-sms test/list-contexts \
+		test/create-context test/activate-context
 
 conf_files = src/ofono.conf plugins/modem.conf
 EXTRA_DIST = src/genbuiltin plugins/example_history.c $(doc_files) \
@@ -839,6 +863,11 @@ drivers/atmodem/call-volume.$(OBJEXT):  \
 	drivers/atmodem/$(DEPDIR)/$(am__dirstamp)
 drivers/atmodem/atutil.$(OBJEXT): drivers/atmodem/$(am__dirstamp) \
 	drivers/atmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/atmodem/gprs.$(OBJEXT): drivers/atmodem/$(am__dirstamp) \
+	drivers/atmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/atmodem/gprs-context.$(OBJEXT):  \
+	drivers/atmodem/$(am__dirstamp) \
+	drivers/atmodem/$(DEPDIR)/$(am__dirstamp)
 drivers/calypsomodem/$(am__dirstamp):
 	@$(MKDIR_P) drivers/calypsomodem
 	@: > drivers/calypsomodem/$(am__dirstamp)
@@ -851,6 +880,28 @@ drivers/calypsomodem/calypsomodem.$(OBJEXT):  \
 drivers/calypsomodem/voicecall.$(OBJEXT):  \
 	drivers/calypsomodem/$(am__dirstamp) \
 	drivers/calypsomodem/$(DEPDIR)/$(am__dirstamp)
+drivers/hfpmodem/$(am__dirstamp):
+	@$(MKDIR_P) drivers/hfpmodem
+	@: > drivers/hfpmodem/$(am__dirstamp)
+drivers/hfpmodem/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) drivers/hfpmodem/$(DEPDIR)
+	@: > drivers/hfpmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/hfpmodem/hfpmodem.$(OBJEXT): drivers/hfpmodem/$(am__dirstamp) \
+	drivers/hfpmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/hfpmodem/voicecall.$(OBJEXT):  \
+	drivers/hfpmodem/$(am__dirstamp) \
+	drivers/hfpmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/mbmmodem/$(am__dirstamp):
+	@$(MKDIR_P) drivers/mbmmodem
+	@: > drivers/mbmmodem/$(am__dirstamp)
+drivers/mbmmodem/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) drivers/mbmmodem/$(DEPDIR)
+	@: > drivers/mbmmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/mbmmodem/mbmmodem.$(OBJEXT): drivers/mbmmodem/$(am__dirstamp) \
+	drivers/mbmmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/mbmmodem/gprs-context.$(OBJEXT):  \
+	drivers/mbmmodem/$(am__dirstamp) \
+	drivers/mbmmodem/$(DEPDIR)/$(am__dirstamp)
 plugins/modemconf.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
 plugins/phonesim.$(OBJEXT): plugins/$(am__dirstamp) \
@@ -868,6 +919,8 @@ plugins/hso.$(OBJEXT): plugins/$(am__dirstamp) \
 plugins/huawei.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
 plugins/novatel.$(OBJEXT): plugins/$(am__dirstamp) \
+	plugins/$(DEPDIR)/$(am__dirstamp)
+plugins/hfp.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
 plugins/example_history.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
@@ -920,6 +973,7 @@ src/cbs.$(OBJEXT): src/$(am__dirstamp) src/$(DEPDIR)/$(am__dirstamp)
 src/watch.$(OBJEXT): src/$(am__dirstamp) src/$(DEPDIR)/$(am__dirstamp)
 src/call-volume.$(OBJEXT): src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
+src/gprs.$(OBJEXT): src/$(am__dirstamp) src/$(DEPDIR)/$(am__dirstamp)
 src/ofonod$(EXEEXT): $(src_ofonod_OBJECTS) $(src_ofonod_DEPENDENCIES) src/$(am__dirstamp)
 	@rm -f src/ofonod$(EXEEXT)
 	$(AM_V_CCLD)$(src_ofonod_LINK) $(src_ofonod_OBJECTS) $(src_ofonod_LDADD) $(LIBS)
@@ -966,6 +1020,8 @@ mostlyclean-compile:
 	-rm -f drivers/atmodem/call-volume.$(OBJEXT)
 	-rm -f drivers/atmodem/cbs.$(OBJEXT)
 	-rm -f drivers/atmodem/devinfo.$(OBJEXT)
+	-rm -f drivers/atmodem/gprs-context.$(OBJEXT)
+	-rm -f drivers/atmodem/gprs.$(OBJEXT)
 	-rm -f drivers/atmodem/network-registration.$(OBJEXT)
 	-rm -f drivers/atmodem/phonebook.$(OBJEXT)
 	-rm -f drivers/atmodem/sim.$(OBJEXT)
@@ -975,6 +1031,8 @@ mostlyclean-compile:
 	-rm -f drivers/atmodem/voicecall.$(OBJEXT)
 	-rm -f drivers/calypsomodem/calypsomodem.$(OBJEXT)
 	-rm -f drivers/calypsomodem/voicecall.$(OBJEXT)
+	-rm -f drivers/hfpmodem/hfpmodem.$(OBJEXT)
+	-rm -f drivers/hfpmodem/voicecall.$(OBJEXT)
 	-rm -f drivers/isimodem/call-barring.$(OBJEXT)
 	-rm -f drivers/isimodem/call-forwarding.$(OBJEXT)
 	-rm -f drivers/isimodem/call-meter.$(OBJEXT)
@@ -990,6 +1048,8 @@ mostlyclean-compile:
 	-rm -f drivers/isimodem/ssn.$(OBJEXT)
 	-rm -f drivers/isimodem/ussd.$(OBJEXT)
 	-rm -f drivers/isimodem/voicecall.$(OBJEXT)
+	-rm -f drivers/mbmmodem/gprs-context.$(OBJEXT)
+	-rm -f drivers/mbmmodem/mbmmodem.$(OBJEXT)
 	-rm -f gatchat/gatchat.$(OBJEXT)
 	-rm -f gatchat/gatmux.$(OBJEXT)
 	-rm -f gatchat/gatresult.$(OBJEXT)
@@ -1012,6 +1072,7 @@ mostlyclean-compile:
 	-rm -f plugins/calypso.$(OBJEXT)
 	-rm -f plugins/example_history.$(OBJEXT)
 	-rm -f plugins/g1.$(OBJEXT)
+	-rm -f plugins/hfp.$(OBJEXT)
 	-rm -f plugins/hso.$(OBJEXT)
 	-rm -f plugins/huawei.$(OBJEXT)
 	-rm -f plugins/mbm.$(OBJEXT)
@@ -1027,6 +1088,7 @@ mostlyclean-compile:
 	-rm -f src/cbs.$(OBJEXT)
 	-rm -f src/common.$(OBJEXT)
 	-rm -f src/dbus.$(OBJEXT)
+	-rm -f src/gprs.$(OBJEXT)
 	-rm -f src/history.$(OBJEXT)
 	-rm -f src/log.$(OBJEXT)
 	-rm -f src/main.$(OBJEXT)
@@ -1064,6 +1126,8 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/call-volume.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/cbs.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/devinfo.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/gprs-context.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/gprs.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/network-registration.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/phonebook.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/sim.Po@am__quote@
@@ -1073,6 +1137,8 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/voicecall.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/calypsomodem/$(DEPDIR)/calypsomodem.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/calypsomodem/$(DEPDIR)/voicecall.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/hfpmodem/$(DEPDIR)/hfpmodem.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/hfpmodem/$(DEPDIR)/voicecall.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/isimodem/$(DEPDIR)/call-barring.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/isimodem/$(DEPDIR)/call-forwarding.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/isimodem/$(DEPDIR)/call-meter.Po@am__quote@
@@ -1088,6 +1154,8 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/isimodem/$(DEPDIR)/ssn.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/isimodem/$(DEPDIR)/ussd.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/isimodem/$(DEPDIR)/voicecall.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/mbmmodem/$(DEPDIR)/gprs-context.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/mbmmodem/$(DEPDIR)/mbmmodem.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/gatchat.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/gatmux.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/gatresult.Po@am__quote@
@@ -1110,6 +1178,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/calypso.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/example_history.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/g1.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/hfp.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/hso.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/huawei.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/mbm.Po@am__quote@
@@ -1125,6 +1194,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/cbs.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/common.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/dbus.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/gprs.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/history.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/log.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/main.Po@am__quote@
@@ -1591,8 +1661,12 @@ distclean-generic:
 	-rm -f drivers/atmodem/$(am__dirstamp)
 	-rm -f drivers/calypsomodem/$(DEPDIR)/$(am__dirstamp)
 	-rm -f drivers/calypsomodem/$(am__dirstamp)
+	-rm -f drivers/hfpmodem/$(DEPDIR)/$(am__dirstamp)
+	-rm -f drivers/hfpmodem/$(am__dirstamp)
 	-rm -f drivers/isimodem/$(DEPDIR)/$(am__dirstamp)
 	-rm -f drivers/isimodem/$(am__dirstamp)
+	-rm -f drivers/mbmmodem/$(DEPDIR)/$(am__dirstamp)
+	-rm -f drivers/mbmmodem/$(am__dirstamp)
 	-rm -f gatchat/$(DEPDIR)/$(am__dirstamp)
 	-rm -f gatchat/$(am__dirstamp)
 	-rm -f gdbus/$(DEPDIR)/$(am__dirstamp)
@@ -1617,7 +1691,7 @@ clean-am: clean-generic clean-libtool clean-local clean-noinstPROGRAMS \
 
 distclean: distclean-am
 	-rm -f $(am__CONFIG_DISTCLEAN_FILES)
-	-rm -rf drivers/atmodem/$(DEPDIR) drivers/calypsomodem/$(DEPDIR) drivers/isimodem/$(DEPDIR) gatchat/$(DEPDIR) gdbus/$(DEPDIR) gisi/$(DEPDIR) plugins/$(DEPDIR) src/$(DEPDIR) unit/$(DEPDIR)
+	-rm -rf drivers/atmodem/$(DEPDIR) drivers/calypsomodem/$(DEPDIR) drivers/hfpmodem/$(DEPDIR) drivers/isimodem/$(DEPDIR) drivers/mbmmodem/$(DEPDIR) gatchat/$(DEPDIR) gdbus/$(DEPDIR) gisi/$(DEPDIR) plugins/$(DEPDIR) src/$(DEPDIR) unit/$(DEPDIR)
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-hdr distclean-libtool distclean-tags
@@ -1668,7 +1742,7 @@ installcheck-am:
 maintainer-clean: maintainer-clean-am
 	-rm -f $(am__CONFIG_DISTCLEAN_FILES)
 	-rm -rf $(top_srcdir)/autom4te.cache
-	-rm -rf drivers/atmodem/$(DEPDIR) drivers/calypsomodem/$(DEPDIR) drivers/isimodem/$(DEPDIR) gatchat/$(DEPDIR) gdbus/$(DEPDIR) gisi/$(DEPDIR) plugins/$(DEPDIR) src/$(DEPDIR) unit/$(DEPDIR)
+	-rm -rf drivers/atmodem/$(DEPDIR) drivers/calypsomodem/$(DEPDIR) drivers/hfpmodem/$(DEPDIR) drivers/isimodem/$(DEPDIR) drivers/mbmmodem/$(DEPDIR) gatchat/$(DEPDIR) gdbus/$(DEPDIR) gisi/$(DEPDIR) plugins/$(DEPDIR) src/$(DEPDIR) unit/$(DEPDIR)
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 

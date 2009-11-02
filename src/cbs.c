@@ -700,7 +700,7 @@ out:
 }
 
 static void cbs_location_changed(int status, int lac, int ci, int tech,
-					const struct ofono_network_operator *op,
+					const char *mcc, const char *mnc,
 					void *data)
 {
 	struct ofono_cbs *cbs = data;
@@ -708,9 +708,9 @@ static void cbs_location_changed(int status, int lac, int ci, int tech,
 	gboolean lac_changed = FALSE;
 	gboolean ci_changed = FALSE;
 
-	DBG("%d, %d, %d, %d, %p", status, lac, ci, tech, op);
+	DBG("%d, %d, %d, %d, %s%s", status, lac, ci, tech, mcc, mnc);
 
-	if (op == NULL) {
+	if (!mcc || !mnc) {
 		if (cbs->mcc[0] == '\0' && cbs->mnc[0] == '\0')
 			return;
 
@@ -721,9 +721,9 @@ static void cbs_location_changed(int status, int lac, int ci, int tech,
 		goto out;
 	}
 
-	if (strcmp(cbs->mcc, op->mcc) || strcmp(cbs->mnc, op->mnc)) {
-		memcpy(cbs->mcc, op->mcc, sizeof(cbs->mcc));
-		memcpy(cbs->mnc, op->mnc, sizeof(cbs->mnc));
+	if (strcmp(cbs->mcc, mcc) || strcmp(cbs->mnc, mnc)) {
+		memcpy(cbs->mcc, mcc, sizeof(cbs->mcc));
+		memcpy(cbs->mnc, mnc, sizeof(cbs->mnc));
 
 		plmn_changed = TRUE;
 		goto out;
@@ -767,10 +767,12 @@ static void netreg_watch(struct ofono_atom *atom,
 				void *data)
 {
 	struct ofono_cbs *cbs = data;
-	const struct ofono_network_operator *op;
+	const char *mcc;
+	const char *mnc;
 
 	if (cond == OFONO_ATOM_WATCH_CONDITION_UNREGISTERED) {
 		cbs->location_watch = 0;
+		cbs->netreg = 0;
 		return;
 	}
 
@@ -778,11 +780,12 @@ static void netreg_watch(struct ofono_atom *atom,
 	cbs->location_watch = __ofono_netreg_add_status_watch(cbs->netreg,
 					cbs_location_changed, cbs, NULL);
 
-	op = ofono_netreg_get_operator(cbs->netreg);
+	mcc = ofono_netreg_get_mcc(cbs->netreg);
+	mnc = ofono_netreg_get_mnc(cbs->netreg);
 
-	if (op) {
-		memcpy(cbs->mcc, op->mcc, sizeof(cbs->mcc));
-		memcpy(cbs->mnc, op->mnc, sizeof(cbs->mnc));
+	if (mcc && mnc) {
+		memcpy(cbs->mcc, mcc, sizeof(cbs->mcc));
+		memcpy(cbs->mnc, mnc, sizeof(cbs->mnc));
 	} else {
 		memset(cbs->mcc, 0, sizeof(cbs->mcc));
 		memset(cbs->mnc, 0, sizeof(cbs->mnc));

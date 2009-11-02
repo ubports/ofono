@@ -19,23 +19,37 @@
  *
  */
 
-#ifdef TEMP_FAILURE_RETRY
-#define TFR TEMP_FAILURE_RETRY
-#else
-#define TFR
+#ifdef HAVE_CONFIG_H
+#include <config.h>
 #endif
 
-#include <fcntl.h>
+#define _GNU_SOURCE
+#include <stdio.h>
+#include <string.h>
+#include <errno.h>
+#include <glib.h>
 
-int create_dirs(const char *filename, const mode_t mode);
+#define OFONO_API_SUBJECT_TO_CHANGE
+#include <ofono/plugin.h>
+#include <ofono/log.h>
+#include <ofono/modem.h>
 
-ssize_t read_file(unsigned char *buffer, size_t len,
-			const char *path_fmt, ...);
+#include <gatchat.h>
+#include <gatresult.h>
 
-ssize_t write_file(const unsigned char *buffer, size_t len, mode_t mode,
-			const char *path_fmt, ...);
+#include "hfpmodem.h"
 
-GKeyFile *storage_open(const char *imsi, const char *store);
-void storage_sync(const char *imsi, const char *store, GKeyFile *keyfile);
-void storage_close(const char *imsi, const char *store, GKeyFile *keyfile,
-			gboolean save);
+static int hfpmodem_init(void)
+{
+	hfp_voicecall_init();
+
+	return 0;
+}
+
+static void hfpmodem_exit(void)
+{
+	hfp_voicecall_exit();
+}
+
+OFONO_PLUGIN_DEFINE(hfpmodem, "Hands-Free Profile Driver", VERSION,
+		OFONO_PLUGIN_PRIORITY_DEFAULT, hfpmodem_init, hfpmodem_exit)

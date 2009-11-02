@@ -62,3 +62,9 @@ extern void at_cbs_exit();
 
 extern void at_call_volume_init();
 extern void at_call_volume_exit();
+
+extern void at_gprs_init();
+extern void at_gprs_exit();
+
+extern void at_gprs_context_init();
+extern void at_gprs_context_exit();
