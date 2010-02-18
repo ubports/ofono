@@ -1,0 +1,76 @@
+ofono (0.18-1) unstable; urgency=low
+
+  * New upstream release.
+
+ -- Andres Salomon <dilinger@debian.org>  Thu, 18 Feb 2010 03:58:18 +0000
+
+ofono (0.9-1) unstable; urgency=low
+
+  * New upstream release.
+  * Since it runs w/out it, change the udev Depends to a Recommends.
+
+ -- Andres Salomon <dilinger@debian.org>  Mon, 02 Nov 2009 18:46:37 +0000
+
+ofono (0.8-1) unstable; urgency=low
+
+  * New upstream release.
+  * Drop cdbs and use debhelper 7 features instead.
+
+ -- Andres Salomon <dilinger@debian.org>  Sun, 18 Oct 2009 23:54:52 +0000
+
+ofono (0.7-1) unstable; urgency=low
+
+  * New upstream release.
+  * Also build-dep upon udev, as otherwise UDEV_DATADIR is set incorrectly
+    (closes: #549544).
+  * Ofono itself should also probably depend upon udev, eh?
+
+ -- Andres Salomon <dilinger@debian.org>  Sun, 04 Oct 2009 15:27:21 +0000
+
+ofono (0.6-3) unstable; urgency=low
+
+  * Build-dep upon libudev-dev and enable udev support.
+
+ -- Andres Salomon <dilinger@debian.org>  Sat, 03 Oct 2009 20:22:58 +0000
+
+ofono (0.6-2) unstable; urgency=low
+
+  * Add a -dbg package.
+
+ -- Andres Salomon <dilinger@debian.org>  Tue, 29 Sep 2009 20:05:20 +0000
+
+ofono (0.6-1) unstable; urgency=low
+
+  * New upstream release.
+
+ -- Andres Salomon <dilinger@debian.org>  Mon, 28 Sep 2009 16:21:52 +0000
+
+ofono (0.5-1) unstable; urgency=low
+
+  * New upstream release.
+  * Be sure to create /var/lib/ofono (for the lulz).
+  * Silence some lintian warnings.
+
+ -- Andres Salomon <dilinger@debian.org>  Fri, 25 Sep 2009 22:58:23 +0000
+
+ofono (0.4-1) unstable; urgency=low
+
+  * New upstream release.
+  * Update copyright file.
+  * Include the new modem.conf.
+
+ -- Andres Salomon <dilinger@debian.org>  Thu, 03 Sep 2009 19:51:21 +0000
+
+ofono (0.3-1) unstable; urgency=low
+
+  * New upstream release.
+  * Drop ofonod manpage; merged upstream.
+
+ -- Andres Salomon <dilinger@debian.org>  Sat, 15 Aug 2009 15:55:11 +0000
+
+ofono (0.1-1) unstable; urgency=low
+
+  * Initial release.
+
+ -- Andres Salomon <dilinger@debian.org>  Sat, 11 Jul 2009 18:37:48 -0400
+
