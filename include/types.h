@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -83,10 +83,11 @@ struct ofono_phone_number {
 };
 
 struct ofono_call {
-	unsigned id;
+	unsigned int id;
 	int type;
 	int direction;
 	int status;
+	ofono_bool_t mpty;
 	struct ofono_phone_number phone_number;
 	int clip_validity;
 };

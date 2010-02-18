@@ -2,7 +2,7 @@
  *
  *  AT chat library with GLib integration
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *  Copyright (C) 2009  Trolltech ASA.
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -294,12 +294,11 @@ static void wakeup_writer(GAtMux *mux)
 int g_at_mux_raw_write(GAtMux *mux, const void *data, int towrite)
 {
 	GError *error = NULL;
-	GIOStatus status;
 	gssize count = towrite;
 	gsize bytes_written;
 
-	status = g_io_channel_write_chars(mux->channel, (gchar *) data,
-						count, &bytes_written, &error);
+	g_io_channel_write_chars(mux->channel, (gchar *) data,
+					count, &bytes_written, &error);
 
 	return bytes_written;
 }

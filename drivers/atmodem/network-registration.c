@@ -2,7 +2,8 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2010 ST-Ericsson AB.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -44,6 +45,9 @@ static const char *none_prefix[] = { NULL };
 static const char *creg_prefix[] = { "+CREG:", NULL };
 static const char *cops_prefix[] = { "+COPS:", NULL };
 static const char *csq_prefix[] = { "+CSQ:", NULL };
+static const char *cind_prefix[] = { "+CIND:", NULL };
+
+#define SIGNAL_STRENGTH_IND 2
 
 struct netreg_data {
 	GAtChat *chat;
@@ -66,14 +70,11 @@ static void extract_mcc_mnc(const char *str, char *mcc, char *mnc)
 static void at_creg_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
-	GAtResultIter iter;
 	ofono_netreg_status_cb_t cb = cbd->cb;
-	int status;
-	const char *str;
-	int lac = -1, ci = -1, tech = -1;
+	int status, lac, ci, tech;
 	struct ofono_error error;
+	struct netreg_data *nd = cbd->user;
 
-	dump_response("at_creg_cb", ok, result);
 	decode_at_error(&error, g_at_result_final_response(result));
 
 	if (!ok) {
@@ -81,32 +82,11 @@ static void at_creg_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		return;
 	}
 
-	g_at_result_iter_init(&iter, result);
-
-	if (!g_at_result_iter_next(&iter, "+CREG:")) {
+	if (at_util_parse_reg(result, "+CREG:", NULL, &status,
+				&lac, &ci, &tech, nd->vendor) == FALSE) {
 		CALLBACK_WITH_FAILURE(cb, -1, -1, -1, -1, cbd->data);
 		return;
 	}
-
-	/* Skip <n> the unsolicited result code */
-	g_at_result_iter_skip_next(&iter);
-
-	g_at_result_iter_next_number(&iter, &status);
-
-	if (g_at_result_iter_next_string(&iter, &str) == TRUE)
-		lac = strtol(str, NULL, 16);
-	else
-		goto out;
-
-	if (g_at_result_iter_next_string(&iter, &str) == TRUE)
-		ci = strtol(str, NULL, 16);
-	else
-		goto out;
-
-	g_at_result_iter_next_number(&iter, &tech);
-
-out:
-	ofono_debug("creg_cb: %d, %d, %d, %d", status, lac, ci, tech);
 
 	cb(&error, status, lac, ci, tech, cbd->data);
 }
@@ -120,6 +100,8 @@ static void at_registration_status(struct ofono_netreg *netreg,
 
 	if (!cbd)
 		goto error;
+
+	cbd->user = nd;
 
 	if (g_at_chat_send(nd->chat, "AT+CREG?", creg_prefix,
 				at_creg_cb, cbd, g_free) > 0)
@@ -143,7 +125,6 @@ static void cops_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	const char *name;
 	struct ofono_error error;
 
-	dump_response("cops_cb", ok, result);
 	decode_at_error(&error, g_at_result_final_response(result));
 
 	if (!ok || nd->mcc[0] == '\0' || nd->mnc[0] == '\0') {
@@ -179,10 +160,11 @@ static void cops_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	strncpy(op.mnc, nd->mnc, OFONO_MAX_MNC_LENGTH);
 	op.mnc[OFONO_MAX_MNC_LENGTH] = '\0';
 
-	op.status = -1;
+	/* Set to current */
+	op.status = 2;
 	op.tech = tech;
 
-	ofono_debug("cops_cb: %s, %s %s %d", name, nd->mcc, nd->mnc, tech);
+	DBG("cops_cb: %s, %s %s %d", name, nd->mcc, nd->mnc, tech);
 
 	cb(&error, &op, cbd->data);
 
@@ -205,8 +187,6 @@ static void cops_numeric_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	const char *str;
 	int format;
 
-	dump_response("cops_numeric_cb", ok, result);
-
 	if (!ok)
 		goto error;
 
@@ -228,7 +208,7 @@ static void cops_numeric_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 	extract_mcc_mnc(str, nd->mcc, nd->mnc);
 
-	ofono_debug("Cops numeric got mcc: %s, mnc: %s", nd->mcc, nd->mnc);
+	DBG("Cops numeric got mcc: %s, mnc: %s", nd->mcc, nd->mnc);
 
 	return;
 
@@ -283,7 +263,6 @@ static void cops_list_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	int num = 0;
 	struct ofono_error error;
 
-	dump_response("cops_list_cb", ok, result);
 	decode_at_error(&error, g_at_result_final_response(result));
 
 	if (!ok) {
@@ -298,7 +277,7 @@ static void cops_list_cb(gboolean ok, GAtResult *result, gpointer user_data)
 			num += 1;
 	}
 
-	ofono_debug("Got %d elements", num);
+	DBG("Got %d elements", num);
 
 	list = g_try_new0(struct ofono_network_operator, num);
 
@@ -359,15 +338,15 @@ static void cops_list_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		}
 	}
 
-	ofono_debug("Got %d operators", num);
+	DBG("Got %d operators", num);
 
 {
 	int i = 0;
 
 	for (; i < num; i++) {
-		ofono_debug("Operator: %s, %s, %s, status: %d, %d",
-				list[i].name, list[i].mcc, list[i].mnc,
-				list[i].status, list[i].tech);
+		DBG("Operator: %s, %s, %s, status: %d, %d",
+			list[i].name, list[i].mcc, list[i].mnc,
+			list[i].status, list[i].tech);
 	}
 }
 
@@ -402,7 +381,6 @@ static void register_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	ofono_netreg_register_cb_t cb = cbd->cb;
 	struct ofono_error error;
 
-	dump_response("register_cb", ok, result);
 	decode_at_error(&error, g_at_result_final_response(result));
 
 	cb(&error, cbd->data);
@@ -439,7 +417,7 @@ static void at_register_manual(struct ofono_netreg *netreg,
 	if (!cbd)
 		goto error;
 
-	sprintf(buf, "AT+COPS=1,2,\"%s%s\"", mcc, mnc);
+	snprintf(buf, sizeof(buf), "AT+COPS=1,2,\"%s%s\"", mcc, mnc);
 
 	if (g_at_chat_send(nd->chat, buf, none_prefix,
 				register_cb, cbd, g_free) > 0)
@@ -475,7 +453,7 @@ error:
 static inline void report_signal_strength(struct ofono_netreg *netreg,
 						int strength)
 {
-	ofono_debug("csq_notify: %d", strength);
+	DBG("csq_notify: %d", strength);
 
 	if (strength == 99)
 		strength = -1;
@@ -490,8 +468,6 @@ static void csq_notify(GAtResult *result, gpointer user_data)
 	struct ofono_netreg *netreg = user_data;
 	int strength;
 	GAtResultIter iter;
-
-	dump_response("csq_notify", TRUE, result);
 
 	g_at_result_iter_init(&iter, result);
 
@@ -510,8 +486,6 @@ static void calypso_csq_notify(GAtResult *result, gpointer user_data)
 	int strength;
 	GAtResultIter iter;
 
-	dump_response("calypso_csq_notify", TRUE, result);
-
 	g_at_result_iter_init(&iter, result);
 
 	if (!g_at_result_iter_next(&iter, "%CSQ:"))
@@ -523,6 +497,126 @@ static void calypso_csq_notify(GAtResult *result, gpointer user_data)
 	report_signal_strength(netreg, strength);
 }
 
+static void option_osigq_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_netreg *netreg = user_data;
+	int strength;
+	GAtResultIter iter;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "_OSIGQ:"))
+		return;
+
+	if (!g_at_result_iter_next_number(&iter, &strength))
+		return;
+
+	report_signal_strength(netreg, strength);
+}
+
+static void option_owcti_notify(GAtResult *result, gpointer user_data)
+{
+	int mode;
+	GAtResultIter iter;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "_OWCTI:"))
+		return;
+
+	if (!g_at_result_iter_next_number(&iter, &mode))
+		return;
+
+	ofono_info("OWCTI mode: %d", mode);
+}
+
+static void option_octi_notify(GAtResult *result, gpointer user_data)
+{
+	int mode;
+	GAtResultIter iter;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "_OCTI:"))
+		return;
+
+	if (!g_at_result_iter_next_number(&iter, &mode))
+		return;
+
+	ofono_info("OCTI mode: %d", mode);
+}
+
+static void ste_ciev_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_netreg *netreg = user_data;
+	int strength, ind;
+	GAtResultIter iter;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "+CIEV:"))
+		return;
+
+	if (!g_at_result_iter_next_number(&iter, &ind))
+		return;
+
+	if (ind == SIGNAL_STRENGTH_IND) {
+		if (!g_at_result_iter_next_number(&iter, &strength))
+			return;
+
+		strength = (strength * 100) / 5;
+		ofono_netreg_strength_notify(netreg, strength);
+	}
+}
+
+static void ste_cind_cb(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_netreg_strength_cb_t cb = cbd->cb;
+	int strength;
+	GAtResultIter iter;
+	struct ofono_error error;
+
+	decode_at_error(&error, g_at_result_final_response(result));
+
+	if (!ok) {
+		cb(&error, -1, cbd->data);
+		return;
+	}
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "+CIND:")) {
+		CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
+		return;
+	}
+
+	/* Skip battery charge level, which is the first reported  */
+	g_at_result_iter_skip_next(&iter);
+
+	g_at_result_iter_next_number(&iter, &strength);
+
+	strength = (strength * 100) / 5;
+
+	cb(&error, strength, cbd->data);
+}
+
+static void option_ossysi_notify(GAtResult *result, gpointer user_data)
+{
+	int mode;
+	GAtResultIter iter;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "_OSSYSI:"))
+		return;
+
+	if (!g_at_result_iter_next_number(&iter, &mode))
+		return;
+
+	ofono_info("OSSYSI mode: %d", mode);
+}
+
 static void csq_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
@@ -531,7 +625,6 @@ static void csq_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	GAtResultIter iter;
 	struct ofono_error error;
 
-	dump_response("csq_cb", ok, result);
 	decode_at_error(&error, g_at_result_final_response(result));
 
 	if (!ok) {
@@ -548,7 +641,7 @@ static void csq_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 	g_at_result_iter_next_number(&iter, &strength);
 
-	ofono_debug("csq_cb: %d", strength);
+	DBG("csq_cb: %d", strength);
 
 	if (strength == 99)
 		strength = -1;
@@ -567,9 +660,15 @@ static void at_signal_strength(struct ofono_netreg *netreg,
 	if (!cbd)
 		goto error;
 
-	if (g_at_chat_send(nd->chat, "AT+CSQ", csq_prefix,
+	if (nd->vendor == OFONO_VENDOR_STE) {
+		if (g_at_chat_send(nd->chat, "AT+CIND?", cind_prefix,
+				ste_cind_cb, cbd, g_free) > 0)
+			return;
+	} else {
+		if (g_at_chat_send(nd->chat, "AT+CSQ", csq_prefix,
 				csq_cb, cbd, g_free) > 0)
-		return;
+			return;
+	}
 
 error:
 	if (cbd)
@@ -581,34 +680,12 @@ error:
 static void creg_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
-	GAtResultIter iter;
-	int status;
-	int lac = -1, ci = -1, tech = -1;
-	const char *str;
+	int status, lac, ci, tech;
+	struct netreg_data *nd = ofono_netreg_get_data(netreg);
 
-	dump_response("creg_notify", TRUE, result);
-
-	g_at_result_iter_init(&iter, result);
-
-	if (!g_at_result_iter_next(&iter, "+CREG:"))
+	if (at_util_parse_reg_unsolicited(result, "+CREG:", &status,
+				&lac, &ci, &tech, nd->vendor) == FALSE)
 		return;
-
-	g_at_result_iter_next_number(&iter, &status);
-
-	if (g_at_result_iter_next_string(&iter, &str) == TRUE)
-		lac = strtol(str, NULL, 16);
-	else
-		goto out;
-
-	if (g_at_result_iter_next_string(&iter, &str) == TRUE)
-		ci = strtol(str, NULL, 16);
-	else
-		goto out;
-
-	g_at_result_iter_next_number(&iter, &tech);
-
-out:
-	ofono_debug("creg_notify: %d, %d, %d, %d", status, lac, ci, tech);
 
 	ofono_netreg_status_notify(netreg, status, lac, ci, tech);
 }
@@ -630,11 +707,112 @@ static void at_network_registration_initialized(gboolean ok, GAtResult *result,
 	g_at_chat_register(nd->chat, "+CSQ:",
 				csq_notify, FALSE, netreg, NULL);
 
-	if (nd->vendor == OFONO_VENDOR_CALYPSO)
+	switch (nd->vendor) {
+	case OFONO_VENDOR_CALYPSO:
+		g_at_chat_send(nd->chat, "AT%CSQ=1", none_prefix,
+				NULL, NULL, NULL);
 		g_at_chat_register(nd->chat, "%CSQ:", calypso_csq_notify,
 					FALSE, netreg, NULL);
 
+		break;
+	case OFONO_VENDOR_OPTION_HSO:
+		g_at_chat_send(nd->chat, "AT_OSSYS=1", none_prefix,
+				NULL, NULL, NULL);
+		g_at_chat_send(nd->chat, "AT_OCTI=1", none_prefix,
+				NULL, NULL, NULL);
+		g_at_chat_send(nd->chat, "AT_OSQI=1", none_prefix,
+				NULL, NULL, NULL);
+		g_at_chat_register(nd->chat, "_OSIGQ:", option_osigq_notify,
+					FALSE, netreg, NULL);
+		g_at_chat_register(nd->chat, "_OWCTI:", option_owcti_notify,
+					FALSE, netreg, NULL);
+		g_at_chat_register(nd->chat, "_OCTI:", option_octi_notify,
+					FALSE, netreg, NULL);
+		g_at_chat_register(nd->chat, "_OSSYSI:", option_ossysi_notify,
+					FALSE, netreg, NULL);
+
+		g_at_chat_send(nd->chat, "AT_OSSYS?", none_prefix,
+				NULL, NULL, NULL);
+		g_at_chat_send(nd->chat, "AT_OCTI?", none_prefix,
+				NULL, NULL, NULL);
+		g_at_chat_send(nd->chat, "AT_OSQI?", none_prefix,
+				NULL, NULL, NULL);
+
+		/*
+		 * Option has the concept of Speech Service versus
+		 * Data Service. Problem is that in Data Service mode
+		 * the card will reject all voice calls. This is a
+		 * problem for Multi-SIM cards where one of the SIM
+		 * cards is used in a mobile phone and thus incoming
+		 * calls would be not signalled on the phone.
+		 *
+		 *   0 = Speech Service enabled
+		 *   1 = Data Service only mode
+		 */
+		g_at_chat_send(nd->chat, "AT_ODO?", none_prefix,
+				NULL, NULL, NULL);
+		g_at_chat_send(nd->chat, "AT_ODO=0", none_prefix,
+				NULL, NULL, NULL);
+		break;
+	case OFONO_VENDOR_STE:
+		g_at_chat_send(nd->chat, "AT+CMER=3,0,0,1", NULL,
+				NULL, NULL, NULL);
+		g_at_chat_register(nd->chat, "+CIEV:",
+				ste_ciev_notify, FALSE, netreg, NULL);
+		break;
+	default:
+		break;
+	}
+
 	ofono_netreg_register(netreg);
+}
+
+static void at_creg_test_cb(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct ofono_netreg *netreg = user_data;
+	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	gint range[2];
+	GAtResultIter iter;
+	int creg1 = 0;
+	int creg2 = 0;
+
+	if (!ok)
+		goto error;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "+CREG:"))
+		goto error;
+
+	if (!g_at_result_iter_open_list(&iter))
+		goto error;
+
+	while (g_at_result_iter_next_range(&iter, &range[0], &range[1])) {
+		if (1 >= range[0] && 1 <= range[1])
+			creg1 = 1;
+		if (2 >= range[0] && 2 <= range[1])
+			creg2 = 1;
+	}
+
+	g_at_result_iter_close_list(&iter);
+
+	if (creg2) {
+		g_at_chat_send(nd->chat, "AT+CREG=2", none_prefix,
+				at_network_registration_initialized,
+				netreg, NULL);
+		return;
+	}
+
+	if (creg1) {
+		g_at_chat_send(nd->chat, "AT+CREG=1", none_prefix,
+				at_network_registration_initialized,
+				netreg, NULL);
+		return;
+	}
+
+error:
+	ofono_error("Unable to initialize Network Registration");
+	ofono_netreg_remove(netreg);
 }
 
 static int at_netreg_probe(struct ofono_netreg *netreg, unsigned int vendor,
@@ -649,18 +827,17 @@ static int at_netreg_probe(struct ofono_netreg *netreg, unsigned int vendor,
 	nd->vendor = vendor;
 	ofono_netreg_set_data(netreg, nd);
 
-	if (nd->vendor == OFONO_VENDOR_CALYPSO)
-		g_at_chat_send(chat, "AT%CSQ=1", NULL, NULL, NULL, NULL);
+	g_at_chat_send(chat, "AT+CREG=?", creg_prefix,
+			at_creg_test_cb, netreg, NULL);
 
-	g_at_chat_send(chat, "AT+CREG=2", NULL,
-				at_network_registration_initialized,
-				netreg, NULL);
 	return 0;
 }
 
 static void at_netreg_remove(struct ofono_netreg *netreg)
 {
 	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+
+	ofono_netreg_set_data(netreg, NULL);
 
 	g_free(nd);
 }

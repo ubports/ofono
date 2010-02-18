@@ -1,3 +1,77 @@
+ver 0.18:
+	Fix handling of GPRS attach logic.
+	Fix handling of username/password settings for STE/MBM modems.
+	Add support for Bluetooth Handsfree handling.
+	Add support for USSD_STATE_USER_ACTION.
+	Add radio settings atom and driver API.
+	Add framework for AT command server.
+
+ver 0.17:
+	Add support for ST-Ericsson based modems.
+	Add support for processing CBS even if no EFcbmid.
+	Add support for devices with CSCB mode 0 only.
+	Add support for Handsfree devices via BlueZ.
+	Add CID and LAC quirk handling for Huawei modems.
+
+ver 0.16:
+	Fix unregister of operators with null MCC/MNC.
+	Fix CPHS mailbox usage for 3GPP SIM cards.
+	Add support for persistent CBS Topics list.
+	Add support for persistent primary context identifiers.
+	Add support for SIM cache indexing by phase.
+	Add netmask to HSO GPRS context driver.
+
+ver 0.15:
+	Fix missing netmask value for newer MBM devices.
+	Fix concatenation of datagram SMS messages.
+	Add support for 51.011 EFecc format.
+	Add support for Powered property to CbsManager.
+	Add utility for checking if CBS topic is in range.
+
+ver 0.14:
+	Fix some issues with modem shutdown behavior.
+	Fix reset of context settings when deactivated.
+	Fix signal strength handling for Calypso modem.
+	Add proper signal strength handling for HSO modem.
+	Add support for enabling HSO Speech Services.
+	Add modem description for newer MBM devices.
+	Add clip_timeout for HFP incoming call handling.
+	Add poll_clcc for HFP multiparty calls.
+	Add utility for testing GSM GPRS dialing.
+
+ver 0.13:
+	Add better support for call id allocation.
+	Add CLCC query when initializing modem.
+	Add DTMF tone sending support for HFP modem.
+	Add support for modem disabling on shutdown.
+
+ver 0.12:
+	Fix various issues with Calypso modem driver.
+	Fix order of CMER and CIND in SLC connection.
+	Fix issue with SMS references stored as 8 bits.
+	Add static IP configuration for newer MBM devices.
+	Add context status polling for older MBM devices.
+	Add username/password support for MBM devices.
+	Add support for Huawei specific error terminator.
+	Add support for weird naming of Dell 5530 devices.
+	Add udev rules for Option GI0201 and GTM382 modems.
+
+ver 0.11:
+	Fix issue with repeated CCWA notifications.
+	Fix issue with double-swap when 3-way dialing.
+	Add CLCC polling for better multiparty call support.
+	Add GPRS context driver for Option HSO devices.
+	Add support for GPRS interface configuration.
+
+ver 0.10:
+	Fix issues with correct ATD handling.
+	Fix issues with indication handling.
+	Add support for SMS history capability.
+	Add basic save/restore support for GPRS settings.
+	Add three-way calling support to HFP voice driver.
+	Add call volume support to HFP modem plugin.
+	Add initial support for Palm Pre modems.
+
 ver 0.9:
 	Fix issues with voice call dialing logic.
 	Fix issues with USSD decoding support.

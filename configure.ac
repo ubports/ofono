@@ -1,5 +1,5 @@
 AC_PREREQ(2.60)
-AC_INIT(ofono, 0.9)
+AC_INIT(ofono, 0.18)
 
 AM_INIT_AUTOMAKE([foreign subdir-objects])
 AM_CONFIG_HEADER(config.h)
@@ -48,6 +48,10 @@ AC_ARG_ENABLE(debug, AC_HELP_STRING([--enable-debug],
 	fi
 ])
 
+AC_ARG_ENABLE(test, AC_HELP_STRING([--enable-test],
+		[enable test/example scripts]), [enable_test=${enableval}])
+AM_CONDITIONAL(TEST, test "${enable_test}" = "yes")
+
 AC_ARG_ENABLE(pie, AC_HELP_STRING([--enable-pie],
 			[enable position independent executables flag]), [
 	if (test "${enableval}" = "yes" &&
@@ -59,6 +63,9 @@ AC_ARG_ENABLE(pie, AC_HELP_STRING([--enable-pie],
 
 AC_ARG_ENABLE(threads, AC_HELP_STRING([--enable-threads],
 		[enable threading support]), [enable_threads=${enableval}])
+
+AC_CHECK_LIB(c, signalfd, dummy=yes,
+			AC_MSG_ERROR(signalfd support is required))
 
 AC_CHECK_LIB(dl, dlopen, dummy=yes,
 			AC_MSG_ERROR(dynamic linking loader is required))
@@ -81,6 +88,10 @@ PKG_CHECK_MODULES(DBUS, dbus-1 >= 1.0, dummy=yes,
 AC_CHECK_LIB(dbus-1, dbus_watch_get_unix_fd, dummy=yes,
 	AC_DEFINE(NEED_DBUS_WATCH_GET_UNIX_FD, 1,
 		[Define to 1 if you need the dbus_watch_get_unix_fd() function.]))
+AC_CHECK_LIB(dbus-1, dbus_connection_can_send_type, dummy=yes,
+	AC_DEFINE(NEED_DBUS_CONNECTION_CAN_SEND_TYPE, 1,
+		[Define to 1 if you need the dbus_connection_can_send_type() function.]
+))
 AC_SUBST(DBUS_CFLAGS)
 AC_SUBST(DBUS_LIBS)
 
@@ -98,14 +109,10 @@ AC_ARG_ENABLE(udev, AC_HELP_STRING([--disable-udev],
 			[don't use udev support even if available]),
 						[enable_udev=${enableval}])
 if (test "${enable_udev}" != "no"); then
-	PKG_CHECK_MODULES(UDEV, libudev >= 141,
+	PKG_CHECK_MODULES(UDEV, libudev >= 143,
 				[enable_udev="yes"], [enable_udev="no"])
 fi
 if (test "${enable_udev}" = "yes"); then
-	AC_CHECK_LIB(udev, udev_monitor_filter_update, dummy=yes,
-		AC_DEFINE(NEED_UDEV_MONITOR_FILTER, 1,
-			[Define to 1 if you need the
-					udev_monitor_filter...() functions.]))
 	UDEV_DATADIR="`$PKG_CONFIG --variable=udevdir udev`"
 	if (test -z "${UDEV_DATADIR}"); then
 		UDEV_DATADIR="${sysconfdir}/udev/rules.d"

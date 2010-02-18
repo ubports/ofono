@@ -3,8 +3,6 @@
  *
  * Copyright (C) 2009 Nokia Corporation and/or its subsidiary(-ies).
  *
- * Contact: Aki Niemi <aki.niemi@nokia.com>
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * version 2 as published by the Free Software Foundation.
@@ -39,53 +37,14 @@
 #include <ofono/modem.h>
 #include <ofono/cbs.h>
 
-#include "isi.h"
-
-#define PN_SMS			0x02
-#define CBS_TIMEOUT		5
-
-enum message_id {
-	SMS_GSM_CB_ROUTING_REQ = 0x0B,
-	SMS_GSM_CB_ROUTING_RESP = 0x0C,
-	SMS_GSM_CB_ROUTING_NTF = 0x0D
-};
-
-enum routing_command {
-	SMS_ROUTING_RELEASE = 0x00,
-	SMS_ROUTING_SET = 0x01,
-	SMS_ROUTING_SUSPEND = 0x02,
-	SMS_ROUTING_RESUME = 0x03,
-	SMS_ROUTING_UPDATE = 0x04
-};
-
-enum routing_mode {
-	SMS_GSM_ROUTING_MODE_ALL = 0x0B,
-	SMS_GSM_ROUTING_MODE_CB_DDL = 0x0C
-};
-
-enum cause {
-	SMS_OK = 0x00,
-	SMS_ERR_ROUTING_RELEASED = 0x01,
-	SMS_ERR_INVALID_PARAMETER = 0x02,
-	SMS_ERR_DEVICE_FAILURE = 0x03,
-	SMS_ERR_PP_RESERVED = 0x04
-};
-
-enum subject_list_type {
-	SMS_CB_ALLOWED_IDS_LIST = 0x00,
-	SMS_CB_NOT_ALLOWED_IDS_LIST = 0x01
-};
+#include "isimodem.h"
+#include "isiutil.h"
+#include "sms.h"
+#include "debug.h"
 
 struct cbs_data {
 	GIsiClient *client;
-	struct isi_version version;
 };
-
-static void cbs_debug(const void *restrict buf, size_t len, void *data)
-{
-	DBG("");
-	dump_msg(buf, len);
-}
 
 static void isi_set_topics(struct ofono_cbs *cbs, const char *topics,
 				ofono_cbs_set_cb_t cb, void *data)
@@ -120,27 +79,30 @@ static bool routing_resp_cb(GIsiClient *client, const void *restrict data,
 {
 	const unsigned char *msg = data;
 	struct ofono_cbs *cbs = opaque;
+	const char *debug = NULL;
 
-	DBG("");
-
-	if(!msg) {
+	if (!msg) {
 		DBG("ISI client error: %d", g_isi_client_error(client));
-		goto error;
+		return true;
 	}
 
 	if (len < 3 || msg[0] != SMS_GSM_CB_ROUTING_RESP)
-		goto error;
+		return false;
 
 	if (msg[1] != SMS_OK) {
-		DBG("Request failed: 0x%02X", msg[1]);
-		goto error;
+		DBG("Request failed: 0x%02X (%s).\n\n  Unable to bootstrap CBS"
+			" routing.\n  It appears some other component is"
+			" already\n  registered as the CBS routing endpoint.\n "
+			" As a consequence, receiving CBSs is NOT going"
+			" to work.\n\n", msg[1], sms_isi_cause_name(msg[1]));
+		return true;
 	}
 
-	ofono_cbs_register(cbs);
-	return true;
+	debug = getenv("OFONO_ISI_DEBUG");
+	if (debug && (strcmp(debug, "all") == 0 || strcmp(debug, "cbs") == 0))
+		g_isi_client_set_debug(client, sms_debug, NULL);
 
-error:
-	DBG("Unable to bootstrap CB routing.");
+	ofono_cbs_register(cbs);
 	return true;
 }
 
@@ -172,12 +134,11 @@ static int isi_cbs_probe(struct ofono_cbs *cbs, unsigned int vendor,
 
 	ofono_cbs_set_data(cbs, cd);
 
-	g_isi_client_set_debug(cd->client, cbs_debug, NULL);
-	g_isi_subscribe(cd->client, SMS_GSM_CB_ROUTING_NTF, routing_ntf_cb, cbs);
-
 	if (!g_isi_request_make(cd->client, msg, sizeof(msg), CBS_TIMEOUT,
 				routing_resp_cb, cbs))
 		DBG("Failed to set CBS routing.");
+
+	g_isi_subscribe(cd->client, SMS_GSM_CB_ROUTING_NTF, routing_ntf_cb, cbs);
 
 	return 0;
 }

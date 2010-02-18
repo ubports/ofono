@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -271,7 +271,7 @@ static DBusMessage *cv_set_property(DBusConnection *conn, DBusMessage *msg,
 
 		cv->pending_volume = percent;
 		cv->pending = dbus_message_ref(msg);
-		cv->driver->speaker_volume(cv, percent, mv_set_callback, cv);
+		cv->driver->microphone_volume(cv, percent, mv_set_callback, cv);
 
 		return NULL;
 	} else if (g_str_equal(property, "Muted") == TRUE) {

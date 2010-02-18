@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -41,7 +41,7 @@
 #define uninitialized_var(x) x = x
 
 #define SMS_BACKUP_MODE 0600
-#define SMS_BACKUP_PATH STORAGEDIR "/%s/sms"
+#define SMS_BACKUP_PATH STORAGEDIR "/%s/sms_assembly"
 #define SMS_BACKUP_PATH_DIR SMS_BACKUP_PATH "/%s-%i-%i"
 #define SMS_BACKUP_PATH_FILE SMS_BACKUP_PATH_DIR "/%03i"
 
@@ -1003,8 +1003,9 @@ static gboolean decode_status_report(const unsigned char *pdu, int len,
 	if (out->status_report.pi & 0x02) {
 		if (!next_octet(pdu, len, &offset, &out->status_report.dcs))
 			return FALSE;
-	} else
+	} else {
 		out->status_report.dcs = 0;
+	}
 
 	if (out->status_report.pi & 0x04) {
 		int expected;
@@ -1125,8 +1126,9 @@ static gboolean decode_deliver_report(const unsigned char *pdu, int len,
 
 		if (!next_octet(pdu, len, &offset, &octet))
 			return FALSE;
-	} else
+	} else {
 		out->type = SMS_TYPE_DELIVER_REPORT_ACK;
+	}
 
 	pi = octet & 0x07;
 
@@ -1776,8 +1778,9 @@ const char *sms_address_to_string(const struct sms_address *addr)
 				addr->address[0] != '+') {
 		buffer[0] = '+';
 		strcpy(buffer + 1, addr->address);
-	} else
+	} else {
 		strcpy(buffer, addr->address);
+	}
 
 	return buffer;
 }
@@ -2096,7 +2099,7 @@ char *sms_decode_text(GSList *sms_list)
 {
 	GSList *l;
 	GString *str;
-	const struct sms *sms = sms_list->data;
+	const struct sms *sms;
 	int guess_size = g_slist_length(sms_list);
 	char *utf8;
 
@@ -2805,6 +2808,8 @@ gboolean cbs_dcs_decode(guint8 dcs, gboolean *udhi, enum sms_class *cls,
 			ch = (enum sms_charset)((dcs & 0x0c) >> 2);
 		else
 			return FALSE;
+
+		break;
 	case 9:
 		udh = TRUE;
 		cl = (enum sms_class)(dcs & 0x03);
@@ -3025,7 +3030,7 @@ gboolean iso639_2_from_language(enum cbs_language lang, char *iso639)
 char *cbs_decode_text(GSList *cbs_list, char *iso639_lang)
 {
 	GSList *l;
-	const struct cbs *cbs = cbs_list->data;
+	const struct cbs *cbs;
 	enum sms_charset uninitialized_var(charset);
 	enum cbs_language lang;
 	gboolean uninitialized_var(iso639);
@@ -3092,8 +3097,9 @@ char *cbs_decode_text(GSList *cbs_list, char *iso639_lang)
 						NULL, 0,
 						(unsigned char *)iso639_lang);
 			iso639_lang[2] = '\0';
-		} else
+		} else {
 			iso639_2_from_language(lang, iso639_lang);
+		}
 	}
 
 	buf = g_new(unsigned char, bufsize);
@@ -3156,7 +3162,7 @@ char *cbs_decode_text(GSList *cbs_list, char *iso639_lang)
 			}
 
 			while (i < max_offset) {
-				if (ud[i] == 0x00 && ud[i] == '\r')
+				if (ud[i] == 0x00 && ud[i+1] == '\r')
 					break;
 
 				buf[bufsize] = ud[i];
@@ -3509,7 +3515,7 @@ out:
 	return TRUE;
 }
 
-static GSList *cbs_optimize_ranges(GSList *ranges)
+GSList *cbs_optimize_ranges(GSList *ranges)
 {
 	struct cbs_topic_range *range;
 	unsigned char bitmap[125];
@@ -3665,4 +3671,24 @@ char *cbs_topic_ranges_to_string(GSList *ranges)
 	}
 
 	return ret;
+}
+
+static gint cbs_topic_compare(gconstpointer a, gconstpointer b)
+{
+	const struct cbs_topic_range *range = a;
+	unsigned short topic = GPOINTER_TO_UINT(b);
+
+	if (topic >= range->min && topic <= range->max)
+		return 0;
+
+	return 1;
+}
+
+gboolean cbs_topic_in_range(unsigned int topic, GSList *ranges)
+{
+	if (!ranges)
+		return FALSE;
+
+	return g_slist_find_custom(ranges, GUINT_TO_POINTER(topic),
+					cbs_topic_compare) != NULL;
 }

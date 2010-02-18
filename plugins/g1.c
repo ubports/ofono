@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *  Copyright (C) 2009  Collabora Ltd. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -65,13 +65,20 @@ static int g1_probe(struct ofono_modem *modem)
 
 static void g1_remove(struct ofono_modem *modem)
 {
+	GAtChat *chat = ofono_modem_get_data(modem);
+
 	DBG("");
+
+	if (chat) {
+		g_at_chat_unref(chat);
+		ofono_modem_set_data(modem, NULL);
+	}
 }
 
 static void cfun_set_on_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_modem *modem = user_data;
- 
+
 	DBG("");
 
 	if (ok)
@@ -121,9 +128,13 @@ static int g1_enable(struct ofono_modem *modem)
 static void cfun_set_off_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_modem *modem = user_data;
- 
+	GAtChat *chat = ofono_modem_get_data(modem);
+
 	DBG("");
- 
+
+	g_at_chat_unref(chat);
+	ofono_modem_set_data(modem, NULL);
+
 	if (ok)
 		ofono_modem_set_powered(modem, FALSE);
 }
@@ -135,12 +146,11 @@ static int g1_disable(struct ofono_modem *modem)
 	DBG("");
 
 	/* power down modem */
+	g_at_chat_cancel_all(chat);
+	g_at_chat_unregister_all(chat);
 	g_at_chat_send(chat, "AT+CFUN=0", NULL, cfun_set_off_cb, modem, NULL);
 
-	g_at_chat_unref(chat);
-	ofono_modem_set_data(modem, NULL);
-
-	return 0;
+	return -EINPROGRESS;
 }
 
 static void g1_pre_sim(struct ofono_modem *modem)
@@ -168,7 +178,7 @@ static void g1_post_sim(struct ofono_modem *modem)
 	ofono_call_meter_create(modem, 0, "atmodem", chat);
 	ofono_call_barring_create(modem, 0, "atmodem", chat);
 	ofono_ssn_create(modem, 0, "atmodem", chat);
-	ofono_sms_create(modem, OFONO_VENDOR_HTC_G1, "atmodem", chat);
+	ofono_sms_create(modem, OFONO_VENDOR_QUALCOMM_MSM, "atmodem", chat);
 	ofono_phonebook_create(modem, 0, "atmodem", chat);
 
 	mw = ofono_message_waiting_create(modem);

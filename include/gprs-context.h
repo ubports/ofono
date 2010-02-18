@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -44,6 +44,10 @@ struct ofono_gprs_primary_context {
 
 typedef void (*ofono_gprs_context_cb_t)(const struct ofono_error *error,
 					void *data);
+typedef void (*ofono_gprs_context_up_cb_t)(const struct ofono_error *error,
+				const char *interface, ofono_bool_t static_ip,
+				const char *address, const char *netmask,
+				const char *gw, const char **dns, void *data);
 
 struct ofono_gprs_context_driver {
 	const char *name;
@@ -52,13 +56,14 @@ struct ofono_gprs_context_driver {
 	void (*remove)(struct ofono_gprs_context *gc);
 	void (*activate_primary)(struct ofono_gprs_context *gc,
 				const struct ofono_gprs_primary_context *ctx,
-				ofono_gprs_context_cb_t cb, void *data);
+				ofono_gprs_context_up_cb_t cb, void *data);
 	void (*deactivate_primary)(struct ofono_gprs_context *gc,
 					unsigned int id,
 					ofono_gprs_context_cb_t cb, void *data);
 };
 
-void ofono_gprs_context_deactivated(struct ofono_gprs_context *gc, unsigned id);
+void ofono_gprs_context_deactivated(struct ofono_gprs_context *gc,
+					unsigned int id);
 
 int ofono_gprs_context_driver_register(const struct ofono_gprs_context_driver *d);
 void ofono_gprs_context_driver_unregister(const struct ofono_gprs_context_driver *d);
@@ -70,6 +75,8 @@ void ofono_gprs_context_remove(struct ofono_gprs_context *gc);
 
 void ofono_gprs_context_set_data(struct ofono_gprs_context *gc, void *data);
 void *ofono_gprs_context_get_data(struct ofono_gprs_context *gc);
+
+struct ofono_modem *ofono_gprs_context_get_modem(struct ofono_gprs_context *gc);
 
 #ifdef __cplusplus
 }

@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -57,15 +57,17 @@ static int set_address(struct ofono_modem *modem,
 	if (value) {
 		ofono_modem_set_string(modem, "Address", value);
 		g_free(value);
-	} else
+	} else {
 		ofono_modem_set_string(modem, "Address", "127.0.0.1");
+	}
 
 	value = g_key_file_get_string(keyfile, group, "Port", NULL);
 	if (value) {
 		ofono_modem_set_integer(modem, "Port", atoi(value));
 		g_free(value);
-	} else
+	} else {
 		ofono_modem_set_integer(modem, "Port", 12345);
+	}
 
 	value = g_key_file_get_string(keyfile, group, "Modem", NULL);
 	if (value) {
@@ -111,24 +113,36 @@ static int set_device(struct ofono_modem *modem,
 	return 0;
 }
 
+static struct {
+	const char *driver;
+	int (*func) (struct ofono_modem *modem,
+				GKeyFile *keyfile, const char *group);
+} setup_helpers[] = {
+	{ "phonesim",	set_address	},
+	{ "atgen",	set_device	},
+	{ "g1",		set_device	},
+	{ "ste",	set_device	},
+	{ "calypso",	set_device	},
+	{ "palmpre",	set_device	},
+	{ NULL }
+};
+
 static struct ofono_modem *create_modem(GKeyFile *keyfile, const char *group)
 {
 	struct ofono_modem *modem;
 	char *driver;
+	int i;
 
 	driver = g_key_file_get_string(keyfile, group, "Driver", NULL);
 	if (!driver)
 		return NULL;
 
-	modem = ofono_modem_create(driver);
+	modem = ofono_modem_create(group, driver);
 
-	if (!g_strcmp0(driver, "phonesim"))
-		set_address(modem, keyfile, group);
-
-	if (!g_strcmp0(driver, "atgen") || !g_strcmp0(driver, "g1") ||
-						!g_strcmp0(driver, "calypso") ||
-						!g_strcmp0(driver, "hfp"))
-		set_device(modem, keyfile, group);
+	for (i = 0; setup_helpers[i].driver; i++) {
+		if (!g_strcmp0(driver, setup_helpers[i].driver))
+			setup_helpers[i].func(modem, keyfile, group);
+	}
 
 	g_free(driver);
 

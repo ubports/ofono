@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -292,7 +292,8 @@ static void set_cw(struct ofono_call_settings *cs, int new_cw, int mask)
 		else
 			value = "disabled";
 
-		sprintf(buf, "%sCallWaiting", bearer_class_to_string(j));
+		snprintf(buf, sizeof(buf), "%sCallWaiting",
+				bearer_class_to_string(j));
 		ofono_dbus_signal_property_changed(conn, path,
 						OFONO_CALL_SETTINGS_INTERFACE,
 						buf, DBUS_TYPE_STRING,
@@ -313,7 +314,8 @@ static void property_append_cw_conditions(DBusMessageIter *dict,
 		if (!(mask & i))
 			continue;
 
-		sprintf(prop, "%sCallWaiting", bearer_class_to_string(i));
+		snprintf(prop, sizeof(prop), "%sCallWaiting",
+				bearer_class_to_string(i));
 
 		if (conditions & i)
 			value = "enabled";
@@ -370,7 +372,7 @@ static void cw_ss_query_callback(const struct ofono_error *error, int status,
 	struct ofono_call_settings *cs = data;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
-		ofono_debug("setting CW via SS failed");
+		DBG("setting CW via SS failed");
 
 		cs->flags &= ~CALL_SETTINGS_FLAG_CACHED;
 		__ofono_dbus_pending_reply(&cs->pending,
@@ -389,7 +391,7 @@ static void cw_ss_set_callback(const struct ofono_error *error, void *data)
 	struct ofono_call_settings *cs = data;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
-		ofono_debug("setting CW via SS failed");
+		DBG("setting CW via SS failed");
 		__ofono_dbus_pending_reply(&cs->pending,
 					__ofono_error_failed(cs->pending));
 
@@ -525,7 +527,7 @@ static void clip_colp_colr_ss_query_cb(const struct ofono_error *error,
 	const char *value;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
-		ofono_debug("Error occurred during ss control query");
+		DBG("Error occurred during ss control query");
 		__ofono_dbus_pending_reply(&cs->pending,
 					__ofono_error_failed(cs->pending));
 
@@ -590,8 +592,9 @@ static gboolean clip_colp_colr_ss(int type,
 	} else if (!strcmp(sc, "77")) {
 		cs->ss_setting = CALL_SETTING_TYPE_COLR;
 		query_op = cs->driver->colr_query;
-	} else
+	} else {
 		return FALSE;
+	}
 
 	if (type != SS_CONTROL_TYPE_QUERY || strlen(sia) || strlen(sib) ||
 		strlen(sic) || strlen(dn)) {
@@ -608,7 +611,7 @@ static gboolean clip_colp_colr_ss(int type,
 		return TRUE;
 	}
 
-	ofono_debug("Received CLIP/COLR/COLP query ss control");
+	DBG("Received CLIP/COLR/COLP query ss control");
 
 	cs->pending = dbus_message_ref(msg);
 
@@ -624,7 +627,7 @@ static void clir_ss_query_callback(const struct ofono_error *error,
 	const char *value;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
-		ofono_debug("setting clir via SS failed");
+		DBG("setting clir via SS failed");
 		__ofono_dbus_pending_reply(&cs->pending,
 					__ofono_error_failed(cs->pending));
 
@@ -672,7 +675,7 @@ static void clir_ss_set_callback(const struct ofono_error *error, void *data)
 	struct ofono_call_settings *cs = data;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
-		ofono_debug("setting clir via SS failed");
+		DBG("setting clir via SS failed");
 		__ofono_dbus_pending_reply(&cs->pending,
 					__ofono_error_failed(cs->pending));
 
@@ -993,7 +996,7 @@ static void clir_set_callback(const struct ofono_error *error, void *data)
 	struct ofono_call_settings *cs = data;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
-		ofono_debug("setting clir failed");
+		DBG("setting clir failed");
 		__ofono_dbus_pending_reply(&cs->pending,
 					__ofono_error_failed(cs->pending));
 
@@ -1055,7 +1058,7 @@ static void cw_set_callback(const struct ofono_error *error, void *data)
 	struct ofono_call_settings *cs = data;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
-		ofono_debug("Error occurred during CW set");
+		DBG("Error occurred during CW set");
 
 		__ofono_dbus_pending_reply(&cs->pending,
 					__ofono_error_failed(cs->pending));

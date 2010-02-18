@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -22,10 +22,14 @@
 enum sim_fileid {
 	SIM_EFPL_FILEID = 0x2f05,
 	SIM_EFLI_FILEID = 0x6f05,
+	SIM_EF_CPHS_MWIS_FILEID = 0x6f11,
+	SIM_EF_CPHS_INFORMATION_FILEID = 0x6f16,
+	SIM_EF_CPHS_MBDN_FILEID = 0x6f17,
 	SIM_EFMSISDN_FILEID = 0x6f40,
 	SIM_EFSPN_FILEID = 0x6f46,
 	SIM_EFSDN_FILEID = 0x6f49,
 	SIM_EFAD_FILEID = 0x6fad,
+	SIM_EFPHASE_FILEID = 0x6fae,
 	SIM_EFPNN_FILEID = 0x6fc5,
 	SIM_EFOPL_FILEID = 0x6fc6,
 	SIM_EFMBDN_FILEID = 0x6fc7,

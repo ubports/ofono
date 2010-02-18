@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -492,7 +492,7 @@ static unsigned short gsm_single_shift_lookup(unsigned char k,
 	struct codepoint key = { k, 0 };
 	const struct codepoint *table;
 	unsigned int len;
-	
+
 	table = alphabet_lookup[lang].togsm_single_shift;
 	len = alphabet_lookup[lang].togsm_single_shift_len;
 
@@ -508,7 +508,7 @@ static unsigned short unicode_locking_shift_lookup(unsigned short k,
 
 	table = alphabet_lookup[lang].tounicode_locking_shift;
 
-	return codepoint_lookup(&key, table, len); 
+	return codepoint_lookup(&key, table, len);
 }
 
 static unsigned short unicode_single_shift_lookup(unsigned short k,
@@ -555,7 +555,7 @@ char *convert_gsm_to_utf8_with_lang(const unsigned char *text, long len,
 		return NULL;
 
 	if (len < 0 && !terminator)
-		goto err_out;
+		goto error;
 
 	if (len < 0) {
 		i = 0;
@@ -570,17 +570,17 @@ char *convert_gsm_to_utf8_with_lang(const unsigned char *text, long len,
 		unsigned short c;
 
 		if (text[i] > 0x7f)
-			goto err_out;
+			goto error;
 
 		if (text[i] == 0x1b) {
 			++i;
 			if (i >= len)
-				goto err_out;
+				goto error;
 
 			c = gsm_single_shift_lookup(text[i], single_lang);
 
 			if (c == GUND)
-				goto err_out;
+				goto error;
 		} else {
 			c = gsm_locking_shift_lookup(text[i], locking_lang);
 		}
@@ -591,7 +591,7 @@ char *convert_gsm_to_utf8_with_lang(const unsigned char *text, long len,
 	res = g_malloc(res_length + 1);
 
 	if (!res)
-		goto err_out;
+		goto error;
 
 	out = res;
 
@@ -614,7 +614,7 @@ char *convert_gsm_to_utf8_with_lang(const unsigned char *text, long len,
 	if (items_written)
 		*items_written = out - res;
 
-err_out:
+error:
 	if (items_read)
 		*items_read = i;
 
@@ -933,8 +933,9 @@ unsigned char *unpack_7bit_own_buf(const unsigned char *in, long len,
 			out++;
 			bits = 7;
 			rest = 0;
-		} else
+		} else {
 			bits = bits - 1;
+		}
 	}
 
 	/* According to 23.038 6.1.2.3.1, last paragraph:

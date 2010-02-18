@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -53,7 +53,6 @@ static const char *atd_prefix[] = { "+COLP:", NULL };
 
 struct voicecall_data {
 	GSList *calls;
-	unsigned int id_list;
 	unsigned int local_release;
 	unsigned int clcc_source;
 	GAtChat *chat;
@@ -89,10 +88,11 @@ static int class_to_call_type(int cls)
 	}
 }
 
-static struct ofono_call *create_call(struct voicecall_data *d, int type,
+static struct ofono_call *create_call(struct ofono_voicecall *vc, int type,
 					int direction, int status,
 					const char *num, int num_type, int clip)
 {
+	struct voicecall_data *d = ofono_voicecall_get_data(vc);
 	struct ofono_call *call;
 
 	/* Generate a call structure for the waiting call */
@@ -101,7 +101,7 @@ static struct ofono_call *create_call(struct voicecall_data *d, int type,
 	if (!call)
 		return NULL;
 
-	call->id = at_util_alloc_next_id(&d->id_list);
+	call->id = ofono_voicecall_get_next_callid(vc);
 	call->type = type;
 	call->direction = direction;
 	call->status = status;
@@ -119,61 +119,6 @@ static struct ofono_call *create_call(struct voicecall_data *d, int type,
 	return call;
 }
 
-static GSList *parse_clcc(GAtResult *result)
-{
-	GAtResultIter iter;
-	GSList *l = NULL;
-	int id, dir, status, type;
-	struct ofono_call *call;
-
-	g_at_result_iter_init(&iter, result);
-
-	while (g_at_result_iter_next(&iter, "+CLCC:")) {
-		const char *str = "";
-		int number_type = 129;
-
-		if (!g_at_result_iter_next_number(&iter, &id))
-			continue;
-
-		if (!g_at_result_iter_next_number(&iter, &dir))
-			continue;
-
-		if (!g_at_result_iter_next_number(&iter, &status))
-			continue;
-
-		if (!g_at_result_iter_next_number(&iter, &type))
-			continue;
-
-		if (!g_at_result_iter_skip_next(&iter))
-			continue;
-
-		if (g_at_result_iter_next_string(&iter, &str))
-			g_at_result_iter_next_number(&iter, &number_type);
-
-		call = g_try_new0(struct ofono_call, 1);
-
-		if (!call)
-			break;
-
-		call->id = id;
-		call->direction = dir;
-		call->status = status;
-		call->type = type;
-		strncpy(call->phone_number.number, str,
-				OFONO_MAX_PHONE_NUMBER_LENGTH);
-		call->phone_number.type = number_type;
-
-		if (strlen(call->phone_number.number) > 0)
-			call->clip_validity = 0;
-		else
-			call->clip_validity = 2;
-
-		l = g_slist_insert_sorted(l, call, at_util_call_compare);
-	}
-
-	return l;
-}
-
 static void clcc_poll_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_voicecall *vc = user_data;
@@ -183,15 +128,13 @@ static void clcc_poll_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	struct ofono_call *nc, *oc;
 	gboolean poll_again = FALSE;
 
-	dump_response("clcc_poll_cb", ok, result);
-
 	if (!ok) {
-		ofono_error("We are polling CLCC and CLCC resulted in an error");
+		ofono_error("We are polling CLCC and received an error");
 		ofono_error("All bets are off for call management");
 		return;
 	}
 
-	calls = parse_clcc(result);
+	calls = at_util_parse_clcc(result);
 
 	n = calls;
 	o = vd->calls;
@@ -215,8 +158,6 @@ static void clcc_poll_cb(gboolean ok, GAtResult *result, gpointer user_data)
 				ofono_voicecall_disconnected(vc, oc->id,
 								reason, NULL);
 
-			at_util_release_id(&vd->id_list, oc->id);
-
 			o = o->next;
 		} else if (nc && (!oc || (nc->id < oc->id))) {
 			/* new call, signal it */
@@ -234,7 +175,8 @@ static void clcc_poll_cb(gboolean ok, GAtResult *result, gpointer user_data)
 			 */
 			nc->clip_validity = oc->clip_validity;
 
-			if (memcmp(nc, oc, sizeof(struct ofono_call)) && !nc->type)
+			if (memcmp(nc, oc, sizeof(struct ofono_call)) &&
+					!nc->type)
 				ofono_voicecall_notify(vc, nc);
 
 			n = n->next;
@@ -273,7 +215,6 @@ static void generic_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	struct voicecall_data *vd = ofono_voicecall_get_data(req->vc);
 	struct ofono_error error;
 
-	dump_response("generic_cb", ok, result);
 	decode_at_error(&error, g_at_result_final_response(result));
 
 	if (ok && req->affected_types) {
@@ -284,8 +225,7 @@ static void generic_cb(gboolean ok, GAtResult *result, gpointer user_data)
 			call = l->data;
 
 			if (req->affected_types & (0x1 << call->status))
-				vd->local_release |=
-					(0x1 << call->id);
+				vd->local_release |= (0x1 << call->id);
 		}
 	}
 
@@ -303,7 +243,6 @@ static void release_id_cb(gboolean ok, GAtResult *result,
 	struct voicecall_data *vd = ofono_voicecall_get_data(req->vc);
 	struct ofono_error error;
 
-	dump_response("release_id_cb", ok, result);
 	decode_at_error(&error, g_at_result_final_response(result));
 
 	if (ok)
@@ -328,13 +267,23 @@ static void atd_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	int validity = 2;
 	struct ofono_error error;
 	struct ofono_call *call;
-
-	dump_response("atd_cb", ok, result);
+	GSList *l;
 
 	decode_at_error(&error, g_at_result_final_response(result));
 
 	if (!ok)
 		goto out;
+
+	/* On a success, make sure to put all active calls on hold */
+	for (l = vd->calls; l; l = l->next) {
+		call = l->data;
+
+		if (call->status != 0)
+			continue;
+
+		call->status = 1;
+		ofono_voicecall_notify(vc, call);
+	}
 
 	g_at_result_iter_init(&iter, result);
 
@@ -347,14 +296,14 @@ static void atd_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		else
 			validity = 2;
 
-		ofono_debug("colp_notify: %s %d %d", num, type, validity);
+		DBG("colp_notify: %s %d %d", num, type, validity);
 	}
 
 	/* Generate a voice call that was just dialed, we guess the ID */
-	call = create_call(vd, 0, 0, 2, num, type, validity);
+	call = create_call(vc, 0, 0, 2, num, type, validity);
 
 	if (!call) {
-		ofono_error("Unable to allocate call, call tracking will fail!");
+		ofono_error("Unable to malloc, call tracking will fail!");
 		return;
 	}
 
@@ -389,9 +338,9 @@ static void at_dial(struct ofono_voicecall *vc,
 	cbd->user = vc;
 
 	if (ph->type == 145)
-		sprintf(buf, "ATD+%s", ph->number);
+		snprintf(buf, sizeof(buf), "ATD+%s", ph->number);
 	else
-		sprintf(buf, "ATD%s", ph->number);
+		snprintf(buf, sizeof(buf), "ATD%s", ph->number);
 
 	switch (clir) {
 	case OFONO_CLIR_OPTION_INVOCATION:
@@ -466,66 +415,17 @@ static void at_hangup(struct ofono_voicecall *vc,
 
 static void clcc_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
-	struct cb_data *cbd = user_data;
-	ofono_call_list_cb_t cb = cbd->cb;
-	struct ofono_error error;
-	GSList *calls = NULL;
-	GSList *l;
-	struct ofono_call *list;
-	int num;
-
-	dump_response("clcc_cb", ok, result);
-	decode_at_error(&error, g_at_result_final_response(result));
-
-	if (!ok) {
-		cb(&error, 0, NULL, cbd->data);
-		goto out;
-	}
-
-	calls = parse_clcc(result);
-
-	if (calls == NULL) {
-		CALLBACK_WITH_FAILURE(cb, 0, NULL, cbd->data);
-		goto out;
-	}
-
-	list = g_try_new0(struct ofono_call, g_slist_length(calls));
-
-	if (!list) {
-		CALLBACK_WITH_FAILURE(cb, 0, NULL, cbd->data);
-		goto out;
-	}
-
-	for (num = 0, l = calls; l; l = l->next, num++)
-		memcpy(&list[num], l->data, sizeof(struct ofono_call));
-
-	cb(&error, num, list, cbd->data);
-
-	g_free(list);
-
-out:
-	g_slist_foreach(calls, (GFunc) g_free, NULL);
-	g_slist_free(calls);
-}
-
-static void at_list_calls(struct ofono_voicecall *vc, ofono_call_list_cb_t cb,
-				void *data)
-{
+	struct ofono_voicecall *vc = user_data;
 	struct voicecall_data *vd = ofono_voicecall_get_data(vc);
-	struct cb_data *cbd = cb_data_new(cb, data);
+	GSList *l;
 
-	if (!cbd)
-		goto error;
-
-	if (g_at_chat_send(vd->chat, "AT+CLCC", clcc_prefix,
-				clcc_cb, cbd, g_free) > 0)
+	if (!ok)
 		return;
 
-error:
-	if (cbd)
-		g_free(cbd);
+	vd->calls = at_util_parse_clcc(result);
 
-	CALLBACK_WITH_FAILURE(cb, 0, NULL, data);
+	for (l = vd->calls; l; l = l->next)
+		ofono_voicecall_notify(vc, l->data);
 }
 
 static void at_hold_all_active(struct ofono_voicecall *vc,
@@ -570,7 +470,7 @@ static void at_release_specific(struct ofono_voicecall *vc, int id,
 	req->data = data;
 	req->id = id;
 
-	sprintf(buf, "AT+CHLD=1%d", id);
+	snprintf(buf, sizeof(buf), "AT+CHLD=1%d", id);
 
 	if (g_at_chat_send(vd->chat, buf, none_prefix,
 				release_id_cb, req, g_free) > 0)
@@ -588,7 +488,7 @@ static void at_private_chat(struct ofono_voicecall *vc, int id,
 {
 	char buf[32];
 
-	sprintf(buf, "AT+CHLD=2%d", id);
+	snprintf(buf, sizeof(buf), "AT+CHLD=2%d", id);
 	at_template(buf, vc, generic_cb, 0, cb, data);
 }
 
@@ -620,7 +520,7 @@ static void at_deflect(struct ofono_voicecall *vc,
 	char buf[128];
 	unsigned int incoming_or_waiting = (0x1 << 4) | (0x1 << 5);
 
-	sprintf(buf, "AT+CTFR=%s,%d", ph->number, ph->type);
+	snprintf(buf, sizeof(buf), "AT+CTFR=%s,%d", ph->number, ph->type);
 	at_template(buf, vc, generic_cb, incoming_or_waiting, cb, data);
 }
 
@@ -630,7 +530,6 @@ static void vts_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	ofono_voicecall_cb_t cb = cbd->cb;
 	struct ofono_error error;
 
-	dump_response("vts_cb", ok, result);
 	decode_at_error(&error, g_at_result_final_response(result));
 	cb(&error, cbd->data);
 }
@@ -680,8 +579,6 @@ static void ring_notify(GAtResult *result, gpointer user_data)
 	struct voicecall_data *vd = ofono_voicecall_get_data(vc);
 	struct ofono_call *call;
 
-	dump_response("ring_notify", TRUE, result);
-
 	/* See comment in CRING */
 	if (g_slist_find_custom(vd->calls, GINT_TO_POINTER(5),
 				at_util_call_compare_by_status))
@@ -693,7 +590,7 @@ static void ring_notify(GAtResult *result, gpointer user_data)
 		return;
 
 	/* Generate an incoming call of unknown type */
-	call = create_call(vd, 9, 1, 4, NULL, 128, 2);
+	call = create_call(vc, 9, 1, 4, NULL, 128, 2);
 
 	if (!call) {
 		ofono_error("Couldn't create call, call management is fubar!");
@@ -711,9 +608,6 @@ static void cring_notify(GAtResult *result, gpointer user_data)
 	GAtResultIter iter;
 	const char *line;
 	int type;
-	struct ofono_call *call;
-
-	dump_response("cring_notify", TRUE, result);
 
 	/* Handle the following situation:
 	 * Active Call + Waiting Call.  Active Call is Released.  The Waiting
@@ -748,7 +642,7 @@ static void cring_notify(GAtResult *result, gpointer user_data)
 		type = 9;
 
 	/* Generate an incoming call */
-	call = create_call(vd, type, 1, 4, NULL, 128, 2);
+	create_call(vc, type, 1, 4, NULL, 128, 2);
 
 	/* We have a call, and call type but don't know the number and
 	 * must wait for the CLIP to arrive before announcing the call.
@@ -757,7 +651,7 @@ static void cring_notify(GAtResult *result, gpointer user_data)
 	 */
 	vd->clcc_source = g_timeout_add(CLIP_INTERVAL, poll_clcc, vc);
 
-	ofono_debug("cring_notify");
+	DBG("cring_notify");
 }
 
 static void clip_notify(GAtResult *result, gpointer user_data)
@@ -769,8 +663,6 @@ static void clip_notify(GAtResult *result, gpointer user_data)
 	int type, validity;
 	GSList *l;
 	struct ofono_call *call;
-
-	dump_response("clip_notify", TRUE, result);
 
 	l = g_slist_find_custom(vd->calls, GINT_TO_POINTER(4),
 				at_util_call_compare_by_status);
@@ -804,7 +696,7 @@ static void clip_notify(GAtResult *result, gpointer user_data)
 	/* If we have CLI validity field, override our guessed value */
 	g_at_result_iter_next_number(&iter, &validity);
 
-	ofono_debug("clip_notify: %s %d %d", num, type, validity);
+	DBG("clip_notify: %s %d %d", num, type, validity);
 
 	call = l->data;
 
@@ -835,7 +727,10 @@ static void ccwa_notify(GAtResult *result, gpointer user_data)
 	int num_type, validity, cls;
 	struct ofono_call *call;
 
-	dump_response("ccwa_notify", TRUE, result);
+	/* Some modems resend CCWA, ignore it the second time around */
+	if (g_slist_find_custom(vd->calls, GINT_TO_POINTER(5),
+				at_util_call_compare_by_status))
+		return;
 
 	g_at_result_iter_init(&iter, result);
 
@@ -862,13 +757,13 @@ static void ccwa_notify(GAtResult *result, gpointer user_data)
 	/* If we have CLI validity field, override our guessed value */
 	g_at_result_iter_next_number(&iter, &validity);
 
-	ofono_debug("ccwa_notify: %s %d %d %d", num, num_type, cls, validity);
+	DBG("ccwa_notify: %s %d %d %d", num, num_type, cls, validity);
 
-	call = create_call(vd, class_to_call_type(cls), 1, 5,
+	call = create_call(vc, class_to_call_type(cls), 1, 5,
 				num, num_type, validity);
 
 	if (!call) {
-		ofono_error("malloc call structfailed. Call management is fubar");
+		ofono_error("Unable to malloc. Call management is fubar");
 		return;
 	}
 
@@ -917,7 +812,7 @@ static void at_voicecall_initialized(gboolean ok, GAtResult *result,
 	struct ofono_voicecall *vc = user_data;
 	struct voicecall_data *vd = ofono_voicecall_get_data(vc);
 
-	ofono_debug("voicecall_init: registering to notifications");
+	DBG("voicecall_init: registering to notifications");
 
 	g_at_chat_register(vd->chat, "RING", ring_notify, FALSE, vc, NULL);
 	g_at_chat_register(vd->chat, "+CRING:", cring_notify, FALSE, vc, NULL);
@@ -934,6 +829,9 @@ static void at_voicecall_initialized(gboolean ok, GAtResult *result,
 	g_at_chat_register(vd->chat, "BUSY", busy_notify, FALSE, vc, NULL);
 
 	ofono_voicecall_register(vc);
+
+	/* Populate the call list */
+	g_at_chat_send(vd->chat, "AT+CLCC", clcc_prefix, clcc_cb, vc, NULL);
 }
 
 static int at_voicecall_probe(struct ofono_voicecall *vc, unsigned int vendor,
@@ -959,8 +857,14 @@ static void at_voicecall_remove(struct ofono_voicecall *vc)
 {
 	struct voicecall_data *vd = ofono_voicecall_get_data(vc);
 
+	if (vd->clcc_source)
+		g_source_remove(vd->clcc_source);
+
 	g_slist_foreach(vd->calls, (GFunc) g_free, NULL);
 	g_slist_free(vd->calls);
+
+	ofono_voicecall_set_data(vc, NULL);
+
 	g_free(vd);
 }
 
@@ -971,7 +875,6 @@ static struct ofono_voicecall_driver driver = {
 	.dial			= at_dial,
 	.answer			= at_answer,
 	.hangup			= at_hangup,
-	.list_calls		= at_list_calls,
 	.hold_all_active	= at_hold_all_active,
 	.release_all_held	= at_release_all_held,
 	.set_udub		= at_set_udub,

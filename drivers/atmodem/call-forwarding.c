@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -53,7 +53,6 @@ static void ccfc_query_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	int i;
 	int maxlen;
 
-	dump_response("ccfc_query_cb", ok, result);
 	decode_at_error(&error, g_at_result_final_response(result));
 
 	if (!ok)
@@ -112,10 +111,10 @@ static void ccfc_query_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	}
 
 	for (i = 0; i < num; i++)
-		ofono_debug("ccfc_cb: %d, %d, %s(%d) - %d sec",
-				list[i].status, list[i].cls,
-				list[i].phone_number.number,
-				list[i].phone_number.type, list[i].time);
+		DBG("ccfc_cb: %d, %d, %s(%d) - %d sec",
+			list[i].status, list[i].cls,
+			list[i].phone_number.number,
+			list[i].phone_number.type, list[i].time);
 
 out:
 	cb(&error, num, list, cbd->data);
@@ -135,9 +134,9 @@ static void at_ccfc_query(struct ofono_call_forwarding *cf, int type, int cls,
 	cbd->user = GINT_TO_POINTER(cls);
 
 	if (cls == 7)
-		sprintf(buf, "AT+CCFC=%d,2", type);
+		snprintf(buf, sizeof(buf), "AT+CCFC=%d,2", type);
 	else
-		sprintf(buf, "AT+CCFC=%d,2,,,%d", type, cls);
+		snprintf(buf, sizeof(buf), "AT+CCFC=%d,2,,,%d", type, cls);
 
 	if (g_at_chat_send(chat, buf, ccfc_prefix,
 				ccfc_query_cb, cbd, g_free) > 0)
@@ -156,7 +155,6 @@ static void ccfc_set_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	ofono_call_forwarding_set_cb_t cb = cbd->cb;
 	struct ofono_error error;
 
-	dump_response("ccfc_set_cb", ok, result);
 	decode_at_error(&error, g_at_result_final_response(result));
 
 	cb(&error, cbd->data);
@@ -189,10 +187,10 @@ static void at_ccfc_erasure(struct ofono_call_forwarding *cf,
 	char buf[128];
 	int len;
 
-	len = sprintf(buf, "AT+CCFC=%d,4", type);
+	len = snprintf(buf, sizeof(buf), "AT+CCFC=%d,4", type);
 
 	if (cls != 7)
-		sprintf(buf + len, ",,,%d", cls);
+		snprintf(buf + len, sizeof(buf) - len, ",,,%d", cls);
 
 	at_ccfc_set(cf, buf, cb, data);
 }
@@ -205,10 +203,10 @@ static void at_ccfc_deactivation(struct ofono_call_forwarding *cf,
 	char buf[128];
 	int len;
 
-	len = sprintf(buf, "AT+CCFC=%d,0", type);
+	len = snprintf(buf, sizeof(buf), "AT+CCFC=%d,0", type);
 
 	if (cls != 7)
-		sprintf(buf + len, ",,,%d", cls);
+		snprintf(buf + len, sizeof(buf) - len, ",,,%d", cls);
 
 	at_ccfc_set(cf, buf, cb, data);
 }
@@ -220,10 +218,10 @@ static void at_ccfc_activation(struct ofono_call_forwarding *cf,
 	char buf[128];
 	int len;
 
-	len = sprintf(buf, "AT+CCFC=%d,1", type);
+	len = snprintf(buf, sizeof(buf), "AT+CCFC=%d,1", type);
 
 	if (cls != 7)
-		sprintf(buf + len, ",,,%d", cls);
+		snprintf(buf + len, sizeof(buf) - len, ",,,%d", cls);
 
 	at_ccfc_set(cf, buf, cb, data);
 }
@@ -238,11 +236,11 @@ static void at_ccfc_registration(struct ofono_call_forwarding *cf,
 	char buf[128];
 	int offset;
 
-	offset = sprintf(buf, "AT+CCFC=%d,3,\"%s\",%d,%d", type,
+	offset = snprintf(buf, sizeof(buf), "AT+CCFC=%d,3,\"%s\",%d,%d", type,
 				ph->number, ph->type, cls);
 
 	if (type == 2 || type == 4 || type == 5)
-		sprintf(buf+offset, ",,,%d", time);
+		snprintf(buf+offset, sizeof(buf) - offset, ",,,%d", time);
 
 	at_ccfc_set(cf, buf, cb, data);
 }

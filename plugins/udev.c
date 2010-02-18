@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -25,7 +25,6 @@
 
 #include <errno.h>
 
-#define LIBUDEV_I_KNOW_THE_API_IS_SUBJECT_TO_CHANGE
 #include <libudev.h>
 
 #include <glib.h>
@@ -34,22 +33,6 @@
 #include <ofono/plugin.h>
 #include <ofono/modem.h>
 #include <ofono/log.h>
-
-#ifdef NEED_UDEV_MONITOR_FILTER
-static int udev_monitor_filter_add_match_subsystem_devtype(struct udev_monitor *udev_monitor,
-				const char *subsystem, const char *devtype)
-{
-	return -EINVAL;
-}
-static int udev_monitor_filter_update(struct udev_monitor *udev_monitor)
-{
-	return -EINVAL;
-}
-static int udev_monitor_filter_remove(struct udev_monitor *udev_monitor)
-{
-	return -EINVAL;
-}
-#endif
 
 static GSList *modem_list = NULL;
 
@@ -86,6 +69,24 @@ static const char *get_driver(struct udev_device *udev_device)
 	return driver;
 }
 
+static const char *get_serial(struct udev_device *udev_device)
+{
+	struct udev_list_entry *entry;
+	const char *serial = NULL;
+
+	entry = udev_device_get_properties_list_entry(udev_device);
+	while (entry) {
+		const char *name = udev_list_entry_get_name(entry);
+
+		if (g_strcmp0(name, "ID_SERIAL_SHORT") == 0)
+			serial = udev_list_entry_get_value(entry);
+
+		entry = udev_list_entry_get_next(entry);
+	}
+
+	return serial;
+}
+
 #define MODEM_DEVICE		"ModemDevice"
 #define DATA_DEVICE		"DataDevice"
 #define GPS_DEVICE		"GPSDevice"
@@ -103,29 +104,38 @@ static void add_mbm(struct ofono_modem *modem,
 	if (desc == NULL)
 		return;
 
+	DBG("desc: %s", desc);
+
 	registered = ofono_modem_get_integer(modem, "Registered");
 	if (registered != 0)
 		return;
 
 	if (g_str_has_suffix(desc, "Minicard Modem") ||
-			g_str_has_suffix(desc, "Broadband Modem")) {
+			g_str_has_suffix(desc, "Mini-Card Modem") ||
+			g_str_has_suffix(desc, "Broadband Modem") ||
+			g_str_has_suffix(desc, "Broadband USB Modem")) {
 		devnode = udev_device_get_devnode(udev_device);
 		ofono_modem_set_string(modem, MODEM_DEVICE, devnode);
 	} else if (g_str_has_suffix(desc, "Minicard Data Modem") ||
+			g_str_has_suffix(desc, "Mini-Card Data Modem") ||
 			g_str_has_suffix(desc, "Broadband Data Modem")) {
 		devnode = udev_device_get_devnode(udev_device);
 		ofono_modem_set_string(modem, DATA_DEVICE, devnode);
 	} else if (g_str_has_suffix(desc, "Minicard GPS Port") ||
+			g_str_has_suffix(desc, "Mini-Card GPRS Port") ||
 			g_str_has_suffix(desc, "Broadband GPS Port")) {
 		devnode = udev_device_get_devnode(udev_device);
 		ofono_modem_set_string(modem, GPS_DEVICE, devnode);
 	} else if (g_str_has_suffix(desc, "Minicard Network Adapter") ||
-			g_str_has_suffix(desc, "Broadband Network Adapter")) {
+			g_str_has_suffix(desc, "Mini-Card Network Adapter") ||
+			g_str_has_suffix(desc, "Broadband Network Adapter") ||
+			g_str_has_suffix(desc, "Minicard NetworkAdapter")) {
 		devnode = udev_device_get_property_value(udev_device,
 								"INTERFACE");
 		ofono_modem_set_string(modem, NETWORK_INTERFACE, devnode);
-	} else
+	} else {
 		return;
+	}
 
 	device  = ofono_modem_get_string(modem, MODEM_DEVICE);
 	network = ofono_modem_get_string(modem, NETWORK_INTERFACE);
@@ -136,11 +146,14 @@ static void add_mbm(struct ofono_modem *modem,
 	}
 }
 
+#define APPLICATION_PORT "ApplicationPort"
+#define CONTROL_PORT "ControlPort"
+
 static void add_hso(struct ofono_modem *modem,
 					struct udev_device *udev_device)
 {
 	const char *subsystem, *type, *devnode;
-	const char *device, *network;
+	const char *app, *control, *network;
 	int registered;
 
 	subsystem = udev_device_get_subsystem(udev_device);
@@ -153,20 +166,26 @@ static void add_hso(struct ofono_modem *modem,
 
 	type = udev_device_get_sysattr_value(udev_device, "hsotype");
 
-	if (type != NULL && g_str_has_suffix(type, "Control") == TRUE) {
+	if (type != NULL) {
 		devnode = udev_device_get_devnode(udev_device);
-		ofono_modem_set_string(modem, MODEM_DEVICE, devnode);
+
+		if (g_str_has_suffix(type, "Application") == TRUE)
+			ofono_modem_set_string(modem, APPLICATION_PORT, devnode);
+		else if (g_str_has_suffix(type, "Control") == TRUE)
+			ofono_modem_set_string(modem, CONTROL_PORT, devnode);
 	} else if (g_str_equal(subsystem, "net") == TRUE) {
 		devnode = udev_device_get_property_value(udev_device,
 								"INTERFACE");
 		ofono_modem_set_string(modem, NETWORK_INTERFACE, devnode);
-	} else
+	} else {
 		return;
+	}
 
-	device  = ofono_modem_get_string(modem, MODEM_DEVICE);
+	app = ofono_modem_get_string(modem, APPLICATION_PORT);
+	control = ofono_modem_get_string(modem, CONTROL_PORT);
 	network = ofono_modem_get_string(modem, NETWORK_INTERFACE);
 
-	if (device != NULL && network != NULL) {
+	if (app != NULL && control != NULL && network != NULL) {
 		ofono_modem_set_integer(modem, "Registered", 1);
 		ofono_modem_register(modem);
 	}
@@ -210,7 +229,7 @@ static void add_modem(struct udev_device *udev_device)
 {
 	struct ofono_modem *modem;
 	struct udev_device *parent;
-	const char *devpath, *driver = NULL;
+	const char *devpath, *driver;
 
 	parent = udev_device_get_parent(udev_device);
 	if (parent == NULL)
@@ -234,7 +253,9 @@ static void add_modem(struct udev_device *udev_device)
 
 	modem = find_modem(devpath);
 	if (modem == NULL) {
-		modem = ofono_modem_create(driver);
+		const char *serial = get_serial(parent);
+
+		modem = ofono_modem_create(serial, driver);
 		if (modem == NULL)
 			return;
 

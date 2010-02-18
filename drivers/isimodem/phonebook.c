@@ -39,41 +39,10 @@
 #include <ofono/phonebook.h>
 #include "util.h"
 
-#include "isi.h"
-
-#define PHONEBOOK_TIMEOUT	5
-#define PN_SIM			0x09
-
-enum pb_message_id {
-	SIM_PB_REQ_SIM_PB_READ = 0xDC,
-	SIM_PB_RESP_SIM_PB_READ = 0xDD
-};
-
-enum pb_service_types {
-	SIM_PB_READ = 0x0F
-};
-
-enum pb_sub_block_id {
-	SIM_PB_INFO_REQUEST = 0xE4,
-	SIM_PB_STATUS = 0xFB,
-	SIM_PB_LOCATION = 0xFE,
-	SIM_PB_LOCATION_SEARCH = 0xFF
-};
-
-enum pb_type {
-	SIM_PB_ADN = 0xC8
-};
-
-enum pb_tag {
-	SIM_PB_ANR = 0xCA,
-	SIM_PB_EMAIL = 0xDD,
-	SIM_PB_SNE = 0xF7
-};
-
-enum pb_status {
-	SIM_SERV_OK = 0x01,
-	SIM_SERV_NO_MATCH = 0x16
-};
+#include "isimodem.h"
+#include "isiutil.h"
+#include "sim.h"
+#include "debug.h"
 
 struct pb_data {
 	GIsiClient *client;
@@ -171,15 +140,16 @@ static int decode_read_response(const unsigned char *msg, size_t len,
 			break;
 
 		default:
-			DBG("Skipping sub-block: 0x%04X (%zu bytes)",
-				g_isi_sb_iter_get_id(&iter),
+			DBG("Skipping sub-block: %s (%zd bytes)",
+				sim_subblock_name(g_isi_sb_iter_get_id(&iter)),
 				g_isi_sb_iter_get_len(&iter));
 			break;
 		}
 	}
 
 	if (status != SIM_SERV_OK) {
-		DBG("PB read returned status: 0x%02X", status);
+		DBG("Request failed: %s (0x%02X)",
+			sim_isi_cause_name(status), status);
 		goto error;
 	}
 
@@ -224,7 +194,7 @@ static void read_next_entry(GIsiClient *client, int location, GIsiResponseFunc r
 	if (!cbd)
 		goto error;
 
-	if (g_isi_request_make(client, msg, sizeof(msg), PHONEBOOK_TIMEOUT,
+	if (g_isi_request_make(client, msg, sizeof(msg), SIM_TIMEOUT,
 				read_cb, cbd))
 		return;
 
@@ -293,7 +263,7 @@ static void isi_export_entries(struct ofono_phonebook *pb, const char *storage,
 	if (strcmp(storage, "SM"))
 		goto error;
 
-	if (g_isi_request_make(pbd->client, msg, sizeof(msg), PHONEBOOK_TIMEOUT,
+	if (g_isi_request_make(pbd->client, msg, sizeof(msg), SIM_TIMEOUT,
 				read_resp_cb, cbd))
 		return;
 
@@ -313,19 +283,27 @@ static gboolean isi_phonebook_register(gpointer user)
 	return FALSE;
 }
 
-static void reachable_cb(GIsiClient *client, bool alive, void *opaque)
+static void reachable_cb(GIsiClient *client, bool alive, uint16_t object,
+				void *opaque)
 {
 	struct ofono_phonebook *pb = opaque;
+	const char *debug = NULL;
 
-	if (alive == true) {
-		DBG("Resource 0x%02X, with version %03d.%03d reachable",
-			g_isi_client_resource(client),
-			g_isi_version_major(client),
-			g_isi_version_minor(client));
-		g_idle_add(isi_phonebook_register, pb);
+	if (!alive) {
+		DBG("Unable to bootsrap phonebook driver");
 		return;
 	}
-	DBG("Unable to bootsrap phonebook driver");
+
+	DBG("%s (v%03d.%03d) reachable",
+		pn_resource_name(g_isi_client_resource(client)),
+		g_isi_version_major(client),
+		g_isi_version_minor(client));
+
+	debug = getenv("OFONO_ISI_DEBUG");
+	if (debug && (strcmp(debug, "all") == 0 || strcmp(debug, "sim") == 0))
+		g_isi_client_set_debug(client, sim_debug, NULL);
+
+	g_idle_add(isi_phonebook_register, pb);
 }
 
 static int isi_phonebook_probe(struct ofono_phonebook *pb, unsigned int vendor,

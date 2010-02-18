@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -52,7 +52,6 @@ static void calypso_generic_cb(gboolean ok, GAtResult *result,
 	ofono_voicecall_cb_t cb = cbd->cb;
 	struct ofono_error error;
 
-	dump_response("calypso_generic_cb", ok, result);
 	decode_at_error(&error, g_at_result_final_response(result));
 
 	cb(&error, cbd->data);
@@ -87,9 +86,9 @@ static void calypso_dial(struct ofono_voicecall *vc,
 	char buf[256];
 
 	if (ph->type == 145)
-		sprintf(buf, "ATD+%s", ph->number);
+		snprintf(buf, sizeof(buf), "ATD+%s", ph->number);
 	else
-		sprintf(buf, "ATD%s", ph->number);
+		snprintf(buf, sizeof(buf), "ATD%s", ph->number);
 
 	switch (clir) {
 	case OFONO_CLIR_OPTION_INVOCATION:
@@ -156,7 +155,10 @@ static void calypso_release_specific(struct ofono_voicecall *vc, int id,
 {
 	char buf[32];
 
-	sprintf(buf, "AT+CHLD=1%d", id);
+	/* On calypso, 1X only releases active calls, while 7X releases
+	 * active or held calls
+	 */
+	snprintf(buf, sizeof(buf), "AT%%CHLD=7%d", id);
 	calypso_template(vc, buf, cb, data);
 }
 
@@ -165,7 +167,7 @@ static void calypso_private_chat(struct ofono_voicecall *vc, int id,
 {
 	char buf[32];
 
-	sprintf(buf, "AT+CHLD=2%d", id);
+	snprintf(buf, sizeof(buf), "AT+CHLD=2%d", id);
 	calypso_template(vc, buf, cb, data);
 }
 
@@ -187,7 +189,7 @@ static void calypso_deflect(struct ofono_voicecall *vc,
 {
 	char buf[128];
 
-	sprintf(buf, "AT+CTFR=%s,%d", ph->number, ph->type);
+	snprintf(buf, sizeof(buf), "AT+CTFR=%s,%d", ph->number, ph->type);
 	calypso_template(vc, buf, cb, data);
 }
 
@@ -231,8 +233,6 @@ static void cpi_notify(GAtResult *result, gpointer user_data)
 	int line = 0;
 	int validity;
 	struct ofono_call call;
-
-	dump_response("cpi_notify", TRUE, result);
 
 	g_at_result_iter_init(&iter, result);
 
@@ -318,7 +318,8 @@ static void cpi_notify(GAtResult *result, gpointer user_data)
 
 	/* Need to send this on the calypso hardware to avoid echo issues */
 	if (msgtype == 3 || msgtype == 4)
-		g_at_chat_send(vd->chat, "AT%N0187", NULL, NULL, NULL, NULL);
+		g_at_chat_send(vd->chat, "AT%N0187", none_prefix,
+				NULL, NULL, NULL);
 
 	switch (msgtype) {
 	case 0:
@@ -369,7 +370,7 @@ static void calypso_voicecall_initialized(gboolean ok, GAtResult *result,
 	struct ofono_voicecall *vc = user_data;
 	struct voicecall_data *vd = ofono_voicecall_get_data(vc);
 
-	ofono_debug("voicecall_init: registering to notifications");
+	DBG("voicecall_init: registering to notifications");
 
 	g_at_chat_register(vd->chat, "%CPI:", cpi_notify, FALSE, vc, NULL);
 
@@ -387,11 +388,7 @@ static int calypso_voicecall_probe(struct ofono_voicecall *vc, unsigned int vend
 
 	ofono_voicecall_set_data(vc, vd);
 
-	g_at_chat_send(chat, "AT+CLIP=1", NULL, NULL, NULL, NULL);
-	g_at_chat_send(chat, "AT+COLP=0", NULL, NULL, NULL, NULL);
-	g_at_chat_send(chat, "AT+CSSN=1,1", NULL, NULL, NULL, NULL);
-	g_at_chat_send(chat, "AT%CPI=3", NULL, NULL, NULL, NULL);
-	g_at_chat_send(chat, "AT+CCWA=1", NULL,
+	g_at_chat_send(chat, "AT%CPI=3", NULL,
 				calypso_voicecall_initialized, vc, NULL);
 
 	return 0;
@@ -411,7 +408,6 @@ static struct ofono_voicecall_driver driver = {
 	.dial			= calypso_dial,
 	.answer			= calypso_answer,
 	.hangup			= calypso_hangup,
-	.list_calls		= NULL,
 	.hold_all_active	= calypso_hold_all_active,
 	.release_all_held	= calypso_release_all_held,
 	.set_udub		= calypso_set_udub,

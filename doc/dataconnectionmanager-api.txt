@@ -24,10 +24,15 @@ Methods		dict GetProperties()
 
 			Deactivates all active contexts.
 
-		object CreateContext()
+		object CreateContext(string name, string type)
 
-			Creates a new Primary context.  Returns the object
-			path of the created context.
+			Creates a new Primary context.  The name is a free
+			form string that describes this context.  The name
+			should not be empty and limited to a short string
+			for display purposes.  The type contains the intended
+			purpose of the context.  For possible values see the
+			Type documentation of PrimaryDataContext interface.
+			Returns the object path of the created context.
 
 		void RemoveContext(object context)
 
@@ -119,13 +124,15 @@ Methods		dict GetProperties()
 			Possible Errors: [service].Error.InvalidArguments
 					 [service].Error.InvalidFormat
 					 [service].Error.Failed
+					 [service].Error.NotAttached
+					 [service].Error.AttachInProgress
 
 Signals		PropertyChanged(string property, variant value)
 
 			This signal indicates a changed value of the given
 			property.
 
-Properties	boolean Activated [readwrite]
+Properties	boolean Active [readwrite]
 
 			Holds whether the context is activated.  This value
 			can be set to activate / deactivate the context.
@@ -156,24 +163,41 @@ Properties	boolean Activated [readwrite]
 			purposes.  This value cannot be changed when the
 			context is active.
 
-		string Interface [readonly, optional]
+		string Name [readwrite]
 
-			Holds the interface of the network interface created
-			by this context (e.g. "ppp0")
+			The name is a free form string that describes this
+			context.  The name should not be empty and limited
+			to a short string for display purposes.
 
-		string Address [readonly, optional]
+		dict Settings [readonly, optional]
 
-			Holds the IP address for this context.
+			Holds all the IP network settings
 
-		string Netmask [readonly, optional]
+			string Interface [readonly, optional]
 
-			Holds the Netmask for this context.
+				Holds the interface of the network interface used
+				by this context (e.g. "ppp0" "usb0")
 
-		array{string} DomainNameServers [readonly, optional]
+			string Method [readonly, optional]
 
-			Holds the list of domain name servers for this
-			context.
+				Holds the IP network config method
+					"static"- Set IP network statically
+					"dhcp"  - Set IP network through DHCP
 
-		string Gateway [readonly, optional]
+			string Address [readonly, optional]
 
-			Holds the gateway IP for this connection.
+				Holds the IP address for this context.
+
+			string Netmask [readonly, optional]
+
+				Holds the Netmask for this context.
+
+			array{string} DomainNameServers [readonly, optional]
+
+				Holds the list of domain name servers for this
+				context.
+
+			string Gateway [readonly, optional]
+
+				Holds the gateway IP for this connection.
+

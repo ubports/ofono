@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -353,7 +353,7 @@ struct sms_assembly_node {
 	struct sms_address addr;
 	time_t ts;
 	GSList *fragment_list;
-	guint8 ref;
+	guint16 ref;
 	guint8 max_fragments;
 	guint8 num_fragments;
 	unsigned int bitmap[8];
@@ -494,3 +494,5 @@ void cbs_assembly_location_changed(struct cbs_assembly *assembly, gboolean plmn,
 
 char *cbs_topic_ranges_to_string(GSList *ranges);
 GSList *cbs_extract_topic_ranges(const char *ranges);
+GSList *cbs_optimize_ranges(GSList *ranges);
+gboolean cbs_topic_in_range(unsigned int topic, GSList *ranges);

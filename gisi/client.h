@@ -38,7 +38,8 @@ typedef struct _GIsiClient GIsiClient;
 struct _GIsiRequest;
 typedef struct _GIsiRequest GIsiRequest;
 
-typedef void (*GIsiVerifyFunc)(GIsiClient *client, bool alive, void *opaque);
+typedef void (*GIsiVerifyFunc)(GIsiClient *client, bool alive,
+				uint16_t object, void *opaque);
 
 typedef bool (*GIsiResponseFunc)(GIsiClient *client,
 		const void *restrict data, size_t len,
@@ -71,6 +72,10 @@ int g_isi_client_error(const GIsiClient *client);
 
 GIsiRequest *g_isi_request_make(GIsiClient *client, const void *data,
 				size_t len, unsigned timeout,
+				GIsiResponseFunc func, void *opaque);
+struct iovec;
+GIsiRequest *g_isi_request_vmake(GIsiClient *client, const struct iovec *iov,
+				size_t iovlen, unsigned timeout,
 				GIsiResponseFunc func, void *opaque);
 
 void g_isi_request_cancel(GIsiRequest *req);

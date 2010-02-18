@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -23,17 +23,20 @@
 
 #define OFONO_API_SUBJECT_TO_CHANGE
 
+#include <ofono/types.h>
+
+void __ofono_exit();
+
 int __ofono_manager_init();
 void __ofono_manager_cleanup();
 
 const char **__ofono_modem_get_list();
+void __ofono_modem_shutdown();
 
 #include <ofono/log.h>
 
-int __ofono_log_init(gboolean detach, gboolean debug);
+int __ofono_log_init(const char *debug, ofono_bool_t detach);
 void __ofono_log_cleanup(void);
-
-void __ofono_toggle_debug(void);
 
 #include <ofono/dbus.h>
 
@@ -51,12 +54,12 @@ DBusMessage *__ofono_error_not_supported(DBusMessage *msg);
 DBusMessage *__ofono_error_timed_out(DBusMessage *msg);
 DBusMessage *__ofono_error_sim_not_ready(DBusMessage *msg);
 DBusMessage *__ofono_error_in_use(DBusMessage *msg);
+DBusMessage *__ofono_error_not_attached(DBusMessage *msg);
+DBusMessage *__ofono_error_attach_in_progress(DBusMessage *msg);
 
 void __ofono_dbus_pending_reply(DBusMessage **msg, DBusMessage *reply);
 
 gboolean __ofono_dbus_valid_object_path(const char *path);
-
-#include <ofono/types.h>
 
 struct ofono_watchlist_item {
 	unsigned int id;
@@ -85,8 +88,9 @@ void __ofono_plugin_cleanup(void);
 
 #include <ofono/modem.h>
 
-unsigned int __ofono_modem_alloc_callid(struct ofono_modem *modem);
-void __ofono_modem_release_callid(struct ofono_modem *modem, int id);
+unsigned int __ofono_modem_callid_next(struct ofono_modem *modem);
+void __ofono_modem_callid_hold(struct ofono_modem *modem, int id);
+void __ofono_modem_callid_release(struct ofono_modem *modem, int id);
 
 struct ofono_atom;
 
@@ -109,6 +113,7 @@ enum ofono_atom_type {
 	OFONO_ATOM_TYPES_CALL_VOLUME = 15,
 	OFONO_ATOM_TYPE_GPRS = 16,
 	OFONO_ATOM_TYPE_GPRS_CONTEXT = 17,
+	OFONO_ATOM_TYPE_RADIO_SETTINGS = 18,
 };
 
 enum ofono_atom_watch_condition {
@@ -161,10 +166,15 @@ void __ofono_atom_free(struct ofono_atom *atom);
 #include <ofono/devinfo.h>
 #include <ofono/phonebook.h>
 #include <ofono/sms.h>
-#include <ofono/sim.h>
 #include <ofono/voicecall.h>
 #include <ofono/gprs.h>
 #include <ofono/gprs-context.h>
+#include <ofono/radio-settings.h>
+
+#include <ofono/sim.h>
+
+void __ofono_cbs_sim_download(struct ofono_sim *sim,
+				const guint8 *pdu, int pdu_len);
 
 #include <ofono/ssn.h>
 
@@ -231,6 +241,20 @@ void __ofono_history_call_ended(struct ofono_modem *modem,
 
 void __ofono_history_call_missed(struct ofono_modem *modem,
 				const struct ofono_call *call, time_t when);
+
+void __ofono_history_sms_received(struct ofono_modem *modem,
+					unsigned int msg_id, const char *from,
+					const struct tm *remote,
+					const struct tm *local,
+					const char *text);
+
+void __ofono_history_sms_send_pending(struct ofono_modem *modem,
+					unsigned int msg_id, const char *to,
+					time_t when, const char *text);
+
+void __ofono_history_sms_send_status(struct ofono_modem *modem,
+					unsigned int msg_id, time_t when,
+					enum ofono_history_sms_status status);
 
 #include <ofono/message-waiting.h>
 

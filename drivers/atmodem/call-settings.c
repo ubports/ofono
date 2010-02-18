@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -55,7 +55,6 @@ static void ccwa_query_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	struct ofono_error error;
 	GAtResultIter iter;
 
-	dump_response("ccwa_query_cb", ok, result);
 	decode_at_error(&error, g_at_result_final_response(result));
 
 	if (!ok)
@@ -71,7 +70,7 @@ static void ccwa_query_cb(gboolean ok, GAtResult *result, gpointer user_data)
 			conditions |= cls;
 	}
 
-	ofono_debug("CW enabled for: %d", conditions);
+	DBG("CW enabled for: %d", conditions);
 
 out:
 	cb(&error, conditions, cbd->data);
@@ -90,9 +89,9 @@ static void at_ccwa_query(struct ofono_call_settings *cs, int cls,
 	cbd->user = GINT_TO_POINTER(cls);
 
 	if (cls == 7)
-		sprintf(buf, "AT+CCWA=1,2");
+		snprintf(buf, sizeof(buf), "AT+CCWA=1,2");
 	else
-		sprintf(buf, "AT+CCWA=1,2,%d", cls);
+		snprintf(buf, sizeof(buf), "AT+CCWA=1,2,%d", cls);
 
 	if (g_at_chat_send(chat, buf, ccwa_prefix,
 				ccwa_query_cb, cbd, g_free) > 0)
@@ -111,7 +110,6 @@ static void ccwa_set_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	ofono_call_settings_set_cb_t cb = cbd->cb;
 	struct ofono_error error;
 
-	dump_response("ccwa_set_cb", ok, result);
 	decode_at_error(&error, g_at_result_final_response(result));
 
 	cb(&error, cbd->data);
@@ -127,7 +125,7 @@ static void at_ccwa_set(struct ofono_call_settings *cs, int mode, int cls,
 	if (!cbd)
 		goto error;
 
-	sprintf(buf, "AT+CCWA=1,%d,%d", mode, cls);
+	snprintf(buf, sizeof(buf), "AT+CCWA=1,%d,%d", mode, cls);
 
 	if (g_at_chat_send(chat, buf, none_prefix,
 				ccwa_set_cb, cbd, g_free) > 0)
@@ -149,7 +147,6 @@ static void clip_query_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	GAtResultIter iter;
 	int status = -1;
 
-	dump_response("clip_query_cb", ok, result);
 	decode_at_error(&error, g_at_result_final_response(result));
 
 	if (!ok) {
@@ -168,7 +165,7 @@ static void clip_query_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	g_at_result_iter_skip_next(&iter);
 	g_at_result_iter_next_number(&iter, &status);
 
-	ofono_debug("clip_query_cb: network: %d", status);
+	DBG("clip_query_cb: network: %d", status);
 
 	cb(&error, status, cbd->data);
 }
@@ -201,7 +198,6 @@ static void colp_query_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	GAtResultIter iter;
 	int status;
 
-	dump_response("colp_query_cb", ok, result);
 	decode_at_error(&error, g_at_result_final_response(result));
 
 	if (!ok) {
@@ -220,7 +216,7 @@ static void colp_query_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	g_at_result_iter_skip_next(&iter);
 	g_at_result_iter_next_number(&iter, &status);
 
-	ofono_debug("colp_query_cb: network: %d", status);
+	DBG("colp_query_cb: network: %d", status);
 
 	cb(&error, status, cbd->data);
 }
@@ -253,7 +249,6 @@ static void clir_query_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	GAtResultIter iter;
 	int override = 0, network = 2;
 
-	dump_response("clir_query_cb", ok, result);
 	decode_at_error(&error, g_at_result_final_response(result));
 
 	if (!ok) {
@@ -271,8 +266,7 @@ static void clir_query_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	g_at_result_iter_next_number(&iter, &override);
 	g_at_result_iter_next_number(&iter, &network);
 
-	ofono_debug("clir_query_cb: override: %d, network: %d",
-			override, network);
+	DBG("clir_query_cb: override: %d, network: %d", override, network);
 
 	cb(&error, override, network, cbd->data);
 }
@@ -303,7 +297,6 @@ static void clir_set_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	ofono_call_settings_set_cb_t cb = cbd->cb;
 	struct ofono_error error;
 
-	dump_response("clir_set_cb", ok, result);
 	decode_at_error(&error, g_at_result_final_response(result));
 
 	cb(&error, cbd->data);
@@ -319,7 +312,7 @@ static void at_clir_set(struct ofono_call_settings *cs, int mode,
 	if (!cbd)
 		goto error;
 
-	sprintf(buf, "AT+CLIR=%d", mode);
+	snprintf(buf, sizeof(buf), "AT+CLIR=%d", mode);
 
 	if (g_at_chat_send(chat, buf, none_prefix,
 				clir_set_cb, cbd, g_free) > 0)

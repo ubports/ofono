@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -40,15 +40,6 @@
 #define USSD_FLAG_PENDING 0x1
 
 static GSList *g_drivers = NULL;
-
-enum ussd_status {
-	USSD_STATUS_NOTIFY = 0,
-	USSD_STATUS_ACTION_REQUIRED = 1,
-	USSD_STATUS_TERMINATED = 2,
-	USSD_STATUS_LOCAL_CLIENT_RESPONDED = 3,
-	USSD_STATUS_NOT_SUPPORTED = 4,
-	USSD_STATUS_TIMED_OUT = 5,
-};
 
 enum ussd_state {
 	USSD_STATE_IDLE = 0,
@@ -231,13 +222,13 @@ static gboolean recognized_control_string(struct ofono_ussd *ussd,
 	int type;
 	gboolean ret = FALSE;
 
-	ofono_debug("parsing control string");
+	DBG("parsing control string");
 
 	if (parse_ss_control_string(str, &type, &sc,
 				&sia, &sib, &sic, &sid, &dn)) {
 		GSList *l = ussd->ss_control_list;
 
-		ofono_debug("Got parse result: %d, %s, %s, %s, %s, %s, %s",
+		DBG("Got parse result: %d, %s, %s, %s, %s, %s, %s",
 				type, sc, sia, sib, sic, sid, dn);
 
 		/* A password change string needs to be treated separately
@@ -292,24 +283,28 @@ void ofono_ussd_notify(struct ofono_ussd *ussd, int status, const char *str)
 	DBusMessageIter iter;
 	DBusMessageIter variant;
 
-	if (status == USSD_STATUS_NOT_SUPPORTED) {
+	if (status == OFONO_USSD_STATUS_NOT_SUPPORTED) {
 		ussd->state = USSD_STATE_IDLE;
+
+		if (!ussd->pending)
+			return;
+
 		reply = __ofono_error_not_supported(ussd->pending);
 		goto out;
 	}
 
-	if (status == USSD_STATUS_TIMED_OUT) {
+	if (status == OFONO_USSD_STATUS_TIMED_OUT) {
 		ussd->state = USSD_STATE_IDLE;
+
+		if (!ussd->pending)
+			return;
+
 		reply = __ofono_error_timed_out(ussd->pending);
 		goto out;
 	}
 
 	/* TODO: Rework this in the Agent framework */
 	if (ussd->state == USSD_STATE_ACTIVE) {
-		if (status == USSD_STATUS_ACTION_REQUIRED) {
-			ofono_error("Unable to handle action required ussd");
-			return;
-		}
 
 		reply = dbus_message_new_method_return(ussd->pending);
 
@@ -329,10 +324,14 @@ void ofono_ussd_notify(struct ofono_ussd *ussd, int status, const char *str)
 
 		dbus_message_iter_close_container(&iter, &variant);
 
-		ussd->state = USSD_STATE_IDLE;
+		if (status == OFONO_USSD_STATUS_ACTION_REQUIRED)
+			ussd->state = USSD_STATE_USER_ACTION;
+		else
+			ussd->state = USSD_STATE_IDLE;
+
 	} else {
 		ofono_error("Received an unsolicited USSD, ignoring for now...");
-		ofono_debug("USSD is: status: %d, %s", status, str);
+		DBG("USSD is: status: %d, %s", status, str);
 
 		return;
 	}
@@ -351,7 +350,7 @@ static void ussd_callback(const struct ofono_error *error, void *data)
 	DBusMessage *reply;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR)
-		ofono_debug("ussd request failed with error: %s",
+		DBG("ussd request failed with error: %s",
 				telephony_error_to_str(error));
 
 	ussd->flags &= ~USSD_FLAG_PENDING;
@@ -391,15 +390,15 @@ static DBusMessage *ussd_initiate(DBusConnection *conn, DBusMessage *msg,
 	if (strlen(str) == 0)
 		return __ofono_error_invalid_format(msg);
 
-	ofono_debug("checking if this is a recognized control string");
+	DBG("checking if this is a recognized control string");
 	if (recognized_control_string(ussd, str, msg))
 		return NULL;
 
-	ofono_debug("No.., checking if this is a USSD string");
+	DBG("No.., checking if this is a USSD string");
 	if (!valid_ussd_string(str))
 		return __ofono_error_invalid_format(msg);
 
-	ofono_debug("OK, running USSD request");
+	DBG("OK, running USSD request");
 
 	if (!ussd->driver->request)
 		return __ofono_error_not_implemented(msg);
@@ -418,7 +417,7 @@ static void ussd_cancel_callback(const struct ofono_error *error, void *data)
 	DBusMessage *reply;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR)
-		ofono_debug("ussd cancel failed with error: %s",
+		DBG("ussd cancel failed with error: %s",
 				telephony_error_to_str(error));
 
 	ussd->flags &= ~USSD_FLAG_PENDING;
@@ -430,8 +429,9 @@ static void ussd_cancel_callback(const struct ofono_error *error, void *data)
 		ussd->state = USSD_STATE_IDLE;
 
 		reply = dbus_message_new_method_return(ussd->pending);
-	} else
+	} else {
 		reply = __ofono_error_failed(ussd->pending);
+	}
 
 	__ofono_dbus_pending_reply(&ussd->pending, reply);
 }

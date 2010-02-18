@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -55,6 +55,20 @@ enum ofono_sim_password_type {
 	OFONO_SIM_PASSWORD_PHSP_PUK,
 	OFONO_SIM_PASSWORD_PHCORP_PUK,
 	OFONO_SIM_PASSWORD_INVALID,
+};
+
+enum ofono_sim_phase {
+	OFONO_SIM_PHASE_1G,
+	OFONO_SIM_PHASE_2G,
+	OFONO_SIM_PHASE_2G_PLUS,
+	OFONO_SIM_PHASE_3G,
+	OFONO_SIM_PHASE_UNKNOWN,
+};
+
+enum ofono_sim_cphs_phase {
+	OFONO_SIM_CPHS_PHASE_NONE,
+	OFONO_SIM_CPHS_PHASE_1G,
+	OFONO_SIM_CPHS_PHASE_2G,
 };
 
 typedef void (*ofono_sim_file_info_cb_t)(const struct ofono_error *error,
@@ -135,6 +149,9 @@ struct ofono_sim_driver {
 	void (*query_locked)(struct ofono_sim *sim,
 			enum ofono_sim_password_type type,
 			ofono_sim_locked_cb_t cb, void *data);
+	void (*envelope)(struct ofono_sim *sim, int length,
+				const guint8 *command,
+				ofono_sim_read_cb_t cb, void *data);
 };
 
 int ofono_sim_driver_register(const struct ofono_sim_driver *d);
@@ -151,6 +168,10 @@ void ofono_sim_set_data(struct ofono_sim *sim, void *data);
 void *ofono_sim_get_data(struct ofono_sim *sim);
 
 const char *ofono_sim_get_imsi(struct ofono_sim *sim);
+enum ofono_sim_phase ofono_sim_get_phase(struct ofono_sim *sim);
+
+enum ofono_sim_cphs_phase ofono_sim_get_cphs_phase(struct ofono_sim *sim);
+const unsigned char *ofono_sim_get_cphs_service_table(struct ofono_sim *sim);
 
 unsigned int ofono_sim_add_ready_watch(struct ofono_sim *sim,
 				ofono_sim_ready_notify_cb_t cb,

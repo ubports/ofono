@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -314,6 +314,19 @@ DBusMessage *__ofono_error_in_use(DBusMessage *msg)
 {
 	return g_dbus_create_error(msg, DBUS_GSM_ERROR_INTERFACE ".InUse",
 			"The resource is currently in use");
+}
+
+DBusMessage *__ofono_error_not_attached(DBusMessage *msg)
+{
+	return g_dbus_create_error(msg, DBUS_GSM_ERROR_INTERFACE ".NotAttached",
+			"GPRS is not attached");
+}
+
+DBusMessage *__ofono_error_attach_in_progress(DBusMessage *msg)
+{
+	return g_dbus_create_error(msg,
+				DBUS_GSM_ERROR_INTERFACE ".AttachInProgress",
+				"GPRS Attach is in progress");
 }
 
 void __ofono_dbus_pending_reply(DBusMessage **msg, DBusMessage *reply)

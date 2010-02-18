@@ -34,7 +34,18 @@ for path in properties["Modems"]:
 		print "    [ %s ]" % (path)
 
 		for key in properties.keys():
-			val = str(properties[key])
+			if key in ["Settings"]:
+				val = "{"
+				for i in properties[key].keys():
+					val += " " + i + "="
+					if i in ["DomainNameServers"]:
+						for n in properties[key][i]:
+							val += n + ","
+					else:
+						val += properties[key][i]
+				val += " }"
+			else:
+				val = str(properties[key])
 			print "        %s = %s" % (key, val)
 	
 		print

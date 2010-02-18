@@ -41,7 +41,7 @@
 #define PN_SIM			0x09
 
 struct verify_data {
-	void *func;
+	GIsiVerifyFunc func;
 	void *data;
 };
 
@@ -54,7 +54,7 @@ static bool verify_cb(GIsiClient *client, const void *restrict data,
 
 	bool alive = false;
 
-	if(!msg)
+	if (!msg)
 		goto out;
 
 	if (len < 2 || msg[0] != COMMON_MESSAGE)
@@ -71,7 +71,7 @@ static bool verify_cb(GIsiClient *client, const void *restrict data,
 
 out:
 	if (func)
-		func(client, alive, vd->data);
+		func(client, alive, object, vd->data);
 	g_free(vd);
 	return true;
 }

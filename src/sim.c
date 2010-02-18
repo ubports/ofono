@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -46,8 +46,8 @@
 #define SIM_MANAGER_INTERFACE "org.ofono.SimManager"
 
 #define SIM_CACHE_MODE 0600
-#define SIM_CACHE_PATH STORAGEDIR "/%s/%04x"
-#define SIM_CACHE_PATH_LEN(imsilen) (strlen(SIM_CACHE_PATH) - 2 + imsilen)
+#define SIM_CACHE_PATH STORAGEDIR "/%s-%i/%04x"
+#define SIM_CACHE_PATH_LEN(imsilen) (strlen(SIM_CACHE_PATH) - 3 + imsilen)
 #define SIM_CACHE_HEADER_SIZE 6
 
 static GSList *g_drivers = NULL;
@@ -72,6 +72,7 @@ struct sim_file_op {
 
 struct ofono_sim {
 	char *imsi;
+	enum ofono_sim_phase phase;
 	unsigned char mnc_length;
 	GSList *own_numbers;
 	GSList *new_numbers;
@@ -87,6 +88,8 @@ struct ofono_sim {
 	unsigned char efmsisdn_records;
 	unsigned char *efli;
 	unsigned char efli_length;
+	enum ofono_sim_cphs_phase cphs_phase;
+	unsigned char cphs_service_table[2];
 	struct ofono_watchlist *ready_watches;
 	const struct ofono_sim_driver *driver;
 	void *driver_data;
@@ -375,8 +378,9 @@ static gboolean set_own_numbers(struct ofono_sim *sim,
 			sim_adn_build(efmsisdn, sim->efmsisdn_length,
 					number, NULL);
 			new_numbers = new_numbers->next;
-		} else
+		} else {
 			memset(efmsisdn, 0xff, sim->efmsisdn_length);
+		}
 
 		if (ofono_sim_write(req->sim, SIM_EFMSISDN_FILEID,
 				msisdn_set_cb, OFONO_SIM_FILE_STRUCTURE_FIXED,
@@ -949,6 +953,28 @@ static void sim_ready(void *user)
 			sim_sdn_read_cb, sim);
 }
 
+static void sim_cphs_information_read_cb(int ok, int length, int record,
+				const unsigned char *data,
+				int record_length, void *userdata)
+{
+	struct ofono_sim *sim = userdata;
+
+	sim->cphs_phase = OFONO_SIM_CPHS_PHASE_NONE;
+
+	if (!ok || length < 3)
+		goto ready;
+
+	if (data[0] == 0x01)
+		sim->cphs_phase = OFONO_SIM_CPHS_PHASE_1G;
+	else if (data[0] >= 0x02)
+		sim->cphs_phase = OFONO_SIM_CPHS_PHASE_2G;
+
+	memcpy(sim->cphs_service_table, data + 1, 2);
+
+ready:
+	ofono_sim_set_ready(sim);
+}
+
 static void sim_imsi_cb(const struct ofono_error *error, const char *imsi,
 		void *data)
 {
@@ -961,7 +987,11 @@ static void sim_imsi_cb(const struct ofono_error *error, const char *imsi,
 
 	sim->imsi = g_strdup(imsi);
 
-	ofono_sim_set_ready(sim);
+	/* Read CPHS-support bits, this is still part of the SIM
+	 * initialisation but no order is specified for it.  */
+	ofono_sim_read(sim, SIM_EF_CPHS_INFORMATION_FILEID,
+			OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
+			sim_cphs_information_read_cb, sim);
 }
 
 static void sim_retrieve_imsi(struct ofono_sim *sim)
@@ -1171,8 +1201,9 @@ skip_efpl:
 			sim->language_prefs = concat_lang_prefs(NULL, efpl);
 		else
 			sim->language_prefs = concat_lang_prefs(efli, efpl);
-	} else
+	} else {
 		sim->language_prefs = concat_lang_prefs(efpl, efli);
+	}
 
 	if (sim->efli) {
 		g_free(sim->efli);
@@ -1215,6 +1246,32 @@ static void sim_retrieve_efli_and_efpl(struct ofono_sim *sim)
 	ofono_sim_read(sim, SIM_EFPL_FILEID,
 			OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
 			sim_efpl_read_cb, sim);
+}
+
+static void sim_efphase_read_cb(const struct ofono_error *error,
+				const unsigned char *data, int len, void *user)
+{
+	struct ofono_sim *sim = user;
+
+	if (!error || error->type != OFONO_ERROR_TYPE_NO_ERROR || len != 1)
+		sim->phase = OFONO_SIM_PHASE_3G;
+	else
+		sim->phase = data[0];
+
+	/* Proceed with SIM initialization */
+	sim_retrieve_efli_and_efpl(sim);
+	sim_pin_check(sim);
+}
+
+static void sim_determine_phase(struct ofono_sim *sim)
+{
+	if (!sim->driver->read_file_transparent) {
+		sim_efphase_read_cb(NULL, NULL, 0, sim);
+		return;
+	}
+
+	sim->driver->read_file_transparent(sim, SIM_EFPHASE_FILEID, 0, 1,
+						sim_efphase_read_cb, sim);
 }
 
 static void sim_op_error(struct ofono_sim *sim)
@@ -1276,7 +1333,8 @@ static void sim_op_retrieve_cb(const struct ofono_error *error,
 	cb(1, op->length, op->current, data, op->record_length, op->userdata);
 
 	if (op->cache && imsi) {
-		char *path = g_strdup_printf(SIM_CACHE_PATH, imsi, op->id);
+		char *path = g_strdup_printf(SIM_CACHE_PATH,
+						imsi, sim->phase, op->id);
 
 		op->cache = cache_record(path, op->current, op->record_length,
 						data);
@@ -1398,8 +1456,8 @@ static void sim_op_info_cb(const struct ofono_error *error, int length,
 		fileinfo[4] = record_length >> 8;
 		fileinfo[5] = record_length & 0xff;
 
-		if (write_file(fileinfo, 6, SIM_CACHE_MODE,
-					SIM_CACHE_PATH, imsi, op->id) != 6)
+		if (write_file(fileinfo, 6, SIM_CACHE_MODE, SIM_CACHE_PATH,
+					imsi, sim->phase, op->id) != 6)
 			op->cache = FALSE;
 	}
 }
@@ -1441,14 +1499,14 @@ static gboolean sim_op_check_cached(struct ofono_sim *sim)
 	if (!imsi)
 		return FALSE;
 
-	path = g_strdup_printf(SIM_CACHE_PATH, imsi, op->id);
+	path = g_strdup_printf(SIM_CACHE_PATH, imsi, sim->phase, op->id);
 
 	fd = TFR(open(path, O_RDONLY));
 	g_free(path);
 
 	if (fd == -1) {
 		if (errno != ENOENT)
-			ofono_debug("Error %i opening cache file for "
+			DBG("Error %i opening cache file for "
 					"fileid %04x, IMSI %s",
 					errno, op->id, imsi);
 
@@ -1660,6 +1718,30 @@ const char *ofono_sim_get_imsi(struct ofono_sim *sim)
 	return sim->imsi;
 }
 
+enum ofono_sim_phase ofono_sim_get_phase(struct ofono_sim *sim)
+{
+	if (sim == NULL)
+		return 0;
+
+	return sim->phase;
+}
+
+enum ofono_sim_cphs_phase ofono_sim_get_cphs_phase(struct ofono_sim *sim)
+{
+	if (sim == NULL)
+		return OFONO_SIM_CPHS_PHASE_NONE;
+
+	return sim->cphs_phase;
+}
+
+const unsigned char *ofono_sim_get_cphs_service_table(struct ofono_sim *sim)
+{
+	if (sim == NULL)
+		return NULL;
+
+	return sim->cphs_service_table;
+}
+
 unsigned int ofono_sim_add_ready_watch(struct ofono_sim *sim,
 				ofono_sim_ready_notify_cb_t notify,
 				void *data, ofono_destroy_func destroy)
@@ -1718,6 +1800,42 @@ void ofono_sim_set_ready(struct ofono_sim *sim)
 
 		notify(item->notify_data);
 	}
+}
+
+static void sim_cb_download_cb(const struct ofono_error *error,
+				const unsigned char *data, int len, void *user)
+{
+	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
+		ofono_error("CellBroadcast download to UICC failed");
+		return;
+	}
+
+	DBG("CellBroadcast download to UICC reported no error");
+}
+
+void __ofono_cbs_sim_download(struct ofono_sim *sim,
+				const guint8 *pdu, int pdu_len)
+{
+	guint8 tlv[pdu_len + 8];
+
+	if (sim->ready != TRUE)
+		return;
+
+	if (sim->driver->envelope == NULL)
+		return;
+
+	tlv[0] = 0xd2; /* Cell Broadcast Download */
+	tlv[1] = 6 + pdu_len;
+	tlv[2] = 0x82; /* Device Identities */
+	tlv[3] = 0x02; /* Device Identities length */
+	tlv[4] = 0x83; /* Network */
+	tlv[5] = 0x81; /* UICC */
+	tlv[6] = 0x8c; /* Cell Broadcast page */
+	tlv[7] = pdu_len;
+
+	memcpy(tlv + 8, pdu, pdu_len);
+
+	sim->driver->envelope(sim, pdu_len + 8, tlv, sim_cb_download_cb, sim);
 }
 
 int ofono_sim_driver_register(const struct ofono_sim_driver *d)
@@ -1825,6 +1943,7 @@ struct ofono_sim *ofono_sim_create(struct ofono_modem *modem,
 	if (sim == NULL)
 		return NULL;
 
+	sim->phase = OFONO_SIM_PHASE_UNKNOWN;
 	sim->atom = __ofono_modem_add_atom(modem, OFONO_ATOM_TYPE_SIM,
 						sim_remove, sim);
 
@@ -1877,6 +1996,7 @@ void ofono_sim_register(struct ofono_sim *sim)
 	 * Read EFecc
 	 * Read EFli and EFpl
 	 * SIM Pin check
+	 * Request SIM phase (only in 51.011)
 	 * Read EFust
 	 * Read EFest
 	 * Read IMSI
@@ -1885,8 +2005,7 @@ void ofono_sim_register(struct ofono_sim *sim)
 	 * arbitrary files to be written or read, assuming their presence
 	 * in the EFust
 	 */
-	sim_retrieve_efli_and_efpl(sim);
-	sim_pin_check(sim);
+	sim_determine_phase(sim);
 }
 
 void ofono_sim_remove(struct ofono_sim *sim)

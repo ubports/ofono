@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -30,19 +30,55 @@
 #include <unistd.h>
 #include <string.h>
 #include <signal.h>
+#include <sys/signalfd.h>
 
 #include "ofono.h"
 
+#define SHUTDOWN_GRACE_SECONDS 10
+
 static GMainLoop *event_loop;
 
-static void sig_debug(int sig)
-{
-	__ofono_toggle_debug();
-}
-
-static void sig_term(int sig)
+void __ofono_exit()
 {
 	g_main_loop_quit(event_loop);
+}
+
+static gboolean quit_eventloop(gpointer user_data)
+{
+	__ofono_exit();
+	return FALSE;
+}
+
+static gboolean signal_cb(GIOChannel *channel, GIOCondition cond, gpointer data)
+{
+	static int terminated = 0;
+	int signal_fd = GPOINTER_TO_INT(data);
+	struct signalfd_siginfo si;
+	ssize_t res;
+
+	if (cond & (G_IO_NVAL | G_IO_ERR))
+		return FALSE;
+
+	res = read(signal_fd, &si, sizeof(si));
+	if (res != sizeof(si))
+		return FALSE;
+
+	switch (si.ssi_signo) {
+	case SIGINT:
+	case SIGTERM:
+		if (terminated == 0) {
+			g_timeout_add_seconds(SHUTDOWN_GRACE_SECONDS,
+						quit_eventloop, NULL);
+			__ofono_modem_shutdown();
+		}
+
+		terminated++;
+		break;
+	default:
+		break;
+	}
+
+	return TRUE;
 }
 
 static void system_bus_disconnected(DBusConnection *conn, void *user_data)
@@ -52,15 +88,18 @@ static void system_bus_disconnected(DBusConnection *conn, void *user_data)
 	g_main_loop_quit(event_loop);
 }
 
+static gchar *option_debug = NULL;
 static gboolean option_detach = TRUE;
-static gboolean option_debug = FALSE;
+static gboolean option_version = FALSE;
 
 static GOptionEntry options[] = {
+	{ "debug", 'd', 0, G_OPTION_ARG_STRING, &option_debug,
+				"Specify debug options to enable", "DEBUG" },
 	{ "nodetach", 'n', G_OPTION_FLAG_REVERSE,
 				G_OPTION_ARG_NONE, &option_detach,
 				"Don't run as daemon in background" },
-	{ "debug", 'd', 0, G_OPTION_ARG_NONE, &option_debug,
-				"Enable debug information output" },
+	{ "version", 'v', 0, G_OPTION_ARG_NONE, &option_version,
+				"Show version information and exit" },
 	{ NULL },
 };
 
@@ -68,9 +107,34 @@ int main(int argc, char **argv)
 {
 	GOptionContext *context;
 	GError *err = NULL;
-	struct sigaction sa;
+	sigset_t mask;
 	DBusConnection *conn;
 	DBusError error;
+	int signal_fd;
+	GIOChannel *signal_io;
+	int signal_source;
+
+	sigemptyset(&mask);
+	sigaddset(&mask, SIGTERM);
+	sigaddset(&mask, SIGINT);
+
+	if (sigprocmask(SIG_BLOCK, &mask, NULL) < 0) {
+		perror("Can't set signal mask");
+		return 1;
+	}
+
+	signal_fd = signalfd(-1, &mask, 0);
+	if (signal_fd < 0) {
+		perror("Can't create signal filedescriptor");
+		return 1;
+	}
+
+	signal_io = g_io_channel_unix_new(signal_fd);
+	g_io_channel_set_close_on_unref(signal_io, TRUE);
+	signal_source = g_io_add_watch(signal_io,
+			G_IO_IN | G_IO_HUP | G_IO_ERR | G_IO_NVAL,
+			signal_cb, GINT_TO_POINTER(signal_fd));
+	g_io_channel_unref(signal_io);
 
 #ifdef NEED_THREADS
 	if (g_thread_supported() == FALSE)
@@ -93,6 +157,11 @@ int main(int argc, char **argv)
 
 	g_option_context_free(context);
 
+	if (option_version == TRUE) {
+		printf("%s\n", VERSION);
+		exit(0);
+	}
+
 	if (option_detach == TRUE) {
 		if (daemon(0, 0)) {
 			perror("Can't start daemon");
@@ -109,7 +178,7 @@ int main(int argc, char **argv)
 	}
 #endif
 
-	__ofono_log_init(option_detach, option_debug);
+	__ofono_log_init(option_debug, option_detach);
 
 	dbus_error_init(&error);
 
@@ -119,8 +188,10 @@ int main(int argc, char **argv)
 			ofono_error("Unable to hop onto D-Bus: %s",
 					error.message);
 			dbus_error_free(&error);
-		} else
+		} else {
 			ofono_error("Unable to hop onto D-Bus");
+		}
+
 		goto cleanup;
 	}
 
@@ -133,18 +204,6 @@ int main(int argc, char **argv)
 
 	__ofono_plugin_init(NULL, NULL);
 
-	memset(&sa, 0, sizeof(sa));
-	sa.sa_flags = SA_NOCLDSTOP;
-	sa.sa_handler = sig_term;
-	sigaction(SIGTERM, &sa, NULL);
-	sigaction(SIGINT,  &sa, NULL);
-
-	sa.sa_handler = sig_debug;
-	sigaction(SIGUSR2, &sa, NULL);
-
-	sa.sa_handler = SIG_IGN;
-	sigaction(SIGPIPE, &sa, NULL);
-
 	g_main_loop_run(event_loop);
 
 	__ofono_plugin_cleanup();
@@ -155,6 +214,7 @@ int main(int argc, char **argv)
 	dbus_connection_unref(conn);
 
 cleanup:
+	g_source_remove(signal_source);
 	g_main_loop_unref(event_loop);
 
 	__ofono_log_cleanup();

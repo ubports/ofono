@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -37,8 +37,14 @@
 #include "gatchat.h"
 #include "gatresult.h"
 #include "simutil.h"
+#include "vendor.h"
 
 #include "atmodem.h"
+
+struct sim_data {
+	GAtChat *chat;
+	unsigned int vendor;
+};
 
 static const char *crsm_prefix[] = { "+CRSM:", NULL };
 
@@ -54,7 +60,6 @@ static void at_crsm_info_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	int str;
 	unsigned char access[3];
 
-	dump_response("at_crsm_info_cb", ok, result);
 	decode_at_error(&error, g_at_result_final_response(result));
 
 	if (!ok) {
@@ -75,7 +80,7 @@ static void at_crsm_info_cb(gboolean ok, GAtResult *result, gpointer user_data)
 			(sw1 == 0x90 && sw2 != 0x00))
 		goto error;
 
-	ofono_debug("crsm_info_cb: %02x, %02x, %i", sw1, sw2, len);
+	DBG("crsm_info_cb: %02x, %02x, %i", sw1, sw2, len);
 
 	if (response[0] == 0x62)
 		ok = sim_parse_3g_get_response(response, len, &flen, &rlen,
@@ -98,7 +103,7 @@ static void at_sim_read_info(struct ofono_sim *sim, int fileid,
 					ofono_sim_file_info_cb_t cb,
 					void *data)
 {
-	GAtChat *chat = ofono_sim_get_data(sim);
+	struct sim_data *sd = ofono_sim_get_data(sim);
 	struct cb_data *cbd = cb_data_new(cb, data);
 	char buf[64];
 
@@ -107,7 +112,10 @@ static void at_sim_read_info(struct ofono_sim *sim, int fileid,
 
 	snprintf(buf, sizeof(buf), "AT+CRSM=192,%i", fileid);
 
-	if (g_at_chat_send(chat, buf, crsm_prefix,
+	if (sd->vendor == OFONO_VENDOR_QUALCOMM_MSM)
+		strcat(buf, ",0,0,255"); /* Maximum possible length */
+
+	if (g_at_chat_send(sd->chat, buf, crsm_prefix,
 				at_crsm_info_cb, cbd, g_free) > 0)
 		return;
 
@@ -128,7 +136,6 @@ static void at_crsm_read_cb(gboolean ok, GAtResult *result,
 	const guint8 *response;
 	gint sw1, sw2, len;
 
-	dump_response("at_crsm_read_cb", ok, result);
 	decode_at_error(&error, g_at_result_final_response(result));
 
 	if (!ok) {
@@ -153,7 +160,7 @@ static void at_crsm_read_cb(gboolean ok, GAtResult *result,
 		return;
 	}
 
-	ofono_debug("crsm_read_cb: %02x, %02x, %d", sw1, sw2, len);
+	DBG("crsm_read_cb: %02x, %02x, %d", sw1, sw2, len);
 
 	cb(&error, response, len, cbd->data);
 }
@@ -162,7 +169,7 @@ static void at_sim_read_binary(struct ofono_sim *sim, int fileid,
 					int start, int length,
 					ofono_sim_read_cb_t cb, void *data)
 {
-	GAtChat *chat = ofono_sim_get_data(sim);
+	struct sim_data *sd = ofono_sim_get_data(sim);
 	struct cb_data *cbd = cb_data_new(cb, data);
 	char buf[64];
 
@@ -172,7 +179,7 @@ static void at_sim_read_binary(struct ofono_sim *sim, int fileid,
 	snprintf(buf, sizeof(buf), "AT+CRSM=176,%i,%i,%i,%i", fileid,
 			start >> 8, start & 0xff, length);
 
-	if (g_at_chat_send(chat, buf, crsm_prefix,
+	if (g_at_chat_send(sd->chat, buf, crsm_prefix,
 				at_crsm_read_cb, cbd, g_free) > 0)
 		return;
 
@@ -187,7 +194,7 @@ static void at_sim_read_record(struct ofono_sim *sim, int fileid,
 					int record, int length,
 					ofono_sim_read_cb_t cb, void *data)
 {
-	GAtChat *chat = ofono_sim_get_data(sim);
+	struct sim_data *sd = ofono_sim_get_data(sim);
 	struct cb_data *cbd = cb_data_new(cb, data);
 	char buf[64];
 
@@ -197,7 +204,7 @@ static void at_sim_read_record(struct ofono_sim *sim, int fileid,
 	snprintf(buf, sizeof(buf), "AT+CRSM=178,%i,%i,4,%i", fileid,
 			record, length);
 
-	if (g_at_chat_send(chat, buf, crsm_prefix,
+	if (g_at_chat_send(sd->chat, buf, crsm_prefix,
 				at_crsm_read_cb, cbd, g_free) > 0)
 		return;
 
@@ -217,7 +224,6 @@ static void at_crsm_update_cb(gboolean ok, GAtResult *result,
 	struct ofono_error error;
 	gint sw1, sw2;
 
-	dump_response("at_crsm_update_cb", ok, result);
 	decode_at_error(&error, g_at_result_final_response(result));
 
 	if (!ok) {
@@ -241,7 +247,7 @@ static void at_crsm_update_cb(gboolean ok, GAtResult *result,
 		return;
 	}
 
-	ofono_debug("crsm_update_cb: %02x, %02x", sw1, sw2);
+	DBG("crsm_update_cb: %02x, %02x", sw1, sw2);
 
 	cb(&error, cbd->data);
 }
@@ -251,7 +257,7 @@ static void at_sim_update_binary(struct ofono_sim *sim, int fileid,
 					const unsigned char *value,
 					ofono_sim_write_cb_t cb, void *data)
 {
-	GAtChat *chat = ofono_sim_get_data(sim);
+	struct sim_data *sd = ofono_sim_get_data(sim);
 	struct cb_data *cbd = cb_data_new(cb, data);
 	char *buf = g_try_new(char, 36 + length * 2);
 	int len, ret;
@@ -263,9 +269,9 @@ static void at_sim_update_binary(struct ofono_sim *sim, int fileid,
 			start >> 8, start & 0xff, length);
 
 	for (; length; length--)
-		len += sprintf(buf + len, "%02hhx", *value++);
+		len += sprintf(buf + len, "%02hhX", *value++);
 
-	ret = g_at_chat_send(chat, buf, crsm_prefix,
+	ret = g_at_chat_send(sd->chat, buf, crsm_prefix,
 				at_crsm_update_cb, cbd, g_free);
 
 	g_free(buf);
@@ -285,7 +291,7 @@ static void at_sim_update_record(struct ofono_sim *sim, int fileid,
 					const unsigned char *value,
 					ofono_sim_write_cb_t cb, void *data)
 {
-	GAtChat *chat = ofono_sim_get_data(sim);
+	struct sim_data *sd = ofono_sim_get_data(sim);
 	struct cb_data *cbd = cb_data_new(cb, data);
 	char *buf = g_try_new(char, 36 + length * 2);
 	int len, ret;
@@ -297,9 +303,9 @@ static void at_sim_update_record(struct ofono_sim *sim, int fileid,
 			record, length);
 
 	for (; length; length--)
-		len += sprintf(buf + len, "%02hhx", *value++);
+		len += sprintf(buf + len, "%02hhX", *value++);
 
-	ret = g_at_chat_send(chat, buf, crsm_prefix,
+	ret = g_at_chat_send(sd->chat, buf, crsm_prefix,
 				at_crsm_update_cb, cbd, g_free);
 
 	g_free(buf);
@@ -318,7 +324,7 @@ static void at_sim_update_cyclic(struct ofono_sim *sim, int fileid,
 					int length, const unsigned char *value,
 					ofono_sim_write_cb_t cb, void *data)
 {
-	GAtChat *chat = ofono_sim_get_data(sim);
+	struct sim_data *sd = ofono_sim_get_data(sim);
 	struct cb_data *cbd = cb_data_new(cb, data);
 	char *buf = g_try_new(char, 36 + length * 2);
 	int len, ret;
@@ -329,9 +335,9 @@ static void at_sim_update_cyclic(struct ofono_sim *sim, int fileid,
 	len = sprintf(buf, "AT+CRSM=220,%i,0,3,%i,", fileid, length);
 
 	for (; length; length--)
-		len += sprintf(buf + len, "%02hhx", *value++);
+		len += sprintf(buf + len, "%02hhX", *value++);
 
-	ret = g_at_chat_send(chat, buf, crsm_prefix,
+	ret = g_at_chat_send(sd->chat, buf, crsm_prefix,
 				at_crsm_update_cb, cbd, g_free);
 
 	g_free(buf);
@@ -355,7 +361,6 @@ static void at_cimi_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	const char *imsi;
 	int i;
 
-	dump_response("at_cimi_cb", ok, result);
 	decode_at_error(&error, g_at_result_final_response(result));
 
 	if (!ok) {
@@ -370,7 +375,7 @@ static void at_cimi_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 	imsi = g_at_result_iter_raw_line(&iter);
 
-	ofono_debug("cimi_cb: %s", imsi);
+	DBG("cimi_cb: %s", imsi);
 
 	cb(&error, imsi, cbd->data);
 }
@@ -378,13 +383,13 @@ static void at_cimi_cb(gboolean ok, GAtResult *result, gpointer user_data)
 static void at_read_imsi(struct ofono_sim *sim, ofono_sim_imsi_cb_t cb,
 			void *data)
 {
-	GAtChat *chat = ofono_sim_get_data(sim);
+	struct sim_data *sd = ofono_sim_get_data(sim);
 	struct cb_data *cbd = cb_data_new(cb, data);
 
 	if (!cbd)
 		goto error;
 
-	if (g_at_chat_send(chat, "AT+CIMI", NULL,
+	if (g_at_chat_send(sd->chat, "AT+CIMI", NULL,
 				at_cimi_cb, cbd, g_free) > 0)
 		return;
 
@@ -420,6 +425,7 @@ static struct {
 static void at_cpin_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
+	struct sim_data *sd = ofono_sim_get_data(cbd->user);
 	GAtResultIter iter;
 	ofono_sim_passwd_cb_t cb = cbd->cb;
 	struct ofono_error error;
@@ -427,23 +433,31 @@ static void at_cpin_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	int pin_type = OFONO_SIM_PASSWORD_INVALID;
 	int i;
 	int len = sizeof(at_sim_name) / sizeof(*at_sim_name);
+	const char *final = g_at_result_final_response(result);
 
-	dump_response("at_cpin_cb", ok, result);
-	decode_at_error(&error, g_at_result_final_response(result));
+	if (sd->vendor == OFONO_VENDOR_WAVECOM && ok && strlen(final) > 7)
+		decode_at_error(&error, "OK");
+	else
+		decode_at_error(&error, final);
 
 	if (!ok) {
 		cb(&error, -1, cbd->data);
 		return;
 	}
 
-	g_at_result_iter_init(&iter, result);
+	if (sd->vendor == OFONO_VENDOR_WAVECOM) {
+		/* +CPIN: <pin> */
+		pin_required = final + 7;
+	} else {
+		g_at_result_iter_init(&iter, result);
 
-	if (!g_at_result_iter_next(&iter, "+CPIN:")) {
-		CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
-		return;
+		if (!g_at_result_iter_next(&iter, "+CPIN:")) {
+			CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
+			return;
+		}
+
+		g_at_result_iter_next_unquoted_string(&iter, &pin_required);
 	}
-
-	g_at_result_iter_next_unquoted_string(&iter, &pin_required);
 
 	for (i = 0; i < len; i++) {
 		if (strcmp(pin_required, at_sim_name[i].name))
@@ -458,7 +472,7 @@ static void at_cpin_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		return;
 	}
 
-	ofono_debug("crsm_pin_cb: %s", pin_required);
+	DBG("crsm_pin_cb: %s", pin_required);
 
 	cb(&error, pin_type, cbd->data);
 }
@@ -466,13 +480,15 @@ static void at_cpin_cb(gboolean ok, GAtResult *result, gpointer user_data)
 static void at_pin_query(struct ofono_sim *sim, ofono_sim_passwd_cb_t cb,
 			void *data)
 {
-	GAtChat *chat = ofono_sim_get_data(sim);
+	struct sim_data *sd = ofono_sim_get_data(sim);
 	struct cb_data *cbd = cb_data_new(cb, data);
 
 	if (!cbd)
 		goto error;
 
-	if (g_at_chat_send(chat, "AT+CPIN?", NULL,
+	cbd->user = sim;
+
+	if (g_at_chat_send(sd->chat, "AT+CPIN?", NULL,
 				at_cpin_cb, cbd, g_free) > 0)
 		return;
 
@@ -490,7 +506,6 @@ static void at_lock_unlock_cb(gboolean ok, GAtResult *result,
 	ofono_sim_lock_unlock_cb_t cb = cbd->cb;
 	struct ofono_error error;
 
-	dump_response("at_lock_unlock_cb", ok, result);
 	decode_at_error(&error, g_at_result_final_response(result));
 
 	cb(&error, cbd->data);
@@ -499,7 +514,7 @@ static void at_lock_unlock_cb(gboolean ok, GAtResult *result,
 static void at_pin_send(struct ofono_sim *sim, const char *passwd,
 			ofono_sim_lock_unlock_cb_t cb, void *data)
 {
-	GAtChat *chat = ofono_sim_get_data(sim);
+	struct sim_data *sd = ofono_sim_get_data(sim);
 	struct cb_data *cbd = cb_data_new(cb, data);
 	char buf[64];
 	int ret;
@@ -509,7 +524,8 @@ static void at_pin_send(struct ofono_sim *sim, const char *passwd,
 
 	snprintf(buf, sizeof(buf), "AT+CPIN=\"%s\"", passwd);
 
-	ret = g_at_chat_send(chat, buf, NULL, at_lock_unlock_cb, cbd, g_free);
+	ret = g_at_chat_send(sd->chat, buf, NULL,
+				at_lock_unlock_cb, cbd, g_free);
 
 	memset(buf, 0, sizeof(buf));
 
@@ -527,7 +543,7 @@ static void at_pin_send_puk(struct ofono_sim *sim, const char *puk,
 				const char *passwd,
 				ofono_sim_lock_unlock_cb_t cb, void *data)
 {
-	GAtChat *chat = ofono_sim_get_data(sim);
+	struct sim_data *sd = ofono_sim_get_data(sim);
 	struct cb_data *cbd = cb_data_new(cb, data);
 	char buf[64];
 	int ret;
@@ -537,7 +553,8 @@ static void at_pin_send_puk(struct ofono_sim *sim, const char *puk,
 
 	snprintf(buf, sizeof(buf), "AT+CPIN=\"%s\",\"%s\"", puk, passwd);
 
-	ret = g_at_chat_send(chat, buf, NULL, at_lock_unlock_cb, cbd, g_free);
+	ret = g_at_chat_send(sd->chat, buf, NULL,
+				at_lock_unlock_cb, cbd, g_free);
 
 	memset(buf, 0, sizeof(buf));
 
@@ -567,7 +584,7 @@ static void at_pin_enable(struct ofono_sim *sim,
 				int enable, const char *passwd,
 				ofono_sim_lock_unlock_cb_t cb, void *data)
 {
-	GAtChat *chat = ofono_sim_get_data(sim);
+	struct sim_data *sd = ofono_sim_get_data(sim);
 	struct cb_data *cbd = cb_data_new(cb, data);
 	char buf[64];
 	int ret;
@@ -582,7 +599,8 @@ static void at_pin_enable(struct ofono_sim *sim,
 	snprintf(buf, sizeof(buf), "AT+CLCK=\"%s\",%i,\"%s\"",
 			at_clck_cpwd_fac[passwd_type], enable ? 1 : 0, passwd);
 
-	ret = g_at_chat_send(chat, buf, NULL, at_lock_unlock_cb, cbd, g_free);
+	ret = g_at_chat_send(sd->chat, buf, NULL,
+				at_lock_unlock_cb, cbd, g_free);
 
 	memset(buf, 0, sizeof(buf));
 
@@ -601,7 +619,7 @@ static void at_change_passwd(struct ofono_sim *sim,
 			const char *old, const char *new,
 			ofono_sim_lock_unlock_cb_t cb, void *data)
 {
-	GAtChat *chat = ofono_sim_get_data(sim);
+	struct sim_data *sd = ofono_sim_get_data(sim);
 	struct cb_data *cbd = cb_data_new(cb, data);
 	char buf[64];
 	int ret;
@@ -617,7 +635,8 @@ static void at_change_passwd(struct ofono_sim *sim,
 	snprintf(buf, sizeof(buf), "AT+CPWD=\"%s\",\"%s\",\"%s\"",
 			at_clck_cpwd_fac[passwd_type], old, new);
 
-	ret = g_at_chat_send(chat, buf, NULL, at_lock_unlock_cb, cbd, g_free);
+	ret = g_at_chat_send(sd->chat, buf, NULL,
+				at_lock_unlock_cb, cbd, g_free);
 
 	memset(buf, 0, sizeof(buf));
 
@@ -640,7 +659,6 @@ static void at_lock_status_cb(gboolean ok, GAtResult *result,
 	struct ofono_error error;
 	int locked;
 
-	dump_response("at_lock_status_cb", ok, result);
 	decode_at_error(&error, g_at_result_final_response(result));
 
 	if (!ok) {
@@ -657,7 +675,7 @@ static void at_lock_status_cb(gboolean ok, GAtResult *result,
 
 	g_at_result_iter_next_number(&iter, &locked);
 
-	ofono_debug("lock_status_cb: %i", locked);
+	DBG("lock_status_cb: %i", locked);
 
 	cb(&error, locked, cbd->data);
 }
@@ -666,7 +684,7 @@ static void at_pin_query_enabled(struct ofono_sim *sim,
 				enum ofono_sim_password_type passwd_type,
 				ofono_sim_locked_cb_t cb, void *data)
 {
-	GAtChat *chat = ofono_sim_get_data(sim);
+	struct sim_data *sd = ofono_sim_get_data(sim);
 	struct cb_data *cbd = cb_data_new(cb, data);
 	char buf[64];
 	unsigned int len = sizeof(at_clck_cpwd_fac) / sizeof(*at_clck_cpwd_fac);
@@ -680,7 +698,7 @@ static void at_pin_query_enabled(struct ofono_sim *sim,
 	snprintf(buf, sizeof(buf), "AT+CLCK=\"%s\",2",
 			at_clck_cpwd_fac[passwd_type]);
 
-	if (g_at_chat_send(chat, buf, NULL,
+	if (g_at_chat_send(sd->chat, buf, NULL,
 				at_lock_status_cb, cbd, g_free) > 0)
 		return;
 
@@ -689,6 +707,82 @@ error:
 		g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, -1, data);
+}
+
+static void at_csim_envelope_cb(gboolean ok, GAtResult *result,
+		gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	GAtResultIter iter;
+	ofono_sim_read_cb_t cb = cbd->cb;
+	struct ofono_error error;
+	const guint8 *response;
+	gint rlen, len;
+
+	decode_at_error(&error, g_at_result_final_response(result));
+
+	if (!ok)
+		goto error;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "+CSIM:"))
+		goto error;
+
+	if (!g_at_result_iter_next_number(&iter, &rlen))
+		goto error;
+
+	if (!g_at_result_iter_next_hexstring(&iter, &response, &len))
+		goto error;
+
+	if (rlen != len * 2 || len < 2 ||
+			response[len - 2] != 0x90 || response[len - 1] != 0)
+		goto error;
+
+	DBG("csim_envelope_cb: %i", len);
+
+	cb(&error, response, len - 2, cbd->data);
+	return;
+
+error:
+	CALLBACK_WITH_FAILURE(cb, NULL, 0, cbd->data);
+}
+
+static void at_sim_envelope(struct ofono_sim *sim, int length,
+				const guint8 *command,
+				ofono_sim_read_cb_t cb, void *data)
+{
+	struct sim_data *sd = ofono_sim_get_data(sim);
+	struct cb_data *cbd = cb_data_new(cb, data);
+	char *buf = g_try_new(char, 64 + length * 2);
+	int len, ret;
+
+	if (!cbd || !buf)
+		goto error;
+
+	len = sprintf(buf, "AT+CSIM=%i,A0C20000%02hhX",
+			10 + length * 2, length);
+
+	for (; length; length--)
+		len += sprintf(buf + len, "%02hhX", *command++);
+
+	ret = g_at_chat_send(sd->chat, buf, crsm_prefix,
+				at_csim_envelope_cb, cbd, g_free);
+
+	g_free(buf);
+	buf = NULL;
+
+	if (ret > 0)
+		return;
+
+error:
+	if (buf)
+		g_free(buf);
+
+	if (cbd)
+		g_free(cbd);
+
+	CALLBACK_WITH_FAILURE(cb, NULL, 0, data);
 }
 
 static gboolean at_sim_register(gpointer user)
@@ -704,8 +798,16 @@ static int at_sim_probe(struct ofono_sim *sim, unsigned int vendor,
 				void *data)
 {
 	GAtChat *chat = data;
+	struct sim_data *sd;
 
-	ofono_sim_set_data(sim, chat);
+	sd = g_new0(struct sim_data, 1);
+	sd->chat = chat;
+	sd->vendor = vendor;
+
+	if (sd->vendor == OFONO_VENDOR_WAVECOM)
+		g_at_chat_add_terminator(chat, "+CPIN:", 6, TRUE);
+
+	ofono_sim_set_data(sim, sd);
 	g_idle_add(at_sim_register, sim);
 
 	return 0;
@@ -713,6 +815,11 @@ static int at_sim_probe(struct ofono_sim *sim, unsigned int vendor,
 
 static void at_sim_remove(struct ofono_sim *sim)
 {
+	struct sim_data *sd = ofono_sim_get_data(sim);
+
+	ofono_sim_set_data(sim, NULL);
+
+	g_free(sd);
 }
 
 static struct ofono_sim_driver driver = {
@@ -733,6 +840,7 @@ static struct ofono_sim_driver driver = {
 	.lock			= at_pin_enable,
 	.change_passwd		= at_change_passwd,
 	.query_locked		= at_pin_query_enabled,
+	.envelope		= at_sim_envelope,
 };
 
 void at_sim_init()

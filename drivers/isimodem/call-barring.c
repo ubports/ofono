@@ -3,8 +3,6 @@
  *
  * Copyright (C) 2009 Nokia Corporation and/or its subsidiary(-ies).
  *
- * Contact: Alexander Kanavin <alexander.kanavin@nokia.com>
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * version 2 as published by the Free Software Foundation.
@@ -41,8 +39,10 @@
 #include <ofono/call-barring.h>
 #include "util.h"
 
-#include "isi.h"
+#include "isimodem.h"
+#include "isiutil.h"
 #include "ss.h"
+#include "debug.h"
 
 struct barr_data {
 	GIsiClient *client;
@@ -61,7 +61,7 @@ static bool set_resp_cb(GIsiClient *client, const void *restrict data,
 	}
 
 	if (len < 3 || msg[0] != SS_SERVICE_COMPLETED_RESP)
-		goto error;
+		return false;
 
 	if (msg[1] != SS_ACTIVATION && msg[1] != SS_DEACTIVATION)
 		goto error;
@@ -204,7 +204,7 @@ static bool query_resp_cb(GIsiClient *client, const void *restrict data,
 	}
 
 	if (len < 7 || msg[0] != SS_SERVICE_COMPLETED_RESP)
-		goto error;
+		return false;
 
 	if (msg[1] != SS_INTERROGATION)
 		goto error;
@@ -233,7 +233,7 @@ static bool query_resp_cb(GIsiClient *client, const void *restrict data,
 				if (!g_isi_sb_iter_get_byte(&iter, &bsc, 3 + i))
 					goto error;
 
-			        update_status_mask(&mask, bsc);
+				update_status_mask(&mask, bsc);
 			}
 			break;
 		}
@@ -242,8 +242,8 @@ static bool query_resp_cb(GIsiClient *client, const void *restrict data,
 			break;
 
 		default:
-			DBG("Skipping sub-block: 0x%04X (%zu bytes)",
-				g_isi_sb_iter_get_id(&iter),
+			DBG("Skipping sub-block: %s (%zd bytes)",
+				ss_subblock_name(g_isi_sb_iter_get_id(&iter)),
 				g_isi_sb_iter_get_len(&iter));
 			break;
 		}
@@ -321,7 +321,7 @@ static bool set_passwd_resp_cb(GIsiClient *client, const void *restrict data,
 	}
 
 	if (len < 3 || msg[0] != SS_SERVICE_COMPLETED_RESP)
-		goto error;
+		return false;
 
 	if (msg[1] != SS_GSM_PASSWORD_REGISTRATION)
 		goto error;
@@ -410,19 +410,27 @@ static gboolean isi_call_barring_register(gpointer user)
 	return FALSE;
 }
 
-static void reachable_cb(GIsiClient *client, bool alive, void *opaque)
+static void reachable_cb(GIsiClient *client, bool alive, uint16_t object,
+				void *opaque)
 {
 	struct ofono_call_barring *barr = opaque;
+	const char *debug = NULL;
 
-	if (alive == true) {
-		DBG("Resource 0x%02X, with version %03d.%03d reachable",
-			g_isi_client_resource(client),
-			g_isi_version_major(client),
-			g_isi_version_minor(client));
-		g_idle_add(isi_call_barring_register, barr);
+	if (!alive) {
+		DBG("Unable to bootsrap call barring driver");
 		return;
 	}
-	DBG("Unable to bootsrap call barring driver");
+
+	DBG("%s (v%03d.%03d) reachable",
+		pn_resource_name(g_isi_client_resource(client)),
+		g_isi_version_major(client),
+		g_isi_version_minor(client));
+
+	debug = getenv("OFONO_ISI_DEBUG");
+	if (debug && (strcmp(debug, "all") == 0 || strcmp(debug, "ss") == 0))
+		g_isi_client_set_debug(client, ss_debug, NULL);
+
+	g_idle_add(isi_call_barring_register, barr);
 }
 
 

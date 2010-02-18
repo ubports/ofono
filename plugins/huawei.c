@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -38,6 +38,7 @@
 #include <ofono/netreg.h>
 #include <ofono/sim.h>
 #include <ofono/sms.h>
+#include <ofono/gprs.h>
 #include <ofono/voicecall.h>
 #include <ofono/log.h>
 
@@ -70,6 +71,7 @@ static void huawei_remove(struct ofono_modem *modem)
 
 	ofono_modem_set_data(modem, NULL);
 
+	g_at_chat_unref(data->chat);
 	g_free(data);
 }
 
@@ -113,6 +115,8 @@ static int huawei_enable(struct ofono_modem *modem)
 	if (!data->chat)
 		return -EIO;
 
+	g_at_chat_add_terminator(data->chat, "COMMAND NOT SUPPORT", -1, FALSE);
+
 	if (getenv("OFONO_AT_DEBUG"))
 		g_at_chat_set_debug(data->chat, huawei_debug, NULL);
 
@@ -127,8 +131,13 @@ static int huawei_enable(struct ofono_modem *modem)
 static void cfun_disable(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_modem *modem = user_data;
+	struct huawei_data *data = ofono_modem_get_data(modem);
 
 	DBG("");
+
+	g_at_chat_shutdown(data->chat);
+	g_at_chat_unref(data->chat);
+	data->chat = NULL;
 
 	if (ok)
 		ofono_modem_set_powered(modem, FALSE);
@@ -143,15 +152,12 @@ static int huawei_disable(struct ofono_modem *modem)
 	if (!data->chat)
 		return 0;
 
+	g_at_chat_cancel_all(data->chat);
+	g_at_chat_unregister_all(data->chat);
 	g_at_chat_send(data->chat, "AT+CFUN=0", NULL,
 					cfun_disable, modem, NULL);
 
-	g_at_chat_shutdown(data->chat);
-
-	g_at_chat_unref(data->chat);
-	data->chat = NULL;
-
-	return 0;
+	return -EINPROGRESS;
 }
 
 static void huawei_pre_sim(struct ofono_modem *modem)
@@ -171,8 +177,8 @@ static void huawei_post_sim(struct ofono_modem *modem)
 
 	DBG("%p", modem);
 
-	ofono_netreg_create(modem, 0, "atmodem", data->chat);
-	ofono_sms_create(modem, OFONO_VENDOR_HTC_G1, "atmodem", data->chat);
+	ofono_netreg_create(modem, OFONO_VENDOR_HUAWEI, "atmodem", data->chat);
+	ofono_sms_create(modem, OFONO_VENDOR_QUALCOMM_MSM, "atmodem", data->chat);
 }
 
 static struct ofono_modem_driver huawei_driver = {

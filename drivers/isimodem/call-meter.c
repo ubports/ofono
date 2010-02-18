@@ -3,8 +3,6 @@
  *
  * Copyright (C) 2009 Nokia Corporation and/or its subsidiary(-ies).
  *
- * Contact: Aki Niemi <aki.niemi@nokia.com>
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * version 2 as published by the Free Software Foundation.
@@ -39,13 +37,12 @@
 #include <ofono/modem.h>
 #include <ofono/call-meter.h>
 
-#include "isi.h"
-
-#define PN_SS			0x06
+#include "isimodem.h"
+#include "isiutil.h"
+#include "ss.h"
 
 struct call_meter_data {
 	GIsiClient *client;
-	struct isi_version version;
 };
 
 static void isi_call_meter_query(struct ofono_call_meter *cm,

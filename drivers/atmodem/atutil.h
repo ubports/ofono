@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -20,11 +20,19 @@
  */
 
 void decode_at_error(struct ofono_error *error, const char *final);
-void dump_response(const char *func, gboolean ok, GAtResult *result);
 gint at_util_call_compare_by_status(gconstpointer a, gconstpointer b);
+gint at_util_call_compare_by_phone_number(gconstpointer a, gconstpointer b);
+gint at_util_call_compare_by_id(gconstpointer a, gconstpointer b);
 gint at_util_call_compare(gconstpointer a, gconstpointer b);
-unsigned int at_util_alloc_next_id(unsigned int *id_list);
-void at_util_release_id(unsigned int *id_list, unsigned int id);
+GSList *at_util_parse_clcc(GAtResult *result);
+gboolean at_util_parse_reg(GAtResult *result, const char *prefix,
+				int *mode, int *status,
+				int *lac, int *ci, int *tech,
+				unsigned int vendor);
+gboolean at_util_parse_reg_unsolicited(GAtResult *result, const char *prefix,
+					int *status, int *lac,
+					int *ci, int *tech,
+					unsigned int vendor);
 
 struct cb_data {
 	void *cb;
@@ -60,4 +68,12 @@ static inline struct cb_data *cb_data_new(void *cb, void *data)
 							\
 		cb(&cb_e, ##args);			\
 	} while (0)					\
+
+#define CALLBACK_WITH_SUCCESS(f, args...)		\
+	do {						\
+		struct ofono_error e;			\
+		e.type = OFONO_ERROR_TYPE_NO_ERROR;	\
+		e.error = 0;				\
+		f(&e, ##args);				\
+	} while(0)					\
 

@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -91,8 +91,7 @@ static void cusd_parse(GAtResult *result, struct ofono_ussd *ussd)
 		/* TODO: Figure out what to do with 8 bit data */
 		ofono_error("8-bit coded USSD response received");
 		status = 4; /* Not supported */
-	}
-	else {
+	} else {
 		/* No other encoding is mentioned in TS27007 7.15 */
 		ofono_error("Unsupported USSD data coding scheme (%02x)", dcs);
 		status = 4; /* Not supported */
@@ -110,7 +109,6 @@ static void cusd_request_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	struct cusd_req *cbd = user_data;
 	struct ofono_error error;
 
-	dump_response("cusd_request_cb", ok, result);
 	decode_at_error(&error, g_at_result_final_response(result));
 
 	cbd->cb(&error, cbd->data);
@@ -148,7 +146,8 @@ static void at_ussd_request(struct ofono_ussd *ussd, const char *str,
 	if (written > max_len)
 		goto error;
 
-	sprintf(buf, "AT+CUSD=1,\"%.*s\",%d", (int) written, converted, dcs);
+	snprintf(buf, sizeof(buf), "AT+CUSD=1,\"%.*s\",%d",
+			(int) written, converted, dcs);
 
 	g_free(converted);
 	converted = NULL;
@@ -173,7 +172,6 @@ static void cusd_cancel_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	ofono_ussd_cb_t cb = cbd->cb;
 	struct ofono_error error;
 
-	dump_response("cusd_cancel_cb", ok, result);
 	decode_at_error(&error, g_at_result_final_response(result));
 
 	cb(&error, cbd->data);
@@ -202,8 +200,6 @@ error:
 static void cusd_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_ussd *ussd = user_data;
-
-	dump_response("cusd_notify", TRUE, result);
 
 	cusd_parse(result, ussd);
 }

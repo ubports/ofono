@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -44,7 +44,7 @@ static const char *none_prefix[] = { NULL };
 
 struct gprs_context_data {
 	GAtChat *chat;
-	unsigned active_context;
+	unsigned int active_context;
 };
 
 static void at_cgact_down_cb(gboolean ok, GAtResult *result, gpointer user_data)
@@ -58,7 +58,6 @@ static void at_cgact_down_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	if (ok)
 		gcd->active_context = 0;
 
-	dump_response("cgact_down_cb", ok, result);
 	decode_at_error(&error, g_at_result_final_response(result));
 
 	cb(&error, cbd->data);
@@ -67,25 +66,22 @@ static void at_cgact_down_cb(gboolean ok, GAtResult *result, gpointer user_data)
 static void at_cgact_up_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
-	ofono_gprs_context_cb_t cb = cbd->cb;
+	ofono_gprs_context_up_cb_t cb = cbd->cb;
 	struct ofono_error error;
 
-	dump_response("cgact_up_cb", ok, result);
 	decode_at_error(&error, g_at_result_final_response(result));
 
-	cb(&error, cbd->data);
+	cb(&error, NULL, 0, NULL, NULL, NULL, NULL, cbd->data);
 }
 
 static void at_cgdcont_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
-	ofono_gprs_context_cb_t cb = cbd->cb;
+	ofono_gprs_context_up_cb_t cb = cbd->cb;
 	struct ofono_gprs_context *gc = cbd->user;
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 	struct cb_data *ncbd;
 	char buf[64];
-
-	dump_response("cgdcont_cb", ok, result);
 
 	if (!ok) {
 		struct ofono_error error;
@@ -93,13 +89,13 @@ static void at_cgdcont_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		gcd->active_context = 0;
 
 		decode_at_error(&error, g_at_result_final_response(result));
-		cb(&error, cbd->data);
+		cb(&error, NULL, 0, NULL, NULL, NULL, NULL, cbd->data);
 		return;
 	}
 
 	ncbd = g_memdup(cbd, sizeof(struct cb_data));
 
-	sprintf(buf, "AT+CGACT=1,%u", gcd->active_context);
+	snprintf(buf, sizeof(buf), "AT+CGACT=1,%u", gcd->active_context);
 
 	if (g_at_chat_send(gcd->chat, buf, none_prefix,
 				at_cgact_up_cb, ncbd, g_free) > 0)
@@ -110,12 +106,12 @@ static void at_cgdcont_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 	gcd->active_context = 0;
 
-	CALLBACK_WITH_FAILURE(cb, cbd->data);
+	CALLBACK_WITH_FAILURE(cb, NULL, 0, NULL, NULL, NULL, NULL, cbd->data);
 }
 
 static void at_gprs_activate_primary(struct ofono_gprs_context *gc,
 				const struct ofono_gprs_primary_context *ctx,
-				ofono_gprs_context_cb_t cb, void *data)
+				ofono_gprs_context_up_cb_t cb, void *data)
 {
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 	struct cb_data *cbd = cb_data_new(cb, data);
@@ -130,7 +126,7 @@ static void at_gprs_activate_primary(struct ofono_gprs_context *gc,
 	cbd->user = gc;
 
 	/* TODO: Handle username / password fields */
-	len = sprintf(buf, "AT+CGDCONT=%u,\"IP\"", ctx->cid);
+	len = snprintf(buf, sizeof(buf), "AT+CGDCONT=%u,\"IP\"", ctx->cid);
 
 	if (ctx->apn)
 		snprintf(buf + len, sizeof(buf) - len - 3, ",\"%s\"",
@@ -143,7 +139,7 @@ error:
 	if (cbd)
 		g_free(cbd);
 
-	CALLBACK_WITH_FAILURE(cb, data);
+	CALLBACK_WITH_FAILURE(cb, NULL, 0, NULL, NULL, NULL, NULL, data);
 }
 
 static void at_gprs_deactivate_primary(struct ofono_gprs_context *gc,
@@ -159,7 +155,7 @@ static void at_gprs_deactivate_primary(struct ofono_gprs_context *gc,
 
 	cbd->user = gc;
 
-	sprintf(buf, "AT+CGACT=0,%u", id);
+	snprintf(buf, sizeof(buf), "AT+CGACT=0,%u", id);
 
 	if (g_at_chat_send(gcd->chat, buf, none_prefix,
 				at_cgact_down_cb, cbd, g_free) > 0)
@@ -179,8 +175,6 @@ static void at_cgact_read_cb(gboolean ok, GAtResult *result,
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 	gint cid, state;
 	GAtResultIter iter;
-
-	dump_response("cgact_read_cb", ok, result);
 
 	if (!ok)
 		return;

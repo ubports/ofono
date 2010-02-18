@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -171,9 +171,11 @@ static void setup_modem(struct ofono_modem *modem)
 	int i;
 
 	/* Generate unsolicited notifications as soon as they're generated */
-	for (i = 0; i < NUM_DLC; i++)
+	for (i = 0; i < NUM_DLC; i++) {
+		g_at_chat_send(data->dlcs[i], "ATE0", NULL, NULL, NULL, NULL);
 		g_at_chat_send(data->dlcs[i], "AT%CUNS=0",
 				NULL, NULL, NULL, NULL);
+	}
 
 	/* CSTAT tells us when SMS & Phonebook are ready to be used */
 	g_at_chat_register(data->dlcs[SETUP_DLC], "%CSTAT:", cstat_notify,
@@ -182,7 +184,7 @@ static void setup_modem(struct ofono_modem *modem)
 				NULL, NULL, NULL);
 
 	/* audio side tone: set to minimum */
-	g_at_chat_send(data->dlcs[VOICE_DLC], "AT@ST=\"-26\"", NULL,
+	g_at_chat_send(data->dlcs[SETUP_DLC], "AT@ST=\"-26\"", NULL,
 			NULL, NULL, NULL);
 
 	/* Disable deep sleep */
@@ -209,8 +211,9 @@ static void cfun_set_on_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		g_at_mux_shutdown(data->mux);
 		g_at_mux_unref(data->mux);
 		data->mux = NULL;
-	} else
+	} else {
 		setup_modem(modem);
+	}
 
 	ofono_modem_set_powered(modem, ok);
 }
@@ -249,7 +252,7 @@ static void mux_setup(GAtMux *mux, gpointer user_data)
 			g_at_chat_set_debug(data->dlcs[i], calypso_debug,
 						GUINT_TO_POINTER(i));
 
-		g_at_chat_set_wakeup_command(data->dlcs[i], "\r", 1000, 5000);
+		g_at_chat_set_wakeup_command(data->dlcs[i], "AT\r", 500, 5000);
 	}
 
 	g_at_chat_send(data->dlcs[SETUP_DLC], "AT+CFUN=1", NULL,
@@ -272,13 +275,13 @@ static void modem_initialize(struct ofono_modem *modem)
 	if (options == NULL)
 		goto error;
 
-	g_hash_table_insert(options, "baud", "115200");
-	g_hash_table_insert(options, "parity", "none");
-	g_hash_table_insert(options, "stopbits", "1");
-	g_hash_table_insert(options, "databits", "8");
-	g_hash_table_insert(options, "xonxoff", "on");
-	g_hash_table_insert(options, "local", "on");
-	g_hash_table_insert(options, "rtscts", "on");
+	g_hash_table_insert(options, "Baud", "115200");
+	g_hash_table_insert(options, "Parity", "none");
+	g_hash_table_insert(options, "StopBits", "1");
+	g_hash_table_insert(options, "DataBits", "8");
+	g_hash_table_insert(options, "XonXoff", "on");
+	g_hash_table_insert(options, "Local", "on");
+	g_hash_table_insert(options, "RtsCts", "on");
 
 	io = g_at_tty_open(device, options);
 	g_hash_table_destroy(options);
@@ -300,7 +303,7 @@ static void modem_initialize(struct ofono_modem *modem)
 	if (getenv("OFONO_AT_DEBUG") != NULL)
 		g_at_chat_set_debug(chat, calypso_setup_debug, NULL);
 
-	g_at_chat_set_wakeup_command(chat, "\r", 1000, 5000);
+	g_at_chat_set_wakeup_command(chat, "AT\r", 500, 5000);
 
 	g_at_chat_send(chat, "ATE0", NULL, NULL, NULL, NULL);
 
@@ -444,15 +447,13 @@ static void calypso_post_sim(struct ofono_modem *modem)
 	DBG("");
 
 	ofono_ussd_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
-	ofono_sim_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
 	ofono_call_forwarding_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
 	ofono_call_settings_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
 	ofono_netreg_create(modem, OFONO_VENDOR_CALYPSO, "atmodem",
 				data->dlcs[NETREG_DLC]);
-	ofono_voicecall_create(modem, 0, "calypsomodem", data->dlcs[VOICE_DLC]);
 	ofono_call_meter_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
 	ofono_call_barring_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
-	ofono_ssn_create(modem, 0, "atmodem", data->dlcs[VOICE_DLC]);
+	ofono_ssn_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
 	ofono_call_volume_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
 
 	mw = ofono_message_waiting_create(modem);

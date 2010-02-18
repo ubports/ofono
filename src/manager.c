@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -29,6 +29,10 @@
 
 #include "ofono.h"
 
+/*
+ * Note __ofono_modem_get_list() will abort if it cannot allocate
+ * memory; so no error path or cleanup is needed.
+ */
 static DBusMessage *manager_get_properties(DBusConnection *conn,
 						DBusMessage *msg, void *data)
 {
@@ -42,9 +46,6 @@ static DBusMessage *manager_get_properties(DBusConnection *conn,
 		return NULL;
 
 	modems = __ofono_modem_get_list();
-
-	if (!modems)
-		return NULL;
 
 	dbus_message_iter_init_append(reply, &iter);
 

@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -867,17 +867,17 @@ static void test_sim()
 
 	utf8 = sim_string_to_utf8(sim_80_1, sizeof(sim_80_1));
 	g_assert(utf8);
-	g_assert(strcmp(utf8, "ono") == 0 );
+	g_assert(strcmp(utf8, "ono") == 0);
 	g_free(utf8);
 
 	utf8 = sim_string_to_utf8(sim_80_2, sizeof(sim_80_2));
 	g_assert(utf8);
-	g_assert(strcmp(utf8, "ono") == 0 );
+	g_assert(strcmp(utf8, "ono") == 0);
 	g_free(utf8);
 
 	utf8 = sim_string_to_utf8(sim_80_3, sizeof(sim_80_3));
 	g_assert(utf8);
-	g_assert(strcmp(utf8, "ono") == 0 );
+	g_assert(strcmp(utf8, "ono") == 0);
 	g_free(utf8);
 
 	utf8 = sim_string_to_utf8(sim_81_0, sizeof(sim_81_0));
@@ -890,7 +890,7 @@ static void test_sim()
 
 	utf8 = sim_string_to_utf8(sim_81_1, sizeof(sim_81_1));
 	g_assert(utf8);
-	g_assert(strcmp(utf8, "ono") == 0 );
+	g_assert(strcmp(utf8, "ono") == 0);
 	g_free(utf8);
 
 	utf8 = sim_string_to_utf8(sim_82_0, sizeof(sim_82_0));

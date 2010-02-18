@@ -2,7 +2,7 @@
  *
  *  AT chat library with GLib integration
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -28,6 +28,7 @@ extern "C" {
 
 #include "gatresult.h"
 #include "gatsyntax.h"
+#include "gatutil.h"
 
 struct _GAtChat;
 
@@ -36,10 +37,9 @@ typedef struct _GAtChat GAtChat;
 typedef void (*GAtResultFunc)(gboolean success, GAtResult *result,
 				gpointer user_data);
 typedef void (*GAtNotifyFunc)(GAtResult *result, gpointer user_data);
-typedef void (*GAtDisconnectFunc)(gpointer user_data);
-typedef void (*GAtDebugFunc)(const char *str, gpointer user_data);
 
 GAtChat *g_at_chat_new(GIOChannel *channel, GAtSyntax *syntax);
+GAtChat *g_at_chat_new_blocking(GIOChannel *channel, GAtSyntax *syntax);
 
 GIOChannel *g_at_chat_get_channel(GAtChat *chat);
 
@@ -118,15 +118,20 @@ guint g_at_chat_send_pdu_listing(GAtChat *chat, const char *cmd,
 				gpointer user_data, GDestroyNotify notify);
 
 gboolean g_at_chat_cancel(GAtChat *chat, guint id);
+gboolean g_at_chat_cancel_all(GAtChat *chat);
 
 guint g_at_chat_register(GAtChat *chat, const char *prefix,
 				GAtNotifyFunc func, gboolean expect_pdu,
 				gpointer user_data, GDestroyNotify notify);
 
 gboolean g_at_chat_unregister(GAtChat *chat, guint id);
+gboolean g_at_chat_unregister_all(GAtChat *chat);
 
 gboolean g_at_chat_set_wakeup_command(GAtChat *chat, const char *cmd,
 					guint timeout, guint msec);
+
+void g_at_chat_add_terminator(GAtChat *chat, char *terminator,
+				int len, gboolean success);
 
 
 #ifdef __cplusplus

@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -180,8 +180,8 @@ error:
 	CALLBACK_WITH_FAILURE(cb, data);
 }
 
-static int at_call_volume_probe(struct ofono_call_volume *cv, unsigned int vendor,
-				void *data)
+static int at_call_volume_probe(struct ofono_call_volume *cv,
+				unsigned int vendor, void *data)
 {
 	GAtChat *chat = data;
 	struct cv_data *cvd;
@@ -209,6 +209,8 @@ static int at_call_volume_probe(struct ofono_call_volume *cv, unsigned int vendo
 static void at_call_volume_remove(struct ofono_call_volume *cv)
 {
 	struct cv_data *cvd = ofono_call_volume_get_data(cv);
+
+	ofono_call_volume_set_data(cv, NULL);
 
 	g_free(cvd);
 }

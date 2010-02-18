@@ -1,7 +1,7 @@
 /*
  * oFono - GSM Telephony Stack for Linux
  *
- * Copyright (C) 2008-2009 Intel Corporation.  All rights reserved.
+ * Copyright (C) 2008-2010 Intel Corporation.  All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -94,8 +94,6 @@ static void at_cpbr_notify(GAtResult *result, gpointer user_data)
 	struct pb_data *pbd = ofono_phonebook_get_data(pb);
 	GAtResultIter iter;
 	int current;
-
-	dump_response("at_cbpr_notify", 1, result);
 
 	if (pbd->supported & CHARSET_IRA)
 		current = CHARSET_IRA;
@@ -232,7 +230,7 @@ static void at_read_entries_cb(gboolean ok, GAtResult *result,
 	charset = best_charset(pbd->supported);
 
 	if (strcmp(pbd->old_charset, charset)) {
-		sprintf(buf, "AT+CSCS=\"%s\"", pbd->old_charset);
+		snprintf(buf, sizeof(buf), "AT+CSCS=\"%s\"", pbd->old_charset);
 		g_at_chat_send(pbd->chat, buf, none_prefix, NULL, NULL, NULL);
 	}
 
@@ -246,7 +244,8 @@ static void at_read_entries(struct cb_data *cbd)
 	struct pb_data *pbd = ofono_phonebook_get_data(pb);
 	char buf[32];
 
-	sprintf(buf, "AT+CPBR=%d,%d", pbd->index_min, pbd->index_max);
+	snprintf(buf, sizeof(buf), "AT+CPBR=%d,%d",
+			pbd->index_min, pbd->index_max);
 	if (g_at_chat_send_listing(pbd->chat, buf, cpbr_prefix,
 					at_cpbr_notify, at_read_entries_cb,
 					cbd, NULL) > 0)
@@ -281,8 +280,6 @@ static void at_read_charset_cb(gboolean ok, GAtResult *result,
 	const char *charset;
 	char buf[32];
 
-	dump_response("at_read_charset_cb", ok, result);
-
 	if (!ok)
 		goto error;
 
@@ -302,7 +299,7 @@ static void at_read_charset_cb(gboolean ok, GAtResult *result,
 		return;
 	}
 
-	sprintf(buf, "AT+CSCS=\"%s\"", charset);
+	snprintf(buf, sizeof(buf), "AT+CSCS=\"%s\"", charset);
 	if (g_at_chat_send(pbd->chat, buf, none_prefix,
 				at_set_charset_cb, cbd, NULL) > 0)
 		return;
@@ -354,8 +351,6 @@ static void at_select_storage_cb(gboolean ok, GAtResult *result,
 	struct ofono_phonebook *pb = cbd->user;
 	struct pb_data *pbd = ofono_phonebook_get_data(pb);
 
-	dump_response("at_select_storage_cb", ok, result);
-
 	if (!ok)
 		goto error;
 
@@ -379,7 +374,7 @@ static void at_export_entries(struct ofono_phonebook *pb, const char *storage,
 
 	cbd->user = pb;
 
-	sprintf(buf, "AT+CPBS=\"%s\"", storage);
+	snprintf(buf, sizeof(buf), "AT+CPBS=\"%s\"", storage);
 	if (g_at_chat_send(pbd->chat, buf, none_prefix,
 				at_select_storage_cb, cbd, NULL) > 0)
 		return;
@@ -408,8 +403,6 @@ static void at_list_storages_cb(gboolean ok, GAtResult *result,
 	gboolean in_list = FALSE;
 	GAtResultIter iter;
 	const char *storage;
-
-	dump_response("at_list_storages_cb", ok, result);
 
 	if (!ok)
 		goto error;
@@ -451,8 +444,6 @@ static void at_list_charsets_cb(gboolean ok, GAtResult *result,
 	GAtResultIter iter;
 	const char *charset;
 
-	dump_response("at_list_charsets_cb", ok, result);
-
 	if (!ok)
 		goto error;
 
@@ -489,8 +480,9 @@ static void at_list_charsets_cb(gboolean ok, GAtResult *result,
 					"phonebook is possible on this modem,"
 					" if this is in error, submit patches "
 					"to properly support this hardware");
-		} else
+		} else {
 			goto error;
+		}
 	}
 
 	if (g_at_chat_send(pbd->chat, "AT+CPBS=?", cpbs_prefix,
@@ -534,6 +526,8 @@ static void at_phonebook_remove(struct ofono_phonebook *pb)
 
 	if (pbd->old_charset)
 		g_free(pbd->old_charset);
+
+	ofono_phonebook_set_data(pb, NULL);
 
 	g_free(pbd);
 }

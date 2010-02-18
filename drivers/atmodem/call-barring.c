@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -50,7 +50,6 @@ static void clck_query_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	GAtResultIter iter;
 	int status_mask, status, class, line;
 
-	dump_response("clck_query_cb", ok, result);
 	decode_at_error(&error, g_at_result_final_response(result));
 
 	status_mask = 0;
@@ -86,12 +85,11 @@ static void at_call_barring_query(struct ofono_call_barring *cb,
 	GAtChat *chat = ofono_call_barring_get_data(cb);
 	struct cb_data *cbd = cb_data_new(callback, data);
 	char buf[64];
-	int len;
 
 	if (!cbd || strlen(lock) != 2)
 		goto error;
 
-	len = sprintf(buf, "AT+CLCK=\"%s\",2", lock);
+	snprintf(buf, sizeof(buf), "AT+CLCK=\"%s\",2", lock);
 
 	if (g_at_chat_send(chat, buf, clck_prefix,
 				clck_query_cb, cbd, g_free) > 0)
@@ -110,7 +108,6 @@ static void clck_set_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	ofono_call_barring_set_cb_t callback = cbd->cb;
 	struct ofono_error error;
 
-	dump_response("clck_set_cb", ok, result);
 	decode_at_error(&error, g_at_result_final_response(result));
 	callback(&error, cbd->data);
 }
@@ -134,8 +131,7 @@ static void at_call_barring_set(struct ofono_call_barring *cb, const char *lock,
 				",\"%s\"", passwd);
 		/* Assume cls == 7 means use defaults */
 		if (cls != 7)
-			len += snprintf(buf + len, sizeof(buf) - len,
-					",%i", cls);
+			snprintf(buf + len, sizeof(buf) - len, ",%i", cls);
 	}
 
 	if (g_at_chat_send(chat, buf, none_prefix,
@@ -155,7 +151,6 @@ static void cpwd_set_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	ofono_call_barring_set_cb_t callback = cbd->cb;
 	struct ofono_error error;
 
-	dump_response("cpwd_set_cb", ok, result);
 	decode_at_error(&error, g_at_result_final_response(result));
 	callback(&error, cbd->data);
 }

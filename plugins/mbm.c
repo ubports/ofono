@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -58,6 +58,23 @@ struct mbm_data {
 	GAtChat *chat;
 };
 
+static void erinfo_notifier(GAtResult *result, gpointer user_data)
+{
+	GAtResultIter iter;
+	int mode, gsm, umts;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (g_at_result_iter_next(&iter, "*ERINFO:") == FALSE)
+		return;
+
+	g_at_result_iter_next_number(&iter, &mode);
+	g_at_result_iter_next_number(&iter, &gsm);
+	g_at_result_iter_next_number(&iter, &umts);
+
+	ofono_info("network capability: GSM %d UMTS %d", gsm, umts);
+}
+
 static int mbm_probe(struct ofono_modem *modem)
 {
 	struct mbm_data *data;
@@ -81,6 +98,7 @@ static void mbm_remove(struct ofono_modem *modem)
 
 	ofono_modem_set_data(modem, NULL);
 
+	g_at_chat_unref(data->chat);
 	g_free(data);
 }
 
@@ -92,6 +110,7 @@ static void mbm_debug(const char *str, void *user_data)
 static void cfun_enable(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_modem *modem = user_data;
+	struct mbm_data *data = ofono_modem_get_data(modem);
 
 	DBG("");
 
@@ -99,6 +118,11 @@ static void cfun_enable(gboolean ok, GAtResult *result, gpointer user_data)
 		ofono_modem_set_powered(modem, FALSE);
 
 	ofono_modem_set_powered(modem, TRUE);
+
+	g_at_chat_send(data->chat, "AT*ERINFO=1", none_prefix,
+			NULL, NULL, NULL);
+	g_at_chat_register(data->chat, "*ERINFO:", erinfo_notifier,
+							FALSE, modem, NULL);
 }
 
 static void cfun_query(gboolean ok, GAtResult *result, gpointer user_data)
@@ -108,7 +132,10 @@ static void cfun_query(gboolean ok, GAtResult *result, gpointer user_data)
 	GAtResultIter iter;
 	int status;
 
-	DBG("");
+	DBG("%d", ok);
+
+	if (!ok)
+		return;
 
 	g_at_result_iter_init(&iter, result);
 
@@ -149,6 +176,25 @@ static void emrdy_notifier(GAtResult *result, gpointer user_data)
 					cfun_query, modem, NULL);
 }
 
+static void emrdy_query(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct ofono_modem *modem = user_data;
+	struct mbm_data *data = ofono_modem_get_data(modem);
+
+	DBG("%d", ok);
+
+	if (ok)
+		return;
+
+	/* On some MBM hardware the EMRDY cannot be queried, so if this fails
+	 * we try to run CFUN? to check the state.  CFUN? will fail unless
+	 * EMRDY: 1 has been sent, in which case the emrdy_notifier should be
+	 * triggered eventually and we send CFUN? again.
+	 */
+	g_at_chat_send(data->chat, "AT+CFUN?", cfun_prefix,
+					cfun_query, modem, NULL);
+};
+
 static int mbm_enable(struct ofono_modem *modem)
 {
 	struct mbm_data *data = ofono_modem_get_data(modem);
@@ -185,7 +231,8 @@ static int mbm_enable(struct ofono_modem *modem)
 
 	g_at_chat_send(data->chat, "AT&F E0 V1 X4 &C1 +CMEE=1", NULL,
 					NULL, NULL, NULL);
-	g_at_chat_send(data->chat, "AT*EMRDY?", none_prefix, NULL, NULL, NULL);
+	g_at_chat_send(data->chat, "AT*EMRDY?", none_prefix,
+				emrdy_query, modem, NULL);
 
 	return -EINPROGRESS;
 }
@@ -193,8 +240,13 @@ static int mbm_enable(struct ofono_modem *modem)
 static void cfun_disable(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_modem *modem = user_data;
+	struct mbm_data *data = ofono_modem_get_data(modem);
 
 	DBG("");
+
+	g_at_chat_shutdown(data->chat);
+	g_at_chat_unref(data->chat);
+	data->chat = NULL;
 
 	if (ok)
 		ofono_modem_set_powered(modem, FALSE);
@@ -209,13 +261,10 @@ static int mbm_disable(struct ofono_modem *modem)
 	if (!data->chat)
 		return 0;
 
+	g_at_chat_cancel_all(data->chat);
+	g_at_chat_unregister_all(data->chat);
 	g_at_chat_send(data->chat, "AT+CFUN=4", NULL,
 					cfun_disable, modem, NULL);
-
-	g_at_chat_shutdown(data->chat);
-
-	g_at_chat_unref(data->chat);
-	data->chat = NULL;
 
 	return -EINPROGRESS;
 }

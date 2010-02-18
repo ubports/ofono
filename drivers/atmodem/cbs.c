@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -25,6 +25,7 @@
 
 #define _GNU_SOURCE
 #include <string.h>
+#include <stdio.h>
 
 #include <glib.h>
 
@@ -39,6 +40,12 @@
 #include "atmodem.h"
 
 static const char *none_prefix[] = { NULL };
+static const char *cscb_prefix[] = { "+CSCB:", NULL };
+
+struct cbs_data {
+	GAtChat *chat;
+	gboolean cscb_mode_1;
+};
 
 static void at_cbm_notify(GAtResult *result, gpointer user_data)
 {
@@ -49,8 +56,6 @@ static void at_cbm_notify(GAtResult *result, gpointer user_data)
 	unsigned char pdu[88];
 	long hexpdulen;
 
-	dump_response("at_cbm_notify", TRUE, result);
-
 	g_at_result_iter_init(&iter, result);
 
 	if (!g_at_result_iter_next(&iter, "+CBM:"))
@@ -59,6 +64,11 @@ static void at_cbm_notify(GAtResult *result, gpointer user_data)
 	if (!g_at_result_iter_next_number(&iter, &pdulen))
 		return;
 
+	if (pdulen > 88) {
+		ofono_error("Got a CBM message bigger than maximum size!");
+		return;
+	}
+
 	hexpdu = g_at_result_pdu(result);
 
 	if (!hexpdu) {
@@ -66,7 +76,7 @@ static void at_cbm_notify(GAtResult *result, gpointer user_data)
 		return;
 	}
 
-	ofono_debug("Got new Cell Broadcast via CBM: %s, %d", hexpdu, pdulen);
+	DBG("Got new Cell Broadcast via CBM: %s, %d", hexpdu, pdulen);
 
 	if (decode_hex_own_buf(hexpdu, -1, &hexpdulen, 0, pdu) == NULL) {
 		ofono_error("Unable to hex-decode the PDU");
@@ -87,7 +97,6 @@ static void at_cscb_set_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	ofono_cbs_set_cb_t cb = cbd->cb;
 	struct ofono_error error;
 
-	dump_response("cscb_set_cb", ok, result);
 	decode_at_error(&error, g_at_result_final_response(result));
 
 	cb(&error, cbd->data);
@@ -96,7 +105,7 @@ static void at_cscb_set_cb(gboolean ok, GAtResult *result, gpointer user_data)
 static void at_cbs_set_topics(struct ofono_cbs *cbs, const char *topics,
 				ofono_cbs_set_cb_t cb, void *user_data)
 {
-	GAtChat *chat = ofono_cbs_get_data(cbs);
+	struct cbs_data *data = ofono_cbs_get_data(cbs);
 	struct cb_data *cbd = cb_data_new(cb, user_data);
 	char *buf;
 	unsigned int id;
@@ -106,7 +115,7 @@ static void at_cbs_set_topics(struct ofono_cbs *cbs, const char *topics,
 
 	buf = g_strdup_printf("AT+CSCB=0,\"%s\"", topics);
 
-	id = g_at_chat_send(chat, buf, none_prefix,
+	id = g_at_chat_send(data->chat, buf, none_prefix,
 				at_cscb_set_cb, cbd, g_free);
 
 	g_free(buf);
@@ -124,13 +133,19 @@ error:
 static void at_cbs_clear_topics(struct ofono_cbs *cbs,
 				ofono_cbs_set_cb_t cb, void *user_data)
 {
-	GAtChat *chat = ofono_cbs_get_data(cbs);
+	struct cbs_data *data = ofono_cbs_get_data(cbs);
 	struct cb_data *cbd = cb_data_new(cb, user_data);
+	char buf[256];
 
 	if (!cbd)
 		goto error;
 
-	if (g_at_chat_send(chat, "AT+CSCB=1,\"0-65535\"", none_prefix,
+	if (data->cscb_mode_1)
+		snprintf(buf, sizeof(buf), "AT+CSCB=1,\"0-65535\"");
+	else
+		snprintf(buf, sizeof(buf), "AT+CSCB=0,\"\"");
+
+	if (g_at_chat_send(data->chat, buf, none_prefix,
 				at_cscb_set_cb, cbd, g_free) > 0)
 		return;
 
@@ -144,7 +159,7 @@ error:
 static void at_cbs_register(gboolean ok, GAtResult *result, gpointer user)
 {
 	struct ofono_cbs *cbs = user;
-	GAtChat *chat = ofono_cbs_get_data(cbs);
+	struct cbs_data *data = ofono_cbs_get_data(cbs);
 
 	/* This driver assumes that something else will properly setup
 	 * CNMI notifications to deliver CBS broadcasts via +CBM.  We do
@@ -154,29 +169,78 @@ static void at_cbs_register(gboolean ok, GAtResult *result, gpointer user)
 	 * The default SMS driver will setup the CNMI for +CBM delivery
 	 * appropriately for us
 	 */
-	g_at_chat_register(chat, "+CBM:", at_cbm_notify, TRUE, cbs, NULL);
+	g_at_chat_register(data->chat, "+CBM:", at_cbm_notify, TRUE, cbs, NULL);
 
 	ofono_cbs_register(cbs);
 }
 
-static int at_cbs_probe(struct ofono_cbs *cbs, unsigned int vendor,
-				void *data)
+static void at_cscb_support_cb(gboolean ok, GAtResult *result, gpointer user)
 {
-	GAtChat *chat = data;
+	struct ofono_cbs *cbs = user;
+	struct cbs_data *data = ofono_cbs_get_data(cbs);
+	gint range[2];
+	GAtResultIter iter;
+	char buf[256];
 
-	ofono_cbs_set_data(cbs, chat);
+	if (!ok)
+		goto error;
 
-	/* Start with CBS not accepting any channels.  The core will
-	 * power on / set preferred channels when it is ready
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "+CSCB:"))
+		goto error;
+
+	if (!g_at_result_iter_open_list(&iter))
+		goto error;
+
+	while (g_at_result_iter_next_range(&iter, &range[0], &range[1]))
+		if (1 >= range[0] && 1 <= range[1])
+			data->cscb_mode_1 = TRUE;
+
+	g_at_result_iter_close_list(&iter);
+
+	/* Assume that if CSCB mode 1 is supported, then we need to use
+	 * it to remove topics, otherwise we need to set the entire list
+	 * of new topics using CSCB mode 0.
 	 */
-	g_at_chat_send(chat, "AT+CSCB=1,\"0-65535\"", none_prefix,
-				at_cbs_register, cbs, NULL);
+	if (data->cscb_mode_1)
+		snprintf(buf, sizeof(buf), "AT+CSCB=1,\"0-65535\"");
+	else
+		snprintf(buf, sizeof(buf), "AT+CSCB=0,\"\"");
+
+	if (g_at_chat_send(data->chat, buf, none_prefix,
+				at_cbs_register, cbs, NULL) > 0)
+		return;
+
+error:
+	ofono_error("CSCB not supported");
+	ofono_cbs_remove(cbs);
+}
+
+static int at_cbs_probe(struct ofono_cbs *cbs, unsigned int vendor,
+				void *user)
+{
+	GAtChat *chat = user;
+	struct cbs_data *data;
+
+	data = g_new0(struct cbs_data, 1);
+	data->chat = chat;
+
+	ofono_cbs_set_data(cbs, data);
+
+	g_at_chat_send(chat, "AT+CSCB=?", cscb_prefix,
+			at_cscb_support_cb, cbs, NULL);
 
 	return 0;
 }
 
 static void at_cbs_remove(struct ofono_cbs *cbs)
 {
+	struct cbs_data *data = ofono_cbs_get_data(cbs);
+
+	ofono_cbs_set_data(cbs, NULL);
+
+	g_free(data);
 }
 
 static struct ofono_cbs_driver driver = {

@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -65,7 +65,8 @@ void ofono_gprs_remove(struct ofono_gprs *gprs);
 void ofono_gprs_set_data(struct ofono_gprs *gprs, void *data);
 void *ofono_gprs_get_data(struct ofono_gprs *gprs);
 
-void ofono_gprs_set_cid_range(struct ofono_gprs *gprs, int min, int max);
+void ofono_gprs_set_cid_range(struct ofono_gprs *gprs,
+				unsigned int min, unsigned int max);
 void ofono_gprs_add_context(struct ofono_gprs *gprs,
 				struct ofono_gprs_context *gc);
 

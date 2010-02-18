@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -91,7 +91,6 @@ static void at_csca_set_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	ofono_sms_sca_set_cb_t cb = cbd->cb;
 	struct ofono_error error;
 
-	dump_response("csca_set_cb", ok, result);
 	decode_at_error(&error, g_at_result_final_response(result));
 
 	cb(&error, cbd->data);
@@ -108,7 +107,7 @@ static void at_csca_set(struct ofono_sms *sms,
 	if (!cbd)
 		goto error;
 
-	sprintf(buf, "AT+CSCA=\"%s\",%d", sca->number, sca->type);
+	snprintf(buf, sizeof(buf), "AT+CSCA=\"%s\",%d", sca->number, sca->type);
 
 	if (g_at_chat_send(data->chat, buf, csca_prefix,
 				at_csca_set_cb, cbd, g_free) > 0)
@@ -130,7 +129,6 @@ static void at_csca_query_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	struct ofono_phone_number sca;
 	const char *number;
 
-	dump_response("at_csca_cb", ok, result);
 	decode_at_error(&error, g_at_result_final_response(result));
 
 	if (!ok) {
@@ -149,15 +147,16 @@ static void at_csca_query_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	if (number[0] == '+') {
 		number = number + 1;
 		sca.type = 145;
-	} else
+	} else {
 		sca.type = 129;
+	}
 
 	strncpy(sca.number, number, OFONO_MAX_PHONE_NUMBER_LENGTH);
 	sca.number[OFONO_MAX_PHONE_NUMBER_LENGTH] = '\0';
 
 	g_at_result_iter_next_number(&iter, &sca.type);
 
-	ofono_debug("csca_query_cb: %s, %d", sca.number, sca.type);
+	DBG("csca_query_cb: %s, %d", sca.number, sca.type);
 
 	cb(&error, &sca, cbd->data);
 
@@ -195,7 +194,6 @@ static void at_cmgs_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	struct ofono_error error;
 	int mr;
 
-	dump_response("at_cmgs_cb", ok, result);
 	decode_at_error(&error, g_at_result_final_response(result));
 
 	if (!ok) {
@@ -211,7 +209,7 @@ static void at_cmgs_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	if (!g_at_result_iter_next_number(&iter, &mr))
 		goto err;
 
-	ofono_debug("Got MR: %d", mr);
+	DBG("Got MR: %d", mr);
 
 	cb(&error, mr, cbd->data);
 	return;
@@ -233,12 +231,12 @@ static void at_cmgs(struct ofono_sms *sms, unsigned char *pdu, int pdu_len,
 		goto error;
 
 	if (mms) {
-		sprintf(buf, "AT+CMMS=%d", mms);
+		snprintf(buf, sizeof(buf), "AT+CMMS=%d", mms);
 		g_at_chat_send(data->chat, buf, none_prefix,
 				NULL, NULL, NULL);
 	}
 
-	len = sprintf(buf, "AT+CMGS=%d\r", tpdu_len);
+	len = snprintf(buf, sizeof(buf), "AT+CMGS=%d\r", tpdu_len);
 	encode_hex_own_buf(pdu, pdu_len, 0, buf+len);
 
 	if (g_at_chat_send(data->chat, buf, cmgs_prefix,
@@ -288,21 +286,19 @@ static void at_cds_notify(GAtResult *result, gpointer user_data)
 	const char *pdu;
 	char buf[256];
 
-	dump_response("at_cds_notify", TRUE, result);
-
 	if (!at_parse_pdu_common(result, "+CDS:", &pdu, &pdulen)) {
 		ofono_error("Unable to parse CDS notification");
 		return;
 	}
 
-	ofono_debug("Got new Status-Report PDU via CDS: %s, %d", pdu, pdulen);
+	DBG("Got new Status-Report PDU via CDS: %s, %d", pdu, pdulen);
 
 	/* We must acknowledge the PDU using CNMA */
 	if (data->cnma_ack_pdu)
-		sprintf(buf, "AT+CNMA=1,%d\r%s", data->cnma_ack_pdu_len,
-				data->cnma_ack_pdu);
-	else
-		sprintf(buf, "AT+CNMA=0"); /* Should be a safe fallback */
+		snprintf(buf, sizeof(buf), "AT+CNMA=1,%d\r%s",
+				data->cnma_ack_pdu_len, data->cnma_ack_pdu);
+	else /* Should be a safe fallback */
+		snprintf(buf, sizeof(buf), "AT+CNMA=0");
 
 	g_at_chat_send(data->chat, buf, none_prefix, at_cnma_cb, NULL, NULL);
 }
@@ -317,8 +313,6 @@ static void at_cmt_notify(GAtResult *result, gpointer user_data)
 	unsigned char pdu[176];
 	char buf[256];
 
-	dump_response("at_cmt_notify", TRUE, result);
-
 	if (!at_parse_pdu_common(result, "+CMT:", &hexpdu, &tpdu_len)) {
 		ofono_error("Unable to parse CMT notification");
 		return;
@@ -329,17 +323,17 @@ static void at_cmt_notify(GAtResult *result, gpointer user_data)
 		return;
 	}
 
-	ofono_debug("Got new SMS Deliver PDU via CMT: %s, %d", hexpdu, tpdu_len);
+	DBG("Got new SMS Deliver PDU via CMT: %s, %d", hexpdu, tpdu_len);
 
 	decode_hex_own_buf(hexpdu, -1, &pdu_len, 0, pdu);
 	ofono_sms_deliver_notify(sms, pdu, pdu_len, tpdu_len);
 
 	/* We must acknowledge the PDU using CNMA */
 	if (data->cnma_ack_pdu)
-		sprintf(buf, "AT+CNMA=1,%d\r%s", data->cnma_ack_pdu_len,
-				data->cnma_ack_pdu);
-	else
-		sprintf(buf, "AT+CNMA=0"); /* Should be a safe fallback */
+		snprintf(buf, sizeof(buf), "AT+CNMA=1,%d\r%s",
+				data->cnma_ack_pdu_len, data->cnma_ack_pdu);
+	else /* Should be a safe fallback */
+		snprintf(buf, sizeof(buf), "AT+CNMA=0");
 
 	g_at_chat_send(data->chat, buf, none_prefix, at_cnma_cb, NULL, NULL);
 }
@@ -352,8 +346,6 @@ static void at_cmgr_notify(GAtResult *result, gpointer user_data)
 	unsigned char pdu[176];
 	long pdu_len;
 	int tpdu_len;
-
-	dump_response("at_cmgr_notify", TRUE, result);
 
 	g_at_result_iter_init(&iter, result);
 
@@ -374,7 +366,7 @@ static void at_cmgr_notify(GAtResult *result, gpointer user_data)
 	if (strlen(hexpdu) > sizeof(pdu) * 2)
 		goto err;
 
-	ofono_debug("Got PDU: %s, with len: %d", hexpdu, tpdu_len);
+	DBG("Got PDU: %s, with len: %d", hexpdu, tpdu_len);
 
 	decode_hex_own_buf(hexpdu, -1, &pdu_len, 0, pdu);
 	ofono_sms_deliver_notify(sms, pdu, pdu_len, tpdu_len);
@@ -410,11 +402,11 @@ static void at_cmti_cpms_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 	data->store = req->store;
 
-	sprintf(buf, "AT+CMGR=%d", req->index);
+	snprintf(buf, sizeof(buf), "AT+CMGR=%d", req->index);
 	g_at_chat_send(data->chat, buf, none_prefix, at_cmgr_cb, NULL, NULL);
 
 	/* We don't buffer SMS on the SIM/ME, send along a CMGD as well */
-	sprintf(buf, "AT+CMGD=%d", req->index);
+	snprintf(buf, sizeof(buf), "AT+CMGD=%d", req->index);
 	g_at_chat_send(data->chat, buf, none_prefix, at_cmgd_cb, NULL, NULL);
 }
 
@@ -426,8 +418,6 @@ static void at_cmti_notify(GAtResult *result, gpointer user_data)
 	int store;
 	GAtResultIter iter;
 	int index;
-
-	dump_response("at_cmti_notify", TRUE, result);
 
 	g_at_result_iter_init(&iter, result);
 
@@ -447,7 +437,7 @@ static void at_cmti_notify(GAtResult *result, gpointer user_data)
 	if (!g_at_result_iter_next_number(&iter, &index))
 		goto err;
 
-	ofono_debug("Got a CMTI indication at %s, index: %d", strstore, index);
+	DBG("Got a CMTI indication at %s, index: %d", strstore, index);
 
 	if (store == data->store) {
 		struct cpms_request req;
@@ -466,8 +456,8 @@ static void at_cmti_notify(GAtResult *result, gpointer user_data)
 		req->store = store;
 		req->index = index;
 
-		sprintf(buf, "AT+CPMS=\"%s\",\"%s\",\"%s\"",
-			strstore, strstore, incoming);
+		snprintf(buf, sizeof(buf), "AT+CPMS=\"%s\",\"%s\",\"%s\"",
+				strstore, strstore, incoming);
 
 		g_at_chat_send(data->chat, buf, cpms_prefix, at_cmti_cpms_cb,
 				req, g_free);
@@ -500,8 +490,6 @@ static void at_cmgl_notify(GAtResult *result, gpointer user_data)
 	int status;
 	char buf[16];
 
-	dump_response("at_cmgl_notify", TRUE, result);
-
 	g_at_result_iter_init(&iter, result);
 
 	while (g_at_result_iter_next(&iter, "+CMGL:")) {
@@ -523,7 +511,7 @@ static void at_cmgl_notify(GAtResult *result, gpointer user_data)
 
 		hexpdu = g_at_result_pdu(result);
 
-		ofono_debug("Found an old SMS PDU: %s, with len: %d",
+		DBG("Found an old SMS PDU: %s, with len: %d",
 				hexpdu, tpdu_len);
 
 		if (strlen(hexpdu) > sizeof(pdu) * 2)
@@ -533,7 +521,7 @@ static void at_cmgl_notify(GAtResult *result, gpointer user_data)
 		ofono_sms_deliver_notify(sms, pdu, pdu_len, tpdu_len);
 
 		/* We don't buffer SMS on the SIM/ME, send along a CMGD */
-		sprintf(buf, "AT+CMGD=%d", index);
+		snprintf(buf, sizeof(buf), "AT+CMGD=%d", index);
 		g_at_chat_send(data->chat, buf, none_prefix,
 				at_cmgd_cb, NULL, NULL);
 	}
@@ -548,7 +536,7 @@ static void at_cmgl_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	struct ofono_sms *sms = user_data;
 
 	if (!ok)
-		ofono_debug("Initial listing SMS storage failed!");
+		DBG("Initial listing SMS storage failed!");
 
 	at_cmgl_done(sms);
 }
@@ -591,8 +579,8 @@ static void at_cmgl_set_cpms(struct ofono_sms *sms, int store)
 		req->sms = sms;
 		req->store = store;
 
-		sprintf(buf, "AT+CPMS=\"%s\",\"%s\",\"%s\"",
-			readwrite, readwrite, incoming);
+		snprintf(buf, sizeof(buf), "AT+CPMS=\"%s\",\"%s\",\"%s\"",
+				readwrite, readwrite, incoming);
 
 		g_at_chat_send(data->chat, buf, cpms_prefix, at_cmgl_cpms_cb,
 				req, g_free);
@@ -680,9 +668,9 @@ static gboolean build_cnmi_string(char *buf, int *cnmi_opts,
 	const char *mode;
 	int len = sprintf(buf, "AT+CNMI=");
 
-	if (data->vendor == OFONO_VENDOR_HTC_G1)
-		/* The G1 advertises support for mode 2, but returns an error
-		 * if we attempt to actually use it. */
+	if (data->vendor == OFONO_VENDOR_QUALCOMM_MSM)
+		/* MSM devices advertise support for mode 2, but return an
+		 * error if we attempt to actually use it. */
 		mode = "1";
 	else
 		/* Sounds like 2 is the sanest mode */
@@ -752,8 +740,6 @@ static void at_cnmi_query_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	gboolean supported = FALSE;
 	char buf[128];
 
-	dump_response("at_cnmi_query_cb", ok, result);
-
 	if (!ok)
 		goto out;
 
@@ -806,8 +792,6 @@ static void at_cpms_set_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	struct ofono_sms *sms = user_data;
 	struct sms_data *data = ofono_sms_get_data(sms);
 
-	dump_response("at_cpms_set_cb", ok, result);
-
 	if (ok)
 		return at_query_cnmi(sms);
 
@@ -829,7 +813,8 @@ static gboolean set_cpms(gpointer user_data)
 	const char *incoming = storages[data->incoming];
 	char buf[128];
 
-	sprintf(buf, "AT+CPMS=\"%s\",\"%s\",\"%s\"", store, store, incoming);
+	snprintf(buf, sizeof(buf), "AT+CPMS=\"%s\",\"%s\",\"%s\"",
+			store, store, incoming);
 
 	g_at_chat_send(data->chat, buf, cpms_prefix,
 			at_cpms_set_cb, sms, NULL);
@@ -841,8 +826,6 @@ static void at_cmgf_set_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	struct ofono_sms *sms = user_data;
 	struct sms_data *data = ofono_sms_get_data(sms);
 
-	dump_response("at_cmgf_set_cb", ok, result);
-
 	if (ok) {
 		data->retries = 0;
 		set_cpms(sms);
@@ -852,7 +835,7 @@ static void at_cmgf_set_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	data->retries += 1;
 
 	if (data->retries == MAX_CMGF_RETRIES) {
-		ofono_debug("Unable to enter PDU mode");
+		DBG("Unable to enter PDU mode");
 		return at_sms_not_supported(sms);
 	}
 
@@ -875,8 +858,6 @@ static void at_cpms_query_cb(gboolean ok, GAtResult *result,
 	struct ofono_sms *sms = user_data;
 	struct sms_data *data = ofono_sms_get_data(sms);
 	gboolean supported = FALSE;
-
-	dump_response("cpms_query_cb", ok, result);
 
 	if (ok) {
 		int mem = 0;
@@ -952,8 +933,6 @@ static void at_cmgf_query_cb(gboolean ok, GAtResult *result,
 	struct sms_data *data = ofono_sms_get_data(sms);
 	gboolean supported = FALSE;
 
-	dump_response("cmgf_query_cb", ok, result);
-
 	if (ok) {
 		GAtResultIter iter;
 		int mode;
@@ -986,8 +965,6 @@ static void at_csms_status_cb(gboolean ok, GAtResult *result,
 	struct ofono_sms *sms = user_data;
 	struct sms_data *data = ofono_sms_get_data(sms);
 	gboolean supported = FALSE;
-
-	dump_response("csms_status_cb", ok, result);
 
 	if (ok) {
 		GAtResultIter iter;
@@ -1042,10 +1019,8 @@ static void at_csms_query_cb(gboolean ok, GAtResult *result,
 	struct sms_data *data = ofono_sms_get_data(sms);
 	gboolean cnma_supported = FALSE;
 	GAtResultIter iter;
-	int status;
+	int status_min, status_max;
 	char buf[128];
-
-	dump_response("csms_query_cb", ok, result);
 
 	if (!ok)
 		return at_sms_not_supported(sms);
@@ -1058,14 +1033,14 @@ static void at_csms_query_cb(gboolean ok, GAtResult *result,
 	if (!g_at_result_iter_open_list(&iter))
 		goto out;
 
-	while (g_at_result_iter_next_number(&iter, &status))
-		if (status == 1)
+	while (g_at_result_iter_next_range(&iter, &status_min, &status_max))
+		if (status_min <= 1 && 1 <= status_max)
 			cnma_supported = TRUE;
 
-	ofono_debug("CSMS query parsed successfully");
+	DBG("CSMS query parsed successfully");
 
 out:
-	sprintf(buf, "AT+CSMS=%d", cnma_supported ? 1 : 0);
+	snprintf(buf, sizeof(buf), "AT+CSMS=%d", cnma_supported ? 1 : 0);
 	g_at_chat_send(data->chat, buf, csms_prefix,
 			at_csms_set_cb, sms, NULL);
 }

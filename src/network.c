@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -40,10 +40,8 @@
 #define NETWORK_REGISTRATION_INTERFACE "org.ofono.NetworkRegistration"
 #define NETWORK_OPERATOR_INTERFACE "org.ofono.NetworkOperator"
 
-#define NETWORK_REGISTRATION_FLAG_REQUESTING_OPLIST 0x1
-#define NETWORK_REGISTRATION_FLAG_PENDING 0x2
-#define NETWORK_REGISTRATION_FLAG_HOME_SHOW_PLMN 0x4
-#define NETWORK_REGISTRATION_FLAG_ROAMING_SHOW_SPN 0x8
+#define NETWORK_REGISTRATION_FLAG_HOME_SHOW_PLMN 0x1
+#define NETWORK_REGISTRATION_FLAG_ROAMING_SHOW_SPN 0x2
 
 enum network_registration_mode {
 	NETWORK_REGISTRATION_MODE_AUTO = 0,
@@ -51,9 +49,6 @@ enum network_registration_mode {
 	NETWORK_REGISTRATION_MODE_OFF = 2,
 	NETWORK_REGISTRATION_MODE_MANUAL_AUTO = 4
 };
-
-/* How often we update the operator list, in seconds */
-#define OPERATOR_LIST_UPDATE_TIME 300
 
 #define SETTINGS_STORE "netreg"
 #define SETTINGS_GROUP "Settings"
@@ -84,7 +79,6 @@ struct ofono_netreg {
 	char *spname;
 	struct sim_spdi *spdi;
 	struct sim_eons *eons;
-	gint opscan_source;
 	struct ofono_sim *sim;
 	GKeyFile *settings;
 	char *imsi;
@@ -219,7 +213,14 @@ static void register_callback(const struct ofono_error *error, void *data)
 	netreg->pending = NULL;
 
 out:
-	netreg->flags &= ~NETWORK_REGISTRATION_FLAG_PENDING;
+	if (netreg->driver->registration_status)
+		netreg->driver->registration_status(netreg,
+					registration_status_callback, netreg);
+}
+
+static void init_register(const struct ofono_error *error, void *data)
+{
+	struct ofono_netreg *netreg = data;
 
 	if (netreg->driver->registration_status)
 		netreg->driver->registration_status(netreg,
@@ -245,7 +246,7 @@ static void network_operator_populate_registered(struct ofono_netreg *netreg,
 				__ofono_atom_get_path(netreg->atom));
 
 	if (!dbus_connection_list_registered(conn, path, &children)) {
-		ofono_debug("Unable to obtain registered NetworkOperator(s)");
+		DBG("Unable to obtain registered NetworkOperator(s)");
 		*network_operators = g_try_new0(char *, 1);
 		return;
 	}
@@ -386,6 +387,10 @@ static void set_network_operator_status(struct network_operator_data *opd,
 
 	opd->status = status;
 
+	/* Don't emit for the case where only operator name is reported */
+	if (opd->mcc[0] == '\0' && opd->mnc[0] == '\0')
+		return;
+
 	status_str = network_operator_status_to_string(status);
 	path = network_operator_build_path(netreg, opd->mcc, opd->mnc);
 
@@ -487,11 +492,6 @@ static void set_network_operator_name(struct network_operator_data *opd,
 	if (opd->eons_info && opd->eons_info->longname)
 		return;
 
-	path = network_operator_build_path(netreg, opd->mcc, opd->mnc);
-
-	ofono_dbus_signal_property_changed(conn, path, NETWORK_OPERATOR_INTERFACE,
-					"Name", DBUS_TYPE_STRING, &name);
-
 	if (opd == netreg->current_operator) {
 		const char *path = __ofono_atom_get_path(netreg->atom);
 
@@ -502,6 +502,15 @@ static void set_network_operator_name(struct network_operator_data *opd,
 						"Operator", DBUS_TYPE_STRING,
 						&operator);
 	}
+
+	/* Don't emit when only operator name is reported */
+	if (opd->mcc[0] == '\0' && opd->mnc[0] == '\0')
+		return;
+
+	path = network_operator_build_path(netreg, opd->mcc, opd->mnc);
+
+	ofono_dbus_signal_property_changed(conn, path, NETWORK_OPERATOR_INTERFACE,
+					"Name", DBUS_TYPE_STRING, &name);
 }
 
 static void set_network_operator_eons_info(struct network_operator_data *opd,
@@ -555,11 +564,11 @@ static void set_network_operator_eons_info(struct network_operator_data *opd,
 		oldinfo = "";
 
 	if (eons_info && eons_info->info)
-		newname = eons_info->info;
+		newinfo = eons_info->info;
 	else
 		newinfo = "";
 
-	if (oldname != newname && strcmp(oldname, newname))
+	if (oldinfo != newinfo && strcmp(oldinfo, newinfo))
 		ofono_dbus_signal_property_changed(conn, path,
 						NETWORK_OPERATOR_INTERFACE,
 						"AdditionalInformation",
@@ -636,13 +645,12 @@ static DBusMessage *network_operator_register(DBusConnection *conn,
 	struct network_operator_data *opd = data;
 	struct ofono_netreg *netreg = opd->netreg;
 
-	if (netreg->flags & NETWORK_REGISTRATION_FLAG_PENDING)
+	if (netreg->pending)
 		return __ofono_error_busy(msg);
 
 	if (netreg->driver->register_manual == NULL)
 		return __ofono_error_not_implemented(msg);
 
-	netreg->flags |= NETWORK_REGISTRATION_FLAG_PENDING;
 	netreg->pending = dbus_message_ref(msg);
 
 	netreg->driver->register_manual(netreg, opd->mcc, opd->mnc,
@@ -782,13 +790,12 @@ static DBusMessage *network_register(DBusConnection *conn,
 {
 	struct ofono_netreg *netreg = data;
 
-	if (netreg->flags & NETWORK_REGISTRATION_FLAG_PENDING)
+	if (netreg->pending)
 		return __ofono_error_busy(msg);
 
 	if (netreg->driver->register_auto == NULL)
 		return __ofono_error_not_implemented(msg);
 
-	netreg->flags |= NETWORK_REGISTRATION_FLAG_PENDING;
 	netreg->pending = dbus_message_ref(msg);
 
 	netreg->driver->register_auto(netreg, register_callback, netreg);
@@ -803,18 +810,35 @@ static DBusMessage *network_deregister(DBusConnection *conn,
 {
 	struct ofono_netreg *netreg = data;
 
-	if (netreg->flags & NETWORK_REGISTRATION_FLAG_PENDING)
+	if (netreg->pending)
 		return __ofono_error_busy(msg);
 
 	if (netreg->driver->deregister == NULL)
 		return __ofono_error_not_implemented(msg);
 
-	netreg->flags |= NETWORK_REGISTRATION_FLAG_PENDING;
 	netreg->pending = dbus_message_ref(msg);
 
 	netreg->driver->deregister(netreg, register_callback, netreg);
 
 	set_registration_mode(netreg, NETWORK_REGISTRATION_MODE_OFF);
+
+	return NULL;
+}
+
+static DBusMessage *network_propose_scan(DBusConnection *conn,
+						DBusMessage *msg, void *data)
+{
+	struct ofono_netreg *netreg = data;
+
+	if (netreg->pending)
+		return __ofono_error_busy(msg);
+
+	if (netreg->driver->list_operators == NULL)
+		return __ofono_error_not_implemented(msg);
+
+	netreg->pending = dbus_message_ref(msg);
+
+	netreg->driver->list_operators(netreg, operator_list_callback, netreg);
 
 	return NULL;
 }
@@ -825,6 +849,8 @@ static GDBusMethodTable network_registration_methods[] = {
 							G_DBUS_METHOD_FLAG_ASYNC },
 	{ "Deregister",		"",	"",		network_deregister,
 							G_DBUS_METHOD_FLAG_ASYNC },
+	{ "ProposeScan",	"",	"ao",		network_propose_scan,
+							G_DBUS_METHOD_FLAG_ASYNC },
 	{ }
 };
 
@@ -832,40 +858,6 @@ static GDBusSignalTable network_registration_signals[] = {
 	{ "PropertyChanged",	"sv" },
 	{ }
 };
-
-static void update_network_operator_list(struct ofono_netreg *netreg)
-{
-	if (netreg->flags & NETWORK_REGISTRATION_FLAG_REQUESTING_OPLIST)
-		return;
-
-	if (!netreg->driver->list_operators)
-		return;
-
-	netreg->flags |= NETWORK_REGISTRATION_FLAG_REQUESTING_OPLIST;
-	netreg->driver->list_operators(netreg, operator_list_callback, netreg);
-}
-
-static gboolean update_network_operator_list_cb(void *user_data)
-{
-	struct ofono_netreg *netreg = user_data;
-
-	update_network_operator_list(netreg);
-
-	return TRUE;
-}
-
-static gboolean update_network_operator_list_init(void *user_data)
-{
-	struct ofono_netreg *netreg = user_data;
-
-	update_network_operator_list(netreg);
-
-	netreg->opscan_source = g_timeout_add_seconds(OPERATOR_LIST_UPDATE_TIME,
-					update_network_operator_list_cb, netreg);
-
-
-	return FALSE;
-}
 
 static void set_registration_status(struct ofono_netreg *netreg, int status)
 {
@@ -956,8 +948,9 @@ void __ofono_netreg_set_base_station_name(struct ofono_netreg *netreg,
 		 * but don't emit signal */
 		if (netreg->current_operator == NULL)
 			return;
-	} else
+	} else {
 		netreg->base_station = g_strdup(name);
+	}
 
 	ofono_dbus_signal_property_changed(conn, path,
 						NETWORK_REGISTRATION_INTERFACE,
@@ -1086,23 +1079,14 @@ static GSList *compress_operator_list(const struct ofono_network_operator *list,
 	return oplist;
 }
 
-static void operator_list_callback(const struct ofono_error *error, int total,
-					const struct ofono_network_operator *list,
-					void *data)
+static gboolean update_operator_list(struct ofono_netreg *netreg, int total,
+					const struct ofono_network_operator *list)
 {
-	struct ofono_netreg *netreg = data;
 	GSList *n = NULL;
 	GSList *o;
 	GSList *compressed;
 	GSList *c;
-	gboolean need_to_emit = FALSE;
-
-	netreg->flags &= ~NETWORK_REGISTRATION_FLAG_REQUESTING_OPLIST;
-
-	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
-		ofono_debug("Error occurred during operator list");
-		return;
-	}
+	gboolean changed = FALSE;
 
 	compressed = compress_operator_list(list, total);
 
@@ -1133,7 +1117,7 @@ static void operator_list_callback(const struct ofono_error *error, int total,
 			}
 
 			n = g_slist_prepend(n, opd);
-			need_to_emit = TRUE;
+			changed = TRUE;
 		}
 	}
 
@@ -1144,7 +1128,7 @@ static void operator_list_callback(const struct ofono_error *error, int total,
 		n = g_slist_reverse(n);
 
 	if (netreg->operator_list)
-		need_to_emit = TRUE;
+		changed = TRUE;
 
 	for (o = netreg->operator_list; o; o = o->next)
 		network_operator_dbus_unregister(netreg, o->data);
@@ -1152,6 +1136,46 @@ static void operator_list_callback(const struct ofono_error *error, int total,
 	g_slist_free(netreg->operator_list);
 
 	netreg->operator_list = n;
+
+	return changed;
+}
+
+static void operator_list_callback(const struct ofono_error *error, int total,
+					const struct ofono_network_operator *list,
+					void *data)
+{
+	struct ofono_netreg *netreg = data;
+	DBusMessage *reply;
+	char **network_operators;
+	DBusMessageIter iter;
+	DBusMessageIter array_iter;
+	int i;
+	gboolean need_to_emit;
+
+	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
+		DBG("Error occurred during operator list");
+		__ofono_dbus_pending_reply(&netreg->pending,
+					__ofono_error_failed(netreg->pending));
+		return;
+	}
+
+	need_to_emit = update_operator_list(netreg, total, list);
+
+	reply = dbus_message_new_method_return(netreg->pending);
+	network_operator_populate_registered(netreg, &network_operators);
+
+	dbus_message_iter_init_append(reply, &iter);
+	dbus_message_iter_open_container(&iter, DBUS_TYPE_ARRAY,
+		DBUS_TYPE_OBJECT_PATH_AS_STRING, &array_iter);
+
+	for (i = 0; network_operators[i]; i++)
+		dbus_message_iter_append_basic(&array_iter,
+			DBUS_TYPE_OBJECT_PATH, &network_operators[i]);
+
+	dbus_message_iter_close_container(&iter, &array_iter);
+	__ofono_dbus_pending_reply(&netreg->pending, reply);
+
+	g_strfreev(network_operators);
 
 	if (need_to_emit)
 		network_operator_emit_available_operators(netreg);
@@ -1170,7 +1194,7 @@ static void current_operator_callback(const struct ofono_error *error,
 	DBG("%p, %p", netreg, netreg->current_operator);
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
-		ofono_debug("Error during current operator");
+		DBG("Error during current operator");
 		return;
 	}
 
@@ -1213,7 +1237,8 @@ static void current_operator_callback(const struct ofono_error *error,
 
 		opd = network_operator_create(current);
 
-		if (!network_operator_dbus_register(netreg, opd)) {
+		if (opd->mcc[0] != '\0' && opd->mnc[0] != '\0' &&
+				!network_operator_dbus_register(netreg, opd)) {
 			g_free(opd);
 			return;
 		}
@@ -1222,7 +1247,8 @@ static void current_operator_callback(const struct ofono_error *error,
 		netreg->operator_list = g_slist_append(netreg->operator_list,
 							opd);
 
-		network_operator_emit_available_operators(netreg);
+		if (opd->mcc[0] != '\0' && opd->mnc[0] != '\0')
+			network_operator_emit_available_operators(netreg);
 	} else {
 		/* We don't free this here because operator is registered */
 		/* Taken care of elsewhere */
@@ -1247,7 +1273,7 @@ static void registration_status_callback(const struct ofono_error *error,
 	struct ofono_netreg *netreg = data;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
-		ofono_debug("Error during registration status query");
+		DBG("Error during registration status query");
 		return;
 	}
 
@@ -1261,7 +1287,7 @@ static void init_registration_status(const struct ofono_error *error,
 	struct ofono_netreg *netreg = data;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
-		ofono_debug("Error during registration status query");
+		DBG("Error during registration status query");
 		return;
 	}
 
@@ -1280,8 +1306,11 @@ static void init_registration_status(const struct ofono_error *error,
 	if (netreg->mode == NETWORK_REGISTRATION_MODE_AUTO &&
 		(status == NETWORK_REGISTRATION_STATUS_NOT_REGISTERED ||
 			status == NETWORK_REGISTRATION_STATUS_DENIED ||
-			status == NETWORK_REGISTRATION_STATUS_UNKNOWN))
-		netreg->driver->register_auto(netreg, register_callback, netreg);
+			status == NETWORK_REGISTRATION_STATUS_UNKNOWN)) {
+		if (netreg->driver->register_auto)
+			netreg->driver->register_auto(netreg, init_register,
+							netreg);
+	}
 }
 
 void ofono_netreg_strength_notify(struct ofono_netreg *netreg, int strength)
@@ -1317,7 +1346,7 @@ static void signal_strength_callback(const struct ofono_error *error,
 	struct ofono_netreg *netreg = data;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
-		ofono_debug("Error during signal strength query");
+		DBG("Error during signal strength query");
 		return;
 	}
 
@@ -1578,13 +1607,14 @@ static void netreg_unregister(struct ofono_atom *atom)
 	__ofono_watchlist_free(netreg->status_watches);
 	netreg->status_watches = NULL;
 
-	if (netreg->opscan_source) {
-		g_source_remove(netreg->opscan_source);
-		netreg->opscan_source = 0;
-	}
+	for (l = netreg->operator_list; l; l = l->next) {
+		struct network_operator_data *opd = l->data;
 
-	for (l = netreg->operator_list; l; l = l->next)
+		if (opd->mcc[0] == '\0' && opd->mnc[0] == '\0')
+			continue;
+
 		network_operator_dbus_unregister(netreg, l->data);
+	}
 
 	g_slist_free(netreg->operator_list);
 	netreg->operator_list = NULL;
@@ -1721,10 +1751,6 @@ void ofono_netreg_register(struct ofono_netreg *netreg)
 	netreg->status_watches = __ofono_watchlist_new(g_free);
 
 	ofono_modem_add_interface(modem, NETWORK_REGISTRATION_INTERFACE);
-
-	if (netreg->driver->list_operators)
-		netreg->opscan_source = g_timeout_add_seconds(5,
-				update_network_operator_list_init, netreg);
 
 	if (netreg->driver->registration_status)
 		netreg->driver->registration_status(netreg,
