@@ -37,9 +37,6 @@
 #include "util.h"
 #include "storage.h"
 
-#define NETWORK_REGISTRATION_INTERFACE "org.ofono.NetworkRegistration"
-#define NETWORK_OPERATOR_INTERFACE "org.ofono.NetworkOperator"
-
 #define NETWORK_REGISTRATION_FLAG_HOME_SHOW_PLMN 0x1
 #define NETWORK_REGISTRATION_FLAG_ROAMING_SHOW_SPN 0x2
 
@@ -188,9 +185,8 @@ static void set_registration_mode(struct ofono_netreg *netreg, int mode)
 	path = __ofono_atom_get_path(netreg->atom);
 
 	ofono_dbus_signal_property_changed(conn, path,
-						NETWORK_REGISTRATION_INTERFACE,
-						"Mode", DBUS_TYPE_STRING,
-						&strmode);
+					OFONO_NETWORK_REGISTRATION_INTERFACE,
+					"Mode", DBUS_TYPE_STRING, &strmode);
 }
 
 static void register_callback(const struct ofono_error *error, void *data)
@@ -366,10 +362,10 @@ static void network_operator_emit_available_operators(struct ofono_netreg *netre
 	network_operator_populate_registered(netreg, &network_operators);
 
 	ofono_dbus_signal_array_property_changed(conn, path,
-						NETWORK_REGISTRATION_INTERFACE,
-						"AvailableOperators",
-						DBUS_TYPE_OBJECT_PATH,
-						&network_operators);
+					OFONO_NETWORK_REGISTRATION_INTERFACE,
+					"AvailableOperators",
+					DBUS_TYPE_OBJECT_PATH,
+					&network_operators);
 
 	g_strfreev(network_operators);
 }
@@ -394,9 +390,10 @@ static void set_network_operator_status(struct network_operator_data *opd,
 	status_str = network_operator_status_to_string(status);
 	path = network_operator_build_path(netreg, opd->mcc, opd->mnc);
 
-	ofono_dbus_signal_property_changed(conn, path, NETWORK_OPERATOR_INTERFACE,
-						"Status", DBUS_TYPE_STRING,
-						&status_str);
+	ofono_dbus_signal_property_changed(conn, path,
+					OFONO_NETWORK_OPERATOR_INTERFACE,
+					"Status", DBUS_TYPE_STRING,
+					&status_str);
 }
 
 static void set_network_operator_techs(struct network_operator_data *opd,
@@ -415,10 +412,9 @@ static void set_network_operator_techs(struct network_operator_data *opd,
 	path = network_operator_build_path(netreg, opd->mcc, opd->mnc);
 
 	ofono_dbus_signal_array_property_changed(conn, path,
-						NETWORK_REGISTRATION_INTERFACE,
-						"Technologies",
-						DBUS_TYPE_STRING,
-						&technologies);
+					OFONO_NETWORK_REGISTRATION_INTERFACE,
+					"Technologies", DBUS_TYPE_STRING,
+					&technologies);
 	g_strfreev(technologies);
 }
 
@@ -427,6 +423,7 @@ static char *get_operator_display_name(struct ofono_netreg *netreg)
 	struct network_operator_data *opd = netreg->current_operator;
 	const char *plmn;
 	static char name[1024];
+	static char mccmnc[OFONO_MAX_MCC_LENGTH + OFONO_MAX_MNC_LENGTH + 1];
 	int len = sizeof(name);
 	int home_or_spdi;
 
@@ -440,6 +437,16 @@ static char *get_operator_display_name(struct ofono_netreg *netreg)
 	}
 
 	plmn = opd->name;
+
+	/*
+	 * This is a fallback on some really broken hardware which do not
+	 * report the COPS name
+	 */
+	if (plmn[0] == '\0') {
+		snprintf(mccmnc, sizeof(mccmnc), "%s%s", opd->mcc, opd->mnc);
+		plmn = mccmnc;
+	}
+
 	if (opd->eons_info && opd->eons_info->longname)
 		plmn = opd->eons_info->longname;
 
@@ -480,6 +487,9 @@ static void set_network_operator_name(struct network_operator_data *opd,
 	const char *path;
 	const char *operator;
 
+	if (name[0] == '\0')
+		return;
+
 	if (!strncmp(opd->name, name, OFONO_MAX_OPERATOR_NAME_LENGTH))
 		return;
 
@@ -498,9 +508,9 @@ static void set_network_operator_name(struct network_operator_data *opd,
 		operator = get_operator_display_name(netreg);
 
 		ofono_dbus_signal_property_changed(conn, path,
-						NETWORK_REGISTRATION_INTERFACE,
-						"Operator", DBUS_TYPE_STRING,
-						&operator);
+					OFONO_NETWORK_REGISTRATION_INTERFACE,
+					"Operator", DBUS_TYPE_STRING,
+					&operator);
 	}
 
 	/* Don't emit when only operator name is reported */
@@ -509,7 +519,8 @@ static void set_network_operator_name(struct network_operator_data *opd,
 
 	path = network_operator_build_path(netreg, opd->mcc, opd->mnc);
 
-	ofono_dbus_signal_property_changed(conn, path, NETWORK_OPERATOR_INTERFACE,
+	ofono_dbus_signal_property_changed(conn, path,
+					OFONO_NETWORK_OPERATOR_INTERFACE,
 					"Name", DBUS_TYPE_STRING, &name);
 }
 
@@ -543,18 +554,17 @@ static void set_network_operator_eons_info(struct network_operator_data *opd,
 
 	if (oldname != newname && strcmp(oldname, newname)) {
 		ofono_dbus_signal_property_changed(conn, path,
-						NETWORK_OPERATOR_INTERFACE,
-						"Name", DBUS_TYPE_STRING,
-						&newname);
+					OFONO_NETWORK_OPERATOR_INTERFACE,
+					"Name", DBUS_TYPE_STRING, &newname);
 
 		if (opd == netreg->current_operator) {
 			const char *npath = __ofono_atom_get_path(netreg->atom);
 			const char *operator = get_operator_display_name(netreg);
 
 			ofono_dbus_signal_property_changed(conn, npath,
-						NETWORK_REGISTRATION_INTERFACE,
-						"Operator", DBUS_TYPE_STRING,
-						&operator);
+					OFONO_NETWORK_REGISTRATION_INTERFACE,
+					"Operator", DBUS_TYPE_STRING,
+					&operator);
 		}
 	}
 
@@ -570,9 +580,9 @@ static void set_network_operator_eons_info(struct network_operator_data *opd,
 
 	if (oldinfo != newinfo && strcmp(oldinfo, newinfo))
 		ofono_dbus_signal_property_changed(conn, path,
-						NETWORK_OPERATOR_INTERFACE,
-						"AdditionalInformation",
-						DBUS_TYPE_STRING, &newinfo);
+					OFONO_NETWORK_OPERATOR_INTERFACE,
+					"AdditionalInformation",
+					DBUS_TYPE_STRING, &newinfo);
 }
 
 static DBusMessage *network_operator_get_properties(DBusConnection *conn,
@@ -583,6 +593,7 @@ static DBusMessage *network_operator_get_properties(DBusConnection *conn,
 	DBusMessage *reply;
 	DBusMessageIter iter;
 	DBusMessageIter dict;
+	char mccmnc[OFONO_MAX_MCC_LENGTH + OFONO_MAX_MNC_LENGTH + 1];
 
 	const char *name = opd->name;
 	const char *status =
@@ -600,6 +611,11 @@ static DBusMessage *network_operator_get_properties(DBusConnection *conn,
 	dbus_message_iter_open_container(&iter, DBUS_TYPE_ARRAY,
 					OFONO_PROPERTIES_ARRAY_SIGNATURE,
 					&dict);
+
+	if (name[0] == '\0') {
+		snprintf(mccmnc, sizeof(mccmnc), "%s%s", opd->mcc, opd->mnc);
+		name = mccmnc;
+	}
 
 	ofono_dbus_dict_append(&dict, "Name", DBUS_TYPE_STRING, &name);
 
@@ -681,7 +697,8 @@ static gboolean network_operator_dbus_register(struct ofono_netreg *netreg,
 
 	path = network_operator_build_path(netreg, opd->mcc, opd->mnc);
 
-	if (!g_dbus_register_interface(conn, path, NETWORK_OPERATOR_INTERFACE,
+	if (!g_dbus_register_interface(conn, path,
+					OFONO_NETWORK_OPERATOR_INTERFACE,
 					network_operator_methods,
 					network_operator_signals,
 					NULL, opd,
@@ -709,7 +726,7 @@ static gboolean network_operator_dbus_unregister(struct ofono_netreg *netreg,
 	path = network_operator_build_path(netreg, opd->mcc, opd->mnc);
 
 	return g_dbus_unregister_interface(conn, path,
-					NETWORK_OPERATOR_INTERFACE);
+					OFONO_NETWORK_OPERATOR_INTERFACE);
 }
 
 static DBusMessage *network_get_properties(DBusConnection *conn,
@@ -868,7 +885,7 @@ static void set_registration_status(struct ofono_netreg *netreg, int status)
 	netreg->status = status;
 
 	ofono_dbus_signal_property_changed(conn, path,
-					NETWORK_REGISTRATION_INTERFACE,
+					OFONO_NETWORK_REGISTRATION_INTERFACE,
 					"Status", DBUS_TYPE_STRING,
 					&str_status);
 }
@@ -888,9 +905,9 @@ static void set_registration_location(struct ofono_netreg *netreg, int lac)
 		return;
 
 	ofono_dbus_signal_property_changed(conn, path,
-						NETWORK_REGISTRATION_INTERFACE,
-						"LocationAreaCode",
-						DBUS_TYPE_UINT16, &dbus_lac);
+					OFONO_NETWORK_REGISTRATION_INTERFACE,
+					"LocationAreaCode",
+					DBUS_TYPE_UINT16, &dbus_lac);
 }
 
 static void set_registration_cellid(struct ofono_netreg *netreg, int ci)
@@ -905,9 +922,8 @@ static void set_registration_cellid(struct ofono_netreg *netreg, int ci)
 		return;
 
 	ofono_dbus_signal_property_changed(conn, path,
-						NETWORK_REGISTRATION_INTERFACE,
-						"CellId", DBUS_TYPE_UINT32,
-						&dbus_ci);
+					OFONO_NETWORK_REGISTRATION_INTERFACE,
+					"CellId", DBUS_TYPE_UINT32, &dbus_ci);
 }
 
 static void set_registration_technology(struct ofono_netreg *netreg, int tech)
@@ -922,9 +938,9 @@ static void set_registration_technology(struct ofono_netreg *netreg, int tech)
 		return;
 
 	ofono_dbus_signal_property_changed(conn, path,
-						NETWORK_REGISTRATION_INTERFACE,
-						"Technology", DBUS_TYPE_STRING,
-						&tech_str);
+					OFONO_NETWORK_REGISTRATION_INTERFACE,
+					"Technology", DBUS_TYPE_STRING,
+					&tech_str);
 }
 
 void __ofono_netreg_set_base_station_name(struct ofono_netreg *netreg,
@@ -953,9 +969,9 @@ void __ofono_netreg_set_base_station_name(struct ofono_netreg *netreg,
 	}
 
 	ofono_dbus_signal_property_changed(conn, path,
-						NETWORK_REGISTRATION_INTERFACE,
-						"BaseStation", DBUS_TYPE_STRING,
-						&base_station);
+					OFONO_NETWORK_REGISTRATION_INTERFACE,
+					"BaseStation", DBUS_TYPE_STRING,
+					&base_station);
 }
 
 unsigned int __ofono_netreg_add_status_watch(struct ofono_netreg *netreg,
@@ -1259,7 +1275,7 @@ emit:
 	operator = get_operator_display_name(netreg);
 
 	ofono_dbus_signal_property_changed(conn, path,
-					NETWORK_REGISTRATION_INTERFACE,
+					OFONO_NETWORK_REGISTRATION_INTERFACE,
 					"Operator", DBUS_TYPE_STRING,
 					&operator);
 
@@ -1334,9 +1350,9 @@ void ofono_netreg_strength_notify(struct ofono_netreg *netreg, int strength)
 		dbus_uint16_t strength = netreg->signal_strength;
 
 		ofono_dbus_signal_property_changed(conn, path,
-						NETWORK_REGISTRATION_INTERFACE,
-						"Strength", DBUS_TYPE_UINT16,
-						&strength);
+					OFONO_NETWORK_REGISTRATION_INTERFACE,
+					"Strength", DBUS_TYPE_UINT16,
+					&strength);
 	}
 }
 
@@ -1452,9 +1468,9 @@ static void sim_spdi_read_cb(int ok, int length, int record,
 		operator = get_operator_display_name(netreg);
 
 		ofono_dbus_signal_property_changed(conn, path,
-						NETWORK_REGISTRATION_INTERFACE,
-						"Operator", DBUS_TYPE_STRING,
-						&operator);
+					OFONO_NETWORK_REGISTRATION_INTERFACE,
+					"Operator", DBUS_TYPE_STRING,
+					&operator);
 	}
 }
 
@@ -1517,9 +1533,9 @@ static void sim_spn_read_cb(int ok, int length, int record,
 		operator = get_operator_display_name(netreg);
 
 		ofono_dbus_signal_property_changed(conn, path,
-						NETWORK_REGISTRATION_INTERFACE,
-						"Operator", DBUS_TYPE_STRING,
-						&operator);
+					OFONO_NETWORK_REGISTRATION_INTERFACE,
+					"Operator", DBUS_TYPE_STRING,
+					&operator);
 	}
 }
 
@@ -1634,8 +1650,9 @@ static void netreg_unregister(struct ofono_atom *atom)
 	}
 
 	g_dbus_unregister_interface(conn, path,
-					NETWORK_REGISTRATION_INTERFACE);
-	ofono_modem_remove_interface(modem, NETWORK_REGISTRATION_INTERFACE);
+					OFONO_NETWORK_REGISTRATION_INTERFACE);
+	ofono_modem_remove_interface(modem,
+					OFONO_NETWORK_REGISTRATION_INTERFACE);
 }
 
 static void netreg_remove(struct ofono_atom *atom)
@@ -1738,19 +1755,19 @@ void ofono_netreg_register(struct ofono_netreg *netreg)
 	struct ofono_atom *sim_atom;
 
 	if (!g_dbus_register_interface(conn, path,
-					NETWORK_REGISTRATION_INTERFACE,
+					OFONO_NETWORK_REGISTRATION_INTERFACE,
 					network_registration_methods,
 					network_registration_signals,
 					NULL, netreg, NULL)) {
 		ofono_error("Could not create %s interface",
-				NETWORK_REGISTRATION_INTERFACE);
+				OFONO_NETWORK_REGISTRATION_INTERFACE);
 
 		return;
 	}
 
 	netreg->status_watches = __ofono_watchlist_new(g_free);
 
-	ofono_modem_add_interface(modem, NETWORK_REGISTRATION_INTERFACE);
+	ofono_modem_add_interface(modem, OFONO_NETWORK_REGISTRATION_INTERFACE);
 
 	if (netreg->driver->registration_status)
 		netreg->driver->registration_status(netreg,

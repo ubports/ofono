@@ -55,7 +55,11 @@ gatchat_sources = gatchat/gatchat.h gatchat/gatchat.c \
 				gatchat/gattty.h gatchat/gattty.c \
 				gatchat/gatutil.h gatchat/gatutil.c \
 				gatchat/gat.h \
-				gatchat/gatserver.h gatchat/gatserver.c
+				gatchat/gatserver.h gatchat/gatserver.c \
+				gatchat/gatppp.c gatchat/gatppp.h \
+				gatchat/ppp.c gatchat/ppp.h gatchat/ppp_cp.h \
+				gatchat/ppp_cp.c gatchat/ppp_lcp.c \
+				gatchat/ppp_auth.c gatchat/ppp_net.c
 
 udev_files = plugins/ofono.rules
 
@@ -195,6 +199,9 @@ builtin_sources += plugins/hso.c
 builtin_modules += huawei
 builtin_sources += plugins/huawei.c
 
+builtin_modules += em770
+builtin_sources += plugins/em770.c
+
 builtin_modules += novatel
 builtin_sources += plugins/novatel.c
 
@@ -228,7 +235,7 @@ src_ofonod_SOURCES = $(gdbus_sources) $(builtin_sources) \
 			src/simutil.h src/simutil.c src/storage.h \
 			src/storage.c src/cbs.c src/watch.c src/call-volume.c \
 			src/gprs.c src/idmap.h src/idmap.c \
-			src/radio-settings.c
+			src/radio-settings.c src/stkutil.h src/stkutil.c
 
 src_ofonod_LDADD = $(builtin_libadd) @GLIB_LIBS@ @DBUS_LIBS@ -ldl
 
@@ -292,7 +299,8 @@ unit_objects =
 
 noinst_PROGRAMS = unit/test-common unit/test-util unit/test-idmap \
 					unit/test-sms unit/test-simutil \
-					unit/test-mux unit/test-caif
+					unit/test-mux unit/test-caif \
+					unit/test-stkutil
 
 unit_test_common_SOURCES = unit/test-common.c src/common.c
 unit_test_common_LDADD = @GLIB_LIBS@
@@ -314,6 +322,12 @@ unit_test_simutil_SOURCES = unit/test-simutil.c src/util.c \
 				src/simutil.c src/smsutil.c src/storage.c
 unit_test_simutil_LDADD = @GLIB_LIBS@
 unit_objects += $(unit_test_simutil_OBJECTS)
+
+unit_test_stkutil_SOURCES = unit/test-stkutil.c src/util.c \
+				src/storage.c src/smsutil.c \
+				src/simutil.c src/stkutil.c
+unit_test_stkutil_LDADD = @GLIB_LIBS@
+unit_objects += $(unit_test_stkutil_OBJECTS)
 
 unit_test_mux_SOURCES = unit/test-mux.c $(gatchat_sources)
 unit_test_mux_LDADD = @GLIB_LIBS@

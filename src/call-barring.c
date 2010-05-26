@@ -37,6 +37,7 @@
 #include "common.h"
 
 #define CALL_BARRING_FLAG_CACHED 0x1
+#define NUM_OF_BARRINGS 5
 
 static GSList *g_drivers = NULL;
 
@@ -47,8 +48,8 @@ static void set_query_next_lock(struct ofono_call_barring *cb);
 struct ofono_call_barring {
 	int flags;
 	DBusMessage *pending;
-	int *cur_locks;
-	int *new_locks;
+	int cur_locks[NUM_OF_BARRINGS];
+	int new_locks[NUM_OF_BARRINGS];
 	int query_start;
 	int query_end;
 	int query_next;
@@ -146,10 +147,8 @@ static void update_barrings(struct ofono_call_barring *cb, int mask)
 					"Incoming", cls);
 	}
 
-	for (i = cb->query_start; i <= cb->query_end; i++) {
+	for (i = cb->query_start; i <= cb->query_end; i++)
 		cb->cur_locks[i] = cb->new_locks[i];
-		cb->new_locks[i] = 0;
-	}
 }
 
 static void cb_ss_property_append(struct ofono_call_barring *cb,
@@ -164,7 +163,7 @@ static void cb_ss_property_append(struct ofono_call_barring *cb,
 		if (!(mask & i))
 			continue;
 
-		strvalue = (cb->cur_locks[lock] & i) ? "enabled" : "disabled";
+		strvalue = (cb->new_locks[lock] & i) ? "enabled" : "disabled";
 
 		snprintf(property_name, sizeof(property_name), "%s%s",
 				bearer_class_to_string(i),
@@ -403,7 +402,7 @@ static gboolean cb_ss_control(int type, const char *sc,
 	if (strlen(dn) > 0)
 		goto bad_format;
 
-	if (!is_valid_pin(sia))
+	if (type != SS_CONTROL_TYPE_QUERY && !is_valid_pin(sia, PIN_TYPE_NET))
 		goto bad_format;
 
 	switch (type) {
@@ -457,13 +456,13 @@ static gboolean cb_ss_control(int type, const char *sc,
 	switch (type) {
 	case SS_CONTROL_TYPE_ACTIVATION:
 	case SS_CONTROL_TYPE_REGISTRATION:
-		cb->ss_req_type = SS_CONTROL_TYPE_REGISTRATION;
+		cb->ss_req_type = SS_CONTROL_TYPE_ACTIVATION;
 		cb->driver->set(cb, fac, 1, sia, cls,
 				cb_ss_set_lock_callback, cb);
 		break;
 	case SS_CONTROL_TYPE_ERASURE:
 	case SS_CONTROL_TYPE_DEACTIVATION:
-		cb->ss_req_type = SS_CONTROL_TYPE_ERASURE;
+		cb->ss_req_type = SS_CONTROL_TYPE_DEACTIVATION;
 		cb->driver->set(cb, fac, 0, sia, cls,
 				cb_ss_set_lock_callback, cb);
 		break;
@@ -524,7 +523,7 @@ static gboolean cb_ss_passwd(const char *sc,
 	if (!fac)
 		return FALSE;
 
-	if (!is_valid_pin(old) || !is_valid_pin(new))
+	if (!is_valid_pin(old, PIN_TYPE_NET) || !is_valid_pin(new, PIN_TYPE_NET))
 		goto bad_format;
 
 	cb->pending = dbus_message_ref(msg);
@@ -590,7 +589,7 @@ static inline void cb_append_property(struct ofono_call_barring *cb,
 	int i;
 
 	for (i = start; i <= end; i++)
-		if (cb->cur_locks[i] & cls)
+		if (cb->new_locks[i] & cls)
 			break;
 
 	if (i <= end)
@@ -855,7 +854,7 @@ static DBusMessage *cb_set_property(DBusConnection *conn, DBusMessage *msg,
 			return __ofono_error_invalid_args(msg);
 
 		dbus_message_iter_get_basic(&iter, &passwd);
-		if (!is_valid_pin(passwd))
+		if (!is_valid_pin(passwd, PIN_TYPE_NET))
 			return __ofono_error_invalid_format(msg);
 	}
 
@@ -902,7 +901,7 @@ static DBusMessage *cb_disable_all(DBusConnection *conn, DBusMessage *msg,
 					DBUS_TYPE_INVALID) == FALSE)
 		return __ofono_error_invalid_args(msg);
 
-	if (!is_valid_pin(passwd))
+	if (!is_valid_pin(passwd, PIN_TYPE_NET))
 		return __ofono_error_invalid_format(msg);
 
 	cb_set_query_bounds(cb, fac, FALSE);
@@ -950,10 +949,10 @@ static DBusMessage *cb_set_passwd(DBusConnection *conn, DBusMessage *msg,
 					DBUS_TYPE_INVALID) == FALSE)
 		return __ofono_error_invalid_args(msg);
 
-	if (!is_valid_pin(old_passwd))
+	if (!is_valid_pin(old_passwd, PIN_TYPE_NET))
 		return __ofono_error_invalid_format(msg);
 
-	if (!is_valid_pin(new_passwd))
+	if (!is_valid_pin(new_passwd, PIN_TYPE_NET))
 		return __ofono_error_invalid_format(msg);
 
 	cb->pending = dbus_message_ref(msg);
@@ -991,18 +990,9 @@ static void call_barring_incoming_enabled_notify(int idx, void *userdata)
 	struct ofono_call_barring *cb = userdata;
 	DBusConnection *conn = ofono_dbus_get_connection();
 	const char *path = __ofono_atom_get_path(cb->atom);
-	DBusMessage *signal;
 
-	signal = dbus_message_new_signal(path, OFONO_CALL_BARRING_INTERFACE,
-						"IncomingBarringInEffect");
-
-	if (!signal) {
-		ofono_error("Unable to allocate new %s.IncomingBarringInEffect"
-				" signal", OFONO_CALL_BARRING_INTERFACE);
-		return;
-	}
-
-	g_dbus_send_message(conn, signal);
+	g_dbus_emit_signal(conn, path, OFONO_CALL_BARRING_INTERFACE,
+			"IncomingBarringInEffect", DBUS_TYPE_INVALID);
 }
 
 static void call_barring_outgoing_enabled_notify(int idx, void *userdata)
@@ -1080,9 +1070,6 @@ static void call_barring_remove(struct ofono_atom *atom)
 	if (cb->driver && cb->driver->remove)
 		cb->driver->remove(cb);
 
-	g_free(cb->cur_locks);
-	g_free(cb->new_locks);
-
 	g_free(cb);
 }
 
@@ -1093,7 +1080,6 @@ struct ofono_call_barring *ofono_call_barring_create(struct ofono_modem *modem,
 {
 	struct ofono_call_barring *cb;
 	GSList *l;
-	int lcount;
 
 	if (driver == NULL)
 		return NULL;
@@ -1103,10 +1089,6 @@ struct ofono_call_barring *ofono_call_barring_create(struct ofono_modem *modem,
 	if (cb == NULL)
 		return NULL;
 
-	lcount = CB_ALL_END - CB_ALL_START + 1;
-
-	cb->cur_locks = g_new0(int, lcount);
-	cb->new_locks = g_new0(int, lcount);
 	cb->atom = __ofono_modem_add_atom(modem, OFONO_ATOM_TYPE_CALL_BARRING,
 						call_barring_remove, cb);
 

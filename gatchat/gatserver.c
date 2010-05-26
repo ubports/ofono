@@ -32,6 +32,9 @@
 #include "ringbuffer.h"
 #include "gatserver.h"
 
+#define BUF_SIZE 4096
+/* #define WRITE_SCHEDULER_DEBUG 1 */
+
 enum ParserState {
 	PARSER_STATE_IDLE,
 	PARSER_STATE_A,
@@ -85,29 +88,82 @@ struct v250_settings {
 	unsigned int c108;		/* set by &D<val> */
 };
 
+/* AT command set that server supported */
+struct at_command {
+	GAtServerNotifyFunc notify;
+	gpointer user_data;
+	GDestroyNotify destroy_notify;
+};
+
 struct _GAtServer {
 	gint ref_count;				/* Ref count */
 	struct v250_settings v250;		/* V.250 command setting */
 	GIOChannel *channel;			/* Server IO */
-	int server_watch;			/* Watch for server IO */
+	guint read_watch;			/* GSource read id, 0 if none */
+	guint write_watch;			/* GSource write id, 0 if none */
 	guint read_so_far;			/* Number of bytes processed */
 	GAtDisconnectFunc user_disconnect;	/* User disconnect func */
 	gpointer user_disconnect_data;		/* User disconnect data */
 	GAtDebugFunc debugf;			/* Debugging output function */
 	gpointer debug_data;			/* Data to pass to debug func */
+	GHashTable *command_list;		/* List of AT commands */
 	struct ring_buffer *read_buf;		/* Current read buffer */
+	GQueue *write_queue;			/* Write buffer queue */
 	guint max_read_attempts;		/* Max reads per select */
 	enum ParserState parser_state;
+	gboolean destroyed;			/* Re-entrancy guard */
 };
 
-static void g_at_server_send_result(GAtServer *server, GAtServerResult result)
+static void g_at_server_wakeup_writer(GAtServer *server);
+
+static struct ring_buffer *allocate_next(GAtServer *server)
+{
+	struct ring_buffer *buf = ring_buffer_new(BUF_SIZE);
+
+	if (!buf)
+		return NULL;
+
+	g_queue_push_tail(server->write_queue, buf);
+
+	return buf;
+}
+
+static void send_common(GAtServer *server, const char *buf, unsigned int len)
+{
+	gsize towrite = len;
+	gsize bytes_written = 0;
+	struct ring_buffer *write_buf;
+
+	write_buf = g_queue_peek_tail(server->write_queue);
+
+	while (bytes_written < towrite) {
+		gsize wbytes = MIN((gsize)ring_buffer_avail(write_buf),
+						towrite - bytes_written);
+
+		bytes_written += ring_buffer_write(write_buf,
+							buf + bytes_written,
+							wbytes);
+
+		/*
+		 * Make sure we don't allocate a buffer if we've written
+		 * everything out already
+		 */
+		if (ring_buffer_avail(write_buf) == 0 &&
+				bytes_written < towrite)
+			write_buf = allocate_next(server);
+	}
+
+	g_at_server_wakeup_writer(server);
+}
+
+static void g_at_server_send_final(GAtServer *server, GAtServerResult result)
 {
 	struct v250_settings v250 = server->v250;
 	const char *result_str = server_result_to_string(result);
 	char buf[1024];
 	char t = v250.s3;
 	char r = v250.s4;
-	gsize wbuf;
+	unsigned int len;
 
 	if (v250.quiet)
 		return;
@@ -116,19 +172,16 @@ static void g_at_server_send_result(GAtServer *server, GAtServerResult result)
 		return;
 
 	if (v250.is_v1)
-		snprintf(buf, sizeof(buf), "%c%c%s%c%c", t, r, result_str,
+		len = snprintf(buf, sizeof(buf), "%c%c%s%c%c", t, r, result_str,
 				t, r);
 	else
-		snprintf(buf, sizeof(buf), "%u%c", (unsigned int) result, t);
+		len = snprintf(buf, sizeof(buf), "%u%c", (unsigned int) result,
+				t);
 
-	g_at_util_debug_chat(FALSE, buf, strlen(buf),
-				server->debugf, server->debug_data);
-
-	g_io_channel_write(server->channel, (char *) buf, strlen(buf),
-							&wbuf);
+	send_common(server, buf, MIN(len, sizeof(buf)-1));
 }
 
-static inline gboolean is_at_command_prefix(const char c)
+static inline gboolean is_extended_command_prefix(const char c)
 {
 	switch (c) {
 	case '+':
@@ -141,45 +194,153 @@ static inline gboolean is_at_command_prefix(const char c)
 	}
 }
 
-static void parse_at_command(GAtServer *server, char *buf)
+static gboolean is_basic_command_prefix(const char *buf)
 {
-	g_at_server_send_result(server, G_AT_SERVER_RESULT_ERROR);
+	if (g_ascii_isalpha(buf[0]))
+		return TRUE;
+
+	if (buf[0] == '&' && g_ascii_isalpha(buf[1]))
+		return TRUE;
+
+	return FALSE;
 }
 
-static void parse_v250_settings(GAtServer *server, char *buf)
+static void at_command_notify(GAtServer *server, char *command,
+				char *prefix, GAtServerRequestType type)
 {
-	g_at_server_send_result(server, G_AT_SERVER_RESULT_ERROR);
+	struct at_command *node;
+	GAtResult result;
+
+	node = g_hash_table_lookup(server->command_list, prefix);
+
+	if (node == NULL) {
+		g_at_server_send_final(server, G_AT_SERVER_RESULT_ERROR);
+		return;
+	}
+
+	result.lines = g_slist_prepend(NULL, command);
+	result.final_or_pdu = 0;
+
+	node->notify(type, &result, node->user_data);
+
+	g_slist_free(result.lines);
+}
+
+static unsigned int parse_extended_command(GAtServer *server, char *buf)
+{
+	const char *valid_extended_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+						"0123456789!%-./:_";
+	const char *separators = ";?=";
+	unsigned int prefix_len, i;
+	gboolean in_string = FALSE;
+	gboolean seen_question = FALSE;
+	gboolean seen_equals = FALSE;
+	char prefix[18]; /* According to V250, 5.4.1 */
+	GAtServerRequestType type;
+
+	prefix_len = strcspn(buf, separators);
+
+	if (prefix_len > 17 || prefix_len < 2)
+		return 0;
+
+	/* Convert to upper case, we will always use upper case naming */
+	for (i = 0; i < prefix_len; i++)
+		prefix[i] = g_ascii_toupper(buf[i]);
+
+	prefix[prefix_len] = '\0';
+
+	if (strspn(prefix + 1, valid_extended_chars) != (prefix_len - 1))
+		return 0;
+
+	/*
+	 * V.250 Section 5.4.1: "The first character following "+" shall be
+	 * an alphabetic character in the range "A" through "Z".
+	 */
+	if (prefix[1] <= 'A' || prefix[1] >= 'Z')
+		return 0;
+
+	if (buf[i] != '\0' && buf[i] != ';' && buf[i] != '?' && buf[i] != '=')
+		return 0;
+
+	type = G_AT_SERVER_REQUEST_TYPE_COMMAND_ONLY;
+
+	/* Continue until we hit eol or ';' */
+	while (buf[i] && !(buf[i] == ';' && in_string == FALSE)) {
+		if (buf[i] == '"') {
+			in_string = !in_string;
+			goto next;
+		}
+
+		if (in_string == TRUE)
+			goto next;
+
+		if (buf[i] == '?') {
+			if (seen_question || seen_equals)
+				return 0;
+
+			if (buf[i + 1] != '\0' && buf[i + 1] != ';')
+				return 0;
+
+			seen_question = TRUE;
+			type = G_AT_SERVER_REQUEST_TYPE_QUERY;
+		} else if (buf[i] == '=') {
+			if (seen_equals || seen_question)
+				return 0;
+
+			seen_equals = TRUE;
+
+			if (buf[i + 1] == '?')
+				type = G_AT_SERVER_REQUEST_TYPE_SUPPORT;
+			else
+				type = G_AT_SERVER_REQUEST_TYPE_SET;
+		}
+
+next:
+		i++;
+	}
+
+	/* We can scratch in this buffer, so mark ';' as null */
+	buf[i] = '\0';
+
+	at_command_notify(server, buf, prefix, type);
+
+	/* Also consume the terminating null */
+	return i + 1;
+}
+
+static unsigned int parse_basic_command(GAtServer *server, char *buf)
+{
+	return 0;
 }
 
 static void server_parse_line(GAtServer *server, char *line)
 {
-	gsize i = 0;
-	char c;
+	unsigned int pos = 0;
+	unsigned int len = strlen(line);
 
-	if (line == NULL) {
-		g_at_server_send_result(server, G_AT_SERVER_RESULT_ERROR);
-		goto done;
+	if (len == 0) {
+		g_at_server_send_final(server, G_AT_SERVER_RESULT_OK);
+		return;
 	}
 
-	if (line[0] == '\0') {
-		g_at_server_send_result(server, G_AT_SERVER_RESULT_OK);
-		goto done;
+	while (pos < len) {
+		unsigned int consumed;
+
+		if (is_extended_command_prefix(line[pos]))
+			consumed = parse_extended_command(server, line + pos);
+		else if (is_basic_command_prefix(line + pos))
+			consumed = parse_basic_command(server, line + pos);
+		else
+			consumed = 0;
+
+		if (consumed == 0) {
+			g_at_server_send_final(server,
+						G_AT_SERVER_RESULT_ERROR);
+			break;
+		}
+
+		pos += consumed;
 	}
-
-	c = line[i];
-	/* skip semicolon */
-	if (c == ';')
-		c = line[++i];
-
-	if (is_at_command_prefix(c) || c == 'A' || c == 'D' || c == 'H')
-		parse_at_command(server, line + i);
-	else if (g_ascii_isalpha(c) || c == '&')
-		parse_v250_settings(server, line + i);
-	else
-		g_at_server_send_result(server, G_AT_SERVER_RESULT_ERROR);
-
-done:
-	g_free(line);
 }
 
 static enum ParserResult server_feed(GAtServer *server,
@@ -264,6 +425,7 @@ static char *extract_line(GAtServer *p)
 	int strip_front = 0;
 	int line_length = 0;
 	gboolean in_string = FALSE;
+	char s3 = p->v250.s3;
 	char *line;
 	int i;
 
@@ -284,7 +446,7 @@ static char *extract_line(GAtServer *p)
 			buf = ring_buffer_read_ptr(p->read_buf, pos);
 	}
 
-	/* We will strip AT and \r */
+	/* We will strip AT and S3 */
 	line_length -= 3;
 
 	line = g_try_new(char, line_length + 1);
@@ -308,7 +470,7 @@ static char *extract_line(GAtServer *p)
 
 		if ((*buf == ' ' || *buf == '\t') && in_string == FALSE)
 			; /* Skip */
-		else if (*buf != '\r')
+		else if (*buf != s3)
 			line[i++] = *buf;
 
 		buf += 1;
@@ -318,7 +480,7 @@ static char *extract_line(GAtServer *p)
 			buf = ring_buffer_read_ptr(p->read_buf, pos);
 	}
 
-	/* Strip \r */
+	/* Strip S3 */
 	ring_buffer_drain(p->read_buf, p->read_so_far - strip_front - 2);
 
 	line[i] = '\0';
@@ -331,7 +493,7 @@ static void new_bytes(GAtServer *p)
 	unsigned int len = ring_buffer_len(p->read_buf);
 	unsigned int wrap = ring_buffer_len_no_wrap(p->read_buf);
 	unsigned char *buf = ring_buffer_read_ptr(p->read_buf, p->read_so_far);
-	enum ParserState result;
+	enum ParserResult result;
 
 	while (p->channel && (p->read_so_far < len)) {
 		gsize rbytes = MIN(len - p->read_so_far, wrap - p->read_so_far);
@@ -354,17 +516,26 @@ static void new_bytes(GAtServer *p)
 			 * According to section 5.2.4 and 5.6 of V250,
 			 * Empty commands must be OK by the DCE
 			 */
-			g_at_server_send_result(p, G_AT_SERVER_RESULT_OK);
+			g_at_server_send_final(p, G_AT_SERVER_RESULT_OK);
 			ring_buffer_drain(p->read_buf, p->read_so_far);
 			break;
 
 		case PARSER_RESULT_COMMAND:
-			server_parse_line(p, extract_line(p));
+		{
+			char *line = extract_line(p);
+
+			if (line) {
+				server_parse_line(p, line);
+				g_free(line);
+			} else
+				g_at_server_send_final(p,
+						G_AT_SERVER_RESULT_ERROR);
 			break;
+		}
 
 		case PARSER_RESULT_REPEAT_LAST:
 			/* TODO */
-			g_at_server_send_result(p, G_AT_SERVER_RESULT_OK);
+			g_at_server_send_final(p, G_AT_SERVER_RESULT_OK);
 			ring_buffer_drain(p->read_buf, p->read_so_far);
 			break;
 
@@ -380,7 +551,7 @@ static void new_bytes(GAtServer *p)
 
 	/* We're overflowing the buffer, shutdown the socket */
 	if (p->read_buf && ring_buffer_avail(p->read_buf) == 0)
-		g_source_remove(p->server_watch);
+		g_source_remove(p->read_watch);
 }
 
 static gboolean received_data(GIOChannel *channel, GIOCondition cond,
@@ -414,8 +585,12 @@ static gboolean received_data(GIOChannel *channel, GIOCondition cond,
 
 		total_read += rbytes;
 
-		if (rbytes > 0)
+		if (rbytes > 0) {
+			if (server->v250.echo)
+				send_common(server, (char *)buf, rbytes);
+
 			ring_buffer_write_advance(server->read_buf, rbytes);
+		}
 	} while (err == G_IO_ERROR_NONE && rbytes > 0 &&
 					read_count < server->max_read_attempts);
 
@@ -431,17 +606,126 @@ static gboolean received_data(GIOChannel *channel, GIOCondition cond,
 	return TRUE;
 }
 
-static void server_watcher_destroy_notify(GAtServer *server)
+static gboolean can_write_data(GIOChannel *channel, GIOCondition cond,
+				gpointer data)
 {
-	server->server_watch = 0;
+	GAtServer *server = data;
+	GIOError err;
+	gsize bytes_written;
+	gsize towrite;
+	struct ring_buffer *write_buf;
+	unsigned char *buf;
+#ifdef WRITE_SCHEDULER_DEBUG
+	int limiter;
+#endif
 
+	if (cond & (G_IO_NVAL | G_IO_HUP | G_IO_ERR))
+		return FALSE;
+
+	if (!server->write_queue)
+		return FALSE;
+
+	/* Write data out from the head of the queue */
+	write_buf = g_queue_peek_head(server->write_queue);
+
+	buf = ring_buffer_read_ptr(write_buf, 0);
+
+	towrite = ring_buffer_len_no_wrap(write_buf);
+
+#ifdef WRITE_SCHEDULER_DEBUG
+	limiter = towrite;
+
+	if (limiter > 5)
+		limiter = 5;
+#endif
+
+	err = g_io_channel_write(server->channel,
+			(char *)buf,
+#ifdef WRITE_SCHEDULER_DEBUG
+			limiter,
+#else
+			towrite,
+#endif
+			&bytes_written);
+
+	if (err != G_IO_ERROR_NONE) {
+		g_source_remove(server->read_watch);
+		return FALSE;
+	}
+
+	g_at_util_debug_chat(FALSE, (char *)buf, bytes_written, server->debugf,
+				server->debug_data);
+
+	ring_buffer_drain(write_buf, bytes_written);
+
+	/* All data in current buffer is written, free it
+	 * unless it's the last buffer in the queue.
+	 */
+	if ((ring_buffer_len(write_buf) == 0) &&
+			(g_queue_get_length(server->write_queue) > 1)) {
+		write_buf = g_queue_pop_head(server->write_queue);
+		ring_buffer_free(write_buf);
+		write_buf = g_queue_peek_head(server->write_queue);
+	}
+
+	if (ring_buffer_len(write_buf) > 0)
+		return TRUE;
+
+	return FALSE;
+}
+
+static void write_queue_free(GQueue *write_queue)
+{
+	struct ring_buffer *write_buf;
+
+	while ((write_buf = g_queue_pop_head(write_queue)))
+		ring_buffer_free(write_buf);
+
+	g_queue_free(write_queue);
+}
+
+static void g_at_server_cleanup(GAtServer *server)
+{
+	/* Cleanup all received data */
 	ring_buffer_free(server->read_buf);
 	server->read_buf = NULL;
 
+	/* Cleanup pending data to write */
+	write_queue_free(server->write_queue);
+
+	g_hash_table_destroy(server->command_list);
+	server->command_list = NULL;
+
 	server->channel = NULL;
+}
+
+static void read_watcher_destroy_notify(GAtServer *server)
+{
+	g_at_server_cleanup(server);
+	server->read_watch = 0;
 
 	if (server->user_disconnect)
 		server->user_disconnect(server->user_disconnect_data);
+
+	if (server->destroyed)
+		g_free(server);
+}
+
+static void write_watcher_destroy_notify(GAtServer *server)
+{
+	server->write_watch = 0;
+}
+
+static void g_at_server_wakeup_writer(GAtServer *server)
+{
+	if (server->write_watch != 0)
+		return;
+
+	server->write_watch = g_io_add_watch_full(server->channel,
+			G_PRIORITY_DEFAULT,
+			G_IO_OUT | G_IO_HUP | G_IO_ERR | G_IO_NVAL,
+			can_write_data, server,
+			(GDestroyNotify)write_watcher_destroy_notify);
 }
 
 static void v250_settings_create(struct v250_settings *v250)
@@ -455,6 +739,16 @@ static void v250_settings_create(struct v250_settings *v250)
 	v250->res_format = 0;
 	v250->c109 = 1;
 	v250->c108 = 0;
+}
+
+static void at_notify_node_destroy(gpointer data)
+{
+	struct at_command *node = data;
+
+	if (node->destroy_notify)
+		node->destroy_notify(node->user_data);
+
+	g_free(node);
 }
 
 GAtServer *g_at_server_new(GIOChannel *io)
@@ -471,25 +765,41 @@ GAtServer *g_at_server_new(GIOChannel *io)
 	server->ref_count = 1;
 	v250_settings_create(&server->v250);
 	server->channel = io;
-	server->read_buf = ring_buffer_new(4096);
-	server->max_read_attempts = 3;
-
+	server->command_list = g_hash_table_new_full(g_str_hash, g_str_equal,
+							g_free,
+							at_notify_node_destroy);
+	server->read_buf = ring_buffer_new(BUF_SIZE);
 	if (!server->read_buf)
 		goto error;
+
+	server->write_queue = g_queue_new();
+	if (!server->write_queue)
+		goto error;
+
+	if (!allocate_next(server))
+		goto error;
+
+	server->max_read_attempts = 3;
 
 	if (!g_at_util_setup_io(server->channel, G_IO_FLAG_NONBLOCK))
 		goto error;
 
-	server->server_watch = g_io_add_watch_full(io, G_PRIORITY_DEFAULT,
+	server->read_watch = g_io_add_watch_full(io, G_PRIORITY_DEFAULT,
 				G_IO_IN | G_IO_HUP | G_IO_ERR | G_IO_NVAL,
 				received_data, server,
-				(GDestroyNotify)server_watcher_destroy_notify);
+				(GDestroyNotify)read_watcher_destroy_notify);
 
 	return server;
 
 error:
+	if (server->command_list)
+		g_hash_table_destroy(server->command_list);
+
 	if (server->read_buf)
 		ring_buffer_free(server->read_buf);
+
+	if (server->write_queue)
+		write_queue_free(server->write_queue);
 
 	if (server)
 		g_free(server);
@@ -520,6 +830,16 @@ void g_at_server_unref(GAtServer *server)
 		return;
 
 	g_at_server_shutdown(server);
+
+	/* glib delays the destruction of the watcher until it exits, this
+	 * means we can't free the data just yet, even though we've been
+	 * destroyed already.  We have to wait until the read_watcher
+	 * destroy function gets called
+	 */
+	if (server->read_watch != 0)
+		server->destroyed = TRUE;
+	else
+		g_free(server);
 }
 
 gboolean g_at_server_shutdown(GAtServer *server)
@@ -531,13 +851,11 @@ gboolean g_at_server_shutdown(GAtServer *server)
 	server->user_disconnect = NULL;
 	server->user_disconnect_data = NULL;
 
-	if (server->server_watch) {
-		g_source_remove(server->server_watch);
-		server->server_watch = 0;
-	}
+	if (server->write_watch)
+		g_source_remove(server->write_watch);
 
-	g_free(server);
-	server = NULL;
+	if (server->read_watch)
+		g_source_remove(server->read_watch);
 
 	return TRUE;
 }
@@ -563,6 +881,54 @@ gboolean g_at_server_set_debug(GAtServer *server, GAtDebugFunc func,
 
 	server->debugf = func;
 	server->debug_data = user;
+
+	return TRUE;
+}
+
+gboolean g_at_server_register(GAtServer *server, char *prefix,
+					GAtServerNotifyFunc notify,
+					gpointer user_data,
+					GDestroyNotify destroy_notify)
+{
+	struct at_command *node;
+
+	if (server == NULL || server->command_list == NULL)
+		return FALSE;
+
+	if (notify == NULL)
+		return FALSE;
+
+	if (prefix == NULL || strlen(prefix) == 0)
+		return FALSE;
+
+	node = g_try_new0(struct at_command, 1);
+	if (!node)
+		return FALSE;
+
+	node->notify = notify;
+	node->user_data = user_data;
+	node->destroy_notify = destroy_notify;
+
+	g_hash_table_replace(server->command_list, g_strdup(prefix), node);
+
+	return TRUE;
+}
+
+gboolean g_at_server_unregister(GAtServer *server, const char *prefix)
+{
+	struct at_command *node;
+
+	if (server == NULL || server->command_list == NULL)
+		return FALSE;
+
+	if (prefix == NULL || strlen(prefix) == 0)
+		return FALSE;
+
+	node = g_hash_table_lookup(server->command_list, prefix);
+	if (!node)
+		return FALSE;
+
+	g_hash_table_remove(server->command_list, prefix);
 
 	return TRUE;
 }

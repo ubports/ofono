@@ -26,6 +26,7 @@
 extern "C" {
 #endif
 
+#include "gatresult.h"
 #include "gatutil.h"
 
 struct _GAtServer;
@@ -42,14 +43,35 @@ enum _GAtServerResult {
 	G_AT_SERVER_RESULT_NO_DIALTONE = 6,
 	G_AT_SERVER_RESULT_BUSY = 7,
 	G_AT_SERVER_RESULT_NO_ANSWER = 8,
+	G_AT_SERVER_RESULT_EXT_ERROR = 256,
 };
 
 typedef enum _GAtServerResult GAtServerResult;
+
+/* Types of AT command:
+ * COMMAND_ONLY: command without any sub-parameters, e.g. ATA, AT+CLCC
+ * QUERY: command followed by '?', e.g. AT+CPIN?
+ * SUPPORT: command followed by '=?', e.g. AT+CSMS=?
+ * SET: command followed by '=', e.g. AT+CLIP=1
+ * 	or, basic command followed with sub-parameters, e.g. ATD12345;
+ */
+enum _GAtServerRequestType {
+	G_AT_SERVER_REQUEST_TYPE_COMMAND_ONLY,
+	G_AT_SERVER_REQUEST_TYPE_QUERY,
+	G_AT_SERVER_REQUEST_TYPE_SUPPORT,
+	G_AT_SERVER_REQUEST_TYPE_SET,
+};
+
+typedef enum _GAtServerRequestType GAtServerRequestType;
+
+typedef void (*GAtServerNotifyFunc)(GAtServerRequestType type,
+					GAtResult *result, gpointer user_data);
 
 GAtServer *g_at_server_new(GIOChannel *io);
 
 GAtServer *g_at_server_ref(GAtServer *server);
 void g_at_server_unref(GAtServer *server);
+
 gboolean g_at_server_shutdown(GAtServer *server);
 
 gboolean g_at_server_set_disconnect_function(GAtServer *server,
@@ -58,6 +80,12 @@ gboolean g_at_server_set_disconnect_function(GAtServer *server,
 gboolean g_at_server_set_debug(GAtServer *server,
 					GAtDebugFunc func,
 					gpointer user);
+
+gboolean g_at_server_register(GAtServer *server, char *prefix,
+					GAtServerNotifyFunc notify,
+					gpointer user_data,
+					GDestroyNotify destroy_notify);
+gboolean g_at_server_unregister(GAtServer *server, const char *prefix);
 
 #ifdef __cplusplus
 }

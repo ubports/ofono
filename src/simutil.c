@@ -63,6 +63,8 @@ struct opl_operator {
 #define ADM	4
 #define NEV	15
 
+#define ROOTMF 0x3F00
+
 static struct sim_ef_info ef_db[] = {
 {	0x2F05, ROOTMF, BINARY, 0,	ALW,	PIN	},
 {	0x2F06, ROOTMF, RECORD, 0,	ALW,	PIN	},
@@ -115,43 +117,371 @@ static struct sim_ef_info ef_db[] = {
 {	0x6FE3, 0x0000, BINARY, 18,	PIN,	PIN	},
 };
 
-/* Parse ASN.1 Basic Encoding Rules TLVs per ISO/IEC 7816 */
+void simple_tlv_iter_init(struct simple_tlv_iter *iter,
+				const unsigned char *pdu, unsigned int len)
+{
+	iter->pdu = pdu;
+	iter->max = len;
+	iter->pos = 0;
+	iter->tag = 0;
+	iter->len = 0;
+	iter->data = NULL;
+}
+
+gboolean simple_tlv_iter_next(struct simple_tlv_iter *iter)
+{
+	const unsigned char *pdu = iter->pdu + iter->pos;
+	const unsigned char *end = iter->pdu + iter->max;
+	unsigned char tag;
+	unsigned short len;
+
+	if (pdu == end)
+		return FALSE;
+
+	tag = *pdu;
+	pdu++;
+
+	/*
+	 * ISO 7816-4, Section 5.2.1:
+	 *
+	 * The tag field consists of a single byte encoding a tag number from
+	 * 1 to 254.  The values 00 and FF are invalid for tag fields.
+	 *
+	 * The length field consists of one or three consecutive bytes.
+	 * 	- If the first byte is not set to FF, then the length field
+	 * 	  consists of a single byte encoding a number from zero to
+	 * 	  254 and denoted N.
+	 * 	- If the first byte is set to FF, then the length field
+	 * 	  continues on the subsequent two bytes with any value
+	 * 	  encoding a number from zero to 65535 and denoted N
+	 *
+	 * If N is zero, there is no value field, i.e. data object is empty.
+	 */
+	if (pdu == end)
+		return FALSE;
+
+	len = *pdu++;
+
+	if (len == 0xFF) {
+		if ((pdu + 2) > end)
+			return FALSE;
+
+		len = (pdu[0] << 8) | pdu[1];
+
+		pdu += 2;
+	}
+
+	if (pdu + len > end)
+		return FALSE;
+
+	iter->tag = tag;
+	iter->len = len;
+	iter->data = pdu;
+
+	iter->pos = pdu + len - iter->pdu;
+
+	return TRUE;
+}
+
+unsigned char simple_tlv_iter_get_tag(struct simple_tlv_iter *iter)
+{
+	return iter->tag;
+}
+
+unsigned short simple_tlv_iter_get_length(struct simple_tlv_iter *iter)
+{
+	return iter->len;
+}
+
+const unsigned char *simple_tlv_iter_get_data(struct simple_tlv_iter *iter)
+{
+	return iter->data;
+}
+
+void comprehension_tlv_iter_init(struct comprehension_tlv_iter *iter,
+					const unsigned char *pdu,
+					unsigned int len)
+{
+	iter->pdu = pdu;
+	iter->max = len;
+	iter->pos = 0;
+	iter->tag = 0;
+	iter->cr = FALSE;
+	iter->data = 0;
+}
+
+/* Comprehension TLVs defined in Section 7 of ETSI TS 102.220 */
+gboolean comprehension_tlv_iter_next(struct comprehension_tlv_iter *iter)
+{
+	const unsigned char *pdu = iter->pdu + iter->pos;
+	const unsigned char *end = iter->pdu + iter->max;
+	unsigned short tag;
+	unsigned short len;
+	gboolean cr;
+
+	if (pdu == end)
+		return FALSE;
+
+	cr = bit_field(*pdu, 7, 1);
+	tag = bit_field(*pdu, 0, 7);
+	pdu++;
+
+	if (tag == 0x00 || tag == 0xFF || tag == 0x80)
+		return FALSE;
+
+	/*
+	 * ETSI TS 102.220, Section 7.1.1.2
+	 * 
+	 * If byte 1 of the tag is equal to 0x7F, then the tag is encoded
+	 * on the following two bytes, with bit 8 of the 2nd byte of the tag
+	 * being the CR flag.
+	 */
+	if (tag == 0x7F) {
+		if ((pdu + 2) > end)
+			return FALSE;
+
+		cr = bit_field(pdu[0], 7, 1);
+		tag = ((pdu[0] & 0x7f) << 7) | pdu[1];
+
+		if (tag < 0x0001 || tag > 0x7fff)
+			return FALSE;
+
+		pdu += 2;
+	}
+
+	if (pdu == end)
+		return FALSE;
+
+	len = *pdu++;
+
+	if (len >= 0x80) {
+		unsigned int extended_bytes = len - 0x80;
+		unsigned int i;
+
+		if (extended_bytes == 0 || extended_bytes > 3)
+			return FALSE;
+
+		if ((pdu + extended_bytes) > end)
+			return FALSE;
+
+		if (pdu[0] == 0)
+			return FALSE;
+
+		for (len = 0, i = 0; i < extended_bytes; i++)
+			len = (len << 8) | *pdu++;
+	}
+
+	if (pdu + len > end)
+		return FALSE;
+
+	iter->tag = tag;
+	iter->cr = cr;
+	iter->len = len;
+	iter->data = pdu;
+
+	iter->pos = pdu + len - iter->pdu;
+
+	return TRUE;
+}
+
+unsigned short comprehension_tlv_iter_get_tag(
+					struct comprehension_tlv_iter *iter)
+{
+	return iter->tag;
+}
+
+gboolean comprehension_tlv_get_cr(struct comprehension_tlv_iter *iter)
+{
+	return iter->cr;
+}
+
+unsigned int comprehension_tlv_iter_get_length(
+					struct comprehension_tlv_iter *iter)
+{
+	return iter->len;
+}
+
+const unsigned char *comprehension_tlv_iter_get_data(
+					struct comprehension_tlv_iter *iter)
+{
+	return iter->data;
+}
+
+void ber_tlv_iter_init(struct ber_tlv_iter *iter, const unsigned char *pdu,
+			unsigned int len)
+{
+	iter->pdu = pdu;
+	iter->max = len;
+	iter->pos = 0;
+}
+
+unsigned int ber_tlv_iter_get_tag(struct ber_tlv_iter *iter)
+{
+	return iter->tag;
+}
+
+enum ber_tlv_data_type ber_tlv_iter_get_class(struct ber_tlv_iter *iter)
+{
+	return iter->class;
+}
+
+enum ber_tlv_data_encoding_type
+	ber_tlv_iter_get_encoding(struct ber_tlv_iter *iter)
+{
+	return iter->encoding;
+}
+
+unsigned char ber_tlv_iter_get_short_tag(struct ber_tlv_iter *iter)
+{
+	if (iter->tag > 30)
+		return 0;
+
+	return iter->tag | (iter->encoding << 5) | (iter->class << 6);
+}
+
+unsigned int ber_tlv_iter_get_length(struct ber_tlv_iter *iter)
+{
+	return iter->len;
+}
+
+const unsigned char *ber_tlv_iter_get_data(struct ber_tlv_iter *iter)
+{
+	return iter->data;
+}
+
+/* BER TLV structure is defined in ISO/IEC 7816-4 */
+gboolean ber_tlv_iter_next(struct ber_tlv_iter *iter)
+{
+	const unsigned char *pdu = iter->pdu + iter->pos;
+	const unsigned char *end = iter->pdu + iter->max;
+	unsigned int tag;
+	int len;
+	enum ber_tlv_data_type class;
+	enum ber_tlv_data_encoding_type encoding;
+
+	while ((pdu < end) && (*pdu == 0x00 || *pdu == 0xff))
+		pdu++;
+
+	if (pdu == end)
+		return FALSE;
+
+	class = bit_field(*pdu, 6, 2);
+	encoding = bit_field(*pdu, 5, 1);
+	tag = bit_field(*pdu, 0, 5);
+
+	pdu++;
+
+	/*
+	 * ISO 7816-4, Section 5.2.2.1:
+	 * "If bits 5 to 1 of the first byte of the tag are not
+	 * all set to 1, then they encode a tag number from zero
+	 * to thirty and the tag field consists of a single byte.
+	 *
+	 * Otherwise, the tag field continues on one or more
+	 * subsequent bytes
+	 * 	- Bit 8 of each subsequent byte shall be set to 1,
+	 * 	  unless it is the last subsequent byte
+	 * 	- Bits 7 to 1 of the first subsequent byte shall not be
+	 * 	  all set to 0
+	 * 	- Bits 7 to 1 of the first subsequent byte, followed by
+	 * 	  bits 7 to 1 of each further subsequent byte, up to
+	 * 	  and including bits 7 to 1 of the last subsequent
+	 * 	  byte encode a tag number.
+	 */
+	if (tag == 0x1f) {
+		if (pdu == end)
+			return FALSE;
+
+		/* First byte of the extended tag cannot contain 0 */
+		if ((*pdu & 0x7f) == 0)
+			return FALSE;
+
+		tag = 0;
+
+		while ((pdu < end) && (*pdu & 0x80)) {
+			tag = (tag << 7) | (*pdu & 0x7f);
+			pdu++;
+		}
+
+		if (pdu == end)
+			return FALSE;
+
+		tag = (tag << 7) | *pdu;
+		pdu++;
+	}
+
+	if (pdu == end)
+		return FALSE;
+
+	len = *pdu++;
+
+	if (len >= 0x80) {
+		unsigned int extended_bytes = len - 0x80;
+		unsigned int i;
+
+		if (extended_bytes == 0 || extended_bytes > 4)
+			return FALSE;
+
+		if ((pdu + extended_bytes) > end)
+			return FALSE;
+
+		if (pdu[0] == 0)
+			return FALSE;
+
+		for (len = 0, i = 0; i < extended_bytes; i++)
+			len = (len << 8) | *pdu++;
+	}
+
+	if (pdu + len > end)
+		return FALSE;
+
+	iter->tag = tag;
+	iter->class = class;
+	iter->encoding = encoding;
+	iter->len = len;
+	iter->data = pdu;
+
+	iter->pos = pdu + len - iter->pdu;
+
+	return TRUE;
+}
+
+void ber_tlv_iter_recurse(struct ber_tlv_iter *iter,
+				struct ber_tlv_iter *recurse)
+{
+	recurse->pdu = iter->data;
+	recurse->max = iter->len;
+	recurse->pos = 0;
+}
+
+void ber_tlv_iter_recurse_simple(struct ber_tlv_iter *iter,
+					struct simple_tlv_iter *container)
+{
+	simple_tlv_iter_init(container, iter->data, iter->len);
+}
+
+void ber_tlv_iter_recurse_comprehension(struct ber_tlv_iter *iter,
+					struct comprehension_tlv_iter *recurse)
+{
+	comprehension_tlv_iter_init(recurse, iter->data, iter->len);
+}
+
 static const guint8 *ber_tlv_find_by_tag(const guint8 *pdu, guint8 in_tag,
 						int in_len, int *out_len)
 {
-	guint8 tag;
-	int len;
-	const guint8 *end = pdu + in_len;
+	struct ber_tlv_iter iter;
 
-	do {
-		while (pdu < end && (*pdu == 0x00 || *pdu == 0xff))
-			pdu++;
-		if (pdu == end)
-			break;
+	ber_tlv_iter_init(&iter, pdu, in_len);
 
-		tag = *pdu++;
-		if (!(0x1f & ~tag))
-			while (pdu < end && (*pdu++ & 0x80))
-				;
-		if (pdu == end)
-			break;
+	while (ber_tlv_iter_next(&iter)) {
+		if (ber_tlv_iter_get_short_tag(&iter) != in_tag)
+			continue;
 
-		for (len = 0; pdu + 1 < end && (*pdu & 0x80);
-				len = (len | (*pdu++ & 0x7f)) << 7)
-			;
+		if (out_len)
+			*out_len = ber_tlv_iter_get_length(&iter);
 
-		if (*pdu & 0x80)
-			break;
-		len |= *pdu++;
-
-		if (tag == in_tag && pdu + len <= end) {
-			if (out_len)
-				*out_len = len;
-			return pdu;
-		}
-
-		pdu += len;
-	} while (pdu < end);
+		return ber_tlv_iter_get_data(&iter);
+	}
 
 	return NULL;
 }
@@ -250,22 +580,30 @@ struct sim_spdi {
 
 struct sim_spdi *sim_spdi_new(const guint8 *tlv, int length)
 {
+	const guint8 *plmn_list_tlv;
 	const guint8 *plmn_list;
 	struct sim_spdi *spdi;
 	struct spdi_operator *oper;
 	int tlv_length;
+	int list_length;
 
-	if (length <= 5)
+	if (length < 7)
 		return NULL;
 
-	plmn_list = ber_tlv_find_by_tag(tlv, 0x80, length, &tlv_length);
+	plmn_list_tlv = ber_tlv_find_by_tag(tlv, 0xA3, length, &tlv_length);
+
+	if (plmn_list_tlv == NULL)
+		return NULL;
+
+	plmn_list = ber_tlv_find_by_tag(plmn_list_tlv, 0x80, tlv_length,
+						&list_length);
 
 	if (!plmn_list)
 		return NULL;
 
 	spdi = g_new0(struct sim_spdi, 1);
 
-	for (tlv_length /= 3; tlv_length--; plmn_list += 3) {
+	for (list_length /= 3; list_length--; plmn_list += 3) {
 		if ((plmn_list[0] & plmn_list[1] & plmn_list[2]) == 0xff)
 			continue;
 

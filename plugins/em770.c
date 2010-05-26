@@ -33,28 +33,36 @@
 
 #define OFONO_API_SUBJECT_TO_CHANGE
 #include <ofono/plugin.h>
+#include <ofono/log.h>
 #include <ofono/modem.h>
+#include <ofono/call-barring.h>
+#include <ofono/call-forwarding.h>
+#include <ofono/call-meter.h>
+#include <ofono/call-settings.h>
 #include <ofono/devinfo.h>
+#include <ofono/message-waiting.h>
 #include <ofono/netreg.h>
+#include <ofono/phonebook.h>
 #include <ofono/sim.h>
 #include <ofono/sms.h>
+#include <ofono/ssn.h>
+#include <ofono/ussd.h>
 #include <ofono/gprs.h>
 #include <ofono/voicecall.h>
-#include <ofono/log.h>
 
 #include <drivers/atmodem/vendor.h>
 
-struct huawei_data {
+struct em770_data {
 	GAtChat *chat;
 };
 
-static int huawei_probe(struct ofono_modem *modem)
+static int em770_probe(struct ofono_modem *modem)
 {
-	struct huawei_data *data;
+	struct em770_data *data;
 
 	DBG("%p", modem);
 
-	data = g_try_new0(struct huawei_data, 1);
+	data = g_try_new0(struct em770_data, 1);
 	if (!data)
 		return -ENOMEM;
 
@@ -63,9 +71,9 @@ static int huawei_probe(struct ofono_modem *modem)
 	return 0;
 }
 
-static void huawei_remove(struct ofono_modem *modem)
+static void em770_remove(struct ofono_modem *modem)
 {
-	struct huawei_data *data = ofono_modem_get_data(modem);
+	struct em770_data *data = ofono_modem_get_data(modem);
 
 	DBG("%p", modem);
 
@@ -75,7 +83,7 @@ static void huawei_remove(struct ofono_modem *modem)
 	g_free(data);
 }
 
-static void huawei_debug(const char *str, void *user_data)
+static void em770_debug(const char *str, void *user_data)
 {
 	ofono_info("%s", str);
 }
@@ -90,9 +98,9 @@ static void cfun_enable(gboolean ok, GAtResult *result, gpointer user_data)
 		ofono_modem_set_powered(modem, TRUE);
 }
 
-static int huawei_enable(struct ofono_modem *modem)
+static int em770_enable(struct ofono_modem *modem)
 {
-	struct huawei_data *data = ofono_modem_get_data(modem);
+	struct em770_data *data = ofono_modem_get_data(modem);
 	GAtSyntax *syntax;
 	GIOChannel *channel;
 	const char *device;
@@ -107,7 +115,7 @@ static int huawei_enable(struct ofono_modem *modem)
 	if (!channel)
 		return -EIO;
 
-	syntax = g_at_syntax_new_gsm_permissive();
+	syntax = g_at_syntax_new_gsmv1();
 	data->chat = g_at_chat_new(channel, syntax);
 	g_at_syntax_unref(syntax);
 	g_io_channel_unref(channel);
@@ -116,9 +124,10 @@ static int huawei_enable(struct ofono_modem *modem)
 		return -EIO;
 
 	g_at_chat_add_terminator(data->chat, "COMMAND NOT SUPPORT", -1, FALSE);
+	g_at_chat_add_terminator(data->chat, "TOO MANY PARAMETERS", -1, FALSE);
 
 	if (getenv("OFONO_AT_DEBUG"))
-		g_at_chat_set_debug(data->chat, huawei_debug, NULL);
+		g_at_chat_set_debug(data->chat, em770_debug, NULL);
 
 	g_at_chat_send(data->chat, "ATE0", NULL, NULL, NULL, NULL);
 
@@ -131,7 +140,7 @@ static int huawei_enable(struct ofono_modem *modem)
 static void cfun_disable(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_modem *modem = user_data;
-	struct huawei_data *data = ofono_modem_get_data(modem);
+	struct em770_data *data = ofono_modem_get_data(modem);
 
 	DBG("");
 
@@ -143,9 +152,9 @@ static void cfun_disable(gboolean ok, GAtResult *result, gpointer user_data)
 		ofono_modem_set_powered(modem, FALSE);
 }
 
-static int huawei_disable(struct ofono_modem *modem)
+static int em770_disable(struct ofono_modem *modem)
 {
-	struct huawei_data *data = ofono_modem_get_data(modem);
+	struct em770_data *data = ofono_modem_get_data(modem);
 
 	DBG("%p", modem);
 
@@ -160,9 +169,9 @@ static int huawei_disable(struct ofono_modem *modem)
 	return -EINPROGRESS;
 }
 
-static void huawei_pre_sim(struct ofono_modem *modem)
+static void em770_pre_sim(struct ofono_modem *modem)
 {
-	struct huawei_data *data = ofono_modem_get_data(modem);
+	struct em770_data *data = ofono_modem_get_data(modem);
 
 	DBG("%p", modem);
 
@@ -171,35 +180,47 @@ static void huawei_pre_sim(struct ofono_modem *modem)
 	ofono_voicecall_create(modem, 0, "atmodem", data->chat);
 }
 
-static void huawei_post_sim(struct ofono_modem *modem)
+static void em770_post_sim(struct ofono_modem *modem)
 {
-	struct huawei_data *data = ofono_modem_get_data(modem);
+	struct em770_data *data = ofono_modem_get_data(modem);
+	struct ofono_message_waiting *mw;
 
 	DBG("%p", modem);
 
-	ofono_netreg_create(modem, OFONO_VENDOR_HUAWEI, "atmodem", data->chat);
+	ofono_ussd_create(modem, 0, "atmodem", data->chat);
+	ofono_call_forwarding_create(modem, 0, "atmodem", data->chat);
+	ofono_call_settings_create(modem, 0, "atmodem", data->chat);
+	ofono_netreg_create(modem, 0, "atmodem", data->chat);
+	ofono_call_meter_create(modem, 0, "atmodem", data->chat);
+	ofono_call_barring_create(modem, 0, "atmodem", data->chat);
+	ofono_ssn_create(modem, 0, "atmodem", data->chat);
 	ofono_sms_create(modem, OFONO_VENDOR_QUALCOMM_MSM, "atmodem", data->chat);
+	ofono_phonebook_create(modem, 0, "atmodem", data->chat);
+
+	mw = ofono_message_waiting_create(modem);
+	if (mw)
+		ofono_message_waiting_register(mw);
 }
 
-static struct ofono_modem_driver huawei_driver = {
-	.name		= "huawei",
-	.probe		= huawei_probe,
-	.remove		= huawei_remove,
-	.enable		= huawei_enable,
-	.disable	= huawei_disable,
-	.pre_sim	= huawei_pre_sim,
-	.post_sim	= huawei_post_sim,
+static struct ofono_modem_driver em770_driver = {
+	.name		= "em770",
+	.probe		= em770_probe,
+	.remove		= em770_remove,
+	.enable		= em770_enable,
+	.disable	= em770_disable,
+	.pre_sim	= em770_pre_sim,
+	.post_sim	= em770_post_sim,
 };
 
-static int huawei_init(void)
+static int em770_init(void)
 {
-	return ofono_modem_driver_register(&huawei_driver);
+	return ofono_modem_driver_register(&em770_driver);
 }
 
-static void huawei_exit(void)
+static void em770_exit(void)
 {
-	ofono_modem_driver_unregister(&huawei_driver);
+	ofono_modem_driver_unregister(&em770_driver);
 }
 
-OFONO_PLUGIN_DEFINE(huawei, "HUAWEI Mobile modem driver", VERSION,
-		OFONO_PLUGIN_PRIORITY_DEFAULT, huawei_init, huawei_exit)
+OFONO_PLUGIN_DEFINE(em770, "HUAWEI EM770 modem driver", VERSION,
+		OFONO_PLUGIN_PRIORITY_DEFAULT, em770_init, em770_exit)

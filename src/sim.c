@@ -42,8 +42,7 @@
 #include "smsutil.h"
 #include "simutil.h"
 #include "storage.h"
-
-#define SIM_MANAGER_INTERFACE "org.ofono.SimManager"
+#include "stkutil.h"
 
 #define SIM_CACHE_MODE 0600
 #define SIM_CACHE_PATH STORAGEDIR "/%s-%i/%04x"
@@ -493,10 +492,9 @@ static void sim_locked_cb(struct ofono_sim *sim, gboolean locked)
 
 	locked_pins = get_locked_pins(sim);
 	ofono_dbus_signal_array_property_changed(conn, path,
-							SIM_MANAGER_INTERFACE,
-							"LockedPins",
-							DBUS_TYPE_STRING,
-							&locked_pins);
+						OFONO_SIM_MANAGER_INTERFACE,
+						"LockedPins", DBUS_TYPE_STRING,
+						&locked_pins);
 	g_strfreev(locked_pins);
 }
 
@@ -553,7 +551,7 @@ static DBusMessage *sim_lock_or_unlock(struct ofono_sim *sim, int lock,
 			type == OFONO_SIM_PASSWORD_SIM_PIN2)
 		return __ofono_error_invalid_format(msg);
 
-	if (!is_valid_pin(pin))
+	if (!is_valid_pin(pin, PIN_TYPE_PIN))
 		return __ofono_error_invalid_format(msg);
 
 	sim->pending = dbus_message_ref(msg);
@@ -620,10 +618,10 @@ static DBusMessage *sim_change_pin(DBusConnection *conn, DBusMessage *msg,
 	if (password_is_pin(type) == FALSE)
 		return __ofono_error_invalid_format(msg);
 
-	if (!is_valid_pin(old))
+	if (!is_valid_pin(old, PIN_TYPE_PIN))
 		return __ofono_error_invalid_format(msg);
 
-	if (!is_valid_pin(new))
+	if (!is_valid_pin(new, PIN_TYPE_PIN))
 		return __ofono_error_invalid_format(msg);
 
 	if (!strcmp(new, old))
@@ -675,7 +673,7 @@ static DBusMessage *sim_enter_pin(DBusConnection *conn, DBusMessage *msg,
 	if (type == OFONO_SIM_PASSWORD_NONE || type != sim->pin_type)
 		return __ofono_error_invalid_format(msg);
 
-	if (!is_valid_pin(pin))
+	if (!is_valid_pin(pin, PIN_TYPE_PIN))
 		return __ofono_error_invalid_format(msg);
 
 	sim->pending = dbus_message_ref(msg);
@@ -710,10 +708,10 @@ static DBusMessage *sim_reset_pin(DBusConnection *conn, DBusMessage *msg,
 	if (type == OFONO_SIM_PASSWORD_NONE || type != sim->pin_type)
 		return __ofono_error_invalid_format(msg);
 
-	if (!is_valid_pin(puk))
+	if (!is_valid_pin(puk, PIN_TYPE_PUK))
 		return __ofono_error_invalid_format(msg);
 
-	if (!is_valid_pin(pin))
+	if (!is_valid_pin(pin, PIN_TYPE_PIN))
 		return __ofono_error_invalid_format(msg);
 
 	sim->pending = dbus_message_ref(msg);
@@ -813,10 +811,10 @@ check:
 		own_numbers = get_own_numbers(sim->own_numbers);
 
 		ofono_dbus_signal_array_property_changed(conn, path,
-							SIM_MANAGER_INTERFACE,
-							"SubscriberNumbers",
-							DBUS_TYPE_STRING,
-							&own_numbers);
+						OFONO_SIM_MANAGER_INTERFACE,
+						"SubscriberNumbers",
+						DBUS_TYPE_STRING, &own_numbers);
+
 		g_strfreev(own_numbers);
 	} else {
 		g_slist_foreach(sim->new_numbers, (GFunc) g_free, NULL);
@@ -849,7 +847,7 @@ static void sim_ad_read_cb(int ok, int length, int record,
 	sim->mnc_length = new_mnc_length;
 
 	ofono_dbus_signal_property_changed(conn, path,
-					SIM_MANAGER_INTERFACE,
+					OFONO_SIM_MANAGER_INTERFACE,
 					"MobileNetworkCodeLength",
 					DBUS_TYPE_BYTE, &sim->mnc_length);
 }
@@ -926,7 +924,7 @@ check:
 		service_numbers = get_service_numbers(sim->service_numbers);
 
 		ofono_dbus_signal_dict_property_changed(conn, path,
-						SIM_MANAGER_INTERFACE,
+						OFONO_SIM_MANAGER_INTERFACE,
 						"ServiceDiallingNumbers",
 						DBUS_TYPE_STRING,
 						&service_numbers);
@@ -1027,10 +1025,9 @@ static void sim_pin_query_cb(const struct ofono_error *error,
 		sim->locked_pins[pin_type] = TRUE;
 
 		ofono_dbus_signal_property_changed(conn, path,
-							SIM_MANAGER_INTERFACE,
-							"PinRequired",
-							DBUS_TYPE_STRING,
-							&pin_name);
+						OFONO_SIM_MANAGER_INTERFACE,
+						"PinRequired", DBUS_TYPE_STRING,
+						&pin_name);
 	}
 
 checkdone:
@@ -1225,10 +1222,10 @@ skip_efpl:
 		return;
 
 	ofono_dbus_signal_array_property_changed(conn, path,
-							SIM_MANAGER_INTERFACE,
-							"PreferredLanguages",
-							DBUS_TYPE_STRING,
-							&sim->language_prefs);
+						OFONO_SIM_MANAGER_INTERFACE,
+						"PreferredLanguages",
+						DBUS_TYPE_STRING,
+						&sim->language_prefs);
 }
 
 static void sim_retrieve_efli_and_efpl(struct ofono_sim *sim)
@@ -1501,6 +1498,9 @@ static gboolean sim_op_check_cached(struct ofono_sim *sim)
 
 	path = g_strdup_printf(SIM_CACHE_PATH, imsi, sim->phase, op->id);
 
+	if (path == NULL)
+		return FALSE;
+
 	fd = TFR(open(path, O_RDONLY));
 	g_free(path);
 
@@ -1536,7 +1536,10 @@ static gboolean sim_op_check_cached(struct ofono_sim *sim)
 		goto cleanup;
 	}
 
-	buffer = g_malloc(file_length);
+	buffer = g_try_malloc(file_length);
+
+	if (buffer == NULL)
+		goto cleanup;
 
 	len = TFR(read(fd, buffer, file_length));
 
@@ -1824,7 +1827,7 @@ void __ofono_cbs_sim_download(struct ofono_sim *sim,
 	if (sim->driver->envelope == NULL)
 		return;
 
-	tlv[0] = 0xd2; /* Cell Broadcast Download */
+	tlv[0] = STK_ENVELOPE_TYPE_CBS_PP_DOWNLOAD;
 	tlv[1] = 6 + pdu_len;
 	tlv[2] = 0x82; /* Device Identities */
 	tlv[3] = 0x02; /* Device Identities length */
@@ -1867,9 +1870,8 @@ static void sim_unregister(struct ofono_atom *atom)
 	__ofono_watchlist_free(sim->ready_watches);
 	sim->ready_watches = NULL;
 
-	g_dbus_unregister_interface(conn, path,
-					SIM_MANAGER_INTERFACE);
-	ofono_modem_remove_interface(modem, SIM_MANAGER_INTERFACE);
+	g_dbus_unregister_interface(conn, path, OFONO_SIM_MANAGER_INTERFACE);
+	ofono_modem_remove_interface(modem, OFONO_SIM_MANAGER_INTERFACE);
 }
 
 static void sim_remove(struct ofono_atom *atom)
@@ -1970,16 +1972,16 @@ void ofono_sim_register(struct ofono_sim *sim)
 	const char *path = __ofono_atom_get_path(sim->atom);
 
 	if (!g_dbus_register_interface(conn, path,
-					SIM_MANAGER_INTERFACE,
+					OFONO_SIM_MANAGER_INTERFACE,
 					sim_methods, sim_signals, NULL,
 					sim, NULL)) {
 		ofono_error("Could not create %s interface",
-				SIM_MANAGER_INTERFACE);
+				OFONO_SIM_MANAGER_INTERFACE);
 
 		return;
 	}
 
-	ofono_modem_add_interface(modem, SIM_MANAGER_INTERFACE);
+	ofono_modem_add_interface(modem, OFONO_SIM_MANAGER_INTERFACE);
 	sim->ready_watches = __ofono_watchlist_new(g_free);
 
 	__ofono_atom_register(sim->atom, sim_unregister);
