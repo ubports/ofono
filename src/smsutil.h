@@ -412,6 +412,9 @@ void encode_bcd_number(const char *number, unsigned char *out);
 gboolean sms_decode(const unsigned char *pdu, int len, gboolean outgoing,
 			int tpdu_len, struct sms *out);
 
+gboolean sms_decode_unpacked_stk_pdu(const unsigned char *pdu, int len,
+					struct sms *out);
+
 gboolean sms_encode(const struct sms *in, int *len, int *tpdu_len,
 			unsigned char *pdu);
 
@@ -421,6 +424,14 @@ gboolean sms_decode_address_field(const unsigned char *pdu, int len,
 
 gboolean sms_encode_address_field(const struct sms_address *in, gboolean sc,
 					unsigned char *pdu, int *offset);
+
+guint8 sms_decode_semi_octet(guint8 in);
+
+gboolean sms_decode_scts(const unsigned char *pdu, int len,
+				int *offset, struct sms_scts *out);
+
+gboolean sms_encode_scts(const struct sms_scts *in, unsigned char *pdu,
+				int *offset);
 
 int sms_udl_in_bytes(guint8 ud_len, guint8 dcs);
 
@@ -471,7 +482,8 @@ GSList *sms_assembly_add_fragment(struct sms_assembly *assembly,
 void sms_assembly_expire(struct sms_assembly *assembly, time_t before);
 
 GSList *sms_text_prepare(const char *utf8, guint16 ref,
-				gboolean use_16bit, int *ref_offset);
+				gboolean use_16bit, int *ref_offset,
+				gboolean use_delivery_reports);
 
 gboolean cbs_dcs_decode(guint8 dcs, gboolean *udhi, enum sms_class *cls,
 			enum sms_charset *charset, gboolean *compressed,

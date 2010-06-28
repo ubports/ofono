@@ -34,33 +34,168 @@
 #include "gatppp.h"
 #include "ppp.h"
 
-#ifdef DEBUG
-static const char *pppcp_state_strings[] =
-	{"INITIAL", "STARTING", "CLOSED", "STOPPED", "CLOSING", "STOPPING",
-	"REQSENT", "ACKRCVD", "ACKSENT", "OPENED" };
-
-#define pppcp_trace(p) do { \
-	g_print("%s: current state %d:%s\n", __FUNCTION__, \
-		p->state, pppcp_state_strings[p->state]); \
-} while (0)
-#else
-#define pppcp_trace(p) do { } while (0)
-#endif
-
-#define pppcp_to_ppp_packet(p) \
-	(p-PPP_HEADROOM)
-
-struct pppcp_event {
-	enum pppcp_event_type type;
-	gint len;
-	guint8 data[0];
+static const char *pppcp_state_strings[] = {
+	"INITIAL", "STARTING", "CLOSED", "STOPPED", "CLOSING", "STOPPING",
+	"REQSENT", "ACKRCVD", "ACKSENT", "OPENED"
 };
 
-#define INITIAL_RESTART_TIMEOUT	3000
+static const char *pppcp_event_strings[] = {
+	"Up", "Down", "Open", "Close", "TO+", "TO-", "RCR+", "RCR-",
+	"RCA", "RCN", "RTR", "RTA", "RUC", "RXJ+", "RXJ-", "RXR"
+};
+
+#define pppcp_trace(p) do { \
+	char *str = g_strdup_printf("%s: %s: current state %d:%s", \
+				p->driver->name, __FUNCTION__, \
+				p->state, pppcp_state_strings[p->state]); \
+	ppp_debug(p->ppp, str); \
+	g_free(str); \
+} while (0);
+
+#define pppcp_trace_event(p, type, actions, state) do { \
+	char *str = g_strdup_printf("event: %d (%s), " \
+				"action: %x, new_state: %d (%s)", \
+				type, pppcp_event_strings[type], \
+				actions, state, pppcp_state_strings[state]); \
+	ppp_debug(p->ppp, str); \
+	g_free(str); \
+} while (0);
+
+#define pppcp_to_ppp_packet(p) \
+	(((guint8 *) p) - sizeof(struct ppp_header))
+
+#define INITIAL_RESTART_TIMEOUT	3	/* restart interval in seconds */
 #define MAX_TERMINATE		2
 #define MAX_CONFIGURE		10
 #define MAX_FAILURE		5
 #define CP_HEADER_SZ		4
+
+enum pppcp_state {
+	INITIAL		= 0,
+	STARTING	= 1,
+	CLOSED		= 2,
+	STOPPED		= 3,
+	CLOSING		= 4,
+	STOPPING	= 5,
+	REQSENT		= 6,
+	ACKRCVD		= 7,
+	ACKSENT		= 8,
+	OPENED		= 9,
+};
+
+enum actions {
+	INV = 0x10,
+	IRC = 0x20,
+	ZRC = 0x40,
+	TLU = 0x100,
+	TLD = 0x200,
+	TLS = 0x400,
+	TLF = 0x800,
+	SCR = 0x1000,
+	SCA = 0x2000,
+	SCN = 0x4000,
+	STR = 0x8000,
+	STA = 0x10000,
+	SCJ = 0x20000,
+	SER = 0x40000,
+};
+
+/*
+ * Transition table straight from RFC 1661 Section 4.1
+ * Y coordinate is the events, while X coordinate is the state
+ *
+ * Magic of bitwise operations allows the table to describe all state
+ * transitions defined in the specification
+ */
+static int cp_transitions[16][10] = {
+/* Up */
+{ 2, IRC|SCR|6, INV, INV, INV, INV, INV, INV, INV, INV },
+/* Down */
+{ INV, INV, 0, TLS|1, 0, 1, 1, 1, 1, TLD|1 },
+/* Open */
+{ TLS|1, 1, IRC|SCR|6, 3, 5, 5, 6, 7, 8, 9 },
+/* Close */
+{ 0, TLF|0, 2, 2, 4, 4, IRC|STR|4, IRC|STR|4, IRC|STR|4, TLD|IRC|STR|4 },
+/* TO+ */
+{ INV, INV, INV, INV, STR|4, STR|5, SCR|6, SCR|6, SCR|8, INV },
+/* TO- */
+{ INV, INV, INV, INV, TLF|2, TLF|3, TLF|3, TLF|3, TLF|3, INV },
+/* RCR+ */
+{ INV, INV, STA|2, IRC|SCR|SCA|8, 4, 5, SCA|8, SCA|TLU|9, SCA|8, TLD|SCR|SCA|8 },
+/* RCR- */
+{ INV, INV, STA|2, IRC|SCR|SCN|6, 4, 5, SCN|6, SCN|7, SCN|6, TLD|SCR|SCN|6 },
+/* RCA */
+{ INV, INV, STA|2, STA|3, 4, 5, IRC|7, SCR|6, IRC|TLU|9, TLD|SCR|6 },
+/* RCN */
+{ INV, INV, STA|2, STA|3, 4, 5, IRC|SCR|6, SCR|6, IRC|SCR|8, TLD|SCR|6 },
+/* RTR */
+{ INV, INV, STA|2, STA|3, STA|4, STA|5, STA|6, STA|6, STA|6, TLD|ZRC|STA|5 },
+/* RTA */
+{ INV, INV, 2, 3, TLF|2, TLF|3, 6, 6, 8, TLD|SCR|6 },
+/* RUC */
+{ INV, INV, SCJ|2, SCJ|3, SCJ|4, SCJ|5, SCJ|6, SCJ|7, SCJ|8, SCJ|9 },
+/* RXJ+ */
+{ INV, INV, 2, 3, 4, 5, 6, 6, 8, 9 },
+/* RXJ- */
+{ INV, INV, TLF|2, TLF|3, TLF|2, TLF|3, TLF|3, TLF|3, TLF|3, TLD|IRC|STR|5 },
+/* RXR */
+{ INV, INV, 2, 3, 4, 5, 6, 7, 8, SER|9 },
+};
+
+enum pppcp_event_type {
+	UP		= 0,
+	DOWN		= 1,
+	OPEN		= 2,
+	CLOSE		= 3,
+	TO_PLUS		= 4,
+	TO_MINUS	= 5,
+	RCR_PLUS	= 6,
+	RCR_MINUS	= 7,
+	RCA		= 8,
+	RCN		= 9,
+	RTR		= 10,
+	RTA		= 11,
+	RUC		= 12,
+	RXJ_PLUS	= 13,
+	RXJ_MINUS	= 14,
+	RXR		= 15,
+};
+
+struct pppcp_timer_data {
+	struct pppcp_data *data;
+	guint restart_counter;
+	guint restart_interval;
+	guint max_counter;
+	guint restart_timer;
+};
+
+struct pppcp_data {
+	unsigned char state;
+	struct pppcp_timer_data config_timer_data;
+	struct pppcp_timer_data terminate_timer_data;
+	guint max_failure;
+	guint failure_counter;
+	GAtPPP *ppp;
+	guint8 config_identifier;
+	guint8 terminate_identifier;
+	guint8 reject_identifier;
+	const guint8 *local_options;
+	guint16 local_options_len;
+	guint8 *peer_options;
+	guint16 peer_options_len;
+	gboolean send_reject;
+	const struct pppcp_proto *driver;
+	gpointer priv;
+};
+
+static void pppcp_generate_event(struct pppcp_data *data,
+				enum pppcp_event_type event_type,
+				const guint8 *packet, guint len);
+
+static void pppcp_packet_free(struct pppcp_packet *packet)
+{
+	g_free(pppcp_to_ppp_packet(packet));
+}
 
 static struct pppcp_packet *pppcp_packet_new(struct pppcp_data *data,
 						guint type, guint bufferlen)
@@ -69,12 +204,9 @@ static struct pppcp_packet *pppcp_packet_new(struct pppcp_data *data,
 	struct ppp_header *ppp_packet;
 	guint16 packet_length = bufferlen + sizeof(*packet);
 
-	ppp_packet = g_try_malloc0(packet_length + 2);
+	ppp_packet = ppp_packet_new(packet_length, data->driver->proto);
 	if (!ppp_packet)
 		return NULL;
-
-	/* add our protocol information */
-	ppp_packet->proto = htons(data->proto);
 
 	/* advance past protocol to add CP header information */
 	packet = (struct pppcp_packet *) (ppp_packet->info);
@@ -84,63 +216,96 @@ static struct pppcp_packet *pppcp_packet_new(struct pppcp_data *data,
 	return packet;
 }
 
+void ppp_option_iter_init(struct ppp_option_iter *iter,
+					const struct pppcp_packet *packet)
+{
+	iter->max = ntohs(packet->length) - CP_HEADER_SZ;
+	iter->pdata = packet->data;
+	iter->pos = 0;
+	iter->type = 0;
+	iter->len = 0;
+	iter->option_data = NULL;
+}
+
+gboolean ppp_option_iter_next(struct ppp_option_iter *iter)
+{
+	const guint8 *cur = iter->pdata + iter->pos;
+	const guint8 *end = iter->pdata + iter->max;
+
+	if (cur + 1 > end)
+		return FALSE;
+
+	if (cur + cur[1] > end)
+		return FALSE;
+
+	iter->type = cur[0];
+	iter->len = cur[1] - 2;
+	iter->option_data = cur + 2;
+
+	iter->pos += cur[1];
+
+	return TRUE;
+}
+
+guint8 ppp_option_iter_get_type(struct ppp_option_iter *iter)
+{
+	return iter->type;
+}
+
+guint8 ppp_option_iter_get_length(struct ppp_option_iter *iter)
+{
+	return iter->len;
+}
+
+const guint8 *ppp_option_iter_get_data(struct ppp_option_iter *iter)
+{
+	return iter->option_data;
+}
+
+guint8 pppcp_get_code(const guint8 *data)
+{
+	struct ppp_header *ppp_packet = (struct ppp_header *) data;
+	struct pppcp_packet *packet = (struct pppcp_packet *) ppp_packet->info;
+
+	return packet->code;
+}
+
 static gboolean pppcp_timeout(gpointer user_data)
 {
-	struct pppcp_data *data = user_data;
+	struct pppcp_timer_data *timer_data = user_data;
 
-	pppcp_trace(data);
+	pppcp_trace(timer_data->data);
 
-	data->restart_timer = 0;
+	timer_data->restart_timer = 0;
 
-	if (data->restart_counter)
-		pppcp_generate_event(data, TO_PLUS, NULL, 0);
+	if (timer_data->restart_counter > 0)
+		pppcp_generate_event(timer_data->data, TO_PLUS, NULL, 0);
 	else
-		pppcp_generate_event(data, TO_MINUS, NULL, 0);
+		pppcp_generate_event(timer_data->data, TO_MINUS, NULL, 0);
 
 	return FALSE;
 }
 
-static void pppcp_start_timer(struct pppcp_data *data)
+static void pppcp_stop_timer(struct pppcp_timer_data *timer_data)
 {
-	data->restart_timer = g_timeout_add(data->restart_interval,
-				pppcp_timeout, data);
-}
-
-static void pppcp_stop_timer(struct pppcp_data *data)
-{
-	if (data->restart_timer) {
-		g_source_remove(data->restart_timer);
-		data->restart_timer = 0;
+	if (timer_data->restart_timer > 0) {
+		g_source_remove(timer_data->restart_timer);
+		timer_data->restart_timer = 0;
 	}
 }
 
-static gboolean pppcp_timer_is_running(struct pppcp_data *data)
+static void pppcp_start_timer(struct pppcp_timer_data *timer_data)
 {
-	/* determine if the restart timer is running */
-	if (data->restart_timer)
-		return TRUE;
-	return FALSE;
+	pppcp_stop_timer(timer_data);
+
+	timer_data->restart_timer =
+		g_timeout_add_seconds(timer_data->restart_interval,
+				pppcp_timeout, timer_data);
 }
 
-static struct pppcp_event *pppcp_event_new(enum pppcp_event_type type,
-					gpointer event_data, guint len)
+static gboolean is_first_request(struct pppcp_timer_data *timer_data)
 {
-	struct pppcp_event *event;
-	guint8 *data = event_data;
-
-	event = g_try_malloc0(sizeof(struct pppcp_event) + len);
-	if (!event)
-		return NULL;
-
-	event->type = type;
-	memcpy(event->data, data, len);
-	event->len = len;
-	return event;
-}
-
-static struct pppcp_event *pppcp_get_event(struct pppcp_data *data)
-{
-	return g_queue_pop_head(data->event_queue);
+	return (timer_data->restart_counter == timer_data->max_counter);
 }
 
 /* actions */
@@ -152,53 +317,27 @@ static void pppcp_illegal_event(guint8 state, guint8 type)
 
 static void pppcp_this_layer_up(struct pppcp_data *data)
 {
-	struct pppcp_action *action = data->action;
-
-	if (action->this_layer_up)
-		action->this_layer_up(data);
+	if (data->driver->this_layer_up)
+		data->driver->this_layer_up(data);
 }
 
 static void pppcp_this_layer_down(struct pppcp_data *data)
 {
-	struct pppcp_action *action = data->action;
-
-	if (action->this_layer_up)
-		action->this_layer_down(data);
+	if (data->driver->this_layer_down)
+		data->driver->this_layer_down(data);
 }
 
 static void pppcp_this_layer_started(struct pppcp_data *data)
 {
-	struct pppcp_action *action = data->action;
-
-	if (action->this_layer_up)
-		action->this_layer_started(data);
+	if (data->driver->this_layer_started)
+		data->driver->this_layer_started(data);
 }
 
 static void pppcp_this_layer_finished(struct pppcp_data *data)
 {
-	struct pppcp_action *action = data->action;
-
-	if (action->this_layer_up)
-		action->this_layer_finished(data);
-}
-
-static void pppcp_free_option(gpointer data, gpointer user_data)
-{
-	struct ppp_option *option = data;
-	g_free(option);
-}
-
-static void pppcp_clear_options(struct pppcp_data *data)
-{
-	g_list_foreach(data->acceptable_options, pppcp_free_option, NULL);
-	g_list_foreach(data->unacceptable_options, pppcp_free_option, NULL);
-	g_list_foreach(data->rejected_options, pppcp_free_option, NULL);
-	g_list_free(data->acceptable_options);
-	g_list_free(data->unacceptable_options);
-	g_list_free(data->rejected_options);
-	data->acceptable_options = NULL;
-	data->unacceptable_options = NULL;
-	data->rejected_options = NULL;
+	pppcp_trace(data);
+	if (data->driver->this_layer_finished)
+		data->driver->this_layer_finished(data);
 }
 
 /*
@@ -206,19 +345,21 @@ static void pppcp_clear_options(struct pppcp_data *data)
  * or max-configure.  The counter is decremented for
  * each transmission, including the first.
  */
-static void pppcp_initialize_restart_count(struct pppcp_data *data, guint value)
+static void pppcp_initialize_restart_count(struct pppcp_timer_data *timer_data)
 {
+	struct pppcp_data *data = timer_data->data;
+
 	pppcp_trace(data);
-	pppcp_clear_options(data);
-	data->restart_counter = value;
+
+	timer_data->restart_counter = timer_data->max_counter;
 }
 
 /*
  * set restart counter to zero
  */
-static void pppcp_zero_restart_count(struct pppcp_data *data)
+static void pppcp_zero_restart_count(struct pppcp_timer_data *timer_data)
 {
-	data->restart_counter = 0;
+	timer_data->restart_counter = 0;
 }
 
 /*
@@ -229,147 +370,110 @@ static guint8 new_identity(struct pppcp_data *data, guint prev_identifier)
 	return prev_identifier + 1;
 }
 
-static void get_option_length(gpointer data, gpointer user_data)
-{
-	struct ppp_option *option = data;
-	guint8 *length = user_data;
-
-	*length += option->length;
-}
-
-static void copy_option(gpointer data, gpointer user_data)
-{
-	struct ppp_option *option = data;
-	guint8 **location = user_data;
-	memcpy(*location, (guint8 *) option, option->length);
-	*location += option->length;
-}
-
-void pppcp_add_config_option(struct pppcp_data *data, struct ppp_option *option)
-{
-	data->config_options = g_list_append(data->config_options, option);
-}
-
 /*
  * transmit a Configure-Request packet
  * start the restart timer
  * decrement the restart counter
  */
-static void pppcp_send_configure_request(struct pppcp_data *data)
+static void pppcp_send_configure_request(struct pppcp_data *pppcp)
 {
 	struct pppcp_packet *packet;
-	guint8 olength = 0;
-	guint8 *odata;
+	struct pppcp_timer_data *timer_data = &pppcp->config_timer_data;
 
-	pppcp_trace(data);
+	pppcp_trace(pppcp);
 
-	/* figure out how much space to allocate for options */
-	g_list_foreach(data->config_options, get_option_length, &olength);
-
-	packet = pppcp_packet_new(data, CONFIGURE_REQUEST, olength);
-
-	/* copy config options into packet data */
-	odata = packet->data;
-	g_list_foreach(data->config_options, copy_option, &odata);
+	packet = pppcp_packet_new(pppcp, PPPCP_CODE_TYPE_CONFIGURE_REQUEST,
+					pppcp->local_options_len);
+	memcpy(packet->data, pppcp->local_options, pppcp->local_options_len);
 
 	/*
 	 * if this is the first request, we need a new identifier.
 	 * if this is a retransmission, leave the identifier alone.
 	 */
-	if (data->restart_counter == data->max_configure)
-		data->config_identifier =
-			new_identity(data, data->config_identifier);
-	packet->identifier = data->config_identifier;
+	if (is_first_request(timer_data))
+		pppcp->config_identifier =
+			new_identity(pppcp, pppcp->config_identifier);
+	packet->identifier = pppcp->config_identifier;
 
-	ppp_transmit(data->ppp, pppcp_to_ppp_packet((guint8 *) packet),
+	ppp_transmit(pppcp->ppp, pppcp_to_ppp_packet(packet),
 			ntohs(packet->length));
 
-	/* XXX don't retransmit right now */
-#if 0
-	data->restart_counter--;
-	pppcp_start_timer(data);
-#endif
+	pppcp_packet_free(packet);
+
+	/* start timer for retransmission */
+	timer_data->restart_counter--;
+	pppcp_start_timer(timer_data);
 }
 
 /*
  * transmit a Configure-Ack packet
  */
-static void pppcp_send_configure_ack(struct pppcp_data *data,
-					guint8 *request)
+static void pppcp_send_configure_ack(struct pppcp_data *pppcp,
+					const guint8 *request)
 {
 	struct pppcp_packet *packet;
-	struct pppcp_packet *pppcp_header = (struct pppcp_packet *) request;
-	guint len;
-	guint8 *odata;
+	struct pppcp_packet *cr_req = (struct pppcp_packet *) request;
+	guint16 len;
 
-	pppcp_trace(data);
+	pppcp_trace(pppcp);
+
+	pppcp->failure_counter = 0;
 
 	/* subtract for header. */
-	len = ntohs(pppcp_header->length) - sizeof(*packet);
+	len = ntohs(cr_req->length) - CP_HEADER_SZ;
 
-	packet = pppcp_packet_new(data, CONFIGURE_ACK, len);
+	packet = pppcp_packet_new(pppcp, PPPCP_CODE_TYPE_CONFIGURE_ACK, len);
 
-	/* copy the applied options in. */
-	odata = packet->data;
-
-	g_list_foreach(data->acceptable_options, copy_option, &odata);
-
-	/* match identifier of the request */
-	packet->identifier = pppcp_header->identifier;
-
-	ppp_transmit(data->ppp, pppcp_to_ppp_packet((guint8 *) packet),
+	memcpy(packet->data, cr_req->data, len);
+	packet->identifier = cr_req->identifier;
+	ppp_transmit(pppcp->ppp, pppcp_to_ppp_packet(packet),
 			ntohs(packet->length));
+	pppcp_packet_free(packet);
 }
 
 /*
  * transmit a Configure-Nak or Configure-Reject packet
  */
-static void pppcp_send_configure_nak(struct pppcp_data *data,
-					guint8 *configure_packet)
+static void pppcp_send_configure_nak(struct pppcp_data *pppcp,
+					const guint8 *request)
 {
 	struct pppcp_packet *packet;
-	struct pppcp_packet *pppcp_header =
-			(struct pppcp_packet *) configure_packet;
-	guint8 olength = 0;
-	guint8 *odata;
+	struct pppcp_packet *cr_req = (struct pppcp_packet *) request;
 
-	/* if we have any rejected options, send a config-reject */
-	if (g_list_length(data->rejected_options)) {
-		/* figure out how much space to allocate for options */
-		g_list_foreach(data->rejected_options, get_option_length,
-				&olength);
+	pppcp_trace(pppcp);
 
-		packet = pppcp_packet_new(data, CONFIGURE_REJECT, olength);
+	/*
+	 * if we have exceeded our Max-Failure counter, we simply reject all
+	 * the options.
+	 */
+	if (pppcp->failure_counter >= pppcp->max_failure) {
+		guint16 len = ntohs(cr_req->length) - CP_HEADER_SZ;
 
-		/* copy the rejected options in. */
-		odata = packet->data;
-		g_list_foreach(data->rejected_options, copy_option,
-				&odata);
+		packet = pppcp_packet_new(pppcp,
+					PPPCP_CODE_TYPE_CONFIGURE_REJECT, len);
+		memcpy(packet->data, cr_req->data, len);
+	} else {
+		enum pppcp_code code = PPPCP_CODE_TYPE_CONFIGURE_NAK;
 
-		packet->identifier = pppcp_header->identifier;
-		ppp_transmit(data->ppp, pppcp_to_ppp_packet((guint8 *) packet),
+		if (pppcp->send_reject == TRUE)
+			code = PPPCP_CODE_TYPE_CONFIGURE_REJECT;
+		else
+			pppcp->failure_counter++;
+
+		packet = pppcp_packet_new(pppcp, code, pppcp->peer_options_len);
+		memcpy(packet->data, pppcp->peer_options,
+						pppcp->peer_options_len);
+	}
+
+	packet->identifier = cr_req->identifier;
+	ppp_transmit(pppcp->ppp, pppcp_to_ppp_packet(packet),
 			ntohs(packet->length));
 
-	}
-	/* if we have any unacceptable options, send a config-nak */
-	if (g_list_length(data->unacceptable_options)) {
-		olength = 0;
+	pppcp_packet_free(packet);
 
-		/* figure out how much space to allocate for options */
-		g_list_foreach(data->unacceptable_options, get_option_length,
-				&olength);
-
-		packet = pppcp_packet_new(data, CONFIGURE_NAK, olength);
-
-		/* copy the unacceptable options in. */
-		odata = packet->data;
-		g_list_foreach(data->unacceptable_options, copy_option,
-				&odata);
-
-		packet->identifier = pppcp_header->identifier;
-		ppp_transmit(data->ppp, pppcp_to_ppp_packet((guint8 *) packet),
-				ntohs(packet->length));
-	}
+	g_free(pppcp->peer_options);
+	pppcp->peer_options = NULL;
+	pppcp->peer_options_len = 0;
 }
 
 /*
@@ -380,43 +484,54 @@ static void pppcp_send_configure_nak(struct pppcp_data *data,
 static void pppcp_send_terminate_request(struct pppcp_data *data)
 {
 	struct pppcp_packet *packet;
+	struct pppcp_timer_data *timer_data = &data->terminate_timer_data;
+
+	pppcp_trace(data);
 
 	/*
 	 * the data field can be used by the sender (us).
 	 * leave this empty for now.
 	 */
-	packet = pppcp_packet_new(data, TERMINATE_REQUEST, 0);
+	packet = pppcp_packet_new(data, PPPCP_CODE_TYPE_TERMINATE_REQUEST, 0);
 
 	/*
 	 * Is this a retransmission?  If so, do not change
 	 * the identifier.  If not, we need a fresh identity.
 	 */
-	if (data->restart_counter == data->max_terminate)
+	if (is_first_request(timer_data))
 		data->terminate_identifier =
 			new_identity(data, data->terminate_identifier);
 	packet->identifier = data->terminate_identifier;
-	ppp_transmit(data->ppp, pppcp_to_ppp_packet((guint8 *) packet),
+	ppp_transmit(data->ppp, pppcp_to_ppp_packet(packet),
 			ntohs(packet->length));
-	data->restart_counter--;
-	pppcp_start_timer(data);
+
+	pppcp_packet_free(packet);
+	timer_data->restart_counter--;
+	pppcp_start_timer(timer_data);
 }
 
 /*
  * transmit a Terminate-Ack packet
  */
 static void pppcp_send_terminate_ack(struct pppcp_data *data,
-					guint8 *request)
+					const guint8 *request)
 {
 	struct pppcp_packet *packet;
 	struct pppcp_packet *pppcp_header = (struct pppcp_packet *) request;
+	struct pppcp_timer_data *timer_data = &data->terminate_timer_data;
 
-	packet = pppcp_packet_new(data, TERMINATE_ACK, 0);
+	pppcp_trace(data);
+
+	packet = pppcp_packet_new(data, PPPCP_CODE_TYPE_TERMINATE_ACK, 0);
 
 	/* match identifier of the request */
 	packet->identifier = pppcp_header->identifier;
 
-	ppp_transmit(data->ppp, pppcp_to_ppp_packet((guint8 *) packet),
+	ppp_transmit(data->ppp, pppcp_to_ppp_packet(packet),
 			ntohs(pppcp_header->length));
+
+	pppcp_packet_free(packet);
+	pppcp_start_timer(timer_data);
 }
 
 /*
@@ -425,12 +540,16 @@ static void pppcp_send_terminate_ack(struct pppcp_data *data,
  * XXX this seg faults.
  */
 static void pppcp_send_code_reject(struct pppcp_data *data,
-					guint8 *rejected_packet)
+					const guint8 *rejected_packet)
 {
 	struct pppcp_packet *packet;
+	const struct pppcp_packet *old_packet =
+				(const struct pppcp_packet *) rejected_packet;
 
-	packet = pppcp_packet_new(data, CODE_REJECT,
-			ntohs(((struct pppcp_packet *) rejected_packet)->length));
+	pppcp_trace(data);
+
+	packet = pppcp_packet_new(data, PPPCP_CODE_TYPE_CODE_REJECT,
+						ntohs(old_packet->length));
 
 	/*
 	 * Identifier must be changed for each Code-Reject sent
@@ -442,17 +561,19 @@ static void pppcp_send_code_reject(struct pppcp_data *data,
 	 * truncated if it needs to be to comply with mtu requirement
 	 */
 	memcpy(packet->data, rejected_packet,
-			ntohs(packet->length - CP_HEADER_SZ));
+			ntohs(packet->length) - CP_HEADER_SZ);
 
-	ppp_transmit(data->ppp, pppcp_to_ppp_packet((guint8 *) packet),
+	ppp_transmit(data->ppp, pppcp_to_ppp_packet(packet),
 			ntohs(packet->length));
+
+	pppcp_packet_free(packet);
 }
 
 /*
  * transmit an Echo-Reply packet
  */
 static void pppcp_send_echo_reply(struct pppcp_data *data,
-				guint8 *request)
+						const guint8 *request)
 {
 	struct pppcp_packet *packet;
 	struct pppcp_packet *header = (struct pppcp_packet *) request;
@@ -460,17 +581,18 @@ static void pppcp_send_echo_reply(struct pppcp_data *data,
 	/*
 	 * 0 bytes for data, 4 bytes for magic number
 	 */
-	packet = pppcp_packet_new(data, ECHO_REPLY, 4);
+	packet = pppcp_packet_new(data, PPPCP_CODE_TYPE_ECHO_REPLY, 4);
 
 	/*
 	 * match identifier of request
 	 */
 	packet->identifier = header->identifier;
 
-	/* magic number? */
-	ppp_transmit(data->ppp, pppcp_to_ppp_packet((guint8 *) packet),
+	/* magic number will always be zero */
+	ppp_transmit(data->ppp, pppcp_to_ppp_packet(packet),
 			ntohs(packet->length));
 
+	pppcp_packet_free(packet);
 }
 
 static void pppcp_transition_state(enum pppcp_state new_state,
@@ -487,9 +609,8 @@ static void pppcp_transition_state(enum pppcp_state new_state,
 	case CLOSED:
 	case STOPPED:
 	case OPENED:
-		/* if timer is running, stop it */
-		if (pppcp_timer_is_running(data))
-			pppcp_stop_timer(data);
+		pppcp_stop_timer(&data->config_timer_data);
+		pppcp_stop_timer(&data->terminate_timer_data);
 		break;
 	case CLOSING:
 	case STOPPING:
@@ -501,849 +622,207 @@ static void pppcp_transition_state(enum pppcp_state new_state,
 	data->state = new_state;
 }
 
-static void pppcp_up_event(struct pppcp_data *data, guint8 *packet, guint len)
-{
-	pppcp_trace(data);
-	switch (data->state) {
-	case INITIAL:
-		/* switch state to CLOSED */
-		pppcp_transition_state(CLOSED, data);
-		break;
-	case STARTING:
-		/* irc, scr/6 */
-		pppcp_initialize_restart_count(data, data->max_configure);
-		pppcp_send_configure_request(data);
-		pppcp_transition_state(REQSENT, data);
-		break;
-	case CLOSED:
-	case STOPPED:
-	case OPENED:
-	case CLOSING:
-	case STOPPING:
-	case REQSENT:
-	case ACKRCVD:
-	case ACKSENT:
-		pppcp_illegal_event(data->state, UP);
-	}
-}
-
-static void pppcp_down_event(struct pppcp_data *data, guint8 *packet, guint len)
-{
-	switch (data->state) {
-	case CLOSED:
-		pppcp_transition_state(INITIAL, data);
-		break;
-	case STOPPED:
-		/* tls/1 */
-		pppcp_transition_state(STARTING, data);
-		pppcp_this_layer_started(data);
-		break;
-	case CLOSING:
-		pppcp_transition_state(INITIAL, data);
-		break;
-	case STOPPING:
-	case REQSENT:
-	case ACKRCVD:
-	case ACKSENT:
-		pppcp_transition_state(STARTING, data);
-		break;
-	case OPENED:
-		pppcp_transition_state(STARTING, data);
-		pppcp_this_layer_down(data);
-	case INITIAL:
-	case STARTING:
-		pppcp_illegal_event(data->state, DOWN);
-		/* illegal */
-	}
-}
-
-static void pppcp_open_event(struct pppcp_data *data, guint8 *packet, guint len)
-{
-	pppcp_trace(data);
-	switch (data->state) {
-	case INITIAL:
-		/* tls/1 */
-		pppcp_transition_state(STARTING, data);
-		pppcp_this_layer_started(data);
-		break;
-	case STARTING:
-		pppcp_transition_state(STARTING, data);
-		break;
-	case CLOSED:
-		pppcp_initialize_restart_count(data, data->max_configure);
-		pppcp_send_configure_request(data);
-		pppcp_transition_state(REQSENT, data);
-		break;
-	case STOPPED:
-		/* 3r */
-		pppcp_transition_state(STOPPED, data);
-		break;
-	case CLOSING:
-	case STOPPING:
-		/* 5r */
-		pppcp_transition_state(STOPPING, data);
-		break;
-	case REQSENT:
-	case ACKRCVD:
-	case ACKSENT:
-		pppcp_transition_state(data->state, data);
-		break;
-	case OPENED:
-		/* 9r */
-		pppcp_transition_state(data->state, data);
-		break;
-	}
-}
-
-static void pppcp_close_event(struct pppcp_data *data, guint8* packet, guint len)
-{
-	switch (data->state) {
-	case INITIAL:
-		pppcp_transition_state(INITIAL, data);
-		break;
-	case STARTING:
-		pppcp_this_layer_finished(data);
-		pppcp_transition_state(INITIAL, data);
-		break;
-	case CLOSED:
-	case STOPPED:
-		pppcp_transition_state(CLOSED, data);
-		break;
-	case CLOSING:
-	case STOPPING:
-		pppcp_transition_state(CLOSING, data);
-		break;
-	case OPENED:
-		pppcp_this_layer_down(data);
-	case REQSENT:
-	case ACKRCVD:
-	case ACKSENT:
-		pppcp_initialize_restart_count(data, data->max_terminate);
-		pppcp_send_terminate_request(data);
-		pppcp_transition_state(CLOSING, data);
-		break;
-	}
-}
-
-static void pppcp_to_plus_event(struct pppcp_data *data, guint8 *packet, guint len)
-{
-	pppcp_trace(data);
-
-	switch (data->state) {
-	case CLOSING:
-		pppcp_send_terminate_request(data);
-		pppcp_transition_state(CLOSING, data);
-		break;
-	case STOPPING:
-		pppcp_send_terminate_request(data);
-		pppcp_transition_state(STOPPING, data);
-		break;
-	case REQSENT:
-	case ACKRCVD:
-		pppcp_send_configure_request(data);
-		pppcp_transition_state(REQSENT, data);
-		break;
-	case ACKSENT:
-		pppcp_send_configure_request(data);
-		pppcp_transition_state(ACKSENT, data);
-		break;
-	case INITIAL:
-	case STARTING:
-	case CLOSED:
-	case STOPPED:
-	case OPENED:
-		pppcp_illegal_event(data->state, TO_PLUS);
-	}
-}
-
-static void pppcp_to_minus_event(struct pppcp_data *data, guint8 *packet, guint len)
-{
-	pppcp_trace(data);
-	switch (data->state) {
-	case CLOSING:
-		pppcp_transition_state(CLOSED, data);
-		pppcp_this_layer_finished(data);
-		break;
-	case STOPPING:
-		pppcp_transition_state(STOPPED, data);
-		pppcp_this_layer_finished(data);
-		break;
-	case REQSENT:
-	case ACKRCVD:
-	case ACKSENT:
-		/* tlf/3p */
-		pppcp_transition_state(STOPPED, data);
-		pppcp_this_layer_finished(data);
-		break;
-	case INITIAL:
-	case STARTING:
-	case CLOSED:
-	case STOPPED:
-	case OPENED:
-		pppcp_illegal_event(data->state, TO_MINUS);
-	}
-}
-
-static void pppcp_rcr_plus_event(struct pppcp_data *data,
-				guint8 *packet, guint len)
-{
-	pppcp_trace(data);
-	switch (data->state) {
-	case CLOSED:
-		pppcp_send_terminate_ack(data, packet);
-		pppcp_transition_state(CLOSED, data);
-		break;
-	case STOPPED:
-		pppcp_initialize_restart_count(data, data->max_configure);
-		pppcp_send_configure_request(data);
-		pppcp_send_configure_ack(data, packet);
-		pppcp_transition_state(ACKSENT, data);
-		break;
-	case CLOSING:
-	case STOPPING:
-		pppcp_transition_state(data->state, data);
-		break;
-	case REQSENT:
-		pppcp_send_configure_ack(data, packet);
-		pppcp_transition_state(ACKSENT, data);
-		break;
-	case ACKRCVD:
-		pppcp_send_configure_ack(data, packet);
-		pppcp_this_layer_up(data);
-		pppcp_transition_state(OPENED, data);
-		break;
-	case ACKSENT:
-		pppcp_send_configure_ack(data, packet);
-		pppcp_transition_state(ACKSENT, data);
-		break;
-	case OPENED:
-		pppcp_this_layer_down(data);
-		pppcp_send_configure_request(data);
-		pppcp_send_configure_ack(data, packet);
-		pppcp_transition_state(ACKSENT, data);
-		break;
-	case INITIAL:
-	case STARTING:
-		pppcp_illegal_event(data->state, RCR_PLUS);
-	}
-}
-
-static void pppcp_rcr_minus_event(struct pppcp_data *data,
-				guint8 *packet, guint len)
-{
-	pppcp_trace(data);
-
-	switch (data->state) {
-	case CLOSED:
-		pppcp_send_terminate_ack(data, packet);
-		pppcp_transition_state(CLOSED, data);
-		break;
-	case STOPPED:
-		pppcp_initialize_restart_count(data, data->max_configure);
-		pppcp_send_configure_request(data);
-		pppcp_send_configure_nak(data, packet);
-		pppcp_transition_state(REQSENT, data);
-		break;
-	case CLOSING:
-	case STOPPING:
-		pppcp_transition_state(data->state, data);
-		break;
-	case REQSENT:
-	case ACKRCVD:
-		pppcp_send_configure_nak(data, packet);
-		pppcp_transition_state(data->state, data);
-		break;
-	case ACKSENT:
-		pppcp_send_configure_nak(data, packet);
-		pppcp_transition_state(REQSENT, data);
-		break;
-	case OPENED:
-		pppcp_this_layer_down(data);
-		pppcp_send_configure_request(data);
-		pppcp_send_configure_nak(data, packet);
-		pppcp_transition_state(REQSENT, data);
-		break;
-	case INITIAL:
-	case STARTING:
-		pppcp_illegal_event(data->state, RCR_MINUS);
-	}
-}
-
-static void pppcp_rca_event(struct pppcp_data *data, guint8 *packet, guint len)
-{
-	pppcp_trace(data);
-
-	switch (data->state) {
-	case CLOSED:
-	case STOPPED:
-		pppcp_send_terminate_ack(data, packet);
-	case CLOSING:
-	case STOPPING:
-		pppcp_transition_state(data->state, data);
-		break;
-	case REQSENT:
-		pppcp_initialize_restart_count(data, data->max_configure);
-		pppcp_transition_state(ACKRCVD, data);
-		break;
-	case ACKRCVD:
-		/* scr/6x */
-		pppcp_send_configure_request(data);
-		pppcp_transition_state(REQSENT, data);
-	case ACKSENT:
-		pppcp_initialize_restart_count(data, data->max_configure);
-		pppcp_this_layer_up(data);
-		pppcp_transition_state(OPENED, data);
-		break;
-	case OPENED:
-		pppcp_this_layer_down(data);
-		pppcp_send_configure_request(data);
-		pppcp_transition_state(REQSENT, data);
-		break;
-	case INITIAL:
-	case STARTING:
-		pppcp_illegal_event(data->state, RCA);
-	}
-}
-
-static void pppcp_rcn_event(struct pppcp_data *data, guint8 *packet, guint len)
-{
-	pppcp_trace(data);
-
-	switch (data->state) {
-	case CLOSED:
-	case STOPPED:
-		pppcp_send_terminate_ack(data, packet);
-	case CLOSING:
-	case STOPPING:
-		pppcp_transition_state(data->state, data);
-	case REQSENT:
-		pppcp_initialize_restart_count(data, data->max_configure);
-		pppcp_send_configure_request(data);
-		pppcp_transition_state(REQSENT, data);
-		break;
-	case ACKRCVD:
-		/* scr/6x */
-		pppcp_send_configure_request(data);
-		pppcp_transition_state(REQSENT, data);
-		break;
-	case ACKSENT:
-		pppcp_initialize_restart_count(data, data->max_configure);
-		pppcp_send_configure_request(data);
-		pppcp_transition_state(ACKSENT, data);
-		break;
-	case OPENED:
-		pppcp_this_layer_down(data);
-		pppcp_send_configure_request(data);
-		pppcp_transition_state(REQSENT, data);
-		break;
-	case INITIAL:
-	case STARTING:
-		pppcp_illegal_event(data->state, RCN);
-	}
-}
-
-static void pppcp_rtr_event(struct pppcp_data *data, guint8 *packet, guint len)
-{
-	pppcp_trace(data);
-
-	switch (data->state) {
-	case CLOSED:
-	case STOPPED:
-		pppcp_send_terminate_ack(data, packet);
-	case CLOSING:
-	case STOPPING:
-		break;
-	case REQSENT:
-	case ACKRCVD:
-	case ACKSENT:
-		pppcp_send_terminate_ack(data, packet);
-		pppcp_transition_state(REQSENT, data);
-		break;
-	case OPENED:
-		pppcp_this_layer_down(data);
-		pppcp_zero_restart_count(data);
-		pppcp_send_terminate_ack(data, packet);
-		pppcp_transition_state(STOPPING, data);
-		break;
-	case INITIAL:
-	case STARTING:
-		pppcp_illegal_event(data->state, RTR);
-	}
-}
-
-static void pppcp_rta_event(struct pppcp_data *data, guint8 *packet, guint len)
-{
-	pppcp_trace(data);
-
-	switch (data->state) {
-	case CLOSED:
-	case STOPPED:
-		pppcp_transition_state(data->state, data);
-		break;
-	case CLOSING:
-		pppcp_this_layer_finished(data);
-		pppcp_transition_state(CLOSED, data);
-		break;
-	case STOPPING:
-		pppcp_this_layer_finished(data);
-		pppcp_transition_state(STOPPED, data);
-		break;
-	case REQSENT:
-	case ACKRCVD:
-		pppcp_transition_state(REQSENT, data);
-		break;
-	case ACKSENT:
-		pppcp_transition_state(ACKSENT, data);
-		break;
-	case OPENED:
-		pppcp_this_layer_down(data);
-		pppcp_send_configure_request(data);
-		pppcp_transition_state(REQSENT, data);
-		break;
-	case INITIAL:
-	case STARTING:
-		pppcp_illegal_event(data->state, RTA);
-	}
-}
-
-static void pppcp_ruc_event(struct pppcp_data *data, guint8 *packet, guint len)
-{
-	pppcp_trace(data);
-
-	switch (data->state) {
-	case CLOSED:
-	case STOPPED:
-	case CLOSING:
-	case STOPPING:
-	case REQSENT:
-	case ACKRCVD:
-	case ACKSENT:
-	case OPENED:
-		pppcp_send_code_reject(data, packet);
-		pppcp_transition_state(data->state, data);
-		break;
-	case INITIAL:
-	case STARTING:
-		pppcp_illegal_event(data->state, RUC);
-	}
-}
-
-static void pppcp_rxj_plus_event(struct pppcp_data *data, guint8 *packet, guint len)
-{
-	pppcp_trace(data);
-
-	switch (data->state) {
-	case CLOSED:
-	case STOPPED:
-	case CLOSING:
-	case STOPPING:
-		pppcp_transition_state(data->state, data);
-		break;
-	case REQSENT:
-	case ACKRCVD:
-		pppcp_transition_state(REQSENT, data);
-		break;
-	case ACKSENT:
-	case OPENED:
-		pppcp_transition_state(data->state, data);
-		break;
-	case INITIAL:
-	case STARTING:
-		pppcp_illegal_event(data->state, RXJ_PLUS);
-	}
-}
-
-static void pppcp_rxj_minus_event(struct pppcp_data *data,
-				guint8 *packet, guint len)
-{
-	pppcp_trace(data);
-
-	switch (data->state) {
-	case CLOSED:
-	case STOPPED:
-		pppcp_this_layer_finished(data);
-		pppcp_transition_state(data->state, data);
-		break;
-	case CLOSING:
-		pppcp_this_layer_finished(data);
-		pppcp_transition_state(CLOSED, data);
-		break;
-	case STOPPING:
-		pppcp_this_layer_finished(data);
-		pppcp_transition_state(STOPPED, data);
-		break;
-	case REQSENT:
-	case ACKRCVD:
-	case ACKSENT:
-		pppcp_this_layer_finished(data);
-		pppcp_transition_state(STOPPED, data);
-		break;
-	case OPENED:
-		pppcp_this_layer_down(data);
-		pppcp_initialize_restart_count(data, data->max_terminate);
-		pppcp_send_terminate_request(data);
-		pppcp_transition_state(STOPPING, data);
-		break;
-	case INITIAL:
-	case STARTING:
-		pppcp_illegal_event(data->state, RXJ_MINUS);
-	}
-}
-
-static void pppcp_rxr_event(struct pppcp_data *data, guint8 *packet, guint len)
-{
-	pppcp_trace(data);
-
-	switch (data->state) {
-	case CLOSED:
-	case STOPPED:
-	case CLOSING:
-	case STOPPING:
-	case REQSENT:
-	case ACKRCVD:
-	case ACKSENT:
-		pppcp_transition_state(data->state, data);
-		break;
-	case OPENED:
-		pppcp_send_echo_reply(data, packet);
-		pppcp_transition_state(OPENED, data);
-		break;
-	case INITIAL:
-	case STARTING:
-		pppcp_illegal_event(data->state, RXR);
-	}
-}
-
-static void pppcp_handle_event(gpointer user_data)
-{
-	struct pppcp_event *event;
-	struct pppcp_data *data = user_data;
-
-	while ((event = pppcp_get_event(data))) {
-		if (event->type > RXR)
-			pppcp_illegal_event(data->state, event->type);
-		else
-			data->event_ops[event->type](data, event->data,
-							event->len);
-		g_free(event);
-	}
-}
-
 /*
  * send the event handler a new event to process
  */
-void pppcp_generate_event(struct pppcp_data *data,
+static void pppcp_generate_event(struct pppcp_data *data,
 				enum pppcp_event_type event_type,
-				gpointer event_data, guint data_len)
+				const guint8 *packet, guint len)
 {
-	struct pppcp_event *event;
+	int actions;
+	unsigned char new_state;
 
-	event = pppcp_event_new(event_type, event_data, data_len);
-	if (event)
-		g_queue_push_tail(data->event_queue, event);
-	pppcp_handle_event(data);
-}
-
-static gint is_option(gconstpointer a, gconstpointer b)
-{
-	const struct ppp_option *o = a;
-	guint8 otype = (guint8) GPOINTER_TO_UINT(b);
-
-	if (o->type == otype)
-		return 0;
-	else
-		return -1;
-}
-
-static void verify_config_option(gpointer elem, gpointer user_data)
-{
-	struct ppp_option *config = elem;
-	struct pppcp_data *data = user_data;
-	guint type = config->type;
-	struct ppp_option *option;
-	GList *list;
-
-	/*
-	 * determine whether this config option is in the
-	 * acceptable options list
-	 */
-	list = g_list_find_custom(data->acceptable_options,
-					GUINT_TO_POINTER(type), is_option);
-	if (list)
-		return;
-
-	/*
-	 * if the option did not exist, we need to store a copy
-	 * of the option in the unacceptable_options list so it
-	 * can be nak'ed.
-	 */
-	option = g_try_malloc0(config->length);
-	if (option == NULL)
-		return;
-
-	option->type = config->type;
-	option->length = config->length;
-	data->unacceptable_options =
-			g_list_append(data->unacceptable_options, option);
-}
-
-static void remove_config_option(gpointer elem, gpointer user_data)
-{
-	struct ppp_option *config = elem;
-	struct pppcp_data *data = user_data;
-	guint type = config->type;
-	GList *list;
-
-	/*
-	 * determine whether this config option is in the
-	 * applied options list
-	 */
-	list = g_list_find_custom(data->config_options,
-					GUINT_TO_POINTER(type), is_option);
-	if (!list)
-		return;
-
-	data->config_options = g_list_delete_link(data->config_options, list);
-}
-
-static guint8 pppcp_process_configure_request(struct pppcp_data *data,
-					struct pppcp_packet *packet)
-{
-	gint len;
-	int i = 0;
-	struct ppp_option *option;
-	enum option_rval rval = OPTION_ERR;
-	struct pppcp_action *action = data->action;
+	if (event_type > RXR)
+		goto error;
 
 	pppcp_trace(data);
 
-	len = ntohs(packet->length) - CP_HEADER_SZ;
+	actions = cp_transitions[event_type][data->state];
+	new_state = actions & 0xf;
 
-	/*
-	 * check the options.
-	 */
-	while (i < len) {
-		guint8 otype = packet->data[i];
-		guint8 olen = packet->data[i+1];
-		option = g_try_malloc0(olen);
-		if (option == NULL)
-			break;
-		option->type = otype;
-		option->length = olen;
-		memcpy(option->data, &packet->data[i+2], olen-2);
-		if (action->option_scan)
-			rval = action->option_scan(option, data);
-		switch (rval) {
-		case OPTION_ACCEPT:
-			data->acceptable_options =
-				g_list_append(data->acceptable_options, option);
-			break;
-		case OPTION_REJECT:
-			data->rejected_options =
-				g_list_append(data->rejected_options, option);
-			break;
-		case OPTION_NAK:
-			data->unacceptable_options =
-				g_list_append(data->unacceptable_options,
-						option);
-			break;
-		case OPTION_ERR:
-			g_printerr("unhandled option type %d\n", otype);
-		}
-		/* skip ahead to the next option */
-		i += olen;
-	}
+	pppcp_trace_event(data, event_type, actions, new_state);
 
-	/* make sure all required config options were included */
-	g_list_foreach(data->config_options, verify_config_option, data);
+	if (actions & INV)
+		goto error;
 
-	if (g_list_length(data->unacceptable_options) ||
-			g_list_length(data->rejected_options))
+	if (actions & IRC) {
+		struct pppcp_timer_data *timer_data;
+
+		if (new_state == CLOSING || new_state == STOPPING)
+			timer_data = &data->terminate_timer_data;
+		else
+			timer_data = &data->config_timer_data;
+
+		pppcp_initialize_restart_count(timer_data);
+	} else if (actions & ZRC)
+		pppcp_zero_restart_count(&data->terminate_timer_data);
+
+	if (actions & SCR)
+		pppcp_send_configure_request(data);
+
+	if (actions & SCA)
+		pppcp_send_configure_ack(data, packet);
+	else if (actions & SCN)
+		pppcp_send_configure_nak(data, packet);
+
+	if (actions & STR)
+		pppcp_send_terminate_request(data);
+	else if (actions & STA)
+		pppcp_send_terminate_ack(data, packet);
+
+	if (actions & SCJ)
+		pppcp_send_code_reject(data, packet);
+
+	if (actions & SER)
+		pppcp_send_echo_reply(data, packet);
+
+	pppcp_transition_state(new_state, data);
+
+	if (actions & TLS)
+		pppcp_this_layer_started(data);
+	else if (actions & TLU)
+		pppcp_this_layer_up(data);
+	else if (actions & TLD)
+		pppcp_this_layer_down(data);
+	else if (actions & TLF)
+		pppcp_this_layer_finished(data);
+
+	return;
+
+error:
+	pppcp_illegal_event(data->state, event_type);
+}
+
+void pppcp_signal_open(struct pppcp_data *data)
+{
+	pppcp_generate_event(data, OPEN, NULL, 0);
+}
+
+void pppcp_signal_close(struct pppcp_data *data)
+{
+	pppcp_generate_event(data, CLOSE, NULL, 0);
+}
+
+void pppcp_signal_up(struct pppcp_data *data)
+{
+	pppcp_generate_event(data, UP, NULL, 0);
+}
+
+void pppcp_signal_down(struct pppcp_data *data)
+{
+	pppcp_generate_event(data, DOWN, NULL, 0);
+}
+
+static guint8 pppcp_process_configure_request(struct pppcp_data *pppcp,
+					const struct pppcp_packet *packet)
+{
+	pppcp_trace(pppcp);
+
+	if (pppcp->failure_counter >= pppcp->max_failure)
 		return RCR_MINUS;
 
-	/*
-	 * all options were acceptable, so we should apply them before
-	 * sending a configure-ack
-	 *
-	 * Remove all applied options from the config_option list.  The
-	 * protocol will have to re-add them if they want them renegotiated
-	 * when the ppp goes down.
-	 */
-	if (action->option_process) {
-		g_list_foreach(data->acceptable_options,
-				action->option_process, data->priv);
-		g_list_foreach(data->acceptable_options, remove_config_option,
-				data);
+	if (pppcp->driver->rcr) {
+		enum rcr_result res;
+
+		res = pppcp->driver->rcr(pppcp, packet,
+						&pppcp->peer_options,
+						&pppcp->peer_options_len);
+
+		if (res == RCR_REJECT) {
+			pppcp->send_reject = TRUE;
+			return RCR_MINUS;
+		} else if (res == RCR_NAK) {
+			pppcp->send_reject = FALSE;
+			return RCR_MINUS;
+		}
 	}
 
 	return RCR_PLUS;
 }
 
-static guint8 pppcp_process_configure_ack(struct pppcp_data *data,
-					struct pppcp_packet *packet)
+static guint8 pppcp_process_configure_ack(struct pppcp_data *pppcp,
+					const struct pppcp_packet *packet)
 {
-	guint len;
-	GList *list;
-	struct ppp_option *acked_option;
-	guint i = 0;
-	struct pppcp_action *action = data->action;
+	gint len;
 
-	pppcp_trace(data);
+	pppcp_trace(pppcp);
 
 	len = ntohs(packet->length) - CP_HEADER_SZ;
 
 	/* if identifiers don't match, we should silently discard */
-	if (packet->identifier != data->config_identifier) {
-		g_printerr("received an ack id %d, but config id is %d\n",
-			packet->identifier, data->config_identifier);
+	if (packet->identifier != pppcp->config_identifier) {
 		return 0;
 	}
 
 	/*
-	 * check each acked option.  If it is what we requested,
-	 * then we can apply these option values.
-	 *
-	 * XXX what if it isn't?  Do this correctly -- for now
-	 * we are just going to assume that all options matched
-	 * and apply them.
+	 * First we must sanity check that all config options acked are
+	 * equal to the config options sent and are in the same order.
+	 * If this is not the case, then silently drop the packet
 	 */
-	while (i < len) {
-		guint8 otype = packet->data[i];
-		guint8 olen = packet->data[i + 1];
-		acked_option = g_try_malloc0(olen);
-		if (acked_option == NULL)
-			break;
-		acked_option->type = otype;
-		acked_option->length = olen;
-		memcpy(acked_option->data, &packet->data[i + 2], olen - 2);
-		list = g_list_find_custom(data->config_options,
-				GUINT_TO_POINTER((guint) otype), is_option);
-		if (list) {
-			/*
-			 * once we've applied the option, delete it from
-			 * the config_options list.
-			 */
-			if (action->option_process)
-				action->option_process(acked_option,
-							data->priv);
-			data->config_options =
-				g_list_delete_link(data->config_options, list);
-		} else
-			g_printerr("oops -- found acked option %d we didn't request\n", acked_option->type);
-		g_free(acked_option);
+	if (pppcp->local_options_len != len)
+		return 0;
 
-		/* skip ahead to the next option */
-		i += olen;
-	}
+	if (memcmp(pppcp->local_options, packet->data, len))
+		return 0;
+
+	/* Otherwise, apply local options */
+	if (pppcp->driver->rca)
+		pppcp->driver->rca(pppcp, packet);
+
 	return RCA;
 }
 
-static guint8 pppcp_process_configure_nak(struct pppcp_data *data,
-					struct pppcp_packet *packet)
+static guint8 pppcp_process_configure_nak(struct pppcp_data *pppcp,
+					const struct pppcp_packet *packet)
 {
-	guint len;
-	GList *list;
-	struct ppp_option *naked_option;
-	struct ppp_option *config_option;
-	guint i = 0;
-	enum option_rval rval = OPTION_ERR;
-	struct pppcp_action *action = data->action;
-
-	pppcp_trace(data);
-
-	len = ntohs(packet->length) - CP_HEADER_SZ;
+	pppcp_trace(pppcp);
 
 	/* if identifiers don't match, we should silently discard */
-	if (packet->identifier != data->config_identifier)
+	if (packet->identifier != pppcp->config_identifier)
 		return 0;
 
-	/*
-	 * check each unacceptable option.  If it is acceptable, then
-	 * we can resend the configure request with this value. we need
-	 * to check the current config options to see if we need to
-	 * modify a value there, or add a new option.
-	 */
-	while (i < len) {
-		guint8 otype = packet->data[i];
-		guint8 olen = packet->data[i+1];
-		naked_option = g_try_malloc0(olen);
-		if (naked_option == NULL)
-			break;
-		naked_option->type = otype;
-		naked_option->length = olen;
-		memcpy(naked_option->data, &packet->data[i + 2], olen - 2);
-		if (action->option_scan)
-			rval = action->option_scan(naked_option, data);
-		if (rval == OPTION_ACCEPT) {
-			/*
-			 * check the current config options to see if they
-			 * match.
-			 */
-			list = g_list_find_custom(data->config_options,
-				GUINT_TO_POINTER((guint) otype), is_option);
-			if (list) {
-				/* modify current option value to match */
-				config_option = list->data;
+	if (pppcp->driver->rcn_nak)
+		pppcp->driver->rcn_nak(pppcp, packet);
 
-				/*
-				 * option values should match, otherwise
-				 * we need to reallocate
-				 */
-				if ((config_option->length ==
-					naked_option->length) && (olen - 2)) {
-						memcpy(config_option->data,
-							naked_option->data,
-							olen - 2);
-				} else {
-					/* XXX implement this */
-					g_printerr("uh oh, option value doesn't match\n");
-				}
-				g_free(naked_option);
-			} else {
-				/* add to list of config options */
-				pppcp_add_config_option(data, naked_option);
-			}
-		} else {
-			/* XXX handle this correctly */
-			g_printerr("oops, option wasn't acceptable\n");
-			g_free(naked_option);
-		}
-
-		/* skip ahead to the next option */
-		i += olen;
-	}
 	return RCN;
 }
 
-static guint8 pppcp_process_configure_reject(struct pppcp_data *data,
-					struct pppcp_packet *packet)
+static guint8 pppcp_process_configure_reject(struct pppcp_data *pppcp,
+					const struct pppcp_packet *packet)
 {
+	pppcp_trace(pppcp);
+
 	/*
 	 * make sure identifier matches that of last sent configure
 	 * request
 	 */
-	if (packet->identifier == data->config_identifier) {
-		/*
-		 * check to see which options were rejected
-		 * Rejected options must be a subset of requested
-		 * options.
-		 *
-		 * when a new configure-request is sent, we may
-		 * not request any of these options be negotiated
-		 */
-		return RCN;
-	}
-	return 0;
+	if (packet->identifier != pppcp->config_identifier)
+		return 0;
+
+	/*
+	 * check to see which options were rejected
+	 * Rejected options must be a subset of requested
+	 * options and in the same order.
+	 *
+	 * when a new configure-request is sent, we may
+	 * not request any of these options be negotiated
+	 */
+	if (pppcp->driver->rcn_rej)
+		pppcp->driver->rcn_rej(pppcp, packet);
+
+	return RCN;
 }
 
 static guint8 pppcp_process_terminate_request(struct pppcp_data *data,
-					struct pppcp_packet *packet)
+					const struct pppcp_packet *packet)
 {
+	pppcp_trace(data);
+
 	return RTR;
 }
 
 static guint8 pppcp_process_terminate_ack(struct pppcp_data *data,
-					struct pppcp_packet *packet)
+					const struct pppcp_packet *packet)
 {
 	/*
 	 * if we wind up using the data field for anything, then
@@ -1351,103 +830,171 @@ static guint8 pppcp_process_terminate_ack(struct pppcp_data *data,
 	 * even if the identifiers don't match, we still handle
 	 * a terminate ack, as it is allowed to be unelicited
 	 */
+	pppcp_trace(data);
+
 	return RTA;
 }
 
 static guint8 pppcp_process_code_reject(struct pppcp_data *data,
-					struct pppcp_packet *packet)
+					const struct pppcp_packet *packet)
 {
 	/*
 	 * determine if the code reject is catastrophic or not.
 	 * return RXJ_PLUS if this reject is acceptable, RXJ_MINUS if
 	 * it is catastrophic.
+	 *
+	 * for now we always return RXJ_MINUS.  Any code
+	 * reject will be catastrophic, since we only support the
+	 * bare minimum number of codes necessary to function.
 	 */
 	return RXJ_MINUS;
 }
 
 static guint8 pppcp_process_protocol_reject(struct pppcp_data *data,
-					struct pppcp_packet *packet)
+					const struct pppcp_packet *packet)
 {
 	/*
 	 * determine if the protocol reject is catastrophic or not.
 	 * return RXJ_PLUS if this reject is acceptable, RXJ_MINUS if
 	 * it is catastrophic.
+	 *
+	 * for now we always return RXJ_MINUS.  Any protocol
+	 * reject will be catastrophic, since we only support the
+	 * bare minimum number of protocols necessary to function.
 	 */
 	return RXJ_MINUS;
 }
 
+/*
+ * For Echo-Request, Echo-Reply, and Discard-Request, we will not
+ * bother checking the magic number of the packet, because we will
+ * never send an echo or discard request.  We can't reliably detect
+ * loop back anyway, since we don't negotiate a magic number.
+ */
 static guint8 pppcp_process_echo_request(struct pppcp_data *data,
-					struct pppcp_packet *packet)
+					const struct pppcp_packet *packet)
 {
 	return RXR;
 }
 
 static guint8 pppcp_process_echo_reply(struct pppcp_data *data,
-					struct pppcp_packet *packet)
+					const struct pppcp_packet *packet)
 {
 	return 0;
 }
 
 static guint8 pppcp_process_discard_request(struct pppcp_data *data,
-					struct pppcp_packet *packet)
+					const struct pppcp_packet *packet)
 {
 	return 0;
+}
+
+static guint8 (*packet_ops[11])(struct pppcp_data *data,
+					const struct pppcp_packet *packet) = {
+	pppcp_process_configure_request,
+	pppcp_process_configure_ack,
+	pppcp_process_configure_nak,
+	pppcp_process_configure_reject,
+	pppcp_process_terminate_request,
+	pppcp_process_terminate_ack,
+	pppcp_process_code_reject,
+	pppcp_process_protocol_reject,
+	pppcp_process_echo_request,
+	pppcp_process_echo_reply,
+	pppcp_process_discard_request,
+};
+
+void pppcp_send_protocol_reject(struct pppcp_data *data,
+				const guint8 *rejected_packet, gsize len)
+{
+	struct pppcp_packet *packet;
+
+	pppcp_trace(data);
+
+	/*
+	 * Protocol-Reject can only be sent when we are in
+	 * the OPENED state.  If in any other state, silently discard.
+	 */
+	if (data->state != OPENED)
+		return;
+
+	/*
+	 * info should contain the old packet info, plus the 16bit
+	 * protocol number we are rejecting.
+	 */
+	packet = pppcp_packet_new(data, PPPCP_CODE_TYPE_PROTOCOL_REJECT, len);
+
+	/*
+	 * Identifier must be changed for each Protocol-Reject sent
+	 */
+	packet->identifier = new_identity(data, data->reject_identifier);
+
+	/*
+	 * rejected packet should be copied in, but it should be
+	 * truncated if it needs to be to comply with mtu requirement
+	 */
+	memcpy(packet->data, rejected_packet,
+			(ntohs(packet->length) - CP_HEADER_SZ));
+
+	ppp_transmit(data->ppp, pppcp_to_ppp_packet(packet),
+			ntohs(packet->length));
 }
 
 /*
  * parse the packet and determine which event this packet caused
  */
-void pppcp_process_packet(gpointer priv, guint8 *new_packet)
+void pppcp_process_packet(gpointer priv, const guint8 *new_packet)
 {
 	struct pppcp_data *data = priv;
-	struct pppcp_packet *packet = (struct pppcp_packet *) new_packet;
+	const struct pppcp_packet *packet =
+				(const struct pppcp_packet *) new_packet;
 	guint8 event_type;
-	gpointer event_data = NULL;
 	guint data_len = 0;
 
 	if (data == NULL)
 		return;
 
 	/* check flags to see if we support this code */
-	if (!(data->valid_codes & (1 << packet->code)))
+	if (!(data->driver->supported_codes & (1 << packet->code)))
 		event_type = RUC;
 	else
-		event_type = data->packet_ops[packet->code-1](data, packet);
+		event_type = packet_ops[packet->code-1](data, packet);
 
 	if (event_type) {
 		data_len = ntohs(packet->length);
-		event_data = packet;
-		pppcp_generate_event(data, event_type, event_data, data_len);
+		pppcp_generate_event(data, event_type, new_packet, data_len);
 	}
 }
 
-void pppcp_set_valid_codes(struct pppcp_data *data, guint16 codes)
+void pppcp_free(struct pppcp_data *pppcp)
 {
-	if (data == NULL)
-		return;
-
-	data->valid_codes = codes;
+	g_free(pppcp->peer_options);
+	g_free(pppcp);
 }
 
-void pppcp_free(struct pppcp_data *data)
+void pppcp_set_data(struct pppcp_data *pppcp, gpointer data)
 {
-	if (data == NULL)
-		return;
-
-	/* free event queue */
-	if (!g_queue_is_empty(data->event_queue))
-		g_queue_foreach(data->event_queue, (GFunc) g_free, NULL);
-	g_queue_free(data->event_queue);
-
-	/* remove all config options */
-	pppcp_clear_options(data);
-
-	/* free self */
-	g_free(data);
+	pppcp->priv = data;
 }
 
-struct pppcp_data *pppcp_new(GAtPPP *ppp, guint16 proto,
-				gpointer priv)
+gpointer pppcp_get_data(struct pppcp_data *pppcp)
+{
+	return pppcp->priv;
+}
+
+GAtPPP *pppcp_get_ppp(struct pppcp_data *pppcp)
+{
+	return pppcp->ppp;
+}
+
+void pppcp_set_local_options(struct pppcp_data *pppcp,
+					const guint8 *options, guint16 len)
+{
+	pppcp->local_options = options;
+	pppcp->local_options_len = len;
+}
+
+struct pppcp_data *pppcp_new(GAtPPP *ppp, const struct pppcp_proto *proto)
 {
 	struct pppcp_data *data;
 
@@ -1456,48 +1003,16 @@ struct pppcp_data *pppcp_new(GAtPPP *ppp, guint16 proto,
 		return NULL;
 
 	data->state = INITIAL;
-	data->restart_interval = INITIAL_RESTART_TIMEOUT;
-	data->max_terminate = MAX_TERMINATE;
-	data->max_configure = MAX_CONFIGURE;
+	data->config_timer_data.restart_interval = INITIAL_RESTART_TIMEOUT;
+	data->terminate_timer_data.restart_interval = INITIAL_RESTART_TIMEOUT;
+	data->config_timer_data.max_counter = MAX_CONFIGURE;
+	data->terminate_timer_data.max_counter = MAX_TERMINATE;
+	data->config_timer_data.data = data;
+	data->terminate_timer_data.data = data;
 	data->max_failure = MAX_FAILURE;
-	data->event_queue = g_queue_new();
-	data->identifier = 0;
+
 	data->ppp = ppp;
-	data->proto = proto;
-	data->priv = priv;
-
-	/* setup func ptrs for processing packet by pppcp code */
-	data->packet_ops[CONFIGURE_REQUEST - 1] =
-					pppcp_process_configure_request;
-	data->packet_ops[CONFIGURE_ACK - 1] = pppcp_process_configure_ack;
-	data->packet_ops[CONFIGURE_NAK - 1] = pppcp_process_configure_nak;
-	data->packet_ops[CONFIGURE_REJECT - 1] = pppcp_process_configure_reject;
-	data->packet_ops[TERMINATE_REQUEST - 1] =
-					pppcp_process_terminate_request;
-	data->packet_ops[TERMINATE_ACK - 1] = pppcp_process_terminate_ack;
-	data->packet_ops[CODE_REJECT - 1] = pppcp_process_code_reject;
-	data->packet_ops[PROTOCOL_REJECT - 1] = pppcp_process_protocol_reject;
-	data->packet_ops[ECHO_REQUEST - 1] = pppcp_process_echo_request;
-	data->packet_ops[ECHO_REPLY - 1] = pppcp_process_echo_reply;
-	data->packet_ops[DISCARD_REQUEST - 1] = pppcp_process_discard_request;
-
-	/* setup func ptrs for handling events by event type */
-	data->event_ops[UP] = pppcp_up_event;
-	data->event_ops[DOWN] = pppcp_down_event;
-	data->event_ops[OPEN] = pppcp_open_event;
-	data->event_ops[CLOSE] = pppcp_close_event;
-	data->event_ops[TO_PLUS] = pppcp_to_plus_event;
-	data->event_ops[TO_MINUS] = pppcp_to_minus_event;
-	data->event_ops[RCR_PLUS] = pppcp_rcr_plus_event;
-	data->event_ops[RCR_MINUS] = pppcp_rcr_minus_event;
-	data->event_ops[RCA] = pppcp_rca_event;
-	data->event_ops[RCN] = pppcp_rcn_event;
-	data->event_ops[RTR] = pppcp_rtr_event;
-	data->event_ops[RTA] = pppcp_rta_event;
-	data->event_ops[RUC] = pppcp_ruc_event;
-	data->event_ops[RXJ_PLUS] = pppcp_rxj_plus_event;
-	data->event_ops[RXJ_MINUS] = pppcp_rxj_minus_event;
-	data->event_ops[RXR] = pppcp_rxr_event;
+	data->driver = proto;
 
 	return data;
 }

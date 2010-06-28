@@ -273,7 +273,7 @@ const char *telephony_error_to_str(const struct ofono_error *error)
 		break;
 	case OFONO_ERROR_TYPE_CMS:
 		e = cms_errors;
-		maxentries = sizeof(cme_errors) / sizeof(struct error_entry);
+		maxentries = sizeof(cms_errors) / sizeof(struct error_entry);
 		break;
 	case OFONO_ERROR_TYPE_CEER:
 		e = ceer_errors;
@@ -589,7 +589,7 @@ gboolean is_valid_pin(const char *pin, enum pin_type type)
 		return FALSE;
 
 	i = strlen(pin);
-	if (i != strspn(pin, "012345679"))
+	if (i != strspn(pin, "0123456789"))
 		return FALSE;
 
 	switch (type) {
@@ -641,21 +641,21 @@ const char *registration_tech_to_string(int tech)
 {
 	switch (tech) {
 	case ACCESS_TECHNOLOGY_GSM:
-		return "GSM";
+		return "gsm";
 	case ACCESS_TECHNOLOGY_GSM_COMPACT:
-		return "GSMCompact";
+		return "gsm";
 	case ACCESS_TECHNOLOGY_UTRAN:
-		return "UTRAN";
+		return "umts";
 	case ACCESS_TECHNOLOGY_GSM_EGPRS:
-		return "GSM+EGPRS";
+		return "edge";
 	case ACCESS_TECHNOLOGY_UTRAN_HSDPA:
-		return "UTRAN+HSDPA";
+		return "hspa";
 	case ACCESS_TECHNOLOGY_UTRAN_HSUPA:
-		return "UTRAN+HSUPA";
+		return "hspa";
 	case ACCESS_TECHNOLOGY_UTRAN_HSDPA_HSUPA:
-		return "UTRAN+HSDPA+HSUPA";
+		return "hspa";
 	case ACCESS_TECHNOLOGY_EUTRAN:
-		return "EUTRAN";
+		return "lte";
 	default:
 		return "";
 	}

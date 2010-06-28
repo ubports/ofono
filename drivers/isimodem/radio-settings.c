@@ -54,9 +54,9 @@ static enum ofono_radio_access_mode isi_mode_to_ofono_mode(guint8 mode)
 	case GSS_DUAL_RAT:
 		return OFONO_RADIO_ACCESS_MODE_ANY;
 	case GSS_GSM_RAT:
-		return OFONO_RADIO_ACCESS_MODE_2G;
+		return OFONO_RADIO_ACCESS_MODE_GSM;
 	case GSS_UMTS_RAT:
-		return OFONO_RADIO_ACCESS_MODE_3G;
+		return OFONO_RADIO_ACCESS_MODE_UMTS;
 	default:
 		return -1;
 	}
@@ -67,17 +67,19 @@ static int ofono_mode_to_isi_mode(enum ofono_radio_access_mode mode)
 	switch (mode) {
 	case OFONO_RADIO_ACCESS_MODE_ANY:
 		return GSS_DUAL_RAT;
-	case OFONO_RADIO_ACCESS_MODE_2G:
+	case OFONO_RADIO_ACCESS_MODE_GSM:
 		return GSS_GSM_RAT;
-	case OFONO_RADIO_ACCESS_MODE_3G:
+	case OFONO_RADIO_ACCESS_MODE_UMTS:
 		return GSS_UMTS_RAT;
 	default:
 		return -1;
 	}
 }
 
-static bool rat_mode_read_resp_cb(GIsiClient *client, const void *restrict data,
-					size_t len, uint16_t object, void *opaque)
+static gboolean rat_mode_read_resp_cb(GIsiClient *client,
+					const void *restrict data, size_t len,
+					uint16_t object,
+					void *opaque)
 {
 	const unsigned char *msg = data;
 	struct isi_cb_data *cbd = opaque;
@@ -91,7 +93,7 @@ static bool rat_mode_read_resp_cb(GIsiClient *client, const void *restrict data,
 
 	if (len < 3) {
 		DBG("truncated message");
-		return false;
+		return FALSE;
 	}
 
 	if (msg[0] == GSS_CS_SERVICE_FAIL_RESP)
@@ -118,7 +120,8 @@ static bool rat_mode_read_resp_cb(GIsiClient *client, const void *restrict data,
 			}
 			default:
 				DBG("Skipping sub-block: %s (%zu bytes)",
-					gss_subblock_name(g_isi_sb_iter_get_id(&iter)),
+					gss_subblock_name(
+						g_isi_sb_iter_get_id(&iter)),
 					g_isi_sb_iter_get_len(&iter));
 				break;
 			}
@@ -128,14 +131,14 @@ static bool rat_mode_read_resp_cb(GIsiClient *client, const void *restrict data,
 		goto out;
 	}
 
-	return false;
+	return FALSE;
 
 error:
 	CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
 
 out:
 	g_free(cbd);
-	return true;
+	return TRUE;
 }
 
 static void isi_query_rat_mode(struct ofono_radio_settings *rs,
@@ -163,8 +166,9 @@ error:
 	g_free(cbd);
 }
 
-static bool rat_mode_write_resp_cb(GIsiClient *client, const void *restrict data,
-					size_t len, uint16_t object, void *opaque)
+static gboolean mode_write_resp_cb(GIsiClient *client,
+					const void *restrict data, size_t len,
+					uint16_t object, void *opaque)
 {
 	const unsigned char *msg = data;
 	struct isi_cb_data *cbd = opaque;
@@ -177,7 +181,7 @@ static bool rat_mode_write_resp_cb(GIsiClient *client, const void *restrict data
 
 	if (len < 3) {
 		DBG("truncated message");
-		return false;
+		return FALSE;
 	}
 
 	if (msg[0] == GSS_CS_SERVICE_FAIL_RESP)
@@ -188,14 +192,14 @@ static bool rat_mode_write_resp_cb(GIsiClient *client, const void *restrict data
 		goto out;
 	}
 
-	return false;
+	return FALSE;
 
 error:
 	CALLBACK_WITH_FAILURE(cb, cbd->data);
 
 out:
 	g_free(cbd);
-	return true;
+	return TRUE;
 }
 
 static void isi_set_rat_mode(struct ofono_radio_settings *rs,
@@ -224,7 +228,7 @@ static void isi_set_rat_mode(struct ofono_radio_settings *rs,
 		goto error;
 
 	if (g_isi_request_make(rd->client, msg, sizeof(msg), GSS_TIMEOUT,
-				rat_mode_write_resp_cb, cbd))
+				mode_write_resp_cb, cbd))
 		return;
 
 error:
@@ -248,7 +252,7 @@ static gboolean isi_radio_settings_register(gpointer user)
 	return FALSE;
 }
 
-static void reachable_cb(GIsiClient *client, bool alive, uint16_t object,
+static void reachable_cb(GIsiClient *client, gboolean alive, uint16_t object,
 				void *opaque)
 {
 	struct ofono_radio_settings *rs = opaque;

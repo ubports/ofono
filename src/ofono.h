@@ -51,6 +51,7 @@ DBusMessage *__ofono_error_busy(DBusMessage *msg);
 DBusMessage *__ofono_error_not_found(DBusMessage *msg);
 DBusMessage *__ofono_error_not_active(DBusMessage *msg);
 DBusMessage *__ofono_error_not_supported(DBusMessage *msg);
+DBusMessage *__ofono_error_not_available(DBusMessage *msg);
 DBusMessage *__ofono_error_timed_out(DBusMessage *msg);
 DBusMessage *__ofono_error_sim_not_ready(DBusMessage *msg);
 DBusMessage *__ofono_error_in_use(DBusMessage *msg);
@@ -114,6 +115,8 @@ enum ofono_atom_type {
 	OFONO_ATOM_TYPE_GPRS = 16,
 	OFONO_ATOM_TYPE_GPRS_CONTEXT = 17,
 	OFONO_ATOM_TYPE_RADIO_SETTINGS = 18,
+	OFONO_ATOM_TYPE_STK = 19,
+	OFONO_ATOM_TYPE_NETTIME = 20,
 };
 
 enum ofono_atom_watch_condition {
@@ -172,9 +175,10 @@ void __ofono_atom_free(struct ofono_atom *atom);
 #include <ofono/radio-settings.h>
 
 #include <ofono/sim.h>
+#include <ofono/stk.h>
 
-void __ofono_cbs_sim_download(struct ofono_sim *sim,
-				const guint8 *pdu, int pdu_len);
+struct cbs;
+void __ofono_cbs_sim_download(struct ofono_stk *stk, const struct cbs *msg);
 
 #include <ofono/ssn.h>
 
@@ -262,3 +266,10 @@ struct sms;
 
 void __ofono_message_waiting_mwi(struct ofono_message_waiting *mw,
 				struct sms *sms, gboolean *out_discard);
+
+#include <ofono/nettime.h>
+
+void __ofono_nettime_probe_drivers(struct ofono_modem *modem);
+
+void __ofono_nettime_info_received(struct ofono_modem *modem,
+					struct ofono_network_time *info);

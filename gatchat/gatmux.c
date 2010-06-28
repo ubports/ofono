@@ -223,8 +223,10 @@ static gboolean received_data(GIOChannel *channel, GIOCondition cond,
 	return TRUE;
 }
 
-static void write_watcher_destroy_notify(GAtMux *mux)
+static void write_watcher_destroy_notify(gpointer user_data)
 {
+	GAtMux *mux = user_data;
+
 	mux->write_watch = 0;
 }
 
@@ -288,7 +290,7 @@ static void wakeup_writer(GAtMux *mux)
 				G_PRIORITY_DEFAULT,
 				G_IO_OUT | G_IO_HUP | G_IO_ERR | G_IO_NVAL,
 				can_write_data, mux,
-				(GDestroyNotify)write_watcher_destroy_notify);
+				write_watcher_destroy_notify);
 }
 
 int g_at_mux_raw_write(GAtMux *mux, const void *data, int towrite)
@@ -431,6 +433,9 @@ static GIOStatus channel_read(GIOChannel *channel, gchar *buf, gsize count,
 
 	*bytes_read = ring_buffer_read(mux_channel->buffer, buf, avail);
 
+	if (*bytes_read == 0)
+		return G_IO_STATUS_AGAIN;
+
 	return G_IO_STATUS_NORMAL;
 }
 
@@ -539,7 +544,7 @@ GAtMux *g_at_mux_new(GIOChannel *channel, const GAtMuxDriver *driver)
 	if (!channel)
 		return NULL;
 
-	mux = g_new0(GAtMux, 1);
+	mux = g_try_new0(GAtMux, 1);
 	if (!mux)
 		return NULL;
 
@@ -642,13 +647,13 @@ gboolean g_at_mux_set_disconnect_function(GAtMux *mux,
 	return TRUE;
 }
 
-gboolean g_at_mux_set_debug(GAtMux *mux, GAtDebugFunc func, gpointer user)
+gboolean g_at_mux_set_debug(GAtMux *mux, GAtDebugFunc func, gpointer user_data)
 {
 	if (mux == NULL)
 		return FALSE;
 
 	mux->debugf = func;
-	mux->debug_data = user;
+	mux->debug_data = user_data;
 
 	return TRUE;
 }
@@ -717,7 +722,8 @@ static void mux_setup_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	channel = g_at_chat_get_channel(msd->chat);
 	channel = g_io_channel_ref(channel);
 
-	g_at_chat_shutdown(msd->chat);
+	g_at_chat_unref(msd->chat);
+	msd->chat = NULL;
 
 	flags = g_io_channel_get_flags(channel) | G_IO_FLAG_NONBLOCK;
 	g_io_channel_set_flags(channel, flags, NULL);

@@ -171,6 +171,7 @@ gboolean at_util_parse_reg_unsolicited(GAtResult *result, const char *prefix,
 
 	switch (vendor) {
 	case OFONO_VENDOR_HUAWEI:
+	case OFONO_VENDOR_NOVATEL:
 		if (g_at_result_iter_next_unquoted_string(&iter, &str) == TRUE)
 			l = strtol(str, NULL, 16);
 		else
@@ -235,6 +236,7 @@ gboolean at_util_parse_reg(GAtResult *result, const char *prefix,
 
 		switch (vendor) {
 		case OFONO_VENDOR_HUAWEI:
+		case OFONO_VENDOR_NOVATEL:
 			r = g_at_result_iter_next_unquoted_string(&iter, &str);
 
 			if (r == TRUE)
@@ -284,4 +286,44 @@ out:
 	}
 
 	return FALSE;
+}
+
+gboolean at_util_parse_sms_index_delivery(GAtResult *result, const char *prefix,
+						enum at_util_sms_store *out_st,
+						int *out_index)
+{
+	GAtResultIter iter;
+	const char *strstore;
+	enum at_util_sms_store st;
+	int index;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, prefix))
+		return FALSE;
+
+	if (!g_at_result_iter_next_string(&iter, &strstore))
+		return FALSE;
+
+	if (g_str_equal(strstore, "ME"))
+		st = AT_UTIL_SMS_STORE_ME;
+	else if (g_str_equal(strstore, "SM"))
+		st = AT_UTIL_SMS_STORE_SM;
+	else if (g_str_equal(strstore, "SR"))
+		st = AT_UTIL_SMS_STORE_SR;
+	else if (g_str_equal(strstore, "BM"))
+		st = AT_UTIL_SMS_STORE_BM;
+	else
+		return FALSE;
+
+	if (!g_at_result_iter_next_number(&iter, &index))
+		return FALSE;
+
+	if (out_index)
+		*out_index = index;
+
+	if (out_st)
+		*out_st = st;
+
+	return TRUE;
 }

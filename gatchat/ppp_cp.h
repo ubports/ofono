@@ -20,52 +20,7 @@
  */
 
 struct pppcp_data;
-
-enum pppcp_code {
-	CONFIGURE_REQUEST = 1,
-	CONFIGURE_ACK,
-	CONFIGURE_NAK,
-	CONFIGURE_REJECT,
-	TERMINATE_REQUEST,
-	TERMINATE_ACK,
-	CODE_REJECT,
-	PROTOCOL_REJECT,
-	ECHO_REQUEST,
-	ECHO_REPLY,
-	DISCARD_REQUEST
-};
-
-enum pppcp_event_type {
-	UP,
-	DOWN,
-	OPEN,
-	CLOSE,
-	TO_PLUS,
-	TO_MINUS,
-	RCR_PLUS,
-	RCR_MINUS,
-	RCA,
-	RCN,
-	RTR,
-	RTA,
-	RUC,
-	RXJ_PLUS,
-	RXJ_MINUS,
-	RXR,
-};
-
-enum pppcp_state {
-	INITIAL,
-	STARTING,
-	CLOSED,
-	STOPPED,
-	CLOSING,
-	STOPPING,
-	REQSENT,
-	ACKRCVD,
-	ACKSENT,
-	OPENED,
-};
+struct ppp_option_iter;
 
 /* option format */
 struct ppp_option {
@@ -74,21 +29,24 @@ struct ppp_option {
 	guint8 data[0];
 };
 
-enum option_rval {
-	OPTION_ACCEPT,
-	OPTION_REJECT,
-	OPTION_NAK,
-	OPTION_ERR,
+enum rcr_result {
+	RCR_ACCEPT,
+	RCR_REJECT,
+	RCR_NAK,
 };
 
-struct pppcp_action {
-	void (*this_layer_up)(struct pppcp_data *data);
-	void (*this_layer_down)(struct pppcp_data *data);
-	void (*this_layer_started)(struct pppcp_data *data);
-	void (*this_layer_finished)(struct pppcp_data *data);
-	enum option_rval (*option_scan)(struct ppp_option *option,
-						gpointer user_data);
-	void (*option_process)(gpointer option, gpointer user_data);
+enum pppcp_code {
+	PPPCP_CODE_TYPE_CONFIGURE_REQUEST = 1,
+	PPPCP_CODE_TYPE_CONFIGURE_ACK,
+	PPPCP_CODE_TYPE_CONFIGURE_NAK,
+	PPPCP_CODE_TYPE_CONFIGURE_REJECT,
+	PPPCP_CODE_TYPE_TERMINATE_REQUEST,
+	PPPCP_CODE_TYPE_TERMINATE_ACK,
+	PPPCP_CODE_TYPE_CODE_REJECT,
+	PPPCP_CODE_TYPE_PROTOCOL_REJECT,
+	PPPCP_CODE_TYPE_ECHO_REQUEST,
+	PPPCP_CODE_TYPE_ECHO_REPLY,
+	PPPCP_CODE_TYPE_DISCARD_REQUEST
 };
 
 struct pppcp_packet {
@@ -98,42 +56,70 @@ struct pppcp_packet {
 	guint8 data[0];
 } __attribute__((packed));
 
-struct pppcp_data {
-	enum pppcp_state state;
-	guint restart_timer;
-	guint restart_counter;
-	guint restart_interval;
-	guint max_terminate;
-	guint max_configure;
-	guint max_failure;
-	guint32 magic_number;
-	GQueue *event_queue;
-	GList *config_options;
-	GList *acceptable_options;
-	GList *unacceptable_options;
-	GList *rejected_options;
-	GList *applied_options;
-	GAtPPP *ppp;
-	guint8 identifier;  /* don't think I need this now */
-	guint8 config_identifier;
-	guint8 terminate_identifier;
-	guint8 reject_identifier;
-	struct pppcp_action *action;
-	guint16 valid_codes;
-	guint8 (*packet_ops[11])(struct pppcp_data *data,
-					struct pppcp_packet *packet);
-	void (*event_ops[16])(struct pppcp_data *data, guint8 *packet,
-				guint length);
-	gpointer priv;
-	guint16 proto;
+struct ppp_option_iter {
+	guint16 max;
+	guint16 pos;
+	const guint8 *pdata;
+	guint8 type;
+	guint8 len;
+	const guint8 *option_data;
 };
 
-struct pppcp_data *pppcp_new(GAtPPP *ppp, guint16 proto, gpointer priv);
+struct pppcp_proto {
+	guint16 proto;
+	const char *name;
+	guint16 supported_codes;
+	void (*this_layer_up)(struct pppcp_data *data);
+	void (*this_layer_down)(struct pppcp_data *data);
+	void (*this_layer_started)(struct pppcp_data *data);
+	void (*this_layer_finished)(struct pppcp_data *data);
+	/* Remote side acked these options, we can now use them */
+	void (*rca)(struct pppcp_data *pppcp, const struct pppcp_packet *pkt);
+	/*
+	 * Remote side sent us an Conf-Req-Nak or Conf-Req-Rej.  The protocol
+	 * driver should examine the packet and update its options accordingly,
+	 * then use set_local_options to set a new set of options to try
+	 * before returning
+	 */
+	void (*rcn_nak)(struct pppcp_data *pppcp,
+					const struct pppcp_packet *pkt);
+	void (*rcn_rej)(struct pppcp_data *pppcp,
+					const struct pppcp_packet *pkt);
+	/*
+	 * Remote side has sent us a request with its options, return whether
+	 * we should ack / nak / rej these options.  In the case of nak / rej,
+	 * the list of options to be sent to the peer is given in the
+	 * new_options & new_len out arguments
+	 */
+	enum rcr_result (*rcr)(struct pppcp_data *pppcp,
+					const struct pppcp_packet *pkt,
+					guint8 **new_options, guint16 *new_len);
+};
+
+void ppp_option_iter_init(struct ppp_option_iter *iter,
+					const struct pppcp_packet *packet);
+gboolean ppp_option_iter_next(struct ppp_option_iter *iter);
+guint8 ppp_option_iter_get_type(struct ppp_option_iter *iter);
+guint8 ppp_option_iter_get_length(struct ppp_option_iter *iter);
+const guint8 *ppp_option_iter_get_data(struct ppp_option_iter *iter);
+
+struct pppcp_data *pppcp_new(GAtPPP *ppp, const struct pppcp_proto *proto);
 void pppcp_free(struct pppcp_data *data);
-void pppcp_add_config_option(struct pppcp_data *data,
-				struct ppp_option *option);
-void pppcp_set_valid_codes(struct pppcp_data *data, guint16 codes);
-void pppcp_generate_event(struct pppcp_data *data,
-				enum pppcp_event_type event_type,
-				gpointer event_data, guint data_len);
-void pppcp_process_packet(gpointer priv, guint8 *new_packet);
+
+void pppcp_set_data(struct pppcp_data *pppcp, gpointer data);
+gpointer pppcp_get_data(struct pppcp_data *pppcp);
+GAtPPP *pppcp_get_ppp(struct pppcp_data *pppcp);
+
+guint8 pppcp_get_code(const guint8 *data);
+
+void pppcp_set_local_options(struct pppcp_data *data,
+				const guint8 *options,
+				guint16 len);
+
+void pppcp_process_packet(gpointer priv, const guint8 *new_packet);
+void pppcp_send_protocol_reject(struct pppcp_data *data,
+				const guint8 *rejected_packet, gsize len);
+void pppcp_signal_open(struct pppcp_data *data);
+void pppcp_signal_close(struct pppcp_data *data);
+void pppcp_signal_up(struct pppcp_data *data);
+void pppcp_signal_down(struct pppcp_data *data);

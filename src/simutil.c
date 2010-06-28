@@ -210,7 +210,7 @@ void comprehension_tlv_iter_init(struct comprehension_tlv_iter *iter,
 	iter->data = 0;
 }
 
-/* Comprehension TLVs defined in Section 7 of ETSI TS 102.220 */
+/* Comprehension TLVs defined in Section 7 of ETSI TS 101.220 */
 gboolean comprehension_tlv_iter_next(struct comprehension_tlv_iter *iter)
 {
 	const unsigned char *pdu = iter->pdu + iter->pos;
@@ -222,15 +222,15 @@ gboolean comprehension_tlv_iter_next(struct comprehension_tlv_iter *iter)
 	if (pdu == end)
 		return FALSE;
 
+	if (*pdu == 0x00 || *pdu == 0xFF || *pdu == 0x80)
+		return FALSE;
+
 	cr = bit_field(*pdu, 7, 1);
 	tag = bit_field(*pdu, 0, 7);
 	pdu++;
 
-	if (tag == 0x00 || tag == 0xFF || tag == 0x80)
-		return FALSE;
-
 	/*
-	 * ETSI TS 102.220, Section 7.1.1.2
+	 * ETSI TS 101.220, Section 7.1.1.2
 	 * 
 	 * If byte 1 of the tag is equal to 0x7F, then the tag is encoded
 	 * on the following two bytes, with bit 8 of the 2nd byte of the tag
@@ -241,7 +241,7 @@ gboolean comprehension_tlv_iter_next(struct comprehension_tlv_iter *iter)
 			return FALSE;
 
 		cr = bit_field(pdu[0], 7, 1);
-		tag = ((pdu[0] & 0x7f) << 7) | pdu[1];
+		tag = ((pdu[0] & 0x7f) << 8) | pdu[1];
 
 		if (tag < 0x0001 || tag > 0x7fff)
 			return FALSE;
@@ -307,6 +307,18 @@ const unsigned char *comprehension_tlv_iter_get_data(
 	return iter->data;
 }
 
+void comprehension_tlv_iter_copy(struct comprehension_tlv_iter *from,
+					struct comprehension_tlv_iter *to)
+{
+	to->max = from->max;
+	to->pos = from->pos;
+	to->pdu = from->pdu;
+	to->tag = from->tag;
+	to->cr = from->cr;
+	to->len = from->len;
+	to->data = from->data;
+}
+
 void ber_tlv_iter_init(struct ber_tlv_iter *iter, const unsigned char *pdu,
 			unsigned int len)
 {
@@ -355,7 +367,7 @@ gboolean ber_tlv_iter_next(struct ber_tlv_iter *iter)
 	const unsigned char *pdu = iter->pdu + iter->pos;
 	const unsigned char *end = iter->pdu + iter->max;
 	unsigned int tag;
-	int len;
+	unsigned int len;
 	enum ber_tlv_data_type class;
 	enum ber_tlv_data_encoding_type encoding;
 
@@ -486,6 +498,274 @@ static const guint8 *ber_tlv_find_by_tag(const guint8 *pdu, guint8 in_tag,
 	return NULL;
 }
 
+#define MAX_BER_TLV_HEADER 8
+
+gboolean ber_tlv_builder_init(struct ber_tlv_builder *builder,
+				unsigned char *pdu, unsigned int size)
+{
+	if (size < MAX_BER_TLV_HEADER)
+		return FALSE;
+
+	builder->pdu = pdu;
+	builder->pos = 0;
+	builder->max = size;
+	builder->parent = NULL;
+	builder->tag = 0xff;
+	builder->len = 0;
+
+	return TRUE;
+}
+
+#define BTLV_LEN_FIELD_SIZE_NEEDED(a)				\
+	((a) <= 0x7f ? 1 :					\
+		((a) <= 0xff ? 2 :				\
+			((a) <= 0xffff ? 3 :			\
+				((a) <= 0xffffff ? 4 : 5))))
+
+#define BTLV_TAG_FIELD_SIZE_NEEDED(a)				\
+	((a) <= 0x1e ? 1 :					\
+		((a) <= 0x7f ? 2 : 3))
+
+static void ber_tlv_builder_write_header(struct ber_tlv_builder *builder)
+{
+	int tag_size = BTLV_TAG_FIELD_SIZE_NEEDED(builder->tag);
+	int len_size = BTLV_LEN_FIELD_SIZE_NEEDED(builder->len);
+	int offset = MAX_BER_TLV_HEADER - tag_size - len_size;
+	unsigned char *pdu = builder->pdu + builder->pos;
+
+	/* Pad with stuff bytes */
+	memset(pdu, 0xff, offset);
+
+	/* Write the tag */
+	pdu[offset++] = (builder->class << 6) |
+				(builder->encoding << 5) |
+					(tag_size == 1 ? builder->tag : 0x1f);
+
+	if (tag_size == 3)
+		pdu[offset++] = 0x80 | (builder->tag >> 7);
+
+	if (tag_size > 2)
+		pdu[offset++] = builder->tag & 0x7f;
+
+	/* Write the length */
+	if (len_size > 1) {
+		int i;
+
+		pdu[offset++] = 0x80 + len_size - 1;
+
+		for (i = len_size - 2; i >= 0; i--)
+			pdu[offset++] = (builder->len >> (i * 8)) & 0xff;
+	} else
+		pdu[offset++] = builder->len;
+}
+
+gboolean ber_tlv_builder_next(struct ber_tlv_builder *builder,
+				enum ber_tlv_data_type class,
+				enum ber_tlv_data_encoding_type encoding,
+				unsigned int new_tag)
+{
+	if (builder->tag != 0xff) {
+		ber_tlv_builder_write_header(builder);
+		builder->pos += MAX_BER_TLV_HEADER + builder->len;
+	}
+
+	if (ber_tlv_builder_set_length(builder, 0) == FALSE)
+		return FALSE;
+
+	builder->class = class;
+	builder->encoding = encoding;
+	builder->tag = new_tag;
+
+	return TRUE;
+}
+
+/* Resize the TLV because the content of Value field needs more space.  If
+ * this TLV is part of another TLV, resize that one too.  */
+gboolean ber_tlv_builder_set_length(struct ber_tlv_builder *builder,
+					unsigned int new_len)
+{
+	unsigned int new_pos = builder->pos + MAX_BER_TLV_HEADER + new_len;
+
+	if (new_pos > builder->max)
+		return FALSE;
+
+	if (builder->parent)
+		ber_tlv_builder_set_length(builder->parent, new_pos);
+
+	builder->len = new_len;
+
+	return TRUE;
+}
+
+unsigned char *ber_tlv_builder_get_data(struct ber_tlv_builder *builder)
+{
+	return builder->pdu + builder->pos + MAX_BER_TLV_HEADER;
+}
+
+gboolean ber_tlv_builder_recurse(struct ber_tlv_builder *builder,
+					struct ber_tlv_builder *recurse)
+{
+	unsigned char *end = builder->pdu + builder->max;
+	unsigned char *data = ber_tlv_builder_get_data(builder);
+
+	if (ber_tlv_builder_init(recurse, data, end - data) == FALSE)
+		return FALSE;
+
+	recurse->parent = builder;
+
+	return TRUE;
+}
+
+gboolean ber_tlv_builder_recurse_comprehension(struct ber_tlv_builder *builder,
+				struct comprehension_tlv_builder *recurse)
+{
+	unsigned char *end = builder->pdu + builder->max;
+	unsigned char *data = ber_tlv_builder_get_data(builder);
+
+	if (comprehension_tlv_builder_init(recurse, data, end - data) == FALSE)
+		return FALSE;
+
+	recurse->parent = builder;
+
+	return TRUE;
+}
+
+void ber_tlv_builder_optimize(struct ber_tlv_builder *builder,
+				unsigned char **out_pdu, unsigned int *out_len)
+{
+	unsigned int len;
+	unsigned char *pdu;
+
+	ber_tlv_builder_write_header(builder);
+
+	len = builder->pos + MAX_BER_TLV_HEADER + builder->len;
+
+	for (pdu = builder->pdu; *pdu == 0xff; pdu++)
+		len--;
+
+	if (out_pdu)
+		*out_pdu = pdu;
+
+	if (out_len)
+		*out_len = len;
+}
+
+gboolean comprehension_tlv_builder_init(
+				struct comprehension_tlv_builder *builder,
+				unsigned char *pdu, unsigned int size)
+{
+	if (size < 2)
+		return FALSE;
+
+	builder->pdu = pdu;
+	builder->pos = 0;
+	builder->max = size;
+	builder->parent = NULL;
+	builder->len = 0;
+
+	builder->pdu[0] = 0;
+
+	return TRUE;
+}
+
+#define CTLV_TAG_FIELD_SIZE(a)			\
+	bit_field((a), 0, 7) == 0x7f ? 3 : 1	\
+
+#define CTLV_LEN_FIELD_SIZE(a)			\
+	(a) >= 0x80 ? (a) - 0x7f : 1		\
+
+gboolean comprehension_tlv_builder_next(
+				struct comprehension_tlv_builder *builder,
+				gboolean cr, unsigned short tag)
+{
+	unsigned char *tlv = builder->pdu + builder->pos;
+	unsigned int prev_size = 0;
+	unsigned int new_size;
+
+	/* Tag is invalid when we start, means we've just been inited */
+	if (tlv[0] != 0) {
+		unsigned int tag_size = CTLV_TAG_FIELD_SIZE(tlv[0]);
+		prev_size = builder->len + tag_size;
+		prev_size += CTLV_LEN_FIELD_SIZE(tlv[tag_size]);
+	}
+
+	new_size = (tag < 0x7f ? 1 : 3) + 1;
+
+	if (builder->pos + prev_size + new_size > builder->max)
+		return FALSE;
+
+	builder->pos += prev_size;
+
+	if (tag >= 0x7f) {
+		builder->pdu[builder->pos + 0] = 0x7f;
+		builder->pdu[builder->pos + 1] = (cr ? 0x80 : 0) | (tag >> 8);
+		builder->pdu[builder->pos + 2] = tag & 0xff;
+	} else
+		builder->pdu[builder->pos + 0] = (cr ? 0x80 : 0x00) | tag;
+
+	builder->len = 0;
+	builder->pdu[builder->pos + new_size - 1] = 0; /* Length */
+
+	return TRUE;
+}
+
+/* Resize the TLV because the content of Value field needs more space.  If
+ * this TLV is part of another TLV, resize that one too.  */
+gboolean comprehension_tlv_builder_set_length(
+				struct comprehension_tlv_builder *builder,
+				unsigned int new_len)
+{
+	unsigned char *tlv = builder->pdu + builder->pos;
+	unsigned int tag_size = CTLV_TAG_FIELD_SIZE(tlv[0]);
+	unsigned int len_size, new_len_size;
+	unsigned int ctlv_len, new_ctlv_len;
+	unsigned int len;
+
+	len_size = CTLV_LEN_FIELD_SIZE(tlv[tag_size]);
+	ctlv_len = tag_size + len_size + builder->len;
+	new_len_size = BTLV_LEN_FIELD_SIZE_NEEDED(new_len);
+	new_ctlv_len = tag_size + new_len_size + new_len;
+
+	/* Check there is enough space */
+	if (builder->pos + new_ctlv_len > builder->max)
+		return FALSE;
+
+	if (builder->parent)
+		ber_tlv_builder_set_length(builder->parent,
+						builder->pos + new_ctlv_len);
+
+	len = MIN(builder->len, new_len);
+	if (len > 0 && new_len_size != len_size)
+		memmove(tlv + tag_size + new_len_size,
+				tlv + tag_size + len_size, len);
+
+	builder->len = new_len;
+
+	/* Write new length */
+	if (new_len_size > 1) {
+		int i;
+		unsigned int offset = tag_size;
+
+		tlv[offset++] = 0x80 + new_len_size - 1;
+
+		for (i = new_len_size - 2; i >= 0; i--)
+			tlv[offset++] = (builder->len >> (i * 8)) & 0xff;
+	} else
+		tlv[tag_size] = builder->len;
+
+	return TRUE;
+}
+
+unsigned char *comprehension_tlv_builder_get_data(
+				struct comprehension_tlv_builder *builder)
+{
+	unsigned char *tlv = builder->pdu + builder->pos;
+	unsigned int tag_size = CTLV_TAG_FIELD_SIZE(*tlv);
+	unsigned int len_size = CTLV_LEN_FIELD_SIZE(tlv[tag_size]);
+
+	return tlv + tag_size + len_size;
+}
+
 static char *sim_network_name_parse(const unsigned char *buffer, int length,
 					gboolean *add_ci)
 {
@@ -538,7 +818,7 @@ static char *sim_network_name_parse(const unsigned char *buffer, int length,
 	return ret;
 }
 
-static void parse_mcc_mnc(const guint8 *bcd, char *mcc, char *mnc)
+void sim_parse_mcc_mnc(const guint8 *bcd, char *mcc, char *mnc)
 {
 	static const char digit_lut[] = "0123456789*#abd\0";
 	guint8 digit;
@@ -560,6 +840,60 @@ static void parse_mcc_mnc(const guint8 *bcd, char *mcc, char *mnc)
 
 	digit = (bcd[1] >> 4) & 0xf;
 	*mnc++ = digit_lut[digit];
+}
+
+static inline int to_semi_oct(char in)
+{
+	int digit;
+
+	switch (in) {
+	case '0':
+	case '1':
+	case '2':
+	case '3':
+	case '4':
+	case '5':
+	case '6':
+	case '7':
+	case '8':
+	case '9':
+		digit = in - '0';
+		break;
+	case '*':
+		digit = 10;
+		break;
+	case '#':
+		digit = 11;
+		break;
+	case 'C':
+	case 'c':
+		digit = 12;
+		break;
+	case '?':
+		digit = 13;
+		break;
+	case 'E':
+	case 'e':
+		digit = 14;
+		break;
+	default:
+		digit = -1;
+		break;
+	}
+
+	return digit;
+}
+
+void sim_encode_mcc_mnc(guint8 *out, const char *mcc, const char *mnc)
+{
+	out[0] = to_semi_oct(mcc[0]);
+	out[0] |= to_semi_oct(mcc[1]) << 4;
+
+	out[1] = mcc[2] ? to_semi_oct(mcc[2]) : 0xf;
+	out[1] |= (mnc[2] ? to_semi_oct(mnc[2]) : 0xf) << 4;
+
+	out[2] = to_semi_oct(mnc[0]);
+	out[2] |= to_semi_oct(mnc[1]) << 4;
 }
 
 static gint spdi_operator_compare(gconstpointer a, gconstpointer b)
@@ -609,7 +943,7 @@ struct sim_spdi *sim_spdi_new(const guint8 *tlv, int length)
 
 		oper = g_new0(struct spdi_operator, 1);
 
-		parse_mcc_mnc(plmn_list, oper->mcc, oper->mnc);
+		sim_parse_mcc_mnc(plmn_list, oper->mcc, oper->mnc);
 		spdi->operators = g_slist_insert_sorted(spdi->operators, oper,
 						spdi_operator_compare);
 	}
@@ -694,7 +1028,7 @@ static struct opl_operator *opl_operator_alloc(const guint8 *record)
 {
 	struct opl_operator *oper = g_new0(struct opl_operator, 1);
 
-	parse_mcc_mnc(record, oper->mcc, oper->mnc);
+	sim_parse_mcc_mnc(record, oper->mcc, oper->mnc);
 	record += 3;
 
 	oper->lac_tac_low = (record[0] << 8) | record[1];
@@ -806,6 +1140,48 @@ const struct sim_eons_operator_info *sim_eons_lookup_with_lac(
 	return sim_eons_lookup_common(eons, mcc, mnc, TRUE, lac);
 }
 
+/*
+ * Extract extended BCD format defined in 3GPP 11.11, 31.102.  The format
+ * is different from what is defined in 3GPP 24.008 and 23.040 (sms).
+ *
+ * Here the digits with values 'C', 'D' and 'E' are treated differently,
+ * for more details see 31.102 Table 4.4
+ *
+ * 'C' - DTMF Control Digit Separator, represented as 'c' by this function
+ * 'D' - Wild Value, represented as a '?' by this function
+ * 'E' - RFU, used to be used as a Shift Operator in 11.11
+ * 'F' - Endmark
+ *
+ * Note that a second or subsequent 'C' BCD value will be interpreted as a
+ * 3 second pause.
+ */
+void sim_extract_bcd_number(const unsigned char *buf, int len, char *out)
+{
+	static const char digit_lut[] = "0123456789*#c?e\0";
+	unsigned char oct;
+	int i;
+
+	for (i = 0; i < len; i++) {
+		oct = buf[i];
+
+		out[i*2] = digit_lut[oct & 0x0f];
+		out[i*2+1] = digit_lut[(oct & 0xf0) >> 4];
+	}
+
+	out[i*2] = '\0';
+}
+
+void sim_encode_bcd_number(const char *number, unsigned char *out)
+{
+	while (number[0] != '\0' && number[1] != '\0') {
+		*out = to_semi_oct(*number++);
+		*out++ |= to_semi_oct(*number++) << 4;
+	}
+
+	if (*number)
+		*out = to_semi_oct(*number) | 0xf0;
+}
+
 gboolean sim_adn_parse(const unsigned char *data, int length,
 			struct ofono_phone_number *ph, char **identifier)
 {
@@ -832,7 +1208,7 @@ gboolean sim_adn_parse(const unsigned char *data, int length,
 
 	/* BCD coded, however the TON/NPI is given by the first byte */
 	number_len -= 1;
-	extract_bcd_number(data, number_len, ph->number);
+	sim_extract_bcd_number(data, number_len, ph->number);
 
 	if (identifier == NULL)
 		return TRUE;
@@ -851,29 +1227,24 @@ void sim_adn_build(unsigned char *data, int length,
 			const char *identifier)
 {
 	int number_len = strlen(ph->number);
-	unsigned char *gsm_identifier = NULL;
-	long gsm_bytes;
-	long alpha_length;
+	unsigned char *alpha = NULL;
+	int alpha_written = 0;
+	int alpha_length;
 
 	alpha_length = length - 14;
 
 	/* Alpha-Identifier field */
 	if (alpha_length > 0) {
-		memset(data, 0xff, alpha_length);
-
 		if (identifier)
-			gsm_identifier = convert_utf8_to_gsm(identifier,
-					-1, NULL, &gsm_bytes, 0);
-
-		if (gsm_identifier) {
-			memcpy(data, gsm_identifier,
-				MIN(gsm_bytes, alpha_length));
-			g_free(gsm_identifier);
+			alpha = utf8_to_sim_string(identifier, alpha_length,
+							&alpha_written);
+		if (alpha) {
+			memcpy(data, alpha, alpha_written);
+			g_free(alpha);
 		}
 
-		/* TODO: figure out when the identifier needs to
-		 * be encoded in UCS2 and do this.
-		 */
+		memset(data + alpha_written, 0xff,
+				alpha_length - alpha_written);
 		data += alpha_length;
 	}
 
@@ -883,7 +1254,7 @@ void sim_adn_build(unsigned char *data, int length,
 	/* Use given number type and 'Unknown' for Numbering Plan */
 	*data++ = ph->type;
 
-	encode_bcd_number(ph->number, data);
+	sim_encode_bcd_number(ph->number, data);
 	memset(data + number_len, 0xff, 10 - number_len);
 	data += 10;
 

@@ -685,7 +685,7 @@ static void test_assembly()
 	if (g_test_verbose())
 		g_printf("Text:\n%s\n", utf8);
 
-	l = sms_text_prepare(utf8, ref, TRUE, NULL);
+	l = sms_text_prepare(utf8, ref, TRUE, NULL, FALSE);
 	g_assert(l);
 	g_assert(g_slist_length(l) == 3);
 
@@ -715,7 +715,7 @@ static void test_prepare_7bit()
 	int encoded_tpdu_len;
 	char *encoded_pdu;
 
-	r = sms_text_prepare(test_no_fragmentation_7bit, 0, FALSE, NULL);
+	r = sms_text_prepare(test_no_fragmentation_7bit, 0, FALSE, NULL, FALSE);
 
 	g_assert(r != NULL);
 
@@ -762,16 +762,26 @@ static void test_prepare_7bit()
 	g_slist_free(r);
 }
 
-static const char *pad1 = "Shakespeare divided his time between London and Str"
+struct sms_concat_data {
+	const char *str;
+	unsigned int segments;
+};
+
+
+static struct sms_concat_data shakespeare_test = {
+	.str = "Shakespeare divided his time between London and Str"
 	"atford during his career. In 1596, the year before he bought New Plac"
 	"e as his family home in Stratford, Shakespeare was living in the pari"
-	"sh of St. Helen's, Bishopsgate, north of the River Thames.";
+	"sh of St. Helen's, Bishopsgate, north of the River Thames.",
+	.segments = 2,
+};
 
 /* The string in this test should be padded at the end.  This confuses some
  * decoders which do not use udl properly
  */
-static void test_prepare_concat()
+static void test_prepare_concat(gconstpointer data)
 {
+	const struct sms_concat_data *test = data;
 	GSList *r;
 	GSList *l;
 	char *decoded_str;
@@ -786,12 +796,11 @@ static void test_prepare_concat()
 	guint8 seq;
 
 	if (g_test_verbose())
-		g_print("strlen: %zd\n", strlen(pad1));
+		g_print("strlen: %zd\n", strlen(test->str));
 
-	r = sms_text_prepare(pad1, 0, TRUE, NULL);
-
+	r = sms_text_prepare(test->str, 0, TRUE, NULL, FALSE);
 	g_assert(r);
-	g_assert(g_slist_length(r) == 2);
+	g_assert(g_slist_length(r) == test->segments);
 
 	for (l = r; l; l = l->next) {
 		char *strpdu;
@@ -842,7 +851,7 @@ static void test_prepare_concat()
 		g_printf("Decoded String: %s\n", decoded_str);
 
 	g_assert(decoded_str);
-	g_assert(strcmp(decoded_str, pad1) == 0);
+	g_assert(strcmp(decoded_str, test->str) == 0);
 	g_free(decoded_str);
 	sms_assembly_free(assembly);
 }
@@ -865,7 +874,7 @@ static void test_limit(gunichar uni, int target_size, gboolean use_16bit)
 
 	utf8[i] = '\0';
 
-	l = sms_text_prepare(utf8, 0, use_16bit, NULL);
+	l = sms_text_prepare(utf8, 0, use_16bit, NULL, FALSE);
 
 	g_assert(l);
 	g_assert(g_slist_length(l) == 255);
@@ -878,7 +887,7 @@ static void test_limit(gunichar uni, int target_size, gboolean use_16bit)
 	memcpy(utf8 + i, utf8_char, stride);
 	utf8[i+stride] = '\0';
 
-	l = sms_text_prepare(utf8, 0, use_16bit, NULL);
+	l = sms_text_prepare(utf8, 0, use_16bit, NULL, FALSE);
 
 	g_assert(l == NULL);
 	g_free(utf8);
@@ -1161,6 +1170,9 @@ static void test_range_minimizer()
 
 int main(int argc, char **argv)
 {
+	char long_string[152*33 + 1];
+	struct sms_concat_data long_string_test;
+
 	g_test_init(&argc, &argv, NULL);
 
 	g_test_add_func("/testsms/Test Simple Deliver", test_simple_deliver);
@@ -1171,7 +1183,22 @@ int main(int argc, char **argv)
 	g_test_add_func("/testsms/Test UDH Iterator", test_udh_iter);
 	g_test_add_func("/testsms/Test Assembly", test_assembly);
 	g_test_add_func("/testsms/Test Prepare 7Bit", test_prepare_7bit);
-	g_test_add_func("/testsms/Test Prepare Concat", test_prepare_concat);
+
+	g_test_add_data_func("/testsms/Test Prepare Concat",
+			&shakespeare_test, test_prepare_concat);
+
+	memset(long_string, 'a', 152*30);
+	memset(long_string + 152*30, 'b', 152);
+	memset(long_string + 152*31, 'c', 152);
+	memset(long_string + 152*32, 'd', 152);
+	long_string[152*33] = '\0';
+
+	long_string_test.str = long_string;
+	long_string_test.segments = 33;
+
+	g_test_add_data_func("/testsms/Test Prepare Concat 30+ segments",
+			&long_string_test, test_prepare_concat);
+
 	g_test_add_func("/testsms/Test Prepare Limits", test_prepare_limits);
 
 	g_test_add_func("/testsms/Test CBS Encode / Decode",

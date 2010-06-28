@@ -89,8 +89,9 @@ static void update_status_mask(unsigned int *mask, int bsc)
 	}
 }
 
-static bool query_resp_cb(GIsiClient *client, const void *restrict data,
-				size_t len, uint16_t object, void *opaque)
+static gboolean query_resp_cb(GIsiClient *client,
+				const void *restrict data, size_t len,
+				uint16_t object, void *opaque)
 {
 	GIsiSubBlockIter iter;
 	const unsigned char *msg = data;
@@ -133,7 +134,7 @@ static bool query_resp_cb(GIsiClient *client, const void *restrict data,
 			for (i = 0; i < count; i++) {
 				if (!g_isi_sb_iter_get_byte(&iter, &bsc, 3 + i))
 					goto error;
-			        update_status_mask(&mask, bsc);
+				update_status_mask(&mask, bsc);
 			}
 			break;
 		}
@@ -154,7 +155,7 @@ error:
 
 out:
 	g_free(cbd);
-	return true;
+	return TRUE;
 
 }
 
@@ -188,8 +189,9 @@ error:
 	g_free(cbd);
 }
 
-static bool set_resp_cb(GIsiClient *client, const void *restrict data,
-				size_t len, uint16_t object, void *opaque)
+static gboolean set_resp_cb(GIsiClient *client,
+				const void *restrict data, size_t len,
+				uint16_t object, void *opaque)
 {
 	GIsiSubBlockIter iter;
 	const unsigned char *msg = data;
@@ -244,7 +246,7 @@ error:
 
 out:
 	g_free(cbd);
-	return true;
+	return TRUE;
 
 }
 
@@ -287,14 +289,14 @@ static gboolean isi_call_settings_register(gpointer user)
 	return FALSE;
 }
 
-static void reachable_cb(GIsiClient *client, bool alive, uint16_t object,
+static void reachable_cb(GIsiClient *client, gboolean alive, uint16_t object,
 				void *opaque)
 {
 	struct ofono_call_settings *cs = opaque;
 	const char *debug = NULL;
 
 	if (!alive) {
-		DBG("Unable to bootsrap call settings driver");
+		DBG("Unable to bootstrap call settings driver");
 		return;
 	}
 
@@ -311,8 +313,8 @@ static void reachable_cb(GIsiClient *client, bool alive, uint16_t object,
 }
 
 
-static int isi_call_settings_probe(struct ofono_call_settings *cs, unsigned int vendor,
-					void *user)
+static int isi_call_settings_probe(struct ofono_call_settings *cs,
+					unsigned int vendor, void *user)
 {
 	GIsiModem *idx = user;
 	struct settings_data *data;
@@ -339,10 +341,12 @@ static void isi_call_settings_remove(struct ofono_call_settings *cs)
 {
 	struct settings_data *data = ofono_call_settings_get_data(cs);
 
-	if (data) {
-		g_isi_client_destroy(data->client);
-		g_free(data);
-	}
+	if (!data)
+		return;
+
+	ofono_call_settings_set_data(cs, NULL);
+	g_isi_client_destroy(data->client);
+	g_free(data);
 }
 
 static struct ofono_call_settings_driver driver = {

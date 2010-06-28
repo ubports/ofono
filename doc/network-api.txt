@@ -100,14 +100,12 @@ Properties	string Mode [readonly]
 
 			Contains the technology of the current network.
 
-			The possible values are: "GSM", "GSMCompact", "UTRAN",
-						 "GSM+EGPS", "UTRAN+HSDPA",
-						 "UTRAN+HSUPA",
-						 "UTRAN+HSDPA+HSUPA"
+			The possible values are: "gsm", "edge", "umts", "hspa",
+							"lte"
 
 			TODO: Values for CDMA and EVDO based networks.
 
-		string Operator [readonly]
+		string Name [readonly]
 
 			Contains the current operator name, suitable for
 			display on the idle screen or an empty string if
@@ -133,7 +131,7 @@ Properties	string Mode [readonly]
 			unavailable, this property will not be returned by
 			GetProperties or will be set to an empty string.
 
-		array{object} AvailableOperators [readonly]
+		array{object} Operators [readonly]
 
 			List of all operator object paths known to the
 			telephony stack. The scanning for new operators is
@@ -184,11 +182,11 @@ Properties	string Name [readonly]
 			The possible values are: "unknown", "available",
 						 "current" and "forbidden"
 
-		uint16 MobileCountryCode [readonly, optional]
+		string MobileCountryCode [readonly, optional]
 
 			Contains the Mobile Country Code (MCC).
 
-		uint16 MobileNetworkCode [readonly, optional]
+		string MobileNetworkCode [readonly, optional]
 
 			Contains the Mobile Network Code (MNC)
 
@@ -197,10 +195,8 @@ Properties	string Name [readonly]
 			Contains a list of technologies currently available
 			from this network provider.
 
-			The possible values are: "GSM", "GSMCompact", "UTRAN",
-						 "GSM+EGPS", "UTRAN+HSDPA",
-						 "UTRAN+HSUPA",
-						 "UTRAN+HSDPA+HSUPA"
+			The possible values are: "gsm", "edge", "umts", "hspa",
+							"lte"
 
 		string AdditionalInformation [readonly, optional]
 

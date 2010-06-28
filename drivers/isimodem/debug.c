@@ -1,7 +1,7 @@
 /*
  * This file is part of oFono - Open Source Telephony
  *
- * Copyright (C) 2009 Nokia Corporation and/or its subsidiary(-ies).
+ * Copyright (C) 2009-2010 Nokia Corporation and/or its subsidiary(-ies).
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -50,6 +50,7 @@ const char *pn_resource_name(int value)
 		_(PN_SIM);
 		_(PN_MTC);
 		_(PN_GSS);
+		_(PN_GPDS);
 	}
 	return "PN_<UNKNOWN>";
 }
@@ -108,12 +109,18 @@ const char *mtc_isi_cause_name(enum mtc_isi_cause value)
 const char *mtc_message_id_name(enum mtc_message_id value)
 {
 	switch (value) {
+		_(MTC_STATE_REQ);
 		_(MTC_STATE_QUERY_REQ);
 		_(MTC_POWER_OFF_REQ);
 		_(MTC_POWER_ON_REQ);
+		_(MTC_STARTUP_SYNQ_REQ);
+		_(MTC_SHUTDOWN_SYNC_REQ);
+		_(MTC_STATE_RESP);
 		_(MTC_STATE_QUERY_RESP);
 		_(MTC_POWER_OFF_RESP);
 		_(MTC_POWER_ON_RESP);
+		_(MTC_STARTUP_SYNQ_RESP);
+		_(MTC_SHUTDOWN_SYNC_RESP);
 		_(MTC_STATE_INFO_IND);
 		_(MTC_COMMON_MESSAGE);
 	}
@@ -139,6 +146,7 @@ const char *mtc_modem_state_name(enum mtc_modem_state value)
 		_(MTC_DISK_WIPE);
 		_(MTC_SW_RESET);
 		_(MTC_CMT_ONLY_MODE);
+		_(MTC_STATE_NONE);
 	}
 	return "MTC_<UNKNOWN>";
 }
@@ -238,9 +246,12 @@ const char *sms_message_id_name(enum sms_message_id value)
 		_(SMS_PP_ROUTING_REQ);
 		_(SMS_PP_ROUTING_RESP);
 		_(SMS_PP_ROUTING_NTF);
+		_(SMS_GSM_RECEIVED_PP_REPORT_REQ);
+		_(SMS_GSM_RECEIVED_PP_REPORT_RESP);
 		_(SMS_GSM_CB_ROUTING_REQ);
 		_(SMS_GSM_CB_ROUTING_RESP);
 		_(SMS_GSM_CB_ROUTING_NTF);
+		_(SMS_MESSAGE_SEND_STATUS_IND);
 		_(SMS_COMMON_MESSAGE);
 	}
 	return "SMS_<UNKNOWN>";
@@ -253,7 +264,12 @@ const char *sms_subblock_name(enum sms_subblock value)
 		_(SMS_GSM_STATUS_REPORT);
 		_(SMS_GSM_SUBMIT);
 		_(SMS_GSM_COMMAND);
+		_(SMS_GSM_DELIVER_REPORT);
+		_(SMS_GSM_REPORT);
 		_(SMS_GSM_ROUTING);
+		_(SMS_GSM_TPDU);
+		_(SMS_COMMON_DATA);
+		_(SMS_ADDRESS);
 	}
 	return "SMS_<UNKNOWN>";
 }
@@ -342,12 +358,19 @@ const char *sim_isi_cause_name(enum sim_isi_cause value)
 const char *sim_message_id_name(enum sim_message_id value)
 {
 	switch (value) {
+		_(SIM_NETWORK_INFO_REQ);
+		_(SIM_NETWORK_INFO_RESP);
 		_(SIM_IMSI_REQ_READ_IMSI);
 		_(SIM_IMSI_RESP_READ_IMSI);
 		_(SIM_SERV_PROV_NAME_REQ);
 		_(SIM_SERV_PROV_NAME_RESP);
+		_(SIM_READ_FIELD_REQ);
+		_(SIM_READ_FIELD_RESP);
+		_(SIM_SMS_REQ);
+		_(SIM_SMS_RESP);
 		_(SIM_PB_REQ_SIM_PB_READ);
 		_(SIM_PB_RESP_SIM_PB_READ);
+		_(SIM_IND);
 		_(SIM_COMMON_MESSAGE);
 	}
 	return "SIM_<UNKNOWN>";
@@ -395,6 +418,7 @@ const char *info_subblock_name(enum info_subblock value)
 		_(INFO_SB_PRODUCT_INFO_NAME);
 		_(INFO_SB_PRODUCT_INFO_MANUFACTURER);
 		_(INFO_SB_SN_IMEI_PLAIN);
+		_(INFO_SB_SN_IMEI_SV_TO_NET);
 		_(INFO_SB_MCUSW_VERSION);
 	}
 	return "INFO_<UNKNOWN>";
@@ -720,6 +744,7 @@ const char *net_message_id_name(enum net_message_id value)
 		_(NET_RSSI_GET_REQ);
 		_(NET_RSSI_GET_RESP);
 		_(NET_RSSI_IND);
+		_(NET_TIME_IND);
 		_(NET_RAT_IND);
 		_(NET_RAT_REQ);
 		_(NET_RAT_RESP);
@@ -744,6 +769,7 @@ const char *net_subblock_name(enum net_subblock value)
 		_(NET_GSM_REG_INFO);
 		_(NET_DETAILED_NETWORK_INFO);
 		_(NET_GSM_OPERATOR_INFO);
+		_(NET_TIME_INFO);
 		_(NET_GSM_BAND_INFO);
 		_(NET_RAT_INFO);
 		_(NET_AVAIL_NETWORK_INFO_COMMON);
@@ -770,6 +796,189 @@ const char *gss_subblock_name(enum gss_subblock value)
 	return "GSS_<UNKNOWN>";
 }
 
+const char *gpds_message_id_name(enum gpds_message_id value)
+{
+	switch (value) {
+		_(GPDS_LL_CONFIGURE_REQ);
+		_(GPDS_LL_CONFIGURE_RESP);
+		_(GPDS_CONTEXT_ID_CREATE_REQ);
+		_(GPDS_CONTEXT_ID_CREATE_RESP);
+		_(GPDS_CONTEXT_ID_CREATE_IND);
+		_(GPDS_CONTEXT_ID_DELETE_IND);
+		_(GPDS_CONTEXT_CONFIGURE_REQ);
+		_(GPDS_CONTEXT_CONFIGURE_RESP);
+		_(GPDS_CONTEXT_ACTIVATE_REQ);
+		_(GPDS_CONTEXT_ACTIVATE_RESP);
+		_(GPDS_CONTEXT_ACTIVATE_IND);
+		_(GPDS_CONTEXT_DEACTIVATE_REQ);
+		_(GPDS_CONTEXT_DEACTIVATE_RESP);
+		_(GPDS_CONTEXT_DEACTIVATE_IND);
+		_(GPDS_CONTEXT_MWI_ACT_REQUEST_IND);
+		_(GPDS_CONTEXT_NWI_ACT_REJECT_REQ);
+		_(GPDS_CONTEXT_NWI_ACT_REJECT_RESP);
+		_(GPDS_CONFIGURE_REQ);
+		_(GPDS_CONFIGURE_RESP);
+		_(GPDS_ATTACH_REQ);
+		_(GPDS_ATTACH_RESP);
+		_(GPDS_ATTACH_IND);
+		_(GPDS_DETACH_REQ);
+		_(GPDS_DETACH_RESP);
+		_(GPDS_DETACH_IND);
+		_(GPDS_STATUS_REQ);
+		_(GPDS_STATUS_RESP);
+		_(GPDS_SMS_PDU_SEND_REQ);
+		_(GPDS_SMS_PDU_SEND_RESP);
+		_(GPDS_SMS_PDU_RECEIVE_IND);
+		_(GPDS_TRANSFER_STATUS_IND);
+		_(GPDS_CONTEXT_ACTIVATE_FAIL_IND);
+		_(GPDS_LL_BIND_REQ);
+		_(GPDS_LL_BIND_RESP);
+		_(GPDS_CONTEXT_STATUS_REQ);
+		_(GPDS_CONTEXT_STATUS_RESP);
+		_(GPDS_CONTEXT_STATUS_IND);
+		_(GPDS_CONTEXT_ACTIVATING_IND);
+		_(GPDS_CONTEXT_MODIFY_REQ);
+		_(GPDS_CONTEXT_MODIFY_RESP);
+		_(GPDS_CONTEXT_MODIFY_IND);
+		_(GPDS_ATTACH_FAIL_IND);
+		_(GPDS_CONTEXT_DEACTIVATING_IND);
+		_(GPDS_CONFIGURATION_INFO_REQ);
+		_(GPDS_CONFIGURATION_INFO_RESP);
+		_(GPDS_CONFIGURATION_INFO_IND);
+		_(GPDS_CONTEXT_AUTH_REQ);
+		_(GPDS_CONTEXT_AUTH_RESP);
+		_(GPDS_TEST_MODE_REQ);
+		_(GPDS_TEST_MODE_RESP);
+		_(GPDS_RADIO_ACTIVITY_IND);
+		_(GPDS_FORCED_READY_STATE_REQ);
+		_(GPDS_FORCED_READY_STATE_RESP);
+		_(GPDS_CONTEXTS_CLEAR_REQ);
+		_(GPDS_CONTEXTS_CLEAR_RESP);
+		_(GPDS_MBMS_SERVICE_SELECTION_REQ);
+		_(GPDS_MBMS_SERVICE_SELECTION_RESP);
+		_(GPDS_MBMS_STATUS_IND);
+		_(GPDS_MBMS_CONTEXT_CREATE_REQ);
+		_(GPDS_MBMS_CONTEXT_CREATE_RESP);
+		_(GPDS_MBMS_CONTEXT_ACTIVATE_REQ);
+		_(GPDS_MBMS_CONTEXT_ACTIVATE_RESP);
+		_(GPDS_MBMS_CONTEXT_DELETE_REQ);
+		_(GPDS_MBMS_CONTEXT_DELETE_RESP);
+		_(GPDS_MBMS_CONTEXT_DELETE_IND);
+		_(GPDS_MBMS_SERVICE_SELECTION_IND);
+		_(GPDS_MBMS_SERVICE_AVAILABLE_IND);
+		_(GPDS_TEST_REQ);
+		_(GPDS_TEST_RESP);
+	}
+	return "GPSD_<UNKNOWN>";
+}
+
+const char *gpds_subblock_name(enum gpds_subblock value)
+{
+	switch (value) {
+		_(GPDS_COMP_INFO);
+		_(GPDS_QOS_REQ_INFO);
+		_(GPDS_QOS_MIN_INFO);
+		_(GPDS_QOS_NEG_INFO);
+		_(GPDS_PDP_ADDRESS_INFO);
+		_(GPDS_APN_INFO);
+		_(GPDS_QOS99_REQ_INFO);
+		_(GPDS_QOS99_MIN_INFO);
+		_(GPDS_QOS99_NEG_INFO);
+		_(GPDS_TFT_INFO);
+		_(GPDS_TFT_FILTER_INFO);
+		_(GPDS_USER_NAME_INFO);
+		_(GPDS_PASSWORD_INFO);
+		_(GPDS_PDNS_ADDRESS_INFO);
+		_(GPDS_SDNS_ADDRESS_INFO);
+		_(GPDS_CHALLENGE_INFO);
+		_(GPDS_DNS_ADDRESS_REQ_INFO);
+		_(GPDS_COMMON_MESSAGE);
+	}
+	return "GPDS_<UNKNOWN>";
+}
+
+const char *gpds_status_name(enum gpds_status value)
+{
+	switch (value) {
+		_(GPDS_ERROR);
+		_(GPDS_OK);
+		_(GPDS_FAIL);
+	}
+	return "GPDS_<UNKNOWN>";
+}
+
+const char *gpds_isi_cause_name(enum gpds_isi_cause value)
+{
+	switch (value) {
+		_(GPDS_CAUSE_UNKNOWN);
+		_(GPDS_CAUSE_IMSI);
+		_(GPDS_CAUSE_MS_ILLEGAL);
+		_(GPDS_CAUSE_ME_ILLEGAL);
+		_(GPDS_CAUSE_GPRS_NOT_ALLOWED);
+		_(GPDS_NOT_ALLOWED);
+		_(GPDS_CAUSE_MS_IDENTITY);
+		_(GPDS_CAUSE_DETACH);
+		_(GPDS_PLMN_NOT_ALLOWED);
+		_(GPDS_LA_NOT_ALLOWED);
+		_(GPDS_ROAMING_NOT_ALLOWED);
+		_(GPDS_CAUSE_GPRS_NOT_ALLOWED_IN_PLMN);
+		_(GPDS_CAUSE_MSC_NOT_REACH);
+		_(GPDS_CAUSE_PLMN_FAIL);
+		_(GPDS_CAUSE_NETWORK_CONGESTION);
+		_(GPDS_CAUSE_MBMS_BEARER_CAPABILITY_INSUFFICIENT);
+		_(GPDS_CAUSE_LLC_SNDCP_FAILURE);
+		_(GPDS_CAUSE_RESOURCE_INSUFF);
+		_(GPDS_CAUSE_APN);
+		_(GPDS_CAUSE_PDP_UNKNOWN);
+		_(GPDS_CAUSE_AUTHENTICATION);
+		_(GPDS_CAUSE_ACT_REJECT_GGSN);
+		_(GPDS_CAUSE_ACT_REJECT);
+		_(GPDS_CAUSE_SERV_OPT_NOT_SUPPORTED);
+		_(GPDS_CAUSE_SERV_OPT_NOT_SUBSCRIBED);
+		_(GPDS_CAUSE_SERV_OPT_OUT_OF_ORDER);
+		_(GPDS_CAUSE_NSAPI_ALREADY_USED);
+		_(GPDS_CAUSE_DEACT_REGULAR);
+		_(GPDS_CAUSE_QOS);
+		_(GPDS_CAUSE_NETWORK_FAIL);
+		_(GPDS_CAUSE_REACTIVATION_REQ);
+		_(GPDS_CAUSE_FEAT_NOT_SUPPORTED);
+		_(GPDS_CAUSE_TFT_SEMANTIC_ERROR);
+		_(GPDS_CAUSE_TFT_SYNTAX_ERROR);
+		_(GPDS_CAUSE_CONTEXT_UNKNOWN);
+		_(GPDS_CAUSE_FILTER_SEMANTIC_ERROR);
+		_(GPDS_CAUSE_FILTER_SYNTAX_ERROR);
+		_(GPDS_CAUSE_CONT_WITHOUT_TFT);
+		_(GPDS_CAUSE_MULTICAST_MEMBERSHIP_TIMEOUT);
+		_(GPDS_CAUSE_INVALID_MANDATORY_INFO);
+		_(GPDS_CAUSE_MSG_TYPE_NON_EXISTENTOR_NOT_IMPLTD);
+		_(GPDS_CAUSE_MSG_TYPE_NOT_COMPATIBLE_WITH_PROTOCOL_STATE);
+		_(GPDS_CAUSE_IE_NON_EXISTENT_OR_NOT_IMPLEMENTED);
+		_(GPDS_CAUSE_CONDITIONAL_IE_ERROR);
+		_(GPDS_CUASEMSG_NOT_COMPATIBLE_WITH_PROTOCOL_STATE);
+		_(GPDS_CAUSE_UNSPECIFIED);
+		_(GPDS_CAUSE_APN_INCOMPATIBLE_WITH_CURR_CTXT);
+		_(GPDS_CAUSE_FDN);
+		_(GPDS_CAUSE_USER_ABORT);
+		_(GPDS_CAUSE_CS_INACTIVE);
+		_(GPDS_CAUSE_CSD_OVERRIDE);
+		_(GPDS_CAUSE_APN_CONTROL);
+		_(GPDS_CAUSE_CALL_CONTROL);
+		_(GPDS_CAUSE_TEMPERATURE_LIMIT);
+		_(GPDS_CAUSE_RETRY_COUNTER_EXPIRED);
+		_(GPDS_CAUSE_NO_CONNECTION);
+		_(GPDS_CAUSE_DETACHED);
+		_(GPDS_CAUSE_NO_SERVICE_POWER_SAVE);
+		_(GPDS_CAUSE_SIM_REMOVED);
+		_(GPDS_CAUSE_POWER_OFF);
+		_(GPDS_CAUSE_LAI_FORBIDDEN_NATIONAL_ROAM_LIST);
+		_(GPDS_CAUSE_LAI_FORBIDDEN_REG_PROVISION_LIST);
+		_(GPDS_CAUSE_ACCESS_BARRED);
+		_(GPDS_CAUSE_FATAL_FAILURE);
+		_(GPDS_CAUSE_AUT_FAILURE);
+	}
+	return "GPDS_<UNKNOWN>";
+}
+
 #undef _
 
 static void hex_dump(const char *name, const uint8_t m[], size_t len)
@@ -794,9 +1003,8 @@ static void hex_dump(const char *name, const uint8_t m[], size_t len)
 		}
 	}
 
-	if (j) {
+	if (j)
 		ofono_debug("    *%-48s : %.*s", hex, (int)k, ascii);
-	}
 }
 
 void ss_debug(const void *restrict buf, size_t len, void *data)
@@ -845,4 +1053,10 @@ void gss_debug(const void *restrict buf, size_t len, void *data)
 {
 	const uint8_t *m = buf;
 	hex_dump(gss_message_id_name(m[0]), m, len);
+}
+
+void gpds_debug(const void *restrict buf, size_t len, void *data)
+{
+	const uint8_t *m = buf;
+	hex_dump(gpds_message_id_name(m[0]), m, len);
 }

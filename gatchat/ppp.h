@@ -21,45 +21,18 @@
 
 #include "ppp_cp.h"
 
-#define DEFAULT_MRU	1500
-#define BUFFERSZ	DEFAULT_MRU*2
-#define DEFAULT_ACCM	0x00000000
-#define PPP_ESC		0x7d
-#define PPP_FLAG_SEQ 	0x7e
-#define PPP_ADDR_FIELD	0xff
-#define PPP_CTRL	0x03
 #define LCP_PROTOCOL	0xc021
 #define CHAP_PROTOCOL	0xc223
-#define PPP_HEADROOM	2
-#define HDLC_HEADROOM	3
-#define HDLC_TAIL	3
+#define IPCP_PROTO	0x8021
+#define PPP_IP_PROTO	0x0021
 #define MD5		5
 
-enum ppp_phase {
-	PPP_DEAD = 0,
-	PPP_ESTABLISHMENT,
-	PPP_AUTHENTICATION,
-	PPP_NETWORK,
-	PPP_TERMINATION,
-};
-
-enum ppp_event {
-	PPP_UP = 1,
-	PPP_OPENED,
-	PPP_SUCCESS,
-	PPP_NONE,
-	PPP_CLOSING,
-	PPP_FAIL,
-	PPP_DOWN
-};
-
-struct ppp_packet_handler {
-	guint16 proto;
-	void (*handler)(gpointer priv, guint8 *packet);
-	gpointer priv;
-};
+struct ppp_chap;
+struct ppp_net;
 
 struct ppp_header {
+	guint8 address;
+	guint8 control;
 	guint16 proto;
 	guint8 info[0];
 } __attribute__((packed));
@@ -72,16 +45,22 @@ struct packed_long {
 	guint32 l;
 } __attribute__((packed));
 
-static inline guint32 __get_unaligned_long(const gpointer p)
+static inline guint32 __get_unaligned_long(const void *p)
 {
 	const struct packed_long *ptr = p;
 	return ptr->l;
 }
 
-static inline guint16 __get_unaligned_short(const gpointer p)
+static inline guint16 __get_unaligned_short(const void *p)
 {
 	const struct packed_short *ptr = p;
 	return ptr->s;
+}
+
+static inline void __put_unaligned_short(void *p, guint16 val)
+{
+	struct packed_short *ptr = p;
+	ptr->s = val;
 }
 
 #define get_host_long(p) \
@@ -90,78 +69,49 @@ static inline guint16 __get_unaligned_short(const gpointer p)
 #define get_host_short(p) \
 	(ntohs(__get_unaligned_short(p)))
 
+#define put_network_short(p, val) \
+	(__put_unaligned_short(p, htons(val)))
+
 #define ppp_info(packet) \
 	(packet + 4)
 
 #define ppp_proto(packet) \
 	(get_host_short(packet + 2))
 
-struct auth_data {
-	guint16 proto;
-	gpointer proto_data;
-	void (*process_packet)(struct auth_data *data, guint8 *packet);
-	char *username;
-	char *password;
-	GAtPPP *ppp;
-};
-
-struct ppp_net_data {
-	GAtPPP *ppp;
-	char *if_name;
-	GIOChannel *channel;
-	struct pppcp_data *ipcp;
-};
-
-struct _GAtPPP {
-	gint ref_count;
-	enum ppp_phase phase;
-	struct pppcp_data *lcp;
-	struct auth_data *auth;
-	struct ppp_net_data *net;
-	guint8 buffer[BUFFERSZ];
-	int index;
-	gint mru;
-	guint16 auth_proto;
-	char user_name[256];
-	char passwd[256];
-	gboolean pfc;
-	gboolean acfc;
-	guint32 xmit_accm[8];
-	guint32 recv_accm;
-	GIOChannel *modem;
-	GQueue *event_queue;
-	GQueue *recv_queue;
-	GAtPPPConnectFunc connect_cb;
-	gpointer connect_data;
-	GAtPPPDisconnectFunc disconnect_cb;
-	gpointer disconnect_data;
-	gint modem_watch;
-};
-
-gboolean ppp_cb(GIOChannel *channel, GIOCondition cond, gpointer data);
-void ppp_close(GAtPPP *ppp);
-void ppp_generate_event(GAtPPP *ppp, enum ppp_event event);
-void ppp_register_packet_handler(struct ppp_packet_handler *handler);
-void ppp_transmit(GAtPPP *ppp, guint8 *packet, guint infolen);
-void ppp_set_auth(GAtPPP *ppp, guint8 *auth_data);
-void ppp_set_recv_accm(GAtPPP *ppp, guint32 accm);
-guint32 ppp_get_xmit_accm(GAtPPP *ppp);
-void ppp_set_pfc(GAtPPP *ppp, gboolean pfc);
-gboolean ppp_get_pfc(GAtPPP *ppp);
-void ppp_set_acfc(GAtPPP *ppp, gboolean acfc);
-gboolean ppp_get_acfc(GAtPPP *ppp);
-struct pppcp_data * lcp_new(GAtPPP *ppp);
+/* LCP related functions */
+struct pppcp_data *lcp_new(GAtPPP *ppp);
 void lcp_free(struct pppcp_data *lcp);
-void lcp_open(struct pppcp_data *data);
-void lcp_close(struct pppcp_data *data);
-void lcp_establish(struct pppcp_data *data);
-void lcp_terminate(struct pppcp_data *data);
-void auth_set_credentials(struct auth_data *data, const char *username,
-				const char *passwd);
-void auth_set_proto(struct auth_data *data, guint16 proto, guint8 method);
-struct auth_data *auth_new(GAtPPP *ppp);
-void auth_free(struct auth_data *auth);
-struct ppp_net_data *ppp_net_new(GAtPPP *ppp);
-void ppp_net_open(struct ppp_net_data *data);
-void ppp_net_free(struct ppp_net_data *data);
-void ppp_net_close(struct ppp_net_data *data);
+void lcp_protocol_reject(struct pppcp_data *lcp, guint8 *packet, gsize len);
+
+/* IPCP related functions */
+struct pppcp_data *ipcp_new(GAtPPP *ppp);
+void ipcp_free(struct pppcp_data *data);
+
+/* CHAP related functions */
+struct ppp_chap *ppp_chap_new(GAtPPP *ppp, guint8 method);
+void ppp_chap_free(struct ppp_chap *chap);
+void ppp_chap_process_packet(struct ppp_chap *chap, const guint8 *new_packet);
+
+/* TUN / Network related functions */
+struct ppp_net *ppp_net_new(GAtPPP *ppp);
+const char *ppp_net_get_interface(struct ppp_net *net);
+void ppp_net_process_packet(struct ppp_net *net, const guint8 *packet);
+void ppp_net_free(struct ppp_net *net);
+gboolean ppp_net_set_mtu(struct ppp_net *net, guint16 mtu);
+
+/* PPP functions related to main GAtPPP object */
+void ppp_debug(GAtPPP *ppp, const char *str);
+void ppp_transmit(GAtPPP *ppp, guint8 *packet, guint infolen);
+void ppp_set_auth(GAtPPP *ppp, const guint8 *auth_data);
+void ppp_auth_notify(GAtPPP *ppp, gboolean success);
+void ppp_ipcp_up_notify(GAtPPP *ppp, const char *ip,
+					const char *dns1, const char *dns2);
+void ppp_ipcp_down_notify(GAtPPP *ppp);
+void ppp_ipcp_finished_notify(GAtPPP *ppp);
+void ppp_lcp_up_notify(GAtPPP *ppp);
+void ppp_lcp_down_notify(GAtPPP *ppp);
+void ppp_lcp_finished_notify(GAtPPP *ppp);
+void ppp_set_recv_accm(GAtPPP *ppp, guint32 accm);
+void ppp_set_xmit_accm(GAtPPP *ppp, guint32 accm);
+void ppp_set_mtu(GAtPPP *ppp, const guint8 *data);
+struct ppp_header *ppp_packet_new(gsize infolen, guint16 protocol);

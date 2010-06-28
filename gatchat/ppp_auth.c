@@ -42,9 +42,9 @@ struct chap_header {
 	guint8 data[0];
 } __attribute__((packed));
 
-struct chap_data {
+struct	ppp_chap {
 	guint8 method;
-	struct auth_data *auth;
+	GAtPPP *ppp;
 };
 
 enum chap_code {
@@ -54,36 +54,26 @@ enum chap_code {
 	FAILURE
 };
 
-void auth_set_credentials(struct auth_data *data, const char *username,
-				const char *password)
+static void chap_process_challenge(struct ppp_chap *chap, const guint8 *packet)
 {
-	if (data == NULL)
-		return;
-
-	g_free(data->username);
-	data->username = g_strdup(username);
-
-	g_free(data->password);
-	data->password = g_strdup(password);
-}
-
-static void chap_process_challenge(struct auth_data *auth, guint8 *packet)
-{
-	struct chap_header *header = (struct chap_header *) packet;
+	const struct chap_header *header = (const struct chap_header *) packet;
 	struct chap_header *response;
-	struct chap_data *data = auth->proto_data;
 	GChecksum *checksum;
-	gchar *secret = data->auth->password;
+	const char *secret = g_at_ppp_get_password(chap->ppp);
 	guint16 response_length;
 	struct ppp_header *ppp_packet;
 	gsize digest_len;
 
 	/* create a checksum over id, secret, and challenge */
-	checksum = g_checksum_new(data->method);
+	checksum = g_checksum_new(chap->method);
 	if (!checksum)
 		return;
+
 	g_checksum_update(checksum, &header->identifier, 1);
-	g_checksum_update(checksum, (guchar *) secret, strlen(secret));
+
+	if (secret)
+		g_checksum_update(checksum, (guchar *) secret, strlen(secret));
+
 	g_checksum_update(checksum, &header->data[1], header->data[0]);
 
 	/* transmit a response packet */
@@ -91,137 +81,74 @@ static void chap_process_challenge(struct auth_data *auth, guint8 *packet)
 	 * allocate space for the header, the checksum, and the ppp header,
 	 * and the value size byte
 	 */
-	digest_len = g_checksum_type_get_length(data->method);
+	digest_len = g_checksum_type_get_length(chap->method);
 	response_length = digest_len + sizeof(*header) + 1;
-	ppp_packet = g_try_malloc0(response_length + 2);
+	ppp_packet = ppp_packet_new(response_length, CHAP_PROTOCOL);
 	if (!ppp_packet)
 		goto challenge_out;
 
-	/* add our protocol information */
-	ppp_packet->proto = htons(CHAP_PROTOCOL);
 	response = (struct chap_header *) &ppp_packet->info;
 	if (response) {
 		response->code = RESPONSE;
 		response->identifier = header->identifier;
 		response->length = htons(response_length);
+		g_checksum_get_digest(checksum, response->data + 1,
+							&digest_len);
 		response->data[0] = digest_len;
-		g_checksum_get_digest(checksum, &response->data[1],
-					(gsize *) &response->data[0]);
 		/* leave the name empty? */
 	}
 
 	/* transmit the packet */
-	ppp_transmit(auth->ppp, (guint8 *) ppp_packet, response_length);
+	ppp_transmit(chap->ppp, (guint8 *) ppp_packet, response_length);
+	g_free(ppp_packet);
 
 challenge_out:
 	g_checksum_free(checksum);
 }
 
-static void chap_process_success(struct auth_data *data, guint8 *packet)
-{
-	ppp_generate_event(data->ppp, PPP_SUCCESS);
-}
-
-static void chap_process_failure(struct auth_data *data, guint8 *packet)
-{
-	struct chap_header *header = (struct chap_header *) packet;
-
-	g_print("Failed to authenticate, message %s\n", header->data);
-}
-
 /*
  * parse the packet
  */
-static void chap_process_packet(gpointer priv, guint8 *new_packet)
+void ppp_chap_process_packet(struct ppp_chap *chap, const guint8 *new_packet)
 {
-	struct auth_data *data = priv;
 	guint8 code = new_packet[0];
 
 	switch (code) {
 	case CHALLENGE:
-		chap_process_challenge(data, new_packet);
+		chap_process_challenge(chap, new_packet);
 		break;
 	case RESPONSE:
-		g_print("Oops, received RESPONSE, but I've not implemented\n");
+		g_print("chap: response (not implemented)\n");
 		break;
 	case SUCCESS:
-		chap_process_success(data, new_packet);
+		ppp_auth_notify(chap->ppp, TRUE);
 		break;
 	case FAILURE:
-		chap_process_failure(data, new_packet);
+		ppp_auth_notify(chap->ppp, FALSE);
 		break;
 	default:
-		g_print("Unknown auth code\n");
 		break;
 	}
 }
 
-struct ppp_packet_handler chap_packet_handler = {
-	.proto = CHAP_PROTOCOL,
-	.handler = chap_process_packet,
-};
-
-static void chap_free(struct auth_data *auth)
+void ppp_chap_free(struct ppp_chap *chap)
 {
-	/* TBD unregister protocol handler */
-
-	g_free(auth->proto_data);
+	g_free(chap);
 }
 
-static struct chap_data *chap_new(struct auth_data *auth, guint8 method)
+struct ppp_chap *ppp_chap_new(GAtPPP *ppp, guint8 method)
 {
-	struct chap_data *data;
+	struct ppp_chap *chap;
 
-	data = g_try_malloc0(sizeof(*data));
-	if (!data)
+	if (method != MD5)
 		return NULL;
 
-	data->auth = auth;
-	switch (method) {
-	case MD5:
-		data->method = G_CHECKSUM_MD5;
-		break;
-	default:
-		g_print("Unknown method\n");
-	}
-
-	/* register packet handler for CHAP protocol */
-	chap_packet_handler.priv = auth;
-	ppp_register_packet_handler(&chap_packet_handler);
-	return data;
-}
-
-void auth_set_proto(struct auth_data *data, guint16 proto, guint8 method)
-{
-	if (data == NULL)
-		return;
-
-	switch (proto) {
-	case CHAP_PROTOCOL:
-		data->proto_data = (gpointer) chap_new(data, method);
-		break;
-	default:
-		g_print("Unknown auth protocol 0x%x\n", proto);
-	}
-}
-
-void auth_free(struct auth_data *data)
-{
-	if (data == NULL)
-		return;
-
-	chap_free(data);
-	g_free(data);
-}
-
-struct auth_data *auth_new(GAtPPP *ppp)
-{
-	struct auth_data *data;
-
-	data = g_try_malloc0(sizeof(*data));
-	if (!data)
+	chap = g_try_new0(struct ppp_chap, 1);
+	if (!chap)
 		return NULL;
 
-	data->ppp = ppp;
-	return data;
+	chap->ppp = ppp;
+	chap->method = G_CHECKSUM_MD5;
+
+	return chap;
 }

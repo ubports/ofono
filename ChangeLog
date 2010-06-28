@@ -1,3 +1,35 @@
+ver 0.23:
+	Fix issue with operator info when not registered.
+	Fix issue with clean PPP shutdown on device removal.
+	Add support for status report notification via CDSI.
+	Add better support for Huawei E160 and E176 devices.
+	Add full GPRS support for Novatel based devices.
+	Add support for Novatel specific radio settings.
+	Add support for Option specific radio settings.
+	Add support for setting CBS topics on Qualcomm devices.
+
+ver 0.22:
+	Fix issue with VPATH builds.
+	Fix issue with SMS and more than 31 fragments.
+	Add even more SIM Toolkit parsing support.
+	Add support for modem online property.
+
+ver 0.21:
+	Add more parsing support for SIM Toolkit.
+	Add support for SIM insertion/removal events.
+	Add support for NITZ (network time) events.
+	Add support for reading EF_ICCID information.
+	Add support for advanced PPP integration.
+	Add support for HDLC specific abstraction.
+	Add support for simpler Technology values.
+	Add support for separate MCC/MNC SIM properties.
+	Add support for GPRS context with ISI modems.
+	Add support for SMS handling with ISI modems.
+	Add support for Wavecom WMP100 based devices.
+	Add support for Option iCON 451 based devices.
+	Add support for Huawei E1552 HSDPA USB devices.
+	Add support for Dell 5530 based devices.
+
 ver 0.20:
 	Fix issue with empty operator names.
 	Add missing API documentation.

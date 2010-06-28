@@ -53,7 +53,9 @@ struct ofono_voicecall {
 	DBusMessage *pending;
 	gint emit_calls_source;
 	gint emit_multi_source;
+	struct ofono_sim *sim;
 	unsigned int sim_watch;
+	unsigned int sim_state_watch;
 	const struct ofono_voicecall_driver *driver;
 	void *driver_data;
 	struct ofono_atom *atom;
@@ -1805,6 +1807,12 @@ static void voicecall_remove(struct ofono_atom *atom)
 		vc->new_en_list = NULL;
 	}
 
+	if (vc->sim_state_watch) {
+		ofono_sim_remove_state_watch(vc->sim, vc->sim_state_watch);
+		vc->sim_state_watch = 0;
+		vc->sim = NULL;
+	}
+
 	g_free(vc);
 }
 
@@ -1843,6 +1851,40 @@ struct ofono_voicecall *ofono_voicecall_create(struct ofono_modem *modem,
 	return vc;
 }
 
+static void sim_state_watch(void *user, enum ofono_sim_state new_state)
+{
+	struct ofono_voicecall *vc = user;
+
+	switch (new_state) {
+	case OFONO_SIM_STATE_INSERTED:
+		/* Try both formats, only one or none will work */
+		ofono_sim_read(vc->sim, SIM_EFECC_FILEID,
+				OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
+				ecc_g2_read_cb, vc);
+		ofono_sim_read(vc->sim, SIM_EFECC_FILEID,
+				OFONO_SIM_FILE_STRUCTURE_FIXED,
+				ecc_g3_read_cb, vc);
+		break;
+	case OFONO_SIM_STATE_NOT_PRESENT:
+		/* TODO: Must release all non-emergency calls */
+
+		/*
+		 * Free the currently being read EN list, just in case the
+		 * SIM is removed when we're still reading them
+		 */
+		if (vc->new_en_list) {
+			g_slist_foreach(vc->new_en_list, (GFunc) g_free, NULL);
+			g_slist_free(vc->new_en_list);
+			vc->new_en_list = NULL;
+		}
+
+		add_to_en_list(&vc->new_en_list, default_en_list_no_sim);
+		set_new_ecc(vc);
+	default:
+		break;
+	}
+}
+
 static void sim_watch(struct ofono_atom *atom,
 			enum ofono_atom_watch_condition cond, void *data)
 {
@@ -1850,16 +1892,17 @@ static void sim_watch(struct ofono_atom *atom,
 	struct ofono_sim *sim = __ofono_atom_get_data(atom);
 
 	if (cond == OFONO_ATOM_WATCH_CONDITION_UNREGISTERED) {
+		vc->sim_state_watch = 0;
+		vc->sim = NULL;
 		return;
 	}
 
-	/* Try both formats, only one or none will work */
-	ofono_sim_read(sim, SIM_EFECC_FILEID,
-			OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
-			ecc_g2_read_cb, vc);
-	ofono_sim_read(sim, SIM_EFECC_FILEID,
-			OFONO_SIM_FILE_STRUCTURE_FIXED,
-			ecc_g3_read_cb, vc);
+	vc->sim = sim;
+	vc->sim_state_watch = ofono_sim_add_state_watch(sim,
+							sim_state_watch,
+							vc, NULL);
+
+	sim_state_watch(vc, ofono_sim_get_state(sim));
 }
 
 void ofono_voicecall_register(struct ofono_voicecall *vc)

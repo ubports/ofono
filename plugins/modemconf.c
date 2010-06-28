@@ -113,6 +113,21 @@ static int set_device(struct ofono_modem *modem,
 	return 0;
 }
 
+static int set_interface(struct ofono_modem *modem,
+					GKeyFile *keyfile, const char *group)
+{
+	char *iface;
+
+	iface = g_key_file_get_string(keyfile, group, "Interface", NULL);
+	if (!iface)
+		return -EINVAL;
+
+	ofono_modem_set_string(modem, "Interface", iface);
+	g_free(iface);
+
+	return 0;
+}
+
 static struct {
 	const char *driver;
 	int (*func) (struct ofono_modem *modem,
@@ -121,9 +136,12 @@ static struct {
 	{ "phonesim",	set_address	},
 	{ "atgen",	set_device	},
 	{ "g1",		set_device	},
+	{ "wavecom",	set_device	},
 	{ "ste",	set_device	},
 	{ "calypso",	set_device	},
 	{ "palmpre",	set_device	},
+	{ "isimodem",	set_interface	},
+	{ "n900modem",	set_interface	},
 	{ NULL }
 };
 
@@ -138,12 +156,15 @@ static struct ofono_modem *create_modem(GKeyFile *keyfile, const char *group)
 		return NULL;
 
 	modem = ofono_modem_create(group, driver);
+	if (modem == NULL)
+		goto error;
 
 	for (i = 0; setup_helpers[i].driver; i++) {
 		if (!g_strcmp0(driver, setup_helpers[i].driver))
 			setup_helpers[i].func(modem, keyfile, group);
 	}
 
+error:
 	g_free(driver);
 
 	return modem;

@@ -37,9 +37,12 @@
 #include <ofono/devinfo.h>
 #include <ofono/netreg.h>
 #include <ofono/sim.h>
+#include <ofono/cbs.h>
 #include <ofono/sms.h>
+#include <ofono/ussd.h>
 #include <ofono/gprs.h>
 #include <ofono/gprs-context.h>
+#include <ofono/radio-settings.h>
 #include <ofono/log.h>
 
 #include <drivers/atmodem/vendor.h>
@@ -87,11 +90,28 @@ static void hso_debug(const char *str, void *user_data)
 static void cfun_enable(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_modem *modem = user_data;
+	struct hso_data *data = ofono_modem_get_data(modem);
 
 	DBG("");
 
-	if (ok)
-		ofono_modem_set_powered(modem, TRUE);
+	ofono_modem_set_powered(modem, ok);
+
+	if (!ok)
+		return;
+
+	/*
+	 * Option has the concept of Speech Service versus
+	 * Data Service. Problem is that in Data Service mode
+	 * the card will reject all voice calls. This is a
+	 * problem for Multi-SIM cards where one of the SIM
+	 * cards is used in a mobile phone and thus incoming
+	 * calls would be not signalled on the phone.
+	 *
+	 *   0 = Speech Service enabled
+	 *   1 = Data Service only mode
+	 */
+	g_at_chat_send(data->app, "AT_ODO?", none_prefix, NULL, NULL, NULL);
+	g_at_chat_send(data->app, "AT_ODO=0", none_prefix, NULL, NULL, NULL);
 }
 
 static GAtChat *create_port(const char *device)
@@ -165,7 +185,6 @@ static void cfun_disable(gboolean ok, GAtResult *result, gpointer user_data)
 
 	DBG("");
 
-	g_at_chat_shutdown(data->control);
 	g_at_chat_unref(data->control);
 	data->control = NULL;
 
@@ -185,7 +204,6 @@ static int hso_disable(struct ofono_modem *modem)
 	g_at_chat_cancel_all(data->control);
 	g_at_chat_unregister_all(data->control);
 
-	g_at_chat_shutdown(data->app);
 	g_at_chat_unref(data->app);
 	data->app = NULL;
 
@@ -198,11 +216,15 @@ static int hso_disable(struct ofono_modem *modem)
 static void hso_pre_sim(struct ofono_modem *modem)
 {
 	struct hso_data *data = ofono_modem_get_data(modem);
+	struct ofono_sim *sim;
 
 	DBG("%p", modem);
 
 	ofono_devinfo_create(modem, 0, "atmodem", data->control);
-	ofono_sim_create(modem, 0, "atmodem", data->control);
+	sim = ofono_sim_create(modem, 0, "atmodem", data->control);
+
+	if (sim)
+		ofono_sim_inserted_notify(sim, TRUE);
 }
 
 static void hso_post_sim(struct ofono_modem *modem)
@@ -215,10 +237,15 @@ static void hso_post_sim(struct ofono_modem *modem)
 
 	ofono_netreg_create(modem, OFONO_VENDOR_OPTION_HSO,
 				"atmodem", data->app);
-	ofono_sms_create(modem, 0, "atmodem", data->app);
+
+	ofono_radio_settings_create(modem, 0, "hsomodem", data->app);
+
+	ofono_sms_create(modem, OFONO_VENDOR_OPTION_HSO, "atmodem", data->app);
+	ofono_cbs_create(modem, 0, "atmodem", data->app);
+	ofono_ussd_create(modem, 0, "atmodem", data->app);
 
 	gprs = ofono_gprs_create(modem, 0, "atmodem", data->app);
-	gc = ofono_gprs_context_create(modem, 0, "hso", data->control);
+	gc = ofono_gprs_context_create(modem, 0, "hsomodem", data->control);
 
 	if (gprs && gc)
 		ofono_gprs_add_context(gprs, gc);

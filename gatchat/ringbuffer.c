@@ -31,6 +31,13 @@
 
 #define MAX_SIZE 262144
 
+struct ring_buffer {
+	unsigned char *buffer;
+	unsigned int size;
+	unsigned int in;
+	unsigned int out;
+};
+
 struct ring_buffer *ring_buffer_new(unsigned int size)
 {
 	unsigned int real_size = 1;
@@ -43,13 +50,11 @@ struct ring_buffer *ring_buffer_new(unsigned int size)
 	if (real_size > MAX_SIZE)
 		return NULL;
 
-	buffer = g_new(struct ring_buffer, 1);
-
+	buffer = g_try_new(struct ring_buffer, 1);
 	if (!buffer)
 		return NULL;
 
-	buffer->buffer = g_new(unsigned char, real_size);
-
+	buffer->buffer = g_try_new(unsigned char, real_size);
 	if (!buffer->buffer) {
 		g_free(buffer);
 		return NULL;
@@ -85,9 +90,10 @@ int ring_buffer_write(struct ring_buffer *buf, const void *data,
 	return len;
 }
 
-unsigned char *ring_buffer_write_ptr(struct ring_buffer *buf)
+unsigned char *ring_buffer_write_ptr(struct ring_buffer *buf,
+					unsigned int offset)
 {
-	return buf->buffer + buf->in % buf->size;
+	return buf->buffer + (buf->in + offset) % buf->size;
 }
 
 int ring_buffer_avail_no_wrap(struct ring_buffer *buf)

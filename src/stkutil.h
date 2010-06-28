@@ -37,8 +37,9 @@ enum stk_envelope_type {
 /* TS 102.223 Section 9.4 */
 enum stk_command_type {
 	STK_COMMAND_TYPE_REFRESH =			0x01,
-	STK_COMMAND_TYPE_POLL_INTERVAL =		0x02,
-	STK_COMMAND_TYPE_POLLING_OFF =			0x03,
+	STK_COMMAND_TYPE_MORE_TIME =			0x02,
+	STK_COMMAND_TYPE_POLL_INTERVAL =		0x03,
+	STK_COMMAND_TYPE_POLLING_OFF =			0x04,
 	STK_COMMAND_TYPE_SETUP_EVENT_LIST =		0x05,
 	STK_COMMAND_TYPE_SETUP_CALL =			0x10,
 	STK_COMMAND_TYPE_SEND_SS =			0x11,
@@ -53,7 +54,7 @@ enum stk_command_type {
 	STK_COMMAND_TYPE_GET_INPUT =			0x23,
 	STK_COMMAND_TYPE_SELECT_ITEM =			0x24,
 	STK_COMMAND_TYPE_SETUP_MENU =			0x25,
-	STK_COMMAND_TYPE_PROVIDE_LOCAL_INFORMATION =	0x26,
+	STK_COMMAND_TYPE_PROVIDE_LOCAL_INFO =		0x26,
 	STK_COMMAND_TYPE_TIMER_MANAGEMENT =		0x27,
 	STK_COMMAND_TYPE_SETUP_IDLE_MODE_TEXT =		0x28,
 	STK_COMMAND_TYPE_PERFORM_CARD_APDU =		0x30,
@@ -68,7 +69,7 @@ enum stk_command_type {
 	STK_COMMAND_TYPE_SEND_DATA =			0x43,
 	STK_COMMAND_TYPE_GET_CHANNEL_STATUS =		0x44,
 	STK_COMMAND_TYPE_SERVICE_SEARCH =		0x45,
-	STK_COMMAND_TYPE_GET_SERVICE_INFORMATION =	0x46,
+	STK_COMMAND_TYPE_GET_SERVICE_INFO =		0x46,
 	STK_COMMAND_TYPE_DECLARE_SERVICE =		0x47,
 	STK_COMMAND_TYPE_SET_FRAMES =			0x50,
 	STK_COMMAND_TYPE_GET_FRAMES_STATUS =		0x51,
@@ -109,6 +110,7 @@ enum stk_data_object_type {
 	STK_DATA_OBJECT_TYPE_CAUSE =				0x1A,
 	STK_DATA_OBJECT_TYPE_LOCATION_STATUS =			0x1B,
 	STK_DATA_OBJECT_TYPE_TRANSACTION_ID =			0x1C,
+	STK_DATA_OBJECT_TYPE_BCCH_CHANNEL_LIST =		0x1D,
 	STK_DATA_OBJECT_TYPE_ICON_ID =				0x1E,
 	STK_DATA_OBJECT_TYPE_ITEM_ICON_ID_LIST =		0x1F,
 	STK_DATA_OBJECT_TYPE_CARD_READER_STATUS =		0x20,
@@ -130,7 +132,7 @@ enum stk_data_object_type {
 	STK_DATA_OBJECT_TYPE_BROWSER_ID =			0x30,
 	STK_DATA_OBJECT_TYPE_URL =				0x31,
 	STK_DATA_OBJECT_TYPE_BEARER =				0x32,
-	STK_DATA_OBJECT_TYPE_PROVISIONING_REFERENCE_FILE =	0x33,
+	STK_DATA_OBJECT_TYPE_PROVISIONING_FILE_REF =		0x33,
 	STK_DATA_OBJECT_TYPE_BROWSER_TERMINATION_CAUSE =	0x34,
 	STK_DATA_OBJECT_TYPE_BEARER_DESCRIPTION =		0x35,
 	STK_DATA_OBJECT_TYPE_CHANNEL_DATA =			0x36,
@@ -150,6 +152,7 @@ enum stk_data_object_type {
 	STK_DATA_OBJECT_TYPE_SERVICE_AVAILABILITY =		0x45,
 	STK_DATA_OBJECT_TYPE_ESN =				0x46,
 	STK_DATA_OBJECT_TYPE_NETWORK_ACCESS_NAME =		0x47,
+	STK_DATA_OBJECT_TYPE_CDMA_SMS_TPDU = 			0x48,
 	STK_DATA_OBJECT_TYPE_REMOTE_ENTITY_ADDRESS =		0x49,
 	STK_DATA_OBJECT_TYPE_TEXT_ATTRIBUTE =			0x50,
 	STK_DATA_OBJECT_TYPE_ITEM_TEXT_ATTRIBUTE_LIST =		0x51,
@@ -165,7 +168,7 @@ enum stk_data_object_type {
 	STK_DATA_OBJECT_TYPE_MMS_ID =				0x6B,
 	STK_DATA_OBJECT_TYPE_MMS_TRANSFER_STATUS =		0x6C,
 	STK_DATA_OBJECT_TYPE_MEID =				0x6D,
-	STK_DATA_OBJECT_TYPE_CONTENT_ID =			0x6E,
+	STK_DATA_OBJECT_TYPE_MMS_CONTENT_ID =			0x6E,
 	STK_DATA_OBJECT_TYPE_MMS_NOTIFICATION =			0x6F,
 	STK_DATA_OBJECT_TYPE_LAST_ENVELOPE =			0x70,
 	STK_DATA_OBJECT_TYPE_REGISTRY_APPLICATION_DATA =	0x71,
@@ -181,9 +184,24 @@ enum stk_device_identity_type {
 	STK_DEVICE_IDENTITY_TYPE_KEYPAD =	0x01,
 	STK_DEVICE_IDENTITY_TYPE_DISPLAY =	0x02,
 	STK_DEVICE_IDENTITY_TYPE_EARPIECE =	0x03,
+	STK_DEVICE_IDENTITY_TYPE_CARD_READER_0 = 0x10,
+	STK_DEVICE_IDENTITY_TYPE_CARD_READER_1 = 0x11,
+	STK_DEVICE_IDENTITY_TYPE_CARD_READER_2 = 0x12,
+	STK_DEVICE_IDENTITY_TYPE_CARD_READER_3 = 0x13,
+	STK_DEVICE_IDENTITY_TYPE_CARD_READER_4 = 0x14,
+	STK_DEVICE_IDENTITY_TYPE_CARD_READER_5 = 0x15,
+	STK_DEVICE_IDENTITY_TYPE_CARD_READER_6 = 0x16,
+	STK_DEVICE_IDENTITY_TYPE_CARD_READER_7 = 0x17,
+	STK_DEVICE_IDENTITY_TYPE_CHANNEL_1 = 0x21,
+	STK_DEVICE_IDENTITY_TYPE_CHANNEL_7 = 0x27,
 	STK_DEVICE_IDENTITY_TYPE_UICC =		0x81,
 	STK_DEVICE_IDENTITY_TYPE_TERMINAL =	0x82,
 	STK_DEVICE_IDENTITY_TYPE_NETWORK =	0x83,
+};
+
+enum stk_qualifier_get_reader_status_type {
+	STK_QUALIFIER_TYPE_CARD_READER_STATUS = 	0x00,
+	STK_QUALIFIER_TYPE_CARD_READER_ID = 		0x01,
 };
 
 enum stk_duration_type {
@@ -264,6 +282,177 @@ enum stk_tone_type {
 	STK_TONE_TYPE_MELODY_8 =	0x47
 };
 
+enum stk_event_type {
+	STK_EVENT_TYPE_MT_CALL =				0x00,
+	STK_EVENT_TYPE_CALL_CONNECTED =				0x01,
+	STK_EVENT_TYPE_CALL_DISCONNECTED =			0x02,
+	STK_EVENT_TYPE_LOCATION_STATUS =			0x03,
+	STK_EVENT_TYPE_USER_ACTIVITY =				0x04,
+	STK_EVENT_TYPE_IDLE_SCREEN_AVAILABLE =			0x05,
+	STK_EVENT_TYPE_CARD_READER_STATUS =			0x06,
+	STK_EVENT_TYPE_LANGUAGE_SELECTION =			0x07,
+	STK_EVENT_TYPE_BROWSER_TERMINATION =			0x08,
+	STK_EVENT_TYPE_DATA_AVAILABLE =				0x09,
+	STK_EVENT_TYPE_CHANNEL_STATUS =				0x0A,
+	STK_EVENT_TYPE_SINGLE_ACCESS_TECHNOLOGY_CHANGE =	0x0B,
+	STK_EVENT_TYPE_DISPLAY_PARAMETERS_CHANGED =		0x0C,
+	STK_EVENT_TYPE_LOCAL_CONNECTION =			0x0D,
+	STK_EVENT_TYPE_NETWORK_SEARCH_MODE_CHANGE =		0x0E,
+	STK_EVENT_TYPE_BROWSING_STATUS =			0x0F,
+	STK_EVENT_TYPE_FRAMES_INFORMATION_CHANGE =		0x10,
+	STK_EVENT_TYPE_I_WLAN_ACCESS_STATUS =			0x11,
+	STK_EVENT_TYPE_NETWORK_REJECTION =			0x12,
+	STK_EVENT_TYPE_HCI_CONNECTIVITY_EVENT =			0x13,
+	STK_EVENT_TYPE_MULTIPLE_ACCESS_TECHNOLOGIES_CHANGE =	0x14
+};
+
+enum stk_service_state {
+	STK_NORMAL_SERVICE = 	0x00,
+	STK_LIMITED_SERVICE = 	0x01,
+	STK_NO_SERVICE = 	0x02
+};
+
+enum stk_icon_qualifier {
+	STK_ICON_QUALIFIER_TYPE_SELF_EXPLANATORY = 	0x00,
+	STK_ICON_QUALIFIER_TYPE_NON_SELF_EXPLANATORY =	0x01
+};
+
+enum stk_ins {
+	STK_INS_DEACTIVATE_FILE = 			0x04,
+	STK_INS_ERASE_RECORDS = 			0x0C,
+	STK_INS_ERASE_BINARY_0E = 			0x0E,
+	STK_INS_ERASE_BINARY_0F = 			0x0F,
+	STK_INS_PERFORM_SCQL_OPERATION = 		0x10,
+	STK_INS_PERFORM_TRANSACTION_OPERATION = 	0x12,
+	STK_INS_PERFORM_USER_OPERATION = 		0x14,
+	STK_INS_VERIFY_20 = 				0x20,
+	STK_INS_VERIFY_21 = 				0x21,
+	STK_INS_MANAGE_SECURITY_ENVIRONMENT = 		0x22,
+	STK_INS_CHANGE_REFERENCE_DATA = 		0x24,
+	STK_INS_DISABLE_VERIFICATION_REQUIREMENT = 	0x26,
+	STK_INS_ENABLE_VERIFICATION_REQUIREMENT = 	0x28,
+	STK_INS_PERFORM_SECURITY_OPERATION = 		0x2A,
+	STK_INS_RESET_RETRY_COUNTER = 			0x2C,
+	STK_INS_ACTIVATE_FILE = 			0x44,
+	STK_INS_GENERATE_ASYMMETRIC_KEY_PAIR = 		0x46,
+	STK_INS_MANAGE_CHANNEL = 			0x70,
+	STK_INS_EXTERNAL_AUTHENTICATE = 		0x82,
+	STK_INS_GET_CHALLENGE = 			0x84,
+	STK_INS_GENERAL_AUTHENTICATE_86 = 		0x86,
+	STK_INS_GENERAL_AUTHENTICATE_87 = 		0x87,
+	STK_INS_INTERNAL_AUTHENTICATE = 		0x88,
+	STK_INS_SEARCH_BINARY_A0 = 			0xA0,
+	STK_INS_SEARCH_BINARY_A1 = 			0xA1,
+	STK_INS_SEARCH_RECORD = 			0xA2,
+	STK_INS_SELECT = 				0xA4,
+	STK_INS_READ_BINARY_B0 = 			0xB0,
+	STK_INS_READ_BINARY_B1 = 			0xB1,
+	STK_INS_READ_RECORDS_B2 = 			0xB2,
+	STK_INS_READ_RECORDS_B3 = 			0xB3,
+	STK_INS_GET_RESPONSE = 				0xC0,
+	STK_INS_ENVELOPE_C2 = 				0xC2,
+	STK_INS_ENVELOPE_C3 =				0xC3,
+	STK_INS_GET_DATA_CA =				0xCA,
+	STK_INS_GET_DATA_CB =				0xCB,
+	STK_INS_WRITE_BINARY_D0 =			0xD0,
+	STK_INS_WRITE_BINARY_D1 = 			0xD1,
+	STK_INS_WRITE_RECORD = 				0xD2,
+	STK_INS_UPDATE_BINARY_D6 = 			0xD6,
+	STK_INS_UPDATE_BINARY_D7 = 			0xD7,
+	STK_INS_PUT_DATA_DA = 				0xDA,
+	STK_INS_PUT_DATA_DB = 				0xDB,
+	STK_INS_UPDATE_RECORD_DC = 			0xDC,
+	STK_INS_UPDATE_RECORD_DD = 			0xDD,
+	STK_INS_CREATE_FILE = 				0xE0,
+	STK_INS_APPEND_RECORD = 			0xE2,
+	STK_INS_DELETE_FILE = 				0xE4,
+	STK_INS_TERMINATE_DF = 				0xE6,
+	STK_INS_TERMINATE_EF = 				0xE8,
+	STK_INS_TERMINATE_CARD_USAGE = 			0xFE
+};
+
+enum stk_browser_id {
+	STK_BROWSER_ID_DEFAULT =	0x00,
+	STK_BROWSER_ID_WML =		0x01,
+	STK_BROWSER_ID_HTML =		0x02,
+	STK_BROWSER_ID_XHTML =		0x03,
+	STK_BROWSER_ID_CHTML =		0x04
+};
+
+enum stk_bearer {
+	STK_BEARER_SMS = 	0x00,
+	STK_BEARER_CS_DATA =	0x01,
+	STK_BEARER_GSM_3G =	0x02,
+	STK_BEARER_PS = 	0x03
+};
+
+enum stk_browser_termination_cause {
+	STK_BROWSER_USER_TERMINATION = 		0x00,
+	STK_BROWSER_ERROR_TERMINATION = 	0x01
+};
+
+enum stk_bearer_type {
+	STK_BEARER_TYPE_DEFAULT = 		0x03,
+	STK_BEARER_TYPE_INDEPENDENT = 		0x04,
+	STK_BEARER_TYPE_BLUETOOTH =		0x05,
+	STK_BEARER_TYPE_IRDA =			0x06,
+	STK_BEARER_TYPE_RS232 = 		0x07,
+	STK_BEARER_TYPE_PACKET_DATA_SERVICE = 	0x08,
+	STK_BEARER_TYPE_I_WLAN = 		0x0a,
+	STK_BEARER_TYPE_USB = 			0x10
+};
+
+enum stk_address_type {
+	STK_ADDRESS_IPV4 = 	0x21,
+	STK_ADDRESS_IPV6 = 	0x57
+};
+
+enum stk_access_technology_type {
+	STK_ACCESS_TECHNOLOGY_GSM = 		0x00,
+	STK_ACCESS_TECHNOLOGY_TIA_EIA_553 =	0x01,
+	STK_ACCESS_TECHNOLOGY_TIA_EIA_136_C =	0x02,
+	STK_ACCESS_TECHNOLOGY_UTRAN = 		0x03,
+	STK_ACCESS_TECHNOLOGY_TETRA = 		0x04,
+	STK_ACCESS_TECHNOLOGY_TIA_EIA_95 = 	0x05,
+	STK_ACCESS_TECHNOLOGY_CDMA2000_1X =	0x06,
+	STK_ACCESS_TECHNOLOGY_CDMA2000_HRPD = 	0x07,
+	STK_ACCESS_TECHNOLOGY_EUTRAN = 		0x08
+};
+
+enum stk_technology_id {
+	STK_TECHNOLOGY_INDEPENDENT = 	0x00,
+	STK_TECHNOLOGY_BLUETOOTH = 	0x01,
+	STK_TECHNOLOGY_IRDA = 		0x02,
+	STK_TECHNOLOGY_RS232 = 		0x03,
+	STK_TECHNOLOGY_USB = 		0x04
+};
+
+enum stk_battery_state {
+	STK_BATTERY_VERY_LOW = 	0x00,
+	STK_BATTERY_LOW = 	0x01,
+	STK_BATTERY_AVERAGE = 	0x02,
+	STK_BATTERY_GOOD = 	0x03,
+	STK_BATTERY_FULL = 	0x04
+};
+
+enum stk_frame_layout_type {
+	STK_LAYOUT_HORIZONTAL = 	0x01,
+	STK_LAYOUT_VERTICAL = 		0x02
+};
+
+enum stk_broadcast_network_technology {
+	STK_BROADCAST_NETWORK_DVB_H = 0x00,
+	STK_BROADCAST_NETWORK_DVB_T = 0x01,
+	STK_BROADCAST_NETWORK_DVB_SH = 0x02,
+	STK_BROADCAST_NETWORK_T_DMB = 0x03
+};
+
+/* For data object that only has a byte array with undetermined length */
+struct stk_common_byte_array {
+	unsigned char *array;
+	unsigned int len;
+};
+
 /* Defined in TS 102.223 Section 8.1 */
 struct stk_address {
 	unsigned char ton_npi;
@@ -303,15 +492,6 @@ struct stk_subaddress {
 struct stk_ccp {
 	unsigned char len;
 	unsigned char ccp[16];
-};
-
-/*
- * Icon ID denotes a file on the SIM filesystem.  Since EF cannot have record
- * ids of 0, we use icon_id with 0 to denote empty icon_identifier objects
- */
-struct stk_icon_identifier {
-	unsigned char qualifier;
-	unsigned char id;
 };
 
 /*
@@ -356,6 +536,227 @@ struct stk_file {
 	unsigned int len;
 };
 
+/* Defined in TS 102.223 Section 8.19 */
+struct stk_location_info {
+	char mnc[OFONO_MAX_MNC_LENGTH + 1];
+	char mcc[OFONO_MAX_MCC_LENGTH + 1];
+	unsigned short lac_tac;
+	ofono_bool_t has_ci;
+	unsigned short ci;
+	ofono_bool_t has_ext_ci;
+	unsigned short ext_ci;
+	ofono_bool_t has_eutran_ci;
+	guint32 eutran_ci;
+};
+
+/*
+ * According to 102.223 Section 8.24 the length of CTLV is 1 byte. This means
+ * that the maximum size is 127 according to the rules of CTLVs.
+ */
+struct stk_items_next_action_indicator {
+	unsigned char list[127];
+	unsigned int len;
+};
+
+/*
+ * According to 102.223 Section 8.25, there are 21 kinds of event type and no
+ * one should appear more than once.
+ */
+struct stk_event_list {
+	unsigned char list[21];
+	unsigned int len;
+};
+
+/*
+ * According to 102.223 Section 8.26, the maximum length of cause is 30.
+ */
+struct stk_cause {
+	unsigned char cause[30];
+	unsigned int len;
+	ofono_bool_t has_cause;
+};
+
+/*
+ * According to 102.223 Section 8.28 the length of CTLV is 1 byte. This means
+ * that the maximum size is 127 according to the rules of CTLVs.
+ */
+struct stk_transaction_id {
+	unsigned char list[127];
+	unsigned int len;
+};
+
+/*
+ * Defined in TS 102.223 Section 8.31
+ * Icon ID denotes a file on the SIM filesystem.  Since EF cannot have record
+ * ids of 0, we use icon_id with 0 to denote empty icon_identifier objects
+ */
+struct stk_icon_id {
+	unsigned char qualifier;
+	unsigned char id;
+};
+
+/*
+ * According to 102.223 Section 8.32 the length of CTLV is 1 byte. This means
+ * that the maximum size is 127 according to the rules of CTLVs. This size also
+ * includes icon list qualifier for 1 byte, so the maxmimum size of icon
+ * identifier list is 126.
+ */
+struct stk_item_icon_id_list {
+	unsigned char qualifier;
+	unsigned char list[126];
+	unsigned int len;
+};
+
+/*
+ * According to 102.223 Section 8.34 the length of CTLV is 1 byte. This means
+ * that the maximum size is 127 according to the rules of CTLVs.
+ */
+struct stk_card_atr {
+	unsigned char atr[127];
+	unsigned int len;
+};
+
+/*
+ * Defined in TS 102.223 Section 8.35. According to it, the maximum size
+ * of data is 236.
+ */
+struct stk_c_apdu {
+	unsigned char cla;
+	unsigned char ins;
+	unsigned char p1;
+	unsigned char p2;
+	unsigned char lc;
+	unsigned char data[236];
+	ofono_bool_t has_le;
+	unsigned char le;
+};
+
+/* Defined in TS 102.223 Section 8.36. According to it, the maximum size
+ * of data is 237.
+ */
+struct stk_r_apdu {
+	unsigned char sw1;
+	unsigned char sw2;
+	unsigned char data[237];
+	unsigned int len;
+};
+
+/* Defined in TS 102.223 Section 8.38 */
+struct stk_timer_value {
+	ofono_bool_t has_value;
+	unsigned char hour;
+	unsigned char minute;
+	unsigned char second;
+};
+
+/*
+ * According to 102.223 Section 8.52 the length of CTLV is 1 byte. This means
+ * that the maximum size is 127 according to the rules of CTLVs. This size also
+ * includes bearer type for 1 byte, so the maxmimum size of bearer parameters
+ * is 126.
+ */
+struct stk_bearer_description {
+	unsigned char type;
+	unsigned char pars[126];
+	unsigned int len;
+};
+
+/*
+ * According to 102.223 Section 8.57 the length of CTLV is 1 byte. This means
+ * that the maximum size is 127 according to the rules of CTLVs.
+ */
+struct stk_card_reader_id {
+	unsigned char id[127];
+	unsigned char len;
+};
+
+/*
+ * According to 102.223 Section 8.58 the address can be either ipv4 or ipv6.
+ * So the maximum size is 16 (for ipv6).
+ */
+struct stk_other_address {
+	union {
+		/* Network Byte Order */
+		unsigned int ipv4;
+		unsigned char ipv6[16];
+	} addr;
+	unsigned char type;
+};
+
+/* Defined in TS 102.223 Section 8.59 */
+struct stk_uicc_te_interface {
+	unsigned char protocol;
+	unsigned short port;
+};
+
+/*
+ * Defined in TS 102.223 Section 8.60.
+ * According to 101.220, Section 4, aid contains two fields RID and PIX.
+ * RID has 5 bytes, while PIX contains information between 7 to 11 bytes.
+ * So the maximum size of aid is 16 bytes.
+ */
+struct stk_aid {
+	unsigned char aid[16];
+	unsigned int len;
+};
+
+/* Defined in TS 102.223 Section 8.62 */
+struct stk_display_parameters {
+	unsigned char height;
+	unsigned char width;
+	unsigned char effects;
+};
+
+/* Defined in TS 102.223 Section 8.63 */
+struct stk_service_record {
+	unsigned char tech_id;
+	unsigned char serv_id;
+	unsigned char *serv_rec;
+	unsigned int len;
+};
+
+/* Defined in TS 102.223 Section 8.64 */
+struct stk_device_filter {
+	unsigned char tech_id;
+	unsigned char *dev_filter;
+	unsigned int len;
+};
+
+/* Defined in TS 102.223 Section 8.65 */
+struct stk_service_search {
+	unsigned char tech_id;
+	unsigned char *ser_search;
+	unsigned int len;
+};
+
+/* Defined in TS 102.223 Section 8.66 */
+struct stk_attribute_info {
+	unsigned char tech_id;
+	unsigned char *attr_info;
+	unsigned int len;
+};
+
+/*
+ * According to TS 102.223 Section 8.68, remote entity address can be either
+ * 6-bytes IEEE-802 address, or 4-bytes IrDA device address.
+ */
+struct stk_remote_entity_address {
+	unsigned char coding_type;
+	union {
+		unsigned char ieee802[6];
+		unsigned char irda[4];
+	} addr;
+};
+
+/*
+ * According to 102.223 Section 8.70 the length of CTLV is 1 byte. This means
+ * that the maximum size is 127 according to the rules of CTLVs.
+ */
+struct stk_network_access_name {
+	unsigned char name[127];
+	unsigned char len;
+};
+
 /*
  * According to 102.223 Section 8.72 the length of text attribute CTLV is 1
  * byte.  This means that the maximum size is 127 according to the rules
@@ -366,31 +767,248 @@ struct stk_text_attribute {
 	unsigned char len;
 };
 
+/*
+ * According to 102.223 Section 8.73 the length of CTLV is 1 byte. This means
+ * that the maximum size is 127 according to the rules of CTLVs. In addition,
+ * the length should be also the number multiplied by 4, so the maximum number
+ * is 124.
+ */
+struct stk_item_text_attribute_list {
+	unsigned char list[124];
+	unsigned char len;
+};
+
+/*
+ * According to 102.223 Section 8.78 the length of CTLV is 1 byte. This means
+ * that the maximum length is 127 bytes for the total length of layout and
+ * relative-sized frame. Thus the maximum length of relative size is 126 bytes.
+ */
+struct stk_frame_layout {
+	unsigned char layout;
+	unsigned char size[126];
+	unsigned int len;
+};
+
+/*
+ * According to 102.223 Section 8.79 the length of CTLV is 1 byte. This means
+ * that the maximum length is 127 bytes for the total length of default frame
+ * id and frame information list. Thus the maximum length of frame information
+ * list is 126 bytes.
+ */
+struct stk_frames_info {
+	unsigned char id;
+	unsigned char list[126];
+	unsigned int len;
+};
+
+/* Defined in TS 102.223 Section 8.80 */
+struct stk_frame_id {
+	ofono_bool_t has_id;
+	unsigned char id;
+};
+
+/*
+ * According to 102.223 Section 8.82 the length of CTLV is 1 byte. This means
+ * that the maximum size is 127 according to the rules of CTLVs.
+ */
+struct stk_mms_reference {
+	unsigned char ref[127];
+	unsigned char len;
+};
+
+/*
+ * According to 102.223 Section 8.83 the length of CTLV is 1 byte. This means
+ * that the maximum size is 127 according to the rules of CTLVs.
+ */
+struct stk_mms_id {
+	unsigned char id[127];
+	unsigned char len;
+};
+
+/*
+ * According to 102.223 Section 8.84 the length of CTLV is 1 byte. This means
+ * that the maximum size is 127 according to the rules of CTLVs.
+ */
+struct stk_mms_transfer_status {
+	unsigned char status[127];
+	unsigned char len;
+};
+
+/*
+ * According to 102.223 Section 8.85 the length of CTLV is 1 byte. This means
+ * that the maximum size is 127 according to the rules of CTLVs.
+ */
+struct stk_mms_content_id {
+	unsigned char id[127];
+	unsigned char len;
+};
+
+/* Defined in TS 102.223 Section 8.88 */
+struct stk_registry_application_data {
+	unsigned short port;
+	unsigned char type;
+	char *name;
+};
+
+/*
+ * According to 102.223 Section 8.90 the length of CTLV is 1 byte. This means
+ * that the maximum length is 127 bytes for the total length of broadcast
+ * network technology and location information. Thus the maximum length of
+ * location information is 126 bytes.
+ */
+struct stk_broadcast_network_information {
+	unsigned char tech;
+	unsigned char loc_info[126];
+	unsigned int len;
+};
+
 struct stk_command_display_text {
 	char *text;
-	struct stk_icon_identifier icon_id;
+	struct stk_icon_id icon_id;
 	ofono_bool_t immediate_response;
 	struct stk_duration duration;
-	struct stk_text_attribute text_attribute;
-	unsigned char frame_id; /* Values 0x10 to 0xFF reserved */
+	struct stk_text_attribute text_attr;
+	struct stk_frame_id frame_id;
+};
+
+struct stk_command_get_inkey {
+	char *text;
+	struct stk_icon_id icon_id;
+	struct stk_duration duration;
+	struct stk_text_attribute text_attr;
+	struct stk_frame_id frame_id;
 };
 
 struct stk_command_get_input {
 	char *text;
-	struct stk_response_length response_length;
+	struct stk_response_length resp_len;
 	char *default_text;
-	struct stk_icon_identifier icon_id;
-	struct stk_text_attribute text_attribute;
-	unsigned char frame_id; /* Values 0x10 to 0xFF reserved */
+	struct stk_icon_id icon_id;
+	struct stk_text_attribute text_attr;
+	struct stk_frame_id frame_id;
+};
+
+struct stk_command_play_tone {
+	char *alpha_id;
+	unsigned char tone;
+	struct stk_duration duration;
+	struct stk_icon_id icon_id;
+	struct stk_text_attribute text_attr;
+	struct stk_frame_id frame_id;
+};
+
+struct stk_command_poll_interval {
+	struct stk_duration duration;
+};
+
+struct stk_command_setup_menu {
+	char *alpha_id;
+	GSList *items;
+	struct stk_items_next_action_indicator next_act;
+	struct stk_icon_id icon_id;
+	struct stk_item_icon_id_list item_icon_id_list;
+	struct stk_text_attribute text_attr;
+	struct stk_item_text_attribute_list item_text_attr_list;
+};
+
+struct stk_command_select_item {
+	char *alpha_id;
+	GSList *items;
+	struct stk_items_next_action_indicator next_act;
+	unsigned char item_id;
+	struct stk_icon_id icon_id;
+	struct stk_item_icon_id_list item_icon_id_list;
+	struct stk_text_attribute text_attr;
+	struct stk_item_text_attribute_list item_text_attr_list;
+	struct stk_frame_id frame_id;
 };
 
 struct stk_command_send_sms {
 	char *alpha_id;
 	struct stk_address address;
 	struct sms gsm_sms;
-	struct stk_icon_identifier icon_id;
-	struct stk_text_attribute text_attribute;
-	unsigned char frame_id; /* Values 0x10 to 0xFF reserved */
+	struct stk_common_byte_array cdma_sms;
+	struct stk_icon_id icon_id;
+	struct stk_text_attribute text_attr;
+	struct stk_frame_id frame_id;
+};
+
+struct stk_command_setup_call {
+	char *alpha_id_usr_cfm;
+	struct stk_address addr;
+	struct stk_ccp ccp;
+	struct stk_subaddress subaddr;
+	struct stk_duration duration;
+	struct stk_icon_id icon_id_usr_cfm;
+	char *alpha_id_call_setup;
+	struct stk_icon_id icon_id_call_setup;
+	struct stk_text_attribute text_attr_usr_cfm;
+	struct stk_text_attribute text_attr_call_setup;
+	struct stk_frame_id frame_id;
+};
+
+struct stk_command_refresh {
+	GSList *file_list;
+	struct stk_aid aid;
+	char *alpha_id;
+	struct stk_icon_id icon_id;
+	struct stk_text_attribute text_attr;
+	struct stk_frame_id frame_id;
+};
+
+struct stk_command_setup_event_list {
+	struct stk_event_list event_list;
+};
+
+struct stk_command_perform_card_apdu {
+	struct stk_c_apdu c_apdu;
+};
+
+struct stk_command_timer_mgmt {
+	unsigned char timer_id;
+	struct stk_timer_value timer_value;
+};
+
+struct stk_command_setup_idle_mode_text {
+	char *text;
+	struct stk_icon_id icon_id;
+	struct stk_text_attribute text_attr;
+	struct stk_frame_id frame_id;
+};
+
+struct stk_command_run_at_command {
+	char *alpha_id;
+	char *at_command;
+	struct stk_icon_id icon_id;
+	struct stk_text_attribute text_attr;
+	struct stk_frame_id frame_id;
+};
+
+struct stk_command_send_dtmf {
+	char *alpha_id;
+	char *dtmf;
+	struct stk_icon_id icon_id;
+	struct stk_text_attribute text_attr;
+	struct stk_frame_id frame_id;
+};
+
+struct stk_command_language_notification {
+	char language[3];
+};
+
+struct stk_command_launch_browser {
+	unsigned char browser_id;
+	char *url;
+	struct stk_common_byte_array bearer;
+	GSList *prov_file_refs;
+	char *text_gateway_proxy_id;
+	char *alpha_id;
+	struct stk_icon_id icon_id;
+	struct stk_text_attribute text_attr;
+	struct stk_frame_id frame_id;
+	struct stk_common_byte_array network_name;
+	char *text_usr;
+	char *text_passwd;
 };
 
 struct stk_command {
@@ -402,14 +1020,196 @@ struct stk_command {
 
 	union {
 		struct stk_command_display_text display_text;
-		struct stk_command_display_text get_inkey;
+		struct stk_command_get_inkey get_inkey;
 		struct stk_command_get_input get_input;
+		struct stk_command_play_tone play_tone;
+		struct stk_command_poll_interval poll_interval;
+		struct stk_command_refresh refresh;
+		struct stk_command_setup_menu setup_menu;
+		struct stk_command_select_item select_item;
 		struct stk_command_send_sms send_sms;
+		struct stk_command_setup_call setup_call;
+		struct stk_command_setup_event_list setup_event_list;
+		struct stk_command_perform_card_apdu perform_card_apdu;
+		struct stk_command_timer_mgmt timer_mgmt;
+		struct stk_command_setup_idle_mode_text setup_idle_mode_text;
+		struct stk_command_run_at_command run_at_command;
+		struct stk_command_send_dtmf send_dtmf;
+		struct stk_command_language_notification language_notification;
+		struct stk_command_launch_browser launch_browser;
 	};
 
 	void (*destructor)(struct stk_command *command);
 };
 
+/* TERMINAL RESPONSEs defined in TS 102.223 Section 6.8 */
+struct stk_response_generic {
+};
+
+struct stk_answer_text {
+	char *text;
+	ofono_bool_t packed;
+	ofono_bool_t yesno;
+	/* If a "Yes/No" answer was requested in a GET INKEY command,
+	 * .yesno must be TRUE and text should be non-NULL to indicate
+	 * a Yes response or NULL to indicate a No response.
+	 */
+};
+
+struct stk_response_get_inkey {
+	struct stk_answer_text text;
+	struct stk_duration duration;
+};
+
+struct stk_response_get_input {
+	struct stk_answer_text text;
+};
+
+struct stk_response_poll_interval {
+	struct stk_duration max_interval;
+};
+
+struct stk_response_select_item {
+	unsigned char item_id;
+};
+
+struct stk_response_set_up_call {
+	struct stk_common_byte_array cc_requested_action;
+	struct {
+		ofono_bool_t cc_modified;
+		struct stk_result result;
+	} modified_result;
+};
+
+struct stk_response_local_info {
+	union {
+		struct stk_location_info location;
+		const char *imei;
+		struct stk_network_measurement_results {
+			struct stk_common_byte_array nmr;
+			struct stk_bcch_ch_list {
+				const short *channels;
+				int length;
+			} bcch_ch_list;
+		} nmr;
+		struct sms_scts datetime;
+		const char *language;
+		enum stk_battery_state battery_charge;
+		enum stk_access_technology_type access_technology;
+		struct stk_timing_advance {
+			enum {
+				STK_TIMING_ADVANCE_ME_IDLE = 0x00,
+				STK_TIMING_ADVANCE_ME_NOT_IDLE = 0x01,
+			} status;
+			/* Contains bit periods number according to 3GPP TS
+			 * 44.118 Section 9.3.106 / 3GPP TS 44.018 Section
+			 * 10.5.2.40.1, not microseconds */
+			int advance;
+		} tadv;
+		/* Bits[31:24]: manufacturer, bits[23:0]: serial number */
+		guint32 esn;
+		const char *imeisv;
+		enum stk_network_search_mode {
+			STK_NETWORK_SEARCH_MODE_MANUAL = 0x00,
+			STK_NETWORK_SEARCH_MODE_AUTOMATIC = 0x01,
+		} search_mode;
+		const char *meid;
+		struct stk_broadcast_network_information broadcast_network_info;
+		struct stk_access_technologies {
+			const enum stk_access_technology_type *techs;
+			int length;
+		} access_technologies;
+		struct {
+			struct stk_access_technologies access_techs;
+			struct stk_location_info *locations;
+		} location_infos;
+		struct {
+			struct stk_access_technologies access_techs;
+			struct stk_network_measurement_results *nmrs;
+		} nmrs;
+	};
+};
+
+struct stk_response_timer_mgmt {
+	unsigned char id;
+	struct stk_timer_value value;
+};
+
+struct stk_response_run_at_command {
+	const char *at_response;
+};
+
+struct stk_response {
+	unsigned char number;
+	unsigned char type;
+	unsigned char qualifier;
+	enum stk_device_identity_type src;
+	enum stk_device_identity_type dst;
+	struct stk_result result;
+
+	union {
+		struct stk_response_generic display_text;
+		struct stk_response_get_inkey get_inkey;
+		struct stk_response_get_input get_input;
+		struct stk_response_generic play_tone;
+		struct stk_response_poll_interval poll_interval;
+		struct stk_response_generic refresh;
+		struct stk_response_generic set_up_menu;
+		struct stk_response_select_item select_item;
+		struct stk_response_generic send_sms;
+		struct stk_response_set_up_call set_up_call;
+		struct stk_response_generic polling_off;
+		struct stk_response_local_info provide_local_info;
+		struct stk_response_generic set_up_event_list;
+		struct stk_response_timer_mgmt timer_mgmt;
+		struct stk_response_generic set_up_idle_mode_text;
+		struct stk_response_run_at_command run_at_command;
+		struct stk_response_generic send_dtmf;
+		struct stk_response_generic language_notification;
+		struct stk_response_generic launch_browser;
+	};
+
+	void (*destructor)(struct stk_response *response);
+};
+
+/* ENVELOPEs defined in TS 102.223 Section 7 */
+struct stk_envelope_sms_pp_download {
+	struct stk_address address;
+	struct sms_deliver message;
+};
+
+struct stk_envelope_cbs_pp_download {
+	struct cbs page;
+};
+
+struct stk_envelope_menu_selection {
+	unsigned char item_id;
+	ofono_bool_t help_request;
+};
+
+struct stk_envelope_sms_mo_control {
+	struct stk_address sc_address;
+	struct stk_address dest_address;
+	struct stk_location_info location;
+};
+
+struct stk_envelope {
+	enum stk_envelope_type type;
+	enum stk_device_identity_type src;
+	enum stk_device_identity_type dst;
+	union {
+		struct stk_envelope_sms_pp_download sms_pp_download;
+		struct stk_envelope_cbs_pp_download cbs_pp_download;
+		struct stk_envelope_menu_selection menu_selection;
+		struct stk_envelope_sms_mo_control sms_mo_control;
+	};
+};
+
 struct stk_command *stk_command_new_from_pdu(const unsigned char *pdu,
 						unsigned int len);
 void stk_command_free(struct stk_command *command);
+
+const unsigned char *stk_pdu_from_response(const struct stk_response *response,
+						unsigned int *out_length);
+const unsigned char *stk_pdu_from_envelope(const struct stk_envelope *envelope,
+						unsigned int *out_length);

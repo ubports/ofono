@@ -25,13 +25,17 @@ for path in properties["Modems"]:
 	properties = connmgr.GetProperties()
 
 	if (properties["PrimaryContexts"] == []):
-		path = connmgr.CreateContext("Example", "internet")
+		path = connmgr.CreateContext("Internet access", "internet")
 	else:
 		path = properties["PrimaryContexts"][0]
 
 	context = dbus.Interface(bus.get_object('org.ofono', path),
 					'org.ofono.PrimaryDataContext')
 
-	context.SetProperty("AccessPointName", sys.argv[1])
+	try:
+		context.SetProperty("AccessPointName", sys.argv[1])
+	except IndexError:
+		print "Usage: %s <apn_name>" % sys.argv[0]
+		exit(1)
 
 	print "Setting APN of %s to %s" % (path, sys.argv[1])

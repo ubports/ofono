@@ -47,6 +47,9 @@ struct sim_data {
 };
 
 static const char *crsm_prefix[] = { "+CRSM:", NULL };
+static const char *cpin_prefix[] = { "+CPIN:", NULL };
+static const char *clck_prefix[] = { "+CLCK:", NULL };
+static const char *none_prefix[] = { NULL };
 
 static void at_crsm_info_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
@@ -404,22 +407,22 @@ static struct {
 	enum ofono_sim_password_type type;
 	const char *name;
 } const at_sim_name[] = {
-	{ OFONO_SIM_PASSWORD_NONE, "READY" },
-	{ OFONO_SIM_PASSWORD_SIM_PIN, "SIM PIN" },
-	{ OFONO_SIM_PASSWORD_SIM_PUK, "SIM PUK" },
-	{ OFONO_SIM_PASSWORD_PHSIM_PIN, "PH-SIM PIN" },
-	{ OFONO_SIM_PASSWORD_PHFSIM_PIN, "PH-FSIM PIN" },
-	{ OFONO_SIM_PASSWORD_PHFSIM_PUK, "PH-FSIM PUK" },
-	{ OFONO_SIM_PASSWORD_SIM_PIN2, "SIM PIN2" },
-	{ OFONO_SIM_PASSWORD_SIM_PUK2, "SIM PUK2" },
-	{ OFONO_SIM_PASSWORD_PHNET_PIN, "PH-NET PIN" },
-	{ OFONO_SIM_PASSWORD_PHNET_PUK, "PH-NET PUK" },
-	{ OFONO_SIM_PASSWORD_PHNETSUB_PIN, "PH-NETSUB PIN" },
-	{ OFONO_SIM_PASSWORD_PHNETSUB_PUK, "PH-NETSUB PUK" },
-	{ OFONO_SIM_PASSWORD_PHSP_PIN, "PH-SP PIN" },
-	{ OFONO_SIM_PASSWORD_PHSP_PUK, "PH-SP PUK" },
-	{ OFONO_SIM_PASSWORD_PHCORP_PIN, "PH-CORP PIN" },
-	{ OFONO_SIM_PASSWORD_PHCORP_PUK, "PH-CORP PUK" },
+	{ OFONO_SIM_PASSWORD_NONE,		"READY"		},
+	{ OFONO_SIM_PASSWORD_SIM_PIN,		"SIM PIN"	},
+	{ OFONO_SIM_PASSWORD_SIM_PUK,		"SIM PUK"	},
+	{ OFONO_SIM_PASSWORD_PHSIM_PIN,		"PH-SIM PIN"	},
+	{ OFONO_SIM_PASSWORD_PHFSIM_PIN,	"PH-FSIM PIN"	},
+	{ OFONO_SIM_PASSWORD_PHFSIM_PUK,	"PH-FSIM PUK"	},
+	{ OFONO_SIM_PASSWORD_SIM_PIN2,		"SIM PIN2"	},
+	{ OFONO_SIM_PASSWORD_SIM_PUK2,		"SIM PUK2"	},
+	{ OFONO_SIM_PASSWORD_PHNET_PIN,		"PH-NET PIN"	},
+	{ OFONO_SIM_PASSWORD_PHNET_PUK,		"PH-NET PUK"	},
+	{ OFONO_SIM_PASSWORD_PHNETSUB_PIN,	"PH-NETSUB PIN"	},
+	{ OFONO_SIM_PASSWORD_PHNETSUB_PUK,	"PH-NETSUB PUK"	},
+	{ OFONO_SIM_PASSWORD_PHSP_PIN,		"PH-SP PIN"	},
+	{ OFONO_SIM_PASSWORD_PHSP_PUK,		"PH-SP PUK"	},
+	{ OFONO_SIM_PASSWORD_PHCORP_PIN,	"PH-CORP PIN"	},
+	{ OFONO_SIM_PASSWORD_PHCORP_PUK,	"PH-CORP PUK"	},
 };
 
 static void at_cpin_cb(gboolean ok, GAtResult *result, gpointer user_data)
@@ -488,7 +491,7 @@ static void at_pin_query(struct ofono_sim *sim, ofono_sim_passwd_cb_t cb,
 
 	cbd->user = sim;
 
-	if (g_at_chat_send(sd->chat, "AT+CPIN?", NULL,
+	if (g_at_chat_send(sd->chat, "AT+CPIN?", cpin_prefix,
 				at_cpin_cb, cbd, g_free) > 0)
 		return;
 
@@ -524,7 +527,7 @@ static void at_pin_send(struct ofono_sim *sim, const char *passwd,
 
 	snprintf(buf, sizeof(buf), "AT+CPIN=\"%s\"", passwd);
 
-	ret = g_at_chat_send(sd->chat, buf, NULL,
+	ret = g_at_chat_send(sd->chat, buf, none_prefix,
 				at_lock_unlock_cb, cbd, g_free);
 
 	memset(buf, 0, sizeof(buf));
@@ -553,7 +556,7 @@ static void at_pin_send_puk(struct ofono_sim *sim, const char *puk,
 
 	snprintf(buf, sizeof(buf), "AT+CPIN=\"%s\",\"%s\"", puk, passwd);
 
-	ret = g_at_chat_send(sd->chat, buf, NULL,
+	ret = g_at_chat_send(sd->chat, buf, none_prefix,
 				at_lock_unlock_cb, cbd, g_free);
 
 	memset(buf, 0, sizeof(buf));
@@ -599,7 +602,7 @@ static void at_pin_enable(struct ofono_sim *sim,
 	snprintf(buf, sizeof(buf), "AT+CLCK=\"%s\",%i,\"%s\"",
 			at_clck_cpwd_fac[passwd_type], enable ? 1 : 0, passwd);
 
-	ret = g_at_chat_send(sd->chat, buf, NULL,
+	ret = g_at_chat_send(sd->chat, buf, none_prefix,
 				at_lock_unlock_cb, cbd, g_free);
 
 	memset(buf, 0, sizeof(buf));
@@ -635,7 +638,7 @@ static void at_change_passwd(struct ofono_sim *sim,
 	snprintf(buf, sizeof(buf), "AT+CPWD=\"%s\",\"%s\",\"%s\"",
 			at_clck_cpwd_fac[passwd_type], old, new);
 
-	ret = g_at_chat_send(sd->chat, buf, NULL,
+	ret = g_at_chat_send(sd->chat, buf, none_prefix,
 				at_lock_unlock_cb, cbd, g_free);
 
 	memset(buf, 0, sizeof(buf));
@@ -698,7 +701,7 @@ static void at_pin_query_enabled(struct ofono_sim *sim,
 	snprintf(buf, sizeof(buf), "AT+CLCK=\"%s\",2",
 			at_clck_cpwd_fac[passwd_type]);
 
-	if (g_at_chat_send(sd->chat, buf, NULL,
+	if (g_at_chat_send(sd->chat, buf, clck_prefix,
 				at_lock_status_cb, cbd, g_free) > 0)
 		return;
 
@@ -707,82 +710,6 @@ error:
 		g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, -1, data);
-}
-
-static void at_csim_envelope_cb(gboolean ok, GAtResult *result,
-		gpointer user_data)
-{
-	struct cb_data *cbd = user_data;
-	GAtResultIter iter;
-	ofono_sim_read_cb_t cb = cbd->cb;
-	struct ofono_error error;
-	const guint8 *response;
-	gint rlen, len;
-
-	decode_at_error(&error, g_at_result_final_response(result));
-
-	if (!ok)
-		goto error;
-
-	g_at_result_iter_init(&iter, result);
-
-	if (!g_at_result_iter_next(&iter, "+CSIM:"))
-		goto error;
-
-	if (!g_at_result_iter_next_number(&iter, &rlen))
-		goto error;
-
-	if (!g_at_result_iter_next_hexstring(&iter, &response, &len))
-		goto error;
-
-	if (rlen != len * 2 || len < 2 ||
-			response[len - 2] != 0x90 || response[len - 1] != 0)
-		goto error;
-
-	DBG("csim_envelope_cb: %i", len);
-
-	cb(&error, response, len - 2, cbd->data);
-	return;
-
-error:
-	CALLBACK_WITH_FAILURE(cb, NULL, 0, cbd->data);
-}
-
-static void at_sim_envelope(struct ofono_sim *sim, int length,
-				const guint8 *command,
-				ofono_sim_read_cb_t cb, void *data)
-{
-	struct sim_data *sd = ofono_sim_get_data(sim);
-	struct cb_data *cbd = cb_data_new(cb, data);
-	char *buf = g_try_new(char, 64 + length * 2);
-	int len, ret;
-
-	if (!cbd || !buf)
-		goto error;
-
-	len = sprintf(buf, "AT+CSIM=%i,A0C20000%02hhX",
-			10 + length * 2, length);
-
-	for (; length; length--)
-		len += sprintf(buf + len, "%02hhX", *command++);
-
-	ret = g_at_chat_send(sd->chat, buf, crsm_prefix,
-				at_csim_envelope_cb, cbd, g_free);
-
-	g_free(buf);
-	buf = NULL;
-
-	if (ret > 0)
-		return;
-
-error:
-	if (buf)
-		g_free(buf);
-
-	if (cbd)
-		g_free(cbd);
-
-	CALLBACK_WITH_FAILURE(cb, NULL, 0, data);
 }
 
 static gboolean at_sim_register(gpointer user)
@@ -840,7 +767,6 @@ static struct ofono_sim_driver driver = {
 	.lock			= at_pin_enable,
 	.change_passwd		= at_change_passwd,
 	.query_locked		= at_pin_query_enabled,
-	.envelope		= at_sim_envelope,
 };
 
 void at_sim_init()

@@ -53,6 +53,10 @@ static GSList *sms_assembly_add_fragment_backup(struct sms_assembly *assembly,
 					guint16 ref, guint8 max, guint8 seq,
 					gboolean backup);
 
+/*
+ * This function uses the meanings of digits 10..15 according to the rules
+ * defined in 23.040 Section 9.1.2.3 and 24.008 Table 10.5.118
+ */
 void extract_bcd_number(const unsigned char *buf, int len, char *out)
 {
 	static const char digit_lut[] = "0123456789*#abc\0";
@@ -75,34 +79,16 @@ static inline int to_semi_oct(char in)
 
 	switch (in) {
 	case '0':
-		digit = 0;
-		break;
 	case '1':
-		digit = 1;
-		break;
 	case '2':
-		digit = 2;
-		break;
 	case '3':
-		digit = 3;
-		break;
 	case '4':
-		digit = 4;
-		break;
 	case '5':
-		digit = 5;
-		break;
 	case '6':
-		digit = 6;
-		break;
 	case '7':
-		digit = 7;
-		break;
 	case '8':
-		digit = 8;
-		break;
 	case '9':
-		digit = 9;
+		digit = in - '0';
 		break;
 	case '*':
 		digit = 10;
@@ -325,7 +311,7 @@ static inline gboolean set_octet(unsigned char *pdu, int *offset,
 	return TRUE;
 }
 
-static gboolean encode_scts(const struct sms_scts *in, unsigned char *pdu,
+gboolean sms_encode_scts(const struct sms_scts *in, unsigned char *pdu,
 				int *offset)
 {
 	guint timezone;
@@ -372,7 +358,12 @@ static gboolean encode_scts(const struct sms_scts *in, unsigned char *pdu,
 	return TRUE;
 }
 
-static gboolean decode_scts(const unsigned char *pdu, int len,
+guint8 sms_decode_semi_octet(guint8 in)
+{
+	return (in & 0x0f) * 10 + (in >> 4);
+}
+
+gboolean sms_decode_scts(const unsigned char *pdu, int len,
 				int *offset, struct sms_scts *out)
 {
 	unsigned char oct = 0;
@@ -381,22 +372,22 @@ static gboolean decode_scts(const unsigned char *pdu, int len,
 		return FALSE;
 
 	next_octet(pdu, len, offset, &oct);
-	out->year = (oct & 0x0f) * 10 + ((oct & 0xf0) >> 4);
+	out->year = sms_decode_semi_octet(oct);
 
 	next_octet(pdu, len, offset, &oct);
-	out->month = (oct & 0x0f) * 10 + ((oct & 0xf0) >> 4);
+	out->month = sms_decode_semi_octet(oct);
 
 	next_octet(pdu, len, offset, &oct);
-	out->day = (oct & 0x0f) * 10 + ((oct & 0xf0) >> 4);
+	out->day = sms_decode_semi_octet(oct);
 
 	next_octet(pdu, len, offset, &oct);
-	out->hour = (oct & 0x0f) * 10 + ((oct & 0xf0) >> 4);
+	out->hour = sms_decode_semi_octet(oct);
 
 	next_octet(pdu, len, offset, &oct);
-	out->minute = (oct & 0x0f) * 10 + ((oct & 0xf0) >> 4);
+	out->minute = sms_decode_semi_octet(oct);
 
 	next_octet(pdu, len, offset, &oct);
-	out->second = (oct & 0x0f) * 10 + ((oct & 0xf0) >> 4);
+	out->second = sms_decode_semi_octet(oct);
 
 	next_octet(pdu, len, offset, &oct);
 
@@ -428,7 +419,7 @@ static gboolean decode_validity_period(const unsigned char *pdu, int len,
 
 		return TRUE;
 	case SMS_VALIDITY_PERIOD_FORMAT_ABSOLUTE:
-		if (!decode_scts(pdu, len, offset, &vp->absolute))
+		if (!sms_decode_scts(pdu, len, offset, &vp->absolute))
 			return FALSE;
 
 		return TRUE;
@@ -462,7 +453,7 @@ static gboolean encode_validity_period(const struct sms_validity_period *vp,
 		set_octet(pdu, offset, vp->relative);
 		return TRUE;
 	case SMS_VALIDITY_PERIOD_FORMAT_ABSOLUTE:
-		return encode_scts(&vp->absolute, pdu, offset);
+		return sms_encode_scts(&vp->absolute, pdu, offset);
 	case SMS_VALIDITY_PERIOD_FORMAT_ENHANCED:
 		/* TODO: Write out proper enhanced VP structure */
 		memcpy(pdu + *offset, vp->enhanced, 7);
@@ -672,7 +663,7 @@ static gboolean encode_deliver(const struct sms_deliver *in, unsigned char *pdu,
 	set_octet(pdu, offset, in->pid);
 	set_octet(pdu, offset, in->dcs);
 
-	if (encode_scts(&in->scts, pdu, offset) == FALSE)
+	if (sms_encode_scts(&in->scts, pdu, offset) == FALSE)
 		return FALSE;
 
 	set_octet(pdu, offset, in->udl);
@@ -713,7 +704,7 @@ static gboolean decode_deliver(const unsigned char *pdu, int len,
 	if (!next_octet(pdu, len, &offset, &out->deliver.dcs))
 		return FALSE;
 
-	if (!decode_scts(pdu, len, &offset, &out->deliver.scts))
+	if (!sms_decode_scts(pdu, len, &offset, &out->deliver.scts))
 		return FALSE;
 
 	if (!next_octet(pdu, len, &offset, &out->deliver.udl))
@@ -743,7 +734,7 @@ static gboolean encode_submit_ack_report(const struct sms_submit_ack_report *in,
 
 	set_octet(pdu, offset, in->pi);
 
-	if (!encode_scts(&in->scts, pdu, offset))
+	if (!sms_encode_scts(&in->scts, pdu, offset))
 		return FALSE;
 
 	if (in->pi & 0x1)
@@ -779,7 +770,7 @@ static gboolean encode_submit_err_report(const struct sms_submit_err_report *in,
 
 	set_octet(pdu, offset, in->pi);
 
-	if (!encode_scts(&in->scts, pdu, offset))
+	if (!sms_encode_scts(&in->scts, pdu, offset))
 		return FALSE;
 
 	if (in->pi & 0x1)
@@ -844,7 +835,7 @@ static gboolean decode_submit_report(const unsigned char *pdu, int len,
 
 	pi = octet & 0x07;
 
-	if (!decode_scts(pdu, len, &offset, scts))
+	if (!sms_decode_scts(pdu, len, &offset, scts))
 		return FALSE;
 
 	if (pi & 0x01) {
@@ -918,10 +909,10 @@ static gboolean encode_status_report(const struct sms_status_report *in,
 	if (!sms_encode_address_field(&in->raddr, FALSE, pdu, offset))
 		return FALSE;
 
-	if (!encode_scts(&in->scts, pdu, offset))
+	if (!sms_encode_scts(&in->scts, pdu, offset))
 		return FALSE;
 
-	if (!encode_scts(&in->dt, pdu, offset))
+	if (!sms_encode_scts(&in->dt, pdu, offset))
 		return FALSE;
 
 	octet = in->st;
@@ -971,10 +962,10 @@ static gboolean decode_status_report(const unsigned char *pdu, int len,
 					&out->status_report.raddr))
 		return FALSE;
 
-	if (!decode_scts(pdu, len, &offset, &out->status_report.scts))
+	if (!sms_decode_scts(pdu, len, &offset, &out->status_report.scts))
 		return FALSE;
 
-	if (!decode_scts(pdu, len, &offset, &out->status_report.dt))
+	if (!sms_decode_scts(pdu, len, &offset, &out->status_report.dt))
 		return FALSE;
 
 	if (!next_octet(pdu, len, &offset, &octet))
@@ -1228,6 +1219,58 @@ static gboolean encode_submit(const struct sms_submit *in,
 	return TRUE;
 }
 
+gboolean sms_decode_unpacked_stk_pdu(const unsigned char *pdu, int len,
+					struct sms *out)
+{
+	unsigned char octet;
+	int offset = 0;
+
+	if (!next_octet(pdu, len, &offset, &octet))
+		return FALSE;
+
+	if ((octet & 0x3) != 1)
+		return FALSE;
+
+	out->type = SMS_TYPE_SUBMIT;
+
+	out->submit.rd = is_bit_set(octet, 2);
+	out->submit.vpf = bit_field(octet, 3, 2);
+	out->submit.rp = is_bit_set(octet, 7);
+	out->submit.udhi = is_bit_set(octet, 6);
+	out->submit.srr = is_bit_set(octet, 5);
+
+	if (!next_octet(pdu, len, &offset, &out->submit.mr))
+		return FALSE;
+
+	if (!sms_decode_address_field(pdu, len, &offset,
+					FALSE, &out->submit.daddr))
+		return FALSE;
+
+	if (!next_octet(pdu, len, &offset, &out->submit.pid))
+		return FALSE;
+
+	if (!next_octet(pdu, len, &offset, &out->submit.dcs))
+		return FALSE;
+
+	/* Now we override the DCS */
+	out->submit.dcs = 0xF0;
+
+	if (!decode_validity_period(pdu, len, &offset, out->submit.vpf,
+					&out->submit.vp))
+		return FALSE;
+
+	if (!next_octet(pdu, len, &offset, &out->submit.udl))
+		return FALSE;
+
+	if ((len - offset) < out->submit.udl)
+		return FALSE;
+
+	pack_7bit_own_buf(pdu + offset, out->submit.udl, 0, FALSE,
+				NULL, 0, out->submit.ud);
+
+	return TRUE;
+}
+
 static gboolean decode_submit(const unsigned char *pdu, int len,
 					struct sms *out)
 {
@@ -1269,6 +1312,9 @@ static gboolean decode_submit(const unsigned char *pdu, int len,
 	expected = sms_udl_in_bytes(out->submit.udl, out->submit.dcs);
 
 	if ((len - offset) < expected)
+		return FALSE;
+
+	if (expected > (int) sizeof(out->submit.ud))
 		return FALSE;
 
 	memcpy(out->submit.ud, pdu+offset, expected);
@@ -1363,7 +1409,8 @@ gboolean sms_encode(const struct sms *in, int *len, int *tpdu_len,
 	int tpdu_start;
 
 	if (in->type == SMS_TYPE_DELIVER || in->type == SMS_TYPE_SUBMIT ||
-			in->type == SMS_TYPE_COMMAND)
+			in->type == SMS_TYPE_COMMAND ||
+			in->type == SMS_TYPE_STATUS_REPORT)
 		if (!sms_encode_address_field(&in->sc_addr, TRUE, pdu, &offset))
 			return FALSE;
 
@@ -2437,16 +2484,16 @@ static GSList *sms_assembly_add_fragment_backup(struct sms_assembly *assembly,
 					guint16 ref, guint8 max, guint8 seq,
 					gboolean backup)
 {
-	int offset = seq / 32;
-	int bit = 1 << (seq % 32);
+	unsigned int offset = seq / 32;
+	unsigned int bit = 1 << (seq % 32);
 	GSList *l;
 	GSList *prev;
 	struct sms *newsms;
 	struct sms_assembly_node *node;
 	GSList *completed;
-	int position;
-	int i;
-	int j;
+	unsigned int position;
+	unsigned int i;
+	unsigned int j;
 
 	prev = NULL;
 
@@ -2475,6 +2522,13 @@ static GSList *sms_assembly_add_fragment_backup(struct sms_assembly *assembly,
 		if (node->bitmap[offset] & bit)
 			return NULL;
 
+		/*
+		 * Iterate over the bitmap to find in which position
+		 * should the fragment be inserted -- basically we
+		 * walk each bit in the bitmap until the bit we care
+		 * about (offset:bit) and count which are stored --
+		 * that gives us in which position we have to insert.
+		 */
 		position = 0;
 		for (i = 0; i < offset; i++)
 			for (j = 0; j < 32; j++)
@@ -2589,7 +2643,8 @@ static inline GSList *sms_list_append(GSList *l, const struct sms *in)
  * if no concatenation took place.
  */
 GSList *sms_text_prepare(const char *utf8, guint16 ref,
-				gboolean use_16bit, int *ref_offset)
+				gboolean use_16bit, int *ref_offset,
+				gboolean use_delivery_reports)
 {
 	struct sms template;
 	int offset = 0;
@@ -2605,7 +2660,7 @@ GSList *sms_text_prepare(const char *utf8, guint16 ref,
 	template.submit.rd = FALSE;
 	template.submit.vpf = SMS_VALIDITY_PERIOD_FORMAT_RELATIVE;
 	template.submit.rp = FALSE;
-	template.submit.srr = FALSE;
+	template.submit.srr = use_delivery_reports;
 	template.submit.mr = 0;
 	template.submit.vp.relative = 0xA7; /* 24 Hours */
 

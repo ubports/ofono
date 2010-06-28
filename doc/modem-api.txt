@@ -32,6 +32,11 @@ Properties	boolean Powered [readwrite]
 			Boolean representing the power state of the modem
 			device.
 
+		boolean Online [readwrite]
+
+			Boolean representing the rf state of the modem.
+			Online is false in flight mode.
+
 		string Name [readonly, optional]
 
 			Friendly name of the modem device.
@@ -61,6 +66,11 @@ Properties	boolean Powered [readwrite]
 			device.
 
 			This is usually obtained by using the +CGSN AT command.
+
+		array{string} Features [readonly]
+
+			List of currently enabled features. It uses simple
+			string abbreviations like "sms", "sim" etc.
 
 		array{string} Interfaces [readonly]
 

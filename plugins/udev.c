@@ -36,6 +36,7 @@
 #include <ofono/log.h>
 
 static GSList *modem_list = NULL;
+static GHashTable *devpath_list = NULL;
 
 static struct ofono_modem *find_modem(const char *devpath)
 {
@@ -97,7 +98,7 @@ static void add_mbm(struct ofono_modem *modem,
 					struct udev_device *udev_device)
 {
 	const char *desc, *devnode;
-	const char *device, *network;
+	const char *device, *data, *network;
 	int registered;
 
 	desc = udev_device_get_sysattr_value(udev_device, "device/interface");
@@ -112,11 +113,15 @@ static void add_mbm(struct ofono_modem *modem,
 		return;
 
 	if (g_str_has_suffix(desc, "Minicard Modem") ||
+			g_str_has_suffix(desc, "Minicard Modem 2") ||
 			g_str_has_suffix(desc, "Mini-Card Modem") ||
 			g_str_has_suffix(desc, "Broadband Modem") ||
 			g_str_has_suffix(desc, "Broadband USB Modem")) {
 		devnode = udev_device_get_devnode(udev_device);
-		ofono_modem_set_string(modem, MODEM_DEVICE, devnode);
+		if (ofono_modem_get_string(modem, MODEM_DEVICE) == NULL)
+			ofono_modem_set_string(modem, MODEM_DEVICE, devnode);
+		else
+			ofono_modem_set_string(modem, DATA_DEVICE, devnode);
 	} else if (g_str_has_suffix(desc, "Minicard Data Modem") ||
 			g_str_has_suffix(desc, "Mini-Card Data Modem") ||
 			g_str_has_suffix(desc, "Broadband Data Modem")) {
@@ -139,9 +144,10 @@ static void add_mbm(struct ofono_modem *modem,
 	}
 
 	device  = ofono_modem_get_string(modem, MODEM_DEVICE);
+	data = ofono_modem_get_string(modem, DATA_DEVICE);
 	network = ofono_modem_get_string(modem, NETWORK_INTERFACE);
 
-	if (device != NULL && network != NULL) {
+	if (device != NULL && data != NULL && network != NULL) {
 		ofono_modem_set_integer(modem, "Registered", 1);
 		ofono_modem_register(modem);
 	}
@@ -195,26 +201,69 @@ static void add_hso(struct ofono_modem *modem,
 static void add_huawei(struct ofono_modem *modem,
 					struct udev_device *udev_device)
 {
-	const char *devnode;
-	int registered;
+	struct udev_list_entry *entry;
+	const char *devnode, *type;
+	int ppp, pcui;
 
-	registered = ofono_modem_get_integer(modem, "Registered");
-	if (registered != 0)
+	/*
+	 * Huawei dongles tend to break up their ports into:
+	 * - Modem - Used for PPP
+	 * - Diag - Used for diagnostics, not usually AT command enabled
+	 * - PCUI - auxiliary channel where unsolicited events are sent
+	 *
+	 * The unsolicited events are controlled with ^PORTSEL command,
+	 * and defaults to 0 (the PCUI port)
+	 *
+	 * Surprising the PCUI port is usually last on the usb interface list
+	 */
+	ppp = ofono_modem_get_integer(modem, "ModemRegistered");
+	pcui = ofono_modem_get_integer(modem, "PcuiRegistered");
+
+	if (ppp & pcui)
 		return;
 
-	devnode = udev_device_get_devnode(udev_device);
-	ofono_modem_set_string(modem, "Device", devnode);
+	entry = udev_device_get_properties_list_entry(udev_device);
+	while (entry) {
+		const char *name = udev_list_entry_get_name(entry);
+		type = udev_list_entry_get_value(entry);
 
-	ofono_modem_set_integer(modem, "Registered", 1);
-	ofono_modem_register(modem);
+		if (g_str_equal(name, "OFONO_HUAWEI_TYPE") != TRUE) {
+			entry = udev_list_entry_get_next(entry);
+			continue;
+		}
+
+		if (g_str_equal(type, "Modem") == TRUE) {
+			if (ppp != 0)
+				return;
+
+			devnode = udev_device_get_devnode(udev_device);
+			ofono_modem_set_string(modem, "Modem", devnode);
+			ppp = 1;
+			ofono_modem_set_integer(modem, "ModemRegistered", ppp);
+		} else if (g_str_equal(type, "Pcui") == TRUE) {
+			if (pcui != 0)
+				return;
+
+			devnode = udev_device_get_devnode(udev_device);
+			ofono_modem_set_string(modem, "Pcui", devnode);
+
+			pcui = 1;
+			ofono_modem_set_integer(modem, "PcuiRegistered", pcui);
+		}
+
+		break;
+	}
+
+	if (ppp && pcui)
+		ofono_modem_register(modem);
 }
 
 static void add_em770(struct ofono_modem *modem,
 					struct udev_device *udev_device)
 {
-	const char *devnode, *intf_number;
-	int registered;
+	const char *devnode, *intfnum;
 	struct udev_device *parent;
+	int registered;
 
 	registered = ofono_modem_get_integer(modem, "Registered");
 	if (registered != 0)
@@ -222,9 +271,9 @@ static void add_em770(struct ofono_modem *modem,
 
 	parent = udev_device_get_parent(udev_device);
 	parent = udev_device_get_parent(parent);
-	intf_number = udev_device_get_sysattr_value(parent, "bInterfaceNumber");
+	intfnum = udev_device_get_sysattr_value(parent, "bInterfaceNumber");
 
-	if (!strcmp(intf_number, "02")) {
+	if (g_strcmp0(intfnum, "02") == 0) {
 		devnode = udev_device_get_devnode(udev_device);
 		ofono_modem_set_string(modem, "Device", devnode);
 
@@ -236,25 +285,35 @@ static void add_em770(struct ofono_modem *modem,
 static void add_novatel(struct ofono_modem *modem,
 					struct udev_device *udev_device)
 {
-	const char *devnode;
+	const char *devnode, *intfnum;
+	struct udev_device *parent;
 	int registered;
 
 	registered = ofono_modem_get_integer(modem, "Registered");
 	if (registered != 0)
 		return;
 
-	devnode = udev_device_get_devnode(udev_device);
-	ofono_modem_set_string(modem, "Device", devnode);
+	parent = udev_device_get_parent(udev_device);
+	parent = udev_device_get_parent(parent);
+	intfnum = udev_device_get_sysattr_value(parent, "bInterfaceNumber");
 
-	ofono_modem_set_integer(modem, "Registered", 1);
-	ofono_modem_register(modem);
+	if (g_strcmp0(intfnum, "00") == 0) {
+		devnode = udev_device_get_devnode(udev_device);
+		ofono_modem_set_string(modem, "PrimaryDevice", devnode);
+	} else if (g_strcmp0(intfnum, "01") == 0) {
+		devnode = udev_device_get_devnode(udev_device);
+		ofono_modem_set_string(modem, "SecondaryDevice", devnode);
+
+		ofono_modem_set_integer(modem, "Registered", 1);
+		ofono_modem_register(modem);
+	}
 }
 
 static void add_modem(struct udev_device *udev_device)
 {
 	struct ofono_modem *modem;
 	struct udev_device *parent;
-	const char *devpath, *driver;
+	const char *devpath, *curpath, *driver;
 
 	parent = udev_device_get_parent(udev_device);
 	if (parent == NULL)
@@ -290,6 +349,12 @@ static void add_modem(struct udev_device *udev_device)
 		modem_list = g_slist_prepend(modem_list, modem);
 	}
 
+	curpath = udev_device_get_devpath(udev_device);
+	if (curpath == NULL)
+		return;
+
+	g_hash_table_insert(devpath_list, g_strdup(curpath), g_strdup(devpath));
+
 	if (g_strcmp0(driver, "mbm") == 0)
 		add_mbm(modem, udev_device);
 	else if (g_strcmp0(driver, "hso") == 0)
@@ -302,30 +367,25 @@ static void add_modem(struct udev_device *udev_device)
 		add_novatel(modem, udev_device);
 }
 
+static gboolean devpath_remove(gpointer key, gpointer value, gpointer user_data)
+{
+	const char *path = value;
+	const char *devpath = user_data;
+
+	return g_str_equal(path, devpath);
+}
+
 static void remove_modem(struct udev_device *udev_device)
 {
 	struct ofono_modem *modem;
-	struct udev_device *parent;
-	const char *devpath, *driver = NULL;
+	const char *curpath = udev_device_get_devpath(udev_device);
+	char *devpath, *remove;
 
-	parent = udev_device_get_parent(udev_device);
-	if (parent == NULL)
+	if (curpath == NULL)
 		return;
 
-	driver = get_driver(parent);
-	if (driver == NULL) {
-		parent = udev_device_get_parent(parent);
-		driver = get_driver(parent);
-		if (driver == NULL) {
-			parent = udev_device_get_parent(parent);
-			driver = get_driver(parent);
-			if (driver == NULL)
-				return;
-		}
-	}
-
-	devpath = udev_device_get_devpath(parent);
-	if (devpath == NULL)
+	devpath = g_hash_table_lookup(devpath_list, curpath);
+	if (!devpath)
 		return;
 
 	modem = find_modem(devpath);
@@ -335,6 +395,12 @@ static void remove_modem(struct udev_device *udev_device)
 	modem_list = g_slist_remove(modem_list, modem);
 
 	ofono_modem_remove(modem);
+
+	remove = g_strdup(devpath);
+
+	g_hash_table_foreach_remove(devpath_list, devpath_remove, remove);
+
+	g_free(remove);
 }
 
 static void enumerate_devices(struct udev *context)
@@ -439,15 +505,24 @@ static void udev_start(void)
 
 static int udev_init(void)
 {
+	devpath_list = g_hash_table_new_full(g_str_hash, g_str_equal,
+						g_free, g_free);
+	if (!devpath_list) {
+		ofono_error("Failed to create udev path list");
+		return -ENOMEM;
+	}
+
 	udev_ctx = udev_new();
 	if (udev_ctx == NULL) {
 		ofono_error("Failed to create udev context");
+		g_hash_table_destroy(devpath_list);
 		return -EIO;
 	}
 
 	udev_mon = udev_monitor_new_from_netlink(udev_ctx, "udev");
 	if (udev_mon == NULL) {
 		ofono_error("Failed to create udev monitor");
+		g_hash_table_destroy(devpath_list);
 		udev_unref(udev_ctx);
 		udev_ctx = NULL;
 		return -EIO;
@@ -478,6 +553,9 @@ static void udev_exit(void)
 
 	g_slist_free(modem_list);
 	modem_list = NULL;
+
+	g_hash_table_destroy(devpath_list);
+	devpath_list = NULL;
 
 	if (udev_ctx == NULL)
 		return;

@@ -79,13 +79,34 @@ gboolean g_at_server_set_disconnect_function(GAtServer *server,
 					gpointer user_data);
 gboolean g_at_server_set_debug(GAtServer *server,
 					GAtDebugFunc func,
-					gpointer user);
+					gpointer user_data);
 
 gboolean g_at_server_register(GAtServer *server, char *prefix,
 					GAtServerNotifyFunc notify,
 					gpointer user_data,
 					GDestroyNotify destroy_notify);
 gboolean g_at_server_unregister(GAtServer *server, const char *prefix);
+
+/* Send a final result code. E.g. G_AT_SERVER_RESULT_NO_DIALTONE */
+void g_at_server_send_final(GAtServer *server, GAtServerResult result);
+
+/* Send an extended final result code. E.g. +CME ERROR: SIM failure. */
+void g_at_server_send_ext_final(GAtServer *server, const char *result);
+
+/* Send an intermediate result code to report the progress. E.g. CONNECT */
+void g_at_server_send_intermediate(GAtServer *server, const char *result);
+
+/* Send an unsolicited result code. E.g. RING */
+void g_at_server_send_unsolicited(GAtServer *server, const char *result);
+
+/*
+ * Send a single response line for the command.  The line should be no longer
+ * than 2048 characters.  If the response contains multiple lines, use
+ * FALSE for the 'last' parameter for lines 1 .. n -1, and 'TRUE' for the last
+ * line.  This is required for formatting of 27.007 compliant multi-line
+ * responses.
+ */
+void g_at_server_send_info(GAtServer *server, const char *line, gboolean last);
 
 #ifdef __cplusplus
 }

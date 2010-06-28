@@ -50,6 +50,8 @@
 #include <ofono/call-barring.h>
 #include <ofono/call-meter.h>
 #include <ofono/radio-settings.h>
+#include <ofono/gprs.h>
+#include <ofono/gprs-context.h>
 
 #include "isimodem.h"
 #include "isiutil.h"
@@ -58,28 +60,61 @@
 
 struct isi_data {
 	struct ofono_modem *modem;
+	char const *ifname;
 	GIsiModem *idx;
 	GIsiClient *client;
+	GPhonetNetlink *link;
+	GPhonetLinkState linkstate;
+	unsigned interval;
+	int reported;
+	ofono_bool_t online;
+	struct isi_cb_data *online_cbd;
 };
 
-static GPhonetNetlink *link = NULL;
-static GSList *g_modems = NULL;
-
-static struct isi_data *find_modem_by_idx(GSList *modems, GIsiModem *idx)
+static void report_powered(struct isi_data *isi, ofono_bool_t powered)
 {
-	GSList *m = NULL;
-
-	for (m = g_modems; m; m = m->next) {
-		struct isi_data *isi = m->data;
-
-		if (isi->idx == idx)
-			return isi;
-	}
-	return NULL;
+	if (powered != isi->reported)
+		ofono_modem_set_powered(isi->modem, isi->reported = powered);
 }
 
-static void mtc_state_cb(GIsiClient *client, const void *restrict data,
-				size_t len, uint16_t object, void *opaque)
+static void report_online(struct isi_data *isi, ofono_bool_t online)
+{
+	struct isi_cb_data *cbd = isi->online_cbd;
+	ofono_modem_online_cb cb = cbd->cb;
+
+	isi->online_cbd = NULL;
+
+	if (isi->online == online)
+		CALLBACK_WITH_SUCCESS(cb, cbd->data);
+	else
+		CALLBACK_WITH_FAILURE(cb, cbd->data);
+
+	g_free(cbd);
+}
+
+static void set_power_by_mtc_state(struct isi_data *isi, int mtc_state)
+{
+	if (isi->online_cbd)
+		report_online(isi, mtc_state == MTC_NORMAL);
+
+	switch (mtc_state) {
+	case MTC_STATE_NONE:
+	case MTC_POWER_OFF:
+	case MTC_CHARGING:
+	case MTC_SELFTEST_FAIL:
+		report_powered(isi, 0);
+		break;
+
+	case MTC_RF_INACTIVE:
+	case MTC_NORMAL:
+	default:
+		report_powered(isi, 1);
+	}
+}
+
+static void mtc_state_ind_cb(GIsiClient *client,
+				const void *restrict data, size_t len,
+				uint16_t object, void *opaque)
 {
 	const unsigned char *msg = data;
 	struct isi_data *isi = opaque;
@@ -92,48 +127,101 @@ static void mtc_state_cb(GIsiClient *client, const void *restrict data,
 	if (len < 3 || msg[0] != MTC_STATE_INFO_IND)
 		return;
 
+	if (msg[2] == MTC_START) {
+		DBG("target modem state: %s (0x%02X)",
+			mtc_modem_state_name(msg[1]), msg[1]);
+	} else if (msg[2] == MTC_READY) {
+		DBG("current modem state: %s (0x%02X)",
+			mtc_modem_state_name(msg[1]), msg[1]);
+		set_power_by_mtc_state(isi, msg[1]);
+	}
+}
+
+static gboolean mtc_poll_query_cb(GIsiClient *client,
+					const void *restrict data, size_t len,
+					uint16_t object, void *opaque)
+{
+	const unsigned char *msg = data;
+	struct isi_data *isi = opaque;
+
+	if (!msg) {
+		const unsigned char req[] = {
+			MTC_STATE_QUERY_REQ, 0x00, 0x00
+		};
+
+		if (isi->linkstate != PN_LINK_UP)
+			return TRUE;
+
+		isi->interval *= 2;
+		if (isi->interval >= 20)
+			isi->interval = 20;
+
+		g_isi_request_make(client, req, sizeof(req),
+					isi->interval,
+					mtc_poll_query_cb, opaque);
+
+		return TRUE;
+	}
+
+	if (len < 3 || msg[0] != MTC_STATE_QUERY_RESP)
+		return FALSE;
+
+	g_isi_subscribe(client, MTC_STATE_INFO_IND, mtc_state_ind_cb, opaque);
+
 	DBG("current modem state: %s (0x%02X)",
 		mtc_modem_state_name(msg[1]), msg[1]);
 	DBG("target modem state: %s (0x%02X)",
 		mtc_modem_state_name(msg[2]), msg[2]);
 
-	ofono_modem_set_powered(isi->modem, msg[1] != MTC_POWER_OFF);
+	if (msg[1] == msg[2])
+		set_power_by_mtc_state(isi, msg[1]);
+
+	return TRUE;
 }
 
-static bool mtc_query_cb(GIsiClient *client, const void *restrict data,
-				size_t len, uint16_t object, void *opaque)
+static gboolean mtc_query_cb(GIsiClient *client,
+				const void *restrict data, size_t len,
+				uint16_t object, void *opaque)
 {
 	const unsigned char *msg = data;
 	struct isi_data *isi = opaque;
 
 	if (!msg) {
 		DBG("ISI client error: %d", g_isi_client_error(client));
-		return true;
+		return TRUE;
 	}
 
 	if (len < 3 || msg[0] != MTC_STATE_QUERY_RESP)
-		return false;
+		return FALSE;
 
 	DBG("current modem state: %s (0x%02X)",
 		mtc_modem_state_name(msg[1]), msg[1]);
 	DBG("target modem state: %s (0x%02X)",
 		mtc_modem_state_name(msg[2]), msg[2]);
 
-	ofono_modem_set_powered(isi->modem, msg[1] != MTC_POWER_OFF);
+	if (msg[1] == msg[2])
+		set_power_by_mtc_state(isi, msg[1]);
 
-	return true;
+	return TRUE;
 }
 
-static void reachable_cb(GIsiClient *client, bool alive, uint16_t object,
+static void reachable_cb(GIsiClient *client, gboolean alive, uint16_t object,
 				void *opaque)
 {
+	struct isi_data *isi = opaque;
+
 	const unsigned char msg[] = {
 		MTC_STATE_QUERY_REQ,
 		0x00, 0x00 /* Filler */
 	};
 
 	if (!alive) {
-		DBG("Unable to bootstrap mtc driver");
+		DBG("MTC client: %s", strerror(-g_isi_client_error(client)));
+
+		if (isi->linkstate == PN_LINK_UP)
+			g_isi_request_make(client, msg, sizeof(msg),
+						isi->interval = MTC_TIMEOUT,
+						mtc_poll_query_cb, opaque);
 		return;
 	}
 
@@ -142,155 +230,156 @@ static void reachable_cb(GIsiClient *client, bool alive, uint16_t object,
 		g_isi_version_major(client),
 		g_isi_version_minor(client));
 
-	g_isi_subscribe(client, MTC_STATE_INFO_IND, mtc_state_cb, opaque);
+	g_isi_subscribe(client, MTC_STATE_INFO_IND, mtc_state_ind_cb, opaque);
 	g_isi_request_make(client, msg, sizeof(msg), MTC_TIMEOUT,
 				mtc_query_cb, opaque);
 }
 
-static void netlink_status_cb(bool up, uint8_t addr, GIsiModem *idx,
+static void phonet_status_cb(GIsiModem *idx,
+				GPhonetLinkState st,
+				char const *ifname,
 				void *data)
 {
-	struct isi_data *isi = find_modem_by_idx(g_modems, idx);
+	struct ofono_modem *modem = data;
+	struct isi_data *isi = ofono_modem_get_data(modem);
 
-	DBG("PhoNet is %s, addr=0x%02x, idx=%p",
-		up ? "up" : "down", addr, idx);
+	DBG("Link %s (%u) is %s",
+		isi->ifname, g_isi_modem_index(isi->idx),
+		st == PN_LINK_REMOVED ? "removed" :
+		st == PN_LINK_DOWN ? "down" : "up");
 
-	if (up) {
+	isi->linkstate = st;
 
-		if (isi) {
-
-			DBG("Modem already registered: (0x%02x)",
-				g_isi_modem_index(idx));
-			return;
-		}
-
-		isi = g_new0(struct isi_data, 1);
-		if (!isi)
-			return;
-
-		isi->idx = idx;
-		isi->modem = ofono_modem_create(NULL, "isimodem");
-		if (!isi->modem) {
-			g_free(isi);
-			return;
-		}
-
-		g_modems = g_slist_prepend(g_modems, isi);
-		ofono_modem_set_data(isi->modem, isi);
-		ofono_modem_register(isi->modem);
-
-		DBG("Done regging modem");
-
- 	} else {
-		if (!isi) {
-			DBG("Unknown modem: (0x%02x)",
-				g_isi_modem_index(idx));
-			return;
-		}
-
-		g_modems = g_slist_remove(g_modems, isi);
-		g_isi_client_destroy(isi->client);
-
-		DBG("Now removing modem");
-			ofono_modem_remove(isi->modem);
-		g_free(isi);
-		isi = NULL;
-	}
-}
-
-static bool mtc_power_on_cb(GIsiClient *client, const void *restrict data,
-				size_t len, uint16_t object, void *opaque)
-{
-	const unsigned char *msg = data;
-	struct isi_data *isi = opaque;
-
-	if (!msg) {
-		DBG("ISI client error: %d", g_isi_client_error(client));
-		return true;
-	}
-
-	if (len < 2 || msg[0] != MTC_POWER_ON_RESP)
-		return false;
-
-	if (msg[1] == MTC_OK)
-		ofono_modem_set_powered(isi->modem, TRUE);
-
-	return true;
-}
-
-static bool mtc_power_off_cb(GIsiClient *client, const void *restrict data,
-				size_t len, uint16_t object, void *opaque)
-{
-	const unsigned char *msg = data;
-	struct isi_data *isi = opaque;
-
-	if (!msg) {
-		DBG("ISI client error: %d", g_isi_client_error(client));
-		return true;
-	}
-
-	if (len < 2 || msg[0] != MTC_POWER_OFF_RESP)
-		return false;
-
-	if (msg[1] == MTC_OK)
-		ofono_modem_set_powered(isi->modem, FALSE);
-
-	return true;
+	if (st == PN_LINK_UP)
+		g_isi_verify(isi->client, reachable_cb, isi);
+	else if (st == PN_LINK_DOWN)
+		set_power_by_mtc_state(isi, MTC_STATE_NONE);
+	else if (st == PN_LINK_REMOVED)
+		ofono_modem_remove(modem);
 }
 
 static int isi_modem_probe(struct ofono_modem *modem)
 {
-	struct isi_data *isi = ofono_modem_get_data(modem);
+	struct isi_data *isi;
+	char const *ifname = ofono_modem_get_string(modem, "Interface");
+	GIsiModem *idx;
+	GPhonetNetlink *link;
 
-	isi->client = g_isi_client_create(isi->idx, PN_MTC);
-	if (!isi->client)
+	if (ifname == NULL)
+		return -EINVAL;
+
+	DBG("(%p) with %s", modem, ifname);
+
+	idx = g_isi_modem_by_name(ifname);
+	if (idx == NULL) {
+		DBG("Interface=%s: %s", ifname, strerror(errno));
+		return -errno;
+	}
+
+	if (g_pn_netlink_by_modem(idx)) {
+		DBG("%s: %s", ifname, strerror(EBUSY));
+		return -EBUSY;
+	}
+
+	link = g_pn_netlink_start(idx, phonet_status_cb, modem);
+	if (!link) {
+		DBG("%s: %s", ifname, strerror(errno));
+		return -errno;
+	}
+
+	isi = g_new0(struct isi_data, 1);
+	if (isi == NULL)
 		return -ENOMEM;
 
-	g_isi_verify(isi->client, reachable_cb, isi);
+	ofono_modem_set_data(isi->modem = modem, isi);
+
+	isi->idx = idx;
+	isi->ifname = ifname;
+	isi->link = link;
+	isi->client = g_isi_client_create(isi->idx, PN_MTC);
+	isi->reported = -1;
 
 	return 0;
 }
 
 static void isi_modem_remove(struct ofono_modem *modem)
 {
-	DBG("");
-}
-
-static int isi_modem_enable(struct ofono_modem *modem)
-{
 	struct isi_data *isi = ofono_modem_get_data(modem);
 
-	const unsigned char msg[] = {
-		MTC_POWER_ON_REQ,
-		0x00, 0x00 /* Filler */
-	};
+	if (!isi)
+		return;
 
-	if (!g_isi_request_make(isi->client, msg, sizeof(msg), MTC_TIMEOUT,
-				mtc_power_on_cb, isi))
-		return -EINVAL;
-
-	return -EINPROGRESS;
+	ofono_modem_set_data(modem, NULL);
+	g_isi_client_destroy(isi->client);
+	g_pn_netlink_stop(isi->link);
+	g_free(isi);
 }
 
-static int isi_modem_disable(struct ofono_modem *modem)
+static gboolean mtc_state_cb(GIsiClient *client,
+				const void *restrict data, size_t len,
+				uint16_t object, void *opaque)
+{
+	struct isi_cb_data *cbd = opaque;
+	struct ofono_modem *modem = cbd->user;
+	ofono_modem_online_cb cb = cbd->cb;
+	struct isi_data *isi = ofono_modem_get_data(modem);
+	const unsigned char *msg = data;
+
+	if (!msg) {
+		DBG("ISI client error: %d", g_isi_client_error(client));
+		goto err;
+	}
+
+	if (len < 3 || msg[0] != MTC_STATE_RESP)
+		return FALSE;
+
+	DBG("cause: %s (0x%02X)", mtc_isi_cause_name(msg[1]), msg[1]);
+
+	if (msg[1] == MTC_OK) {
+		isi->online_cbd = cbd;
+		return TRUE;
+	}
+
+err:
+	if (msg && msg[1] == MTC_ALREADY_ACTIVE)
+		CALLBACK_WITH_SUCCESS(cb, cbd->data);
+	else
+		CALLBACK_WITH_FAILURE(cb, cbd->data);
+
+	g_free(cbd);
+	return TRUE;
+}
+
+static void isi_modem_online(struct ofono_modem *modem, ofono_bool_t online,
+				ofono_modem_online_cb cb, void *data)
 {
 	struct isi_data *isi = ofono_modem_get_data(modem);
-
-	const unsigned char msg[] = {
-		MTC_POWER_OFF_REQ,
-		0x00, 0x00 /* Filler */
+	const unsigned char req[] = {
+		MTC_STATE_REQ, online ? MTC_NORMAL : MTC_RF_INACTIVE, 0x00
 	};
+	struct isi_cb_data *cbd = isi_cb_data_new(modem, cb, data);
 
-	if (!g_isi_request_make(isi->client, msg, sizeof(msg), MTC_TIMEOUT,
-				mtc_power_off_cb, isi))
-		return -EINVAL;
+	DBG("(%p) with %s", modem, isi->ifname);
 
-	return -EINPROGRESS;
+	if (!cbd)
+		goto error;
+
+	isi->online = online;
+
+	if (g_isi_request_make(isi->client, req, sizeof(req), MTC_TIMEOUT,
+				mtc_state_cb, cbd))
+		return;
+
+error:
+	g_free(cbd);
+	CALLBACK_WITH_FAILURE(cb, data);
 }
 
 static void isi_modem_pre_sim(struct ofono_modem *modem)
 {
 	struct isi_data *isi = ofono_modem_get_data(modem);
+
+	DBG("(%p) with %s", modem, isi->ifname);
 
 	ofono_sim_create(isi->modem, 0, "isimodem", isi->idx);
 	ofono_devinfo_create(isi->modem, 0, "isimodem", isi->idx);
@@ -301,7 +390,19 @@ static void isi_modem_post_sim(struct ofono_modem *modem)
 {
 	struct isi_data *isi = ofono_modem_get_data(modem);
 
+	DBG("(%p) with %s", modem, isi->ifname);
+
 	ofono_phonebook_create(isi->modem, 0, "isimodem", isi->idx);
+}
+
+static void isi_modem_post_online(struct ofono_modem *modem)
+{
+	struct isi_data *isi = ofono_modem_get_data(modem);
+	struct ofono_gprs *gprs;
+	struct ofono_gprs_context *gc;
+
+	DBG("(%p) with %s", modem, isi->ifname);
+
 	ofono_netreg_create(isi->modem, 0, "isimodem", isi->idx);
 	ofono_sms_create(isi->modem, 0, "isimodem", isi->idx);
 	ofono_cbs_create(isi->modem, 0, "isimodem", isi->idx);
@@ -312,22 +413,27 @@ static void isi_modem_post_sim(struct ofono_modem *modem)
 	ofono_call_barring_create(isi->modem, 0, "isimodem", isi->idx);
 	ofono_call_meter_create(isi->modem, 0, "isimodem", isi->idx);
 	ofono_radio_settings_create(isi->modem, 0, "isimodem", isi->idx);
+	gprs = ofono_gprs_create(isi->modem, 0, "isimodem", isi->idx);
+	gc = ofono_gprs_context_create(isi->modem, 0, "isimodem", isi->idx);
+
+	if (gprs && gc)
+		ofono_gprs_add_context(gprs, gc);
+	else
+		DBG("Failed to add context");
 }
 
 static struct ofono_modem_driver driver = {
 	.name = "isimodem",
 	.probe = isi_modem_probe,
 	.remove = isi_modem_remove,
-	.enable = isi_modem_enable,
-	.disable = isi_modem_disable,
+	.set_online = isi_modem_online,
 	.pre_sim = isi_modem_pre_sim,
 	.post_sim = isi_modem_post_sim,
+	.post_online = isi_modem_post_online,
 };
 
 static int isimodem_init(void)
 {
-	link = g_pn_netlink_start(netlink_status_cb, NULL);
-
 	isi_devinfo_init();
 	isi_phonebook_init();
 	isi_netreg_init();
@@ -342,6 +448,8 @@ static int isimodem_init(void)
 	isi_call_barring_init();
 	isi_call_meter_init();
 	isi_radio_settings_init();
+	isi_gprs_init();
+	isi_gprs_context_init();
 
 	ofono_modem_driver_register(&driver);
 
@@ -350,23 +458,6 @@ static int isimodem_init(void)
 
 static void isimodem_exit(void)
 {
-	GSList *m;
-
-	for (m = g_modems; m; m = m->next) {
-		struct isi_data *isi = m->data;
-
-		ofono_modem_remove(isi->modem);
-		g_free(isi);
-	}
-
-	g_slist_free(g_modems);
-	g_modems = NULL;
-
-	if (link) {
-		g_pn_netlink_stop(link);
-		link = NULL;
-	}
-
 	ofono_modem_driver_unregister(&driver);
 
 	isi_devinfo_exit();
@@ -383,6 +474,8 @@ static void isimodem_exit(void)
 	isi_call_barring_exit();
 	isi_call_meter_exit();
 	isi_radio_settings_exit();
+	isi_gprs_exit();
+	isi_gprs_context_exit();
 }
 
 OFONO_PLUGIN_DEFINE(isimodem, "PhoNet / ISI modem driver", VERSION,

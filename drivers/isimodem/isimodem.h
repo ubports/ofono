@@ -19,6 +19,8 @@
  *
  */
 
+extern struct ofono_modem *isi_modem_by_interface(char const *ifname);
+
 extern void isi_phonebook_init();
 extern void isi_phonebook_exit();
 
@@ -60,3 +62,9 @@ extern void isi_call_meter_exit();
 
 extern void isi_radio_settings_init();
 extern void isi_radio_settings_exit();
+
+extern void isi_gprs_init();
+extern void isi_gprs_exit();
+
+extern void isi_gprs_context_init();
+extern void isi_gprs_context_exit();

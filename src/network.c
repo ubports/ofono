@@ -363,7 +363,7 @@ static void network_operator_emit_available_operators(struct ofono_netreg *netre
 
 	ofono_dbus_signal_array_property_changed(conn, path,
 					OFONO_NETWORK_REGISTRATION_INTERFACE,
-					"AvailableOperators",
+					"Operators",
 					DBUS_TYPE_OBJECT_PATH,
 					&network_operators);
 
@@ -509,7 +509,7 @@ static void set_network_operator_name(struct network_operator_data *opd,
 
 		ofono_dbus_signal_property_changed(conn, path,
 					OFONO_NETWORK_REGISTRATION_INTERFACE,
-					"Operator", DBUS_TYPE_STRING,
+					"Name", DBUS_TYPE_STRING,
 					&operator);
 	}
 
@@ -563,7 +563,7 @@ static void set_network_operator_eons_info(struct network_operator_data *opd,
 
 			ofono_dbus_signal_property_changed(conn, npath,
 					OFONO_NETWORK_REGISTRATION_INTERFACE,
-					"Operator", DBUS_TYPE_STRING,
+					"Name", DBUS_TYPE_STRING,
 					&operator);
 		}
 	}
@@ -777,11 +777,11 @@ static DBusMessage *network_get_properties(DBusConnection *conn,
 	}
 
 	operator = get_operator_display_name(netreg);
-	ofono_dbus_dict_append(&dict, "Operator", DBUS_TYPE_STRING, &operator);
+	ofono_dbus_dict_append(&dict, "Name", DBUS_TYPE_STRING, &operator);
 
 	network_operator_populate_registered(netreg, &network_operators);
 
-	ofono_dbus_dict_append_array(&dict, "AvailableOperators",
+	ofono_dbus_dict_append_array(&dict, "Operators",
 					DBUS_TYPE_OBJECT_PATH,
 					&network_operators);
 
@@ -1065,6 +1065,17 @@ void ofono_netreg_status_notify(struct ofono_netreg *netreg, int status,
 	notify_status_watches(netreg);
 }
 
+void ofono_netreg_time_notify(struct ofono_netreg *netreg,
+				struct ofono_network_time *info)
+{
+	struct ofono_modem *modem = __ofono_atom_get_modem(netreg->atom);
+
+	if (!info)
+		return;
+
+	__ofono_nettime_info_received(modem, info);
+}
+
 static GSList *compress_operator_list(const struct ofono_network_operator *list,
 					int total)
 {
@@ -1096,7 +1107,7 @@ static GSList *compress_operator_list(const struct ofono_network_operator *list,
 }
 
 static gboolean update_operator_list(struct ofono_netreg *netreg, int total,
-					const struct ofono_network_operator *list)
+				const struct ofono_network_operator *list)
 {
 	GSList *n = NULL;
 	GSList *o;
@@ -1157,8 +1168,8 @@ static gboolean update_operator_list(struct ofono_netreg *netreg, int total,
 }
 
 static void operator_list_callback(const struct ofono_error *error, int total,
-					const struct ofono_network_operator *list,
-					void *data)
+				const struct ofono_network_operator *list,
+				void *data)
 {
 	struct ofono_netreg *netreg = data;
 	DBusMessage *reply;
@@ -1208,6 +1219,15 @@ static void current_operator_callback(const struct ofono_error *error,
 	const char *operator;
 
 	DBG("%p, %p", netreg, netreg->current_operator);
+
+	/*
+	 * Sometimes we try to query COPS right when we roam off the cell,
+	 * in which case the operator information frequently comes in bogus.
+	 * We ignore it here
+	 */
+	if (netreg->status != NETWORK_REGISTRATION_STATUS_REGISTERED &&
+			netreg->status != NETWORK_REGISTRATION_STATUS_ROAMING)
+		current = NULL;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
 		DBG("Error during current operator");
@@ -1276,7 +1296,7 @@ emit:
 
 	ofono_dbus_signal_property_changed(conn, path,
 					OFONO_NETWORK_REGISTRATION_INTERFACE,
-					"Operator", DBUS_TYPE_STRING,
+					"Name", DBUS_TYPE_STRING,
 					&operator);
 
 	notify_status_watches(netreg);
@@ -1469,7 +1489,7 @@ static void sim_spdi_read_cb(int ok, int length, int record,
 
 		ofono_dbus_signal_property_changed(conn, path,
 					OFONO_NETWORK_REGISTRATION_INTERFACE,
-					"Operator", DBUS_TYPE_STRING,
+					"Name", DBUS_TYPE_STRING,
 					&operator);
 	}
 }
@@ -1534,7 +1554,7 @@ static void sim_spn_read_cb(int ok, int length, int record,
 
 		ofono_dbus_signal_property_changed(conn, path,
 					OFONO_NETWORK_REGISTRATION_INTERFACE,
-					"Operator", DBUS_TYPE_STRING,
+					"Name", DBUS_TYPE_STRING,
 					&operator);
 	}
 }

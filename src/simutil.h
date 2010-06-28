@@ -21,6 +21,7 @@
 
 enum sim_fileid {
 	SIM_EFPL_FILEID = 0x2f05,
+	SIM_EF_ICCID_FILEID = 0x2fe2,
 	SIM_EFLI_FILEID = 0x6f05,
 	SIM_EF_CPHS_MWIS_FILEID = 0x6f11,
 	SIM_EF_CPHS_INFORMATION_FILEID = 0x6f16,
@@ -114,6 +115,26 @@ struct ber_tlv_iter {
 	const unsigned char *data;
 };
 
+struct ber_tlv_builder {
+	unsigned int max;
+	unsigned int pos;
+	unsigned char *pdu;
+	struct ber_tlv_builder *parent;
+
+	unsigned int tag;
+	enum ber_tlv_data_type class;
+	enum ber_tlv_data_encoding_type encoding;
+	unsigned int len;
+};
+
+struct comprehension_tlv_builder {
+	unsigned int max;
+	unsigned int pos;
+	unsigned char *pdu;
+	unsigned int len;
+	struct ber_tlv_builder *parent;
+};
+
 void simple_tlv_iter_init(struct simple_tlv_iter *iter,
 				const unsigned char *pdu, unsigned int len);
 gboolean simple_tlv_iter_next(struct simple_tlv_iter *iter);
@@ -131,6 +152,21 @@ unsigned int comprehension_tlv_iter_get_length(
 					struct comprehension_tlv_iter *iter);
 const unsigned char *comprehension_tlv_iter_get_data(
 					struct comprehension_tlv_iter *iter);
+
+void comprehension_tlv_iter_copy(struct comprehension_tlv_iter *from,
+					struct comprehension_tlv_iter *to);
+
+gboolean comprehension_tlv_builder_init(
+				struct comprehension_tlv_builder *builder,
+				unsigned char *pdu, unsigned int size);
+gboolean comprehension_tlv_builder_next(
+				struct comprehension_tlv_builder *builder,
+				gboolean cr, unsigned short tag);
+gboolean comprehension_tlv_builder_set_length(
+				struct comprehension_tlv_builder *builder,
+				unsigned int len);
+unsigned char *comprehension_tlv_builder_get_data(
+				struct comprehension_tlv_builder *builder);
 
 void ber_tlv_iter_init(struct ber_tlv_iter *iter, const unsigned char *pdu,
 			unsigned int len);
@@ -164,6 +200,22 @@ void ber_tlv_iter_recurse_simple(struct ber_tlv_iter *iter,
 void ber_tlv_iter_recurse_comprehension(struct ber_tlv_iter *iter,
 					struct comprehension_tlv_iter *recurse);
 
+gboolean ber_tlv_builder_init(struct ber_tlv_builder *builder,
+				unsigned char *pdu, unsigned int size);
+gboolean ber_tlv_builder_next(struct ber_tlv_builder *builder,
+				enum ber_tlv_data_type class,
+				enum ber_tlv_data_encoding_type encoding,
+				unsigned int new_tag);
+gboolean ber_tlv_builder_set_length(struct ber_tlv_builder *builder,
+					unsigned int len);
+unsigned char *ber_tlv_builder_get_data(struct ber_tlv_builder *builder);
+gboolean ber_tlv_builder_recurse(struct ber_tlv_builder *builder,
+					struct ber_tlv_builder *recurse);
+gboolean ber_tlv_builder_recurse_comprehension(struct ber_tlv_builder *builder,
+				struct comprehension_tlv_builder *recurse);
+void ber_tlv_builder_optimize(struct ber_tlv_builder *builder,
+				unsigned char **pdu, unsigned int *len);
+
 struct sim_eons *sim_eons_new(int pnn_records);
 void sim_eons_add_pnn_record(struct sim_eons *eons, int record,
 				const guint8 *tlv, int length);
@@ -181,6 +233,8 @@ const struct sim_eons_operator_info *sim_eons_lookup(struct sim_eons *eons,
 						const char *mnc);
 void sim_eons_free(struct sim_eons *eons);
 
+void sim_parse_mcc_mnc(const guint8 *bcd, char *mcc, char *mnc);
+void sim_encode_mcc_mnc(guint8 *out, const char *mcc, const char *mnc);
 struct sim_spdi *sim_spdi_new(const guint8 *tlv, int length);
 gboolean sim_spdi_lookup(struct sim_spdi *spdi,
 				const char *mcc, const char *mnc);
@@ -192,6 +246,9 @@ static inline enum sim_file_access file_access_condition_decode(int bcd)
 		return SIM_FILE_ACCESS_ADM;
 	return bcd;
 }
+
+void sim_extract_bcd_number(const unsigned char *buf, int len, char *out);
+void sim_encode_bcd_number(const char *number, unsigned char *out);
 
 gboolean sim_adn_parse(const unsigned char *data, int length,
 			struct ofono_phone_number *ph, char **identifier);

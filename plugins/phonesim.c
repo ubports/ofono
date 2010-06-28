@@ -50,6 +50,7 @@
 #include <ofono/netreg.h>
 #include <ofono/phonebook.h>
 #include <ofono/sim.h>
+#include <ofono/stk.h>
 #include <ofono/sms.h>
 #include <ofono/ssn.h>
 #include <ofono/ussd.h>
@@ -58,6 +59,7 @@
 #include <ofono/gprs-context.h>
 
 #include <drivers/atmodem/vendor.h>
+#include <drivers/atmodem/sim-poll.h>
 
 struct phonesim_data {
 	GAtMux *mux;
@@ -259,8 +261,6 @@ static int phonesim_disable(struct ofono_modem *modem)
 
 	DBG("%p", modem);
 
-	g_at_chat_shutdown(data->chat);
-
 	g_at_chat_unref(data->chat);
 	data->chat = NULL;
 
@@ -277,16 +277,22 @@ static int phonesim_disable(struct ofono_modem *modem)
 static void phonesim_pre_sim(struct ofono_modem *modem)
 {
 	struct phonesim_data *data = ofono_modem_get_data(modem);
+	struct ofono_sim *sim;
 
 	DBG("%p", modem);
 
 	ofono_devinfo_create(modem, 0, "atmodem", data->chat);
-	ofono_sim_create(modem, 0, "atmodem", data->chat);
+	sim = ofono_sim_create(modem, 0, "atmodem", data->chat);
 
 	if (data->calypso)
 		ofono_voicecall_create(modem, 0, "calypsomodem", data->chat);
 	else
 		ofono_voicecall_create(modem, 0, "atmodem", data->chat);
+
+	ofono_stk_create(modem, 0, "atmodem", data->chat);
+
+	if (sim)
+		ofono_sim_inserted_notify(sim, TRUE);
 }
 
 static void phonesim_post_sim(struct ofono_modem *modem)
@@ -306,7 +312,8 @@ static void phonesim_post_sim(struct ofono_modem *modem)
 		ofono_netreg_create(modem, OFONO_VENDOR_CALYPSO,
 							"atmodem", data->chat);
 	else
-		ofono_netreg_create(modem, 0, "atmodem", data->chat);
+		ofono_netreg_create(modem, OFONO_VENDOR_PHONESIM,
+							"atmodem", data->chat);
 
 	ofono_call_meter_create(modem, 0, "atmodem", data->chat);
 	ofono_call_barring_create(modem, 0, "atmodem", data->chat);

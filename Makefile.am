@@ -12,7 +12,8 @@ include_HEADERS = include/log.h include/plugin.h include/history.h \
 			include/netreg.h include/voicecall.h include/devinfo.h \
 			include/cbs.h include/call-volume.h \
 			include/gprs.h include/gprs-context.h \
-			include/radio-settings.h
+			include/radio-settings.h include/stk.h \
+			include/nettime.h
 
 nodist_include_HEADERS = include/version.h
 
@@ -41,25 +42,34 @@ builtin_cflags =
 
 gdbus_sources = gdbus/gdbus.h gdbus/mainloop.c gdbus/object.c gdbus/watch.c
 
-gisi_sources = gisi/phonet.h gisi/modem.h gisi/netlink.h gisi/netlink.c \
-		gisi/socket.h gisi/socket.c gisi/client.h gisi/client.c \
-		gisi/pep.h gisi/pep.c gisi/pipe.h gisi/pipe.c gisi/iter.h \
-		gisi/iter.c gisi/verify.c
+gisi_sources = gisi/modem.h gisi/modem.c \
+			gisi/netlink.h gisi/netlink.c \
+			gisi/socket.h gisi/socket.c \
+			gisi/client.h gisi/client.c \
+			gisi/server.h gisi/server.c \
+			gisi/pep.h gisi/pep.c \
+			gisi/pipe.h gisi/pipe.c \
+			gisi/iter.h gisi/iter.c \
+			gisi/verify.c gisi/phonet.h
 
 gatchat_sources = gatchat/gatchat.h gatchat/gatchat.c \
 				gatchat/gatresult.h gatchat/gatresult.c \
 				gatchat/gatsyntax.h gatchat/gatsyntax.c \
 				gatchat/ringbuffer.h gatchat/ringbuffer.c \
+				gatchat/gatio.h	gatchat/gatio.c \
+				gatchat/crc-ccitt.h gatchat/crc-ccitt.c \
 				gatchat/gatmux.h gatchat/gatmux.c \
 				gatchat/gsm0710.h gatchat/gsm0710.c \
 				gatchat/gattty.h gatchat/gattty.c \
 				gatchat/gatutil.h gatchat/gatutil.c \
 				gatchat/gat.h \
 				gatchat/gatserver.h gatchat/gatserver.c \
+				gatchat/gathdlc.c gatchat/gathdlc.h \
 				gatchat/gatppp.c gatchat/gatppp.h \
-				gatchat/ppp.c gatchat/ppp.h gatchat/ppp_cp.h \
+				gatchat/ppp.h gatchat/ppp_cp.h \
 				gatchat/ppp_cp.c gatchat/ppp_lcp.c \
-				gatchat/ppp_auth.c gatchat/ppp_net.c
+				gatchat/ppp_auth.c gatchat/ppp_net.c \
+				gatchat/ppp_ipcp.c
 
 udev_files = plugins/ofono.rules
 
@@ -93,6 +103,8 @@ builtin_sources += $(gisi_sources) \
 				drivers/isimodem/info.h \
 				drivers/isimodem/network-registration.c \
 				drivers/isimodem/network.h \
+				drivers/isimodem/infoserver.h \
+				drivers/isimodem/infoserver.c \
 				drivers/isimodem/voicecall.c \
 				drivers/isimodem/call.h \
 				drivers/isimodem/sms.c \
@@ -108,7 +120,14 @@ builtin_sources += $(gisi_sources) \
 				drivers/isimodem/call-meter.c \
 				drivers/isimodem/ss.h \
 				drivers/isimodem/radio-settings.c \
-				drivers/isimodem/gss.h
+				drivers/isimodem/gss.h \
+				drivers/isimodem/gprs.c \
+				drivers/isimodem/gprs-context.c \
+				drivers/isimodem/gpds.h
+
+builtin_modules += usbpnmodem
+builtin_sources += plugins/usbpnmodem.c
+
 endif
 
 if ATMODEM
@@ -123,6 +142,9 @@ builtin_sources += $(gatchat_sources) \
 				drivers/atmodem/call-meter.c \
 				drivers/atmodem/network-registration.c \
 				drivers/atmodem/sim.c \
+				drivers/atmodem/stk.c \
+				drivers/atmodem/sim-poll.c \
+				drivers/atmodem/sim-poll.h \
 				drivers/atmodem/ussd.c \
 				drivers/atmodem/voicecall.c \
 				drivers/atmodem/call-barring.c \
@@ -135,6 +157,12 @@ builtin_sources += $(gatchat_sources) \
 				drivers/atmodem/atutil.c \
 				drivers/atmodem/gprs.c \
 				drivers/atmodem/gprs-context.c
+
+builtin_modules += nwmodem
+builtin_sources += drivers/atmodem/atutil.h \
+			drivers/nwmodem/nwmodem.h \
+			drivers/nwmodem/nwmodem.c \
+			drivers/nwmodem/radio-settings.c
 
 builtin_modules += calypsomodem
 builtin_sources += drivers/atmodem/atutil.h \
@@ -154,13 +182,15 @@ builtin_modules += mbmmodem
 builtin_sources += drivers/atmodem/atutil.h \
 			drivers/mbmmodem/mbmmodem.h \
 			drivers/mbmmodem/mbmmodem.c \
-			drivers/mbmmodem/gprs-context.c
+			drivers/mbmmodem/gprs-context.c \
+			drivers/mbmmodem/stk.c
 
 builtin_modules += hsomodem
 builtin_sources += drivers/atmodem/atutil.h \
 			drivers/hsomodem/hsomodem.h \
 			drivers/hsomodem/hsomodem.c \
-			drivers/hsomodem/gprs-context.c
+			drivers/hsomodem/gprs-context.c \
+			drivers/hsomodem/radio-settings.c
 
 builtin_modules += stemodem
 builtin_sources += drivers/atmodem/atutil.h \
@@ -186,6 +216,9 @@ builtin_sources += plugins/atgen.c
 
 builtin_modules += g1
 builtin_sources += plugins/g1.c
+
+builtin_modules += wavecom
+builtin_sources += plugins/wavecom.c
 
 builtin_modules += calypso
 builtin_sources += plugins/calypso.c
@@ -217,8 +250,8 @@ builtin_sources += plugins/ste.c
 endif
 
 if MAINTAINER_MODE
-builtin_modules += example_history
-builtin_sources += plugins/example_history.c
+builtin_modules += example_history example_nettime
+builtin_sources += plugins/example_history.c plugins/example_nettime.c
 endif
 
 sbin_PROGRAMS = src/ofonod
@@ -230,14 +263,15 @@ src_ofonod_SOURCES = $(gdbus_sources) $(builtin_sources) \
 			src/network.c src/voicecall.c src/ussd.c src/sms.c \
 			src/call-settings.c src/call-forwarding.c \
 			src/call-meter.c src/smsutil.h src/smsutil.c \
-			src/ssn.c src/call-barring.c src/sim.c \
+			src/ssn.c src/call-barring.c src/sim.c src/stk.c \
 			src/phonebook.c src/history.c src/message-waiting.c \
 			src/simutil.h src/simutil.c src/storage.h \
 			src/storage.c src/cbs.c src/watch.c src/call-volume.c \
 			src/gprs.c src/idmap.h src/idmap.c \
-			src/radio-settings.c src/stkutil.h src/stkutil.c
+			src/radio-settings.c src/stkutil.h src/stkutil.c \
+			src/nettime.c
 
-src_ofonod_LDADD = $(builtin_libadd) @GLIB_LIBS@ @DBUS_LIBS@ -ldl
+src_ofonod_LDADD = $(builtin_libadd) @GLIB_LIBS@ @DBUS_LIBS@ @CAPNG_LIBS@ -ldl
 
 src_ofonod_LDFLAGS = -Wl,--export-dynamic -Wl,--version-script=src/ofono.ver
 
@@ -254,7 +288,7 @@ else
 build_plugindir = $(plugindir)
 endif
 
-AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ $(builtin_cflags) \
+AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @CAPNG_CFLAGS@ $(builtin_cflags) \
 					-DOFONO_PLUGIN_BUILTIN \
 					-DPLUGINDIR=\""$(build_plugindir)"\"
 
@@ -268,19 +302,44 @@ doc_files = doc/overview.txt doc/ofono-paper.txt \
 			doc/call-meter-api.txt \
 			doc/dataconnectionmanager-api.txt
 
-test_scripts = test/test-manager test/test-modem test/test-voicecall \
-		test/test-network-registration test/test-phonebook \
-		test/test-advice-of-charge test/test-call-settings \
-		test/test-call-forwarding test/test-call-barring \
-		test/test-ss-control-cb test/test-ss-control-cf \
-		test/test-ss-control-cs \
-		test/monitor-ofono test/list-modems test/enable-modem \
-		test/list-operators test/dial-number test/hangup-all \
-		test/receive-sms test/send-sms \
-		test/list-contexts test/create-context \
-		test/activate-context test/deactivate-context \
+test_scripts = test/activate-context \
+		test/create-context \
+		test/deactivate-context \
+		test/dial-number \
+		test/disable-modem \
+		test/enable-modem \
+		test/enter-pin \
+		test/hangup-all \
+		test/list-contexts \
+		test/list-modems \
+		test/list-operators \
+		test/monitor-ofono \
 		test/process-context-settings \
-		test/set-mic-volume
+		test/receive-sms \
+		test/remove-contexts \
+		test/send-sms \
+		test/set-mic-volume \
+		test/set-speaker-volume \
+		test/test-advice-of-charge \
+		test/test-call-barring \
+		test/test-call-forwarding \
+		test/test-call-settings \
+		test/test-manager \
+		test/test-modem \
+		test/test-network-registration \
+		test/test-phonebook \
+		test/test-ss-control-cb \
+		test/test-ss-control-cf \
+		test/test-ss-control-cs \
+		test/test-ussd \
+		test/test-voicecall \
+		test/offline-modem \
+		test/online-modem \
+		test/get-tech-preference \
+		test/set-tech-preference \
+		test/set-use-sms-reports \
+		test/set-cbs-topics \
+		test/enable-cbs
 
 if TEST
 testdir = $(pkglibdir)/test
@@ -339,15 +398,16 @@ unit_test_caif_SOURCES = unit/test-caif.c $(gatchat_sources) \
 unit_test_caif_LDADD = @GLIB_LIBS@
 unit_objects += $(unit_test_caif_OBJECTS)
 
-noinst_PROGRAMS += gatchat/gsmdial gatchat/test-server
+noinst_PROGRAMS += gatchat/gsmdial gatchat/test-server gatchat/test-qcdm
 
 gatchat_gsmdial_SOURCES = gatchat/gsmdial.c $(gatchat_sources)
-
 gatchat_gsmdial_LDADD = @GLIB_LIBS@
 
 gatchat_test_server_SOURCES = gatchat/test-server.c $(gatchat_sources)
-
 gatchat_test_server_LDADD = @GLIB_LIBS@ -lutil
+
+gatchat_test_qcdm_SOURCES = gatchat/test-qcdm.c $(gatchat_sources)
+gatchat_test_qcdm_LDADD = @GLIB_LIBS@
 
 
 DISTCHECK_CONFIGURE_FLAGS = --disable-datafiles
@@ -372,7 +432,7 @@ src/ofono.ver: src/ofono.exp
 	$(AM_V_at)echo "local: *; };" >> $@
 
 plugins/%.rules:
-	$(AM_V_GEN)cp $(subst 97-,,$@) $@
+	$(AM_V_GEN)cp $(srcdir)/$(subst 97-,,$@) $@
 
 $(src_ofonod_OBJECTS) $(unit_objects): $(local_headers)
 
@@ -384,5 +444,5 @@ include/ofono/%.h: include/%.h
 	$(AM_V_at)$(MKDIR_P) include/ofono
 	$(AM_V_GEN)$(LN_S) $(abs_top_srcdir)/$< $@
 
-clean-local: include/ofono
-	@$(RM) -r $<
+clean-local:
+	@$(RM) -rf include/ofono

@@ -57,6 +57,7 @@ struct ofono_cbs {
 	GSList *topics;
 	GSList *new_topics;
 	struct ofono_sim *sim;
+	struct ofono_stk *stk;
 	struct ofono_netreg *netreg;
 	unsigned int netreg_watch;
 	unsigned int location_watch;
@@ -128,7 +129,7 @@ static void cbs_dispatch_emergency(struct ofono_cbs *cbs, const char *message,
 		return;
 	};
 
-	signal = dbus_message_new_signal(path, OFONO_CBS_MANAGER_INTERFACE,
+	signal = dbus_message_new_signal(path, OFONO_CELL_BROADCAST_INTERFACE,
 						"EmergencyBroadcast");
 
 	if (!signal)
@@ -162,7 +163,7 @@ static void cbs_dispatch_text(struct ofono_cbs *cbs, enum sms_class cls,
 	DBusConnection *conn = ofono_dbus_get_connection();
 	const char *path = __ofono_atom_get_path(cbs->atom);
 
-	g_dbus_emit_signal(conn, path, OFONO_CBS_MANAGER_INTERFACE,
+	g_dbus_emit_signal(conn, path, OFONO_CELL_BROADCAST_INTERFACE,
 				"IncomingBroadcast",
 				DBUS_TYPE_STRING, &message,
 				DBUS_TYPE_UINT16, &channel,
@@ -184,18 +185,19 @@ void ofono_cbs_notify(struct ofono_cbs *cbs, const unsigned char *pdu,
 	if (cbs->assembly == NULL)
 		return;
 
-	if (!cbs->powered) {
-		ofono_error("Ignoring CBS because powered is off");
-		return;
-	}
-
 	if (!cbs_decode(pdu, pdu_len, &c)) {
 		ofono_error("Unable to decode CBS PDU");
 		return;
 	}
 
 	if (cbs_topic_in_range(c.message_identifier, cbs->efcbmid_contents)) {
-		__ofono_cbs_sim_download(cbs->sim, pdu, pdu_len);
+		if (cbs->stk)
+			__ofono_cbs_sim_download(cbs->stk, &c);
+		return;
+	}
+
+	if (!cbs->powered) {
+		ofono_error("Ignoring CBS because powered is off");
 		return;
 	}
 
@@ -300,8 +302,6 @@ static char *cbs_topics_to_str(struct ofono_cbs *cbs, GSList *user_topics)
 	char *topic_str;
 	struct cbs_topic_range etws_range = { 4352, 4356 };
 
-	topics = g_slist_append(topics, &etws_range);
-
 	if (user_topics != NULL)
 		topics = g_slist_concat(topics,
 					g_slist_copy(user_topics));
@@ -309,6 +309,8 @@ static char *cbs_topics_to_str(struct ofono_cbs *cbs, GSList *user_topics)
 	if (cbs->efcbmid_contents != NULL)
 		topics = g_slist_concat(topics,
 					g_slist_copy(cbs->efcbmid_contents));
+
+	topics = g_slist_append(topics, &etws_range);
 
 	topic_str = cbs_topic_ranges_to_string(topics);
 	g_slist_free(topics);
@@ -345,7 +347,7 @@ static void cbs_set_topics_cb(const struct ofono_error *error, void *data)
 
 	topics = cbs_topic_ranges_to_string(cbs->topics);
 	ofono_dbus_signal_property_changed(conn, path,
-						OFONO_CBS_MANAGER_INTERFACE,
+						OFONO_CELL_BROADCAST_INTERFACE,
 						"Topics",
 						DBUS_TYPE_STRING, &topics);
 
@@ -416,7 +418,7 @@ static void cbs_set_powered_cb(const struct ofono_error *error, void *data)
 	}
 
 	ofono_dbus_signal_property_changed(conn, path,
-						OFONO_CBS_MANAGER_INTERFACE,
+						OFONO_CELL_BROADCAST_INTERFACE,
 						"Powered",
 						DBUS_TYPE_BOOLEAN,
 						&cbs->powered);
@@ -465,7 +467,7 @@ done:
 	}
 
 	ofono_dbus_signal_property_changed(conn, path,
-						OFONO_CBS_MANAGER_INTERFACE,
+						OFONO_CELL_BROADCAST_INTERFACE,
 						"Powered",
 						DBUS_TYPE_BOOLEAN,
 						&cbs->powered);
@@ -527,14 +529,14 @@ static DBusMessage *cbs_set_property(DBusConnection *conn, DBusMessage *msg,
 	return __ofono_error_invalid_args(msg);
 }
 
-static GDBusMethodTable cbs_manager_methods[] = {
+static GDBusMethodTable cbs_methods[] = {
 	{ "GetProperties",	"",	"a{sv}",	cbs_get_properties },
 	{ "SetProperty",	"sv",	"",		cbs_set_property,
 							G_DBUS_METHOD_FLAG_ASYNC },
 	{ }
 };
 
-static GDBusSignalTable cbs_manager_signals[] = {
+static GDBusSignalTable cbs_signals[] = {
 	{ "PropertyChanged",	"sv"		},
 	{ "IncomingBroadcast",	"sq"		},
 	{ "EmergencyBroadcast", "sa{sv}"	},
@@ -567,8 +569,8 @@ static void cbs_unregister(struct ofono_atom *atom)
 	struct ofono_modem *modem = __ofono_atom_get_modem(atom);
 	const char *path = __ofono_atom_get_path(atom);
 
-	g_dbus_unregister_interface(conn, path, OFONO_CBS_MANAGER_INTERFACE);
-	ofono_modem_remove_interface(modem, OFONO_CBS_MANAGER_INTERFACE);
+	g_dbus_unregister_interface(conn, path, OFONO_CELL_BROADCAST_INTERFACE);
+	ofono_modem_remove_interface(modem, OFONO_CELL_BROADCAST_INTERFACE);
 
 	if (cbs->topics) {
 		g_slist_foreach(cbs->topics, (GFunc)g_free, NULL);
@@ -590,6 +592,7 @@ static void cbs_unregister(struct ofono_atom *atom)
 	}
 
 	cbs->sim = NULL;
+	cbs->stk = NULL;
 
 	if (cbs->reset_source) {
 		g_source_remove(cbs->reset_source);
@@ -1027,28 +1030,33 @@ void ofono_cbs_register(struct ofono_cbs *cbs)
 	struct ofono_modem *modem = __ofono_atom_get_modem(cbs->atom);
 	const char *path = __ofono_atom_get_path(cbs->atom);
 	struct ofono_atom *sim_atom;
+	struct ofono_atom *stk_atom;
 	struct ofono_atom *netreg_atom;
 
 	if (!g_dbus_register_interface(conn, path,
-					OFONO_CBS_MANAGER_INTERFACE,
-					cbs_manager_methods,
-					cbs_manager_signals,
+					OFONO_CELL_BROADCAST_INTERFACE,
+					cbs_methods, cbs_signals,
 					NULL, cbs, NULL)) {
 		ofono_error("Could not create %s interface",
-				OFONO_CBS_MANAGER_INTERFACE);
+				OFONO_CELL_BROADCAST_INTERFACE);
 		return;
 	}
 
-	ofono_modem_add_interface(modem, OFONO_CBS_MANAGER_INTERFACE);
+	ofono_modem_add_interface(modem, OFONO_CELL_BROADCAST_INTERFACE);
 
 	sim_atom = __ofono_modem_find_atom(modem, OFONO_ATOM_TYPE_SIM);
 
 	if (sim_atom) {
 		cbs->sim = __ofono_atom_get_data(sim_atom);
 
-		if (ofono_sim_get_ready(cbs->sim) == TRUE)
+		if (ofono_sim_get_state(cbs->sim) == OFONO_SIM_STATE_READY)
 			cbs_got_imsi(cbs);
 	}
+
+	stk_atom = __ofono_modem_find_atom(modem, OFONO_ATOM_TYPE_STK);
+
+	if (stk_atom)
+		cbs->stk = __ofono_atom_get_data(stk_atom);
 
 	cbs->netreg_watch = __ofono_modem_add_atom_watch(modem,
 					OFONO_ATOM_TYPE_NETREG,

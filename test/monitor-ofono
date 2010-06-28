@@ -7,10 +7,11 @@ import dbus.mainloop.glib
 
 def property_changed(name, value, path, interface):
 	iface = interface[interface.rfind(".") + 1:]
-	if name in ["Modems", "Interfaces",
+	if name in ["Modems", "Interfaces", "Features",
 				"Technologies",
 				"SubscriberNumbers",
-				"AvailableOperators",
+				"Operators",
+				"EmergencyNumbers",
 				"PreferredLanguages"]:
 		val = ""
 		for i in value:

@@ -58,7 +58,6 @@ struct ofono_sms {
 	unsigned int next_msg_id;
 	guint ref;
 	GQueue *txq;
-	time_t last_mms;
 	gint tx_source;
 	struct ofono_message_waiting *mw;
 	unsigned int mw_watch;
@@ -68,6 +67,7 @@ struct ofono_sms {
 	const struct ofono_sms_driver *driver;
 	void *driver_data;
 	struct ofono_atom *atom;
+	ofono_bool_t use_delivery_reports;
 };
 
 struct pending_pdu {
@@ -131,6 +131,9 @@ static DBusMessage *generate_get_properties_reply(struct ofono_sms *sms,
 
 	ofono_dbus_dict_append(&dict, "ServiceCenterAddress", DBUS_TYPE_STRING,
 				&sca);
+
+	ofono_dbus_dict_append(&dict, "UseDeliveryReports", DBUS_TYPE_BOOLEAN,
+				&sms->use_delivery_reports);
 
 	dbus_message_iter_close_container(&iter, &dict);
 
@@ -261,6 +264,27 @@ static DBusMessage *sms_set_property(DBusConnection *conn, DBusMessage *msg,
 		return NULL;
 	}
 
+	if (!strcmp(property, "UseDeliveryReports")) {
+		const char *path = __ofono_atom_get_path(sms->atom);
+		dbus_bool_t value;
+
+		if (dbus_message_iter_get_arg_type(&var) != DBUS_TYPE_BOOLEAN)
+			return __ofono_error_invalid_args(msg);
+
+		dbus_message_iter_get_basic(&var, &value);
+
+		sms->use_delivery_reports = value;
+
+		g_dbus_send_reply(conn, msg, DBUS_TYPE_INVALID);
+
+		ofono_dbus_signal_property_changed(conn, path,
+						OFONO_SMS_MANAGER_INTERFACE,
+						"UseDeliveryReports",
+						DBUS_TYPE_BOOLEAN, &value);
+
+		return NULL;
+	}
+
 	return __ofono_error_invalid_args(msg);
 }
 
@@ -331,7 +355,6 @@ static void tx_finished(const struct ofono_error *error, int mr, void *data)
 static gboolean tx_next(gpointer user_data)
 {
 	struct ofono_sms *sms = user_data;
-	time_t ts;
 	int send_mms = 0;
 	struct tx_queue_entry *entry = g_queue_peek_head(sms->txq);
 	struct pending_pdu *pdu = &entry->pdus[entry->cur_pdu];
@@ -346,14 +369,12 @@ static gboolean tx_next(gpointer user_data)
 	if (!entry)
 		return FALSE;
 
-	ts = time(NULL);
-
-	if ((g_queue_get_length(sms->txq) > 1) &&
-			((ts - sms->last_mms) > 60))
+	if (g_queue_get_length(sms->txq) > 1
+			|| (entry->num_pdus - entry->cur_pdu) > 1)
 		send_mms = 1;
 
-	sms->driver->submit(sms, pdu->pdu, pdu->pdu_len, pdu->tpdu_len, send_mms,
-				tx_finished, sms);
+	sms->driver->submit(sms, pdu->pdu, pdu->pdu_len, pdu->tpdu_len,
+				send_mms, tx_finished, sms);
 
 	return FALSE;
 }
@@ -398,6 +419,19 @@ static struct tx_queue_entry *create_tx_queue_entry(GSList *msg_list)
 	return entry;
 }
 
+/*
+ * Pre-process a SMS text message and deliver it [D-Bus SendMessage()]
+ *
+ * @conn: D-Bus connection
+ * @msg: message data (telephone number and text)
+ * @data: SMS object to use for transmision
+ *
+ * An alphabet is chosen for the text and it (might be) segmented in
+ * fragments by sms_text_prepare() into @msg_list. A queue list @entry
+ * is created by create_tx_queue_entry() and g_queue_push_tail()
+ * appends that entry to the SMS transmit queue. Then the tx_next()
+ * function is scheduled to run to process the queue.
+ */
 static DBusMessage *sms_send_message(DBusConnection *conn, DBusMessage *msg,
 					void *data)
 {
@@ -417,7 +451,8 @@ static DBusMessage *sms_send_message(DBusConnection *conn, DBusMessage *msg,
 	if (valid_phone_number_format(to) == FALSE)
 		return __ofono_error_invalid_format(msg);
 
-	msg_list = sms_text_prepare(text, 0, TRUE, &ref_offset);
+	msg_list = sms_text_prepare(text, 0, TRUE, &ref_offset,
+					sms->use_delivery_reports);
 
 	if (!msg_list)
 		return __ofono_error_invalid_format(msg);
@@ -886,6 +921,9 @@ static void sms_remove(struct ofono_atom *atom)
 					"NextMessageId", sms->next_msg_id);
 		g_key_file_set_integer(sms->settings, SETTINGS_GROUP,
 					"NextReference", sms->ref);
+		g_key_file_set_boolean(sms->settings, SETTINGS_GROUP,
+					"UseDeliveryReports",
+					sms->use_delivery_reports);
 
 		storage_close(sms->imsi, SETTINGS_STORE, sms->settings, TRUE);
 
@@ -897,6 +935,17 @@ static void sms_remove(struct ofono_atom *atom)
 	g_free(sms);
 }
 
+
+/*
+ * Create a SMS driver
+ *
+ * This creates a SMS driver that is hung off a @modem
+ * object. However, for the driver to be used by the system, it has to
+ * be registered with the oFono core using ofono_sms_register().
+ *
+ * This is done once the modem driver determines that SMS is properly
+ * supported by the hardware.
+ */
 struct ofono_sms *ofono_sms_create(struct ofono_modem *modem,
 					unsigned int vendor,
 					const char *driver,
@@ -961,12 +1010,22 @@ static void sms_load_settings(struct ofono_sms *sms, const char *imsi)
 							"NextMessageId", NULL);
 	sms->ref = g_key_file_get_integer(sms->settings, SETTINGS_GROUP,
 							"NextReference", NULL);
+	sms->use_delivery_reports =
+		g_key_file_get_boolean(sms->settings, SETTINGS_GROUP,
+					"UseDeliveryReports", NULL);
 
 	if (sms->ref >= 65536)
 		sms->ref = 1;
-
 }
 
+
+/*
+ * Indicate oFono that a SMS driver is ready for operation
+ *
+ * This is called after ofono_sms_create() was done and the modem
+ * driver determined that a modem supports SMS correctly. Once this
+ * call succeeds, the D-BUS interface for SMS goes live.
+ */
 void ofono_sms_register(struct ofono_sms *sms)
 {
 	DBusConnection *conn = ofono_dbus_get_connection();

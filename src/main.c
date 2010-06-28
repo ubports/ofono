@@ -23,14 +23,18 @@
 #include <config.h>
 #endif
 
-#include <gdbus.h>
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
 #include <signal.h>
 #include <sys/signalfd.h>
+
+#include <gdbus.h>
+
+#ifdef HAVE_CAPNG
+#include <cap-ng.h>
+#endif
 
 #include "ofono.h"
 
@@ -92,8 +96,20 @@ static gchar *option_debug = NULL;
 static gboolean option_detach = TRUE;
 static gboolean option_version = FALSE;
 
+static gboolean parse_debug(const char *key, const char *value,
+					gpointer user_data, GError **error)
+{
+	if (value)
+		option_debug = g_strdup(value);
+	else
+		option_debug = g_strdup("*");
+
+	return TRUE;
+}
+
 static GOptionEntry options[] = {
-	{ "debug", 'd', 0, G_OPTION_ARG_STRING, &option_debug,
+	{ "debug", 'd', G_OPTION_FLAG_OPTIONAL_ARG,
+				G_OPTION_ARG_CALLBACK, parse_debug,
 				"Specify debug options to enable", "DEBUG" },
 	{ "nodetach", 'n', G_OPTION_FLAG_REVERSE,
 				G_OPTION_ARG_NONE, &option_detach,
@@ -113,6 +129,10 @@ int main(int argc, char **argv)
 	int signal_fd;
 	GIOChannel *signal_io;
 	int signal_source;
+
+#ifdef HAVE_CAPNG
+	/* Drop capabilities */
+#endif
 
 	sigemptyset(&mask);
 	sigaddset(&mask, SIGTERM);
