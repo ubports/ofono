@@ -143,6 +143,7 @@ builtin_sources += $(gatchat_sources) \
 				drivers/atmodem/network-registration.c \
 				drivers/atmodem/sim.c \
 				drivers/atmodem/stk.c \
+				drivers/atmodem/stk.h \
 				drivers/atmodem/sim-poll.c \
 				drivers/atmodem/sim-poll.h \
 				drivers/atmodem/ussd.c \
@@ -232,14 +233,14 @@ builtin_sources += plugins/hso.c
 builtin_modules += huawei
 builtin_sources += plugins/huawei.c
 
-builtin_modules += em770
-builtin_sources += plugins/em770.c
-
 builtin_modules += novatel
 builtin_sources += plugins/novatel.c
 
+builtin_modules += bluetooth
+builtin_sources += plugins/bluetooth.c plugins/bluetooth.h
+
 builtin_modules += hfp
-builtin_sources += plugins/hfp.c
+builtin_sources += plugins/hfp.c plugins/bluetooth.h
 
 builtin_modules += palmpre
 builtin_sources += plugins/palmpre.c
@@ -269,7 +270,7 @@ src_ofonod_SOURCES = $(gdbus_sources) $(builtin_sources) \
 			src/storage.c src/cbs.c src/watch.c src/call-volume.c \
 			src/gprs.c src/idmap.h src/idmap.c \
 			src/radio-settings.c src/stkutil.h src/stkutil.c \
-			src/nettime.c
+			src/nettime.c src/stkagent.c src/stkagent.h
 
 src_ofonod_LDADD = $(builtin_libadd) @GLIB_LIBS@ @DBUS_LIBS@ @CAPNG_LIBS@ -ldl
 
@@ -300,6 +301,7 @@ doc_files = doc/overview.txt doc/ofono-paper.txt \
 			doc/voicecallmanager-api.txt doc/voicecall-api.txt \
 			doc/call-forwarding-api.txt doc/call-settings-api.txt \
 			doc/call-meter-api.txt \
+			doc/supplementaryservices-api.txt \
 			doc/dataconnectionmanager-api.txt
 
 test_scripts = test/activate-context \
@@ -320,6 +322,7 @@ test_scripts = test/activate-context \
 		test/send-sms \
 		test/set-mic-volume \
 		test/set-speaker-volume \
+		test/simple-agent \
 		test/test-advice-of-charge \
 		test/test-call-barring \
 		test/test-call-forwarding \
@@ -339,7 +342,8 @@ test_scripts = test/activate-context \
 		test/set-tech-preference \
 		test/set-use-sms-reports \
 		test/set-cbs-topics \
-		test/enable-cbs
+		test/enable-cbs \
+		test/propose-scan
 
 if TEST
 testdir = $(pkglibdir)/test

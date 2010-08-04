@@ -27,6 +27,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 
 #include <glib.h>
 #include <glib/gprintf.h>
@@ -206,6 +207,11 @@ static void check_response_length(const struct stk_response_length *command,
 static void check_gsm_sms(const struct sms *command,
 					const struct sms_test *test)
 {
+	g_assert(command->sc_addr.number_type == test->sc_addr.number_type);
+	g_assert(command->sc_addr.numbering_plan ==
+			test->sc_addr.numbering_plan);
+	g_assert(g_str_equal(command->sc_addr.address, test->sc_addr.address));
+
 	switch (test->type) {
 	case SMS_TYPE_SUBMIT: {
 		const struct sms_submit *cs = &command->submit;
@@ -219,8 +225,8 @@ static void check_gsm_sms(const struct sms *command,
 		g_assert(cs->srr == ts->srr);
 		g_assert(cs->mr == ts->mr);
 
-		g_assert(cs->daddr.number_type == cs->daddr.number_type);
-		g_assert(cs->daddr.numbering_plan == cs->daddr.numbering_plan);
+		g_assert(cs->daddr.number_type == ts->daddr.number_type);
+		g_assert(cs->daddr.numbering_plan == ts->daddr.numbering_plan);
 		g_assert(g_str_equal(cs->daddr.address, ts->daddr.address));
 
 		g_assert(cs->pid == ts->pid);
@@ -272,6 +278,14 @@ static void check_gsm_sms(const struct sms *command,
 	}
 }
 
+/* Defined in TS 102.223 Section 8.14 */
+static inline void check_ss(const struct stk_ss *command,
+					const struct stk_ss *test)
+{
+	g_assert(command->ton_npi == test->ton_npi);
+	check_common_text(command->ss, test->ss);
+}
+
 /* Defined in TS 102.223 Section 8.15 */
 static inline void check_text(const char *command, const char *test)
 {
@@ -283,6 +297,15 @@ static inline void check_tone(const ofono_bool_t command,
 					const ofono_bool_t test)
 {
 	check_common_bool(command, test);
+}
+
+/* Defined in TS 102.223 Section 8.17 */
+static inline void check_ussd(const struct stk_ussd_string *command,
+							const char *test)
+{
+	char *utf8 = ussd_decode(command->dcs, command->len, command->string);
+	check_common_text(utf8, test);
+	g_free(utf8);
 }
 
 /* Defined in TS 102.223 Section 8.18 */
@@ -455,6 +478,29 @@ static inline void check_cdma_sms_tpdu(
 	check_common_byte_array(command, test);
 }
 
+static void check_text_attr_html(const struct stk_text_attribute *test,
+				char *text, const char *expected_html)
+{
+	char *html;
+	unsigned short attrs[256];
+	int i;
+
+	if (expected_html == NULL)
+		return;
+
+	for (i = 0; i < test->len; i += 4) {
+		attrs[i] = test->attributes[i];
+		attrs[i + 1] = test->attributes[i + 1];
+		attrs[i + 2] = test->attributes[i + 2];
+		attrs[i + 3] = test->attributes[i + 3];
+	}
+	html = stk_text_to_html(text, attrs, test->len / 4);
+
+	g_assert(memcmp(html, expected_html, strlen(expected_html)) == 0);
+
+	g_free(html);
+}
+
 /* Defined in TS 102.223 Section 8.72 */
 static void check_text_attr(const struct stk_text_attribute *command,
 					const struct stk_text_attribute *test)
@@ -491,6 +537,7 @@ struct display_text_test {
 	struct stk_duration duration;
 	struct stk_text_attribute text_attr;
 	struct stk_frame_id frame_id;
+	const char *html;
 };
 
 unsigned char display_text_111[] = { 0xD0, 0x1A, 0x81, 0x03, 0x01, 0x21, 0x80,
@@ -585,6 +632,69 @@ unsigned char display_text_711[] = { 0xD0, 0x19, 0x81, 0x03, 0x01, 0x21, 0x80,
 					0x04, 0x31, 0x30, 0x20, 0x53, 0x65,
 					0x63, 0x6F, 0x6E, 0x64, 0x84, 0x02,
 					0x01, 0x0A };
+
+unsigned char display_text_811[] = { 0xD0, 0x22, 0x81, 0x03, 0x01, 0x21, 0x80,
+					0x82, 0x02, 0x81, 0x02, 0x8D, 0x11,
+					0x04, 0x54, 0x65, 0x78, 0x74, 0x20,
+					0x41, 0x74, 0x74, 0x72, 0x69, 0x62,
+					0x75, 0x74, 0x65, 0x20, 0x31, 0xD0,
+					0x04, 0x00, 0x10, 0x00, 0xB4 };
+
+unsigned char display_text_821[] = { 0xD0, 0x22, 0x81, 0x03, 0x01, 0x21, 0x80,
+					0x82, 0x02, 0x81, 0x02, 0x8D, 0x11,
+					0x04, 0x54, 0x65, 0x78, 0x74, 0x20,
+					0x41, 0x74, 0x74, 0x72, 0x69, 0x62,
+					0x75, 0x74, 0x65, 0x20, 0x31, 0xD0,
+					0x04, 0x00, 0x10, 0x01, 0xB4 };
+
+unsigned char display_text_831[] = { 0xD0, 0x22, 0x81, 0x03, 0x01, 0x21, 0x80,
+					0x82, 0x02, 0x81, 0x02, 0x8D, 0x11,
+					0x04, 0x54, 0x65, 0x78, 0x74, 0x20,
+					0x41, 0x74, 0x74, 0x72, 0x69, 0x62,
+					0x75, 0x74, 0x65, 0x20, 0x31, 0xD0,
+					0x04, 0x00, 0x10, 0x02, 0xB4 };
+
+unsigned char display_text_841[] = { 0xD0, 0x22, 0x81, 0x03, 0x01, 0x21, 0x80,
+					0x82, 0x02, 0x81, 0x02, 0x8D, 0x11,
+					0x04, 0x54, 0x65, 0x78, 0x74, 0x20,
+					0x41, 0x74, 0x74, 0x72, 0x69, 0x62,
+					0x75, 0x74, 0x65, 0x20, 0x31, 0xD0,
+					0x04, 0x00, 0x10, 0x04, 0xB4 };
+
+unsigned char display_text_851[] = { 0xD0, 0x22, 0x81, 0x03, 0x01, 0x21, 0x80,
+					0x82, 0x02, 0x81, 0x02, 0x8D, 0x11,
+					0x04, 0x54, 0x65, 0x78, 0x74, 0x20,
+					0x41, 0x74, 0x74, 0x72, 0x69, 0x62,
+					0x75, 0x74, 0x65, 0x20, 0x31, 0xD0,
+					0x04, 0x00, 0x10, 0x08, 0xB4 };
+
+unsigned char display_text_861[] = { 0xD0, 0x22, 0x81, 0x03, 0x01, 0x21, 0x80,
+					0x82, 0x02, 0x81, 0x02, 0x8D, 0x11,
+					0x04, 0x54, 0x65, 0x78, 0x74, 0x20,
+					0x41, 0x74, 0x74, 0x72, 0x69, 0x62,
+					0x75, 0x74, 0x65, 0x20, 0x31, 0xD0,
+					0x04, 0x00, 0x10, 0x10, 0xB4 };
+
+unsigned char display_text_871[] = { 0xD0, 0x22, 0x81, 0x03, 0x01, 0x21, 0x80,
+					0x82, 0x02, 0x81, 0x02, 0x8D, 0x11,
+					0x04, 0x54, 0x65, 0x78, 0x74, 0x20,
+					0x41, 0x74, 0x74, 0x72, 0x69, 0x62,
+					0x75, 0x74, 0x65, 0x20, 0x31, 0xD0,
+					0x04, 0x00, 0x10, 0x20, 0xB4 };
+
+unsigned char display_text_881[] = { 0xD0, 0x22, 0x81, 0x03, 0x01, 0x21, 0x80,
+					0x82, 0x02, 0x81, 0x02, 0x8D, 0x11,
+					0x04, 0x54, 0x65, 0x78, 0x74, 0x20,
+					0x41, 0x74, 0x74, 0x72, 0x69, 0x62,
+					0x75, 0x74, 0x65, 0x20, 0x31, 0xD0,
+					0x04, 0x00, 0x10, 0x40, 0xB4 };
+
+unsigned char display_text_891[] = { 0xD0, 0x22, 0x81, 0x03, 0x01, 0x21, 0x80,
+					0x82, 0x02, 0x81, 0x02, 0x8D, 0x11,
+					0x04, 0x54, 0x65, 0x78, 0x74, 0x20,
+					0x41, 0x74, 0x74, 0x72, 0x69, 0x62,
+					0x75, 0x74, 0x65, 0x20, 0x31, 0xD0,
+					0x04, 0x00, 0x10, 0x80, 0xB4 };
 
 unsigned char display_text_911[] = { 0xD0, 0x10, 0x81, 0x03, 0x01, 0x21, 0x80,
 					0x82, 0x02, 0x81, 0x02, 0x8D, 0x05,
@@ -691,6 +801,132 @@ static struct display_text_test display_text_data_711 = {
 	}
 };
 
+static struct display_text_test display_text_data_811 = {
+	.pdu = display_text_811,
+	.pdu_len = sizeof(display_text_811),
+	.qualifier = 0x80,
+	.text = "Text Attribute 1",
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x00, 0xB4 },
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Text Attribute 1</span>"
+		"</div>",
+};
+
+static struct display_text_test display_text_data_821 = {
+	.pdu = display_text_821,
+	.pdu_len = sizeof(display_text_821),
+	.qualifier = 0x80,
+	.text = "Text Attribute 1",
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x01, 0xB4 },
+	},
+	.html = "<div style=\"text-align: center;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Text Attribute 1</span>"
+		"</div>",
+};
+
+static struct display_text_test display_text_data_831 = {
+	.pdu = display_text_831,
+	.pdu_len = sizeof(display_text_831),
+	.qualifier = 0x80,
+	.text = "Text Attribute 1",
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x02, 0xB4 },
+	},
+	.html = "<div style=\"text-align: right;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Text Attribute 1</span>"
+		"</div>",
+};
+
+static struct display_text_test display_text_data_841 = {
+	.pdu = display_text_841,
+	.pdu_len = sizeof(display_text_841),
+	.qualifier = 0x80,
+	.text = "Text Attribute 1",
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x04, 0xB4 },
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"font-size: "
+		"big;color: #347235;background-color: #FFFF00;\">"
+		"Text Attribute 1</span></div>",
+};
+
+static struct display_text_test display_text_data_851 = {
+	.pdu = display_text_851,
+	.pdu_len = sizeof(display_text_851),
+	.qualifier = 0x80,
+	.text = "Text Attribute 1",
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x08, 0xB4 },
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"font-size: "
+		"small;color: #347235;background-color: #FFFF00;\">"
+		"Text Attribute 1</span></div>",
+};
+
+static struct display_text_test display_text_data_861 = {
+	.pdu = display_text_861,
+	.pdu_len = sizeof(display_text_861),
+	.qualifier = 0x80,
+	.text = "Text Attribute 1",
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x10, 0xB4 },
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"font-weight: "
+		"bold;color: #347235;background-color: #FFFF00;\">"
+		"Text Attribute 1</span></div>",
+};
+
+static struct display_text_test display_text_data_871 = {
+	.pdu = display_text_871,
+	.pdu_len = sizeof(display_text_871),
+	.qualifier = 0x80,
+	.text = "Text Attribute 1",
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x20, 0xB4 },
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"font-style: "
+		"italic;color: #347235;background-color: #FFFF00;\">"
+		"Text Attribute 1</span>",
+};
+
+static struct display_text_test display_text_data_881 = {
+	.pdu = display_text_881,
+	.pdu_len = sizeof(display_text_881),
+	.qualifier = 0x80,
+	.text = "Text Attribute 1",
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x40, 0xB4 },
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\""
+		"text-decoration: underline;color: #347235;"
+		"background-color: #FFFF00;\">Text Attribute 1</span></div>",
+};
+
+static struct display_text_test display_text_data_891 = {
+	.pdu = display_text_891,
+	.pdu_len = sizeof(display_text_891),
+	.qualifier = 0x80,
+	.text = "Text Attribute 1",
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x80, 0xB4 },
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\""
+		"text-decoration: line-through;color: #347235;"
+		"background-color: #FFFF00;\">Text Attribute 1</span>",
+};
+
 static struct display_text_test display_text_data_911 = {
 	.pdu = display_text_911,
 	.pdu_len = sizeof(display_text_911),
@@ -714,6 +950,7 @@ static void test_display_text(gconstpointer data)
 	command = stk_command_new_from_pdu(test->pdu, test->pdu_len);
 
 	g_assert(command);
+	g_assert(command->status == STK_PARSE_RESULT_OK);
 
 	g_assert(command->number == 1);
 	g_assert(command->type == STK_COMMAND_TYPE_DISPLAY_TEXT);
@@ -730,6 +967,9 @@ static void test_display_text(gconstpointer data)
 	check_duration(&command->display_text.duration, &test->duration);
 	check_text_attr(&command->display_text.text_attr,
 						&test->text_attr);
+	check_text_attr_html(&command->display_text.text_attr,
+				command->display_text.text,
+				test->html);
 	check_frame_id(&command->display_text.frame_id, &test->frame_id);
 
 	stk_command_free(command);
@@ -744,6 +984,7 @@ struct get_inkey_test {
 	struct stk_duration duration;
 	struct stk_text_attribute text_attr;
 	struct stk_frame_id frame_id;
+	char *html;
 };
 
 static unsigned char get_inkey_111[] = { 0xD0, 0x15, 0x81, 0x03, 0x01, 0x22,
@@ -1349,7 +1590,9 @@ static struct get_inkey_test get_inkey_data_911 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x09, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Enter \"+\"</span></div>",
 };
 
 static struct get_inkey_test get_inkey_data_912 = {
@@ -1367,7 +1610,10 @@ static struct get_inkey_test get_inkey_data_921 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x09, 0x01, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: center;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Enter \"+\"</span>"
+		"</div>",
 };
 
 static struct get_inkey_test get_inkey_data_922 = {
@@ -1385,7 +1631,10 @@ static struct get_inkey_test get_inkey_data_931 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x09, 0x02, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: right;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Enter \"+\"</span>"
+		"</div>",
 };
 
 static struct get_inkey_test get_inkey_data_932 = {
@@ -1403,7 +1652,10 @@ static struct get_inkey_test get_inkey_data_941 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x09, 0x04, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"font-size: "
+		"big;color: #347235;background-color: #FFFF00;\">Enter \"+\""
+		"</span></div>",
 };
 
 static struct get_inkey_test get_inkey_data_942 = {
@@ -1414,7 +1666,9 @@ static struct get_inkey_test get_inkey_data_942 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x09, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Enter \"#\"</span></div>",
 };
 
 static struct get_inkey_test get_inkey_data_943 = {
@@ -1432,7 +1686,10 @@ static struct get_inkey_test get_inkey_data_951 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x09, 0x08, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"font-size: "
+		"small;color: #347235;background-color: #FFFF00;\">"
+		"Enter \"+\"</span></div>",
 };
 
 static struct get_inkey_test get_inkey_data_952 = {
@@ -1443,7 +1700,9 @@ static struct get_inkey_test get_inkey_data_952 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x09, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Enter \"#\"</span></div>",
 };
 
 static struct get_inkey_test get_inkey_data_953 = {
@@ -1461,7 +1720,10 @@ static struct get_inkey_test get_inkey_data_961 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x09, 0x10, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"font-weight: "
+		"bold;color: #347235;background-color: #FFFF00;\">Enter \"+\""
+		"</span></div>",
 };
 
 static struct get_inkey_test get_inkey_data_962 = {
@@ -1472,7 +1734,9 @@ static struct get_inkey_test get_inkey_data_962 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x09, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Enter \"#\"</span></div>",
 };
 
 static struct get_inkey_test get_inkey_data_963 = {
@@ -1490,7 +1754,10 @@ static struct get_inkey_test get_inkey_data_971 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x09, 0x20, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"font-style: "
+		"italic;color: #347235;background-color: #FFFF00;\">"
+		"Enter \"+\"</span></div>",
 };
 
 static struct get_inkey_test get_inkey_data_972 = {
@@ -1501,7 +1768,9 @@ static struct get_inkey_test get_inkey_data_972 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x09, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Enter \"#\"</span></div>",
 };
 
 static struct get_inkey_test get_inkey_data_973 = {
@@ -1519,7 +1788,10 @@ static struct get_inkey_test get_inkey_data_981 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x09, 0x40, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\""
+		"text-decoration: underline;color: #347235;"
+		"background-color: #FFFF00;\">Enter \"+\"</span></div>",
 };
 
 static struct get_inkey_test get_inkey_data_982 = {
@@ -1530,7 +1802,9 @@ static struct get_inkey_test get_inkey_data_982 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x09, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Enter \"#\"</span></div>",
 };
 
 static struct get_inkey_test get_inkey_data_983 = {
@@ -1548,7 +1822,10 @@ static struct get_inkey_test get_inkey_data_991 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x09, 0x80, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\""
+		"text-decoration: line-through;color: #347235;"
+		"background-color: #FFFF00;\">Enter \"+\"</span></div>",
 };
 
 static struct get_inkey_test get_inkey_data_992a = {
@@ -1559,7 +1836,9 @@ static struct get_inkey_test get_inkey_data_992a = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x09, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Enter \"#\"</span></div>",
 };
 
 static struct get_inkey_test get_inkey_data_992b = {
@@ -1584,7 +1863,9 @@ static struct get_inkey_test get_inkey_data_9101 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x09, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Enter \"+\"</span></div>",
 };
 
 static struct get_inkey_test get_inkey_data_9102 = {
@@ -1651,6 +1932,7 @@ static void test_get_inkey(gconstpointer data)
 	command = stk_command_new_from_pdu(test->pdu, test->pdu_len);
 
 	g_assert(command);
+	g_assert(command->status == STK_PARSE_RESULT_OK);
 
 	g_assert(command->number == 1);
 	g_assert(command->type == STK_COMMAND_TYPE_GET_INKEY);
@@ -1665,6 +1947,8 @@ static void test_get_inkey(gconstpointer data)
 	check_duration(&command->get_inkey.duration, &test->duration);
 	check_text_attr(&command->get_inkey.text_attr,
 						&test->text_attr);
+	check_text_attr_html(&command->get_inkey.text_attr,
+				command->get_inkey.text, test->html);
 	check_frame_id(&command->get_inkey.frame_id, &test->frame_id);
 
 	stk_command_free(command);
@@ -1680,6 +1964,7 @@ struct get_input_test {
 	struct stk_icon_id icon_id;
 	struct stk_text_attribute text_attr;
 	struct stk_frame_id frame_id;
+	char *html;
 };
 
 static unsigned char get_input_111[] = { 0xD0, 0x1B, 0x81, 0x03, 0x01, 0x23,
@@ -2515,7 +2800,9 @@ static struct get_input_test get_input_data_811 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x0B, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Enter 12345</span></div>"
 };
 
 static struct get_input_test get_input_data_812 = {
@@ -2541,7 +2828,10 @@ static struct get_input_test get_input_data_821 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x0B, 0x01, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: center;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Enter 12345</span>"
+		"</div>",
 };
 
 static struct get_input_test get_input_data_822 = {
@@ -2567,7 +2857,10 @@ static struct get_input_test get_input_data_831 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x0B, 0x02, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: right;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Enter 12345</span>"
+		"</div>",
 };
 
 static struct get_input_test get_input_data_832 = {
@@ -2593,7 +2886,10 @@ static struct get_input_test get_input_data_841 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x0B, 0x04, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"font-size: "
+		"big;color: #347235;background-color: #FFFF00;\">Enter 12345"
+		"</span></div>",
 };
 
 static struct get_input_test get_input_data_842 = {
@@ -2608,7 +2904,9 @@ static struct get_input_test get_input_data_842 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x0B, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Enter 22222</span></div>"
 };
 
 static struct get_input_test get_input_data_843 = {
@@ -2634,7 +2932,10 @@ static struct get_input_test get_input_data_851 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x0B, 0x08, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"font-size: "
+		"small;color: #347235;background-color: #FFFF00;\">Enter "
+		"12345</span></div>",
 };
 
 static struct get_input_test get_input_data_852 = {
@@ -2649,7 +2950,9 @@ static struct get_input_test get_input_data_852 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x0B, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Enter 22222</span></div>",
 };
 
 static struct get_input_test get_input_data_853 = {
@@ -2675,7 +2978,10 @@ static struct get_input_test get_input_data_861 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x0B, 0x10, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"font-weight: "
+		"bold;color: #347235;background-color: #FFFF00;\">Enter "
+		"12345</span></div>"
 };
 
 static struct get_input_test get_input_data_862 = {
@@ -2690,7 +2996,9 @@ static struct get_input_test get_input_data_862 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x0B, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Enter 22222</span></div>",
 };
 
 static struct get_input_test get_input_data_863 = {
@@ -2716,7 +3024,10 @@ static struct get_input_test get_input_data_871 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x0B, 0x20, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"font-style: "
+		"italic;color: #347235;background-color: #FFFF00;\">Enter "
+		"12345</span></div>",
 };
 
 static struct get_input_test get_input_data_872 = {
@@ -2731,7 +3042,9 @@ static struct get_input_test get_input_data_872 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x0B, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Enter 22222</span></div>",
 };
 
 static struct get_input_test get_input_data_873 = {
@@ -2757,7 +3070,10 @@ static struct get_input_test get_input_data_881 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x0B, 0x40, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span "
+		"style=\"text-decoration: underline;color: #347235;"
+		"background-color: #FFFF00;\">Enter 12345</span></div>",
 };
 
 static struct get_input_test get_input_data_882 = {
@@ -2772,7 +3088,9 @@ static struct get_input_test get_input_data_882 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x0B, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Enter 22222</span></div>",
 };
 
 static struct get_input_test get_input_data_883 = {
@@ -2798,7 +3116,10 @@ static struct get_input_test get_input_data_891 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x0B, 0x80, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span "
+		"style=\"text-decoration: line-through;color: #347235;"
+		"background-color: #FFFF00;\">Enter 12345</span></div>",
 };
 
 static struct get_input_test get_input_data_892 = {
@@ -2813,7 +3134,9 @@ static struct get_input_test get_input_data_892 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x0B, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Enter 22222</span></div>",
 };
 
 static struct get_input_test get_input_data_893 = {
@@ -2839,7 +3162,9 @@ static struct get_input_test get_input_data_8101 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x0B, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Enter 12345</span></div>",
 };
 
 static struct get_input_test get_input_data_8102 = {
@@ -2956,6 +3281,7 @@ static void test_get_input(gconstpointer data)
 	command = stk_command_new_from_pdu(test->pdu, test->pdu_len);
 
 	g_assert(command);
+	g_assert(command->status == STK_PARSE_RESULT_OK);
 
 	g_assert(command->number == 1);
 	g_assert(command->type == STK_COMMAND_TYPE_GET_INPUT);
@@ -2972,6 +3298,8 @@ static void test_get_input(gconstpointer data)
 	check_icon_id(&command->get_input.icon_id, &test->icon_id);
 	check_text_attr(&command->get_input.text_attr,
 						&test->text_attr);
+	check_text_attr_html(&command->get_input.text_attr,
+				command->get_input.text, test->html);
 	check_frame_id(&command->get_input.frame_id, &test->frame_id);
 
 	stk_command_free(command);
@@ -3001,6 +3329,7 @@ static void test_more_time(gconstpointer data)
 	command = stk_command_new_from_pdu(test->pdu, test->pdu_len);
 
 	g_assert(command);
+	g_assert(command->status == STK_PARSE_RESULT_OK);
 
 	g_assert(command->number == 1);
 	g_assert(command->type == STK_COMMAND_TYPE_MORE_TIME);
@@ -3022,6 +3351,7 @@ struct play_tone_test {
 	struct stk_icon_id icon_id;
 	struct stk_text_attribute text_attr;
 	struct stk_frame_id frame_id;
+	char *html;
 };
 
 static unsigned char play_tone_111[] = { 0xD0, 0x1B, 0x81, 0x03, 0x01, 0x20,
@@ -3792,7 +4122,10 @@ static struct play_tone_test play_tone_data_411 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x10, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Text Attribute 1</span>"
+		"</div>",
 };
 
 static struct play_tone_test play_tone_data_412 = {
@@ -3820,7 +4153,10 @@ static struct play_tone_test play_tone_data_421 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x10, 0x01, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: center;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Text Attribute 1</span>"
+		"</div>",
 };
 
 static struct play_tone_test play_tone_data_422 = {
@@ -3848,7 +4184,10 @@ static struct play_tone_test play_tone_data_431 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x10, 0x02, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: right;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Text Attribute 1</span>"
+		"</div>",
 };
 
 static struct play_tone_test play_tone_data_432 = {
@@ -3876,7 +4215,10 @@ static struct play_tone_test play_tone_data_441 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x10, 0x04, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"font-size: "
+		"big;color: #347235;background-color: #FFFF00;\">"
+		"Text Attribute 1</span></div>",
 };
 
 static struct play_tone_test play_tone_data_442 = {
@@ -3892,7 +4234,10 @@ static struct play_tone_test play_tone_data_442 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x10, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Text Attribute 2</span>"
+		"</div>",
 };
 
 static struct play_tone_test play_tone_data_443 = {
@@ -3920,7 +4265,10 @@ static struct play_tone_test play_tone_data_451 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x10, 0x08, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"font-size: "
+		"small;color: #347235;background-color: #FFFF00;\">"
+		"Text Attribute 1</span></div>",
 };
 
 static struct play_tone_test play_tone_data_452 = {
@@ -3936,7 +4284,10 @@ static struct play_tone_test play_tone_data_452 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x10, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Text Attribute 2</span>"
+		"</div>",
 };
 
 static struct play_tone_test play_tone_data_453 = {
@@ -3964,7 +4315,10 @@ static struct play_tone_test play_tone_data_461 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x0E, 0x10, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"font-weight: "
+		"bold;color: #347235;background-color: #FFFF00;\">"
+		"Text Attribute</span></div> 1"
 };
 
 static struct play_tone_test play_tone_data_462 = {
@@ -3980,7 +4334,10 @@ static struct play_tone_test play_tone_data_462 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x10, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Text Attribute 2</span>"
+		"</div>",
 };
 
 static struct play_tone_test play_tone_data_463 = {
@@ -4008,7 +4365,10 @@ static struct play_tone_test play_tone_data_471 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x0E, 0x20, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"font-style: "
+		"italic;color: #347235;background-color: #FFFF00;\">"
+		"Text Attribute</span></div> 1",
 };
 
 static struct play_tone_test play_tone_data_472 = {
@@ -4024,7 +4384,10 @@ static struct play_tone_test play_tone_data_472 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x10, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Text Attribute 2</span>"
+		"</div>",
 };
 
 static struct play_tone_test play_tone_data_473 = {
@@ -4052,7 +4415,10 @@ static struct play_tone_test play_tone_data_481 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x10, 0x40, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span "
+		"style=\"text-decoration: underline;color: #347235;"
+		"background-color: #FFFF00;\">Text Attribute 1</span></div>",
 };
 
 static struct play_tone_test play_tone_data_482 = {
@@ -4068,7 +4434,10 @@ static struct play_tone_test play_tone_data_482 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x10, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Text Attribute 2</span>"
+		"</div>",
 };
 
 static struct play_tone_test play_tone_data_483 = {
@@ -4096,7 +4465,10 @@ static struct play_tone_test play_tone_data_491 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x10, 0x80, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span "
+		"style=\"text-decoration: line-through;color: #347235;"
+		"background-color: #FFFF00;\">Text Attribute 1</span></div>",
 };
 
 static struct play_tone_test play_tone_data_492 = {
@@ -4112,7 +4484,10 @@ static struct play_tone_test play_tone_data_492 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x10, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Text Attribute 2</span>"
+		"</div>",
 };
 
 static struct play_tone_test play_tone_data_493 = {
@@ -4140,7 +4515,9 @@ static struct play_tone_test play_tone_data_4101 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x10, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Text Attribute 1</span>",
 };
 
 static struct play_tone_test play_tone_data_4102 = {
@@ -4236,6 +4613,7 @@ static void test_play_tone(gconstpointer data)
 	command = stk_command_new_from_pdu(test->pdu, test->pdu_len);
 
 	g_assert(command);
+	g_assert(command->status == STK_PARSE_RESULT_OK);
 
 	g_assert(command->number == 1);
 	g_assert(command->type == STK_COMMAND_TYPE_PLAY_TONE);
@@ -4249,6 +4627,8 @@ static void test_play_tone(gconstpointer data)
 	check_duration(&command->play_tone.duration, &test->duration);
 	check_icon_id(&command->play_tone.icon_id, &test->icon_id);
 	check_text_attr(&command->play_tone.text_attr, &test->text_attr);
+	check_text_attr_html(&command->play_tone.text_attr,
+				command->play_tone.alpha_id, test->html);
 	check_frame_id(&command->play_tone.frame_id, &test->frame_id);
 
 	stk_command_free(command);
@@ -4284,6 +4664,7 @@ static void test_poll_interval(gconstpointer data)
 	command = stk_command_new_from_pdu(test->pdu, test->pdu_len);
 
 	g_assert(command);
+	g_assert(command->status == STK_PARSE_RESULT_OK);
 
 	g_assert(command->number == 1);
 	g_assert(command->type == STK_COMMAND_TYPE_POLL_INTERVAL);
@@ -4308,6 +4689,7 @@ struct setup_menu_test {
 	struct stk_item_icon_id_list item_icon_id_list;
 	struct stk_text_attribute text_attr;
 	struct stk_item_text_attribute_list item_text_attr_list;
+	char *html;
 };
 
 static unsigned char setup_menu_111[] = { 0xD0, 0x3B, 0x81, 0x03, 0x01, 0x25,
@@ -4945,7 +5327,8 @@ static struct setup_menu_test setup_menu_data_112 = {
 static struct setup_menu_test setup_menu_data_113 = {
 	.pdu = setup_menu_113,
 	.pdu_len = sizeof(setup_menu_113),
-	.qualifier = 0x00
+	.qualifier = 0x00,
+	.alpha_id = ""
 };
 
 static struct setup_menu_test setup_menu_data_121 = {
@@ -5121,7 +5504,10 @@ static struct setup_menu_test setup_menu_data_611 = {
 		.len = 12,
 		.list = { 0x00, 0x06, 0x00, 0xB4, 0x00, 0x06, 0x00, 0xB4,
 				0x00, 0x06, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Toolkit Menu 1</span>"
+		"</div>",
 };
 
 static struct setup_menu_test setup_menu_data_612 = {
@@ -5154,7 +5540,10 @@ static struct setup_menu_test setup_menu_data_621 = {
 		.len = 12,
 		.list = { 0x00, 0x06, 0x01, 0xB4, 0x00, 0x06, 0x01, 0xB4,
 				0x00, 0x06, 0x01, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: center;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Toolkit Menu 1</span>"
+		"</div>"
 };
 
 static struct setup_menu_test setup_menu_data_622 = {
@@ -5191,7 +5580,10 @@ static struct setup_menu_test setup_menu_data_631 = {
 		.len = 12,
 		.list = { 0x00, 0x06, 0x02, 0xB4, 0x00, 0x06, 0x02, 0xB4,
 				0x00, 0x06, 0x02, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: right;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Toolkit Menu 1</span>"
+		"</div>"
 };
 
 static struct setup_menu_test setup_menu_data_632 = {
@@ -5224,7 +5616,10 @@ static struct setup_menu_test setup_menu_data_641 = {
 		.len = 12,
 		.list = { 0x00, 0x06, 0x04, 0xB4, 0x00, 0x06, 0x04, 0xB4,
 				0x00, 0x06, 0x04, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"font-size: "
+		"big;color: #347235;background-color: #FFFF00;\">"
+		"Toolkit Menu 1</span></div>",
 };
 
 static struct setup_menu_test setup_menu_data_642 = {
@@ -5245,7 +5640,10 @@ static struct setup_menu_test setup_menu_data_642 = {
 		.len = 12,
 		.list = { 0x00, 0x06, 0x00, 0xB4, 0x00, 0x06, 0x00, 0xB4,
 				0x00, 0x06, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Toolkit Menu 2</span>"
+		"</div>",
 };
 
 static struct setup_menu_test setup_menu_data_643 = {
@@ -5278,7 +5676,10 @@ static struct setup_menu_test setup_menu_data_651 = {
 		.len = 12,
 		.list = { 0x00, 0x06, 0x08, 0xB4, 0x00, 0x06, 0x08, 0xB4,
 				0x00, 0x06, 0x08, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"font-size: "
+		"small;color: #347235;background-color: #FFFF00;\">"
+		"Toolkit Menu 1</span></div>",
 };
 
 static struct setup_menu_test setup_menu_data_661 = {
@@ -5299,7 +5700,10 @@ static struct setup_menu_test setup_menu_data_661 = {
 		.len = 12,
 		.list = { 0x00, 0x06, 0x10, 0xB4, 0x00, 0x06, 0x10, 0xB4,
 				0x00, 0x06, 0x10, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"font-weight: "
+		"bold;color: #347235;background-color: #FFFF00;\">"
+		"Toolkit Menu 1</span></div>",
 };
 
 static struct setup_menu_test setup_menu_data_671 = {
@@ -5320,7 +5724,10 @@ static struct setup_menu_test setup_menu_data_671 = {
 		.len = 12,
 		.list = { 0x00, 0x06, 0x20, 0xB4, 0x00, 0x06, 0x20, 0xB4,
 				0x00, 0x06, 0x20, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"font-style: "
+		"italic;color: #347235;background-color: #FFFF00;\">"
+		"Toolkit Menu 1</span></div>"
 };
 
 static struct setup_menu_test setup_menu_data_681 = {
@@ -5341,7 +5748,10 @@ static struct setup_menu_test setup_menu_data_681 = {
 		.len = 12,
 		.list = { 0x00, 0x06, 0x40, 0xB4, 0x00, 0x06, 0x40, 0xB4,
 				0x00, 0x06, 0x40, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span "
+		"style=\"text-decoration: underline;color: #347235;"
+		"background-color: #FFFF00;\">Toolkit Menu 1</span></div>",
 };
 
 static struct setup_menu_test setup_menu_data_691 = {
@@ -5362,7 +5772,10 @@ static struct setup_menu_test setup_menu_data_691 = {
 		.len = 12,
 		.list = { 0x00, 0x06, 0x80, 0xB4, 0x00, 0x06, 0x80, 0xB4,
 				0x00, 0x06, 0x80, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span "
+		"style=\"text-decoration: line-through;color: #347235;"
+		"background-color: #FFFF00;\">Toolkit Menu 1</span></div>",
 };
 
 static struct setup_menu_test setup_menu_data_6101 = {
@@ -5383,7 +5796,10 @@ static struct setup_menu_test setup_menu_data_6101 = {
 		.len = 12,
 		.list = { 0x00, 0x06, 0x00, 0xB4, 0x00, 0x06, 0x00, 0xB4,
 				0x00, 0x06, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Toolkit Menu</span>"
+		"</div>",
 };
 
 static struct setup_menu_test setup_menu_data_711 = {
@@ -5413,7 +5829,8 @@ static struct setup_menu_test setup_menu_data_712 = {
 static struct setup_menu_test setup_menu_data_713 = {
 	.pdu = setup_menu_713,
 	.pdu_len = sizeof(setup_menu_713),
-	.qualifier = 0x00
+	.qualifier = 0x00,
+	.alpha_id = ""
 };
 
 static struct setup_menu_test setup_menu_data_811 = {
@@ -5443,7 +5860,8 @@ static struct setup_menu_test setup_menu_data_812 = {
 static struct setup_menu_test setup_menu_data_813 = {
 	.pdu = setup_menu_813,
 	.pdu_len = sizeof(setup_menu_813),
-	.qualifier = 0x00
+	.qualifier = 0x00,
+	.alpha_id = ""
 };
 
 static struct setup_menu_test setup_menu_data_911 = {
@@ -5473,7 +5891,8 @@ static struct setup_menu_test setup_menu_data_912 = {
 static struct setup_menu_test setup_menu_data_913 = {
 	.pdu = setup_menu_913,
 	.pdu_len = sizeof(setup_menu_913),
-	.qualifier = 0x00
+	.qualifier = 0x00,
+	.alpha_id = ""
 };
 
 static struct setup_menu_test setup_menu_data_neg_1 = {
@@ -5505,6 +5924,7 @@ static void test_setup_menu(gconstpointer data)
 	command = stk_command_new_from_pdu(test->pdu, test->pdu_len);
 
 	g_assert(command);
+	g_assert(command->status == STK_PARSE_RESULT_OK);
 
 	g_assert(command->number == 1);
 	g_assert(command->type == STK_COMMAND_TYPE_SETUP_MENU);
@@ -5525,6 +5945,20 @@ static void test_setup_menu(gconstpointer data)
 	check_text_attr(&command->setup_menu.text_attr, &test->text_attr);
 	check_item_text_attribute_list(&command->setup_menu.item_text_attr_list,
 					&test->item_text_attr_list);
+	check_text_attr_html(&command->setup_menu.text_attr,
+				command->setup_menu.alpha_id, test->html);
+	stk_command_free(command);
+}
+
+static void test_setup_menu_missing_val(gconstpointer data)
+{
+	const struct setup_menu_test *test = data;
+	struct stk_command *command;
+
+	command = stk_command_new_from_pdu(test->pdu, test->pdu_len);
+
+	g_assert(command);
+	g_assert(command->status == STK_PARSE_RESULT_MISSING_VALUE);
 
 	stk_command_free(command);
 }
@@ -5536,7 +5970,10 @@ static void test_setup_menu_neg(gconstpointer data)
 
 	command = stk_command_new_from_pdu(test->pdu, test->pdu_len);
 
-	g_assert(!command);
+	g_assert(command);
+	g_assert(command->status == STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD);
+
+	stk_command_free(command);
 }
 
 struct select_item_test {
@@ -5552,6 +5989,7 @@ struct select_item_test {
 	struct stk_text_attribute text_attr;
 	struct stk_item_text_attribute_list item_text_attr_list;
 	struct stk_frame_id frame_id;
+	char *html;
 };
 
 static unsigned char select_item_111[] = { 0xD0, 0x3D, 0x81, 0x03, 0x01, 0x24,
@@ -6598,7 +7036,10 @@ static struct select_item_test select_item_data_911 = {
 	.item_text_attr_list = {
 		.len = 8,
 		.list = { 0x00, 0x06, 0x00, 0xB4, 0x00, 0x06, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Toolkit Select 1</span>"
+		"</div>",
 };
 
 static struct select_item_test select_item_data_912 = {
@@ -6628,7 +7069,10 @@ static struct select_item_test select_item_data_921 = {
 	.item_text_attr_list = {
 		.len = 8,
 		.list = { 0x00, 0x06, 0x01, 0xB4, 0x00, 0x06, 0x01, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: center;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Toolkit Select 1</span>"
+		"</div>",
 };
 
 static struct select_item_test select_item_data_922 = {
@@ -6658,7 +7102,10 @@ static struct select_item_test select_item_data_931 = {
 	.item_text_attr_list = {
 		.len = 8,
 		.list = { 0x00, 0x06, 0x02, 0xB4, 0x00, 0x06, 0x02, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: right;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Toolkit Select 1</span>"
+		"</div>"
 };
 
 static struct select_item_test select_item_data_932 = {
@@ -6688,7 +7135,10 @@ static struct select_item_test select_item_data_941 = {
 	.item_text_attr_list = {
 		.len = 8,
 		.list = { 0x00, 0x06, 0x04, 0xB4, 0x00, 0x06, 0x04, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"font-size: "
+		"big;color: #347235;background-color: #FFFF00;\">"
+		"Toolkit Select 1</span></div>",
 };
 
 static struct select_item_test select_item_data_942 = {
@@ -6707,7 +7157,10 @@ static struct select_item_test select_item_data_942 = {
 	.item_text_attr_list = {
 		.len = 8,
 		.list = { 0x00, 0x06, 0x00, 0xB4, 0x00, 0x06, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Toolkit Select 2</span>"
+		"</div>",
 };
 
 static struct select_item_test select_item_data_943 = {
@@ -6737,7 +7190,10 @@ static struct select_item_test select_item_data_951 = {
 	.item_text_attr_list = {
 		.len = 8,
 		.list = { 0x00, 0x06, 0x08, 0xB4, 0x00, 0x06, 0x08, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"font-size: "
+		"small;color: #347235;background-color: #FFFF00;\">"
+		"Toolkit Select 1</span></div>",
 };
 
 static struct select_item_test select_item_data_952 = {
@@ -6756,7 +7212,10 @@ static struct select_item_test select_item_data_952 = {
 	.item_text_attr_list = {
 		.len = 8,
 		.list = { 0x00, 0x06, 0x00, 0xB4, 0x00, 0x06, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Toolkit Select 2</span>"
+		"</div>",
 };
 
 static struct select_item_test select_item_data_953 = {
@@ -6786,7 +7245,10 @@ static struct select_item_test select_item_data_961 = {
 	.item_text_attr_list = {
 		.len = 8,
 		.list = { 0x00, 0x06, 0x10, 0xB4, 0x00, 0x06, 0x10, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"font-weight: "
+		"bold;color: #347235;background-color: #FFFF00;\">"
+		"Toolkit Select 1</span></div>",
 };
 
 static struct select_item_test select_item_data_962 = {
@@ -6805,7 +7267,10 @@ static struct select_item_test select_item_data_962 = {
 	.item_text_attr_list = {
 		.len = 8,
 		.list = { 0x00, 0x06, 0x00, 0xB4, 0x00, 0x06, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Toolkit Select 2</span>"
+		"</div>",
 };
 
 static struct select_item_test select_item_data_963 = {
@@ -6835,7 +7300,10 @@ static struct select_item_test select_item_data_971 = {
 	.item_text_attr_list = {
 		.len = 8,
 		.list = { 0x00, 0x06, 0x20, 0xB4, 0x00, 0x06, 0x20, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"font-style: "
+		"italic;color: #347235;background-color: #FFFF00;\">"
+		"Toolkit Select 1</span></div>"
 };
 
 static struct select_item_test select_item_data_972 = {
@@ -6854,7 +7322,10 @@ static struct select_item_test select_item_data_972 = {
 	.item_text_attr_list = {
 		.len = 8,
 		.list = { 0x00, 0x06, 0x00, 0xB4, 0x00, 0x06, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Toolkit Select 2</span>"
+		"</div>",
 };
 
 static struct select_item_test select_item_data_973 = {
@@ -6884,7 +7355,10 @@ static struct select_item_test select_item_data_981 = {
 	.item_text_attr_list = {
 		.len = 8,
 		.list = { 0x00, 0x06, 0x40, 0xB4, 0x00, 0x06, 0x40, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span "
+		"style=\"text-decoration: underline;color: #347235;"
+		"background-color: #FFFF00;\">Toolkit Select 1</span></div>",
 };
 
 static struct select_item_test select_item_data_982 = {
@@ -6903,7 +7377,10 @@ static struct select_item_test select_item_data_982 = {
 	.item_text_attr_list = {
 		.len = 8,
 		.list = { 0x00, 0x06, 0x00, 0xB4, 0x00, 0x06, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Toolkit Select 2</span>"
+		"</div>",
 };
 
 static struct select_item_test select_item_data_983 = {
@@ -6933,7 +7410,10 @@ static struct select_item_test select_item_data_991 = {
 	.item_text_attr_list = {
 		.len = 8,
 		.list = { 0x00, 0x06, 0x80, 0xB4, 0x00, 0x06, 0x80, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span "
+		"style=\"text-decoration: line-through;color: #347235;"
+		"background-color: #FFFF00;\">Toolkit Select 1</span></div>",
 };
 
 static struct select_item_test select_item_data_992 = {
@@ -6952,7 +7432,10 @@ static struct select_item_test select_item_data_992 = {
 	.item_text_attr_list = {
 		.len = 8,
 		.list = { 0x00, 0x06, 0x00, 0xB4, 0x00, 0x06, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Toolkit Select 2</span>"
+		"</div>",
 };
 
 static struct select_item_test select_item_data_993 = {
@@ -6982,7 +7465,10 @@ static struct select_item_test select_item_data_9101 = {
 	.item_text_attr_list = {
 		.len = 8,
 		.list = { 0x00, 0x06, 0x00, 0xB4, 0x00, 0x06, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Toolkit Select 1</span>"
+		"</div>",
 };
 
 static struct select_item_test select_item_data_9102 = {
@@ -7089,6 +7575,7 @@ static void test_select_item(gconstpointer data)
 	command = stk_command_new_from_pdu(test->pdu, test->pdu_len);
 
 	g_assert(command);
+	g_assert(command->status == STK_PARSE_RESULT_OK);
 
 	g_assert(command->number == 1);
 	g_assert(command->type == STK_COMMAND_TYPE_SELECT_ITEM);
@@ -7109,6 +7596,8 @@ static void test_select_item(gconstpointer data)
 	check_item_text_attribute_list(
 				&command->select_item.item_text_attr_list,
 				&test->item_text_attr_list);
+	check_text_attr_html(&command->select_item.text_attr,
+				command->select_item.alpha_id, test->html);
 	check_frame_id(&command->select_item.frame_id, &test->frame_id);
 
 	stk_command_free(command);
@@ -7119,7 +7608,6 @@ struct send_sms_test {
 	unsigned int pdu_len;
 	unsigned char qualifier;
 	char *alpha_id;
-	struct stk_address address;
 	struct sms_test gsm_sms;
 	struct stk_common_byte_array cdma_sms;
 	struct stk_icon_id icon_id;
@@ -7744,15 +8232,20 @@ static struct send_sms_test send_sms_data_111 = {
 	.pdu_len = sizeof(send_sms_111),
 	.qualifier = 0x00,
 	.alpha_id = "Send SM",
-	.address = {
-		.ton_npi = 0x91,
-		.number = "112233445566778"
-	},
 	.gsm_sms = {
-		{}, SMS_TYPE_SUBMIT,
+		{
+			.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+			.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+			.address = "112233445566778",
+		},
+		SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "012345678",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "012345678",
+			},
 			.pid = 0x40,
 			.dcs = 0xF4,
 			.udl = 12,
@@ -7766,15 +8259,20 @@ static struct send_sms_test send_sms_data_121 = {
 	.pdu_len = sizeof(send_sms_121),
 	.qualifier = 0x01,
 	.alpha_id = "Send SM",
-	.address = {
-		.ton_npi = 0x91,
-		.number = "112233445566778"
-	},
 	.gsm_sms = {
-		{}, SMS_TYPE_SUBMIT,
+		{
+			.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+			.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+			.address = "112233445566778",
+		},
+		SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "012345678",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "012345678",
+			},
 			.pid = 0x40,
 			.dcs = 0xF0,
 			.udl = 7,
@@ -7788,15 +8286,20 @@ static struct send_sms_test send_sms_data_131 = {
 	.pdu_len = sizeof(send_sms_131),
 	.qualifier = 0x00,
 	.alpha_id = "Short Message",
-	.address = {
-		.ton_npi = 0x91,
-		.number = "112233445566778"
-	},
 	.gsm_sms = {
-		{}, SMS_TYPE_SUBMIT,
+		{
+			.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+			.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+			.address = "112233445566778",
+		},
+		SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "012345678",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "012345678",
+			},
 			.pid = 0x40,
 			.dcs = 0xF0,
 			.udl = 13,
@@ -7810,15 +8313,20 @@ static struct send_sms_test send_sms_data_141 = {
 	.pdu_len = sizeof(send_sms_141),
 	.qualifier = 0x01,
 	.alpha_id = "The address data object holds the RP_Destination_Address",
-	.address = {
-		.ton_npi = 0x91,
-		.number = "112233445566778"
-	},
 	.gsm_sms = {
-		{}, SMS_TYPE_SUBMIT,
+		{
+			.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+			.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+			.address = "112233445566778",
+		},
+		SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "012345678",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "012345678",
+			},
 			.pid = 0x40,
 			.dcs = 0xF0,
 			.udl = 160,
@@ -7835,15 +8343,20 @@ static struct send_sms_test send_sms_data_151 = {
 	.pdu_len = sizeof(send_sms_151),
 	.qualifier = 0x00,
 	.alpha_id = "The address data object holds the RP Destination Address",
-	.address = {
-		.ton_npi = 0x91,
-		.number = "112233445566778"
-	},
 	.gsm_sms = {
-		{}, SMS_TYPE_SUBMIT,
+		{
+			.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+			.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+			.address = "112233445566778",
+		},
+		SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "012345678",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "012345678",
+			},
 			.pid = 0x40,
 			.dcs = 0xF0,
 			.udl = 160,
@@ -7869,7 +8382,11 @@ static struct send_sms_test send_sms_data_161 = {
 		{}, SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "01",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "01",
+			},
 			.pid = 0x40,
 			.dcs = 0xF0,
 			.udl = 1,
@@ -7882,15 +8399,21 @@ static struct send_sms_test send_sms_data_171 = {
 	.pdu = send_sms_171,
 	.pdu_len = sizeof(send_sms_171),
 	.qualifier = 0x00,
-	.address = {
-		.ton_npi = 0x91,
-		.number = "112233445566778"
-	},
+	.alpha_id = "",
 	.gsm_sms = {
-		{}, SMS_TYPE_SUBMIT,
+		{
+			.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+			.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+			.address = "112233445566778",
+		},
+		SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "012345678",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "012345678",
+			},
 			.pid = 0x40,
 			.dcs = 0xF4,
 			.udl = 12,
@@ -7903,15 +8426,20 @@ static struct send_sms_test send_sms_data_181 = {
 	.pdu = send_sms_181,
 	.pdu_len = sizeof(send_sms_181),
 	.qualifier = 0x00,
-	.address = {
-		.ton_npi = 0x91,
-		.number = "112233445566778"
-	},
 	.gsm_sms = {
-		{}, SMS_TYPE_SUBMIT,
+		{
+			.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+			.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+			.address = "112233445566778",
+		},
+		SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "012345678",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "012345678",
+			},
 			.pid = 0x40,
 			.dcs = 0xF4,
 			.udl = 12,
@@ -7925,15 +8453,20 @@ static struct send_sms_test send_sms_data_211 = {
 	.pdu_len = sizeof(send_sms_211),
 	.qualifier = 0x00,
 	.alpha_id = "ЗДРАВСТВУЙТЕ",
-	.address = {
-		.ton_npi = 0x91,
-		.number = "112233445566778"
-	},
 	.gsm_sms = {
-		{}, SMS_TYPE_SUBMIT,
+		{
+			.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+			.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+			.address = "112233445566778",
+		},
+		SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "012345678",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "012345678",
+			},
 			.pid = 0x40,
 			.dcs = 0x08,
 			.udl = 24,
@@ -7947,15 +8480,20 @@ static struct send_sms_test send_sms_data_212 = {
 	.pdu_len = sizeof(send_sms_212),
 	.qualifier = 0x00,
 	.alpha_id = "ЗДРАВСТВУЙТЕ",
-	.address = {
-		.ton_npi = 0x91,
-		.number = "112233445566778"
-	},
 	.gsm_sms = {
-		{}, SMS_TYPE_SUBMIT,
+		{
+			.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+			.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+			.address = "112233445566778",
+		},
+		SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "012345678",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "012345678",
+			},
 			.pid = 0x40,
 			.dcs = 0x08,
 			.udl = 24,
@@ -7969,15 +8507,20 @@ static struct send_sms_test send_sms_data_213 = {
 	.pdu_len = sizeof(send_sms_213),
 	.qualifier = 0x00,
 	.alpha_id = "ЗДРАВСТВУЙТЕ",
-	.address = {
-		.ton_npi = 0x91,
-		.number = "112233445566778"
-	},
 	.gsm_sms = {
-		{}, SMS_TYPE_SUBMIT,
+		{
+			.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+			.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+			.address = "112233445566778",
+		},
+		SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "012345678",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "012345678",
+			},
 			.pid = 0x40,
 			.dcs = 0x08,
 			.udl = 24,
@@ -7991,15 +8534,20 @@ static struct send_sms_test send_sms_data_311 = {
 	.pdu_len = sizeof(send_sms_311),
 	.qualifier = 0x00,
 	.alpha_id = "NO ICON",
-	.address = {
-		.ton_npi = 0x91,
-		.number = "112233445566778"
-	},
 	.gsm_sms = {
-		{}, SMS_TYPE_SUBMIT,
+		{
+			.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+			.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+			.address = "112233445566778",
+		},
+		SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "012345678",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "012345678",
+			},
 			.pid = 0x40,
 			.dcs = 0xF4,
 			.udl = 12,
@@ -8017,15 +8565,20 @@ static struct send_sms_test send_sms_data_321 = {
 	.pdu_len = sizeof(send_sms_321),
 	.qualifier = 0x00,
 	.alpha_id = "Send SM",
-	.address = {
-		.ton_npi = 0x91,
-		.number = "112233445566778"
-	},
 	.gsm_sms = {
-		{}, SMS_TYPE_SUBMIT,
+		{
+			.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+			.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+			.address = "112233445566778",
+		},
+		SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "012345678",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "012345678",
+			},
 			.pid = 0x40,
 			.dcs = 0xF4,
 			.udl = 12,
@@ -8047,7 +8600,11 @@ static struct send_sms_test send_sms_data_411 = {
 		{}, SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "01",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "01",
+			},
 			.pid = 0x40,
 			.dcs = 0xF0,
 			.udl = 1,
@@ -8069,7 +8626,11 @@ static struct send_sms_test send_sms_data_412 = {
 		{}, SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "01",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "01",
+			},
 			.pid = 0x40,
 			.dcs = 0xF0,
 			.udl = 1,
@@ -8087,7 +8648,11 @@ static struct send_sms_test send_sms_data_421 = {
 		{}, SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "01",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "01",
+			},
 			.pid = 0x40,
 			.dcs = 0xF0,
 			.udl = 1,
@@ -8109,7 +8674,11 @@ static struct send_sms_test send_sms_data_422 = {
 		{}, SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "01",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "01",
+			},
 			.pid = 0x40,
 			.dcs = 0xF0,
 			.udl = 1,
@@ -8127,7 +8696,11 @@ static struct send_sms_test send_sms_data_431 = {
 		{}, SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "01",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "01",
+			},
 			.pid = 0x40,
 			.dcs = 0xF0,
 			.udl = 1,
@@ -8149,7 +8722,11 @@ static struct send_sms_test send_sms_data_432 = {
 		{}, SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "01",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "01",
+			},
 			.pid = 0x40,
 			.dcs = 0xF0,
 			.udl = 1,
@@ -8167,7 +8744,11 @@ static struct send_sms_test send_sms_data_441 = {
 		{}, SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "01",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "01",
+			},
 			.pid = 0x40,
 			.dcs = 0xF0,
 			.udl = 1,
@@ -8189,7 +8770,11 @@ static struct send_sms_test send_sms_data_442 = {
 		{}, SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "01",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "01",
+			},
 			.pid = 0x40,
 			.dcs = 0xF0,
 			.udl = 1,
@@ -8211,7 +8796,11 @@ static struct send_sms_test send_sms_data_443 = {
 		{}, SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "01",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "01",
+			},
 			.pid = 0x40,
 			.dcs = 0xF0,
 			.udl = 1,
@@ -8229,7 +8818,11 @@ static struct send_sms_test send_sms_data_451 = {
 		{}, SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "01",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "01",
+			},
 			.pid = 0x40,
 			.dcs = 0xF0,
 			.udl = 1,
@@ -8251,7 +8844,11 @@ static struct send_sms_test send_sms_data_452 = {
 		{}, SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "01",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "01",
+			},
 			.pid = 0x40,
 			.dcs = 0xF0,
 			.udl = 1,
@@ -8273,7 +8870,11 @@ static struct send_sms_test send_sms_data_453 = {
 		{}, SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "01",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "01",
+			},
 			.pid = 0x40,
 			.dcs = 0xF0,
 			.udl = 1,
@@ -8291,7 +8892,11 @@ static struct send_sms_test send_sms_data_461 = {
 		{}, SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "01",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "01",
+			},
 			.pid = 0x40,
 			.dcs = 0xF0,
 			.udl = 1,
@@ -8313,7 +8918,11 @@ static struct send_sms_test send_sms_data_462 = {
 		{}, SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "01",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "01",
+			},
 			.pid = 0x40,
 			.dcs = 0xF0,
 			.udl = 1,
@@ -8335,7 +8944,11 @@ static struct send_sms_test send_sms_data_463 = {
 		{}, SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "01",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "01",
+			},
 			.pid = 0x40,
 			.dcs = 0xF0,
 			.udl = 1,
@@ -8353,7 +8966,11 @@ static struct send_sms_test send_sms_data_471 = {
 		{}, SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "01",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "01",
+			},
 			.pid = 0x40,
 			.dcs = 0xF0,
 			.udl = 1,
@@ -8375,7 +8992,11 @@ static struct send_sms_test send_sms_data_472 = {
 		{}, SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "01",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "01",
+			},
 			.pid = 0x40,
 			.dcs = 0xF0,
 			.udl = 1,
@@ -8397,7 +9018,11 @@ static struct send_sms_test send_sms_data_473 = {
 		{}, SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "01",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "01",
+			},
 			.pid = 0x40,
 			.dcs = 0xF0,
 			.udl = 1,
@@ -8415,7 +9040,11 @@ static struct send_sms_test send_sms_data_481 = {
 		{}, SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "01",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "01",
+			},
 			.pid = 0x40,
 			.dcs = 0xF0,
 			.udl = 1,
@@ -8437,7 +9066,11 @@ static struct send_sms_test send_sms_data_482 = {
 		{}, SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "01",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "01",
+			},
 			.pid = 0x40,
 			.dcs = 0xF0,
 			.udl = 1,
@@ -8459,7 +9092,11 @@ static struct send_sms_test send_sms_data_483 = {
 		{}, SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "01",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "01",
+			},
 			.pid = 0x40,
 			.dcs = 0xF0,
 			.udl = 1,
@@ -8477,7 +9114,11 @@ static struct send_sms_test send_sms_data_491 = {
 		{}, SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "01",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "01",
+			},
 			.pid = 0x40,
 			.dcs = 0xF0,
 			.udl = 1,
@@ -8499,7 +9140,11 @@ static struct send_sms_test send_sms_data_492 = {
 		{}, SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "01",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "01",
+			},
 			.pid = 0x40,
 			.dcs = 0xF0,
 			.udl = 1,
@@ -8521,7 +9166,11 @@ static struct send_sms_test send_sms_data_493 = {
 		{}, SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "01",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "01",
+			},
 			.pid = 0x40,
 			.dcs = 0xF0,
 			.udl = 1,
@@ -8539,7 +9188,11 @@ static struct send_sms_test send_sms_data_4101 = {
 		{}, SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "01",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "01",
+			},
 			.pid = 0x40,
 			.dcs = 0xF0,
 			.udl = 1,
@@ -8561,7 +9214,11 @@ static struct send_sms_test send_sms_data_4102 = {
 		{}, SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "01",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "01",
+			},
 			.pid = 0x40,
 			.dcs = 0xF0,
 			.udl = 1,
@@ -8576,15 +9233,20 @@ static struct send_sms_test send_sms_data_511 = {
 	.pdu_len = sizeof(send_sms_511),
 	.qualifier = 0x00,
 	.alpha_id = "中一",
-	.address = {
-		.ton_npi = 0x91,
-		.number = "112233445566778"
-	},
 	.gsm_sms = {
-		{}, SMS_TYPE_SUBMIT,
+		{
+			.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+			.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+			.address = "112233445566778",
+		},
+		SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "012345678",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "012345678",
+			},
 			.pid = 0x40,
 			.dcs = 0x08,
 			.udl = 4,
@@ -8599,15 +9261,20 @@ static struct send_sms_test send_sms_data_512 = {
 	.pdu_len = sizeof(send_sms_512),
 	.qualifier = 0x00,
 	.alpha_id = "中一",
-	.address = {
-		.ton_npi = 0x91,
-		.number = "112233445566778"
-	},
 	.gsm_sms = {
-		{}, SMS_TYPE_SUBMIT,
+		{
+			.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+			.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+			.address = "112233445566778",
+		},
+		SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "012345678",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "012345678",
+			},
 			.pid = 0x40,
 			.dcs = 0x08,
 			.udl = 4,
@@ -8622,15 +9289,20 @@ static struct send_sms_test send_sms_data_513 = {
 	.pdu_len = sizeof(send_sms_513),
 	.qualifier = 0x00,
 	.alpha_id = "中一",
-	.address = {
-		.ton_npi = 0x91,
-		.number = "112233445566778"
-	},
 	.gsm_sms = {
-		{}, SMS_TYPE_SUBMIT,
+		{
+			.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+			.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+			.address = "112233445566778",
+		},
+		SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "012345678",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "012345678",
+			},
 			.pid = 0x40,
 			.dcs = 0x08,
 			.udl = 4,
@@ -8644,15 +9316,20 @@ static struct send_sms_test send_sms_data_611 = {
 	.pdu_len = sizeof(send_sms_611),
 	.qualifier = 0x00,
 	.alpha_id = "80ル0",
-	.address = {
-		.ton_npi = 0x91,
-		.number = "112233445566778"
-	},
 	.gsm_sms = {
-		{}, SMS_TYPE_SUBMIT,
+		{
+			.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+			.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+			.address = "112233445566778",
+		},
+		SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "012345678",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "012345678",
+			},
 			.pid = 0x40,
 			.dcs = 0x08,
 			.udl = 8,
@@ -8666,15 +9343,20 @@ static struct send_sms_test send_sms_data_612 = {
 	.pdu_len = sizeof(send_sms_612),
 	.qualifier = 0x00,
 	.alpha_id = "81ル1",
-	.address = {
-		.ton_npi = 0x91,
-		.number = "112233445566778"
-	},
 	.gsm_sms = {
-		{}, SMS_TYPE_SUBMIT,
+		{
+			.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+			.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+			.address = "112233445566778",
+		},
+		SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "012345678",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "012345678",
+			},
 			.pid = 0x40,
 			.dcs = 0x08,
 			.udl = 8,
@@ -8688,15 +9370,20 @@ static struct send_sms_test send_sms_data_613 = {
 	.pdu_len = sizeof(send_sms_613),
 	.qualifier = 0x00,
 	.alpha_id = "82ル2",
-	.address = {
-		.ton_npi = 0x91,
-		.number = "112233445566778"
-	},
 	.gsm_sms = {
-		{}, SMS_TYPE_SUBMIT,
+		{
+			.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+			.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+			.address = "112233445566778",
+		},
+		SMS_TYPE_SUBMIT,
 		{.submit = {
 			.mr = 0x00,
-			.daddr.address = "012345678",
+			.daddr = {
+				.number_type = SMS_NUMBER_TYPE_INTERNATIONAL,
+				.numbering_plan = SMS_NUMBERING_PLAN_ISDN,
+				.address = "012345678",
+			},
 			.pid = 0x40,
 			.dcs = 0x08,
 			.udl = 8,
@@ -8713,6 +9400,7 @@ static void test_send_sms(gconstpointer data)
 	command = stk_command_new_from_pdu(test->pdu, test->pdu_len);
 
 	g_assert(command);
+	g_assert(command->status == STK_PARSE_RESULT_OK);
 
 	g_assert(command->number == 1);
 	g_assert(command->type == STK_COMMAND_TYPE_SEND_SMS);
@@ -8722,12 +9410,2218 @@ static void test_send_sms(gconstpointer data)
 	g_assert(command->dst == STK_DEVICE_IDENTITY_TYPE_NETWORK);
 
 	check_alpha_id(command->send_sms.alpha_id, test->alpha_id);
-	check_address(&command->send_sms.address, &test->address);
 	check_gsm_sms(&command->send_sms.gsm_sms, &test->gsm_sms);
 	check_cdma_sms_tpdu(&command->send_sms.cdma_sms, &test->cdma_sms);
 	check_icon_id(&command->send_sms.icon_id, &test->icon_id);
 	check_text_attr(&command->send_sms.text_attr, &test->text_attr);
 	check_frame_id(&command->send_sms.frame_id, &test->frame_id);
+
+	stk_command_free(command);
+}
+
+struct send_ss_test {
+	const unsigned char *pdu;
+	unsigned int pdu_len;
+	unsigned char qualifier;
+	char *alpha_id;
+	struct stk_ss ss;
+	struct stk_icon_id icon_id;
+	struct stk_text_attribute text_attr;
+	struct stk_frame_id frame_id;
+};
+
+static unsigned char send_ss_111[] = { 0xD0, 0x29, 0x81, 0x03, 0x01, 0x11,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x0C, 0x43, 0x61, 0x6C,
+						0x6C, 0x20, 0x46, 0x6F, 0x72,
+						0x77, 0x61, 0x72, 0x64, 0x89,
+						0x10, 0x91, 0xAA, 0x12, 0x0A,
+						0x21, 0x43, 0x65, 0x87, 0x09,
+						0x21, 0x43, 0x65, 0x87, 0xA9,
+						0x01, 0xFB };
+
+static unsigned char send_ss_141[] = { 0xD0, 0x2D, 0x81, 0x03, 0x01, 0x11,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x0C, 0x43, 0x61, 0x6C,
+						0x6C, 0x20, 0x46, 0x6F, 0x72,
+						0x77, 0x61, 0x72, 0x64, 0x89,
+						0x14, 0x91, 0xAA, 0x12, 0x0A,
+						0x21, 0x43, 0x65, 0x87, 0x09,
+						0x21, 0x43, 0x65, 0x87, 0x09,
+						0x21, 0x43, 0x65, 0xA7, 0x11,
+						0xFB };
+
+static unsigned char send_ss_151[] = { 0xD0, 0x81, 0xFD, 0x81, 0x03, 0x01,
+						0x11, 0x00, 0x82, 0x02, 0x81,
+						0x83, 0x85, 0x81, 0xEB, 0x45,
+						0x76, 0x65, 0x6E, 0x20, 0x69,
+						0x66, 0x20, 0x74, 0x68, 0x65,
+						0x20, 0x46, 0x69, 0x78, 0x65,
+						0x64, 0x20, 0x44, 0x69, 0x61,
+						0x6C, 0x6C, 0x69, 0x6E, 0x67,
+						0x20, 0x4E, 0x75, 0x6D, 0x62,
+						0x65, 0x72, 0x20, 0x73, 0x65,
+						0x72, 0x76, 0x69, 0x63, 0x65,
+						0x20, 0x69, 0x73, 0x20, 0x65,
+						0x6E, 0x61, 0x62, 0x6C, 0x65,
+						0x64, 0x2C, 0x20, 0x74, 0x68,
+						0x65, 0x20, 0x73, 0x75, 0x70,
+						0x70, 0x6C, 0x65, 0x6D, 0x65,
+						0x6E, 0x74, 0x61, 0x72, 0x79,
+						0x20, 0x73, 0x65, 0x72, 0x76,
+						0x69, 0x63, 0x65, 0x20, 0x63,
+						0x6F, 0x6E, 0x74, 0x72, 0x6F,
+						0x6C, 0x20, 0x73, 0x74, 0x72,
+						0x69, 0x6E, 0x67, 0x20, 0x69,
+						0x6E, 0x63, 0x6C, 0x75, 0x64,
+						0x65, 0x64, 0x20, 0x69, 0x6E,
+						0x20, 0x74, 0x68, 0x65, 0x20,
+						0x53, 0x45, 0x4E, 0x44, 0x20,
+						0x53, 0x53, 0x20, 0x70, 0x72,
+						0x6F, 0x61, 0x63, 0x74, 0x69,
+						0x76, 0x65, 0x20, 0x63, 0x6F,
+						0x6D, 0x6D, 0x61, 0x6E, 0x64,
+						0x20, 0x73, 0x68, 0x61, 0x6C,
+						0x6C, 0x20, 0x6E, 0x6F, 0x74,
+						0x20, 0x62, 0x65, 0x20, 0x63,
+						0x68, 0x65, 0x63, 0x6B, 0x65,
+						0x64, 0x20, 0x61, 0x67, 0x61,
+						0x69, 0x6E, 0x73, 0x74, 0x20,
+						0x74, 0x68, 0x6F, 0x73, 0x65,
+						0x20, 0x6F, 0x66, 0x20, 0x74,
+						0x68, 0x65, 0x20, 0x46, 0x44,
+						0x4E, 0x20, 0x6C, 0x69, 0x73,
+						0x74, 0x2E, 0x20, 0x55, 0x70,
+						0x6F, 0x6E, 0x20, 0x72, 0x65,
+						0x63, 0x65, 0x69, 0x76, 0x69,
+						0x6E, 0x67, 0x20, 0x74, 0x68,
+						0x69, 0x73, 0x20, 0x63, 0x6F,
+						0x6D, 0x6D, 0x61, 0x6E, 0x64,
+						0x2C, 0x20, 0x74, 0x68, 0x65,
+						0x20, 0x4D, 0x45, 0x20, 0x73,
+						0x68, 0x61, 0x6C, 0x6C, 0x20,
+						0x64, 0x65, 0x63, 0x69, 0x89,
+						0x04, 0xFF, 0xBA, 0x13, 0xFB };
+
+static unsigned char send_ss_161[] = { 0xD0, 0x1D, 0x81, 0x03, 0x01, 0x11,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x00, 0x89, 0x10, 0x91,
+						0xAA, 0x12, 0x0A, 0x21, 0x43,
+						0x65, 0x87, 0x09, 0x21, 0x43,
+						0x65, 0x87, 0xA9, 0x01, 0xFB };
+
+static unsigned char send_ss_211[] = { 0xD0, 0x2B, 0x81, 0x03, 0x01, 0x11,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x0A, 0x42, 0x61, 0x73,
+						0x69, 0x63, 0x20, 0x49, 0x63,
+						0x6F, 0x6E, 0x89, 0x10, 0x91,
+						0xAA, 0x12, 0x0A, 0x21, 0x43,
+						0x65, 0x87, 0x09, 0x21, 0x43,
+						0x65, 0x87, 0xA9, 0x01, 0xFB,
+						0x9E, 0x02, 0x00, 0x01 };
+
+static unsigned char send_ss_221[] = { 0xD0, 0x2C, 0x81, 0x03, 0x01, 0x11,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x0B, 0x43, 0x6F, 0x6C,
+						0x6F, 0x75, 0x72, 0x20, 0x49,
+						0x63, 0x6F, 0x6E, 0x89, 0x10,
+						0x91, 0xAA, 0x12, 0x0A, 0x21,
+						0x43, 0x65, 0x87, 0x09, 0x21,
+						0x43, 0x65, 0x87, 0xA9, 0x01,
+						0xFB, 0x9E, 0x02, 0x00, 0x02 };
+
+static unsigned char send_ss_231[] = { 0xD0, 0x2B, 0x81, 0x03, 0x01, 0x11,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x0A, 0x42, 0x61, 0x73,
+						0x69, 0x63, 0x20, 0x49, 0x63,
+						0x6F, 0x6E, 0x89, 0x10, 0x91,
+						0xAA, 0x12, 0x0A, 0x21, 0x43,
+						0x65, 0x87, 0x09, 0x21, 0x43,
+						0x65, 0x87, 0xA9, 0x01, 0xFB,
+						0x9E, 0x02, 0x01, 0x01 };
+
+static unsigned char send_ss_241[] = { 0xD0, 0x1D, 0x81, 0x03, 0x01, 0x11,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x89, 0x0E, 0x91, 0xAA, 0x12,
+						0x0A, 0x21, 0x43, 0x65, 0x87,
+						0x09, 0x21, 0x43, 0x65, 0x87,
+						0xB9, 0x9E, 0x02, 0x01, 0x01 };
+
+static unsigned char send_ss_311[] = { 0xD0, 0x36, 0x81, 0x03, 0x01, 0x11,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x19, 0x80, 0x04, 0x17,
+						0x04, 0x14, 0x04, 0x20, 0x04,
+						0x10, 0x04, 0x12, 0x04, 0x21,
+						0x04, 0x22, 0x04, 0x12, 0x04,
+						0x23, 0x04, 0x19, 0x04, 0x22,
+						0x04, 0x15, 0x89, 0x10, 0x91,
+						0xAA, 0x12, 0x0A, 0x21, 0x43,
+						0x65, 0x87, 0x09, 0x21, 0x43,
+						0x65, 0x87, 0xA9, 0x01, 0xFB };
+
+static unsigned char send_ss_411[] = { 0xD0, 0x33, 0x81, 0x03, 0x01, 0x11,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x31, 0x89, 0x10,
+						0x91, 0xAA, 0x12, 0x0A, 0x21,
+						0x43, 0x65, 0x87, 0x09, 0x21,
+						0x43, 0x65, 0x87, 0xA9, 0x01,
+						0xFB, 0xD0, 0x04, 0x00, 0x10,
+						0x00, 0xB4 };
+
+static unsigned char send_ss_412[] = { 0xD0, 0x2D, 0x81, 0x03, 0x01, 0x11,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x32, 0x89, 0x10,
+						0x91, 0xAA, 0x12, 0x0A, 0x21,
+						0x43, 0x65, 0x87, 0x09, 0x21,
+						0x43, 0x65, 0x87, 0xA9, 0x01,
+						0xFB };
+
+static unsigned char send_ss_421[] = { 0xD0, 0x33, 0x81, 0x03, 0x01, 0x11,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x31, 0x89, 0x10,
+						0x91, 0xAA, 0x12, 0x0A, 0x21,
+						0x43, 0x65, 0x87, 0x09, 0x21,
+						0x43, 0x65, 0x87, 0xA9, 0x01,
+						0xFB, 0xD0, 0x04, 0x00, 0x10,
+						0x01, 0xB4 };
+
+static unsigned char send_ss_422[] = { 0xD0, 0x2D, 0x81, 0x03, 0x01, 0x11,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x32, 0x89, 0x10,
+						0x91, 0xAA, 0x12, 0x0A, 0x21,
+						0x43, 0x65, 0x87, 0x09, 0x21,
+						0x43, 0x65, 0x87, 0xA9, 0x01,
+						0xFB };
+
+static unsigned char send_ss_431[] = { 0xD0, 0x33, 0x81, 0x03, 0x01, 0x11,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x31, 0x89, 0x10,
+						0x91, 0xAA, 0x12, 0x0A, 0x21,
+						0x43, 0x65, 0x87, 0x09, 0x21,
+						0x43, 0x65, 0x87, 0xA9, 0x01,
+						0xFB, 0xD0, 0x04, 0x00, 0x10,
+						0x02, 0xB4 };
+
+static unsigned char send_ss_432[] = { 0xD0, 0x2D, 0x81, 0x03, 0x01, 0x11,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x32, 0x89, 0x10,
+						0x91, 0xAA, 0x12, 0x0A, 0x21,
+						0x43, 0x65, 0x87, 0x09, 0x21,
+						0x43, 0x65, 0x87, 0xA9, 0x01,
+						0xFB };
+
+static unsigned char send_ss_441[] = { 0xD0, 0x33, 0x81, 0x03, 0x01, 0x11,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x31, 0x89, 0x10,
+						0x91, 0xAA, 0x12, 0x0A, 0x21,
+						0x43, 0x65, 0x87, 0x09, 0x21,
+						0x43, 0x65, 0x87, 0xA9, 0x01,
+						0xFB, 0xD0, 0x04, 0x00, 0x10,
+						0x04, 0xB4 };
+
+static unsigned char send_ss_442[] = { 0xD0, 0x33, 0x81, 0x03, 0x01, 0x11,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x32, 0x89, 0x10,
+						0x91, 0xAA, 0x12, 0x0A, 0x21,
+						0x43, 0x65, 0x87, 0x09, 0x21,
+						0x43, 0x65, 0x87, 0xA9, 0x01,
+						0xFB, 0xD0, 0x04, 0x00, 0x10,
+						0x00, 0xB4 };
+
+static unsigned char send_ss_443[] = { 0xD0, 0x2D, 0x81, 0x03, 0x01, 0x11,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x33, 0x89, 0x10,
+						0x91, 0xAA, 0x12, 0x0A, 0x21,
+						0x43, 0x65, 0x87, 0x09, 0x21,
+						0x43, 0x65, 0x87, 0xA9, 0x01,
+						0xFB };
+
+static unsigned char send_ss_451[] = { 0xD0, 0x33, 0x81, 0x03, 0x01, 0x11,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x31, 0x89, 0x10,
+						0x91, 0xAA, 0x12, 0x0A, 0x21,
+						0x43, 0x65, 0x87, 0x09, 0x21,
+						0x43, 0x65, 0x87, 0xA9, 0x01,
+						0xFB, 0xD0, 0x04, 0x00, 0x10,
+						0x08, 0xB4 };
+
+static unsigned char send_ss_452[] = { 0xD0, 0x33, 0x81, 0x03, 0x01, 0x11,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x32, 0x89, 0x10,
+						0x91, 0xAA, 0x12, 0x0A, 0x21,
+						0x43, 0x65, 0x87, 0x09, 0x21,
+						0x43, 0x65, 0x87, 0xA9, 0x01,
+						0xFB, 0xD0, 0x04, 0x00, 0x10,
+						0x00, 0xB4 };
+
+static unsigned char send_ss_453[] = { 0xD0, 0x2D, 0x81, 0x03, 0x01, 0x11,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x33, 0x89, 0x10,
+						0x91, 0xAA, 0x12, 0x0A, 0x21,
+						0x43, 0x65, 0x87, 0x09, 0x21,
+						0x43, 0x65, 0x87, 0xA9, 0x01,
+						0xFB };
+
+static unsigned char send_ss_461[] = { 0xD0, 0x33, 0x81, 0x03, 0x01, 0x11,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x31, 0x89, 0x10,
+						0x91, 0xAA, 0x12, 0x0A, 0x21,
+						0x43, 0x65, 0x87, 0x09, 0x21,
+						0x43, 0x65, 0x87, 0xA9, 0x01,
+						0xFB, 0xD0, 0x04, 0x00, 0x10,
+						0x10, 0xB4 };
+
+static unsigned char send_ss_462[] = { 0xD0, 0x33, 0x81, 0x03, 0x01, 0x11,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x32, 0x89, 0x10,
+						0x91, 0xAA, 0x12, 0x0A, 0x21,
+						0x43, 0x65, 0x87, 0x09, 0x21,
+						0x43, 0x65, 0x87, 0xA9, 0x01,
+						0xFB, 0xD0, 0x04, 0x00, 0x10,
+						0x00, 0xB4 };
+
+static unsigned char send_ss_463[] = { 0xD0, 0x2D, 0x81, 0x03, 0x01, 0x11,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x33, 0x89, 0x10,
+						0x91, 0xAA, 0x12, 0x0A, 0x21,
+						0x43, 0x65, 0x87, 0x09, 0x21,
+						0x43, 0x65, 0x87, 0xA9, 0x01,
+						0xFB };
+
+static unsigned char send_ss_471[] = { 0xD0, 0x33, 0x81, 0x03, 0x01, 0x11,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x31, 0x89, 0x10,
+						0x91, 0xAA, 0x12, 0x0A, 0x21,
+						0x43, 0x65, 0x87, 0x09, 0x21,
+						0x43, 0x65, 0x87, 0xA9, 0x01,
+						0xFB, 0xD0, 0x04, 0x00, 0x10,
+						0x20, 0xB4 };
+
+static unsigned char send_ss_472[] = { 0xD0, 0x33, 0x81, 0x03, 0x01, 0x11,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x32, 0x89, 0x10,
+						0x91, 0xAA, 0x12, 0x0A, 0x21,
+						0x43, 0x65, 0x87, 0x09, 0x21,
+						0x43, 0x65, 0x87, 0xA9, 0x01,
+						0xFB, 0xD0, 0x04, 0x00, 0x10,
+						0x00, 0xB4 };
+
+static unsigned char send_ss_473[] = { 0xD0, 0x2D, 0x81, 0x03, 0x01, 0x11,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x33, 0x89, 0x10,
+						0x91, 0xAA, 0x12, 0x0A, 0x21,
+						0x43, 0x65, 0x87, 0x09, 0x21,
+						0x43, 0x65, 0x87, 0xA9, 0x01,
+						0xFB };
+
+static unsigned char send_ss_481[] = { 0xD0, 0x33, 0x81, 0x03, 0x01, 0x11,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x31, 0x89, 0x10,
+						0x91, 0xAA, 0x12, 0x0A, 0x21,
+						0x43, 0x65, 0x87, 0x09, 0x21,
+						0x43, 0x65, 0x87, 0xA9, 0x01,
+						0xFB, 0xD0, 0x04, 0x00, 0x10,
+						0x40, 0xB4 };
+
+static unsigned char send_ss_482[] = { 0xD0, 0x33, 0x81, 0x03, 0x01, 0x11,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x32, 0x89, 0x10,
+						0x91, 0xAA, 0x12, 0x0A, 0x21,
+						0x43, 0x65, 0x87, 0x09, 0x21,
+						0x43, 0x65, 0x87, 0xA9, 0x01,
+						0xFB, 0xD0, 0x04, 0x00, 0x10,
+						0x00, 0xB4 };
+
+static unsigned char send_ss_483[] = { 0xD0, 0x2D, 0x81, 0x03, 0x01, 0x11,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x33, 0x89, 0x10,
+						0x91, 0xAA, 0x12, 0x0A, 0x21,
+						0x43, 0x65, 0x87, 0x09, 0x21,
+						0x43, 0x65, 0x87, 0xA9, 0x01,
+						0xFB };
+
+static unsigned char send_ss_491[] = { 0xD0, 0x33, 0x81, 0x03, 0x01, 0x11,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x31, 0x89, 0x10,
+						0x91, 0xAA, 0x12, 0x0A, 0x21,
+						0x43, 0x65, 0x87, 0x09, 0x21,
+						0x43, 0x65, 0x87, 0xA9, 0x01,
+						0xFB, 0xD0, 0x04, 0x00, 0x10,
+						0x80, 0xB4 };
+
+static unsigned char send_ss_492[] = { 0xD0, 0x33, 0x81, 0x03, 0x01, 0x11,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x32, 0x89, 0x10,
+						0x91, 0xAA, 0x12, 0x0A, 0x21,
+						0x43, 0x65, 0x87, 0x09, 0x21,
+						0x43, 0x65, 0x87, 0xA9, 0x01,
+						0xFB, 0xD0, 0x04, 0x00, 0x10,
+						0x00, 0xB4 };
+
+static unsigned char send_ss_493[] = { 0xD0, 0x2D, 0x81, 0x03, 0x01, 0x11,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x33, 0x89, 0x10,
+						0x91, 0xAA, 0x12, 0x0A, 0x21,
+						0x43, 0x65, 0x87, 0x09, 0x21,
+						0x43, 0x65, 0x87, 0xA9, 0x01,
+						0xFB };
+
+static unsigned char send_ss_4101[] = { 0xD0, 0x33, 0x81, 0x03, 0x01, 0x11,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x31, 0x89, 0x10,
+						0x91, 0xAA, 0x12, 0x0A, 0x21,
+						0x43, 0x65, 0x87, 0x09, 0x21,
+						0x43, 0x65, 0x87, 0xA9, 0x01,
+						0xFB, 0xD0, 0x04, 0x00, 0x10,
+						0x00, 0xB4 };
+
+static unsigned char send_ss_4102[] = { 0xD0, 0x2D, 0x81, 0x03, 0x01, 0x11,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x32, 0x89, 0x10,
+						0x91, 0xAA, 0x12, 0x0A, 0x21,
+						0x43, 0x65, 0x87, 0x09, 0x21,
+						0x43, 0x65, 0x87, 0xA9, 0x01,
+						0xFB };
+
+static unsigned char send_ss_511[] = { 0xD0, 0x22, 0x81, 0x03, 0x01, 0x11,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x05, 0x80, 0x4F, 0x60,
+						0x59, 0x7D, 0x89, 0x10, 0x91,
+						0xAA, 0x12, 0x0A, 0x21, 0x43,
+						0x65, 0x87, 0x09, 0x21, 0x43,
+						0x65, 0x87, 0xA9, 0x01, 0xFB };
+
+static unsigned char send_ss_611[] = { 0xD0, 0x20, 0x81, 0x03, 0x01, 0x11,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x03, 0x80, 0x30, 0xEB,
+						0x89, 0x10, 0x91, 0xAA, 0x12,
+						0x0A, 0x21, 0x43, 0x65, 0x87,
+						0x09, 0x21, 0x43, 0x65, 0x87,
+						0xA9, 0x01, 0xFB };
+
+static struct send_ss_test send_ss_data_111 = {
+	.pdu = send_ss_111,
+	.pdu_len = sizeof(send_ss_111),
+	.qualifier = 0x00,
+	.alpha_id = "Call Forward",
+	.ss = {
+		.ton_npi = 0x91,
+		.ss = "**21*01234567890123456789*10#"
+	}
+};
+
+static struct send_ss_test send_ss_data_141 = {
+	.pdu = send_ss_141,
+	.pdu_len = sizeof(send_ss_141),
+	.qualifier = 0x00,
+	.alpha_id = "Call Forward",
+	.ss = {
+		.ton_npi = 0x91,
+		.ss = "**21*0123456789012345678901234567*11#"
+	}
+};
+
+static struct send_ss_test send_ss_data_151 = {
+	.pdu = send_ss_151,
+	.pdu_len = sizeof(send_ss_151),
+	.qualifier = 0x00,
+	.alpha_id = "Even if the Fixed Dialling Number service is enabled, the "
+		"supplementary service control string included in the SEND SS "
+		"proactive command shall not be checked against those of the "
+		"FDN list. Upon receiving this command, the ME shall deci",
+	.ss = {
+		.ton_npi = 0xFF,
+		.ss = "*#31#"
+	}
+};
+
+static struct send_ss_test send_ss_data_161 = {
+	.pdu = send_ss_161,
+	.pdu_len = sizeof(send_ss_161),
+	.qualifier = 0x00,
+	.alpha_id = "",
+	.ss = {
+		.ton_npi = 0x91,
+		.ss = "**21*01234567890123456789*10#"
+	}
+};
+
+static struct send_ss_test send_ss_data_211 = {
+	.pdu = send_ss_211,
+	.pdu_len = sizeof(send_ss_211),
+	.qualifier = 0x00,
+	.alpha_id = "Basic Icon",
+	.ss = {
+		.ton_npi = 0x91,
+		.ss = "**21*01234567890123456789*10#"
+	},
+	.icon_id = {
+		.qualifier = STK_ICON_QUALIFIER_TYPE_SELF_EXPLANATORY,
+		.id = 0x01
+	}
+};
+
+static struct send_ss_test send_ss_data_221 = {
+	.pdu = send_ss_221,
+	.pdu_len = sizeof(send_ss_221),
+	.qualifier = 0x00,
+	.alpha_id = "Colour Icon",
+	.ss = {
+		.ton_npi = 0x91,
+		.ss = "**21*01234567890123456789*10#"
+	},
+	.icon_id = {
+		.qualifier = STK_ICON_QUALIFIER_TYPE_SELF_EXPLANATORY,
+		.id = 0x02
+	}
+};
+
+static struct send_ss_test send_ss_data_231 = {
+	.pdu = send_ss_231,
+	.pdu_len = sizeof(send_ss_231),
+	.qualifier = 0x00,
+	.alpha_id = "Basic Icon",
+	.ss = {
+		.ton_npi = 0x91,
+		.ss = "**21*01234567890123456789*10#"
+	},
+	.icon_id = {
+		.qualifier = STK_ICON_QUALIFIER_TYPE_NON_SELF_EXPLANATORY,
+		.id = 0x01
+	}
+};
+
+static struct send_ss_test send_ss_data_241 = {
+	.pdu = send_ss_241,
+	.pdu_len = sizeof(send_ss_241),
+	.qualifier = 0x00,
+	.ss = {
+		.ton_npi = 0x91,
+		.ss = "**21*01234567890123456789#"
+	},
+	.icon_id = {
+		.qualifier = STK_ICON_QUALIFIER_TYPE_NON_SELF_EXPLANATORY,
+		.id = 0x01
+	}
+};
+
+static struct send_ss_test send_ss_data_311 = {
+	.pdu = send_ss_311,
+	.pdu_len = sizeof(send_ss_311),
+	.qualifier = 0x00,
+	.alpha_id = "ЗДРАВСТВУЙТЕ",
+	.ss = {
+		.ton_npi = 0x91,
+		.ss = "**21*01234567890123456789*10#"
+	}
+};
+
+static struct send_ss_test send_ss_data_411 = {
+	.pdu = send_ss_411,
+	.pdu_len = sizeof(send_ss_411),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 1",
+	.ss = {
+		.ton_npi = 0x91,
+		.ss = "**21*01234567890123456789*10#"
+	},
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x00, 0xB4 }
+	}
+};
+
+static struct send_ss_test send_ss_data_412 = {
+	.pdu = send_ss_412,
+	.pdu_len = sizeof(send_ss_412),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 2",
+	.ss = {
+		.ton_npi = 0x91,
+		.ss = "**21*01234567890123456789*10#"
+	}
+};
+
+static struct send_ss_test send_ss_data_421 = {
+	.pdu = send_ss_421,
+	.pdu_len = sizeof(send_ss_421),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 1",
+	.ss = {
+		.ton_npi = 0x91,
+		.ss = "**21*01234567890123456789*10#"
+	},
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x01, 0xB4 }
+	}
+};
+
+static struct send_ss_test send_ss_data_422 = {
+	.pdu = send_ss_422,
+	.pdu_len = sizeof(send_ss_422),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 2",
+	.ss = {
+		.ton_npi = 0x91,
+		.ss = "**21*01234567890123456789*10#"
+	}
+};
+
+static struct send_ss_test send_ss_data_431 = {
+	.pdu = send_ss_431,
+	.pdu_len = sizeof(send_ss_431),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 1",
+	.ss = {
+		.ton_npi = 0x91,
+		.ss = "**21*01234567890123456789*10#"
+	},
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x02, 0xB4 }
+	}
+};
+
+static struct send_ss_test send_ss_data_432 = {
+	.pdu = send_ss_432,
+	.pdu_len = sizeof(send_ss_432),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 2",
+	.ss = {
+		.ton_npi = 0x91,
+		.ss = "**21*01234567890123456789*10#"
+	}
+};
+
+static struct send_ss_test send_ss_data_441 = {
+	.pdu = send_ss_441,
+	.pdu_len = sizeof(send_ss_441),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 1",
+	.ss = {
+		.ton_npi = 0x91,
+		.ss = "**21*01234567890123456789*10#"
+	},
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x04, 0xB4 }
+	}
+};
+
+static struct send_ss_test send_ss_data_442 = {
+	.pdu = send_ss_442,
+	.pdu_len = sizeof(send_ss_442),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 2",
+	.ss = {
+		.ton_npi = 0x91,
+		.ss = "**21*01234567890123456789*10#"
+	},
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x00, 0xB4 }
+	}
+};
+
+static struct send_ss_test send_ss_data_443 = {
+	.pdu = send_ss_443,
+	.pdu_len = sizeof(send_ss_443),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 3",
+	.ss = {
+		.ton_npi = 0x91,
+		.ss = "**21*01234567890123456789*10#"
+	}
+};
+
+static struct send_ss_test send_ss_data_451 = {
+	.pdu = send_ss_451,
+	.pdu_len = sizeof(send_ss_451),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 1",
+	.ss = {
+		.ton_npi = 0x91,
+		.ss = "**21*01234567890123456789*10#"
+	},
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x08, 0xB4 }
+	}
+};
+
+static struct send_ss_test send_ss_data_452 = {
+	.pdu = send_ss_452,
+	.pdu_len = sizeof(send_ss_452),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 2",
+	.ss = {
+		.ton_npi = 0x91,
+		.ss = "**21*01234567890123456789*10#"
+	},
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x00, 0xB4 }
+	}
+};
+
+static struct send_ss_test send_ss_data_453 = {
+	.pdu = send_ss_453,
+	.pdu_len = sizeof(send_ss_453),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 3",
+	.ss = {
+		.ton_npi = 0x91,
+		.ss = "**21*01234567890123456789*10#"
+	}
+};
+
+static struct send_ss_test send_ss_data_461 = {
+	.pdu = send_ss_461,
+	.pdu_len = sizeof(send_ss_461),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 1",
+	.ss = {
+		.ton_npi = 0x91,
+		.ss = "**21*01234567890123456789*10#"
+	},
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x10, 0xB4 }
+	}
+};
+
+static struct send_ss_test send_ss_data_462 = {
+	.pdu = send_ss_462,
+	.pdu_len = sizeof(send_ss_462),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 2",
+	.ss = {
+		.ton_npi = 0x91,
+		.ss = "**21*01234567890123456789*10#"
+	},
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x00, 0xB4 }
+	}
+};
+
+static struct send_ss_test send_ss_data_463 = {
+	.pdu = send_ss_463,
+	.pdu_len = sizeof(send_ss_463),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 3",
+	.ss = {
+		.ton_npi = 0x91,
+		.ss = "**21*01234567890123456789*10#"
+	}
+};
+
+static struct send_ss_test send_ss_data_471 = {
+	.pdu = send_ss_471,
+	.pdu_len = sizeof(send_ss_471),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 1",
+	.ss = {
+		.ton_npi = 0x91,
+		.ss = "**21*01234567890123456789*10#"
+	},
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x20, 0xB4 }
+	}
+};
+
+static struct send_ss_test send_ss_data_472 = {
+	.pdu = send_ss_472,
+	.pdu_len = sizeof(send_ss_472),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 2",
+	.ss = {
+		.ton_npi = 0x91,
+		.ss = "**21*01234567890123456789*10#"
+	},
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x00, 0xB4 }
+	}
+};
+
+static struct send_ss_test send_ss_data_473 = {
+	.pdu = send_ss_473,
+	.pdu_len = sizeof(send_ss_473),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 3",
+	.ss = {
+		.ton_npi = 0x91,
+		.ss = "**21*01234567890123456789*10#"
+	}
+};
+
+static struct send_ss_test send_ss_data_481 = {
+	.pdu = send_ss_481,
+	.pdu_len = sizeof(send_ss_481),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 1",
+	.ss = {
+		.ton_npi = 0x91,
+		.ss = "**21*01234567890123456789*10#"
+	},
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x40, 0xB4 }
+	}
+};
+
+static struct send_ss_test send_ss_data_482 = {
+	.pdu = send_ss_482,
+	.pdu_len = sizeof(send_ss_482),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 2",
+	.ss = {
+		.ton_npi = 0x91,
+		.ss = "**21*01234567890123456789*10#"
+	},
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x00, 0xB4 }
+	}
+};
+
+static struct send_ss_test send_ss_data_483 = {
+	.pdu = send_ss_483,
+	.pdu_len = sizeof(send_ss_483),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 3",
+	.ss = {
+		.ton_npi = 0x91,
+		.ss = "**21*01234567890123456789*10#"
+	}
+};
+
+static struct send_ss_test send_ss_data_491 = {
+	.pdu = send_ss_491,
+	.pdu_len = sizeof(send_ss_491),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 1",
+	.ss = {
+		.ton_npi = 0x91,
+		.ss = "**21*01234567890123456789*10#"
+	},
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x80, 0xB4 }
+	}
+};
+
+static struct send_ss_test send_ss_data_492 = {
+	.pdu = send_ss_492,
+	.pdu_len = sizeof(send_ss_492),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 2",
+	.ss = {
+		.ton_npi = 0x91,
+		.ss = "**21*01234567890123456789*10#"
+	},
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x00, 0xB4 }
+	}
+};
+
+static struct send_ss_test send_ss_data_493 = {
+	.pdu = send_ss_493,
+	.pdu_len = sizeof(send_ss_493),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 3",
+	.ss = {
+		.ton_npi = 0x91,
+		.ss = "**21*01234567890123456789*10#"
+	}
+};
+
+static struct send_ss_test send_ss_data_4101 = {
+	.pdu = send_ss_4101,
+	.pdu_len = sizeof(send_ss_4101),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 1",
+	.ss = {
+		.ton_npi = 0x91,
+		.ss = "**21*01234567890123456789*10#"
+	},
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x00, 0xB4 }
+	}
+};
+
+static struct send_ss_test send_ss_data_4102 = {
+	.pdu = send_ss_4102,
+	.pdu_len = sizeof(send_ss_4102),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 2",
+	.ss = {
+		.ton_npi = 0x91,
+		.ss = "**21*01234567890123456789*10#"
+	}
+};
+
+static struct send_ss_test send_ss_data_511 = {
+	.pdu = send_ss_511,
+	.pdu_len = sizeof(send_ss_511),
+	.qualifier = 0x00,
+	.alpha_id = "你好",
+	.ss = {
+		.ton_npi = 0x91,
+		.ss = "**21*01234567890123456789*10#"
+	}
+};
+
+static struct send_ss_test send_ss_data_611 = {
+	.pdu = send_ss_611,
+	.pdu_len = sizeof(send_ss_611),
+	.qualifier = 0x00,
+	.alpha_id = "ル",
+	.ss = {
+		.ton_npi = 0x91,
+		.ss = "**21*01234567890123456789*10#"
+	}
+};
+
+static void test_send_ss(gconstpointer data)
+{
+	const struct send_ss_test *test = data;
+	struct stk_command *command;
+
+	command = stk_command_new_from_pdu(test->pdu, test->pdu_len);
+
+	g_assert(command);
+	g_assert(command->status == STK_PARSE_RESULT_OK);
+
+	g_assert(command->number == 1);
+	g_assert(command->type == STK_COMMAND_TYPE_SEND_SS);
+	g_assert(command->qualifier == test->qualifier);
+
+	g_assert(command->src == STK_DEVICE_IDENTITY_TYPE_UICC);
+	g_assert(command->dst == STK_DEVICE_IDENTITY_TYPE_NETWORK);
+
+	check_alpha_id(command->send_ss.alpha_id, test->alpha_id);
+	check_ss(&command->send_ss.ss, &test->ss);
+	check_icon_id(&command->send_ss.icon_id, &test->icon_id);
+	check_text_attr(&command->send_ss.text_attr, &test->text_attr);
+	check_frame_id(&command->send_ss.frame_id, &test->frame_id);
+
+	stk_command_free(command);
+}
+
+struct send_ussd_test {
+	const unsigned char *pdu;
+	unsigned int pdu_len;
+	unsigned char qualifier;
+	char *alpha_id;
+	char *ussd;
+	struct stk_icon_id icon_id;
+	struct stk_text_attribute text_attr;
+	struct stk_frame_id frame_id;
+};
+
+static unsigned char send_ussd_111[] = { 0xD0, 0x50, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x0A, 0x37, 0x2D, 0x62,
+						0x69, 0x74, 0x20, 0x55, 0x53,
+						0x53, 0x44, 0x8A, 0x39, 0xF0,
+						0x41, 0xE1, 0x90, 0x58, 0x34,
+						0x1E, 0x91, 0x49, 0xE5, 0x92,
+						0xD9, 0x74, 0x3E, 0xA1, 0x51,
+						0xE9, 0x94, 0x5A, 0xB5, 0x5E,
+						0xB1, 0x59, 0x6D, 0x2B, 0x2C,
+						0x1E, 0x93, 0xCB, 0xE6, 0x33,
+						0x3A, 0xAD, 0x5E, 0xB3, 0xDB,
+						0xEE, 0x37, 0x3C, 0x2E, 0x9F,
+						0xD3, 0xEB, 0xF6, 0x3B, 0x3E,
+						0xAF, 0x6F, 0xC5, 0x64, 0x33,
+						0x5A, 0xCD, 0x76, 0xC3, 0xE5,
+						0x60 };
+
+static unsigned char send_ussd_121[] = { 0xD0, 0x58, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x0A, 0x38, 0x2D, 0x62,
+						0x69, 0x74, 0x20, 0x55, 0x53,
+						0x53, 0x44, 0x8A, 0x41, 0x44,
+						0x41, 0x42, 0x43, 0x44, 0x45,
+						0x46, 0x47, 0x48, 0x49, 0x4A,
+						0x4B, 0x4C, 0x4D, 0x4E, 0x4F,
+						0x50, 0x51, 0x52, 0x53, 0x54,
+						0x55, 0x56, 0x57, 0x58, 0x59,
+						0x5A, 0x2D, 0x61, 0x62, 0x63,
+						0x64, 0x65, 0x66, 0x67, 0x68,
+						0x69, 0x6A, 0x6B, 0x6C, 0x6D,
+						0x6E, 0x6F, 0x70, 0x71, 0x72,
+						0x73, 0x74, 0x75, 0x76, 0x77,
+						0x78, 0x79, 0x7A, 0x2D, 0x31,
+						0x32, 0x33, 0x34, 0x35, 0x36,
+						0x37, 0x38, 0x39, 0x30 };
+
+static unsigned char send_ussd_131[] = { 0xD0, 0x2F, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x09, 0x55, 0x43, 0x53,
+						0x32, 0x20, 0x55, 0x53, 0x53,
+						0x44, 0x8A, 0x19, 0x48, 0x04,
+						0x17, 0x04, 0x14, 0x04, 0x20,
+						0x04, 0x10, 0x04, 0x12, 0x04,
+						0x21, 0x04, 0x22, 0x04, 0x12,
+						0x04, 0x23, 0x04, 0x19, 0x04,
+						0x22, 0x04, 0x15 };
+
+static unsigned char send_ussd_161[] = { 0xD0, 0x81, 0xFD, 0x81, 0x03, 0x01,
+						0x12, 0x00, 0x82, 0x02, 0x81,
+						0x83, 0x85, 0x81, 0xB6, 0x6F,
+						0x6E, 0x63, 0x65, 0x20, 0x61,
+						0x20, 0x52, 0x45, 0x4C, 0x45,
+						0x41, 0x53, 0x45, 0x20, 0x43,
+						0x4F, 0x4D, 0x50, 0x4C, 0x45,
+						0x54, 0x45, 0x20, 0x6D, 0x65,
+						0x73, 0x73, 0x61, 0x67, 0x65,
+						0x20, 0x63, 0x6F, 0x6E, 0x74,
+						0x61, 0x69, 0x6E, 0x69, 0x6E,
+						0x67, 0x20, 0x74, 0x68, 0x65,
+						0x20, 0x55, 0x53, 0x53, 0x44,
+						0x20, 0x52, 0x65, 0x74, 0x75,
+						0x72, 0x6E, 0x20, 0x52, 0x65,
+						0x73, 0x75, 0x6C, 0x74, 0x20,
+						0x6D, 0x65, 0x73, 0x73, 0x61,
+						0x67, 0x65, 0x20, 0x6E, 0x6F,
+						0x74, 0x20, 0x63, 0x6F, 0x6E,
+						0x74, 0x61, 0x69, 0x6E, 0x69,
+						0x6E, 0x67, 0x20, 0x61, 0x6E,
+						0x20, 0x65, 0x72, 0x72, 0x6F,
+						0x72, 0x20, 0x68, 0x61, 0x73,
+						0x20, 0x62, 0x65, 0x65, 0x6E,
+						0x20, 0x72, 0x65, 0x63, 0x65,
+						0x69, 0x76, 0x65, 0x64, 0x20,
+						0x66, 0x72, 0x6F, 0x6D, 0x20,
+						0x74, 0x68, 0x65, 0x20, 0x6E,
+						0x65, 0x74, 0x77, 0x6F, 0x72,
+						0x6B, 0x2C, 0x20, 0x74, 0x68,
+						0x65, 0x20, 0x4D, 0x45, 0x20,
+						0x73, 0x68, 0x61, 0x6C, 0x6C,
+						0x20, 0x69, 0x6E, 0x66, 0x6F,
+						0x72, 0x6D, 0x20, 0x74, 0x68,
+						0x65, 0x20, 0x53, 0x49, 0x4D,
+						0x20, 0x74, 0x68, 0x61, 0x74,
+						0x20, 0x74, 0x68, 0x65, 0x20,
+						0x63, 0x6F, 0x6D, 0x6D, 0x61,
+						0x6E, 0x64, 0x20, 0x68, 0x61,
+						0x73, 0x8A, 0x39, 0xF0, 0x41,
+						0xE1, 0x90, 0x58, 0x34, 0x1E,
+						0x91, 0x49, 0xE5, 0x92, 0xD9,
+						0x74, 0x3E, 0xA1, 0x51, 0xE9,
+						0x94, 0x5A, 0xB5, 0x5E, 0xB1,
+						0x59, 0x6D, 0x2B, 0x2C, 0x1E,
+						0x93, 0xCB, 0xE6, 0x33, 0x3A,
+						0xAD, 0x5E, 0xB3, 0xDB, 0xEE,
+						0x37, 0x3C, 0x2E, 0x9F, 0xD3,
+						0xEB, 0xF6, 0x3B, 0x3E, 0xAF,
+						0x6F, 0xC5, 0x64, 0x33, 0x5A,
+						0xCD, 0x76, 0xC3, 0xE5, 0x60 };
+
+static unsigned char send_ussd_171[] = { 0xD0, 0x44, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x8A, 0x39, 0xF0, 0x41, 0xE1,
+						0x90, 0x58, 0x34, 0x1E, 0x91,
+						0x49, 0xE5, 0x92, 0xD9, 0x74,
+						0x3E, 0xA1, 0x51, 0xE9, 0x94,
+						0x5A, 0xB5, 0x5E, 0xB1, 0x59,
+						0x6D, 0x2B, 0x2C, 0x1E, 0x93,
+						0xCB, 0xE6, 0x33, 0x3A, 0xAD,
+						0x5E, 0xB3, 0xDB, 0xEE, 0x37,
+						0x3C, 0x2E, 0x9F, 0xD3, 0xEB,
+						0xF6, 0x3B, 0x3E, 0xAF, 0x6F,
+						0xC5, 0x64, 0x33, 0x5A, 0xCD,
+						0x76, 0xC3, 0xE5, 0x60 };
+
+static unsigned char send_ussd_181[] = { 0xD0, 0x46, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x00, 0x8A, 0x39, 0xF0,
+						0x41, 0xE1, 0x90, 0x58, 0x34,
+						0x1E, 0x91, 0x49, 0xE5, 0x92,
+						0xD9, 0x74, 0x3E, 0xA1, 0x51,
+						0xE9, 0x94, 0x5A, 0xB5, 0x5E,
+						0xB1, 0x59, 0x6D, 0x2B, 0x2C,
+						0x1E, 0x93, 0xCB, 0xE6, 0x33,
+						0x3A, 0xAD, 0x5E, 0xB3, 0xDB,
+						0xEE, 0x37, 0x3C, 0x2E, 0x9F,
+						0xD3, 0xEB, 0xF6, 0x3B, 0x3E,
+						0xAF, 0x6F, 0xC5, 0x64, 0x33,
+						0x5A, 0xCD, 0x76, 0xC3, 0xE5,
+						0x60 };
+
+static unsigned char send_ussd_211[] = { 0xD0, 0x54, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x0A, 0x42, 0x61, 0x73,
+						0x69, 0x63, 0x20, 0x49, 0x63,
+						0x6F, 0x6E, 0x8A, 0x39, 0xF0,
+						0x41, 0xE1, 0x90, 0x58, 0x34,
+						0x1E, 0x91, 0x49, 0xE5, 0x92,
+						0xD9, 0x74, 0x3E, 0xA1, 0x51,
+						0xE9, 0x94, 0x5A, 0xB5, 0x5E,
+						0xB1, 0x59, 0x6D, 0x2B, 0x2C,
+						0x1E, 0x93, 0xCB, 0xE6, 0x33,
+						0x3A, 0xAD, 0x5E, 0xB3, 0xDB,
+						0xEE, 0x37, 0x3C, 0x2E, 0x9F,
+						0xD3, 0xEB, 0xF6, 0x3B, 0x3E,
+						0xAF, 0x6F, 0xC5, 0x64, 0x33,
+						0x5A, 0xCD, 0x76, 0xC3, 0xE5,
+						0x60, 0x9E, 0x02, 0x00, 0x01 };
+
+static unsigned char send_ussd_221[] = { 0xD0, 0x54, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x0A, 0x43, 0x6F, 0x6C,
+						0x6F, 0x72, 0x20, 0x49, 0x63,
+						0x6F, 0x6E, 0x8A, 0x39, 0xF0,
+						0x41, 0xE1, 0x90, 0x58, 0x34,
+						0x1E, 0x91, 0x49, 0xE5, 0x92,
+						0xD9, 0x74, 0x3E, 0xA1, 0x51,
+						0xE9, 0x94, 0x5A, 0xB5, 0x5E,
+						0xB1, 0x59, 0x6D, 0x2B, 0x2C,
+						0x1E, 0x93, 0xCB, 0xE6, 0x33,
+						0x3A, 0xAD, 0x5E, 0xB3, 0xDB,
+						0xEE, 0x37, 0x3C, 0x2E, 0x9F,
+						0xD3, 0xEB, 0xF6, 0x3B, 0x3E,
+						0xAF, 0x6F, 0xC5, 0x64, 0x33,
+						0x5A, 0xCD, 0x76, 0xC3, 0xE5,
+						0x60, 0x9E, 0x02, 0x00, 0x02 };
+
+static unsigned char send_ussd_231[] = { 0xD0, 0x54, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x0A, 0x42, 0x61, 0x73,
+						0x69, 0x63, 0x20, 0x49, 0x63,
+						0x6F, 0x6E, 0x8A, 0x39, 0xF0,
+						0x41, 0xE1, 0x90, 0x58, 0x34,
+						0x1E, 0x91, 0x49, 0xE5, 0x92,
+						0xD9, 0x74, 0x3E, 0xA1, 0x51,
+						0xE9, 0x94, 0x5A, 0xB5, 0x5E,
+						0xB1, 0x59, 0x6D, 0x2B, 0x2C,
+						0x1E, 0x93, 0xCB, 0xE6, 0x33,
+						0x3A, 0xAD, 0x5E, 0xB3, 0xDB,
+						0xEE, 0x37, 0x3C, 0x2E, 0x9F,
+						0xD3, 0xEB, 0xF6, 0x3B, 0x3E,
+						0xAF, 0x6F, 0xC5, 0x64, 0x33,
+						0x5A, 0xCD, 0x76, 0xC3, 0xE5,
+						0x60, 0x9E, 0x02, 0x01, 0x01 };
+
+static unsigned char send_ussd_241[] = { 0xD0, 0x48, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x8A, 0x39, 0xF0, 0x41, 0xE1,
+						0x90, 0x58, 0x34, 0x1E, 0x91,
+						0x49, 0xE5, 0x92, 0xD9, 0x74,
+						0x3E, 0xA1, 0x51, 0xE9, 0x94,
+						0x5A, 0xB5, 0x5E, 0xB1, 0x59,
+						0x6D, 0x2B, 0x2C, 0x1E, 0x93,
+						0xCB, 0xE6, 0x33, 0x3A, 0xAD,
+						0x5E, 0xB3, 0xDB, 0xEE, 0x37,
+						0x3C, 0x2E, 0x9F, 0xD3, 0xEB,
+						0xF6, 0x3B, 0x3E, 0xAF, 0x6F,
+						0xC5, 0x64, 0x33, 0x5A, 0xCD,
+						0x76, 0xC3, 0xE5, 0x60, 0x9E,
+						0x02, 0x01, 0x01 };
+
+static unsigned char send_ussd_311[] = { 0xD0, 0x5F, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x19, 0x80, 0x04, 0x17,
+						0x04, 0x14, 0x04, 0x20, 0x04,
+						0x10, 0x04, 0x12, 0x04, 0x21,
+						0x04, 0x22, 0x04, 0x12, 0x04,
+						0x23, 0x04, 0x19, 0x04, 0x22,
+						0x04, 0x15, 0x8A, 0x39, 0xF0,
+						0x41, 0xE1, 0x90, 0x58, 0x34,
+						0x1E, 0x91, 0x49, 0xE5, 0x92,
+						0xD9, 0x74, 0x3E, 0xA1, 0x51,
+						0xE9, 0x94, 0x5A, 0xB5, 0x5E,
+						0xB1, 0x59, 0x6D, 0x2B, 0x2C,
+						0x1E, 0x93, 0xCB, 0xE6, 0x33,
+						0x3A, 0xAD, 0x5E, 0xB3, 0xDB,
+						0xEE, 0x37, 0x3C, 0x2E, 0x9F,
+						0xD3, 0xEB, 0xF6, 0x3B, 0x3E,
+						0xAF, 0x6F, 0xC5, 0x64, 0x33,
+						0x5A, 0xCD, 0x76, 0xC3, 0xE5,
+						0x60 };
+
+static unsigned char send_ussd_411[] = { 0xD0, 0x5C, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x31, 0x8A, 0x39,
+						0xF0, 0x41, 0xE1, 0x90, 0x58,
+						0x34, 0x1E, 0x91, 0x49, 0xE5,
+						0x92, 0xD9, 0x74, 0x3E, 0xA1,
+						0x51, 0xE9, 0x94, 0x5A, 0xB5,
+						0x5E, 0xB1, 0x59, 0x6D, 0x2B,
+						0x2C, 0x1E, 0x93, 0xCB, 0xE6,
+						0x33, 0x3A, 0xAD, 0x5E, 0xB3,
+						0xDB, 0xEE, 0x37, 0x3C, 0x2E,
+						0x9F, 0xD3, 0xEB, 0xF6, 0x3B,
+						0x3E, 0xAF, 0x6F, 0xC5, 0x64,
+						0x33, 0x5A, 0xCD, 0x76, 0xC3,
+						0xE5, 0x60, 0xD0, 0x04, 0x00,
+						0x10, 0x00, 0xB4 };
+
+static unsigned char send_ussd_412[] = { 0xD0, 0x56, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x32, 0x8A, 0x39,
+						0xF0, 0x41, 0xE1, 0x90, 0x58,
+						0x34, 0x1E, 0x91, 0x49, 0xE5,
+						0x92, 0xD9, 0x74, 0x3E, 0xA1,
+						0x51, 0xE9, 0x94, 0x5A, 0xB5,
+						0x5E, 0xB1, 0x59, 0x6D, 0x2B,
+						0x2C, 0x1E, 0x93, 0xCB, 0xE6,
+						0x33, 0x3A, 0xAD, 0x5E, 0xB3,
+						0xDB, 0xEE, 0x37, 0x3C, 0x2E,
+						0x9F, 0xD3, 0xEB, 0xF6, 0x3B,
+						0x3E, 0xAF, 0x6F, 0xC5, 0x64,
+						0x33, 0x5A, 0xCD, 0x76, 0xC3,
+						0xE5, 0x60 };
+
+static unsigned char send_ussd_421[] = { 0xD0, 0x5C, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x31, 0x8A, 0x39,
+						0xF0, 0x41, 0xE1, 0x90, 0x58,
+						0x34, 0x1E, 0x91, 0x49, 0xE5,
+						0x92, 0xD9, 0x74, 0x3E, 0xA1,
+						0x51, 0xE9, 0x94, 0x5A, 0xB5,
+						0x5E, 0xB1, 0x59, 0x6D, 0x2B,
+						0x2C, 0x1E, 0x93, 0xCB, 0xE6,
+						0x33, 0x3A, 0xAD, 0x5E, 0xB3,
+						0xDB, 0xEE, 0x37, 0x3C, 0x2E,
+						0x9F, 0xD3, 0xEB, 0xF6, 0x3B,
+						0x3E, 0xAF, 0x6F, 0xC5, 0x64,
+						0x33, 0x5A, 0xCD, 0x76, 0xC3,
+						0xE5, 0x60, 0xD0, 0x04, 0x00,
+						0x10, 0x01, 0xB4 };
+
+static unsigned char send_ussd_422[] = { 0xD0, 0x56, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x32, 0x8A, 0x39,
+						0xF0, 0x41, 0xE1, 0x90, 0x58,
+						0x34, 0x1E, 0x91, 0x49, 0xE5,
+						0x92, 0xD9, 0x74, 0x3E, 0xA1,
+						0x51, 0xE9, 0x94, 0x5A, 0xB5,
+						0x5E, 0xB1, 0x59, 0x6D, 0x2B,
+						0x2C, 0x1E, 0x93, 0xCB, 0xE6,
+						0x33, 0x3A, 0xAD, 0x5E, 0xB3,
+						0xDB, 0xEE, 0x37, 0x3C, 0x2E,
+						0x9F, 0xD3, 0xEB, 0xF6, 0x3B,
+						0x3E, 0xAF, 0x6F, 0xC5, 0x64,
+						0x33, 0x5A, 0xCD, 0x76, 0xC3,
+						0xE5, 0x60 };
+
+static unsigned char send_ussd_431[] = { 0xD0, 0x5C, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x31, 0x8A, 0x39,
+						0xF0, 0x41, 0xE1, 0x90, 0x58,
+						0x34, 0x1E, 0x91, 0x49, 0xE5,
+						0x92, 0xD9, 0x74, 0x3E, 0xA1,
+						0x51, 0xE9, 0x94, 0x5A, 0xB5,
+						0x5E, 0xB1, 0x59, 0x6D, 0x2B,
+						0x2C, 0x1E, 0x93, 0xCB, 0xE6,
+						0x33, 0x3A, 0xAD, 0x5E, 0xB3,
+						0xDB, 0xEE, 0x37, 0x3C, 0x2E,
+						0x9F, 0xD3, 0xEB, 0xF6, 0x3B,
+						0x3E, 0xAF, 0x6F, 0xC5, 0x64,
+						0x33, 0x5A, 0xCD, 0x76, 0xC3,
+						0xE5, 0x60, 0xD0, 0x04, 0x00,
+						0x10, 0x02, 0xB4 };
+
+static unsigned char send_ussd_432[] = { 0xD0, 0x56, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x32, 0x8A, 0x39,
+						0xF0, 0x41, 0xE1, 0x90, 0x58,
+						0x34, 0x1E, 0x91, 0x49, 0xE5,
+						0x92, 0xD9, 0x74, 0x3E, 0xA1,
+						0x51, 0xE9, 0x94, 0x5A, 0xB5,
+						0x5E, 0xB1, 0x59, 0x6D, 0x2B,
+						0x2C, 0x1E, 0x93, 0xCB, 0xE6,
+						0x33, 0x3A, 0xAD, 0x5E, 0xB3,
+						0xDB, 0xEE, 0x37, 0x3C, 0x2E,
+						0x9F, 0xD3, 0xEB, 0xF6, 0x3B,
+						0x3E, 0xAF, 0x6F, 0xC5, 0x64,
+						0x33, 0x5A, 0xCD, 0x76, 0xC3,
+						0xE5, 0x60 };
+
+static unsigned char send_ussd_441[] = { 0xD0, 0x5C, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x31, 0x8A, 0x39,
+						0xF0, 0x41, 0xE1, 0x90, 0x58,
+						0x34, 0x1E, 0x91, 0x49, 0xE5,
+						0x92, 0xD9, 0x74, 0x3E, 0xA1,
+						0x51, 0xE9, 0x94, 0x5A, 0xB5,
+						0x5E, 0xB1, 0x59, 0x6D, 0x2B,
+						0x2C, 0x1E, 0x93, 0xCB, 0xE6,
+						0x33, 0x3A, 0xAD, 0x5E, 0xB3,
+						0xDB, 0xEE, 0x37, 0x3C, 0x2E,
+						0x9F, 0xD3, 0xEB, 0xF6, 0x3B,
+						0x3E, 0xAF, 0x6F, 0xC5, 0x64,
+						0x33, 0x5A, 0xCD, 0x76, 0xC3,
+						0xE5, 0x60, 0xD0, 0x04, 0x00,
+						0x10, 0x04, 0xB4 };
+
+static unsigned char send_ussd_442[] = { 0xD0, 0x5C, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x32, 0x8A, 0x39,
+						0xF0, 0x41, 0xE1, 0x90, 0x58,
+						0x34, 0x1E, 0x91, 0x49, 0xE5,
+						0x92, 0xD9, 0x74, 0x3E, 0xA1,
+						0x51, 0xE9, 0x94, 0x5A, 0xB5,
+						0x5E, 0xB1, 0x59, 0x6D, 0x2B,
+						0x2C, 0x1E, 0x93, 0xCB, 0xE6,
+						0x33, 0x3A, 0xAD, 0x5E, 0xB3,
+						0xDB, 0xEE, 0x37, 0x3C, 0x2E,
+						0x9F, 0xD3, 0xEB, 0xF6, 0x3B,
+						0x3E, 0xAF, 0x6F, 0xC5, 0x64,
+						0x33, 0x5A, 0xCD, 0x76, 0xC3,
+						0xE5, 0x60, 0xD0, 0x04, 0x00,
+						0x10, 0x00, 0xB4 };
+
+static unsigned char send_ussd_443[] = { 0xD0, 0x56, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x33, 0x8A, 0x39,
+						0xF0, 0x41, 0xE1, 0x90, 0x58,
+						0x34, 0x1E, 0x91, 0x49, 0xE5,
+						0x92, 0xD9, 0x74, 0x3E, 0xA1,
+						0x51, 0xE9, 0x94, 0x5A, 0xB5,
+						0x5E, 0xB1, 0x59, 0x6D, 0x2B,
+						0x2C, 0x1E, 0x93, 0xCB, 0xE6,
+						0x33, 0x3A, 0xAD, 0x5E, 0xB3,
+						0xDB, 0xEE, 0x37, 0x3C, 0x2E,
+						0x9F, 0xD3, 0xEB, 0xF6, 0x3B,
+						0x3E, 0xAF, 0x6F, 0xC5, 0x64,
+						0x33, 0x5A, 0xCD, 0x76, 0xC3,
+						0xE5, 0x60 };
+
+static unsigned char send_ussd_451[] = { 0xD0, 0x5C, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x31, 0x8A, 0x39,
+						0xF0, 0x41, 0xE1, 0x90, 0x58,
+						0x34, 0x1E, 0x91, 0x49, 0xE5,
+						0x92, 0xD9, 0x74, 0x3E, 0xA1,
+						0x51, 0xE9, 0x94, 0x5A, 0xB5,
+						0x5E, 0xB1, 0x59, 0x6D, 0x2B,
+						0x2C, 0x1E, 0x93, 0xCB, 0xE6,
+						0x33, 0x3A, 0xAD, 0x5E, 0xB3,
+						0xDB, 0xEE, 0x37, 0x3C, 0x2E,
+						0x9F, 0xD3, 0xEB, 0xF6, 0x3B,
+						0x3E, 0xAF, 0x6F, 0xC5, 0x64,
+						0x33, 0x5A, 0xCD, 0x76, 0xC3,
+						0xE5, 0x60, 0xD0, 0x04, 0x00,
+						0x10, 0x08, 0xB4 };
+
+static unsigned char send_ussd_452[] = { 0xD0, 0x5C, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x32, 0x8A, 0x39,
+						0xF0, 0x41, 0xE1, 0x90, 0x58,
+						0x34, 0x1E, 0x91, 0x49, 0xE5,
+						0x92, 0xD9, 0x74, 0x3E, 0xA1,
+						0x51, 0xE9, 0x94, 0x5A, 0xB5,
+						0x5E, 0xB1, 0x59, 0x6D, 0x2B,
+						0x2C, 0x1E, 0x93, 0xCB, 0xE6,
+						0x33, 0x3A, 0xAD, 0x5E, 0xB3,
+						0xDB, 0xEE, 0x37, 0x3C, 0x2E,
+						0x9F, 0xD3, 0xEB, 0xF6, 0x3B,
+						0x3E, 0xAF, 0x6F, 0xC5, 0x64,
+						0x33, 0x5A, 0xCD, 0x76, 0xC3,
+						0xE5, 0x60, 0xD0, 0x04, 0x00,
+						0x10, 0x00, 0xB4 };
+
+static unsigned char send_ussd_453[] = { 0xD0, 0x56, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x33, 0x8A, 0x39,
+						0xF0, 0x41, 0xE1, 0x90, 0x58,
+						0x34, 0x1E, 0x91, 0x49, 0xE5,
+						0x92, 0xD9, 0x74, 0x3E, 0xA1,
+						0x51, 0xE9, 0x94, 0x5A, 0xB5,
+						0x5E, 0xB1, 0x59, 0x6D, 0x2B,
+						0x2C, 0x1E, 0x93, 0xCB, 0xE6,
+						0x33, 0x3A, 0xAD, 0x5E, 0xB3,
+						0xDB, 0xEE, 0x37, 0x3C, 0x2E,
+						0x9F, 0xD3, 0xEB, 0xF6, 0x3B,
+						0x3E, 0xAF, 0x6F, 0xC5, 0x64,
+						0x33, 0x5A, 0xCD, 0x76, 0xC3,
+						0xE5, 0x60 };
+
+static unsigned char send_ussd_461[] = { 0xD0, 0x5C, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x31, 0x8A, 0x39,
+						0xF0, 0x41, 0xE1, 0x90, 0x58,
+						0x34, 0x1E, 0x91, 0x49, 0xE5,
+						0x92, 0xD9, 0x74, 0x3E, 0xA1,
+						0x51, 0xE9, 0x94, 0x5A, 0xB5,
+						0x5E, 0xB1, 0x59, 0x6D, 0x2B,
+						0x2C, 0x1E, 0x93, 0xCB, 0xE6,
+						0x33, 0x3A, 0xAD, 0x5E, 0xB3,
+						0xDB, 0xEE, 0x37, 0x3C, 0x2E,
+						0x9F, 0xD3, 0xEB, 0xF6, 0x3B,
+						0x3E, 0xAF, 0x6F, 0xC5, 0x64,
+						0x33, 0x5A, 0xCD, 0x76, 0xC3,
+						0xE5, 0x60, 0xD0, 0x04, 0x00,
+						0x10, 0x10, 0xB4 };
+
+static unsigned char send_ussd_462[] = { 0xD0, 0x5C, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x32, 0x8A, 0x39,
+						0xF0, 0x41, 0xE1, 0x90, 0x58,
+						0x34, 0x1E, 0x91, 0x49, 0xE5,
+						0x92, 0xD9, 0x74, 0x3E, 0xA1,
+						0x51, 0xE9, 0x94, 0x5A, 0xB5,
+						0x5E, 0xB1, 0x59, 0x6D, 0x2B,
+						0x2C, 0x1E, 0x93, 0xCB, 0xE6,
+						0x33, 0x3A, 0xAD, 0x5E, 0xB3,
+						0xDB, 0xEE, 0x37, 0x3C, 0x2E,
+						0x9F, 0xD3, 0xEB, 0xF6, 0x3B,
+						0x3E, 0xAF, 0x6F, 0xC5, 0x64,
+						0x33, 0x5A, 0xCD, 0x76, 0xC3,
+						0xE5, 0x60, 0xD0, 0x04, 0x00,
+						0x10, 0x00, 0xB4 };
+
+static unsigned char send_ussd_463[] = { 0xD0, 0x56, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x33, 0x8A, 0x39,
+						0xF0, 0x41, 0xE1, 0x90, 0x58,
+						0x34, 0x1E, 0x91, 0x49, 0xE5,
+						0x92, 0xD9, 0x74, 0x3E, 0xA1,
+						0x51, 0xE9, 0x94, 0x5A, 0xB5,
+						0x5E, 0xB1, 0x59, 0x6D, 0x2B,
+						0x2C, 0x1E, 0x93, 0xCB, 0xE6,
+						0x33, 0x3A, 0xAD, 0x5E, 0xB3,
+						0xDB, 0xEE, 0x37, 0x3C, 0x2E,
+						0x9F, 0xD3, 0xEB, 0xF6, 0x3B,
+						0x3E, 0xAF, 0x6F, 0xC5, 0x64,
+						0x33, 0x5A, 0xCD, 0x76, 0xC3,
+						0xE5, 0x60 };
+
+static unsigned char send_ussd_471[] = { 0xD0, 0x5C, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x31, 0x8A, 0x39,
+						0xF0, 0x41, 0xE1, 0x90, 0x58,
+						0x34, 0x1E, 0x91, 0x49, 0xE5,
+						0x92, 0xD9, 0x74, 0x3E, 0xA1,
+						0x51, 0xE9, 0x94, 0x5A, 0xB5,
+						0x5E, 0xB1, 0x59, 0x6D, 0x2B,
+						0x2C, 0x1E, 0x93, 0xCB, 0xE6,
+						0x33, 0x3A, 0xAD, 0x5E, 0xB3,
+						0xDB, 0xEE, 0x37, 0x3C, 0x2E,
+						0x9F, 0xD3, 0xEB, 0xF6, 0x3B,
+						0x3E, 0xAF, 0x6F, 0xC5, 0x64,
+						0x33, 0x5A, 0xCD, 0x76, 0xC3,
+						0xE5, 0x60, 0xD0, 0x04, 0x00,
+						0x10, 0x20, 0xB4 };
+
+static unsigned char send_ussd_472[] = { 0xD0, 0x5C, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x32, 0x8A, 0x39,
+						0xF0, 0x41, 0xE1, 0x90, 0x58,
+						0x34, 0x1E, 0x91, 0x49, 0xE5,
+						0x92, 0xD9, 0x74, 0x3E, 0xA1,
+						0x51, 0xE9, 0x94, 0x5A, 0xB5,
+						0x5E, 0xB1, 0x59, 0x6D, 0x2B,
+						0x2C, 0x1E, 0x93, 0xCB, 0xE6,
+						0x33, 0x3A, 0xAD, 0x5E, 0xB3,
+						0xDB, 0xEE, 0x37, 0x3C, 0x2E,
+						0x9F, 0xD3, 0xEB, 0xF6, 0x3B,
+						0x3E, 0xAF, 0x6F, 0xC5, 0x64,
+						0x33, 0x5A, 0xCD, 0x76, 0xC3,
+						0xE5, 0x60, 0xD0, 0x04, 0x00,
+						0x10, 0x00, 0xB4 };
+
+static unsigned char send_ussd_473[] = { 0xD0, 0x56, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x33, 0x8A, 0x39,
+						0xF0, 0x41, 0xE1, 0x90, 0x58,
+						0x34, 0x1E, 0x91, 0x49, 0xE5,
+						0x92, 0xD9, 0x74, 0x3E, 0xA1,
+						0x51, 0xE9, 0x94, 0x5A, 0xB5,
+						0x5E, 0xB1, 0x59, 0x6D, 0x2B,
+						0x2C, 0x1E, 0x93, 0xCB, 0xE6,
+						0x33, 0x3A, 0xAD, 0x5E, 0xB3,
+						0xDB, 0xEE, 0x37, 0x3C, 0x2E,
+						0x9F, 0xD3, 0xEB, 0xF6, 0x3B,
+						0x3E, 0xAF, 0x6F, 0xC5, 0x64,
+						0x33, 0x5A, 0xCD, 0x76, 0xC3,
+						0xE5, 0x60 };
+
+static unsigned char send_ussd_481[] = { 0xD0, 0x5C, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x31, 0x8A, 0x39,
+						0xF0, 0x41, 0xE1, 0x90, 0x58,
+						0x34, 0x1E, 0x91, 0x49, 0xE5,
+						0x92, 0xD9, 0x74, 0x3E, 0xA1,
+						0x51, 0xE9, 0x94, 0x5A, 0xB5,
+						0x5E, 0xB1, 0x59, 0x6D, 0x2B,
+						0x2C, 0x1E, 0x93, 0xCB, 0xE6,
+						0x33, 0x3A, 0xAD, 0x5E, 0xB3,
+						0xDB, 0xEE, 0x37, 0x3C, 0x2E,
+						0x9F, 0xD3, 0xEB, 0xF6, 0x3B,
+						0x3E, 0xAF, 0x6F, 0xC5, 0x64,
+						0x33, 0x5A, 0xCD, 0x76, 0xC3,
+						0xE5, 0x60, 0xD0, 0x04, 0x00,
+						0x10, 0x40, 0xB4 };
+
+static unsigned char send_ussd_482[] = { 0xD0, 0x5C, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x32, 0x8A, 0x39,
+						0xF0, 0x41, 0xE1, 0x90, 0x58,
+						0x34, 0x1E, 0x91, 0x49, 0xE5,
+						0x92, 0xD9, 0x74, 0x3E, 0xA1,
+						0x51, 0xE9, 0x94, 0x5A, 0xB5,
+						0x5E, 0xB1, 0x59, 0x6D, 0x2B,
+						0x2C, 0x1E, 0x93, 0xCB, 0xE6,
+						0x33, 0x3A, 0xAD, 0x5E, 0xB3,
+						0xDB, 0xEE, 0x37, 0x3C, 0x2E,
+						0x9F, 0xD3, 0xEB, 0xF6, 0x3B,
+						0x3E, 0xAF, 0x6F, 0xC5, 0x64,
+						0x33, 0x5A, 0xCD, 0x76, 0xC3,
+						0xE5, 0x60, 0xD0, 0x04, 0x00,
+						0x10, 0x00, 0xB4 };
+
+static unsigned char send_ussd_483[] = { 0xD0, 0x56, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x33, 0x8A, 0x39,
+						0xF0, 0x41, 0xE1, 0x90, 0x58,
+						0x34, 0x1E, 0x91, 0x49, 0xE5,
+						0x92, 0xD9, 0x74, 0x3E, 0xA1,
+						0x51, 0xE9, 0x94, 0x5A, 0xB5,
+						0x5E, 0xB1, 0x59, 0x6D, 0x2B,
+						0x2C, 0x1E, 0x93, 0xCB, 0xE6,
+						0x33, 0x3A, 0xAD, 0x5E, 0xB3,
+						0xDB, 0xEE, 0x37, 0x3C, 0x2E,
+						0x9F, 0xD3, 0xEB, 0xF6, 0x3B,
+						0x3E, 0xAF, 0x6F, 0xC5, 0x64,
+						0x33, 0x5A, 0xCD, 0x76, 0xC3,
+						0xE5, 0x60 };
+
+static unsigned char send_ussd_491[] = { 0xD0, 0x5C, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x31, 0x8A, 0x39,
+						0xF0, 0x41, 0xE1, 0x90, 0x58,
+						0x34, 0x1E, 0x91, 0x49, 0xE5,
+						0x92, 0xD9, 0x74, 0x3E, 0xA1,
+						0x51, 0xE9, 0x94, 0x5A, 0xB5,
+						0x5E, 0xB1, 0x59, 0x6D, 0x2B,
+						0x2C, 0x1E, 0x93, 0xCB, 0xE6,
+						0x33, 0x3A, 0xAD, 0x5E, 0xB3,
+						0xDB, 0xEE, 0x37, 0x3C, 0x2E,
+						0x9F, 0xD3, 0xEB, 0xF6, 0x3B,
+						0x3E, 0xAF, 0x6F, 0xC5, 0x64,
+						0x33, 0x5A, 0xCD, 0x76, 0xC3,
+						0xE5, 0x60, 0xD0, 0x04, 0x00,
+						0x10, 0x80, 0xB4 };
+
+static unsigned char send_ussd_492[] = { 0xD0, 0x5C, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x32, 0x8A, 0x39,
+						0xF0, 0x41, 0xE1, 0x90, 0x58,
+						0x34, 0x1E, 0x91, 0x49, 0xE5,
+						0x92, 0xD9, 0x74, 0x3E, 0xA1,
+						0x51, 0xE9, 0x94, 0x5A, 0xB5,
+						0x5E, 0xB1, 0x59, 0x6D, 0x2B,
+						0x2C, 0x1E, 0x93, 0xCB, 0xE6,
+						0x33, 0x3A, 0xAD, 0x5E, 0xB3,
+						0xDB, 0xEE, 0x37, 0x3C, 0x2E,
+						0x9F, 0xD3, 0xEB, 0xF6, 0x3B,
+						0x3E, 0xAF, 0x6F, 0xC5, 0x64,
+						0x33, 0x5A, 0xCD, 0x76, 0xC3,
+						0xE5, 0x60, 0xD0, 0x04, 0x00,
+						0x10, 0x00, 0xB4 };
+
+static unsigned char send_ussd_493[] = { 0xD0, 0x56, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x33, 0x8A, 0x39,
+						0xF0, 0x41, 0xE1, 0x90, 0x58,
+						0x34, 0x1E, 0x91, 0x49, 0xE5,
+						0x92, 0xD9, 0x74, 0x3E, 0xA1,
+						0x51, 0xE9, 0x94, 0x5A, 0xB5,
+						0x5E, 0xB1, 0x59, 0x6D, 0x2B,
+						0x2C, 0x1E, 0x93, 0xCB, 0xE6,
+						0x33, 0x3A, 0xAD, 0x5E, 0xB3,
+						0xDB, 0xEE, 0x37, 0x3C, 0x2E,
+						0x9F, 0xD3, 0xEB, 0xF6, 0x3B,
+						0x3E, 0xAF, 0x6F, 0xC5, 0x64,
+						0x33, 0x5A, 0xCD, 0x76, 0xC3,
+						0xE5, 0x60 };
+
+static unsigned char send_ussd_4101[] = { 0xD0, 0x5C, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x31, 0x8A, 0x39,
+						0xF0, 0x41, 0xE1, 0x90, 0x58,
+						0x34, 0x1E, 0x91, 0x49, 0xE5,
+						0x92, 0xD9, 0x74, 0x3E, 0xA1,
+						0x51, 0xE9, 0x94, 0x5A, 0xB5,
+						0x5E, 0xB1, 0x59, 0x6D, 0x2B,
+						0x2C, 0x1E, 0x93, 0xCB, 0xE6,
+						0x33, 0x3A, 0xAD, 0x5E, 0xB3,
+						0xDB, 0xEE, 0x37, 0x3C, 0x2E,
+						0x9F, 0xD3, 0xEB, 0xF6, 0x3B,
+						0x3E, 0xAF, 0x6F, 0xC5, 0x64,
+						0x33, 0x5A, 0xCD, 0x76, 0xC3,
+						0xE5, 0x60, 0xD0, 0x04, 0x00,
+						0x10, 0x00, 0xB4 };
+
+static unsigned char send_ussd_4102[] = { 0xD0, 0x56, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x10, 0x54, 0x65, 0x78,
+						0x74, 0x20, 0x41, 0x74, 0x74,
+						0x72, 0x69, 0x62, 0x75, 0x74,
+						0x65, 0x20, 0x32, 0x8A, 0x39,
+						0xF0, 0x41, 0xE1, 0x90, 0x58,
+						0x34, 0x1E, 0x91, 0x49, 0xE5,
+						0x92, 0xD9, 0x74, 0x3E, 0xA1,
+						0x51, 0xE9, 0x94, 0x5A, 0xB5,
+						0x5E, 0xB1, 0x59, 0x6D, 0x2B,
+						0x2C, 0x1E, 0x93, 0xCB, 0xE6,
+						0x33, 0x3A, 0xAD, 0x5E, 0xB3,
+						0xDB, 0xEE, 0x37, 0x3C, 0x2E,
+						0x9F, 0xD3, 0xEB, 0xF6, 0x3B,
+						0x3E, 0xAF, 0x6F, 0xC5, 0x64,
+						0x33, 0x5A, 0xCD, 0x76, 0xC3,
+						0xE5, 0x60 };
+
+static unsigned char send_ussd_511[] = { 0xD0, 0x4B, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x05, 0x80, 0x4F, 0x60,
+						0x59, 0x7D, 0x8A, 0x39, 0xF0,
+						0x41, 0xE1, 0x90, 0x58, 0x34,
+						0x1E, 0x91, 0x49, 0xE5, 0x92,
+						0xD9, 0x74, 0x3E, 0xA1, 0x51,
+						0xE9, 0x94, 0x5A, 0xB5, 0x5E,
+						0xB1, 0x59, 0x6D, 0x2B, 0x2C,
+						0x1E, 0x93, 0xCB, 0xE6, 0x33,
+						0x3A, 0xAD, 0x5E, 0xB3, 0xDB,
+						0xEE, 0x37, 0x3C, 0x2E, 0x9F,
+						0xD3, 0xEB, 0xF6, 0x3B, 0x3E,
+						0xAF, 0x6F, 0xC5, 0x64, 0x33,
+						0x5A, 0xCD, 0x76, 0xC3, 0xE5,
+						0x60 };
+
+static unsigned char send_ussd_611[] = { 0xD0, 0x49, 0x81, 0x03, 0x01, 0x12,
+						0x00, 0x82, 0x02, 0x81, 0x83,
+						0x85, 0x03, 0x80, 0x30, 0xEB,
+						0x8A, 0x39, 0xF0, 0x41, 0xE1,
+						0x90, 0x58, 0x34, 0x1E, 0x91,
+						0x49, 0xE5, 0x92, 0xD9, 0x74,
+						0x3E, 0xA1, 0x51, 0xE9, 0x94,
+						0x5A, 0xB5, 0x5E, 0xB1, 0x59,
+						0x6D, 0x2B, 0x2C, 0x1E, 0x93,
+						0xCB, 0xE6, 0x33, 0x3A, 0xAD,
+						0x5E, 0xB3, 0xDB, 0xEE, 0x37,
+						0x3C, 0x2E, 0x9F, 0xD3, 0xEB,
+						0xF6, 0x3B, 0x3E, 0xAF, 0x6F,
+						0xC5, 0x64, 0x33, 0x5A, 0xCD,
+						0x76, 0xC3, 0xE5, 0x60 };
+
+static struct send_ussd_test send_ussd_data_111 = {
+	.pdu = send_ussd_111,
+	.pdu_len = sizeof(send_ussd_111),
+	.qualifier = 0x00,
+	.alpha_id = "7-bit USSD",
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890"
+};
+
+static struct send_ussd_test send_ussd_data_121 = {
+	.pdu = send_ussd_121,
+	.pdu_len = sizeof(send_ussd_121),
+	.qualifier = 0x00,
+	.alpha_id = "8-bit USSD",
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890"
+};
+
+static struct send_ussd_test send_ussd_data_131 = {
+	.pdu = send_ussd_131,
+	.pdu_len = sizeof(send_ussd_131),
+	.qualifier = 0x00,
+	.alpha_id = "UCS2 USSD",
+	.ussd = "ЗДРАВСТВУЙТЕ"
+};
+
+static struct send_ussd_test send_ussd_data_161 = {
+	.pdu = send_ussd_161,
+	.pdu_len = sizeof(send_ussd_161),
+	.qualifier = 0x00,
+	.alpha_id = "once a RELEASE COMPLETE message containing the USSD "
+		"Return Result message not containing an error has been "
+		"received from the network, the ME shall inform the SIM "
+		"that the command has",
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890"
+};
+
+static struct send_ussd_test send_ussd_data_171 = {
+	.pdu = send_ussd_171,
+	.pdu_len = sizeof(send_ussd_171),
+	.qualifier = 0x00,
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890"
+};
+
+static struct send_ussd_test send_ussd_data_181 = {
+	.pdu = send_ussd_181,
+	.pdu_len = sizeof(send_ussd_181),
+	.qualifier = 0x00,
+	.alpha_id = "",
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890"
+};
+
+static struct send_ussd_test send_ussd_data_211 = {
+	.pdu = send_ussd_211,
+	.pdu_len = sizeof(send_ussd_211),
+	.qualifier = 0x00,
+	.alpha_id = "Basic Icon",
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890",
+	.icon_id = {
+		.qualifier = STK_ICON_QUALIFIER_TYPE_SELF_EXPLANATORY,
+		.id = 0x01
+	}
+};
+
+static struct send_ussd_test send_ussd_data_221 = {
+	.pdu = send_ussd_221,
+	.pdu_len = sizeof(send_ussd_221),
+	.qualifier = 0x00,
+	.alpha_id = "Color Icon",
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890",
+	.icon_id = {
+		.qualifier = STK_ICON_QUALIFIER_TYPE_SELF_EXPLANATORY,
+		.id = 0x02
+	}
+};
+
+static struct send_ussd_test send_ussd_data_231 = {
+	.pdu = send_ussd_231,
+	.pdu_len = sizeof(send_ussd_231),
+	.qualifier = 0x00,
+	.alpha_id = "Basic Icon",
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890",
+	.icon_id = {
+		.qualifier = STK_ICON_QUALIFIER_TYPE_NON_SELF_EXPLANATORY,
+		.id = 0x01
+	}
+};
+
+static struct send_ussd_test send_ussd_data_241 = {
+	.pdu = send_ussd_241,
+	.pdu_len = sizeof(send_ussd_241),
+	.qualifier = 0x00,
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890",
+	.icon_id = {
+		.qualifier = STK_ICON_QUALIFIER_TYPE_NON_SELF_EXPLANATORY,
+		.id = 0x01
+	}
+};
+
+/* The ussd is not complete in spec */
+static struct send_ussd_test send_ussd_data_311 = {
+	.pdu = send_ussd_311,
+	.pdu_len = sizeof(send_ussd_311),
+	.qualifier = 0x00,
+	.alpha_id = "ЗДРАВСТВУЙТЕ",
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890"
+};
+
+static struct send_ussd_test send_ussd_data_411 = {
+	.pdu = send_ussd_411,
+	.pdu_len = sizeof(send_ussd_411),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 1",
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890",
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x00, 0xB4 }
+	}
+};
+
+static struct send_ussd_test send_ussd_data_412 = {
+	.pdu = send_ussd_412,
+	.pdu_len = sizeof(send_ussd_412),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 2",
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890"
+};
+
+static struct send_ussd_test send_ussd_data_421 = {
+	.pdu = send_ussd_421,
+	.pdu_len = sizeof(send_ussd_421),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 1",
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890",
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x01, 0xB4 }
+	}
+};
+
+static struct send_ussd_test send_ussd_data_422 = {
+	.pdu = send_ussd_422,
+	.pdu_len = sizeof(send_ussd_422),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 2",
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890"
+};
+
+static struct send_ussd_test send_ussd_data_431 = {
+	.pdu = send_ussd_431,
+	.pdu_len = sizeof(send_ussd_431),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 1",
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890",
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x02, 0xB4 }
+	}
+};
+
+static struct send_ussd_test send_ussd_data_432 = {
+	.pdu = send_ussd_432,
+	.pdu_len = sizeof(send_ussd_432),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 2",
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890"
+};
+
+static struct send_ussd_test send_ussd_data_441 = {
+	.pdu = send_ussd_441,
+	.pdu_len = sizeof(send_ussd_441),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 1",
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890",
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x04, 0xB4 }
+	}
+};
+
+static struct send_ussd_test send_ussd_data_442 = {
+	.pdu = send_ussd_442,
+	.pdu_len = sizeof(send_ussd_442),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 2",
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890",
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x00, 0xB4 }
+	}
+};
+
+static struct send_ussd_test send_ussd_data_443 = {
+	.pdu = send_ussd_443,
+	.pdu_len = sizeof(send_ussd_443),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 3",
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890"
+};
+
+static struct send_ussd_test send_ussd_data_451 = {
+	.pdu = send_ussd_451,
+	.pdu_len = sizeof(send_ussd_451),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 1",
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890",
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x08, 0xB4 }
+	}
+};
+
+static struct send_ussd_test send_ussd_data_452 = {
+	.pdu = send_ussd_452,
+	.pdu_len = sizeof(send_ussd_452),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 2",
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890",
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x00, 0xB4 }
+	}
+};
+
+static struct send_ussd_test send_ussd_data_453 = {
+	.pdu = send_ussd_453,
+	.pdu_len = sizeof(send_ussd_453),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 3",
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890"
+};
+
+static struct send_ussd_test send_ussd_data_461 = {
+	.pdu = send_ussd_461,
+	.pdu_len = sizeof(send_ussd_461),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 1",
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890",
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x10, 0xB4 }
+	}
+};
+
+static struct send_ussd_test send_ussd_data_462 = {
+	.pdu = send_ussd_462,
+	.pdu_len = sizeof(send_ussd_462),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 2",
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890",
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x00, 0xB4 }
+	}
+};
+
+static struct send_ussd_test send_ussd_data_463 = {
+	.pdu = send_ussd_463,
+	.pdu_len = sizeof(send_ussd_463),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 3",
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890"
+};
+
+static struct send_ussd_test send_ussd_data_471 = {
+	.pdu = send_ussd_471,
+	.pdu_len = sizeof(send_ussd_471),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 1",
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890",
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x20, 0xB4 }
+	}
+};
+
+static struct send_ussd_test send_ussd_data_472 = {
+	.pdu = send_ussd_472,
+	.pdu_len = sizeof(send_ussd_472),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 2",
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890",
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x00, 0xB4 }
+	}
+};
+
+static struct send_ussd_test send_ussd_data_473 = {
+	.pdu = send_ussd_473,
+	.pdu_len = sizeof(send_ussd_473),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 3",
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890"
+};
+
+static struct send_ussd_test send_ussd_data_481 = {
+	.pdu = send_ussd_481,
+	.pdu_len = sizeof(send_ussd_481),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 1",
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890",
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x40, 0xB4 }
+	}
+};
+
+static struct send_ussd_test send_ussd_data_482 = {
+	.pdu = send_ussd_482,
+	.pdu_len = sizeof(send_ussd_482),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 2",
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890",
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x00, 0xB4 }
+	}
+};
+
+static struct send_ussd_test send_ussd_data_483 = {
+	.pdu = send_ussd_483,
+	.pdu_len = sizeof(send_ussd_483),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 3",
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890"
+};
+
+static struct send_ussd_test send_ussd_data_491 = {
+	.pdu = send_ussd_491,
+	.pdu_len = sizeof(send_ussd_491),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 1",
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890",
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x80, 0xB4 }
+	}
+};
+
+static struct send_ussd_test send_ussd_data_492 = {
+	.pdu = send_ussd_492,
+	.pdu_len = sizeof(send_ussd_492),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 2",
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890",
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x00, 0xB4 }
+	}
+};
+
+static struct send_ussd_test send_ussd_data_493 = {
+	.pdu = send_ussd_493,
+	.pdu_len = sizeof(send_ussd_493),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 3",
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890"
+};
+
+static struct send_ussd_test send_ussd_data_4101 = {
+	.pdu = send_ussd_4101,
+	.pdu_len = sizeof(send_ussd_4101),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 1",
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890",
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x10, 0x00, 0xB4 }
+	}
+};
+
+static struct send_ussd_test send_ussd_data_4102 = {
+	.pdu = send_ussd_4102,
+	.pdu_len = sizeof(send_ussd_4102),
+	.qualifier = 0x00,
+	.alpha_id = "Text Attribute 2",
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890"
+};
+
+static struct send_ussd_test send_ussd_data_511 = {
+	.pdu = send_ussd_511,
+	.pdu_len = sizeof(send_ussd_511),
+	.qualifier = 0x00,
+	.alpha_id = "你好",
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890"
+};
+
+static struct send_ussd_test send_ussd_data_611 = {
+	.pdu = send_ussd_611,
+	.pdu_len = sizeof(send_ussd_611),
+	.qualifier = 0x00,
+	.alpha_id = "ル",
+	.ussd = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrstuvwxyz-"
+		"1234567890"
+};
+
+static void test_send_ussd(gconstpointer data)
+{
+	const struct send_ussd_test *test = data;
+	struct stk_command *command;
+
+	command = stk_command_new_from_pdu(test->pdu, test->pdu_len);
+
+	g_assert(command);
+	g_assert(command->status == STK_PARSE_RESULT_OK);
+
+	g_assert(command->number == 1);
+	g_assert(command->type == STK_COMMAND_TYPE_SEND_USSD);
+	g_assert(command->qualifier == test->qualifier);
+
+	g_assert(command->src == STK_DEVICE_IDENTITY_TYPE_UICC);
+	g_assert(command->dst == STK_DEVICE_IDENTITY_TYPE_NETWORK);
+
+	check_alpha_id(command->send_ussd.alpha_id, test->alpha_id);
+	check_ussd(&command->send_ussd.ussd_string, test->ussd);
+	check_icon_id(&command->send_ussd.icon_id, &test->icon_id);
+	check_text_attr(&command->send_ussd.text_attr, &test->text_attr);
+	check_frame_id(&command->send_ussd.frame_id, &test->frame_id);
 
 	stk_command_free(command);
 }
@@ -9981,6 +12875,7 @@ static void test_setup_call(gconstpointer data)
 	command = stk_command_new_from_pdu(test->pdu, test->pdu_len);
 
 	g_assert(command);
+	g_assert(command->status == STK_PARSE_RESULT_OK);
 
 	g_assert(command->number == 1);
 	g_assert(command->type == STK_COMMAND_TYPE_SETUP_CALL);
@@ -10055,6 +12950,7 @@ static void test_refresh(gconstpointer data)
 	command = stk_command_new_from_pdu(test->pdu, test->pdu_len);
 
 	g_assert(command);
+	g_assert(command->status == STK_PARSE_RESULT_OK);
 
 	g_assert(command->number == 1);
 	g_assert(command->type == STK_COMMAND_TYPE_REFRESH);
@@ -10096,6 +12992,7 @@ static void test_polling_off(gconstpointer data)
 	command = stk_command_new_from_pdu(test->pdu, test->pdu_len);
 
 	g_assert(command);
+	g_assert(command->status == STK_PARSE_RESULT_OK);
 
 	g_assert(command->number == 1);
 	g_assert(command->type == STK_COMMAND_TYPE_POLLING_OFF);
@@ -10181,6 +13078,7 @@ static void test_provide_local_info(gconstpointer data)
 	command = stk_command_new_from_pdu(test->pdu, test->pdu_len);
 
 	g_assert(command);
+	g_assert(command->status == STK_PARSE_RESULT_OK);
 
 	g_assert(command->number == 1);
 	g_assert(command->type == STK_COMMAND_TYPE_PROVIDE_LOCAL_INFO);
@@ -10288,6 +13186,7 @@ static void test_setup_event_list(gconstpointer data)
 	command = stk_command_new_from_pdu(test->pdu, test->pdu_len);
 
 	g_assert(command);
+	g_assert(command->status == STK_PARSE_RESULT_OK);
 
 	g_assert(command->number == 1);
 	g_assert(command->type == STK_COMMAND_TYPE_SETUP_EVENT_LIST);
@@ -10513,6 +13412,7 @@ static void test_perform_card_apdu(gconstpointer data)
 	command = stk_command_new_from_pdu(test->pdu, test->pdu_len);
 
 	g_assert(command);
+	g_assert(command->status == STK_PARSE_RESULT_OK);
 
 	g_assert(command->number == 1);
 	g_assert(command->type == STK_COMMAND_TYPE_PERFORM_CARD_APDU);
@@ -10550,6 +13450,7 @@ static void test_get_reader_status(gconstpointer data)
 	command = stk_command_new_from_pdu(test->pdu, test->pdu_len);
 
 	g_assert(command);
+	g_assert(command->status == STK_PARSE_RESULT_OK);
 
 	g_assert(command->number == 1);
 	g_assert(command->type == STK_COMMAND_TYPE_GET_READER_STATUS);
@@ -11070,6 +13971,7 @@ static void test_timer_mgmt(gconstpointer data)
 	command = stk_command_new_from_pdu(test->pdu, test->pdu_len);
 
 	g_assert(command);
+	g_assert(command->status == STK_PARSE_RESULT_OK);
 
 	g_assert(command->number == 1);
 	g_assert(command->type == STK_COMMAND_TYPE_TIMER_MANAGEMENT);
@@ -11092,6 +13994,7 @@ struct setup_idle_mode_text_test {
 	struct stk_icon_id icon_id;
 	struct stk_text_attribute text_attr;
 	struct stk_frame_id frame_id;
+	char *html;
 };
 
 static unsigned char setup_idle_mode_text_111[] = { 0xD0, 0x1A, 0x81, 0x03,
@@ -11524,7 +14427,10 @@ static struct setup_idle_mode_text_test setup_idle_mode_text_data_411 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x10, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Idle Mode Text 1</span>"
+		"</div>",
 };
 
 static struct setup_idle_mode_text_test setup_idle_mode_text_data_412 = {
@@ -11542,7 +14448,10 @@ static struct setup_idle_mode_text_test setup_idle_mode_text_data_421 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x10, 0x01, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: center;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Idle Mode Text 1</span>"
+		"</div>",
 };
 
 static struct setup_idle_mode_text_test setup_idle_mode_text_data_422 = {
@@ -11560,7 +14469,10 @@ static struct setup_idle_mode_text_test setup_idle_mode_text_data_431 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x10, 0x02, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: right;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Idle Mode Text 1</span>"
+		"</div>",
 };
 
 static struct setup_idle_mode_text_test setup_idle_mode_text_data_432 = {
@@ -11578,7 +14490,10 @@ static struct setup_idle_mode_text_test setup_idle_mode_text_data_441 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x10, 0x04, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"font-size: "
+		"big;color: #347235;background-color: #FFFF00;\">"
+		"Idle Mode Text 1</span></div>",
 };
 
 static struct setup_idle_mode_text_test setup_idle_mode_text_data_442 = {
@@ -11589,7 +14504,10 @@ static struct setup_idle_mode_text_test setup_idle_mode_text_data_442 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x10, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Idle Mode Text 2</span>"
+		"</div>",
 };
 
 static struct setup_idle_mode_text_test setup_idle_mode_text_data_443 = {
@@ -11607,7 +14525,10 @@ static struct setup_idle_mode_text_test setup_idle_mode_text_data_451 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x10, 0x08, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"font-size: "
+		"small;color: #347235;background-color: #FFFF00;\">"
+		"Idle Mode Text 1</span></div>",
 };
 
 static struct setup_idle_mode_text_test setup_idle_mode_text_data_452 = {
@@ -11618,7 +14539,10 @@ static struct setup_idle_mode_text_test setup_idle_mode_text_data_452 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x10, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Idle Mode Text 2</span>"
+		"</div>",
 };
 
 static struct setup_idle_mode_text_test setup_idle_mode_text_data_453 = {
@@ -11636,7 +14560,10 @@ static struct setup_idle_mode_text_test setup_idle_mode_text_data_461 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x10, 0x10, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"font-weight: "
+		"bold;color: #347235;background-color: #FFFF00;\">"
+		"Idle Mode Text 1</span></div>",
 };
 
 static struct setup_idle_mode_text_test setup_idle_mode_text_data_462 = {
@@ -11647,7 +14574,10 @@ static struct setup_idle_mode_text_test setup_idle_mode_text_data_462 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x10, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Idle Mode Text 2</span>"
+		"</div>",
 };
 
 static struct setup_idle_mode_text_test setup_idle_mode_text_data_463 = {
@@ -11665,7 +14595,10 @@ static struct setup_idle_mode_text_test setup_idle_mode_text_data_471 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x10, 0x20, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"font-style: "
+		"italic;color: #347235;background-color: #FFFF00;\">"
+		"Idle Mode Text 1</span></div>",
 };
 
 static struct setup_idle_mode_text_test setup_idle_mode_text_data_472 = {
@@ -11676,7 +14609,10 @@ static struct setup_idle_mode_text_test setup_idle_mode_text_data_472 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x10, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Idle Mode Text 2</span>"
+		"</div>",
 };
 
 static struct setup_idle_mode_text_test setup_idle_mode_text_data_473 = {
@@ -11694,7 +14630,10 @@ static struct setup_idle_mode_text_test setup_idle_mode_text_data_481 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x10, 0x40, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span "
+		"style=\"text-decoration: underline;color: #347235;"
+		"background-color: #FFFF00;\">Idle Mode Text 1</span></div>",
 };
 
 static struct setup_idle_mode_text_test setup_idle_mode_text_data_482 = {
@@ -11705,7 +14644,10 @@ static struct setup_idle_mode_text_test setup_idle_mode_text_data_482 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x10, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Idle Mode Text 2</span>"
+		"</div>",
 };
 
 static struct setup_idle_mode_text_test setup_idle_mode_text_data_483 = {
@@ -11723,7 +14665,11 @@ static struct setup_idle_mode_text_test setup_idle_mode_text_data_491 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x10, 0x80, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span "
+		"style=\"text-decoration: line-through;color: "
+		"#347235;background-color: #FFFF00;\">Idle Mode Text 1</span>"
+		"</div>",
 };
 
 static struct setup_idle_mode_text_test setup_idle_mode_text_data_492 = {
@@ -11734,7 +14680,10 @@ static struct setup_idle_mode_text_test setup_idle_mode_text_data_492 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x10, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Idle Mode Text 2</span>"
+		"</div>",
 };
 
 static struct setup_idle_mode_text_test setup_idle_mode_text_data_493 = {
@@ -11752,7 +14701,10 @@ static struct setup_idle_mode_text_test setup_idle_mode_text_data_4101 = {
 	.text_attr = {
 		.len = 4,
 		.attributes = { 0x00, 0x10, 0x00, 0xB4 }
-	}
+	},
+	.html = "<div style=\"text-align: left;\"><span style=\"color: "
+		"#347235;background-color: #FFFF00;\">Idle Mode Text 1</span>"
+		"</div>",
 };
 
 static struct setup_idle_mode_text_test setup_idle_mode_text_data_4102 = {
@@ -11784,6 +14736,7 @@ static void test_setup_idle_mode_text(gconstpointer data)
 	command = stk_command_new_from_pdu(test->pdu, test->pdu_len);
 
 	g_assert(command);
+	g_assert(command->status == STK_PARSE_RESULT_OK);
 
 	g_assert(command->number == 1);
 	g_assert(command->type == STK_COMMAND_TYPE_SETUP_IDLE_MODE_TEXT);
@@ -11796,6 +14749,8 @@ static void test_setup_idle_mode_text(gconstpointer data)
 	check_icon_id(&command->setup_idle_mode_text.icon_id, &test->icon_id);
 	check_text_attr(&command->setup_idle_mode_text.text_attr,
 							&test->text_attr);
+	check_text_attr_html(&command->setup_idle_mode_text.text_attr,
+				command->setup_idle_mode_text.text, test->html);
 	check_frame_id(&command->setup_idle_mode_text.frame_id,
 							&test->frame_id);
 
@@ -12163,6 +15118,7 @@ static struct run_at_command_test run_at_command_data_121 = {
 	.pdu = run_at_command_121,
 	.pdu_len = sizeof(run_at_command_121),
 	.qualifier = 0x00,
+	.alpha_id = "",
 	.at_command = "AT+CGMI"
 };
 
@@ -12538,6 +15494,7 @@ static void test_run_at_command(gconstpointer data)
 	command = stk_command_new_from_pdu(test->pdu, test->pdu_len);
 
 	g_assert(command);
+	g_assert(command->status == STK_PARSE_RESULT_OK);
 
 	g_assert(command->number == 1);
 	g_assert(command->type == STK_COMMAND_TYPE_RUN_AT_COMMAND);
@@ -12860,6 +15817,7 @@ static struct send_dtmf_test send_dtmf_data_131 = {
 	.pdu = send_dtmf_131,
 	.pdu_len = sizeof(send_dtmf_131),
 	.qualifier = 0x00,
+	.alpha_id = "",
 	.dtmf = "1cccccccccc2"
 };
 
@@ -13203,6 +16161,7 @@ static void test_send_dtmf(gconstpointer data)
 	command = stk_command_new_from_pdu(test->pdu, test->pdu_len);
 
 	g_assert(command);
+	g_assert(command->status == STK_PARSE_RESULT_OK);
 
 	g_assert(command->number == 1);
 	g_assert(command->type == STK_COMMAND_TYPE_SEND_DTMF);
@@ -13257,6 +16216,7 @@ static void test_language_notification(gconstpointer data)
 	command = stk_command_new_from_pdu(test->pdu, test->pdu_len);
 
 	g_assert(command);
+	g_assert(command->status == STK_PARSE_RESULT_OK);
 
 	g_assert(command->number == 1);
 	g_assert(command->type == STK_COMMAND_TYPE_LANGUAGE_NOTIFICATION);
@@ -13578,6 +16538,7 @@ static struct launch_browser_test launch_browser_data_121 = {
 	.pdu = launch_browser_121,
 	.pdu_len = sizeof(launch_browser_121),
 	.qualifier = 0x00,
+	.alpha_id = "",
 	.url = "http://xxx.yyy.zzz"
 };
 
@@ -13915,6 +16876,7 @@ static void test_launch_browser(gconstpointer data)
 	command = stk_command_new_from_pdu(test->pdu, test->pdu_len);
 
 	g_assert(command);
+	g_assert(command->status == STK_PARSE_RESULT_OK);
 
 	g_assert(command->number == 1);
 	g_assert(command->type == STK_COMMAND_TYPE_LAUNCH_BROWSER);
@@ -15198,6 +18160,26 @@ static const struct terminal_response_test get_input_response_data_1221 = {
 	},
 };
 
+static const unsigned char more_time_response_111[] = {
+	0x81, 0x03, 0x01, 0x02, 0x00, 0x82, 0x02, 0x82,
+	0x81, 0x83, 0x01, 0x00,
+};
+
+static const struct terminal_response_test more_time_response_data_111 = {
+	.pdu = more_time_response_111,
+	.pdu_len = sizeof(more_time_response_111),
+	.response = {
+		.number = 1,
+		.type = STK_COMMAND_TYPE_MORE_TIME,
+		.qualifier = 0x00,
+		.src = STK_DEVICE_IDENTITY_TYPE_TERMINAL,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		.result = {
+			.type = STK_RESULT_TYPE_SUCCESS,
+		},
+	},
+};
+
 static const unsigned char send_sms_response_111[] = {
 	0x81, 0x03, 0x01, 0x13, 0x00, 0x82, 0x02, 0x82,
 	0x81, 0x83, 0x01, 0x00,
@@ -16390,11 +19372,12 @@ static const struct terminal_response_test
 					.len = 16,
 				},
 				.bcch_ch_list = {
-					.channels = (short[]) {
+					.channels = {
 						561, 565, 568, 569, 573,
 						575, 577, 581, 582, 585,
 					},
-					.length = 10,
+					.num = 10,
+					.has_list = TRUE,
 				},
 			}},
 		}},
@@ -16478,7 +19461,7 @@ static const struct terminal_response_test
 		},
 		{ .provide_local_info = {
 			{ .tadv = {
-				.status = STK_TIMING_ADVANCE_ME_IDLE,
+				.status = STK_ME_STATUS_IDLE,
 				.advance = 0,
 			}},
 		}},
@@ -18303,6 +21286,155 @@ static const struct envelope_test menu_selection_data_641 = {
 	},
 };
 
+static const unsigned char call_control_111a[] = {
+	0xd4, 0x25, 0x82, 0x02, 0x82, 0x81, 0x86, 0x0b,
+	0x91, 0x10, 0x32, 0x54, 0x76, 0x98, 0x10, 0x32,
+	0x54, 0x76, 0x98, 0x07, 0x07, 0x06, 0x60, 0x04,
+	0x02, 0x00, 0x05, 0x81, 0x13, 0x09, 0x00, 0xf1,
+	0x10, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01,
+};
+
+static const struct envelope_test call_control_data_111a = {
+	.pdu = call_control_111a,
+	.pdu_len = sizeof(call_control_111a),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_CALL_CONTROL,
+		.src = STK_DEVICE_IDENTITY_TYPE_TERMINAL,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .call_control = {
+			.type = STK_CC_TYPE_CALL_SETUP,
+			{ .address = {
+				.ton_npi = 0x91, /* Intl, ISDN */
+				.number = "01234567890123456789",
+			}},
+			.ccp1 = {
+				.ccp = {
+					0x60, 0x04, 0x02, 0x00, 0x05, 0x81,
+				},
+				.len = 6,
+			},
+			.location = {
+				.mcc = "001",
+				.mnc = "01",
+				.lac_tac = 0x0001,
+				.has_ci = TRUE,
+				.ci = 0x0001,
+				.has_ext_ci = TRUE,
+				.ext_ci = 0x0001,
+			},
+		}},
+	},
+};
+
+static const unsigned char call_control_111b[] = {
+	0xd4, 0x23, 0x82, 0x02, 0x82, 0x81, 0x86, 0x0b,
+	0x91, 0x10, 0x32, 0x54, 0x76, 0x98, 0x10, 0x32,
+	0x54, 0x76, 0x98, 0x07, 0x07, 0x06, 0x60, 0x04,
+	0x02, 0x00, 0x05, 0x81, 0x13, 0x07, 0x00, 0x11,
+	0x10, 0x00, 0x01, 0x00, 0x01,
+};
+
+static const struct envelope_test call_control_data_111b = {
+	.pdu = call_control_111b,
+	.pdu_len = sizeof(call_control_111b),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_CALL_CONTROL,
+		.src = STK_DEVICE_IDENTITY_TYPE_TERMINAL,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .call_control = {
+			.type = STK_CC_TYPE_CALL_SETUP,
+			{ .address = {
+				.ton_npi = 0x91, /* Intl, ISDN */
+				.number = "01234567890123456789",
+			}},
+			.ccp1 = {
+				.ccp = {
+					0x60, 0x04, 0x02, 0x00, 0x05, 0x81,
+				},
+				.len = 6,
+			},
+			.location = {
+				.mcc = "001",
+				.mnc = "011",
+				.lac_tac = 0x0001,
+				.has_ci = TRUE,
+				.ci = 0x0001,
+			},
+		}},
+	},
+};
+
+static const unsigned char call_control_131a[] = {
+	0xd4, 0x18, 0x82, 0x02, 0x82, 0x81, 0x86, 0x07,
+	0x91, 0x10, 0x32, 0x04, 0x21, 0x43, 0x65, 0x13,
+	0x09, 0x00, 0xf1, 0x10, 0x00, 0x01, 0x00, 0x01,
+	0x00, 0x01,
+	/*
+	 * Byte 3 changed to 0x82 and byte 7 changed to 0x86 (Comprehension
+	 * Required should be set according to TS 102 223 7.3.1.6)
+	 */
+};
+
+static const struct envelope_test call_control_data_131a = {
+	.pdu = call_control_131a,
+	.pdu_len = sizeof(call_control_131a),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_CALL_CONTROL,
+		.src = STK_DEVICE_IDENTITY_TYPE_TERMINAL,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .call_control = {
+			.type = STK_CC_TYPE_CALL_SETUP,
+			{ .address = {
+				.ton_npi = 0x91, /* Intl, ISDN */
+				.number = "012340123456",
+			}},
+			.location = {
+				.mcc = "001",
+				.mnc = "01",
+				.lac_tac = 0x0001,
+				.has_ci = TRUE,
+				.ci = 0x0001,
+				.has_ext_ci = TRUE,
+				.ext_ci = 0x0001,
+			},
+		}},
+	},
+};
+
+static const unsigned char call_control_131b[] = {
+	0xd4, 0x16, 0x82, 0x02, 0x82, 0x81, 0x86, 0x07,
+	0x91, 0x10, 0x32, 0x04, 0x21, 0x43, 0x65, 0x13,
+	0x07, 0x00, 0x11, 0x10, 0x00, 0x01, 0x00, 0x01,
+	/*
+	 * Byte 3 changed to 0x82 and byte 7 changed to 0x86 (Comprehension
+	 * Required should be set according to TS 102 223 7.3.1.6)
+	 */
+};
+
+static const struct envelope_test call_control_data_131b = {
+	.pdu = call_control_131b,
+	.pdu_len = sizeof(call_control_131b),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_CALL_CONTROL,
+		.src = STK_DEVICE_IDENTITY_TYPE_TERMINAL,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .call_control = {
+			.type = STK_CC_TYPE_CALL_SETUP,
+			{ .address = {
+				.ton_npi = 0x91, /* Intl, ISDN */
+				.number = "012340123456",
+			}},
+			.location = {
+				.mcc = "001",
+				.mnc = "011",
+				.lac_tac = 0x0001,
+				.has_ci = TRUE,
+				.ci = 0x0001,
+			},
+		}},
+	},
+};
+
 static const unsigned char mo_short_message_control_111a[] = {
 	0xd5, 0x22, 0x02, 0x02, 0x82, 0x81, 0x06, 0x09,
 	0x91, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
@@ -18375,6 +21507,1426 @@ static const struct envelope_test mo_short_message_control_data_111b = {
 	},
 };
 
+static const unsigned char event_download_mt_call_111[] = {
+	0xd6, 0x0a, 0x99, 0x01, 0x00, 0x82, 0x02, 0x83,
+	0x81, 0x9c, 0x01, 0x00,
+	/*
+	 * Byte 3 changed to 0x99 and byte 10 to 0x9c (Comprehension
+	 * Required should be set according to TS 102 223 7.5.1.2)
+	 */
+};
+
+static const struct envelope_test event_download_mt_call_data_111 = {
+	.pdu = event_download_mt_call_111,
+	.pdu_len = sizeof(event_download_mt_call_111),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_NETWORK,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_MT_CALL,
+			{ .mt_call = {
+				.transaction_id = 0,
+			}},
+		}},
+	},
+};
+
+static const unsigned char event_download_mt_call_112[] = {
+	0xd6, 0x0f, 0x99, 0x01, 0x00, 0x82, 0x02, 0x83,
+	0x81, 0x9c, 0x01, 0x00, 0x06, 0x03, 0x81, 0x89,
+	0x67,
+	/*
+	 * Byte 3 changed to 0x99 and byte 10 to 0x9c and byte 13 to
+	 * 0x06 (Comprehension Required should be set according to
+	 * TS 102 223 7.5.1.2)
+	 */
+};
+
+static const struct envelope_test event_download_mt_call_data_112 = {
+	.pdu = event_download_mt_call_112,
+	.pdu_len = sizeof(event_download_mt_call_112),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_NETWORK,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_MT_CALL,
+			{ .mt_call = {
+				.transaction_id = 0,
+				.caller_address = {
+					.ton_npi = 0x81, /* Unknown, ISDN */
+					.number = "9876",
+				},
+			}},
+		}},
+	},
+};
+
+static const unsigned char event_download_call_connected_111[] = {
+	0xd6, 0x0a, 0x99, 0x01, 0x01, 0x82, 0x02, 0x82,
+	0x81, 0x9c, 0x01, 0x80,
+	/*
+	 * Byte 3 changed to 0x99 and byte 10 to 0x9c (Comprehension
+	 * Required should be set according to TS 102 223 7.5.2.2)
+	 */
+};
+
+static const struct envelope_test event_download_call_connected_data_111 = {
+	.pdu = event_download_call_connected_111,
+	.pdu_len = sizeof(event_download_call_connected_111),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_TERMINAL,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_CALL_CONNECTED,
+			{ .call_connected = {
+				.transaction_id = 0x80,
+			}},
+		}},
+	},
+};
+
+static const unsigned char event_download_call_connected_112[] = {
+	0xd6, 0x0a, 0x99, 0x01, 0x01, 0x82, 0x02, 0x83,
+	0x81, 0x9c, 0x01, 0x80,
+	/*
+	 * Byte 3 changed to 0x99 and byte 10 to 0x9c (Comprehension
+	 * Required should be set according to TS 102 223 7.5.2.2)
+	 */
+};
+
+static const struct envelope_test event_download_call_connected_data_112 = {
+	.pdu = event_download_call_connected_112,
+	.pdu_len = sizeof(event_download_call_connected_112),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_NETWORK,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_CALL_CONNECTED,
+			{ .call_connected = {
+				.transaction_id = 0x80,
+			}},
+		}},
+	},
+};
+
+static const unsigned char event_download_call_disconnected_111[] = {
+	0xd6, 0x0a, 0x99, 0x01, 0x02, 0x82, 0x02, 0x83,
+	0x81, 0x9c, 0x01, 0x80,
+	/*
+	 * Byte 3 changed to 0x99 and byte 10 to 0x9c (Comprehension
+	 * Required should be set according to TS 102 223 7.5.3.2)
+	 */
+};
+
+static const struct envelope_test event_download_call_disconnected_data_111 = {
+	.pdu = event_download_call_disconnected_111,
+	.pdu_len = sizeof(event_download_call_disconnected_111),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_NETWORK,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_CALL_DISCONNECTED,
+			{ .call_disconnected = {
+				.transaction_ids = {
+					.len = 1,
+					.list = { 0x80 },
+				},
+			}},
+		}},
+	},
+};
+
+static const unsigned char event_download_call_disconnected_112a[] = {
+	0xd6, 0x0a, 0x99, 0x01, 0x02, 0x82, 0x02, 0x82,
+	0x81, 0x9c, 0x01, 0x80,
+	/*
+	 * Byte 3 changed to 0x99 and byte 10 to 0x9c (Comprehension
+	 * Required should be set according to TS 102 223 7.5.3.2)
+	 */
+};
+
+static const struct envelope_test
+		event_download_call_disconnected_data_112a = {
+	.pdu = event_download_call_disconnected_112a,
+	.pdu_len = sizeof(event_download_call_disconnected_112a),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_TERMINAL,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_CALL_DISCONNECTED,
+			{ .call_disconnected = {
+				.transaction_ids = {
+					.len = 1,
+					.list = { 0x80 },
+				},
+			}},
+		}},
+	},
+};
+
+static const unsigned char event_download_call_disconnected_112b[] = {
+	0xd6, 0x0e, 0x99, 0x01, 0x02, 0x82, 0x02, 0x82,
+	0x81, 0x9c, 0x01, 0x80, 0x1a, 0x02, 0x60, 0x90,
+	/*
+	 * Byte 3 changed to 0x99 and byte 10 to 0x9c and byte 13 to
+	 * 1a (Comprehension Required should be set according to TS
+	 * 102 223 7.5.3.2)
+	 */
+};
+
+static const struct envelope_test
+		event_download_call_disconnected_data_112b = {
+	.pdu = event_download_call_disconnected_112b,
+	.pdu_len = sizeof(event_download_call_disconnected_112b),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_TERMINAL,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_CALL_DISCONNECTED,
+			{ .call_disconnected = {
+				.transaction_ids = {
+					.len = 1,
+					.list = { 0x80 },
+				},
+				.cause = {
+					.has_cause = TRUE,
+					.len = 2,
+					/* Normal call clearing */
+					.cause = { 0x60, 0x90 },
+				},
+			}},
+		}},
+	},
+};
+
+static const unsigned char event_download_call_disconnected_112c[] = {
+	0xd6, 0x0e, 0x99, 0x01, 0x02, 0x82, 0x02, 0x82,
+	0x81, 0x9c, 0x01, 0x80, 0x1a, 0x02, 0xe0, 0x90,
+	/*
+	 * Byte 3 changed to 0x99 and byte 10 to 0x9c and byte 13 to
+	 * 1a (Comprehension Required should be set according to TS
+	 * 102 223 7.5.3.2)
+	 */
+};
+
+static const struct envelope_test
+		event_download_call_disconnected_data_112c = {
+	.pdu = event_download_call_disconnected_112c,
+	.pdu_len = sizeof(event_download_call_disconnected_112c),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_TERMINAL,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_CALL_DISCONNECTED,
+			{ .call_disconnected = {
+				.transaction_ids = {
+					.len = 1,
+					.list = { 0x80 },
+				},
+				.cause = {
+					.has_cause = TRUE,
+					.len = 2,
+					/* Normal call clearing */
+					.cause = { 0xe0, 0x90 },
+				},
+			}},
+		}},
+	},
+};
+
+static const unsigned char event_download_call_disconnected_113a[] = {
+	0xd6, 0x0e, 0x99, 0x01, 0x02, 0x82, 0x02, 0x83,
+	0x81, 0x9c, 0x01, 0x00, 0x1a, 0x02, 0x60, 0x90,
+	/*
+	 * Byte 3 changed to 0x99 and byte 10 to 0x9c and byte 13 to
+	 * 1a (Comprehension Required should be set according to TS
+	 * 102 223 7.5.3.2)
+	 */
+};
+
+static const struct envelope_test
+		event_download_call_disconnected_data_113a = {
+	.pdu = event_download_call_disconnected_113a,
+	.pdu_len = sizeof(event_download_call_disconnected_113a),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_NETWORK,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_CALL_DISCONNECTED,
+			{ .call_disconnected = {
+				.transaction_ids = {
+					.len = 1,
+					.list = { 0 },
+				},
+				.cause = {
+					.has_cause = TRUE,
+					.len = 2,
+					/* Normal call clearing */
+					.cause = { 0x60, 0x90 },
+				},
+			}},
+		}},
+	},
+};
+
+static const unsigned char event_download_call_disconnected_113b[] = {
+	0xd6, 0x0e, 0x99, 0x01, 0x02, 0x82, 0x02, 0x83,
+	0x81, 0x9c, 0x01, 0x00, 0x1a, 0x02, 0xe0, 0x90,
+	/*
+	 * Byte 3 changed to 0x99 and byte 10 to 0x9c and byte 13 to
+	 * 1a (Comprehension Required should be set according to TS
+	 * 102 223 7.5.3.2)
+	 */
+};
+
+static const struct envelope_test
+		event_download_call_disconnected_data_113b = {
+	.pdu = event_download_call_disconnected_113b,
+	.pdu_len = sizeof(event_download_call_disconnected_113b),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_NETWORK,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_CALL_DISCONNECTED,
+			{ .call_disconnected = {
+				.transaction_ids = {
+					.len = 1,
+					.list = { 0 },
+				},
+				.cause = {
+					.has_cause = TRUE,
+					.len = 2,
+					/* Normal call clearing */
+					.cause = { 0xe0, 0x90 },
+				},
+			}},
+		}},
+	},
+};
+
+static const unsigned char event_download_call_disconnected_114a[] = {
+	0xd6, 0x0c, 0x99, 0x01, 0x02, 0x82, 0x02, 0x82,
+	0x81, 0x9c, 0x01, 0x80, 0x1a, 0x00,
+	/*
+	 * Byte 3 changed to 0x99 and byte 10 to 0x9c and byte 13 to
+	 * 1a (Comprehension Required should be set according to TS
+	 * 102 223 7.5.3.2)
+	 */
+};
+
+static const struct envelope_test
+		event_download_call_disconnected_data_114a = {
+	.pdu = event_download_call_disconnected_114a,
+	.pdu_len = sizeof(event_download_call_disconnected_114a),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_TERMINAL,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_CALL_DISCONNECTED,
+			{ .call_disconnected = {
+				.transaction_ids = {
+					.len = 1,
+					.list = { 0x80 },
+				},
+				.cause = {
+					.has_cause = TRUE,
+					/* Radio link failure */
+				},
+			}},
+		}},
+	},
+};
+
+static const unsigned char event_download_call_disconnected_114b[] = {
+	0xd6, 0x0c, 0x99, 0x01, 0x02, 0x82, 0x02, 0x82,
+	0x81, 0x9c, 0x01, 0x00, 0x1a, 0x00,
+	/*
+	 * Byte 3 changed to 0x99 and byte 10 to 0x9c and byte 13 to
+	 * 1a (Comprehension Required should be set according to TS
+	 * 102 223 7.5.3.2)
+	 */
+};
+
+static const struct envelope_test
+		event_download_call_disconnected_data_114b = {
+	.pdu = event_download_call_disconnected_114b,
+	.pdu_len = sizeof(event_download_call_disconnected_114b),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_TERMINAL,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_CALL_DISCONNECTED,
+			{ .call_disconnected = {
+				.transaction_ids = {
+					.len = 1,
+					.list = { 0 },
+				},
+				.cause = {
+					.has_cause = TRUE,
+					/* Radio link failure */
+				},
+			}},
+		}},
+	},
+};
+
+static const unsigned char event_download_location_status_111[] = {
+	0xd6, 0x0a, 0x99, 0x01, 0x03, 0x82, 0x02, 0x82,
+	0x81, 0x9b, 0x01, 0x02,
+	/*
+	 * Byte 3 changed to 0x99 and byte 10 to 0x9b (Comprehension
+	 * Required should be set according to TS 102 223 7.5.4.2)
+	 */
+};
+
+static const struct envelope_test
+		event_download_location_status_data_111 = {
+	.pdu = event_download_location_status_111,
+	.pdu_len = sizeof(event_download_location_status_111),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_TERMINAL,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_LOCATION_STATUS,
+			{ .location_status = {
+				.state = STK_NO_SERVICE,
+			}},
+		}},
+	},
+};
+
+static const unsigned char event_download_location_status_112a[] = {
+	0xd6, 0x15, 0x99, 0x01, 0x03, 0x82, 0x02, 0x82,
+	0x81, 0x9b, 0x01, 0x00, 0x13, 0x09, 0x00, 0xf1,
+	0x10, 0x00, 0x02, 0x00, 0x02, 0x00, 0x01,
+	/*
+	 * Byte 3 changed to 0x99 and byte 10 to 0x9b (Comprehension
+	 * Required should be set according to TS 102 223 7.5.4.2)
+	 */
+};
+
+static const struct envelope_test
+		event_download_location_status_data_112a = {
+	.pdu = event_download_location_status_112a,
+	.pdu_len = sizeof(event_download_location_status_112a),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_TERMINAL,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_LOCATION_STATUS,
+			{ .location_status = {
+				.state = STK_NORMAL_SERVICE,
+				.info = {
+					.mcc = "001",
+					.mnc = "01",
+					.lac_tac = 0x0002,
+					.has_ci = TRUE,
+					.ci = 0x0002,
+					.has_ext_ci = TRUE,
+					.ext_ci = 0x0001,
+				},
+			}},
+		}},
+	},
+};
+
+static const unsigned char event_download_location_status_112b[] = {
+	0xd6, 0x13, 0x99, 0x01, 0x03, 0x82, 0x02, 0x82,
+	0x81, 0x9b, 0x01, 0x00, 0x13, 0x07, 0x00, 0x11,
+	0x10, 0x00, 0x02, 0x00, 0x02,
+	/*
+	 * Byte 3 changed to 0x99 and byte 10 to 0x9b (Comprehension
+	 * Required should be set according to TS 102 223 7.5.4.2)
+	 */
+};
+
+static const struct envelope_test
+		event_download_location_status_data_112b = {
+	.pdu = event_download_location_status_112b,
+	.pdu_len = sizeof(event_download_location_status_112b),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_TERMINAL,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_LOCATION_STATUS,
+			{ .location_status = {
+				.state = STK_NORMAL_SERVICE,
+				.info = {
+					.mcc = "001",
+					.mnc = "011",
+					.lac_tac = 0x0002,
+					.has_ci = TRUE,
+					.ci = 0x0002,
+				},
+			}},
+		}},
+	},
+};
+
+static const unsigned char event_download_location_status_122[] = {
+	0xd6, 0x15, 0x99, 0x01, 0x03, 0x82, 0x02, 0x82,
+	0x81, 0x9b, 0x01, 0x00, 0x13, 0x09, 0x00, 0xf1,
+	0x10, 0x00, 0x02, 0x00, 0x00, 0x00, 0x2f,
+	/*
+	 * Byte 3 changed to 0x99 and byte 10 to 0x9b (Comprehension
+	 * Required should be set according to TS 102 223 7.5.4.2)
+	 */
+};
+
+static const struct envelope_test
+		event_download_location_status_data_122 = {
+	.pdu = event_download_location_status_122,
+	.pdu_len = sizeof(event_download_location_status_122),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_TERMINAL,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_LOCATION_STATUS,
+			{ .location_status = {
+				.state = STK_NORMAL_SERVICE,
+				.info = {
+					.mcc = "001",
+					.mnc = "01",
+					.lac_tac = 0x0002,
+					.has_eutran_ci = TRUE,
+					.eutran_ci = 0x0000002,
+				},
+			}},
+		}},
+	},
+};
+
+/*
+ * This is from 27.22.7.5.  The ENVELOPE given in 27.22.4.16.1.1 seems to
+ * have invalid length value (2nd byte), but in turn the Comprehension
+ * Required bit is set correctly..
+ */
+static const unsigned char event_download_user_activity_111[] = {
+	0xd6, 0x07, 0x99, 0x01, 0x04, 0x82, 0x02, 0x82,
+	0x81,
+	/*
+	 * Byte 3 changed to 0x99 (Comprehension Required should be
+	 * set according to TS 102 223 7.5.5.2)
+	 */
+};
+
+static const struct envelope_test event_download_user_activity_data_111 = {
+	.pdu = event_download_user_activity_111,
+	.pdu_len = sizeof(event_download_user_activity_111),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_TERMINAL,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_USER_ACTIVITY,
+		}},
+	},
+};
+
+static const unsigned char event_download_idle_screen_available_111[] = {
+	0xd6, 0x07, 0x99, 0x01, 0x05, 0x82, 0x02, 0x02,
+	0x81,
+	/*
+	 * Byte 3 changed to 0x99 (Comprehension Required should be
+	 * set according to TS 102 223 7.5.6.2)
+	 */
+};
+
+static const struct envelope_test
+		event_download_idle_screen_available_data_111 = {
+	.pdu = event_download_idle_screen_available_111,
+	.pdu_len = sizeof(event_download_idle_screen_available_111),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_DISPLAY,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_IDLE_SCREEN_AVAILABLE,
+		}},
+	},
+};
+
+static const unsigned char event_download_card_reader_status_111a[] = {
+	0xd6, 0x0a, 0x99, 0x01, 0x06, 0x82, 0x02, 0x82,
+	0x81, 0xa0, 0x01, 0x79,
+};
+
+static const struct envelope_test
+		event_download_card_reader_status_data_111a = {
+	.pdu = event_download_card_reader_status_111a,
+	.pdu_len = sizeof(event_download_card_reader_status_111a),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_TERMINAL,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_CARD_READER_STATUS,
+			{ .card_reader_status = {
+				.id = 1,
+				.removable = TRUE,
+				.present = TRUE,
+				.id1_size = TRUE,
+				.card_present = TRUE,
+				.card_powered = FALSE,
+			}},
+		}},
+	},
+};
+
+static const unsigned char event_download_card_reader_status_111b[] = {
+	0xd6, 0x0a, 0x99, 0x01, 0x06, 0x82, 0x02, 0x82,
+	0x81, 0xa0, 0x01, 0x59,
+};
+
+static const struct envelope_test
+		event_download_card_reader_status_data_111b = {
+	.pdu = event_download_card_reader_status_111b,
+	.pdu_len = sizeof(event_download_card_reader_status_111b),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_TERMINAL,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_CARD_READER_STATUS,
+			{ .card_reader_status = {
+				.id = 1,
+				.removable = TRUE,
+				.present = TRUE,
+				.id1_size = FALSE,
+				.card_present = TRUE,
+				.card_powered = FALSE,
+			}},
+		}},
+	},
+};
+
+static const unsigned char event_download_card_reader_status_111c[] = {
+	0xd6, 0x0a, 0x99, 0x01, 0x06, 0x82, 0x02, 0x82,
+	0x81, 0xa0, 0x01, 0x71,
+};
+
+static const struct envelope_test
+		event_download_card_reader_status_data_111c = {
+	.pdu = event_download_card_reader_status_111c,
+	.pdu_len = sizeof(event_download_card_reader_status_111c),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_TERMINAL,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_CARD_READER_STATUS,
+			{ .card_reader_status = {
+				.id = 1,
+				.removable = FALSE,
+				.present = TRUE,
+				.id1_size = TRUE,
+				.card_present = TRUE,
+				.card_powered = FALSE,
+			}},
+		}},
+	},
+};
+
+static const unsigned char event_download_card_reader_status_111d[] = {
+	0xd6, 0x0a, 0x99, 0x01, 0x06, 0x82, 0x02, 0x82,
+	0x81, 0xa0, 0x01, 0x51,
+};
+
+static const struct envelope_test
+		event_download_card_reader_status_data_111d = {
+	.pdu = event_download_card_reader_status_111d,
+	.pdu_len = sizeof(event_download_card_reader_status_111d),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_TERMINAL,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_CARD_READER_STATUS,
+			{ .card_reader_status = {
+				.id = 1,
+				.removable = FALSE,
+				.present = TRUE,
+				.id1_size = FALSE,
+				.card_present = TRUE,
+				.card_powered = FALSE,
+			}},
+		}},
+	},
+};
+
+static const unsigned char event_download_card_reader_status_112a[] = {
+	0xd6, 0x0a, 0x99, 0x01, 0x06, 0x82, 0x02, 0x82,
+	0x81, 0xa0, 0x01, 0x39,
+};
+
+static const struct envelope_test
+		event_download_card_reader_status_data_112a = {
+	.pdu = event_download_card_reader_status_112a,
+	.pdu_len = sizeof(event_download_card_reader_status_112a),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_TERMINAL,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_CARD_READER_STATUS,
+			{ .card_reader_status = {
+				.id = 1,
+				.removable = TRUE,
+				.present = TRUE,
+				.id1_size = TRUE,
+				.card_present = FALSE,
+			}},
+		}},
+	},
+};
+
+static const unsigned char event_download_card_reader_status_112b[] = {
+	0xd6, 0x0a, 0x99, 0x01, 0x06, 0x82, 0x02, 0x82,
+	0x81, 0xa0, 0x01, 0x19,
+};
+
+static const struct envelope_test
+		event_download_card_reader_status_data_112b = {
+	.pdu = event_download_card_reader_status_112b,
+	.pdu_len = sizeof(event_download_card_reader_status_112b),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_TERMINAL,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_CARD_READER_STATUS,
+			{ .card_reader_status = {
+				.id = 1,
+				.removable = TRUE,
+				.present = TRUE,
+				.id1_size = FALSE,
+				.card_present = FALSE,
+			}},
+		}},
+	},
+};
+
+static const unsigned char event_download_card_reader_status_112c[] = {
+	0xd6, 0x0a, 0x99, 0x01, 0x06, 0x82, 0x02, 0x82,
+	0x81, 0xa0, 0x01, 0x31,
+};
+
+static const struct envelope_test
+		event_download_card_reader_status_data_112c = {
+	.pdu = event_download_card_reader_status_112c,
+	.pdu_len = sizeof(event_download_card_reader_status_112c),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_TERMINAL,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_CARD_READER_STATUS,
+			{ .card_reader_status = {
+				.id = 1,
+				.removable = FALSE,
+				.present = TRUE,
+				.id1_size = TRUE,
+				.card_present = FALSE,
+			}},
+		}},
+	},
+};
+
+static const unsigned char event_download_card_reader_status_112d[] = {
+	0xd6, 0x0a, 0x99, 0x01, 0x06, 0x82, 0x02, 0x82,
+	0x81, 0xa0, 0x01, 0x11,
+};
+
+static const struct envelope_test
+		event_download_card_reader_status_data_112d = {
+	.pdu = event_download_card_reader_status_112d,
+	.pdu_len = sizeof(event_download_card_reader_status_112d),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_TERMINAL,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_CARD_READER_STATUS,
+			{ .card_reader_status = {
+				.id = 1,
+				.removable = FALSE,
+				.present = TRUE,
+				.id1_size = FALSE,
+				.card_present = FALSE,
+			}},
+		}},
+	},
+};
+
+static const unsigned char event_download_card_reader_status_212a[] = {
+	0xd6, 0x0a, 0x99, 0x01, 0x06, 0x82, 0x02, 0x82,
+	0x81, 0xa0, 0x01, 0x29,
+};
+
+static const struct envelope_test
+		event_download_card_reader_status_data_212a = {
+	.pdu = event_download_card_reader_status_212a,
+	.pdu_len = sizeof(event_download_card_reader_status_212a),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_TERMINAL,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_CARD_READER_STATUS,
+			{ .card_reader_status = {
+				.id = 1,
+				.removable = TRUE,
+				.present = FALSE,
+				.id1_size = TRUE,
+				.card_present = FALSE,
+			}},
+		}},
+	},
+};
+
+static const unsigned char event_download_card_reader_status_212b[] = {
+	0xd6, 0x0a, 0x99, 0x01, 0x06, 0x82, 0x02, 0x82,
+	0x81, 0xa0, 0x01, 0x09,
+};
+
+static const struct envelope_test
+		event_download_card_reader_status_data_212b = {
+	.pdu = event_download_card_reader_status_212b,
+	.pdu_len = sizeof(event_download_card_reader_status_212b),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_TERMINAL,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_CARD_READER_STATUS,
+			{ .card_reader_status = {
+				.id = 1,
+				.removable = TRUE,
+				.present = FALSE,
+				.id1_size = FALSE,
+				.card_present = FALSE,
+			}},
+		}},
+	},
+};
+
+static const unsigned char event_download_language_selection_111[] = {
+	0xd6, 0x0b, 0x99, 0x01, 0x07, 0x82, 0x02, 0x82,
+	0x81, 0xad, 0x02, 0x64, 0x65,
+	/*
+	 * Byte 3 changed to 0x99 and byte 10 to 0xad (Comprehension
+	 * Required should be set according to TS 102 223 7.5.8.2)
+	 */
+};
+
+static const struct envelope_test
+		event_download_language_selection_data_111 = {
+	.pdu = event_download_language_selection_111,
+	.pdu_len = sizeof(event_download_language_selection_111),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_TERMINAL,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_LANGUAGE_SELECTION,
+			{ .language_selection = "de" },
+		}},
+	},
+};
+
+static const unsigned char event_download_language_selection_122[] = {
+	0xd6, 0x0b, 0x99, 0x01, 0x07, 0x82, 0x02, 0x82,
+	0x81, 0xad, 0x02, 0x73, 0x65,
+	/* Byte 5 changed to 0x07 (Event: Language Selection) */
+	/* Byte 8 changed to 0x82 (Source device: Terminal) */
+	/* Removed the (unexpected?) Transaction ID data object (0x2d) */
+};
+
+static const struct envelope_test
+		event_download_language_selection_data_122 = {
+	.pdu = event_download_language_selection_122,
+	.pdu_len = sizeof(event_download_language_selection_122),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_TERMINAL,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_LANGUAGE_SELECTION,
+			{ .language_selection = "se" },
+		}},
+	},
+};
+
+static const unsigned char event_download_browser_termination_111[] = {
+	0xd6, 0x0a, 0x99, 0x01, 0x08, 0x82, 0x02, 0x82,
+	0x81, 0xb4, 0x01, 0x00,
+};
+
+static const struct envelope_test
+		event_download_browser_termination_data_111 = {
+	.pdu = event_download_browser_termination_111,
+	.pdu_len = sizeof(event_download_browser_termination_111),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_TERMINAL,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_BROWSER_TERMINATION,
+			{ .browser_termination = {
+				.cause = STK_BROWSER_USER_TERMINATION,
+			}},
+		}},
+	},
+};
+
+static const unsigned char event_download_data_available_111[] = {
+	0xd6, 0x0e, 0x99, 0x01, 0x09, 0x82, 0x02, 0x82,
+	0x81, 0xb8, 0x02, 0x81, 0x00, 0xb7, 0x01, 0xff,
+};
+
+static const struct envelope_test event_download_data_available_data_111 = {
+	.pdu = event_download_data_available_111,
+	.pdu_len = sizeof(event_download_data_available_111),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_TERMINAL,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_DATA_AVAILABLE,
+			{ .data_available = {
+				/* Channel 1 open, Link established */
+				.channel_status = { 0x81, 0x00 },
+				.channel_data_len = 255,
+			}},
+		}},
+	},
+};
+
+static const unsigned char event_download_data_available_211[] = {
+	0xd6, 0x0e, 0x99, 0x01, 0x09, 0x82, 0x02, 0x82,
+	0x81, 0xb8, 0x02, 0x81, 0x01, 0xb7, 0x01, 0xff,
+};
+
+static const struct envelope_test event_download_data_available_data_211 = {
+	.pdu = event_download_data_available_211,
+	.pdu_len = sizeof(event_download_data_available_211),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_TERMINAL,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_DATA_AVAILABLE,
+			{ .data_available = {
+				/* Channel 1 open, Link established */
+				.channel_status = { 0x81, 0x01 },
+				.channel_data_len = 255,
+			}},
+		}},
+	},
+};
+
+static const unsigned char event_download_channel_status_131[] = {
+	0xd6, 0x0b, 0x99, 0x01, 0x0a, 0x82, 0x02, 0x82,
+	0x81, 0xb8, 0x02, 0x01, 0x05,
+};
+
+static const struct envelope_test event_download_channel_status_data_131 = {
+	.pdu = event_download_channel_status_131,
+	.pdu_len = sizeof(event_download_channel_status_131),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_TERMINAL,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_CHANNEL_STATUS,
+			{ .channel_status = {
+				/* Channel 1, Link dropped */
+				.status = { 0x01, 0x05 },
+			}},
+		}},
+	},
+};
+
+static const unsigned char event_download_channel_status_211[] = {
+	0xd6, 0x0b, 0x99, 0x01, 0x0a, 0x82, 0x02, 0x82,
+	0x81, 0xb8, 0x02, 0x41, 0x00,
+	/*
+	 * Byte 10 changed to 0xb8 (Comprehension Required should be
+	 * set according to TS 102 223 7.5.11.2)
+	 */
+};
+
+static const struct envelope_test event_download_channel_status_data_211 = {
+	.pdu = event_download_channel_status_211,
+	.pdu_len = sizeof(event_download_channel_status_211),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_TERMINAL,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_CHANNEL_STATUS,
+			{ .channel_status = {
+				/* Channel 1, TCP in LISTEN state */
+				.status = { 0x41, 0x00 },
+			}},
+		}},
+	},
+};
+
+static const unsigned char event_download_channel_status_221[] = {
+	0xd6, 0x0b, 0x99, 0x01, 0x0a, 0x82, 0x02, 0x82,
+	0x81, 0xb8, 0x02, 0x81, 0x01,
+	/*
+	 * Byte 10 changed to 0xb8 (Comprehension Required should be
+	 * set according to TS 102 223 7.5.11.2)
+	 */
+};
+
+static const struct envelope_test event_download_channel_status_data_221 = {
+	.pdu = event_download_channel_status_221,
+	.pdu_len = sizeof(event_download_channel_status_221),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_TERMINAL,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_CHANNEL_STATUS,
+			{ .channel_status = {
+				/* Channel 1 open, TCP Link established */
+				.status = { 0x81, 0x01 },
+			}},
+		}},
+	},
+};
+
+static const unsigned char event_download_network_rejection_111[] = {
+	0xd6, 0x17, 0x99, 0x01, 0x12, 0x82, 0x02, 0x83,
+	0x81, 0x7d, 0x05, 0x00, 0xf1, 0x10, 0x00, 0x01,
+	0xbf, 0x01, 0x08, 0xf4, 0x01, 0x09, 0xf5, 0x01,
+	0x0b,
+	/*
+	 * Byte 3 changed to 99, byte 17 changed to bf, byte 19 to f4 and
+	 * byte 22 to f5 (Comprehension Required should be set according
+	 * to TS 131 111 7.5.2.2)
+	 */
+};
+
+static const struct envelope_test event_download_network_rejection_data_111 = {
+	.pdu = event_download_network_rejection_111,
+	.pdu_len = sizeof(event_download_network_rejection_111),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_NETWORK,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_NETWORK_REJECTION,
+			{ .network_rejection = {
+				.tai = {
+					.mcc = "001",
+					.mnc = "01",
+					.tac = 0x0001,
+				},
+				.access_tech = STK_ACCESS_TECHNOLOGY_EUTRAN,
+				.update_attach = STK_UPDATE_ATTACH_EPS_ATTACH,
+				.cause = STK_CAUSE_EMM_PLMN_NOT_ALLOWED,
+			}},
+		}},
+	},
+};
+
+static const unsigned char event_download_network_rejection_121[] = {
+	0xd6, 0x17, 0x99, 0x01, 0x12, 0x82, 0x02, 0x83,
+	0x81, 0x7d, 0x05, 0x00, 0xf1, 0x10, 0x00, 0x01,
+	0xbf, 0x01, 0x08, 0xf4, 0x01, 0x0b, 0xf5, 0x01,
+	0x0c,
+	/*
+	 * Byte 3 changed to 99, byte 17 changed to bf, byte 19 to f4 and
+	 * byte 22 to f5 (Comprehension Required should be set according
+	 * to TS 131 111 7.5.2.2)
+	 */
+};
+
+static const struct envelope_test event_download_network_rejection_data_121 = {
+	.pdu = event_download_network_rejection_121,
+	.pdu_len = sizeof(event_download_network_rejection_121),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_EVENT_DOWNLOAD,
+		.src = STK_DEVICE_IDENTITY_TYPE_NETWORK,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .event_download = {
+			.type = STK_EVENT_TYPE_NETWORK_REJECTION,
+			{ .network_rejection = {
+				.tai = {
+					.mcc = "001",
+					.mnc = "01",
+					.tac = 0x0001,
+				},
+				.access_tech = STK_ACCESS_TECHNOLOGY_EUTRAN,
+				.update_attach = STK_UPDATE_ATTACH_TA_UPDATING,
+				.cause = STK_CAUSE_EMM_TAC_NOT_ALLOWED,
+			}},
+		}},
+	},
+};
+
+static const unsigned char timer_expiration_211[] = {
+	0xd7, 0x0c, 0x82, 0x02, 0x82, 0x81, 0xa4, 0x01,
+	0x01, 0xa5, 0x03, 0x00, 0x00, 0x01,
+};
+
+static const struct envelope_test timer_expiration_data_211 = {
+	.pdu = timer_expiration_211,
+	.pdu_len = sizeof(timer_expiration_211),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_TIMER_EXPIRATION,
+		.src = STK_DEVICE_IDENTITY_TYPE_TERMINAL,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .timer_expiration = {
+			.id = 1,
+			.value = {
+				.second = 10,
+				.has_value = TRUE,
+			},
+		}},
+	},
+};
+
+static const unsigned char timer_expiration_221a[] = {
+	0xd7, 0x0c, 0x82, 0x02, 0x82, 0x81, 0xa4, 0x01,
+	0x01, 0xa5, 0x03, 0x00, 0x00, 0x03,
+};
+
+static const struct envelope_test timer_expiration_data_221a = {
+	.pdu = timer_expiration_221a,
+	.pdu_len = sizeof(timer_expiration_221a),
+	.envelope = {
+		.type = STK_ENVELOPE_TYPE_TIMER_EXPIRATION,
+		.src = STK_DEVICE_IDENTITY_TYPE_TERMINAL,
+		.dst = STK_DEVICE_IDENTITY_TYPE_UICC,
+		{ .timer_expiration = {
+			.id = 1,
+			.value = {
+				.second = 30,
+				.has_value = TRUE,
+			},
+		}},
+	},
+};
+
+struct html_attr_test {
+	char *text;
+	struct stk_text_attribute text_attr;
+	char *html;
+};
+
+static struct html_attr_test html_attr_data_1 = {
+	.text = "Blue green green green",
+	.text_attr = {
+		.len = 8,
+		.attributes = {	0x00, 0x00, 0x03, 0x94, 0x00, 0x04, 0x03,
+				0x96 },
+	},
+	.html = "<span style=\"color: #0000A0;background-color: #FFFFFF;\">"
+		"Blue</span><span style=\"color: #347235;background-color: "
+		"#FFFFFF;\"> green green green</span>",
+};
+
+static struct html_attr_test html_attr_data_2 = {
+	.text = "abc",
+	.text_attr = {
+		.len = 8,
+		.attributes = { 0x00, 0x02, 0x03, 0x94, 0x01, 0x02, 0x03,
+				0x96 },
+	},
+	.html = "<span style=\"color: #347235;background-color: #FFFFFF;\">"
+		"a</span><span style=\"color: #0000A0;background-color: "
+		"#FFFFFF;\">bc</span>",
+};
+
+static struct html_attr_test html_attr_data_3 = {
+	.text = "1 < 2, 2 > 1, 1 & 0 == 0\nSpecial Chars are Fun\r\nTo Write",
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x00, 0x03, 0x00 },
+	},
+	.html = "1 &lt; 2, 2 &gt; 1, 1 &amp; 0 == 0<br/>Special Chars are Fun"
+		"<br/>To Write",
+};
+
+static struct html_attr_test html_attr_data_4 = {
+	.text = "€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€"
+		"€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€"
+		"€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€"
+		"€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€"
+		"€€€€€€€€€€€€€€€",
+	.text_attr = {
+		.len = 4,
+		.attributes = { 0x00, 0x00, 0x03, 0x94 },
+	},
+	.html = "<span style=\"color: #347235;background-color: #FFFFFF;\">"
+		"€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€"
+		"€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€"
+		"€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€"
+		"€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€"
+		"€€€€€€€€€€€€€€€</span>",
+};
+
+static void test_html_attr(gconstpointer data)
+{
+	const struct html_attr_test *test = data;
+	check_text_attr_html(&test->text_attr, test->text, test->html);
+}
+
+struct img_xpm_test {
+	const unsigned char *img;
+	unsigned int len;
+	const unsigned char *clut;
+	unsigned short clut_len;
+	guint8 scheme;
+	char *xpm;
+};
+
+const unsigned char img1[] = { 0x05, 0x05, 0xFE, 0xEB, 0xBF, 0xFF, 0xFF, 0xFF };
+
+const unsigned char img2[] = { 0x08, 0x08, 0x02, 0x03, 0x00, 0x16, 0xAA,
+					0xAA, 0x80, 0x02, 0x85, 0x42, 0x81,
+					0x42, 0x81, 0x42, 0x81, 0x52, 0x80,
+					0x02, 0xAA, 0xAA, 0xFF, 0x00, 0x00,
+					0x00, 0xFF, 0x00, 0x00, 0x00, 0xFF };
+
+const unsigned char img3[] = { 0x2E, 0x28, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+				0x00, 0x01, 0xFF, 0x80, 0x00, 0x00, 0x00, 0x0F,
+				0xFF, 0x00, 0x00, 0x00, 0x00, 0x77, 0xFE, 0x00,
+				0x00, 0x00, 0x01, 0xBF, 0xF8, 0x00, 0x00, 0x00,
+				0x06, 0xFF, 0xE0, 0x00, 0x00, 0x00, 0x1A, 0x03,
+				0x80, 0x00, 0x00, 0x00, 0x6B, 0xF6, 0xBC, 0x00,
+				0x00, 0x01, 0xAF, 0xD8, 0x38, 0x00, 0x00, 0x06,
+				0xBF, 0x60, 0x20, 0x00, 0x00, 0x1A, 0xFD, 0x80,
+				0x40, 0x00, 0x00, 0x6B, 0xF6, 0x00, 0x80, 0x00,
+				0x01, 0xA0, 0x1F, 0x02, 0x00, 0x00, 0x06, 0xFF,
+				0xE4, 0x04, 0x00, 0x00, 0x1B, 0xFF, 0x90, 0x10,
+				0x00, 0x00, 0x6D, 0xEE, 0x40, 0x40, 0x00, 0x01,
+				0xBF, 0xF9, 0x01, 0x00, 0x00, 0x6F, 0xFF, 0xE4,
+				0x04, 0x00, 0x00, 0x1B, 0xFF, 0x90, 0x10, 0x00,
+				0x00, 0x6F, 0xFE, 0x40, 0x40, 0x00, 0x01, 0xBF,
+				0xF9, 0x01, 0x00, 0x00, 0x06, 0xFF, 0xE6, 0x04,
+				0x00, 0x00, 0x1B, 0xFF, 0x88, 0x10, 0x00, 0x00,
+				0x6F, 0xFE, 0x20, 0x40, 0x00, 0x01, 0xBF, 0xF8,
+				0x66, 0x00, 0x00, 0x06, 0xFF, 0xE0, 0xF0, 0x00,
+				0x00, 0x1B, 0xFF, 0x80, 0x80, 0x00, 0x00, 0x7F,
+				0xFE, 0x00, 0x00, 0x00, 0x03, 0x00, 0x0C, 0x00,
+				0x00, 0x00, 0x1F, 0xFF, 0xF8, 0x00, 0x00, 0x00,
+				0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+				0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+				0x1C, 0x21, 0x08, 0x44, 0xEE, 0x00, 0x48, 0xC4,
+				0x31, 0x92, 0x20, 0x01, 0x25, 0x11, 0x45, 0x50,
+				0x80, 0x07, 0x14, 0x45, 0x15, 0x43, 0x80, 0x12,
+				0x71, 0x1C, 0x4D, 0x08, 0x00, 0x4A, 0x24, 0x89,
+				0x32, 0x20, 0x01, 0xC8, 0x9E, 0x24, 0x4E,
+				0xE0 };
+
+const unsigned char img4[] = { 0x18, 0x10, 0xFF, 0xFF, 0xFF, 0x80, 0x00, 0x01,
+				0x80, 0x00, 0x01, 0x80, 0x00, 0x01, 0x8F,
+				0x3C, 0xF1, 0x89, 0x20, 0x81, 0x89, 0x20,
+				0x81, 0x89, 0x20, 0xF1, 0x89, 0x20, 0x11,
+				0x89, 0x20, 0x11, 0x89, 0x20, 0x11, 0x8F,
+				0x3C, 0xF1, 0x80, 0x00, 0x01, 0x80, 0x00,
+				0x01, 0x80, 0x00, 0x01, 0xFF, 0xFF, 0xFF };
+
+const unsigned char img5[] = { 0x08, 0x08, 0xFF, 0x03, 0xA5, 0x99, 0x99,
+				0xA5, 0xC3, 0xFF };
+
+static struct img_xpm_test xpm_test_1 = {
+	.img = img1,
+	.len = sizeof(img1),
+	.scheme = STK_IMG_SCHEME_BASIC,
+	.xpm = "/* XPM */\n"
+		"static char *xpm[] = {\n"
+		"\"5 5 2 1\",\n"
+		"\"0	c #000000\",\n"
+		"\"1	c #FFFFFF\",\n"
+		"\"11111\",\n"
+		"\"11011\",\n"
+		"\"10101\",\n"
+		"\"11011\",\n"
+		"\"11111\",\n"
+		"};",
+};
+
+static struct img_xpm_test xpm_test_2 = {
+	.img = img2,
+	.len = sizeof(img2),
+	.clut = img2 + 0x16,
+	.clut_len = 0x09,
+	.scheme = STK_IMG_SCHEME_COLOR,
+	.xpm = "/* XPM */\n"
+		"static char *xpm[] = {\n"
+		"\"8 8 3 1\",\n"
+		"\"0	c #FF0000\",\n"
+		"\"1	c #00FF00\",\n"
+		"\"2	c #0000FF\",\n"
+		"\"22222222\",\n"
+		"\"20000002\",\n"
+		"\"20111002\",\n"
+		"\"20011002\",\n"
+		"\"20011002\",\n"
+		"\"20011102\",\n"
+		"\"20000002\",\n"
+		"\"22222222\",\n"
+		"};",
+};
+
+static struct img_xpm_test xpm_test_3 = {
+	.img = img3,
+	.len = sizeof(img3),
+	.scheme = STK_IMG_SCHEME_BASIC,
+	.xpm = "/* XPM */\n"
+		"static char *xpm[] = {\n"
+		"\"46 40 2 1\",\n"
+		"\"0	c #000000\",\n"
+		"\"1	c #FFFFFF\",\n"
+		"\"0000000000000000000000000000000000000000000000\",\n"
+		"\"0000000000000000011111111110000000000000000000\",\n"
+		"\"0000000000000000111111111111000000000000000000\",\n"
+		"\"0000000000000001110111111111100000000000000000\",\n"
+		"\"0000000000000001101111111111100000000000000000\",\n"
+		"\"0000000000000001101111111111100000000000000000\",\n"
+		"\"0000000000000001101000000011100000000000000000\",\n"
+		"\"0000000000000001101011111101101011110000000000\",\n"
+		"\"0000000000000001101011111101100000111000000000\",\n"
+		"\"0000000000000001101011111101100000001000000000\",\n"
+		"\"0000000000000001101011111101100000000100000000\",\n"
+		"\"0000000000000001101011111101100000000010000000\",\n"
+		"\"0000000000000001101000000001111100000010000000\",\n"
+		"\"0000000000000001101111111111100100000001000000\",\n"
+		"\"0000000000000001101111111111100100000001000000\",\n"
+		"\"0000000000000001101101111011100100000001000000\",\n"
+		"\"0000000000000001101111111111100100000001000000\",\n"
+		"\"0000000000011011111111111111100100000001000000\",\n"
+		"\"0000000000000001101111111111100100000001000000\",\n"
+		"\"0000000000000001101111111111100100000001000000\",\n"
+		"\"0000000000000001101111111111100100000001000000\",\n"
+		"\"0000000000000001101111111111100110000001000000\",\n"
+		"\"0000000000000001101111111111100010000001000000\",\n"
+		"\"0000000000000001101111111111100010000001000000\",\n"
+		"\"0000000000000001101111111111100001100110000000\",\n"
+		"\"0000000000000001101111111111100000111100000000\",\n"
+		"\"0000000000000001101111111111100000001000000000\",\n"
+		"\"0000000000000001111111111111100000000000000000\",\n"
+		"\"0000000000000011000000000000110000000000000000\",\n"
+		"\"0000000000000111111111111111111000000000000000\",\n"
+		"\"0000000000000000000000000000000000000000000000\",\n"
+		"\"0000000000000000000000000000000000000000000000\",\n"
+		"\"0000000000000000000000000000000000000000000000\",\n"
+		"\"0000011100001000010000100001000100111011100000\",\n"
+		"\"0000010010001100010000110001100100100010000000\",\n"
+		"\"0000010010010100010001010001010101000010000000\",\n"
+		"\"0000011100010100010001010001010101000011100000\",\n"
+		"\"0000010010011100010001110001001101000010000000\",\n"
+		"\"0000010010100010010010001001001100100010000000\",\n"
+		"\"0000011100100010011110001001000100111011100000\",\n"
+		"};",
+};
+
+static struct img_xpm_test xpm_test_4 = {
+	.img = img4,
+	.len = sizeof(img4),
+	.scheme = STK_IMG_SCHEME_BASIC,
+	.xpm = "/* XPM */\n"
+		"static char *xpm[] = {\n"
+		"\"24 16 2 1\",\n"
+		"\"0	c #000000\",\n"
+		"\"1	c #FFFFFF\",\n"
+		"\"111111111111111111111111\",\n"
+		"\"100000000000000000000001\",\n"
+		"\"100000000000000000000001\",\n"
+		"\"100000000000000000000001\",\n"
+		"\"100011110011110011110001\",\n"
+		"\"100010010010000010000001\",\n"
+		"\"100010010010000010000001\",\n"
+		"\"100010010010000011110001\",\n"
+		"\"100010010010000000010001\",\n"
+		"\"100010010010000000010001\",\n"
+		"\"100010010010000000010001\",\n"
+		"\"100011110011110011110001\",\n"
+		"\"100000000000000000000001\",\n"
+		"\"100000000000000000000001\",\n"
+		"\"100000000000000000000001\",\n"
+		"\"111111111111111111111111\",\n"
+		"};",
+};
+
+static struct img_xpm_test xpm_test_5 = {
+	.img = img5,
+	.len = sizeof(img5),
+	.scheme = STK_IMG_SCHEME_BASIC,
+	.xpm = "/* XPM */\n"
+		"static char *xpm[] = {\n"
+		"\"8 8 2 1\",\n"
+		"\"0	c #000000\",\n"
+		"\"1	c #FFFFFF\",\n"
+		"\"11111111\",\n"
+		"\"00000011\",\n"
+		"\"10100101\",\n"
+		"\"10011001\",\n"
+		"\"10011001\",\n"
+		"\"10100101\",\n"
+		"\"11000011\",\n"
+		"\"11111111\",\n"
+		"};",
+};
+
+static struct img_xpm_test xpm_test_6 = {
+	.img = img2,
+	.len = sizeof(img2),
+	.clut = img2 + 0x16,
+	.clut_len = 0x09,
+	.scheme = STK_IMG_SCHEME_TRANSPARENCY,
+	.xpm = "/* XPM */\n"
+		"static char *xpm[] = {\n"
+		"\"8 8 3 1\",\n"
+		"\"0	c #FF0000\",\n"
+		"\"1	c #00FF00\",\n"
+		"\"2	c None\",\n"
+		"\"22222222\",\n"
+		"\"20000002\",\n"
+		"\"20111002\",\n"
+		"\"20011002\",\n"
+		"\"20011002\",\n"
+		"\"20011102\",\n"
+		"\"20000002\",\n"
+		"\"22222222\",\n"
+		"};",
+};
+
+static void test_img_to_xpm(gconstpointer data)
+{
+	const struct img_xpm_test *test = data;
+	char *xpm;
+
+	xpm = stk_image_to_xpm(test->img, test->len, test->scheme,
+				test->clut, test->clut_len);
+
+	g_assert(memcmp(xpm, test->xpm, strlen(test->xpm)) == 0);
+	g_free(xpm);
+}
+
 int main(int argc, char **argv)
 {
 	g_test_init(&argc, &argv, NULL);
@@ -18401,6 +22953,24 @@ int main(int argc, char **argv)
 				&display_text_data_611, test_display_text);
 	g_test_add_data_func("/teststk/Display Text 7.1.1",
 				&display_text_data_711, test_display_text);
+	g_test_add_data_func("/teststk/Display Text 8.1.1",
+				&display_text_data_811, test_display_text);
+	g_test_add_data_func("/teststk/Display Text 8.2.1",
+				&display_text_data_821, test_display_text);
+	g_test_add_data_func("/teststk/Display Text 8.3.1",
+				&display_text_data_831, test_display_text);
+	g_test_add_data_func("/teststk/Display Text 8.4.1",
+				&display_text_data_841, test_display_text);
+	g_test_add_data_func("/teststk/Display Text 8.5.1",
+				&display_text_data_851, test_display_text);
+	g_test_add_data_func("/teststk/Display Text 8.6.1",
+				&display_text_data_861, test_display_text);
+	g_test_add_data_func("/teststk/Display Text 8.7.1",
+				&display_text_data_871, test_display_text);
+	g_test_add_data_func("/teststk/Display Text 8.8.1",
+				&display_text_data_881, test_display_text);
+	g_test_add_data_func("/teststk/Display Text 8.9.1",
+				&display_text_data_891, test_display_text);
 	g_test_add_data_func("/teststk/Display Text 9.1.1",
 				&display_text_data_911, test_display_text);
 	g_test_add_data_func("/teststk/Display Text 10.1.1",
@@ -18774,6 +23344,10 @@ int main(int argc, char **argv)
 	g_test_add_data_func("/teststk/More Time 1.1.1",
 				&more_time_data_111, test_more_time);
 
+	g_test_add_data_func("/teststk/More Time response 1.1.1",
+				&more_time_response_data_111,
+				test_terminal_response_encoding);
+
 	g_test_add_data_func("/teststk/Play Tone 1.1.1",
 				&play_tone_data_111, test_play_tone);
 	g_test_add_data_func("/teststk/Play Tone 1.1.2",
@@ -18978,7 +23552,7 @@ int main(int argc, char **argv)
 				&setup_menu_data_913, test_setup_menu);
 
 	g_test_add_data_func("/teststk/Setup Menu Negative 1",
-			&setup_menu_data_neg_1, test_setup_menu_neg);
+			&setup_menu_data_neg_1, test_setup_menu_missing_val);
 	g_test_add_data_func("/teststk/Setup Menu Negative 2",
 			&setup_menu_data_neg_2, test_setup_menu_neg);
 	g_test_add_data_func("/teststk/Setup Menu Negative 3",
@@ -19223,6 +23797,160 @@ int main(int argc, char **argv)
 				&send_sms_data_612, test_send_sms);
 	g_test_add_data_func("/teststk/Send SMS 6.1.3",
 				&send_sms_data_613, test_send_sms);
+
+	g_test_add_data_func("/teststk/Send SS 1.1.1",
+				&send_ss_data_111, test_send_ss);
+	g_test_add_data_func("/teststk/Send SS 1.4.1",
+				&send_ss_data_141, test_send_ss);
+	g_test_add_data_func("/teststk/Send SS 1.5.1",
+				&send_ss_data_151, test_send_ss);
+	g_test_add_data_func("/teststk/Send SS 1.6.1",
+				&send_ss_data_161, test_send_ss);
+	g_test_add_data_func("/teststk/Send SS 2.1.1",
+				&send_ss_data_211, test_send_ss);
+	g_test_add_data_func("/teststk/Send SS 2.2.1",
+				&send_ss_data_221, test_send_ss);
+	g_test_add_data_func("/teststk/Send SS 2.3.1",
+				&send_ss_data_231, test_send_ss);
+	g_test_add_data_func("/teststk/Send SS 2.4.1",
+				&send_ss_data_241, test_send_ss);
+	g_test_add_data_func("/teststk/Send SS 3.1.1",
+				&send_ss_data_311, test_send_ss);
+	g_test_add_data_func("/teststk/Send SS 4.1.1",
+				&send_ss_data_411, test_send_ss);
+	g_test_add_data_func("/teststk/Send SS 4.1.2",
+				&send_ss_data_412, test_send_ss);
+	g_test_add_data_func("/teststk/Send SS 4.2.1",
+				&send_ss_data_421, test_send_ss);
+	g_test_add_data_func("/teststk/Send SS 4.2.2",
+				&send_ss_data_422, test_send_ss);
+	g_test_add_data_func("/teststk/Send SS 4.3.1",
+				&send_ss_data_431, test_send_ss);
+	g_test_add_data_func("/teststk/Send SS 4.3.2",
+				&send_ss_data_432, test_send_ss);
+	g_test_add_data_func("/teststk/Send SS 4.4.1",
+				&send_ss_data_441, test_send_ss);
+	g_test_add_data_func("/teststk/Send SS 4.4.2",
+				&send_ss_data_442, test_send_ss);
+	g_test_add_data_func("/teststk/Send SS 4.4.3",
+				&send_ss_data_443, test_send_ss);
+	g_test_add_data_func("/teststk/Send SS 4.5.1",
+				&send_ss_data_451, test_send_ss);
+	g_test_add_data_func("/teststk/Send SS 4.5.2",
+				&send_ss_data_452, test_send_ss);
+	g_test_add_data_func("/teststk/Send SS 4.5.3",
+				&send_ss_data_453, test_send_ss);
+	g_test_add_data_func("/teststk/Send SS 4.6.1",
+				&send_ss_data_461, test_send_ss);
+	g_test_add_data_func("/teststk/Send SS 4.6.2",
+				&send_ss_data_462, test_send_ss);
+	g_test_add_data_func("/teststk/Send SS 4.6.3",
+				&send_ss_data_463, test_send_ss);
+	g_test_add_data_func("/teststk/Send SS 4.7.1",
+				&send_ss_data_471, test_send_ss);
+	g_test_add_data_func("/teststk/Send SS 4.7.2",
+				&send_ss_data_472, test_send_ss);
+	g_test_add_data_func("/teststk/Send SS 4.7.3",
+				&send_ss_data_473, test_send_ss);
+	g_test_add_data_func("/teststk/Send SS 4.8.1",
+				&send_ss_data_481, test_send_ss);
+	g_test_add_data_func("/teststk/Send SS 4.8.2",
+				&send_ss_data_482, test_send_ss);
+	g_test_add_data_func("/teststk/Send SS 4.8.3",
+				&send_ss_data_483, test_send_ss);
+	g_test_add_data_func("/teststk/Send SS 4.9.1",
+				&send_ss_data_491, test_send_ss);
+	g_test_add_data_func("/teststk/Send SS 4.9.2",
+				&send_ss_data_492, test_send_ss);
+	g_test_add_data_func("/teststk/Send SS 4.9.3",
+				&send_ss_data_493, test_send_ss);
+	g_test_add_data_func("/teststk/Send SS 4.10.1",
+				&send_ss_data_4101, test_send_ss);
+	g_test_add_data_func("/teststk/Send SS 4.10.2",
+				&send_ss_data_4102, test_send_ss);
+	g_test_add_data_func("/teststk/Send SS 5.1.1",
+				&send_ss_data_511, test_send_ss);
+	g_test_add_data_func("/teststk/Send SS 6.1.1",
+				&send_ss_data_611, test_send_ss);
+
+	g_test_add_data_func("/teststk/Send USSD 1.1.1",
+				&send_ussd_data_111, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 1.2.1",
+				&send_ussd_data_121, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 1.3.1",
+				&send_ussd_data_131, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 1.6.1",
+				&send_ussd_data_161, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 1.7.1",
+				&send_ussd_data_171, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 1.8.1",
+				&send_ussd_data_181, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 2.1.1",
+				&send_ussd_data_211, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 2.2.1",
+				&send_ussd_data_221, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 2.3.1",
+				&send_ussd_data_231, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 2.4.1",
+				&send_ussd_data_241, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 3.1.1",
+				&send_ussd_data_311, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 4.1.1",
+				&send_ussd_data_411, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 4.1.2",
+				&send_ussd_data_412, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 4.2.1",
+				&send_ussd_data_421, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 4.2.2",
+				&send_ussd_data_422, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 4.3.1",
+				&send_ussd_data_431, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 4.3.2",
+				&send_ussd_data_432, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 4.4.1",
+				&send_ussd_data_441, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 4.4.2",
+				&send_ussd_data_442, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 4.4.3",
+				&send_ussd_data_443, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 4.5.1",
+				&send_ussd_data_451, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 4.5.2",
+				&send_ussd_data_452, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 4.5.3",
+				&send_ussd_data_453, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 4.6.1",
+				&send_ussd_data_461, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 4.6.2",
+				&send_ussd_data_462, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 4.6.3",
+				&send_ussd_data_463, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 4.7.1",
+				&send_ussd_data_471, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 4.7.2",
+				&send_ussd_data_472, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 4.7.3",
+				&send_ussd_data_473, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 4.8.1",
+				&send_ussd_data_481, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 4.8.2",
+				&send_ussd_data_482, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 4.8.3",
+				&send_ussd_data_483, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 4.9.1",
+				&send_ussd_data_491, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 4.9.2",
+				&send_ussd_data_492, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 4.9.3",
+				&send_ussd_data_493, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 4.10.1",
+				&send_ussd_data_4101, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 4.10.2",
+				&send_ussd_data_4102, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 5.1.1",
+				&send_ussd_data_511, test_send_ussd);
+	g_test_add_data_func("/teststk/Send USSD 6.1.1",
+				&send_ussd_data_611, test_send_ussd);
 
 	g_test_add_data_func("/teststk/Send SMS response 1.1.1",
 				&send_sms_response_data_111,
@@ -20077,12 +24805,174 @@ int main(int argc, char **argv)
 	g_test_add_data_func("/teststk/Menu Selection 6.4.1",
 			&menu_selection_data_641, test_envelope_encoding);
 
+	g_test_add_data_func("/teststk/Call Control 1.1.1A",
+			&call_control_data_111a, test_envelope_encoding);
+	g_test_add_data_func("/teststk/Call Control 1.1.1B",
+			&call_control_data_111b, test_envelope_encoding);
+	g_test_add_data_func("/teststk/Call Control 1.3.1A",
+			&call_control_data_131a, test_envelope_encoding);
+	g_test_add_data_func("/teststk/Call Control 1.3.1B",
+			&call_control_data_131b, test_envelope_encoding);
+
 	g_test_add_data_func("/teststk/MO Short Message Control 1.1.1A",
 			&mo_short_message_control_data_111a,
 			test_envelope_encoding);
 	g_test_add_data_func("/teststk/MO Short Message Control 1.1.1B",
 			&mo_short_message_control_data_111b,
 			test_envelope_encoding);
+
+	g_test_add_data_func("/teststk/Event: MT Call 1.1.1",
+			&event_download_mt_call_data_111,
+			test_envelope_encoding);
+	g_test_add_data_func("/teststk/Event: MT Call 1.1.2",
+			&event_download_mt_call_data_112,
+			test_envelope_encoding);
+
+	g_test_add_data_func("/teststk/Event: Call Connected 1.1.1",
+			&event_download_call_connected_data_111,
+			test_envelope_encoding);
+	g_test_add_data_func("/teststk/Event: Call Connected 1.1.2",
+			&event_download_call_connected_data_112,
+			test_envelope_encoding);
+
+	g_test_add_data_func("/teststk/Event: Call Disconnected 1.1.1",
+			&event_download_call_disconnected_data_111,
+			test_envelope_encoding);
+	g_test_add_data_func("/teststk/Event: Call Disconnected 1.1.2A",
+			&event_download_call_disconnected_data_112a,
+			test_envelope_encoding);
+	g_test_add_data_func("/teststk/Event: Call Disconnected 1.1.2B",
+			&event_download_call_disconnected_data_112b,
+			test_envelope_encoding);
+	g_test_add_data_func("/teststk/Event: Call Disconnected 1.1.2C",
+			&event_download_call_disconnected_data_112c,
+			test_envelope_encoding);
+	g_test_add_data_func("/teststk/Event: Call Disconnected 1.1.3A",
+			&event_download_call_disconnected_data_113a,
+			test_envelope_encoding);
+	g_test_add_data_func("/teststk/Event: Call Disconnected 1.1.3B",
+			&event_download_call_disconnected_data_113b,
+			test_envelope_encoding);
+	g_test_add_data_func("/teststk/Event: Call Disconnected 1.1.4A",
+			&event_download_call_disconnected_data_114a,
+			test_envelope_encoding);
+	g_test_add_data_func("/teststk/Event: Call Disconnected 1.1.4B",
+			&event_download_call_disconnected_data_114b,
+			test_envelope_encoding);
+
+	g_test_add_data_func("/teststk/Event: Location Status 1.1.1",
+			&event_download_location_status_data_111,
+			test_envelope_encoding);
+	g_test_add_data_func("/teststk/Event: Location Status 1.1.2A",
+			&event_download_location_status_data_112a,
+			test_envelope_encoding);
+	g_test_add_data_func("/teststk/Event: Location Status 1.1.2B",
+			&event_download_location_status_data_112b,
+			test_envelope_encoding);
+	g_test_add_data_func("/teststk/Event: Location Status 1.2.2",
+			&event_download_location_status_data_122,
+			test_envelope_encoding);
+
+	g_test_add_data_func("/teststk/Event: User Activity 1.1.1",
+			&event_download_user_activity_data_111,
+			test_envelope_encoding);
+
+	g_test_add_data_func("/teststk/Event: Idle Screen Available 1.1.1",
+			&event_download_idle_screen_available_data_111,
+			test_envelope_encoding);
+
+	g_test_add_data_func("/teststk/Event: Card Reader Status 1.1.1A",
+			&event_download_card_reader_status_data_111a,
+			test_envelope_encoding);
+	g_test_add_data_func("/teststk/Event: Card Reader Status 1.1.1B",
+			&event_download_card_reader_status_data_111b,
+			test_envelope_encoding);
+	g_test_add_data_func("/teststk/Event: Card Reader Status 1.1.1C",
+			&event_download_card_reader_status_data_111c,
+			test_envelope_encoding);
+	g_test_add_data_func("/teststk/Event: Card Reader Status 1.1.1D",
+			&event_download_card_reader_status_data_111d,
+			test_envelope_encoding);
+	g_test_add_data_func("/teststk/Event: Card Reader Status 1.1.2A",
+			&event_download_card_reader_status_data_112a,
+			test_envelope_encoding);
+	g_test_add_data_func("/teststk/Event: Card Reader Status 1.1.2B",
+			&event_download_card_reader_status_data_112b,
+			test_envelope_encoding);
+	g_test_add_data_func("/teststk/Event: Card Reader Status 1.1.2C",
+			&event_download_card_reader_status_data_112c,
+			test_envelope_encoding);
+	g_test_add_data_func("/teststk/Event: Card Reader Status 1.1.2D",
+			&event_download_card_reader_status_data_112d,
+			test_envelope_encoding);
+	g_test_add_data_func("/teststk/Event: Card Reader Status 2.1.2A",
+			&event_download_card_reader_status_data_212a,
+			test_envelope_encoding);
+	g_test_add_data_func("/teststk/Event: Card Reader Status 2.1.2B",
+			&event_download_card_reader_status_data_212b,
+			test_envelope_encoding);
+
+	g_test_add_data_func("/teststk/Event: Language Selection 1.1.1",
+			&event_download_language_selection_data_111,
+			test_envelope_encoding);
+	g_test_add_data_func("/teststk/Event: Language Selection 1.2.2",
+			&event_download_language_selection_data_122,
+			test_envelope_encoding);
+
+	g_test_add_data_func("/teststk/Event: Browser Termination 1.1.1",
+			&event_download_browser_termination_data_111,
+			test_envelope_encoding);
+
+	g_test_add_data_func("/teststk/Event: Data Available 1.1.1",
+			&event_download_data_available_data_111,
+			test_envelope_encoding);
+	g_test_add_data_func("/teststk/Event: Data Available 2.1.1",
+			&event_download_data_available_data_211,
+			test_envelope_encoding);
+
+	g_test_add_data_func("/teststk/Event: Channel Status 1.3.1",
+			&event_download_channel_status_data_131,
+			test_envelope_encoding);
+	g_test_add_data_func("/teststk/Event: Channel Status 2.1.1",
+			&event_download_channel_status_data_211,
+			test_envelope_encoding);
+	g_test_add_data_func("/teststk/Event: Channel Status 2.2.1",
+			&event_download_channel_status_data_221,
+			test_envelope_encoding);
+
+	g_test_add_data_func("/teststk/Event: Network Rejection 1.1.1",
+			&event_download_network_rejection_data_111,
+			test_envelope_encoding);
+	g_test_add_data_func("/teststk/Event: Network Rejection 1.2.1",
+			&event_download_network_rejection_data_121,
+			test_envelope_encoding);
+
+	g_test_add_data_func("/teststk/Timer Expiration 2.1.1",
+			&timer_expiration_data_211, test_envelope_encoding);
+	g_test_add_data_func("/teststk/Timer Expiration 2.2.1A",
+			&timer_expiration_data_221a, test_envelope_encoding);
+
+	g_test_add_data_func("/teststk/HTML Attribute Test 1",
+				&html_attr_data_1, test_html_attr);
+	g_test_add_data_func("/teststk/HTML Attribute Test 2",
+				&html_attr_data_2, test_html_attr);
+	g_test_add_data_func("/teststk/HTML Attribute Test 3",
+				&html_attr_data_3, test_html_attr);
+	g_test_add_data_func("/teststk/HTML Attribute Test 4",
+				&html_attr_data_4, test_html_attr);
+
+	g_test_add_data_func("/teststk/IMG to XPM Test 1",
+				&xpm_test_1, test_img_to_xpm);
+	g_test_add_data_func("/teststk/IMG to XPM Test 2",
+				&xpm_test_2, test_img_to_xpm);
+	g_test_add_data_func("/teststk/IMG to XPM Test 3",
+				&xpm_test_3, test_img_to_xpm);
+	g_test_add_data_func("/teststk/IMG to XPM Test 4",
+				&xpm_test_4, test_img_to_xpm);
+	g_test_add_data_func("/teststk/IMG to XPM Test 5",
+				&xpm_test_5, test_img_to_xpm);
+	g_test_add_data_func("/teststk/IMG to XPM Test 6",
+				&xpm_test_6, test_img_to_xpm);
 
 	return g_test_run();
 }

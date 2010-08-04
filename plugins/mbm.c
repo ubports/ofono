@@ -26,6 +26,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <glib.h>
 #include <gatchat.h>
@@ -38,29 +39,24 @@
 #include <ofono/netreg.h>
 #include <ofono/sim.h>
 #include <ofono/stk.h>
-#include <ofono/sms.h>
 #include <ofono/cbs.h>
-#include <ofono/ssn.h>
+#include <ofono/sms.h>
 #include <ofono/ussd.h>
-#include <ofono/voicecall.h>
-#include <ofono/phonebook.h>
-#include <ofono/message-waiting.h>
-#include <ofono/call-meter.h>
-#include <ofono/call-settings.h>
-#include <ofono/call-volume.h>
-#include <ofono/call-forwarding.h>
 #include <ofono/gprs.h>
 #include <ofono/gprs-context.h>
 #include <ofono/log.h>
+
 #include <drivers/atmodem/vendor.h>
 
 static const char *cfun_prefix[] = { "+CFUN:", NULL };
-static const char *crsm_prefix[] = { "+CRSM:", NULL };
+static const char *cpin_prefix[] = { "+CPIN:", NULL };
 static const char *none_prefix[] = { NULL };
 
 struct mbm_data {
 	GAtChat *modem_port;
 	GAtChat *data_port;
+	guint cpin_poll_source;
+	guint cpin_poll_count;
 	gboolean have_sim;
 };
 
@@ -89,6 +85,10 @@ static void mbm_remove(struct ofono_modem *modem)
 
 	g_at_chat_unref(data->data_port);
 	g_at_chat_unref(data->modem_port);
+
+	if (data->cpin_poll_source > 0)
+		g_source_remove(data->cpin_poll_source);
+
 	g_free(data);
 }
 
@@ -99,39 +99,48 @@ static void mbm_debug(const char *str, void *user_data)
 	ofono_info("%s %s", prefix, str);
 }
 
-static void status_check(gboolean ok, GAtResult *result, gpointer user_data)
+static gboolean init_simpin_check(gpointer user_data);
+
+static void simpin_check(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_modem *modem = user_data;
 	struct mbm_data *data = ofono_modem_get_data(modem);
-	GAtResultIter iter;
-	gint sw[2];
 
 	DBG("");
 
-	if (!ok)
-		goto poweron;
+	/* Modem returns +CME ERROR: 10 if SIM is not ready. */
+	if (!ok && result->final_or_pdu &&
+			!strcmp(result->final_or_pdu, "+CME ERROR: 10") &&
+			data->cpin_poll_count++ < 5) {
+		data->cpin_poll_source =
+			g_timeout_add_seconds(1, init_simpin_check, modem);
+		return;
+	}
 
-	/* Modem fakes a 94 04 response from card (File Id not found /
-	 * Pattern not found) when there's no card in the slot.
-	 */
-	g_at_result_iter_init(&iter, result);
+	data->cpin_poll_count = 0;
 
-	if (!g_at_result_iter_next(&iter, "+CRSM:"))
-		goto poweron;
+	/* Modem returns ERROR if there is no SIM in slot. */
+	data->have_sim = ok;
 
-	g_at_result_iter_next_number(&iter, &sw[0]);
-	g_at_result_iter_next_number(&iter, &sw[1]);
-
-	data->have_sim = sw[0] != 0x94 || sw[1] != 0x04;
-
-poweron:
 	ofono_modem_set_powered(modem, TRUE);
+}
+
+static gboolean init_simpin_check(gpointer user_data)
+{
+	struct ofono_modem *modem = user_data;
+	struct mbm_data *data = ofono_modem_get_data(modem);
+
+	data->cpin_poll_source = 0;
+
+	g_at_chat_send(data->modem_port, "AT+CPIN?", cpin_prefix,
+			simpin_check, modem, NULL);
+
+	return FALSE;
 }
 
 static void cfun_enable(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_modem *modem = user_data;
-	struct mbm_data *data = ofono_modem_get_data(modem);
 
 	DBG("");
 
@@ -140,8 +149,7 @@ static void cfun_enable(gboolean ok, GAtResult *result, gpointer user_data)
 		return;
 	}
 
-	g_at_chat_send(data->modem_port, "AT+CRSM=242", crsm_prefix,
-			status_check, modem, NULL);
+	init_simpin_check(modem);
 }
 
 static void cfun_query(gboolean ok, GAtResult *result, gpointer user_data)
@@ -324,9 +332,8 @@ static void mbm_pre_sim(struct ofono_modem *modem)
 	DBG("%p", modem);
 
 	ofono_devinfo_create(modem, 0, "atmodem", data->modem_port);
-	sim = ofono_sim_create(modem, 0, "atmodem", data->modem_port);
-	ofono_voicecall_create(modem, 0, "atmodem", data->modem_port);
-	ofono_stk_create(modem, 0, "mbmmodem", data->modem_port);
+	sim = ofono_sim_create(modem, OFONO_VENDOR_MBM, "atmodem",
+				data->modem_port);
 
 	if (data->have_sim && sim)
 		ofono_sim_inserted_notify(sim, TRUE);
@@ -335,34 +342,25 @@ static void mbm_pre_sim(struct ofono_modem *modem)
 static void mbm_post_sim(struct ofono_modem *modem)
 {
 	struct mbm_data *data = ofono_modem_get_data(modem);
-	struct ofono_message_waiting *mw;
 	struct ofono_gprs *gprs;
 	struct ofono_gprs_context *gc;
 
 	DBG("%p", modem);
 
-	ofono_call_forwarding_create(modem, 0, "atmodem", data->modem_port);
-	ofono_call_settings_create(modem, 0, "atmodem", data->modem_port);
-	ofono_call_meter_create(modem, 0, "atmodem", data->modem_port);
-	ofono_call_volume_create(modem, 0, "atmodem", data->modem_port);
+	ofono_stk_create(modem, 0, "mbmmodem", data->modem_port);
 
-	ofono_ussd_create(modem, 0, "atmodem", data->modem_port);
 	ofono_netreg_create(modem, OFONO_VENDOR_MBM, "atmodem",
 				data->modem_port);
-	ofono_phonebook_create(modem, 0, "atmodem", data->modem_port);
-	ofono_ssn_create(modem, 0, "atmodem", data->modem_port);
+
 	ofono_sms_create(modem, 0, "atmodem", data->modem_port);
 	ofono_cbs_create(modem, 0, "atmodem", data->modem_port);
+	ofono_ussd_create(modem, 0, "atmodem", data->modem_port);
 
 	gprs = ofono_gprs_create(modem, 0, "atmodem", data->modem_port);
 	gc = ofono_gprs_context_create(modem, 0, "mbm", data->modem_port);
 
 	if (gprs && gc)
 		ofono_gprs_add_context(gprs, gc);
-
-	mw = ofono_message_waiting_create(modem);
-	if (mw)
-		ofono_message_waiting_register(mw);
 }
 
 static struct ofono_modem_driver mbm_driver = {

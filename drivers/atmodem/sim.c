@@ -44,6 +44,8 @@
 struct sim_data {
 	GAtChat *chat;
 	unsigned int vendor;
+	guint epev_id;
+	guint epev_source;
 };
 
 static const char *crsm_prefix[] = { "+CRSM:", NULL };
@@ -80,8 +82,15 @@ static void at_crsm_info_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 	if (!g_at_result_iter_next_hexstring(&iter, &response, &len) ||
 			(sw1 != 0x90 && sw1 != 0x91 && sw1 != 0x92) ||
-			(sw1 == 0x90 && sw2 != 0x00))
-		goto error;
+			(sw1 == 0x90 && sw2 != 0x00)) {
+		memset(&error, 0, sizeof(error));
+
+		error.type = OFONO_ERROR_TYPE_SIM;
+		error.error = (sw1 << 8) | sw2;
+
+		cb(&error, -1, -1, -1, NULL, cbd->data);
+		return;
+	}
 
 	DBG("crsm_info_cb: %02x, %02x, %i", sw1, sw2, len);
 
@@ -107,9 +116,19 @@ static void at_sim_read_info(struct ofono_sim *sim, int fileid,
 					void *data)
 {
 	struct sim_data *sd = ofono_sim_get_data(sim);
-	struct cb_data *cbd = cb_data_new(cb, data);
+	struct cb_data *cbd;
 	char buf[64];
 
+	if (sd->vendor == OFONO_VENDOR_OPTION_HSO) {
+		unsigned char access[3] = { 0x00, 0x00, 0x00 };
+
+		if (fileid == SIM_EFAD_FILEID) {
+			CALLBACK_WITH_SUCCESS(cb, 4, 0, 0, access, data);
+			return;
+		}
+	}
+
+	cbd = cb_data_new(cb, data);
 	if (!cbd)
 		goto error;
 
@@ -123,9 +142,6 @@ static void at_sim_read_info(struct ofono_sim *sim, int fileid,
 		return;
 
 error:
-	if (cbd)
-		g_free(cbd);
-
 	CALLBACK_WITH_FAILURE(cb, -1, -1, -1, NULL, data);
 }
 
@@ -156,9 +172,18 @@ static void at_crsm_read_cb(gboolean ok, GAtResult *result,
 	g_at_result_iter_next_number(&iter, &sw1);
 	g_at_result_iter_next_number(&iter, &sw2);
 
-	if (!g_at_result_iter_next_hexstring(&iter, &response, &len) ||
-		(sw1 != 0x90 && sw1 != 0x91 && sw1 != 0x92 && sw1 != 0x9f) ||
-		(sw1 == 0x90 && sw2 != 0x00)) {
+	if ((sw1 != 0x90 && sw1 != 0x91 && sw1 != 0x92 && sw1 != 0x9f) ||
+			(sw1 == 0x90 && sw2 != 0x00)) {
+		memset(&error, 0, sizeof(error));
+
+		error.type = OFONO_ERROR_TYPE_SIM;
+		error.error = (sw1 << 8) | sw2;
+
+		cb(&error, NULL, 0, cbd->data);
+		return;
+	}
+
+	if (!g_at_result_iter_next_hexstring(&iter, &response, &len)) {
 		CALLBACK_WITH_FAILURE(cb, NULL, 0, cbd->data);
 		return;
 	}
@@ -246,8 +271,10 @@ static void at_crsm_update_cb(gboolean ok, GAtResult *result,
 
 	if ((sw1 != 0x90 && sw1 != 0x91 && sw1 != 0x92 && sw1 != 0x9f) ||
 			(sw1 == 0x90 && sw2 != 0x00)) {
-		CALLBACK_WITH_FAILURE(cb, cbd->data);
-		return;
+		memset(&error, 0, sizeof(error));
+
+		error.type = OFONO_ERROR_TYPE_SIM;
+		error.error = (sw1 << 8) | sw2;
 	}
 
 	DBG("crsm_update_cb: %02x, %02x", sw1, sw2);
@@ -502,6 +529,59 @@ error:
 	CALLBACK_WITH_FAILURE(cb, -1, data);
 }
 
+static gboolean at_epev_unregister(gpointer user_data)
+{
+	struct sim_data *sd = user_data;
+
+	sd->epev_source = 0;
+
+	g_at_chat_unregister(sd->chat, sd->epev_id);
+	sd->epev_id = 0;
+
+	return FALSE;
+}
+
+static void at_epev_notify(GAtResult *result, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	struct sim_data *sd = cbd->user;
+	ofono_sim_lock_unlock_cb_t cb = cbd->cb;
+	struct ofono_error error = { .type = OFONO_ERROR_TYPE_NO_ERROR };
+
+	if (sd->epev_source)
+		return;
+
+	cb(&error, cbd->data);
+
+	sd->epev_source = g_timeout_add(0, at_epev_unregister, sd);
+}
+
+static void at_pin_send_cb(gboolean ok, GAtResult *result,
+				gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	struct sim_data *sd = cbd->user;
+	ofono_sim_lock_unlock_cb_t cb = cbd->cb;
+	struct ofono_error error;
+
+	decode_at_error(&error, g_at_result_final_response(result));
+
+	/*
+	 * On the MBM modem, AT+CPIN? keeps returning SIM PIN for a moment
+	 * after successful AT+CPIN="..", but sends *EPEV when that changes.
+	 */
+	if (ok && sd->vendor == OFONO_VENDOR_MBM) {
+		sd->epev_id = g_at_chat_register(sd->chat, "*EPEV",
+							at_epev_notify,
+							FALSE, cbd, g_free);
+		return;
+	}
+
+	cb(&error, cbd->data);
+
+	g_free(cbd);
+}
+
 static void at_lock_unlock_cb(gboolean ok, GAtResult *result,
 				gpointer user_data)
 {
@@ -525,10 +605,12 @@ static void at_pin_send(struct ofono_sim *sim, const char *passwd,
 	if (!cbd)
 		goto error;
 
+	cbd->user = sd;
+
 	snprintf(buf, sizeof(buf), "AT+CPIN=\"%s\"", passwd);
 
 	ret = g_at_chat_send(sd->chat, buf, none_prefix,
-				at_lock_unlock_cb, cbd, g_free);
+				at_pin_send_cb, cbd, NULL);
 
 	memset(buf, 0, sizeof(buf));
 
@@ -731,8 +813,16 @@ static int at_sim_probe(struct ofono_sim *sim, unsigned int vendor,
 	sd->chat = chat;
 	sd->vendor = vendor;
 
-	if (sd->vendor == OFONO_VENDOR_WAVECOM)
+	switch (sd->vendor) {
+	case OFONO_VENDOR_WAVECOM:
 		g_at_chat_add_terminator(chat, "+CPIN:", 6, TRUE);
+		break;
+	case OFONO_VENDOR_MBM:
+		g_at_chat_send(chat, "AT*EPEE=1", NULL, NULL, NULL, NULL);
+		break;
+	default:
+		break;
+	}
 
 	ofono_sim_set_data(sim, sd);
 	g_idle_add(at_sim_register, sim);
@@ -745,6 +835,9 @@ static void at_sim_remove(struct ofono_sim *sim)
 	struct sim_data *sd = ofono_sim_get_data(sim);
 
 	ofono_sim_set_data(sim, NULL);
+
+	if (sd->epev_source)
+		g_source_remove(sd->epev_source);
 
 	g_free(sd);
 }

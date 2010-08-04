@@ -25,6 +25,7 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <stdint.h>
 
 #include <glib.h>
 
@@ -296,8 +297,10 @@ static gboolean parse_dataobj_alpha_id(struct comprehension_tlv_iter *iter,
 	char *utf8;
 
 	len = comprehension_tlv_iter_get_length(iter);
-	if (len == 0)
+	if (len == 0) {
+		*alpha_id = g_try_malloc0(1);
 		return TRUE;
+	}
 
 	data = comprehension_tlv_iter_get_data(iter);
 	utf8 = sim_string_to_utf8(data, len);
@@ -329,6 +332,8 @@ static gboolean parse_dataobj_subaddress(struct comprehension_tlv_iter *iter,
 	subaddr->len = len;
 	memcpy(subaddr->subaddr, data, len);
 
+	subaddr->has_subaddr = TRUE;
+
 	return TRUE;
 }
 
@@ -350,6 +355,28 @@ static gboolean parse_dataobj_ccp(struct comprehension_tlv_iter *iter,
 	data = comprehension_tlv_iter_get_data(iter);
 	ccp->len = len;
 	memcpy(ccp->ccp, data, len);
+
+	return TRUE;
+}
+
+/* Defined in TS 31.111 Section 8.5 */
+static gboolean parse_dataobj_cbs_page(struct comprehension_tlv_iter *iter,
+					void *user)
+{
+	struct stk_cbs_page *cp = user;
+	const unsigned char *data;
+	unsigned int len;
+
+	len = comprehension_tlv_iter_get_length(iter);
+	if (len < 1)
+		return FALSE;
+
+	if (len > sizeof(cp->page))
+		return FALSE;
+
+	data = comprehension_tlv_iter_get_data(iter);
+	cp->len = len;
+	memcpy(cp->page, data, len);
 
 	return TRUE;
 }
@@ -499,6 +526,32 @@ static gboolean parse_dataobj_gsm_sms_tpdu(struct comprehension_tlv_iter *iter,
 	return TRUE;
 }
 
+/* Defined in TS 102.223 Section 8.14 */
+static gboolean parse_dataobj_ss(struct comprehension_tlv_iter *iter,
+					void *user)
+{
+	struct stk_ss *ss = user;
+	const unsigned char *data;
+	unsigned int len;
+	char *s;
+
+	len = comprehension_tlv_iter_get_length(iter);
+	if (len < 2)
+		return FALSE;
+
+	data = comprehension_tlv_iter_get_data(iter);
+
+	s = g_try_malloc(len * 2 - 1);
+	if (s == NULL)
+		return FALSE;
+
+	ss->ton_npi = data[0];
+	ss->ss = s;
+	sim_extract_bcd_number(data + 1, len - 1, ss->ss);
+
+	return TRUE;
+}
+
 /* Defined in TS 102.223 Section 8.15 */
 static gboolean parse_dataobj_text(struct comprehension_tlv_iter *iter,
 					void *user)
@@ -532,6 +585,24 @@ static gboolean parse_dataobj_tone(struct comprehension_tlv_iter *iter,
 {
 	unsigned char *byte = user;
 	return parse_dataobj_common_byte(iter, byte);
+}
+
+/* Defined in TS 102.223 Section 8.17 */
+static gboolean parse_dataobj_ussd(struct comprehension_tlv_iter *iter,
+					void *user)
+{
+	struct stk_ussd_string *us = user;
+	unsigned int len = comprehension_tlv_iter_get_length(iter);
+	const unsigned char *data = comprehension_tlv_iter_get_data(iter);
+
+	if (len <= 1 || len > 161)
+		return FALSE;
+
+	us->dcs = data[0];
+	us->len = len - 1;
+	memcpy(us->string, data + 1, us->len);
+
+	return TRUE;
 }
 
 /* Defined in TS 102.223 Section 8.18 */
@@ -781,6 +852,35 @@ static gboolean parse_dataobj_transaction_id(
 	return TRUE;
 }
 
+/* Defined in TS 31.111 Section 8.29 */
+static gboolean parse_dataobj_bcch_channel_list(
+		struct comprehension_tlv_iter *iter, void *user)
+{
+	struct stk_bcch_channel_list *bcl = user;
+	const unsigned char *data;
+	unsigned int len = comprehension_tlv_iter_get_length(iter);
+	unsigned int i;
+
+	if (len < 1)
+		return FALSE;
+
+	data = comprehension_tlv_iter_get_data(iter);
+
+	bcl->num = len * 8 / 10;
+
+	for (i = 0; i < bcl->num; i++) {
+		unsigned int index = i * 10 / 8;
+		unsigned int occupied = i * 10 % 8;
+
+		bcl->channels[i] = (data[index] << (2 + occupied)) +
+					(data[index + 1] >> (6 - occupied));
+	}
+
+	bcl->has_list = TRUE;
+
+	return TRUE;
+}
+
 /* Defined in TS 102.223 Section 8.30 */
 static gboolean parse_dataobj_call_control_requested_action(
 		struct comprehension_tlv_iter *iter, void *user)
@@ -989,8 +1089,13 @@ static gboolean parse_dataobj_at_response(struct comprehension_tlv_iter *iter,
 static gboolean parse_dataobj_bc_repeat_indicator(
 		struct comprehension_tlv_iter *iter, void *user)
 {
-	unsigned char *byte = user;
-	return parse_dataobj_common_byte(iter, byte);
+	struct stk_bc_repeat *bc_repeat = user;
+
+	if (parse_dataobj_common_byte(iter, &bc_repeat->value) != TRUE)
+		return FALSE;
+
+	bc_repeat->has_bc_repeat = TRUE;
+	return TRUE;
 }
 
 /* Defined in 102.223 Section 8.43 */
@@ -1044,6 +1149,26 @@ static gboolean parse_dataobj_language(struct comprehension_tlv_iter *iter,
 	 */
 	memcpy(lang, data, len);
 	lang[len] = '\0';
+
+	return TRUE;
+}
+
+/* Defined in 31.111 Section 8.46 */
+static gboolean parse_dataobj_timing_advance(
+			struct comprehension_tlv_iter *iter, void *user)
+{
+	struct stk_timing_advance *ta = user;
+	const unsigned char *data;
+	unsigned int len = comprehension_tlv_iter_get_length(iter);
+
+	if (len != 2)
+		return FALSE;
+
+	data = comprehension_tlv_iter_get_data(iter);
+
+	ta->has_value = TRUE;
+	ta->status = data[0];
+	ta->advance = data[1];
 
 	return TRUE;
 }
@@ -1208,8 +1333,10 @@ static gboolean parse_dataobj_other_address(
 	const unsigned char *data;
 	unsigned char len = comprehension_tlv_iter_get_length(iter);
 
-	if (len == 0)
+	if (len == 0) {
+		oa->type = STK_ADDRESS_AUTO;
 		return TRUE;
+	}
 
 	if ((len != 5) && (len != 17))
 		return FALSE;
@@ -1434,6 +1561,7 @@ static gboolean parse_dataobj_remote_entity_address(
 		return FALSE;
 	}
 
+	rea->has_address = TRUE;
 	rea->coding_type = data[0];
 	memcpy(&rea->addr, data + 1, len - 1);
 
@@ -1506,6 +1634,27 @@ static gboolean parse_dataobj_text_attr(struct comprehension_tlv_iter *iter,
 	return TRUE;
 }
 
+/* Defined in TS 31.111 Section 8.72 */
+static gboolean parse_dataobj_pdp_act_par(
+			struct comprehension_tlv_iter *iter, void *user)
+{
+	struct stk_pdp_act_par *pcap = user;
+	const unsigned char *data;
+	unsigned int len;
+
+	len = comprehension_tlv_iter_get_length(iter);
+
+	if (len > sizeof(pcap->par))
+		return FALSE;
+
+	data = comprehension_tlv_iter_get_data(iter);
+
+	memcpy(pcap->par, data, len);
+	pcap->len = len;
+
+	return TRUE;
+}
+
 /* Defined in TS 102.223 Section 8.73 */
 static gboolean parse_dataobj_item_text_attribute_list(
 		struct comprehension_tlv_iter *iter, void *user)
@@ -1523,6 +1672,14 @@ static gboolean parse_dataobj_item_text_attribute_list(
 	ital->len = len;
 
 	return TRUE;
+}
+
+/* Defined in TS 31.111 Section 8.73 */
+static gboolean parse_dataobj_utran_meas_qualifier(
+			struct comprehension_tlv_iter *iter, void *user)
+{
+	unsigned char *byte = user;
+	return parse_dataobj_common_byte(iter, byte);
 }
 
 /*
@@ -1623,6 +1780,7 @@ static gboolean parse_dataobj_frames_info(struct comprehension_tlv_iter *iter,
 	struct stk_frames_info *fi = user;
 	const unsigned char *data;
 	unsigned char len = comprehension_tlv_iter_get_length(iter);
+	unsigned int i;
 
 	if (len < 1)
 		return FALSE;
@@ -1635,12 +1793,18 @@ static gboolean parse_dataobj_frames_info(struct comprehension_tlv_iter *iter,
 	if ((len == 1 && data[0] != 0) || (len > 1 && data[0] == 0))
 		return FALSE;
 
+	if (len % 2 == 0)
+		return FALSE;
+
 	if (len == 1)
 		return TRUE;
 
 	fi->id = data[0];
-	fi->len = len - 1;
-	memcpy(fi->list, data + 1, fi->len);
+	fi->len = (len - 1) / 2;
+	for (i = 0; i < len; i++) {
+		fi->list[i].height = data[i * 2 + 1] & 0x1f;
+		fi->list[i].width = data[i * 2 + 2] & 0x7f;
+	}
 
 	return TRUE;
 }
@@ -1852,6 +2016,8 @@ static dataobj_handler handler_for_type(enum stk_data_object_type type)
 		return parse_dataobj_subaddress;
 	case STK_DATA_OBJECT_TYPE_CCP:
 		return parse_dataobj_ccp;
+	case STK_DATA_OBJECT_TYPE_CBS_PAGE:
+		return parse_dataobj_cbs_page;
 	case STK_DATA_OBJECT_TYPE_DURATION:
 		return parse_dataobj_duration;
 	case STK_DATA_OBJECT_TYPE_ITEM:
@@ -1864,10 +2030,14 @@ static dataobj_handler handler_for_type(enum stk_data_object_type type)
 		return parse_dataobj_result;
 	case STK_DATA_OBJECT_TYPE_GSM_SMS_TPDU:
 		return parse_dataobj_gsm_sms_tpdu;
+	case STK_DATA_OBJECT_TYPE_SS_STRING:
+		return parse_dataobj_ss;
 	case STK_DATA_OBJECT_TYPE_TEXT:
 		return parse_dataobj_text;
 	case STK_DATA_OBJECT_TYPE_TONE:
 		return parse_dataobj_tone;
+	case STK_DATA_OBJECT_TYPE_USSD_STRING:
+		return parse_dataobj_ussd;
 	case STK_DATA_OBJECT_TYPE_FILE_LIST:
 		return parse_dataobj_file_list;
 	case STK_DATA_OBJECT_TYPE_LOCATION_INFO:
@@ -1890,6 +2060,8 @@ static dataobj_handler handler_for_type(enum stk_data_object_type type)
 		return parse_dataobj_location_status;
 	case STK_DATA_OBJECT_TYPE_TRANSACTION_ID:
 		return parse_dataobj_transaction_id;
+	case STK_DATA_OBJECT_TYPE_BCCH_CHANNEL_LIST:
+		return parse_dataobj_bcch_channel_list;
 	case STK_DATA_OBJECT_TYPE_CALL_CONTROL_REQUESTED_ACTION:
 		return parse_dataobj_call_control_requested_action;
 	case STK_DATA_OBJECT_TYPE_ICON_ID:
@@ -1924,6 +2096,8 @@ static dataobj_handler handler_for_type(enum stk_data_object_type type)
 		return parse_dataobj_language;
 	case STK_DATA_OBJECT_TYPE_BROWSER_ID:
 		return parse_dataobj_browser_id;
+	case STK_DATA_OBJECT_TYPE_TIMING_ADVANCE:
+		return parse_dataobj_timing_advance;
 	case STK_DATA_OBJECT_TYPE_URL:
 		return parse_dataobj_url;
 	case STK_DATA_OBJECT_TYPE_BEARER:
@@ -1974,8 +2148,12 @@ static dataobj_handler handler_for_type(enum stk_data_object_type type)
 		return parse_dataobj_cdma_sms_tpdu;
 	case STK_DATA_OBJECT_TYPE_TEXT_ATTRIBUTE:
 		return parse_dataobj_text_attr;
+	case STK_DATA_OBJECT_TYPE_PDP_ACTIVATION_PARAMETER:
+		return parse_dataobj_pdp_act_par;
 	case STK_DATA_OBJECT_TYPE_ITEM_TEXT_ATTRIBUTE_LIST:
 		return parse_dataobj_item_text_attribute_list;
+	case STK_DATA_OBJECT_TYPE_UTRAN_MEASUREMENT_QUALIFIER:
+		return parse_dataobj_utran_meas_qualifier;
 	case STK_DATA_OBJECT_TYPE_IMEISV:
 		return parse_dataobj_imeisv;
 	case STK_DATA_OBJECT_TYPE_NETWORK_SEARCH_MODE:
@@ -2107,16 +2285,17 @@ struct dataobj_handler_entry {
 	enum stk_data_object_type type;
 	int flags;
 	void *data;
-	gboolean parsed;
 };
 
-static gboolean parse_dataobj(struct comprehension_tlv_iter *iter,
-				enum stk_data_object_type type, ...)
+static enum stk_command_parse_result parse_dataobj(
+					struct comprehension_tlv_iter *iter,
+					enum stk_data_object_type type, ...)
 {
 	GSList *entries = NULL;
 	GSList *l;
 	va_list args;
 	gboolean minimum_set = TRUE;
+	gboolean parse_error = FALSE;
 
 	va_start(args, type);
 
@@ -2133,45 +2312,61 @@ static gboolean parse_dataobj(struct comprehension_tlv_iter *iter,
 		entries = g_slist_prepend(entries, entry);
 	}
 
-	if (comprehension_tlv_iter_next(iter) != TRUE)
-		goto out;
-
 	entries = g_slist_reverse(entries);
 
-	for (l = entries; l; l = l->next) {
+	l = entries;
+	while (comprehension_tlv_iter_next(iter) == TRUE) {
 		dataobj_handler handler;
-		struct dataobj_handler_entry *entry = l->data;
+		struct dataobj_handler_entry *entry;
+		GSList *l2;
+
+		for (l2 = l; l2; l2 = l2->next) {
+			entry = l2->data;
+
+			if (comprehension_tlv_iter_get_tag(iter) == entry->type)
+				break;
+
+			/* Can't skip over mandatory objects */
+			if (entry->flags & DATAOBJ_FLAG_MANDATORY) {
+				l2 = NULL;
+				break;
+			}
+		}
+
+		if (!l2) {
+			if (comprehension_tlv_get_cr(iter) == TRUE)
+				parse_error = TRUE;
+
+			continue;
+		}
 
 		if (entry->flags & DATAOBJ_FLAG_LIST)
 			handler = list_handler_for_type(entry->type);
 		else
 			handler = handler_for_type(entry->type);
 
-		if (handler == NULL)
-			continue;
+		if (handler(iter, entry->data) == FALSE)
+			parse_error = TRUE;
 
-		if (comprehension_tlv_iter_get_tag(iter) == entry->type) {
-			if (handler(iter, entry->data))
-				entry->parsed = TRUE;
-
-			if (comprehension_tlv_iter_next(iter) == FALSE)
-				break;
-		}
+		l = l2->next;
 	}
 
-out:
-	for (l = entries; l; l = l->next) {
+	for (; l; l = l->next) {
 		struct dataobj_handler_entry *entry = l->data;
 
-		if ((entry->flags & DATAOBJ_FLAG_MINIMUM) &&
-				entry->parsed == FALSE)
+		if (entry->flags & DATAOBJ_FLAG_MANDATORY)
 			minimum_set = FALSE;
 	}
 
 	g_slist_foreach(entries, (GFunc)g_free, NULL);
 	g_slist_free(entries);
 
-	return minimum_set;
+	if (minimum_set == FALSE)
+		return STK_PARSE_RESULT_MISSING_VALUE;
+	if (parse_error == TRUE)
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+
+	return STK_PARSE_RESULT_OK;
 }
 
 static void destroy_display_text(struct stk_command *command)
@@ -2179,19 +2374,21 @@ static void destroy_display_text(struct stk_command *command)
 	g_free(command->display_text.text);
 }
 
-static gboolean parse_display_text(struct stk_command *command,
+static enum stk_command_parse_result parse_display_text(
+					struct stk_command *command,
 					struct comprehension_tlv_iter *iter)
 {
 	struct stk_command_display_text *obj = &command->display_text;
-	gboolean ret;
 
 	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
 	if (command->dst != STK_DEVICE_IDENTITY_TYPE_DISPLAY)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
-	ret = parse_dataobj(iter, STK_DATA_OBJECT_TYPE_TEXT,
+	command->destructor = destroy_display_text;
+
+	return parse_dataobj(iter, STK_DATA_OBJECT_TYPE_TEXT,
 				DATAOBJ_FLAG_MANDATORY | DATAOBJ_FLAG_MINIMUM,
 				&obj->text,
 				STK_DATA_OBJECT_TYPE_ICON_ID, 0,
@@ -2205,13 +2402,6 @@ static gboolean parse_display_text(struct stk_command *command,
 				STK_DATA_OBJECT_TYPE_FRAME_ID, 0,
 				&obj->frame_id,
 				STK_DATA_OBJECT_TYPE_INVALID);
-
-	command->destructor = destroy_display_text;
-
-	if (ret == FALSE)
-		return FALSE;
-
-	return TRUE;
 }
 
 static void destroy_get_inkey(struct stk_command *command)
@@ -2219,19 +2409,21 @@ static void destroy_get_inkey(struct stk_command *command)
 	g_free(command->get_inkey.text);
 }
 
-static gboolean parse_get_inkey(struct stk_command *command,
-				struct comprehension_tlv_iter *iter)
+static enum stk_command_parse_result parse_get_inkey(
+					struct stk_command *command,
+					struct comprehension_tlv_iter *iter)
 {
 	struct stk_command_get_inkey *obj = &command->get_inkey;
-	gboolean ret;
 
 	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
 	if (command->dst != STK_DEVICE_IDENTITY_TYPE_TERMINAL)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
-	ret = parse_dataobj(iter, STK_DATA_OBJECT_TYPE_TEXT,
+	command->destructor = destroy_get_inkey;
+
+	return parse_dataobj(iter, STK_DATA_OBJECT_TYPE_TEXT,
 				DATAOBJ_FLAG_MANDATORY | DATAOBJ_FLAG_MINIMUM,
 				&obj->text,
 				STK_DATA_OBJECT_TYPE_ICON_ID, 0,
@@ -2243,13 +2435,6 @@ static gboolean parse_get_inkey(struct stk_command *command,
 				STK_DATA_OBJECT_TYPE_FRAME_ID, 0,
 				&obj->frame_id,
 				STK_DATA_OBJECT_TYPE_INVALID);
-
-	command->destructor = destroy_get_inkey;
-
-	if (ret == FALSE)
-		return FALSE;
-
-	return TRUE;
 }
 
 static void destroy_get_input(struct stk_command *command)
@@ -2258,19 +2443,21 @@ static void destroy_get_input(struct stk_command *command)
 	g_free(command->get_input.default_text);
 }
 
-static gboolean parse_get_input(struct stk_command *command,
+static enum stk_command_parse_result parse_get_input(
+					struct stk_command *command,
 					struct comprehension_tlv_iter *iter)
 {
 	struct stk_command_get_input *obj = &command->get_input;
-	gboolean ret;
 
 	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
 	if (command->dst != STK_DEVICE_IDENTITY_TYPE_TERMINAL)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
-	ret = parse_dataobj(iter, STK_DATA_OBJECT_TYPE_TEXT,
+	command->destructor = destroy_get_input;
+
+	return parse_dataobj(iter, STK_DATA_OBJECT_TYPE_TEXT,
 				DATAOBJ_FLAG_MANDATORY | DATAOBJ_FLAG_MINIMUM,
 				&obj->text,
 				STK_DATA_OBJECT_TYPE_RESPONSE_LENGTH,
@@ -2285,25 +2472,19 @@ static gboolean parse_get_input(struct stk_command *command,
 				STK_DATA_OBJECT_TYPE_FRAME_ID, 0,
 				&obj->frame_id,
 				STK_DATA_OBJECT_TYPE_INVALID);
-
-	command->destructor = destroy_get_input;
-
-	if (ret == FALSE)
-		return FALSE;
-
-	return TRUE;
 }
 
-static gboolean parse_more_time(struct stk_command *command,
+static enum stk_command_parse_result parse_more_time(
+					struct stk_command *command,
 					struct comprehension_tlv_iter *iter)
 {
 	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
 	if (command->dst != STK_DEVICE_IDENTITY_TYPE_TERMINAL)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
-	return TRUE;
+	return STK_PARSE_RESULT_OK;
 }
 
 static void destroy_play_tone(struct stk_command *command)
@@ -2311,19 +2492,21 @@ static void destroy_play_tone(struct stk_command *command)
 	g_free(command->play_tone.alpha_id);
 }
 
-static gboolean parse_play_tone(struct stk_command *command,
+static enum stk_command_parse_result parse_play_tone(
+					struct stk_command *command,
 					struct comprehension_tlv_iter *iter)
 {
 	struct stk_command_play_tone *obj = &command->play_tone;
-	gboolean ret;
 
 	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
 	if (command->dst != STK_DEVICE_IDENTITY_TYPE_EARPIECE)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
-	ret = parse_dataobj(iter, STK_DATA_OBJECT_TYPE_ALPHA_ID, 0,
+	command->destructor = destroy_play_tone;
+
+	return parse_dataobj(iter, STK_DATA_OBJECT_TYPE_ALPHA_ID, 0,
 				&obj->alpha_id,
 				STK_DATA_OBJECT_TYPE_TONE, 0,
 				&obj->tone,
@@ -2336,36 +2519,24 @@ static gboolean parse_play_tone(struct stk_command *command,
 				STK_DATA_OBJECT_TYPE_FRAME_ID, 0,
 				&obj->frame_id,
 				STK_DATA_OBJECT_TYPE_INVALID);
-
-	command->destructor = destroy_play_tone;
-
-	if (ret == FALSE)
-		return FALSE;
-
-	return TRUE;
 }
 
-static gboolean parse_poll_interval(struct stk_command *command,
+static enum stk_command_parse_result parse_poll_interval(
+					struct stk_command *command,
 					struct comprehension_tlv_iter *iter)
 {
 	struct stk_command_poll_interval *obj = &command->poll_interval;
-	gboolean ret;
 
 	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
 	if (command->dst != STK_DEVICE_IDENTITY_TYPE_TERMINAL)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
-	ret = parse_dataobj(iter, STK_DATA_OBJECT_TYPE_DURATION,
+	return parse_dataobj(iter, STK_DATA_OBJECT_TYPE_DURATION,
 				DATAOBJ_FLAG_MANDATORY | DATAOBJ_FLAG_MINIMUM,
 				&obj->duration,
 				STK_DATA_OBJECT_TYPE_INVALID);
-
-	if (ret == FALSE)
-		return FALSE;
-
-	return TRUE;
 }
 
 static void destroy_setup_menu(struct stk_command *command)
@@ -2376,21 +2547,21 @@ static void destroy_setup_menu(struct stk_command *command)
 	g_slist_free(command->setup_menu.items);
 }
 
-static gboolean parse_setup_menu(struct stk_command *command,
+static enum stk_command_parse_result parse_setup_menu(
+					struct stk_command *command,
 					struct comprehension_tlv_iter *iter)
 {
 	struct stk_command_setup_menu *obj = &command->setup_menu;
-	gboolean ret;
 
 	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
 	if (command->dst != STK_DEVICE_IDENTITY_TYPE_TERMINAL)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
 	command->destructor = destroy_setup_menu;
 
-	ret = parse_dataobj(iter,
+	return parse_dataobj(iter,
 			STK_DATA_OBJECT_TYPE_ALPHA_ID,
 			DATAOBJ_FLAG_MANDATORY | DATAOBJ_FLAG_MINIMUM,
 			&obj->alpha_id,
@@ -2408,11 +2579,6 @@ static gboolean parse_setup_menu(struct stk_command *command,
 			STK_DATA_OBJECT_TYPE_ITEM_TEXT_ATTRIBUTE_LIST, 0,
 			&obj->item_text_attr_list,
 			STK_DATA_OBJECT_TYPE_INVALID);
-
-	if (ret == FALSE)
-		return FALSE;
-
-	return TRUE;
 }
 
 static void destroy_select_item(struct stk_command *command)
@@ -2423,23 +2589,21 @@ static void destroy_select_item(struct stk_command *command)
 	g_slist_free(command->select_item.items);
 }
 
-static gboolean parse_select_item(struct stk_command *command,
+static enum stk_command_parse_result parse_select_item(
+					struct stk_command *command,
 					struct comprehension_tlv_iter *iter)
 {
 	struct stk_command_select_item *obj = &command->select_item;
-	gboolean ret;
+	enum stk_command_parse_result status;
 
 	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
 	if (command->dst != STK_DEVICE_IDENTITY_TYPE_TERMINAL)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
-	command->destructor = destroy_select_item;
-
-	ret = parse_dataobj(iter,
-			STK_DATA_OBJECT_TYPE_ALPHA_ID,
-			DATAOBJ_FLAG_MANDATORY | DATAOBJ_FLAG_MINIMUM,
+	status = parse_dataobj(iter,
+			STK_DATA_OBJECT_TYPE_ALPHA_ID, 0,
 			&obj->alpha_id,
 			STK_DATA_OBJECT_TYPE_ITEM,
 			DATAOBJ_FLAG_MANDATORY | DATAOBJ_FLAG_MINIMUM |
@@ -2460,40 +2624,40 @@ static gboolean parse_select_item(struct stk_command *command,
 			&obj->frame_id,
 			STK_DATA_OBJECT_TYPE_INVALID);
 
-	if (ret == FALSE)
-		return FALSE;
+	command->destructor = destroy_select_item;
 
-	if (obj->items == NULL)
-		return FALSE;
+	if (status == STK_PARSE_RESULT_OK && obj->items == NULL)
+		status = STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
-	return TRUE;
+	return status;
 }
 
 static void destroy_send_sms(struct stk_command *command)
 {
 	g_free(command->send_sms.alpha_id);
-	g_free(command->send_sms.address.number);
 	g_free(command->send_sms.cdma_sms.array);
 }
 
-static gboolean parse_send_sms(struct stk_command *command,
+static enum stk_command_parse_result parse_send_sms(
+					struct stk_command *command,
 					struct comprehension_tlv_iter *iter)
 {
 	struct stk_command_send_sms *obj = &command->send_sms;
+	enum stk_command_parse_result status;
 	struct gsm_sms_tpdu gsm_tpdu;
-	gboolean ret;
+	struct stk_address sc_address = { 0, NULL };
 
 	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
 	if (command->dst != STK_DEVICE_IDENTITY_TYPE_NETWORK)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
 	memset(&gsm_tpdu, 0, sizeof(gsm_tpdu));
-	ret = parse_dataobj(iter, STK_DATA_OBJECT_TYPE_ALPHA_ID, 0,
+	status = parse_dataobj(iter, STK_DATA_OBJECT_TYPE_ALPHA_ID, 0,
 				&obj->alpha_id,
 				STK_DATA_OBJECT_TYPE_ADDRESS, 0,
-				&obj->address,
+				&sc_address,
 				STK_DATA_OBJECT_TYPE_GSM_SMS_TPDU, 0,
 				&gsm_tpdu,
 				STK_DATA_OBJECT_TYPE_CDMA_SMS_TPDU, 0,
@@ -2508,33 +2672,130 @@ static gboolean parse_send_sms(struct stk_command *command,
 
 	command->destructor = destroy_send_sms;
 
-	if (ret == FALSE)
-		return FALSE;
+	if (status != STK_PARSE_RESULT_OK)
+		goto out;
 
-	if (gsm_tpdu.len == 0 && obj->cdma_sms.len == 0)
-		return FALSE;
+	if (gsm_tpdu.len == 0 && obj->cdma_sms.len == 0) {
+		status = STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+		goto out;
+	}
 
-	if (gsm_tpdu.len > 0 && obj->cdma_sms.len > 0)
-		return FALSE;
+	if (gsm_tpdu.len > 0 && obj->cdma_sms.len > 0) {
+		status = STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+		goto out;
+	}
 
 	/* We don't process CDMA pdus for now */
 	if (obj->cdma_sms.len > 0)
-		return TRUE;
+		goto out;
 
 	/* packing is needed */
-	if (command->qualifier & 0x01)
-		return sms_decode_unpacked_stk_pdu(gsm_tpdu.tpdu, gsm_tpdu.len,
-							&obj->gsm_sms);
+	if (command->qualifier & 0x01) {
+		if (sms_decode_unpacked_stk_pdu(gsm_tpdu.tpdu, gsm_tpdu.len,
+							&obj->gsm_sms) !=
+				TRUE) {
+			status = STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+			goto out;
+		}
+
+		goto set_addr;
+	}
 
 	if (sms_decode(gsm_tpdu.tpdu, gsm_tpdu.len, TRUE,
-				gsm_tpdu.len, &obj->gsm_sms) == FALSE)
-		return FALSE;
+				gsm_tpdu.len, &obj->gsm_sms) == FALSE) {
+		status = STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+		goto out;
+	}
 
 	if (obj->gsm_sms.type != SMS_TYPE_SUBMIT &&
-			obj->gsm_sms.type != SMS_TYPE_COMMAND)
-		return FALSE;
+			obj->gsm_sms.type != SMS_TYPE_COMMAND) {
+		status = STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+		goto out;
+	}
 
-	return TRUE;
+set_addr:
+	if (sc_address.number == NULL)
+		goto out;
+
+	if (strlen(sc_address.number) > 20) {
+		status = STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+		goto out;
+	}
+
+	strcpy(obj->gsm_sms.sc_addr.address, sc_address.number);
+	obj->gsm_sms.sc_addr.numbering_plan = sc_address.ton_npi & 15;
+	obj->gsm_sms.sc_addr.number_type = (sc_address.ton_npi >> 4) & 7;
+
+out:
+	g_free(sc_address.number);
+
+	return status;
+}
+
+static void destroy_send_ss(struct stk_command *command)
+{
+	g_free(command->send_ss.alpha_id);
+	g_free(command->send_ss.ss.ss);
+}
+
+static enum stk_command_parse_result parse_send_ss(struct stk_command *command,
+					struct comprehension_tlv_iter *iter)
+{
+	struct stk_command_send_ss *obj = &command->send_ss;
+
+	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+
+	if (command->dst != STK_DEVICE_IDENTITY_TYPE_NETWORK)
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+
+	command->destructor = destroy_send_ss;
+
+	return parse_dataobj(iter, STK_DATA_OBJECT_TYPE_ALPHA_ID, 0,
+				&obj->alpha_id,
+				STK_DATA_OBJECT_TYPE_SS_STRING,
+				DATAOBJ_FLAG_MANDATORY | DATAOBJ_FLAG_MINIMUM,
+				&obj->ss,
+				STK_DATA_OBJECT_TYPE_ICON_ID, 0,
+				&obj->icon_id,
+				STK_DATA_OBJECT_TYPE_TEXT_ATTRIBUTE, 0,
+				&obj->text_attr,
+				STK_DATA_OBJECT_TYPE_FRAME_ID, 0,
+				&obj->frame_id,
+				STK_DATA_OBJECT_TYPE_INVALID);
+}
+
+static void destroy_send_ussd(struct stk_command *command)
+{
+	g_free(command->send_ussd.alpha_id);
+}
+
+static enum stk_command_parse_result parse_send_ussd(
+					struct stk_command *command,
+					struct comprehension_tlv_iter *iter)
+{
+	struct stk_command_send_ussd *obj = &command->send_ussd;
+
+	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+
+	if (command->dst != STK_DEVICE_IDENTITY_TYPE_NETWORK)
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+
+	command->destructor = destroy_send_ussd;
+
+	return parse_dataobj(iter, STK_DATA_OBJECT_TYPE_ALPHA_ID, 0,
+				&obj->alpha_id,
+				STK_DATA_OBJECT_TYPE_USSD_STRING,
+				DATAOBJ_FLAG_MANDATORY | DATAOBJ_FLAG_MINIMUM,
+				&obj->ussd_string,
+				STK_DATA_OBJECT_TYPE_ICON_ID, 0,
+				&obj->icon_id,
+				STK_DATA_OBJECT_TYPE_TEXT_ATTRIBUTE, 0,
+				&obj->text_attr,
+				STK_DATA_OBJECT_TYPE_FRAME_ID, 0,
+				&obj->frame_id,
+				STK_DATA_OBJECT_TYPE_INVALID);
 }
 
 static void destroy_setup_call(struct stk_command *command)
@@ -2544,19 +2805,21 @@ static void destroy_setup_call(struct stk_command *command)
 	g_free(command->setup_call.alpha_id_call_setup);
 }
 
-static gboolean parse_setup_call(struct stk_command *command,
+static enum stk_command_parse_result parse_setup_call(
+					struct stk_command *command,
 					struct comprehension_tlv_iter *iter)
 {
 	struct stk_command_setup_call *obj = &command->setup_call;
-	gboolean ret;
 
 	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
 	if (command->dst != STK_DEVICE_IDENTITY_TYPE_NETWORK)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
-	ret = parse_dataobj(iter, STK_DATA_OBJECT_TYPE_ALPHA_ID, 0,
+	command->destructor = destroy_setup_call;
+
+	return parse_dataobj(iter, STK_DATA_OBJECT_TYPE_ALPHA_ID, 0,
 				&obj->alpha_id_usr_cfm,
 				STK_DATA_OBJECT_TYPE_ADDRESS,
 				DATAOBJ_FLAG_MANDATORY | DATAOBJ_FLAG_MINIMUM,
@@ -2580,13 +2843,6 @@ static gboolean parse_setup_call(struct stk_command *command,
 				STK_DATA_OBJECT_TYPE_FRAME_ID, 0,
 				&obj->frame_id,
 				STK_DATA_OBJECT_TYPE_INVALID);
-
-	command->destructor = destroy_setup_call;
-
-	if (ret == FALSE)
-		return FALSE;
-
-	return TRUE;
 }
 
 static void destroy_refresh(struct stk_command *command)
@@ -2596,19 +2852,21 @@ static void destroy_refresh(struct stk_command *command)
 	g_free(command->refresh.alpha_id);
 }
 
-static gboolean parse_refresh(struct stk_command *command,
+static enum stk_command_parse_result parse_refresh(
+					struct stk_command *command,
 					struct comprehension_tlv_iter *iter)
 {
 	struct stk_command_refresh *obj = &command->refresh;
-	gboolean ret;
 
 	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
 	if (command->dst != STK_DEVICE_IDENTITY_TYPE_TERMINAL)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
-	ret = parse_dataobj(iter, STK_DATA_OBJECT_TYPE_FILE_LIST, 0,
+	command->destructor = destroy_refresh;
+
+	return parse_dataobj(iter, STK_DATA_OBJECT_TYPE_FILE_LIST, 0,
 				&obj->file_list,
 				STK_DATA_OBJECT_TYPE_AID, 0,
 				&obj->aid,
@@ -2621,159 +2879,146 @@ static gboolean parse_refresh(struct stk_command *command,
 				STK_DATA_OBJECT_TYPE_FRAME_ID, 0,
 				&obj->frame_id,
 				STK_DATA_OBJECT_TYPE_INVALID);
-
-	command->destructor = destroy_refresh;
-
-	if (ret == FALSE)
-		return FALSE;
-
-	return TRUE;
 }
 
-static gboolean parse_polling_off(struct stk_command *command,
+static enum stk_command_parse_result parse_polling_off(
+					struct stk_command *command,
 					struct comprehension_tlv_iter *iter)
 {
 	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
 	if (command->dst != STK_DEVICE_IDENTITY_TYPE_TERMINAL)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
-	return TRUE;
+	return STK_PARSE_RESULT_OK;
 }
 
-static gboolean parse_provide_local_info(struct stk_command *command,
+static enum stk_command_parse_result parse_provide_local_info(
+					struct stk_command *command,
 					struct comprehension_tlv_iter *iter)
 {
 	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
 	if (command->dst != STK_DEVICE_IDENTITY_TYPE_TERMINAL)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
-	return TRUE;
+	return STK_PARSE_RESULT_OK;
 }
 
-static gboolean parse_setup_event_list(struct stk_command *command,
+static enum stk_command_parse_result parse_setup_event_list(
+					struct stk_command *command,
 					struct comprehension_tlv_iter *iter)
 {
 	struct stk_command_setup_event_list *obj = &command->setup_event_list;
-	gboolean ret;
 
 	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
 	if (command->dst != STK_DEVICE_IDENTITY_TYPE_TERMINAL)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
-	ret = parse_dataobj(iter, STK_DATA_OBJECT_TYPE_EVENT_LIST,
+	return parse_dataobj(iter, STK_DATA_OBJECT_TYPE_EVENT_LIST,
 				DATAOBJ_FLAG_MANDATORY | DATAOBJ_FLAG_MINIMUM,
 				&obj->event_list,
 				STK_DATA_OBJECT_TYPE_INVALID);
-
-	if (ret == FALSE)
-		return FALSE;
-
-	return TRUE;
 }
 
-static gboolean parse_perform_card_apdu(struct stk_command *command,
+static enum stk_command_parse_result parse_perform_card_apdu(
+					struct stk_command *command,
 					struct comprehension_tlv_iter *iter)
 {
 	struct stk_command_perform_card_apdu *obj = &command->perform_card_apdu;
-	gboolean ret;
 
 	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
 	if ((command->dst < STK_DEVICE_IDENTITY_TYPE_CARD_READER_0) ||
 			(command->dst > STK_DEVICE_IDENTITY_TYPE_CARD_READER_7))
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
-	ret = parse_dataobj(iter, STK_DATA_OBJECT_TYPE_C_APDU,
+	return parse_dataobj(iter, STK_DATA_OBJECT_TYPE_C_APDU,
 				DATAOBJ_FLAG_MANDATORY | DATAOBJ_FLAG_MINIMUM,
 				&obj->c_apdu,
 				STK_DATA_OBJECT_TYPE_INVALID);
-
-	if (ret == FALSE)
-		return FALSE;
-
-	return TRUE;
 }
 
-static gboolean parse_power_off_card(struct stk_command *command,
+static enum stk_command_parse_result parse_power_off_card(
+					struct stk_command *command,
 					struct comprehension_tlv_iter *iter)
 {
 	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
 	if ((command->dst < STK_DEVICE_IDENTITY_TYPE_CARD_READER_0) ||
 			(command->dst > STK_DEVICE_IDENTITY_TYPE_CARD_READER_7))
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
-	return TRUE;
+	return STK_PARSE_RESULT_OK;
 }
 
-static gboolean parse_power_on_card(struct stk_command *command,
+static enum stk_command_parse_result parse_power_on_card(
+					struct stk_command *command,
 					struct comprehension_tlv_iter *iter)
 {
 	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
 	if ((command->dst < STK_DEVICE_IDENTITY_TYPE_CARD_READER_0) ||
 			(command->dst > STK_DEVICE_IDENTITY_TYPE_CARD_READER_7))
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
-	return TRUE;
+	return STK_PARSE_RESULT_OK;
 }
 
-static gboolean parse_get_reader_status(struct stk_command *command,
+static enum stk_command_parse_result parse_get_reader_status(
+					struct stk_command *command,
 					struct comprehension_tlv_iter *iter)
 {
 	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
 	switch (command->qualifier) {
 	case STK_QUALIFIER_TYPE_CARD_READER_STATUS:
 		if (command->dst != STK_DEVICE_IDENTITY_TYPE_TERMINAL)
-			return FALSE;
+			return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 		break;
 	case STK_QUALIFIER_TYPE_CARD_READER_ID:
 		if ((command->dst < STK_DEVICE_IDENTITY_TYPE_CARD_READER_0) ||
 				(command->dst >
 					STK_DEVICE_IDENTITY_TYPE_CARD_READER_7))
-			return FALSE;
+			return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 		break;
 	default:
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 	}
 
-	return TRUE;
+	return STK_PARSE_RESULT_OK;
 }
 
-static gboolean parse_timer_mgmt(struct stk_command *command,
+static enum stk_command_parse_result parse_timer_mgmt(
+					struct stk_command *command,
 					struct comprehension_tlv_iter *iter)
 {
 	struct stk_command_timer_mgmt *obj = &command->timer_mgmt;
-	gboolean ret;
+	enum stk_data_object_flag value_flags = 0;
 
 	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
 	if (command->dst != STK_DEVICE_IDENTITY_TYPE_TERMINAL)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
-	ret = parse_dataobj(iter, STK_DATA_OBJECT_TYPE_TIMER_ID,
+	if ((command->qualifier & 3) == 0) /* Start a timer */
+		value_flags = DATAOBJ_FLAG_MANDATORY;
+
+	return parse_dataobj(iter, STK_DATA_OBJECT_TYPE_TIMER_ID,
 				DATAOBJ_FLAG_MANDATORY | DATAOBJ_FLAG_MINIMUM,
 				&obj->timer_id,
-				STK_DATA_OBJECT_TYPE_TIMER_VALUE, 0,
+				STK_DATA_OBJECT_TYPE_TIMER_VALUE, value_flags,
 				&obj->timer_value,
 				STK_DATA_OBJECT_TYPE_INVALID);
-
-	if (ret == FALSE)
-		return FALSE;
-
-	return TRUE;
 }
 
 static void destroy_setup_idle_mode_text(struct stk_command *command)
@@ -2781,20 +3026,22 @@ static void destroy_setup_idle_mode_text(struct stk_command *command)
 	g_free(command->setup_idle_mode_text.text);
 }
 
-static gboolean parse_setup_idle_mode_text(struct stk_command *command,
+static enum stk_command_parse_result parse_setup_idle_mode_text(
+					struct stk_command *command,
 					struct comprehension_tlv_iter *iter)
 {
 	struct stk_command_setup_idle_mode_text *obj =
 					&command->setup_idle_mode_text;
-	gboolean ret;
 
 	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
 	if (command->dst != STK_DEVICE_IDENTITY_TYPE_TERMINAL)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
-	ret = parse_dataobj(iter, STK_DATA_OBJECT_TYPE_TEXT,
+	command->destructor = destroy_setup_idle_mode_text;
+
+	return parse_dataobj(iter, STK_DATA_OBJECT_TYPE_TEXT,
 				DATAOBJ_FLAG_MANDATORY | DATAOBJ_FLAG_MINIMUM,
 				&obj->text,
 				STK_DATA_OBJECT_TYPE_ICON_ID, 0,
@@ -2804,13 +3051,6 @@ static gboolean parse_setup_idle_mode_text(struct stk_command *command,
 				STK_DATA_OBJECT_TYPE_FRAME_ID, 0,
 				&obj->frame_id,
 				STK_DATA_OBJECT_TYPE_INVALID);
-
-	command->destructor = destroy_setup_idle_mode_text;
-
-	if (ret == FALSE)
-		return FALSE;
-
-	return TRUE;
 }
 
 static void destroy_run_at_command(struct stk_command *command)
@@ -2819,19 +3059,21 @@ static void destroy_run_at_command(struct stk_command *command)
 	g_free(command->run_at_command.at_command);
 }
 
-static gboolean parse_run_at_command(struct stk_command *command,
+static enum stk_command_parse_result parse_run_at_command(
+					struct stk_command *command,
 					struct comprehension_tlv_iter *iter)
 {
 	struct stk_command_run_at_command *obj = &command->run_at_command;
-	gboolean ret;
 
 	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
 	if (command->dst != STK_DEVICE_IDENTITY_TYPE_TERMINAL)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
-	ret = parse_dataobj(iter, STK_DATA_OBJECT_TYPE_ALPHA_ID, 0,
+	command->destructor = destroy_run_at_command;
+
+	return parse_dataobj(iter, STK_DATA_OBJECT_TYPE_ALPHA_ID, 0,
 				&obj->alpha_id,
 				STK_DATA_OBJECT_TYPE_AT_COMMAND,
 				DATAOBJ_FLAG_MANDATORY | DATAOBJ_FLAG_MINIMUM,
@@ -2843,13 +3085,6 @@ static gboolean parse_run_at_command(struct stk_command *command,
 				STK_DATA_OBJECT_TYPE_FRAME_ID, 0,
 				&obj->frame_id,
 				STK_DATA_OBJECT_TYPE_INVALID);
-
-	command->destructor = destroy_run_at_command;
-
-	if (ret == FALSE)
-		return FALSE;
-
-	return TRUE;
 }
 
 static void destroy_send_dtmf(struct stk_command *command)
@@ -2858,19 +3093,21 @@ static void destroy_send_dtmf(struct stk_command *command)
 	g_free(command->send_dtmf.dtmf);
 }
 
-static gboolean parse_send_dtmf(struct stk_command *command,
+static enum stk_command_parse_result parse_send_dtmf(
+					struct stk_command *command,
 					struct comprehension_tlv_iter *iter)
 {
 	struct stk_command_send_dtmf *obj = &command->send_dtmf;
-	gboolean ret;
 
 	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
 	if (command->dst != STK_DEVICE_IDENTITY_TYPE_NETWORK)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
-	ret = parse_dataobj(iter, STK_DATA_OBJECT_TYPE_ALPHA_ID, 0,
+	command->destructor = destroy_send_dtmf;
+
+	return parse_dataobj(iter, STK_DATA_OBJECT_TYPE_ALPHA_ID, 0,
 				&obj->alpha_id,
 				STK_DATA_OBJECT_TYPE_DTMF_STRING,
 				DATAOBJ_FLAG_MANDATORY | DATAOBJ_FLAG_MINIMUM,
@@ -2882,36 +3119,24 @@ static gboolean parse_send_dtmf(struct stk_command *command,
 				STK_DATA_OBJECT_TYPE_FRAME_ID, 0,
 				&obj->frame_id,
 				STK_DATA_OBJECT_TYPE_INVALID);
-
-	command->destructor = destroy_send_dtmf;
-
-	if (ret == FALSE)
-		return FALSE;
-
-	return TRUE;
 }
 
-static gboolean parse_language_notification(struct stk_command *command,
+static enum stk_command_parse_result parse_language_notification(
+					struct stk_command *command,
 					struct comprehension_tlv_iter *iter)
 {
 	struct stk_command_language_notification *obj =
 					&command->language_notification;
-	gboolean ret;
 
 	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
 	if (command->dst != STK_DEVICE_IDENTITY_TYPE_TERMINAL)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
-	ret = parse_dataobj(iter, STK_DATA_OBJECT_TYPE_LANGUAGE, 0,
+	return parse_dataobj(iter, STK_DATA_OBJECT_TYPE_LANGUAGE, 0,
 				&obj->language,
 				STK_DATA_OBJECT_TYPE_INVALID);
-
-	if (ret == FALSE)
-		return FALSE;
-
-	return TRUE;
 }
 
 static void destroy_launch_browser(struct stk_command *command)
@@ -2928,19 +3153,21 @@ static void destroy_launch_browser(struct stk_command *command)
 	g_free(command->launch_browser.text_passwd);
 }
 
-static gboolean parse_launch_browser(struct stk_command *command,
+static enum stk_command_parse_result parse_launch_browser(
+					struct stk_command *command,
 					struct comprehension_tlv_iter *iter)
 {
 	struct stk_command_launch_browser *obj = &command->launch_browser;
-	gboolean ret;
 
 	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
 	if (command->dst != STK_DEVICE_IDENTITY_TYPE_TERMINAL)
-		return FALSE;
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
-	ret = parse_dataobj(iter,
+	command->destructor = destroy_launch_browser;
+
+	return parse_dataobj(iter,
 				STK_DATA_OBJECT_TYPE_BROWSER_ID, 0,
 				&obj->browser_id,
 				STK_DATA_OBJECT_TYPE_URL,
@@ -2968,13 +3195,475 @@ static gboolean parse_launch_browser(struct stk_command *command,
 				STK_DATA_OBJECT_TYPE_TEXT, 0,
 				&obj->text_passwd,
 				STK_DATA_OBJECT_TYPE_INVALID);
+}
 
-	command->destructor = destroy_launch_browser;
+/* TODO: parse_open_channel */
 
-	if (ret == FALSE)
-		return FALSE;
+static void destroy_close_channel(struct stk_command *command)
+{
+	g_free(command->close_channel.alpha_id);
+}
 
-	return TRUE;
+static enum stk_command_parse_result parse_close_channel(
+					struct stk_command *command,
+					struct comprehension_tlv_iter *iter)
+{
+	struct stk_command_close_channel *obj = &command->close_channel;
+
+	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+
+	if (command->dst != STK_DEVICE_IDENTITY_TYPE_TERMINAL)
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+
+	command->destructor = destroy_close_channel;
+
+	return parse_dataobj(iter, STK_DATA_OBJECT_TYPE_ALPHA_ID, 0,
+				&obj->alpha_id,
+				STK_DATA_OBJECT_TYPE_ICON_ID, 0,
+				&obj->icon_id,
+				STK_DATA_OBJECT_TYPE_TEXT_ATTRIBUTE, 0,
+				&obj->text_attr,
+				STK_DATA_OBJECT_TYPE_FRAME_ID, 0,
+				&obj->frame_id,
+				STK_DATA_OBJECT_TYPE_INVALID);
+}
+
+static void destroy_receive_data(struct stk_command *command)
+{
+	g_free(command->receive_data.alpha_id);
+}
+
+static enum stk_command_parse_result parse_receive_data(
+					struct stk_command *command,
+					struct comprehension_tlv_iter *iter)
+{
+	struct stk_command_receive_data *obj = &command->receive_data;
+
+	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+
+	if ((command->dst < STK_DEVICE_IDENTITY_TYPE_CHANNEL_1) ||
+			(command->dst > STK_DEVICE_IDENTITY_TYPE_CHANNEL_7))
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+
+	command->destructor = destroy_receive_data;
+
+	return parse_dataobj(iter, STK_DATA_OBJECT_TYPE_ALPHA_ID, 0,
+				&obj->alpha_id,
+				STK_DATA_OBJECT_TYPE_ICON_ID, 0,
+				&obj->icon_id,
+				STK_DATA_OBJECT_TYPE_CHANNEL_DATA_LENGTH,
+				DATAOBJ_FLAG_MANDATORY | DATAOBJ_FLAG_MINIMUM,
+				&obj->data_len,
+				STK_DATA_OBJECT_TYPE_TEXT_ATTRIBUTE, 0,
+				&obj->text_attr,
+				STK_DATA_OBJECT_TYPE_FRAME_ID, 0,
+				&obj->frame_id,
+				STK_DATA_OBJECT_TYPE_INVALID);
+}
+
+static void destroy_send_data(struct stk_command *command)
+{
+	g_free(command->send_data.alpha_id);
+	g_free(command->send_data.data.array);
+}
+
+static enum stk_command_parse_result parse_send_data(
+					struct stk_command *command,
+					struct comprehension_tlv_iter *iter)
+{
+	struct stk_command_send_data *obj = &command->send_data;
+
+	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+
+	if ((command->dst < STK_DEVICE_IDENTITY_TYPE_CHANNEL_1) ||
+			(command->dst > STK_DEVICE_IDENTITY_TYPE_CHANNEL_7))
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+
+	command->destructor = destroy_send_data;
+
+	return parse_dataobj(iter, STK_DATA_OBJECT_TYPE_ALPHA_ID, 0,
+				&obj->alpha_id,
+				STK_DATA_OBJECT_TYPE_ICON_ID, 0,
+				&obj->icon_id,
+				STK_DATA_OBJECT_TYPE_CHANNEL_DATA,
+				DATAOBJ_FLAG_MANDATORY | DATAOBJ_FLAG_MINIMUM,
+				&obj->data,
+				STK_DATA_OBJECT_TYPE_TEXT_ATTRIBUTE, 0,
+				&obj->text_attr,
+				STK_DATA_OBJECT_TYPE_FRAME_ID, 0,
+				&obj->frame_id,
+				STK_DATA_OBJECT_TYPE_INVALID);
+}
+
+static enum stk_command_parse_result parse_get_channel_status(
+					struct stk_command *command,
+					struct comprehension_tlv_iter *iter)
+{
+	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+
+	if (command->dst != STK_DEVICE_IDENTITY_TYPE_TERMINAL)
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+
+	return STK_PARSE_RESULT_OK;
+}
+
+static void destroy_service_search(struct stk_command *command)
+{
+	g_free(command->service_search.alpha_id);
+	g_free(command->service_search.serv_search.ser_search);
+	g_free(command->service_search.dev_filter.dev_filter);
+}
+
+static enum stk_command_parse_result parse_service_search(
+					struct stk_command *command,
+					struct comprehension_tlv_iter *iter)
+{
+	struct stk_command_service_search *obj = &command->service_search;
+
+	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+
+	if (command->dst != STK_DEVICE_IDENTITY_TYPE_TERMINAL)
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+
+	command->destructor = destroy_service_search;
+
+	return parse_dataobj(iter, STK_DATA_OBJECT_TYPE_ALPHA_ID, 0,
+				&obj->alpha_id,
+				STK_DATA_OBJECT_TYPE_ICON_ID, 0,
+				&obj->icon_id,
+				STK_DATA_OBJECT_TYPE_SERVICE_SEARCH,
+				DATAOBJ_FLAG_MANDATORY | DATAOBJ_FLAG_MINIMUM,
+				&obj->serv_search,
+				STK_DATA_OBJECT_TYPE_DEVICE_FILTER, 0,
+				&obj->dev_filter,
+				STK_DATA_OBJECT_TYPE_TEXT_ATTRIBUTE, 0,
+				&obj->text_attr,
+				STK_DATA_OBJECT_TYPE_FRAME_ID, 0,
+				&obj->frame_id,
+				STK_DATA_OBJECT_TYPE_INVALID);
+}
+
+static void destroy_get_service_info(struct stk_command *command)
+{
+	g_free(command->get_service_info.alpha_id);
+	g_free(command->get_service_info.attr_info.attr_info);
+}
+
+static enum stk_command_parse_result parse_get_service_info(
+					struct stk_command *command,
+					struct comprehension_tlv_iter *iter)
+{
+	struct stk_command_get_service_info *obj = &command->get_service_info;
+
+	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+
+	if (command->dst != STK_DEVICE_IDENTITY_TYPE_TERMINAL)
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+
+	command->destructor = destroy_get_service_info;
+
+	return parse_dataobj(iter, STK_DATA_OBJECT_TYPE_ALPHA_ID, 0,
+				&obj->alpha_id,
+				STK_DATA_OBJECT_TYPE_ICON_ID, 0,
+				&obj->icon_id,
+				STK_DATA_OBJECT_TYPE_ATTRIBUTE_INFO,
+				DATAOBJ_FLAG_MANDATORY | DATAOBJ_FLAG_MINIMUM,
+				&obj->attr_info,
+				STK_DATA_OBJECT_TYPE_TEXT_ATTRIBUTE, 0,
+				&obj->text_attr,
+				STK_DATA_OBJECT_TYPE_FRAME_ID, 0,
+				&obj->frame_id,
+				STK_DATA_OBJECT_TYPE_INVALID);
+}
+
+static void destroy_declare_service(struct stk_command *command)
+{
+	g_free(command->declare_service.serv_rec.serv_rec);
+}
+
+static enum stk_command_parse_result parse_declare_service(
+					struct stk_command *command,
+					struct comprehension_tlv_iter *iter)
+{
+	struct stk_command_declare_service *obj = &command->declare_service;
+
+	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+
+	if (command->dst != STK_DEVICE_IDENTITY_TYPE_TERMINAL)
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+
+	command->destructor = destroy_declare_service;
+
+	return parse_dataobj(iter, STK_DATA_OBJECT_TYPE_SERVICE_RECORD,
+				DATAOBJ_FLAG_MANDATORY | DATAOBJ_FLAG_MINIMUM,
+				&obj->serv_rec,
+				STK_DATA_OBJECT_TYPE_UICC_TE_INTERFACE, 0,
+				&obj->intf,
+				STK_DATA_OBJECT_TYPE_INVALID);
+}
+
+static enum stk_command_parse_result parse_set_frames(
+					struct stk_command *command,
+					struct comprehension_tlv_iter *iter)
+{
+	struct stk_command_set_frames *obj = &command->set_frames;
+
+	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+
+	if (command->dst != STK_DEVICE_IDENTITY_TYPE_TERMINAL)
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+
+	return parse_dataobj(iter, STK_DATA_OBJECT_TYPE_FRAME_ID,
+				DATAOBJ_FLAG_MANDATORY | DATAOBJ_FLAG_MINIMUM,
+				&obj->frame_id,
+				STK_DATA_OBJECT_TYPE_FRAME_LAYOUT, 0,
+				&obj->frame_layout,
+				STK_DATA_OBJECT_TYPE_FRAME_ID, 0,
+				&obj->frame_id_default,
+				STK_DATA_OBJECT_TYPE_INVALID);
+}
+
+static enum stk_command_parse_result parse_get_frames_status(
+					struct stk_command *command,
+					struct comprehension_tlv_iter *iter)
+{
+	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+
+	if (command->dst != STK_DEVICE_IDENTITY_TYPE_TERMINAL)
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+
+	return STK_PARSE_RESULT_OK;
+}
+
+static void destroy_retrieve_mms(struct stk_command *command)
+{
+	g_free(command->retrieve_mms.alpha_id);
+	g_slist_foreach(command->retrieve_mms.mms_rec_files,
+						(GFunc)g_free, NULL);
+	g_slist_free(command->retrieve_mms.mms_rec_files);
+}
+
+static enum stk_command_parse_result parse_retrieve_mms(
+					struct stk_command *command,
+					struct comprehension_tlv_iter *iter)
+{
+	struct stk_command_retrieve_mms *obj = &command->retrieve_mms;
+
+	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+
+	if (command->dst != STK_DEVICE_IDENTITY_TYPE_NETWORK)
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+
+	command->destructor = destroy_retrieve_mms;
+
+	return parse_dataobj(iter, STK_DATA_OBJECT_TYPE_ALPHA_ID, 0,
+				&obj->alpha_id,
+				STK_DATA_OBJECT_TYPE_ICON_ID, 0,
+				&obj->icon_id,
+				STK_DATA_OBJECT_TYPE_MMS_REFERENCE,
+				DATAOBJ_FLAG_MANDATORY | DATAOBJ_FLAG_MINIMUM,
+				&obj->mms_ref,
+				STK_DATA_OBJECT_TYPE_FILE_LIST,
+				DATAOBJ_FLAG_MANDATORY | DATAOBJ_FLAG_MINIMUM,
+				&obj->mms_rec_files,
+				STK_DATA_OBJECT_TYPE_MMS_CONTENT_ID,
+				DATAOBJ_FLAG_MANDATORY | DATAOBJ_FLAG_MINIMUM,
+				&obj->mms_content_id,
+				STK_DATA_OBJECT_TYPE_MMS_ID, 0,
+				&obj->mms_id,
+				STK_DATA_OBJECT_TYPE_TEXT_ATTRIBUTE, 0,
+				&obj->text_attr,
+				STK_DATA_OBJECT_TYPE_FRAME_ID, 0,
+				&obj->frame_id,
+				STK_DATA_OBJECT_TYPE_INVALID);
+}
+
+static void destroy_submit_mms(struct stk_command *command)
+{
+	g_free(command->submit_mms.alpha_id);
+	g_slist_foreach(command->submit_mms.mms_subm_files,
+						(GFunc)g_free, NULL);
+	g_slist_free(command->submit_mms.mms_subm_files);
+}
+
+static enum stk_command_parse_result parse_submit_mms(
+					struct stk_command *command,
+					struct comprehension_tlv_iter *iter)
+{
+	struct stk_command_submit_mms *obj = &command->submit_mms;
+
+	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+
+	if (command->dst != STK_DEVICE_IDENTITY_TYPE_NETWORK)
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+
+	command->destructor = destroy_submit_mms;
+
+	return parse_dataobj(iter, STK_DATA_OBJECT_TYPE_ALPHA_ID, 0,
+				&obj->alpha_id,
+				STK_DATA_OBJECT_TYPE_ICON_ID, 0,
+				&obj->icon_id,
+				STK_DATA_OBJECT_TYPE_FILE_LIST,
+				DATAOBJ_FLAG_MANDATORY | DATAOBJ_FLAG_MINIMUM,
+				&obj->mms_subm_files,
+				STK_DATA_OBJECT_TYPE_MMS_ID, 0,
+				&obj->mms_id,
+				STK_DATA_OBJECT_TYPE_TEXT_ATTRIBUTE, 0,
+				&obj->text_attr,
+				STK_DATA_OBJECT_TYPE_FRAME_ID, 0,
+				&obj->frame_id,
+				STK_DATA_OBJECT_TYPE_INVALID);
+}
+
+static void destroy_display_mms(struct stk_command *command)
+{
+	g_slist_foreach(command->display_mms.mms_subm_files,
+						(GFunc)g_free, NULL);
+	g_slist_free(command->display_mms.mms_subm_files);
+}
+
+static enum stk_command_parse_result parse_display_mms(
+					struct stk_command *command,
+					struct comprehension_tlv_iter *iter)
+{
+	struct stk_command_display_mms *obj = &command->display_mms;
+
+	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+
+	if (command->dst != STK_DEVICE_IDENTITY_TYPE_TERMINAL)
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+
+	command->destructor = destroy_display_mms;
+
+	return parse_dataobj(iter, STK_DATA_OBJECT_TYPE_FILE_LIST,
+				DATAOBJ_FLAG_MANDATORY | DATAOBJ_FLAG_MINIMUM,
+				&obj->mms_subm_files,
+				STK_DATA_OBJECT_TYPE_MMS_ID,
+				DATAOBJ_FLAG_MANDATORY | DATAOBJ_FLAG_MINIMUM,
+				&obj->mms_id,
+				STK_DATA_OBJECT_TYPE_IMMEDIATE_RESPONSE, 0,
+				&obj->imd_resp,
+				STK_DATA_OBJECT_TYPE_FRAME_ID, 0,
+				&obj->frame_id,
+				STK_DATA_OBJECT_TYPE_INVALID);
+}
+
+static enum stk_command_parse_result parse_activate(
+					struct stk_command *command,
+					struct comprehension_tlv_iter *iter)
+{
+	struct stk_command_activate *obj = &command->activate;
+
+	if (command->src != STK_DEVICE_IDENTITY_TYPE_UICC)
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+
+	if (command->dst != STK_DEVICE_IDENTITY_TYPE_TERMINAL)
+		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+
+	return parse_dataobj(iter, STK_DATA_OBJECT_TYPE_ACTIVATE_DESCRIPTOR,
+				DATAOBJ_FLAG_MANDATORY | DATAOBJ_FLAG_MINIMUM,
+				&obj->actv_desc,
+				STK_DATA_OBJECT_TYPE_INVALID);
+}
+
+static enum stk_command_parse_result parse_command_body(
+					struct stk_command *command,
+					struct comprehension_tlv_iter *iter)
+{
+	switch (command->type) {
+	case STK_COMMAND_TYPE_DISPLAY_TEXT:
+		return parse_display_text(command, iter);
+	case STK_COMMAND_TYPE_GET_INKEY:
+		return parse_get_inkey(command, iter);
+	case STK_COMMAND_TYPE_GET_INPUT:
+		return parse_get_input(command, iter);
+	case STK_COMMAND_TYPE_MORE_TIME:
+		return parse_more_time(command, iter);
+	case STK_COMMAND_TYPE_PLAY_TONE:
+		return parse_play_tone(command, iter);
+	case STK_COMMAND_TYPE_POLL_INTERVAL:
+		return parse_poll_interval(command, iter);
+	case STK_COMMAND_TYPE_SETUP_MENU:
+		return parse_setup_menu(command, iter);
+	case STK_COMMAND_TYPE_SELECT_ITEM:
+		return parse_select_item(command, iter);
+	case STK_COMMAND_TYPE_SEND_SMS:
+		return parse_send_sms(command, iter);
+	case STK_COMMAND_TYPE_SEND_SS:
+		return parse_send_ss(command, iter);
+	case STK_COMMAND_TYPE_SEND_USSD:
+		return parse_send_ussd(command, iter);
+	case STK_COMMAND_TYPE_SETUP_CALL:
+		return parse_setup_call(command, iter);
+	case STK_COMMAND_TYPE_REFRESH:
+		return parse_refresh(command, iter);
+	case STK_COMMAND_TYPE_POLLING_OFF:
+		return parse_polling_off(command, iter);
+	case STK_COMMAND_TYPE_PROVIDE_LOCAL_INFO:
+		return parse_provide_local_info(command, iter);
+	case STK_COMMAND_TYPE_SETUP_EVENT_LIST:
+		return parse_setup_event_list(command, iter);
+	case STK_COMMAND_TYPE_PERFORM_CARD_APDU:
+		return parse_perform_card_apdu(command, iter);
+	case STK_COMMAND_TYPE_POWER_OFF_CARD:
+		return parse_power_off_card(command, iter);
+	case STK_COMMAND_TYPE_POWER_ON_CARD:
+		return parse_power_on_card(command, iter);
+	case STK_COMMAND_TYPE_GET_READER_STATUS:
+		return parse_get_reader_status(command, iter);
+	case STK_COMMAND_TYPE_TIMER_MANAGEMENT:
+		return parse_timer_mgmt(command, iter);
+	case STK_COMMAND_TYPE_SETUP_IDLE_MODE_TEXT:
+		return parse_setup_idle_mode_text(command, iter);
+	case STK_COMMAND_TYPE_RUN_AT_COMMAND:
+		return parse_run_at_command(command, iter);
+	case STK_COMMAND_TYPE_SEND_DTMF:
+		return parse_send_dtmf(command, iter);
+	case STK_COMMAND_TYPE_LANGUAGE_NOTIFICATION:
+		return parse_language_notification(command, iter);
+	case STK_COMMAND_TYPE_LAUNCH_BROWSER:
+		return parse_launch_browser(command, iter);
+	case STK_COMMAND_TYPE_CLOSE_CHANNEL:
+		return parse_close_channel(command, iter);
+	case STK_COMMAND_TYPE_RECEIVE_DATA:
+		return parse_receive_data(command, iter);
+	case STK_COMMAND_TYPE_SEND_DATA:
+		return parse_send_data(command, iter);
+	case STK_COMMAND_TYPE_GET_CHANNEL_STATUS:
+		return parse_get_channel_status(command, iter);
+	case STK_COMMAND_TYPE_SERVICE_SEARCH:
+		return parse_service_search(command, iter);
+	case STK_COMMAND_TYPE_GET_SERVICE_INFO:
+		return parse_get_service_info(command, iter);
+	case STK_COMMAND_TYPE_DECLARE_SERVICE:
+		return parse_declare_service(command, iter);
+	case STK_COMMAND_TYPE_SET_FRAMES:
+		return parse_set_frames(command, iter);
+	case STK_COMMAND_TYPE_GET_FRAMES_STATUS:
+		return parse_get_frames_status(command, iter);
+	case STK_COMMAND_TYPE_RETRIEVE_MMS:
+		return parse_retrieve_mms(command, iter);
+	case STK_COMMAND_TYPE_SUBMIT_MMS:
+		return parse_submit_mms(command, iter);
+	case STK_COMMAND_TYPE_DISPLAY_MMS:
+		return parse_display_mms(command, iter);
+	case STK_COMMAND_TYPE_ACTIVATE:
+		return parse_activate(command, iter);
+	default:
+		return STK_PARSE_RESULT_TYPE_NOT_UNDERSTOOD;
+	};
 }
 
 struct stk_command *stk_command_new_from_pdu(const unsigned char *pdu,
@@ -2984,7 +3673,6 @@ struct stk_command *stk_command_new_from_pdu(const unsigned char *pdu,
 	struct comprehension_tlv_iter iter;
 	const unsigned char *data;
 	struct stk_command *command;
-	gboolean ok;
 
 	ber_tlv_iter_init(&ber, pdu, len);
 
@@ -3019,109 +3707,31 @@ struct stk_command *stk_command_new_from_pdu(const unsigned char *pdu,
 	command->type = data[1];
 	command->qualifier = data[2];
 
-	if (comprehension_tlv_iter_next(&iter) != TRUE)
-		goto fail;
+	if (comprehension_tlv_iter_next(&iter) != TRUE) {
+		command->status = STK_PARSE_RESULT_MISSING_VALUE;
+		goto out;
+	}
 
 	if (comprehension_tlv_iter_get_tag(&iter) !=
-			STK_DATA_OBJECT_TYPE_DEVICE_IDENTITIES)
-		goto fail;
+			STK_DATA_OBJECT_TYPE_DEVICE_IDENTITIES) {
+		command->status = STK_PARSE_RESULT_MISSING_VALUE;
+		goto out;
+	}
 
-	if (comprehension_tlv_iter_get_length(&iter) != 0x02)
-		goto fail;
+	if (comprehension_tlv_iter_get_length(&iter) != 0x02) {
+		command->status = STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
+		goto out;
+	}
 
 	data = comprehension_tlv_iter_get_data(&iter);
 
 	command->src = data[0];
 	command->dst = data[1];
 
-	switch (command->type) {
-	case STK_COMMAND_TYPE_DISPLAY_TEXT:
-		ok = parse_display_text(command, &iter);
-		break;
-	case STK_COMMAND_TYPE_GET_INKEY:
-		ok = parse_get_inkey(command, &iter);
-		break;
-	case STK_COMMAND_TYPE_GET_INPUT:
-		ok = parse_get_input(command, &iter);
-		break;
-	case STK_COMMAND_TYPE_MORE_TIME:
-		ok = parse_more_time(command, &iter);
-		break;
-	case STK_COMMAND_TYPE_PLAY_TONE:
-		ok = parse_play_tone(command, &iter);
-		break;
-	case STK_COMMAND_TYPE_POLL_INTERVAL:
-		ok = parse_poll_interval(command, &iter);
-		break;
-	case STK_COMMAND_TYPE_SETUP_MENU:
-		ok = parse_setup_menu(command, &iter);
-		break;
-	case STK_COMMAND_TYPE_SELECT_ITEM:
-		ok = parse_select_item(command, &iter);
-		break;
-	case STK_COMMAND_TYPE_SEND_SMS:
-		ok = parse_send_sms(command, &iter);
-		break;
-	case STK_COMMAND_TYPE_SETUP_CALL:
-		ok = parse_setup_call(command, &iter);
-		break;
-	case STK_COMMAND_TYPE_REFRESH:
-		ok = parse_refresh(command, &iter);
-		break;
-	case STK_COMMAND_TYPE_POLLING_OFF:
-		ok = parse_polling_off(command, &iter);
-		break;
-	case STK_COMMAND_TYPE_PROVIDE_LOCAL_INFO:
-		ok = parse_provide_local_info(command, &iter);
-		break;
-	case STK_COMMAND_TYPE_SETUP_EVENT_LIST:
-		ok = parse_setup_event_list(command, &iter);
-		break;
-	case STK_COMMAND_TYPE_PERFORM_CARD_APDU:
-		ok = parse_perform_card_apdu(command, &iter);
-		break;
-	case STK_COMMAND_TYPE_POWER_OFF_CARD:
-		ok = parse_power_off_card(command, &iter);
-		break;
-	case STK_COMMAND_TYPE_POWER_ON_CARD:
-		ok = parse_power_on_card(command, &iter);
-		break;
-	case STK_COMMAND_TYPE_GET_READER_STATUS:
-		ok = parse_get_reader_status(command, &iter);
-		break;
-	case STK_COMMAND_TYPE_TIMER_MANAGEMENT:
-		ok = parse_timer_mgmt(command, &iter);
-		break;
-	case STK_COMMAND_TYPE_SETUP_IDLE_MODE_TEXT:
-		ok = parse_setup_idle_mode_text(command, &iter);
-		break;
-	case STK_COMMAND_TYPE_RUN_AT_COMMAND:
-		ok = parse_run_at_command(command, &iter);
-		break;
-	case STK_COMMAND_TYPE_SEND_DTMF:
-		ok = parse_send_dtmf(command, &iter);
-		break;
-	case STK_COMMAND_TYPE_LANGUAGE_NOTIFICATION:
-		ok = parse_language_notification(command, &iter);
-		break;
-	case STK_COMMAND_TYPE_LAUNCH_BROWSER:
-		ok = parse_launch_browser(command, &iter);
-		break;
-	default:
-		ok = FALSE;
-		break;
-	};
+	command->status = parse_command_body(command, &iter);
 
-	if (ok)
-		return command;
-
-fail:
-	if (command->destructor)
-		command->destructor(command);
-
-	g_free(command);
-
-	return NULL;
+out:
+	return command;
 }
 
 void stk_command_free(struct stk_command *command)
@@ -3357,6 +3967,61 @@ static gboolean build_dataobj_address(struct stk_tlv_builder *tlv,
 		stk_tlv_builder_close_container(tlv);
 }
 
+/* Described in TS 102.223 Section 8.2 */
+static gboolean build_dataobj_alpha_id(struct stk_tlv_builder *tlv,
+					const void *data, gboolean cr)
+{
+	unsigned char tag = STK_DATA_OBJECT_TYPE_ALPHA_ID;
+	int len;
+	unsigned char *string;
+
+	if (data == NULL)
+		return TRUE;
+
+	if (strlen(data) == 0)
+		return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+			stk_tlv_builder_close_container(tlv);
+
+	string = utf8_to_sim_string(data, -1, &len);
+	if (string == NULL)
+		return FALSE;
+
+	return stk_tlv_builder_open_container(tlv, cr, tag, TRUE) &&
+		stk_tlv_builder_append_bytes(tlv, string, len) &&
+		stk_tlv_builder_close_container(tlv);
+}
+
+/* Described in TS 102.223 Section 8.3 */
+static gboolean build_dataobj_subaddress(struct stk_tlv_builder *tlv,
+						const void *data, gboolean cr)
+{
+	const struct stk_subaddress *sa = data;
+	unsigned char tag = STK_DATA_OBJECT_TYPE_SUBADDRESS;
+
+	if (sa->has_subaddr == FALSE)
+		return TRUE;
+
+	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+		stk_tlv_builder_append_bytes(tlv, sa->subaddr, sa->len) &&
+		stk_tlv_builder_close_container(tlv);
+}
+
+/* Described in TS 131.111 Section 8.4 */
+static gboolean build_dataobj_ccp(struct stk_tlv_builder *tlv,
+					const void *data, gboolean cr)
+{
+	const struct stk_ccp *ccp = data;
+	unsigned char tag = STK_DATA_OBJECT_TYPE_CCP;
+
+	if (ccp->len == 0)
+		return TRUE;
+
+	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+		stk_tlv_builder_append_byte(tlv, ccp->len) &&
+		stk_tlv_builder_append_bytes(tlv, ccp->ccp, ccp->len) &&
+		stk_tlv_builder_close_container(tlv);
+}
+
 /* Described in TS 131.111 Section 8.5 */
 static gboolean build_dataobj_cbs_page(struct stk_tlv_builder *tlv,
 					const void *data, gboolean cr)
@@ -3447,6 +4112,27 @@ static gboolean build_dataobj_gsm_sms_tpdu(struct stk_tlv_builder *tlv,
 		stk_tlv_builder_close_container(tlv);
 }
 
+/* Described in TS 131.111 Section 8.14 */
+static gboolean build_dataobj_ss_string(struct stk_tlv_builder *tlv,
+					const void *data, gboolean cr)
+{
+	const struct stk_address *addr = data;
+	unsigned char tag = STK_DATA_OBJECT_TYPE_SS_STRING;
+	unsigned int len;
+	unsigned char number[128];
+
+	if (addr->number == NULL)
+		return TRUE;
+
+	len = (strlen(addr->number) + 1) / 2;
+	sim_encode_bcd_number(addr->number, number);
+
+	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+		stk_tlv_builder_append_byte(tlv, addr->ton_npi) &&
+		stk_tlv_builder_append_bytes(tlv, number, len) &&
+		stk_tlv_builder_close_container(tlv);
+}
+
 /* Defined in TS 102.223 Section 8.15 */
 static gboolean build_dataobj_text(struct stk_tlv_builder *tlv,
 					const void *data, gboolean cr)
@@ -3482,6 +4168,59 @@ static gboolean build_dataobj_text(struct stk_tlv_builder *tlv,
 		return ret;
 
 	return stk_tlv_builder_close_container(tlv);
+}
+
+/* Described in TS 131.111 Section 8.17 */
+static gboolean build_dataobj_ussd_string(struct stk_tlv_builder *tlv,
+					const void *data, gboolean cr)
+{
+	const struct stk_ussd_string *ussd = data;
+	unsigned char tag = STK_DATA_OBJECT_TYPE_USSD_STRING;
+
+	if (ussd->string == NULL)
+		return TRUE;
+
+	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+		stk_tlv_builder_append_byte(tlv, ussd->dcs) &&
+		stk_tlv_builder_append_bytes(tlv, ussd->string, ussd->len) &&
+		stk_tlv_builder_close_container(tlv);
+}
+
+/* Described in TS 102.223 Section 8.18 */
+static gboolean build_dataobj_file_list(struct stk_tlv_builder *tlv,
+					const void *data, gboolean cr)
+{
+	GSList *l = (void *) data;
+	const struct stk_file *file;
+	unsigned char tag = STK_DATA_OBJECT_TYPE_FILE_LIST;
+
+	if (stk_tlv_builder_open_container(tlv, cr, tag, TRUE) != TRUE)
+		return FALSE;
+
+	if (stk_tlv_builder_append_byte(tlv, g_slist_length(l)) != TRUE)
+		return FALSE;
+
+	for (; l; l = l->next) {
+		file = l->data;
+
+		if (stk_tlv_builder_append_bytes(tlv, file->file,
+							file->len) != TRUE)
+			return FALSE;
+	}
+
+	return stk_tlv_builder_close_container(tlv);
+}
+
+/* Shortcut for a single File element */
+static gboolean build_dataobj_file(struct stk_tlv_builder *tlv,
+					const void *data, gboolean cr)
+{
+	GSList l = {
+		.data = (void *) data,
+		.next = NULL,
+	};
+
+	return build_dataobj_file_list(tlv, &l, cr);
 }
 
 /* Described in TS 102.223 Section 8.19 */
@@ -3596,31 +4335,103 @@ static gboolean build_dataobj_network_measurement_results(
 	return stk_tlv_builder_close_container(tlv);
 }
 
+/* Described in TS 102.223 Section 8.25 */
+static gboolean build_dataobj_event_list(struct stk_tlv_builder *tlv,
+						const void *data, gboolean cr)
+{
+	const struct stk_event_list *list = data;
+	unsigned char tag = STK_DATA_OBJECT_TYPE_EVENT_LIST;
+
+	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+		stk_tlv_builder_append_bytes(tlv, list->list, list->len) &&
+		stk_tlv_builder_close_container(tlv);
+}
+
+/* Shortcut for a single Event type */
+static gboolean build_dataobj_event_type(struct stk_tlv_builder *tlv,
+						const void *data, gboolean cr)
+{
+	const struct stk_event_list list = {
+		.list = { *(uint8_t *) data },
+		.len = 1,
+	};
+
+	return build_dataobj_event_list(tlv, &list, cr);
+}
+
+/* Described in TS 102.223 Section 8.26 */
+static gboolean build_dataobj_cause(struct stk_tlv_builder *tlv,
+					const void *data, gboolean cr)
+{
+	const struct stk_cause *cause = data;
+	unsigned char tag = STK_DATA_OBJECT_TYPE_CAUSE;
+
+	if (cause->has_cause == FALSE)
+		return TRUE;
+
+	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+		stk_tlv_builder_append_bytes(tlv, cause->cause, cause->len) &&
+		stk_tlv_builder_close_container(tlv);
+}
+
+/* Described in TS 102.223 Section 8.27 */
+static gboolean build_dataobj_location_status(struct stk_tlv_builder *tlv,
+						const void *data, gboolean cr)
+{
+	const enum stk_service_state *state = data;
+	unsigned char tag = STK_DATA_OBJECT_TYPE_LOCATION_STATUS;
+
+	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+		stk_tlv_builder_append_byte(tlv, *state) &&
+		stk_tlv_builder_close_container(tlv);
+}
+
+/* Described in TS 131.111 Section 8.28 */
+static gboolean build_dataobj_transaction_ids(struct stk_tlv_builder *tlv,
+						const void *data, gboolean cr)
+{
+	const struct stk_transaction_id *id = data;
+	unsigned char tag = STK_DATA_OBJECT_TYPE_TRANSACTION_ID;
+
+	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+		stk_tlv_builder_append_bytes(tlv, id->list, id->len) &&
+		stk_tlv_builder_close_container(tlv);
+}
+
+/* Shortcut for a single Transaction ID */
+static gboolean build_dataobj_transaction_id(struct stk_tlv_builder *tlv,
+						const void *data, gboolean cr)
+{
+	const struct stk_transaction_id ids = {
+		.list = { *(uint8_t *) data },
+		.len = 1,
+	};
+
+	return build_dataobj_transaction_ids(tlv, &ids, cr);
+}
+
 /* Described in 3GPP 31.111 Section 8.29 */
 static gboolean build_dataobj_bcch_channel_list(struct stk_tlv_builder *tlv,
 						const void *data, gboolean cr)
 {
-	const struct stk_bcch_ch_list *list = data;
+	const struct stk_bcch_channel_list *list = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_BCCH_CHANNEL_LIST;
-	int i, bytes, pos, shift;
+	unsigned int i, bytes, pos, shift;
 	unsigned char value;
 
-	/* To distinguish between no BCCH Channel List data object and
-	 * an empty object in a sequence of empty and non-empty objects,
-	 * .channels must be non-NULL in objects in sequences.  */
-	if (list->channels == NULL)
+	if (list->has_list == FALSE)
 		return TRUE;
 
 	if (stk_tlv_builder_open_container(tlv, cr, tag, TRUE) != TRUE)
 		return FALSE;
 
-	bytes = (list->length * 10 + 7) / 8;
+	bytes = (list->num * 10 + 7) / 8;
 	for (i = 0; i < bytes; i++) {
 		pos = (i * 8 + 7) / 10;
 		shift = pos * 10 + 10 - i * 8 - 8;
 
 		value = 0;
-		if (pos < list->length)
+		if (pos < list->num)
 			value |= list->channels[pos] >> shift;
 		if (shift > 2)
 			value |= list->channels[pos - 1] << (10 - shift);
@@ -3644,6 +4455,26 @@ static gboolean build_dataobj_cc_requested_action(struct stk_tlv_builder *tlv,
 
 	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
 		stk_tlv_builder_append_bytes(tlv, action->array, action->len) &&
+		stk_tlv_builder_close_container(tlv);
+}
+
+/* Described in TS 102.223 Section 8.33 */
+static gboolean build_dataobj_card_reader_status(struct stk_tlv_builder *tlv,
+						const void *data, gboolean cr)
+{
+	const struct stk_reader_status *status = data;
+	unsigned char tag = STK_DATA_OBJECT_TYPE_CARD_READER_STATUS;
+	unsigned char byte;
+
+	byte = status->id |
+		(status->removable << 3) |
+		(status->present << 4) |
+		(status->id1_size << 5) |
+		(status->card_present << 6) |
+		(status->card_powered << 7);
+
+	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+		stk_tlv_builder_append_byte(tlv, byte) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
@@ -3734,6 +4565,21 @@ static gboolean build_dataobj_at_response(struct stk_tlv_builder *tlv,
 		stk_tlv_builder_close_container(tlv);
 }
 
+/* Described in TS 131.111 Section 8.42 */
+static gboolean build_dataobj_bc_repeat(struct stk_tlv_builder *tlv,
+						const void *data, gboolean cr)
+{
+	unsigned char tag = STK_DATA_OBJECT_TYPE_BC_REPEAT_INDICATOR;
+	const struct stk_bc_repeat *bcr = data;
+
+	if (bcr->has_bc_repeat == FALSE)
+		return TRUE;
+
+	return stk_tlv_builder_open_container(tlv, cr, tag, TRUE) &&
+		stk_tlv_builder_append_byte(tlv, bcr->value) &&
+		stk_tlv_builder_close_container(tlv);
+}
+
 /* Described in TS 102.223 Section 8.45 */
 static gboolean build_dataobj_language(struct stk_tlv_builder *tlv,
 					const void *data, gboolean cr)
@@ -3763,6 +4609,112 @@ static gboolean build_dataobj_timing_advance(struct stk_tlv_builder *tlv,
 	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
 		stk_tlv_builder_append_byte(tlv, tadv->status) &&
 		stk_tlv_builder_append_byte(tlv, tadv->advance) &&
+		stk_tlv_builder_close_container(tlv);
+}
+
+/* Described in TS 102.223 Section 8.51 */
+static gboolean build_dataobj_browser_termination_cause(
+						struct stk_tlv_builder *tlv,
+						const void *data, gboolean cr)
+{
+	const enum stk_browser_termination_cause *cause = data;
+	unsigned char tag = STK_DATA_OBJECT_TYPE_BROWSER_TERMINATION_CAUSE;
+
+	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+		stk_tlv_builder_append_byte(tlv, *cause) &&
+		stk_tlv_builder_close_container(tlv);
+}
+
+/* Described in TS 102.223 Section 8.52 */
+static gboolean build_dataobj_bearer_description(struct stk_tlv_builder *tlv,
+						const void *data, gboolean cr)
+{
+	const struct stk_bearer_description *bd = data;
+	unsigned char tag = STK_DATA_OBJECT_TYPE_BEARER_DESCRIPTION;
+
+	if (bd->type == 0x00)
+		return TRUE;
+
+	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+		stk_tlv_builder_append_byte(tlv, bd->type) &&
+		stk_tlv_builder_append_bytes(tlv, bd->pars, bd->len) &&
+		stk_tlv_builder_close_container(tlv);
+}
+
+/* Described in TS 102.223 Section 8.54 */
+static gboolean build_dataobj_channel_data_length(
+						struct stk_tlv_builder *tlv,
+						const void *data, gboolean cr)
+{
+	const unsigned int *length = data;
+	unsigned char tag = STK_DATA_OBJECT_TYPE_CHANNEL_DATA_LENGTH;
+
+	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+		stk_tlv_builder_append_byte(tlv, MIN(*length, 255)) &&
+		stk_tlv_builder_close_container(tlv);
+}
+
+/* Described in TS 102.223 Section 8.56 */
+static gboolean build_dataobj_channel_status(struct stk_tlv_builder *tlv,
+						const void *data, gboolean cr)
+{
+	unsigned char tag = STK_DATA_OBJECT_TYPE_CHANNEL_STATUS;
+
+	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+		stk_tlv_builder_append_bytes(tlv, data, 2) &&
+		stk_tlv_builder_close_container(tlv);
+}
+
+/* Described in TS 102.223 Section 8.58 */
+static gboolean build_dataobj_other_address(struct stk_tlv_builder *tlv,
+						const void *data, gboolean cr)
+{
+	const struct stk_other_address *addr = data;
+	unsigned char tag = STK_DATA_OBJECT_TYPE_OTHER_ADDRESS;
+	gboolean ok = FALSE;
+
+	if (!addr->type)
+		return TRUE;
+
+	if (stk_tlv_builder_open_container(tlv, cr, tag, FALSE) == FALSE)
+		return FALSE;
+
+	switch (addr->type) {
+	case STK_ADDRESS_AUTO:
+		ok = TRUE;
+		break;
+	case STK_ADDRESS_IPV4:
+		ok =
+			stk_tlv_builder_append_byte(tlv, addr->type) &&
+			stk_tlv_builder_append_bytes(tlv,
+					(const guint8 *) &addr->addr.ipv4, 4);
+		break;
+	case STK_ADDRESS_IPV6:
+		ok =
+			stk_tlv_builder_append_byte(tlv, addr->type) &&
+			stk_tlv_builder_append_bytes(tlv, addr->addr.ipv6, 16);
+		break;
+	}
+
+	if (!ok)
+		return FALSE;
+
+	return stk_tlv_builder_close_container(tlv);
+}
+
+/* Described in TS 102.223 Section 8.59 */
+static gboolean build_dataobj_uicc_te_interface(struct stk_tlv_builder *tlv,
+						const void *data, gboolean cr)
+{
+	const struct stk_uicc_te_interface *iface = data;
+	unsigned char tag = STK_DATA_OBJECT_TYPE_UICC_TE_INTERFACE;
+
+	if (iface->protocol == 0 && iface->port == 0)
+		return TRUE;
+
+	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+		stk_tlv_builder_append_byte(tlv, iface->protocol) &&
+		stk_tlv_builder_append_short(tlv, iface->port) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
@@ -3796,6 +4748,66 @@ static gboolean build_dataobj_access_technology(struct stk_tlv_builder *tlv,
 	return build_dataobj_access_technologies(tlv, &techs, cr);
 }
 
+/* Described in TS 102.223 Section 8.62 */
+static gboolean build_dataobj_display_parameters(struct stk_tlv_builder *tlv,
+						const void *data, gboolean cr)
+{
+	const struct stk_display_parameters *params = data;
+	unsigned char tag = STK_DATA_OBJECT_TYPE_DISPLAY_PARAMETERS;
+
+	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+		stk_tlv_builder_append_byte(tlv, params->height) &&
+		stk_tlv_builder_append_byte(tlv, params->width) &&
+		stk_tlv_builder_append_byte(tlv, params->effects) &&
+		stk_tlv_builder_close_container(tlv);
+}
+
+/* Described in TS 102.223 Section 8.63 */
+static gboolean build_dataobj_service_record(struct stk_tlv_builder *tlv,
+						const void *data, gboolean cr)
+{
+	const struct stk_service_record *rec = data;
+	unsigned char tag = STK_DATA_OBJECT_TYPE_SERVICE_RECORD;
+
+	return stk_tlv_builder_open_container(tlv, cr, tag, TRUE) &&
+		stk_tlv_builder_append_byte(tlv, rec->tech_id) &&
+		stk_tlv_builder_append_byte(tlv, rec->serv_id) &&
+		stk_tlv_builder_append_bytes(tlv, rec->serv_rec, rec->len) &&
+		stk_tlv_builder_close_container(tlv);
+}
+
+/* Described in TS 102.223 Section 8.68 */
+static gboolean build_dataobj_remote_entity_address(struct stk_tlv_builder *tlv,
+						const void *data, gboolean cr)
+{
+	const struct stk_remote_entity_address *addr = data;
+	unsigned char tag = STK_DATA_OBJECT_TYPE_REMOTE_ENTITY_ADDRESS;
+	gboolean ok = FALSE;
+
+	if (addr->has_address != TRUE)
+		return TRUE;
+
+	if (stk_tlv_builder_open_container(tlv, cr, tag, TRUE) != TRUE)
+		return FALSE;
+
+	if (stk_tlv_builder_append_byte(tlv, addr->coding_type) != TRUE)
+		return FALSE;
+
+	switch (addr->coding_type) {
+	case 0x00:
+		ok = stk_tlv_builder_append_bytes(tlv, addr->addr.ieee802, 6);
+		break;
+	case 0x01:
+		ok = stk_tlv_builder_append_bytes(tlv, addr->addr.irda, 4);
+		break;
+	}
+
+	if (!ok)
+		return FALSE;
+
+	return stk_tlv_builder_close_container(tlv);
+}
+
 /* Described in TS 102.223 Section 8.69 */
 static gboolean build_dataobj_esn(struct stk_tlv_builder *tlv,
 					const void *data, gboolean cr)
@@ -3806,6 +4818,24 @@ static gboolean build_dataobj_esn(struct stk_tlv_builder *tlv,
 	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
 		stk_tlv_builder_append_short(tlv, *esn >> 16) &&
 		stk_tlv_builder_append_short(tlv, *esn >> 0) &&
+		stk_tlv_builder_close_container(tlv);
+}
+
+/* Described in TS 131.111 Section 8.72, 3GPP 24.008 Section 9.5.7 */
+static gboolean build_dataobj_pdp_context_params(struct stk_tlv_builder *tlv,
+						const void *data, gboolean cr)
+{
+	const struct stk_common_byte_array *params = data;
+	unsigned char tag = STK_DATA_OBJECT_TYPE_PDP_ACTIVATION_PARAMETER;
+
+	if (params->len < 1)
+		return TRUE;
+
+	if (params->len > 0x7f)
+		return FALSE;
+
+	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+		stk_tlv_builder_append_bytes(tlv, params->array, params->len) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
@@ -3862,6 +4892,44 @@ static gboolean build_dataobj_battery_state(struct stk_tlv_builder *tlv,
 		stk_tlv_builder_close_container(tlv);
 }
 
+/* Described in TS 102.223 Section 8.77 */
+static gboolean build_dataobj_browsing_status(struct stk_tlv_builder *tlv,
+						const void *data, gboolean cr)
+{
+	const struct stk_common_byte_array *bs = data;
+	unsigned char tag = STK_DATA_OBJECT_TYPE_BROWSING_STATUS;
+
+	return stk_tlv_builder_open_container(tlv, cr, tag, TRUE) &&
+		stk_tlv_builder_append_bytes(tlv, bs->array, bs->len) &&
+		stk_tlv_builder_close_container(tlv);
+}
+
+/* Described in TS 102.223 Section 8.79 */
+static gboolean build_dataobj_frames_information(struct stk_tlv_builder *tlv,
+						const void *data, gboolean cr)
+{
+	const struct stk_frames_info *info = data;
+	unsigned char tag = STK_DATA_OBJECT_TYPE_FRAMES_INFO;
+	unsigned int i;
+
+	if (stk_tlv_builder_open_container(tlv, cr, tag, FALSE) != TRUE)
+		return FALSE;
+
+	if (stk_tlv_builder_append_byte(tlv, info->id) != TRUE)
+		return FALSE;
+
+	for (i = 0; i < info->len; i++) {
+		if (stk_tlv_builder_append_byte(tlv,
+						info->list[i].height) != TRUE)
+			return FALSE;
+		if (stk_tlv_builder_append_byte(tlv,
+						info->list[i].width) != TRUE)
+			return FALSE;
+	}
+
+	return stk_tlv_builder_close_container(tlv);
+}
+
 /* Described in TS 102.223 Section 8.81 */
 static gboolean build_dataobj_meid(struct stk_tlv_builder *tlv,
 					const void *data, gboolean cr)
@@ -3883,6 +4951,110 @@ static gboolean build_dataobj_meid(struct stk_tlv_builder *tlv,
 		stk_tlv_builder_close_container(tlv);
 }
 
+/* Described in TS 102.223 Section 8.83 */
+static gboolean build_dataobj_mms_id(struct stk_tlv_builder *tlv,
+					const void *data, gboolean cr)
+{
+	const struct stk_mms_id *id = data;
+	unsigned char tag = STK_DATA_OBJECT_TYPE_MMS_ID;
+
+	/* Assume the length is never 0 for a valid ID, however the whole
+	 * data object's presence is conditional.  */
+	if (id->len == 0)
+		return TRUE;
+
+	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+		stk_tlv_builder_append_bytes(tlv, id->id, id->len) &&
+		stk_tlv_builder_close_container(tlv);
+}
+
+/* Described in TS 102.223 Section 8.84 */
+static gboolean build_dataobj_mms_transfer_status(struct stk_tlv_builder *tlv,
+						const void *data, gboolean cr)
+{
+	const struct stk_mms_transfer_status *mts = data;
+	unsigned char tag = STK_DATA_OBJECT_TYPE_MMS_TRANSFER_STATUS;
+
+	/* Assume the length is never 0 for a valid Result message, however
+	 * the whole data object's presence is conditional.  */
+	if (mts->len == 0)
+		return TRUE;
+
+	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+		stk_tlv_builder_append_bytes(tlv, mts->status, mts->len) &&
+		stk_tlv_builder_close_container(tlv);
+}
+
+/* Described in TS 131.111 Section 8.84 */
+static gboolean build_dataobj_i_wlan_access_status(struct stk_tlv_builder *tlv,
+						const void *data, gboolean cr)
+{
+	const enum stk_i_wlan_access_status *status = data;
+	unsigned char tag = STK_DATA_OBJECT_TYPE_I_WLAN_ACCESS_STATUS;
+
+	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+		stk_tlv_builder_append_byte(tlv, *status) &&
+		stk_tlv_builder_close_container(tlv);
+}
+
+/* Described in TS 102.223 Section 8.86 */
+static gboolean build_dataobj_mms_notification(struct stk_tlv_builder *tlv,
+						const void *data, gboolean cr)
+{
+	const struct stk_common_byte_array *msg = data;
+	unsigned char tag = STK_DATA_OBJECT_TYPE_MMS_NOTIFICATION;
+
+	return stk_tlv_builder_open_container(tlv, cr, tag, TRUE) &&
+		stk_tlv_builder_append_bytes(tlv, msg->array, msg->len) &&
+		stk_tlv_builder_close_container(tlv);
+}
+
+/* Described in TS 102.223 Section 8.87 */
+static gboolean build_dataobj_last_envelope(struct stk_tlv_builder *tlv,
+						const void *data, gboolean cr)
+{
+	const ofono_bool_t *last = data;
+	unsigned char tag = STK_DATA_OBJECT_TYPE_LAST_ENVELOPE;
+
+	if (!*last)
+		return TRUE;
+
+	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+		stk_tlv_builder_close_container(tlv);
+}
+
+/* Described in TS 102.223 Section 8.88 */
+static gboolean build_dataobj_registry_application_data(
+						struct stk_tlv_builder *tlv,
+						const void *data, gboolean cr)
+{
+	const struct stk_registry_application_data *rad = data;
+	unsigned char tag = STK_DATA_OBJECT_TYPE_REGISTRY_APPLICATION_DATA;
+	guint8 dcs, *name;
+	gsize len;
+	long gsmlen;
+
+	name = convert_utf8_to_gsm(rad->name, -1, NULL, &gsmlen, 0);
+	len = gsmlen;
+	dcs = 0x04;
+	if (name == NULL) {
+		name = (guint8 *) g_convert((const gchar *) rad->name, -1,
+						"UCS-2BE", "UTF-8//TRANSLIT",
+						NULL, &len, NULL);
+		dcs = 0x08;
+
+		if (name == NULL)
+			return FALSE;
+	}
+
+	return stk_tlv_builder_open_container(tlv, cr, tag, TRUE) &&
+		stk_tlv_builder_append_short(tlv, rad->port) &&
+		stk_tlv_builder_append_byte(tlv, dcs) &&
+		stk_tlv_builder_append_byte(tlv, rad->type) &&
+		stk_tlv_builder_append_bytes(tlv, name, len) &&
+		stk_tlv_builder_close_container(tlv);
+}
+
 /* Described in TS 102.223 Section 8.90 */
 static gboolean build_dataobj_broadcast_network_information(
 						struct stk_tlv_builder *tlv,
@@ -3894,6 +5066,87 @@ static gboolean build_dataobj_broadcast_network_information(
 	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
 		stk_tlv_builder_append_byte(tlv, bni->tech) &&
 		stk_tlv_builder_append_bytes(tlv, bni->loc_info, bni->len) &&
+		stk_tlv_builder_close_container(tlv);
+}
+
+/* Described in TS 131.111 Section 8.91 / 3GPP 24.008 Section 10.5.5.15 */
+static gboolean build_dataobj_routing_area_id(struct stk_tlv_builder *tlv,
+						const void *data, gboolean cr)
+{
+	const struct stk_routing_area_info *rai = data;
+	unsigned char tag = STK_DATA_OBJECT_TYPE_ROUTING_AREA_INFO;
+	guint8 mccmnc[3];
+
+	if (rai->mcc[0] == 0)
+		return TRUE;
+
+	sim_encode_mcc_mnc(mccmnc, rai->mcc, rai->mnc);
+
+	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+		stk_tlv_builder_append_bytes(tlv, mccmnc, 3) &&
+		stk_tlv_builder_append_short(tlv, rai->lac) &&
+		stk_tlv_builder_append_byte(tlv, rai->rac) &&
+		stk_tlv_builder_close_container(tlv);
+}
+
+/* Described in TS 131.111 Section 8.92 */
+static gboolean build_dataobj_update_attach_type(struct stk_tlv_builder *tlv,
+						const void *data, gboolean cr)
+{
+	const enum stk_update_attach_type *type = data;
+	unsigned char tag = STK_DATA_OBJECT_TYPE_UPDATE_ATTACH_TYPE;
+
+	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+		stk_tlv_builder_append_byte(tlv, *type) &&
+		stk_tlv_builder_close_container(tlv);
+}
+
+/* Described in TS 131.111 Section 8.93 */
+static gboolean build_dataobj_rejection_cause_code(struct stk_tlv_builder *tlv,
+						const void *data, gboolean cr)
+{
+	const enum stk_rejection_cause_code *cause = data;
+	unsigned char tag = STK_DATA_OBJECT_TYPE_REJECTION_CAUSE_CODE;
+
+	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+		stk_tlv_builder_append_byte(tlv, *cause) &&
+		stk_tlv_builder_close_container(tlv);
+}
+
+/* Described in TS 131.111 Section 8.98, 3GPP 24.301 Section 6.5.1 */
+static gboolean build_dataobj_eps_pdn_conn_params(struct stk_tlv_builder *tlv,
+						const void *data, gboolean cr)
+{
+	const struct stk_common_byte_array *params = data;
+	unsigned char tag = STK_DATA_OBJECT_TYPE_EPS_PDN_CONN_ACTIVATION_REQ;
+
+	if (params->len < 1)
+		return TRUE;
+
+	if (params->len > 0x7f)
+		return FALSE;
+
+	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+		stk_tlv_builder_append_bytes(tlv, params->array, params->len) &&
+		stk_tlv_builder_close_container(tlv);
+}
+
+/* Described in TS 131.111 Section 8.99 / 3GPP 24.301 Section 9.9.3.32 */
+static gboolean build_dataobj_tracking_area_id(struct stk_tlv_builder *tlv,
+						const void *data, gboolean cr)
+{
+	const struct stk_tracking_area_id *tai = data;
+	unsigned char tag = STK_DATA_OBJECT_TYPE_TRACKING_AREA_ID;
+	guint8 mccmnc[3];
+
+	if (tai->mcc[0] == 0)
+		return TRUE;
+
+	sim_encode_mcc_mnc(mccmnc, tai->mcc, tai->mnc);
+
+	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+		stk_tlv_builder_append_bytes(tlv, mccmnc, 3) &&
+		stk_tlv_builder_append_short(tlv, tai->tac) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
@@ -4154,6 +5407,7 @@ const unsigned char *stk_pdu_from_response(const struct stk_response *response,
 					&response->get_input.text,
 					NULL);
 		break;
+	case STK_COMMAND_TYPE_MORE_TIME:
 	case STK_COMMAND_TYPE_SEND_SMS:
 	case STK_COMMAND_TYPE_PLAY_TONE:
 		break;
@@ -4231,6 +5485,241 @@ static gboolean build_envelope_dataobj_device_ids(struct stk_tlv_builder *tlv,
 		stk_tlv_builder_close_container(tlv);
 }
 
+static gboolean build_envelope_call_control(
+					struct stk_tlv_builder *builder,
+					const struct stk_envelope *envelope)
+{
+	const struct stk_envelope_call_control *cc = &envelope->call_control;
+	gboolean ok = FALSE;
+
+	if (build_dataobj(builder, build_envelope_dataobj_device_ids,
+				DATAOBJ_FLAG_CR, envelope, NULL) != TRUE)
+		return FALSE;
+
+	switch (cc->type) {
+	case STK_CC_TYPE_CALL_SETUP:
+		ok = build_dataobj(builder, build_dataobj_address,
+					DATAOBJ_FLAG_CR, &cc->address, NULL);
+		break;
+	case STK_CC_TYPE_SUPPLEMENTARY_SERVICE:
+		ok = build_dataobj(builder, build_dataobj_ss_string,
+					DATAOBJ_FLAG_CR, &cc->ss_string, NULL);
+		break;
+	case STK_CC_TYPE_USSD_OP:
+		ok = build_dataobj(builder, build_dataobj_ussd_string,
+					DATAOBJ_FLAG_CR, &cc->ussd_string,
+					NULL);
+		break;
+	case STK_CC_TYPE_PDP_CTX_ACTIVATION:
+		ok = build_dataobj(builder, build_dataobj_pdp_context_params,
+					DATAOBJ_FLAG_CR, &cc->pdp_ctx_params,
+					NULL);
+		break;
+	case STK_CC_TYPE_EPS_PDN_CONNECTION_ACTIVATION:
+		ok = build_dataobj(builder, build_dataobj_eps_pdn_conn_params,
+					DATAOBJ_FLAG_CR, &cc->eps_pdn_params,
+					NULL);
+		break;
+	}
+
+	if (ok != TRUE)
+		return FALSE;
+
+	return build_dataobj(builder,
+				build_dataobj_ccp, 0, &cc->ccp1,
+				build_dataobj_subaddress, 0, &cc->subaddress,
+				build_dataobj_location_info, 0, &cc->location,
+				build_dataobj_ccp, 0, &cc->ccp2,
+				build_dataobj_alpha_id, 0, cc->alpha_id,
+				build_dataobj_bc_repeat, 0, &cc->bc_repeat,
+				NULL);
+}
+
+static gboolean build_envelope_event_download(struct stk_tlv_builder *builder,
+					const struct stk_envelope *envelope)
+{
+	const struct stk_envelope_event_download *evt =
+		&envelope->event_download;
+
+	if (build_dataobj(builder,
+				build_dataobj_event_type, DATAOBJ_FLAG_CR,
+				&evt->type,
+				build_envelope_dataobj_device_ids,
+				DATAOBJ_FLAG_CR,
+				envelope,
+				NULL) == FALSE)
+		return FALSE;
+
+	switch (evt->type) {
+	case STK_EVENT_TYPE_MT_CALL:
+		return build_dataobj(builder,
+					build_dataobj_transaction_id,
+					DATAOBJ_FLAG_CR,
+					&evt->mt_call.transaction_id,
+					build_dataobj_address, 0,
+					&evt->mt_call.caller_address,
+					build_dataobj_subaddress, 0,
+					&evt->mt_call.caller_subaddress,
+					NULL);
+	case STK_EVENT_TYPE_CALL_CONNECTED:
+		return build_dataobj(builder,
+					build_dataobj_transaction_id,
+					DATAOBJ_FLAG_CR,
+					&evt->call_connected.transaction_id,
+					NULL);
+	case STK_EVENT_TYPE_CALL_DISCONNECTED:
+		return build_dataobj(builder,
+					build_dataobj_transaction_ids,
+					DATAOBJ_FLAG_CR,
+					&evt->call_disconnected.transaction_ids,
+					build_dataobj_cause, 0,
+					&evt->call_disconnected.cause,
+					NULL);
+	case STK_EVENT_TYPE_LOCATION_STATUS:
+		return build_dataobj(builder,
+					build_dataobj_location_status,
+					DATAOBJ_FLAG_CR,
+					&evt->location_status.state,
+					build_dataobj_location_info, 0,
+					&evt->location_status.info,
+					NULL);
+	case STK_EVENT_TYPE_USER_ACTIVITY:
+	case STK_EVENT_TYPE_IDLE_SCREEN_AVAILABLE:
+		return TRUE;
+	case STK_EVENT_TYPE_CARD_READER_STATUS:
+		return build_dataobj(builder,
+					build_dataobj_card_reader_status,
+					DATAOBJ_FLAG_CR,
+					&evt->card_reader_status,
+					NULL);
+	case STK_EVENT_TYPE_LANGUAGE_SELECTION:
+		return build_dataobj(builder,
+					build_dataobj_language, DATAOBJ_FLAG_CR,
+					evt->language_selection,
+					NULL);
+	case STK_EVENT_TYPE_BROWSER_TERMINATION:
+		return build_dataobj(builder,
+					build_dataobj_browser_termination_cause,
+					DATAOBJ_FLAG_CR,
+					&evt->browser_termination.cause,
+					NULL);
+	case STK_EVENT_TYPE_DATA_AVAILABLE:
+		return build_dataobj(builder,
+					build_dataobj_channel_status,
+					DATAOBJ_FLAG_CR,
+					&evt->data_available.channel_status,
+					build_dataobj_channel_data_length,
+					DATAOBJ_FLAG_CR,
+					&evt->data_available.channel_data_len,
+					NULL);
+	case STK_EVENT_TYPE_CHANNEL_STATUS:
+		return build_dataobj(builder,
+					build_dataobj_channel_status,
+					DATAOBJ_FLAG_CR,
+					&evt->channel_status.status,
+					build_dataobj_bearer_description,
+					DATAOBJ_FLAG_CR,
+					&evt->channel_status.bearer_desc,
+					build_dataobj_other_address,
+					DATAOBJ_FLAG_CR,
+					&evt->channel_status.address,
+					NULL);
+	case STK_EVENT_TYPE_SINGLE_ACCESS_TECHNOLOGY_CHANGE:
+		return build_dataobj(builder,
+					build_dataobj_access_technology,
+					DATAOBJ_FLAG_CR,
+					&evt->access_technology_change,
+					NULL);
+	case STK_EVENT_TYPE_DISPLAY_PARAMETERS_CHANGED:
+		return build_dataobj(builder,
+					build_dataobj_display_parameters,
+					DATAOBJ_FLAG_CR,
+					&evt->display_params_changed,
+					NULL);
+	case STK_EVENT_TYPE_LOCAL_CONNECTION:
+		return build_dataobj(builder,
+					build_dataobj_service_record,
+					DATAOBJ_FLAG_CR,
+					&evt->local_connection.service_record,
+					build_dataobj_remote_entity_address, 0,
+					&evt->local_connection.remote_addr,
+					build_dataobj_uicc_te_interface, 0,
+					&evt->local_connection.transport_level,
+					build_dataobj_other_address,
+					0,
+					&evt->local_connection.transport_addr,
+					NULL);
+	case STK_EVENT_TYPE_NETWORK_SEARCH_MODE_CHANGE:
+		return build_dataobj(builder,
+					build_dataobj_network_search_mode,
+					DATAOBJ_FLAG_CR,
+					&evt->network_search_mode_change,
+					NULL);
+	case STK_EVENT_TYPE_BROWSING_STATUS:
+		return build_dataobj(builder,
+					build_dataobj_browsing_status,
+					DATAOBJ_FLAG_CR,
+					&evt->browsing_status,
+					NULL);
+	case STK_EVENT_TYPE_FRAMES_INFORMATION_CHANGE:
+		return build_dataobj(builder,
+					build_dataobj_frames_information,
+					DATAOBJ_FLAG_CR,
+					&evt->frames_information_change,
+					NULL);
+	case STK_EVENT_TYPE_I_WLAN_ACCESS_STATUS:
+		return build_dataobj(builder,
+					build_dataobj_i_wlan_access_status,
+					DATAOBJ_FLAG_CR,
+					&evt->i_wlan_access_status,
+					NULL);
+	case STK_EVENT_TYPE_NETWORK_REJECTION:
+		return build_dataobj(builder,
+					build_dataobj_location_info, 0,
+					&evt->network_rejection.location,
+					build_dataobj_routing_area_id, 0,
+					&evt->network_rejection.rai,
+					build_dataobj_tracking_area_id, 0,
+					&evt->network_rejection.tai,
+					build_dataobj_access_technology,
+					DATAOBJ_FLAG_CR,
+					&evt->network_rejection.access_tech,
+					build_dataobj_update_attach_type,
+					DATAOBJ_FLAG_CR,
+					&evt->network_rejection.update_attach,
+					build_dataobj_rejection_cause_code,
+					DATAOBJ_FLAG_CR,
+					&evt->network_rejection.cause,
+					NULL);
+	case STK_EVENT_TYPE_HCI_CONNECTIVITY_EVENT:
+		return TRUE;
+	default:
+		return FALSE;
+	}
+}
+
+static gboolean build_envelope_terminal_apps(struct stk_tlv_builder *builder,
+					const struct stk_envelope *envelope)
+{
+	const struct stk_envelope_terminal_apps *ta = &envelope->terminal_apps;
+	int i;
+
+	if (build_dataobj(builder,
+				build_envelope_dataobj_device_ids,
+				DATAOBJ_FLAG_CR, envelope, NULL) == FALSE)
+		return FALSE;
+
+	for (i = 0; i < ta->count; i++)
+		if (build_dataobj(builder,
+					build_dataobj_registry_application_data,
+					0, &ta->list[i], NULL) == FALSE)
+			return FALSE;
+
+	return build_dataobj(builder,
+				build_dataobj_last_envelope,
+				0, &ta->last, NULL);
+}
+
 const unsigned char *stk_pdu_from_envelope(const struct stk_envelope *envelope,
 						unsigned int *out_length)
 {
@@ -4280,6 +5769,9 @@ const unsigned char *stk_pdu_from_envelope(const struct stk_envelope *envelope,
 					&envelope->menu_selection.help_request,
 					NULL);
 		break;
+	case STK_ENVELOPE_TYPE_CALL_CONTROL:
+		ok = build_envelope_call_control(&builder, envelope);
+		break;
 	case STK_ENVELOPE_TYPE_MO_SMS_CONTROL:
 		/*
 		 * Comprehension Required according to the specs but not
@@ -4296,6 +5788,60 @@ const unsigned char *stk_pdu_from_envelope(const struct stk_envelope *envelope,
 					&envelope->sms_mo_control.location,
 					NULL);
 		break;
+	case STK_ENVELOPE_TYPE_EVENT_DOWNLOAD:
+		ok = build_envelope_event_download(&builder, envelope);
+		break;
+	case STK_ENVELOPE_TYPE_TIMER_EXPIRATION:
+		ok = build_dataobj(&builder,
+					build_envelope_dataobj_device_ids,
+					DATAOBJ_FLAG_CR,
+					envelope,
+					build_dataobj_timer_id,
+					DATAOBJ_FLAG_CR,
+					&envelope->timer_expiration.id,
+					build_dataobj_timer_value,
+					DATAOBJ_FLAG_CR,
+					&envelope->timer_expiration.value,
+					NULL);
+		break;
+	case STK_ENVELOPE_TYPE_USSD_DOWNLOAD:
+		ok = build_dataobj(&builder,
+					build_envelope_dataobj_device_ids,
+					DATAOBJ_FLAG_CR,
+					envelope,
+					build_dataobj_ussd_string,
+					DATAOBJ_FLAG_CR,
+					&envelope->ussd_data_download.string,
+					NULL);
+		break;
+	case STK_ENVELOPE_TYPE_MMS_TRANSFER_STATUS:
+		ok = build_dataobj(&builder,
+					build_envelope_dataobj_device_ids,
+					DATAOBJ_FLAG_CR,
+					envelope,
+					build_dataobj_file, DATAOBJ_FLAG_CR,
+					&envelope->mms_status.transfer_file,
+					build_dataobj_mms_id, 0,
+					&envelope->mms_status.id,
+					build_dataobj_mms_transfer_status, 0,
+					&envelope->mms_status.transfer_status,
+					NULL);
+		break;
+	case STK_ENVELOPE_TYPE_MMS_NOTIFICATION:
+		ok = build_dataobj(&builder,
+					build_envelope_dataobj_device_ids,
+					DATAOBJ_FLAG_CR,
+					envelope,
+					build_dataobj_mms_notification,
+					DATAOBJ_FLAG_CR,
+					&envelope->mms_notification.msg,
+					build_dataobj_last_envelope, 0,
+					&envelope->mms_notification.last,
+					NULL);
+		break;
+	case STK_ENVELOPE_TYPE_TERMINAL_APP:
+		ok = build_envelope_terminal_apps(&builder, envelope);
+		break;
 	default:
 		return NULL;
 	};
@@ -4306,4 +5852,374 @@ const unsigned char *stk_pdu_from_envelope(const struct stk_envelope *envelope,
 	ber_tlv_builder_optimize(&btlv, &pdu, out_length);
 
 	return pdu;
+}
+
+static const char *html_colors[] = {
+	"#000000", /* Black */
+	"#808080", /* Dark Grey */
+	"#C11B17", /* Dark Red */
+	"#FBB117", /* Dark Yellow */
+	"#347235", /* Dark Green */
+	"#307D7E", /* Dark Cyan */
+	"#0000A0", /* Dark Blue */
+	"#C031C7", /* Dark Magenta */
+	"#C0C0C0", /* Grey */
+	"#FFFFFF", /* White */
+	"#FF0000", /* Bright Red */
+	"#FFFF00", /* Bright Yellow */
+	"#00FF00", /* Bright Green */
+	"#00FFFF", /* Bright Cyan */
+	"#0000FF", /* Bright Blue */
+	"#FF00FF", /* Bright Magenta */
+};
+
+#define STK_TEXT_FORMAT_ALIGN_MASK 0x03
+#define STK_TEXT_FORMAT_FONT_MASK 0x0C
+#define STK_TEXT_FORMAT_STYLE_MASK 0xF0
+#define STK_DEFAULT_TEXT_ALIGNMENT 0x00
+#define STK_TEXT_FORMAT_INIT 0x9003
+
+/* Defined in ETSI 123 40 9.2.3.24.10.1.1 */
+enum stk_text_format_code {
+	STK_TEXT_FORMAT_LEFT_ALIGN = 0x00,
+	STK_TEXT_FORMAT_CENTER_ALIGN = 0x01,
+	STK_TEXT_FORMAT_RIGHT_ALIGN = 0x02,
+	STK_TEXT_FORMAT_NO_ALIGN = 0x03,
+	STK_TEXT_FORMAT_FONT_SIZE_LARGE = 0x04,
+	STK_TEXT_FORMAT_FONT_SIZE_SMALL = 0x08,
+	STK_TEXT_FORMAT_FONT_SIZE_RESERVED = 0x0c,
+	STK_TEXT_FORMAT_STYLE_BOLD = 0x10,
+	STK_TEXT_FORMAT_STYLE_ITALIC = 0x20,
+	STK_TEXT_FORMAT_STYLE_UNDERLINED = 0x40,
+	STK_TEXT_FORMAT_STYLE_STRIKETHROUGH = 0x80,
+};
+
+static void end_format(GString *string, guint16 attr)
+{
+	guint code = attr & 0xFF;
+	guint color = (attr >> 8) & 0xFF;
+
+	if ((code & ~STK_TEXT_FORMAT_ALIGN_MASK) || color)
+		g_string_append(string, "</span>");
+
+	if ((code & STK_TEXT_FORMAT_ALIGN_MASK) != STK_TEXT_FORMAT_NO_ALIGN)
+		g_string_append(string, "</div>");
+}
+
+static void start_format(GString *string, guint16 attr)
+{
+	guint8 code = attr & 0xFF;
+	guint8 color = (attr >> 8) & 0xFF;
+	guint8 align = code & STK_TEXT_FORMAT_ALIGN_MASK;
+	guint8 font = code & STK_TEXT_FORMAT_FONT_MASK;
+	guint8 style = code & STK_TEXT_FORMAT_STYLE_MASK;
+	int fg = color & 0x0f;
+	int bg = (color >> 4) & 0x0f;
+
+	/* align formatting applies to a block of text */
+	if (align != STK_TEXT_FORMAT_NO_ALIGN)
+		g_string_append(string, "<div style=\"");
+
+	switch (align) {
+	case STK_TEXT_FORMAT_RIGHT_ALIGN:
+		g_string_append(string, "text-align: right;\">");
+		break;
+	case STK_TEXT_FORMAT_CENTER_ALIGN:
+		g_string_append(string, "text-align: center;\">");
+		break;
+	case STK_TEXT_FORMAT_LEFT_ALIGN:
+		g_string_append(string, "text-align: left;\">");
+		break;
+	}
+
+	if ((font == 0) && (style == 0) && (color == 0))
+		return;
+
+	/* font, style, and color are inline */
+	g_string_append(string, "<span style=\"");
+
+	switch (font) {
+	case STK_TEXT_FORMAT_FONT_SIZE_LARGE:
+		g_string_append(string, "font-size: big;");
+		break;
+	case STK_TEXT_FORMAT_FONT_SIZE_SMALL:
+		g_string_append(string, "font-size: small;");
+		break;
+	}
+
+	if (style & STK_TEXT_FORMAT_STYLE_BOLD)
+		g_string_append(string, "font-weight: bold;");
+	if (style & STK_TEXT_FORMAT_STYLE_ITALIC)
+		g_string_append(string, "font-style: italic;");
+	if (style & STK_TEXT_FORMAT_STYLE_UNDERLINED)
+		g_string_append(string, "text-decoration: underline;");
+	if (style & STK_TEXT_FORMAT_STYLE_STRIKETHROUGH)
+		g_string_append(string, "text-decoration: line-through;");
+
+	/* add any color */
+	g_string_append_printf(string, "color: %s;", html_colors[fg]);
+	g_string_append_printf(string, "background-color: %s;",
+						html_colors[bg]);
+	g_string_append(string, "\">");
+}
+
+char *stk_text_to_html(const char *utf8,
+				const unsigned short *attrs, int num_attrs)
+{
+	long text_len = g_utf8_strlen(utf8, -1);
+	GString *string = g_string_sized_new(strlen(utf8) + 1);
+	short *formats;
+	int pos, i, j;
+	guint16 start, end, len, attr, prev_attr;
+	guint8 code, color, align;
+	const char *text = utf8;
+	int attrs_len = num_attrs * 4;
+
+	formats = g_try_new0(gint16, (text_len + 1));
+	if (formats == NULL) {
+		g_string_free(string, TRUE);
+		return NULL;
+	}
+
+	/* we will need formatting at the position beyond the last char */
+	for (i = 0; i <= text_len; i++)
+		formats[i] = STK_TEXT_FORMAT_INIT;
+
+	for (i = 0; i < attrs_len; i += 4) {
+		start = attrs[i];
+		len = attrs[i + 1];
+		code = attrs[i + 2] & 0xFF;
+		color = attrs[i + 3] & 0xFF;
+
+		if (len == 0)
+			end = text_len;
+		else
+			end = start + len;
+
+		/* sanity check values */
+		if (start > end || end > text_len)
+			continue;
+
+		/*
+		 * if the alignment is the same as either the default
+		 * or the last alignment used, don't set any alignment
+		 * value.
+		 */
+		if (start == 0)
+			align = STK_TEXT_FORMAT_NO_ALIGN;
+		else {
+			align = formats[start - 1] &
+					STK_TEXT_FORMAT_ALIGN_MASK;
+		}
+
+		if ((code & STK_TEXT_FORMAT_ALIGN_MASK) == align)
+			code |= STK_TEXT_FORMAT_NO_ALIGN;
+
+		attr = code | (color << 8);
+
+		for (j = start; j < end; j++)
+			formats[j] = attr;
+	}
+
+	prev_attr = STK_TEXT_FORMAT_INIT;
+
+	for (pos = 0; pos <= text_len; pos++) {
+		attr = formats[pos];
+		if (attr != prev_attr) {
+			if (prev_attr != STK_TEXT_FORMAT_INIT)
+				end_format(string, prev_attr);
+
+			if (attr != STK_TEXT_FORMAT_INIT)
+				start_format(string, attr);
+
+			prev_attr = attr;
+		}
+
+		if (pos == text_len)
+			break;
+
+		switch (g_utf8_get_char(text)) {
+		case '\n':
+			g_string_append(string, "<br/>");
+			break;
+		case '\r':
+		{
+			char *next = g_utf8_next_char(text);
+			gunichar c = g_utf8_get_char(next);
+
+			g_string_append(string, "<br/>");
+
+			if ((pos + 1 < text_len) && (c == '\n')) {
+				text = g_utf8_next_char(text);
+				pos++;
+			}
+			break;
+		}
+		case '<':
+			g_string_append(string, "&lt;");
+			break;
+		case '>':
+			g_string_append(string, "&gt;");
+			break;
+		case '&':
+			g_string_append(string, "&amp;");
+			break;
+		default:
+			g_string_append_unichar(string, g_utf8_get_char(text));
+		}
+
+		text = g_utf8_next_char(text);
+	}
+
+	g_free(formats);
+
+	/* return characters from string. Caller must free char data */
+	return g_string_free(string, FALSE);
+}
+
+static const char chars_table[] = {
+	'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C',
+	'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
+	'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'a', 'b', 'c',
+	'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p',
+	'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', '+', '.' };
+
+char *stk_image_to_xpm(const unsigned char *img, unsigned int len,
+			enum stk_img_scheme scheme, const unsigned char *clut,
+			unsigned short clut_len)
+{
+	guint8 width, height;
+	unsigned int ncolors, nbits, entry, cpp;
+	unsigned int i, j;
+	int bit, k;
+	GString *xpm;
+	unsigned int pos = 0;
+	const char xpm_header[] = "/* XPM */\n";
+	const char declaration[] = "static char *xpm[] = {\n";
+	char c[3];
+
+	if (img == NULL)
+		return NULL;
+
+	/* sanity check length */
+	if (len < 3)
+		return NULL;
+
+	width = img[pos++];
+	height = img[pos++];
+
+	if (scheme == STK_IMG_SCHEME_BASIC) {
+		nbits = 1;
+		ncolors = 2;
+	} else {
+		/* sanity check length */
+		if ((pos + 4 > len) || (clut == NULL))
+			return NULL;
+
+		nbits = img[pos++];
+		ncolors = img[pos++];
+
+		/* the value of zero should be interpreted as 256 */
+		if (ncolors == 0)
+			ncolors = 256;
+
+		/* skip clut offset bytes */
+		pos += 2;
+
+		if ((ncolors * 3) > clut_len)
+			return NULL;
+	}
+
+	if (pos + ((width * height + 7) / 8) > len)
+		return NULL;
+
+	/* determine the number of chars need to represent the pixel */
+	cpp = ncolors > 64 ? 2 : 1;
+
+	/*
+	 * space needed:
+	 * 	header line
+	 *	declaration and beginning of assignment line
+	 *	values - max length of 19
+	 *	colors - ncolors * (cpp + whitespace + deliminators + color)
+	 *	pixels - width * height * cpp + height deliminators "",\n
+	 *	end of assignment - 2 chars "};"
+	 */
+	xpm = g_string_sized_new(strlen(xpm_header) + strlen(declaration) +
+				19 + ((cpp + 14) * ncolors) +
+				(width * height * cpp) + (4 * height) + 2);
+	if (xpm == NULL)
+		return NULL;
+
+	/* add header, declaration, values */
+	g_string_append(xpm, xpm_header);
+	g_string_append(xpm, declaration);
+	g_string_append_printf(xpm, "\"%d %d %d %d\",\n", width, height,
+				ncolors, cpp);
+
+	/* create colors */
+	if (scheme == STK_IMG_SCHEME_BASIC) {
+		g_string_append(xpm, "\"0\tc #000000\",\n");
+		g_string_append(xpm, "\"1\tc #FFFFFF\",\n");
+	} else {
+		for (i = 0; i < ncolors; i++) {
+			/* lookup char representation of this number */
+			if (ncolors > 64) {
+				c[0] = chars_table[i / 64];
+				c[1] = chars_table[i % 64];
+				c[2] = '\0';
+			} else {
+				c[0] = chars_table[i % 64];
+				c[1] = '\0';
+			}
+
+			if ((i == (ncolors - 1)) &&
+					scheme == STK_IMG_SCHEME_TRANSPARENCY)
+				g_string_append_printf(xpm,
+					"\"%s\tc None\",\n", c);
+			else
+				g_string_append_printf(xpm,
+					"\"%s\tc #%02hhX%02hhX%02hhX\",\n",
+					c, clut[0], clut[1], clut[2]);
+			clut += 3;
+		}
+	}
+
+	/* height rows of width pixels */
+	k = 7;
+	for (i = 0; i < height; i++) {
+		g_string_append(xpm, "\"");
+		for (j = 0; j < width; j++) {
+			entry = 0;
+			for (bit = nbits - 1; bit >= 0; bit--) {
+				entry |= (img[pos] >> k & 0x1) << bit;
+				k--;
+
+				/* see if we crossed a byte boundary */
+				if (k < 0) {
+					k = 7;
+					pos++;
+				}
+			}
+
+			/* lookup char representation of this number */
+			if (ncolors > 64) {
+				c[0] = chars_table[entry / 64];
+				c[1] = chars_table[entry % 64];
+				c[2] = '\0';
+			} else {
+				c[0] = chars_table[entry % 64];
+				c[1] = '\0';
+			}
+
+			g_string_append_printf(xpm, "%s", c);
+		}
+
+		g_string_append(xpm, "\",\n");
+	}
+
+	g_string_append(xpm, "};");
+
+	/* Caller must free char data */
+	return g_string_free(xpm, FALSE);
 }

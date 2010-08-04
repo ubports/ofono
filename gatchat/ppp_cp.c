@@ -938,6 +938,8 @@ void pppcp_send_protocol_reject(struct pppcp_data *data,
 
 	ppp_transmit(data->ppp, pppcp_to_ppp_packet(packet),
 			ntohs(packet->length));
+
+	pppcp_packet_free(packet);
 }
 
 /*
@@ -994,7 +996,8 @@ void pppcp_set_local_options(struct pppcp_data *pppcp,
 	pppcp->local_options_len = len;
 }
 
-struct pppcp_data *pppcp_new(GAtPPP *ppp, const struct pppcp_proto *proto)
+struct pppcp_data *pppcp_new(GAtPPP *ppp, const struct pppcp_proto *proto,
+				gboolean dormant, guint max_failure)
 {
 	struct pppcp_data *data;
 
@@ -1002,14 +1005,22 @@ struct pppcp_data *pppcp_new(GAtPPP *ppp, const struct pppcp_proto *proto)
 	if (!data)
 		return NULL;
 
-	data->state = INITIAL;
+	if (dormant)
+		data->state = STOPPED;
+	else
+		data->state = INITIAL;
+
 	data->config_timer_data.restart_interval = INITIAL_RESTART_TIMEOUT;
 	data->terminate_timer_data.restart_interval = INITIAL_RESTART_TIMEOUT;
 	data->config_timer_data.max_counter = MAX_CONFIGURE;
 	data->terminate_timer_data.max_counter = MAX_TERMINATE;
 	data->config_timer_data.data = data;
 	data->terminate_timer_data.data = data;
-	data->max_failure = MAX_FAILURE;
+
+	if (max_failure)
+		data->max_failure = max_failure;
+	else
+		data->max_failure = MAX_FAILURE;
 
 	data->ppp = ppp;
 	data->driver = proto;

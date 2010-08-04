@@ -227,6 +227,14 @@ static void add_huawei(struct ofono_modem *modem,
 		const char *name = udev_list_entry_get_name(entry);
 		type = udev_list_entry_get_value(entry);
 
+		if (g_str_equal(name, "OFONO_HUAWEI_VOICE") == TRUE) {
+			gboolean value = g_str_equal(type, "1");
+
+			ofono_modem_set_boolean(modem, "HasVoice", value);
+			entry = udev_list_entry_get_next(entry);
+			continue;
+		}
+
 		if (g_str_equal(name, "OFONO_HUAWEI_TYPE") != TRUE) {
 			entry = udev_list_entry_get_next(entry);
 			continue;
@@ -256,30 +264,6 @@ static void add_huawei(struct ofono_modem *modem,
 
 	if (ppp && pcui)
 		ofono_modem_register(modem);
-}
-
-static void add_em770(struct ofono_modem *modem,
-					struct udev_device *udev_device)
-{
-	const char *devnode, *intfnum;
-	struct udev_device *parent;
-	int registered;
-
-	registered = ofono_modem_get_integer(modem, "Registered");
-	if (registered != 0)
-		return;
-
-	parent = udev_device_get_parent(udev_device);
-	parent = udev_device_get_parent(parent);
-	intfnum = udev_device_get_sysattr_value(parent, "bInterfaceNumber");
-
-	if (g_strcmp0(intfnum, "02") == 0) {
-		devnode = udev_device_get_devnode(udev_device);
-		ofono_modem_set_string(modem, "Device", devnode);
-
-		ofono_modem_set_integer(modem, "Registered", 1);
-		ofono_modem_register(modem);
-	}
 }
 
 static void add_novatel(struct ofono_modem *modem,
@@ -353,6 +337,8 @@ static void add_modem(struct udev_device *udev_device)
 	if (curpath == NULL)
 		return;
 
+	DBG("%s (%s)", curpath, driver);
+
 	g_hash_table_insert(devpath_list, g_strdup(curpath), g_strdup(devpath));
 
 	if (g_strcmp0(driver, "mbm") == 0)
@@ -361,8 +347,6 @@ static void add_modem(struct udev_device *udev_device)
 		add_hso(modem, udev_device);
 	else if (g_strcmp0(driver, "huawei") == 0)
 		add_huawei(modem, udev_device);
-	else if (g_strcmp0(driver, "em770") == 0)
-		add_em770(modem, udev_device);
 	else if (g_strcmp0(driver, "novatel") == 0)
 		add_novatel(modem, udev_device);
 }
@@ -383,6 +367,8 @@ static void remove_modem(struct udev_device *udev_device)
 
 	if (curpath == NULL)
 		return;
+
+	DBG("%s", curpath);
 
 	devpath = g_hash_table_lookup(devpath_list, curpath);
 	if (!devpath)

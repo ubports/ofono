@@ -65,7 +65,8 @@ struct gprs_context_data {
 	void *cb_data;                                  /* Callback data */
 };
 
-static void ppp_connect(const char *interface, const char *ip,
+static void ppp_connect(const char *interface, const char *local,
+			const char *remote,
 			const char *dns1, const char *dns2,
 			gpointer user_data)
 {
@@ -78,7 +79,7 @@ static void ppp_connect(const char *interface, const char *ip,
 	dns[2] = 0;
 
 	gcd->state = STATE_ACTIVE;
-	CALLBACK_WITH_SUCCESS(gcd->up_cb, interface, TRUE, ip,
+	CALLBACK_WITH_SUCCESS(gcd->up_cb, interface, TRUE, local,
 					STATIC_IP_NETMASK, NULL,
 					dns, gcd->cb_data);
 }
@@ -92,7 +93,6 @@ static void ppp_disconnect(GAtPPPDisconnectReason reason, gpointer user_data)
 
 	g_at_ppp_unref(gcd->ppp);
 	gcd->ppp = NULL;
-	g_at_chat_resume(gcd->chat);
 
 	switch (gcd->state) {
 	case STATE_ENABLING:
@@ -109,6 +109,12 @@ static void ppp_disconnect(GAtPPPDisconnectReason reason, gpointer user_data)
 
 	gcd->active_context = 0;
 	gcd->state = STATE_IDLE;
+	/*
+	 * If the channel of gcd->chat is NULL, it might cause
+	 * gprs_context_remove get called and the gprs context will be
+	 * removed.
+	 */
+	g_at_chat_resume(gcd->chat);
 }
 
 static gboolean setup_ppp(struct ofono_gprs_context *gc)
@@ -256,7 +262,7 @@ static void at_gprs_context_remove(struct ofono_gprs_context *gc)
 
 	DBG("");
 
-	if (gcd->state != STATE_IDLE) {
+	if (gcd->state != STATE_IDLE && gcd->ppp) {
 		g_at_ppp_unref(gcd->ppp);
 		g_at_chat_resume(gcd->chat);
 	}

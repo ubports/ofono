@@ -38,12 +38,65 @@
 #include "gatresult.h"
 
 #include "atmodem.h"
+#include "stk.h"
+#include "vendor.h"
 
 struct stk_data {
 	GAtChat *chat;
+	unsigned int vendor;
 };
 
 static const char *csim_prefix[] = { "+CSIM:", NULL };
+
+static void csim_fetch_cb(gboolean ok, GAtResult *result,
+		gpointer user_data)
+{
+	struct ofono_stk *stk = user_data;
+	GAtResultIter iter;
+	const guint8 *response;
+	gint rlen, len;
+
+	if (!ok)
+		return;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "+CSIM:"))
+		return;
+
+	if (!g_at_result_iter_next_number(&iter, &rlen))
+		return;
+
+	if (!g_at_result_iter_next_hexstring(&iter, &response, &len))
+		return;
+
+	if (rlen != len * 2 || len < 2)
+		return;
+
+	/* Check that SW1 indicates success */
+	if (response[len - 2] != 0x90 && response[len - 2] != 0x91)
+		return;
+
+	if (response[len - 2] == 0x90 && response[len - 1] != 0)
+		return;
+
+	DBG("csim_fetch_cb: %i", len);
+
+	ofono_stk_proactive_command_notify(stk, len - 2, response);
+
+	/* Can this happen? */
+	if (response[len - 2] == 0x91)
+		at_sim_fetch_command(stk, response[len - 1]);
+}
+
+void at_sim_fetch_command(struct ofono_stk *stk, int length)
+{
+	char buf[64];
+	struct stk_data *sd = ofono_stk_get_data(stk);
+
+	snprintf(buf, sizeof(buf), "AT+CSIM=10,A0120000%02hhX", length);
+	g_at_chat_send(sd->chat, buf, csim_prefix, csim_fetch_cb, stk, NULL);
+}
 
 static void at_csim_envelope_cb(gboolean ok, GAtResult *result,
 				gpointer user_data)
@@ -74,11 +127,13 @@ static void at_csim_envelope_cb(gboolean ok, GAtResult *result,
 	if (rlen != len * 2 || len < 2)
 		goto error;
 
-	if (response[len - 2] != 0x90 && response[len - 2] != 0x91)
-		goto error;
+	if ((response[len - 2] != 0x90 && response[len - 2] != 0x91) ||
+			(response[len - 2] == 0x90 && response[len - 1] != 0)) {
+		memset(&error, 0, sizeof(error));
 
-	if (response[len - 2] == 0x90 && response[len - 1] != 0)
-		goto error;
+		error.type = OFONO_ERROR_TYPE_SIM;
+		error.error = (response[len - 2] << 8) | response[len - 1];
+	}
 
 	DBG("csim_envelope_cb: %i", len);
 
@@ -157,11 +212,13 @@ static void at_csim_terminal_response_cb(gboolean ok, GAtResult *result,
 	if (rlen != len * 2 || len < 2)
 		goto error;
 
-	if (response[len - 2] != 0x90 && response[len - 2] != 0x91)
-		goto error;
+	if ((response[len - 2] != 0x90 && response[len - 2] != 0x91) ||
+			(response[len - 2] == 0x90 && response[len - 1] != 0)) {
+		memset(&error, 0, sizeof(error));
 
-	if (response[len - 2] == 0x90 && response[len - 1] != 0)
-		goto error;
+		error.type = OFONO_ERROR_TYPE_SIM;
+		error.error = (response[len - 2] << 8) | response[len - 1];
+	}
 
 	DBG("csim_terminal_response_cb: %i", len);
 
@@ -207,9 +264,42 @@ error:
 	CALLBACK_WITH_FAILURE(cb, data);
 }
 
+static void phonesim_tcmd_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_stk *stk = user_data;
+	GAtResultIter iter;
+	int length;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "*TCMD:"))
+		return;
+
+	if (!g_at_result_iter_next_number(&iter, &length))
+		return;
+
+	at_sim_fetch_command(stk, length);
+}
+
+static void phonesim_tend_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_stk *stk = user_data;
+
+	ofono_stk_proactive_session_end_notify(stk);
+}
+
 static gboolean at_stk_register(gpointer user)
 {
 	struct ofono_stk *stk = user;
+	struct stk_data *sd = ofono_stk_get_data(stk);
+
+	if (sd->vendor == OFONO_VENDOR_PHONESIM) {
+		g_at_chat_register(sd->chat, "*TCMD:", phonesim_tcmd_notify,
+							FALSE, stk, NULL);
+
+		g_at_chat_register(sd->chat, "*TEND", phonesim_tend_notify,
+							FALSE, stk, NULL);
+	}
 
 	ofono_stk_register(stk);
 
@@ -223,6 +313,7 @@ static int at_stk_probe(struct ofono_stk *stk, unsigned int vendor, void *data)
 
 	sd = g_new0(struct stk_data, 1);
 	sd->chat = chat;
+	sd->vendor = vendor;
 
 	ofono_stk_set_data(stk, sd);
 	g_idle_add(at_stk_register, stk);

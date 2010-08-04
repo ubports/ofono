@@ -364,6 +364,20 @@ struct sms_assembly {
 	GSList *assembly_list;
 };
 
+struct id_table_node {
+	struct sms_address to;
+	unsigned int mrs[8];
+	time_t expiration;
+	unsigned char total_mrs;
+	unsigned char sent_mrs;
+	gboolean deliverable;
+};
+
+struct status_report_assembly {
+	const char *imsi;
+	GHashTable *assembly_table;
+};
+
 struct cbs {
 	enum cbs_geo_scope gs;			/* 2 bits */
 	guint16 message_code;			/* 10 bits */
@@ -417,6 +431,12 @@ gboolean sms_decode_unpacked_stk_pdu(const unsigned char *pdu, int len,
 
 gboolean sms_encode(const struct sms *in, int *len, int *tpdu_len,
 			unsigned char *pdu);
+
+/*
+ * Length is based on the address being 12 hex characters plus a
+ * terminating NUL char. See sms_assembly_extract_address().
+ */
+#define DECLARE_SMS_ADDR_STR(a) char a[25]
 
 gboolean sms_decode_address_field(const unsigned char *pdu, int len,
 					int *offset, gboolean sc,
@@ -480,6 +500,23 @@ GSList *sms_assembly_add_fragment(struct sms_assembly *assembly,
 					const struct sms_address *addr,
 					guint16 ref, guint8 max, guint8 seq);
 void sms_assembly_expire(struct sms_assembly *assembly, time_t before);
+gboolean sms_address_to_hex_string(const struct sms_address *in,
+				   char *straddr);
+
+struct status_report_assembly *status_report_assembly_new(const char *imsi);
+void status_report_assembly_free(struct status_report_assembly *assembly);
+gboolean status_report_assembly_report(struct status_report_assembly *assembly,
+					const struct sms *status_report,
+					unsigned int *msg_id,
+					gboolean *msg_delivered);
+void status_report_assembly_add_fragment(struct status_report_assembly
+					*assembly, unsigned int msg_id,
+					const struct sms_address *to,
+					unsigned char mr, time_t expiration,
+					unsigned char total_mrs);
+void status_report_assembly_expire(struct status_report_assembly *assembly,
+					time_t before, GFunc foreach_func,
+					gpointer data);
 
 GSList *sms_text_prepare(const char *utf8, guint16 ref,
 				gboolean use_16bit, int *ref_offset,
@@ -508,3 +545,5 @@ char *cbs_topic_ranges_to_string(GSList *ranges);
 GSList *cbs_extract_topic_ranges(const char *ranges);
 GSList *cbs_optimize_ranges(GSList *ranges);
 gboolean cbs_topic_in_range(unsigned int topic, GSList *ranges);
+
+char *ussd_decode(int dcs, int len, const unsigned char *data);

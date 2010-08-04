@@ -43,6 +43,7 @@
 #include "atmodem.h"
 
 static const char *csca_prefix[] = { "+CSCA:", NULL };
+static const char *cgsms_prefix[] = { "+CGSMS:", NULL };
 static const char *csms_prefix[] = { "+CSMS:", NULL };
 static const char *cmgf_prefix[] = { "+CMGF:", NULL };
 static const char *cpms_prefix[] = { "+CPMS:", NULL };
@@ -251,6 +252,91 @@ error:
 	CALLBACK_WITH_FAILURE(cb, -1, user_data);
 }
 
+static void at_cgsms_set_cb(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_sms_sca_set_cb_t cb = cbd->cb;
+	struct ofono_error error;
+
+	decode_at_error(&error, g_at_result_final_response(result));
+
+	cb(&error, cbd->data);
+}
+
+static void at_cgsms_set(struct ofono_sms *sms, int bearer,
+			ofono_sms_bearer_set_cb_t cb, void *user_data)
+{
+	struct sms_data *data = ofono_sms_get_data(sms);
+	struct cb_data *cbd = cb_data_new(cb, user_data);
+	char buf[64];
+
+	if (!cbd)
+		goto error;
+
+	snprintf(buf, sizeof(buf), "AT+CGSMS=%d", bearer);
+
+	if (g_at_chat_send(data->chat, buf, none_prefix,
+				at_cgsms_set_cb, cbd, g_free) > 0)
+		return;
+
+error:
+	if (cbd)
+		g_free(cbd);
+
+	CALLBACK_WITH_FAILURE(cb, user_data);
+}
+
+static void at_cgsms_query_cb(gboolean ok, GAtResult *result,
+				gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_sms_bearer_query_cb_t cb = cbd->cb;
+	struct ofono_error error;
+	GAtResultIter iter;
+	int bearer;
+
+	decode_at_error(&error, g_at_result_final_response(result));
+
+	if (!ok) {
+		cb(&error, -1, cbd->data);
+		return;
+	}
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "+CGSMS:"))
+		goto err;
+
+	g_at_result_iter_next_number(&iter, &bearer);
+
+	cb(&error, bearer, cbd->data);
+
+	return;
+
+err:
+	CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
+}
+
+static void at_cgsms_query(struct ofono_sms *sms,
+				ofono_sms_bearer_query_cb_t cb, void *user_data)
+{
+	struct sms_data *data = ofono_sms_get_data(sms);
+	struct cb_data *cbd = cb_data_new(cb, user_data);
+
+	if (!cbd)
+		goto error;
+
+	if (g_at_chat_send(data->chat, "AT+CGSMS?", cgsms_prefix,
+				at_cgsms_query_cb, cbd, g_free) > 0)
+		return;
+
+error:
+	if (cbd)
+		g_free(cbd);
+
+	CALLBACK_WITH_FAILURE(cb, -1, user_data);
+}
+
 static void at_cnma_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	if (!ok)
@@ -297,6 +383,7 @@ static inline void at_ack_delivery(struct ofono_sms *sms)
 static void at_cds_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_sms *sms = user_data;
+	struct sms_data *data = ofono_sms_get_data(sms);
 	long pdu_len;
 	int tpdu_len;
 	const char *hexpdu;
@@ -318,7 +405,8 @@ static void at_cds_notify(GAtResult *result, gpointer user_data)
 	decode_hex_own_buf(hexpdu, -1, &pdu_len, 0, pdu);
 	ofono_sms_status_notify(sms, pdu, pdu_len, tpdu_len);
 
-	at_ack_delivery(sms);
+	if (data->cnma_enabled)
+		at_ack_delivery(sms);
 }
 
 static void at_cmt_notify(GAtResult *result, gpointer user_data)
@@ -734,14 +822,14 @@ static gboolean build_cnmi_string(char *buf, int *cnmi_opts,
 	 * sends the device into la-la land.
 	 */
 	if (data->vendor == OFONO_VENDOR_NOVATEL)
-		/* MSM devices advertise support for mode 2, but return an
-		 * error if we attempt to actually use it. */
-		mode = "2";
+		mode = "20";
 	else
-		/* Sounds like 2 is the sanest mode */
-		mode = data->cnma_enabled ? "10" : "20";
+		mode = "120";
 
-	/* Always deliver Status-Reports via +CDS or don't deliver at all */
+	/*
+	 * Try to deliver Status-Reports via +CDS, then CDSI or don't
+	 * deliver at all
+	 * */
 	if (!append_cnmi_element(buf, &len, cnmi_opts[3], mode, FALSE))
 		return FALSE;
 
@@ -1155,6 +1243,8 @@ static struct ofono_sms_driver driver = {
 	.sca_query	= at_csca_query,
 	.sca_set	= at_csca_set,
 	.submit		= at_cmgs,
+	.bearer_query	= at_cgsms_query,
+	.bearer_set	= at_cgsms_set,
 };
 
 void at_sms_init()

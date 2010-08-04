@@ -35,13 +35,13 @@
 #include "gatppp.h"
 #include "ppp.h"
 
-#define IPCP_SUPPORTED_CODES	  ((1 << PPPCP_CODE_TYPE_CONFIGURE_REQUEST) | \
-				  (1 << PPPCP_CODE_TYPE_CONFIGURE_ACK) | \
-				  (1 << PPPCP_CODE_TYPE_CONFIGURE_NAK) | \
-				  (1 << PPPCP_CODE_TYPE_CONFIGURE_REJECT) | \
-				  (1 << PPPCP_CODE_TYPE_TERMINATE_REQUEST) | \
-				  (1 << PPPCP_CODE_TYPE_TERMINATE_ACK) | \
-				  (1 << PPPCP_CODE_TYPE_CODE_REJECT))
+#define IPCP_SUPPORTED_CODES	((1 << PPPCP_CODE_TYPE_CONFIGURE_REQUEST) | \
+				(1 << PPPCP_CODE_TYPE_CONFIGURE_ACK) | \
+				(1 << PPPCP_CODE_TYPE_CONFIGURE_NAK) | \
+				(1 << PPPCP_CODE_TYPE_CONFIGURE_REJECT) | \
+				(1 << PPPCP_CODE_TYPE_TERMINATE_REQUEST) | \
+				(1 << PPPCP_CODE_TYPE_TERMINATE_ACK) | \
+				(1 << PPPCP_CODE_TYPE_CODE_REJECT))
 
 enum ipcp_option_types {
 	IP_ADDRESSES		= 1,
@@ -63,50 +63,56 @@ enum ipcp_option_types {
 #define REQ_OPTION_NBNS1	0x08
 #define REQ_OPTION_NBNS2	0x10
 
+#define MAX_IPCP_FAILURE	100
+
 struct ipcp_data {
 	guint8 options[MAX_CONFIG_OPTION_SIZE];
 	guint16 options_len;
 	guint8 req_options;
-	guint32 ipaddr;
+	guint32 local_addr;
+	guint32 peer_addr;
 	guint32 dns1;
 	guint32 dns2;
 	guint32 nbns1;
 	guint32 nbns2;
+	gboolean is_server;
 };
 
-#define FILL_IP(req, type, var) 				\
-	if (req) {						\
-		ipcp->options[len] = type;			\
-		ipcp->options[len + 1] = 6;			\
-		memcpy(ipcp->options + len + 2, var, 4);	\
-								\
-		len += 6;					\
-	}							\
+#define FILL_IP(options, req, type, var)		\
+	if (req) {					\
+		options[len] = type;			\
+		options[len + 1] = 6;			\
+		memcpy(options + len + 2, var, 4);	\
+							\
+		len += 6;				\
+	}						\
 
 static void ipcp_generate_config_options(struct ipcp_data *ipcp)
 {
 	guint16 len = 0;
 
-	FILL_IP(ipcp->req_options & REQ_OPTION_IPADDR,
-					IP_ADDRESS, &ipcp->ipaddr);
-	FILL_IP(ipcp->req_options & REQ_OPTION_DNS1,
+	FILL_IP(ipcp->options, ipcp->req_options & REQ_OPTION_IPADDR,
+					IP_ADDRESS, &ipcp->local_addr);
+	FILL_IP(ipcp->options, ipcp->req_options & REQ_OPTION_DNS1,
 					PRIMARY_DNS_SERVER, &ipcp->dns1);
-	FILL_IP(ipcp->req_options & REQ_OPTION_DNS2,
+	FILL_IP(ipcp->options, ipcp->req_options & REQ_OPTION_DNS2,
 					SECONDARY_DNS_SERVER, &ipcp->dns2);
-	FILL_IP(ipcp->req_options & REQ_OPTION_NBNS1,
+	FILL_IP(ipcp->options, ipcp->req_options & REQ_OPTION_NBNS1,
 					PRIMARY_NBNS_SERVER, &ipcp->nbns1);
-	FILL_IP(ipcp->req_options & REQ_OPTION_NBNS2,
+	FILL_IP(ipcp->options, ipcp->req_options & REQ_OPTION_NBNS2,
 					SECONDARY_NBNS_SERVER, &ipcp->nbns2);
 
 	ipcp->options_len = len;
 }
 
-static void ipcp_reset_config_options(struct ipcp_data *ipcp)
+static void ipcp_reset_client_config_options(struct ipcp_data *ipcp)
 {
 	ipcp->req_options = REQ_OPTION_IPADDR | REQ_OPTION_DNS1 |
 				REQ_OPTION_DNS2 | REQ_OPTION_NBNS1 |
 				REQ_OPTION_NBNS2;
-	ipcp->ipaddr = 0;
+
+	ipcp->local_addr = 0;
+	ipcp->peer_addr = 0;
 	ipcp->dns1 = 0;
 	ipcp->dns2 = 0;
 	ipcp->nbns1 = 0;
@@ -115,17 +121,42 @@ static void ipcp_reset_config_options(struct ipcp_data *ipcp)
 	ipcp_generate_config_options(ipcp);
 }
 
+static void ipcp_reset_server_config_options(struct ipcp_data *ipcp)
+{
+	if (ipcp->local_addr != 0)
+		ipcp->req_options = REQ_OPTION_IPADDR;
+	else
+		ipcp->req_options = 0;
+
+	ipcp_generate_config_options(ipcp);
+}
+
+void ipcp_set_server_info(struct pppcp_data *pppcp, guint32 peer_addr,
+				guint32 dns1, guint32 dns2)
+{
+	struct ipcp_data *ipcp = pppcp_get_data(pppcp);
+
+	ipcp->peer_addr = peer_addr;
+	ipcp->dns1 = dns1;
+	ipcp->dns2 = dns2;
+}
+
 static void ipcp_up(struct pppcp_data *pppcp)
 {
 	struct ipcp_data *ipcp = pppcp_get_data(pppcp);
-	char ip[INET_ADDRSTRLEN];
+	char local[INET_ADDRSTRLEN];
+	char peer[INET_ADDRSTRLEN];
 	char dns1[INET_ADDRSTRLEN];
 	char dns2[INET_ADDRSTRLEN];
 	struct in_addr addr;
 
-	memset(ip, 0, sizeof(ip));
-	addr.s_addr = ipcp->ipaddr;
-	inet_ntop(AF_INET, &addr, ip, INET_ADDRSTRLEN);
+	memset(local, 0, sizeof(local));
+	addr.s_addr = ipcp->local_addr;
+	inet_ntop(AF_INET, &addr, local, INET_ADDRSTRLEN);
+
+	memset(peer, 0, sizeof(peer));
+	addr.s_addr = ipcp->peer_addr;
+	inet_ntop(AF_INET, &addr, peer, INET_ADDRSTRLEN);
 
 	memset(dns1, 0, sizeof(dns1));
 	addr.s_addr = ipcp->dns1;
@@ -135,7 +166,8 @@ static void ipcp_up(struct pppcp_data *pppcp)
 	addr.s_addr = ipcp->dns2;
 	inet_ntop(AF_INET, &addr, dns2, INET_ADDRSTRLEN);
 
-	ppp_ipcp_up_notify(pppcp_get_ppp(pppcp), ip[0] ? ip : NULL,
+	ppp_ipcp_up_notify(pppcp_get_ppp(pppcp), local[0] ? local : NULL,
+					peer[0] ? peer : NULL,
 					dns1[0] ? dns1 : NULL,
 					dns2[0] ? dns2 : NULL);
 }
@@ -144,7 +176,11 @@ static void ipcp_down(struct pppcp_data *pppcp)
 {
 	struct ipcp_data *ipcp = pppcp_get_data(pppcp);
 
-	ipcp_reset_config_options(ipcp);
+	if (ipcp->is_server)
+		ipcp_reset_server_config_options(ipcp);
+	else
+		ipcp_reset_client_config_options(ipcp);
+
 	pppcp_set_local_options(pppcp, ipcp->options, ipcp->options_len);
 	ppp_ipcp_down_notify(pppcp_get_ppp(pppcp));
 }
@@ -160,6 +196,9 @@ static void ipcp_rca(struct pppcp_data *pppcp,
 	struct ipcp_data *ipcp = pppcp_get_data(pppcp);
 	struct ppp_option_iter iter;
 
+	if (ipcp->is_server)
+		return;
+
 	ppp_option_iter_init(&iter, packet);
 
 	while (ppp_option_iter_next(&iter) == TRUE) {
@@ -167,7 +206,7 @@ static void ipcp_rca(struct pppcp_data *pppcp,
 
 		switch (ppp_option_iter_get_type(&iter)) {
 		case IP_ADDRESS:
-			memcpy(&ipcp->ipaddr, data, 4);
+			memcpy(&ipcp->local_addr, data, 4);
 			break;
 		case PRIMARY_DNS_SERVER:
 			memcpy(&ipcp->dns1, data, 4);
@@ -193,6 +232,9 @@ static void ipcp_rcn_nak(struct pppcp_data *pppcp,
 	struct ipcp_data *ipcp = pppcp_get_data(pppcp);
 	struct ppp_option_iter iter;
 
+	if (ipcp->is_server)
+		return;
+
 	g_print("Received IPCP NAK\n");
 
 	ppp_option_iter_init(&iter, packet);
@@ -204,7 +246,7 @@ static void ipcp_rcn_nak(struct pppcp_data *pppcp,
 		case IP_ADDRESS:
 			g_print("Setting suggested ip addr\n");
 			ipcp->req_options |= REQ_OPTION_IPADDR;
-			memcpy(&ipcp->ipaddr, data, 4);
+			memcpy(&ipcp->local_addr, data, 4);
 			break;
 		case PRIMARY_DNS_SERVER:
 			g_print("Setting suggested dns1\n");
@@ -269,22 +311,145 @@ static void ipcp_rcn_rej(struct pppcp_data *pppcp,
 	pppcp_set_local_options(pppcp, ipcp->options, ipcp->options_len);
 }
 
-static enum rcr_result ipcp_rcr(struct pppcp_data *pppcp,
+static enum rcr_result ipcp_server_rcr(struct ipcp_data *ipcp,
 					const struct pppcp_packet *packet,
 					guint8 **new_options, guint16 *new_len)
 {
 	struct ppp_option_iter iter;
+	guint8 nak_options[MAX_CONFIG_OPTION_SIZE];
+	guint16 len = 0;
+	guint8 *rej_options = NULL;
+	guint16 rej_len = 0;
+	guint32 addr;
 
 	ppp_option_iter_init(&iter, packet);
 
-	if (ppp_option_iter_next(&iter) == FALSE)
-		return RCR_ACCEPT;
+	while (ppp_option_iter_next(&iter) == TRUE) {
+		const guint8 *data = ppp_option_iter_get_data(&iter);
+		guint8 type = ppp_option_iter_get_type(&iter);
 
-	/* Reject all options */
-	*new_len = packet->length - sizeof(*packet);
-	*new_options = g_memdup(packet->data, *new_len);
+		switch (type) {
+		case IP_ADDRESS:
+			memcpy(&addr, data, 4);
 
-	return RCR_REJECT;
+			FILL_IP(nak_options,
+					addr != ipcp->peer_addr || addr == 0,
+					type, &ipcp->peer_addr);
+			break;
+		case PRIMARY_DNS_SERVER:
+			memcpy(&addr, data, 4);
+
+			FILL_IP(nak_options, addr != ipcp->dns1 || addr == 0,
+					type, &ipcp->dns1);
+			break;
+		case SECONDARY_DNS_SERVER:
+			memcpy(&addr, data, 4);
+
+			FILL_IP(nak_options, addr != ipcp->dns2 || addr == 0,
+					type, &ipcp->dns2);
+			break;
+		default:
+			/* Reject */
+			if (rej_options == NULL) {
+				guint16 max_len = ntohs(packet->length) - 4;
+				rej_options = g_new0(guint8, max_len);
+			}
+
+			if (rej_options != NULL) {
+				guint8 opt_len =
+					ppp_option_iter_get_length(&iter);
+
+				rej_options[rej_len] = type;
+				rej_options[rej_len + 1] = opt_len + 2;
+				memcpy(rej_options + rej_len + 2,
+								data, opt_len);
+				rej_len += opt_len + 2;
+			}
+			break;
+		}
+	}
+
+	if (rej_len > 0) {
+		*new_len = rej_len;
+		*new_options = rej_options;
+
+		return RCR_REJECT;
+	}
+
+	if (len > 0) {
+		*new_len = len;
+		*new_options = g_memdup(nak_options, len);
+
+		return RCR_NAK;
+	}
+
+	return RCR_ACCEPT;
+}
+
+static enum rcr_result ipcp_client_rcr(struct ipcp_data *ipcp,
+					const struct pppcp_packet *packet,
+					guint8 **new_options, guint16 *new_len)
+{
+	guint8 *options = NULL;
+	struct ppp_option_iter iter;
+	guint8 len = 0;
+
+	ppp_option_iter_init(&iter, packet);
+
+	while (ppp_option_iter_next(&iter) == TRUE) {
+		const guint8 *data = ppp_option_iter_get_data(&iter);
+		guint8 type = ppp_option_iter_get_type(&iter);
+
+		switch (type) {
+		case IP_ADDRESS:
+			memcpy(&ipcp->peer_addr, data, 4);
+			if (ipcp->peer_addr != 0)
+				break;
+
+			/*
+			 * Fall through, reject IP_ADDRESS if peer sends
+			 * us 0 (expecting us to provide its IP address)
+			 */
+		default:
+			if (options == NULL) {
+				guint16 max_len = ntohs(packet->length) - 4;
+				options = g_new0(guint8, max_len);
+			}
+
+			if (options != NULL) {
+				guint8 opt_len =
+					ppp_option_iter_get_length(&iter);
+
+				options[len] = type;
+				options[len + 1] = opt_len + 2;
+				memcpy(options + len + 2, data, opt_len);
+				len += opt_len + 2;
+			}
+
+			break;
+		}
+	}
+
+	if (len > 0) {
+		*new_len = len;
+		*new_options = options;
+
+		return RCR_REJECT;
+	}
+
+	return RCR_ACCEPT;
+}
+
+static enum rcr_result ipcp_rcr(struct pppcp_data *pppcp,
+					const struct pppcp_packet *packet,
+					guint8 **new_options, guint16 *new_len)
+{
+	struct ipcp_data *ipcp = pppcp_get_data(pppcp);
+
+	if (ipcp->is_server)
+		return ipcp_server_rcr(ipcp, packet, new_options, new_len);
+	else
+		return ipcp_client_rcr(ipcp, packet, new_options, new_len);
 }
 
 struct pppcp_proto ipcp_proto = {
@@ -300,7 +465,7 @@ struct pppcp_proto ipcp_proto = {
 	.rcr			= ipcp_rcr,
 };
 
-struct pppcp_data *ipcp_new(GAtPPP *ppp)
+struct pppcp_data *ipcp_new(GAtPPP *ppp, gboolean is_server, guint32 ip)
 {
 	struct ipcp_data *ipcp;
 	struct pppcp_data *pppcp;
@@ -309,7 +474,13 @@ struct pppcp_data *ipcp_new(GAtPPP *ppp)
 	if (!ipcp)
 		return NULL;
 
-	pppcp = pppcp_new(ppp, &ipcp_proto);
+	/*
+	 * Some 3G modems use repeated IPCP NAKs as the way of stalling
+	 * util sending us the client IP address. So we increase the
+	 * default number of NAKs we accept before start treating them
+	 * as rejects.
+	 */
+	pppcp = pppcp_new(ppp, &ipcp_proto, FALSE, MAX_IPCP_FAILURE);
 	if (!pppcp) {
 		g_printerr("Failed to allocate PPPCP struct\n");
 		g_free(ipcp);
@@ -317,7 +488,14 @@ struct pppcp_data *ipcp_new(GAtPPP *ppp)
 	}
 
 	pppcp_set_data(pppcp, ipcp);
-	ipcp_reset_config_options(ipcp);
+	ipcp->is_server = is_server;
+
+	if (is_server) {
+		ipcp->local_addr = ip;
+		ipcp_reset_server_config_options(ipcp);
+	} else
+		ipcp_reset_client_config_options(ipcp);
+
 	pppcp_set_local_options(pppcp, ipcp->options, ipcp->options_len);
 
 	return pppcp;

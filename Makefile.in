@@ -71,8 +71,8 @@ host_triplet = @host@
 @ISIMODEM_TRUE@	drivers/isimodem/gpds.h plugins/usbpnmodem.c
 @ATMODEM_TRUE@am__append_7 = atmodem nwmodem calypsomodem hfpmodem \
 @ATMODEM_TRUE@	mbmmodem hsomodem stemodem modemconf phonesim \
-@ATMODEM_TRUE@	atgen g1 wavecom calypso mbm hso huawei em770 \
-@ATMODEM_TRUE@	novatel hfp palmpre ste
+@ATMODEM_TRUE@	atgen g1 wavecom calypso mbm hso huawei novatel \
+@ATMODEM_TRUE@	bluetooth hfp palmpre ste
 @ATMODEM_TRUE@am__append_8 = $(gatchat_sources) \
 @ATMODEM_TRUE@	drivers/atmodem/atmodem.h \
 @ATMODEM_TRUE@	drivers/atmodem/atmodem.c \
@@ -82,7 +82,7 @@ host_triplet = @host@
 @ATMODEM_TRUE@	drivers/atmodem/call-meter.c \
 @ATMODEM_TRUE@	drivers/atmodem/network-registration.c \
 @ATMODEM_TRUE@	drivers/atmodem/sim.c drivers/atmodem/stk.c \
-@ATMODEM_TRUE@	drivers/atmodem/sim-poll.c \
+@ATMODEM_TRUE@	drivers/atmodem/stk.h drivers/atmodem/sim-poll.c \
 @ATMODEM_TRUE@	drivers/atmodem/sim-poll.h \
 @ATMODEM_TRUE@	drivers/atmodem/ussd.c \
 @ATMODEM_TRUE@	drivers/atmodem/voicecall.c \
@@ -127,8 +127,10 @@ host_triplet = @host@
 @ATMODEM_TRUE@	plugins/phonesim.c plugins/atgen.c plugins/g1.c \
 @ATMODEM_TRUE@	plugins/wavecom.c plugins/calypso.c \
 @ATMODEM_TRUE@	plugins/mbm.c plugins/hso.c plugins/huawei.c \
-@ATMODEM_TRUE@	plugins/em770.c plugins/novatel.c plugins/hfp.c \
-@ATMODEM_TRUE@	plugins/palmpre.c plugins/ste.c
+@ATMODEM_TRUE@	plugins/novatel.c plugins/bluetooth.c \
+@ATMODEM_TRUE@	plugins/bluetooth.h plugins/hfp.c \
+@ATMODEM_TRUE@	plugins/bluetooth.h plugins/palmpre.c \
+@ATMODEM_TRUE@	plugins/ste.c
 @ATMODEM_TRUE@@DATAFILES_TRUE@am__append_9 = plugins/modem.conf
 @MAINTAINER_MODE_TRUE@am__append_10 = example_history example_nettime
 @MAINTAINER_MODE_TRUE@am__append_11 = plugins/example_history.c plugins/example_nettime.c
@@ -228,15 +230,16 @@ am__src_ofonod_SOURCES_DIST = gdbus/gdbus.h gdbus/mainloop.c \
 	drivers/atmodem/sms.c drivers/atmodem/cbs.c \
 	drivers/atmodem/call-forwarding.c drivers/atmodem/call-meter.c \
 	drivers/atmodem/network-registration.c drivers/atmodem/sim.c \
-	drivers/atmodem/stk.c drivers/atmodem/sim-poll.c \
-	drivers/atmodem/sim-poll.h drivers/atmodem/ussd.c \
-	drivers/atmodem/voicecall.c drivers/atmodem/call-barring.c \
-	drivers/atmodem/phonebook.c drivers/atmodem/ssn.c \
-	drivers/atmodem/devinfo.c drivers/atmodem/call-volume.c \
-	drivers/atmodem/vendor.h drivers/atmodem/atutil.h \
-	drivers/atmodem/atutil.c drivers/atmodem/gprs.c \
-	drivers/atmodem/gprs-context.c drivers/nwmodem/nwmodem.h \
-	drivers/nwmodem/nwmodem.c drivers/nwmodem/radio-settings.c \
+	drivers/atmodem/stk.c drivers/atmodem/stk.h \
+	drivers/atmodem/sim-poll.c drivers/atmodem/sim-poll.h \
+	drivers/atmodem/ussd.c drivers/atmodem/voicecall.c \
+	drivers/atmodem/call-barring.c drivers/atmodem/phonebook.c \
+	drivers/atmodem/ssn.c drivers/atmodem/devinfo.c \
+	drivers/atmodem/call-volume.c drivers/atmodem/vendor.h \
+	drivers/atmodem/atutil.h drivers/atmodem/atutil.c \
+	drivers/atmodem/gprs.c drivers/atmodem/gprs-context.c \
+	drivers/nwmodem/nwmodem.h drivers/nwmodem/nwmodem.c \
+	drivers/nwmodem/radio-settings.c \
 	drivers/calypsomodem/calypsomodem.h \
 	drivers/calypsomodem/calypsomodem.c \
 	drivers/calypsomodem/voicecall.c drivers/hfpmodem/hfpmodem.h \
@@ -252,9 +255,9 @@ am__src_ofonod_SOURCES_DIST = gdbus/gdbus.h gdbus/mainloop.c \
 	drivers/stemodem/if_caif.h plugins/modemconf.c \
 	plugins/phonesim.c plugins/atgen.c plugins/g1.c \
 	plugins/wavecom.c plugins/calypso.c plugins/mbm.c \
-	plugins/hso.c plugins/huawei.c plugins/em770.c \
-	plugins/novatel.c plugins/hfp.c plugins/palmpre.c \
-	plugins/ste.c plugins/example_history.c \
+	plugins/hso.c plugins/huawei.c plugins/novatel.c \
+	plugins/bluetooth.c plugins/bluetooth.h plugins/hfp.c \
+	plugins/palmpre.c plugins/ste.c plugins/example_history.c \
 	plugins/example_nettime.c src/main.c src/ofono.h src/log.c \
 	src/plugin.c src/modem.c src/common.h src/common.c \
 	src/manager.c src/dbus.c src/util.h src/util.c src/network.c \
@@ -265,7 +268,7 @@ am__src_ofonod_SOURCES_DIST = gdbus/gdbus.h gdbus/mainloop.c \
 	src/simutil.h src/simutil.c src/storage.h src/storage.c \
 	src/cbs.c src/watch.c src/call-volume.c src/gprs.c src/idmap.h \
 	src/idmap.c src/radio-settings.c src/stkutil.h src/stkutil.c \
-	src/nettime.c
+	src/nettime.c src/stkagent.c src/stkagent.h
 am__objects_2 = gdbus/mainloop.$(OBJEXT) gdbus/object.$(OBJEXT) \
 	gdbus/watch.$(OBJEXT)
 @UDEV_TRUE@am__objects_3 = plugins/udev.$(OBJEXT)
@@ -338,9 +341,10 @@ am__objects_4 = gisi/modem.$(OBJEXT) gisi/netlink.$(OBJEXT) \
 @ATMODEM_TRUE@	plugins/wavecom.$(OBJEXT) \
 @ATMODEM_TRUE@	plugins/calypso.$(OBJEXT) plugins/mbm.$(OBJEXT) \
 @ATMODEM_TRUE@	plugins/hso.$(OBJEXT) plugins/huawei.$(OBJEXT) \
-@ATMODEM_TRUE@	plugins/em770.$(OBJEXT) \
-@ATMODEM_TRUE@	plugins/novatel.$(OBJEXT) plugins/hfp.$(OBJEXT) \
-@ATMODEM_TRUE@	plugins/palmpre.$(OBJEXT) plugins/ste.$(OBJEXT)
+@ATMODEM_TRUE@	plugins/novatel.$(OBJEXT) \
+@ATMODEM_TRUE@	plugins/bluetooth.$(OBJEXT) \
+@ATMODEM_TRUE@	plugins/hfp.$(OBJEXT) plugins/palmpre.$(OBJEXT) \
+@ATMODEM_TRUE@	plugins/ste.$(OBJEXT)
 @MAINTAINER_MODE_TRUE@am__objects_7 =  \
 @MAINTAINER_MODE_TRUE@	plugins/example_history.$(OBJEXT) \
 @MAINTAINER_MODE_TRUE@	plugins/example_nettime.$(OBJEXT)
@@ -360,7 +364,7 @@ am_src_ofonod_OBJECTS = $(am__objects_2) $(am__objects_8) \
 	src/watch.$(OBJEXT) src/call-volume.$(OBJEXT) \
 	src/gprs.$(OBJEXT) src/idmap.$(OBJEXT) \
 	src/radio-settings.$(OBJEXT) src/stkutil.$(OBJEXT) \
-	src/nettime.$(OBJEXT)
+	src/nettime.$(OBJEXT) src/stkagent.$(OBJEXT)
 src_ofonod_OBJECTS = $(am_src_ofonod_OBJECTS)
 am__DEPENDENCIES_1 =
 am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1)
@@ -677,7 +681,7 @@ src_ofonod_SOURCES = $(gdbus_sources) $(builtin_sources) \
 			src/storage.c src/cbs.c src/watch.c src/call-volume.c \
 			src/gprs.c src/idmap.h src/idmap.c \
 			src/radio-settings.c src/stkutil.h src/stkutil.c \
-			src/nettime.c
+			src/nettime.c src/stkagent.c src/stkagent.h
 
 src_ofonod_LDADD = $(builtin_libadd) @GLIB_LIBS@ @DBUS_LIBS@ @CAPNG_LIBS@ -ldl
 src_ofonod_LDFLAGS = -Wl,--export-dynamic -Wl,--version-script=src/ofono.ver
@@ -700,6 +704,7 @@ doc_files = doc/overview.txt doc/ofono-paper.txt \
 			doc/voicecallmanager-api.txt doc/voicecall-api.txt \
 			doc/call-forwarding-api.txt doc/call-settings-api.txt \
 			doc/call-meter-api.txt \
+			doc/supplementaryservices-api.txt \
 			doc/dataconnectionmanager-api.txt
 
 test_scripts = test/activate-context \
@@ -720,6 +725,7 @@ test_scripts = test/activate-context \
 		test/send-sms \
 		test/set-mic-volume \
 		test/set-speaker-volume \
+		test/simple-agent \
 		test/test-advice-of-charge \
 		test/test-call-barring \
 		test/test-call-forwarding \
@@ -739,7 +745,8 @@ test_scripts = test/activate-context \
 		test/set-tech-preference \
 		test/set-use-sms-reports \
 		test/set-cbs-topics \
-		test/enable-cbs
+		test/enable-cbs \
+		test/propose-scan
 
 @TEST_TRUE@testdir = $(pkglibdir)/test
 @TEST_TRUE@test_SCRIPTS = $(test_scripts)
@@ -1207,9 +1214,9 @@ plugins/hso.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
 plugins/huawei.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
-plugins/em770.$(OBJEXT): plugins/$(am__dirstamp) \
-	plugins/$(DEPDIR)/$(am__dirstamp)
 plugins/novatel.$(OBJEXT): plugins/$(am__dirstamp) \
+	plugins/$(DEPDIR)/$(am__dirstamp)
+plugins/bluetooth.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
 plugins/hfp.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
@@ -1278,6 +1285,8 @@ src/radio-settings.$(OBJEXT): src/$(am__dirstamp) \
 src/stkutil.$(OBJEXT): src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
 src/nettime.$(OBJEXT): src/$(am__dirstamp) \
+	src/$(DEPDIR)/$(am__dirstamp)
+src/stkagent.$(OBJEXT): src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
 src/ofonod$(EXEEXT): $(src_ofonod_OBJECTS) $(src_ofonod_DEPENDENCIES) src/$(am__dirstamp)
 	@rm -f src/ofonod$(EXEEXT)
@@ -1455,9 +1464,9 @@ mostlyclean-compile:
 	-rm -f gisi/socket.$(OBJEXT)
 	-rm -f gisi/verify.$(OBJEXT)
 	-rm -f plugins/atgen.$(OBJEXT)
+	-rm -f plugins/bluetooth.$(OBJEXT)
 	-rm -f plugins/caif.$(OBJEXT)
 	-rm -f plugins/calypso.$(OBJEXT)
-	-rm -f plugins/em770.$(OBJEXT)
 	-rm -f plugins/example_history.$(OBJEXT)
 	-rm -f plugins/example_nettime.$(OBJEXT)
 	-rm -f plugins/g1.$(OBJEXT)
@@ -1500,6 +1509,7 @@ mostlyclean-compile:
 	-rm -f src/smsutil.$(OBJEXT)
 	-rm -f src/ssn.$(OBJEXT)
 	-rm -f src/stk.$(OBJEXT)
+	-rm -f src/stkagent.$(OBJEXT)
 	-rm -f src/stkutil.$(OBJEXT)
 	-rm -f src/storage.$(OBJEXT)
 	-rm -f src/ussd.$(OBJEXT)
@@ -1608,9 +1618,9 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@gisi/$(DEPDIR)/socket.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gisi/$(DEPDIR)/verify.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/atgen.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/bluetooth.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/caif.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/calypso.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/em770.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/example_history.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/example_nettime.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/g1.Po@am__quote@
@@ -1653,6 +1663,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/smsutil.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/ssn.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/stk.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/stkagent.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/stkutil.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/storage.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/ussd.Po@am__quote@
