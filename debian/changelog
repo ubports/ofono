@@ -1,8 +1,10 @@
 ofono (0.18-2) UNRELEASED; urgency=low
 
   * debian/: Added some files relating to building with git.
+  * debian/control: Adopt the package from Andres. Thanks for your work,
+    dude!
 
- -- Jonny Lamb <jonny@debian.org>  Mon, 29 Nov 2010 15:21:35 +0000
+ -- Jonny Lamb <jonny@debian.org>  Mon, 29 Nov 2010 15:28:01 +0000
 
 ofono (0.18-1) unstable; urgency=low
 
