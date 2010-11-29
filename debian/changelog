@@ -1,5 +1,6 @@
-ofono (0.18-2) UNRELEASED; urgency=low
+ofono (0.36-1) UNRELEASED; urgency=low
 
+  * New upstream release.
   * debian/: Added some files relating to building with git.
   * debian/control: Adopt the package from Andres. Thanks for your work,
     dude!
