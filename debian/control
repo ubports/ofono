@@ -9,7 +9,7 @@ Build-Depends: debhelper (>= 5),
                libdbus-glib-1-dev,
                libudev-dev,
                udev
-Standards-Version: 3.8.3
+Standards-Version: 3.9.1
 Homepage: http://www.ofono.org/
 
 Package: ofono
