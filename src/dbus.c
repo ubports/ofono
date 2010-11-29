@@ -28,7 +28,7 @@
 
 #include "ofono.h"
 
-#define DBUS_GSM_ERROR_INTERFACE "org.ofono.Error"
+#define OFONO_ERROR_INTERFACE "org.ofono.Error"
 
 static DBusConnection *g_connection;
 
@@ -75,7 +75,7 @@ static void append_array_variant(DBusMessageIter *iter, int type, void *val)
 	DBusMessageIter variant, array;
 	char typesig[2];
 	char arraysig[3];
-	const char **str_array = *(const char ***)val;
+	const char **str_array = *(const char ***) val;
 	int i;
 
 	arraysig[0] = DBUS_TYPE_ARRAY;
@@ -117,7 +117,7 @@ static void append_dict_variant(DBusMessageIter *iter, int type, void *val)
 	DBusMessageIter variant, array, entry;
 	char typesig[5];
 	char arraysig[6];
-	const void **val_array = *(const void ***)val;
+	const void **val_array = *(const void ***) val;
 	int i;
 
 	arraysig[0] = DBUS_TYPE_ARRAY;
@@ -247,86 +247,105 @@ int ofono_dbus_signal_dict_property_changed(DBusConnection *conn,
 
 DBusMessage *__ofono_error_invalid_args(DBusMessage *msg)
 {
-	return g_dbus_create_error(msg, DBUS_GSM_ERROR_INTERFACE
+	return g_dbus_create_error(msg, OFONO_ERROR_INTERFACE
 					".InvalidArguments",
 					"Invalid arguments in method call");
 }
 
 DBusMessage *__ofono_error_invalid_format(DBusMessage *msg)
 {
-	return g_dbus_create_error(msg, DBUS_GSM_ERROR_INTERFACE
+	return g_dbus_create_error(msg, OFONO_ERROR_INTERFACE
 					".InvalidFormat",
 					"Argument format is not recognized");
 }
 
 DBusMessage *__ofono_error_not_implemented(DBusMessage *msg)
 {
-	return g_dbus_create_error(msg, DBUS_GSM_ERROR_INTERFACE
+	return g_dbus_create_error(msg, OFONO_ERROR_INTERFACE
 					".NotImplemented",
 					"Implementation not provided");
 }
 
 DBusMessage *__ofono_error_failed(DBusMessage *msg)
 {
-	return g_dbus_create_error(msg, DBUS_GSM_ERROR_INTERFACE ".Failed",
+	return g_dbus_create_error(msg, OFONO_ERROR_INTERFACE ".Failed",
 					"Operation failed");
 }
 
 DBusMessage *__ofono_error_busy(DBusMessage *msg)
 {
-	return g_dbus_create_error(msg, DBUS_GSM_ERROR_INTERFACE ".InProgress",
+	return g_dbus_create_error(msg, OFONO_ERROR_INTERFACE ".InProgress",
 					"Operation already in progress");
 }
 
 DBusMessage *__ofono_error_not_found(DBusMessage *msg)
 {
-	return g_dbus_create_error(msg, DBUS_GSM_ERROR_INTERFACE ".NotFound",
+	return g_dbus_create_error(msg, OFONO_ERROR_INTERFACE ".NotFound",
 			"Object is not found or not valid for this operation");
 }
 
 DBusMessage *__ofono_error_not_active(DBusMessage *msg)
 {
-	return g_dbus_create_error(msg, DBUS_GSM_ERROR_INTERFACE ".NotActive",
+	return g_dbus_create_error(msg, OFONO_ERROR_INTERFACE ".NotActive",
 			"Operation is not active or in progress");
 }
 
 DBusMessage *__ofono_error_not_supported(DBusMessage *msg)
 {
-	return g_dbus_create_error(msg, DBUS_GSM_ERROR_INTERFACE
+	return g_dbus_create_error(msg, OFONO_ERROR_INTERFACE
 					".NotSupported",
 					"Operation is not supported by the"
 					" network / modem");
 }
 
+DBusMessage *__ofono_error_not_available(DBusMessage *msg)
+{
+	return g_dbus_create_error(msg, OFONO_ERROR_INTERFACE
+					".NotAvailable",
+					"Operation currently not available");
+}
+
 DBusMessage *__ofono_error_timed_out(DBusMessage *msg)
 {
-	return g_dbus_create_error(msg, DBUS_GSM_ERROR_INTERFACE ".Timedout",
+	return g_dbus_create_error(msg, OFONO_ERROR_INTERFACE ".Timedout",
 			"Operation failure due to timeout");
 }
 
 DBusMessage *__ofono_error_sim_not_ready(DBusMessage *msg)
 {
-	return g_dbus_create_error(msg, DBUS_GSM_ERROR_INTERFACE ".SimNotReady",
+	return g_dbus_create_error(msg, OFONO_ERROR_INTERFACE ".SimNotReady",
 			"SIM is not ready or not inserted");
 }
 
 DBusMessage *__ofono_error_in_use(DBusMessage *msg)
 {
-	return g_dbus_create_error(msg, DBUS_GSM_ERROR_INTERFACE ".InUse",
+	return g_dbus_create_error(msg, OFONO_ERROR_INTERFACE ".InUse",
 			"The resource is currently in use");
 }
 
 DBusMessage *__ofono_error_not_attached(DBusMessage *msg)
 {
-	return g_dbus_create_error(msg, DBUS_GSM_ERROR_INTERFACE ".NotAttached",
+	return g_dbus_create_error(msg, OFONO_ERROR_INTERFACE ".NotAttached",
 			"GPRS is not attached");
 }
 
 DBusMessage *__ofono_error_attach_in_progress(DBusMessage *msg)
 {
 	return g_dbus_create_error(msg,
-				DBUS_GSM_ERROR_INTERFACE ".AttachInProgress",
+				OFONO_ERROR_INTERFACE ".AttachInProgress",
 				"GPRS Attach is in progress");
+}
+
+DBusMessage *__ofono_error_canceled(DBusMessage *msg)
+{
+	return g_dbus_create_error(msg, OFONO_ERROR_INTERFACE ".Canceled",
+					"Operation has been canceled");
+}
+
+DBusMessage *__ofono_error_access_denied(DBusMessage *msg)
+{
+	return g_dbus_create_error(msg, OFONO_ERROR_INTERFACE ".AccessDenied",
+					"Operation not permitted");
 }
 
 void __ofono_dbus_pending_reply(DBusMessage **msg, DBusMessage *reply)

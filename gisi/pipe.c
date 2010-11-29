@@ -1,23 +1,21 @@
 /*
- * This file is part of oFono - Open Source Telephony
  *
- * Copyright (C) 2009 Nokia Corporation and/or its subsidiary(-ies).
+ *  oFono - Open Source Telephony
  *
- * Contact: Rémi Denis-Courmont <remi.denis-courmont@nokia.com>
+ *  Copyright (C) 2009-2010 Nokia Corporation and/or its subsidiary(-ies).
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * version 2 as published by the Free Software Foundation.
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
  *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
- * 02110-1301 USA
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program; if not, write to the Free Software
+ *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
  */
 
@@ -26,7 +24,6 @@
 #endif
 
 #include <stdint.h>
-#include <stdbool.h>
 #include <errno.h>
 #include <glib.h>
 #include "client.h"
@@ -125,8 +122,8 @@ struct _GIsiPipe {
 	void *opaque;
 	int error;
 	uint8_t handle;
-	bool enabled;
-	bool enabling;
+	gboolean enabled;
+	gboolean enabling;
 };
 
 static int g_isi_pipe_error(uint8_t code)
@@ -163,16 +160,16 @@ static void g_isi_pipe_handle_error(GIsiPipe *pipe, uint8_t code)
 		pipe->error_handler(pipe);
 }
 
-static bool g_isi_pipe_created(GIsiClient *client,
-				const void *restrict data, size_t len,
-				uint16_t object, void *opaque)
+static gboolean g_isi_pipe_created(GIsiClient *client,
+					const void *restrict data, size_t len,
+					uint16_t object, void *opaque)
 {
 	GIsiPipe *pipe = opaque;
 	const isi_pipe_resp_t *resp = data;
 
 	if (len < 5 ||
 	    resp->cmd != PNS_PIPE_CREATE_RESP)
-		return false;
+		return FALSE;
 
 	if (resp->pipe_handle != PN_PIPE_INVALID_HANDLE) {
 		pipe->handle = resp->pipe_handle;
@@ -182,7 +179,7 @@ static bool g_isi_pipe_created(GIsiClient *client,
 			pipe->handler(pipe);
 	} else
 		g_isi_pipe_handle_error(pipe, resp->error_code);
-	return true;
+	return TRUE;
 }
 
 /**
@@ -211,14 +208,17 @@ GIsiPipe *g_isi_pipe_create(GIsiModem *modem, void (*created)(GIsiPipe *),
 		.type2 = type2,
 		.n_sb = 0,
 	};
-	GIsiPipe *pipe = g_malloc(sizeof(*pipe));
+	GIsiPipe *pipe = g_try_malloc(sizeof(GIsiPipe));
+
+	if (pipe == NULL)
+		return NULL;
 
 	pipe->client = g_isi_client_create(modem, PN_PIPE);
 	pipe->handler = created;
 	pipe->error_handler = NULL;
 	pipe->error = 0;
-	pipe->enabling = false;
-	pipe->enabled = false;
+	pipe->enabling = FALSE;
+	pipe->enabled = FALSE;
 	pipe->handle = PN_PIPE_INVALID_HANDLE;
 
 	if (pipe->client == NULL ||
@@ -247,22 +247,22 @@ g_isi_pipe_check_resp(const GIsiPipe *pipe, uint8_t cmd,
 	return resp;
 }
 
-static bool g_isi_pipe_enabled(GIsiClient *client,
-				const void *restrict data, size_t len,
-				uint16_t object, void *opaque)
+static gboolean g_isi_pipe_enabled(GIsiClient *client,
+					const void *restrict data, size_t len,
+					uint16_t object, void *opaque)
 {
 	GIsiPipe *pipe = opaque;
 	const isi_pipe_resp_t *resp;
 
 	resp = g_isi_pipe_check_resp(pipe, PNS_PIPE_ENABLE_RESP, data, len);
 	if (!resp)
-		return false;
+		return FALSE;
 
 	g_isi_pipe_handle_error(pipe, resp->error_code);
-	pipe->enabling = false;
+	pipe->enabling = FALSE;
 	if (!pipe->error)
-		pipe->enabled = true;
-	return true;
+		pipe->enabled = TRUE;
+	return TRUE;
 }
 
 static GIsiRequest *g_isi_pipe_enable(GIsiPipe *pipe)
@@ -292,26 +292,26 @@ int g_isi_pipe_start(GIsiPipe *pipe)
 	if (pipe->handle != PN_PIPE_INVALID_HANDLE)
 		g_isi_pipe_enable(pipe);
 	else
-		pipe->enabling = true;
+		pipe->enabling = TRUE;
 
 	return 0;
 }
 
 /* Not very useful, it will never have time to trigger */
-static bool g_isi_pipe_removed(GIsiClient *client,
-				const void *restrict data, size_t len,
-				uint16_t object, void *opaque)
+static gboolean g_isi_pipe_removed(GIsiClient *client,
+					const void *restrict data, size_t len,
+					uint16_t object, void *opaque)
 {
 	GIsiPipe *pipe = opaque;
 	const isi_pipe_resp_t *resp;
 
 	resp = g_isi_pipe_check_resp(pipe, PNS_PIPE_REMOVE_RESP, data, len);
 	if (!resp)
-		return false;
+		return FALSE;
 
 	pipe->handle = PN_PIPE_INVALID_HANDLE;
 	pipe->error = -EPIPE;
-	return true;
+	return TRUE;
 }
 
 

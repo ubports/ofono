@@ -32,8 +32,7 @@ struct ofono_gprs;
 struct ofono_gprs_context;
 
 typedef void (*ofono_gprs_status_cb_t)(const struct ofono_error *error,
-						int status, int lac, int ci,
-						int tech, void *data);
+						int status, void *data);
 
 typedef void (*ofono_gprs_cb_t)(const struct ofono_error *error, void *data);
 
@@ -44,14 +43,22 @@ struct ofono_gprs_driver {
 	void (*remove)(struct ofono_gprs *gprs);
 	void (*set_attached)(struct ofono_gprs *gprs, int attached,
 				ofono_gprs_cb_t cb, void *data);
-	void (*registration_status)(struct ofono_gprs *gprs,
+	void (*attached_status)(struct ofono_gprs *gprs,
 					ofono_gprs_status_cb_t cb, void *data);
 };
 
-void ofono_gprs_status_notify(struct ofono_gprs *gprs,
-				int status, int lac, int ci, int tech);
+enum gprs_suspend_cause {
+	GPRS_SUSPENDED_DETACHED,
+	GPRS_SUSPENDED_SIGNALLING,
+	GPRS_SUSPENDED_CALL,
+	GPRS_SUSPENDED_NO_COVERAGE,
+	GPRS_SUSPENDED_UNKNOWN_CAUSE,
+};
 
+void ofono_gprs_status_notify(struct ofono_gprs *gprs, int status);
 void ofono_gprs_detached_notify(struct ofono_gprs *gprs);
+void ofono_gprs_suspend_notify(struct ofono_gprs *gprs, int cause);
+void ofono_gprs_resume_notify(struct ofono_gprs *gprs);
 
 int ofono_gprs_driver_register(const struct ofono_gprs_driver *d);
 void ofono_gprs_driver_unregister(const struct ofono_gprs_driver *d);

@@ -26,6 +26,8 @@
 extern "C" {
 #endif
 
+#include <ofono/types.h>
+
 enum ofono_disconnect_reason;
 struct ofono_call;
 
@@ -33,6 +35,8 @@ enum ofono_history_sms_status {
 	OFONO_HISTORY_SMS_STATUS_PENDING,
 	OFONO_HISTORY_SMS_STATUS_SUBMITTED,
 	OFONO_HISTORY_SMS_STATUS_SUBMIT_FAILED,
+	OFONO_HISTORY_SMS_STATUS_DELIVERED,
+	OFONO_HISTORY_SMS_STATUS_DELIVER_FAILED,
 };
 
 struct ofono_history_context {
@@ -51,14 +55,16 @@ struct ofono_history_driver {
 	void (*call_missed)(struct ofono_history_context *context,
 				const struct ofono_call *call, time_t when);
 	void (*sms_received)(struct ofono_history_context *context,
-				unsigned int msg_id, const char *from,
+				const struct ofono_uuid *uuid, const char *from,
 				const struct tm *remote, const struct tm *local,
 				const char *text);
 	void (*sms_send_pending)(struct ofono_history_context *context,
-					unsigned int id, const char *to,
+					const struct ofono_uuid *uuid,
+					const char *to,
 					time_t when, const char *text);
 	void (*sms_send_status)(struct ofono_history_context *context,
-					unsigned int id, time_t when,
+					const struct ofono_uuid *uuid,
+					time_t when,
 					enum ofono_history_sms_status status);
 };
 

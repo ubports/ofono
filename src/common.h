@@ -115,6 +115,13 @@ enum ss_cssu {
 	SS_MT_CALL_DEFLECTED		= 9,
 };
 
+enum pin_type {
+	PIN_TYPE_NONE,
+	PIN_TYPE_PIN,
+	PIN_TYPE_PUK,
+	PIN_TYPE_NET,
+};
+
 const char *telephony_error_to_str(const struct ofono_error *error);
 
 gboolean valid_phone_number_format(const char *number);
@@ -123,7 +130,7 @@ void string_to_phone_number(const char *str, struct ofono_phone_number *ph);
 
 int mmi_service_code_to_bearer_class(int code);
 
-gboolean valid_ussd_string(const char *str);
+gboolean valid_ussd_string(const char *str, gboolean call_in_progress);
 
 gboolean parse_ss_control_string(char *str, int *ss_type,
 					char **sc, char **sia,
@@ -134,7 +141,7 @@ const char *ss_control_type_to_string(enum ss_control_type type);
 
 const char *bearer_class_to_string(enum bearer_class cls);
 
-gboolean is_valid_pin(const char *pin);
+gboolean is_valid_pin(const char *pin, enum pin_type type);
 
 const char *registration_status_to_string(int status);
 const char *registration_tech_to_string(int tech);

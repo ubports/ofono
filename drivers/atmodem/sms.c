@@ -43,6 +43,7 @@
 #include "atmodem.h"
 
 static const char *csca_prefix[] = { "+CSCA:", NULL };
+static const char *cgsms_prefix[] = { "+CGSMS:", NULL };
 static const char *csms_prefix[] = { "+CSMS:", NULL };
 static const char *cmgf_prefix[] = { "+CMGF:", NULL };
 static const char *cpms_prefix[] = { "+CPMS:", NULL };
@@ -62,19 +63,19 @@ static const char *storages[] = {
 	"SM",
 	"ME",
 	"MT",
+	"SR",
+	"BM",
 };
-
-#define SM_STORE 0
-#define ME_STORE 1
-#define MT_STORE 2
 
 struct sms_data {
 	int store;
 	int incoming;
 	int retries;
+	gboolean expect_sr;
 	gboolean cnma_enabled;
 	char *cnma_ack_pdu;
 	int cnma_ack_pdu_len;
+	guint timeout_source;
 	GAtChat *chat;
 	unsigned int vendor;
 };
@@ -83,6 +84,7 @@ struct cpms_request {
 	struct ofono_sms *sms;
 	int store;
 	int index;
+	gboolean expect_sr;
 };
 
 static void at_csca_set_cb(gboolean ok, GAtResult *result, gpointer user_data)
@@ -114,8 +116,7 @@ static void at_csca_set(struct ofono_sms *sms,
 		return;
 
 error:
-	if (cbd)
-		g_free(cbd);
+	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, user_data);
 }
@@ -180,8 +181,7 @@ static void at_csca_query(struct ofono_sms *sms, ofono_sms_sca_query_cb_t cb,
 		return;
 
 error:
-	if (cbd)
-		g_free(cbd);
+	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, NULL, user_data);
 }
@@ -244,8 +244,90 @@ static void at_cmgs(struct ofono_sms *sms, unsigned char *pdu, int pdu_len,
 		return;
 
 error:
-	if (cbd)
-		g_free(cbd);
+	g_free(cbd);
+
+	CALLBACK_WITH_FAILURE(cb, -1, user_data);
+}
+
+static void at_cgsms_set_cb(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_sms_sca_set_cb_t cb = cbd->cb;
+	struct ofono_error error;
+
+	decode_at_error(&error, g_at_result_final_response(result));
+
+	cb(&error, cbd->data);
+}
+
+static void at_cgsms_set(struct ofono_sms *sms, int bearer,
+			ofono_sms_bearer_set_cb_t cb, void *user_data)
+{
+	struct sms_data *data = ofono_sms_get_data(sms);
+	struct cb_data *cbd = cb_data_new(cb, user_data);
+	char buf[64];
+
+	if (!cbd)
+		goto error;
+
+	snprintf(buf, sizeof(buf), "AT+CGSMS=%d", bearer);
+
+	if (g_at_chat_send(data->chat, buf, none_prefix,
+				at_cgsms_set_cb, cbd, g_free) > 0)
+		return;
+
+error:
+	g_free(cbd);
+
+	CALLBACK_WITH_FAILURE(cb, user_data);
+}
+
+static void at_cgsms_query_cb(gboolean ok, GAtResult *result,
+				gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_sms_bearer_query_cb_t cb = cbd->cb;
+	struct ofono_error error;
+	GAtResultIter iter;
+	int bearer;
+
+	decode_at_error(&error, g_at_result_final_response(result));
+
+	if (!ok) {
+		cb(&error, -1, cbd->data);
+		return;
+	}
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "+CGSMS:"))
+		goto err;
+
+	g_at_result_iter_next_number(&iter, &bearer);
+
+	cb(&error, bearer, cbd->data);
+
+	return;
+
+err:
+	CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
+}
+
+static void at_cgsms_query(struct ofono_sms *sms,
+				ofono_sms_bearer_query_cb_t cb, void *user_data)
+{
+	struct sms_data *data = ofono_sms_get_data(sms);
+	struct cb_data *cbd = cb_data_new(cb, user_data);
+
+	if (!cbd)
+		goto error;
+
+	if (g_at_chat_send(data->chat, "AT+CGSMS?", cgsms_prefix,
+				at_cgsms_query_cb, cbd, g_free) > 0)
+		return;
+
+error:
+	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, -1, user_data);
 }
@@ -278,20 +360,12 @@ static gboolean at_parse_pdu_common(GAtResult *result, const char *prefix,
 	return TRUE;
 }
 
-static void at_cds_notify(GAtResult *result, gpointer user_data)
+static inline void at_ack_delivery(struct ofono_sms *sms)
 {
-	struct ofono_sms *sms = user_data;
 	struct sms_data *data = ofono_sms_get_data(sms);
-	int pdulen;
-	const char *pdu;
 	char buf[256];
 
-	if (!at_parse_pdu_common(result, "+CDS:", &pdu, &pdulen)) {
-		ofono_error("Unable to parse CDS notification");
-		return;
-	}
-
-	DBG("Got new Status-Report PDU via CDS: %s, %d", pdu, pdulen);
+	DBG("");
 
 	/* We must acknowledge the PDU using CNMA */
 	if (data->cnma_ack_pdu)
@@ -303,15 +377,42 @@ static void at_cds_notify(GAtResult *result, gpointer user_data)
 	g_at_chat_send(data->chat, buf, none_prefix, at_cnma_cb, NULL, NULL);
 }
 
-static void at_cmt_notify(GAtResult *result, gpointer user_data)
+static void at_cds_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_sms *sms = user_data;
 	struct sms_data *data = ofono_sms_get_data(sms);
+	long pdu_len;
+	int tpdu_len;
+	const char *hexpdu;
+	unsigned char pdu[176];
+
+	if (!at_parse_pdu_common(result, "+CDS:", &hexpdu, &tpdu_len)) {
+		ofono_error("Unable to parse CDS notification");
+		return;
+	}
+
+	if (strlen(hexpdu) > sizeof(pdu) * 2) {
+		ofono_error("Bad PDU length in CDS notification");
+		return;
+	}
+
+	DBG("Got new Status-Report PDU via CDS: %s, %d", hexpdu, tpdu_len);
+
+	/* Decode pdu and notify about new SMS status report */
+	decode_hex_own_buf(hexpdu, -1, &pdu_len, 0, pdu);
+	ofono_sms_status_notify(sms, pdu, pdu_len, tpdu_len);
+
+	if (data->cnma_enabled)
+		at_ack_delivery(sms);
+}
+
+static void at_cmt_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_sms *sms = user_data;
 	const char *hexpdu;
 	long pdu_len;
 	int tpdu_len;
 	unsigned char pdu[176];
-	char buf[256];
 
 	if (!at_parse_pdu_common(result, "+CMT:", &hexpdu, &tpdu_len)) {
 		ofono_error("Unable to parse CMT notification");
@@ -328,24 +429,20 @@ static void at_cmt_notify(GAtResult *result, gpointer user_data)
 	decode_hex_own_buf(hexpdu, -1, &pdu_len, 0, pdu);
 	ofono_sms_deliver_notify(sms, pdu, pdu_len, tpdu_len);
 
-	/* We must acknowledge the PDU using CNMA */
-	if (data->cnma_ack_pdu)
-		snprintf(buf, sizeof(buf), "AT+CNMA=1,%d\r%s",
-				data->cnma_ack_pdu_len, data->cnma_ack_pdu);
-	else /* Should be a safe fallback */
-		snprintf(buf, sizeof(buf), "AT+CNMA=0");
-
-	g_at_chat_send(data->chat, buf, none_prefix, at_cnma_cb, NULL, NULL);
+	at_ack_delivery(sms);
 }
 
 static void at_cmgr_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_sms *sms = user_data;
+	struct sms_data *data = ofono_sms_get_data(sms);
 	GAtResultIter iter;
 	const char *hexpdu;
 	unsigned char pdu[176];
 	long pdu_len;
 	int tpdu_len;
+
+	DBG("");
 
 	g_at_result_iter_init(&iter, result);
 
@@ -369,7 +466,11 @@ static void at_cmgr_notify(GAtResult *result, gpointer user_data)
 	DBG("Got PDU: %s, with len: %d", hexpdu, tpdu_len);
 
 	decode_hex_own_buf(hexpdu, -1, &pdu_len, 0, pdu);
-	ofono_sms_deliver_notify(sms, pdu, pdu_len, tpdu_len);
+
+	if (data->expect_sr)
+		ofono_sms_status_notify(sms, pdu, pdu_len, tpdu_len);
+	else
+		ofono_sms_deliver_notify(sms, pdu, pdu_len, tpdu_len);
 	return;
 
 err:
@@ -388,7 +489,7 @@ static void at_cmgd_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		ofono_error("Unable to delete received SMS");
 }
 
-static void at_cmti_cpms_cb(gboolean ok, GAtResult *result, gpointer user_data)
+static void at_cmgr_cpms_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct cpms_request *req = user_data;
 	struct ofono_sms *sms = req->sms;
@@ -396,11 +497,12 @@ static void at_cmti_cpms_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	char buf[128];
 
 	if (!ok) {
-		ofono_error("Received CMTI, but CPMS request failed");
+		ofono_error("Received CMTI/CDSI, but CPMS request failed");
 		return;
 	}
 
 	data->store = req->store;
+	data->expect_sr = req->expect_sr;
 
 	snprintf(buf, sizeof(buf), "AT+CMGR=%d", req->index);
 	g_at_chat_send(data->chat, buf, none_prefix, at_cmgr_cb, NULL, NULL);
@@ -410,34 +512,10 @@ static void at_cmti_cpms_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	g_at_chat_send(data->chat, buf, none_prefix, at_cmgd_cb, NULL, NULL);
 }
 
-static void at_cmti_notify(GAtResult *result, gpointer user_data)
+static void at_send_cmgr_cpms(struct ofono_sms *sms, int store, int index,
+				gboolean expect_sr)
 {
-	struct ofono_sms *sms = user_data;
 	struct sms_data *data = ofono_sms_get_data(sms);
-	const char *strstore;
-	int store;
-	GAtResultIter iter;
-	int index;
-
-	g_at_result_iter_init(&iter, result);
-
-	if (!g_at_result_iter_next(&iter, "+CMTI:"))
-		goto err;
-
-	if (!g_at_result_iter_next_string(&iter, &strstore))
-		goto err;
-
-	if (!strcmp(strstore, "ME"))
-		store = ME_STORE;
-	else if (!strcmp(strstore, "SM"))
-		store = SM_STORE;
-	else
-		goto err;
-
-	if (!g_at_result_iter_next_number(&iter, &index))
-		goto err;
-
-	DBG("Got a CMTI indication at %s, index: %d", strstore, index);
 
 	if (store == data->store) {
 		struct cpms_request req;
@@ -445,8 +523,9 @@ static void at_cmti_notify(GAtResult *result, gpointer user_data)
 		req.sms = sms;
 		req.store = store;
 		req.index = index;
+		req.expect_sr = expect_sr;
 
-		at_cmti_cpms_cb(TRUE, NULL, &req);
+		at_cmgr_cpms_cb(TRUE, NULL, &req);
 	} else {
 		char buf[128];
 		const char *incoming = storages[data->incoming];
@@ -455,26 +534,84 @@ static void at_cmti_notify(GAtResult *result, gpointer user_data)
 		req->sms = sms;
 		req->store = store;
 		req->index = index;
+		req->expect_sr = expect_sr;
 
 		snprintf(buf, sizeof(buf), "AT+CPMS=\"%s\",\"%s\",\"%s\"",
-				strstore, strstore, incoming);
+				storages[store], storages[store], incoming);
 
-		g_at_chat_send(data->chat, buf, cpms_prefix, at_cmti_cpms_cb,
+		g_at_chat_send(data->chat, buf, cpms_prefix, at_cmgr_cpms_cb,
 				req, g_free);
 	}
+}
 
+static void at_cmti_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_sms *sms = user_data;
+	enum at_util_sms_store store;
+	int index;
+
+	if (at_util_parse_sms_index_delivery(result, "+CMTI:",
+						&store, &index) == FALSE)
+		goto error;
+
+	if (store != AT_UTIL_SMS_STORE_SM && store != AT_UTIL_SMS_STORE_ME)
+		goto error;
+
+	DBG("Got a CMTI indication at %s, index: %d", storages[store], index);
+	at_send_cmgr_cpms(sms, store, index, FALSE);
 	return;
 
-err:
+error:
 	ofono_error("Unable to parse CMTI notification");
+}
+
+static void at_cdsi_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_sms *sms = user_data;
+	enum at_util_sms_store store;
+	int index;
+
+	if (at_util_parse_sms_index_delivery(result, "+CDSI:",
+						&store, &index) == FALSE)
+		goto error;
+
+	/* Some modems actually store status reports in SM, and not SR */
+	if (store != AT_UTIL_SMS_STORE_SR && store != AT_UTIL_SMS_STORE_SM &&
+			store != AT_UTIL_SMS_STORE_ME)
+		goto error;
+
+	DBG("Got a CDSI indication at %s, index: %d", storages[store], index);
+	at_send_cmgr_cpms(sms, store, index, TRUE);
+	return;
+
+error:
+	ofono_error("Unable to parse CDSI notification");
 }
 
 static void at_cmgl_done(struct ofono_sms *sms)
 {
 	struct sms_data *data = ofono_sms_get_data(sms);
 
-	if (data->incoming == MT_STORE && data->store == ME_STORE)
-		at_cmgl_set_cpms(sms, SM_STORE);
+	DBG("");
+
+	if (data->incoming == AT_UTIL_SMS_STORE_MT &&
+			data->store == AT_UTIL_SMS_STORE_ME) {
+		at_cmgl_set_cpms(sms, AT_UTIL_SMS_STORE_SM);
+		return;
+	}
+
+	g_at_chat_register(data->chat, "+CMTI:", at_cmti_notify, FALSE,
+				sms, NULL);
+	g_at_chat_register(data->chat, "+CMT:", at_cmt_notify, TRUE,
+				sms, NULL);
+	g_at_chat_register(data->chat, "+CDS:", at_cds_notify, TRUE,
+				sms, NULL);
+	g_at_chat_register(data->chat, "+CDSI:", at_cdsi_notify, FALSE,
+				sms, NULL);
+
+	/* We treat CMGR just like a notification */
+	g_at_chat_register(data->chat, "+CMGR:", at_cmgr_notify, TRUE,
+				sms, NULL);
 }
 
 static void at_cmgl_notify(GAtResult *result, gpointer user_data)
@@ -489,6 +626,8 @@ static void at_cmgl_notify(GAtResult *result, gpointer user_data)
 	int index;
 	int status;
 	char buf[16];
+
+	DBG("");
 
 	g_at_result_iter_init(&iter, result);
 
@@ -591,20 +730,9 @@ static void at_sms_initialized(struct ofono_sms *sms)
 {
 	struct sms_data *data = ofono_sms_get_data(sms);
 
-	g_at_chat_register(data->chat, "+CMTI:", at_cmti_notify, FALSE,
-				sms, NULL);
-	g_at_chat_register(data->chat, "+CMT:", at_cmt_notify, TRUE,
-				sms, NULL);
-	g_at_chat_register(data->chat, "+CDS:", at_cds_notify, TRUE,
-				sms, NULL);
-
-	/* We treat CMGR just like a notification */
-	g_at_chat_register(data->chat, "+CMGR:", at_cmgr_notify, TRUE,
-				sms, NULL);
-
 	/* Inspect and free the incoming SMS storage */
-	if (data->incoming == MT_STORE)
-		at_cmgl_set_cpms(sms, ME_STORE);
+	if (data->incoming == AT_UTIL_SMS_STORE_MT)
+		at_cmgl_set_cpms(sms, AT_UTIL_SMS_STORE_ME);
 	else
 		at_cmgl_set_cpms(sms, data->incoming);
 
@@ -668,7 +796,11 @@ static gboolean build_cnmi_string(char *buf, int *cnmi_opts,
 	const char *mode;
 	int len = sprintf(buf, "AT+CNMI=");
 
-	if (data->vendor == OFONO_VENDOR_QUALCOMM_MSM)
+	DBG("");
+
+	if (data->vendor == OFONO_VENDOR_QUALCOMM_MSM ||
+			data->vendor == OFONO_VENDOR_HUAWEI ||
+			data->vendor == OFONO_VENDOR_NOVATEL)
 		/* MSM devices advertise support for mode 2, but return an
 		 * error if we attempt to actually use it. */
 		mode = "1";
@@ -688,8 +820,22 @@ static gboolean build_cnmi_string(char *buf, int *cnmi_opts,
 	if (!append_cnmi_element(buf, &len, cnmi_opts[2], "20", FALSE))
 		return FALSE;
 
-	/* Always deliver Status-Reports via +CDS or don't deliver at all */
-	if (!append_cnmi_element(buf, &len, cnmi_opts[3], "10", FALSE))
+	/*
+	 * Some manufacturers seem to have trouble with delivery via +CDS.
+	 * They report the status report properly, however refuse to +CNMA
+	 * ack it with error "CNMA not expected."  However, not acking it
+	 * sends the device into la-la land.
+	 */
+	if (data->vendor == OFONO_VENDOR_NOVATEL)
+		mode = "20";
+	else
+		mode = "120";
+
+	/*
+	 * Try to deliver Status-Reports via +CDS, then CDSI or don't
+	 * deliver at all
+	 * */
+	if (!append_cnmi_element(buf, &len, cnmi_opts[3], mode, FALSE))
 		return FALSE;
 
 	/* Don't care about buffering, 0 seems safer */
@@ -705,6 +851,8 @@ static void construct_ack_pdu(struct sms_data *d)
 	unsigned char pdu[164];
 	int len;
 	int tpdu_len;
+
+	DBG("");
 
 	memset(&ackpdu, 0, sizeof(ackpdu));
 
@@ -768,6 +916,13 @@ static void at_cnmi_query_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	if (build_cnmi_string(buf, cnmi_opts, data))
 		supported = TRUE;
 
+	/* support for ack pdu is not working */
+	if (data->vendor == OFONO_VENDOR_IFX ||
+			data->vendor == OFONO_VENDOR_HUAWEI ||
+			data->vendor == OFONO_VENDOR_NOVATEL ||
+			data->vendor == OFONO_VENDOR_OPTION_HSO)
+		goto out;
+
 	if (data->cnma_enabled)
 		construct_ack_pdu(data);
 
@@ -802,7 +957,7 @@ static void at_cpms_set_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		return at_sms_not_supported(sms);
 	}
 
-	g_timeout_add_seconds(1, set_cpms, sms);
+	data->timeout_source = g_timeout_add_seconds(1, set_cpms, sms);
 }
 
 static gboolean set_cpms(gpointer user_data)
@@ -818,6 +973,9 @@ static gboolean set_cpms(gpointer user_data)
 
 	g_at_chat_send(data->chat, buf, cpms_prefix,
 			at_cpms_set_cb, sms, NULL);
+
+	data->timeout_source = 0;
+
 	return FALSE;
 }
 
@@ -839,7 +997,7 @@ static void at_cmgf_set_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		return at_sms_not_supported(sms);
 	}
 
-	g_timeout_add_seconds(1, set_cmgf, sms);
+	data->timeout_source = g_timeout_add_seconds(1, set_cmgf, sms);
 }
 
 static gboolean set_cmgf(gpointer user_data)
@@ -849,6 +1007,9 @@ static gboolean set_cmgf(gpointer user_data)
 
 	g_at_chat_send(data->chat, "AT+CMGF=0", cmgf_prefix,
 			at_cmgf_set_cb, sms, NULL);
+
+	data->timeout_source = 0;
+
 	return FALSE;
 }
 
@@ -898,12 +1059,12 @@ static void at_cpms_query_cb(gboolean ok, GAtResult *result,
 
 		if (sm_supported[0] && sm_supported[1]) {
 			supported = TRUE;
-			data->store = SM_STORE;
+			data->store = AT_UTIL_SMS_STORE_SM;
 		}
 
 		if (me_supported[0] && me_supported[1]) {
 			supported = TRUE;
-			data->store = ME_STORE;
+			data->store = AT_UTIL_SMS_STORE_ME;
 		}
 
 		/* This seems to be a special case, where the modem will
@@ -911,13 +1072,13 @@ static void at_cpms_query_cb(gboolean ok, GAtResult *result,
 		 * mem1
 		 */
 		if (mt_supported[2] && (sm_supported[0] || me_supported[0]))
-			data->incoming = MT_STORE;
+			data->incoming = AT_UTIL_SMS_STORE_MT;
 
 		if (sm_supported[2])
-			data->incoming = SM_STORE;
+			data->incoming = AT_UTIL_SMS_STORE_SM;
 
 		if (me_supported[2])
-			data->incoming = ME_STORE;
+			data->incoming = AT_UTIL_SMS_STORE_ME;
 	}
 out:
 	if (!supported)
@@ -977,8 +1138,15 @@ static void at_csms_status_cb(gboolean ok, GAtResult *result,
 		if (!g_at_result_iter_next(&iter, "+CSMS:"))
 			goto out;
 
-		if (!g_at_result_iter_next_number(&iter, &service))
-			goto out;
+
+		if (data->vendor == OFONO_VENDOR_HUAWEI ||
+				data->vendor == OFONO_VENDOR_NOVATEL) {
+			g_at_result_iter_skip_next(&iter);
+			service = 0;
+		} else {
+			if (!g_at_result_iter_next_number(&iter, &service))
+				goto out;
+		}
 
 		if (!g_at_result_iter_next_number(&iter, &mt))
 			goto out;
@@ -1052,12 +1220,12 @@ static int at_sms_probe(struct ofono_sms *sms, unsigned int vendor,
 	struct sms_data *data;
 
 	data = g_new0(struct sms_data, 1);
-	data->chat = chat;
+	data->chat = g_at_chat_clone(chat);
 	data->vendor = vendor;
 
 	ofono_sms_set_data(sms, data);
 
-	g_at_chat_send(chat, "AT+CSMS=?", csms_prefix,
+	g_at_chat_send(data->chat, "AT+CSMS=?", csms_prefix,
 			at_csms_query_cb, sms, NULL);
 
 	return 0;
@@ -1067,19 +1235,24 @@ static void at_sms_remove(struct ofono_sms *sms)
 {
 	struct sms_data *data = ofono_sms_get_data(sms);
 
-	if (data->cnma_ack_pdu)
-		g_free(data->cnma_ack_pdu);
+	g_free(data->cnma_ack_pdu);
 
+	if (data->timeout_source > 0)
+		g_source_remove(data->timeout_source);
+
+	g_at_chat_unref(data->chat);
 	g_free(data);
 }
 
 static struct ofono_sms_driver driver = {
-	.name = "atmodem",
-	.probe = at_sms_probe,
-	.remove = at_sms_remove,
+	.name		= "atmodem",
+	.probe		= at_sms_probe,
+	.remove		= at_sms_remove,
 	.sca_query	= at_csca_query,
 	.sca_set	= at_csca_set,
 	.submit		= at_cmgs,
+	.bearer_query	= at_cgsms_query,
+	.bearer_set	= at_cgsms_set,
 };
 
 void at_sms_init()

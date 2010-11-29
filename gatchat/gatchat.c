@@ -34,18 +34,21 @@
 
 #include "ringbuffer.h"
 #include "gatchat.h"
+#include "gatio.h"
 
 /* #define WRITE_SCHEDULER_DEBUG 1 */
 
-static const char *none_prefix[] = { NULL };
+struct at_chat;
+static void chat_wakeup_writer(struct at_chat *chat);
 
-static void g_at_chat_wakeup_writer(GAtChat *chat);
+static const char *none_prefix[] = { NULL };
 
 struct at_command {
 	char *cmd;
 	char **prefixes;
 	gboolean expect_pdu;
 	guint id;
+	guint gid;
 	GAtResultFunc callback;
 	GAtNotifyFunc listing;
 	gpointer user_data;
@@ -54,32 +57,34 @@ struct at_command {
 
 struct at_notify_node {
 	guint id;
+	guint gid;
 	GAtNotifyFunc callback;
 	gpointer user_data;
 	GDestroyNotify notify;
+	gboolean destroyed;
 };
+
+typedef gboolean (*node_remove_func)(struct at_notify_node *node,
+					gpointer user_data);
 
 struct at_notify {
 	GSList *nodes;
 	gboolean pdu;
 };
 
-struct _GAtChat {
+struct at_chat {
 	gint ref_count;				/* Ref count */
 	guint next_cmd_id;			/* Next command id */
 	guint next_notify_id;			/* Next notify id */
-	guint read_watch;			/* GSource read id, 0 if none */
-	guint write_watch;			/* GSource write id, 0 if none */
-	gboolean use_write_watch;		/* watch usage for non blocking */
-	GIOChannel *channel;			/* channel */
+	guint next_gid;				/* Next group id */
+	GAtIO *io;				/* AT IO */
 	GQueue *command_queue;			/* Command queue */
 	guint cmd_bytes_written;		/* bytes written from cmd */
 	GHashTable *notify_list;		/* List of notification reg */
 	GAtDisconnectFunc user_disconnect;	/* user disconnect func */
 	gpointer user_disconnect_data;		/* user disconnect data */
-	struct ring_buffer *buf;		/* Current read buffer */
 	guint read_so_far;			/* Number of bytes processed */
-	guint max_read_attempts;		/* max number of read attempts */
+	gboolean suspended;			/* Are we suspended? */
 	GAtDebugFunc debugf;			/* debugging output function */
 	gpointer debug_data;			/* Data to pass to debug func */
 	char *pdu_notify;			/* Unsolicited Resp w/ PDU */
@@ -91,7 +96,16 @@ struct _GAtChat {
 	GTimer *wakeup_timer;			/* Keep track of elapsed time */
 	GAtSyntax *syntax;
 	gboolean destroyed;			/* Re-entrancy guard */
+	gboolean in_read_handler;		/* Re-entrancy guard */
+	gboolean in_notify;
 	GSList *terminator_list;		/* Non-standard terminator */
+};
+
+struct _GAtChat {
+	gint ref_count;
+	struct at_chat *parent;
+	guint group;
+	GAtChat *slave;
 };
 
 struct terminator_info {
@@ -99,6 +113,11 @@ struct terminator_info {
 	int len;
 	gboolean success;
 };
+
+static gboolean node_is_destroyed(struct at_notify_node *node, gpointer user)
+{
+	return node->destroyed;
+}
 
 static gint at_notify_node_compare_by_id(gconstpointer a, gconstpointer b)
 {
@@ -114,17 +133,21 @@ static gint at_notify_node_compare_by_id(gconstpointer a, gconstpointer b)
 	return 0;
 }
 
-static void at_notify_node_destroy(struct at_notify_node *node)
+static void at_notify_node_destroy(gpointer data, gpointer user_data)
 {
+	struct at_notify_node *node = data;
+
 	if (node->notify)
 		node->notify(node->user_data);
 
 	g_free(node);
 }
 
-static void at_notify_destroy(struct at_notify *notify)
+static void at_notify_destroy(gpointer user_data)
 {
-	g_slist_foreach(notify->nodes, (GFunc) at_notify_node_destroy, NULL);
+	struct at_notify *notify = user_data;
+
+	g_slist_foreach(notify->nodes, at_notify_node_destroy, NULL);
 	g_free(notify);
 }
 
@@ -142,7 +165,66 @@ static gint at_command_compare_by_id(gconstpointer a, gconstpointer b)
 	return 0;
 }
 
-static struct at_command *at_command_create(const char *cmd,
+static gboolean at_chat_unregister_all(struct at_chat *chat,
+					gboolean mark_only,
+					node_remove_func func,
+					gpointer userdata)
+{
+	GHashTableIter iter;
+	struct at_notify *notify;
+	struct at_notify_node *node;
+	gpointer key, value;
+	GSList *p;
+	GSList *c;
+	GSList *t;
+
+	if (chat->notify_list == NULL)
+		return FALSE;
+
+	g_hash_table_iter_init(&iter, chat->notify_list);
+
+	while (g_hash_table_iter_next(&iter, &key, &value)) {
+		notify = value;
+
+		p = NULL;
+		c = notify->nodes;
+
+		while (c) {
+			node = c->data;
+
+			if (func(node, userdata) != TRUE) {
+				p = c;
+				c = c->next;
+				continue;
+			}
+
+			if (mark_only) {
+				node->destroyed = TRUE;
+				p = c;
+				c = c->next;
+				continue;
+			}
+
+			if (p)
+				p->next = c->next;
+			else
+				notify->nodes = c->next;
+
+			at_notify_node_destroy(node, NULL);
+
+			t = c;
+			c = c->next;
+			g_slist_free_1(t);
+		}
+
+		if (notify->nodes == NULL)
+			g_hash_table_iter_remove(&iter);
+	}
+
+	return TRUE;
+}
+
+static struct at_command *at_command_create(guint gid, const char *cmd,
 						const char **prefix_list,
 						gboolean expect_pdu,
 						GAtNotifyFunc listing,
@@ -171,13 +253,11 @@ static struct at_command *at_command_create(const char *cmd,
 	}
 
 	c = g_try_new0(struct at_command, 1);
-
 	if (!c)
 		return 0;
 
 	len = strlen(cmd);
 	c->cmd = g_try_new(char, len + 2);
-
 	if (!c->cmd) {
 		g_free(c);
 		return 0;
@@ -199,6 +279,7 @@ static struct at_command *at_command_create(const char *cmd,
 
 	c->cmd[len] = '\0';
 
+	c->gid = gid;
 	c->expect_pdu = expect_pdu;
 	c->prefixes = prefixes;
 	c->callback = func;
@@ -227,12 +308,9 @@ static void free_terminator(struct terminator_info *info)
 	info = NULL;
 }
 
-static void g_at_chat_cleanup(GAtChat *chat)
+static void chat_cleanup(struct at_chat *chat)
 {
 	struct at_command *c;
-
-	ring_buffer_free(chat->buf);
-	chat->buf = NULL;
 
 	/* Cleanup pending commands */
 	while ((c = g_queue_pop_head(chat->command_queue)))
@@ -273,8 +351,6 @@ static void g_at_chat_cleanup(GAtChat *chat)
 	g_at_syntax_unref(chat->syntax);
 	chat->syntax = NULL;
 
-	chat->channel = NULL;
-
 	if (chat->terminator_list) {
 		g_slist_foreach(chat->terminator_list,
 					(GFunc)free_terminator, NULL);
@@ -283,21 +359,16 @@ static void g_at_chat_cleanup(GAtChat *chat)
 	}
 }
 
-static void read_watcher_destroy_notify(GAtChat *chat)
+static void io_disconnect(gpointer user_data)
 {
-	g_at_chat_cleanup(chat);
-	chat->read_watch = 0;
+	struct at_chat *chat = user_data;
+
+	chat_cleanup(chat);
+	g_at_io_unref(chat->io);
+	chat->io = NULL;
 
 	if (chat->user_disconnect)
 		chat->user_disconnect(chat->user_disconnect_data);
-
-	if (chat->destroyed)
-		g_free(chat);
-}
-
-static void write_watcher_destroy_notify(GAtChat *chat)
-{
-	chat->write_watch = 0;
 }
 
 static void at_notify_call_callback(gpointer data, gpointer user_data)
@@ -308,7 +379,7 @@ static void at_notify_call_callback(gpointer data, gpointer user_data)
 	node->callback(result, node->user_data);
 }
 
-static gboolean g_at_chat_match_notify(GAtChat *chat, char *line)
+static gboolean at_chat_match_notify(struct at_chat *chat, char *line)
 {
 	GHashTableIter iter;
 	struct at_notify *notify;
@@ -319,6 +390,8 @@ static gboolean g_at_chat_match_notify(GAtChat *chat, char *line)
 	g_hash_table_iter_init(&iter, chat->notify_list);
 	result.lines = 0;
 	result.final_or_pdu = 0;
+
+	chat->in_notify = TRUE;
 
 	while (g_hash_table_iter_next(&iter, &key, &value)) {
 		notify = value;
@@ -343,15 +416,19 @@ static gboolean g_at_chat_match_notify(GAtChat *chat, char *line)
 		ret = TRUE;
 	}
 
+	chat->in_notify = FALSE;
+
 	if (ret) {
 		g_slist_free(result.lines);
 		g_free(line);
+
+		at_chat_unregister_all(chat, FALSE, node_is_destroyed, NULL);
 	}
 
 	return ret;
 }
 
-static void g_at_chat_finish_command(GAtChat *p, gboolean ok, char *final)
+static void at_chat_finish_command(struct at_chat *p, gboolean ok, char *final)
 {
 	struct at_command *cmd = g_queue_pop_head(p->command_queue);
 	GSList *response_lines;
@@ -363,7 +440,7 @@ static void g_at_chat_finish_command(GAtChat *p, gboolean ok, char *final)
 	p->cmd_bytes_written = 0;
 
 	if (g_queue_peek_head(p->command_queue))
-		g_at_chat_wakeup_writer(p);
+		chat_wakeup_writer(p);
 
 	response_lines = p->response_lines;
 	p->response_lines = NULL;
@@ -392,14 +469,14 @@ static struct terminator_info terminator_table[] = {
 	{ "NO DIALTONE", -1, FALSE },
 	{ "BUSY", -1, FALSE },
 	{ "NO CARRIER", -1, FALSE },
-	{ "CONNECT", -1, TRUE },
+	{ "CONNECT", 7, TRUE },
 	{ "NO ANSWER", -1, FALSE },
 	{ "+CMS ERROR:", 11, FALSE },
 	{ "+CME ERROR:", 11, FALSE },
 	{ "+EXT ERROR:", 11, FALSE }
 };
 
-void g_at_chat_add_terminator(GAtChat *chat, char *terminator,
+static void at_chat_add_terminator(struct at_chat *chat, char *terminator,
 					int len, gboolean success)
 {
 	struct terminator_info *info = g_new0(struct terminator_info, 1);
@@ -420,7 +497,7 @@ static gboolean check_terminator(struct terminator_info *info, char *line)
 	return FALSE;
 }
 
-static gboolean g_at_chat_handle_command_response(GAtChat *p,
+static gboolean at_chat_handle_command_response(struct at_chat *p,
 							struct at_command *cmd,
 							char *line)
 {
@@ -432,7 +509,7 @@ static gboolean g_at_chat_handle_command_response(GAtChat *p,
 	for (i = 0; i < size; i++) {
 		struct terminator_info *info = &terminator_table[i];
 		if (check_terminator(info, line)) {
-			g_at_chat_finish_command(p, info->success, line);
+			at_chat_finish_command(p, info->success, line);
 			return TRUE;
 		}
 	}
@@ -440,7 +517,7 @@ static gboolean g_at_chat_handle_command_response(GAtChat *p,
 	for (l = p->terminator_list; l; l = l->next) {
 		struct terminator_info *info = l->data;
 		if (check_terminator(info, line)) {
-			g_at_chat_finish_command(p, info->success, line);
+			at_chat_finish_command(p, info->success, line);
 			return TRUE;
 		}
 	}
@@ -485,7 +562,7 @@ out:
 	return TRUE;
 }
 
-static void have_line(GAtChat *p, char *str)
+static void have_line(struct at_chat *p, char *str)
 {
 	/* We're not going to copy terminal <CR><LF> */
 	struct at_command *cmd;
@@ -511,11 +588,11 @@ static void have_line(GAtChat *p, char *str)
 		 * final response from the modem, so we check this as well.
 		 */
 		if ((c == '\r' || c == 26) &&
-				g_at_chat_handle_command_response(p, cmd, str))
+				at_chat_handle_command_response(p, cmd, str))
 			return;
 	}
 
-	if (g_at_chat_match_notify(p, str) == TRUE)
+	if (at_chat_match_notify(p, str) == TRUE)
 		return;
 
 done:
@@ -523,12 +600,15 @@ done:
 	g_free(str);
 }
 
-static void have_notify_pdu(GAtChat *p, char *pdu, GAtResult *result)
+static void have_notify_pdu(struct at_chat *p, char *pdu, GAtResult *result)
 {
 	GHashTableIter iter;
 	struct at_notify *notify;
 	char *prefix;
 	gpointer key, value;
+	gboolean called = FALSE;
+
+	p->in_notify = TRUE;
 
 	g_hash_table_iter_init(&iter, p->notify_list);
 
@@ -543,10 +623,16 @@ static void have_notify_pdu(GAtChat *p, char *pdu, GAtResult *result)
 			continue;
 
 		g_slist_foreach(notify->nodes, at_notify_call_callback, result);
+		called = TRUE;
 	}
+
+	p->in_notify = FALSE;
+
+	if (called)
+		at_chat_unregister_all(p, FALSE, node_is_destroyed, NULL);
 }
 
-static void have_pdu(GAtChat *p, char *pdu)
+static void have_pdu(struct at_chat *p, char *pdu)
 {
 	struct at_command *cmd;
 	GAtResult result;
@@ -586,58 +672,63 @@ error:
 		g_free(pdu);
 }
 
-static char *extract_line(GAtChat *p)
+static char *extract_line(struct at_chat *p, struct ring_buffer *rbuf)
 {
-	unsigned int wrap = ring_buffer_len_no_wrap(p->buf);
+	unsigned int wrap = ring_buffer_len_no_wrap(rbuf);
 	unsigned int pos = 0;
-	unsigned char *buf = ring_buffer_read_ptr(p->buf, pos);
+	unsigned char *buf = ring_buffer_read_ptr(rbuf, pos);
+	gboolean in_string = FALSE;
 	int strip_front = 0;
 	int line_length = 0;
 	char *line;
 
 	while (pos < p->read_so_far) {
-		if (*buf == '\r' || *buf == '\n')
+		if (in_string == FALSE && (*buf == '\r' || *buf == '\n')) {
 			if (!line_length)
 				strip_front += 1;
 			else
 				break;
-		else
+		} else {
+			if (*buf == '"')
+				in_string = !in_string;
+
 			line_length += 1;
+		}
 
 		buf += 1;
 		pos += 1;
 
 		if (pos == wrap)
-			buf = ring_buffer_read_ptr(p->buf, pos);
+			buf = ring_buffer_read_ptr(rbuf, pos);
 	}
 
 	line = g_try_new(char, line_length + 1);
-
 	if (!line) {
-		ring_buffer_drain(p->buf, p->read_so_far);
+		ring_buffer_drain(rbuf, p->read_so_far);
 		return NULL;
 	}
 
-	ring_buffer_drain(p->buf, strip_front);
-	ring_buffer_read(p->buf, line, line_length);
-	ring_buffer_drain(p->buf, p->read_so_far - strip_front - line_length);
+	ring_buffer_drain(rbuf, strip_front);
+	ring_buffer_read(rbuf, line, line_length);
+	ring_buffer_drain(rbuf, p->read_so_far - strip_front - line_length);
 
 	line[line_length] = '\0';
 
 	return line;
 }
 
-static void new_bytes(GAtChat *p)
+static void new_bytes(struct ring_buffer *rbuf, gpointer user_data)
 {
-	unsigned int len = ring_buffer_len(p->buf);
-	unsigned int wrap = ring_buffer_len_no_wrap(p->buf);
-	unsigned char *buf = ring_buffer_read_ptr(p->buf, p->read_so_far);
+	struct at_chat *p = user_data;
+	unsigned int len = ring_buffer_len(rbuf);
+	unsigned int wrap = ring_buffer_len_no_wrap(rbuf);
+	unsigned char *buf = ring_buffer_read_ptr(rbuf, p->read_so_far);
 
 	GAtSyntaxResult result;
 
-	g_at_chat_ref(p);
+	p->in_read_handler = TRUE;
 
-	while (p->channel && (p->read_so_far < len)) {
+	while (p->suspended == FALSE && (p->read_so_far < len)) {
 		gsize rbytes = MIN(len - p->read_so_far, wrap - p->read_so_far);
 		result = p->syntax->feed(p->syntax, (char *)buf, &rbytes);
 
@@ -645,7 +736,7 @@ static void new_bytes(GAtChat *p)
 		p->read_so_far += rbytes;
 
 		if (p->read_so_far == wrap) {
-			buf = ring_buffer_read_ptr(p->buf, p->read_so_far);
+			buf = ring_buffer_read_ptr(rbuf, p->read_so_far);
 			wrap = len;
 		}
 
@@ -655,20 +746,20 @@ static void new_bytes(GAtChat *p)
 		switch (result) {
 		case G_AT_SYNTAX_RESULT_LINE:
 		case G_AT_SYNTAX_RESULT_MULTILINE:
-			have_line(p, extract_line(p));
+			have_line(p, extract_line(p, rbuf));
 			break;
 
 		case G_AT_SYNTAX_RESULT_PDU:
-			have_pdu(p, extract_line(p));
+			have_pdu(p, extract_line(p, rbuf));
 			break;
 
 		case G_AT_SYNTAX_RESULT_PROMPT:
-			g_at_chat_wakeup_writer(p);
-			ring_buffer_drain(p->buf, p->read_so_far);
+			chat_wakeup_writer(p);
+			ring_buffer_drain(rbuf, p->read_so_far);
 			break;
 
 		default:
-			ring_buffer_drain(p->buf, p->read_so_far);
+			ring_buffer_drain(rbuf, p->read_so_far);
 			break;
 		}
 
@@ -677,66 +768,15 @@ static void new_bytes(GAtChat *p)
 		p->read_so_far = 0;
 	}
 
-	/* We're overflowing the buffer, shutdown the socket */
-	if (p->buf && ring_buffer_avail(p->buf) == 0)
-		g_source_remove(p->read_watch);
+	p->in_read_handler = FALSE;
 
-	g_at_chat_unref(p);
-}
-
-static gboolean received_data(GIOChannel *channel, GIOCondition cond,
-				gpointer data)
-{
-	unsigned char *buf;
-	GAtChat *chat = data;
-	GIOError err;
-	gsize rbytes;
-	gsize toread;
-	gsize total_read = 0;
-	guint read_count = 0;
-
-	if (cond & G_IO_NVAL)
-		return FALSE;
-
-	/* Regardless of condition, try to read all the data available */
-	do {
-		toread = ring_buffer_avail_no_wrap(chat->buf);
-
-		if (toread == 0)
-			break;
-
-		rbytes = 0;
-		buf = ring_buffer_write_ptr(chat->buf);
-
-		err = g_io_channel_read(channel, (char *) buf, toread, &rbytes);
-		g_at_util_debug_chat(TRUE, (char *)buf, rbytes,
-					chat->debugf, chat->debug_data);
-
-		read_count++;
-
-		total_read += rbytes;
-
-		if (rbytes > 0)
-			ring_buffer_write_advance(chat->buf, rbytes);
-
-	} while (err == G_IO_ERROR_NONE && rbytes > 0 &&
-					read_count < chat->max_read_attempts);
-
-	if (total_read > 0)
-		new_bytes(chat);
-
-	if (cond & (G_IO_HUP | G_IO_ERR))
-		return FALSE;
-
-	if (read_count > 0 && rbytes == 0 && err != G_IO_ERROR_AGAIN)
-		return FALSE;
-
-	return TRUE;
+	if (p->destroyed)
+		g_free(p);
 }
 
 static void wakeup_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
-	GAtChat *chat = user_data;
+	struct at_chat *chat = user_data;
 
 	if (ok == FALSE)
 		return;
@@ -748,9 +788,9 @@ static void wakeup_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	chat->timeout_source = 0;
 }
 
-static gboolean wakeup_no_response(gpointer user)
+static gboolean wakeup_no_response(gpointer user_data)
 {
-	GAtChat *chat = user;
+	struct at_chat *chat = user_data;
 	struct at_command *cmd = g_queue_peek_head(chat->command_queue);
 
 	if (chat->debugf)
@@ -759,8 +799,8 @@ static gboolean wakeup_no_response(gpointer user)
 	if (cmd == NULL)
 		return FALSE;
 
-	g_at_chat_finish_command(chat, FALSE, NULL);
-	cmd = at_command_create(chat->wakeup, none_prefix, FALSE,
+	at_chat_finish_command(chat, FALSE, NULL);
+	cmd = at_command_create(0, chat->wakeup, none_prefix, FALSE,
 				NULL, wakeup_cb, chat, NULL, TRUE);
 
 	if (!cmd) {
@@ -773,23 +813,15 @@ static gboolean wakeup_no_response(gpointer user)
 	return TRUE;
 }
 
-static gboolean can_write_data(GIOChannel *channel, GIOCondition cond,
-				gpointer data)
+static gboolean can_write_data(gpointer data)
 {
-	GAtChat *chat = data;
+	struct at_chat *chat = data;
 	struct at_command *cmd;
-	GIOError err;
 	gsize bytes_written;
 	gsize towrite;
 	gsize len;
 	char *cr;
 	gboolean wakeup_first = FALSE;
-#ifdef WRITE_SCHEDULER_DEBUG
-	int limiter;
-#endif
-
-	if (cond & (G_IO_NVAL | G_IO_HUP | G_IO_ERR))
-		return FALSE;
 
 	/* Grab the first command off the queue and write as
 	 * much of it as we can
@@ -820,7 +852,7 @@ static gboolean can_write_data(GIOChannel *channel, GIOCondition cond,
 	}
 
 	if (chat->cmd_bytes_written == 0 && wakeup_first == TRUE) {
-		cmd = at_command_create(chat->wakeup, none_prefix, FALSE,
+		cmd = at_command_create(0, chat->wakeup, none_prefix, FALSE,
 					NULL, wakeup_cb, chat, NULL, TRUE);
 
 		if (!cmd)
@@ -842,28 +874,17 @@ static gboolean can_write_data(GIOChannel *channel, GIOCondition cond,
 		towrite = cr - (cmd->cmd + chat->cmd_bytes_written) + 1;
 
 #ifdef WRITE_SCHEDULER_DEBUG
-	limiter = towrite;
-
-	if (limiter > 5)
-		limiter = 5;
+	if (towrite > 5)
+		towrite = 5;
 #endif
 
-	err = g_io_channel_write(chat->channel,
-			cmd->cmd + chat->cmd_bytes_written,
-#ifdef WRITE_SCHEDULER_DEBUG
-			limiter,
-#else
-			towrite,
-#endif
-			&bytes_written);
+	bytes_written = g_at_io_write(chat->io,
+					cmd->cmd + chat->cmd_bytes_written,
+					towrite);
 
-	if (err != G_IO_ERROR_NONE) {
-		g_source_remove(chat->read_watch);
+	if (bytes_written == 0)
 		return FALSE;
-	}
 
-	g_at_util_debug_chat(FALSE, cmd->cmd + chat->cmd_bytes_written,
-				bytes_written, chat->debugf, chat->debug_data);
 	chat->cmd_bytes_written += bytes_written;
 
 	if (bytes_written < towrite)
@@ -876,210 +897,113 @@ static gboolean can_write_data(GIOChannel *channel, GIOCondition cond,
 	return FALSE;
 }
 
-static void g_at_chat_wakeup_writer(GAtChat *chat)
+static void chat_wakeup_writer(struct at_chat *chat)
 {
-	if (chat->write_watch != 0)
+	g_at_io_set_write_handler(chat->io, can_write_data, chat);
+}
+
+static void at_chat_suspend(struct at_chat *chat)
+{
+	chat->suspended = TRUE;
+
+	g_at_io_set_write_handler(chat->io, NULL, NULL);
+	g_at_io_set_read_handler(chat->io, NULL, NULL);
+	g_at_io_set_debug(chat->io, NULL, NULL);
+
+}
+
+static void at_chat_resume(struct at_chat *chat)
+{
+	chat->suspended = FALSE;
+
+	if (g_at_io_get_channel(chat->io) == NULL) {
+		io_disconnect(chat);
 		return;
-
-	if (chat->use_write_watch == TRUE) {
-		chat->write_watch = g_io_add_watch_full(chat->channel,
-				G_PRIORITY_DEFAULT,
-				G_IO_OUT | G_IO_HUP | G_IO_ERR | G_IO_NVAL,
-				can_write_data, chat,
-				(GDestroyNotify)write_watcher_destroy_notify);
-	} else {
-		while (can_write_data(chat->channel, G_IO_OUT, chat) == TRUE);
-		write_watcher_destroy_notify(chat);
-	}
-}
-
-static GAtChat *create_chat(GIOChannel *channel, GIOFlags flags,
-				GAtSyntax *syntax)
-{
-	GAtChat *chat;
-
-	if (!channel)
-		return NULL;
-
-	if (!syntax)
-		return NULL;
-
-	chat = g_try_new0(GAtChat, 1);
-
-	if (!chat)
-		return chat;
-
-	chat->ref_count = 1;
-	chat->next_cmd_id = 1;
-	chat->next_notify_id = 1;
-	chat->debugf = NULL;
-
-	if (flags & G_IO_FLAG_NONBLOCK) {
-		chat->use_write_watch = TRUE;
-		chat->max_read_attempts = 3;
-	} else {
-		chat->use_write_watch = FALSE;
-		chat->max_read_attempts = 1;
 	}
 
-	chat->buf = ring_buffer_new(4096);
+	g_at_io_set_disconnect_function(chat->io, io_disconnect, chat);
 
-	if (!chat->buf)
-		goto error;
+	g_at_io_set_debug(chat->io, chat->debugf, chat->debug_data);
+	g_at_io_set_read_handler(chat->io, new_bytes, chat);
 
-	chat->command_queue = g_queue_new();
-
-	if (!chat->command_queue)
-		goto error;
-
-	chat->notify_list = g_hash_table_new_full(g_str_hash, g_str_equal,
-				g_free, (GDestroyNotify)at_notify_destroy);
-
-	if (!g_at_util_setup_io(channel, flags))
-		goto error;
-
-	chat->channel = channel;
-	chat->read_watch = g_io_add_watch_full(channel, G_PRIORITY_DEFAULT,
-				G_IO_IN | G_IO_HUP | G_IO_ERR | G_IO_NVAL,
-				received_data, chat,
-				(GDestroyNotify)read_watcher_destroy_notify);
-
-	chat->syntax = g_at_syntax_ref(syntax);
-
-	return chat;
-
-error:
-	if (chat->buf)
-		ring_buffer_free(chat->buf);
-
-	if (chat->command_queue)
-		g_queue_free(chat->command_queue);
-
-	if (chat->notify_list)
-		g_hash_table_destroy(chat->notify_list);
-
-	g_free(chat);
-	return NULL;
+	if (g_queue_get_length(chat->command_queue) > 0)
+		chat_wakeup_writer(chat);
 }
 
-GAtChat *g_at_chat_new(GIOChannel *channel, GAtSyntax *syntax)
-{
-	return create_chat(channel, G_IO_FLAG_NONBLOCK, syntax);
-}
-
-GAtChat *g_at_chat_new_blocking(GIOChannel *channel, GAtSyntax *syntax)
-{
-	return create_chat(channel, 0, syntax);
-}
-
-GIOChannel *g_at_chat_get_channel(GAtChat *chat)
-{
-	if (chat == NULL)
-		return NULL;
-
-	return chat->channel;
-}
-
-GAtChat *g_at_chat_ref(GAtChat *chat)
-{
-	if (chat == NULL)
-		return NULL;
-
-	g_atomic_int_inc(&chat->ref_count);
-
-	return chat;
-}
-
-void g_at_chat_unref(GAtChat *chat)
+static void at_chat_unref(struct at_chat *chat)
 {
 	gboolean is_zero;
-
-	if (chat == NULL)
-		return;
 
 	is_zero = g_atomic_int_dec_and_test(&chat->ref_count);
 
 	if (is_zero == FALSE)
 		return;
 
-	g_at_chat_shutdown(chat);
+	if (chat->io) {
+		at_chat_suspend(chat);
+		g_at_io_unref(chat->io);
+		chat->io = NULL;
+		chat_cleanup(chat);
+	}
 
-	/* glib delays the destruction of the watcher until it exits, this
-	 * means we can't free the data just yet, even though we've been
-	 * destroyed already.  We have to wait until the read_watcher
-	 * destroy function gets called
-	 */
-	if (chat->read_watch != 0)
+	if (chat->in_read_handler)
 		chat->destroyed = TRUE;
 	else
 		g_free(chat);
 }
 
-gboolean g_at_chat_shutdown(GAtChat *chat)
-{
-	if (chat->channel == NULL)
-		return FALSE;
-
-	/* Don't trigger user disconnect on shutdown */
-	chat->user_disconnect = NULL;
-	chat->user_disconnect_data = NULL;
-
-	if (chat->read_watch)
-		g_source_remove(chat->read_watch);
-
-	if (chat->write_watch)
-		g_source_remove(chat->write_watch);
-
-	return TRUE;
-}
-
-gboolean g_at_chat_set_syntax(GAtChat *chat, GAtSyntax *syntax)
-{
-	if (chat == NULL)
-		return FALSE;
-
-	g_at_syntax_unref(chat->syntax);
-
-	chat->syntax = g_at_syntax_ref(syntax);
-
-	return TRUE;
-}
-
-gboolean g_at_chat_set_disconnect_function(GAtChat *chat,
+static gboolean at_chat_set_disconnect_function(struct at_chat *chat,
 			GAtDisconnectFunc disconnect, gpointer user_data)
 {
-	if (chat == NULL)
-		return FALSE;
-
 	chat->user_disconnect = disconnect;
 	chat->user_disconnect_data = user_data;
 
 	return TRUE;
 }
 
-gboolean g_at_chat_set_debug(GAtChat *chat, GAtDebugFunc func, gpointer user)
+static gboolean at_chat_set_debug(struct at_chat *chat,
+				GAtDebugFunc func, gpointer user_data)
 {
-	if (chat == NULL)
-		return FALSE;
 
 	chat->debugf = func;
-	chat->debug_data = user;
+	chat->debug_data = user_data;
+
+	if (chat->io)
+		g_at_io_set_debug(chat->io, func, user_data);
 
 	return TRUE;
 }
 
-static guint send_common(GAtChat *chat, const char *cmd,
-			const char **prefix_list,
-			gboolean expect_pdu,
-			GAtNotifyFunc listing, GAtResultFunc func,
-			gpointer user_data, GDestroyNotify notify)
+static gboolean at_chat_set_wakeup_command(struct at_chat *chat,
+						const char *cmd,
+						unsigned int timeout,
+						unsigned int msec)
+{
+	if (chat->wakeup)
+		g_free(chat->wakeup);
+
+	chat->wakeup = g_strdup(cmd);
+	chat->inactivity_time = (gdouble)msec / 1000;
+	chat->wakeup_timeout = timeout;
+
+	return TRUE;
+}
+
+static guint at_chat_send_common(struct at_chat *chat, guint gid,
+					const char *cmd,
+					const char **prefix_list,
+					gboolean expect_pdu,
+					GAtNotifyFunc listing,
+					GAtResultFunc func,
+					gpointer user_data,
+					GDestroyNotify notify)
 {
 	struct at_command *c;
 
 	if (chat == NULL || chat->command_queue == NULL)
 		return 0;
 
-	c = at_command_create(cmd, prefix_list, expect_pdu, listing, func,
+	c = at_command_create(gid, cmd, prefix_list, expect_pdu, listing, func,
 				user_data, notify, FALSE);
 
 	if (!c)
@@ -1090,52 +1014,42 @@ static guint send_common(GAtChat *chat, const char *cmd,
 	g_queue_push_tail(chat->command_queue, c);
 
 	if (g_queue_get_length(chat->command_queue) == 1)
-		g_at_chat_wakeup_writer(chat);
+		chat_wakeup_writer(chat);
 
 	return c->id;
 }
 
-guint g_at_chat_send(GAtChat *chat, const char *cmd,
-			const char **prefix_list, GAtResultFunc func,
-			gpointer user_data, GDestroyNotify notify)
+static struct at_notify *at_notify_create(struct at_chat *chat,
+						const char *prefix,
+						gboolean pdu)
 {
-	return send_common(chat, cmd, prefix_list, FALSE, NULL, func,
-				user_data, notify);
-}
+	struct at_notify *notify;
+	char *key;
 
-guint g_at_chat_send_listing(GAtChat *chat, const char *cmd,
-				const char **prefix_list,
-				GAtNotifyFunc listing, GAtResultFunc func,
-				gpointer user_data, GDestroyNotify notify)
-{
-	if (listing == NULL)
+	key = g_strdup(prefix);
+
+	if (!key)
 		return 0;
 
-	return send_common(chat, cmd, prefix_list, FALSE, listing, func,
-				user_data, notify);
-}
-
-guint g_at_chat_send_pdu_listing(GAtChat *chat, const char *cmd,
-				const char **prefix_list,
-				GAtNotifyFunc listing, GAtResultFunc func,
-				gpointer user_data, GDestroyNotify notify)
-{
-	if (listing == NULL)
+	notify = g_try_new0(struct at_notify, 1);
+	if (!notify) {
+		g_free(key);
 		return 0;
+	}
 
-	return send_common(chat, cmd, prefix_list, TRUE, listing, func,
-				user_data, notify);
+	notify->pdu = pdu;
+
+	g_hash_table_insert(chat->notify_list, key, notify);
+
+	return notify;
 }
 
-gboolean g_at_chat_cancel(GAtChat *chat, guint id)
+static gboolean at_chat_cancel(struct at_chat *chat, guint group, guint id)
 {
 	GList *l;
+	struct at_command *c;
 
-	if (chat == NULL || chat->command_queue == NULL)
-		return FALSE;
-
-	/* We use id 0 for wakeup commands */
-	if (id == 0)
+	if (chat->command_queue == NULL)
 		return FALSE;
 
 	l = g_queue_find_custom(chat->command_queue, GUINT_TO_POINTER(id),
@@ -1144,33 +1058,36 @@ gboolean g_at_chat_cancel(GAtChat *chat, guint id)
 	if (!l)
 		return FALSE;
 
+	c = l->data;
+
+	if (c->gid != group)
+		return FALSE;
+
 	if (l == g_queue_peek_head(chat->command_queue) &&
 			chat->cmd_bytes_written > 0) {
-		struct at_command *c = l->data;
-
 		/* We can't actually remove it since it is most likely
 		 * already in progress, just null out the callback
 		 * so it won't be called
 		 */
 		c->callback = NULL;
 	} else {
-		at_command_destroy(l->data);
-		g_queue_remove(chat->command_queue, l->data);
+		at_command_destroy(c);
+		g_queue_remove(chat->command_queue, c);
 	}
 
 	return TRUE;
 }
 
-gboolean g_at_chat_cancel_all(GAtChat *chat)
+static gboolean at_chat_cancel_group(struct at_chat *chat, guint group)
 {
 	int n = 0;
 	struct at_command *c;
 
-	if (chat == NULL || chat->command_queue == NULL)
+	if (chat->command_queue == NULL)
 		return FALSE;
 
 	while ((c = g_queue_peek_nth(chat->command_queue, n)) != NULL) {
-		if (c->id == 0) {
+		if (c->id == 0 || c->gid != group) {
 			n += 1;
 			continue;
 		}
@@ -1188,40 +1105,15 @@ gboolean g_at_chat_cancel_all(GAtChat *chat)
 	return TRUE;
 }
 
-static struct at_notify *at_notify_create(GAtChat *chat, const char *prefix,
-						gboolean pdu)
-{
-	struct at_notify *notify;
-	char *key;
-
-	key = g_strdup(prefix);
-
-	if (!key)
-		return 0;
-
-	notify = g_try_new0(struct at_notify, 1);
-
-	if (!notify) {
-		g_free(key);
-		return 0;
-	}
-
-	notify->pdu = pdu;
-
-	g_hash_table_insert(chat->notify_list, key, notify);
-
-	return notify;
-}
-
-guint g_at_chat_register(GAtChat *chat, const char *prefix,
-				GAtNotifyFunc func, gboolean expect_pdu,
-				gpointer user_data,
+static guint at_chat_register(struct at_chat *chat, guint group,
+				const char *prefix, GAtNotifyFunc func,
+				gboolean expect_pdu, gpointer user_data,
 				GDestroyNotify destroy_notify)
 {
 	struct at_notify *notify;
 	struct at_notify_node *node;
 
-	if (chat == NULL || chat->notify_list == NULL)
+	if (chat->notify_list == NULL)
 		return 0;
 
 	if (func == NULL)
@@ -1239,11 +1131,11 @@ guint g_at_chat_register(GAtChat *chat, const char *prefix,
 		return 0;
 
 	node = g_try_new0(struct at_notify_node, 1);
-
 	if (!node)
 		return 0;
 
 	node->id = chat->next_notify_id++;
+	node->gid = group;
 	node->callback = func;
 	node->user_data = user_data;
 	node->notify = destroy_notify;
@@ -1253,14 +1145,16 @@ guint g_at_chat_register(GAtChat *chat, const char *prefix,
 	return node->id;
 }
 
-gboolean g_at_chat_unregister(GAtChat *chat, guint id)
+static gboolean at_chat_unregister(struct at_chat *chat, gboolean mark_only,
+					guint group, guint id)
 {
 	GHashTableIter iter;
 	struct at_notify *notify;
+	struct at_notify_node *node;
 	gpointer key, value;
 	GSList *l;
 
-	if (chat == NULL || chat->notify_list == NULL)
+	if (chat->notify_list == NULL)
 		return FALSE;
 
 	g_hash_table_iter_init(&iter, chat->notify_list);
@@ -1274,8 +1168,18 @@ gboolean g_at_chat_unregister(GAtChat *chat, guint id)
 		if (!l)
 			continue;
 
-		at_notify_node_destroy(l->data);
-		notify->nodes = g_slist_remove(notify->nodes, l->data);
+		node = l->data;
+
+		if (node->gid != group)
+			return FALSE;
+
+		if (mark_only) {
+			node->destroyed = TRUE;
+			return TRUE;
+		}
+
+		at_notify_node_destroy(node, NULL);
+		notify->nodes = g_slist_remove(notify->nodes, node);
 
 		if (notify->nodes == NULL)
 			g_hash_table_iter_remove(&iter);
@@ -1283,47 +1187,336 @@ gboolean g_at_chat_unregister(GAtChat *chat, guint id)
 		return TRUE;
 	}
 
-	return TRUE;
+	return FALSE;
 }
 
-gboolean g_at_chat_unregister_all(GAtChat *chat)
+static gboolean node_compare_by_group(struct at_notify_node *node,
+					gpointer userdata)
 {
-	GHashTableIter iter;
-	struct at_notify *notify;
-	gpointer key, value;
-	GSList *l;
+	guint group = GPOINTER_TO_UINT(userdata);
 
-	if (chat == NULL || chat->notify_list == NULL)
-		return FALSE;
+	if (node->gid == group)
+		return TRUE;
 
-	g_hash_table_iter_init(&iter, chat->notify_list);
+	return FALSE;
+}
 
-	while (g_hash_table_iter_next(&iter, &key, &value)) {
-		notify = value;
+static struct at_chat *create_chat(GIOChannel *channel, GIOFlags flags,
+					GAtSyntax *syntax)
+{
+	struct at_chat *chat;
 
-		for (l = notify->nodes; l; l = l->next)
-			at_notify_node_destroy(l->data);
+	if (!channel)
+		return NULL;
 
-		g_slist_free(notify->nodes);
-		notify->nodes = NULL;
-		g_hash_table_iter_remove(&iter);
+	if (!syntax)
+		return NULL;
+
+	chat = g_try_new0(struct at_chat, 1);
+	if (!chat)
+		return chat;
+
+	chat->ref_count = 1;
+	chat->next_cmd_id = 1;
+	chat->next_notify_id = 1;
+	chat->debugf = NULL;
+
+	if (flags & G_IO_FLAG_NONBLOCK)
+		chat->io = g_at_io_new(channel);
+	else
+		chat->io = g_at_io_new_blocking(channel);
+
+	if (!chat->io)
+		goto error;
+
+	g_at_io_set_disconnect_function(chat->io, io_disconnect, chat);
+
+	chat->command_queue = g_queue_new();
+
+	if (!chat->command_queue)
+		goto error;
+
+	chat->notify_list = g_hash_table_new_full(g_str_hash, g_str_equal,
+						g_free, at_notify_destroy);
+
+	g_at_io_set_read_handler(chat->io, new_bytes, chat);
+
+	chat->syntax = g_at_syntax_ref(syntax);
+
+	return chat;
+
+error:
+	g_at_io_unref(chat->io);
+
+	if (chat->command_queue)
+		g_queue_free(chat->command_queue);
+
+	if (chat->notify_list)
+		g_hash_table_destroy(chat->notify_list);
+
+	g_free(chat);
+	return NULL;
+}
+
+static GAtChat *g_at_chat_new_common(GIOChannel *channel, GIOFlags flags,
+					GAtSyntax *syntax)
+{
+	GAtChat *chat;
+
+	chat = g_try_new0(GAtChat, 1);
+	if (chat == NULL)
+		return NULL;
+
+	chat->parent = create_chat(channel, flags, syntax);
+	if (chat->parent == NULL) {
+		g_free(chat);
+		return NULL;
 	}
 
-	return TRUE;
+	chat->group = chat->parent->next_gid++;
+	chat->ref_count = 1;
+
+	return chat;
+}
+
+GAtChat *g_at_chat_new(GIOChannel *channel, GAtSyntax *syntax)
+{
+	return g_at_chat_new_common(channel, G_IO_FLAG_NONBLOCK, syntax);
+}
+
+GAtChat *g_at_chat_new_blocking(GIOChannel *channel, GAtSyntax *syntax)
+{
+	return g_at_chat_new_common(channel, 0, syntax);
+}
+
+GAtChat *g_at_chat_clone(GAtChat *clone)
+{
+	GAtChat *chat;
+
+	if (clone == NULL)
+		return NULL;
+
+	chat = g_try_new0(GAtChat, 1);
+	if (chat == NULL)
+		return NULL;
+
+	chat->parent = clone->parent;
+	chat->group = chat->parent->next_gid++;
+	chat->ref_count = 1;
+	g_atomic_int_inc(&chat->parent->ref_count);
+
+	if (clone->slave != NULL)
+		chat->slave = g_at_chat_clone(clone->slave);
+
+	return chat;
+}
+
+GAtChat *g_at_chat_set_slave(GAtChat *chat, GAtChat *slave)
+{
+	if (chat == NULL)
+		return NULL;
+
+	if (chat->slave != NULL)
+		g_at_chat_unref(chat->slave);
+
+	if (slave != NULL)
+		chat->slave = g_at_chat_ref(slave);
+	else
+		chat->slave = NULL;
+
+	return chat->slave;
+}
+
+GAtChat *g_at_chat_get_slave(GAtChat *chat)
+{
+	if (chat == NULL)
+		return NULL;
+
+	return chat->slave;
+}
+
+GIOChannel *g_at_chat_get_channel(GAtChat *chat)
+{
+	if (chat == NULL || chat->parent->io == NULL)
+		return NULL;
+
+	return g_at_io_get_channel(chat->parent->io);
+}
+
+GAtIO *g_at_chat_get_io(GAtChat *chat)
+{
+	if (chat == NULL)
+		return NULL;
+
+	return chat->parent->io;
+}
+
+GAtChat *g_at_chat_ref(GAtChat *chat)
+{
+	if (chat == NULL)
+		return NULL;
+
+	g_atomic_int_inc(&chat->ref_count);
+
+	return chat;
+}
+
+void g_at_chat_suspend(GAtChat *chat)
+{
+	if (chat == NULL)
+		return;
+
+	at_chat_suspend(chat->parent);
+}
+
+void g_at_chat_resume(GAtChat *chat)
+{
+	if (chat == NULL)
+		return;
+
+	at_chat_resume(chat->parent);
+}
+
+void g_at_chat_unref(GAtChat *chat)
+{
+	gboolean is_zero;
+
+	if (chat == NULL)
+		return;
+
+	is_zero = g_atomic_int_dec_and_test(&chat->ref_count);
+
+	if (is_zero == FALSE)
+		return;
+
+	if (chat->slave != NULL)
+		g_at_chat_unref(chat->slave);
+
+	at_chat_cancel_group(chat->parent, chat->group);
+	g_at_chat_unregister_all(chat);
+	at_chat_unref(chat->parent);
+
+	g_free(chat);
+}
+
+gboolean g_at_chat_set_disconnect_function(GAtChat *chat,
+			GAtDisconnectFunc disconnect, gpointer user_data)
+{
+	if (chat == NULL || chat->group != 0)
+		return FALSE;
+
+	return at_chat_set_disconnect_function(chat->parent, disconnect,
+						user_data);
+}
+
+gboolean g_at_chat_set_debug(GAtChat *chat,
+				GAtDebugFunc func, gpointer user_data)
+{
+
+	if (chat == NULL || chat->group != 0)
+		return FALSE;
+
+	return at_chat_set_debug(chat->parent, func, user_data);
+}
+
+void g_at_chat_add_terminator(GAtChat *chat, char *terminator,
+					int len, gboolean success)
+{
+	if (chat == NULL || chat->group != 0)
+		return;
+
+	at_chat_add_terminator(chat->parent, terminator, len, success);
 }
 
 gboolean g_at_chat_set_wakeup_command(GAtChat *chat, const char *cmd,
 					unsigned int timeout, unsigned int msec)
 {
+	if (chat == NULL || chat->group != 0)
+		return FALSE;
+
+	return at_chat_set_wakeup_command(chat->parent, cmd, timeout, msec);
+}
+
+guint g_at_chat_send(GAtChat *chat, const char *cmd,
+			const char **prefix_list, GAtResultFunc func,
+			gpointer user_data, GDestroyNotify notify)
+{
+	return at_chat_send_common(chat->parent, chat->group,
+					cmd, prefix_list, FALSE, NULL,
+					func, user_data, notify);
+}
+
+guint g_at_chat_send_listing(GAtChat *chat, const char *cmd,
+				const char **prefix_list,
+				GAtNotifyFunc listing, GAtResultFunc func,
+				gpointer user_data, GDestroyNotify notify)
+{
+	if (listing == NULL)
+		return 0;
+
+	return at_chat_send_common(chat->parent, chat->group,
+					cmd, prefix_list, FALSE,
+					listing, func, user_data, notify);
+}
+
+guint g_at_chat_send_pdu_listing(GAtChat *chat, const char *cmd,
+				const char **prefix_list,
+				GAtNotifyFunc listing, GAtResultFunc func,
+				gpointer user_data, GDestroyNotify notify)
+{
+	if (listing == NULL)
+		return 0;
+
+	return at_chat_send_common(chat->parent, chat->group,
+					cmd, prefix_list, TRUE,
+					listing, func, user_data, notify);
+}
+
+gboolean g_at_chat_cancel(GAtChat *chat, guint id)
+{
+	/* We use id 0 for wakeup commands */
+	if (chat == NULL || id == 0)
+		return FALSE;
+
+	return at_chat_cancel(chat->parent, chat->group, id);
+}
+
+gboolean g_at_chat_cancel_all(GAtChat *chat)
+{
 	if (chat == NULL)
 		return FALSE;
 
-	if (chat->wakeup)
-		g_free(chat->wakeup);
+	return at_chat_cancel_group(chat->parent, chat->group);
+}
 
-	chat->wakeup = g_strdup(cmd);
-	chat->inactivity_time = (gdouble)msec / 1000;
-	chat->wakeup_timeout = timeout;
+guint g_at_chat_register(GAtChat *chat, const char *prefix,
+				GAtNotifyFunc func, gboolean expect_pdu,
+				gpointer user_data,
+				GDestroyNotify destroy_notify)
+{
+	if (chat == NULL)
+		return 0;
 
-	return TRUE;
+	return at_chat_register(chat->parent, chat->group, prefix,
+				func, expect_pdu, user_data, destroy_notify);
+}
+
+gboolean g_at_chat_unregister(GAtChat *chat, guint id)
+{
+	if (chat == NULL)
+		return FALSE;
+
+	return at_chat_unregister(chat->parent, chat->parent->in_notify,
+					chat->group, id);
+}
+
+gboolean g_at_chat_unregister_all(GAtChat *chat)
+{
+	if (chat == NULL)
+		return FALSE;
+
+	return at_chat_unregister_all(chat->parent,
+					chat->parent->in_notify,
+					node_compare_by_group,
+					GUINT_TO_POINTER(chat->group));
 }

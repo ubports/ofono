@@ -7,18 +7,13 @@ bus = dbus.SystemBus()
 manager = dbus.Interface(bus.get_object('org.ofono', '/'),
 						'org.ofono.Manager')
 
-properties = manager.GetProperties()
+modems = manager.GetModems()
 
-for path in properties["Modems"]:
-	modem = dbus.Interface(bus.get_object('org.ofono', path),
-							'org.ofono.Modem')
-
-	properties = modem.GetProperties()
-
+for path, properties in modems:
 	print "[ %s ]" % (path)
 
 	for key in properties.keys():
-		if key in ["Interfaces"]:
+		if key in ["Interfaces", "Features"]:
 			val = ""
 			for i in properties[key]:
 				val += i + " "
@@ -38,24 +33,31 @@ for path in properties["Modems"]:
 			continue
 
 		for key in properties.keys():
-			if key in ["AvailableOperators", "Calls",
-						"MultipartyCalls",
-						"EmergencyNumbers",
-						"SubscriberNumbers",
-						"ServiceDiallingNumbers",
-						"PreferredLanguages",
-						"PrimaryContexts",
-						"LockedPins"]:
+			if key in ["Calls",
+					"MultipartyCalls",
+					"EmergencyNumbers",
+					"SubscriberNumbers",
+					"PreferredLanguages",
+					"PrimaryContexts",
+					"LockedPins"]:
 				val = ""
 				for i in properties[key]:
 					val += i + " "
+			elif key in ["ServiceNumbers"]:
+				val = ""
+				for i in properties[key]:
+					val += "[" + i + "] = '"
+					val += properties[key][i] + "' "
 			elif key in ["MobileNetworkCodeLength",
 						"VoicemailMessageCount",
 						"MicrophoneVolume",
 						"SpeakerVolume"]:
 				val = int(properties[key])
+			elif key in ["MainMenu"]:
+				val = ", ".join([ text + " (" + str(int(icon)) +
+					")" for text, icon in properties[key] ])
 			else:
 				val = str(properties[key])
 			print "        %s = %s" % (key, val)
-	
+
 	print

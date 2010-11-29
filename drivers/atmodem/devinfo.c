@@ -102,8 +102,7 @@ static void at_query_manufacturer(struct ofono_devinfo *info,
 		return;
 
 error:
-	if (cbd)
-		g_free(cbd);
+	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, NULL, data);
 }
@@ -124,8 +123,7 @@ static void at_query_model(struct ofono_devinfo *info,
 		return;
 
 error:
-	if (cbd)
-		g_free(cbd);
+	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, NULL, data);
 }
@@ -146,8 +144,7 @@ static void at_query_revision(struct ofono_devinfo *info,
 		return;
 
 error:
-	if (cbd)
-		g_free(cbd);
+	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, NULL, data);
 }
@@ -168,8 +165,7 @@ static void at_query_serial(struct ofono_devinfo *info,
 		return;
 
 error:
-	if (cbd)
-		g_free(cbd);
+	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, NULL, data);
 }
@@ -188,7 +184,7 @@ static int at_devinfo_probe(struct ofono_devinfo *info, unsigned int vendor,
 {
 	GAtChat *chat = data;
 
-	ofono_devinfo_set_data(info, chat);
+	ofono_devinfo_set_data(info, g_at_chat_clone(chat));
 	g_idle_add(at_devinfo_register, info);
 
 	return 0;
@@ -196,6 +192,10 @@ static int at_devinfo_probe(struct ofono_devinfo *info, unsigned int vendor,
 
 static void at_devinfo_remove(struct ofono_devinfo *info)
 {
+	GAtChat *chat = ofono_devinfo_get_data(info);
+
+	g_at_chat_unref(chat);
+	ofono_devinfo_set_data(info, NULL);
 }
 
 static struct ofono_devinfo_driver driver = {

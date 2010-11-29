@@ -91,7 +91,7 @@ static void at_owancall_down_cb(gboolean ok, GAtResult *result,
 	cb(&error, cbd->data);
 }
 
-static void hso_owancall_up_cb(gboolean ok, GAtResult *result,
+static void at_owancall_up_cb(gboolean ok, GAtResult *result,
 				gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
@@ -137,11 +137,10 @@ static void hso_cgdcont_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	snprintf(buf, sizeof(buf), "AT_OWANCALL=%u,1,1", gcd->active_context);
 
 	if (g_at_chat_send(gcd->chat, buf, none_prefix,
-				hso_owancall_up_cb, ncbd, g_free) > 0)
+				at_owancall_up_cb, ncbd, g_free) > 0)
 		return;
 
-	if (ncbd)
-		g_free(ncbd);
+	g_free(ncbd);
 
 	gcd->active_context = 0;
 
@@ -166,7 +165,7 @@ static void hso_gprs_activate_primary(struct ofono_gprs_context *gc,
 
 	if (ctx->username[0] && ctx->password[0])
 		snprintf(buf, sizeof(buf), "AT$QCPDPP=%u,1,\"%s\",\"%s\"",
-			ctx->cid, ctx->username, ctx->password);
+			ctx->cid, ctx->password, ctx->username);
 	else if (ctx->password[0])
 		snprintf(buf, sizeof(buf), "AT$QCPDPP=%u,2,,\"%s\"",
 				ctx->cid, ctx->password);
@@ -186,9 +185,9 @@ static void hso_gprs_activate_primary(struct ofono_gprs_context *gc,
 	if (g_at_chat_send(gcd->chat, buf, none_prefix,
 				hso_cgdcont_cb, cbd, g_free) > 0)
 		return;
+
 error:
-	if (cbd)
-		g_free(cbd);
+	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, NULL, 0, NULL, NULL, NULL, NULL, data);
 }
@@ -213,8 +212,7 @@ static void hso_gprs_deactivate_primary(struct ofono_gprs_context *gc,
 		return;
 
 error:
-	if (cbd)
-		g_free(cbd);
+	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, data);
 }
@@ -274,8 +272,8 @@ static void owandata_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	ofono_info("IP: %s, Gateway: %s", ip, gateway);
 	ofono_info("DNS: %s, %s", dns1, dns2);
 
-	CALLBACK_WITH_SUCCESS(gcd->up_cb, interface, TRUE, ip, STATIC_IP_NETMASK,
-				gateway, dns, gcd->cb_data);
+	CALLBACK_WITH_SUCCESS(gcd->up_cb, interface, TRUE, ip,
+				STATIC_IP_NETMASK, gateway, dns, gcd->cb_data);
 
 	gcd->hso_state = HSO_NONE;
 	gcd->up_cb = NULL;
@@ -363,9 +361,9 @@ static int hso_gprs_context_probe(struct ofono_gprs_context *gc,
 	struct gprs_context_data *gcd;
 
 	gcd = g_new0(struct gprs_context_data, 1);
-	gcd->chat = chat;
+	gcd->chat = g_at_chat_clone(chat);
 
-	g_at_chat_register(chat, "_OWANCALL:", owancall_notifier,
+	g_at_chat_register(gcd->chat, "_OWANCALL:", owancall_notifier,
 				FALSE, gc, NULL);
 
 	ofono_gprs_context_set_data(gc, gcd);
@@ -378,11 +376,13 @@ static void hso_gprs_context_remove(struct ofono_gprs_context *gc)
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 
 	ofono_gprs_context_set_data(gc, NULL);
+
+	g_at_chat_unref(gcd->chat);
 	g_free(gcd);
 }
 
 static struct ofono_gprs_context_driver driver = {
-	.name			= "hso",
+	.name			= "hsomodem",
 	.probe			= hso_gprs_context_probe,
 	.remove			= hso_gprs_context_remove,
 	.activate_primary	= hso_gprs_activate_primary,

@@ -1,21 +1,21 @@
 /*
- * This file is part of oFono - Open Source Telephony
  *
- * Copyright (C) 2009 Nokia Corporation and/or its subsidiary(-ies).
+ *  oFono - Open Source Telephony
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * version 2 as published by the Free Software Foundation.
+ *  Copyright (C) 2009-2010 Nokia Corporation and/or its subsidiary(-ies).
  *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
- * 02110-1301 USA
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program; if not, write to the Free Software
+ *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
  */
 
@@ -125,19 +125,33 @@ enum sim_pb_tag {
 };
 
 enum sim_message_id {
+	SIM_NETWORK_INFO_REQ = 0x19,
+	SIM_NETWORK_INFO_RESP = 0x1A,
 	SIM_IMSI_REQ_READ_IMSI = 0x1D,
 	SIM_IMSI_RESP_READ_IMSI = 0x1E,
 	SIM_SERV_PROV_NAME_REQ = 0x21,
 	SIM_SERV_PROV_NAME_RESP = 0x22,
+	SIM_READ_FIELD_REQ = 0xBA,
+	SIM_READ_FIELD_RESP = 0xBB,
+	SIM_SMS_REQ = 0xBC,
+	SIM_SMS_RESP = 0xBD,
 	SIM_PB_REQ_SIM_PB_READ = 0xDC,
 	SIM_PB_RESP_SIM_PB_READ = 0xDD,
+	SIM_IND = 0xEF,
 	SIM_COMMON_MESSAGE = 0xF0
 };
 
 enum sim_service_type {
+	SIM_ST_PIN = 0x01,
+	SIM_ST_ALL_SERVICES = 0x05,
+	SIM_ST_INFO = 0x0D,
 	SIM_ST_READ_SERV_PROV_NAME = 0x2C,
 	SIM_PB_READ = 0x0F,
-	READ_IMSI = 0x2D
+	READ_IMSI = 0x2D,
+	READ_HPLMN = 0x2F,
+	READ_PARAMETER = 0x52,
+	UPDATE_PARAMETER = 0x53,
+	ICC = 0x66,
 };
 
 #ifdef __cplusplus

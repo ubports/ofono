@@ -37,9 +37,6 @@
 #include "util.h"
 #include "storage.h"
 
-#define NETWORK_REGISTRATION_INTERFACE "org.ofono.NetworkRegistration"
-#define NETWORK_OPERATOR_INTERFACE "org.ofono.NetworkOperator"
-
 #define NETWORK_REGISTRATION_FLAG_HOME_SHOW_PLMN 0x1
 #define NETWORK_REGISTRATION_FLAG_ROAMING_SHOW_SPN 0x2
 
@@ -87,21 +84,6 @@ struct ofono_netreg {
 	void *driver_data;
 	struct ofono_atom *atom;
 };
-
-static void operator_list_callback(const struct ofono_error *error, int total,
-				const struct ofono_network_operator *list,
-				void *data);
-
-static void current_operator_callback(const struct ofono_error *error,
-				const struct ofono_network_operator *current,
-				void *data);
-
-static void signal_strength_callback(const struct ofono_error *error,
-					int strength, void *data);
-
-static void registration_status_callback(const struct ofono_error *error,
-					int status, int lac, int ci, int tech,
-					void *data);
 
 struct network_operator_data {
 	char name[OFONO_MAX_OPERATOR_NAME_LENGTH + 1];
@@ -188,9 +170,22 @@ static void set_registration_mode(struct ofono_netreg *netreg, int mode)
 	path = __ofono_atom_get_path(netreg->atom);
 
 	ofono_dbus_signal_property_changed(conn, path,
-						NETWORK_REGISTRATION_INTERFACE,
-						"Mode", DBUS_TYPE_STRING,
-						&strmode);
+					OFONO_NETWORK_REGISTRATION_INTERFACE,
+					"Mode", DBUS_TYPE_STRING, &strmode);
+}
+
+static void registration_status_callback(const struct ofono_error *error,
+					int status, int lac, int ci, int tech,
+					void *data)
+{
+	struct ofono_netreg *netreg = data;
+
+	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
+		DBG("Error during registration status query");
+		return;
+	}
+
+	ofono_netreg_status_notify(netreg, status, lac, ci, tech);
 }
 
 static void register_callback(const struct ofono_error *error, void *data)
@@ -225,69 +220,6 @@ static void init_register(const struct ofono_error *error, void *data)
 	if (netreg->driver->registration_status)
 		netreg->driver->registration_status(netreg,
 					registration_status_callback, netreg);
-}
-
-/* Must use g_strfreev on network_operators */
-static void network_operator_populate_registered(struct ofono_netreg *netreg,
-						char ***network_operators)
-{
-	DBusConnection *conn = ofono_dbus_get_connection();
-	char **children;
-	int i;
-	int prefix_len;
-	int num_children;
-	GSList *l;
-	char path[256];
-	char mnc[OFONO_MAX_MNC_LENGTH + 1];
-	char mcc[OFONO_MAX_MCC_LENGTH + 1];
-	int op_path_len;
-
-	prefix_len = snprintf(path, sizeof(path), "%s/operator",
-				__ofono_atom_get_path(netreg->atom));
-
-	if (!dbus_connection_list_registered(conn, path, &children)) {
-		DBG("Unable to obtain registered NetworkOperator(s)");
-		*network_operators = g_try_new0(char *, 1);
-		return;
-	}
-
-	for (i = 0; children[i]; i++)
-		;
-
-	num_children = i;
-
-	*network_operators = g_try_new0(char *, num_children + 1);
-
-	/* Enough to store '/' + MCC + MNC + null */
-	op_path_len = prefix_len;
-	op_path_len += OFONO_MAX_MCC_LENGTH + OFONO_MAX_MNC_LENGTH + 2;
-
-	/* Quoting 27.007: "The list of operators shall be in order: home
-	 * network, networks referenced in SIM or active application in the
-	 * UICC (GSM or USIM) in the following order: HPLMN selector, User
-	 * controlled PLMN selector, Operator controlled PLMN selector and
-	 * PLMN selector (in the SIM or GSM application), and other networks."
-	 * Thus we must make sure we return the list in the same order,
-	 * if possible.  Luckily the operator_list is stored in order already
-	 */
-	i = 0;
-	for (l = netreg->operator_list; l; l = l->next) {
-		struct network_operator_data *opd = l->data;
-		int j;
-
-		for (j = 0; children[j]; j++) {
-			sscanf(children[j], "%3[0-9]%[0-9]", mcc, mnc);
-			if (!strcmp(opd->mcc, mcc) && !strcmp(opd->mnc, mnc)) {
-				(*network_operators)[i] =
-					g_try_new(char, op_path_len);
-				snprintf((*network_operators)[i], op_path_len,
-						"%s/%s", path, children[j]);
-				++i;
-			}
-		}
-	}
-
-	dbus_free_string_array(children);
 }
 
 static struct network_operator_data *
@@ -344,7 +276,7 @@ static gint network_operator_data_compare(gconstpointer a, gconstpointer b)
 	return comp1 != 0 ? comp1 : comp2;
 }
 
-static inline const char *network_operator_build_path(struct ofono_netreg *netreg,
+static const char *network_operator_build_path(struct ofono_netreg *netreg,
 							const char *mcc,
 							const char *mnc)
 {
@@ -355,23 +287,6 @@ static inline const char *network_operator_build_path(struct ofono_netreg *netre
 			mcc, mnc);
 
 	return path;
-}
-
-static void network_operator_emit_available_operators(struct ofono_netreg *netreg)
-{
-	DBusConnection *conn = ofono_dbus_get_connection();
-	const char *path = __ofono_atom_get_path(netreg->atom);
-	char **network_operators;
-
-	network_operator_populate_registered(netreg, &network_operators);
-
-	ofono_dbus_signal_array_property_changed(conn, path,
-						NETWORK_REGISTRATION_INTERFACE,
-						"AvailableOperators",
-						DBUS_TYPE_OBJECT_PATH,
-						&network_operators);
-
-	g_strfreev(network_operators);
 }
 
 static void set_network_operator_status(struct network_operator_data *opd,
@@ -394,9 +309,10 @@ static void set_network_operator_status(struct network_operator_data *opd,
 	status_str = network_operator_status_to_string(status);
 	path = network_operator_build_path(netreg, opd->mcc, opd->mnc);
 
-	ofono_dbus_signal_property_changed(conn, path, NETWORK_OPERATOR_INTERFACE,
-						"Status", DBUS_TYPE_STRING,
-						&status_str);
+	ofono_dbus_signal_property_changed(conn, path,
+					OFONO_NETWORK_OPERATOR_INTERFACE,
+					"Status", DBUS_TYPE_STRING,
+					&status_str);
 }
 
 static void set_network_operator_techs(struct network_operator_data *opd,
@@ -415,10 +331,9 @@ static void set_network_operator_techs(struct network_operator_data *opd,
 	path = network_operator_build_path(netreg, opd->mcc, opd->mnc);
 
 	ofono_dbus_signal_array_property_changed(conn, path,
-						NETWORK_REGISTRATION_INTERFACE,
-						"Technologies",
-						DBUS_TYPE_STRING,
-						&technologies);
+					OFONO_NETWORK_REGISTRATION_INTERFACE,
+					"Technologies", DBUS_TYPE_STRING,
+					&technologies);
 	g_strfreev(technologies);
 }
 
@@ -427,12 +342,15 @@ static char *get_operator_display_name(struct ofono_netreg *netreg)
 	struct network_operator_data *opd = netreg->current_operator;
 	const char *plmn;
 	static char name[1024];
+	static char mccmnc[OFONO_MAX_MCC_LENGTH + OFONO_MAX_MNC_LENGTH + 1];
 	int len = sizeof(name);
 	int home_or_spdi;
 
-	/* The name displayed to user depends on whether we're in a home
+	/*
+	 * The name displayed to user depends on whether we're in a home
 	 * PLMN or roaming and on configuration bits from the SIM, all
-	 * together there are four cases to consider.  */
+	 * together there are four cases to consider.
+	 */
 
 	if (!opd) {
 		g_strlcpy(name, "", len);
@@ -440,6 +358,16 @@ static char *get_operator_display_name(struct ofono_netreg *netreg)
 	}
 
 	plmn = opd->name;
+
+	/*
+	 * This is a fallback on some really broken hardware which do not
+	 * report the COPS name
+	 */
+	if (plmn[0] == '\0') {
+		snprintf(mccmnc, sizeof(mccmnc), "%s%s", opd->mcc, opd->mnc);
+		plmn = mccmnc;
+	}
+
 	if (opd->eons_info && opd->eons_info->longname)
 		plmn = opd->eons_info->longname;
 
@@ -480,13 +408,17 @@ static void set_network_operator_name(struct network_operator_data *opd,
 	const char *path;
 	const char *operator;
 
+	if (name[0] == '\0')
+		return;
+
 	if (!strncmp(opd->name, name, OFONO_MAX_OPERATOR_NAME_LENGTH))
 		return;
 
 	strncpy(opd->name, name, OFONO_MAX_OPERATOR_NAME_LENGTH);
 	opd->name[OFONO_MAX_OPERATOR_NAME_LENGTH] = '\0';
 
-	/* If we have Enhanced Operator Name info on the SIM, we always use
+	/*
+	 * If we have Enhanced Operator Name info on the SIM, we always use
 	 * that, so do not need to emit the signal here
 	 */
 	if (opd->eons_info && opd->eons_info->longname)
@@ -498,9 +430,9 @@ static void set_network_operator_name(struct network_operator_data *opd,
 		operator = get_operator_display_name(netreg);
 
 		ofono_dbus_signal_property_changed(conn, path,
-						NETWORK_REGISTRATION_INTERFACE,
-						"Operator", DBUS_TYPE_STRING,
-						&operator);
+					OFONO_NETWORK_REGISTRATION_INTERFACE,
+					"Name", DBUS_TYPE_STRING,
+					&operator);
 	}
 
 	/* Don't emit when only operator name is reported */
@@ -509,7 +441,8 @@ static void set_network_operator_name(struct network_operator_data *opd,
 
 	path = network_operator_build_path(netreg, opd->mcc, opd->mnc);
 
-	ofono_dbus_signal_property_changed(conn, path, NETWORK_OPERATOR_INTERFACE,
+	ofono_dbus_signal_property_changed(conn, path,
+					OFONO_NETWORK_OPERATOR_INTERFACE,
 					"Name", DBUS_TYPE_STRING, &name);
 }
 
@@ -543,18 +476,18 @@ static void set_network_operator_eons_info(struct network_operator_data *opd,
 
 	if (oldname != newname && strcmp(oldname, newname)) {
 		ofono_dbus_signal_property_changed(conn, path,
-						NETWORK_OPERATOR_INTERFACE,
-						"Name", DBUS_TYPE_STRING,
-						&newname);
+					OFONO_NETWORK_OPERATOR_INTERFACE,
+					"Name", DBUS_TYPE_STRING, &newname);
 
 		if (opd == netreg->current_operator) {
 			const char *npath = __ofono_atom_get_path(netreg->atom);
-			const char *operator = get_operator_display_name(netreg);
+			const char *operator =
+				get_operator_display_name(netreg);
 
 			ofono_dbus_signal_property_changed(conn, npath,
-						NETWORK_REGISTRATION_INTERFACE,
-						"Operator", DBUS_TYPE_STRING,
-						&operator);
+					OFONO_NETWORK_REGISTRATION_INTERFACE,
+					"Name", DBUS_TYPE_STRING,
+					&operator);
 		}
 	}
 
@@ -570,9 +503,58 @@ static void set_network_operator_eons_info(struct network_operator_data *opd,
 
 	if (oldinfo != newinfo && strcmp(oldinfo, newinfo))
 		ofono_dbus_signal_property_changed(conn, path,
-						NETWORK_OPERATOR_INTERFACE,
-						"AdditionalInformation",
-						DBUS_TYPE_STRING, &newinfo);
+					OFONO_NETWORK_OPERATOR_INTERFACE,
+					"AdditionalInformation",
+					DBUS_TYPE_STRING, &newinfo);
+}
+
+static void append_operator_properties(struct network_operator_data *opd,
+					DBusMessageIter *dict)
+{
+	const char *name = opd->name;
+	const char *status = network_operator_status_to_string(opd->status);
+	char mccmnc[OFONO_MAX_MCC_LENGTH + OFONO_MAX_MNC_LENGTH + 1];
+
+	if (opd->eons_info && opd->eons_info->longname)
+		name = opd->eons_info->longname;
+
+	if (name[0] == '\0') {
+		snprintf(mccmnc, sizeof(mccmnc), "%s%s", opd->mcc, opd->mnc);
+		name = mccmnc;
+	}
+
+	ofono_dbus_dict_append(dict, "Name", DBUS_TYPE_STRING, &name);
+
+	ofono_dbus_dict_append(dict, "Status", DBUS_TYPE_STRING, &status);
+
+	if (*opd->mcc != '\0') {
+		const char *mcc = opd->mcc;
+		ofono_dbus_dict_append(dict, "MobileCountryCode",
+					DBUS_TYPE_STRING, &mcc);
+	}
+
+	if (*opd->mnc != '\0') {
+		const char *mnc = opd->mnc;
+		ofono_dbus_dict_append(dict, "MobileNetworkCode",
+					DBUS_TYPE_STRING, &mnc);
+	}
+
+	if (opd->techs != 0) {
+		char **technologies = network_operator_technologies(opd);
+
+		ofono_dbus_dict_append_array(dict, "Technologies",
+						DBUS_TYPE_STRING,
+						&technologies);
+
+		g_strfreev(technologies);
+	}
+
+	if (opd->eons_info && opd->eons_info->info) {
+		const char *additional = opd->eons_info->info;
+
+		ofono_dbus_dict_append(dict, "AdditionalInformation",
+					DBUS_TYPE_STRING, &additional);
+	}
 }
 
 static DBusMessage *network_operator_get_properties(DBusConnection *conn,
@@ -583,14 +565,6 @@ static DBusMessage *network_operator_get_properties(DBusConnection *conn,
 	DBusMessage *reply;
 	DBusMessageIter iter;
 	DBusMessageIter dict;
-
-	const char *name = opd->name;
-	const char *status =
-		network_operator_status_to_string(opd->status);
-
-	if (opd->eons_info && opd->eons_info->longname)
-		name = opd->eons_info->longname;
-
 	reply = dbus_message_new_method_return(msg);
 	if (!reply)
 		return NULL;
@@ -601,38 +575,7 @@ static DBusMessage *network_operator_get_properties(DBusConnection *conn,
 					OFONO_PROPERTIES_ARRAY_SIGNATURE,
 					&dict);
 
-	ofono_dbus_dict_append(&dict, "Name", DBUS_TYPE_STRING, &name);
-
-	ofono_dbus_dict_append(&dict, "Status", DBUS_TYPE_STRING, &status);
-
-	if (*opd->mcc != '\0') {
-		const char *mcc = opd->mcc;
-		ofono_dbus_dict_append(&dict, "MobileCountryCode",
-					DBUS_TYPE_STRING, &mcc);
-	}
-
-	if (*opd->mnc != '\0') {
-		const char *mnc = opd->mnc;
-		ofono_dbus_dict_append(&dict, "MobileNetworkCode",
-					DBUS_TYPE_STRING, &mnc);
-	}
-
-	if (opd->techs != 0) {
-		char **technologies = network_operator_technologies(opd);
-
-		ofono_dbus_dict_append_array(&dict, "Technologies",
-						DBUS_TYPE_STRING,
-						&technologies);
-
-		g_strfreev(technologies);
-	}
-
-	if (opd->eons_info && opd->eons_info->info) {
-		const char *additional = opd->eons_info->info;
-
-		ofono_dbus_dict_append(&dict, "AdditionalInformation",
-					DBUS_TYPE_STRING, &additional);
-	}
+	append_operator_properties(opd, &dict);
 
 	dbus_message_iter_close_container(&iter, &dict);
 
@@ -662,9 +605,9 @@ static DBusMessage *network_operator_register(DBusConnection *conn,
 }
 
 static GDBusMethodTable network_operator_methods[] = {
-	{ "GetProperties",	"",	"a{sv}",	network_operator_get_properties },
-	{ "Register",		"",	"",		network_operator_register,
-							G_DBUS_METHOD_FLAG_ASYNC },
+	{ "GetProperties",  "",  "a{sv}",  network_operator_get_properties },
+	{ "Register",       "",  "",       network_operator_register,
+						G_DBUS_METHOD_FLAG_ASYNC },
 	{ }
 };
 
@@ -681,7 +624,8 @@ static gboolean network_operator_dbus_register(struct ofono_netreg *netreg,
 
 	path = network_operator_build_path(netreg, opd->mcc, opd->mnc);
 
-	if (!g_dbus_register_interface(conn, path, NETWORK_OPERATOR_INTERFACE,
+	if (!g_dbus_register_interface(conn, path,
+					OFONO_NETWORK_OPERATOR_INTERFACE,
 					network_operator_methods,
 					network_operator_signals,
 					NULL, opd,
@@ -701,7 +645,7 @@ static gboolean network_operator_dbus_register(struct ofono_netreg *netreg,
 }
 
 static gboolean network_operator_dbus_unregister(struct ofono_netreg *netreg,
-						struct network_operator_data *opd)
+					struct network_operator_data *opd)
 {
 	DBusConnection *conn = ofono_dbus_get_connection();
 	const char *path;
@@ -709,344 +653,7 @@ static gboolean network_operator_dbus_unregister(struct ofono_netreg *netreg,
 	path = network_operator_build_path(netreg, opd->mcc, opd->mnc);
 
 	return g_dbus_unregister_interface(conn, path,
-					NETWORK_OPERATOR_INTERFACE);
-}
-
-static DBusMessage *network_get_properties(DBusConnection *conn,
-						DBusMessage *msg, void *data)
-{
-	struct ofono_netreg *netreg = data;
-	DBusMessage *reply;
-	DBusMessageIter iter;
-	DBusMessageIter dict;
-
-	const char *status = registration_status_to_string(netreg->status);
-	const char *operator;
-	const char *mode = registration_mode_to_string(netreg->mode);
-
-	char **network_operators;
-
-	reply = dbus_message_new_method_return(msg);
-	if (!reply)
-		return NULL;
-
-	dbus_message_iter_init_append(reply, &iter);
-
-	dbus_message_iter_open_container(&iter, DBUS_TYPE_ARRAY,
-					OFONO_PROPERTIES_ARRAY_SIGNATURE,
-					&dict);
-
-	ofono_dbus_dict_append(&dict, "Status", DBUS_TYPE_STRING, &status);
-	ofono_dbus_dict_append(&dict, "Mode", DBUS_TYPE_STRING, &mode);
-
-	if (netreg->location != -1) {
-		dbus_uint16_t location = netreg->location;
-		ofono_dbus_dict_append(&dict, "LocationAreaCode",
-					DBUS_TYPE_UINT16, &location);
-	}
-
-	if (netreg->cellid != -1) {
-		dbus_uint32_t cellid = netreg->cellid;
-		ofono_dbus_dict_append(&dict, "CellId",
-					DBUS_TYPE_UINT32, &cellid);
-	}
-
-	if (netreg->technology != -1) {
-		const char *technology =
-			registration_tech_to_string(netreg->technology);
-
-		ofono_dbus_dict_append(&dict, "Technology", DBUS_TYPE_STRING,
-					&technology);
-	}
-
-	operator = get_operator_display_name(netreg);
-	ofono_dbus_dict_append(&dict, "Operator", DBUS_TYPE_STRING, &operator);
-
-	network_operator_populate_registered(netreg, &network_operators);
-
-	ofono_dbus_dict_append_array(&dict, "AvailableOperators",
-					DBUS_TYPE_OBJECT_PATH,
-					&network_operators);
-
-	g_strfreev(network_operators);
-
-	if (netreg->signal_strength != -1) {
-		dbus_uint16_t strength = netreg->signal_strength;
-		ofono_dbus_dict_append(&dict, "Strength", DBUS_TYPE_UINT16,
-					&strength);
-	}
-
-	if (netreg->base_station)
-		ofono_dbus_dict_append(&dict, "BaseStation", DBUS_TYPE_STRING,
-					&netreg->base_station);
-
-	dbus_message_iter_close_container(&iter, &dict);
-
-	return reply;
-}
-
-static DBusMessage *network_register(DBusConnection *conn,
-					DBusMessage *msg, void *data)
-{
-	struct ofono_netreg *netreg = data;
-
-	if (netreg->pending)
-		return __ofono_error_busy(msg);
-
-	if (netreg->driver->register_auto == NULL)
-		return __ofono_error_not_implemented(msg);
-
-	netreg->pending = dbus_message_ref(msg);
-
-	netreg->driver->register_auto(netreg, register_callback, netreg);
-
-	set_registration_mode(netreg, NETWORK_REGISTRATION_MODE_AUTO);
-
-	return NULL;
-}
-
-static DBusMessage *network_deregister(DBusConnection *conn,
-					DBusMessage *msg, void *data)
-{
-	struct ofono_netreg *netreg = data;
-
-	if (netreg->pending)
-		return __ofono_error_busy(msg);
-
-	if (netreg->driver->deregister == NULL)
-		return __ofono_error_not_implemented(msg);
-
-	netreg->pending = dbus_message_ref(msg);
-
-	netreg->driver->deregister(netreg, register_callback, netreg);
-
-	set_registration_mode(netreg, NETWORK_REGISTRATION_MODE_OFF);
-
-	return NULL;
-}
-
-static DBusMessage *network_propose_scan(DBusConnection *conn,
-						DBusMessage *msg, void *data)
-{
-	struct ofono_netreg *netreg = data;
-
-	if (netreg->pending)
-		return __ofono_error_busy(msg);
-
-	if (netreg->driver->list_operators == NULL)
-		return __ofono_error_not_implemented(msg);
-
-	netreg->pending = dbus_message_ref(msg);
-
-	netreg->driver->list_operators(netreg, operator_list_callback, netreg);
-
-	return NULL;
-}
-
-static GDBusMethodTable network_registration_methods[] = {
-	{ "GetProperties",	"",	"a{sv}",	network_get_properties	},
-	{ "Register",		"",	"",		network_register,
-							G_DBUS_METHOD_FLAG_ASYNC },
-	{ "Deregister",		"",	"",		network_deregister,
-							G_DBUS_METHOD_FLAG_ASYNC },
-	{ "ProposeScan",	"",	"ao",		network_propose_scan,
-							G_DBUS_METHOD_FLAG_ASYNC },
-	{ }
-};
-
-static GDBusSignalTable network_registration_signals[] = {
-	{ "PropertyChanged",	"sv" },
-	{ }
-};
-
-static void set_registration_status(struct ofono_netreg *netreg, int status)
-{
-	const char *str_status = registration_status_to_string(status);
-	const char *path = __ofono_atom_get_path(netreg->atom);
-	DBusConnection *conn = ofono_dbus_get_connection();
-
-	netreg->status = status;
-
-	ofono_dbus_signal_property_changed(conn, path,
-					NETWORK_REGISTRATION_INTERFACE,
-					"Status", DBUS_TYPE_STRING,
-					&str_status);
-}
-
-static void set_registration_location(struct ofono_netreg *netreg, int lac)
-{
-	DBusConnection *conn = ofono_dbus_get_connection();
-	const char *path = __ofono_atom_get_path(netreg->atom);
-	dbus_uint16_t dbus_lac = lac;
-
-	if (lac > 0xffff)
-		return;
-
-	netreg->location = lac;
-
-	if (netreg->location == -1)
-		return;
-
-	ofono_dbus_signal_property_changed(conn, path,
-						NETWORK_REGISTRATION_INTERFACE,
-						"LocationAreaCode",
-						DBUS_TYPE_UINT16, &dbus_lac);
-}
-
-static void set_registration_cellid(struct ofono_netreg *netreg, int ci)
-{
-	DBusConnection *conn = ofono_dbus_get_connection();
-	const char *path = __ofono_atom_get_path(netreg->atom);
-	dbus_uint32_t dbus_ci = ci;
-
-	netreg->cellid = ci;
-
-	if (netreg->cellid == -1)
-		return;
-
-	ofono_dbus_signal_property_changed(conn, path,
-						NETWORK_REGISTRATION_INTERFACE,
-						"CellId", DBUS_TYPE_UINT32,
-						&dbus_ci);
-}
-
-static void set_registration_technology(struct ofono_netreg *netreg, int tech)
-{
-	const char *tech_str = registration_tech_to_string(tech);
-	DBusConnection *conn = ofono_dbus_get_connection();
-	const char *path = __ofono_atom_get_path(netreg->atom);
-
-	netreg->technology = tech;
-
-	if (netreg->technology == -1)
-		return;
-
-	ofono_dbus_signal_property_changed(conn, path,
-						NETWORK_REGISTRATION_INTERFACE,
-						"Technology", DBUS_TYPE_STRING,
-						&tech_str);
-}
-
-void __ofono_netreg_set_base_station_name(struct ofono_netreg *netreg,
-						const char *name)
-{
-	DBusConnection *conn = ofono_dbus_get_connection();
-	const char *path = __ofono_atom_get_path(netreg->atom);
-	const char *base_station = name ? name : "";
-
-	/* Cell ID changed, but we don't have a cell name, nothing to do */
-	if (netreg->base_station == NULL && name == NULL)
-		return;
-
-	if (netreg->base_station)
-		g_free(netreg->base_station);
-
-	if (name == NULL) {
-		netreg->base_station = NULL;
-
-		/* We just got unregistered, set name to NULL
-		 * but don't emit signal */
-		if (netreg->current_operator == NULL)
-			return;
-	} else {
-		netreg->base_station = g_strdup(name);
-	}
-
-	ofono_dbus_signal_property_changed(conn, path,
-						NETWORK_REGISTRATION_INTERFACE,
-						"BaseStation", DBUS_TYPE_STRING,
-						&base_station);
-}
-
-unsigned int __ofono_netreg_add_status_watch(struct ofono_netreg *netreg,
-				ofono_netreg_status_notify_cb_t notify,
-				void *data, ofono_destroy_func destroy)
-{
-	struct ofono_watchlist_item *item;
-
-	DBG("%p", netreg);
-
-	if (netreg == NULL)
-		return 0;
-
-	if (notify == NULL)
-		return 0;
-
-	item = g_new0(struct ofono_watchlist_item, 1);
-
-	item->notify = notify;
-	item->destroy = destroy;
-	item->notify_data = data;
-
-	return __ofono_watchlist_add_item(netreg->status_watches, item);
-}
-
-gboolean __ofono_netreg_remove_status_watch(struct ofono_netreg *netreg,
-						unsigned int id)
-{
-	DBG("%p", netreg);
-
-	return __ofono_watchlist_remove_item(netreg->status_watches, id);
-}
-
-static void notify_status_watches(struct ofono_netreg *netreg)
-{
-	struct ofono_watchlist_item *item;
-	GSList *l;
-	ofono_netreg_status_notify_cb_t notify;
-	const char *mcc = NULL;
-	const char *mnc = NULL;
-
-	if (netreg->current_operator) {
-		mcc = netreg->current_operator->mcc;
-		mnc = netreg->current_operator->mnc;
-	}
-
-	for (l = netreg->status_watches->items; l; l = l->next) {
-		item = l->data;
-		notify = item->notify;
-
-		notify(netreg->status, netreg->location, netreg->cellid,
-			netreg->technology, mcc, mnc, item->notify_data);
-	}
-}
-
-void ofono_netreg_status_notify(struct ofono_netreg *netreg, int status,
-			int lac, int ci, int tech)
-{
-	if (!netreg)
-		return;
-
-	if (netreg->status != status)
-		set_registration_status(netreg, status);
-
-	if (netreg->location != lac)
-		set_registration_location(netreg, lac);
-
-	if (netreg->cellid != ci)
-		set_registration_cellid(netreg, ci);
-
-	if (netreg->technology != tech)
-		set_registration_technology(netreg, tech);
-
-	if (netreg->status == NETWORK_REGISTRATION_STATUS_REGISTERED ||
-		netreg->status == NETWORK_REGISTRATION_STATUS_ROAMING) {
-		if (netreg->driver->current_operator)
-			netreg->driver->current_operator(netreg,
-					current_operator_callback, netreg);
-	} else {
-		struct ofono_error error;
-
-		error.type = OFONO_ERROR_TYPE_NO_ERROR;
-		error.error = 0;
-
-		current_operator_callback(&error, NULL, netreg);
-		__ofono_netreg_set_base_station_name(netreg, NULL);
-
-		netreg->signal_strength = -1;
-	}
-
-	notify_status_watches(netreg);
+					OFONO_NETWORK_OPERATOR_INTERFACE);
 }
 
 static GSList *compress_operator_list(const struct ofono_network_operator *list,
@@ -1080,7 +687,7 @@ static GSList *compress_operator_list(const struct ofono_network_operator *list,
 }
 
 static gboolean update_operator_list(struct ofono_netreg *netreg, int total,
-					const struct ofono_network_operator *list)
+				const struct ofono_network_operator *list)
 {
 	GSList *n = NULL;
 	GSList *o;
@@ -1140,17 +747,192 @@ static gboolean update_operator_list(struct ofono_netreg *netreg, int total,
 	return changed;
 }
 
-static void operator_list_callback(const struct ofono_error *error, int total,
-					const struct ofono_network_operator *list,
-					void *data)
+static DBusMessage *network_get_properties(DBusConnection *conn,
+						DBusMessage *msg, void *data)
 {
 	struct ofono_netreg *netreg = data;
 	DBusMessage *reply;
-	char **network_operators;
 	DBusMessageIter iter;
-	DBusMessageIter array_iter;
-	int i;
-	gboolean need_to_emit;
+	DBusMessageIter dict;
+
+	const char *status = registration_status_to_string(netreg->status);
+	const char *operator;
+	const char *mode = registration_mode_to_string(netreg->mode);
+
+	reply = dbus_message_new_method_return(msg);
+	if (!reply)
+		return NULL;
+
+	dbus_message_iter_init_append(reply, &iter);
+
+	dbus_message_iter_open_container(&iter, DBUS_TYPE_ARRAY,
+					OFONO_PROPERTIES_ARRAY_SIGNATURE,
+					&dict);
+
+	ofono_dbus_dict_append(&dict, "Status", DBUS_TYPE_STRING, &status);
+	ofono_dbus_dict_append(&dict, "Mode", DBUS_TYPE_STRING, &mode);
+
+	if (netreg->location != -1) {
+		dbus_uint16_t location = netreg->location;
+		ofono_dbus_dict_append(&dict, "LocationAreaCode",
+					DBUS_TYPE_UINT16, &location);
+	}
+
+	if (netreg->cellid != -1) {
+		dbus_uint32_t cellid = netreg->cellid;
+		ofono_dbus_dict_append(&dict, "CellId",
+					DBUS_TYPE_UINT32, &cellid);
+	}
+
+	if (netreg->technology != -1) {
+		const char *technology =
+			registration_tech_to_string(netreg->technology);
+
+		ofono_dbus_dict_append(&dict, "Technology", DBUS_TYPE_STRING,
+					&technology);
+	}
+
+	if (netreg->current_operator) {
+		if (netreg->current_operator->mcc[0] != '\0') {
+			const char *mcc = netreg->current_operator->mcc;
+			ofono_dbus_dict_append(&dict, "MobileCountryCode",
+						DBUS_TYPE_STRING, &mcc);
+		}
+
+		if (netreg->current_operator->mnc[0] != '\0') {
+			const char *mnc = netreg->current_operator->mnc;
+			ofono_dbus_dict_append(&dict, "MobileNetworkCode",
+						DBUS_TYPE_STRING, &mnc);
+		}
+	}
+
+	operator = get_operator_display_name(netreg);
+	ofono_dbus_dict_append(&dict, "Name", DBUS_TYPE_STRING, &operator);
+
+	if (netreg->signal_strength != -1) {
+		dbus_uint16_t strength = netreg->signal_strength;
+		ofono_dbus_dict_append(&dict, "Strength", DBUS_TYPE_UINT16,
+					&strength);
+	}
+
+	if (netreg->base_station)
+		ofono_dbus_dict_append(&dict, "BaseStation", DBUS_TYPE_STRING,
+					&netreg->base_station);
+
+	dbus_message_iter_close_container(&iter, &dict);
+
+	return reply;
+}
+
+static DBusMessage *network_register(DBusConnection *conn,
+					DBusMessage *msg, void *data)
+{
+	struct ofono_netreg *netreg = data;
+
+	if (netreg->pending)
+		return __ofono_error_busy(msg);
+
+	if (netreg->driver->register_auto == NULL)
+		return __ofono_error_not_implemented(msg);
+
+	netreg->pending = dbus_message_ref(msg);
+
+	netreg->driver->register_auto(netreg, register_callback, netreg);
+
+	set_registration_mode(netreg, NETWORK_REGISTRATION_MODE_AUTO);
+
+	return NULL;
+}
+
+static DBusMessage *network_deregister(DBusConnection *conn,
+					DBusMessage *msg, void *data)
+{
+	struct ofono_netreg *netreg = data;
+
+	if (netreg->pending)
+		return __ofono_error_busy(msg);
+
+	if (netreg->driver->deregister == NULL)
+		return __ofono_error_not_implemented(msg);
+
+	netreg->pending = dbus_message_ref(msg);
+
+	netreg->driver->deregister(netreg, register_callback, netreg);
+
+	set_registration_mode(netreg, NETWORK_REGISTRATION_MODE_OFF);
+
+	return NULL;
+}
+
+static void append_operator_struct(struct ofono_netreg *netreg,
+					struct network_operator_data *opd,
+					DBusMessageIter *iter)
+{
+	DBusMessageIter entry, dict;
+	const char *path;
+
+	path = network_operator_build_path(netreg, opd->mcc, opd->mnc);
+
+	dbus_message_iter_open_container(iter, DBUS_TYPE_STRUCT, NULL, &entry);
+	dbus_message_iter_append_basic(&entry, DBUS_TYPE_OBJECT_PATH, &path);
+	dbus_message_iter_open_container(&entry, DBUS_TYPE_ARRAY,
+					OFONO_PROPERTIES_ARRAY_SIGNATURE,
+					&dict);
+	append_operator_properties(opd, &dict);
+	dbus_message_iter_close_container(&entry, &dict);
+	dbus_message_iter_close_container(iter, &entry);
+}
+
+static void append_operator_struct_list(struct ofono_netreg *netreg,
+					DBusMessageIter *array)
+{
+	DBusConnection *conn = ofono_dbus_get_connection();
+	char **children;
+	char path[256];
+	GSList *l;
+
+	snprintf(path, sizeof(path), "%s/operator",
+			__ofono_atom_get_path(netreg->atom));
+
+	if (!dbus_connection_list_registered(conn, path, &children)) {
+		DBG("Unable to obtain registered NetworkOperator(s)");
+		return;
+	}
+
+	/*
+	 * Quoting 27.007: "The list of operators shall be in order: home
+	 * network, networks referenced in SIM or active application in the
+	 * UICC (GSM or USIM) in the following order: HPLMN selector, User
+	 * controlled PLMN selector, Operator controlled PLMN selector and
+	 * PLMN selector (in the SIM or GSM application), and other networks."
+	 * Thus we must make sure we return the list in the same order,
+	 * if possible.  Luckily the operator_list is stored in order already
+	 */
+	for (l = netreg->operator_list; l; l = l->next) {
+		struct network_operator_data *opd = l->data;
+		char mnc[OFONO_MAX_MNC_LENGTH + 1];
+		char mcc[OFONO_MAX_MCC_LENGTH + 1];
+		int j;
+
+		for (j = 0; children[j]; j++) {
+			sscanf(children[j], "%3[0-9]%[0-9]", mcc, mnc);
+
+			if (!strcmp(opd->mcc, mcc) && !strcmp(opd->mnc, mnc))
+				append_operator_struct(netreg, opd, array);
+		}
+	}
+
+	dbus_free_string_array(children);
+}
+
+static void operator_list_callback(const struct ofono_error *error, int total,
+				const struct ofono_network_operator *list,
+				void *data)
+{
+	struct ofono_netreg *netreg = data;
+	DBusMessage *reply;
+	DBusMessageIter iter;
+	DBusMessageIter array;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
 		DBG("Error occurred during operator list");
@@ -1159,26 +941,254 @@ static void operator_list_callback(const struct ofono_error *error, int total,
 		return;
 	}
 
-	need_to_emit = update_operator_list(netreg, total, list);
+	update_operator_list(netreg, total, list);
 
 	reply = dbus_message_new_method_return(netreg->pending);
-	network_operator_populate_registered(netreg, &network_operators);
 
 	dbus_message_iter_init_append(reply, &iter);
+
 	dbus_message_iter_open_container(&iter, DBUS_TYPE_ARRAY,
-		DBUS_TYPE_OBJECT_PATH_AS_STRING, &array_iter);
+					DBUS_STRUCT_BEGIN_CHAR_AS_STRING
+					DBUS_TYPE_OBJECT_PATH_AS_STRING
+					DBUS_TYPE_ARRAY_AS_STRING
+					DBUS_DICT_ENTRY_BEGIN_CHAR_AS_STRING
+					DBUS_TYPE_STRING_AS_STRING
+					DBUS_TYPE_VARIANT_AS_STRING
+					DBUS_DICT_ENTRY_END_CHAR_AS_STRING
+					DBUS_STRUCT_END_CHAR_AS_STRING,
+					&array);
+	append_operator_struct_list(netreg, &array);
+	dbus_message_iter_close_container(&iter, &array);
 
-	for (i = 0; network_operators[i]; i++)
-		dbus_message_iter_append_basic(&array_iter,
-			DBUS_TYPE_OBJECT_PATH, &network_operators[i]);
-
-	dbus_message_iter_close_container(&iter, &array_iter);
 	__ofono_dbus_pending_reply(&netreg->pending, reply);
+}
 
-	g_strfreev(network_operators);
+static DBusMessage *network_scan(DBusConnection *conn,
+					DBusMessage *msg, void *data)
+{
+	struct ofono_netreg *netreg = data;
 
-	if (need_to_emit)
-		network_operator_emit_available_operators(netreg);
+	if (netreg->pending)
+		return __ofono_error_busy(msg);
+
+	if (netreg->driver->list_operators == NULL)
+		return __ofono_error_not_implemented(msg);
+
+	netreg->pending = dbus_message_ref(msg);
+
+	netreg->driver->list_operators(netreg, operator_list_callback, netreg);
+
+	return NULL;
+}
+
+static DBusMessage *network_get_operators(DBusConnection *conn,
+						DBusMessage *msg, void *data)
+{
+	struct ofono_netreg *netreg = data;
+	DBusMessage *reply;
+	DBusMessageIter iter;
+	DBusMessageIter array;
+
+	reply = dbus_message_new_method_return(msg);
+	if (reply == NULL)
+		return NULL;
+
+	dbus_message_iter_init_append(reply, &iter);
+
+	dbus_message_iter_open_container(&iter, DBUS_TYPE_ARRAY,
+					DBUS_STRUCT_BEGIN_CHAR_AS_STRING
+					DBUS_TYPE_OBJECT_PATH_AS_STRING
+					DBUS_TYPE_ARRAY_AS_STRING
+					DBUS_DICT_ENTRY_BEGIN_CHAR_AS_STRING
+					DBUS_TYPE_STRING_AS_STRING
+					DBUS_TYPE_VARIANT_AS_STRING
+					DBUS_DICT_ENTRY_END_CHAR_AS_STRING
+					DBUS_STRUCT_END_CHAR_AS_STRING,
+					&array);
+	append_operator_struct_list(netreg, &array);
+	dbus_message_iter_close_container(&iter, &array);
+
+	return reply;
+}
+
+static GDBusMethodTable network_registration_methods[] = {
+	{ "GetProperties",  "",  "a{sv}",	network_get_properties },
+	{ "Register",       "",  "",		network_register,
+						G_DBUS_METHOD_FLAG_ASYNC },
+	{ "Deregister",     "",  "",		network_deregister,
+						G_DBUS_METHOD_FLAG_ASYNC },
+	{ "GetOperators",   "",  "a(oa{sv})",	network_get_operators },
+	{ "Scan",           "",  "a(oa{sv})",	network_scan,
+						G_DBUS_METHOD_FLAG_ASYNC },
+	{ }
+};
+
+static GDBusSignalTable network_registration_signals[] = {
+	{ "PropertyChanged",	"sv" },
+	{ }
+};
+
+static void set_registration_status(struct ofono_netreg *netreg, int status)
+{
+	const char *str_status = registration_status_to_string(status);
+	const char *path = __ofono_atom_get_path(netreg->atom);
+	DBusConnection *conn = ofono_dbus_get_connection();
+
+	netreg->status = status;
+
+	ofono_dbus_signal_property_changed(conn, path,
+					OFONO_NETWORK_REGISTRATION_INTERFACE,
+					"Status", DBUS_TYPE_STRING,
+					&str_status);
+}
+
+static void set_registration_location(struct ofono_netreg *netreg, int lac)
+{
+	DBusConnection *conn = ofono_dbus_get_connection();
+	const char *path = __ofono_atom_get_path(netreg->atom);
+	dbus_uint16_t dbus_lac = lac;
+
+	if (lac > 0xffff)
+		return;
+
+	netreg->location = lac;
+
+	if (netreg->location == -1)
+		return;
+
+	ofono_dbus_signal_property_changed(conn, path,
+					OFONO_NETWORK_REGISTRATION_INTERFACE,
+					"LocationAreaCode",
+					DBUS_TYPE_UINT16, &dbus_lac);
+}
+
+static void set_registration_cellid(struct ofono_netreg *netreg, int ci)
+{
+	DBusConnection *conn = ofono_dbus_get_connection();
+	const char *path = __ofono_atom_get_path(netreg->atom);
+	dbus_uint32_t dbus_ci = ci;
+
+	netreg->cellid = ci;
+
+	if (netreg->cellid == -1)
+		return;
+
+	ofono_dbus_signal_property_changed(conn, path,
+					OFONO_NETWORK_REGISTRATION_INTERFACE,
+					"CellId", DBUS_TYPE_UINT32, &dbus_ci);
+}
+
+static void set_registration_technology(struct ofono_netreg *netreg, int tech)
+{
+	const char *tech_str = registration_tech_to_string(tech);
+	DBusConnection *conn = ofono_dbus_get_connection();
+	const char *path = __ofono_atom_get_path(netreg->atom);
+
+	netreg->technology = tech;
+
+	if (netreg->technology == -1)
+		return;
+
+	ofono_dbus_signal_property_changed(conn, path,
+					OFONO_NETWORK_REGISTRATION_INTERFACE,
+					"Technology", DBUS_TYPE_STRING,
+					&tech_str);
+}
+
+void __ofono_netreg_set_base_station_name(struct ofono_netreg *netreg,
+						const char *name)
+{
+	DBusConnection *conn = ofono_dbus_get_connection();
+	const char *path = __ofono_atom_get_path(netreg->atom);
+	const char *base_station = name ? name : "";
+
+	/* Cell ID changed, but we don't have a cell name, nothing to do */
+	if (netreg->base_station == NULL && name == NULL)
+		return;
+
+	if (netreg->base_station)
+		g_free(netreg->base_station);
+
+	if (name == NULL) {
+		netreg->base_station = NULL;
+
+		/*
+		 * We just got unregistered, set name to NULL
+		 * but don't emit signal
+		 */
+		if (netreg->current_operator == NULL)
+			return;
+	} else {
+		netreg->base_station = g_strdup(name);
+	}
+
+	ofono_dbus_signal_property_changed(conn, path,
+					OFONO_NETWORK_REGISTRATION_INTERFACE,
+					"BaseStation", DBUS_TYPE_STRING,
+					&base_station);
+}
+
+unsigned int __ofono_netreg_add_status_watch(struct ofono_netreg *netreg,
+				ofono_netreg_status_notify_cb_t notify,
+				void *data, ofono_destroy_func destroy)
+{
+	struct ofono_watchlist_item *item;
+
+	DBG("%p", netreg);
+
+	if (netreg == NULL)
+		return 0;
+
+	if (notify == NULL)
+		return 0;
+
+	item = g_new0(struct ofono_watchlist_item, 1);
+
+	item->notify = notify;
+	item->destroy = destroy;
+	item->notify_data = data;
+
+	return __ofono_watchlist_add_item(netreg->status_watches, item);
+}
+
+gboolean __ofono_netreg_remove_status_watch(struct ofono_netreg *netreg,
+						unsigned int id)
+{
+	DBG("%p", netreg);
+
+	return __ofono_watchlist_remove_item(netreg->status_watches, id);
+}
+
+static void notify_status_watches(struct ofono_netreg *netreg)
+{
+	struct ofono_watchlist_item *item;
+	GSList *l;
+	ofono_netreg_status_notify_cb_t notify;
+	const char *mcc = NULL;
+	const char *mnc = NULL;
+
+	if (netreg->current_operator) {
+		mcc = netreg->current_operator->mcc;
+		mnc = netreg->current_operator->mnc;
+	}
+
+	for (l = netreg->status_watches->items; l; l = l->next) {
+		item = l->data;
+		notify = item->notify;
+
+		notify(netreg->status, netreg->location, netreg->cellid,
+			netreg->technology, mcc, mnc, item->notify_data);
+	}
+}
+
+static void reset_available(struct network_operator_data *old,
+				const struct ofono_network_operator *new)
+{
+	if (old == NULL)
+		return;
+
+	if (new == NULL || network_operator_compare(old, new) != 0)
+		set_network_operator_status(old, OPERATOR_STATUS_AVAILABLE);
 }
 
 static void current_operator_callback(const struct ofono_error *error,
@@ -1193,6 +1203,15 @@ static void current_operator_callback(const struct ofono_error *error,
 
 	DBG("%p, %p", netreg, netreg->current_operator);
 
+	/*
+	 * Sometimes we try to query COPS right when we roam off the cell,
+	 * in which case the operator information frequently comes in bogus.
+	 * We ignore it here
+	 */
+	if (netreg->status != NETWORK_REGISTRATION_STATUS_REGISTERED &&
+			netreg->status != NETWORK_REGISTRATION_STATUS_ROAMING)
+		current = NULL;
+
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
 		DBG("Error during current operator");
 		return;
@@ -1203,11 +1222,7 @@ static void current_operator_callback(const struct ofono_error *error,
 
 	/* We got a new network operator, reset the previous one's status */
 	/* It will be updated properly later */
-	if (netreg->current_operator &&
-		(!current ||
-			network_operator_compare(netreg->current_operator, current)))
-		set_network_operator_status(netreg->current_operator,
-						OPERATOR_STATUS_AVAILABLE);
+	reset_available(netreg->current_operator, current);
 
 	if (current)
 		op = g_slist_find_custom(netreg->operator_list, current,
@@ -1246,9 +1261,6 @@ static void current_operator_callback(const struct ofono_error *error,
 		netreg->current_operator = opd;
 		netreg->operator_list = g_slist_append(netreg->operator_list,
 							opd);
-
-		if (opd->mcc[0] != '\0' && opd->mnc[0] != '\0')
-			network_operator_emit_available_operators(netreg);
 	} else {
 		/* We don't free this here because operator is registered */
 		/* Taken care of elsewhere */
@@ -1259,25 +1271,91 @@ emit:
 	operator = get_operator_display_name(netreg);
 
 	ofono_dbus_signal_property_changed(conn, path,
-					NETWORK_REGISTRATION_INTERFACE,
-					"Operator", DBUS_TYPE_STRING,
+					OFONO_NETWORK_REGISTRATION_INTERFACE,
+					"Name", DBUS_TYPE_STRING,
 					&operator);
+
+	if (netreg->current_operator) {
+		if (netreg->current_operator->mcc[0] != '\0') {
+			const char *mcc = netreg->current_operator->mcc;
+			ofono_dbus_signal_property_changed(conn, path,
+					OFONO_NETWORK_REGISTRATION_INTERFACE,
+					"MobileCountryCode",
+					DBUS_TYPE_STRING, &mcc);
+		}
+
+		if (netreg->current_operator->mnc[0] != '\0') {
+			const char *mnc = netreg->current_operator->mnc;
+			ofono_dbus_signal_property_changed(conn, path,
+					OFONO_NETWORK_REGISTRATION_INTERFACE,
+					"MobileNetworkCode",
+					DBUS_TYPE_STRING, &mnc);
+		}
+	}
 
 	notify_status_watches(netreg);
 }
 
-static void registration_status_callback(const struct ofono_error *error,
-					int status, int lac, int ci, int tech,
-					void *data)
+void ofono_netreg_status_notify(struct ofono_netreg *netreg, int status,
+			int lac, int ci, int tech)
+{
+	if (!netreg)
+		return;
+
+	if (netreg->status != status)
+		set_registration_status(netreg, status);
+
+	if (netreg->location != lac)
+		set_registration_location(netreg, lac);
+
+	if (netreg->cellid != ci)
+		set_registration_cellid(netreg, ci);
+
+	if (netreg->technology != tech)
+		set_registration_technology(netreg, tech);
+
+	if (netreg->status == NETWORK_REGISTRATION_STATUS_REGISTERED ||
+		netreg->status == NETWORK_REGISTRATION_STATUS_ROAMING) {
+		if (netreg->driver->current_operator)
+			netreg->driver->current_operator(netreg,
+					current_operator_callback, netreg);
+	} else {
+		struct ofono_error error;
+
+		error.type = OFONO_ERROR_TYPE_NO_ERROR;
+		error.error = 0;
+
+		current_operator_callback(&error, NULL, netreg);
+		__ofono_netreg_set_base_station_name(netreg, NULL);
+
+		netreg->signal_strength = -1;
+	}
+
+	notify_status_watches(netreg);
+}
+
+void ofono_netreg_time_notify(struct ofono_netreg *netreg,
+				struct ofono_network_time *info)
+{
+	struct ofono_modem *modem = __ofono_atom_get_modem(netreg->atom);
+
+	if (!info)
+		return;
+
+	__ofono_nettime_info_received(modem, info);
+}
+
+static void signal_strength_callback(const struct ofono_error *error,
+					int strength, void *data)
 {
 	struct ofono_netreg *netreg = data;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
-		DBG("Error during registration status query");
+		DBG("Error during signal strength query");
 		return;
 	}
 
-	ofono_netreg_status_notify(netreg, status, lac, ci, tech);
+	ofono_netreg_strength_notify(netreg, strength);
 }
 
 static void init_registration_status(const struct ofono_error *error,
@@ -1293,7 +1371,8 @@ static void init_registration_status(const struct ofono_error *error,
 
 	ofono_netreg_status_notify(netreg, status, lac, ci, tech);
 
-	/* Bootstrap our signal strength value without waiting for the
+	/*
+	 * Bootstrap our signal strength value without waiting for the
 	 * stack to report it
 	 */
 	if (netreg->status == NETWORK_REGISTRATION_STATUS_REGISTERED ||
@@ -1320,13 +1399,6 @@ void ofono_netreg_strength_notify(struct ofono_netreg *netreg, int strength)
 	if (netreg->signal_strength == strength)
 		return;
 
-	/* Theoretically we can get signal strength even when not registered
-	 * to any network.  However, what do we do with it in that case?
-	 */
-	if (netreg->status != NETWORK_REGISTRATION_STATUS_REGISTERED &&
-		netreg->status != NETWORK_REGISTRATION_STATUS_ROAMING)
-		return;
-
 	netreg->signal_strength = strength;
 
 	if (strength != -1) {
@@ -1334,23 +1406,10 @@ void ofono_netreg_strength_notify(struct ofono_netreg *netreg, int strength)
 		dbus_uint16_t strength = netreg->signal_strength;
 
 		ofono_dbus_signal_property_changed(conn, path,
-						NETWORK_REGISTRATION_INTERFACE,
-						"Strength", DBUS_TYPE_UINT16,
-						&strength);
+					OFONO_NETWORK_REGISTRATION_INTERFACE,
+					"Strength", DBUS_TYPE_UINT16,
+					&strength);
 	}
-}
-
-static void signal_strength_callback(const struct ofono_error *error,
-					int strength, void *data)
-{
-	struct ofono_netreg *netreg = data;
-
-	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
-		DBG("Error during signal strength query");
-		return;
-	}
-
-	ofono_netreg_strength_notify(netreg, strength);
 }
 
 static void sim_opl_read_cb(int ok, int length, int record,
@@ -1415,10 +1474,12 @@ static void sim_pnn_read_cb(int ok, int length, int record,
 		return;
 
 check:
-	/* If PNN is not present then OPL is not useful, don't
+	/*
+	 * If PNN is not present then OPL is not useful, don't
 	 * retrieve it.  If OPL is not there then PNN[1] will
 	 * still be used for the HPLMN and/or EHPLMN, if PNN
-	 * is present.  */
+	 * is present.
+	 */
 	if (netreg->eons && !sim_eons_pnn_is_empty(netreg->eons))
 		ofono_sim_read(netreg->sim, SIM_EFOPL_FILEID,
 				OFONO_SIM_FILE_STRUCTURE_FIXED,
@@ -1452,9 +1513,9 @@ static void sim_spdi_read_cb(int ok, int length, int record,
 		operator = get_operator_display_name(netreg);
 
 		ofono_dbus_signal_property_changed(conn, path,
-						NETWORK_REGISTRATION_INTERFACE,
-						"Operator", DBUS_TYPE_STRING,
-						&operator);
+					OFONO_NETWORK_REGISTRATION_INTERFACE,
+					"Name", DBUS_TYPE_STRING,
+					&operator);
 	}
 }
 
@@ -1471,7 +1532,8 @@ static void sim_spn_read_cb(int ok, int length, int record,
 
 	dcbyte = data[0];
 
-	/* TS 31.102 says:
+	/*
+	 * TS 31.102 says:
 	 *
 	 * the string shall use:
 	 *
@@ -1517,9 +1579,9 @@ static void sim_spn_read_cb(int ok, int length, int record,
 		operator = get_operator_display_name(netreg);
 
 		ofono_dbus_signal_property_changed(conn, path,
-						NETWORK_REGISTRATION_INTERFACE,
-						"Operator", DBUS_TYPE_STRING,
-						&operator);
+					OFONO_NETWORK_REGISTRATION_INTERFACE,
+					"Name", DBUS_TYPE_STRING,
+					&operator);
 	}
 }
 
@@ -1584,7 +1646,7 @@ int ofono_netreg_driver_register(const struct ofono_netreg_driver *d)
 	if (d->probe == NULL)
 		return -EINVAL;
 
-	g_drivers = g_slist_prepend(g_drivers, (void *)d);
+	g_drivers = g_slist_prepend(g_drivers, (void *) d);
 
 	return 0;
 }
@@ -1593,7 +1655,7 @@ void ofono_netreg_driver_unregister(const struct ofono_netreg_driver *d)
 {
 	DBG("driver: %p, name: %s", d, d->name);
 
-	g_drivers = g_slist_remove(g_drivers, (void *)d);
+	g_drivers = g_slist_remove(g_drivers, (void *) d);
 }
 
 static void netreg_unregister(struct ofono_atom *atom)
@@ -1634,8 +1696,9 @@ static void netreg_unregister(struct ofono_atom *atom)
 	}
 
 	g_dbus_unregister_interface(conn, path,
-					NETWORK_REGISTRATION_INTERFACE);
-	ofono_modem_remove_interface(modem, NETWORK_REGISTRATION_INTERFACE);
+					OFONO_NETWORK_REGISTRATION_INTERFACE);
+	ofono_modem_remove_interface(modem,
+					OFONO_NETWORK_REGISTRATION_INTERFACE);
 }
 
 static void netreg_remove(struct ofono_atom *atom)
@@ -1738,19 +1801,19 @@ void ofono_netreg_register(struct ofono_netreg *netreg)
 	struct ofono_atom *sim_atom;
 
 	if (!g_dbus_register_interface(conn, path,
-					NETWORK_REGISTRATION_INTERFACE,
+					OFONO_NETWORK_REGISTRATION_INTERFACE,
 					network_registration_methods,
 					network_registration_signals,
 					NULL, netreg, NULL)) {
 		ofono_error("Could not create %s interface",
-				NETWORK_REGISTRATION_INTERFACE);
+				OFONO_NETWORK_REGISTRATION_INTERFACE);
 
 		return;
 	}
 
 	netreg->status_watches = __ofono_watchlist_new(g_free);
 
-	ofono_modem_add_interface(modem, NETWORK_REGISTRATION_INTERFACE);
+	ofono_modem_add_interface(modem, OFONO_NETWORK_REGISTRATION_INTERFACE);
 
 	if (netreg->driver->registration_status)
 		netreg->driver->registration_status(netreg,

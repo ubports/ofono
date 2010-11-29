@@ -20,6 +20,7 @@
  */
 
 #define CBS_MAX_GSM_CHARS 93
+#define SMS_MSGID_LEN 20
 
 enum sms_type {
 	SMS_TYPE_DELIVER = 0,
@@ -364,6 +365,19 @@ struct sms_assembly {
 	GSList *assembly_list;
 };
 
+struct id_table_node {
+	unsigned int mrs[8];
+	time_t expiration;
+	unsigned char total_mrs;
+	unsigned char sent_mrs;
+	gboolean deliverable;
+} __attribute__((packed));
+
+struct status_report_assembly {
+	const char *imsi;
+	GHashTable *assembly_table;
+};
+
 struct cbs {
 	enum cbs_geo_scope gs;			/* 2 bits */
 	guint16 message_code;			/* 10 bits */
@@ -412,8 +426,17 @@ void encode_bcd_number(const char *number, unsigned char *out);
 gboolean sms_decode(const unsigned char *pdu, int len, gboolean outgoing,
 			int tpdu_len, struct sms *out);
 
+gboolean sms_decode_unpacked_stk_pdu(const unsigned char *pdu, int len,
+					struct sms *out);
+
 gboolean sms_encode(const struct sms *in, int *len, int *tpdu_len,
 			unsigned char *pdu);
+
+/*
+ * Length is based on the address being 12 hex characters plus a
+ * terminating NUL char. See sms_assembly_extract_address().
+ */
+#define DECLARE_SMS_ADDR_STR(a) char a[25]
 
 gboolean sms_decode_address_field(const unsigned char *pdu, int len,
 					int *offset, gboolean sc,
@@ -421,6 +444,14 @@ gboolean sms_decode_address_field(const unsigned char *pdu, int len,
 
 gboolean sms_encode_address_field(const struct sms_address *in, gboolean sc,
 					unsigned char *pdu, int *offset);
+
+guint8 sms_decode_semi_octet(guint8 in);
+
+gboolean sms_decode_scts(const unsigned char *pdu, int len,
+				int *offset, struct sms_scts *out);
+
+gboolean sms_encode_scts(const struct sms_scts *in, unsigned char *pdu,
+				int *offset);
 
 int sms_udl_in_bytes(guint8 ud_len, guint8 dcs);
 
@@ -469,9 +500,32 @@ GSList *sms_assembly_add_fragment(struct sms_assembly *assembly,
 					const struct sms_address *addr,
 					guint16 ref, guint8 max, guint8 seq);
 void sms_assembly_expire(struct sms_assembly *assembly, time_t before);
+gboolean sms_address_to_hex_string(const struct sms_address *in, char *straddr);
 
-GSList *sms_text_prepare(const char *utf8, guint16 ref,
-				gboolean use_16bit, int *ref_offset);
+struct status_report_assembly *status_report_assembly_new(const char *imsi);
+void status_report_assembly_free(struct status_report_assembly *assembly);
+gboolean status_report_assembly_report(struct status_report_assembly *assembly,
+					const struct sms *status_report,
+					unsigned char *out_msgid,
+					gboolean *msg_delivered);
+void status_report_assembly_add_fragment(struct status_report_assembly
+					*assembly, const unsigned char *msgid,
+					const struct sms_address *to,
+					unsigned char mr, time_t expiration,
+					unsigned char total_mrs);
+void status_report_assembly_expire(struct status_report_assembly *assembly,
+					time_t before);
+
+GSList *sms_text_prepare(const char *to, const char *utf8, guint16 ref,
+				gboolean use_16bit,
+				gboolean use_delivery_reports);
+
+GSList *sms_datagram_prepare(const char *to,
+				const unsigned char *data, unsigned int len,
+				guint16 ref, gboolean use_16bit_ref,
+				unsigned short src, unsigned short dst,
+				gboolean use_16bit_port,
+				gboolean use_delivery_reports);
 
 gboolean cbs_dcs_decode(guint8 dcs, gboolean *udhi, enum sms_class *cls,
 			enum sms_charset *charset, gboolean *compressed,
@@ -496,3 +550,6 @@ char *cbs_topic_ranges_to_string(GSList *ranges);
 GSList *cbs_extract_topic_ranges(const char *ranges);
 GSList *cbs_optimize_ranges(GSList *ranges);
 gboolean cbs_topic_in_range(unsigned int topic, GSList *ranges);
+
+char *ussd_decode(int dcs, int len, const unsigned char *data);
+gboolean ussd_encode(const char *str, long *items_written, unsigned char *pdu);

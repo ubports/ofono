@@ -1,23 +1,21 @@
 /*
- * This file is part of oFono - Open Source Telephony
  *
- * Copyright (C) 2009 Nokia Corporation and/or its subsidiary(-ies).
+ *  oFono - Open Source Telephony
  *
- * Contact: Alexander Kanavin <alexander.kanavin@nokia.com>
+ *  Copyright (C) 2009-2010 Nokia Corporation and/or its subsidiary(-ies).
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * version 2 as published by the Free Software Foundation.
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
  *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
- * 02110-1301 USA
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program; if not, write to the Free Software
+ *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
  */
 
@@ -55,7 +53,7 @@ static int decode_read_response(const unsigned char *msg, size_t len,
 
 	char *name = NULL;
 	char *number = NULL;
-	char *sne= NULL;
+	char *sne = NULL;
 	char *anr = NULL;
 	char *email = NULL;
 
@@ -68,7 +66,7 @@ static int decode_read_response(const unsigned char *msg, size_t len,
 	if (msg[1] != SIM_PB_READ)
 		goto error;
 
-	for (g_isi_sb_iter_init_full(&iter, msg, len, 3, true, msg[2]);
+	for (g_isi_sb_iter_init_full(&iter, msg, len, 3, TRUE, msg[2]);
 	     g_isi_sb_iter_is_valid(&iter);
 	     g_isi_sb_iter_next(&iter)) {
 
@@ -135,7 +133,7 @@ static int decode_read_response(const unsigned char *msg, size_t len,
 		case SIM_PB_STATUS:
 
 			if (!g_isi_sb_iter_get_byte(&iter, &status, 4))
-				 goto error;
+				goto error;
 
 			break;
 
@@ -166,7 +164,9 @@ error:
 	return location;
 }
 
-static void read_next_entry(GIsiClient *client, int location, GIsiResponseFunc read_cb, struct isi_cb_data *cbd)
+static void read_next_entry(GIsiClient *client, int location,
+				GIsiResponseFunc read_cb,
+				struct isi_cb_data *cbd)
 {
 	ofono_phonebook_cb_t cb = cbd->cb;
 	const unsigned char msg[] = {
@@ -176,7 +176,8 @@ static void read_next_entry(GIsiClient *client, int location, GIsiResponseFunc r
 		0, SIM_PB_LOCATION_SEARCH,	/* subblock id */
 		0, 8,				/* subblock size */
 		0, SIM_PB_ADN,
-		location >> 8, location & 0xFF,	/* read next entry after specified by location */
+		location >> 8, location & 0xFF,	/* read next entry after
+						 * specified by location */
 		0, SIM_PB_INFO_REQUEST,		/* subblock id */
 		0, 16,				/* subblock size */
 		4,				/* number of tags */
@@ -203,15 +204,16 @@ error:
 	g_free(cbd);
 }
 
-static bool read_resp_cb(GIsiClient *client, const void *restrict data,
-				size_t len, uint16_t object, void *opaque)
+static gboolean read_resp_cb(GIsiClient *client,
+				const void *restrict data, size_t len,
+				uint16_t object, void *opaque)
 {
 	const unsigned char *msg = data;
 	struct isi_cb_data *cbd = opaque;
 	ofono_phonebook_cb_t cb = cbd->cb;
 	int location;
 
-	if(!msg) {
+	if (!msg) {
 		DBG("ISI client error: %d", g_isi_client_error(client));
 		goto error;
 	}
@@ -219,7 +221,7 @@ static bool read_resp_cb(GIsiClient *client, const void *restrict data,
 	location = decode_read_response(data, len, cbd->user);
 	if (location != -1) {
 		read_next_entry(client, location, read_resp_cb, cbd);
-		return true;
+		return TRUE;
 	}
 
 	CALLBACK_WITH_SUCCESS(cb, cbd->data);
@@ -230,7 +232,7 @@ error:
 
 out:
 	g_free(cbd);
-	return true;
+	return TRUE;
 }
 
 static void isi_export_entries(struct ofono_phonebook *pb, const char *storage,
@@ -257,7 +259,7 @@ static void isi_export_entries(struct ofono_phonebook *pb, const char *storage,
 		0, 0				/* filler */
 	};
 
-	if (!cbd)
+	if (!cbd || !pbd)
 		goto error;
 
 	if (strcmp(storage, "SM"))
@@ -283,14 +285,14 @@ static gboolean isi_phonebook_register(gpointer user)
 	return FALSE;
 }
 
-static void reachable_cb(GIsiClient *client, bool alive, uint16_t object,
+static void reachable_cb(GIsiClient *client, gboolean alive, uint16_t object,
 				void *opaque)
 {
 	struct ofono_phonebook *pb = opaque;
 	const char *debug = NULL;
 
 	if (!alive) {
-		DBG("Unable to bootsrap phonebook driver");
+		DBG("Unable to bootstrap phonebook driver");
 		return;
 	}
 
@@ -333,10 +335,12 @@ static void isi_phonebook_remove(struct ofono_phonebook *pb)
 {
 	struct pb_data *data = ofono_phonebook_get_data(pb);
 
-	if (data) {
-		g_isi_client_destroy(data->client);
-		g_free(data);
-	}
+	if (!data)
+		return;
+
+	ofono_phonebook_set_data(pb, NULL);
+	g_isi_client_destroy(data->client);
+	g_free(data);
 }
 
 static struct ofono_phonebook_driver driver = {

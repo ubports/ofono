@@ -8,29 +8,31 @@ bus = dbus.SystemBus()
 manager = dbus.Interface(bus.get_object('org.ofono', '/'),
 						'org.ofono.Manager')
 
-properties = manager.GetProperties()
+modems = manager.GetModems()
 
-for path in properties["Modems"]:
-	modem = dbus.Interface(bus.get_object('org.ofono', path),
-							'org.ofono.Modem')
-
-	properties = modem.GetProperties()
-
-	if "org.ofono.DataConnectionManager" not in properties["Interfaces"]:
+for path, properties in modems:
+	if "org.ofono.ConnectionManager" not in properties["Interfaces"]:
 		continue
 
-	connmgr = dbus.Interface(bus.get_object('org.ofono', path),
-					'org.ofono.DataConnectionManager')
+	connman = dbus.Interface(bus.get_object('org.ofono', path),
+					'org.ofono.ConnectionManager')
 
-	properties = connmgr.GetProperties()
+	contexts = connman.GetContexts()
 
-	if (properties["PrimaryContexts"] == []):
+	if (len(contexts) == 0):
 		print "No context available"
 		sys.exit(1)
 
-	path = properties["PrimaryContexts"][0]
+	if len(sys.argv) > 1:
+		path = contexts[int(sys.argv[1])][0]
+	else:
+		path = contexts[0][0]
 
 	context = dbus.Interface(bus.get_object('org.ofono', path),
-					'org.ofono.PrimaryDataContext')
+					'org.ofono.ConnectionContext')
 
-	context.SetProperty("Active", dbus.Boolean(0))
+	try:
+		context.SetProperty("Active", dbus.Boolean(0))
+	except dbus.DBusException, e:
+		print "Error activating %s: %s" % (path, str(e))
+		exit(2)

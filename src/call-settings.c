@@ -418,7 +418,7 @@ static gboolean cw_ss_control(int type,
 	if (strcmp(sc, "43"))
 		return FALSE;
 
-	if (cs->pending) {
+	if (__ofono_call_settings_is_busy(cs)) {
 		reply = __ofono_error_busy(msg);
 		goto error;
 	}
@@ -462,7 +462,8 @@ static gboolean cw_ss_control(int type,
 
 	case SS_CONTROL_TYPE_QUERY:
 		cs->ss_req_type = SS_CONTROL_TYPE_QUERY;
-		/* Always query the entire set, SMS not applicable
+		/*
+		 * Always query the entire set, SMS not applicable
 		 * according to 22.004 Appendix A, so CLASS_DEFAULT
 		 * is safe to use here
 		 */
@@ -550,7 +551,7 @@ static void clip_colp_colr_ss_query_cb(const struct ofono_error *error,
 	case CALL_SETTING_TYPE_COLR:
 		set_colr(cs, status);
 		value = colr_status_to_string(status);
-		context = "CallingLineRestriction";
+		context = "CalledLineRestriction";
 		break;
 
 	default:
@@ -576,7 +577,7 @@ static gboolean clip_colp_colr_ss(int type,
 	if (!cs)
 		return FALSE;
 
-	if (cs->pending) {
+	if (__ofono_call_settings_is_busy(cs)) {
 		DBusMessage *reply = __ofono_error_busy(msg);
 		g_dbus_send_message(conn, reply);
 
@@ -699,7 +700,7 @@ static gboolean clir_ss_control(int type,
 	if (strcmp(sc, "31"))
 		return FALSE;
 
-	if (cs->pending) {
+	if (__ofono_call_settings_is_busy(cs)) {
 		DBusMessage *reply = __ofono_error_busy(msg);
 		g_dbus_send_message(conn, reply);
 
@@ -708,7 +709,7 @@ static gboolean clir_ss_control(int type,
 
 	/* This is the temporary form of CLIR, handled in voicecalls */
 	if (!strlen(sia) && !strlen(sib) & !strlen(sic) &&
-		strlen(dn) && type != SS_CONTROL_TYPE_QUERY)
+			strlen(dn) && type != SS_CONTROL_TYPE_QUERY)
 		return FALSE;
 
 	if (strlen(sia) || strlen(sib) || strlen(sic) || strlen(dn)) {
@@ -718,8 +719,14 @@ static gboolean clir_ss_control(int type,
 		return TRUE;
 	}
 
-	if ((type == SS_CONTROL_TYPE_QUERY && !cs->driver->clir_query) ||
-		(type != SS_CONTROL_TYPE_QUERY && !cs->driver->clir_set)) {
+	if (type == SS_CONTROL_TYPE_QUERY && cs->driver->clir_query == NULL) {
+		DBusMessage *reply = __ofono_error_not_implemented(msg);
+		g_dbus_send_message(conn, reply);
+
+		return TRUE;
+	}
+
+	if (type != SS_CONTROL_TYPE_QUERY && !cs->driver->clir_set) {
 		DBusMessage *reply = __ofono_error_not_implemented(msg);
 		g_dbus_send_message(conn, reply);
 
@@ -733,7 +740,7 @@ static gboolean clir_ss_control(int type,
 	case SS_CONTROL_TYPE_REGISTRATION:
 	case SS_CONTROL_TYPE_ACTIVATION:
 		cs->ss_req_type = SS_CONTROL_TYPE_ACTIVATION;
-		cs->driver->clir_set(cs, OFONO_CLIR_OPTION_INVOCATION,
+		cs->driver->clir_set(cs, OFONO_CLIR_OPTION_SUPPRESSION,
 					clir_ss_set_callback, cs);
 		break;
 
@@ -745,7 +752,7 @@ static gboolean clir_ss_control(int type,
 	case SS_CONTROL_TYPE_DEACTIVATION:
 	case SS_CONTROL_TYPE_ERASURE:
 		cs->ss_req_type = SS_CONTROL_TYPE_DEACTIVATION;
-		cs->driver->clir_set(cs, OFONO_CLIR_OPTION_SUPPRESSION,
+		cs->driver->clir_set(cs, OFONO_CLIR_OPTION_INVOCATION,
 					clir_ss_set_callback, cs);
 		break;
 	};
@@ -776,6 +783,11 @@ static void cs_unregister_ss_controls(struct ofono_call_settings *cs)
 
 	if (cs->driver->colr_query)
 		__ofono_ussd_ssc_unregister(cs->ussd, "77");
+}
+
+gboolean __ofono_call_settings_is_busy(struct ofono_call_settings *cs)
+{
+	return cs->pending ? TRUE : FALSE;
 }
 
 static DBusMessage *generate_get_properties_reply(struct ofono_call_settings *cs,
@@ -950,7 +962,7 @@ static DBusMessage *cs_get_properties(DBusConnection *conn, DBusMessage *msg,
 {
 	struct ofono_call_settings *cs = data;
 
-	if (cs->pending)
+	if (__ofono_call_settings_is_busy(cs) || __ofono_ussd_is_busy(cs->ussd))
 		return __ofono_error_busy(msg);
 
 	if (cs->flags & CALL_SETTINGS_FLAG_CACHED)
@@ -971,7 +983,7 @@ static void clir_set_query_callback(const struct ofono_error *error,
 	struct ofono_call_settings *cs = data;
 	DBusMessage *reply;
 
-	if (!cs->pending)
+	if (!__ofono_call_settings_is_busy(cs))
 		return;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
@@ -1127,7 +1139,7 @@ static DBusMessage *cs_set_property(DBusConnection *conn, DBusMessage *msg,
 	const char *property;
 	int cls;
 
-	if (cs->pending)
+	if (__ofono_call_settings_is_busy(cs) || __ofono_ussd_is_busy(cs->ussd))
 		return __ofono_error_busy(msg);
 
 	if (!dbus_message_iter_init(msg, &iter))
@@ -1187,7 +1199,7 @@ int ofono_call_settings_driver_register(const struct ofono_call_settings_driver 
 	if (d->probe == NULL)
 		return -EINVAL;
 
-	g_drivers = g_slist_prepend(g_drivers, (void *)d);
+	g_drivers = g_slist_prepend(g_drivers, (void *) d);
 
 	return 0;
 }
@@ -1196,7 +1208,7 @@ void ofono_call_settings_driver_unregister(const struct ofono_call_settings_driv
 {
 	DBG("driver: %p, name: %s", d, d->name);
 
-	g_drivers = g_slist_remove(g_drivers, (void *)d);
+	g_drivers = g_slist_remove(g_drivers, (void *) d);
 }
 
 static void call_settings_unregister(struct ofono_atom *atom)

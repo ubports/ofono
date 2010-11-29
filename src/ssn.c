@@ -80,7 +80,7 @@ unsigned int __ofono_ssn_mo_watch_add(struct ofono_ssn *ssn, int code1,
 	return add_ssn_handler(ssn->mo_handler_list, code1, cb, user, destroy);
 }
 
-gboolean __ofono_ssn_mo_watch_remove(struct ofono_ssn *ssn, int id)
+gboolean __ofono_ssn_mo_watch_remove(struct ofono_ssn *ssn, unsigned int id)
 {
 	if (ssn == NULL)
 		return FALSE;
@@ -102,7 +102,7 @@ unsigned int __ofono_ssn_mt_watch_add(struct ofono_ssn *ssn, int code2,
 	return add_ssn_handler(ssn->mt_handler_list, code2, cb, user, destroy);
 }
 
-gboolean __ofono_ssn_mt_watch_remove(struct ofono_ssn *ssn, int id)
+gboolean __ofono_ssn_mt_watch_remove(struct ofono_ssn *ssn, unsigned int id)
 {
 	if (ssn == NULL)
 		return FALSE;
@@ -150,7 +150,7 @@ int ofono_ssn_driver_register(const struct ofono_ssn_driver *d)
 	if (d->probe == NULL)
 		return -EINVAL;
 
-	g_drivers = g_slist_prepend(g_drivers, (void *)d);
+	g_drivers = g_slist_prepend(g_drivers, (void *) d);
 
 	return 0;
 }
@@ -159,7 +159,7 @@ void ofono_ssn_driver_unregister(const struct ofono_ssn_driver *d)
 {
 	DBG("driver: %p, name: %s", d, d->name);
 
-	g_drivers = g_slist_remove(g_drivers, (void *)d);
+	g_drivers = g_slist_remove(g_drivers, (void *) d);
 }
 
 static void ssn_unregister(struct ofono_atom *atom)

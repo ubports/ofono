@@ -1,0 +1,37 @@
+#!/usr/bin/python
+
+import dbus
+import sys
+
+bus = dbus.SystemBus()
+
+if len(sys.argv) == 2:
+	path = sys.argv[1]
+else:
+	manager = dbus.Interface(bus.get_object('org.ofono', '/'),
+			'org.ofono.Manager')
+	modems = manager.GetModems()
+	path = modems[0][0]
+
+netreg = dbus.Interface(bus.get_object('org.ofono', path),
+				'org.ofono.NetworkRegistration')
+
+operators = netreg.GetOperators()
+
+for entry in operators:
+	path = entry[0]
+	properties = entry[1]
+
+	print "[ %s ]" % (path)
+
+	for key in properties.keys():
+		if key in ["Technologies"]:
+			val = ""
+			for i in properties[key]:
+				val += i + " "
+		else:
+			val = str(properties[key])
+		print "    %s = %s" % (key, val)
+
+	print
+

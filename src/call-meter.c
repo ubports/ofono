@@ -292,7 +292,8 @@ static DBusMessage *cm_get_properties(DBusConnection *conn, DBusMessage *msg,
 
 	cm->pending = dbus_message_ref(msg);
 
-	/* We don't need to query ppu, currency & acm_max every time
+	/*
+	 * We don't need to query ppu, currency & acm_max every time
 	 * Not sure if we have to query acm & call_meter every time
 	 * so lets play on the safe side and query them.  They should be
 	 * fast to query anyway
@@ -406,7 +407,8 @@ static void set_puct_callback(const struct ofono_error *error, void *data)
 	cm->driver->puct_query(cm, set_puct_query_callback, cm);
 }
 
-/* This function is for the really bizarre case of someone trying to call
+/*
+ * This function is for the really bizarre case of someone trying to call
  * SetProperty before GetProperties.  But we must handle it...
  */
 static void set_puct_initial_query_callback(const struct ofono_error *error,
@@ -546,7 +548,7 @@ static DBusMessage *cm_set_property(DBusConnection *conn, DBusMessage *msg,
 
 	dbus_message_iter_get_basic(&iter, &passwd);
 
-	if (!is_valid_pin(passwd))
+	if (!is_valid_pin(passwd, PIN_TYPE_PIN))
 		return __ofono_error_invalid_format(msg);
 
 	for (property = cm_properties; property->name; property++) {
@@ -618,7 +620,7 @@ static DBusMessage *cm_acm_reset(DBusConnection *conn, DBusMessage *msg,
 					DBUS_TYPE_INVALID) == FALSE)
 		return __ofono_error_invalid_args(msg);
 
-	if (!is_valid_pin(pin2))
+	if (!is_valid_pin(pin2, PIN_TYPE_PIN))
 		return __ofono_error_invalid_format(msg);
 
 	cm->pending = dbus_message_ref(msg);
@@ -652,18 +654,10 @@ void ofono_call_meter_changed_notify(struct ofono_call_meter *cm, int new_value)
 void ofono_call_meter_maximum_notify(struct ofono_call_meter *cm)
 {
 	DBusConnection *conn = ofono_dbus_get_connection();
-	DBusMessage *signal;
 	const char *path = __ofono_atom_get_path(cm->atom);
 
-	signal = dbus_message_new_signal(path, OFONO_CALL_METER_INTERFACE,
-						"NearMaximumWarning");
-	if (!signal) {
-		ofono_error("Unable to allocate new %s.NearMaximumWarning "
-				"signal", OFONO_CALL_METER_INTERFACE);
-		return;
-	}
-
-	g_dbus_send_message(conn, signal);
+	g_dbus_emit_signal(conn, path, OFONO_CALL_METER_INTERFACE,
+			"NearMaximumWarning", DBUS_TYPE_INVALID);
 }
 
 int ofono_call_meter_driver_register(const struct ofono_call_meter_driver *d)
@@ -673,7 +667,7 @@ int ofono_call_meter_driver_register(const struct ofono_call_meter_driver *d)
 	if (d->probe == NULL)
 		return -EINVAL;
 
-	g_drivers = g_slist_prepend(g_drivers, (void *)d);
+	g_drivers = g_slist_prepend(g_drivers, (void *) d);
 
 	return 0;
 }
@@ -682,7 +676,7 @@ void ofono_call_meter_driver_unregister(const struct ofono_call_meter_driver *d)
 {
 	DBG("driver: %p, name: %s", d, d->name);
 
-	g_drivers = g_slist_remove(g_drivers, (void *)d);
+	g_drivers = g_slist_remove(g_drivers, (void *) d);
 }
 
 static void call_meter_unregister(struct ofono_atom *atom)
