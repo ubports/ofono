@@ -41,39 +41,39 @@ host_triplet = @host@
 @UDEV_TRUE@am__append_2 = plugins/udev.c
 @UDEV_TRUE@am__append_3 = @UDEV_CFLAGS@
 @UDEV_TRUE@am__append_4 = @UDEV_LIBS@
-@ISIMODEM_TRUE@am__append_5 = isimodem
+@ISIMODEM_TRUE@am__append_5 = isimodem isigen n900
 @ISIMODEM_TRUE@am__append_6 = $(gisi_sources) \
-@ISIMODEM_TRUE@				drivers/isimodem/isimodem.h \
-@ISIMODEM_TRUE@				drivers/isimodem/isimodem.c \
-@ISIMODEM_TRUE@				drivers/isimodem/mtc.h \
-@ISIMODEM_TRUE@				drivers/isimodem/debug.h \
-@ISIMODEM_TRUE@				drivers/isimodem/isiutil.h \
-@ISIMODEM_TRUE@				drivers/isimodem/debug.c \
-@ISIMODEM_TRUE@				drivers/isimodem/phonebook.c \
-@ISIMODEM_TRUE@				drivers/isimodem/devinfo.c \
-@ISIMODEM_TRUE@				drivers/isimodem/info.h \
-@ISIMODEM_TRUE@				drivers/isimodem/network-registration.c \
-@ISIMODEM_TRUE@				drivers/isimodem/network.h \
-@ISIMODEM_TRUE@				drivers/isimodem/voicecall.c \
-@ISIMODEM_TRUE@				drivers/isimodem/call.h \
-@ISIMODEM_TRUE@				drivers/isimodem/sms.c \
-@ISIMODEM_TRUE@				drivers/isimodem/sms.h \
-@ISIMODEM_TRUE@				drivers/isimodem/cbs.c \
-@ISIMODEM_TRUE@				drivers/isimodem/sim.c \
-@ISIMODEM_TRUE@				drivers/isimodem/sim.h \
-@ISIMODEM_TRUE@				drivers/isimodem/ssn.c \
-@ISIMODEM_TRUE@				drivers/isimodem/ussd.c \
-@ISIMODEM_TRUE@				drivers/isimodem/call-forwarding.c \
-@ISIMODEM_TRUE@				drivers/isimodem/call-settings.c \
-@ISIMODEM_TRUE@				drivers/isimodem/call-barring.c \
-@ISIMODEM_TRUE@				drivers/isimodem/call-meter.c \
-@ISIMODEM_TRUE@				drivers/isimodem/ss.h \
-@ISIMODEM_TRUE@				drivers/isimodem/radio-settings.c \
-@ISIMODEM_TRUE@				drivers/isimodem/gss.h
-
-@ATMODEM_TRUE@am__append_7 = atmodem calypsomodem hfpmodem mbmmodem \
-@ATMODEM_TRUE@	hsomodem stemodem modemconf phonesim atgen g1 \
-@ATMODEM_TRUE@	calypso mbm hso huawei novatel hfp palmpre ste
+@ISIMODEM_TRUE@	drivers/isimodem/isimodem.h \
+@ISIMODEM_TRUE@	drivers/isimodem/isimodem.c \
+@ISIMODEM_TRUE@	drivers/isimodem/mtc.h drivers/isimodem/debug.h \
+@ISIMODEM_TRUE@	drivers/isimodem/isiutil.h \
+@ISIMODEM_TRUE@	drivers/isimodem/debug.c \
+@ISIMODEM_TRUE@	drivers/isimodem/phonebook.c \
+@ISIMODEM_TRUE@	drivers/isimodem/devinfo.c \
+@ISIMODEM_TRUE@	drivers/isimodem/info.h \
+@ISIMODEM_TRUE@	drivers/isimodem/network-registration.c \
+@ISIMODEM_TRUE@	drivers/isimodem/network.h \
+@ISIMODEM_TRUE@	drivers/isimodem/infoserver.h \
+@ISIMODEM_TRUE@	drivers/isimodem/infoserver.c \
+@ISIMODEM_TRUE@	drivers/isimodem/voicecall.c \
+@ISIMODEM_TRUE@	drivers/isimodem/call.h drivers/isimodem/sms.c \
+@ISIMODEM_TRUE@	drivers/isimodem/sms.h drivers/isimodem/cbs.c \
+@ISIMODEM_TRUE@	drivers/isimodem/sim.c drivers/isimodem/sim.h \
+@ISIMODEM_TRUE@	drivers/isimodem/ssn.c drivers/isimodem/ussd.c \
+@ISIMODEM_TRUE@	drivers/isimodem/call-forwarding.c \
+@ISIMODEM_TRUE@	drivers/isimodem/call-settings.c \
+@ISIMODEM_TRUE@	drivers/isimodem/call-barring.c \
+@ISIMODEM_TRUE@	drivers/isimodem/call-meter.c \
+@ISIMODEM_TRUE@	drivers/isimodem/ss.h \
+@ISIMODEM_TRUE@	drivers/isimodem/radio-settings.c \
+@ISIMODEM_TRUE@	drivers/isimodem/gss.h drivers/isimodem/gprs.c \
+@ISIMODEM_TRUE@	drivers/isimodem/gprs-context.c \
+@ISIMODEM_TRUE@	drivers/isimodem/gpds.h \
+@ISIMODEM_TRUE@	drivers/isimodem/audio-settings.c \
+@ISIMODEM_TRUE@	plugins/isigen.c plugins/n900.c \
+@ISIMODEM_TRUE@	plugins/nokia-gpio.h plugins/nokia-gpio.c
+@ATMODEM_TRUE@am__append_7 = atmodem nwmodem huaweimodem calypsomodem \
+@ATMODEM_TRUE@	hfpmodem mbmmodem hsomodem ifxmodem stemodem
 @ATMODEM_TRUE@am__append_8 = $(gatchat_sources) \
 @ATMODEM_TRUE@	drivers/atmodem/atmodem.h \
 @ATMODEM_TRUE@	drivers/atmodem/atmodem.c \
@@ -82,7 +82,10 @@ host_triplet = @host@
 @ATMODEM_TRUE@	drivers/atmodem/call-forwarding.c \
 @ATMODEM_TRUE@	drivers/atmodem/call-meter.c \
 @ATMODEM_TRUE@	drivers/atmodem/network-registration.c \
-@ATMODEM_TRUE@	drivers/atmodem/sim.c drivers/atmodem/ussd.c \
+@ATMODEM_TRUE@	drivers/atmodem/sim.c drivers/atmodem/stk.c \
+@ATMODEM_TRUE@	drivers/atmodem/stk.h drivers/atmodem/sim-poll.c \
+@ATMODEM_TRUE@	drivers/atmodem/sim-poll.h \
+@ATMODEM_TRUE@	drivers/atmodem/ussd.c \
 @ATMODEM_TRUE@	drivers/atmodem/voicecall.c \
 @ATMODEM_TRUE@	drivers/atmodem/call-barring.c \
 @ATMODEM_TRUE@	drivers/atmodem/phonebook.c \
@@ -93,9 +96,20 @@ host_triplet = @host@
 @ATMODEM_TRUE@	drivers/atmodem/atutil.c drivers/atmodem/gprs.c \
 @ATMODEM_TRUE@	drivers/atmodem/gprs-context.c \
 @ATMODEM_TRUE@	drivers/atmodem/atutil.h \
+@ATMODEM_TRUE@	drivers/nwmodem/nwmodem.h \
+@ATMODEM_TRUE@	drivers/nwmodem/nwmodem.c \
+@ATMODEM_TRUE@	drivers/nwmodem/radio-settings.c \
+@ATMODEM_TRUE@	drivers/atmodem/atutil.h \
+@ATMODEM_TRUE@	drivers/huaweimodem/huaweimodem.h \
+@ATMODEM_TRUE@	drivers/huaweimodem/huaweimodem.c \
+@ATMODEM_TRUE@	drivers/huaweimodem/voicecall.c \
+@ATMODEM_TRUE@	drivers/huaweimodem/audio-settings.c \
+@ATMODEM_TRUE@	drivers/huaweimodem/gprs-context.c \
+@ATMODEM_TRUE@	drivers/atmodem/atutil.h \
 @ATMODEM_TRUE@	drivers/calypsomodem/calypsomodem.h \
 @ATMODEM_TRUE@	drivers/calypsomodem/calypsomodem.c \
 @ATMODEM_TRUE@	drivers/calypsomodem/voicecall.c \
+@ATMODEM_TRUE@	drivers/calypsomodem/stk.c \
 @ATMODEM_TRUE@	drivers/atmodem/atutil.h \
 @ATMODEM_TRUE@	drivers/hfpmodem/hfpmodem.h \
 @ATMODEM_TRUE@	drivers/hfpmodem/hfpmodem.c \
@@ -106,36 +120,57 @@ host_triplet = @host@
 @ATMODEM_TRUE@	drivers/mbmmodem/mbmmodem.h \
 @ATMODEM_TRUE@	drivers/mbmmodem/mbmmodem.c \
 @ATMODEM_TRUE@	drivers/mbmmodem/gprs-context.c \
-@ATMODEM_TRUE@	drivers/atmodem/atutil.h \
+@ATMODEM_TRUE@	drivers/mbmmodem/stk.c drivers/atmodem/atutil.h \
 @ATMODEM_TRUE@	drivers/hsomodem/hsomodem.h \
 @ATMODEM_TRUE@	drivers/hsomodem/hsomodem.c \
 @ATMODEM_TRUE@	drivers/hsomodem/gprs-context.c \
+@ATMODEM_TRUE@	drivers/hsomodem/radio-settings.c \
 @ATMODEM_TRUE@	drivers/atmodem/atutil.h \
+@ATMODEM_TRUE@	drivers/ifxmodem/ifxmodem.h \
+@ATMODEM_TRUE@	drivers/ifxmodem/ifxmodem.c \
+@ATMODEM_TRUE@	drivers/ifxmodem/voicecall.c \
+@ATMODEM_TRUE@	drivers/ifxmodem/audio-settings.c \
+@ATMODEM_TRUE@	drivers/ifxmodem/radio-settings.c \
+@ATMODEM_TRUE@	drivers/ifxmodem/gprs-context.c \
+@ATMODEM_TRUE@	drivers/ifxmodem/stk.c drivers/atmodem/atutil.h \
 @ATMODEM_TRUE@	drivers/stemodem/stemodem.h \
 @ATMODEM_TRUE@	drivers/stemodem/stemodem.c \
 @ATMODEM_TRUE@	drivers/stemodem/voicecall.c \
+@ATMODEM_TRUE@	drivers/stemodem/radio-settings.c \
+@ATMODEM_TRUE@	drivers/stemodem/caif_rtnl.c \
+@ATMODEM_TRUE@	drivers/stemodem/caif_rtnl.h \
 @ATMODEM_TRUE@	drivers/stemodem/gprs-context.c \
 @ATMODEM_TRUE@	drivers/stemodem/caif_socket.h \
-@ATMODEM_TRUE@	drivers/stemodem/if_caif.h plugins/modemconf.c \
-@ATMODEM_TRUE@	plugins/phonesim.c plugins/atgen.c plugins/g1.c \
+@ATMODEM_TRUE@	drivers/stemodem/if_caif.h
+@ATMODEM_TRUE@@PHONESIM_TRUE@am__append_9 = phonesim
+@ATMODEM_TRUE@@PHONESIM_TRUE@am__append_10 = plugins/phonesim.c
+@ATMODEM_TRUE@@DATAFILES_TRUE@@PHONESIM_TRUE@am__append_11 = plugins/phonesim.conf
+@ATMODEM_TRUE@am__append_12 = g1 wavecom calypso mbm hso zte huawei \
+@ATMODEM_TRUE@	novatel nokia bluetooth hfp palmpre ifx ste caif
+@ATMODEM_TRUE@am__append_13 = plugins/g1.c plugins/wavecom.c \
 @ATMODEM_TRUE@	plugins/calypso.c plugins/mbm.c plugins/hso.c \
-@ATMODEM_TRUE@	plugins/huawei.c plugins/novatel.c plugins/hfp.c \
-@ATMODEM_TRUE@	plugins/palmpre.c plugins/ste.c
-@ATMODEM_TRUE@@DATAFILES_TRUE@am__append_9 = plugins/modem.conf
-@MAINTAINER_MODE_TRUE@am__append_10 = example_history
-@MAINTAINER_MODE_TRUE@am__append_11 = plugins/example_history.c
+@ATMODEM_TRUE@	plugins/zte.c plugins/huawei.c plugins/novatel.c \
+@ATMODEM_TRUE@	plugins/nokia.c plugins/bluetooth.c \
+@ATMODEM_TRUE@	plugins/bluetooth.h plugins/hfp.c \
+@ATMODEM_TRUE@	plugins/bluetooth.h plugins/palmpre.c \
+@ATMODEM_TRUE@	plugins/ifx.c plugins/ste.c plugins/caif.c
+@MAINTAINER_MODE_TRUE@am__append_14 = example_history example_nettime
+@MAINTAINER_MODE_TRUE@am__append_15 = examples/history.c \
+@MAINTAINER_MODE_TRUE@	examples/nettime.c
 sbin_PROGRAMS = src/ofonod$(EXEEXT)
 noinst_PROGRAMS = unit/test-common$(EXEEXT) unit/test-util$(EXEEXT) \
 	unit/test-idmap$(EXEEXT) unit/test-sms$(EXEEXT) \
 	unit/test-simutil$(EXEEXT) unit/test-mux$(EXEEXT) \
-	unit/test-caif$(EXEEXT) gatchat/gsmdial$(EXEEXT) \
-	gatchat/test-server$(EXEEXT)
+	unit/test-caif$(EXEEXT) unit/test-stkutil$(EXEEXT) \
+	tools/huawei-audio$(EXEEXT) gatchat/gsmdial$(EXEEXT) \
+	gatchat/test-server$(EXEEXT) gatchat/test-qcdm$(EXEEXT)
 subdir = .
 DIST_COMMON = README $(am__configure_deps) $(dist_man_MANS) \
 	$(include_HEADERS) $(srcdir)/Makefile.am $(srcdir)/Makefile.in \
 	$(srcdir)/config.h.in $(top_srcdir)/configure \
-	$(top_srcdir)/include/version.h.in AUTHORS COPYING ChangeLog \
-	INSTALL NEWS compile config.guess config.sub depcomp \
+	$(top_srcdir)/include/version.h.in \
+	$(top_srcdir)/src/ofono.service.in AUTHORS COPYING ChangeLog \
+	INSTALL NEWS TODO compile config.guess config.sub depcomp \
 	install-sh ltmain.sh missing
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/acinclude.m4 \
@@ -146,20 +181,25 @@ am__CONFIG_DISTCLEAN_FILES = config.status config.cache config.log \
  configure.lineno config.status.lineno
 mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = config.h
-CONFIG_CLEAN_FILES = include/version.h
+CONFIG_CLEAN_FILES = include/version.h src/ofono.service
 CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(sbindir)" "$(DESTDIR)$(testdir)" \
 	"$(DESTDIR)$(man8dir)" "$(DESTDIR)$(confdir)" \
-	"$(DESTDIR)$(dbusdir)" "$(DESTDIR)$(rulesdir)" \
-	"$(DESTDIR)$(statedir)" "$(DESTDIR)$(includedir)" \
-	"$(DESTDIR)$(includedir)"
+	"$(DESTDIR)$(dbusconfdir)" "$(DESTDIR)$(rulesdir)" \
+	"$(DESTDIR)$(statedir)" "$(DESTDIR)$(systemdunitdir)" \
+	"$(DESTDIR)$(includedir)" "$(DESTDIR)$(includedir)"
 PROGRAMS = $(noinst_PROGRAMS) $(sbin_PROGRAMS)
 am__dirstamp = $(am__leading_dot)dirstamp
 am__objects_1 = gatchat/gatchat.$(OBJEXT) gatchat/gatresult.$(OBJEXT) \
 	gatchat/gatsyntax.$(OBJEXT) gatchat/ringbuffer.$(OBJEXT) \
+	gatchat/gatio.$(OBJEXT) gatchat/crc-ccitt.$(OBJEXT) \
 	gatchat/gatmux.$(OBJEXT) gatchat/gsm0710.$(OBJEXT) \
 	gatchat/gattty.$(OBJEXT) gatchat/gatutil.$(OBJEXT) \
-	gatchat/gatserver.$(OBJEXT)
+	gatchat/gatserver.$(OBJEXT) gatchat/gatrawip.$(OBJEXT) \
+	gatchat/gathdlc.$(OBJEXT) gatchat/gatppp.$(OBJEXT) \
+	gatchat/ppp_cp.$(OBJEXT) gatchat/ppp_lcp.$(OBJEXT) \
+	gatchat/ppp_auth.$(OBJEXT) gatchat/ppp_net.$(OBJEXT) \
+	gatchat/ppp_ipcp.$(OBJEXT)
 am_gatchat_gsmdial_OBJECTS = gatchat/gsmdial.$(OBJEXT) \
 	$(am__objects_1)
 gatchat_gsmdial_OBJECTS = $(am_gatchat_gsmdial_OBJECTS)
@@ -167,22 +207,28 @@ gatchat_gsmdial_DEPENDENCIES =
 AM_V_lt = $(am__v_lt_$(V))
 am__v_lt_ = $(am__v_lt_$(AM_DEFAULT_VERBOSITY))
 am__v_lt_0 = --silent
+am_gatchat_test_qcdm_OBJECTS = gatchat/test-qcdm.$(OBJEXT) \
+	$(am__objects_1)
+gatchat_test_qcdm_OBJECTS = $(am_gatchat_test_qcdm_OBJECTS)
+gatchat_test_qcdm_DEPENDENCIES =
 am_gatchat_test_server_OBJECTS = gatchat/test-server.$(OBJEXT) \
 	$(am__objects_1)
 gatchat_test_server_OBJECTS = $(am_gatchat_test_server_OBJECTS)
 gatchat_test_server_DEPENDENCIES =
 am__src_ofonod_SOURCES_DIST = gdbus/gdbus.h gdbus/mainloop.c \
-	gdbus/object.c gdbus/watch.c plugins/udev.c plugins/caif.c \
-	gisi/phonet.h gisi/modem.h gisi/netlink.h gisi/netlink.c \
+	gdbus/watch.c gdbus/object.c gdbus/polkit.c plugins/udev.c \
+	gisi/modem.h gisi/modem.c gisi/netlink.h gisi/netlink.c \
 	gisi/socket.h gisi/socket.c gisi/client.h gisi/client.c \
-	gisi/pep.h gisi/pep.c gisi/pipe.h gisi/pipe.c gisi/iter.h \
-	gisi/iter.c gisi/verify.c drivers/isimodem/isimodem.h \
+	gisi/server.h gisi/server.c gisi/pep.h gisi/pep.c gisi/pipe.h \
+	gisi/pipe.c gisi/iter.h gisi/iter.c gisi/verify.c \
+	gisi/phonet.h drivers/isimodem/isimodem.h \
 	drivers/isimodem/isimodem.c drivers/isimodem/mtc.h \
 	drivers/isimodem/debug.h drivers/isimodem/isiutil.h \
 	drivers/isimodem/debug.c drivers/isimodem/phonebook.c \
 	drivers/isimodem/devinfo.c drivers/isimodem/info.h \
 	drivers/isimodem/network-registration.c \
-	drivers/isimodem/network.h drivers/isimodem/voicecall.c \
+	drivers/isimodem/network.h drivers/isimodem/infoserver.h \
+	drivers/isimodem/infoserver.c drivers/isimodem/voicecall.c \
 	drivers/isimodem/call.h drivers/isimodem/sms.c \
 	drivers/isimodem/sms.h drivers/isimodem/cbs.c \
 	drivers/isimodem/sim.c drivers/isimodem/sim.h \
@@ -191,54 +237,86 @@ am__src_ofonod_SOURCES_DIST = gdbus/gdbus.h gdbus/mainloop.c \
 	drivers/isimodem/call-settings.c \
 	drivers/isimodem/call-barring.c drivers/isimodem/call-meter.c \
 	drivers/isimodem/ss.h drivers/isimodem/radio-settings.c \
-	drivers/isimodem/gss.h gatchat/gatchat.h gatchat/gatchat.c \
-	gatchat/gatresult.h gatchat/gatresult.c gatchat/gatsyntax.h \
-	gatchat/gatsyntax.c gatchat/ringbuffer.h gatchat/ringbuffer.c \
+	drivers/isimodem/gss.h drivers/isimodem/gprs.c \
+	drivers/isimodem/gprs-context.c drivers/isimodem/gpds.h \
+	drivers/isimodem/audio-settings.c plugins/isigen.c \
+	plugins/n900.c plugins/nokia-gpio.h plugins/nokia-gpio.c \
+	gatchat/gatchat.h gatchat/gatchat.c gatchat/gatresult.h \
+	gatchat/gatresult.c gatchat/gatsyntax.h gatchat/gatsyntax.c \
+	gatchat/ringbuffer.h gatchat/ringbuffer.c gatchat/gatio.h \
+	gatchat/gatio.c gatchat/crc-ccitt.h gatchat/crc-ccitt.c \
 	gatchat/gatmux.h gatchat/gatmux.c gatchat/gsm0710.h \
 	gatchat/gsm0710.c gatchat/gattty.h gatchat/gattty.c \
 	gatchat/gatutil.h gatchat/gatutil.c gatchat/gat.h \
-	gatchat/gatserver.h gatchat/gatserver.c \
+	gatchat/gatserver.h gatchat/gatserver.c gatchat/gatrawip.h \
+	gatchat/gatrawip.c gatchat/gathdlc.c gatchat/gathdlc.h \
+	gatchat/gatppp.c gatchat/gatppp.h gatchat/ppp.h \
+	gatchat/ppp_cp.h gatchat/ppp_cp.c gatchat/ppp_lcp.c \
+	gatchat/ppp_auth.c gatchat/ppp_net.c gatchat/ppp_ipcp.c \
 	drivers/atmodem/atmodem.h drivers/atmodem/atmodem.c \
 	drivers/atmodem/call-settings.c drivers/atmodem/sms.c \
 	drivers/atmodem/cbs.c drivers/atmodem/call-forwarding.c \
 	drivers/atmodem/call-meter.c \
 	drivers/atmodem/network-registration.c drivers/atmodem/sim.c \
+	drivers/atmodem/stk.c drivers/atmodem/stk.h \
+	drivers/atmodem/sim-poll.c drivers/atmodem/sim-poll.h \
 	drivers/atmodem/ussd.c drivers/atmodem/voicecall.c \
 	drivers/atmodem/call-barring.c drivers/atmodem/phonebook.c \
 	drivers/atmodem/ssn.c drivers/atmodem/devinfo.c \
 	drivers/atmodem/call-volume.c drivers/atmodem/vendor.h \
 	drivers/atmodem/atutil.h drivers/atmodem/atutil.c \
 	drivers/atmodem/gprs.c drivers/atmodem/gprs-context.c \
+	drivers/nwmodem/nwmodem.h drivers/nwmodem/nwmodem.c \
+	drivers/nwmodem/radio-settings.c \
+	drivers/huaweimodem/huaweimodem.h \
+	drivers/huaweimodem/huaweimodem.c \
+	drivers/huaweimodem/voicecall.c \
+	drivers/huaweimodem/audio-settings.c \
+	drivers/huaweimodem/gprs-context.c \
 	drivers/calypsomodem/calypsomodem.h \
 	drivers/calypsomodem/calypsomodem.c \
-	drivers/calypsomodem/voicecall.c drivers/hfpmodem/hfpmodem.h \
-	drivers/hfpmodem/hfpmodem.c drivers/hfpmodem/voicecall.c \
+	drivers/calypsomodem/voicecall.c drivers/calypsomodem/stk.c \
+	drivers/hfpmodem/hfpmodem.h drivers/hfpmodem/hfpmodem.c \
+	drivers/hfpmodem/voicecall.c \
 	drivers/hfpmodem/network-registration.c \
 	drivers/hfpmodem/call-volume.c drivers/mbmmodem/mbmmodem.h \
 	drivers/mbmmodem/mbmmodem.c drivers/mbmmodem/gprs-context.c \
-	drivers/hsomodem/hsomodem.h drivers/hsomodem/hsomodem.c \
-	drivers/hsomodem/gprs-context.c drivers/stemodem/stemodem.h \
-	drivers/stemodem/stemodem.c drivers/stemodem/voicecall.c \
+	drivers/mbmmodem/stk.c drivers/hsomodem/hsomodem.h \
+	drivers/hsomodem/hsomodem.c drivers/hsomodem/gprs-context.c \
+	drivers/hsomodem/radio-settings.c drivers/ifxmodem/ifxmodem.h \
+	drivers/ifxmodem/ifxmodem.c drivers/ifxmodem/voicecall.c \
+	drivers/ifxmodem/audio-settings.c \
+	drivers/ifxmodem/radio-settings.c \
+	drivers/ifxmodem/gprs-context.c drivers/ifxmodem/stk.c \
+	drivers/stemodem/stemodem.h drivers/stemodem/stemodem.c \
+	drivers/stemodem/voicecall.c drivers/stemodem/radio-settings.c \
+	drivers/stemodem/caif_rtnl.c drivers/stemodem/caif_rtnl.h \
 	drivers/stemodem/gprs-context.c drivers/stemodem/caif_socket.h \
-	drivers/stemodem/if_caif.h plugins/modemconf.c \
-	plugins/phonesim.c plugins/atgen.c plugins/g1.c \
-	plugins/calypso.c plugins/mbm.c plugins/hso.c plugins/huawei.c \
-	plugins/novatel.c plugins/hfp.c plugins/palmpre.c \
-	plugins/ste.c plugins/example_history.c src/main.c src/ofono.h \
-	src/log.c src/plugin.c src/modem.c src/common.h src/common.c \
-	src/manager.c src/dbus.c src/util.h src/util.c src/network.c \
-	src/voicecall.c src/ussd.c src/sms.c src/call-settings.c \
-	src/call-forwarding.c src/call-meter.c src/smsutil.h \
-	src/smsutil.c src/ssn.c src/call-barring.c src/sim.c \
-	src/phonebook.c src/history.c src/message-waiting.c \
-	src/simutil.h src/simutil.c src/storage.h src/storage.c \
-	src/cbs.c src/watch.c src/call-volume.c src/gprs.c src/idmap.h \
-	src/idmap.c src/radio-settings.c
-am__objects_2 = gdbus/mainloop.$(OBJEXT) gdbus/object.$(OBJEXT) \
-	gdbus/watch.$(OBJEXT)
+	drivers/stemodem/if_caif.h plugins/phonesim.c plugins/g1.c \
+	plugins/wavecom.c plugins/calypso.c plugins/mbm.c \
+	plugins/hso.c plugins/zte.c plugins/huawei.c plugins/novatel.c \
+	plugins/nokia.c plugins/bluetooth.c plugins/bluetooth.h \
+	plugins/hfp.c plugins/palmpre.c plugins/ifx.c plugins/ste.c \
+	plugins/caif.c examples/history.c examples/nettime.c \
+	plugins/smart-messaging.c plugins/push-notification.c \
+	src/ofono.ver src/main.c src/ofono.h src/log.c src/plugin.c \
+	src/modem.c src/common.h src/common.c src/manager.c src/dbus.c \
+	src/util.h src/util.c src/network.c src/voicecall.c src/ussd.c \
+	src/sms.c src/call-settings.c src/call-forwarding.c \
+	src/call-meter.c src/smsutil.h src/smsutil.c src/ssn.c \
+	src/call-barring.c src/sim.c src/stk.c src/phonebook.c \
+	src/history.c src/message-waiting.c src/simutil.h \
+	src/simutil.c src/storage.h src/storage.c src/cbs.c \
+	src/watch.c src/call-volume.c src/gprs.c src/idmap.h \
+	src/idmap.c src/radio-settings.c src/stkutil.h src/stkutil.c \
+	src/nettime.c src/stkagent.c src/stkagent.h src/simfs.c \
+	src/simfs.h src/audio-settings.c src/smsagent.c src/smsagent.h
+am__objects_2 = gdbus/mainloop.$(OBJEXT) gdbus/watch.$(OBJEXT) \
+	gdbus/object.$(OBJEXT) gdbus/polkit.$(OBJEXT)
 @UDEV_TRUE@am__objects_3 = plugins/udev.$(OBJEXT)
-am__objects_4 = gisi/netlink.$(OBJEXT) gisi/socket.$(OBJEXT) \
-	gisi/client.$(OBJEXT) gisi/pep.$(OBJEXT) gisi/pipe.$(OBJEXT) \
+am__objects_4 = gisi/modem.$(OBJEXT) gisi/netlink.$(OBJEXT) \
+	gisi/socket.$(OBJEXT) gisi/client.$(OBJEXT) \
+	gisi/server.$(OBJEXT) gisi/pep.$(OBJEXT) gisi/pipe.$(OBJEXT) \
 	gisi/iter.$(OBJEXT) gisi/verify.$(OBJEXT)
 @ISIMODEM_TRUE@am__objects_5 = $(am__objects_4) \
 @ISIMODEM_TRUE@	drivers/isimodem/isimodem.$(OBJEXT) \
@@ -246,6 +324,7 @@ am__objects_4 = gisi/netlink.$(OBJEXT) gisi/socket.$(OBJEXT) \
 @ISIMODEM_TRUE@	drivers/isimodem/phonebook.$(OBJEXT) \
 @ISIMODEM_TRUE@	drivers/isimodem/devinfo.$(OBJEXT) \
 @ISIMODEM_TRUE@	drivers/isimodem/network-registration.$(OBJEXT) \
+@ISIMODEM_TRUE@	drivers/isimodem/infoserver.$(OBJEXT) \
 @ISIMODEM_TRUE@	drivers/isimodem/voicecall.$(OBJEXT) \
 @ISIMODEM_TRUE@	drivers/isimodem/sms.$(OBJEXT) \
 @ISIMODEM_TRUE@	drivers/isimodem/cbs.$(OBJEXT) \
@@ -256,7 +335,12 @@ am__objects_4 = gisi/netlink.$(OBJEXT) gisi/socket.$(OBJEXT) \
 @ISIMODEM_TRUE@	drivers/isimodem/call-settings.$(OBJEXT) \
 @ISIMODEM_TRUE@	drivers/isimodem/call-barring.$(OBJEXT) \
 @ISIMODEM_TRUE@	drivers/isimodem/call-meter.$(OBJEXT) \
-@ISIMODEM_TRUE@	drivers/isimodem/radio-settings.$(OBJEXT)
+@ISIMODEM_TRUE@	drivers/isimodem/radio-settings.$(OBJEXT) \
+@ISIMODEM_TRUE@	drivers/isimodem/gprs.$(OBJEXT) \
+@ISIMODEM_TRUE@	drivers/isimodem/gprs-context.$(OBJEXT) \
+@ISIMODEM_TRUE@	drivers/isimodem/audio-settings.$(OBJEXT) \
+@ISIMODEM_TRUE@	plugins/isigen.$(OBJEXT) plugins/n900.$(OBJEXT) \
+@ISIMODEM_TRUE@	plugins/nokia-gpio.$(OBJEXT)
 @ATMODEM_TRUE@am__objects_6 = $(am__objects_1) \
 @ATMODEM_TRUE@	drivers/atmodem/atmodem.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/atmodem/call-settings.$(OBJEXT) \
@@ -266,6 +350,8 @@ am__objects_4 = gisi/netlink.$(OBJEXT) gisi/socket.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/atmodem/call-meter.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/atmodem/network-registration.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/atmodem/sim.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/atmodem/stk.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/atmodem/sim-poll.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/atmodem/ussd.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/atmodem/voicecall.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/atmodem/call-barring.$(OBJEXT) \
@@ -276,31 +362,56 @@ am__objects_4 = gisi/netlink.$(OBJEXT) gisi/socket.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/atmodem/atutil.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/atmodem/gprs.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/atmodem/gprs-context.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/nwmodem/nwmodem.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/nwmodem/radio-settings.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/huaweimodem/huaweimodem.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/huaweimodem/voicecall.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/huaweimodem/audio-settings.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/huaweimodem/gprs-context.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/calypsomodem/calypsomodem.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/calypsomodem/voicecall.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/calypsomodem/stk.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/hfpmodem/hfpmodem.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/hfpmodem/voicecall.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/hfpmodem/network-registration.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/hfpmodem/call-volume.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/mbmmodem/mbmmodem.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/mbmmodem/gprs-context.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/mbmmodem/stk.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/hsomodem/hsomodem.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/hsomodem/gprs-context.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/hsomodem/radio-settings.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/ifxmodem/ifxmodem.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/ifxmodem/voicecall.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/ifxmodem/audio-settings.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/ifxmodem/radio-settings.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/ifxmodem/gprs-context.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/ifxmodem/stk.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/stemodem/stemodem.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/stemodem/voicecall.$(OBJEXT) \
-@ATMODEM_TRUE@	drivers/stemodem/gprs-context.$(OBJEXT) \
-@ATMODEM_TRUE@	plugins/modemconf.$(OBJEXT) \
-@ATMODEM_TRUE@	plugins/phonesim.$(OBJEXT) \
-@ATMODEM_TRUE@	plugins/atgen.$(OBJEXT) plugins/g1.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/stemodem/radio-settings.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/stemodem/caif_rtnl.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/stemodem/gprs-context.$(OBJEXT)
+@ATMODEM_TRUE@@PHONESIM_TRUE@am__objects_7 =  \
+@ATMODEM_TRUE@@PHONESIM_TRUE@	plugins/phonesim.$(OBJEXT)
+@ATMODEM_TRUE@am__objects_8 = plugins/g1.$(OBJEXT) \
+@ATMODEM_TRUE@	plugins/wavecom.$(OBJEXT) \
 @ATMODEM_TRUE@	plugins/calypso.$(OBJEXT) plugins/mbm.$(OBJEXT) \
-@ATMODEM_TRUE@	plugins/hso.$(OBJEXT) plugins/huawei.$(OBJEXT) \
-@ATMODEM_TRUE@	plugins/novatel.$(OBJEXT) plugins/hfp.$(OBJEXT) \
-@ATMODEM_TRUE@	plugins/palmpre.$(OBJEXT) plugins/ste.$(OBJEXT)
-@MAINTAINER_MODE_TRUE@am__objects_7 =  \
-@MAINTAINER_MODE_TRUE@	plugins/example_history.$(OBJEXT)
-am__objects_8 = $(am__objects_3) plugins/caif.$(OBJEXT) \
-	$(am__objects_5) $(am__objects_6) $(am__objects_7)
-am_src_ofonod_OBJECTS = $(am__objects_2) $(am__objects_8) \
+@ATMODEM_TRUE@	plugins/hso.$(OBJEXT) plugins/zte.$(OBJEXT) \
+@ATMODEM_TRUE@	plugins/huawei.$(OBJEXT) \
+@ATMODEM_TRUE@	plugins/novatel.$(OBJEXT) \
+@ATMODEM_TRUE@	plugins/nokia.$(OBJEXT) \
+@ATMODEM_TRUE@	plugins/bluetooth.$(OBJEXT) \
+@ATMODEM_TRUE@	plugins/hfp.$(OBJEXT) plugins/palmpre.$(OBJEXT) \
+@ATMODEM_TRUE@	plugins/ifx.$(OBJEXT) plugins/ste.$(OBJEXT) \
+@ATMODEM_TRUE@	plugins/caif.$(OBJEXT)
+@MAINTAINER_MODE_TRUE@am__objects_9 = examples/history.$(OBJEXT) \
+@MAINTAINER_MODE_TRUE@	examples/nettime.$(OBJEXT)
+am__objects_10 = $(am__objects_3) $(am__objects_5) $(am__objects_6) \
+	$(am__objects_7) $(am__objects_8) $(am__objects_9) \
+	plugins/smart-messaging.$(OBJEXT) \
+	plugins/push-notification.$(OBJEXT)
+am_src_ofonod_OBJECTS = $(am__objects_2) $(am__objects_10) \
 	src/main.$(OBJEXT) src/log.$(OBJEXT) src/plugin.$(OBJEXT) \
 	src/modem.$(OBJEXT) src/common.$(OBJEXT) src/manager.$(OBJEXT) \
 	src/dbus.$(OBJEXT) src/util.$(OBJEXT) src/network.$(OBJEXT) \
@@ -308,22 +419,31 @@ am_src_ofonod_OBJECTS = $(am__objects_2) $(am__objects_8) \
 	src/call-settings.$(OBJEXT) src/call-forwarding.$(OBJEXT) \
 	src/call-meter.$(OBJEXT) src/smsutil.$(OBJEXT) \
 	src/ssn.$(OBJEXT) src/call-barring.$(OBJEXT) src/sim.$(OBJEXT) \
-	src/phonebook.$(OBJEXT) src/history.$(OBJEXT) \
-	src/message-waiting.$(OBJEXT) src/simutil.$(OBJEXT) \
-	src/storage.$(OBJEXT) src/cbs.$(OBJEXT) src/watch.$(OBJEXT) \
-	src/call-volume.$(OBJEXT) src/gprs.$(OBJEXT) \
-	src/idmap.$(OBJEXT) src/radio-settings.$(OBJEXT)
+	src/stk.$(OBJEXT) src/phonebook.$(OBJEXT) \
+	src/history.$(OBJEXT) src/message-waiting.$(OBJEXT) \
+	src/simutil.$(OBJEXT) src/storage.$(OBJEXT) src/cbs.$(OBJEXT) \
+	src/watch.$(OBJEXT) src/call-volume.$(OBJEXT) \
+	src/gprs.$(OBJEXT) src/idmap.$(OBJEXT) \
+	src/radio-settings.$(OBJEXT) src/stkutil.$(OBJEXT) \
+	src/nettime.$(OBJEXT) src/stkagent.$(OBJEXT) \
+	src/simfs.$(OBJEXT) src/audio-settings.$(OBJEXT) \
+	src/smsagent.$(OBJEXT)
 src_ofonod_OBJECTS = $(am_src_ofonod_OBJECTS)
 am__DEPENDENCIES_1 =
 am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1)
+src_ofonod_DEPENDENCIES = $(am__DEPENDENCIES_2)
 src_ofonod_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
 	$(src_ofonod_LDFLAGS) $(LDFLAGS) -o $@
+am_tools_huawei_audio_OBJECTS = $(am__objects_2) \
+	tools/huawei-audio.$(OBJEXT)
+tools_huawei_audio_OBJECTS = $(am_tools_huawei_audio_OBJECTS)
+tools_huawei_audio_DEPENDENCIES =
 am_unit_test_caif_OBJECTS = unit/test-caif.$(OBJEXT) $(am__objects_1)
 unit_test_caif_OBJECTS = $(am_unit_test_caif_OBJECTS)
 unit_test_caif_DEPENDENCIES =
 am_unit_test_common_OBJECTS = unit/test-common.$(OBJEXT) \
-	src/common.$(OBJEXT)
+	src/common.$(OBJEXT) src/util.$(OBJEXT)
 unit_test_common_OBJECTS = $(am_unit_test_common_OBJECTS)
 unit_test_common_DEPENDENCIES =
 am_unit_test_idmap_OBJECTS = unit/test-idmap.$(OBJEXT) \
@@ -342,6 +462,11 @@ am_unit_test_sms_OBJECTS = unit/test-sms.$(OBJEXT) src/util.$(OBJEXT) \
 	src/smsutil.$(OBJEXT) src/storage.$(OBJEXT)
 unit_test_sms_OBJECTS = $(am_unit_test_sms_OBJECTS)
 unit_test_sms_DEPENDENCIES =
+am_unit_test_stkutil_OBJECTS = unit/test-stkutil.$(OBJEXT) \
+	src/util.$(OBJEXT) src/storage.$(OBJEXT) src/smsutil.$(OBJEXT) \
+	src/simutil.$(OBJEXT) src/stkutil.$(OBJEXT)
+unit_test_stkutil_OBJECTS = $(am_unit_test_stkutil_OBJECTS)
+unit_test_stkutil_DEPENDENCIES =
 am_unit_test_util_OBJECTS = unit/test-util.$(OBJEXT) \
 	src/util.$(OBJEXT)
 unit_test_util_OBJECTS = $(am_unit_test_util_OBJECTS)
@@ -394,21 +519,25 @@ am__v_CCLD_0 = @echo "  CCLD  " $@;
 AM_V_GEN = $(am__v_GEN_$(V))
 am__v_GEN_ = $(am__v_GEN_$(AM_DEFAULT_VERBOSITY))
 am__v_GEN_0 = @echo "  GEN   " $@;
-SOURCES = $(gatchat_gsmdial_SOURCES) $(gatchat_test_server_SOURCES) \
-	$(src_ofonod_SOURCES) $(unit_test_caif_SOURCES) \
+SOURCES = $(gatchat_gsmdial_SOURCES) $(gatchat_test_qcdm_SOURCES) \
+	$(gatchat_test_server_SOURCES) $(src_ofonod_SOURCES) \
+	$(tools_huawei_audio_SOURCES) $(unit_test_caif_SOURCES) \
 	$(unit_test_common_SOURCES) $(unit_test_idmap_SOURCES) \
 	$(unit_test_mux_SOURCES) $(unit_test_simutil_SOURCES) \
-	$(unit_test_sms_SOURCES) $(unit_test_util_SOURCES)
-DIST_SOURCES = $(gatchat_gsmdial_SOURCES) \
+	$(unit_test_sms_SOURCES) $(unit_test_stkutil_SOURCES) \
+	$(unit_test_util_SOURCES)
+DIST_SOURCES = $(gatchat_gsmdial_SOURCES) $(gatchat_test_qcdm_SOURCES) \
 	$(gatchat_test_server_SOURCES) $(am__src_ofonod_SOURCES_DIST) \
-	$(unit_test_caif_SOURCES) $(unit_test_common_SOURCES) \
-	$(unit_test_idmap_SOURCES) $(unit_test_mux_SOURCES) \
-	$(unit_test_simutil_SOURCES) $(unit_test_sms_SOURCES) \
+	$(tools_huawei_audio_SOURCES) $(unit_test_caif_SOURCES) \
+	$(unit_test_common_SOURCES) $(unit_test_idmap_SOURCES) \
+	$(unit_test_mux_SOURCES) $(unit_test_simutil_SOURCES) \
+	$(unit_test_sms_SOURCES) $(unit_test_stkutil_SOURCES) \
 	$(unit_test_util_SOURCES)
 man8dir = $(mandir)/man8
 NROFF = nroff
 MANS = $(dist_man_MANS)
-DATA = $(conf_DATA) $(dbus_DATA) $(rules_DATA) $(state_DATA)
+DATA = $(conf_DATA) $(dbusconf_DATA) $(rules_DATA) $(state_DATA) \
+	$(systemdunit_DATA)
 HEADERS = $(include_HEADERS) $(nodist_include_HEADERS)
 ETAGS = etags
 CTAGS = ctags
@@ -431,6 +560,8 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+CAPNG_CFLAGS = @CAPNG_CFLAGS@
+CAPNG_LIBS = @CAPNG_LIBS@
 CC = @CC@
 CCDEPMODE = @CCDEPMODE@
 CFLAGS = @CFLAGS@
@@ -438,6 +569,7 @@ CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CYGPATH_W = @CYGPATH_W@
 DBUS_CFLAGS = @DBUS_CFLAGS@
+DBUS_CONFDIR = @DBUS_CONFDIR@
 DBUS_DATADIR = @DBUS_DATADIR@
 DBUS_LIBS = @DBUS_LIBS@
 DEFS = @DEFS@
@@ -490,6 +622,9 @@ SED = @SED@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
 STRIP = @STRIP@
+SYSTEMD_CFLAGS = @SYSTEMD_CFLAGS@
+SYSTEMD_LIBS = @SYSTEMD_LIBS@
+SYSTEMD_UNITDIR = @SYSTEMD_UNITDIR@
 UDEV_CFLAGS = @UDEV_CFLAGS@
 UDEV_DATADIR = @UDEV_DATADIR@
 UDEV_LIBS = @UDEV_LIBS@
@@ -556,68 +691,91 @@ include_HEADERS = include/log.h include/plugin.h include/history.h \
 			include/netreg.h include/voicecall.h include/devinfo.h \
 			include/cbs.h include/call-volume.h \
 			include/gprs.h include/gprs-context.h \
-			include/radio-settings.h
+			include/radio-settings.h include/stk.h \
+			include/audio-settings.h include/nettime.h
 
 nodist_include_HEADERS = include/version.h
 local_headers = $(foreach file,$(include_HEADERS) $(nodist_include_HEADERS), \
 					include/ofono/$(notdir $(file)))
 
-@DATAFILES_TRUE@dbusdir = @DBUS_DATADIR@
-@DATAFILES_TRUE@dbus_DATA = src/ofono.conf
+@DATAFILES_TRUE@dbusconfdir = @DBUS_CONFDIR@
+@DATAFILES_TRUE@dbusconf_DATA = src/ofono.conf
+@DATAFILES_TRUE@@SYSTEMD_TRUE@systemdunitdir = @SYSTEMD_UNITDIR@
+@DATAFILES_TRUE@@SYSTEMD_TRUE@systemdunit_DATA = src/ofono.service
 @DATAFILES_TRUE@confdir = $(sysconfdir)/ofono
-@DATAFILES_TRUE@conf_DATA = $(am__append_9)
+@DATAFILES_TRUE@conf_DATA = $(am__append_11)
 @DATAFILES_TRUE@statedir = $(localstatedir)/lib/ofono
 @DATAFILES_TRUE@state_DATA = 
-builtin_modules = $(am__append_1) caif $(am__append_5) $(am__append_7) \
-	$(am__append_10)
-builtin_sources = $(am__append_2) plugins/caif.c $(am__append_6) \
-	$(am__append_8) $(am__append_11)
+builtin_modules = $(am__append_1) $(am__append_5) $(am__append_7) \
+	$(am__append_9) $(am__append_12) $(am__append_14) \
+	smart_messaging push_notification
+builtin_sources = $(am__append_2) $(am__append_6) $(am__append_8) \
+	$(am__append_10) $(am__append_13) $(am__append_15) \
+	plugins/smart-messaging.c plugins/push-notification.c
 builtin_libadd = $(am__append_4)
 builtin_cflags = $(am__append_3)
-gdbus_sources = gdbus/gdbus.h gdbus/mainloop.c gdbus/object.c gdbus/watch.c
-gisi_sources = gisi/phonet.h gisi/modem.h gisi/netlink.h gisi/netlink.c \
-		gisi/socket.h gisi/socket.c gisi/client.h gisi/client.c \
-		gisi/pep.h gisi/pep.c gisi/pipe.h gisi/pipe.c gisi/iter.h \
-		gisi/iter.c gisi/verify.c
+gdbus_sources = gdbus/gdbus.h gdbus/mainloop.c gdbus/watch.c \
+					gdbus/object.c gdbus/polkit.c
+
+gisi_sources = gisi/modem.h gisi/modem.c \
+			gisi/netlink.h gisi/netlink.c \
+			gisi/socket.h gisi/socket.c \
+			gisi/client.h gisi/client.c \
+			gisi/server.h gisi/server.c \
+			gisi/pep.h gisi/pep.c \
+			gisi/pipe.h gisi/pipe.c \
+			gisi/iter.h gisi/iter.c \
+			gisi/verify.c gisi/phonet.h
 
 gatchat_sources = gatchat/gatchat.h gatchat/gatchat.c \
 				gatchat/gatresult.h gatchat/gatresult.c \
 				gatchat/gatsyntax.h gatchat/gatsyntax.c \
 				gatchat/ringbuffer.h gatchat/ringbuffer.c \
+				gatchat/gatio.h	gatchat/gatio.c \
+				gatchat/crc-ccitt.h gatchat/crc-ccitt.c \
 				gatchat/gatmux.h gatchat/gatmux.c \
 				gatchat/gsm0710.h gatchat/gsm0710.c \
 				gatchat/gattty.h gatchat/gattty.c \
 				gatchat/gatutil.h gatchat/gatutil.c \
 				gatchat/gat.h \
-				gatchat/gatserver.h gatchat/gatserver.c
+				gatchat/gatserver.h gatchat/gatserver.c \
+				gatchat/gatrawip.h gatchat/gatrawip.c \
+				gatchat/gathdlc.c gatchat/gathdlc.h \
+				gatchat/gatppp.c gatchat/gatppp.h \
+				gatchat/ppp.h gatchat/ppp_cp.h \
+				gatchat/ppp_cp.c gatchat/ppp_lcp.c \
+				gatchat/ppp_auth.c gatchat/ppp_net.c \
+				gatchat/ppp_ipcp.c
 
 udev_files = plugins/ofono.rules
 @DATAFILES_TRUE@@UDEV_TRUE@rulesdir = @UDEV_DATADIR@
 @DATAFILES_TRUE@@UDEV_TRUE@rules_DATA = $(foreach file,$(udev_files), plugins/97-$(notdir $(file)))
-src_ofonod_SOURCES = $(gdbus_sources) $(builtin_sources) \
+src_ofonod_SOURCES = $(gdbus_sources) $(builtin_sources) src/ofono.ver \
 			src/main.c src/ofono.h src/log.c src/plugin.c \
 			src/modem.c src/common.h src/common.c \
 			src/manager.c src/dbus.c src/util.h src/util.c \
 			src/network.c src/voicecall.c src/ussd.c src/sms.c \
 			src/call-settings.c src/call-forwarding.c \
 			src/call-meter.c src/smsutil.h src/smsutil.c \
-			src/ssn.c src/call-barring.c src/sim.c \
+			src/ssn.c src/call-barring.c src/sim.c src/stk.c \
 			src/phonebook.c src/history.c src/message-waiting.c \
 			src/simutil.h src/simutil.c src/storage.h \
 			src/storage.c src/cbs.c src/watch.c src/call-volume.c \
 			src/gprs.c src/idmap.h src/idmap.c \
-			src/radio-settings.c
+			src/radio-settings.c src/stkutil.h src/stkutil.c \
+			src/nettime.c src/stkagent.c src/stkagent.h \
+			src/simfs.c src/simfs.h src/audio-settings.c \
+			src/smsagent.c src/smsagent.h
 
-src_ofonod_LDADD = $(builtin_libadd) @GLIB_LIBS@ @DBUS_LIBS@ -ldl
-src_ofonod_LDFLAGS = -Wl,--export-dynamic -Wl,--version-script=src/ofono.ver
-src_ofonod_DEPENDENCIES = src/ofono.ver
-CLEANFILES = src/ofono.ver src/ofono.exp src/builtin.h \
-					$(local_headers) $(rules_DATA)
+src_ofonod_LDADD = $(builtin_libadd) @GLIB_LIBS@ @DBUS_LIBS@ @CAPNG_LIBS@ -ldl
+src_ofonod_LDFLAGS = -Wl,--export-dynamic \
+				-Wl,--version-script=$(srcdir)/src/ofono.ver
 
+CLEANFILES = src/builtin.h $(local_headers) $(rules_DATA)
 plugindir = $(libdir)/ofono/plugins
 @MAINTAINER_MODE_FALSE@build_plugindir = $(plugindir)
 @MAINTAINER_MODE_TRUE@build_plugindir = $(abs_top_srcdir)/plugins/.libs
-AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ $(builtin_cflags) \
+AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @CAPNG_CFLAGS@ $(builtin_cflags) \
 					-DOFONO_PLUGIN_BUILTIN \
 					-DPLUGINDIR=\""$(build_plugindir)"\"
 
@@ -628,35 +786,92 @@ doc_files = doc/overview.txt doc/ofono-paper.txt \
 		doc/manager-api.txt doc/modem-api.txt doc/network-api.txt \
 			doc/voicecallmanager-api.txt doc/voicecall-api.txt \
 			doc/call-forwarding-api.txt doc/call-settings-api.txt \
-			doc/call-meter-api.txt \
-			doc/dataconnectionmanager-api.txt
+			doc/call-meter-api.txt doc/call-barring-api.txt \
+			doc/supplementaryservices-api.txt \
+			doc/connman-api.txt doc/features.txt \
+			doc/pushnotification-api.txt \
+			doc/smartmessaging-api.txt \
+			doc/call-volume-api.txt doc/cell-broadcast-api.txt \
+			doc/message-api.txt doc/message-waiting-api.txt \
+			doc/phonebook-api.txt doc/radio-settings-api.txt \
+			doc/sim-api.txt doc/stk-api.txt \
+			doc/audio-settings-api.txt
 
-test_scripts = test/test-manager test/test-modem test/test-voicecall \
-		test/test-network-registration test/test-phonebook \
-		test/test-advice-of-charge test/test-call-settings \
-		test/test-call-forwarding test/test-call-barring \
-		test/test-ss-control-cb test/test-ss-control-cf \
-		test/test-ss-control-cs \
-		test/monitor-ofono test/list-modems test/enable-modem \
-		test/list-operators test/dial-number test/hangup-all \
-		test/receive-sms test/send-sms \
-		test/list-contexts test/create-context \
-		test/activate-context test/deactivate-context \
+test_scripts = test/backtrace \
+		test/create-internet-context \
+		test/create-mms-context \
+		test/activate-context \
+		test/deactivate-context \
+		test/deactivate-all \
+		test/dial-number \
+		test/list-calls \
+		test/answer-calls \
+		test/create-multiparty \
+		test/private-chat \
+		test/disable-modem \
+		test/enable-modem \
+		test/enter-pin \
+		test/reset-pin \
+		test/hangup-all \
+		test/hangup-active \
+		test/set-mms-details \
+		test/set-roaming-allowed \
+		test/list-contexts \
+		test/list-modems \
+		test/list-operators \
+		test/scan-for-operators \
+		test/get-operators\
+		test/monitor-ofono \
 		test/process-context-settings \
-		test/set-mic-volume
+		test/receive-sms \
+		test/remove-contexts \
+		test/send-sms \
+		test/set-mic-volume \
+		test/set-speaker-volume \
+		test/test-stk-menu \
+		test/test-advice-of-charge \
+		test/test-call-barring \
+		test/test-call-forwarding \
+		test/test-call-settings \
+		test/test-modem \
+		test/test-network-registration \
+		test/test-phonebook \
+		test/test-ss-control-cb \
+		test/test-ss-control-cf \
+		test/test-ss-control-cs \
+		test/test-voicecall \
+		test/test-ussd \
+		test/cancel-ussd \
+		test/initiate-ussd \
+		test/offline-modem \
+		test/online-modem \
+		test/get-tech-preference \
+		test/set-tech-preference \
+		test/set-use-sms-reports \
+		test/set-cbs-topics \
+		test/enable-cbs \
+		test/lock-pin \
+		test/unlock-pin \
+		test/enable-gprs \
+		test/disable-gprs \
+		test/get-icon \
+		test/set-fast-dormancy \
+		test/test-push-notification \
+		test/test-smart-messaging \
+		test/send-vcard
 
 @TEST_TRUE@testdir = $(pkglibdir)/test
 @TEST_TRUE@test_SCRIPTS = $(test_scripts)
-conf_files = src/ofono.conf plugins/modem.conf
-EXTRA_DIST = src/genbuiltin plugins/example_history.c $(doc_files) \
-				$(test_scripts) $(conf_files) $(udev_files)
+conf_files = src/ofono.conf plugins/phonesim.conf
+EXTRA_DIST = src/genbuiltin $(conf_files) $(udev_files) \
+					$(doc_files) $(test_scripts)
 
 dist_man_MANS = doc/ofonod.8
 unit_objects = $(unit_test_common_OBJECTS) $(unit_test_utils_OBJECTS) \
 	$(unit_test_idmap_OBJECTS) $(unit_test_sms_OBJECTS) \
-	$(unit_test_simutil_OBJECTS) $(unit_test_mux_OBJECTS) \
-	$(unit_test_caif_OBJECTS)
-unit_test_common_SOURCES = unit/test-common.c src/common.c
+	$(unit_test_simutil_OBJECTS) $(unit_test_stkutil_OBJECTS) \
+	$(unit_test_mux_OBJECTS) $(unit_test_caif_OBJECTS)
+unit_test_common_SOURCES = unit/test-common.c src/common.c src/util.c
 unit_test_common_LDADD = @GLIB_LIBS@
 unit_test_util_SOURCES = unit/test-util.c src/util.c
 unit_test_util_LDADD = @GLIB_LIBS@
@@ -668,6 +883,11 @@ unit_test_simutil_SOURCES = unit/test-simutil.c src/util.c \
 				src/simutil.c src/smsutil.c src/storage.c
 
 unit_test_simutil_LDADD = @GLIB_LIBS@
+unit_test_stkutil_SOURCES = unit/test-stkutil.c src/util.c \
+				src/storage.c src/smsutil.c \
+				src/simutil.c src/stkutil.c
+
+unit_test_stkutil_LDADD = @GLIB_LIBS@
 unit_test_mux_SOURCES = unit/test-mux.c $(gatchat_sources)
 unit_test_mux_LDADD = @GLIB_LIBS@
 unit_test_caif_SOURCES = unit/test-caif.c $(gatchat_sources) \
@@ -675,10 +895,14 @@ unit_test_caif_SOURCES = unit/test-caif.c $(gatchat_sources) \
 					drivers/stemodem/if_caif.h 
 
 unit_test_caif_LDADD = @GLIB_LIBS@
+tools_huawei_audio_SOURCES = $(gdbus_sources) tools/huawei-audio.c
+tools_huawei_audio_LDADD = @GLIB_LIBS@ @DBUS_LIBS@
 gatchat_gsmdial_SOURCES = gatchat/gsmdial.c $(gatchat_sources)
 gatchat_gsmdial_LDADD = @GLIB_LIBS@
 gatchat_test_server_SOURCES = gatchat/test-server.c $(gatchat_sources)
 gatchat_test_server_LDADD = @GLIB_LIBS@ -lutil
+gatchat_test_qcdm_SOURCES = gatchat/test-qcdm.c $(gatchat_sources)
+gatchat_test_qcdm_LDADD = @GLIB_LIBS@
 DISTCHECK_CONFIGURE_FLAGS = --disable-datafiles
 MAINTAINERCLEANFILES = Makefile.in \
 	aclocal.m4 configure config.h.in config.sub config.guess \
@@ -741,6 +965,8 @@ $(srcdir)/config.h.in: @MAINTAINER_MODE_TRUE@ $(am__configure_deps)
 distclean-hdr:
 	-rm -f config.h stamp-h1
 include/version.h: $(top_builddir)/config.status $(top_srcdir)/include/version.h.in
+	cd $(top_builddir) && $(SHELL) ./config.status $@
+src/ofono.service: $(top_builddir)/config.status $(top_srcdir)/src/ofono.service.in
 	cd $(top_builddir) && $(SHELL) ./config.status $@
 
 clean-noinstPROGRAMS:
@@ -810,6 +1036,10 @@ gatchat/gatsyntax.$(OBJEXT): gatchat/$(am__dirstamp) \
 	gatchat/$(DEPDIR)/$(am__dirstamp)
 gatchat/ringbuffer.$(OBJEXT): gatchat/$(am__dirstamp) \
 	gatchat/$(DEPDIR)/$(am__dirstamp)
+gatchat/gatio.$(OBJEXT): gatchat/$(am__dirstamp) \
+	gatchat/$(DEPDIR)/$(am__dirstamp)
+gatchat/crc-ccitt.$(OBJEXT): gatchat/$(am__dirstamp) \
+	gatchat/$(DEPDIR)/$(am__dirstamp)
 gatchat/gatmux.$(OBJEXT): gatchat/$(am__dirstamp) \
 	gatchat/$(DEPDIR)/$(am__dirstamp)
 gatchat/gsm0710.$(OBJEXT): gatchat/$(am__dirstamp) \
@@ -820,9 +1050,30 @@ gatchat/gatutil.$(OBJEXT): gatchat/$(am__dirstamp) \
 	gatchat/$(DEPDIR)/$(am__dirstamp)
 gatchat/gatserver.$(OBJEXT): gatchat/$(am__dirstamp) \
 	gatchat/$(DEPDIR)/$(am__dirstamp)
+gatchat/gatrawip.$(OBJEXT): gatchat/$(am__dirstamp) \
+	gatchat/$(DEPDIR)/$(am__dirstamp)
+gatchat/gathdlc.$(OBJEXT): gatchat/$(am__dirstamp) \
+	gatchat/$(DEPDIR)/$(am__dirstamp)
+gatchat/gatppp.$(OBJEXT): gatchat/$(am__dirstamp) \
+	gatchat/$(DEPDIR)/$(am__dirstamp)
+gatchat/ppp_cp.$(OBJEXT): gatchat/$(am__dirstamp) \
+	gatchat/$(DEPDIR)/$(am__dirstamp)
+gatchat/ppp_lcp.$(OBJEXT): gatchat/$(am__dirstamp) \
+	gatchat/$(DEPDIR)/$(am__dirstamp)
+gatchat/ppp_auth.$(OBJEXT): gatchat/$(am__dirstamp) \
+	gatchat/$(DEPDIR)/$(am__dirstamp)
+gatchat/ppp_net.$(OBJEXT): gatchat/$(am__dirstamp) \
+	gatchat/$(DEPDIR)/$(am__dirstamp)
+gatchat/ppp_ipcp.$(OBJEXT): gatchat/$(am__dirstamp) \
+	gatchat/$(DEPDIR)/$(am__dirstamp)
 gatchat/gsmdial$(EXEEXT): $(gatchat_gsmdial_OBJECTS) $(gatchat_gsmdial_DEPENDENCIES) gatchat/$(am__dirstamp)
 	@rm -f gatchat/gsmdial$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(gatchat_gsmdial_OBJECTS) $(gatchat_gsmdial_LDADD) $(LIBS)
+gatchat/test-qcdm.$(OBJEXT): gatchat/$(am__dirstamp) \
+	gatchat/$(DEPDIR)/$(am__dirstamp)
+gatchat/test-qcdm$(EXEEXT): $(gatchat_test_qcdm_OBJECTS) $(gatchat_test_qcdm_DEPENDENCIES) gatchat/$(am__dirstamp)
+	@rm -f gatchat/test-qcdm$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(gatchat_test_qcdm_OBJECTS) $(gatchat_test_qcdm_LDADD) $(LIBS)
 gatchat/test-server.$(OBJEXT): gatchat/$(am__dirstamp) \
 	gatchat/$(DEPDIR)/$(am__dirstamp)
 gatchat/test-server$(EXEEXT): $(gatchat_test_server_OBJECTS) $(gatchat_test_server_DEPENDENCIES) gatchat/$(am__dirstamp)
@@ -836,9 +1087,11 @@ gdbus/$(DEPDIR)/$(am__dirstamp):
 	@: > gdbus/$(DEPDIR)/$(am__dirstamp)
 gdbus/mainloop.$(OBJEXT): gdbus/$(am__dirstamp) \
 	gdbus/$(DEPDIR)/$(am__dirstamp)
+gdbus/watch.$(OBJEXT): gdbus/$(am__dirstamp) \
+	gdbus/$(DEPDIR)/$(am__dirstamp)
 gdbus/object.$(OBJEXT): gdbus/$(am__dirstamp) \
 	gdbus/$(DEPDIR)/$(am__dirstamp)
-gdbus/watch.$(OBJEXT): gdbus/$(am__dirstamp) \
+gdbus/polkit.$(OBJEXT): gdbus/$(am__dirstamp) \
 	gdbus/$(DEPDIR)/$(am__dirstamp)
 plugins/$(am__dirstamp):
 	@$(MKDIR_P) plugins
@@ -848,19 +1101,21 @@ plugins/$(DEPDIR)/$(am__dirstamp):
 	@: > plugins/$(DEPDIR)/$(am__dirstamp)
 plugins/udev.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
-plugins/caif.$(OBJEXT): plugins/$(am__dirstamp) \
-	plugins/$(DEPDIR)/$(am__dirstamp)
 gisi/$(am__dirstamp):
 	@$(MKDIR_P) gisi
 	@: > gisi/$(am__dirstamp)
 gisi/$(DEPDIR)/$(am__dirstamp):
 	@$(MKDIR_P) gisi/$(DEPDIR)
 	@: > gisi/$(DEPDIR)/$(am__dirstamp)
+gisi/modem.$(OBJEXT): gisi/$(am__dirstamp) \
+	gisi/$(DEPDIR)/$(am__dirstamp)
 gisi/netlink.$(OBJEXT): gisi/$(am__dirstamp) \
 	gisi/$(DEPDIR)/$(am__dirstamp)
 gisi/socket.$(OBJEXT): gisi/$(am__dirstamp) \
 	gisi/$(DEPDIR)/$(am__dirstamp)
 gisi/client.$(OBJEXT): gisi/$(am__dirstamp) \
+	gisi/$(DEPDIR)/$(am__dirstamp)
+gisi/server.$(OBJEXT): gisi/$(am__dirstamp) \
 	gisi/$(DEPDIR)/$(am__dirstamp)
 gisi/pep.$(OBJEXT): gisi/$(am__dirstamp) \
 	gisi/$(DEPDIR)/$(am__dirstamp)
@@ -886,6 +1141,9 @@ drivers/isimodem/phonebook.$(OBJEXT):  \
 drivers/isimodem/devinfo.$(OBJEXT): drivers/isimodem/$(am__dirstamp) \
 	drivers/isimodem/$(DEPDIR)/$(am__dirstamp)
 drivers/isimodem/network-registration.$(OBJEXT):  \
+	drivers/isimodem/$(am__dirstamp) \
+	drivers/isimodem/$(DEPDIR)/$(am__dirstamp)
+drivers/isimodem/infoserver.$(OBJEXT):  \
 	drivers/isimodem/$(am__dirstamp) \
 	drivers/isimodem/$(DEPDIR)/$(am__dirstamp)
 drivers/isimodem/voicecall.$(OBJEXT):  \
@@ -916,6 +1174,20 @@ drivers/isimodem/call-meter.$(OBJEXT):  \
 drivers/isimodem/radio-settings.$(OBJEXT):  \
 	drivers/isimodem/$(am__dirstamp) \
 	drivers/isimodem/$(DEPDIR)/$(am__dirstamp)
+drivers/isimodem/gprs.$(OBJEXT): drivers/isimodem/$(am__dirstamp) \
+	drivers/isimodem/$(DEPDIR)/$(am__dirstamp)
+drivers/isimodem/gprs-context.$(OBJEXT):  \
+	drivers/isimodem/$(am__dirstamp) \
+	drivers/isimodem/$(DEPDIR)/$(am__dirstamp)
+drivers/isimodem/audio-settings.$(OBJEXT):  \
+	drivers/isimodem/$(am__dirstamp) \
+	drivers/isimodem/$(DEPDIR)/$(am__dirstamp)
+plugins/isigen.$(OBJEXT): plugins/$(am__dirstamp) \
+	plugins/$(DEPDIR)/$(am__dirstamp)
+plugins/n900.$(OBJEXT): plugins/$(am__dirstamp) \
+	plugins/$(DEPDIR)/$(am__dirstamp)
+plugins/nokia-gpio.$(OBJEXT): plugins/$(am__dirstamp) \
+	plugins/$(DEPDIR)/$(am__dirstamp)
 drivers/atmodem/$(am__dirstamp):
 	@$(MKDIR_P) drivers/atmodem
 	@: > drivers/atmodem/$(am__dirstamp)
@@ -941,6 +1213,10 @@ drivers/atmodem/network-registration.$(OBJEXT):  \
 	drivers/atmodem/$(DEPDIR)/$(am__dirstamp)
 drivers/atmodem/sim.$(OBJEXT): drivers/atmodem/$(am__dirstamp) \
 	drivers/atmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/atmodem/stk.$(OBJEXT): drivers/atmodem/$(am__dirstamp) \
+	drivers/atmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/atmodem/sim-poll.$(OBJEXT): drivers/atmodem/$(am__dirstamp) \
+	drivers/atmodem/$(DEPDIR)/$(am__dirstamp)
 drivers/atmodem/ussd.$(OBJEXT): drivers/atmodem/$(am__dirstamp) \
 	drivers/atmodem/$(DEPDIR)/$(am__dirstamp)
 drivers/atmodem/voicecall.$(OBJEXT): drivers/atmodem/$(am__dirstamp) \
@@ -964,6 +1240,35 @@ drivers/atmodem/gprs.$(OBJEXT): drivers/atmodem/$(am__dirstamp) \
 drivers/atmodem/gprs-context.$(OBJEXT):  \
 	drivers/atmodem/$(am__dirstamp) \
 	drivers/atmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/nwmodem/$(am__dirstamp):
+	@$(MKDIR_P) drivers/nwmodem
+	@: > drivers/nwmodem/$(am__dirstamp)
+drivers/nwmodem/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) drivers/nwmodem/$(DEPDIR)
+	@: > drivers/nwmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/nwmodem/nwmodem.$(OBJEXT): drivers/nwmodem/$(am__dirstamp) \
+	drivers/nwmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/nwmodem/radio-settings.$(OBJEXT):  \
+	drivers/nwmodem/$(am__dirstamp) \
+	drivers/nwmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/huaweimodem/$(am__dirstamp):
+	@$(MKDIR_P) drivers/huaweimodem
+	@: > drivers/huaweimodem/$(am__dirstamp)
+drivers/huaweimodem/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) drivers/huaweimodem/$(DEPDIR)
+	@: > drivers/huaweimodem/$(DEPDIR)/$(am__dirstamp)
+drivers/huaweimodem/huaweimodem.$(OBJEXT):  \
+	drivers/huaweimodem/$(am__dirstamp) \
+	drivers/huaweimodem/$(DEPDIR)/$(am__dirstamp)
+drivers/huaweimodem/voicecall.$(OBJEXT):  \
+	drivers/huaweimodem/$(am__dirstamp) \
+	drivers/huaweimodem/$(DEPDIR)/$(am__dirstamp)
+drivers/huaweimodem/audio-settings.$(OBJEXT):  \
+	drivers/huaweimodem/$(am__dirstamp) \
+	drivers/huaweimodem/$(DEPDIR)/$(am__dirstamp)
+drivers/huaweimodem/gprs-context.$(OBJEXT):  \
+	drivers/huaweimodem/$(am__dirstamp) \
+	drivers/huaweimodem/$(DEPDIR)/$(am__dirstamp)
 drivers/calypsomodem/$(am__dirstamp):
 	@$(MKDIR_P) drivers/calypsomodem
 	@: > drivers/calypsomodem/$(am__dirstamp)
@@ -974,6 +1279,9 @@ drivers/calypsomodem/calypsomodem.$(OBJEXT):  \
 	drivers/calypsomodem/$(am__dirstamp) \
 	drivers/calypsomodem/$(DEPDIR)/$(am__dirstamp)
 drivers/calypsomodem/voicecall.$(OBJEXT):  \
+	drivers/calypsomodem/$(am__dirstamp) \
+	drivers/calypsomodem/$(DEPDIR)/$(am__dirstamp)
+drivers/calypsomodem/stk.$(OBJEXT):  \
 	drivers/calypsomodem/$(am__dirstamp) \
 	drivers/calypsomodem/$(DEPDIR)/$(am__dirstamp)
 drivers/hfpmodem/$(am__dirstamp):
@@ -1004,6 +1312,8 @@ drivers/mbmmodem/mbmmodem.$(OBJEXT): drivers/mbmmodem/$(am__dirstamp) \
 drivers/mbmmodem/gprs-context.$(OBJEXT):  \
 	drivers/mbmmodem/$(am__dirstamp) \
 	drivers/mbmmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/mbmmodem/stk.$(OBJEXT): drivers/mbmmodem/$(am__dirstamp) \
+	drivers/mbmmodem/$(DEPDIR)/$(am__dirstamp)
 drivers/hsomodem/$(am__dirstamp):
 	@$(MKDIR_P) drivers/hsomodem
 	@: > drivers/hsomodem/$(am__dirstamp)
@@ -1015,6 +1325,31 @@ drivers/hsomodem/hsomodem.$(OBJEXT): drivers/hsomodem/$(am__dirstamp) \
 drivers/hsomodem/gprs-context.$(OBJEXT):  \
 	drivers/hsomodem/$(am__dirstamp) \
 	drivers/hsomodem/$(DEPDIR)/$(am__dirstamp)
+drivers/hsomodem/radio-settings.$(OBJEXT):  \
+	drivers/hsomodem/$(am__dirstamp) \
+	drivers/hsomodem/$(DEPDIR)/$(am__dirstamp)
+drivers/ifxmodem/$(am__dirstamp):
+	@$(MKDIR_P) drivers/ifxmodem
+	@: > drivers/ifxmodem/$(am__dirstamp)
+drivers/ifxmodem/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) drivers/ifxmodem/$(DEPDIR)
+	@: > drivers/ifxmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/ifxmodem/ifxmodem.$(OBJEXT): drivers/ifxmodem/$(am__dirstamp) \
+	drivers/ifxmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/ifxmodem/voicecall.$(OBJEXT):  \
+	drivers/ifxmodem/$(am__dirstamp) \
+	drivers/ifxmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/ifxmodem/audio-settings.$(OBJEXT):  \
+	drivers/ifxmodem/$(am__dirstamp) \
+	drivers/ifxmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/ifxmodem/radio-settings.$(OBJEXT):  \
+	drivers/ifxmodem/$(am__dirstamp) \
+	drivers/ifxmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/ifxmodem/gprs-context.$(OBJEXT):  \
+	drivers/ifxmodem/$(am__dirstamp) \
+	drivers/ifxmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/ifxmodem/stk.$(OBJEXT): drivers/ifxmodem/$(am__dirstamp) \
+	drivers/ifxmodem/$(DEPDIR)/$(am__dirstamp)
 drivers/stemodem/$(am__dirstamp):
 	@$(MKDIR_P) drivers/stemodem
 	@: > drivers/stemodem/$(am__dirstamp)
@@ -1026,16 +1361,20 @@ drivers/stemodem/stemodem.$(OBJEXT): drivers/stemodem/$(am__dirstamp) \
 drivers/stemodem/voicecall.$(OBJEXT):  \
 	drivers/stemodem/$(am__dirstamp) \
 	drivers/stemodem/$(DEPDIR)/$(am__dirstamp)
+drivers/stemodem/radio-settings.$(OBJEXT):  \
+	drivers/stemodem/$(am__dirstamp) \
+	drivers/stemodem/$(DEPDIR)/$(am__dirstamp)
+drivers/stemodem/caif_rtnl.$(OBJEXT):  \
+	drivers/stemodem/$(am__dirstamp) \
+	drivers/stemodem/$(DEPDIR)/$(am__dirstamp)
 drivers/stemodem/gprs-context.$(OBJEXT):  \
 	drivers/stemodem/$(am__dirstamp) \
 	drivers/stemodem/$(DEPDIR)/$(am__dirstamp)
-plugins/modemconf.$(OBJEXT): plugins/$(am__dirstamp) \
-	plugins/$(DEPDIR)/$(am__dirstamp)
 plugins/phonesim.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
-plugins/atgen.$(OBJEXT): plugins/$(am__dirstamp) \
-	plugins/$(DEPDIR)/$(am__dirstamp)
 plugins/g1.$(OBJEXT): plugins/$(am__dirstamp) \
+	plugins/$(DEPDIR)/$(am__dirstamp)
+plugins/wavecom.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
 plugins/calypso.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
@@ -1043,17 +1382,39 @@ plugins/mbm.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
 plugins/hso.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
+plugins/zte.$(OBJEXT): plugins/$(am__dirstamp) \
+	plugins/$(DEPDIR)/$(am__dirstamp)
 plugins/huawei.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
 plugins/novatel.$(OBJEXT): plugins/$(am__dirstamp) \
+	plugins/$(DEPDIR)/$(am__dirstamp)
+plugins/nokia.$(OBJEXT): plugins/$(am__dirstamp) \
+	plugins/$(DEPDIR)/$(am__dirstamp)
+plugins/bluetooth.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
 plugins/hfp.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
 plugins/palmpre.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
+plugins/ifx.$(OBJEXT): plugins/$(am__dirstamp) \
+	plugins/$(DEPDIR)/$(am__dirstamp)
 plugins/ste.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
-plugins/example_history.$(OBJEXT): plugins/$(am__dirstamp) \
+plugins/caif.$(OBJEXT): plugins/$(am__dirstamp) \
+	plugins/$(DEPDIR)/$(am__dirstamp)
+examples/$(am__dirstamp):
+	@$(MKDIR_P) examples
+	@: > examples/$(am__dirstamp)
+examples/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) examples/$(DEPDIR)
+	@: > examples/$(DEPDIR)/$(am__dirstamp)
+examples/history.$(OBJEXT): examples/$(am__dirstamp) \
+	examples/$(DEPDIR)/$(am__dirstamp)
+examples/nettime.$(OBJEXT): examples/$(am__dirstamp) \
+	examples/$(DEPDIR)/$(am__dirstamp)
+plugins/smart-messaging.$(OBJEXT): plugins/$(am__dirstamp) \
+	plugins/$(DEPDIR)/$(am__dirstamp)
+plugins/push-notification.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
 src/$(am__dirstamp):
 	@$(MKDIR_P) src
@@ -1090,6 +1451,7 @@ src/ssn.$(OBJEXT): src/$(am__dirstamp) src/$(DEPDIR)/$(am__dirstamp)
 src/call-barring.$(OBJEXT): src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
 src/sim.$(OBJEXT): src/$(am__dirstamp) src/$(DEPDIR)/$(am__dirstamp)
+src/stk.$(OBJEXT): src/$(am__dirstamp) src/$(DEPDIR)/$(am__dirstamp)
 src/phonebook.$(OBJEXT): src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
 src/history.$(OBJEXT): src/$(am__dirstamp) \
@@ -1108,9 +1470,31 @@ src/gprs.$(OBJEXT): src/$(am__dirstamp) src/$(DEPDIR)/$(am__dirstamp)
 src/idmap.$(OBJEXT): src/$(am__dirstamp) src/$(DEPDIR)/$(am__dirstamp)
 src/radio-settings.$(OBJEXT): src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
+src/stkutil.$(OBJEXT): src/$(am__dirstamp) \
+	src/$(DEPDIR)/$(am__dirstamp)
+src/nettime.$(OBJEXT): src/$(am__dirstamp) \
+	src/$(DEPDIR)/$(am__dirstamp)
+src/stkagent.$(OBJEXT): src/$(am__dirstamp) \
+	src/$(DEPDIR)/$(am__dirstamp)
+src/simfs.$(OBJEXT): src/$(am__dirstamp) src/$(DEPDIR)/$(am__dirstamp)
+src/audio-settings.$(OBJEXT): src/$(am__dirstamp) \
+	src/$(DEPDIR)/$(am__dirstamp)
+src/smsagent.$(OBJEXT): src/$(am__dirstamp) \
+	src/$(DEPDIR)/$(am__dirstamp)
 src/ofonod$(EXEEXT): $(src_ofonod_OBJECTS) $(src_ofonod_DEPENDENCIES) src/$(am__dirstamp)
 	@rm -f src/ofonod$(EXEEXT)
 	$(AM_V_CCLD)$(src_ofonod_LINK) $(src_ofonod_OBJECTS) $(src_ofonod_LDADD) $(LIBS)
+tools/$(am__dirstamp):
+	@$(MKDIR_P) tools
+	@: > tools/$(am__dirstamp)
+tools/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) tools/$(DEPDIR)
+	@: > tools/$(DEPDIR)/$(am__dirstamp)
+tools/huawei-audio.$(OBJEXT): tools/$(am__dirstamp) \
+	tools/$(DEPDIR)/$(am__dirstamp)
+tools/huawei-audio$(EXEEXT): $(tools_huawei_audio_OBJECTS) $(tools_huawei_audio_DEPENDENCIES) tools/$(am__dirstamp)
+	@rm -f tools/huawei-audio$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(tools_huawei_audio_OBJECTS) $(tools_huawei_audio_LDADD) $(LIBS)
 unit/$(am__dirstamp):
 	@$(MKDIR_P) unit
 	@: > unit/$(am__dirstamp)
@@ -1147,6 +1531,11 @@ unit/test-sms.$(OBJEXT): unit/$(am__dirstamp) \
 unit/test-sms$(EXEEXT): $(unit_test_sms_OBJECTS) $(unit_test_sms_DEPENDENCIES) unit/$(am__dirstamp)
 	@rm -f unit/test-sms$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(unit_test_sms_OBJECTS) $(unit_test_sms_LDADD) $(LIBS)
+unit/test-stkutil.$(OBJEXT): unit/$(am__dirstamp) \
+	unit/$(DEPDIR)/$(am__dirstamp)
+unit/test-stkutil$(EXEEXT): $(unit_test_stkutil_OBJECTS) $(unit_test_stkutil_DEPENDENCIES) unit/$(am__dirstamp)
+	@rm -f unit/test-stkutil$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(unit_test_stkutil_OBJECTS) $(unit_test_stkutil_LDADD) $(LIBS)
 unit/test-util.$(OBJEXT): unit/$(am__dirstamp) \
 	unit/$(DEPDIR)/$(am__dirstamp)
 unit/test-util$(EXEEXT): $(unit_test_util_OBJECTS) $(unit_test_util_DEPENDENCIES) unit/$(am__dirstamp)
@@ -1202,12 +1591,15 @@ mostlyclean-compile:
 	-rm -f drivers/atmodem/gprs.$(OBJEXT)
 	-rm -f drivers/atmodem/network-registration.$(OBJEXT)
 	-rm -f drivers/atmodem/phonebook.$(OBJEXT)
+	-rm -f drivers/atmodem/sim-poll.$(OBJEXT)
 	-rm -f drivers/atmodem/sim.$(OBJEXT)
 	-rm -f drivers/atmodem/sms.$(OBJEXT)
 	-rm -f drivers/atmodem/ssn.$(OBJEXT)
+	-rm -f drivers/atmodem/stk.$(OBJEXT)
 	-rm -f drivers/atmodem/ussd.$(OBJEXT)
 	-rm -f drivers/atmodem/voicecall.$(OBJEXT)
 	-rm -f drivers/calypsomodem/calypsomodem.$(OBJEXT)
+	-rm -f drivers/calypsomodem/stk.$(OBJEXT)
 	-rm -f drivers/calypsomodem/voicecall.$(OBJEXT)
 	-rm -f drivers/hfpmodem/call-volume.$(OBJEXT)
 	-rm -f drivers/hfpmodem/hfpmodem.$(OBJEXT)
@@ -1215,6 +1607,18 @@ mostlyclean-compile:
 	-rm -f drivers/hfpmodem/voicecall.$(OBJEXT)
 	-rm -f drivers/hsomodem/gprs-context.$(OBJEXT)
 	-rm -f drivers/hsomodem/hsomodem.$(OBJEXT)
+	-rm -f drivers/hsomodem/radio-settings.$(OBJEXT)
+	-rm -f drivers/huaweimodem/audio-settings.$(OBJEXT)
+	-rm -f drivers/huaweimodem/gprs-context.$(OBJEXT)
+	-rm -f drivers/huaweimodem/huaweimodem.$(OBJEXT)
+	-rm -f drivers/huaweimodem/voicecall.$(OBJEXT)
+	-rm -f drivers/ifxmodem/audio-settings.$(OBJEXT)
+	-rm -f drivers/ifxmodem/gprs-context.$(OBJEXT)
+	-rm -f drivers/ifxmodem/ifxmodem.$(OBJEXT)
+	-rm -f drivers/ifxmodem/radio-settings.$(OBJEXT)
+	-rm -f drivers/ifxmodem/stk.$(OBJEXT)
+	-rm -f drivers/ifxmodem/voicecall.$(OBJEXT)
+	-rm -f drivers/isimodem/audio-settings.$(OBJEXT)
 	-rm -f drivers/isimodem/call-barring.$(OBJEXT)
 	-rm -f drivers/isimodem/call-forwarding.$(OBJEXT)
 	-rm -f drivers/isimodem/call-meter.$(OBJEXT)
@@ -1222,6 +1626,9 @@ mostlyclean-compile:
 	-rm -f drivers/isimodem/cbs.$(OBJEXT)
 	-rm -f drivers/isimodem/debug.$(OBJEXT)
 	-rm -f drivers/isimodem/devinfo.$(OBJEXT)
+	-rm -f drivers/isimodem/gprs-context.$(OBJEXT)
+	-rm -f drivers/isimodem/gprs.$(OBJEXT)
+	-rm -f drivers/isimodem/infoserver.$(OBJEXT)
 	-rm -f drivers/isimodem/isimodem.$(OBJEXT)
 	-rm -f drivers/isimodem/network-registration.$(OBJEXT)
 	-rm -f drivers/isimodem/phonebook.$(OBJEXT)
@@ -1233,11 +1640,23 @@ mostlyclean-compile:
 	-rm -f drivers/isimodem/voicecall.$(OBJEXT)
 	-rm -f drivers/mbmmodem/gprs-context.$(OBJEXT)
 	-rm -f drivers/mbmmodem/mbmmodem.$(OBJEXT)
+	-rm -f drivers/mbmmodem/stk.$(OBJEXT)
+	-rm -f drivers/nwmodem/nwmodem.$(OBJEXT)
+	-rm -f drivers/nwmodem/radio-settings.$(OBJEXT)
+	-rm -f drivers/stemodem/caif_rtnl.$(OBJEXT)
 	-rm -f drivers/stemodem/gprs-context.$(OBJEXT)
+	-rm -f drivers/stemodem/radio-settings.$(OBJEXT)
 	-rm -f drivers/stemodem/stemodem.$(OBJEXT)
 	-rm -f drivers/stemodem/voicecall.$(OBJEXT)
+	-rm -f examples/history.$(OBJEXT)
+	-rm -f examples/nettime.$(OBJEXT)
+	-rm -f gatchat/crc-ccitt.$(OBJEXT)
 	-rm -f gatchat/gatchat.$(OBJEXT)
+	-rm -f gatchat/gathdlc.$(OBJEXT)
+	-rm -f gatchat/gatio.$(OBJEXT)
 	-rm -f gatchat/gatmux.$(OBJEXT)
+	-rm -f gatchat/gatppp.$(OBJEXT)
+	-rm -f gatchat/gatrawip.$(OBJEXT)
 	-rm -f gatchat/gatresult.$(OBJEXT)
 	-rm -f gatchat/gatserver.$(OBJEXT)
 	-rm -f gatchat/gatsyntax.$(OBJEXT)
@@ -1245,33 +1664,50 @@ mostlyclean-compile:
 	-rm -f gatchat/gatutil.$(OBJEXT)
 	-rm -f gatchat/gsm0710.$(OBJEXT)
 	-rm -f gatchat/gsmdial.$(OBJEXT)
+	-rm -f gatchat/ppp_auth.$(OBJEXT)
+	-rm -f gatchat/ppp_cp.$(OBJEXT)
+	-rm -f gatchat/ppp_ipcp.$(OBJEXT)
+	-rm -f gatchat/ppp_lcp.$(OBJEXT)
+	-rm -f gatchat/ppp_net.$(OBJEXT)
 	-rm -f gatchat/ringbuffer.$(OBJEXT)
+	-rm -f gatchat/test-qcdm.$(OBJEXT)
 	-rm -f gatchat/test-server.$(OBJEXT)
 	-rm -f gdbus/mainloop.$(OBJEXT)
 	-rm -f gdbus/object.$(OBJEXT)
+	-rm -f gdbus/polkit.$(OBJEXT)
 	-rm -f gdbus/watch.$(OBJEXT)
 	-rm -f gisi/client.$(OBJEXT)
 	-rm -f gisi/iter.$(OBJEXT)
+	-rm -f gisi/modem.$(OBJEXT)
 	-rm -f gisi/netlink.$(OBJEXT)
 	-rm -f gisi/pep.$(OBJEXT)
 	-rm -f gisi/pipe.$(OBJEXT)
+	-rm -f gisi/server.$(OBJEXT)
 	-rm -f gisi/socket.$(OBJEXT)
 	-rm -f gisi/verify.$(OBJEXT)
-	-rm -f plugins/atgen.$(OBJEXT)
+	-rm -f plugins/bluetooth.$(OBJEXT)
 	-rm -f plugins/caif.$(OBJEXT)
 	-rm -f plugins/calypso.$(OBJEXT)
-	-rm -f plugins/example_history.$(OBJEXT)
 	-rm -f plugins/g1.$(OBJEXT)
 	-rm -f plugins/hfp.$(OBJEXT)
 	-rm -f plugins/hso.$(OBJEXT)
 	-rm -f plugins/huawei.$(OBJEXT)
+	-rm -f plugins/ifx.$(OBJEXT)
+	-rm -f plugins/isigen.$(OBJEXT)
 	-rm -f plugins/mbm.$(OBJEXT)
-	-rm -f plugins/modemconf.$(OBJEXT)
+	-rm -f plugins/n900.$(OBJEXT)
+	-rm -f plugins/nokia-gpio.$(OBJEXT)
+	-rm -f plugins/nokia.$(OBJEXT)
 	-rm -f plugins/novatel.$(OBJEXT)
 	-rm -f plugins/palmpre.$(OBJEXT)
 	-rm -f plugins/phonesim.$(OBJEXT)
+	-rm -f plugins/push-notification.$(OBJEXT)
+	-rm -f plugins/smart-messaging.$(OBJEXT)
 	-rm -f plugins/ste.$(OBJEXT)
 	-rm -f plugins/udev.$(OBJEXT)
+	-rm -f plugins/wavecom.$(OBJEXT)
+	-rm -f plugins/zte.$(OBJEXT)
+	-rm -f src/audio-settings.$(OBJEXT)
 	-rm -f src/call-barring.$(OBJEXT)
 	-rm -f src/call-forwarding.$(OBJEXT)
 	-rm -f src/call-meter.$(OBJEXT)
@@ -1288,26 +1724,34 @@ mostlyclean-compile:
 	-rm -f src/manager.$(OBJEXT)
 	-rm -f src/message-waiting.$(OBJEXT)
 	-rm -f src/modem.$(OBJEXT)
+	-rm -f src/nettime.$(OBJEXT)
 	-rm -f src/network.$(OBJEXT)
 	-rm -f src/phonebook.$(OBJEXT)
 	-rm -f src/plugin.$(OBJEXT)
 	-rm -f src/radio-settings.$(OBJEXT)
 	-rm -f src/sim.$(OBJEXT)
+	-rm -f src/simfs.$(OBJEXT)
 	-rm -f src/simutil.$(OBJEXT)
 	-rm -f src/sms.$(OBJEXT)
+	-rm -f src/smsagent.$(OBJEXT)
 	-rm -f src/smsutil.$(OBJEXT)
 	-rm -f src/ssn.$(OBJEXT)
+	-rm -f src/stk.$(OBJEXT)
+	-rm -f src/stkagent.$(OBJEXT)
+	-rm -f src/stkutil.$(OBJEXT)
 	-rm -f src/storage.$(OBJEXT)
 	-rm -f src/ussd.$(OBJEXT)
 	-rm -f src/util.$(OBJEXT)
 	-rm -f src/voicecall.$(OBJEXT)
 	-rm -f src/watch.$(OBJEXT)
+	-rm -f tools/huawei-audio.$(OBJEXT)
 	-rm -f unit/test-caif.$(OBJEXT)
 	-rm -f unit/test-common.$(OBJEXT)
 	-rm -f unit/test-idmap.$(OBJEXT)
 	-rm -f unit/test-mux.$(OBJEXT)
 	-rm -f unit/test-simutil.$(OBJEXT)
 	-rm -f unit/test-sms.$(OBJEXT)
+	-rm -f unit/test-stkutil.$(OBJEXT)
 	-rm -f unit/test-util.$(OBJEXT)
 
 distclean-compile:
@@ -1326,12 +1770,15 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/gprs.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/network-registration.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/phonebook.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/sim-poll.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/sim.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/sms.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/ssn.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/stk.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/ussd.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/voicecall.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/calypsomodem/$(DEPDIR)/calypsomodem.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/calypsomodem/$(DEPDIR)/stk.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/calypsomodem/$(DEPDIR)/voicecall.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/hfpmodem/$(DEPDIR)/call-volume.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/hfpmodem/$(DEPDIR)/hfpmodem.Po@am__quote@
@@ -1339,6 +1786,18 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/hfpmodem/$(DEPDIR)/voicecall.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/hsomodem/$(DEPDIR)/gprs-context.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/hsomodem/$(DEPDIR)/hsomodem.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/hsomodem/$(DEPDIR)/radio-settings.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/huaweimodem/$(DEPDIR)/audio-settings.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/huaweimodem/$(DEPDIR)/gprs-context.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/huaweimodem/$(DEPDIR)/huaweimodem.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/huaweimodem/$(DEPDIR)/voicecall.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/ifxmodem/$(DEPDIR)/audio-settings.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/ifxmodem/$(DEPDIR)/gprs-context.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/ifxmodem/$(DEPDIR)/ifxmodem.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/ifxmodem/$(DEPDIR)/radio-settings.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/ifxmodem/$(DEPDIR)/stk.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/ifxmodem/$(DEPDIR)/voicecall.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/isimodem/$(DEPDIR)/audio-settings.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/isimodem/$(DEPDIR)/call-barring.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/isimodem/$(DEPDIR)/call-forwarding.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/isimodem/$(DEPDIR)/call-meter.Po@am__quote@
@@ -1346,6 +1805,9 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/isimodem/$(DEPDIR)/cbs.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/isimodem/$(DEPDIR)/debug.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/isimodem/$(DEPDIR)/devinfo.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/isimodem/$(DEPDIR)/gprs-context.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/isimodem/$(DEPDIR)/gprs.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/isimodem/$(DEPDIR)/infoserver.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/isimodem/$(DEPDIR)/isimodem.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/isimodem/$(DEPDIR)/network-registration.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/isimodem/$(DEPDIR)/phonebook.Po@am__quote@
@@ -1357,11 +1819,23 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/isimodem/$(DEPDIR)/voicecall.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/mbmmodem/$(DEPDIR)/gprs-context.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/mbmmodem/$(DEPDIR)/mbmmodem.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/mbmmodem/$(DEPDIR)/stk.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/nwmodem/$(DEPDIR)/nwmodem.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/nwmodem/$(DEPDIR)/radio-settings.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/stemodem/$(DEPDIR)/caif_rtnl.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/stemodem/$(DEPDIR)/gprs-context.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/stemodem/$(DEPDIR)/radio-settings.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/stemodem/$(DEPDIR)/stemodem.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/stemodem/$(DEPDIR)/voicecall.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@examples/$(DEPDIR)/history.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@examples/$(DEPDIR)/nettime.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/crc-ccitt.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/gatchat.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/gathdlc.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/gatio.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/gatmux.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/gatppp.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/gatrawip.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/gatresult.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/gatserver.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/gatsyntax.Po@am__quote@
@@ -1369,33 +1843,50 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/gatutil.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/gsm0710.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/gsmdial.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/ppp_auth.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/ppp_cp.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/ppp_ipcp.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/ppp_lcp.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/ppp_net.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/ringbuffer.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/test-qcdm.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/test-server.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gdbus/$(DEPDIR)/mainloop.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gdbus/$(DEPDIR)/object.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@gdbus/$(DEPDIR)/polkit.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gdbus/$(DEPDIR)/watch.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gisi/$(DEPDIR)/client.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gisi/$(DEPDIR)/iter.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@gisi/$(DEPDIR)/modem.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gisi/$(DEPDIR)/netlink.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gisi/$(DEPDIR)/pep.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gisi/$(DEPDIR)/pipe.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@gisi/$(DEPDIR)/server.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gisi/$(DEPDIR)/socket.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gisi/$(DEPDIR)/verify.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/atgen.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/bluetooth.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/caif.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/calypso.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/example_history.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/g1.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/hfp.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/hso.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/huawei.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/ifx.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/isigen.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/mbm.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/modemconf.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/n900.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/nokia-gpio.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/nokia.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/novatel.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/palmpre.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/phonesim.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/push-notification.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/smart-messaging.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/ste.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/udev.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/wavecom.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/zte.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/audio-settings.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/call-barring.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/call-forwarding.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/call-meter.Po@am__quote@
@@ -1412,26 +1903,34 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/manager.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/message-waiting.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/modem.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/nettime.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/network.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/phonebook.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/plugin.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/radio-settings.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/sim.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/simfs.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/simutil.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/sms.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/smsagent.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/smsutil.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/ssn.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/stk.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/stkagent.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/stkutil.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/storage.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/ussd.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/util.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/voicecall.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/watch.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@tools/$(DEPDIR)/huawei-audio.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@unit/$(DEPDIR)/test-caif.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@unit/$(DEPDIR)/test-common.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@unit/$(DEPDIR)/test-idmap.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@unit/$(DEPDIR)/test-mux.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@unit/$(DEPDIR)/test-simutil.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@unit/$(DEPDIR)/test-sms.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@unit/$(DEPDIR)/test-stkutil.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@unit/$(DEPDIR)/test-util.Po@am__quote@
 
 .c.o:
@@ -1468,6 +1967,7 @@ clean-libtool:
 	-rm -rf .libs _libs
 	-rm -rf gatchat/.libs gatchat/_libs
 	-rm -rf src/.libs src/_libs
+	-rm -rf tools/.libs tools/_libs
 	-rm -rf unit/.libs unit/_libs
 
 distclean-libtool:
@@ -1530,26 +2030,26 @@ uninstall-confDATA:
 	test -n "$$files" || exit 0; \
 	echo " ( cd '$(DESTDIR)$(confdir)' && rm -f" $$files ")"; \
 	cd "$(DESTDIR)$(confdir)" && rm -f $$files
-install-dbusDATA: $(dbus_DATA)
+install-dbusconfDATA: $(dbusconf_DATA)
 	@$(NORMAL_INSTALL)
-	test -z "$(dbusdir)" || $(MKDIR_P) "$(DESTDIR)$(dbusdir)"
-	@list='$(dbus_DATA)'; test -n "$(dbusdir)" || list=; \
+	test -z "$(dbusconfdir)" || $(MKDIR_P) "$(DESTDIR)$(dbusconfdir)"
+	@list='$(dbusconf_DATA)'; test -n "$(dbusconfdir)" || list=; \
 	for p in $$list; do \
 	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
 	  echo "$$d$$p"; \
 	done | $(am__base_list) | \
 	while read files; do \
-	  echo " $(INSTALL_DATA) $$files '$(DESTDIR)$(dbusdir)'"; \
-	  $(INSTALL_DATA) $$files "$(DESTDIR)$(dbusdir)" || exit $$?; \
+	  echo " $(INSTALL_DATA) $$files '$(DESTDIR)$(dbusconfdir)'"; \
+	  $(INSTALL_DATA) $$files "$(DESTDIR)$(dbusconfdir)" || exit $$?; \
 	done
 
-uninstall-dbusDATA:
+uninstall-dbusconfDATA:
 	@$(NORMAL_UNINSTALL)
-	@list='$(dbus_DATA)'; test -n "$(dbusdir)" || list=; \
+	@list='$(dbusconf_DATA)'; test -n "$(dbusconfdir)" || list=; \
 	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
 	test -n "$$files" || exit 0; \
-	echo " ( cd '$(DESTDIR)$(dbusdir)' && rm -f" $$files ")"; \
-	cd "$(DESTDIR)$(dbusdir)" && rm -f $$files
+	echo " ( cd '$(DESTDIR)$(dbusconfdir)' && rm -f" $$files ")"; \
+	cd "$(DESTDIR)$(dbusconfdir)" && rm -f $$files
 install-rulesDATA: $(rules_DATA)
 	@$(NORMAL_INSTALL)
 	test -z "$(rulesdir)" || $(MKDIR_P) "$(DESTDIR)$(rulesdir)"
@@ -1590,6 +2090,26 @@ uninstall-stateDATA:
 	test -n "$$files" || exit 0; \
 	echo " ( cd '$(DESTDIR)$(statedir)' && rm -f" $$files ")"; \
 	cd "$(DESTDIR)$(statedir)" && rm -f $$files
+install-systemdunitDATA: $(systemdunit_DATA)
+	@$(NORMAL_INSTALL)
+	test -z "$(systemdunitdir)" || $(MKDIR_P) "$(DESTDIR)$(systemdunitdir)"
+	@list='$(systemdunit_DATA)'; test -n "$(systemdunitdir)" || list=; \
+	for p in $$list; do \
+	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+	  echo "$$d$$p"; \
+	done | $(am__base_list) | \
+	while read files; do \
+	  echo " $(INSTALL_DATA) $$files '$(DESTDIR)$(systemdunitdir)'"; \
+	  $(INSTALL_DATA) $$files "$(DESTDIR)$(systemdunitdir)" || exit $$?; \
+	done
+
+uninstall-systemdunitDATA:
+	@$(NORMAL_UNINSTALL)
+	@list='$(systemdunit_DATA)'; test -n "$(systemdunitdir)" || list=; \
+	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
+	test -n "$$files" || exit 0; \
+	echo " ( cd '$(DESTDIR)$(systemdunitdir)' && rm -f" $$files ")"; \
+	cd "$(DESTDIR)$(systemdunitdir)" && rm -f $$files
 install-includeHEADERS: $(include_HEADERS)
 	@$(NORMAL_INSTALL)
 	test -z "$(includedir)" || $(MKDIR_P) "$(DESTDIR)$(includedir)"
@@ -1848,7 +2368,7 @@ check: check-am
 all-am: Makefile $(PROGRAMS) $(SCRIPTS) $(MANS) $(DATA) $(HEADERS) \
 		config.h
 installdirs:
-	for dir in "$(DESTDIR)$(sbindir)" "$(DESTDIR)$(testdir)" "$(DESTDIR)$(man8dir)" "$(DESTDIR)$(confdir)" "$(DESTDIR)$(dbusdir)" "$(DESTDIR)$(rulesdir)" "$(DESTDIR)$(statedir)" "$(DESTDIR)$(includedir)" "$(DESTDIR)$(includedir)"; do \
+	for dir in "$(DESTDIR)$(sbindir)" "$(DESTDIR)$(testdir)" "$(DESTDIR)$(man8dir)" "$(DESTDIR)$(confdir)" "$(DESTDIR)$(dbusconfdir)" "$(DESTDIR)$(rulesdir)" "$(DESTDIR)$(statedir)" "$(DESTDIR)$(systemdunitdir)" "$(DESTDIR)$(includedir)" "$(DESTDIR)$(includedir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
 install: install-am
@@ -1881,12 +2401,20 @@ distclean-generic:
 	-rm -f drivers/hfpmodem/$(am__dirstamp)
 	-rm -f drivers/hsomodem/$(DEPDIR)/$(am__dirstamp)
 	-rm -f drivers/hsomodem/$(am__dirstamp)
+	-rm -f drivers/huaweimodem/$(DEPDIR)/$(am__dirstamp)
+	-rm -f drivers/huaweimodem/$(am__dirstamp)
+	-rm -f drivers/ifxmodem/$(DEPDIR)/$(am__dirstamp)
+	-rm -f drivers/ifxmodem/$(am__dirstamp)
 	-rm -f drivers/isimodem/$(DEPDIR)/$(am__dirstamp)
 	-rm -f drivers/isimodem/$(am__dirstamp)
 	-rm -f drivers/mbmmodem/$(DEPDIR)/$(am__dirstamp)
 	-rm -f drivers/mbmmodem/$(am__dirstamp)
+	-rm -f drivers/nwmodem/$(DEPDIR)/$(am__dirstamp)
+	-rm -f drivers/nwmodem/$(am__dirstamp)
 	-rm -f drivers/stemodem/$(DEPDIR)/$(am__dirstamp)
 	-rm -f drivers/stemodem/$(am__dirstamp)
+	-rm -f examples/$(DEPDIR)/$(am__dirstamp)
+	-rm -f examples/$(am__dirstamp)
 	-rm -f gatchat/$(DEPDIR)/$(am__dirstamp)
 	-rm -f gatchat/$(am__dirstamp)
 	-rm -f gdbus/$(DEPDIR)/$(am__dirstamp)
@@ -1897,6 +2425,8 @@ distclean-generic:
 	-rm -f plugins/$(am__dirstamp)
 	-rm -f src/$(DEPDIR)/$(am__dirstamp)
 	-rm -f src/$(am__dirstamp)
+	-rm -f tools/$(DEPDIR)/$(am__dirstamp)
+	-rm -f tools/$(am__dirstamp)
 	-rm -f unit/$(DEPDIR)/$(am__dirstamp)
 	-rm -f unit/$(am__dirstamp)
 
@@ -1911,7 +2441,7 @@ clean-am: clean-generic clean-libtool clean-local clean-noinstPROGRAMS \
 
 distclean: distclean-am
 	-rm -f $(am__CONFIG_DISTCLEAN_FILES)
-	-rm -rf drivers/atmodem/$(DEPDIR) drivers/calypsomodem/$(DEPDIR) drivers/hfpmodem/$(DEPDIR) drivers/hsomodem/$(DEPDIR) drivers/isimodem/$(DEPDIR) drivers/mbmmodem/$(DEPDIR) drivers/stemodem/$(DEPDIR) gatchat/$(DEPDIR) gdbus/$(DEPDIR) gisi/$(DEPDIR) plugins/$(DEPDIR) src/$(DEPDIR) unit/$(DEPDIR)
+	-rm -rf drivers/atmodem/$(DEPDIR) drivers/calypsomodem/$(DEPDIR) drivers/hfpmodem/$(DEPDIR) drivers/hsomodem/$(DEPDIR) drivers/huaweimodem/$(DEPDIR) drivers/ifxmodem/$(DEPDIR) drivers/isimodem/$(DEPDIR) drivers/mbmmodem/$(DEPDIR) drivers/nwmodem/$(DEPDIR) drivers/stemodem/$(DEPDIR) examples/$(DEPDIR) gatchat/$(DEPDIR) gdbus/$(DEPDIR) gisi/$(DEPDIR) plugins/$(DEPDIR) src/$(DEPDIR) tools/$(DEPDIR) unit/$(DEPDIR)
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-hdr distclean-libtool distclean-tags
@@ -1928,10 +2458,10 @@ info: info-am
 
 info-am:
 
-install-data-am: install-confDATA install-dbusDATA \
+install-data-am: install-confDATA install-dbusconfDATA \
 	install-includeHEADERS install-man \
 	install-nodist_includeHEADERS install-rulesDATA \
-	install-stateDATA install-testSCRIPTS
+	install-stateDATA install-systemdunitDATA install-testSCRIPTS
 
 install-dvi: install-dvi-am
 
@@ -1962,7 +2492,7 @@ installcheck-am:
 maintainer-clean: maintainer-clean-am
 	-rm -f $(am__CONFIG_DISTCLEAN_FILES)
 	-rm -rf $(top_srcdir)/autom4te.cache
-	-rm -rf drivers/atmodem/$(DEPDIR) drivers/calypsomodem/$(DEPDIR) drivers/hfpmodem/$(DEPDIR) drivers/hsomodem/$(DEPDIR) drivers/isimodem/$(DEPDIR) drivers/mbmmodem/$(DEPDIR) drivers/stemodem/$(DEPDIR) gatchat/$(DEPDIR) gdbus/$(DEPDIR) gisi/$(DEPDIR) plugins/$(DEPDIR) src/$(DEPDIR) unit/$(DEPDIR)
+	-rm -rf drivers/atmodem/$(DEPDIR) drivers/calypsomodem/$(DEPDIR) drivers/hfpmodem/$(DEPDIR) drivers/hsomodem/$(DEPDIR) drivers/huaweimodem/$(DEPDIR) drivers/ifxmodem/$(DEPDIR) drivers/isimodem/$(DEPDIR) drivers/mbmmodem/$(DEPDIR) drivers/nwmodem/$(DEPDIR) drivers/stemodem/$(DEPDIR) examples/$(DEPDIR) gatchat/$(DEPDIR) gdbus/$(DEPDIR) gisi/$(DEPDIR) plugins/$(DEPDIR) src/$(DEPDIR) tools/$(DEPDIR) unit/$(DEPDIR)
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 
@@ -1979,11 +2509,11 @@ ps: ps-am
 
 ps-am:
 
-uninstall-am: uninstall-confDATA uninstall-dbusDATA \
+uninstall-am: uninstall-confDATA uninstall-dbusconfDATA \
 	uninstall-includeHEADERS uninstall-man \
 	uninstall-nodist_includeHEADERS uninstall-rulesDATA \
 	uninstall-sbinPROGRAMS uninstall-stateDATA \
-	uninstall-testSCRIPTS
+	uninstall-systemdunitDATA uninstall-testSCRIPTS
 
 uninstall-man: uninstall-man8
 
@@ -1997,21 +2527,22 @@ uninstall-man: uninstall-man8
 	distclean-libtool distclean-tags distcleancheck distdir \
 	distuninstallcheck dvi dvi-am html html-am info info-am \
 	install install-am install-confDATA install-data \
-	install-data-am install-dbusDATA install-dvi install-dvi-am \
-	install-exec install-exec-am install-html install-html-am \
-	install-includeHEADERS install-info install-info-am \
-	install-man install-man8 install-nodist_includeHEADERS \
-	install-pdf install-pdf-am install-ps install-ps-am \
-	install-rulesDATA install-sbinPROGRAMS install-stateDATA \
-	install-strip install-testSCRIPTS installcheck installcheck-am \
-	installdirs maintainer-clean maintainer-clean-generic \
-	mostlyclean mostlyclean-compile mostlyclean-generic \
-	mostlyclean-libtool pdf pdf-am ps ps-am tags uninstall \
-	uninstall-am uninstall-confDATA uninstall-dbusDATA \
-	uninstall-includeHEADERS uninstall-man uninstall-man8 \
-	uninstall-nodist_includeHEADERS uninstall-rulesDATA \
-	uninstall-sbinPROGRAMS uninstall-stateDATA \
-	uninstall-testSCRIPTS
+	install-data-am install-dbusconfDATA install-dvi \
+	install-dvi-am install-exec install-exec-am install-html \
+	install-html-am install-includeHEADERS install-info \
+	install-info-am install-man install-man8 \
+	install-nodist_includeHEADERS install-pdf install-pdf-am \
+	install-ps install-ps-am install-rulesDATA \
+	install-sbinPROGRAMS install-stateDATA install-strip \
+	install-systemdunitDATA install-testSCRIPTS installcheck \
+	installcheck-am installdirs maintainer-clean \
+	maintainer-clean-generic mostlyclean mostlyclean-compile \
+	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
+	tags uninstall uninstall-am uninstall-confDATA \
+	uninstall-dbusconfDATA uninstall-includeHEADERS uninstall-man \
+	uninstall-man8 uninstall-nodist_includeHEADERS \
+	uninstall-rulesDATA uninstall-sbinPROGRAMS uninstall-stateDATA \
+	uninstall-systemdunitDATA uninstall-testSCRIPTS
 
 
 src/plugin.$(OBJEXT): src/builtin.h
@@ -2019,17 +2550,8 @@ src/plugin.$(OBJEXT): src/builtin.h
 src/builtin.h: src/genbuiltin $(builtin_sources)
 	$(AM_V_GEN)$(srcdir)/src/genbuiltin $(builtin_modules) > $@
 
-src/ofono.exp: $(src_ofonod_OBJECTS)
-	$(AM_V_GEN)$(NM) $^ | $(AWK) '{ print $$3 }' | sort -u | \
-				$(EGREP) -e '^ofono_' -e '^g_dbus_' > $@
-
-src/ofono.ver: src/ofono.exp
-	$(AM_V_at)echo "{ global:" > $@
-	$(AM_V_GEN)$(SED) -e "s/\(.*\)/\1;/" $< >> $@
-	$(AM_V_at)echo "local: *; };" >> $@
-
 plugins/%.rules:
-	$(AM_V_GEN)cp $(subst 97-,,$@) $@
+	$(AM_V_GEN)cp $(srcdir)/$(subst 97-,,$@) $@
 
 $(src_ofonod_OBJECTS) $(unit_objects): $(local_headers)
 
@@ -2041,8 +2563,8 @@ include/ofono/%.h: include/%.h
 	$(AM_V_at)$(MKDIR_P) include/ofono
 	$(AM_V_GEN)$(LN_S) $(abs_top_srcdir)/$< $@
 
-clean-local: include/ofono
-	@$(RM) -r $<
+clean-local:
+	@$(RM) -rf include/ofono
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

@@ -8,28 +8,18 @@ bus = dbus.SystemBus()
 manager = dbus.Interface(bus.get_object('org.ofono', '/'),
 						'org.ofono.Manager')
 
-properties = manager.GetProperties()
+modems = manager.GetModems()
 
-for path in properties["Modems"]:
-	modem = dbus.Interface(bus.get_object('org.ofono', path),
-							'org.ofono.Modem')
-
-	properties = modem.GetProperties()
-
-	if "org.ofono.DataConnectionManager" not in properties["Interfaces"]:
+for path, properties in modems:
+	if "org.ofono.ConnectionManager" not in properties["Interfaces"]:
 		continue
 
-	connmgr = dbus.Interface(bus.get_object('org.ofono', path),
-					'org.ofono.DataConnectionManager')
+	connman = dbus.Interface(bus.get_object('org.ofono', path),
+					'org.ofono.ConnectionManager')
 
-	properties = connmgr.GetProperties()
+	contexts = connman.GetContexts()
 
-	for path in properties["PrimaryContexts"]:
-		context = dbus.Interface(bus.get_object('org.ofono', path),
-					'org.ofono.PrimaryDataContext')
-
-		properties = context.GetProperties()
-
+	for path, properties in contexts:
 		if properties["Active"] == dbus.Boolean(0):
 			continue
 
@@ -39,11 +29,15 @@ for path in properties["Modems"]:
 
 		interface = settings["Interface"]
 		address = settings["Address"]
-		gateway = settings["Gateway"]
+		try:
+			gateway = settings["Gateway"]
+		except:
+			gateway = "0.0.0.0";
 
 		if settings["Method"] == "dhcp":
 			print "    Run DHCP on interface %s" % (interface)
 		else:
+			print "    Interface is %s" % (interface)
 			print "    IP address is %s" % (address)
 			print "    Gateway is %s" % (gateway)
 

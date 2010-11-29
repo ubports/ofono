@@ -1,23 +1,21 @@
 /*
- * This file is part of oFono - Open Source Telephony
  *
- * Copyright (C) 2009 Nokia Corporation and/or its subsidiary(-ies).
+ *  oFono - Open Source Telephony
  *
- * Contact: Rémi Denis-Courmont <remi.denis-courmont@nokia.com>
+ *  Copyright (C) 2009-2010 Nokia Corporation and/or its subsidiary(-ies).
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * version 2 as published by the Free Software Foundation.
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
  *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
- * 02110-1301 USA
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program; if not, write to the Free Software
+ *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
  */
 
@@ -56,11 +54,10 @@ GIOChannel *phonet_new(GIsiModem *modem, uint8_t resource)
 
 	if (ifi == 0)
 		g_warning("Unspecified GIsiModem!");
-	else
-	if (if_indextoname(ifi, buf) == NULL ||
-	    setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, buf, IF_NAMESIZE))
+	else if (if_indextoname(ifi, buf) == NULL ||
+		setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, buf, IF_NAMESIZE))
 		goto error;
-	if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)))
+	if (bind(fd, (void *)&addr, sizeof(addr)))
 		goto error;
 
 	channel = g_io_channel_unix_new(fd);
@@ -88,7 +85,7 @@ ssize_t phonet_read(GIOChannel *channel, void *restrict buf, size_t len,
 	ssize_t ret;
 
 	ret = recvfrom(g_io_channel_unix_get_fd(channel), buf, len,
-			MSG_DONTWAIT, (struct sockaddr *)&addr, &addrlen);
+			MSG_DONTWAIT, (void *)&addr, &addrlen);
 	if (ret == -1)
 		return -1;
 

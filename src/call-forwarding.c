@@ -144,7 +144,8 @@ static GSList *cf_cond_list_create(int total,
 	int j;
 	struct ofono_call_forwarding_condition *cond;
 
-	/* Specification is not really clear how the results are reported,
+	/*
+	 * Specification is not really clear how the results are reported,
 	 * so assume both multiple list items & compound values of class
 	 * are possible
 	 */
@@ -219,7 +220,8 @@ static void set_new_cond_list(struct ofono_call_forwarding *cf,
 	for (l = list; l; l = l->next) {
 		lc = l->data;
 
-		/* New condition lists might have attributes we don't care about
+		/*
+		 * New condition lists might have attributes we don't care about
 		 * triggered by e.g. ss control magic strings just skip them
 		 * here.  For now we only support Voice, although Fax & all Data
 		 * basic services are applicable as well.
@@ -430,7 +432,8 @@ static DBusMessage *cf_get_properties(DBusConnection *conn, DBusMessage *msg,
 	if (!cf->driver->query)
 		return __ofono_error_not_implemented(msg);
 
-	if (cf->pending)
+	if (__ofono_call_forwarding_is_busy(cf) ||
+			__ofono_ussd_is_busy(cf->ussd))
 		return __ofono_error_busy(msg);
 
 	cf->pending = dbus_message_ref(msg);
@@ -457,7 +460,8 @@ static gboolean cf_condition_enabled_property(struct ofono_call_forwarding *cf,
 		if (strncmp(property, prefix, len))
 			continue;
 
-		/* We check the 4 call forwarding types, e.g.
+		/*
+		 * We check the 4 call forwarding types, e.g.
 		 * unconditional, busy, no reply, not reachable
 		 */
 		for (j = 0; j < 4; j++)
@@ -586,7 +590,8 @@ static DBusMessage *cf_set_property(DBusConnection *conn, DBusMessage *msg,
 	int cls;
 	int type;
 
-	if (cf->pending)
+	if (__ofono_call_forwarding_is_busy(cf) ||
+			__ofono_ussd_is_busy(cf->ussd))
 		return __ofono_error_busy(msg);
 
 	if (!dbus_message_iter_init(msg, &iter))
@@ -704,7 +709,8 @@ static DBusMessage *cf_disable_all(DBusConnection *conn, DBusMessage *msg,
 	if (!cf->driver->erasure)
 		return __ofono_error_not_implemented(msg);
 
-	if (cf->pending)
+	if (__ofono_call_forwarding_is_busy(cf) ||
+			__ofono_ussd_is_busy(cf->ussd))
 		return __ofono_error_busy(msg);
 
 	if (dbus_message_get_args(msg, NULL, DBUS_TYPE_STRING, &strtype,
@@ -895,7 +901,7 @@ static gboolean cf_ss_control(int type, const char *sc,
 	if (!cf)
 		return FALSE;
 
-	if (cf->pending) {
+	if (__ofono_call_forwarding_is_busy(cf)) {
 		reply = __ofono_error_busy(msg);
 		g_dbus_send_message(conn, reply);
 
@@ -928,7 +934,8 @@ static gboolean cf_ss_control(int type, const char *sc,
 		type == SS_CONTROL_TYPE_DEACTIVATION))
 		goto error;
 
-	/* Activation / Registration is figured context specific according to
+	/*
+	 * Activation / Registration is figured context specific according to
 	 * 22.030 Section 6.5.2 "The UE shall determine from the context
 	 * whether, an entry of a single *, activation or registration
 	 * was intended."
@@ -1030,7 +1037,8 @@ static gboolean cf_ss_control(int type, const char *sc,
 		break;
 	}
 
-	/* Some modems don't understand all classes very well, particularly
+	/*
+	 * Some modems don't understand all classes very well, particularly
 	 * the older models.  So if the bearer class is the default, we
 	 * just use the more commonly understood value of 7 since BEARER_SMS
 	 * is not applicable to CallForwarding conditions according to 22.004
@@ -1092,6 +1100,11 @@ static void cf_unregister_ss_controls(struct ofono_call_forwarding *cf)
 	__ofono_ussd_ssc_unregister(cf->ussd, "004");
 }
 
+gboolean __ofono_call_forwarding_is_busy(struct ofono_call_forwarding *cf)
+{
+	return cf->pending ? TRUE : FALSE;
+}
+
 int ofono_call_forwarding_driver_register(const struct ofono_call_forwarding_driver *d)
 {
 	DBG("driver: %p, name: %s", d, d->name);
@@ -1099,7 +1112,7 @@ int ofono_call_forwarding_driver_register(const struct ofono_call_forwarding_dri
 	if (d->probe == NULL)
 		return -EINVAL;
 
-	g_drivers = g_slist_prepend(g_drivers, (void *)d);
+	g_drivers = g_slist_prepend(g_drivers, (void *) d);
 
 	return 0;
 }
@@ -1108,7 +1121,7 @@ void ofono_call_forwarding_driver_unregister(const struct ofono_call_forwarding_
 {
 	DBG("driver: %p, name: %s", d, d->name);
 
-	g_drivers = g_slist_remove(g_drivers, (void *)d);
+	g_drivers = g_slist_remove(g_drivers, (void *) d);
 }
 
 static void call_forwarding_unregister(struct ofono_atom *atom)

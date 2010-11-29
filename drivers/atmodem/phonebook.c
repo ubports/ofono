@@ -27,6 +27,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <errno.h>
 
 #include <glib.h>
 
@@ -39,6 +40,7 @@
 #include "gatresult.h"
 
 #include "atmodem.h"
+#include "vendor.h"
 
 #define INDEX_INVALID -1
 
@@ -57,18 +59,54 @@ struct pb_data {
 	char *old_charset;
 	int supported;
 	GAtChat *chat;
+	unsigned int vendor;
+	guint ready_id;
 };
 
-static char *ucs2_to_utf8(const char *str)
+static void warn_bad()
 {
-	long len;
-	unsigned char *ucs2;
+	ofono_warn("Name field conversion to UTF8 failed, this can indicate a"
+			" problem with modem integration, as this field"
+			" is required by 27.007.");
+}
+
+static gboolean parse_text(GAtResultIter *iter, char **str, int encoding)
+{
+	const char *string;
+	const guint8 *hex;
+	int len;
 	char *utf8;
-	ucs2 = decode_hex(str, -1, &len, 0);
-	utf8 = g_convert((char *)ucs2, len, "UTF-8//TRANSLIT", "UCS-2BE",
+	/* charset_current is CHARSET_UCS2, CHARSET_IRA or CHARSET_UTF8 */
+	if (encoding == CHARSET_UCS2) {
+		/*
+		 * Some devices omit the quotes, so use next_hexstring,
+		 * which handles quoted or unquoted hex strings
+		 */
+		if (g_at_result_iter_next_hexstring(iter, &hex, &len) == FALSE)
+			return FALSE;
+
+		utf8 = g_convert((const gchar*) hex, len,
+					"UTF-8//TRANSLIT", "UCS-2BE",
 					NULL, NULL, NULL);
-	g_free(ucs2);
-	return utf8;
+
+		if (utf8) {
+			*str = utf8;
+			return TRUE;
+		}
+
+		return FALSE;
+	}
+
+	/*
+	 * In the case of IRA charset, assume these are Latin1
+	 * characters, same as in UTF8
+	 */
+	if (g_at_result_iter_next_string(iter, &string)) {
+		*str = g_strdup(string);
+		return TRUE;
+	}
+
+	return FALSE;
 }
 
 static const char *best_charset(int supported)
@@ -110,15 +148,15 @@ static void at_cpbr_notify(GAtResult *result, gpointer user_data)
 		int index;
 		const char *number;
 		int type;
-		const char *text;
+		char *text;
 		int hidden = -1;
-		const char *group = NULL;
+		char *group = NULL;
 		const char *adnumber = NULL;
 		int adtype = -1;
-		const char *secondtext = NULL;
-		const char *email = NULL;
-		const char *sip_uri = NULL;
-		const char *tel_uri = NULL;
+		char *secondtext = NULL;
+		char *email = NULL;
+		char *sip_uri = NULL;
+		char *tel_uri = NULL;
 
 		if (!g_at_result_iter_next_number(&iter, &index))
 			continue;
@@ -129,70 +167,31 @@ static void at_cpbr_notify(GAtResult *result, gpointer user_data)
 		if (!g_at_result_iter_next_number(&iter, &type))
 			continue;
 
-		if (!g_at_result_iter_next_string(&iter, &text))
+		if (!parse_text(&iter, &text, current)) {
+			warn_bad();
 			continue;
+		}
 
 		g_at_result_iter_next_number(&iter, &hidden);
-		g_at_result_iter_next_string(&iter, &group);
+		parse_text(&iter, &group, current);
 		g_at_result_iter_next_string(&iter, &adnumber);
 		g_at_result_iter_next_number(&iter, &adtype);
-		g_at_result_iter_next_string(&iter, &secondtext);
-		g_at_result_iter_next_string(&iter, &email);
-		g_at_result_iter_next_string(&iter, &sip_uri);
-		g_at_result_iter_next_string(&iter, &tel_uri);
+		parse_text(&iter, &secondtext, current);
+		parse_text(&iter, &email, current);
+		parse_text(&iter, &sip_uri, current);
+		parse_text(&iter, &tel_uri, current);
 
-		/* charset_current is either CHARSET_UCS2 or CHARSET_UTF8 */
-		if (current == CHARSET_UCS2) {
-			char *text_utf8;
-			char *group_utf8 = NULL;
-			char *secondtext_utf8 = NULL;
-			char *email_utf8 = NULL;
-			char *sip_uri_utf8 = NULL;
-			char *tel_uri_utf8 = NULL;
+		ofono_phonebook_entry(pb, index, number, type,
+			text, hidden, group, adnumber,
+			adtype, secondtext, email,
+			sip_uri, tel_uri);
 
-			text_utf8 = ucs2_to_utf8(text);
-
-			if (text_utf8 == NULL)
-				ofono_warn("Name field conversion to UTF8"
-						" failed, this can indicate a"
-						" problem with modem"
-						" integration, as this field"
-						" is required by 27.007."
-						"  Contents of name reported"
-						" by modem: %s", text);
-
-			if (group)
-				group_utf8 = ucs2_to_utf8(group);
-			if (secondtext)
-				secondtext_utf8 = ucs2_to_utf8(secondtext);
-			if (email)
-				email_utf8 = ucs2_to_utf8(email);
-			if (sip_uri)
-				sip_uri_utf8 = ucs2_to_utf8(sip_uri);
-			if (tel_uri)
-				tel_uri_utf8 = ucs2_to_utf8(tel_uri);
-
-			ofono_phonebook_entry(pb, index, number, type,
-				text_utf8, hidden, group_utf8, adnumber,
-				adtype, secondtext_utf8, email_utf8,
-				sip_uri_utf8, tel_uri_utf8);
-
-			g_free(text_utf8);
-			g_free(group_utf8);
-			g_free(secondtext_utf8);
-			g_free(email_utf8);
-			g_free(sip_uri_utf8);
-			g_free(tel_uri_utf8);
-		} else {
-			/* In the case of IRA charset, assume these are Latin1
-			 * characters, same as in UTF8
-			 */
-			ofono_phonebook_entry(pb, index, number, type,
-				text, hidden, group, adnumber,
-				adtype, secondtext, email,
-				sip_uri, tel_uri);
-
-		}
+		g_free(text);
+		g_free(group);
+		g_free(secondtext);
+		g_free(email);
+		g_free(sip_uri);
+		g_free(tel_uri);
 	}
 }
 
@@ -213,7 +212,7 @@ static void export_failed(struct cb_data *cbd)
 }
 
 static void at_read_entries_cb(gboolean ok, GAtResult *result,
-				gpointer user_data)
+						gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
 	struct ofono_phonebook *pb = cbd->user;
@@ -258,7 +257,7 @@ static void at_read_entries(struct cb_data *cbd)
 }
 
 static void at_set_charset_cb(gboolean ok, GAtResult *result,
-				gpointer user_data)
+						gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
 
@@ -271,7 +270,7 @@ static void at_set_charset_cb(gboolean ok, GAtResult *result,
 }
 
 static void at_read_charset_cb(gboolean ok, GAtResult *result,
-					gpointer user_data)
+						gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
 	struct ofono_phonebook *pb = cbd->user;
@@ -309,7 +308,7 @@ error:
 }
 
 static void at_list_indices_cb(gboolean ok, GAtResult *result,
-				gpointer user_data)
+						gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
 	struct ofono_phonebook *pb = cbd->user;
@@ -326,7 +325,7 @@ static void at_list_indices_cb(gboolean ok, GAtResult *result,
 	if (!g_at_result_iter_open_list(&iter))
 		goto error;
 
-	/* retrieve index_min and index_max from indices
+	/* Retrieve index_min and index_max from indices
 	 * which seems like "(1-150),32,16"
 	 */
 	if (!g_at_result_iter_next_range(&iter, &pbd->index_min,
@@ -345,7 +344,7 @@ error:
 }
 
 static void at_select_storage_cb(gboolean ok, GAtResult *result,
-					gpointer user_data)
+						gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
 	struct ofono_phonebook *pb = cbd->user;
@@ -380,8 +379,7 @@ static void at_export_entries(struct ofono_phonebook *pb, const char *storage,
 		return;
 
 error:
-	if (cbd)
-		g_free(cbd);
+	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, data);
 }
@@ -395,9 +393,28 @@ static void phonebook_not_supported(struct ofono_phonebook *pb)
 }
 
 static void at_list_storages_cb(gboolean ok, GAtResult *result,
-					gpointer user_data)
+						gpointer user_data);
+
+static void ifx_pbready_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_phonebook *pb = user_data;
+	struct pb_data *pbd = ofono_phonebook_get_data(pb);
+
+	g_at_chat_unregister(pbd->chat, pbd->ready_id);
+	pbd->ready_id = 0;
+
+	if (g_at_chat_send(pbd->chat, "AT+CPBS=?", cpbs_prefix,
+				at_list_storages_cb, pb, NULL) > 0)
+		return;
+
+	phonebook_not_supported(pb);
+}
+
+static void at_list_storages_cb(gboolean ok, GAtResult *result,
+						gpointer user_data)
+{
+	struct ofono_phonebook *pb = user_data;
+	struct pb_data *pbd = ofono_phonebook_get_data(pb);
 	gboolean sm_supported = FALSE;
 	gboolean me_supported = FALSE;
 	gboolean in_list = FALSE;
@@ -423,20 +440,28 @@ static void at_list_storages_cb(gboolean ok, GAtResult *result,
 	}
 
 	if (in_list && !g_at_result_iter_close_list(&iter))
-		goto error;
+		goto vendor;
 
 	if (!me_supported && !sm_supported)
-		goto error;
+		goto vendor;
 
 	ofono_phonebook_register(pb);
 	return;
+
+vendor:
+	switch (pbd->vendor) {
+	case OFONO_VENDOR_IFX:
+		pbd->ready_id = g_at_chat_register(pbd->chat, "+PBREADY",
+					ifx_pbready_notify, FALSE, pb, NULL);
+		return;
+	}
 
 error:
 	phonebook_not_supported(pb);
 }
 
 static void at_list_charsets_cb(gboolean ok, GAtResult *result,
-					gpointer user_data)
+						gpointer user_data)
 {
 	struct ofono_phonebook *pb = user_data;
 	struct pb_data *pbd = ofono_phonebook_get_data(pb);
@@ -510,8 +535,12 @@ static int at_phonebook_probe(struct ofono_phonebook *pb, unsigned int vendor,
 	GAtChat *chat = data;
 	struct pb_data *pbd;
 
-	pbd = g_new0(struct pb_data, 1);
-	pbd->chat = chat;
+	pbd = g_try_new0(struct pb_data, 1);
+	if (!pbd)
+		return -ENOMEM;
+
+	pbd->chat = g_at_chat_clone(chat);
+	pbd->vendor = vendor;
 
 	ofono_phonebook_set_data(pb, pbd);
 
@@ -529,14 +558,15 @@ static void at_phonebook_remove(struct ofono_phonebook *pb)
 
 	ofono_phonebook_set_data(pb, NULL);
 
+	g_at_chat_unref(pbd->chat);
 	g_free(pbd);
 }
 
 static struct ofono_phonebook_driver driver = {
-	.name			= "atmodem",
-	.probe			= at_phonebook_probe,
-	.remove			= at_phonebook_remove,
-	.export_entries		= at_export_entries
+	.name		= "atmodem",
+	.probe		= at_phonebook_probe,
+	.remove		= at_phonebook_remove,
+	.export_entries	= at_export_entries
 };
 
 void at_phonebook_init()

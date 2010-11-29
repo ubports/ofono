@@ -29,6 +29,7 @@ extern "C" {
 #include "gatresult.h"
 #include "gatsyntax.h"
 #include "gatutil.h"
+#include "gatio.h"
 
 struct _GAtChat;
 
@@ -42,13 +43,18 @@ GAtChat *g_at_chat_new(GIOChannel *channel, GAtSyntax *syntax);
 GAtChat *g_at_chat_new_blocking(GIOChannel *channel, GAtSyntax *syntax);
 
 GIOChannel *g_at_chat_get_channel(GAtChat *chat);
+GAtIO *g_at_chat_get_io(GAtChat *chat);
 
 GAtChat *g_at_chat_ref(GAtChat *chat);
 void g_at_chat_unref(GAtChat *chat);
 
-gboolean g_at_chat_shutdown(GAtChat *chat);
+GAtChat *g_at_chat_clone(GAtChat *chat);
 
-gboolean g_at_chat_set_syntax(GAtChat *chat, GAtSyntax *syntax);
+GAtChat *g_at_chat_set_slave(GAtChat *chat, GAtChat *slave);
+GAtChat *g_at_chat_get_slave(GAtChat *chat);
+
+void g_at_chat_suspend(GAtChat *chat);
+void g_at_chat_resume(GAtChat *chat);
 
 gboolean g_at_chat_set_disconnect_function(GAtChat *chat,
 			GAtDisconnectFunc disconnect, gpointer user_data);
@@ -58,7 +64,8 @@ gboolean g_at_chat_set_disconnect_function(GAtChat *chat,
  * provided to GAtChat the logging function will be called with the
  * input/output string and user data
  */
-gboolean g_at_chat_set_debug(GAtChat *chat, GAtDebugFunc func, gpointer user);
+gboolean g_at_chat_set_debug(GAtChat *chat,
+				GAtDebugFunc func, gpointer user_data);
 
 /*!
  * Queue an AT command for execution.  The command contents are given
@@ -132,7 +139,6 @@ gboolean g_at_chat_set_wakeup_command(GAtChat *chat, const char *cmd,
 
 void g_at_chat_add_terminator(GAtChat *chat, char *terminator,
 				int len, gboolean success);
-
 
 #ifdef __cplusplus
 }

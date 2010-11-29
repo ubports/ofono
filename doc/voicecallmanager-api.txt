@@ -5,20 +5,23 @@ Service		org.ofono
 Interface	org.ofono.VoiceCallManager
 Object path	[variable prefix]/{modem0,modem1,...}
 
-Methods		dict GetProperties()
+Methods		array{object,dict} GetCalls()
 
-			Returns all global system properties. See the
-			properties section for available properties.
+			Get an array of call object paths and properties
+			that represents the currently present calls.
 
-			Possible Errors: [service].Error.InvalidArguments
+			This method call should only be used once when an
+			application starts up.  Further call additions and
+			removal shall be monitored via CallAdded and
+			CallRemoved signals.
 
 		object Dial(string number, string hide_callerid)
 
 			Initiates a new outgoing call. Returns the object path
-			to the newly created call. The clir variable holds
-			the CLIR override for this call.
+			to the newly created call. The hide_callerid variable
+			holds the CLIR override for this call.
 			The defines values are:
-				"" or "default" - Default (Netowrk) CLIR mode
+				"" or "default" - Default (Network) CLIR mode
 							is used
 				"enabled" - Hides callerid, CLIR Invocation
 						is used
@@ -31,7 +34,7 @@ Methods		dict GetProperties()
 
 			Joins the currently Active (or Outgoing, depending
 			on network support) and Held calls together and
-			disconnects both calls. In effect transfering
+			disconnects both calls. In effect transferring
 			one party to the other. This procedure requires
 			an Active and Held call and the Explicit Call Transfer
 			(ECT) supplementary service to be active.
@@ -42,15 +45,15 @@ Methods		dict GetProperties()
 		void SwapCalls()
 
 			Swaps Active and Held calls.  The effect of this
-			is that all calls (0 or more including calls in a 
+			is that all calls (0 or more including calls in a
 			multi-party conversation) that were Active are now Held,
 			and all calls (0 or more) that were Held are now Active.
 
-			GSM specification does not allow calls to be swapped 
+			GSM specification does not allow calls to be swapped
 			in the case where Held, Active and Waiting calls exist.
-			Some modems implement this anyway, thus it is manufacturer
-			specific whether this method will succeed in the case
-			of Held, Active and Waiting calls.
+			Some modems implement this anyway, thus it is
+			manufacturer specific whether this method will succeed
+			in the case of Held, Active and Waiting calls.
 
 			This functionality is generally implemented by using
 			the +CHLD=2 AT command.
@@ -64,7 +67,7 @@ Methods		dict GetProperties()
 
 		void HoldAndAnswer()
 
-			Puts the current call (including multi-party calls) on 
+			Puts the current call (including multi-party calls) on
 			hold and answers the currently waiting call. Calling
 			this function when a user already has a both Active and
 			Held calls is invalid, since in GSM a user can have
@@ -72,7 +75,7 @@ Methods		dict GetProperties()
 
 		void HangupAll()
 
-			Releases all calls. 
+			Releases all calls.
 
 		array{object} PrivateChat(object call)
 
@@ -96,7 +99,7 @@ Methods		dict GetProperties()
 			participating in the multiparty call.
 
 			There can only be one subscriber controlled multi-party
-			call according to the GSM specification.  
+			call according to the GSM specification.
 
 			This is usually implemented using the +CHLD=3 AT
 			command.
@@ -108,24 +111,31 @@ Methods		dict GetProperties()
 
 		void SendTones(string tones)
 
-			Sends the DTMF tones to the network.  Under GSM the
-			tones have a fixed duration.  Tones can be one of:
-			'0' - '9', '*', '#', 'A', 'B', 'C', 'D'. The last four
-			are typically not used in normal circumstances.
+			Sends the DTMF tones to the network.  The tones have
+			a fixed duration.  Tones can be one of: '0' - '9',
+			'*', '#', 'A', 'B', 'C', 'D'.  The last four are
+			typically not used in normal circumstances.
 
-Signals		PropertyChanged(string property, variant value)
+Signals		CallAdded(object path, dict properties)
 
-			Signal is emitted whenever a property has changed. The
-			new value is passed as the signal argument.
+			Signal that is sent when a new call is added.  It
+			contains the object path of the new voice call and
+			also its properties.
 
-Properties	array{object} Calls [readonly]
+			Applications get the whole properties via this
+			signal and don't need to call GetProperties on
+			the voice call object.
 
-			Returns the list of calls currently present in the
-			system. If there are no calls, the list will be empty.
+		CallRemoved(object path)
 
-		array{object} MultipartyCalls [readonly]
+			Signal that is sent when a voice call has been
+			released.  The object path is no longer accessible
+			after this signal and only emitted for reference.
 
-			Returns the list of calls that are currently
-			participating in the multi-party (MPTY) call.  The list
-			will be empty if no multi-party call is active, or a
-			list with at least two elements otherwise.
+Properties	array{string} EmergencyNumbers
+
+			Contains the list of emergency numbers recognized
+			by oFono.  This list is based on the default set
+			of numbers provided by the specification and any
+			extra numbers provisioned by the carrier on the
+			SIM.

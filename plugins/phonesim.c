@@ -30,6 +30,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <stdio.h>
 
 #include <glib.h>
 #include <gatmux.h>
@@ -50,6 +51,7 @@
 #include <ofono/netreg.h>
 #include <ofono/phonebook.h>
 #include <ofono/sim.h>
+#include <ofono/stk.h>
 #include <ofono/sms.h>
 #include <ofono/ssn.h>
 #include <ofono/ussd.h>
@@ -58,12 +60,142 @@
 #include <ofono/gprs-context.h>
 
 #include <drivers/atmodem/vendor.h>
+#include <drivers/atmodem/sim-poll.h>
+#include <drivers/atmodem/atutil.h>
+
+static const char *none_prefix[] = { NULL };
+static int next_iface = 0;
 
 struct phonesim_data {
 	GAtMux *mux;
 	GAtChat *chat;
 	gboolean calypso;
 	gboolean use_mux;
+};
+
+struct gprs_context_data {
+	GAtChat *chat;
+	char *interface;
+};
+
+static void at_cgact_up_cb(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_gprs_context_up_cb_t cb = cbd->cb;
+	struct ofono_gprs_context *gc = cbd->user;
+	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
+	struct ofono_error error;
+
+	decode_at_error(&error, g_at_result_final_response(result));
+	cb(&error, ok ? gcd->interface : NULL, FALSE,
+			NULL, NULL, NULL, NULL, cbd->data);
+}
+
+static void at_cgact_down_cb(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_gprs_context_cb_t cb = cbd->cb;
+	struct ofono_error error;
+
+	decode_at_error(&error, g_at_result_final_response(result));
+	cb(&error, cbd->data);
+}
+
+static void phonesim_activate_primary(struct ofono_gprs_context *gc,
+				const struct ofono_gprs_primary_context *ctx,
+				ofono_gprs_context_up_cb_t cb, void *data)
+{
+	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
+	struct cb_data *cbd = cb_data_new(cb, data);
+	char buf[OFONO_GPRS_MAX_APN_LENGTH + 128];
+	int len;
+
+	cbd->user = gc;
+
+	len = snprintf(buf, sizeof(buf), "AT+CGDCONT=%u,\"IP\"", ctx->cid);
+
+	if (ctx->apn)
+		snprintf(buf + len, sizeof(buf) - len - 3, ",\"%s\"",
+				ctx->apn);
+
+	/* Assume always succeeds */
+	if (g_at_chat_send(gcd->chat, buf, none_prefix, NULL, NULL, NULL) == 0)
+		goto error;
+
+	sprintf(buf, "AT+CGACT=1,%u", ctx->cid);
+	if (g_at_chat_send(gcd->chat, buf, none_prefix,
+				at_cgact_up_cb, cbd, g_free) > 0)
+		return;
+
+error:
+	g_free(cbd);
+
+	CALLBACK_WITH_FAILURE(cb, NULL, 0, NULL, NULL, NULL, NULL, data);
+}
+
+static void phonesim_deactivate_primary(struct ofono_gprs_context *gc,
+					unsigned int id,
+					ofono_gprs_context_cb_t cb, void *data)
+{
+	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
+	struct cb_data *cbd = cb_data_new(cb, data);
+	char buf[128];
+
+	if (!cbd)
+		goto error;
+
+	cbd->user = gc;
+
+	snprintf(buf, sizeof(buf), "AT+CGACT=0,%u", id);
+
+	if (g_at_chat_send(gcd->chat, buf, none_prefix,
+				at_cgact_down_cb, cbd, g_free) > 0)
+		return;
+
+error:
+	g_free(cbd);
+
+	CALLBACK_WITH_FAILURE(cb, data);
+}
+
+static int phonesim_context_probe(struct ofono_gprs_context *gc,
+					unsigned int vendor, void *data)
+{
+	GAtChat *chat = data;
+	struct gprs_context_data *gcd;
+
+	gcd = g_try_new0(struct gprs_context_data, 1);
+	if (!gcd)
+		return -ENOMEM;
+
+	gcd->chat = g_at_chat_clone(chat);
+	gcd->interface = g_strdup_printf("dummy%d", next_iface++);
+
+	ofono_gprs_context_set_data(gc, gcd);
+
+	return 0;
+}
+
+static void phonesim_context_remove(struct ofono_gprs_context *gc)
+{
+	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
+
+	DBG("");
+
+	ofono_gprs_context_set_data(gc, NULL);
+
+	g_at_chat_unref(gcd->chat);
+	g_free(gcd->interface);
+
+	g_free(gcd);
+}
+
+static struct ofono_gprs_context_driver context_driver = {
+	.name			= "phonesim",
+	.probe			= phonesim_context_probe,
+	.remove			= phonesim_context_remove,
+	.activate_primary	= phonesim_activate_primary,
+	.deactivate_primary	= phonesim_deactivate_primary,
 };
 
 static int phonesim_probe(struct ofono_modem *modem)
@@ -161,7 +293,9 @@ static void mux_setup(GAtMux *mux, gpointer user_data)
 	if (data->calypso)
 		g_at_chat_set_wakeup_command(data->chat, "AT\r", 500, 5000);
 
-	g_at_chat_send(data->chat, "AT+CFUN=1", NULL,
+	g_at_chat_send(data->chat, "ATE0", NULL, NULL, NULL, NULL);
+
+	g_at_chat_send(data->chat, "AT+CFUN=1", none_prefix,
 					cfun_set_on_cb, modem, NULL);
 }
 
@@ -242,15 +376,49 @@ static int phonesim_enable(struct ofono_modem *modem)
 	}
 
 	if (data->use_mux) {
+		g_at_chat_send(data->chat, "ATE0", NULL, NULL, NULL, NULL);
+
 		g_at_mux_setup_gsm0710(data->chat, mux_setup, modem, NULL);
+
 		g_at_chat_unref(data->chat);
 		data->chat = NULL;
-	} else {
-		g_at_chat_send(data->chat, "AT+CFUN=1", NULL,
-					cfun_set_on_cb, modem, NULL);
+
+		return -EINPROGRESS;
 	}
 
-	return -EINPROGRESS;
+	g_at_chat_send(data->chat, "AT+CSCS=\"GSM\"", none_prefix,
+			NULL, NULL, NULL);
+
+	return 0;
+}
+
+static void set_online_cb(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_modem_online_cb_t callback = cbd->cb;
+	struct ofono_error error;
+
+	decode_at_error(&error, g_at_result_final_response(result));
+
+	callback(&error, cbd->data);
+}
+
+static void phonesim_set_online(struct ofono_modem *modem, ofono_bool_t online,
+				ofono_modem_online_cb_t cb, void *user_data)
+{
+	struct phonesim_data *data = ofono_modem_get_data(modem);
+	struct cb_data *cbd = cb_data_new(cb, user_data);
+	char buf[64];
+
+	DBG("%p", modem);
+
+	snprintf(buf, sizeof(buf), "AT+CFUN=%d", online ? 1 : 4);
+
+	if (g_at_chat_send(data->chat, buf, none_prefix,
+				set_online_cb, cbd, g_free) > 0)
+		return;
+
+	CALLBACK_WITH_FAILURE(cb, user_data);
 }
 
 static int phonesim_disable(struct ofono_modem *modem)
@@ -258,8 +426,6 @@ static int phonesim_disable(struct ofono_modem *modem)
 	struct phonesim_data *data = ofono_modem_get_data(modem);
 
 	DBG("%p", modem);
-
-	g_at_chat_shutdown(data->chat);
 
 	g_at_chat_unref(data->chat);
 	data->chat = NULL;
@@ -277,24 +443,41 @@ static int phonesim_disable(struct ofono_modem *modem)
 static void phonesim_pre_sim(struct ofono_modem *modem)
 {
 	struct phonesim_data *data = ofono_modem_get_data(modem);
+	struct ofono_sim *sim;
 
 	DBG("%p", modem);
 
 	ofono_devinfo_create(modem, 0, "atmodem", data->chat);
-	ofono_sim_create(modem, 0, "atmodem", data->chat);
+	sim = ofono_sim_create(modem, 0, "atmodem", data->chat);
 
 	if (data->calypso)
 		ofono_voicecall_create(modem, 0, "calypsomodem", data->chat);
 	else
 		ofono_voicecall_create(modem, 0, "atmodem", data->chat);
+
+	if (sim)
+		ofono_sim_inserted_notify(sim, TRUE);
 }
 
 static void phonesim_post_sim(struct ofono_modem *modem)
 {
 	struct phonesim_data *data = ofono_modem_get_data(modem);
+
+	DBG("%p", modem);
+
+	ofono_phonebook_create(modem, 0, "atmodem", data->chat);
+
+	if (!data->calypso)
+		ofono_stk_create(modem, OFONO_VENDOR_PHONESIM,
+					"atmodem", data->chat);
+}
+
+static void phonesim_post_online(struct ofono_modem *modem)
+{
+	struct phonesim_data *data = ofono_modem_get_data(modem);
 	struct ofono_message_waiting *mw;
 	struct ofono_gprs *gprs;
-	struct ofono_gprs_context *gc;
+	struct ofono_gprs_context *gc1, *gc2;
 
 	DBG("%p", modem);
 
@@ -306,7 +489,8 @@ static void phonesim_post_sim(struct ofono_modem *modem)
 		ofono_netreg_create(modem, OFONO_VENDOR_CALYPSO,
 							"atmodem", data->chat);
 	else
-		ofono_netreg_create(modem, 0, "atmodem", data->chat);
+		ofono_netreg_create(modem, OFONO_VENDOR_PHONESIM,
+							"atmodem", data->chat);
 
 	ofono_call_meter_create(modem, 0, "atmodem", data->chat);
 	ofono_call_barring_create(modem, 0, "atmodem", data->chat);
@@ -315,19 +499,23 @@ static void phonesim_post_sim(struct ofono_modem *modem)
 
 	if (!data->calypso) {
 		ofono_sms_create(modem, 0, "atmodem", data->chat);
-		ofono_phonebook_create(modem, 0, "atmodem", data->chat);
 		ofono_cbs_create(modem, 0, "atmodem", data->chat);
 	}
 
 	gprs = ofono_gprs_create(modem, 0, "atmodem", data->chat);
-	gc = ofono_gprs_context_create(modem, 0, "atmodem", data->chat);
 
-	if (gprs && gc)
-		ofono_gprs_add_context(gprs, gc);
+	gc1 = ofono_gprs_context_create(modem, 0, "phonesim", data->chat);
+	if (gprs && gc1)
+		ofono_gprs_add_context(gprs, gc1);
+
+	gc2 = ofono_gprs_context_create(modem, 0, "phonesim", data->chat);
+	if (gprs && gc2)
+		ofono_gprs_add_context(gprs, gc2);
 
 	mw = ofono_message_waiting_create(modem);
 	if (mw)
 		ofono_message_waiting_register(mw);
+
 }
 
 static struct ofono_modem_driver phonesim_driver = {
@@ -336,19 +524,134 @@ static struct ofono_modem_driver phonesim_driver = {
 	.remove		= phonesim_remove,
 	.enable		= phonesim_enable,
 	.disable	= phonesim_disable,
+	.set_online	= phonesim_set_online,
 	.pre_sim	= phonesim_pre_sim,
-	.post_sim	= phonesim_post_sim
+	.post_sim	= phonesim_post_sim,
+	.post_online	= phonesim_post_online,
 };
+
+static struct ofono_modem *create_modem(GKeyFile *keyfile, const char *group)
+{
+	struct ofono_modem *modem;
+	char *value;
+
+	DBG("group %s", group);
+
+	modem = ofono_modem_create(group, "phonesim");
+	if (!modem)
+		return NULL;
+
+	value = g_key_file_get_string(keyfile, group, "Address", NULL);
+	if (!value)
+		goto error;
+
+	ofono_modem_set_string(modem, "Address", value);
+	g_free(value);
+
+	value = g_key_file_get_string(keyfile, group, "Port", NULL);
+	if (!value)
+		goto error;
+
+	ofono_modem_set_integer(modem, "Port", atoi(value));
+	g_free(value);
+
+	value = g_key_file_get_string(keyfile, group, "Modem", NULL);
+	if (value) {
+		ofono_modem_set_string(modem, "Modem", value);
+		g_free(value);
+	}
+
+	value = g_key_file_get_string(keyfile, group, "Multiplexer", NULL);
+	if (value) {
+		ofono_modem_set_string(modem, "Multiplexer", value);
+		g_free(value);
+	}
+
+	DBG("%p", modem);
+
+	return modem;
+
+error:
+	ofono_error("Missing address or port setting for %s", group);
+
+	ofono_modem_remove(modem);
+
+	return NULL;
+}
+
+static GSList *modem_list = NULL;
+
+static void parse_config(const char *filename)
+{
+	GKeyFile *keyfile;
+	GError *err = NULL;
+	char **modems;
+	int i;
+
+	DBG("filename %s", filename);
+
+	keyfile = g_key_file_new();
+
+	g_key_file_set_list_separator(keyfile, ',');
+
+	if (!g_key_file_load_from_file(keyfile, filename, 0, &err)) {
+		ofono_warn("Reading of %s failed: %s", filename, err->message);
+		g_error_free(err);
+		goto done;
+	}
+
+	modems = g_key_file_get_groups(keyfile, NULL);
+
+	for (i = 0; modems[i]; i++) {
+		struct ofono_modem *modem;
+
+		modem = create_modem(keyfile, modems[i]);
+		if (!modem)
+			continue;
+
+		modem_list = g_slist_prepend(modem_list, modem);
+
+		ofono_modem_register(modem);
+	}
+
+	g_strfreev(modems);
+
+done:
+	g_key_file_free(keyfile);
+}
 
 static int phonesim_init(void)
 {
-	return ofono_modem_driver_register(&phonesim_driver);
+	int err;
+
+	err = ofono_modem_driver_register(&phonesim_driver);
+	if (err < 0)
+		return err;
+
+	ofono_gprs_context_driver_register(&context_driver);
+
+	parse_config(CONFIGDIR "/phonesim.conf");
+
+	return 0;
 }
 
 static void phonesim_exit(void)
 {
+	GSList *list;
+
+	for (list = modem_list; list; list = list->next) {
+		struct ofono_modem *modem = list->data;
+
+		ofono_modem_remove(modem);
+	}
+
+	g_slist_free(modem_list);
+	modem_list = NULL;
+
+	ofono_gprs_context_driver_unregister(&context_driver);
+
 	ofono_modem_driver_unregister(&phonesim_driver);
 }
 
-OFONO_PLUGIN_DEFINE(phonesim, "PhoneSIM driver", VERSION,
+OFONO_PLUGIN_DEFINE(phonesim, "Phone Simulator driver", VERSION,
 		OFONO_PLUGIN_PRIORITY_DEFAULT, phonesim_init, phonesim_exit)

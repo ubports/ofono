@@ -23,3 +23,6 @@
 
 extern void calypso_voicecall_init();
 extern void calypso_voicecall_exit();
+
+extern void calypso_stk_init();
+extern void calypso_stk_exit();

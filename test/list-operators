@@ -1,20 +1,16 @@
 #!/usr/bin/python
 
 import dbus
+import sys
 
 bus = dbus.SystemBus()
 
 manager = dbus.Interface(bus.get_object('org.ofono', '/'),
 						'org.ofono.Manager')
 
-properties = manager.GetProperties()
+modems = manager.GetModems()
 
-for path in properties["Modems"]:
-	modem = dbus.Interface(bus.get_object('org.ofono', path),
-							'org.ofono.Modem')
-
-	properties = modem.GetProperties()
-
+for path, properties in modems:
 	print "[ %s ]" % (path)
 
 	if "org.ofono.NetworkRegistration" not in properties["Interfaces"]:
@@ -23,14 +19,12 @@ for path in properties["Modems"]:
 	netreg = dbus.Interface(bus.get_object('org.ofono', path),
 					'org.ofono.NetworkRegistration')
 
-	properties = netreg.GetProperties()
+	if len(sys.argv) == 2 and sys.argv[1] == 'scan':
+		operators = netreg.Scan()
+	else:
+		operators = netreg.GetOperators()
 
-	for path in properties["AvailableOperators"]:
-		operator = dbus.Interface(bus.get_object('org.ofono', path),
-					'org.ofono.NetworkOperator')
-
-		properties = operator.GetProperties()
-
+	for path, properties in operators:
 		print "    [ %s ]" % (path)
 
 		for key in properties.keys():
@@ -41,5 +35,5 @@ for path in properties["Modems"]:
 			else:
 				val = str(properties[key])
 			print "        %s = %s" % (key, val)
-	
+
 		print

@@ -7,30 +7,20 @@ bus = dbus.SystemBus()
 manager = dbus.Interface(bus.get_object('org.ofono', '/'),
 						'org.ofono.Manager')
 
-properties = manager.GetProperties()
+modems = manager.GetModems()
 
-for path in properties["Modems"]:
-	modem = dbus.Interface(bus.get_object('org.ofono', path),
-							'org.ofono.Modem')
-
-	properties = modem.GetProperties()
-
+for path, properties in modems:
 	print "[ %s ]" % (path)
 
-	if "org.ofono.DataConnectionManager" not in properties["Interfaces"]:
+	if "org.ofono.ConnectionManager" not in properties["Interfaces"]:
 		continue
 
-	connmgr = dbus.Interface(bus.get_object('org.ofono', path),
-					'org.ofono.DataConnectionManager')
+	connman = dbus.Interface(bus.get_object('org.ofono', path),
+					'org.ofono.ConnectionManager')
 
-	properties = connmgr.GetProperties()
+	contexts = connman.GetContexts()
 
-	for path in properties["PrimaryContexts"]:
-		context = dbus.Interface(bus.get_object('org.ofono', path),
-					'org.ofono.PrimaryDataContext')
-
-		properties = context.GetProperties()
-
+	for path, properties in contexts:
 		print "    [ %s ]" % (path)
 
 		for key in properties.keys():
@@ -47,5 +37,5 @@ for path in properties["Modems"]:
 			else:
 				val = str(properties[key])
 			print "        %s = %s" % (key, val)
-	
+
 		print

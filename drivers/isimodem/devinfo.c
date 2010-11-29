@@ -1,21 +1,21 @@
 /*
- * This file is part of oFono - Open Source Telephony
  *
- * Copyright (C) 2009 Nokia Corporation and/or its subsidiary(-ies).
+ *  oFono - Open Source Telephony
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * version 2 as published by the Free Software Foundation.
+ *  Copyright (C) 2009-2010 Nokia Corporation and/or its subsidiary(-ies).
  *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
- * 02110-1301 USA
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program; if not, write to the Free Software
+ *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
  */
 
@@ -47,8 +47,9 @@ struct devinfo_data {
 	GIsiClient *client;
 };
 
-static bool info_resp_cb(GIsiClient *client, const void *restrict data,
-				size_t len, uint16_t object, void *opaque)
+static gboolean info_resp_cb(GIsiClient *client,
+				const void *restrict data, size_t len,
+				uint16_t object, void *opaque)
 {
 	const unsigned char *msg = data;
 	struct isi_cb_data *cbd = opaque;
@@ -65,13 +66,13 @@ static bool info_resp_cb(GIsiClient *client, const void *restrict data,
 
 	if (len < 3) {
 		DBG("truncated message");
-		return false;
+		return FALSE;
 	}
 
 	if (msg[0] != INFO_PRODUCT_INFO_READ_RESP
 		&& msg[0] != INFO_VERSION_READ_RESP
 		&& msg[0] != INFO_SERIAL_NUMBER_READ_RESP)
-		return false;
+		return FALSE;
 
 	if (msg[1] != INFO_OK) {
 		DBG("request failed: %s", info_isi_cause_name(msg[1]));
@@ -99,7 +100,7 @@ static bool info_resp_cb(GIsiClient *client, const void *restrict data,
 			g_free(info);
 
 			g_free(cbd);
-			return true;
+			return TRUE;
 
 		default:
 			DBG("skipping: %s (%zu bytes)",
@@ -112,7 +113,7 @@ static bool info_resp_cb(GIsiClient *client, const void *restrict data,
 error:
 	CALLBACK_WITH_FAILURE(cb, "", cbd->data);
 	g_free(cbd);
-	return true;
+	return TRUE;
 }
 
 static void isi_query_manufacturer(struct ofono_devinfo *info,
@@ -127,7 +128,7 @@ static void isi_query_manufacturer(struct ofono_devinfo *info,
 		INFO_PRODUCT_MANUFACTURER
 	};
 
-	if (!cbd)
+	if (!cbd || !dev)
 		goto error;
 
 	if (g_isi_request_make(dev->client, msg, sizeof(msg),
@@ -176,7 +177,7 @@ static void isi_query_revision(struct ofono_devinfo *info,
 		0x00, 0x00, 0x00, 0x00
 	};
 
-	if (!cbd)
+	if (!cbd || !dev)
 		goto error;
 
 	if (g_isi_request_make(dev->client, msg, sizeof(msg),
@@ -200,7 +201,7 @@ static void isi_query_serial(struct ofono_devinfo *info,
 		INFO_SN_IMEI_PLAIN
 	};
 
-	if (!cbd)
+	if (!cbd || !dev)
 		goto error;
 
 	if (g_isi_request_make(dev->client, msg, sizeof(msg),
@@ -227,7 +228,7 @@ static gboolean isi_devinfo_register(gpointer user)
 	return FALSE;
 }
 
-static void reachable_cb(GIsiClient *client, bool alive, uint16_t object,
+static void reachable_cb(GIsiClient *client, gboolean alive, uint16_t object,
 				void *opaque)
 {
 	struct ofono_devinfo *info = opaque;

@@ -1,21 +1,21 @@
 /*
- * This file is part of oFono - Open Source Telephony
  *
- * Copyright (C) 2009 Nokia Corporation and/or its subsidiary(-ies).
+ *  oFono - Open Source Telephony
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * version 2 as published by the Free Software Foundation.
+ *  Copyright (C) 2009-2010 Nokia Corporation and/or its subsidiary(-ies).
  *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
- * 02110-1301 USA
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program; if not, write to the Free Software
+ *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
  */
 
@@ -30,9 +30,11 @@
 #include "call.h"
 #include "network.h"
 #include "gss.h"
+#include "gpds.h"
 
 const char *ss_message_id_name(enum ss_message_id value);
 const char *ss_subblock_name(enum ss_subblock value);
+const char *ss_ussd_type_name(enum ss_ussd_type value);
 
 const char *mtc_isi_cause_name(enum mtc_isi_cause value);
 const char *mtc_message_id_name(enum mtc_message_id value);
@@ -65,6 +67,13 @@ const char *net_subblock_name(enum net_subblock value);
 const char *gss_message_id_name(enum gss_message_id value);
 const char *gss_subblock_name(enum gss_subblock value);
 
+const char *gpds_message_id_name(enum gpds_message_id value);
+const char *gpds_subblock_name(enum gpds_subblock value);
+const char *gpds_status_name(enum gpds_status value);
+const char *gpds_isi_cause_name(enum gpds_isi_cause value);
+const char *gpds_transfer_status_name(enum gpds_transfer_status value);
+const char *gpds_transfer_cause_name(enum gpds_transfer_cause value);
+
 void ss_debug(const void *restrict buf, size_t len, void *data);
 void mtc_debug(const void *restrict buf, size_t len, void *data);
 void sms_debug(const void *restrict buf, size_t len, void *data);
@@ -73,6 +82,7 @@ void info_debug(const void *restrict buf, size_t len, void *data);
 void call_debug(const void *restrict buf, size_t len, void *data);
 void net_debug(const void *restrict buf, size_t len, void *data);
 void gss_debug(const void *restrict buf, size_t len, void *data);
+void gpds_debug(const void *restrict buf, size_t len, void *data);
 
 const char *pn_resource_name(int value);
 

@@ -1,23 +1,21 @@
 /*
- * This file is part of oFono - Open Source Telephony
  *
- * Copyright (C) 2009 Nokia Corporation and/or its subsidiary(-ies).
+ *  oFono - Open Source Telephony
  *
- * Contact: Rémi Denis-Courmont <remi.denis-courmont@nokia.com>
+ *  Copyright (C) 2009-2010 Nokia Corporation and/or its subsidiary(-ies).
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * version 2 as published by the Free Software Foundation.
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
  *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
- * 02110-1301 USA
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program; if not, write to the Free Software
+ *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
  */
 
@@ -29,7 +27,6 @@ extern "C" {
 #endif
 
 #include <stdint.h>
-#include <stdbool.h>
 
 struct _GIsiSubBlockIter {
 	uint8_t *start;
@@ -46,28 +43,28 @@ void g_isi_sb_iter_init(GIsiSubBlockIter *iter,
 void g_isi_sb_iter_init_full(GIsiSubBlockIter *iter,
 				const void *restrict data,
 				size_t len, size_t used,
-				bool longhdr,
+				gboolean longhdr,
 				uint16_t sub_blocks);
-bool g_isi_sb_iter_is_valid(const GIsiSubBlockIter *iter);
+gboolean g_isi_sb_iter_is_valid(const GIsiSubBlockIter *iter);
 
-bool g_isi_sb_iter_next(GIsiSubBlockIter *iter);
+gboolean g_isi_sb_iter_next(GIsiSubBlockIter *iter);
 
 int g_isi_sb_iter_get_id(const GIsiSubBlockIter *iter);
 size_t g_isi_sb_iter_get_len(const GIsiSubBlockIter *iter);
 
-bool g_isi_sb_iter_get_data(const GIsiSubBlockIter *restrict iter,
+gboolean g_isi_sb_iter_get_data(const GIsiSubBlockIter *restrict iter,
 				void **data, unsigned pos);
-bool g_isi_sb_iter_get_byte(const GIsiSubBlockIter *restrict iter,
+gboolean g_isi_sb_iter_get_byte(const GIsiSubBlockIter *restrict iter,
 				uint8_t *byte, unsigned pos);
-bool g_isi_sb_iter_get_word(const GIsiSubBlockIter *restrict iter,
+gboolean g_isi_sb_iter_get_word(const GIsiSubBlockIter *restrict iter,
 				uint16_t *word, unsigned pos);
-bool g_isi_sb_iter_get_dword(const GIsiSubBlockIter *restrict iter,
-				uint32_t *dword, unsigned pos);
-bool g_isi_sb_iter_get_oper_code(const GIsiSubBlockIter *restrict iter,
+gboolean g_isi_sb_iter_get_dword(const GIsiSubBlockIter *restrict iter,
+					uint32_t *dword, unsigned pos);
+gboolean g_isi_sb_iter_get_oper_code(const GIsiSubBlockIter *restrict iter,
 					char *mcc, char *mnc, unsigned pos);
-bool g_isi_sb_iter_get_alpha_tag(const GIsiSubBlockIter *restrict iter,
+gboolean g_isi_sb_iter_get_alpha_tag(const GIsiSubBlockIter *restrict iter,
 					char **utf8, size_t len, unsigned pos);
-bool g_isi_sb_iter_get_latin_tag(const GIsiSubBlockIter *restrict iter,
+gboolean g_isi_sb_iter_get_latin_tag(const GIsiSubBlockIter *restrict iter,
 					char **ascii, size_t len, unsigned pos);
 
 #ifdef __cplusplus

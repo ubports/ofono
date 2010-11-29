@@ -8,11 +8,17 @@ bus = dbus.SystemBus()
 manager = dbus.Interface(bus.get_object('org.ofono', '/'),
 						'org.ofono.Manager')
 
-properties = manager.GetProperties()
-
-path = properties["Modems"][0]
+modems = manager.GetModems()
+path = modems[0][0]
 
 manager = dbus.Interface(bus.get_object('org.ofono', path),
-						'org.ofono.SmsManager')
+					'org.ofono.MessageManager')
 
-manager.SendMessage(sys.argv[1], sys.argv[2])
+if len(sys.argv) == 4:
+	manager.SetProperty("UseDeliveryReports",
+					dbus.Boolean(int(sys.argv[1])))
+	path = manager.SendMessage(sys.argv[1], sys.argv[2])
+else:
+	path = manager.SendMessage(sys.argv[1], sys.argv[2])
+
+print path

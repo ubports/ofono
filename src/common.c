@@ -31,13 +31,15 @@
 
 #include <ofono/types.h>
 #include "common.h"
+#include "util.h"
 
 struct error_entry {
 	int error;
 	const char *str;
 };
 
-/* 0-127 from 24.011 Annex E2
+/*
+ * 0-127 from 24.011 Annex E2
  * 127-255 23.040 Section 9.2.3.22
  * Rest are from 27.005 Section 3.2.5
  */
@@ -273,7 +275,7 @@ const char *telephony_error_to_str(const struct ofono_error *error)
 		break;
 	case OFONO_ERROR_TYPE_CMS:
 		e = cms_errors;
-		maxentries = sizeof(cme_errors) / sizeof(struct error_entry);
+		maxentries = sizeof(cms_errors) / sizeof(struct error_entry);
 		break;
 	case OFONO_ERROR_TYPE_CEER:
 		e = ceer_errors;
@@ -294,7 +296,8 @@ int mmi_service_code_to_bearer_class(int code)
 {
 	int cls = 0;
 
-	/* Teleservices according to 22.004
+	/*
+	 * Teleservices according to 22.004
 	 * 1 - Voice
 	 * 2 - SMS
 	 * 3,4,5 - Unallocated
@@ -333,27 +336,39 @@ int mmi_service_code_to_bearer_class(int code)
 	case 19:
 		cls = BEARER_CLASS_VOICE | BEARER_CLASS_FAX;
 		break;
-
-	/* 22.030: 7-11 */
-	/* 22.004 only defines BS 7 (Data Sync) & BS 8 (Data Async) */
+	/*
+	 * 22.030: 7-11
+	 * 22.004 only defines BS 7 (Data Sync) & BS 8 (Data Async)
+	 * and PAD and Packet bearer services are deprecated.  Still,
+	 * AT modems rely on these to differentiate between sending
+	 * a 'All Sync' or 'All Data Sync' message types.  In theory
+	 * both message types cover the same bearer services, but we
+	 * must still send these for conformance reasons.
+	 */
 	case 20:
-		cls = BEARER_CLASS_DATA_ASYNC | BEARER_CLASS_DATA_SYNC;
+		cls = BEARER_CLASS_DATA_ASYNC | BEARER_CLASS_DATA_SYNC |
+			BEARER_CLASS_PAD | BEARER_CLASS_PACKET;
 		break;
-	/* According to 22.030: All Async */
+	/* According to 22.030: All Async (7) */
 	case 21:
-	/* According to 22.030: All Data Async */
+		cls = BEARER_CLASS_DATA_ASYNC | BEARER_CLASS_PAD;
+		break;
+	/* According to 22.030: All Data Async (7)*/
 	case 25:
 		cls = BEARER_CLASS_DATA_ASYNC;
 		break;
-	/* According to 22.030: All Sync */
+	/* According to 22.030: All Sync (8) */
 	case 22:
-	/* According to 22.030: All Data Sync */
+		cls = BEARER_CLASS_DATA_SYNC | BEARER_CLASS_PACKET;
+		break;
+	/* According to 22.030: All Data Sync (8) */
 	case 24:
 		cls = BEARER_CLASS_DATA_SYNC;
 		break;
-	/* According to 22.030: Telephony & All Sync services */
+	/* According to 22.030: Telephony & All Sync services (1, 8) */
 	case 26:
-		cls = BEARER_CLASS_VOICE | BEARER_CLASS_DATA_SYNC;
+		cls = BEARER_CLASS_VOICE | BEARER_CLASS_DATA_SYNC |
+			BEARER_CLASS_PACKET;
 		break;
 	default:
 		break;
@@ -381,7 +396,7 @@ const char *phone_number_to_string(const struct ofono_phone_number *ph)
 
 void string_to_phone_number(const char *str, struct ofono_phone_number *ph)
 {
-	if (strlen(str) && str[0] == '+') {
+	if (str[0] == '+') {
 		strcpy(ph->number, str+1);
 		ph->type = 145;	/* International */
 	} else {
@@ -390,51 +405,46 @@ void string_to_phone_number(const char *str, struct ofono_phone_number *ph)
 	}
 }
 
-int valid_ussd_string(const char *str)
+gboolean valid_ussd_string(const char *str, gboolean call_in_progress)
 {
 	int len = strlen(str);
 
 	if (!len)
 		return FALSE;
 
-	/* It is hard to understand exactly what constitutes a valid USSD string
-	 * According to 22.090:
-	 * Case a - 1, 2 or 3 digits from the set (*, #) followed by 1X(Y),
-	 * where X=any number 0‑4, Y=any number 0‑9, then, optionally "*
-	 * followed by any number of any characters", and concluding with #SEND
+	/*
+	 * Return true if an MMI input string is to be sent as USSD.
 	 *
-	 * Case b - 1, 2 or 3 digits from the set (*, #) followed by 1X(Y),
-	 * where X=any number 5‑9, Y=any number 0‑9, then, optionally "*
-	 * followed by any number of any characters", and concluding with #SEND
+	 * According to 3GPP TS 22.030, after checking the well-known
+	 * supplementary service control, SIM control and manufacturer
+	 * defined control codes, the terminal should check if the input
+	 * should be sent as USSD according to the following rules:
 	 *
-	 * Case c - 7(Y) SEND, where Y=any number 0‑9
+	 * 1) Terminated by '#'
+	 * 2) A short string of 1 or 2 digits
 	 *
-	 * Case d - All other formats
-	 *
-	 * According to 22.030 Figure 3.5.3.2 USSD strings can be:
-	 *
-	 * Supplementary service control
-	 * SIM control
-	 * Manufacturer defined
-	 * Terminated by '#'
-	 * Short String - This can be any 2 digit short string.  If the string
-	 *                starts with a '1' and no calls are in progress then
-	 *                this string is treated as a call setup request
-	 *
-	 * Everything else is not a valid USSD string
+	 * As an exception, if a 2 digit string starts with a '1' and
+	 * there are no calls in progress then this string is treated as
+	 * a call setup request instead.
 	 */
 
-	if (len != 2 && str[len-1] != '#')
+	if (str[len-1] == '#')
+		return TRUE;
+
+	if (!call_in_progress && len == 2 && str[0] != '1')
 		return FALSE;
 
-	return TRUE;
+	if (len <= 2)
+		return TRUE;
+
+	return FALSE;
 }
 
 const char *ss_control_type_to_string(enum ss_control_type type)
 {
 	switch (type) {
 	case SS_CONTROL_TYPE_ACTIVATION:
-		return "acivation";
+		return "activation";
 	case SS_CONTROL_TYPE_REGISTRATION:
 		return "registration";
 	case SS_CONTROL_TYPE_QUERY:
@@ -459,7 +469,8 @@ const char *ss_control_type_to_string(enum ss_control_type type)
 		}				\
 	} while (0)				\
 
-/* Note: The str will be modified, so in case of error you should
+/*
+ * Note: The str will be modified, so in case of error you should
  * throw it away and start over
  */
 gboolean parse_ss_control_string(char *str, int *ss_type,
@@ -518,7 +529,8 @@ gboolean parse_ss_control_string(char *str, int *ss_type,
 
 	NEXT_FIELD(c, *sc);
 
-	/* According to 22.030 SC is 2 or 3 digits, there can be
+	/*
+	 * According to 22.030 SC is 2 or 3 digits, there can be
 	 * an optional digit 'n' if this is a call setup string,
 	 * however 22.030 does not define any SC of length 3
 	 * with an 'n' present
@@ -580,7 +592,7 @@ const char *bearer_class_to_string(enum bearer_class cls)
 	return NULL;
 }
 
-gboolean is_valid_pin(const char *pin)
+gboolean is_valid_pin(const char *pin, enum pin_type type)
 {
 	unsigned int i;
 
@@ -588,14 +600,33 @@ gboolean is_valid_pin(const char *pin)
 	if (pin == NULL || pin[0] == '\0')
 		return FALSE;
 
-	for (i = 0; i < strlen(pin); i++)
-		if (pin[i] < '0' || pin[i] > '9')
-			return FALSE;
-
-	if (i > 8)
+	i = strlen(pin);
+	if (i != strspn(pin, "0123456789"))
 		return FALSE;
 
-	return TRUE;
+	switch (type) {
+	case PIN_TYPE_PIN:
+		/* 11.11 Section 9.3 ("CHV"): 4..8 IA-5 digits */
+		if (4 <= i && i <= 8)
+			return TRUE;
+		break;
+	case PIN_TYPE_PUK:
+		/* 11.11 Section 9.3 ("UNBLOCK CHV"), 8 IA-5 digits */
+		if (i == 8)
+			return TRUE;
+		break;
+	case PIN_TYPE_NET:
+		/* 22.004 Section 5.2, 4 IA-5 digits */
+		if (i == 4)
+			return TRUE;
+		break;
+	case PIN_TYPE_NONE:
+		if (i < 8)
+			return TRUE;
+		break;
+	}
+
+	return FALSE;
 }
 
 const char *registration_status_to_string(int status)
@@ -622,21 +653,21 @@ const char *registration_tech_to_string(int tech)
 {
 	switch (tech) {
 	case ACCESS_TECHNOLOGY_GSM:
-		return "GSM";
+		return "gsm";
 	case ACCESS_TECHNOLOGY_GSM_COMPACT:
-		return "GSMCompact";
+		return "gsm";
 	case ACCESS_TECHNOLOGY_UTRAN:
-		return "UTRAN";
+		return "umts";
 	case ACCESS_TECHNOLOGY_GSM_EGPRS:
-		return "GSM+EGPRS";
+		return "edge";
 	case ACCESS_TECHNOLOGY_UTRAN_HSDPA:
-		return "UTRAN+HSDPA";
+		return "hspa";
 	case ACCESS_TECHNOLOGY_UTRAN_HSUPA:
-		return "UTRAN+HSUPA";
+		return "hspa";
 	case ACCESS_TECHNOLOGY_UTRAN_HSDPA_HSUPA:
-		return "UTRAN+HSDPA+HSUPA";
+		return "hspa";
 	case ACCESS_TECHNOLOGY_EUTRAN:
-		return "EUTRAN";
+		return "lte";
 	default:
 		return "";
 	}
@@ -666,4 +697,11 @@ gboolean is_valid_apn(const char *apn)
 	}
 
 	return TRUE;
+}
+
+const char *ofono_uuid_to_str(const struct ofono_uuid *uuid)
+{
+	static char buf[OFONO_SHA1_UUID_LEN * 2 + 1];
+
+	return encode_hex_own_buf(uuid->uuid, OFONO_SHA1_UUID_LEN, 0, buf);
 }

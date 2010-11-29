@@ -1,21 +1,21 @@
 /*
- * This file is part of oFono - Open Source Telephony
  *
- * Copyright (C) 2009 Nokia Corporation and/or its subsidiary(-ies).
+ *  oFono - Open Source Telephony
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * version 2 as published by the Free Software Foundation.
+ *  Copyright (C) 2009-2010 Nokia Corporation and/or its subsidiary(-ies).
  *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
- * 02110-1301 USA
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program; if not, write to the Free Software
+ *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
  */
 
@@ -77,9 +77,10 @@ static int forw_type_to_isi_code(int type)
 	return ss_code;
 }
 
-static bool decode_gsm_forwarding_info(const void *restrict data, size_t len,
-					uint8_t *status, uint8_t *ton,
-					uint8_t *norply, char **number)
+static gboolean decode_gsm_forwarding_info(const void *restrict data,
+						size_t len,
+						uint8_t *status, uint8_t *ton,
+						uint8_t *norply, char **number)
 {
 	GIsiSubBlockIter iter;
 
@@ -103,7 +104,7 @@ static bool decode_gsm_forwarding_info(const void *restrict data, size_t len,
 				|| !g_isi_sb_iter_get_byte(&iter, &_numlen, 7)
 				|| !g_isi_sb_iter_get_alpha_tag(&iter, &_number,
 					_numlen * 2, 10))
-				return false;
+				return FALSE;
 
 			if (status)
 				*status = _status;
@@ -116,7 +117,7 @@ static bool decode_gsm_forwarding_info(const void *restrict data, size_t len,
 			else
 				g_free(_number);
 
-			return true;
+			return TRUE;
 		}
 		default:
 			DBG("Skipping sub-block: %s (%zd bytes)",
@@ -125,11 +126,12 @@ static bool decode_gsm_forwarding_info(const void *restrict data, size_t len,
 			break;
 		}
 	}
-	return false;
+	return FALSE;
 }
 
-static bool registration_resp_cb(GIsiClient *client, const void *restrict data,
-				size_t len, uint16_t object, void *opaque)
+static gboolean registration_resp_cb(GIsiClient *client,
+					const void *restrict data, size_t len,
+					uint16_t object, void *opaque)
 {
 	GIsiSubBlockIter iter;
 	const unsigned char *msg = data;
@@ -142,7 +144,7 @@ static bool registration_resp_cb(GIsiClient *client, const void *restrict data,
 	}
 
 	if (len < 7 || msg[0] != SS_SERVICE_COMPLETED_RESP)
-		return false;
+		return FALSE;
 
 	if (msg[1] != SS_REGISTRATION)
 		goto error;
@@ -193,7 +195,7 @@ error:
 
 out:
 	g_free(cbd);
-	return true;
+	return TRUE;
 }
 
 static void isi_registration(struct ofono_call_forwarding *cf,
@@ -227,7 +229,7 @@ static void isi_registration(struct ofono_call_forwarding *cf,
 
 	DBG("forwarding type %d class %d\n", type, cls);
 
-	if (!cbd || !number->number || strlen(number->number) > 28)
+	if (!cbd || !fd || !number->number || strlen(number->number) > 28)
 		goto error;
 
 	ss_code = forw_type_to_isi_code(type);
@@ -260,8 +262,9 @@ error:
 	g_free(cbd);
 }
 
-static bool erasure_resp_cb(GIsiClient *client, const void *restrict data,
-				size_t len, uint16_t object, void *opaque)
+static gboolean erasure_resp_cb(GIsiClient *client,
+				const void *restrict data, size_t len,
+				uint16_t object, void *opaque)
 {
 	GIsiSubBlockIter iter;
 	const unsigned char *msg = data;
@@ -324,7 +327,7 @@ error:
 
 out:
 	g_free(cbd);
-	return true;
+	return TRUE;
 }
 
 
@@ -346,7 +349,7 @@ static void isi_erasure(struct ofono_call_forwarding *cf, int type, int cls,
 
 	DBG("forwarding type %d class %d\n", type, cls);
 
-	if (!cbd)
+	if (!cbd || !fd)
 		goto error;
 
 	ss_code = forw_type_to_isi_code(type);
@@ -365,8 +368,9 @@ error:
 	g_free(cbd);
 }
 
-static bool query_resp_cb(GIsiClient *client, const void *restrict data,
-				size_t len, uint16_t object, void *opaque)
+static gboolean query_resp_cb(GIsiClient *client,
+				const void *restrict data, size_t len,
+				uint16_t object, void *opaque)
 {
 	GIsiSubBlockIter iter;
 	const unsigned char *msg = data;
@@ -422,8 +426,8 @@ static bool query_resp_cb(GIsiClient *client, const void *restrict data,
 							&ton, &norply, &number))
 				goto error;
 
-			list.status = status & (SS_GSM_ACTIVE | SS_GSM_REGISTERED
-						| SS_GSM_PROVISIONED);
+			/* As in 27.007 section 7.11 */
+			list.status = status & SS_GSM_ACTIVE;
 			list.time = norply;
 			list.phone_number.type = ton | 128;
 			strncpy(list.phone_number.number, number,
@@ -453,7 +457,7 @@ error:
 
 out:
 	g_free(cbd);
-	return true;
+	return TRUE;
 
 }
 
@@ -477,7 +481,7 @@ static void isi_query(struct ofono_call_forwarding *cf, int type, int cls,
 
 	DBG("forwarding type %d class %d\n", type, cls);
 
-	if (!cbd || cls != 7)
+	if (!cbd || !fd || cls != 7)
 		goto error;
 
 	ss_code = forw_type_to_isi_code(type);
@@ -505,14 +509,14 @@ static gboolean isi_call_forwarding_register(gpointer user)
 	return FALSE;
 }
 
-static void reachable_cb(GIsiClient *client, bool alive, uint16_t object,
+static void reachable_cb(GIsiClient *client, gboolean alive, uint16_t object,
 				void *opaque)
 {
 	struct ofono_call_forwarding *cf = opaque;
 	const char *debug = NULL;
 
 	if (!alive) {
-		DBG("Unable to bootsrap call forwarding driver");
+		DBG("Unable to bootstrap call forwarding driver");
 		return;
 	}
 
@@ -556,10 +560,12 @@ static void isi_call_forwarding_remove(struct ofono_call_forwarding *cf)
 {
 	struct forw_data *data = ofono_call_forwarding_get_data(cf);
 
-	if (data) {
-		g_isi_client_destroy(data->client);
-		g_free(data);
-	}
+	if (!data)
+		return;
+
+	ofono_call_forwarding_set_data(cf, NULL);
+	g_isi_client_destroy(data->client);
+	g_free(data);
 }
 
 static struct ofono_call_forwarding_driver driver = {

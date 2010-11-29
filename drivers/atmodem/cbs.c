@@ -38,6 +38,7 @@
 #include "gatresult.h"
 
 #include "atmodem.h"
+#include "vendor.h"
 
 static const char *none_prefix[] = { NULL };
 static const char *cscb_prefix[] = { "+CSCB:", NULL };
@@ -45,6 +46,7 @@ static const char *cscb_prefix[] = { "+CSCB:", NULL };
 struct cbs_data {
 	GAtChat *chat;
 	gboolean cscb_mode_1;
+	unsigned int vendor;
 };
 
 static void at_cbm_notify(GAtResult *result, gpointer user_data)
@@ -55,6 +57,8 @@ static void at_cbm_notify(GAtResult *result, gpointer user_data)
 	GAtResultIter iter;
 	unsigned char pdu[88];
 	long hexpdulen;
+
+	DBG("");
 
 	g_at_result_iter_init(&iter, result);
 
@@ -110,8 +114,21 @@ static void at_cbs_set_topics(struct ofono_cbs *cbs, const char *topics,
 	char *buf;
 	unsigned int id;
 
+	DBG("");
+
 	if (!cbd)
 		goto error;
+
+	/* For the Qualcomm based devices it is required to clear
+	 * the list of topics first.  Otherwise setting the new
+	 * topic ranges will fail.
+	 *
+	 * In addition only AT+CSCB=1 seems to work.  Providing
+	 * a topic range for clearing makes AT+CSBC=0,... fail.
+	 */
+	if (data->vendor == OFONO_VENDOR_QUALCOMM_MSM)
+		g_at_chat_send(data->chat, "AT+CSCB=1", none_prefix,
+				NULL, NULL, NULL);
 
 	buf = g_strdup_printf("AT+CSCB=0,\"%s\"", topics);
 
@@ -124,8 +141,7 @@ static void at_cbs_set_topics(struct ofono_cbs *cbs, const char *topics,
 		return;
 
 error:
-	if (cbd)
-		g_free(cbd);
+	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, user_data);
 }
@@ -136,6 +152,8 @@ static void at_cbs_clear_topics(struct ofono_cbs *cbs,
 	struct cbs_data *data = ofono_cbs_get_data(cbs);
 	struct cb_data *cbd = cb_data_new(cb, user_data);
 	char buf[256];
+
+	DBG("");
 
 	if (!cbd)
 		goto error;
@@ -150,8 +168,7 @@ static void at_cbs_clear_topics(struct ofono_cbs *cbs,
 		return;
 
 error:
-	if (cbd)
-		g_free(cbd);
+	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, user_data);
 }
@@ -224,11 +241,12 @@ static int at_cbs_probe(struct ofono_cbs *cbs, unsigned int vendor,
 	struct cbs_data *data;
 
 	data = g_new0(struct cbs_data, 1);
-	data->chat = chat;
+	data->chat = g_at_chat_clone(chat);
+	data->vendor = vendor;
 
 	ofono_cbs_set_data(cbs, data);
 
-	g_at_chat_send(chat, "AT+CSCB=?", cscb_prefix,
+	g_at_chat_send(data->chat, "AT+CSCB=?", cscb_prefix,
 			at_cscb_support_cb, cbs, NULL);
 
 	return 0;
@@ -240,6 +258,7 @@ static void at_cbs_remove(struct ofono_cbs *cbs)
 
 	ofono_cbs_set_data(cbs, NULL);
 
+	g_at_chat_unref(data->chat);
 	g_free(data);
 }
 

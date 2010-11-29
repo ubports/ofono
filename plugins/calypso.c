@@ -1,4 +1,5 @@
 /*
+ *
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
@@ -54,11 +55,12 @@
 #include <ofono/ssn.h>
 #include <ofono/ussd.h>
 #include <ofono/voicecall.h>
+#include <ofono/stk.h>
 
 #include <drivers/atmodem/vendor.h>
 
-#define CALYPSO_POWER_PATH "/sys/bus/platform/devices/neo1973-pm-gsm.0/power_on"
-#define CALYPSO_RESET_PATH "/sys/bus/platform/devices/neo1973-pm-gsm.0/reset"
+#define CALYPSO_POWER_PATH "/sys/bus/platform/devices/gta02-pm-gsm.0/power_on"
+#define CALYPSO_RESET_PATH "/sys/bus/platform/devices/gta02-pm-gsm.0/reset"
 
 enum powercycle_state {
 	POWERCYCLE_STATE_POWER0 = 0,
@@ -70,11 +72,13 @@ enum powercycle_state {
 
 #define NUM_DLC 4
 
-#define VOICE_DLC 0
-#define NETREG_DLC 1
-#define SMS_DLC 2
-#define AUX_DLC 3
-#define SETUP_DLC 3
+#define VOICE_DLC   0
+#define NETREG_DLC  1
+#define SMS_DLC     2
+#define AUX_DLC     3
+#define SETUP_DLC   3
+
+static char *debug_prefixes[NUM_DLC] = { "Voice: ", "Net: ", "SMS: ", "Aux: " };
 
 struct calypso_data {
 	GAtMux *mux;
@@ -82,23 +86,18 @@ struct calypso_data {
 	enum powercycle_state state;
 	gboolean phonebook_added;
 	gboolean sms_added;
+	gboolean have_sim;
+	struct ofono_sim *sim;
 };
 
-static void calypso_debug(const char *str, void *data)
-{
-	guint dlc = GPOINTER_TO_UINT(data);
+static const char *cpin_prefix[] = { "+CPIN:", NULL };
+static const char *none_prefix[] = { NULL };
 
-	ofono_info("DLC%u: %s", dlc, str);
-}
-
-static void calypso_mux_debug(const char *str, void *data)
+static void calypso_debug(const char *str, void *user_data)
 {
-	ofono_info("MUX: %s", str);
-}
+	const char *prefix = user_data;
 
-static void calypso_setup_debug(const char *str, void *data)
-{
-	ofono_info("Setup: %s", str);
+	ofono_info("%s%s", prefix, str);
 }
 
 static int calypso_probe(struct ofono_modem *modem)
@@ -106,7 +105,7 @@ static int calypso_probe(struct ofono_modem *modem)
 	const char *device;
 	struct calypso_data *data;
 
-	DBG("");
+	DBG("%p", modem);
 
 	device = ofono_modem_get_string(modem, "Device");
 	if (device == NULL)
@@ -125,7 +124,7 @@ static void calypso_remove(struct ofono_modem *modem)
 {
 	struct calypso_data *data = ofono_modem_get_data(modem);
 
-	DBG("");
+	DBG("%p", modem);
 
 	g_free(data);
 }
@@ -165,6 +164,23 @@ static void cstat_notify(GAtResult *result, gpointer user_data)
 	}
 }
 
+static void simind_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_modem *modem = user_data;
+	struct calypso_data *data = ofono_modem_get_data(modem);
+	GAtResultIter iter;
+
+	if (!data->sim)
+		return;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (g_at_result_iter_next(&iter, "%SIMREM:"))
+		ofono_sim_inserted_notify(data->sim, FALSE);
+	else if (g_at_result_iter_next(&iter, "%SIMINS:"))
+		ofono_sim_inserted_notify(data->sim, TRUE);
+}
+
 static void setup_modem(struct ofono_modem *modem)
 {
 	struct calypso_data *data = ofono_modem_get_data(modem);
@@ -174,6 +190,8 @@ static void setup_modem(struct ofono_modem *modem)
 	for (i = 0; i < NUM_DLC; i++) {
 		g_at_chat_send(data->dlcs[i], "ATE0", NULL, NULL, NULL, NULL);
 		g_at_chat_send(data->dlcs[i], "AT%CUNS=0",
+				NULL, NULL, NULL, NULL);
+		g_at_chat_send(data->dlcs[i], "AT+CMEE=1",
 				NULL, NULL, NULL, NULL);
 	}
 
@@ -190,32 +208,43 @@ static void setup_modem(struct ofono_modem *modem)
 	/* Disable deep sleep */
 	g_at_chat_send(data->dlcs[SETUP_DLC], "AT%SLEEP=2", NULL,
 			NULL, NULL, NULL);
+
+	/* Enable SIM removed/inserted notifications */
+	g_at_chat_register(data->dlcs[SETUP_DLC], "%SIMREM:", simind_notify,
+				FALSE, modem, NULL);
+	g_at_chat_register(data->dlcs[SETUP_DLC], "%SIMINS:", simind_notify,
+				FALSE, modem, NULL);
+	g_at_chat_send(data->dlcs[SETUP_DLC], "AT%SIMIND=1", NULL,
+				NULL, NULL, NULL);
 }
 
-static void cfun_set_on_cb(gboolean ok, GAtResult *result, gpointer user_data)
+static void simpin_check_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_modem *modem = user_data;
 	struct calypso_data *data = ofono_modem_get_data(modem);
 
 	DBG("");
 
-	if (ok == FALSE) {
-		int i;
+	/* Modem returns ERROR if there is no SIM in slot. */
+	data->have_sim = ok;
 
-		for (i = 0; i < NUM_DLC; i++) {
-			g_at_chat_shutdown(data->dlcs[i]);
-			g_at_chat_unref(data->dlcs[i]);
-			data->dlcs[i] = NULL;
-		}
+	setup_modem(modem);
 
-		g_at_mux_shutdown(data->mux);
-		g_at_mux_unref(data->mux);
-		data->mux = NULL;
-	} else {
-		setup_modem(modem);
-	}
+	ofono_modem_set_powered(modem, TRUE);
+}
 
-	ofono_modem_set_powered(modem, ok);
+static void init_simpin_check(struct ofono_modem *modem)
+{
+	struct calypso_data *data = ofono_modem_get_data(modem);
+
+	/*
+	 * Check for SIM presence by seeing if AT+CPIN? succeeds.
+	 * The SIM can not be practically inserted/removed without
+	 * restarting the device so there's no need to check more
+	 * than once.
+	 */
+	g_at_chat_send(data->dlcs[SETUP_DLC], "AT+CPIN?", cpin_prefix,
+			simpin_check_cb, modem, NULL);
 }
 
 static void mux_setup(GAtMux *mux, gpointer user_data)
@@ -236,7 +265,7 @@ static void mux_setup(GAtMux *mux, gpointer user_data)
 	data->mux = mux;
 
 	if (getenv("OFONO_AT_DEBUG"))
-		g_at_mux_set_debug(data->mux, calypso_mux_debug, NULL);
+		g_at_mux_set_debug(data->mux, calypso_debug, "MUX: ");
 
 	g_at_mux_start(mux);
 
@@ -250,13 +279,12 @@ static void mux_setup(GAtMux *mux, gpointer user_data)
 
 		if (getenv("OFONO_AT_DEBUG"))
 			g_at_chat_set_debug(data->dlcs[i], calypso_debug,
-						GUINT_TO_POINTER(i));
+							debug_prefixes[i]);
 
 		g_at_chat_set_wakeup_command(data->dlcs[i], "AT\r", 500, 5000);
 	}
 
-	g_at_chat_send(data->dlcs[SETUP_DLC], "AT+CFUN=1", NULL,
-					cfun_set_on_cb, modem, NULL);
+	init_simpin_check(modem);
 }
 
 static void modem_initialize(struct ofono_modem *modem)
@@ -301,7 +329,7 @@ static void modem_initialize(struct ofono_modem *modem)
 		goto error;
 
 	if (getenv("OFONO_AT_DEBUG") != NULL)
-		g_at_chat_set_debug(chat, calypso_setup_debug, NULL);
+		g_at_chat_set_debug(chat, calypso_debug, "Setup: ");
 
 	g_at_chat_set_wakeup_command(chat, "AT\r", 500, 5000);
 
@@ -393,6 +421,8 @@ static int calypso_enable(struct ofono_modem *modem)
 {
 	struct calypso_data *data = ofono_modem_get_data(modem);
 
+	DBG("%p", modem);
+
 	if (write_file(CALYPSO_POWER_PATH, FALSE) == FALSE)
 		return -EINVAL;
 
@@ -407,10 +437,9 @@ static int calypso_disable(struct ofono_modem *modem)
 	struct calypso_data *data = ofono_modem_get_data(modem);
 	int i;
 
-	DBG("");
+	DBG("%p", modem);
 
 	for (i = 0; i < NUM_DLC; i++) {
-		g_at_chat_shutdown(data->dlcs[i]);
 		g_at_chat_unref(data->dlcs[i]);
 		data->dlcs[i] = NULL;
 	}
@@ -432,11 +461,63 @@ static void calypso_pre_sim(struct ofono_modem *modem)
 {
 	struct calypso_data *data = ofono_modem_get_data(modem);
 
-	DBG("");
+	DBG("%p", modem);
 
 	ofono_devinfo_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
-	ofono_sim_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
+	data->sim = ofono_sim_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
 	ofono_voicecall_create(modem, 0, "calypsomodem", data->dlcs[VOICE_DLC]);
+
+	/*
+	 * The STK atom is only useful after SIM has been initialised,
+	 * so really it belongs in post_sim.  However, the order of the
+	 * following three actions is adapted to work around different
+	 * issues with the Calypso's firmware in its different versions
+	 * (may have been fixed starting at some version, but this order
+	 * should work with any version).
+	 *
+	 * To deal with PIN-enabled and PIN-disabled SIM cards, the order
+	 * needs to be as follows:
+	 *
+	 * AT%SATC="..."
+	 * ...
+	 * AT+CFUN=1
+	 * ...
+	 * AT+CPIN="..."
+	 *
+	 * %SATC comes before the other two actions because it provides
+	 * the Terminal Profile data to the modem, which will be used
+	 * during the Profile Download either during +CFUN=1 (on
+	 * unprotected cards) or +CPIN="..." (on protected cards).
+	 * The STK atom needs to be present at this time because the
+	 * card may start issuing proactive commands immediately after
+	 * the Download.
+	 *
+	 * +CFUN=1 appears before PIN entry because switching from +CFUN
+	 * mode 0 later, on the Calypso has side effects at least on some
+	 * versions of the firmware:
+	 *
+	 * mode 0 -> 1 transition forces PIN re-authentication.
+	 * mode 0 -> 4 doesn't work at all.
+	 * mode 1 -> 4 and
+	 * mode 4 -> 1 transitions work and have no side effects.
+	 *
+	 * So in order to switch to Offline mode at startup,
+	 * AT+CFUN=1;+CFUN=4 would be needed.
+	 *
+	 * Additionally AT+CFUN=1 response is not checked: on PIN-enabled
+	 * cards, it will in most situations return "+CME ERROR: SIM PIN
+	 * required" (CME ERROR 11) even though the switch to mode 1
+	 * succeeds.  It will not perform Profile Download on those cards
+	 * though, until another +CPIN command.
+	 */
+	if (data->have_sim && data->sim)
+		ofono_stk_create(modem, 0, "calypsomodem", data->dlcs[AUX_DLC]);
+
+	g_at_chat_send(data->dlcs[AUX_DLC], "AT+CFUN=1",
+			none_prefix, NULL, NULL, NULL);
+
+	if (data->have_sim && data->sim)
+		ofono_sim_inserted_notify(data->sim, TRUE);
 }
 
 static void calypso_post_sim(struct ofono_modem *modem)
@@ -444,7 +525,7 @@ static void calypso_post_sim(struct ofono_modem *modem)
 	struct calypso_data *data = ofono_modem_get_data(modem);
 	struct ofono_message_waiting *mw;
 
-	DBG("");
+	DBG("%p", modem);
 
 	ofono_ussd_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
 	ofono_call_forwarding_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);

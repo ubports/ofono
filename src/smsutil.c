@@ -45,7 +45,11 @@
 #define SMS_BACKUP_PATH_DIR SMS_BACKUP_PATH "/%s-%i-%i"
 #define SMS_BACKUP_PATH_FILE SMS_BACKUP_PATH_DIR "/%03i"
 
+#define SMS_SR_BACKUP_PATH STORAGEDIR "/%s/sms_sr"
+#define SMS_SR_BACKUP_PATH_FILE SMS_SR_BACKUP_PATH "/%s-%s"
+
 #define SMS_ADDR_FMT "%24[0-9A-F]"
+#define SMS_MSGID_FMT "%40[0-9A-F]"
 
 static GSList *sms_assembly_add_fragment_backup(struct sms_assembly *assembly,
 					const struct sms *sms, time_t ts,
@@ -53,6 +57,10 @@ static GSList *sms_assembly_add_fragment_backup(struct sms_assembly *assembly,
 					guint16 ref, guint8 max, guint8 seq,
 					gboolean backup);
 
+/*
+ * This function uses the meanings of digits 10..15 according to the rules
+ * defined in 23.040 Section 9.1.2.3 and 24.008 Table 10.5.118
+ */
 void extract_bcd_number(const unsigned char *buf, int len, char *out)
 {
 	static const char digit_lut[] = "0123456789*#abc\0";
@@ -75,34 +83,16 @@ static inline int to_semi_oct(char in)
 
 	switch (in) {
 	case '0':
-		digit = 0;
-		break;
 	case '1':
-		digit = 1;
-		break;
 	case '2':
-		digit = 2;
-		break;
 	case '3':
-		digit = 3;
-		break;
 	case '4':
-		digit = 4;
-		break;
 	case '5':
-		digit = 5;
-		break;
 	case '6':
-		digit = 6;
-		break;
 	case '7':
-		digit = 7;
-		break;
 	case '8':
-		digit = 8;
-		break;
 	case '9':
-		digit = 9;
+		digit = in - '0';
 		break;
 	case '*':
 		digit = 10;
@@ -141,7 +131,8 @@ void encode_bcd_number(const char *number, unsigned char *out)
 		*out = to_semi_oct(*number) | 0xf0;
 }
 
-/* Returns whether the DCS could be parsed successfully, e.g. no reserved
+/*
+ * Returns whether the DCS could be parsed successfully, e.g. no reserved
  * values were used
  */
 gboolean sms_dcs_decode(guint8 dcs, enum sms_class *cls,
@@ -167,7 +158,7 @@ gboolean sms_dcs_decode(guint8 dcs, enum sms_class *cls,
 		comp = (dcs & 0x20) ? TRUE : FALSE;
 
 		if (dcs & 0x10)
-			cl = (enum sms_class)(dcs & 0x03);
+			cl = (enum sms_class) (dcs & 0x03);
 		else
 			cl = SMS_CLASS_UNSPECIFIED;
 
@@ -186,7 +177,7 @@ gboolean sms_dcs_decode(guint8 dcs, enum sms_class *cls,
 		else
 			ch = SMS_CHARSET_7BIT;
 
-		cl = (enum sms_class)(dcs & 0x03);
+		cl = (enum sms_class) (dcs & 0x03);
 
 		break;
 	default:
@@ -325,7 +316,7 @@ static inline gboolean set_octet(unsigned char *pdu, int *offset,
 	return TRUE;
 }
 
-static gboolean encode_scts(const struct sms_scts *in, unsigned char *pdu,
+gboolean sms_encode_scts(const struct sms_scts *in, unsigned char *pdu,
 				int *offset)
 {
 	guint timezone;
@@ -372,7 +363,12 @@ static gboolean encode_scts(const struct sms_scts *in, unsigned char *pdu,
 	return TRUE;
 }
 
-static gboolean decode_scts(const unsigned char *pdu, int len,
+guint8 sms_decode_semi_octet(guint8 in)
+{
+	return (in & 0x0f) * 10 + (in >> 4);
+}
+
+gboolean sms_decode_scts(const unsigned char *pdu, int len,
 				int *offset, struct sms_scts *out)
 {
 	unsigned char oct = 0;
@@ -381,26 +377,45 @@ static gboolean decode_scts(const unsigned char *pdu, int len,
 		return FALSE;
 
 	next_octet(pdu, len, offset, &oct);
-	out->year = (oct & 0x0f) * 10 + ((oct & 0xf0) >> 4);
+	out->year = sms_decode_semi_octet(oct);
+
+	if (out->year > 99)
+		return FALSE;
 
 	next_octet(pdu, len, offset, &oct);
-	out->month = (oct & 0x0f) * 10 + ((oct & 0xf0) >> 4);
+	out->month = sms_decode_semi_octet(oct);
+
+	if (out->month > 12)
+		return FALSE;
 
 	next_octet(pdu, len, offset, &oct);
-	out->day = (oct & 0x0f) * 10 + ((oct & 0xf0) >> 4);
+	out->day = sms_decode_semi_octet(oct);
+
+	if (out->day > 31)
+		return FALSE;
 
 	next_octet(pdu, len, offset, &oct);
-	out->hour = (oct & 0x0f) * 10 + ((oct & 0xf0) >> 4);
+	out->hour = sms_decode_semi_octet(oct);
+
+	if (out->hour > 23)
+		return FALSE;
 
 	next_octet(pdu, len, offset, &oct);
-	out->minute = (oct & 0x0f) * 10 + ((oct & 0xf0) >> 4);
+	out->minute = sms_decode_semi_octet(oct);
+
+	if (out->minute > 59)
+		return FALSE;
 
 	next_octet(pdu, len, offset, &oct);
-	out->second = (oct & 0x0f) * 10 + ((oct & 0xf0) >> 4);
+	out->second = sms_decode_semi_octet(oct);
+
+	if (out->second > 59)
+		return FALSE;
 
 	next_octet(pdu, len, offset, &oct);
 
-	/* Time Zone indicates the difference, expressed in quarters
+	/*
+	 * Time Zone indicates the difference, expressed in quarters
 	 * of an hour, between the local time and GMT. In the first of the two
 	 * semi‑octets, the first bit (bit 3 of the seventh octet of the
 	 * TP‑Service‑Centre‑Time‑Stamp field) represents the algebraic
@@ -410,6 +425,9 @@ static gboolean decode_scts(const unsigned char *pdu, int len,
 
 	if (oct & 0x08)
 		out->timezone = out->timezone * -1;
+
+	if ((out->timezone > 12*4-1) || (out->timezone < -(12*4-1)))
+		return FALSE;
 
 	return TRUE;
 }
@@ -428,12 +446,13 @@ static gboolean decode_validity_period(const unsigned char *pdu, int len,
 
 		return TRUE;
 	case SMS_VALIDITY_PERIOD_FORMAT_ABSOLUTE:
-		if (!decode_scts(pdu, len, offset, &vp->absolute))
+		if (!sms_decode_scts(pdu, len, offset, &vp->absolute))
 			return FALSE;
 
 		return TRUE;
 	case SMS_VALIDITY_PERIOD_FORMAT_ENHANCED:
-		/* TODO: Parse out enhanced structure properly
+		/*
+		 * TODO: Parse out enhanced structure properly
 		 * 23.040 Section 9.2.3.12.3
 		 */
 		if ((len - *offset) < 7)
@@ -462,7 +481,7 @@ static gboolean encode_validity_period(const struct sms_validity_period *vp,
 		set_octet(pdu, offset, vp->relative);
 		return TRUE;
 	case SMS_VALIDITY_PERIOD_FORMAT_ABSOLUTE:
-		return encode_scts(&vp->absolute, pdu, offset);
+		return sms_encode_scts(&vp->absolute, pdu, offset);
 	case SMS_VALIDITY_PERIOD_FORMAT_ENHANCED:
 		/* TODO: Write out proper enhanced VP structure */
 		memcpy(pdu + *offset, vp->enhanced, 7);
@@ -608,7 +627,8 @@ gboolean sms_decode_address_field(const unsigned char *pdu, int len,
 		else
 			chars = addr_len * 4 / 7;
 
-		/* This cannot happen according to 24.011, however
+		/*
+		 * This cannot happen according to 24.011, however
 		 * nothing is said in 23.040
 		 */
 		if (chars == 0) {
@@ -672,7 +692,7 @@ static gboolean encode_deliver(const struct sms_deliver *in, unsigned char *pdu,
 	set_octet(pdu, offset, in->pid);
 	set_octet(pdu, offset, in->dcs);
 
-	if (encode_scts(&in->scts, pdu, offset) == FALSE)
+	if (sms_encode_scts(&in->scts, pdu, offset) == FALSE)
 		return FALSE;
 
 	set_octet(pdu, offset, in->udl);
@@ -713,7 +733,7 @@ static gboolean decode_deliver(const unsigned char *pdu, int len,
 	if (!next_octet(pdu, len, &offset, &out->deliver.dcs))
 		return FALSE;
 
-	if (!decode_scts(pdu, len, &offset, &out->deliver.scts))
+	if (!sms_decode_scts(pdu, len, &offset, &out->deliver.scts))
 		return FALSE;
 
 	if (!next_octet(pdu, len, &offset, &out->deliver.udl))
@@ -743,7 +763,7 @@ static gboolean encode_submit_ack_report(const struct sms_submit_ack_report *in,
 
 	set_octet(pdu, offset, in->pi);
 
-	if (!encode_scts(&in->scts, pdu, offset))
+	if (!sms_encode_scts(&in->scts, pdu, offset))
 		return FALSE;
 
 	if (in->pi & 0x1)
@@ -779,7 +799,7 @@ static gboolean encode_submit_err_report(const struct sms_submit_err_report *in,
 
 	set_octet(pdu, offset, in->pi);
 
-	if (!encode_scts(&in->scts, pdu, offset))
+	if (!sms_encode_scts(&in->scts, pdu, offset))
 		return FALSE;
 
 	if (in->pi & 0x1)
@@ -820,7 +840,8 @@ static gboolean decode_submit_report(const unsigned char *pdu, int len,
 	if (!next_octet(pdu, len, &offset, &octet))
 		return FALSE;
 
-	/* At this point we don't know whether this is an ACK or an ERROR.
+	/*
+	 * At this point we don't know whether this is an ACK or an ERROR.
 	 * FCS can only have values 0x80 and above, as 0x00 - 0x7F are reserved
 	 * according to 3GPP 23.040.  For PI, the values can be only in
 	 * bit 0, 1, 2 with the 7th bit reserved as an extension.  Since
@@ -844,7 +865,7 @@ static gboolean decode_submit_report(const unsigned char *pdu, int len,
 
 	pi = octet & 0x07;
 
-	if (!decode_scts(pdu, len, &offset, scts))
+	if (!sms_decode_scts(pdu, len, &offset, scts))
 		return FALSE;
 
 	if (pi & 0x01) {
@@ -918,10 +939,10 @@ static gboolean encode_status_report(const struct sms_status_report *in,
 	if (!sms_encode_address_field(&in->raddr, FALSE, pdu, offset))
 		return FALSE;
 
-	if (!encode_scts(&in->scts, pdu, offset))
+	if (!sms_encode_scts(&in->scts, pdu, offset))
 		return FALSE;
 
-	if (!encode_scts(&in->dt, pdu, offset))
+	if (!sms_encode_scts(&in->dt, pdu, offset))
 		return FALSE;
 
 	octet = in->st;
@@ -971,10 +992,10 @@ static gboolean decode_status_report(const unsigned char *pdu, int len,
 					&out->status_report.raddr))
 		return FALSE;
 
-	if (!decode_scts(pdu, len, &offset, &out->status_report.scts))
+	if (!sms_decode_scts(pdu, len, &offset, &out->status_report.scts))
 		return FALSE;
 
-	if (!decode_scts(pdu, len, &offset, &out->status_report.dt))
+	if (!sms_decode_scts(pdu, len, &offset, &out->status_report.dt))
 		return FALSE;
 
 	if (!next_octet(pdu, len, &offset, &octet))
@@ -982,7 +1003,8 @@ static gboolean decode_status_report(const unsigned char *pdu, int len,
 
 	out->status_report.st = octet;
 
-	/* We have to be careful here, PI is labeled as Optional in 23.040
+	/*
+	 * We have to be careful here, PI is labeled as Optional in 23.040
 	 * which is different from RP-ERR & RP-ACK for both Deliver & Submit
 	 * reports
 	 */
@@ -1111,7 +1133,8 @@ static gboolean decode_deliver_report(const unsigned char *pdu, int len,
 	if (!next_octet(pdu, len, &offset, &octet))
 		return FALSE;
 
-	/* At this point we don't know whether this is an ACK or an ERROR.
+	/*
+	 * At this point we don't know whether this is an ACK or an ERROR.
 	 * FCS can only have values 0x80 and above, as 0x00 - 0x7F are reserved
 	 * according to 3GPP 23.040.  For PI, the values can be only in
 	 * bit 0, 1, 2 with the 7th bit reserved as an extension.  Since
@@ -1228,6 +1251,58 @@ static gboolean encode_submit(const struct sms_submit *in,
 	return TRUE;
 }
 
+gboolean sms_decode_unpacked_stk_pdu(const unsigned char *pdu, int len,
+					struct sms *out)
+{
+	unsigned char octet;
+	int offset = 0;
+
+	if (!next_octet(pdu, len, &offset, &octet))
+		return FALSE;
+
+	if ((octet & 0x3) != 1)
+		return FALSE;
+
+	out->type = SMS_TYPE_SUBMIT;
+
+	out->submit.rd = is_bit_set(octet, 2);
+	out->submit.vpf = bit_field(octet, 3, 2);
+	out->submit.rp = is_bit_set(octet, 7);
+	out->submit.udhi = is_bit_set(octet, 6);
+	out->submit.srr = is_bit_set(octet, 5);
+
+	if (!next_octet(pdu, len, &offset, &out->submit.mr))
+		return FALSE;
+
+	if (!sms_decode_address_field(pdu, len, &offset,
+					FALSE, &out->submit.daddr))
+		return FALSE;
+
+	if (!next_octet(pdu, len, &offset, &out->submit.pid))
+		return FALSE;
+
+	if (!next_octet(pdu, len, &offset, &out->submit.dcs))
+		return FALSE;
+
+	/* Now we override the DCS */
+	out->submit.dcs = 0xF0;
+
+	if (!decode_validity_period(pdu, len, &offset, out->submit.vpf,
+					&out->submit.vp))
+		return FALSE;
+
+	if (!next_octet(pdu, len, &offset, &out->submit.udl))
+		return FALSE;
+
+	if ((len - offset) < out->submit.udl)
+		return FALSE;
+
+	pack_7bit_own_buf(pdu + offset, out->submit.udl, 0, FALSE,
+				NULL, 0, out->submit.ud);
+
+	return TRUE;
+}
+
 static gboolean decode_submit(const unsigned char *pdu, int len,
 					struct sms *out)
 {
@@ -1269,6 +1344,9 @@ static gboolean decode_submit(const unsigned char *pdu, int len,
 	expected = sms_udl_in_bytes(out->submit.udl, out->submit.dcs);
 
 	if ((len - offset) < expected)
+		return FALSE;
+
+	if (expected > (int) sizeof(out->submit.ud))
 		return FALSE;
 
 	memcpy(out->submit.ud, pdu+offset, expected);
@@ -1363,7 +1441,8 @@ gboolean sms_encode(const struct sms *in, int *len, int *tpdu_len,
 	int tpdu_start;
 
 	if (in->type == SMS_TYPE_DELIVER || in->type == SMS_TYPE_SUBMIT ||
-			in->type == SMS_TYPE_COMMAND)
+			in->type == SMS_TYPE_COMMAND ||
+			in->type == SMS_TYPE_STATUS_REPORT)
 		if (!sms_encode_address_field(&in->sc_addr, TRUE, pdu, &offset))
 			return FALSE;
 
@@ -1568,7 +1647,8 @@ static gboolean verify_udh(const guint8 *hdr, guint8 max_len)
 	if (hdr[0] >= max_len)
 		return FALSE;
 
-	/* According to 23.040: If the length of the User Data Header is
+	/*
+	 * According to 23.040: If the length of the User Data Header is
 	 * such that there are too few or too many octets in the final
 	 * Information Element then the whole User Data Header shall be
 	 * ignored.
@@ -1720,7 +1800,8 @@ gboolean sms_udh_iter_next(struct sms_udh_iter *iter)
 	return TRUE;
 }
 
-/* Returns both forms of time.  The time_t value returns the time in local
+/*
+ * Returns both forms of time.  The time_t value returns the time in local
  * timezone.  The struct tm is filled out with the remote time information
  */
 time_t sms_scts_to_time(const struct sms_scts *scts, struct tm *remote)
@@ -1794,13 +1875,14 @@ static gboolean extract_app_port_common(struct sms_udh_iter *iter, int *dst,
 	int dstport = -1;
 	gboolean uninitialized_var(is_addr_8bit);
 
-	/* According to the specification, we have to use the last
+	/*
+	 * According to the specification, we have to use the last
 	 * useable header.  Also, we have to ignore ports that are reserved:
 	 * A receiving entity shall ignore (i.e. skip over and commence
 	 * processing at the next information element) any information element
 	 * where the value of the Information-Element-Data is Reserved or not
 	 * supported.
-	*/
+	 */
 	while ((iei = sms_udh_iter_get_ie_type(iter)) !=
 			SMS_IEI_INVALID) {
 		switch (iei) {
@@ -1882,7 +1964,8 @@ gboolean sms_extract_concatenation(const struct sms *sms, guint16 *ref_num,
 	guint8 uninitialized_var(max), uninitialized_var(seq);
 	gboolean concatenated = FALSE;
 
-	/* We must ignore the entire user_data header here:
+	/*
+	 * We must ignore the entire user_data header here:
 	 * If the length of the User Data Header is such that there
 	 * are too few or too many octets in the final Information
 	 * Element then the whole User Data Header shall be ignored.
@@ -1890,7 +1973,8 @@ gboolean sms_extract_concatenation(const struct sms *sms, guint16 *ref_num,
 	if (!sms_udh_iter_init(sms, &iter))
 		return FALSE;
 
-	/* According to the specification, we have to use the last
+	/*
+	 * According to the specification, we have to use the last
 	 * useable header:
 	 * In the event that IEs determined as not repeatable are
 	 * duplicated, the last occurrence of the IE shall be used.
@@ -1966,7 +2050,8 @@ gboolean sms_extract_language_variant(const struct sms *sms, guint8 *locking,
 	enum sms_iei iei;
 	guint8 variant;
 
-	/* We must ignore the entire user_data header here:
+	/*
+	 * We must ignore the entire user_data header here:
 	 * If the length of the User Data Header is such that there
 	 * are too few or too many octets in the final Information
 	 * Element then the whole User Data Header shall be ignored.
@@ -1974,7 +2059,8 @@ gboolean sms_extract_language_variant(const struct sms *sms, guint8 *locking,
 	if (!sms_udh_iter_init(sms, &iter))
 		return FALSE;
 
-	/* According to the specification, we have to use the last
+	/*
+	 * According to the specification, we have to use the last
 	 * useable header:
 	 * In the event that IEs determined as not repeatable are
 	 * duplicated, the last occurrence of the IE shall be used.
@@ -2040,7 +2126,8 @@ unsigned char *sms_decode_datagram(GSList *sms_list, long *out_len)
 		if (!ud)
 			return NULL;
 
-		/* Note we do this because we must check whether the UDH
+		/*
+		 * Note we do this because we must check whether the UDH
 		 * is properly formatted.  If not, the entire UDH is ignored
 		 */
 		if (sms_udh_iter_init(sms, &iter))
@@ -2158,8 +2245,10 @@ char *sms_decode_text(GSList *sms_list)
 
 			sms_extract_language_variant(sms, &locking_shift, &single_shift);
 
-			/* If language is not defined in 3GPP TS 23.038,
-	 		 * implementations are instructed to ignore it' */
+			/*
+			 * If language is not defined in 3GPP TS 23.038,
+			 * implementations are instructed to ignore it
+			 */
 			if (locking_shift >= GSM_DIALECT_INVALID)
 				locking_shift = GSM_DIALECT_DEFAULT;
 
@@ -2171,8 +2260,9 @@ char *sms_decode_text(GSList *sms_list)
 								locking_shift,
 								single_shift);
 		} else {
-			const gchar *from = (const gchar *)(ud + taken);
-			/* According to the spec: A UCS2 character shall not be
+			const gchar *from = (const gchar *) (ud + taken);
+			/*
+			 * According to the spec: A UCS2 character shall not be
 			 * split in the middle; if the length of the User Data
 			 * Header is odd, the maximum length of the whole TP-UD
 			 * field is 139 octets
@@ -2228,8 +2318,7 @@ static gboolean sms_assembly_extract_address(const char *straddr,
 	return sms_decode_address_field(pdu, len, &offset, FALSE, out);
 }
 
-static gboolean sms_assembly_encode_address(const struct sms_address *in,
-						char *straddr)
+gboolean sms_address_to_hex_string(const struct sms_address *in, char *straddr)
 {
 	unsigned char pdu[12];
 	int offset = 0;
@@ -2249,7 +2338,7 @@ static void sms_assembly_load(struct sms_assembly *assembly,
 				const struct dirent *dir)
 {
 	struct sms_address addr;
-	char straddr[25];
+	DECLARE_SMS_ADDR_STR(straddr);
 	guint16 ref;
 	guint8 max;
 	guint8 seq;
@@ -2326,12 +2415,12 @@ static gboolean sms_assembly_store(struct sms_assembly *assembly,
 {
 	unsigned char buf[177];
 	int len;
-	char straddr[25];
+	DECLARE_SMS_ADDR_STR(straddr);
 
 	if (!assembly->imsi)
 		return FALSE;
 
-	if (sms_assembly_encode_address(&node->addr, straddr) == FALSE)
+	if (sms_address_to_hex_string(&node->addr, straddr) == FALSE)
 		return FALSE;
 
 	len = sms_serialize(buf, sms);
@@ -2349,12 +2438,12 @@ static void sms_assembly_backup_free(struct sms_assembly *assembly,
 {
 	char *path;
 	int seq;
-	char straddr[25];
+	DECLARE_SMS_ADDR_STR(straddr);
 
 	if (!assembly->imsi)
 		return;
 
-	if (sms_assembly_encode_address(&node->addr, straddr) == FALSE)
+	if (sms_address_to_hex_string(&node->addr, straddr) == FALSE)
 		return;
 
 	for (seq = 0; seq < node->max_fragments; seq++) {
@@ -2413,7 +2502,7 @@ void sms_assembly_free(struct sms_assembly *assembly)
 	for (l = assembly->assembly_list; l; l = l->next) {
 		struct sms_assembly_node *node = l->data;
 
-		g_slist_foreach(node->fragment_list, (GFunc)g_free, 0);
+		g_slist_foreach(node->fragment_list, (GFunc) g_free, 0);
 		g_slist_free(node->fragment_list);
 		g_free(node);
 	}
@@ -2437,16 +2526,16 @@ static GSList *sms_assembly_add_fragment_backup(struct sms_assembly *assembly,
 					guint16 ref, guint8 max, guint8 seq,
 					gboolean backup)
 {
-	int offset = seq / 32;
-	int bit = 1 << (seq % 32);
+	unsigned int offset = seq / 32;
+	unsigned int bit = 1 << (seq % 32);
 	GSList *l;
 	GSList *prev;
 	struct sms *newsms;
 	struct sms_assembly_node *node;
 	GSList *completed;
-	int position;
-	int i;
-	int j;
+	unsigned int position;
+	unsigned int i;
+	unsigned int j;
 
 	prev = NULL;
 
@@ -2465,7 +2554,8 @@ static GSList *sms_assembly_add_fragment_backup(struct sms_assembly *assembly,
 		if (ref != node->ref)
 			continue;
 
-		/* Message Reference and address the same, but max is not
+		/*
+		 * Message Reference and address the same, but max is not
 		 * ignore the SMS completely
 		 */
 		if (max != node->max_fragments)
@@ -2475,6 +2565,13 @@ static GSList *sms_assembly_add_fragment_backup(struct sms_assembly *assembly,
 		if (node->bitmap[offset] & bit)
 			return NULL;
 
+		/*
+		 * Iterate over the bitmap to find in which position
+		 * should the fragment be inserted -- basically we
+		 * walk each bit in the bitmap until the bit we care
+		 * about (offset:bit) and count which are stored --
+		 * that gives us in which position we have to insert.
+		 */
 		position = 0;
 		for (i = 0; i < offset; i++)
 			for (j = 0; j < 32; j++)
@@ -2556,7 +2653,7 @@ void sms_assembly_expire(struct sms_assembly *assembly, time_t before)
 
 		sms_assembly_backup_free(assembly, node);
 
-		g_slist_foreach(node->fragment_list, (GFunc)g_free, 0);
+		g_slist_foreach(node->fragment_list, (GFunc) g_free, 0);
 		g_slist_free(node->fragment_list);
 		g_free(node);
 
@@ -2571,6 +2668,463 @@ void sms_assembly_expire(struct sms_assembly *assembly, time_t before)
 	}
 }
 
+static gboolean sha1_equal(gconstpointer v1, gconstpointer v2)
+{
+	return memcmp(v1, v2, SMS_MSGID_LEN) == 0;
+}
+
+static guint sha1_hash(gconstpointer v)
+{
+	guint h;
+
+	memcpy(&h, v, sizeof(h));
+
+	return h;
+}
+
+static void sr_assembly_load_backup(GHashTable *assembly_table,
+					const char *imsi,
+					const struct dirent *addr_dir)
+{
+	struct sms_address addr;
+	DECLARE_SMS_ADDR_STR(straddr);
+	struct id_table_node *node;
+	GHashTable *id_table;
+	int r;
+	char *assembly_table_key;
+	unsigned int *id_table_key;
+	char msgid_str[SMS_MSGID_LEN * 2 + 1];
+	unsigned char msgid[SMS_MSGID_LEN];
+
+	if (addr_dir->d_type != DT_REG)
+		return;
+
+	/*
+	 * All SMS-messages under the same IMSI-code are
+	 * included in the same directory.
+	 * So, SMS-address and message ID are included in the same file name
+	 * Max of SMS address size is 12 bytes, hex encoded
+	 * Max of SMS SHA1 hash is 20 bytes, hex encoded
+	 */
+	if (sscanf(addr_dir->d_name, SMS_ADDR_FMT "-" SMS_MSGID_FMT,
+				straddr, msgid_str) < 2)
+		return;
+
+	if (sms_assembly_extract_address(straddr, &addr) == FALSE)
+		return;
+
+	if (strlen(msgid_str) != 2 * SMS_MSGID_LEN)
+		return;
+
+	if (decode_hex_own_buf(msgid_str, 2 * SMS_MSGID_LEN,
+				NULL, 0, msgid) == NULL)
+		return;
+
+	node = g_new0(struct id_table_node, 1);
+
+	r = read_file((unsigned char *) node,
+			sizeof(struct id_table_node),
+			SMS_SR_BACKUP_PATH "/%s",
+			imsi, addr_dir->d_name);
+
+	if (r < 0) {
+		g_free(node);
+		return;
+	}
+
+	id_table = g_hash_table_lookup(assembly_table,
+					sms_address_to_string(&addr));
+
+	/* Create hashtable keyed by the to address if required */
+	if (id_table == NULL) {
+		id_table = g_hash_table_new_full(sha1_hash, sha1_equal,
+							g_free, g_free);
+
+		assembly_table_key = g_strdup(sms_address_to_string(&addr));
+		g_hash_table_insert(assembly_table, assembly_table_key,
+					id_table);
+	}
+
+	/* Node ready, create key and add them to the table */
+	id_table_key = g_memdup(msgid, SMS_MSGID_LEN);
+
+	g_hash_table_insert(id_table, id_table_key, node);
+}
+
+struct status_report_assembly *status_report_assembly_new(const char *imsi)
+{
+	char *path;
+	int len;
+	struct dirent **addresses;
+	struct status_report_assembly *ret =
+				g_new0(struct status_report_assembly, 1);
+
+	ret->assembly_table = g_hash_table_new_full(g_str_hash, g_str_equal,
+				g_free, (GDestroyNotify) g_hash_table_destroy);
+
+	if (imsi) {
+		ret->imsi = imsi;
+
+		/* Restore state from backup */
+		path = g_strdup_printf(SMS_SR_BACKUP_PATH, imsi);
+		len = scandir(path, &addresses, NULL, alphasort);
+
+		g_free(path);
+
+		if (len < 0)
+			return ret;
+
+		/*
+		 * Go through different addresses. Each address can relate to
+		 * 1-n msg_ids.
+		 */
+
+		while (len--) {
+			sr_assembly_load_backup(ret->assembly_table, imsi,
+								addresses[len]);
+			g_free(addresses[len]);
+		}
+
+		g_free(addresses);
+	}
+
+	return ret;
+}
+
+static gboolean sr_assembly_add_fragment_backup(const char *imsi,
+					const struct id_table_node *node,
+					const struct sms_address *addr,
+					const unsigned char *msgid)
+{
+	int len = sizeof(struct id_table_node);
+	DECLARE_SMS_ADDR_STR(straddr);
+	char msgid_str[SMS_MSGID_LEN * 2 + 1];
+
+	if (!imsi)
+		return FALSE;
+
+	if (sms_address_to_hex_string(addr, straddr) == FALSE)
+		return FALSE;
+
+	if (encode_hex_own_buf(msgid, SMS_MSGID_LEN, 0, msgid_str) == NULL)
+		return FALSE;
+
+	/* storagedir/%s/sms_sr/%s-%s */
+	if (write_file((unsigned char *) node, len, SMS_BACKUP_MODE,
+			SMS_SR_BACKUP_PATH_FILE, imsi,
+			straddr, msgid_str) != len)
+		return FALSE;
+
+	return TRUE;
+}
+
+static gboolean sr_assembly_remove_fragment_backup(const char *imsi,
+					const struct sms_address *addr,
+					const unsigned char *sha1)
+{
+	char *path;
+	DECLARE_SMS_ADDR_STR(straddr);
+	char msgid_str[SMS_MSGID_LEN * 2 + 1];
+
+	if (!imsi)
+		return FALSE;
+
+	if (sms_address_to_hex_string(addr, straddr) == FALSE)
+		return FALSE;
+
+	if (encode_hex_own_buf(sha1, SMS_MSGID_LEN, 0, msgid_str) == FALSE)
+		return FALSE;
+
+	path = g_strdup_printf(SMS_SR_BACKUP_PATH_FILE,
+					imsi, straddr, msgid_str);
+
+	unlink(path);
+	g_free(path);
+
+	return TRUE;
+}
+
+void status_report_assembly_free(struct status_report_assembly *assembly)
+{
+	g_hash_table_destroy(assembly->assembly_table);
+	g_free(assembly);
+}
+
+static gboolean sr_st_to_delivered(enum sms_st st, gboolean *delivered)
+{
+	if (st >= SMS_ST_TEMPFINAL_CONGESTION && st <= SMS_ST_TEMPFINAL_LAST)
+		return FALSE;
+
+	if (st >= SMS_ST_TEMPORARY_CONGESTION && st <= SMS_ST_TEMPORARY_LAST)
+		return FALSE;
+
+	if (st <= SMS_ST_COMPLETED_LAST) {
+		*delivered = TRUE;
+		return TRUE;
+	}
+
+	if (st >= SMS_ST_PERMANENT_RP_ERROR && st <= SMS_ST_PERMANENT_LAST) {
+		*delivered = FALSE;
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
+static struct id_table_node *find_by_mr_and_mark(GHashTable *id_table,
+						unsigned char mr,
+						GHashTableIter *out_iter,
+						unsigned char **out_id)
+{
+	unsigned int offset = mr / 32;
+	unsigned int bit = 1 << (mr % 32);
+	gpointer key, value;
+	struct id_table_node *node;
+
+	g_hash_table_iter_init(out_iter, id_table);
+	while (g_hash_table_iter_next(out_iter, &key, &value)) {
+		node = value;
+
+		/* Address and MR matched */
+		if (node->mrs[offset] & bit) {
+			node->mrs[offset] ^= bit;
+			*out_id = key;
+
+			return node;
+		}
+	}
+
+	return NULL;
+}
+
+/*
+ * Key (receiver address) does not exist in assembly. Some networks can change
+ * address to international format, although address is sent in the national
+ * format. Handle also change from national to international format.
+ * Notify these special cases by comparing only last six digits of the assembly
+ * addresses and received address. If address contains less than six digits,
+ * compare only existing digits.
+ */
+static struct id_table_node *fuzzy_lookup(struct status_report_assembly *assy,
+						const struct sms *sr,
+						const char **out_addr,
+						GHashTableIter *out_iter,
+						unsigned char **out_msgid)
+{
+	GHashTableIter iter_addr;
+	gpointer key, value;
+	const char *r_addr;
+
+	r_addr = sms_address_to_string(&sr->status_report.raddr);
+	g_hash_table_iter_init(&iter_addr, assy->assembly_table);
+
+	while (g_hash_table_iter_next(&iter_addr, &key, &value)) {
+		const char *s_addr = key;
+		GHashTable *id_table = value;
+		unsigned int len, r_len, s_len;
+		unsigned int i;
+		struct id_table_node *node;
+
+		if (r_addr[0] == '+' && s_addr[0] == '+')
+			continue;
+
+		if (r_addr[0] != '+' && s_addr[0] != '+')
+			continue;
+
+		r_len = strlen(r_addr);
+		s_len = strlen(s_addr);
+
+		len = MIN(6, MIN(r_len, s_len));
+
+		for (i = 0; i < len; i++)
+			if (s_addr[s_len - i - 1] != r_addr[r_len - i - 1])
+				break;
+
+		/* Not all digits matched. */
+		if (i < len)
+			continue;
+
+		/* Address matched. Check message reference. */
+		node = find_by_mr_and_mark(id_table, sr->status_report.mr,
+						out_iter, out_msgid);
+		if (node != NULL) {
+			*out_addr = s_addr;
+			return node;
+		}
+	}
+
+	return NULL;
+}
+
+gboolean status_report_assembly_report(struct status_report_assembly *assembly,
+					const struct sms *sr,
+					unsigned char *out_msgid,
+					gboolean *out_delivered)
+{
+	const char *straddr;
+	GHashTable *id_table;
+	GHashTableIter iter;
+	struct sms_address addr;
+	struct id_table_node *node;
+	gboolean delivered;
+	gboolean pending;
+	unsigned char *msgid;
+	int i;
+
+	/* We ignore temporary or tempfinal status reports */
+	if (sr_st_to_delivered(sr->status_report.st, &delivered) == FALSE)
+		return FALSE;
+
+	straddr = sms_address_to_string(&sr->status_report.raddr);
+	id_table = g_hash_table_lookup(assembly->assembly_table, straddr);
+
+	if (id_table != NULL)
+		node = find_by_mr_and_mark(id_table, sr->status_report.mr,
+						&iter, &msgid);
+	else
+		node = fuzzy_lookup(assembly, sr, &straddr, &iter, &msgid);
+
+	/* Unable to find a message reference belonging to this address */
+	if (node == NULL)
+		return FALSE;
+
+	node->deliverable = node->deliverable && delivered;
+
+	/* If we haven't sent the entire message yet, wait until sent */
+	if (node->sent_mrs < node->total_mrs)
+		return FALSE;
+
+	/* Figure out if we are expecting more status reports */
+	for (i = 0, pending = FALSE; i < 8; i++) {
+		/* There are still pending mr(s). */
+		if (node->mrs[i] != 0) {
+			pending = TRUE;
+			break;
+		}
+	}
+
+	sms_address_from_string(&addr, straddr);
+
+	if (pending == TRUE && node->deliverable == TRUE) {
+		/*
+		 * More status reports expected, and already received
+		 * reports completed. Update backup file.
+		 */
+		sr_assembly_add_fragment_backup(assembly->imsi, node,
+						&addr, msgid);
+
+		return FALSE;
+	}
+
+	if (out_delivered)
+		*out_delivered = node->deliverable;
+
+	if (out_msgid)
+		memcpy(out_msgid, msgid, SMS_MSGID_LEN);
+
+	sr_assembly_remove_fragment_backup(assembly->imsi, &addr, msgid);
+	id_table = g_hash_table_iter_get_hash_table(&iter);
+	g_hash_table_iter_remove(&iter);
+
+	if (g_hash_table_size(id_table) == 0)
+		g_hash_table_remove(assembly->assembly_table, straddr);
+
+	return TRUE;
+}
+
+void status_report_assembly_add_fragment(
+					struct status_report_assembly *assembly,
+					const unsigned char *msgid,
+					const struct sms_address *to,
+					unsigned char mr, time_t expiration,
+					unsigned char total_mrs)
+{
+	unsigned int offset = mr / 32;
+	unsigned int bit = 1 << (mr % 32);
+	GHashTable *id_table;
+	struct id_table_node *node;
+	unsigned char *id_table_key;
+
+	id_table = g_hash_table_lookup(assembly->assembly_table,
+					sms_address_to_string(to));
+
+	/* Create hashtable keyed by the to address if required */
+	if (id_table == NULL) {
+		id_table = g_hash_table_new_full(sha1_hash, sha1_equal,
+								g_free, g_free);
+		g_hash_table_insert(assembly->assembly_table,
+					g_strdup(sms_address_to_string(to)),
+					id_table);
+	}
+
+	node = g_hash_table_lookup(id_table, msgid);
+
+	/* Create node in the message id hashtable if required */
+	if (node == NULL) {
+		id_table_key = g_memdup(msgid, SMS_MSGID_LEN);
+
+		node = g_new0(struct id_table_node, 1);
+		node->total_mrs = total_mrs;
+		node->deliverable = TRUE;
+
+		g_hash_table_insert(id_table, id_table_key, node);
+	}
+
+	/* id_table and node both exists */
+	node->mrs[offset] |= bit;
+	node->expiration = expiration;
+	node->sent_mrs++;
+	sr_assembly_add_fragment_backup(assembly->imsi, node, to, msgid);
+}
+
+void status_report_assembly_expire(struct status_report_assembly *assembly,
+					time_t before)
+{
+	GHashTable *id_table;
+	GHashTableIter iter_addr, iter_node;
+	struct sms_address addr;
+	char *straddr;
+	gpointer key;
+	struct id_table_node *node;
+
+	g_hash_table_iter_init(&iter_addr, assembly->assembly_table);
+
+	/*
+	 * Go through different addresses. Each address can relate to
+	 * 1-n msg_ids.
+	 */
+	while (g_hash_table_iter_next(&iter_addr, (gpointer) &straddr,
+					(gpointer) &id_table)) {
+
+		sms_address_from_string(&addr, straddr);
+		g_hash_table_iter_init(&iter_node, id_table);
+
+		/* Go through different messages. */
+		while (g_hash_table_iter_next(&iter_node, &key,
+						(gpointer) &node)) {
+			/*
+			 * If message is expired, removed it from the
+			 * hash-table and remove the backup-file
+			 */
+			if (node->expiration <= before) {
+				g_hash_table_iter_remove(&iter_node);
+
+				sr_assembly_remove_fragment_backup(
+								assembly->imsi,
+								&addr,
+								key);
+			}
+		}
+
+		/*
+		 * If all messages are removed, remove address
+		 * from the hash-table.
+		 */
+		if (g_hash_table_size(id_table) == 0)
+			g_hash_table_iter_remove(&iter_addr);
+	}
+}
+
 static inline GSList *sms_list_append(GSList *l, const struct sms *in)
 {
 	struct sms *sms;
@@ -2582,14 +3136,144 @@ static inline GSList *sms_list_append(GSList *l, const struct sms *in)
 	return l;
 }
 
-/* Prepares the text for transmission.  Breaks up into fragments if
+/*
+ * Prepares a datagram for transmission.  Breaks up into fragments if
  * necessary using ref as the concatenated message reference number.
- * Returns a list of sms messages in order.  If ref_offset is given,
- * then the ref_offset contains the reference number offset or 0
- * if no concatenation took place.
+ * Returns a list of sms messages in order.
+ *
+ * @use_delivery_reports: value for the Status-Report-Request field
+ *     (23.040 3.2.9, 9.2.2.2)
  */
-GSList *sms_text_prepare(const char *utf8, guint16 ref,
-				gboolean use_16bit, int *ref_offset)
+GSList *sms_datagram_prepare(const char *to,
+				const unsigned char *data, unsigned int len,
+				guint16 ref, gboolean use_16bit_ref,
+				unsigned short src, unsigned short dst,
+				gboolean use_16bit_port,
+				gboolean use_delivery_reports)
+{
+	struct sms template;
+	unsigned int offset;
+	unsigned int written;
+	unsigned int left;
+	guint8 seq;
+	GSList *r = NULL;
+
+	memset(&template, 0, sizeof(struct sms));
+	template.type = SMS_TYPE_SUBMIT;
+	template.submit.rd = FALSE;
+	template.submit.vpf = SMS_VALIDITY_PERIOD_FORMAT_RELATIVE;
+	template.submit.rp = FALSE;
+	template.submit.srr = use_delivery_reports;
+	template.submit.mr = 0;
+	template.submit.vp.relative = 0xA7; /* 24 Hours */
+	template.submit.dcs = 0x04; /* Class Unspecified, 8 Bit */
+	template.submit.udhi = TRUE;
+	sms_address_from_string(&template.submit.daddr, to);
+
+	offset = 1;
+
+	if (use_16bit_port) {
+		template.submit.ud[0] += 6;
+		template.submit.ud[offset] = SMS_IEI_APPLICATION_ADDRESS_16BIT;
+		template.submit.ud[offset + 1] = 4;
+		template.submit.ud[offset + 2] = (dst & 0xff00) >> 8;
+		template.submit.ud[offset + 3] = dst & 0xff;
+		template.submit.ud[offset + 4] = (src & 0xff00) >> 8;
+		template.submit.ud[offset + 5] = src & 0xff;
+
+		offset += 6;
+	} else {
+		template.submit.ud[0] += 4;
+		template.submit.ud[offset] = SMS_IEI_APPLICATION_ADDRESS_8BIT;
+		template.submit.ud[offset + 1] = 2;
+		template.submit.ud[offset + 2] = dst & 0xff;
+		template.submit.ud[offset + 3] = src & 0xff;
+
+		offset += 4;
+	}
+
+	if (len <= (140 - offset)) {
+		template.submit.udl = len + offset;
+		memcpy(template.submit.ud + offset, data, len);
+
+		return sms_list_append(NULL, &template);
+	}
+
+	if (use_16bit_ref) {
+		template.submit.ud[0] += 6;
+		template.submit.ud[offset] = SMS_IEI_CONCATENATED_16BIT;
+		template.submit.ud[offset + 1] = 4;
+		template.submit.ud[offset + 2] = (ref & 0xff00) >> 8;
+		template.submit.ud[offset + 3] = ref & 0xff;
+
+		offset += 6;
+	} else {
+		template.submit.ud[0] += 5;
+		template.submit.ud[offset] = SMS_IEI_CONCATENATED_8BIT;
+		template.submit.ud[offset + 1] = 3;
+		template.submit.ud[offset + 2] = ref & 0xff;
+
+		offset += 5;
+	}
+
+	seq = 0;
+	left = len;
+	written = 0;
+
+	while (left > 0) {
+		unsigned int chunk;
+
+		seq += 1;
+
+		chunk = 140 - offset;
+		if (left < chunk)
+			chunk = left;
+
+		template.submit.udl = chunk + offset;
+		memcpy(template.submit.ud + offset, data + written, chunk);
+
+		written += chunk;
+		left -= chunk;
+
+		template.submit.ud[offset - 1] = seq;
+
+		r = sms_list_append(r, &template);
+
+		if (seq == 255)
+			break;
+	}
+
+	if (left > 0) {
+		g_slist_foreach(r, (GFunc) g_free, NULL);
+		g_slist_free(r);
+
+		return NULL;
+	} else {
+		GSList *l;
+
+		for (l = r; l; l = l->next) {
+			struct sms *sms = l->data;
+
+			sms->submit.ud[offset - 2] = seq;
+		}
+	}
+
+	r = g_slist_reverse(r);
+
+	return r;
+}
+
+/*
+ * Prepares the text for transmission.  Breaks up into fragments if
+ * necessary using ref as the concatenated message reference number.
+ * Returns a list of sms messages in order.
+ *
+ * @use_delivery_reports: value for the Status-Report-Request field
+ *     (23.040 3.2.9, 9.2.2.2)
+ */
+GSList *sms_text_prepare(const char *to, const char *utf8, guint16 ref,
+				gboolean use_16bit,
+				gboolean use_delivery_reports)
 {
 	struct sms template;
 	int offset = 0;
@@ -2605,9 +3289,10 @@ GSList *sms_text_prepare(const char *utf8, guint16 ref,
 	template.submit.rd = FALSE;
 	template.submit.vpf = SMS_VALIDITY_PERIOD_FORMAT_RELATIVE;
 	template.submit.rp = FALSE;
-	template.submit.srr = FALSE;
+	template.submit.srr = use_delivery_reports;
 	template.submit.mr = 0;
 	template.submit.vp.relative = 0xA7; /* 24 Hours */
+	sms_address_from_string(&template.submit.daddr, to);
 
 	/* UDHI, UDL, UD and DCS actually depend on what we have in the text */
 	gsm_encoded = convert_utf8_to_gsm(utf8, -1, NULL, &written, 0);
@@ -2632,9 +3317,6 @@ GSList *sms_text_prepare(const char *utf8, guint16 ref,
 		template.submit.udhi = FALSE;
 
 	if (gsm_encoded && (written <= sms_text_capacity_gsm(160, offset))) {
-		if (ref_offset)
-			*ref_offset = 0;
-
 		template.submit.udl = written + (offset * 8 + 6) / 7;
 		pack_7bit_own_buf(gsm_encoded, written, offset, FALSE, NULL,
 					0, template.submit.ud + offset);
@@ -2644,9 +3326,6 @@ GSList *sms_text_prepare(const char *utf8, guint16 ref,
 	}
 
 	if (ucs2_encoded && (written <= (140 - offset))) {
-		if (ref_offset)
-			*ref_offset = 0;
-
 		template.submit.udl = written + offset;
 		memcpy(template.submit.ud + offset, ucs2_encoded, written);
 
@@ -2659,22 +3338,19 @@ GSList *sms_text_prepare(const char *utf8, guint16 ref,
 	if (!offset)
 		offset = 1;
 
-	if (ref_offset)
-		*ref_offset = offset + 2;
-
 	if (use_16bit) {
 		template.submit.ud[0] += 6;
 		template.submit.ud[offset] = SMS_IEI_CONCATENATED_16BIT;
 		template.submit.ud[offset + 1] = 4;
-		template.submit.ud[offset + 2] = (ref & 0xf0) >> 8;
-		template.submit.ud[offset + 3] = ref & 0xf;
+		template.submit.ud[offset + 2] = (ref & 0xff00) >> 8;
+		template.submit.ud[offset + 3] = ref & 0xff;
 
 		offset += 6;
 	} else {
 		template.submit.ud[0] += 5;
 		template.submit.ud[offset] = SMS_IEI_CONCATENATED_8BIT;
 		template.submit.ud[offset + 1] = 3;
-		template.submit.ud[offset + 2] = ref & 0xf;
+		template.submit.ud[offset + 2] = ref & 0xff;
 
 		offset += 5;
 	}
@@ -2691,11 +3367,11 @@ GSList *sms_text_prepare(const char *utf8, guint16 ref,
 		if (gsm_encoded) {
 			chunk = sms_text_capacity_gsm(160, offset);
 
-			if (gsm_encoded[written + chunk - 1] == 0x1b)
-				chunk -= 1;
-
 			if (left < chunk)
 				chunk = left;
+
+			if (gsm_encoded[written + chunk - 1] == 0x1b)
+				chunk -= 1;
 
 			template.submit.udl = chunk + (offset * 8 + 6) / 7;
 			pack_7bit_own_buf(gsm_encoded + written, chunk,
@@ -2731,7 +3407,7 @@ GSList *sms_text_prepare(const char *utf8, guint16 ref,
 		g_free(ucs2_encoded);
 
 	if (left > 0) {
-		g_slist_foreach(r, (GFunc)g_free, NULL);
+		g_slist_foreach(r, (GFunc) g_free, NULL);
 		g_slist_free(r);
 
 		return NULL;
@@ -2770,7 +3446,7 @@ gboolean cbs_dcs_decode(guint8 dcs, gboolean *udhi, enum sms_class *cls,
 	case 0:
 		ch = SMS_CHARSET_7BIT;
 		cl = SMS_CLASS_UNSPECIFIED;
-		lang = (enum cbs_language)lower;
+		lang = (enum cbs_language) lower;
 		break;
 	case 1:
 		if (lower > 1)
@@ -2791,7 +3467,7 @@ gboolean cbs_dcs_decode(guint8 dcs, gboolean *udhi, enum sms_class *cls,
 
 		ch = SMS_CHARSET_7BIT;
 		cl = SMS_CLASS_UNSPECIFIED;
-		lang = (enum cbs_language)dcs;
+		lang = (enum cbs_language) dcs;
 		break;
 	case 4:
 	case 5:
@@ -2800,21 +3476,21 @@ gboolean cbs_dcs_decode(guint8 dcs, gboolean *udhi, enum sms_class *cls,
 		comp = (dcs & 0x20) ? TRUE : FALSE;
 
 		if (dcs & 0x10)
-			cl = (enum sms_class)(dcs & 0x03);
+			cl = (enum sms_class) (dcs & 0x03);
 		else
 			cl = SMS_CLASS_UNSPECIFIED;
 
 		if (((dcs & 0x0c) >> 2) < 3)
-			ch = (enum sms_charset)((dcs & 0x0c) >> 2);
+			ch = (enum sms_charset) ((dcs & 0x0c) >> 2);
 		else
 			return FALSE;
 
 		break;
 	case 9:
 		udh = TRUE;
-		cl = (enum sms_class)(dcs & 0x03);
+		cl = (enum sms_class) (dcs & 0x03);
 		if (((dcs & 0x0c) >> 2) < 3)
-			ch = (enum sms_charset)((dcs & 0x0c) >> 2);
+			ch = (enum sms_charset) ((dcs & 0x0c) >> 2);
 		else
 			return FALSE;
 
@@ -2829,7 +3505,7 @@ gboolean cbs_dcs_decode(guint8 dcs, gboolean *udhi, enum sms_class *cls,
 			ch = SMS_CHARSET_7BIT;
 
 		if (lower & 0x3)
-			cl = (enum sms_class)(lower & 0x3);
+			cl = (enum sms_class) (lower & 0x3);
 		else
 			cl = SMS_CLASS_UNSPECIFIED;
 
@@ -2873,7 +3549,8 @@ gboolean cbs_decode(const unsigned char *pdu, int len, struct cbs *out)
 	out->max_pages = pdu[5] & 0xf;
 	out->page = (pdu[5] >> 4) & 0xf;
 
-	/* If a mobile receives the code 0000 in either the first field or
+	/*
+	 * If a mobile receives the code 0000 in either the first field or
 	 * the second field then it shall treat the CBS message exactly the
 	 * same as a CBS message with page parameter 0001 0001 (i.e. a single
 	 * page message).
@@ -3041,7 +3718,8 @@ char *cbs_decode_text(GSList *cbs_list, char *iso639_lang)
 	if (cbs_list == NULL)
 		return NULL;
 
-	/* CBS can only come from the network, so we're much less lenient
+	/*
+	 * CBS can only come from the network, so we're much less lenient
 	 * on what we support.  Namely we require the same charset to be
 	 * used across all pages.
 	 */
@@ -3131,7 +3809,8 @@ char *cbs_decode_text(GSList *cbs_list, char *iso639_lang)
 
 			i = iso639 ? 3 : 0;
 
-			/* CR is a padding character, which means we can
+			/*
+			 * CR is a padding character, which means we can
 			 * safely discard everything afterwards
 			 */
 			for (; i < written; i++, bufsize++) {
@@ -3141,7 +3820,8 @@ char *cbs_decode_text(GSList *cbs_list, char *iso639_lang)
 				buf[bufsize] = unpacked[i];
 			}
 
-			/* It isn't clear whether extension sequences
+			/*
+			 * It isn't clear whether extension sequences
 			 * (2 septets) must be wholly present in the page
 			 * and not broken over multiple pages.  The behavior
 			 * is probably the same as SMS, but we don't make
@@ -3152,9 +3832,10 @@ char *cbs_decode_text(GSList *cbs_list, char *iso639_lang)
 			int i = taken;
 			int max_offset = taken + num_ucs2_chars * 2;
 
-			/* It is completely unclear how UCS2 chars are handled
+			/*
+			 * It is completely unclear how UCS2 chars are handled
 			 * especially across pages or when the UDH is present.
-			 * For now do the best we can
+			 * For now do the best we can.
 			 */
 			if (iso639) {
 				i += 2;
@@ -3177,7 +3858,7 @@ char *cbs_decode_text(GSList *cbs_list, char *iso639_lang)
 	if (charset == SMS_CHARSET_7BIT)
 		utf8 = convert_gsm_to_utf8(buf, bufsize, NULL, NULL, 0);
 	else
-		utf8 = g_convert((char *)buf, bufsize, "UTF-8//TRANSLIT",
+		utf8 = g_convert((char *) buf, bufsize, "UTF-8//TRANSLIT",
 					"UCS-2BE", NULL, NULL, NULL);
 
 	g_free(buf);
@@ -3192,7 +3873,8 @@ static inline gboolean cbs_is_update_newer(unsigned int n, unsigned int o)
 	if (new_update == old_update)
 		return FALSE;
 
-	/* Any Update Number eight or less higher (modulo 16) than the last
+	/*
+	 * Any Update Number eight or less higher (modulo 16) than the last
 	 * received Update Number will be considered more recent, and shall be
 	 * treated as a new CBS message, provided the mobile has not been
 	 * switched off.
@@ -3215,7 +3897,7 @@ void cbs_assembly_free(struct cbs_assembly *assembly)
 	for (l = assembly->assembly_list; l; l = l->next) {
 		struct cbs_assembly_node *node = l->data;
 
-		g_slist_foreach(node->pages, (GFunc)g_free, 0);
+		g_slist_foreach(node->pages, (GFunc) g_free, 0);
 		g_slist_free(node->pages);
 		g_free(node);
 	}
@@ -3271,8 +3953,9 @@ static void cbs_assembly_expire(struct cbs_assembly *assembly,
 	GSList *prev;
 	GSList *tmp;
 
-	/* Take care of the case where several updates are being
-	 * reassembled at the same time.  If the newer one is assembled
+	/*
+	 * Take care of the case where several updates are being
+	 * reassembled at the same time. If the newer one is assembled
 	 * first, then the subsequent old update is discarded, make
 	 * sure that we're also discarding the assembly node for the
 	 * partially assembled ones
@@ -3294,7 +3977,7 @@ static void cbs_assembly_expire(struct cbs_assembly *assembly,
 		else
 			assembly->assembly_list = l->next;
 
-		g_slist_foreach(node->pages, (GFunc)g_free, NULL);
+		g_slist_foreach(node->pages, (GFunc) g_free, NULL);
 		g_slist_free(node->pages);
 		g_free(node->pages);
 		tmp = l;
@@ -3306,7 +3989,8 @@ static void cbs_assembly_expire(struct cbs_assembly *assembly,
 void cbs_assembly_location_changed(struct cbs_assembly *assembly, gboolean plmn,
 					gboolean lac, gboolean ci)
 {
-	/* Location Area wide (in GSM) (which means that a CBS message with the
+	/*
+	 * Location Area wide (in GSM) (which means that a CBS message with the
 	 * same Message Code and Update Number may or may not be "new" in the
 	 * next cell according to whether the next cell is in the same Location
 	 * Area as the current cell), or
@@ -3603,7 +4287,7 @@ GSList *cbs_extract_topic_ranges(const char *ranges)
 	}
 
 	tmp = cbs_optimize_ranges(ret);
-	g_slist_foreach(ret, (GFunc)g_free, NULL);
+	g_slist_foreach(ret, (GFunc) g_free, NULL);
 	g_slist_free(ret);
 
 	return tmp;
@@ -3691,4 +4375,75 @@ gboolean cbs_topic_in_range(unsigned int topic, GSList *ranges)
 
 	return g_slist_find_custom(ranges, GUINT_TO_POINTER(topic),
 					cbs_topic_compare) != NULL;
+}
+
+char *ussd_decode(int dcs, int len, const unsigned char *data)
+{
+	gboolean udhi;
+	enum sms_charset charset;
+	gboolean compressed;
+	gboolean iso639;
+	char *utf8;
+
+	if (!cbs_dcs_decode(dcs, &udhi, NULL, &charset,
+				&compressed, NULL, &iso639))
+		return NULL;
+
+	if (udhi || compressed || iso639)
+		return NULL;
+
+	switch (charset) {
+	case SMS_CHARSET_7BIT:
+	{
+		long written;
+		unsigned char *unpacked = unpack_7bit(data, len, 0, TRUE, 0,
+							&written, 0);
+		if (unpacked == NULL)
+			return NULL;
+
+		utf8 = convert_gsm_to_utf8(unpacked, written, NULL, NULL, 0);
+		g_free(unpacked);
+
+		break;
+	}
+	case SMS_CHARSET_8BIT:
+		utf8 = convert_gsm_to_utf8(data, len, NULL, NULL, 0);
+		break;
+	case SMS_CHARSET_UCS2:
+		utf8 = g_convert((const gchar *) data, len,
+					"UTF-8//TRANSLIT", "UCS-2BE",
+					NULL, NULL, NULL);
+		break;
+	default:
+		utf8 = NULL;
+	}
+
+	return utf8;
+}
+
+gboolean ussd_encode(const char *str, long *items_written, unsigned char *pdu)
+{
+	unsigned char *converted = NULL;
+	long written;
+	long num_packed;
+
+	if (!pdu)
+		return FALSE;
+
+	converted = convert_utf8_to_gsm(str, -1, NULL, &written, 0);
+	if (!converted || written > 182) {
+		g_free(converted);
+		return FALSE;
+	}
+
+	pack_7bit_own_buf(converted, written, 0, TRUE, &num_packed, 0, pdu);
+	g_free(converted);
+
+	if (num_packed < 1)
+		return FALSE;
+
+	if (items_written)
+		*items_written = num_packed;
+
+	return TRUE;
 }

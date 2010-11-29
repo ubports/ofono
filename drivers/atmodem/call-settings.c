@@ -44,6 +44,7 @@ static const char *clir_prefix[] = { "+CLIR:", NULL };
 static const char *colp_prefix[] = { "+COLP:", NULL };
 static const char *clip_prefix[] = { "+CLIP:", NULL };
 static const char *ccwa_prefix[] = { "+CCWA:", NULL };
+static const char *colr_prefix[] = { "+COLR:", NULL };
 
 static void ccwa_query_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
@@ -98,8 +99,7 @@ static void at_ccwa_query(struct ofono_call_settings *cs, int cls,
 		return;
 
 error:
-	if (cbd)
-		g_free(cbd);
+	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, 0, data);
 }
@@ -132,8 +132,7 @@ static void at_ccwa_set(struct ofono_call_settings *cs, int mode, int cls,
 		return;
 
 error:
-	if (cbd)
-		g_free(cbd);
+	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, data);
 }
@@ -184,8 +183,7 @@ static void at_clip_query(struct ofono_call_settings *cs,
 		return;
 
 error:
-	if (cbd)
-		g_free(cbd);
+	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, -1, data);
 }
@@ -235,8 +233,7 @@ static void at_colp_query(struct ofono_call_settings *cs,
 		return;
 
 error:
-	if (cbd)
-		g_free(cbd);
+	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, -1, data);
 }
@@ -285,8 +282,7 @@ static void at_clir_query(struct ofono_call_settings *cs,
 		return;
 
 error:
-	if (cbd)
-		g_free(cbd);
+	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, -1, -1, data);
 }
@@ -319,10 +315,60 @@ static void at_clir_set(struct ofono_call_settings *cs, int mode,
 		return;
 
 error:
-	if (cbd)
-		g_free(cbd);
+	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, data);
+}
+
+static void colr_query_cb(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_call_settings_status_cb_t cb = cbd->cb;
+	struct ofono_error error;
+	GAtResultIter iter;
+	int status;
+
+	decode_at_error(&error, g_at_result_final_response(result));
+
+	if (!ok) {
+		cb(&error, -1, cbd->data);
+		return;
+	}
+
+	g_at_result_iter_init(&iter, result);
+
+	if (g_at_result_iter_next(&iter, "+COLR:") == FALSE)
+		goto error;
+
+	if (g_at_result_iter_next_number(&iter, &status) == FALSE)
+		goto error;
+
+	DBG("colr_query_cb: network: %d", status);
+
+	cb(&error, status, cbd->data);
+	return;
+
+error:
+	CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
+}
+
+static void at_colr_query(struct ofono_call_settings *cs,
+				ofono_call_settings_status_cb_t cb, void *data)
+{
+	GAtChat *chat = ofono_call_settings_get_data(cs);
+	struct cb_data *cbd = cb_data_new(cb, data);
+
+	if (!cbd)
+		goto error;
+
+	if (g_at_chat_send(chat, "AT+COLR", colr_prefix,
+				colr_query_cb, cbd, g_free) > 0)
+		return;
+
+error:
+	g_free(cbd);
+
+	CALLBACK_WITH_FAILURE(cb, -1, data);
 }
 
 static gboolean at_call_settings_register(gpointer user)
@@ -339,7 +385,7 @@ static int at_call_settings_probe(struct ofono_call_settings *cs,
 {
 	GAtChat *chat = data;
 
-	ofono_call_settings_set_data(cs, chat);
+	ofono_call_settings_set_data(cs, g_at_chat_clone(chat));
 	g_idle_add(at_call_settings_register, cs);
 
 	return 0;
@@ -347,6 +393,10 @@ static int at_call_settings_probe(struct ofono_call_settings *cs,
 
 static void at_call_settings_remove(struct ofono_call_settings *cs)
 {
+	GAtChat *chat = ofono_call_settings_get_data(cs);
+
+	g_at_chat_unref(chat);
+	ofono_call_settings_set_data(cs, NULL);
 }
 
 static struct ofono_call_settings_driver driver = {
@@ -357,7 +407,7 @@ static struct ofono_call_settings_driver driver = {
 	.colp_query = at_colp_query,
 	.clir_query = at_clir_query,
 	.clir_set = at_clir_set,
-	.colr_query = NULL,
+	.colr_query = at_colr_query,
 	.cw_query = at_ccwa_query,
 	.cw_set = at_ccwa_set,
 };

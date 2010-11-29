@@ -1,0 +1,508 @@
+pBackground
+==========
+
+- Priority scale: High, Medium and Low
+
+- Complexity scale: C1, C2, C4 and C8.  The complexity scale is exponential,
+  with complexity 1 being the lowest complexity.  Complexity is a function
+  of both task 'complexity' and task 'scope'.
+
+  The general rule of thumb is that a complexity 1 task should take 1-2 weeks
+  for a person very familiar with oFono codebase.  Higher complexity tasks
+  require more time and have higher uncertainty.
+
+  Higher complexity tasks should be refined into several lower complexity tasks
+  once the task is better understood.
+
+
+SMS
+===
+
+- Add support for Enhanced SMS (EMS) from 3GPP 23.040.  These SMS messages
+  support a richer set of formatting elements, including bold/italic and
+  font size selection.  Embedding images and sounds into the SMS is also
+  supported.  This task should add support for receiving such SMS messages.
+
+  Proposed solution is to convert such messages to HTML and embed image /
+  sound data as embedded MIME in the generated HTML stream.  The EMS messages
+  will have to be detected (by the presence of particular tags in the SMS)
+  and signaled separately from simple SMS messages.
+
+  Priority: Low
+  Complexity: C8
+
+- See / Cancel pending SMS messages over DBus.  When oFono sends SMS messages
+  the method call is only returned when the message has been submitted to the
+  network.  Instead we should return an object path and allow cancellation of
+  pending messages.
+
+  Priority: High
+  Complexity: C2
+  Owner: Yang Gu <yang.gu@intel.com>
+
+- Persist outgoing SMS messages.  Currently oFono persists incoming messages
+  that are fragmented.  However oFono does not persist queued outgoing
+  messages.  oFono should persist such messages and restore / requeue them
+  on the next oFono startup.
+
+  Priority: High
+  Complexity: C1
+  Owner: Kristen Carlson Accardi <kristen@linux.intel.com>
+
+- Add CDMA support to the SMS stack. The idea is to support only the PDU
+  mode. To start with only Submit and Deliver message handling for WMT
+  teleservice will be added to bring the basic CDMA SMS send and receive
+  functionality.
+
+  Priority: Low
+  Complexity: C8
+  Owner: Rajesh Kadhiravan Nagaiah <Rajesh.Nagaiah@elektrobit.com>
+
+- Add CDMA Delivery(Status) Report handling to the SMS stack.
+
+  Priority: Low
+  Complexity: C4
+  Owner: Rajesh Kadhiravan Nagaiah <Rajesh.Nagaiah@elektrobit.com>
+
+- Add CDMA Voice Mail Notification handling to the SMS stack. In CDMA the
+  Message Waiting indication is notified through a specific teleservice ID
+  VMN. No update to corresponding elementary files required since they are
+  not present in the R-UIM. This will result in the message waiting
+  indication being initially processed within the SMS atom and then being
+  passed for delivery to the message waiting atom. Furthemore note that in
+  CDMA only voice mail type is supported.
+
+  Priority: Low
+  Complexity: C4
+  Owner: Rajesh Kadhiravan Nagaiah <Rajesh.Nagaiah@elektrobit.com>
+
+- Asynchronously acknowledge SMS DELIVER messages sent by the SMS driver
+  to core using ofono_sms_deliver_notify().  This may require the struct
+  ofono_sms_driver to be extended with one more function pointer like:
+    void (*deliver_ack)(unsigned char *pdu, int len, cb_t cb, void *data)
+  because currently messages are automatically acknowledged by either the
+  modem (this is the case of some AT modems) or the driver right after
+  ofono_sms_deliver_notify() and a failure to deliver at an upper level is
+  ignored.  The PDU can be an RP-ACK or RP-ERROR message with optional
+  TP-User-Content element, for example if returned from USIM Data Download.
+
+  Priority: Low
+  Complexity: C2
+
+SIM / SIM File system
+=====================
+
+- Read / Write EFcfis.  Call forwarding settings can be bootstrapped on the
+  SIM for faster notification of the user that call forwarding is active.
+  These settings are stored in EFcfis.  oFono should read these settings and
+  update the call forwarding atom appropriately.
+
+  Priority: Low
+  Complexity: C2
+  Owner: Jeevaka Badrappan <jeevaka.badrappan@elektrobit.com>
+
+- SIM Call History plugin.  New UICCs support four new SIM elementary files
+  for storing call history information on the SIM: EFici, EFict, EFoci, EFoct.
+  A plugin should be developed for oFono that will write to these files.
+
+  Priority: Low
+  Complexity: C2
+
+- Support proprietary extensions for SIM PIN retry counter.  Most vendors
+  provide an extension commands to obtain such a retry counter for PINs and
+  PUKs.  Need to enable this as a property in oFono.
+
+  Priority: Low
+  Complexity: C2
+
+- Add support for SIM 'ready' notifications from the driver to the core.  Most
+  modem manufacturers initialize the SIM (e.g. cache SIM file system, STK
+  initialization, etc) internally before allowing the telephony stack to
+  access these portions.  When the PIN is locked, this can lead to oFono being
+  too fast for the modem and asking it for things before the firmware is ready.
+
+  The proposal is to introduce a new sim function:
+    void ofono_sim_ready_notify(struct ofono_sim *sim);
+
+  When oFono determines the SIM PIN is READY, it checks whether
+  ofono_sim_ready_notify has been called.  If it hasn't, then it stalls the
+  initialization procedure (and calling post_sim) until
+  ofono_sim_ready_notify is called.
+
+  Priority: High
+  Complexity: C2
+  Owner: Pekka Pessi <pekka.pessi@nokia.com>
+
+- Check SIM pin status if sim_change_pin fails. If it is anything other than
+  READY, we must tear the state back to pre_sim state and set the modem offline.
+
+  Priority: Medium
+  Complexity: C1
+  Owner: Marit Henriksen <marit.henriksen@stericsson.com>
+
+Modem Emulator
+==============
+
+- Support HFP AG emulator.  We should provide a new HFP_AG_EMULATOR atom type
+  that will implement the Bluetooth HFP AG profile.  Voicecall atom, netreg
+  atoms can register command handlers for this atom appropriately.
+
+  Complexity: C4
+  Priority: Medium
+
+- Support extensions to HFP AG emulator.  Some carkits support additional
+  AT command extensions to the Bluetooth HFP AG standard.  Refer to CE4A
+  white paper: "AT-commands for Automotive Premium Phone Integration".
+  Plugins can register additional command handlers appropriately to handle
+  such commands.
+
+  Complexity: C4
+  Priority: Medium
+  Depends: HFP AG emulator
+
+- Support HSP AG.  Similar to HFP AG emulator but implements the much reduced
+  Bluetooth HSP AG profile.
+
+  Priority: Low
+  Complexity: C1
+
+- Support DUN emulator. Implement the Bluetooth DUN profile with only mandatory
+  AT command support.
+
+  Complexity: C4
+  Priority: Medium
+
+  Depends: PPP Server mode
+
+- Support Bluetooth SPP profile.
+
+  Complexity: C4
+  Priority: Medium
+
+
+Flight Mode
+===========
+
+- Flight Mode support.  Add an 'Online' property to the Modem interface that
+  will control the online state of the modem.  When Online state is True all
+  atoms are available.  When Online state is False, all network related items
+  are removed (e.g. CallSettings) or enter into reduced functionality set
+  where only the SIM is available (e.g. DataConnectionManager, SimManager, etc)
+
+  Complexity: C4
+  Priority: High
+  Owner: Pekka Pessi <pekka.pessi@nokia.com>
+
+
+GPRS
+====
+
+- PPP Server support.  Extend GAtPPP to support PPP Server role, similarly to
+  how existing GSM modems support PPP GPRS contexts.
+
+  Priority: High
+  Complexity: C2
+
+- IPv6 CP support.  To support IPv6 based GPRS contexts via PPP, GAtPPP
+  needs to be updated to support IPv6CP from RFC 2472.
+
+  Priority: Low
+  Complexity: C4
+
+- Add support for IPv6 GPRS contexts.
+
+  Priority: Medium
+  Complexity: C1
+
+
+Location Services
+=================
+
+- Neighbor Cell Info.  Add dedicated atom, D-Bus API and atom driver(s) for
+  Neighbor Cell information.
+
+  This feature is not discussed in 27.007, thus manufacturer specific commands
+  are required.
+
+  Complexity: C4
+  Priority: Medium
+
+
+Supplementary Services
+======================
+
+- Closed User Group (CUG) support.
+
+  Priority: Low
+  Complexity: C8
+
+- Call Completion to Busy Subscriber (CCBS) support
+
+  This feature is not discussed in 27.007, thus manufacturer specific commands
+  are required.
+
+  Priority: Low
+  Complexity: C8
+
+- Calling Name Presentation (CNAP) support
+
+  Priority: Low
+  Complexity: C2
+
+- User to User Signaling (UUS) support
+
+  Priority: Low
+  Complexity: C8
+
+- Multiple Subscriber Profile (MSP) support
+
+  Priority: Low
+  Complexity: C2
+
+- Called Line Identification.  This affects both call_settings and voicecall
+  atoms.  3GPP service is accessed by the +CDIP command.
+
+  Priority: Low
+  Complexity: C4
+
+- CPHS Support.  This includes ALS and CPHS specific elementary files.
+
+  Priority: Low
+  Complexity: C8
+
+
+Voicecall
+=========
+
+- Supplementary service notifications on remote party actions:
+  - call has been put on hold (+CSSU: 2)
+  - call has been retrieved (+CSSU: 3), and
+  - joining call to a multiparty conference (+CSSU: 4)
+
+  Priority: Medium
+  Complexity: C1
+  Owner: Pekka Pessi <pekka.pessi@nokia.com>
+
+- Long phone numbers. According to 3GPP TS 24.008, the callee address
+  can be up to 80 digits long.
+
+  Priority: Medium
+  Complexity: C2
+
+- Dial strings. Include CLIR prefixes and 2nd stage dial strings in the
+  DialString call property. Add dialstring accessor method to C API.
+
+  Priority: Medium
+  Complexity: C4
+
+- Provide feedback of sent DTMF tones. Emit SendingTones signal if modem can
+  provide approximate starting and stopping times for DTMF tones. Signal
+  argument contains a string of DTMF tones to be sent, or empty string when
+  all tones has been sent.
+
+  Priority: Medium
+  Complexity: C2
+  Owner: Pekka Pessi <pekka.pessi@nokia.com>
+
+
+Sim Toolkit
+===========
+
+- Support Refresh proactive command.  The specification defines 7 types
+  of Refresh types:
+	- NAA Initialization
+	- NAA File Change Notification
+	- NAA Initialization and File Change Notification
+	- NAA Initialization and Full File Change Notification
+	- UICC Reset
+	- NAA Application Reset (2G only)
+	- NAA Session Reset (3G only)
+
+  The 'NAA Initialization' type will be ignored by oFono, it is assumed
+  this is handled by the modem.
+
+  For 'UICC Reset', 'NAA Application Reset' and 'NAA Session Reset' oFono
+  will first check whether there are any calls or ussd operations active.
+  If there are, the appropriate response will be sent (e.g. busy on call
+  or screen busy terminal response.)  Otherwise a positive response will be
+  sent to the driver.  In the case of a 'UICC Reset' the driver / modem
+  can interpret this that it is safe to reset the UICC.
+
+  Alternatively, the driver / modem can notify the core of the SIM removal
+  / SIM insertion events without using the Refresh proactive command.  It
+  is up to the driver / modem to perform a warm reset.  In particular, 3GPP
+  31.111 mandates that any change to EFimsi is done by using 'UICC Reset',
+  'NAA Application Reset' or 'NAA Session Reset'.  Please see 3GPP 31.111
+  Section 6.4.7.1.
+
+  Other types will be handled by oFono flushing the EF cache of the files
+  affected (or the entire SIM cache in case of Full File Change Notifications)
+  and re-reading the affected files.  Any properties derived from these
+  Elementary Files will be updated and signaled using PropertyChanged.
+
+  Priority: High
+  Complexity: C8
+
+- Support Send Short Message proactive command.
+
+  Priority: High
+  Complexity: C2
+  Owner: Andrzej Zaborowski <andrew.zaborowski@intel.com>
+
+- Support Set Up Call proactive command.  If the UICC has indicated that
+  the user should be informed, then the SimToolkitAgent will be called
+  in order to request user's confirmation of the call setup.  If the user
+  has confirmed, or if user's confirmation was not requested, oFono will
+  setup the call and optionally inform the user.
+
+  Priority: High
+  Complexity: C8
+
+- Support Language Notification proactive command.
+
+  Priority: Medium
+  Complexity: C1
+  Owner: Jeevaka Badrappan <jeevaka.badrappan@elektrobit.com>
+
+- Support Provide Local Information.  Whenever oFono receives a Provide Local
+  Information proactive command, it should check the type of the information
+  requested.  If the information is about the time/date or the language of the
+  terminal, it should respond to the command with the appropriate terminal
+  response.  Otherwise, it will respond with an error.
+
+  Priority: High
+  Complexity: C2
+  Owner: Yang Gu <yang.gu@intel.com>
+
+
+Emergency Calls
+===============
+
+- Modem Emergency mode.  Support network registration and online/offline
+  mode during the emergency calls and related network activity (e.g.,
+  network-initiated location request via supplementary service channel).
+
+  Proposed solution is to introduce a new Emergency boolean property to the
+  Modem D-Bus interface and new functions to modem interface:
+
+  - ofono_modem_emergency_mode_inc()
+  - ofono_modem_emergency_mode_dec()
+  - ofono_modem_emergency_mode_get()
+  - ofono_modem_add_emergency_mode_watch()
+  - ofono_modem_remove_emergency_mode_watch()
+
+  When emergency mode is requested, modem is set to online (if needed) and
+  the watchers are notified. There can be multiple parties requesting
+  emergency mode.  When all of them have completed the emergency-related
+  operation and called ofono_modem_emergency_mode_dec(), modem is set to
+  offline (if needed) and the watchers are again notified.
+
+  Priority: High
+  Complexity: C2
+
+- Country / Operator specific emergency numbers.  Figure out how to support
+  countries / operators with specific mandated emergency numbers which are
+  not part of the standard emergency number list. This needs to be queried
+  by the voicecall atom every time a new SIM is inserted.  The list is
+  assumed to be managed by the modem.  If no such functionality is available,
+  then the 3GPP mandated behavior is used.
+
+  Priority: High
+  Complexity: C2
+
+- Network updating the emergency number list. Support the list of emergency
+  numbers dynamically updated by the network.
+
+  Priority: High
+  Complexity: C2
+
+- Extend the voicecall interface with a property indicating whether this call
+  is an emergency call (essentially the CLI matches one of the numbers on the
+  emergency calling codes list.)
+
+  Priority: High
+  Complexity: C1
+  Owner: John Mathew <john.mathew@elektrobit.com>
+
+Miscellaneous
+=============
+
+- Bluetooth SAP Client support.  The Telit UC864-G devices support Bluetooth
+  SAP client mode.  This requires the use of a modem side-channel to read the
+  APDU & CPDU data and send it to the remote phone device over Bluetooth RFCOMM
+  channel.
+
+  Complexity: C4
+  Priority: Low
+
+- Frequency Band Selection.  Add frequency band selection capability to the
+  RadioSettings atom.
+  Owner: Lucas De Marchi <lucas.demarchi@profusion.mobi>
+
+  This feature is not discussed in 27.007, thus manufacturer specific commands
+  are required.
+
+  Complexity: C2
+  Priority: Low
+
+- PolicyKit support.  Add support for PolicyKit checking of all oFono D-Bus
+  interfaces.
+
+  Complexity: C4
+  Priority: Low
+
+- Internet Access Provider database.  Have oFono automatically configure
+  GPRS contexts based on an internal database.  Database format to be decided.
+  If there are multiple matches in the database, then some user intervention
+  might be required.
+
+  Priority: Medium
+  Complexity: C8
+
+- Support for modem 'silent' reset notifications.  oFono will remove all atoms
+  and re-initialize.
+
+  Priority: Medium
+  Complexity: C2
+  Owner: Gustavo F Padovan <padovan@profusion.mobi>
+
+- Add support for Modem 'power down & lock' and 'unlock & power up'.  When the
+  'power down & lock' is given, the calling application is noted and all
+  other applications are blocked from powering up the modem.  Only the calling
+  application can lift the lock.  Alternatively, if the calling application
+  exits prematurely the lock is lifted as well.
+
+  The proposed property name is "Lockdown" as part of the Modem interface.
+
+  Priority: Medium
+  Complexity: C2
+  Owner: Gustavo F Padovan <padovan@profusion.mobi>
+
+- TTY (hearing impaired) support.  Add a new oFono atom type that will enable
+  the user to enable or disable the TTY support on the modem.  Support for
+  automatic detection of TTY (signaled by the driver) is also desired.
+
+  This feature is not discussed in 27.007, thus manufacturer specific commands
+  are required.
+
+  Priority: High
+  Complexity: C1
+  Owner: Lucas De Marchi <lucas.demarchi@profusion.mobi>
+
+- Add support for GPS power control atom.  Many modem manufacturers provide
+  a GPS unit with their modem hardware.  This unit can be turned on or off
+  and frequently takes over one of the tty ports that the modem provides.
+
+  This feature is not discussed in 27.007, thus manufacturer specific commands
+  are required.
+
+  Priority: Low
+  Complexity: C4
+
+- Add Location Service API for providing basic E911 suport.
+  This will be based on the 27.007 defined AT commands using
+  XML for transport of positioning request and responses.
+
+  Priority: Medium
+  Complexity: C2
+  Owner: Sjur Brændeland <sjur.brandeland@stericsson.com>

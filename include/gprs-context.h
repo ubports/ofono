@@ -34,12 +34,26 @@ struct ofono_gprs_context;
 #define OFONO_GPRS_MAX_USERNAME_LENGTH 63
 #define OFONO_GPRS_MAX_PASSWORD_LENGTH 255
 
+enum ofono_gprs_proto {
+	OFONO_GPRS_PROTO_IP = 0,
+	OFONO_GPRS_PROTO_IPV6,
+};
+
+enum ofono_gprs_context_type {
+	OFONO_GPRS_CONTEXT_TYPE_ANY = 0,
+	OFONO_GPRS_CONTEXT_TYPE_INTERNET,
+	OFONO_GPRS_CONTEXT_TYPE_MMS,
+	OFONO_GPRS_CONTEXT_TYPE_WAP,
+	OFONO_GPRS_CONTEXT_TYPE_IMS,
+};
+
 struct ofono_gprs_primary_context {
 	unsigned int cid;
 	int direction;
 	char apn[OFONO_GPRS_MAX_APN_LENGTH + 1];
 	char username[OFONO_GPRS_MAX_USERNAME_LENGTH + 1];
 	char password[OFONO_GPRS_MAX_PASSWORD_LENGTH + 1];
+	enum ofono_gprs_proto proto;
 };
 
 typedef void (*ofono_gprs_context_cb_t)(const struct ofono_error *error,
@@ -77,6 +91,9 @@ void ofono_gprs_context_set_data(struct ofono_gprs_context *gc, void *data);
 void *ofono_gprs_context_get_data(struct ofono_gprs_context *gc);
 
 struct ofono_modem *ofono_gprs_context_get_modem(struct ofono_gprs_context *gc);
+
+void ofono_gprs_context_set_type(struct ofono_gprs_context *gc,
+					enum ofono_gprs_context_type type);
 
 #ifdef __cplusplus
 }
