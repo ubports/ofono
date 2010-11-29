@@ -1,7 +1,11 @@
 #!/usr/bin/make -f
+DEB_AUTO_CLEANUP_RCS := yes
 
-%:
-	dh $@
+include /usr/share/cdbs/1/class/autotools.mk
+include /usr/share/cdbs/1/rules/debhelper.mk
+include /usr/share/cdbs/1/rules/simple-patchsys.mk
+include /usr/share/cdbs/1/rules/utils.mk
 
-override_dh_strip:
-	dh_strip --dbg-package=ofono-dbg
+common-binary-post-install-arch:: list-missing
+
+include $(CURDIR)/debian/update-patches.mk

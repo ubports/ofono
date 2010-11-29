@@ -3,7 +3,8 @@ Section: admin
 Priority: optional
 Maintainer: Debian Telepathy maintainers <pkg-telepathy-maintainers@lists.alioth.debian.org>
 Uploaders: Jonny Lamb <jonny@debian.org>
-Build-Depends: debhelper (>> 7),
+Build-Depends: debhelper (>= 5),
+               cdbs,
                libglib2.0-dev (>= 2.22),
                libdbus-glib-1-dev,
                libudev-dev,

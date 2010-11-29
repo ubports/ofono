@@ -6,8 +6,10 @@ ofono (0.36-1) UNRELEASED; urgency=low
     dude!
   * debian/control: Up versioned build-dep on glib.
   * debinan/ofono.install: Updated.
+  * debian/rules: Switch to cdbs to be like the rest of the pkg-telepathy
+    packages.
 
- -- Jonny Lamb <jonny@debian.org>  Mon, 29 Nov 2010 15:40:10 +0000
+ -- Jonny Lamb <jonny@debian.org>  Mon, 29 Nov 2010 17:57:23 +0000
 
 ofono (0.18-1) unstable; urgency=low
 
