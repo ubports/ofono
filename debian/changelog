@@ -9,8 +9,10 @@ ofono (0.36-1) UNRELEASED; urgency=low
   * debian/rules: Switch to cdbs to be like the rest of the pkg-telepathy
     packages.
   * debian/control: Upped Standards-Version. (no changes)
+  * debian/ofono.init: Add dependency on $remote_fs in required-start and
+    required-stop.
 
- -- Jonny Lamb <jonny@debian.org>  Mon, 29 Nov 2010 17:58:19 +0000
+ -- Jonny Lamb <jonny@debian.org>  Mon, 29 Nov 2010 17:58:49 +0000
 
 ofono (0.18-1) unstable; urgency=low
 
