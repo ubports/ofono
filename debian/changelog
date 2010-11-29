@@ -1,20 +1,20 @@
-ofono (0.36-1) UNRELEASED; urgency=low
+ofono (0.36-1) unstable; urgency=low
 
   * New upstream release.
   * debian/: Added some files relating to building with git.
-  * debian/control: Adopt the package from Andres. Thanks for your work,
-    dude!
-  * debian/control: Up versioned build-dep on glib.
+  * debian/control:
+    + Adopt the package from Andres. Thanks for your work, dude!
+    + Upped versioned build-dep on glib.
+    + Upped Standards-Version. (no changes)
   * debinan/ofono.install: Updated.
   * debian/rules: Switch to cdbs to be like the rest of the pkg-telepathy
     packages.
-  * debian/control: Upped Standards-Version. (no changes)
   * debian/ofono.init: Add dependency on $remote_fs in required-start and
     required-stop.
   * debian/compat: Lower to 5 for misc reasons.
   * debian/patches/: Add patch to fix small lintian problem.
 
- -- Jonny Lamb <jonny@debian.org>  Mon, 29 Nov 2010 18:05:12 +0000
+ -- Jonny Lamb <jonny@debian.org>  Mon, 29 Nov 2010 18:14:48 +0000
 
 ofono (0.18-1) unstable; urgency=low
 
