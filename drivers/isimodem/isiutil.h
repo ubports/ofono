@@ -1,21 +1,21 @@
 /*
- * This file is part of oFono - Open Source Telephony
  *
- * Copyright (C) 2009 Nokia Corporation and/or its subsidiary(-ies).
+ *  oFono - Open Source Telephony
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * version 2 as published by the Free Software Foundation.
+ *  Copyright (C) 2009-2010 Nokia Corporation and/or its subsidiary(-ies).
  *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
- * 02110-1301 USA
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program; if not, write to the Free Software
+ *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
  */
 
@@ -34,7 +34,6 @@ static inline struct isi_cb_data *isi_cb_data_new(void *user, void *cb,
 	struct isi_cb_data *ret;
 
 	ret = g_try_new0(struct isi_cb_data, 1);
-
 	if (ret) {
 		ret->cb = cb;
 		ret->data = data;
@@ -49,7 +48,7 @@ static inline struct isi_cb_data *isi_cb_data_new(void *user, void *cb,
 		e.type = OFONO_ERROR_TYPE_FAILURE;	\
 		e.error = 0;				\
 		f(&e, ##args);				\
-	} while(0)
+	} while (0)
 
 #define CALLBACK_WITH_SUCCESS(f, args...)		\
 	do {						\
@@ -57,8 +56,6 @@ static inline struct isi_cb_data *isi_cb_data_new(void *user, void *cb,
 		e.type = OFONO_ERROR_TYPE_NO_ERROR;	\
 		e.error = 0;				\
 		f(&e, ##args);				\
-	} while(0)
-
-void dump_msg(const unsigned char *msg, size_t len);
+	} while (0)
 
 #endif /* !__ISIMODEM_UTIL_H */

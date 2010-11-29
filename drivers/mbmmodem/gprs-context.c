@@ -27,6 +27,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <errno.h>
 
 #include <glib.h>
 
@@ -92,6 +93,8 @@ static void mbm_e2ipcfg_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	const char *interface;
 	gboolean success = FALSE;
 
+	DBG("ok %d", ok);
+
 	if (!ok)
 		goto out;
 
@@ -135,6 +138,9 @@ out:
 	modem = ofono_gprs_context_get_modem(gc);
 	interface = ofono_modem_get_string(modem, "NetworkInterface");
 
+	ofono_info("IP: %s  Gateway: %s", ip, gateway);
+	ofono_info("DNS: %s, %s", dns[0], dns[1]);
+
 	CALLBACK_WITH_SUCCESS(gcd->up_cb, interface, success, ip,
 					STATIC_IP_NETMASK, gateway,
 					success ? dns : NULL, gcd->cb_data);
@@ -148,12 +154,18 @@ static void mbm_get_ip_details(struct ofono_gprs_context *gc)
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 	struct ofono_modem *modem;
 	const char *interface;
+	char buf[64];
+
+	DBG("");
 
 	if (gcd->have_e2ipcfg) {
 		g_at_chat_send(gcd->chat, "AT*E2IPCFG?", e2ipcfg_prefix,
 				mbm_e2ipcfg_cb, gc, NULL);
 		return;
 	}
+
+	snprintf(buf, sizeof(buf), "AT+CGPADDR=%u", gcd->active_context);
+	g_at_chat_send(gcd->chat, buf, none_prefix, NULL, NULL, NULL);
 
 	modem = ofono_gprs_context_get_modem(gc);
 	interface = ofono_modem_get_string(modem, "NetworkInterface");
@@ -169,12 +181,14 @@ static void mbm_state_changed(struct ofono_gprs_context *gc, int state)
 {
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 
+	DBG("state %d", state);
+
 	if (gcd->active_context == 0)
 		return;
 
 	switch (state) {
 	case MBM_E2NAP_DISCONNECTED:
-		DBG("MBM Context: disconnected");
+		DBG("disconnected");
 
 		if (gcd->mbm_state == MBM_DISABLING) {
 			CALLBACK_WITH_SUCCESS(gcd->down_cb, gcd->cb_data);
@@ -194,7 +208,7 @@ static void mbm_state_changed(struct ofono_gprs_context *gc, int state)
 		break;
 
 	case MBM_E2NAP_CONNECTED:
-		DBG("MBM Context: connected");
+		DBG("connected");
 
 		if (gcd->mbm_state == MBM_ENABLING)
 			mbm_get_ip_details(gc);
@@ -202,7 +216,7 @@ static void mbm_state_changed(struct ofono_gprs_context *gc, int state)
 		break;
 
 	case MBM_E2NAP_CONNECTING:
-		DBG("MBM Context: connecting");
+		DBG("connecting");
 		break;
 
 	default:
@@ -218,6 +232,8 @@ static void mbm_enap_poll_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 	GAtResultIter iter;
 	int state;
+
+	DBG("ok %d", ok);
 
 	g_at_result_iter_init(&iter, result);
 
@@ -254,6 +270,8 @@ static void at_enap_down_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 	struct ofono_error error;
 
+	DBG("ok %d", ok);
+
 	/* Now we have to wait for the unsolicited notification to arrive */
 	if (ok && gcd->enap != 0) {
 		gcd->mbm_state = MBM_DISABLING;
@@ -278,6 +296,8 @@ static void mbm_enap_up_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	struct ofono_gprs_context *gc = cbd->user;
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 	struct ofono_error error;
+
+	DBG("ok %d", ok);
 
 	if (ok) {
 		gcd->mbm_state = MBM_ENABLING;
@@ -306,6 +326,8 @@ static void mbm_cgdcont_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	struct cb_data *ncbd;
 	char buf[64];
 
+	DBG("ok %d", ok);
+
 	if (!ok) {
 		struct ofono_error error;
 
@@ -324,8 +346,7 @@ static void mbm_cgdcont_cb(gboolean ok, GAtResult *result, gpointer user_data)
 				mbm_enap_up_cb, ncbd, g_free) > 0)
 		return;
 
-	if (ncbd)
-		g_free(ncbd);
+	g_free(ncbd);
 
 	gcd->active_context = 0;
 
@@ -340,6 +361,8 @@ static void mbm_gprs_activate_primary(struct ofono_gprs_context *gc,
 	struct cb_data *cbd = cb_data_new(cb, data);
 	char buf[AUTH_BUF_LENGTH];
 	int len;
+
+	DBG("cid %u", ctx->cid);
 
 	if (!cbd)
 		goto error;
@@ -371,8 +394,7 @@ static void mbm_gprs_activate_primary(struct ofono_gprs_context *gc,
 	return;
 
 error:
-	if (cbd)
-		g_free(cbd);
+	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, NULL, 0, NULL, NULL, NULL, NULL, data);
 }
@@ -384,6 +406,8 @@ static void mbm_gprs_deactivate_primary(struct ofono_gprs_context *gc,
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 	struct cb_data *cbd = cb_data_new(cb, data);
 
+	DBG("cid %u", cid);
+
 	if (!cbd)
 		goto error;
 
@@ -394,8 +418,7 @@ static void mbm_gprs_deactivate_primary(struct ofono_gprs_context *gc,
 		return;
 
 error:
-	if (cbd)
-		g_free(cbd);
+	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, data);
 }
@@ -421,6 +444,8 @@ static void mbm_e2nap_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	struct ofono_gprs_context *gc = user_data;
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 
+	DBG("ok %d", ok);
+
 	gcd->have_e2nap = ok;
 
 	if (ok)
@@ -443,13 +468,22 @@ static int mbm_gprs_context_probe(struct ofono_gprs_context *gc,
 	GAtChat *chat = data;
 	struct gprs_context_data *gcd;
 
-	gcd = g_new0(struct gprs_context_data, 1);
-	gcd->chat = chat;
+	DBG("");
+
+	gcd = g_try_new0(struct gprs_context_data, 1);
+	if (!gcd)
+		return -ENOMEM;
+
+	gcd->chat = g_at_chat_clone(chat);
 
 	ofono_gprs_context_set_data(gc, gcd);
 
-	g_at_chat_send(chat, "AT*E2NAP=1", none_prefix, mbm_e2nap_cb, gc, NULL);
-	g_at_chat_send(chat, "AT*E2IPCFG=?", e2ipcfg_prefix,
+	g_at_chat_send(gcd->chat, "AT*ENAPDBG=1", none_prefix,
+				NULL, NULL, NULL);
+
+	g_at_chat_send(gcd->chat, "AT*E2NAP=1", none_prefix,
+			mbm_e2nap_cb, gc, NULL);
+	g_at_chat_send(gcd->chat, "AT*E2IPCFG=?", e2ipcfg_prefix,
 			mbm_e2ipcfg_query_cb, gc, NULL);
 
 	return 0;
@@ -459,17 +493,21 @@ static void mbm_gprs_context_remove(struct ofono_gprs_context *gc)
 {
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 
+	DBG("");
+
 	if (gcd->enap_source) {
 		g_source_remove(gcd->enap_source);
 		gcd->enap_source = 0;
 	}
 
 	ofono_gprs_context_set_data(gc, NULL);
+
+	g_at_chat_unref(gcd->chat);
 	g_free(gcd);
 }
 
 static struct ofono_gprs_context_driver driver = {
-	.name			= "mbm",
+	.name			= "mbmmodem",
 	.probe			= mbm_gprs_context_probe,
 	.remove			= mbm_gprs_context_remove,
 	.activate_primary	= mbm_gprs_activate_primary,

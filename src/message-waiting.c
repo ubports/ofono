@@ -39,8 +39,6 @@
 #include "simutil.h"
 #include "smsutil.h"
 
-#define MESSAGE_WAITING_INTERFACE "org.ofono.MessageWaiting"
-
 struct mailbox_state {
 	gboolean indication;
 	unsigned char message_count;
@@ -252,13 +250,15 @@ static void mbdn_set_cb(int ok, void *data)
 		number = phone_number_to_string(old);
 
 		ofono_dbus_signal_property_changed(conn, path,
-						MESSAGE_WAITING_INTERFACE,
+						OFONO_MESSAGE_WAITING_INTERFACE,
 						property, DBUS_TYPE_STRING,
 						&number);
 	}
 
-	/* Make a single attempt at keeping the CPHS version of the file
-	 * in sync.  */
+	/*
+	 * Make a single attempt at keeping the CPHS version of the file
+	 * in sync.
+	 */
 	if (req->cphs == FALSE)
 		set_cphs_mbdn(req->mw, TRUE, req->mailbox,
 				phone_number_to_string(&req->number), NULL);
@@ -276,7 +276,7 @@ static DBusMessage *set_mbdn(struct ofono_message_waiting *mw, int mailbox,
 	struct mbdn_set_request *req;
 	unsigned char efmbdn[255];
 
-	/* 
+	/*
 	 * If we have no 3GPP EFmbdn on the card, maybe the
 	 * CPHS version is available
 	 */
@@ -399,12 +399,12 @@ static void update_indicator_and_emit(struct ofono_message_waiting *mw,
 		return;
 
 	ofono_dbus_signal_property_changed(conn, path,
-				MESSAGE_WAITING_INTERFACE,
+				OFONO_MESSAGE_WAITING_INTERFACE,
 				mw_message_waiting_property_name[mailbox],
 				DBUS_TYPE_BOOLEAN, &indication);
 
 	ofono_dbus_signal_property_changed(conn, path,
-				MESSAGE_WAITING_INTERFACE,
+				OFONO_MESSAGE_WAITING_INTERFACE,
 				mw_message_count_property_name[mailbox],
 				DBUS_TYPE_BYTE, &count);
 }
@@ -526,7 +526,7 @@ static void mw_cphs_mbdn_read_cb(int ok, int total_length, int record,
 		value = phone_number_to_string(&mw->mailbox_number[i]);
 
 		ofono_dbus_signal_property_changed(conn, path,
-				MESSAGE_WAITING_INTERFACE,
+				OFONO_MESSAGE_WAITING_INTERFACE,
 				mw_mailbox_property_name[i],
 				DBUS_TYPE_STRING, &value);
 	}
@@ -567,7 +567,7 @@ static void mw_mbdn_read_cb(int ok, int total_length, int record,
 		value = phone_number_to_string(&mw->mailbox_number[i]);
 
 		ofono_dbus_signal_property_changed(conn, path,
-				MESSAGE_WAITING_INTERFACE,
+				OFONO_MESSAGE_WAITING_INTERFACE,
 				mw_mailbox_property_name[i],
 				DBUS_TYPE_STRING, &value);
 	}
@@ -654,7 +654,7 @@ static void mw_set_indicator(struct ofono_message_waiting *mw, int profile,
 
 		if (mw_message_waiting_property_name[type])
 			ofono_dbus_signal_property_changed(conn, path,
-					MESSAGE_WAITING_INTERFACE,
+					OFONO_MESSAGE_WAITING_INTERFACE,
 					mw_message_waiting_property_name[type],
 					DBUS_TYPE_BOOLEAN, &indication);
 	}
@@ -666,7 +666,7 @@ static void mw_set_indicator(struct ofono_message_waiting *mw, int profile,
 
 		if (mw_message_waiting_property_name[type])
 			ofono_dbus_signal_property_changed(conn, path,
-					MESSAGE_WAITING_INTERFACE,
+					OFONO_MESSAGE_WAITING_INTERFACE,
 					mw_message_count_property_name[type],
 					DBUS_TYPE_BYTE, &messages);
 	}
@@ -729,10 +729,12 @@ static void handle_special_sms_iei(struct ofono_message_waiting *mw,
 		if (type == (SMS_MWI_TYPE_OTHER | 4))
 			type = SMS_MWI_TYPE_VIDEO;
 		else
-			/* 23.040 9.2.3.24.2: "Terminals should be capable of
+			/*
+			 * 23.040 9.2.3.24.2: "Terminals should be capable of
 			 * receiving any values in octet 1, even including
 			 * those marked as Reserved."  Treat Reserved as
-			 * "Other".  */
+			 * "Other".
+			 */
 			type = SMS_MWI_TYPE_OTHER;
 	}
 
@@ -821,7 +823,8 @@ void __ofono_message_waiting_mwi(struct ofono_message_waiting *mw,
 	if (out_discard)
 		*out_discard = FALSE;
 
-	/* Check MWI types in the order from highest priority to lowest
+	/*
+	 * Check MWI types in the order from highest priority to lowest
 	 * because they must override one another.
 	 */
 
@@ -882,7 +885,8 @@ void __ofono_message_waiting_mwi(struct ofono_message_waiting *mw,
 		}
 
 		if (iei_found) {
-			/* 23.040 9.2.3.24.2 says "In the event of a
+			/*
+			 * 23.040 9.2.3.24.2 says "In the event of a
 			 * conflict between this setting and the setting
 			 * of the Data Coding Scheme (see 3GPP TS 23.038 [9])
 			 * then the message shall be stored if either the DCS
@@ -916,8 +920,8 @@ static void message_waiting_unregister(struct ofono_atom *atom)
 	const char *path = __ofono_atom_get_path(atom);
 
 	g_dbus_unregister_interface(conn, path,
-					MESSAGE_WAITING_INTERFACE);
-	ofono_modem_remove_interface(modem, MESSAGE_WAITING_INTERFACE);
+					OFONO_MESSAGE_WAITING_INTERFACE);
+	ofono_modem_remove_interface(modem, OFONO_MESSAGE_WAITING_INTERFACE);
 }
 
 void ofono_message_waiting_register(struct ofono_message_waiting *mw)
@@ -928,16 +932,16 @@ void ofono_message_waiting_register(struct ofono_message_waiting *mw)
 	struct ofono_atom *sim_atom;
 
 	if (!g_dbus_register_interface(conn, path,
-					MESSAGE_WAITING_INTERFACE,
+					OFONO_MESSAGE_WAITING_INTERFACE,
 					message_waiting_methods,
 					message_waiting_signals,
 					NULL, mw, NULL)) {
 		ofono_error("Could not create %s interface",
-				MESSAGE_WAITING_INTERFACE);
+				OFONO_MESSAGE_WAITING_INTERFACE);
 		return;
 	}
 
-	ofono_modem_add_interface(modem, MESSAGE_WAITING_INTERFACE);
+	ofono_modem_add_interface(modem, OFONO_MESSAGE_WAITING_INTERFACE);
 
 	sim_atom = __ofono_modem_find_atom(modem, OFONO_ATOM_TYPE_SIM);
 

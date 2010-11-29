@@ -50,6 +50,17 @@ Current implemented features:
 		Additional information about the current network can be
 		easily retrieved and displayed to the user.
 
+	Network time indications
+
+		oFono includes support for receiving Network Identity and
+		Timezone (NITZ) indications, and handles processing of
+		this information via system-specific plugins.
+
+		An example network time plugin is provided that simply
+		prints out the received time information. A more advanced,
+		real-world plugin could automatically set the system time
+		based on the received information.
+
 	Voice call handling
 
 		The voice call interface handles simple call creation and
@@ -91,7 +102,10 @@ Current implemented features:
 		supports concatenated messages of up to 255 segments, UCS2 and
 		GSM alphabets as well as extended alphabets.  SMS status
 		report features are not yet available.
-		
+
+		Selection of SMS bearer settings is supported through the
+		'Bearer' property on the SmsManager interface.
+
 	SIM PIN handling
 
 		SIM PIN locks, network and service provider locks are
@@ -115,12 +129,6 @@ Work in progress features:
 
 		User initiated USSD support is available, but not
 		network-initiated USSD support.
-
-	PPP
-
-		Modems that use PPP for data connections are currently not
-		supported.  This feature will be available once a functional
-		userspace ppp stack is available.
 
 Not implemented features:
 

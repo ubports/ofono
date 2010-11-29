@@ -28,6 +28,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <errno.h>
 
 #include <glib.h>
 
@@ -222,8 +223,7 @@ static void ste_dial(struct ofono_voicecall *vc,
 		return;
 
 error:
-	if (cbd)
-		g_free(cbd);
+	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, data);
 }
@@ -248,8 +248,7 @@ static void ste_template(const char *cmd, struct ofono_voicecall *vc,
 		return;
 
 error:
-	if (req)
-		g_free(req);
+	g_free(req);
 
 	CALLBACK_WITH_FAILURE(cb, data);
 }
@@ -315,8 +314,7 @@ static void ste_release_specific(struct ofono_voicecall *vc, int id,
 		return;
 
 error:
-	if (req)
-		g_free(req);
+	g_free(req);
 
 	CALLBACK_WITH_FAILURE(cb, data);
 }
@@ -343,7 +341,7 @@ static void ste_transfer(struct ofono_voicecall *vc,
 	unsigned int transfer = 0x1 | 0x2;
 
 	/* Transfer can puts held & active calls together and disconnects
-	 * from both.  However, some networks support transfering of
+	 * from both.  However, some networks support transferring of
 	 * dialing/ringing calls as well.
 	 */
 	transfer |= 0x4 | 0x8;
@@ -401,8 +399,7 @@ static void ste_send_dtmf(struct ofono_voicecall *vc, const char *dtmf,
 		return;
 
 error:
-	if (cbd)
-		g_free(cbd);
+	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, data);
 }
@@ -502,14 +499,13 @@ static void ecav_notify(GAtResult *result, gpointer user_data)
 		else
 			direction = CALL_DIRECTION_MOBILE_TERMINATED;
 
-		if ((strlen(num)) > 0)
+		if (strlen(num) > 0)
 			clip_validity = CLIP_VALIDITY_VALID;
 		else
 			clip_validity = CLIP_VALIDITY_NOT_AVAILABLE;
 
 		new_call = create_call(vc, call_type, direction, status,
 					num, num_type, clip_validity);
-
 		if (!new_call) {
 			ofono_error("Unable to malloc. "
 					"Call management is fubar");
@@ -533,20 +529,32 @@ static void ecav_notify(GAtResult *result, gpointer user_data)
 	}
 }
 
+static void ste_voicecall_initialized(gboolean ok, GAtResult *result,
+					gpointer user_data)
+{
+	struct ofono_voicecall *vc = user_data;
+	struct voicecall_data *vd = ofono_voicecall_get_data(vc);
+
+	g_at_chat_register(vd->chat, "*ECAV:", ecav_notify, FALSE, vc, NULL);
+	ofono_voicecall_register(vc);
+}
+
 static int ste_voicecall_probe(struct ofono_voicecall *vc, unsigned int vendor,
 				void *data)
 {
 	GAtChat *chat = data;
 	struct voicecall_data *vd;
 
-	vd = g_new0(struct voicecall_data, 1);
-	vd->chat = chat;
+	vd = g_try_new0(struct voicecall_data, 1);
+	if (!vd)
+		return -ENOMEM;
+
+	vd->chat = g_at_chat_clone(chat);
 
 	ofono_voicecall_set_data(vc, vd);
 
-	g_at_chat_send(chat, "AT*ECAM=1", NULL, NULL, NULL, NULL);
-	g_at_chat_register(chat, "*ECAV:", ecav_notify, FALSE, vc, NULL);
-	ofono_voicecall_register(vc);
+	g_at_chat_send(vd->chat, "AT*ECAM=1", none_prefix,
+			ste_voicecall_initialized, vc, NULL);
 
 	return 0;
 }
@@ -560,6 +568,7 @@ static void ste_voicecall_remove(struct ofono_voicecall *vc)
 
 	ofono_voicecall_set_data(vc, NULL);
 
+	g_at_chat_unref(vd->chat);
 	g_free(vd);
 }
 
@@ -569,7 +578,7 @@ static struct ofono_voicecall_driver driver = {
 	.remove			= ste_voicecall_remove,
 	.dial			= ste_dial,
 	.answer			= ste_answer,
-	.hangup			= ste_hangup,
+	.hangup_active		= ste_hangup,
 	.hold_all_active	= ste_hold_all_active,
 	.release_all_held	= ste_release_all_held,
 	.set_udub		= ste_set_udub,

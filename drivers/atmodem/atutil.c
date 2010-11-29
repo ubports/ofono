@@ -40,6 +40,12 @@ void decode_at_error(struct ofono_error *error, const char *final)
 	if (!strcmp(final, "OK")) {
 		error->type = OFONO_ERROR_TYPE_NO_ERROR;
 		error->error = 0;
+	} else if (g_str_has_prefix(final, "+CMS ERROR:")) {
+		error->type = OFONO_ERROR_TYPE_CMS;
+		error->error = strtol(&final[11], NULL, 0);
+	} else if (g_str_has_prefix(final, "+CME ERROR:")) {
+		error->type = OFONO_ERROR_TYPE_CME;
+		error->error = strtol(&final[11], NULL, 0);
 	} else {
 		error->type = OFONO_ERROR_TYPE_FAILURE;
 		error->error = 0;
@@ -169,8 +175,13 @@ gboolean at_util_parse_reg_unsolicited(GAtResult *result, const char *prefix,
 	if (g_at_result_iter_next_number(&iter, &s) == FALSE)
 		return FALSE;
 
+	/* Some firmware will report bogus lac/ci when unregistered */
+	if (s != 1 && s != 5)
+		goto out;
+
 	switch (vendor) {
 	case OFONO_VENDOR_HUAWEI:
+	case OFONO_VENDOR_NOVATEL:
 		if (g_at_result_iter_next_unquoted_string(&iter, &str) == TRUE)
 			l = strtol(str, NULL, 16);
 		else
@@ -233,8 +244,13 @@ gboolean at_util_parse_reg(GAtResult *result, const char *prefix,
 		if (g_at_result_iter_next_number(&iter, &s) == FALSE)
 			continue;
 
+		/* Some firmware will report bogus lac/ci when unregistered */
+		if (s != 1 && s != 5)
+			goto out;
+
 		switch (vendor) {
 		case OFONO_VENDOR_HUAWEI:
+		case OFONO_VENDOR_NOVATEL:
 			r = g_at_result_iter_next_unquoted_string(&iter, &str);
 
 			if (r == TRUE)
@@ -282,6 +298,129 @@ out:
 
 		return TRUE;
 	}
+
+	return FALSE;
+}
+
+gboolean at_util_parse_sms_index_delivery(GAtResult *result, const char *prefix,
+						enum at_util_sms_store *out_st,
+						int *out_index)
+{
+	GAtResultIter iter;
+	const char *strstore;
+	enum at_util_sms_store st;
+	int index;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, prefix))
+		return FALSE;
+
+	if (!g_at_result_iter_next_string(&iter, &strstore))
+		return FALSE;
+
+	if (g_str_equal(strstore, "ME"))
+		st = AT_UTIL_SMS_STORE_ME;
+	else if (g_str_equal(strstore, "SM"))
+		st = AT_UTIL_SMS_STORE_SM;
+	else if (g_str_equal(strstore, "SR"))
+		st = AT_UTIL_SMS_STORE_SR;
+	else if (g_str_equal(strstore, "BM"))
+		st = AT_UTIL_SMS_STORE_BM;
+	else
+		return FALSE;
+
+	if (!g_at_result_iter_next_number(&iter, &index))
+		return FALSE;
+
+	if (out_index)
+		*out_index = index;
+
+	if (out_st)
+		*out_st = st;
+
+	return TRUE;
+}
+
+static gboolean at_util_charset_string_to_charset(const char *str,
+					enum at_util_charset *charset)
+{
+	if (!g_strcmp0(str, "GSM"))
+		*charset = AT_UTIL_CHARSET_GSM;
+	else if (!g_strcmp0(str, "HEX"))
+		*charset = AT_UTIL_CHARSET_HEX;
+	else if (!g_strcmp0(str, "IRA"))
+		*charset = AT_UTIL_CHARSET_IRA;
+	else if (!g_strcmp0(str, "PCCP437"))
+		*charset = AT_UTIL_CHARSET_PCCP437;
+	else if (!g_strcmp0(str, "PCDN"))
+		*charset = AT_UTIL_CHARSET_PCDN;
+	else if (!g_strcmp0(str, "UCS2"))
+		*charset = AT_UTIL_CHARSET_UCS2;
+	else if (!g_strcmp0(str, "UTF-8"))
+		*charset = AT_UTIL_CHARSET_UTF8;
+	else if (!g_strcmp0(str, "8859-1"))
+		*charset = AT_UTIL_CHARSET_8859_1;
+	else if (!g_strcmp0(str, "8859-2"))
+		*charset = AT_UTIL_CHARSET_8859_2;
+	else if (!g_strcmp0(str, "8859-3"))
+		*charset = AT_UTIL_CHARSET_8859_3;
+	else if (!g_strcmp0(str, "8859-4"))
+		*charset = AT_UTIL_CHARSET_8859_4;
+	else if (!g_strcmp0(str, "8859-5"))
+		*charset = AT_UTIL_CHARSET_8859_5;
+	else if (!g_strcmp0(str, "8859-6"))
+		*charset = AT_UTIL_CHARSET_8859_6;
+	else if (!g_strcmp0(str, "8859-C"))
+		*charset = AT_UTIL_CHARSET_8859_C;
+	else if (!g_strcmp0(str, "8859-A"))
+		*charset = AT_UTIL_CHARSET_8859_A;
+	else if (!g_strcmp0(str, "8859-G"))
+		*charset = AT_UTIL_CHARSET_8859_G;
+	else if (!g_strcmp0(str, "8859-H"))
+		*charset = AT_UTIL_CHARSET_8859_H;
+	else
+		return FALSE;
+
+	return TRUE;
+}
+
+gboolean at_util_parse_cscs_supported(GAtResult *result, int *supported)
+{
+	GAtResultIter iter;
+	const char *str;
+	enum at_util_charset charset;
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "+CSCS:"))
+		return FALSE;
+
+	/* Some modems don't report CSCS in a proper list */
+	g_at_result_iter_open_list(&iter);
+
+	while (g_at_result_iter_next_string(&iter, &str)) {
+		if (at_util_charset_string_to_charset(str, &charset))
+			*supported |= charset;
+	}
+
+	g_at_result_iter_close_list(&iter);
+
+	return TRUE;
+}
+
+gboolean at_util_parse_cscs_query(GAtResult *result,
+				enum at_util_charset *charset)
+{
+	GAtResultIter iter;
+	const char *str;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "+CSCS:"))
+		return FALSE;
+
+	if (g_at_result_iter_next_string(&iter, &str))
+		return at_util_charset_string_to_charset(str, charset);
 
 	return FALSE;
 }

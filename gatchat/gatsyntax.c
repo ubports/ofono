@@ -32,6 +32,7 @@ enum GSMV1_STATE {
 	GSMV1_STATE_INITIAL_CR,
 	GSMV1_STATE_INITIAL_LF,
 	GSMV1_STATE_RESPONSE,
+	GSMV1_STATE_RESPONSE_STRING,
 	GSMV1_STATE_TERMINATOR_CR,
 	GSMV1_STATE_GUESS_MULTILINE_RESPONSE,
 	GSMV1_STATE_MULTILINE_RESPONSE,
@@ -41,13 +42,14 @@ enum GSMV1_STATE {
 	GSMV1_STATE_PDU,
 	GSMV1_STATE_PDU_CR,
 	GSMV1_STATE_PROMPT,
-	GSMV1_STATE_GARBAGE,
-	GSMV1_STATE_GARBAGE_CHECK_LF,
+	GSMV1_STATE_ECHO,
+	GSMV1_PPP_DATA,
 };
 
 enum GSM_PERMISSIVE_STATE {
 	GSM_PERMISSIVE_STATE_IDLE = 0,
 	GSM_PERMISSIVE_STATE_RESPONSE,
+	GSM_PERMISSIVE_STATE_RESPONSE_STRING,
 	GSM_PERMISSIVE_STATE_GUESS_PDU,
 	GSM_PERMISSIVE_STATE_PDU,
 	GSM_PERMISSIVE_STATE_PROMPT,
@@ -80,15 +82,17 @@ static GAtSyntaxResult gsmv1_feed(GAtSyntax *syntax,
 		case GSMV1_STATE_IDLE:
 			if (byte == '\r')
 				syntax->state = GSMV1_STATE_INITIAL_CR;
+			else if (byte == '~')
+				syntax->state = GSMV1_PPP_DATA;
 			else
-				syntax->state = GSMV1_STATE_GARBAGE;
+				syntax->state = GSMV1_STATE_ECHO;
 			break;
 
 		case GSMV1_STATE_INITIAL_CR:
 			if (byte == '\n')
 				syntax->state = GSMV1_STATE_INITIAL_LF;
 			else
-				syntax->state = GSMV1_STATE_GARBAGE;
+				syntax->state = GSMV1_STATE_ECHO;
 			break;
 
 		case GSMV1_STATE_INITIAL_LF:
@@ -96,6 +100,8 @@ static GAtSyntaxResult gsmv1_feed(GAtSyntax *syntax,
 				syntax->state = GSMV1_STATE_TERMINATOR_CR;
 			else if (byte == '>')
 				syntax->state = GSMV1_STATE_PROMPT;
+			else if (byte == '"')
+				syntax->state = GSMV1_STATE_RESPONSE_STRING;
 			else
 				syntax->state = GSMV1_STATE_RESPONSE;
 			break;
@@ -103,6 +109,13 @@ static GAtSyntaxResult gsmv1_feed(GAtSyntax *syntax,
 		case GSMV1_STATE_RESPONSE:
 			if (byte == '\r')
 				syntax->state = GSMV1_STATE_TERMINATOR_CR;
+			else if (byte == '"')
+				syntax->state = GSMV1_STATE_RESPONSE_STRING;
+			break;
+
+		case GSMV1_STATE_RESPONSE_STRING:
+			if (byte == '"')
+				syntax->state = GSMV1_STATE_RESPONSE;
 			break;
 
 		case GSMV1_STATE_TERMINATOR_CR:
@@ -187,13 +200,11 @@ static GAtSyntaxResult gsmv1_feed(GAtSyntax *syntax,
 			syntax->state = GSMV1_STATE_RESPONSE;
 			return G_AT_SYNTAX_RESULT_UNSURE;
 
-		case GSMV1_STATE_GARBAGE:
-			if (byte == '\r')
-				syntax->state = GSMV1_STATE_GARBAGE_CHECK_LF;
+		case GSMV1_STATE_ECHO:
 			/* This handles the case of echo of the PDU terminated
 			 * by CtrlZ character
 			 */
-			else if (byte == 26) {
+			if (byte == 26 || byte == '\r') {
 				syntax->state = GSMV1_STATE_IDLE;
 				res = G_AT_SYNTAX_RESULT_UNRECOGNIZED;
 				i += 1;
@@ -202,14 +213,15 @@ static GAtSyntaxResult gsmv1_feed(GAtSyntax *syntax,
 
 			break;
 
-		case GSMV1_STATE_GARBAGE_CHECK_LF:
-			syntax->state = GSMV1_STATE_IDLE;
-			res = G_AT_SYNTAX_RESULT_UNRECOGNIZED;
-
-			if (byte == '\n')
+		case GSMV1_PPP_DATA:
+			if (byte == '~') {
+				syntax->state = GSMV1_STATE_IDLE;
+				res = G_AT_SYNTAX_RESULT_UNRECOGNIZED;
 				i += 1;
+				goto out;
+			}
 
-			goto out;
+			break;
 
 		default:
 			break;
@@ -255,7 +267,14 @@ static GAtSyntaxResult gsm_permissive_feed(GAtSyntax *syntax,
 				i += 1;
 				res = G_AT_SYNTAX_RESULT_LINE;
 				goto out;
-			}
+			} else if (byte == '"')
+				syntax->state =
+					GSM_PERMISSIVE_STATE_RESPONSE_STRING;
+			break;
+
+		case GSM_PERMISSIVE_STATE_RESPONSE_STRING:
+			if (byte == '"')
+				syntax->state = GSM_PERMISSIVE_STATE_RESPONSE;
 			break;
 
 		case GSM_PERMISSIVE_STATE_GUESS_PDU:

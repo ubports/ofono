@@ -29,12 +29,20 @@
 #include <errno.h>
 #include <unistd.h>
 #include <sys/signalfd.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 #include <glib.h>
 #include <gatchat.h>
 #include <gattty.h>
+#include <gatppp.h>
+
+#define IFCONFIG_PATH "/sbin/ifconfig"
 
 static const char *none_prefix[] = { NULL };
+static const char *cfun_prefix[] = { "+CFUN:", NULL };
+static const char *creg_prefix[] = { "+CREG:", NULL };
 static const char *cgreg_prefix[] = { "+CGREG:", NULL };
 
 static gchar *option_ip = NULL;
@@ -45,7 +53,11 @@ static gint option_cid = 0;
 static gchar *option_apn = NULL;
 static gint option_offmode = 0;
 static gboolean option_legacy = FALSE;
+static gchar *option_username = NULL;
+static gchar *option_password = NULL;
+static gchar *option_pppdump = NULL;
 
+static GAtPPP *ppp;
 static GAtChat *control;
 static GAtChat *modem;
 static GMainLoop *event_loop;
@@ -53,14 +65,16 @@ static GMainLoop *event_loop;
 enum state {
 	STATE_NONE = 0,
 	STATE_REGISTERING,
+	STATE_ATTACHING,
 	STATE_ACTIVATING
 };
 
 static int state = 0;
+static int oldmode = 0;
 
 static void gsmdial_debug(const char *str, void *data)
 {
-	g_print("%s: %s\n", (const char *)data, str);
+	g_print("%s: %s\n", (const char *) data, str);
 }
 
 static gboolean quit_eventloop(gpointer user_data)
@@ -92,12 +106,15 @@ static gboolean signal_cb(GIOChannel *channel, GIOCondition cond, gpointer data)
 	case SIGINT:
 	case SIGTERM:
 		if (terminated == 0) {
-			char buf[64];
-
 			g_timeout_add_seconds(10, quit_eventloop, NULL);
-			sprintf(buf, "AT+CFUN=%u", option_offmode);
-			g_at_chat_send(control, buf, none_prefix,
-					power_down, NULL, NULL);
+
+			if (ppp == NULL) {
+				char buf[64];
+				sprintf(buf, "AT+CFUN=%u", option_offmode);
+				g_at_chat_send(control, buf, none_prefix,
+						power_down, NULL, NULL);
+			} else
+				g_at_ppp_shutdown(ppp);
 		}
 
 		terminated++;
@@ -206,18 +223,103 @@ out:
 	return FALSE;
 }
 
-static void at_cgact_up_cb(gboolean ok, GAtResult *result, gpointer user_data)
+static gboolean execute(const char *cmd)
+{
+	int status;
+
+	status = system(cmd);
+	if (status < 0) {
+		g_print("Failed to execute command: %s\n", strerror(errno));
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+static void ppp_connect(const char *iface, const char *local, const char *peer,
+			const char *dns1, const char *dns2,
+			gpointer user_data)
+{
+	char buf[512];
+
+	/* print out the negotiated address and dns server */
+	g_print("Network Device: %s\n", iface);
+	g_print("IP Address: %s\n", local);
+	g_print("Peer IP Address: %s\n", peer);
+	g_print("Primary DNS Server: %s\n", dns1);
+	g_print("Secondary DNS Server: %s\n", dns2);
+
+	if (getuid() != 0) {
+		g_print("Need root privilege to config PPP interface\n");
+		return;
+	}
+
+	snprintf(buf, sizeof(buf), "%s %s up", IFCONFIG_PATH, iface);
+	execute(buf);
+
+	snprintf(buf, sizeof(buf), "%s %s %s pointopoint %s", IFCONFIG_PATH,
+				iface, local, peer);
+	execute(buf);
+}
+
+static void no_carrier_notify(GAtResult *result, gpointer user_data)
 {
 	char buf[64];
 
+	sprintf(buf, "AT+CFUN=%u", option_offmode);
+	g_at_chat_send(control, buf, none_prefix, power_down, NULL, NULL);
+}
+
+static void ppp_disconnect(GAtPPPDisconnectReason reason, gpointer user_data)
+{
+	g_print("PPP Link down: %d\n", reason);
+
+	g_at_ppp_unref(ppp);
+	ppp = NULL;
+
+	g_at_chat_resume(modem);
+
+	g_at_chat_register(modem, "NO CARRIER", no_carrier_notify,
+					FALSE, NULL, NULL);
+}
+
+static void connect_cb(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	GAtIO *io;
+
 	if (!ok) {
-		g_print("Error activating context\n");
+		g_print("Unable to define context\n");
 		exit(1);
 	}
 
-	sprintf(buf, "AT+CGDATA=\"PPP\",%u", option_cid);
+	/* get the data IO channel */
+	io = g_at_chat_get_io(modem);
 
-	g_at_chat_send(modem, buf, none_prefix, NULL, NULL, NULL);
+	/*
+	 * shutdown gatchat or else it tries to take all the input
+	 * from the modem and does not let PPP get it.
+	 */
+	g_at_chat_suspend(modem);
+
+	/* open ppp */
+	ppp = g_at_ppp_new_from_io(io);
+	if (!ppp) {
+		g_print("Unable to create PPP object\n");
+		exit(1);
+	}
+	g_at_ppp_set_debug(ppp, gsmdial_debug, "PPP");
+
+	if (option_pppdump)
+		g_at_ppp_set_recording(ppp, option_pppdump);
+
+	g_at_ppp_set_credentials(ppp, option_username, option_password);
+
+	/* set connect and disconnect callbacks */
+	g_at_ppp_set_connect_function(ppp, ppp_connect, NULL);
+	g_at_ppp_set_disconnect_function(ppp, ppp_disconnect, NULL);
+
+	/* open the ppp connection */
+	g_at_ppp_open(ppp);
 }
 
 static void at_cgdcont_cb(gboolean ok, GAtResult *result, gpointer user_data)
@@ -229,15 +331,12 @@ static void at_cgdcont_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		exit(1);
 	}
 
-	if (option_legacy == TRUE) {
-			sprintf(buf, "ATD*99***%u#", option_cid);
-			g_at_chat_send(modem, buf, none_prefix,
-					NULL, NULL, NULL);
-	} else {
-		sprintf(buf, "AT+CGACT=1,%u", option_cid);
-		g_at_chat_send(control, buf, none_prefix,
-				at_cgact_up_cb, NULL, NULL);
-	}
+	if (option_legacy == TRUE)
+		sprintf(buf, "ATD*99***%u#", option_cid);
+	else
+		sprintf(buf, "AT+CGDATA=\"PPP\",%u", option_cid);
+
+	g_at_chat_send(modem, buf, none_prefix, connect_cb, NULL, NULL);
 }
 
 static void setup_context(int status)
@@ -248,7 +347,7 @@ static void setup_context(int status)
 	state = STATE_ACTIVATING;
 
 	g_print("Registered to GPRS network, roaming=%s\n",
-			status == 5 ? "True" : "False");
+					status == 5 ? "true" : "false");
 
 	len = sprintf(buf, "AT+CGDCONT=%u,\"IP\"", option_cid);
 	snprintf(buf + len, sizeof(buf) - len - 3, ",\"%s\"", option_apn);
@@ -259,11 +358,11 @@ static void cgreg_notify(GAtResult *result, gpointer user_data)
 {
 	int status, lac, ci, tech;
 
-	if (state != STATE_REGISTERING)
+	if (state != STATE_ATTACHING)
 		return;
 
 	if (at_util_parse_reg_unsolicited(result, "+CGREG:", &status,
-				&lac, &ci, &tech) == FALSE)
+						&lac, &ci, &tech) == FALSE)
 		return;
 
 	if (status != 1 && status != 5)
@@ -276,12 +375,18 @@ static void cgreg_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	int status, lac, ci, tech;
 
-	if (at_util_parse_reg(result, "+CGREG:", NULL, &status,
-				&lac, &ci, &tech) == FALSE)
+	if (!ok)
 		return;
 
-	if (status != 1 && status != 5)
+	if (at_util_parse_reg(result, "+CGREG:", NULL, &status,
+						&lac, &ci, &tech) == FALSE)
 		return;
+
+	if (status != 1 && status != 5) {
+		g_at_chat_register(control, "+CGREG:",
+					cgreg_notify, FALSE, NULL, NULL);
+		return;
+	}
 
 	setup_context(status);
 }
@@ -292,7 +397,18 @@ static void attached_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		return;
 
 	g_at_chat_send(control, "AT+CGREG?", cgreg_prefix,
-			cgreg_cb, NULL, NULL);
+						cgreg_cb, NULL, NULL);
+}
+
+static void activate_gprs(int status)
+{
+	state = STATE_ATTACHING;
+	g_print("Registered to network, roaming=%s\n",
+					status == 5 ? "true" : "false");
+
+	g_print("Activating GPRS network...\n");
+	g_at_chat_send(control, "AT+CGATT=1", none_prefix,
+						attached_cb, NULL, NULL);
 }
 
 static void creg_notify(GAtResult *result, gpointer user_data)
@@ -303,17 +419,33 @@ static void creg_notify(GAtResult *result, gpointer user_data)
 		return;
 
 	if (at_util_parse_reg_unsolicited(result, "+CREG:", &status,
-				&lac, &ci, &tech) == FALSE)
+						&lac, &ci, &tech) == FALSE)
 		return;
 
-	if (status == 1 || status == 5) {
-		g_print("Registered to network, roaming=%s\n",
-				status == 5 ? "True" : "False");
+	if (status != 1 && status != 5)
+		return;
 
-		g_print("Activating gprs network...\n");
-		g_at_chat_send(control, "AT+CGATT=1", none_prefix,
-				attached_cb, NULL, NULL);
+	activate_gprs(status);
+}
+
+static void creg_cb(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	int status, lac, ci, tech;
+
+	if (!ok)
+		return;
+
+	if (at_util_parse_reg(result, "+CREG:", NULL, &status,
+						&lac, &ci, &tech) == FALSE)
+		return;
+
+	if (status != 1 && status != 5) {
+		g_at_chat_register(control, "+CREG:",
+						creg_notify, FALSE, NULL, NULL);
+		return;
 	}
+
+	activate_gprs(status);
 }
 
 static void register_cb(gboolean ok, GAtResult *result, gpointer user_data)
@@ -325,25 +457,56 @@ static void register_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 	state = STATE_REGISTERING;
 	g_print("Waiting for network registration...\n");
+
+	g_at_chat_send(control, "AT+CREG?", creg_prefix,
+						creg_cb, NULL, NULL);
 }
 
 static void start_dial(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	if (!ok) {
+		g_print("Checking PIN status failed\n");
+		exit(1);
+	}
+
+	g_at_chat_send(control, "AT+CREG=2", none_prefix, NULL, NULL, NULL);
+	g_at_chat_send(control, "AT+CGREG=2", none_prefix, NULL, NULL, NULL);
+
+	g_at_chat_send(control, "AT+COPS=0", none_prefix,
+						register_cb, NULL, NULL);
+}
+
+static void check_pin(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	if (!ok) {
 		g_print("Turning on the modem failed\n");
 		exit(1);
 	}
 
-	g_at_chat_register(control, "+CREG:",
-				creg_notify, FALSE, NULL, NULL);
-	g_at_chat_register(control, "+CGREG:",
-				cgreg_notify, FALSE, NULL, NULL);
+	g_at_chat_send(control, "AT+CPIN?", NULL, start_dial, NULL, NULL);
+}
 
-	g_at_chat_send(control, "AT+CREG=2", none_prefix, NULL, NULL, NULL);
-	g_at_chat_send(control, "AT+CGREG=2", none_prefix, NULL, NULL, NULL);
+static void check_mode(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	GAtResultIter iter;
 
-	g_at_chat_send(control, "AT+COPS=0", none_prefix,
-			register_cb, NULL, NULL);
+	if (!ok) {
+		g_print("Checking modem mode failed\n");
+		exit(1);
+	}
+
+	g_at_result_iter_init(&iter, result);
+	g_at_result_iter_next(&iter, "+CFUN:");
+	g_at_result_iter_next_number(&iter, &oldmode);
+
+	g_print("Current modem mode is %d\n", oldmode);
+
+	if (oldmode == 1) {
+		check_pin(ok, result, user_data);
+		return;
+	}
+
+	g_at_chat_send(control, "AT+CFUN=1", NULL, check_pin, NULL, NULL);
 }
 
 static int open_serial()
@@ -388,6 +551,49 @@ static int open_serial()
 	return 0;
 }
 
+static int open_ip()
+{
+	int sk, err;
+	struct sockaddr_in addr;
+	GAtSyntax *syntax;
+	GIOChannel *channel;
+
+	sk = socket(PF_INET, SOCK_STREAM, 0);
+	if (sk < 0)
+		return -EINVAL;
+
+	memset(&addr, 0, sizeof(addr));
+	addr.sin_family = AF_INET;
+	addr.sin_addr.s_addr = inet_addr(option_ip);
+	addr.sin_port = htons(option_port);
+
+	err = connect(sk, (struct sockaddr *) &addr, sizeof(addr));
+	if (err < 0) {
+		close(sk);
+		return err;
+	}
+
+	channel = g_io_channel_unix_new(sk);
+	if (channel == NULL) {
+		close(sk);
+		return -ENOMEM;
+	}
+
+	syntax = g_at_syntax_new_gsmv1();
+	control = g_at_chat_new(channel, syntax);
+	g_io_channel_unref(channel);
+	g_at_syntax_unref(syntax);
+
+	if (control == NULL)
+		return -ENOMEM;
+
+	g_at_chat_ref(control);
+	modem = control;
+	g_at_chat_set_debug(control, gsmdial_debug, "");
+
+	return 0;
+}
+
 static GOptionEntry options[] = {
 	{ "ip", 'i', 0, G_OPTION_ARG_STRING, &option_ip,
 				"Specify IP" },
@@ -406,6 +612,12 @@ static GOptionEntry options[] = {
 				"Specify CFUN offmode" },
 	{ "legacy", 'l', 0, G_OPTION_ARG_NONE, &option_legacy,
 				"Use ATD*99***<cid>#" },
+	{ "username", 'u', 0, G_OPTION_ARG_STRING, &option_username,
+				"Specify PPP username" },
+	{ "password", 'w', 0, G_OPTION_ARG_STRING, &option_password,
+				"Specify PPP password" },
+	{ "pppdump", 'D', 0, G_OPTION_ARG_STRING, &option_pppdump,
+				"Specify pppdump filename" },
 	{ NULL },
 };
 
@@ -448,11 +660,15 @@ int main(int argc, char **argv)
 		if (ret < 0)
 			goto out;
 	} else {
+		int ret;
+
 		g_print("IP: %s\n", option_ip);
 		g_print("Port: %d\n", option_port);
+		ret = open_ip();
 		g_free(option_ip);
 
-		goto out;
+		if (ret < 0)
+			goto out;
 	}
 
 	g_print("APN: %s\n", option_apn);
@@ -485,15 +701,20 @@ int main(int argc, char **argv)
 	event_loop = g_main_loop_new(NULL, FALSE);
 
 	g_at_chat_send(control, "ATE0Q0V1", NULL, NULL, NULL, NULL);
-	g_at_chat_send(control, "AT+CFUN=1", NULL, start_dial, NULL, NULL);
+	g_at_chat_send(control, "AT+CFUN?", cfun_prefix,
+						check_mode, NULL, NULL);
 
 	g_main_loop_run(event_loop);
 	g_source_remove(signal_source);
 	g_main_loop_unref(event_loop);
 
 out:
-	g_at_chat_unref(control);
-	g_at_chat_unref(modem);
+	if (ppp == NULL) {
+		g_at_chat_unref(control);
+		g_at_chat_unref(modem);
+	} else
+		g_at_ppp_unref(ppp);
+
 	g_free(option_apn);
 
 	return 0;

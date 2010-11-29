@@ -1,21 +1,21 @@
 /*
- * This file is part of oFono - Open Source Telephony
  *
- * Copyright (C) 2009 Nokia Corporation and/or its subsidiary(-ies).
+ *  oFono - Open Source Telephony
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * version 2 as published by the Free Software Foundation.
+ *  Copyright (C) 2009-2010 Nokia Corporation and/or its subsidiary(-ies).
  *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
- * 02110-1301 USA
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program; if not, write to the Free Software
+ *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
  */
 
@@ -30,6 +30,7 @@ extern "C" {
 #define NETWORK_TIMEOUT		5
 #define NETWORK_SCAN_TIMEOUT	180
 #define NETWORK_SET_TIMEOUT	240
+#define NET_INVALID_TIME	0x64
 
 enum net_message_id {
 	NET_SET_REQ = 0x07,
@@ -37,6 +38,7 @@ enum net_message_id {
 	NET_RSSI_GET_REQ = 0x0B,
 	NET_RSSI_GET_RESP = 0x0C,
 	NET_RSSI_IND = 0x1E,
+	NET_TIME_IND = 0x27,
 	NET_RAT_IND = 0x35,
 	NET_RAT_REQ = 0x36,
 	NET_RAT_RESP = 0x37,
@@ -57,6 +59,7 @@ enum net_subblock {
 	NET_GSM_REG_INFO = 0x09,
 	NET_DETAILED_NETWORK_INFO = 0x0B,
 	NET_GSM_OPERATOR_INFO = 0x0C,
+	NET_TIME_INFO = 0x10,
 	NET_GSM_BAND_INFO = 0x11,
 	NET_RAT_INFO = 0x2C,
 	NET_AVAIL_NETWORK_INFO_COMMON = 0xE1,

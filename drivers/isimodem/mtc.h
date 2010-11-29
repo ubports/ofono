@@ -1,21 +1,21 @@
 /*
- * This file is part of oFono - Open Source Telephony
  *
- * Copyright (C) 2009 Nokia Corporation and/or its subsidiary(-ies).
+ *  oFono - Open Source Telephony
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * version 2 as published by the Free Software Foundation.
+ *  Copyright (C) 2009-2010 Nokia Corporation and/or its subsidiary(-ies).
  *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
- * 02110-1301 USA
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program; if not, write to the Free Software
+ *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
  */
 
@@ -28,6 +28,7 @@ extern "C" {
 
 #define PN_MTC			0x15
 #define MTC_TIMEOUT		5
+#define MTC_STATE_REQ_TIMEOUT   (6 + 5)
 
 enum mtc_isi_cause {
 	MTC_OK = 0x00,
@@ -42,13 +43,27 @@ enum mtc_isi_cause {
 	MTC_RESET_REQUIRED = 0x17
 };
 
+enum mtc_isi_action {
+	MTC_START = 0x03,
+	MTC_READY = 0x04,
+	MTC_NOS_READY = 0x0C,
+	MTC_SOS_START = 0x11,
+	MTC_SOS_READY = 0x12,
+};
+
 enum mtc_message_id {
+	MTC_STATE_REQ = 0x01,
 	MTC_STATE_QUERY_REQ = 0x02,
 	MTC_POWER_OFF_REQ = 0x03,
 	MTC_POWER_ON_REQ = 0x04,
+	MTC_STARTUP_SYNQ_REQ = 0x0B,
+	MTC_SHUTDOWN_SYNC_REQ = 0x12,
+	MTC_STATE_RESP = 0x64,
 	MTC_STATE_QUERY_RESP = 0x65,
 	MTC_POWER_OFF_RESP = 0x66,
 	MTC_POWER_ON_RESP = 0x67,
+	MTC_STARTUP_SYNQ_RESP = 0x6E,
+	MTC_SHUTDOWN_SYNC_RESP = 0x75,
 	MTC_STATE_INFO_IND = 0xC0,
 	MTC_COMMON_MESSAGE = 0xF0
 };
@@ -69,7 +84,8 @@ enum mtc_modem_state {
 	MTC_DISCHARGING = 0x0C,
 	MTC_DISK_WIPE = 0x0D,
 	MTC_SW_RESET = 0x0E,
-	MTC_CMT_ONLY_MODE = 0xFF
+	MTC_CMT_ONLY_MODE = 0xFF,
+	MTC_STATE_NONE = -1,	/* Used only internally */
 };
 
 #ifdef __cplusplus

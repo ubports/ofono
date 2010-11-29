@@ -60,14 +60,17 @@ void g_at_util_debug_chat(gboolean in, const char *str, gsize len,
 			escaped += 4;
 	}
 
-	escaped_str = g_malloc(escaped + 1);
+	escaped_str = g_try_malloc(escaped + 1);
+	if (escaped_str == NULL)
+		return;
+
 	escaped_str[0] = type;
 	escaped_str[1] = ' ';
 	escaped_str[2] = '\0';
 	escaped_str[escaped] = '\0';
 
 	for (escaped = 2, i = 0; i < len; i++) {
-		char c = str[i];
+		unsigned char c = str[i];
 
 		switch (c) {
 		case '\r':
@@ -106,6 +109,29 @@ void g_at_util_debug_chat(gboolean in, const char *str, gsize len,
 	g_free(escaped_str);
 }
 
+void g_at_util_debug_dump(gboolean in, const unsigned char *buf, gsize len,
+				GAtDebugFunc debugf, gpointer user_data)
+{
+	char type = in ? '<' : '>';
+	GString *str;
+	gsize i;
+
+	if (!debugf || !len)
+		return;
+
+	str = g_string_sized_new(1 + (len * 2));
+	if (!str)
+		return;
+
+	g_string_append_c(str, type);
+
+	for (i = 0; i < len; i++)
+		g_string_append_printf(str, " %02x", buf[i]);
+
+	debugf(str->str, user_data);
+	g_string_free(str, TRUE);
+}
+
 gboolean g_at_util_setup_io(GIOChannel *io, GIOFlags flags)
 {
 	GIOFlags io_flags;
@@ -114,16 +140,17 @@ gboolean g_at_util_setup_io(GIOChannel *io, GIOFlags flags)
 			G_IO_STATUS_NORMAL)
 		return FALSE;
 
-	io_flags = g_io_channel_get_flags(io);
+	if (flags & G_IO_FLAG_SET_MASK) {
+		io_flags = g_io_channel_get_flags(io);
 
-	io_flags |= (flags & G_IO_FLAG_SET_MASK);
+		io_flags |= (flags & G_IO_FLAG_SET_MASK);
 
-	if (g_io_channel_set_flags(io, io_flags, NULL) !=
-			G_IO_STATUS_NORMAL)
-		return FALSE;
+		if (g_io_channel_set_flags(io, io_flags, NULL) !=
+				G_IO_STATUS_NORMAL)
+			return FALSE;
+	}
 
 	g_io_channel_set_close_on_unref(io, TRUE);
 
 	return TRUE;
 }
-

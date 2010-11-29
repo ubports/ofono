@@ -1,23 +1,21 @@
 /*
- * This file is part of oFono - Open Source Telephony
  *
- * Copyright (C) 2009 Nokia Corporation and/or its subsidiary(-ies).
+ *  oFono - Open Source Telephony
  *
- * Contact: Rémi Denis-Courmont <remi.denis-courmont@nokia.com>
+ *  Copyright (C) 2009-2010 Nokia Corporation and/or its subsidiary(-ies).
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * version 2 as published by the Free Software Foundation.
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
  *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
- * 02110-1301 USA
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program; if not, write to the Free Software
+ *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
  */
 
@@ -66,16 +64,19 @@ static gboolean g_isi_pep_callback(GIOChannel *channel, GIOCondition cond,
 		return TRUE;
 	}
 	pep->gprs_fd = fd;
-	pep->ready(pep, pep->opaque);
+
+	if (pep->ready)
+		pep->ready(pep, pep->opaque);
+
 	return FALSE;
 }
 
 GIsiPEP *g_isi_pep_create(GIsiModem *modem, GIsiPEPCallback cb, void *opaque)
 {
-	GIsiPEP *pep = g_malloc(sizeof(*pep));
+	unsigned ifi = g_isi_modem_index(modem);
+	GIsiPEP *pep = NULL;
 	GIOChannel *channel;
 	int fd;
-	unsigned ifi = g_isi_modem_index(modem);
 	char buf[IF_NAMESIZE];
 
 	fd = socket(PF_PHONET, SOCK_SEQPACKET, 0);
@@ -85,14 +86,21 @@ GIsiPEP *g_isi_pep_create(GIsiModem *modem, GIsiPEPCallback cb, void *opaque)
 	fcntl(fd, F_SETFD, FD_CLOEXEC);
 	fcntl(fd, F_SETFL, O_NONBLOCK|fcntl(fd, F_GETFL));
 
-	if (if_indextoname(ifi, buf) == NULL ||
-	    setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, buf, IF_NAMESIZE))
+	if (if_indextoname(ifi, buf) == NULL)
+		goto error;
+
+	if (setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, buf, IF_NAMESIZE) != 0)
+		goto error;
+
+	pep = g_try_malloc(sizeof(GIsiPEP));
+	if (pep == NULL)
 		goto error;
 
 	pep->ready = cb;
 	pep->opaque = opaque;
 	pep->gprs_fd = -1;
 	pep->handle = 0;
+
 	if (listen(fd, 1) || ioctl(fd, SIOCPNGETOBJECT, &pep->handle))
 		goto error;
 
@@ -104,7 +112,9 @@ GIsiPEP *g_isi_pep_create(GIsiModem *modem, GIsiPEPCallback cb, void *opaque)
 					G_IO_IN|G_IO_ERR|G_IO_HUP|G_IO_NVAL,
 					g_isi_pep_callback, pep);
 	g_io_channel_unref(channel);
+
 	return pep;
+
 error:
 	close(fd);
 	g_free(pep);
@@ -138,6 +148,8 @@ unsigned g_isi_pep_get_ifindex(const GIsiPEP *pep)
 
 char *g_isi_pep_get_ifname(const GIsiPEP *pep, char *ifname)
 {
-	unsigned ifi = g_isi_pep_get_ifindex(pep);
-	return if_indextoname(ifi, ifname);
+	if (pep->gprs_fd == -1)
+		return NULL;
+
+	return if_indextoname(g_isi_pep_get_ifindex(pep), ifname);
 }

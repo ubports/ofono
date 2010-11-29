@@ -71,11 +71,18 @@ enum ofono_sim_cphs_phase {
 	OFONO_SIM_CPHS_PHASE_2G,
 };
 
+enum ofono_sim_state {
+	OFONO_SIM_STATE_NOT_PRESENT,
+	OFONO_SIM_STATE_INSERTED,
+	OFONO_SIM_STATE_READY,
+};
+
 typedef void (*ofono_sim_file_info_cb_t)(const struct ofono_error *error,
 					int filelength,
 					enum ofono_sim_file_structure structure,
 					int recordlength,
 					const unsigned char access[3],
+					unsigned char file_status,
 					void *data);
 
 typedef void (*ofono_sim_read_cb_t)(const struct ofono_error *error,
@@ -88,7 +95,8 @@ typedef void (*ofono_sim_write_cb_t)(const struct ofono_error *error,
 typedef void (*ofono_sim_imsi_cb_t)(const struct ofono_error *error,
 					const char *imsi, void *data);
 
-typedef void (*ofono_sim_ready_notify_cb_t)(void *data);
+typedef void (*ofono_sim_state_event_cb_t)(enum ofono_sim_state new_state,
+					void *data);
 
 typedef void (*ofono_sim_file_read_cb_t)(int ok, int total_length, int record,
 					const unsigned char *data,
@@ -149,9 +157,6 @@ struct ofono_sim_driver {
 	void (*query_locked)(struct ofono_sim *sim,
 			enum ofono_sim_password_type type,
 			ofono_sim_locked_cb_t cb, void *data);
-	void (*envelope)(struct ofono_sim *sim, int length,
-				const guint8 *command,
-				ofono_sim_read_cb_t cb, void *data);
 };
 
 int ofono_sim_driver_register(const struct ofono_sim_driver *d);
@@ -173,14 +178,15 @@ enum ofono_sim_phase ofono_sim_get_phase(struct ofono_sim *sim);
 enum ofono_sim_cphs_phase ofono_sim_get_cphs_phase(struct ofono_sim *sim);
 const unsigned char *ofono_sim_get_cphs_service_table(struct ofono_sim *sim);
 
-unsigned int ofono_sim_add_ready_watch(struct ofono_sim *sim,
-				ofono_sim_ready_notify_cb_t cb,
-				void *data, ofono_destroy_func destroy);
+unsigned int ofono_sim_add_state_watch(struct ofono_sim *sim,
+					ofono_sim_state_event_cb_t cb,
+					void *data, ofono_destroy_func destroy);
 
-void ofono_sim_remove_ready_watch(struct ofono_sim *sim, unsigned int id);
+void ofono_sim_remove_state_watch(struct ofono_sim *sim, unsigned int id);
 
-int ofono_sim_get_ready(struct ofono_sim *sim);
-void ofono_sim_set_ready(struct ofono_sim *sim);
+enum ofono_sim_state ofono_sim_get_state(struct ofono_sim *sim);
+
+void ofono_sim_inserted_notify(struct ofono_sim *sim, ofono_bool_t inserted);
 
 /* This will queue an operation to read all available records with id from the
  * SIM.  Callback cb will be called every time a record has been read, or once
@@ -197,6 +203,10 @@ int ofono_sim_write(struct ofono_sim *sim, int id,
 			ofono_sim_file_write_cb_t cb,
 			enum ofono_sim_file_structure structure, int record,
 			const unsigned char *data, int length, void *userdata);
+
+int ofono_sim_read_bytes(struct ofono_sim *sim, int id,
+			unsigned short offset, unsigned short num_bytes,
+			ofono_sim_file_read_cb_t cb, void *data);
 #ifdef __cplusplus
 }
 #endif

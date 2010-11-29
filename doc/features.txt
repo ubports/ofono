@@ -1,0 +1,218 @@
+oFono - Open Source Telephony
+*****************************
+
+Purpose
+=======
+
+The purpose of this document is to enumerate all major functionality areas
+of oFono.  In effect, this document will serve as the primary, up to date
+source of oFono feature information.  It is intended for developers, managers
+and users alike to quickly gauge the progress of the project and feature
+availability.
+
+Sim Toolkit
+===========
+
+Supported Proactive Commands:
+
+- Display Text proactive command support.  Upon receiving the proactive
+  command notification oFono decodes it, including performing character
+  conversion from packed/unpacked GSM 7bit and UCS2 to UTF-8 encoded text.
+  The registered agent is then called using the DisplayText method on the
+  SimToolkitAgent interface to handle the user interaction aspects.
+
+  SIM-specified duration are handled.  If immediate response to the SIM
+  is required, oFono sends a terminal response immediately.  DisplayText
+  method is still executed normally, until a timeout occurs or a new
+  proactive command arrives from the SIM.
+
+- Get Inkey proactive command support.  When this command is received,
+  oFono decodes it and checks what "flavor" it is.  Depending on this, the
+  SimToolkitAgent is called with a different method call:
+	* If the Get Inkey flavor indicates that this is a simple Yes/No
+	  confirmation, then the RequestConfirmation method is called.
+	* If the Get Inkey flavor indicates that the SIM only expects digits,
+	  then the RequestDigit method is called.
+	* Otherwise the RequestKey method is called
+
+  SIM specified durations are handled, if the user agent does not respond
+  in the time allowed, then the 'No Response' Terminal Response is generated
+  automatically.
+
+- Get Input proactive command support.  When this command is received,
+  oFono decodes it and checks what "flavor" it is.  Depending on this, the
+  SimToolkitAgent is called with a different method call:
+	* If the Get Input flavor indicates that the SIM only expects digits,
+	  then the RequestDigits method is called.
+	* Otherwise the RequestInput method is called
+
+- More Time proactive command support.  This command is intended to notify
+  that the SIM is still busy processing a command.  For oFono, this proactive
+  command is a no-op.  It is always replied to successfully.
+
+- Setup Menu proactive command support. When this command is received, oFono
+  parses the new main menu structure and updates its MainMenu and MainMenuTitle
+  properties which reflect the items, icons and the alpha text of the
+  proactive command.  Soft key support and menu help system are ignored by
+  oFono.
+
+- Select Item proactive command support.  When this command is received, oFono
+  decodes it and dispatches it to the SimToolkitAgent by calling the
+  RequestSelection method.  This method is passed the menu selection title,
+  the selectable items and the default, if any.
+
+- Timer Management proactive command support.  oFono supports starting,
+  stopping and querying timer state flavors of this command.  Up to eight
+  timers are supported.  This proactive command is handled completely
+  inside oFono and no external user interaction is required.
+
+- Set Up Idle Mode Text proactive command support.  Whenever oFono receives
+  this proactive command, it updates the IdleText property on the main
+  SimToolkit interface.  Indications that this property has changed are
+  handled by the usual means.
+
+- Send DTMF proactive command.  Whenever oFono receives the Send DTMF command,
+  it checks that there are calls in progress and DTMF is possible.  If so,
+  DTMF characters are passed to the voicecall atom to be transmitted to the
+  modem.  The appropriate terminal response is sent to the SIM once the DTMF
+  tones have been played or the call has been disconnected.
+
+  NOTE: This command can also be handled by the modem.
+
+- Play Tone proactive command.  Whenever oFono receives a Play Tone proactive
+  command it checks whether the tone is to be continuous/looped or played once.
+  It then calls the SimToolkitAgent PlayTone or LoopTone method as appropriate.
+  The sound that will be played will be determined based on the sound type
+  that is passed to the agent.  It is up to the system integrator to provide
+  the appropriate sounds.
+
+- Send USSD proactive command.  Whenever oFono receives a Send USSD proactive
+  command it checks whether there are any USSD / SS operations in progress.
+  If an operation is in progress, the appropriate terminal response is sent
+  without performing the Send USSD operation.  Otherwise the USSD string
+  is sent to the network, and the response is sent back to the SIM in the
+  terminal response.
+
+  NOTE: This command can also be handled by the modem.
+
+- Sim icon support.  oFono supports icons that are stored on the SIM.  If the
+  SIM notifies oFono that an icon is available for a particular proactive
+  command, oFono passes this information to the UI.  The UI is able to obtain
+  the icons by using GetIcon method on the SimManager interface.  The icons
+  are read from the SIM and converted into XPM format.
+
+- Text attribute support.  Whenever oFono detects that text attributes have
+  been given to any text or alpha string, it applies them and converts the
+  resulting text to HTML.  The UI is expected to be able to display such
+  HTML formatted text.
+
+Envelopes:
+
+- Timer Expiration envelope support.  Whenever a timer expires (as started by
+  the Timer Management proactive command) oFono forwards, this envelope type
+  to the SIM.  No external user interaction is required.
+
+- Menu Selection envelope support.  The user can initiate a proactive command
+  session by selecting something from the Sim Toolkit main menu.  This is done
+  by using the SimToolkit's SelectItem method.  As a result, oFono will send
+  the Menu Selection envelope to the SIM.
+
+- CBS-PP Download envelope support.  When oFono receives a cell broadcast
+  and on a channel listed in EFcbmid, it is dispatched to the SIM using the
+  CBS-PP Download envelope.  No user interaction is required or signaled
+  whenever this occurs.
+
+- SMS-PP Download envelope support.  When oFono receives an sms message
+  addressed to the SIM, it is dispatched to the SIM using the SMS-PP Download
+  envelope.  No user interaction is required or signaled whenever this occurs.
+
+  Please note that many current modems do not support returning RP-ACK and
+  RP-ERROR acknowledgement PDUs back to the network.  This is required by the
+  CAT specification for SMS-PP Download.  E.g. the sim response to the SMS-PP
+  Download Envelope is to be stored in an RP-ACK / RP-ERROR PDU and returned to
+  the network.  It is thus anticipated that modems will transparently handle
+  this feature in the firmware.
+
+The following commands are expected to be handled by the modem:
+
+- Send SS proactive command.  oFono does not explicitly support this proactive
+  command since AT modems do not provide the low level information necessary
+  for oFono to generate a valid response.  The modem (or driver) shall handle
+  this command.  Optionally the modem (or driver) can inform oFono that the
+  proactive command has been received and is being handled by the modem, as
+  well as when the terminal response has been sent by the modem.  oFono will
+  display the necessary user information for this time period if this
+  information is included in the proactive command.
+
+
+Short Messaging Service
+=======================
+
+- Unique identifier for incoming and outgoing SMS messages.  Whenever a
+  message is received or sent by oFono, a unique ID is generated for that
+  message.  The id is relevant to all segments of an SMS and in the case of
+  incoming messages is only generated when the SMS is fully assembled.  The
+  hash used is SHA1.  This unique identifier is used to identify the SMS
+  message to history plugins as well.
+
+- SMS Status Report support.  oFono allows requesting of SMS Status Reports
+  via the MessageManager UseDeliveryReports property.  If enabled, oFono
+  will set the SRR bit and process incoming status reports.  oFono takes
+  care of collating the status reports for multi-fragment messages.  Once all
+  status reports are received, the UI is notified either via DBus or history
+  plugin API.
+
+- Source / Destination port addressing scheme from 3GPP 23.040.  A special
+  header is used to indicate the source / destination port of the application
+  this SMS message belongs to.  oFono provides a handler registration
+  framework where plugins can handle the reception of such messages.  The
+  handler can be registered to receive messages which contain a specific
+  source and destination port, or a wildcard.  When such messages are received,
+  they are matched against the registered handlers and dispatched appropriately.
+
+  oFono takes care of de-fragmentation of such SMS messages, so the handler
+  is informed only once the entire message has been received, and the data
+  payload has been extracted.
+
+- Smart Messaging Service - vCard support.  oFono provides the ability to send
+  and receive vCard objects through the SmartMessaging interface.  vCards can
+  be sent using the SendBusinessCard method and received using the
+  SmartMessagingAgent framework.
+
+- Smart Messaging Service - vCalendar support.  oFono provides the ability to
+  send and receive vCalendar objects through the SmartMessaging interface.
+  vCalendars can be sent using the SendAppointment method and received using
+  the SmartMessagingAgent framework.
+
+- WAP PUSH notification support.  oFono allows the reception of WAP PUSH
+  messages via SMS through the use of the PushNotification interface and the
+  PushNotificationAgent framework.
+
+
+GPRS
+====
+
+- GPRS suspension event support.  The packet data service may be temporarily
+  suspended while a circuit switched service such as voice call or SMS is
+  active.
+
+SIM
+===
+
+- Fixed Dialing support.  oFono reads the necessary bits from the SIM to
+  check if FDN support is allocated and enabled in the SIM.  If enabled,
+  oFono halts the SIM initialization procedure and the modem remains in the
+  PRESIM state.  In this state oFono will only allow emergency calls.
+
+- Barred Dialing support.  oFono reads the necessary bits from the SIM to
+  check if BDN support is allocated and enabled in the SIM.  If enabled,
+  oFono halts the SIM initialization procedure and the modem remains in the
+  PRESIM state.  In this state oFono will only allow emergency calls.
+
+Radio settings
+==============
+
+- Fast dormancy support. A fast dormancy feature can be enabled in the
+  cellular modem to conserve power when the end user is not actively
+  using the device but some networking applications are online using
+  packet data.

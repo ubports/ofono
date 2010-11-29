@@ -26,7 +26,9 @@
 extern "C" {
 #endif
 
+#include "gatresult.h"
 #include "gatutil.h"
+#include "gatio.h"
 
 struct _GAtServer;
 
@@ -42,14 +44,39 @@ enum _GAtServerResult {
 	G_AT_SERVER_RESULT_NO_DIALTONE = 6,
 	G_AT_SERVER_RESULT_BUSY = 7,
 	G_AT_SERVER_RESULT_NO_ANSWER = 8,
+	G_AT_SERVER_RESULT_EXT_ERROR = 256,
 };
 
 typedef enum _GAtServerResult GAtServerResult;
 
+/* Types of AT command:
+ * COMMAND_ONLY: command without any sub-parameters, e.g. ATA, AT+CLCC
+ * QUERY: command followed by '?', e.g. AT+CPIN?
+ * SUPPORT: command followed by '=?', e.g. AT+CSMS=?
+ * SET: command followed by '=', e.g. AT+CLIP=1
+ * 	or, basic command followed with sub-parameters, e.g. ATD12345;
+ */
+enum _GAtServerRequestType {
+	G_AT_SERVER_REQUEST_TYPE_COMMAND_ONLY,
+	G_AT_SERVER_REQUEST_TYPE_QUERY,
+	G_AT_SERVER_REQUEST_TYPE_SUPPORT,
+	G_AT_SERVER_REQUEST_TYPE_SET,
+};
+
+typedef enum _GAtServerRequestType GAtServerRequestType;
+
+typedef void (*GAtServerNotifyFunc)(GAtServerRequestType type,
+					GAtResult *result, gpointer user_data);
+
 GAtServer *g_at_server_new(GIOChannel *io);
+GIOChannel *g_at_server_get_channel(GAtServer *server);
+GAtIO *g_at_server_get_io(GAtServer *server);
 
 GAtServer *g_at_server_ref(GAtServer *server);
+void g_at_server_suspend(GAtServer *server);
+void g_at_server_resume(GAtServer *server);
 void g_at_server_unref(GAtServer *server);
+
 gboolean g_at_server_shutdown(GAtServer *server);
 
 gboolean g_at_server_set_disconnect_function(GAtServer *server,
@@ -57,7 +84,34 @@ gboolean g_at_server_set_disconnect_function(GAtServer *server,
 					gpointer user_data);
 gboolean g_at_server_set_debug(GAtServer *server,
 					GAtDebugFunc func,
-					gpointer user);
+					gpointer user_data);
+
+gboolean g_at_server_register(GAtServer *server, char *prefix,
+					GAtServerNotifyFunc notify,
+					gpointer user_data,
+					GDestroyNotify destroy_notify);
+gboolean g_at_server_unregister(GAtServer *server, const char *prefix);
+
+/* Send a final result code. E.g. G_AT_SERVER_RESULT_NO_DIALTONE */
+void g_at_server_send_final(GAtServer *server, GAtServerResult result);
+
+/* Send an extended final result code. E.g. +CME ERROR: SIM failure. */
+void g_at_server_send_ext_final(GAtServer *server, const char *result);
+
+/* Send an intermediate result code to report the progress. E.g. CONNECT */
+void g_at_server_send_intermediate(GAtServer *server, const char *result);
+
+/* Send an unsolicited result code. E.g. RING */
+void g_at_server_send_unsolicited(GAtServer *server, const char *result);
+
+/*
+ * Send a single response line for the command.  The line should be no longer
+ * than 2048 characters.  If the response contains multiple lines, use
+ * FALSE for the 'last' parameter for lines 1 .. n -1, and 'TRUE' for the last
+ * line.  This is required for formatting of 27.007 compliant multi-line
+ * responses.
+ */
+void g_at_server_send_info(GAtServer *server, const char *line, gboolean last);
 
 #ifdef __cplusplus
 }

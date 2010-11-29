@@ -27,12 +27,14 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <errno.h>
 
 #include <glib.h>
 
 #include <ofono/log.h>
 #include <ofono/modem.h>
 #include <ofono/voicecall.h>
+#include "vendor.h"
 
 #include "gatchat.h"
 #include "gatresult.h"
@@ -45,6 +47,9 @@
  /* Amount of time we give for CLIP to arrive before we commence CLCC poll */
 #define CLIP_INTERVAL 200
 
+ /* When +VTD returns 0, an unspecified manufacturer-specific delay is used */
+#define TONE_DURATION 1000
+
 static const char *clcc_prefix[] = { "+CLCC:", NULL };
 static const char *none_prefix[] = { NULL };
 
@@ -56,6 +61,10 @@ struct voicecall_data {
 	unsigned int local_release;
 	unsigned int clcc_source;
 	GAtChat *chat;
+	unsigned int vendor;
+	unsigned int tone_duration;
+	guint vts_source;
+	unsigned int vts_delay;
 };
 
 struct release_id_req {
@@ -97,7 +106,6 @@ static struct ofono_call *create_call(struct ofono_voicecall *vc, int type,
 
 	/* Generate a call structure for the waiting call */
 	call = g_try_new0(struct ofono_call, 1);
-
 	if (!call)
 		return NULL;
 
@@ -301,13 +309,12 @@ static void atd_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 	/* Generate a voice call that was just dialed, we guess the ID */
 	call = create_call(vc, 0, 0, 2, num, type, validity);
-
 	if (!call) {
 		ofono_error("Unable to malloc, call tracking will fail!");
 		return;
 	}
 
-	/* Telephonyd will generate a call with the dialed number
+	/* oFono core will generate a call with the dialed number
 	 * inside its dial callback.  Unless we got COLP information
 	 * we do not need to communicate that a call is being
 	 * dialed
@@ -368,8 +375,7 @@ static void at_dial(struct ofono_voicecall *vc,
 		return;
 
 error:
-	if (cbd)
-		g_free(cbd);
+	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, data);
 }
@@ -394,8 +400,7 @@ static void at_template(const char *cmd, struct ofono_voicecall *vc,
 		return;
 
 error:
-	if (req)
-		g_free(req);
+	g_free(req);
 
 	CALLBACK_WITH_FAILURE(cb, data);
 }
@@ -409,7 +414,7 @@ static void at_answer(struct ofono_voicecall *vc,
 static void at_hangup(struct ofono_voicecall *vc,
 			ofono_voicecall_cb_t cb, void *data)
 {
-	/* Hangup all calls */
+	/* Hangup active call */
 	at_template("AT+CHUP", vc, generic_cb, 0x3f, cb, data);
 }
 
@@ -477,8 +482,7 @@ static void at_release_specific(struct ofono_voicecall *vc, int id,
 		return;
 
 error:
-	if (req)
-		g_free(req);
+	g_free(req);
 
 	CALLBACK_WITH_FAILURE(cb, data);
 }
@@ -505,7 +509,7 @@ static void at_transfer(struct ofono_voicecall *vc,
 	unsigned int transfer = 0x1 | 0x2;
 
 	/* Transfer can puts held & active calls together and disconnects
-	 * from both.  However, some networks support transfering of
+	 * from both.  However, some networks support transferring of
 	 * dialing/ringing calls as well.
 	 */
 	transfer |= 0x4 | 0x8;
@@ -524,14 +528,37 @@ static void at_deflect(struct ofono_voicecall *vc,
 	at_template(buf, vc, generic_cb, incoming_or_waiting, cb, data);
 }
 
+static gboolean vts_timeout_cb(gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	struct voicecall_data *vd = cbd->user;
+	ofono_voicecall_cb_t cb = cbd->cb;
+
+	vd->vts_source = 0;
+
+	CALLBACK_WITH_SUCCESS(cb, cbd->data);
+	g_free(cbd);
+
+	return FALSE;
+}
+
 static void vts_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
+	struct voicecall_data *vd = cbd->user;
 	ofono_voicecall_cb_t cb = cbd->cb;
 	struct ofono_error error;
 
 	decode_at_error(&error, g_at_result_final_response(result));
-	cb(&error, cbd->data);
+
+	if (!ok) {
+		cb(&error, cbd->data);
+
+		g_free(cbd);
+		return;
+	}
+
+	vd->vts_source = g_timeout_add(vd->vts_delay, vts_timeout_cb, cbd);
 }
 
 static void at_send_dtmf(struct ofono_voicecall *vc, const char *dtmf,
@@ -547,19 +574,22 @@ static void at_send_dtmf(struct ofono_voicecall *vc, const char *dtmf,
 	if (!cbd)
 		goto error;
 
-	/* strlen("+VTS=\"T\";") = 9 + initial AT + null */
-	buf = g_try_new(char, len * 9 + 3);
+	cbd->user = vd;
 
+	/* strlen("+VTS=T;") = 7 + initial AT + null */
+	buf = g_try_new(char, len * 9 + 3);
 	if (!buf)
 		goto error;
 
-	s = sprintf(buf, "AT+VTS=\"%c\"", dtmf[0]);
+	s = sprintf(buf, "AT+VTS=%c", dtmf[0]);
 
 	for (i = 1; i < len; i++)
-		s += sprintf(buf + s, ";+VTS=\"%c\"", dtmf[i]);
+		s += sprintf(buf + s, ";+VTS=%c", dtmf[i]);
+
+	vd->vts_delay = vd->tone_duration * len;
 
 	s = g_at_chat_send(vd->chat, buf, none_prefix,
-				vts_cb, cbd, g_free);
+				vts_cb, cbd, NULL);
 
 	g_free(buf);
 
@@ -567,8 +597,7 @@ static void at_send_dtmf(struct ofono_voicecall *vc, const char *dtmf,
 		return;
 
 error:
-	if (cbd)
-		g_free(cbd);
+	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, data);
 }
@@ -631,7 +660,6 @@ static void cring_notify(GAtResult *result, gpointer user_data)
 		return;
 
 	line = g_at_result_iter_raw_line(&iter);
-
 	if (line == NULL)
 		return;
 
@@ -666,7 +694,6 @@ static void clip_notify(GAtResult *result, gpointer user_data)
 
 	l = g_slist_find_custom(vd->calls, GINT_TO_POINTER(4),
 				at_util_call_compare_by_status);
-
 	if (l == NULL) {
 		ofono_error("CLIP for unknown call");
 		return;
@@ -761,7 +788,6 @@ static void ccwa_notify(GAtResult *result, gpointer user_data)
 
 	call = create_call(vc, class_to_call_type(cls), 1, 5,
 				num, num_type, validity);
-
 	if (!call) {
 		ofono_error("Unable to malloc. Call management is fubar");
 		return;
@@ -806,6 +832,26 @@ static void busy_notify(GAtResult *result, gpointer user_data)
 			clcc_poll_cb, vc, NULL);
 }
 
+static void vtd_query_cb(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct ofono_voicecall *vc = user_data;
+	struct voicecall_data *vd = ofono_voicecall_get_data(vc);
+	GAtResultIter iter;
+	int duration;
+
+	if (!ok)
+		return;
+
+	g_at_result_iter_init(&iter, result);
+	g_at_result_iter_next(&iter, "+VTD:");
+
+	if (!g_at_result_iter_next_number(&iter, &duration))
+		return;
+
+	if (duration)
+		vd->tone_duration = duration * 100;
+}
+
 static void at_voicecall_initialized(gboolean ok, GAtResult *result,
 					gpointer user_data)
 {
@@ -840,16 +886,24 @@ static int at_voicecall_probe(struct ofono_voicecall *vc, unsigned int vendor,
 	GAtChat *chat = data;
 	struct voicecall_data *vd;
 
-	vd = g_new0(struct voicecall_data, 1);
-	vd->chat = chat;
+	vd = g_try_new0(struct voicecall_data, 1);
+	if (!vd)
+		return -ENOMEM;
+
+	vd->chat = g_at_chat_clone(chat);
+	vd->vendor = vendor;
+	vd->tone_duration = TONE_DURATION;
 
 	ofono_voicecall_set_data(vc, vd);
 
-	g_at_chat_send(chat, "AT+CRC=1", NULL, NULL, NULL, NULL);
-	g_at_chat_send(chat, "AT+CLIP=1", NULL, NULL, NULL, NULL);
-	g_at_chat_send(chat, "AT+COLP=1", NULL, NULL, NULL, NULL);
-	g_at_chat_send(chat, "AT+CCWA=1", NULL,
+	g_at_chat_send(vd->chat, "AT+CRC=1", NULL, NULL, NULL, NULL);
+	g_at_chat_send(vd->chat, "AT+CLIP=1", NULL, NULL, NULL, NULL);
+	g_at_chat_send(vd->chat, "AT+COLP=1", NULL, NULL, NULL, NULL);
+	g_at_chat_send(vd->chat, "AT+VTD?", NULL,
+				vtd_query_cb, vc, NULL);
+	g_at_chat_send(vd->chat, "AT+CCWA=1", NULL,
 				at_voicecall_initialized, vc, NULL);
+
 	return 0;
 }
 
@@ -860,11 +914,15 @@ static void at_voicecall_remove(struct ofono_voicecall *vc)
 	if (vd->clcc_source)
 		g_source_remove(vd->clcc_source);
 
+	if (vd->vts_source)
+		g_source_remove(vd->vts_source);
+
 	g_slist_foreach(vd->calls, (GFunc) g_free, NULL);
 	g_slist_free(vd->calls);
 
 	ofono_voicecall_set_data(vc, NULL);
 
+	g_at_chat_unref(vd->chat);
 	g_free(vd);
 }
 
@@ -874,7 +932,7 @@ static struct ofono_voicecall_driver driver = {
 	.remove			= at_voicecall_remove,
 	.dial			= at_dial,
 	.answer			= at_answer,
-	.hangup			= at_hangup,
+	.hangup_all		= at_hangup,
 	.hold_all_active	= at_hold_all_active,
 	.release_all_held	= at_release_all_held,
 	.set_udub		= at_set_udub,

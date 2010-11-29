@@ -29,47 +29,65 @@
 
 #include "ofono.h"
 
-/*
- * Note __ofono_modem_get_list() will abort if it cannot allocate
- * memory; so no error path or cleanup is needed.
- */
-static DBusMessage *manager_get_properties(DBusConnection *conn,
-						DBusMessage *msg, void *data)
+static void append_modem(struct ofono_modem *modem, void *userdata)
 {
-	DBusMessageIter iter;
-	DBusMessageIter dict;
+	DBusMessageIter *array = userdata;
+	const char *path = ofono_modem_get_path(modem);
+	DBusMessageIter entry, dict;
+
+	if (ofono_modem_is_registered(modem) == FALSE)
+		return;
+
+	dbus_message_iter_open_container(array, DBUS_TYPE_STRUCT,
+						NULL, &entry);
+	dbus_message_iter_append_basic(&entry, DBUS_TYPE_OBJECT_PATH,
+					&path);
+	dbus_message_iter_open_container(&entry, DBUS_TYPE_ARRAY,
+				OFONO_PROPERTIES_ARRAY_SIGNATURE,
+				&dict);
+
+	__ofono_modem_append_properties(modem, &dict);
+	dbus_message_iter_close_container(&entry, &dict);
+	dbus_message_iter_close_container(array, &entry);
+}
+
+static DBusMessage *manager_get_modems(DBusConnection *conn,
+					DBusMessage *msg, void *data)
+{
 	DBusMessage *reply;
-	const char **modems;
+	DBusMessageIter iter;
+	DBusMessageIter array;
 
 	reply = dbus_message_new_method_return(msg);
-	if (!reply)
+	if (reply == NULL)
 		return NULL;
-
-	modems = __ofono_modem_get_list();
 
 	dbus_message_iter_init_append(reply, &iter);
 
 	dbus_message_iter_open_container(&iter, DBUS_TYPE_ARRAY,
-					OFONO_PROPERTIES_ARRAY_SIGNATURE,
-					&dict);
-
-	ofono_dbus_dict_append_array(&dict, "Modems", DBUS_TYPE_OBJECT_PATH,
-					&modems);
-
-	g_free(modems);
-
-	dbus_message_iter_close_container(&iter, &dict);
+					DBUS_STRUCT_BEGIN_CHAR_AS_STRING
+					DBUS_TYPE_OBJECT_PATH_AS_STRING
+					DBUS_TYPE_ARRAY_AS_STRING
+					DBUS_DICT_ENTRY_BEGIN_CHAR_AS_STRING
+					DBUS_TYPE_STRING_AS_STRING
+					DBUS_TYPE_VARIANT_AS_STRING
+					DBUS_DICT_ENTRY_END_CHAR_AS_STRING
+					DBUS_STRUCT_END_CHAR_AS_STRING,
+					&array);
+	__ofono_modem_foreach(append_modem, &array);
+	dbus_message_iter_close_container(&iter, &array);
 
 	return reply;
 }
 
 static GDBusMethodTable manager_methods[] = {
-	{ "GetProperties",	"",	"a{sv}",	manager_get_properties },
+	{ "GetModems",          "",    "a(oa{sv})",  manager_get_modems },
 	{ }
 };
 
 static GDBusSignalTable manager_signals[] = {
-	{ "PropertyChanged", "sv" },
+	{ "ModemAdded",        "oa{sv}" },
+	{ "ModemRemoved",      "o" },
 	{ }
 };
 

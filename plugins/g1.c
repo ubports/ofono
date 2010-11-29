@@ -1,4 +1,5 @@
 /*
+ *
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
@@ -50,9 +51,11 @@
 
 #include <drivers/atmodem/vendor.h>
 
-static void g1_debug(const char *str, void *data)
+static void g1_debug(const char *str, void *user_data)
 {
-	ofono_info("%s", str);
+	const char *prefix = user_data;
+
+	ofono_info("%s%s", prefix, str);
 }
 
 /* Detect hardware, and initialize if found */
@@ -111,8 +114,8 @@ static int g1_enable(struct ofono_modem *modem)
 	if (chat == NULL)
 		return -EIO;
 
-	if (getenv("OFONO_AT_DEBUG") != NULL)
-		g_at_chat_set_debug(chat, g1_debug, NULL);
+	if (getenv("OFONO_AT_DEBUG"))
+		g_at_chat_set_debug(chat, g1_debug, "");
 
 	ofono_modem_set_data(modem, chat);
 
@@ -156,12 +159,16 @@ static int g1_disable(struct ofono_modem *modem)
 static void g1_pre_sim(struct ofono_modem *modem)
 {
 	GAtChat *chat = ofono_modem_get_data(modem);
+	struct ofono_sim *sim;
 
 	DBG("");
 
 	ofono_devinfo_create(modem, 0, "atmodem", chat);
-	ofono_sim_create(modem, 0, "atmodem", chat);
+	sim = ofono_sim_create(modem, 0, "atmodem", chat);
 	ofono_voicecall_create(modem, 0, "atmodem", chat);
+
+	if (sim)
+		ofono_sim_inserted_notify(sim, TRUE);
 }
 
 static void g1_post_sim(struct ofono_modem *modem)

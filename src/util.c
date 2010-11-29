@@ -400,7 +400,7 @@ static const unsigned short por_gsm[] = {
 	0x0028, 0x0029, 0x002A, 0x002B, 0x002C, 0x002D, 0x002E, 0x002F, /* 0x2F */
 	0x0030, 0x0031, 0x0032, 0x0033, 0x0034, 0x0035, 0x0036, 0x0037, /* 0x37 */
 	0x0038, 0x0039, 0x003A, 0x003B, 0x003C, 0x003D, 0x003E, 0x003F, /* 0x3F */
-	0x00A1, 0x0041, 0x0042, 0x0043, 0x0044, 0x0045, 0x0046, 0x0047, /* 0x47 */
+	0x00CD, 0x0041, 0x0042, 0x0043, 0x0044, 0x0045, 0x0046, 0x0047, /* 0x47 */
 	0x0048, 0x0049, 0x004A, 0x004B, 0x004C, 0x004D, 0x004E, 0x004F, /* 0x4F */
 	0x0050, 0x0051, 0x0052, 0x0053, 0x0054, 0x0055, 0x0056, 0x0057, /* 0x57 */
 	0x0058, 0x0059, 0x005A, 0x00C3, 0x00D5, 0x00DA, 0x00DC, 0x00A7, /* 0x5F */
@@ -462,8 +462,8 @@ static const struct alphabet_conversion_table alphabet_lookup[] = {
 
 static int compare_codepoints(const void *a, const void *b)
 {
-	const struct codepoint *ca = (const struct codepoint *)a;
-	const struct codepoint *cb = (const struct codepoint *)b;
+	const struct codepoint *ca = (const struct codepoint *) a;
+	const struct codepoint *cb = (const struct codepoint *) b;
 
 	return (ca->from > cb->from) - (ca->from < cb->from);
 }
@@ -535,7 +535,7 @@ static unsigned short unicode_single_shift_lookup(unsigned short k,
  * GSM encoded string in items_read (if not NULL), not including the
  * terminator character. Returns the number of bytes written into the UTF8
  * encoded string in items_written (if not NULL) not including the terminal
- * '\0' character.  The caller is reponsible for freeing the returned value.
+ * '\0' character.  The caller is responsible for freeing the returned value.
  */
 char *convert_gsm_to_utf8_with_lang(const unsigned char *text, long len,
 					long *items_read, long *items_written,
@@ -588,7 +588,7 @@ char *convert_gsm_to_utf8_with_lang(const unsigned char *text, long len,
 		res_length += UTF8_LENGTH(c);
 	}
 
-	res = g_malloc(res_length + 1);
+	res = g_try_malloc(res_length + 1);
 
 	if (!res)
 		goto error;
@@ -692,7 +692,7 @@ unsigned char *convert_utf8_to_gsm_with_lang(const char *text, long len,
 		nchars += 1;
 	}
 
-	res = g_malloc(res_len + (terminator ? 1 : 0));
+	res = g_try_malloc(res_len + (terminator ? 1 : 0));
 
 	if (!res)
 		goto err_out;
@@ -782,9 +782,9 @@ unsigned char *decode_hex_own_buf(const char *in, long len, long *items_written,
 		c = toupper(in[i]);
 
 		if (c >= '0' && c <= '9')
-			b = b*16 + c - '0';
+			b = b * 16 + c - '0';
 		else if (c >= 'A' && c <= 'F')
-			b = b*16 + 10 + c - 'A';
+			b = b * 16 + 10 + c - 'A';
 		else
 			return NULL;
 
@@ -917,17 +917,21 @@ unsigned char *unpack_7bit_own_buf(const unsigned char *in, long len,
 		/* Figure out the remainder */
 		rest = (in[i] >> bits) & ((1 << (8-bits)) - 1);
 
-		/* We have the entire character, here we don't increate
+		/*
+		 * We have the entire character, here we don't increate
 		 * out if this is we started at an offset.  Instead
-		 * we effectively populate variable rest */
+		 * we effectively populate variable rest
+		 */
 		if (i != 0 || bits == 7)
 			out++;
 
 		if ((out-buf) == max_to_unpack)
 			break;
 
-		/* We expected only 1 bit from this octet, means there's 7
-		 * left, take care of them here */
+		/*
+		 * We expected only 1 bit from this octet, means there's 7
+		 * left, take care of them here
+		 */
 		if (bits == 1) {
 			*out = rest;
 			out++;
@@ -938,7 +942,8 @@ unsigned char *unpack_7bit_own_buf(const unsigned char *in, long len,
 		}
 	}
 
-	/* According to 23.038 6.1.2.3.1, last paragraph:
+	/*
+	 * According to 23.038 6.1.2.3.1, last paragraph:
 	 * "If the total number of characters to be sent equals (8n-1)
 	 * where n=1,2,3 etc. then there are 7 spare bits at the end
 	 * of the message. To avoid the situation where the receiving
@@ -950,8 +955,8 @@ unsigned char *unpack_7bit_own_buf(const unsigned char *in, long len,
 	 * the message ends on an octet boundary with <CR> as the last
 	 * character.
 	 */
-	if (ussd && (((out - buf) % 8) == 0) && (*(out-1) == '\r'))
-			out = out - 1;
+	if (ussd && (((out - buf) % 8) == 0) && (*(out - 1) == '\r'))
+		out = out - 1;
 
 	if (terminator)
 		*out = terminator;
@@ -1021,7 +1026,8 @@ unsigned char *pack_7bit_own_buf(const unsigned char *in, long len,
 			bits = bits - 1;
 	}
 
-	/* If <CR> is intended to be the last character and the message
+	/*
+	 * If <CR> is intended to be the last character and the message
 	 * (including the wanted <CR>) ends on an octet boundary, then
 	 * another <CR> must be added together with a padding bit 0. The
 	 * receiving entity will perform the carriage return function twice,
@@ -1034,7 +1040,7 @@ unsigned char *pack_7bit_own_buf(const unsigned char *in, long len,
 	if (bits != 7)
 		out++;
 
-	if (ussd && ((total_bits % 8) == 0) && (in[len-1] == '\r')) {
+	if (ussd && ((total_bits % 8) == 0) && (in[len - 1] == '\r')) {
 		*out = '\r';
 		out++;
 	}
@@ -1072,7 +1078,7 @@ unsigned char *pack_7bit(const unsigned char *in, long len, int byte_offset,
 		total_bits += bits;
 
 	/* Round up number of bytes, must append <cr> if true */
-	if (ussd && ((total_bits % 8) == 0) && (in[len-1] == '\r'))
+	if (ussd && ((total_bits % 8) == 0) && (in[len - 1] == '\r'))
 		buf = g_new(unsigned char, (total_bits + 14) / 8);
 	else
 		buf = g_new(unsigned char, (total_bits + 7) / 8);
@@ -1096,7 +1102,8 @@ char *sim_string_to_utf8(const unsigned char *buffer, int length)
 		return NULL;
 
 	if (buffer[0] < 0x80) {
-		/* We have to find the real length, since on SIM file system
+		/*
+		 * We have to find the real length, since on SIM file system
 		 * alpha fields are 0xff padded
 		 */
 		for (i = 0; i < length; i++)
@@ -1119,7 +1126,7 @@ char *sim_string_to_utf8(const unsigned char *buffer, int length)
 			if (buffer[i] == 0xff && buffer[i + 1] == 0xff)
 				break;
 
-		return g_convert((char *)buffer + 1, i - 1,
+		return g_convert((char *) buffer + 1, i - 1,
 					"UTF-8//TRANSLIT", "UCS-2BE",
 					NULL, NULL, NULL);
 	case 0x81:
@@ -1189,7 +1196,7 @@ char *sim_string_to_utf8(const unsigned char *buffer, int length)
 		if (buffer[i] != 0xff)
 			return NULL;
 
-	utf8 = g_malloc(res_len + 1);
+	utf8 = g_try_malloc(res_len + 1);
 
 	if (!utf8)
 		return NULL;
@@ -1214,4 +1221,158 @@ char *sim_string_to_utf8(const unsigned char *buffer, int length)
 	*out = '\0';
 
 	return utf8;
+}
+
+unsigned char *utf8_to_sim_string(const char *utf,
+					int max_length, int *out_length)
+{
+	unsigned char *result;
+	unsigned char *ucs2;
+	long gsm_bytes;
+	gsize converted;
+
+	result = convert_utf8_to_gsm(utf, -1, NULL, &gsm_bytes, 0);
+	if (result) {
+		if (gsm_bytes > max_length) {
+			gsm_bytes = max_length;
+			while (gsm_bytes && result[gsm_bytes - 1] == 0x1b)
+				gsm_bytes -= 1;
+		}
+
+		*out_length = gsm_bytes;
+		return result;
+	}
+
+	/* NOTE: UCS2 formats with an offset are never used */
+
+	ucs2 = (guint8 *) g_convert(utf, -1, "UCS-2BE//TRANSLIT", "UTF-8",
+					NULL, &converted, NULL);
+
+	if (!ucs2)
+		return NULL;
+
+	if (max_length != -1 && (int) converted + 1 > max_length)
+		converted = (max_length - 1) & ~1;
+
+	result = g_try_malloc(converted + 1);
+	if (!result) {
+		g_free(ucs2);
+		return NULL;
+	}
+
+	*out_length = converted + 1;
+
+	result[0] = 0x80;
+	memcpy(&result[1], ucs2, converted);
+	g_free(ucs2);
+
+	return result;
+}
+
+/*!
+ * Converts UCS2 encoded text to GSM alphabet. The result is unpacked,
+ * with the 7th bit always 0. If terminator is not 0, a terminator character
+ * is appended to the result.
+ *
+ * Returns the encoded data or NULL if the data could not be encoded. The
+ * data must be freed by the caller. If items_read is not NULL, it contains
+ * the actual number of bytes read. If items_written is not NULL, contains
+ * the number of bytes written.
+ */
+unsigned char *convert_ucs2_to_gsm_with_lang(const unsigned char *text,
+					long len, long *items_read,
+					long *items_written,
+					unsigned char terminator,
+					enum gsm_dialect locking_lang,
+					enum gsm_dialect single_lang)
+{
+	long nchars = 0;
+	const unsigned char *in;
+	unsigned char *out;
+	unsigned char *res = NULL;
+	long res_len;
+	long i;
+
+	if (locking_lang >= GSM_DIALECT_INVALID)
+		return NULL;
+
+	if (single_lang >= GSM_DIALECT_INVALID)
+		return NULL;
+
+	if (len < 1 || len % 2)
+		return NULL;
+
+	in = text;
+	res_len = 0;
+
+	for (i = 0; i < len; i += 2) {
+		gunichar c = (in[i] << 8) | in[i + 1];
+		unsigned short converted = GUND;
+
+		if (c > 0xffff)
+			goto err_out;
+
+		converted = unicode_locking_shift_lookup(c, locking_lang);
+
+		if (converted == GUND)
+			converted = unicode_single_shift_lookup(c, single_lang);
+
+		if (converted == GUND)
+			goto err_out;
+
+		if (converted & 0x1b00)
+			res_len += 2;
+		else
+			res_len += 1;
+
+		nchars += 1;
+	}
+
+	res = g_try_malloc(res_len + (terminator ? 1 : 0));
+	if (!res)
+		goto err_out;
+
+	in = text;
+	out = res;
+
+	for (i = 0; i < len; i += 2) {
+		gunichar c = (in[i] << 8) | in[i + 1];
+		unsigned short converted = GUND;
+
+		converted = unicode_locking_shift_lookup(c, locking_lang);
+
+		if (converted == GUND)
+			converted = unicode_single_shift_lookup(c, single_lang);
+
+		if (converted & 0x1b00) {
+			*out = 0x1b;
+			++out;
+		}
+
+		*out = converted;
+		++out;
+	}
+
+	if (terminator)
+		*out = terminator;
+
+	if (items_written)
+		*items_written = out - res;
+
+err_out:
+	if (items_read)
+		*items_read = i;
+
+	return res;
+}
+
+unsigned char *convert_ucs2_to_gsm(const unsigned char *text, long len,
+				long *items_read, long *items_written,
+				unsigned char terminator)
+{
+	return convert_ucs2_to_gsm_with_lang(text, len, items_read,
+						items_written,
+						terminator,
+						GSM_DIALECT_DEFAULT,
+						GSM_DIALECT_DEFAULT);
 }

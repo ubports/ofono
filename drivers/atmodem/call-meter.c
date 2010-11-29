@@ -65,19 +65,21 @@ static void caoc_cacm_camm_query_cb(gboolean ok,
 
 	g_at_result_iter_init(&iter, result);
 
-	if (!g_at_result_iter_next(&iter, cbd->user)) {
-		CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
-		return;
-	}
+	if (!g_at_result_iter_next(&iter, cbd->user))
+		goto error;
 
-	g_at_result_iter_next_string(&iter, &meter_hex);
+	if (g_at_result_iter_next_string(&iter, &meter_hex) == FALSE)
+		goto error;
+
 	meter = strtol(meter_hex, &end, 16);
-	if (*end) {
-		CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
-		return;
-	}
+	if (*end)
+		goto error;
 
 	cb(&error, meter, cbd->data);
+	return;
+
+error:
+	CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
 }
 
 static void cccm_notify(GAtResult *result, gpointer user_data)
@@ -93,14 +95,18 @@ static void cccm_notify(GAtResult *result, gpointer user_data)
 	if (!g_at_result_iter_next(&iter, "+CCCM:"))
 		return;
 
-	g_at_result_iter_next_string(&iter, &meter_hex);
+	if (g_at_result_iter_next_string(&iter, &meter_hex) == FALSE)
+		goto error;
+
 	meter = strtol(meter_hex, &end, 16);
-	if (*end) {
-		ofono_error("Invalid CCCM value");
-		return;
-	}
+	if (*end)
+		goto error;
 
 	ofono_call_meter_changed_notify(cm, meter);
+	return;
+
+error:
+	ofono_error("Invalid CCCM value");
 }
 
 static void at_caoc_query(struct ofono_call_meter *cm,
@@ -119,8 +125,7 @@ static void at_caoc_query(struct ofono_call_meter *cm,
 		return;
 
 error:
-	if (cbd)
-		g_free(cbd);
+	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, -1, data);
 }
@@ -141,8 +146,7 @@ static void at_cacm_query(struct ofono_call_meter *cm,
 		return;
 
 error:
-	if (cbd)
-		g_free(cbd);
+	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, -1, data);
 }
@@ -175,8 +179,7 @@ static void at_cacm_set(struct ofono_call_meter *cm, const char *passwd,
 		return;
 
 error:
-	if (cbd)
-		g_free(cbd);
+	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, data);
 }
@@ -197,8 +200,7 @@ static void at_camm_query(struct ofono_call_meter *cm,
 		return;
 
 error:
-	if (cbd)
-		g_free(cbd);
+	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, -1, data);
 }
@@ -221,8 +223,7 @@ static void at_camm_set(struct ofono_call_meter *cm,
 		return;
 
 error:
-	if (cbd)
-		g_free(cbd);
+	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, data);
 }
@@ -247,18 +248,24 @@ static void cpuc_query_cb(gboolean ok,
 
 	g_at_result_iter_init(&iter, result);
 
-	if (!g_at_result_iter_next(&iter, cbd->user)) {
-		CALLBACK_WITH_FAILURE(cb, 0, 0, cbd->data);
-		return;
-	}
+	if (g_at_result_iter_next(&iter, cbd->user) != TRUE)
+		goto error;
 
-	g_at_result_iter_next_string(&iter, &currency);
+	if (g_at_result_iter_next_string(&iter, &currency) != TRUE)
+		goto error;
+
 	strncpy(currency_buf, currency, sizeof(currency_buf));
 
-	g_at_result_iter_next_string(&iter, &ppu);
+	if (g_at_result_iter_next_string(&iter, &ppu) != TRUE)
+		goto error;
+
 	ppuval = strtod(ppu, NULL);
 
 	cb(&error, currency_buf, ppuval, cbd->data);
+	return;
+
+error:
+	CALLBACK_WITH_FAILURE(cb, 0, 0, cbd->data);
 }
 
 static void at_cpuc_query(struct ofono_call_meter *cm,
@@ -276,8 +283,7 @@ static void at_cpuc_query(struct ofono_call_meter *cm,
 		return;
 
 error:
-	if (cbd)
-		g_free(cbd);
+	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, 0, 0, data);
 }
@@ -301,8 +307,7 @@ static void at_cpuc_set(struct ofono_call_meter *cm, const char *currency,
 		return;
 
 error:
-	if (cbd)
-		g_free(cbd);
+	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, data);
 }
@@ -336,6 +341,7 @@ static int at_caoc_probe(struct ofono_call_meter *cm, unsigned int vendor,
 {
 	GAtChat *chat = data;
 
+	chat = g_at_chat_clone(chat);
 	ofono_call_meter_set_data(cm, chat);
 
 	g_at_chat_send(chat, "AT+CAOC=2", NULL, NULL, NULL, NULL);
@@ -347,6 +353,10 @@ static int at_caoc_probe(struct ofono_call_meter *cm, unsigned int vendor,
 
 static void at_caoc_remove(struct ofono_call_meter *cm)
 {
+	GAtChat *chat = ofono_call_meter_get_data(cm);
+
+	g_at_chat_unref(chat);
+	ofono_call_meter_set_data(cm, NULL);
 }
 
 static struct ofono_call_meter_driver driver = {

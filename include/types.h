@@ -60,6 +60,7 @@ enum ofono_error_type {
 	OFONO_ERROR_TYPE_CME,
 	OFONO_ERROR_TYPE_CMS,
 	OFONO_ERROR_TYPE_CEER,
+	OFONO_ERROR_TYPE_SIM,
 	OFONO_ERROR_TYPE_FAILURE
 };
 
@@ -91,6 +92,25 @@ struct ofono_call {
 	struct ofono_phone_number phone_number;
 	int clip_validity;
 };
+
+struct ofono_network_time {
+	int sec;	/* Seconds [0..59], -1 if unavailable */
+	int min;	/* Minutes [0..59], -1 if unavailable */
+	int hour;	/* Hours [0..23], -1 if unavailable */
+	int mday;	/* Day of month [1..31], -1 if unavailable */
+	int mon;	/* Month [1..12], -1 if unavailable */
+	int year;	/* Current year, -1 if unavailable */
+	int dst;	/* Current adjustment, in seconds */
+	int utcoff;	/* Offset from UTC in seconds */
+};
+
+#define OFONO_SHA1_UUID_LEN 20
+
+struct ofono_uuid {
+	unsigned char uuid[OFONO_SHA1_UUID_LEN];
+};
+
+const char *ofono_uuid_to_str(const struct ofono_uuid *uuid);
 
 #ifdef __cplusplus
 }

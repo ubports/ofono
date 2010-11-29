@@ -23,14 +23,18 @@
 #include <config.h>
 #endif
 
-#include <gdbus.h>
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
 #include <signal.h>
 #include <sys/signalfd.h>
+
+#include <gdbus.h>
+
+#ifdef HAVE_CAPNG
+#include <cap-ng.h>
+#endif
 
 #include "ofono.h"
 
@@ -89,12 +93,30 @@ static void system_bus_disconnected(DBusConnection *conn, void *user_data)
 }
 
 static gchar *option_debug = NULL;
+static gchar *option_plugin = NULL;
+static gchar *option_noplugin = NULL;
 static gboolean option_detach = TRUE;
 static gboolean option_version = FALSE;
 
+static gboolean parse_debug(const char *key, const char *value,
+					gpointer user_data, GError **error)
+{
+	if (value)
+		option_debug = g_strdup(value);
+	else
+		option_debug = g_strdup("*");
+
+	return TRUE;
+}
+
 static GOptionEntry options[] = {
-	{ "debug", 'd', 0, G_OPTION_ARG_STRING, &option_debug,
+	{ "debug", 'd', G_OPTION_FLAG_OPTIONAL_ARG,
+				G_OPTION_ARG_CALLBACK, parse_debug,
 				"Specify debug options to enable", "DEBUG" },
+	{ "plugin", 'p', 0, G_OPTION_ARG_STRING, &option_plugin,
+				"Specify plugins to load", "NAME,..," },
+	{ "noplugin", 'P', 0, G_OPTION_ARG_STRING, &option_noplugin,
+				"Specify plugins not to load", "NAME,..." },
 	{ "nodetach", 'n', G_OPTION_FLAG_REVERSE,
 				G_OPTION_ARG_NONE, &option_detach,
 				"Don't run as daemon in background" },
@@ -113,6 +135,15 @@ int main(int argc, char **argv)
 	int signal_fd;
 	GIOChannel *signal_io;
 	int signal_source;
+
+#ifdef HAVE_CAPNG
+	/* Drop capabilities */
+	capng_clear(CAPNG_SELECT_BOTH);
+	capng_updatev(CAPNG_ADD, CAPNG_EFFECTIVE | CAPNG_PERMITTED,
+				CAP_NET_BIND_SERVICE, CAP_NET_ADMIN,
+				CAP_NET_RAW, CAP_SYS_ADMIN, -1);
+	capng_apply(CAPNG_SELECT_BOTH);
+#endif
 
 	sigemptyset(&mask);
 	sigaddset(&mask, SIGTERM);
@@ -200,15 +231,22 @@ int main(int argc, char **argv)
 
 	__ofono_dbus_init(conn);
 
+	__ofono_modemwatch_init();
+
 	__ofono_manager_init();
 
-	__ofono_plugin_init(NULL, NULL);
+	__ofono_plugin_init(option_plugin, option_noplugin);
+
+	g_free(option_plugin);
+	g_free(option_noplugin);
 
 	g_main_loop_run(event_loop);
 
 	__ofono_plugin_cleanup();
 
 	__ofono_manager_cleanup();
+
+	__ofono_modemwatch_cleanup();
 
 	__ofono_dbus_cleanup();
 	dbus_connection_unref(conn);
