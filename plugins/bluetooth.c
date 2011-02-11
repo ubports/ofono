@@ -40,6 +40,7 @@
 static DBusConnection *connection;
 static GHashTable *uuid_hash = NULL;
 static GHashTable *adapter_address_hash = NULL;
+static gint bluetooth_refcount;
 
 void bluetooth_create_path(const char *dev_addr, const char *adapter_addr,
 				char *buf, int size)
@@ -77,7 +78,7 @@ int bluetooth_send_with_reply(const char *path, const char *interface,
 
 	msg = dbus_message_new_method_call(BLUEZ_SERVICE, path,
 						interface, method);
-	if (!msg) {
+	if (msg == NULL) {
 		ofono_error("Unable to allocate new D-Bus %s message", method);
 		err = -ENOMEM;
 		goto fail;
@@ -271,7 +272,7 @@ static void device_properties_cb(DBusPendingCall *call, gpointer user_data)
 
 	if ((have_uuid & HFP_AG) && device_addr && adapter_addr) {
 		profile = g_hash_table_lookup(uuid_hash, HFP_AG_UUID);
-		if (!profile || !profile->create)
+		if (profile == NULL || profile->create == NULL)
 			goto done;
 
 		profile->create(path, device_addr, adapter_addr, alias);
@@ -493,7 +494,7 @@ static void bluetooth_remove_all_modem(gpointer key, gpointer value,
 
 static void bluetooth_disconnect(DBusConnection *connection, void *user_data)
 {
-	if (!uuid_hash)
+	if (uuid_hash == NULL)
 		return;
 
 	g_hash_table_foreach(uuid_hash, bluetooth_remove_all_modem, NULL);
@@ -504,12 +505,10 @@ static guint adapter_added_watch;
 static guint adapter_removed_watch;
 static guint property_watch;
 
-int bluetooth_register_uuid(const char *uuid, struct bluetooth_profile *profile)
+static void bluetooth_ref(void)
 {
-	int err;
-
-	if (uuid_hash)
-		goto done;
+	if (bluetooth_refcount > 0)
+		goto increment;
 
 	connection = ofono_dbus_get_connection();
 
@@ -533,7 +532,6 @@ int bluetooth_register_uuid(const char *uuid, struct bluetooth_profile *profile)
 
 	if (bluetooth_watch == 0 || adapter_added_watch == 0 ||
 			adapter_removed_watch == 0 || property_watch == 0) {
-		err = -EIO;
 		goto remove;
 	}
 
@@ -543,28 +541,21 @@ int bluetooth_register_uuid(const char *uuid, struct bluetooth_profile *profile)
 	adapter_address_hash = g_hash_table_new_full(g_str_hash, g_str_equal,
 						g_free, g_free);
 
-done:
-	g_hash_table_insert(uuid_hash, g_strdup(uuid), profile);
+increment:
+	g_atomic_int_inc(&bluetooth_refcount);
 
-	bluetooth_send_with_reply("/", BLUEZ_MANAGER_INTERFACE, "GetProperties",
-				manager_properties_cb, NULL, NULL, -1,
-				DBUS_TYPE_INVALID);
-
-	return 0;
+	return;
 
 remove:
 	g_dbus_remove_watch(connection, bluetooth_watch);
 	g_dbus_remove_watch(connection, adapter_added_watch);
 	g_dbus_remove_watch(connection, adapter_removed_watch);
 	g_dbus_remove_watch(connection, property_watch);
-	return err;
 }
 
-void bluetooth_unregister_uuid(const char *uuid)
+static void bluetooth_unref(void)
 {
-	g_hash_table_remove(uuid_hash, uuid);
-
-	if (g_hash_table_size(uuid_hash))
+	if (g_atomic_int_dec_and_test(&bluetooth_refcount) == FALSE)
 		return;
 
 	g_dbus_remove_watch(connection, bluetooth_watch);
@@ -574,7 +565,29 @@ void bluetooth_unregister_uuid(const char *uuid)
 
 	g_hash_table_destroy(uuid_hash);
 	g_hash_table_destroy(adapter_address_hash);
-	uuid_hash = NULL;
+}
+
+int bluetooth_register_uuid(const char *uuid, struct bluetooth_profile *profile)
+{
+	bluetooth_ref();
+
+	if (bluetooth_refcount == 0)
+		return -EIO;
+
+	g_hash_table_insert(uuid_hash, g_strdup(uuid), profile);
+
+	bluetooth_send_with_reply("/", BLUEZ_MANAGER_INTERFACE, "GetProperties",
+				manager_properties_cb, NULL, NULL, -1,
+				DBUS_TYPE_INVALID);
+
+	return 0;
+}
+
+void bluetooth_unregister_uuid(const char *uuid)
+{
+	g_hash_table_remove(uuid_hash, uuid);
+
+	bluetooth_unref();
 }
 
 OFONO_PLUGIN_DEFINE(bluetooth, "Bluetooth Utils Plugins", VERSION,

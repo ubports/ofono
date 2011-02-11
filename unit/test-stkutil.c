@@ -245,7 +245,11 @@ static void check_gsm_sms(const struct sms *command,
 			g_assert(ca->hour == ta->hour);
 			g_assert(ca->minute == ta->minute);
 			g_assert(ca->second == ta->second);
-			g_assert(ca->timezone == ta->timezone);
+			g_assert(ca->has_timezone == ta->has_timezone);
+
+			if (ta->has_timezone)
+				g_assert(ca->timezone == ta->timezone);
+
 			break;
 		}
 		case SMS_VALIDITY_PERIOD_FORMAT_ENHANCED:
@@ -2626,7 +2630,7 @@ static struct get_input_test get_input_data_1101 = {
 	.pdu = get_input_1101,
 	.pdu_len = sizeof(get_input_1101),
 	.qualifier = 0x00,
-	.text = NULL,
+	.text = "",
 	.resp_len = {
 		.min = 1,
 		.max = 5
@@ -13995,6 +13999,7 @@ struct setup_idle_mode_text_test {
 	struct stk_text_attribute text_attr;
 	struct stk_frame_id frame_id;
 	char *html;
+	enum stk_command_parse_result status;
 };
 
 static unsigned char setup_idle_mode_text_111[] = { 0xD0, 0x1A, 0x81, 0x03,
@@ -14355,7 +14360,8 @@ static struct setup_idle_mode_text_test setup_idle_mode_text_data_121 = {
 static struct setup_idle_mode_text_test setup_idle_mode_text_data_131 = {
 	.pdu = setup_idle_mode_text_131,
 	.pdu_len = sizeof(setup_idle_mode_text_131),
-	.qualifier = 0x00
+	.qualifier = 0x00,
+	.text = ""
 };
 
 static struct setup_idle_mode_text_test setup_idle_mode_text_data_171 = {
@@ -14406,10 +14412,12 @@ static struct setup_idle_mode_text_test setup_idle_mode_text_data_241 = {
 	.pdu = setup_idle_mode_text_241,
 	.pdu_len = sizeof(setup_idle_mode_text_241),
 	.qualifier = 0x00,
+	.text = "",
 	.icon_id = {
 		.qualifier = STK_ICON_QUALIFIER_TYPE_NON_SELF_EXPLANATORY,
 		.id = 0x01
-	}
+	},
+	.status = STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD
 };
 
 static struct setup_idle_mode_text_test setup_idle_mode_text_data_311 = {
@@ -14736,7 +14744,7 @@ static void test_setup_idle_mode_text(gconstpointer data)
 	command = stk_command_new_from_pdu(test->pdu, test->pdu_len);
 
 	g_assert(command);
-	g_assert(command->status == STK_PARSE_RESULT_OK);
+	g_assert(command->status == test->status);
 
 	g_assert(command->number == 1);
 	g_assert(command->type == STK_COMMAND_TYPE_SETUP_IDLE_MODE_TEXT);
@@ -14766,6 +14774,7 @@ struct run_at_command_test {
 	struct stk_icon_id icon_id;
 	struct stk_text_attribute text_attr;
 	struct stk_frame_id frame_id;
+	enum stk_command_parse_result status;
 };
 
 static unsigned char run_at_command_111[] = { 0xD0, 0x12, 0x81, 0x03, 0x01,
@@ -15187,7 +15196,8 @@ static struct run_at_command_test run_at_command_data_251 = {
 	.icon_id = {
 		.qualifier = STK_ICON_QUALIFIER_TYPE_NON_SELF_EXPLANATORY,
 		.id = 0x01
-	}
+	},
+	.status = STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD
 };
 
 static struct run_at_command_test run_at_command_data_311 = {
@@ -15494,7 +15504,7 @@ static void test_run_at_command(gconstpointer data)
 	command = stk_command_new_from_pdu(test->pdu, test->pdu_len);
 
 	g_assert(command);
-	g_assert(command->status == STK_PARSE_RESULT_OK);
+	g_assert(command->status == test->status);
 
 	g_assert(command->number == 1);
 	g_assert(command->type == STK_COMMAND_TYPE_RUN_AT_COMMAND);
@@ -20931,6 +20941,8 @@ static const struct envelope_test sms_pp_data_download_data_161 = {
 					.year = 98,
 					.month = 1,
 					.day = 1,
+					.has_timezone = TRUE,
+					.timezone = 0,
 				},
 				.udl = 13,
 				.ud = "Short Message",
@@ -20974,6 +20986,8 @@ static const struct envelope_test sms_pp_data_download_data_162 = {
 					.year = 98,
 					.month = 1,
 					.day = 1,
+					.has_timezone = TRUE,
+					.timezone = 0,
 				},
 				.udl = 13,
 				.ud = "Short Message",
@@ -21020,6 +21034,8 @@ static const struct envelope_test sms_pp_data_download_data_182 = {
 					.year = 98,
 					.month = 1,
 					.day = 1,
+					.has_timezone = TRUE,
+					.timezone = 0,
 				},
 				.udl = 30,
 				.ud = {

@@ -38,6 +38,7 @@
 #include "gatchat.h"
 #include "gatresult.h"
 
+#include "common.h"
 #include "atmodem.h"
 #include "vendor.h"
 
@@ -82,7 +83,7 @@ static int option_parse_tech(GAtResult *result)
 {
 	GAtResultIter iter;
 	int s, octi, ouwcti;
-	int tech = -1;
+	int tech;
 
 	g_at_result_iter_init(&iter, result);
 
@@ -106,28 +107,31 @@ static int option_parse_tech(GAtResult *result)
 
 	switch (octi) {
 	case 1: /* GSM */
-		tech = 0;
+		tech = ACCESS_TECHNOLOGY_GSM;
 		break;
 	case 2: /* GPRS */
-		tech = 1;
+		tech = ACCESS_TECHNOLOGY_GSM;
 		break;
 	case 3: /* EDGE */
-		tech = 3;
+		tech = ACCESS_TECHNOLOGY_GSM_EGPRS;
+		break;
+	default:
+		tech = -1;
 		break;
 	}
 
 	switch (ouwcti) {
 	case 1: /* UMTS */
-		tech = 2;
+		tech = ACCESS_TECHNOLOGY_UTRAN;
 		break;
 	case 2: /* HSDPA */
-		tech = 4;
+		tech = ACCESS_TECHNOLOGY_UTRAN_HSDPA;
 		break;
 	case 3: /* HSUPA */
-		tech = 5;
+		tech = ACCESS_TECHNOLOGY_UTRAN_HSUPA;
 		break;
 	case 4: /* HSPA */
-		tech = 6;
+		tech = ACCESS_TECHNOLOGY_UTRAN_HSDPA_HSUPA;
 		break;
 	}
 
@@ -182,9 +186,6 @@ static void at_registration_status(struct ofono_netreg *netreg,
 	struct netreg_data *nd = ofono_netreg_get_data(netreg);
 	struct cb_data *cbd = cb_data_new(cb, data);
 
-	if (!cbd)
-		goto error;
-
 	cbd->user = nd;
 
 	switch (nd->vendor) {
@@ -194,6 +195,14 @@ static void at_registration_status(struct ofono_netreg *netreg,
 		 * intercepted in mbm_erinfo_notify
 		 */
 		g_at_chat_send(nd->chat, "AT*ERINFO?", none_prefix,
+				NULL, NULL, NULL);
+		break;
+	case OFONO_VENDOR_GOBI:
+		/*
+		 * Send *CNTI=0 to find out the current tech, it will be
+		 * intercepted in gobi_cnti_notify
+		 */
+		g_at_chat_send(nd->chat, "AT*CNTI=0", none_prefix,
 				NULL, NULL, NULL);
 		break;
 	case OFONO_VENDOR_NOVATEL:
@@ -220,7 +229,6 @@ static void at_registration_status(struct ofono_netreg *netreg,
 				at_creg_cb, cbd, g_free) > 0)
 		return;
 
-error:
 	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, -1, -1, -1, -1, data);
@@ -259,7 +267,7 @@ static void cops_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 	/* Default to GSM */
 	if (g_at_result_iter_next_number(&iter, &tech) == FALSE)
-		tech = 0;
+		tech = ACCESS_TECHNOLOGY_GSM;
 
 	strncpy(op.name, name, OFONO_MAX_OPERATOR_NAME_LENGTH);
 	op.name[OFONO_MAX_OPERATOR_NAME_LENGTH] = '\0';
@@ -349,9 +357,6 @@ static void at_current_operator(struct ofono_netreg *netreg,
 	struct cb_data *cbd = cb_data_new(cb, data);
 	gboolean ok;
 
-	if (!cbd)
-		goto error;
-
 	cbd->user = netreg;
 
 	/* Nokia modems have a broken return value for the string
@@ -376,7 +381,6 @@ static void at_current_operator(struct ofono_netreg *netreg,
 	if (ok)
 		return;
 
-error:
 	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, NULL, data);
@@ -408,8 +412,7 @@ static void cops_list_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	DBG("Got %d elements", num);
 
 	list = g_try_new0(struct ofono_network_operator, num);
-
-	if (!list) {
+	if (list == NULL) {
 		CALLBACK_WITH_FAILURE(cb, 0, NULL, cbd->data);
 		return;
 	}
@@ -455,7 +458,7 @@ static void cops_list_cb(gboolean ok, GAtResult *result, gpointer user_data)
 			extract_mcc_mnc(n, list[num].mcc, list[num].mnc);
 
 			if (!g_at_result_iter_next_number(&iter, &tech))
-				tech = 0;
+				tech = ACCESS_TECHNOLOGY_GSM;
 
 			list[num].tech = tech;
 
@@ -492,14 +495,10 @@ static void at_list_operators(struct ofono_netreg *netreg,
 	struct netreg_data *nd = ofono_netreg_get_data(netreg);
 	struct cb_data *cbd = cb_data_new(cb, data);
 
-	if (!cbd)
-		goto error;
-
 	if (g_at_chat_send(nd->chat, "AT+COPS=?", cops_prefix,
 				cops_list_cb, cbd, g_free) > 0)
 		return;
 
-error:
 	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, 0, NULL, data);
@@ -522,14 +521,10 @@ static void at_register_auto(struct ofono_netreg *netreg,
 	struct netreg_data *nd = ofono_netreg_get_data(netreg);
 	struct cb_data *cbd = cb_data_new(cb, data);
 
-	if (!cbd)
-		goto error;
-
 	if (g_at_chat_send(nd->chat, "AT+COPS=0", none_prefix,
 				register_cb, cbd, g_free) > 0)
 		return;
 
-error:
 	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, data);
@@ -543,35 +538,12 @@ static void at_register_manual(struct ofono_netreg *netreg,
 	struct cb_data *cbd = cb_data_new(cb, data);
 	char buf[128];
 
-	if (!cbd)
-		goto error;
-
 	snprintf(buf, sizeof(buf), "AT+COPS=1,2,\"%s%s\"", mcc, mnc);
 
 	if (g_at_chat_send(nd->chat, buf, none_prefix,
 				register_cb, cbd, g_free) > 0)
 		return;
 
-error:
-	g_free(cbd);
-
-	CALLBACK_WITH_FAILURE(cb, data);
-}
-
-static void at_deregister(struct ofono_netreg *netreg,
-				ofono_netreg_register_cb_t cb, void *data)
-{
-	struct netreg_data *nd = ofono_netreg_get_data(netreg);
-	struct cb_data *cbd = cb_data_new(cb, data);
-
-	if (!cbd)
-		goto error;
-
-	if (g_at_chat_send(nd->chat, "AT+COPS=2", none_prefix,
-				register_cb, cbd, g_free) > 0)
-		return;
-
-error:
 	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, data);
@@ -663,13 +635,13 @@ static void ifx_xciev_notify(GAtResult *result, gpointer user_data)
 		return;
 
 	if (ind == 0)
-		strength = 0;
+		strength = -1;
 	else if (ind == 7)
 		strength = 100;
 	else
 		strength = (ind * 15);
 
-	ofono_netreg_strength_notify(netreg, ind);
+	ofono_netreg_strength_notify(netreg, strength);
 }
 
 static void ciev_notify(GAtResult *result, gpointer user_data)
@@ -699,8 +671,8 @@ static void ciev_notify(GAtResult *result, gpointer user_data)
 
 static void ctzv_notify(GAtResult *result, gpointer user_data)
 {
-	//struct ofono_netreg *netreg = user_data;
-	//struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct ofono_netreg *netreg = user_data;
+	struct netreg_data *nd = ofono_netreg_get_data(netreg);
 	const char *tz;
 	GAtResultIter iter;
 
@@ -713,6 +685,10 @@ static void ctzv_notify(GAtResult *result, gpointer user_data)
 		return;
 
 	DBG("tz %s", tz);
+
+	nd->time.utcoff = atoi(tz) * 15 * 60;
+
+	ofono_netreg_time_notify(netreg, &nd->time);
 }
 
 static void ifx_ctzv_notify(GAtResult *result, gpointer user_data)
@@ -862,9 +838,6 @@ static void at_signal_strength(struct ofono_netreg *netreg,
 	struct netreg_data *nd = ofono_netreg_get_data(netreg);
 	struct cb_data *cbd = cb_data_new(cb, data);
 
-	if (!cbd)
-		goto error;
-
 	cbd->user = nd;
 
 	/*
@@ -881,7 +854,6 @@ static void at_signal_strength(struct ofono_netreg *netreg,
 			return;
 	}
 
-error:
 	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, -1, data);
@@ -969,10 +941,10 @@ static void mbm_erinfo_notify(GAtResult *result, gpointer user_data)
 	/* Convert to tech values from 27.007 */
 	switch (gsm) {
 	case 1: /* GSM */
-		nd->tech = 0;
+		nd->tech = ACCESS_TECHNOLOGY_GSM;
 		break;
 	case 2: /* EDGE */
-		nd->tech = 3;
+		nd->tech = ACCESS_TECHNOLOGY_GSM_EGPRS;
 		break;
 	default:
 		nd->tech = -1;
@@ -980,20 +952,60 @@ static void mbm_erinfo_notify(GAtResult *result, gpointer user_data)
 
 	switch (umts) {
 	case 1: /* UMTS */
-		nd->tech = 2;
+		nd->tech = ACCESS_TECHNOLOGY_UTRAN;
 		break;
 	case 2: /* UMTS + HSDPA */
-		nd->tech = 4;
-		break;
-	default:
+		nd->tech = ACCESS_TECHNOLOGY_UTRAN_HSDPA;
 		break;
 	}
 }
 
+static int cnti_to_tech(const char *cnti)
+{
+	if (g_str_equal(cnti, "GSM") == TRUE ||
+			g_str_equal(cnti, "GPRS") == TRUE)
+		return ACCESS_TECHNOLOGY_GSM;
+	else if (g_str_equal(cnti, "EDGE") == TRUE)
+		return ACCESS_TECHNOLOGY_GSM_EGPRS;
+	else if (g_str_equal(cnti, "UMTS") == TRUE)
+		return ACCESS_TECHNOLOGY_UTRAN;
+	else if (g_str_equal(cnti, "HSDPA") == TRUE)
+		return ACCESS_TECHNOLOGY_UTRAN_HSDPA;
+	else if (g_str_equal(cnti, "HSUPA") == TRUE)
+		return ACCESS_TECHNOLOGY_UTRAN_HSUPA;
+
+	return -1;
+}
+
+static void gobi_cnti_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_netreg *netreg = user_data;
+	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	GAtResultIter iter;
+	const char *tech;
+	int option;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (g_at_result_iter_next(&iter, "*CNTI:") == FALSE)
+		return;
+
+	if (g_at_result_iter_next_number(&iter, &option) == FALSE)
+		return;
+
+	if (option != 0)
+		return;
+
+	if (g_at_result_iter_next_unquoted_string(&iter, &tech) == FALSE)
+		return;
+
+	nd->tech = cnti_to_tech(tech);
+}
+
 static void nw_cnti_notify(GAtResult *result, gpointer user_data)
 {
-	//struct ofono_netreg *netreg = user_data;
-	//struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct ofono_netreg *netreg = user_data;
+	struct netreg_data *nd = ofono_netreg_get_data(netreg);
 	GAtResultIter iter;
 	const char *tech;
 	int option;
@@ -1012,17 +1024,29 @@ static void nw_cnti_notify(GAtResult *result, gpointer user_data)
 	if (g_at_result_iter_next_unquoted_string(&iter, &tech) == FALSE)
 		return;
 
-	ofono_info("CNTI: %s", tech);
+	nd->tech = cnti_to_tech(tech);
 }
 
-static void option_query_tech_cb(gboolean ok,
-			GAtResult *result, gpointer user_data)
+static void cnti_query_tech_cb(gboolean ok, GAtResult *result,
+						gpointer user_data)
 {
 	struct tech_query *tq = user_data;
-	int tech = -1;
+	struct netreg_data *nd = ofono_netreg_get_data(tq->netreg);
+
+	ofono_netreg_status_notify(tq->netreg,
+			tq->status, tq->lac, tq->ci, nd->tech);
+}
+
+static void option_query_tech_cb(gboolean ok, GAtResult *result,
+						gpointer user_data)
+{
+	struct tech_query *tq = user_data;
+	int tech;
 
 	if (ok)
 		tech = option_parse_tech(result);
+	else
+		tech = -1;
 
 	ofono_netreg_status_notify(tq->netreg,
 			tq->status, tq->lac, tq->ci, tech);
@@ -1042,25 +1066,35 @@ static void creg_notify(GAtResult *result, gpointer user_data)
 	if (status != 1 && status != 5)
 		goto notify;
 
+	tq = g_try_new0(struct tech_query, 1);
+	if (tq == NULL)
+		goto notify;
+
+	tq->status = status;
+	tq->lac = lac;
+	tq->ci = ci;
+	tq->netreg = netreg;
+
 	switch (nd->vendor) {
+	case OFONO_VENDOR_GOBI:
+		if (g_at_chat_send(nd->chat, "AT*CNTI=0", none_prefix,
+					cnti_query_tech_cb, tq, g_free) > 0)
+			return;
+		break;
+	case OFONO_VENDOR_NOVATEL:
+		if (g_at_chat_send(nd->chat, "AT$CNTI=0", none_prefix,
+					cnti_query_tech_cb, tq, g_free) > 0)
+			return;
+		break;
 	case OFONO_VENDOR_OPTION_HSO:
-		tq = g_new0(struct tech_query, 1);
-		if (!tq)
-			break;
-
-		tq->status = status;
-		tq->lac = lac;
-		tq->ci = ci;
-		tq->netreg = netreg;
-
 		if (g_at_chat_send(nd->chat, "AT_OCTI?;_OUWCTI?",
 					option_tech_prefix,
 					option_query_tech_cb, tq, g_free) > 0)
 			return;
-
-		g_free(tq);
 		break;
 	}
+
+	g_free(tq);
 
 	if ((status == 1 || status == 5) && tech == -1)
 		tech = nd->tech;
@@ -1198,6 +1232,15 @@ static void at_creg_set_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		g_at_chat_send(nd->chat, "AT+CIND=?", cind_prefix,
 					cind_support_cb, netreg, NULL);
 		return;
+	case OFONO_VENDOR_GOBI:
+		/*
+		 * Gobi devices don't support unsolicited notifications
+		 * of technology changes, but register a handle for
+		 * CNTI so we get notified by any query.
+		 */
+		g_at_chat_register(nd->chat, "*CNTI:", gobi_cnti_notify,
+					FALSE, netreg, NULL);
+		break;
 	case OFONO_VENDOR_NOVATEL:
 		/*
 		 * Novatel doesn't support unsolicited notifications
@@ -1339,16 +1382,15 @@ static struct ofono_netreg_driver driver = {
 	.list_operators			= at_list_operators,
 	.register_auto			= at_register_auto,
 	.register_manual		= at_register_manual,
-	.deregister			= at_deregister,
 	.strength			= at_signal_strength,
 };
 
-void at_netreg_init()
+void at_netreg_init(void)
 {
 	ofono_netreg_driver_register(&driver);
 }
 
-void at_netreg_exit()
+void at_netreg_exit(void)
 {
 	ofono_netreg_driver_unregister(&driver);
 }

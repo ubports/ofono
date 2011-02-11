@@ -1,3 +1,68 @@
+ver 0.41:
+	Fix issue with SIM callback handling.
+	Fix issue with XTMS handling and IFX modem.
+	Add support for alphabets and SMS encoding.
+	Add support for generic PIN retries handling.
+	Add support for PIN retries and MBM modem.
+	Add support for radio settings and MBM modem.
+	Add support for cell broadcast and STE modem.
+	Add support for handling ECAV status Released.
+
+ver 0.40:
+	Fix issue with MessageCenter and MessageProxy settings.
+	Fix issue with voice call support and Calypso modem.
+	Fix issue with user busy release and ISI modem.
+	Fix issue with DTMF sending and ISI modem.
+	Add support for handling long phone numbers.
+	Add support for persisting outgoing messages.
+	Add support for GPRS provision infrastructure.
+	Add support for proper GPRS handling in offline mode.
+	Add support for handling Launch Browser proactive command.
+	Remove support for deprecated deregister method.
+
+ver 0.39:
+	Fix issue with not handling empty EFecc properly.
+	Fix issue with string length and DTMF handling.
+	Fix issue with missing info for terminal busy result.
+	Fix issue with signal strength handling and IFX modem.
+	Fix handling of SIM Toolkit enabling and IFX modem.
+	Add support for packet switched bearer notifications.
+	Add support for handling called line identification.
+	Add support for PIN retry counter interface.
+	Add support for ST-Ericsson modem init daemon.
+	Add support for Cinterion TC65 modem.
+	Add support for simple ISI client interface.
+
+ver 0.38:
+	Change CalledLine* to ConnectedLine* properties.
+	Fix issue with calling presentation property.
+	Fix issue with network time and ISI modems.
+	Fix issue with timezone reporting and HSO modems.
+	Fix issue with SIM ready status and HSO modems.
+	Fix issue with hidden caller ID and STE modems.
+	Fix issue with handling of STK Setup Menu.
+	Fix issue with missing STK text and icon checks.
+	Fix issue with missing signal strength query.
+
+ver 0.37:
+	Fix issue with parsing of un-quoted CREG / CGREG.
+	Fix issue with call forwarding for data and fax.
+	Fix issue with too short timeout for DisplayText.
+	Fix issue with handling zero length text strings.
+	Fix issue with decoding of optional SMS elements.
+	Fix issue with charset and MWI DCS decoding.
+	Fix issue with WAP push notification handling.
+	Fix issue with calling handling and ISI modem.
+	Fix issue with network interfaces and STE modem.
+	Fix issue with SIM state notification of Huawei modem.
+	Add support for radio settings handling and Huawei modem.
+	Add support for provide local info proactive command.
+	Add support for calling name presentation properties.
+	Add support for modem lockdown handling and property.
+	Add support for handling silent modem reset trigger.
+	Add support for frequency band selection interface.
+	Add support for text telephony interface.
+
 ver 0.36:
 	Fix issue with CLIR Invocation and Suppression.
 	Fix issue with power/online transition with ZTE devices.

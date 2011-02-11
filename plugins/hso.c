@@ -50,10 +50,15 @@
 #include <drivers/atmodem/vendor.h>
 
 static const char *none_prefix[] = { NULL };
+static const char *opmn_prefix[] = { "_OPMN:", NULL };
+static const char *obls_prefix[] = { "_OBLS:", NULL };
 
 struct hso_data {
 	GAtChat *app;
 	GAtChat *control;
+	guint sim_poll_source;
+	guint sim_poll_count;
+	gboolean have_sim;
 };
 
 static int hso_probe(struct ofono_modem *modem)
@@ -63,7 +68,7 @@ static int hso_probe(struct ofono_modem *modem)
 	DBG("%p", modem);
 
 	data = g_try_new0(struct hso_data, 1);
-	if (!data)
+	if (data == NULL)
 		return -ENOMEM;
 
 	ofono_modem_set_data(modem, data);
@@ -80,6 +85,10 @@ static void hso_remove(struct ofono_modem *modem)
 	ofono_modem_set_data(modem, NULL);
 
 	g_at_chat_unref(data->control);
+
+	if (data->sim_poll_source > 0)
+		g_source_remove(data->sim_poll_source);
+
 	g_free(data);
 }
 
@@ -90,17 +99,65 @@ static void hso_debug(const char *str, void *user_data)
 	ofono_info("%s%s", prefix, str);
 }
 
-static void cfun_enable(gboolean ok, GAtResult *result, gpointer user_data)
+static gboolean init_sim_check(gpointer user_data);
+
+static void sim_status(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_modem *modem = user_data;
 	struct hso_data *data = ofono_modem_get_data(modem);
+	GAtResultIter iter;
+	int sim, pb, sms;
 
 	DBG("");
 
-	ofono_modem_set_powered(modem, ok);
+	if (data->sim_poll_source > 0) {
+		g_source_remove(data->sim_poll_source);
+		data->sim_poll_source = 0;
+	}
 
-	if (!ok)
+	if (!ok) {
+		ofono_modem_set_powered(modem, FALSE);
 		return;
+	}
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "_OBLS:")) {
+		ofono_modem_set_powered(modem, FALSE);
+		return;
+	}
+
+	if (!g_at_result_iter_next_number(&iter, &sim)) {
+		ofono_modem_set_powered(modem, FALSE);
+		return;
+	}
+
+	if (!g_at_result_iter_next_number(&iter, &pb)) {
+		ofono_modem_set_powered(modem, FALSE);
+		return;
+	}
+
+	if (!g_at_result_iter_next_number(&iter, &sms)) {
+		ofono_modem_set_powered(modem, FALSE);
+		return;
+	}
+
+	DBG("status sim %d pb %d sms %d", sim, pb, sms);
+
+	if (sim == 0) {
+		data->have_sim = FALSE;
+
+		if (data->sim_poll_count++ < 5) {
+			data->sim_poll_source = g_timeout_add_seconds(1,
+							init_sim_check, modem);
+			return;
+		}
+	} else
+		data->have_sim = TRUE;
+
+	data->sim_poll_count = 0;
+
+	ofono_modem_set_powered(modem, TRUE);
 
 	/*
 	 * Option has the concept of Speech Service versus
@@ -117,6 +174,58 @@ static void cfun_enable(gboolean ok, GAtResult *result, gpointer user_data)
 	g_at_chat_send(data->app, "AT_ODO=0", none_prefix, NULL, NULL, NULL);
 }
 
+static gboolean init_sim_check(gpointer user_data)
+{
+	struct ofono_modem *modem = user_data;
+	struct hso_data *data = ofono_modem_get_data(modem);
+
+	data->sim_poll_source = 0;
+
+	g_at_chat_send(data->control, "AT_OBLS", obls_prefix,
+					sim_status, modem, NULL);
+
+	return FALSE;
+}
+
+static void check_model(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct ofono_modem *modem = user_data;
+	GAtResultIter iter;
+	char const *model;
+
+	DBG("");
+
+	if (!ok)
+		goto done;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "_OPMN:"))
+		goto done;
+
+	if (g_at_result_iter_next_unquoted_string(&iter, &model))
+		ofono_info("Model is %s", model);
+
+done:
+	init_sim_check(modem);
+}
+
+static void cfun_enable(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct ofono_modem *modem = user_data;
+	struct hso_data *data = ofono_modem_get_data(modem);
+
+	DBG("");
+
+	if (!ok) {
+		ofono_modem_set_powered(modem, FALSE);
+		return;
+	}
+
+	g_at_chat_send(data->control, "AT_OPMN", opmn_prefix,
+					check_model, modem, NULL);
+}
+
 static GAtChat *create_port(const char *device)
 {
 	GAtSyntax *syntax;
@@ -124,7 +233,7 @@ static GAtChat *create_port(const char *device)
 	GAtChat *chat;
 
 	channel = g_at_tty_open(device, NULL);
-	if (!channel)
+	if (channel == NULL)
 		return NULL;
 
 	syntax = g_at_syntax_new_gsm_permissive();
@@ -132,7 +241,7 @@ static GAtChat *create_port(const char *device)
 	g_at_syntax_unref(syntax);
 	g_io_channel_unref(channel);
 
-	if (!chat)
+	if (chat == NULL)
 		return NULL;
 
 	return chat;
@@ -149,7 +258,7 @@ static int hso_enable(struct ofono_modem *modem)
 	control = ofono_modem_get_string(modem, "ControlPort");
 	app = ofono_modem_get_string(modem, "ApplicationPort");
 
-	if (!app || !control)
+	if (app == NULL || control == NULL)
 		return -EINVAL;
 
 	data->control = create_port(control);
@@ -201,7 +310,7 @@ static int hso_disable(struct ofono_modem *modem)
 
 	DBG("%p", modem);
 
-	if (!data->control)
+	if (data->control == NULL)
 		return 0;
 
 	g_at_chat_cancel_all(data->control);
@@ -237,13 +346,9 @@ static void hso_set_online(struct ofono_modem *modem, ofono_bool_t online,
 
 	DBG("modem %p %s", modem, online ? "online" : "offline");
 
-	if (!cbd)
-		goto error;
-
 	if (g_at_chat_send(chat, command, NULL, set_online_cb, cbd, g_free))
 		return;
 
-error:
 	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, cbd->data);
@@ -260,7 +365,7 @@ static void hso_pre_sim(struct ofono_modem *modem)
 	sim = ofono_sim_create(modem, OFONO_VENDOR_OPTION_HSO,
 				"atmodem", data->control);
 
-	if (sim)
+	if (sim && data->have_sim == TRUE)
 		ofono_sim_inserted_notify(sim, TRUE);
 }
 
@@ -271,6 +376,9 @@ static void hso_post_sim(struct ofono_modem *modem)
 	DBG("%p", modem);
 
 	ofono_phonebook_create(modem, 0, "atmodem", data->app);
+	ofono_radio_settings_create(modem, 0, "hsomodem", data->app);
+
+	ofono_sms_create(modem, OFONO_VENDOR_OPTION_HSO, "atmodem", data->app);
 }
 
 static void hso_post_online(struct ofono_modem *modem)
@@ -284,9 +392,6 @@ static void hso_post_online(struct ofono_modem *modem)
 	ofono_netreg_create(modem, OFONO_VENDOR_OPTION_HSO,
 				"atmodem", data->app);
 
-	ofono_radio_settings_create(modem, 0, "hsomodem", data->app);
-
-	ofono_sms_create(modem, OFONO_VENDOR_OPTION_HSO, "atmodem", data->app);
 	ofono_cbs_create(modem, OFONO_VENDOR_QUALCOMM_MSM,
 				"atmodem", data->app);
 	ofono_ussd_create(modem, OFONO_VENDOR_QUALCOMM_MSM,

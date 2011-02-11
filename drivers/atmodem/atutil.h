@@ -71,6 +71,9 @@ gboolean at_util_parse_cscs_supported(GAtResult *result, int *supported);
 gboolean at_util_parse_cscs_query(GAtResult *result,
 				enum at_util_charset *charset);
 
+gboolean at_util_parse_attr(GAtResult *result, const char *prefix,
+				const char **out_attr);
+
 struct cb_data {
 	void *cb;
 	void *data;
@@ -81,11 +84,7 @@ static inline struct cb_data *cb_data_new(void *cb, void *data)
 {
 	struct cb_data *ret;
 
-	ret = g_try_new0(struct cb_data, 1);
-
-	if (!ret)
-		return ret;
-
+	ret = g_new0(struct cb_data, 1);
 	ret->cb = cb;
 	ret->data = data;
 

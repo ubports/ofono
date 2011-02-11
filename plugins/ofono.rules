@@ -7,6 +7,13 @@ KERNEL!="ttyUSB[0-9]*", GOTO="ofono_tty_end"
 
 SUBSYSTEMS=="usb", ATTRS{bInterfaceNumber}=="?*", ATTRS{bInterfaceClass}=="ff", ENV{OFONO_IFACE_NUM}="$attr{bInterfaceNumber}"
 
+# Qualcomm Gobi 2000 (Lenovo)
+ATTRS{idVendor}=="05c6", ATTRS{idProduct}=="9205", ENV{OFONO_IFACE_NUM}=="02", ENV{OFONO_GOBI_TYPE}="modem"
+
+# Sierra Wireless HSPA Modem
+ATTRS{idVendor}=="1199", ATTRS{idProduct}=="6880", ENV{OFONO_IFACE_NUM}=="03", ENV{OFONO_SIERRA_TYPE}="modem"
+ATTRS{idVendor}=="1199", ATTRS{idProduct}=="6890", ENV{OFONO_IFACE_NUM}=="03", ENV{OFONO_SIERRA_TYPE}="modem"
+
 ATTRS{idVendor}=="19d2", ATTRS{idProduct}=="0031", ENV{OFONO_IFACE_NUM}=="03", ENV{OFONO_ZTE_TYPE}="modem"
 ATTRS{idVendor}=="19d2", ATTRS{idProduct}=="0031", ENV{OFONO_IFACE_NUM}=="01", ENV{OFONO_ZTE_TYPE}="aux"
 
@@ -30,7 +37,7 @@ ATTRS{idVendor}=="12d1", ATTRS{idProduct}=="1401", ENV{OFONO_IFACE_NUM}=="02", E
 ATTRS{idVendor}=="12d1", ATTRS{idProduct}=="1402", ENV{OFONO_IFACE_NUM}=="00", ENV{OFONO_HUAWEI_TYPE}="Modem"
 ATTRS{idVendor}=="12d1", ATTRS{idProduct}=="1402", ENV{OFONO_IFACE_NUM}=="02", ENV{OFONO_HUAWEI_TYPE}="Pcui"
 
-ATTRS{idVendor}=="12d1", ATTRS{idProduct}=="1404", ENV{OFONO_IFACE_NUM}=="00", ENV{OFONO_HUAWEI_TYPE}="Modem"
+ATTRS{idVendor}=="12d1", ATTRS{idProduct}=="1404", ENV{OFONO_IFACE_NUM}=="01", ENV{OFONO_HUAWEI_TYPE}="Modem"
 ATTRS{idVendor}=="12d1", ATTRS{idProduct}=="1404", ENV{OFONO_IFACE_NUM}=="02", ENV{OFONO_HUAWEI_TYPE}="Pcui"
 ATTRS{idVendor}=="12d1", ATTRS{idProduct}=="1404", ENV{OFONO_HUAWEI_VOICE}="1"
 
@@ -343,8 +350,8 @@ SUBSYSTEM!="net", GOTO="ofono_isi_end"
 ATTRS{type}!="820", GOTO="ofono_isi_end"
 KERNELS=="gadget", GOTO="ofono_isi_end"
 
-# Generic / PC Suite mode
-SUBSYSTEMS=="usb", ENV{OFONO_DRIVER}="isigen", ENV{OFONO_ISI_ADDRESS}="16"
+# Generic USB / PC Suite mode
+SUBSYSTEMS=="usb", ENV{OFONO_DRIVER}="isiusb", ENV{OFONO_ISI_ADDRESS}="16"
 
 # Nokia N900 modem
 SUBSYSTEMS=="hsi", ENV{OFONO_DRIVER}="n900", ENV{OFONO_ISI_ADDRESS}="108"
@@ -357,8 +364,16 @@ ENV{DEVTYPE}!="usb_device", GOTO="ofono_end"
 # Novatel Wireless
 ATTRS{idVendor}=="1410", ENV{OFONO_DRIVER}="novatel"
 
+# Sierra Wireless
+ATTRS{idVendor}=="1199", ENV{OFONO_DRIVER}="sierra"
+
+ATTRS{idVendor}=="1199", ATTRS{serial}=="1234567890ABCDEF", ENV{ID_SERIAL_SHORT}=""
+
 # HUAWEI Technology
 ATTRS{idVendor}=="12d1", ENV{OFONO_DRIVER}="huawei"
+
+# Qualcomm Incorporated
+ATTRS{idVendor}=="05c6", ENV{OFONO_DRIVER}="gobi"
 
 # ZTE Incorporated
 ATTRS{idVendor}=="19d2", ENV{OFONO_DRIVER}="zte"
@@ -431,5 +446,9 @@ ATTRS{idVendor}=="0421", ATTRS{idProduct}=="060e", ENV{OFONO_DRIVER}="nokia"
 
 # Nokia Internet Stick CS-17
 ATTRS{idVendor}=="0421", ATTRS{idProduct}=="0623", ENV{OFONO_DRIVER}="nokia"
+
+# Nokia CDMA Device
+ATTRS{idVendor}=="0421", ATTRS{idProduct}=="023e", ENV{OFONO_DRIVER}="nokiacdma"
+ATTRS{idVendor}=="0421", ATTRS{idProduct}=="00b6", ENV{OFONO_DRIVER}="nokiacdma"
 
 LABEL="ofono_end"

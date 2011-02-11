@@ -282,7 +282,7 @@ static int at_gprs_context_probe(struct ofono_gprs_context *gc,
 	}
 
 	gcd = g_try_new0(struct gprs_context_data, 1);
-	if (!gcd)
+	if (gcd == NULL)
 		return -ENOMEM;
 
 	gcd->chat = g_at_chat_clone(chat);
@@ -317,12 +317,12 @@ static struct ofono_gprs_context_driver driver = {
 	.deactivate_primary	= at_gprs_deactivate_primary,
 };
 
-void at_gprs_context_init()
+void at_gprs_context_init(void)
 {
 	ofono_gprs_context_driver_register(&driver);
 }
 
-void at_gprs_context_exit()
+void at_gprs_context_exit(void)
 {
 	ofono_gprs_context_driver_unregister(&driver);
 }

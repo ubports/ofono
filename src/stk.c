@@ -26,6 +26,7 @@
 #define _GNU_SOURCE
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <stdint.h>
 
 #include <glib.h>
@@ -98,6 +99,11 @@ struct extern_req {
 static void envelope_queue_run(struct ofono_stk *stk);
 static void timers_update(struct ofono_stk *stk);
 
+#define ADD_ERROR_RESULT(result, error, addn_info)		\
+		result.type = error;				\
+		result.additional_len = sizeof(addn_info);	\
+		result.additional = addn_info;			\
+
 static int stk_respond(struct ofono_stk *stk, struct stk_response *rsp,
 			ofono_stk_generic_cb_t cb)
 {
@@ -116,7 +122,7 @@ static int stk_respond(struct ofono_stk *stk, struct stk_response *rsp,
 	rsp->qualifier = stk->pending_cmd->qualifier;
 
 	tlv = stk_pdu_from_response(rsp, &tlv_len);
-	if (!tlv)
+	if (tlv == NULL)
 		return -EINVAL;
 
 	stk_command_free(stk->pending_cmd);
@@ -208,7 +214,7 @@ static int stk_send_envelope(struct ofono_stk *stk, struct stk_envelope *e,
 
 	e->dst = STK_DEVICE_IDENTITY_TYPE_UICC;
 	tlv = stk_pdu_from_envelope(e, &tlv_len);
-	if (!tlv)
+	if (tlv == NULL)
 		return -EINVAL;
 
 	op = g_new0(struct envelope_op, 1);
@@ -342,7 +348,7 @@ static struct stk_menu *stk_menu_create(const char *title,
 
 	ret->title = dbus_apply_text_attributes(title ? title : "",
 						title_attr);
-	if (!ret->title)
+	if (ret->title == NULL)
 		ret->title = g_strdup(title ? title : "");
 
 	memcpy(&ret->icon, icon, sizeof(ret->icon));
@@ -366,7 +372,7 @@ static struct stk_menu *stk_menu_create(const char *title,
 			text = dbus_apply_text_attributes(item->text, &attr);
 		}
 
-		if (!text)
+		if (text == NULL)
 			text = strdup(item->text);
 
 		ret->items[i].text = text;
@@ -451,7 +457,7 @@ static void emit_menu_changed(struct ofono_stk *stk)
 
 	signal = dbus_message_new_signal(path, OFONO_STK_INTERFACE,
 						"PropertyChanged");
-	if (!signal) {
+	if (signal == NULL) {
 		ofono_error("Unable to allocate new %s.PropertyChanged signal",
 				OFONO_SIM_APP_INTERFACE);
 
@@ -471,12 +477,22 @@ static void stk_alpha_id_set(struct ofono_stk *stk,
 		const char *text, const struct stk_text_attribute *attr,
 		const struct stk_icon_id *icon)
 {
-	/* TODO */
+	char *alpha = dbus_apply_text_attributes(text, attr);
+
+	/*
+	 * Currently, we are treating null data object(len = 0, no value part)
+	 * and no alpha identifier cases equally. This may be changed once
+	 * better idea is found out.
+	 */
+	if (alpha != NULL)
+		stk_agent_display_action_info(stk->current_agent, alpha, icon);
+
+	g_free(alpha);
 }
 
 static void stk_alpha_id_unset(struct ofono_stk *stk)
 {
-	/* TODO */
+	stk_agent_request_cancel(stk->current_agent);
 }
 
 static int duration_to_msecs(const struct stk_duration *duration)
@@ -510,7 +526,7 @@ static DBusMessage *stk_get_properties(DBusConnection *conn,
 	unsigned char icon;
 
 	reply = dbus_message_new_method_return(msg);
-	if (!reply)
+	if (reply == NULL)
 		return NULL;
 
 	dbus_message_iter_init_append(reply, &iter);
@@ -519,7 +535,7 @@ static DBusMessage *stk_get_properties(DBusConnection *conn,
 					OFONO_PROPERTIES_ARRAY_SIGNATURE,
 					&dict);
 
-	str = stk->idle_mode_text ? stk->idle_mode_text : "";
+	str = stk->idle_mode_text;
 	ofono_dbus_dict_append(&dict, "IdleModeText", DBUS_TYPE_STRING, &str);
 
 	icon = stk->idle_mode_icon.id;
@@ -632,13 +648,13 @@ static DBusMessage *stk_register_agent(DBusConnection *conn,
 	stk->default_agent = stk_agent_new(agent_path,
 						dbus_message_get_sender(msg),
 						FALSE);
-	if (!stk->default_agent)
+	if (stk->default_agent == NULL)
 		return __ofono_error_failed(msg);
 
 	stk_agent_set_removed_notify(stk->default_agent,
 					default_agent_notify, stk);
 
-	if (!stk->session_agent)
+	if (stk->session_agent == NULL)
 		stk->current_agent = stk->default_agent;
 
 	return dbus_message_new_method_return(msg);
@@ -656,7 +672,7 @@ static DBusMessage *stk_unregister_agent(DBusConnection *conn,
 					DBUS_TYPE_INVALID) == FALSE)
 		return __ofono_error_invalid_args(msg);
 
-	if (!stk->default_agent)
+	if (stk->default_agent == NULL)
 		return __ofono_error_failed(msg);
 
 	if (!stk_agent_matches(stk->default_agent, agent_path, agent_bus))
@@ -698,7 +714,7 @@ static void menu_selection_envelope_cb(struct ofono_stk *stk, gboolean ok,
 	stk->session_agent = stk_agent_new(agent_path,
 					dbus_message_get_sender(stk->pending),
 					TRUE);
-	if (!stk->session_agent) {
+	if (stk->session_agent == NULL) {
 		reply = __ofono_error_failed(stk->pending);
 
 		goto out;
@@ -729,7 +745,7 @@ static DBusMessage *stk_select_item(DBusConnection *conn,
 	if (stk->pending || stk->session_agent)
 		return __ofono_error_busy(msg);
 
-	if (!menu)
+	if (menu == NULL)
 		return __ofono_error_not_supported(msg);
 
 	if (dbus_message_get_args(msg, NULL,
@@ -838,7 +854,7 @@ static gboolean handle_command_send_sms(const struct stk_command *cmd,
 
 	sms_atom = __ofono_modem_find_atom(modem, OFONO_ATOM_TYPE_SMS);
 
-	if (!sms_atom || !__ofono_atom_get_registered(sms_atom)) {
+	if (sms_atom == NULL || !__ofono_atom_get_registered(sms_atom)) {
 		rsp->result.type = STK_RESULT_TYPE_NOT_CAPABLE;
 		return TRUE;
 	}
@@ -851,7 +867,10 @@ static gboolean handle_command_send_sms(const struct stk_command *cmd,
 	msg_list.next = NULL;
 
 	if (__ofono_sms_txq_submit(sms, &msg_list, 0, &uuid, NULL, NULL) < 0) {
-		rsp->result.type = STK_RESULT_TYPE_TERMINAL_BUSY;
+		unsigned char no_cause_result[] = { 0x00 };
+
+		ADD_ERROR_RESULT(rsp->result, STK_RESULT_TYPE_TERMINAL_BUSY,
+					no_cause_result);
 		return TRUE;
 	}
 
@@ -872,17 +891,15 @@ static gboolean handle_command_set_idle_text(const struct stk_command *cmd,
 {
 	DBusConnection *conn = ofono_dbus_get_connection();
 	const char *path = __ofono_atom_get_path(stk->atom);
-	char *idle_mode_text = NULL;
+	char *idle_mode_text;
 
-	if (cmd->setup_idle_mode_text.text) {
-		idle_mode_text = dbus_apply_text_attributes(
+	idle_mode_text = dbus_apply_text_attributes(
 					cmd->setup_idle_mode_text.text,
 					&cmd->setup_idle_mode_text.text_attr);
 
-		if (!idle_mode_text) {
-			rsp->result.type = STK_RESULT_TYPE_DATA_NOT_UNDERSTOOD;
-			return TRUE;
-		}
+	if (idle_mode_text == NULL) {
+		rsp->result.type = STK_RESULT_TYPE_DATA_NOT_UNDERSTOOD;
+		return TRUE;
 	}
 
 	if (stk->idle_mode_text)
@@ -890,7 +907,6 @@ static gboolean handle_command_set_idle_text(const struct stk_command *cmd,
 
 	stk->idle_mode_text = idle_mode_text;
 
-	idle_mode_text = idle_mode_text ? idle_mode_text : "";
 	ofono_dbus_signal_property_changed(conn, path, OFONO_STK_INTERFACE,
 						"IdleModeText",
 						DBUS_TYPE_STRING,
@@ -1090,26 +1106,26 @@ static gboolean handle_command_set_up_menu(const struct stk_command *cmd,
 						struct stk_response *rsp,
 						struct ofono_stk *stk)
 {
-	gboolean modified = FALSE;
-
-	if (stk->main_menu) {
-		stk_menu_free(stk->main_menu);
-		stk->main_menu = NULL;
-
-		modified = TRUE;
-	}
+	struct stk_menu *menu = NULL;
 
 	if (cmd->setup_menu.items) {
-		stk->main_menu = stk_menu_create_from_set_up_menu(cmd);
+		menu = stk_menu_create_from_set_up_menu(cmd);
 
-		if (stk->main_menu)
-			modified = TRUE;
-		else
+		if (menu == NULL) {
 			rsp->result.type = STK_RESULT_TYPE_DATA_NOT_UNDERSTOOD;
+			return TRUE;
+		}
 	}
 
-	if (modified)
-		emit_menu_changed(stk);
+	if (menu == NULL && stk->main_menu == NULL)
+		return TRUE;
+
+	if (stk->main_menu)
+		stk_menu_free(stk->main_menu);
+
+	stk->main_menu = menu;
+
+	emit_menu_changed(stk);
 
 	return TRUE;
 }
@@ -1132,8 +1148,9 @@ static void request_selection_cb(enum stk_agent_result result, uint8_t id,
 	switch (result) {
 	case STK_AGENT_RESULT_OK:
 	{
-		static struct ofono_error error =
-			{ .type = OFONO_ERROR_TYPE_FAILURE };
+		static struct ofono_error error = {
+			.type = OFONO_ERROR_TYPE_FAILURE
+		};
 		struct stk_response rsp;
 
 		memset(&rsp, 0, sizeof(rsp));
@@ -1168,7 +1185,7 @@ static gboolean handle_command_select_item(const struct stk_command *cmd,
 {
 	stk->select_item_menu = stk_menu_create_from_select_item(cmd);
 
-	if (!stk->select_item_menu) {
+	if (stk->select_item_menu == NULL) {
 		rsp->result.type = STK_RESULT_TYPE_DATA_NOT_UNDERSTOOD;
 
 		return TRUE;
@@ -1180,9 +1197,12 @@ static gboolean handle_command_select_item(const struct stk_command *cmd,
 					request_selection_cb, stk,
 					request_selection_destroy,
 					stk->timeout * 1000) < 0) {
+		unsigned char no_cause_result[] = { 0x00 };
+
 		request_selection_destroy(stk);
 
-		rsp->result.type = STK_RESULT_TYPE_TERMINAL_BUSY;
+		ADD_ERROR_RESULT(rsp->result, STK_RESULT_TYPE_TERMINAL_BUSY,
+					no_cause_result);
 		return TRUE;
 	}
 
@@ -1203,6 +1223,9 @@ static void display_text_cb(enum stk_agent_result result, void *user_data)
 {
 	struct ofono_stk *stk = user_data;
 	gboolean confirm;
+	struct stk_response rsp;
+	static unsigned char screen_busy_result[] = { 0x01 };
+	static struct ofono_error error = { .type = OFONO_ERROR_TYPE_FAILURE };
 
 	stk->respond_on_exit = FALSE;
 
@@ -1250,6 +1273,14 @@ static void display_text_cb(enum stk_agent_result result, void *user_data)
 			STK_RESULT_TYPE_NO_RESPONSE : STK_RESULT_TYPE_SUCCESS);
 		break;
 
+	case STK_AGENT_RESULT_BUSY:
+		memset(&rsp, 0, sizeof(rsp));
+		ADD_ERROR_RESULT(rsp.result, STK_RESULT_TYPE_TERMINAL_BUSY,
+					screen_busy_result);
+		if (stk_respond(stk, &rsp, stk_command_cb))
+			stk_command_cb(&error, stk);
+		break;
+
 	case STK_AGENT_RESULT_TERMINATE:
 	default:
 		send_simple_response(stk, STK_RESULT_TYPE_USER_TERMINATED);
@@ -1268,10 +1299,13 @@ static gboolean handle_command_display_text(const struct stk_command *cmd,
 	char *text = dbus_apply_text_attributes(dt->text, &dt->text_attr);
 	int err;
 
-	if (!text) {
+	if (text == NULL) {
 		rsp->result.type = STK_RESULT_TYPE_DATA_NOT_UNDERSTOOD;
 		return TRUE;
 	}
+
+	if (qualifier & (1 << 7))
+		timeout = stk->timeout * 1000;
 
 	if (dt->duration.interval)
 		timeout = duration_to_msecs(&dt->duration);
@@ -1283,7 +1317,10 @@ static gboolean handle_command_display_text(const struct stk_command *cmd,
 
 	/* We most likely got an out of memory error, tell SIM to retry */
 	if (err < 0) {
-		rsp->result.type = STK_RESULT_TYPE_TERMINAL_BUSY;
+		unsigned char no_cause_result[] = { 0x00 };
+
+		ADD_ERROR_RESULT(rsp->result, STK_RESULT_TYPE_TERMINAL_BUSY,
+					no_cause_result);
 		return TRUE;
 	}
 
@@ -1363,6 +1400,7 @@ static void request_confirmation_cb(enum stk_agent_result result,
 		break;
 
 	case STK_AGENT_RESULT_TERMINATE:
+	default:
 		send_simple_response(stk, STK_RESULT_TYPE_USER_TERMINATED);
 		break;
 	}
@@ -1405,6 +1443,7 @@ static void request_key_cb(enum stk_agent_result result, char *string,
 		break;
 
 	case STK_AGENT_RESULT_TERMINATE:
+	default:
 		send_simple_response(stk, STK_RESULT_TYPE_USER_TERMINATED);
 		break;
 	}
@@ -1427,7 +1466,7 @@ static gboolean handle_command_get_inkey(const struct stk_command *cmd,
 	 */
 	int err;
 
-	if (!text) {
+	if (text == NULL) {
 		rsp->result.type = STK_RESULT_TYPE_DATA_NOT_UNDERSTOOD;
 		return TRUE;
 	}
@@ -1455,11 +1494,14 @@ static gboolean handle_command_get_inkey(const struct stk_command *cmd,
 	g_free(text);
 
 	if (err < 0) {
+		unsigned char no_cause_result[] = { 0x00 };
+
 		/*
 		 * We most likely got an out of memory error, tell SIM
 		 * to retry
 		 */
-		rsp->result.type = STK_RESULT_TYPE_TERMINAL_BUSY;
+		ADD_ERROR_RESULT(rsp->result, STK_RESULT_TYPE_TERMINAL_BUSY,
+					no_cause_result);
 		return TRUE;
 	}
 
@@ -1502,6 +1544,7 @@ static void request_string_cb(enum stk_agent_result result, char *string,
 		break;
 
 	case STK_AGENT_RESULT_TERMINATE:
+	default:
 		send_simple_response(stk, STK_RESULT_TYPE_USER_TERMINATED);
 		break;
 	}
@@ -1520,7 +1563,7 @@ static gboolean handle_command_get_input(const struct stk_command *cmd,
 	gboolean hidden = (qualifier & (1 << 2)) != 0;
 	int err;
 
-	if (!text) {
+	if (text == NULL) {
 		rsp->result.type = STK_RESULT_TYPE_DATA_NOT_UNDERSTOOD;
 		return TRUE;
 	}
@@ -1543,11 +1586,14 @@ static gboolean handle_command_get_input(const struct stk_command *cmd,
 	g_free(text);
 
 	if (err < 0) {
+		unsigned char no_cause_result[] = { 0x00 };
+
 		/*
 		 * We most likely got an out of memory error, tell SIM
 		 * to retry
 		 */
-		rsp->result.type = STK_RESULT_TYPE_TERMINAL_BUSY;
+		ADD_ERROR_RESULT(rsp->result, STK_RESULT_TYPE_TERMINAL_BUSY,
+					no_cause_result);
 		return TRUE;
 	}
 
@@ -1564,12 +1610,12 @@ static void call_setup_connected(struct ofono_call *call, void *data)
 	static struct ofono_error error = { .type = OFONO_ERROR_TYPE_FAILURE };
 	static unsigned char facility_rejected_result[] = { 0x9d };
 
-	if (!call || call->status == CALL_STATUS_DISCONNECTED) {
+	if (call == NULL || call->status == CALL_STATUS_DISCONNECTED) {
 		memset(&rsp, 0, sizeof(rsp));
 
-		rsp.result.type = STK_RESULT_TYPE_NETWORK_UNAVAILABLE;
-		rsp.result.additional_len = sizeof(facility_rejected_result);
-		rsp.result.additional = facility_rejected_result;
+		ADD_ERROR_RESULT(rsp.result,
+					STK_RESULT_TYPE_NETWORK_UNAVAILABLE,
+					facility_rejected_result);
 
 		if (stk_respond(stk, &rsp, stk_command_cb))
 			stk_command_cb(&error, stk);
@@ -1590,7 +1636,7 @@ static void call_setup_cancel(struct ofono_stk *stk)
 
 	vc_atom = __ofono_modem_find_atom(__ofono_atom_get_modem(stk->atom),
 						OFONO_ATOM_TYPE_VOICECALL);
-	if (!vc_atom)
+	if (vc_atom == NULL)
 		return;
 
 	vc = __ofono_atom_get_data(vc_atom);
@@ -1638,7 +1684,7 @@ static void confirm_call_cb(enum stk_agent_result result, gboolean confirm,
 	if (vc_atom)
 		vc = __ofono_atom_get_data(vc_atom);
 
-	if (!vc) {
+	if (vc == NULL) {
 		send_simple_response(stk, STK_RESULT_TYPE_NOT_CAPABLE);
 		return;
 	}
@@ -1646,7 +1692,7 @@ static void confirm_call_cb(enum stk_agent_result result, gboolean confirm,
 	if (sc->alpha_id_call_setup) {
 		alpha_id = dbus_apply_text_attributes(sc->alpha_id_call_setup,
 						&sc->text_attr_call_setup);
-		if (!alpha_id) {
+		if (alpha_id == NULL) {
 			send_simple_response(stk,
 					STK_RESULT_TYPE_DATA_NOT_UNDERSTOOD);
 			return;
@@ -1668,9 +1714,8 @@ static void confirm_call_cb(enum stk_agent_result result, gboolean confirm,
 	if (err == -EBUSY) {
 		memset(&rsp, 0, sizeof(rsp));
 
-		rsp.result.type = STK_RESULT_TYPE_TERMINAL_BUSY;
-		rsp.result.additional_len = sizeof(busy_on_call_result);
-		rsp.result.additional = busy_on_call_result;
+		ADD_ERROR_RESULT(rsp.result, STK_RESULT_TYPE_TERMINAL_BUSY,
+					busy_on_call_result);
 
 		if (stk_respond(stk, &rsp, stk_command_cb))
 			stk_command_cb(&error, stk);
@@ -1686,9 +1731,8 @@ static void confirm_call_cb(enum stk_agent_result result, gboolean confirm,
 
 	memset(&rsp, 0, sizeof(rsp));
 
-	rsp.result.type = STK_RESULT_TYPE_NETWORK_UNAVAILABLE;
-	rsp.result.additional_len = sizeof(no_cause_result);
-	rsp.result.additional = no_cause_result;
+	ADD_ERROR_RESULT(rsp.result, STK_RESULT_TYPE_NETWORK_UNAVAILABLE,
+				no_cause_result);
 
 	if (stk_respond(stk, &rsp, stk_command_cb))
 		stk_command_cb(&error, stk);
@@ -1725,25 +1769,23 @@ static gboolean handle_command_set_up_call(const struct stk_command *cmd,
 	if (vc_atom)
 		vc = __ofono_atom_get_data(vc_atom);
 
-	if (!vc) {
+	if (vc == NULL) {
 		rsp->result.type = STK_RESULT_TYPE_NOT_CAPABLE;
 		return TRUE;
 	}
 
 	if (__ofono_voicecall_is_busy(vc, qualifier >> 1)) {
-		rsp->result.type = STK_RESULT_TYPE_TERMINAL_BUSY;
-		rsp->result.additional_len = sizeof(busy_on_call_result);
-		rsp->result.additional = busy_on_call_result;
+		ADD_ERROR_RESULT(rsp->result, STK_RESULT_TYPE_TERMINAL_BUSY,
+					busy_on_call_result);
 		return TRUE;
 	}
 
-	if (sc->alpha_id_usr_cfm) {
-		alpha_id = dbus_apply_text_attributes(sc->alpha_id_usr_cfm,
-							&sc->text_attr_usr_cfm);
-		if (!alpha_id) {
-			rsp->result.type = STK_RESULT_TYPE_DATA_NOT_UNDERSTOOD;
-			return TRUE;
-		}
+	alpha_id = dbus_apply_text_attributes(sc->alpha_id_usr_cfm ?
+						sc->alpha_id_usr_cfm : "",
+						&sc->text_attr_usr_cfm);
+	if (alpha_id == NULL) {
+		rsp->result.type = STK_RESULT_TYPE_DATA_NOT_UNDERSTOOD;
+		return TRUE;
 	}
 
 	err = stk_agent_confirm_call(stk->current_agent, alpha_id,
@@ -1752,11 +1794,14 @@ static gboolean handle_command_set_up_call(const struct stk_command *cmd,
 	g_free(alpha_id);
 
 	if (err < 0) {
+		unsigned char no_cause_result[] = { 0x00 };
+
 		/*
 		 * We most likely got an out of memory error, tell SIM
 		 * to retry
 		 */
-		rsp->result.type = STK_RESULT_TYPE_TERMINAL_BUSY;
+		ADD_ERROR_RESULT(rsp->result, STK_RESULT_TYPE_TERMINAL_BUSY,
+					no_cause_result);
 		return TRUE;
 	}
 
@@ -1773,7 +1818,7 @@ static void send_ussd_cancel(struct ofono_stk *stk)
 
 	atom = __ofono_modem_find_atom(__ofono_atom_get_modem(stk->atom),
 						OFONO_ATOM_TYPE_USSD);
-	if (!atom)
+	if (atom == NULL)
 		return;
 
 	ussd = __ofono_atom_get_data(atom);
@@ -1829,9 +1874,8 @@ static void send_ussd_callback(int error, int dcs, const unsigned char *msg,
 		break;
 
 	default:
-		rsp.result.type = STK_RESULT_TYPE_USSD_RETURN_ERROR;
-		rsp.result.additional_len = sizeof(no_cause);
-		rsp.result.additional = no_cause;
+		ADD_ERROR_RESULT(rsp.result, STK_RESULT_TYPE_USSD_RETURN_ERROR,
+					no_cause);
 
 		if (stk_respond(stk, &rsp, stk_command_cb))
 			stk_command_cb(&failure, stk);
@@ -1856,9 +1900,9 @@ static gboolean handle_command_send_ussd(const struct stk_command *cmd,
 		struct ofono_call_forwarding *cf = __ofono_atom_get_data(atom);
 
 		if (__ofono_call_forwarding_is_busy(cf)) {
-			rsp->result.type = STK_RESULT_TYPE_TERMINAL_BUSY;
-			rsp->result.additional_len = sizeof(busy_on_ss_result);
-			rsp->result.additional = busy_on_ss_result;
+			ADD_ERROR_RESULT(rsp->result,
+						STK_RESULT_TYPE_TERMINAL_BUSY,
+						busy_on_ss_result);
 			return TRUE;
 		}
 	}
@@ -1868,9 +1912,9 @@ static gboolean handle_command_send_ussd(const struct stk_command *cmd,
 		struct ofono_call_barring *cb = __ofono_atom_get_data(atom);
 
 		if (__ofono_call_barring_is_busy(cb)) {
-			rsp->result.type = STK_RESULT_TYPE_TERMINAL_BUSY;
-			rsp->result.additional_len = sizeof(busy_on_ss_result);
-			rsp->result.additional = busy_on_ss_result;
+			ADD_ERROR_RESULT(rsp->result,
+						STK_RESULT_TYPE_TERMINAL_BUSY,
+						busy_on_ss_result);
 			return TRUE;
 		}
 	}
@@ -1880,24 +1924,23 @@ static gboolean handle_command_send_ussd(const struct stk_command *cmd,
 		struct ofono_call_settings *cs = __ofono_atom_get_data(atom);
 
 		if (__ofono_call_settings_is_busy(cs)) {
-			rsp->result.type = STK_RESULT_TYPE_TERMINAL_BUSY;
-			rsp->result.additional_len = sizeof(busy_on_ss_result);
-			rsp->result.additional = busy_on_ss_result;
+			ADD_ERROR_RESULT(rsp->result,
+						STK_RESULT_TYPE_TERMINAL_BUSY,
+						busy_on_ss_result);
 			return TRUE;
 		}
 	}
 
 	atom = __ofono_modem_find_atom(modem, OFONO_ATOM_TYPE_USSD);
-	if (!atom || !__ofono_atom_get_registered(atom)) {
+	if (atom == NULL || !__ofono_atom_get_registered(atom)) {
 		rsp->result.type = STK_RESULT_TYPE_NOT_CAPABLE;
 		return TRUE;
 	}
 
 	ussd = __ofono_atom_get_data(atom);
 	if (__ofono_ussd_is_busy(ussd)) {
-		rsp->result.type = STK_RESULT_TYPE_TERMINAL_BUSY;
-		rsp->result.additional_len = sizeof(busy_on_ussd_result);
-		rsp->result.additional = busy_on_ussd_result;
+		ADD_ERROR_RESULT(rsp->result, STK_RESULT_TYPE_TERMINAL_BUSY,
+					busy_on_ussd_result);
 		return TRUE;
 	}
 
@@ -1918,9 +1961,8 @@ static gboolean handle_command_send_ussd(const struct stk_command *cmd,
 	}
 
 	if (err == -EBUSY) {
-		rsp->result.type = STK_RESULT_TYPE_TERMINAL_BUSY;
-		rsp->result.additional_len = sizeof(busy_on_ussd_result);
-		rsp->result.additional = busy_on_ussd_result;
+		ADD_ERROR_RESULT(rsp->result, STK_RESULT_TYPE_TERMINAL_BUSY,
+					busy_on_ussd_result);
 		return TRUE;
 	}
 
@@ -1992,6 +2034,77 @@ static gboolean handle_command_refresh(const struct stk_command *cmd,
 	return TRUE;
 }
 
+static void get_time(struct stk_response *rsp)
+{
+	time_t now;
+	struct tm *t;
+
+	time(&now);
+	t = localtime(&now);
+
+	rsp->result.type = STK_RESULT_TYPE_SUCCESS;
+
+	if (t->tm_year > 100)
+		rsp->provide_local_info.datetime.year = t->tm_year - 100;
+	else
+		rsp->provide_local_info.datetime.year = t->tm_year;
+
+	rsp->provide_local_info.datetime.month = t->tm_mon + 1;
+	rsp->provide_local_info.datetime.day = t->tm_mday;
+	rsp->provide_local_info.datetime.hour = t->tm_hour;
+	rsp->provide_local_info.datetime.minute = t->tm_min;
+	rsp->provide_local_info.datetime.second = t->tm_sec;
+	rsp->provide_local_info.datetime.timezone = t->tm_gmtoff / 900;
+	rsp->provide_local_info.datetime.has_timezone = TRUE;
+
+	return;
+}
+
+static void get_lang(struct stk_response *rsp, struct ofono_stk *stk)
+{
+	char *l;
+	char lang[3];
+	struct ofono_error failure = { .type = OFONO_ERROR_TYPE_FAILURE };
+
+	l = getenv("LANG");
+	if (l == NULL) {
+		rsp->result.type = STK_RESULT_TYPE_NOT_CAPABLE;
+		goto out;
+	}
+
+	memcpy(lang, l, 2);
+	lang[2] = '\0';
+
+	rsp->result.type = STK_RESULT_TYPE_SUCCESS;
+	rsp->provide_local_info.language = lang;
+
+out:
+	if (stk_respond(stk, rsp, stk_command_cb))
+		stk_command_cb(&failure, stk);
+}
+
+static gboolean handle_command_provide_local_info(const struct stk_command *cmd,
+				struct stk_response *rsp, struct ofono_stk *stk)
+{
+	switch (cmd->qualifier) {
+	case 3:
+		DBG("Date, time and time zone");
+		get_time(rsp);
+		return TRUE;
+
+	case 4:
+		DBG("Language setting");
+		get_lang(rsp, stk);
+		return FALSE;
+
+	default:
+		ofono_info("Unsupported Provide Local Info qualifier: %d",
+				cmd->qualifier);
+		rsp->result.type = STK_RESULT_TYPE_NOT_CAPABLE;
+		return TRUE;
+	}
+}
+
 static void send_dtmf_cancel(struct ofono_stk *stk)
 {
 	struct ofono_voicecall *vc = NULL;
@@ -2021,14 +2134,14 @@ static void dtmf_sent_cb(int error, void *user_data)
 	if (error == ENOENT) {
 		struct stk_response rsp;
 		static unsigned char not_in_speech_call_result[] = { 0x07 };
-		static struct ofono_error failure =
-			{ .type = OFONO_ERROR_TYPE_FAILURE };
+		static struct ofono_error failure = {
+			.type = OFONO_ERROR_TYPE_FAILURE
+		};
 
 		memset(&rsp, 0, sizeof(rsp));
 
-		rsp.result.type = STK_RESULT_TYPE_TERMINAL_BUSY;
-		rsp.result.additional_len = sizeof(not_in_speech_call_result);
-		rsp.result.additional = not_in_speech_call_result;
+		ADD_ERROR_RESULT(rsp.result, STK_RESULT_TYPE_TERMINAL_BUSY,
+					not_in_speech_call_result);
 
 		if (stk_respond(stk, &rsp, stk_command_cb))
 			stk_command_cb(&failure, stk);
@@ -2059,7 +2172,7 @@ static gboolean handle_command_send_dtmf(const struct stk_command *cmd,
 	if (vc_atom)
 		vc = __ofono_atom_get_data(vc_atom);
 
-	if (!vc) {
+	if (vc == NULL) {
 		rsp->result.type = STK_RESULT_TYPE_NOT_CAPABLE;
 		return TRUE;
 	}
@@ -2067,7 +2180,7 @@ static gboolean handle_command_send_dtmf(const struct stk_command *cmd,
 	/* Convert the DTMF string to phone number format */
 	for (pos = 0; cmd->send_dtmf.dtmf[pos] != '\0'; pos++) {
 		digit = strchr(dtmf_from, cmd->send_dtmf.dtmf[pos]);
-		if (!digit) {
+		if (digit == NULL) {
 			rsp->result.type = STK_RESULT_TYPE_DATA_NOT_UNDERSTOOD;
 			return TRUE;
 		}
@@ -2079,20 +2192,14 @@ static gboolean handle_command_send_dtmf(const struct stk_command *cmd,
 
 	err = __ofono_voicecall_tone_send(vc, dtmf, dtmf_sent_cb, stk);
 
-	if (err == -EBUSY) {
-		rsp->result.type = STK_RESULT_TYPE_TERMINAL_BUSY;
-		return TRUE;
-	}
-
 	if (err == -ENOSYS) {
 		rsp->result.type = STK_RESULT_TYPE_NOT_CAPABLE;
 		return TRUE;
 	}
 
 	if (err == -ENOENT) {
-		rsp->result.type = STK_RESULT_TYPE_TERMINAL_BUSY;
-		rsp->result.additional_len = sizeof(not_in_speech_call_result);
-		rsp->result.additional = not_in_speech_call_result;
+		ADD_ERROR_RESULT(rsp->result, STK_RESULT_TYPE_TERMINAL_BUSY,
+					not_in_speech_call_result);
 		return TRUE;
 	}
 
@@ -2102,11 +2209,14 @@ static gboolean handle_command_send_dtmf(const struct stk_command *cmd,
 	}
 
 	if (err < 0) {
+		unsigned char no_cause_result[] = { 0x00 };
+
 		/*
 		 * We most likely got an out of memory error, tell SIM
 		 * to retry
 		 */
-		rsp->result.type = STK_RESULT_TYPE_TERMINAL_BUSY;
+		ADD_ERROR_RESULT(rsp->result, STK_RESULT_TYPE_TERMINAL_BUSY,
+					no_cause_result);
 		return TRUE;
 	}
 
@@ -2202,7 +2312,7 @@ static gboolean handle_command_play_tone(const struct stk_command *cmd,
 	int err;
 
 	if (pt->tone > sizeof(tone_infos) / sizeof(*tone_infos) ||
-			!tone_infos[pt->tone].name) {
+			tone_infos[pt->tone].name == NULL) {
 		rsp->result.type = STK_RESULT_TYPE_DATA_NOT_UNDERSTOOD;
 
 		return TRUE;
@@ -2210,7 +2320,7 @@ static gboolean handle_command_play_tone(const struct stk_command *cmd,
 
 	text = dbus_apply_text_attributes(pt->alpha_id ? pt->alpha_id : "",
 						&pt->text_attr);
-	if (!text) {
+	if (text == NULL) {
 		rsp->result.type = STK_RESULT_TYPE_DATA_NOT_UNDERSTOOD;
 
 		return TRUE;
@@ -2238,11 +2348,88 @@ static gboolean handle_command_play_tone(const struct stk_command *cmd,
 	g_free(text);
 
 	if (err < 0) {
+		unsigned char no_cause_result[] = { 0x00 };
+
 		/*
 		 * We most likely got an out of memory error, tell SIM
 		 * to retry
 		 */
-		rsp->result.type = STK_RESULT_TYPE_TERMINAL_BUSY;
+		ADD_ERROR_RESULT(rsp->result, STK_RESULT_TYPE_TERMINAL_BUSY,
+					no_cause_result);
+		return TRUE;
+	}
+
+	stk->respond_on_exit = TRUE;
+	stk->cancel_cmd = stk_request_cancel;
+
+	return FALSE;
+}
+
+static void confirm_launch_browser_cb(enum stk_agent_result result,
+					gboolean confirm,
+					void *user_data)
+{
+	struct ofono_stk *stk = user_data;
+	unsigned char no_cause[] = { 0x00 };
+	struct ofono_error failure = { .type = OFONO_ERROR_TYPE_FAILURE };
+	struct stk_response rsp;
+
+	stk->respond_on_exit = FALSE;
+
+	switch (result) {
+	case STK_AGENT_RESULT_TIMEOUT:
+		confirm = FALSE;
+		/* Fall through */
+
+	case STK_AGENT_RESULT_OK:
+		if (confirm)
+			break;
+		/* Fall through */
+
+	default:
+		memset(&rsp, 0, sizeof(rsp));
+		ADD_ERROR_RESULT(rsp.result, STK_RESULT_TYPE_TERMINAL_BUSY,
+					no_cause);
+
+		if (stk_respond(stk, &rsp, stk_command_cb))
+			stk_command_cb(&failure, stk);
+
+		return;
+	}
+
+	send_simple_response(stk, STK_RESULT_TYPE_SUCCESS);
+}
+
+static gboolean handle_command_launch_browser(const struct stk_command *cmd,
+						struct stk_response *rsp,
+						struct ofono_stk *stk)
+{
+	const struct stk_command_launch_browser *lb = &cmd->launch_browser;
+	char *alpha_id;
+	int err;
+
+	alpha_id = dbus_apply_text_attributes(lb->alpha_id ? lb->alpha_id : "",
+							&lb->text_attr);
+	if (alpha_id == NULL) {
+		rsp->result.type = STK_RESULT_TYPE_DATA_NOT_UNDERSTOOD;
+		return TRUE;
+	}
+
+	err = stk_agent_confirm_launch_browser(stk->current_agent, alpha_id,
+						lb->icon_id.id, lb->url,
+						confirm_launch_browser_cb,
+						stk, NULL, stk->timeout * 1000);
+	g_free(alpha_id);
+
+	if (err < 0) {
+		unsigned char no_cause_result[] = { 0x00 };
+
+		/*
+		 * We most likely got an out of memory error, tell SIM
+		 * to retry
+		 */
+		ADD_ERROR_RESULT(rsp->result, STK_RESULT_TYPE_TERMINAL_BUSY,
+					no_cause_result);
 		return TRUE;
 	}
 
@@ -2296,7 +2483,7 @@ void ofono_stk_proactive_command_notify(struct ofono_stk *stk,
 	stk_proactive_command_cancel(stk);
 
 	stk->pending_cmd = stk_command_new_from_pdu(pdu, length);
-	if (!stk->pending_cmd) {
+	if (stk->pending_cmd == NULL) {
 		ofono_error("Can't parse proactive command");
 
 		/*
@@ -2424,6 +2611,11 @@ void ofono_stk_proactive_command_notify(struct ofono_stk *stk,
 							&rsp, stk);
 		break;
 
+	case STK_COMMAND_TYPE_PROVIDE_LOCAL_INFO:
+		respond = handle_command_provide_local_info(stk->pending_cmd,
+								&rsp, stk);
+		break;
+
 	case STK_COMMAND_TYPE_SEND_DTMF:
 		respond = handle_command_send_dtmf(stk->pending_cmd,
 							&rsp, stk);
@@ -2431,6 +2623,11 @@ void ofono_stk_proactive_command_notify(struct ofono_stk *stk,
 
 	case STK_COMMAND_TYPE_PLAY_TONE:
 		respond = handle_command_play_tone(stk->pending_cmd,
+							&rsp, stk);
+		break;
+
+	case STK_COMMAND_TYPE_LAUNCH_BROWSER:
+		respond = handle_command_launch_browser(stk->pending_cmd,
 							&rsp, stk);
 		break;
 
@@ -2469,7 +2666,7 @@ void ofono_stk_proactive_command_handled_notify(struct ofono_stk *stk,
 
 	cmd = stk_command_new_from_pdu(pdu, length);
 
-	if (!cmd || cmd->status != STK_PARSE_RESULT_OK) {
+	if (cmd == NULL || cmd->status != STK_PARSE_RESULT_OK) {
 		ofono_error("Can't parse proactive command");
 
 		if (cmd)
@@ -2560,10 +2757,8 @@ static void stk_unregister(struct ofono_atom *atom)
 		stk->cancel_cmd = NULL;
 	}
 
-	if (stk->idle_mode_text) {
-		g_free(stk->idle_mode_text);
-		stk->idle_mode_text = NULL;
-	}
+	g_free(stk->idle_mode_text);
+	stk->idle_mode_text = NULL;
 
 	if (stk->timers_source) {
 		g_source_remove(stk->timers_source);
@@ -2651,7 +2846,7 @@ void ofono_stk_register(struct ofono_stk *stk)
 
 	__ofono_atom_register(stk->atom, stk_unregister);
 
-	stk->timeout = 600; /* 10 minutes */
+	stk->timeout = 180; /* 3 minutes */
 	stk->short_timeout = 20; /* 20 seconds */
 	stk->envelope_q = g_queue_new();
 }

@@ -26,6 +26,7 @@ enum stk_agent_result {
 	STK_AGENT_RESULT_BACK,
 	STK_AGENT_RESULT_TERMINATE,
 	STK_AGENT_RESULT_TIMEOUT,
+	STK_AGENT_RESULT_BUSY,
 };
 
 struct stk_menu_item {
@@ -136,3 +137,13 @@ int stk_agent_loop_tone(struct stk_agent *agent, const char *text,
 
 void append_menu_items_variant(DBusMessageIter *iter,
 				const struct stk_menu_item *items);
+
+int stk_agent_display_action_info(struct stk_agent *agent, const char *text,
+					const struct stk_icon_id *icon);
+
+int stk_agent_confirm_launch_browser(struct stk_agent *agent, const char *text,
+					unsigned char icon_id, const char *url,
+					stk_agent_confirmation_cb cb,
+					void *user_data,
+					ofono_destroy_func destroy,
+					int timeout);

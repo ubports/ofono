@@ -45,11 +45,14 @@ static inline void bcd_to_mccmnc(const uint8_t *restrict bcd,
 	mnc[3] = '\0';
 }
 
-void g_isi_sb_iter_init_full(GIsiSubBlockIter *iter, const void *restrict data,
-				size_t len, size_t used, gboolean longhdr,
+void g_isi_sb_iter_init_full(GIsiSubBlockIter *iter, const GIsiMessage *msg,
+				size_t used, gboolean longhdr,
 				uint16_t sub_blocks)
 {
-	if (!data)
+	const uint8_t *data = g_isi_msg_data(msg);
+	size_t len = g_isi_msg_data_len(msg);
+
+	if (data == NULL)
 		len = used = 0;
 
 	iter->start = (uint8_t *)data + used;
@@ -58,10 +61,13 @@ void g_isi_sb_iter_init_full(GIsiSubBlockIter *iter, const void *restrict data,
 	iter->sub_blocks = len > used ? sub_blocks : 0;
 }
 
-void g_isi_sb_iter_init(GIsiSubBlockIter *iter, const void *restrict data,
-			size_t len, size_t used)
+void g_isi_sb_iter_init(GIsiSubBlockIter *iter, const GIsiMessage *msg,
+			size_t used)
 {
-	if (!data)
+	const uint8_t *data = g_isi_msg_data(msg);
+	size_t len = g_isi_msg_data_len(msg);
+
+	if (data == NULL)
 		len = used = 0;
 
 	iter->start = (uint8_t *)data + used;
@@ -70,9 +76,40 @@ void g_isi_sb_iter_init(GIsiSubBlockIter *iter, const void *restrict data,
 	iter->sub_blocks = len > used ? iter->start[-1] : 0;
 }
 
+void g_isi_sb_subiter_init(GIsiSubBlockIter *outer, GIsiSubBlockIter *inner,
+				size_t used)
+{
+	size_t len = g_isi_sb_iter_get_len(outer);
+
+	if (outer->start + len > outer->end ||
+			outer->start + used > outer->end)
+		len = used = 0;
+
+	inner->start = outer->start + used;
+	inner->end = inner->start + len;
+	inner->longhdr = FALSE;
+	inner->sub_blocks = len > used ? inner->start[-1] : 0;
+}
+
+void g_isi_sb_subiter_init_full(GIsiSubBlockIter *outer,
+				GIsiSubBlockIter *inner, size_t used,
+				gboolean longhdr, uint16_t sub_blocks)
+{
+	size_t len = g_isi_sb_iter_get_len(outer);
+
+	if (outer->start + len > outer->end ||
+			outer->start + used > outer->end)
+		len = used = 0;
+
+	inner->start = outer->start + used;
+	inner->end = inner->start + len;
+	inner->longhdr = longhdr;
+	inner->sub_blocks = len > used ? sub_blocks : 0;
+}
+
 gboolean g_isi_sb_iter_is_valid(const GIsiSubBlockIter *iter)
 {
-	if (!iter)
+	if (iter == NULL)
 		return FALSE;
 
 	if (iter->sub_blocks == 0)
@@ -90,14 +127,16 @@ gboolean g_isi_sb_iter_is_valid(const GIsiSubBlockIter *iter)
 int g_isi_sb_iter_get_id(const GIsiSubBlockIter *iter)
 {
 	if (iter->longhdr)
-		return (iter->start[0] << 8) | (iter->start[1]);
+		return (iter->start[0] << 8) | iter->start[1];
+
 	return iter->start[0];
 }
 
 size_t g_isi_sb_iter_get_len(const GIsiSubBlockIter *iter)
 {
 	if (iter->longhdr)
-		return (iter->start[2] << 8) | (iter->start[3]);
+		return (iter->start[2] << 8) | iter->start[3];
+
 	return iter->start[1];
 }
 
@@ -105,8 +144,9 @@ gboolean g_isi_sb_iter_get_data(const GIsiSubBlockIter *restrict iter,
 				void **data, unsigned pos)
 {
 	if ((size_t)pos > g_isi_sb_iter_get_len(iter)
-		|| iter->start + pos > iter->end)
+			|| iter->start + pos > iter->end)
 		return FALSE;
+
 	*data = (void *)iter->start + pos;
 	return TRUE;
 }
@@ -115,8 +155,9 @@ gboolean g_isi_sb_iter_get_byte(const GIsiSubBlockIter *restrict iter,
 				uint8_t *byte, unsigned pos)
 {
 	if ((size_t)pos > g_isi_sb_iter_get_len(iter)
-		|| iter->start + pos > iter->end)
+			|| iter->start + pos > iter->end)
 		return FALSE;
+
 	*byte = iter->start[pos];
 	return TRUE;
 }
@@ -165,10 +206,11 @@ gboolean g_isi_sb_iter_get_alpha_tag(const GIsiSubBlockIter *restrict iter,
 	if (pos > g_isi_sb_iter_get_len(iter))
 		return FALSE;
 
-	if (!utf8 || len == 0 || pos + len > g_isi_sb_iter_get_len(iter))
+	if (utf8 == NULL || len == 0 || pos + len > g_isi_sb_iter_get_len(iter))
 		return FALSE;
 
 	ucs2 = iter->start + pos;
+
 	if (ucs2 + len > iter->end)
 		return FALSE;
 
@@ -185,10 +227,14 @@ gboolean g_isi_sb_iter_get_latin_tag(const GIsiSubBlockIter *restrict iter,
 	if (pos > g_isi_sb_iter_get_len(iter))
 		return FALSE;
 
-	if (!latin || len == 0 || pos + len > g_isi_sb_iter_get_len(iter))
+	if (latin == NULL || len == 0)
+		return FALSE;
+
+	if (pos + len > g_isi_sb_iter_get_len(iter))
 		return FALSE;
 
 	str = iter->start + pos;
+
 	if (str + len > iter->end)
 		return FALSE;
 
@@ -214,4 +260,13 @@ gboolean g_isi_sb_iter_next(GIsiSubBlockIter *iter)
 	iter->sub_blocks--;
 
 	return TRUE;
+}
+
+gboolean g_isi_sb_iter_get_struct(const GIsiSubBlockIter *restrict iter,
+					void **type, size_t len, unsigned pos)
+{
+	if (iter->start + pos + len > iter->end)
+		return FALSE;
+
+	return g_isi_sb_iter_get_data(iter, type, pos);
 }

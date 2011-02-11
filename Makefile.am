@@ -1,9 +1,7 @@
 
 AM_MAKEFLAGS = --no-print-directory
 
-includedir = @includedir@/ofono
-
-include_HEADERS = include/log.h include/plugin.h include/history.h \
+pkginclude_HEADERS = include/log.h include/plugin.h include/history.h \
 			include/dbus.h include/modem.h include/types.h \
 			include/call-barring.h include/call-forwarding.h \
 			include/call-meter.h include/call-settings.h \
@@ -13,18 +11,25 @@ include_HEADERS = include/log.h include/plugin.h include/history.h \
 			include/cbs.h include/call-volume.h \
 			include/gprs.h include/gprs-context.h \
 			include/radio-settings.h include/stk.h \
-			include/audio-settings.h include/nettime.h
+			include/audio-settings.h include/nettime.h \
+			include/ctm.h include/cdma-voicecall.h \
+			include/cdma-sms.h include/sim-auth.h \
+			include/gprs-provision.h
 
-nodist_include_HEADERS = include/version.h
+nodist_pkginclude_HEADERS = include/version.h
 
-local_headers = $(foreach file,$(include_HEADERS) $(nodist_include_HEADERS), \
+local_headers = $(foreach file,$(pkginclude_HEADERS) \
+				$(nodist_pkginclude_HEADERS), \
 					include/ofono/$(notdir $(file)))
+
+pkgconfigdir = $(libdir)/pkgconfig
+pkgconfig_DATA = ofono.pc
 
 
 if DATAFILES
 dbusconfdir = @DBUS_CONFDIR@
 
-dbusconf_DATA = src/ofono.conf
+dist_dbusconf_DATA = src/ofono.conf
 
 if SYSTEMD
 systemdunitdir = @SYSTEMD_UNITDIR@
@@ -34,7 +39,7 @@ endif
 
 confdir = $(sysconfdir)/ofono
 
-conf_DATA =
+dist_conf_DATA =
 
 statedir = $(localstatedir)/lib/ofono
 
@@ -48,16 +53,6 @@ builtin_cflags =
 
 gdbus_sources = gdbus/gdbus.h gdbus/mainloop.c gdbus/watch.c \
 					gdbus/object.c gdbus/polkit.c
-
-gisi_sources = gisi/modem.h gisi/modem.c \
-			gisi/netlink.h gisi/netlink.c \
-			gisi/socket.h gisi/socket.c \
-			gisi/client.h gisi/client.c \
-			gisi/server.h gisi/server.c \
-			gisi/pep.h gisi/pep.c \
-			gisi/pipe.h gisi/pipe.c \
-			gisi/iter.h gisi/iter.c \
-			gisi/verify.c gisi/phonet.h
 
 gatchat_sources = gatchat/gatchat.h gatchat/gatchat.c \
 				gatchat/gatresult.h gatchat/gatresult.c \
@@ -78,6 +73,19 @@ gatchat_sources = gatchat/gatchat.h gatchat/gatchat.c \
 				gatchat/ppp_cp.c gatchat/ppp_lcp.c \
 				gatchat/ppp_auth.c gatchat/ppp_net.c \
 				gatchat/ppp_ipcp.c
+
+gisi_sources = gisi/client.c gisi/client.h gisi/common.h \
+				gisi/iter.c gisi/iter.h \
+				gisi/message.c gisi/message.h \
+				gisi/modem.c gisi/modem.h \
+				gisi/netlink.c gisi/netlink.h \
+				gisi/pep.c gisi/pep.h \
+				gisi/phonet.h \
+				gisi/pipe.c gisi/pipe.h \
+				gisi/server.c gisi/server.h \
+				gisi/socket.c gisi/socket.h
+
+btio_sources = btio/btio.h btio/btio.c
 
 udev_files = plugins/ofono.rules
 
@@ -131,8 +139,8 @@ builtin_sources += $(gisi_sources) \
 				drivers/isimodem/gpds.h \
 				drivers/isimodem/audio-settings.c
 
-builtin_modules += isigen
-builtin_sources += plugins/isigen.c
+builtin_modules += isiusb
+builtin_sources += plugins/isiusb.c
 
 builtin_modules += n900
 builtin_sources += plugins/n900.c plugins/nokia-gpio.h plugins/nokia-gpio.c
@@ -165,7 +173,8 @@ builtin_sources += $(gatchat_sources) \
 				drivers/atmodem/atutil.h \
 				drivers/atmodem/atutil.c \
 				drivers/atmodem/gprs.c \
-				drivers/atmodem/gprs-context.c
+				drivers/atmodem/gprs-context.c \
+				drivers/atmodem/sim-auth.c
 
 builtin_modules += nwmodem
 builtin_sources += drivers/atmodem/atutil.h \
@@ -179,7 +188,8 @@ builtin_sources += drivers/atmodem/atutil.h \
 			drivers/huaweimodem/huaweimodem.c \
 			drivers/huaweimodem/voicecall.c \
 			drivers/huaweimodem/audio-settings.c \
-			drivers/huaweimodem/gprs-context.c
+			drivers/huaweimodem/gprs-context.c \
+			drivers/huaweimodem/radio-settings.c
 
 builtin_modules += calypsomodem
 builtin_sources += drivers/atmodem/atutil.h \
@@ -218,7 +228,8 @@ builtin_sources += drivers/atmodem/atutil.h \
 			drivers/ifxmodem/audio-settings.c \
 			drivers/ifxmodem/radio-settings.c \
 			drivers/ifxmodem/gprs-context.c \
-			drivers/ifxmodem/stk.c
+			drivers/ifxmodem/stk.c \
+			drivers/ifxmodem/ctm.c
 
 builtin_modules += stemodem
 builtin_sources += drivers/atmodem/atutil.h \
@@ -237,12 +248,23 @@ builtin_modules += phonesim
 builtin_sources += plugins/phonesim.c
 
 if DATAFILES
-conf_DATA += plugins/phonesim.conf
+dist_conf_DATA += plugins/phonesim.conf
 endif
+endif
+
+if CDMAMODEM
+builtin_modules += cdmamodem
+builtin_sources += drivers/cdmamodem/cdmamodem.h \
+			drivers/cdmamodem/cdmamodem.c \
+			drivers/cdmamodem/voicecall.c \
+			drivers/cdmamodem/devinfo.c
 endif
 
 builtin_modules += g1
 builtin_sources += plugins/g1.c
+
+builtin_modules += gobi
+builtin_sources += plugins/gobi.c
 
 builtin_modules += wavecom
 builtin_sources += plugins/wavecom.c
@@ -262,17 +284,11 @@ builtin_sources += plugins/zte.c
 builtin_modules += huawei
 builtin_sources += plugins/huawei.c
 
+builtin_modules += sierra
+builtin_sources += plugins/sierra.c
+
 builtin_modules += novatel
 builtin_sources += plugins/novatel.c
-
-builtin_modules += nokia
-builtin_sources += plugins/nokia.c
-
-builtin_modules += bluetooth
-builtin_sources += plugins/bluetooth.c plugins/bluetooth.h
-
-builtin_modules += hfp
-builtin_sources += plugins/hfp.c plugins/bluetooth.h
 
 builtin_modules += palmpre
 builtin_sources += plugins/palmpre.c
@@ -283,8 +299,31 @@ builtin_sources += plugins/ifx.c
 builtin_modules += ste
 builtin_sources += plugins/ste.c
 
+builtin_modules += stemgr
+builtin_sources += plugins/stemgr.c
+
 builtin_modules += caif
 builtin_sources += plugins/caif.c
+
+builtin_modules += tc65
+builtin_sources += plugins/tc65.c
+
+builtin_modules += nokia
+builtin_sources += plugins/nokia.c
+
+builtin_modules += nokiacdma
+builtin_sources += plugins/nokiacdma.c
+
+if BLUETOOTH
+builtin_modules += bluetooth
+builtin_sources += plugins/bluetooth.c plugins/bluetooth.h
+
+builtin_modules += hfp
+builtin_sources += plugins/hfp.c plugins/bluetooth.h
+
+builtin_cflags += @BLUEZ_CFLAGS@
+builtin_libadd += @BLUEZ_LIBS@
+endif
 endif
 
 if MAINTAINER_MODE
@@ -293,6 +332,9 @@ builtin_sources += examples/history.c
 
 builtin_modules += example_nettime
 builtin_sources += examples/nettime.c
+
+builtin_modules += example_provision
+builtin_sources += examples/provision.c
 endif
 
 builtin_modules += smart_messaging
@@ -318,16 +360,20 @@ src_ofonod_SOURCES = $(gdbus_sources) $(builtin_sources) src/ofono.ver \
 			src/radio-settings.c src/stkutil.h src/stkutil.c \
 			src/nettime.c src/stkagent.c src/stkagent.h \
 			src/simfs.c src/simfs.h src/audio-settings.c \
-			src/smsagent.c src/smsagent.h
+			src/smsagent.c src/smsagent.h src/ctm.c \
+			src/cdma-voicecall.c src/sim-auth.c \
+			src/message.h src/message.c src/gprs-provision.c
 
 src_ofonod_LDADD = $(builtin_libadd) @GLIB_LIBS@ @DBUS_LIBS@ @CAPNG_LIBS@ -ldl
 
 src_ofonod_LDFLAGS = -Wl,--export-dynamic \
 				-Wl,--version-script=$(srcdir)/src/ofono.ver
 
-CLEANFILES = src/builtin.h $(local_headers) $(rules_DATA)
+BUILT_SOURCES = $(local_headers)
 
-plugindir = $(libdir)/ofono/plugins
+CLEANFILES = src/builtin.h $(BUILT_SOURCES) $(rules_DATA)
+
+plugindir = $(pkglibdir)/plugins
 
 if MAINTAINER_MODE
 build_plugindir = $(abs_top_srcdir)/plugins/.libs
@@ -335,14 +381,16 @@ else
 build_plugindir = $(plugindir)
 endif
 
-AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @CAPNG_CFLAGS@ $(builtin_cflags) \
+AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @CAPNG_CFLAGS@ @USB_CFLAGS@ \
+					$(builtin_cflags) \
 					-DOFONO_PLUGIN_BUILTIN \
 					-DPLUGINDIR=\""$(build_plugindir)"\"
 
 INCLUDES = -I$(builddir)/include -I$(builddir)/src -I$(srcdir)/src \
-			-I$(srcdir)/gdbus -I$(srcdir)/gisi -I$(srcdir)/gatchat
+			-I$(srcdir)/gdbus -I$(srcdir)/gisi -I$(srcdir)/gatchat \
+			-I$(srcdir)/btio
 
-doc_files = doc/overview.txt doc/ofono-paper.txt \
+doc_files = doc/overview.txt doc/ofono-paper.txt doc/release-faq.txt \
 		doc/manager-api.txt doc/modem-api.txt doc/network-api.txt \
 			doc/voicecallmanager-api.txt doc/voicecall-api.txt \
 			doc/call-forwarding-api.txt doc/call-settings-api.txt \
@@ -352,10 +400,11 @@ doc_files = doc/overview.txt doc/ofono-paper.txt \
 			doc/pushnotification-api.txt \
 			doc/smartmessaging-api.txt \
 			doc/call-volume-api.txt doc/cell-broadcast-api.txt \
-			doc/message-api.txt doc/message-waiting-api.txt \
+			doc/messagemanager-api.txt doc/message-waiting-api.txt \
 			doc/phonebook-api.txt doc/radio-settings-api.txt \
 			doc/sim-api.txt doc/stk-api.txt \
-			doc/audio-settings-api.txt
+			doc/audio-settings-api.txt doc/text-telephony-api.txt \
+			doc/calypso-modem.txt doc/message-api.txt
 
 
 test_scripts = test/backtrace \
@@ -419,17 +468,25 @@ test_scripts = test/backtrace \
 		test/set-fast-dormancy \
 		test/test-push-notification \
 		test/test-smart-messaging \
-		test/send-vcard
+		test/send-vcard \
+		test/set-tty \
+		test/set-gsm-band \
+		test/set-umts-band \
+		test/lockdown-modem \
+		test/set-call-forwarding \
+		test/cdma-list-call \
+		test/cdma-dial-number \
+		test/cdma-hangup \
+		test/disable-call-forwarding \
+		test/list-messages \
+		test/test-sms
 
 if TEST
 testdir = $(pkglibdir)/test
 test_SCRIPTS = $(test_scripts)
 endif
 
-conf_files = src/ofono.conf plugins/phonesim.conf
-
-EXTRA_DIST = src/genbuiltin $(conf_files) $(udev_files) \
-					$(doc_files) $(test_scripts)
+EXTRA_DIST = src/genbuiltin $(udev_files) $(doc_files) $(test_scripts)
 
 dist_man_MANS = doc/ofonod.8
 
@@ -474,14 +531,19 @@ unit_objects += $(unit_test_mux_OBJECTS)
 
 unit_test_caif_SOURCES = unit/test-caif.c $(gatchat_sources) \
 					drivers/stemodem/caif_socket.h \
-					drivers/stemodem/if_caif.h 
+					drivers/stemodem/if_caif.h
 unit_test_caif_LDADD = @GLIB_LIBS@
 unit_objects += $(unit_test_caif_OBJECTS)
 
-noinst_PROGRAMS += tools/huawei-audio
+if TOOLS
+noinst_PROGRAMS += tools/huawei-audio tools/auto-enable
 
 tools_huawei_audio_SOURCES = $(gdbus_sources) tools/huawei-audio.c
 tools_huawei_audio_LDADD = @GLIB_LIBS@ @DBUS_LIBS@
+
+tools_auto_enable_SOURCES = $(gdbus_sources) tools/auto-enable.c
+tools_auto_enable_LDADD = @GLIB_LIBS@ @DBUS_LIBS@
+endif
 
 noinst_PROGRAMS += gatchat/gsmdial gatchat/test-server gatchat/test-qcdm
 
@@ -509,8 +571,6 @@ src/builtin.h: src/genbuiltin $(builtin_sources)
 
 plugins/%.rules:
 	$(AM_V_GEN)cp $(srcdir)/$(subst 97-,,$@) $@
-
-$(src_ofonod_OBJECTS) $(unit_objects): $(local_headers)
 
 include/ofono/version.h: include/version.h
 	$(AM_V_at)$(MKDIR_P) include/ofono

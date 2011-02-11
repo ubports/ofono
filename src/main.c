@@ -42,7 +42,7 @@
 
 static GMainLoop *event_loop;
 
-void __ofono_exit()
+void __ofono_exit(void)
 {
 	g_main_loop_quit(event_loop);
 }
@@ -214,7 +214,7 @@ int main(int argc, char **argv)
 	dbus_error_init(&error);
 
 	conn = g_dbus_setup_bus(DBUS_BUS_SYSTEM, OFONO_SERVICE, &error);
-	if (!conn) {
+	if (conn == NULL) {
 		if (dbus_error_is_set(&error) == TRUE) {
 			ofono_error("Unable to hop onto D-Bus: %s",
 					error.message);

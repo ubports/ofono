@@ -33,7 +33,7 @@
 #include <ofono/log.h>
 #include <ofono/modem.h>
 #include <ofono/voicecall.h>
-#include <common.h>
+#include "common.h"
 #include "gatchat.h"
 #include "gatresult.h"
 
@@ -80,7 +80,7 @@ static GSList *find_dialing(GSList *calls)
 	c = g_slist_find_custom(calls, GINT_TO_POINTER(CALL_STATUS_DIALING),
 				at_util_call_compare_by_status);
 
-	if (!c)
+	if (c == NULL)
 		c = g_slist_find_custom(calls,
 					GINT_TO_POINTER(CALL_STATUS_ALERTING),
 					at_util_call_compare_by_status);
@@ -96,10 +96,11 @@ static struct ofono_call *create_call(struct ofono_voicecall *vc, int type,
 	struct ofono_call *call;
 
 	/* Generate a call structure for the waiting call */
-	call = g_try_new0(struct ofono_call, 1);
-
-	if (!call)
+	call = g_try_new(struct ofono_call, 1);
+	if (call == NULL)
 		return NULL;
+
+	ofono_call_init(call);
 
 	call->id = ofono_voicecall_get_next_callid(vc);
 	call->type = type;
@@ -225,10 +226,10 @@ static void clcc_poll_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		if (nc && (nc->status == CALL_STATUS_HELD))
 			num_held++;
 
-		if (oc && (!nc || (nc->id > oc->id))) {
+		if (oc && (nc == NULL || (nc->id > oc->id))) {
 			enum ofono_disconnect_reason reason;
 
-			if (vd->local_release & (0x1 << oc->id))
+			if (vd->local_release & (1 << oc->id))
 				reason = OFONO_DISCONNECT_REASON_LOCAL_HANGUP;
 			else
 				reason = OFONO_DISCONNECT_REASON_REMOTE_HANGUP;
@@ -240,7 +241,7 @@ static void clcc_poll_cb(gboolean ok, GAtResult *result, gpointer user_data)
 			vd->local_release &= ~(1 << oc->id);
 
 			o = o->next;
-		} else if (nc && (!oc || (nc->id < oc->id))) {
+		} else if (nc && (oc == NULL || (nc->id < oc->id))) {
 			/* new call, signal it */
 			if (nc->type == 0)
 				ofono_voicecall_notify(vc, nc);
@@ -336,7 +337,7 @@ static void atd_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	for (l = vd->calls; l; l = l->next) {
 		call = l->data;
 
-		if (call->status != 0)
+		if (call->status != CALL_STATUS_ACTIVE)
 			continue;
 
 		call->status = CALL_STATUS_HELD;
@@ -344,8 +345,7 @@ static void atd_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	}
 
 	call = create_call(vc, 0, 0, CALL_STATUS_DIALING, NULL, type, validity);
-
-	if (!call) {
+	if (call == NULL) {
 		ofono_error("Unable to allocate call, "
 				"call tracking will fail!");
 		return;
@@ -357,15 +357,12 @@ out:
 
 static void hfp_dial(struct ofono_voicecall *vc,
 			const struct ofono_phone_number *ph,
-			enum ofono_clir_option clir, enum ofono_cug_option cug,
-			ofono_voicecall_cb_t cb, void *data)
+			enum ofono_clir_option clir, ofono_voicecall_cb_t cb,
+			void *data)
 {
 	struct voicecall_data *vd = ofono_voicecall_get_data(vc);
 	struct cb_data *cbd = cb_data_new(cb, data);
 	char buf[256];
-
-	if (!cbd)
-		goto error;
 
 	cbd->user = vc;
 	if (ph->type == 145)
@@ -379,7 +376,6 @@ static void hfp_dial(struct ofono_voicecall *vc,
 				atd_cb, cbd, g_free) > 0)
 		return;
 
-error:
 	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, data);
@@ -392,7 +388,7 @@ static void hfp_template(const char *cmd, struct ofono_voicecall *vc,
 	struct voicecall_data *vd = ofono_voicecall_get_data(vc);
 	struct change_state_req *req = g_try_new0(struct change_state_req, 1);
 
-	if (!req)
+	if (req == NULL)
 		goto error;
 
 	req->vc = vc;
@@ -440,7 +436,7 @@ static void hfp_release_all_held(struct ofono_voicecall *vc,
 				ofono_voicecall_cb_t cb, void *data)
 {
 	struct voicecall_data *vd = ofono_voicecall_get_data(vc);
-	unsigned int held_status = 0x1 << 1;
+	unsigned int held_status = 1 << CALL_STATUS_HELD;
 
 	if (vd->ag_mpty_features & AG_CHLD_0) {
 		hfp_template("AT+CHLD=0", vc, generic_cb, held_status,
@@ -455,7 +451,8 @@ static void hfp_set_udub(struct ofono_voicecall *vc,
 			ofono_voicecall_cb_t cb, void *data)
 {
 	struct voicecall_data *vd = ofono_voicecall_get_data(vc);
-	unsigned int incoming_or_waiting = (0x1 << 4) | (0x1 << 5);
+	unsigned int incoming_or_waiting =
+		(1 << CALL_STATUS_INCOMING) | (1 << CALL_STATUS_WAITING);
 
 	if (vd->ag_mpty_features & AG_CHLD_0) {
 		hfp_template("AT+CHLD=0", vc, generic_cb, incoming_or_waiting,
@@ -506,7 +503,7 @@ static void hfp_release_specific(struct ofono_voicecall *vc, int id,
 
 	req = g_try_new0(struct release_id_req, 1);
 
-	if (!req)
+	if (req == NULL)
 		goto error;
 
 	req->vc = vc;
@@ -584,7 +581,7 @@ static void hfp_send_dtmf(struct ofono_voicecall *vc, const char *dtmf,
 	char *buf;
 	int s;
 
-	if (!req)
+	if (req == NULL)
 		goto error;
 
 	req->vc = vc;
@@ -592,10 +589,9 @@ static void hfp_send_dtmf(struct ofono_voicecall *vc, const char *dtmf,
 	req->data = data;
 	req->affected_types = 0;
 
-	/* strlen("AT+VTS=") = 7 */
-	buf = g_try_new(char, strlen(dtmf) + 7);
-
-	if (!buf)
+	/* strlen("AT+VTS=) = 7 + NULL */
+	buf = g_try_new(char, strlen(dtmf) + 8);
+	if (buf == NULL)
 		goto error;
 
 	sprintf(buf, "AT+VTS=%s", dtmf);
@@ -652,9 +648,10 @@ static void ccwa_notify(GAtResult *result, gpointer user_data)
 
 	DBG("ccwa_notify: %s %d %d", num, num_type, validity);
 
-	call = create_call(vc, 0, 1, 5, num, num_type, validity);
+	call = create_call(vc, 0, 1, CALL_STATUS_WAITING, num, num_type,
+			    validity);
 
-	if (!call) {
+	if (call == NULL) {
 		ofono_error("malloc call struct failed.  "
 				"Call management is fubar");
 		return;
@@ -725,7 +722,7 @@ static void ring_notify(GAtResult *result, gpointer user_data)
 	/* Generate an incoming call of voice type */
 	call = create_call(vc, 0, 1, CALL_STATUS_INCOMING, NULL, 128, 2);
 
-	if (!call)
+	if (call == NULL)
 		ofono_error("Couldn't create call, call management is fubar!");
 
 	/* We don't know the number must wait for CLIP to arrive before
@@ -878,11 +875,11 @@ static void sync_dialing_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	 */
 	o = find_dialing(vd->calls);
 
-	if (!n && o) {
+	if (n == NULL && o) {
 		oc = o->data;
 		release_call(vc, oc);
 		vd->calls = g_slist_remove(vd->calls, oc);
-	} else if (n && !o) {
+	} else if (n && o == NULL) {
 		nc = n->data;
 		new_call_notify(vc, nc->type, nc->direction, nc->status,
 				nc->phone_number.number, nc->phone_number.type,
@@ -1176,12 +1173,12 @@ static struct ofono_voicecall_driver driver = {
 	.send_tones		= hfp_send_dtmf
 };
 
-void hfp_voicecall_init()
+void hfp_voicecall_init(void)
 {
 	ofono_voicecall_driver_register(&driver);
 }
 
-void hfp_voicecall_exit()
+void hfp_voicecall_exit(void)
 {
 	ofono_voicecall_driver_unregister(&driver);
 }

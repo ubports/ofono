@@ -55,6 +55,7 @@ struct ofono_message_waiting {
 	gboolean cphs_mbdn_not_provided;
 	struct ofono_phone_number mailbox_number[5];
 	struct ofono_sim *sim;
+	struct ofono_sim_context *sim_context;
 	struct ofono_atom *atom;
 };
 
@@ -119,7 +120,7 @@ static DBusMessage *mw_get_properties(DBusConnection *conn,
 	const char *number;
 
 	reply = dbus_message_new_method_return(msg);
-	if (!reply)
+	if (reply == NULL)
 		return NULL;
 
 	dbus_message_iter_init_append(reply, &iter);
@@ -202,7 +203,7 @@ static DBusMessage *set_cphs_mbdn(struct ofono_message_waiting *mw,
 	sim_adn_build(efmbdn, req->mw->ef_cphs_mbdn_length,
 			&req->number, NULL);
 
-	if (ofono_sim_write(mw->sim, SIM_EF_CPHS_MBDN_FILEID,
+	if (ofono_sim_write(mw->sim_context, SIM_EF_CPHS_MBDN_FILEID,
 			sync ? cphs_mbdn_sync_cb : mbdn_set_cb,
 			OFONO_SIM_FILE_STRUCTURE_FIXED,
 			mw_mailbox_to_cphs_record[mailbox],
@@ -300,10 +301,10 @@ static DBusMessage *set_mbdn(struct ofono_message_waiting *mw, int mailbox,
 
 	sim_adn_build(efmbdn, req->mw->efmbdn_length, &req->number, NULL);
 
-	if (ofono_sim_write(req->mw->sim, SIM_EFMBDN_FILEID, mbdn_set_cb,
-			OFONO_SIM_FILE_STRUCTURE_FIXED,
-			req->mw->efmbdn_record_id[mailbox],
-			efmbdn, req->mw->efmbdn_length, req) == -1) {
+	if (ofono_sim_write(req->mw->sim_context, SIM_EFMBDN_FILEID,
+				mbdn_set_cb, OFONO_SIM_FILE_STRUCTURE_FIXED,
+				req->mw->efmbdn_record_id[mailbox],
+				efmbdn, req->mw->efmbdn_length, req) == -1) {
 		g_free(req);
 
 		if (msg)
@@ -395,7 +396,7 @@ static void update_indicator_and_emit(struct ofono_message_waiting *mw,
 	indication = info->indication;
 	count = info->message_count;
 
-	if (!mw_message_waiting_property_name[mailbox])
+	if (mw_message_waiting_property_name[mailbox] == NULL)
 		return;
 
 	ofono_dbus_signal_property_changed(conn, path,
@@ -460,7 +461,7 @@ static void mw_mwis_read_cb(int ok, int total_length, int record,
 
 	if (!ok || record_length < 5) {
 		ofono_error("Unable to read waiting messages numbers "
-			"from SIM");
+				"from SIM");
 
 		mw->efmwis_length = 0;
 
@@ -543,7 +544,7 @@ static void mw_mbdn_read_cb(int ok, int total_length, int record,
 
 	if (!ok || record_length < 14 || total_length < record_length) {
 		ofono_error("Unable to read mailbox dialling numbers "
-			"from SIM");
+				"from SIM");
 
 		mw->efmbdn_length = 0;
 		mw->mbdn_not_provided = TRUE;
@@ -585,7 +586,7 @@ static void mw_mbi_read_cb(int ok, int total_length, int record,
 
 	if (!ok || record_length < 4) {
 		ofono_error("Unable to read mailbox identifies "
-			"from SIM");
+				"from SIM");
 
 		mw->efmbdn_length = 0;
 		mw->mbdn_not_provided = TRUE;
@@ -600,7 +601,7 @@ static void mw_mbi_read_cb(int ok, int total_length, int record,
 	for (i = 0; i < 5 && i < record_length; i++)
 		mw->efmbdn_record_id[i] = data[i];
 
-	err = ofono_sim_read(mw->sim, SIM_EFMBDN_FILEID,
+	err = ofono_sim_read(mw->sim_context, SIM_EFMBDN_FILEID,
 				OFONO_SIM_FILE_STRUCTURE_FIXED,
 				mw_mbdn_read_cb, mw);
 
@@ -615,7 +616,7 @@ out:
 	st = ofono_sim_get_cphs_service_table(mw->sim);
 
 	if (st && bit_field(st[0], 4, 2) == 3)
-		ofono_sim_read(mw->sim, SIM_EF_CPHS_MBDN_FILEID,
+		ofono_sim_read(mw->sim_context, SIM_EF_CPHS_MBDN_FILEID,
 				OFONO_SIM_FILE_STRUCTURE_FIXED,
 				mw_cphs_mbdn_read_cb, mw);
 }
@@ -689,7 +690,8 @@ static void mw_set_indicator(struct ofono_message_waiting *mw, int profile,
 		if (mw->messages[i].indication)
 			efmwis[0] |= 1 << i;
 
-	if (ofono_sim_write(mw->sim, SIM_EFMWIS_FILEID, mw_mwis_write_cb,
+	if (ofono_sim_write(mw->sim_context, SIM_EFMWIS_FILEID,
+				mw_mwis_write_cb,
 				OFONO_SIM_FILE_STRUCTURE_FIXED, 1,
 				efmwis, mw->efmwis_length, mw) != 0) {
 		ofono_error("Queuing a EF-MWI write to SIM failed");
@@ -707,7 +709,8 @@ try_cphs:
 		efmwis[1] = mw->messages[1].indication ? 0xa : 0x5 |
 			mw->messages[3].indication ? 0xa0 : 0x50;
 
-	if (ofono_sim_write(mw->sim, SIM_EF_CPHS_MWIS_FILEID, mw_mwis_write_cb,
+	if (ofono_sim_write(mw->sim_context, SIM_EF_CPHS_MWIS_FILEID,
+				mw_mwis_write_cb,
 				OFONO_SIM_FILE_STRUCTURE_TRANSPARENT, 0,
 				efmwis, mw->ef_cphs_mwis_length, mw) != 0)
 		ofono_error("Queuing a EF-MWIS write to SIM failed (CPHS)");
@@ -918,6 +921,14 @@ static void message_waiting_unregister(struct ofono_atom *atom)
 	DBusConnection *conn = ofono_dbus_get_connection();
 	struct ofono_modem *modem = __ofono_atom_get_modem(atom);
 	const char *path = __ofono_atom_get_path(atom);
+	struct ofono_message_waiting *mw = __ofono_atom_get_data(atom);
+
+	if (mw->sim_context) {
+		ofono_sim_context_free(mw->sim_context);
+		mw->sim_context = NULL;
+	}
+
+	mw->sim = NULL;
 
 	g_dbus_unregister_interface(conn, path,
 					OFONO_MESSAGE_WAITING_INTERFACE);
@@ -926,10 +937,17 @@ static void message_waiting_unregister(struct ofono_atom *atom)
 
 void ofono_message_waiting_register(struct ofono_message_waiting *mw)
 {
-	DBusConnection *conn = ofono_dbus_get_connection();
-	const char *path = __ofono_atom_get_path(mw->atom);
-	struct ofono_modem *modem = __ofono_atom_get_modem(mw->atom);
+	DBusConnection *conn;
+	const char *path;
+	struct ofono_modem *modem;
 	struct ofono_atom *sim_atom;
+
+	if (mw == NULL)
+		return;
+
+	conn = ofono_dbus_get_connection();
+	modem = __ofono_atom_get_modem(mw->atom);
+	path = __ofono_atom_get_path(mw->atom);
 
 	if (!g_dbus_register_interface(conn, path,
 					OFONO_MESSAGE_WAITING_INTERFACE,
@@ -948,17 +966,18 @@ void ofono_message_waiting_register(struct ofono_message_waiting *mw)
 	if (sim_atom) {
 		/* Assume that if sim atom exists, it is ready */
 		mw->sim = __ofono_atom_get_data(sim_atom);
+		mw->sim_context = ofono_sim_context_create(mw->sim);
 
 		/* Loads MWI states and MBDN from SIM */
-		ofono_sim_read(mw->sim, SIM_EFMWIS_FILEID,
+		ofono_sim_read(mw->sim_context, SIM_EFMWIS_FILEID,
 				OFONO_SIM_FILE_STRUCTURE_FIXED,
 				mw_mwis_read_cb, mw);
-		ofono_sim_read(mw->sim, SIM_EFMBI_FILEID,
+		ofono_sim_read(mw->sim_context, SIM_EFMBI_FILEID,
 				OFONO_SIM_FILE_STRUCTURE_FIXED,
 				mw_mbi_read_cb, mw);
 
 		/* Also read CPHS MWIS field */
-		ofono_sim_read(mw->sim, SIM_EF_CPHS_MWIS_FILEID,
+		ofono_sim_read(mw->sim_context, SIM_EF_CPHS_MWIS_FILEID,
 				OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
 				mw_cphs_mwis_read_cb, mw);
 	}

@@ -49,12 +49,6 @@ enum ofono_clir_option {
 	OFONO_CLIR_OPTION_SUPPRESSION
 };
 
-/* 27.007 Section 6.2 */
-enum ofono_cug_option {
-	OFONO_CUG_OPTION_DEFAULT = 0,
-	OFONO_CUG_OPTION_INVOCATION = 1,
-};
-
 enum ofono_error_type {
 	OFONO_ERROR_TYPE_NO_ERROR = 0,
 	OFONO_ERROR_TYPE_CME,
@@ -76,11 +70,20 @@ struct ofono_error {
 	int error;
 };
 
-#define OFONO_MAX_PHONE_NUMBER_LENGTH 20
+#define OFONO_MAX_PHONE_NUMBER_LENGTH 80
+#define OFONO_MAX_CALLER_NAME_LENGTH 80
 
 struct ofono_phone_number {
 	char number[OFONO_MAX_PHONE_NUMBER_LENGTH + 1];
 	int type;
+};
+
+/* Length of NUM_FIELDS in 3GPP2 C.S0005-E v2.0 */
+#define OFONO_CDMA_MAX_PHONE_NUMBER_LENGTH 256
+
+struct ofono_cdma_phone_number {
+	/* char maps to max size of CHARi (8 bit) in 3GPP2 C.S0005-E v2.0 */
+	char number[OFONO_CDMA_MAX_PHONE_NUMBER_LENGTH];
 };
 
 struct ofono_call {
@@ -88,9 +91,11 @@ struct ofono_call {
 	int type;
 	int direction;
 	int status;
-	ofono_bool_t mpty;
 	struct ofono_phone_number phone_number;
+	struct ofono_phone_number called_number;
+	char name[OFONO_MAX_CALLER_NAME_LENGTH + 1];
 	int clip_validity;
+	int cnap_validity;
 };
 
 struct ofono_network_time {
@@ -100,7 +105,7 @@ struct ofono_network_time {
 	int mday;	/* Day of month [1..31], -1 if unavailable */
 	int mon;	/* Month [1..12], -1 if unavailable */
 	int year;	/* Current year, -1 if unavailable */
-	int dst;	/* Current adjustment, in seconds */
+	int dst;	/* Current adjustment, in hours */
 	int utcoff;	/* Offset from UTC in seconds */
 };
 
@@ -111,6 +116,7 @@ struct ofono_uuid {
 };
 
 const char *ofono_uuid_to_str(const struct ofono_uuid *uuid);
+void ofono_call_init(struct ofono_call *call);
 
 #ifdef __cplusplus
 }

@@ -5,7 +5,14 @@ Service		org.ofono
 Interface	org.ofono.VoiceCallManager
 Object path	[variable prefix]/{modem0,modem1,...}
 
-Methods		array{object,dict} GetCalls()
+Methods		dict GetProperties()
+
+			Returns properties for the VoiceCallManager Interface.
+			See the properties section for available properties.
+
+			Possible Errors: [service].Error.InvalidArguments
+
+		array{object,dict} GetCalls()
 
 			Get an array of call object paths and properties
 			that represents the currently present calls.
@@ -60,10 +67,10 @@ Methods		array{object,dict} GetCalls()
 
 		void ReleaseAndAnswer()
 
-			Releases currently active call and answers the currently
-			waiting call. Please note that if the current call is
-			a multiparty call, then all parties in the multi-party
-			call will be released.
+			Releases currently active call (0 or more) and
+			answers the currently waiting call. Please note that
+			if the current call is a multiparty call, then all
+			parties in the multi-party call will be released.
 
 		void HoldAndAnswer()
 
@@ -132,7 +139,12 @@ Signals		CallAdded(object path, dict properties)
 			released.  The object path is no longer accessible
 			after this signal and only emitted for reference.
 
-Properties	array{string} EmergencyNumbers
+		PropertyChanged(string property, variant value)
+
+			Signal is emitted whenever a property has changed.
+			The new value is passed as the signal argument.
+
+Properties	array{string} EmergencyNumbers [readonly]
 
 			Contains the list of emergency numbers recognized
 			by oFono.  This list is based on the default set

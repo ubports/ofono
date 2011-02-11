@@ -132,16 +132,16 @@ GSList *at_util_parse_clcc(GAtResult *result)
 		if (g_at_result_iter_next_string(&iter, &str))
 			g_at_result_iter_next_number(&iter, &number_type);
 
-		call = g_try_new0(struct ofono_call, 1);
-
-		if (!call)
+		call = g_try_new(struct ofono_call, 1);
+		if (call == NULL)
 			break;
+
+		ofono_call_init(call);
 
 		call->id = id;
 		call->direction = dir;
 		call->status = status;
 		call->type = type;
-		call->mpty = mpty;
 		strncpy(call->phone_number.number, str,
 				OFONO_MAX_PHONE_NUMBER_LENGTH);
 		call->phone_number.type = number_type;
@@ -180,6 +180,7 @@ gboolean at_util_parse_reg_unsolicited(GAtResult *result, const char *prefix,
 		goto out;
 
 	switch (vendor) {
+	case OFONO_VENDOR_GOBI:
 	case OFONO_VENDOR_HUAWEI:
 	case OFONO_VENDOR_NOVATEL:
 		if (g_at_result_iter_next_unquoted_string(&iter, &str) == TRUE)
@@ -241,14 +242,30 @@ gboolean at_util_parse_reg(GAtResult *result, const char *prefix,
 		g_at_result_iter_next_number(&iter, &m);
 
 		/* Sometimes we get an unsolicited CREG/CGREG here, skip it */
-		if (g_at_result_iter_next_number(&iter, &s) == FALSE)
-			continue;
+		switch (vendor) {
+		case OFONO_VENDOR_HUAWEI:
+		case OFONO_VENDOR_NOVATEL:
+			r = g_at_result_iter_next_unquoted_string(&iter, &str);
+
+			if (r == FALSE || strlen(str) != 1)
+				continue;
+
+			s = strtol(str, NULL, 10);
+
+			break;
+		default:
+			if (g_at_result_iter_next_number(&iter, &s) == FALSE)
+				continue;
+
+			break;
+		}
 
 		/* Some firmware will report bogus lac/ci when unregistered */
 		if (s != 1 && s != 5)
 			goto out;
 
 		switch (vendor) {
+		case OFONO_VENDOR_GOBI:
 		case OFONO_VENDOR_HUAWEI:
 		case OFONO_VENDOR_NOVATEL:
 			r = g_at_result_iter_next_unquoted_string(&iter, &str);
@@ -423,4 +440,47 @@ gboolean at_util_parse_cscs_query(GAtResult *result,
 		return at_util_charset_string_to_charset(str, charset);
 
 	return FALSE;
+}
+
+static const char *at_util_fixup_return(const char *line, const char *prefix)
+{
+	if (g_str_has_prefix(line, prefix) == FALSE)
+		return line;
+
+	line += strlen(prefix);
+
+	while (line[0] == ' ')
+		line++;
+
+	return line;
+}
+
+gboolean at_util_parse_attr(GAtResult *result, const char *prefix,
+				const char **out_attr)
+{
+	int numlines = g_at_result_num_response_lines(result);
+	GAtResultIter iter;
+	const char *line;
+	int i;
+
+	if (numlines == 0)
+		return FALSE;
+
+	g_at_result_iter_init(&iter, result);
+
+	/*
+	 * We have to be careful here, sometimes a stray unsolicited
+	 * notification will appear as part of the response and we
+	 * cannot rely on having a prefix to recognize the actual
+	 * response line.  So use the last line only as the response
+	 */
+	for (i = 0; i < numlines; i++)
+		g_at_result_iter_next(&iter, NULL);
+
+	line = g_at_result_iter_raw_line(&iter);
+
+	if (out_attr)
+		*out_attr = at_util_fixup_return(line, prefix);
+
+	return TRUE;
 }

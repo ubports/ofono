@@ -44,7 +44,7 @@ Methods		dict GetProperties()
 
 			Obtain the icon given by id.  Only ids greater than 1
 			are valid.  XPM format is currently used to return the
-			icon format.
+			icon data.
 
 Signals		PropertyChanged(string name, variant value)
 
@@ -129,7 +129,7 @@ Properties	boolean Present [readonly]
 
 		string CardIdentifier [readonly]
 
-			Contains the Intergrated Circuit Card Identifer (ICCID)
+			Contains the Integrated Circuit Card Identifer (ICCID)
 			which is read directly from the SIM.
 
 		boolean FixedDialing [readonly]
@@ -145,3 +145,15 @@ Properties	boolean Present [readonly]
 
 			If BDN is enabled, oFono halts the SIM initialization
 			procedure and only emergency calls are allowed.
+
+		dict{string,byte} Retries [readonly]
+
+			Contains all the retry counters available. The possible
+			values for the first field are the same as in
+			PinRequired property. The second field contains is the
+			counter for that pin type.
+
+			This property is updated after each operation that
+			might have changed the retry counters, i.e. calls to
+			ChangePin(), EnterPin(), ResetPin() LockPin(),
+			UnlockPin().

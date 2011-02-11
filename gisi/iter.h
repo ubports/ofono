@@ -28,22 +28,25 @@ extern "C" {
 
 #include <stdint.h>
 
+#include "message.h"
+
 struct _GIsiSubBlockIter {
 	uint8_t *start;
 	uint8_t *end;
-	uint16_t longhdr;
+	gboolean longhdr;
 	uint16_t sub_blocks;
 };
-
 typedef struct _GIsiSubBlockIter GIsiSubBlockIter;
 
-void g_isi_sb_iter_init(GIsiSubBlockIter *iter,
-			const void *restrict data,
-			size_t len, size_t used);
-void g_isi_sb_iter_init_full(GIsiSubBlockIter *iter,
-				const void *restrict data,
-				size_t len, size_t used,
-				gboolean longhdr,
+void g_isi_sb_iter_init(GIsiSubBlockIter *iter, const GIsiMessage *msg,
+			size_t used);
+void g_isi_sb_iter_init_full(GIsiSubBlockIter *iter, const GIsiMessage *msg,
+				size_t used, gboolean longhdr,
+				uint16_t sub_blocks);
+void g_isi_sb_subiter_init(GIsiSubBlockIter *outer, GIsiSubBlockIter *inner,
+				size_t used);
+void g_isi_sb_subiter_init_full(GIsiSubBlockIter *out, GIsiSubBlockIter *in,
+				size_t used, gboolean longhdr,
 				uint16_t sub_blocks);
 gboolean g_isi_sb_iter_is_valid(const GIsiSubBlockIter *iter);
 
@@ -66,6 +69,8 @@ gboolean g_isi_sb_iter_get_alpha_tag(const GIsiSubBlockIter *restrict iter,
 					char **utf8, size_t len, unsigned pos);
 gboolean g_isi_sb_iter_get_latin_tag(const GIsiSubBlockIter *restrict iter,
 					char **ascii, size_t len, unsigned pos);
+gboolean g_isi_sb_iter_get_struct(const GIsiSubBlockIter *restrict iter,
+					void **ptr, size_t len, unsigned pos);
 
 #ifdef __cplusplus
 }

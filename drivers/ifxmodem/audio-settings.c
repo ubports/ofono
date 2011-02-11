@@ -116,7 +116,7 @@ static int ifx_audio_settings_probe(struct ofono_audio_settings *as,
 	struct audio_settings_data *asd;
 
 	asd = g_try_new0(struct audio_settings_data, 1);
-	if (!asd)
+	if (asd == NULL)
 		return -ENOMEM;
 
 	asd->chat = g_at_chat_clone(chat);
@@ -145,12 +145,12 @@ static struct ofono_audio_settings_driver driver = {
 	.remove		= ifx_audio_settings_remove,
 };
 
-void ifx_audio_settings_init()
+void ifx_audio_settings_init(void)
 {
 	ofono_audio_settings_driver_register(&driver);
 }
 
-void ifx_audio_settings_exit()
+void ifx_audio_settings_exit(void)
 {
 	ofono_audio_settings_driver_unregister(&driver);
 }

@@ -135,7 +135,7 @@ static void add_mbm(struct ofono_modem *modem,
 		devnode = udev_device_get_devnode(udev_device);
 		ofono_modem_set_string(modem, DATA_DEVICE, devnode);
 	} else if (g_str_has_suffix(desc, "Minicard GPS Port") ||
-			g_str_has_suffix(desc, "Mini-Card GPRS Port") ||
+			g_str_has_suffix(desc, "Mini-Card GPS Port") ||
 			g_str_has_suffix(desc, "Broadband GPS Port")) {
 		devnode = udev_device_get_devnode(udev_device);
 		ofono_modem_set_string(modem, GPS_DEVICE, devnode);
@@ -359,6 +359,38 @@ static void add_huawei(struct ofono_modem *modem,
 		ofono_modem_register(modem);
 }
 
+static void add_sierra(struct ofono_modem *modem,
+					struct udev_device *udev_device)
+{
+	struct udev_list_entry *entry;
+	const char *devnode;
+	gboolean found = FALSE;
+
+	DBG("modem %p", modem);
+
+	entry = udev_device_get_properties_list_entry(udev_device);
+	while (entry) {
+		const char *name = udev_list_entry_get_name(entry);
+		const char *value = udev_list_entry_get_value(entry);
+
+		if (g_str_equal(name, "OFONO_SIERRA_TYPE") == TRUE &&
+					g_str_equal(value, "modem") == TRUE) {
+			found = TRUE;
+			break;
+		}
+
+		entry = udev_list_entry_get_next(entry);
+	}
+
+	if (found == FALSE)
+		return;
+
+	devnode = udev_device_get_devnode(udev_device);
+	ofono_modem_set_string(modem, "Device", devnode);
+
+	ofono_modem_register(modem);
+}
+
 static void add_novatel(struct ofono_modem *modem,
 					struct udev_device *udev_device)
 {
@@ -449,6 +481,77 @@ static void add_isi(struct ofono_modem *modem,
 	ofono_modem_register(modem);
 }
 
+static void add_gobi(struct ofono_modem *modem,
+					struct udev_device *udev_device)
+{
+	struct udev_list_entry *entry;
+	const char *devnode;
+	gboolean found = FALSE;
+
+	DBG("modem %p", modem);
+
+	entry = udev_device_get_properties_list_entry(udev_device);
+	while (entry) {
+		const char *name = udev_list_entry_get_name(entry);
+		const char *value = udev_list_entry_get_value(entry);
+
+		if (g_str_equal(name, "OFONO_GOBI_TYPE") == TRUE &&
+					g_str_equal(value, "modem") == TRUE) {
+			found = TRUE;
+			break;
+		}
+
+		entry = udev_list_entry_get_next(entry);
+	}
+
+	if (found == FALSE)
+		return;
+
+	devnode = udev_device_get_devnode(udev_device);
+	ofono_modem_set_string(modem, "Device", devnode);
+
+	ofono_modem_register(modem);
+}
+
+static void add_calypso(struct ofono_modem *modem,
+					struct udev_device *udev_device)
+{
+	const char *devnode;
+
+	DBG("modem %p", modem);
+
+	devnode = udev_device_get_devnode(udev_device);
+	ofono_modem_set_string(modem, "Device", devnode);
+
+	ofono_modem_register(modem);
+}
+
+static void add_tc65(struct ofono_modem *modem,
+			struct udev_device *udev_device)
+{
+	const char *devnode;
+
+	DBG("modem %p", modem);
+
+	devnode = udev_device_get_devnode(udev_device);
+	ofono_modem_set_string(modem, "Device", devnode);
+
+	ofono_modem_register(modem);
+}
+
+static void add_nokiacdma(struct ofono_modem *modem,
+					struct udev_device *udev_device)
+{
+	const char *devnode;
+
+	DBG("modem %p", modem);
+
+	devnode = udev_device_get_devnode(udev_device);
+	ofono_modem_set_string(modem, "Device", devnode);
+
+	ofono_modem_register(modem);
+}
+
 static void add_modem(struct udev_device *udev_device)
 {
 	struct ofono_modem *modem;
@@ -525,14 +628,24 @@ done:
 		add_zte(modem, udev_device);
 	else if (g_strcmp0(driver, "huawei") == 0)
 		add_huawei(modem, udev_device);
+	else if (g_strcmp0(driver, "sierra") == 0)
+		add_sierra(modem, udev_device);
 	else if (g_strcmp0(driver, "novatel") == 0)
 		add_novatel(modem, udev_device);
 	else if (g_strcmp0(driver, "nokia") == 0)
 		add_nokia(modem, udev_device);
-	else if (g_strcmp0(driver, "isigen") == 0)
+	else if (g_strcmp0(driver, "isiusb") == 0)
 		add_isi(modem, udev_device);
 	else if (g_strcmp0(driver, "n900") == 0)
 		add_isi(modem, udev_device);
+	else if (g_strcmp0(driver, "gobi") == 0)
+		add_gobi(modem, udev_device);
+	else if (g_strcmp0(driver, "calypso") == 0)
+		add_calypso(modem, udev_device);
+	else if (g_strcmp0(driver, "tc65") == 0)
+		add_tc65(modem, udev_device);
+	else if (g_strcmp0(driver, "nokiacdma") == 0)
+		add_nokiacdma(modem, udev_device);
 }
 
 static gboolean devpath_remove(gpointer key, gpointer value, gpointer user_data)
@@ -555,7 +668,7 @@ static void remove_modem(struct udev_device *udev_device)
 	DBG("%s", curpath);
 
 	devpath = g_hash_table_lookup(devpath_list, curpath);
-	if (!devpath)
+	if (devpath == NULL)
 		return;
 
 	modem = find_modem(devpath);
@@ -681,7 +794,7 @@ static int udev_init(void)
 {
 	devpath_list = g_hash_table_new_full(g_str_hash, g_str_equal,
 						g_free, g_free);
-	if (!devpath_list) {
+	if (devpath_list == NULL) {
 		ofono_error("Failed to create udev path list");
 		return -ENOMEM;
 	}

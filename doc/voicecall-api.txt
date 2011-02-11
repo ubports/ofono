@@ -87,6 +87,21 @@ Properties	string LineIdentification [readonly]
 			"override category" option was not provisioned for
 			the current subscriber.
 
+		string IncomingLine [readonly, optional]
+
+			Contains the Called Line Identification information
+			returned by the network. This is only available for
+			incoming calls and indicates the local subscriber
+			number which was dialed by the remote party. This is
+			useful for subscribers which have a multiple line
+			service with their network provider and would like
+			to know what line the call is coming in on.
+
+		string Name [readonly]
+
+			Contains the Name Identification information returned
+			by the network, if present.
+
 		boolean Multiparty [readonly]
 
 			Contains the indication if the voice call is part
@@ -125,3 +140,8 @@ Properties	string LineIdentification [readonly]
 
 			Icon identifier to be used instead of or together
 			with the text information.
+
+		boolean Emergency [readonly]
+
+			Contains the indication if the voice call is an
+			emergency call or not.

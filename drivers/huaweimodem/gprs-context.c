@@ -311,9 +311,6 @@ static void huawei_gprs_activate_primary(struct ofono_gprs_context *gc,
 
 	DBG("cid %u", ctx->cid);
 
-	if (!cbd)
-		goto error;
-
 	gcd->active_context = ctx->cid;
 
 	cbd->user = gc;
@@ -328,7 +325,6 @@ static void huawei_gprs_activate_primary(struct ofono_gprs_context *gc,
 				at_cgdcont_cb, cbd, g_free) > 0)
 		return;
 
-error:
 	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, NULL, 0, NULL, NULL, NULL, NULL, data);
@@ -344,9 +340,6 @@ static void huawei_gprs_deactivate_primary(struct ofono_gprs_context *gc,
 
 	DBG("cid %u", cid);
 
-	if (!cbd)
-		goto error;
-
 	cbd->user = gc;
 
 	snprintf(buf, sizeof(buf), "AT^NDISDUP=%u,0", cid);
@@ -355,7 +348,6 @@ static void huawei_gprs_deactivate_primary(struct ofono_gprs_context *gc,
 				at_ndisdup_down_cb, cbd, g_free) > 0)
 		return;
 
-error:
 	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, data);
@@ -376,7 +368,7 @@ static int huawei_gprs_context_probe(struct ofono_gprs_context *gc,
 	}
 
 	gcd = g_try_new0(struct gprs_context_data, 1);
-	if (!gcd)
+	if (gcd == NULL)
 		return -ENOMEM;
 
 	gcd->chat = g_at_chat_clone(chat);
@@ -406,12 +398,12 @@ static struct ofono_gprs_context_driver driver = {
 	.deactivate_primary	= huawei_gprs_deactivate_primary,
 };
 
-void huawei_gprs_context_init()
+void huawei_gprs_context_init(void)
 {
 	ofono_gprs_context_driver_register(&driver);
 }
 
-void huawei_gprs_context_exit()
+void huawei_gprs_context_exit(void)
 {
 	ofono_gprs_context_driver_unregister(&driver);
 }

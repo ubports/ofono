@@ -50,6 +50,7 @@ struct ofono_voicecall {
 	GSList *new_en_list; /* Emergency numbers being read from SIM */
 	DBusMessage *pending;
 	struct ofono_sim *sim;
+	struct ofono_sim_context *sim_context;
 	unsigned int sim_watch;
 	unsigned int sim_state_watch;
 	const struct ofono_voicecall_driver *driver;
@@ -68,6 +69,7 @@ struct voicecall {
 	char *message;
 	uint8_t icon_id;
 	gboolean untracked;
+	gboolean dial_result_handled;
 };
 
 struct dial_request {
@@ -175,6 +177,17 @@ static const char *phone_and_clip_to_string(const struct ofono_phone_number *n,
 		return "";
 
 	return phone_number_to_string(n);
+}
+
+static const char *cnap_to_string(const char *name, int cnap_validity)
+{
+	if (cnap_validity == CNAP_VALIDITY_WITHHELD && !strlen(name))
+		return "withheld";
+
+	if (cnap_validity == CNAP_VALIDITY_NOT_AVAILABLE)
+		return "";
+
+	return name;
 }
 
 static const char *time_to_str(const time_t *t)
@@ -315,6 +328,23 @@ static void tone_request_finish(struct ofono_voicecall *vc,
 	g_free(entry);
 }
 
+static gint number_compare(gconstpointer a, gconstpointer b)
+{
+	const char *s1 = a, *s2 = b;
+	return strcmp(s1, s2);
+}
+
+static gboolean voicecall_is_emergency(struct voicecall *v)
+{
+	struct ofono_call *call = v->call;
+	const char *lineid_str;
+
+	lineid_str = phone_number_to_string(&call->phone_number);
+
+	return g_slist_find_custom(v->vc->en_list, lineid_str,
+						number_compare) ? TRUE : FALSE;
+}
+
 static void append_voicecall_properties(struct voicecall *v,
 					DBusMessageIter *dict)
 {
@@ -322,15 +352,35 @@ static void append_voicecall_properties(struct voicecall *v,
 	const char *status;
 	const char *callerid;
 	const char *timestr;
+	const char *name;
 	ofono_bool_t mpty;
+	dbus_bool_t emergency_call;
 
 	status = call_status_to_string(call->status);
-	callerid = phone_number_to_string(&call->phone_number);
 
 	ofono_dbus_dict_append(dict, "State", DBUS_TYPE_STRING, &status);
 
+	if (call->direction == CALL_DIRECTION_MOBILE_TERMINATED)
+		callerid = phone_and_clip_to_string(&call->phone_number,
+							call->clip_validity);
+	else
+		callerid = phone_number_to_string(&call->phone_number);
+
 	ofono_dbus_dict_append(dict, "LineIdentification",
-				DBUS_TYPE_STRING, &callerid);
+					DBUS_TYPE_STRING, &callerid);
+
+	if (call->called_number.number[0] != '\0') {
+		const char *calledid;
+
+		calledid = phone_number_to_string(&call->called_number);
+
+		ofono_dbus_dict_append(dict, "IncomingLine",
+						DBUS_TYPE_STRING, &calledid);
+	}
+
+	name = cnap_to_string(call->name, call->cnap_validity);
+
+	ofono_dbus_dict_append(dict, "Name", DBUS_TYPE_STRING, &name);
 
 	if (call->status == CALL_STATUS_ACTIVE ||
 			call->status == CALL_STATUS_HELD ||
@@ -343,8 +393,7 @@ static void append_voicecall_properties(struct voicecall *v,
 	}
 
 	if (g_slist_find_custom(v->vc->multiparty_list,
-				GINT_TO_POINTER(call->id),
-				call_compare_by_id))
+				GINT_TO_POINTER(call->id), call_compare_by_id))
 		mpty = TRUE;
 	else
 		mpty = FALSE;
@@ -352,12 +401,21 @@ static void append_voicecall_properties(struct voicecall *v,
 	ofono_dbus_dict_append(dict, "Multiparty", DBUS_TYPE_BOOLEAN, &mpty);
 
 	if (v->message)
-		ofono_dbus_dict_append(dict, "Information", DBUS_TYPE_STRING,
-					&v->message);
+		ofono_dbus_dict_append(dict, "Information",
+						DBUS_TYPE_STRING, &v->message);
 
 	if (v->icon_id)
-		ofono_dbus_dict_append(dict, "Icon", DBUS_TYPE_BYTE,
-					&v->icon_id);
+		ofono_dbus_dict_append(dict, "Icon",
+						DBUS_TYPE_BYTE, &v->icon_id);
+
+	if (voicecall_is_emergency(v) == TRUE)
+		emergency_call = TRUE;
+	else
+		emergency_call = FALSE;
+
+	ofono_dbus_dict_append(dict, "Emergency",
+					DBUS_TYPE_BOOLEAN, &emergency_call);
+
 }
 
 static DBusMessage *voicecall_get_properties(DBusConnection *conn,
@@ -369,8 +427,7 @@ static DBusMessage *voicecall_get_properties(DBusConnection *conn,
 	DBusMessageIter dict;
 
 	reply = dbus_message_new_method_return(msg);
-
-	if (!reply)
+	if (reply == NULL)
 		return NULL;
 
 	dbus_message_iter_init_append(reply, &iter);
@@ -398,7 +455,7 @@ static DBusMessage *voicecall_deflect(DBusConnection *conn,
 		call->status != CALL_STATUS_WAITING)
 		return __ofono_error_failed(msg);
 
-	if (!vc->driver->deflect)
+	if (vc->driver->deflect == NULL)
 		return __ofono_error_not_implemented(msg);
 
 	if (vc->pending)
@@ -423,10 +480,10 @@ static DBusMessage *voicecall_deflect(DBusConnection *conn,
 static void dial_request_user_cancel(struct ofono_voicecall *vc,
 					struct voicecall *call)
 {
-	if (!vc->dial_req)
+	if (vc->dial_req == NULL)
 		return;
 
-	if (!call || call == vc->dial_req->call)
+	if (call == NULL || call == vc->dial_req->call)
 		dial_request_finish(vc);
 }
 
@@ -533,7 +590,7 @@ static DBusMessage *voicecall_answer(DBusConnection *conn,
 	if (call->status != CALL_STATUS_INCOMING)
 		return __ofono_error_failed(msg);
 
-	if (!vc->driver->answer)
+	if (vc->driver->answer == NULL)
 		return __ofono_error_not_implemented(msg);
 
 	if (vc->pending)
@@ -569,8 +626,7 @@ static struct voicecall *voicecall_create(struct ofono_voicecall *vc,
 	struct voicecall *v;
 
 	v = g_try_new0(struct voicecall, 1);
-
-	if (!v)
+	if (v == NULL)
 		return NULL;
 
 	v->call = call;
@@ -691,8 +747,8 @@ static void voicecall_set_call_lineid(struct voicecall *v,
 	const char *lineid_str;
 
 	if (!strcmp(call->phone_number.number, ph->number) &&
-		call->phone_number.type == ph->type &&
-		call->clip_validity == clip_validity)
+			call->phone_number.type == ph->type &&
+			call->clip_validity == clip_validity)
 		return;
 
 	/*
@@ -704,7 +760,7 @@ static void voicecall_set_call_lineid(struct voicecall *v,
 
 	/* For plugins that don't keep state, ignore */
 	if (call->clip_validity == CLIP_VALIDITY_VALID &&
-		clip_validity == CLIP_VALIDITY_NOT_AVAILABLE)
+			clip_validity == CLIP_VALIDITY_NOT_AVAILABLE)
 		return;
 
 	strcpy(call->phone_number.number, ph->number);
@@ -722,6 +778,73 @@ static void voicecall_set_call_lineid(struct voicecall *v,
 						OFONO_VOICECALL_INTERFACE,
 						"LineIdentification",
 						DBUS_TYPE_STRING, &lineid_str);
+
+	if (voicecall_is_emergency(v)) {
+		dbus_bool_t emergency_call = TRUE;
+
+		ofono_dbus_signal_property_changed(conn, path,
+						OFONO_VOICECALL_INTERFACE,
+						"Emergency",
+						DBUS_TYPE_BOOLEAN,
+						&emergency_call);
+	}
+}
+
+static void voicecall_set_call_calledid(struct voicecall *v,
+					const struct ofono_phone_number *ph)
+{
+	struct ofono_call *call = v->call;
+	DBusConnection *conn = ofono_dbus_get_connection();
+	const char *path;
+	const char *calledid_str;
+
+	if (!strcmp(call->called_number.number, ph->number) &&
+					call->called_number.type == ph->type)
+		return;
+
+	strcpy(call->called_number.number, ph->number);
+	call->called_number.type = ph->type;
+
+	path = voicecall_build_path(v->vc, call);
+	calledid_str = phone_number_to_string(ph);
+
+	ofono_dbus_signal_property_changed(conn, path,
+						OFONO_VOICECALL_INTERFACE,
+						"IncomingLine",
+						DBUS_TYPE_STRING,
+						&calledid_str);
+}
+
+
+static void voicecall_set_call_name(struct voicecall *v,
+					const char *name,
+					int cnap_validity)
+{
+	struct ofono_call *call = v->call;
+	DBusConnection *conn = ofono_dbus_get_connection();
+	const char *path;
+	const char *name_str;
+
+	if (!strcmp(call->name, name) && call->cnap_validity == cnap_validity)
+		return;
+
+	/* For plugins that don't keep state, ignore */
+	if (call->cnap_validity == CNAP_VALIDITY_VALID &&
+			cnap_validity == CNAP_VALIDITY_NOT_AVAILABLE)
+		return;
+
+	strncpy(call->name, name, OFONO_MAX_CALLER_NAME_LENGTH);
+	call->name[OFONO_MAX_CALLER_NAME_LENGTH] = '\0';
+	call->cnap_validity = cnap_validity;
+
+	path = voicecall_build_path(v->vc, call);
+
+	name_str = cnap_to_string(name, cnap_validity);
+
+	ofono_dbus_signal_property_changed(conn, path,
+						OFONO_VOICECALL_INTERFACE,
+						"Name",
+						DBUS_TYPE_STRING, &name_str);
 }
 
 static gboolean voicecall_dbus_register(struct voicecall *v)
@@ -729,7 +852,7 @@ static gboolean voicecall_dbus_register(struct voicecall *v)
 	DBusConnection *conn = ofono_dbus_get_connection();
 	const char *path;
 
-	if (!v)
+	if (v == NULL)
 		return FALSE;
 
 	path = voicecall_build_path(v->vc, v->call);
@@ -879,10 +1002,10 @@ static void voicecalls_multiparty_changed(GSList *old, GSList *new)
 		nc = n ? n->data : NULL;
 		oc = o ? o->data : NULL;
 
-		if (oc && (!nc || (nc->call->id > oc->call->id))) {
+		if (oc && (nc == NULL || (nc->call->id > oc->call->id))) {
 			voicecall_emit_multiparty(oc, FALSE);
 			o = o->next;
-		} else if (nc && (!oc || (nc->call->id < oc->call->id))) {
+		} else if (nc && (oc == NULL || (nc->call->id < oc->call->id))) {
 			voicecall_emit_multiparty(nc, TRUE);
 			n = n->next;
 		} else {
@@ -957,7 +1080,7 @@ static void voicecalls_release_next(struct ofono_voicecall *vc)
 {
 	struct voicecall *call;
 
-	if (!vc->release_list)
+	if (vc->release_list == NULL)
 		return;
 
 	call = vc->release_list->data;
@@ -997,8 +1120,7 @@ static DBusMessage *manager_get_properties(DBusConnection *conn,
 	char **list;
 
 	reply = dbus_message_new_method_return(msg);
-
-	if (!reply)
+	if (reply == NULL)
 		return NULL;
 
 	dbus_message_iter_init_append(reply, &iter);
@@ -1046,8 +1168,7 @@ static struct ofono_call *synthesize_outgoing_call(struct ofono_voicecall *vc,
 	struct ofono_call *call;
 
 	call = g_try_new0(struct ofono_call, 1);
-
-	if (!call)
+	if (call == NULL)
 		return call;
 
 	call->id = __ofono_modem_callid_next(modem);
@@ -1096,17 +1217,26 @@ static struct voicecall *dial_handle_result(struct ofono_voicecall *vc,
 		v = l->data;
 
 		if (v->call->status == CALL_STATUS_DIALING ||
-				v->call->status == CALL_STATUS_ALERTING ||
-				v->call->status == CALL_STATUS_ACTIVE)
-			return v;
+				v->call->status == CALL_STATUS_ALERTING)
+			goto handled;
+
+		/*
+		 * Dial request may return before existing active call
+		 * is put on hold or after dialed call has got active
+		 */
+		if (v->call->status == CALL_STATUS_ACTIVE &&
+				v->call->direction ==
+				CALL_DIRECTION_MOBILE_ORIGINATED &&
+				!v->dial_result_handled)
+			goto handled;
 	}
 
 	call = synthesize_outgoing_call(vc, number);
-	if (!call)
+	if (call == NULL)
 		return NULL;
 
 	v = voicecall_create(vc, call);
-	if (!v)
+	if (v == NULL)
 		return NULL;
 
 	v->detect_time = time(NULL);
@@ -1118,6 +1248,9 @@ static struct voicecall *dial_handle_result(struct ofono_voicecall *vc,
 				call_compare);
 
 	*need_to_emit = TRUE;
+
+handled:
+	v->dial_result_handled = TRUE;
 
 	return v;
 }
@@ -1172,13 +1305,13 @@ static DBusMessage *manager_dial(DBusConnection *conn,
 					DBUS_TYPE_INVALID) == FALSE)
 		return __ofono_error_invalid_args(msg);
 
-	if (!valid_phone_number_format(number))
+	if (!valid_long_phone_number_format(number))
 		return __ofono_error_invalid_format(msg);
 
 	if (clir_string_to_clir(clirstr, &clir) == FALSE)
 		return __ofono_error_invalid_format(msg);
 
-	if (!vc->driver->dial)
+	if (vc->driver->dial == NULL)
 		return __ofono_error_not_implemented(msg);
 
 	if (voicecalls_have_incoming(vc))
@@ -1195,8 +1328,7 @@ static DBusMessage *manager_dial(DBusConnection *conn,
 
 	string_to_phone_number(number, &ph);
 
-	vc->driver->dial(vc, &ph, clir, OFONO_CUG_OPTION_DEFAULT,
-				manager_dial_callback, vc);
+	vc->driver->dial(vc, &ph, clir, manager_dial_callback, vc);
 
 	return NULL;
 }
@@ -1225,7 +1357,7 @@ static DBusMessage *manager_transfer(DBusConnection *conn,
 	if ((numactive != 1) && (numheld != 1))
 		return __ofono_error_failed(msg);
 
-	if (!vc->driver->transfer)
+	if (vc->driver->transfer == NULL)
 		return __ofono_error_not_implemented(msg);
 
 	vc->pending = dbus_message_ref(msg);
@@ -1265,7 +1397,7 @@ static DBusMessage *manager_swap_calls(DBusConnection *conn,
 	if (voicecalls_have_waiting(vc))
 		return __ofono_error_failed(msg);
 
-	if (!vc->driver->hold_all_active)
+	if (vc->driver->hold_all_active == NULL)
 		return __ofono_error_not_implemented(msg);
 
 	vc->pending = dbus_message_ref(msg);
@@ -1286,7 +1418,7 @@ static DBusMessage *manager_release_and_answer(DBusConnection *conn,
 	if (!voicecalls_have_waiting(vc))
 		return __ofono_error_failed(msg);
 
-	if (!vc->driver->release_all_active)
+	if (vc->driver->release_all_active == NULL)
 		return __ofono_error_not_implemented(msg);
 
 	vc->pending = dbus_message_ref(msg);
@@ -1314,7 +1446,7 @@ static DBusMessage *manager_hold_and_answer(DBusConnection *conn,
 	if (voicecalls_have_active(vc) && voicecalls_have_held(vc))
 		return __ofono_error_failed(msg);
 
-	if (!vc->driver->hold_all_active)
+	if (vc->driver->hold_all_active == NULL)
 		return __ofono_error_not_implemented(msg);
 
 	vc->pending = dbus_message_ref(msg);
@@ -1448,7 +1580,7 @@ static DBusMessage *multiparty_private_chat(DBusConnection *conn,
 
 	c = strrchr(callpath, '/');
 
-	if (!c || strncmp(path, callpath, c-callpath))
+	if (c == NULL || strncmp(path, callpath, c-callpath))
 		return __ofono_error_not_found(msg);
 
 	if (!sscanf(c, "/voicecall%2u", &id))
@@ -1460,7 +1592,7 @@ static DBusMessage *multiparty_private_chat(DBusConnection *conn,
 			break;
 	}
 
-	if (!l)
+	if (l == NULL)
 		return __ofono_error_not_found(msg);
 
 	/*
@@ -1471,7 +1603,7 @@ static DBusMessage *multiparty_private_chat(DBusConnection *conn,
 	if (voicecalls_have_held(vc))
 		return __ofono_error_failed(msg);
 
-	if (!vc->driver->private_chat)
+	if (vc->driver->private_chat == NULL)
 		return __ofono_error_not_implemented(msg);
 
 	vc->pending = dbus_message_ref(msg);
@@ -1540,7 +1672,7 @@ static DBusMessage *multiparty_create(DBusConnection *conn,
 	if (!voicecalls_have_held(vc) || !voicecalls_have_active(vc))
 		return __ofono_error_failed(msg);
 
-	if (!vc->driver->create_multiparty)
+	if (vc->driver->create_multiparty == NULL)
 		return __ofono_error_not_implemented(msg);
 
 	vc->pending = dbus_message_ref(msg);
@@ -1558,13 +1690,13 @@ static DBusMessage *multiparty_hangup(DBusConnection *conn,
 	if (vc->pending)
 		return __ofono_error_busy(msg);
 
-	if (!vc->driver->release_specific)
+	if (vc->driver->release_specific == NULL)
 		return __ofono_error_not_implemented(msg);
 
-	if (!vc->driver->release_all_held)
+	if (vc->driver->release_all_held == NULL)
 		return __ofono_error_not_implemented(msg);
 
-	if (!vc->driver->release_all_active)
+	if (vc->driver->release_all_active == NULL)
 		return __ofono_error_not_implemented(msg);
 
 	if (vc->multiparty_list == NULL) {
@@ -1628,7 +1760,7 @@ static DBusMessage *manager_tone(DBusConnection *conn,
 	if (vc->pending)
 		return __ofono_error_busy(msg);
 
-	if (!vc->driver->send_tones)
+	if (vc->driver->send_tones == NULL)
 		return __ofono_error_not_implemented(msg);
 
 	/* Send DTMFs only if we have at least one connected call */
@@ -1760,7 +1892,7 @@ void ofono_voicecall_disconnected(struct ofono_voicecall *vc, int id,
 	l = g_slist_find_custom(vc->call_list, GUINT_TO_POINTER(id),
 				call_compare_by_id);
 
-	if (!l) {
+	if (l == NULL) {
 		ofono_error("Plugin notified us of call disconnect for"
 				" unknown call");
 		return;
@@ -1818,35 +1950,37 @@ void ofono_voicecall_notify(struct ofono_voicecall *vc,
 	struct voicecall *v = NULL;
 	struct ofono_call *newcall;
 
-	DBG("Got a voicecall event, status: %d, id: %u, number: %s",
-			call->status, call->id, call->phone_number.number);
+	DBG("Got a voicecall event, status: %d, id: %u, number: %s"
+			" called_number: %s", call->status, call->id,
+			call->phone_number.number, call->called_number.number);
 
 	l = g_slist_find_custom(vc->call_list, GUINT_TO_POINTER(call->id),
 				call_compare_by_id);
 
 	if (l) {
-		DBG("Found call with id: %d\n", call->id);
+		DBG("Found call with id: %d", call->id);
 		voicecall_set_call_status(l->data, call->status);
 		voicecall_set_call_lineid(l->data, &call->phone_number,
 						call->clip_validity);
+		voicecall_set_call_calledid(l->data, &call->called_number);
+		voicecall_set_call_name(l->data, call->name,
+						call->cnap_validity);
 
 		return;
 	}
 
-	DBG("Did not find a call with id: %d\n", call->id);
+	DBG("Did not find a call with id: %d", call->id);
 
 	__ofono_modem_callid_hold(modem, call->id);
 
 	newcall = g_memdup(call, sizeof(struct ofono_call));
-
-	if (!newcall) {
+	if (newcall == NULL) {
 		ofono_error("Unable to allocate call");
 		goto error;
 	}
 
 	v = voicecall_create(vc, newcall);
-
-	if (!v) {
+	if (v == NULL) {
 		ofono_error("Unable to allocate voicecall_data");
 		goto error;
 	}
@@ -1978,9 +2112,6 @@ static void ecc_g2_read_cb(int ok, int total_length, int record,
 								g_strdup(en));
 	}
 
-	if (vc->new_en_list == NULL)
-		return;
-
 	set_new_ecc(vc);
 }
 
@@ -2013,7 +2144,7 @@ static void ecc_g3_read_cb(int ok, int total_length, int record,
 		return;
 
 check:
-	if (vc->new_en_list == NULL)
+	if (!ok && vc->new_en_list == NULL)
 		return;
 
 	set_new_ecc(vc);
@@ -2154,16 +2285,24 @@ static void sim_state_watch(enum ofono_sim_state new_state, void *user)
 
 	switch (new_state) {
 	case OFONO_SIM_STATE_INSERTED:
+		if (vc->sim_context == NULL)
+			vc->sim_context = ofono_sim_context_create(vc->sim);
+
 		/* Try both formats, only one or none will work */
-		ofono_sim_read(vc->sim, SIM_EFECC_FILEID,
+		ofono_sim_read(vc->sim_context, SIM_EFECC_FILEID,
 				OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
 				ecc_g2_read_cb, vc);
-		ofono_sim_read(vc->sim, SIM_EFECC_FILEID,
+		ofono_sim_read(vc->sim_context, SIM_EFECC_FILEID,
 				OFONO_SIM_FILE_STRUCTURE_FIXED,
 				ecc_g3_read_cb, vc);
 		break;
 	case OFONO_SIM_STATE_NOT_PRESENT:
 		/* TODO: Must release all non-emergency calls */
+
+		if (vc->sim_context) {
+			ofono_sim_context_free(vc->sim_context);
+			vc->sim_context = NULL;
+		}
 
 		/*
 		 * Free the currently being read EN list, just in case the
@@ -2332,7 +2471,7 @@ static void dial_request_cb(const struct ofono_error *error, void *data)
 static void dial_request(struct ofono_voicecall *vc)
 {
 	vc->driver->dial(vc, &vc->dial_req->ph, OFONO_CLIR_OPTION_DEFAULT,
-				OFONO_CUG_OPTION_DEFAULT, dial_request_cb, vc);
+				dial_request_cb, vc);
 }
 
 static void dial_req_disconnect_cb(const struct ofono_error *error, void *data)
@@ -2363,7 +2502,7 @@ int __ofono_voicecall_dial(struct ofono_voicecall *vc,
 	if (!valid_phone_number_format(addr))
 		return -EINVAL;
 
-	if (!vc->driver->dial)
+	if (vc->driver->dial == NULL)
 		return -ENOSYS;
 
 	if (interaction == OFONO_VOICECALL_INTERACTION_DISCONNECT &&
@@ -2419,7 +2558,7 @@ int __ofono_voicecall_dial(struct ofono_voicecall *vc,
 
 void __ofono_voicecall_dial_cancel(struct ofono_voicecall *vc)
 {
-	if (!vc->dial_req || !vc->dial_req->cb)
+	if (vc->dial_req == NULL || vc->dial_req->cb == NULL)
 		return;
 
 	vc->dial_req->cb = NULL;
@@ -2431,7 +2570,7 @@ static void tone_request_cb(const struct ofono_error *error, void *data)
 	struct tone_queue_entry *entry = g_queue_peek_head(vc->toneq);
 	int len = 0;
 
-	if (!entry)
+	if (entry == NULL)
 		return;
 
 	/*
@@ -2477,7 +2616,7 @@ static gboolean tone_request_run(gpointer user_data)
 
 	vc->tone_source = 0;
 
-	if (!entry)
+	if (entry == NULL)
 		return FALSE;
 
 	len = strcspn(entry->left, "pP");
@@ -2504,7 +2643,7 @@ int __ofono_voicecall_tone_send(struct ofono_voicecall *vc,
 				const char *tone_str,
 				ofono_voicecall_tone_cb_t cb, void *user_data)
 {
-	if (!vc->driver->send_tones)
+	if (vc->driver->send_tones == NULL)
 		return -ENOSYS;
 
 	/* Send DTMFs only if we have at least one connected call */

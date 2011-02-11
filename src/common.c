@@ -234,7 +234,7 @@ struct error_entry ceer_errors[] = {
 	{ 127,	"Interworking, unspecified" },
 };
 
-gboolean valid_phone_number_format(const char *number)
+gboolean valid_number_format(const char *number, int length)
 {
 	int len = strlen(number);
 	int begin = 0;
@@ -246,10 +246,50 @@ gboolean valid_phone_number_format(const char *number)
 	if (number[0] == '+')
 		begin = 1;
 
-	if ((len - begin) > OFONO_MAX_PHONE_NUMBER_LENGTH)
+	if ((len - begin) > length)
 		return FALSE;
 
 	for (i = begin; i < len; i++) {
+		if (number[i] >= '0' && number[i] <= '9')
+			continue;
+
+		if (number[i] == '*' || number[i] == '#')
+			continue;
+
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+/*
+ * According to 3GPP TS 24.011 or 3GPP TS 31.102, some
+ * addresses (or numbers), like Service Centre address,
+ * Destination address, or EFADN (Abbreviated dialling numbers),
+ * are up 20 digits.
+ */
+gboolean valid_phone_number_format(const char *number)
+{
+	return valid_number_format(number, 20);
+}
+
+gboolean valid_long_phone_number_format(const char *number)
+{
+	return valid_number_format(number, OFONO_MAX_PHONE_NUMBER_LENGTH);
+}
+
+gboolean valid_cdma_phone_number_format(const char *number)
+{
+	int len = strlen(number);
+	int i;
+
+	if (!len)
+		return FALSE;
+
+	if (len > OFONO_CDMA_MAX_PHONE_NUMBER_LENGTH)
+		return FALSE;
+
+	for (i = 0; i < len; i++) {
 		if (number[i] >= '0' && number[i] <= '9')
 			continue;
 
@@ -405,6 +445,23 @@ void string_to_phone_number(const char *str, struct ofono_phone_number *ph)
 	}
 }
 
+const char *cdma_phone_number_to_string(
+				const struct ofono_cdma_phone_number *ph)
+{
+	static char buffer[OFONO_CDMA_MAX_PHONE_NUMBER_LENGTH + 1];
+
+	strncpy(buffer, ph->number, OFONO_CDMA_MAX_PHONE_NUMBER_LENGTH);
+	buffer[OFONO_CDMA_MAX_PHONE_NUMBER_LENGTH] = '\0';
+
+	return buffer;
+}
+
+void string_to_cdma_phone_number(const char *str,
+					struct ofono_cdma_phone_number *ph)
+{
+	strcpy(ph->number, str);
+}
+
 gboolean valid_ussd_string(const char *str, gboolean call_in_progress)
 {
 	int len = strlen(str);
@@ -516,7 +573,7 @@ gboolean parse_ss_control_string(char *str, int *ss_type,
 	/* Must have at least one other '#' */
 	c = strrchr(str+cur, '#');
 
-	if (!c)
+	if (c == NULL)
 		goto out;
 
 	*dn = c+1;
@@ -704,4 +761,11 @@ const char *ofono_uuid_to_str(const struct ofono_uuid *uuid)
 	static char buf[OFONO_SHA1_UUID_LEN * 2 + 1];
 
 	return encode_hex_own_buf(uuid->uuid, OFONO_SHA1_UUID_LEN, 0, buf);
+}
+
+void ofono_call_init(struct ofono_call *call)
+{
+	memset(call, 0, sizeof(struct ofono_call));
+	call->cnap_validity = CNAP_VALIDITY_NOT_AVAILABLE;
+	call->clip_validity = CLIP_VALIDITY_NOT_AVAILABLE;
 }

@@ -48,6 +48,7 @@
 #include <ofono/netreg.h>
 #include <ofono/phonebook.h>
 #include <ofono/sim.h>
+#include <ofono/cbs.h>
 #include <ofono/sms.h>
 #include <ofono/ssn.h>
 #include <ofono/ussd.h>
@@ -64,7 +65,11 @@
 #include <drivers/stemodem/caif_socket.h>
 #include <drivers/stemodem/if_caif.h>
 
+#define NUM_CHAT	1
+
 static const char *cpin_prefix[] = { "+CPIN:", NULL };
+
+static char *chat_prefixes[NUM_CHAT] = { "Default: " };
 
 struct ste_data {
 	GAtChat *chat;
@@ -80,7 +85,7 @@ static int ste_probe(struct ofono_modem *modem)
 	DBG("%p", modem);
 
 	data = g_try_new0(struct ste_data, 1);
-	if (!data)
+	if (data == NULL)
 		return -ENOMEM;
 
 	ofono_modem_set_data(modem, data);
@@ -162,18 +167,16 @@ static void cfun_enable(gboolean ok, GAtResult *result, gpointer user_data)
 	init_simpin_check(modem);
 }
 
-static int ste_enable(struct ofono_modem *modem)
+static GIOChannel *ste_create_channel(struct ofono_modem *modem)
 {
-	struct ste_data *data = ofono_modem_get_data(modem);
 	GIOChannel *channel;
-	GAtSyntax *syntax;
 	const char *device;
 	int fd;
 
 	DBG("%p", modem);
 
 	device = ofono_modem_get_string(modem, "Device");
-	if (!device) {
+	if (device == NULL) {
 		struct sockaddr_caif addr;
 		int err;
 		const char *interface;
@@ -182,13 +185,14 @@ static int ste_enable(struct ofono_modem *modem)
 		fd = socket(AF_CAIF, SOCK_STREAM, CAIFPROTO_AT);
 		if (fd < 0) {
 			ofono_error("Failed to create CAIF socket for AT");
-			return -EIO;
+			return NULL;
 		}
 
 		/* Bind CAIF socket to specified interface */
 		interface = ofono_modem_get_string(modem, "Interface");
 		if (interface) {
 			struct ifreq ifreq;
+
 			memset(&ifreq, 0, sizeof(ifreq));
 			strcpy(ifreq.ifr_name, interface);
 			err = setsockopt(fd, SOL_SOCKET,
@@ -197,7 +201,7 @@ static int ste_enable(struct ofono_modem *modem)
 				ofono_error("Failed to bind caif socket "
 					"to interface");
 				close(fd);
-				return err;
+				return NULL;
 			}
 		}
 
@@ -210,37 +214,56 @@ static int ste_enable(struct ofono_modem *modem)
 		if (err < 0) {
 			ofono_error("Failed to connect CAIF socket for AT");
 			close(fd);
-			return err;
+			return NULL;
 		}
 	} else {
 		fd = open(device, O_RDWR);
 		if (fd < 0) {
 			ofono_error("Failed to open device %s", device);
-			return -EIO;
+			return NULL;
 		}
 	}
 
 	channel = g_io_channel_unix_new(fd);
-	if (!channel)  {
+	if (channel == NULL)  {
 		close(fd);
-		return -EIO;
+		return NULL;
 	}
+
 	g_io_channel_set_close_on_unref(channel, TRUE);
+
+	return channel;
+}
+
+static int ste_enable(struct ofono_modem *modem)
+{
+	struct ste_data *data = ofono_modem_get_data(modem);
+	GIOChannel *channel;
+	GAtSyntax *syntax;
 
 	syntax = g_at_syntax_new_gsm_permissive();
 
-	data->chat = g_at_chat_new_blocking(channel, syntax);
-	g_at_syntax_unref(syntax);
-	g_io_channel_unref(channel);
+	channel = ste_create_channel(modem);
+	if (!channel)
+		return -EIO;
 
-	if (!data->chat)
+	data->chat = g_at_chat_new_blocking(channel, syntax);
+	g_at_chat_send(data->chat, "AT&F E0 V1 X4 &C1 +CMEE=1",
+			NULL, NULL, NULL, NULL);
+
+	/* All STE modems support UTF-8 */
+	g_at_chat_send(data->chat, "AT+CSCS=\"UTF-8\"",
+			NULL, NULL, NULL, NULL);
+
+	g_io_channel_unref(channel);
+	g_at_syntax_unref(syntax);
+
+	if (data->chat == NULL)
 		return -ENOMEM;
 
 	if (getenv("OFONO_AT_DEBUG"))
-		g_at_chat_set_debug(data->chat, ste_debug, "");
+		g_at_chat_set_debug(data->chat, ste_debug, chat_prefixes[0]);
 
-	g_at_chat_send(data->chat, "AT&F E0 V1 X4 &C1 +CMEE=1",
-			NULL, NULL, NULL, NULL);
 	g_at_chat_send(data->chat, "AT+CFUN=4", NULL, cfun_enable, modem, NULL);
 
 	return -EINPROGRESS;
@@ -266,7 +289,7 @@ static int ste_disable(struct ofono_modem *modem)
 
 	DBG("%p", modem);
 
-	if (!data->chat)
+	if (data->chat == NULL)
 		return 0;
 
 	g_at_chat_cancel_all(data->chat);
@@ -298,13 +321,9 @@ static void ste_set_online(struct ofono_modem *modem, ofono_bool_t online,
 
 	DBG("modem %p %s", modem, online ? "online" : "offline");
 
-	if (!cbd)
-		goto error;
-
 	if (g_at_chat_send(chat, command, NULL, set_online_cb, cbd, g_free))
 		return;
 
-error:
 	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, cbd->data);
@@ -333,6 +352,9 @@ static void ste_post_sim(struct ofono_modem *modem)
 
 	ofono_stk_create(modem, 0, "mbmmodem", data->chat);
 	ofono_phonebook_create(modem, 0, "atmodem", data->chat);
+	ofono_radio_settings_create(modem, 0, "stemodem", data->chat);
+
+	ofono_sms_create(modem, 0, "atmodem", data->chat);
 }
 
 static void ste_post_online(struct ofono_modem *modem)
@@ -344,7 +366,6 @@ static void ste_post_online(struct ofono_modem *modem)
 
 	DBG("%p", modem);
 
-	ofono_radio_settings_create(modem, 0, "stemodem", data->chat);
 	ofono_ussd_create(modem, 0, "atmodem", data->chat);
 	ofono_call_forwarding_create(modem, 0, "atmodem", data->chat);
 	ofono_call_settings_create(modem, 0, "atmodem", data->chat);
@@ -352,8 +373,8 @@ static void ste_post_online(struct ofono_modem *modem)
 	ofono_call_meter_create(modem, 0, "atmodem", data->chat);
 	ofono_call_barring_create(modem, 0, "atmodem", data->chat);
 	ofono_ssn_create(modem, 0, "atmodem", data->chat);
-	ofono_sms_create(modem, 0, "atmodem", data->chat);
 	ofono_call_volume_create(modem, 0, "atmodem", data->chat);
+	ofono_cbs_create(modem, 0, "atmodem", data->chat);
 
 	gprs = ofono_gprs_create(modem, OFONO_VENDOR_MBM,
 					"atmodem", data->chat);

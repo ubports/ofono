@@ -41,7 +41,7 @@ host_triplet = @host@
 @UDEV_TRUE@am__append_2 = plugins/udev.c
 @UDEV_TRUE@am__append_3 = @UDEV_CFLAGS@
 @UDEV_TRUE@am__append_4 = @UDEV_LIBS@
-@ISIMODEM_TRUE@am__append_5 = isimodem isigen n900
+@ISIMODEM_TRUE@am__append_5 = isimodem isiusb n900
 @ISIMODEM_TRUE@am__append_6 = $(gisi_sources) \
 @ISIMODEM_TRUE@	drivers/isimodem/isimodem.h \
 @ISIMODEM_TRUE@	drivers/isimodem/isimodem.c \
@@ -70,7 +70,7 @@ host_triplet = @host@
 @ISIMODEM_TRUE@	drivers/isimodem/gprs-context.c \
 @ISIMODEM_TRUE@	drivers/isimodem/gpds.h \
 @ISIMODEM_TRUE@	drivers/isimodem/audio-settings.c \
-@ISIMODEM_TRUE@	plugins/isigen.c plugins/n900.c \
+@ISIMODEM_TRUE@	plugins/isiusb.c plugins/n900.c \
 @ISIMODEM_TRUE@	plugins/nokia-gpio.h plugins/nokia-gpio.c
 @ATMODEM_TRUE@am__append_7 = atmodem nwmodem huaweimodem calypsomodem \
 @ATMODEM_TRUE@	hfpmodem mbmmodem hsomodem ifxmodem stemodem
@@ -95,6 +95,7 @@ host_triplet = @host@
 @ATMODEM_TRUE@	drivers/atmodem/atutil.h \
 @ATMODEM_TRUE@	drivers/atmodem/atutil.c drivers/atmodem/gprs.c \
 @ATMODEM_TRUE@	drivers/atmodem/gprs-context.c \
+@ATMODEM_TRUE@	drivers/atmodem/sim-auth.c \
 @ATMODEM_TRUE@	drivers/atmodem/atutil.h \
 @ATMODEM_TRUE@	drivers/nwmodem/nwmodem.h \
 @ATMODEM_TRUE@	drivers/nwmodem/nwmodem.c \
@@ -105,6 +106,7 @@ host_triplet = @host@
 @ATMODEM_TRUE@	drivers/huaweimodem/voicecall.c \
 @ATMODEM_TRUE@	drivers/huaweimodem/audio-settings.c \
 @ATMODEM_TRUE@	drivers/huaweimodem/gprs-context.c \
+@ATMODEM_TRUE@	drivers/huaweimodem/radio-settings.c \
 @ATMODEM_TRUE@	drivers/atmodem/atutil.h \
 @ATMODEM_TRUE@	drivers/calypsomodem/calypsomodem.h \
 @ATMODEM_TRUE@	drivers/calypsomodem/calypsomodem.c \
@@ -132,7 +134,8 @@ host_triplet = @host@
 @ATMODEM_TRUE@	drivers/ifxmodem/audio-settings.c \
 @ATMODEM_TRUE@	drivers/ifxmodem/radio-settings.c \
 @ATMODEM_TRUE@	drivers/ifxmodem/gprs-context.c \
-@ATMODEM_TRUE@	drivers/ifxmodem/stk.c drivers/atmodem/atutil.h \
+@ATMODEM_TRUE@	drivers/ifxmodem/stk.c drivers/ifxmodem/ctm.c \
+@ATMODEM_TRUE@	drivers/atmodem/atutil.h \
 @ATMODEM_TRUE@	drivers/stemodem/stemodem.h \
 @ATMODEM_TRUE@	drivers/stemodem/stemodem.c \
 @ATMODEM_TRUE@	drivers/stemodem/voicecall.c \
@@ -145,29 +148,48 @@ host_triplet = @host@
 @ATMODEM_TRUE@@PHONESIM_TRUE@am__append_9 = phonesim
 @ATMODEM_TRUE@@PHONESIM_TRUE@am__append_10 = plugins/phonesim.c
 @ATMODEM_TRUE@@DATAFILES_TRUE@@PHONESIM_TRUE@am__append_11 = plugins/phonesim.conf
-@ATMODEM_TRUE@am__append_12 = g1 wavecom calypso mbm hso zte huawei \
-@ATMODEM_TRUE@	novatel nokia bluetooth hfp palmpre ifx ste caif
-@ATMODEM_TRUE@am__append_13 = plugins/g1.c plugins/wavecom.c \
-@ATMODEM_TRUE@	plugins/calypso.c plugins/mbm.c plugins/hso.c \
-@ATMODEM_TRUE@	plugins/zte.c plugins/huawei.c plugins/novatel.c \
-@ATMODEM_TRUE@	plugins/nokia.c plugins/bluetooth.c \
-@ATMODEM_TRUE@	plugins/bluetooth.h plugins/hfp.c \
-@ATMODEM_TRUE@	plugins/bluetooth.h plugins/palmpre.c \
-@ATMODEM_TRUE@	plugins/ifx.c plugins/ste.c plugins/caif.c
-@MAINTAINER_MODE_TRUE@am__append_14 = example_history example_nettime
-@MAINTAINER_MODE_TRUE@am__append_15 = examples/history.c \
-@MAINTAINER_MODE_TRUE@	examples/nettime.c
+@ATMODEM_TRUE@@CDMAMODEM_TRUE@am__append_12 = cdmamodem
+@ATMODEM_TRUE@@CDMAMODEM_TRUE@am__append_13 = drivers/cdmamodem/cdmamodem.h \
+@ATMODEM_TRUE@@CDMAMODEM_TRUE@			drivers/cdmamodem/cdmamodem.c \
+@ATMODEM_TRUE@@CDMAMODEM_TRUE@			drivers/cdmamodem/voicecall.c \
+@ATMODEM_TRUE@@CDMAMODEM_TRUE@			drivers/cdmamodem/devinfo.c
+
+@ATMODEM_TRUE@am__append_14 = g1 gobi wavecom calypso mbm hso zte \
+@ATMODEM_TRUE@	huawei sierra novatel palmpre ifx ste stemgr \
+@ATMODEM_TRUE@	caif tc65 nokia nokiacdma
+@ATMODEM_TRUE@am__append_15 = plugins/g1.c plugins/gobi.c \
+@ATMODEM_TRUE@	plugins/wavecom.c plugins/calypso.c \
+@ATMODEM_TRUE@	plugins/mbm.c plugins/hso.c plugins/zte.c \
+@ATMODEM_TRUE@	plugins/huawei.c plugins/sierra.c \
+@ATMODEM_TRUE@	plugins/novatel.c plugins/palmpre.c \
+@ATMODEM_TRUE@	plugins/ifx.c plugins/ste.c plugins/stemgr.c \
+@ATMODEM_TRUE@	plugins/caif.c plugins/tc65.c plugins/nokia.c \
+@ATMODEM_TRUE@	plugins/nokiacdma.c
+@ATMODEM_TRUE@@BLUETOOTH_TRUE@am__append_16 = bluetooth hfp
+@ATMODEM_TRUE@@BLUETOOTH_TRUE@am__append_17 = plugins/bluetooth.c \
+@ATMODEM_TRUE@@BLUETOOTH_TRUE@	plugins/bluetooth.h \
+@ATMODEM_TRUE@@BLUETOOTH_TRUE@	plugins/hfp.c \
+@ATMODEM_TRUE@@BLUETOOTH_TRUE@	plugins/bluetooth.h
+@ATMODEM_TRUE@@BLUETOOTH_TRUE@am__append_18 = @BLUEZ_CFLAGS@
+@ATMODEM_TRUE@@BLUETOOTH_TRUE@am__append_19 = @BLUEZ_LIBS@
+@MAINTAINER_MODE_TRUE@am__append_20 = example_history example_nettime \
+@MAINTAINER_MODE_TRUE@	example_provision
+@MAINTAINER_MODE_TRUE@am__append_21 = examples/history.c \
+@MAINTAINER_MODE_TRUE@	examples/nettime.c examples/provision.c
 sbin_PROGRAMS = src/ofonod$(EXEEXT)
 noinst_PROGRAMS = unit/test-common$(EXEEXT) unit/test-util$(EXEEXT) \
 	unit/test-idmap$(EXEEXT) unit/test-sms$(EXEEXT) \
 	unit/test-simutil$(EXEEXT) unit/test-mux$(EXEEXT) \
 	unit/test-caif$(EXEEXT) unit/test-stkutil$(EXEEXT) \
-	tools/huawei-audio$(EXEEXT) gatchat/gsmdial$(EXEEXT) \
+	$(am__EXEEXT_1) gatchat/gsmdial$(EXEEXT) \
 	gatchat/test-server$(EXEEXT) gatchat/test-qcdm$(EXEEXT)
+@TOOLS_TRUE@am__append_22 = tools/huawei-audio tools/auto-enable
 subdir = .
-DIST_COMMON = README $(am__configure_deps) $(dist_man_MANS) \
-	$(include_HEADERS) $(srcdir)/Makefile.am $(srcdir)/Makefile.in \
-	$(srcdir)/config.h.in $(top_srcdir)/configure \
+DIST_COMMON = README $(am__configure_deps) $(am__dist_conf_DATA_DIST) \
+	$(am__dist_dbusconf_DATA_DIST) $(dist_man_MANS) \
+	$(pkginclude_HEADERS) $(srcdir)/Makefile.am \
+	$(srcdir)/Makefile.in $(srcdir)/config.h.in \
+	$(srcdir)/ofono.pc.in $(top_srcdir)/configure \
 	$(top_srcdir)/include/version.h.in \
 	$(top_srcdir)/src/ofono.service.in AUTHORS COPYING ChangeLog \
 	INSTALL NEWS TODO compile config.guess config.sub depcomp \
@@ -181,13 +203,16 @@ am__CONFIG_DISTCLEAN_FILES = config.status config.cache config.log \
  configure.lineno config.status.lineno
 mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = config.h
-CONFIG_CLEAN_FILES = include/version.h src/ofono.service
+CONFIG_CLEAN_FILES = include/version.h src/ofono.service ofono.pc
 CONFIG_CLEAN_VPATH_FILES =
+@TOOLS_TRUE@am__EXEEXT_1 = tools/huawei-audio$(EXEEXT) \
+@TOOLS_TRUE@	tools/auto-enable$(EXEEXT)
 am__installdirs = "$(DESTDIR)$(sbindir)" "$(DESTDIR)$(testdir)" \
 	"$(DESTDIR)$(man8dir)" "$(DESTDIR)$(confdir)" \
-	"$(DESTDIR)$(dbusconfdir)" "$(DESTDIR)$(rulesdir)" \
-	"$(DESTDIR)$(statedir)" "$(DESTDIR)$(systemdunitdir)" \
-	"$(DESTDIR)$(includedir)" "$(DESTDIR)$(includedir)"
+	"$(DESTDIR)$(dbusconfdir)" "$(DESTDIR)$(pkgconfigdir)" \
+	"$(DESTDIR)$(rulesdir)" "$(DESTDIR)$(statedir)" \
+	"$(DESTDIR)$(systemdunitdir)" "$(DESTDIR)$(pkgincludedir)" \
+	"$(DESTDIR)$(pkgincludedir)"
 PROGRAMS = $(noinst_PROGRAMS) $(sbin_PROGRAMS)
 am__dirstamp = $(am__leading_dot)dirstamp
 am__objects_1 = gatchat/gatchat.$(OBJEXT) gatchat/gatresult.$(OBJEXT) \
@@ -217,15 +242,16 @@ gatchat_test_server_OBJECTS = $(am_gatchat_test_server_OBJECTS)
 gatchat_test_server_DEPENDENCIES =
 am__src_ofonod_SOURCES_DIST = gdbus/gdbus.h gdbus/mainloop.c \
 	gdbus/watch.c gdbus/object.c gdbus/polkit.c plugins/udev.c \
-	gisi/modem.h gisi/modem.c gisi/netlink.h gisi/netlink.c \
-	gisi/socket.h gisi/socket.c gisi/client.h gisi/client.c \
-	gisi/server.h gisi/server.c gisi/pep.h gisi/pep.c gisi/pipe.h \
-	gisi/pipe.c gisi/iter.h gisi/iter.c gisi/verify.c \
-	gisi/phonet.h drivers/isimodem/isimodem.h \
-	drivers/isimodem/isimodem.c drivers/isimodem/mtc.h \
-	drivers/isimodem/debug.h drivers/isimodem/isiutil.h \
-	drivers/isimodem/debug.c drivers/isimodem/phonebook.c \
-	drivers/isimodem/devinfo.c drivers/isimodem/info.h \
+	gisi/client.c gisi/client.h gisi/common.h gisi/iter.c \
+	gisi/iter.h gisi/message.c gisi/message.h gisi/modem.c \
+	gisi/modem.h gisi/netlink.c gisi/netlink.h gisi/pep.c \
+	gisi/pep.h gisi/phonet.h gisi/pipe.c gisi/pipe.h gisi/server.c \
+	gisi/server.h gisi/socket.c gisi/socket.h \
+	drivers/isimodem/isimodem.h drivers/isimodem/isimodem.c \
+	drivers/isimodem/mtc.h drivers/isimodem/debug.h \
+	drivers/isimodem/isiutil.h drivers/isimodem/debug.c \
+	drivers/isimodem/phonebook.c drivers/isimodem/devinfo.c \
+	drivers/isimodem/info.h \
 	drivers/isimodem/network-registration.c \
 	drivers/isimodem/network.h drivers/isimodem/infoserver.h \
 	drivers/isimodem/infoserver.c drivers/isimodem/voicecall.c \
@@ -239,7 +265,7 @@ am__src_ofonod_SOURCES_DIST = gdbus/gdbus.h gdbus/mainloop.c \
 	drivers/isimodem/ss.h drivers/isimodem/radio-settings.c \
 	drivers/isimodem/gss.h drivers/isimodem/gprs.c \
 	drivers/isimodem/gprs-context.c drivers/isimodem/gpds.h \
-	drivers/isimodem/audio-settings.c plugins/isigen.c \
+	drivers/isimodem/audio-settings.c plugins/isiusb.c \
 	plugins/n900.c plugins/nokia-gpio.h plugins/nokia-gpio.c \
 	gatchat/gatchat.h gatchat/gatchat.c gatchat/gatresult.h \
 	gatchat/gatresult.c gatchat/gatsyntax.h gatchat/gatsyntax.c \
@@ -266,13 +292,14 @@ am__src_ofonod_SOURCES_DIST = gdbus/gdbus.h gdbus/mainloop.c \
 	drivers/atmodem/call-volume.c drivers/atmodem/vendor.h \
 	drivers/atmodem/atutil.h drivers/atmodem/atutil.c \
 	drivers/atmodem/gprs.c drivers/atmodem/gprs-context.c \
-	drivers/nwmodem/nwmodem.h drivers/nwmodem/nwmodem.c \
-	drivers/nwmodem/radio-settings.c \
+	drivers/atmodem/sim-auth.c drivers/nwmodem/nwmodem.h \
+	drivers/nwmodem/nwmodem.c drivers/nwmodem/radio-settings.c \
 	drivers/huaweimodem/huaweimodem.h \
 	drivers/huaweimodem/huaweimodem.c \
 	drivers/huaweimodem/voicecall.c \
 	drivers/huaweimodem/audio-settings.c \
 	drivers/huaweimodem/gprs-context.c \
+	drivers/huaweimodem/radio-settings.c \
 	drivers/calypsomodem/calypsomodem.h \
 	drivers/calypsomodem/calypsomodem.c \
 	drivers/calypsomodem/voicecall.c drivers/calypsomodem/stk.c \
@@ -288,16 +315,21 @@ am__src_ofonod_SOURCES_DIST = gdbus/gdbus.h gdbus/mainloop.c \
 	drivers/ifxmodem/audio-settings.c \
 	drivers/ifxmodem/radio-settings.c \
 	drivers/ifxmodem/gprs-context.c drivers/ifxmodem/stk.c \
-	drivers/stemodem/stemodem.h drivers/stemodem/stemodem.c \
-	drivers/stemodem/voicecall.c drivers/stemodem/radio-settings.c \
-	drivers/stemodem/caif_rtnl.c drivers/stemodem/caif_rtnl.h \
-	drivers/stemodem/gprs-context.c drivers/stemodem/caif_socket.h \
-	drivers/stemodem/if_caif.h plugins/phonesim.c plugins/g1.c \
+	drivers/ifxmodem/ctm.c drivers/stemodem/stemodem.h \
+	drivers/stemodem/stemodem.c drivers/stemodem/voicecall.c \
+	drivers/stemodem/radio-settings.c drivers/stemodem/caif_rtnl.c \
+	drivers/stemodem/caif_rtnl.h drivers/stemodem/gprs-context.c \
+	drivers/stemodem/caif_socket.h drivers/stemodem/if_caif.h \
+	plugins/phonesim.c drivers/cdmamodem/cdmamodem.h \
+	drivers/cdmamodem/cdmamodem.c drivers/cdmamodem/voicecall.c \
+	drivers/cdmamodem/devinfo.c plugins/g1.c plugins/gobi.c \
 	plugins/wavecom.c plugins/calypso.c plugins/mbm.c \
-	plugins/hso.c plugins/zte.c plugins/huawei.c plugins/novatel.c \
-	plugins/nokia.c plugins/bluetooth.c plugins/bluetooth.h \
-	plugins/hfp.c plugins/palmpre.c plugins/ifx.c plugins/ste.c \
-	plugins/caif.c examples/history.c examples/nettime.c \
+	plugins/hso.c plugins/zte.c plugins/huawei.c plugins/sierra.c \
+	plugins/novatel.c plugins/palmpre.c plugins/ifx.c \
+	plugins/ste.c plugins/stemgr.c plugins/caif.c plugins/tc65.c \
+	plugins/nokia.c plugins/nokiacdma.c plugins/bluetooth.c \
+	plugins/bluetooth.h plugins/hfp.c examples/history.c \
+	examples/nettime.c examples/provision.c \
 	plugins/smart-messaging.c plugins/push-notification.c \
 	src/ofono.ver src/main.c src/ofono.h src/log.c src/plugin.c \
 	src/modem.c src/common.h src/common.c src/manager.c src/dbus.c \
@@ -310,14 +342,16 @@ am__src_ofonod_SOURCES_DIST = gdbus/gdbus.h gdbus/mainloop.c \
 	src/watch.c src/call-volume.c src/gprs.c src/idmap.h \
 	src/idmap.c src/radio-settings.c src/stkutil.h src/stkutil.c \
 	src/nettime.c src/stkagent.c src/stkagent.h src/simfs.c \
-	src/simfs.h src/audio-settings.c src/smsagent.c src/smsagent.h
+	src/simfs.h src/audio-settings.c src/smsagent.c src/smsagent.h \
+	src/ctm.c src/cdma-voicecall.c src/sim-auth.c src/message.h \
+	src/message.c src/gprs-provision.c
 am__objects_2 = gdbus/mainloop.$(OBJEXT) gdbus/watch.$(OBJEXT) \
 	gdbus/object.$(OBJEXT) gdbus/polkit.$(OBJEXT)
 @UDEV_TRUE@am__objects_3 = plugins/udev.$(OBJEXT)
-am__objects_4 = gisi/modem.$(OBJEXT) gisi/netlink.$(OBJEXT) \
-	gisi/socket.$(OBJEXT) gisi/client.$(OBJEXT) \
-	gisi/server.$(OBJEXT) gisi/pep.$(OBJEXT) gisi/pipe.$(OBJEXT) \
-	gisi/iter.$(OBJEXT) gisi/verify.$(OBJEXT)
+am__objects_4 = gisi/client.$(OBJEXT) gisi/iter.$(OBJEXT) \
+	gisi/message.$(OBJEXT) gisi/modem.$(OBJEXT) \
+	gisi/netlink.$(OBJEXT) gisi/pep.$(OBJEXT) gisi/pipe.$(OBJEXT) \
+	gisi/server.$(OBJEXT) gisi/socket.$(OBJEXT)
 @ISIMODEM_TRUE@am__objects_5 = $(am__objects_4) \
 @ISIMODEM_TRUE@	drivers/isimodem/isimodem.$(OBJEXT) \
 @ISIMODEM_TRUE@	drivers/isimodem/debug.$(OBJEXT) \
@@ -339,7 +373,7 @@ am__objects_4 = gisi/modem.$(OBJEXT) gisi/netlink.$(OBJEXT) \
 @ISIMODEM_TRUE@	drivers/isimodem/gprs.$(OBJEXT) \
 @ISIMODEM_TRUE@	drivers/isimodem/gprs-context.$(OBJEXT) \
 @ISIMODEM_TRUE@	drivers/isimodem/audio-settings.$(OBJEXT) \
-@ISIMODEM_TRUE@	plugins/isigen.$(OBJEXT) plugins/n900.$(OBJEXT) \
+@ISIMODEM_TRUE@	plugins/isiusb.$(OBJEXT) plugins/n900.$(OBJEXT) \
 @ISIMODEM_TRUE@	plugins/nokia-gpio.$(OBJEXT)
 @ATMODEM_TRUE@am__objects_6 = $(am__objects_1) \
 @ATMODEM_TRUE@	drivers/atmodem/atmodem.$(OBJEXT) \
@@ -362,12 +396,14 @@ am__objects_4 = gisi/modem.$(OBJEXT) gisi/netlink.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/atmodem/atutil.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/atmodem/gprs.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/atmodem/gprs-context.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/atmodem/sim-auth.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/nwmodem/nwmodem.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/nwmodem/radio-settings.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/huaweimodem/huaweimodem.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/huaweimodem/voicecall.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/huaweimodem/audio-settings.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/huaweimodem/gprs-context.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/huaweimodem/radio-settings.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/calypsomodem/calypsomodem.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/calypsomodem/voicecall.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/calypsomodem/stk.$(OBJEXT) \
@@ -387,6 +423,7 @@ am__objects_4 = gisi/modem.$(OBJEXT) gisi/netlink.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/ifxmodem/radio-settings.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/ifxmodem/gprs-context.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/ifxmodem/stk.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/ifxmodem/ctm.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/stemodem/stemodem.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/stemodem/voicecall.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/stemodem/radio-settings.$(OBJEXT) \
@@ -394,24 +431,33 @@ am__objects_4 = gisi/modem.$(OBJEXT) gisi/netlink.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/stemodem/gprs-context.$(OBJEXT)
 @ATMODEM_TRUE@@PHONESIM_TRUE@am__objects_7 =  \
 @ATMODEM_TRUE@@PHONESIM_TRUE@	plugins/phonesim.$(OBJEXT)
-@ATMODEM_TRUE@am__objects_8 = plugins/g1.$(OBJEXT) \
-@ATMODEM_TRUE@	plugins/wavecom.$(OBJEXT) \
+@ATMODEM_TRUE@@CDMAMODEM_TRUE@am__objects_8 = drivers/cdmamodem/cdmamodem.$(OBJEXT) \
+@ATMODEM_TRUE@@CDMAMODEM_TRUE@	drivers/cdmamodem/voicecall.$(OBJEXT) \
+@ATMODEM_TRUE@@CDMAMODEM_TRUE@	drivers/cdmamodem/devinfo.$(OBJEXT)
+@ATMODEM_TRUE@am__objects_9 = plugins/g1.$(OBJEXT) \
+@ATMODEM_TRUE@	plugins/gobi.$(OBJEXT) plugins/wavecom.$(OBJEXT) \
 @ATMODEM_TRUE@	plugins/calypso.$(OBJEXT) plugins/mbm.$(OBJEXT) \
 @ATMODEM_TRUE@	plugins/hso.$(OBJEXT) plugins/zte.$(OBJEXT) \
 @ATMODEM_TRUE@	plugins/huawei.$(OBJEXT) \
+@ATMODEM_TRUE@	plugins/sierra.$(OBJEXT) \
 @ATMODEM_TRUE@	plugins/novatel.$(OBJEXT) \
+@ATMODEM_TRUE@	plugins/palmpre.$(OBJEXT) plugins/ifx.$(OBJEXT) \
+@ATMODEM_TRUE@	plugins/ste.$(OBJEXT) plugins/stemgr.$(OBJEXT) \
+@ATMODEM_TRUE@	plugins/caif.$(OBJEXT) plugins/tc65.$(OBJEXT) \
 @ATMODEM_TRUE@	plugins/nokia.$(OBJEXT) \
-@ATMODEM_TRUE@	plugins/bluetooth.$(OBJEXT) \
-@ATMODEM_TRUE@	plugins/hfp.$(OBJEXT) plugins/palmpre.$(OBJEXT) \
-@ATMODEM_TRUE@	plugins/ifx.$(OBJEXT) plugins/ste.$(OBJEXT) \
-@ATMODEM_TRUE@	plugins/caif.$(OBJEXT)
-@MAINTAINER_MODE_TRUE@am__objects_9 = examples/history.$(OBJEXT) \
-@MAINTAINER_MODE_TRUE@	examples/nettime.$(OBJEXT)
-am__objects_10 = $(am__objects_3) $(am__objects_5) $(am__objects_6) \
+@ATMODEM_TRUE@	plugins/nokiacdma.$(OBJEXT)
+@ATMODEM_TRUE@@BLUETOOTH_TRUE@am__objects_10 =  \
+@ATMODEM_TRUE@@BLUETOOTH_TRUE@	plugins/bluetooth.$(OBJEXT) \
+@ATMODEM_TRUE@@BLUETOOTH_TRUE@	plugins/hfp.$(OBJEXT)
+@MAINTAINER_MODE_TRUE@am__objects_11 = examples/history.$(OBJEXT) \
+@MAINTAINER_MODE_TRUE@	examples/nettime.$(OBJEXT) \
+@MAINTAINER_MODE_TRUE@	examples/provision.$(OBJEXT)
+am__objects_12 = $(am__objects_3) $(am__objects_5) $(am__objects_6) \
 	$(am__objects_7) $(am__objects_8) $(am__objects_9) \
+	$(am__objects_10) $(am__objects_11) \
 	plugins/smart-messaging.$(OBJEXT) \
 	plugins/push-notification.$(OBJEXT)
-am_src_ofonod_OBJECTS = $(am__objects_2) $(am__objects_10) \
+am_src_ofonod_OBJECTS = $(am__objects_2) $(am__objects_12) \
 	src/main.$(OBJEXT) src/log.$(OBJEXT) src/plugin.$(OBJEXT) \
 	src/modem.$(OBJEXT) src/common.$(OBJEXT) src/manager.$(OBJEXT) \
 	src/dbus.$(OBJEXT) src/util.$(OBJEXT) src/network.$(OBJEXT) \
@@ -427,16 +473,28 @@ am_src_ofonod_OBJECTS = $(am__objects_2) $(am__objects_10) \
 	src/radio-settings.$(OBJEXT) src/stkutil.$(OBJEXT) \
 	src/nettime.$(OBJEXT) src/stkagent.$(OBJEXT) \
 	src/simfs.$(OBJEXT) src/audio-settings.$(OBJEXT) \
-	src/smsagent.$(OBJEXT)
+	src/smsagent.$(OBJEXT) src/ctm.$(OBJEXT) \
+	src/cdma-voicecall.$(OBJEXT) src/sim-auth.$(OBJEXT) \
+	src/message.$(OBJEXT) src/gprs-provision.$(OBJEXT)
 src_ofonod_OBJECTS = $(am_src_ofonod_OBJECTS)
 am__DEPENDENCIES_1 =
-am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1)
+am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
 src_ofonod_DEPENDENCIES = $(am__DEPENDENCIES_2)
 src_ofonod_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
 	$(src_ofonod_LDFLAGS) $(LDFLAGS) -o $@
-am_tools_huawei_audio_OBJECTS = $(am__objects_2) \
-	tools/huawei-audio.$(OBJEXT)
+am__tools_auto_enable_SOURCES_DIST = gdbus/gdbus.h gdbus/mainloop.c \
+	gdbus/watch.c gdbus/object.c gdbus/polkit.c \
+	tools/auto-enable.c
+@TOOLS_TRUE@am_tools_auto_enable_OBJECTS = $(am__objects_2) \
+@TOOLS_TRUE@	tools/auto-enable.$(OBJEXT)
+tools_auto_enable_OBJECTS = $(am_tools_auto_enable_OBJECTS)
+tools_auto_enable_DEPENDENCIES =
+am__tools_huawei_audio_SOURCES_DIST = gdbus/gdbus.h gdbus/mainloop.c \
+	gdbus/watch.c gdbus/object.c gdbus/polkit.c \
+	tools/huawei-audio.c
+@TOOLS_TRUE@am_tools_huawei_audio_OBJECTS = $(am__objects_2) \
+@TOOLS_TRUE@	tools/huawei-audio.$(OBJEXT)
 tools_huawei_audio_OBJECTS = $(am_tools_huawei_audio_OBJECTS)
 tools_huawei_audio_DEPENDENCIES =
 am_unit_test_caif_OBJECTS = unit/test-caif.$(OBJEXT) $(am__objects_1)
@@ -521,24 +579,27 @@ am__v_GEN_ = $(am__v_GEN_$(AM_DEFAULT_VERBOSITY))
 am__v_GEN_0 = @echo "  GEN   " $@;
 SOURCES = $(gatchat_gsmdial_SOURCES) $(gatchat_test_qcdm_SOURCES) \
 	$(gatchat_test_server_SOURCES) $(src_ofonod_SOURCES) \
-	$(tools_huawei_audio_SOURCES) $(unit_test_caif_SOURCES) \
-	$(unit_test_common_SOURCES) $(unit_test_idmap_SOURCES) \
-	$(unit_test_mux_SOURCES) $(unit_test_simutil_SOURCES) \
-	$(unit_test_sms_SOURCES) $(unit_test_stkutil_SOURCES) \
-	$(unit_test_util_SOURCES)
+	$(tools_auto_enable_SOURCES) $(tools_huawei_audio_SOURCES) \
+	$(unit_test_caif_SOURCES) $(unit_test_common_SOURCES) \
+	$(unit_test_idmap_SOURCES) $(unit_test_mux_SOURCES) \
+	$(unit_test_simutil_SOURCES) $(unit_test_sms_SOURCES) \
+	$(unit_test_stkutil_SOURCES) $(unit_test_util_SOURCES)
 DIST_SOURCES = $(gatchat_gsmdial_SOURCES) $(gatchat_test_qcdm_SOURCES) \
 	$(gatchat_test_server_SOURCES) $(am__src_ofonod_SOURCES_DIST) \
-	$(tools_huawei_audio_SOURCES) $(unit_test_caif_SOURCES) \
-	$(unit_test_common_SOURCES) $(unit_test_idmap_SOURCES) \
-	$(unit_test_mux_SOURCES) $(unit_test_simutil_SOURCES) \
-	$(unit_test_sms_SOURCES) $(unit_test_stkutil_SOURCES) \
-	$(unit_test_util_SOURCES)
+	$(am__tools_auto_enable_SOURCES_DIST) \
+	$(am__tools_huawei_audio_SOURCES_DIST) \
+	$(unit_test_caif_SOURCES) $(unit_test_common_SOURCES) \
+	$(unit_test_idmap_SOURCES) $(unit_test_mux_SOURCES) \
+	$(unit_test_simutil_SOURCES) $(unit_test_sms_SOURCES) \
+	$(unit_test_stkutil_SOURCES) $(unit_test_util_SOURCES)
 man8dir = $(mandir)/man8
 NROFF = nroff
 MANS = $(dist_man_MANS)
-DATA = $(conf_DATA) $(dbusconf_DATA) $(rules_DATA) $(state_DATA) \
-	$(systemdunit_DATA)
-HEADERS = $(include_HEADERS) $(nodist_include_HEADERS)
+am__dist_conf_DATA_DIST = plugins/phonesim.conf
+am__dist_dbusconf_DATA_DIST = src/ofono.conf
+DATA = $(dist_conf_DATA) $(dist_dbusconf_DATA) $(pkgconfig_DATA) \
+	$(rules_DATA) $(state_DATA) $(systemdunit_DATA)
+HEADERS = $(nodist_pkginclude_HEADERS) $(pkginclude_HEADERS)
 ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
@@ -560,6 +621,8 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BLUEZ_CFLAGS = @BLUEZ_CFLAGS@
+BLUEZ_LIBS = @BLUEZ_LIBS@
 CAPNG_CFLAGS = @CAPNG_CFLAGS@
 CAPNG_LIBS = @CAPNG_LIBS@
 CC = @CC@
@@ -622,12 +685,12 @@ SED = @SED@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
 STRIP = @STRIP@
-SYSTEMD_CFLAGS = @SYSTEMD_CFLAGS@
-SYSTEMD_LIBS = @SYSTEMD_LIBS@
 SYSTEMD_UNITDIR = @SYSTEMD_UNITDIR@
 UDEV_CFLAGS = @UDEV_CFLAGS@
 UDEV_DATADIR = @UDEV_DATADIR@
 UDEV_LIBS = @UDEV_LIBS@
+USB_CFLAGS = @USB_CFLAGS@
+USB_LIBS = @USB_LIBS@
 VERSION = @VERSION@
 abs_builddir = @abs_builddir@
 abs_srcdir = @abs_srcdir@
@@ -658,7 +721,7 @@ host_cpu = @host_cpu@
 host_os = @host_os@
 host_vendor = @host_vendor@
 htmldir = @htmldir@
-includedir = @includedir@/ofono
+includedir = @includedir@
 infodir = @infodir@
 install_sh = @install_sh@
 libdir = @libdir@
@@ -682,7 +745,7 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 AM_MAKEFLAGS = --no-print-directory
-include_HEADERS = include/log.h include/plugin.h include/history.h \
+pkginclude_HEADERS = include/log.h include/plugin.h include/history.h \
 			include/dbus.h include/modem.h include/types.h \
 			include/call-barring.h include/call-forwarding.h \
 			include/call-meter.h include/call-settings.h \
@@ -692,40 +755,38 @@ include_HEADERS = include/log.h include/plugin.h include/history.h \
 			include/cbs.h include/call-volume.h \
 			include/gprs.h include/gprs-context.h \
 			include/radio-settings.h include/stk.h \
-			include/audio-settings.h include/nettime.h
+			include/audio-settings.h include/nettime.h \
+			include/ctm.h include/cdma-voicecall.h \
+			include/cdma-sms.h include/sim-auth.h \
+			include/gprs-provision.h
 
-nodist_include_HEADERS = include/version.h
-local_headers = $(foreach file,$(include_HEADERS) $(nodist_include_HEADERS), \
+nodist_pkginclude_HEADERS = include/version.h
+local_headers = $(foreach file,$(pkginclude_HEADERS) \
+				$(nodist_pkginclude_HEADERS), \
 					include/ofono/$(notdir $(file)))
 
+pkgconfigdir = $(libdir)/pkgconfig
+pkgconfig_DATA = ofono.pc
 @DATAFILES_TRUE@dbusconfdir = @DBUS_CONFDIR@
-@DATAFILES_TRUE@dbusconf_DATA = src/ofono.conf
+@DATAFILES_TRUE@dist_dbusconf_DATA = src/ofono.conf
 @DATAFILES_TRUE@@SYSTEMD_TRUE@systemdunitdir = @SYSTEMD_UNITDIR@
 @DATAFILES_TRUE@@SYSTEMD_TRUE@systemdunit_DATA = src/ofono.service
 @DATAFILES_TRUE@confdir = $(sysconfdir)/ofono
-@DATAFILES_TRUE@conf_DATA = $(am__append_11)
+@DATAFILES_TRUE@dist_conf_DATA = $(am__append_11)
 @DATAFILES_TRUE@statedir = $(localstatedir)/lib/ofono
 @DATAFILES_TRUE@state_DATA = 
 builtin_modules = $(am__append_1) $(am__append_5) $(am__append_7) \
 	$(am__append_9) $(am__append_12) $(am__append_14) \
-	smart_messaging push_notification
+	$(am__append_16) $(am__append_20) smart_messaging \
+	push_notification
 builtin_sources = $(am__append_2) $(am__append_6) $(am__append_8) \
 	$(am__append_10) $(am__append_13) $(am__append_15) \
-	plugins/smart-messaging.c plugins/push-notification.c
-builtin_libadd = $(am__append_4)
-builtin_cflags = $(am__append_3)
+	$(am__append_17) $(am__append_21) plugins/smart-messaging.c \
+	plugins/push-notification.c
+builtin_libadd = $(am__append_4) $(am__append_19)
+builtin_cflags = $(am__append_3) $(am__append_18)
 gdbus_sources = gdbus/gdbus.h gdbus/mainloop.c gdbus/watch.c \
 					gdbus/object.c gdbus/polkit.c
-
-gisi_sources = gisi/modem.h gisi/modem.c \
-			gisi/netlink.h gisi/netlink.c \
-			gisi/socket.h gisi/socket.c \
-			gisi/client.h gisi/client.c \
-			gisi/server.h gisi/server.c \
-			gisi/pep.h gisi/pep.c \
-			gisi/pipe.h gisi/pipe.c \
-			gisi/iter.h gisi/iter.c \
-			gisi/verify.c gisi/phonet.h
 
 gatchat_sources = gatchat/gatchat.h gatchat/gatchat.c \
 				gatchat/gatresult.h gatchat/gatresult.c \
@@ -747,6 +808,18 @@ gatchat_sources = gatchat/gatchat.h gatchat/gatchat.c \
 				gatchat/ppp_auth.c gatchat/ppp_net.c \
 				gatchat/ppp_ipcp.c
 
+gisi_sources = gisi/client.c gisi/client.h gisi/common.h \
+				gisi/iter.c gisi/iter.h \
+				gisi/message.c gisi/message.h \
+				gisi/modem.c gisi/modem.h \
+				gisi/netlink.c gisi/netlink.h \
+				gisi/pep.c gisi/pep.h \
+				gisi/phonet.h \
+				gisi/pipe.c gisi/pipe.h \
+				gisi/server.c gisi/server.h \
+				gisi/socket.c gisi/socket.h
+
+btio_sources = btio/btio.h btio/btio.c
 udev_files = plugins/ofono.rules
 @DATAFILES_TRUE@@UDEV_TRUE@rulesdir = @UDEV_DATADIR@
 @DATAFILES_TRUE@@UDEV_TRUE@rules_DATA = $(foreach file,$(udev_files), plugins/97-$(notdir $(file)))
@@ -765,24 +838,29 @@ src_ofonod_SOURCES = $(gdbus_sources) $(builtin_sources) src/ofono.ver \
 			src/radio-settings.c src/stkutil.h src/stkutil.c \
 			src/nettime.c src/stkagent.c src/stkagent.h \
 			src/simfs.c src/simfs.h src/audio-settings.c \
-			src/smsagent.c src/smsagent.h
+			src/smsagent.c src/smsagent.h src/ctm.c \
+			src/cdma-voicecall.c src/sim-auth.c \
+			src/message.h src/message.c src/gprs-provision.c
 
 src_ofonod_LDADD = $(builtin_libadd) @GLIB_LIBS@ @DBUS_LIBS@ @CAPNG_LIBS@ -ldl
 src_ofonod_LDFLAGS = -Wl,--export-dynamic \
 				-Wl,--version-script=$(srcdir)/src/ofono.ver
 
-CLEANFILES = src/builtin.h $(local_headers) $(rules_DATA)
-plugindir = $(libdir)/ofono/plugins
+BUILT_SOURCES = $(local_headers)
+CLEANFILES = src/builtin.h $(BUILT_SOURCES) $(rules_DATA)
+plugindir = $(pkglibdir)/plugins
 @MAINTAINER_MODE_FALSE@build_plugindir = $(plugindir)
 @MAINTAINER_MODE_TRUE@build_plugindir = $(abs_top_srcdir)/plugins/.libs
-AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @CAPNG_CFLAGS@ $(builtin_cflags) \
+AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @CAPNG_CFLAGS@ @USB_CFLAGS@ \
+					$(builtin_cflags) \
 					-DOFONO_PLUGIN_BUILTIN \
 					-DPLUGINDIR=\""$(build_plugindir)"\"
 
 INCLUDES = -I$(builddir)/include -I$(builddir)/src -I$(srcdir)/src \
-			-I$(srcdir)/gdbus -I$(srcdir)/gisi -I$(srcdir)/gatchat
+			-I$(srcdir)/gdbus -I$(srcdir)/gisi -I$(srcdir)/gatchat \
+			-I$(srcdir)/btio
 
-doc_files = doc/overview.txt doc/ofono-paper.txt \
+doc_files = doc/overview.txt doc/ofono-paper.txt doc/release-faq.txt \
 		doc/manager-api.txt doc/modem-api.txt doc/network-api.txt \
 			doc/voicecallmanager-api.txt doc/voicecall-api.txt \
 			doc/call-forwarding-api.txt doc/call-settings-api.txt \
@@ -792,10 +870,11 @@ doc_files = doc/overview.txt doc/ofono-paper.txt \
 			doc/pushnotification-api.txt \
 			doc/smartmessaging-api.txt \
 			doc/call-volume-api.txt doc/cell-broadcast-api.txt \
-			doc/message-api.txt doc/message-waiting-api.txt \
+			doc/messagemanager-api.txt doc/message-waiting-api.txt \
 			doc/phonebook-api.txt doc/radio-settings-api.txt \
 			doc/sim-api.txt doc/stk-api.txt \
-			doc/audio-settings-api.txt
+			doc/audio-settings-api.txt doc/text-telephony-api.txt \
+			doc/calypso-modem.txt doc/message-api.txt
 
 test_scripts = test/backtrace \
 		test/create-internet-context \
@@ -858,14 +937,22 @@ test_scripts = test/backtrace \
 		test/set-fast-dormancy \
 		test/test-push-notification \
 		test/test-smart-messaging \
-		test/send-vcard
+		test/send-vcard \
+		test/set-tty \
+		test/set-gsm-band \
+		test/set-umts-band \
+		test/lockdown-modem \
+		test/set-call-forwarding \
+		test/cdma-list-call \
+		test/cdma-dial-number \
+		test/cdma-hangup \
+		test/disable-call-forwarding \
+		test/list-messages \
+		test/test-sms
 
 @TEST_TRUE@testdir = $(pkglibdir)/test
 @TEST_TRUE@test_SCRIPTS = $(test_scripts)
-conf_files = src/ofono.conf plugins/phonesim.conf
-EXTRA_DIST = src/genbuiltin $(conf_files) $(udev_files) \
-					$(doc_files) $(test_scripts)
-
+EXTRA_DIST = src/genbuiltin $(udev_files) $(doc_files) $(test_scripts)
 dist_man_MANS = doc/ofonod.8
 unit_objects = $(unit_test_common_OBJECTS) $(unit_test_utils_OBJECTS) \
 	$(unit_test_idmap_OBJECTS) $(unit_test_sms_OBJECTS) \
@@ -892,11 +979,13 @@ unit_test_mux_SOURCES = unit/test-mux.c $(gatchat_sources)
 unit_test_mux_LDADD = @GLIB_LIBS@
 unit_test_caif_SOURCES = unit/test-caif.c $(gatchat_sources) \
 					drivers/stemodem/caif_socket.h \
-					drivers/stemodem/if_caif.h 
+					drivers/stemodem/if_caif.h
 
 unit_test_caif_LDADD = @GLIB_LIBS@
-tools_huawei_audio_SOURCES = $(gdbus_sources) tools/huawei-audio.c
-tools_huawei_audio_LDADD = @GLIB_LIBS@ @DBUS_LIBS@
+@TOOLS_TRUE@tools_huawei_audio_SOURCES = $(gdbus_sources) tools/huawei-audio.c
+@TOOLS_TRUE@tools_huawei_audio_LDADD = @GLIB_LIBS@ @DBUS_LIBS@
+@TOOLS_TRUE@tools_auto_enable_SOURCES = $(gdbus_sources) tools/auto-enable.c
+@TOOLS_TRUE@tools_auto_enable_LDADD = @GLIB_LIBS@ @DBUS_LIBS@
 gatchat_gsmdial_SOURCES = gatchat/gsmdial.c $(gatchat_sources)
 gatchat_gsmdial_LDADD = @GLIB_LIBS@
 gatchat_test_server_SOURCES = gatchat/test-server.c $(gatchat_sources)
@@ -908,7 +997,7 @@ MAINTAINERCLEANFILES = Makefile.in \
 	aclocal.m4 configure config.h.in config.sub config.guess \
 	ltmain.sh depcomp compile missing install-sh mkinstalldirs
 
-all: config.h
+all: $(BUILT_SOURCES) config.h
 	$(MAKE) $(AM_MAKEFLAGS) all-am
 
 .SUFFIXES:
@@ -967,6 +1056,8 @@ distclean-hdr:
 include/version.h: $(top_builddir)/config.status $(top_srcdir)/include/version.h.in
 	cd $(top_builddir) && $(SHELL) ./config.status $@
 src/ofono.service: $(top_builddir)/config.status $(top_srcdir)/src/ofono.service.in
+	cd $(top_builddir) && $(SHELL) ./config.status $@
+ofono.pc: $(top_builddir)/config.status $(srcdir)/ofono.pc.in
 	cd $(top_builddir) && $(SHELL) ./config.status $@
 
 clean-noinstPROGRAMS:
@@ -1107,23 +1198,23 @@ gisi/$(am__dirstamp):
 gisi/$(DEPDIR)/$(am__dirstamp):
 	@$(MKDIR_P) gisi/$(DEPDIR)
 	@: > gisi/$(DEPDIR)/$(am__dirstamp)
+gisi/client.$(OBJEXT): gisi/$(am__dirstamp) \
+	gisi/$(DEPDIR)/$(am__dirstamp)
+gisi/iter.$(OBJEXT): gisi/$(am__dirstamp) \
+	gisi/$(DEPDIR)/$(am__dirstamp)
+gisi/message.$(OBJEXT): gisi/$(am__dirstamp) \
+	gisi/$(DEPDIR)/$(am__dirstamp)
 gisi/modem.$(OBJEXT): gisi/$(am__dirstamp) \
 	gisi/$(DEPDIR)/$(am__dirstamp)
 gisi/netlink.$(OBJEXT): gisi/$(am__dirstamp) \
-	gisi/$(DEPDIR)/$(am__dirstamp)
-gisi/socket.$(OBJEXT): gisi/$(am__dirstamp) \
-	gisi/$(DEPDIR)/$(am__dirstamp)
-gisi/client.$(OBJEXT): gisi/$(am__dirstamp) \
-	gisi/$(DEPDIR)/$(am__dirstamp)
-gisi/server.$(OBJEXT): gisi/$(am__dirstamp) \
 	gisi/$(DEPDIR)/$(am__dirstamp)
 gisi/pep.$(OBJEXT): gisi/$(am__dirstamp) \
 	gisi/$(DEPDIR)/$(am__dirstamp)
 gisi/pipe.$(OBJEXT): gisi/$(am__dirstamp) \
 	gisi/$(DEPDIR)/$(am__dirstamp)
-gisi/iter.$(OBJEXT): gisi/$(am__dirstamp) \
+gisi/server.$(OBJEXT): gisi/$(am__dirstamp) \
 	gisi/$(DEPDIR)/$(am__dirstamp)
-gisi/verify.$(OBJEXT): gisi/$(am__dirstamp) \
+gisi/socket.$(OBJEXT): gisi/$(am__dirstamp) \
 	gisi/$(DEPDIR)/$(am__dirstamp)
 drivers/isimodem/$(am__dirstamp):
 	@$(MKDIR_P) drivers/isimodem
@@ -1182,7 +1273,7 @@ drivers/isimodem/gprs-context.$(OBJEXT):  \
 drivers/isimodem/audio-settings.$(OBJEXT):  \
 	drivers/isimodem/$(am__dirstamp) \
 	drivers/isimodem/$(DEPDIR)/$(am__dirstamp)
-plugins/isigen.$(OBJEXT): plugins/$(am__dirstamp) \
+plugins/isiusb.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
 plugins/n900.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
@@ -1240,6 +1331,8 @@ drivers/atmodem/gprs.$(OBJEXT): drivers/atmodem/$(am__dirstamp) \
 drivers/atmodem/gprs-context.$(OBJEXT):  \
 	drivers/atmodem/$(am__dirstamp) \
 	drivers/atmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/atmodem/sim-auth.$(OBJEXT): drivers/atmodem/$(am__dirstamp) \
+	drivers/atmodem/$(DEPDIR)/$(am__dirstamp)
 drivers/nwmodem/$(am__dirstamp):
 	@$(MKDIR_P) drivers/nwmodem
 	@: > drivers/nwmodem/$(am__dirstamp)
@@ -1267,6 +1360,9 @@ drivers/huaweimodem/audio-settings.$(OBJEXT):  \
 	drivers/huaweimodem/$(am__dirstamp) \
 	drivers/huaweimodem/$(DEPDIR)/$(am__dirstamp)
 drivers/huaweimodem/gprs-context.$(OBJEXT):  \
+	drivers/huaweimodem/$(am__dirstamp) \
+	drivers/huaweimodem/$(DEPDIR)/$(am__dirstamp)
+drivers/huaweimodem/radio-settings.$(OBJEXT):  \
 	drivers/huaweimodem/$(am__dirstamp) \
 	drivers/huaweimodem/$(DEPDIR)/$(am__dirstamp)
 drivers/calypsomodem/$(am__dirstamp):
@@ -1350,6 +1446,8 @@ drivers/ifxmodem/gprs-context.$(OBJEXT):  \
 	drivers/ifxmodem/$(DEPDIR)/$(am__dirstamp)
 drivers/ifxmodem/stk.$(OBJEXT): drivers/ifxmodem/$(am__dirstamp) \
 	drivers/ifxmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/ifxmodem/ctm.$(OBJEXT): drivers/ifxmodem/$(am__dirstamp) \
+	drivers/ifxmodem/$(DEPDIR)/$(am__dirstamp)
 drivers/stemodem/$(am__dirstamp):
 	@$(MKDIR_P) drivers/stemodem
 	@: > drivers/stemodem/$(am__dirstamp)
@@ -1372,7 +1470,24 @@ drivers/stemodem/gprs-context.$(OBJEXT):  \
 	drivers/stemodem/$(DEPDIR)/$(am__dirstamp)
 plugins/phonesim.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
+drivers/cdmamodem/$(am__dirstamp):
+	@$(MKDIR_P) drivers/cdmamodem
+	@: > drivers/cdmamodem/$(am__dirstamp)
+drivers/cdmamodem/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) drivers/cdmamodem/$(DEPDIR)
+	@: > drivers/cdmamodem/$(DEPDIR)/$(am__dirstamp)
+drivers/cdmamodem/cdmamodem.$(OBJEXT):  \
+	drivers/cdmamodem/$(am__dirstamp) \
+	drivers/cdmamodem/$(DEPDIR)/$(am__dirstamp)
+drivers/cdmamodem/voicecall.$(OBJEXT):  \
+	drivers/cdmamodem/$(am__dirstamp) \
+	drivers/cdmamodem/$(DEPDIR)/$(am__dirstamp)
+drivers/cdmamodem/devinfo.$(OBJEXT):  \
+	drivers/cdmamodem/$(am__dirstamp) \
+	drivers/cdmamodem/$(DEPDIR)/$(am__dirstamp)
 plugins/g1.$(OBJEXT): plugins/$(am__dirstamp) \
+	plugins/$(DEPDIR)/$(am__dirstamp)
+plugins/gobi.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
 plugins/wavecom.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
@@ -1386,13 +1501,9 @@ plugins/zte.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
 plugins/huawei.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
+plugins/sierra.$(OBJEXT): plugins/$(am__dirstamp) \
+	plugins/$(DEPDIR)/$(am__dirstamp)
 plugins/novatel.$(OBJEXT): plugins/$(am__dirstamp) \
-	plugins/$(DEPDIR)/$(am__dirstamp)
-plugins/nokia.$(OBJEXT): plugins/$(am__dirstamp) \
-	plugins/$(DEPDIR)/$(am__dirstamp)
-plugins/bluetooth.$(OBJEXT): plugins/$(am__dirstamp) \
-	plugins/$(DEPDIR)/$(am__dirstamp)
-plugins/hfp.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
 plugins/palmpre.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
@@ -1400,7 +1511,19 @@ plugins/ifx.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
 plugins/ste.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
+plugins/stemgr.$(OBJEXT): plugins/$(am__dirstamp) \
+	plugins/$(DEPDIR)/$(am__dirstamp)
 plugins/caif.$(OBJEXT): plugins/$(am__dirstamp) \
+	plugins/$(DEPDIR)/$(am__dirstamp)
+plugins/tc65.$(OBJEXT): plugins/$(am__dirstamp) \
+	plugins/$(DEPDIR)/$(am__dirstamp)
+plugins/nokia.$(OBJEXT): plugins/$(am__dirstamp) \
+	plugins/$(DEPDIR)/$(am__dirstamp)
+plugins/nokiacdma.$(OBJEXT): plugins/$(am__dirstamp) \
+	plugins/$(DEPDIR)/$(am__dirstamp)
+plugins/bluetooth.$(OBJEXT): plugins/$(am__dirstamp) \
+	plugins/$(DEPDIR)/$(am__dirstamp)
+plugins/hfp.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
 examples/$(am__dirstamp):
 	@$(MKDIR_P) examples
@@ -1411,6 +1534,8 @@ examples/$(DEPDIR)/$(am__dirstamp):
 examples/history.$(OBJEXT): examples/$(am__dirstamp) \
 	examples/$(DEPDIR)/$(am__dirstamp)
 examples/nettime.$(OBJEXT): examples/$(am__dirstamp) \
+	examples/$(DEPDIR)/$(am__dirstamp)
+examples/provision.$(OBJEXT): examples/$(am__dirstamp) \
 	examples/$(DEPDIR)/$(am__dirstamp)
 plugins/smart-messaging.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
@@ -1481,6 +1606,15 @@ src/audio-settings.$(OBJEXT): src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
 src/smsagent.$(OBJEXT): src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
+src/ctm.$(OBJEXT): src/$(am__dirstamp) src/$(DEPDIR)/$(am__dirstamp)
+src/cdma-voicecall.$(OBJEXT): src/$(am__dirstamp) \
+	src/$(DEPDIR)/$(am__dirstamp)
+src/sim-auth.$(OBJEXT): src/$(am__dirstamp) \
+	src/$(DEPDIR)/$(am__dirstamp)
+src/message.$(OBJEXT): src/$(am__dirstamp) \
+	src/$(DEPDIR)/$(am__dirstamp)
+src/gprs-provision.$(OBJEXT): src/$(am__dirstamp) \
+	src/$(DEPDIR)/$(am__dirstamp)
 src/ofonod$(EXEEXT): $(src_ofonod_OBJECTS) $(src_ofonod_DEPENDENCIES) src/$(am__dirstamp)
 	@rm -f src/ofonod$(EXEEXT)
 	$(AM_V_CCLD)$(src_ofonod_LINK) $(src_ofonod_OBJECTS) $(src_ofonod_LDADD) $(LIBS)
@@ -1490,6 +1624,11 @@ tools/$(am__dirstamp):
 tools/$(DEPDIR)/$(am__dirstamp):
 	@$(MKDIR_P) tools/$(DEPDIR)
 	@: > tools/$(DEPDIR)/$(am__dirstamp)
+tools/auto-enable.$(OBJEXT): tools/$(am__dirstamp) \
+	tools/$(DEPDIR)/$(am__dirstamp)
+tools/auto-enable$(EXEEXT): $(tools_auto_enable_OBJECTS) $(tools_auto_enable_DEPENDENCIES) tools/$(am__dirstamp)
+	@rm -f tools/auto-enable$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(tools_auto_enable_OBJECTS) $(tools_auto_enable_LDADD) $(LIBS)
 tools/huawei-audio.$(OBJEXT): tools/$(am__dirstamp) \
 	tools/$(DEPDIR)/$(am__dirstamp)
 tools/huawei-audio$(EXEEXT): $(tools_huawei_audio_OBJECTS) $(tools_huawei_audio_DEPENDENCIES) tools/$(am__dirstamp)
@@ -1591,6 +1730,7 @@ mostlyclean-compile:
 	-rm -f drivers/atmodem/gprs.$(OBJEXT)
 	-rm -f drivers/atmodem/network-registration.$(OBJEXT)
 	-rm -f drivers/atmodem/phonebook.$(OBJEXT)
+	-rm -f drivers/atmodem/sim-auth.$(OBJEXT)
 	-rm -f drivers/atmodem/sim-poll.$(OBJEXT)
 	-rm -f drivers/atmodem/sim.$(OBJEXT)
 	-rm -f drivers/atmodem/sms.$(OBJEXT)
@@ -1601,6 +1741,9 @@ mostlyclean-compile:
 	-rm -f drivers/calypsomodem/calypsomodem.$(OBJEXT)
 	-rm -f drivers/calypsomodem/stk.$(OBJEXT)
 	-rm -f drivers/calypsomodem/voicecall.$(OBJEXT)
+	-rm -f drivers/cdmamodem/cdmamodem.$(OBJEXT)
+	-rm -f drivers/cdmamodem/devinfo.$(OBJEXT)
+	-rm -f drivers/cdmamodem/voicecall.$(OBJEXT)
 	-rm -f drivers/hfpmodem/call-volume.$(OBJEXT)
 	-rm -f drivers/hfpmodem/hfpmodem.$(OBJEXT)
 	-rm -f drivers/hfpmodem/network-registration.$(OBJEXT)
@@ -1611,8 +1754,10 @@ mostlyclean-compile:
 	-rm -f drivers/huaweimodem/audio-settings.$(OBJEXT)
 	-rm -f drivers/huaweimodem/gprs-context.$(OBJEXT)
 	-rm -f drivers/huaweimodem/huaweimodem.$(OBJEXT)
+	-rm -f drivers/huaweimodem/radio-settings.$(OBJEXT)
 	-rm -f drivers/huaweimodem/voicecall.$(OBJEXT)
 	-rm -f drivers/ifxmodem/audio-settings.$(OBJEXT)
+	-rm -f drivers/ifxmodem/ctm.$(OBJEXT)
 	-rm -f drivers/ifxmodem/gprs-context.$(OBJEXT)
 	-rm -f drivers/ifxmodem/ifxmodem.$(OBJEXT)
 	-rm -f drivers/ifxmodem/radio-settings.$(OBJEXT)
@@ -1650,6 +1795,7 @@ mostlyclean-compile:
 	-rm -f drivers/stemodem/voicecall.$(OBJEXT)
 	-rm -f examples/history.$(OBJEXT)
 	-rm -f examples/nettime.$(OBJEXT)
+	-rm -f examples/provision.$(OBJEXT)
 	-rm -f gatchat/crc-ccitt.$(OBJEXT)
 	-rm -f gatchat/gatchat.$(OBJEXT)
 	-rm -f gatchat/gathdlc.$(OBJEXT)
@@ -1678,32 +1824,37 @@ mostlyclean-compile:
 	-rm -f gdbus/watch.$(OBJEXT)
 	-rm -f gisi/client.$(OBJEXT)
 	-rm -f gisi/iter.$(OBJEXT)
+	-rm -f gisi/message.$(OBJEXT)
 	-rm -f gisi/modem.$(OBJEXT)
 	-rm -f gisi/netlink.$(OBJEXT)
 	-rm -f gisi/pep.$(OBJEXT)
 	-rm -f gisi/pipe.$(OBJEXT)
 	-rm -f gisi/server.$(OBJEXT)
 	-rm -f gisi/socket.$(OBJEXT)
-	-rm -f gisi/verify.$(OBJEXT)
 	-rm -f plugins/bluetooth.$(OBJEXT)
 	-rm -f plugins/caif.$(OBJEXT)
 	-rm -f plugins/calypso.$(OBJEXT)
 	-rm -f plugins/g1.$(OBJEXT)
+	-rm -f plugins/gobi.$(OBJEXT)
 	-rm -f plugins/hfp.$(OBJEXT)
 	-rm -f plugins/hso.$(OBJEXT)
 	-rm -f plugins/huawei.$(OBJEXT)
 	-rm -f plugins/ifx.$(OBJEXT)
-	-rm -f plugins/isigen.$(OBJEXT)
+	-rm -f plugins/isiusb.$(OBJEXT)
 	-rm -f plugins/mbm.$(OBJEXT)
 	-rm -f plugins/n900.$(OBJEXT)
 	-rm -f plugins/nokia-gpio.$(OBJEXT)
 	-rm -f plugins/nokia.$(OBJEXT)
+	-rm -f plugins/nokiacdma.$(OBJEXT)
 	-rm -f plugins/novatel.$(OBJEXT)
 	-rm -f plugins/palmpre.$(OBJEXT)
 	-rm -f plugins/phonesim.$(OBJEXT)
 	-rm -f plugins/push-notification.$(OBJEXT)
+	-rm -f plugins/sierra.$(OBJEXT)
 	-rm -f plugins/smart-messaging.$(OBJEXT)
 	-rm -f plugins/ste.$(OBJEXT)
+	-rm -f plugins/stemgr.$(OBJEXT)
+	-rm -f plugins/tc65.$(OBJEXT)
 	-rm -f plugins/udev.$(OBJEXT)
 	-rm -f plugins/wavecom.$(OBJEXT)
 	-rm -f plugins/zte.$(OBJEXT)
@@ -1714,8 +1865,11 @@ mostlyclean-compile:
 	-rm -f src/call-settings.$(OBJEXT)
 	-rm -f src/call-volume.$(OBJEXT)
 	-rm -f src/cbs.$(OBJEXT)
+	-rm -f src/cdma-voicecall.$(OBJEXT)
 	-rm -f src/common.$(OBJEXT)
+	-rm -f src/ctm.$(OBJEXT)
 	-rm -f src/dbus.$(OBJEXT)
+	-rm -f src/gprs-provision.$(OBJEXT)
 	-rm -f src/gprs.$(OBJEXT)
 	-rm -f src/history.$(OBJEXT)
 	-rm -f src/idmap.$(OBJEXT)
@@ -1723,12 +1877,14 @@ mostlyclean-compile:
 	-rm -f src/main.$(OBJEXT)
 	-rm -f src/manager.$(OBJEXT)
 	-rm -f src/message-waiting.$(OBJEXT)
+	-rm -f src/message.$(OBJEXT)
 	-rm -f src/modem.$(OBJEXT)
 	-rm -f src/nettime.$(OBJEXT)
 	-rm -f src/network.$(OBJEXT)
 	-rm -f src/phonebook.$(OBJEXT)
 	-rm -f src/plugin.$(OBJEXT)
 	-rm -f src/radio-settings.$(OBJEXT)
+	-rm -f src/sim-auth.$(OBJEXT)
 	-rm -f src/sim.$(OBJEXT)
 	-rm -f src/simfs.$(OBJEXT)
 	-rm -f src/simutil.$(OBJEXT)
@@ -1744,6 +1900,7 @@ mostlyclean-compile:
 	-rm -f src/util.$(OBJEXT)
 	-rm -f src/voicecall.$(OBJEXT)
 	-rm -f src/watch.$(OBJEXT)
+	-rm -f tools/auto-enable.$(OBJEXT)
 	-rm -f tools/huawei-audio.$(OBJEXT)
 	-rm -f unit/test-caif.$(OBJEXT)
 	-rm -f unit/test-common.$(OBJEXT)
@@ -1770,6 +1927,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/gprs.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/network-registration.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/phonebook.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/sim-auth.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/sim-poll.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/sim.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/sms.Po@am__quote@
@@ -1780,6 +1938,9 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/calypsomodem/$(DEPDIR)/calypsomodem.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/calypsomodem/$(DEPDIR)/stk.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/calypsomodem/$(DEPDIR)/voicecall.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/cdmamodem/$(DEPDIR)/cdmamodem.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/cdmamodem/$(DEPDIR)/devinfo.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/cdmamodem/$(DEPDIR)/voicecall.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/hfpmodem/$(DEPDIR)/call-volume.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/hfpmodem/$(DEPDIR)/hfpmodem.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/hfpmodem/$(DEPDIR)/network-registration.Po@am__quote@
@@ -1790,8 +1951,10 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/huaweimodem/$(DEPDIR)/audio-settings.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/huaweimodem/$(DEPDIR)/gprs-context.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/huaweimodem/$(DEPDIR)/huaweimodem.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/huaweimodem/$(DEPDIR)/radio-settings.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/huaweimodem/$(DEPDIR)/voicecall.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/ifxmodem/$(DEPDIR)/audio-settings.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/ifxmodem/$(DEPDIR)/ctm.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/ifxmodem/$(DEPDIR)/gprs-context.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/ifxmodem/$(DEPDIR)/ifxmodem.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/ifxmodem/$(DEPDIR)/radio-settings.Po@am__quote@
@@ -1829,6 +1992,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/stemodem/$(DEPDIR)/voicecall.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@examples/$(DEPDIR)/history.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@examples/$(DEPDIR)/nettime.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@examples/$(DEPDIR)/provision.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/crc-ccitt.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/gatchat.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gatchat/$(DEPDIR)/gathdlc.Po@am__quote@
@@ -1857,32 +2021,37 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@gdbus/$(DEPDIR)/watch.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gisi/$(DEPDIR)/client.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gisi/$(DEPDIR)/iter.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@gisi/$(DEPDIR)/message.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gisi/$(DEPDIR)/modem.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gisi/$(DEPDIR)/netlink.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gisi/$(DEPDIR)/pep.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gisi/$(DEPDIR)/pipe.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gisi/$(DEPDIR)/server.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gisi/$(DEPDIR)/socket.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@gisi/$(DEPDIR)/verify.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/bluetooth.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/caif.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/calypso.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/g1.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/gobi.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/hfp.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/hso.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/huawei.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/ifx.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/isigen.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/isiusb.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/mbm.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/n900.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/nokia-gpio.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/nokia.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/nokiacdma.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/novatel.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/palmpre.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/phonesim.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/push-notification.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/sierra.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/smart-messaging.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/ste.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/stemgr.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/tc65.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/udev.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/wavecom.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/zte.Po@am__quote@
@@ -1893,8 +2062,11 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/call-settings.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/call-volume.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/cbs.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/cdma-voicecall.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/common.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/ctm.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/dbus.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/gprs-provision.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/gprs.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/history.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/idmap.Po@am__quote@
@@ -1902,12 +2074,14 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/main.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/manager.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/message-waiting.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/message.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/modem.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/nettime.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/network.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/phonebook.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/plugin.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/radio-settings.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/sim-auth.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/sim.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/simfs.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/simutil.Po@am__quote@
@@ -1923,6 +2097,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/util.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/voicecall.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/watch.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@tools/$(DEPDIR)/auto-enable.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tools/$(DEPDIR)/huawei-audio.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@unit/$(DEPDIR)/test-caif.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@unit/$(DEPDIR)/test-common.Po@am__quote@
@@ -2010,10 +2185,10 @@ uninstall-man8:
 	test -z "$$files" || { \
 	  echo " ( cd '$(DESTDIR)$(man8dir)' && rm -f" $$files ")"; \
 	  cd "$(DESTDIR)$(man8dir)" && rm -f $$files; }
-install-confDATA: $(conf_DATA)
+install-dist_confDATA: $(dist_conf_DATA)
 	@$(NORMAL_INSTALL)
 	test -z "$(confdir)" || $(MKDIR_P) "$(DESTDIR)$(confdir)"
-	@list='$(conf_DATA)'; test -n "$(confdir)" || list=; \
+	@list='$(dist_conf_DATA)'; test -n "$(confdir)" || list=; \
 	for p in $$list; do \
 	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
 	  echo "$$d$$p"; \
@@ -2023,17 +2198,17 @@ install-confDATA: $(conf_DATA)
 	  $(INSTALL_DATA) $$files "$(DESTDIR)$(confdir)" || exit $$?; \
 	done
 
-uninstall-confDATA:
+uninstall-dist_confDATA:
 	@$(NORMAL_UNINSTALL)
-	@list='$(conf_DATA)'; test -n "$(confdir)" || list=; \
+	@list='$(dist_conf_DATA)'; test -n "$(confdir)" || list=; \
 	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
 	test -n "$$files" || exit 0; \
 	echo " ( cd '$(DESTDIR)$(confdir)' && rm -f" $$files ")"; \
 	cd "$(DESTDIR)$(confdir)" && rm -f $$files
-install-dbusconfDATA: $(dbusconf_DATA)
+install-dist_dbusconfDATA: $(dist_dbusconf_DATA)
 	@$(NORMAL_INSTALL)
 	test -z "$(dbusconfdir)" || $(MKDIR_P) "$(DESTDIR)$(dbusconfdir)"
-	@list='$(dbusconf_DATA)'; test -n "$(dbusconfdir)" || list=; \
+	@list='$(dist_dbusconf_DATA)'; test -n "$(dbusconfdir)" || list=; \
 	for p in $$list; do \
 	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
 	  echo "$$d$$p"; \
@@ -2043,13 +2218,33 @@ install-dbusconfDATA: $(dbusconf_DATA)
 	  $(INSTALL_DATA) $$files "$(DESTDIR)$(dbusconfdir)" || exit $$?; \
 	done
 
-uninstall-dbusconfDATA:
+uninstall-dist_dbusconfDATA:
 	@$(NORMAL_UNINSTALL)
-	@list='$(dbusconf_DATA)'; test -n "$(dbusconfdir)" || list=; \
+	@list='$(dist_dbusconf_DATA)'; test -n "$(dbusconfdir)" || list=; \
 	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
 	test -n "$$files" || exit 0; \
 	echo " ( cd '$(DESTDIR)$(dbusconfdir)' && rm -f" $$files ")"; \
 	cd "$(DESTDIR)$(dbusconfdir)" && rm -f $$files
+install-pkgconfigDATA: $(pkgconfig_DATA)
+	@$(NORMAL_INSTALL)
+	test -z "$(pkgconfigdir)" || $(MKDIR_P) "$(DESTDIR)$(pkgconfigdir)"
+	@list='$(pkgconfig_DATA)'; test -n "$(pkgconfigdir)" || list=; \
+	for p in $$list; do \
+	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+	  echo "$$d$$p"; \
+	done | $(am__base_list) | \
+	while read files; do \
+	  echo " $(INSTALL_DATA) $$files '$(DESTDIR)$(pkgconfigdir)'"; \
+	  $(INSTALL_DATA) $$files "$(DESTDIR)$(pkgconfigdir)" || exit $$?; \
+	done
+
+uninstall-pkgconfigDATA:
+	@$(NORMAL_UNINSTALL)
+	@list='$(pkgconfig_DATA)'; test -n "$(pkgconfigdir)" || list=; \
+	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
+	test -n "$$files" || exit 0; \
+	echo " ( cd '$(DESTDIR)$(pkgconfigdir)' && rm -f" $$files ")"; \
+	cd "$(DESTDIR)$(pkgconfigdir)" && rm -f $$files
 install-rulesDATA: $(rules_DATA)
 	@$(NORMAL_INSTALL)
 	test -z "$(rulesdir)" || $(MKDIR_P) "$(DESTDIR)$(rulesdir)"
@@ -2110,46 +2305,46 @@ uninstall-systemdunitDATA:
 	test -n "$$files" || exit 0; \
 	echo " ( cd '$(DESTDIR)$(systemdunitdir)' && rm -f" $$files ")"; \
 	cd "$(DESTDIR)$(systemdunitdir)" && rm -f $$files
-install-includeHEADERS: $(include_HEADERS)
+install-nodist_pkgincludeHEADERS: $(nodist_pkginclude_HEADERS)
 	@$(NORMAL_INSTALL)
-	test -z "$(includedir)" || $(MKDIR_P) "$(DESTDIR)$(includedir)"
-	@list='$(include_HEADERS)'; test -n "$(includedir)" || list=; \
+	test -z "$(pkgincludedir)" || $(MKDIR_P) "$(DESTDIR)$(pkgincludedir)"
+	@list='$(nodist_pkginclude_HEADERS)'; test -n "$(pkgincludedir)" || list=; \
 	for p in $$list; do \
 	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
 	  echo "$$d$$p"; \
 	done | $(am__base_list) | \
 	while read files; do \
-	  echo " $(INSTALL_HEADER) $$files '$(DESTDIR)$(includedir)'"; \
-	  $(INSTALL_HEADER) $$files "$(DESTDIR)$(includedir)" || exit $$?; \
+	  echo " $(INSTALL_HEADER) $$files '$(DESTDIR)$(pkgincludedir)'"; \
+	  $(INSTALL_HEADER) $$files "$(DESTDIR)$(pkgincludedir)" || exit $$?; \
 	done
 
-uninstall-includeHEADERS:
+uninstall-nodist_pkgincludeHEADERS:
 	@$(NORMAL_UNINSTALL)
-	@list='$(include_HEADERS)'; test -n "$(includedir)" || list=; \
+	@list='$(nodist_pkginclude_HEADERS)'; test -n "$(pkgincludedir)" || list=; \
 	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
 	test -n "$$files" || exit 0; \
-	echo " ( cd '$(DESTDIR)$(includedir)' && rm -f" $$files ")"; \
-	cd "$(DESTDIR)$(includedir)" && rm -f $$files
-install-nodist_includeHEADERS: $(nodist_include_HEADERS)
+	echo " ( cd '$(DESTDIR)$(pkgincludedir)' && rm -f" $$files ")"; \
+	cd "$(DESTDIR)$(pkgincludedir)" && rm -f $$files
+install-pkgincludeHEADERS: $(pkginclude_HEADERS)
 	@$(NORMAL_INSTALL)
-	test -z "$(includedir)" || $(MKDIR_P) "$(DESTDIR)$(includedir)"
-	@list='$(nodist_include_HEADERS)'; test -n "$(includedir)" || list=; \
+	test -z "$(pkgincludedir)" || $(MKDIR_P) "$(DESTDIR)$(pkgincludedir)"
+	@list='$(pkginclude_HEADERS)'; test -n "$(pkgincludedir)" || list=; \
 	for p in $$list; do \
 	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
 	  echo "$$d$$p"; \
 	done | $(am__base_list) | \
 	while read files; do \
-	  echo " $(INSTALL_HEADER) $$files '$(DESTDIR)$(includedir)'"; \
-	  $(INSTALL_HEADER) $$files "$(DESTDIR)$(includedir)" || exit $$?; \
+	  echo " $(INSTALL_HEADER) $$files '$(DESTDIR)$(pkgincludedir)'"; \
+	  $(INSTALL_HEADER) $$files "$(DESTDIR)$(pkgincludedir)" || exit $$?; \
 	done
 
-uninstall-nodist_includeHEADERS:
+uninstall-pkgincludeHEADERS:
 	@$(NORMAL_UNINSTALL)
-	@list='$(nodist_include_HEADERS)'; test -n "$(includedir)" || list=; \
+	@list='$(pkginclude_HEADERS)'; test -n "$(pkgincludedir)" || list=; \
 	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
 	test -n "$$files" || exit 0; \
-	echo " ( cd '$(DESTDIR)$(includedir)' && rm -f" $$files ")"; \
-	cd "$(DESTDIR)$(includedir)" && rm -f $$files
+	echo " ( cd '$(DESTDIR)$(pkgincludedir)' && rm -f" $$files ")"; \
+	cd "$(DESTDIR)$(pkgincludedir)" && rm -f $$files
 
 ID: $(HEADERS) $(SOURCES) $(LISP) $(TAGS_FILES)
 	list='$(SOURCES) $(HEADERS) $(LISP) $(TAGS_FILES)'; \
@@ -2364,14 +2559,16 @@ distcleancheck: distclean
 	       $(distcleancheck_listfiles) ; \
 	       exit 1; } >&2
 check-am: all-am
-check: check-am
+check: $(BUILT_SOURCES)
+	$(MAKE) $(AM_MAKEFLAGS) check-am
 all-am: Makefile $(PROGRAMS) $(SCRIPTS) $(MANS) $(DATA) $(HEADERS) \
 		config.h
 installdirs:
-	for dir in "$(DESTDIR)$(sbindir)" "$(DESTDIR)$(testdir)" "$(DESTDIR)$(man8dir)" "$(DESTDIR)$(confdir)" "$(DESTDIR)$(dbusconfdir)" "$(DESTDIR)$(rulesdir)" "$(DESTDIR)$(statedir)" "$(DESTDIR)$(systemdunitdir)" "$(DESTDIR)$(includedir)" "$(DESTDIR)$(includedir)"; do \
+	for dir in "$(DESTDIR)$(sbindir)" "$(DESTDIR)$(testdir)" "$(DESTDIR)$(man8dir)" "$(DESTDIR)$(confdir)" "$(DESTDIR)$(dbusconfdir)" "$(DESTDIR)$(pkgconfigdir)" "$(DESTDIR)$(rulesdir)" "$(DESTDIR)$(statedir)" "$(DESTDIR)$(systemdunitdir)" "$(DESTDIR)$(pkgincludedir)" "$(DESTDIR)$(pkgincludedir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
-install: install-am
+install: $(BUILT_SOURCES)
+	$(MAKE) $(AM_MAKEFLAGS) install-am
 install-exec: install-exec-am
 install-data: install-data-am
 uninstall: uninstall-am
@@ -2397,6 +2594,8 @@ distclean-generic:
 	-rm -f drivers/atmodem/$(am__dirstamp)
 	-rm -f drivers/calypsomodem/$(DEPDIR)/$(am__dirstamp)
 	-rm -f drivers/calypsomodem/$(am__dirstamp)
+	-rm -f drivers/cdmamodem/$(DEPDIR)/$(am__dirstamp)
+	-rm -f drivers/cdmamodem/$(am__dirstamp)
 	-rm -f drivers/hfpmodem/$(DEPDIR)/$(am__dirstamp)
 	-rm -f drivers/hfpmodem/$(am__dirstamp)
 	-rm -f drivers/hsomodem/$(DEPDIR)/$(am__dirstamp)
@@ -2433,6 +2632,7 @@ distclean-generic:
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
 	@echo "it deletes files that may require special tools to rebuild."
+	-test -z "$(BUILT_SOURCES)" || rm -f $(BUILT_SOURCES)
 	-test -z "$(MAINTAINERCLEANFILES)" || rm -f $(MAINTAINERCLEANFILES)
 clean: clean-am
 
@@ -2441,7 +2641,7 @@ clean-am: clean-generic clean-libtool clean-local clean-noinstPROGRAMS \
 
 distclean: distclean-am
 	-rm -f $(am__CONFIG_DISTCLEAN_FILES)
-	-rm -rf drivers/atmodem/$(DEPDIR) drivers/calypsomodem/$(DEPDIR) drivers/hfpmodem/$(DEPDIR) drivers/hsomodem/$(DEPDIR) drivers/huaweimodem/$(DEPDIR) drivers/ifxmodem/$(DEPDIR) drivers/isimodem/$(DEPDIR) drivers/mbmmodem/$(DEPDIR) drivers/nwmodem/$(DEPDIR) drivers/stemodem/$(DEPDIR) examples/$(DEPDIR) gatchat/$(DEPDIR) gdbus/$(DEPDIR) gisi/$(DEPDIR) plugins/$(DEPDIR) src/$(DEPDIR) tools/$(DEPDIR) unit/$(DEPDIR)
+	-rm -rf drivers/atmodem/$(DEPDIR) drivers/calypsomodem/$(DEPDIR) drivers/cdmamodem/$(DEPDIR) drivers/hfpmodem/$(DEPDIR) drivers/hsomodem/$(DEPDIR) drivers/huaweimodem/$(DEPDIR) drivers/ifxmodem/$(DEPDIR) drivers/isimodem/$(DEPDIR) drivers/mbmmodem/$(DEPDIR) drivers/nwmodem/$(DEPDIR) drivers/stemodem/$(DEPDIR) examples/$(DEPDIR) gatchat/$(DEPDIR) gdbus/$(DEPDIR) gisi/$(DEPDIR) plugins/$(DEPDIR) src/$(DEPDIR) tools/$(DEPDIR) unit/$(DEPDIR)
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-hdr distclean-libtool distclean-tags
@@ -2458,10 +2658,11 @@ info: info-am
 
 info-am:
 
-install-data-am: install-confDATA install-dbusconfDATA \
-	install-includeHEADERS install-man \
-	install-nodist_includeHEADERS install-rulesDATA \
-	install-stateDATA install-systemdunitDATA install-testSCRIPTS
+install-data-am: install-dist_confDATA install-dist_dbusconfDATA \
+	install-man install-nodist_pkgincludeHEADERS \
+	install-pkgconfigDATA install-pkgincludeHEADERS \
+	install-rulesDATA install-stateDATA install-systemdunitDATA \
+	install-testSCRIPTS
 
 install-dvi: install-dvi-am
 
@@ -2492,7 +2693,7 @@ installcheck-am:
 maintainer-clean: maintainer-clean-am
 	-rm -f $(am__CONFIG_DISTCLEAN_FILES)
 	-rm -rf $(top_srcdir)/autom4te.cache
-	-rm -rf drivers/atmodem/$(DEPDIR) drivers/calypsomodem/$(DEPDIR) drivers/hfpmodem/$(DEPDIR) drivers/hsomodem/$(DEPDIR) drivers/huaweimodem/$(DEPDIR) drivers/ifxmodem/$(DEPDIR) drivers/isimodem/$(DEPDIR) drivers/mbmmodem/$(DEPDIR) drivers/nwmodem/$(DEPDIR) drivers/stemodem/$(DEPDIR) examples/$(DEPDIR) gatchat/$(DEPDIR) gdbus/$(DEPDIR) gisi/$(DEPDIR) plugins/$(DEPDIR) src/$(DEPDIR) tools/$(DEPDIR) unit/$(DEPDIR)
+	-rm -rf drivers/atmodem/$(DEPDIR) drivers/calypsomodem/$(DEPDIR) drivers/cdmamodem/$(DEPDIR) drivers/hfpmodem/$(DEPDIR) drivers/hsomodem/$(DEPDIR) drivers/huaweimodem/$(DEPDIR) drivers/ifxmodem/$(DEPDIR) drivers/isimodem/$(DEPDIR) drivers/mbmmodem/$(DEPDIR) drivers/nwmodem/$(DEPDIR) drivers/stemodem/$(DEPDIR) examples/$(DEPDIR) gatchat/$(DEPDIR) gdbus/$(DEPDIR) gisi/$(DEPDIR) plugins/$(DEPDIR) src/$(DEPDIR) tools/$(DEPDIR) unit/$(DEPDIR)
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 
@@ -2509,15 +2710,15 @@ ps: ps-am
 
 ps-am:
 
-uninstall-am: uninstall-confDATA uninstall-dbusconfDATA \
-	uninstall-includeHEADERS uninstall-man \
-	uninstall-nodist_includeHEADERS uninstall-rulesDATA \
-	uninstall-sbinPROGRAMS uninstall-stateDATA \
+uninstall-am: uninstall-dist_confDATA uninstall-dist_dbusconfDATA \
+	uninstall-man uninstall-nodist_pkgincludeHEADERS \
+	uninstall-pkgconfigDATA uninstall-pkgincludeHEADERS \
+	uninstall-rulesDATA uninstall-sbinPROGRAMS uninstall-stateDATA \
 	uninstall-systemdunitDATA uninstall-testSCRIPTS
 
 uninstall-man: uninstall-man8
 
-.MAKE: all install-am install-strip
+.MAKE: all check install install-am install-strip
 
 .PHONY: CTAGS GTAGS all all-am am--refresh check check-am clean \
 	clean-generic clean-libtool clean-local clean-noinstPROGRAMS \
@@ -2526,22 +2727,23 @@ uninstall-man: uninstall-man8
 	distclean distclean-compile distclean-generic distclean-hdr \
 	distclean-libtool distclean-tags distcleancheck distdir \
 	distuninstallcheck dvi dvi-am html html-am info info-am \
-	install install-am install-confDATA install-data \
-	install-data-am install-dbusconfDATA install-dvi \
+	install install-am install-data install-data-am \
+	install-dist_confDATA install-dist_dbusconfDATA install-dvi \
 	install-dvi-am install-exec install-exec-am install-html \
-	install-html-am install-includeHEADERS install-info \
-	install-info-am install-man install-man8 \
-	install-nodist_includeHEADERS install-pdf install-pdf-am \
+	install-html-am install-info install-info-am install-man \
+	install-man8 install-nodist_pkgincludeHEADERS install-pdf \
+	install-pdf-am install-pkgconfigDATA install-pkgincludeHEADERS \
 	install-ps install-ps-am install-rulesDATA \
 	install-sbinPROGRAMS install-stateDATA install-strip \
 	install-systemdunitDATA install-testSCRIPTS installcheck \
 	installcheck-am installdirs maintainer-clean \
 	maintainer-clean-generic mostlyclean mostlyclean-compile \
 	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
-	tags uninstall uninstall-am uninstall-confDATA \
-	uninstall-dbusconfDATA uninstall-includeHEADERS uninstall-man \
-	uninstall-man8 uninstall-nodist_includeHEADERS \
-	uninstall-rulesDATA uninstall-sbinPROGRAMS uninstall-stateDATA \
+	tags uninstall uninstall-am uninstall-dist_confDATA \
+	uninstall-dist_dbusconfDATA uninstall-man uninstall-man8 \
+	uninstall-nodist_pkgincludeHEADERS uninstall-pkgconfigDATA \
+	uninstall-pkgincludeHEADERS uninstall-rulesDATA \
+	uninstall-sbinPROGRAMS uninstall-stateDATA \
 	uninstall-systemdunitDATA uninstall-testSCRIPTS
 
 
@@ -2552,8 +2754,6 @@ src/builtin.h: src/genbuiltin $(builtin_sources)
 
 plugins/%.rules:
 	$(AM_V_GEN)cp $(srcdir)/$(subst 97-,,$@) $@
-
-$(src_ofonod_OBJECTS) $(unit_objects): $(local_headers)
 
 include/ofono/version.h: include/version.h
 	$(AM_V_at)$(MKDIR_P) include/ofono

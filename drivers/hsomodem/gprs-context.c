@@ -156,9 +156,6 @@ static void hso_gprs_activate_primary(struct ofono_gprs_context *gc,
 	char buf[AUTH_BUF_LENGTH];
 	int len;
 
-	if (!cbd)
-		goto error;
-
 	gcd->active_context = ctx->cid;
 
 	cbd->user = gc;
@@ -200,9 +197,6 @@ static void hso_gprs_deactivate_primary(struct ofono_gprs_context *gc,
 	struct cb_data *cbd = cb_data_new(cb, data);
 	char buf[128];
 
-	if (!cbd)
-		goto error;
-
 	cbd->user = gc;
 
 	snprintf(buf, sizeof(buf), "AT_OWANCALL=%u,0,1", cid);
@@ -211,7 +205,6 @@ static void hso_gprs_deactivate_primary(struct ofono_gprs_context *gc,
 				at_owancall_down_cb, cbd, g_free) > 0)
 		return;
 
-error:
 	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, data);
@@ -389,12 +382,12 @@ static struct ofono_gprs_context_driver driver = {
 	.deactivate_primary	= hso_gprs_deactivate_primary,
 };
 
-void hso_gprs_context_init()
+void hso_gprs_context_init(void)
 {
 	ofono_gprs_context_driver_register(&driver);
 }
 
-void hso_gprs_context_exit()
+void hso_gprs_context_exit(void)
 {
 	ofono_gprs_context_driver_unregister(&driver);
 }

@@ -25,12 +25,12 @@
 
 #include <ofono/types.h>
 
-void __ofono_exit();
+void __ofono_exit(void);
 
-int __ofono_manager_init();
-void __ofono_manager_cleanup();
+int __ofono_manager_init(void);
+void __ofono_manager_cleanup(void);
 
-void __ofono_modem_shutdown();
+void __ofono_modem_shutdown(void);
 
 #include <ofono/log.h>
 
@@ -103,28 +103,31 @@ void __ofono_modem_append_properties(struct ofono_modem *modem,
 struct ofono_atom;
 
 enum ofono_atom_type {
-	OFONO_ATOM_TYPE_DEVINFO = 0,
-	OFONO_ATOM_TYPE_CALL_BARRING = 1,
-	OFONO_ATOM_TYPE_CALL_FORWARDING = 2,
-	OFONO_ATOM_TYPE_CALL_METER = 3,
-	OFONO_ATOM_TYPE_CALL_SETTINGS = 4,
-	OFONO_ATOM_TYPE_NETREG = 5,
-	OFONO_ATOM_TYPE_PHONEBOOK = 6,
-	OFONO_ATOM_TYPE_SMS = 7,
-	OFONO_ATOM_TYPE_SIM = 8,
-	OFONO_ATOM_TYPE_USSD = 9,
-	OFONO_ATOM_TYPE_VOICECALL = 10,
-	OFONO_ATOM_TYPE_HISTORY = 11,
-	OFONO_ATOM_TYPE_SSN = 12,
-	OFONO_ATOM_TYPE_MESSAGE_WAITING = 13,
-	OFONO_ATOM_TYPE_CBS = 14,
-	OFONO_ATOM_TYPES_CALL_VOLUME = 15,
-	OFONO_ATOM_TYPE_GPRS = 16,
-	OFONO_ATOM_TYPE_GPRS_CONTEXT = 17,
-	OFONO_ATOM_TYPE_RADIO_SETTINGS = 18,
-	OFONO_ATOM_TYPE_AUDIO_SETTINGS = 19,
-	OFONO_ATOM_TYPE_STK = 20,
-	OFONO_ATOM_TYPE_NETTIME = 21,
+	OFONO_ATOM_TYPE_DEVINFO,
+	OFONO_ATOM_TYPE_CALL_BARRING,
+	OFONO_ATOM_TYPE_CALL_FORWARDING,
+	OFONO_ATOM_TYPE_CALL_METER,
+	OFONO_ATOM_TYPE_CALL_SETTINGS,
+	OFONO_ATOM_TYPE_NETREG,
+	OFONO_ATOM_TYPE_PHONEBOOK,
+	OFONO_ATOM_TYPE_SMS,
+	OFONO_ATOM_TYPE_SIM,
+	OFONO_ATOM_TYPE_USSD,
+	OFONO_ATOM_TYPE_VOICECALL,
+	OFONO_ATOM_TYPE_HISTORY,
+	OFONO_ATOM_TYPE_SSN,
+	OFONO_ATOM_TYPE_MESSAGE_WAITING,
+	OFONO_ATOM_TYPE_CBS,
+	OFONO_ATOM_TYPES_CALL_VOLUME,
+	OFONO_ATOM_TYPE_GPRS,
+	OFONO_ATOM_TYPE_GPRS_CONTEXT,
+	OFONO_ATOM_TYPE_RADIO_SETTINGS,
+	OFONO_ATOM_TYPE_AUDIO_SETTINGS,
+	OFONO_ATOM_TYPE_STK,
+	OFONO_ATOM_TYPE_NETTIME,
+	OFONO_ATOM_TYPE_CTM,
+	OFONO_ATOM_TYPE_CDMA_VOICECALL_MANAGER,
+	OFONO_ATOM_TYPE_SIM_AUTH,
 };
 
 enum ofono_atom_watch_condition {
@@ -172,8 +175,8 @@ void __ofono_atom_free(struct ofono_atom *atom);
 
 typedef void (*ofono_modemwatch_cb_t)(struct ofono_modem *modem,
 					gboolean added, void *data);
-void __ofono_modemwatch_init();
-void __ofono_modemwatch_cleanup();
+void __ofono_modemwatch_init(void);
+void __ofono_modemwatch_cleanup(void);
 unsigned int __ofono_modemwatch_add(ofono_modemwatch_cb_t cb, void *user,
 					ofono_destroy_func destroy);
 gboolean __ofono_modemwatch_remove(unsigned int id);
@@ -205,6 +208,7 @@ gboolean __ofono_call_settings_is_busy(struct ofono_call_settings *cs);
 #include <ofono/gprs-context.h>
 #include <ofono/radio-settings.h>
 #include <ofono/audio-settings.h>
+#include <ofono/ctm.h>
 
 #include <ofono/voicecall.h>
 
@@ -241,6 +245,7 @@ enum ofono_sms_submit_flag {
 	OFONO_SMS_SUBMIT_FLAG_RECORD_HISTORY =	0x2,
 	OFONO_SMS_SUBMIT_FLAG_RETRY =		0x4,
 	OFONO_SMS_SUBMIT_FLAG_EXPOSE_DBUS =	0x8,
+	OFONO_SMS_SUBMIT_FLAG_REUSE_UUID =	0x10,
 };
 
 typedef void (*ofono_sms_txq_submit_cb_t)(gboolean ok, void *data);
@@ -413,3 +418,15 @@ void __ofono_nettime_probe_drivers(struct ofono_modem *modem);
 
 void __ofono_nettime_info_received(struct ofono_modem *modem,
 					struct ofono_network_time *info);
+
+#include <ofono/cdma-voicecall.h>
+#include <ofono/sim-auth.h>
+
+#include <ofono/gprs-provision.h>
+ofono_bool_t __ofono_gprs_provision_get_settings(const char *mcc,
+				const char *mnc,
+				struct ofono_gprs_provision_data **settings,
+				int *count);
+void __ofono_gprs_provision_free_settings(
+				struct ofono_gprs_provision_data *settings,
+				int count);

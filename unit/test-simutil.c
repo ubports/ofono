@@ -80,12 +80,12 @@ static void test_buffer(const unsigned char *buf, size_t size)
 	g_assert(ber_tlv_iter_next(&iter) == FALSE);
 }
 
-static void test_ber_tlv_iter()
+static void test_ber_tlv_iter(void)
 {
 	test_buffer(valid_mms_params, sizeof(valid_mms_params));
 }
 
-static void test_ber_tlv_builder_mms()
+static void test_ber_tlv_builder_mms(void)
 {
 	struct ber_tlv_iter top_iter, nested_iter;
 	struct ber_tlv_builder top_builder, nested_builder;
@@ -128,7 +128,7 @@ static void test_ber_tlv_builder_mms()
 	test_buffer(pdu, pdulen);
 }
 
-static void test_ber_tlv_builder_efpnn()
+static void test_ber_tlv_builder_efpnn(void)
 {
 	struct sim_eons *eons_info;
 	unsigned char efpnn0[64], efpnn1[64];
@@ -188,7 +188,7 @@ static void test_ber_tlv_builder_efpnn()
 	sim_eons_free(eons_info);
 }
 
-static void test_ber_tlv_builder_3g_status()
+static void test_ber_tlv_builder_3g_status(void)
 {
 	unsigned char buf[512];
 	struct ber_tlv_builder top_builder, nested_builder;
@@ -351,7 +351,7 @@ const unsigned char valid_efpnn[][28] = {
 	  0x53, 0x68, 0x6F, 0x72, 0x74, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, }
 };
 
-static void test_eons()
+static void test_eons(void)
 {
 	const struct sim_eons_operator_info *op_info;
 	struct sim_eons *eons_info;
@@ -372,7 +372,7 @@ static void test_eons()
 	sim_eons_optimize(eons_info);
 
 	op_info = sim_eons_lookup(eons_info, "246", "82");
-	g_assert(!op_info);
+	g_assert(op_info == NULL);
 	op_info = sim_eons_lookup(eons_info, "246", "81");
 	g_assert(op_info);
 
@@ -383,7 +383,7 @@ static void test_eons()
 	sim_eons_free(eons_info);
 }
 
-static void test_ef_db()
+static void test_ef_db(void)
 {
 	struct sim_ef_info *info;
 
@@ -391,7 +391,7 @@ static void test_ef_db()
 	g_assert(info);
 
 	info = sim_ef_db_lookup(0x6FB1);
-	g_assert(!info);
+	g_assert(info == NULL);
 
 	info = sim_ef_db_lookup(0x2F05);
 	g_assert(info);
@@ -405,7 +405,7 @@ static const char *binary_ef = "62178202412183022F058A01058B032F060F8002000A"
 static const char *record_ef = "62198205422100200483026F408A01058B036F0607"
 				"800200808800";
 
-static void test_3g_status_data()
+static void test_3g_status_data(void)
 {
 	unsigned char *response;
 	long len;
@@ -444,6 +444,36 @@ static void test_3g_status_data()
 	g_free(response);
 }
 
+static char *at_cuad_response = "611B4F10A0000000871002FFFFFFFF8905080000"
+	"FFFFFFFFFFFFFFFFFFFFFFFFFF611F4F0CA000000063504B43532D"
+	"313550094D49445066696C657351043F007F80";
+
+static void test_application_entry_decode(void) {
+	unsigned char *ef_dir;
+	long len;
+	GSList *entries;
+	struct sim_app_record *app[2];
+
+	ef_dir = decode_hex(at_cuad_response, -1, &len, 0);
+	entries = sim_parse_app_template_entries(ef_dir, len);
+
+	g_assert(g_slist_length(entries) == 2);
+
+	app[0] = entries->next->data;
+	app[1] = entries->data;
+
+	g_assert(app[0]->aid_len == 0x10);
+	g_assert(!memcmp(app[0]->aid, &ef_dir[4], 0x10));
+	g_assert(app[0]->label == NULL);
+
+	g_assert(app[1]->aid_len == 0x0c);
+	g_assert(!memcmp(app[1]->aid, &ef_dir[37], 0x0c));
+	g_assert(app[1]->label != NULL);
+	g_assert(!strcmp(app[1]->label, "MIDPfiles"));
+
+	g_free(ef_dir);
+}
+
 int main(int argc, char **argv)
 {
 	g_test_init(&argc, &argv, NULL);
@@ -458,6 +488,8 @@ int main(int argc, char **argv)
 	g_test_add_func("/testsimutil/EONS Handling", test_eons);
 	g_test_add_func("/testsimutil/Elementary File DB", test_ef_db);
 	g_test_add_func("/testsimutil/3G Status response", test_3g_status_data);
+	g_test_add_func("/testsimutil/Application entries decoding",
+			test_application_entry_decode);
 
 	return g_test_run();
 }

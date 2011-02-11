@@ -38,8 +38,7 @@
 #include <ofono/ssn.h>
 
 #include "isimodem.h"
-
-#define PN_SS			0x06
+#include "ss.h"
 
 struct ssn_data {
 	GIsiClient *client;
@@ -48,17 +47,20 @@ struct ssn_data {
 static int isi_ssn_probe(struct ofono_ssn *ssn, unsigned int vendor,
 				void *user)
 {
-	GIsiModem *idx = user;
-	struct ssn_data *data = g_try_new0(struct ssn_data, 1);
+	GIsiModem *modem = user;
+	struct ssn_data *sd;
 
-	if (!data)
+	sd = g_try_new0(struct ssn_data, 1);
+	if (sd == NULL)
 		return -ENOMEM;
 
-	data->client = g_isi_client_create(idx, PN_SS);
-	if (!data->client)
+	sd->client = g_isi_client_create(modem, PN_SS);
+	if (sd->client == NULL) {
+		g_free(sd);
 		return -ENOMEM;
+	}
 
-	ofono_ssn_set_data(ssn, data);
+	ofono_ssn_set_data(ssn, sd);
 
 	return 0;
 }
@@ -67,10 +69,11 @@ static void isi_ssn_remove(struct ofono_ssn *ssn)
 {
 	struct ssn_data *data = ofono_ssn_get_data(ssn);
 
-	if (!data)
+	ofono_ssn_set_data(ssn, NULL);
+
+	if (data == NULL)
 		return;
 
-	ofono_ssn_set_data(ssn, NULL);
 	g_isi_client_destroy(data->client);
 	g_free(data);
 }
@@ -81,12 +84,12 @@ static struct ofono_ssn_driver driver = {
 	.remove			= isi_ssn_remove
 };
 
-void isi_ssn_init()
+void isi_ssn_init(void)
 {
 	ofono_ssn_driver_register(&driver);
 }
 
-void isi_ssn_exit()
+void isi_ssn_exit(void)
 {
 	ofono_ssn_driver_unregister(&driver);
 }

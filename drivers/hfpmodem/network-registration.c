@@ -236,9 +236,6 @@ static void hfp_registration_status(struct ofono_netreg *netreg,
 	struct cb_data *cbd = cb_data_new(cb, data);
 	gboolean ok;
 
-	if (!cbd)
-		goto error;
-
 	cbd->user = netreg;
 
 	ok = g_at_chat_send(nd->chat, "AT+CIND?", cind_prefix,
@@ -246,7 +243,6 @@ static void hfp_registration_status(struct ofono_netreg *netreg,
 	if (ok)
 		return;
 
-error:
 	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, -1, -1, -1, -1, data);
@@ -258,9 +254,6 @@ static void hfp_current_operator(struct ofono_netreg *netreg,
 	struct netreg_data *nd = ofono_netreg_get_data(netreg);
 	struct cb_data *cbd = cb_data_new(cb, data);
 	gboolean ok;
-
-	if (!cbd)
-		goto error;
 
 	cbd->user = netreg;
 
@@ -274,7 +267,8 @@ static void hfp_current_operator(struct ofono_netreg *netreg,
 	if (ok)
 		return;
 
-error:
+	g_free(cbd);
+
 	CALLBACK_WITH_FAILURE(cb, NULL, data);
 }
 
@@ -284,16 +278,12 @@ static void hfp_signal_strength(struct ofono_netreg *netreg,
 	struct netreg_data *nd = ofono_netreg_get_data(netreg);
 	struct cb_data *cbd = cb_data_new(cb, data);
 
-	if (!cbd)
-		goto error;
-
 	cbd->user = netreg;
 
 	if (g_at_chat_send(nd->chat, "AT+CIND?", cind_prefix,
 				signal_strength_cb, cbd, g_free) > 0)
 		return;
 
-error:
 	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, -1, data);
@@ -348,12 +338,12 @@ static struct ofono_netreg_driver driver = {
 	.strength			= hfp_signal_strength,
 };
 
-void hfp_netreg_init()
+void hfp_netreg_init(void)
 {
 	ofono_netreg_driver_register(&driver);
 }
 
-void hfp_netreg_exit()
+void hfp_netreg_exit(void)
 {
 	ofono_netreg_driver_unregister(&driver);
 }

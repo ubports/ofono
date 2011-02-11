@@ -42,7 +42,7 @@ void g_at_util_debug_chat(gboolean in, const char *str, gsize len,
 	gsize ctrlz_size = strlen(ctrlz);
 	gsize i;
 
-	if (!debugf || !len)
+	if (debugf == NULL || !len)
 		return;
 
 	for (i = 0; i < len; i++) {
@@ -116,11 +116,11 @@ void g_at_util_debug_dump(gboolean in, const unsigned char *buf, gsize len,
 	GString *str;
 	gsize i;
 
-	if (!debugf || !len)
+	if (debugf == NULL || !len)
 		return;
 
 	str = g_string_sized_new(1 + (len * 2));
-	if (!str)
+	if (str == NULL)
 		return;
 
 	g_string_append_c(str, type);
@@ -136,9 +136,10 @@ gboolean g_at_util_setup_io(GIOChannel *io, GIOFlags flags)
 {
 	GIOFlags io_flags;
 
-	if (g_io_channel_set_encoding(io, NULL, NULL) !=
-			G_IO_STATUS_NORMAL)
+	if (g_io_channel_set_encoding(io, NULL, NULL) != G_IO_STATUS_NORMAL)
 		return FALSE;
+
+	g_io_channel_set_buffered(io, FALSE);
 
 	if (flags & G_IO_FLAG_SET_MASK) {
 		io_flags = g_io_channel_get_flags(io);
@@ -146,7 +147,7 @@ gboolean g_at_util_setup_io(GIOChannel *io, GIOFlags flags)
 		io_flags |= (flags & G_IO_FLAG_SET_MASK);
 
 		if (g_io_channel_set_flags(io, io_flags, NULL) !=
-				G_IO_STATUS_NORMAL)
+							G_IO_STATUS_NORMAL)
 			return FALSE;
 	}
 

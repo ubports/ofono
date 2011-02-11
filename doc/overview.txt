@@ -73,7 +73,7 @@ Current implemented features:
 	Advanced voice call control
 
 		Features like COLR/CLIR/CLIP/COLP are supported by the
-		voice call handling interface. 
+		voice call handling interface.
 
 		The support for call forwarding and call waiting is also
 		present.
@@ -100,8 +100,8 @@ Current implemented features:
 
 		The SMS support for text messages is available.  oFono
 		supports concatenated messages of up to 255 segments, UCS2 and
-		GSM alphabets as well as extended alphabets.  SMS status
-		report features are not yet available.
+		GSM alphabets as well as extended alphabets.  Delivery
+		confirmations (Status Reports) are also supported.
 
 		Selection of SMS bearer settings is supported through the
 		'Bearer' property on the SmsManager interface.
@@ -119,9 +119,24 @@ Current implemented features:
 
 	GPRS
 
-		GPRS data connections are fully supported by oFono.  However
-		this support is currently limited to just one active GPRS
-		context (network interface).
+		GPRS data connections are fully supported by oFono.  Multiple
+		active GPRS contexts are supported, but IPv6 context support is
+		currently missing.
+
+	Radio Access Settings
+
+		The radio settings interface contains support for selecting
+		the access selection mode and used frequency bands, and allows
+		enabling and disabling fast dormancy on hardware that support
+		this feature.
+
+	Sim Toolkit
+
+		The Sim Toolkit interface handles the SAT commands. Sim Toolkit
+		relies on the SimToolkit agent not only to get confirmation
+		from the user but also to inform user of the SAT initiated
+		operation status. Information on the Sim Toolkit feature
+		list can be found in features.txt.
 
 Work in progress features:
 

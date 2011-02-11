@@ -29,6 +29,7 @@ extern "C" {
 #include <ofono/types.h>
 
 struct ofono_sim;
+struct ofono_sim_context;
 
 /* 51.011 Section 9.3 */
 enum ofono_sim_file_structure {
@@ -108,6 +109,9 @@ typedef void (*ofono_sim_passwd_cb_t)(const struct ofono_error *error,
 					enum ofono_sim_password_type type,
 					void *data);
 
+typedef void (*ofono_sim_pin_retries_cb_t)(const struct ofono_error *error,
+			int retries[OFONO_SIM_PASSWORD_INVALID], void *data);
+
 typedef void (*ofono_sim_lock_unlock_cb_t)(const struct ofono_error *error,
 					void *data);
 
@@ -144,12 +148,14 @@ struct ofono_sim_driver {
 			ofono_sim_passwd_cb_t cb, void *data);
 	void (*send_passwd)(struct ofono_sim *sim, const char *passwd,
 			ofono_sim_lock_unlock_cb_t cb, void *data);
+	void (*query_pin_retries)(struct ofono_sim *sim,
+				ofono_sim_pin_retries_cb_t cb, void *data);
 	void (*reset_passwd)(struct ofono_sim *sim, const char *puk,
 			const char *passwd,
 			ofono_sim_lock_unlock_cb_t cb, void *data);
 	void (*change_passwd)(struct ofono_sim *sim,
 			enum ofono_sim_password_type type,
-			const char *old, const char *new,
+			const char *old_passwd, const char *new_passwd,
 			ofono_sim_lock_unlock_cb_t cb, void *data);
 	void (*lock)(struct ofono_sim *sim, enum ofono_sim_password_type type,
 			int enable, const char *passwd,
@@ -173,6 +179,8 @@ void ofono_sim_set_data(struct ofono_sim *sim, void *data);
 void *ofono_sim_get_data(struct ofono_sim *sim);
 
 const char *ofono_sim_get_imsi(struct ofono_sim *sim);
+const char *ofono_sim_get_mcc(struct ofono_sim *sim);
+const char *ofono_sim_get_mnc(struct ofono_sim *sim);
 enum ofono_sim_phase ofono_sim_get_phase(struct ofono_sim *sim);
 
 enum ofono_sim_cphs_phase ofono_sim_get_cphs_phase(struct ofono_sim *sim);
@@ -188,6 +196,9 @@ enum ofono_sim_state ofono_sim_get_state(struct ofono_sim *sim);
 
 void ofono_sim_inserted_notify(struct ofono_sim *sim, ofono_bool_t inserted);
 
+struct ofono_sim_context *ofono_sim_context_create(struct ofono_sim *sim);
+void ofono_sim_context_free(struct ofono_sim_context *context);
+
 /* This will queue an operation to read all available records with id from the
  * SIM.  Callback cb will be called every time a record has been read, or once
  * if an error has occurred.  For transparent files, the callback will only
@@ -195,16 +206,16 @@ void ofono_sim_inserted_notify(struct ofono_sim *sim, ofono_bool_t inserted);
  *
  * Returns 0 if the request could be queued, -1 otherwise.
  */
-int ofono_sim_read(struct ofono_sim *sim, int id,
+int ofono_sim_read(struct ofono_sim_context *context, int id,
 			enum ofono_sim_file_structure expected,
 			ofono_sim_file_read_cb_t cb, void *data);
 
-int ofono_sim_write(struct ofono_sim *sim, int id,
+int ofono_sim_write(struct ofono_sim_context *context, int id,
 			ofono_sim_file_write_cb_t cb,
 			enum ofono_sim_file_structure structure, int record,
 			const unsigned char *data, int length, void *userdata);
 
-int ofono_sim_read_bytes(struct ofono_sim *sim, int id,
+int ofono_sim_read_bytes(struct ofono_sim_context *context, int id,
 			unsigned short offset, unsigned short num_bytes,
 			ofono_sim_file_read_cb_t cb, void *data);
 #ifdef __cplusplus

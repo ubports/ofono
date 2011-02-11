@@ -51,6 +51,7 @@ const char *pn_resource_name(int value)
 		_(PN_MTC);
 		_(PN_GSS);
 		_(PN_GPDS);
+		_(PN_WRAN);
 	}
 	return "PN_<UNKNOWN>";
 }
@@ -280,6 +281,7 @@ const char *sms_subblock_name(enum sms_subblock value)
 		_(SMS_GSM_DELIVER_REPORT);
 		_(SMS_GSM_REPORT);
 		_(SMS_GSM_ROUTING);
+		_(SMS_GSM_CB_MESSAGE);
 		_(SMS_GSM_TPDU);
 		_(SMS_COMMON_DATA);
 		_(SMS_ADDRESS);
@@ -416,6 +418,8 @@ const char *info_message_id_name(enum info_message_id value)
 	switch (value) {
 		_(INFO_SERIAL_NUMBER_READ_REQ);
 		_(INFO_SERIAL_NUMBER_READ_RESP);
+		_(INFO_PP_READ_REQ);
+		_(INFO_PP_READ_RESP);
 		_(INFO_VERSION_READ_REQ);
 		_(INFO_VERSION_READ_RESP);
 		_(INFO_PRODUCT_INFO_READ_REQ);
@@ -432,6 +436,7 @@ const char *info_subblock_name(enum info_subblock value)
 		_(INFO_SB_PRODUCT_INFO_MANUFACTURER);
 		_(INFO_SB_SN_IMEI_PLAIN);
 		_(INFO_SB_SN_IMEI_SV_TO_NET);
+		_(INFO_SB_PP);
 		_(INFO_SB_MCUSW_VERSION);
 	}
 	return "INFO_<UNKNOWN>";
@@ -1019,16 +1024,17 @@ const char *gpds_transfer_cause_name(enum gpds_transfer_cause value)
 
 #undef _
 
-static void hex_dump(const char *name, const uint8_t m[], size_t len)
+static void hex_dump(const char *resname, uint8_t res, const char *name,
+			uint8_t id, uint8_t utid, const uint8_t m[], size_t len)
 {
 	char hex[3 * 16 + 1];
 	char ascii[16 + 1];
 	size_t i, j, k;
 
-	ofono_debug("%s [%s=0x%02X len=%zu]:", name,
-			"message_id", m[0], len);
+	ofono_debug("%s (0x%02X): %s [id=0x%02X utid=0x%02X len=%zu]:",
+			resname, res, name, id, utid, len);
 
-	strcpy(hex, " **"), j = 3;
+	strcpy(hex, ""), j = 0;
 	strcpy(ascii, "."), k = 1;
 
 	for (i = 0; i < len; i++) {
@@ -1036,65 +1042,48 @@ static void hex_dump(const char *name, const uint8_t m[], size_t len)
 		ascii[k++] = g_ascii_isgraph(m[i]) ? m[i] : '.';
 
 		if ((j & 48) == 48) {
-			ofono_debug("    *%-48s : %.*s", hex, (int)k, ascii);
+			ofono_debug("    *%-48s : %.*s", hex, (int) k, ascii);
 			j = 0, k = 0;
 		}
 	}
 
 	if (j)
-		ofono_debug("    *%-48s : %.*s", hex, (int)k, ascii);
+		ofono_debug("    *%-48s : %.*s", hex, (int) k, ascii);
 }
 
-void ss_debug(const void *restrict buf, size_t len, void *data)
+static const char *res_to_name(uint8_t res, uint8_t id)
 {
-	const uint8_t *m = buf;
-	hex_dump(ss_message_id_name(m[0]), m, len);
+	switch (res) {
+	case PN_NETWORK:
+		return net_message_id_name(id);
+	case PN_PHONE_INFO:
+		return info_message_id_name(id);
+	case PN_SS:
+		return ss_message_id_name(id);
+	case PN_CALL:
+		return call_message_id_name(id);
+	case PN_SMS:
+		return sms_message_id_name(id);
+	case PN_SIM:
+		return sim_message_id_name(id);
+	case PN_MTC:
+		return mtc_message_id_name(id);
+	case PN_GSS:
+		return gss_message_id_name(id);
+	case PN_GPDS:
+		return gpds_message_id_name(id);
+	}
+	return "UNKNOWN";
 }
 
-void mtc_debug(const void *restrict buf, size_t len, void *data)
+void isi_trace(const GIsiMessage *msg, void *data)
 {
-	const uint8_t *m = buf;
-	hex_dump(mtc_message_id_name(m[0]), m, len);
-}
+	uint8_t id = g_isi_msg_id(msg);
+	uint8_t res = g_isi_msg_resource(msg);
+	const char *resname = pn_resource_name(res);
+	const char *name = res_to_name(res, id);
+	uint8_t const *dump = g_isi_msg_data(msg);
 
-void sms_debug(const void *restrict buf, size_t len, void *data)
-{
-	const uint8_t *m = buf;
-	hex_dump(sms_message_id_name(m[0]), m, len);
-}
-
-void sim_debug(const void *restrict buf, size_t len, void *data)
-{
-	const uint8_t *m = buf;
-	hex_dump(sim_message_id_name(m[0]), m, len);
-}
-
-void info_debug(const void *restrict buf, size_t len, void *data)
-{
-	const uint8_t *m = buf;
-	hex_dump(info_message_id_name(m[0]), m, len);
-}
-
-void call_debug(const void *restrict buf, size_t len, void *data)
-{
-	const uint8_t *m = buf;
-	hex_dump(call_message_id_name(m[0]), m, len);
-}
-
-void net_debug(const void *restrict buf, size_t len, void *data)
-{
-	const uint8_t *m = buf;
-	hex_dump(net_message_id_name(m[0]), m, len);
-}
-
-void gss_debug(const void *restrict buf, size_t len, void *data)
-{
-	const uint8_t *m = buf;
-	hex_dump(gss_message_id_name(m[0]), m, len);
-}
-
-void gpds_debug(const void *restrict buf, size_t len, void *data)
-{
-	const uint8_t *m = buf;
-	hex_dump(gpds_message_id_name(m[0]), m, len);
+	hex_dump(resname, res, name, id, g_isi_msg_utid(msg),
+			dump - 2, g_isi_msg_data_len(msg) + 2);
 }
