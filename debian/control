@@ -8,7 +8,8 @@ Build-Depends: debhelper (>= 5),
                libglib2.0-dev (>= 2.22),
                libdbus-glib-1-dev,
                libudev-dev,
-               udev
+               udev,
+               libbluetooth-dev (>= 4.30)
 Standards-Version: 3.9.1
 Homepage: http://www.ofono.org/
 Vcs-Git: git://git.debian.org/git/pkg-telepathy/ofono.git

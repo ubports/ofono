@@ -8,4 +8,6 @@ include /usr/share/cdbs/1/rules/utils.mk
 
 common-binary-post-install-arch:: list-missing
 
+DEB_CONFIGURE_EXTRA_FLAGS := --enable-bluetooth
+
 include $(CURDIR)/debian/update-patches.mk
