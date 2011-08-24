@@ -1,11 +1,11 @@
-ofono (0.53-1) UNRELEASED; urgency=low
+ofono (0.53-1) unstable; urgency=low
 
   * New upstream release.
   * debian/control: Add Vcs-* fields.
   * Ensure ofono is built with bluetooth support (pass --enable-bluetooth
     and add libbluetooth-dev build-dep).
 
- -- Jonny Lamb <jonny@debian.org>  Wed, 24 Aug 2011 14:35:30 +0100
+ -- Jonny Lamb <jonny@debian.org>  Wed, 24 Aug 2011 14:40:25 +0100
 
 ofono (0.36-1) unstable; urgency=low
 
