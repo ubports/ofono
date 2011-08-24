@@ -1,3 +1,10 @@
+ofono (0.53-2) UNRELEASED; urgency=low
+
+  * debian/ofono.init: Add dbus as a dependency to start and stop. Thanks
+    to Johannes Schauer for the patch and report. (Closes: #631707)
+
+ -- Jonny Lamb <jonny@debian.org>  Wed, 24 Aug 2011 15:35:42 +0100
+
 ofono (0.53-1) unstable; urgency=low
 
   * New upstream release.
