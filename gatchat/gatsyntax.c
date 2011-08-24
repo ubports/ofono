@@ -43,7 +43,9 @@ enum GSMV1_STATE {
 	GSMV1_STATE_PDU_CR,
 	GSMV1_STATE_PROMPT,
 	GSMV1_STATE_ECHO,
-	GSMV1_PPP_DATA,
+	GSMV1_STATE_PPP_DATA,
+	GSMV1_STATE_SHORT_PROMPT,
+	GSMV1_STATE_SHORT_PROMPT_CR,
 };
 
 enum GSM_PERMISSIVE_STATE {
@@ -53,6 +55,8 @@ enum GSM_PERMISSIVE_STATE {
 	GSM_PERMISSIVE_STATE_GUESS_PDU,
 	GSM_PERMISSIVE_STATE_PDU,
 	GSM_PERMISSIVE_STATE_PROMPT,
+	GSM_PERMISSIVE_STATE_GUESS_SHORT_PROMPT,
+	GSM_PERMISSIVE_STATE_SHORT_PROMPT,
 };
 
 static void gsmv1_hint(GAtSyntax *syntax, GAtSyntaxExpectHint hint)
@@ -63,6 +67,9 @@ static void gsmv1_hint(GAtSyntax *syntax, GAtSyntaxExpectHint hint)
 		break;
 	case G_AT_SYNTAX_EXPECT_MULTILINE:
 		syntax->state = GSMV1_STATE_GUESS_MULTILINE_RESPONSE;
+		break;
+	case G_AT_SYNTAX_EXPECT_SHORT_PROMPT:
+		syntax->state = GSMV1_STATE_SHORT_PROMPT;
 		break;
 	default:
 		break;
@@ -83,7 +90,7 @@ static GAtSyntaxResult gsmv1_feed(GAtSyntax *syntax,
 			if (byte == '\r')
 				syntax->state = GSMV1_STATE_INITIAL_CR;
 			else if (byte == '~')
-				syntax->state = GSMV1_PPP_DATA;
+				syntax->state = GSMV1_STATE_PPP_DATA;
 			else
 				syntax->state = GSMV1_STATE_ECHO;
 			break;
@@ -91,7 +98,10 @@ static GAtSyntaxResult gsmv1_feed(GAtSyntax *syntax,
 		case GSMV1_STATE_INITIAL_CR:
 			if (byte == '\n')
 				syntax->state = GSMV1_STATE_INITIAL_LF;
-			else
+			else if (byte == '\r') {
+				syntax->state = GSMV1_STATE_IDLE;
+				return G_AT_SYNTAX_RESULT_UNRECOGNIZED;
+			} else
 				syntax->state = GSMV1_STATE_ECHO;
 			break;
 
@@ -213,7 +223,7 @@ static GAtSyntaxResult gsmv1_feed(GAtSyntax *syntax,
 
 			break;
 
-		case GSMV1_PPP_DATA:
+		case GSMV1_STATE_PPP_DATA:
 			if (byte == '~') {
 				syntax->state = GSMV1_STATE_IDLE;
 				res = G_AT_SYNTAX_RESULT_UNRECOGNIZED;
@@ -222,6 +232,25 @@ static GAtSyntaxResult gsmv1_feed(GAtSyntax *syntax,
 			}
 
 			break;
+
+		case GSMV1_STATE_SHORT_PROMPT:
+			if (byte == '\r')
+				syntax->state = GSMV1_STATE_SHORT_PROMPT_CR;
+			else
+				syntax->state = GSMV1_STATE_ECHO;
+
+			break;
+
+		case GSMV1_STATE_SHORT_PROMPT_CR:
+			if (byte == '\n') {
+				syntax->state = GSMV1_STATE_IDLE;
+				i += 1;
+				res = G_AT_SYNTAX_RESULT_PROMPT;
+				goto out;
+			}
+
+			syntax->state = GSMV1_STATE_RESPONSE;
+			return G_AT_SYNTAX_RESULT_UNSURE;
 
 		default:
 			break;
@@ -239,6 +268,8 @@ static void gsm_permissive_hint(GAtSyntax *syntax, GAtSyntaxExpectHint hint)
 {
 	if (hint == G_AT_SYNTAX_EXPECT_PDU)
 		syntax->state = GSM_PERMISSIVE_STATE_GUESS_PDU;
+	else if (hint == G_AT_SYNTAX_EXPECT_SHORT_PROMPT)
+		syntax->state = GSM_PERMISSIVE_STATE_GUESS_SHORT_PROMPT;
 }
 
 static GAtSyntaxResult gsm_permissive_feed(GAtSyntax *syntax,
@@ -303,6 +334,27 @@ static GAtSyntaxResult gsm_permissive_feed(GAtSyntax *syntax,
 			syntax->state = GSM_PERMISSIVE_STATE_RESPONSE;
 			return G_AT_SYNTAX_RESULT_UNSURE;
 
+		case GSM_PERMISSIVE_STATE_GUESS_SHORT_PROMPT:
+			if (byte == '\n')
+				/* ignore */;
+			else if (byte == '\r')
+				syntax->state =
+					GSM_PERMISSIVE_STATE_SHORT_PROMPT;
+			else
+				syntax->state = GSM_PERMISSIVE_STATE_RESPONSE;
+			break;
+
+		case GSM_PERMISSIVE_STATE_SHORT_PROMPT:
+			if (byte == '\n') {
+				syntax->state = GSM_PERMISSIVE_STATE_IDLE;
+				i += 1;
+				res = G_AT_SYNTAX_RESULT_PROMPT;
+				goto out;
+			}
+
+			syntax->state = GSM_PERMISSIVE_STATE_RESPONSE;
+			return G_AT_SYNTAX_RESULT_UNSURE;
+
 		default:
 			break;
 		};
@@ -332,12 +384,12 @@ GAtSyntax *g_at_syntax_new_full(GAtSyntaxFeedFunc feed,
 }
 
 
-GAtSyntax *g_at_syntax_new_gsmv1()
+GAtSyntax *g_at_syntax_new_gsmv1(void)
 {
 	return g_at_syntax_new_full(gsmv1_feed, gsmv1_hint, GSMV1_STATE_IDLE);
 }
 
-GAtSyntax *g_at_syntax_new_gsm_permissive()
+GAtSyntax *g_at_syntax_new_gsm_permissive(void)
 {
 	return g_at_syntax_new_full(gsm_permissive_feed, gsm_permissive_hint,
 					GSM_PERMISSIVE_STATE_IDLE);

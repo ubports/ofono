@@ -41,36 +41,52 @@ static GSList *g_drivers = NULL;
 
 /* 27.007 Section 7.7 */
 enum clir_status {
-	CLIR_STATUS_NOT_PROVISIONED = 0,
-	CLIR_STATUS_PROVISIONED_PERMANENT,
-	CLIR_STATUS_UNKNOWN,
-	CLIR_STATUS_TEMPORARY_RESTRICTED,
-	CLIR_STATUS_TEMPORARY_ALLOWED
+	CLIR_STATUS_NOT_PROVISIONED =		0,
+	CLIR_STATUS_PROVISIONED_PERMANENT =	1,
+	CLIR_STATUS_UNKNOWN =			2,
+	CLIR_STATUS_TEMPORARY_RESTRICTED =	3,
+	CLIR_STATUS_TEMPORARY_ALLOWED =		4
 };
 
 /* 27.007 Section 7.6 */
 enum clip_status {
-	CLIP_STATUS_NOT_PROVISIONED = 0,
-	CLIP_STATUS_PROVISIONED,
-	CLIP_STATUS_UNKNOWN
+	CLIP_STATUS_NOT_PROVISIONED =		0,
+	CLIP_STATUS_PROVISIONED =		1,
+	CLIP_STATUS_UNKNOWN =			2
+};
+
+/* 27.007 Section 7.30 */
+enum cnap_status {
+	CNAP_STATUS_NOT_PROVISIONED =		0,
+	CNAP_STATUS_PROVISIONED =		1,
+	CNAP_STATUS_UNKNOWN =			2
 };
 
 /* 27.007 Section 7.8 */
 enum colp_status {
-	COLP_STATUS_NOT_PROVISIONED = 0,
-	COLP_STATUS_PROVISIONED = 1,
-	COLP_STATUS_UNKNOWN = 2
+	COLP_STATUS_NOT_PROVISIONED =		0,
+	COLP_STATUS_PROVISIONED =		1,
+	COLP_STATUS_UNKNOWN =			2
+};
+
+/* 27.007 Section 7.9 */
+enum cdip_status {
+	CDIP_STATUS_NOT_PROVISIONED =		0,
+	CDIP_STATUS_PROVISIONED =		1,
+	CDIP_STATUS_UNKNOWN =			2
 };
 
 /* This is not defined in 27.007, but presumably the same as CLIP/COLP */
 enum colr_status {
-	COLR_STATUS_NOT_PROVISIONED = 0,
-	COLR_STATUS_PROVISIONED = 1,
-	COLR_STATUS_UNKNOWN = 2
+	COLR_STATUS_NOT_PROVISIONED =		0,
+	COLR_STATUS_PROVISIONED =		1,
+	COLR_STATUS_UNKNOWN =			2
 };
 
 enum call_setting_type {
 	CALL_SETTING_TYPE_CLIP = 0,
+	CALL_SETTING_TYPE_CNAP,
+	CALL_SETTING_TYPE_CDIP,
 	CALL_SETTING_TYPE_COLP,
 	CALL_SETTING_TYPE_COLR,
 	CALL_SETTING_TYPE_CLIR,
@@ -81,6 +97,8 @@ struct ofono_call_settings {
 	int clir;
 	int colr;
 	int clip;
+	int cnap;
+	int cdip;
 	int colp;
 	int clir_setting;
 	int cw;
@@ -103,9 +121,33 @@ static const char *clip_status_to_string(int status)
 		return "disabled";
 	case CLIP_STATUS_PROVISIONED:
 		return "enabled";
-	default:
-		return "unknown";
 	}
+
+	return "unknown";
+}
+
+static const char *cdip_status_to_string(int status)
+{
+	switch (status) {
+	case CDIP_STATUS_NOT_PROVISIONED:
+		return "disabled";
+	case CDIP_STATUS_PROVISIONED:
+		return "enabled";
+	}
+
+	return "unknown";
+}
+
+static const char *cnap_status_to_string(int status)
+{
+	switch (status) {
+	case CNAP_STATUS_NOT_PROVISIONED:
+		return "disabled";
+	case CNAP_STATUS_PROVISIONED:
+		return "enabled";
+	}
+
+	return "unknown";
 }
 
 static const char *colp_status_to_string(int status)
@@ -115,9 +157,9 @@ static const char *colp_status_to_string(int status)
 		return "disabled";
 	case COLP_STATUS_PROVISIONED:
 		return "enabled";
-	default:
-		return "unknown";
 	}
+
+	return "unknown";
 }
 
 static const char *colr_status_to_string(int status)
@@ -127,9 +169,9 @@ static const char *colr_status_to_string(int status)
 		return "disabled";
 	case COLR_STATUS_PROVISIONED:
 		return "enabled";
-	default:
-		return "unknown";
 	}
+
+	return "unknown";
 }
 
 static const char *hide_callerid_to_string(int status)
@@ -141,9 +183,9 @@ static const char *hide_callerid_to_string(int status)
 		return "enabled";
 	case OFONO_CLIR_OPTION_SUPPRESSION:
 		return "disabled";
-	default:
-		return "default";
 	}
+
+	return "default";
 }
 
 static const char *clir_status_to_string(int status)
@@ -157,9 +199,9 @@ static const char *clir_status_to_string(int status)
 		return "on";
 	case CLIR_STATUS_TEMPORARY_ALLOWED:
 		return "off";
-	default:
-		return "unknown";
 	}
+
+	return "unknown";
 }
 
 static void set_clir_network(struct ofono_call_settings *cs, int clir)
@@ -206,6 +248,28 @@ static void set_clir_override(struct ofono_call_settings *cs, int override)
 						DBUS_TYPE_STRING, &str);
 }
 
+static void set_cdip(struct ofono_call_settings *cs, int cdip)
+{
+	DBusConnection *conn;
+	const char *path;
+	const char *str;
+
+	if (cs->cdip == cdip)
+		return;
+
+	cs->cdip = cdip;
+
+	conn = ofono_dbus_get_connection();
+	path = __ofono_atom_get_path(cs->atom);
+
+	str = cdip_status_to_string(cdip);
+
+	ofono_dbus_signal_property_changed(conn, path,
+						OFONO_CALL_SETTINGS_INTERFACE,
+						"CalledLinePresentation",
+						DBUS_TYPE_STRING, &str);
+}
+
 static void set_clip(struct ofono_call_settings *cs, int clip)
 {
 	DBusConnection *conn;
@@ -228,6 +292,28 @@ static void set_clip(struct ofono_call_settings *cs, int clip)
 						DBUS_TYPE_STRING, &str);
 }
 
+static void set_cnap(struct ofono_call_settings *cs, int cnap)
+{
+	DBusConnection *conn;
+	const char *path;
+	const char *str;
+
+	if (cs->cnap == cnap)
+		return;
+
+	cs->cnap = cnap;
+
+	conn = ofono_dbus_get_connection();
+	path = __ofono_atom_get_path(cs->atom);
+
+	str = cnap_status_to_string(cnap);
+
+	ofono_dbus_signal_property_changed(conn, path,
+						OFONO_CALL_SETTINGS_INTERFACE,
+						"CallingNamePresentation",
+						DBUS_TYPE_STRING, &str);
+}
+
 static void set_colp(struct ofono_call_settings *cs, int colp)
 {
 	DBusConnection *conn;
@@ -246,7 +332,7 @@ static void set_colp(struct ofono_call_settings *cs, int colp)
 
 	ofono_dbus_signal_property_changed(conn, path,
 						OFONO_CALL_SETTINGS_INTERFACE,
-						"CalledLinePresentation",
+						"ConnectedLinePresentation",
 						DBUS_TYPE_STRING, &str);
 }
 
@@ -268,7 +354,7 @@ static void set_colr(struct ofono_call_settings *cs, int colr)
 
 	ofono_dbus_signal_property_changed(conn, path,
 						OFONO_CALL_SETTINGS_INTERFACE,
-						"CalledLineRestriction",
+						"ConnectedLineRestriction",
 						DBUS_TYPE_STRING, &str);
 }
 
@@ -412,7 +498,7 @@ static gboolean cw_ss_control(int type,
 	int cls = BEARER_CLASS_SS_DEFAULT;
 	DBusMessage *reply;
 
-	if (!cs)
+	if (cs == NULL)
 		return FALSE;
 
 	if (strcmp(sc, "43"))
@@ -426,8 +512,8 @@ static gboolean cw_ss_control(int type,
 	if (strlen(sib) || strlen(sib) || strlen(dn))
 		goto bad_format;
 
-	if ((type == SS_CONTROL_TYPE_QUERY && !cs->driver->cw_query) ||
-		(type != SS_CONTROL_TYPE_QUERY && !cs->driver->cw_set)) {
+	if ((type == SS_CONTROL_TYPE_QUERY && cs->driver->cw_query == NULL) ||
+		(type != SS_CONTROL_TYPE_QUERY && cs->driver->cw_set == NULL)) {
 		reply = __ofono_error_not_implemented(msg);
 		goto error;
 	}
@@ -520,7 +606,7 @@ static void generate_ss_query_reply(struct ofono_call_settings *cs,
 	__ofono_dbus_pending_reply(&cs->pending, reply);
 }
 
-static void clip_colp_colr_ss_query_cb(const struct ofono_error *error,
+static void clip_cnap_colp_colr_ss_query_cb(const struct ofono_error *error,
 					int status, void *data)
 {
 	struct ofono_call_settings *cs = data;
@@ -542,29 +628,36 @@ static void clip_colp_colr_ss_query_cb(const struct ofono_error *error,
 		context = "CallingLinePresentation";
 		break;
 
+	case CALL_SETTING_TYPE_CNAP:
+		set_cnap(cs, status);
+		value = cnap_status_to_string(status);
+		context = "CallingNamePresentation";
+		break;
+
+
 	case CALL_SETTING_TYPE_COLP:
 		set_colp(cs, status);
 		value = colp_status_to_string(status);
-		context = "CalledLinePresentation";
+		context = "ConnectedLinePresentation";
 		break;
 
 	case CALL_SETTING_TYPE_COLR:
 		set_colr(cs, status);
 		value = colr_status_to_string(status);
-		context = "CalledLineRestriction";
+		context = "ConnectedLineRestriction";
 		break;
 
 	default:
 		__ofono_dbus_pending_reply(&cs->pending,
 				__ofono_error_failed(cs->pending));
-		ofono_error("Unknown type during COLR/COLP/CLIP ss");
+		ofono_error("Unknown type during COLR/COLP/CLIP/CNAP ss");
 		return;
 	};
 
 	generate_ss_query_reply(cs, context, value);
 }
 
-static gboolean clip_colp_colr_ss(int type,
+static gboolean clip_cnap_colp_colr_ss(int type,
 				const char *sc, const char *sia,
 				const char *sib, const char *sic,
 				const char *dn, DBusMessage *msg, void *data)
@@ -574,7 +667,7 @@ static gboolean clip_colp_colr_ss(int type,
 	void (*query_op)(struct ofono_call_settings *cs,
 				ofono_call_settings_status_cb_t cb, void *data);
 
-	if (!cs)
+	if (cs == NULL)
 		return FALSE;
 
 	if (__ofono_call_settings_is_busy(cs)) {
@@ -587,6 +680,9 @@ static gboolean clip_colp_colr_ss(int type,
 	if (!strcmp(sc, "30")) {
 		cs->ss_setting = CALL_SETTING_TYPE_CLIP;
 		query_op = cs->driver->clip_query;
+	} else if (!strcmp(sc, "300")) {
+		cs->ss_setting = CALL_SETTING_TYPE_CNAP;
+		query_op = cs->driver->cnap_query;
 	} else if (!strcmp(sc, "76")) {
 		cs->ss_setting = CALL_SETTING_TYPE_COLP;
 		query_op = cs->driver->colp_query;
@@ -605,18 +701,18 @@ static gboolean clip_colp_colr_ss(int type,
 		return TRUE;
 	}
 
-	if (!query_op) {
+	if (query_op == NULL) {
 		DBusMessage *reply = __ofono_error_not_implemented(msg);
 		g_dbus_send_message(conn, reply);
 
 		return TRUE;
 	}
 
-	DBG("Received CLIP/COLR/COLP query ss control");
+	DBG("Received CLIP/CNAP/COLR/COLP query ss control");
 
 	cs->pending = dbus_message_ref(msg);
 
-	query_op(cs, clip_colp_colr_ss_query_cb, cs);
+	query_op(cs, clip_cnap_colp_colr_ss_query_cb, cs);
 
 	return TRUE;
 }
@@ -637,7 +733,7 @@ static void clir_ss_query_callback(const struct ofono_error *error,
 
 	switch (network) {
 	case CLIR_STATUS_UNKNOWN:
-		value = "uknown";
+		value = "unknown";
 		break;
 
 	case CLIR_STATUS_PROVISIONED_PERMANENT:
@@ -694,7 +790,7 @@ static gboolean clir_ss_control(int type,
 	struct ofono_call_settings *cs = data;
 	DBusConnection *conn = ofono_dbus_get_connection();
 
-	if (!cs)
+	if (cs == NULL)
 		return FALSE;
 
 	if (strcmp(sc, "31"))
@@ -726,7 +822,7 @@ static gboolean clir_ss_control(int type,
 		return TRUE;
 	}
 
-	if (type != SS_CONTROL_TYPE_QUERY && !cs->driver->clir_set) {
+	if (type != SS_CONTROL_TYPE_QUERY && cs->driver->clir_set == NULL) {
 		DBusMessage *reply = __ofono_error_not_implemented(msg);
 		g_dbus_send_message(conn, reply);
 
@@ -762,15 +858,19 @@ static gboolean clir_ss_control(int type,
 
 static void cs_register_ss_controls(struct ofono_call_settings *cs)
 {
-	__ofono_ussd_ssc_register(cs->ussd, "30", clip_colp_colr_ss, cs, NULL);
+	__ofono_ussd_ssc_register(cs->ussd, "30", clip_cnap_colp_colr_ss,
+								cs, NULL);
 	__ofono_ussd_ssc_register(cs->ussd, "31", clir_ss_control, cs, NULL);
-	__ofono_ussd_ssc_register(cs->ussd, "76", clip_colp_colr_ss, cs, NULL);
+	__ofono_ussd_ssc_register(cs->ussd, "76", clip_cnap_colp_colr_ss,
+								cs, NULL);
+	__ofono_ussd_ssc_register(cs->ussd, "300", clip_cnap_colp_colr_ss,
+								cs, NULL);
 
 	__ofono_ussd_ssc_register(cs->ussd, "43", cw_ss_control, cs, NULL);
 
-	if (cs->driver->colr_query)
+	if (cs->driver->colr_query != NULL)
 		__ofono_ussd_ssc_register(cs->ussd, "77",
-						clip_colp_colr_ss, cs, NULL);
+					clip_cnap_colp_colr_ss, cs, NULL);
 }
 
 static void cs_unregister_ss_controls(struct ofono_call_settings *cs)
@@ -778,10 +878,11 @@ static void cs_unregister_ss_controls(struct ofono_call_settings *cs)
 	__ofono_ussd_ssc_unregister(cs->ussd, "30");
 	__ofono_ussd_ssc_unregister(cs->ussd, "31");
 	__ofono_ussd_ssc_unregister(cs->ussd, "76");
+	__ofono_ussd_ssc_unregister(cs->ussd, "300");
 
 	__ofono_ussd_ssc_unregister(cs->ussd, "43");
 
-	if (cs->driver->colr_query)
+	if (cs->driver->colr_query != NULL)
 		__ofono_ussd_ssc_unregister(cs->ussd, "77");
 }
 
@@ -799,8 +900,7 @@ static DBusMessage *generate_get_properties_reply(struct ofono_call_settings *cs
 	const char *str;
 
 	reply = dbus_message_new_method_return(msg);
-
-	if (!reply)
+	if (reply == NULL)
 		return NULL;
 
 	dbus_message_iter_init_append(reply, &iter);
@@ -813,12 +913,20 @@ static DBusMessage *generate_get_properties_reply(struct ofono_call_settings *cs
 	ofono_dbus_dict_append(&dict, "CallingLinePresentation",
 				DBUS_TYPE_STRING, &str);
 
+	str = cnap_status_to_string(cs->cnap);
+	ofono_dbus_dict_append(&dict, "CallingNamePresentation",
+				DBUS_TYPE_STRING, &str);
+
 	str = colp_status_to_string(cs->colp);
-	ofono_dbus_dict_append(&dict, "CalledLinePresentation",
+	ofono_dbus_dict_append(&dict, "ConnectedLinePresentation",
 				DBUS_TYPE_STRING, &str);
 
 	str = colr_status_to_string(cs->colr);
-	ofono_dbus_dict_append(&dict, "CalledLineRestriction",
+	ofono_dbus_dict_append(&dict, "ConnectedLineRestriction",
+				DBUS_TYPE_STRING, &str);
+
+	str = cdip_status_to_string(cs->cdip);
+	ofono_dbus_dict_append(&dict, "CalledLinePresentation",
 				DBUS_TYPE_STRING, &str);
 
 	str = clir_status_to_string(cs->clir);
@@ -859,7 +967,7 @@ out:
 
 static void query_clir(struct ofono_call_settings *cs)
 {
-	if (!cs->driver->clir_query) {
+	if (cs->driver->clir_query == NULL) {
 		if (cs->pending) {
 			DBusMessage *reply =
 				generate_get_properties_reply(cs,
@@ -873,6 +981,49 @@ static void query_clir(struct ofono_call_settings *cs)
 	cs->driver->clir_query(cs, cs_clir_callback, cs);
 }
 
+static void cs_cdip_callback(const struct ofono_error *error,
+				int state, void *data)
+{
+	struct ofono_call_settings *cs = data;
+
+	if (error->type == OFONO_ERROR_TYPE_NO_ERROR)
+		set_cdip(cs, state);
+
+	query_clir(cs);
+}
+
+static void query_cdip(struct ofono_call_settings *cs)
+{
+	if (cs->driver->cdip_query == NULL) {
+		query_clir(cs);
+		return;
+	}
+
+	cs->driver->cdip_query(cs, cs_cdip_callback, cs);
+}
+
+
+static void cs_cnap_callback(const struct ofono_error *error,
+				int state, void *data)
+{
+	struct ofono_call_settings *cs = data;
+
+	if (error->type == OFONO_ERROR_TYPE_NO_ERROR)
+		set_cnap(cs, state);
+
+	query_cdip(cs);
+}
+
+static void query_cnap(struct ofono_call_settings *cs)
+{
+	if (cs->driver->cnap_query == NULL) {
+		query_cdip(cs);
+		return;
+	}
+
+	cs->driver->cnap_query(cs, cs_cnap_callback, cs);
+}
+
 static void cs_clip_callback(const struct ofono_error *error,
 				int state, void *data)
 {
@@ -881,12 +1032,12 @@ static void cs_clip_callback(const struct ofono_error *error,
 	if (error->type == OFONO_ERROR_TYPE_NO_ERROR)
 		set_clip(cs, state);
 
-	query_clir(cs);
+	query_cnap(cs);
 }
 
 static void query_clip(struct ofono_call_settings *cs)
 {
-	if (!cs->driver->clip_query) {
+	if (cs->driver->clip_query == NULL) {
 		query_clir(cs);
 		return;
 	}
@@ -907,7 +1058,7 @@ static void cs_colp_callback(const struct ofono_error *error,
 
 static void query_colp(struct ofono_call_settings *cs)
 {
-	if (!cs->driver->colp_query) {
+	if (cs->driver->colp_query == NULL) {
 		query_clip(cs);
 		return;
 	}
@@ -928,7 +1079,7 @@ static void cs_colr_callback(const struct ofono_error *error,
 
 static void query_colr(struct ofono_call_settings *cs)
 {
-	if (!cs->driver->colr_query) {
+	if (cs->driver->colr_query == NULL) {
 		query_colp(cs);
 		return;
 	}
@@ -949,7 +1100,7 @@ static void cs_cw_callback(const struct ofono_error *error, int status,
 
 static void query_cw(struct ofono_call_settings *cs)
 {
-	if (!cs->driver->cw_query) {
+	if (cs->driver->cw_query == NULL) {
 		query_colr(cs);
 		return;
 	}
@@ -1028,11 +1179,11 @@ static DBusMessage *set_clir(DBusMessage *msg, struct ofono_call_settings *cs,
 		return __ofono_error_not_implemented(msg);
 
 	if (!strcmp(setting, "default"))
-		clir = 0;
+		clir = CLIR_STATUS_NOT_PROVISIONED;
 	else if (!strcmp(setting, "enabled"))
-		clir = 1;
+		clir = CLIR_STATUS_PROVISIONED_PERMANENT;
 	else if (!strcmp(setting, "disabled"))
-		clir = 2;
+		clir = CLIR_STATUS_UNKNOWN;
 
 	if (clir == -1)
 		return __ofono_error_invalid_format(msg);
@@ -1237,7 +1388,7 @@ static void call_settings_remove(struct ofono_atom *atom)
 	if (cs == NULL)
 		return;
 
-	if (cs->driver && cs->driver->remove)
+	if (cs->driver != NULL && cs->driver->remove != NULL)
 		cs->driver->remove(cs);
 
 	g_free(cs);
@@ -1260,10 +1411,11 @@ struct ofono_call_settings *ofono_call_settings_create(struct ofono_modem *modem
 		return NULL;
 
 	/* Set all the settings to unknown state */
-	cs->clip = 2;
-	cs->clir = 2;
-	cs->colp = 2;
-	cs->colr = 2;
+	cs->clip = CLIP_STATUS_UNKNOWN;
+	cs->cnap = CNAP_STATUS_UNKNOWN;
+	cs->clir = CLIR_STATUS_UNKNOWN;
+	cs->colp = COLP_STATUS_UNKNOWN;
+	cs->colr = COLR_STATUS_UNKNOWN;
 	cs->atom = __ofono_modem_add_atom(modem, OFONO_ATOM_TYPE_CALL_SETTINGS,
 						call_settings_remove, cs);
 
@@ -1302,7 +1454,6 @@ void ofono_call_settings_register(struct ofono_call_settings *cs)
 	DBusConnection *conn = ofono_dbus_get_connection();
 	const char *path = __ofono_atom_get_path(cs->atom);
 	struct ofono_modem *modem = __ofono_atom_get_modem(cs->atom);
-	struct ofono_atom *ussd_atom;
 
 	if (!g_dbus_register_interface(conn, path,
 					OFONO_CALL_SETTINGS_INTERFACE,
@@ -1319,12 +1470,6 @@ void ofono_call_settings_register(struct ofono_call_settings *cs)
 	cs->ussd_watch = __ofono_modem_add_atom_watch(modem,
 					OFONO_ATOM_TYPE_USSD,
 					ussd_watch, cs, NULL);
-
-	ussd_atom = __ofono_modem_find_atom(modem, OFONO_ATOM_TYPE_USSD);
-
-	if (ussd_atom && __ofono_atom_get_registered(ussd_atom))
-		ussd_watch(ussd_atom, OFONO_ATOM_WATCH_CONDITION_REGISTERED,
-				cs);
 
 	__ofono_atom_register(cs->atom, call_settings_unregister);
 }

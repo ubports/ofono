@@ -35,18 +35,7 @@
 
 #include "atmodem.h"
 
-static const char *fixup_return(const char *line, const char *prefix)
-{
-	if (g_str_has_prefix(line, prefix) == FALSE)
-		return line;
-
-	line = line + strlen(prefix);
-
-	while (line[0] == ' ')
-		line++;
-
-	return line;
-}
+static const char *gcap_prefix[] = { "+GCAP:", NULL };
 
 static void attr_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
@@ -54,10 +43,7 @@ static void attr_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	ofono_devinfo_query_cb_t cb = cbd->cb;
 	const char *prefix = cbd->user;
 	struct ofono_error error;
-	int numlines = g_at_result_num_response_lines(result);
-	GAtResultIter iter;
-	const char *line;
-	int i;
+	const char *attr;
 
 	decode_at_error(&error, g_at_result_final_response(result));
 
@@ -66,24 +52,12 @@ static void attr_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		return;
 	}
 
-	if (numlines == 0) {
+	if (at_util_parse_attr(result, prefix, &attr) == FALSE) {
 		CALLBACK_WITH_FAILURE(cb, NULL, cbd->data);
 		return;
 	}
 
-	g_at_result_iter_init(&iter, result);
-
-	/* We have to be careful here, sometimes a stray unsolicited
-	 * notification will appear as part of the response and we
-	 * cannot rely on having a prefix to recognize the actual
-	 * response line.  So use the last line only as the response
-	 */
-	for (i = 0; i < numlines; i++)
-		g_at_result_iter_next(&iter, NULL);
-
-	line = g_at_result_iter_raw_line(&iter);
-
-	cb(&error, fixup_return(line, prefix), cbd->data);
+	cb(&error, attr, cbd->data);
 }
 
 static void at_query_manufacturer(struct ofono_devinfo *info,
@@ -92,16 +66,11 @@ static void at_query_manufacturer(struct ofono_devinfo *info,
 	struct cb_data *cbd = cb_data_new(cb, data);
 	GAtChat *chat = ofono_devinfo_get_data(info);
 
-	if (!cbd)
-		goto error;
-
 	cbd->user = "+CGMI:";
 
-	if (g_at_chat_send(chat, "AT+CGMI", NULL,
-				attr_cb, cbd, g_free) > 0)
+	if (g_at_chat_send(chat, "AT+CGMI", NULL, attr_cb, cbd, g_free) > 0)
 		return;
 
-error:
 	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, NULL, data);
@@ -113,16 +82,11 @@ static void at_query_model(struct ofono_devinfo *info,
 	struct cb_data *cbd = cb_data_new(cb, data);
 	GAtChat *chat = ofono_devinfo_get_data(info);
 
-	if (!cbd)
-		goto error;
-
 	cbd->user = "+CGMM:";
 
-	if (g_at_chat_send(chat, "AT+CGMM", NULL,
-				attr_cb, cbd, g_free) > 0)
+	if (g_at_chat_send(chat, "AT+CGMM", NULL, attr_cb, cbd, g_free) > 0)
 		return;
 
-error:
 	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, NULL, data);
@@ -134,16 +98,11 @@ static void at_query_revision(struct ofono_devinfo *info,
 	struct cb_data *cbd = cb_data_new(cb, data);
 	GAtChat *chat = ofono_devinfo_get_data(info);
 
-	if (!cbd)
-		goto error;
-
 	cbd->user = "+CGMR:";
 
-	if (g_at_chat_send(chat, "AT+CGMR", NULL,
-				attr_cb, cbd, g_free) > 0)
+	if (g_at_chat_send(chat, "AT+CGMR", NULL, attr_cb, cbd, g_free) > 0)
 		return;
 
-error:
 	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, NULL, data);
@@ -155,37 +114,32 @@ static void at_query_serial(struct ofono_devinfo *info,
 	struct cb_data *cbd = cb_data_new(cb, data);
 	GAtChat *chat = ofono_devinfo_get_data(info);
 
-	if (!cbd)
-		goto error;
-
 	cbd->user = "+CGSN:";
 
-	if (g_at_chat_send(chat, "AT+CGSN", NULL,
-				attr_cb, cbd, g_free) > 0)
+	if (g_at_chat_send(chat, "AT+CGSN", NULL, attr_cb, cbd, g_free) > 0)
 		return;
 
-error:
 	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, NULL, data);
 }
 
-static gboolean at_devinfo_register(gpointer user_data)
+static void capability_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_devinfo *info = user_data;
 
 	ofono_devinfo_register(info);
-
-	return FALSE;
 }
 
 static int at_devinfo_probe(struct ofono_devinfo *info, unsigned int vendor,
 				void *data)
 {
-	GAtChat *chat = data;
+	GAtChat *chat = g_at_chat_clone(data);
 
-	ofono_devinfo_set_data(info, g_at_chat_clone(chat));
-	g_idle_add(at_devinfo_register, info);
+	ofono_devinfo_set_data(info, chat);
+
+	g_at_chat_send(chat, "AT+GCAP", gcap_prefix,
+				capability_cb, info, NULL);
 
 	return 0;
 }
@@ -194,18 +148,19 @@ static void at_devinfo_remove(struct ofono_devinfo *info)
 {
 	GAtChat *chat = ofono_devinfo_get_data(info);
 
-	g_at_chat_unref(chat);
 	ofono_devinfo_set_data(info, NULL);
+
+	g_at_chat_unref(chat);
 }
 
 static struct ofono_devinfo_driver driver = {
-	.name = "atmodem",
-	.probe = at_devinfo_probe,
-	.remove = at_devinfo_remove,
-	.query_manufacturer = at_query_manufacturer,
-	.query_model = at_query_model,
-	.query_revision = at_query_revision,
-	.query_serial = at_query_serial
+	.name			= "atmodem",
+	.probe			= at_devinfo_probe,
+	.remove			= at_devinfo_remove,
+	.query_manufacturer	= at_query_manufacturer,
+	.query_model		= at_query_model,
+	.query_revision		= at_query_revision,
+	.query_serial		= at_query_serial,
 };
 
 void at_devinfo_init(void)

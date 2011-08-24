@@ -73,7 +73,7 @@ Current implemented features:
 	Advanced voice call control
 
 		Features like COLR/CLIR/CLIP/COLP are supported by the
-		voice call handling interface. 
+		voice call handling interface.
 
 		The support for call forwarding and call waiting is also
 		present.
@@ -100,8 +100,8 @@ Current implemented features:
 
 		The SMS support for text messages is available.  oFono
 		supports concatenated messages of up to 255 segments, UCS2 and
-		GSM alphabets as well as extended alphabets.  SMS status
-		report features are not yet available.
+		GSM alphabets as well as extended alphabets.  Delivery
+		confirmations (Status Reports) are also supported.
 
 		Selection of SMS bearer settings is supported through the
 		'Bearer' property on the SmsManager interface.
@@ -109,7 +109,8 @@ Current implemented features:
 	SIM PIN handling
 
 		SIM PIN locks, network and service provider locks are
-		supported.
+		supported. The SIM Manager also handles retry counter for PIN,
+		PIN2, PUK and PUK2.
 
 	Cell Broadcast
 
@@ -119,16 +120,51 @@ Current implemented features:
 
 	GPRS
 
-		GPRS data connections are fully supported by oFono.  However
-		this support is currently limited to just one active GPRS
-		context (network interface).
+		GPRS data connections are fully supported by oFono.  Multiple
+		active GPRS contexts are supported. IPv6 context support is
+		in progress.
+
+	Radio Access Settings
+
+		The radio settings interface contains support for selecting
+		the access selection mode and used frequency bands, and allows
+		enabling and disabling fast dormancy on hardware that support
+		this feature.
+
+	Sim Toolkit
+
+		The Sim Toolkit interface handles the SAT commands. Sim Toolkit
+		relies on the SimToolkit agent not only to get confirmation
+		from the user but also to inform user of the SAT initiated
+		operation status. Information on the Sim Toolkit feature
+		list can be found in features.txt.
+
+	Supplementary Services
+
+		The Supplementary Services interface handles both recognized
+		supplementary service control string and user/network initiated
+		unstructured supplementary service data (USSD).
+
+	GPS/Location Services
+
+		oFono provides a Location Reporting interface that enables
+		taking advantage of on-board GPS capabilities of modern modems.
+		oFono also provides an Assisted Satellite Navigation interface
+		that allows feeding assistance data to the GPS unit from the
+		network as well as E911 services.
 
 Work in progress features:
 
-	USSD
+	GPRS
 
-		User initiated USSD support is available, but not
-		network-initiated USSD support.
+		IPv6 PS context support is under development.
+
+	Modem Emulator
+
+		To enable DialUp Networking (over Bluetooth or USB), and to
+		allow Bluetooth HandsFree / Headset support, oFono will expose
+		some 'fake' modem to enable the communication with car kits, or
+		other devices.
 
 Not implemented features:
 
@@ -173,4 +209,3 @@ Not implemented features:
 		prominent.
 
 		A similar split like with MMS might be a good idea.
-

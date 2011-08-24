@@ -52,6 +52,8 @@ struct _GAtIO {
 	gpointer write_data;			/* Write callback userdata */
 	GAtDebugFunc debugf;			/* debugging output function */
 	gpointer debug_data;			/* Data to pass to debug func */
+	GAtDisconnectFunc write_done_func;	/* tx empty notifier */
+	gpointer write_done_data;		/* tx empty data */
 	gboolean destroyed;			/* Re-entrancy guard */
 };
 
@@ -82,7 +84,7 @@ static gboolean received_data(GIOChannel *channel, GIOCondition cond,
 {
 	unsigned char *buf;
 	GAtIO *io = data;
-	GIOError err;
+	GIOStatus status;
 	gsize rbytes;
 	gsize toread;
 	gsize total_read = 0;
@@ -101,7 +103,8 @@ static gboolean received_data(GIOChannel *channel, GIOCondition cond,
 		rbytes = 0;
 		buf = ring_buffer_write_ptr(io->buf, 0);
 
-		err = g_io_channel_read(channel, (char *) buf, toread, &rbytes);
+		status = g_io_channel_read_chars(channel, (char *) buf,
+							toread, &rbytes, NULL);
 		g_at_util_debug_chat(TRUE, (char *)buf, rbytes,
 					io->debugf, io->debug_data);
 
@@ -112,7 +115,7 @@ static gboolean received_data(GIOChannel *channel, GIOCondition cond,
 		if (rbytes > 0)
 			ring_buffer_write_advance(io->buf, rbytes);
 
-	} while (err == G_IO_ERROR_NONE && rbytes > 0 &&
+	} while (status == G_IO_STATUS_NORMAL && rbytes > 0 &&
 					read_count < io->max_read_attempts);
 
 	if (total_read > 0 && io->read_handler)
@@ -121,7 +124,7 @@ static gboolean received_data(GIOChannel *channel, GIOCondition cond,
 	if (cond & (G_IO_HUP | G_IO_ERR))
 		return FALSE;
 
-	if (read_count > 0 && rbytes == 0 && err != G_IO_ERROR_AGAIN)
+	if (read_count > 0 && rbytes == 0 && status != G_IO_STATUS_AGAIN)
 		return FALSE;
 
 	/* We're overflowing the buffer, shutdown the socket */
@@ -133,12 +136,13 @@ static gboolean received_data(GIOChannel *channel, GIOCondition cond,
 
 gsize g_at_io_write(GAtIO *io, const gchar *data, gsize count)
 {
-	GIOError err;
+	GIOStatus status;
 	gsize bytes_written;
 
-	err = g_io_channel_write(io->channel, data, count, &bytes_written);
+	status = g_io_channel_write_chars(io->channel, data,
+						count, &bytes_written, NULL);
 
-	if (err != G_IO_ERROR_NONE) {
+	if (status != G_IO_STATUS_NORMAL) {
 		g_source_remove(io->read_watch);
 		return 0;
 	}
@@ -156,6 +160,12 @@ static void write_watcher_destroy_notify(gpointer user_data)
 	io->write_watch = 0;
 	io->write_handler = NULL;
 	io->write_data = NULL;
+
+	if (io->write_done_func) {
+		io->write_done_func(io->write_done_data);
+		io->write_done_func = NULL;
+		io->write_done_data = NULL;
+	}
 }
 
 static gboolean can_write_data(GIOChannel *channel, GIOCondition cond,
@@ -170,18 +180,17 @@ static gboolean can_write_data(GIOChannel *channel, GIOCondition cond,
 		return FALSE;
 
 	return io->write_handler(io->write_data);
-
 }
 
 static GAtIO *create_io(GIOChannel *channel, GIOFlags flags)
 {
 	GAtIO *io;
 
-	if (!channel)
+	if (channel == NULL)
 		return NULL;
 
 	io = g_try_new0(GAtIO, 1);
-	if (!io)
+	if (io == NULL)
 		return io;
 
 	io->ref_count = 1;
@@ -195,7 +204,7 @@ static GAtIO *create_io(GIOChannel *channel, GIOFlags flags)
 		io->use_write_watch = FALSE;
 	}
 
-	io->buf = ring_buffer_new(4096);
+	io->buf = ring_buffer_new(8192);
 
 	if (!io->buf)
 		goto error;
@@ -286,7 +295,7 @@ gboolean g_at_io_set_write_handler(GAtIO *io, GAtIOWriteFunc write_handler,
 
 	if (io->use_write_watch == TRUE)
 		io->write_watch = g_io_add_watch_full(io->channel,
-				G_PRIORITY_DEFAULT,
+				G_PRIORITY_HIGH,
 				G_IO_OUT | G_IO_HUP | G_IO_ERR | G_IO_NVAL,
 				can_write_data, io,
 				write_watcher_destroy_notify);
@@ -367,4 +376,19 @@ gboolean g_at_io_set_debug(GAtIO *io, GAtDebugFunc func, gpointer user_data)
 	io->debug_data = user_data;
 
 	return TRUE;
+}
+
+void g_at_io_set_write_done(GAtIO *io, GAtDisconnectFunc func,
+				gpointer user_data)
+{
+	if (io == NULL)
+		return;
+
+	io->write_done_func = func;
+	io->write_done_data = user_data;
+}
+
+void g_at_io_drain_ring_buffer(GAtIO *io, guint len)
+{
+	ring_buffer_drain(io->buf, len);
 }

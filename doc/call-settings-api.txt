@@ -8,10 +8,18 @@ Methods		dict GetProperties()
 
 			Contains the properties for this object.
 
+			Possible Errors: [service].Error.InProgress
+
 		void SetProperty(string property, variant value)
 
 			Sets the given property value to that specified in
 			call parameter.
+
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.InvalidArguments
+					 [service].Error.InvalidFormat
+					 [service].Error.Failed
 
 Signals		PropertyChanged(string property, variant value)
 
@@ -32,6 +40,34 @@ Properties	string CallingLinePresentation [readonly]
 
 		string CalledLinePresentation [readonly]
 
+			Contains the value of the called line identification
+			presentation property.  The value indicates the state
+			of the CDIP supplementary service in the network.  If
+			enabled, when receiving a call the network will provide
+			the subscriber's line dialed.  This is useful for
+			subscribers which have a multiple line service with
+			their network provider and would like to know what
+			line the call is coming in on.
+
+			Possible values are:
+				"disabled",
+				"enabled",
+				"unknown"
+
+		string CallingNamePresentation [readonly]
+
+			Contains the value of the calling name identification
+			presentation property.  The value indicates
+			the state of the CNAP supplementary service in the
+			network.  If enabled, the network will provide
+			the name of the calling party for incoming calls.
+			Possible values are:
+				"disabled",
+				"enabled",
+				"unknown"
+
+		string ConnectedLinePresentation [readonly]
+
 			Contains the value of the connected line identification
 			presentation property.  The value indicates the state
 			of the COLP supplementary service in the network.  If
@@ -42,7 +78,7 @@ Properties	string CallingLinePresentation [readonly]
 				"enabled",
 				"unknown"
 
-		string CalledLineRestriction [readonly]
+		string ConnectedLineRestriction [readonly]
 
 			Contains the value of the connected line identification
 			restriction property. The value indicates the state of

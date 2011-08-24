@@ -58,4 +58,25 @@ static inline struct isi_cb_data *isi_cb_data_new(void *user, void *cb,
 		f(&e, ##args);				\
 	} while (0)
 
+#define ISI_RESOURCE_DBG(msg)					\
+	DBG("QSO: %s [0x%02X] v%03d.%03d",			\
+		pn_resource_name(g_isi_msg_resource((msg))),	\
+		g_isi_msg_resource((msg)),			\
+		g_isi_msg_version_major((msg)),			\
+		g_isi_msg_version_minor((msg)));
+
+#define ISI_VERSION_AT_LEAST(ver,maj,min)			\
+	((ver) != NULL && ((ver)->major > (maj) ||		\
+		((ver)->major == (maj) &&			\
+			(ver)->minor >= (min))))
+
+#define ALIGN4(val) (((val) + 3) & ~3)
+
+#define ISI_16BIT(val)						\
+	(((val) >> 8) & 0xFF), ((val) & 0xFF)
+
+#define ISI_32BIT(val)						\
+	(((val) >> 24) & 0xFF), (((val) >> 16) & 0xFF),		\
+	(((val) >> 8) & 0xFF), ((val) & 0xFF)
+
 #endif /* !__ISIMODEM_UTIL_H */

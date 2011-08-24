@@ -58,11 +58,13 @@ enum lcp_options {
 	ACFC			= 8,
 };
 
-/* Maximum size of all options, we only ever request ACCM and MRU */ 
-#define MAX_CONFIG_OPTION_SIZE 10
+/* Maximum size of all options, we only ever request ACCM, MRU, ACFC and PFC */
+#define MAX_CONFIG_OPTION_SIZE 14
 
 #define REQ_OPTION_ACCM	0x1
 #define REQ_OPTION_MRU	0x2
+#define REQ_OPTION_ACFC	0x4
+#define REQ_OPTION_PFC	0x8
 
 struct lcp_data {
 	guint8 options[MAX_CONFIG_OPTION_SIZE];
@@ -100,13 +102,26 @@ static void lcp_generate_config_options(struct lcp_data *lcp)
 		len += 4;
 	}
 
+	if (lcp->req_options & REQ_OPTION_ACFC) {
+		lcp->options[len] = ACFC;
+		lcp->options[len + 1] = 2;
+
+		len += 2;
+	}
+
+	if (lcp->req_options & REQ_OPTION_PFC) {
+		lcp->options[len] = PFC;
+		lcp->options[len + 1] = 2;
+
+		len += 2;
+	}
+
 	lcp->options_len = len;
 }
 
 static void lcp_reset_config_options(struct lcp_data *lcp)
 {
-	lcp->req_options = REQ_OPTION_ACCM;
-	lcp->accm = 0;
+	/* Using the default ACCM */
 
 	lcp_generate_config_options(lcp);
 }
@@ -147,9 +162,18 @@ static void lcp_rca(struct pppcp_data *pppcp, const struct pppcp_packet *packet)
 	ppp_option_iter_init(&iter, packet);
 
 	while (ppp_option_iter_next(&iter) == TRUE) {
+		const guint8 *data = ppp_option_iter_get_data(&iter);
 		switch (ppp_option_iter_get_type(&iter)) {
 		case ACCM:
-			ppp_set_xmit_accm(pppcp_get_ppp(pppcp), 0);
+			/*
+			 * RFC1662 Section 7.1
+			 * The Configuration Option is used to inform the peer
+			 * which control characters MUST remain mapped when
+			 * the peer sends them.
+			 */
+
+			ppp_set_recv_accm(pppcp_get_ppp(pppcp),
+					get_host_long(data));
 			break;
 		default:
 			break;
@@ -174,8 +198,6 @@ static void lcp_rcn_nak(struct pppcp_data *pppcp,
 			guint16 mru = get_host_short(data);
 
 			if (mru < 2048) {
-				g_print("Setting peer's suggested mru: %hd\n",
-						mru);
 				lcp->mru = get_host_short(data);
 				lcp->req_options |= REQ_OPTION_MRU;
 			}
@@ -225,7 +247,7 @@ static enum rcr_result lcp_rcr(struct pppcp_data *pppcp,
 			 */
 
 			option = g_try_malloc0(5);
-			if (!option)
+			if (option == NULL)
 				return RCR_REJECT;
 
 			option[0] = AUTH_PROTO;
@@ -263,7 +285,13 @@ static enum rcr_result lcp_rcr(struct pppcp_data *pppcp,
 	while (ppp_option_iter_next(&iter) == TRUE) {
 		switch (ppp_option_iter_get_type(&iter)) {
 		case ACCM:
-			ppp_set_recv_accm(ppp,
+			/*
+			 * RFC1662 Section 7.1
+			 * The Configuration Option is used to inform the peer
+			 * which control characters MUST remain mapped when
+			 * the peer sends them.
+			 */
+			ppp_set_xmit_accm(ppp,
 				get_host_long(ppp_option_iter_get_data(&iter)));
 			break;
 		case AUTH_PROTO:
@@ -273,10 +301,26 @@ static enum rcr_result lcp_rcr(struct pppcp_data *pppcp,
 			ppp_set_mtu(ppp, ppp_option_iter_get_data(&iter));
 			break;
 		case MAGIC_NUMBER:
-		case PFC:
-		case ACFC:
 			/* don't care */
 			break;
+		case PFC:
+		{
+			struct lcp_data *lcp = pppcp_get_data(pppcp);
+
+			if (lcp->req_options & REQ_OPTION_PFC)
+				ppp_set_xmit_pfc(ppp, TRUE);
+
+			break;
+		}
+		case ACFC:
+		{
+			struct lcp_data *lcp = pppcp_get_data(pppcp);
+
+			if (lcp->req_options & REQ_OPTION_ACFC)
+				ppp_set_xmit_acfc(ppp, TRUE);
+
+			break;
+		}
 		}
 	}
 
@@ -310,11 +354,11 @@ struct pppcp_data *lcp_new(GAtPPP *ppp, gboolean is_server)
 	struct lcp_data *lcp;
 
 	lcp = g_try_new0(struct lcp_data, 1);
-	if (!lcp)
+	if (lcp == NULL)
 		return NULL;
 
 	pppcp = pppcp_new(ppp, &lcp_proto, is_server, 0);
-	if (!pppcp) {
+	if (pppcp == NULL) {
 		g_free(lcp);
 		return NULL;
 	}
@@ -325,4 +369,38 @@ struct pppcp_data *lcp_new(GAtPPP *ppp, gboolean is_server)
 	pppcp_set_local_options(pppcp, lcp->options, lcp->options_len);
 
 	return pppcp;
+}
+
+void lcp_set_acfc_enabled(struct pppcp_data *pppcp, gboolean enabled)
+{
+	struct lcp_data *lcp = pppcp_get_data(pppcp);
+	guint8 old = lcp->req_options;
+
+	if (enabled == TRUE)
+		lcp->req_options |= REQ_OPTION_ACFC;
+	else
+		lcp->req_options &= ~REQ_OPTION_ACFC;
+
+	if (lcp->req_options == old)
+		return;
+
+	lcp_generate_config_options(lcp);
+	pppcp_set_local_options(pppcp, lcp->options, lcp->options_len);
+}
+
+void lcp_set_pfc_enabled(struct pppcp_data *pppcp, gboolean enabled)
+{
+	struct lcp_data *lcp = pppcp_get_data(pppcp);
+	guint8 old = lcp->req_options;
+
+	if (enabled == TRUE)
+		lcp->req_options |= REQ_OPTION_PFC;
+	else
+		lcp->req_options &= ~REQ_OPTION_PFC;
+
+	if (lcp->req_options == old)
+		return;
+
+	lcp_generate_config_options(lcp);
+	pppcp_set_local_options(pppcp, lcp->options, lcp->options_len);
 }

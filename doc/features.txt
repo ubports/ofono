@@ -95,6 +95,71 @@ Supported Proactive Commands:
 
   NOTE: This command can also be handled by the modem.
 
+- Language Notification proactive command. Whenever oFono receives a Language
+  Notification proactive command, it prints the language code and sends
+  terminal response to the SIM immediately.
+
+- Provide Local Information proactive command.  Whenever oFono receives a
+  Provide Local Information proactive command, it checks the type of the
+  information requested.  If the information is about the time/date or the
+  language of the terminal, it responds to the command with the appropriate
+  terminal response. The time/date information is obtained using localtime().
+  The language information is obtained by checking the LANG environment
+  variable.  All other information requests are expected to be handled by
+  the modem.
+
+- Send Short Message proactive command.  Whenever oFono receives a Send SMS
+  proactive command, it parses the PDU and submits it to the outgoing SMS
+  queue.  A terminal response is sent to the SIM When the raw PDU has been
+  sent, or failed to be sent.
+
+  NOTE: This command can also be handled by the modem.
+
+- Set Up Call proactive command.  When oFono receives a Set Up Call proactive
+  command, it checks whether the UICC has indicated that the user should be
+  informed.  In this case the SimToolkitAgent is called with the
+  ConfirmCallSetup method.  If the user has authorized the operation, or if
+  the user's confirmation was not indicated oFono will setup the call and
+  optionally inform the user.  The information sent by the SIM will be
+  available on the resulting voice call object.  The relevant properties are
+  Information and Icon.
+
+  NOTE: This command can also be handled by the modem.
+
+- Refresh proactive command.  The specification defines 7 types
+  of Refresh requests:
+	- NAA Initialization
+	- NAA File Change Notification
+	- NAA Initialization and File Change Notification
+	- NAA Initialization and Full File Change Notification
+	- UICC Reset
+	- NAA Application Reset (2G only)
+	- NAA Session Reset (3G only)
+
+  oFono can fully perform the the first four types of Refresh.  The
+  remaining three must be handled by the modem or its driver with a
+  notification sent to ofono.  Regardless of whether the command is
+  handled by the modem or not, oFono will check whether there are any
+  calls or ussd operations active.  If there are, the appropriate
+  response will be sent (e.g. busy on call or screen busy terminal
+  response.)  Otherwise a positive response will be sent to the driver.
+  In the case of a 'UICC Reset' the driver / modem can interpret this
+  that it is safe to reset the UICC.
+
+  Alternatively, the driver / modem can notify the core of the SIM removal
+  / SIM insertion events without using the Refresh proactive command.  It
+  is up to the driver / modem to perform a warm reset.  In particular, 3GPP
+  31.111 mandates that any change to EFimsi is done by using 'UICC Reset',
+  'NAA Application Reset' or 'NAA Session Reset'.  Please see 3GPP 31.111
+  Section 6.4.7.1.
+
+  Other types are handled by oFono flushing the EF cache of the files
+  affected (or the entire SIM cache in case of Full File Change Notifications)
+  and re-reading the affected files.  Any properties derived from these
+  Elementary Files will be updated and signaled using PropertyChanged.
+
+  NOTE: This command can also be handled by the modem.
+
 - Sim icon support.  oFono supports icons that are stored on the SIM.  If the
   SIM notifies oFono that an icon is available for a particular proactive
   command, oFono passes this information to the UI.  The UI is able to obtain
@@ -144,6 +209,266 @@ The following commands are expected to be handled by the modem:
   display the necessary user information for this time period if this
   information is included in the proactive command.
 
+ -----------------------------------------------------------------------
+|	Feature			|	Support	|	Implemented by	|
+|				|		|			|
+ -----------------------------------------------------------------------
+|Profile Download		|	YES	|	BASEBAND	|
+|				|		|			|
+ -----------------------------------------------------------------------
+|SMS-PP Data Download		|	YES	|	BASEBAND	|
+|				|		|			|
+ -----------------------------------------------------------------------
+|Cell Broadcast data Download	|	YES	|	BASEBAND or ME	|
+|				|		|			|
+ -----------------------------------------------------------------------
+|CALL CONTROL BY SIM		|	YES	|	BASEBAND	|
+|				|		|			|
+ -----------------------------------------------------------------------
+|DISPLAY TEXT			|	YES	|	ME		|
+|				|		|			|
+ -----------------------------------------------------------------------
+|GET INPUT			|	YES	|	ME		|
+|				|		|			|
+ -----------------------------------------------------------------------
+|GET INKEY			|	YES	|	ME		|
+|				|		|			|
+ -----------------------------------------------------------------------
+|MORE TIME			|	YES	|	ME		|
+|				|		|			|
+ -----------------------------------------------------------------------
+|PLAY TONE			|	YES	|	ME		|
+|				|		|			|
+ -----------------------------------------------------------------------
+|POLL INTERVAL			|	YES	|	BASEBAND	|
+|				|		|			|
+ -----------------------------------------------------------------------
+|POLLING OFF			|	YES	|	BASEBAND	|
+|				|		|			|
+ -----------------------------------------------------------------------
+|REFRESH			|	YES	|	BASEBAND-ME	|
+|				|		|			|
+ -----------------------------------------------------------------------
+|SELECT ITEM			|	YES	|	ME		|
+|				|		|			|
+ -----------------------------------------------------------------------
+|SEND SHORT MESSAGE		|	YES	|	BASEBAND-ME	|
+|				|		|			|
+ -----------------------------------------------------------------------
+|SEND SS			|	YES	|	BASEBAND-ME	|
+|				|		|			|
+ -----------------------------------------------------------------------
+|SEND USSD			|	YES	|	BASEBAND-ME	|
+|				|		|			|
+ -----------------------------------------------------------------------
+|SET UP CALL			|	YES	|	BASEBAND-ME	|
+|				|		|			|
+ -----------------------------------------------------------------------
+|SET UP MENU			|	YES	|	ME		|
+|				|		|			|
+ -----------------------------------------------------------------------
+|PROVIDE LOCAL INFORMATION	|	YES	|	BASEBAND	|
+|(MCC, MNC, LAC, cellId &	|		|			|
+|IMEI)				|		|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|PROVIDE LOCAL INFORMATION	|	YES	|	BASEBAND	|
+|(NMR)				|		|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|SET UP EVENT LIST		|	YES	|	BASEBAND	|
+|				|		|			|
+ -----------------------------------------------------------------------
+|EVENT: MT CALL			|	YES	|	BASEBAND	|
+|				|		|			|
+ -----------------------------------------------------------------------
+|EVENT: CALL CONNECTED		|	YES	|	BASEBAND	|
+|				|		|			|
+ -----------------------------------------------------------------------
+|EVENT: CALL DISCONNECTED	|	YES	|	BASEBAND	|
+|				|		|			|
+ -----------------------------------------------------------------------
+|EVENT: LOCATION STATUS		|	YES	|	BASEBAND	|
+|				|		|			|
+ -----------------------------------------------------------------------
+|EVENT: USER ACTIVITY		|	NO	|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|EVENT: IDLE SCREEN AVAILABLE	|	NO	|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|EVENT: CARD READER STATUS	|	NO	|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|EVENT: LANGUAGE SELECTION	|	NO	|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|EVENT: BROWSER TERMINATION	|	NO	|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|EVENT: DATA AVAILABLE		|	NO	|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|EVENT: CHANNEL STATUS		|	NO	|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|EVENT: ACCESS TECHNOLOGY	|	YES	|	BASEBAND	|
+|	CHANGE			|		|			|
+ -----------------------------------------------------------------------
+|EVENT: DISPLAY PARAMETERS	|	NO	|			|
+|	CHANGED			|		|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|EVENT: LOCAL CONNECTION	|	NO	|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|EVENT: NETWORK SEARCH MODE	|	YES	|	BASEBAND	|
+|	CHANGE			|		|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|POWER ON CARD			|	NO	|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|POWER OFF CARD			|	NO	|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|PERFORM CARD APDU		|	NO	|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|GET READER STATUS		|	NO	|			|
+|(Card reader status)		|		|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|GET READER STATUS		|	NO	|			|
+|(Card reader identifier)	|		|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|TIMER MANAGEMENT		|	YES	|	BASEBAND-ME	|
+|				|		|			|
+ -----------------------------------------------------------------------
+|PROVIDE LOCAL INFORMATION	|	YES	|	ME		|
+|(Date, Time, & Time Zone)	|		|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|SET UP IDLE MODE TEXT		|	YES	|	ME		|
+|				|		|			|
+ -----------------------------------------------------------------------
+|RUN AT COMMAND			|	YES	|	BASEBAND	|
+|				|		|			|
+ -----------------------------------------------------------------------
+|SEND DTMF			|	YES	|	BASEBAND-ME	|
+|				|		|			|
+ -----------------------------------------------------------------------
+|PROVIDE LOCAL INFORMATION	|	YES	|	ME		|
+|(Language)			|		|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|PROVIDE LOCAL INFORMATION	|	YES	|	BASEBAND	|
+|(Timing Advance)		|		|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|Language Notification		|	YES	|	ME		|
+|				|		|			|
+ -----------------------------------------------------------------------
+|LAUNCH BROWSER			|	YES	|	ME		|
+|				|	(MIN)	|			|
+ -----------------------------------------------------------------------
+|PROVIDE LOCAL INFORMATION	|	YES	|	BASEBAND	|
+|(ACCESS TECHNOLOGY)		|		|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|OPEN CHANNEL			|	NO	|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|CLOSE CHANNEL			|	NO	|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|RECEIVE DATA			|	NO	|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|SEND DATA			|	NO	|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|GET CHANNEL STATUS		|	NO	|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|SERVICE SEARCH			|	NO	|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|GET SERVICE INFORMATION	|	NO	|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|DECLARE SERVICE		|	NO	|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|Text Attributes		|	YES	|	ME		|
+|				|		|			|
+ -----------------------------------------------------------------------
+|ICONS				|	YES	|	ME		|
+|				|		|			|
+ -----------------------------------------------------------------------
+|Bearer Independent Protocol	|	NO	|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|VARIABLE TIMEOUT		|	YES	|	ME		|
+|				|		|			|
+ -----------------------------------------------------------------------
+|PROVIDE LOCAL INFORMATION	|	YES	|	BASEBAND	|
+|(IMEISV)			|		|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|PROVIDE LOCAL INFORMATION	|	YES	|	BASEBAND	|
+|(SEARCH MODE CHANGE)		|		|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|Extended Launch Browser	|	NO	|			|
+|Capability			|		|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|PROVIDE LOCAL INFORMATION	|	YES	|	BASEBAND	|
+|(battery state)		|		|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|RETRIEVE MULTIMEDIA MESSAGE	|	NO	|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|SUBMIT MULTIMEDIA MESSAGE	|	NO	|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|DISPLAY MULTIMEDIA MESSAGE	|	NO	|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|SET FRAMES			|	NO	|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|GET FRAMES STATUS		|	NO	|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|PROVIDE LOCAL INFORMATION	|	YES	|	BASEBAND	|
+|(NMR(UTRAN))			|		|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|USSD Data Download and		|	NO	|			|
+|application mode		|		|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|EVENT: BROWSING STATUS		|	NO	|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+|EVENT: MMS TRANSFER STATUS	|	NO	|			|
+|				|		|			|
+ -----------------------------------------------------------------------
+
+Modem
+=====
+
+- 'silent' modem reset. Sometimes modems get in a bad state and have to reset
+  itself. Now oFono can be notified when a reset happens and do proper work to
+  put the modem back to work restoring the state before the reset.
+
+- Lockdown support. Through the Lockdown property on the Modem D-Bus API, one
+  can power down the modem and lock it disallowing any other application to
+  use that modem. Useful for firmware update and similar stuff.
 
 Short Messaging Service
 =======================
@@ -188,6 +513,10 @@ Short Messaging Service
   messages via SMS through the use of the PushNotification interface and the
   PushNotificationAgent framework.
 
+- Persisting of outgoing SMS messages.  Whenever oFono is asked to send an SMS
+  message, it adds it to an internal queue and persists it on disk.  The queue
+  is persistent across reboots of oFono and allows to queue SMS messages even
+  while the modem is offline.
 
 GPRS
 ====
@@ -195,6 +524,20 @@ GPRS
 - GPRS suspension event support.  The packet data service may be temporarily
   suspended while a circuit switched service such as voice call or SMS is
   active.
+
+- GPRS context protocol support.  oFono supports the followig types of GPRS
+  contexts:
+	- IPv4
+	- IPv6
+	- Dual Stack (IPv4 + IPv6)
+
+Location Reporting
+==================
+
+- GPS support. Many modem manufacturers provide a GPS unit with their modem
+  hardware.  Upon client request oFono can turn this unit on or off and pass a
+  file descriptor in which client may receive the desired location reporting
+  data.
 
 SIM
 ===
@@ -209,6 +552,16 @@ SIM
   oFono halts the SIM initialization procedure and the modem remains in the
   PRESIM state.  In this state oFono will only allow emergency calls.
 
+- Read / Write EFcfis / EFcphs-cff.  oFono reads EFcfis/EFcphs-cff SIM files
+  to check if VoiceUnconditional call forwarding rule is enabled.  If enabled,
+  ForwardingFlagOnSim will be set and VoiceUnconditional may contain the
+  "forwarded to" number if the number is available.
+
+- Support SIM retry counters. oFono exports all the retry counters available on
+  SIM, e.g., PIN, PIN2, PUK and PUK2. Whenever an action changes them, a signal
+  is sent with the updated values, so user can keep track of how many times
+  he/she can still give a wrong pin before the SIM locking down.
+
 Radio settings
 ==============
 
@@ -216,3 +569,104 @@ Radio settings
   cellular modem to conserve power when the end user is not actively
   using the device but some networking applications are online using
   packet data.
+
+- Frequency Band Selection support. This feature allows the user to limit the
+  frequency bands in which the cellular modem can operate.
+
+Text Telephony
+==============
+
+- TTY (hearing impaired) support, also known as Cellular Text Modem (CTM).
+  In case it's supported by the modem, oFono allows the user to enabled
+  or disable it through the TextTelephony interface.
+
+Emergency Calls
+===============
+
+- Emergency number reporting.  During SIM initialization phase oFono reads
+  EFecc in order to bootstrap the emergency calling codes provided by the SIM.
+  Emergency number list is exposed via the EmergencyNumbers property on the
+  VoicecallManager interface.  If SIM is present, list is the union of default
+  emergency numbers(112, 911), numbers in EFecc and Network / Modem reported
+  emergency numbers.  If SIM is not present or EFecc has not been read yet,
+  list is the union of default emergency numbers(112, 911) and emergency
+  numbers without SIM(119, 118, 999, 110, 08 and 000).
+
+- Emergency call reporting.  When a voicecall is made to a number present
+  on the EmergencyNumbers list it is automatically flagged as an emergency
+  call.  This is done by setting the Emergency property on the Voicecall
+  interface to TRUE.
+
+- Emergency Mode.  oFono supports a concept of an 'Emergency Mode'.  This mode
+  is activated when any emergency procedure is ongoing and restricts certain
+  actions (e.g. setting the modem offline).  Emergency procedures are e.g.
+  ongoing emergency calls, or network initiated location requests related to
+  the emergency call.  The state of the emergency mode is exposed via the
+  Emergency property on the org.ofono.Modem interface.  This property is
+  intended to be used by power management daemons and other entities which
+  need to be aware of the ongoing emergency operation.
+
+Supplementary Services
+======================
+
+- CNAP support.  The Calling Name Presentation supplementary service is
+  supported by oFono.  One can query whether the service is provisioned in the
+  network by using the CallSettings interface.  If the network reports the
+  calling name, it is presented on the Voicecall interface using the Name
+  property.  If no calling name is given, the Name is empty.
+
+- CDIP support.  The Called Line Presentation is supported by oFono. One can
+  query whether the service is provisioned in the network by using the
+  CallSettings interface.  If the network supports this service, the number
+  dialed by the remote party is presented through the Voicecall interface using
+  the IncomingLine property.
+
+Voice Calls
+===========
+
+- Long phone number support. oFono supports dialing of phone numbers up to
+  80 digits long.
+
+- Supplementary service notifications related to mobile originated (MO) and
+  mobile terminated (MT) calls.  oFono supports certain supplementary service
+  notifications, typically reported by CSSU and CSSI, that are related to
+  MT/MO calls:
+	- outgoing call has been forwarded (+CSSI: 2)
+	- outgoing calls are barred (+CSSI: 5)
+	- outgoing call barred due to call barring on remote party (+CSSI: 6)
+	- incoming call is a forwarded call (+CSSU: 0)
+	- call has been put on hold by the remote party (+CSSU: 2)
+	- call has been retrieved by the remote party (+CSSU: 3)
+	- call has been added to a mpty call by the remote party (+CSSU: 4)
+
+Flight Mode
+===========
+
+- Flight Mode support.  oFono uses the 'Online' property on the Modem interface
+  that controls the state of the radio.  When Online state is False, all
+  interfaces that depend on the radio being on are removed.  Other interfaces
+  enter reduced functionality mode where only certain actions are available
+  that do not depend on the radio.  E.g. setting various settings on the local
+  store or the SIM.
+
+Network Registration
+====================
+
+- Support for PLMN_MODE bit from CPHS Customer Service Profile (CSP) within
+  the 'Value Added Services' service group.  oFono reads this file when the
+  network registration atom has been initialized.  If EFcsp indicates that
+  manual network registration is not allowed, oFono enters into 'auto-only'
+  registration mode.  Updates to this file via STK Refresh is also supported.
+
+PPP Stack
+=========
+
+- Support for Protocol Field Compression (PFC) packets.  The oFono PPP stack
+  supports both receiving and sending of packets with PFC enabled.  The user
+  can also control whether PFC capability is advertised to the peer, and used
+  during transmission.
+
+- Support for Address & Control Field Compression (ACFC) packets.  The oFono
+  PPP stack supports both receiving and sending of packets with ACFC enabled.
+  The user can also control whether ACFC capability is advertised to the peer,
+  and used during transmission.

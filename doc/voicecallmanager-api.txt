@@ -5,7 +5,12 @@ Service		org.ofono
 Interface	org.ofono.VoiceCallManager
 Object path	[variable prefix]/{modem0,modem1,...}
 
-Methods		array{object,dict} GetCalls()
+Methods		dict GetProperties()
+
+			Returns properties for the VoiceCallManager Interface.
+			See the properties section for available properties.
+
+		array{object,dict} GetCalls()
 
 			Get an array of call object paths and properties
 			that represents the currently present calls.
@@ -30,6 +35,12 @@ Methods		array{object,dict} GetCalls()
 
 			This is usually implemented using the ATD AT command.
 
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.InvalidArguments
+					 [service].Error.InvalidFormat
+					 [service].Error.NotImplemented
+					 [service].Error.Failed
+
 		void Transfer()
 
 			Joins the currently Active (or Outgoing, depending
@@ -41,6 +52,10 @@ Methods		array{object,dict} GetCalls()
 
 			This functionality is generally implemented by using
 			the +CHLD=4 AT command.
+
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.Failed
 
 		void SwapCalls()
 
@@ -58,12 +73,20 @@ Methods		array{object,dict} GetCalls()
 			This functionality is generally implemented by using
 			the +CHLD=2 AT command.
 
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.Failed
+
 		void ReleaseAndAnswer()
 
-			Releases currently active call and answers the currently
-			waiting call. Please note that if the current call is
-			a multiparty call, then all parties in the multi-party
-			call will be released.
+			Releases currently active call (0 or more) and
+			answers the currently waiting call. Please note that
+			if the current call is a multiparty call, then all
+			parties in the multi-party call will be released.
+
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.Failed
 
 		void HoldAndAnswer()
 
@@ -73,9 +96,17 @@ Methods		array{object,dict} GetCalls()
 			Held calls is invalid, since in GSM a user can have
 			only a single Held call at a time.
 
+                        Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.Failed
+
 		void HangupAll()
 
 			Releases all calls.
+
+                        Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.Failed
 
 		array{object} PrivateChat(object call)
 
@@ -89,6 +120,13 @@ Methods		array{object,dict} GetCalls()
 			participating in the multiparty call.
 
 			This is usually implemented using the +CHLD=2X command.
+
+                        Possible Errors: [service].Error.InProgress
+					 [service].Error.InvalidArguments
+					 [service].Error.InvalidFormat
+					 [service].Error.NotFound
+					 [service].Error.NotImplemented
+					 [service].Error.Failed
 
 		array{object} CreateMultiparty()
 
@@ -104,10 +142,18 @@ Methods		array{object,dict} GetCalls()
 			This is usually implemented using the +CHLD=3 AT
 			command.
 
+                        Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.Failed
+
 		void HangupMultiparty()
 
 			Hangs up the multi-party call.  All participating
 			calls are released.
+
+                        Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.Failed
 
 		void SendTones(string tones)
 
@@ -115,6 +161,12 @@ Methods		array{object,dict} GetCalls()
 			a fixed duration.  Tones can be one of: '0' - '9',
 			'*', '#', 'A', 'B', 'C', 'D'.  The last four are
 			typically not used in normal circumstances.
+
+                        Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.InvalidArguments
+					 [service].Error.InvalidFormat
+					 [service].Error.Failed
 
 Signals		CallAdded(object path, dict properties)
 
@@ -132,7 +184,37 @@ Signals		CallAdded(object path, dict properties)
 			released.  The object path is no longer accessible
 			after this signal and only emitted for reference.
 
-Properties	array{string} EmergencyNumbers
+		PropertyChanged(string property, variant value)
+
+			Signal is emitted whenever a property has changed.
+			The new value is passed as the signal argument.
+
+		BarringActive(string type) [experimental]
+
+			Signal emitted when an outgoing voice call is made and
+			the call has been barred by the network due to the
+			remote party's "Call Barring" Supplementary Services
+			settings for incoming calls. In this case the type
+			parameter in the signal set to "remote".
+			The signal is also emitted when an outgoing voice call
+			is made and the call has been barred by the network due
+			to the local "Call Barring" Supplementary Services
+			settings for outgoing calls. In this case the type
+			parameter in the signal is set to "local".
+
+		CallForwarded(string type) [experimental]
+
+			Signal emitted when an outgoing voice call is made and
+			the call has been redirected to another number due to
+			the remote party's "Call Forwarding" Supplementary
+			Services settings. In this case the type parameter in
+			the signal is set to "outgoing".
+			The signal is also emitted when the incoming voice call
+			is a redirected call due to a call forwarding operation.
+			In this case the type parameter in the signal is set to
+			"incoming".
+
+Properties	array{string} EmergencyNumbers [readonly]
 
 			Contains the list of emergency numbers recognized
 			by oFono.  This list is based on the default set

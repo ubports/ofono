@@ -9,22 +9,47 @@ Methods		dict GetProperties()
 
 			Contains the properties for this object.
 
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+
 		void ChangePassword(string old_password, string new_password)
 
 			Register new network password for the barring
 			services.
 
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.InvalidFormat
+					 [service].Error.Failed
+
 		void DisableAll(string password)
 
 			Disables all call barrings.
+
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.InvalidArguments
+					 [service].Error.InvalidFormat
+					 [service].Error.Failed
 
 		void DisableAllIncoming(string password)
 
 			Disables barrings for incoming calls.
 
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.InvalidArguments
+					 [service].Error.InvalidFormat
+					 [service].Error.Failed
+
 		void DisableAllOutgoing(string password)
 
 			Disables barrings for outgoing calls.
+
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.InvalidArguments
+					 [service].Error.InvalidFormat
+					 [service].Error.Failed
 
 		void SetProperty(string property, variant value, string pin2)
 
@@ -32,20 +57,16 @@ Methods		dict GetProperties()
 			call parameter.  For all properties, the password
 			(typically PIN2) must be provided.
 
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.InvalidArguments
+					 [service].Error.InvalidFormat
+					 [service].Error.Failed
+
 Signals		PropertyChanged(string property, variant value)
 
 			Signal is emitted whenever a property has changed.
 			The new value is passed as the signal argument.
-
-		IncomingBarringInEffect()
-
-			Signal is emitted when a call is made and an
-			incoming call barring supplementary service is in use.
-
-		OutgoingBarringInEffect()
-
-			Signal is emitted when a call is made and an
-			outgoing call barring supplementary service is in use.
 
 Properties	string VoiceIncoming [readwrite]
 

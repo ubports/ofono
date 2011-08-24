@@ -145,7 +145,10 @@ static void ifx_set_rat_mode(struct ofono_radio_settings *rs,
 		goto error;
 	}
 
-	snprintf(buf, sizeof(buf), "AT+XRAT=%u,%u", value, preferred);
+	if (value == 1)
+		snprintf(buf, sizeof(buf), "AT+XRAT=%u,%u", value, preferred);
+	else
+		snprintf(buf, sizeof(buf), "AT+XRAT=%u", value);
 
 	if (g_at_chat_send(rsd->chat, buf, none_prefix,
 					xrat_modify_cb, cbd, g_free) > 0)
@@ -173,7 +176,7 @@ static int ifx_radio_settings_probe(struct ofono_radio_settings *rs,
 	struct radio_settings_data *rsd;
 
 	rsd = g_try_new0(struct radio_settings_data, 1);
-	if (!rsd)
+	if (rsd == NULL)
 		return -ENOMEM;
 
 	rsd->chat = g_at_chat_clone(chat);
@@ -204,12 +207,12 @@ static struct ofono_radio_settings_driver driver = {
 	.set_rat_mode		= ifx_set_rat_mode
 };
 
-void ifx_radio_settings_init()
+void ifx_radio_settings_init(void)
 {
 	ofono_radio_settings_driver_register(&driver);
 }
 
-void ifx_radio_settings_exit()
+void ifx_radio_settings_exit(void)
 {
 	ofono_radio_settings_driver_unregister(&driver);
 }

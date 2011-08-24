@@ -27,6 +27,13 @@
 #define PPP_IP_PROTO	0x0021
 #define MD5		5
 
+#define DBG(p, fmt, arg...) do {				\
+	char *str = g_strdup_printf("%s:%s() " fmt, __FILE__,	\
+					__FUNCTION__ , ## arg); \
+	ppp_debug(p, str);					\
+	g_free(str);						\
+} while (0)
+
 struct ppp_chap;
 struct ppp_net;
 
@@ -72,9 +79,6 @@ static inline void __put_unaligned_short(void *p, guint16 val)
 #define put_network_short(p, val) \
 	(__put_unaligned_short(p, htons(val)))
 
-#define ppp_info(packet) \
-	(packet + 4)
-
 #define ppp_proto(packet) \
 	(get_host_short(packet + 2))
 
@@ -82,6 +86,8 @@ static inline void __put_unaligned_short(void *p, guint16 val)
 struct pppcp_data *lcp_new(GAtPPP *ppp, gboolean dormant);
 void lcp_free(struct pppcp_data *lcp);
 void lcp_protocol_reject(struct pppcp_data *lcp, guint8 *packet, gsize len);
+void lcp_set_acfc_enabled(struct pppcp_data *pppcp, gboolean enabled);
+void lcp_set_pfc_enabled(struct pppcp_data *pppcp, gboolean enabled);
 
 /* IPCP related functions */
 struct pppcp_data *ipcp_new(GAtPPP *ppp, gboolean is_server, guint32 ip);
@@ -92,14 +98,18 @@ void ipcp_set_server_info(struct pppcp_data *ipcp, guint32 peer_addr,
 /* CHAP related functions */
 struct ppp_chap *ppp_chap_new(GAtPPP *ppp, guint8 method);
 void ppp_chap_free(struct ppp_chap *chap);
-void ppp_chap_process_packet(struct ppp_chap *chap, const guint8 *new_packet);
+void ppp_chap_process_packet(struct ppp_chap *chap, const guint8 *new_packet,
+				gsize len);
 
 /* TUN / Network related functions */
-struct ppp_net *ppp_net_new(GAtPPP *ppp);
+struct ppp_net *ppp_net_new(GAtPPP *ppp, int fd);
 const char *ppp_net_get_interface(struct ppp_net *net);
-void ppp_net_process_packet(struct ppp_net *net, const guint8 *packet);
+void ppp_net_process_packet(struct ppp_net *net, const guint8 *packet,
+				gsize len);
 void ppp_net_free(struct ppp_net *net);
 gboolean ppp_net_set_mtu(struct ppp_net *net, guint16 mtu);
+void ppp_net_suspend_interface(struct ppp_net *net);
+void ppp_net_resume_interface(struct ppp_net *net);
 
 /* PPP functions related to main GAtPPP object */
 void ppp_debug(GAtPPP *ppp, const char *str);
@@ -116,4 +126,6 @@ void ppp_lcp_finished_notify(GAtPPP *ppp);
 void ppp_set_recv_accm(GAtPPP *ppp, guint32 accm);
 void ppp_set_xmit_accm(GAtPPP *ppp, guint32 accm);
 void ppp_set_mtu(GAtPPP *ppp, const guint8 *data);
+void ppp_set_xmit_acfc(GAtPPP *ppp, gboolean acfc);
+void ppp_set_xmit_pfc(GAtPPP *ppp, gboolean pfc);
 struct ppp_header *ppp_packet_new(gsize infolen, guint16 protocol);

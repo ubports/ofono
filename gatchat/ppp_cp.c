@@ -205,7 +205,7 @@ static struct pppcp_packet *pppcp_packet_new(struct pppcp_data *data,
 	guint16 packet_length = bufferlen + sizeof(*packet);
 
 	ppp_packet = ppp_packet_new(packet_length, data->driver->proto);
-	if (!ppp_packet)
+	if (ppp_packet == NULL)
 		return NULL;
 
 	/* advance past protocol to add CP header information */
@@ -310,9 +310,9 @@ static gboolean is_first_request(struct pppcp_timer_data *timer_data)
 
 /* actions */
 /* log an illegal event, but otherwise do nothing */
-static void pppcp_illegal_event(guint8 state, guint8 type)
+static void pppcp_illegal_event(GAtPPP *ppp, guint8 state, guint8 type)
 {
-	g_printerr("Illegal event %d while in state %d\n", type, state);
+	DBG(ppp, "Illegal event %d while in state %d", type, state);
 }
 
 static void pppcp_this_layer_up(struct pppcp_data *data)
@@ -690,7 +690,7 @@ static void pppcp_generate_event(struct pppcp_data *data,
 	return;
 
 error:
-	pppcp_illegal_event(data->state, event_type);
+	pppcp_illegal_event(data->ppp, data->state, event_type);
 }
 
 void pppcp_signal_open(struct pppcp_data *data)
@@ -922,7 +922,8 @@ void pppcp_send_protocol_reject(struct pppcp_data *data,
 	 * info should contain the old packet info, plus the 16bit
 	 * protocol number we are rejecting.
 	 */
-	packet = pppcp_packet_new(data, PPPCP_CODE_TYPE_PROTOCOL_REJECT, len);
+	packet = pppcp_packet_new(data, PPPCP_CODE_TYPE_PROTOCOL_REJECT,
+					len - 2);
 
 	/*
 	 * Identifier must be changed for each Protocol-Reject sent
@@ -933,8 +934,7 @@ void pppcp_send_protocol_reject(struct pppcp_data *data,
 	 * rejected packet should be copied in, but it should be
 	 * truncated if it needs to be to comply with mtu requirement
 	 */
-	memcpy(packet->data, rejected_packet,
-			(ntohs(packet->length) - CP_HEADER_SZ));
+	memcpy(packet->data, rejected_packet + 2, len - 2);
 
 	ppp_transmit(data->ppp, pppcp_to_ppp_packet(packet),
 			ntohs(packet->length));
@@ -945,7 +945,7 @@ void pppcp_send_protocol_reject(struct pppcp_data *data,
 /*
  * parse the packet and determine which event this packet caused
  */
-void pppcp_process_packet(gpointer priv, const guint8 *new_packet)
+void pppcp_process_packet(gpointer priv, const guint8 *new_packet, gsize len)
 {
 	struct pppcp_data *data = priv;
 	const struct pppcp_packet *packet =
@@ -953,7 +953,7 @@ void pppcp_process_packet(gpointer priv, const guint8 *new_packet)
 	guint8 event_type;
 	guint data_len = 0;
 
-	if (data == NULL)
+	if (len < sizeof(struct pppcp_packet))
 		return;
 
 	/* check flags to see if we support this code */
@@ -970,6 +970,8 @@ void pppcp_process_packet(gpointer priv, const guint8 *new_packet)
 
 void pppcp_free(struct pppcp_data *pppcp)
 {
+	pppcp_stop_timer(&pppcp->config_timer_data);
+	pppcp_stop_timer(&pppcp->terminate_timer_data);
 	g_free(pppcp->peer_options);
 	g_free(pppcp);
 }
@@ -1002,7 +1004,7 @@ struct pppcp_data *pppcp_new(GAtPPP *ppp, const struct pppcp_proto *proto,
 	struct pppcp_data *data;
 
 	data = g_try_malloc0(sizeof(struct pppcp_data));
-	if (!data)
+	if (data == NULL)
 		return NULL;
 
 	if (dormant)

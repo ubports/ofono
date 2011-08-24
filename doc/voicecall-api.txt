@@ -10,8 +10,6 @@ Methods		dict GetProperties()
 			Returns all properties for this object. See the
 			properties section for available properties.
 
-			Possible Errors: [service].Error.InvalidArguments
-
 		void Deflect(string number)
 
 			Deflects the incoming or waiting call to number given
@@ -24,6 +22,12 @@ Methods		dict GetProperties()
 
 			This method should not be confused with the Transfer()
 			method.
+
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.InvalidArguments
+					 [service].Error.InvalidFormat
+					 [service].Error.Failed
 
 		void Hangup()
 
@@ -43,6 +47,10 @@ Methods		dict GetProperties()
 			of a held multiparty call might not be possible on some
 			implementations.
 
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.Failed
+					 [service].Error.NotImplemented
+
 		void Answer()
 
 			Answers the incoming call.  Only valid if the state
@@ -50,6 +58,11 @@ Methods		dict GetProperties()
 
 			This functionality is generally implemented by ATA
 			AT command.
+
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.Failed
+					 [service].Error.NotImplemented
+					 [service].Error.Failed
 
 Signals		PropertyChanged(string property, variant value)
 
@@ -86,6 +99,21 @@ Properties	string LineIdentification [readonly]
 			remote party refused to provide caller ID and the
 			"override category" option was not provisioned for
 			the current subscriber.
+
+		string IncomingLine [readonly, optional]
+
+			Contains the Called Line Identification information
+			returned by the network. This is only available for
+			incoming calls and indicates the local subscriber
+			number which was dialed by the remote party. This is
+			useful for subscribers which have a multiple line
+			service with their network provider and would like
+			to know what line the call is coming in on.
+
+		string Name [readonly]
+
+			Contains the Name Identification information returned
+			by the network, if present.
 
 		boolean Multiparty [readonly]
 
@@ -125,3 +153,18 @@ Properties	string LineIdentification [readonly]
 
 			Icon identifier to be used instead of or together
 			with the text information.
+
+		boolean Emergency [readonly]
+
+			Contains the indication if the voice call is an
+			emergency call or not.
+
+		boolean RemoteHeld [experimental]
+
+			Contains the indication whether the voice call is put
+			on hold by the remote party or not.
+
+		boolean RemoteMultiparty [experimental]
+
+			Contains the indication whether the voice call is
+			joined in a multiparty call by the remote party or not.

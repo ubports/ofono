@@ -68,6 +68,9 @@ static void example_history_call_ended(struct ofono_history_context *context,
 	else
 		ofono_debug("From: %s", from);
 
+	if (call->cnap_validity == 0)
+		ofono_debug("Name from Network: %s\n", call->name);
+
 	strftime(buf, 127, "%Y-%m-%dT%H:%M:%S%z", localtime(&start));
 	buf[127] = '\0';
 	ofono_debug("StartTime: %s", buf);
@@ -96,6 +99,10 @@ static void example_history_call_missed(struct ofono_history_context *context,
 		from = phone_number_to_string(&call->phone_number);
 
 	ofono_debug("From: %s", from);
+
+	if (call->cnap_validity == 0)
+		ofono_debug("Name from Network: %s\n", call->name);
+
 	strftime(buf, 127, "%Y-%m-%dT%H:%M:%S%z", localtime(&when));
 	buf[127] = '\0';
 	ofono_debug("When: %s", buf);
@@ -164,6 +171,11 @@ static void example_history_sms_send_status(
 	case OFONO_HISTORY_SMS_STATUS_SUBMIT_FAILED:
 		ofono_debug("Sending SMS %s failed", ofono_uuid_to_str(uuid));
 		ofono_debug("Failure Time: %s", buf);
+		break;
+	case OFONO_HISTORY_SMS_STATUS_SUBMIT_CANCELLED:
+		ofono_debug("Submission of SMS %s was canceled",
+					ofono_uuid_to_str(uuid));
+		ofono_debug("Cancel time: %s", buf);
 		break;
 	case OFONO_HISTORY_SMS_STATUS_DELIVERED:
 		ofono_debug("SMS delivered, msg_id: %s, time: %s",

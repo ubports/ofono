@@ -43,16 +43,26 @@ extern "C" {
 #define OFONO_MESSAGE_MANAGER_INTERFACE "org.ofono.MessageManager"
 #define OFONO_MESSAGE_INTERFACE "org.ofono.Message"
 #define OFONO_MESSAGE_WAITING_INTERFACE "org.ofono.MessageWaiting"
+#define OFONO_SUPPLEMENTARY_SERVICES_INTERFACE "org.ofono.SupplementaryServices"
 #define OFONO_NETWORK_REGISTRATION_INTERFACE "org.ofono.NetworkRegistration"
 #define OFONO_NETWORK_OPERATOR_INTERFACE "org.ofono.NetworkOperator"
 #define OFONO_PHONEBOOK_INTERFACE "org.ofono.Phonebook"
 #define OFONO_RADIO_SETTINGS_INTERFACE "org.ofono.RadioSettings"
 #define OFONO_AUDIO_SETTINGS_INTERFACE "org.ofono.AudioSettings"
+#define OFONO_TEXT_TELEPHONY_INTERFACE "org.ofono.TextTelephony"
 #define OFONO_SIM_MANAGER_INTERFACE "org.ofono.SimManager"
 #define OFONO_VOICECALL_INTERFACE "org.ofono.VoiceCall"
 #define OFONO_VOICECALL_MANAGER_INTERFACE "org.ofono.VoiceCallManager"
 #define OFONO_STK_INTERFACE OFONO_SERVICE ".SimToolkit"
 #define OFONO_SIM_APP_INTERFACE OFONO_SERVICE ".SimToolkitAgent"
+#define OFONO_LOCATION_REPORTING_INTERFACE OFONO_SERVICE ".LocationReporting"
+#define OFONO_GNSS_INTERFACE "org.ofono.AssistedSatelliteNavigation"
+#define OFONO_GNSS_POSR_AGENT_INTERFACE "org.ofono.PositioningRequestAgent"
+
+/* CDMA Interfaces */
+#define OFONO_CDMA_VOICECALL_MANAGER_INTERFACE "org.ofono.cdma.VoiceCallManager"
+#define OFONO_CDMA_MESSAGE_MANAGER_INTERFACE "org.ofono.cdma.MessageManager"
+#define OFONO_CDMA_CONNECTION_MANAGER_INTERFACE "org.ofono.cdma.ConnectionManager"
 
 /* Essentially a{sv} */
 #define OFONO_PROPERTIES_ARRAY_SIGNATURE DBUS_DICT_ENTRY_BEGIN_CHAR_AS_STRING \
@@ -60,7 +70,7 @@ extern "C" {
 					DBUS_TYPE_VARIANT_AS_STRING \
 					DBUS_DICT_ENTRY_END_CHAR_AS_STRING
 
-DBusConnection *ofono_dbus_get_connection();
+DBusConnection *ofono_dbus_get_connection(void);
 
 void ofono_dbus_dict_append(DBusMessageIter *dict, const char *key, int type,
 				void *value);

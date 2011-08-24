@@ -63,7 +63,7 @@ struct pb_data {
 	guint ready_id;
 };
 
-static void warn_bad()
+static void warn_bad(void)
 {
 	ofono_warn("Name field conversion to UTF8 failed, this can indicate a"
 			" problem with modem integration, as this field"
@@ -172,10 +172,10 @@ static void at_cpbr_notify(GAtResult *result, gpointer user_data)
 			continue;
 		}
 
-		g_at_result_iter_next_number(&iter, &hidden);
+		g_at_result_iter_next_number_default(&iter, 0, &hidden);
 		parse_text(&iter, &group, current);
 		g_at_result_iter_next_string(&iter, &adnumber);
-		g_at_result_iter_next_number(&iter, &adtype);
+		g_at_result_iter_next_number_default(&iter, 0, &adtype);
 		parse_text(&iter, &secondtext, current);
 		parse_text(&iter, &email, current);
 		parse_text(&iter, &sip_uri, current);
@@ -368,9 +368,6 @@ static void at_export_entries(struct ofono_phonebook *pb, const char *storage,
 	struct cb_data *cbd = cb_data_new(cb, data);
 	char buf[32];
 
-	if (!cbd)
-		goto error;
-
 	cbd->user = pb;
 
 	snprintf(buf, sizeof(buf), "AT+CPBS=\"%s\"", storage);
@@ -378,7 +375,6 @@ static void at_export_entries(struct ofono_phonebook *pb, const char *storage,
 				at_select_storage_cb, cbd, NULL) > 0)
 		return;
 
-error:
 	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, data);
@@ -536,7 +532,7 @@ static int at_phonebook_probe(struct ofono_phonebook *pb, unsigned int vendor,
 	struct pb_data *pbd;
 
 	pbd = g_try_new0(struct pb_data, 1);
-	if (!pbd)
+	if (pbd == NULL)
 		return -ENOMEM;
 
 	pbd->chat = g_at_chat_clone(chat);
@@ -569,12 +565,12 @@ static struct ofono_phonebook_driver driver = {
 	.export_entries	= at_export_entries
 };
 
-void at_phonebook_init()
+void at_phonebook_init(void)
 {
 	ofono_phonebook_driver_register(&driver);
 }
 
-void at_phonebook_exit()
+void at_phonebook_exit(void)
 {
 	ofono_phonebook_driver_unregister(&driver);
 }

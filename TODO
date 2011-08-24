@@ -1,4 +1,4 @@
-pBackground
+Background
 ==========
 
 - Priority scale: High, Medium and Low
@@ -31,51 +31,6 @@ SMS
   Priority: Low
   Complexity: C8
 
-- See / Cancel pending SMS messages over DBus.  When oFono sends SMS messages
-  the method call is only returned when the message has been submitted to the
-  network.  Instead we should return an object path and allow cancellation of
-  pending messages.
-
-  Priority: High
-  Complexity: C2
-  Owner: Yang Gu <yang.gu@intel.com>
-
-- Persist outgoing SMS messages.  Currently oFono persists incoming messages
-  that are fragmented.  However oFono does not persist queued outgoing
-  messages.  oFono should persist such messages and restore / requeue them
-  on the next oFono startup.
-
-  Priority: High
-  Complexity: C1
-  Owner: Kristen Carlson Accardi <kristen@linux.intel.com>
-
-- Add CDMA support to the SMS stack. The idea is to support only the PDU
-  mode. To start with only Submit and Deliver message handling for WMT
-  teleservice will be added to bring the basic CDMA SMS send and receive
-  functionality.
-
-  Priority: Low
-  Complexity: C8
-  Owner: Rajesh Kadhiravan Nagaiah <Rajesh.Nagaiah@elektrobit.com>
-
-- Add CDMA Delivery(Status) Report handling to the SMS stack.
-
-  Priority: Low
-  Complexity: C4
-  Owner: Rajesh Kadhiravan Nagaiah <Rajesh.Nagaiah@elektrobit.com>
-
-- Add CDMA Voice Mail Notification handling to the SMS stack. In CDMA the
-  Message Waiting indication is notified through a specific teleservice ID
-  VMN. No update to corresponding elementary files required since they are
-  not present in the R-UIM. This will result in the message waiting
-  indication being initially processed within the SMS atom and then being
-  passed for delivery to the message waiting atom. Furthemore note that in
-  CDMA only voice mail type is supported.
-
-  Priority: Low
-  Complexity: C4
-  Owner: Rajesh Kadhiravan Nagaiah <Rajesh.Nagaiah@elektrobit.com>
-
 - Asynchronously acknowledge SMS DELIVER messages sent by the SMS driver
   to core using ofono_sms_deliver_notify().  This may require the struct
   ofono_sms_driver to be extended with one more function pointer like:
@@ -92,25 +47,9 @@ SMS
 SIM / SIM File system
 =====================
 
-- Read / Write EFcfis.  Call forwarding settings can be bootstrapped on the
-  SIM for faster notification of the user that call forwarding is active.
-  These settings are stored in EFcfis.  oFono should read these settings and
-  update the call forwarding atom appropriately.
-
-  Priority: Low
-  Complexity: C2
-  Owner: Jeevaka Badrappan <jeevaka.badrappan@elektrobit.com>
-
 - SIM Call History plugin.  New UICCs support four new SIM elementary files
   for storing call history information on the SIM: EFici, EFict, EFoci, EFoct.
   A plugin should be developed for oFono that will write to these files.
-
-  Priority: Low
-  Complexity: C2
-
-- Support proprietary extensions for SIM PIN retry counter.  Most vendors
-  provide an extension commands to obtain such a retry counter for PINs and
-  PUKs.  Need to enable this as a property in oFono.
 
   Priority: Low
   Complexity: C2
@@ -131,14 +70,26 @@ SIM / SIM File system
 
   Priority: High
   Complexity: C2
-  Owner: Pekka Pessi <pekka.pessi@nokia.com>
 
-- Check SIM pin status if sim_change_pin fails. If it is anything other than
-  READY, we must tear the state back to pre_sim state and set the modem offline.
+- Support SIM authentication: SIM and AKA suites.
 
   Priority: Medium
-  Complexity: C1
-  Owner: Marit Henriksen <marit.henriksen@stericsson.com>
+  Complexity: C4
+
+- Support SIM authentication: GBA_U suite.
+
+  Priority: Low
+  Complexity: C4
+
+- ISIM support
+
+  ISIM is the SIM application for IP Multimedia Subsystem, specified in
+  3GPP TS 31.103. The UICCs can support multiple ISIMs for different IMS
+  identities.
+
+  Priority: Low
+  Complexity: C4
+
 
 Modem Emulator
 ==============
@@ -149,15 +100,16 @@ Modem Emulator
 
   Complexity: C4
   Priority: Medium
+  Owner: Frédéric Danis <frederic.danis@linux.intel.com>
 
-- Support extensions to HFP AG emulator.  Some carkits support additional
-  AT command extensions to the Bluetooth HFP AG standard.  Refer to CE4A
+- Support CE4A extensions to HFP AG emulator. CE4A defines additional
+  AT command extensions to the Bluetooth HFP AG standard. Refer to CE4A
   white paper: "AT-commands for Automotive Premium Phone Integration".
   Plugins can register additional command handlers appropriately to handle
   such commands.
 
   Complexity: C4
-  Priority: Medium
+  Priority: Low
   Depends: HFP AG emulator
 
 - Support HSP AG.  Similar to HFP AG emulator but implements the much reduced
@@ -167,10 +119,11 @@ Modem Emulator
   Complexity: C1
 
 - Support DUN emulator. Implement the Bluetooth DUN profile with only mandatory
-  AT command support.
+  AT command support. Implement USB DUN as well.
 
   Complexity: C4
   Priority: Medium
+  Owner: Guillaume Zajac <guillaume.zajac@linux.intel.com>
 
   Depends: PPP Server mode
 
@@ -179,40 +132,46 @@ Modem Emulator
   Complexity: C4
   Priority: Medium
 
+- Support new HFP 1.6 AG command related to indicators (AT+BIA).
 
-Flight Mode
-===========
+  Complexity: C1
+  Priority: Low
+  Owner: Frédéric Danis <frederic.danis@linux.intel.com>
+  Depends: HFP AG emulator
 
-- Flight Mode support.  Add an 'Online' property to the Modem interface that
-  will control the online state of the modem.  When Online state is True all
-  atoms are available.  When Online state is False, all network related items
-  are removed (e.g. CallSettings) or enter into reduced functionality set
-  where only the SIM is available (e.g. DataConnectionManager, SimManager, etc)
+- Support new HFP 1.6 AG commands allowing to publish, select and connect audio
+  codecs (AT+BAC, AT+BCS, +BCS, AT+BCC). This will need to interact with audio
+  framework.
 
   Complexity: C4
-  Priority: High
-  Owner: Pekka Pessi <pekka.pessi@nokia.com>
+  Priority: Low
+  Depends: HFP AG emulator
 
+- Integrate HFP AG emulator as a BlueZ service.
+  Replace direct access to Bluetooth library by usage of the BlueZ service
+  architecture.
 
-GPRS
-====
-
-- PPP Server support.  Extend GAtPPP to support PPP Server role, similarly to
-  how existing GSM modems support PPP GPRS contexts.
-
-  Priority: High
   Complexity: C2
+  Priority: Medium
+  Depends: HFP AG emulator
+
+- Add audio management to HFP AG emulator.
+  Integrate HFP AG emulator to BlueZ and Pulse Audio.
+  Add audio related AT commands support: remote audio volume control and in-band
+  ring tone management.
+
+  Complexity: C4
+  Priority: Medium
+  Depends: HFP AG emulator as BlueZ service
+
+PPP
+===
 
 - IPv6 CP support.  To support IPv6 based GPRS contexts via PPP, GAtPPP
   needs to be updated to support IPv6CP from RFC 2472.
 
   Priority: Low
   Complexity: C4
-
-- Add support for IPv6 GPRS contexts.
-
-  Priority: Medium
-  Complexity: C1
 
 
 Location Services
@@ -244,11 +203,6 @@ Supplementary Services
   Priority: Low
   Complexity: C8
 
-- Calling Name Presentation (CNAP) support
-
-  Priority: Low
-  Complexity: C2
-
 - User to User Signaling (UUS) support
 
   Priority: Low
@@ -259,35 +213,31 @@ Supplementary Services
   Priority: Low
   Complexity: C2
 
-- Called Line Identification.  This affects both call_settings and voicecall
-  atoms.  3GPP service is accessed by the +CDIP command.
-
-  Priority: Low
-  Complexity: C4
-
 - CPHS Support.  This includes ALS and CPHS specific elementary files.
 
   Priority: Low
   Complexity: C8
 
+- Call forwarding state handling change
+
+  At the moment call forwarding states are not always correct. Any active
+  conditional call forwarding should become quiescent while unconditional call
+  forwarding is activate. If call forwarding unconditional is subsequently
+  deactivated, all the quiescent forwardings should become operative again.
+  I.e. No conditional call forwarding string should be returned while
+  unconditional call forwarding is active even if they exist.
+
+  If there is an successful attempt to activate/deactivate conditional call
+  forwarding while unconditional call forwarding is active the conditional cache
+  flag should cleared.
+
+  Priority: High
+  Complexity: C1
+  Owner: Nicolas Bertrand <nicolas.bertrand@linux.intel.com>
+
 
 Voicecall
 =========
-
-- Supplementary service notifications on remote party actions:
-  - call has been put on hold (+CSSU: 2)
-  - call has been retrieved (+CSSU: 3), and
-  - joining call to a multiparty conference (+CSSU: 4)
-
-  Priority: Medium
-  Complexity: C1
-  Owner: Pekka Pessi <pekka.pessi@nokia.com>
-
-- Long phone numbers. According to 3GPP TS 24.008, the callee address
-  can be up to 80 digits long.
-
-  Priority: Medium
-  Complexity: C2
 
 - Dial strings. Include CLIR prefixes and 2nd stage dial strings in the
   DialString call property. Add dialstring accessor method to C API.
@@ -302,127 +252,49 @@ Voicecall
 
   Priority: Medium
   Complexity: C2
-  Owner: Pekka Pessi <pekka.pessi@nokia.com>
+
+- Blacklisting. According to 3GPP TS 22.001 annex E, the TE must provide
+  automatic calling repeat call attempt restrictions.
+
+  There should be a method to manually reset blacklisting.
+
+  Priority: Medium
+  Complexity: C1
 
 
 Sim Toolkit
 ===========
 
-- Support Refresh proactive command.  The specification defines 7 types
-  of Refresh types:
-	- NAA Initialization
-	- NAA File Change Notification
-	- NAA Initialization and File Change Notification
-	- NAA Initialization and Full File Change Notification
-	- UICC Reset
-	- NAA Application Reset (2G only)
-	- NAA Session Reset (3G only)
+- Support of the BIP (Bearer Independent Protocol) proactive commands.
+  The specification defines several bearer types. For now, only the packet data
+  service bearer is considered.
 
-  The 'NAA Initialization' type will be ignored by oFono, it is assumed
-  this is handled by the modem.
-
-  For 'UICC Reset', 'NAA Application Reset' and 'NAA Session Reset' oFono
-  will first check whether there are any calls or ussd operations active.
-  If there are, the appropriate response will be sent (e.g. busy on call
-  or screen busy terminal response.)  Otherwise a positive response will be
-  sent to the driver.  In the case of a 'UICC Reset' the driver / modem
-  can interpret this that it is safe to reset the UICC.
-
-  Alternatively, the driver / modem can notify the core of the SIM removal
-  / SIM insertion events without using the Refresh proactive command.  It
-  is up to the driver / modem to perform a warm reset.  In particular, 3GPP
-  31.111 mandates that any change to EFimsi is done by using 'UICC Reset',
-  'NAA Application Reset' or 'NAA Session Reset'.  Please see 3GPP 31.111
-  Section 6.4.7.1.
-
-  Other types will be handled by oFono flushing the EF cache of the files
-  affected (or the entire SIM cache in case of Full File Change Notifications)
-  and re-reading the affected files.  Any properties derived from these
-  Elementary Files will be updated and signaled using PropertyChanged.
-
-  Priority: High
-  Complexity: C8
-
-- Support Send Short Message proactive command.
-
-  Priority: High
-  Complexity: C2
-  Owner: Andrzej Zaborowski <andrew.zaborowski@intel.com>
-
-- Support Set Up Call proactive command.  If the UICC has indicated that
-  the user should be informed, then the SimToolkitAgent will be called
-  in order to request user's confirmation of the call setup.  If the user
-  has confirmed, or if user's confirmation was not requested, oFono will
-  setup the call and optionally inform the user.
-
-  Priority: High
-  Complexity: C8
-
-- Support Language Notification proactive command.
+	- OPEN CHANNEL: requests the terminal to open a data channel with
+	parameters indicated in the command. A user confirmation may be
+	requested by the SimToolkitAgent.
+	- CLOSE CHANNEL:requests the terminal to close the specified data
+	channel.
+	- RECEIVE DATA:requests the terminal to return to the UICC data
+	received on the specified channel.
+	- SEND DATA:requests the terminal to send on the specified channel data
+	provided by the UICC.
+	- GET CHANNEL STATUS: requests the terminal to return the current
+	status of all available data channels.
 
   Priority: Medium
-  Complexity: C1
-  Owner: Jeevaka Badrappan <jeevaka.badrappan@elektrobit.com>
+  Complexity: C4
+  Owner: Philippe Nunes <philippe.nunes@linux.intel.com>
 
-- Support Provide Local Information.  Whenever oFono receives a Provide Local
-  Information proactive command, it should check the type of the information
-  requested.  If the information is about the time/date or the language of the
-  terminal, it should respond to the command with the appropriate terminal
-  response.  Otherwise, it will respond with an error.
+- Support Setup Event List proactive command.
+  To fully support the class 'e', the following events
+	-Data Available event
+	-Channel status event
+  shall be monitored by oFono if part of the current event list.
+  This list is supplied by the last SETUP EVENT LIST command.
 
-  Priority: High
+  Priority: Medium
   Complexity: C2
-  Owner: Yang Gu <yang.gu@intel.com>
-
-
-Emergency Calls
-===============
-
-- Modem Emergency mode.  Support network registration and online/offline
-  mode during the emergency calls and related network activity (e.g.,
-  network-initiated location request via supplementary service channel).
-
-  Proposed solution is to introduce a new Emergency boolean property to the
-  Modem D-Bus interface and new functions to modem interface:
-
-  - ofono_modem_emergency_mode_inc()
-  - ofono_modem_emergency_mode_dec()
-  - ofono_modem_emergency_mode_get()
-  - ofono_modem_add_emergency_mode_watch()
-  - ofono_modem_remove_emergency_mode_watch()
-
-  When emergency mode is requested, modem is set to online (if needed) and
-  the watchers are notified. There can be multiple parties requesting
-  emergency mode.  When all of them have completed the emergency-related
-  operation and called ofono_modem_emergency_mode_dec(), modem is set to
-  offline (if needed) and the watchers are again notified.
-
-  Priority: High
-  Complexity: C2
-
-- Country / Operator specific emergency numbers.  Figure out how to support
-  countries / operators with specific mandated emergency numbers which are
-  not part of the standard emergency number list. This needs to be queried
-  by the voicecall atom every time a new SIM is inserted.  The list is
-  assumed to be managed by the modem.  If no such functionality is available,
-  then the 3GPP mandated behavior is used.
-
-  Priority: High
-  Complexity: C2
-
-- Network updating the emergency number list. Support the list of emergency
-  numbers dynamically updated by the network.
-
-  Priority: High
-  Complexity: C2
-
-- Extend the voicecall interface with a property indicating whether this call
-  is an emergency call (essentially the CLI matches one of the numbers on the
-  emergency calling codes list.)
-
-  Priority: High
-  Complexity: C1
-  Owner: John Mathew <john.mathew@elektrobit.com>
+  Owner: Philippe Nunes <philippe.nunes@linux.intel.com>
 
 Miscellaneous
 =============
@@ -433,16 +305,6 @@ Miscellaneous
   channel.
 
   Complexity: C4
-  Priority: Low
-
-- Frequency Band Selection.  Add frequency band selection capability to the
-  RadioSettings atom.
-  Owner: Lucas De Marchi <lucas.demarchi@profusion.mobi>
-
-  This feature is not discussed in 27.007, thus manufacturer specific commands
-  are required.
-
-  Complexity: C2
   Priority: Low
 
 - PolicyKit support.  Add support for PolicyKit checking of all oFono D-Bus
@@ -459,50 +321,230 @@ Miscellaneous
   Priority: Medium
   Complexity: C8
 
-- Support for modem 'silent' reset notifications.  oFono will remove all atoms
-  and re-initialize.
-
-  Priority: Medium
-  Complexity: C2
-  Owner: Gustavo F Padovan <padovan@profusion.mobi>
-
-- Add support for Modem 'power down & lock' and 'unlock & power up'.  When the
-  'power down & lock' is given, the calling application is noted and all
-  other applications are blocked from powering up the modem.  Only the calling
-  application can lift the lock.  Alternatively, if the calling application
-  exits prematurely the lock is lifted as well.
-
-  The proposed property name is "Lockdown" as part of the Modem interface.
-
-  Priority: Medium
-  Complexity: C2
-  Owner: Gustavo F Padovan <padovan@profusion.mobi>
-
-- TTY (hearing impaired) support.  Add a new oFono atom type that will enable
-  the user to enable or disable the TTY support on the modem.  Support for
-  automatic detection of TTY (signaled by the driver) is also desired.
-
-  This feature is not discussed in 27.007, thus manufacturer specific commands
-  are required.
-
-  Priority: High
-  Complexity: C1
-  Owner: Lucas De Marchi <lucas.demarchi@profusion.mobi>
-
-- Add support for GPS power control atom.  Many modem manufacturers provide
-  a GPS unit with their modem hardware.  This unit can be turned on or off
-  and frequently takes over one of the tty ports that the modem provides.
-
-  This feature is not discussed in 27.007, thus manufacturer specific commands
-  are required.
-
-  Priority: Low
-  Complexity: C4
-
-- Add Location Service API for providing basic E911 suport.
+- Add Location Service API for providing basic E911 support.
   This will be based on the 27.007 defined AT commands using
   XML for transport of positioning request and responses.
 
   Priority: Medium
   Complexity: C2
-  Owner: Sjur Brændeland <sjur.brandeland@stericsson.com>
+
+
+CDMA Voicecall
+==============
+
+- Add support for Mobile Originated and Mobile Terminated Voice Call over
+  a CDMA network. This includes management of call state and providing
+  appropriate values for the LineIdentification in each case.
+
+  Priority: High
+  Complexity: C2
+
+- Add support for Three-Way Calling over a CDMA network. Three-Way Calling
+  provides the subscriber with the capability to add a third party to an
+  established two-party call, so that all three parties may communicate in a
+  three-way call.
+
+  In CDMA mode, the originating subscriber of a current conversation can
+  request for a third party to be added to a conversation by sending a Flash
+  With Information Message (FWIM) with dialed digits to the network. Upon
+  setting up a two-way conversation with the added party, the originating
+  subscriber can request to establish a three-way conversation by sending
+  another Flash With Information Message. Upon receiving the second Flash With
+  Information Message, the MSC reconnects the original party to the
+  conversation thus completing the setup of a three-way conversation.
+
+  CDMA Three-Way Calling is described by Figure B-5 in 3GPP2 C.S0005-E Version
+  2.0.
+
+  Priority: High
+  Complexity: C2
+
+- Add support for Call Waiting over a CDMA network. Call Waiting (CW) provides
+  notification of an incoming call to an originating subscriber, while the
+  subscriber's call is in the 2-way state. Subsequently, the originating
+  subscriber can either answer or ignore the incoming call. If the originating
+  subscriber answers the second call, it may alternate between the two calls.
+
+  In CDMA mode, the originating subscriber of a current conversation will
+  receive either a Flash With Information Message or an Alert With Information
+  Message from the network if there is an additional mobile terminated voice
+  call incoming. The originating subscriber can change conversation parties by
+  sending a Flash With Information Message to the network and the MSC will
+  toggle the speech path between the two conversations.
+
+  CDMA Call Waiting is described by Figure B-6 in 3GPP2 C.S0005-E Version
+  2.0.
+
+  Priority: High
+  Complexity: C2
+
+- Support sending DTMF tones over CDMA network.
+
+  Priority: High
+  Complexity: C2
+
+- Support optional network-based Plus Code Dialing for international calls over
+  a CDMA network. An input key, e.g. the "+" key, or a functional equivalent
+  can be used to replace the international access prefix when dialing. When
+  received, transmitted or stored, an international indicator can be included
+  with the address digits although it is the responsibility of the network to
+  ignore the international indicator when attached to a national number. This
+  is described in Section 2.7.1.3.2.4 of 3GPP2 C.S0005-E v2.0 and Section 1.2
+  of 3GPP2 N.S0027 v1.0.
+
+  Priority: High
+  Complexity: C2
+
+CDMA SMS
+==============
+
+- Support CDMA SMS stack in PDU mode. This includes basic support of
+  SMS Point-to-Point Message, SMS Broadcast Message and SMS Acknowledge
+  Message as per 3GPP2 C.S0015-B version 2.0.
+
+  Priority: High
+  Complexity: C4
+
+- Support sending Wireless Messaging Teleservice (WMT) Submit Message and
+  receiving WMT Deliver Message as defined 3GPP2 C.S0015-B version 2.0.
+
+  Priority: High
+  Complexity: C4
+
+- Support Delivery Acknowledgment. oFono allows requesting of CDMA SMS
+  Delivery Acknowledgment via the MessageManager's
+  UseDeliveryAcknowledgement property. If enabled, oFono's CDMA SMS stack
+  will encode the Reply Option subparameter in the Submit message and
+  process incoming SMS Delivery Acknowledgment Message. oFono will notify
+  UI either via DBus or history plugin API.
+
+  Priority: Medium
+  Complexity: C2
+
+- Support receiving Voice Mail Notification (VMN) Teleservice Deliver
+  message. CDMA network uses VMN Teleservice to deliver the number of
+  messages stored at the Voice Mail System to the CDMA mobile subscriber.
+
+  Priority: High
+  Complexity: C4
+
+- Support sending Wireless Enhanced Messaging Teleservice (WEMT) Submit
+  Message and receiving WEMT Deliver Messsage as defined 3GPP2 C.S0015-B
+  version 2.0.
+
+  WMT does not support message fragmentation thus can not be used to for
+  long message. WEMT is devised to support long message and Enhanced
+  Messaging Service (EMS). The WEMT SMS message's CHARi field of the
+  subparameter User Data encapsulate GSM-SMS TP-User Data as defined in
+  Section 9.2.3.24 of 3GPP TS 23.040.
+
+  Priority: Medium
+  Complexity: C4
+
+- Support sending Wireless Application Protocol (WAP) Teleservice Submit
+  Message and receiving WAP Deliver Messsage as defined 3GPP2 C.S0015-B
+  version 2.0.
+
+  Priority: Medium
+  Complexity: C4
+
+- Support Call-Back Number. The Call-Back Number subparameter indicates
+  the number to be dialed in reply to a received SMS message.
+
+  In transmit direction, oFono allows setting of Call-Back Number. If the
+  Call Back Number property is set, CDMA SMS stack will encode Call-Back
+  Number subparameter in the Submit Message.
+
+  In receiving direction, oFono will process the Call-Back Number
+  subparameter in the incoming Deliver Message and notify UI of the
+  Call-Back Number together with the newly received text message.
+
+  Priority: Medium
+  Complexity: C2
+
+- Support immediately displayed message. oFono CDMA SMS stack will
+  process the optional Message Display Mode subparameter in the incoming
+  SMS message. If Message Display Mode subparameter indicates the
+  message display mode is Immediate Display, oFono will send
+  ImmediateMessage signal, otherwise oFono will send IncomingMessage
+  signal.
+
+  Priority: Medium
+  Complexity: C2
+
+
+CDMA CMAS
+==============
+
+- Support Commercial Mobile Alert Service (CMAS) over CDMA systems. CMAS
+  over CDMA system is defined in TIA-1149. The CMAS message is carried in
+  the CHARi field of the User Data subparameter of CDMA SMS Broadcast
+  message.
+
+  Priority: Medium
+  Complexity: C4
+
+CDMA Network Acquisition
+========================
+
+- Support reporting of the received signal strength indicator (RSSI)
+  measurement and of the pilot energy ratio (Ec/Io) measurement, for the
+  currently acquired CDMA network.
+
+  Priority: Medium
+  Complexity: C1
+
+- Support reporting of the received signal strength indicator (RSSI)
+  measurement and of the signal to interference-plus-noise ratio (SINR)
+  measurement, for the currently acquired 1xEV-DO data network.
+
+  Priority: Medium
+  Complexity: C1
+
+- Support reporting of the Enhanced Roaming Indicators (ERI) to indicate the
+  current roaming condition of the CDMA mobile device. Each indicator maps to
+  a unique display number within the Standard and Non-Standard service ranges,
+  as described in Section 8 of 3GPP2 C.R1001-C v1.0.
+  These numbers are stored on the device in the (Enhanced) Preferred Roaming
+  List (PRL) and it is the responsibility of the modem to broadcast the
+  relevant indicator for a currently acquired system. Further details of the
+  system acquisition process are described in 3GPP2 C.S0016-B v1.0.
+
+  Priority: Medium
+  Complexity: C2
+
+- Support reporting of identifiers of the currently acquired CDMA network,
+  including the System Identifier (SID) and the Network Identifier (NID),
+  It is the responsibility of the modem to broadcast the relevant identifiers
+  for a currently acquired system, and these identifiers are provided by the
+  network. This is described in 3GPP2 C.S0005-E v2.0.
+
+  Priority: Medium
+  Complexity: C2
+
+- Support International Roaming, including support for reporting the Mobile
+  Country Code (MCC) and the Mobile Network Code (MNC) for the currently
+  acquired network. International Roaming is provided via enhancements to the
+  PRL by encoding the MCC and the (two digit only) MNC in existing SID/NID
+  fields, as described in the CDMA Development Group standards Document "IPRL
+  Enhancements for International Roaming - CDG Doc #86". It is the
+  responsibility of the modem to broadcast the values for the currently
+  acquired system.
+
+  Priority: Medium
+  Complexity: C2
+
+CDMA Connection Manager
+=======================
+
+- Support Packet Data Service over CDMA (1xRTT and 1xEV-DO) systems. This
+  includes Mobile Originated connection and disconnection features.
+
+  Priority: Medium
+  Complexity: C4
+
+- Support Network Initiated disconnection of Packet Data Service over CDMA
+  (1xRTT and 1xEV-DO) systems.
+
+  Priority: Medium
+  Complexity: C2

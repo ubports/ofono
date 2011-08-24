@@ -41,6 +41,7 @@
 enum allowed_error {
 	ALLOWED_ERROR_GO_BACK	= 0x1,
 	ALLOWED_ERROR_TERMINATE	= 0x2,
+	ALLOWED_ERROR_BUSY		= 0x4,
 };
 
 struct stk_agent {
@@ -62,6 +63,7 @@ struct stk_agent {
 #define ERROR_PREFIX OFONO_SERVICE ".Error"
 #define GOBACK_ERROR ERROR_PREFIX ".GoBack"
 #define TERMINATE_ERROR ERROR_PREFIX ".EndSession"
+#define BUSY_ERROR ERROR_PREFIX ".Busy"
 
 static void stk_agent_send_noreply(struct stk_agent *agent, const char *method)
 {
@@ -194,6 +196,12 @@ static int check_error(struct stk_agent *agent, DBusMessage *reply,
 		goto out;
 	}
 
+	if ((allowed_errors & ALLOWED_ERROR_BUSY) &&
+			g_str_equal(err.name, BUSY_ERROR)) {
+		*out_result = STK_AGENT_RESULT_BUSY;
+		goto out;
+	}
+
 	result = -EINVAL;
 
 out:
@@ -218,7 +226,7 @@ struct stk_agent *stk_agent_new(const char *path, const char *sender,
 	struct stk_agent *agent = g_try_new0(struct stk_agent, 1);
 	DBusConnection *conn = ofono_dbus_get_connection();
 
-	if (!agent)
+	if (agent == NULL)
 		return NULL;
 
 	agent->path = g_strdup(path);
@@ -376,8 +384,8 @@ static void display_text_cb(DBusPendingCall *call, void *data)
 	gboolean remove_agent;
 
 	if (check_error(agent, reply,
-			ALLOWED_ERROR_GO_BACK | ALLOWED_ERROR_TERMINATE,
-			&result) == -EINVAL) {
+			ALLOWED_ERROR_GO_BACK | ALLOWED_ERROR_TERMINATE |
+			ALLOWED_ERROR_BUSY, &result) == -EINVAL) {
 		remove_agent = TRUE;
 		goto error;
 	}
@@ -952,6 +960,254 @@ int stk_agent_loop_tone(struct stk_agent *agent, const char *text,
 	agent->user_destroy = destroy;
 
 	dbus_pending_call_set_notify(agent->call, play_tone_cb,
+					agent, NULL);
+
+	return 0;
+}
+
+static void action_info_cb(DBusPendingCall *call, void *data)
+{
+	struct stk_agent *agent = data;
+	DBusMessage *reply = dbus_pending_call_steal_reply(call);
+	enum stk_agent_result result;
+	gboolean remove_agent;
+
+	if (check_error(agent, reply, 0, &result) == -EINVAL) {
+		remove_agent = TRUE;
+		goto error;
+	}
+
+	if (dbus_message_get_args(reply, NULL, DBUS_TYPE_INVALID) == FALSE) {
+		ofono_error("Can't parse the reply to DisplayActionInfo()");
+		remove_agent = TRUE;
+		goto error;
+	}
+
+	goto done;
+
+	CALLBACK_END();
+}
+
+int stk_agent_display_action_info(struct stk_agent *agent, const char *text,
+					const struct stk_icon_id *icon)
+{
+	DBusConnection *conn = ofono_dbus_get_connection();
+
+	agent->msg = dbus_message_new_method_call(agent->bus, agent->path,
+						OFONO_SIM_APP_INTERFACE,
+						"DisplayActionInformation");
+	if (agent->msg == NULL)
+		return -ENOMEM;
+
+	dbus_message_append_args(agent->msg,
+					DBUS_TYPE_STRING, &text,
+					DBUS_TYPE_BYTE, &icon->id,
+					DBUS_TYPE_INVALID);
+
+	if (dbus_connection_send_with_reply(conn, agent->msg, &agent->call,
+						0) == FALSE ||
+			agent->call == NULL)
+		return -EIO;
+
+	dbus_pending_call_set_notify(agent->call, action_info_cb, agent, NULL);
+
+	return 0;
+}
+
+static void confirm_launch_browser_cb(DBusPendingCall *call, void *data)
+{
+	struct stk_agent *agent = data;
+	stk_agent_confirmation_cb cb = agent->user_cb;
+	DBusMessage *reply = dbus_pending_call_steal_reply(call);
+	enum stk_agent_result result;
+	gboolean remove_agent;
+	dbus_bool_t confirm;
+
+	if (check_error(agent, reply, 0, &result) == -EINVAL) {
+		remove_agent = TRUE;
+		cb(STK_AGENT_RESULT_TERMINATE, FALSE, agent->user_data);
+		goto error;
+	}
+
+	if (result != STK_AGENT_RESULT_OK) {
+		cb(result, FALSE, agent->user_data);
+		goto done;
+	}
+
+	if (dbus_message_get_args(reply, NULL,
+					DBUS_TYPE_BOOLEAN, &confirm,
+					DBUS_TYPE_INVALID) == FALSE) {
+		ofono_error("Can't parse the reply to ConfirmLaunchBrowser()");
+		remove_agent = TRUE;
+		goto error;
+	}
+
+	cb(result, confirm, agent->user_data);
+
+	CALLBACK_END();
+}
+
+int stk_agent_confirm_launch_browser(struct stk_agent *agent, const char *text,
+					unsigned char icon_id, const char *url,
+					stk_agent_confirmation_cb cb,
+					void *user_data,
+					ofono_destroy_func destroy, int timeout)
+{
+	DBusConnection *conn = ofono_dbus_get_connection();
+
+	agent->msg = dbus_message_new_method_call(agent->bus, agent->path,
+							OFONO_SIM_APP_INTERFACE,
+							"ConfirmLaunchBrowser");
+	if (agent->msg == NULL)
+		return -ENOMEM;
+
+	if (url == NULL)
+		url = "";
+
+	dbus_message_append_args(agent->msg,
+					DBUS_TYPE_STRING, &text,
+					DBUS_TYPE_BYTE, &icon_id,
+					DBUS_TYPE_STRING, &url,
+					DBUS_TYPE_INVALID);
+
+	if (dbus_connection_send_with_reply(conn, agent->msg, &agent->call,
+						timeout) == FALSE ||
+						agent->call == NULL)
+		return -EIO;
+
+	agent->user_cb = cb;
+	agent->user_data = user_data;
+	agent->user_destroy = destroy;
+
+	dbus_pending_call_set_notify(agent->call, confirm_launch_browser_cb,
+					agent, NULL);
+
+	return 0;
+}
+
+static void display_action_cb(DBusPendingCall *call, void *data)
+{
+	struct stk_agent *agent = data;
+	stk_agent_display_action_cb cb = agent->user_cb;
+	DBusMessage *reply = dbus_pending_call_steal_reply(call);
+	enum stk_agent_result result;
+	gboolean remove_agent;
+
+	if (check_error(agent, reply,
+			ALLOWED_ERROR_TERMINATE, &result) == -EINVAL) {
+		remove_agent = TRUE;
+		goto error;
+	}
+
+	if (dbus_message_get_args(reply, NULL, DBUS_TYPE_INVALID) == FALSE) {
+		ofono_error("Can't parse the reply to DisplayAction()");
+		remove_agent = TRUE;
+		goto error;
+	}
+
+	cb(result, agent->user_data);
+	goto done;
+
+	CALLBACK_END();
+}
+
+int stk_agent_display_action(struct stk_agent *agent,
+					const char *text,
+					const struct stk_icon_id *icon,
+					stk_agent_display_action_cb cb,
+					void *user_data,
+					ofono_destroy_func destroy)
+{
+	DBusConnection *conn = ofono_dbus_get_connection();
+
+	agent->msg = dbus_message_new_method_call(agent->bus, agent->path,
+						OFONO_SIM_APP_INTERFACE,
+						"DisplayAction");
+	if (agent->msg == NULL)
+		return -ENOMEM;
+
+	dbus_message_append_args(agent->msg,
+					DBUS_TYPE_STRING, &text,
+					DBUS_TYPE_BYTE, &icon->id,
+					DBUS_TYPE_INVALID);
+
+	if (dbus_connection_send_with_reply(conn, agent->msg, &agent->call,
+						0) == FALSE ||
+						agent->call == NULL)
+		return -EIO;
+
+	agent->user_cb = cb;
+	agent->user_data = user_data;
+	agent->user_destroy = destroy;
+
+	dbus_pending_call_set_notify(agent->call, display_action_cb,
+					agent, NULL);
+
+	return 0;
+}
+
+static void confirm_open_channel_cb(DBusPendingCall *call, void *data)
+{
+	struct stk_agent *agent = data;
+	stk_agent_confirmation_cb cb = agent->user_cb;
+	DBusMessage *reply = dbus_pending_call_steal_reply(call);
+	enum stk_agent_result result;
+	gboolean remove_agent;
+	dbus_bool_t confirm;
+
+	if (check_error(agent, reply,
+			ALLOWED_ERROR_TERMINATE, &result) == -EINVAL) {
+		remove_agent = TRUE;
+		goto error;
+	}
+
+	if (result != STK_AGENT_RESULT_OK) {
+		cb(result, FALSE, agent->user_data);
+		goto done;
+	}
+
+	if (dbus_message_get_args(reply, NULL,
+					DBUS_TYPE_BOOLEAN, &confirm,
+					DBUS_TYPE_INVALID) == FALSE) {
+		ofono_error("Can't parse the reply to ConfirmOpenChannel()");
+		remove_agent = TRUE;
+		goto error;
+	}
+
+	cb(result, confirm, agent->user_data);
+
+	CALLBACK_END();
+}
+
+int stk_agent_confirm_open_channel(struct stk_agent *agent, const char *text,
+					const struct stk_icon_id *icon,
+					stk_agent_confirmation_cb cb,
+					void *user_data,
+					ofono_destroy_func destroy, int timeout)
+{
+	DBusConnection *conn = ofono_dbus_get_connection();
+
+	agent->msg = dbus_message_new_method_call(agent->bus, agent->path,
+							OFONO_SIM_APP_INTERFACE,
+							"ConfirmOpenChannel");
+	if (agent->msg == NULL)
+		return -ENOMEM;
+
+	dbus_message_append_args(agent->msg,
+					DBUS_TYPE_STRING, &text,
+					DBUS_TYPE_BYTE, &icon->id,
+					DBUS_TYPE_INVALID);
+
+	if (dbus_connection_send_with_reply(conn, agent->msg, &agent->call,
+						timeout) == FALSE ||
+						agent->call == NULL)
+		return -EIO;
+
+	agent->user_cb = cb;
+	agent->user_data = user_data;
+	agent->user_destroy = destroy;
+
+	dbus_pending_call_set_notify(agent->call, confirm_open_channel_cb,
 					agent, NULL);
 
 	return 0;

@@ -72,6 +72,7 @@ static struct sim_ef_info ef_db[] = {
 {	0x4F20, 0x5F50, BINARY, 0,	PIN,	ADM	},
 {	0x6F05, 0x7F20, BINARY, 0,	ALW,	PIN	},
 {	0x6F06, 0x0000, RECORD, 0,	ALW,	ADM	},
+{	0x6F15, 0x7F20, BINARY, 0,	PIN,	PIN	},
 {	0x6F2C, 0x7F20, BINARY, 16,	PIN,	PIN	},
 {	0x6F30, 0x7F20, BINARY, 0,	PIN,	PIN	},
 {	0x6F32, 0x7F20, BINARY, 0,	PIN,	ADM	},
@@ -232,7 +233,7 @@ gboolean comprehension_tlv_iter_next(struct comprehension_tlv_iter *iter)
 
 	/*
 	 * ETSI TS 101.220, Section 7.1.1.2
-	 * 
+	 *
 	 * If byte 1 of the tag is equal to 0x7F, then the tag is encoded
 	 * on the following two bytes, with bit 8 of the 2nd byte of the tag
 	 * being the CR flag.
@@ -723,11 +724,10 @@ gboolean comprehension_tlv_builder_set_length(
 	unsigned char *tlv = builder->pdu + builder->pos;
 	unsigned int tag_size = CTLV_TAG_FIELD_SIZE(tlv[0]);
 	unsigned int len_size, new_len_size;
-	unsigned int ctlv_len, new_ctlv_len;
+	unsigned int new_ctlv_len;
 	unsigned int len;
 
 	len_size = CTLV_LEN_FIELD_SIZE(tlv[tag_size]);
-	ctlv_len = tag_size + len_size + builder->len;
 	new_len_size = BTLV_LEN_FIELD_SIZE_NEEDED(new_len);
 	new_ctlv_len = tag_size + new_len_size + new_len;
 
@@ -939,7 +939,7 @@ struct sim_spdi *sim_spdi_new(const guint8 *tlv, int length)
 	plmn_list = ber_tlv_find_by_tag(plmn_list_tlv, 0x80, tlv_length,
 						&list_length);
 
-	if (!plmn_list)
+	if (plmn_list == NULL)
 		return NULL;
 
 	spdi = g_new0(struct sim_spdi, 1);
@@ -963,7 +963,7 @@ gboolean sim_spdi_lookup(struct sim_spdi *spdi,
 {
 	struct spdi_operator spdi_op;
 
-	if (!spdi)
+	if (spdi == NULL)
 		return FALSE;
 
 	g_strlcpy(spdi_op.mcc, mcc, sizeof(spdi_op.mcc));
@@ -975,6 +975,9 @@ gboolean sim_spdi_lookup(struct sim_spdi *spdi,
 
 void sim_spdi_free(struct sim_spdi *spdi)
 {
+	if (spdi == NULL)
+		return;
+
 	g_slist_foreach(spdi->operators, (GFunc)g_free, NULL);
 	g_slist_free(spdi->operators);
 	g_free(spdi);
@@ -982,6 +985,9 @@ void sim_spdi_free(struct sim_spdi *spdi)
 
 static void pnn_operator_free(struct sim_eons_operator_info *oper)
 {
+	if (oper == NULL)
+		return;
+
 	g_free(oper->info);
 	g_free(oper->shortname);
 	g_free(oper->longname);
@@ -1011,7 +1017,7 @@ void sim_eons_add_pnn_record(struct sim_eons *eons, int record,
 
 	name = ber_tlv_find_by_tag(tlv, 0x43, length, &namelength);
 
-	if (!name || !namelength)
+	if (name == NULL || !namelength)
 		return;
 
 	oper->longname = sim_network_name_parse(name, namelength,
@@ -1072,6 +1078,9 @@ void sim_eons_free(struct sim_eons *eons)
 {
 	int i;
 
+	if (eons == NULL)
+		return;
+
 	for (i = 0; i < eons->pnn_max; i++)
 		pnn_operator_free(eons->pnn_list + i);
 
@@ -1119,7 +1128,7 @@ static const struct sim_eons_operator_info *
 			break;
 	}
 
-	if (!l)
+	if (l == NULL)
 		return NULL;
 
 	opl = l->data;
@@ -1257,8 +1266,6 @@ void sim_adn_build(unsigned char *data, int length,
 
 	number_len = (number_len + 1) / 2;
 	*data++ = number_len + 1;
-
-	/* Use given number type and 'Unknown' for Numbering Plan */
 	*data++ = ph->type;
 
 	sim_encode_bcd_number(ph->number, data);
@@ -1316,7 +1323,7 @@ gboolean sim_parse_3g_get_response(const unsigned char *data, int len,
 	 */
 	tlv = ber_tlv_find_by_tag(fcp, 0x80, fcp_length, &tlv_length);
 
-	if (!tlv || tlv_length < 2)
+	if (tlv == NULL || tlv_length < 2)
 		return FALSE;
 
 	flen = tlv[0];
@@ -1325,14 +1332,14 @@ gboolean sim_parse_3g_get_response(const unsigned char *data, int len,
 
 	tlv = ber_tlv_find_by_tag(fcp, 0x83, fcp_length, &tlv_length);
 
-	if (!tlv || tlv_length != 2)
+	if (tlv == NULL || tlv_length != 2)
 		return FALSE;
 
 	id = (tlv[0] << 8) | tlv[1];
 
 	tlv = ber_tlv_find_by_tag(fcp, 0x82, fcp_length, &tlv_length);
 
-	if (!tlv || (tlv_length != 2 && tlv_length != 5))
+	if (tlv == NULL || (tlv_length != 2 && tlv_length != 5))
 		return FALSE;
 
 	if (tlv[1] != 0x21)
@@ -1381,7 +1388,7 @@ gboolean sim_parse_3g_get_response(const unsigned char *data, int len,
 
 	acc[2] = 0x44;
 
-	if (!info)
+	if (info == NULL)
 		acc[0] = 0x11;
 	else
 		acc[0] = (info->perm_read << 4) | info->perm_update;
@@ -1466,4 +1473,63 @@ gboolean sim_sst_is_active(unsigned char *efsst, unsigned char len,
 		return FALSE;
 
 	return (efsst[index / 4] >> (((index % 4) * 2) + 1)) & 1;
+}
+
+GSList *sim_parse_app_template_entries(const unsigned char *buffer, int len)
+{
+	GSList *ret = NULL;
+	const unsigned char *dataobj;
+	int dataobj_len;
+
+	/* Find all the application entries */
+	while ((dataobj = ber_tlv_find_by_tag(buffer, 0x61, len,
+						&dataobj_len)) != NULL) {
+		struct sim_app_record app;
+		const unsigned char *aid, *label;
+		int label_len;
+
+		/* Find the aid (mandatory) */
+		aid = ber_tlv_find_by_tag(dataobj, 0x4f, dataobj_len,
+						&app.aid_len);
+		if (!aid || app.aid_len < 0x01 || app.aid_len > 0x10)
+			goto error;
+
+		memcpy(app.aid, aid, app.aid_len);
+
+		/* Find the label (optional) */
+		label = ber_tlv_find_by_tag(dataobj, 0x50, dataobj_len,
+						&label_len);
+		if (label) {
+			/*
+			 * Label field uses the extra complicated
+			 * encoding in 102.221 Annex A
+			 */
+			app.label = sim_string_to_utf8(label, label_len);
+
+			if (app.label == NULL)
+				goto error;
+		} else
+			app.label = NULL;
+
+		ret = g_slist_prepend(ret, g_memdup(&app, sizeof(app)));
+
+		len -= (dataobj - buffer) + dataobj_len;
+		buffer = dataobj + dataobj_len;
+	}
+
+	return ret;
+
+error:
+	while (ret) {
+		GSList *t = ret;
+		struct sim_app_record *app = ret->data;
+
+		g_free(app->label);
+		g_free(app);
+
+		ret = ret->next;
+		g_slist_free_1(t);
+	}
+
+	return NULL;
 }

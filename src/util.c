@@ -3,6 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2009-2010  Nokia Corporation and/or its subsidiary(-ies).
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -62,8 +63,7 @@
 #define GUND			0xFFFF
 
 #define UTF8_LENGTH(c) \
-	((c) < 0x80 ? 1 : \
-	 ((c) < 0x800 ? 2 : 3))
+	((c) < 0x80 ? 1 : ((c) < 0x800 ? 2 : 3))
 
 #define TABLE_SIZE(t) \
 	(sizeof((t)) / sizeof(struct codepoint))
@@ -73,13 +73,21 @@ struct codepoint {
 	unsigned short to;
 };
 
-struct alphabet_conversion_table {
-	const unsigned short *togsm_locking_shift;
-	const struct codepoint *togsm_single_shift;
-	unsigned int togsm_single_shift_len;
-	const struct codepoint *tounicode_locking_shift;
-	const struct codepoint *tounicode_single_shift;
-	unsigned int tounicode_single_shift_len;
+struct conversion_table {
+	/* To unicode locking shift table */
+	const struct codepoint *locking_u;
+	unsigned int locking_len_u;
+
+	/* To unicode single shift table */
+	const struct codepoint *single_u;
+	unsigned int single_len_u;
+
+	/* To GSM locking shift table, fixed size */
+	const unsigned short *locking_g;
+
+	/* To GSM single shift table */
+	const struct codepoint *single_g;
+	unsigned int single_len_g;
 };
 
 /* GSM to Unicode extension table, for GSM sequences starting with 0x1B */
@@ -282,24 +290,25 @@ static const struct codepoint por_ext_unicode[] = {
 
 /* Used for conversion of GSM to Unicode */
 static const unsigned short def_gsm[] = {
-	0x0040, 0x00A3, 0x0024, 0x00A5, 0x00E8, 0x00E9, 0x00F9, 0x00EC, /* 0x07 */
-	0x00F2, 0x00C7, 0x000A, 0x00D8, 0x00F8, 0x000D, 0x00C5, 0x00E5, /* 0x0F */
-	0x0394, 0x005F, 0x03A6, 0x0393, 0x039B, 0x03A9, 0x03A0, 0x03A8, /* 0x17 */
-	0x03A3, 0x0398, 0x039E, 0x00A0, 0x00C6, 0x00E6, 0x00DF, 0x00C9, /* 0x1F */
-	0x0020, 0x0021, 0x0022, 0x0023, 0x00A4, 0x0025, 0x0026, 0x0027, /* 0x27 */
-	0x0028, 0x0029, 0x002A, 0x002B, 0x002C, 0x002D, 0x002E, 0x002F, /* 0x2F */
-	0x0030, 0x0031, 0x0032, 0x0033, 0x0034, 0x0035, 0x0036, 0x0037, /* 0x37 */
-	0x0038, 0x0039, 0x003A, 0x003B, 0x003C, 0x003D, 0x003E, 0x003F, /* 0x3F */
-	0x00A1, 0x0041, 0x0042, 0x0043, 0x0044, 0x0045, 0x0046, 0x0047, /* 0x47 */
-	0x0048, 0x0049, 0x004A, 0x004B, 0x004C, 0x004D, 0x004E, 0x004F, /* 0x4F */
-	0x0050, 0x0051, 0x0052, 0x0053, 0x0054, 0x0055, 0x0056, 0x0057, /* 0x57 */
-	0x0058, 0x0059, 0x005A, 0x00C4, 0x00D6, 0x00D1, 0x00DC, 0x00A7, /* 0x5F */
-	0x00BF, 0x0061, 0x0062, 0x0063, 0x0064, 0x0065, 0x0066, 0x0067, /* 0x67 */
-	0x0068, 0x0069, 0x006A, 0x006B, 0x006C, 0x006D, 0x006E, 0x006F, /* 0x6F */
-	0x0070, 0x0071, 0x0072, 0x0073, 0x0074, 0x0075, 0x0076, 0x0077, /* 0x77 */
-	0x0078, 0x0079, 0x007A, 0x00E4, 0x00F6, 0x00F1, 0x00FC, 0x00E0  /* 0x7F */
+	0x0040, 0x00A3, 0x0024, 0x00A5, 0x00E8, 0x00E9, 0x00F9, 0x00EC,
+	0x00F2, 0x00C7, 0x000A, 0x00D8, 0x00F8, 0x000D, 0x00C5, 0x00E5,
+	0x0394, 0x005F, 0x03A6, 0x0393, 0x039B, 0x03A9, 0x03A0, 0x03A8,
+	0x03A3, 0x0398, 0x039E, 0x00A0, 0x00C6, 0x00E6, 0x00DF, 0x00C9,
+	0x0020, 0x0021, 0x0022, 0x0023, 0x00A4, 0x0025, 0x0026, 0x0027,
+	0x0028, 0x0029, 0x002A, 0x002B, 0x002C, 0x002D, 0x002E, 0x002F,
+	0x0030, 0x0031, 0x0032, 0x0033, 0x0034, 0x0035, 0x0036, 0x0037,
+	0x0038, 0x0039, 0x003A, 0x003B, 0x003C, 0x003D, 0x003E, 0x003F,
+	0x00A1, 0x0041, 0x0042, 0x0043, 0x0044, 0x0045, 0x0046, 0x0047,
+	0x0048, 0x0049, 0x004A, 0x004B, 0x004C, 0x004D, 0x004E, 0x004F,
+	0x0050, 0x0051, 0x0052, 0x0053, 0x0054, 0x0055, 0x0056, 0x0057,
+	0x0058, 0x0059, 0x005A, 0x00C4, 0x00D6, 0x00D1, 0x00DC, 0x00A7,
+	0x00BF, 0x0061, 0x0062, 0x0063, 0x0064, 0x0065, 0x0066, 0x0067,
+	0x0068, 0x0069, 0x006A, 0x006B, 0x006C, 0x006D, 0x006E, 0x006F,
+	0x0070, 0x0071, 0x0072, 0x0073, 0x0074, 0x0075, 0x0076, 0x0077,
+	0x0078, 0x0079, 0x007A, 0x00E4, 0x00F6, 0x00F1, 0x00FC, 0x00E0
 };
 
+/* Used for conversion of Unicode to GSM */
 static const struct codepoint def_unicode[] = {
 	{ 0x000A, 0x0A }, { 0x000D, 0x0D }, { 0x0020, 0x20 }, { 0x0021, 0x21 },
 	{ 0x0022, 0x22 }, { 0x0023, 0x23 }, { 0x0024, 0x02 }, { 0x0025, 0x25 },
@@ -337,22 +346,22 @@ static const struct codepoint def_unicode[] = {
 
 /* Appendix A.3.1 in 3GPP TS23.038 */
 static const unsigned short tur_gsm[] = {
-	0x0040, 0x00A3, 0x0024, 0x00A5, 0x20AC, 0x00E9, 0x00F9, 0x0131, /* 0x07 */
-	0x00F2, 0x00C7, 0x000A, 0x011E, 0x011F, 0x000D, 0x00C5, 0x00E5, /* 0x0F */
-	0x0394, 0x005F, 0x03A6, 0x0393, 0x039B, 0x03A9, 0x03A0, 0x03A8, /* 0x17 */
-	0x03A3, 0x0398, 0x039E, 0x00A0, 0x015E, 0x015F, 0x00DF, 0x00C9, /* 0x1F */
-	0x0020, 0x0021, 0x0022, 0x0023, 0x00A4, 0x0025, 0x0026, 0x0027, /* 0x27 */
-	0x0028, 0x0029, 0x002A, 0x002B, 0x002C, 0x002D, 0x002E, 0x002F, /* 0x2F */
-	0x0030, 0x0031, 0x0032, 0x0033, 0x0034, 0x0035, 0x0036, 0x0037, /* 0x37 */
-	0x0038, 0x0039, 0x003A, 0x003B, 0x003C, 0x003D, 0x003E, 0x003F, /* 0x3F */
-	0x0130, 0x0041, 0x0042, 0x0043, 0x0044, 0x0045, 0x0046, 0x0047, /* 0x47 */
-	0x0048, 0x0049, 0x004A, 0x004B, 0x004C, 0x004D, 0x004E, 0x004F, /* 0x4F */
-	0x0050, 0x0051, 0x0052, 0x0053, 0x0054, 0x0055, 0x0056, 0x0057, /* 0x57 */
-	0x0058, 0x0059, 0x005A, 0x00C4, 0x00D6, 0x00D1, 0x00DC, 0x00A7, /* 0x5F */
-	0x00E7, 0x0061, 0x0062, 0x0063, 0x0064, 0x0065, 0x0066, 0x0067, /* 0x67 */
-	0x0068, 0x0069, 0x006A, 0x006B, 0x006C, 0x006D, 0x006E, 0x006F, /* 0x6F */
-	0x0070, 0x0071, 0x0072, 0x0073, 0x0074, 0x0075, 0x0076, 0x0077, /* 0x77 */
-	0x0078, 0x0079, 0x007A, 0x00E4, 0x00F6, 0x00F1, 0x00FC, 0x00E0  /* 0x7F */
+	0x0040, 0x00A3, 0x0024, 0x00A5, 0x20AC, 0x00E9, 0x00F9, 0x0131,
+	0x00F2, 0x00C7, 0x000A, 0x011E, 0x011F, 0x000D, 0x00C5, 0x00E5,
+	0x0394, 0x005F, 0x03A6, 0x0393, 0x039B, 0x03A9, 0x03A0, 0x03A8,
+	0x03A3, 0x0398, 0x039E, 0x00A0, 0x015E, 0x015F, 0x00DF, 0x00C9,
+	0x0020, 0x0021, 0x0022, 0x0023, 0x00A4, 0x0025, 0x0026, 0x0027,
+	0x0028, 0x0029, 0x002A, 0x002B, 0x002C, 0x002D, 0x002E, 0x002F,
+	0x0030, 0x0031, 0x0032, 0x0033, 0x0034, 0x0035, 0x0036, 0x0037,
+	0x0038, 0x0039, 0x003A, 0x003B, 0x003C, 0x003D, 0x003E, 0x003F,
+	0x0130, 0x0041, 0x0042, 0x0043, 0x0044, 0x0045, 0x0046, 0x0047,
+	0x0048, 0x0049, 0x004A, 0x004B, 0x004C, 0x004D, 0x004E, 0x004F,
+	0x0050, 0x0051, 0x0052, 0x0053, 0x0054, 0x0055, 0x0056, 0x0057,
+	0x0058, 0x0059, 0x005A, 0x00C4, 0x00D6, 0x00D1, 0x00DC, 0x00A7,
+	0x00E7, 0x0061, 0x0062, 0x0063, 0x0064, 0x0065, 0x0066, 0x0067,
+	0x0068, 0x0069, 0x006A, 0x006B, 0x006C, 0x006D, 0x006E, 0x006F,
+	0x0070, 0x0071, 0x0072, 0x0073, 0x0074, 0x0075, 0x0076, 0x0077,
+	0x0078, 0x0079, 0x007A, 0x00E4, 0x00F6, 0x00F1, 0x00FC, 0x00E0
 };
 
 static const struct codepoint tur_unicode[] = {
@@ -392,22 +401,22 @@ static const struct codepoint tur_unicode[] = {
 
 /* Appendix A.3.2 in 3GPP TS23.038 */
 static const unsigned short por_gsm[] = {
-	0x0040, 0x00A3, 0x0024, 0x00A5, 0x00EA, 0x00E9, 0x00FA, 0x00ED, /* 0x07 */
-	0x00F3, 0x00E7, 0x000A, 0x00D4, 0x00F4, 0x000D, 0x00C1, 0x00E1, /* 0x0F */
-	0x0394, 0x005F, 0x00AA, 0x00C7, 0x00C0, 0x221E, 0x005E, 0x005C, /* 0x17 */
-	0x20ac, 0x00D3, 0x007C, 0x00A0, 0x00C2, 0x00E2, 0x00CA, 0x00C9, /* 0x1F */
-	0x0020, 0x0021, 0x0022, 0x0023, 0x00BA, 0x0025, 0x0026, 0x0027, /* 0x27 */
-	0x0028, 0x0029, 0x002A, 0x002B, 0x002C, 0x002D, 0x002E, 0x002F, /* 0x2F */
-	0x0030, 0x0031, 0x0032, 0x0033, 0x0034, 0x0035, 0x0036, 0x0037, /* 0x37 */
-	0x0038, 0x0039, 0x003A, 0x003B, 0x003C, 0x003D, 0x003E, 0x003F, /* 0x3F */
-	0x00CD, 0x0041, 0x0042, 0x0043, 0x0044, 0x0045, 0x0046, 0x0047, /* 0x47 */
-	0x0048, 0x0049, 0x004A, 0x004B, 0x004C, 0x004D, 0x004E, 0x004F, /* 0x4F */
-	0x0050, 0x0051, 0x0052, 0x0053, 0x0054, 0x0055, 0x0056, 0x0057, /* 0x57 */
-	0x0058, 0x0059, 0x005A, 0x00C3, 0x00D5, 0x00DA, 0x00DC, 0x00A7, /* 0x5F */
-	0x007E, 0x0061, 0x0062, 0x0063, 0x0064, 0x0065, 0x0066, 0x0067, /* 0x67 */
-	0x0068, 0x0069, 0x006A, 0x006B, 0x006C, 0x006D, 0x006E, 0x006F, /* 0x6F */
-	0x0070, 0x0071, 0x0072, 0x0073, 0x0074, 0x0075, 0x0076, 0x0077, /* 0x77 */
-	0x0078, 0x0079, 0x007A, 0x00E3, 0x00F5, 0x0060, 0x00FC, 0x00E0  /* 0x7F */
+	0x0040, 0x00A3, 0x0024, 0x00A5, 0x00EA, 0x00E9, 0x00FA, 0x00ED,
+	0x00F3, 0x00E7, 0x000A, 0x00D4, 0x00F4, 0x000D, 0x00C1, 0x00E1,
+	0x0394, 0x005F, 0x00AA, 0x00C7, 0x00C0, 0x221E, 0x005E, 0x005C,
+	0x20ac, 0x00D3, 0x007C, 0x00A0, 0x00C2, 0x00E2, 0x00CA, 0x00C9,
+	0x0020, 0x0021, 0x0022, 0x0023, 0x00BA, 0x0025, 0x0026, 0x0027,
+	0x0028, 0x0029, 0x002A, 0x002B, 0x002C, 0x002D, 0x002E, 0x002F,
+	0x0030, 0x0031, 0x0032, 0x0033, 0x0034, 0x0035, 0x0036, 0x0037,
+	0x0038, 0x0039, 0x003A, 0x003B, 0x003C, 0x003D, 0x003E, 0x003F,
+	0x00CD, 0x0041, 0x0042, 0x0043, 0x0044, 0x0045, 0x0046, 0x0047,
+	0x0048, 0x0049, 0x004A, 0x004B, 0x004C, 0x004D, 0x004E, 0x004F,
+	0x0050, 0x0051, 0x0052, 0x0053, 0x0054, 0x0055, 0x0056, 0x0057,
+	0x0058, 0x0059, 0x005A, 0x00C3, 0x00D5, 0x00DA, 0x00DC, 0x00A7,
+	0x007E, 0x0061, 0x0062, 0x0063, 0x0064, 0x0065, 0x0066, 0x0067,
+	0x0068, 0x0069, 0x006A, 0x006B, 0x006C, 0x006D, 0x006E, 0x006F,
+	0x0070, 0x0071, 0x0072, 0x0073, 0x0074, 0x0075, 0x0076, 0x0077,
+	0x0078, 0x0079, 0x007A, 0x00E3, 0x00F5, 0x0060, 0x00FC, 0x00E0
 };
 
 static const struct codepoint por_unicode[] = {
@@ -445,21 +454,6 @@ static const struct codepoint por_unicode[] = {
 	{ 0x00FC, 0x7E }, { 0x0394, 0x10 }, { 0x20AC, 0x18 }, { 0x221E, 0x15 }
 };
 
-static const struct alphabet_conversion_table alphabet_lookup[] = {
-	/* Default GSM 7 bit */
-	{ def_gsm, def_ext_gsm, TABLE_SIZE(def_ext_gsm),
-		def_unicode, def_ext_unicode, TABLE_SIZE(def_ext_unicode) },
-	/* Turkish GSM dialect */
-	{ tur_gsm, tur_ext_gsm, TABLE_SIZE(tur_ext_gsm),
-		tur_unicode, tur_ext_unicode, TABLE_SIZE(tur_ext_unicode) },
-	/* Spanish GSM dialect, note that this one only has extension table */
-	{ def_gsm, spa_ext_gsm, TABLE_SIZE(spa_ext_gsm),
-		def_unicode, spa_ext_unicode, TABLE_SIZE(spa_ext_unicode)  },
-	/* Portuguese GSM dialect */
-	{ por_gsm, por_ext_gsm, TABLE_SIZE(por_ext_gsm),
-		por_unicode, por_ext_unicode, TABLE_SIZE(por_ext_unicode) },
-};
-
 static int compare_codepoints(const void *a, const void *b)
 {
 	const struct codepoint *ca = (const struct codepoint *) a;
@@ -480,48 +474,104 @@ static unsigned short codepoint_lookup(struct codepoint *key,
 	return result ? result->to : GUND;
 }
 
-static unsigned short gsm_locking_shift_lookup(unsigned char k,
-						unsigned char lang)
+static unsigned short gsm_locking_shift_lookup(struct conversion_table *t,
+						unsigned char k)
 {
-	return alphabet_lookup[lang].togsm_locking_shift[k];
+	return t->locking_g[k];
 }
 
-static unsigned short gsm_single_shift_lookup(unsigned char k,
-						unsigned char lang)
+static unsigned short gsm_single_shift_lookup(struct conversion_table *t,
+						unsigned char k)
 {
 	struct codepoint key = { k, 0 };
-	const struct codepoint *table;
-	unsigned int len;
-
-	table = alphabet_lookup[lang].togsm_single_shift;
-	len = alphabet_lookup[lang].togsm_single_shift_len;
-
-	return codepoint_lookup(&key, table, len);
+	return codepoint_lookup(&key, t->single_g, t->single_len_g);
 }
 
-static unsigned short unicode_locking_shift_lookup(unsigned short k,
-							unsigned char lang)
+static unsigned short unicode_locking_shift_lookup(struct conversion_table *t,
+							unsigned short k)
 {
 	struct codepoint key = { k, 0 };
-	const struct codepoint *table;
-	unsigned int len = 128;
-
-	table = alphabet_lookup[lang].tounicode_locking_shift;
-
-	return codepoint_lookup(&key, table, len);
+	return codepoint_lookup(&key, t->locking_u, t->locking_len_u);
 }
 
-static unsigned short unicode_single_shift_lookup(unsigned short k,
-							unsigned char lang)
+static unsigned short unicode_single_shift_lookup(struct conversion_table *t,
+							unsigned short k)
 {
 	struct codepoint key = { k, 0 };
-	const struct codepoint *table;
-	unsigned int len;
+	return codepoint_lookup(&key, t->single_u, t->single_len_u);
+}
 
-	table = alphabet_lookup[lang].tounicode_single_shift;
-	len = alphabet_lookup[lang].tounicode_single_shift_len;
+static gboolean populate_locking_shift(struct conversion_table *t,
+					enum gsm_dialect lang)
+{
+	switch (lang) {
+	case GSM_DIALECT_DEFAULT:
+	case GSM_DIALECT_SPANISH:
+		t->locking_g = def_gsm;
+		t->locking_u = def_unicode;
+		t->locking_len_u = TABLE_SIZE(def_unicode);
+		return TRUE;
 
-	return codepoint_lookup(&key, table, len);
+	case GSM_DIALECT_TURKISH:
+		t->locking_g = tur_gsm;
+		t->locking_u = tur_unicode;
+		t->locking_len_u = TABLE_SIZE(tur_unicode);
+		return TRUE;
+
+	case GSM_DIALECT_PORTUGUESE:
+		t->locking_g = por_gsm;
+		t->locking_u = por_unicode;
+		t->locking_len_u = TABLE_SIZE(por_unicode);
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
+static gboolean populate_single_shift(struct conversion_table *t,
+					enum gsm_dialect lang)
+{
+	switch (lang) {
+	case GSM_DIALECT_DEFAULT:
+		t->single_g = def_ext_gsm;
+		t->single_len_g = TABLE_SIZE(def_ext_gsm);
+		t->single_u = def_ext_unicode;
+		t->single_len_u = TABLE_SIZE(def_ext_unicode);
+		return TRUE;
+
+	case GSM_DIALECT_TURKISH:
+		t->single_g = tur_ext_gsm;
+		t->single_len_g = TABLE_SIZE(tur_ext_gsm);
+		t->single_u = tur_ext_unicode;
+		t->single_len_u = TABLE_SIZE(tur_ext_unicode);
+		return TRUE;
+
+	case GSM_DIALECT_SPANISH:
+		t->single_g = spa_ext_gsm;
+		t->single_len_g = TABLE_SIZE(spa_ext_gsm);
+		t->single_u = spa_ext_unicode;
+		t->single_len_u = TABLE_SIZE(spa_ext_unicode);
+		return TRUE;
+
+	case GSM_DIALECT_PORTUGUESE:
+		t->single_g = por_ext_gsm;
+		t->single_len_g = TABLE_SIZE(por_ext_gsm);
+		t->single_u = por_ext_unicode;
+		t->single_len_u = TABLE_SIZE(por_ext_unicode);
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
+static gboolean conversion_table_init(struct conversion_table *t,
+					enum gsm_dialect locking,
+					enum gsm_dialect single)
+{
+	memset(t, 0, sizeof(struct conversion_table));
+
+	return populate_locking_shift(t, locking) &&
+			populate_single_shift(t, single);
 }
 
 /*!
@@ -548,10 +598,9 @@ char *convert_gsm_to_utf8_with_lang(const unsigned char *text, long len,
 	long i = 0;
 	long res_length;
 
-	if (locking_lang >= GSM_DIALECT_INVALID)
-		return NULL;
+	struct conversion_table t;
 
-	if (single_lang >= GSM_DIALECT_INVALID)
+	if (conversion_table_init(&t, locking_lang, single_lang) == FALSE)
 		return NULL;
 
 	if (len < 0 && !terminator)
@@ -577,20 +626,19 @@ char *convert_gsm_to_utf8_with_lang(const unsigned char *text, long len,
 			if (i >= len)
 				goto error;
 
-			c = gsm_single_shift_lookup(text[i], single_lang);
+			c = gsm_single_shift_lookup(&t, text[i]);
 
 			if (c == GUND)
 				goto error;
 		} else {
-			c = gsm_locking_shift_lookup(text[i], locking_lang);
+			c = gsm_locking_shift_lookup(&t, text[i]);
 		}
 
 		res_length += UTF8_LENGTH(c);
 	}
 
 	res = g_try_malloc(res_length + 1);
-
-	if (!res)
+	if (res == NULL)
 		goto error;
 
 	out = res;
@@ -600,9 +648,9 @@ char *convert_gsm_to_utf8_with_lang(const unsigned char *text, long len,
 		unsigned short c;
 
 		if (text[i] == 0x1b)
-			c = gsm_single_shift_lookup(text[++i], single_lang);
+			c = gsm_single_shift_lookup(&t, text[++i]);
 		else
-			c = gsm_locking_shift_lookup(text[i], locking_lang);
+			c = gsm_locking_shift_lookup(&t, text[i]);
 
 		out += g_unichar_to_utf8(c, out);
 
@@ -648,6 +696,7 @@ unsigned char *convert_utf8_to_gsm_with_lang(const char *text, long len,
 					enum gsm_dialect locking_lang,
 					enum gsm_dialect single_lang)
 {
+	struct conversion_table t;
 	long nchars = 0;
 	const char *in;
 	unsigned char *out;
@@ -655,10 +704,7 @@ unsigned char *convert_utf8_to_gsm_with_lang(const char *text, long len,
 	long res_len;
 	long i;
 
-	if (locking_lang >= GSM_DIALECT_INVALID)
-		return NULL;
-
-	if (single_lang >= GSM_DIALECT_INVALID)
+	if (conversion_table_init(&t, locking_lang, single_lang) == FALSE)
 		return NULL;
 
 	in = text;
@@ -675,10 +721,10 @@ unsigned char *convert_utf8_to_gsm_with_lang(const char *text, long len,
 		if (c > 0xffff)
 			goto err_out;
 
-		converted = unicode_locking_shift_lookup(c, locking_lang);
+		converted = unicode_locking_shift_lookup(&t, c);
 
 		if (converted == GUND)
-			converted = unicode_single_shift_lookup(c, single_lang);
+			converted = unicode_single_shift_lookup(&t, c);
 
 		if (converted == GUND)
 			goto err_out;
@@ -693,8 +739,7 @@ unsigned char *convert_utf8_to_gsm_with_lang(const char *text, long len,
 	}
 
 	res = g_try_malloc(res_len + (terminator ? 1 : 0));
-
-	if (!res)
+	if (res == NULL)
 		goto err_out;
 
 	in = text;
@@ -704,10 +749,10 @@ unsigned char *convert_utf8_to_gsm_with_lang(const char *text, long len,
 
 		gunichar c = g_utf8_get_char(in);
 
-		converted = unicode_locking_shift_lookup(c, locking_lang);
+		converted = unicode_locking_shift_lookup(&t, c);
 
 		if (converted == GUND)
-			converted = unicode_single_shift_lookup(c, single_lang);
+			converted = unicode_single_shift_lookup(&t, c);
 
 		if (converted & 0x1b00) {
 			*out = 0x1b;
@@ -742,6 +787,71 @@ unsigned char *convert_utf8_to_gsm(const char *text, long len,
 						terminator,
 						GSM_DIALECT_DEFAULT,
 						GSM_DIALECT_DEFAULT);
+}
+
+/*!
+ * Converts UTF-8 encoded text to GSM alphabet. It finds an encoding
+ * that uses the minimum set of GSM dialects based on the hint given.
+ *
+ * It first attempts to use the default dialect's single shift and
+ * locking shift tables. It then tries with only the single shift
+ * table of the hinted dialect, and finally with both the single shift
+ * and locking shift tables of the hinted dialect.
+ *
+ * Returns the encoded data or NULL if no suitable encoding could be
+ * found. The data must be freed by the caller. If items_read is not
+ * NULL, it contains the actual number of bytes read. If items_written
+ * is not NULL, it contains the number of bytes written. If
+ * used_locking and used_single are not NULL, they will contain the
+ * dialects used for the locking shift and single shift tables.
+ */
+unsigned char *convert_utf8_to_gsm_best_lang(const char *utf8, long len,
+					long *items_read, long *items_written,
+					unsigned char terminator,
+					enum gsm_dialect hint,
+					enum gsm_dialect *used_locking,
+					enum gsm_dialect *used_single)
+{
+	enum gsm_dialect locking = GSM_DIALECT_DEFAULT;
+	enum gsm_dialect single = GSM_DIALECT_DEFAULT;
+	unsigned char *encoded;
+
+	encoded = convert_utf8_to_gsm_with_lang(utf8, len, items_read,
+						items_written, terminator,
+						locking, single);
+	if (encoded != NULL)
+		goto out;
+
+	if (hint == GSM_DIALECT_DEFAULT)
+		return NULL;
+
+	single = hint;
+	encoded = convert_utf8_to_gsm_with_lang(utf8, len, items_read,
+						items_written, terminator,
+						locking, single);
+	if (encoded != NULL)
+		goto out;
+
+	/* Spanish dialect uses the default locking shift table */
+	if (hint == GSM_DIALECT_SPANISH)
+		return NULL;
+
+	locking = hint;
+	encoded = convert_utf8_to_gsm_with_lang(utf8, len, items_read,
+						items_written, terminator,
+						locking, single);
+
+	if (encoded == NULL)
+		return NULL;
+
+out:
+	if (used_locking != NULL)
+		*used_locking = locking;
+
+	if (used_single != NULL)
+		*used_single = single;
+
+	return encoded;
 }
 
 /*!
@@ -1060,7 +1170,7 @@ unsigned char *pack_7bit(const unsigned char *in, long len, int byte_offset,
 	long total_bits;
 	unsigned char *buf;
 
-	if (len == 0 || !items_written)
+	if (len == 0 || items_written == NULL)
 		return NULL;
 
 	if (len < 0) {
@@ -1089,6 +1199,7 @@ unsigned char *pack_7bit(const unsigned char *in, long len, int byte_offset,
 
 char *sim_string_to_utf8(const unsigned char *buffer, int length)
 {
+	struct conversion_table t;
 	int i;
 	int j;
 	int num_chars;
@@ -1097,6 +1208,10 @@ char *sim_string_to_utf8(const unsigned char *buffer, int length)
 	int offset;
 	char *utf8 = NULL;
 	char *out;
+
+	if (conversion_table_init(&t, GSM_DIALECT_DEFAULT,
+					GSM_DIALECT_DEFAULT) == FALSE)
+		return NULL;
 
 	if (length < 1)
 		return NULL;
@@ -1174,14 +1289,14 @@ char *sim_string_to_utf8(const unsigned char *buffer, int length)
 			if (i >= length)
 				return NULL;
 
-			c = gsm_single_shift_lookup(buffer[i++], 0);
+			c = gsm_single_shift_lookup(&t, buffer[i++]);
 
 			if (c == 0)
 				return NULL;
 
 			j += 2;
 		} else {
-			c = gsm_locking_shift_lookup(buffer[i++], 0);
+			c = gsm_locking_shift_lookup(&t, buffer[i++]);
 			j += 1;
 		}
 
@@ -1197,8 +1312,7 @@ char *sim_string_to_utf8(const unsigned char *buffer, int length)
 			return NULL;
 
 	utf8 = g_try_malloc(res_len + 1);
-
-	if (!utf8)
+	if (utf8 == NULL)
 		return NULL;
 
 	i = offset;
@@ -1211,9 +1325,9 @@ char *sim_string_to_utf8(const unsigned char *buffer, int length)
 			c = (buffer[i++] & 0x7f) + ucs2_offset;
 		else if (buffer[i] == 0x1b) {
 			++i;
-			c = gsm_single_shift_lookup(buffer[i++], 0);
+			c = gsm_single_shift_lookup(&t, buffer[i++]);
 		} else
-			c = gsm_locking_shift_lookup(buffer[i++], 0);
+			c = gsm_locking_shift_lookup(&t, buffer[i++]);
 
 		out += g_unichar_to_utf8(c, out);
 	}
@@ -1223,8 +1337,8 @@ char *sim_string_to_utf8(const unsigned char *buffer, int length)
 	return utf8;
 }
 
-unsigned char *utf8_to_sim_string(const char *utf,
-					int max_length, int *out_length)
+unsigned char *utf8_to_sim_string(const char *utf, int max_length,
+					int *out_length)
 {
 	unsigned char *result;
 	unsigned char *ucs2;
@@ -1247,15 +1361,14 @@ unsigned char *utf8_to_sim_string(const char *utf,
 
 	ucs2 = (guint8 *) g_convert(utf, -1, "UCS-2BE//TRANSLIT", "UTF-8",
 					NULL, &converted, NULL);
-
-	if (!ucs2)
+	if (ucs2 == NULL)
 		return NULL;
 
 	if (max_length != -1 && (int) converted + 1 > max_length)
 		converted = (max_length - 1) & ~1;
 
 	result = g_try_malloc(converted + 1);
-	if (!result) {
+	if (result == NULL) {
 		g_free(ucs2);
 		return NULL;
 	}
@@ -1286,6 +1399,7 @@ unsigned char *convert_ucs2_to_gsm_with_lang(const unsigned char *text,
 					enum gsm_dialect locking_lang,
 					enum gsm_dialect single_lang)
 {
+	struct conversion_table t;
 	long nchars = 0;
 	const unsigned char *in;
 	unsigned char *out;
@@ -1293,10 +1407,7 @@ unsigned char *convert_ucs2_to_gsm_with_lang(const unsigned char *text,
 	long res_len;
 	long i;
 
-	if (locking_lang >= GSM_DIALECT_INVALID)
-		return NULL;
-
-	if (single_lang >= GSM_DIALECT_INVALID)
+	if (conversion_table_init(&t, locking_lang, single_lang) == FALSE)
 		return NULL;
 
 	if (len < 1 || len % 2)
@@ -1312,10 +1423,10 @@ unsigned char *convert_ucs2_to_gsm_with_lang(const unsigned char *text,
 		if (c > 0xffff)
 			goto err_out;
 
-		converted = unicode_locking_shift_lookup(c, locking_lang);
+		converted = unicode_locking_shift_lookup(&t, c);
 
 		if (converted == GUND)
-			converted = unicode_single_shift_lookup(c, single_lang);
+			converted = unicode_single_shift_lookup(&t, c);
 
 		if (converted == GUND)
 			goto err_out;
@@ -1329,7 +1440,7 @@ unsigned char *convert_ucs2_to_gsm_with_lang(const unsigned char *text,
 	}
 
 	res = g_try_malloc(res_len + (terminator ? 1 : 0));
-	if (!res)
+	if (res == NULL)
 		goto err_out;
 
 	in = text;
@@ -1339,10 +1450,10 @@ unsigned char *convert_ucs2_to_gsm_with_lang(const unsigned char *text,
 		gunichar c = (in[i] << 8) | in[i + 1];
 		unsigned short converted = GUND;
 
-		converted = unicode_locking_shift_lookup(c, locking_lang);
+		converted = unicode_locking_shift_lookup(&t, c);
 
 		if (converted == GUND)
-			converted = unicode_single_shift_lookup(c, single_lang);
+			converted = unicode_single_shift_lookup(&t, c);
 
 		if (converted & 0x1b00) {
 			*out = 0x1b;

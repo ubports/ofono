@@ -114,6 +114,7 @@ static void clvl_range_query(gboolean ok, GAtResult *result, gpointer user_data)
 	/* Try opening the list, but don't fail */
 	g_at_result_iter_open_list(&iter);
 	g_at_result_iter_next_range(&iter, &cvd->clvl_min, &cvd->clvl_max);
+	g_at_result_iter_close_list(&iter);
 }
 
 static void cv_generic_set_cb(gboolean ok, GAtResult *result,
@@ -138,9 +139,6 @@ static void at_call_volume_speaker_volume(struct ofono_call_volume *cv,
 	char buf[64];
 	int level;
 
-	if (!cbd)
-		goto error;
-
 	level = ((cvd->clvl_max - cvd->clvl_min) *
 			percent) / 100 + cvd->clvl_min;
 
@@ -150,7 +148,6 @@ static void at_call_volume_speaker_volume(struct ofono_call_volume *cv,
 				cv_generic_set_cb, cbd, g_free) > 0)
 		return;
 
-error:
 	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, data);
@@ -163,16 +160,12 @@ static void at_call_volume_mute(struct ofono_call_volume *cv, int muted,
 	struct cb_data *cbd = cb_data_new(cb, data);
 	char buf[64];
 
-	if (!cbd)
-		goto error;
-
 	snprintf(buf, sizeof(buf), "AT+CMUT=%d", muted);
 
 	if (g_at_chat_send(cvd->chat, buf, none_prefix,
 				cv_generic_set_cb, cbd, g_free) > 0)
 		return;
 
-error:
 	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, data);
@@ -222,12 +215,12 @@ static struct ofono_call_volume_driver driver = {
 	.mute = at_call_volume_mute,
 };
 
-void at_call_volume_init()
+void at_call_volume_init(void)
 {
 	ofono_call_volume_driver_register(&driver);
 }
 
-void at_call_volume_exit()
+void at_call_volume_exit(void)
 {
 	ofono_call_volume_driver_unregister(&driver);
 }

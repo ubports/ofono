@@ -77,16 +77,24 @@ gboolean ppp_net_set_mtu(struct ppp_net *net, guint16 mtu)
 	return TRUE;
 }
 
-void ppp_net_process_packet(struct ppp_net *net, const guint8 *packet)
+void ppp_net_process_packet(struct ppp_net *net, const guint8 *packet,
+				gsize plen)
 {
 	GIOStatus status;
 	gsize bytes_written;
 	guint16 len;
 
+	if (plen < 4)
+		return;
+
 	/* find the length of the packet to transmit */
 	len = get_host_short(&packet[2]);
 	status = g_io_channel_write_chars(net->channel, (gchar *) packet,
-						len, &bytes_written, NULL);
+						MIN(len, plen),
+						&bytes_written, NULL);
+
+	if (status != G_IO_STATUS_NORMAL)
+		return;
 }
 
 /*
@@ -123,35 +131,44 @@ const char *ppp_net_get_interface(struct ppp_net *net)
 	return net->if_name;
 }
 
-struct ppp_net *ppp_net_new(GAtPPP *ppp)
+struct ppp_net *ppp_net_new(GAtPPP *ppp, int fd)
 {
 	struct ppp_net *net;
 	GIOChannel *channel = NULL;
 	struct ifreq ifr;
-	int fd, err;
+	int err;
 
 	net = g_try_new0(struct ppp_net, 1);
 	if (net == NULL)
-		return NULL;
+		goto badalloc;
 
 	net->ppp_packet = ppp_packet_new(MAX_PACKET, PPP_IP_PROTO);
-	if (net->ppp_packet == NULL) {
-		g_free(net);
-		return NULL;
-	}
-
-	/* open a tun interface */
-	fd = open("/dev/net/tun", O_RDWR);
-	if (fd < 0)
+	if (net->ppp_packet == NULL)
 		goto error;
 
+	/*
+	 * If the fd value is still the default one,
+	 * open the tun interface and configure it.
+	 */
 	memset(&ifr, 0, sizeof(ifr));
-	ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
-	strcpy(ifr.ifr_name, "ppp%d");
 
-	err = ioctl(fd, TUNSETIFF, (void *) &ifr);
-	if (err < 0)
-		goto error;
+	if (fd < 0) {
+		/* open a tun interface */
+		fd = open("/dev/net/tun", O_RDWR);
+		if (fd < 0)
+			goto error;
+
+		ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
+		strcpy(ifr.ifr_name, "ppp%d");
+
+		err = ioctl(fd, TUNSETIFF, (void *) &ifr);
+		if (err < 0)
+			goto error;
+	} else {
+		err = ioctl(fd, TUNGETIFF, (void *) &ifr);
+		if (err < 0)
+			goto error;
+	}
 
 	net->if_name = strdup(ifr.ifr_name);
 
@@ -178,21 +195,49 @@ error:
 	if (channel)
 		g_io_channel_unref(channel);
 
-	if (fd >= 0)
-		close(fd);
-
 	g_free(net->if_name);
 	g_free(net->ppp_packet);
 	g_free(net);
+
+badalloc:
+	if (fd >= 0)
+		close(fd);
+
 	return NULL;
 }
 
 void ppp_net_free(struct ppp_net *net)
 {
-	g_source_remove(net->watch);
+	if (net->watch) {
+		g_source_remove(net->watch);
+		net->watch = 0;
+	}
+
 	g_io_channel_unref(net->channel);
 
 	g_free(net->ppp_packet);
 	g_free(net->if_name);
 	g_free(net);
+}
+
+void ppp_net_suspend_interface(struct ppp_net *net)
+{
+	if (net == NULL || net->channel == NULL)
+		return;
+
+	if (net->watch == 0)
+		return;
+
+	g_source_remove(net->watch);
+	net->watch = 0;
+}
+
+void ppp_net_resume_interface(struct ppp_net *net)
+{
+	if (net == NULL || net->channel == NULL)
+		return;
+
+	net->watch = g_io_add_watch(net->channel,
+			G_IO_IN | G_IO_HUP | G_IO_ERR | G_IO_NVAL,
+			ppp_net_callback, net);
 }
