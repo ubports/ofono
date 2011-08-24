@@ -53,10 +53,7 @@ struct gprs_context_data {
 	unsigned int dhcp_source;
 	unsigned int dhcp_count;
 	guint ndis_watch;
-	union {
-		ofono_gprs_context_cb_t down_cb;	/* Down callback */
-		ofono_gprs_context_up_cb_t up_cb;	/* Up callback */
-	};
+	ofono_gprs_context_cb_t cb;
 	void *cb_data;					/* Callback data */
 };
 
@@ -68,8 +65,7 @@ static gboolean dhcp_poll(gpointer user_data)
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 
 	if (gcd->dhcp_count > 20)
-		CALLBACK_WITH_FAILURE(gcd->up_cb, NULL, 0, NULL, NULL,
-						NULL, NULL, gcd->cb_data);
+		CALLBACK_WITH_FAILURE(gcd->cb, gcd->cb_data);
 	else
 		check_dhcp(gc);
 
@@ -77,40 +73,6 @@ static gboolean dhcp_poll(gpointer user_data)
 	gcd->dhcp_source = 0;
 
 	return FALSE;
-}
-
-static gboolean ndis_receive_callback(GIOChannel *channel,
-					GIOCondition cond, gpointer user_data)
-{
-	struct ofono_gprs_context *gc = user_data;
-	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
-	GIOStatus status;
-	gsize bytes_read;
-	char buf[1059];
-
-	if (cond & (G_IO_NVAL | G_IO_ERR | G_IO_HUP)) {
-		gcd->ndis_watch = 0;
-		return FALSE;
-	}
-
-	status = g_io_channel_read_chars(channel, buf, sizeof(buf),
-							&bytes_read, NULL);
-
-	ofono_info("Received %zd bytes", bytes_read);
-
-	{
-		unsigned int i;
-		for (i = 0; i < bytes_read; i++)
-			printf("%02x ", buf[i]);
-		printf("\n");
-	}
-
-	if (status != G_IO_STATUS_NORMAL && status != G_IO_STATUS_AGAIN) {
-		gcd->ndis_watch = 0;
-		return FALSE;
-	}
-
-	return TRUE;
 }
 
 static gboolean get_next_addr(GAtResultIter *iter, char **addr)
@@ -145,9 +107,6 @@ static void dhcp_query_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	char *dns1 = NULL;
 	char *dns2 = NULL;
 	const char *dns[3];
-	struct ofono_modem *modem;
-	const char *devnode;
-	GIOChannel *channel;
 
 	DBG("ok %d", ok);
 
@@ -177,24 +136,16 @@ static void dhcp_query_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	ofono_info("IP: %s  Gateway: %s", ip, gateway);
 	ofono_info("DNS: %s, %s", dns1, dns2);
 
-	modem = ofono_gprs_context_get_modem(gc);
-	devnode = ofono_modem_get_string(modem, "NDIS");
-
-	ofono_info("NDIS: %s", devnode);
-
-	channel = g_at_tty_open(devnode, NULL);
-	if (channel) {
-		gcd->ndis_watch = g_io_add_watch(channel,
-				G_IO_IN | G_IO_HUP | G_IO_ERR | G_IO_NVAL,
-				ndis_receive_callback, gc);
-	}
-	g_io_channel_unref(channel);
-
 	interface = "invalid";
 
-	CALLBACK_WITH_SUCCESS(gcd->up_cb, interface, TRUE, ip,
-					netmask, gateway, dns, gcd->cb_data);
-	gcd->up_cb = NULL;
+	ofono_gprs_context_set_interface(gc, interface);
+	ofono_gprs_context_set_ipv4_address(gc, ip, TRUE);
+	ofono_gprs_context_set_ipv4_netmask(gc, netmask);
+	ofono_gprs_context_set_ipv4_gateway(gc, gateway);
+	ofono_gprs_context_set_ipv4_dns_servers(gc, dns);
+
+	CALLBACK_WITH_SUCCESS(gcd->cb, gcd->cb_data);
+	gcd->cb = NULL;
 	gcd->cb_data = NULL;
 
 	g_free(ip);
@@ -224,7 +175,7 @@ static void at_ndisdup_down_cb(gboolean ok, GAtResult *result,
 	DBG("ok %d", ok);
 
 	if (ok) {
-		gcd->down_cb = cb;
+		gcd->cb = cb;
 		gcd->cb_data = cbd->data;
 
 		if (gcd->ndis_watch > 0) {
@@ -241,7 +192,7 @@ static void at_ndisdup_up_cb(gboolean ok, GAtResult *result,
 						gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
-	ofono_gprs_context_up_cb_t cb = cbd->cb;
+	ofono_gprs_context_cb_t cb = cbd->cb;
 	struct ofono_gprs_context *gc = cbd->user;
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 	struct ofono_error error;
@@ -249,7 +200,7 @@ static void at_ndisdup_up_cb(gboolean ok, GAtResult *result,
 	DBG("ok %d", ok);
 
 	if (ok) {
-		gcd->up_cb = cb;
+		gcd->cb = cb;
 		gcd->cb_data = cbd->data;
 
 		gcd->dhcp_count = 0;
@@ -261,13 +212,13 @@ static void at_ndisdup_up_cb(gboolean ok, GAtResult *result,
 	gcd->active_context = 0;
 
 	decode_at_error(&error, g_at_result_final_response(result));
-	cb(&error, NULL, FALSE, NULL, NULL, NULL, NULL, cbd->data);
+	cb(&error, cbd->data);
 }
 
 static void at_cgdcont_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
-	ofono_gprs_context_up_cb_t cb = cbd->cb;
+	ofono_gprs_context_cb_t cb = cbd->cb;
 	struct ofono_gprs_context *gc = cbd->user;
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 	struct cb_data *ncbd;
@@ -281,7 +232,7 @@ static void at_cgdcont_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		gcd->active_context = 0;
 
 		decode_at_error(&error, g_at_result_final_response(result));
-		cb(&error, NULL, 0, NULL, NULL, NULL, NULL, cbd->data);
+		cb(&error, cbd->data);
 		return;
 	}
 
@@ -297,22 +248,23 @@ static void at_cgdcont_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 	gcd->active_context = 0;
 
-	CALLBACK_WITH_FAILURE(cb, NULL, 0, NULL, NULL, NULL, NULL, cbd->data);
+	CALLBACK_WITH_FAILURE(cb, cbd->data);
 }
 
 static void huawei_gprs_activate_primary(struct ofono_gprs_context *gc,
 				const struct ofono_gprs_primary_context *ctx,
-				ofono_gprs_context_up_cb_t cb, void *data)
+				ofono_gprs_context_cb_t cb, void *data)
 {
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 	struct cb_data *cbd = cb_data_new(cb, data);
 	char buf[64];
 	int len;
 
-	DBG("cid %u", ctx->cid);
-
-	if (!cbd)
+	/* IPv6 support not implemented */
+	if (ctx->proto != OFONO_GPRS_PROTO_IP)
 		goto error;
+
+	DBG("cid %u", ctx->cid);
 
 	gcd->active_context = ctx->cid;
 
@@ -331,7 +283,7 @@ static void huawei_gprs_activate_primary(struct ofono_gprs_context *gc,
 error:
 	g_free(cbd);
 
-	CALLBACK_WITH_FAILURE(cb, NULL, 0, NULL, NULL, NULL, NULL, data);
+	CALLBACK_WITH_FAILURE(cb, data);
 }
 
 static void huawei_gprs_deactivate_primary(struct ofono_gprs_context *gc,
@@ -344,9 +296,6 @@ static void huawei_gprs_deactivate_primary(struct ofono_gprs_context *gc,
 
 	DBG("cid %u", cid);
 
-	if (!cbd)
-		goto error;
-
 	cbd->user = gc;
 
 	snprintf(buf, sizeof(buf), "AT^NDISDUP=%u,0", cid);
@@ -355,7 +304,6 @@ static void huawei_gprs_deactivate_primary(struct ofono_gprs_context *gc,
 				at_ndisdup_down_cb, cbd, g_free) > 0)
 		return;
 
-error:
 	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, data);
@@ -376,7 +324,7 @@ static int huawei_gprs_context_probe(struct ofono_gprs_context *gc,
 	}
 
 	gcd = g_try_new0(struct gprs_context_data, 1);
-	if (!gcd)
+	if (gcd == NULL)
 		return -ENOMEM;
 
 	gcd->chat = g_at_chat_clone(chat);
@@ -406,12 +354,12 @@ static struct ofono_gprs_context_driver driver = {
 	.deactivate_primary	= huawei_gprs_deactivate_primary,
 };
 
-void huawei_gprs_context_init()
+void huawei_gprs_context_init(void)
 {
 	ofono_gprs_context_driver_register(&driver);
 }
 
-void huawei_gprs_context_exit()
+void huawei_gprs_context_exit(void)
 {
 	ofono_gprs_context_driver_unregister(&driver);
 }

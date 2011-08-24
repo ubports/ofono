@@ -48,6 +48,8 @@ enum at_util_charset {
 	AT_UTIL_CHARSET_8859_H =	0x10000,
 };
 
+typedef void (*at_util_sim_inserted_cb_t)(gboolean present, void *userdata);
+
 void decode_at_error(struct ofono_error *error, const char *final);
 gint at_util_call_compare_by_status(gconstpointer a, gconstpointer b);
 gint at_util_call_compare_by_phone_number(gconstpointer a, gconstpointer b);
@@ -71,6 +73,15 @@ gboolean at_util_parse_cscs_supported(GAtResult *result, int *supported);
 gboolean at_util_parse_cscs_query(GAtResult *result,
 				enum at_util_charset *charset);
 
+gboolean at_util_parse_attr(GAtResult *result, const char *prefix,
+				const char **out_attr);
+
+struct at_util_sim_state_query *at_util_sim_state_query_new(GAtChat *chat,
+						guint interval, guint num_times,
+						at_util_sim_inserted_cb_t cb,
+						void *userdata);
+void at_util_sim_state_query_free(struct at_util_sim_state_query *req);
+
 struct cb_data {
 	void *cb;
 	void *data;
@@ -81,11 +92,7 @@ static inline struct cb_data *cb_data_new(void *cb, void *data)
 {
 	struct cb_data *ret;
 
-	ret = g_try_new0(struct cb_data, 1);
-
-	if (!ret)
-		return ret;
-
+	ret = g_new0(struct cb_data, 1);
 	ret->cb = cb;
 	ret->data = data;
 

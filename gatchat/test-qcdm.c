@@ -28,7 +28,6 @@
 #include <glib.h>
 
 #include "gattty.h"
-#include "gatutil.h"
 #include "gathdlc.h"
 
 static gboolean option_debug = FALSE;
@@ -95,9 +94,6 @@ static void hdlc_debug(const char *str, void *data)
 
 static void hdlc_receive(const unsigned char *buf, gsize len, void *data)
 {
-	if (option_debug == TRUE)
-		g_at_util_debug_dump(TRUE, buf, len, hdlc_debug, "QCDM");
-
 	parse_qcdm(buf, len);
 }
 
@@ -106,10 +102,6 @@ static void send_command(GAtHDLC *hdlc, guint8 cmd)
 	unsigned char cmdbuf[1];
 
 	cmdbuf[0] = cmd;
-
-	if (option_debug == TRUE)
-		g_at_util_debug_dump(FALSE, cmdbuf, sizeof(cmdbuf),
-							hdlc_debug, "QCDM");
 
 	g_at_hdlc_send(hdlc, cmdbuf, sizeof(cmdbuf));
 }
@@ -122,10 +114,6 @@ static void send_subsys_command(GAtHDLC *hdlc, guint8 id, guint16 cmd)
 	cmdbuf[1] = id;
 	cmdbuf[2] = cmd & 0xff;
 	cmdbuf[3] = cmd >> 8;
-
-	if (option_debug == TRUE)
-		g_at_util_debug_dump(FALSE, cmdbuf, sizeof(cmdbuf),
-							hdlc_debug, "QCDM");
 
 	g_at_hdlc_send(hdlc, cmdbuf, sizeof(cmdbuf));
 }
@@ -161,13 +149,13 @@ int main(int argc, char **argv)
 
 	g_option_context_free(context);
 
-	if (!option_device)
+	if (option_device == NULL)
 		option_device = g_strdup("/dev/ttyUSB1");
 
 	g_print("Device: %s\n", option_device);
 
-	channel = g_at_tty_open(option_device, NULL);
-	if (!channel) {
+	channel = g_at_tty_open_qcdm(option_device);
+	if (channel == NULL) {
 		g_printerr("Failed to open QCDM device\n");
 		return 1;
 	}
@@ -178,11 +166,14 @@ int main(int argc, char **argv)
 
 	g_io_channel_unref(channel);
 
-	if (!hdlc)
+	if (hdlc == NULL)
 		return 1;
 
 	if (option_debug == TRUE)
 		g_at_hdlc_set_debug(hdlc, hdlc_debug, "HDLC");
+
+	g_at_hdlc_set_xmit_accm(hdlc, 0);
+	g_at_hdlc_set_recv_accm(hdlc, 0);
 
 	g_at_hdlc_set_receive(hdlc, hdlc_receive, NULL);
 

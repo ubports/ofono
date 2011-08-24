@@ -163,7 +163,7 @@ static void cm_get_properties_reply(struct ofono_call_meter *cm)
 	const char *currency = cm->currency;
 
 	reply = dbus_message_new_method_return(cm->pending);
-	if (!reply)
+	if (reply == NULL)
 		return;
 
 	dbus_message_iter_init_append(reply, &iter);
@@ -181,7 +181,8 @@ static void cm_get_properties_reply(struct ofono_call_meter *cm)
 	ofono_dbus_dict_append(&dict, "AccumulatedCallMeterMaximum",
 				DBUS_TYPE_UINT32, &cm->acm_max);
 
-	ofono_dbus_dict_append(&dict, "PricePerUnit", DBUS_TYPE_DOUBLE, &cm->ppu);
+	ofono_dbus_dict_append(&dict, "PricePerUnit", DBUS_TYPE_DOUBLE,
+				&cm->ppu);
 
 	ofono_dbus_dict_append(&dict, "Currency", DBUS_TYPE_STRING, &currency);
 
@@ -190,8 +191,8 @@ static void cm_get_properties_reply(struct ofono_call_meter *cm)
 	__ofono_dbus_pending_reply(&cm->pending, reply);
 }
 
-static void query_call_meter_callback(const struct ofono_error *error, int value,
-					void *data)
+static void query_call_meter_callback(const struct ofono_error *error,
+					int value, void *data)
 {
 	struct ofono_call_meter *cm = data;
 
@@ -204,7 +205,7 @@ static void query_call_meter_callback(const struct ofono_error *error, int value
 
 static void query_call_meter(struct ofono_call_meter *cm)
 {
-	if (!cm->driver->call_meter_query) {
+	if (cm->driver->call_meter_query == NULL) {
 		if (cm->pending)
 			cm_get_properties_reply(cm);
 
@@ -227,7 +228,7 @@ static void query_acm_callback(const struct ofono_error *error, int value,
 
 static void query_acm(struct ofono_call_meter *cm)
 {
-	if (!cm->driver->acm_query) {
+	if (cm->driver->acm_query == NULL) {
 		query_call_meter(cm);
 		return;
 	}
@@ -250,7 +251,7 @@ static void query_acm_max_callback(const struct ofono_error *error, int value,
 
 static void query_acm_max(struct ofono_call_meter *cm)
 {
-	if (!cm->driver->acm_max_query) {
+	if (cm->driver->acm_max_query == NULL) {
 		cm->flags |= CALL_METER_FLAG_CACHED;
 
 		query_acm(cm);
@@ -276,7 +277,7 @@ static void query_puct_callback(const struct ofono_error *error,
 
 static void query_puct(struct ofono_call_meter *cm)
 {
-	if (!cm->driver->puct_query)
+	if (cm->driver->puct_query == NULL)
 		query_acm_max(cm);
 	else
 		cm->driver->puct_query(cm, query_puct_callback, cm);
@@ -306,13 +307,13 @@ static DBusMessage *cm_get_properties(DBusConnection *conn, DBusMessage *msg,
 	return NULL;
 }
 
-static void set_acm_max_query_callback(const struct ofono_error *error, int value,
-					void *data)
+static void set_acm_max_query_callback(const struct ofono_error *error,
+					int value, void *data)
 {
 	struct ofono_call_meter *cm = data;
 	DBusMessage *reply;
 
-	if (!cm->pending)
+	if (cm->pending == NULL)
 		return;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
@@ -331,6 +332,18 @@ static void set_acm_max_query_callback(const struct ofono_error *error, int valu
 	set_acm_max(cm, value);
 }
 
+static void check_pin2_state(struct ofono_call_meter *cm)
+{
+	struct ofono_atom *sim_atom;
+
+	sim_atom = __ofono_modem_find_atom(__ofono_atom_get_modem(cm->atom),
+						OFONO_ATOM_TYPE_SIM);
+	if (sim_atom == NULL)
+		return;
+
+	__ofono_sim_recheck_pin(__ofono_atom_get_data(sim_atom));
+}
+
 static void set_acm_max_callback(const struct ofono_error *error, void *data)
 {
 	struct ofono_call_meter *cm = data;
@@ -339,6 +352,7 @@ static void set_acm_max_callback(const struct ofono_error *error, void *data)
 		DBG("Setting acm_max failed");
 		__ofono_dbus_pending_reply(&cm->pending,
 					__ofono_error_failed(cm->pending));
+		check_pin2_state(cm);
 		return;
 	}
 
@@ -353,7 +367,7 @@ static DBusMessage *prop_set_acm_max(DBusMessage *msg,
 {
 	dbus_uint32_t value;
 
-	if (!cm->driver->acm_max_set)
+	if (cm->driver->acm_max_set == NULL)
 		return __ofono_error_not_implemented(msg);
 
 	dbus_message_iter_get_basic(dbus_value, &value);
@@ -372,7 +386,7 @@ static void set_puct_query_callback(const struct ofono_error *error,
 	struct ofono_call_meter *cm = data;
 	DBusMessage *reply;
 
-	if (!cm->pending)
+	if (cm->pending == NULL)
 		return;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
@@ -400,6 +414,7 @@ static void set_puct_callback(const struct ofono_error *error, void *data)
 		DBG("setting puct failed");
 		__ofono_dbus_pending_reply(&cm->pending,
 					__ofono_error_failed(cm->pending));
+		check_pin2_state(cm);
 		return;
 	}
 
@@ -421,7 +436,7 @@ static void set_puct_initial_query_callback(const struct ofono_error *error,
 	const char *name;
 	const char *pin2;
 
-	if (!cm->pending)
+	if (cm->pending == NULL)
 		return;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
@@ -456,7 +471,7 @@ static DBusMessage *prop_set_ppu(DBusMessage *msg, struct ofono_call_meter *cm,
 {
 	double ppu;
 
-	if (!cm->driver->puct_set || !cm->driver->puct_query)
+	if (cm->driver->puct_set == NULL || cm->driver->puct_query == NULL)
 		return __ofono_error_not_implemented(msg);
 
 	dbus_message_iter_get_basic(var, &ppu);
@@ -480,7 +495,7 @@ static DBusMessage *prop_set_cur(DBusMessage *msg, struct ofono_call_meter *cm,
 {
 	const char *value;
 
-	if (!cm->driver->puct_set || !cm->driver->puct_query)
+	if (cm->driver->puct_set == NULL || cm->driver->puct_query == NULL)
 		return __ofono_error_not_implemented(msg);
 
 	dbus_message_iter_get_basic(var, &value);
@@ -548,7 +563,7 @@ static DBusMessage *cm_set_property(DBusConnection *conn, DBusMessage *msg,
 
 	dbus_message_iter_get_basic(&iter, &passwd);
 
-	if (!is_valid_pin(passwd, PIN_TYPE_PIN))
+	if (!__ofono_is_valid_sim_pin(passwd, OFONO_SIM_PASSWORD_SIM_PIN2))
 		return __ofono_error_invalid_format(msg);
 
 	for (property = cm_properties; property->name; property++) {
@@ -570,7 +585,7 @@ static void reset_acm_query_callback(const struct ofono_error *error, int value,
 	struct ofono_call_meter *cm = data;
 	DBusMessage *reply;
 
-	if (!cm->pending)
+	if (cm->pending == NULL)
 		return;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
@@ -597,6 +612,7 @@ static void acm_reset_callback(const struct ofono_error *error, void *data)
 		DBG("reseting acm failed");
 		__ofono_dbus_pending_reply(&cm->pending,
 					__ofono_error_failed(cm->pending));
+		check_pin2_state(cm);
 		return;
 	}
 
@@ -610,7 +626,7 @@ static DBusMessage *cm_acm_reset(DBusConnection *conn, DBusMessage *msg,
 	struct ofono_call_meter *cm = data;
 	const char *pin2;
 
-	if (!cm->driver->acm_reset)
+	if (cm->driver->acm_reset == NULL)
 		return __ofono_error_not_implemented(msg);
 
 	if (cm->pending)
@@ -620,7 +636,7 @@ static DBusMessage *cm_acm_reset(DBusConnection *conn, DBusMessage *msg,
 					DBUS_TYPE_INVALID) == FALSE)
 		return __ofono_error_invalid_args(msg);
 
-	if (!is_valid_pin(pin2, PIN_TYPE_PIN))
+	if (!__ofono_is_valid_sim_pin(pin2, OFONO_SIM_PASSWORD_SIM_PIN2))
 		return __ofono_error_invalid_format(msg);
 
 	cm->pending = dbus_message_ref(msg);

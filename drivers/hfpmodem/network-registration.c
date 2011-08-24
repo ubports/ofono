@@ -30,16 +30,17 @@
 #include <stdio.h>
 
 #include <glib.h>
+#include <gatchat.h>
+#include <gatresult.h>
 
 #include <ofono/log.h>
 #include <ofono/modem.h>
 #include <ofono/netreg.h>
 
-#include "gatchat.h"
-#include "gatresult.h"
 #include "common.h"
 
 #include "hfpmodem.h"
+#include "slc.h"
 
 #define HFP_MAX_OPERATOR_NAME_LENGTH 16
 
@@ -129,10 +130,14 @@ static void ciev_notify(GAtResult *result, gpointer user_data)
 	} else if (index == nd->cind_pos[HFP_INDICATOR_ROAM]) {
 		nd->cind_val[HFP_INDICATOR_ROAM] = value;
 
-		if (value) {
+		if (value)
 			status = NETWORK_REGISTRATION_STATUS_ROAMING;
-			ofono_netreg_status_notify(netreg, status, -1, -1, -1);
-		}
+		else if (nd->cind_val[HFP_INDICATOR_SERVICE])
+			status = NETWORK_REGISTRATION_STATUS_REGISTERED;
+		else
+			status = NETWORK_REGISTRATION_STATUS_NOT_REGISTERED;
+
+		ofono_netreg_status_notify(netreg, status, -1, -1, -1);
 	} else if (index == nd->cind_pos[HFP_INDICATOR_SIGNAL]) {
 		nd->cind_val[HFP_INDICATOR_SIGNAL] = value;
 		ofono_netreg_strength_notify(netreg, value * 20);
@@ -236,9 +241,6 @@ static void hfp_registration_status(struct ofono_netreg *netreg,
 	struct cb_data *cbd = cb_data_new(cb, data);
 	gboolean ok;
 
-	if (!cbd)
-		goto error;
-
 	cbd->user = netreg;
 
 	ok = g_at_chat_send(nd->chat, "AT+CIND?", cind_prefix,
@@ -246,7 +248,6 @@ static void hfp_registration_status(struct ofono_netreg *netreg,
 	if (ok)
 		return;
 
-error:
 	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, -1, -1, -1, -1, data);
@@ -258,9 +259,6 @@ static void hfp_current_operator(struct ofono_netreg *netreg,
 	struct netreg_data *nd = ofono_netreg_get_data(netreg);
 	struct cb_data *cbd = cb_data_new(cb, data);
 	gboolean ok;
-
-	if (!cbd)
-		goto error;
 
 	cbd->user = netreg;
 
@@ -274,7 +272,8 @@ static void hfp_current_operator(struct ofono_netreg *netreg,
 	if (ok)
 		return;
 
-error:
+	g_free(cbd);
+
 	CALLBACK_WITH_FAILURE(cb, NULL, data);
 }
 
@@ -284,16 +283,12 @@ static void hfp_signal_strength(struct ofono_netreg *netreg,
 	struct netreg_data *nd = ofono_netreg_get_data(netreg);
 	struct cb_data *cbd = cb_data_new(cb, data);
 
-	if (!cbd)
-		goto error;
-
 	cbd->user = netreg;
 
 	if (g_at_chat_send(nd->chat, "AT+CIND?", cind_prefix,
 				signal_strength_cb, cbd, g_free) > 0)
 		return;
 
-error:
 	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, -1, data);
@@ -311,14 +306,14 @@ static gboolean hfp_netreg_register(gpointer user_data)
 static int hfp_netreg_probe(struct ofono_netreg *netreg, unsigned int vendor,
 				void *user_data)
 {
-	struct hfp_data *data = user_data;
+	struct hfp_slc_info *info = user_data;
 	struct netreg_data *nd;
 
 	nd = g_new0(struct netreg_data, 1);
 
-	nd->chat = data->chat;
-	memcpy(nd->cind_pos, data->cind_pos, HFP_INDICATOR_LAST);
-	memcpy(nd->cind_val, data->cind_val, HFP_INDICATOR_LAST);
+	nd->chat = g_at_chat_clone(info->chat);
+	memcpy(nd->cind_pos, info->cind_pos, HFP_INDICATOR_LAST);
+	memcpy(nd->cind_val, info->cind_val, HFP_INDICATOR_LAST);
 
 	ofono_netreg_set_data(netreg, nd);
 
@@ -348,12 +343,12 @@ static struct ofono_netreg_driver driver = {
 	.strength			= hfp_signal_strength,
 };
 
-void hfp_netreg_init()
+void hfp_netreg_init(void)
 {
 	ofono_netreg_driver_register(&driver);
 }
 
-void hfp_netreg_exit()
+void hfp_netreg_exit(void)
 {
 	ofono_netreg_driver_unregister(&driver);
 }

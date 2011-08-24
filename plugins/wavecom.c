@@ -44,7 +44,6 @@
 #include <ofono/phonebook.h>
 #include <ofono/sim.h>
 #include <ofono/sms.h>
-#include <ofono/ssn.h>
 #include <ofono/ussd.h>
 #include <ofono/voicecall.h>
 
@@ -78,12 +77,12 @@ static int wavecom_enable(struct ofono_modem *modem)
 	DBG("%p", modem);
 
 	device = ofono_modem_get_string(modem, "Device");
-	if (!device)
+	if (device == NULL)
 		return -EINVAL;
 
 	options = g_hash_table_new(g_str_hash, g_str_equal);
 
-	if (!options)
+	if (options == NULL)
 		return -ENOMEM;
 
 	g_hash_table_insert(options, "Baud", "115200");
@@ -95,7 +94,7 @@ static int wavecom_enable(struct ofono_modem *modem)
 
 	g_hash_table_destroy(options);
 
-	if (!channel)
+	if (channel == NULL)
 		return -EIO;
 
 	/*
@@ -108,7 +107,7 @@ static int wavecom_enable(struct ofono_modem *modem)
 	g_at_syntax_unref(syntax);
 	g_io_channel_unref(channel);
 
-	if (!chat)
+	if (chat == NULL)
 		return -ENOMEM;
 
 	if (getenv("OFONO_AT_DEBUG"))
@@ -156,7 +155,6 @@ static void wavecom_post_sim(struct ofono_modem *modem)
 	ofono_netreg_create(modem, 0, "atmodem", chat);
 	ofono_call_meter_create(modem, 0, "atmodem", chat);
 	ofono_call_barring_create(modem, 0, "atmodem", chat);
-	ofono_ssn_create(modem, 0, "atmodem", chat);
 	ofono_sms_create(modem, 0, "atmodem", chat);
 	ofono_phonebook_create(modem, 0, "atmodem", chat);
 

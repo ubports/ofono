@@ -81,10 +81,10 @@ const char *g_at_result_iter_raw_line(GAtResultIter *iter)
 {
 	const char *line;
 
-	if (!iter)
+	if (iter == NULL)
 		return NULL;
 
-	if (!iter->l)
+	if (iter->l == NULL)
 		return NULL;
 
 	line = iter->l->data;
@@ -113,10 +113,10 @@ gboolean g_at_result_iter_next_unquoted_string(GAtResultIter *iter,
 	unsigned int len;
 	char *line;
 
-	if (!iter)
+	if (iter == NULL)
 		return FALSE;
 
-	if (!iter->l)
+	if (iter->l == NULL)
 		return FALSE;
 
 	line = iter->l->data;
@@ -157,10 +157,10 @@ gboolean g_at_result_iter_next_string(GAtResultIter *iter, const char **str)
 	unsigned int len;
 	char *line;
 
-	if (!iter)
+	if (iter == NULL)
 		return FALSE;
 
-	if (!iter->l)
+	if (iter->l == NULL)
 		return FALSE;
 
 	line = iter->l->data;
@@ -209,10 +209,10 @@ gboolean g_at_result_iter_next_hexstring(GAtResultIter *iter,
 	char *line;
 	char *bufpos;
 
-	if (!iter)
+	if (iter == NULL)
 		return FALSE;
 
-	if (!iter->l)
+	if (iter->l == NULL)
 		return FALSE;
 
 	line = iter->l->data;
@@ -264,10 +264,10 @@ gboolean g_at_result_iter_next_number(GAtResultIter *iter, gint *number)
 	int value = 0;
 	char *line;
 
-	if (!iter)
+	if (iter == NULL)
 		return FALSE;
 
-	if (!iter->l)
+	if (iter->l == NULL)
 		return FALSE;
 
 	line = iter->l->data;
@@ -292,6 +292,36 @@ gboolean g_at_result_iter_next_number(GAtResultIter *iter, gint *number)
 	return TRUE;
 }
 
+gboolean g_at_result_iter_next_number_default(GAtResultIter *iter, gint dflt,
+						gint *number)
+{
+	unsigned int pos;
+	int len;
+	char *line;
+
+	if (iter == NULL)
+		return FALSE;
+
+	if (iter->l == NULL)
+		return FALSE;
+
+	line = iter->l->data;
+	len = strlen(line);
+
+	pos = skip_to_next_field(line, iter->line_pos, len);
+
+	if (pos != iter->line_pos) {
+		iter->line_pos = pos;
+
+		if (number)
+			*number = dflt;
+
+		return TRUE;
+	}
+
+	return g_at_result_iter_next_number(iter, number);
+}
+
 gboolean g_at_result_iter_next_range(GAtResultIter *iter, gint *min, gint *max)
 {
 	int pos;
@@ -301,10 +331,10 @@ gboolean g_at_result_iter_next_range(GAtResultIter *iter, gint *min, gint *max)
 	int high = 0;
 	char *line;
 
-	if (!iter)
+	if (iter == NULL)
 		return FALSE;
 
-	if (!iter->l)
+	if (iter->l == NULL)
 		return FALSE;
 
 	line = iter->l->data;
@@ -391,10 +421,10 @@ gboolean g_at_result_iter_skip_next(GAtResultIter *iter)
 	unsigned int skipped_to;
 	char *line;
 
-	if (!iter)
+	if (iter == NULL)
 		return FALSE;
 
-	if (!iter->l)
+	if (iter->l == NULL)
 		return FALSE;
 
 	line = iter->l->data;
@@ -414,10 +444,10 @@ gboolean g_at_result_iter_open_list(GAtResultIter *iter)
 	char *line;
 	unsigned int len;
 
-	if (!iter)
+	if (iter == NULL)
 		return FALSE;
 
-	if (!iter->l)
+	if (iter->l == NULL)
 		return FALSE;
 
 	line = iter->l->data;
@@ -443,10 +473,10 @@ gboolean g_at_result_iter_close_list(GAtResultIter *iter)
 	char *line;
 	unsigned int len;
 
-	if (!iter)
+	if (iter == NULL)
 		return FALSE;
 
-	if (!iter->l)
+	if (iter->l == NULL)
 		return FALSE;
 
 	line = iter->l->data;
@@ -467,7 +497,7 @@ gboolean g_at_result_iter_close_list(GAtResultIter *iter)
 
 const char *g_at_result_final_response(GAtResult *result)
 {
-	if (!result)
+	if (result == NULL)
 		return NULL;
 
 	return result->final_or_pdu;
@@ -475,7 +505,7 @@ const char *g_at_result_final_response(GAtResult *result)
 
 const char *g_at_result_pdu(GAtResult *result)
 {
-	if (!result)
+	if (result == NULL)
 		return NULL;
 
 	return result->final_or_pdu;
@@ -483,10 +513,10 @@ const char *g_at_result_pdu(GAtResult *result)
 
 gint g_at_result_num_response_lines(GAtResult *result)
 {
-	if (!result)
+	if (result == NULL)
 		return 0;
 
-	if (!result->lines)
+	if (result->lines == NULL)
 		return 0;
 
 	return g_slist_length(result->lines);

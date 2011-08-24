@@ -183,7 +183,6 @@ static gboolean received_data(GIOChannel *channel, GIOCondition cond,
 {
 	GAtMux *mux = data;
 	int i;
-	GError *error = NULL;
 	GIOStatus status;
 	gsize bytes_read;
 
@@ -195,7 +194,7 @@ static gboolean received_data(GIOChannel *channel, GIOCondition cond,
 	bytes_read = 0;
 	status = g_io_channel_read_chars(mux->channel, mux->buf + mux->buf_used,
 					sizeof(mux->buf) - mux->buf_used,
-					&bytes_read, &error);
+					&bytes_read, NULL);
 
 	mux->buf_used += bytes_read;
 
@@ -308,12 +307,11 @@ static void wakeup_writer(GAtMux *mux)
 
 int g_at_mux_raw_write(GAtMux *mux, const void *data, int towrite)
 {
-	GError *error = NULL;
 	gssize count = towrite;
 	gsize bytes_written;
 
 	g_io_channel_write_chars(mux->channel, (gchar *) data,
-					count, &bytes_written, &error);
+					count, &bytes_written, NULL);
 
 	return bytes_written;
 }
@@ -414,7 +412,7 @@ static gboolean watch_dispatch(GSource *source, GSourceFunc callback,
 	GAtMuxWatch *watch = (GAtMuxWatch *) source;
 	GAtMuxChannel *channel = (GAtMuxChannel *) watch->channel;
 
-	if (!func)
+	if (func == NULL)
 		return FALSE;
 
 	return func(watch->channel, channel->condition & watch->condition,
@@ -554,11 +552,11 @@ GAtMux *g_at_mux_new(GIOChannel *channel, const GAtMuxDriver *driver)
 {
 	GAtMux *mux;
 
-	if (!channel)
+	if (channel == NULL)
 		return NULL;
 
 	mux = g_try_new0(GAtMux, 1);
-	if (!mux)
+	if (mux == NULL)
 		return NULL;
 
 	mux->ref_count = 1;
@@ -699,6 +697,10 @@ GIOChannel *g_at_mux_create_channel(GAtMux *mux)
 	channel->funcs = &channel_funcs;
 
 	channel->is_seekable = FALSE;
+	channel->is_readable = TRUE;
+	channel->is_writeable = TRUE;
+
+	channel->do_encode = FALSE;
 
 	mux_channel->mux = mux;
 	mux_channel->dlc = i+1;

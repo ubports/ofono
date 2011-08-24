@@ -40,6 +40,7 @@
 
 #define PUSH_NOTIFICATION_INTERFACE "org.ofono.PushNotification"
 #define AGENT_INTERFACE "org.ofono.PushNotificationAgent"
+
 #define WAP_PUSH_SRC_PORT 9200
 #define WAP_PUSH_DST_PORT 2948
 
@@ -49,16 +50,21 @@ struct push_notification {
 	struct ofono_modem *modem;
 	struct ofono_sms *sms;
 	struct sms_agent *agent;
-	unsigned int push_watch;
+	unsigned int push_watch[2];
 };
 
 static void agent_exited(void *userdata)
 {
 	struct push_notification *pn = userdata;
 
-	if (pn->push_watch > 0) {
-		__ofono_sms_datagram_watch_remove(pn->sms, pn->push_watch);
-		pn->push_watch = 0;
+	if (pn->push_watch[0] > 0) {
+		__ofono_sms_datagram_watch_remove(pn->sms, pn->push_watch[0]);
+		pn->push_watch[0] = 0;
+	}
+
+	if (pn->push_watch[1] > 0) {
+		__ofono_sms_datagram_watch_remove(pn->sms, pn->push_watch[1]);
+		pn->push_watch[1] = 0;
 	}
 
 	pn->agent = NULL;
@@ -107,10 +113,16 @@ static DBusMessage *push_notification_register_agent(DBusConnection *conn,
 
 	sms_agent_set_removed_notify(pn->agent, agent_exited, pn);
 
-	pn->push_watch = __ofono_sms_datagram_watch_add(pn->sms, push_received,
+	pn->push_watch[0] = __ofono_sms_datagram_watch_add(pn->sms,
+							push_received,
 							WAP_PUSH_DST_PORT,
 							WAP_PUSH_SRC_PORT,
 							pn, NULL);
+
+	pn->push_watch[1] = __ofono_sms_datagram_watch_add(pn->sms,
+							push_received,
+							WAP_PUSH_DST_PORT,
+							0, pn, NULL);
 
 	return dbus_message_new_method_return(msg);
 }
@@ -134,6 +146,7 @@ static DBusMessage *push_notification_unregister_agent(DBusConnection *conn,
 		return __ofono_error_failed(msg);
 
 	sms_agent_free(pn->agent);
+	pn->agent = NULL;
 
 	return dbus_message_new_method_return(msg);
 }
@@ -151,7 +164,8 @@ static void push_notification_cleanup(gpointer user)
 	DBG("%p", pn);
 
 	/* The push watch was already cleaned up */
-	pn->push_watch = 0;
+	pn->push_watch[0] = 0;
+	pn->push_watch[1] = 0;
 	pn->sms = NULL;
 
 	sms_agent_free(pn->agent);
@@ -211,7 +225,7 @@ static void call_modemwatch(struct ofono_modem *modem, void *user)
 	modem_watch(modem, TRUE, user);
 }
 
-static int push_notification_init()
+static int push_notification_init(void)
 {
 	DBG("");
 
@@ -222,7 +236,7 @@ static int push_notification_init()
 	return 0;
 }
 
-static void push_notification_exit()
+static void push_notification_exit(void)
 {
 	DBG("");
 

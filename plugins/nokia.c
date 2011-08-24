@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#include <stdio.h>
 #include <errno.h>
 #include <stdlib.h>
 
@@ -51,8 +50,6 @@ static const char *none_prefix[] = { NULL };
 struct nokia_data {
 	GAtChat *modem;
 	GAtChat *control;
-	struct ofono_gprs *gprs;
-	struct ofono_gprs_context *gc;
 };
 
 static int nokia_probe(struct ofono_modem *modem)
@@ -62,7 +59,7 @@ static int nokia_probe(struct ofono_modem *modem)
 	DBG("%p", modem);
 
 	data = g_try_new0(struct nokia_data, 1);
-	if (!data)
+	if (data == NULL)
 		return -ENOMEM;
 
 	ofono_modem_set_data(modem, data);
@@ -77,9 +74,6 @@ static void nokia_remove(struct ofono_modem *modem)
 	DBG("%p", modem);
 
 	ofono_modem_set_data(modem, NULL);
-
-	g_at_chat_unref(data->modem);
-	g_at_chat_unref(data->control);
 
 	g_free(data);
 }
@@ -106,15 +100,16 @@ static GAtChat *open_device(struct ofono_modem *modem,
 	DBG("%s %s", key, device);
 
 	channel = g_at_tty_open(device, NULL);
-	if (!channel)
+	if (channel == NULL)
 		return NULL;
 
 	syntax = g_at_syntax_new_gsm_permissive();
 	chat = g_at_chat_new(channel, syntax);
 	g_at_syntax_unref(syntax);
+
 	g_io_channel_unref(channel);
 
-	if (!chat)
+	if (chat == NULL)
 		return NULL;
 
 	if (getenv("OFONO_AT_DEBUG"))
@@ -123,39 +118,20 @@ static GAtChat *open_device(struct ofono_modem *modem,
 	return chat;
 }
 
-static void nokia_disconnect(gpointer user_data)
+static void cfun_enable(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_modem *modem = user_data;
 	struct nokia_data *data = ofono_modem_get_data(modem);
 
 	DBG("");
 
-	if (data->gc)
-		ofono_gprs_context_remove(data->gc);
+	if (!ok) {
+		g_at_chat_unref(data->modem);
+		data->modem = NULL;
 
-	g_at_chat_unref(data->modem);
-	data->modem = NULL;
-
-	data->modem = open_device(modem, "Modem", "Modem: ");
-	if (!data->modem)
-		return;
-
-	g_at_chat_set_disconnect_function(data->modem,
-						nokia_disconnect, modem);
-
-	ofono_info("Reopened GPRS context channel");
-
-	data->gc = ofono_gprs_context_create(modem, 0, "atmodem", data->modem);
-
-	if (data->gprs && data->gc)
-		ofono_gprs_add_context(data->gprs, data->gc);
-}
-
-static void cfun_enable(gboolean ok, GAtResult *result, gpointer user_data)
-{
-	struct ofono_modem *modem = user_data;
-
-	DBG("");
+		g_at_chat_unref(data->control);
+		data->control = NULL;
+	}
 
 	ofono_modem_set_powered(modem, ok);
 }
@@ -170,9 +146,6 @@ static int nokia_enable(struct ofono_modem *modem)
 	if (data->modem == NULL)
 		return -EINVAL;
 
-	g_at_chat_set_disconnect_function(data->modem,
-						nokia_disconnect, modem);
-
 	data->control = open_device(modem, "Control", "Control: ");
 	if (data->control == NULL) {
 		g_at_chat_unref(data->modem);
@@ -180,7 +153,10 @@ static int nokia_enable(struct ofono_modem *modem)
 		return -EIO;
 	}
 
-	g_at_chat_send(data->control, "ATE0 +CMEE=1", none_prefix,
+	g_at_chat_send(data->modem, "ATE0 &C0 +CMEE=1", NULL,
+						NULL, NULL, NULL);
+
+	g_at_chat_send(data->control, "ATE0 &C0 +CMEE=1", NULL,
 						NULL, NULL, NULL);
 
 	g_at_chat_send(data->control, "AT+CFUN=1", none_prefix,
@@ -209,18 +185,15 @@ static int nokia_disable(struct ofono_modem *modem)
 
 	DBG("%p", modem);
 
-	if (data->modem) {
-		g_at_chat_cancel_all(data->modem);
-		g_at_chat_unregister_all(data->modem);
-		g_at_chat_unref(data->modem);
-		data->modem = NULL;
-	}
+	g_at_chat_cancel_all(data->modem);
+	g_at_chat_unregister_all(data->modem);
 
-	if (!data->control)
-		return 0;
+	g_at_chat_unref(data->modem);
+	data->modem = NULL;
 
 	g_at_chat_cancel_all(data->control);
 	g_at_chat_unregister_all(data->control);
+
 	g_at_chat_send(data->control, "AT+CFUN=4", none_prefix,
 					cfun_disable, modem, NULL);
 
@@ -244,6 +217,8 @@ static void nokia_pre_sim(struct ofono_modem *modem)
 static void nokia_post_sim(struct ofono_modem *modem)
 {
 	struct nokia_data *data = ofono_modem_get_data(modem);
+	struct ofono_gprs *gprs;
+	struct ofono_gprs_context *gc;
 
 	DBG("%p", modem);
 
@@ -256,13 +231,12 @@ static void nokia_post_sim(struct ofono_modem *modem)
 					"atmodem", data->control);
 	ofono_phonebook_create(modem, 0, "atmodem", data->control);
 
-	data->gprs = ofono_gprs_create(modem, OFONO_VENDOR_NOKIA,
+	gprs = ofono_gprs_create(modem, OFONO_VENDOR_NOKIA,
 					"atmodem", data->control);
+	gc = ofono_gprs_context_create(modem, 0, "atmodem", data->modem);
 
-	data->gc = ofono_gprs_context_create(modem, 0, "atmodem", data->modem);
-
-	if (data->gprs && data->gc)
-		ofono_gprs_add_context(data->gprs, data->gc);
+	if (gprs && gc)
+		ofono_gprs_add_context(gprs, gc);
 }
 
 static struct ofono_modem_driver nokia_driver = {

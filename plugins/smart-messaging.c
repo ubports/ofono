@@ -165,6 +165,7 @@ static DBusMessage *smart_messaging_unregister_agent(DBusConnection *conn,
 		return __ofono_error_failed(msg);
 
 	sms_agent_free(sm->agent);
+	sm->agent = NULL;
 
 	return dbus_message_new_method_return(msg);
 }
@@ -207,7 +208,7 @@ static DBusMessage *smart_messaging_send_vcard(DBusConnection *conn,
 	msg_list = sms_datagram_prepare(to, bytes, len, ref, use_16bit_ref,
 						0, VCARD_DST_PORT, TRUE, FALSE);
 
-	if (!msg_list)
+	if (msg_list == NULL)
 		return __ofono_error_invalid_format(msg);
 
 	flags = OFONO_SMS_SUBMIT_FLAG_RETRY | OFONO_SMS_SUBMIT_FLAG_EXPOSE_DBUS;
@@ -250,7 +251,7 @@ static DBusMessage *smart_messaging_send_vcal(DBusConnection *conn,
 	msg_list = sms_datagram_prepare(to, bytes, len, ref, use_16bit_ref,
 						0, VCAL_DST_PORT, TRUE, FALSE);
 
-	if (!msg_list)
+	if (msg_list == NULL)
 		return __ofono_error_invalid_format(msg);
 
 	flags = OFONO_SMS_SUBMIT_FLAG_RETRY | OFONO_SMS_SUBMIT_FLAG_EXPOSE_DBUS;
@@ -345,7 +346,7 @@ static void call_modemwatch(struct ofono_modem *modem, void *user)
 	modem_watch(modem, TRUE, user);
 }
 
-static int smart_messaging_init()
+static int smart_messaging_init(void)
 {
 	DBG("");
 
@@ -356,7 +357,7 @@ static int smart_messaging_init()
 	return 0;
 }
 
-static void smart_messaging_exit()
+static void smart_messaging_exit(void)
 {
 	DBG("");
 

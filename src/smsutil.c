@@ -48,8 +48,19 @@
 #define SMS_SR_BACKUP_PATH STORAGEDIR "/%s/sms_sr"
 #define SMS_SR_BACKUP_PATH_FILE SMS_SR_BACKUP_PATH "/%s-%s"
 
+#define SMS_TX_BACKUP_PATH STORAGEDIR "/%s/tx_queue"
+#define SMS_TX_BACKUP_PATH_DIR SMS_TX_BACKUP_PATH "/%lu-%lu-%s"
+#define SMS_TX_BACKUP_PATH_FILE SMS_TX_BACKUP_PATH_DIR "/%03i"
+
 #define SMS_ADDR_FMT "%24[0-9A-F]"
 #define SMS_MSGID_FMT "%40[0-9A-F]"
+
+/*
+ * Time zone accounts for daylight saving time, and the two extreme time
+ * zones on earth are UTC-12 and UTC+14.
+ */
+#define MAX_TIMEZONE 56
+#define MIN_TIMEZONE -48
 
 static GSList *sms_assembly_add_fragment_backup(struct sms_assembly *assembly,
 					const struct sms *sms, time_t ts,
@@ -219,7 +230,12 @@ gboolean sms_mwi_dcs_decode(guint8 dcs, enum sms_mwi_type *type,
 	else
 		dis = FALSE;
 
-	if (upper == 3)
+	/*
+	 * As per 3GPP TS 23.038 specification, if bits 7..4 set to 1110,
+	 * text included in the user data is coded in the uncompresssed
+	 * UCS2 character set.
+	 */
+	if (upper == 2)
 		ch = SMS_CHARSET_UCS2;
 	else
 		ch = SMS_CHARSET_7BIT;
@@ -339,7 +355,8 @@ gboolean sms_encode_scts(const struct sms_scts *in, unsigned char *pdu,
 	if (in->second > 59)
 		return FALSE;
 
-	if ((in->timezone > 12*4-1) || (in->timezone < -(12*4-1)))
+	if ((in->timezone > MAX_TIMEZONE || in->timezone < MIN_TIMEZONE) &&
+			in->has_timezone == TRUE)
 		return FALSE;
 
 	pdu = pdu + *offset;
@@ -351,6 +368,11 @@ gboolean sms_encode_scts(const struct sms_scts *in, unsigned char *pdu,
 	pdu[4] = ((in->minute / 10) & 0x0f) | (((in->minute % 10) & 0x0f) << 4);
 	pdu[5] = ((in->second / 10) & 0x0f) | (((in->second % 10) & 0x0f) << 4);
 
+	if (in->has_timezone == FALSE) {
+		pdu[6] = 0xff;
+		goto out;
+	}
+
 	timezone = abs(in->timezone);
 
 	pdu[6] = ((timezone / 10) & 0x07) | (((timezone % 10) & 0x0f) << 4);
@@ -358,6 +380,7 @@ gboolean sms_encode_scts(const struct sms_scts *in, unsigned char *pdu,
 	if (in->timezone < 0)
 		pdu[6] |= 0x8;
 
+out:
 	*offset += 7;
 
 	return TRUE;
@@ -426,8 +449,10 @@ gboolean sms_decode_scts(const unsigned char *pdu, int len,
 	if (oct & 0x08)
 		out->timezone = out->timezone * -1;
 
-	if ((out->timezone > 12*4-1) || (out->timezone < -(12*4-1)))
+	if ((out->timezone > MAX_TIMEZONE) || (out->timezone < MIN_TIMEZONE))
 		return FALSE;
+
+	out->has_timezone = TRUE;
 
 	return TRUE;
 }
@@ -525,8 +550,7 @@ gboolean sms_encode_address_field(const struct sms_address *in, gboolean sc,
 			return FALSE;
 
 		gsm = convert_utf8_to_gsm(in->address, len, NULL, &written, 0);
-
-		if (!gsm)
+		if (gsm == NULL)
 			return FALSE;
 
 		r = pack_7bit_own_buf(gsm, written, 0, FALSE, &packed, 0, p);
@@ -641,14 +665,14 @@ gboolean sms_decode_address_field(const unsigned char *pdu, int len,
 
 		*offset = *offset + (addr_len + 1) / 2;
 
-		if (!res)
+		if (res == NULL)
 			return FALSE;
 
 		utf8 = convert_gsm_to_utf8(res, written, NULL, NULL, 0);
 
 		g_free(res);
 
-		if (!utf8)
+		if (utf8 == NULL)
 			return FALSE;
 
 		if (strlen(utf8) > 20) {
@@ -1025,8 +1049,6 @@ static gboolean decode_status_report(const unsigned char *pdu, int len,
 	if (out->status_report.pi & 0x02) {
 		if (!next_octet(pdu, len, &offset, &out->status_report.dcs))
 			return FALSE;
-	} else {
-		out->status_report.dcs = 0;
 	}
 
 	if (out->status_report.pi & 0x04) {
@@ -1504,11 +1526,13 @@ gboolean sms_decode(const unsigned char *pdu, int len, gboolean outgoing,
 	unsigned char type;
 	int offset = 0;
 
-	if (!out)
+	if (out == NULL)
 		return FALSE;
 
 	if (len == 0)
 		return FALSE;
+
+	memset(out, 0, sizeof(*out));
 
 	if (tpdu_len < len) {
 		if (!sms_decode_address_field(pdu, len, &offset,
@@ -1617,7 +1641,7 @@ const guint8 *sms_extract_common(const struct sms *sms, gboolean *out_udhi,
 		break;
 	};
 
-	if (!ud)
+	if (ud == NULL)
 		return NULL;
 
 	if (out_udhi)
@@ -1682,8 +1706,7 @@ gboolean sms_udh_iter_init(const struct sms *sms, struct sms_udh_iter *iter)
 	guint8 max_ud_len;
 
 	hdr = sms_extract_common(sms, &udhi, &dcs, &udl, &max_ud_len);
-
-	if (!hdr)
+	if (hdr == NULL)
 		return FALSE;
 
 	if (!udhi)
@@ -2122,8 +2145,7 @@ unsigned char *sms_decode_datagram(GSList *sms_list, long *out_len)
 		sms = l->data;
 
 		ud = sms_extract_common(sms, NULL, NULL, &udl, NULL);
-
-		if (!ud)
+		if (ud == NULL)
 			return NULL;
 
 		/*
@@ -2141,8 +2163,7 @@ unsigned char *sms_decode_datagram(GSList *sms_list, long *out_len)
 		return NULL;
 
 	buf = g_try_new(unsigned char, len);
-
-	if (!buf)
+	if (buf == NULL)
 		return NULL;
 
 	len = 0;
@@ -2243,16 +2264,17 @@ char *sms_decode_text(GSList *sms_list)
 			if (buf[written-1] == 0x1b)
 				written = written - 1;
 
-			sms_extract_language_variant(sms, &locking_shift, &single_shift);
+			sms_extract_language_variant(sms, &locking_shift,
+								&single_shift);
 
 			/*
 			 * If language is not defined in 3GPP TS 23.038,
 			 * implementations are instructed to ignore it
 			 */
-			if (locking_shift >= GSM_DIALECT_INVALID)
+			if (locking_shift > SMS_ALPHABET_PORTUGUESE)
 				locking_shift = GSM_DIALECT_DEFAULT;
 
-			if (single_shift >= GSM_DIALECT_INVALID)
+			if (single_shift > SMS_ALPHABET_PORTUGUESE)
 				single_shift = GSM_DIALECT_DEFAULT;
 
 			converted = convert_gsm_to_utf8_with_lang(buf, written,
@@ -2303,6 +2325,15 @@ static gboolean sms_deserialize(const unsigned char *buf,
 		return FALSE;
 
 	return sms_decode(buf + 1, len - 1, FALSE, buf[0], sms);
+}
+
+static gboolean sms_deserialize_outgoing(const unsigned char *buf,
+		struct sms *sms, int len)
+{
+	if (len < 1)
+		return FALSE;
+
+	return sms_decode(buf + 1, len - 1, TRUE, buf[0], sms);
 }
 
 static gboolean sms_assembly_extract_address(const char *straddr,
@@ -2417,7 +2448,7 @@ static gboolean sms_assembly_store(struct sms_assembly *assembly,
 	int len;
 	DECLARE_SMS_ADDR_STR(straddr);
 
-	if (!assembly->imsi)
+	if (assembly->imsi == NULL)
 		return FALSE;
 
 	if (sms_address_to_hex_string(&node->addr, straddr) == FALSE)
@@ -2440,7 +2471,7 @@ static void sms_assembly_backup_free(struct sms_assembly *assembly,
 	int seq;
 	DECLARE_SMS_ADDR_STR(straddr);
 
-	if (!assembly->imsi)
+	if (assembly->imsi == NULL)
 		return;
 
 	if (sms_address_to_hex_string(&node->addr, straddr) == FALSE)
@@ -2695,6 +2726,7 @@ static void sr_assembly_load_backup(GHashTable *assembly_table,
 	unsigned int *id_table_key;
 	char msgid_str[SMS_MSGID_LEN * 2 + 1];
 	unsigned char msgid[SMS_MSGID_LEN];
+	char endc;
 
 	if (addr_dir->d_type != DT_REG)
 		return;
@@ -2706,8 +2738,8 @@ static void sr_assembly_load_backup(GHashTable *assembly_table,
 	 * Max of SMS address size is 12 bytes, hex encoded
 	 * Max of SMS SHA1 hash is 20 bytes, hex encoded
 	 */
-	if (sscanf(addr_dir->d_name, SMS_ADDR_FMT "-" SMS_MSGID_FMT,
-				straddr, msgid_str) < 2)
+	if (sscanf(addr_dir->d_name, SMS_ADDR_FMT "-" SMS_MSGID_FMT "%c",
+				straddr, msgid_str, &endc) != 2)
 		return;
 
 	if (sms_assembly_extract_address(straddr, &addr) == FALSE)
@@ -2800,7 +2832,7 @@ static gboolean sr_assembly_add_fragment_backup(const char *imsi,
 	DECLARE_SMS_ADDR_STR(straddr);
 	char msgid_str[SMS_MSGID_LEN * 2 + 1];
 
-	if (!imsi)
+	if (imsi == NULL)
 		return FALSE;
 
 	if (sms_address_to_hex_string(addr, straddr) == FALSE)
@@ -2826,7 +2858,7 @@ static gboolean sr_assembly_remove_fragment_backup(const char *imsi,
 	DECLARE_SMS_ADDR_STR(straddr);
 	char msgid_str[SMS_MSGID_LEN * 2 + 1];
 
-	if (!imsi)
+	if (imsi == NULL)
 		return FALSE;
 
 	if (sms_address_to_hex_string(addr, straddr) == FALSE)
@@ -3125,6 +3157,228 @@ void status_report_assembly_expire(struct status_report_assembly *assembly,
 	}
 }
 
+static int sms_tx_load_filter(const struct dirent *dent)
+{
+	char *endp;
+	guint8 seq __attribute__ ((unused));
+
+	if (dent->d_type != DT_REG)
+		return 0;
+
+	seq = strtol(dent->d_name, &endp, 10);
+	if (*endp != '\0')
+		return 0;
+
+	return 1;
+}
+
+/*
+ * Each directory contains a file per pdu.
+ */
+static GSList *sms_tx_load(const char *imsi, const struct dirent *dir)
+{
+	GSList *list = NULL;
+	struct dirent **pdus;
+	char *path;
+	int len, r;
+	unsigned char buf[177];
+	struct sms s;
+
+	if (dir->d_type != DT_DIR)
+		return NULL;
+
+	path = g_strdup_printf(SMS_TX_BACKUP_PATH "/%s", imsi, dir->d_name);
+	len = scandir(path, &pdus, sms_tx_load_filter, versionsort);
+	g_free(path);
+
+	if (len < 0)
+		return NULL;
+
+	while (len--) {
+		r = read_file(buf, sizeof(buf), SMS_TX_BACKUP_PATH "/%s/%s",
+					imsi, dir->d_name, pdus[len]->d_name);
+
+		if (r < 0)
+			goto free_pdu;
+
+		if (sms_deserialize_outgoing(buf, &s, r) == FALSE)
+			goto free_pdu;
+
+		list = g_slist_prepend(list, g_memdup(&s, sizeof(s)));
+
+free_pdu:
+		g_free(pdus[len]);
+	}
+
+	g_free(pdus);
+
+	return list;
+}
+
+static int sms_tx_queue_filter(const struct dirent *dirent)
+{
+	if (dirent->d_type != DT_DIR)
+		return 0;
+
+	if (!strcmp(dirent->d_name, ".") || !strcmp(dirent->d_name, ".."))
+		return 0;
+
+	return 1;
+}
+
+/*
+ * populate the queue with tx_backup_entry from stored backup
+ * data.
+ */
+GQueue *sms_tx_queue_load(const char *imsi)
+{
+	GQueue *retq = 0;
+	char *path;
+	struct dirent **entries;
+	int len;
+	int i;
+	unsigned long id;
+
+	if (imsi == NULL)
+		return NULL;
+
+	path = g_strdup_printf(SMS_TX_BACKUP_PATH, imsi);
+
+	len = scandir(path, &entries, sms_tx_queue_filter, versionsort);
+	if (len < 0)
+		goto nodir_exit;
+
+	retq = g_queue_new();
+
+	for (i = 0, id = 0; i < len; i++) {
+		char uuid[SMS_MSGID_LEN * 2 + 1];
+		GSList *msg_list;
+		unsigned long oldid;
+		unsigned long flags;
+		char *oldpath, *newpath;
+		struct txq_backup_entry *entry;
+		struct dirent *dir = entries[i];
+		char endc;
+
+		if (sscanf(dir->d_name, "%lu-%lu-" SMS_MSGID_FMT "%c",
+					&oldid, &flags, uuid, &endc) != 3)
+			continue;
+
+		if (strlen(uuid) !=  2 * SMS_MSGID_LEN)
+			continue;
+
+		msg_list = sms_tx_load(imsi, dir);
+		if (msg_list == NULL)
+			continue;
+
+		entry = g_new0(struct txq_backup_entry, 1);
+		entry->msg_list = msg_list;
+		entry->flags = flags;
+		decode_hex_own_buf(uuid, -1, NULL, 0, entry->uuid);
+
+		g_queue_push_tail(retq, entry);
+
+		/* Don't bother re-shuffling the ids if they are the same */
+		if (oldid == id) {
+			id++;
+			continue;
+		}
+
+		oldpath = g_strdup_printf("%s/%s", path, dir->d_name);
+		newpath = g_strdup_printf(SMS_TX_BACKUP_PATH_DIR,
+						imsi, id++, flags, uuid);
+
+		/* rename directory to reflect new position in queue */
+		rename(oldpath, newpath);
+
+		g_free(newpath);
+		g_free(oldpath);
+	}
+
+	for (i = 0; i < len; i++)
+		g_free(entries[i]);
+
+	g_free(entries);
+
+nodir_exit:
+	g_free(path);
+	return retq;
+}
+
+gboolean sms_tx_backup_store(const char *imsi, unsigned long id,
+				unsigned long flags, const char *uuid,
+				guint8 seq, const unsigned char *pdu,
+				int pdu_len, int tpdu_len)
+{
+	unsigned char buf[177];
+	int len;
+
+	if (!imsi)
+		return FALSE;
+
+	memcpy(buf + 1, pdu, pdu_len);
+	buf[0] = tpdu_len;
+	len = pdu_len + 1;
+
+	/*
+	 * file name is: imsi/tx_queue/order-flags-uuid/pdu
+	 */
+	if (write_file(buf, len, SMS_BACKUP_MODE, SMS_TX_BACKUP_PATH_FILE,
+					imsi, id, flags, uuid, seq) != len)
+		return FALSE;
+
+	return TRUE;
+}
+
+void sms_tx_backup_free(const char *imsi, unsigned long id,
+				unsigned long flags, const char *uuid)
+{
+	char *path;
+	struct dirent **entries;
+	int len;
+
+	path = g_strdup_printf(SMS_TX_BACKUP_PATH_DIR,
+					imsi, id, flags, uuid);
+
+	len = scandir(path, &entries, NULL, versionsort);
+
+	if (len < 0)
+		goto nodir_exit;
+
+	/* skip '..' and '.' entries */
+	while (len-- > 2) {
+		struct dirent *dir = entries[len];
+		char *file = g_strdup_printf("%s/%s", path, dir->d_name);
+
+		unlink(file);
+		g_free(file);
+
+		g_free(entries[len]);
+	}
+
+	g_free(entries[1]);
+	g_free(entries[0]);
+	g_free(entries);
+
+	rmdir(path);
+
+nodir_exit:
+	g_free(path);
+}
+
+void sms_tx_backup_remove(const char *imsi, unsigned long id,
+				unsigned long flags, const char *uuid,
+				guint8 seq)
+{
+	char *path;
+
+	path = g_strdup_printf(SMS_TX_BACKUP_PATH_FILE,
+					imsi, id, flags, uuid, seq);
+	unlink(path);
+
+	g_free(path);
+}
+
 static inline GSList *sms_list_append(GSList *l, const struct sms *in)
 {
 	struct sms *sms;
@@ -3271,9 +3525,10 @@ GSList *sms_datagram_prepare(const char *to,
  * @use_delivery_reports: value for the Status-Report-Request field
  *     (23.040 3.2.9, 9.2.2.2)
  */
-GSList *sms_text_prepare(const char *to, const char *utf8, guint16 ref,
-				gboolean use_16bit,
-				gboolean use_delivery_reports)
+GSList *sms_text_prepare_with_alphabet(const char *to, const char *utf8,
+					guint16 ref, gboolean use_16bit,
+					gboolean use_delivery_reports,
+					enum sms_alphabet alphabet)
 {
 	struct sms template;
 	int offset = 0;
@@ -3283,6 +3538,8 @@ GSList *sms_text_prepare(const char *to, const char *utf8, guint16 ref,
 	long left;
 	guint8 seq;
 	GSList *r = NULL;
+	enum gsm_dialect used_locking;
+	enum gsm_dialect used_single;
 
 	memset(&template, 0, sizeof(struct sms));
 	template.type = SMS_TYPE_SUBMIT;
@@ -3294,10 +3551,14 @@ GSList *sms_text_prepare(const char *to, const char *utf8, guint16 ref,
 	template.submit.vp.relative = 0xA7; /* 24 Hours */
 	sms_address_from_string(&template.submit.daddr, to);
 
-	/* UDHI, UDL, UD and DCS actually depend on what we have in the text */
-	gsm_encoded = convert_utf8_to_gsm(utf8, -1, NULL, &written, 0);
-
-	if (!gsm_encoded) {
+	/*
+	 * UDHI, UDL, UD and DCS actually depend on the contents of
+	 * the text, and also on the GSM dialect we use to encode it.
+	 */
+	gsm_encoded = convert_utf8_to_gsm_best_lang(utf8, -1, NULL, &written, 0,
+							alphabet, &used_locking,
+							&used_single);
+	if (gsm_encoded == NULL) {
 		gsize converted;
 
 		ucs2_encoded = g_convert(utf8, -1, "UCS-2BE//TRANSLIT", "UTF-8",
@@ -3305,16 +3566,38 @@ GSList *sms_text_prepare(const char *to, const char *utf8, guint16 ref,
 		written = converted;
 	}
 
-	if (!gsm_encoded && !ucs2_encoded)
+	if (gsm_encoded == NULL && ucs2_encoded == NULL)
 		return NULL;
 
-	if (gsm_encoded)
+	if (gsm_encoded != NULL)
 		template.submit.dcs = 0x00; /* Class Unspecified, 7 Bit */
 	else
 		template.submit.dcs = 0x08; /* Class Unspecified, UCS2 */
 
+	if (gsm_encoded != NULL && used_single != GSM_DIALECT_DEFAULT) {
+		if (!offset)
+			offset = 1;
+
+		template.submit.ud[0] += 3;
+		template.submit.ud[offset] = SMS_IEI_NATIONAL_LANGUAGE_SINGLE_SHIFT;
+		template.submit.ud[offset + 1] = 1;
+		template.submit.ud[offset + 2] = used_single;
+		offset += 3;
+	}
+
+	if (gsm_encoded != NULL && used_locking != GSM_DIALECT_DEFAULT) {
+		if (!offset)
+			offset = 1;
+
+		template.submit.ud[0] += 3;
+		template.submit.ud[offset] = SMS_IEI_NATIONAL_LANGUAGE_LOCKING_SHIFT;
+		template.submit.ud[offset + 1] = 1;
+		template.submit.ud[offset + 2] = used_locking;
+		offset += 3;
+	}
+
 	if (offset != 0)
-		template.submit.udhi = FALSE;
+		template.submit.udhi = TRUE;
 
 	if (gsm_encoded && (written <= sms_text_capacity_gsm(160, offset))) {
 		template.submit.udl = written + (offset * 8 + 6) / 7;
@@ -3424,6 +3707,15 @@ GSList *sms_text_prepare(const char *to, const char *utf8, guint16 ref,
 	r = g_slist_reverse(r);
 
 	return r;
+}
+
+GSList *sms_text_prepare(const char *to, const char *utf8, guint16 ref,
+				gboolean use_16bit,
+				gboolean use_delivery_reports)
+{
+	return sms_text_prepare_with_alphabet(to, utf8, ref, use_16bit,
+						use_delivery_reports,
+						SMS_ALPHABET_DEFAULT);
 }
 
 gboolean cbs_dcs_decode(guint8 dcs, gboolean *udhi, enum sms_class *cls,
@@ -3885,7 +4177,7 @@ static inline gboolean cbs_is_update_newer(unsigned int n, unsigned int o)
 	return FALSE;
 }
 
-struct cbs_assembly *cbs_assembly_new()
+struct cbs_assembly *cbs_assembly_new(void)
 {
 	return g_new0(struct cbs_assembly, 1);
 }
@@ -4370,7 +4662,7 @@ static gint cbs_topic_compare(gconstpointer a, gconstpointer b)
 
 gboolean cbs_topic_in_range(unsigned int topic, GSList *ranges)
 {
-	if (!ranges)
+	if (ranges == NULL)
 		return FALSE;
 
 	return g_slist_find_custom(ranges, GUINT_TO_POINTER(topic),
@@ -4427,11 +4719,11 @@ gboolean ussd_encode(const char *str, long *items_written, unsigned char *pdu)
 	long written;
 	long num_packed;
 
-	if (!pdu)
+	if (pdu == NULL)
 		return FALSE;
 
 	converted = convert_utf8_to_gsm(str, -1, NULL, &written, 0);
-	if (!converted || written > 182) {
+	if (converted == NULL || written > 182) {
 		g_free(converted);
 		return FALSE;
 	}

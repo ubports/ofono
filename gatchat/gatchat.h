@@ -39,6 +39,21 @@ typedef void (*GAtResultFunc)(gboolean success, GAtResult *result,
 				gpointer user_data);
 typedef void (*GAtNotifyFunc)(GAtResult *result, gpointer user_data);
 
+enum _GAtChatTerminator {
+	G_AT_CHAT_TERMINATOR_OK,
+	G_AT_CHAT_TERMINATOR_ERROR,
+	G_AT_CHAT_TERMINATOR_NO_DIALTONE,
+	G_AT_CHAT_TERMINATOR_BUSY,
+	G_AT_CHAT_TERMINATOR_NO_CARRIER,
+	G_AT_CHAT_TERMINATOR_CONNECT,
+	G_AT_CHAT_TERMINATOR_NO_ANSWER,
+	G_AT_CHAT_TERMINATOR_CMS_ERROR,
+	G_AT_CHAT_TERMINATOR_CME_ERROR,
+	G_AT_CHAT_TERMINATOR_EXT_ERROR,
+};
+
+typedef enum _GAtChatTerminator GAtChatTerminator;
+
 GAtChat *g_at_chat_new(GIOChannel *channel, GAtSyntax *syntax);
 GAtChat *g_at_chat_new_blocking(GIOChannel *channel, GAtSyntax *syntax);
 
@@ -124,6 +139,14 @@ guint g_at_chat_send_pdu_listing(GAtChat *chat, const char *cmd,
 				GAtNotifyFunc listing, GAtResultFunc func,
 				gpointer user_data, GDestroyNotify notify);
 
+/*!
+ * Same as g_at_chat_send except parser will know to expect short prompt syntax
+ * used with +CPOS.
+ */
+guint g_at_chat_send_and_expect_short_prompt(GAtChat *chat, const char *cmd,
+				const char **valid_resp, GAtResultFunc func,
+				gpointer user_data, GDestroyNotify notify);
+
 gboolean g_at_chat_cancel(GAtChat *chat, guint id);
 gboolean g_at_chat_cancel_all(GAtChat *chat);
 
@@ -139,6 +162,8 @@ gboolean g_at_chat_set_wakeup_command(GAtChat *chat, const char *cmd,
 
 void g_at_chat_add_terminator(GAtChat *chat, char *terminator,
 				int len, gboolean success);
+void g_at_chat_blacklist_terminator(GAtChat *chat,
+						GAtChatTerminator terminator);
 
 #ifdef __cplusplus
 }

@@ -153,7 +153,7 @@ static void at_stk_envelope(struct ofono_stk *stk, int length,
 	char *buf = g_try_new(char, 64 + length * 2);
 	int len, ret;
 
-	if (!cbd || !buf)
+	if (buf == NULL)
 		goto error;
 
 	len = sprintf(buf, "AT+CSIM=%i,A0C20000%02hhX",
@@ -236,7 +236,7 @@ static void at_stk_terminal_response(struct ofono_stk *stk, int length,
 	char *buf = g_try_new(char, 64 + length * 2);
 	int len, ret;
 
-	if (!cbd || !buf)
+	if (buf == NULL)
 		goto error;
 
 	len = sprintf(buf, "AT+CSIM=%i,A0140000%02hhX",
@@ -335,12 +335,12 @@ static struct ofono_stk_driver driver = {
 	.terminal_response	= at_stk_terminal_response,
 };
 
-void at_stk_init()
+void at_stk_init(void)
 {
 	ofono_stk_driver_register(&driver);
 }
 
-void at_stk_exit()
+void at_stk_exit(void)
 {
 	ofono_stk_driver_unregister(&driver);
 }

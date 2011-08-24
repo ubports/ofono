@@ -1,7 +1,7 @@
 AC_PREREQ(2.60)
-AC_INIT(ofono, 0.36)
+AC_INIT(ofono, 0.53)
 
-AM_INIT_AUTOMAKE([foreign subdir-objects])
+AM_INIT_AUTOMAKE([foreign subdir-objects color-tests])
 AM_CONFIG_HEADER(config.h)
 
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
@@ -61,7 +61,7 @@ AC_ARG_ENABLE(pie, AC_HELP_STRING([--enable-pie],
 AC_ARG_ENABLE(threads, AC_HELP_STRING([--enable-threads],
 		[enable threading support]), [enable_threads=${enableval}])
 
-AC_CHECK_LIB(c, signalfd, dummy=yes,
+AC_CHECK_FUNC(signalfd, dummy=yes,
 			AC_MSG_ERROR(signalfd support is required))
 
 AC_CHECK_LIB(dl, dlopen, dummy=yes,
@@ -82,6 +82,10 @@ fi
 
 PKG_CHECK_MODULES(DBUS, dbus-1 >= 1.0, dummy=yes,
 				AC_MSG_ERROR(D-Bus >= 1.0 is required))
+saved_CFLAGS="$CFLAGS"
+saved_LIBS="$LIBS"
+CFLAGS="$CFLAGS $DBUS_CFLAGS"
+LIBS="$LIBS $DBUS_LIBS"
 AC_CHECK_LIB(dbus-1, dbus_watch_get_unix_fd, dummy=yes,
 	AC_DEFINE(NEED_DBUS_WATCH_GET_UNIX_FD, 1,
 		[Define to 1 if you need the dbus_watch_get_unix_fd() function.]))
@@ -89,6 +93,8 @@ AC_CHECK_LIB(dbus-1, dbus_connection_can_send_type, dummy=yes,
 	AC_DEFINE(NEED_DBUS_CONNECTION_CAN_SEND_TYPE, 1,
 		[Define to 1 if you need the dbus_connection_can_send_type() function.]
 ))
+CFLAGS="$saved_CFLAGS"
+LIBS="$saved_LIBS"
 AC_SUBST(DBUS_CFLAGS)
 AC_SUBST(DBUS_LIBS)
 
@@ -112,18 +118,14 @@ else
 fi
 AC_SUBST(DBUS_DATADIR)
 
-AC_ARG_ENABLE(systemd, AC_HELP_STRING([--enable-systemd],
-		[enable systemd support]), [enable_systemd=${enableval}])
-if (test "${enable_systemd}" = "yes"); then
-	PKG_CHECK_MODULES(SYSTEMD, systemd, dummy=yes,
-				AC_MSG_ERROR(systemd is required))
-	SYSTEMD_UNITDIR="`$PKG_CONFIG --variable=systemdsystemunitdir systemd`"
-	if (test -z "${SYSTEM_UNITDIR}"); then
-		SYSTEMD_UNITDIR="/lib/systemd/system"
-	fi
+AC_ARG_WITH([systemdunitdir], AC_HELP_STRING([--with-systemdunitdir=DIR],
+	[path to systemd service directory]), [path_systemdunit=${withval}],
+		[path_systemdunit="`$PKG_CONFIG --variable=systemdsystemunitdir systemd`"])
+if (test -n "${path_systemdunit}"); then
+	SYSTEMD_UNITDIR="${path_systemdunit}"
 	AC_SUBST(SYSTEMD_UNITDIR)
 fi
-AM_CONDITIONAL(SYSTEMD, test "${enable_systemd}" = "yes")
+AM_CONDITIONAL(SYSTEMD, test -n "${path_systemdunit}")
 
 AC_ARG_ENABLE(capng, AC_HELP_STRING([--enable-capng],
 		[enable capabilities support]), [enable_capng=${enableval}])
@@ -153,10 +155,25 @@ AC_SUBST(UDEV_CFLAGS)
 AC_SUBST(UDEV_LIBS)
 AM_CONDITIONAL(UDEV, test "${enable_udev}" = "yes")
 
+AC_ARG_ENABLE(tools, AC_HELP_STRING([--enable-tools],
+		[enable testing tools]), [enable_tools=${enableval}])
+if (test "${enable_tools}" = "yes"); then
+	PKG_CHECK_MODULES(USB, libusb-1.0, dummy=yes,
+				AC_MSG_ERROR(USB library is required))
+	AC_SUBST(USB_CFLAGS)
+	AC_SUBST(USB_LIBS)
+fi
+AM_CONDITIONAL(TOOLS, test "${enable_tools}" = "yes")
+
 AC_ARG_ENABLE(atmodem, AC_HELP_STRING([--disable-atmodem],
 				[disable ETSI AT modem support]),
 					[enable_atmodem=${enableval}])
 AM_CONDITIONAL(ATMODEM, test "${enable_atmodem}" != "no")
+
+AC_ARG_ENABLE(cdmamodem, AC_HELP_STRING([--disable-cdmamodem],
+				[disable CDMA AT modem support]),
+					[enable_cdmamodem=${enableval}])
+AM_CONDITIONAL(CDMAMODEM, test "${enable_cdmamodem}" != "no")
 
 AC_ARG_ENABLE(phonesim, AC_HELP_STRING([--disable-phonesim],
 				[disable Phone simulator support]),
@@ -169,10 +186,29 @@ AC_ARG_ENABLE(isimodem, AC_HELP_STRING([--disable-isimodem],
 					[enable_isimodem=${enableval}])
 AM_CONDITIONAL(ISIMODEM, test "${enable_isimodem}" != "no")
 
+AC_ARG_ENABLE(bluetooth, AC_HELP_STRING([--disable-bluetooth],
+				[disable Bluetooth modem support]),
+					[enable_bluetooth=${enableval}])
+if (test "${enable_bluetooth}" != "no"); then
+	PKG_CHECK_MODULES(BLUEZ, bluez >= 4.30, dummy=yes,
+			AC_MSG_ERROR(Bluetooth library >= 4.30 is required))
+fi
+AC_SUBST(BLUEZ_CFLAGS)
+AC_SUBST(BLUEZ_LIBS)
+AM_CONDITIONAL(BLUETOOTH, test "${enable_bluetooth}" != "no")
+
+AC_MSG_CHECKING([for mobile-broadband-provider-info])
+PKG_CHECK_EXISTS(mobile-broadband-provider-info,
+	_PKG_CONFIG(PROVIDER_DATABASE, [variable=database],
+					[mobile-broadband-provider-info])
+	AC_DEFINE_UNQUOTED(PROVIDER_DATABASE, "$pkg_cv_PROVIDER_DATABASE",
+					[Mobile provider database])
+	AC_MSG_RESULT([yes]),
+	AC_MSG_RESULT([no]))
+
 AC_ARG_ENABLE(datafiles, AC_HELP_STRING([--disable-datafiles],
 			[don't install configuration and data files]),
 					[enable_datafiles=${enableval}])
-
 AM_CONDITIONAL(DATAFILES, test "${enable_datafiles}" != "no")
 
 if (test "${prefix}" = "NONE"); then
@@ -200,4 +236,4 @@ fi
 AC_DEFINE_UNQUOTED(CONFIGDIR, "${configdir}",
 			[Directory for the configuration files])
 
-AC_OUTPUT(Makefile include/version.h src/ofono.service)
+AC_OUTPUT(Makefile include/version.h src/ofono.service ofono.pc)

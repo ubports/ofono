@@ -2,7 +2,7 @@
  *
  *  D-Bus helper library
  *
- *  Copyright (C) 2004-2010  Marcel Holtmann <marcel@holtmann.org>
+ *  Copyright (C) 2004-2011  Marcel Holtmann <marcel@holtmann.org>
  *
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -162,7 +162,7 @@ static void generate_introspection_xml(DBusConnection *conn,
 
 	gstr = g_string_new(DBUS_INTROSPECT_1_0_XML_DOCTYPE_DECL_NODE);
 
-	g_string_append_printf(gstr, "<node name=\"%s\">\n", path);
+	g_string_append_printf(gstr, "<node>\n");
 
 	for (list = data->interfaces; list; list = list->next) {
 		struct interface_data *iface = list->data;
@@ -201,12 +201,12 @@ static DBusMessage *introspect(DBusConnection *connection,
 		return NULL;
 	}
 
-	if (!data->introspect)
+	if (data->introspect == NULL)
 		generate_introspection_xml(connection, data,
 						dbus_message_get_path(message));
 
 	reply = dbus_message_new_method_return(message);
-	if (!reply)
+	if (reply == NULL)
 		return NULL;
 
 	dbus_message_append_args(reply, DBUS_TYPE_STRING, &data->introspect,
@@ -255,14 +255,13 @@ void g_dbus_pending_success(DBusConnection *connection,
 
         for (list = pending_security; list; list = list->next) {
 		struct security_data *secdata = list->data;
-		DBusHandlerResult result;
 
 		if (secdata->pending != pending)
 			continue;
 
 		pending_security = g_slist_remove(pending_security, secdata);
 
-		result = process_message(connection, secdata->message,
+		process_message(connection, secdata->message,
 				secdata->method, secdata->iface_user_data);
 
 		dbus_message_unref(secdata->message);
@@ -405,7 +404,7 @@ static struct interface_data *find_interface(GSList *interfaces,
 {
 	GSList *list;
 
-	if (!name)
+	if (name == NULL)
 		return NULL;
 
 	for (list = interfaces; list; list = list->next) {
@@ -428,7 +427,7 @@ static DBusHandlerResult generic_message(DBusConnection *connection,
 	interface = dbus_message_get_interface(message);
 
 	iface = find_interface(data->interfaces, interface);
-	if (!iface)
+	if (iface == NULL)
 		return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 
 	for (method = iface->methods; method &&
@@ -464,7 +463,7 @@ static void invalidate_parent_data(DBusConnection *conn, const char *child_path)
 
 	parent_path = g_strdup(child_path);
 	slash = strrchr(parent_path, '/');
-	if (!slash)
+	if (slash == NULL)
 		goto done;
 
 	if (slash == parent_path && parent_path[1] != '\0')
@@ -475,13 +474,14 @@ static void invalidate_parent_data(DBusConnection *conn, const char *child_path)
 	if (!strlen(parent_path))
 		goto done;
 
-	if (!dbus_connection_get_object_path_data(conn, parent_path,
-							(void *) &data)) {
-		invalidate_parent_data(conn, parent_path);
+	if (dbus_connection_get_object_path_data(conn, parent_path,
+							(void *) &data) == FALSE) {
 		goto done;
 	}
 
-	if (!data)
+	invalidate_parent_data(conn, parent_path);
+
+	if (data == NULL)
 		goto done;
 
 	g_free(data->introspect);
@@ -554,7 +554,7 @@ static gboolean remove_interface(struct generic_data *data, const char *name)
 	struct interface_data *iface;
 
 	iface = find_interface(data->interfaces, name);
-	if (!iface)
+	if (iface == NULL)
 		return FALSE;
 
 	data->interfaces = g_slist_remove(data->interfaces, iface);
@@ -601,14 +601,14 @@ static gboolean check_signal(DBusConnection *conn, const char *path,
 
 	*args = NULL;
 	if (!dbus_connection_get_object_path_data(conn, path,
-					(void *) &data) || !data) {
+					(void *) &data) || data == NULL) {
 		error("dbus_connection_emit_signal: path %s isn't registered",
 				path);
 		return FALSE;
 	}
 
 	iface = find_interface(data->interfaces, interface);
-	if (!iface) {
+	if (iface == NULL) {
 		error("dbus_connection_emit_signal: %s does not implement %s",
 				path, interface);
 		return FALSE;
@@ -621,7 +621,7 @@ static gboolean check_signal(DBusConnection *conn, const char *path,
 		}
 	}
 
-	if (!*args) {
+	if (*args == NULL) {
 		error("No signal named %s on interface %s", name, interface);
 		return FALSE;
 	}
@@ -644,7 +644,7 @@ static dbus_bool_t emit_signal_valist(DBusConnection *conn,
 		return FALSE;
 
 	signal = dbus_message_new_signal(path, interface, name);
-	if (!signal) {
+	if (signal == NULL) {
 		error("Unable to allocate new %s.%s signal", interface,  name);
 		return FALSE;
 	}
@@ -702,7 +702,7 @@ gboolean g_dbus_unregister_interface(DBusConnection *connection,
 {
 	struct generic_data *data = NULL;
 
-	if (!path)
+	if (path == NULL)
 		return FALSE;
 
 	if (dbus_connection_get_object_path_data(connection, path,

@@ -10,38 +10,23 @@ Methods		dict GetProperties()
 			Returns all network registration properties. See the
 			properties section for available properties.
 
-			Possible Errors: [service].Error.InvalidArguments
-
-		void SetProperty(string name, variant value)
-
-			Changes the value of the specified property. Only
-			properties that are listed as readwrite are
-			changeable. On success a PropertyChanged signal
-			will be emitted.
-
-			Possible Errors: [service].Error.InvalidArguments
-					 [service].Error.DoesNotExist
-
 		void Register()
 
 			Attempts to register to the default network. The
 			default network is normally selected by the settings
 			from the SIM card.
 
-			Possible Errors: [service].Error.InvalidArguments
-
-		void Deregister()
-
-			Completely unregisters from the network
-
-			Possible Errors: [service].Error.InvalidArguments
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.Failed
+					 [service].Error.AccessDenied
 
 		array{object,dict} GetOperators()
 
 			Retrieve array of operator object and properties.
 
 			This method can be used to retrieve the current
-			operator list.  This is eithe an empty list (when
+			operator list.  This is either an empty list (when
 			not registered to any network) or a list with one
 			or more operators (when registered).
 
@@ -62,6 +47,11 @@ Methods		dict GetProperties()
 			GPRS contexts.  Expect the context to be unavailable
 			for the duration of the operator scan.
 
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.Failed
+					 [service].Error.AccessDenied
+
 Signals		PropertyChanged(string property, variant value)
 
 			This signal indicates a changed value of the given
@@ -69,27 +59,27 @@ Signals		PropertyChanged(string property, variant value)
 
 Properties	string Mode [readonly]
 
-			The current registration mode. The deault of this
+			The current registration mode. The default of this
 			is "auto", but can be changed during operation. This
 			property will change to "manual" if the Register()
 			method of an operator is called.
 
 			The possible values are:
-				"auto"     Network registration is performed
-				           automatically.
-				"manual"   Network operator is selected
-				           manually. If the operator is
-				           currently not selected, registration
-				           is notattempted
-				"off"      Unregisters from currently selected
-				           network, if any, and does not
-				           attempt to register again.
+				"auto"       Network registration is performed
+				             automatically.
+				"auto-only"  Network registration is performed
+				             automatically, and manual
+				             selection is disabled.
+				"manual"     Network operator is selected
+				             manually. If the operator is
+				             currently not selected,
+				             registration is not attempted.
 
 		string Status [readonly]
 
 			The current registration status of a modem.
 
-			The possible values are: 
+			The possible values are:
 				"unregistered"  Not registered to any network
 				"registered"    Registered to home network
 				"searching"     Not registered, but searching
@@ -136,11 +126,6 @@ Properties	string Mode [readonly]
 			display on the idle screen or an empty string if
 			not registered to a network.
 
-			This value is idential to the Name property from
-			the network operator object. It is provided here
-			for simplicity of application that don't allow
-			manual registration.
-
 		byte Strength [readonly, optional]
 
 			Contains the current signal strength as a percentage
@@ -169,8 +154,6 @@ Methods		dict GetProperties()
 			Returns all network operator properties. See the
 			properties section for available properties.
 
-			Possible Errors: [service].Error.InvalidArguments
-
 		void Register()
 
 			Attempts to register to this network operator.
@@ -179,7 +162,10 @@ Methods		dict GetProperties()
 			be observed by tracking the NetworkRegistration Status
 			property.
 
-			Possible Errors: [service].Error.InvalidArguments
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.Failed
+					 [service].Error.AccessDenied
 
 Signals		PropertyChanged(string property, variant value)
 
@@ -188,7 +174,11 @@ Signals		PropertyChanged(string property, variant value)
 
 Properties	string Name [readonly]
 
-			Contains the name of the operator
+			Contains the name of the operator, suitable for using
+			as a string handle in a UI widget used for manual
+			network selection. For a proper display name of the
+			current operator, use the Name property of the
+			NetworkRegistration interface instead.
 
 		string Status [readonly]
 

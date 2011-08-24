@@ -187,9 +187,6 @@ static void at_ussd_request(struct ofono_ussd *ussd, int dcs,
 	char buf[512];
 	enum sms_charset charset;
 
-	if (!cbd)
-		goto error;
-
 	cbd->user = ussd;
 
 	if (!cbs_dcs_decode(dcs, NULL, NULL, &charset,
@@ -212,20 +209,24 @@ static void at_ussd_request(struct ofono_ussd *ussd, int dcs,
 		char coded_buf[321];
 		char *converted = encode_hex_own_buf(pdu, len, 0, coded_buf);
 
-		if (!converted)
+		if (converted == NULL)
 			goto error;
 
 		snprintf(buf, sizeof(buf), "AT+CUSD=1,\"%s\",%d",
 				converted, dcs);
 	}
 
-	if (data->vendor == OFONO_VENDOR_QUALCOMM_MSM) {
+	switch (data->vendor) {
+	case OFONO_VENDOR_QUALCOMM_MSM:
 		/* Ensure that the modem is using GSM character set. It
 		 * seems it defaults to IRA and then umlauts are not
 		 * properly encoded. The modem returns some weird from
 		 * of Latin-1, but it is not really Latin-1 either. */
 		g_at_chat_send(data->chat, "AT+CSCS=\"GSM\"", none_prefix,
 							NULL, NULL, NULL);
+		break;
+	default:
+		break;
 	}
 
 	if (g_at_chat_send(data->chat, buf, cusd_prefix,
@@ -247,12 +248,17 @@ static void cusd_cancel_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 	decode_at_error(&error, g_at_result_final_response(result));
 
-	if (data->vendor == OFONO_VENDOR_QUALCOMM_MSM) {
+	switch (data->vendor) {
+	case OFONO_VENDOR_GOBI:
+	case OFONO_VENDOR_QUALCOMM_MSM:
 		/* All errors and notifications arrive unexpected and
 		 * thus just reset the state here. This is safer than
 		 * getting stuck in a dead-lock. */
 		error.type = OFONO_ERROR_TYPE_NO_ERROR;
 		error.error = 0;
+		break;
+	default:
+		break;
 	}
 
 	cb(&error, cbd->data);
@@ -264,16 +270,12 @@ static void at_ussd_cancel(struct ofono_ussd *ussd,
 	struct ussd_data *data = ofono_ussd_get_data(ussd);
 	struct cb_data *cbd = cb_data_new(cb, user_data);
 
-	if (!cbd)
-		goto error;
-
 	cbd->user = data;
 
 	if (g_at_chat_send(data->chat, "AT+CUSD=2", none_prefix,
 				cusd_cancel_cb, cbd, g_free) > 0)
 		return;
 
-error:
 	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, user_data);
@@ -314,10 +316,11 @@ static int at_ussd_probe(struct ofono_ussd *ussd, unsigned int vendor,
 
 	ofono_ussd_set_data(ussd, data);
 
-	g_at_chat_send(chat, "AT+CSCS?", cscs_prefix, read_charset_cb, data,
-			NULL);
+	g_at_chat_send(data->chat, "AT+CSCS?", cscs_prefix,
+			read_charset_cb, data, NULL);
 
-	g_at_chat_send(chat, "AT+CUSD=1", NULL, at_ussd_register, ussd, NULL);
+	g_at_chat_send(data->chat, "AT+CUSD=1", NULL,
+			at_ussd_register, ussd, NULL);
 
 	return 0;
 }
@@ -340,12 +343,12 @@ static struct ofono_ussd_driver driver = {
 	.cancel		= at_ussd_cancel
 };
 
-void at_ussd_init()
+void at_ussd_init(void)
 {
 	ofono_ussd_driver_register(&driver);
 }
 
-void at_ussd_exit()
+void at_ussd_exit(void)
 {
 	ofono_ussd_driver_unregister(&driver);
 }

@@ -22,9 +22,12 @@
 #ifndef __ISIMODEM_DEBUG_H
 #define __ISIMODEM_DEBUG_H
 
+#include <gisi/message.h>
+
 #include "ss.h"
 #include "mtc.h"
 #include "sms.h"
+#include "uicc.h"
 #include "sim.h"
 #include "info.h"
 #include "call.h"
@@ -39,6 +42,15 @@ const char *ss_ussd_type_name(enum ss_ussd_type value);
 const char *mtc_isi_cause_name(enum mtc_isi_cause value);
 const char *mtc_message_id_name(enum mtc_message_id value);
 const char *mtc_modem_state_name(enum mtc_modem_state value);
+const char *mce_rf_state_name(enum mce_rf_state value);
+
+const char *mce_message_id_name(enum mce_message_id value);
+const char *mce_modem_state_name(enum mce_modem_state value);
+const char *mce_status_info(enum mce_status_info value);
+
+const char *uicc_message_id_name(enum uicc_message_id value);
+const char *uicc_subblock_name(uint8_t value);
+const char *uicc_status_name(uint8_t value);
 
 const char *sms_gsm_cause_name(enum sms_gsm_cause value);
 const char *sms_isi_cause_name(enum sms_isi_cause value);
@@ -48,6 +60,12 @@ const char *sms_subblock_name(enum sms_subblock value);
 const char *sim_isi_cause_name(enum sim_isi_cause value);
 const char *sim_message_id_name(enum sim_message_id value);
 const char *sim_subblock_name(enum sim_subblock value);
+
+enum ofono_sim_password_type;
+
+const char *sim_password_name(enum ofono_sim_password_type value);
+
+const char *sec_message_id_name(enum sec_message_id value);
 
 const char *info_isi_cause_name(enum info_isi_cause value);
 const char *info_message_id_name(enum info_message_id value);
@@ -74,15 +92,7 @@ const char *gpds_isi_cause_name(enum gpds_isi_cause value);
 const char *gpds_transfer_status_name(enum gpds_transfer_status value);
 const char *gpds_transfer_cause_name(enum gpds_transfer_cause value);
 
-void ss_debug(const void *restrict buf, size_t len, void *data);
-void mtc_debug(const void *restrict buf, size_t len, void *data);
-void sms_debug(const void *restrict buf, size_t len, void *data);
-void sim_debug(const void *restrict buf, size_t len, void *data);
-void info_debug(const void *restrict buf, size_t len, void *data);
-void call_debug(const void *restrict buf, size_t len, void *data);
-void net_debug(const void *restrict buf, size_t len, void *data);
-void gss_debug(const void *restrict buf, size_t len, void *data);
-void gpds_debug(const void *restrict buf, size_t len, void *data);
+void isi_trace(const GIsiMessage *msg, void *data);
 
 const char *pn_resource_name(int value);
 

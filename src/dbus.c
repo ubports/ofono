@@ -139,8 +139,24 @@ static void append_dict_variant(DBusMessageIter *iter, int type, void *val)
 
 		dbus_message_iter_append_basic(&entry, DBUS_TYPE_STRING,
 						&(val_array[i + 0]));
-		dbus_message_iter_append_basic(&entry, type,
-						&(val_array[i + 1]));
+
+		/*
+		 * D-Bus expects a char** or uint8* depending on the type
+		 * given. Since we are dealing with an array through a void**
+		 * (and thus val_array[i] is a pointer) we need to
+		 * differentiate DBUS_TYPE_STRING from the others. The other
+		 * option would be the user to pass the exact type to this
+		 * function, instead of a pointer to it. However in this case
+		 * a cast from type to void* would be needed, which is not
+		 * good.
+		 */
+		if (type == DBUS_TYPE_STRING) {
+			dbus_message_iter_append_basic(&entry, type,
+							&(val_array[i + 1]));
+		} else {
+			dbus_message_iter_append_basic(&entry, type,
+							val_array[i + 1]);
+		}
 
 		dbus_message_iter_close_container(&array, &entry);
 	}
@@ -175,8 +191,7 @@ int ofono_dbus_signal_property_changed(DBusConnection *conn,
 	DBusMessageIter iter;
 
 	signal = dbus_message_new_signal(path, interface, "PropertyChanged");
-
-	if (!signal) {
+	if (signal == NULL) {
 		ofono_error("Unable to allocate new %s.PropertyChanged signal",
 				interface);
 		return -1;
@@ -202,8 +217,7 @@ int ofono_dbus_signal_array_property_changed(DBusConnection *conn,
 	DBusMessageIter iter;
 
 	signal = dbus_message_new_signal(path, interface, "PropertyChanged");
-
-	if (!signal) {
+	if (signal == NULL) {
 		ofono_error("Unable to allocate new %s.PropertyChanged signal",
 				interface);
 		return -1;
@@ -229,8 +243,7 @@ int ofono_dbus_signal_dict_property_changed(DBusConnection *conn,
 	DBusMessageIter iter;
 
 	signal = dbus_message_new_signal(path, interface, "PropertyChanged");
-
-	if (!signal) {
+	if (signal == NULL) {
 		ofono_error("Unable to allocate new %s.PropertyChanged signal",
 				interface);
 		return -1;
@@ -348,6 +361,13 @@ DBusMessage *__ofono_error_access_denied(DBusMessage *msg)
 					"Operation not permitted");
 }
 
+DBusMessage *__ofono_error_emergency_active(DBusMessage *msg)
+{
+	return g_dbus_create_error(msg,
+				OFONO_ERROR_INTERFACE ".EmergencyActive",
+				"Emergency mode active");
+}
+
 void __ofono_dbus_pending_reply(DBusMessage **msg, DBusMessage *reply)
 {
 	DBusConnection *conn = ofono_dbus_get_connection();
@@ -402,7 +422,7 @@ gboolean __ofono_dbus_valid_object_path(const char *path)
 	return TRUE;
 }
 
-DBusConnection *ofono_dbus_get_connection()
+DBusConnection *ofono_dbus_get_connection(void)
 {
 	return g_connection;
 }
@@ -426,7 +446,7 @@ void __ofono_dbus_cleanup(void)
 {
 	DBusConnection *conn = ofono_dbus_get_connection();
 
-	if (!conn || !dbus_connection_get_is_connected(conn))
+	if (conn == NULL || !dbus_connection_get_is_connected(conn))
 		return;
 
 	dbus_gsm_set_connection(NULL);
