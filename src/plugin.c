@@ -88,7 +88,7 @@ static gboolean check_plugin(struct ofono_plugin_desc *desc,
 		for (; *patterns; patterns++)
 			if (g_pattern_match_simple(*patterns, desc->name))
 				break;
-		if (!*patterns) {
+		if (*patterns == NULL) {
 			ofono_info("Ignoring %s", desc->description);
 			return FALSE;
 		}
@@ -112,10 +112,10 @@ int __ofono_plugin_init(const char *pattern, const char *exclude)
 	DBG("");
 
 	if (pattern)
-		patterns = g_strsplit_set(pattern, ", ", -1);
+		patterns = g_strsplit_set(pattern, ":, ", -1);
 
 	if (exclude)
-		excludes = g_strsplit_set(exclude, ", ", -1);
+		excludes = g_strsplit_set(exclude, ":, ", -1);
 
 	for (i = 0; __ofono_builtin[i]; i++) {
 		if (check_plugin(__ofono_builtin[i],

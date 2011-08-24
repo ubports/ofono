@@ -154,6 +154,13 @@ enum sms_charset {
 	SMS_CHARSET_UCS2 = 2,
 };
 
+enum sms_alphabet {
+	SMS_ALPHABET_DEFAULT = 0,
+	SMS_ALPHABET_TURKISH,
+	SMS_ALPHABET_SPANISH,
+	SMS_ALPHABET_PORTUGUESE,
+};
+
 enum sms_mwi_type {
 	SMS_MWI_TYPE_VOICE = 0,
 	SMS_MWI_TYPE_FAX = 1,
@@ -223,6 +230,7 @@ struct sms_scts {
 	guint8 hour;
 	guint8 minute;
 	guint8 second;
+	gboolean has_timezone;
 	gint8 timezone;
 };
 
@@ -407,15 +415,21 @@ struct cbs_topic_range {
 	unsigned short max;
 };
 
+struct txq_backup_entry {
+	GSList *msg_list;
+	unsigned char uuid[SMS_MSGID_LEN];
+	unsigned long flags;
+};
+
 static inline gboolean is_bit_set(unsigned char oct, int bit)
 {
-	int mask = 0x1 << bit;
+	int mask = 1 << bit;
 	return oct & mask ? TRUE : FALSE;
 }
 
 static inline unsigned char bit_field(unsigned char oct, int start, int num)
 {
-	unsigned char mask = (0x1 << num) - 1;
+	unsigned char mask = (1 << num) - 1;
 
 	return (oct >> start) & mask;
 }
@@ -516,9 +530,25 @@ void status_report_assembly_add_fragment(struct status_report_assembly
 void status_report_assembly_expire(struct status_report_assembly *assembly,
 					time_t before);
 
+gboolean sms_tx_backup_store(const char *imsi, unsigned long id,
+				unsigned long flags, const char *uuid,
+				guint8 seq, const unsigned char *pdu,
+				int pdu_len, int tpdu_len);
+void sms_tx_backup_remove(const char *imsi, unsigned long id,
+				unsigned long flags, const char *uuid,
+				guint8 seq);
+void sms_tx_backup_free(const char *imsi, unsigned long id,
+				unsigned long flags, const char *uuid);
+GQueue *sms_tx_queue_load(const char *imsi);
+
 GSList *sms_text_prepare(const char *to, const char *utf8, guint16 ref,
 				gboolean use_16bit,
 				gboolean use_delivery_reports);
+
+GSList *sms_text_prepare_with_alphabet(const char *to, const char *utf8,
+				guint16 ref, gboolean use_16bit,
+				gboolean use_delivery_reports,
+				enum sms_alphabet alphabet);
 
 GSList *sms_datagram_prepare(const char *to,
 				const unsigned char *data, unsigned int len,
@@ -539,7 +569,7 @@ gboolean cbs_extract_app_port(const struct cbs *cbs, int *dst, int *src,
 
 char *cbs_decode_text(GSList *cbs_list, char *iso639_lang);
 
-struct cbs_assembly *cbs_assembly_new();
+struct cbs_assembly *cbs_assembly_new(void);
 void cbs_assembly_free(struct cbs_assembly *assembly);
 GSList *cbs_assembly_add_page(struct cbs_assembly *assembly,
 				const struct cbs *cbs);

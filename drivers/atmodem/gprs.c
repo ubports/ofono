@@ -69,16 +69,12 @@ static void at_gprs_set_attached(struct ofono_gprs *gprs, int attached,
 	struct cb_data *cbd = cb_data_new(cb, data);
 	char buf[64];
 
-	if (!cbd)
-		goto error;
-
 	snprintf(buf, sizeof(buf), "AT+CGATT=%i", attached ? 1 : 0);
 
 	if (g_at_chat_send(gd->chat, buf, none_prefix,
 				at_cgatt_cb, cbd, g_free) > 0)
 		return;
 
-error:
 	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, data);
@@ -115,12 +111,17 @@ static void at_gprs_registration_status(struct ofono_gprs *gprs,
 	struct gprs_data *gd = ofono_gprs_get_data(gprs);
 	struct cb_data *cbd = cb_data_new(cb, data);
 
-	if (!cbd)
-		goto error;
-
 	cbd->user = gd;
 
 	switch (gd->vendor) {
+	case OFONO_VENDOR_GOBI:
+		/*
+		 * Send *CNTI=0 to find out the current tech, it will be
+		 * intercepted in gobi_cnti_notify in network registration
+		 */
+		g_at_chat_send(gd->chat, "AT*CNTI=0", none_prefix,
+				NULL, NULL, NULL);
+		break;
 	case OFONO_VENDOR_NOVATEL:
 		/*
 		 * Send $CNTI=0 to find out the current tech, it will be
@@ -135,7 +136,6 @@ static void at_gprs_registration_status(struct ofono_gprs *gprs,
 				at_cgreg_cb, cbd, g_free) > 0)
 		return;
 
-error:
 	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, -1, data);
@@ -200,6 +200,26 @@ static void xdatastat_notify(GAtResult *result, gpointer user_data)
 	}
 }
 
+static void cpsb_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_gprs *gprs = user_data;
+	GAtResultIter iter;
+	gint bearer;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "+CPSB:"))
+		return;
+
+	if (!g_at_result_iter_next_number(&iter, NULL))
+		return;
+
+	if (!g_at_result_iter_next_number(&iter, &bearer))
+		return;
+
+	ofono_gprs_bearer_notify(gprs, bearer);
+}
+
 static void gprs_initialized(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_gprs *gprs = user_data;
@@ -207,7 +227,10 @@ static void gprs_initialized(gboolean ok, GAtResult *result, gpointer user_data)
 
 	g_at_chat_register(gd->chat, "+CGEV:", cgev_notify, FALSE, gprs, NULL);
 	g_at_chat_register(gd->chat, "+CGREG:", cgreg_notify,
-					FALSE, gprs, NULL);
+						FALSE, gprs, NULL);
+	g_at_chat_register(gd->chat, "+CPSB:", cpsb_notify, FALSE, gprs, NULL);
+
+	g_at_chat_send(gd->chat, "AT+CPSB=1", none_prefix, NULL, NULL, NULL);
 
 	switch (gd->vendor) {
 	case OFONO_VENDOR_IFX:
@@ -350,7 +373,7 @@ static int at_gprs_probe(struct ofono_gprs *gprs,
 	struct gprs_data *gd;
 
 	gd = g_try_new0(struct gprs_data, 1);
-	if (!gd)
+	if (gd == NULL)
 		return -ENOMEM;
 
 	gd->chat = g_at_chat_clone(chat);
@@ -382,12 +405,12 @@ static struct ofono_gprs_driver driver = {
 	.attached_status	= at_gprs_registration_status,
 };
 
-void at_gprs_init()
+void at_gprs_init(void)
 {
 	ofono_gprs_driver_register(&driver);
 }
 
-void at_gprs_exit()
+void at_gprs_exit(void)
 {
 	ofono_gprs_driver_unregister(&driver);
 }

@@ -172,12 +172,14 @@ static int hso_radio_settings_probe(struct ofono_radio_settings *rs,
 	struct radio_settings_data *rsd;
 
 	rsd = g_try_new0(struct radio_settings_data, 1);
-	if (!rsd)
+	if (rsd == NULL)
 		return -ENOMEM;
 
 	rsd->chat = g_at_chat_clone(chat);
 
 	ofono_radio_settings_set_data(rs, rsd);
+
+	g_at_chat_send(rsd->chat, "AT_OPBM?", none_prefix, NULL, NULL, NULL);
 
 	g_at_chat_send(rsd->chat, "AT_OPSYS=?", opsys_prefix,
 					opsys_support_cb, rs, NULL);
@@ -203,12 +205,12 @@ static struct ofono_radio_settings_driver driver = {
 	.set_rat_mode		= hso_set_rat_mode
 };
 
-void hso_radio_settings_init()
+void hso_radio_settings_init(void)
 {
 	ofono_radio_settings_driver_register(&driver);
 }
 
-void hso_radio_settings_exit()
+void hso_radio_settings_exit(void)
 {
 	ofono_radio_settings_driver_unregister(&driver);
 }

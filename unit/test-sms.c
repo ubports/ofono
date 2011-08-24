@@ -143,7 +143,7 @@ static void dump_details(struct sms *sms)
 	}
 }
 
-static void test_simple_deliver()
+static void test_simple_deliver(void)
 {
 	struct sms sms;
 	unsigned char *decoded_pdu;
@@ -214,7 +214,7 @@ static void test_simple_deliver()
 	g_free(utf8);
 }
 
-static void test_alnum_sender()
+static void test_alnum_sender(void)
 {
 	struct sms sms;
 	unsigned char *decoded_pdu;
@@ -285,7 +285,7 @@ static void test_alnum_sender()
 	g_free(utf8);
 }
 
-static void test_deliver_encode()
+static void test_deliver_encode(void)
 {
 	struct sms sms;
 	unsigned char *decoded_pdu;
@@ -361,7 +361,7 @@ static void test_deliver_encode()
 	g_free(encoded_pdu);
 }
 
-static void test_simple_submit()
+static void test_simple_submit(void)
 {
 	struct sms sms;
 	unsigned char *decoded_pdu;
@@ -427,7 +427,7 @@ static void test_simple_submit()
 	g_free(utf8);
 }
 
-static void test_submit_encode()
+static void test_submit_encode(void)
 {
 	struct sms sms;
 	unsigned char *decoded_pdu;
@@ -469,6 +469,219 @@ static void test_submit_encode()
 	g_assert(strcmp(simple_submit, encoded_pdu) == 0);
 
 	g_free(encoded_pdu);
+}
+
+struct sms_charset_data {
+	char *pdu;
+	int data_len;
+	enum gsm_dialect locking_lang;
+	enum gsm_dialect single_lang;
+	char expected_text[];
+};
+
+static struct sms_charset_data sms_charset_default = {
+	.pdu =
+		"0001000B91" "5310101010" "1000008080" "8060402818" "0E888462C1"
+		"68381E9088" "6442A9582E" "988C06C4E9" "783EA09068" "442A994EA8"
+		"946AC56AB9" "5EB0986C46" "ABD96EB89C" "6EC7EBF97E" "C0A070482C"
+		"1A8FC8A472" "C96C3A9FD0" "A8744AAD5A" "AFD8AC76CB" "ED7ABFE0B0"
+		"784C2E9BCF" "E8B47ACD6E" "BBDFF0B87C" "4EAFDBEFF8" "BC7ECFEFFB"
+		"FF",
+	.data_len = 112,
+	.expected_text = {
+		0x40, 0xc2, 0xa3, 0x24, 0xc2, 0xa5, 0xc3, 0xa8, 0xc3, 0xa9,
+		0xc3, 0xb9, 0xc3, 0xac, 0xc3, 0xb2, 0xc3, 0x87, 0x0a, 0xc3,
+		0x98, 0xc3, 0xb8, 0x0d, 0xc3, 0x85, 0xc3, 0xa5, 0xce, 0x94,
+		0x5f, 0xce, 0xa6, 0xce, 0x93, 0xce, 0x9b, 0xce, 0xa9, 0xce,
+		0xa0, 0xce, 0xa8, 0xce, 0xa3, 0xce, 0x98, 0xce, 0x9e, 0x20,
+		0xc3, 0x86, 0xc3, 0xa6, 0xc3, 0x9f, 0xc3, 0x89, 0x20, 0x21,
+		0x22, 0x23, 0xc2, 0xa4, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a,
+		0x2b, 0x2c, 0x2d, 0x2e, 0x2f, 0x30, 0x31, 0x32, 0x33, 0x34,
+		0x35, 0x36, 0x37, 0x38, 0x39, 0x3a, 0x3b, 0x3c, 0x3d, 0x3e,
+		0x3f, 0xc2, 0xa1, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47,
+		0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f, 0x50, 0x51,
+		0x52, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x5a, 0xc3,
+		0x84, 0xc3, 0x96, 0xc3, 0x91, 0xc3, 0x9c, 0xc2, 0xa7, 0xc2,
+		0xbf, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69,
+		0x6a, 0x6b, 0x6c, 0x6d, 0x6e, 0x6f, 0x70, 0x71, 0x72, 0x73,
+		0x74, 0x75, 0x76, 0x77, 0x78, 0x79, 0x7a, 0xc3, 0xa4, 0xc3,
+		0xb6, 0xc3, 0xb1, 0xc3, 0xbc, 0xc3, 0xa0, 0x00
+	}
+};
+
+static struct sms_charset_data sms_charset_default_ext = {
+	.pdu =
+		"0001000B91" "5310101010" "100000151B" "C58602DAA0" "36A9CD6BC3"
+		"DBF436BE0D" "705306",
+	.data_len = 19,
+	.expected_text = {
+		0x0c, 0x5e, 0x20, 0x7b,	0x7d, 0x5c, 0x5b, 0x7e,	0x5d, 0x7c,
+		0xe2, 0x82, 0xac, 0x00
+	}
+};
+
+static struct sms_charset_data sms_charset_turkey = {
+	.pdu =
+		"0001000B91" "5310101010" "1000008080" "8060402818" "0E888462C1"
+		"68381E9088" "6442A9582E" "988C06C4E9" "783EA09068" "442A994EA8"
+		"946AC56AB9" "5EB0986C46" "ABD96EB89C" "6EC7EBF97E" "C0A070482C"
+		"1A8FC8A472" "C96C3A9FD0" "A8744AAD5A" "AFD8AC76CB" "ED7ABFE0B0"
+		"784C2E9BCF" "E8B47ACD6E" "BBDFF0B87C" "4EAFDBEFF8" "BC7ECFEFFB"
+		"FF",
+	.data_len = 112,
+	.locking_lang = GSM_DIALECT_TURKISH,
+	.expected_text = {
+		0x40, 0xc2, 0xa3, 0x24, 0xc2, 0xa5, 0xe2, 0x82, 0xac, 0xc3,
+		0xa9, 0xc3, 0xb9, 0xc4, 0xb1, 0xc3, 0xb2, 0xc3, 0x87, 0x0a,
+		0xc4, 0x9e, 0xc4, 0x9f, 0x0d, 0xc3, 0x85, 0xc3, 0xa5, 0xce,
+		0x94, 0x5f, 0xce, 0xa6, 0xce, 0x93, 0xce, 0x9b, 0xce, 0xa9,
+		0xce, 0xa0, 0xce, 0xa8, 0xce, 0xa3, 0xce, 0x98, 0xce, 0x9e,
+		0x20, 0xc5, 0x9e, 0xc5, 0x9f, 0xc3, 0x9f, 0xc3, 0x89, 0x20,
+		0x21, 0x22, 0x23, 0xc2, 0xa4, 0x25, 0x26, 0x27, 0x28, 0x29,
+		0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f, 0x30, 0x31, 0x32, 0x33,
+		0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3a, 0x3b, 0x3c, 0x3d,
+		0x3e, 0x3f, 0xc4, 0xb0, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46,
+		0x47, 0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f, 0x50,
+		0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x5a,
+		0xc3, 0x84, 0xc3, 0x96, 0xc3, 0x91, 0xc3, 0x9c, 0xc2, 0xa7,
+		0xc3, 0xa7, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68,
+		0x69, 0x6a, 0x6b, 0x6c, 0x6d, 0x6e, 0x6f, 0x70, 0x71, 0x72,
+		0x73, 0x74, 0x75, 0x76, 0x77, 0x78, 0x79, 0x7a, 0xc3, 0xa4,
+		0xc3, 0xb6, 0xc3, 0xb1, 0xc3, 0xbc, 0xc3, 0xa0, 0x00
+	}
+};
+
+static struct sms_charset_data sms_charset_turkey_ext = {
+	.pdu =
+		"0001000B91" "5310101010" "1000001A1B" "C586B2416D" "529BD786B7"
+		"E96D7C1BE0" "02C8011318" "870E",
+	.data_len = 23,
+	.locking_lang = GSM_DIALECT_TURKISH,
+	.single_lang = GSM_DIALECT_TURKISH,
+	.expected_text = {
+		0x0c, 0x5e, 0x7b, 0x7d, 0x5c, 0x5b, 0x7e, 0x5d, 0x7c, 0xc4,
+		0x9e, 0xc4, 0xb0, 0xc5, 0x9e, 0xc3, 0xa7, 0xe2, 0x82, 0xac,
+		0xc4, 0x9f, 0xc4, 0xb1, 0xc5, 0x9f, 0x00
+	}
+};
+
+static struct sms_charset_data sms_charset_portugal = {
+	.pdu =
+		"0001000B91" "5310101010" "1000008080" "8060402818" "0E888462C1"
+		"68381E9088" "6442A9582E" "988C06C4E9" "783EA09068" "442A994EA8"
+		"946AC56AB9" "5EB0986C46" "ABD96EB89C" "6EC7EBF97E" "C0A070482C"
+		"1A8FC8A472" "C96C3A9FD0" "A8744AAD5A" "AFD8AC76CB" "ED7ABFE0B0"
+		"784C2E9BCF" "E8B47ACD6E" "BBDFF0B87C" "4EAFDBEFF8" "BC7ECFEFFB"
+		"FF",
+	.data_len = 112,
+	.locking_lang = GSM_DIALECT_PORTUGUESE,
+	.expected_text = {
+		0x40, 0xc2, 0xa3, 0x24, 0xc2, 0xa5, 0xc3, 0xaa, 0xc3, 0xa9,
+		0xc3, 0xba, 0xc3, 0xad, 0xc3, 0xb3, 0xc3, 0xa7, 0x0a, 0xc3,
+		0x94, 0xc3, 0xb4, 0x0d, 0xc3, 0x81, 0xc3, 0xa1, 0xce, 0x94,
+		0x5f, 0xc2, 0xaa, 0xc3, 0x87, 0xc3, 0x80, 0xe2, 0x88, 0x9e,
+		0x5e, 0x5c, 0xe2, 0x82, 0xac, 0xc3, 0x93, 0x7c, 0x20, 0xc3,
+		0x82, 0xc3, 0xa2, 0xc3, 0x8a, 0xc3, 0x89, 0x20, 0x21, 0x22,
+		0x23, 0xc2, 0xba, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b,
+		0x2c, 0x2d, 0x2e, 0x2f, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35,
+		0x36, 0x37, 0x38, 0x39, 0x3a, 0x3b, 0x3c, 0x3d, 0x3e, 0x3f,
+		0xc3, 0x8d, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48,
+		0x49, 0x4a, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f, 0x50, 0x51, 0x52,
+		0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x5a, 0xc3, 0x83,
+		0xc3, 0x95, 0xc3, 0x9a, 0xc3, 0x9c, 0xc2, 0xa7, 0x7e, 0x61,
+		0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a, 0x6b,
+		0x6c, 0x6d, 0x6e, 0x6f, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75,
+		0x76, 0x77, 0x78, 0x79, 0x7a, 0xc3, 0xa3, 0xc3, 0xb5, 0x60,
+		0xc3, 0xbc, 0xc3, 0xa0, 0x00
+	}
+};
+
+static struct sms_charset_data sms_charset_portugal_ext = {
+	.pdu =
+		"0001000B91" "5310101010" "1000003184" "C446B16038" "1E1BC96662"
+		"D9543696CD" "6583D9643C" "1BD42675D9" "F0C01B9F86" "02CC74B75C"
+		"0EE68030EC" "F91D",
+	.data_len = 43,
+	.locking_lang = GSM_DIALECT_PORTUGUESE,
+	.single_lang = GSM_DIALECT_PORTUGUESE,
+	.expected_text = {
+		0xc3, 0xaa, 0xc3, 0xa7, 0x0c, 0xc3, 0x94, 0xc3, 0xb4, 0xc3,
+		0x81, 0xc3, 0xa1, 0xce, 0xa6, 0xce, 0x93, 0x5e, 0xce, 0xa9,
+		0xce, 0xa0, 0xce, 0xa8, 0xce, 0xa3, 0xce, 0x98, 0xc3, 0x8a,
+		0x7b, 0x7d, 0x5c, 0x5b, 0x7e, 0x5d, 0x7c, 0xc3, 0x80, 0xc3,
+		0x8d, 0xc3, 0x93, 0xc3, 0x9a, 0xc3, 0x83, 0xc3, 0x95, 0xc3,
+		0x82, 0xe2, 0x82, 0xac, 0xc3, 0xad, 0xc3, 0xb3, 0xc3, 0xba,
+		0xc3, 0xa3, 0xc3, 0xb5, 0xc3, 0xa2, 0x00
+	}
+};
+
+static struct sms_charset_data sms_charset_spain = {
+	.pdu =
+		"0001000B91" "5310101010" "100000269B" "C446B1A16C" "509BD4E6B5"
+		"E16D7A1BDF" "06B8096E92" "9BE7A6BA09" "6FCA9BF4E6" "BDA903",
+	.data_len = 34,
+	.locking_lang = GSM_DIALECT_SPANISH,
+	.single_lang = GSM_DIALECT_SPANISH,
+	.expected_text = {
+		0xc3, 0xa7, 0x0c, 0x5e, 0x7b, 0x7d, 0x5c, 0x5b, 0x7e, 0x5d,
+		0x7c, 0xc3, 0x81, 0xc3, 0x8d, 0xc3, 0x93, 0xc3, 0x9a, 0xc3,
+		0xa1, 0xe2, 0x82, 0xac, 0xc3, 0xad, 0xc3, 0xb3, 0xc3, 0xba,
+		0x00
+	}
+};
+
+static void test_sms_charset(gconstpointer param)
+{
+	gboolean ret;
+	struct sms sms;
+	unsigned char *pdu;
+	unsigned char *unpacked;
+	long pdu_len;
+	int data_len;
+	enum sms_charset sms_charset;
+	gboolean sms_compressed;
+	char *text;
+	struct sms_charset_data *data = (struct sms_charset_data *)param;
+
+	pdu = decode_hex(data->pdu, -1, &pdu_len, 0);
+
+	g_assert(pdu);
+	g_assert(pdu_len == (gint64)strlen(data->pdu) / 2);
+
+	ret = sms_decode(pdu, pdu_len, FALSE, pdu_len, &sms);
+
+	g_assert(ret);
+
+	g_free(pdu);
+
+	g_assert(sms.type == SMS_TYPE_DELIVER);
+
+	ret = sms_dcs_decode(sms.deliver.dcs, NULL, &sms_charset,
+				&sms_compressed, NULL);
+
+	g_assert(ret);
+	g_assert(sms_charset == SMS_CHARSET_7BIT);
+	g_assert(sms_compressed == FALSE);
+
+	data_len = sms_udl_in_bytes(sms.deliver.udl, sms.deliver.dcs);
+
+	g_assert(data_len == data->data_len);
+
+	unpacked = unpack_7bit(sms.deliver.ud, data_len, 0, FALSE,
+				sms.deliver.udl, NULL, 0xff);
+
+	g_assert(unpacked);
+
+	text = convert_gsm_to_utf8_with_lang(unpacked, -1, NULL, NULL, 0xff,
+		data->locking_lang, data->single_lang);
+
+	g_assert(text);
+
+	g_free(unpacked);
+
+	g_assert(strcmp(data->expected_text, text) == 0);
+
+	g_free(text);
 }
 
 struct text_format_header {
@@ -718,7 +931,7 @@ static const char *assembly_pdu3 = "038121F340048155550119906041001222044A0500"
 					"00431044B043B0020043D04300433002E";
 static int assembly_pdu_len3 = 89;
 
-static void test_assembly()
+static void test_assembly(void)
 {
 	unsigned char pdu[176];
 	long pdu_len;
@@ -805,7 +1018,7 @@ static const char *expected_no_fragmentation_7bit = "079153485002020911000C915"
 			"348870420140000A71154747A0E4ACF41F4F29C9E769F4121";
 static const char *sc_addr = "+358405202090";
 static const char *da_addr = "+358478400241";
-static void test_prepare_7bit()
+static void test_prepare_7bit(void)
 {
 	GSList *r;
 	struct sms *sms;
@@ -992,7 +1205,7 @@ static void test_limit(gunichar uni, int target_size, gboolean use_16bit)
 	g_free(utf8);
 }
 
-static void test_prepare_limits()
+static void test_prepare_limits(void)
 {
 	gunichar ascii = 0x41;
 	gunichar ucs2 = 0x416;
@@ -1023,7 +1236,7 @@ static const char *cbs2 = "0110003201114679785E96371A8D46A3D168341A8D46A3D1683"
 	"41A8D46A3D168341A8D46A3D168341A8D46A3D168341A8D46A3D168341A8D46A3D168"
 	"341A8D46A3D168341A8D46A3D168341A8D46A3D168341A8D46A3D100";
 
-static void test_cbs_encode_decode()
+static void test_cbs_encode_decode(void)
 {
 	unsigned char *decoded_pdu;
 	long pdu_len;
@@ -1088,7 +1301,7 @@ static void test_cbs_encode_decode()
 	g_free(encoded_pdu);
 }
 
-static void test_cbs_assembly()
+static void test_cbs_assembly(void)
 {
 	unsigned char *decoded_pdu;
 	long pdu_len;
@@ -1176,65 +1389,13 @@ static void test_cbs_assembly()
 	cbs_assembly_free(assembly);
 }
 
-static void test_serialize_assembly()
-{
-	unsigned char pdu[176];
-	long pdu_len;
-	struct sms sms;
-	struct sms_assembly *assembly = sms_assembly_new("1234");
-	guint16 ref;
-	guint8 max;
-	guint8 seq;
-	GSList *l;
-
-	decode_hex_own_buf(assembly_pdu1, -1, &pdu_len, 0, pdu);
-	sms_decode(pdu, pdu_len, FALSE, assembly_pdu_len1, &sms);
-
-	sms_extract_concatenation(&sms, &ref, &max, &seq);
-	l = sms_assembly_add_fragment(assembly, &sms, time(NULL),
-					&sms.deliver.oaddr, ref, max, seq);
-
-	if (g_test_verbose()) {
-		g_print("Ref: %u\n", ref);
-		g_print("Max: %u\n", max);
-		g_print("From: %s\n",
-				sms_address_to_string(&sms.deliver.oaddr));
-	}
-
-	g_assert(g_slist_length(assembly->assembly_list) == 1);
-	g_assert(l == NULL);
-
-	decode_hex_own_buf(assembly_pdu2, -1, &pdu_len, 0, pdu);
-	sms_decode(pdu, pdu_len, FALSE, assembly_pdu_len2, &sms);
-
-	sms_extract_concatenation(&sms, &ref, &max, &seq);
-	l = sms_assembly_add_fragment(assembly, &sms, time(NULL),
-					&sms.deliver.oaddr, ref, max, seq);
-	g_assert(l == NULL);
-
-	sms_assembly_free(assembly);
-
-	assembly = sms_assembly_new("1234");
-
-	decode_hex_own_buf(assembly_pdu3, -1, &pdu_len, 0, pdu);
-	sms_decode(pdu, pdu_len, FALSE, assembly_pdu_len3, &sms);
-
-	sms_extract_concatenation(&sms, &ref, &max, &seq);
-	l = sms_assembly_add_fragment(assembly, &sms, time(NULL),
-					&sms.deliver.oaddr, ref, max, seq);
-
-	g_assert(l != NULL);
-
-	sms_assembly_free(assembly);
-}
-
 static const char *ranges[] = { "1-5, 2, 3, 600, 569-900, 999",
 				"0-20, 33, 44, 50-60, 20-50, 1-5, 5, 3, 5",
 				NULL };
 static const char *inv_ranges[] = { "1-5, 3333", "1-5, afbcd", "1-5, 3-5,,",
 					"1-5, 3-5, c", NULL };
 
-static void test_range_minimizer()
+static void test_range_minimizer(void)
 {
 	int i = 0;
 
@@ -1267,7 +1428,7 @@ static void test_range_minimizer()
 	}
 }
 
-static void test_sr_assembly()
+static void test_sr_assembly(void)
 {
 	const char *sr_pdu1 = "06040D91945152991136F00160124130340A0160124130"
 				"940A00";
@@ -1461,6 +1622,34 @@ int main(int argc, char **argv)
 	g_test_add_func("/testsms/Test Simple Submit", test_simple_submit);
 	g_test_add_func("/testsms/Test Submit Encode", test_submit_encode);
 
+	g_test_add_data_func("/testsms/Test "
+		"GSM 7 bit Default Alphabet Decode",
+		&sms_charset_default, test_sms_charset);
+
+	g_test_add_data_func("/testsms/Test "
+		"GSM 7 bit Default Alphabet Extension Table Decode",
+		&sms_charset_default_ext, test_sms_charset);
+
+	g_test_add_data_func("/testsms/Test "
+		"Turkish National Language Locking Shift Table Decode",
+		&sms_charset_turkey, test_sms_charset);
+
+	g_test_add_data_func("/testsms/Test "
+		"Turkish National Language Single Shift Table Decode",
+		&sms_charset_turkey_ext, test_sms_charset);
+
+	g_test_add_data_func("/testsms/Test "
+		"Portuguese National Language Locking Shift Table Decode",
+		&sms_charset_portugal, test_sms_charset);
+
+	g_test_add_data_func("/testsms/Test "
+		"Portuguese National Language Single Shift Table Decode",
+		&sms_charset_portugal_ext, test_sms_charset);
+
+	g_test_add_data_func("/testsms/Test "
+		"Spanish National Language Single Shift Table Decode",
+		&sms_charset_spain, test_sms_charset);
+
 	g_test_add_data_func("/testsms/Test EMS UDH 1",
 			&ems_udh_test_1, test_ems_udh);
 	g_test_add_data_func("/testsms/Test EMS UDH 2",
@@ -1489,9 +1678,6 @@ int main(int argc, char **argv)
 	g_test_add_func("/testsms/Test CBS Encode / Decode",
 			test_cbs_encode_decode);
 	g_test_add_func("/testsms/Test CBS Assembly", test_cbs_assembly);
-
-	g_test_add_func("/testsms/Test SMS Assembly Serialize",
-			test_serialize_assembly);
 
 	g_test_add_func("/testsms/Range minimizer", test_range_minimizer);
 

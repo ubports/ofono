@@ -33,11 +33,6 @@ struct ofono_voicecall;
 typedef void (*ofono_voicecall_cb_t)(const struct ofono_error *error,
 					void *data);
 
-typedef void (*ofono_call_list_cb_t)(const struct ofono_error *error,
-					int numcalls,
-					const struct ofono_call *call_list,
-					void *data);
-
 /* Voice call related functionality, including ATD, ATA, +CHLD, CTFR, CLCC
  * and VTS.
  *
@@ -63,8 +58,8 @@ struct ofono_voicecall_driver {
 	 */
 	void (*dial)(struct ofono_voicecall *vc,
 			const struct ofono_phone_number *number,
-			enum ofono_clir_option clir, enum ofono_cug_option cug,
-			ofono_voicecall_cb_t cb, void *data);
+			enum ofono_clir_option clir, ofono_voicecall_cb_t cb,
+			void *data);
 	/* Answers an incoming call, this usually corresponds to ATA */
 	void (*answer)(struct ofono_voicecall *vc,
 			ofono_voicecall_cb_t cb, void *data);
@@ -76,7 +71,8 @@ struct ofono_voicecall_driver {
 	void (*hangup_all)(struct ofono_voicecall *vc,
 			ofono_voicecall_cb_t cb, void *data);
 	/*
-	 * Holds all active and retrieves held or waiting calls, this usually
+	 * Holds all active calls and answers waiting call.  If there is
+	 * no waiting calls, retrieves held call.  This usually
 	 * corresponds to +CHLD=2
 	 */
 	void (*hold_all_active)(struct ofono_voicecall *vc,
@@ -139,6 +135,9 @@ struct ofono_voicecall_driver {
 			ofono_voicecall_cb_t cb, void *data);
 };
 
+void ofono_voicecall_en_list_notify(struct ofono_voicecall *vc,
+					char **nw_en_list);
+
 void ofono_voicecall_notify(struct ofono_voicecall *vc,
 				const struct ofono_call *call);
 void ofono_voicecall_disconnected(struct ofono_voicecall *vc, int id,
@@ -158,6 +157,12 @@ void ofono_voicecall_remove(struct ofono_voicecall *vc);
 void ofono_voicecall_set_data(struct ofono_voicecall *vc, void *data);
 void *ofono_voicecall_get_data(struct ofono_voicecall *vc);
 int ofono_voicecall_get_next_callid(struct ofono_voicecall *vc);
+
+void ofono_voicecall_ssn_mo_notify(struct ofono_voicecall *vc, unsigned int id,
+					int code, int index);
+void ofono_voicecall_ssn_mt_notify(struct ofono_voicecall *vc, unsigned int id,
+					int code, int index,
+					const struct ofono_phone_number *ph);
 
 #ifdef __cplusplus
 }

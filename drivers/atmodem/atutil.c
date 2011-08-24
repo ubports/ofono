@@ -35,6 +35,20 @@
 #include "atutil.h"
 #include "vendor.h"
 
+static const char *cpin_prefix[] = { "+CPIN:", NULL };
+
+struct at_util_sim_state_query {
+	GAtChat *chat;
+	guint cpin_poll_source;
+	guint cpin_poll_count;
+	guint interval;
+	guint num_times;
+	at_util_sim_inserted_cb_t cb;
+	void *userdata;
+};
+
+static gboolean cpin_check(gpointer userdata);
+
 void decode_at_error(struct ofono_error *error, const char *final)
 {
 	if (!strcmp(final, "OK")) {
@@ -132,16 +146,16 @@ GSList *at_util_parse_clcc(GAtResult *result)
 		if (g_at_result_iter_next_string(&iter, &str))
 			g_at_result_iter_next_number(&iter, &number_type);
 
-		call = g_try_new0(struct ofono_call, 1);
-
-		if (!call)
+		call = g_try_new(struct ofono_call, 1);
+		if (call == NULL)
 			break;
+
+		ofono_call_init(call);
 
 		call->id = id;
 		call->direction = dir;
 		call->status = status;
 		call->type = type;
-		call->mpty = mpty;
 		strncpy(call->phone_number.number, str,
 				OFONO_MAX_PHONE_NUMBER_LENGTH);
 		call->phone_number.type = number_type;
@@ -180,6 +194,7 @@ gboolean at_util_parse_reg_unsolicited(GAtResult *result, const char *prefix,
 		goto out;
 
 	switch (vendor) {
+	case OFONO_VENDOR_GOBI:
 	case OFONO_VENDOR_HUAWEI:
 	case OFONO_VENDOR_NOVATEL:
 		if (g_at_result_iter_next_unquoted_string(&iter, &str) == TRUE)
@@ -241,14 +256,30 @@ gboolean at_util_parse_reg(GAtResult *result, const char *prefix,
 		g_at_result_iter_next_number(&iter, &m);
 
 		/* Sometimes we get an unsolicited CREG/CGREG here, skip it */
-		if (g_at_result_iter_next_number(&iter, &s) == FALSE)
-			continue;
+		switch (vendor) {
+		case OFONO_VENDOR_HUAWEI:
+		case OFONO_VENDOR_NOVATEL:
+			r = g_at_result_iter_next_unquoted_string(&iter, &str);
+
+			if (r == FALSE || strlen(str) != 1)
+				continue;
+
+			s = strtol(str, NULL, 10);
+
+			break;
+		default:
+			if (g_at_result_iter_next_number(&iter, &s) == FALSE)
+				continue;
+
+			break;
+		}
 
 		/* Some firmware will report bogus lac/ci when unregistered */
 		if (s != 1 && s != 5)
 			goto out;
 
 		switch (vendor) {
+		case OFONO_VENDOR_GOBI:
 		case OFONO_VENDOR_HUAWEI:
 		case OFONO_VENDOR_NOVATEL:
 			r = g_at_result_iter_next_unquoted_string(&iter, &str);
@@ -423,4 +454,135 @@ gboolean at_util_parse_cscs_query(GAtResult *result,
 		return at_util_charset_string_to_charset(str, charset);
 
 	return FALSE;
+}
+
+static const char *at_util_fixup_return(const char *line, const char *prefix)
+{
+	if (g_str_has_prefix(line, prefix) == FALSE)
+		return line;
+
+	line += strlen(prefix);
+
+	while (line[0] == ' ')
+		line++;
+
+	return line;
+}
+
+gboolean at_util_parse_attr(GAtResult *result, const char *prefix,
+				const char **out_attr)
+{
+	int numlines = g_at_result_num_response_lines(result);
+	GAtResultIter iter;
+	const char *line;
+	int i;
+
+	if (numlines == 0)
+		return FALSE;
+
+	g_at_result_iter_init(&iter, result);
+
+	/*
+	 * We have to be careful here, sometimes a stray unsolicited
+	 * notification will appear as part of the response and we
+	 * cannot rely on having a prefix to recognize the actual
+	 * response line.  So use the last line only as the response
+	 */
+	for (i = 0; i < numlines; i++)
+		g_at_result_iter_next(&iter, NULL);
+
+	line = g_at_result_iter_raw_line(&iter);
+
+	if (out_attr)
+		*out_attr = at_util_fixup_return(line, prefix);
+
+	return TRUE;
+}
+
+static void cpin_check_cb(gboolean ok, GAtResult *result, gpointer userdata)
+{
+	struct at_util_sim_state_query *req = userdata;
+	struct ofono_error error;
+
+	decode_at_error(&error, g_at_result_final_response(result));
+
+	if (error.type == OFONO_ERROR_TYPE_NO_ERROR)
+		goto done;
+
+	/*
+	 * If we got a generic error the AT port might not be ready,
+	 * try again
+	 */
+	if (error.type == OFONO_ERROR_TYPE_FAILURE)
+		goto tryagain;
+
+	/* If we got any other error besides CME, fail */
+	if (error.type != OFONO_ERROR_TYPE_CME)
+		goto done;
+
+	switch (error.error) {
+	case 10:
+	case 13:
+		goto done;
+
+	case 14:
+		goto tryagain;
+
+	default:
+		/* Assume SIM is present */
+		ok = TRUE;
+		goto done;
+	}
+
+tryagain:
+	if (req->cpin_poll_count++ < req->num_times) {
+		req->cpin_poll_source = g_timeout_add_seconds(req->interval,
+								cpin_check,
+								req);
+		return;
+	}
+
+done:
+	if (req->cb)
+		req->cb(ok, req->userdata);
+}
+
+static gboolean cpin_check(gpointer userdata)
+{
+	struct at_util_sim_state_query *req = userdata;
+
+	req->cpin_poll_source = 0;
+
+	g_at_chat_send(req->chat, "AT+CPIN?", cpin_prefix,
+			cpin_check_cb, req, NULL);
+
+	return FALSE;
+}
+
+struct at_util_sim_state_query *at_util_sim_state_query_new(GAtChat *chat,
+						guint interval, guint num_times,
+						at_util_sim_inserted_cb_t cb,
+						void *userdata)
+{
+	struct at_util_sim_state_query *req;
+
+	req = g_new0(struct at_util_sim_state_query, 1);
+
+	req->chat = chat;
+	req->interval = interval;
+	req->num_times = num_times;
+	req->cb = cb;
+	req->userdata = userdata;
+
+	cpin_check(req);
+
+	return req;
+}
+
+void at_util_sim_state_query_free(struct at_util_sim_state_query *req)
+{
+	if (req->cpin_poll_source > 0)
+		g_source_remove(req->cpin_poll_source);
+
+	g_free(req);
 }

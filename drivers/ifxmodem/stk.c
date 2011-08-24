@@ -46,7 +46,7 @@ struct stk_data {
 
 static const char *none_prefix[] = { NULL };
 static const char *sate_prefix[] = { "+SATE:", NULL };
-static const char *cfun_prefix[] = { "+CFUN:", NULL };
+static const char *xsatk_prefix[] = { "+XSATK:", NULL };
 
 static void sate_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
@@ -104,7 +104,7 @@ static void ifx_stk_envelope(struct ofono_stk *stk, int length,
 
 	DBG("");
 
-	if (!cbd || !buf)
+	if (buf == NULL)
 		goto error;
 
 	len = sprintf(buf, "AT+SATE=\"");
@@ -150,7 +150,7 @@ static void ifx_stk_terminal_response(struct ofono_stk *stk, int length,
 
 	DBG("");
 
-	if (!cbd || !buf)
+	if (buf == NULL)
 		goto error;
 
 	len = sprintf(buf, "AT+SATR=\"");
@@ -171,6 +171,16 @@ error:
 	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, data);
+}
+
+static void ifx_stk_user_confirmation(struct ofono_stk *stk, gboolean confirm)
+{
+	struct stk_data *sd = ofono_stk_get_data(stk);
+	char buf[20];
+
+	snprintf(buf, sizeof(buf), "AT+SATD=%i", confirm ? 1 : 0);
+
+	g_at_chat_send(sd->chat, buf, none_prefix, NULL, NULL, NULL);
 }
 
 static void sati_notify(GAtResult *result, gpointer user_data)
@@ -244,7 +254,7 @@ static void satf_notify(GAtResult *result, gpointer user_data)
 		ofono_stk_proactive_session_end_notify(stk);
 }
 
-static void cfun_support_cb(gboolean ok, GAtResult *result,
+static void xsatk_support_cb(gboolean ok, GAtResult *result,
 						gpointer user_data)
 {
 	struct ofono_stk *stk = user_data;
@@ -259,8 +269,7 @@ static void cfun_support_cb(gboolean ok, GAtResult *result,
 	g_at_chat_register(sd->chat, "+SATN:", satn_notify, FALSE, stk, NULL);
 	g_at_chat_register(sd->chat, "+SATF:", satf_notify, FALSE, stk, NULL);
 
-	g_at_chat_send(sd->chat, "AT+CFUN=6", none_prefix,
-						NULL, NULL, NULL);
+	g_at_chat_send(sd->chat, "AT+XSATK=1,1", none_prefix, NULL, NULL, NULL);
 
 	ofono_stk_register(stk);
 }
@@ -273,15 +282,15 @@ static int ifx_stk_probe(struct ofono_stk *stk, unsigned int vendor, void *data)
 	DBG("");
 
 	sd = g_try_new0(struct stk_data, 1);
-	if (!sd)
+	if (sd == NULL)
 		return -ENOMEM;
 
 	sd->chat = g_at_chat_clone(chat);
 
 	ofono_stk_set_data(stk, sd);
 
-	g_at_chat_send(sd->chat, "AT+CFUN=?", cfun_prefix,
-					cfun_support_cb, stk, NULL);
+	g_at_chat_send(sd->chat, "AT+XSATK=?", xsatk_prefix, xsatk_support_cb,
+			stk, NULL);
 
 	return 0;
 }
@@ -304,14 +313,15 @@ static struct ofono_stk_driver driver = {
 	.remove			= ifx_stk_remove,
 	.envelope		= ifx_stk_envelope,
 	.terminal_response	= ifx_stk_terminal_response,
+	.user_confirmation	= ifx_stk_user_confirmation,
 };
 
-void ifx_stk_init()
+void ifx_stk_init(void)
 {
 	ofono_stk_driver_register(&driver);
 }
 
-void ifx_stk_exit()
+void ifx_stk_exit(void)
 {
 	ofono_stk_driver_unregister(&driver);
 }

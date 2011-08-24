@@ -38,23 +38,17 @@
 #include "gatchat.h"
 #include "gatresult.h"
 
+#include "common.h"
 #include "ifxmodem.h"
 
-/* Amount of ms we wait between CLCC calls */
-#define POLL_CLCC_INTERVAL 500
-
- /* Amount of time we give for CLIP to arrive before we commence CLCC poll */
-#define CLIP_INTERVAL 200
-
 static const char *none_prefix[] = { NULL };
-
-/* According to 27.007 COLP is an intermediate status for ATD */
-static const char *atd_prefix[] = { "+COLP:", NULL };
+static const char *xlema_prefix[] = { "+XLEMA:", NULL };
 
 struct voicecall_data {
 	GSList *calls;
 	unsigned int local_release;
 	GAtChat *chat;
+	char **en_list;
 };
 
 struct release_id_req {
@@ -87,17 +81,20 @@ static int class_to_call_type(int cls)
 
 static struct ofono_call *create_call(struct ofono_voicecall *vc, int type,
 					int direction, int status,
-					const char *num, int num_type, int clip)
+					const char *num, int num_type,
+					int clip, int id)
 {
 	struct voicecall_data *d = ofono_voicecall_get_data(vc);
 	struct ofono_call *call;
 
 	/* Generate a call structure for the waiting call */
-	call = g_try_new0(struct ofono_call, 1);
-	if (!call)
+	call = g_try_new(struct ofono_call, 1);
+	if (call == NULL)
 		return NULL;
 
-	call->id = ofono_voicecall_get_next_callid(vc);
+	ofono_call_init(call);
+
+	call->id = id;
 	call->type = type;
 	call->direction = direction;
 	call->status = status;
@@ -123,7 +120,8 @@ static void xcallstat_notify(GAtResult *result, gpointer user_data)
 	int id;
 	int status;
 	GSList *l;
-	struct ofono_call *call;
+	struct ofono_call *new_call;
+	struct ofono_call *existing_call = NULL;
 
 	g_at_result_iter_init(&iter, result);
 
@@ -139,52 +137,83 @@ static void xcallstat_notify(GAtResult *result, gpointer user_data)
 	l = g_slist_find_custom(vd->calls, GINT_TO_POINTER(id),
 				at_util_call_compare_by_id);
 
-	if (l == NULL) {
-		/*
-		 * We should only receive XCALLSTAT on waiting and incoming
-		 * In the case of waiting, we will get the rest of the info
-		 * from CCWA indication.
-		 * In the case of incoming, we will get the info from CLIP
-		 * indications.
+	if (l == NULL && status != CALL_STATUS_DIALING &&
+				status != CALL_STATUS_INCOMING &&
+				status != CALL_STATUS_WAITING) {
+		ofono_error("Received XCALLSTAT for an untracked"
+				" call, this indicates a bug!");
+		return;
+	}
+
+	if (l)
+		existing_call = l->data;
+
+	switch (status) {
+	case CALL_STATUS_DISCONNECTED:
+	{
+		enum ofono_disconnect_reason reason;
+
+		existing_call->status = status;
+
+		if (vd->local_release & (1 << existing_call->id))
+			reason = OFONO_DISCONNECT_REASON_LOCAL_HANGUP;
+		else
+			reason = OFONO_DISCONNECT_REASON_REMOTE_HANGUP;
+
+		ofono_voicecall_disconnected(vc, existing_call->id,
+						reason, NULL);
+
+		vd->local_release &= ~(1 << existing_call->id);
+		vd->calls = g_slist_remove(vd->calls, l->data);
+		g_free(existing_call);
+		break;
+	}
+	case CALL_STATUS_DIALING:
+	case CALL_STATUS_WAITING:
+	case CALL_STATUS_INCOMING:
+	{
+		int direction;
+
+		/* Handle the following situation:
+		 * Active Call + Waiting Call. Active Call is Released.
+		 * The Waiting call becomes Incoming. In this case, no
+		 * need to create a new call. Call status change will be
+		 * triggered from clip_notify.
 		 */
-		if (status != 4 && status != 5) {
-			ofono_info("Received an XCALLSTAT for an untracked"
-					" call, this indicates a bug!");
+		if (existing_call) {
+			existing_call->status = status;
 			return;
 		}
 
-		return;
-	}
-
-	call = l->data;
-
-	/* Check if call has been disconnected */
-	if (status == 6) {
-		enum ofono_disconnect_reason r;
-
-		if (vd->local_release & (0x1 << call->id))
-			r = OFONO_DISCONNECT_REASON_LOCAL_HANGUP;
+		if (status == CALL_STATUS_DIALING)
+			direction = CALL_DIRECTION_MOBILE_ORIGINATED;
 		else
-			r = OFONO_DISCONNECT_REASON_REMOTE_HANGUP;
+			direction = CALL_DIRECTION_MOBILE_TERMINATED;
 
-		if (call->type == 0)
-			ofono_voicecall_disconnected(vc, call->id, r, NULL);
+		new_call = create_call(vc, 0, direction, status,
+					NULL, 128,
+					CLIP_VALIDITY_NOT_AVAILABLE, id);
+		if (new_call == NULL) {
+			ofono_error("Unable to malloc. "
+					"Call management is fubar");
+			return;
+		}
 
-		vd->local_release &= ~(0x1 << call->id);
-		vd->calls = g_slist_remove(vd->calls, call);
-		g_free(call);
-
-		return;
+		new_call->id = id;
+		break;
 	}
+	case CALL_STATUS_ALERTING:
+	case CALL_STATUS_ACTIVE:
+	case CALL_STATUS_HELD:
+	default:
+		/* For connected status, simply reset back to active */
+		if (status == 7)
+			status = CALL_STATUS_ACTIVE;
 
-	/* For connected status, simply reset back to active */
-	if (status == 7)
-		status = 0;
-
-	call->status = status;
-
-	if (call->type == 0)
-		ofono_voicecall_notify(vc, call);
+		existing_call->status = status;
+		ofono_voicecall_notify(vc, existing_call);
+		break;
+	}
 }
 
 static void xem_notify(GAtResult *result, gpointer user_data)
@@ -229,8 +258,8 @@ static void generic_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		for (l = vd->calls; l; l = l->next) {
 			call = l->data;
 
-			if (req->affected_types & (0x1 << call->status))
-				vd->local_release |= (0x1 << call->id);
+			if (req->affected_types & (1 << call->status))
+				vd->local_release |= (1 << call->id);
 		}
 	}
 
@@ -247,7 +276,7 @@ static void release_id_cb(gboolean ok, GAtResult *result,
 	decode_at_error(&error, g_at_result_final_response(result));
 
 	if (ok)
-		vd->local_release |= 0x1 << req->id;
+		vd->local_release |= 1 << req->id;
 
 	req->cb(&error, req->data);
 }
@@ -255,64 +284,25 @@ static void release_id_cb(gboolean ok, GAtResult *result,
 static void atd_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
-	struct ofono_voicecall *vc = cbd->user;
 	ofono_voicecall_cb_t cb = cbd->cb;
-	GAtResultIter iter;
-	const char *num;
-	int type = 128;
-	int validity = 2;
 	struct ofono_error error;
-	struct ofono_call *call;
 
 	decode_at_error(&error, g_at_result_final_response(result));
-
-	if (!ok) {
-		cb(&error, cbd->data);
-		return;
-	}
-
-	g_at_result_iter_init(&iter, result);
-
-	if (g_at_result_iter_next(&iter, "+COLP:")) {
-		g_at_result_iter_next_string(&iter, &num);
-		g_at_result_iter_next_number(&iter, &type);
-
-		if (strlen(num) > 0)
-			validity = 0;
-		else
-			validity = 2;
-
-		DBG("colp_notify: %s %d %d", num, type, validity);
-	}
-
-	/* Generate a voice call that was just dialed, we guess the ID */
-	call = create_call(vc, 0, 0, 2, num, type, validity);
-	if (!call) {
-		ofono_error("Unable to malloc, call tracking will fail!");
-		return;
-	}
 
 	/* Let oFono core will generate a call with the dialed number
 	 * inside its dial callback.
 	 */
 	cb(&error, cbd->data);
-
-	/* If we got COLP information, then notify the core */
-	if (validity != 2)
-		ofono_voicecall_notify(vc, call);
 }
 
 static void ifx_dial(struct ofono_voicecall *vc,
 			const struct ofono_phone_number *ph,
-			enum ofono_clir_option clir, enum ofono_cug_option cug,
-			ofono_voicecall_cb_t cb, void *data)
+			enum ofono_clir_option clir, ofono_voicecall_cb_t cb,
+			void *data)
 {
 	struct voicecall_data *vd = ofono_voicecall_get_data(vc);
 	struct cb_data *cbd = cb_data_new(cb, data);
 	char buf[256];
-
-	if (!cbd)
-		goto error;
 
 	cbd->user = vc;
 
@@ -332,21 +322,12 @@ static void ifx_dial(struct ofono_voicecall *vc,
 		break;
 	}
 
-	switch (cug) {
-	case OFONO_CUG_OPTION_INVOCATION:
-		strcat(buf, "G");
-		break;
-	default:
-		break;
-	}
-
 	strcat(buf, ";");
 
-	if (g_at_chat_send(vd->chat, buf, atd_prefix,
+	if (g_at_chat_send(vd->chat, buf, none_prefix,
 				atd_cb, cbd, g_free) > 0)
 		return;
 
-error:
 	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, data);
@@ -359,7 +340,7 @@ static void ifx_template(const char *cmd, struct ofono_voicecall *vc,
 	struct voicecall_data *vd = ofono_voicecall_get_data(vc);
 	struct change_state_req *req = g_try_new0(struct change_state_req, 1);
 
-	if (!req)
+	if (req == NULL)
 		goto error;
 
 	req->vc = vc;
@@ -406,14 +387,16 @@ static void ifx_hold_all_active(struct ofono_voicecall *vc,
 static void ifx_release_all_held(struct ofono_voicecall *vc,
 				ofono_voicecall_cb_t cb, void *data)
 {
-	unsigned int held_status = 0x1 << 1;
+	unsigned int held_status = 1 << CALL_STATUS_HELD;
 	ifx_template("AT+CHLD=0", vc, generic_cb, held_status, cb, data);
 }
 
 static void ifx_set_udub(struct ofono_voicecall *vc,
 			ofono_voicecall_cb_t cb, void *data)
 {
-	unsigned int incoming_or_waiting = (0x1 << 4) | (0x1 << 5);
+	unsigned int incoming_or_waiting =
+		(1 << CALL_STATUS_INCOMING) | (1 << CALL_STATUS_WAITING);
+
 	ifx_template("AT+CHLD=0", vc, generic_cb, incoming_or_waiting,
 			cb, data);
 }
@@ -431,7 +414,7 @@ static void ifx_release_specific(struct ofono_voicecall *vc, int id,
 	struct release_id_req *req = g_try_new0(struct release_id_req, 1);
 	char buf[32];
 
-	if (!req)
+	if (req == NULL)
 		goto error;
 
 	req->vc = vc;
@@ -486,7 +469,8 @@ static void ifx_deflect(struct ofono_voicecall *vc,
 			ofono_voicecall_cb_t cb, void *data)
 {
 	char buf[128];
-	unsigned int incoming_or_waiting = (0x1 << 4) | (0x1 << 5);
+	unsigned int incoming_or_waiting =
+		(1 << CALL_STATUS_INCOMING) | (1 << CALL_STATUS_WAITING);
 
 	snprintf(buf, sizeof(buf), "AT+CTFR=%s,%d", ph->number, ph->type);
 	ifx_template(buf, vc, generic_cb, incoming_or_waiting, cb, data);
@@ -518,12 +502,9 @@ static void ifx_send_dtmf(struct ofono_voicecall *vc, const char *dtmf,
 	int i;
 	char *buf;
 
-	if (!cbd)
-		goto error;
-
 	/* strlen("+VTS=T\;") = 7 + initial AT + null */
 	buf = g_try_new(char, len * 7 + 3);
-	if (!buf)
+	if (buf == NULL)
 		goto error;
 
 	s = sprintf(buf, "AT+VTS=%c", dtmf[0]);
@@ -551,23 +532,28 @@ static void cring_notify(GAtResult *result, gpointer user_data)
 	struct voicecall_data *vd = ofono_voicecall_get_data(vc);
 	GAtResultIter iter;
 	const char *line;
-	int type;
+	GSList *l;
+	struct ofono_call *call;
 
 	/* Handle the following situation:
 	 * Active Call + Waiting Call.  Active Call is Released.  The Waiting
-	 * call becomes Incoming and RING/CRING indications are signaled.
-	 * Sometimes these arrive before we managed to poll CLCC to find about
-	 * the stage change.  If this happens, simply ignore the RING/CRING
-	 * when a waiting call exists (cannot have waiting + incoming in GSM)
+	 * call becomes Incoming and CRING indications are signaled.
+	 * Sometimes these arrive before the actual state change notification.
+	 * If this happens, simply ignore the CRING when a waiting call
+	 * exists (cannot have waiting + incoming in GSM)
 	 */
-	if (g_slist_find_custom(vd->calls, GINT_TO_POINTER(5),
+	if (g_slist_find_custom(vd->calls,
+				GINT_TO_POINTER(CALL_STATUS_WAITING),
 				at_util_call_compare_by_status))
 		return;
 
-	/* CRING can repeat, ignore if we already have an incoming call */
-	if (g_slist_find_custom(vd->calls, GINT_TO_POINTER(4),
-				at_util_call_compare_by_status))
+	l = g_slist_find_custom(vd->calls,
+				GINT_TO_POINTER(CALL_STATUS_INCOMING),
+				at_util_call_compare_by_status);
+	if (l == NULL) {
+		ofono_error("CRING received before XCALLSTAT!!!");
 		return;
+	}
 
 	g_at_result_iter_init(&iter, result);
 
@@ -578,14 +564,13 @@ static void cring_notify(GAtResult *result, gpointer user_data)
 	if (line == NULL)
 		return;
 
+	call = l->data;
+
 	/* Ignore everything that is not voice for now */
 	if (!strcasecmp(line, "VOICE"))
-		type = 0;
+		call->type = 0;
 	else
-		type = 9;
-
-	/* Generate an incoming call */
-	create_call(vc, type, 1, 4, NULL, 128, 2);
+		call->type = 9;
 
 	/* Assume the CLIP always arrives, and we signal the call there */
 	DBG("cring_notify");
@@ -601,7 +586,8 @@ static void clip_notify(GAtResult *result, gpointer user_data)
 	GSList *l;
 	struct ofono_call *call;
 
-	l = g_slist_find_custom(vd->calls, GINT_TO_POINTER(4),
+	l = g_slist_find_custom(vd->calls,
+				GINT_TO_POINTER(CALL_STATUS_INCOMING),
 				at_util_call_compare_by_status);
 	if (l == NULL) {
 		ofono_error("CLIP for unknown call");
@@ -646,6 +632,56 @@ static void clip_notify(GAtResult *result, gpointer user_data)
 		ofono_voicecall_notify(vc, call);
 }
 
+static void cnap_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_voicecall *vc = user_data;
+	struct voicecall_data *vd = ofono_voicecall_get_data(vc);
+	GAtResultIter iter;
+	const char *name;
+	int validity;
+	GSList *l;
+	struct ofono_call *call;
+
+	/*
+	 * Currently, its not clear which URC will contain the
+	 * calling party name for the waiting call.
+	 */
+	l = g_slist_find_custom(vd->calls,
+				GINT_TO_POINTER(CALL_STATUS_INCOMING),
+				at_util_call_compare_by_status);
+	if (l == NULL) {
+		ofono_error("CNAP for unknown call");
+		return;
+	}
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "+CNAP:"))
+		return;
+
+	if (!g_at_result_iter_next_string(&iter, &name))
+		return;
+
+	if (strlen(name) > 0)
+		validity = CNAP_VALIDITY_VALID;
+	else
+		validity = CNAP_VALIDITY_NOT_AVAILABLE;
+
+	/* If we have CNI validity field, override our guessed value */
+	g_at_result_iter_next_number(&iter, &validity);
+
+	DBG("%s %d", name, validity);
+
+	call = l->data;
+
+	strncpy(call->name, name, OFONO_MAX_CALLER_NAME_LENGTH);
+	call->name[OFONO_MAX_CALLER_NAME_LENGTH] = '\0';
+	call->cnap_validity = validity;
+
+	if (call->type == 0)
+		ofono_voicecall_notify(vc, call);
+}
+
 static void ccwa_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_voicecall *vc = user_data;
@@ -653,12 +689,16 @@ static void ccwa_notify(GAtResult *result, gpointer user_data)
 	GAtResultIter iter;
 	const char *num;
 	int num_type, validity, cls;
+	GSList *l;
 	struct ofono_call *call;
 
-	/* Some modems resend CCWA, ignore it the second time around */
-	if (g_slist_find_custom(vd->calls, GINT_TO_POINTER(5),
-				at_util_call_compare_by_status))
+	l = g_slist_find_custom(vd->calls,
+				GINT_TO_POINTER(CALL_STATUS_WAITING),
+				at_util_call_compare_by_status);
+	if (l == NULL) {
+		ofono_error("CCWA received before XCALLSTAT!!!");
 		return;
+	}
 
 	g_at_result_iter_init(&iter, result);
 
@@ -687,15 +727,145 @@ static void ccwa_notify(GAtResult *result, gpointer user_data)
 
 	DBG("ccwa_notify: %s %d %d %d", num, num_type, cls, validity);
 
-	call = create_call(vc, class_to_call_type(cls), 1, 5,
-				num, num_type, validity);
-	if (!call) {
-		ofono_error("Unable to malloc. Call management is fubar");
-		return;
-	}
+	call = l->data;
+
+	call->type = class_to_call_type(cls);
+	strncpy(call->phone_number.number, num, OFONO_MAX_PHONE_NUMBER_LENGTH);
+	call->phone_number.number[OFONO_MAX_PHONE_NUMBER_LENGTH] = '\0';
+	call->phone_number.type = num_type;
+	call->clip_validity = validity;
 
 	if (call->type == 0) /* Only notify voice calls */
 		ofono_voicecall_notify(vc, call);
+}
+
+static void xcolp_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_voicecall *vc = user_data;
+	struct voicecall_data *vd = ofono_voicecall_get_data(vc);
+	GAtResultIter iter;
+	const char *num;
+	int type, call_id;
+	GSList *l;
+	struct ofono_call *call;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "+XCOLP:"))
+		return;
+
+	if (!g_at_result_iter_next_number(&iter, &call_id))
+		return;
+
+	if (!g_at_result_iter_next_string(&iter, &num))
+		return;
+
+	if (!g_at_result_iter_next_number(&iter, &type))
+		return;
+
+	if (strlen(num) == 0) {
+		ofono_error("XCOLP received with invalid number!!!");
+		return;
+	}
+
+	DBG("xcolp_notify: %d %s %d", call_id, num, type);
+
+	l = g_slist_find_custom(vd->calls,
+				GINT_TO_POINTER(call_id),
+				at_util_call_compare_by_id);
+	if (l == NULL) {
+		ofono_error("XCOLP for unknown call");
+		return;
+	}
+
+	call = l->data;
+
+	strncpy(call->phone_number.number, num,	OFONO_MAX_PHONE_NUMBER_LENGTH);
+	call->phone_number.number[OFONO_MAX_PHONE_NUMBER_LENGTH] = '\0';
+	call->phone_number.type = type;
+	call->clip_validity = CLIP_VALIDITY_VALID;
+
+	ofono_voicecall_notify(vc, call);
+}
+
+static void xlema_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_voicecall *vc = user_data;
+	struct voicecall_data *vd = ofono_voicecall_get_data(vc);
+	GAtResultIter iter;
+	int index, total_cnt;
+	const char *number;
+	int count = (vd->en_list == NULL) ? 0 : g_strv_length(vd->en_list);
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "+XLEMA:"))
+		return;
+
+	if (!g_at_result_iter_next_number(&iter, &index))
+		return;
+
+	if (!g_at_result_iter_next_number(&iter, &total_cnt))
+		return;
+
+	if (!g_at_result_iter_next_string(&iter, &number))
+		return;
+
+	if (vd->en_list == NULL)
+		vd->en_list = g_new0(char *, total_cnt + 1);
+
+	vd->en_list[count] = g_strdup(number);
+
+	if (index != total_cnt)
+		return;
+
+	ofono_voicecall_en_list_notify(vc, vd->en_list);
+
+	g_strfreev(vd->en_list);
+	vd->en_list = NULL;
+}
+
+static void xlema_read(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct ofono_voicecall *vc = user_data;
+	struct voicecall_data *vd = ofono_voicecall_get_data(vc);
+	GAtResultIter iter;
+	int num = 0;
+	int index, total_cnt;
+	const char *number;
+
+	if (!ok) {
+		DBG("Emergency number list read failed");
+		return;
+	}
+
+	g_at_result_iter_init(&iter, result);
+
+	while (g_at_result_iter_next(&iter, "+XLEMA:"))
+		num += 1;
+
+	vd->en_list = g_new0(char *, num + 1);
+
+	num = 0;
+	g_at_result_iter_init(&iter, result);
+
+	while (g_at_result_iter_next(&iter, "+XLEMA:")) {
+		if (!g_at_result_iter_next_number(&iter, &index))
+			continue;
+
+		if (!g_at_result_iter_next_number(&iter, &total_cnt))
+			continue;
+
+		if (!g_at_result_iter_next_string(&iter, &number))
+			continue;
+
+		vd->en_list[num++] = g_strdup(number);
+	}
+
+	ofono_voicecall_en_list_notify(vc, vd->en_list);
+
+	g_strfreev(vd->en_list);
+	vd->en_list = NULL;
 }
 
 static void ifx_voicecall_initialized(gboolean ok, GAtResult *result,
@@ -708,10 +878,16 @@ static void ifx_voicecall_initialized(gboolean ok, GAtResult *result,
 
 	g_at_chat_register(vd->chat, "+CRING:", cring_notify, FALSE, vc, NULL);
 	g_at_chat_register(vd->chat, "+CLIP:", clip_notify, FALSE, vc, NULL);
+	g_at_chat_register(vd->chat, "+CNAP:", cnap_notify, FALSE, vc, NULL);
 	g_at_chat_register(vd->chat, "+CCWA:", ccwa_notify, FALSE, vc, NULL);
 	g_at_chat_register(vd->chat, "+XEM:", xem_notify, FALSE, vc, NULL);
 	g_at_chat_register(vd->chat, "+XCALLSTAT:", xcallstat_notify,
 							FALSE, vc, NULL);
+	g_at_chat_register(vd->chat, "+XCOLP:", xcolp_notify, FALSE, vc, NULL);
+	g_at_chat_register(vd->chat, "+XLEMA:", xlema_notify, FALSE, vc, NULL);
+	/* Enable emergency number list notification */
+	g_at_chat_send(vd->chat, "AT+XLEMA=1", xlema_prefix, xlema_read, vc,
+									NULL);
 
 	ofono_voicecall_register(vc);
 }
@@ -723,19 +899,20 @@ static int ifx_voicecall_probe(struct ofono_voicecall *vc, unsigned int vendor,
 	struct voicecall_data *vd;
 
 	vd = g_try_new0(struct voicecall_data, 1);
-	if (!vd)
+	if (vd == NULL)
 		return -ENOMEM;
 
 	vd->chat = g_at_chat_clone(chat);
 
 	ofono_voicecall_set_data(vc, vd);
 
-	g_at_chat_send(chat, "AT+XCALLSTAT=1", none_prefix, NULL, NULL, NULL);
-	g_at_chat_send(chat, "AT+XEMC=1", none_prefix, NULL, NULL, NULL);
+	g_at_chat_send(vd->chat, "AT+XCALLSTAT=1", none_prefix, NULL, NULL,
+			NULL);
+	g_at_chat_send(vd->chat, "AT+XEMC=1", none_prefix, NULL, NULL, NULL);
+	g_at_chat_send(vd->chat, "AT+XCOLP=1", none_prefix, NULL, NULL, NULL);
 
 	g_at_chat_send(vd->chat, "AT+CRC=1", none_prefix, NULL, NULL, NULL);
 	g_at_chat_send(vd->chat, "AT+CLIP=1", none_prefix, NULL, NULL, NULL);
-	g_at_chat_send(vd->chat, "AT+COLP=1", none_prefix, NULL, NULL, NULL);
 	g_at_chat_send(vd->chat, "AT+CNAP=1", none_prefix, NULL, NULL, NULL);
 	g_at_chat_send(vd->chat, "AT+CCWA=1", none_prefix,
 				ifx_voicecall_initialized, vc, NULL);
@@ -749,6 +926,8 @@ static void ifx_voicecall_remove(struct ofono_voicecall *vc)
 
 	g_slist_foreach(vd->calls, (GFunc) g_free, NULL);
 	g_slist_free(vd->calls);
+
+	g_strfreev(vd->en_list);
 
 	ofono_voicecall_set_data(vc, NULL);
 
@@ -777,12 +956,12 @@ static struct ofono_voicecall_driver driver = {
 	.send_tones		= ifx_send_dtmf
 };
 
-void ifx_voicecall_init()
+void ifx_voicecall_init(void)
 {
 	ofono_voicecall_driver_register(&driver);
 }
 
-void ifx_voicecall_exit()
+void ifx_voicecall_exit(void)
 {
 	ofono_voicecall_driver_unregister(&driver);
 }

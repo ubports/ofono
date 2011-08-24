@@ -37,7 +37,6 @@
 #include "smsutil.h"
 #include "util.h"
 
-#define SUPPLEMENTARY_SERVICES_INTERFACE "org.ofono.SupplementaryServices"
 #define MAX_USSD_LENGTH 160
 
 static GSList *g_drivers = NULL;
@@ -76,7 +75,7 @@ struct ssc_entry {
 
 gboolean __ofono_ussd_is_busy(struct ofono_ussd *ussd)
 {
-	if (!ussd)
+	if (ussd == NULL)
 		return FALSE;
 
 	if (ussd->pending || ussd->state != USSD_STATE_IDLE || ussd->req)
@@ -92,7 +91,7 @@ static struct ssc_entry *ssc_entry_create(const char *sc, void *cb, void *data,
 
 	r = g_try_new0(struct ssc_entry, 1);
 
-	if (!r)
+	if (r == NULL)
 		return r;
 
 	r->service = g_strdup(sc);
@@ -125,12 +124,11 @@ gboolean __ofono_ussd_ssc_register(struct ofono_ussd *ussd, const char *sc,
 {
 	struct ssc_entry *entry;
 
-	if (!ussd)
+	if (ussd == NULL)
 		return FALSE;
 
 	entry = ssc_entry_create(sc, cb, data, destroy);
-
-	if (!entry)
+	if (entry == NULL)
 		return FALSE;
 
 	ussd->ss_control_list = g_slist_prepend(ussd->ss_control_list, entry);
@@ -142,13 +140,13 @@ void __ofono_ussd_ssc_unregister(struct ofono_ussd *ussd, const char *sc)
 {
 	GSList *l;
 
-	if (!ussd)
+	if (ussd == NULL)
 		return;
 
 	l = g_slist_find_custom(ussd->ss_control_list, sc,
 				ssc_entry_find_by_service);
 
-	if (!l)
+	if (l == NULL)
 		return;
 
 	ssc_entry_destroy(l->data);
@@ -161,12 +159,11 @@ gboolean __ofono_ussd_passwd_register(struct ofono_ussd *ussd, const char *sc,
 {
 	struct ssc_entry *entry;
 
-	if (!ussd)
+	if (ussd == NULL)
 		return FALSE;
 
 	entry = ssc_entry_create(sc, cb, data, destroy);
-
-	if (!entry)
+	if (entry == NULL)
 		return FALSE;
 
 	ussd->ss_passwd_list = g_slist_prepend(ussd->ss_passwd_list, entry);
@@ -178,13 +175,13 @@ void __ofono_ussd_passwd_unregister(struct ofono_ussd *ussd, const char *sc)
 {
 	GSList *l;
 
-	if (!ussd)
+	if (ussd == NULL)
 		return;
 
 	l = g_slist_find_custom(ussd->ss_passwd_list, sc,
 				ssc_entry_find_by_service);
 
-	if (!l)
+	if (l == NULL)
 		return;
 
 	ssc_entry_destroy(l->data);
@@ -324,7 +321,7 @@ static void ussd_change_state(struct ofono_ussd *ussd, int state)
 
 	value = ussd_get_state_string(ussd);
 	ofono_dbus_signal_property_changed(conn, path,
-			SUPPLEMENTARY_SERVICES_INTERFACE,
+			OFONO_SUPPLEMENTARY_SERVICES_INTERFACE,
 			"State", DBUS_TYPE_STRING, &value);
 }
 
@@ -420,7 +417,7 @@ void ofono_ussd_notify(struct ofono_ussd *ussd, int status, int dcs,
 	if (status == OFONO_USSD_STATUS_NOT_SUPPORTED) {
 		ussd_change_state(ussd, USSD_STATE_IDLE);
 
-		if (!ussd->pending)
+		if (ussd->pending == NULL)
 			return;
 
 		reply = __ofono_error_not_supported(ussd->pending);
@@ -430,7 +427,7 @@ void ofono_ussd_notify(struct ofono_ussd *ussd, int status, int dcs,
 	if (status == OFONO_USSD_STATUS_TIMED_OUT) {
 		ussd_change_state(ussd, USSD_STATE_IDLE);
 
-		if (!ussd->pending)
+		if (ussd->pending == NULL)
 			return;
 
 		reply = __ofono_error_timed_out(ussd->pending);
@@ -447,7 +444,7 @@ void ofono_ussd_notify(struct ofono_ussd *ussd, int status, int dcs,
 
 		reply = dbus_message_new_method_return(ussd->pending);
 
-		if (!str)
+		if (str == NULL)
 			str = "";
 
 		dbus_message_iter_init_append(reply, &iter);
@@ -471,7 +468,7 @@ void ofono_ussd_notify(struct ofono_ussd *ussd, int status, int dcs,
 	} else if (ussd->state == USSD_STATE_RESPONSE_SENT) {
 		reply = dbus_message_new_method_return(ussd->pending);
 
-		if (!str)
+		if (str == NULL)
 			str = "";
 
 		dbus_message_append_args(reply, DBUS_TYPE_STRING, &str,
@@ -494,11 +491,11 @@ void ofono_ussd_notify(struct ofono_ussd *ussd, int status, int dcs,
 			signal_name = "NotificationReceived";
 		}
 
-		if (!str)
+		if (str == NULL)
 			str = "";
 
 		g_dbus_emit_signal(conn, path,
-				SUPPLEMENTARY_SERVICES_INTERFACE, signal_name,
+			OFONO_SUPPLEMENTARY_SERVICES_INTERFACE, signal_name,
 				DBUS_TYPE_STRING, &str, DBUS_TYPE_INVALID);
 
 		ussd_change_state(ussd, new_state);
@@ -534,7 +531,7 @@ static void ussd_callback(const struct ofono_error *error, void *data)
 		return;
 	}
 
-	if (!ussd->pending)
+	if (ussd->pending == NULL)
 		return;
 
 	reply = __ofono_error_failed(ussd->pending);
@@ -583,7 +580,7 @@ static DBusMessage *ussd_initiate(DBusConnection *conn, DBusMessage *msg,
 	if (!ussd_encode(str, &num_packed, buf))
 		return __ofono_error_invalid_format(msg);
 
-	if (!ussd->driver->request)
+	if (ussd->driver->request == NULL)
 		return __ofono_error_not_implemented(msg);
 
 	DBG("OK, running USSD request");
@@ -609,7 +606,7 @@ static void ussd_response_callback(const struct ofono_error *error, void *data)
 		return;
 	}
 
-	if (!ussd->pending)
+	if (ussd->pending == NULL)
 		return;
 
 	reply = __ofono_error_failed(ussd->pending);
@@ -641,7 +638,7 @@ static DBusMessage *ussd_respond(DBusConnection *conn, DBusMessage *msg,
 	if (!ussd_encode(str, &num_packed, buf))
 		return __ofono_error_invalid_format(msg);
 
-	if (!ussd->driver->request)
+	if (ussd->driver->request == NULL)
 		return __ofono_error_not_implemented(msg);
 
 	ussd->pending = dbus_message_ref(msg);
@@ -696,7 +693,7 @@ static DBusMessage *ussd_cancel(DBusConnection *conn, DBusMessage *msg,
 	if (ussd->cancel)
 		return __ofono_error_busy(msg);
 
-	if (!ussd->driver->cancel)
+	if (ussd->driver->cancel == NULL)
 		return __ofono_error_not_implemented(msg);
 
 	ussd->cancel = dbus_message_ref(msg);
@@ -716,7 +713,7 @@ static DBusMessage *ussd_get_properties(DBusConnection *conn,
 	const char *value;
 
 	reply = dbus_message_new_method_return(msg);
-	if (!reply)
+	if (reply == NULL)
 		return NULL;
 
 	dbus_message_iter_init_append(reply, &iter);
@@ -786,9 +783,10 @@ static void ussd_unregister(struct ofono_atom *atom)
 	g_slist_free(ussd->ss_passwd_list);
 	ussd->ss_passwd_list = NULL;
 
-	ofono_modem_remove_interface(modem, SUPPLEMENTARY_SERVICES_INTERFACE);
+	ofono_modem_remove_interface(modem,
+					OFONO_SUPPLEMENTARY_SERVICES_INTERFACE);
 	g_dbus_unregister_interface(conn, path,
-					SUPPLEMENTARY_SERVICES_INTERFACE);
+					OFONO_SUPPLEMENTARY_SERVICES_INTERFACE);
 }
 
 static void ussd_remove(struct ofono_atom *atom)
@@ -848,16 +846,17 @@ void ofono_ussd_register(struct ofono_ussd *ussd)
 	const char *path = __ofono_atom_get_path(ussd->atom);
 
 	if (!g_dbus_register_interface(conn, path,
-					SUPPLEMENTARY_SERVICES_INTERFACE,
+					OFONO_SUPPLEMENTARY_SERVICES_INTERFACE,
 					ussd_methods, ussd_signals, NULL,
 					ussd, NULL)) {
 		ofono_error("Could not create %s interface",
-				SUPPLEMENTARY_SERVICES_INTERFACE);
+				OFONO_SUPPLEMENTARY_SERVICES_INTERFACE);
 
 		return;
 	}
 
-	ofono_modem_add_interface(modem, SUPPLEMENTARY_SERVICES_INTERFACE);
+	ofono_modem_add_interface(modem,
+				OFONO_SUPPLEMENTARY_SERVICES_INTERFACE);
 
 	__ofono_atom_register(ussd->atom, ussd_unregister);
 }
@@ -893,7 +892,7 @@ int __ofono_ussd_initiate(struct ofono_ussd *ussd, int dcs,
 {
 	struct ussd_request *req;
 
-	if (!ussd->driver->request)
+	if (ussd->driver->request == NULL)
 		return -ENOSYS;
 
 	if (__ofono_ussd_is_busy(ussd))
@@ -915,7 +914,7 @@ int __ofono_ussd_initiate(struct ofono_ussd *ussd, int dcs,
 
 void __ofono_ussd_initiate_cancel(struct ofono_ussd *ussd)
 {
-	if (!ussd->req || !ussd->req->cb)
+	if (ussd->req == NULL || ussd->req->cb == NULL)
 		return;
 
 	ussd->req->cb = NULL;

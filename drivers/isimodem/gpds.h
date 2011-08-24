@@ -27,7 +27,11 @@ extern "C" {
 #endif
 
 #define GPDS_MAX_CONTEXT_COUNT			11
-#define GPDS_TIMEOUT				60
+#define GPDS_TIMEOUT				3
+#define GPDS_CTX_ACTIVATE_TIMEOUT		(6 * 30)	/* 6 * T3380 */
+#define GPDS_CTX_DEACTIVATE_TIMEOUT		(6 * 8)		/* 6 * T3390 */
+#define GPDS_ATTACH_TIMEOUT			(6 * 15)	/* 6 * T3310 */
+#define GPDS_DETACH_TIMEOUT			(6 * 15)	/* 6 * T3321 */
 
 #define GPDS_MAX_APN_STRING_LENGTH		100
 #define GPDS_MAX_USERNAME_LENGTH		53
@@ -35,6 +39,7 @@ extern "C" {
 
 #define PN_GPDS					0x31
 #define PN_PEP_TYPE_GPRS			0x04
+#define PN_WRAN					0xB4
 
 enum gpds_message_id {
 	GPDS_LL_CONFIGURE_REQ =			0x00,
@@ -126,7 +131,6 @@ enum gpds_subblock {
 	GPDS_SDNS_ADDRESS_INFO =		0x0E,
 	GPDS_CHALLENGE_INFO =			0x0F,
 	GPDS_DNS_ADDRESS_REQ_INFO =		0x90,
-	GPDS_COMMON_MESSAGE =			0xF0
 };
 
 enum gpds_status {
@@ -247,6 +251,32 @@ enum gpds_request_mode {
 enum gpds_attach_status {
 	GPDS_DETACHED =				0x00,
 	GPDS_ATTACHED =				0x01
+};
+
+enum gpds_attach_mode {
+	GPDS_ATTACH_MODE_MANUAL =		0x00,
+	GPDS_ATTACH_MODE_AUTOMATIC =		0x01,
+	GPDS_ATTACH_MODE_DEFAULT =		0xFF
+};
+
+enum gpds_mt_act_mode {
+	GPDS_MT_ACT_MODE_REJECT =		0x00,
+	GPDS_MT_ACT_MODE_ACCEPT =		0x01,
+	GPDS_MT_ACT_MODE_DEFAULT =		0xFF
+};
+
+enum gpds_classc_mode {
+	GPDS_CLASSC_MODE_GPRS =			0x00,
+	GPDS_CLASSC_MODE_GSM =			0x01,
+	GPDS_CLASSC_MODE_DEFAULT =		0xFF
+};
+
+enum gpds_aol_context {
+	GPDS_AOL_CTX_NOT_ACTIVE =		0x00,
+	GPDS_AOL_CTX_HPLMN_ACTIVE =		0x01,
+	GPDS_AOL_CTX_VPLMN_ACTIVE =		0x02,
+	GPDS_AOL_CTX_ACTIVE =			0x03,
+	GPDS_AOL_CTX_DEFAULT =			0xFF
 };
 
 #ifdef __cplusplus

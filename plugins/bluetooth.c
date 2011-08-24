@@ -31,15 +31,40 @@
 #include <unistd.h>
 #include <glib.h>
 #include <gdbus.h>
-#include <ofono.h>
 
+#define OFONO_API_SUBJECT_TO_CHANGE
 #include <ofono/dbus.h>
+#include <ofono/plugin.h>
+#include <ofono/log.h>
 
+#include <btio.h>
 #include "bluetooth.h"
 
 static DBusConnection *connection;
 static GHashTable *uuid_hash = NULL;
 static GHashTable *adapter_address_hash = NULL;
+static gint bluetooth_refcount;
+static GSList *server_list = NULL;
+static const char *adapter_any_name = "any";
+static char *adapter_any_path;
+
+#define TIMEOUT 60 /* Timeout for user response (seconds) */
+
+struct server {
+	guint8 channel;
+	char *sdp_record;
+	guint32 handle;
+	GIOChannel *io;
+	ConnectFunc connect_cb;
+	gpointer user_data;
+};
+
+struct cb_data {
+	struct server *server;
+	char *path;
+	guint source;
+	GIOChannel *io;
+};
 
 void bluetooth_create_path(const char *dev_addr, const char *adapter_addr,
 				char *buf, int size)
@@ -77,7 +102,7 @@ int bluetooth_send_with_reply(const char *path, const char *interface,
 
 	msg = dbus_message_new_method_call(BLUEZ_SERVICE, path,
 						interface, method);
-	if (!msg) {
+	if (msg == NULL) {
 		ofono_error("Unable to allocate new D-Bus %s message", method);
 		err = -ENOMEM;
 		goto fail;
@@ -197,13 +222,13 @@ void bluetooth_parse_properties(DBusMessage *reply, const char *property, ...)
 	}
 
 done:
-	g_slist_foreach(prop_handlers, (GFunc)g_free, NULL);
+	g_slist_foreach(prop_handlers, (GFunc) g_free, NULL);
 	g_slist_free(prop_handlers);
 }
 
-static void has_uuid(DBusMessageIter *array, gpointer user_data)
+static void parse_uuids(DBusMessageIter *array, gpointer user_data)
 {
-	gboolean *profiles = user_data;
+	GSList **uuids = user_data;
 	DBusMessageIter value;
 
 	if (dbus_message_iter_get_arg_type(array) != DBUS_TYPE_ARRAY)
@@ -216,8 +241,7 @@ static void has_uuid(DBusMessageIter *array, gpointer user_data)
 
 		dbus_message_iter_get_basic(&value, &uuid);
 
-		if (!strcasecmp(uuid, HFP_AG_UUID))
-			*profiles |= HFP_AG;
+		*uuids = g_slist_prepend(*uuids, (char *) uuid);
 
 		dbus_message_iter_next(&value);
 	}
@@ -234,33 +258,53 @@ static void parse_string(DBusMessageIter *iter, gpointer user_data)
 	dbus_message_iter_get_basic(iter, str);
 }
 
+static void bluetooth_probe(GSList *uuids, const char *path,
+				const char *device, const char *adapter,
+				const char *alias)
+{
+	for (; uuids; uuids = uuids->next) {
+		struct bluetooth_profile *driver;
+		const char *uuid = uuids->data;
+		int err;
+
+		driver = g_hash_table_lookup(uuid_hash, uuid);
+		if (driver == NULL)
+			continue;
+
+		err = driver->probe(path, device, adapter, alias);
+		if (err == 0)
+			continue;
+
+		ofono_error("%s probe: %s (%d)", driver->name, strerror(-err),
+									-err);
+	}
+}
+
 static void device_properties_cb(DBusPendingCall *call, gpointer user_data)
 {
 	DBusMessage *reply;
-	int have_uuid = 0;
 	const char *path = user_data;
 	const char *adapter = NULL;
 	const char *adapter_addr = NULL;
 	const char *device_addr = NULL;
 	const char *alias = NULL;
-	struct bluetooth_profile *profile;
+	struct DBusError derr;
+	GSList *uuids = NULL;
 
 	reply = dbus_pending_call_steal_reply(call);
 
-	if (dbus_message_is_error(reply, DBUS_ERROR_SERVICE_UNKNOWN)) {
-		DBG("Bluetooth daemon is apparently not available.");
+	dbus_error_init(&derr);
+
+	if (dbus_set_error_from_message(&derr, reply)) {
+		ofono_error("Device.GetProperties replied an error: %s, %s",
+					derr.name, derr.message);
+		dbus_error_free(&derr);
 		goto done;
 	}
 
-	if (dbus_message_get_type(reply) == DBUS_MESSAGE_TYPE_ERROR) {
-		if (!dbus_message_is_error(reply, DBUS_ERROR_UNKNOWN_METHOD))
-			ofono_info("Error from GetProperties reply: %s",
-					dbus_message_get_error_name(reply));
+	DBG("");
 
-		goto done;
-	}
-
-	bluetooth_parse_properties(reply, "UUIDs", has_uuid, &have_uuid,
+	bluetooth_parse_properties(reply, "UUIDs", parse_uuids, &uuids,
 				"Adapter", parse_string, &adapter,
 				"Address", parse_string, &device_addr,
 				"Alias", parse_string, &alias, NULL);
@@ -269,15 +313,13 @@ static void device_properties_cb(DBusPendingCall *call, gpointer user_data)
 		adapter_addr = g_hash_table_lookup(adapter_address_hash,
 							adapter);
 
-	if ((have_uuid & HFP_AG) && device_addr && adapter_addr) {
-		profile = g_hash_table_lookup(uuid_hash, HFP_AG_UUID);
-		if (!profile || !profile->create)
-			goto done;
+	if (!device_addr || !adapter_addr)
+		goto done;
 
-		profile->create(path, device_addr, adapter_addr, alias);
-	}
+	bluetooth_probe(uuids, path, device_addr, adapter_addr, alias);
 
 done:
+	g_slist_free(uuids);
 	dbus_message_unref(reply);
 }
 
@@ -318,7 +360,7 @@ static gboolean property_changed(DBusConnection *connection, DBusMessage *msg,
 
 	dbus_message_iter_get_basic(&iter, &property);
 	if (g_str_equal(property, "UUIDs") == TRUE) {
-		int profiles = 0;
+		GSList *uuids = NULL;
 		const char *path = dbus_message_get_path(msg);
 		DBusMessageIter variant;
 
@@ -330,13 +372,13 @@ static gboolean property_changed(DBusConnection *connection, DBusMessage *msg,
 
 		dbus_message_iter_recurse(&iter, &variant);
 
-		has_uuid(&variant, &profiles);
+		parse_uuids(&variant, &uuids);
 
 		/* We need the full set of properties to be able to create
 		 * the modem properly, including Adapter and Alias, so
 		 * refetch everything again
 		 */
-		if (profiles)
+		if (uuids)
 			bluetooth_send_with_reply(path, BLUEZ_DEVICE_INTERFACE,
 					"GetProperties", device_properties_cb,
 					g_strdup(path), g_free, -1,
@@ -374,16 +416,23 @@ static void adapter_properties_cb(DBusPendingCall *call, gpointer user_data)
 {
 	const char *path = user_data;
 	DBusMessage *reply;
+	DBusError derr;
 	GSList *device_list = NULL;
 	GSList *l;
 	const char *addr;
 
 	reply = dbus_pending_call_steal_reply(call);
 
-	if (dbus_message_is_error(reply, DBUS_ERROR_SERVICE_UNKNOWN)) {
-		DBG("Bluetooth daemon is apparently not available.");
+	dbus_error_init(&derr);
+
+	if (dbus_set_error_from_message(&derr, reply)) {
+		ofono_error("Adapter.GetProperties replied an error: %s, %s",
+					derr.name, derr.message);
+		dbus_error_free(&derr);
 		goto done;
 	}
+
+	DBG("");
 
 	bluetooth_parse_properties(reply,
 					"Devices", parse_devices, &device_list,
@@ -408,20 +457,264 @@ done:
 	dbus_message_unref(reply);
 }
 
+static void get_adapter_properties(const char *path, const char *handle,
+						gpointer user_data)
+{
+	bluetooth_send_with_reply(path, BLUEZ_ADAPTER_INTERFACE,
+			"GetProperties", adapter_properties_cb,
+			g_strdup(path), g_free, -1, DBUS_TYPE_INVALID);
+}
+
+static void remove_record(struct server *server)
+{
+	DBusMessage *msg;
+
+	if (server->handle == 0)
+		return;
+
+	msg = dbus_message_new_method_call(BLUEZ_SERVICE, adapter_any_path,
+					BLUEZ_SERVICE_INTERFACE,
+					"RemoveRecord");
+	if (msg == NULL) {
+		ofono_error("Unable to allocate D-Bus RemoveRecord message");
+		return;
+	}
+
+	dbus_message_append_args(msg, DBUS_TYPE_UINT32, &server->handle,
+					DBUS_TYPE_INVALID);
+	g_dbus_send_message(connection, msg);
+
+	ofono_info("Unregistered handle for channel %d: 0x%x",
+			server->channel, server->handle);
+}
+
+static void cb_data_destroy(gpointer data)
+{
+	struct cb_data *cb_data = data;
+
+	if (cb_data->source != 0)
+		g_source_remove(cb_data->source);
+
+	g_free(cb_data->path);
+	g_free(cb_data);
+}
+
+static void cancel_authorization(struct cb_data *user_data)
+{
+	DBusMessage *msg;
+
+	msg = dbus_message_new_method_call(BLUEZ_SERVICE, user_data->path,
+						BLUEZ_SERVICE_INTERFACE,
+						"CancelAuthorization");
+
+	if (msg == NULL) {
+		ofono_error("Unable to allocate D-Bus CancelAuthorization"
+				" message");
+		return;
+	}
+
+	g_dbus_send_message(connection, msg);
+}
+
+static gboolean client_event(GIOChannel *chan, GIOCondition cond, gpointer data)
+{
+	struct cb_data *cb_data = data;
+
+	cancel_authorization(cb_data);
+	cb_data->source = 0;
+
+	return FALSE;
+}
+
+static void auth_cb(DBusPendingCall *call, gpointer user_data)
+{
+	struct cb_data *cb_data = user_data;
+	struct server *server = cb_data->server;
+	DBusMessage *reply = dbus_pending_call_steal_reply(call);
+	DBusError derr;
+	GError *err = NULL;
+
+	dbus_error_init(&derr);
+
+	if (dbus_set_error_from_message(&derr, reply)) {
+		ofono_error("RequestAuthorization error: %s, %s",
+				derr.name, derr.message);
+
+		if (dbus_error_has_name(&derr, DBUS_ERROR_NO_REPLY))
+			cancel_authorization(cb_data);
+
+		dbus_error_free(&derr);
+	} else {
+		ofono_info("RequestAuthorization succeeded");
+
+		if (!bt_io_accept(cb_data->io, server->connect_cb,
+					server->user_data, NULL, &err)) {
+			ofono_error("%s", err->message);
+			g_error_free(err);
+		}
+	}
+
+	dbus_message_unref(reply);
+}
+
+static void new_connection(GIOChannel *io, gpointer user_data)
+{
+	struct server *server = user_data;
+	struct cb_data *cbd;
+	const char *addr;
+	GError *err = NULL;
+	char laddress[18], raddress[18];
+	guint8 channel;
+	GHashTableIter iter;
+	gpointer key, value;
+	const char *path;
+
+	bt_io_get(io, BT_IO_RFCOMM, &err, BT_IO_OPT_SOURCE, laddress,
+					BT_IO_OPT_DEST, raddress,
+					BT_IO_OPT_CHANNEL, &channel,
+					BT_IO_OPT_INVALID);
+	if (err) {
+		ofono_error("%s", err->message);
+		g_error_free(err);
+		return;
+	}
+
+	ofono_info("New connection for %s on channel %u from: %s,", laddress,
+							channel, raddress);
+
+	path = NULL;
+	g_hash_table_iter_init(&iter, adapter_address_hash);
+
+	while (g_hash_table_iter_next(&iter, &key, &value)) {
+		if (g_str_equal(laddress, value) == TRUE) {
+			path = key;
+			break;
+		}
+	}
+
+	if (path == NULL)
+		return;
+
+	cbd = g_try_new0(struct cb_data, 1);
+	if (cbd == NULL) {
+		ofono_error("Unable to allocate client cb_data structure");
+		return;
+	}
+
+	cbd->path = g_strdup(path);
+	cbd->server = server;
+	cbd->io = io;
+
+	addr = raddress;
+
+	if (bluetooth_send_with_reply(path, BLUEZ_SERVICE_INTERFACE,
+					"RequestAuthorization",
+					auth_cb, cbd, cb_data_destroy,
+					TIMEOUT, DBUS_TYPE_STRING, &addr,
+					DBUS_TYPE_UINT32, &server->handle,
+					DBUS_TYPE_INVALID) < 0) {
+		ofono_error("Request Bluetooth authorization failed");
+		return;
+	}
+
+	ofono_info("RequestAuthorization(%s, 0x%x)", raddress, server->handle);
+
+	cbd->source = g_io_add_watch(io, G_IO_HUP | G_IO_ERR | G_IO_NVAL,
+					client_event, cbd);
+}
+
+static void remove_service_handle(gpointer data, gpointer user_data)
+{
+	struct server *server = data;
+
+	server->handle = 0;
+}
+
+static void add_record_cb(DBusPendingCall *call, gpointer user_data)
+{
+	struct server *server = user_data;
+	DBusMessage *reply = dbus_pending_call_steal_reply(call);
+	DBusError derr;
+
+	dbus_error_init(&derr);
+
+	if (dbus_set_error_from_message(&derr, reply)) {
+		ofono_error("Replied with an error: %s, %s",
+					derr.name, derr.message);
+		dbus_error_free(&derr);
+		goto done;
+	}
+
+	dbus_message_get_args(reply, NULL, DBUS_TYPE_UINT32, &server->handle,
+					DBUS_TYPE_INVALID);
+
+	ofono_info("Registered handle for channel %d: 0x%x",
+			server->channel, server->handle);
+
+done:
+	dbus_message_unref(reply);
+}
+
+static void add_record(gpointer data, gpointer user_data)
+{
+	struct server *server = data;
+
+	if (server->sdp_record == NULL)
+		return;
+
+	bluetooth_send_with_reply(adapter_any_path,
+					BLUEZ_SERVICE_INTERFACE, "AddRecord",
+					add_record_cb, server, NULL, -1,
+					DBUS_TYPE_STRING, &server->sdp_record,
+					DBUS_TYPE_INVALID);
+}
+
+static void find_adapter_cb(DBusPendingCall *call, gpointer user_data)
+{
+	DBusMessage *reply = dbus_pending_call_steal_reply(call);
+	DBusError derr;
+	const char *path;
+
+	dbus_error_init(&derr);
+
+	if (dbus_set_error_from_message(&derr, reply)) {
+		ofono_error("Replied with an error: %s, %s",
+					derr.name, derr.message);
+		dbus_error_free(&derr);
+		goto done;
+	}
+
+	dbus_message_get_args(reply, NULL, DBUS_TYPE_OBJECT_PATH, &path,
+					DBUS_TYPE_INVALID);
+
+	adapter_any_path = g_strdup(path);
+
+	g_slist_foreach(server_list, (GFunc) add_record, NULL);
+
+done:
+	dbus_message_unref(reply);
+}
+
 static gboolean adapter_added(DBusConnection *connection, DBusMessage *message,
 				void *user_data)
 {
 	const char *path;
-	int ret;
 
 	dbus_message_get_args(message, NULL, DBUS_TYPE_OBJECT_PATH, &path,
 				DBUS_TYPE_INVALID);
 
-	ret = bluetooth_send_with_reply(path, BLUEZ_ADAPTER_INTERFACE,
+	bluetooth_send_with_reply(path, BLUEZ_ADAPTER_INTERFACE,
 			"GetProperties", adapter_properties_cb, g_strdup(path),
 			g_free, -1, DBUS_TYPE_INVALID);
 
 	return TRUE;
+}
+
+static void bluetooth_remove(gpointer key, gpointer value, gpointer user_data)
+{
+	struct bluetooth_profile *profile = value;
+
+	profile->remove(user_data);
 }
 
 static gboolean adapter_removed(DBusConnection *connection,
@@ -430,8 +723,25 @@ static gboolean adapter_removed(DBusConnection *connection,
 	const char *path;
 
 	if (dbus_message_get_args(message, NULL, DBUS_TYPE_OBJECT_PATH, &path,
-				DBUS_TYPE_INVALID) == TRUE)
-		g_hash_table_remove(adapter_address_hash, path);
+				DBUS_TYPE_INVALID) == FALSE)
+		return FALSE;
+
+	g_hash_table_foreach(uuid_hash, bluetooth_remove, (gpointer) path);
+	g_hash_table_remove(adapter_address_hash, path);
+
+	return TRUE;
+}
+
+static gboolean device_removed(DBusConnection *connection,
+				DBusMessage *message, void *user_data)
+{
+	const char *path;
+
+	if (dbus_message_get_args(message, NULL, DBUS_TYPE_OBJECT_PATH, &path,
+				DBUS_TYPE_INVALID) == FALSE)
+		return FALSE;
+
+	g_hash_table_foreach(uuid_hash, bluetooth_remove, (gpointer) path);
 
 	return TRUE;
 }
@@ -466,11 +776,16 @@ static void parse_adapters(DBusMessageIter *array, gpointer user_data)
 static void manager_properties_cb(DBusPendingCall *call, gpointer user_data)
 {
 	DBusMessage *reply;
+	DBusError derr;
 
 	reply = dbus_pending_call_steal_reply(call);
 
-	if (dbus_message_is_error(reply, DBUS_ERROR_SERVICE_UNKNOWN)) {
-		DBG("Bluetooth daemon is apparently not available.");
+	dbus_error_init(&derr);
+
+	if (dbus_set_error_from_message(&derr, reply)) {
+		ofono_error("Manager.GetProperties() replied an error: %s, %s",
+					derr.name, derr.message);
+		dbus_error_free(&derr);
 		goto done;
 	}
 
@@ -483,38 +798,44 @@ done:
 	dbus_message_unref(reply);
 }
 
-static void bluetooth_remove_all_modem(gpointer key, gpointer value,
-					gpointer user_data)
+static void bluetooth_connect(DBusConnection *connection, void *user_data)
 {
-	struct bluetooth_profile *profile = value;
+	bluetooth_send_with_reply("/", BLUEZ_MANAGER_INTERFACE, "GetProperties",
+				manager_properties_cb, NULL, NULL, -1,
+				DBUS_TYPE_INVALID);
 
-	profile->remove_all();
+	bluetooth_send_with_reply("/", BLUEZ_MANAGER_INTERFACE, "FindAdapter",
+				find_adapter_cb, NULL, NULL, -1,
+				DBUS_TYPE_STRING, &adapter_any_name,
+				DBUS_TYPE_INVALID);
 }
 
 static void bluetooth_disconnect(DBusConnection *connection, void *user_data)
 {
-	if (!uuid_hash)
+	if (uuid_hash == NULL)
 		return;
 
-	g_hash_table_foreach(uuid_hash, bluetooth_remove_all_modem, NULL);
+	g_hash_table_foreach(uuid_hash, bluetooth_remove, NULL);
+
+	g_slist_foreach(server_list, (GFunc) remove_service_handle, NULL);
 }
 
 static guint bluetooth_watch;
 static guint adapter_added_watch;
 static guint adapter_removed_watch;
+static guint device_removed_watch;
 static guint property_watch;
 
-int bluetooth_register_uuid(const char *uuid, struct bluetooth_profile *profile)
+static void bluetooth_ref(void)
 {
-	int err;
-
-	if (uuid_hash)
-		goto done;
+	if (bluetooth_refcount > 0)
+		goto increment;
 
 	connection = ofono_dbus_get_connection();
 
 	bluetooth_watch = g_dbus_add_service_watch(connection, BLUEZ_SERVICE,
-					NULL, bluetooth_disconnect, NULL, NULL);
+					bluetooth_connect,
+					bluetooth_disconnect, NULL, NULL);
 
 	adapter_added_watch = g_dbus_add_signal_watch(connection, NULL, NULL,
 						BLUEZ_MANAGER_INTERFACE,
@@ -526,6 +847,11 @@ int bluetooth_register_uuid(const char *uuid, struct bluetooth_profile *profile)
 						"AdapterRemoved",
 						adapter_removed, NULL, NULL);
 
+	device_removed_watch = g_dbus_add_signal_watch(connection, NULL, NULL,
+						BLUEZ_ADAPTER_INTERFACE,
+						"DeviceRemoved",
+						device_removed, NULL, NULL);
+
 	property_watch = g_dbus_add_signal_watch(connection, NULL, NULL,
 						BLUEZ_DEVICE_INTERFACE,
 						"PropertyChanged",
@@ -533,7 +859,6 @@ int bluetooth_register_uuid(const char *uuid, struct bluetooth_profile *profile)
 
 	if (bluetooth_watch == 0 || adapter_added_watch == 0 ||
 			adapter_removed_watch == 0 || property_watch == 0) {
-		err = -EIO;
 		goto remove;
 	}
 
@@ -543,29 +868,25 @@ int bluetooth_register_uuid(const char *uuid, struct bluetooth_profile *profile)
 	adapter_address_hash = g_hash_table_new_full(g_str_hash, g_str_equal,
 						g_free, g_free);
 
-done:
-	g_hash_table_insert(uuid_hash, g_strdup(uuid), profile);
+increment:
+	g_atomic_int_inc(&bluetooth_refcount);
 
-	bluetooth_send_with_reply("/", BLUEZ_MANAGER_INTERFACE, "GetProperties",
-				manager_properties_cb, NULL, NULL, -1,
-				DBUS_TYPE_INVALID);
-
-	return 0;
+	return;
 
 remove:
 	g_dbus_remove_watch(connection, bluetooth_watch);
 	g_dbus_remove_watch(connection, adapter_added_watch);
 	g_dbus_remove_watch(connection, adapter_removed_watch);
 	g_dbus_remove_watch(connection, property_watch);
-	return err;
 }
 
-void bluetooth_unregister_uuid(const char *uuid)
+static void bluetooth_unref(void)
 {
-	g_hash_table_remove(uuid_hash, uuid);
-
-	if (g_hash_table_size(uuid_hash))
+	if (g_atomic_int_dec_and_test(&bluetooth_refcount) == FALSE)
 		return;
+
+	g_free(adapter_any_path);
+	adapter_any_path = NULL;
 
 	g_dbus_remove_watch(connection, bluetooth_watch);
 	g_dbus_remove_watch(connection, adapter_added_watch);
@@ -574,7 +895,82 @@ void bluetooth_unregister_uuid(const char *uuid)
 
 	g_hash_table_destroy(uuid_hash);
 	g_hash_table_destroy(adapter_address_hash);
-	uuid_hash = NULL;
+}
+
+int bluetooth_register_uuid(const char *uuid, struct bluetooth_profile *profile)
+{
+	bluetooth_ref();
+
+	g_hash_table_insert(uuid_hash, g_strdup(uuid), profile);
+
+	g_hash_table_foreach(adapter_address_hash,
+				(GHFunc) get_adapter_properties, NULL);
+
+	return 0;
+}
+
+void bluetooth_unregister_uuid(const char *uuid)
+{
+	g_hash_table_remove(uuid_hash, uuid);
+
+	bluetooth_unref();
+}
+
+struct server *bluetooth_register_server(guint8 channel, const char *sdp_record,
+					ConnectFunc cb, gpointer user_data)
+{
+	struct server *server;
+	GError *err = NULL;
+
+	server = g_try_new0(struct server, 1);
+	if (!server)
+		return NULL;
+
+	server->channel = channel;
+
+	server->io = bt_io_listen(BT_IO_RFCOMM, NULL, new_connection,
+					server, NULL, &err,
+					BT_IO_OPT_CHANNEL, server->channel,
+					BT_IO_OPT_SEC_LEVEL, BT_IO_SEC_MEDIUM,
+					BT_IO_OPT_INVALID);
+	if (server->io == NULL) {
+		g_error_free(err);
+		g_free(server);
+		return NULL;
+	}
+
+	bluetooth_ref();
+
+	if (sdp_record != NULL)
+		server->sdp_record = g_strdup(sdp_record);
+
+	server->connect_cb = cb;
+	server->user_data = user_data;
+
+	server_list = g_slist_prepend(server_list, server);
+
+	if (adapter_any_path != NULL)
+		add_record(server, NULL);
+
+	return server;
+}
+
+void bluetooth_unregister_server(struct server *server)
+{
+	server_list = g_slist_remove(server_list, server);
+
+	remove_record(server);
+
+	if (server->io != NULL) {
+		g_io_channel_shutdown(server->io, TRUE, NULL);
+		g_io_channel_unref(server->io);
+		server->io = NULL;
+	}
+
+	g_free(server->sdp_record);
+	g_free(server);
+
+	bluetooth_unref();
 }
 
 OFONO_PLUGIN_DEFINE(bluetooth, "Bluetooth Utils Plugins", VERSION,

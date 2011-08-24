@@ -47,7 +47,6 @@
 #include <ofono/call-settings.h>
 #include <ofono/call-volume.h>
 #include <ofono/message-waiting.h>
-#include <ofono/ssn.h>
 #include <ofono/sim.h>
 #include <ofono/cbs.h>
 #include <ofono/sms.h>
@@ -57,6 +56,7 @@
 #include <ofono/radio-settings.h>
 #include <ofono/audio-settings.h>
 #include <ofono/stk.h>
+#include <ofono/ctm.h>
 #include <ofono/log.h>
 
 #include <drivers/atmodem/atutil.h>
@@ -115,7 +115,7 @@ static int ifx_probe(struct ofono_modem *modem)
 	DBG("%p", modem);
 
 	data = g_try_new0(struct ifx_data, 1);
-	if (!data)
+	if (data == NULL)
 		return -ENOMEM;
 
 	data->mux_ldisc = -1;
@@ -145,7 +145,7 @@ static void xsim_notify(GAtResult *result, gpointer user_data)
 	GAtResultIter iter;
 	int state;
 
-	if (!data->sim)
+	if (data->sim == NULL)
 		return;
 
 	g_at_result_iter_init(&iter, result);
@@ -197,7 +197,7 @@ static void shutdown_device(struct ifx_data *data)
 	}
 
 	for (i = 0; i < NUM_DLC; i++) {
-		if (!data->dlcs[i])
+		if (data->dlcs[i] == NULL)
 			continue;
 
 		g_at_chat_unref(data->dlcs[i]);
@@ -239,7 +239,7 @@ static GAtChat *create_chat(GIOChannel *channel, struct ofono_modem *modem,
 	GAtSyntax *syntax;
 	GAtChat *chat;
 
-	if (!channel)
+	if (channel == NULL)
 		return NULL;
 
 	syntax = g_at_syntax_new_gsmv1();
@@ -247,7 +247,7 @@ static GAtChat *create_chat(GIOChannel *channel, struct ofono_modem *modem,
 	g_at_syntax_unref(syntax);
 	g_io_channel_unref(channel);
 
-	if (!chat)
+	if (chat == NULL)
 		return NULL;
 
 	if (getenv("OFONO_AT_DEBUG"))
@@ -408,7 +408,7 @@ static gboolean dlc_ready_check(gpointer user_data)
 		GIOChannel *channel = g_at_tty_open(dlc_nodes[i], NULL);
 
 		data->dlcs[i] = create_chat(channel, modem, dlc_prefixes[i]);
-		if (!data->dlcs[i]) {
+		if (data->dlcs[i] == NULL) {
 			ofono_error("Failed to open %s", dlc_nodes[i]);
 			goto error;
 		}
@@ -433,19 +433,12 @@ error:
 static void setup_internal_mux(struct ofono_modem *modem)
 {
 	struct ifx_data *data = ofono_modem_get_data(modem);
-	GIOFlags flags;
 	int i;
 
 	DBG("");
 
-	flags = g_io_channel_get_flags(data->device) | G_IO_FLAG_NONBLOCK;
-	g_io_channel_set_flags(data->device, flags, NULL);
-
-	g_io_channel_set_encoding(data->device, NULL, NULL);
-	g_io_channel_set_buffered(data->device, FALSE);
-
 	data->mux = g_at_mux_new_gsm0710_basic(data->device, data->frame_size);
-	if (!data->mux)
+	if (data->mux == NULL)
 		goto error;
 
 	if (getenv("OFONO_MUX_DEBUG"))
@@ -457,7 +450,7 @@ static void setup_internal_mux(struct ofono_modem *modem)
 		GIOChannel *channel = g_at_mux_create_channel(data->mux);
 
 		data->dlcs[i] = create_chat(channel, modem, dlc_prefixes[i]);
-		if (!data->dlcs[i]) {
+		if (data->dlcs[i] == NULL) {
 			ofono_error("Failed to create channel");
 			goto error;
 		}
@@ -580,14 +573,14 @@ static int ifx_enable(struct ofono_modem *modem)
 	}
 
 	data->device = g_at_tty_open(device, NULL);
-	if (!data->device)
+	if (data->device == NULL)
                 return -EIO;
 
 	syntax = g_at_syntax_new_gsmv1();
 	chat = g_at_chat_new(data->device, syntax);
 	g_at_syntax_unref(syntax);
 
-	if (!chat) {
+	if (chat == NULL) {
 		g_io_channel_unref(data->device);
                 return -EIO;
 	}
@@ -598,6 +591,7 @@ static int ifx_enable(struct ofono_modem *modem)
 	g_at_chat_send(chat, "ATE0 +CMEE=1", NULL,
 					NULL, NULL, NULL);
 
+	/* Enable multiplexer */
 	data->frame_size = 1509;
 
 	g_at_chat_send(chat, "AT+CMUX=0,0,,1509,10,3,30,,", NULL,
@@ -651,11 +645,10 @@ static void set_online_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
 	ofono_modem_online_cb_t cb = cbd->cb;
+	struct ofono_error error;
 
-	if (ok)
-		CALLBACK_WITH_SUCCESS(cb, cbd->data);
-	else
-		CALLBACK_WITH_FAILURE(cb, cbd->data);
+	decode_at_error(&error, g_at_result_final_response(result));
+	cb(&error, cbd->data);
 }
 
 static void ifx_set_online(struct ofono_modem *modem, ofono_bool_t online,
@@ -667,17 +660,13 @@ static void ifx_set_online(struct ofono_modem *modem, ofono_bool_t online,
 
 	DBG("%p %s", modem, online ? "online" : "offline");
 
-	if (!cbd)
-		goto error;
-
-	if (g_at_chat_send(data->dlcs[AUX_DLC], command, NULL,
+	if (g_at_chat_send(data->dlcs[AUX_DLC], command, none_prefix,
 					set_online_cb, cbd, g_free) > 0)
 		return;
 
-error:
-	g_free(cbd);
-
 	CALLBACK_WITH_FAILURE(cb, cbd->data);
+
+	g_free(cbd);
 }
 
 static void ifx_pre_sim(struct ofono_modem *modem)
@@ -692,6 +681,7 @@ static void ifx_pre_sim(struct ofono_modem *modem)
 	ofono_voicecall_create(modem, 0, "ifxmodem", data->dlcs[VOICE_DLC]);
 	ofono_audio_settings_create(modem, 0,
 					"ifxmodem", data->dlcs[VOICE_DLC]);
+	ofono_ctm_create(modem, 0, "ifxmodem", data->dlcs[AUX_DLC]);
 }
 
 static void ifx_post_sim(struct ofono_modem *modem)
@@ -702,6 +692,11 @@ static void ifx_post_sim(struct ofono_modem *modem)
 
 	ofono_stk_create(modem, 0, "ifxmodem", data->dlcs[AUX_DLC]);
 	ofono_phonebook_create(modem, OFONO_VENDOR_IFX,
+					"atmodem", data->dlcs[AUX_DLC]);
+	ofono_call_forwarding_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
+	ofono_radio_settings_create(modem, 0, "ifxmodem", data->dlcs[AUX_DLC]);
+
+	ofono_sms_create(modem, OFONO_VENDOR_IFX,
 					"atmodem", data->dlcs[AUX_DLC]);
 }
 
@@ -714,17 +709,12 @@ static void ifx_post_online(struct ofono_modem *modem)
 
 	DBG("%p", modem);
 
-	ofono_radio_settings_create(modem, 0, "ifxmodem", data->dlcs[AUX_DLC]);
 	ofono_netreg_create(modem, OFONO_VENDOR_IFX,
 					"atmodem", data->dlcs[NETREG_DLC]);
 
-	ofono_sms_create(modem, OFONO_VENDOR_IFX,
-					"atmodem", data->dlcs[AUX_DLC]);
 	ofono_cbs_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
 	ofono_ussd_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
 
-	ofono_ssn_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
-	ofono_call_forwarding_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
 	ofono_call_settings_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
 	ofono_call_meter_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
 	ofono_call_barring_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
@@ -736,7 +726,7 @@ static void ifx_post_online(struct ofono_modem *modem)
 
 	gprs = ofono_gprs_create(modem, OFONO_VENDOR_IFX,
 					"atmodem", data->dlcs[NETREG_DLC]);
-	if (!gprs)
+	if (gprs == NULL)
 		return;
 
 	if (data->mux_ldisc < 0) {
