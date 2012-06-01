@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -347,6 +347,13 @@ DBusMessage *__ofono_error_attach_in_progress(DBusMessage *msg)
 	return g_dbus_create_error(msg,
 				OFONO_ERROR_INTERFACE ".AttachInProgress",
 				"GPRS Attach is in progress");
+}
+
+DBusMessage *__ofono_error_not_registered(DBusMessage *msg)
+{
+	return g_dbus_create_error(msg,
+				OFONO_ERROR_INTERFACE ".NotRegistered",
+				"Modem is not registered to the network");
 }
 
 DBusMessage *__ofono_error_canceled(DBusMessage *msg)

@@ -2,7 +2,7 @@
  *
  *  AT chat library with GLib integration
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -70,6 +70,8 @@ struct _GAtHDLC {
 	int record_fd;
 	gboolean in_read_handler;
 	gboolean destroyed;
+	gboolean wakeup_sent;
+	gboolean start_frame_marker;
 	gboolean no_carrier_detect;
 	GAtSuspendFunc suspend_func;
 	gpointer suspend_data;
@@ -87,12 +89,13 @@ static inline void hdlc_record(GAtHDLC *hdlc, gboolean in,
 	unsigned char id;
 	int err;
 
-	g_at_util_debug_dump(in, data, length, hdlc->debugf, hdlc->debug_data);
+	g_at_util_debug_hexdump(in, data, length,
+					hdlc->debugf, hdlc->debug_data);
 
 	if (hdlc->record_fd < 0)
 		return;
 
-	if (len == 0)
+	if (length == 0)
 		return;
 
 	gettimeofday(&now, NULL);
@@ -328,7 +331,6 @@ out:
 GAtHDLC *g_at_hdlc_new_from_io(GAtIO *io)
 {
 	GAtHDLC *hdlc;
-	unsigned char *buf;
 	struct ring_buffer* write_buffer;
 
 	if (io == NULL)
@@ -356,11 +358,6 @@ GAtHDLC *g_at_hdlc_new_from_io(GAtIO *io)
 		goto error;
 
 	g_queue_push_tail(hdlc->write_queue, write_buffer);
-
-	/* Write an initial 0x7e as wakeup character */
-	buf = ring_buffer_write_ptr(write_buffer, 0);
-	*buf = HDLC_FLAG;
-	ring_buffer_write_advance(write_buffer, 1);
 
 	hdlc->decode_buffer = g_try_malloc(BUFFER_SIZE);
 	if (!hdlc->decode_buffer)
@@ -563,6 +560,24 @@ gboolean g_at_hdlc_send(GAtHDLC *hdlc, const unsigned char *data, gsize size)
 	i = 0;
 	buf = ring_buffer_write_ptr(write_buffer, 0);
 
+	if (hdlc->start_frame_marker == TRUE) {
+		/* Protocol requires 0x7e as start marker */
+		if (pos + 1 > avail)
+			return FALSE;
+
+		*buf++ = HDLC_FLAG;
+		pos++;
+
+		if (pos == wrap)
+			buf = ring_buffer_write_ptr(write_buffer, pos);
+	} else if (hdlc->wakeup_sent == FALSE) {
+		/* Write an initial 0x7e as wakeup character */
+		*buf++ = HDLC_FLAG;
+		pos++;
+
+		hdlc->wakeup_sent = TRUE;
+	}
+
 	while (pos < avail && i < size) {
 		if (escape == TRUE) {
 			fcs = HDLC_FCS(fcs, data[i]);
@@ -616,6 +631,7 @@ gboolean g_at_hdlc_send(GAtHDLC *hdlc, const unsigned char *data, gsize size)
 	if (pos + 1 > avail)
 		return FALSE;
 
+	/* Add 0x7e as end marker */
 	*buf = HDLC_FLAG;
 	pos++;
 
@@ -624,6 +640,14 @@ gboolean g_at_hdlc_send(GAtHDLC *hdlc, const unsigned char *data, gsize size)
 	g_at_io_set_write_handler(hdlc->io, can_write_data, hdlc);
 
 	return TRUE;
+}
+
+void g_at_hdlc_set_start_frame_marker(GAtHDLC *hdlc, gboolean marker)
+{
+	if (hdlc == NULL)
+		return;
+
+	hdlc->start_frame_marker = marker;
 }
 
 void g_at_hdlc_set_no_carrier_detect(GAtHDLC *hdlc, gboolean detect)

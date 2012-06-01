@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -119,7 +119,10 @@ static const char *default_en_list[] = { "911", "112", NULL };
 static const char *default_en_list_no_sim[] = { "119", "118", "999", "110",
 						"08", "000", NULL };
 
+static void send_ciev_after_swap_callback(const struct ofono_error *error,
+								void *data);
 static void generic_callback(const struct ofono_error *error, void *data);
+static void hangup_all_active(const struct ofono_error *error, void *data);
 static void multirelease_callback(const struct ofono_error *err, void *data);
 static gboolean tone_request_run(gpointer user_data);
 
@@ -260,6 +263,54 @@ static unsigned int voicecalls_num_connecting(struct ofono_voicecall *vc)
 	r += voicecalls_num_with_status(vc, CALL_STATUS_ALERTING);
 
 	return r;
+}
+
+static gboolean voicecalls_have_active(struct ofono_voicecall *vc)
+{
+	GSList *l;
+	struct voicecall *v;
+
+	for (l = vc->call_list; l; l = l->next) {
+		v = l->data;
+
+		if (v->call->status == CALL_STATUS_ACTIVE ||
+				v->call->status == CALL_STATUS_DIALING ||
+				v->call->status == CALL_STATUS_ALERTING)
+			return TRUE;
+	}
+
+	return FALSE;
+}
+
+static gboolean voicecalls_have_with_status(struct ofono_voicecall *vc,
+						int status)
+{
+	GSList *l;
+	struct voicecall *v;
+
+	for (l = vc->call_list; l; l = l->next) {
+		v = l->data;
+
+		if (v->call->status == status)
+			return TRUE;
+	}
+
+	return FALSE;
+}
+
+static gboolean voicecalls_have_held(struct ofono_voicecall *vc)
+{
+	return voicecalls_have_with_status(vc, CALL_STATUS_HELD);
+}
+
+static gboolean voicecalls_have_waiting(struct ofono_voicecall *vc)
+{
+	return voicecalls_have_with_status(vc, CALL_STATUS_WAITING);
+}
+
+static gboolean voicecalls_have_incoming(struct ofono_voicecall *vc)
+{
+	return voicecalls_have_with_status(vc, CALL_STATUS_INCOMING);
 }
 
 static void dial_request_finish(struct ofono_voicecall *vc)
@@ -539,7 +590,9 @@ static DBusMessage *voicecall_hangup(DBusConnection *conn,
 		return NULL;
 
 	case CALL_STATUS_HELD:
-		if (single_call && vc->driver->release_all_held) {
+		if (vc->driver->release_all_held &&
+				voicecalls_num_held(vc) == 1 &&
+				voicecalls_have_waiting(vc) == FALSE) {
 			vc->pending = dbus_message_ref(msg);
 			vc->driver->release_all_held(vc, generic_callback, vc);
 
@@ -695,13 +748,21 @@ static void voicecall_emit_multiparty(struct voicecall *call, gboolean mpty)
 						&val);
 }
 
+static void emulator_set_indicator_forced(struct ofono_voicecall *vc,
+						const char *name, int value)
+{
+	struct ofono_modem *modem = __ofono_atom_get_modem(vc->atom);
+	struct ofono_emulator *em;
+
+	em = __ofono_atom_find(OFONO_ATOM_TYPE_EMULATOR_HFP, modem);
+	if (em)
+		__ofono_emulator_set_indicator_forced(em, name, value);
+}
+
 static void emulator_call_status_cb(struct ofono_atom *atom, void *data)
 {
 	struct ofono_emulator *em = __ofono_atom_get_data(atom);
 	struct emulator_status *s = data;
-
-	if (em == s->vc->pending_em)
-		return;
 
 	ofono_emulator_set_indicator(em, OFONO_EMULATOR_IND_CALL, s->status);
 }
@@ -711,9 +772,6 @@ static void emulator_callsetup_status_cb(struct ofono_atom *atom, void *data)
 	struct ofono_emulator *em = __ofono_atom_get_data(atom);
 	struct emulator_status *s = data;
 
-	if (em == s->vc->pending_em)
-		return;
-
 	ofono_emulator_set_indicator(em, OFONO_EMULATOR_IND_CALLSETUP,
 					s->status);
 }
@@ -722,9 +780,6 @@ static void emulator_callheld_status_cb(struct ofono_atom *atom, void *data)
 {
 	struct ofono_emulator *em = __ofono_atom_get_data(atom);
 	struct emulator_status *s = data;
-
-	if (em == s->vc->pending_em)
-		return;
 
 	ofono_emulator_set_indicator(em, OFONO_EMULATOR_IND_CALLHELD,
 					s->status);
@@ -737,6 +792,8 @@ static void notify_emulator_call_status(struct ofono_voicecall *vc)
 	unsigned int non_mpty = 0;
 	gboolean multiparty = FALSE;
 	gboolean held = FALSE;
+	unsigned int non_mpty_held = 0;
+	gboolean multiparty_held = FALSE;
 	gboolean incoming = FALSE;
 	gboolean dialing = FALSE;
 	gboolean alerting = FALSE;
@@ -763,6 +820,12 @@ static void notify_emulator_call_status(struct ofono_voicecall *vc)
 
 		case CALL_STATUS_HELD:
 			held = TRUE;
+			if (g_slist_find_custom(vc->multiparty_list,
+						GINT_TO_POINTER(v->call->id),
+						call_compare_by_id))
+				multiparty_held = TRUE;
+			else
+				non_mpty_held++;
 			break;
 
 		case CALL_STATUS_DIALING:
@@ -782,6 +845,28 @@ static void notify_emulator_call_status(struct ofono_voicecall *vc)
 			break;
 		}
 	}
+
+	/*
+	 * Perform some basic sanity checks for transitionary states;
+	 * if a transitionary state is detected, then ignore it.  The call
+	 * indicators will be updated properly in the follow-on calls to
+	 * this function once the final state has been reached
+	 */
+
+	if (incoming && (held || call))
+		return;
+
+	if (waiting && (held == FALSE && call == FALSE))
+		return;
+
+	if (non_mpty > 1 || (non_mpty && multiparty))
+		return;
+
+	if (non_mpty_held > 1 || (non_mpty_held && multiparty_held))
+		return;
+
+	if (multiparty && multiparty_held)
+		return;
 
 	data.status = call || held ? OFONO_EMULATOR_CALL_ACTIVE :
 					OFONO_EMULATOR_CALL_INACTIVE;
@@ -809,18 +894,6 @@ static void notify_emulator_call_status(struct ofono_voicecall *vc)
 	if (held)
 		data.status = call ? OFONO_EMULATOR_CALLHELD_MULTIPLE :
 					OFONO_EMULATOR_CALLHELD_ON_HOLD;
-	else if (non_mpty > 1 || (non_mpty && multiparty))
-		/*
-		 * After call swap, it is possible that all calls move
-		 * temporarily to active state (depending on call state update
-		 * order), generating an update of callheld indicator to 0.
-		 * This will fail PTS test TP/TWC/BV-03-I.
-		 *
-		 * So, in case of multiple active calls, or an active call with
-		 * an active mutiparty call, force update of callheld indicator
-		 * to 2 (intermediate state allowed).
-		 */
-		data.status = OFONO_EMULATOR_CALLHELD_ON_HOLD;
 	else
 		data.status = OFONO_EMULATOR_CALLHELD_NONE;
 
@@ -1049,44 +1122,6 @@ static int voicecalls_path_list(struct ofono_voicecall *vc, GSList *call_list,
 	return 0;
 }
 
-static gboolean voicecalls_have_active(struct ofono_voicecall *vc)
-{
-	GSList *l;
-	struct voicecall *v;
-
-	for (l = vc->call_list; l; l = l->next) {
-		v = l->data;
-
-		if (v->call->status == CALL_STATUS_ACTIVE ||
-				v->call->status == CALL_STATUS_DIALING ||
-				v->call->status == CALL_STATUS_ALERTING)
-			return TRUE;
-	}
-
-	return FALSE;
-}
-
-static gboolean voicecalls_have_with_status(struct ofono_voicecall *vc,
-						int status)
-{
-	GSList *l;
-	struct voicecall *v;
-
-	for (l = vc->call_list; l; l = l->next) {
-		v = l->data;
-
-		if (v->call->status == status)
-			return TRUE;
-	}
-
-	return FALSE;
-}
-
-static gboolean voicecalls_have_held(struct ofono_voicecall *vc)
-{
-	return voicecalls_have_with_status(vc, CALL_STATUS_HELD);
-}
-
 static GSList *voicecalls_held_list(struct ofono_voicecall *vc)
 {
 	GSList *l;
@@ -1127,16 +1162,6 @@ static GSList *voicecalls_active_list(struct ofono_voicecall *vc)
 		r = g_slist_reverse(r);
 
 	return r;
-}
-
-static gboolean voicecalls_have_waiting(struct ofono_voicecall *vc)
-{
-	return voicecalls_have_with_status(vc, CALL_STATUS_WAITING);
-}
-
-static gboolean voicecalls_have_incoming(struct ofono_voicecall *vc)
-{
-	return voicecalls_have_with_status(vc, CALL_STATUS_INCOMING);
 }
 
 struct ofono_call *__ofono_voicecall_find_call_with_status(
@@ -1226,7 +1251,8 @@ static void voicecalls_emit_call_added(struct ofono_voicecall *vc,
 }
 
 static void voicecalls_release_queue(struct ofono_voicecall *vc, GSList *calls,
-					ofono_voicecall_cb_t cb)
+					ofono_voicecall_cb_t cb,
+					ofono_bool_t skip_held)
 {
 	GSList *l;
 	struct voicecall *call;
@@ -1238,6 +1264,9 @@ static void voicecalls_release_queue(struct ofono_voicecall *vc, GSList *calls,
 		call = l->data;
 
 		if (call->call->status == CALL_STATUS_WAITING)
+			continue;
+
+		if (skip_held && call->call->status == CALL_STATUS_HELD)
 			continue;
 
 		vc->release_list = g_slist_prepend(vc->release_list, l->data);
@@ -1599,13 +1628,19 @@ static DBusMessage *manager_swap_without_accept(DBusConnection *conn,
 						DBusMessage *msg, void *data)
 {
 	struct ofono_voicecall *vc = data;
+	ofono_voicecall_cb_t cb;
 
 	if (vc->pending || vc->dial_req || vc->pending_em)
 		return __ofono_error_busy(msg);
 
 	vc->pending = dbus_message_ref(msg);
 
-	vc->driver->swap_without_accept(vc, generic_callback, vc);
+	if (voicecalls_have_active(vc) && voicecalls_have_held(vc))
+		cb = send_ciev_after_swap_callback;
+	else
+		cb = generic_callback;
+
+	vc->driver->swap_without_accept(vc, cb, vc);
 
 	return NULL;
 }
@@ -1615,6 +1650,7 @@ static DBusMessage *manager_swap_calls(DBusConnection *conn,
 					DBusMessage *msg, void *data)
 {
 	struct ofono_voicecall *vc = data;
+	ofono_voicecall_cb_t cb;
 
 	if (vc->driver->swap_without_accept)
 		return manager_swap_without_accept(conn, msg, data);
@@ -1630,7 +1666,12 @@ static DBusMessage *manager_swap_calls(DBusConnection *conn,
 
 	vc->pending = dbus_message_ref(msg);
 
-	vc->driver->hold_all_active(vc, generic_callback, vc);
+	if (voicecalls_have_active(vc) && voicecalls_have_held(vc))
+		cb = send_ciev_after_swap_callback;
+	else
+		cb = generic_callback;
+
+	vc->driver->hold_all_active(vc, cb, vc);
 
 	return NULL;
 }
@@ -1707,12 +1748,15 @@ static DBusMessage *manager_hangup_all(DBusConnection *conn,
 
 	vc->pending = dbus_message_ref(msg);
 
-	if (vc->driver->hangup_all == NULL) {
-		voicecalls_release_queue(vc, vc->call_list,
-						voicecalls_release_done);
-		voicecalls_release_next(vc);
-	} else
+	if (vc->driver->hangup_all) {
 		vc->driver->hangup_all(vc, generic_callback, vc);
+		return NULL;
+	}
+
+	if (voicecalls_num_held(vc) > 0)
+		vc->driver->hangup_active(vc, hangup_all_active, vc);
+	else
+		vc->driver->hangup_active(vc, generic_callback, vc);
 
 	return NULL;
 }
@@ -1960,7 +2004,7 @@ static DBusMessage *multiparty_hangup(DBusConnection *conn,
 
 	/* Fall back to the old-fashioned way */
 	voicecalls_release_queue(vc, vc->multiparty_list,
-					voicecalls_release_done);
+					voicecalls_release_done, FALSE);
 	voicecalls_release_next(vc);
 
 out:
@@ -2281,6 +2325,26 @@ error:
 		g_free(v);
 }
 
+static void send_ciev_after_swap_callback(const struct ofono_error *error,
+								void *data)
+{
+	struct ofono_voicecall *vc = data;
+	DBusMessage *reply;
+
+	if (error->type != OFONO_ERROR_TYPE_NO_ERROR)
+		DBG("command failed with error: %s",
+				telephony_error_to_str(error));
+
+	if (error->type == OFONO_ERROR_TYPE_NO_ERROR) {
+		reply = dbus_message_new_method_return(vc->pending);
+		emulator_set_indicator_forced(vc, OFONO_EMULATOR_IND_CALLHELD,
+					OFONO_EMULATOR_CALLHELD_MULTIPLE);
+	} else
+		reply = __ofono_error_failed(vc->pending);
+
+	__ofono_dbus_pending_reply(&vc->pending, reply);
+}
+
 static void generic_callback(const struct ofono_error *error, void *data)
 {
 	struct ofono_voicecall *vc = data;
@@ -2296,6 +2360,36 @@ static void generic_callback(const struct ofono_error *error, void *data)
 		reply = __ofono_error_failed(vc->pending);
 
 	__ofono_dbus_pending_reply(&vc->pending, reply);
+}
+
+static void hangup_all_active(const struct ofono_error *error, void *data)
+{
+	struct ofono_voicecall *vc = data;
+
+	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
+		__ofono_dbus_pending_reply(&vc->pending,
+					__ofono_error_failed(vc->pending));
+		return;
+	}
+
+	/*
+	 * If we have waiting call, we cannot use CHLD=0 due to side effects
+	 * to that call.  Instead we try to hangup all calls one by one,
+	 * which might fail if the modem / AG does not support release_specific
+	 * for held calls.  In that case the waiting call and held calls will
+	 * remain.
+	 */
+	if (vc->driver->release_all_held == NULL ||
+			voicecalls_have_waiting(vc)) {
+		GSList *held = voicecalls_held_list(vc);
+
+		voicecalls_release_queue(vc, held,
+						voicecalls_release_done, FALSE);
+		voicecalls_release_next(vc);
+
+		g_slist_free(held);
+	} else
+		vc->driver->release_all_held(vc, generic_callback, vc);
 }
 
 static void multirelease_callback(const struct ofono_error *error, void *data)
@@ -2752,6 +2846,23 @@ static void sim_watch(struct ofono_atom *atom,
 	sim_state_watch(ofono_sim_get_state(sim), vc);
 }
 
+static void emulator_send_ciev_after_swap_cb(const struct ofono_error *error,
+								void *data)
+{
+	struct ofono_voicecall *vc = data;
+
+	if (vc->pending_em == NULL)
+		return;
+
+	ofono_emulator_send_final(vc->pending_em, error);
+
+	if (error->type == OFONO_ERROR_TYPE_NO_ERROR)
+		emulator_set_indicator_forced(vc, OFONO_EMULATOR_IND_CALLHELD,
+					OFONO_EMULATOR_CALLHELD_MULTIPLE);
+
+	vc->pending_em = NULL;
+}
+
 static void emulator_generic_cb(const struct ofono_error *error, void *data)
 {
 	struct ofono_voicecall *vc = data;
@@ -2879,8 +2990,6 @@ static void emulator_chup_cb(struct ofono_emulator *em,
 {
 	struct ofono_voicecall *vc = userdata;
 	struct ofono_error result;
-	GSList *l;
-	struct voicecall *call;
 
 	result.error = 0;
 
@@ -2902,22 +3011,13 @@ static void emulator_chup_cb(struct ofono_emulator *em,
 			goto done;
 		}
 
-		for (l = vc->call_list; l; l = l->next) {
-			call = l->data;
-
-			if (call->call->status == CALL_STATUS_WAITING ||
-					call->call->status == CALL_STATUS_HELD)
-				continue;
-
-			vc->release_list = g_slist_prepend(vc->release_list,
-								l->data);
-		}
-
-		if (vc->release_list == NULL)
+		if (voicecalls_have_active(vc) == FALSE &&
+				voicecalls_have_incoming(vc) == FALSE)
 			goto fail;
 
 		vc->pending_em = em;
-		vc->release_queue_done_cb = emulator_generic_cb;
+		voicecalls_release_queue(vc, vc->call_list,
+						emulator_generic_cb, TRUE);
 		voicecalls_release_next(vc);
 
 done:
@@ -3001,6 +3101,7 @@ static void emulator_chld_cb(struct ofono_emulator *em,
 	char buf[64];
 	char *info;
 	int chld;
+	ofono_voicecall_cb_t cb;
 
 	result.error = 0;
 
@@ -3042,9 +3143,14 @@ static void emulator_chld_cb(struct ofono_emulator *em,
 			if (vc->driver->hold_all_active == NULL)
 				goto fail;
 
+			if (voicecalls_have_active(vc) &&
+					voicecalls_have_held(vc))
+				cb = emulator_send_ciev_after_swap_cb;
+			else
+				cb = emulator_generic_cb;
+
 			vc->pending_em = em;
-			vc->driver->hold_all_active(vc,
-					emulator_generic_cb, vc);
+			vc->driver->hold_all_active(vc, cb, vc);
 			return;
 		case 3:
 			if (vc->driver->create_multiparty == NULL)
@@ -3210,8 +3316,6 @@ static void emulator_dial_callback(const struct ofono_error *error, void *data)
 
 	vc->pending_em = NULL;
 
-	notify_emulator_call_status(vc);
-
 	if (need_to_emit)
 		voicecalls_emit_call_added(vc, v);
 }
@@ -3277,18 +3381,15 @@ static void emulator_atd_cb(struct ofono_emulator *em,
 			goto fail;
 
 		if (len == 3 && str[0] == '>' && str[1] == '1') {
-			struct ofono_atom *mw_atom;
 			struct ofono_message_waiting *mw;
 			const struct ofono_phone_number *ph;
 			const char *num;
 
-			mw_atom = __ofono_modem_find_atom(modem,
-					OFONO_ATOM_TYPE_MESSAGE_WAITING);
-
-			if (mw_atom == NULL)
+			mw = __ofono_atom_find(OFONO_ATOM_TYPE_MESSAGE_WAITING,
+						modem);
+			if (mw == NULL)
 				goto fail;
 
-			mw = __ofono_atom_get_data(mw_atom);
 			ph = __ofono_message_waiting_get_mbdn(mw, 0);
 
 			if (ph == NULL)

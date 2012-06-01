@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -208,11 +208,11 @@ static gboolean stk_file_iter_next(struct stk_file_iter *iter)
 	unsigned int i;
 	unsigned char last_type;
 
-	/* SIM EFs always start with ROOT MF, 0x3f */
-	if (start[iter->pos] != 0x3f)
+	if (pos + 2 >= max)
 		return FALSE;
 
-	if (pos + 2 >= max)
+	/* SIM EFs always start with ROOT MF, 0x3f */
+	if (start[iter->pos] != 0x3f)
 		return FALSE;
 
 	last_type = 0x3f;

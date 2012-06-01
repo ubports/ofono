@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2010-2011 Nokia Corporation. All rights reserved.
+ *  Copyright (C) 2010-2011  Nokia Corporation and/or its subsidiary(-ies).
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -63,6 +63,11 @@ int ofono_cdma_connman_driver_register(
 				const struct ofono_cdma_connman_driver *d);
 void ofono_cdma_connman_driver_unregister(
 				const struct ofono_cdma_connman_driver *d);
+
+void ofono_cdma_connman_deactivated(struct ofono_cdma_connman *cm);
+
+void ofono_cdma_connman_dormant_notify(struct ofono_cdma_connman *cm,
+					ofono_bool_t dormant);
 
 struct ofono_cdma_connman *ofono_cdma_connman_create(
 						struct ofono_modem *modem,

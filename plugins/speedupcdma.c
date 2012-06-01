@@ -34,8 +34,11 @@
 #include <ofono/plugin.h>
 #include <ofono/modem.h>
 #include <ofono/devinfo.h>
+#include <ofono/cdma-netreg.h>
 #include <ofono/cdma-connman.h>
 #include <ofono/log.h>
+
+#include "drivers/atmodem/vendor.h"
 
 struct speedupcdma_data {
 	GAtChat *modem;
@@ -71,6 +74,9 @@ static void speedupcdma_remove(struct ofono_modem *modem)
 	DBG("%p", modem);
 
 	ofono_modem_set_data(modem, NULL);
+
+	/* Cleanup after hot-unplug */
+	g_at_chat_unref(data->aux);
 
 	g_free(data);
 }
@@ -143,6 +149,8 @@ static int speedupcdma_enable(struct ofono_modem *modem)
 		return -EIO;
 	}
 
+	g_at_chat_set_slave(data->modem, data->aux);
+
 	g_at_chat_send(data->modem, "ATE0 &C0 +CMEE=1", NULL, NULL, NULL, NULL);
 	g_at_chat_send(data->aux, "ATE0 &C0 +CMEE=1", NULL, NULL, NULL, NULL);
 
@@ -207,7 +215,10 @@ static void speedupcdma_post_online(struct ofono_modem *modem)
 
 	DBG("%p", modem);
 
-	ofono_cdma_connman_create(modem, 0, "cdmamodem", data->modem);
+	ofono_cdma_netreg_create(modem, 0, "huaweicdmamodem", data->aux);
+
+	ofono_cdma_connman_create(modem, OFONO_VENDOR_HUAWEI, "cdmamodem",
+					data->modem);
 }
 
 static struct ofono_modem_driver speedupcdma_driver = {

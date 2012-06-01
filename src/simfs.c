@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -901,8 +901,10 @@ int sim_fs_read(struct ofono_sim_context *context, int id,
 	if (fs->driver == NULL)
 		return -EINVAL;
 
-	if (fs->driver->read_file_info == NULL)
+	if (fs->driver->read_file_info == NULL) {
+		cb(0, 0, 0, NULL, 0, data);
 		return -ENOSYS;
+	}
 
 	if (fs->op_q == NULL)
 		fs->op_q = g_queue_new();

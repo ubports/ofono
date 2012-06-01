@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2010 Nokia Corporation. All rights reserved.
+ *  Copyright (C) 2010  Nokia Corporation and/or its subsidiary(-ies).
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -40,6 +40,7 @@ static GSList *g_drivers;
 
 struct ofono_cdma_voicecall {
 	struct ofono_cdma_phone_number phone_number;
+	struct ofono_cdma_phone_number waiting_number;
 	int direction;
 	enum cdma_call_status status;
 	time_t start_time;
@@ -108,14 +109,25 @@ static void append_voicecall_properties(struct ofono_cdma_voicecall *vc,
 {
 	const char *status;
 	const char *lineid;
+	const char *waiting_call;
+	dbus_bool_t call_waiting = FALSE;
 
 	status = cdma_call_status_to_string(vc->status);
-	lineid = cdma_phone_number_to_string(&vc->phone_number);
-
 	ofono_dbus_dict_append(dict, "State", DBUS_TYPE_STRING, &status);
 
+	lineid = cdma_phone_number_to_string(&vc->phone_number);
 	ofono_dbus_dict_append(dict, "LineIdentification",
-				DBUS_TYPE_STRING, &lineid);
+					DBUS_TYPE_STRING, &lineid);
+
+	if (vc->waiting_number.number[0] != '\0') {
+		waiting_call = cdma_phone_number_to_string(&vc->waiting_number);
+		ofono_dbus_dict_append(dict, "CallWaitingNumber",
+					DBUS_TYPE_STRING, &waiting_call);
+		call_waiting = TRUE;
+	}
+
+	ofono_dbus_dict_append(dict, "CallWaiting",
+					DBUS_TYPE_BOOLEAN, &call_waiting);
 
 	if (vc->status == CDMA_CALL_STATUS_ACTIVE) {
 		const char *timestr = time_to_str(&vc->start_time);
@@ -172,6 +184,8 @@ static void voicecall_set_call_status(struct ofono_cdma_voicecall *vc,
 	const char *status_str;
 	enum cdma_call_status old_status;
 
+	DBG("status: %s", cdma_call_status_to_string(status));
+
 	if (vc->status == status)
 		return;
 
@@ -197,6 +211,15 @@ static void voicecall_set_call_status(struct ofono_cdma_voicecall *vc,
 					OFONO_CDMA_VOICECALL_MANAGER_INTERFACE,
 					"StartTime", DBUS_TYPE_STRING,
 					&timestr);
+	}
+
+	/* TODO: Properly signal property changes here */
+	if (status == CDMA_CALL_STATUS_DISCONNECTED) {
+		memset(&vc->phone_number, 0,
+				sizeof(struct ofono_cdma_phone_number));
+
+		memset(&vc->waiting_number, 0,
+			sizeof(struct ofono_cdma_phone_number));
 	}
 }
 
@@ -286,12 +309,114 @@ static DBusMessage *voicecall_manager_hangup(DBusConnection *conn,
 	return NULL;
 }
 
+static DBusMessage *voicecall_manager_answer(DBusConnection *conn,
+					DBusMessage *msg, void *data)
+{
+	struct ofono_cdma_voicecall *vc = data;
+
+	if (vc->pending)
+		return __ofono_error_busy(msg);
+
+	if (vc->driver->answer == NULL)
+		return __ofono_error_not_implemented(msg);
+
+	if (vc->status != CDMA_CALL_STATUS_INCOMING)
+		return __ofono_error_failed(msg);
+
+	vc->pending = dbus_message_ref(msg);
+
+	vc->driver->answer(vc, generic_callback, vc);
+
+	return NULL;
+}
+
+static DBusMessage *voicecall_manager_flash(DBusConnection *conn,
+					DBusMessage *msg, void *data)
+{
+	struct ofono_cdma_voicecall *vc = data;
+	const char *string;
+
+	if (vc->pending)
+		return __ofono_error_busy(msg);
+
+	if (vc->driver->send_flash == NULL)
+		return __ofono_error_not_implemented(msg);
+
+	if (dbus_message_get_args(msg, NULL, DBUS_TYPE_STRING, &string,
+					DBUS_TYPE_INVALID) == FALSE)
+		return __ofono_error_invalid_args(msg);
+
+	vc->pending = dbus_message_ref(msg);
+
+	vc->driver->send_flash(vc, string, generic_callback, vc);
+
+	return NULL;
+}
+
+static ofono_bool_t is_valid_tones(const char *tones)
+{
+	int len;
+	int i;
+
+	if (tones == NULL)
+		return FALSE;
+
+	len = strlen(tones);
+	if (len == 0)
+		return FALSE;
+
+	for (i = 0; i < len; i++) {
+		if (g_ascii_isdigit(tones[i]) || tones[i] == '*' ||
+				tones[i] == '#')
+			continue;
+		else
+			return FALSE;
+	}
+
+	return TRUE;
+}
+
+static DBusMessage *voicecall_manager_tone(DBusConnection *conn,
+					DBusMessage *msg, void *data)
+{
+	struct ofono_cdma_voicecall *vc = data;
+	const char *tones;
+
+	if (vc->pending)
+		return __ofono_error_busy(msg);
+
+	if (vc->driver->send_tones == NULL)
+		return __ofono_error_not_implemented(msg);
+
+	if (vc->status != CDMA_CALL_STATUS_ACTIVE)
+		return __ofono_error_failed(msg);
+
+	if (dbus_message_get_args(msg, NULL, DBUS_TYPE_STRING, &tones,
+					DBUS_TYPE_INVALID) == FALSE)
+		return __ofono_error_invalid_args(msg);
+
+	if (is_valid_tones(tones) == FALSE)
+		return __ofono_error_invalid_args(msg);
+
+	vc->pending = dbus_message_ref(msg);
+
+	vc->driver->send_tones(vc,  tones, generic_callback, vc);
+
+	return NULL;
+}
+
 static GDBusMethodTable manager_methods[] = {
 	{ "GetProperties",    "",    "a{sv}",
 					voicecall_manager_get_properties },
 	{ "Dial",             "s",  "o",        voicecall_manager_dial,
 						G_DBUS_METHOD_FLAG_ASYNC },
 	{ "Hangup",           "",    "",         voicecall_manager_hangup,
+						G_DBUS_METHOD_FLAG_ASYNC },
+	{ "Answer",           "",    "",         voicecall_manager_answer,
+						G_DBUS_METHOD_FLAG_ASYNC },
+	{ "SendFlash",      "s",    "",         voicecall_manager_flash,
+						G_DBUS_METHOD_FLAG_ASYNC },
+	{ "SendTones",     "s",    "",        voicecall_manager_tone,
 						G_DBUS_METHOD_FLAG_ASYNC },
 	{ }
 };

@@ -1,3 +1,12 @@
+ofono (1.6-1) unstable; urgency=low
+
+  * New upstream release.
+  * Add myself to uploaders. 
+  * Update Standards-Version. 
+  * Change source/format to 3.0 (quilt)
+
+ -- Hector Oron <zumbi@debian.org>  Fri, 01 Jun 2012 18:29:37 +0200
+
 ofono (0.53-2) unstable; urgency=low
 
   * debian/ofono.init: Add dbus as a dependency to start and stop. Thanks

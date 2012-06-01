@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -41,6 +41,7 @@
 #include "gatppp.h"
 
 #include "atmodem.h"
+#include "vendor.h"
 
 #define TUN_SYSFS_DIR "/sys/devices/virtual/misc/tun"
 
@@ -64,6 +65,7 @@ struct gprs_context_data {
 	enum state state;
 	ofono_gprs_context_cb_t cb;
 	void *cb_data;                                  /* Callback data */
+	unsigned int vendor;
 };
 
 static void ppp_debug(const char *str, void *data)
@@ -239,6 +241,27 @@ static void at_gprs_activate_primary(struct ofono_gprs_context *gc,
 
 	gcd->state = STATE_ENABLING;
 
+	if (gcd->vendor == OFONO_VENDOR_ZTE) {
+		GAtChat *chat = g_at_chat_get_slave(gcd->chat);
+
+		/*
+		 * The modem port of ZTE devices with certain firmware
+		 * versions ends up getting suspended. It will no longer
+		 * signal POLLOUT and becomes pretty unresponsive.
+		 *
+		 * To wake up the modem port, the only reliable method
+		 * found so far is AT+ZOPRT power mode command. It is
+		 * enough to ask for the current mode and the modem
+		 * port wakes up and accepts commands again.
+		 *
+		 * And since the modem port is suspended, this command
+		 * needs to be send on the control port of course.
+		 *
+		 */
+		g_at_chat_send(chat, "AT+ZOPRT?", none_prefix,
+						NULL, NULL, NULL);
+	}
+
 	len = snprintf(buf, sizeof(buf), "AT+CGDCONT=%u,\"IP\"", ctx->cid);
 
 	if (ctx->apn)
@@ -321,6 +344,7 @@ static int at_gprs_context_probe(struct ofono_gprs_context *gc,
 		return -ENOMEM;
 
 	gcd->chat = g_at_chat_clone(chat);
+	gcd->vendor = vendor;
 
 	ofono_gprs_context_set_data(gc, gcd);
 

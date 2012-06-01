@@ -1,0 +1,127 @@
+Description: Install udev rules files as in previous releases.
+ Current release does not install udev rules files, the following patch
+ its a forward port of the logic to install udev rules files found on
+ previous releases.
+ ofono (1.6-1) unstable; urgency=low
+ .
+   * New upstream release.
+   * Add myself to uploaders.
+   * Update Standards-Version.
+   * Change source/format to 3.0 (quilt)
+Author: Hector Oron <zumbi@debian.org>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout http://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Last-Update: <2012-06-01>
+
+Index: ofono-1.6/Makefile.in
+===================================================================
+--- ofono-1.6.orig/Makefile.in	2012-06-02 00:10:07.950794404 +0200
++++ ofono-1.6/Makefile.in	2012-06-02 00:13:53.130786439 +0200
+@@ -758,7 +758,7 @@
+ am__dist_conf_DATA_DIST = plugins/phonesim.conf
+ am__dist_dbusconf_DATA_DIST = src/ofono.conf
+ DATA = $(dist_conf_DATA) $(dist_dbusconf_DATA) $(pkgconfig_DATA) \
+-	$(state_DATA) $(systemdunit_DATA)
++	$(rules_DATA) $(state_DATA) $(systemdunit_DATA)
+ HEADERS = $(nodist_pkginclude_HEADERS) $(pkginclude_HEADERS)
+ ETAGS = etags
+ CTAGS = ctags
+@@ -1008,6 +1008,9 @@
+ 				gisi/socket.c gisi/socket.h
+ 
+ btio_sources = btio/btio.h btio/btio.c
++udev_files = plugins/ofono.rules plugins/ofono-speedup.rules
++@DATAFILES_TRUE@@UDEV_TRUE@rulesdir = @UDEV_DATADIR@
++@DATAFILES_TRUE@@UDEV_TRUE@rules_DATA = $(foreach file,$(udev_files), plugins/97-$(notdir $(file)))
+ src_ofonod_SOURCES = $(gdbus_sources) $(builtin_sources) src/ofono.ver \
+ 			src/main.c src/ofono.h src/log.c src/plugin.c \
+ 			src/modem.c src/common.h src/common.c \
+@@ -1154,7 +1157,7 @@
+ 
+ @TEST_TRUE@testdir = $(pkglibdir)/test
+ @TEST_TRUE@test_SCRIPTS = $(test_scripts)
+-EXTRA_DIST = src/genbuiltin plugins/ofono.rules plugins/ofono-speedup.rules \
++EXTRA_DIST = src/genbuiltin $(udev_files) \
+ 				$(doc_files) $(test_scripts)
+ 
+ dist_man_MANS = doc/ofonod.8
+@@ -2711,6 +2714,27 @@
+ 	@list='$(pkgconfig_DATA)'; test -n "$(pkgconfigdir)" || list=; \
+ 	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
+ 	dir='$(DESTDIR)$(pkgconfigdir)'; $(am__uninstall_files_from_dir)
++
++install-rulesDATA: $(rules_DATA)
++	@$(NORMAL_INSTALL)
++	test -z "$(rulesdir)" || $(MKDIR_P) "$(DESTDIR)$(rulesdir)"
++	@list='$(rules_DATA)'; test -n "$(rulesdir)" || list=; \
++	for p in $$list; do \
++	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
++	  echo "$$d$$p"; \
++	done | $(am__base_list) | \
++	while read files; do \
++	  echo " $(INSTALL_DATA) $$files '$(DESTDIR)$(rulesdir)'"; \
++	  $(INSTALL_DATA) $$files "$(DESTDIR)$(rulesdir)" || exit $$?; \
++	done
++
++uninstall-rulesDATA:
++	@$(NORMAL_UNINSTALL)
++	@list='$(rules_DATA)'; test -n "$(rulesdir)" || list=; \
++	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
++	test -n "$$files" || exit 0; \
++	echo " ( cd '$(DESTDIR)$(rulesdir)' && rm -f" $$files ")"; \
++	cd "$(DESTDIR)$(rulesdir)" && rm -f $$files
+ install-stateDATA: $(state_DATA)
+ 	@$(NORMAL_INSTALL)
+ 	test -z "$(statedir)" || $(MKDIR_P) "$(DESTDIR)$(statedir)"
+@@ -3223,7 +3247,8 @@
+ install-data-am: install-dist_confDATA install-dist_dbusconfDATA \
+ 	install-man install-nodist_pkgincludeHEADERS \
+ 	install-pkgconfigDATA install-pkgincludeHEADERS \
+-	install-stateDATA install-systemdunitDATA install-testSCRIPTS
++	install-rulesDATA install-stateDATA install-systemdunitDATA \
++	install-testSCRIPTS
+ 
+ install-dvi: install-dvi-am
+ 
+@@ -3274,7 +3299,7 @@
+ uninstall-am: uninstall-dist_confDATA uninstall-dist_dbusconfDATA \
+ 	uninstall-man uninstall-nodist_pkgincludeHEADERS \
+ 	uninstall-pkgconfigDATA uninstall-pkgincludeHEADERS \
+-	uninstall-sbinPROGRAMS uninstall-stateDATA \
++	uninstall-rulesDATA uninstall-sbinPROGRAMS uninstall-stateDATA \
+ 	uninstall-systemdunitDATA uninstall-testSCRIPTS
+ 
+ uninstall-man: uninstall-man8
+@@ -3295,17 +3320,18 @@
+ 	install-info install-info-am install-man install-man8 \
+ 	install-nodist_pkgincludeHEADERS install-pdf install-pdf-am \
+ 	install-pkgconfigDATA install-pkgincludeHEADERS install-ps \
+-	install-ps-am install-sbinPROGRAMS install-stateDATA \
+-	install-strip install-systemdunitDATA install-testSCRIPTS \
+-	installcheck installcheck-am installdirs maintainer-clean \
+-	maintainer-clean-generic mostlyclean mostlyclean-compile \
+-	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
+-	tags uninstall uninstall-am uninstall-dist_confDATA \
+-	uninstall-dist_dbusconfDATA uninstall-man uninstall-man8 \
++	install-ps-am install-rulesDATA install-sbinPROGRAMS \
++	install-stateDATA install-strip install-systemdunitDATA \
++	install-testSCRIPTS installcheck installcheck-am installdirs \
++	maintainer-clean maintainer-clean-generic mostlyclean \
++	mostlyclean-compile mostlyclean-generic mostlyclean-libtool \
++	pdf pdf-am ps ps-am tags uninstall uninstall-am \
++	uninstall-dist_confDATA uninstall-dist_dbusconfDATA \
++	uninstall-man uninstall-man8 \
+ 	uninstall-nodist_pkgincludeHEADERS uninstall-pkgconfigDATA \
+-	uninstall-pkgincludeHEADERS uninstall-sbinPROGRAMS \
+-	uninstall-stateDATA uninstall-systemdunitDATA \
+-	uninstall-testSCRIPTS
++	uninstall-pkgincludeHEADERS uninstall-rulesDATA \
++	uninstall-sbinPROGRAMS uninstall-stateDATA \
++	uninstall-systemdunitDATA uninstall-testSCRIPTS
+ 
+ 
+ src/builtin.h: src/genbuiltin config.status

@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -41,6 +41,7 @@
 #include <ofono/ussd.h>
 #include <ofono/gprs.h>
 #include <ofono/gprs-context.h>
+#include <ofono/radio-settings.h>
 #include <ofono/phonebook.h>
 #include <ofono/log.h>
 
@@ -79,14 +80,20 @@ static void zte_remove(struct ofono_modem *modem)
 
 	ofono_modem_set_data(modem, NULL);
 
+	/* Cleanup potential SIM state polling */
+	at_util_sim_state_query_free(data->sim_state_query);
+
+	/* Cleanup after hot-unplug */
+	g_at_chat_unref(data->aux);
+
 	g_free(data);
 }
 
 static void zte_debug(const char *str, void *user_data)
 {
-        const char *prefix = user_data;
+	const char *prefix = user_data;
 
-        ofono_info("%s%s", prefix, str);
+	ofono_info("%s%s", prefix, str);
 }
 
 static GAtChat *open_device(struct ofono_modem *modem,
@@ -96,6 +103,7 @@ static GAtChat *open_device(struct ofono_modem *modem,
 	GIOChannel *channel;
 	GAtSyntax *syntax;
 	GAtChat *chat;
+	GHashTable *options;
 
 	device = ofono_modem_get_string(modem, key);
 	if (device == NULL)
@@ -103,7 +111,23 @@ static GAtChat *open_device(struct ofono_modem *modem,
 
 	DBG("%s %s", key, device);
 
-	channel = g_at_tty_open(device, NULL);
+	options = g_hash_table_new(g_str_hash, g_str_equal);
+	if (options == NULL)
+		return NULL;
+
+	g_hash_table_insert(options, "Baud", "115200");
+	g_hash_table_insert(options, "Parity", "none");
+	g_hash_table_insert(options, "StopBits", "1");
+	g_hash_table_insert(options, "DataBits", "8");
+	g_hash_table_insert(options, "XonXoff", "off");
+	g_hash_table_insert(options, "RtsCts", "on");
+	g_hash_table_insert(options, "Local", "on");
+	g_hash_table_insert(options, "Read", "on");
+
+	channel = g_at_tty_open(device, options);
+
+	g_hash_table_destroy(options);
+
 	if (channel == NULL)
 		return NULL;
 
@@ -122,20 +146,7 @@ static GAtChat *open_device(struct ofono_modem *modem,
 	return chat;
 }
 
-static void sim_state_cb(gboolean present, gpointer user_data)
-{
-	struct ofono_modem *modem = user_data;
-	struct zte_data *data = ofono_modem_get_data(modem);
-
-	at_util_sim_state_query_free(data->sim_state_query);
-	data->sim_state_query = NULL;
-
-	data->have_sim = present;
-
-	ofono_modem_set_powered(modem, TRUE);
-}
-
-static void cfun_enable(gboolean ok, GAtResult *result, gpointer user_data)
+static void zoprt_enable(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_modem *modem = user_data;
 	struct zte_data *data = ofono_modem_get_data(modem);
@@ -157,8 +168,58 @@ static void cfun_enable(gboolean ok, GAtResult *result, gpointer user_data)
 	g_at_chat_send(data->modem, "AT&C0", NULL, NULL, NULL, NULL);
 	g_at_chat_send(data->aux, "AT&C0", NULL, NULL, NULL, NULL);
 
+	/*
+	 * Ensure that the modem is using GSM character set and not IRA,
+	 * otherwise weirdness with umlauts and other non-ASCII characters
+	 * can result
+	 */
+	g_at_chat_send(data->modem, "AT+CSCS=\"GSM\"", none_prefix,
+							NULL, NULL, NULL);
+	g_at_chat_send(data->aux, "AT+CSCS=\"GSM\"", none_prefix,
+							NULL, NULL, NULL);
+
+	/* Read PCB information */
+	g_at_chat_send(data->aux, "AT+ZPCB?", none_prefix, NULL, NULL, NULL);
+
+	ofono_modem_set_powered(modem, TRUE);
+}
+
+static void sim_state_cb(gboolean present, gpointer user_data)
+{
+	struct ofono_modem *modem = user_data;
+	struct zte_data *data = ofono_modem_get_data(modem);
+
+	at_util_sim_state_query_free(data->sim_state_query);
+	data->sim_state_query = NULL;
+
+	data->have_sim = present;
+
+	/* Switch device into offline mode now */
+	g_at_chat_send(data->aux, "AT+ZOPRT=6", none_prefix,
+					zoprt_enable, modem, NULL);
+}
+
+static void cfun_enable(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct ofono_modem *modem = user_data;
+	struct zte_data *data = ofono_modem_get_data(modem);
+
+	DBG("");
+
+	if (!ok) {
+		g_at_chat_unref(data->modem);
+		data->modem = NULL;
+
+		g_at_chat_unref(data->aux);
+		data->aux = NULL;
+
+		ofono_modem_set_powered(modem, FALSE);
+		return;
+	}
+
 	data->sim_state_query = at_util_sim_state_query_new(data->aux,
-						2, 20, sim_state_cb, modem);
+						2, 20, sim_state_cb, modem,
+						NULL);
 }
 
 static int zte_enable(struct ofono_modem *modem)
@@ -178,11 +239,16 @@ static int zte_enable(struct ofono_modem *modem)
 		return -EIO;
 	}
 
-	g_at_chat_send(data->modem, "ATE0 +CMEE=1", NULL, NULL, NULL, NULL);
+	g_at_chat_set_slave(data->modem, data->aux);
+
+	g_at_chat_blacklist_terminator(data->aux,
+					G_AT_CHAT_TERMINATOR_NO_CARRIER);
+
+	g_at_chat_send(data->modem, "ATZ E0 +CMEE=1", NULL, NULL, NULL, NULL);
 	g_at_chat_send(data->aux, "ATE0 +CMEE=1", NULL, NULL, NULL, NULL);
 
-	/* Direct transition 0 -> 4 leaves SIM hosed */
-	g_at_chat_send(data->aux, "AT+CFUN=1;+CFUN=4", NULL,
+	/* Switch device on first */
+	g_at_chat_send(data->aux, "AT+CFUN=1", NULL,
 					cfun_enable, modem, NULL);
 
 	return -EINPROGRESS;
@@ -202,6 +268,17 @@ static void cfun_disable(gboolean ok, GAtResult *result, gpointer user_data)
 		ofono_modem_set_powered(modem, FALSE);
 }
 
+static void zoprt_disable(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct ofono_modem *modem = user_data;
+	struct zte_data *data = ofono_modem_get_data(modem);
+
+	DBG("");
+
+	g_at_chat_send(data->aux, "AT+CFUN=0", NULL,
+					cfun_disable, modem, NULL);
+}
+
 static int zte_disable(struct ofono_modem *modem)
 {
 	struct zte_data *data = ofono_modem_get_data(modem);
@@ -217,8 +294,9 @@ static int zte_disable(struct ofono_modem *modem)
 	g_at_chat_cancel_all(data->aux);
 	g_at_chat_unregister_all(data->aux);
 
-	g_at_chat_send(data->aux, "AT+CFUN=0", NULL,
-					cfun_disable, modem, NULL);
+	/* Switch to offline mode first */
+	g_at_chat_send(data->aux, "AT+ZOPRT=6", none_prefix,
+					zoprt_disable, modem, NULL);
 
 	return -EINPROGRESS;
 }
@@ -238,7 +316,7 @@ static void zte_set_online(struct ofono_modem *modem, ofono_bool_t online,
 {
 	struct zte_data *data = ofono_modem_get_data(modem);
 	struct cb_data *cbd = cb_data_new(cb, user_data);
-	char const *command = online ? "AT+CFUN=1" : "AT+CFUN=4";
+	char const *command = online ? "AT+ZOPRT=5" : "AT+ZOPRT=6";
 
 	DBG("modem %p %s", modem, online ? "online" : "offline");
 
@@ -259,8 +337,7 @@ static void zte_pre_sim(struct ofono_modem *modem)
 	DBG("%p", modem);
 
 	ofono_devinfo_create(modem, 0, "atmodem", data->aux);
-	sim = ofono_sim_create(modem, OFONO_VENDOR_QUALCOMM_MSM,
-						"atmodem", data->aux);
+	sim = ofono_sim_create(modem, OFONO_VENDOR_ZTE, "atmodem", data->aux);
 
 	if (sim && data->have_sim == TRUE)
 		ofono_sim_inserted_notify(sim, TRUE);
@@ -276,11 +353,13 @@ static void zte_post_sim(struct ofono_modem *modem)
 
 	ofono_phonebook_create(modem, 0, "atmodem", data->aux);
 
-	ofono_sms_create(modem, OFONO_VENDOR_QUALCOMM_MSM,
-					"atmodem", data->aux);
+	ofono_radio_settings_create(modem, 0, "ztemodem", data->aux);
 
-	gprs = ofono_gprs_create(modem, 0, "atmodem", data->aux);
-	gc = ofono_gprs_context_create(modem, 0, "atmodem", data->modem);
+	ofono_sms_create(modem, OFONO_VENDOR_ZTE, "atmodem", data->aux);
+
+	gprs = ofono_gprs_create(modem, OFONO_VENDOR_ZTE, "atmodem", data->aux);
+	gc = ofono_gprs_context_create(modem, OFONO_VENDOR_ZTE,
+						"atmodem", data->modem);
 
 	if (gprs && gc)
 		ofono_gprs_add_context(gprs, gc);
@@ -306,10 +385,10 @@ static struct ofono_modem_driver zte_driver = {
 	.remove		= zte_remove,
 	.enable		= zte_enable,
 	.disable	= zte_disable,
-	.set_online     = zte_set_online,
+	.set_online	= zte_set_online,
 	.pre_sim	= zte_pre_sim,
 	.post_sim	= zte_post_sim,
-	.post_online    = zte_post_online,
+	.post_online	= zte_post_online,
 };
 
 static int zte_init(void)

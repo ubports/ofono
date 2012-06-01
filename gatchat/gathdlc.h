@@ -2,7 +2,7 @@
  *
  *  AT chat library with GLib integration
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -55,6 +55,7 @@ void g_at_hdlc_set_recording(GAtHDLC *hdlc, const char *filename);
 
 GAtIO *g_at_hdlc_get_io(GAtHDLC *hdlc);
 
+void g_at_hdlc_set_start_frame_marker(GAtHDLC *hdlc, gboolean marker);
 void g_at_hdlc_set_no_carrier_detect(GAtHDLC *hdlc, gboolean detect);
 
 void g_at_hdlc_set_suspend_function(GAtHDLC *hdlc, GAtSuspendFunc func,

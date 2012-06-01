@@ -2,7 +2,7 @@
  *
  *  AT chat library with GLib integration
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -369,9 +369,6 @@ static void connect_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	}
 	g_at_ppp_set_debug(ppp, gsmdial_debug, "PPP");
 
-	if (option_pppdump)
-		g_at_ppp_set_recording(ppp, option_pppdump);
-
 	g_at_ppp_set_credentials(ppp, option_username, option_password);
 
 	g_at_ppp_set_acfc_enabled(ppp, option_acfc);
@@ -383,6 +380,9 @@ static void connect_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 	/* open the ppp connection */
 	g_at_ppp_open(ppp, io);
+
+	if (option_pppdump)
+		g_at_ppp_set_recording(ppp, option_pppdump);
 }
 
 static void at_cgdcont_cb(gboolean ok, GAtResult *result, gpointer user_data)
@@ -771,7 +771,7 @@ int main(int argc, char **argv)
 	event_loop = g_main_loop_new(NULL, FALSE);
 
 	if (option_bluetooth) {
-		g_at_chat_send(control, "ATD*99", none_prefix, connect_cb,
+		g_at_chat_send(control, "ATD*99#", none_prefix, connect_cb,
 				NULL, NULL);
 	} else {
 		g_at_chat_send(control, "ATE0Q0V1", NULL, NULL, NULL, NULL);

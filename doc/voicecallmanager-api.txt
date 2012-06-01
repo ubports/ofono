@@ -35,6 +35,10 @@ Methods		dict GetProperties()
 
 			This is usually implemented using the ATD AT command.
 
+			NOTE: If an active call (single or multiparty) exists,
+			then it is automatically put on hold if the dial
+			procedure is successful.
+
 			Possible Errors: [service].Error.InProgress
 					 [service].Error.InvalidArguments
 					 [service].Error.InvalidFormat
@@ -102,7 +106,8 @@ Methods		dict GetProperties()
 
 		void HangupAll()
 
-			Releases all calls.
+			Releases all calls except waiting calls. This includes
+			multiparty calls.
 
                         Possible Errors: [service].Error.InProgress
 					 [service].Error.NotImplemented
@@ -184,6 +189,12 @@ Signals		CallAdded(object path, dict properties)
 			released.  The object path is no longer accessible
 			after this signal and only emitted for reference.
 
+			NOTE: If the VoiceCallManager interface becomes
+			unavailable, this signal is not guaranteed to be
+			emitted for remaining calls.  The applications are
+			expected to monitor changes in Modem.Interfaces
+			property.
+
 		PropertyChanged(string property, variant value)
 
 			Signal is emitted whenever a property has changed.
@@ -202,7 +213,7 @@ Signals		CallAdded(object path, dict properties)
 			settings for outgoing calls. In this case the type
 			parameter in the signal is set to "local".
 
-		CallForwarded(string type) [experimental]
+		Forwarded(string type) [experimental]
 
 			Signal emitted when an outgoing voice call is made and
 			the call has been redirected to another number due to

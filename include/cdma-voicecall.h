@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2010 Nokia Corporation. All rights reserved.
+ *  Copyright (C) 2010  Nokia Corporation and/or its subsidiary(-ies).
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -54,6 +54,15 @@ struct ofono_cdma_voicecall_driver {
 
 	/* Hangs up active, dialing, alerting or incoming calls */
 	void (*hangup)(struct ofono_cdma_voicecall *vc,
+			ofono_cdma_voicecall_cb_t cb, void *data);
+
+	void (*answer)(struct ofono_cdma_voicecall *vc,
+			ofono_cdma_voicecall_cb_t cb, void *data);
+
+	void (*send_flash)(struct ofono_cdma_voicecall *vc, const char *string,
+			ofono_cdma_voicecall_cb_t cb, void *data);
+
+	void (*send_tones)(struct ofono_cdma_voicecall *vc, const char *tones,
 			ofono_cdma_voicecall_cb_t cb, void *data);
 };
 

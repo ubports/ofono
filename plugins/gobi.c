@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -81,6 +81,9 @@ static void gobi_remove(struct ofono_modem *modem)
 	DBG("%p", modem);
 
 	ofono_modem_set_data(modem, NULL);
+
+	/* Cleanup after hot-unplug */
+	g_at_chat_unref(data->chat);
 
 	g_free(data);
 }

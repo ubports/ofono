@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -190,7 +190,7 @@ static void call_modemwatch(struct ofono_modem *modem, void *user)
 	modem_watch(modem, TRUE, user);
 }
 
-static int hfp_ag_init()
+static int hfp_ag_init(void)
 {
 	sim_hash = g_hash_table_new(g_direct_hash, g_direct_equal);
 
@@ -200,7 +200,7 @@ static int hfp_ag_init()
 	return 0;
 }
 
-static void hfp_ag_exit()
+static void hfp_ag_exit(void)
 {
 	__ofono_modemwatch_remove(modemwatch_id);
 	g_list_free(modems);

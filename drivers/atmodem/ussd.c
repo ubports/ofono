@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -130,6 +130,8 @@ static void cusd_parse(GAtResult *result, struct ofono_ussd *ussd)
 		goto out;
 	}
 
+	DBG("response charset %d modem charset %d", charset, data->charset);
+
 	switch (charset) {
 	case SMS_CHARSET_7BIT:
 		switch (data->charset) {
@@ -159,6 +161,8 @@ static void cusd_parse(GAtResult *result, struct ofono_ussd *ussd)
 		msg_ptr = decode_hex_own_buf(content, -1, &msg_len, 0, msg);
 		break;
 	}
+
+	DBG("msg ptr %p msg len %ld", msg_ptr, msg_len);
 
 out:
 	ofono_ussd_notify(ussd, status, dcs, msg_ptr, msg_ptr ? msg_len : 0);
@@ -214,19 +218,6 @@ static void at_ussd_request(struct ofono_ussd *ussd, int dcs,
 
 		snprintf(buf, sizeof(buf), "AT+CUSD=1,\"%s\",%d",
 				converted, dcs);
-	}
-
-	switch (data->vendor) {
-	case OFONO_VENDOR_QUALCOMM_MSM:
-		/* Ensure that the modem is using GSM character set. It
-		 * seems it defaults to IRA and then umlauts are not
-		 * properly encoded. The modem returns some weird from
-		 * of Latin-1, but it is not really Latin-1 either. */
-		g_at_chat_send(data->chat, "AT+CSCS=\"GSM\"", none_prefix,
-							NULL, NULL, NULL);
-		break;
-	default:
-		break;
 	}
 
 	if (g_at_chat_send(data->chat, buf, cusd_prefix,
@@ -295,6 +286,7 @@ static void at_ussd_register(gboolean ok, GAtResult *result, gpointer user)
 
 	if (!ok) {
 		ofono_error("Could not enable CUSD notifications");
+		ofono_ussd_remove(ussd);
 		return;
 	}
 

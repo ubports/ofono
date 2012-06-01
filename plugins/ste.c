@@ -2,8 +2,8 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
- *  Copyright (C) 2010 ST-Ericsson AB.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2010  ST-Ericsson AB.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -501,10 +501,10 @@ static struct ofono_modem_driver ste_driver = {
 	.remove		= ste_remove,
 	.enable		= ste_enable,
 	.disable	= ste_disable,
-	.set_online     = ste_set_online,
+	.set_online	= ste_set_online,
 	.pre_sim	= ste_pre_sim,
 	.post_sim	= ste_post_sim,
-	.post_online    = ste_post_online,
+	.post_online	= ste_post_online,
 };
 
 static int ste_init(void)

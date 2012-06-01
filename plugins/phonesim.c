@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -59,9 +59,9 @@
 #include <ofono/gprs.h>
 #include <ofono/gprs-context.h>
 #include <ofono/gnss.h>
+#include <ofono/handsfree.h>
 
 #include <drivers/atmodem/vendor.h>
-#include <drivers/atmodem/sim-poll.h>
 #include <drivers/atmodem/atutil.h>
 #include <drivers/hfpmodem/slc.h>
 
@@ -348,11 +348,11 @@ static void phonesim_ctm_set(struct ofono_ctm *ctm, ofono_bool_t enable,
 }
 
 static struct ofono_gprs_context_driver context_driver = {
-	.name                   = "phonesim",
-	.probe                  = phonesim_context_probe,
-	.remove                 = phonesim_context_remove,
-	.activate_primary       = phonesim_activate_primary,
-	.deactivate_primary     = phonesim_deactivate_primary,
+	.name			= "phonesim",
+	.probe			= phonesim_context_probe,
+	.remove			= phonesim_context_remove,
+	.activate_primary	= phonesim_activate_primary,
+	.deactivate_primary	= phonesim_deactivate_primary,
 };
 
 static struct ofono_ctm_driver ctm_driver = {
@@ -880,7 +880,7 @@ static int localhfp_enable(struct ofono_modem *modem)
 
 	g_at_chat_set_disconnect_function(chat, slc_failed, modem);
 
-	hfp_slc_info_init(info);
+	hfp_slc_info_init(info, HFP_VERSION_LATEST);
 	info->chat = chat;
 	hfp_slc_establish(info, slc_established, slc_failed, modem);
 
@@ -906,6 +906,7 @@ static void localhfp_pre_sim(struct ofono_modem *modem)
 	ofono_voicecall_create(modem, 0, "hfpmodem", info);
 	ofono_netreg_create(modem, 0, "hfpmodem", info);
 	ofono_call_volume_create(modem, 0, "hfpmodem", info);
+	ofono_handsfree_create(modem, 0, "hfpmodem", info);
 }
 
 static struct ofono_modem_driver localhfp_driver = {

@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -34,8 +34,11 @@ void __ofono_modem_shutdown(void);
 
 #include <ofono/log.h>
 
-int __ofono_log_init(const char *debug, ofono_bool_t detach);
+int __ofono_log_init(const char *program, const char *debug,
+						ofono_bool_t detach);
 void __ofono_log_cleanup(void);
+void __ofono_log_enable(struct ofono_debug_desc *start,
+					struct ofono_debug_desc *stop);
 
 #include <ofono/dbus.h>
 
@@ -56,6 +59,7 @@ DBusMessage *__ofono_error_sim_not_ready(DBusMessage *msg);
 DBusMessage *__ofono_error_in_use(DBusMessage *msg);
 DBusMessage *__ofono_error_not_attached(DBusMessage *msg);
 DBusMessage *__ofono_error_attach_in_progress(DBusMessage *msg);
+DBusMessage *__ofono_error_not_registered(DBusMessage *msg);
 DBusMessage *__ofono_error_canceled(DBusMessage *msg);
 DBusMessage *__ofono_error_access_denied(DBusMessage *msg);
 DBusMessage *__ofono_error_emergency_active(DBusMessage *msg);
@@ -135,6 +139,8 @@ enum ofono_atom_type {
 	OFONO_ATOM_TYPE_LOCATION_REPORTING,
 	OFONO_ATOM_TYPE_GNSS,
 	OFONO_ATOM_TYPE_CDMA_SMS,
+	OFONO_ATOM_TYPE_CDMA_NETREG,
+	OFONO_ATOM_TYPE_HANDSFREE,
 };
 
 enum ofono_atom_watch_condition {
@@ -173,6 +179,14 @@ void __ofono_modem_foreach_registered_atom(struct ofono_modem *modem,
 void *__ofono_atom_get_data(struct ofono_atom *atom);
 const char *__ofono_atom_get_path(struct ofono_atom *atom);
 struct ofono_modem *__ofono_atom_get_modem(struct ofono_atom *atom);
+
+#define __ofono_atom_find(enum_type, modem)			\
+({								\
+	struct ofono_atom *atom =				\
+		__ofono_modem_find_atom(modem, enum_type);	\
+								\
+	atom ? __ofono_atom_get_data(atom) : NULL;		\
+})
 
 void __ofono_atom_register(struct ofono_atom *atom,
 				void (*unregister)(struct ofono_atom *));
@@ -345,6 +359,8 @@ unsigned short __ofono_sms_get_next_ref(struct ofono_sms *sms);
 ofono_bool_t __ofono_sim_service_available(struct ofono_sim *sim,
 						int ust_service,
 						int sst_service);
+ofono_bool_t __ofono_sim_cphs_service_available(struct ofono_sim *sim,
+						int cphs_service);
 
 ofono_bool_t __ofono_is_valid_sim_pin(const char *pin,
 					enum ofono_sim_password_type type);
@@ -478,8 +494,16 @@ void __ofono_gprs_provision_free_settings(
 				int count);
 
 #include <ofono/emulator.h>
+void __ofono_emulator_set_indicator_forced(struct ofono_emulator *em,
+						const char *name, int value);
+
 #include <ofono/gnss.h>
 #include <ofono/cdma-sms.h>
+#include <ofono/cdma-netreg.h>
+
+#include <ofono/cdma-provision.h>
+ofono_bool_t __ofono_cdma_provision_get_name(const char *sid, char **name);
+
 #include <ofono/private-network.h>
 
 void __ofono_private_network_release(int id);
