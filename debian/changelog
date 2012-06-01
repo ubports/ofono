@@ -1,3 +1,9 @@
+ofono (1.6-2) unstable; urgency=low
+
+  * Add build dependency on mobile-broadband-provider-info 
+
+ -- Hector Oron <zumbi@debian.org>  Sat, 02 Jun 2012 00:55:18 +0200
+
 ofono (1.6-1) unstable; urgency=low
 
   * New upstream release.
