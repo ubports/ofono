@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -57,9 +57,6 @@
 #define MAX_CONTEXTS 256
 #define SUSPEND_TIMEOUT 8
 
-static GSList *g_drivers = NULL;
-static GSList *g_context_drivers = NULL;
-
 /* 27.007 Section 7.29 */
 enum packet_bearer {
 	PACKET_BEARER_NONE =		0,
@@ -97,7 +94,7 @@ struct ofono_gprs {
 	const struct ofono_gprs_driver *driver;
 	void *driver_data;
 	struct ofono_atom *atom;
-	struct ofono_sim_context *sim_context;
+	unsigned int spn_watch;
 };
 
 struct ipv4_settings {
@@ -151,6 +148,9 @@ struct pri_context {
 
 static void gprs_netreg_update(struct ofono_gprs *gprs);
 static void gprs_deactivate_next(struct ofono_gprs *gprs);
+
+static GSList *g_drivers = NULL;
+static GSList *g_context_drivers = NULL;
 
 const char *packet_bearer_to_string(int bearer)
 {
@@ -1285,7 +1285,7 @@ static DBusMessage *pri_set_property(DBusConnection *conn,
 static GDBusMethodTable context_methods[] = {
 	{ "GetProperties",	"",	"a{sv}",	pri_get_properties },
 	{ "SetProperty",	"sv",	"",		pri_set_property,
-							G_DBUS_METHOD_FLAG_ASYNC },
+						G_DBUS_METHOD_FLAG_ASYNC },
 	{ }
 };
 
@@ -1404,11 +1404,11 @@ static void update_suspended_property(struct ofono_gprs *gprs,
 
 static gboolean suspend_timeout(gpointer data)
 {
-       struct ofono_gprs *gprs = data;
+	struct ofono_gprs *gprs = data;
 
-       gprs->suspend_timeout = 0;
-       update_suspended_property(gprs, TRUE);
-       return FALSE;
+	gprs->suspend_timeout = 0;
+	update_suspended_property(gprs, TRUE);
+	return FALSE;
 }
 
 void ofono_gprs_suspend_notify(struct ofono_gprs *gprs, int cause)
@@ -2108,6 +2108,14 @@ void ofono_gprs_status_notify(struct ofono_gprs *gprs, int status)
 		return;
 	}
 
+	/*
+	 * If we're already taking action, e.g. attaching or detaching, then
+	 * ignore this notification for now, we will take appropriate action
+	 * after the set_attach operation has completed
+	 */
+	if (gprs->flags & GPRS_FLAG_ATTACHING)
+		return;
+
 	/* We registered without being powered */
 	if (gprs->powered == FALSE)
 		goto detach;
@@ -2245,7 +2253,8 @@ void ofono_gprs_context_deactivated(struct ofono_gprs_context *gc,
 	}
 }
 
-int ofono_gprs_context_driver_register(const struct ofono_gprs_context_driver *d)
+int ofono_gprs_context_driver_register(
+				const struct ofono_gprs_context_driver *d)
 {
 	DBG("driver: %p, name: %s", d, d->name);
 
@@ -2257,7 +2266,8 @@ int ofono_gprs_context_driver_register(const struct ofono_gprs_context_driver *d
 	return 0;
 }
 
-void ofono_gprs_context_driver_unregister(const struct ofono_gprs_context_driver *d)
+void ofono_gprs_context_driver_unregister(
+				const struct ofono_gprs_context_driver *d)
 {
 	DBG("driver: %p, name: %s", d, d->name);
 
@@ -2338,7 +2348,7 @@ struct ofono_modem *ofono_gprs_context_get_modem(struct ofono_gprs_context *gc)
 }
 
 void ofono_gprs_context_set_type(struct ofono_gprs_context *gc,
-                                        enum ofono_gprs_context_type type)
+					enum ofono_gprs_context_type type)
 {
 	DBG("type %d", type);
 
@@ -2520,6 +2530,13 @@ static void gprs_unregister(struct ofono_atom *atom)
 		gprs->netreg = NULL;
 	}
 
+	if (gprs->spn_watch) {
+		struct ofono_sim *sim = __ofono_atom_find(OFONO_ATOM_TYPE_SIM,
+								modem);
+
+		ofono_sim_remove_spn_watch(sim, &gprs->spn_watch);
+	}
+
 	ofono_modem_remove_interface(modem,
 					OFONO_CONNECTION_MANAGER_INTERFACE);
 	g_dbus_unregister_interface(conn, path,
@@ -2554,9 +2571,6 @@ static void gprs_remove(struct ofono_atom *atom)
 
 	if (gprs->driver && gprs->driver->remove)
 		gprs->driver->remove(gprs);
-
-	if (gprs->sim_context)
-		ofono_sim_context_free(gprs->sim_context);
 
 	g_free(gprs);
 }
@@ -2825,7 +2839,7 @@ static void provision_context(const struct ofono_gprs_provision_data *ap,
 	if (ap == NULL)
 		return;
 
-	if (ap->name == NULL || strlen(ap->name) > MAX_CONTEXT_NAME_LENGTH)
+	if (ap->name && strlen(ap->name) > MAX_CONTEXT_NAME_LENGTH)
 		return;
 
 	if (ap->apn == NULL || strlen(ap->apn) > OFONO_GPRS_MAX_APN_LENGTH)
@@ -2945,56 +2959,37 @@ static void ofono_gprs_finish_register(struct ofono_gprs *gprs)
 	__ofono_atom_register(gprs->atom, gprs_unregister);
 }
 
-static void sim_spn_read_cb(int ok, int length, int record,
-				const unsigned char *data,
-				int record_length, void *userdata)
+static void spn_read_cb(const char *spn, const char *dc, void *data)
 {
-	struct ofono_gprs *gprs	= userdata;
-	char *spn = NULL;
-	struct ofono_atom *sim_atom;
-	struct ofono_sim *sim = NULL;
+	struct ofono_gprs *gprs	= data;
+	struct ofono_modem *modem = __ofono_atom_get_modem(gprs->atom);
+	struct ofono_sim *sim = __ofono_atom_find(OFONO_ATOM_TYPE_SIM, modem);
 
-	if (ok)
-		spn = sim_string_to_utf8(data + 1, length - 1);
-
-	sim_atom = __ofono_modem_find_atom(__ofono_atom_get_modem(gprs->atom),
-						OFONO_ATOM_TYPE_SIM);
-	if (sim_atom) {
-		sim = __ofono_atom_get_data(sim_atom);
-		provision_contexts(gprs, ofono_sim_get_mcc(sim),
+	provision_contexts(gprs, ofono_sim_get_mcc(sim),
 					ofono_sim_get_mnc(sim), spn);
-	}
 
-	g_free(spn);
+	ofono_sim_remove_spn_watch(sim, &gprs->spn_watch);
+
 	ofono_gprs_finish_register(gprs);
 }
 
 void ofono_gprs_register(struct ofono_gprs *gprs)
 {
 	struct ofono_modem *modem = __ofono_atom_get_modem(gprs->atom);
-	struct ofono_atom *sim_atom;
-	struct ofono_sim *sim = NULL;
+	struct ofono_sim *sim = __ofono_atom_find(OFONO_ATOM_TYPE_SIM, modem);
 
-	sim_atom = __ofono_modem_find_atom(modem, OFONO_ATOM_TYPE_SIM);
+	if (sim == NULL)
+		goto finish;
 
-	if (sim_atom) {
-		const char *imsi;
-		sim = __ofono_atom_get_data(sim_atom);
+	gprs_load_settings(gprs, ofono_sim_get_imsi(sim));
 
-		imsi = ofono_sim_get_imsi(sim);
-		gprs_load_settings(gprs, imsi);
-	}
+	if (gprs->contexts)
+		goto finish;
 
-	if (gprs->contexts == NULL && sim != NULL) {
-		/* Get Service Provider Name from SIM for provisioning */
-		gprs->sim_context = ofono_sim_context_create(sim);
+	ofono_sim_add_spn_watch(sim, &gprs->spn_watch, spn_read_cb, gprs, NULL);
+	return;
 
-		if (ofono_sim_read(gprs->sim_context, SIM_EFSPN_FILEID,
-				OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
-					sim_spn_read_cb, gprs) >= 0)
-			return;
-	}
-
+finish:
 	ofono_gprs_finish_register(gprs);
 }
 

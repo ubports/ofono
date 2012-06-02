@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -37,19 +37,18 @@
 #include "util.h"
 #include "storage.h"
 
-#define NETWORK_REGISTRATION_FLAG_HOME_SHOW_PLMN 0x1
-#define NETWORK_REGISTRATION_FLAG_ROAMING_SHOW_SPN 0x2
+#define SETTINGS_STORE "netreg"
+#define SETTINGS_GROUP "Settings"
+
+#define NETWORK_REGISTRATION_FLAG_HOME_SHOW_PLMN	0x1
+#define NETWORK_REGISTRATION_FLAG_ROAMING_SHOW_SPN	0x2
+#define NETWORK_REGISTRATION_FLAG_READING_PNN		0x4
 
 enum network_registration_mode {
 	NETWORK_REGISTRATION_MODE_AUTO =	0,
 	NETWORK_REGISTRATION_MODE_MANUAL =	2,
 	NETWORK_REGISTRATION_MODE_AUTO_ONLY =	5, /* Out of range of 27.007 */
 };
-
-#define SETTINGS_STORE "netreg"
-#define SETTINGS_GROUP "Settings"
-
-static GSList *g_drivers = NULL;
 
 /* 27.007 Section 7.3 <stat> */
 enum operator_status {
@@ -72,7 +71,6 @@ struct ofono_netreg {
 	int flags;
 	DBusMessage *pending;
 	int signal_strength;
-	char *spname;
 	struct sim_spdi *spdi;
 	struct sim_eons *eons;
 	struct ofono_sim *sim;
@@ -84,6 +82,7 @@ struct ofono_netreg {
 	void *driver_data;
 	struct ofono_atom *atom;
 	unsigned int hfp_watch;
+	unsigned int spn_watch;
 };
 
 struct network_operator_data {
@@ -95,6 +94,8 @@ struct network_operator_data {
 	const struct sim_eons_operator_info *eons_info;
 	struct ofono_netreg *netreg;
 };
+
+static GSList *g_drivers = NULL;
 
 static const char *registration_mode_to_string(int mode)
 {
@@ -360,6 +361,7 @@ static char *get_operator_display_name(struct ofono_netreg *netreg)
 {
 	struct network_operator_data *opd = netreg->current_operator;
 	const char *plmn;
+	const char *spn;
 	static char name[1024];
 	static char mccmnc[OFONO_MAX_MCC_LENGTH + OFONO_MAX_MNC_LENGTH + 1];
 	int len = sizeof(name);
@@ -390,7 +392,9 @@ static char *get_operator_display_name(struct ofono_netreg *netreg)
 	if (opd->eons_info && opd->eons_info->longname)
 		plmn = opd->eons_info->longname;
 
-	if (netreg->spname == NULL || strlen(netreg->spname) == 0) {
+	spn = ofono_sim_get_spn(netreg->sim);
+
+	if (spn == NULL || strlen(spn) == 0) {
 		g_strlcpy(name, plmn, len);
 		return name;
 	}
@@ -404,19 +408,29 @@ static char *get_operator_display_name(struct ofono_netreg *netreg)
 	if (home_or_spdi)
 		if (netreg->flags & NETWORK_REGISTRATION_FLAG_HOME_SHOW_PLMN)
 			/* Case 1 */
-			snprintf(name, len, "%s (%s)", netreg->spname, plmn);
+			snprintf(name, len, "%s (%s)", spn, plmn);
 		else
 			/* Case 2 */
-			snprintf(name, len, "%s", netreg->spname);
+			snprintf(name, len, "%s", spn);
 	else
 		if (netreg->flags & NETWORK_REGISTRATION_FLAG_ROAMING_SHOW_SPN)
 			/* Case 3 */
-			snprintf(name, len, "%s (%s)", netreg->spname, plmn);
+			snprintf(name, len, "%s (%s)", spn, plmn);
 		else
 			/* Case 4 */
 			snprintf(name, len, "%s", plmn);
 
 	return name;
+}
+
+static void netreg_emit_operator_display_name(struct ofono_netreg *netreg)
+{
+	const char *operator = get_operator_display_name(netreg);
+
+	ofono_dbus_signal_property_changed(ofono_dbus_get_connection(),
+					__ofono_atom_get_path(netreg->atom),
+					OFONO_NETWORK_REGISTRATION_INTERFACE,
+					"Name", DBUS_TYPE_STRING, &operator);
 }
 
 static void set_network_operator_name(struct network_operator_data *opd,
@@ -425,7 +439,6 @@ static void set_network_operator_name(struct network_operator_data *opd,
 	DBusConnection *conn = ofono_dbus_get_connection();
 	struct ofono_netreg *netreg = opd->netreg;
 	const char *path;
-	const char *operator;
 
 	if (name[0] == '\0')
 		return;
@@ -443,16 +456,8 @@ static void set_network_operator_name(struct network_operator_data *opd,
 	if (opd->eons_info && opd->eons_info->longname)
 		return;
 
-	if (opd == netreg->current_operator) {
-		const char *path = __ofono_atom_get_path(netreg->atom);
-
-		operator = get_operator_display_name(netreg);
-
-		ofono_dbus_signal_property_changed(conn, path,
-					OFONO_NETWORK_REGISTRATION_INTERFACE,
-					"Name", DBUS_TYPE_STRING,
-					&operator);
-	}
+	if (opd == netreg->current_operator)
+		netreg_emit_operator_display_name(netreg);
 
 	/* Don't emit when only operator name is reported */
 	if (opd->mcc[0] == '\0' && opd->mnc[0] == '\0')
@@ -498,16 +503,8 @@ static void set_network_operator_eons_info(struct network_operator_data *opd,
 					OFONO_NETWORK_OPERATOR_INTERFACE,
 					"Name", DBUS_TYPE_STRING, &newname);
 
-		if (opd == netreg->current_operator) {
-			const char *npath = __ofono_atom_get_path(netreg->atom);
-			const char *operator =
-				get_operator_display_name(netreg);
-
-			ofono_dbus_signal_property_changed(conn, npath,
-					OFONO_NETWORK_REGISTRATION_INTERFACE,
-					"Name", DBUS_TYPE_STRING,
-					&operator);
-		}
+		if (opd == netreg->current_operator)
+			netreg_emit_operator_display_name(netreg);
 	}
 
 	if (old_eons_info && old_eons_info->info)
@@ -688,6 +685,9 @@ static GSList *compress_operator_list(const struct ofono_network_operator *list,
 
 	for (i = 0; i < total; i++) {
 		o = NULL;
+
+		if (list[i].mcc[0] == '\0' || list[i].mnc[0] == '\0')
+			continue;
 
 		if (oplist)
 			o = g_slist_find_custom(oplist, &list[i],
@@ -1206,7 +1206,6 @@ static void current_operator_callback(const struct ofono_error *error,
 	struct ofono_netreg *netreg = data;
 	const char *path = __ofono_atom_get_path(netreg->atom);
 	GSList *op = NULL;
-	const char *operator;
 
 	DBG("%p, %p", netreg, netreg->current_operator);
 
@@ -1276,12 +1275,7 @@ static void current_operator_callback(const struct ofono_error *error,
 	}
 
 emit:
-	operator = get_operator_display_name(netreg);
-
-	ofono_dbus_signal_property_changed(conn, path,
-					OFONO_NETWORK_REGISTRATION_INTERFACE,
-					"Name", DBUS_TYPE_STRING,
-					&operator);
+	netreg_emit_operator_display_name(netreg);
 
 	if (netreg->current_operator) {
 		if (netreg->current_operator->mcc[0] != '\0') {
@@ -1341,6 +1335,9 @@ void ofono_netreg_status_notify(struct ofono_netreg *netreg, int status,
 {
 	if (netreg == NULL)
 		return;
+
+	DBG("%s status %d tech %d", __ofono_atom_get_path(netreg->atom),
+							status, tech);
 
 	if (netreg->status != status) {
 		struct ofono_modem *modem;
@@ -1527,6 +1524,8 @@ void ofono_netreg_strength_notify(struct ofono_netreg *netreg, int strength)
 			netreg->status != NETWORK_REGISTRATION_STATUS_ROAMING)
 		return;
 
+	DBG("strength %d", strength);
+
 	netreg->signal_strength = strength;
 
 	if (strength != -1) {
@@ -1595,7 +1594,7 @@ static void sim_pnn_read_cb(int ok, int length, int record,
 		goto check;
 
 	if (length < 3 || record_length < 3 || length < record_length)
-		return;
+		goto check;
 
 	total = length / record_length;
 
@@ -1608,6 +1607,8 @@ static void sim_pnn_read_cb(int ok, int length, int record,
 		return;
 
 check:
+	netreg->flags &= ~NETWORK_REGISTRATION_FLAG_READING_PNN;
+
 	/*
 	 * If PNN is not present then OPL is not useful, don't
 	 * retrieve it.  If OPL is not there then PNN[1] will
@@ -1625,97 +1626,47 @@ static void sim_spdi_read_cb(int ok, int length, int record,
 				int record_length, void *user_data)
 {
 	struct ofono_netreg *netreg = user_data;
-	struct network_operator_data *current = netreg->current_operator;
 
 	if (!ok)
 		return;
 
 	netreg->spdi = sim_spdi_new(data, length);
 
-	if (current == NULL)
+	if (netreg->current_operator == NULL)
 		return;
 
-	if (netreg->status == NETWORK_REGISTRATION_STATUS_ROAMING) {
-		DBusConnection *conn = ofono_dbus_get_connection();
-		const char *path = __ofono_atom_get_path(netreg->atom);
-		const char *operator;
+	if (netreg->status != NETWORK_REGISTRATION_STATUS_ROAMING)
+		return;
 
-		if (!sim_spdi_lookup(netreg->spdi,
-					current->mcc, current->mnc))
-			return;
+	if (!sim_spdi_lookup(netreg->spdi, netreg->current_operator->mcc,
+				netreg->current_operator->mnc))
+		return;
 
-		operator = get_operator_display_name(netreg);
-
-		ofono_dbus_signal_property_changed(conn, path,
-					OFONO_NETWORK_REGISTRATION_INTERFACE,
-					"Name", DBUS_TYPE_STRING,
-					&operator);
-	}
+	netreg_emit_operator_display_name(netreg);
 }
 
-static void sim_spn_read_cb(int ok, int length, int record,
-				const unsigned char *data,
-				int record_length, void *user_data)
+static void sim_spn_display_condition_parse(struct ofono_netreg *netreg,
+						guint8 dcbyte)
 {
-	struct ofono_netreg *netreg = user_data;
-	unsigned char dcbyte;
-	char *spn;
-
-	if (!ok)
-		return;
-
-	dcbyte = data[0];
-
-	/*
-	 * TS 31.102 says:
-	 *
-	 * the string shall use:
-	 *
-	 * - either the SMS default 7-bit coded alphabet as defined in
-	 *   TS 23.038 [5] with bit 8 set to 0. The string shall be left
-	 *   justified. Unused bytes shall be set to 'FF'.
-	 *
-	 * - or one of the UCS2 code options defined in the annex of TS
-	 *   31.101 [11].
-	 *
-	 * 31.101 has no such annex though.  51.101 refers to Annex B of
-	 * itself which is not there either.  11.11 contains the same
-	 * paragraph as 51.101 and has an Annex B which we implement.
-	 */
-	spn = sim_string_to_utf8(data + 1, length - 1);
-	if (spn == NULL) {
-		ofono_error("EFspn read successfully, but couldn't parse");
-		return;
-	}
-
-	if (strlen(spn) == 0) {
-		g_free(spn);
-		return;
-	}
-
-	netreg->spname = spn;
-	ofono_sim_read(netreg->sim_context, SIM_EFSPDI_FILEID,
-			OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
-			sim_spdi_read_cb, netreg);
-
 	if (dcbyte & SIM_EFSPN_DC_HOME_PLMN_BIT)
 		netreg->flags |= NETWORK_REGISTRATION_FLAG_HOME_SHOW_PLMN;
 
 	if (!(dcbyte & SIM_EFSPN_DC_ROAMING_SPN_BIT))
 		netreg->flags |= NETWORK_REGISTRATION_FLAG_ROAMING_SHOW_SPN;
+}
 
-	if (netreg->current_operator) {
-		DBusConnection *conn = ofono_dbus_get_connection();
-		const char *path = __ofono_atom_get_path(netreg->atom);
-		const char *operator;
+static void spn_read_cb(const char *spn, const char *dc, void *data)
+{
+	struct ofono_netreg *netreg = data;
 
-		operator = get_operator_display_name(netreg);
+	netreg->flags &= ~(NETWORK_REGISTRATION_FLAG_HOME_SHOW_PLMN |
+				NETWORK_REGISTRATION_FLAG_ROAMING_SHOW_SPN);
 
-		ofono_dbus_signal_property_changed(conn, path,
-					OFONO_NETWORK_REGISTRATION_INTERFACE,
-					"Name", DBUS_TYPE_STRING,
-					&operator);
-	}
+	if (dc)
+		sim_spn_display_condition_parse(netreg, *dc);
+
+	if (netreg->current_operator)
+		netreg_emit_operator_display_name(netreg);
 }
 
 int ofono_netreg_get_location(struct ofono_netreg *netreg)
@@ -1828,8 +1779,10 @@ static void netreg_unregister(struct ofono_atom *atom)
 	for (l = netreg->operator_list; l; l = l->next) {
 		struct network_operator_data *opd = l->data;
 
-		if (opd->mcc[0] == '\0' && opd->mnc[0] == '\0')
+		if (opd->mcc[0] == '\0' && opd->mnc[0] == '\0') {
+			g_free(opd);
 			continue;
+		}
 
 		network_operator_dbus_unregister(netreg, l->data);
 	}
@@ -1850,6 +1803,9 @@ static void netreg_unregister(struct ofono_atom *atom)
 		netreg->imsi = NULL;
 		netreg->settings = NULL;
 	}
+
+	if (netreg->spn_watch)
+		ofono_sim_remove_spn_watch(netreg->sim, &netreg->spn_watch);
 
 	if (netreg->sim_context) {
 		ofono_sim_context_free(netreg->sim_context);
@@ -1879,7 +1835,6 @@ static void netreg_remove(struct ofono_atom *atom)
 	sim_eons_free(netreg->eons);
 	sim_spdi_free(netreg->spdi);
 
-	g_free(netreg->spname);
 	g_free(netreg);
 }
 
@@ -1988,6 +1943,8 @@ static void sim_pnn_opl_changed(int id, void *userdata)
 	struct ofono_netreg *netreg = userdata;
 	GSList *l;
 
+	if (netreg->flags & NETWORK_REGISTRATION_FLAG_READING_PNN)
+		return;
 	/*
 	 * Free references to structures on the netreg->eons list and
 	 * update the operator info on D-bus.  If EFpnn/EFopl read succeeds,
@@ -2000,40 +1957,26 @@ static void sim_pnn_opl_changed(int id, void *userdata)
 	sim_eons_free(netreg->eons);
 	netreg->eons = NULL;
 
+	netreg->flags |= NETWORK_REGISTRATION_FLAG_READING_PNN;
 	ofono_sim_read(netreg->sim_context, SIM_EFPNN_FILEID,
 			OFONO_SIM_FILE_STRUCTURE_FIXED,
 			sim_pnn_read_cb, netreg);
 }
 
-static void sim_spn_spdi_changed(int id, void *userdata)
+static void sim_spdi_changed(int id, void *userdata)
 {
 	struct ofono_netreg *netreg = userdata;
-
-	netreg->flags &= ~(NETWORK_REGISTRATION_FLAG_HOME_SHOW_PLMN |
-			NETWORK_REGISTRATION_FLAG_ROAMING_SHOW_SPN);
-
-	g_free(netreg->spname);
-	netreg->spname = NULL;
 
 	sim_spdi_free(netreg->spdi);
 	netreg->spdi = NULL;
 
-	if (netreg->current_operator) {
-		DBusConnection *conn = ofono_dbus_get_connection();
-		const char *path = __ofono_atom_get_path(netreg->atom);
-		const char *operator;
+	if (netreg->current_operator &&
+			netreg->status == NETWORK_REGISTRATION_STATUS_ROAMING)
+		netreg_emit_operator_display_name(netreg);
 
-		operator = get_operator_display_name(netreg);
-
-		ofono_dbus_signal_property_changed(conn, path,
-					OFONO_NETWORK_REGISTRATION_INTERFACE,
-					"Name", DBUS_TYPE_STRING,
-					&operator);
-	}
-
-	ofono_sim_read(netreg->sim_context, SIM_EFSPN_FILEID,
+	ofono_sim_read(netreg->sim_context, SIM_EFSPDI_FILEID,
 			OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
-			sim_spn_read_cb, netreg);
+			sim_spdi_read_cb, netreg);
 }
 
 static void emulator_cops_cb(struct ofono_emulator *em,
@@ -2102,7 +2045,6 @@ void ofono_netreg_register(struct ofono_netreg *netreg)
 	DBusConnection *conn = ofono_dbus_get_connection();
 	struct ofono_modem *modem = __ofono_atom_get_modem(netreg->atom);
 	const char *path = __ofono_atom_get_path(netreg->atom);
-	struct ofono_atom *sim_atom;
 
 	if (!g_dbus_register_interface(conn, path,
 					OFONO_NETWORK_REGISTRATION_INTERFACE,
@@ -2123,15 +2065,14 @@ void ofono_netreg_register(struct ofono_netreg *netreg)
 		netreg->driver->registration_status(netreg,
 					init_registration_status, netreg);
 
-	sim_atom = __ofono_modem_find_atom(modem, OFONO_ATOM_TYPE_SIM);
-
-	if (sim_atom != NULL) {
+	netreg->sim = __ofono_atom_find(OFONO_ATOM_TYPE_SIM, modem);
+	if (netreg->sim != NULL) {
 		/* Assume that if sim atom exists, it is ready */
-		netreg->sim = __ofono_atom_get_data(sim_atom);
 		netreg->sim_context = ofono_sim_context_create(netreg->sim);
 
 		netreg_load_settings(netreg);
 
+		netreg->flags |= NETWORK_REGISTRATION_FLAG_READING_PNN;
 		ofono_sim_read(netreg->sim_context, SIM_EFPNN_FILEID,
 				OFONO_SIM_FILE_STRUCTURE_FIXED,
 				sim_pnn_read_cb, netreg);
@@ -2142,15 +2083,21 @@ void ofono_netreg_register(struct ofono_netreg *netreg)
 						sim_pnn_opl_changed, netreg,
 						NULL);
 
-		ofono_sim_read(netreg->sim_context, SIM_EFSPN_FILEID,
-				OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
-				sim_spn_read_cb, netreg);
-		ofono_sim_add_file_watch(netreg->sim_context, SIM_EFSPN_FILEID,
-						sim_spn_spdi_changed, netreg,
-						NULL);
-		ofono_sim_add_file_watch(netreg->sim_context, SIM_EFSPDI_FILEID,
-						sim_spn_spdi_changed, netreg,
-						NULL);
+		ofono_sim_add_spn_watch(netreg->sim, &netreg->spn_watch,
+						spn_read_cb, netreg, NULL);
+
+		if (__ofono_sim_service_available(netreg->sim,
+				SIM_UST_SERVICE_PROVIDER_DISPLAY_INFO,
+				SIM_SST_SERVICE_PROVIDER_DISPLAY_INFO)) {
+			ofono_sim_read(netreg->sim_context, SIM_EFSPDI_FILEID,
+					OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
+					sim_spdi_read_cb, netreg);
+
+			ofono_sim_add_file_watch(netreg->sim_context,
+							SIM_EFSPDI_FILEID,
+							sim_spdi_changed,
+							netreg, NULL);
+		}
 	}
 
 	__ofono_atom_register(netreg->atom, netreg_unregister);

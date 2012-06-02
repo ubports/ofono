@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -88,131 +88,12 @@ static const char *get_serial(struct udev_device *udev_device)
 		unsigned int i, len = strlen(serial);
 
 		for (i = 0; i < len; i++) {
-			if (!isalnum(serial[i]))
+			if (!g_ascii_isalnum(serial[i]))
 				return NULL;
 		}
 	}
 
 	return serial;
-}
-
-#define MODEM_DEVICE		"ModemDevice"
-#define DATA_DEVICE		"DataDevice"
-#define GPS_DEVICE		"GPSDevice"
-#define NETWORK_INTERFACE	"NetworkInterface"
-
-static void add_mbm(struct ofono_modem *modem,
-					struct udev_device *udev_device)
-{
-	const char *desc, *devnode;
-	const char *device, *data, *network;
-	int registered;
-
-	desc = udev_device_get_sysattr_value(udev_device, "device/interface");
-
-	if (desc == NULL)
-		return;
-
-	DBG("desc: %s", desc);
-
-	registered = ofono_modem_get_integer(modem, "Registered");
-
-	if (registered == 0 &&
-			(g_str_has_suffix(desc, "Minicard Modem") ||
-			g_str_has_suffix(desc, "Minicard Modem 2") ||
-			g_str_has_suffix(desc, "Mini-Card Modem") ||
-			g_str_has_suffix(desc, "Broadband Modem") ||
-			g_str_has_suffix(desc, "Module Modem") ||
-			g_str_has_suffix(desc, "Broadband USB Modem"))) {
-		devnode = udev_device_get_devnode(udev_device);
-
-		if (ofono_modem_get_string(modem, MODEM_DEVICE) == NULL)
-			ofono_modem_set_string(modem, MODEM_DEVICE, devnode);
-		else
-			ofono_modem_set_string(modem, DATA_DEVICE, devnode);
-	} else if (registered == 0 &&
-			(g_str_has_suffix(desc, "Minicard Data Modem") ||
-			g_str_has_suffix(desc, "Mini-Card Data Modem") ||
-			g_str_has_suffix(desc, "Module Data Modem") ||
-			g_str_has_suffix(desc, "Module\xc2\xa0""Data Modem") ||
-			g_str_has_suffix(desc, "Broadband Data Modem"))) {
-		devnode = udev_device_get_devnode(udev_device);
-		ofono_modem_set_string(modem, DATA_DEVICE, devnode);
-	} else if (g_str_has_suffix(desc, "Minicard GPS Port") ||
-			g_str_has_suffix(desc, "Mini-Card GPS Port") ||
-			g_str_has_suffix(desc, "Module NMEA") ||
-			g_str_has_suffix(desc, "Broadband GPS Port")) {
-		devnode = udev_device_get_devnode(udev_device);
-		ofono_modem_set_string(modem, GPS_DEVICE, devnode);
-	} else if (registered == 0 &&
-			(g_str_has_suffix(desc, "Minicard Network Adapter") ||
-			g_str_has_suffix(desc, "Mini-Card Network Adapter") ||
-			g_str_has_suffix(desc, "Broadband Network Adapter") ||
-			g_str_has_suffix(desc, "Module Network Adapter") ||
-			g_str_has_suffix(desc, "Minicard NetworkAdapter"))) {
-		devnode = get_property(udev_device, "INTERFACE");
-		ofono_modem_set_string(modem, NETWORK_INTERFACE, devnode);
-	} else {
-		return;
-	}
-
-	if (registered == 1)
-		return;
-
-	device  = ofono_modem_get_string(modem, MODEM_DEVICE);
-	data = ofono_modem_get_string(modem, DATA_DEVICE);
-	network = ofono_modem_get_string(modem, NETWORK_INTERFACE);
-
-	if (device != NULL && data != NULL && network != NULL) {
-		ofono_modem_set_integer(modem, "Registered", 1);
-		ofono_modem_register(modem);
-	}
-}
-
-#define APPLICATION_PORT "ApplicationPort"
-#define CONTROL_PORT "ControlPort"
-
-static void add_hso(struct ofono_modem *modem,
-					struct udev_device *udev_device)
-{
-	const char *subsystem, *type, *devnode;
-	const char *app, *control, *network;
-	int registered;
-
-	DBG("modem %p", modem);
-
-	subsystem = udev_device_get_subsystem(udev_device);
-	if (subsystem == NULL)
-		return;
-
-	registered = ofono_modem_get_integer(modem, "Registered");
-	if (registered != 0)
-		return;
-
-	type = udev_device_get_sysattr_value(udev_device, "hsotype");
-
-	if (type != NULL) {
-		devnode = udev_device_get_devnode(udev_device);
-
-		if (g_str_has_suffix(type, "Application") == TRUE)
-			ofono_modem_set_string(modem, APPLICATION_PORT, devnode);
-		else if (g_str_has_suffix(type, "Control") == TRUE)
-			ofono_modem_set_string(modem, CONTROL_PORT, devnode);
-	} else if (g_str_equal(subsystem, "net") == TRUE) {
-		devnode = get_property(udev_device, "INTERFACE");
-		ofono_modem_set_string(modem, NETWORK_INTERFACE, devnode);
-	} else {
-		return;
-	}
-
-	app = ofono_modem_get_string(modem, APPLICATION_PORT);
-	control = ofono_modem_get_string(modem, CONTROL_PORT);
-	network = ofono_modem_get_string(modem, NETWORK_INTERFACE);
-
-	if (app != NULL && control != NULL && network != NULL) {
-		ofono_modem_set_integer(modem, "Registered", 1);
-		ofono_modem_register(modem);
-	}
 }
 
 static void add_ifx(struct ofono_modem *modem,
@@ -244,213 +125,6 @@ static void add_ifx(struct ofono_modem *modem,
 	ofono_modem_register(modem);
 }
 
-static void add_zte(struct ofono_modem *modem,
-					struct udev_device *udev_device)
-{
-	struct udev_list_entry *entry;
-	const char *devnode, *type;
-
-	int ppp, aux;
-
-	DBG("modem %p", modem);
-
-	ppp = ofono_modem_get_integer(modem, "ModemRegistered");
-	aux = ofono_modem_get_integer(modem, "AuxRegistered");
-
-	if (ppp && aux)
-		return;
-
-	entry = udev_device_get_properties_list_entry(udev_device);
-	while (entry) {
-		const char *name = udev_list_entry_get_name(entry);
-		type = udev_list_entry_get_value(entry);
-
-		if (g_str_equal(name, "OFONO_ZTE_TYPE") != TRUE) {
-			entry = udev_list_entry_get_next(entry);
-			continue;
-		}
-
-		if (g_str_equal(type, "modem") == TRUE) {
-			if (ppp != 0)
-				return;
-
-			devnode = udev_device_get_devnode(udev_device);
-			ofono_modem_set_string(modem, "Modem", devnode);
-			ppp = 1;
-			ofono_modem_set_integer(modem, "ModemRegistered", ppp);
-		} else if (g_str_equal(type, "aux") == TRUE) {
-			if (aux != 0)
-				return;
-
-			devnode = udev_device_get_devnode(udev_device);
-			ofono_modem_set_string(modem, "Aux", devnode);
-
-			aux = 1;
-			ofono_modem_set_integer(modem, "AuxRegistered", aux);
-		}
-
-		break;
-	}
-
-	if (ppp && aux)
-		ofono_modem_register(modem);
-}
-
-static void add_huawei(struct ofono_modem *modem,
-					struct udev_device *udev_device)
-{
-	struct udev_list_entry *entry;
-	const char *devnode;
-	int ppp, pcui;
-
-	DBG("modem %p", modem);
-
-	/*
-	 * Huawei dongles tend to break up their ports into:
-	 * - Modem - Used for PPP
-	 * - Diag - Used for diagnostics, not usually AT command enabled
-	 * - PCUI - auxiliary channel where unsolicited events are sent
-	 *
-	 * The unsolicited events are controlled with ^PORTSEL command,
-	 * and defaults to 0 (the PCUI port)
-	 *
-	 * Surprising the PCUI port is usually last on the usb interface list
-	 */
-	ppp = ofono_modem_get_integer(modem, "ModemRegistered");
-	pcui = ofono_modem_get_integer(modem, "PcuiRegistered");
-
-	if (ppp && pcui)
-		return;
-
-	entry = udev_device_get_properties_list_entry(udev_device);
-	while (entry) {
-		const char *name = udev_list_entry_get_name(entry);
-		const char *type = udev_list_entry_get_value(entry);
-
-		if (g_str_equal(name, "OFONO_HUAWEI_TYPE") != TRUE) {
-			entry = udev_list_entry_get_next(entry);
-			continue;
-		}
-
-		if (g_str_equal(type, "Modem") == TRUE) {
-			if (ppp != 0)
-				return;
-
-			devnode = udev_device_get_devnode(udev_device);
-			ofono_modem_set_string(modem, "Modem", devnode);
-			ppp = 1;
-			ofono_modem_set_integer(modem, "ModemRegistered", ppp);
-		} else if (g_str_equal(type, "Pcui") == TRUE) {
-			if (pcui != 0)
-				return;
-
-			devnode = udev_device_get_devnode(udev_device);
-			ofono_modem_set_string(modem, "Pcui", devnode);
-
-			pcui = 1;
-			ofono_modem_set_integer(modem, "PcuiRegistered", pcui);
-		}
-
-		break;
-	}
-
-	if (ppp && pcui)
-		ofono_modem_register(modem);
-}
-
-static void add_sierra(struct ofono_modem *modem,
-					struct udev_device *udev_device)
-{
-	struct udev_list_entry *entry;
-	const char *devnode;
-	gboolean found = FALSE;
-
-	DBG("modem %p", modem);
-
-	entry = udev_device_get_properties_list_entry(udev_device);
-	while (entry) {
-		const char *name = udev_list_entry_get_name(entry);
-		const char *value = udev_list_entry_get_value(entry);
-
-		if (g_str_equal(name, "OFONO_SIERRA_TYPE") == TRUE &&
-					g_str_equal(value, "modem") == TRUE) {
-			found = TRUE;
-			break;
-		}
-
-		entry = udev_list_entry_get_next(entry);
-	}
-
-	if (found == FALSE)
-		return;
-
-	devnode = udev_device_get_devnode(udev_device);
-	ofono_modem_set_string(modem, "Device", devnode);
-
-	ofono_modem_register(modem);
-}
-
-static void add_novatel(struct ofono_modem *modem,
-					struct udev_device *udev_device)
-{
-	const char *devnode, *intfnum;
-	int registered;
-
-	DBG("modem %p", modem);
-
-	registered = ofono_modem_get_integer(modem, "Registered");
-
-        if (registered > 1)
-                return;
-
-	intfnum = get_property(udev_device, "ID_USB_INTERFACE_NUM");
-
-	DBG("intfnum %s", intfnum);
-
-	if (g_strcmp0(intfnum, "00") == 0) {
-		devnode = udev_device_get_devnode(udev_device);
-		ofono_modem_set_string(modem, "PrimaryDevice", devnode);
-
-		ofono_modem_set_integer(modem, "Registered", ++registered);
-	} else if (g_strcmp0(intfnum, "01") == 0) {
-		devnode = udev_device_get_devnode(udev_device);
-		ofono_modem_set_string(modem, "SecondaryDevice", devnode);
-
-		ofono_modem_set_integer(modem, "Registered", ++registered);
-	}
-
-	if (registered > 1)
-		ofono_modem_register(modem);
-}
-
-static void add_nokia(struct ofono_modem *modem,
-					struct udev_device *udev_device)
-{
-	const char *devnode, *intfnum;
-	int registered;
-
-	DBG("modem %p", modem);
-
-	registered = ofono_modem_get_integer(modem, "Registered");
-	if (registered != 0)
-		return;
-
-	intfnum = get_property(udev_device, "ID_USB_INTERFACE_NUM");
-
-	DBG("intfnum %s", intfnum);
-
-	if (g_strcmp0(intfnum, "02") == 0) {
-		devnode = udev_device_get_devnode(udev_device);
-		ofono_modem_set_string(modem, "Modem", devnode);
-	} else if (g_strcmp0(intfnum, "04") == 0) {
-		devnode = udev_device_get_devnode(udev_device);
-		ofono_modem_set_string(modem, "Control", devnode);
-
-		ofono_modem_set_integer(modem, "Registered", 1);
-		ofono_modem_register(modem);
-	}
-}
-
 static void add_isi(struct ofono_modem *modem,
 					struct udev_device *udev_device)
 {
@@ -476,38 +150,6 @@ static void add_isi(struct ofono_modem *modem,
 	ofono_modem_set_string(modem, "Interface", ifname);
 
 	DBG("interface %s", ifname);
-
-	ofono_modem_register(modem);
-}
-
-static void add_gobi(struct ofono_modem *modem,
-					struct udev_device *udev_device)
-{
-	struct udev_list_entry *entry;
-	const char *devnode;
-	gboolean found = FALSE;
-
-	DBG("modem %p", modem);
-
-	entry = udev_device_get_properties_list_entry(udev_device);
-	while (entry) {
-		const char *name = udev_list_entry_get_name(entry);
-		const char *value = udev_list_entry_get_value(entry);
-
-		if (g_str_equal(name, "OFONO_GOBI_TYPE") == TRUE &&
-					g_str_equal(value, "modem") == TRUE) {
-			found = TRUE;
-			break;
-		}
-
-		entry = udev_list_entry_get_next(entry);
-	}
-
-	if (found == FALSE)
-		return;
-
-	devnode = udev_device_get_devnode(udev_device);
-	ofono_modem_set_string(modem, "Device", devnode);
 
 	ofono_modem_register(modem);
 }
@@ -551,166 +193,17 @@ static void add_nokiacdma(struct ofono_modem *modem,
 	ofono_modem_register(modem);
 }
 
-static void add_linktop(struct ofono_modem *modem,
+static void add_sim900(struct ofono_modem *modem,
 					struct udev_device *udev_device)
 {
-	const char *devnode, *intfnum;
-	int registered;
+	const char *devnode;
 
 	DBG("modem %p", modem);
 
-	registered = ofono_modem_get_integer(modem, "Registered");
-	if (registered != 0)
-		return;
+	devnode = udev_device_get_devnode(udev_device);
+	ofono_modem_set_string(modem, "Device", devnode);
 
-	intfnum = get_property(udev_device, "ID_USB_INTERFACE_NUM");
-
-	DBG("intfnum %s", intfnum);
-
-	if (g_strcmp0(intfnum, "01") == 0) {
-		devnode = udev_device_get_devnode(udev_device);
-		ofono_modem_set_string(modem, "Aux", devnode);
-	} else if (g_strcmp0(intfnum, "03") == 0) {
-		devnode = udev_device_get_devnode(udev_device);
-		ofono_modem_set_string(modem, "Modem", devnode);
-
-		ofono_modem_set_integer(modem, "Registered", 1);
-		ofono_modem_register(modem);
-	}
-}
-
-static void add_telit(struct ofono_modem *modem,
-					struct udev_device *udev_device)
-{
-	struct udev_list_entry *entry;
-	const char *devnode, *type;
-	int registered;
-
-	DBG("modem %p", modem);
-
-	registered = ofono_modem_get_integer(modem, "Registered");
-
-	entry = udev_device_get_properties_list_entry(udev_device);
-
-	while (entry) {
-		const char *name = udev_list_entry_get_name(entry);
-		type = udev_list_entry_get_value(entry);
-
-		if (g_str_equal(name, "OFONO_TELIT_TYPE") != TRUE) {
-			entry = udev_list_entry_get_next(entry);
-			continue;
-		}
-
-		if (registered == 0 && g_str_equal(type, "Modem") == TRUE) {
-			devnode = udev_device_get_devnode(udev_device);
-			ofono_modem_set_string(modem, "Modem", devnode);
-		} else if (g_str_equal(type, "GPS") == TRUE) {
-			devnode = udev_device_get_devnode(udev_device);
-			ofono_modem_set_string(modem, "GPS", devnode);
-		} else if (registered == 0 &&
-				g_str_equal(type, "Data") == TRUE) {
-			devnode = udev_device_get_devnode(udev_device);
-			ofono_modem_set_string(modem, "Data", devnode);
-		}
-
-		break;
-	}
-
-	if (registered == 1)
-		return;
-
-	if (ofono_modem_get_string(modem, "Modem") != NULL &&
-			ofono_modem_get_string(modem, "Data") != NULL) {
-		ofono_modem_set_integer(modem, "Registered", 1);
-		ofono_modem_register(modem);
-	}
-}
-
-static void add_speedup(struct ofono_modem *modem,
-					struct udev_device *udev_device)
-{
-	struct udev_list_entry *entry;
-	const char *devnode, *type;
-
-	int ppp, aux;
-
-	DBG("modem %p", modem);
-
-	ppp = ofono_modem_get_integer(modem, "ModemRegistered");
-	aux = ofono_modem_get_integer(modem, "AuxRegistered");
-
-	if (ppp && aux)
-		return;
-
-	entry = udev_device_get_properties_list_entry(udev_device);
-	while (entry) {
-		const char *name = udev_list_entry_get_name(entry);
-		type = udev_list_entry_get_value(entry);
-
-		if (g_str_equal(name, "OFONO_SPEEDUP_TYPE") != TRUE) {
-			entry = udev_list_entry_get_next(entry);
-			continue;
-		}
-
-		if (g_str_equal(type, "modem") == TRUE) {
-			if (ppp != 0)
-				return;
-
-			devnode = udev_device_get_devnode(udev_device);
-			ofono_modem_set_string(modem, "Modem", devnode);
-			ppp = 1;
-			ofono_modem_set_integer(modem, "ModemRegistered", ppp);
-		} else if (g_str_equal(type, "aux") == TRUE) {
-			if (aux != 0)
-				return;
-
-			devnode = udev_device_get_devnode(udev_device);
-			ofono_modem_set_string(modem, "Aux", devnode);
-
-			aux = 1;
-			ofono_modem_set_integer(modem, "AuxRegistered", aux);
-		}
-
-		break;
-	}
-
-	if (ppp && aux)
-		ofono_modem_register(modem);
-}
-
-static void add_samsung(struct ofono_modem *modem,
-					struct udev_device *udev_device)
-{
-	const char *subsystem;
-
-	DBG("modem %p", modem);
-
-	subsystem = udev_device_get_subsystem(udev_device);
-	if (subsystem == NULL)
-		return;
-
-	if (g_str_equal(subsystem, "net") == TRUE) {
-		const char *interface;
-
-		interface = get_property(udev_device, "INTERFACE");
-		if (interface == NULL)
-			return;
-
-		DBG("network %s", interface);
-
-		ofono_modem_set_string(modem, "Network", interface);
-	} else if (g_str_equal(subsystem, "tty") == TRUE) {
-		const char *devnode;
-
-		devnode = udev_device_get_devnode(udev_device);
-		if (devnode == NULL)
-			return;
-
-		DBG("device %s", devnode);
-
-		ofono_modem_set_string(modem, "Device", devnode);
-		ofono_modem_register(modem);
-	}
+	ofono_modem_register(modem);
 }
 
 static void add_modem(struct udev_device *udev_device)
@@ -779,54 +272,28 @@ done:
 
 	g_hash_table_insert(devpath_list, g_strdup(curpath), g_strdup(devpath));
 
-	if (g_strcmp0(driver, "mbm") == 0)
-		add_mbm(modem, udev_device);
-	else if (g_strcmp0(driver, "hso") == 0)
-		add_hso(modem, udev_device);
-	else if (g_strcmp0(driver, "ifx") == 0)
+	if (g_strcmp0(driver, "ifx") == 0)
 		add_ifx(modem, udev_device);
-	else if (g_strcmp0(driver, "zte") == 0)
-		add_zte(modem, udev_device);
-	else if (g_strcmp0(driver, "huawei") == 0)
-		add_huawei(modem, udev_device);
-	else if (g_strcmp0(driver, "huaweicdma") == 0)
-		add_huawei(modem, udev_device);
-	else if (g_strcmp0(driver, "sierra") == 0)
-		add_sierra(modem, udev_device);
-	else if (g_strcmp0(driver, "novatel") == 0)
-		add_novatel(modem, udev_device);
-	else if (g_strcmp0(driver, "nokia") == 0)
-		add_nokia(modem, udev_device);
-	else if (g_strcmp0(driver, "isiusb") == 0)
-		add_isi(modem, udev_device);
 	else if (g_strcmp0(driver, "u8500") == 0)
 		add_isi(modem, udev_device);
 	else if (g_strcmp0(driver, "n900") == 0)
 		add_isi(modem, udev_device);
-	else if (g_strcmp0(driver, "gobi") == 0)
-		add_gobi(modem, udev_device);
 	else if (g_strcmp0(driver, "calypso") == 0)
 		add_calypso(modem, udev_device);
 	else if (g_strcmp0(driver, "tc65") == 0)
 		add_tc65(modem, udev_device);
-	else if (g_strcmp0(driver, "telit") == 0)
-		add_telit(modem, udev_device);
 	else if (g_strcmp0(driver, "nokiacdma") == 0)
 		add_nokiacdma(modem, udev_device);
-	else if (g_strcmp0(driver, "linktop") == 0)
-		add_linktop(modem, udev_device);
-	else if (g_strcmp0(driver, "speedup") == 0)
-		add_speedup(modem, udev_device);
-	else if (g_strcmp0(driver, "speedupcdma") == 0)
-		add_speedup(modem, udev_device);
-	else if (g_strcmp0(driver, "samsung") == 0)
-		add_samsung(modem, udev_device);
+	else if (g_strcmp0(driver, "sim900") == 0)
+		add_sim900(modem, udev_device);
 }
 
 static gboolean devpath_remove(gpointer key, gpointer value, gpointer user_data)
 {
 	const char *path = value;
 	const char *devpath = user_data;
+
+	DBG("%s -> %s", path, devpath);
 
 	return g_str_equal(path, devpath);
 }
@@ -853,6 +320,8 @@ static void remove_modem(struct udev_device *udev_device)
 	modem_list = g_slist_remove(modem_list, modem);
 
 	ofono_modem_remove(modem);
+
+	DBG("%s", devpath);
 
 	remove = g_strdup(devpath);
 
@@ -901,14 +370,23 @@ static void enumerate_devices(struct udev *context)
 	udev_enumerate_unref(enumerate);
 }
 
-static gboolean udev_event(GIOChannel *channel,
-				GIOCondition condition, gpointer user_data)
+static struct udev *udev_ctx;
+static struct udev_monitor *udev_mon;
+static guint udev_watch = 0;
+
+static gboolean udev_event(GIOChannel *channel, GIOCondition cond,
+							gpointer user_data)
 {
-	struct udev_monitor *monitor = user_data;
 	struct udev_device *device;
 	const char *subsystem, *action;
 
-	device = udev_monitor_receive_device(monitor);
+	if (cond & (G_IO_ERR | G_IO_HUP | G_IO_NVAL)) {
+		ofono_warn("Error with udev monitor channel");
+		udev_watch = 0;
+		return FALSE;
+	}
+
+	device = udev_monitor_receive_device(udev_mon);
 	if (device == NULL)
 		return TRUE;
 
@@ -919,6 +397,8 @@ static gboolean udev_event(GIOChannel *channel,
 	action = udev_device_get_action(device);
 	if (action == NULL)
 		goto done;
+
+	DBG("subsystem %s %s", subsystem, action);
 
 	if (g_str_equal(action, "add") == TRUE) {
 		if (g_strcmp0(subsystem, "tty") == 0 ||
@@ -932,15 +412,13 @@ static gboolean udev_event(GIOChannel *channel,
 			remove_modem(device);
 	}
 
+	DBG("subsystem %s finished", subsystem);
+
 done:
 	udev_device_unref(device);
 
 	return TRUE;
 }
-
-static struct udev *udev_ctx;
-static struct udev_monitor *udev_mon;
-static guint udev_watch = 0;
 
 static void udev_start(void)
 {
@@ -960,7 +438,9 @@ static void udev_start(void)
 	if (channel == NULL)
 		return;
 
-	udev_watch = g_io_add_watch(channel, G_IO_IN, udev_event, udev_mon);
+	udev_watch = g_io_add_watch(channel,
+				G_IO_IN | G_IO_ERR | G_IO_HUP | G_IO_NVAL,
+							udev_event, NULL);
 
 	g_io_channel_unref(channel);
 }

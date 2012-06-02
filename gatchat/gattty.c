@@ -2,7 +2,7 @@
  *
  *  AT chat library with GLib integration
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -278,7 +278,7 @@ GIOChannel *g_at_tty_open_qcdm(const char *tty)
 	ti.c_cflag &= ~(CSIZE | CSTOPB | PARENB);
 	ti.c_cflag |= (B115200 | CS8);
 
-	if (tcsetattr (fd, TCSANOW, &ti) < 0) {
+	if (tcsetattr(fd, TCSANOW, &ti) < 0) {
 		close(fd);
 		return NULL;
 	}

@@ -1,3 +1,65 @@
+ver 1.6:
+	Fix issue with elementary files updates.
+	Fix issue with emulator ringing notification.
+	Fix issue with GTA04 modem and CLCC behavior.
+	Fix issue with Huawei modem voice call timing.
+	Fix issue with ZTE modem and SIM busy condition.
+	Add support for radio settings of ZTE modem.
+	Add support for USSD and voice calls of SIM900 modem.
+	Add support for online/offline handling of SpeedUp modem.
+	Add support for Sierra Wireless DirectIP modem.
+
+ver 1.5:
+	Fix issue with USSD handling and Infineon modem.
+	Fix issue with signal strength reporting and Infineon modem.
+	Add support for Assisted Satellite Navigation and Infineon modem.
+	Add support for IPv6/dual contexts and Infineon modem.
+	Add support for SIM retry counters and SIM Com modem.
+	Add support for SMS handling and SIM Com modem.
+
+ver 1.4:
+	Fix issue with new SPN watch semantics.
+	Fix issue with handling malformed emergency numbers.
+	Fix issue with missing XSIMSTATE query for Infineon.
+	Add support for new Infineon voice settings handling.
+
+ver 1.3:
+	Add support for CDMA PIN management.
+	Add support for CDMA provider name and SID.
+	Add support for Huawei USSD 8-bit PDU mode.
+	Add support for SIMCom SIM900 modems.
+
+ver 1.2:
+	Fix issue with PIN type string for network PUK.
+	Fix issue with voice dialing and Qualcomm MSM modems.
+	Fix issue with Option HSO and SIM card detection.
+	Add support for Option HSO voice call handling.
+	Add support for Huawei modem capabilities check.
+	Add support for Huawei unified GSM/UMTS and CDMA driver.
+
+ver 1.1:
+	Fix issue with Telit modem and signal strength indication.
+	Fix issue with Bluetooth and outstanding Connect/Disconnect.
+	Fix issue with Handsfree support and hanging up all calls.
+	Add support for more advanced Handsfree features.
+	Add support for exposing Bluetooth address information.
+	Add support for Mobile Provider Database provisioning.
+	Add support for CPHS SPN and short-SPN identifiers.
+	Add support for CDMA signal strength notification.
+	Add support for CDMA dormant notification.
+	Add support for CDMA network registration.
+	Add support for CDMA call waiting feature.
+	Add support for PPP IPv6 Control Protocol.
+
+ver 1.0:
+	Fix issue with phonebook driver and SIM busy.
+	Add support for SIM Access Profile client.
+	Add support for 27.007 SIM Toolkit commands.
+	Add support for Huawei CDMA data modems.
+	Add support for Huawei GPRS bearer notifications.
+	Add support for Huawei technology reporting.
+	Add support for ZTE network time reports.
+
 ver 0.53:
 	Add support for disabling data carrier detect.
 	Add support for username/password settings for CDMA.

@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -75,6 +75,7 @@ static gboolean signal_handler(GIOChannel *channel, GIOCondition cond,
 	case SIGINT:
 	case SIGTERM:
 		if (__terminated == 0) {
+			ofono_info("Terminating");
 			g_timeout_add_seconds(SHUTDOWN_GRACE_SECONDS,
 						quit_eventloop, NULL);
 			__ofono_modem_shutdown();
@@ -225,7 +226,7 @@ int main(int argc, char **argv)
 
 	signal = setup_signalfd();
 
-	__ofono_log_init(option_debug, option_detach);
+	__ofono_log_init(argv[0], option_debug, option_detach);
 
 	dbus_error_init(&error);
 

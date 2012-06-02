@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -39,7 +39,7 @@
 #include "gatchat.h"
 #include "gatresult.h"
 
-#include  "common.h"
+#include "common.h"
 
 #include "atmodem.h"
 
@@ -145,8 +145,23 @@ static void clcc_poll_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	GSList *n, *o;
 	struct ofono_call *nc, *oc;
 	gboolean poll_again = FALSE;
+	struct ofono_error error;
+
+	decode_at_error(&error, g_at_result_final_response(result));
 
 	if (!ok) {
+		/*
+		 * On certain Option GTM modems CLCC polling can fail
+		 * with a CME ERROR: 100.  It seems to be safe to ignore
+		 * it and continue polling anyway
+		 */
+		if (vd->vendor == OFONO_VENDOR_QUALCOMM_MSM &&
+				error.type == OFONO_ERROR_TYPE_CME &&
+				error.error == 100) {
+			poll_again = TRUE;
+			goto poll_again;
+		}
+
 		ofono_error("We are polling CLCC and received an error");
 		ofono_error("All bets are off for call management");
 		return;
@@ -161,9 +176,16 @@ static void clcc_poll_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		nc = n ? n->data : NULL;
 		oc = o ? o->data : NULL;
 
-		if (nc && nc->status >= CALL_STATUS_DIALING &&
-				nc->status <= CALL_STATUS_WAITING)
+		switch (vd->vendor) {
+		case OFONO_VENDOR_QUALCOMM_MSM:
 			poll_again = TRUE;
+			break;
+		default:
+			if (nc && nc->status >= CALL_STATUS_DIALING &&
+					nc->status <= CALL_STATUS_WAITING)
+				poll_again = TRUE;
+			break;
+		}
 
 		if (oc && (nc == NULL || (nc->id > oc->id))) {
 			enum ofono_disconnect_reason reason;
@@ -238,6 +260,7 @@ static void clcc_poll_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 	vd->local_release = 0;
 
+poll_again:
 	if (poll_again && !vd->clcc_source)
 		vd->clcc_source = g_timeout_add(POLL_CLCC_INTERVAL,
 						poll_clcc, vc);
@@ -1095,7 +1118,16 @@ static int at_voicecall_probe(struct ofono_voicecall *vc, unsigned int vendor,
 	g_at_chat_send(vd->chat, "AT+CLIP=1", NULL, NULL, NULL, NULL);
 	g_at_chat_send(vd->chat, "AT+CDIP=1", NULL, NULL, NULL, NULL);
 	g_at_chat_send(vd->chat, "AT+CNAP=1", NULL, NULL, NULL, NULL);
-	g_at_chat_send(vd->chat, "AT+COLP=1", NULL, NULL, NULL, NULL);
+
+	switch (vd->vendor) {
+	case OFONO_VENDOR_QUALCOMM_MSM:
+		g_at_chat_send(vd->chat, "AT+COLP=0", NULL, NULL, NULL, NULL);
+		break;
+	default:
+		g_at_chat_send(vd->chat, "AT+COLP=1", NULL, NULL, NULL, NULL);
+		break;
+	}
+
 	g_at_chat_send(vd->chat, "AT+CSSN=1,1", NULL, NULL, NULL, NULL);
 	g_at_chat_send(vd->chat, "AT+VTD?", NULL,
 				vtd_query_cb, vc, NULL);

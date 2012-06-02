@@ -2,7 +2,7 @@
  *
  *  AT Server library with GLib integration
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -69,6 +69,8 @@ typedef void (*GAtServerNotifyFunc)(GAtServer *server,
 					GAtServerRequestType type,
 					GAtResult *result, gpointer user_data);
 
+typedef void (*GAtServerFinishFunc)(GAtServer *server, gpointer user_data);
+
 GAtServer *g_at_server_new(GIOChannel *io);
 GIOChannel *g_at_server_get_channel(GAtServer *server);
 GAtIO *g_at_server_get_io(GAtServer *server);
@@ -114,6 +116,11 @@ void g_at_server_send_unsolicited(GAtServer *server, const char *result);
  * responses.
  */
 void g_at_server_send_info(GAtServer *server, const char *line, gboolean last);
+
+gboolean g_at_server_set_finish_callback(GAtServer *server,
+						GAtServerFinishFunc finishf,
+						gpointer user_data);
+gboolean g_at_server_command_pending(GAtServer *server);
 
 #ifdef __cplusplus
 }

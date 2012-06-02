@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -79,7 +79,8 @@ gboolean at_util_parse_attr(GAtResult *result, const char *prefix,
 struct at_util_sim_state_query *at_util_sim_state_query_new(GAtChat *chat,
 						guint interval, guint num_times,
 						at_util_sim_inserted_cb_t cb,
-						void *userdata);
+						void *userdata,
+						GDestroyNotify destroy);
 void at_util_sim_state_query_free(struct at_util_sim_state_query *req);
 
 struct cb_data {
@@ -131,5 +132,4 @@ static inline int at_util_convert_signal_strength(int strength)
 		e.type = OFONO_ERROR_TYPE_NO_ERROR;	\
 		e.error = 0;				\
 		f(&e, ##args);				\
-	} while(0)					\
-
+	} while (0)

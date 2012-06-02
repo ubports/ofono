@@ -2,7 +2,7 @@
  *
  *  AT server library with GLib integration
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -123,15 +123,15 @@ struct _GAtServer {
 	char *last_line;			/* Last read line */
 	unsigned int cur_pos;			/* Where we are on the line */
 	GAtServerResult last_result;
-	gboolean suspended;
 	gboolean final_sent;
 	gboolean final_async;
 	gboolean in_read_handler;
+	GAtServerFinishFunc finishf;		/* Callback when cmd finishes */
+	gpointer finish_data;			/* Finish func data */
 };
 
 static void server_wakeup_writer(GAtServer *server);
 static void server_parse_line(GAtServer *server);
-static void server_resume(GAtServer *server);
 
 static struct ring_buffer *allocate_next(GAtServer *server)
 {
@@ -199,37 +199,50 @@ static void send_result_common(GAtServer *server, const char *result)
 	send_common(server, buf, len);
 }
 
-void g_at_server_send_final(GAtServer *server, GAtServerResult result)
+static inline void send_final_common(GAtServer *server, const char *result)
+{
+	send_result_common(server, result);
+	server->final_async = FALSE;
+
+	if (server->finishf)
+		server->finishf(server, server->finish_data);
+}
+
+static inline void send_final_numeric(GAtServer *server, GAtServerResult result)
 {
 	char buf[1024];
-
-	server->final_sent = TRUE;
-	server->last_result = result;
-
-	if (result == G_AT_SERVER_RESULT_OK && server->suspended) {
-		if (server->final_async)
-			server_parse_line(server);
-
-		return;
-	}
 
 	if (server->v250.is_v1)
 		sprintf(buf, "%s", server_result_to_string(result));
 	else
 		sprintf(buf, "%u", (unsigned int)result);
 
-	send_result_common(server, buf);
+	send_final_common(server, buf);
+}
 
-	server_resume(server);
+void g_at_server_send_final(GAtServer *server, GAtServerResult result)
+{
+	if (server->final_sent != FALSE)
+		return;
+
+	server->final_sent = TRUE;
+	server->last_result = result;
+
+	if (result == G_AT_SERVER_RESULT_OK) {
+		if (server->final_async)
+			server_parse_line(server);
+
+		return;
+	}
+
+	send_final_numeric(server, result);
 }
 
 void g_at_server_send_ext_final(GAtServer *server, const char *result)
 {
 	server->final_sent = TRUE;
 	server->last_result = G_AT_SERVER_RESULT_EXT_ERROR;
-	send_result_common(server, result);
-
-	server_resume(server);
+	send_final_common(server, result);
 }
 
 void g_at_server_send_intermediate(GAtServer *server, const char *result)
@@ -808,17 +821,11 @@ static void server_parse_line(GAtServer *server)
 	unsigned int pos = server->cur_pos;
 	unsigned int len = strlen(line);
 
-	server->final_async = FALSE;
-
-	if (pos == 0) {
-		server->suspended = TRUE;
-		g_at_io_set_read_handler(server->io, NULL, NULL);
-	}
-
 	while (pos < len) {
 		unsigned int consumed;
 
 		server->final_sent = FALSE;
+		server->final_async = FALSE;
 
 		if (is_extended_command_prefix(line[pos]))
 			consumed = parse_extended_command(server, line + pos);
@@ -847,8 +854,7 @@ static void server_parse_line(GAtServer *server)
 			return;
 	}
 
-	server_resume(server);
-	g_at_server_send_final(server, G_AT_SERVER_RESULT_OK);
+	send_final_numeric(server, G_AT_SERVER_RESULT_OK);
 }
 
 static enum ParserResult server_feed(GAtServer *server,
@@ -1008,6 +1014,12 @@ static void new_bytes(struct ring_buffer *rbuf, gpointer user_data)
 	unsigned char *buf = ring_buffer_read_ptr(rbuf, p->read_so_far);
 	enum ParserResult result;
 
+	/* We do not support command abortion, so ignore input */
+	if (p->final_async) {
+		ring_buffer_drain(rbuf, len);
+		return;
+	}
+
 	p->in_read_handler = TRUE;
 
 	while (p->io && (p->read_so_far < len)) {
@@ -1025,10 +1037,10 @@ static void new_bytes(struct ring_buffer *rbuf, gpointer user_data)
 			wrap = len;
 		}
 
-		if (result == PARSER_RESULT_UNSURE)
+		switch (result) {
+		case PARSER_RESULT_UNSURE:
 			continue;
 
-		switch (result) {
 		case PARSER_RESULT_EMPTY_COMMAND:
 			/*
 			 * According to section 5.2.4 and 5.6 of V250,
@@ -1064,7 +1076,7 @@ static void new_bytes(struct ring_buffer *rbuf, gpointer user_data)
 						G_AT_SERVER_RESULT_OK);
 			break;
 
-		default:
+		case PARSER_RESULT_GARBAGE:
 			ring_buffer_drain(rbuf, p->read_so_far);
 			break;
 		}
@@ -1072,6 +1084,18 @@ static void new_bytes(struct ring_buffer *rbuf, gpointer user_data)
 		len -= p->read_so_far;
 		wrap -= p->read_so_far;
 		p->read_so_far = 0;
+
+		/*
+		 * Handle situations where we receive two command lines in
+		 * one read, which should not be possible (and implies the
+		 * earlier command should be canceled.
+		 *
+		 * e.g. AT+CMD1\rAT+CMD2
+		 */
+		if (result != PARSER_RESULT_GARBAGE) {
+			ring_buffer_drain(rbuf, len);
+			break;
+		}
 	}
 
 	p->in_read_handler = FALSE;
@@ -1175,15 +1199,6 @@ static void io_disconnect(gpointer user_data)
 static void server_wakeup_writer(GAtServer *server)
 {
 	g_at_io_set_write_handler(server->io, can_write_data, server);
-}
-
-static void server_resume(GAtServer *server)
-{
-	if (server->suspended == FALSE)
-		return;
-
-	server->suspended = FALSE;
-	g_at_io_set_read_handler(server->io, new_bytes, server);
 }
 
 static void at_notify_node_destroy(gpointer data)
@@ -1454,4 +1469,25 @@ gboolean g_at_server_unregister(GAtServer *server, const char *prefix)
 	g_hash_table_remove(server->command_list, prefix);
 
 	return TRUE;
+}
+
+gboolean g_at_server_set_finish_callback(GAtServer *server,
+						GAtServerFinishFunc finishf,
+						gpointer user_data)
+{
+	if (server == NULL)
+		return FALSE;
+
+	server->finishf = finishf;
+	server->finish_data = user_data;
+
+	return TRUE;
+}
+
+gboolean g_at_server_command_pending(GAtServer *server)
+{
+	if (server == NULL)
+		return FALSE;
+
+	return server->final_async;
 }

@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -32,13 +32,14 @@
 
 #define OFONO_API_SUBJECT_TO_CHANGE
 #include <ofono/plugin.h>
-#include <ofono/log.h>
 #include <ofono/modem.h>
 #include <ofono/devinfo.h>
 #include <ofono/netreg.h>
 #include <ofono/sim.h>
 #include <ofono/gprs.h>
+#include <ofono/gprs-context.h>
 #include <ofono/phonebook.h>
+#include <ofono/log.h>
 
 #include <drivers/atmodem/atutil.h>
 #include <drivers/atmodem/vendor.h>
@@ -46,7 +47,7 @@
 static const char *none_prefix[] = { NULL };
 
 struct sierra_data {
-	GAtChat *chat;
+	GAtChat *modem;
 };
 
 static void sierra_debug(const char *str, void *user_data)
@@ -79,6 +80,9 @@ static void sierra_remove(struct ofono_modem *modem)
 
 	ofono_modem_set_data(modem, NULL);
 
+	/* Cleanup after hot-unplug */
+	g_at_chat_unref(data->modem);
+
 	g_free(data);
 }
 
@@ -100,7 +104,7 @@ static GAtChat *open_device(struct ofono_modem *modem,
 	if (channel == NULL)
 		return NULL;
 
-	syntax = g_at_syntax_new_gsmv1();
+	syntax = g_at_syntax_new_gsm_permissive();
 	chat = g_at_chat_new(channel, syntax);
 	g_at_syntax_unref(syntax);
 
@@ -123,8 +127,8 @@ static void cfun_enable(gboolean ok, GAtResult *result, gpointer user_data)
 	DBG("");
 
 	if (!ok) {
-		g_at_chat_unref(data->chat);
-		data->chat = NULL;
+		g_at_chat_unref(data->modem);
+		data->modem = NULL;
 	}
 
 	ofono_modem_set_powered(modem, ok);
@@ -136,14 +140,14 @@ static int sierra_enable(struct ofono_modem *modem)
 
 	DBG("%p", modem);
 
-	data->chat = open_device(modem, "Device", "Device: ");
-	if (data->chat == NULL)
+	data->modem = open_device(modem, "Modem", "Modem: ");
+	if (data->modem == NULL)
 		return -EINVAL;
 
-	g_at_chat_send(data->chat, "ATE0 &C0 +CMEE=1", NULL,
+	g_at_chat_send(data->modem, "ATE0 &C0 +CMEE=1", NULL,
 						NULL, NULL, NULL);
 
-	g_at_chat_send(data->chat, "AT+CFUN=4", none_prefix,
+	g_at_chat_send(data->modem, "AT+CFUN=4", none_prefix,
 					cfun_enable, modem, NULL);
 
 	return -EINPROGRESS;
@@ -156,8 +160,8 @@ static void cfun_disable(gboolean ok, GAtResult *result, gpointer user_data)
 
 	DBG("");
 
-	g_at_chat_unref(data->chat);
-	data->chat = NULL;
+	g_at_chat_unref(data->modem);
+	data->modem = NULL;
 
 	if (ok)
 		ofono_modem_set_powered(modem, FALSE);
@@ -169,10 +173,10 @@ static int sierra_disable(struct ofono_modem *modem)
 
 	DBG("%p", modem);
 
-	g_at_chat_cancel_all(data->chat);
-	g_at_chat_unregister_all(data->chat);
+	g_at_chat_cancel_all(data->modem);
+	g_at_chat_unregister_all(data->modem);
 
-	g_at_chat_send(data->chat, "AT+CFUN=0", none_prefix,
+	g_at_chat_send(data->modem, "AT+CFUN=0", none_prefix,
 					cfun_disable, modem, NULL);
 
 	return -EINPROGRESS;
@@ -197,7 +201,7 @@ static void sierra_set_online(struct ofono_modem *modem, ofono_bool_t online,
 
 	DBG("modem %p %s", modem, online ? "online" : "offline");
 
-	if (g_at_chat_send(data->chat, command, none_prefix,
+	if (g_at_chat_send(data->modem, command, none_prefix,
 					set_online_cb, cbd, g_free) > 0)
 		return;
 
@@ -213,9 +217,9 @@ static void sierra_pre_sim(struct ofono_modem *modem)
 
 	DBG("%p", modem);
 
-	ofono_devinfo_create(modem, 0, "atmodem", data->chat);
+	ofono_devinfo_create(modem, 0, "atmodem", data->modem);
 	sim = ofono_sim_create(modem, OFONO_VENDOR_SIERRA,
-					"atmodem", data->chat);
+					"atmodem", data->modem);
 
 	if (sim)
 		ofono_sim_inserted_notify(sim, TRUE);
@@ -227,18 +231,24 @@ static void sierra_post_sim(struct ofono_modem *modem)
 
 	DBG("%p", modem);
 
-	ofono_phonebook_create(modem, 0, "atmodem", data->chat);
+	ofono_phonebook_create(modem, 0, "atmodem", data->modem);
 }
 
 static void sierra_post_online(struct ofono_modem *modem)
 {
 	struct sierra_data *data = ofono_modem_get_data(modem);
+	struct ofono_gprs *gprs;
+	struct ofono_gprs_context *gc;
 
 	DBG("%p", modem);
 
-	ofono_netreg_create(modem, 0, "atmodem", data->chat);
+	ofono_netreg_create(modem, 0, "atmodem", data->modem);
 
-	ofono_gprs_create(modem, 0, "atmodem", data->chat);
+	gprs = ofono_gprs_create(modem, 0, "atmodem", data->modem);
+	gc = ofono_gprs_context_create(modem, 0, "swmodem", data->modem);
+
+	if (gprs && gc)
+		ofono_gprs_add_context(gprs, gc);
 }
 
 static struct ofono_modem_driver sierra_driver = {

@@ -2,8 +2,8 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
- *  Copyright (C) 2009 ProFUSION embedded systems. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2009  ProFUSION embedded systems. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -51,6 +51,7 @@ struct netreg_data {
 	GAtChat *chat;
 	unsigned char cind_pos[HFP_INDICATOR_LAST];
 	int cind_val[HFP_INDICATOR_LAST];
+	guint register_source;
 };
 
 static void cops_cb(gboolean ok, GAtResult *result, gpointer user_data)
@@ -297,6 +298,9 @@ static void hfp_signal_strength(struct ofono_netreg *netreg,
 static gboolean hfp_netreg_register(gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
+	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+
+	nd->register_source = 0;
 
 	ofono_netreg_register(netreg);
 
@@ -320,7 +324,7 @@ static int hfp_netreg_probe(struct ofono_netreg *netreg, unsigned int vendor,
 	g_at_chat_register(nd->chat, "+CIEV:", ciev_notify, FALSE,
 				netreg, NULL);
 
-	g_idle_add(hfp_netreg_register, netreg);
+	nd->register_source = g_idle_add(hfp_netreg_register, netreg);
 
 	return 0;
 }
@@ -329,8 +333,12 @@ static void hfp_netreg_remove(struct ofono_netreg *netreg)
 {
 	struct netreg_data *nd = ofono_netreg_get_data(netreg);
 
+	if (nd->register_source != 0)
+		g_source_remove(nd->register_source);
+
 	ofono_netreg_set_data(netreg, NULL);
 
+	g_at_chat_unref(nd->chat);
 	g_free(nd);
 }
 
