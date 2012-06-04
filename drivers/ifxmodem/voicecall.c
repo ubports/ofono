@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -795,6 +795,7 @@ static void xlema_notify(GAtResult *result, gpointer user_data)
 	GAtResultIter iter;
 	int index, total_cnt;
 	const char *number;
+	int len;
 	int count = (vd->en_list == NULL) ? 0 : g_strv_length(vd->en_list);
 
 	g_at_result_iter_init(&iter, result);
@@ -811,18 +812,37 @@ static void xlema_notify(GAtResult *result, gpointer user_data)
 	if (!g_at_result_iter_next_string(&iter, &number))
 		return;
 
+	/* Skip category */
+	if (g_at_result_iter_skip_next(&iter) == FALSE)
+		goto done;
+
+	/* Skip presence */
+	if (g_at_result_iter_skip_next(&iter) == FALSE)
+		goto done;
+
+	/* If we succeed here, then the number is from NVM or NITZ */
+	if (g_at_result_iter_skip_next(&iter) == FALSE)
+		goto done;
+
 	if (vd->en_list == NULL)
 		vd->en_list = g_new0(char *, total_cnt + 1);
 
-	vd->en_list[count] = g_strdup(number);
+	len = strspn(number, "0123456789");
+	vd->en_list[count] = g_strndup(number, len);
 
+	if (number[len] != '\0')
+		ofono_warn("Malformed emergency number: %.*s", len, number);
+
+done:
 	if (index != total_cnt)
 		return;
 
-	ofono_voicecall_en_list_notify(vc, vd->en_list);
+	if (vd->en_list) {
+		ofono_voicecall_en_list_notify(vc, vd->en_list);
 
-	g_strfreev(vd->en_list);
-	vd->en_list = NULL;
+		g_strfreev(vd->en_list);
+		vd->en_list = NULL;
+	}
 }
 
 static void xlema_read(gboolean ok, GAtResult *result, gpointer user_data)
@@ -833,6 +853,7 @@ static void xlema_read(gboolean ok, GAtResult *result, gpointer user_data)
 	int num = 0;
 	int index, total_cnt;
 	const char *number;
+	int len;
 
 	if (!ok) {
 		DBG("Emergency number list read failed");
@@ -859,7 +880,12 @@ static void xlema_read(gboolean ok, GAtResult *result, gpointer user_data)
 		if (!g_at_result_iter_next_string(&iter, &number))
 			continue;
 
-		vd->en_list[num++] = g_strdup(number);
+		len = strspn(number, "0123456789");
+		vd->en_list[num++] = g_strndup(number, len);
+
+		if (number[len] != '\0')
+			ofono_warn("Malformed emergency number: %.*s",
+							len, number);
 	}
 
 	ofono_voicecall_en_list_notify(vc, vd->en_list);

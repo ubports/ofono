@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2010-2011 Nokia Corporation. All rights reserved.
+ *  Copyright (C) 2010-2011  Nokia Corporation and/or its subsidiary(-ies).
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -338,6 +338,29 @@ static void cdma_connman_settings_append_properties(
 	dbus_message_iter_close_container(dict, &entry);
 }
 
+static ofono_bool_t network_registered(struct ofono_cdma_connman *cm)
+{
+	int status;
+	struct ofono_modem *modem = __ofono_atom_get_modem(cm->atom);
+	struct ofono_cdma_netreg *cdma_netreg;
+
+	cdma_netreg = __ofono_atom_find(OFONO_ATOM_TYPE_CDMA_NETREG, modem);
+	if (cdma_netreg == NULL)
+		return FALSE;
+
+	status = ofono_cdma_netreg_get_status(cdma_netreg);
+
+	switch (status) {
+	case NETWORK_REGISTRATION_STATUS_REGISTERED:
+	case NETWORK_REGISTRATION_STATUS_ROAMING:
+		return TRUE;
+	default:
+		break;
+	}
+
+	return FALSE;
+}
+
 static DBusMessage *cdma_connman_get_properties(DBusConnection *conn,
 						DBusMessage *msg, void *data)
 {
@@ -463,9 +486,11 @@ static DBusMessage *cdma_connman_set_property(DBusConnection *conn,
 				cm->driver->deactivate == NULL)
 			return __ofono_error_not_implemented(msg);
 
+		if (network_registered(cm) == FALSE)
+			return __ofono_error_not_registered(msg);
+
 		cm->pending = dbus_message_ref(msg);
 
-		/* TODO: add logic to support CDMA Network Registration */
 		if (value)
 			cm->driver->activate(cm, cm->username, cm->password,
 						activate_callback, cm);
@@ -524,6 +549,42 @@ void ofono_cdma_connman_driver_unregister(
 	DBG("driver: %p, name: %s", d, d->name);
 
 	g_drivers = g_slist_remove(g_drivers, (void *) d);
+}
+
+void ofono_cdma_connman_deactivated(struct ofono_cdma_connman *cm)
+{
+	DBusConnection *conn = ofono_dbus_get_connection();
+	ofono_bool_t value;
+	const char *path;
+
+	if (cm == NULL)
+		return;
+
+	cdma_connman_settings_reset(cm);
+	cm->powered = FALSE;
+	value = cm->powered;
+	path = __ofono_atom_get_path(cm->atom);
+
+	ofono_dbus_signal_property_changed(conn, path,
+				OFONO_CDMA_CONNECTION_MANAGER_INTERFACE,
+				"Powered", DBUS_TYPE_BOOLEAN, &value);
+}
+
+void ofono_cdma_connman_dormant_notify(struct ofono_cdma_connman *cm,
+					ofono_bool_t dormant)
+{
+	DBusConnection *conn = ofono_dbus_get_connection();
+	const char *path;
+
+	if (cm == NULL)
+		return;
+
+	cm->dormant = dormant;
+	path = __ofono_atom_get_path(cm->atom);
+
+	ofono_dbus_signal_property_changed(conn, path,
+				OFONO_CDMA_CONNECTION_MANAGER_INTERFACE,
+				"Dormant", DBUS_TYPE_BOOLEAN, &dormant);
 }
 
 static void cdma_connman_unregister(struct ofono_atom *atom)
@@ -612,8 +673,6 @@ void ofono_cdma_connman_register(struct ofono_cdma_connman *cm)
 
 	ofono_modem_add_interface(modem,
 				OFONO_CDMA_CONNECTION_MANAGER_INTERFACE);
-
-	/* TODO: add watch to support CDMA Network Registration atom */
 
 	__ofono_atom_register(cm->atom, cdma_connman_unregister);
 }

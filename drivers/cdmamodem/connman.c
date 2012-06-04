@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2010-2011 Nokia Corporation. All rights reserved.
+ *  Copyright (C) 2010-2011  Nokia Corporation and/or its subsidiary(-ies).
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -41,6 +41,7 @@
 #include "gatppp.h"
 
 #include "cdmamodem.h"
+#include "drivers/atmodem/vendor.h"
 
 #define TUN_SYSFS_DIR "/sys/devices/virtual/misc/tun"
 
@@ -58,6 +59,7 @@ enum state {
 struct connman_data {
 	GAtChat *chat;
 	GAtPPP *ppp;
+	unsigned int vendor;
 	enum state state;
 	char username[OFONO_CDMA_CONNMAN_MAX_USERNAME_LENGTH + 1];
 	char password[OFONO_CDMA_CONNMAN_MAX_PASSWORD_LENGTH + 1];
@@ -116,7 +118,7 @@ static void ppp_disconnect(GAtPPPDisconnectReason reason, gpointer user_data)
 		CALLBACK_WITH_SUCCESS(cd->down_cb, cd->cb_data);
 		break;
 	default:
-		/* TODO: Handle network initiated disconnection */
+		ofono_cdma_connman_deactivated(cm);
 		break;
 	}
 
@@ -188,7 +190,6 @@ static void cdma_connman_activate(struct ofono_cdma_connman *cm,
 					void *data)
 {
 	struct connman_data *cd = ofono_cdma_connman_get_data(cm);
-	char buf[64];
 
 	DBG("");
 
@@ -199,9 +200,7 @@ static void cdma_connman_activate(struct ofono_cdma_connman *cm,
 
 	cd->state = STATE_ENABLING;
 
-	sprintf(buf, "ATD#777");
-
-	if (g_at_chat_send(cd->chat, buf, none_prefix,
+	if (g_at_chat_send(cd->chat, "ATD#777", none_prefix,
 				atd_cb, cm, NULL) > 0)
 		return;
 
@@ -223,9 +222,38 @@ static void cdma_connman_deactivate(struct ofono_cdma_connman *cm,
 	g_at_ppp_shutdown(cd->ppp);
 }
 
+static void huawei_dsdormant_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_cdma_connman *cm = user_data;
+	int dormant;
+	GAtResultIter iter;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "^DSDORMANT:"))
+		return;
+
+	if (!g_at_result_iter_next_number(&iter, &dormant))
+		return;
+
+	switch (dormant) {
+	case 0:
+		ofono_cdma_connman_dormant_notify(cm, FALSE);
+		break;
+	case 1:
+		ofono_cdma_connman_dormant_notify(cm, TRUE);
+		break;
+	default:
+		ofono_error("Invalid DSDORMANT value");
+		break;
+	}
+}
+
 static void at_c0_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_cdma_connman *cm = user_data;
+	struct connman_data *cd = ofono_cdma_connman_get_data(cm);
+	GAtChat *chat;
 
 	DBG("ok %d", ok);
 
@@ -233,6 +261,16 @@ static void at_c0_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		ofono_info("Unable to configure circuit 109");
 		ofono_cdma_connman_remove(cm);
 		return;
+	}
+
+	switch (cd->vendor) {
+	case OFONO_VENDOR_HUAWEI:
+		chat = g_at_chat_get_slave(cd->chat);
+		g_at_chat_register(chat, "^DSDORMANT", huawei_dsdormant_notify,
+					FALSE, cm, NULL);
+		break;
+	default:
+		break;
 	}
 
 	ofono_cdma_connman_register(cm);
@@ -257,9 +295,12 @@ static int cdma_connman_probe(struct ofono_cdma_connman *cm,
 		return -ENOMEM;
 
 	cd->chat = g_at_chat_clone(chat);
+	cd->vendor = vendor;
 
 	ofono_cdma_connman_set_data(cm, cd);
 
+	/* Turn off any modem-initiated dormancy timeout */
+	g_at_chat_send(cd->chat, "AT+CTA=0", none_prefix, NULL, NULL, NULL);
 	g_at_chat_send(cd->chat, "AT&C0", none_prefix, at_c0_cb, cm, NULL);
 
 	return 0;

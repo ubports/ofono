@@ -1,21 +1,22 @@
 /*
- * This file is part of oFono - Open Source Telephony
  *
- * Copyright (C) ST-Ericsson SA 2011.
+ *  oFono - Open Source Telephony
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * version 2 as published by the Free Software Foundation.
+ *  Copyright (C) 2011  ST-Ericsson AB.
+ *  Copyright (C) 2011  Nokia Corporation and/or its subsidiary(-ies).
  *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
- * 02110-1301 USA
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program; if not, write to the Free Software
+ *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
  */
 
@@ -25,8 +26,6 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <glib/gtypes.h>
 
 #include <gisi/client.h>
 #include <gisi/modem.h>
@@ -248,6 +247,11 @@ enum uicc_details {
 	UICC_NO_DETAILS =			0x00,
 	UICC_INVALID_PARAMETERS =		0x01,
 	UICC_FILE_NOT_FOUND =			0x02,
+	UICC_SECURITY_CONDITIONS_NOT_SATISFIED =	0x03,
+	UICC_APPL_CONFLICT =				0x04,
+	UICC_CARD_ERROR =				0x05,
+	UICC_SERVICE_NOT_SUPPORTED =			0x06,
+	UICC_SESSION_EXPIRED =				0x07,
 };
 
 enum uicc_simlock_status {

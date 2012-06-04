@@ -17,7 +17,8 @@ pkginclude_HEADERS = include/log.h include/plugin.h include/history.h \
 			include/gprs-provision.h include/emulator.h \
 			include/location-reporting.h \
 			include/cdma-connman.h include/gnss.h \
-			include/private-network.h
+			include/private-network.h include/cdma-netreg.h \
+			include/cdma-provision.h include/handsfree.h
 
 nodist_pkginclude_HEADERS = include/version.h
 
@@ -75,7 +76,7 @@ gatchat_sources = gatchat/gatchat.h gatchat/gatchat.c \
 				gatchat/ppp.h gatchat/ppp_cp.h \
 				gatchat/ppp_cp.c gatchat/ppp_lcp.c \
 				gatchat/ppp_auth.c gatchat/ppp_net.c \
-				gatchat/ppp_ipcp.c
+				gatchat/ppp_ipcp.c gatchat/ppp_ipv6cp.c
 
 gisi_sources = gisi/client.c gisi/client.h gisi/common.h \
 				gisi/iter.c gisi/iter.h \
@@ -90,19 +91,14 @@ gisi_sources = gisi/client.c gisi/client.h gisi/common.h \
 
 btio_sources = btio/btio.h btio/btio.c
 
-udev_files = plugins/ofono.rules
-
 if UDEV
 builtin_modules += udev
 builtin_sources += plugins/udev.c
 builtin_cflags += @UDEV_CFLAGS@
 builtin_libadd += @UDEV_LIBS@
 
-if DATAFILES
-rulesdir = @UDEV_DATADIR@
-
-rules_DATA = $(foreach file,$(udev_files), plugins/97-$(notdir $(file)))
-endif
+builtin_modules += udevng
+builtin_sources += plugins/udevng.c
 endif
 
 if ISIMODEM
@@ -141,8 +137,9 @@ builtin_sources += $(gisi_sources) \
 				drivers/isimodem/gpds.h \
 				drivers/isimodem/audio-settings.c \
 				drivers/isimodem/uicc.h \
-				drivers/isimodem/uicc.c
-
+				drivers/isimodem/uicc.c \
+				drivers/isimodem/uicc-util.h \
+				drivers/isimodem/uicc-util.c
 
 builtin_modules += isiusb
 builtin_sources += plugins/isiusb.c
@@ -168,8 +165,6 @@ builtin_sources += $(gatchat_sources) \
 				drivers/atmodem/sim.c \
 				drivers/atmodem/stk.c \
 				drivers/atmodem/stk.h \
-				drivers/atmodem/sim-poll.c \
-				drivers/atmodem/sim-poll.h \
 				drivers/atmodem/ussd.c \
 				drivers/atmodem/voicecall.c \
 				drivers/atmodem/call-barring.c \
@@ -190,14 +185,28 @@ builtin_sources += drivers/atmodem/atutil.h \
 			drivers/nwmodem/nwmodem.c \
 			drivers/nwmodem/radio-settings.c
 
+builtin_modules += swmodem
+builtin_sources += drivers/atmodem/atutil.h \
+			drivers/swmodem/swmodem.h \
+			drivers/swmodem/swmodem.c \
+			drivers/swmodem/gprs-context.c
+
+builtin_modules += ztemodem
+builtin_sources += drivers/atmodem/atutil.h \
+			drivers/ztemodem/ztemodem.h \
+			drivers/ztemodem/ztemodem.c \
+			drivers/ztemodem/radio-settings.c
+
 builtin_modules += huaweimodem
 builtin_sources += drivers/atmodem/atutil.h \
 			drivers/huaweimodem/huaweimodem.h \
 			drivers/huaweimodem/huaweimodem.c \
+			drivers/huaweimodem/ussd.c \
 			drivers/huaweimodem/voicecall.c \
 			drivers/huaweimodem/audio-settings.c \
 			drivers/huaweimodem/gprs-context.c \
-			drivers/huaweimodem/radio-settings.c
+			drivers/huaweimodem/radio-settings.c \
+			drivers/huaweimodem/cdma-netreg.c
 
 builtin_modules += calypsomodem
 builtin_sources += drivers/atmodem/atutil.h \
@@ -248,7 +257,8 @@ builtin_modules += dunmodem
 builtin_sources += drivers/atmodem/atutil.h \
 			drivers/dunmodem/dunmodem.h \
 			drivers/dunmodem/dunmodem.c \
-			drivers/dunmodem/network-registration.c
+			drivers/dunmodem/network-registration.c \
+			drivers/dunmodem/gprs.c
 
 builtin_modules += hfpmodem
 builtin_sources += drivers/atmodem/atutil.h \
@@ -258,7 +268,15 @@ builtin_sources += drivers/atmodem/atutil.h \
 			drivers/hfpmodem/slc.c \
 			drivers/hfpmodem/voicecall.c \
 			drivers/hfpmodem/network-registration.c \
-			drivers/hfpmodem/call-volume.c
+			drivers/hfpmodem/call-volume.c \
+			drivers/hfpmodem/devinfo.c \
+			drivers/hfpmodem/handsfree.c
+
+builtin_modules += speedupmodem
+builtin_sources += drivers/atmodem/atutil.h \
+			drivers/speedupmodem/speedupmodem.h \
+			drivers/speedupmodem/speedupmodem.c \
+			drivers/speedupmodem/ussd.c
 
 if PHONESIM
 builtin_modules += phonesim
@@ -302,9 +320,6 @@ builtin_sources += plugins/zte.c
 builtin_modules += huawei
 builtin_sources += plugins/huawei.c
 
-builtin_modules += huaweicdma
-builtin_sources += plugins/huaweicdma.c
-
 builtin_modules += sierra
 builtin_sources += plugins/sierra.c
 
@@ -338,8 +353,11 @@ builtin_sources += plugins/nokiacdma.c
 builtin_modules += linktop
 builtin_sources += plugins/linktop.c
 
-builtin_modules += telit
-builtin_sources += plugins/telit.c
+builtin_modules += icera
+builtin_sources += plugins/icera.c
+
+builtin_modules += alcatel
+builtin_sources += plugins/alcatel.c
 
 builtin_modules += speedup
 builtin_sources += plugins/speedup.c
@@ -347,9 +365,21 @@ builtin_sources += plugins/speedup.c
 builtin_modules += speedupcdma
 builtin_sources += plugins/speedupcdma.c
 
+builtin_modules += samsung
+builtin_sources += plugins/samsung.c
+
+builtin_modules += sim900
+builtin_sources += plugins/sim900.c
+
 if BLUETOOTH
 builtin_modules += bluetooth
 builtin_sources += plugins/bluetooth.c plugins/bluetooth.h
+
+builtin_modules += telit
+builtin_sources += plugins/telit.c plugins/bluetooth.h
+
+builtin_modules += sap
+builtin_sources += plugins/sap.c plugins/bluetooth.h
 
 builtin_modules += hfp
 builtin_sources += plugins/hfp_hf.c plugins/bluetooth.h
@@ -367,6 +397,16 @@ builtin_sources += $(btio_sources)
 builtin_cflags += @BLUEZ_CFLAGS@
 builtin_libadd += @BLUEZ_LIBS@
 endif
+endif
+
+if PROVISION
+builtin_sources += plugins/mbpi.h plugins/mbpi.c
+
+builtin_modules += provision
+builtin_sources += plugins/provision.c
+
+builtin_modules += cdma_provision
+builtin_sources += plugins/cdma-provision.c
 endif
 
 if MAINTAINER_MODE
@@ -416,16 +456,17 @@ src_ofonod_SOURCES = $(gdbus_sources) $(builtin_sources) src/ofono.ver \
 			src/cdma-connman.c src/gnss.c \
 			src/gnssagent.c src/gnssagent.h \
 			src/cdma-smsutil.h src/cdma-smsutil.c \
-			src/cdma-sms.c src/private-network.c
+			src/cdma-sms.c src/private-network.c src/cdma-netreg.c \
+			src/cdma-provision.c src/handsfree.c
 
 src_ofonod_LDADD = $(builtin_libadd) @GLIB_LIBS@ @DBUS_LIBS@ @CAPNG_LIBS@ -ldl
 
 src_ofonod_LDFLAGS = -Wl,--export-dynamic \
 				-Wl,--version-script=$(srcdir)/src/ofono.ver
 
-BUILT_SOURCES = $(local_headers)
+BUILT_SOURCES = $(local_headers) src/builtin.h
 
-CLEANFILES = src/builtin.h $(BUILT_SOURCES) $(rules_DATA)
+CLEANFILES = $(BUILT_SOURCES) $(rules_DATA)
 
 plugindir = $(pkglibdir)/plugins
 
@@ -471,6 +512,7 @@ test_scripts = test/backtrace \
 		test/dial-number \
 		test/list-calls \
 		test/answer-calls \
+		test/reject-calls \
 		test/create-multiparty \
 		test/private-chat \
 		test/disable-modem \
@@ -550,7 +592,8 @@ testdir = $(pkglibdir)/test
 test_SCRIPTS = $(test_scripts)
 endif
 
-EXTRA_DIST = src/genbuiltin $(udev_files) $(doc_files) $(test_scripts)
+EXTRA_DIST = src/genbuiltin plugins/ofono.rules plugins/ofono-speedup.rules \
+				$(doc_files) $(test_scripts)
 
 dist_man_MANS = doc/ofonod.8
 
@@ -613,7 +656,8 @@ TESTS = $(unit_tests)
 
 if TOOLS
 noinst_PROGRAMS += tools/huawei-audio tools/auto-enable \
-			tools/get-location tools/lookup-apn
+			tools/get-location tools/lookup-apn \
+			tools/lookup-provider-name
 
 tools_huawei_audio_SOURCES = $(gdbus_sources) tools/huawei-audio.c
 tools_huawei_audio_LDADD = @GLIB_LIBS@ @DBUS_LIBS@
@@ -624,8 +668,12 @@ tools_auto_enable_LDADD = @GLIB_LIBS@ @DBUS_LIBS@
 tools_get_location_SOURCES = tools/get-location.c
 tools_get_location_LDADD = @GLIB_LIBS@ @DBUS_LIBS@
 
-tools_lookup_apn_SOURCES = tools/lookup-apn.c
+tools_lookup_apn_SOURCES = plugins/mbpi.c plugins/mbpi.h tools/lookup-apn.c
 tools_lookup_apn_LDADD = @GLIB_LIBS@
+
+tools_lookup_provider_name_SOURCES = plugins/mbpi.c plugins/mbpi.h \
+				tools/lookup-provider-name.c
+tools_lookup_provider_name_LDADD = @GLIB_LIBS@
 endif
 
 noinst_PROGRAMS += gatchat/gsmdial gatchat/test-server gatchat/test-qcdm
@@ -647,8 +695,6 @@ MAINTAINERCLEANFILES = Makefile.in \
 	ltmain.sh depcomp compile missing install-sh mkinstalldirs
 
 
-src/plugin.$(OBJEXT): src/builtin.h
-
 src/builtin.h: src/genbuiltin config.status
 	$(AM_V_GEN)$(srcdir)/src/genbuiltin $(builtin_modules) > $@
 
@@ -659,9 +705,9 @@ include/ofono/version.h: include/version.h
 	$(AM_V_at)$(MKDIR_P) include/ofono
 	$(AM_V_GEN)$(LN_S) $(abs_top_builddir)/$< $@
 
-include/ofono/%.h: include/%.h
+include/ofono/%.h: $(abs_top_srcdir)/include/%.h
 	$(AM_V_at)$(MKDIR_P) include/ofono
-	$(AM_V_GEN)$(LN_S) $(abs_top_srcdir)/$< $@
+	$(AM_V_GEN)$(LN_S) $< $@
 
 clean-local:
 	@$(RM) -rf include/ofono

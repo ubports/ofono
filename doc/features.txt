@@ -531,6 +531,18 @@ GPRS
 	- IPv6
 	- Dual Stack (IPv4 + IPv6)
 
+- GPRS provisioning support.  oFono will automatically configure GPRS contexts
+  if no prior configuration (e.g. user or provisioning) has been detected.
+  If the GPRS atom detects that provisioning is required it will query the
+  inserted sim card for the Service Provider Name and call each registered
+  provisioning plugin with the MCC, MNC, SPN of the inserted SIM card.  If the
+  provisioning information is provided, then it is used to populate the
+  initial context configuration.
+
+- GPRS provisioning via 'Mobile Broadband Provider Info'.  oFono supports
+  provisioning of GPRS contexts via Mobile Broadband Provider Info project's
+  database.
+
 Location Reporting
 ==================
 
@@ -658,6 +670,14 @@ Network Registration
   manual network registration is not allowed, oFono enters into 'auto-only'
   registration mode.  Updates to this file via STK Refresh is also supported.
 
+- Support for 3GPP Service Provider Name (EFspn), CPHS Operator Name
+  String (ONS) and CPHS Short Operator Name String fields.  oFono always
+  tries to read the EFspn field first.  If this is not available, then oFono
+  tries to read the CPHS variant.  If neither are available and the
+  appropriate bits are set in the CPHS Information field, oFono tries to read
+  the CPHS Short ONS field.  oFono then reports the network name via the
+  'Name' property.
+
 PPP Stack
 =========
 
@@ -670,3 +690,52 @@ PPP Stack
   PPP stack supports both receiving and sending of packets with ACFC enabled.
   The user can also control whether ACFC capability is advertised to the peer,
   and used during transmission.
+
+Modem Emulator
+==============
+
+- Support for Bluetooth HandsFree Profile Audio Gateway (HFP AG).  oFono
+  supports the underlying AT command protocol specified by BT HFP version 1.6.
+  Supported features include 3-way calling, ability to reject a call,
+  enhanced call status, enhanced call control, report of extended error results
+  code and indicator activation. Audio management is assumed to be performed in
+  another system component, e.g. PulseAudio.
+
+- Support for Bluetooth DUN profile.  oFono supports the Dial Up Networking
+  profile and all mandatory commands specified by BT DUN 1.1.  For a list
+  of supported commands please see doc/dialup-command-set.txt.
+
+CDMA Connection Manager
+=======================
+
+- Support Network Initiated disconnection of Packet Data Service over CDMA
+  (1xRTT and 1xEV-DO) systems.
+
+CDMA Network Acquisition
+========================
+
+- Support reporting of the received signal strength indicator (RSSI)
+  measurement for the currently acquired CDMA network.
+
+- Support reporting of the received signal strength indicator (RSSI)
+  measurement for the currently acquired 1xEV-DO data network.
+
+Bluetooth Sim Access Profile
+============================
+
+- oFono supports certain modems that can utilize remote sim cards
+  (e.g. via SAP).  This is done transparently to the user and all of oFono's
+  APIs are supported on such devices (assuming the device itself supports
+  the required features).  Today the Telit UC864-G is supported in this mode.
+
+Bluetooth Handsfree Profile
+===========================
+
+- Voicecall support.  oFono supports the use of Bluetooth Handsfree capable
+  devices to make voicecalls.  All features are supported, including 3-way
+  calls, multiparty calls, call waiting, etc.
+
+- Support for Handsfree specific protocol features.  oFono clients can gain
+  access to Bluetooth HFP specific features via the oFono Handsfree interface.
+  These features include voice recognition activation, last number redial,
+  etc.

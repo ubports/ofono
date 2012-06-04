@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -49,7 +49,7 @@ static const char *none_prefix[] = { NULL };
 
 struct nokia_data {
 	GAtChat *modem;
-	GAtChat *control;
+	GAtChat *aux;
 };
 
 static int nokia_probe(struct ofono_modem *modem)
@@ -75,14 +75,17 @@ static void nokia_remove(struct ofono_modem *modem)
 
 	ofono_modem_set_data(modem, NULL);
 
+	/* Cleanup after hot-unplug */
+	g_at_chat_unref(data->aux);
+
 	g_free(data);
 }
 
 static void nokia_debug(const char *str, void *user_data)
 {
-        const char *prefix = user_data;
+	const char *prefix = user_data;
 
-        ofono_info("%s%s", prefix, str);
+	ofono_info("%s%s", prefix, str);
 }
 
 static GAtChat *open_device(struct ofono_modem *modem,
@@ -129,8 +132,8 @@ static void cfun_enable(gboolean ok, GAtResult *result, gpointer user_data)
 		g_at_chat_unref(data->modem);
 		data->modem = NULL;
 
-		g_at_chat_unref(data->control);
-		data->control = NULL;
+		g_at_chat_unref(data->aux);
+		data->aux = NULL;
 	}
 
 	ofono_modem_set_powered(modem, ok);
@@ -146,8 +149,8 @@ static int nokia_enable(struct ofono_modem *modem)
 	if (data->modem == NULL)
 		return -EINVAL;
 
-	data->control = open_device(modem, "Control", "Control: ");
-	if (data->control == NULL) {
+	data->aux = open_device(modem, "Aux", "Aux: ");
+	if (data->aux == NULL) {
 		g_at_chat_unref(data->modem);
 		data->modem = NULL;
 		return -EIO;
@@ -156,10 +159,20 @@ static int nokia_enable(struct ofono_modem *modem)
 	g_at_chat_send(data->modem, "ATE0 &C0 +CMEE=1", NULL,
 						NULL, NULL, NULL);
 
-	g_at_chat_send(data->control, "ATE0 &C0 +CMEE=1", NULL,
+	g_at_chat_send(data->aux, "ATE0 &C0 +CMEE=1", NULL,
 						NULL, NULL, NULL);
 
-	g_at_chat_send(data->control, "AT+CFUN=1", none_prefix,
+	/*
+	 * Ensure that the modem is using GSM character set and not IRA,
+	 * otherwise weirdness with umlauts and other non-ASCII characters
+	 * can result
+	 */
+	g_at_chat_send(data->modem, "AT+CSCS=\"GSM\"", none_prefix,
+							NULL, NULL, NULL);
+	g_at_chat_send(data->aux, "AT+CSCS=\"GSM\"", none_prefix,
+							NULL, NULL, NULL);
+
+	g_at_chat_send(data->aux, "AT+CFUN=1", none_prefix,
 					cfun_enable, modem, NULL);
 
 	return -EINPROGRESS;
@@ -172,8 +185,8 @@ static void cfun_disable(gboolean ok, GAtResult *result, gpointer user_data)
 
 	DBG("");
 
-	g_at_chat_unref(data->control);
-	data->control = NULL;
+	g_at_chat_unref(data->aux);
+	data->aux = NULL;
 
 	if (ok)
 		ofono_modem_set_powered(modem, FALSE);
@@ -191,10 +204,10 @@ static int nokia_disable(struct ofono_modem *modem)
 	g_at_chat_unref(data->modem);
 	data->modem = NULL;
 
-	g_at_chat_cancel_all(data->control);
-	g_at_chat_unregister_all(data->control);
+	g_at_chat_cancel_all(data->aux);
+	g_at_chat_unregister_all(data->aux);
 
-	g_at_chat_send(data->control, "AT+CFUN=4", none_prefix,
+	g_at_chat_send(data->aux, "AT+CFUN=4", none_prefix,
 					cfun_disable, modem, NULL);
 
 	return -EINPROGRESS;
@@ -207,8 +220,8 @@ static void nokia_pre_sim(struct ofono_modem *modem)
 
 	DBG("%p", modem);
 
-	ofono_devinfo_create(modem, 0, "atmodem", data->control);
-	sim = ofono_sim_create(modem, 0, "atmodem", data->control);
+	ofono_devinfo_create(modem, 0, "atmodem", data->aux);
+	sim = ofono_sim_create(modem, 0, "atmodem", data->aux);
 
 	if (sim)
 		ofono_sim_inserted_notify(sim, TRUE);
@@ -222,21 +235,30 @@ static void nokia_post_sim(struct ofono_modem *modem)
 
 	DBG("%p", modem);
 
-	ofono_netreg_create(modem, OFONO_VENDOR_NOKIA,
-					"atmodem", data->control);
+	ofono_phonebook_create(modem, 0, "atmodem", data->aux);
 
 	ofono_sms_create(modem, OFONO_VENDOR_OPTION_HSO,
-					"atmodem", data->control);
-	ofono_ussd_create(modem, OFONO_VENDOR_QUALCOMM_MSM,
-					"atmodem", data->control);
-	ofono_phonebook_create(modem, 0, "atmodem", data->control);
+					"atmodem", data->aux);
 
 	gprs = ofono_gprs_create(modem, OFONO_VENDOR_NOKIA,
-					"atmodem", data->control);
+					"atmodem", data->aux);
 	gc = ofono_gprs_context_create(modem, 0, "atmodem", data->modem);
 
 	if (gprs && gc)
 		ofono_gprs_add_context(gprs, gc);
+}
+
+static void nokia_post_online(struct ofono_modem *modem)
+{
+	struct nokia_data *data = ofono_modem_get_data(modem);
+
+	DBG("%p", modem);
+
+	ofono_netreg_create(modem, OFONO_VENDOR_NOKIA,
+					"atmodem", data->aux);
+
+	ofono_ussd_create(modem, OFONO_VENDOR_QUALCOMM_MSM,
+					"atmodem", data->aux);
 }
 
 static struct ofono_modem_driver nokia_driver = {
@@ -247,6 +269,7 @@ static struct ofono_modem_driver nokia_driver = {
 	.disable	= nokia_disable,
 	.pre_sim	= nokia_pre_sim,
 	.post_sim	= nokia_post_sim,
+	.post_online	= nokia_post_online,
 };
 
 static int nokia_init(void)

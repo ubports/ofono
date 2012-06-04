@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -45,6 +45,7 @@ struct at_util_sim_state_query {
 	guint num_times;
 	at_util_sim_inserted_cb_t cb;
 	void *userdata;
+	GDestroyNotify destroy;
 };
 
 static gboolean cpin_check(gpointer userdata);
@@ -131,10 +132,16 @@ GSList *at_util_parse_clcc(GAtResult *result)
 		if (!g_at_result_iter_next_number(&iter, &id))
 			continue;
 
+		if (id == 0)
+			continue;
+
 		if (!g_at_result_iter_next_number(&iter, &dir))
 			continue;
 
 		if (!g_at_result_iter_next_number(&iter, &status))
+			continue;
+
+		if (status > 5)
 			continue;
 
 		if (!g_at_result_iter_next_number(&iter, &type))
@@ -195,8 +202,10 @@ gboolean at_util_parse_reg_unsolicited(GAtResult *result, const char *prefix,
 
 	switch (vendor) {
 	case OFONO_VENDOR_GOBI:
+	case OFONO_VENDOR_ZTE:
 	case OFONO_VENDOR_HUAWEI:
 	case OFONO_VENDOR_NOVATEL:
+	case OFONO_VENDOR_SPEEDUP:
 		if (g_at_result_iter_next_unquoted_string(&iter, &str) == TRUE)
 			l = strtol(str, NULL, 16);
 		else
@@ -257,8 +266,10 @@ gboolean at_util_parse_reg(GAtResult *result, const char *prefix,
 
 		/* Sometimes we get an unsolicited CREG/CGREG here, skip it */
 		switch (vendor) {
+		case OFONO_VENDOR_ZTE:
 		case OFONO_VENDOR_HUAWEI:
 		case OFONO_VENDOR_NOVATEL:
+		case OFONO_VENDOR_SPEEDUP:
 			r = g_at_result_iter_next_unquoted_string(&iter, &str);
 
 			if (r == FALSE || strlen(str) != 1)
@@ -280,8 +291,10 @@ gboolean at_util_parse_reg(GAtResult *result, const char *prefix,
 
 		switch (vendor) {
 		case OFONO_VENDOR_GOBI:
+		case OFONO_VENDOR_ZTE:
 		case OFONO_VENDOR_HUAWEI:
 		case OFONO_VENDOR_NOVATEL:
+		case OFONO_VENDOR_SPEEDUP:
 			r = g_at_result_iter_next_unquoted_string(&iter, &str);
 
 			if (r == TRUE)
@@ -562,7 +575,8 @@ static gboolean cpin_check(gpointer userdata)
 struct at_util_sim_state_query *at_util_sim_state_query_new(GAtChat *chat,
 						guint interval, guint num_times,
 						at_util_sim_inserted_cb_t cb,
-						void *userdata)
+						void *userdata,
+						GDestroyNotify destroy)
 {
 	struct at_util_sim_state_query *req;
 
@@ -573,6 +587,7 @@ struct at_util_sim_state_query *at_util_sim_state_query_new(GAtChat *chat,
 	req->num_times = num_times;
 	req->cb = cb;
 	req->userdata = userdata;
+	req->destroy = destroy;
 
 	cpin_check(req);
 
@@ -581,8 +596,14 @@ struct at_util_sim_state_query *at_util_sim_state_query_new(GAtChat *chat,
 
 void at_util_sim_state_query_free(struct at_util_sim_state_query *req)
 {
+	if (req == NULL)
+		return;
+
 	if (req->cpin_poll_source > 0)
 		g_source_remove(req->cpin_poll_source);
+
+	if (req->destroy)
+		req->destroy(req->userdata);
 
 	g_free(req);
 }

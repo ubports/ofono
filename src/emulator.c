@@ -59,6 +59,9 @@ struct indicator {
 	int value;
 	int min;
 	int max;
+	gboolean deferred;
+	gboolean active;
+	gboolean mandatory;
 };
 
 static void emulator_debug(const char *str, void *data)
@@ -333,16 +336,37 @@ static struct ofono_call *find_call_with_status(struct ofono_emulator *em,
 								int status)
 {
 	struct ofono_modem *modem = __ofono_atom_get_modem(em->atom);
-	struct ofono_atom *vc_atom;
 	struct ofono_voicecall *vc;
 
-	vc_atom = __ofono_modem_find_atom(modem, OFONO_ATOM_TYPE_VOICECALL);
-	if (vc_atom == NULL)
+	vc = __ofono_atom_find(OFONO_ATOM_TYPE_VOICECALL, modem);
+	if (vc == NULL)
 		return NULL;
 
-	vc = __ofono_atom_get_data(vc_atom);
-
 	return __ofono_voicecall_find_call_with_status(vc, status);
+}
+
+static void notify_deferred_indicators(GAtServer *server, void *user_data)
+{
+	struct ofono_emulator *em = user_data;
+	int i;
+	char buf[20];
+	GSList *l;
+	struct indicator *ind;
+
+	for (i = 1, l = em->indicators; l; l = l->next, i++) {
+		ind = l->data;
+
+		if (!ind->deferred)
+			continue;
+
+		if (em->events_mode == 3 && em->events_ind && em->slc &&
+				ind->active) {
+			sprintf(buf, "+CIEV: %d,%d", i, ind->value);
+			g_at_server_send_unsolicited(em->server, buf);
+		}
+
+		ind->deferred = FALSE;
+	}
 }
 
 static gboolean notify_ccwa(void *user_data)
@@ -396,13 +420,6 @@ static gboolean notify_ring(void *user_data)
 		return TRUE;
 
 	c = find_call_with_status(em, CALL_STATUS_INCOMING);
-
-	/*
-	 * In case of waiting call becoming an incoming call, call status
-	 * change may not have been done yet, so try to find waiting call too
-	 */
-	if (c == NULL)
-		c = find_call_with_status(em, CALL_STATUS_WAITING);
 
 	if (c == NULL)
 		return TRUE;
@@ -759,8 +776,61 @@ fail:
 	}
 }
 
+static void bia_cb(GAtServer *server, GAtServerRequestType type,
+			GAtResult *result, gpointer user_data)
+{
+	struct ofono_emulator *em = user_data;
+
+	switch (type) {
+	case G_AT_SERVER_REQUEST_TYPE_SET:
+	{
+		GAtResultIter iter;
+		GSList *l;
+		int val;
+
+		g_at_result_iter_init(&iter, result);
+		g_at_result_iter_next(&iter, "");
+
+		/* check validity of the request */
+		while (g_at_result_iter_next_number_default(&iter, 0, &val))
+			if (val != 0 &&  val != 1)
+				goto fail;
+
+		/* Check that we have no non-numbers in the stream */
+		if (g_at_result_iter_skip_next(&iter) == TRUE)
+			goto fail;
+
+		/* request is valid, update the indicator activation status */
+		g_at_result_iter_init(&iter, result);
+		g_at_result_iter_next(&iter, "");
+
+		for (l = em->indicators; l; l = l->next) {
+			struct indicator *ind = l->data;
+
+			if (g_at_result_iter_next_number_default(&iter,
+						ind->active, &val) == FALSE)
+				break;
+
+			if (ind->mandatory == TRUE)
+				continue;
+
+			ind->active = val;
+		}
+
+		g_at_server_send_final(server, G_AT_SERVER_RESULT_OK);
+		break;
+	}
+
+	default:
+fail:
+		g_at_server_send_final(server, G_AT_SERVER_RESULT_ERROR);
+		break;
+	}
+}
+
 static void emulator_add_indicator(struct ofono_emulator *em, const char* name,
-					int min, int max, int dflt)
+					int min, int max, int dflt,
+					gboolean mandatory)
 {
 	struct indicator *ind;
 
@@ -774,6 +844,8 @@ static void emulator_add_indicator(struct ofono_emulator *em, const char* name,
 	ind->min = min;
 	ind->max = max;
 	ind->value = dflt;
+	ind->active = TRUE;
+	ind->mandatory = mandatory;
 
 	em->indicators = g_slist_append(em->indicators, ind);
 }
@@ -832,17 +904,24 @@ void ofono_emulator_register(struct ofono_emulator *em, int fd)
 	g_at_server_set_debug(em->server, emulator_debug, "Server");
 	g_at_server_set_disconnect_function(em->server,
 						emulator_disconnect, em);
+	g_at_server_set_finish_callback(em->server, notify_deferred_indicators,
+						em);
 
 	if (em->type == OFONO_EMULATOR_TYPE_HFP) {
-		emulator_add_indicator(em, OFONO_EMULATOR_IND_SERVICE, 0, 1, 0);
-		emulator_add_indicator(em, OFONO_EMULATOR_IND_CALL, 0, 1, 0);
+		emulator_add_indicator(em, OFONO_EMULATOR_IND_SERVICE, 0, 1, 0,
+									FALSE);
+		emulator_add_indicator(em, OFONO_EMULATOR_IND_CALL, 0, 1, 0,
+									TRUE);
 		emulator_add_indicator(em, OFONO_EMULATOR_IND_CALLSETUP, 0, 3,
-									0);
+								0, TRUE);
 		emulator_add_indicator(em, OFONO_EMULATOR_IND_CALLHELD, 0, 2,
-									0);
-		emulator_add_indicator(em, OFONO_EMULATOR_IND_SIGNAL, 0, 5, 0);
-		emulator_add_indicator(em, OFONO_EMULATOR_IND_ROAMING, 0, 1, 0);
-		emulator_add_indicator(em, OFONO_EMULATOR_IND_BATTERY, 0, 5, 5);
+								0, TRUE);
+		emulator_add_indicator(em, OFONO_EMULATOR_IND_SIGNAL, 0, 5, 0,
+									FALSE);
+		emulator_add_indicator(em, OFONO_EMULATOR_IND_ROAMING, 0, 1, 0,
+									FALSE);
+		emulator_add_indicator(em, OFONO_EMULATOR_IND_BATTERY, 0, 5, 5,
+									FALSE);
 
 		g_at_server_register(em->server, "+BRSF", brsf_cb, em, NULL);
 		g_at_server_register(em->server, "+CIND", cind_cb, em, NULL);
@@ -850,6 +929,7 @@ void ofono_emulator_register(struct ofono_emulator *em, int fd)
 		g_at_server_register(em->server, "+CLIP", clip_cb, em, NULL);
 		g_at_server_register(em->server, "+CCWA", ccwa_cb, em, NULL);
 		g_at_server_register(em->server, "+CMEE", cmee_cb, em, NULL);
+		g_at_server_register(em->server, "+BIA", bia_cb, em, NULL);
 	}
 
 	__ofono_atom_register(em->atom, emulator_unregister);
@@ -1123,9 +1203,12 @@ void ofono_emulator_set_indicator(struct ofono_emulator *em,
 	if (waiting)
 		notify_ccwa(em);
 
-	if (em->events_mode == 3 && em->events_ind && em->slc) {
-		sprintf(buf, "+CIEV: %d,%d", i, ind->value);
-		g_at_server_send_unsolicited(em->server, buf);
+	if (em->events_mode == 3 && em->events_ind && em->slc && ind->active) {
+		if (!g_at_server_command_pending(em->server)) {
+			sprintf(buf, "+CIEV: %d,%d", i, ind->value);
+			g_at_server_send_unsolicited(em->server, buf);
+		} else
+			ind->deferred = TRUE;
 	}
 
 	/*
@@ -1161,4 +1244,27 @@ start_ring:
 	notify_ring(em);
 	em->callsetup_source = g_timeout_add_seconds(RING_TIMEOUT,
 							notify_ring, em);
+}
+
+void __ofono_emulator_set_indicator_forced(struct ofono_emulator *em,
+						const char *name, int value)
+{
+	int i;
+	struct indicator *ind;
+	char buf[20];
+
+	ind = find_indicator(em, name, &i);
+
+	if (ind == NULL || value < ind->min || value > ind->max)
+		return;
+
+	ind->value = value;
+
+	if (em->events_mode == 3 && em->events_ind && em->slc && ind->active) {
+		if (!g_at_server_command_pending(em->server)) {
+			sprintf(buf, "+CIEV: %d,%d", i, ind->value);
+			g_at_server_send_unsolicited(em->server, buf);
+		} else
+			ind->deferred = TRUE;
+	}
 }

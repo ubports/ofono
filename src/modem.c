@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -118,6 +118,20 @@ struct modem_property {
 	enum property_type type;
 	void *value;
 };
+
+static const char *modem_type_to_string(enum ofono_modem_type type)
+{
+	switch (type) {
+	case OFONO_MODEM_TYPE_HARDWARE:
+		return "hardware";
+	case OFONO_MODEM_TYPE_HFP:
+		return "hfp";
+	case OFONO_MODEM_TYPE_SAP:
+		return "sap";
+	}
+
+	return "unknown";
+}
 
 unsigned int __ofono_modem_callid_next(struct ofono_modem *modem)
 {
@@ -578,6 +592,7 @@ static gboolean modem_has_sim(struct ofono_modem *modem)
 
 	return FALSE;
 }
+
 static void common_online_cb(const struct ofono_error *error, void *data)
 {
 	struct ofono_modem *modem = data;
@@ -753,8 +768,9 @@ void __ofono_modem_append_properties(struct ofono_modem *modem,
 	char **features;
 	int i;
 	GSList *l;
-	struct ofono_atom *devinfo_atom;
+	struct ofono_devinfo *info;
 	dbus_bool_t emergency = ofono_modem_get_emergency_mode(modem);
+	const char *strtype;
 
 	ofono_dbus_dict_append(dict, "Online", DBUS_TYPE_BOOLEAN,
 				&modem->online);
@@ -768,14 +784,8 @@ void __ofono_modem_append_properties(struct ofono_modem *modem,
 	ofono_dbus_dict_append(dict, "Emergency", DBUS_TYPE_BOOLEAN,
 				&emergency);
 
-	devinfo_atom = __ofono_modem_find_atom(modem, OFONO_ATOM_TYPE_DEVINFO);
-
-	/* We cheat a little here and don't check the registered status */
-	if (devinfo_atom) {
-		struct ofono_devinfo *info;
-
-		info = __ofono_atom_get_data(devinfo_atom);
-
+	info = __ofono_atom_find(OFONO_ATOM_TYPE_DEVINFO, modem);
+	if (info) {
 		if (info->manufacturer)
 			ofono_dbus_dict_append(dict, "Manufacturer",
 						DBUS_TYPE_STRING,
@@ -813,6 +823,9 @@ void __ofono_modem_append_properties(struct ofono_modem *modem,
 	if (modem->name)
 		ofono_dbus_dict_append(dict, "Name", DBUS_TYPE_STRING,
 					&modem->name);
+
+	strtype = modem_type_to_string(modem->driver->modem_type);
+	ofono_dbus_dict_append(dict, "Type", DBUS_TYPE_STRING, &strtype);
 }
 
 static DBusMessage *modem_get_properties(DBusConnection *conn,
@@ -1398,6 +1411,7 @@ static void query_model(struct ofono_devinfo *info)
 	if (info->driver->query_model == NULL) {
 		/* If model is not supported, don't bother querying revision */
 		query_serial(info);
+		return;
 	}
 
 	info->driver->query_model(info, query_model_cb, info);
@@ -1779,7 +1793,7 @@ struct ofono_modem *ofono_modem_create(const char *name, const char *type)
 		return NULL;
 
 	if (name == NULL)
-		snprintf(path, sizeof(path), "/%s%d", type, next_modem_id);
+		snprintf(path, sizeof(path), "/%s_%d", type, next_modem_id);
 	else
 		snprintf(path, sizeof(path), "/%s", name);
 
@@ -1858,6 +1872,8 @@ static void call_modemwatches(struct ofono_modem *modem, gboolean added)
 	struct ofono_watchlist_item *watch;
 	ofono_modemwatch_cb_t notify;
 
+	DBG("%p added:%d", modem, added);
+
 	for (l = g_modemwatches->items; l; l = l->next) {
 		watch = l->data;
 
@@ -1872,6 +1888,8 @@ static void emit_modem_added(struct ofono_modem *modem)
 	DBusMessageIter iter;
 	DBusMessageIter dict;
 	const char *path;
+
+	DBG("%p", modem);
 
 	signal = dbus_message_new_signal(OFONO_MANAGER_PATH,
 						OFONO_MANAGER_INTERFACE,
@@ -1908,6 +1926,8 @@ int ofono_modem_register(struct ofono_modem *modem)
 {
 	DBusConnection *conn = ofono_dbus_get_connection();
 	GSList *l;
+
+	DBG("%p", modem);
 
 	if (modem == NULL)
 		return -EINVAL;
@@ -1970,6 +1990,8 @@ static void emit_modem_removed(struct ofono_modem *modem)
 	DBusConnection *conn = ofono_dbus_get_connection();
 	const char *path = modem->path;
 
+	DBG("%p", modem);
+
 	g_dbus_emit_signal(conn, OFONO_MANAGER_PATH, OFONO_MANAGER_INTERFACE,
 				"ModemRemoved", DBUS_TYPE_OBJECT_PATH, &path,
 				DBUS_TYPE_INVALID);
@@ -1978,6 +2000,8 @@ static void emit_modem_removed(struct ofono_modem *modem)
 static void modem_unregister(struct ofono_modem *modem)
 {
 	DBusConnection *conn = ofono_dbus_get_connection();
+
+	DBG("%p", modem);
 
 	if (modem->powered == TRUE)
 		set_powered(modem, FALSE);
@@ -2052,9 +2076,7 @@ void ofono_modem_remove(struct ofono_modem *modem)
 
 	g_modem_list = g_slist_remove(g_modem_list, modem);
 
-	if (modem->driver_type)
-		g_free(modem->driver_type);
-
+	g_free(modem->driver_type);
 	g_free(modem->name);
 	g_free(modem->path);
 	g_free(modem);

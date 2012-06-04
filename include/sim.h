@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -183,6 +183,7 @@ void *ofono_sim_get_data(struct ofono_sim *sim);
 const char *ofono_sim_get_imsi(struct ofono_sim *sim);
 const char *ofono_sim_get_mcc(struct ofono_sim *sim);
 const char *ofono_sim_get_mnc(struct ofono_sim *sim);
+const char *ofono_sim_get_spn(struct ofono_sim *sim);
 enum ofono_sim_phase ofono_sim_get_phase(struct ofono_sim *sim);
 
 enum ofono_sim_cphs_phase ofono_sim_get_cphs_phase(struct ofono_sim *sim);
@@ -195,6 +196,14 @@ unsigned int ofono_sim_add_state_watch(struct ofono_sim *sim,
 void ofono_sim_remove_state_watch(struct ofono_sim *sim, unsigned int id);
 
 enum ofono_sim_state ofono_sim_get_state(struct ofono_sim *sim);
+
+typedef void (*ofono_sim_spn_cb_t)(const char *spn, const char *dc, void *data);
+
+gboolean ofono_sim_add_spn_watch(struct ofono_sim *sim, unsigned int *id,
+					ofono_sim_spn_cb_t cb, void *data,
+					ofono_destroy_func destroy);
+
+gboolean ofono_sim_remove_spn_watch(struct ofono_sim *sim, unsigned int *id);
 
 void ofono_sim_inserted_notify(struct ofono_sim *sim, ofono_bool_t inserted);
 

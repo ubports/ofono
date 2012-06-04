@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -174,7 +174,6 @@ static void cbs_dispatch_text(struct ofono_cbs *cbs, enum sms_class cls,
 void ofono_cbs_notify(struct ofono_cbs *cbs, const unsigned char *pdu,
 				int pdu_len)
 {
-	struct ofono_modem *modem = __ofono_atom_get_modem(cbs->atom);
 	struct cbs c;
 	enum sms_class cls;
 	gboolean udhi;
@@ -193,14 +192,10 @@ void ofono_cbs_notify(struct ofono_cbs *cbs, const unsigned char *pdu,
 	}
 
 	if (cbs_topic_in_range(c.message_identifier, cbs->efcbmid_contents)) {
-		struct ofono_atom *sim_atom;
-
-		sim_atom = __ofono_modem_find_atom(modem, OFONO_ATOM_TYPE_SIM);
-		if (sim_atom == NULL)
+		if (cbs->sim == NULL)
 			return;
 
-		if (!__ofono_sim_service_available(
-					__ofono_atom_get_data(sim_atom),
+		if (!__ofono_sim_service_available(cbs->sim,
 					SIM_UST_SERVICE_DATA_DOWNLOAD_SMS_CB,
 					SIM_SST_SERVICE_DATA_DOWNLOAD_SMS_CB))
 			return;
@@ -1085,8 +1080,6 @@ void ofono_cbs_register(struct ofono_cbs *cbs)
 	DBusConnection *conn = ofono_dbus_get_connection();
 	struct ofono_modem *modem = __ofono_atom_get_modem(cbs->atom);
 	const char *path = __ofono_atom_get_path(cbs->atom);
-	struct ofono_atom *sim_atom;
-	struct ofono_atom *stk_atom;
 
 	if (!g_dbus_register_interface(conn, path,
 					OFONO_CELL_BROADCAST_INTERFACE,
@@ -1099,20 +1092,15 @@ void ofono_cbs_register(struct ofono_cbs *cbs)
 
 	ofono_modem_add_interface(modem, OFONO_CELL_BROADCAST_INTERFACE);
 
-	sim_atom = __ofono_modem_find_atom(modem, OFONO_ATOM_TYPE_SIM);
-
-	if (sim_atom) {
-		cbs->sim = __ofono_atom_get_data(sim_atom);
+	cbs->sim = __ofono_atom_find(OFONO_ATOM_TYPE_SIM, modem);
+	if (cbs->sim) {
 		cbs->sim_context = ofono_sim_context_create(cbs->sim);
 
 		if (ofono_sim_get_state(cbs->sim) == OFONO_SIM_STATE_READY)
 			cbs_got_imsi(cbs);
 	}
 
-	stk_atom = __ofono_modem_find_atom(modem, OFONO_ATOM_TYPE_STK);
-
-	if (stk_atom)
-		cbs->stk = __ofono_atom_get_data(stk_atom);
+	cbs->stk = __ofono_atom_find(OFONO_ATOM_TYPE_STK, modem);
 
 	cbs->netreg_watch = __ofono_modem_add_atom_watch(modem,
 					OFONO_ATOM_TYPE_NETREG,

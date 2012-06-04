@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -91,11 +91,11 @@ static void mbm_remove(struct ofono_modem *modem)
 
 	ofono_modem_set_data(modem, NULL);
 
+	/* Cleanup potential SIM state polling */
+	at_util_sim_state_query_free(data->sim_state_query);
+
 	g_at_chat_unref(data->data_port);
 	g_at_chat_unref(data->modem_port);
-
-	if (data->sim_state_query)
-		at_util_sim_state_query_free(data->sim_state_query);
 
 	g_free(data);
 }
@@ -164,7 +164,7 @@ done:
 	data->sim_state_query = at_util_sim_state_query_new(data->modem_port,
 								1, 5,
 								sim_state_cb,
-								modem);
+								modem, NULL);
 }
 
 static void cfun_enable(gboolean ok, GAtResult *result, gpointer user_data)
@@ -481,10 +481,10 @@ static struct ofono_modem_driver mbm_driver = {
 	.remove		= mbm_remove,
 	.enable		= mbm_enable,
 	.disable	= mbm_disable,
-	.set_online     = mbm_set_online,
+	.set_online	= mbm_set_online,
 	.pre_sim	= mbm_pre_sim,
 	.post_sim	= mbm_post_sim,
-	.post_online    = mbm_post_online,
+	.post_online	= mbm_post_online,
 };
 
 static int mbm_init(void)

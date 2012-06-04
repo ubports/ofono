@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -38,9 +38,11 @@ enum sim_fileid {
 	SIM_EFIMSI_FILEID =			0x6F07,
 	SIM_EF_CPHS_MWIS_FILEID =		0x6F11,
 	SIM_EF_CPHS_CFF_FILEID =		0x6F13,
+	SIM_EF_CPHS_SPN_FILEID =		0x6F14,
 	SIM_EF_CPHS_CSP_FILEID =		0x6F15,
 	SIM_EF_CPHS_INFORMATION_FILEID =	0x6F16,
 	SIM_EF_CPHS_MBDN_FILEID =		0x6F17,
+	SIM_EF_CPHS_SPN_SHORT_FILEID =		0x6F18,
 	SIM_EFUST_FILEID =			0x6F38,
 	SIM_EFSST_FILEID =			0x6F38, /* same as EFust */
 	SIM_EFADN_FILEID =			0x6F3A,
@@ -238,6 +240,15 @@ enum sim_sst_service {
 	SIM_SST_SERVICE_MWIS =				53,
 	SIM_SST_SERVICE_CFIS =				54,
 	SIM_SST_SERVICE_PROVIDER_DISPLAY_INFO =		55
+};
+
+/* CPHS 4.2, Section B.3.1.1 */
+enum sim_cphs_service {
+	SIM_CPHS_SERVICE_CSP =			0x0,
+	SIM_CPHS_SERVICE_SST =			0x1,
+	SIM_CPHS_SERVICE_MAILBOX_NUMBERS =	0x2,
+	SIM_CPHS_SERVICE_SHORT_SPN =		0x3,
+	SIM_CPHS_SERVICE_INFO_NUMBERS =		0x4,
 };
 
 /* CPHS 4.2, Section B4.7 CSP Service Group Codes */
@@ -481,5 +492,7 @@ gboolean sim_sst_is_available(unsigned char *service_sst, unsigned char len,
 						enum sim_sst_service index);
 gboolean sim_sst_is_active(unsigned char *service_sst, unsigned char len,
 						enum sim_sst_service index);
+gboolean sim_cphs_is_active(unsigned char *service_cphs,
+				enum sim_cphs_service index);
 
 GSList *sim_parse_app_template_entries(const unsigned char *buffer, int len);

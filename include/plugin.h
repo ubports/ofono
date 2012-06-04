@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -23,6 +23,7 @@
 #define __OFONO_PLUGIN_H
 
 #include <ofono/version.h>
+#include <ofono/log.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -50,6 +51,8 @@ struct ofono_plugin_desc {
 	int priority;
 	int (*init) (void);
 	void (*exit) (void);
+	void *debug_start;
+	void *debug_stop;
 };
 
 /**
@@ -69,10 +72,15 @@ struct ofono_plugin_desc {
 		};
 #else
 #define OFONO_PLUGIN_DEFINE(name, description, version, priority, init, exit) \
+		extern struct ofono_debug_desc __start___debug[] \
+				__attribute__ ((weak, visibility("hidden"))); \
+		extern struct ofono_debug_desc __stop___debug[] \
+				__attribute__ ((weak, visibility("hidden"))); \
 		extern struct ofono_plugin_desc ofono_plugin_desc \
 				__attribute__ ((visibility("default"))); \
 		struct ofono_plugin_desc ofono_plugin_desc = { \
-			#name, description, version, priority, init, exit \
+			#name, description, version, priority, init, exit, \
+			__start___debug, __stop___debug \
 		};
 #endif
 

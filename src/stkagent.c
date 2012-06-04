@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -37,6 +37,10 @@
 #include "smsutil.h"
 #include "stkutil.h"
 #include "stkagent.h"
+
+#ifndef DBUS_TIMEOUT_INFINITE
+#define DBUS_TIMEOUT_INFINITE ((int) 0x7fffffff)
+#endif
 
 enum allowed_error {
 	ALLOWED_ERROR_GO_BACK	= 0x1,
@@ -1005,7 +1009,7 @@ int stk_agent_display_action_info(struct stk_agent *agent, const char *text,
 					DBUS_TYPE_INVALID);
 
 	if (dbus_connection_send_with_reply(conn, agent->msg, &agent->call,
-						0) == FALSE ||
+					DBUS_TIMEOUT_INFINITE) == FALSE ||
 			agent->call == NULL)
 		return -EIO;
 
@@ -1132,8 +1136,8 @@ int stk_agent_display_action(struct stk_agent *agent,
 					DBUS_TYPE_INVALID);
 
 	if (dbus_connection_send_with_reply(conn, agent->msg, &agent->call,
-						0) == FALSE ||
-						agent->call == NULL)
+					DBUS_TIMEOUT_INFINITE) == FALSE ||
+			agent->call == NULL)
 		return -EIO;
 
 	agent->user_cb = cb;

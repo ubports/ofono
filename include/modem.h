@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -29,6 +29,12 @@ extern "C" {
 #include <ofono/types.h>
 
 struct ofono_modem;
+
+enum ofono_modem_type {
+	OFONO_MODEM_TYPE_HARDWARE = 0,
+	OFONO_MODEM_TYPE_HFP,
+	OFONO_MODEM_TYPE_SAP,
+};
 
 void ofono_modem_add_interface(struct ofono_modem *modem,
 				const char *interface);
@@ -75,6 +81,7 @@ typedef void (*ofono_modem_online_cb_t)(const struct ofono_error *error,
 
 struct ofono_modem_driver {
 	const char *name;
+	enum ofono_modem_type modem_type;
 
 	/* Detect existence of device and initialize any device-specific data
 	 * structures */

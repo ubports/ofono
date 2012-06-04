@@ -119,7 +119,7 @@ static gboolean parse_reply(DBusMessage *reply, const char **path,
 	if (dbus_message_iter_get_arg_type(&array) != DBUS_TYPE_OBJECT_PATH)
 		return FALSE;
 
-	dbus_message_iter_get_basic(&array, &path);
+	dbus_message_iter_get_basic(&array, path);
 
 	dbus_message_iter_next(&array);
 	if (dbus_message_iter_get_arg_type(&array) != DBUS_TYPE_ARRAY)
@@ -186,8 +186,7 @@ static void request_reply(DBusPendingCall *call, void *user_data)
 	if (reply == NULL)
 		goto badreply;
 
-	if (parse_reply(dbus_pending_call_steal_reply(call),
-			&path, &pns) == FALSE)
+	if (parse_reply(reply, &path, &pns) == FALSE)
 		goto error;
 
 	DBG("fd: %d, path: %s", pns.fd, path);
@@ -265,6 +264,7 @@ static int connman_request(ofono_private_network_cb_t cb, void *data)
 	req->data = data;
 	req->uid = id;
 	req->redundant = FALSE;
+	req->path = NULL;
 
 	dbus_pending_call_set_notify(call, request_reply, req, NULL);
 	g_hash_table_insert(requests, &req->uid, req);

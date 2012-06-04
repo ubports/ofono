@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -21,6 +21,9 @@
 
 #include <drivers/atmodem/atutil.h>
 
+extern void huawei_ussd_init(void);
+extern void huawei_ussd_exit(void);
+
 extern void huawei_voicecall_init(void);
 extern void huawei_voicecall_exit(void);
 
@@ -32,3 +35,6 @@ extern void huawei_radio_settings_exit(void);
 
 extern void huawei_gprs_context_init(void);
 extern void huawei_gprs_context_exit(void);
+
+extern void huawei_cdma_netreg_init(void);
+extern void huawei_cdma_netreg_exit(void);

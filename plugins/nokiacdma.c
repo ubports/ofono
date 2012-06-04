@@ -1,21 +1,22 @@
 /*
- * This file is part of oFono - Open Source Telephony
  *
- * Copyright (C) 2010 Nokia Corporation. All rights reserved.
+ *  oFono - Open Source Telephony
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * version 2 as published by the Free Software Foundation.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2010-2011  Nokia Corporation and/or its subsidiary(-ies).
  *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
- * 02110-1301 USA
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program; if not, write to the Free Software
+ *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
  */
 
@@ -94,6 +95,8 @@ static int nokiacdma_enable(struct ofono_modem *modem)
 	GIOChannel *channel;
 	const char *device;
 
+	DBG("%p", modem);
+
 	device = ofono_modem_get_string(modem, "Device");
 	if (device == NULL)
 		return -EINVAL;
@@ -138,12 +141,15 @@ static void nokiacdma_pre_sim(struct ofono_modem *modem)
 {
 	struct nokiacdma_data *data = ofono_modem_get_data(modem);
 
+	DBG("%p", modem);
+
 	ofono_cdma_voicecall_create(modem, 0, "cdmamodem", data->chat);
 	ofono_devinfo_create(modem, 0, "cdmamodem", data->chat);
 }
 
 static void nokiacdma_post_sim(struct ofono_modem *modem)
 {
+	DBG("%p", modem);
 }
 
 static void nokiacdma_post_online(struct ofono_modem *modem)
@@ -151,18 +157,19 @@ static void nokiacdma_post_online(struct ofono_modem *modem)
 	struct nokiacdma_data *data = ofono_modem_get_data(modem);
 
 	DBG("%p", modem);
+
 	ofono_cdma_connman_create(modem, 0, "cdmamodem", data->chat);
 }
 
 static struct ofono_modem_driver nokiacdma_driver = {
-	.name			= "nokiacdma",
-	.probe			= nokiacdma_probe,
-	.remove			= nokiacdma_remove,
-	.enable			= nokiacdma_enable,
-	.disable		= nokiacdma_disable,
-	.pre_sim		= nokiacdma_pre_sim,
-	.post_sim		= nokiacdma_post_sim,
-	.post_online		= nokiacdma_post_online,
+	.name		= "nokiacdma",
+	.probe		= nokiacdma_probe,
+	.remove		= nokiacdma_remove,
+	.enable		= nokiacdma_enable,
+	.disable	= nokiacdma_disable,
+	.pre_sim	= nokiacdma_pre_sim,
+	.post_sim	= nokiacdma_post_sim,
+	.post_online	= nokiacdma_post_online,
 };
 
 static int nokiacdma_init(void)

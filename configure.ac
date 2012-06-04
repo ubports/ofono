@@ -1,5 +1,5 @@
 AC_PREREQ(2.60)
-AC_INIT(ofono, 0.53)
+AC_INIT(ofono, 1.6)
 
 AM_INIT_AUTOMAKE([foreign subdir-objects color-tests])
 AM_CONFIG_HEADER(config.h)
@@ -67,8 +67,8 @@ AC_CHECK_FUNC(signalfd, dummy=yes,
 AC_CHECK_LIB(dl, dlopen, dummy=yes,
 			AC_MSG_ERROR(dynamic linking loader is required))
 
-PKG_CHECK_MODULES(GLIB, glib-2.0 >= 2.22, dummy=yes,
-				AC_MSG_ERROR(GLib >= 2.22 is required))
+PKG_CHECK_MODULES(GLIB, glib-2.0 >= 2.28, dummy=yes,
+				AC_MSG_ERROR(GLib >= 2.28 is required))
 AC_SUBST(GLIB_CFLAGS)
 AC_SUBST(GLIB_LIBS)
 
@@ -80,21 +80,8 @@ if (test "${enable_threads}" = "yes"); then
 	GLIB_LIBS="$GLIB_LIBS $GTHREAD_LIBS"
 fi
 
-PKG_CHECK_MODULES(DBUS, dbus-1 >= 1.0, dummy=yes,
-				AC_MSG_ERROR(D-Bus >= 1.0 is required))
-saved_CFLAGS="$CFLAGS"
-saved_LIBS="$LIBS"
-CFLAGS="$CFLAGS $DBUS_CFLAGS"
-LIBS="$LIBS $DBUS_LIBS"
-AC_CHECK_LIB(dbus-1, dbus_watch_get_unix_fd, dummy=yes,
-	AC_DEFINE(NEED_DBUS_WATCH_GET_UNIX_FD, 1,
-		[Define to 1 if you need the dbus_watch_get_unix_fd() function.]))
-AC_CHECK_LIB(dbus-1, dbus_connection_can_send_type, dummy=yes,
-	AC_DEFINE(NEED_DBUS_CONNECTION_CAN_SEND_TYPE, 1,
-		[Define to 1 if you need the dbus_connection_can_send_type() function.]
-))
-CFLAGS="$saved_CFLAGS"
-LIBS="$saved_LIBS"
+PKG_CHECK_MODULES(DBUS, dbus-1 >= 1.4, dummy=yes,
+				AC_MSG_ERROR(D-Bus >= 1.4 is required))
 AC_SUBST(DBUS_CFLAGS)
 AC_SUBST(DBUS_LIBS)
 
@@ -197,14 +184,29 @@ AC_SUBST(BLUEZ_CFLAGS)
 AC_SUBST(BLUEZ_LIBS)
 AM_CONDITIONAL(BLUETOOTH, test "${enable_bluetooth}" != "no")
 
-AC_MSG_CHECKING([for mobile-broadband-provider-info])
-PKG_CHECK_EXISTS(mobile-broadband-provider-info,
-	_PKG_CONFIG(PROVIDER_DATABASE, [variable=database],
+AC_ARG_WITH([provisiondb], AC_HELP_STRING([--with-provisiondb=FILE],
+	[location of provision database]), [path_provisiondb=${withval}])
+
+AC_ARG_ENABLE(provision, AC_HELP_STRING([--disable-provision],
+				[disable provisioning suport]),
+					[enable_provision=${enableval}])
+if (test "${enable_provision}" != "no"); then
+	if (test -n "${path_provisiondb}"); then
+		AC_DEFINE_UNQUOTED(PROVIDER_DATABASE, "${path_provisiondb}",
+						[Mobile provider database])
+	else
+		AC_MSG_CHECKING([for mobile-broadband-provider-info])
+		PKG_CHECK_EXISTS(mobile-broadband-provider-info,
+			_PKG_CONFIG(PROVIDER_DATABASE, [variable=database],
 					[mobile-broadband-provider-info])
-	AC_DEFINE_UNQUOTED(PROVIDER_DATABASE, "$pkg_cv_PROVIDER_DATABASE",
-					[Mobile provider database])
-	AC_MSG_RESULT([yes]),
-	AC_MSG_RESULT([no]))
+			AC_DEFINE_UNQUOTED(PROVIDER_DATABASE,
+						"$pkg_cv_PROVIDER_DATABASE",
+						[Mobile provider database])
+			AC_MSG_RESULT([yes]),
+			AC_MSG_ERROR(Mobile broadband provider database is required))
+	fi
+fi
+AM_CONDITIONAL(PROVISION, test "${enable_provision}" != "no")
 
 AC_ARG_ENABLE(datafiles, AC_HELP_STRING([--disable-datafiles],
 			[don't install configuration and data files]),

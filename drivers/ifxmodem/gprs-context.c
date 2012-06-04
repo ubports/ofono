@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -64,6 +64,7 @@ struct gprs_context_data {
 	char password[OFONO_GPRS_MAX_PASSWORD_LENGTH + 1];
 	GAtRawIP *rawip;
 	enum state state;
+	enum ofono_gprs_proto proto;
 	char address[32];
 	char dns1[32];
 	char dns2[32];
@@ -301,11 +302,25 @@ static void setup_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	if (g_at_chat_send(gcd->chat, buf, none_prefix, NULL, NULL, NULL) == 0)
 		goto error;
 
-	sprintf(buf, "AT+XDNS=%u,1", gcd->active_context);
+	g_at_chat_send(gcd->chat, "AT+XDNS=?", none_prefix, NULL, NULL, NULL);
+
+	switch (gcd->proto) {
+	case OFONO_GPRS_PROTO_IP:
+		sprintf(buf, "AT+XDNS=%u,1", gcd->active_context);
+		break;
+	case OFONO_GPRS_PROTO_IPV6:
+		sprintf(buf, "AT+XDNS=%u,2", gcd->active_context);
+		break;
+	case OFONO_GPRS_PROTO_IPV4V6:
+		sprintf(buf, "AT+XDNS=%u,3", gcd->active_context);
+		break;
+	}
+
 	if (g_at_chat_send(gcd->chat, buf, none_prefix, NULL, NULL, NULL) == 0)
 		goto error;
 
 	sprintf(buf, "AT+CGACT=1,%u", gcd->active_context);
+
 	if (g_at_chat_send(gcd->chat, buf, none_prefix,
 				activate_cb, gc, NULL) > 0)
 		return;
@@ -320,11 +335,7 @@ static void ifx_gprs_activate_primary(struct ofono_gprs_context *gc,
 {
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 	char buf[OFONO_GPRS_MAX_APN_LENGTH + 128];
-	int len;
-
-	/* IPv6 support not implemented */
-	if (ctx->proto != OFONO_GPRS_PROTO_IP)
-		goto error;
+	int len = 0;
 
 	DBG("cid %u", ctx->cid);
 
@@ -335,8 +346,22 @@ static void ifx_gprs_activate_primary(struct ofono_gprs_context *gc,
 	memcpy(gcd->password, ctx->password, sizeof(ctx->password));
 
 	gcd->state = STATE_ENABLING;
+	gcd->proto = ctx->proto;
 
-	len = snprintf(buf, sizeof(buf), "AT+CGDCONT=%u,\"IP\"", ctx->cid);
+	switch (ctx->proto) {
+	case OFONO_GPRS_PROTO_IP:
+		len = snprintf(buf, sizeof(buf), "AT+CGDCONT=%u,\"IP\"",
+								ctx->cid);
+		break;
+	case OFONO_GPRS_PROTO_IPV6:
+		len = snprintf(buf, sizeof(buf), "AT+CGDCONT=%u,\"IPV6\"",
+								ctx->cid);
+		break;
+	case OFONO_GPRS_PROTO_IPV4V6:
+		len = snprintf(buf, sizeof(buf), "AT+CGDCONT=%u,\"IPV4V6\"",
+								ctx->cid);
+		break;
+	}
 
 	if (ctx->apn)
 		snprintf(buf + len, sizeof(buf) - len - 3,
@@ -346,7 +371,6 @@ static void ifx_gprs_activate_primary(struct ofono_gprs_context *gc,
 				setup_cb, gc, NULL) > 0)
 		return;
 
-error:
 	CALLBACK_WITH_FAILURE(cb, data);
 }
 
