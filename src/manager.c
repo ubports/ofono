@@ -80,14 +80,18 @@ static DBusMessage *manager_get_modems(DBusConnection *conn,
 	return reply;
 }
 
-static GDBusMethodTable manager_methods[] = {
-	{ "GetModems",          "",    "a(oa{sv})",  manager_get_modems },
+static const GDBusMethodTable manager_methods[] = {
+	{ GDBUS_METHOD("GetModems",
+				NULL, GDBUS_ARGS({ "modems", "a(oa{sv})" }),
+				manager_get_modems) },
 	{ }
 };
 
-static GDBusSignalTable manager_signals[] = {
-	{ "ModemAdded",        "oa{sv}" },
-	{ "ModemRemoved",      "o" },
+static const GDBusSignalTable manager_signals[] = {
+	{ GDBUS_SIGNAL("ModemAdded",
+		GDBUS_ARGS({ "path", "o" }, { "properties", "a{sv}" })) },
+	{ GDBUS_SIGNAL("ModemRemoved",
+		GDBUS_ARGS({ "path", "o" })) },
 	{ }
 };
 

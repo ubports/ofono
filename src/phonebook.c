@@ -479,13 +479,14 @@ static DBusMessage *import_entries(DBusConnection *conn, DBusMessage *msg,
 	return NULL;
 }
 
-static GDBusMethodTable phonebook_methods[] = {
-	{ "Import",	"",	"s",	import_entries,
-					G_DBUS_METHOD_FLAG_ASYNC },
+static const GDBusMethodTable phonebook_methods[] = {
+	{ GDBUS_ASYNC_METHOD("Import",
+			NULL, GDBUS_ARGS({ "entries", "s" }),
+			import_entries) },
 	{ }
 };
 
-static GDBusSignalTable phonebook_signals[] = {
+static const GDBusSignalTable phonebook_signals[] = {
 	{ }
 };
 

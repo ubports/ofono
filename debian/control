@@ -2,7 +2,7 @@ Source: ofono
 Section: admin
 Priority: optional
 Maintainer: Debian Telepathy maintainers <pkg-telepathy-maintainers@lists.alioth.debian.org>
-Uploaders: Jonny Lamb <jonny@debian.org>, Hector Oron <zumbi@debian.org>
+Uploaders: Jonny Lamb <jonny@debian.org>, Hector Oron <zumbi@debian.org>, Konstantinos Margaritis <markos@debian.org>
 Build-Depends: debhelper (>= 5),
                cdbs,
                libglib2.0-dev (>= 2.22),

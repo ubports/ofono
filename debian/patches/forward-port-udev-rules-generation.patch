@@ -2,45 +2,44 @@ Description: Install udev rules files as in previous releases.
  Current release does not install udev rules files, the following patch
  its a forward port of the logic to install udev rules files found on
  previous releases.
- ofono (1.6-1) unstable; urgency=low
+ ofono (1.9-1) unstable; urgency=low
  .
    * New upstream release.
    * Add myself to uploaders.
-   * Update Standards-Version.
-   * Change source/format to 3.0 (quilt)
-Author: Hector Oron <zumbi@debian.org>
+   * Update Hector's udev rules patch to new version
+Author: Konstantinos Margaritis <markos@debian.org>
 
 ---
 The information above should follow the Patch Tagging Guidelines, please
 checkout http://dep.debian.net/deps/dep3/ to learn about the format. Here
 are templates for supplementary fields that you might want to add:
 
-Last-Update: <2012-06-01>
+Last-Update: <2012-07-30>
 
-Index: ofono-1.6/Makefile.in
+Index: ofono-1.9/Makefile.in
 ===================================================================
---- ofono-1.6.orig/Makefile.in	2012-06-02 00:10:07.950794404 +0200
-+++ ofono-1.6/Makefile.in	2012-06-02 00:13:53.130786439 +0200
-@@ -758,7 +758,7 @@
+--- ofono-1.9.orig/Makefile.in	2012-06-02 00:10:07.950794404 +0200
++++ ofono-1.9/Makefile.in	2012-06-02 00:13:53.130786439 +0200
+@@ -880,7 +880,7 @@
  am__dist_conf_DATA_DIST = plugins/phonesim.conf
- am__dist_dbusconf_DATA_DIST = src/ofono.conf
+ am__dist_dbusconf_DATA_DIST = src/ofono.conf dundee/dundee.conf
  DATA = $(dist_conf_DATA) $(dist_dbusconf_DATA) $(pkgconfig_DATA) \
 -	$(state_DATA) $(systemdunit_DATA)
 +	$(rules_DATA) $(state_DATA) $(systemdunit_DATA)
  HEADERS = $(nodist_pkginclude_HEADERS) $(pkginclude_HEADERS)
  ETAGS = etags
  CTAGS = ctags
-@@ -1008,6 +1008,9 @@
+@@ -1130,6 +1130,9 @@
  				gisi/socket.c gisi/socket.h
  
  btio_sources = btio/btio.h btio/btio.c
 +udev_files = plugins/ofono.rules plugins/ofono-speedup.rules
 +@DATAFILES_TRUE@@UDEV_TRUE@rulesdir = @UDEV_DATADIR@
 +@DATAFILES_TRUE@@UDEV_TRUE@rules_DATA = $(foreach file,$(udev_files), plugins/97-$(notdir $(file)))
- src_ofonod_SOURCES = $(gdbus_sources) $(builtin_sources) src/ofono.ver \
- 			src/main.c src/ofono.h src/log.c src/plugin.c \
- 			src/modem.c src/common.h src/common.c \
-@@ -1154,7 +1157,7 @@
+ @QMIMODEM_TRUE@qmi_sources = drivers/qmimodem/qmi.h drivers/qmimodem/qmi.c \
+ @QMIMODEM_TRUE@					drivers/qmimodem/ctl.h \
+ @QMIMODEM_TRUE@					drivers/qmimodem/dms.h \
+@@ -1288,7 +1291,7 @@
  
  @TEST_TRUE@testdir = $(pkglibdir)/test
  @TEST_TRUE@test_SCRIPTS = $(test_scripts)
@@ -49,11 +48,10 @@ Index: ofono-1.6/Makefile.in
  				$(doc_files) $(test_scripts)
  
  dist_man_MANS = doc/ofonod.8
-@@ -2711,6 +2714,27 @@
+@@ -2995,6 +2998,26 @@
  	@list='$(pkgconfig_DATA)'; test -n "$(pkgconfigdir)" || list=; \
  	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
  	dir='$(DESTDIR)$(pkgconfigdir)'; $(am__uninstall_files_from_dir)
-+
 +install-rulesDATA: $(rules_DATA)
 +	@$(NORMAL_INSTALL)
 +	test -z "$(rulesdir)" || $(MKDIR_P) "$(DESTDIR)$(rulesdir)"
@@ -76,8 +74,8 @@ Index: ofono-1.6/Makefile.in
 +	cd "$(DESTDIR)$(rulesdir)" && rm -f $$files
  install-stateDATA: $(state_DATA)
  	@$(NORMAL_INSTALL)
- 	test -z "$(statedir)" || $(MKDIR_P) "$(DESTDIR)$(statedir)"
-@@ -3223,7 +3247,8 @@
+ 	@list='$(state_DATA)'; test -n "$(statedir)" || list=; \
+@@ -3525,7 +3548,8 @@
  install-data-am: install-dist_confDATA install-dist_dbusconfDATA \
  	install-man install-nodist_pkgincludeHEADERS \
  	install-pkgconfigDATA install-pkgincludeHEADERS \
@@ -87,7 +85,7 @@ Index: ofono-1.6/Makefile.in
  
  install-dvi: install-dvi-am
  
-@@ -3274,7 +3299,7 @@
+@@ -3576,7 +3600,7 @@
  uninstall-am: uninstall-dist_confDATA uninstall-dist_dbusconfDATA \
  	uninstall-man uninstall-nodist_pkgincludeHEADERS \
  	uninstall-pkgconfigDATA uninstall-pkgincludeHEADERS \
@@ -96,7 +94,7 @@ Index: ofono-1.6/Makefile.in
  	uninstall-systemdunitDATA uninstall-testSCRIPTS
  
  uninstall-man: uninstall-man8
-@@ -3295,17 +3320,18 @@
+@@ -3597,17 +3621,18 @@
  	install-info install-info-am install-man install-man8 \
  	install-nodist_pkgincludeHEADERS install-pdf install-pdf-am \
  	install-pkgconfigDATA install-pkgincludeHEADERS install-ps \
@@ -125,3 +123,4 @@ Index: ofono-1.6/Makefile.in
  
  
  src/builtin.h: src/genbuiltin config.status
+

@@ -60,6 +60,7 @@ static const char *clck_prefix[] = { "+CLCK:", NULL };
 static const char *huawei_cpin_prefix[] = { "^CPIN:", NULL };
 static const char *xpincnt_prefix[] = { "+XPINCNT:", NULL };
 static const char *zpinpuk_prefix[] = { "+ZPINPUK:", NULL };
+static const char *pinnum_prefix[] = { "%PINNUM:", NULL };
 static const char *oercn_prefix[] = { "_OERCN:", NULL };
 static const char *cpinr_prefixes[] = { "+CPINR:", "+CPINRE:", NULL };
 static const char *epin_prefix[] = { "*EPIN:", NULL };
@@ -505,6 +506,46 @@ error:
 	CALLBACK_WITH_FAILURE(cb, NULL, cbd->data);
 }
 
+static void pinnum_cb(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_sim_pin_retries_cb_t cb = cbd->cb;
+	const char *final = g_at_result_final_response(result);
+	GAtResultIter iter;
+	struct ofono_error error;
+	int retries[OFONO_SIM_PASSWORD_INVALID];
+	size_t i;
+	static enum ofono_sim_password_type password_types[] = {
+		OFONO_SIM_PASSWORD_SIM_PIN,
+		OFONO_SIM_PASSWORD_SIM_PUK,
+		OFONO_SIM_PASSWORD_SIM_PIN2,
+		OFONO_SIM_PASSWORD_SIM_PUK2,
+	};
+
+
+	decode_at_error(&error, final);
+
+	if (!ok) {
+		cb(&error, NULL, cbd->data);
+		return;
+	}
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "%PINNUM:"))
+		goto error;
+
+	BUILD_PIN_RETRIES_ARRAY(password_types, ARRAY_SIZE(password_types),
+				retries);
+
+	cb(&error, retries, cbd->data);
+
+	return;
+
+error:
+	CALLBACK_WITH_FAILURE(cb, NULL, cbd->data);
+}
+
 static void zpinpuk_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
@@ -830,6 +871,11 @@ static void at_pin_retries_query(struct ofono_sim *sim,
 					huawei_cpin_cb, cbd, g_free) > 0)
 			return;
 		break;
+	case OFONO_VENDOR_ICERA:
+		if (g_at_chat_send(sd->chat, "AT%PINNUM?", pinnum_prefix,
+					pinnum_cb, cbd, g_free) > 0)
+			return;
+		break;
 	case OFONO_VENDOR_ZTE:
 		if (g_at_chat_send(sd->chat, "AT+ZPINPUK=?", zpinpuk_prefix,
 					zpinpuk_cb, cbd, g_free) > 0)
@@ -880,7 +926,8 @@ static void at_cpin_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		return;
 	}
 
-	if (sd->vendor == OFONO_VENDOR_WAVECOM) {
+	if (sd->vendor == OFONO_VENDOR_WAVECOM ||
+			sd->vendor == OFONO_VENDOR_WAVECOM_Q2XXX) {
 		/* +CPIN: <pin> */
 		pin_required = final + 7;
 	} else {
@@ -1257,6 +1304,9 @@ static int at_sim_probe(struct ofono_sim *sim, unsigned int vendor,
 		break;
 	case OFONO_VENDOR_MBM:
 		g_at_chat_send(sd->chat, "AT*EPEE=1", NULL, NULL, NULL, NULL);
+		break;
+	case OFONO_VENDOR_WAVECOM_Q2XXX:
+		g_at_chat_add_terminator(chat, "+CPIN: READY", -1, TRUE);
 		break;
 	default:
 		break;

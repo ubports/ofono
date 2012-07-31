@@ -10,11 +10,11 @@ Signed-off-by: Jonny Lamb <jonny@debian.org>
  doc/ofonod.8 |    2 +-
  1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/doc/ofonod.8 b/doc/ofonod.8
-index 7bb908c..d288031 100644
---- a/doc/ofonod.8
-+++ b/doc/ofonod.8
-@@ -18,7 +18,7 @@ is used to manage \fID-Bus\fP permissions for oFono.
+Index: ofono-1.9/doc/ofonod.8
+===================================================================
+--- ofono-1.9.orig/doc/ofonod.8	2010-08-02 08:17:42.000000000 +0300
++++ ofono-1.9/doc/ofonod.8	2012-07-31 19:49:47.000000000 +0300
+@@ -18,7 +18,7 @@
  .SH OPTIONS
  .TP
  .B --debug, -d

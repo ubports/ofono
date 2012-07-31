@@ -114,8 +114,6 @@ static void ctm_query_enabled_callback(const struct ofono_error *error,
 	ofono_bool_t enabled_old;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
-		DBusMessage *reply;
-
 		DBG("Error during ctm enabled query");
 
 		reply = __ofono_error_failed(ctm->pending);
@@ -202,16 +200,19 @@ static DBusMessage *ctm_set_property(DBusConnection *conn, DBusMessage *msg,
 	return __ofono_error_invalid_args(msg);
 }
 
-static GDBusMethodTable ctm_methods[] = {
-	{ "GetProperties",  "",    "a{sv}",  ctm_get_properties,
-						G_DBUS_METHOD_FLAG_ASYNC },
-	{ "SetProperty",    "sv",  "",       ctm_set_property,
-						G_DBUS_METHOD_FLAG_ASYNC },
+static const GDBusMethodTable ctm_methods[] = {
+	{ GDBUS_ASYNC_METHOD("GetProperties",
+			NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
+			ctm_get_properties) },
+	{ GDBUS_ASYNC_METHOD("SetProperty",
+			GDBUS_ARGS({ "property", "s" }, { "value", "v" }), NULL,
+			ctm_set_property) },
 	{ }
 };
 
-static GDBusSignalTable ctm_signals[] = {
-	{ "PropertyChanged",	"sv" },
+static const GDBusSignalTable ctm_signals[] = {
+	{ GDBUS_SIGNAL("PropertyChanged",
+			GDBUS_ARGS({ "name", "s" }, { "value", "v" })) },
 	{ }
 };
 

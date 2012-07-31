@@ -517,16 +517,19 @@ static DBusMessage *cdma_connman_set_property(DBusConnection *conn,
 	return __ofono_error_invalid_args(msg);
 }
 
-static GDBusMethodTable cdma_connman_methods[] = {
-	{ "GetProperties",	"",	"a{sv}",
-						cdma_connman_get_properties },
-	{ "SetProperty",	"sv",	"",	cdma_connman_set_property,
-						G_DBUS_METHOD_FLAG_ASYNC },
+static const GDBusMethodTable cdma_connman_methods[] = {
+	{ GDBUS_METHOD("GetProperties",
+			NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
+			cdma_connman_get_properties) },
+	{ GDBUS_ASYNC_METHOD("SetProperty",
+			GDBUS_ARGS({ "property", "s" }, { "value", "v" }),
+			NULL, cdma_connman_set_property) },
 	{ }
 };
 
-static GDBusSignalTable cdma_connman_signals[] = {
-	{ "PropertyChanged",	"sv" },
+static const GDBusSignalTable cdma_connman_signals[] = {
+	{ GDBUS_SIGNAL("PropertyChanged",
+			GDBUS_ARGS({ "name", "s" }, { "value", "v" })) },
 	{ }
 };
 

@@ -107,12 +107,14 @@ static DBusMessage *network_get_properties(DBusConnection *conn,
 	return reply;
 }
 
-static GDBusMethodTable cdma_netreg_manager_methods[] = {
-	{ "GetProperties",  "",  "a{sv}",	network_get_properties },
+static const GDBusMethodTable cdma_netreg_manager_methods[] = {
+	{ GDBUS_METHOD("GetProperties",
+			NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
+			network_get_properties) },
 	{ }
 };
 
-static GDBusSignalTable cdma_netreg_manager_signals[] = {
+static const GDBusSignalTable cdma_netreg_manager_signals[] = {
 	{ }
 };
 
