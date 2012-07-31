@@ -268,13 +268,19 @@ static DBusMessage *smart_messaging_send_vcal(DBusConnection *conn,
 	return NULL;
 }
 
-static GDBusMethodTable smart_messaging_methods[] = {
-	{ "RegisterAgent",    "o",     "",  smart_messaging_register_agent },
-	{ "UnregisterAgent",  "o",     "",  smart_messaging_unregister_agent },
-	{ "SendBusinessCard", "say",   "o", smart_messaging_send_vcard,
-						G_DBUS_METHOD_FLAG_ASYNC },
-	{ "SendAppointment",  "say",   "o", smart_messaging_send_vcal,
-						G_DBUS_METHOD_FLAG_ASYNC },
+static const GDBusMethodTable smart_messaging_methods[] = {
+	{ GDBUS_METHOD("RegisterAgent", GDBUS_ARGS({ "path", "o" }), NULL,
+			smart_messaging_register_agent) },
+	{ GDBUS_METHOD("UnregisterAgent", GDBUS_ARGS({ "path", "o" }), NULL,
+			smart_messaging_unregister_agent) },
+	{ GDBUS_ASYNC_METHOD("SendBusinessCard",
+				GDBUS_ARGS({ "to", "s" }, { "card", "ay" }),
+				GDBUS_ARGS({ "path", "o" }),
+				smart_messaging_send_vcard) },
+	{ GDBUS_ASYNC_METHOD("SendAppointment",
+			GDBUS_ARGS({ "to", "s" }, { "appointment", "ay" }),
+			GDBUS_ARGS({ "path", "o" }),
+			smart_messaging_send_vcal) },
 	{ }
 };
 

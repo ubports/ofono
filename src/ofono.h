@@ -63,6 +63,12 @@ DBusMessage *__ofono_error_not_registered(DBusMessage *msg);
 DBusMessage *__ofono_error_canceled(DBusMessage *msg);
 DBusMessage *__ofono_error_access_denied(DBusMessage *msg);
 DBusMessage *__ofono_error_emergency_active(DBusMessage *msg);
+DBusMessage *__ofono_error_incorrect_password(DBusMessage *msg);
+DBusMessage *__ofono_error_not_allowed(DBusMessage *msg);
+DBusMessage *__ofono_error_not_recognized(DBusMessage *msg);
+
+DBusMessage *__ofono_error_from_error(const struct ofono_error *error,
+						DBusMessage *msg);
 
 void __ofono_dbus_pending_reply(DBusMessage **msg, DBusMessage *reply);
 
@@ -182,10 +188,10 @@ struct ofono_modem *__ofono_atom_get_modem(struct ofono_atom *atom);
 
 #define __ofono_atom_find(enum_type, modem)			\
 ({								\
-	struct ofono_atom *atom =				\
+	struct ofono_atom *tmp_atom =				\
 		__ofono_modem_find_atom(modem, enum_type);	\
 								\
-	atom ? __ofono_atom_get_data(atom) : NULL;		\
+	tmp_atom ? __ofono_atom_get_data(tmp_atom) : NULL;	\
 })
 
 void __ofono_atom_register(struct ofono_atom *atom,

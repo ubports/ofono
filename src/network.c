@@ -200,15 +200,15 @@ static void set_registration_mode(struct ofono_netreg *netreg, int mode)
 	netreg->mode = mode;
 
 	if (netreg->settings) {
-		const char *mode;
+		const char *mode_str;
 
 		if (netreg->mode == NETWORK_REGISTRATION_MODE_MANUAL)
-			mode = "manual";
+			mode_str = "manual";
 		else
-			mode = "auto";
+			mode_str = "auto";
 
 		g_key_file_set_string(netreg->settings, SETTINGS_GROUP,
-					"Mode", mode);
+					"Mode", mode_str);
 		storage_sync(netreg->imsi, SETTINGS_STORE, netreg->settings);
 	}
 
@@ -623,15 +623,18 @@ static DBusMessage *network_operator_register(DBusConnection *conn,
 	return NULL;
 }
 
-static GDBusMethodTable network_operator_methods[] = {
-	{ "GetProperties",  "",  "a{sv}",  network_operator_get_properties },
-	{ "Register",       "",  "",       network_operator_register,
-						G_DBUS_METHOD_FLAG_ASYNC },
+static const GDBusMethodTable network_operator_methods[] = {
+	{ GDBUS_METHOD("GetProperties",
+			NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
+			network_operator_get_properties) },
+	{ GDBUS_ASYNC_METHOD("Register", NULL, NULL,
+						network_operator_register) },
 	{ }
 };
 
-static GDBusSignalTable network_operator_signals[] = {
-	{ "PropertyChanged",	"sv" },
+static const GDBusSignalTable network_operator_signals[] = {
+	{ GDBUS_SIGNAL("PropertyChanged",
+			GDBUS_ARGS({ "name", "s" }, { "value", "v" })) },
 	{ }
 };
 
@@ -1020,18 +1023,24 @@ static DBusMessage *network_get_operators(DBusConnection *conn,
 	return reply;
 }
 
-static GDBusMethodTable network_registration_methods[] = {
-	{ "GetProperties",  "",  "a{sv}",	network_get_properties },
-	{ "Register",       "",  "",		network_register,
-						G_DBUS_METHOD_FLAG_ASYNC },
-	{ "GetOperators",   "",  "a(oa{sv})",	network_get_operators },
-	{ "Scan",           "",  "a(oa{sv})",	network_scan,
-						G_DBUS_METHOD_FLAG_ASYNC },
+static const GDBusMethodTable network_registration_methods[] = {
+	{ GDBUS_METHOD("GetProperties",
+			NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
+			network_get_properties) },
+	{ GDBUS_ASYNC_METHOD("Register",
+				NULL, NULL, network_register) },
+	{ GDBUS_METHOD("GetOperators",
+		NULL, GDBUS_ARGS({ "operators_with_properties", "a(oa{sv})" }),
+		network_get_operators) },
+	{ GDBUS_ASYNC_METHOD("Scan",
+		NULL, GDBUS_ARGS({ "operators_with_properties", "a(oa{sv})" }),
+		network_scan) },
 	{ }
 };
 
-static GDBusSignalTable network_registration_signals[] = {
-	{ "PropertyChanged",	"sv" },
+static const GDBusSignalTable network_registration_signals[] = {
+	{ GDBUS_SIGNAL("PropertyChanged",
+			GDBUS_ARGS({ "name", "s" }, { "value", "v" })) },
 	{ }
 };
 
@@ -1530,12 +1539,12 @@ void ofono_netreg_strength_notify(struct ofono_netreg *netreg, int strength)
 
 	if (strength != -1) {
 		const char *path = __ofono_atom_get_path(netreg->atom);
-		unsigned char strength = netreg->signal_strength;
+		unsigned char strength_byte = netreg->signal_strength;
 
 		ofono_dbus_signal_property_changed(conn, path,
 					OFONO_NETWORK_REGISTRATION_INTERFACE,
 					"Strength", DBUS_TYPE_BYTE,
-					&strength);
+					&strength_byte);
 	}
 
 	modem = __ofono_atom_get_modem(netreg->atom);

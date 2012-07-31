@@ -48,6 +48,7 @@
 
 #define GPRS_FLAG_ATTACHING 0x1
 #define GPRS_FLAG_RECHECK 0x2
+#define GPRS_FLAG_ATTACHED_UPDATE 0x4
 
 #define SETTINGS_STORE "gprs"
 #define SETTINGS_GROUP "Settings"
@@ -98,7 +99,7 @@ struct ofono_gprs {
 };
 
 struct ipv4_settings {
-	gboolean static_ip;
+	ofono_bool_t static_ip;
 	char *ip;
 	char *netmask;
 	char *gateway;
@@ -1282,15 +1283,19 @@ static DBusMessage *pri_set_property(DBusConnection *conn,
 	return __ofono_error_invalid_args(msg);
 }
 
-static GDBusMethodTable context_methods[] = {
-	{ "GetProperties",	"",	"a{sv}",	pri_get_properties },
-	{ "SetProperty",	"sv",	"",		pri_set_property,
-						G_DBUS_METHOD_FLAG_ASYNC },
+static const GDBusMethodTable context_methods[] = {
+	{ GDBUS_METHOD("GetProperties",
+			NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
+			pri_get_properties) },
+	{ GDBUS_ASYNC_METHOD("SetProperty",
+			GDBUS_ARGS({ "property", "s" }, { "value", "v" }),
+			NULL, pri_set_property) },
 	{ }
 };
 
-static GDBusSignalTable context_signals[] = {
-	{ "PropertyChanged",	"sv" },
+static const GDBusSignalTable context_signals[] = {
+	{ GDBUS_SIGNAL("PropertyChanged",
+			GDBUS_ARGS({ "name", "s" }, { "value", "v" })) },
 	{ }
 };
 
@@ -1436,6 +1441,45 @@ void ofono_gprs_resume_notify(struct ofono_gprs *gprs)
 	update_suspended_property(gprs, FALSE);
 }
 
+static gboolean have_active_contexts(struct ofono_gprs *gprs)
+{
+	GSList *l;
+	struct pri_context *ctx;
+
+	for (l = gprs->contexts; l; l = l->next) {
+		ctx = l->data;
+
+		if (ctx->active == TRUE)
+			return TRUE;
+	}
+
+	return FALSE;
+}
+
+static void release_active_contexts(struct ofono_gprs *gprs)
+{
+	GSList *l;
+	struct pri_context *ctx;
+
+	for (l = gprs->contexts; l; l = l->next) {
+		struct ofono_gprs_context *gc;
+
+		ctx = l->data;
+
+		if (ctx->active == FALSE)
+			continue;
+
+		/* This context is already being messed with */
+		if (ctx->pending)
+			continue;
+
+		gc = ctx->context_driver;
+
+		if (gc->driver->detach_shutdown != NULL)
+			gc->driver->detach_shutdown(gc, ctx->context.cid);
+	}
+}
+
 static void gprs_attached_update(struct ofono_gprs *gprs)
 {
 	DBusConnection *conn = ofono_dbus_get_connection();
@@ -1450,29 +1494,21 @@ static void gprs_attached_update(struct ofono_gprs *gprs)
 	if (attached == gprs->attached)
 		return;
 
-	gprs->attached = attached;
-
-	if (gprs->attached == FALSE) {
-		GSList *l;
-		struct pri_context *ctx;
-
-		for (l = gprs->contexts; l; l = l->next) {
-			ctx = l->data;
-
-			if (ctx->active == FALSE)
-				continue;
-
-			pri_reset_context_settings(ctx);
-			release_context(ctx);
-
-			value = FALSE;
-			ofono_dbus_signal_property_changed(conn, ctx->path,
-					OFONO_CONNECTION_CONTEXT_INTERFACE,
-					"Active", DBUS_TYPE_BOOLEAN, &value);
-		}
-
+	/*
+	 * If an active context is found, a PPP session might be still active
+	 * at driver level. "Attached" = TRUE property can't be signalled to
+	 * the applications registered on GPRS properties.
+	 * Active contexts have to be release at driver level.
+	 */
+	if (attached == FALSE) {
+		release_active_contexts(gprs);
 		gprs->bearer = -1;
+	} else if (have_active_contexts(gprs) == TRUE) {
+		gprs->flags |= GPRS_FLAG_ATTACHED_UPDATE;
+		return;
 	}
+
+	gprs->attached = attached;
 
 	path = __ofono_atom_get_path(gprs->atom);
 	value = attached;
@@ -1512,12 +1548,12 @@ static void gprs_attach_callback(const struct ofono_error *error, void *data)
 		gprs->driver_attached = !gprs->driver_attached;
 
 	if (gprs->driver->attached_status == NULL) {
-		struct ofono_error error;
+		struct ofono_error status_error;
 
-		error.type = OFONO_ERROR_TYPE_FAILURE;
-		error.error = 0;
+		status_error.type = OFONO_ERROR_TYPE_FAILURE;
+		status_error.error = 0;
 
-		registration_status_cb(&error, -1, gprs);
+		registration_status_cb(&status_error, -1, gprs);
 		return;
 	}
 
@@ -2062,23 +2098,34 @@ static DBusMessage *gprs_get_contexts(DBusConnection *conn,
 	return reply;
 }
 
-static GDBusMethodTable manager_methods[] = {
-	{ "GetProperties",     "",     "a{sv}",     gprs_get_properties },
-	{ "SetProperty",       "sv",   "",          gprs_set_property },
-	{ "AddContext",        "s",    "o",         gprs_add_context,
-						G_DBUS_METHOD_FLAG_ASYNC },
-	{ "RemoveContext",     "o",    "",          gprs_remove_context,
-						G_DBUS_METHOD_FLAG_ASYNC },
-	{ "DeactivateAll",     "",     "",          gprs_deactivate_all,
-						G_DBUS_METHOD_FLAG_ASYNC },
-	{ "GetContexts",       "",     "a(oa{sv})", gprs_get_contexts },
+static const GDBusMethodTable manager_methods[] = {
+	{ GDBUS_METHOD("GetProperties",
+			NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
+			gprs_get_properties) },
+	{ GDBUS_METHOD("SetProperty",
+			GDBUS_ARGS({ "property", "s" }, { "value", "v" }),
+			NULL, gprs_set_property) },
+	{ GDBUS_ASYNC_METHOD("AddContext",
+			GDBUS_ARGS({ "type", "s" }),
+			GDBUS_ARGS({ "path", "o" }),
+			gprs_add_context) },
+	{ GDBUS_ASYNC_METHOD("RemoveContext",
+			GDBUS_ARGS({ "path", "o" }), NULL,
+			gprs_remove_context) },
+	{ GDBUS_ASYNC_METHOD("DeactivateAll", NULL, NULL,
+			gprs_deactivate_all) },
+	{ GDBUS_METHOD("GetContexts", NULL,
+			GDBUS_ARGS({ "contexts_with_properties", "a(oa{sv})" }),
+			gprs_get_contexts) },
 	{ }
 };
 
-static GDBusSignalTable manager_signals[] = {
-	{ "PropertyChanged",	"sv" },
-	{ "ContextAdded",	"oa{sv}" },
-	{ "ContextRemoved",     "o" },
+static const GDBusSignalTable manager_signals[] = {
+	{ GDBUS_SIGNAL("PropertyChanged",
+			GDBUS_ARGS({ "name", "s" }, { "value", "v" })) },
+	{ GDBUS_SIGNAL("ContextAdded",
+			GDBUS_ARGS({ "path", "o" }, { "properties", "v" })) },
+	{ GDBUS_SIGNAL("ContextRemoved", GDBUS_ARGS({ "path", "o" })) },
 	{ }
 };
 
@@ -2251,6 +2298,16 @@ void ofono_gprs_context_deactivated(struct ofono_gprs_context *gc,
 					OFONO_CONNECTION_CONTEXT_INTERFACE,
 					"Active", DBUS_TYPE_BOOLEAN, &value);
 	}
+
+	/*
+	 * If "Attached" property was about to be signalled as TRUE but there
+	 * were still active contexts, try again to signal "Attached" property
+	 * to registered applications after active contexts have been released.
+	 */
+	if (gc->gprs->flags & GPRS_FLAG_ATTACHED_UPDATE) {
+		gc->gprs->flags &= ~GPRS_FLAG_ATTACHED_UPDATE;
+		gprs_attached_update(gc->gprs);
+	}
 }
 
 int ofono_gprs_context_driver_register(
@@ -2366,7 +2423,7 @@ void ofono_gprs_context_set_interface(struct ofono_gprs_context *gc,
 
 void ofono_gprs_context_set_ipv4_address(struct ofono_gprs_context *gc,
 						const char *address,
-						gboolean static_ip)
+						ofono_bool_t static_ip)
 {
 	struct context_settings *settings = gc->settings;
 

@@ -323,9 +323,10 @@ static void cb_ss_set_lock_callback(const struct ofono_error *error,
 	struct ofono_call_barring *cb = data;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
-		DBG("Enabling/disabling Call Barring via SS failed");
+		DBG("Enabling/disabling Call Barring via SS failed with err:%s",
+			telephony_error_to_str(error));
 		__ofono_dbus_pending_reply(&cb->pending,
-					__ofono_error_failed(cb->pending));
+			__ofono_error_from_error(error, cb->pending));
 		return;
 	}
 
@@ -485,8 +486,9 @@ static void cb_set_passwd_callback(const struct ofono_error *error, void *data)
 	if (error->type == OFONO_ERROR_TYPE_NO_ERROR)
 		reply = dbus_message_new_method_return(cb->pending);
 	else {
-		reply = __ofono_error_failed(cb->pending);
-		DBG("Changing Call Barring password via SS failed");
+		DBG("Changing Call Barring password via SS failed with err: %s",
+				telephony_error_to_str(error));
+		reply = __ofono_error_from_error(error, cb->pending);
 	}
 
 	__ofono_dbus_pending_reply(&cb->pending, reply);
@@ -966,24 +968,31 @@ static DBusMessage *cb_set_passwd(DBusConnection *conn, DBusMessage *msg,
 	return NULL;
 }
 
-static GDBusMethodTable cb_methods[] = {
-	{ "GetProperties",	"",	"a{sv}",	cb_get_properties,
-							G_DBUS_METHOD_FLAG_ASYNC },
-	{ "SetProperty",	"svs",	"",		cb_set_property,
-							G_DBUS_METHOD_FLAG_ASYNC },
-	{ "DisableAll",		"s",	"",		cb_disable_ab,
-							G_DBUS_METHOD_FLAG_ASYNC },
-	{ "DisableAllIncoming",	"s",	"",		cb_disable_ac,
-							G_DBUS_METHOD_FLAG_ASYNC },
-	{ "DisableAllOutgoing",	"s",	"",		cb_disable_ag,
-							G_DBUS_METHOD_FLAG_ASYNC },
-	{ "ChangePassword",	"ss",	"",		cb_set_passwd,
-							G_DBUS_METHOD_FLAG_ASYNC },
+static const GDBusMethodTable cb_methods[] = {
+	{ GDBUS_ASYNC_METHOD("GetProperties",
+				NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
+				cb_get_properties) },
+	{ GDBUS_ASYNC_METHOD("SetProperty",
+			GDBUS_ARGS({ "property", "s" },
+					{ "value", "v" }, { "pin2", "s" }),
+			NULL, cb_set_property) },
+	{ GDBUS_ASYNC_METHOD("DisableAll", GDBUS_ARGS({ "password", "s" }),
+			NULL, cb_disable_ab) },
+	{ GDBUS_ASYNC_METHOD("DisableAllIncoming",
+			GDBUS_ARGS({ "password", "s" }), NULL,
+			cb_disable_ac) },
+	{ GDBUS_ASYNC_METHOD("DisableAllOutgoing",
+			GDBUS_ARGS({ "password", "s" }), NULL,
+			cb_disable_ag) },
+	{ GDBUS_ASYNC_METHOD("ChangePassword",
+			GDBUS_ARGS({ "old", "s" }, { "new", "s" }),
+			NULL, cb_set_passwd) },
 	{ }
 };
 
-static GDBusSignalTable cb_signals[] = {
-	{ "PropertyChanged",		"sv" },
+static const GDBusSignalTable cb_signals[] = {
+	{ GDBUS_SIGNAL("PropertyChanged",
+			GDBUS_ARGS({ "name", "s" }, { "value", "v" })) },
 	{ }
 };
 

@@ -809,27 +809,34 @@ static DBusMessage *stk_select_item(DBusConnection *conn,
 
 	DBG("");
 
-	if (stk_send_envelope(stk, &e, menu_selection_envelope_cb, 0))
-		return __ofono_error_failed(msg);
-
 	stk->pending = dbus_message_ref(msg);
+
+	if (stk_send_envelope(stk, &e, menu_selection_envelope_cb, 0))
+		__ofono_dbus_pending_reply(&stk->pending,
+					__ofono_error_failed(stk->pending));
 
 	return NULL;
 }
 
-static GDBusMethodTable stk_methods[] = {
-	{ "GetProperties",		"",	"a{sv}",stk_get_properties },
-	{ "SelectItem",			"yo",	"",	stk_select_item,
-					G_DBUS_METHOD_FLAG_ASYNC },
-	{ "RegisterAgent",		"o",	"",	stk_register_agent },
-	{ "UnregisterAgent",		"o",	"",	stk_unregister_agent },
-
+static const GDBusMethodTable stk_methods[] = {
+	{ GDBUS_METHOD("GetProperties",
+			NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
+			stk_get_properties) },
+	{ GDBUS_ASYNC_METHOD("SelectItem",
+			GDBUS_ARGS({ "item", "y" }, { "agent", "o" }), NULL,
+			stk_select_item) },
+	{ GDBUS_METHOD("RegisterAgent",
+			GDBUS_ARGS({ "path", "o" }), NULL,
+			stk_register_agent) },
+	{ GDBUS_METHOD("UnregisterAgent",
+			GDBUS_ARGS({ "path", "o" }), NULL,
+			stk_unregister_agent) },
 	{ }
 };
 
-static GDBusSignalTable stk_signals[] = {
-	{ "PropertyChanged",	"sv" },
-
+static const GDBusSignalTable stk_signals[] = {
+	{ GDBUS_SIGNAL("PropertyChanged",
+			GDBUS_ARGS({ "name", "s" }, { "value", "v" })) },
 	{ }
 };
 

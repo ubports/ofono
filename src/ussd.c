@@ -573,7 +573,7 @@ static DBusMessage *ussd_initiate(DBusConnection *conn, DBusMessage *msg,
 
 	DBG("No.., checking if this is a USSD string");
 	if (!valid_ussd_string(str, call_in_progress))
-		return __ofono_error_invalid_format(msg);
+		return __ofono_error_not_recognized(msg);
 
 	if (!ussd_encode(str, &num_packed, buf))
 		return __ofono_error_invalid_format(msg);
@@ -728,22 +728,29 @@ static DBusMessage *ussd_get_properties(DBusConnection *conn,
 	return reply;
 }
 
-static GDBusMethodTable ussd_methods[] = {
-	{ "Initiate",		"s",	"sv",		ussd_initiate,
-					G_DBUS_METHOD_FLAG_ASYNC },
-	{ "Respond",		"s",	"s",		ussd_respond,
-					G_DBUS_METHOD_FLAG_ASYNC },
-	{ "Cancel",		"",	"",		ussd_cancel,
-					G_DBUS_METHOD_FLAG_ASYNC },
-	{ "GetProperties",	"",	"a{sv}",	ussd_get_properties,
-					0 },
+static const GDBusMethodTable ussd_methods[] = {
+	{ GDBUS_ASYNC_METHOD("Initiate",
+			GDBUS_ARGS({ "command", "s" }),
+			GDBUS_ARGS({ "result_name", "s" }, { "value", "v" }),
+			ussd_initiate) },
+	{ GDBUS_ASYNC_METHOD("Respond",
+			GDBUS_ARGS({ "reply", "s" }),
+			GDBUS_ARGS({ "result", "s" }),
+			ussd_respond) },
+	{ GDBUS_ASYNC_METHOD("Cancel", NULL, NULL, ussd_cancel) },
+	{ GDBUS_METHOD("GetProperties",
+			NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
+			ussd_get_properties) },
 	{ }
 };
 
-static GDBusSignalTable ussd_signals[] = {
-	{ "NotificationReceived",	"s" },
-	{ "RequestReceived",		"s" },
-	{ "PropertyChanged",		"sv" },
+static const GDBusSignalTable ussd_signals[] = {
+	{ GDBUS_SIGNAL("NotificationReceived",
+					GDBUS_ARGS({ "message", "s" })) },
+	{ GDBUS_SIGNAL("RequestReceived",
+					GDBUS_ARGS({ "message", "s" })) },
+	{ GDBUS_SIGNAL("PropertyChanged",
+			GDBUS_ARGS({ "name", "s" }, { "value", "v" })) },
 	{ }
 };
 

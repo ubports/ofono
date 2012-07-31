@@ -780,6 +780,41 @@ static void ctzv_notify(GAtResult *result, gpointer user_data)
 	ofono_netreg_time_notify(netreg, &nd->time);
 }
 
+static void tlts_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_netreg *netreg = user_data;
+	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	int year, mon, mday, hour, min, sec;
+	char tz[4];
+	const char *time;
+	GAtResultIter iter;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "*TLTS:"))
+		return;
+
+	if (!g_at_result_iter_next_string(&iter, &time))
+		return;
+
+	DBG("time %s", time);
+
+	if (sscanf(time, "%02u/%02u/%02u,%02u:%02u:%02u%s", &year, &mon, &mday,
+						&hour, &min, &sec, tz) != 7)
+                return;
+
+        nd->time.sec = sec;
+        nd->time.min = min;
+        nd->time.hour = hour;
+        nd->time.mday = mday;
+        nd->time.mon = mon;
+        nd->time.year = 2000 + year;
+
+	nd->time.utcoff = atoi(tz) * 15 * 60;
+
+	ofono_netreg_time_notify(netreg, &nd->time);
+}
+
 static gboolean notify_time(gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
@@ -1144,6 +1179,57 @@ static void mbm_erinfo_notify(GAtResult *result, gpointer user_data)
 		nd->tech = ACCESS_TECHNOLOGY_UTRAN_HSDPA;
 		break;
 	}
+}
+
+static void icera_nwstate_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_netreg *netreg = user_data;
+	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	GAtResultIter iter;
+	const char *mccmnc, *tech, *state;
+	int rssi;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (g_at_result_iter_next(&iter, "%NWSTATE:") == FALSE)
+		return;
+
+	if (g_at_result_iter_next_number(&iter, &rssi) == FALSE)
+		return;
+
+	if (g_at_result_iter_next_unquoted_string(&iter, &mccmnc) == FALSE)
+		return;
+
+	if (g_at_result_iter_next_unquoted_string(&iter, &tech) == FALSE)
+		return;
+
+	if (g_at_result_iter_next_unquoted_string(&iter, &state) == FALSE)
+		return;
+
+	DBG("rssi %d tech %s state %s", rssi, tech, state);
+
+	/* small 'g' means CS, big 'G' means PS */
+	if (g_str_equal(tech, "2g") == TRUE ||
+				g_str_equal(tech, "2G") == TRUE ||
+				g_str_equal(tech, "2G-GPRS") == TRUE) {
+		nd->tech = ACCESS_TECHNOLOGY_GSM;
+	} else if (g_str_equal(tech, "2G-EDGE") == TRUE) {
+		nd->tech = ACCESS_TECHNOLOGY_GSM_EGPRS;
+	} else if (g_str_equal(tech, "3g") == TRUE ||
+				g_str_equal(tech, "3G") == TRUE ||
+				g_str_equal(tech, "R99") == TRUE) {
+		if (g_str_equal(state, "HSDPA") == TRUE)
+			nd->tech = ACCESS_TECHNOLOGY_UTRAN_HSDPA;
+		else if (g_str_equal(state, "HSUPA") == TRUE)
+			nd->tech = ACCESS_TECHNOLOGY_UTRAN_HSUPA;
+		else if (g_str_equal(state, "HSDPA-HSUPA") == TRUE)
+			nd->tech = ACCESS_TECHNOLOGY_UTRAN_HSDPA_HSUPA;
+		else if (g_str_equal(state, "HSDPA-HSUPA-HSPA+") == TRUE)
+			nd->tech = ACCESS_TECHNOLOGY_UTRAN_HSDPA_HSUPA;
+		else
+			nd->tech = ACCESS_TECHNOLOGY_UTRAN;
+	} else
+		nd->tech = -1;
 }
 
 static int cnti_to_tech(const char *cnti)
@@ -1525,6 +1611,23 @@ static void at_creg_set_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		g_at_chat_send(nd->chat, "AT+CTZR=1", none_prefix,
 						NULL, NULL, NULL);
 		break;
+	case OFONO_VENDOR_ICERA:
+		/* Register for network technology updates */
+		g_at_chat_register(nd->chat, "%NWSTATE:", icera_nwstate_notify,
+						FALSE, netreg, NULL);
+		g_at_chat_send(nd->chat, "AT%NWSTATE=1", none_prefix,
+						NULL, NULL, NULL);
+
+		/* Register for radio access technology updates */
+		g_at_chat_send(nd->chat, "AT*TRATD=1", none_prefix,
+						NULL, NULL, NULL);
+
+		/* Register for network time update reports */
+		g_at_chat_register(nd->chat, "*TLTS:", tlts_notify,
+						FALSE, netreg, NULL);
+		g_at_chat_send(nd->chat, "AT*TLTS=1", none_prefix,
+						NULL, NULL, NULL);
+		break;
 	case OFONO_VENDOR_NOKIA:
 	case OFONO_VENDOR_SAMSUNG:
 	case OFONO_VENDOR_SIMCOM:
@@ -1555,11 +1658,12 @@ static void at_creg_test_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 	g_at_result_iter_init(&iter, result);
 
+retry:
 	if (!g_at_result_iter_next(&iter, "+CREG:"))
 		goto error;
 
 	if (!g_at_result_iter_open_list(&iter))
-		goto error;
+		goto retry;
 
 	while (g_at_result_iter_next_range(&iter, &range[0], &range[1])) {
 		if (1 >= range[0] && 1 <= range[1])

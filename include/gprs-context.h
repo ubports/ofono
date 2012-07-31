@@ -71,13 +71,17 @@ struct ofono_gprs_context_driver {
 	void (*deactivate_primary)(struct ofono_gprs_context *gc,
 					unsigned int id,
 					ofono_gprs_context_cb_t cb, void *data);
+	void (*detach_shutdown)(struct ofono_gprs_context *gc,
+					unsigned int id);
 };
 
 void ofono_gprs_context_deactivated(struct ofono_gprs_context *gc,
 					unsigned int id);
 
-int ofono_gprs_context_driver_register(const struct ofono_gprs_context_driver *d);
-void ofono_gprs_context_driver_unregister(const struct ofono_gprs_context_driver *d);
+int ofono_gprs_context_driver_register(
+				const struct ofono_gprs_context_driver *d);
+void ofono_gprs_context_driver_unregister(
+				const struct ofono_gprs_context_driver *d);
 
 struct ofono_gprs_context *ofono_gprs_context_create(struct ofono_modem *modem,
 						unsigned int vendor,
@@ -97,7 +101,7 @@ void ofono_gprs_context_set_interface(struct ofono_gprs_context *gc,
 
 void ofono_gprs_context_set_ipv4_address(struct ofono_gprs_context *gc,
 						const char *address,
-						gboolean static_ip);
+						ofono_bool_t static_ip);
 void ofono_gprs_context_set_ipv4_netmask(struct ofono_gprs_context *gc,
 						const char *netmask);
 void ofono_gprs_context_set_ipv4_gateway(struct ofono_gprs_context *gc,

@@ -368,15 +368,19 @@ static DBusMessage *mw_set_property(DBusConnection *conn, DBusMessage *msg,
 	return __ofono_error_invalid_args(msg);
 }
 
-static GDBusMethodTable message_waiting_methods[] = {
-	{ "GetProperties",	"",	"a{sv}",	mw_get_properties	},
-	{ "SetProperty",	"sv",	"",		mw_set_property,
-							G_DBUS_METHOD_FLAG_ASYNC },
+static const GDBusMethodTable message_waiting_methods[] = {
+	{ GDBUS_METHOD("GetProperties",
+			NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
+			mw_get_properties) },
+	{ GDBUS_ASYNC_METHOD("SetProperty",
+			GDBUS_ARGS({ "property", "s" }, { "value", "v" }),
+			NULL, mw_set_property) },
 	{ }
 };
 
-static GDBusSignalTable message_waiting_signals[] = {
-	{ "PropertyChanged",	"sv" },
+static const GDBusSignalTable message_waiting_signals[] = {
+	{ GDBUS_SIGNAL("PropertyChanged",
+			GDBUS_ARGS({ "name", "s" }, { "value", "v" })) },
 	{ }
 };
 

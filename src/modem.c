@@ -1123,15 +1123,19 @@ static DBusMessage *modem_set_property(DBusConnection *conn,
 	return __ofono_error_invalid_args(msg);
 }
 
-static GDBusMethodTable modem_methods[] = {
-	{ "GetProperties",	"",	"a{sv}",	modem_get_properties },
-	{ "SetProperty",	"sv",	"",		modem_set_property,
-							G_DBUS_METHOD_FLAG_ASYNC },
+static const GDBusMethodTable modem_methods[] = {
+	{ GDBUS_METHOD("GetProperties",
+			NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
+			modem_get_properties) },
+	{ GDBUS_ASYNC_METHOD("SetProperty",
+			GDBUS_ARGS({ "property", "s" }, { "value", "v" }),
+			NULL, modem_set_property) },
 	{ }
 };
 
-static GDBusSignalTable modem_signals[] = {
-	{ "PropertyChanged",	"sv" },
+static const GDBusSignalTable modem_signals[] = {
+	{ GDBUS_SIGNAL("PropertyChanged",
+			GDBUS_ARGS({ "name", "s" }, { "value", "v" })) },
 	{ }
 };
 
@@ -1777,6 +1781,20 @@ void ofono_modem_set_name(struct ofono_modem *modem, const char *name)
 						"Name", DBUS_TYPE_STRING,
 						&modem->name);
 	}
+}
+
+void ofono_modem_set_driver(struct ofono_modem *modem, const char *type)
+{
+	DBG("type: %s", type);
+
+	if (modem->driver)
+		return;
+
+	if (strlen(type) > 16)
+		return;
+
+	g_free(modem->driver_type);
+	modem->driver_type = g_strdup(type);
 }
 
 struct ofono_modem *ofono_modem_create(const char *name, const char *type)

@@ -239,17 +239,21 @@ static DBusMessage *location_reporting_release(DBusConnection *conn,
 	return NULL;
 }
 
-static GDBusMethodTable location_reporting_methods[] = {
-	{ "GetProperties",  "",    "a{sv}", location_reporting_get_properties },
-	{ "Request",        "",    "h",     location_reporting_request,
-						G_DBUS_METHOD_FLAG_ASYNC },
-	{ "Release",        "",    "",      location_reporting_release,
-						G_DBUS_METHOD_FLAG_ASYNC },
+static const GDBusMethodTable location_reporting_methods[] = {
+	{ GDBUS_METHOD("GetProperties",
+			NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
+			location_reporting_get_properties) },
+	{ GDBUS_ASYNC_METHOD("Request",
+			NULL, GDBUS_ARGS({ "fd", "h" }),
+			location_reporting_request) },
+	{ GDBUS_ASYNC_METHOD("Release", NULL, NULL,
+					location_reporting_release) },
 	{ }
 };
 
-static GDBusSignalTable location_reporting_signals[] = {
-	{ "PropertyChanged",	"sv" },
+static const GDBusSignalTable location_reporting_signals[] = {
+	{ GDBUS_SIGNAL("PropertyChanged",
+			GDBUS_ARGS({ "name", "s" }, { "value", "v" })) },
 	{ }
 };
 

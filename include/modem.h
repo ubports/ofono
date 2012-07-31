@@ -36,46 +36,6 @@ enum ofono_modem_type {
 	OFONO_MODEM_TYPE_SAP,
 };
 
-void ofono_modem_add_interface(struct ofono_modem *modem,
-				const char *interface);
-void ofono_modem_remove_interface(struct ofono_modem *modem,
-					const char *interface);
-
-const char *ofono_modem_get_path(struct ofono_modem *modem);
-
-void ofono_modem_set_data(struct ofono_modem *modem, void *data);
-void *ofono_modem_get_data(struct ofono_modem *modem);
-
-struct ofono_modem *ofono_modem_create(const char *name, const char *type);
-int ofono_modem_register(struct ofono_modem *modem);
-
-ofono_bool_t ofono_modem_is_registered(struct ofono_modem *modem);
-void ofono_modem_remove(struct ofono_modem *modem);
-
-void ofono_modem_reset(struct ofono_modem *modem);
-
-void ofono_modem_set_powered(struct ofono_modem *modem, ofono_bool_t powered);
-ofono_bool_t ofono_modem_get_powered(struct ofono_modem *modem);
-
-ofono_bool_t ofono_modem_get_online(struct ofono_modem *modem);
-
-ofono_bool_t ofono_modem_get_emergency_mode(struct ofono_modem *modem);
-
-void ofono_modem_set_name(struct ofono_modem *modem, const char *name);
-
-int ofono_modem_set_string(struct ofono_modem *modem,
-				const char *key, const char *value);
-const char *ofono_modem_get_string(struct ofono_modem *modem, const char *key);
-
-int ofono_modem_set_integer(struct ofono_modem *modem,
-				const char *key, int value);
-int ofono_modem_get_integer(struct ofono_modem *modem, const char *key);
-
-int ofono_modem_set_boolean(struct ofono_modem *modem,
-				const char *key, ofono_bool_t value);
-ofono_bool_t ofono_modem_get_boolean(struct ofono_modem *modem,
-					const char *key);
-
 typedef void (*ofono_modem_online_cb_t)(const struct ofono_error *error,
 					void *data);
 
@@ -109,6 +69,47 @@ struct ofono_modem_driver {
 	/* Populate the atoms available online */
 	void (*post_online)(struct ofono_modem *modem);
 };
+
+void ofono_modem_add_interface(struct ofono_modem *modem,
+				const char *interface);
+void ofono_modem_remove_interface(struct ofono_modem *modem,
+					const char *interface);
+
+const char *ofono_modem_get_path(struct ofono_modem *modem);
+
+void ofono_modem_set_data(struct ofono_modem *modem, void *data);
+void *ofono_modem_get_data(struct ofono_modem *modem);
+
+struct ofono_modem *ofono_modem_create(const char *name, const char *type);
+int ofono_modem_register(struct ofono_modem *modem);
+
+ofono_bool_t ofono_modem_is_registered(struct ofono_modem *modem);
+void ofono_modem_remove(struct ofono_modem *modem);
+
+void ofono_modem_reset(struct ofono_modem *modem);
+
+void ofono_modem_set_powered(struct ofono_modem *modem, ofono_bool_t powered);
+ofono_bool_t ofono_modem_get_powered(struct ofono_modem *modem);
+
+ofono_bool_t ofono_modem_get_online(struct ofono_modem *modem);
+
+ofono_bool_t ofono_modem_get_emergency_mode(struct ofono_modem *modem);
+
+void ofono_modem_set_name(struct ofono_modem *modem, const char *name);
+void ofono_modem_set_driver(struct ofono_modem *modem, const char *type);
+
+int ofono_modem_set_string(struct ofono_modem *modem,
+				const char *key, const char *value);
+const char *ofono_modem_get_string(struct ofono_modem *modem, const char *key);
+
+int ofono_modem_set_integer(struct ofono_modem *modem,
+				const char *key, int value);
+int ofono_modem_get_integer(struct ofono_modem *modem, const char *key);
+
+int ofono_modem_set_boolean(struct ofono_modem *modem,
+				const char *key, ofono_bool_t value);
+ofono_bool_t ofono_modem_get_boolean(struct ofono_modem *modem,
+					const char *key);
 
 int ofono_modem_driver_register(const struct ofono_modem_driver *);
 void ofono_modem_driver_unregister(const struct ofono_modem_driver *);

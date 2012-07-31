@@ -287,6 +287,9 @@ static GAtSyntaxResult gsm_permissive_feed(GAtSyntax *syntax,
 				/* ignore */;
 			else if (byte == '>')
 				syntax->state = GSM_PERMISSIVE_STATE_PROMPT;
+			else if (byte == '"')
+				syntax->state =
+					GSM_PERMISSIVE_STATE_RESPONSE_STRING;
 			else
 				syntax->state = GSM_PERMISSIVE_STATE_RESPONSE;
 			break;

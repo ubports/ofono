@@ -540,17 +540,23 @@ static DBusMessage *cbs_set_property(DBusConnection *conn, DBusMessage *msg,
 	return __ofono_error_invalid_args(msg);
 }
 
-static GDBusMethodTable cbs_methods[] = {
-	{ "GetProperties",	"",	"a{sv}",	cbs_get_properties },
-	{ "SetProperty",	"sv",	"",		cbs_set_property,
-							G_DBUS_METHOD_FLAG_ASYNC },
+static const GDBusMethodTable cbs_methods[] = {
+	{ GDBUS_METHOD("GetProperties",
+			NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
+			cbs_get_properties) },
+	{ GDBUS_ASYNC_METHOD("SetProperty",
+			GDBUS_ARGS({ "property", "s" }, { "value", "v" }),
+			NULL, cbs_set_property) },
 	{ }
 };
 
-static GDBusSignalTable cbs_signals[] = {
-	{ "PropertyChanged",	"sv"		},
-	{ "IncomingBroadcast",	"sq"		},
-	{ "EmergencyBroadcast", "sa{sv}"	},
+static const GDBusSignalTable cbs_signals[] = {
+	{ GDBUS_SIGNAL("PropertyChanged",
+			GDBUS_ARGS({ "property", "s" }, { "value", "v" })) },
+	{ GDBUS_SIGNAL("IncomingBroadcast",
+			GDBUS_ARGS({ "message", "s" }, { "channel", "q" })) },
+	{ GDBUS_SIGNAL("EmergencyBroadcast",
+			GDBUS_ARGS({ "message", "s" }, { "dict", "a{sv}" })) },
 	{ }
 };
 

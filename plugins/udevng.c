@@ -176,7 +176,8 @@ static gboolean setup_hso(struct modem_info *modem)
 
 static gboolean setup_gobi(struct modem_info *modem)
 {
-	const char *device = NULL, *gps = NULL, *qcdm = NULL;
+	const char *qmi = NULL, *mdm = NULL, *net = NULL;
+	const char *gps = NULL, *diag = NULL;
 	GSList *list;
 
 	DBG("%s", modem->syspath);
@@ -188,21 +189,28 @@ static gboolean setup_gobi(struct modem_info *modem)
 						info->number, info->label);
 
 		if (g_strcmp0(info->interface, "255/255/255") == 0) {
-			if (g_strcmp0(info->number, "01") == 0)
-				qcdm = info->devnode;
+			if (info->number == NULL)
+				qmi = info->devnode;
+			else if (g_strcmp0(info->number, "00") == 0)
+				net = info->devnode;
+			else if (g_strcmp0(info->number, "01") == 0)
+				diag = info->devnode;
 			else if (g_strcmp0(info->number, "02") == 0)
-				device = info->devnode;
+				mdm = info->devnode;
 			else if (g_strcmp0(info->number, "03") == 0)
 				gps = info->devnode;
 		}
 	}
 
-	if (device == NULL)
+	if (qmi == NULL || mdm == NULL || net == NULL)
 		return FALSE;
 
-	DBG("device=%s gps=%s qcdm=%s", device, gps, qcdm);
+	DBG("qmi=%s net=%s mdm=%s gps=%s diag=%s", qmi, net, mdm, gps, diag);
 
-	ofono_modem_set_string(modem->modem, "Device", device);
+	ofono_modem_set_string(modem->modem, "Device", qmi);
+	ofono_modem_set_string(modem->modem, "Modem", mdm);
+	ofono_modem_set_string(modem->modem, "Diag", diag);
+	ofono_modem_set_string(modem->modem, "NetworkInterface", net);
 
 	return TRUE;
 }
@@ -283,7 +291,8 @@ static gboolean setup_option(struct modem_info *modem)
 
 static gboolean setup_huawei(struct modem_info *modem)
 {
-	const char *mdm = NULL, *pcui = NULL, *diag = NULL;
+	const char *qmi = NULL, *mdm = NULL, *net = NULL;
+	const char *pcui = NULL, *diag = NULL;
 	GSList *list;
 
 	DBG("%s", modem->syspath);
@@ -298,20 +307,16 @@ static gboolean setup_huawei(struct modem_info *modem)
 				g_strcmp0(info->interface, "255/1/1") == 0 ||
 				g_strcmp0(info->interface, "255/2/1") == 0) {
 			mdm = info->devnode;
-			if (pcui != NULL && diag != NULL)
-				break;
 		} else if (g_strcmp0(info->label, "pcui") == 0 ||
 				g_strcmp0(info->interface, "255/1/2") == 0 ||
 				g_strcmp0(info->interface, "255/2/2") == 0) {
 			pcui = info->devnode;
-			if (mdm != NULL && diag != NULL)
-				break;
 		} else if (g_strcmp0(info->label, "diag") == 0 ||
 				g_strcmp0(info->interface, "255/1/3") == 0 ||
 				g_strcmp0(info->interface, "255/2/3") == 0) {
 			diag = info->devnode;
-			if (mdm != NULL && pcui != NULL)
-				break;
+		} else if (g_strcmp0(info->interface, "255/1/8") == 0) {
+			net = info->devnode;
 		} else if (g_strcmp0(info->interface, "255/255/255") == 0) {
 			if (g_strcmp0(info->number, "00") == 0)
 				mdm = info->devnode;
@@ -329,11 +334,13 @@ static gboolean setup_huawei(struct modem_info *modem)
 	if (mdm == NULL || pcui == NULL)
 		return FALSE;
 
-	DBG("modem=%s pcui=%s diag=%s", mdm, pcui, diag);
+	DBG("mdm=%s pcui=%s diag=%s qmi=%s net=%s", mdm, pcui, diag, qmi, net);
 
+	ofono_modem_set_string(modem->modem, "Device", qmi);
 	ofono_modem_set_string(modem->modem, "Modem", mdm);
 	ofono_modem_set_string(modem->modem, "Pcui", pcui);
 	ofono_modem_set_string(modem->modem, "Diag", diag);
+	ofono_modem_set_string(modem->modem, "NetworkInterface", net);
 
 	return TRUE;
 }
@@ -419,12 +426,20 @@ static gboolean setup_icera(struct modem_info *modem)
 						info->number, info->label);
 
 		if (g_strcmp0(info->interface, "2/2/1") == 0) {
-			if (g_strcmp0(info->number, "01") == 0)
+			if (g_strcmp0(info->number, "00") == 0)
 				aux = info->devnode;
+			else if (g_strcmp0(info->number, "01") == 0)
+				aux = info->devnode;
+			else if (g_strcmp0(info->number, "02") == 0)
+				mdm = info->devnode;
 			else if (g_strcmp0(info->number, "03") == 0)
 				mdm = info->devnode;
 		} else if (g_strcmp0(info->interface, "2/6/0") == 0) {
 			if (g_strcmp0(info->number, "05") == 0)
+				net = info->devnode;
+			else if (g_strcmp0(info->number, "06") == 0)
+				net = info->devnode;
+			else if (g_strcmp0(info->number, "07") == 0)
 				net = info->devnode;
 		}
 	}
@@ -739,7 +754,7 @@ static struct {
 	{ "isiusb",	setup_isi,	"type"			},
 	{ "mbm",	setup_mbm,	"device/interface"	},
 	{ "hso",	setup_hso,	"hsotype"		},
-	{ "gobi",	setup_gobi,	},
+	{ "gobi",	setup_gobi	},
 	{ "sierra",	setup_sierra	},
 	{ "option",	setup_option	},
 	{ "huawei",	setup_huawei	},
@@ -896,6 +911,7 @@ static void add_device(const char *syspath, const char *devname,
 	else
 		sysattr = NULL;
 
+	DBG("%s", syspath);
 	DBG("%s", devpath);
 	DBG("%s (%s) %s [%s] ==> %s %s", devnode, driver,
 					interface, number, label, sysattr);
@@ -925,6 +941,10 @@ static struct {
 	{ "linktop",	"cdc_acm",	"230d"		},
 	{ "icera",	"cdc_acm",	"19d2"		},
 	{ "icera",	"cdc_ether",	"19d2"		},
+	{ "icera",	"cdc_acm",	"04e8", "6872"	},
+	{ "icera",	"cdc_ether",	"04e8", "6872"	},
+	{ "icera",	"cdc_acm",	"0421", "0633"	},
+	{ "icera",	"cdc_ether",	"0421", "0633"	},
 	{ "mbm",	"cdc_acm",	"0bdb"		},
 	{ "mbm"		"cdc_ether",	"0bdb"		},
 	{ "mbm",	"cdc_acm",	"0fce"		},
@@ -936,12 +956,14 @@ static struct {
 	{ "mbm",	"cdc_acm",	"0930"		},
 	{ "mbm",	"cdc_ether",	"0930"		},
 	{ "hso",	"hso"				},
+	{ "gobi",	"qmi_wwan"			},
 	{ "gobi",	"qcserial"			},
 	{ "sierra",	"sierra"			},
 	{ "sierra",	"sierra_net"			},
 	{ "option",	"option",	"0af0"		},
 	{ "huawei",	"option",	"201e"		},
 	{ "huawei",	"cdc_ether",	"12d1"		},
+	{ "huawei",	"qmi_wwan",	"12d1"		},
 	{ "huawei",	"option",	"12d1"		},
 	{ "speedupcdma","option",	"1c9e", "9e00"	},
 	{ "speedup",	"option",	"1c9e"		},
@@ -984,16 +1006,23 @@ static void check_usb_device(struct udev_device *device)
 		unsigned int i;
 
 		drv = udev_device_get_property_value(device, "ID_USB_DRIVER");
-		if (drv == NULL)
-			return;
+		if (drv == NULL) {
+			drv = udev_device_get_driver(device);
+			if (drv == NULL) {
+				struct udev_device *parent;
+
+				parent = udev_device_get_parent(device);
+				if (parent == NULL)
+					return;
+
+				drv = udev_device_get_driver(parent);
+				if (drv == NULL)
+					return;
+			}
+		}
 
 		vid = udev_device_get_property_value(device, "ID_VENDOR_ID");
-		if (vid == NULL)
-			return;
-
 		pid = udev_device_get_property_value(device, "ID_MODEL_ID");
-		if (pid == NULL)
-			return;
 
 		DBG("%s [%s:%s]", drv, vid, pid);
 
@@ -1005,16 +1034,17 @@ static void check_usb_device(struct udev_device *device)
 				driver = vendor_list[i].driver;
 				vendor = vid;
 				model = pid;
-				break;
+				continue;
 			}
+
+			if (vid == NULL || pid == NULL)
+				continue;
 
 			if (g_str_equal(vendor_list[i].vid, vid) == TRUE) {
 				if (vendor_list[i].pid == NULL) {
-					if (driver == NULL) {
-						driver = vendor_list[i].driver;
-						vendor = vid;
-						model = pid;
-					}
+					driver = vendor_list[i].driver;
+					vendor = vid;
+					model = pid;
 					continue;
 				}
 
@@ -1039,8 +1069,11 @@ static void check_device(struct udev_device *device)
 	const char *bus;
 
 	bus = udev_device_get_property_value(device, "ID_BUS");
-	if (bus == NULL)
-		return;
+	if (bus == NULL) {
+		bus = udev_device_get_subsystem(device);
+		if (bus == NULL)
+			return;
+	}
 
 	if (g_str_equal(bus, "usb") == TRUE)
 		check_usb_device(device);
@@ -1091,6 +1124,7 @@ static void enumerate_devices(struct udev *context)
 		return;
 
 	udev_enumerate_add_match_subsystem(enumerate, "tty");
+	udev_enumerate_add_match_subsystem(enumerate, "usb");
 	udev_enumerate_add_match_subsystem(enumerate, "net");
 
 	udev_enumerate_scan_devices(enumerate);
@@ -1212,6 +1246,7 @@ static int detect_init(void)
 						NULL, destroy_modem);
 
 	udev_monitor_filter_add_match_subsystem_devtype(udev_mon, "tty", NULL);
+	udev_monitor_filter_add_match_subsystem_devtype(udev_mon, "usb", NULL);
 	udev_monitor_filter_add_match_subsystem_devtype(udev_mon, "net", NULL);
 
 	udev_monitor_filter_update(udev_mon);

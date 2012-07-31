@@ -1103,23 +1103,35 @@ int __ofono_sms_txq_cancel(struct ofono_sms *sms, const struct ofono_uuid *uuid)
 	return 0;
 }
 
-static GDBusMethodTable sms_manager_methods[] = {
-	{ "GetProperties",    "",    "a{sv}",        sms_get_properties,
-						G_DBUS_METHOD_FLAG_ASYNC },
-	{ "SetProperty",      "sv",  "",             sms_set_property,
-						G_DBUS_METHOD_FLAG_ASYNC },
-	{ "SendMessage",      "ss",  "o",             sms_send_message,
-						G_DBUS_METHOD_FLAG_ASYNC },
-	{ "GetMessages",       "",    "a(oa{sv})",    sms_get_messages },
+static const GDBusMethodTable sms_manager_methods[] = {
+	{ GDBUS_ASYNC_METHOD("GetProperties",
+				NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
+				sms_get_properties) },
+	{ GDBUS_ASYNC_METHOD("SetProperty",
+			GDBUS_ARGS({ "property", "s" }, { "value", "v" }),
+			NULL, sms_set_property) },
+	{ GDBUS_ASYNC_METHOD("SendMessage",
+			GDBUS_ARGS({ "to", "s" }, { "text", "s" }),
+			GDBUS_ARGS({ "path", "o" }),
+			sms_send_message) },
+	{ GDBUS_METHOD("GetMessages",
+			NULL, GDBUS_ARGS({ "messages", "a(oa{sv})" }),
+			sms_get_messages) },
 	{ }
 };
 
-static GDBusSignalTable sms_manager_signals[] = {
-	{ "PropertyChanged",	"sv"		},
-	{ "IncomingMessage",	"sa{sv}"	},
-	{ "ImmediateMessage",	"sa{sv}"	},
-	{ "MessageAdded",	"oa{sv}"	},
-	{ "MessageRemoved",	"o"		},
+static const GDBusSignalTable sms_manager_signals[] = {
+	{ GDBUS_SIGNAL("PropertyChanged",
+			GDBUS_ARGS({ "name", "s" }, { "value", "v" })) },
+	{ GDBUS_SIGNAL("IncomingMessage",
+			GDBUS_ARGS({ "message", "s" }, { "info", "a{sv}" })) },
+	{ GDBUS_SIGNAL("ImmediateMessage",
+			GDBUS_ARGS({ "message", "s" }, { "info", "a{sv}" })) },
+	{ GDBUS_SIGNAL("MessageAdded",
+			GDBUS_ARGS({ "path", "o" },
+						{ "properties", "a{sv}" })) },
+	{ GDBUS_SIGNAL("MessageRemoved",
+			GDBUS_ARGS({ "path", "o" })) },
 	{ }
 };
 
@@ -1447,7 +1459,7 @@ static inline gboolean handle_mwi(struct ofono_sms *sms, struct sms *s)
 	return discard;
 }
 
-void ofono_sms_deliver_notify(struct ofono_sms *sms, unsigned char *pdu,
+void ofono_sms_deliver_notify(struct ofono_sms *sms, const unsigned char *pdu,
 				int len, int tpdu_len)
 {
 	struct ofono_modem *modem = __ofono_atom_get_modem(sms->atom);
@@ -1594,7 +1606,7 @@ out:
 	handle_deliver(sms, &s);
 }
 
-void ofono_sms_status_notify(struct ofono_sms *sms, unsigned char *pdu,
+void ofono_sms_status_notify(struct ofono_sms *sms, const unsigned char *pdu,
 				int len, int tpdu_len)
 {
 	struct sms s;
