@@ -1,5 +1,5 @@
 AC_PREREQ(2.60)
-AC_INIT(ofono, 1.6)
+AC_INIT(ofono, 1.9)
 
 AM_INIT_AUTOMAKE([foreign subdir-objects color-tests])
 AM_CONFIG_HEADER(config.h)
@@ -114,16 +114,6 @@ if (test -n "${path_systemdunit}"); then
 fi
 AM_CONDITIONAL(SYSTEMD, test -n "${path_systemdunit}")
 
-AC_ARG_ENABLE(capng, AC_HELP_STRING([--enable-capng],
-		[enable capabilities support]), [enable_capng=${enableval}])
-if (test "${enable_capng}" = "yes"); then
-	PKG_CHECK_MODULES(CAPNG, libcap-ng, dummy=yes,
-				AC_MSG_ERROR(Capabilities library is required))
-	AC_SUBST(CAPNG_CFLAGS)
-	AC_SUBST(CAPNG_LIBS)
-	AC_DEFINE(HAVE_CAPNG, 1, [Define to 1 if you have capabilities library.])
-fi
-
 AC_ARG_ENABLE(udev, AC_HELP_STRING([--disable-udev],
 			[don't use udev support even if available]),
 						[enable_udev=${enableval}])
@@ -152,6 +142,10 @@ if (test "${enable_tools}" = "yes"); then
 fi
 AM_CONDITIONAL(TOOLS, test "${enable_tools}" = "yes")
 
+AC_ARG_ENABLE(dundee, AC_HELP_STRING([--enable-dundee],
+		[enable DUN deamon support]), [enable_dundee=${enableval}])
+AM_CONDITIONAL(DUNDEE, test "${enable_dundee}" = "yes")
+
 AC_ARG_ENABLE(atmodem, AC_HELP_STRING([--disable-atmodem],
 				[disable ETSI AT modem support]),
 					[enable_atmodem=${enableval}])
@@ -173,12 +167,17 @@ AC_ARG_ENABLE(isimodem, AC_HELP_STRING([--disable-isimodem],
 					[enable_isimodem=${enableval}])
 AM_CONDITIONAL(ISIMODEM, test "${enable_isimodem}" != "no")
 
+AC_ARG_ENABLE(qmimodem, AC_HELP_STRING([--disable-qmimodem],
+				[disable Qualcomm QMI modem support]),
+					[enable_qmimodem=${enableval}])
+AM_CONDITIONAL(QMIMODEM, test "${enable_qmimodem}" != "no")
+
 AC_ARG_ENABLE(bluetooth, AC_HELP_STRING([--disable-bluetooth],
 				[disable Bluetooth modem support]),
 					[enable_bluetooth=${enableval}])
 if (test "${enable_bluetooth}" != "no"); then
-	PKG_CHECK_MODULES(BLUEZ, bluez >= 4.30, dummy=yes,
-			AC_MSG_ERROR(Bluetooth library >= 4.30 is required))
+	PKG_CHECK_MODULES(BLUEZ, bluez >= 4.99, dummy=yes,
+			AC_MSG_ERROR(Bluetooth library >= 4.99 is required))
 fi
 AC_SUBST(BLUEZ_CFLAGS)
 AC_SUBST(BLUEZ_LIBS)
@@ -209,7 +208,7 @@ fi
 AM_CONDITIONAL(PROVISION, test "${enable_provision}" != "no")
 
 AC_ARG_ENABLE(datafiles, AC_HELP_STRING([--disable-datafiles],
-			[don't install configuration and data files]),
+			[do not install configuration and data files]),
 					[enable_datafiles=${enableval}])
 AM_CONDITIONAL(DATAFILES, test "${enable_datafiles}" != "no")
 
@@ -238,4 +237,5 @@ fi
 AC_DEFINE_UNQUOTED(CONFIGDIR, "${configdir}",
 			[Directory for the configuration files])
 
-AC_OUTPUT(Makefile include/version.h src/ofono.service ofono.pc)
+AC_OUTPUT(Makefile include/version.h src/ofono.service ofono.pc \
+		dundee/dundee.service)

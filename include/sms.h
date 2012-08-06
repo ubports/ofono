@@ -51,7 +51,7 @@ struct ofono_sms_driver {
 	void (*sca_set)(struct ofono_sms *sms,
 			const struct ofono_phone_number *sca,
 			ofono_sms_sca_set_cb_t cb, void *data);
-	void (*submit)(struct ofono_sms *sms, unsigned char *pdu,
+	void (*submit)(struct ofono_sms *sms, const unsigned char *pdu,
 			int pdu_len, int tpdu_len, int mms,
 			ofono_sms_submit_cb_t cb, void *data);
 	void (*bearer_query)(struct ofono_sms *sms,
@@ -60,9 +60,9 @@ struct ofono_sms_driver {
 				ofono_sms_bearer_set_cb_t, void *data);
 };
 
-void ofono_sms_deliver_notify(struct ofono_sms *sms, unsigned char *pdu,
+void ofono_sms_deliver_notify(struct ofono_sms *sms, const unsigned char *pdu,
 				int len, int tpdu_len);
-void ofono_sms_status_notify(struct ofono_sms *sms, unsigned char *pdu,
+void ofono_sms_status_notify(struct ofono_sms *sms, const unsigned char *pdu,
 				int len, int tpdu_len);
 
 int ofono_sms_driver_register(const struct ofono_sms_driver *d);

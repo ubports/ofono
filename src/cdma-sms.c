@@ -43,13 +43,14 @@ struct ofono_cdma_sms {
 	struct ofono_atom *atom;
 };
 
-static GDBusMethodTable cdma_sms_manager_methods[] = {
+static const GDBusMethodTable cdma_sms_manager_methods[] = {
 	/* TODO */
 	{ }
 };
 
-static GDBusSignalTable cdma_sms_manager_signals[] = {
-	{ "IncomingMessage",	"sa{sv}"	},
+static const GDBusSignalTable cdma_sms_manager_signals[] = {
+	{ GDBUS_SIGNAL("IncomingMessage",
+			GDBUS_ARGS({ "message", "s"}, { "info", "a{sv}" })) },
 	/* TODO */
 	{ }
 };
@@ -169,7 +170,7 @@ static void ofono_cdma_sms_process_p2p(struct ofono_cdma_sms *cdma_sms,
 }
 
 void ofono_cdma_sms_deliver_notify(struct ofono_cdma_sms *cdma_sms,
-					unsigned char *pdu, int tpdu_len)
+					const unsigned char *pdu, int tpdu_len)
 {
 	static struct cdma_sms s;
 

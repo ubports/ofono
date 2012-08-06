@@ -3,9 +3,6 @@
 /* Directory for the configuration files */
 #undef CONFIGDIR
 
-/* Define to 1 if you have capabilities library. */
-#undef HAVE_CAPNG
-
 /* Define to 1 if you have the <dlfcn.h> header file. */
 #undef HAVE_DLFCN_H
 

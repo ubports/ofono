@@ -104,42 +104,42 @@ endif
 if ISIMODEM
 builtin_modules += isimodem
 builtin_sources += $(gisi_sources) \
-				drivers/isimodem/isimodem.h \
-				drivers/isimodem/isimodem.c \
-				drivers/isimodem/mtc.h \
-				drivers/isimodem/debug.h \
-				drivers/isimodem/isiutil.h \
-				drivers/isimodem/debug.c \
-				drivers/isimodem/phonebook.c \
-				drivers/isimodem/devinfo.c \
-				drivers/isimodem/info.h \
-				drivers/isimodem/network-registration.c \
-				drivers/isimodem/network.h \
-				drivers/isimodem/infoserver.h \
-				drivers/isimodem/infoserver.c \
-				drivers/isimodem/voicecall.c \
-				drivers/isimodem/call.h \
-				drivers/isimodem/sms.c \
-				drivers/isimodem/sms.h \
-				drivers/isimodem/cbs.c \
-				drivers/isimodem/sim.c \
-				drivers/isimodem/sim.h \
-				drivers/isimodem/ussd.c \
-				drivers/isimodem/call-forwarding.c \
-				drivers/isimodem/call-settings.c \
-				drivers/isimodem/call-barring.c \
-				drivers/isimodem/call-meter.c \
-				drivers/isimodem/ss.h \
-				drivers/isimodem/radio-settings.c \
-				drivers/isimodem/gss.h \
-				drivers/isimodem/gprs.c \
-				drivers/isimodem/gprs-context.c \
-				drivers/isimodem/gpds.h \
-				drivers/isimodem/audio-settings.c \
-				drivers/isimodem/uicc.h \
-				drivers/isimodem/uicc.c \
-				drivers/isimodem/uicc-util.h \
-				drivers/isimodem/uicc-util.c
+			drivers/isimodem/isimodem.h \
+			drivers/isimodem/isimodem.c \
+			drivers/isimodem/mtc.h \
+			drivers/isimodem/debug.h \
+			drivers/isimodem/isiutil.h \
+			drivers/isimodem/debug.c \
+			drivers/isimodem/phonebook.c \
+			drivers/isimodem/devinfo.c \
+			drivers/isimodem/info.h \
+			drivers/isimodem/network-registration.c \
+			drivers/isimodem/network.h \
+			drivers/isimodem/infoserver.h \
+			drivers/isimodem/infoserver.c \
+			drivers/isimodem/voicecall.c \
+			drivers/isimodem/call.h \
+			drivers/isimodem/sms.c \
+			drivers/isimodem/sms.h \
+			drivers/isimodem/cbs.c \
+			drivers/isimodem/sim.c \
+			drivers/isimodem/sim.h \
+			drivers/isimodem/ussd.c \
+			drivers/isimodem/call-forwarding.c \
+			drivers/isimodem/call-settings.c \
+			drivers/isimodem/call-barring.c \
+			drivers/isimodem/call-meter.c \
+			drivers/isimodem/ss.h \
+			drivers/isimodem/radio-settings.c \
+			drivers/isimodem/gss.h \
+			drivers/isimodem/gprs.c \
+			drivers/isimodem/gprs-context.c \
+			drivers/isimodem/gpds.h \
+			drivers/isimodem/audio-settings.c \
+			drivers/isimodem/uicc.h \
+			drivers/isimodem/uicc.c \
+			drivers/isimodem/uicc-util.h \
+			drivers/isimodem/uicc-util.c
 
 builtin_modules += isiusb
 builtin_sources += plugins/isiusb.c
@@ -151,33 +151,63 @@ builtin_modules += u8500
 builtin_sources += plugins/u8500.c
 endif
 
+if QMIMODEM
+qmi_sources = drivers/qmimodem/qmi.h drivers/qmimodem/qmi.c \
+					drivers/qmimodem/ctl.h \
+					drivers/qmimodem/dms.h \
+					drivers/qmimodem/nas.h \
+					drivers/qmimodem/wms.h \
+					drivers/qmimodem/wds.h \
+					drivers/qmimodem/pds.h \
+					drivers/qmimodem/common.h
+
+builtin_modules += qmimodem
+builtin_sources += $(qmi_sources) \
+			drivers/qmimodem/util.h \
+			drivers/qmimodem/qmimodem.h \
+			drivers/qmimodem/qmimodem.c \
+			drivers/qmimodem/devinfo.c \
+			drivers/qmimodem/voicecall.c \
+			drivers/qmimodem/network-registration.c \
+			drivers/qmimodem/sim-legacy.c \
+			drivers/qmimodem/sms.c \
+			drivers/qmimodem/ussd.c \
+			drivers/qmimodem/gprs.c \
+			drivers/qmimodem/gprs-context.c \
+			drivers/qmimodem/radio-settings.c \
+			drivers/qmimodem/location-reporting.c
+
+builtin_modules += gobi
+builtin_sources += plugins/gobi.c
+endif
+
 if ATMODEM
 builtin_modules += atmodem
 builtin_sources += $(gatchat_sources) \
-				drivers/atmodem/atmodem.h \
-				drivers/atmodem/atmodem.c \
-				drivers/atmodem/call-settings.c \
-				drivers/atmodem/sms.c \
-				drivers/atmodem/cbs.c \
-				drivers/atmodem/call-forwarding.c \
-				drivers/atmodem/call-meter.c \
-				drivers/atmodem/network-registration.c \
-				drivers/atmodem/sim.c \
-				drivers/atmodem/stk.c \
-				drivers/atmodem/stk.h \
-				drivers/atmodem/ussd.c \
-				drivers/atmodem/voicecall.c \
-				drivers/atmodem/call-barring.c \
-				drivers/atmodem/phonebook.c \
-				drivers/atmodem/devinfo.c \
-				drivers/atmodem/call-volume.c \
-				drivers/atmodem/vendor.h \
-				drivers/atmodem/atutil.h \
-				drivers/atmodem/atutil.c \
-				drivers/atmodem/gprs.c \
-				drivers/atmodem/gprs-context.c \
-				drivers/atmodem/sim-auth.c \
-				drivers/atmodem/gnss.c
+			drivers/atmodem/atmodem.h \
+			drivers/atmodem/atmodem.c \
+			drivers/atmodem/call-settings.c \
+			drivers/atmodem/sms.c \
+			drivers/atmodem/cbs.c \
+			drivers/atmodem/call-forwarding.c \
+			drivers/atmodem/call-meter.c \
+			drivers/atmodem/network-registration.c \
+			drivers/atmodem/sim.c \
+			drivers/atmodem/stk.c \
+			drivers/atmodem/stk.h \
+			drivers/atmodem/ussd.c \
+			drivers/atmodem/voicecall.c \
+			drivers/atmodem/call-barring.c \
+			drivers/atmodem/phonebook.c \
+			drivers/atmodem/devinfo.c \
+			drivers/atmodem/call-volume.c \
+			drivers/atmodem/vendor.h \
+			drivers/atmodem/atutil.h \
+			drivers/atmodem/atutil.c \
+			drivers/atmodem/gprs.c \
+			drivers/atmodem/gprs-context.c \
+			drivers/atmodem/sim-auth.c \
+			drivers/atmodem/gnss.c
 
 builtin_modules += nwmodem
 builtin_sources += drivers/atmodem/atutil.h \
@@ -196,6 +226,13 @@ builtin_sources += drivers/atmodem/atutil.h \
 			drivers/ztemodem/ztemodem.h \
 			drivers/ztemodem/ztemodem.c \
 			drivers/ztemodem/radio-settings.c
+
+builtin_modules += iceramodem
+builtin_sources += drivers/atmodem/atutil.h \
+			drivers/iceramodem/iceramodem.h \
+			drivers/iceramodem/iceramodem.c \
+			drivers/iceramodem/gprs-context.c \
+			drivers/iceramodem/radio-settings.c
 
 builtin_modules += huaweimodem
 builtin_sources += drivers/atmodem/atutil.h \
@@ -298,9 +335,6 @@ endif
 
 builtin_modules += g1
 builtin_sources += plugins/g1.c
-
-builtin_modules += gobi
-builtin_sources += plugins/gobi.c
 
 builtin_modules += wavecom
 builtin_sources += plugins/wavecom.c
@@ -459,7 +493,7 @@ src_ofonod_SOURCES = $(gdbus_sources) $(builtin_sources) src/ofono.ver \
 			src/cdma-sms.c src/private-network.c src/cdma-netreg.c \
 			src/cdma-provision.c src/handsfree.c
 
-src_ofonod_LDADD = $(builtin_libadd) @GLIB_LIBS@ @DBUS_LIBS@ @CAPNG_LIBS@ -ldl
+src_ofonod_LDADD = $(builtin_libadd) @GLIB_LIBS@ @DBUS_LIBS@ -ldl
 
 src_ofonod_LDFLAGS = -Wl,--export-dynamic \
 				-Wl,--version-script=$(srcdir)/src/ofono.ver
@@ -476,7 +510,7 @@ else
 build_plugindir = $(plugindir)
 endif
 
-AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @CAPNG_CFLAGS@ @USB_CFLAGS@ \
+AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @USB_CFLAGS@ \
 					$(builtin_cflags) \
 					-DOFONO_PLUGIN_BUILTIN \
 					-DPLUGINDIR=\""$(build_plugindir)"\"
@@ -544,6 +578,7 @@ test_scripts = test/backtrace \
 		test/test-network-registration \
 		test/test-phonebook \
 		test/test-cbs \
+		test/test-ss \
 		test/test-ss-control-cb \
 		test/test-ss-control-cf \
 		test/test-ss-control-cs \
@@ -560,6 +595,7 @@ test_scripts = test/backtrace \
 		test/enable-cbs \
 		test/lock-pin \
 		test/unlock-pin \
+		test/change-pin \
 		test/enable-gprs \
 		test/disable-gprs \
 		test/get-icon \
@@ -585,7 +621,8 @@ test_scripts = test/backtrace \
 		test/cdma-connman-enable \
 		test/set-context-property \
 		test/test-gnss \
-		test/swap-calls
+		test/swap-calls \
+		test/release-and-answer
 
 if TEST
 testdir = $(pkglibdir)/test
@@ -674,6 +711,33 @@ tools_lookup_apn_LDADD = @GLIB_LIBS@
 tools_lookup_provider_name_SOURCES = plugins/mbpi.c plugins/mbpi.h \
 				tools/lookup-provider-name.c
 tools_lookup_provider_name_LDADD = @GLIB_LIBS@
+
+if QMIMODEM
+noinst_PROGRAMS += tools/qmi
+
+tools_qmi_SOURCES = $(qmi_sources) tools/qmi.c
+tools_qmi_LDADD = @GLIB_LIBS@
+endif
+endif
+
+if DUNDEE
+sbin_PROGRAMS += dundee/dundee
+
+dundee_dundee_SOURCES = $(gdbus_sources) $(gatchat_sources) $(btio_sources) \
+			src/log.c src/dbus.c plugins/bluetooth.c \
+			dundee/dundee.h dundee/main.c dundee/dbus.c \
+			dundee/manager.c dundee/device.c dundee/bluetooth.c
+
+dundee_dundee_LDADD = $(builtin_libadd) @GLIB_LIBS@ @DBUS_LIBS@ -ldl
+
+if DATAFILES
+dist_dbusconf_DATA += dundee/dundee.conf
+
+if SYSTEMD
+systemdunit_DATA += dundee/dundee.service
+endif
+endif
+
 endif
 
 noinst_PROGRAMS += gatchat/gsmdial gatchat/test-server gatchat/test-qcdm

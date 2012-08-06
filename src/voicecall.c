@@ -667,20 +667,22 @@ static DBusMessage *voicecall_answer(DBusConnection *conn,
 	return NULL;
 }
 
-static GDBusMethodTable voicecall_methods[] = {
-	{ "GetProperties",  "",    "a{sv}",   voicecall_get_properties },
-	{ "Deflect",        "s",   "",        voicecall_deflect,
-						G_DBUS_METHOD_FLAG_ASYNC },
-	{ "Hangup",         "",    "",        voicecall_hangup,
-						G_DBUS_METHOD_FLAG_ASYNC },
-	{ "Answer",         "",    "",        voicecall_answer,
-						G_DBUS_METHOD_FLAG_ASYNC },
+static const GDBusMethodTable voicecall_methods[] = {
+	{ GDBUS_METHOD("GetProperties",
+				NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
+				voicecall_get_properties) },
+	{ GDBUS_ASYNC_METHOD("Deflect", GDBUS_ARGS({ "number", "s" }), NULL,
+							voicecall_deflect) },
+	{ GDBUS_ASYNC_METHOD("Hangup", NULL, NULL, voicecall_hangup) },
+	{ GDBUS_ASYNC_METHOD("Answer", NULL, NULL, voicecall_answer) },
 	{ }
 };
 
-static GDBusSignalTable voicecall_signals[] = {
-	{ "PropertyChanged",	"sv" },
-	{ "DisconnectReason",	"s" },
+static const GDBusSignalTable voicecall_signals[] = {
+	{ GDBUS_SIGNAL("PropertyChanged",
+			GDBUS_ARGS({ "name", "s" }, { "value", "v" })) },
+	{ GDBUS_SIGNAL("DisconnectReason",
+					GDBUS_ARGS({ "reason", "s" })) },
 	{ }
 };
 
@@ -2117,38 +2119,47 @@ static DBusMessage *manager_get_calls(DBusConnection *conn,
 	return reply;
 }
 
-static GDBusMethodTable manager_methods[] = {
-	{ "GetProperties",     "",    "a{sv}",      manager_get_properties },
-	{ "Dial",              "ss",  "o",          manager_dial,
-						G_DBUS_METHOD_FLAG_ASYNC },
-	{ "Transfer",          "",    "",           manager_transfer,
-						G_DBUS_METHOD_FLAG_ASYNC },
-	{ "SwapCalls",         "",    "",           manager_swap_calls,
-						G_DBUS_METHOD_FLAG_ASYNC },
-	{ "ReleaseAndAnswer",  "",    "",           manager_release_and_answer,
-						G_DBUS_METHOD_FLAG_ASYNC },
-	{ "HoldAndAnswer",     "",    "",           manager_hold_and_answer,
-						G_DBUS_METHOD_FLAG_ASYNC },
-	{ "HangupAll",         "",    "",           manager_hangup_all,
-						G_DBUS_METHOD_FLAG_ASYNC },
-	{ "PrivateChat",       "o",   "ao",         multiparty_private_chat,
-						G_DBUS_METHOD_FLAG_ASYNC },
-	{ "CreateMultiparty",  "",    "ao",         multiparty_create,
-						G_DBUS_METHOD_FLAG_ASYNC },
-	{ "HangupMultiparty",  "",    "",           multiparty_hangup,
-						G_DBUS_METHOD_FLAG_ASYNC },
-	{ "SendTones",         "s",   "",           manager_tone,
-						G_DBUS_METHOD_FLAG_ASYNC },
-	{ "GetCalls",          "",    "a(oa{sv})",  manager_get_calls },
+static const GDBusMethodTable manager_methods[] = {
+	{ GDBUS_METHOD("GetProperties",
+			NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
+			manager_get_properties) },
+	{ GDBUS_ASYNC_METHOD("Dial",
+		GDBUS_ARGS({ "number", "s" }, { "hide_callerid", "s" }),
+		GDBUS_ARGS({ "path", "o" }),
+		manager_dial) },
+	{ GDBUS_ASYNC_METHOD("Transfer", NULL, NULL, manager_transfer) },
+	{ GDBUS_ASYNC_METHOD("SwapCalls",  NULL, NULL, manager_swap_calls) },
+	{ GDBUS_ASYNC_METHOD("ReleaseAndAnswer", NULL, NULL,
+						manager_release_and_answer) },
+	{ GDBUS_ASYNC_METHOD("HoldAndAnswer", NULL, NULL,
+						manager_hold_and_answer) },
+	{ GDBUS_ASYNC_METHOD("HangupAll", NULL, NULL,
+						manager_hangup_all) },
+	{ GDBUS_ASYNC_METHOD("PrivateChat", GDBUS_ARGS({ "call", "o" }),
+						GDBUS_ARGS({ "calls", "ao" }),
+						multiparty_private_chat) },
+	{ GDBUS_ASYNC_METHOD("CreateMultiparty",
+					NULL, GDBUS_ARGS({ "calls", "o" }),
+					multiparty_create) },
+	{ GDBUS_ASYNC_METHOD("HangupMultiparty", NULL, NULL,
+							multiparty_hangup) },
+	{ GDBUS_ASYNC_METHOD("SendTones",
+				GDBUS_ARGS({ "SendTones", "s" }), NULL,
+				manager_tone) },
+	{ GDBUS_METHOD("GetCalls",
+		NULL, GDBUS_ARGS({ "calls_with_properties", "a(oa{sv})" }),
+		manager_get_calls) },
 	{ }
 };
 
-static GDBusSignalTable manager_signals[] = {
-	{ "Forwarded",		"s" },
-	{ "BarringActive",	"s" },
-	{ "PropertyChanged",	"sv" },
-	{ "CallAdded",		"oa{sv}" },
-	{ "CallRemoved",	"o" },
+static const GDBusSignalTable manager_signals[] = {
+	{ GDBUS_SIGNAL("Forwarded", GDBUS_ARGS({ "type", "s" })) },
+	{ GDBUS_SIGNAL("BarringActive", GDBUS_ARGS({ "type", "s" })) },
+	{ GDBUS_SIGNAL("PropertyChanged",
+			GDBUS_ARGS({ "name", "s" }, { "value", "v" })) },
+	{ GDBUS_SIGNAL("CallAdded",
+		GDBUS_ARGS({ "path", "o" }, { "properties", "a{sv}" })) },
+	{ GDBUS_SIGNAL("CallRemoved", GDBUS_ARGS({ "path", "o"})) },
 	{ }
 };
 
@@ -2270,14 +2281,10 @@ void ofono_voicecall_notify(struct ofono_voicecall *vc,
 
 	if (vc->flags & VOICECALL_FLAG_STK_MODEM_CALLSETUP) {
 		struct dial_request *req = vc->dial_req;
-		const char *number = phone_number_to_string(&req->ph);
+		const char *phone_number = phone_number_to_string(&req->ph);
 
-		if (!strcmp(number, "112")) {
-			struct ofono_modem *modem =
-					__ofono_atom_get_modem(vc->atom);
-
+		if (!strcmp(phone_number, "112"))
 			__ofono_modem_inc_emergency_mode(modem);
-		}
 
 		if (v->call->clip_validity == CLIP_VALIDITY_NOT_AVAILABLE) {
 			char *number = v->call->phone_number.number;
