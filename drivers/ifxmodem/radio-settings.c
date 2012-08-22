@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -145,7 +145,10 @@ static void ifx_set_rat_mode(struct ofono_radio_settings *rs,
 		goto error;
 	}
 
-	snprintf(buf, sizeof(buf), "AT+XRAT=%u,%u", value, preferred);
+	if (value == 1)
+		snprintf(buf, sizeof(buf), "AT+XRAT=%u,%u", value, preferred);
+	else
+		snprintf(buf, sizeof(buf), "AT+XRAT=%u", value);
 
 	if (g_at_chat_send(rsd->chat, buf, none_prefix,
 					xrat_modify_cb, cbd, g_free) > 0)
@@ -160,8 +163,10 @@ static void xrat_support_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_radio_settings *rs = user_data;
 
-	if (!ok)
+	if (!ok) {
+		ofono_radio_settings_remove(rs);
 		return;
+	}
 
 	ofono_radio_settings_register(rs);
 }

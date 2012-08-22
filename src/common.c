@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -49,13 +49,13 @@ struct error_entry cms_errors[] = {
 	{ 10,	"Call barred" },
 	{ 21,	"Short message transfer rejected" },
 	{ 27,	"Destination out of service" },
-	{ 28,	"Unindentified subscriber" },
+	{ 28,	"Unidentified subscriber" },
 	{ 29,	"Facility rejected" },
 	{ 30,	"Unknown subscriber" },
 	{ 38,	"Network out of order" },
 	{ 41,	"Temporary failure" },
 	{ 42,	"Congestion" },
-	{ 47,	"Recources unavailable" },
+	{ 47,	"Resources unavailable" },
 	{ 50,	"Requested facility not subscribed" },
 	{ 69,	"Requested facility not implemented" },
 	{ 81,	"Invalid short message transfer reference value" },
@@ -65,8 +65,8 @@ struct error_entry cms_errors[] = {
 	{ 98,	"Message not compatible with short message protocol state" },
 	{ 99,	"Information element non-existent or not implemented" },
 	{ 111,	"Protocol error, unspecified" },
-	{ 127,	"Internetworking error, unspecified" },
-	{ 128,	"Telematic internetworking not supported" },
+	{ 127,	"Interworking error, unspecified" },
+	{ 128,	"Telematic interworking not supported" },
 	{ 129,	"Short message type 0 not supported" },
 	{ 130,	"Cannot replace short message" },
 	{ 143,	"Unspecified TP-PID error" },
@@ -89,7 +89,7 @@ struct error_entry cms_errors[] = {
 	{ 209,	"No SMS Storage capability in SIM" },
 	{ 210,	"Error in MS" },
 	{ 211,	"Memory capacity exceeded" },
-	{ 212,	"Sim application toolkit busy" },
+	{ 212,	"SIM application toolkit busy" },
 	{ 213,	"SIM data download error" },
 	{ 255,	"Unspecified error cause" },
 	{ 300,	"ME Failure" },
@@ -121,7 +121,7 @@ struct error_entry cms_errors[] = {
 struct error_entry cme_errors[] = {
 	{ 0,	"Phone failure" },
 	{ 1,	"No connection to phone" },
-	{ 2,	"Phone adapter link reserved" },
+	{ 2,	"Phone adaptor link reserved" },
 	{ 3,	"Operation not allowed" },
 	{ 4,	"Operation not supported" },
 	{ 5,	"PH_SIM PIN required" },
@@ -156,6 +156,7 @@ struct error_entry cme_errors[] = {
 	{ 46,	"Corporate personalization PIN required" },
 	{ 47,	"Corporate personalization PUK required" },
 	{ 48,	"PH-SIM PUK required" },
+	{ 50,	"Incorrect parameters" },
 	{ 100,	"Unknown error" },
 	{ 103,	"Illegal MS" },
 	{ 106,	"Illegal ME" },
@@ -204,14 +205,14 @@ struct error_entry ceer_errors[] = {
 	{ 38,	"Network out of order" },
 	{ 41,	"Temporary failure" },
 	{ 42,	"Switching equipment congestion" },
-	{ 43,	"Access information discared" },
+	{ 43,	"Access information discarded" },
 	{ 44,	"Requested circuit/channel not available" },
 	{ 47,	"Resource unavailable (unspecified)" },
 	{ 49,	"Quality of service unavailable" },
 	{ 50,	"Requested facility not subscribed" },
 	{ 55,	"Incoming calls barred within the CUG" },
 	{ 57,	"Bearer capability not authorized" },
-	{ 58,	"Bearar capability not presently available" },
+	{ 58,	"Bearer capability not presently available" },
 	{ 63,	"Service or option not available, unspecified" },
 	{ 65,	"Bearer service not implemented" },
 	{ 68,	"ACM equal to or greater than ACMmax" },
@@ -229,7 +230,7 @@ struct error_entry ceer_errors[] = {
 	{ 99,	"Information element non-existent or not implemented" },
 	{ 100,	"Conditional IE error" },
 	{ 101,	"Message not compatible with protocol state" },
-	{ 102,	"Recovery on timer expirty" },
+	{ 102,	"Recovery on timer expiry" },
 	{ 111,	"Protocol error, unspecified" },
 	{ 127,	"Interworking, unspecified" },
 };
@@ -245,6 +246,9 @@ gboolean valid_number_format(const char *number, int length)
 
 	if (number[0] == '+')
 		begin = 1;
+
+	if (begin == len)
+		return FALSE;
 
 	if ((len - begin) > length)
 		return FALSE;
@@ -419,16 +423,16 @@ int mmi_service_code_to_bearer_class(int code)
 
 const char *phone_number_to_string(const struct ofono_phone_number *ph)
 {
-	static char buffer[64];
+	static char buffer[OFONO_MAX_PHONE_NUMBER_LENGTH + 2];
 
 	if (ph->type == 145 && (strlen(ph->number) > 0) &&
 			ph->number[0] != '+') {
 		buffer[0] = '+';
-		strncpy(buffer + 1, ph->number, 62);
-		buffer[63] = '\0';
+		strncpy(buffer + 1, ph->number, OFONO_MAX_PHONE_NUMBER_LENGTH);
+		buffer[OFONO_MAX_PHONE_NUMBER_LENGTH + 1] = '\0';
 	} else {
-		strncpy(buffer, ph->number, 63);
-		buffer[63] = '\0';
+		strncpy(buffer, ph->number, OFONO_MAX_PHONE_NUMBER_LENGTH + 1);
+		buffer[OFONO_MAX_PHONE_NUMBER_LENGTH + 1] = '\0';
 	}
 
 	return buffer;
@@ -488,7 +492,7 @@ gboolean valid_ussd_string(const char *str, gboolean call_in_progress)
 	if (str[len-1] == '#')
 		return TRUE;
 
-	if (!call_in_progress && len == 2 && str[0] != '1')
+	if (!call_in_progress && len == 2 && str[0] == '1')
 		return FALSE;
 
 	if (len <= 2)
@@ -647,43 +651,6 @@ const char *bearer_class_to_string(enum bearer_class cls)
 	};
 
 	return NULL;
-}
-
-gboolean is_valid_pin(const char *pin, enum pin_type type)
-{
-	unsigned int i;
-
-	/* Pin must not be empty */
-	if (pin == NULL || pin[0] == '\0')
-		return FALSE;
-
-	i = strlen(pin);
-	if (i != strspn(pin, "0123456789"))
-		return FALSE;
-
-	switch (type) {
-	case PIN_TYPE_PIN:
-		/* 11.11 Section 9.3 ("CHV"): 4..8 IA-5 digits */
-		if (4 <= i && i <= 8)
-			return TRUE;
-		break;
-	case PIN_TYPE_PUK:
-		/* 11.11 Section 9.3 ("UNBLOCK CHV"), 8 IA-5 digits */
-		if (i == 8)
-			return TRUE;
-		break;
-	case PIN_TYPE_NET:
-		/* 22.004 Section 5.2, 4 IA-5 digits */
-		if (i == 4)
-			return TRUE;
-		break;
-	case PIN_TYPE_NONE:
-		if (i < 8)
-			return TRUE;
-		break;
-	}
-
-	return FALSE;
 }
 
 const char *registration_status_to_string(int status)

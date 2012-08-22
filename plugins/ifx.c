@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -47,7 +47,6 @@
 #include <ofono/call-settings.h>
 #include <ofono/call-volume.h>
 #include <ofono/message-waiting.h>
-#include <ofono/ssn.h>
 #include <ofono/sim.h>
 #include <ofono/cbs.h>
 #include <ofono/sms.h>
@@ -56,6 +55,7 @@
 #include <ofono/gprs-context.h>
 #include <ofono/radio-settings.h>
 #include <ofono/audio-settings.h>
+#include <ofono/gnss.h>
 #include <ofono/stk.h>
 #include <ofono/ctm.h>
 #include <ofono/log.h>
@@ -80,7 +80,8 @@ static const char *dlc_nodes[NUM_DLC] = { "/dev/ttyGSM1", "/dev/ttyGSM2",
 					"/dev/ttyGSM5", "/dev/ttyGSM6" };
 
 static const char *none_prefix[] = { NULL };
-static const char *xdrv_prefix[] = { "+XDRV:", NULL };
+static const char *xgendata_prefix[] = { "+XGENDATA:", NULL };
+static const char *xsimstate_prefix[] = { "+XSIMSTATE:", NULL };
 
 struct ifx_data {
 	GIOChannel *device;
@@ -93,11 +94,6 @@ struct ifx_data {
 	guint frame_size;
 	int mux_ldisc;
 	int saved_ldisc;
-	int audio_source;
-	int audio_dest;
-	int audio_context;
-	const char *audio_setting;
-	int audio_loopback;
 	struct ofono_sim *sim;
 	gboolean have_sim;
 };
@@ -138,25 +134,8 @@ static void ifx_remove(struct ofono_modem *modem)
 	g_free(data);
 }
 
-static void xsim_notify(GAtResult *result, gpointer user_data)
+static void ifx_set_sim_state(struct ifx_data *data, int state)
 {
-	struct ofono_modem *modem = user_data;
-	struct ifx_data *data = ofono_modem_get_data(modem);
-
-	GAtResultIter iter;
-	int state;
-
-	if (data->sim == NULL)
-		return;
-
-	g_at_result_iter_init(&iter, result);
-
-	if (!g_at_result_iter_next(&iter, "+XSIM:"))
-		return;
-
-	if (!g_at_result_iter_next_number(&iter, &state))
-		return;
-
 	DBG("state %d", state);
 
 	switch (state) {
@@ -184,6 +163,55 @@ static void xsim_notify(GAtResult *result, gpointer user_data)
 		ofono_warn("Unknown SIM state %d received", state);
 		break;
 	}
+}
+
+static void xsim_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_modem *modem = user_data;
+	struct ifx_data *data = ofono_modem_get_data(modem);
+
+	GAtResultIter iter;
+	int state;
+
+	if (data->sim == NULL)
+		return;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "+XSIM:"))
+		return;
+
+	if (!g_at_result_iter_next_number(&iter, &state))
+		return;
+
+	ifx_set_sim_state(data, state);
+}
+
+static void xsimstate_query(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct ofono_modem *modem = user_data;
+	struct ifx_data *data = ofono_modem_get_data(modem);
+	GAtResultIter iter;
+	int mode;
+	int state;
+
+	DBG("");
+
+	if (!ok)
+		return;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "+XSIMSTATE:"))
+		return;
+
+	if (!g_at_result_iter_next_number(&iter, &mode))
+		return;
+
+	if (!g_at_result_iter_next_number(&iter, &state))
+		return;
+
+	ifx_set_sim_state(data, state);
 }
 
 static void shutdown_device(struct ifx_data *data)
@@ -281,50 +309,13 @@ static void xgendata_query(gboolean ok, GAtResult *result, gpointer user_data)
 
 	DBG("\n%s", gendata);
 
-	if (g_str_has_prefix(gendata, "    XMM6260") == TRUE) {
-		ofono_info("Detected XMM6260 modem");
-		data->audio_source = 4;
-		data->audio_dest = 3;
-		data->audio_context = 0;
-	}
+	/* switch to GSM character set instead of IRA */
+	g_at_chat_send(data->dlcs[AUX_DLC], "AT+CSCS=\"GSM\"", none_prefix,
+							NULL, NULL, NULL);
 
 	/* disable UART for power saving */
 	g_at_chat_send(data->dlcs[AUX_DLC], "AT+XPOW=0,0,0", none_prefix,
 							NULL, NULL, NULL);
-
-	if (data->audio_setting && data->audio_source && data->audio_dest) {
-		char buf[64];
-
-		/* configure source */
-		snprintf(buf, sizeof(buf), "AT+XDRV=40,4,%d,%d,%s",
-						data->audio_source,
-						data->audio_context,
-						data->audio_setting);
-		g_at_chat_send(data->dlcs[AUX_DLC], buf, xdrv_prefix,
-						NULL, NULL, NULL);
-
-		/* configure destination */
-		snprintf(buf, sizeof(buf), "AT+XDRV=40,5,%d,%d,%s",
-						data->audio_dest,
-						data->audio_context,
-						data->audio_setting);
-		g_at_chat_send(data->dlcs[AUX_DLC], buf, xdrv_prefix,
-						NULL, NULL, NULL);
-
-		if (data->audio_loopback) {
-			/* set destination for source */
-			snprintf(buf, sizeof(buf), "AT+XDRV=40,6,%d,%d",
-					data->audio_source, data->audio_dest);
-			g_at_chat_send(data->dlcs[AUX_DLC], buf, xdrv_prefix,
-							NULL, NULL, NULL);
-
-			/* enable source */
-			snprintf(buf, sizeof(buf), "AT+XDRV=40,2,%d",
-							data->audio_source);
-			g_at_chat_send(data->dlcs[AUX_DLC], buf, xdrv_prefix,
-							NULL, NULL, NULL);
-		}
-	}
 
 	data->have_sim = FALSE;
 
@@ -337,6 +328,9 @@ static void xgendata_query(gboolean ok, GAtResult *result, gpointer user_data)
 	/* enable XSIM and XLOCK notifications */
 	g_at_chat_send(data->dlcs[AUX_DLC], "AT+XSIMSTATE=1", none_prefix,
 						NULL, NULL, NULL);
+
+	g_at_chat_send(data->dlcs[AUX_DLC], "AT+XSIMSTATE?", xsimstate_prefix,
+					xsimstate_query, modem, NULL);
 
 	return;
 
@@ -358,7 +352,7 @@ static void cfun_enable(gboolean ok, GAtResult *result, gpointer user_data)
 		return;
 	}
 
-	g_at_chat_send(data->dlcs[AUX_DLC], "AT+XGENDATA", NULL,
+	g_at_chat_send(data->dlcs[AUX_DLC], "AT+XGENDATA", xgendata_prefix,
 					xgendata_query, modem, NULL);
 }
 
@@ -455,7 +449,7 @@ static void setup_internal_mux(struct ofono_modem *modem)
 			ofono_error("Failed to create channel");
 			goto error;
 		}
-        }
+	}
 
 	/* wait for DLC creation to settle */
 	data->dlc_init_source = g_timeout_add(10, dlc_setup, modem);
@@ -542,7 +536,7 @@ static gboolean mux_timeout_cb(gpointer user_data)
 static int ifx_enable(struct ofono_modem *modem)
 {
 	struct ifx_data *data = ofono_modem_get_data(modem);
-	const char *device, *ldisc, *audio, *loopback;
+	const char *device, *ldisc;
 	GAtSyntax *syntax;
 	GAtChat *chat;
 
@@ -554,18 +548,6 @@ static int ifx_enable(struct ofono_modem *modem)
 
 	DBG("%s", device);
 
-	audio = ofono_modem_get_string(modem, "AudioSetting");
-	if (g_strcmp0(audio, "FULL_DUPLEX") == 0)
-		data->audio_setting = "0,0,0,0,0,0,0,0,0";
-	else if (g_strcmp0(audio, "BURSTMODE_48KHZ") == 0)
-		data->audio_setting = "0,0,8,0,2,0,0,0,0";
-	else if (g_strcmp0(audio, "BURSTMODE_96KHZ") == 0)
-		data->audio_setting = "0,0,9,0,2,0,0,0,0";
-
-	loopback = ofono_modem_get_string(modem, "AudioLoopback");
-	if (loopback != NULL)
-		data->audio_loopback = atoi(loopback);
-
 	ldisc = ofono_modem_get_string(modem, "LineDiscipline");
 	if (ldisc != NULL) {
 		data->mux_ldisc = atoi(ldisc);
@@ -575,7 +557,7 @@ static int ifx_enable(struct ofono_modem *modem)
 
 	data->device = g_at_tty_open(device, NULL);
 	if (data->device == NULL)
-                return -EIO;
+		return -EIO;
 
 	syntax = g_at_syntax_new_gsmv1();
 	chat = g_at_chat_new(data->device, syntax);
@@ -583,7 +565,7 @@ static int ifx_enable(struct ofono_modem *modem)
 
 	if (chat == NULL) {
 		g_io_channel_unref(data->device);
-                return -EIO;
+		return -EIO;
 	}
 
 	if (getenv("OFONO_AT_DEBUG"))
@@ -592,6 +574,7 @@ static int ifx_enable(struct ofono_modem *modem)
 	g_at_chat_send(chat, "ATE0 +CMEE=1", NULL,
 					NULL, NULL, NULL);
 
+	/* Enable multiplexer */
 	data->frame_size = 1509;
 
 	g_at_chat_send(chat, "AT+CMUX=0,0,,1509,10,3,30,,", NULL,
@@ -635,7 +618,7 @@ static int ifx_disable(struct ofono_modem *modem)
 		g_at_chat_unregister_all(data->dlcs[i]);
 	}
 
-	g_at_chat_send(data->dlcs[AUX_DLC], "AT+CFUN=4", NULL,
+	g_at_chat_send(data->dlcs[AUX_DLC], "AT+CFUN=0", NULL,
 					cfun_disable, modem, NULL);
 
 	return -EINPROGRESS;
@@ -645,11 +628,10 @@ static void set_online_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
 	ofono_modem_online_cb_t cb = cbd->cb;
+	struct ofono_error error;
 
-	if (ok)
-		CALLBACK_WITH_SUCCESS(cb, cbd->data);
-	else
-		CALLBACK_WITH_FAILURE(cb, cbd->data);
+	decode_at_error(&error, g_at_result_final_response(result));
+	cb(&error, cbd->data);
 }
 
 static void ifx_set_online(struct ofono_modem *modem, ofono_bool_t online,
@@ -661,13 +643,13 @@ static void ifx_set_online(struct ofono_modem *modem, ofono_bool_t online,
 
 	DBG("%p %s", modem, online ? "online" : "offline");
 
-	if (g_at_chat_send(data->dlcs[AUX_DLC], command, NULL,
+	if (g_at_chat_send(data->dlcs[AUX_DLC], command, none_prefix,
 					set_online_cb, cbd, g_free) > 0)
 		return;
 
-	g_free(cbd);
-
 	CALLBACK_WITH_FAILURE(cb, cbd->data);
+
+	g_free(cbd);
 }
 
 static void ifx_pre_sim(struct ofono_modem *modem)
@@ -716,7 +698,8 @@ static void ifx_post_online(struct ofono_modem *modem)
 	ofono_cbs_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
 	ofono_ussd_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
 
-	ofono_ssn_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
+	ofono_gnss_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
+
 	ofono_call_settings_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
 	ofono_call_meter_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
 	ofono_call_barring_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);

@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2009-2010 Nokia Corporation and/or its subsidiary(-ies).
+ *  Copyright (C) 2009-2010  Nokia Corporation and/or its subsidiary(-ies).
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -43,9 +43,6 @@ extern void isi_sim_exit(void);
 extern void isi_ussd_init(void);
 extern void isi_ussd_exit(void);
 
-extern void isi_ssn_init(void);
-extern void isi_ssn_exit(void);
-
 extern void isi_call_forwarding_init(void);
 extern void isi_call_forwarding_exit(void);
 
@@ -69,3 +66,6 @@ extern void isi_gprs_context_exit(void);
 
 extern void isi_audio_settings_init(void);
 extern void isi_audio_settings_exit(void);
+
+extern void isi_uicc_init(void);
+extern void isi_uicc_exit(void);

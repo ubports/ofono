@@ -2,8 +2,8 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
- *  Copyright (C) 2010 ST-Ericsson AB.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2010  ST-Ericsson AB.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -491,6 +491,7 @@ static void ecav_notify(GAtResult *result, gpointer user_data)
 
 		vd->local_release &= ~(1 << existing_call->id);
 		vd->calls = g_slist_remove(vd->calls, l->data);
+		g_free(existing_call);
 		break;
 	}
 

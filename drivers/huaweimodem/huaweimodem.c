@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -34,20 +34,26 @@
 
 static int huaweimodem_init(void)
 {
+	huawei_ussd_init();
 	huawei_voicecall_init();
 	huawei_audio_settings_init();
 	huawei_radio_settings_init();
 	huawei_gprs_context_init();
+
+	huawei_cdma_netreg_init();
 
 	return 0;
 }
 
 static void huaweimodem_exit(void)
 {
+	huawei_cdma_netreg_exit();
+
 	huawei_gprs_context_exit();
 	huawei_radio_settings_exit();
 	huawei_audio_settings_exit();
 	huawei_voicecall_exit();
+	huawei_ussd_exit();
 }
 
 OFONO_PLUGIN_DEFINE(huaweimodem, "Huawei modem driver", VERSION,

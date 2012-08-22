@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -85,6 +85,7 @@ struct sim_fs {
 	int fd;
 	struct ofono_sim *sim;
 	const struct ofono_sim_driver *driver;
+	GSList *contexts;
 };
 
 void sim_fs_free(struct sim_fs *fs)
@@ -104,13 +105,23 @@ void sim_fs_free(struct sim_fs *fs)
 	if (fs->op_q) {
 		g_queue_foreach(fs->op_q, (GFunc) sim_fs_op_free, NULL);
 		g_queue_free(fs->op_q);
+		fs->op_q = NULL;
 	}
+
+	while (fs->contexts)
+		sim_fs_context_free(fs->contexts->data);
 
 	g_free(fs);
 }
 
+struct file_watch {
+	struct ofono_watchlist_item item;
+	int ef;
+};
+
 struct ofono_sim_context {
 	struct sim_fs *fs;
+	struct ofono_watchlist *file_watches;
 };
 
 struct sim_fs *sim_fs_new(struct ofono_sim *sim,
@@ -138,33 +149,90 @@ struct ofono_sim_context *sim_fs_context_new(struct sim_fs *fs)
 		return NULL;
 
 	context->fs = fs;
+	fs->contexts = g_slist_prepend(fs->contexts, context);
 
 	return context;
 }
 
 void sim_fs_context_free(struct ofono_sim_context *context)
 {
+	struct sim_fs *fs = context->fs;
 	int n = 0;
 	struct sim_fs_op *op;
 
-	while ((op = g_queue_peek_nth(context->fs->op_q, n)) != NULL) {
-		if (op->context != context) {
-			n += 1;
-			continue;
+	if (fs->op_q) {
+		while ((op = g_queue_peek_nth(fs->op_q, n)) != NULL) {
+			if (op->context != context) {
+				n += 1;
+				continue;
+			}
+
+			if (n == 0) {
+				op->cb = NULL;
+
+				n += 1;
+				continue;
+			}
+
+			sim_fs_op_free(op);
+			g_queue_remove(fs->op_q, op);
 		}
-
-		if (n == 0) {
-			op->cb = NULL;
-
-			n += 1;
-			continue;
-		}
-
-		sim_fs_op_free(op);
-		g_queue_remove(context->fs->op_q, op);
 	}
 
+	if (context->file_watches)
+		__ofono_watchlist_free(context->file_watches);
+
+	fs->contexts = g_slist_remove(fs->contexts, context);
 	g_free(context);
+}
+
+unsigned int sim_fs_file_watch_add(struct ofono_sim_context *context, int id,
+					ofono_sim_file_changed_cb_t cb,
+					void *userdata,
+					ofono_destroy_func destroy)
+{
+	struct file_watch *watch;
+
+	if (cb == NULL)
+		return 0;
+
+	if (context->file_watches == NULL)
+		context->file_watches = __ofono_watchlist_new(g_free);
+
+	watch = g_new0(struct file_watch, 1);
+
+	watch->ef = id;
+	watch->item.notify = cb;
+	watch->item.notify_data = userdata;
+	watch->item.destroy = destroy;
+
+	return __ofono_watchlist_add_item(context->file_watches,
+					(struct ofono_watchlist_item *) watch);
+}
+
+void sim_fs_file_watch_remove(struct ofono_sim_context *context,
+				unsigned int id)
+{
+	__ofono_watchlist_remove_item(context->file_watches, id);
+}
+
+void sim_fs_notify_file_watches(struct sim_fs *fs, int id)
+{
+	GSList *l;
+
+	for (l = fs->contexts; l; l = l->next) {
+		struct ofono_sim_context *context = l->data;
+		GSList *k;
+
+		for (k = context->file_watches->items; k; k = k->next) {
+			struct file_watch *w = k->data;
+			ofono_sim_file_changed_cb_t notify = w->item.notify;
+
+			if (id == -1 || w->ef == id)
+				notify(w->ef, w->item.notify_data);
+		}
+	}
+
 }
 
 static void sim_fs_end_current(struct sim_fs *fs)
@@ -833,8 +901,10 @@ int sim_fs_read(struct ofono_sim_context *context, int id,
 	if (fs->driver == NULL)
 		return -EINVAL;
 
-	if (fs->driver->read_file_info == NULL)
+	if (fs->driver->read_file_info == NULL) {
+		cb(0, 0, 0, NULL, 0, data);
 		return -ENOSYS;
+	}
 
 	if (fs->op_q == NULL)
 		fs->op_q = g_queue_new();

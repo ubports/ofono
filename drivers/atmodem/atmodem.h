@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -54,9 +54,6 @@ extern void at_sms_exit(void);
 extern void at_phonebook_init(void);
 extern void at_phonebook_exit(void);
 
-extern void at_ssn_init(void);
-extern void at_ssn_exit(void);
-
 extern void at_devinfo_init(void);
 extern void at_devinfo_exit(void);
 
@@ -74,3 +71,6 @@ extern void at_gprs_context_exit(void);
 
 extern void at_sim_auth_init(void);
 extern void at_sim_auth_exit(void);
+
+extern void at_gnss_init(void);
+extern void at_gnss_exit(void);

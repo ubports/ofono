@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -268,13 +268,19 @@ static DBusMessage *smart_messaging_send_vcal(DBusConnection *conn,
 	return NULL;
 }
 
-static GDBusMethodTable smart_messaging_methods[] = {
-	{ "RegisterAgent",    "o",     "",  smart_messaging_register_agent },
-	{ "UnregisterAgent",  "o",     "",  smart_messaging_unregister_agent },
-	{ "SendBusinessCard", "say",   "o", smart_messaging_send_vcard,
-						G_DBUS_METHOD_FLAG_ASYNC },
-	{ "SendAppointment",  "say",   "o", smart_messaging_send_vcal,
-						G_DBUS_METHOD_FLAG_ASYNC },
+static const GDBusMethodTable smart_messaging_methods[] = {
+	{ GDBUS_METHOD("RegisterAgent", GDBUS_ARGS({ "path", "o" }), NULL,
+			smart_messaging_register_agent) },
+	{ GDBUS_METHOD("UnregisterAgent", GDBUS_ARGS({ "path", "o" }), NULL,
+			smart_messaging_unregister_agent) },
+	{ GDBUS_ASYNC_METHOD("SendBusinessCard",
+				GDBUS_ARGS({ "to", "s" }, { "card", "ay" }),
+				GDBUS_ARGS({ "path", "o" }),
+				smart_messaging_send_vcard) },
+	{ GDBUS_ASYNC_METHOD("SendAppointment",
+			GDBUS_ARGS({ "to", "s" }, { "appointment", "ay" }),
+			GDBUS_ARGS({ "path", "o" }),
+			smart_messaging_send_vcal) },
 	{ }
 };
 

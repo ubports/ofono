@@ -28,10 +28,6 @@
 #include <glib.h>
 #include <dbus/dbus.h>
 
-#ifdef NEED_DBUS_WATCH_GET_UNIX_FD
-#define dbus_watch_get_unix_fd dbus_watch_get_fd
-#endif
-
 #include "gdbus.h"
 
 #define DISPATCH_TIMEOUT  0
@@ -230,9 +226,6 @@ static dbus_bool_t add_timeout(DBusTimeout *timeout, void *data)
 
 static void remove_timeout(DBusTimeout *timeout, void *data)
 {
-	if (dbus_timeout_get_enabled(timeout))
-		return;
-
 	/* will trigger timeout_handler_free() */
 	dbus_timeout_set_data(timeout, NULL, NULL);
 }

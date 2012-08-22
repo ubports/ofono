@@ -2,7 +2,7 @@
  *
  *  AT chat library with GLib integration
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -38,6 +38,9 @@
 
 /* #define WRITE_SCHEDULER_DEBUG 1 */
 
+#define COMMAND_FLAG_EXPECT_PDU			0x1
+#define COMMAND_FLAG_EXPECT_SHORT_PROMPT	0x2
+
 struct at_chat;
 static void chat_wakeup_writer(struct at_chat *chat);
 
@@ -46,7 +49,7 @@ static const char *none_prefix[] = { NULL };
 struct at_command {
 	char *cmd;
 	char **prefixes;
-	gboolean expect_pdu;
+	guint flags;
 	guint id;
 	guint gid;
 	GAtResultFunc callback;
@@ -99,6 +102,7 @@ struct at_chat {
 	gboolean in_read_handler;		/* Re-entrancy guard */
 	gboolean in_notify;
 	GSList *terminator_list;		/* Non-standard terminator */
+	guint16 terminator_blacklist;		/* Blacklisted terinators */
 };
 
 struct _GAtChat {
@@ -148,6 +152,7 @@ static void at_notify_destroy(gpointer user_data)
 	struct at_notify *notify = user_data;
 
 	g_slist_foreach(notify->nodes, at_notify_node_destroy, NULL);
+	g_slist_free(notify->nodes);
 	g_free(notify);
 }
 
@@ -226,7 +231,7 @@ static gboolean at_chat_unregister_all(struct at_chat *chat,
 
 static struct at_command *at_command_create(guint gid, const char *cmd,
 						const char **prefix_list,
-						gboolean expect_pdu,
+						guint flags,
 						GAtNotifyFunc listing,
 						GAtResultFunc func,
 						gpointer user_data,
@@ -280,7 +285,7 @@ static struct at_command *at_command_create(guint gid, const char *cmd,
 	c->cmd[len] = '\0';
 
 	c->gid = gid;
-	c->expect_pdu = expect_pdu;
+	c->flags = flags;
 	c->prefixes = prefixes;
 	c->callback = func;
 	c->listing = listing;
@@ -486,6 +491,12 @@ static void at_chat_add_terminator(struct at_chat *chat, char *terminator,
 	chat->terminator_list = g_slist_prepend(chat->terminator_list, info);
 }
 
+static void at_chat_blacklist_terminator(struct at_chat *chat,
+						GAtChatTerminator terminator)
+{
+	chat->terminator_blacklist |= 1 << terminator;
+}
+
 static gboolean check_terminator(struct terminator_info *info, char *line)
 {
 	if (info->len == -1 && !strcmp(line, info->terminator))
@@ -508,7 +519,8 @@ static gboolean at_chat_handle_command_response(struct at_chat *p,
 
 	for (i = 0; i < size; i++) {
 		struct terminator_info *info = &terminator_table[i];
-		if (check_terminator(info, line)) {
+		if (check_terminator(info, line) &&
+				(p->terminator_blacklist & 1 << i) == 0) {
 			at_chat_finish_command(p, info->success, line);
 			return TRUE;
 		}
@@ -523,17 +535,17 @@ static gboolean at_chat_handle_command_response(struct at_chat *p,
 	}
 
 	if (cmd->prefixes) {
-		int i;
+		int n;
 
-		for (i = 0; cmd->prefixes[i]; i++)
-			if (g_str_has_prefix(line, cmd->prefixes[i]))
+		for (n = 0; cmd->prefixes[n]; n++)
+			if (g_str_has_prefix(line, cmd->prefixes[n]))
 				goto out;
 
 		return FALSE;
 	}
 
 out:
-	if (cmd->listing && cmd->expect_pdu)
+	if (cmd->listing && (cmd->flags & COMMAND_FLAG_EXPECT_PDU))
 		hint = G_AT_SYNTAX_EXPECT_PDU;
 	else
 		hint = G_AT_SYNTAX_EXPECT_MULTILINE;
@@ -541,7 +553,7 @@ out:
 	if (p->syntax->set_hint)
 		p->syntax->set_hint(p->syntax, hint);
 
-	if (cmd->listing && cmd->expect_pdu) {
+	if (cmd->listing && (cmd->flags & COMMAND_FLAG_EXPECT_PDU)) {
 		p->pdu_notify = line;
 		return TRUE;
 	}
@@ -646,7 +658,8 @@ static void have_pdu(struct at_chat *p, char *pdu)
 
 	cmd = g_queue_peek_head(p->command_queue);
 
-	if (cmd && cmd->expect_pdu && p->cmd_bytes_written > 0) {
+	if (cmd && (cmd->flags & COMMAND_FLAG_EXPECT_PDU) &&
+			p->cmd_bytes_written > 0) {
 		char c = cmd->cmd[p->cmd_bytes_written - 1];
 
 		if (c == '\r')
@@ -801,7 +814,7 @@ static gboolean wakeup_no_response(gpointer user_data)
 
 	at_chat_finish_command(chat, FALSE, NULL);
 
-	cmd = at_command_create(0, chat->wakeup, none_prefix, FALSE,
+	cmd = at_command_create(0, chat->wakeup, none_prefix, 0,
 				NULL, wakeup_cb, chat, NULL, TRUE);
 	if (cmd == NULL) {
 		chat->timeout_source = 0;
@@ -852,7 +865,7 @@ static gboolean can_write_data(gpointer data)
 	}
 
 	if (chat->cmd_bytes_written == 0 && wakeup_first == TRUE) {
-		cmd = at_command_create(0, chat->wakeup, none_prefix, FALSE,
+		cmd = at_command_create(0, chat->wakeup, none_prefix, 0,
 					NULL, wakeup_cb, chat, NULL, TRUE);
 		if (cmd == NULL)
 			return FALSE;
@@ -889,6 +902,16 @@ static gboolean can_write_data(gpointer data)
 	if (bytes_written < towrite)
 		return TRUE;
 
+	/*
+	 * If we're expecting a short prompt, set the hint for all lines
+	 * sent to the modem except the last
+	 */
+	if ((cmd->flags & COMMAND_FLAG_EXPECT_SHORT_PROMPT) &&
+			chat->cmd_bytes_written < len &&
+			chat->syntax->set_hint)
+		chat->syntax->set_hint(chat->syntax,
+					G_AT_SYNTAX_EXPECT_SHORT_PROMPT);
+
 	/* Full command submitted, update timer */
 	if (chat->wakeup_timer)
 		g_timer_start(chat->wakeup_timer);
@@ -908,7 +931,6 @@ static void at_chat_suspend(struct at_chat *chat)
 	g_at_io_set_write_handler(chat->io, NULL, NULL);
 	g_at_io_set_read_handler(chat->io, NULL, NULL);
 	g_at_io_set_debug(chat->io, NULL, NULL);
-
 }
 
 static void at_chat_resume(struct at_chat *chat)
@@ -952,7 +974,8 @@ static void at_chat_unref(struct at_chat *chat)
 }
 
 static gboolean at_chat_set_disconnect_function(struct at_chat *chat,
-			GAtDisconnectFunc disconnect, gpointer user_data)
+						GAtDisconnectFunc disconnect,
+						gpointer user_data)
 {
 	chat->user_disconnect = disconnect;
 	chat->user_disconnect_data = user_data;
@@ -961,7 +984,7 @@ static gboolean at_chat_set_disconnect_function(struct at_chat *chat,
 }
 
 static gboolean at_chat_set_debug(struct at_chat *chat,
-				GAtDebugFunc func, gpointer user_data)
+					GAtDebugFunc func, gpointer user_data)
 {
 
 	chat->debugf = func;
@@ -991,7 +1014,7 @@ static gboolean at_chat_set_wakeup_command(struct at_chat *chat,
 static guint at_chat_send_common(struct at_chat *chat, guint gid,
 					const char *cmd,
 					const char **prefix_list,
-					gboolean expect_pdu,
+					guint flags,
 					GAtNotifyFunc listing,
 					GAtResultFunc func,
 					gpointer user_data,
@@ -1002,7 +1025,7 @@ static guint at_chat_send_common(struct at_chat *chat, guint gid,
 	if (chat == NULL || chat->command_queue == NULL)
 		return 0;
 
-	c = at_command_create(gid, cmd, prefix_list, expect_pdu, listing, func,
+	c = at_command_create(gid, cmd, prefix_list, flags, listing, func,
 				user_data, notify, FALSE);
 	if (c == NULL)
 		return 0;
@@ -1424,6 +1447,15 @@ void g_at_chat_add_terminator(GAtChat *chat, char *terminator,
 	at_chat_add_terminator(chat->parent, terminator, len, success);
 }
 
+void g_at_chat_blacklist_terminator(GAtChat *chat,
+						GAtChatTerminator terminator)
+{
+	if (chat == NULL || chat->group != 0)
+		return;
+
+	at_chat_blacklist_terminator(chat->parent, terminator);
+}
+
 gboolean g_at_chat_set_wakeup_command(GAtChat *chat, const char *cmd,
 					unsigned int timeout, unsigned int msec)
 {
@@ -1438,7 +1470,7 @@ guint g_at_chat_send(GAtChat *chat, const char *cmd,
 			gpointer user_data, GDestroyNotify notify)
 {
 	return at_chat_send_common(chat->parent, chat->group,
-					cmd, prefix_list, FALSE, NULL,
+					cmd, prefix_list, 0, NULL,
 					func, user_data, notify);
 }
 
@@ -1451,7 +1483,7 @@ guint g_at_chat_send_listing(GAtChat *chat, const char *cmd,
 		return 0;
 
 	return at_chat_send_common(chat->parent, chat->group,
-					cmd, prefix_list, FALSE,
+					cmd, prefix_list, 0,
 					listing, func, user_data, notify);
 }
 
@@ -1464,8 +1496,21 @@ guint g_at_chat_send_pdu_listing(GAtChat *chat, const char *cmd,
 		return 0;
 
 	return at_chat_send_common(chat->parent, chat->group,
-					cmd, prefix_list, TRUE,
+					cmd, prefix_list,
+					COMMAND_FLAG_EXPECT_PDU,
 					listing, func, user_data, notify);
+}
+
+guint g_at_chat_send_and_expect_short_prompt(GAtChat *chat, const char *cmd,
+						const char **prefix_list,
+						GAtResultFunc func,
+						gpointer user_data,
+						GDestroyNotify notify)
+{
+	return at_chat_send_common(chat->parent, chat->group,
+					cmd, prefix_list,
+					COMMAND_FLAG_EXPECT_SHORT_PROMPT,
+					NULL, func, user_data, notify);
 }
 
 gboolean g_at_chat_cancel(GAtChat *chat, guint id)

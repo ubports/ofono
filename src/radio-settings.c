@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2010 Nokia Corporation and/or its subsidiary(-ies).
+ *  Copyright (C) 2010  Nokia Corporation and/or its subsidiary(-ies).
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -601,16 +601,19 @@ static DBusMessage *radio_set_property(DBusConnection *conn, DBusMessage *msg,
 	return __ofono_error_invalid_args(msg);
 }
 
-static GDBusMethodTable radio_methods[] = {
-	{ "GetProperties",  "",    "a{sv}",  radio_get_properties,
-						G_DBUS_METHOD_FLAG_ASYNC },
-	{ "SetProperty",    "sv",  "",       radio_set_property,
-						G_DBUS_METHOD_FLAG_ASYNC },
+static const GDBusMethodTable radio_methods[] = {
+	{ GDBUS_ASYNC_METHOD("GetProperties",
+			NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
+			radio_get_properties) },
+	{ GDBUS_ASYNC_METHOD("SetProperty",
+			GDBUS_ARGS({ "property", "s" }, { "value", "v" }),
+			NULL, radio_set_property) },
 	{ }
 };
 
-static GDBusSignalTable radio_signals[] = {
-	{ "PropertyChanged",	"sv" },
+static const GDBusSignalTable radio_signals[] = {
+	{ GDBUS_SIGNAL("PropertyChanged",
+			GDBUS_ARGS({ "name", "s" }, { "value", "v" })) },
 	{ }
 };
 

@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -68,10 +68,14 @@ struct opl_operator {
 static struct sim_ef_info ef_db[] = {
 {	0x2F05, ROOTMF, BINARY, 0,	ALW,	PIN	},
 {	0x2F06, ROOTMF, RECORD, 0,	ALW,	PIN	},
-{	0x2FE2, ROOTMF, BINARY, 10,	ALW,	NEV 	},
+{	0x2FE2, ROOTMF, BINARY, 10,	ALW,	NEV	},
 {	0x4F20, 0x5F50, BINARY, 0,	PIN,	ADM	},
 {	0x6F05, 0x7F20, BINARY, 0,	ALW,	PIN	},
 {	0x6F06, 0x0000, RECORD, 0,	ALW,	ADM	},
+{	0x6F07, 0x0000, BINARY, 9,	PIN,	ADM	},
+{	0x6F14, 0x7F20, BINARY, 0,	PIN,	ADM	},
+{	0x6F15, 0x7F20, BINARY, 0,	PIN,	PIN	},
+{	0x6F18, 0x7F20, BINARY, 10,	PIN,	ADM	},
 {	0x6F2C, 0x7F20, BINARY, 16,	PIN,	PIN	},
 {	0x6F30, 0x7F20, BINARY, 0,	PIN,	PIN	},
 {	0x6F32, 0x7F20, BINARY, 0,	PIN,	ADM	},
@@ -723,11 +727,10 @@ gboolean comprehension_tlv_builder_set_length(
 	unsigned char *tlv = builder->pdu + builder->pos;
 	unsigned int tag_size = CTLV_TAG_FIELD_SIZE(tlv[0]);
 	unsigned int len_size, new_len_size;
-	unsigned int ctlv_len, new_ctlv_len;
+	unsigned int new_ctlv_len;
 	unsigned int len;
 
 	len_size = CTLV_LEN_FIELD_SIZE(tlv[tag_size]);
-	ctlv_len = tag_size + len_size + builder->len;
 	new_len_size = BTLV_LEN_FIELD_SIZE_NEEDED(new_len);
 	new_ctlv_len = tag_size + new_len_size + new_len;
 
@@ -1473,6 +1476,14 @@ gboolean sim_sst_is_active(unsigned char *efsst, unsigned char len,
 		return FALSE;
 
 	return (efsst[index / 4] >> (((index % 4) * 2) + 1)) & 1;
+}
+
+gboolean sim_cphs_is_active(unsigned char *cphs, enum sim_cphs_service index)
+{
+	if (index >= 2 * 4u)
+		return FALSE;
+
+	return ((cphs[index / 4] >> ((index % 4) * 2)) & 3) == 3;
 }
 
 GSList *sim_parse_app_template_entries(const unsigned char *buffer, int len)

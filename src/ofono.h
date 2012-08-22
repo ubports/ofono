@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -34,8 +34,11 @@ void __ofono_modem_shutdown(void);
 
 #include <ofono/log.h>
 
-int __ofono_log_init(const char *debug, ofono_bool_t detach);
+int __ofono_log_init(const char *program, const char *debug,
+						ofono_bool_t detach);
 void __ofono_log_cleanup(void);
+void __ofono_log_enable(struct ofono_debug_desc *start,
+					struct ofono_debug_desc *stop);
 
 #include <ofono/dbus.h>
 
@@ -56,8 +59,16 @@ DBusMessage *__ofono_error_sim_not_ready(DBusMessage *msg);
 DBusMessage *__ofono_error_in_use(DBusMessage *msg);
 DBusMessage *__ofono_error_not_attached(DBusMessage *msg);
 DBusMessage *__ofono_error_attach_in_progress(DBusMessage *msg);
+DBusMessage *__ofono_error_not_registered(DBusMessage *msg);
 DBusMessage *__ofono_error_canceled(DBusMessage *msg);
 DBusMessage *__ofono_error_access_denied(DBusMessage *msg);
+DBusMessage *__ofono_error_emergency_active(DBusMessage *msg);
+DBusMessage *__ofono_error_incorrect_password(DBusMessage *msg);
+DBusMessage *__ofono_error_not_allowed(DBusMessage *msg);
+DBusMessage *__ofono_error_not_recognized(DBusMessage *msg);
+
+DBusMessage *__ofono_error_from_error(const struct ofono_error *error,
+						DBusMessage *msg);
 
 void __ofono_dbus_pending_reply(DBusMessage **msg, DBusMessage *reply);
 
@@ -127,7 +138,15 @@ enum ofono_atom_type {
 	OFONO_ATOM_TYPE_NETTIME,
 	OFONO_ATOM_TYPE_CTM,
 	OFONO_ATOM_TYPE_CDMA_VOICECALL_MANAGER,
+	OFONO_ATOM_TYPE_CDMA_CONNMAN,
 	OFONO_ATOM_TYPE_SIM_AUTH,
+	OFONO_ATOM_TYPE_EMULATOR_DUN,
+	OFONO_ATOM_TYPE_EMULATOR_HFP,
+	OFONO_ATOM_TYPE_LOCATION_REPORTING,
+	OFONO_ATOM_TYPE_GNSS,
+	OFONO_ATOM_TYPE_CDMA_SMS,
+	OFONO_ATOM_TYPE_CDMA_NETREG,
+	OFONO_ATOM_TYPE_HANDSFREE,
 };
 
 enum ofono_atom_watch_condition {
@@ -146,6 +165,11 @@ struct ofono_atom *__ofono_modem_add_atom(struct ofono_modem *modem,
 					void (*destruct)(struct ofono_atom *),
 					void *data);
 
+struct ofono_atom *__ofono_modem_add_atom_offline(struct ofono_modem *modem,
+					enum ofono_atom_type type,
+					void (*destruct)(struct ofono_atom *),
+					void *data);
+
 struct ofono_atom *__ofono_modem_find_atom(struct ofono_modem *modem,
 						enum ofono_atom_type type);
 
@@ -153,9 +177,22 @@ void __ofono_modem_foreach_atom(struct ofono_modem *modem,
 				enum ofono_atom_type type,
 				ofono_atom_func callback, void *data);
 
+void __ofono_modem_foreach_registered_atom(struct ofono_modem *modem,
+						enum ofono_atom_type type,
+						ofono_atom_func callback,
+						void *data);
+
 void *__ofono_atom_get_data(struct ofono_atom *atom);
 const char *__ofono_atom_get_path(struct ofono_atom *atom);
 struct ofono_modem *__ofono_atom_get_modem(struct ofono_atom *atom);
+
+#define __ofono_atom_find(enum_type, modem)			\
+({								\
+	struct ofono_atom *tmp_atom =				\
+		__ofono_modem_find_atom(modem, enum_type);	\
+								\
+	tmp_atom ? __ofono_atom_get_data(tmp_atom) : NULL;	\
+})
 
 void __ofono_atom_register(struct ofono_atom *atom,
 				void (*unregister)(struct ofono_atom *));
@@ -181,12 +218,29 @@ unsigned int __ofono_modemwatch_add(ofono_modemwatch_cb_t cb, void *user,
 					ofono_destroy_func destroy);
 gboolean __ofono_modemwatch_remove(unsigned int id);
 
-typedef void (*ofono_modem_online_notify_func)(ofono_bool_t online, void *data);
+typedef void (*ofono_modem_online_notify_func)(struct ofono_modem *modem,
+						ofono_bool_t online,
+						void *data);
 unsigned int __ofono_modem_add_online_watch(struct ofono_modem *modem,
 					ofono_modem_online_notify_func notify,
 					void *data, ofono_destroy_func destroy);
 void __ofono_modem_remove_online_watch(struct ofono_modem *modem,
 					unsigned int id);
+
+typedef void (*ofono_modem_powered_notify_func)(struct ofono_modem *modem,
+						ofono_bool_t powered,
+						void *data);
+
+unsigned int __ofono_modem_add_powered_watch(struct ofono_modem *modem,
+					ofono_modem_online_notify_func notify,
+					void *data, ofono_destroy_func destroy);
+void __ofono_modem_remove_powered_watch(struct ofono_modem *modem,
+					unsigned int id);
+
+void __ofono_modem_sim_reset(struct ofono_modem *modem);
+
+void __ofono_modem_inc_emergency_mode(struct ofono_modem *modem);
+void __ofono_modem_dec_emergency_mode(struct ofono_modem *modem);
 
 #include <ofono/call-barring.h>
 
@@ -209,6 +263,7 @@ gboolean __ofono_call_settings_is_busy(struct ofono_call_settings *cs);
 #include <ofono/radio-settings.h>
 #include <ofono/audio-settings.h>
 #include <ofono/ctm.h>
+#include <ofono/location-reporting.h>
 
 #include <ofono/voicecall.h>
 
@@ -231,10 +286,19 @@ int __ofono_voicecall_dial(struct ofono_voicecall *vc,
 				ofono_voicecall_dial_cb_t cb, void *user_data);
 void __ofono_voicecall_dial_cancel(struct ofono_voicecall *vc);
 
+void __ofono_voicecall_set_alpha_and_icon_id(struct ofono_voicecall *vc,
+						const char *addr, int addr_type,
+						const char *message,
+						unsigned char icon_id);
+void __ofono_voicecall_clear_alpha_and_icon_id(struct ofono_voicecall *vc);
+
 int __ofono_voicecall_tone_send(struct ofono_voicecall *vc,
 				const char *tone_str,
 				ofono_voicecall_tone_cb_t cb, void *user_data);
 void __ofono_voicecall_tone_cancel(struct ofono_voicecall *vc, int id);
+
+struct ofono_call *__ofono_voicecall_find_call_with_status(
+				struct ofono_voicecall *vc, int status);
 
 #include <ofono/sms.h>
 
@@ -275,6 +339,9 @@ int __ofono_sms_txq_set_submit_notify(struct ofono_sms *sms,
 					void *data,
 					ofono_destroy_func destroy);
 
+int __ofono_sms_txq_cancel(struct ofono_sms *sms,
+				const struct ofono_uuid *uuid);
+
 const char *__ofono_sms_message_path_from_uuid(struct ofono_sms *sms,
 						const struct ofono_uuid *uuid);
 
@@ -298,6 +365,19 @@ unsigned short __ofono_sms_get_next_ref(struct ofono_sms *sms);
 ofono_bool_t __ofono_sim_service_available(struct ofono_sim *sim,
 						int ust_service,
 						int sst_service);
+ofono_bool_t __ofono_sim_cphs_service_available(struct ofono_sim *sim,
+						int cphs_service);
+
+ofono_bool_t __ofono_is_valid_sim_pin(const char *pin,
+					enum ofono_sim_password_type type);
+
+ofono_bool_t __ofono_is_valid_net_pin(const char *pin);
+
+void __ofono_sim_refresh(struct ofono_sim *sim, GSList *file_list,
+				ofono_bool_t full_file_change,
+				ofono_bool_t naa_init);
+
+void __ofono_sim_recheck_pin(struct ofono_sim *sim);
 
 #include <ofono/stk.h>
 
@@ -311,23 +391,6 @@ void __ofono_cbs_sim_download(struct ofono_stk *stk, const struct cbs *msg);
 struct sms;
 int __ofono_sms_sim_download(struct ofono_stk *stk, const struct sms *msg,
 				__ofono_sms_sim_download_cb_t cb, void *data);
-
-#include <ofono/ssn.h>
-
-typedef void (*ofono_ssn_mo_notify_cb)(int index, void *user);
-typedef void (*ofono_ssn_mt_notify_cb)(int index,
-					const struct ofono_phone_number *ph,
-					void *user);
-
-unsigned int __ofono_ssn_mo_watch_add(struct ofono_ssn *ssn, int code1,
-					ofono_ssn_mo_notify_cb cb, void *user,
-					ofono_destroy_func destroy);
-gboolean __ofono_ssn_mo_watch_remove(struct ofono_ssn *ssn, unsigned int id);
-
-unsigned int __ofono_ssn_mt_watch_add(struct ofono_ssn *ssn, int code2,
-					ofono_ssn_mt_notify_cb cb, void *user,
-					ofono_destroy_func destroy);
-gboolean __ofono_ssn_mt_watch_remove(struct ofono_ssn *ssn, unsigned int id);
 
 #include <ofono/ussd.h>
 
@@ -412,6 +475,10 @@ struct sms;
 void __ofono_message_waiting_mwi(struct ofono_message_waiting *mw,
 				struct sms *sms, gboolean *out_discard);
 
+const struct ofono_phone_number *__ofono_message_waiting_get_mbdn(
+					struct ofono_message_waiting *mw,
+					unsigned int index);
+
 #include <ofono/nettime.h>
 
 void __ofono_nettime_probe_drivers(struct ofono_modem *modem);
@@ -420,13 +487,31 @@ void __ofono_nettime_info_received(struct ofono_modem *modem,
 					struct ofono_network_time *info);
 
 #include <ofono/cdma-voicecall.h>
+#include <ofono/cdma-connman.h>
 #include <ofono/sim-auth.h>
 
 #include <ofono/gprs-provision.h>
 ofono_bool_t __ofono_gprs_provision_get_settings(const char *mcc,
-				const char *mnc,
+				const char *mnc, const char *spn,
 				struct ofono_gprs_provision_data **settings,
 				int *count);
 void __ofono_gprs_provision_free_settings(
 				struct ofono_gprs_provision_data *settings,
 				int count);
+
+#include <ofono/emulator.h>
+void __ofono_emulator_set_indicator_forced(struct ofono_emulator *em,
+						const char *name, int value);
+
+#include <ofono/gnss.h>
+#include <ofono/cdma-sms.h>
+#include <ofono/cdma-netreg.h>
+
+#include <ofono/cdma-provision.h>
+ofono_bool_t __ofono_cdma_provision_get_name(const char *sid, char **name);
+
+#include <ofono/private-network.h>
+
+void __ofono_private_network_release(int id);
+ofono_bool_t __ofono_private_network_request(ofono_private_network_cb_t cb,
+						int *id, void *data);

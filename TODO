@@ -31,15 +31,6 @@ SMS
   Priority: Low
   Complexity: C8
 
-- See / Cancel pending SMS messages over DBus.  When oFono sends SMS messages
-  the method call is only returned when the message has been submitted to the
-  network.  Instead we should return an object path and allow cancellation of
-  pending messages.
-
-  Priority: High
-  Complexity: C2
-  Owner: Yang Gu <yang.gu@intel.com>
-
 - Asynchronously acknowledge SMS DELIVER messages sent by the SMS driver
   to core using ofono_sms_deliver_notify().  This may require the struct
   ofono_sms_driver to be extended with one more function pointer like:
@@ -52,6 +43,18 @@ SMS
 
   Priority: Low
   Complexity: C2
+
+
+CBS
+===
+
+- Support UMTS format for CBS messages.  This might be needed by some hardware
+  which does not convert UMTS-formatted cell broadcasts to GSM-formatted cell
+  broadcasts.  The UMTS CBS format can be found in 3GPP 25.324 Section 11.1.
+
+  Priority: Low
+  Complexity: C2
+
 
 SIM / SIM File system
 =====================
@@ -79,33 +82,11 @@ SIM / SIM File system
 
   Priority: High
   Complexity: C2
-  Owner: Pekka Pessi <pekka.pessi@nokia.com>
-
-- Check SIM pin status if sim_change_pin fails. If it is anything other than
-  READY, we must tear the state back to pre_sim state and set the modem offline.
-
-  Priority: Medium
-  Complexity: C1
-  Owner: Marit Henriksen <marit.henriksen@stericsson.com>
-
-- Add support for CPHS Customer Service Profile (CSP).  This task adds support
-  for reading the EFcsp file and in particular, interpreting the PLMN mode bit
-  within the 'Value Added Services' service group.
-
-  Based on the PLMN mode value, manual network selection needs to either be
-  enabled or disabled in the netreg atom.  Also to accommodate this, there
-  probably needs to be a new 'forced' mode to indicate that manual network
-  selection is disabled.
-
-  Priority: Medium
-  Complexity: C1
-  Owner: Aki Niemi <aki.niemi@nokia.com>
 
 - Support SIM authentication: SIM and AKA suites.
 
   Priority: Medium
   Complexity: C4
-  Owner: Pekka Pessi <pekka.pessi@nokia.com>
 
 - Support SIM authentication: GBA_U suite.
 
@@ -125,24 +106,15 @@ SIM / SIM File system
 Modem Emulator
 ==============
 
-- Support HFP AG emulator.  We should provide a new HFP_AG_EMULATOR atom type
-  that will implement the Bluetooth HFP AG profile.  Voicecall atom, netreg
-  atoms can register command handlers for this atom appropriately.
-
-  Complexity: C4
-  Priority: Medium
-  Owner: Frédéric Danis <frederic.danis@linux.intel.com>
-
-- Support extensions to HFP AG emulator.  Some carkits support additional
-  AT command extensions to the Bluetooth HFP AG standard.  Refer to CE4A
+- Support CE4A extensions to HFP AG emulator. CE4A defines additional
+  AT command extensions to the Bluetooth HFP AG standard. Refer to CE4A
   white paper: "AT-commands for Automotive Premium Phone Integration".
   Plugins can register additional command handlers appropriately to handle
   such commands.
 
   Complexity: C4
-  Priority: Medium
+  Priority: Low
   Depends: HFP AG emulator
-  Owner: Frédéric Dalleau <frederic.dalleau@linux.intel.com>
 
 - Support HSP AG.  Similar to HFP AG emulator but implements the much reduced
   Bluetooth HSP AG profile.
@@ -150,55 +122,51 @@ Modem Emulator
   Priority: Low
   Complexity: C1
 
-- Support DUN emulator. Implement the Bluetooth DUN profile with only mandatory
-  AT command support. Implement USB DUN as well.
+- Support DUN networking over the USB transport.  This might require extra
+  AT commands to be implemented in order to comply with general USB DUN
+  expectations as there is no standard for the same.
 
   Complexity: C4
-  Priority: Medium
-  Owner: Gustavo F Padovan <padovan@profusion.mobi>
-
-  Depends: PPP Server mode
+  Priority: Low
 
 - Support Bluetooth SPP profile.
 
   Complexity: C4
   Priority: Medium
 
-
-Flight Mode
-===========
-
-- Flight Mode support.  Add an 'Online' property to the Modem interface that
-  will control the online state of the modem.  When Online state is True all
-  atoms are available.  When Online state is False, all network related items
-  are removed (e.g. CallSettings) or enter into reduced functionality set
-  where only the SIM is available (e.g. DataConnectionManager, SimManager, etc)
+- Support new HFP 1.6 AG commands allowing to publish, select and connect audio
+  codecs (AT+BAC, AT+BCS, +BCS, AT+BCC). This will need to interact with audio
+  framework.
 
   Complexity: C4
-  Priority: High
-  Owner: Pekka Pessi <pekka.pessi@nokia.com>
+  Priority: Low
+  Depends: HFP AG emulator
 
+- Integrate HFP AG emulator as a BlueZ service.
+  Replace direct access to Bluetooth library by usage of the BlueZ service
+  architecture.
 
-GPRS
-====
-
-- PPP Server support.  Extend GAtPPP to support PPP Server role, similarly to
-  how existing GSM modems support PPP GPRS contexts.
-
-  Priority: High
   Complexity: C2
+  Priority: Medium
+  Depends: HFP AG emulator
+
+- Add audio management to HFP AG emulator.
+  Integrate HFP AG emulator to BlueZ and Pulse Audio.
+  Add audio related AT commands support: remote audio volume control and in-band
+  ring tone management.
+
+  Complexity: C4
+  Priority: Medium
+  Depends: HFP AG emulator as BlueZ service
+
+PPP
+===
 
 - IPv6 CP support.  To support IPv6 based GPRS contexts via PPP, GAtPPP
   needs to be updated to support IPv6CP from RFC 2472.
 
   Priority: Low
   Complexity: C4
-
-- Add support for IPv6 GPRS contexts.
-
-  Priority: Medium
-  Complexity: C2
-  Owner: Mika Liljeberg <mika.liljeberg@nokia.com>
 
 
 Location Services
@@ -212,7 +180,6 @@ Location Services
 
   Complexity: C4
   Priority: Medium
-  Owner: Antti Paila <antti.paila@nokia.com>
 
 
 Supplementary Services
@@ -252,28 +219,20 @@ Supplementary Services
   conditional call forwarding should become quiescent while unconditional call
   forwarding is activate. If call forwarding unconditional is subsequently
   deactivated, all the quiescent forwardings should become operative again.
-  I.e. No conditional call forwardin string should be returned while
+  I.e. No conditional call forwarding string should be returned while
   unconditional call forwarding is active even if they exist.
 
   If there is an successful attempt to activate/deactivate conditional call
   forwarding while unconditional call forwarding is active the conditional cache
   flag should cleared.
 
-  Priority: Low
+  Priority: High
   Complexity: C1
+  Owner: Nicolas Bertrand <nicolas.bertrand@linux.intel.com>
 
 
 Voicecall
 =========
-
-- Supplementary service notifications on remote party actions:
-  - call has been put on hold (+CSSU: 2)
-  - call has been retrieved (+CSSU: 3), and
-  - joining call to a multiparty conference (+CSSU: 4)
-
-  Priority: Medium
-  Complexity: C1
-  Owner: Pekka Pessi <pekka.pessi@nokia.com>
 
 - Dial strings. Include CLIR prefixes and 2nd stage dial strings in the
   DialString call property. Add dialstring accessor method to C API.
@@ -288,7 +247,6 @@ Voicecall
 
   Priority: Medium
   Complexity: C2
-  Owner: Pekka Pessi <pekka.pessi@nokia.com>
 
 - Blacklisting. According to 3GPP TS 22.001 annex E, the TE must provide
   automatic calling repeat call attempt restrictions.
@@ -302,95 +260,39 @@ Voicecall
 Sim Toolkit
 ===========
 
-- Support Refresh proactive command.  The specification defines 7 types
-  of Refresh types:
-	- NAA Initialization
-	- NAA File Change Notification
-	- NAA Initialization and File Change Notification
-	- NAA Initialization and Full File Change Notification
-	- UICC Reset
-	- NAA Application Reset (2G only)
-	- NAA Session Reset (3G only)
+- Support of the BIP (Bearer Independent Protocol) proactive commands.
+  The specification defines several bearer types. For now, only the packet data
+  service bearer is considered.
 
-  The 'NAA Initialization' type will be ignored by oFono, it is assumed
-  this is handled by the modem.
+	- OPEN CHANNEL: requests the terminal to open a data channel with
+	parameters indicated in the command. A user confirmation may be
+	requested by the SimToolkitAgent.
+	- CLOSE CHANNEL:requests the terminal to close the specified data
+	channel.
+	- RECEIVE DATA:requests the terminal to return to the UICC data
+	received on the specified channel.
+	- SEND DATA:requests the terminal to send on the specified channel data
+	provided by the UICC.
+	- GET CHANNEL STATUS: requests the terminal to return the current
+	status of all available data channels.
 
-  For 'UICC Reset', 'NAA Application Reset' and 'NAA Session Reset' oFono
-  will first check whether there are any calls or ussd operations active.
-  If there are, the appropriate response will be sent (e.g. busy on call
-  or screen busy terminal response.)  Otherwise a positive response will be
-  sent to the driver.  In the case of a 'UICC Reset' the driver / modem
-  can interpret this that it is safe to reset the UICC.
+  Priority: Medium
+  Complexity: C4
+  Owner: Philippe Nunes <philippe.nunes@linux.intel.com>
 
-  Alternatively, the driver / modem can notify the core of the SIM removal
-  / SIM insertion events without using the Refresh proactive command.  It
-  is up to the driver / modem to perform a warm reset.  In particular, 3GPP
-  31.111 mandates that any change to EFimsi is done by using 'UICC Reset',
-  'NAA Application Reset' or 'NAA Session Reset'.  Please see 3GPP 31.111
-  Section 6.4.7.1.
+- Support Setup Event List proactive command.
+  To fully support the class 'e', the following events
+	-Data Available event
+	-Channel status event
+  shall be monitored by oFono if part of the current event list.
+  This list is supplied by the last SETUP EVENT LIST command.
 
-  Other types will be handled by oFono flushing the EF cache of the files
-  affected (or the entire SIM cache in case of Full File Change Notifications)
-  and re-reading the affected files.  Any properties derived from these
-  Elementary Files will be updated and signaled using PropertyChanged.
-
-  Priority: High
-  Complexity: C8
-
-
-Emergency Calls
-===============
-
-- Modem Emergency mode.  Support network registration and online/offline
-  mode during the emergency calls and related network activity (e.g.,
-  network-initiated location request via supplementary service channel).
-
-  Proposed solution is to introduce a new Emergency boolean property to the
-  Modem D-Bus interface and new functions to modem interface:
-
-  - ofono_modem_emergency_mode_inc()
-  - ofono_modem_emergency_mode_dec()
-  - ofono_modem_emergency_mode_get()
-  - ofono_modem_add_emergency_mode_watch()
-  - ofono_modem_remove_emergency_mode_watch()
-
-  When emergency mode is requested, modem is set to online (if needed) and
-  the watchers are notified. There can be multiple parties requesting
-  emergency mode.  When all of them have completed the emergency-related
-  operation and called ofono_modem_emergency_mode_dec(), modem is set to
-  offline (if needed) and the watchers are again notified.
-
-  Priority: High
+  Priority: Medium
   Complexity: C2
-
-- Country / Operator specific emergency numbers.  Figure out how to support
-  countries / operators with specific mandated emergency numbers which are
-  not part of the standard emergency number list. This needs to be queried
-  by the voicecall atom every time a new SIM is inserted.  The list is
-  assumed to be managed by the modem.  If no such functionality is available,
-  then the 3GPP mandated behavior is used.
-
-  Priority: High
-  Complexity: C2
-
-- Network updating the emergency number list. Support the list of emergency
-  numbers dynamically updated by the network.
-
-  Priority: High
-  Complexity: C2
-  Owner: Petteri Tikander <petteri.tikander@ixonos.com>
-
+  Owner: Philippe Nunes <philippe.nunes@linux.intel.com>
 
 Miscellaneous
 =============
-
-- Bluetooth SAP Client support.  The Telit UC864-G devices support Bluetooth
-  SAP client mode.  This requires the use of a modem side-channel to read the
-  APDU & CPDU data and send it to the remote phone device over Bluetooth RFCOMM
-  channel.
-
-  Complexity: C4
-  Priority: Low
 
 - PolicyKit support.  Add support for PolicyKit checking of all oFono D-Bus
   interfaces.
@@ -398,41 +300,13 @@ Miscellaneous
   Complexity: C4
   Priority: Low
 
-- Internet Access Provider database.  Have oFono automatically configure
-  GPRS contexts based on an internal database.  Database format to be decided.
-  If there are multiple matches in the database, then some user intervention
-  might be required.
-
-  Priority: Medium
-  Complexity: C8
-  Owner: Jukka Saunamäki <jukka.saunamaki@nokia.com>
-
-- Add support for GPS power control atom.  Many modem manufacturers provide
-  a GPS unit with their modem hardware.  This unit can be turned on or off
-  and frequently takes over one of the tty ports that the modem provides.
-
-  This feature is not discussed in 27.007, thus manufacturer specific commands
-  are required.
-
-  Priority: Low
-  Complexity: C4
-  Owner: Rafael Ignacio Zurita <rafael.zurita@profusion.mobi>
-
 - Add Location Service API for providing basic E911 support.
   This will be based on the 27.007 defined AT commands using
   XML for transport of positioning request and responses.
 
   Priority: Medium
   Complexity: C2
-  Owner: Sjur Brændeland <sjur.brandeland@stericsson.com>
 
-- Add support for main.conf.  This task will add support for general
-  as well as per-atom configuration options that are read and parsed
-  at startup from a configuration file under /etc/ofono.
-
-  Priority: Medium
-  Complexity: C1
-  Owner: Aki Niemi <aki.niemi@nokia.com>
 
 CDMA Voicecall
 ==============
@@ -443,7 +317,6 @@ CDMA Voicecall
 
   Priority: High
   Complexity: C2
-  Owner: Dara Spieker-Doyle <dara.spieker-doyle@nokia.com>
 
 - Add support for Three-Way Calling over a CDMA network. Three-Way Calling
   provides the subscriber with the capability to add a third party to an
@@ -590,20 +463,17 @@ CDMA CMAS
   Priority: Medium
   Complexity: C4
 
-CDMA NETWORK ACQUISITION
+CDMA Network Acquisition
 ========================
 
-- Support reporting of the received signal strength indicator (RSSI)
-  measurement and of the pilot energy ratio (Ec/Io) measurement, for the
+- Support reporting of the pilot energy ratio (Ec/Io) measurement for the
   currently acquired CDMA network.
 
   Priority: Medium
   Complexity: C1
-  Owner: Dara Spieker-Doyle <dara.spieker-doyle@nokia.com>
 
-- Support reporting of the received signal strength indicator (RSSI)
-  measurement and of the signal to interference-plus-noise ratio (SINR)
-  measurement, for the currently acquired 1xEV-DO data network.
+- Support of the signal to interference-plus-noise ratio (SINR)
+  measurement for the currently acquired 1xEV-DO data network.
 
   Priority: Medium
   Complexity: C1
@@ -641,6 +511,14 @@ CDMA NETWORK ACQUISITION
   Priority: Medium
   Complexity: C2
 
+- Support reporting of the current registered operator name in long alphanumeric
+  format. Based on the System Identifier (SID) broadcasted by the modem, the
+  CDMA network name is retrieved from a look-up table (aka the 'mobile
+  broadband provider info' database).
+
+  Priority: Medium
+  Complexity: C2
+
 CDMA Connection Manager
 =======================
 
@@ -649,9 +527,3 @@ CDMA Connection Manager
 
   Priority: Medium
   Complexity: C4
-
-- Support Network Initiated disconnection of Packet Data Service over CDMA
-  (1xRTT and 1xEV-DO) systems.
-
-  Priority: Medium
-  Complexity: C2

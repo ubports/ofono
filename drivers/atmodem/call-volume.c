@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -114,6 +114,7 @@ static void clvl_range_query(gboolean ok, GAtResult *result, gpointer user_data)
 	/* Try opening the list, but don't fail */
 	g_at_result_iter_open_list(&iter);
 	g_at_result_iter_next_range(&iter, &cvd->clvl_min, &cvd->clvl_max);
+	g_at_result_iter_close_list(&iter);
 }
 
 static void cv_generic_set_cb(gboolean ok, GAtResult *result,

@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -68,8 +68,8 @@ static void at_cbm_notify(GAtResult *result, gpointer user_data)
 	if (!g_at_result_iter_next_number(&iter, &pdulen))
 		return;
 
-	if (pdulen > 88) {
-		ofono_error("Got a CBM message bigger than maximum size!");
+	if (pdulen != 88) {
+		ofono_error("Got a CBM message with invalid PDU size!");
 		return;
 	}
 

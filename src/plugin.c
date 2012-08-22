@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -53,8 +53,8 @@ static gboolean add_plugin(void *handle, struct ofono_plugin_desc *desc)
 		return FALSE;
 
 	if (g_str_equal(desc->version, OFONO_VERSION) == FALSE) {
-		ofono_error("Version mismatch for %s: found %s, expected %s",
-			    desc->description, desc->version, OFONO_VERSION);
+		ofono_error("Invalid version %s for %s", desc->version,
+							desc->description);
 		return FALSE;
 	}
 
@@ -65,6 +65,8 @@ static gboolean add_plugin(void *handle, struct ofono_plugin_desc *desc)
 	plugin->handle = handle;
 	plugin->active = FALSE;
 	plugin->desc = desc;
+
+	__ofono_log_enable(desc->debug_start, desc->debug_stop);
 
 	plugins = g_slist_insert_sorted(plugins, plugin, compare_priority);
 
@@ -112,10 +114,10 @@ int __ofono_plugin_init(const char *pattern, const char *exclude)
 	DBG("");
 
 	if (pattern)
-		patterns = g_strsplit_set(pattern, ", ", -1);
+		patterns = g_strsplit_set(pattern, ":, ", -1);
 
 	if (exclude)
-		excludes = g_strsplit_set(exclude, ", ", -1);
+		excludes = g_strsplit_set(exclude, ":, ", -1);
 
 	for (i = 0; __ofono_builtin[i]; i++) {
 		if (check_plugin(__ofono_builtin[i],

@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2009-2010 Nokia Corporation and/or its subsidiary(-ies).
+ *  Copyright (C) 2009-2010  Nokia Corporation and/or its subsidiary(-ies).
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -294,10 +294,12 @@ static void reachable_cb(const GIsiMessage *msg, void *data)
 {
 	struct ofono_phonebook *pb = data;
 
-	if (g_isi_msg_error(msg) < 0)
+	if (g_isi_msg_error(msg) < 0) {
+		ofono_phonebook_remove(pb);
 		return;
+	}
 
-	ISI_VERSION_DBG(msg);
+	ISI_RESOURCE_DBG(msg);
 
 	ofono_phonebook_register(pb);
 }

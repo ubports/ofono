@@ -46,7 +46,6 @@
 #include <ofono/cbs.h>
 #include <ofono/sim.h>
 #include <ofono/ussd.h>
-#include <ofono/ssn.h>
 #include <ofono/call-forwarding.h>
 #include <ofono/call-settings.h>
 #include <ofono/call-barring.h>
@@ -54,6 +53,7 @@
 #include <ofono/radio-settings.h>
 #include <ofono/gprs.h>
 #include <ofono/gprs-context.h>
+#include <ofono/message-waiting.h>
 
 #include "drivers/isimodem/isimodem.h"
 #include "drivers/isimodem/isiutil.h"
@@ -65,7 +65,7 @@ struct isi_data {
 	GIsiModem *modem;
 	GIsiClient *client;
 	GIsiPhonetNetlink *link;
-	GIsiPhonetLinkState linkstate;
+	enum GIsiPhonetLinkState linkstate;
 	unsigned interval;
 	int reported;
 	ofono_bool_t online;
@@ -207,7 +207,7 @@ static void reachable_cb(const GIsiMessage *msg, void *data)
 	if (!g_isi_msg_error(msg) < 0)
 		return;
 
-	ISI_VERSION_DBG(msg);
+	ISI_RESOURCE_DBG(msg);
 
 	g_isi_client_ind_subscribe(isi->client, MTC_STATE_INFO_IND,
 					mtc_state_ind_cb, om);
@@ -223,7 +223,7 @@ static void reachable_cb(const GIsiMessage *msg, void *data)
 	g_idle_add(bootstrap_current_state, om);
 }
 
-static void phonet_status_cb(GIsiModem *modem, GIsiPhonetLinkState st,
+static void phonet_status_cb(GIsiModem *modem, enum GIsiPhonetLinkState st,
 				char const *ifname, void *data)
 {
 	struct ofono_modem *om = data;
@@ -262,6 +262,7 @@ static int isiusb_probe(struct ofono_modem *modem)
 	}
 
 	g_isi_modem_set_userdata(isimodem, modem);
+	g_isi_modem_set_flags(isimodem, GISI_MODEM_FLAG_USE_LEGACY_SUBSCRIBE);
 
 	if (getenv("OFONO_ISI_DEBUG"))
 		g_isi_modem_set_debug(isimodem, ofono_debug);
@@ -351,7 +352,7 @@ static void mtc_state_cb(const GIsiMessage *msg, void *data)
 
 	DBG("MTC cause: %s (0x%02X)", mtc_isi_cause_name(cause), cause);
 
-	if (cause == MTC_OK) {
+	if (cause == MTC_OK || cause == MTC_STATE_TRANSITION_GOING_ON) {
 		isi->online_cbd = cbd;
 		return;
 	}
@@ -420,18 +421,22 @@ static void isiusb_post_sim(struct ofono_modem *modem)
 static void isiusb_post_online(struct ofono_modem *modem)
 {
 	struct isi_data *isi = ofono_modem_get_data(modem);
+	struct ofono_message_waiting *mw;
 
 	DBG("(%p) with %s", modem, isi->ifname);
 
 	ofono_netreg_create(modem, 0, "isimodem", isi->modem);
 	ofono_sms_create(modem, 0, "isimodem", isi->modem);
 	ofono_cbs_create(modem, 0, "isimodem", isi->modem);
-	ofono_ssn_create(modem, 0, "isimodem", isi->modem);
 	ofono_ussd_create(modem, 0, "isimodem", isi->modem);
 	ofono_call_settings_create(modem, 0, "isimodem", isi->modem);
 	ofono_call_barring_create(modem, 0, "isimodem", isi->modem);
 	ofono_call_meter_create(modem, 0, "isimodem", isi->modem);
 	ofono_gprs_create(modem, 0, "isimodem", isi->modem);
+
+	mw = ofono_message_waiting_create(modem);
+	if (mw)
+		ofono_message_waiting_register(mw);
 }
 
 static int isiusb_enable(struct ofono_modem *modem)

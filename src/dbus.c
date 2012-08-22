@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -31,6 +31,21 @@
 #define OFONO_ERROR_INTERFACE "org.ofono.Error"
 
 static DBusConnection *g_connection;
+
+struct error_mapping_entry {
+	int error;
+	DBusMessage *(*ofono_error_func)(DBusMessage *);
+};
+
+struct error_mapping_entry cme_errors_mapping[] = {
+	{ 3,	__ofono_error_not_allowed },
+	{ 4,	__ofono_error_not_supported },
+	{ 16,	__ofono_error_incorrect_password },
+	{ 30,	__ofono_error_not_registered },
+	{ 31,	__ofono_error_timed_out },
+	{ 32,	__ofono_error_access_denied },
+	{ 50,	__ofono_error_invalid_args },
+};
 
 static void append_variant(DBusMessageIter *iter,
 				int type, void *value)
@@ -349,6 +364,13 @@ DBusMessage *__ofono_error_attach_in_progress(DBusMessage *msg)
 				"GPRS Attach is in progress");
 }
 
+DBusMessage *__ofono_error_not_registered(DBusMessage *msg)
+{
+	return g_dbus_create_error(msg,
+				OFONO_ERROR_INTERFACE ".NotRegistered",
+				"Modem is not registered to the network");
+}
+
 DBusMessage *__ofono_error_canceled(DBusMessage *msg)
 {
 	return g_dbus_create_error(msg, OFONO_ERROR_INTERFACE ".Canceled",
@@ -359,6 +381,59 @@ DBusMessage *__ofono_error_access_denied(DBusMessage *msg)
 {
 	return g_dbus_create_error(msg, OFONO_ERROR_INTERFACE ".AccessDenied",
 					"Operation not permitted");
+}
+
+DBusMessage *__ofono_error_emergency_active(DBusMessage *msg)
+{
+	return g_dbus_create_error(msg,
+				OFONO_ERROR_INTERFACE ".EmergencyActive",
+				"Emergency mode active");
+}
+
+DBusMessage *__ofono_error_incorrect_password(DBusMessage *msg)
+{
+	return g_dbus_create_error(msg,
+				OFONO_ERROR_INTERFACE ".IncorrectPassword",
+				"Password is incorrect");
+}
+
+DBusMessage *__ofono_error_not_allowed(DBusMessage *msg)
+{
+	return g_dbus_create_error(msg, OFONO_ERROR_INTERFACE ".NotAllowed",
+					"Operation is not allowed");
+}
+
+DBusMessage *__ofono_error_not_recognized(DBusMessage *msg)
+{
+	return g_dbus_create_error(msg, OFONO_ERROR_INTERFACE ".NotRecognized",
+					"String not recognized as USSD/SS");
+}
+
+DBusMessage *__ofono_error_from_error(const struct ofono_error *error,
+						DBusMessage *msg)
+{
+	struct error_mapping_entry *e;
+	int maxentries;
+	int i;
+
+	switch (error->type) {
+	case OFONO_ERROR_TYPE_CME:
+		e = cme_errors_mapping;
+		maxentries = sizeof(cme_errors_mapping) /
+					sizeof(struct error_mapping_entry);
+		for (i = 0; i < maxentries; i++)
+			if (e[i].error == error->error)
+				return e[i].ofono_error_func(msg);
+		break;
+	case OFONO_ERROR_TYPE_CMS:
+		return __ofono_error_failed(msg);
+	case OFONO_ERROR_TYPE_CEER:
+		return __ofono_error_failed(msg);
+	default:
+		return __ofono_error_failed(msg);
+	}
+
+	return __ofono_error_failed(msg);
 }
 
 void __ofono_dbus_pending_reply(DBusMessage **msg, DBusMessage *reply)

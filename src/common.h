@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -122,13 +122,6 @@ enum ss_cssu {
 	SS_MT_CALL_DEFLECTED =			9,
 };
 
-enum pin_type {
-	PIN_TYPE_NONE,
-	PIN_TYPE_PIN,
-	PIN_TYPE_PUK,
-	PIN_TYPE_NET,
-};
-
 /* 27.007 Section 10.1.10 */
 enum context_status {
 	CONTEXT_STATUS_DEACTIVATED = 0,
@@ -161,8 +154,6 @@ gboolean parse_ss_control_string(char *str, int *ss_type,
 const char *ss_control_type_to_string(enum ss_control_type type);
 
 const char *bearer_class_to_string(enum bearer_class cls);
-
-gboolean is_valid_pin(const char *pin, enum pin_type type);
 
 const char *registration_status_to_string(int status);
 const char *registration_tech_to_string(int tech);

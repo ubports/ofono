@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -26,6 +26,7 @@
 #define _GNU_SOURCE
 #include <string.h>
 #include <stdio.h>
+#include <stdint.h>
 
 #include <glib.h>
 #include <gdbus.h>
@@ -45,19 +46,18 @@
 #include "simfs.h"
 #include "stkutil.h"
 
-static GSList *g_drivers = NULL;
-
-static void sim_own_numbers_update(struct ofono_sim *sim);
-static void sim_pin_check(struct ofono_sim *sim);
-static void sim_set_ready(struct ofono_sim *sim);
+#define SIM_FLAG_READING_SPN	0x1
 
 struct ofono_sim {
+	int flags;
+
 	/* Contents of the SIM file system, in rough initialization order */
 	char *iccid;
 
 	char **language_prefs;
 	unsigned char *efli;
 	unsigned char efli_length;
+	gboolean language_prefs_update;
 
 	enum ofono_sim_password_type pin_type;
 	gboolean locked_pins[OFONO_SIM_PASSWORD_SIM_PUK]; /* Number of PINs */
@@ -95,15 +95,25 @@ struct ofono_sim {
 	enum ofono_sim_state state;
 	struct ofono_watchlist *state_watches;
 
+	char *spn;
+	char *spn_dc;
+	struct ofono_watchlist *spn_watches;
+	unsigned int ef_spn_watch;
+	unsigned int cphs_spn_watch;
+	unsigned int cphs_spn_short_watch;
+
 	struct sim_fs *simfs;
 	struct ofono_sim_context *context;
+	struct ofono_sim_context *early_context;
 
 	unsigned char *iidf_image;
+	unsigned int *iidf_watch_ids;
 
 	DBusMessage *pending;
 	const struct ofono_sim_driver *driver;
 	void *driver_data;
 	struct ofono_atom *atom;
+	unsigned int hfp_watch;
 };
 
 struct msisdn_set_request {
@@ -136,6 +146,10 @@ static const char *const passwd_name[] = {
 	[OFONO_SIM_PASSWORD_PHCORP_PIN] = "corp",
 	[OFONO_SIM_PASSWORD_PHCORP_PUK] = "corppuk",
 };
+
+static void sim_own_numbers_update(struct ofono_sim *sim);
+
+static GSList *g_drivers = NULL;
 
 static const char *sim_passwd_name(enum ofono_sim_password_type type)
 {
@@ -191,7 +205,7 @@ static enum ofono_sim_password_type puk2pin(enum ofono_sim_password_type type)
 	case OFONO_SIM_PASSWORD_SIM_PUK2:
 		return OFONO_SIM_PASSWORD_SIM_PIN2;
 	case OFONO_SIM_PASSWORD_PHNET_PUK:
-		return OFONO_SIM_PASSWORD_PHNET_PUK;
+		return OFONO_SIM_PASSWORD_PHNET_PIN;
 	case OFONO_SIM_PASSWORD_PHNETSUB_PUK:
 		return OFONO_SIM_PASSWORD_PHNETSUB_PIN;
 	case OFONO_SIM_PASSWORD_PHSP_PUK:
@@ -306,6 +320,19 @@ static void service_number_free(struct service_number *num)
 	g_free(num);
 }
 
+static void call_state_watches(struct ofono_sim *sim)
+{
+	GSList *l;
+	ofono_sim_state_event_cb_t notify;
+
+	for (l = sim->state_watches->items; l; l = l->next) {
+		struct ofono_watchlist_item *item = l->data;
+		notify = item->notify;
+
+		notify(sim->state, item->notify_data);
+	}
+}
+
 static DBusMessage *sim_get_properties(DBusConnection *conn,
 					DBusMessage *msg, void *data)
 {
@@ -414,7 +441,6 @@ static void sim_pin_retries_query_cb(const struct ofono_error *error,
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
 		ofono_error("Querying remaining pin retries failed");
-
 		return;
 	}
 
@@ -624,7 +650,7 @@ static void sim_unlock_cb(const struct ofono_error *error, void *data)
 		DBusMessage *reply = __ofono_error_failed(sim->pending);
 
 		__ofono_dbus_pending_reply(&sim->pending, reply);
-		sim_pin_retries_check(sim);
+		__ofono_sim_recheck_pin(sim);
 
 		return;
 	}
@@ -640,7 +666,7 @@ static void sim_lock_cb(const struct ofono_error *error, void *data)
 		DBusMessage *reply = __ofono_error_failed(sim->pending);
 
 		__ofono_dbus_pending_reply(&sim->pending, reply);
-		sim_pin_retries_check(sim);
+		__ofono_sim_recheck_pin(sim);
 
 		return;
 	}
@@ -676,7 +702,7 @@ static DBusMessage *sim_lock_or_unlock(struct ofono_sim *sim, int lock,
 			type == OFONO_SIM_PASSWORD_SIM_PIN2)
 		return __ofono_error_invalid_format(msg);
 
-	if (!is_valid_pin(pin, PIN_TYPE_PIN))
+	if (!__ofono_is_valid_sim_pin(pin, type))
 		return __ofono_error_invalid_format(msg);
 
 	sim->pending = dbus_message_ref(msg);
@@ -711,7 +737,7 @@ static void sim_change_pin_cb(const struct ofono_error *error, void *data)
 		__ofono_dbus_pending_reply(&sim->pending,
 				__ofono_error_failed(sim->pending));
 
-		sim_pin_retries_check(sim);
+		__ofono_sim_recheck_pin(sim);
 
 		return;
 	}
@@ -748,10 +774,10 @@ static DBusMessage *sim_change_pin(DBusConnection *conn, DBusMessage *msg,
 	if (password_is_pin(type) == FALSE)
 		return __ofono_error_invalid_format(msg);
 
-	if (!is_valid_pin(old, PIN_TYPE_PIN))
+	if (!__ofono_is_valid_sim_pin(old, type))
 		return __ofono_error_invalid_format(msg);
 
-	if (!is_valid_pin(new, PIN_TYPE_PIN))
+	if (!__ofono_is_valid_sim_pin(new, type))
 		return __ofono_error_invalid_format(msg);
 
 	if (!strcmp(new, old))
@@ -776,7 +802,7 @@ static void sim_enter_pin_cb(const struct ofono_error *error, void *data)
 
 	__ofono_dbus_pending_reply(&sim->pending, reply);
 
-	sim_pin_check(sim);
+	__ofono_sim_recheck_pin(sim);
 }
 
 static DBusMessage *sim_enter_pin(DBusConnection *conn, DBusMessage *msg,
@@ -803,7 +829,10 @@ static DBusMessage *sim_enter_pin(DBusConnection *conn, DBusMessage *msg,
 	if (type == OFONO_SIM_PASSWORD_NONE || type != sim->pin_type)
 		return __ofono_error_invalid_format(msg);
 
-	if (!is_valid_pin(pin, PIN_TYPE_PIN))
+	if (password_is_pin(type) == FALSE)
+		return __ofono_error_invalid_format(msg);
+
+	if (!__ofono_is_valid_sim_pin(pin, type))
 		return __ofono_error_invalid_format(msg);
 
 	sim->pending = dbus_message_ref(msg);
@@ -928,6 +957,11 @@ static void sim_iidf_read_cb(int ok, int length, int record,
 					sim_iidf_read_clut_cb, sim);
 }
 
+static void sim_image_data_changed(int id, void *userdata)
+{
+	/* TODO: notify D-bus clients */
+}
+
 static void sim_get_image(struct ofono_sim *sim, unsigned char id,
 				gpointer user_data)
 {
@@ -937,17 +971,14 @@ static void sim_get_image(struct ofono_sim *sim, unsigned char id,
 	unsigned short iidf_offset;
 	unsigned short iidf_len;
 
-	image = sim_fs_get_cached_image(sim->simfs, id);
-
-	if (image != NULL) {
-		sim_get_image_cb(sim, id, image, FALSE);
-		return;
-	}
-
-	if (sim->efimg_length <= (id * 9)) {
+	if (sim->efimg_length <= id * 9) {
 		sim_get_image_cb(sim, id, NULL, FALSE);
 		return;
 	}
+
+	image = sim_fs_get_cached_image(sim->simfs, id);
+	if (image != NULL)
+		sim_get_image_cb(sim, id, image, FALSE);
 
 	efimg = &sim->efimg[id * 9];
 
@@ -956,8 +987,16 @@ static void sim_get_image(struct ofono_sim *sim, unsigned char id,
 	iidf_len = efimg[7] << 8 | efimg[8];
 
 	/* read the image data */
-	ofono_sim_read_bytes(sim->context, iidf_id, iidf_offset, iidf_len,
-				sim_iidf_read_cb, sim);
+	if (image == NULL)
+		ofono_sim_read_bytes(sim->context, iidf_id, iidf_offset,
+					iidf_len, sim_iidf_read_cb, sim);
+
+	if (sim->iidf_watch_ids[id] > 0)
+		return;
+
+	sim->iidf_watch_ids[id] = ofono_sim_add_file_watch(sim->context,
+					iidf_id, sim_image_data_changed,
+					sim, NULL);
 }
 
 static DBusMessage *sim_get_icon(DBusConnection *conn,
@@ -1013,10 +1052,12 @@ static DBusMessage *sim_reset_pin(DBusConnection *conn, DBusMessage *msg,
 	if (type == OFONO_SIM_PASSWORD_NONE || type != sim->pin_type)
 		return __ofono_error_invalid_format(msg);
 
-	if (!is_valid_pin(puk, PIN_TYPE_PUK))
+	if (!__ofono_is_valid_sim_pin(puk, type))
 		return __ofono_error_invalid_format(msg);
 
-	if (!is_valid_pin(pin, PIN_TYPE_PIN))
+	type = puk2pin(type);
+
+	if (!__ofono_is_valid_sim_pin(pin, type))
 		return __ofono_error_invalid_format(msg);
 
 	sim->pending = dbus_message_ref(msg);
@@ -1025,27 +1066,40 @@ static DBusMessage *sim_reset_pin(DBusConnection *conn, DBusMessage *msg,
 	return NULL;
 }
 
-static GDBusMethodTable sim_methods[] = {
-	{ "GetProperties",	"",	"a{sv}",	sim_get_properties	},
-	{ "SetProperty",	"sv",	"",		sim_set_property,
-							G_DBUS_METHOD_FLAG_ASYNC },
-	{ "ChangePin",		"sss",	"",		sim_change_pin,
-							G_DBUS_METHOD_FLAG_ASYNC },
-	{ "EnterPin",		"ss",	"",		sim_enter_pin,
-							G_DBUS_METHOD_FLAG_ASYNC },
-	{ "ResetPin",		"sss",	"",		sim_reset_pin,
-							G_DBUS_METHOD_FLAG_ASYNC },
-	{ "LockPin",		"ss",	"",		sim_lock_pin,
-							G_DBUS_METHOD_FLAG_ASYNC },
-	{ "UnlockPin",		"ss",	"",		sim_unlock_pin,
-							G_DBUS_METHOD_FLAG_ASYNC },
-	{ "GetIcon",		"y",	"ay",		sim_get_icon,
-							G_DBUS_METHOD_FLAG_ASYNC },
+static const GDBusMethodTable sim_methods[] = {
+	{ GDBUS_METHOD("GetProperties",
+			NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
+			sim_get_properties) },
+	{ GDBUS_ASYNC_METHOD("SetProperty",
+			GDBUS_ARGS({ "property", "s" }, { "value", "v" }),
+			NULL, sim_set_property) },
+	{ GDBUS_ASYNC_METHOD("ChangePin",
+			GDBUS_ARGS({ "type", "s" }, { "oldpin", "s" },
+						{ "newpin", "s" }), NULL,
+			sim_change_pin) },
+	{ GDBUS_ASYNC_METHOD("EnterPin",
+			GDBUS_ARGS({ "type", "s" }, { "pin", "s" }), NULL,
+			sim_enter_pin) },
+	{ GDBUS_ASYNC_METHOD("ResetPin",
+			GDBUS_ARGS({ "type", "s" }, { "puk", "s" },
+						{ "newpin", "s" }), NULL,
+			sim_reset_pin) },
+	{ GDBUS_ASYNC_METHOD("LockPin",
+			GDBUS_ARGS({ "type", "s" }, { "pin", "s" }), NULL,
+			sim_lock_pin) },
+	{ GDBUS_ASYNC_METHOD("UnlockPin",
+			GDBUS_ARGS({ "type", "s" }, { "pin", "s" }), NULL,
+			sim_unlock_pin) },
+	{ GDBUS_ASYNC_METHOD("GetIcon",
+			GDBUS_ARGS({ "id", "y" }),
+			GDBUS_ARGS({ "icon", "ay" }),
+			sim_get_icon) },
 	{ }
 };
 
-static GDBusSignalTable sim_signals[] = {
-	{ "PropertyChanged",	"sv" },
+static const GDBusSignalTable sim_signals[] = {
+	{ GDBUS_SIGNAL("PropertyChanged",
+			GDBUS_ARGS({ "name", "s" }, { "value", "v" })) },
 	{ }
 };
 
@@ -1082,8 +1136,10 @@ static void sim_msisdn_read_cb(int ok, int length, int record,
 	if (!ok)
 		goto check;
 
-	if (record_length < 14 || length < record_length)
+	if (record_length < 14 || length < record_length) {
+		ofono_error("EFmsidn shall at least contain 14 bytes");
 		return;
+	}
 
 	total = length / record_length;
 
@@ -1195,10 +1251,12 @@ out:
 check:
 	/* All records retrieved */
 	if (sim->service_numbers) {
-		char **service_numbers;
-
 		sim->service_numbers = g_slist_reverse(sim->service_numbers);
 		sim->sdn_ready = TRUE;
+	}
+
+	if (sim->sdn_ready) {
+		char **service_numbers;
 
 		service_numbers = get_service_numbers(sim->service_numbers);
 
@@ -1211,11 +1269,33 @@ check:
 	}
 }
 
+static void sim_service_numbers_changed(int id, void *userdata)
+{
+	struct ofono_sim *sim = userdata;
+
+	if (sim->service_numbers) {
+		g_slist_foreach(sim->service_numbers,
+				(GFunc)service_number_free, NULL);
+		g_slist_free(sim->service_numbers);
+		sim->service_numbers = NULL;
+	}
+
+	ofono_sim_read(sim->context, SIM_EFSDN_FILEID,
+			OFONO_SIM_FILE_STRUCTURE_FIXED, sim_sdn_read_cb, sim);
+}
+
 static void sim_own_numbers_update(struct ofono_sim *sim)
 {
 	ofono_sim_read(sim->context, SIM_EFMSISDN_FILEID,
 			OFONO_SIM_FILE_STRUCTURE_FIXED, sim_msisdn_read_cb,
 			sim);
+}
+
+static void sim_own_numbers_changed(int id, void *userdata)
+{
+	struct ofono_sim *sim = userdata;
+
+	sim_own_numbers_update(sim);
 }
 
 static void sim_efimg_read_cb(int ok, int length, int record,
@@ -1241,9 +1321,15 @@ static void sim_efimg_read_cb(int ok, int length, int record,
 
 	if (sim->efimg == NULL) {
 		sim->efimg = g_try_malloc0(num_records * 9);
-
 		if (sim->efimg == NULL)
 			return;
+
+		sim->iidf_watch_ids = g_try_new0(unsigned int, num_records);
+		if (sim->iidf_watch_ids == NULL) {
+			g_free(sim->efimg);
+			sim->efimg = NULL;
+			return;
+		}
 
 		sim->efimg_length = num_records * 9;
 	}
@@ -1259,6 +1345,33 @@ static void sim_efimg_read_cb(int ok, int length, int record,
 	memcpy(efimg, &data[1], 9);
 }
 
+static void sim_efimg_changed(int id, void *userdata)
+{
+	struct ofono_sim *sim = userdata;
+	int i, watch;
+
+	if (sim->efimg != NULL) {
+		for (i = sim->efimg_length / 9 - 1; i >= 0; i--) {
+			watch = sim->iidf_watch_ids[i];
+			if (watch == 0)
+				continue;
+
+			ofono_sim_remove_file_watch(sim->context, watch);
+		}
+
+		g_free(sim->efimg);
+		sim->efimg = NULL;
+		sim->efimg_length = 0;
+		g_free(sim->iidf_watch_ids);
+		sim->iidf_watch_ids = NULL;
+	}
+
+	ofono_sim_read(sim->context, SIM_EFIMG_FILEID,
+			OFONO_SIM_FILE_STRUCTURE_FIXED, sim_efimg_read_cb, sim);
+
+	/* TODO: notify D-bus clients */
+}
+
 static void sim_ready(enum ofono_sim_state new_state, void *user)
 {
 	struct ofono_sim *sim = user;
@@ -1267,24 +1380,40 @@ static void sim_ready(enum ofono_sim_state new_state, void *user)
 		return;
 
 	sim_own_numbers_update(sim);
+	ofono_sim_add_file_watch(sim->context, SIM_EFMSISDN_FILEID,
+					sim_own_numbers_changed, sim, NULL);
 
 	ofono_sim_read(sim->context, SIM_EFSDN_FILEID,
 			OFONO_SIM_FILE_STRUCTURE_FIXED, sim_sdn_read_cb, sim);
+	ofono_sim_add_file_watch(sim->context, SIM_EFSDN_FILEID,
+					sim_service_numbers_changed, sim, NULL);
+
 	ofono_sim_read(sim->context, SIM_EFIMG_FILEID,
 			OFONO_SIM_FILE_STRUCTURE_FIXED, sim_efimg_read_cb, sim);
+	ofono_sim_add_file_watch(sim->context, SIM_EFIMG_FILEID,
+					sim_efimg_changed, sim, NULL);
 }
 
-static void sim_imsi_cb(const struct ofono_error *error, const char *imsi,
-		void *data)
+static void sim_set_ready(struct ofono_sim *sim)
 {
-	struct ofono_sim *sim = data;
+	if (sim == NULL)
+		return;
+
+	if (sim->state != OFONO_SIM_STATE_INSERTED &&
+			sim->state != OFONO_SIM_STATE_LOCKED_OUT)
+		return;
+
+	sim->state = OFONO_SIM_STATE_READY;
+
+	sim_fs_check_version(sim->simfs);
+
+	call_state_watches(sim);
+}
+
+static void sim_imsi_obtained(struct ofono_sim *sim, const char *imsi)
+{
 	DBusConnection *conn = ofono_dbus_get_connection();
 	const char *path = __ofono_atom_get_path(sim->atom);
-
-	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
-		ofono_error("Unable to read IMSI, emergency calls only");
-		return;
-	}
 
 	sim->imsi = g_strdup(imsi);
 
@@ -1316,17 +1445,76 @@ static void sim_imsi_cb(const struct ofono_error *error, const char *imsi,
 	}
 
 	sim_set_ready(sim);
+
+}
+
+static void sim_imsi_cb(const struct ofono_error *error, const char *imsi,
+			void *data)
+{
+	struct ofono_sim *sim = data;
+
+	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
+		ofono_error("Unable to read IMSI, emergency calls only");
+		return;
+	}
+
+	sim_imsi_obtained(sim, imsi);
+}
+
+static void sim_efimsi_cb(const struct ofono_error *error,
+				const unsigned char *data, int len, void *user)
+{
+	struct ofono_sim *sim = user;
+	char imsi[17]; /* IMSI max length is 15 + 1 for NULL + 1 waste */
+	unsigned char imsi_len;
+	unsigned char parity;
+
+	if (error->type != OFONO_ERROR_TYPE_NO_ERROR)
+		goto error;
+
+	if (len != 9)
+		goto error;
+
+	imsi_len = data[0];
+
+	if (imsi_len == 0 || imsi_len > 8)
+		goto error;
+
+	/* The low 3 bits of the first byte should be set to binary 001 */
+	if ((data[1] & 0x7) != 0x1)
+		goto error;
+
+	/* Save off the parity bit */
+	parity = (data[1] >> 3) & 1;
+
+	extract_bcd_number(data + 1, imsi_len, imsi);
+	imsi[16] = '\0';
+
+	if ((strlen(imsi + 1) % 2) != parity)
+		goto error;
+
+	sim_imsi_obtained(sim, imsi + 1);
+	return;
+
+error:
+	ofono_error("Unable to read IMSI, emergency calls only");
 }
 
 static void sim_retrieve_imsi(struct ofono_sim *sim)
 {
-	if (sim->driver->read_imsi == NULL) {
-		ofono_error("IMSI retrieval not implemented,"
-				" only emergency calls will be available");
+	if (sim->driver->read_imsi) {
+		sim->driver->read_imsi(sim, sim_imsi_cb, sim);
 		return;
 	}
 
-	sim->driver->read_imsi(sim, sim_imsi_cb, sim);
+	if (sim->driver->read_file_transparent == NULL) {
+		ofono_error("IMSI retrieval not implemented,"
+			" only emergency calls will be available");
+		return;
+	}
+
+	sim->driver->read_file_transparent(sim, SIM_EFIMSI_FILEID, 0, 9,
+						sim_efimsi_cb, sim);
 }
 
 static void sim_fdn_enabled(struct ofono_sim *sim)
@@ -1571,8 +1759,10 @@ static void sim_ad_read_cb(int ok, int length, int record,
 	if (!ok)
 		return;
 
-	if (length < 4)
+	if (length < 4) {
+		ofono_error("EFad should contain at least four bytes");
 		return;
+	}
 
 	new_mnc_length = data[3] & 0xf;
 
@@ -1621,6 +1811,8 @@ static void sim_efphase_read_cb(int ok, int length, int record,
 
 static void sim_initialize_after_pin(struct ofono_sim *sim)
 {
+	sim->context = ofono_sim_context_create(sim);
+
 	ofono_sim_read(sim->context, SIM_EFPHASE_FILEID,
 			OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
 			sim_efphase_read_cb, sim);
@@ -1636,55 +1828,6 @@ static void sim_initialize_after_pin(struct ofono_sim *sim)
 	ofono_sim_read(sim->context, SIM_EF_CPHS_INFORMATION_FILEID,
 			OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
 			sim_cphs_information_read_cb, sim);
-}
-
-static void sim_pin_query_cb(const struct ofono_error *error,
-				enum ofono_sim_password_type pin_type,
-				void *data)
-{
-	struct ofono_sim *sim = data;
-	DBusConnection *conn = ofono_dbus_get_connection();
-	const char *path = __ofono_atom_get_path(sim->atom);
-	const char *pin_name;
-
-	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
-		ofono_error("Querying PIN authentication state failed");
-
-		goto checkdone;
-	}
-
-	if (sim->pin_type != pin_type) {
-		sim->pin_type = pin_type;
-		pin_name = sim_passwd_name(pin_type);
-
-		if (pin_type != OFONO_SIM_PASSWORD_NONE &&
-				password_is_pin(pin_type) == FALSE)
-			pin_type = puk2pin(pin_type);
-
-		if (pin_type != OFONO_SIM_PASSWORD_INVALID)
-			sim->locked_pins[pin_type] = TRUE;
-
-		ofono_dbus_signal_property_changed(conn, path,
-						OFONO_SIM_MANAGER_INTERFACE,
-						"PinRequired", DBUS_TYPE_STRING,
-						&pin_name);
-	}
-
-	sim_pin_retries_check(sim);
-
-checkdone:
-	if (pin_type == OFONO_SIM_PASSWORD_NONE)
-		sim_initialize_after_pin(sim);
-}
-
-static void sim_pin_check(struct ofono_sim *sim)
-{
-	if (sim->driver->query_passwd_state == NULL) {
-		sim_initialize_after_pin(sim);
-		return;
-	}
-
-	sim->driver->query_passwd_state(sim, sim_pin_query_cb, sim);
 }
 
 static void sim_efli_read_cb(int ok, int length, int record,
@@ -1870,7 +2013,11 @@ skip_efpl:
 						DBUS_TYPE_STRING,
 						&sim->language_prefs);
 
-	sim_pin_check(sim);
+	/* Proceed with sim initialization if we're not merely updating */
+	if (!sim->language_prefs_update)
+		__ofono_sim_recheck_pin(sim);
+
+	sim->language_prefs_update = FALSE;
 }
 
 static void sim_iccid_read_cb(int ok, int length, int record,
@@ -1894,6 +2041,43 @@ static void sim_iccid_read_cb(int ok, int length, int record,
 						"CardIdentifier",
 						DBUS_TYPE_STRING,
 						&sim->iccid);
+}
+
+static void sim_iccid_changed(int id, void *userdata)
+{
+	struct ofono_sim *sim = userdata;
+
+	if (sim->iccid) {
+		g_free(sim->iccid);
+		sim->iccid = NULL;
+	}
+
+	ofono_sim_read(sim->early_context, SIM_EF_ICCID_FILEID,
+			OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
+			sim_iccid_read_cb, sim);
+}
+
+static void sim_efli_efpl_changed(int id, void *userdata)
+{
+	struct ofono_sim *sim = userdata;
+
+	if (sim->efli != NULL) /* This shouldn't happen */
+		return;
+
+	if (sim->language_prefs) {
+		g_strfreev(sim->language_prefs);
+		sim->language_prefs = NULL;
+	}
+
+	sim->language_prefs_update = TRUE;
+
+	ofono_sim_read(sim->early_context, SIM_EFLI_FILEID,
+			OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
+			sim_efli_read_cb, sim);
+
+	ofono_sim_read(sim->early_context, SIM_EFPL_FILEID,
+			OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
+			sim_efpl_read_cb, sim);
 }
 
 static void sim_initialize(struct ofono_sim *sim)
@@ -1924,10 +2108,15 @@ static void sim_initialize(struct ofono_sim *sim)
 	 * in the EFust
 	 */
 
+	if (sim->early_context == NULL)
+		sim->early_context = ofono_sim_context_create(sim);
+
 	/* Grab the EFiccid which is always available */
-	ofono_sim_read(sim->context, SIM_EF_ICCID_FILEID,
+	ofono_sim_read(sim->early_context, SIM_EF_ICCID_FILEID,
 			OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
 			sim_iccid_read_cb, sim);
+	ofono_sim_add_file_watch(sim->early_context, SIM_EF_ICCID_FILEID,
+					sim_iccid_changed, sim, NULL);
 
 	/* EFecc is read by the voicecall atom */
 
@@ -1939,12 +2128,17 @@ static void sim_initialize(struct ofono_sim *sim)
 	 * However we don't depend on the user interface and so
 	 * need to read both files now.
 	 */
-	ofono_sim_read(sim->context, SIM_EFLI_FILEID,
+	ofono_sim_read(sim->early_context, SIM_EFLI_FILEID,
 			OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
 			sim_efli_read_cb, sim);
-	ofono_sim_read(sim->context, SIM_EFPL_FILEID,
+	ofono_sim_add_file_watch(sim->early_context, SIM_EFLI_FILEID,
+					sim_efli_efpl_changed, sim, NULL);
+
+	ofono_sim_read(sim->early_context, SIM_EFPL_FILEID,
 			OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
 			sim_efpl_read_cb, sim);
+	ofono_sim_add_file_watch(sim->early_context, SIM_EFPL_FILEID,
+					sim_efli_efpl_changed, sim, NULL);
 }
 
 struct ofono_sim_context *ofono_sim_context_create(struct ofono_sim *sim)
@@ -1987,6 +2181,20 @@ int ofono_sim_write(struct ofono_sim_context *context, int id,
 				userdata);
 }
 
+unsigned int ofono_sim_add_file_watch(struct ofono_sim_context *context,
+					int id, ofono_sim_file_changed_cb_t cb,
+					void *userdata,
+					ofono_destroy_func destroy)
+{
+	return sim_fs_file_watch_add(context, id, cb, userdata, destroy);
+}
+
+void ofono_sim_remove_file_watch(struct ofono_sim_context *context,
+					unsigned int id)
+{
+	sim_fs_file_watch_remove(context, id);
+}
+
 const char *ofono_sim_get_imsi(struct ofono_sim *sim)
 {
 	if (sim == NULL)
@@ -2009,6 +2217,14 @@ const char *ofono_sim_get_mnc(struct ofono_sim *sim)
 		return NULL;
 
 	return sim->mnc;
+}
+
+const char *ofono_sim_get_spn(struct ofono_sim *sim)
+{
+	if (sim == NULL)
+		return NULL;
+
+	return sim->spn;
 }
 
 enum ofono_sim_phase ofono_sim_get_phase(struct ofono_sim *sim)
@@ -2050,6 +2266,12 @@ ofono_bool_t __ofono_sim_service_available(struct ofono_sim *sim,
 	return FALSE;
 }
 
+ofono_bool_t __ofono_sim_cphs_service_available(struct ofono_sim *sim,
+						int cphs_service)
+{
+	return sim_cphs_is_active(sim->cphs_service_table, cphs_service);
+}
+
 static void sim_inserted_update(struct ofono_sim *sim)
 {
 	DBusConnection *conn = ofono_dbus_get_connection();
@@ -2062,12 +2284,38 @@ static void sim_inserted_update(struct ofono_sim *sim)
 						DBUS_TYPE_BOOLEAN, &present);
 }
 
-static void sim_free_state(struct ofono_sim *sim)
+static void sim_free_early_state(struct ofono_sim *sim)
 {
 	if (sim->iccid) {
 		g_free(sim->iccid);
 		sim->iccid = NULL;
 	}
+
+	if (sim->efli) {
+		g_free(sim->efli);
+		sim->efli = NULL;
+		sim->efli_length = 0;
+	}
+
+	if (sim->language_prefs) {
+		g_strfreev(sim->language_prefs);
+		sim->language_prefs = NULL;
+	}
+
+	if (sim->early_context) {
+		ofono_sim_context_free(sim->early_context);
+		sim->early_context = NULL;
+	}
+}
+
+static void sim_free_main_state(struct ofono_sim *sim)
+{
+	int i;
+
+	for (i = 0; i < OFONO_SIM_PASSWORD_INVALID; i++)
+		sim->pin_retries[i] = -1;
+
+	memset(sim->locked_pins, 0, sizeof(sim->locked_pins));
 
 	if (sim->imsi) {
 		g_free(sim->imsi);
@@ -2088,17 +2336,7 @@ static void sim_free_state(struct ofono_sim *sim)
 				(GFunc)service_number_free, NULL);
 		g_slist_free(sim->service_numbers);
 		sim->service_numbers = NULL;
-	}
-
-	if (sim->efli) {
-		g_free(sim->efli);
-		sim->efli = NULL;
-		sim->efli_length = 0;
-	}
-
-	if (sim->language_prefs) {
-		g_strfreev(sim->language_prefs);
-		sim->language_prefs = NULL;
+		sim->sdn_ready = FALSE;
 	}
 
 	if (sim->efust) {
@@ -2119,12 +2357,17 @@ static void sim_free_state(struct ofono_sim *sim)
 		sim->efsst_length = 0;
 	}
 
+	sim->phase = OFONO_SIM_PHASE_UNKNOWN;
+	sim->cphs_phase = OFONO_SIM_CPHS_PHASE_NONE;
 	sim->mnc_length = 0;
+	memset(sim->cphs_service_table, 0, 2);
 
 	if (sim->efimg) {
 		g_free(sim->efimg);
 		sim->efimg = NULL;
 		sim->efimg_length = 0;
+		g_free(sim->iidf_watch_ids);
+		sim->iidf_watch_ids = NULL;
 	}
 
 	g_free(sim->iidf_image);
@@ -2132,13 +2375,21 @@ static void sim_free_state(struct ofono_sim *sim)
 
 	sim->fixed_dialing = FALSE;
 	sim->barred_dialing = FALSE;
+
+	if (sim->context) {
+		ofono_sim_context_free(sim->context);
+		sim->context = NULL;
+	}
+}
+
+static void sim_free_state(struct ofono_sim *sim)
+{
+	sim_free_early_state(sim);
+	sim_free_main_state(sim);
 }
 
 void ofono_sim_inserted_notify(struct ofono_sim *sim, ofono_bool_t inserted)
 {
-	ofono_sim_state_event_cb_t notify;
-	GSList *l;
-
 	if (inserted == TRUE && sim->state == OFONO_SIM_STATE_NOT_PRESENT)
 		sim->state = OFONO_SIM_STATE_INSERTED;
 	else if (inserted == FALSE && sim->state != OFONO_SIM_STATE_NOT_PRESENT)
@@ -2150,13 +2401,7 @@ void ofono_sim_inserted_notify(struct ofono_sim *sim, ofono_bool_t inserted)
 		return;
 
 	sim_inserted_update(sim);
-
-	for (l = sim->state_watches->items; l; l = l->next) {
-		struct ofono_watchlist_item *item = l->data;
-		notify = item->notify;
-
-		notify(sim->state, item->notify_data);
-	}
+	call_state_watches(sim);
 
 	if (inserted)
 		sim_initialize(sim);
@@ -2200,27 +2445,314 @@ enum ofono_sim_state ofono_sim_get_state(struct ofono_sim *sim)
 	return sim->state;
 }
 
-static void sim_set_ready(struct ofono_sim *sim)
+static void spn_watch_cb(gpointer data, gpointer user_data)
 {
-	GSList *l;
-	ofono_sim_state_event_cb_t notify;
+	struct ofono_watchlist_item *item = data;
+	struct ofono_sim *sim = user_data;
+
+	if (item->notify)
+		((ofono_sim_spn_cb_t) item->notify)(sim->spn, sim->spn_dc,
+							item->notify_data);
+}
+
+static inline void spn_watches_notify(struct ofono_sim *sim)
+{
+	if (sim->spn_watches->items)
+		g_slist_foreach(sim->spn_watches->items, spn_watch_cb, sim);
+
+	sim->flags &= ~SIM_FLAG_READING_SPN;
+}
+
+static void sim_spn_set(struct ofono_sim *sim, const void *data, int length,
+						const unsigned char *dc)
+{
+	g_free(sim->spn);
+	sim->spn = NULL;
+
+	g_free(sim->spn_dc);
+	sim->spn_dc = NULL;
+
+	if (data == NULL)
+		goto notify;
+
+	/*
+	 * TS 31.102 says:
+	 *
+	 * the string shall use:
+	 *
+	 * - either the SMS default 7-bit coded alphabet as defined in
+	 *   TS 23.038 [5] with bit 8 set to 0. The string shall be left
+	 *   justified. Unused bytes shall be set to 'FF'.
+	 *
+	 * - or one of the UCS2 code options defined in the annex of TS
+	 *   31.101 [11].
+	 *
+	 * 31.101 has no such annex though.  51.101 refers to Annex B of
+	 * itself which is not there either.  11.11 contains the same
+	 * paragraph as 51.101 and has an Annex B which we implement.
+	 */
+	sim->spn = sim_string_to_utf8(data, length);
+	if (sim->spn == NULL) {
+		ofono_error("EFspn read successfully, but couldn't parse");
+		goto notify;
+	}
+
+	if (strlen(sim->spn) == 0) {
+		g_free(sim->spn);
+		sim->spn = NULL;
+		goto notify;
+	}
+
+	if (dc)
+		sim->spn_dc = g_memdup(dc, 1);
+
+notify:
+	spn_watches_notify(sim);
+}
+
+static void sim_cphs_spn_short_read_cb(int ok, int length, int record,
+					const unsigned char *data,
+					int record_length, void *user_data)
+{
+	struct ofono_sim *sim = user_data;
+
+	if (!ok) {
+		sim_spn_set(sim, NULL, 0, NULL);
+		return;
+	}
+
+	sim_spn_set(sim, data, length, NULL);
+}
+
+static void sim_cphs_spn_read_cb(int ok, int length, int record,
+					const unsigned char *data,
+					int record_length, void *user_data)
+{
+	struct ofono_sim *sim = user_data;
+
+	if (!ok) {
+		if (__ofono_sim_cphs_service_available(sim,
+						SIM_CPHS_SERVICE_SHORT_SPN))
+			ofono_sim_read(sim->context,
+					SIM_EF_CPHS_SPN_SHORT_FILEID,
+					OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
+					sim_cphs_spn_short_read_cb, sim);
+		else
+			sim_spn_set(sim, NULL, 0, NULL);
+
+		return;
+	}
+
+	sim_spn_set(sim, data, length, NULL);
+}
+
+static void sim_spn_read_cb(int ok, int length, int record,
+				const unsigned char *data,
+				int record_length, void *user_data)
+{
+	struct ofono_sim *sim = user_data;
+
+	if (!ok) {
+		ofono_sim_read(sim->context, SIM_EF_CPHS_SPN_FILEID,
+				OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
+				sim_cphs_spn_read_cb, sim);
+
+		return;
+	}
+
+	sim_spn_set(sim, data + 1, length - 1, data);
+}
+
+static void sim_spn_changed(int id, void *userdata)
+{
+	struct ofono_sim *sim = userdata;
+
+	if (sim->flags & SIM_FLAG_READING_SPN)
+		return;
+
+	sim->flags |= SIM_FLAG_READING_SPN;
+	ofono_sim_read(sim->context, SIM_EFSPN_FILEID,
+			OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
+			sim_spn_read_cb, sim);
+}
+
+static void sim_spn_init(struct ofono_sim *sim)
+{
+	sim->ef_spn_watch = ofono_sim_add_file_watch(sim->context,
+					SIM_EFSPN_FILEID, sim_spn_changed, sim,
+					NULL);
+
+	sim->cphs_spn_watch = ofono_sim_add_file_watch(sim->context,
+					SIM_EF_CPHS_SPN_FILEID,
+					sim_spn_changed, sim, NULL);
+
+	if (__ofono_sim_cphs_service_available(sim,
+						SIM_CPHS_SERVICE_SHORT_SPN))
+		sim->cphs_spn_short_watch = ofono_sim_add_file_watch(
+				sim->context, SIM_EF_CPHS_SPN_SHORT_FILEID,
+				sim_spn_changed, sim, NULL);
+}
+
+static void sim_spn_close(struct ofono_sim *sim)
+{
+	__ofono_watchlist_free(sim->spn_watches);
+	sim->spn_watches = NULL;
+
+	/*
+	 * We have not initialized SPN logic at all yet, either because
+	 * no netreg / gprs atom has been needed or we have not reached the
+	 * post_sim state
+	 */
+	if (sim->ef_spn_watch == 0)
+		return;
+
+	ofono_sim_remove_file_watch(sim->context, sim->ef_spn_watch);
+	sim->ef_spn_watch = 0;
+
+	ofono_sim_remove_file_watch(sim->context, sim->cphs_spn_watch);
+	sim->cphs_spn_watch = 0;
+
+	if (sim->cphs_spn_short_watch) {
+		ofono_sim_remove_file_watch(sim->context,
+						sim->cphs_spn_short_watch);
+		sim->cphs_spn_short_watch = 0;
+	}
+
+	sim->flags &= ~SIM_FLAG_READING_SPN;
+
+	g_free(sim->spn);
+	sim->spn = NULL;
+
+	g_free(sim->spn_dc);
+	sim->spn_dc = NULL;
+}
+
+ofono_bool_t ofono_sim_add_spn_watch(struct ofono_sim *sim, unsigned int *id,
+					ofono_sim_spn_cb_t cb, void *data,
+					ofono_destroy_func destroy)
+{
+	struct ofono_watchlist_item *item;
+	unsigned int watch_id;
+
+	DBG("%p", sim);
 
 	if (sim == NULL)
-		return;
+		return 0;
 
-	if (sim->state != OFONO_SIM_STATE_INSERTED)
-		return;
+	item = g_new0(struct ofono_watchlist_item, 1);
 
-	sim->state = OFONO_SIM_STATE_READY;
+	item->notify = cb;
+	item->destroy = destroy;
+	item->notify_data = data;
 
-	sim_fs_check_version(sim->simfs);
+	watch_id = __ofono_watchlist_add_item(sim->spn_watches, item);
+	if (watch_id == 0)
+		return FALSE;
 
-	for (l = sim->state_watches->items; l; l = l->next) {
-		struct ofono_watchlist_item *item = l->data;
-		notify = item->notify;
+	*id = watch_id;
 
-		notify(sim->state, item->notify_data);
+	if (sim->ef_spn_watch == 0) {
+		sim_spn_init(sim);
+		sim_spn_changed(0, sim);
+		return TRUE;
 	}
+
+	if (sim->flags & SIM_FLAG_READING_SPN)
+		return TRUE;
+
+	((ofono_sim_spn_cb_t) item->notify)(sim->spn, sim->spn_dc,
+							item->notify_data);
+	return TRUE;
+}
+
+ofono_bool_t ofono_sim_remove_spn_watch(struct ofono_sim *sim, unsigned int *id)
+{
+	gboolean ret;
+
+	DBG("%p", sim);
+
+	if (sim == NULL)
+		return FALSE;
+
+	ret = __ofono_watchlist_remove_item(sim->spn_watches, *id);
+	if (ret == TRUE)
+		*id = 0;
+
+	return ret;
+}
+
+static void sim_pin_query_cb(const struct ofono_error *error,
+				enum ofono_sim_password_type pin_type,
+				void *data)
+{
+	struct ofono_sim *sim = data;
+	DBusConnection *conn = ofono_dbus_get_connection();
+	const char *path = __ofono_atom_get_path(sim->atom);
+	const char *pin_name;
+
+	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
+		ofono_error("Querying PIN authentication state failed");
+		return;
+	}
+
+	if (sim->pin_type != pin_type) {
+		sim->pin_type = pin_type;
+		pin_name = sim_passwd_name(pin_type);
+
+		if (pin_type != OFONO_SIM_PASSWORD_NONE &&
+				password_is_pin(pin_type) == FALSE)
+			pin_type = puk2pin(pin_type);
+
+		if (pin_type != OFONO_SIM_PASSWORD_INVALID)
+			sim->locked_pins[pin_type] = TRUE;
+
+		ofono_dbus_signal_property_changed(conn, path,
+						OFONO_SIM_MANAGER_INTERFACE,
+						"PinRequired", DBUS_TYPE_STRING,
+						&pin_name);
+	}
+
+	switch (pin_type) {
+	case OFONO_SIM_PASSWORD_NONE:
+	case OFONO_SIM_PASSWORD_SIM_PIN2:
+	case OFONO_SIM_PASSWORD_SIM_PUK2:
+		break;
+	default:
+		if (sim->state == OFONO_SIM_STATE_READY) {
+			/* Force the sim state out of READY */
+			sim_free_main_state(sim);
+
+			sim->state = OFONO_SIM_STATE_LOCKED_OUT;
+			call_state_watches(sim);
+		}
+		break;
+	}
+
+	sim_pin_retries_check(sim);
+
+	switch (pin_type) {
+	case OFONO_SIM_PASSWORD_SIM_PIN2:
+	case OFONO_SIM_PASSWORD_SIM_PUK2:
+	case OFONO_SIM_PASSWORD_NONE:
+		if (sim->state == OFONO_SIM_STATE_READY)
+			break;
+
+		/* Fall through */
+		sim_initialize_after_pin(sim);
+		break;
+	default:
+		break;
+	}
+}
+
+void __ofono_sim_recheck_pin(struct ofono_sim *sim)
+{
+	if (sim->driver->query_passwd_state == NULL) {
+		sim_initialize_after_pin(sim);
+		return;
+	}
+
+	sim->driver->query_passwd_state(sim, sim_pin_query_cb, sim);
 }
 
 int ofono_sim_driver_register(const struct ofono_sim_driver *d)
@@ -2242,6 +2774,13 @@ void ofono_sim_driver_unregister(const struct ofono_sim_driver *d)
 	g_drivers = g_slist_remove(g_drivers, (void *) d);
 }
 
+static void emulator_remove_handler(struct ofono_atom *atom, void *data)
+{
+	struct ofono_emulator *em = __ofono_atom_get_data(atom);
+
+	ofono_emulator_remove_handler(em, data);
+}
+
 static void sim_unregister(struct ofono_atom *atom)
 {
 	DBusConnection *conn = ofono_dbus_get_connection();
@@ -2249,8 +2788,17 @@ static void sim_unregister(struct ofono_atom *atom)
 	const char *path = __ofono_atom_get_path(atom);
 	struct ofono_sim *sim = __ofono_atom_get_data(atom);
 
+	__ofono_modem_foreach_registered_atom(modem,
+						OFONO_ATOM_TYPE_EMULATOR_HFP,
+						emulator_remove_handler,
+						"+CNUM");
+
+	__ofono_modem_remove_atom_watch(modem, sim->hfp_watch);
+
 	__ofono_watchlist_free(sim->state_watches);
 	sim->state_watches = NULL;
+
+	sim_spn_close(sim);
 
 	g_dbus_unregister_interface(conn, path, OFONO_SIM_MANAGER_INTERFACE);
 	ofono_modem_remove_interface(modem, OFONO_SIM_MANAGER_INTERFACE);
@@ -2269,11 +2817,6 @@ static void sim_remove(struct ofono_atom *atom)
 		sim->driver->remove(sim);
 
 	sim_free_state(sim);
-
-	if (sim->context) {
-		ofono_sim_context_free(sim->context);
-		sim->context = NULL;
-	}
 
 	sim_fs_free(sim->simfs);
 	sim->simfs = NULL;
@@ -2321,6 +2864,53 @@ struct ofono_sim *ofono_sim_create(struct ofono_modem *modem,
 	return sim;
 }
 
+static void emulator_cnum_cb(struct ofono_emulator *em,
+			struct ofono_emulator_request *req, void *userdata)
+{
+	struct ofono_sim *sim = userdata;
+	struct ofono_error result;
+	GSList *l;
+	const char *phone;
+	/*
+	 * '+CNUM: ,"+",,,4' + phone number + phone type on 3 digits max
+	 * + terminating null
+	 */
+	char buf[OFONO_MAX_PHONE_NUMBER_LENGTH + 18 + 1];
+
+	result.error = 0;
+
+	switch (ofono_emulator_request_get_type(req)) {
+	case OFONO_EMULATOR_REQUEST_TYPE_COMMAND_ONLY:
+		for (l = sim->own_numbers; l; l = l->next) {
+			struct ofono_phone_number *ph = l->data;
+
+			phone = phone_number_to_string(ph);
+			sprintf(buf, "+CNUM: ,\"%s\",%d,,4", phone, ph->type);
+			ofono_emulator_send_info(em, buf, l->next == NULL ?
+							TRUE : FALSE);
+		}
+
+		result.type = OFONO_ERROR_TYPE_NO_ERROR;
+		ofono_emulator_send_final(em, &result);
+		break;
+
+	default:
+		result.type = OFONO_ERROR_TYPE_FAILURE;
+		ofono_emulator_send_final(em, &result);
+	};
+}
+
+static void emulator_hfp_watch(struct ofono_atom *atom,
+				enum ofono_atom_watch_condition cond,
+				void *data)
+{
+	struct ofono_emulator *em = __ofono_atom_get_data(atom);
+
+	if (cond == OFONO_ATOM_WATCH_CONDITION_REGISTERED)
+		ofono_emulator_add_handler(em, "+CNUM", emulator_cnum_cb, data,
+						NULL);
+}
+
 void ofono_sim_register(struct ofono_sim *sim)
 {
 	DBusConnection *conn = ofono_dbus_get_connection();
@@ -2339,8 +2929,8 @@ void ofono_sim_register(struct ofono_sim *sim)
 
 	ofono_modem_add_interface(modem, OFONO_SIM_MANAGER_INTERFACE);
 	sim->state_watches = __ofono_watchlist_new(g_free);
+	sim->spn_watches = __ofono_watchlist_new(g_free);
 	sim->simfs = sim_fs_new(sim, sim->driver);
-	sim->context = ofono_sim_context_create(sim);
 
 	__ofono_atom_register(sim->atom, sim_unregister);
 
@@ -2348,6 +2938,10 @@ void ofono_sim_register(struct ofono_sim *sim)
 
 	if (sim->state > OFONO_SIM_STATE_NOT_PRESENT)
 		sim_initialize(sim);
+
+	sim->hfp_watch = __ofono_modem_add_atom_watch(modem,
+					OFONO_ATOM_TYPE_EMULATOR_HFP,
+					emulator_hfp_watch, sim, NULL);
 }
 
 void ofono_sim_remove(struct ofono_sim *sim)
@@ -2363,4 +2957,188 @@ void ofono_sim_set_data(struct ofono_sim *sim, void *data)
 void *ofono_sim_get_data(struct ofono_sim *sim)
 {
 	return sim->driver_data;
+}
+
+static ofono_bool_t is_valid_pin(const char *pin, unsigned int min,
+					unsigned int max)
+{
+	unsigned int i;
+
+	/* Pin must not be empty */
+	if (pin == NULL || pin[0] == '\0')
+		return FALSE;
+
+	i = strlen(pin);
+	if (i != strspn(pin, "0123456789"))
+		return FALSE;
+
+	if (min <= i && i <= max)
+		return TRUE;
+
+	return FALSE;
+}
+
+ofono_bool_t __ofono_is_valid_sim_pin(const char *pin,
+					enum ofono_sim_password_type type)
+{
+	switch (type) {
+	case OFONO_SIM_PASSWORD_SIM_PIN:
+	case OFONO_SIM_PASSWORD_SIM_PIN2:
+		/* 11.11 Section 9.3 ("CHV"): 4..8 IA-5 digits */
+		return is_valid_pin(pin, 4, 8);
+		break;
+	case OFONO_SIM_PASSWORD_PHSIM_PIN:
+	case OFONO_SIM_PASSWORD_PHFSIM_PIN:
+	case OFONO_SIM_PASSWORD_PHNET_PIN:
+	case OFONO_SIM_PASSWORD_PHNETSUB_PIN:
+	case OFONO_SIM_PASSWORD_PHSP_PIN:
+	case OFONO_SIM_PASSWORD_PHCORP_PIN:
+		/* 22.022 Section 14 4..16 IA-5 digits */
+		return is_valid_pin(pin, 4, 16);
+		break;
+	case OFONO_SIM_PASSWORD_SIM_PUK:
+	case OFONO_SIM_PASSWORD_SIM_PUK2:
+	case OFONO_SIM_PASSWORD_PHFSIM_PUK:
+	case OFONO_SIM_PASSWORD_PHNET_PUK:
+	case OFONO_SIM_PASSWORD_PHNETSUB_PUK:
+	case OFONO_SIM_PASSWORD_PHSP_PUK:
+	case OFONO_SIM_PASSWORD_PHCORP_PUK:
+		/* 11.11 Section 9.3 ("UNBLOCK CHV"), 8 IA-5 digits */
+		return is_valid_pin(pin, 8, 8);
+		break;
+	case OFONO_SIM_PASSWORD_NONE:
+		return is_valid_pin(pin, 0, 8);
+		break;
+	case OFONO_SIM_PASSWORD_INVALID:
+		break;
+	}
+
+	return FALSE;
+}
+
+ofono_bool_t __ofono_is_valid_net_pin(const char *pin)
+{
+	return is_valid_pin(pin, 4, 4);
+}
+
+static void sim_file_changed_flush(struct ofono_sim *sim, int id)
+{
+	int i, imgid;
+
+	if (id == SIM_EFIMG_FILEID)
+		/* All cached images become invalid */
+		sim_fs_image_cache_flush(sim->simfs);
+	else if (sim->efimg) {
+		/*
+		 * Data and CLUT for image instances stored in the changed
+		 * file need to be re-read.
+		 */
+		for (i = sim->efimg_length / 9 - 1; i >= 0; i--) {
+			imgid = (sim->efimg[i * 9 + 3] << 8) |
+				sim->efimg[i * 9 + 4];
+
+			if (imgid == id)
+				sim_fs_image_cache_flush_file(sim->simfs, i);
+		}
+	}
+
+	sim_fs_cache_flush_file(sim->simfs, id);
+}
+
+void __ofono_sim_refresh(struct ofono_sim *sim, GSList *file_list,
+			ofono_bool_t full_file_change, ofono_bool_t naa_init)
+{
+	GSList *l;
+	gboolean reinit_naa = naa_init || full_file_change;
+
+	/*
+	 * Check if any files used in SIM initialisation procedure
+	 * are affected, except EFiccid, EFpl, EFli.
+	 */
+	for (l = file_list; l; l = l->next) {
+		struct stk_file *file = l->data;
+		uint32_t mf, df, ef;
+
+		if (file->len != 6)
+			continue;
+
+		mf = (file->file[0] << 8) | (file->file[1] << 0);
+		df = (file->file[2] << 8) | (file->file[3] << 0);
+		ef = (file->file[4] << 8) | (file->file[5] << 0);
+
+		if (mf != 0x3f00)
+			continue;
+
+		/*
+		 * 8.18: "the path '3F007FFF' indicates the relevant
+		 * NAA Application dedicated file;".
+		 */
+		if (df == 0x7fff)
+			df = 0x7f20;
+
+#define DFGSM (0x7f20 << 16)
+#define DFTEL (0x7f10 << 16)
+
+		switch ((df << 16) | ef) {
+		case DFGSM | SIM_EFEST_FILEID:
+		case DFGSM | SIM_EFUST_FILEID: /* aka. EFSST */
+		case DFGSM | SIM_EFPHASE_FILEID:
+		case DFGSM | SIM_EFAD_FILEID:
+		case DFTEL | SIM_EFBDN_FILEID:
+		case DFTEL | SIM_EFADN_FILEID:
+		case DFGSM | SIM_EF_CPHS_INFORMATION_FILEID:
+			reinit_naa = TRUE;
+			break;
+		}
+	}
+
+	/* Flush cached content for affected files */
+	if (full_file_change)
+		sim_fs_cache_flush(sim->simfs);
+	else {
+		for (l = file_list; l; l = l->next) {
+			struct stk_file *file = l->data;
+			int id = (file->file[file->len - 2] << 8) |
+				(file->file[file->len - 1] << 0);
+
+			sim_file_changed_flush(sim, id);
+		}
+	}
+
+	if (reinit_naa) {
+		/* Force the sim state out of READY */
+		sim_free_main_state(sim);
+
+		sim->state = OFONO_SIM_STATE_INSERTED;
+		__ofono_modem_sim_reset(__ofono_atom_get_modem(sim->atom));
+	}
+
+	/*
+	 * Notify the subscribers of files that have changed and who
+	 * haven't unsubsribed during the SIM state change.
+	 */
+	if (full_file_change)
+		sim_fs_notify_file_watches(sim->simfs, -1);
+	else {
+		for (l = file_list; l; l = l->next) {
+			struct stk_file *file = l->data;
+			int id = (file->file[file->len - 2] << 8) |
+				(file->file[file->len - 1] << 0);
+
+			sim_fs_notify_file_watches(sim->simfs, id);
+		}
+	}
+
+	if (reinit_naa) {
+		/*
+		 * REVISIT: There's some concern that on re-insertion the
+		 * atoms will start to talk to the SIM before it becomes
+		 * ready, on certain SIMs.
+		 */
+		/*
+		 * Start initialization procedure from after EFiccid,
+		 * EFli and EFpl are retrieved.
+		 */
+		__ofono_sim_recheck_pin(sim);
+	}
 }

@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -477,9 +477,10 @@ static void cw_ss_set_callback(const struct ofono_error *error, void *data)
 	struct ofono_call_settings *cs = data;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
-		DBG("setting CW via SS failed");
+		DBG("setting CW via SS failed with error: %s",
+			telephony_error_to_str(error));
 		__ofono_dbus_pending_reply(&cs->pending,
-					__ofono_error_failed(cs->pending));
+			__ofono_error_from_error(error, cs->pending));
 
 		return;
 	}
@@ -614,9 +615,10 @@ static void clip_cnap_colp_colr_ss_query_cb(const struct ofono_error *error,
 	const char *value;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
-		DBG("Error occurred during ss control query");
+		DBG("SS control query failed with error: %s",
+			telephony_error_to_str(error));
 		__ofono_dbus_pending_reply(&cs->pending,
-					__ofono_error_failed(cs->pending));
+			__ofono_error_from_error(error, cs->pending));
 
 		return;
 	}
@@ -733,7 +735,7 @@ static void clir_ss_query_callback(const struct ofono_error *error,
 
 	switch (network) {
 	case CLIR_STATUS_UNKNOWN:
-		value = "uknown";
+		value = "unknown";
 		break;
 
 	case CLIR_STATUS_PROVISIONED_PERMANENT:
@@ -772,9 +774,10 @@ static void clir_ss_set_callback(const struct ofono_error *error, void *data)
 	struct ofono_call_settings *cs = data;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
-		DBG("setting clir via SS failed");
+		DBG("setting clir via SS failed with error: %s",
+			telephony_error_to_str(error));
 		__ofono_dbus_pending_reply(&cs->pending,
-					__ofono_error_failed(cs->pending));
+			__ofono_error_from_error(error, cs->pending));
 
 		return;
 	}
@@ -1330,16 +1333,19 @@ static DBusMessage *cs_set_property(DBusConnection *conn, DBusMessage *msg,
 	return __ofono_error_invalid_args(msg);
 }
 
-static GDBusMethodTable cs_methods[] = {
-	{ "GetProperties",	"",	"a{sv}",	cs_get_properties,
-							G_DBUS_METHOD_FLAG_ASYNC },
-	{ "SetProperty",	"sv",	"",		cs_set_property,
-							G_DBUS_METHOD_FLAG_ASYNC },
+static const GDBusMethodTable cs_methods[] = {
+	{ GDBUS_ASYNC_METHOD("GetProperties",
+				NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
+				cs_get_properties) },
+	{ GDBUS_ASYNC_METHOD("SetProperty",
+			GDBUS_ARGS({ "property", "s" }, { "value", "v" }),
+			NULL, cs_set_property) },
 	{ }
 };
 
-static GDBusSignalTable cs_signals[] = {
-	{ "PropertyChanged",	"sv" },
+static const GDBusSignalTable cs_signals[] = {
+	{ GDBUS_SIGNAL("PropertyChanged",
+			GDBUS_ARGS({ "property", "s" }, { "value", "v" })) },
 	{ }
 };
 
@@ -1454,7 +1460,6 @@ void ofono_call_settings_register(struct ofono_call_settings *cs)
 	DBusConnection *conn = ofono_dbus_get_connection();
 	const char *path = __ofono_atom_get_path(cs->atom);
 	struct ofono_modem *modem = __ofono_atom_get_modem(cs->atom);
-	struct ofono_atom *ussd_atom;
 
 	if (!g_dbus_register_interface(conn, path,
 					OFONO_CALL_SETTINGS_INTERFACE,
@@ -1471,12 +1476,6 @@ void ofono_call_settings_register(struct ofono_call_settings *cs)
 	cs->ussd_watch = __ofono_modem_add_atom_watch(modem,
 					OFONO_ATOM_TYPE_USSD,
 					ussd_watch, cs, NULL);
-
-	ussd_atom = __ofono_modem_find_atom(modem, OFONO_ATOM_TYPE_USSD);
-
-	if (ussd_atom && __ofono_atom_get_registered(ussd_atom))
-		ussd_watch(ussd_atom, OFONO_ATOM_WATCH_CONDITION_REGISTERED,
-				cs);
 
 	__ofono_atom_register(cs->atom, call_settings_unregister);
 }

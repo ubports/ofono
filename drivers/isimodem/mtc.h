@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2009-2010 Nokia Corporation and/or its subsidiary(-ies).
+ *  Copyright (C) 2009-2010  Nokia Corporation and/or its subsidiary(-ies).
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -27,8 +27,46 @@ extern "C" {
 #endif
 
 #define PN_MTC				0x15
+#define PN_MODEM_MCE			0xC2
 #define MTC_TIMEOUT			5
 #define MTC_STATE_REQ_TIMEOUT		(6 + 5)
+
+enum mce_message_id {
+	MCE_MODEM_STATE_IND =		0x00,
+	MCE_MODEM_STATE_QUERY_REQ =     0x01,
+	MCE_MODEM_STATE_QUERY_RESP =    0x02,
+	MCE_RF_STATE_REQ =		0x03,
+	MCE_RF_STATE_RESP =		0x04,
+	MCE_RF_STATE_IND =		0x05,
+	MCE_RF_STATE_QUERY_REQ =	0x06,
+	MCE_RF_STATE_QUERY_RESP =       0x07,
+	MCE_POWER_OFF_REQ =		0x08,
+	MCE_POWER_OFF_RESP =		0x09
+};
+
+enum mce_rf_state {
+	MCE_RF_OFF =			0x00,
+	MCE_RF_ON =			0x01
+};
+
+enum mce_status_info {
+	MCE_OK =			0x00,
+	MCE_FAIL =			0x01,
+	MCE_ALREADY_ACTIVE =		0x06,
+	MCE_TRANSITION_ONGOING =	0x16
+};
+
+enum mce_modem_state {
+	MCE_NORMAL =			0x00,
+	MCE_LOCAL =			0x01,
+	MCE_SW_RESET =			0x80,
+	MCE_POWER_OFF =			0x81
+};
+
+enum mce_isi_action {
+	MCE_START =			0x03,
+	MCE_READY =			0x04
+};
 
 enum mtc_isi_cause {
 	MTC_OK =			0x00,
@@ -65,7 +103,6 @@ enum mtc_message_id {
 	MTC_STARTUP_SYNQ_RESP =		0x6E,
 	MTC_SHUTDOWN_SYNC_RESP =	0x75,
 	MTC_STATE_INFO_IND =		0xC0,
-	MTC_COMMON_MESSAGE =		0xF0,
 };
 
 enum mtc_modem_state {

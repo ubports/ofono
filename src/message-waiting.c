@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -49,8 +49,10 @@ struct ofono_message_waiting {
 	unsigned char efmwis_length;
 	unsigned char efmbdn_length;
 	unsigned char efmbdn_record_id[5];
+	unsigned int efmbdn_watch;
 	unsigned char ef_cphs_mwis_length;
 	unsigned char ef_cphs_mbdn_length;
+	unsigned int ef_cphs_mbdn_watch;
 	gboolean mbdn_not_provided;
 	gboolean cphs_mbdn_not_provided;
 	struct ofono_phone_number mailbox_number[5];
@@ -366,15 +368,19 @@ static DBusMessage *mw_set_property(DBusConnection *conn, DBusMessage *msg,
 	return __ofono_error_invalid_args(msg);
 }
 
-static GDBusMethodTable message_waiting_methods[] = {
-	{ "GetProperties",	"",	"a{sv}",	mw_get_properties	},
-	{ "SetProperty",	"sv",	"",		mw_set_property,
-							G_DBUS_METHOD_FLAG_ASYNC },
+static const GDBusMethodTable message_waiting_methods[] = {
+	{ GDBUS_METHOD("GetProperties",
+			NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
+			mw_get_properties) },
+	{ GDBUS_ASYNC_METHOD("SetProperty",
+			GDBUS_ARGS({ "property", "s" }, { "value", "v" }),
+			NULL, mw_set_property) },
 	{ }
 };
 
-static GDBusSignalTable message_waiting_signals[] = {
-	{ "PropertyChanged",	"sv" },
+static const GDBusSignalTable message_waiting_signals[] = {
+	{ GDBUS_SIGNAL("PropertyChanged",
+			GDBUS_ARGS({ "name", "s" }, { "value", "v" })) },
 	{ }
 };
 
@@ -576,13 +582,46 @@ static void mw_mbdn_read_cb(int ok, int total_length, int record,
 	mw->efmbdn_length = record_length;
 }
 
+static void mw_mbdn_changed(int id, void *userdata)
+{
+	struct ofono_message_waiting *mw = userdata;
+	int err;
+
+	mw->efmbdn_length = 0;
+	mw->mbdn_not_provided = FALSE;
+
+	err = ofono_sim_read(mw->sim_context, SIM_EFMBDN_FILEID,
+				OFONO_SIM_FILE_STRUCTURE_FIXED,
+				mw_mbdn_read_cb, mw);
+	if (err != 0)
+		ofono_error("Unable to read EF-MBDN from SIM");
+}
+
+static void mw_cphs_mbdn_changed(int id, void *userdata)
+{
+	struct ofono_message_waiting *mw = userdata;
+
+	mw->ef_cphs_mbdn_length = 0;
+	mw->cphs_mbdn_not_provided = FALSE;
+
+	ofono_sim_read(mw->sim_context, SIM_EF_CPHS_MBDN_FILEID,
+			OFONO_SIM_FILE_STRUCTURE_FIXED,
+			mw_cphs_mbdn_read_cb, mw);
+}
+
+const struct ofono_phone_number *__ofono_message_waiting_get_mbdn(
+					struct ofono_message_waiting *mw,
+					unsigned int index)
+{
+	return &mw->mailbox_number[index];
+}
+
 static void mw_mbi_read_cb(int ok, int total_length, int record,
 				const unsigned char *data,
 				int record_length, void *userdata)
 {
 	struct ofono_message_waiting *mw = userdata;
 	int i, err;
-	const unsigned char *st;
 
 	if (!ok || record_length < 4) {
 		ofono_error("Unable to read mailbox identifies "
@@ -604,6 +643,9 @@ static void mw_mbi_read_cb(int ok, int total_length, int record,
 	err = ofono_sim_read(mw->sim_context, SIM_EFMBDN_FILEID,
 				OFONO_SIM_FILE_STRUCTURE_FIXED,
 				mw_mbdn_read_cb, mw);
+	mw->efmbdn_watch = ofono_sim_add_file_watch(mw->sim_context,
+						SIM_EFMBDN_FILEID,
+						mw_mbdn_changed, mw, NULL);
 
 	if (err != 0)
 		ofono_error("Unable to read EF-MBDN from SIM");
@@ -613,12 +655,16 @@ out:
 	 * Mailbox numbers located in Byte 1, bits 6 & 5,
 	 * Check for Activated & Allocated
 	 */
-	st = ofono_sim_get_cphs_service_table(mw->sim);
-
-	if (st && bit_field(st[0], 4, 2) == 3)
+	if (__ofono_sim_cphs_service_available(mw->sim,
+					SIM_CPHS_SERVICE_MAILBOX_NUMBERS)) {
 		ofono_sim_read(mw->sim_context, SIM_EF_CPHS_MBDN_FILEID,
 				OFONO_SIM_FILE_STRUCTURE_FIXED,
 				mw_cphs_mbdn_read_cb, mw);
+		mw->ef_cphs_mbdn_watch = ofono_sim_add_file_watch(
+						mw->sim_context,
+						SIM_EF_CPHS_MBDN_FILEID,
+						mw_cphs_mbdn_changed, mw, NULL);
+	}
 }
 
 static void mw_mwis_write_cb(int ok, void *userdata)
@@ -935,12 +981,51 @@ static void message_waiting_unregister(struct ofono_atom *atom)
 	ofono_modem_remove_interface(modem, OFONO_MESSAGE_WAITING_INTERFACE);
 }
 
+static void mw_mwis_changed(int id, void *userdata)
+{
+	struct ofono_message_waiting *mw = userdata;
+
+	mw->efmwis_length = 0;
+
+	ofono_sim_read(mw->sim_context, SIM_EFMWIS_FILEID,
+			OFONO_SIM_FILE_STRUCTURE_FIXED,
+			mw_mwis_read_cb, mw);
+}
+
+static void mw_cphs_mwis_changed(int id, void *userdata)
+{
+	struct ofono_message_waiting *mw = userdata;
+
+	mw->ef_cphs_mwis_length = 0;
+
+	ofono_sim_read(mw->sim_context, SIM_EF_CPHS_MWIS_FILEID,
+			OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
+			mw_cphs_mwis_read_cb, mw);
+}
+
+static void mw_mbi_changed(int id, void *userdata)
+{
+	struct ofono_message_waiting *mw = userdata;
+
+	mw->efmbdn_length = 0;
+	mw->mbdn_not_provided = FALSE;
+
+	mw->ef_cphs_mbdn_length = 0;
+	mw->cphs_mbdn_not_provided = FALSE;
+
+	ofono_sim_remove_file_watch(mw->sim_context, mw->efmbdn_watch);
+	ofono_sim_remove_file_watch(mw->sim_context, mw->ef_cphs_mbdn_watch);
+
+	ofono_sim_read(mw->sim_context, SIM_EFMBI_FILEID,
+			OFONO_SIM_FILE_STRUCTURE_FIXED,
+			mw_mbi_read_cb, mw);
+}
+
 void ofono_message_waiting_register(struct ofono_message_waiting *mw)
 {
 	DBusConnection *conn;
 	const char *path;
 	struct ofono_modem *modem;
-	struct ofono_atom *sim_atom;
 
 	if (mw == NULL)
 		return;
@@ -961,11 +1046,9 @@ void ofono_message_waiting_register(struct ofono_message_waiting *mw)
 
 	ofono_modem_add_interface(modem, OFONO_MESSAGE_WAITING_INTERFACE);
 
-	sim_atom = __ofono_modem_find_atom(modem, OFONO_ATOM_TYPE_SIM);
-
-	if (sim_atom) {
+	mw->sim = __ofono_atom_find(OFONO_ATOM_TYPE_SIM, modem);
+	if (mw->sim) {
 		/* Assume that if sim atom exists, it is ready */
-		mw->sim = __ofono_atom_get_data(sim_atom);
 		mw->sim_context = ofono_sim_context_create(mw->sim);
 
 		/* Loads MWI states and MBDN from SIM */
@@ -980,6 +1063,19 @@ void ofono_message_waiting_register(struct ofono_message_waiting *mw)
 		ofono_sim_read(mw->sim_context, SIM_EF_CPHS_MWIS_FILEID,
 				OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
 				mw_cphs_mwis_read_cb, mw);
+
+		/*
+		 * The operator could send us SMS mwi updates, but let's be
+		 * extra careful and track the file contents too.
+		 */
+		ofono_sim_add_file_watch(mw->sim_context, SIM_EFMWIS_FILEID,
+						mw_mwis_changed, mw, NULL);
+		ofono_sim_add_file_watch(mw->sim_context,
+						SIM_EF_CPHS_MWIS_FILEID,
+						mw_cphs_mwis_changed, mw, NULL);
+
+		ofono_sim_add_file_watch(mw->sim_context, SIM_EFMBI_FILEID,
+						mw_mbi_changed, mw, NULL);
 	}
 
 	__ofono_atom_register(mw->atom, message_waiting_unregister);

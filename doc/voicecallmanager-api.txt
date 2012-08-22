@@ -10,8 +10,6 @@ Methods		dict GetProperties()
 			Returns properties for the VoiceCallManager Interface.
 			See the properties section for available properties.
 
-			Possible Errors: [service].Error.InvalidArguments
-
 		array{object,dict} GetCalls()
 
 			Get an array of call object paths and properties
@@ -37,6 +35,16 @@ Methods		dict GetProperties()
 
 			This is usually implemented using the ATD AT command.
 
+			NOTE: If an active call (single or multiparty) exists,
+			then it is automatically put on hold if the dial
+			procedure is successful.
+
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.InvalidArguments
+					 [service].Error.InvalidFormat
+					 [service].Error.NotImplemented
+					 [service].Error.Failed
+
 		void Transfer()
 
 			Joins the currently Active (or Outgoing, depending
@@ -48,6 +56,10 @@ Methods		dict GetProperties()
 
 			This functionality is generally implemented by using
 			the +CHLD=4 AT command.
+
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.Failed
 
 		void SwapCalls()
 
@@ -65,12 +77,20 @@ Methods		dict GetProperties()
 			This functionality is generally implemented by using
 			the +CHLD=2 AT command.
 
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.Failed
+
 		void ReleaseAndAnswer()
 
 			Releases currently active call (0 or more) and
 			answers the currently waiting call. Please note that
 			if the current call is a multiparty call, then all
 			parties in the multi-party call will be released.
+
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.Failed
 
 		void HoldAndAnswer()
 
@@ -80,9 +100,18 @@ Methods		dict GetProperties()
 			Held calls is invalid, since in GSM a user can have
 			only a single Held call at a time.
 
+                        Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.Failed
+
 		void HangupAll()
 
-			Releases all calls.
+			Releases all calls except waiting calls. This includes
+			multiparty calls.
+
+                        Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.Failed
 
 		array{object} PrivateChat(object call)
 
@@ -96,6 +125,13 @@ Methods		dict GetProperties()
 			participating in the multiparty call.
 
 			This is usually implemented using the +CHLD=2X command.
+
+                        Possible Errors: [service].Error.InProgress
+					 [service].Error.InvalidArguments
+					 [service].Error.InvalidFormat
+					 [service].Error.NotFound
+					 [service].Error.NotImplemented
+					 [service].Error.Failed
 
 		array{object} CreateMultiparty()
 
@@ -111,10 +147,18 @@ Methods		dict GetProperties()
 			This is usually implemented using the +CHLD=3 AT
 			command.
 
+                        Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.Failed
+
 		void HangupMultiparty()
 
 			Hangs up the multi-party call.  All participating
 			calls are released.
+
+                        Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.Failed
 
 		void SendTones(string tones)
 
@@ -122,6 +166,12 @@ Methods		dict GetProperties()
 			a fixed duration.  Tones can be one of: '0' - '9',
 			'*', '#', 'A', 'B', 'C', 'D'.  The last four are
 			typically not used in normal circumstances.
+
+                        Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.InvalidArguments
+					 [service].Error.InvalidFormat
+					 [service].Error.Failed
 
 Signals		CallAdded(object path, dict properties)
 
@@ -139,10 +189,41 @@ Signals		CallAdded(object path, dict properties)
 			released.  The object path is no longer accessible
 			after this signal and only emitted for reference.
 
+			NOTE: If the VoiceCallManager interface becomes
+			unavailable, this signal is not guaranteed to be
+			emitted for remaining calls.  The applications are
+			expected to monitor changes in Modem.Interfaces
+			property.
+
 		PropertyChanged(string property, variant value)
 
 			Signal is emitted whenever a property has changed.
 			The new value is passed as the signal argument.
+
+		BarringActive(string type) [experimental]
+
+			Signal emitted when an outgoing voice call is made and
+			the call has been barred by the network due to the
+			remote party's "Call Barring" Supplementary Services
+			settings for incoming calls. In this case the type
+			parameter in the signal set to "remote".
+			The signal is also emitted when an outgoing voice call
+			is made and the call has been barred by the network due
+			to the local "Call Barring" Supplementary Services
+			settings for outgoing calls. In this case the type
+			parameter in the signal is set to "local".
+
+		Forwarded(string type) [experimental]
+
+			Signal emitted when an outgoing voice call is made and
+			the call has been redirected to another number due to
+			the remote party's "Call Forwarding" Supplementary
+			Services settings. In this case the type parameter in
+			the signal is set to "outgoing".
+			The signal is also emitted when the incoming voice call
+			is a redirected call due to a call forwarding operation.
+			In this case the type parameter in the signal is set to
+			"incoming".
 
 Properties	array{string} EmergencyNumbers [readonly]
 

@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2009-2010 Nokia Corporation and/or its subsidiary(-ies).
+ *  Copyright (C) 2009-2010  Nokia Corporation and/or its subsidiary(-ies).
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -131,7 +131,6 @@ enum gpds_subblock {
 	GPDS_SDNS_ADDRESS_INFO =		0x0E,
 	GPDS_CHALLENGE_INFO =			0x0F,
 	GPDS_DNS_ADDRESS_REQ_INFO =		0x90,
-	GPDS_COMMON_MESSAGE =			0xF0
 };
 
 enum gpds_status {

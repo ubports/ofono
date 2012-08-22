@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -25,6 +25,7 @@
 
 #include <errno.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <glib.h>
 #include <gatchat.h>
@@ -44,7 +45,6 @@
 #include <ofono/phonebook.h>
 #include <ofono/sim.h>
 #include <ofono/sms.h>
-#include <ofono/ssn.h>
 #include <ofono/ussd.h>
 #include <ofono/voicecall.h>
 
@@ -135,20 +135,36 @@ static int wavecom_disable(struct ofono_modem *modem)
 static void wavecom_pre_sim(struct ofono_modem *modem)
 {
 	GAtChat *chat = ofono_modem_get_data(modem);
+	const char *model;
+	enum ofono_vendor vendor = 0;
+	struct ofono_sim *sim;
 
 	DBG("%p", modem);
 
+	model = ofono_modem_get_string(modem, "Model");
+	if (model && strcmp(model, "Q2XXX") == 0)
+		vendor = OFONO_VENDOR_WAVECOM_Q2XXX;
+
 	ofono_devinfo_create(modem, 0, "atmodem", chat);
-	ofono_sim_create(modem, OFONO_VENDOR_WAVECOM, "atmodem", chat);
+	sim = ofono_sim_create(modem, vendor, "atmodem", chat);
 	ofono_voicecall_create(modem, 0, "atmodem", chat);
+
+	if (vendor == OFONO_VENDOR_WAVECOM_Q2XXX)
+		ofono_sim_inserted_notify(sim, TRUE);
 }
 
 static void wavecom_post_sim(struct ofono_modem *modem)
 {
 	GAtChat *chat = ofono_modem_get_data(modem);
 	struct ofono_message_waiting *mw;
+	const char *model;
+	enum ofono_vendor vendor = 0;
 
 	DBG("%p", modem);
+
+	model = ofono_modem_get_string(modem, "Model");
+	if (model && strcmp(model, "Q2XXX") == 0)
+		vendor = OFONO_VENDOR_WAVECOM_Q2XXX;
 
 	ofono_ussd_create(modem, 0, "atmodem", chat);
 	ofono_call_forwarding_create(modem, 0, "atmodem", chat);
@@ -156,8 +172,7 @@ static void wavecom_post_sim(struct ofono_modem *modem)
 	ofono_netreg_create(modem, 0, "atmodem", chat);
 	ofono_call_meter_create(modem, 0, "atmodem", chat);
 	ofono_call_barring_create(modem, 0, "atmodem", chat);
-	ofono_ssn_create(modem, 0, "atmodem", chat);
-	ofono_sms_create(modem, 0, "atmodem", chat);
+	ofono_sms_create(modem, vendor, "atmodem", chat);
 	ofono_phonebook_create(modem, 0, "atmodem", chat);
 
 	mw = ofono_message_waiting_create(modem);

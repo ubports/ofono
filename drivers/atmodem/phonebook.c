@@ -1,21 +1,21 @@
 /*
- * oFono - GSM Telephony Stack for Linux
  *
- * Copyright (C) 2008-2010 Intel Corporation.  All rights reserved.
+ *  oFono - Open Source Telephony
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program; if not, write to the Free Software
+ *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
  */
 
@@ -60,6 +60,8 @@ struct pb_data {
 	int supported;
 	GAtChat *chat;
 	unsigned int vendor;
+	guint poll_source;
+	guint poll_count;
 	guint ready_id;
 };
 
@@ -172,10 +174,10 @@ static void at_cpbr_notify(GAtResult *result, gpointer user_data)
 			continue;
 		}
 
-		g_at_result_iter_next_number(&iter, &hidden);
+		g_at_result_iter_next_number_default(&iter, 0, &hidden);
 		parse_text(&iter, &group, current);
 		g_at_result_iter_next_string(&iter, &adnumber);
-		g_at_result_iter_next_number(&iter, &adtype);
+		g_at_result_iter_next_number_default(&iter, 0, &adtype);
 		parse_text(&iter, &secondtext, current);
 		parse_text(&iter, &email, current);
 		parse_text(&iter, &sip_uri, current);
@@ -391,6 +393,22 @@ static void phonebook_not_supported(struct ofono_phonebook *pb)
 static void at_list_storages_cb(gboolean ok, GAtResult *result,
 						gpointer user_data);
 
+static gboolean cpbs_support_check(gpointer user_data)
+{
+	struct ofono_phonebook *pb = user_data;
+	struct pb_data *pbd = ofono_phonebook_get_data(pb);
+
+	pbd->poll_source = 0;
+
+	if (g_at_chat_send(pbd->chat, "AT+CPBS=?", cpbs_prefix,
+				at_list_storages_cb, pb, NULL) > 0)
+		return FALSE;
+
+	phonebook_not_supported(pb);
+
+	return FALSE;
+}
+
 static void ifx_pbready_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_phonebook *pb = user_data;
@@ -399,11 +417,7 @@ static void ifx_pbready_notify(GAtResult *result, gpointer user_data)
 	g_at_chat_unregister(pbd->chat, pbd->ready_id);
 	pbd->ready_id = 0;
 
-	if (g_at_chat_send(pbd->chat, "AT+CPBS=?", cpbs_prefix,
-				at_list_storages_cb, pb, NULL) > 0)
-		return;
-
-	phonebook_not_supported(pb);
+	cpbs_support_check(pb);
 }
 
 static void at_list_storages_cb(gboolean ok, GAtResult *result,
@@ -411,14 +425,31 @@ static void at_list_storages_cb(gboolean ok, GAtResult *result,
 {
 	struct ofono_phonebook *pb = user_data;
 	struct pb_data *pbd = ofono_phonebook_get_data(pb);
+	struct ofono_error error;
 	gboolean sm_supported = FALSE;
 	gboolean me_supported = FALSE;
 	gboolean in_list = FALSE;
 	GAtResultIter iter;
 	const char *storage;
 
-	if (!ok)
+	decode_at_error(&error, g_at_result_final_response(result));
+
+	switch (error.type) {
+	case OFONO_ERROR_TYPE_NO_ERROR:
+		break;
+	case OFONO_ERROR_TYPE_CME:
+		/* Check for SIM busy - try again later */
+		if (error.error == 14) {
+			if (pbd->poll_count++ < 12) {
+				pbd->poll_source = g_timeout_add_seconds(5,
+						cpbs_support_check, pb);
+				return;
+			}
+		}
+		/* fall through */
+	default:
 		goto error;
+	}
 
 	g_at_result_iter_init(&iter, result);
 	if (!g_at_result_iter_next(&iter, "+CPBS:"))
@@ -506,9 +537,10 @@ static void at_list_charsets_cb(gboolean ok, GAtResult *result,
 		}
 	}
 
-	if (g_at_chat_send(pbd->chat, "AT+CPBS=?", cpbs_prefix,
-				at_list_storages_cb, pb, NULL) > 0)
-		return;
+	pbd->poll_count = 0;
+
+	cpbs_support_check(pb);
+	return;
 
 error:
 	phonebook_not_supported(pb);
@@ -548,6 +580,9 @@ static int at_phonebook_probe(struct ofono_phonebook *pb, unsigned int vendor,
 static void at_phonebook_remove(struct ofono_phonebook *pb)
 {
 	struct pb_data *pbd = ofono_phonebook_get_data(pb);
+
+	if (pbd->poll_source > 0)
+		g_source_remove(pbd->poll_source);
 
 	if (pbd->old_charset)
 		g_free(pbd->old_charset);

@@ -2,7 +2,7 @@
  *
  *  PPP library with GLib integration
  *
- *  Copyright (C) 2009-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2009-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -117,7 +117,7 @@ void pppcp_set_local_options(struct pppcp_data *data,
 				const guint8 *options,
 				guint16 len);
 
-void pppcp_process_packet(gpointer priv, const guint8 *new_packet);
+void pppcp_process_packet(gpointer priv, const guint8 *new_packet, gsize len);
 void pppcp_send_protocol_reject(struct pppcp_data *data,
 				const guint8 *rejected_packet, gsize len);
 void pppcp_signal_open(struct pppcp_data *data);

@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -34,6 +34,21 @@
 
 #include "atutil.h"
 #include "vendor.h"
+
+static const char *cpin_prefix[] = { "+CPIN:", NULL };
+
+struct at_util_sim_state_query {
+	GAtChat *chat;
+	guint cpin_poll_source;
+	guint cpin_poll_count;
+	guint interval;
+	guint num_times;
+	at_util_sim_inserted_cb_t cb;
+	void *userdata;
+	GDestroyNotify destroy;
+};
+
+static gboolean cpin_check(gpointer userdata);
 
 void decode_at_error(struct ofono_error *error, const char *final)
 {
@@ -117,10 +132,16 @@ GSList *at_util_parse_clcc(GAtResult *result)
 		if (!g_at_result_iter_next_number(&iter, &id))
 			continue;
 
+		if (id == 0)
+			continue;
+
 		if (!g_at_result_iter_next_number(&iter, &dir))
 			continue;
 
 		if (!g_at_result_iter_next_number(&iter, &status))
+			continue;
+
+		if (status > 5)
 			continue;
 
 		if (!g_at_result_iter_next_number(&iter, &type))
@@ -181,8 +202,10 @@ gboolean at_util_parse_reg_unsolicited(GAtResult *result, const char *prefix,
 
 	switch (vendor) {
 	case OFONO_VENDOR_GOBI:
+	case OFONO_VENDOR_ZTE:
 	case OFONO_VENDOR_HUAWEI:
 	case OFONO_VENDOR_NOVATEL:
+	case OFONO_VENDOR_SPEEDUP:
 		if (g_at_result_iter_next_unquoted_string(&iter, &str) == TRUE)
 			l = strtol(str, NULL, 16);
 		else
@@ -243,8 +266,10 @@ gboolean at_util_parse_reg(GAtResult *result, const char *prefix,
 
 		/* Sometimes we get an unsolicited CREG/CGREG here, skip it */
 		switch (vendor) {
+		case OFONO_VENDOR_ZTE:
 		case OFONO_VENDOR_HUAWEI:
 		case OFONO_VENDOR_NOVATEL:
+		case OFONO_VENDOR_SPEEDUP:
 			r = g_at_result_iter_next_unquoted_string(&iter, &str);
 
 			if (r == FALSE || strlen(str) != 1)
@@ -266,8 +291,10 @@ gboolean at_util_parse_reg(GAtResult *result, const char *prefix,
 
 		switch (vendor) {
 		case OFONO_VENDOR_GOBI:
+		case OFONO_VENDOR_ZTE:
 		case OFONO_VENDOR_HUAWEI:
 		case OFONO_VENDOR_NOVATEL:
+		case OFONO_VENDOR_SPEEDUP:
 			r = g_at_result_iter_next_unquoted_string(&iter, &str);
 
 			if (r == TRUE)
@@ -483,4 +510,100 @@ gboolean at_util_parse_attr(GAtResult *result, const char *prefix,
 		*out_attr = at_util_fixup_return(line, prefix);
 
 	return TRUE;
+}
+
+static void cpin_check_cb(gboolean ok, GAtResult *result, gpointer userdata)
+{
+	struct at_util_sim_state_query *req = userdata;
+	struct ofono_error error;
+
+	decode_at_error(&error, g_at_result_final_response(result));
+
+	if (error.type == OFONO_ERROR_TYPE_NO_ERROR)
+		goto done;
+
+	/*
+	 * If we got a generic error the AT port might not be ready,
+	 * try again
+	 */
+	if (error.type == OFONO_ERROR_TYPE_FAILURE)
+		goto tryagain;
+
+	/* If we got any other error besides CME, fail */
+	if (error.type != OFONO_ERROR_TYPE_CME)
+		goto done;
+
+	switch (error.error) {
+	case 10:
+	case 13:
+		goto done;
+
+	case 14:
+		goto tryagain;
+
+	default:
+		/* Assume SIM is present */
+		ok = TRUE;
+		goto done;
+	}
+
+tryagain:
+	if (req->cpin_poll_count++ < req->num_times) {
+		req->cpin_poll_source = g_timeout_add_seconds(req->interval,
+								cpin_check,
+								req);
+		return;
+	}
+
+done:
+	if (req->cb)
+		req->cb(ok, req->userdata);
+}
+
+static gboolean cpin_check(gpointer userdata)
+{
+	struct at_util_sim_state_query *req = userdata;
+
+	req->cpin_poll_source = 0;
+
+	g_at_chat_send(req->chat, "AT+CPIN?", cpin_prefix,
+			cpin_check_cb, req, NULL);
+
+	return FALSE;
+}
+
+struct at_util_sim_state_query *at_util_sim_state_query_new(GAtChat *chat,
+						guint interval, guint num_times,
+						at_util_sim_inserted_cb_t cb,
+						void *userdata,
+						GDestroyNotify destroy)
+{
+	struct at_util_sim_state_query *req;
+
+	req = g_new0(struct at_util_sim_state_query, 1);
+
+	req->chat = chat;
+	req->interval = interval;
+	req->num_times = num_times;
+	req->cb = cb;
+	req->userdata = userdata;
+	req->destroy = destroy;
+
+	cpin_check(req);
+
+	return req;
+}
+
+void at_util_sim_state_query_free(struct at_util_sim_state_query *req)
+{
+	if (req == NULL)
+		return;
+
+	if (req->cpin_poll_source > 0)
+		g_source_remove(req->cpin_poll_source);
+
+	if (req->destroy)
+		req->destroy(req->userdata);
+
+	g_free(req);
 }

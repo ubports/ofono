@@ -2,7 +2,7 @@
  *
  *  AT chat library with GLib integration
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -290,6 +290,36 @@ gboolean g_at_result_iter_next_number(GAtResultIter *iter, gint *number)
 		*number = value;
 
 	return TRUE;
+}
+
+gboolean g_at_result_iter_next_number_default(GAtResultIter *iter, gint dflt,
+						gint *number)
+{
+	unsigned int pos;
+	int len;
+	char *line;
+
+	if (iter == NULL)
+		return FALSE;
+
+	if (iter->l == NULL)
+		return FALSE;
+
+	line = iter->l->data;
+	len = strlen(line);
+
+	pos = skip_to_next_field(line, iter->line_pos, len);
+
+	if (pos != iter->line_pos) {
+		iter->line_pos = pos;
+
+		if (number)
+			*number = dflt;
+
+		return TRUE;
+	}
+
+	return g_at_result_iter_next_number(iter, number);
 }
 
 gboolean g_at_result_iter_next_range(GAtResultIter *iter, gint *min, gint *max)

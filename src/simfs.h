@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -28,6 +28,16 @@ typedef void (*sim_fs_read_info_cb_t)(int ok, unsigned char file_status,
 struct sim_fs *sim_fs_new(struct ofono_sim *sim,
 				const struct ofono_sim_driver *driver);
 struct ofono_sim_context *sim_fs_context_new(struct sim_fs *fs);
+
+unsigned int sim_fs_file_watch_add(struct ofono_sim_context *context,
+					int id, ofono_sim_file_changed_cb_t cb,
+					void *userdata,
+					ofono_destroy_func destroy);
+void sim_fs_file_watch_remove(struct ofono_sim_context *context,
+					unsigned int id);
+
+/* Id of -1 notifies all watches, serving as a wildcard */
+void sim_fs_notify_file_watches(struct sim_fs *fs, int id);
 
 int sim_fs_read(struct ofono_sim_context *context, int id,
 		enum ofono_sim_file_structure expected_type,

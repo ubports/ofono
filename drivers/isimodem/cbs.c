@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2009-2010 Nokia Corporation and/or its subsidiary(-ies).
+ *  Copyright (C) 2009-2010  Nokia Corporation and/or its subsidiary(-ies).
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -53,7 +53,7 @@ struct cbs_info {
 	uint8_t pdu[88];
 };
 
-static gboolean check_response_status(const GIsiMessage *msg, uint8_t msgid)
+static gboolean check_resp(const GIsiMessage *msg, uint8_t msgid)
 {
 	uint8_t cause;
 	uint8_t reason;
@@ -110,7 +110,7 @@ static void routing_ntf_cb(const GIsiMessage *msg, void *data)
 	size_t len = sizeof(struct cbs_info);
 	GIsiSubBlockIter iter;
 
-	if (!check_response_status(msg, SMS_GSM_CB_ROUTING_NTF))
+	if (!check_resp(msg, SMS_GSM_CB_ROUTING_NTF))
 		return;
 
 	for (g_isi_sb_iter_init(&iter, msg, 2);
@@ -133,8 +133,10 @@ static void routing_resp_cb(const GIsiMessage *msg, void *data)
 	struct ofono_cbs *cbs = data;
 	struct cbs_data *cd = ofono_cbs_get_data(cbs);
 
-	if (cd == NULL || !check_response_status(msg, SMS_GSM_CB_ROUTING_RESP))
+	if (!check_resp(msg, SMS_GSM_CB_ROUTING_RESP)) {
+		ofono_cbs_remove(cbs);
 		return;
+	}
 
 	g_isi_client_ntf_subscribe(cd->client, SMS_GSM_CB_ROUTING_NTF,
 					routing_ntf_cb, cbs);
@@ -142,13 +144,12 @@ static void routing_resp_cb(const GIsiMessage *msg, void *data)
 	ofono_cbs_register(cbs);
 }
 
-static int isi_cbs_probe(struct ofono_cbs *cbs, unsigned int vendor,
-				void *user)
+static void cbs_reachable_cb(const GIsiMessage *msg, void *data)
 {
-	GIsiModem *modem = user;
-	struct cbs_data *cd;
+	struct ofono_cbs *cbs = data;
+	struct cbs_data *cd = ofono_cbs_get_data(cbs);
 
-	const uint8_t msg[] = {
+	const uint8_t req[] = {
 		SMS_GSM_CB_ROUTING_REQ,
 		SMS_ROUTING_SET,
 		SMS_GSM_ROUTING_MODE_ALL,
@@ -161,7 +162,24 @@ static int isi_cbs_probe(struct ofono_cbs *cbs, unsigned int vendor,
 		0x00   /* Languages */
 	};
 
-	cd = g_try_new0(struct cbs_data, 1);
+	if (g_isi_msg_error(msg) < 0) {
+		DBG("Unable to find CBS resource");
+		ofono_cbs_remove(cbs);
+		return;
+	}
+
+	ISI_RESOURCE_DBG(msg);
+
+	g_isi_client_send(cd->client, req, sizeof(req), routing_resp_cb,
+				cbs, NULL);
+}
+
+static int isi_cbs_probe(struct ofono_cbs *cbs, unsigned int vendor,
+				void *user)
+{
+	GIsiModem *modem = user;
+	struct cbs_data *cd = g_try_new0(struct cbs_data, 1);
+
 	if (cd == NULL)
 		return -ENOMEM;
 
@@ -173,11 +191,9 @@ static int isi_cbs_probe(struct ofono_cbs *cbs, unsigned int vendor,
 
 	ofono_cbs_set_data(cbs, cd);
 
-	if (g_isi_client_send(cd->client, msg, sizeof(msg),
-				routing_resp_cb, cbs, NULL))
-		return 0;
+	g_isi_client_verify(cd->client, cbs_reachable_cb, cbs, NULL);
 
-	return -errno;
+	return 0;
 }
 
 static void isi_cbs_remove(struct ofono_cbs *cbs)

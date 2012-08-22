@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -44,7 +44,6 @@
 #include <ofono/phonebook.h>
 #include <ofono/sim.h>
 #include <ofono/sms.h>
-#include <ofono/ssn.h>
 #include <ofono/ussd.h>
 #include <ofono/voicecall.h>
 
@@ -208,7 +207,6 @@ static void tc65_post_online(struct ofono_modem *modem)
 	ofono_netreg_create(modem, 0, "atmodem", chat);
 	ofono_call_meter_create(modem, 0, "atmodem", chat);
 	ofono_call_barring_create(modem, 0, "atmodem", chat);
-	ofono_ssn_create(modem, 0, "atmodem", chat);
 
 	gprs = ofono_gprs_create(modem, 0, "atmodem", chat);
 	gc = ofono_gprs_context_create(modem, 0, "atmodem", chat);
@@ -222,15 +220,15 @@ static void tc65_post_online(struct ofono_modem *modem)
 }
 
 static struct ofono_modem_driver tc65_driver = {
-	.name                   = "tc65",
-	.probe                  = tc65_probe,
-	.remove                 = tc65_remove,
-	.enable                 = tc65_enable,
-	.disable                = tc65_disable,
-	.set_online             = tc65_set_online,
-	.pre_sim                = tc65_pre_sim,
-	.post_sim               = tc65_post_sim,
-	.post_online            = tc65_post_online,
+	.name		= "tc65",
+	.probe		= tc65_probe,
+	.remove		= tc65_remove,
+	.enable		= tc65_enable,
+	.disable	= tc65_disable,
+	.set_online	= tc65_set_online,
+	.pre_sim	= tc65_pre_sim,
+	.post_sim	= tc65_post_sim,
+	.post_online	= tc65_post_online,
 };
 
 static int tc65_init(void)

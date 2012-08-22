@@ -2,7 +2,7 @@
  *
  *  AT chat library with GLib integration
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -250,7 +250,40 @@ GIOChannel *g_at_tty_open(const char *tty, GHashTable *options)
 		return NULL;
 
 	channel = g_io_channel_unix_new(fd);
+	if (channel == NULL) {
+		close(fd);
+		return NULL;
+	}
 
+	g_io_channel_set_close_on_unref(channel, TRUE);
+
+	return channel;
+}
+
+GIOChannel *g_at_tty_open_qcdm(const char *tty)
+{
+	GIOChannel *channel;
+	struct termios ti;
+	int fd;
+
+        fd = open(tty, O_RDWR | O_NOCTTY | O_NONBLOCK);
+        if (fd < 0)
+                return NULL;
+
+	/* Switch TTY to raw mode */
+	memset(&ti, 0, sizeof(ti));
+	cfmakeraw(&ti);
+
+	/* No parity, 1 stop bit */
+	ti.c_cflag &= ~(CSIZE | CSTOPB | PARENB);
+	ti.c_cflag |= (B115200 | CS8);
+
+	if (tcsetattr(fd, TCSANOW, &ti) < 0) {
+		close(fd);
+		return NULL;
+	}
+
+	channel = g_io_channel_unix_new(fd);
 	if (channel == NULL) {
 		close(fd);
 		return NULL;

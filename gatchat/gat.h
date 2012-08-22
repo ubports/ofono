@@ -2,7 +2,7 @@
  *
  *  AT chat library with GLib integration
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -32,6 +32,7 @@ typedef void (*GAtDisconnectFunc)(gpointer user_data);
 typedef void (*GAtReceiveFunc)(const unsigned char *data, gsize size,
 							gpointer user_data);
 typedef void (*GAtDebugFunc)(const char *str, gpointer user_data);
+typedef void (*GAtSuspendFunc)(gpointer user_data);
 
 #ifdef __cplusplus
 }

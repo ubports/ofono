@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -543,7 +543,7 @@ static DBusMessage *ussd_initiate(DBusConnection *conn, DBusMessage *msg,
 {
 	struct ofono_ussd *ussd = data;
 	struct ofono_modem *modem = __ofono_atom_get_modem(ussd->atom);
-	struct ofono_atom *vca;
+	struct ofono_voicecall *vc;
 	gboolean call_in_progress;
 	const char *str;
 	int dcs = 0x0f;
@@ -564,18 +564,16 @@ static DBusMessage *ussd_initiate(DBusConnection *conn, DBusMessage *msg,
 	if (recognized_control_string(ussd, str, msg))
 		return NULL;
 
-	vca = __ofono_modem_find_atom(modem, OFONO_ATOM_TYPE_VOICECALL);
-
-	if (vca)
-		call_in_progress =
-			__ofono_voicecall_is_busy(__ofono_atom_get_data(vca),
+	vc = __ofono_atom_find(OFONO_ATOM_TYPE_VOICECALL, modem);
+	if (vc)
+		call_in_progress = __ofono_voicecall_is_busy(vc,
 					OFONO_VOICECALL_INTERACTION_NONE);
 	else
 		call_in_progress = FALSE;
 
 	DBG("No.., checking if this is a USSD string");
 	if (!valid_ussd_string(str, call_in_progress))
-		return __ofono_error_invalid_format(msg);
+		return __ofono_error_not_recognized(msg);
 
 	if (!ussd_encode(str, &num_packed, buf))
 		return __ofono_error_invalid_format(msg);
@@ -730,22 +728,29 @@ static DBusMessage *ussd_get_properties(DBusConnection *conn,
 	return reply;
 }
 
-static GDBusMethodTable ussd_methods[] = {
-	{ "Initiate",		"s",	"sv",		ussd_initiate,
-					G_DBUS_METHOD_FLAG_ASYNC },
-	{ "Respond",		"s",	"s",		ussd_respond,
-					G_DBUS_METHOD_FLAG_ASYNC },
-	{ "Cancel",		"",	"",		ussd_cancel,
-					G_DBUS_METHOD_FLAG_ASYNC },
-	{ "GetProperties",	"",	"a{sv}",	ussd_get_properties,
-					0 },
+static const GDBusMethodTable ussd_methods[] = {
+	{ GDBUS_ASYNC_METHOD("Initiate",
+			GDBUS_ARGS({ "command", "s" }),
+			GDBUS_ARGS({ "result_name", "s" }, { "value", "v" }),
+			ussd_initiate) },
+	{ GDBUS_ASYNC_METHOD("Respond",
+			GDBUS_ARGS({ "reply", "s" }),
+			GDBUS_ARGS({ "result", "s" }),
+			ussd_respond) },
+	{ GDBUS_ASYNC_METHOD("Cancel", NULL, NULL, ussd_cancel) },
+	{ GDBUS_METHOD("GetProperties",
+			NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
+			ussd_get_properties) },
 	{ }
 };
 
-static GDBusSignalTable ussd_signals[] = {
-	{ "NotificationReceived",	"s" },
-	{ "RequestReceived",		"s" },
-	{ "PropertyChanged",		"sv" },
+static const GDBusSignalTable ussd_signals[] = {
+	{ GDBUS_SIGNAL("NotificationReceived",
+					GDBUS_ARGS({ "message", "s" })) },
+	{ GDBUS_SIGNAL("RequestReceived",
+					GDBUS_ARGS({ "message", "s" })) },
+	{ GDBUS_SIGNAL("PropertyChanged",
+			GDBUS_ARGS({ "name", "s" }, { "value", "v" })) },
 	{ }
 };
 

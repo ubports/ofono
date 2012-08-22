@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -68,6 +68,7 @@ struct ofono_cbs {
 	GSList *efcbmir_contents;
 	unsigned short efcbmid_length;
 	GSList *efcbmid_contents;
+	gboolean efcbmid_update;
 	guint reset_source;
 	int lac;
 	int ci;
@@ -173,7 +174,6 @@ static void cbs_dispatch_text(struct ofono_cbs *cbs, enum sms_class cls,
 void ofono_cbs_notify(struct ofono_cbs *cbs, const unsigned char *pdu,
 				int pdu_len)
 {
-	struct ofono_modem *modem = __ofono_atom_get_modem(cbs->atom);
 	struct cbs c;
 	enum sms_class cls;
 	gboolean udhi;
@@ -192,14 +192,10 @@ void ofono_cbs_notify(struct ofono_cbs *cbs, const unsigned char *pdu,
 	}
 
 	if (cbs_topic_in_range(c.message_identifier, cbs->efcbmid_contents)) {
-		struct ofono_atom *sim_atom;
-
-		sim_atom = __ofono_modem_find_atom(modem, OFONO_ATOM_TYPE_SIM);
-		if (sim_atom == NULL)
+		if (cbs->sim == NULL)
 			return;
 
-		if (!__ofono_sim_service_available(
-					__ofono_atom_get_data(sim_atom),
+		if (!__ofono_sim_service_available(cbs->sim,
 					SIM_UST_SERVICE_DATA_DOWNLOAD_SMS_CB,
 					SIM_SST_SERVICE_DATA_DOWNLOAD_SMS_CB))
 			return;
@@ -544,17 +540,23 @@ static DBusMessage *cbs_set_property(DBusConnection *conn, DBusMessage *msg,
 	return __ofono_error_invalid_args(msg);
 }
 
-static GDBusMethodTable cbs_methods[] = {
-	{ "GetProperties",	"",	"a{sv}",	cbs_get_properties },
-	{ "SetProperty",	"sv",	"",		cbs_set_property,
-							G_DBUS_METHOD_FLAG_ASYNC },
+static const GDBusMethodTable cbs_methods[] = {
+	{ GDBUS_METHOD("GetProperties",
+			NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
+			cbs_get_properties) },
+	{ GDBUS_ASYNC_METHOD("SetProperty",
+			GDBUS_ARGS({ "property", "s" }, { "value", "v" }),
+			NULL, cbs_set_property) },
 	{ }
 };
 
-static GDBusSignalTable cbs_signals[] = {
-	{ "PropertyChanged",	"sv"		},
-	{ "IncomingBroadcast",	"sq"		},
-	{ "EmergencyBroadcast", "sa{sv}"	},
+static const GDBusSignalTable cbs_signals[] = {
+	{ GDBUS_SIGNAL("PropertyChanged",
+			GDBUS_ARGS({ "property", "s" }, { "value", "v" })) },
+	{ GDBUS_SIGNAL("IncomingBroadcast",
+			GDBUS_ARGS({ "message", "s" }, { "channel", "q" })) },
+	{ GDBUS_SIGNAL("EmergencyBroadcast",
+			GDBUS_ARGS({ "message", "s" }, { "dict", "a{sv}" })) },
 	{ }
 };
 
@@ -743,6 +745,7 @@ static void cbs_got_file_contents(struct ofono_cbs *cbs)
 						"Powered", &error);
 
 	if (error) {
+		g_error_free(error);
 		powered = TRUE;
 		g_key_file_set_boolean(cbs->settings, SETTINGS_GROUP,
 					"Powered", powered);
@@ -885,7 +888,35 @@ static void sim_cbmid_read_cb(int ok, int length, int record,
 	g_free(str);
 
 done:
-	cbs_got_file_contents(cbs);
+	if (cbs->efcbmid_update) {
+		if (cbs->powered == TRUE) {
+			char *topic_str = cbs_topics_to_str(cbs, cbs->topics);
+			cbs->driver->set_topics(cbs, topic_str,
+						cbs_set_powered_cb, cbs);
+			g_free(topic_str);
+		}
+
+		cbs->efcbmid_update = FALSE;
+	} else
+		cbs_got_file_contents(cbs);
+}
+
+static void cbs_efcbmid_changed(int id, void *userdata)
+{
+	struct ofono_cbs *cbs = userdata;
+
+	if (cbs->efcbmid_length) {
+		cbs->efcbmid_length = 0;
+		g_slist_foreach(cbs->efcbmid_contents, (GFunc) g_free, NULL);
+		g_slist_free(cbs->efcbmid_contents);
+		cbs->efcbmid_contents = NULL;
+	}
+
+	cbs->efcbmid_update = TRUE;
+
+	ofono_sim_read(cbs->sim_context, SIM_EFCBMID_FILEID,
+			OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
+			sim_cbmid_read_cb, cbs);
 }
 
 static void cbs_got_imsi(struct ofono_cbs *cbs)
@@ -928,6 +959,8 @@ static void cbs_got_imsi(struct ofono_cbs *cbs)
 	ofono_sim_read(cbs->sim_context, SIM_EFCBMID_FILEID,
 			OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
 			sim_cbmid_read_cb, cbs);
+	ofono_sim_add_file_watch(cbs->sim_context, SIM_EFCBMID_FILEID,
+					cbs_efcbmid_changed, cbs, NULL);
 }
 
 static gboolean reset_base_station_name(gpointer user)
@@ -1053,9 +1086,6 @@ void ofono_cbs_register(struct ofono_cbs *cbs)
 	DBusConnection *conn = ofono_dbus_get_connection();
 	struct ofono_modem *modem = __ofono_atom_get_modem(cbs->atom);
 	const char *path = __ofono_atom_get_path(cbs->atom);
-	struct ofono_atom *sim_atom;
-	struct ofono_atom *stk_atom;
-	struct ofono_atom *netreg_atom;
 
 	if (!g_dbus_register_interface(conn, path,
 					OFONO_CELL_BROADCAST_INTERFACE,
@@ -1068,30 +1098,19 @@ void ofono_cbs_register(struct ofono_cbs *cbs)
 
 	ofono_modem_add_interface(modem, OFONO_CELL_BROADCAST_INTERFACE);
 
-	sim_atom = __ofono_modem_find_atom(modem, OFONO_ATOM_TYPE_SIM);
-
-	if (sim_atom) {
-		cbs->sim = __ofono_atom_get_data(sim_atom);
+	cbs->sim = __ofono_atom_find(OFONO_ATOM_TYPE_SIM, modem);
+	if (cbs->sim) {
 		cbs->sim_context = ofono_sim_context_create(cbs->sim);
 
 		if (ofono_sim_get_state(cbs->sim) == OFONO_SIM_STATE_READY)
 			cbs_got_imsi(cbs);
 	}
 
-	stk_atom = __ofono_modem_find_atom(modem, OFONO_ATOM_TYPE_STK);
-
-	if (stk_atom)
-		cbs->stk = __ofono_atom_get_data(stk_atom);
+	cbs->stk = __ofono_atom_find(OFONO_ATOM_TYPE_STK, modem);
 
 	cbs->netreg_watch = __ofono_modem_add_atom_watch(modem,
 					OFONO_ATOM_TYPE_NETREG,
 					netreg_watch, cbs, NULL);
-
-	netreg_atom = __ofono_modem_find_atom(modem, OFONO_ATOM_TYPE_NETREG);
-
-	if (netreg_atom && __ofono_atom_get_registered(netreg_atom))
-		netreg_watch(netreg_atom,
-				OFONO_ATOM_WATCH_CONDITION_REGISTERED, cbs);
 
 	__ofono_atom_register(cbs->atom, cbs_unregister);
 }

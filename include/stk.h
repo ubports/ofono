@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -47,6 +47,7 @@ struct ofono_stk_driver {
 	void (*terminal_response)(struct ofono_stk *stk,
 					int length, const unsigned char *resp,
 					ofono_stk_generic_cb_t cb, void *data);
+	void (*user_confirmation)(struct ofono_stk *stk, ofono_bool_t confirm);
 };
 
 int ofono_stk_driver_register(const struct ofono_stk_driver *d);

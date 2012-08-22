@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *  Copyright (C) 2009-2010  Nokia Corporation and/or its subsidiary(-ies).
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -628,11 +628,22 @@ char *convert_gsm_to_utf8_with_lang(const unsigned char *text, long len,
 
 			c = gsm_single_shift_lookup(&t, text[i]);
 
+			/*
+			 * According to the comment in the table from
+			 * 3GPP 23.038, Section 6.2.1.1:
+			 * "In the event that an MS receives a code where
+			 * a symbol is not represented in the above table
+			 * then the MS shall display either the character
+			 * shown in the main GSM 7 bit default  alphabet
+			 * table in subclause 6.2.1., or the character from
+			 * the National Language Locking Shift Table in the
+			 * case where the locking shift mechanism as defined
+			 * in subclause 6.2.1.2.3 is used."
+			 */
 			if (c == GUND)
-				goto error;
-		} else {
+				c = gsm_locking_shift_lookup(&t, text[i]);
+		} else
 			c = gsm_locking_shift_lookup(&t, text[i]);
-		}
 
 		res_length += UTF8_LENGTH(c);
 	}
@@ -647,9 +658,12 @@ char *convert_gsm_to_utf8_with_lang(const unsigned char *text, long len,
 	while (out < res + res_length) {
 		unsigned short c;
 
-		if (text[i] == 0x1b)
+		if (text[i] == 0x1b) {
 			c = gsm_single_shift_lookup(&t, text[++i]);
-		else
+
+			if (c == GUND)
+				c = gsm_locking_shift_lookup(&t, text[i]);
+		} else
 			c = gsm_locking_shift_lookup(&t, text[i]);
 
 		out += g_unichar_to_utf8(c, out);

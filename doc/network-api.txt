@@ -10,25 +10,16 @@ Methods		dict GetProperties()
 			Returns all network registration properties. See the
 			properties section for available properties.
 
-			Possible Errors: [service].Error.InvalidArguments
-
-		void SetProperty(string name, variant value)
-
-			Changes the value of the specified property. Only
-			properties that are listed as readwrite are
-			changeable. On success a PropertyChanged signal
-			will be emitted.
-
-			Possible Errors: [service].Error.InvalidArguments
-					 [service].Error.DoesNotExist
-
 		void Register()
 
 			Attempts to register to the default network. The
 			default network is normally selected by the settings
 			from the SIM card.
 
-			Possible Errors: [service].Error.InvalidArguments
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.Failed
+					 [service].Error.AccessDenied
 
 		array{object,dict} GetOperators()
 
@@ -55,6 +46,11 @@ Methods		dict GetProperties()
 			NOTE: The operator scan can interfere with any active
 			GPRS contexts.  Expect the context to be unavailable
 			for the duration of the operator scan.
+
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.Failed
+					 [service].Error.AccessDenied
 
 Signals		PropertyChanged(string property, variant value)
 
@@ -122,8 +118,6 @@ Properties	string Mode [readonly]
 			The possible values are: "gsm", "edge", "umts", "hspa",
 							"lte"
 
-			TODO: Values for CDMA and EVDO based networks.
-
 		string Name [readonly]
 
 			Contains the current operator name, suitable for
@@ -158,8 +152,6 @@ Methods		dict GetProperties()
 			Returns all network operator properties. See the
 			properties section for available properties.
 
-			Possible Errors: [service].Error.InvalidArguments
-
 		void Register()
 
 			Attempts to register to this network operator.
@@ -168,7 +160,10 @@ Methods		dict GetProperties()
 			be observed by tracking the NetworkRegistration Status
 			property.
 
-			Possible Errors: [service].Error.InvalidArguments
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.Failed
+					 [service].Error.AccessDenied
 
 Signals		PropertyChanged(string property, variant value)
 

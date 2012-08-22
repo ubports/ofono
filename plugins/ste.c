@@ -2,8 +2,8 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2009  Intel Corporation. All rights reserved.
- *  Copyright (C) 2010 ST-Ericsson AB.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2010  ST-Ericsson AB.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -50,7 +50,6 @@
 #include <ofono/sim.h>
 #include <ofono/cbs.h>
 #include <ofono/sms.h>
-#include <ofono/ssn.h>
 #include <ofono/ussd.h>
 #include <ofono/call-volume.h>
 #include <ofono/voicecall.h>
@@ -58,6 +57,7 @@
 #include <ofono/gprs-context.h>
 #include <ofono/radio-settings.h>
 #include <ofono/stk.h>
+#include <ofono/gnss.h>
 
 #include <drivers/atmodem/atutil.h>
 #include <drivers/atmodem/vendor.h>
@@ -65,17 +65,34 @@
 #include <drivers/stemodem/caif_socket.h>
 #include <drivers/stemodem/if_caif.h>
 
-#define NUM_CHAT	1
+#define NUM_CHAT	6
+#define AT_DEFAULT	0
+#define AT_NET		1
+#define AT_VOICE	2
+#define AT_GPRS	3
+#define AT_SIM		4
+#define AT_GNSS	5
 
-static const char *cpin_prefix[] = { "+CPIN:", NULL };
+#define MAX_PDP_CONTEXTS	4
 
-static char *chat_prefixes[NUM_CHAT] = { "Default: " };
+static char *chat_prefixes[NUM_CHAT] = { "Default: ", "Net: ", "Voice: ",
+					 "GPRS: ", "SIM: ", "GNSS:" };
 
 struct ste_data {
-	GAtChat *chat;
-	guint cpin_poll_source;
-	guint cpin_poll_count;
+	GAtChat *chat[NUM_CHAT];
 	gboolean have_sim;
+	struct ofono_sim *sim;
+};
+
+enum ste_sim_state {
+	SIM_STATE_NULL = 0,
+	SIM_STATE_AWAITING_APP,
+	SIM_STATE_BLOCKED,
+	SIM_STATE_BLOCKED_FOREVER,
+	SIM_STATE_WAIT_FOR_PIN,
+	SIM_STATE_ACTIVE,
+	SIM_STATE_TERMINATING,
+	SIM_STATE_POWER_OFF
 };
 
 static int ste_probe(struct ofono_modem *modem)
@@ -96,15 +113,14 @@ static int ste_probe(struct ofono_modem *modem)
 static void ste_remove(struct ofono_modem *modem)
 {
 	struct ste_data *data = ofono_modem_get_data(modem);
+	int i;
 
 	DBG("%p", modem);
 
 	ofono_modem_set_data(modem, NULL);
 
-	g_at_chat_unref(data->chat);
-
-	if (data->cpin_poll_source > 0)
-		g_source_remove(data->cpin_poll_source);
+	for (i = 0; i < NUM_CHAT; i++)
+		g_at_chat_unref(data->chat[i]);
 
 	g_free(data);
 }
@@ -116,39 +132,73 @@ static void ste_debug(const char *str, void *user_data)
 	ofono_info("%s%s", prefix, str);
 }
 
-static gboolean init_simpin_check(gpointer user_data);
-
-static void simpin_check(gboolean ok, GAtResult *result, gpointer user_data)
+static void handle_sim_status(int status, struct ofono_modem *modem)
 {
-	struct ofono_modem *modem = user_data;
 	struct ste_data *data = ofono_modem_get_data(modem);
+	DBG("SIM status:%d\n", status);
 
-	/* Modem returns +CME ERROR: 10 if SIM is not ready. */
-	if (!ok && result->final_or_pdu &&
-			!strcmp(result->final_or_pdu, "+CME ERROR: 10") &&
-			data->cpin_poll_count++ < 5) {
-		data->cpin_poll_source =
-			g_timeout_add_seconds(1, init_simpin_check, modem);
-		return;
+	switch (status) {
+	case SIM_STATE_WAIT_FOR_PIN:
+	case SIM_STATE_ACTIVE:
+	case SIM_STATE_NULL:
+	case SIM_STATE_AWAITING_APP:
+	case SIM_STATE_BLOCKED:
+	case SIM_STATE_BLOCKED_FOREVER:
+	case SIM_STATE_TERMINATING:
+		if (data->have_sim == FALSE) {
+			if (data->sim)
+				ofono_sim_inserted_notify(data->sim, TRUE);
+
+			data->have_sim = TRUE;
+		}
+		break;
+	case SIM_STATE_POWER_OFF:
+		if (data->have_sim == TRUE) {
+			if (data->sim)
+				ofono_sim_inserted_notify(data->sim, FALSE);
+
+			data->have_sim = FALSE;
+		}
+		break;
 	}
-
-	data->cpin_poll_count = 0;
-
-	/* Modem returns ERROR if there is no SIM in slot. */
-	data->have_sim = ok;
-
-	ofono_modem_set_powered(modem, TRUE);
 }
 
-static gboolean init_simpin_check(gpointer user_data)
+static void handle_sim_state(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct ofono_modem *modem = user_data;
+	int simnr, status;
+	GAtResultIter iter;
+
+	DBG("ok:%d", ok);
+
+	if (!ok)
+		return;
+
+	g_at_result_iter_init(&iter, result);
+
+	ofono_modem_set_powered(modem, TRUE);
+
+	if (!g_at_result_iter_next(&iter, "*ESIMSR:"))
+		return;
+
+	if (!g_at_result_iter_next_number(&iter, &simnr))
+		return;
+
+	if (!g_at_result_iter_next_number(&iter, &status))
+		return;
+
+	handle_sim_status(status, modem);
+}
+
+static gboolean init_sim_reporting(gpointer user_data)
 {
 	struct ofono_modem *modem = user_data;
 	struct ste_data *data = ofono_modem_get_data(modem);
 
-	data->cpin_poll_source = 0;
+	data->have_sim = FALSE;
 
-	g_at_chat_send(data->chat, "AT+CPIN?", cpin_prefix,
-			simpin_check, modem, NULL);
+	g_at_chat_send(data->chat[AT_SIM], "AT*ESIMSR=1;*ESIMSR?", NULL,
+			handle_sim_state, modem, NULL);
 
 	return FALSE;
 }
@@ -156,15 +206,25 @@ static gboolean init_simpin_check(gpointer user_data)
 static void cfun_enable(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_modem *modem = user_data;
+	struct ste_data *data = ofono_modem_get_data(modem);
+	int i;
 
 	DBG("");
 
 	if (!ok) {
 		ofono_modem_set_powered(modem, FALSE);
+
+		for (i = 0; i < NUM_CHAT; i++) {
+			g_at_chat_cancel_all(data->chat[i]);
+			g_at_chat_unregister_all(data->chat[i]);
+			g_at_chat_unref(data->chat[i]);
+			data->chat[i] = NULL;
+		}
+
 		return;
 	}
 
-	init_simpin_check(modem);
+	init_sim_reporting(modem);
 }
 
 static GIOChannel *ste_create_channel(struct ofono_modem *modem)
@@ -235,49 +295,88 @@ static GIOChannel *ste_create_channel(struct ofono_modem *modem)
 	return channel;
 }
 
+static void esimsr_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_modem *modem = user_data;
+	int status;
+	GAtResultIter iter;
+	DBG("");
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "*ESIMSR:"))
+		return;
+
+	if (!g_at_result_iter_next_number(&iter, &status))
+		return;
+
+	handle_sim_status(status, modem);
+}
+
 static int ste_enable(struct ofono_modem *modem)
 {
 	struct ste_data *data = ofono_modem_get_data(modem);
 	GIOChannel *channel;
 	GAtSyntax *syntax;
+	int i;
 
-	syntax = g_at_syntax_new_gsm_permissive();
+	for (i = 0; i < NUM_CHAT; i++) {
+		channel = ste_create_channel(modem);
+		syntax = g_at_syntax_new_gsm_permissive();
+		data->chat[i] = g_at_chat_new_blocking(channel, syntax);
 
-	channel = ste_create_channel(modem);
-	if (!channel)
-		return -EIO;
+		if (data->chat[i] == NULL) {
+			g_io_channel_unref(channel);
+			g_at_syntax_unref(syntax);
+			DBG("Failed to create AT chat %s", chat_prefixes[i]);
+			goto error;
+		}
 
-	data->chat = g_at_chat_new_blocking(channel, syntax);
-	g_at_chat_send(data->chat, "AT&F E0 V1 X4 &C1 +CMEE=1",
-			NULL, NULL, NULL, NULL);
+		if (getenv("OFONO_AT_DEBUG"))
+			g_at_chat_set_debug(data->chat[i], ste_debug,
+						chat_prefixes[i]);
 
-	/* All STE modems support UTF-8 */
-	g_at_chat_send(data->chat, "AT+CSCS=\"UTF-8\"",
-			NULL, NULL, NULL, NULL);
+		g_at_chat_send(data->chat[i], "AT&F E0 V1 X4 &C1 +CMEE=1",
+				NULL, NULL, NULL, NULL);
 
-	g_io_channel_unref(channel);
-	g_at_syntax_unref(syntax);
+		/* All STE modems support UTF-8 */
+		g_at_chat_send(data->chat[i], "AT+CSCS=\"UTF-8\"",
+				NULL, NULL, NULL, NULL);
 
-	if (data->chat == NULL)
-		return -ENOMEM;
+		g_io_channel_unref(channel);
+		g_at_syntax_unref(syntax);
+	}
 
-	if (getenv("OFONO_AT_DEBUG"))
-		g_at_chat_set_debug(data->chat, ste_debug, chat_prefixes[0]);
+	g_at_chat_send(data->chat[AT_DEFAULT], "AT+CFUN=4", NULL, cfun_enable,
+				modem, NULL);
 
-	g_at_chat_send(data->chat, "AT+CFUN=4", NULL, cfun_enable, modem, NULL);
+	g_at_chat_register(data->chat[AT_SIM], "*ESIMSR:", esimsr_notify,
+				FALSE, modem, NULL);
 
 	return -EINPROGRESS;
+
+error:
+	/* Unref open chats if any */
+	while (i--) {
+		g_at_chat_unref(data->chat[i]);
+		data->chat[i] = NULL;
+	}
+
+	return -EIO;
 }
 
 static void cfun_disable(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_modem *modem = user_data;
 	struct ste_data *data = ofono_modem_get_data(modem);
+	int i;
 
 	DBG("");
 
-	g_at_chat_unref(data->chat);
-	data->chat = NULL;
+	for (i = 0; i < NUM_CHAT; i++) {
+		g_at_chat_unref(data->chat[i]);
+		data->chat[i] = NULL;
+	}
 
 	if (ok)
 		ofono_modem_set_powered(modem, FALSE);
@@ -286,15 +385,15 @@ static void cfun_disable(gboolean ok, GAtResult *result, gpointer user_data)
 static int ste_disable(struct ofono_modem *modem)
 {
 	struct ste_data *data = ofono_modem_get_data(modem);
+	int i;
 
 	DBG("%p", modem);
 
-	if (data->chat == NULL)
-		return 0;
-
-	g_at_chat_cancel_all(data->chat);
-	g_at_chat_unregister_all(data->chat);
-	g_at_chat_send(data->chat, "AT+CFUN=4", NULL,
+	for (i = 0; i < NUM_CHAT; i++) {
+		g_at_chat_cancel_all(data->chat[i]);
+		g_at_chat_unregister_all(data->chat[i]);
+	}
+	g_at_chat_send(data->chat[AT_DEFAULT], "AT+CFUN=4", NULL,
 					cfun_disable, modem, NULL);
 
 	return -EINPROGRESS;
@@ -315,7 +414,7 @@ static void ste_set_online(struct ofono_modem *modem, ofono_bool_t online,
 				ofono_modem_online_cb_t cb, void *user_data)
 {
 	struct ste_data *data = ofono_modem_get_data(modem);
-	GAtChat *chat = data->chat;
+	GAtChat *chat = data->chat[AT_DEFAULT];
 	struct cb_data *cbd = cb_data_new(cb, user_data);
 	char const *command = online ? "AT+CFUN=1" : "AT+CFUN=4";
 
@@ -332,16 +431,13 @@ static void ste_set_online(struct ofono_modem *modem, ofono_bool_t online,
 static void ste_pre_sim(struct ofono_modem *modem)
 {
 	struct ste_data *data = ofono_modem_get_data(modem);
-	struct ofono_sim *sim;
 
 	DBG("%p", modem);
 
-	ofono_devinfo_create(modem, 0, "atmodem", data->chat);
-	sim = ofono_sim_create(modem, OFONO_VENDOR_MBM, "atmodem", data->chat);
-	ofono_voicecall_create(modem, 0, "stemodem", data->chat);
-
-	if (sim)
-		ofono_sim_inserted_notify(sim, TRUE);
+	ofono_devinfo_create(modem, 0, "atmodem", data->chat[AT_DEFAULT]);
+	data->sim = ofono_sim_create(modem, OFONO_VENDOR_MBM, "atmodem",
+					data->chat[AT_SIM]);
+	ofono_voicecall_create(modem, 0, "stemodem", data->chat[AT_VOICE]);
 }
 
 static void ste_post_sim(struct ofono_modem *modem)
@@ -350,11 +446,11 @@ static void ste_post_sim(struct ofono_modem *modem)
 
 	DBG("%p", modem);
 
-	ofono_stk_create(modem, 0, "mbmmodem", data->chat);
-	ofono_phonebook_create(modem, 0, "atmodem", data->chat);
-	ofono_radio_settings_create(modem, 0, "stemodem", data->chat);
+	ofono_stk_create(modem, 0, "mbmmodem", data->chat[AT_SIM]);
+	ofono_phonebook_create(modem, 0, "atmodem", data->chat[AT_SIM]);
+	ofono_radio_settings_create(modem, 0, "stemodem", data->chat[AT_NET]);
 
-	ofono_sms_create(modem, 0, "atmodem", data->chat);
+	ofono_sms_create(modem, 0, "atmodem", data->chat[AT_DEFAULT]);
 }
 
 static void ste_post_online(struct ofono_modem *modem)
@@ -363,28 +459,38 @@ static void ste_post_online(struct ofono_modem *modem)
 	struct ofono_message_waiting *mw;
 	struct ofono_gprs *gprs;
 	struct ofono_gprs_context *gc;
+	int i;
 
 	DBG("%p", modem);
 
-	ofono_ussd_create(modem, 0, "atmodem", data->chat);
-	ofono_call_forwarding_create(modem, 0, "atmodem", data->chat);
-	ofono_call_settings_create(modem, 0, "atmodem", data->chat);
-	ofono_netreg_create(modem, OFONO_VENDOR_MBM, "atmodem", data->chat);
-	ofono_call_meter_create(modem, 0, "atmodem", data->chat);
-	ofono_call_barring_create(modem, 0, "atmodem", data->chat);
-	ofono_ssn_create(modem, 0, "atmodem", data->chat);
-	ofono_call_volume_create(modem, 0, "atmodem", data->chat);
-	ofono_cbs_create(modem, 0, "atmodem", data->chat);
+	ofono_ussd_create(modem, 0, "atmodem", data->chat[AT_DEFAULT]);
+	ofono_call_forwarding_create(modem, 0,
+					"atmodem", data->chat[AT_DEFAULT]);
+	ofono_call_settings_create(modem, 0, "atmodem", data->chat[AT_DEFAULT]);
+	ofono_netreg_create(modem, OFONO_VENDOR_MBM,
+					"atmodem", data->chat[AT_NET]);
+	ofono_call_meter_create(modem, 0, "atmodem", data->chat[AT_DEFAULT]);
+	ofono_call_barring_create(modem, 0, "atmodem", data->chat[AT_DEFAULT]);
+	ofono_call_volume_create(modem, 0, "atmodem", data->chat[AT_DEFAULT]);
+	ofono_cbs_create(modem, 0, "atmodem", data->chat[AT_DEFAULT]);
+	ofono_gnss_create(modem, OFONO_VENDOR_STE, "atmodem",
+				data->chat[AT_GNSS]);
 
 	gprs = ofono_gprs_create(modem, OFONO_VENDOR_MBM,
-					"atmodem", data->chat);
-	gc = ofono_gprs_context_create(modem, 0, "stemodem", data->chat);
+					"atmodem", data->chat[AT_GPRS]);
 
-	if (gprs && gc)
-		ofono_gprs_add_context(gprs, gc);
+	if (gprs) {
+		for (i = 0; i < MAX_PDP_CONTEXTS; i++) {
+			gc = ofono_gprs_context_create(modem, 0, "stemodem",
+					data->chat[AT_GPRS]);
+			if (gc == NULL)
+				break;
+
+			ofono_gprs_add_context(gprs, gc);
+		}
+	}
 
 	mw = ofono_message_waiting_create(modem);
-
 	if (mw)
 		ofono_message_waiting_register(mw);
 }
@@ -395,10 +501,10 @@ static struct ofono_modem_driver ste_driver = {
 	.remove		= ste_remove,
 	.enable		= ste_enable,
 	.disable	= ste_disable,
-	.set_online     = ste_set_online,
+	.set_online	= ste_set_online,
 	.pre_sim	= ste_pre_sim,
 	.post_sim	= ste_post_sim,
-	.post_online    = ste_post_online,
+	.post_online	= ste_post_online,
 };
 
 static int ste_init(void)

@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -301,15 +301,19 @@ static DBusMessage *cv_set_property(DBusConnection *conn, DBusMessage *msg,
 	return __ofono_error_invalid_args(msg);
 }
 
-static GDBusMethodTable cv_methods[] = {
-	{ "GetProperties",	"",	"a{sv}",	cv_get_properties },
-	{ "SetProperty",	"sv",	"",		cv_set_property,
-							G_DBUS_METHOD_FLAG_ASYNC },
+static const GDBusMethodTable cv_methods[] = {
+	{ GDBUS_METHOD("GetProperties",
+			NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
+			cv_get_properties) },
+	{ GDBUS_ASYNC_METHOD("SetProperty",
+			GDBUS_ARGS({ "property", "s" }, { "value", "v" }),
+			NULL, cv_set_property) },
 	{ }
 };
 
-static GDBusSignalTable cv_signals[] = {
-	{ "PropertyChanged",	"sv" },
+static const GDBusSignalTable cv_signals[] = {
+	{ GDBUS_SIGNAL("PropertyChanged",
+			GDBUS_ARGS({ "property", "s" }, { "value", "v" })) },
 	{ }
 };
 

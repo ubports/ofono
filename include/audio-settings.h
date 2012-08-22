@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -42,11 +42,15 @@ void ofono_audio_settings_active_notify(struct ofono_audio_settings *as,
 void ofono_audio_settings_mode_notify(struct ofono_audio_settings *as,
 						const char *mode);
 
-int ofono_audio_settings_driver_register(const struct ofono_audio_settings_driver *d);
-void ofono_audio_settings_driver_unregister(const struct ofono_audio_settings_driver *d);
+int ofono_audio_settings_driver_register(
+				const struct ofono_audio_settings_driver *d);
+void ofono_audio_settings_driver_unregister(
+				const struct ofono_audio_settings_driver *d);
 
-struct ofono_audio_settings *ofono_audio_settings_create(struct ofono_modem *modem,
-			unsigned int vendor, const char *driver, void *data);
+struct ofono_audio_settings *ofono_audio_settings_create(
+						struct ofono_modem *modem,
+						unsigned int vendor,
+						const char *driver, void *data);
 
 void ofono_audio_settings_register(struct ofono_audio_settings *as);
 void ofono_audio_settings_remove(struct ofono_audio_settings *as);
@@ -54,7 +58,8 @@ void ofono_audio_settings_remove(struct ofono_audio_settings *as);
 void ofono_audio_settings_set_data(struct ofono_audio_settings *as, void *data);
 void *ofono_audio_settings_get_data(struct ofono_audio_settings *as);
 
-struct ofono_modem *ofono_audio_settings_get_modem(struct ofono_audio_settings *as);
+struct ofono_modem *ofono_audio_settings_get_modem(
+					struct ofono_audio_settings *as);
 
 #ifdef __cplusplus
 }

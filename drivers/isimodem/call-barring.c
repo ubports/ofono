@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2009-2010 Nokia Corporation and/or its subsidiary(-ies).
+ *  Copyright (C) 2009-2010  Nokia Corporation and/or its subsidiary(-ies).
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -49,7 +49,7 @@ struct barr_data {
 	GIsiClient *client;
 };
 
-static int lock_code_to_mmi(char const *lock)
+static int lock_code_to_mmi(const char *lock)
 {
 	if (strcmp(lock, "AO") == 0)
 		return SS_GSM_BARR_ALL_OUT;
@@ -71,87 +71,9 @@ static int lock_code_to_mmi(char const *lock)
 		return 0;
 }
 
-static gboolean check_response_status(const GIsiMessage *msg, uint8_t msgid)
-{
-	if (g_isi_msg_error(msg) < 0) {
-		DBG("Error: %s", strerror(-g_isi_msg_error(msg)));
-		return FALSE;
-	}
-
-	if (g_isi_msg_id(msg) != msgid) {
-		DBG("Unexpected msg: %s",
-			ss_message_id_name(g_isi_msg_id(msg)));
-		return FALSE;
-	}
-	return TRUE;
-}
-
-static void set_resp_cb(const GIsiMessage *msg, void *data)
-{
-	struct isi_cb_data *cbd = data;
-	ofono_call_barring_set_cb_t cb = cbd->cb;
-	uint8_t type;
-
-	if (!check_response_status(msg, SS_SERVICE_COMPLETED_RESP))
-		goto error;
-
-	if (!g_isi_msg_data_get_byte(msg, 0, &type))
-		goto error;
-
-	if (type != SS_ACTIVATION && type != SS_DEACTIVATION)
-		goto error;
-
-	CALLBACK_WITH_SUCCESS(cb, cbd->data);
-	return;
-
-error:
-	CALLBACK_WITH_FAILURE(cb, cbd->data);
-}
-
-
-static void isi_set(struct ofono_call_barring *barr, const char *lock,
-			int enable, const char *passwd, int cls,
-			ofono_call_barring_set_cb_t cb, void *data)
-{
-	struct barr_data *bd = ofono_call_barring_get_data(barr);
-	struct isi_cb_data *cbd = isi_cb_data_new(barr, cb, data);
-	int ss_code = lock_code_to_mmi(lock);
-
-	const uint8_t msg[] = {
-		SS_SERVICE_REQ,
-		enable ? SS_ACTIVATION : SS_DEACTIVATION,
-		SS_ALL_TELE_AND_BEARER,
-		ss_code >> 8, ss_code & 0xFF,	/* Service code */
-		SS_SEND_ADDITIONAL_INFO,
-		1,			/* Subblock count */
-		SS_GSM_PASSWORD,
-		28,			/* Subblock length */
-		0, passwd[0], 0, passwd[1],
-		0, passwd[2], 0, passwd[3],
-		0, 0, 0, 0, 0, 0, 0, 0,	/* Filler */
-		0, 0, 0, 0, 0, 0, 0, 0,	/* Filler */
-		0, 0			/* Filler */
-	};
-
-	DBG("lock code %s enable %d class %d password %s",
-		lock, enable, cls, passwd);
-
-	if (cbd == NULL || bd == NULL)
-		goto error;
-
-	if (g_isi_client_send(bd->client, msg, sizeof(msg),
-				set_resp_cb, cbd, g_free))
-		return;
-
-error:
-	CALLBACK_WITH_FAILURE(cb, data);
-	g_free(cbd);
-}
-
-static void update_status_mask(unsigned int *mask, int bsc)
+static void update_status_mask(uint32_t *mask, uint8_t bsc)
 {
 	switch (bsc) {
-
 	case SS_GSM_TELEPHONY:
 		*mask |= 1;
 		break;
@@ -185,9 +107,139 @@ static void update_status_mask(unsigned int *mask, int bsc)
 		break;
 
 	default:
-		DBG("Unknown BSC: 0x%04X", bsc);
+		DBG("Unknown BSC value %d, please report", bsc);
 		break;
 	}
+}
+
+static gboolean check_resp(const GIsiMessage *msg, uint8_t msgid, uint8_t type)
+{
+	uint8_t service;
+
+	if (g_isi_msg_error(msg) < 0) {
+		DBG("Error: %s", g_isi_msg_strerror(msg));
+		return FALSE;
+	}
+
+	if (g_isi_msg_id(msg) != msgid) {
+		DBG("Unexpected msg: %s",
+			ss_message_id_name(g_isi_msg_id(msg)));
+		return FALSE;
+	}
+
+	if (!g_isi_msg_data_get_byte(msg, 0, &service) || service != type) {
+		DBG("Unexpected service type: 0x%02X", service);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+static gboolean decode_gsm_bsc_info(GIsiSubBlockIter *iter, uint32_t *mask)
+{
+	uint8_t *bsc;
+	uint8_t num, i;
+
+	if (!g_isi_sb_iter_get_byte(iter, &num, 2))
+		return FALSE;
+
+	if (!g_isi_sb_iter_get_struct(iter, (void **) &bsc, num, 3))
+		return FALSE;
+
+	for (i = 0; i < num; i++)
+		update_status_mask(mask, bsc[i]);
+
+	return TRUE;
+}
+
+static gboolean decode_gsm_barring_info(GIsiSubBlockIter *outer, uint32_t *mask)
+{
+	GIsiSubBlockIter iter;
+	uint8_t status;
+	uint8_t bsc;
+
+	for (g_isi_sb_subiter_init(outer, &iter, 4);
+			g_isi_sb_iter_is_valid(&iter);
+			g_isi_sb_iter_next(&iter)) {
+
+		if (g_isi_sb_iter_get_id(&iter) != SS_GSM_BARRING_FEATURE)
+			continue;
+
+		if (!g_isi_sb_iter_get_byte(&iter, &bsc, 2))
+			return FALSE;
+
+		if (!g_isi_sb_iter_get_byte(&iter, &status, 3))
+			return FALSE;
+
+		if (status & SS_GSM_ACTIVE)
+			update_status_mask(mask, bsc);
+
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
+static void unset_resp_cb(const GIsiMessage *msg, void *data)
+{
+	struct isi_cb_data *cbd = data;
+	ofono_call_barring_set_cb_t cb = cbd->cb;
+
+	if (check_resp(msg, SS_SERVICE_COMPLETED_RESP, SS_DEACTIVATION))
+		CALLBACK_WITH_SUCCESS(cb, cbd->data);
+	else
+		CALLBACK_WITH_FAILURE(cb, cbd->data);
+}
+
+static void set_resp_cb(const GIsiMessage *msg, void *data)
+{
+	struct isi_cb_data *cbd = data;
+	ofono_call_barring_set_cb_t cb = cbd->cb;
+
+	if (check_resp(msg, SS_SERVICE_COMPLETED_RESP, SS_ACTIVATION))
+		CALLBACK_WITH_SUCCESS(cb, cbd->data);
+	else
+		CALLBACK_WITH_FAILURE(cb, cbd->data);
+}
+
+static void isi_set(struct ofono_call_barring *barr, const char *lock,
+			int enable, const char *passwd, int cls,
+			ofono_call_barring_set_cb_t cb, void *data)
+{
+	struct barr_data *bd = ofono_call_barring_get_data(barr);
+	struct isi_cb_data *cbd = isi_cb_data_new(barr, cb, data);
+	int ss_code = lock_code_to_mmi(lock);
+
+	const uint8_t msg[] = {
+		SS_SERVICE_REQ,
+		enable ? SS_ACTIVATION : SS_DEACTIVATION,
+		SS_ALL_TELE_AND_BEARER,
+		ss_code >> 8, ss_code & 0xFF,	/* Service code */
+		SS_SEND_ADDITIONAL_INFO,
+		1,			/* Subblock count */
+		SS_GSM_PASSWORD,
+		28,			/* Subblock length */
+		0, passwd[0], 0, passwd[1],
+		0, passwd[2], 0, passwd[3],
+		0, 0, 0, 0, 0, 0, 0, 0,	/* Filler */
+		0, 0, 0, 0, 0, 0, 0, 0,	/* Filler */
+		0, 0,			/* Filler */
+	};
+
+	DBG("lock code %s enable %d class %d password %s",
+		lock, enable, cls, passwd);
+
+	if (cbd == NULL || bd == NULL)
+		goto error;
+
+	if (g_isi_client_send(bd->client, msg, sizeof(msg),
+				enable ? set_resp_cb : unset_resp_cb,
+				cbd, g_free))
+		return;
+
+error:
+	CALLBACK_WITH_FAILURE(cb, data);
+	g_free(cbd);
 }
 
 static void query_resp_cb(const GIsiMessage *msg, void *data)
@@ -196,36 +248,43 @@ static void query_resp_cb(const GIsiMessage *msg, void *data)
 	ofono_call_barring_query_cb_t cb = cbd->cb;
 	GIsiSubBlockIter iter;
 	uint32_t mask = 0;
-	uint8_t type;
-	uint8_t count = 0;
-	uint8_t bsc = 0;
-	uint8_t i;
+	uint8_t status;
 
-	if (!check_response_status(msg, SS_SERVICE_COMPLETED_RESP))
-		goto error;
-
-	if (!g_isi_msg_data_get_byte(msg, 0, &type))
-		goto error;
-
-	if (type != SS_INTERROGATION)
+	if (!check_resp(msg, SS_SERVICE_COMPLETED_RESP, SS_INTERROGATION))
 		goto error;
 
 	for (g_isi_sb_iter_init(&iter, msg, 6);
 			g_isi_sb_iter_is_valid(&iter);
 			g_isi_sb_iter_next(&iter)) {
 
-		if (g_isi_sb_iter_get_id(&iter) != SS_GSM_BSC_INFO)
-			continue;
+		switch (g_isi_sb_iter_get_id(&iter)) {
+		case SS_STATUS_RESULT:
 
-		if (!g_isi_sb_iter_get_byte(&iter, &count, 2))
-			goto error;
-
-		for (i = 0; i < count; i++) {
-
-			if (!g_isi_sb_iter_get_byte(&iter, &bsc, 3 + i))
+			if (!g_isi_sb_iter_get_byte(&iter, &status, 2))
 				goto error;
 
-			update_status_mask(&mask, bsc);
+			if (status & SS_GSM_ACTIVE)
+				mask = 1;
+
+			break;
+
+		case SS_GSM_BARRING_INFO:
+
+			if (!decode_gsm_barring_info(&iter, &mask))
+				goto error;
+
+			break;
+
+		case SS_GSM_BSC_INFO:
+
+			if (!decode_gsm_bsc_info(&iter, &mask))
+				goto error;
+
+			break;
+
+		case SS_GSM_ADDITIONAL_INFO:
+			break;
+
 		}
 	}
 
@@ -258,8 +317,8 @@ static void isi_query(struct ofono_call_barring *barr, const char *lock,
 	if (cbd == NULL || bd == NULL)
 		goto error;
 
-	if (g_isi_client_send(bd->client, msg, sizeof(msg),
-				query_resp_cb, cbd, g_free))
+	if (g_isi_client_send(bd->client, msg, sizeof(msg), query_resp_cb,
+				cbd, g_free))
 		return;
 
 error:
@@ -271,22 +330,12 @@ static void set_passwd_resp_cb(const GIsiMessage *msg, void *data)
 {
 	struct isi_cb_data *cbd = data;
 	ofono_call_barring_set_cb_t cb = cbd->cb;
-	uint8_t type;
 
-	if (!check_response_status(msg, SS_SERVICE_COMPLETED_RESP))
-		goto error;
-
-	if (!g_isi_msg_data_get_byte(msg, 0, &type))
-		goto error;
-
-	if (type != SS_GSM_PASSWORD_REGISTRATION)
-		goto error;
-
-	CALLBACK_WITH_SUCCESS(cb, cbd->data);
-	return;
-
-error:
-	CALLBACK_WITH_FAILURE(cb, cbd->data);
+	if (check_resp(msg, SS_SERVICE_COMPLETED_RESP,
+			SS_GSM_PASSWORD_REGISTRATION))
+		CALLBACK_WITH_SUCCESS(cb, cbd->data);
+	else
+		CALLBACK_WITH_FAILURE(cb, cbd->data);
 }
 
 static void isi_set_passwd(struct ofono_call_barring *barr, const char *lock,
@@ -312,7 +361,7 @@ static void isi_set_passwd(struct ofono_call_barring *barr, const char *lock,
 		0, new_passwd[2], 0, new_passwd[3],
 		0, new_passwd[0], 0, new_passwd[1],
 		0, new_passwd[2], 0, new_passwd[3],
-		0, 0				/* Filler */
+		0, 0,				/* Filler */
 	};
 
 	DBG("lock code %s (%u) old password %s new password %s",
@@ -321,8 +370,8 @@ static void isi_set_passwd(struct ofono_call_barring *barr, const char *lock,
 	if (cbd == NULL || bd == NULL)
 		goto error;
 
-	if (g_isi_client_send(bd->client, msg, sizeof(msg),
-				set_passwd_resp_cb, cbd, g_free))
+	if (g_isi_client_send(bd->client, msg, sizeof(msg), set_passwd_resp_cb,
+				cbd, g_free))
 		return;
 
 error:
@@ -334,14 +383,15 @@ static void reachable_cb(const GIsiMessage *msg, void *data)
 {
 	struct ofono_call_barring *barr = data;
 
-	if (g_isi_msg_error(msg) < 0)
+	if (g_isi_msg_error(msg) < 0) {
+		ofono_call_barring_remove(barr);
 		return;
+	}
 
-	ISI_VERSION_DBG(msg);
+	ISI_RESOURCE_DBG(msg);
 
 	ofono_call_barring_register(barr);
 }
-
 
 static int isi_call_barring_probe(struct ofono_call_barring *barr,
 					unsigned int vendor, void *user)

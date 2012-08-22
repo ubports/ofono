@@ -2,8 +2,9 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *  Copyright (C) 2010  ProFUSION embedded systems
+ *  Copyright (C) 2011  BMW Car IT GmbH. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -38,13 +39,13 @@
 #include <ofono/plugin.h>
 #include <ofono/log.h>
 #include <ofono/modem.h>
+#include <ofono/devinfo.h>
 #include <ofono/netreg.h>
 #include <ofono/voicecall.h>
 #include <ofono/call-volume.h>
+#include <ofono/handsfree.h>
 
-#include <drivers/hfpmodem/hfpmodem.h>
-
-#include <ofono/dbus.h>
+#include <drivers/hfpmodem/slc.h>
 
 #include "bluetooth.h"
 
@@ -57,13 +58,17 @@
 #define DBUS_TYPE_UNIX_FD -1
 #endif
 
-static const char *brsf_prefix[] = { "+BRSF:", NULL };
-static const char *cind_prefix[] = { "+CIND:", NULL };
-static const char *cmer_prefix[] = { "+CMER:", NULL };
-static const char *chld_prefix[] = { "+CHLD:", NULL };
-
 static DBusConnection *connection;
 static GHashTable *modem_hash = NULL;
+
+struct hfp_data {
+	struct hfp_slc_info info;
+	char *handsfree_path;
+	char *handsfree_address;
+	DBusMessage *slc_msg;
+	gboolean agent_registered;
+	DBusPendingCall *call;
+};
 
 static void hfp_debug(const char *str, void *user_data)
 {
@@ -72,24 +77,11 @@ static void hfp_debug(const char *str, void *user_data)
 	ofono_info("%s%s", prefix, str);
 }
 
-static void clear_data(struct ofono_modem *modem)
+static void slc_established(gpointer userdata)
 {
+	struct ofono_modem *modem = userdata;
 	struct hfp_data *data = ofono_modem_get_data(modem);
-
-	if (data->chat == NULL)
-		return;
-
-	g_at_chat_unref(data->chat);
-	data->chat = NULL;
-
-	memset(data->cind_val, 0, sizeof(data->cind_val));
-	memset(data->cind_pos, 0, sizeof(data->cind_pos));
-}
-
-static void service_level_conn_established(struct ofono_modem *modem)
-{
 	DBusMessage *msg;
-	struct hfp_data *data = ofono_modem_get_data(modem);
 
 	ofono_modem_set_powered(modem, TRUE);
 
@@ -99,12 +91,11 @@ static void service_level_conn_established(struct ofono_modem *modem)
 	data->slc_msg = NULL;
 
 	ofono_info("Service level connection established");
-
-	g_at_chat_send(data->chat, "AT+CMEE=1", NULL, NULL, NULL, NULL);
 }
 
-static void service_level_conn_failed(struct ofono_modem *modem)
+static void slc_failed(gpointer userdata)
 {
+	struct ofono_modem *modem = userdata;
 	struct hfp_data *data = ofono_modem_get_data(modem);
 	DBusMessage *msg;
 
@@ -117,200 +108,20 @@ static void service_level_conn_failed(struct ofono_modem *modem)
 
 	ofono_error("Service level connection failed");
 	ofono_modem_set_powered(modem, FALSE);
-	clear_data(modem);
-}
 
-static void chld_cb(gboolean ok, GAtResult *result, gpointer user_data)
-{
-	struct ofono_modem *modem = user_data;
-	struct hfp_data *data = ofono_modem_get_data(modem);
-	unsigned int ag_mpty_feature = 0;
-	GAtResultIter iter;
-	const char *str;
-
-	if (!ok)
-		return;
-
-	g_at_result_iter_init(&iter, result);
-
-	if (!g_at_result_iter_next(&iter, "+CHLD:"))
-		return;
-
-	if (!g_at_result_iter_open_list(&iter))
-		return;
-
-	while (g_at_result_iter_next_unquoted_string(&iter, &str)) {
-		if (!strcmp(str, "0"))
-			ag_mpty_feature |= AG_CHLD_0;
-		else if (!strcmp(str, "1"))
-			ag_mpty_feature |= AG_CHLD_1;
-		else if (!strcmp(str, "1x"))
-			ag_mpty_feature |= AG_CHLD_1x;
-		else if (!strcmp(str, "2"))
-			ag_mpty_feature |= AG_CHLD_2;
-		else if (!strcmp(str, "2x"))
-			ag_mpty_feature |= AG_CHLD_2x;
-		else if (!strcmp(str, "3"))
-			ag_mpty_feature |= AG_CHLD_3;
-		else if (!strcmp(str, "4"))
-			ag_mpty_feature |= AG_CHLD_4;
-	}
-
-	if (!g_at_result_iter_close_list(&iter))
-		return;
-
-	data->ag_mpty_features = ag_mpty_feature;
-
-	service_level_conn_established(modem);
-}
-
-static void cmer_cb(gboolean ok, GAtResult *result, gpointer user_data)
-{
-	struct ofono_modem *modem = user_data;
-	struct hfp_data *data = ofono_modem_get_data(modem);
-
-	if (!ok) {
-		service_level_conn_failed(modem);
-		return;
-	}
-
-	if (data->ag_features & AG_FEATURE_3WAY)
-		g_at_chat_send(data->chat, "AT+CHLD=?", chld_prefix,
-			chld_cb, modem, NULL);
-	else
-		service_level_conn_established(modem);
-}
-
-static void cind_status_cb(gboolean ok, GAtResult *result,
-				gpointer user_data)
-{
-	struct ofono_modem *modem = user_data;
-	struct hfp_data *data = ofono_modem_get_data(modem);
-	GAtResultIter iter;
-	int index;
-	int value;
-
-	if (!ok)
-		goto error;
-
-	g_at_result_iter_init(&iter, result);
-
-	if (!g_at_result_iter_next(&iter, "+CIND:"))
-		goto error;
-
-	index = 1;
-
-	while (g_at_result_iter_next_number(&iter, &value)) {
-		int i;
-
-		for (i = 0; i < HFP_INDICATOR_LAST; i++) {
-			if (index != data->cind_pos[i])
-				continue;
-
-			data->cind_val[i] = value;
-		}
-
-		index += 1;
-	}
-
-	g_at_chat_send(data->chat, "AT+CMER=3,0,0,1", cmer_prefix,
-				cmer_cb, modem, NULL);
-	return;
-
-error:
-	service_level_conn_failed(modem);
-}
-
-static void cind_cb(gboolean ok, GAtResult *result, gpointer user_data)
-{
-	struct ofono_modem *modem = user_data;
-	struct hfp_data *data = ofono_modem_get_data(modem);
-	GAtResultIter iter;
-	const char *str;
-	int index;
-	int min, max;
-
-	if (!ok)
-		goto error;
-
-	g_at_result_iter_init(&iter, result);
-	if (!g_at_result_iter_next(&iter, "+CIND:"))
-		goto error;
-
-	index = 1;
-
-	while (g_at_result_iter_open_list(&iter)) {
-		if (!g_at_result_iter_next_string(&iter, &str))
-			goto error;
-
-		if (!g_at_result_iter_open_list(&iter))
-			goto error;
-
-		while (g_at_result_iter_next_range(&iter, &min, &max))
-			;
-
-		if (!g_at_result_iter_close_list(&iter))
-			goto error;
-
-		if (!g_at_result_iter_close_list(&iter))
-			goto error;
-
-		if (g_str_equal("service", str) == TRUE)
-			data->cind_pos[HFP_INDICATOR_SERVICE] = index;
-		else if (g_str_equal("call", str) == TRUE)
-			data->cind_pos[HFP_INDICATOR_CALL] = index;
-		else if (g_str_equal("callsetup", str) == TRUE)
-			data->cind_pos[HFP_INDICATOR_CALLSETUP] = index;
-		else if (g_str_equal("callheld", str) == TRUE)
-			data->cind_pos[HFP_INDICATOR_CALLHELD] = index;
-		else if (g_str_equal("signal", str) == TRUE)
-			data->cind_pos[HFP_INDICATOR_SIGNAL] = index;
-		else if (g_str_equal("roam", str) == TRUE)
-			data->cind_pos[HFP_INDICATOR_ROAM] = index;
-		else if (g_str_equal("battchg", str) == TRUE)
-			data->cind_pos[HFP_INDICATOR_BATTCHG] = index;
-
-		index += 1;
-	}
-
-	g_at_chat_send(data->chat, "AT+CIND?", cind_prefix,
-			cind_status_cb, modem, NULL);
-	return;
-
-error:
-	service_level_conn_failed(modem);
-}
-
-static void brsf_cb(gboolean ok, GAtResult *result, gpointer user_data)
-{
-	struct ofono_modem *modem = user_data;
-	struct hfp_data *data = ofono_modem_get_data(modem);
-	GAtResultIter iter;
-
-	if (!ok)
-		goto error;
-
-	g_at_result_iter_init(&iter, result);
-
-	if (!g_at_result_iter_next(&iter, "+BRSF:"))
-		goto error;
-
-	g_at_result_iter_next_number(&iter, (gint *)&data->ag_features);
-
-	g_at_chat_send(data->chat, "AT+CIND=?", cind_prefix,
-				cind_cb, modem, NULL);
-	return;
-
-error:
-	service_level_conn_failed(modem);
+	g_at_chat_unref(data->info.chat);
+	data->info.chat = NULL;
 }
 
 static void hfp_disconnected_cb(gpointer user_data)
 {
 	struct ofono_modem *modem = user_data;
+	struct hfp_data *data = ofono_modem_get_data(modem);
 
 	ofono_modem_set_powered(modem, FALSE);
-	clear_data(modem);
+
+	g_at_chat_unref(data->info.chat);
+	data->info.chat = NULL;
 }
 
 /* either oFono or Phone could request SLC connection */
@@ -320,7 +131,6 @@ static int service_level_connection(struct ofono_modem *modem, int fd)
 	GIOChannel *io;
 	GAtSyntax *syntax;
 	GAtChat *chat;
-	char buf[64];
 
 	io = g_io_channel_unix_new(fd);
 	if (io == NULL) {
@@ -329,7 +139,7 @@ static int service_level_connection(struct ofono_modem *modem, int fd)
 		return -EIO;
 	}
 
-	syntax = g_at_syntax_new_gsmv1();
+	syntax = g_at_syntax_new_gsm_permissive();
 	chat = g_at_chat_new(io, syntax);
 	g_at_syntax_unref(syntax);
 	g_io_channel_unref(io);
@@ -342,10 +152,8 @@ static int service_level_connection(struct ofono_modem *modem, int fd)
 	if (getenv("OFONO_AT_DEBUG"))
 		g_at_chat_set_debug(chat, hfp_debug, "");
 
-	snprintf(buf, sizeof(buf), "AT+BRSF=%d", data->hf_features);
-	g_at_chat_send(chat, buf, brsf_prefix,
-				brsf_cb, modem, NULL);
-	data->chat = chat;
+	data->info.chat = chat;
+	hfp_slc_establish(&data->info, slc_established, slc_failed, modem);
 
 	return -EINPROGRESS;
 }
@@ -356,10 +164,13 @@ static DBusMessage *hfp_agent_new_connection(DBusConnection *conn,
 	int fd, err;
 	struct ofono_modem *modem = data;
 	struct hfp_data *hfp_data = ofono_modem_get_data(modem);
+	guint16 version;
 
 	if (!dbus_message_get_args(msg, NULL, DBUS_TYPE_UNIX_FD, &fd,
-				DBUS_TYPE_INVALID))
+				DBUS_TYPE_UINT16, &version, DBUS_TYPE_INVALID))
 		return __ofono_error_invalid_args(msg);
+
+	hfp_slc_info_init(&hfp_data->info, version);
 
 	err = service_level_connection(modem, fd);
 	if (err < 0 && err != -EINPROGRESS)
@@ -381,19 +192,21 @@ static DBusMessage *hfp_agent_release(DBusConnection *conn,
 	g_dbus_unregister_interface(connection, obj_path, HFP_AGENT_INTERFACE);
 	hfp_data->agent_registered = FALSE;
 
+	g_hash_table_remove(modem_hash, hfp_data->handsfree_path);
 	ofono_modem_remove(modem);
 
 	return dbus_message_new_method_return(msg);
 }
 
-static GDBusMethodTable agent_methods[] = {
-	{ "NewConnection", "h", "", hfp_agent_new_connection,
-		G_DBUS_METHOD_FLAG_ASYNC },
-	{ "Release", "", "", hfp_agent_release },
-	{ NULL, NULL, NULL, NULL }
+static const GDBusMethodTable agent_methods[] = {
+	{ GDBUS_ASYNC_METHOD("NewConnection",
+				GDBUS_ARGS({ "fd", "h" }, { "version", "q" }),
+				NULL, hfp_agent_new_connection) },
+	{ GDBUS_METHOD("Release", NULL, NULL, hfp_agent_release) },
+	{ }
 };
 
-static int hfp_create_modem(const char *device, const char *dev_addr,
+static int hfp_hf_probe(const char *device, const char *dev_addr,
 				const char *adapter_addr, const char *alias)
 {
 	struct ofono_modem *modem;
@@ -418,14 +231,12 @@ static int hfp_create_modem(const char *device, const char *dev_addr,
 	if (data == NULL)
 		goto free;
 
-	data->hf_features |= HF_FEATURE_3WAY;
-	data->hf_features |= HF_FEATURE_CLIP;
-	data->hf_features |= HF_FEATURE_REMOTE_VOLUME_CONTROL;
-	data->hf_features |= HF_FEATURE_ENHANCED_CALL_STATUS;
-	data->hf_features |= HF_FEATURE_ENHANCED_CALL_CONTROL;
-
 	data->handsfree_path = g_strdup(device);
 	if (data->handsfree_path == NULL)
+		goto free;
+
+	data->handsfree_address = g_strdup(dev_addr);
+	if (data->handsfree_address == NULL)
 		goto free;
 
 	ofono_modem_set_data(modem, data);
@@ -437,31 +248,42 @@ static int hfp_create_modem(const char *device, const char *dev_addr,
 	return 0;
 
 free:
+	if (data != NULL)
+		g_free(data->handsfree_path);
+
 	g_free(data);
 	ofono_modem_remove(modem);
 
 	return -ENOMEM;
 }
 
-static gboolean hfp_remove_each_modem(gpointer key, gpointer value,
+static gboolean hfp_remove_modem(gpointer key, gpointer value,
 					gpointer user_data)
 {
 	struct ofono_modem *modem = value;
+	const char *device = key;
+	const char *prefix = user_data;
+
+	if (prefix && g_str_has_prefix(device, prefix) == FALSE)
+		return FALSE;
 
 	ofono_modem_remove(modem);
 
 	return TRUE;
 }
 
-static void hfp_remove_all_modem(void)
+static void hfp_hf_remove(const char *prefix)
 {
+	DBG("%s", prefix);
+
 	if (modem_hash == NULL)
 		return;
 
-	g_hash_table_foreach_remove(modem_hash, hfp_remove_each_modem, NULL);
+	g_hash_table_foreach_remove(modem_hash, hfp_remove_modem,
+							(gpointer) prefix);
 }
 
-static void hfp_set_alias(const char *device, const char *alias)
+static void hfp_hf_set_alias(const char *device, const char *alias)
 {
 	struct ofono_modem *modem;
 
@@ -539,12 +361,14 @@ static void hfp_remove(struct ofono_modem *modem)
 	struct hfp_data *data = ofono_modem_get_data(modem);
 	const char *obj_path = ofono_modem_get_path(modem);
 
+	if (data->call != NULL)
+		dbus_pending_call_cancel(data->call);
+
 	if (g_dbus_unregister_interface(connection, obj_path,
 					HFP_AGENT_INTERFACE))
 		hfp_unregister_ofono_handsfree(modem);
 
-	g_hash_table_remove(modem_hash, data->handsfree_path);
-
+	g_free(data->handsfree_address);
 	g_free(data->handsfree_path);
 	g_free(data);
 
@@ -585,6 +409,7 @@ static void hfp_connect_reply(DBusPendingCall *call, gpointer user_data)
 
 done:
 	dbus_message_unref(reply);
+	data->call = NULL;
 }
 
 /* power up hardware */
@@ -597,7 +422,8 @@ static int hfp_enable(struct ofono_modem *modem)
 
 	status = bluetooth_send_with_reply(data->handsfree_path,
 					BLUEZ_GATEWAY_INTERFACE, "Connect",
-					hfp_connect_reply, modem, NULL,
+					&data->call, hfp_connect_reply,
+					modem, NULL,
 					DBUS_TIMEOUT, DBUS_TYPE_INVALID);
 
 	if (status < 0)
@@ -609,6 +435,7 @@ static int hfp_enable(struct ofono_modem *modem)
 static void hfp_power_down(DBusPendingCall *call, gpointer user_data)
 {
 	struct ofono_modem *modem = user_data;
+	struct hfp_data *data = ofono_modem_get_data(modem);
 	DBusMessage *reply;
 	DBusError derr;
 
@@ -625,6 +452,7 @@ static void hfp_power_down(DBusPendingCall *call, gpointer user_data)
 
 done:
 	dbus_message_unref(reply);
+	data->call = NULL;
 }
 
 static int hfp_disable(struct ofono_modem *modem)
@@ -634,12 +462,14 @@ static int hfp_disable(struct ofono_modem *modem)
 
 	DBG("%p", modem);
 
-	clear_data(modem);
+	g_at_chat_unref(data->info.chat);
+	data->info.chat = NULL;
 
 	if (data->agent_registered) {
 		status = bluetooth_send_with_reply(data->handsfree_path,
 					BLUEZ_GATEWAY_INTERFACE, "Disconnect",
-					hfp_power_down, modem, NULL,
+					&data->call, hfp_power_down,
+					modem, NULL,
 					DBUS_TIMEOUT, DBUS_TYPE_INVALID);
 
 		if (status < 0)
@@ -655,9 +485,11 @@ static void hfp_pre_sim(struct ofono_modem *modem)
 
 	DBG("%p", modem);
 
-	ofono_voicecall_create(modem, 0, "hfpmodem", data);
-	ofono_netreg_create(modem, 0, "hfpmodem", data);
-	ofono_call_volume_create(modem, 0, "hfpmodem", data);
+	ofono_devinfo_create(modem, 0, "hfpmodem", data->handsfree_address);
+	ofono_voicecall_create(modem, 0, "hfpmodem", &data->info);
+	ofono_netreg_create(modem, 0, "hfpmodem", &data->info);
+	ofono_call_volume_create(modem, 0, "hfpmodem", &data->info);
+	ofono_handsfree_create(modem, 0, "hfpmodem", &data->info);
 }
 
 static void hfp_post_sim(struct ofono_modem *modem)
@@ -667,6 +499,7 @@ static void hfp_post_sim(struct ofono_modem *modem)
 
 static struct ofono_modem_driver hfp_driver = {
 	.name		= "hfp",
+	.modem_type	= OFONO_MODEM_TYPE_HFP,
 	.probe		= hfp_probe,
 	.remove		= hfp_remove,
 	.enable		= hfp_enable,
@@ -675,11 +508,11 @@ static struct ofono_modem_driver hfp_driver = {
 	.post_sim	= hfp_post_sim,
 };
 
-static struct bluetooth_profile hfp_profile = {
-	.name		= "hfp",
-	.create		= hfp_create_modem,
-	.remove_all	= hfp_remove_all_modem,
-	.set_alias	= hfp_set_alias,
+static struct bluetooth_profile hfp_hf = {
+	.name		= "hfp_hf",
+	.probe		= hfp_hf_probe,
+	.remove		= hfp_hf_remove,
+	.set_alias	= hfp_hf_set_alias,
 };
 
 static int hfp_init(void)
@@ -695,7 +528,7 @@ static int hfp_init(void)
 	if (err < 0)
 		return err;
 
-	err = bluetooth_register_uuid(HFP_AG_UUID, &hfp_profile);
+	err = bluetooth_register_uuid(HFP_AG_UUID, &hfp_hf);
 	if (err < 0) {
 		ofono_modem_driver_unregister(&hfp_driver);
 		return err;

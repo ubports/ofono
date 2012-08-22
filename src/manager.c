@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -80,14 +80,18 @@ static DBusMessage *manager_get_modems(DBusConnection *conn,
 	return reply;
 }
 
-static GDBusMethodTable manager_methods[] = {
-	{ "GetModems",          "",    "a(oa{sv})",  manager_get_modems },
+static const GDBusMethodTable manager_methods[] = {
+	{ GDBUS_METHOD("GetModems",
+				NULL, GDBUS_ARGS({ "modems", "a(oa{sv})" }),
+				manager_get_modems) },
 	{ }
 };
 
-static GDBusSignalTable manager_signals[] = {
-	{ "ModemAdded",        "oa{sv}" },
-	{ "ModemRemoved",      "o" },
+static const GDBusSignalTable manager_signals[] = {
+	{ GDBUS_SIGNAL("ModemAdded",
+		GDBUS_ARGS({ "path", "o" }, { "properties", "a{sv}" })) },
+	{ GDBUS_SIGNAL("ModemRemoved",
+		GDBUS_ARGS({ "path", "o" })) },
 	{ }
 };
 

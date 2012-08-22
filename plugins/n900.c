@@ -45,7 +45,6 @@
 #include <ofono/cbs.h>
 #include <ofono/sim.h>
 #include <ofono/ussd.h>
-#include <ofono/ssn.h>
 #include <ofono/call-forwarding.h>
 #include <ofono/call-settings.h>
 #include <ofono/call-barring.h>
@@ -242,7 +241,7 @@ static void mtc_reachable_cb(const GIsiMessage *msg, void *data)
 	if (!g_isi_msg_error(msg) < 0)
 		return;
 
-	ISI_VERSION_DBG(msg);
+	ISI_RESOURCE_DBG(msg);
 
 	g_isi_client_ind_subscribe(isi->client, MTC_STATE_INFO_IND,
 					mtc_state_ind_cb, modem);
@@ -351,6 +350,7 @@ static int n900_probe(struct ofono_modem *modem)
 	}
 
 	g_isi_modem_set_userdata(isimodem, modem);
+	g_isi_modem_set_flags(isimodem, GISI_MODEM_FLAG_USE_LEGACY_SUBSCRIBE);
 
 	if (getenv("OFONO_ISI_DEBUG"))
 		g_isi_modem_set_debug(isimodem, ofono_debug);
@@ -508,7 +508,6 @@ static void n900_post_online(struct ofono_modem *modem)
 	ofono_netreg_create(modem, 0, "isimodem", isi->modem);
 	ofono_sms_create(modem, 0, "isimodem", isi->modem);
 	ofono_cbs_create(modem, 0, "isimodem", isi->modem);
-	ofono_ssn_create(modem, 0, "isimodem", isi->modem);
 	ofono_ussd_create(modem, 0, "isimodem", isi->modem);
 	ofono_call_settings_create(modem, 0, "isimodem", isi->modem);
 	ofono_call_barring_create(modem, 0, "isimodem", isi->modem);

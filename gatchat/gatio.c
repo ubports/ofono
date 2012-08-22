@@ -2,7 +2,7 @@
  *
  *  AT chat library with GLib integration
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -52,6 +52,8 @@ struct _GAtIO {
 	gpointer write_data;			/* Write callback userdata */
 	GAtDebugFunc debugf;			/* debugging output function */
 	gpointer debug_data;			/* Data to pass to debug func */
+	GAtDisconnectFunc write_done_func;	/* tx empty notifier */
+	gpointer write_done_data;		/* tx empty data */
 	gboolean destroyed;			/* Re-entrancy guard */
 };
 
@@ -158,6 +160,12 @@ static void write_watcher_destroy_notify(gpointer user_data)
 	io->write_watch = 0;
 	io->write_handler = NULL;
 	io->write_data = NULL;
+
+	if (io->write_done_func) {
+		io->write_done_func(io->write_done_data);
+		io->write_done_func = NULL;
+		io->write_done_data = NULL;
+	}
 }
 
 static gboolean can_write_data(GIOChannel *channel, GIOCondition cond,
@@ -172,7 +180,6 @@ static gboolean can_write_data(GIOChannel *channel, GIOCondition cond,
 		return FALSE;
 
 	return io->write_handler(io->write_data);
-
 }
 
 static GAtIO *create_io(GIOChannel *channel, GIOFlags flags)
@@ -369,4 +376,19 @@ gboolean g_at_io_set_debug(GAtIO *io, GAtDebugFunc func, gpointer user_data)
 	io->debug_data = user_data;
 
 	return TRUE;
+}
+
+void g_at_io_set_write_done(GAtIO *io, GAtDisconnectFunc func,
+				gpointer user_data)
+{
+	if (io == NULL)
+		return;
+
+	io->write_done_func = func;
+	io->write_done_data = user_data;
+}
+
+void g_at_io_drain_ring_buffer(GAtIO *io, guint len)
+{
+	ring_buffer_drain(io->buf, len);
 }

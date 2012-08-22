@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -56,11 +56,7 @@ struct ofono_call_barring {
 	int ss_req_type;
 	int ss_req_cls;
 	int ss_req_lock;
-	struct ofono_ssn *ssn;
 	struct ofono_ussd *ussd;
-	unsigned int incoming_bar_watch;
-	unsigned int outgoing_bar_watch;
-	unsigned int ssn_watch;
 	unsigned int ussd_watch;
 	const struct ofono_call_barring_driver *driver;
 	void *driver_data;
@@ -327,9 +323,10 @@ static void cb_ss_set_lock_callback(const struct ofono_error *error,
 	struct ofono_call_barring *cb = data;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
-		DBG("Enabling/disabling Call Barring via SS failed");
+		DBG("Enabling/disabling Call Barring via SS failed with err:%s",
+			telephony_error_to_str(error));
 		__ofono_dbus_pending_reply(&cb->pending,
-					__ofono_error_failed(cb->pending));
+			__ofono_error_from_error(error, cb->pending));
 		return;
 	}
 
@@ -402,7 +399,7 @@ static gboolean cb_ss_control(int type, const char *sc,
 	if (strlen(dn) > 0)
 		goto bad_format;
 
-	if (type != SS_CONTROL_TYPE_QUERY && !is_valid_pin(sia, PIN_TYPE_NET))
+	if (type != SS_CONTROL_TYPE_QUERY && !__ofono_is_valid_net_pin(sia))
 		goto bad_format;
 
 	switch (type) {
@@ -489,8 +486,9 @@ static void cb_set_passwd_callback(const struct ofono_error *error, void *data)
 	if (error->type == OFONO_ERROR_TYPE_NO_ERROR)
 		reply = dbus_message_new_method_return(cb->pending);
 	else {
-		reply = __ofono_error_failed(cb->pending);
-		DBG("Changing Call Barring password via SS failed");
+		DBG("Changing Call Barring password via SS failed with err: %s",
+				telephony_error_to_str(error));
+		reply = __ofono_error_from_error(error, cb->pending);
 	}
 
 	__ofono_dbus_pending_reply(&cb->pending, reply);
@@ -524,7 +522,7 @@ static gboolean cb_ss_passwd(const char *sc,
 	if (fac == NULL)
 		return FALSE;
 
-	if (!is_valid_pin(old, PIN_TYPE_NET) || !is_valid_pin(new, PIN_TYPE_NET))
+	if (!__ofono_is_valid_net_pin(old) || !__ofono_is_valid_net_pin(new))
 		goto bad_format;
 
 	cb->pending = dbus_message_ref(msg);
@@ -862,7 +860,7 @@ static DBusMessage *cb_set_property(DBusConnection *conn, DBusMessage *msg,
 			return __ofono_error_invalid_args(msg);
 
 		dbus_message_iter_get_basic(&iter, &passwd);
-		if (!is_valid_pin(passwd, PIN_TYPE_NET))
+		if (!__ofono_is_valid_net_pin(passwd))
 			return __ofono_error_invalid_format(msg);
 	}
 
@@ -909,7 +907,7 @@ static DBusMessage *cb_disable_all(DBusConnection *conn, DBusMessage *msg,
 					DBUS_TYPE_INVALID) == FALSE)
 		return __ofono_error_invalid_args(msg);
 
-	if (!is_valid_pin(passwd, PIN_TYPE_NET))
+	if (!__ofono_is_valid_net_pin(passwd))
 		return __ofono_error_invalid_format(msg);
 
 	cb_set_query_bounds(cb, fac, FALSE);
@@ -957,10 +955,10 @@ static DBusMessage *cb_set_passwd(DBusConnection *conn, DBusMessage *msg,
 					DBUS_TYPE_INVALID) == FALSE)
 		return __ofono_error_invalid_args(msg);
 
-	if (!is_valid_pin(old_passwd, PIN_TYPE_NET))
+	if (!__ofono_is_valid_net_pin(old_passwd))
 		return __ofono_error_invalid_format(msg);
 
-	if (!is_valid_pin(new_passwd, PIN_TYPE_NET))
+	if (!__ofono_is_valid_net_pin(new_passwd))
 		return __ofono_error_invalid_format(msg);
 
 	cb->pending = dbus_message_ref(msg);
@@ -970,57 +968,33 @@ static DBusMessage *cb_set_passwd(DBusConnection *conn, DBusMessage *msg,
 	return NULL;
 }
 
-static GDBusMethodTable cb_methods[] = {
-	{ "GetProperties",	"",	"a{sv}",	cb_get_properties,
-							G_DBUS_METHOD_FLAG_ASYNC },
-	{ "SetProperty",	"svs",	"",		cb_set_property,
-							G_DBUS_METHOD_FLAG_ASYNC },
-	{ "DisableAll",		"s",	"",		cb_disable_ab,
-							G_DBUS_METHOD_FLAG_ASYNC },
-	{ "DisableAllIncoming",	"s",	"",		cb_disable_ac,
-							G_DBUS_METHOD_FLAG_ASYNC },
-	{ "DisableAllOutgoing",	"s",	"",		cb_disable_ag,
-							G_DBUS_METHOD_FLAG_ASYNC },
-	{ "ChangePassword",	"ss",	"",		cb_set_passwd,
-							G_DBUS_METHOD_FLAG_ASYNC },
+static const GDBusMethodTable cb_methods[] = {
+	{ GDBUS_ASYNC_METHOD("GetProperties",
+				NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
+				cb_get_properties) },
+	{ GDBUS_ASYNC_METHOD("SetProperty",
+			GDBUS_ARGS({ "property", "s" },
+					{ "value", "v" }, { "pin2", "s" }),
+			NULL, cb_set_property) },
+	{ GDBUS_ASYNC_METHOD("DisableAll", GDBUS_ARGS({ "password", "s" }),
+			NULL, cb_disable_ab) },
+	{ GDBUS_ASYNC_METHOD("DisableAllIncoming",
+			GDBUS_ARGS({ "password", "s" }), NULL,
+			cb_disable_ac) },
+	{ GDBUS_ASYNC_METHOD("DisableAllOutgoing",
+			GDBUS_ARGS({ "password", "s" }), NULL,
+			cb_disable_ag) },
+	{ GDBUS_ASYNC_METHOD("ChangePassword",
+			GDBUS_ARGS({ "old", "s" }, { "new", "s" }),
+			NULL, cb_set_passwd) },
 	{ }
 };
 
-static GDBusSignalTable cb_signals[] = {
-	{ "IncomingBarringInEffect",	"" },
-	{ "OutgoingBarringInEffect",	"" },
-	{ "PropertyChanged",		"sv" },
+static const GDBusSignalTable cb_signals[] = {
+	{ GDBUS_SIGNAL("PropertyChanged",
+			GDBUS_ARGS({ "name", "s" }, { "value", "v" })) },
 	{ }
 };
-
-static void call_barring_incoming_enabled_notify(int idx, void *userdata)
-{
-	struct ofono_call_barring *cb = userdata;
-	DBusConnection *conn = ofono_dbus_get_connection();
-	const char *path = __ofono_atom_get_path(cb->atom);
-
-	g_dbus_emit_signal(conn, path, OFONO_CALL_BARRING_INTERFACE,
-			"IncomingBarringInEffect", DBUS_TYPE_INVALID);
-}
-
-static void call_barring_outgoing_enabled_notify(int idx, void *userdata)
-{
-	struct ofono_call_barring *cb = userdata;
-	DBusConnection *conn = ofono_dbus_get_connection();
-	const char *path = __ofono_atom_get_path(cb->atom);
-	DBusMessage *signal;
-
-	signal = dbus_message_new_signal(path, OFONO_CALL_BARRING_INTERFACE,
-						"OutgoingBarringInEffect");
-
-	if (signal == NULL) {
-		ofono_error("Unable to allocate new %s.OutgoingBarringInEffect"
-				" signal", OFONO_CALL_BARRING_INTERFACE);
-		return;
-	}
-
-	g_dbus_send_message(conn, signal);
-}
 
 int ofono_call_barring_driver_register(const struct ofono_call_barring_driver *d)
 {
@@ -1053,14 +1027,6 @@ static void call_barring_unregister(struct ofono_atom *atom)
 
 	if (cb->ussd)
 		cb_unregister_ss_controls(cb);
-
-	if (cb->incoming_bar_watch)
-		__ofono_ssn_mo_watch_remove(cb->ssn, cb->incoming_bar_watch);
-	if (cb->outgoing_bar_watch)
-		__ofono_ssn_mt_watch_remove(cb->ssn, cb->outgoing_bar_watch);
-
-	if (cb->ssn_watch)
-		__ofono_modem_remove_atom_watch(modem, cb->ssn_watch);
 
 	if (cb->ussd_watch)
 		__ofono_modem_remove_atom_watch(modem, cb->ussd_watch);
@@ -1116,29 +1082,6 @@ struct ofono_call_barring *ofono_call_barring_create(struct ofono_modem *modem,
 	return cb;
 }
 
-static void ssn_watch(struct ofono_atom *atom,
-			enum ofono_atom_watch_condition cond, void *data)
-{
-	struct ofono_call_barring *cb = data;
-
-	if (cond == OFONO_ATOM_WATCH_CONDITION_UNREGISTERED) {
-		cb->ssn = NULL;
-		cb->incoming_bar_watch = 0;
-		cb->outgoing_bar_watch = 0;
-		return;
-	}
-
-	cb->ssn = __ofono_atom_get_data(atom);
-
-	cb->incoming_bar_watch =
-		__ofono_ssn_mo_watch_add(cb->ssn, SS_MO_INCOMING_BARRING,
-				call_barring_incoming_enabled_notify, cb, NULL);
-
-	cb->outgoing_bar_watch =
-		__ofono_ssn_mo_watch_add(cb->ssn, SS_MO_OUTGOING_BARRING,
-				call_barring_outgoing_enabled_notify, cb, NULL);
-}
-
 static void ussd_watch(struct ofono_atom *atom,
 			enum ofono_atom_watch_condition cond, void *data)
 {
@@ -1158,8 +1101,6 @@ void ofono_call_barring_register(struct ofono_call_barring *cb)
 	DBusConnection *conn = ofono_dbus_get_connection();
 	const char *path = __ofono_atom_get_path(cb->atom);
 	struct ofono_modem *modem = __ofono_atom_get_modem(cb->atom);
-	struct ofono_atom *ssn_atom;
-	struct ofono_atom *ussd_atom;
 
 	if (!g_dbus_register_interface(conn, path,
 					OFONO_CALL_BARRING_INTERFACE,
@@ -1173,23 +1114,9 @@ void ofono_call_barring_register(struct ofono_call_barring *cb)
 
 	ofono_modem_add_interface(modem, OFONO_CALL_BARRING_INTERFACE);
 
-	cb->ssn_watch = __ofono_modem_add_atom_watch(modem, OFONO_ATOM_TYPE_SSN,
-					ssn_watch, cb, NULL);
-
-	ssn_atom = __ofono_modem_find_atom(modem, OFONO_ATOM_TYPE_SSN);
-
-	if (ssn_atom && __ofono_atom_get_registered(ssn_atom))
-		ssn_watch(ssn_atom, OFONO_ATOM_WATCH_CONDITION_REGISTERED, cb);
-
 	cb->ussd_watch = __ofono_modem_add_atom_watch(modem,
 					OFONO_ATOM_TYPE_USSD,
 					ussd_watch, cb, NULL);
-
-	ussd_atom = __ofono_modem_find_atom(modem, OFONO_ATOM_TYPE_USSD);
-
-	if (ussd_atom && __ofono_atom_get_registered(ussd_atom))
-		ussd_watch(ussd_atom, OFONO_ATOM_WATCH_CONDITION_REGISTERED,
-				cb);
 
 	__ofono_atom_register(cb->atom, call_barring_unregister);
 }

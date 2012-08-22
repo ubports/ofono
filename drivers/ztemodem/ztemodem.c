@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2012  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -19,4 +19,31 @@
  *
  */
 
-void atmodem_poll_enable(struct ofono_modem *modem, GAtChat *chat);
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
+
+#include <glib.h>
+#include <gatchat.h>
+
+#define OFONO_API_SUBJECT_TO_CHANGE
+#include <ofono/plugin.h>
+#include <ofono/types.h>
+
+#include "ztemodem.h"
+
+static int ztemodem_init(void)
+{
+	zte_radio_settings_init();
+
+	return 0;
+}
+
+static void ztemodem_exit(void)
+{
+	zte_radio_settings_exit();
+}
+
+OFONO_PLUGIN_DEFINE(ztemodem, "ZTE modem driver", VERSION,
+			OFONO_PLUGIN_PRIORITY_DEFAULT,
+			ztemodem_init, ztemodem_exit)

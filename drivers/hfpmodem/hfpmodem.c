@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -23,27 +23,22 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
-#include <stdio.h>
-#include <string.h>
-#include <errno.h>
-#include <glib.h>
-
 #define OFONO_API_SUBJECT_TO_CHANGE
 #include <ofono/plugin.h>
-#include <ofono/log.h>
 #include <ofono/modem.h>
 
+#include <glib.h>
 #include <gatchat.h>
-#include <gatresult.h>
 
 #include "hfpmodem.h"
 
 static int hfpmodem_init(void)
 {
 	hfp_voicecall_init();
+	hfp_devinfo_init();
 	hfp_netreg_init();
 	hfp_call_volume_init();
+	hfp_handsfree_init();
 
 	return 0;
 }
@@ -51,8 +46,10 @@ static int hfpmodem_init(void)
 static void hfpmodem_exit(void)
 {
 	hfp_voicecall_exit();
+	hfp_devinfo_exit();
 	hfp_netreg_exit();
 	hfp_call_volume_exit();
+	hfp_handsfree_exit();
 }
 
 OFONO_PLUGIN_DEFINE(hfpmodem, "Hands-Free Profile Driver", VERSION,

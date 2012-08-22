@@ -10,9 +10,8 @@ Methods		dict GetProperties()
 			Returns all radio access properties. See the
 			properties section for available properties.
 
-			Possible Errors: [service].Error.InvalidArguments
+			Possible Errors: [service].Error.InProgress
 					 [service].Error.NotImplemented
-					 [service].Error.InProgress
 					 [service].Error.Failed
 
 		void SetProperty(string name, variant value)
@@ -22,9 +21,9 @@ Methods		dict GetProperties()
 			changeable. On success a PropertyChanged signal
 			will be emitted.
 
-			Possible Errors: [service].Error.InvalidArguments
-					 [service].Error.DoesNotExist
-					 [service].Error.InProgress
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.InvalidArguments
 					 [service].Error.Failed
 
 Signals		PropertyChanged(string property, variant value)
@@ -44,13 +43,13 @@ Properties	string TechnologyPreference [readwrite]
 					availability.
 				"gsm"	Only GSM used for radio access.
 				"umts"	Only UMTS used for radio access.
-				"lte"	Only LTE used for radio acccess.
+				"lte"	Only LTE used for radio access.
 
 		string GsmBand [readwrite, optional]
 
 			Frequency band in which the modem is allowed to
 			operate when using "gsm" mode. Setting this property
-			has an imediate effect on modem only if
+			has an immediate effect on modem only if
 			TechnologyPreference is set to "gsm" or "any".
 			Otherwise the value is kept and applied whenever modem
 			uses this mode.
@@ -70,7 +69,7 @@ Properties	string TechnologyPreference [readwrite]
 
 			Frequency band in which the modem is allowed to
 			operate when using "umts" mode. Setting this property
-			has an imediate effect on modem only if
+			has an immediate effect on modem only if
 			TechnologyPreference is set to "umts" or "any".
 			Otherwise the value is kept and applied whenever modem
 			uses this mode.

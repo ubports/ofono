@@ -2,7 +2,7 @@
  *
  *  oFono - Open Telephony stack for Linux
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -40,8 +40,8 @@ struct ofono_call_forwarding_condition {
 
 typedef void (*ofono_call_forwarding_set_cb_t)(const struct ofono_error *error,
 						void *data);
-typedef void (*ofono_call_forwarding_query_cb_t)(const struct ofono_error *error,
-			int total,
+typedef void (*ofono_call_forwarding_query_cb_t)(
+			const struct ofono_error *error, int total,
 			const struct ofono_call_forwarding_condition *list,
 			void *data);
 
@@ -68,13 +68,15 @@ struct ofono_call_forwarding_driver {
 				void *data);
 };
 
-int ofono_call_forwarding_driver_register(const struct ofono_call_forwarding_driver *d);
-void ofono_call_forwarding_driver_unregister(const struct ofono_call_forwarding_driver *d);
+int ofono_call_forwarding_driver_register(
+				const struct ofono_call_forwarding_driver *d);
+void ofono_call_forwarding_driver_unregister(
+				const struct ofono_call_forwarding_driver *d);
 
-struct ofono_call_forwarding *ofono_call_forwarding_create(struct ofono_modem *modem,
-							unsigned int vendor,
-							const char *driver,
-							void *data);
+struct ofono_call_forwarding *ofono_call_forwarding_create(
+						struct ofono_modem *modem,
+						unsigned int vendor,
+						const char *driver, void *data);
 
 void ofono_call_forwarding_register(struct ofono_call_forwarding *cf);
 void ofono_call_forwarding_remove(struct ofono_call_forwarding *cf);

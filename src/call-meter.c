@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -332,6 +332,18 @@ static void set_acm_max_query_callback(const struct ofono_error *error,
 	set_acm_max(cm, value);
 }
 
+static void check_pin2_state(struct ofono_call_meter *cm)
+{
+	struct ofono_atom *sim_atom;
+
+	sim_atom = __ofono_modem_find_atom(__ofono_atom_get_modem(cm->atom),
+						OFONO_ATOM_TYPE_SIM);
+	if (sim_atom == NULL)
+		return;
+
+	__ofono_sim_recheck_pin(__ofono_atom_get_data(sim_atom));
+}
+
 static void set_acm_max_callback(const struct ofono_error *error, void *data)
 {
 	struct ofono_call_meter *cm = data;
@@ -340,6 +352,7 @@ static void set_acm_max_callback(const struct ofono_error *error, void *data)
 		DBG("Setting acm_max failed");
 		__ofono_dbus_pending_reply(&cm->pending,
 					__ofono_error_failed(cm->pending));
+		check_pin2_state(cm);
 		return;
 	}
 
@@ -401,6 +414,7 @@ static void set_puct_callback(const struct ofono_error *error, void *data)
 		DBG("setting puct failed");
 		__ofono_dbus_pending_reply(&cm->pending,
 					__ofono_error_failed(cm->pending));
+		check_pin2_state(cm);
 		return;
 	}
 
@@ -549,7 +563,7 @@ static DBusMessage *cm_set_property(DBusConnection *conn, DBusMessage *msg,
 
 	dbus_message_iter_get_basic(&iter, &passwd);
 
-	if (!is_valid_pin(passwd, PIN_TYPE_PIN))
+	if (!__ofono_is_valid_sim_pin(passwd, OFONO_SIM_PASSWORD_SIM_PIN2))
 		return __ofono_error_invalid_format(msg);
 
 	for (property = cm_properties; property->name; property++) {
@@ -598,6 +612,7 @@ static void acm_reset_callback(const struct ofono_error *error, void *data)
 		DBG("reseting acm failed");
 		__ofono_dbus_pending_reply(&cm->pending,
 					__ofono_error_failed(cm->pending));
+		check_pin2_state(cm);
 		return;
 	}
 
@@ -621,7 +636,7 @@ static DBusMessage *cm_acm_reset(DBusConnection *conn, DBusMessage *msg,
 					DBUS_TYPE_INVALID) == FALSE)
 		return __ofono_error_invalid_args(msg);
 
-	if (!is_valid_pin(pin2, PIN_TYPE_PIN))
+	if (!__ofono_is_valid_sim_pin(pin2, OFONO_SIM_PASSWORD_SIM_PIN2))
 		return __ofono_error_invalid_format(msg);
 
 	cm->pending = dbus_message_ref(msg);
@@ -631,19 +646,24 @@ static DBusMessage *cm_acm_reset(DBusConnection *conn, DBusMessage *msg,
 	return NULL;
 }
 
-static GDBusMethodTable cm_methods[] = {
-	{ "GetProperties",	"",	"a{sv}",	cm_get_properties,
-							G_DBUS_METHOD_FLAG_ASYNC },
-	{ "SetProperty",	"svs",	"",		cm_set_property,
-							G_DBUS_METHOD_FLAG_ASYNC },
-	{ "Reset", 		"s",	"",		cm_acm_reset,
-							G_DBUS_METHOD_FLAG_ASYNC },
+static const GDBusMethodTable cm_methods[] = {
+	{ GDBUS_ASYNC_METHOD("GetProperties",
+				NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
+				cm_get_properties) },
+	{ GDBUS_ASYNC_METHOD("SetProperty",
+			GDBUS_ARGS({ "property", "s" }, { "value", "v" },
+							{ "password", "s" }),
+			NULL, cm_set_property) },
+	{ GDBUS_ASYNC_METHOD("Reset",
+				GDBUS_ARGS({ "passoword", "s" }), NULL,
+				cm_acm_reset) },
 	{ }
 };
 
-static GDBusSignalTable cm_signals[] = {
-	{ "PropertyChanged",	"sv" },
-	{ "NearMaximumWarning",	"" },
+static const GDBusSignalTable cm_signals[] = {
+	{ GDBUS_SIGNAL("PropertyChanged",
+			GDBUS_ARGS({ "property", "s" }, { "value", "v" })) },
+	{ GDBUS_SIGNAL("NearMaximumWarning", NULL) },
 	{ }
 };
 

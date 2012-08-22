@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -345,7 +345,9 @@ static void test_invalid(void)
 {
 	long nwritten;
 	long nread;
-	char *res;
+	short unsigned int exp_code;
+	long exp_res_length;
+	char *res, *exp_res = NULL;
 	unsigned char *gsm;
 
 	res = convert_gsm_to_utf8(invalid_gsm_extended, 0, &nread, &nwritten,
@@ -356,11 +358,24 @@ static void test_invalid(void)
 	g_assert(res[0] == '\0');
 	g_free(res);
 
+	/*
+	 * In case of invalid GSM extended code, we should display
+	 * the character of the main default alphabet table.
+	 */
 	res = convert_gsm_to_utf8(invalid_gsm_extended,
 					sizeof(invalid_gsm_extended),
 					&nread, &nwritten, 0);
-	g_assert(res == NULL);
-	g_assert(nread == 1);
+
+	exp_code = gsm_to_unicode_map[invalid_gsm_extended[1]*2 + 1];
+
+	exp_res_length = UTF8_LENGTH(exp_code);
+	exp_res = g_new0(char, exp_res_length + 1);
+	g_unichar_to_utf8(exp_code, exp_res);
+
+	g_assert(g_strcmp0(res, exp_res) == 0);
+	g_assert(nread == exp_res_length);
+	g_free(exp_res);
+	g_free(res);
 
 	res = convert_gsm_to_utf8(invalid_gsm_extended_len,
 					sizeof(invalid_gsm_extended_len),
@@ -508,7 +523,7 @@ static void test_valid_turkish(void)
 	}
 }
 
-static const char hex_packed[] = "493A283D0795C3F33C88FE06C9CB6132885EC6D34"
+static const char hex_packed_sms[] = "493A283D0795C3F33C88FE06C9CB6132885EC6D34"
 					"1EDF27C1E3E97E7207B3A0C0A5241E377BB1D"
 					"7693E72E";
 static const char expected[] = "It is easy to read text messages via AT "
@@ -517,7 +532,7 @@ static int reported_text_size = 49;
 
 static void test_decode_encode(void)
 {
-	const char *sms = hex_packed;
+	const char *sms = hex_packed_sms;
 	unsigned char *decoded, *packed;
 	char *utf8, *hex_packed;
 	unsigned char *gsm, *gsm_encoded;

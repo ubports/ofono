@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -64,13 +64,11 @@ struct gprs_context_data {
 	char password[OFONO_GPRS_MAX_PASSWORD_LENGTH + 1];
 	GAtRawIP *rawip;
 	enum state state;
+	enum ofono_gprs_proto proto;
 	char address[32];
 	char dns1[32];
 	char dns2[32];
-	union {
-		ofono_gprs_context_cb_t down_cb;        /* Down callback */
-		ofono_gprs_context_up_cb_t up_cb;       /* Up callback */
-	};
+	ofono_gprs_context_cb_t cb;
 	void *cb_data;                                  /* Callback data */
 };
 
@@ -123,13 +121,12 @@ static void failed_setup(struct ofono_gprs_context *gc,
 	gcd->state = STATE_IDLE;
 
 	if (result == NULL) {
-		CALLBACK_WITH_FAILURE(gcd->up_cb, NULL, 0, NULL, NULL,
-						NULL, NULL, gcd->cb_data);
+		CALLBACK_WITH_FAILURE(gcd->cb, gcd->cb_data);
 		return;
 	}
 
 	decode_at_error(&error, g_at_result_final_response(result));
-	gcd->up_cb(&error, NULL, 0, NULL, NULL, NULL, NULL, gcd->cb_data);
+	gcd->cb(&error, gcd->cb_data);
 }
 
 static void session_cb(gboolean ok, GAtResult *result, gpointer user_data)
@@ -157,10 +154,14 @@ static void session_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	if (interface == NULL)
 		interface = "invalid";
 
-	CALLBACK_WITH_SUCCESS(gcd->up_cb, interface, TRUE, gcd->address,
-				STATIC_IP_NETMASK, NULL, dns, gcd->cb_data);
+	ofono_gprs_context_set_interface(gc, interface);
+	ofono_gprs_context_set_ipv4_address(gc, gcd->address, TRUE);
+	ofono_gprs_context_set_ipv4_netmask(gc, STATIC_IP_NETMASK);
+	ofono_gprs_context_set_ipv4_dns_servers(gc, dns);
 
-	gcd->up_cb = NULL;
+	CALLBACK_WITH_SUCCESS(gcd->cb, gcd->cb_data);
+
+	gcd->cb = NULL;
 	gcd->cb_data = NULL;
 }
 
@@ -301,11 +302,25 @@ static void setup_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	if (g_at_chat_send(gcd->chat, buf, none_prefix, NULL, NULL, NULL) == 0)
 		goto error;
 
-	sprintf(buf, "AT+XDNS=%u,1", gcd->active_context);
+	g_at_chat_send(gcd->chat, "AT+XDNS=?", none_prefix, NULL, NULL, NULL);
+
+	switch (gcd->proto) {
+	case OFONO_GPRS_PROTO_IP:
+		sprintf(buf, "AT+XDNS=%u,1", gcd->active_context);
+		break;
+	case OFONO_GPRS_PROTO_IPV6:
+		sprintf(buf, "AT+XDNS=%u,2", gcd->active_context);
+		break;
+	case OFONO_GPRS_PROTO_IPV4V6:
+		sprintf(buf, "AT+XDNS=%u,3", gcd->active_context);
+		break;
+	}
+
 	if (g_at_chat_send(gcd->chat, buf, none_prefix, NULL, NULL, NULL) == 0)
 		goto error;
 
 	sprintf(buf, "AT+CGACT=1,%u", gcd->active_context);
+
 	if (g_at_chat_send(gcd->chat, buf, none_prefix,
 				activate_cb, gc, NULL) > 0)
 		return;
@@ -316,23 +331,37 @@ error:
 
 static void ifx_gprs_activate_primary(struct ofono_gprs_context *gc,
 				const struct ofono_gprs_primary_context *ctx,
-				ofono_gprs_context_up_cb_t cb, void *data)
+				ofono_gprs_context_cb_t cb, void *data)
 {
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 	char buf[OFONO_GPRS_MAX_APN_LENGTH + 128];
-	int len;
+	int len = 0;
 
 	DBG("cid %u", ctx->cid);
 
 	gcd->active_context = ctx->cid;
-	gcd->up_cb = cb;
+	gcd->cb = cb;
 	gcd->cb_data = data;
 	memcpy(gcd->username, ctx->username, sizeof(ctx->username));
 	memcpy(gcd->password, ctx->password, sizeof(ctx->password));
 
 	gcd->state = STATE_ENABLING;
+	gcd->proto = ctx->proto;
 
-	len = snprintf(buf, sizeof(buf), "AT+CGDCONT=%u,\"IP\"", ctx->cid);
+	switch (ctx->proto) {
+	case OFONO_GPRS_PROTO_IP:
+		len = snprintf(buf, sizeof(buf), "AT+CGDCONT=%u,\"IP\"",
+								ctx->cid);
+		break;
+	case OFONO_GPRS_PROTO_IPV6:
+		len = snprintf(buf, sizeof(buf), "AT+CGDCONT=%u,\"IPV6\"",
+								ctx->cid);
+		break;
+	case OFONO_GPRS_PROTO_IPV4V6:
+		len = snprintf(buf, sizeof(buf), "AT+CGDCONT=%u,\"IPV4V6\"",
+								ctx->cid);
+		break;
+	}
 
 	if (ctx->apn)
 		snprintf(buf + len, sizeof(buf) - len - 3,
@@ -342,7 +371,7 @@ static void ifx_gprs_activate_primary(struct ofono_gprs_context *gc,
 				setup_cb, gc, NULL) > 0)
 		return;
 
-	CALLBACK_WITH_FAILURE(cb, NULL, 0, NULL, NULL, NULL, NULL, data);
+	CALLBACK_WITH_FAILURE(cb, data);
 }
 
 static void deactivate_cb(gboolean ok, GAtResult *result, gpointer user_data)
@@ -360,7 +389,7 @@ static void deactivate_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 	g_at_chat_resume(gcd->chat);
 
-	CALLBACK_WITH_SUCCESS(gcd->down_cb, gcd->cb_data);
+	CALLBACK_WITH_SUCCESS(gcd->cb, gcd->cb_data);
 }
 
 static void ifx_gprs_deactivate_primary(struct ofono_gprs_context *gc,
@@ -374,7 +403,7 @@ static void ifx_gprs_deactivate_primary(struct ofono_gprs_context *gc,
 	DBG("cid %u", cid);
 
 	gcd->state = STATE_DISABLING;
-	gcd->down_cb = cb;
+	gcd->cb = cb;
 	gcd->cb_data = data;
 
 	g_at_rawip_shutdown(gcd->rawip);

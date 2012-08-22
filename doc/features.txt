@@ -126,6 +126,40 @@ Supported Proactive Commands:
 
   NOTE: This command can also be handled by the modem.
 
+- Refresh proactive command.  The specification defines 7 types
+  of Refresh requests:
+	- NAA Initialization
+	- NAA File Change Notification
+	- NAA Initialization and File Change Notification
+	- NAA Initialization and Full File Change Notification
+	- UICC Reset
+	- NAA Application Reset (2G only)
+	- NAA Session Reset (3G only)
+
+  oFono can fully perform the the first four types of Refresh.  The
+  remaining three must be handled by the modem or its driver with a
+  notification sent to ofono.  Regardless of whether the command is
+  handled by the modem or not, oFono will check whether there are any
+  calls or ussd operations active.  If there are, the appropriate
+  response will be sent (e.g. busy on call or screen busy terminal
+  response.)  Otherwise a positive response will be sent to the driver.
+  In the case of a 'UICC Reset' the driver / modem can interpret this
+  that it is safe to reset the UICC.
+
+  Alternatively, the driver / modem can notify the core of the SIM removal
+  / SIM insertion events without using the Refresh proactive command.  It
+  is up to the driver / modem to perform a warm reset.  In particular, 3GPP
+  31.111 mandates that any change to EFimsi is done by using 'UICC Reset',
+  'NAA Application Reset' or 'NAA Session Reset'.  Please see 3GPP 31.111
+  Section 6.4.7.1.
+
+  Other types are handled by oFono flushing the EF cache of the files
+  affected (or the entire SIM cache in case of Full File Change Notifications)
+  and re-reading the affected files.  Any properties derived from these
+  Elementary Files will be updated and signaled using PropertyChanged.
+
+  NOTE: This command can also be handled by the modem.
+
 - Sim icon support.  oFono supports icons that are stored on the SIM.  If the
   SIM notifies oFono that an icon is available for a particular proactive
   command, oFono passes this information to the UI.  The UI is able to obtain
@@ -484,13 +518,38 @@ Short Messaging Service
   is persistent across reboots of oFono and allows to queue SMS messages even
   while the modem is offline.
 
-
 GPRS
 ====
 
 - GPRS suspension event support.  The packet data service may be temporarily
   suspended while a circuit switched service such as voice call or SMS is
   active.
+
+- GPRS context protocol support.  oFono supports the followig types of GPRS
+  contexts:
+	- IPv4
+	- IPv6
+	- Dual Stack (IPv4 + IPv6)
+
+- GPRS provisioning support.  oFono will automatically configure GPRS contexts
+  if no prior configuration (e.g. user or provisioning) has been detected.
+  If the GPRS atom detects that provisioning is required it will query the
+  inserted sim card for the Service Provider Name and call each registered
+  provisioning plugin with the MCC, MNC, SPN of the inserted SIM card.  If the
+  provisioning information is provided, then it is used to populate the
+  initial context configuration.
+
+- GPRS provisioning via 'Mobile Broadband Provider Info'.  oFono supports
+  provisioning of GPRS contexts via Mobile Broadband Provider Info project's
+  database.
+
+Location Reporting
+==================
+
+- GPS support. Many modem manufacturers provide a GPS unit with their modem
+  hardware.  Upon client request oFono can turn this unit on or off and pass a
+  file descriptor in which client may receive the desired location reporting
+  data.
 
 SIM
 ===
@@ -536,17 +595,28 @@ Text Telephony
 Emergency Calls
 ===============
 
-- EFecc support.  During SIM initialization phase oFono reads EFecc in order
-  to bootstrap the emergency calling codes provides by the SIM.  If the SIM is
-  not present or EFecc has not been read yet, the default set of emergency
-  calling codes is used.
+- Emergency number reporting.  During SIM initialization phase oFono reads
+  EFecc in order to bootstrap the emergency calling codes provided by the SIM.
+  Emergency number list is exposed via the EmergencyNumbers property on the
+  VoicecallManager interface.  If SIM is present, list is the union of default
+  emergency numbers(112, 911), numbers in EFecc and Network / Modem reported
+  emergency numbers.  If SIM is not present or EFecc has not been read yet,
+  list is the union of default emergency numbers(112, 911) and emergency
+  numbers without SIM(119, 118, 999, 110, 08 and 000).
 
-- Emergency number reporting.  The current known list of emergency calling
-  codes is reported by oFono in the EmergencyNumbers property on the
-  VoicecallManager interface.  When a voicecall is made to a number present
+- Emergency call reporting.  When a voicecall is made to a number present
   on the EmergencyNumbers list it is automatically flagged as an emergency
   call.  This is done by setting the Emergency property on the Voicecall
   interface to TRUE.
+
+- Emergency Mode.  oFono supports a concept of an 'Emergency Mode'.  This mode
+  is activated when any emergency procedure is ongoing and restricts certain
+  actions (e.g. setting the modem offline).  Emergency procedures are e.g.
+  ongoing emergency calls, or network initiated location requests related to
+  the emergency call.  The state of the emergency mode is exposed via the
+  Emergency property on the org.ofono.Modem interface.  This property is
+  intended to be used by power management daemons and other entities which
+  need to be aware of the ongoing emergency operation.
 
 Supplementary Services
 ======================
@@ -568,3 +638,104 @@ Voice Calls
 
 - Long phone number support. oFono supports dialing of phone numbers up to
   80 digits long.
+
+- Supplementary service notifications related to mobile originated (MO) and
+  mobile terminated (MT) calls.  oFono supports certain supplementary service
+  notifications, typically reported by CSSU and CSSI, that are related to
+  MT/MO calls:
+	- outgoing call has been forwarded (+CSSI: 2)
+	- outgoing calls are barred (+CSSI: 5)
+	- outgoing call barred due to call barring on remote party (+CSSI: 6)
+	- incoming call is a forwarded call (+CSSU: 0)
+	- call has been put on hold by the remote party (+CSSU: 2)
+	- call has been retrieved by the remote party (+CSSU: 3)
+	- call has been added to a mpty call by the remote party (+CSSU: 4)
+
+Flight Mode
+===========
+
+- Flight Mode support.  oFono uses the 'Online' property on the Modem interface
+  that controls the state of the radio.  When Online state is False, all
+  interfaces that depend on the radio being on are removed.  Other interfaces
+  enter reduced functionality mode where only certain actions are available
+  that do not depend on the radio.  E.g. setting various settings on the local
+  store or the SIM.
+
+Network Registration
+====================
+
+- Support for PLMN_MODE bit from CPHS Customer Service Profile (CSP) within
+  the 'Value Added Services' service group.  oFono reads this file when the
+  network registration atom has been initialized.  If EFcsp indicates that
+  manual network registration is not allowed, oFono enters into 'auto-only'
+  registration mode.  Updates to this file via STK Refresh is also supported.
+
+- Support for 3GPP Service Provider Name (EFspn), CPHS Operator Name
+  String (ONS) and CPHS Short Operator Name String fields.  oFono always
+  tries to read the EFspn field first.  If this is not available, then oFono
+  tries to read the CPHS variant.  If neither are available and the
+  appropriate bits are set in the CPHS Information field, oFono tries to read
+  the CPHS Short ONS field.  oFono then reports the network name via the
+  'Name' property.
+
+PPP Stack
+=========
+
+- Support for Protocol Field Compression (PFC) packets.  The oFono PPP stack
+  supports both receiving and sending of packets with PFC enabled.  The user
+  can also control whether PFC capability is advertised to the peer, and used
+  during transmission.
+
+- Support for Address & Control Field Compression (ACFC) packets.  The oFono
+  PPP stack supports both receiving and sending of packets with ACFC enabled.
+  The user can also control whether ACFC capability is advertised to the peer,
+  and used during transmission.
+
+Modem Emulator
+==============
+
+- Support for Bluetooth HandsFree Profile Audio Gateway (HFP AG).  oFono
+  supports the underlying AT command protocol specified by BT HFP version 1.6.
+  Supported features include 3-way calling, ability to reject a call,
+  enhanced call status, enhanced call control, report of extended error results
+  code and indicator activation. Audio management is assumed to be performed in
+  another system component, e.g. PulseAudio.
+
+- Support for Bluetooth DUN profile.  oFono supports the Dial Up Networking
+  profile and all mandatory commands specified by BT DUN 1.1.  For a list
+  of supported commands please see doc/dialup-command-set.txt.
+
+CDMA Connection Manager
+=======================
+
+- Support Network Initiated disconnection of Packet Data Service over CDMA
+  (1xRTT and 1xEV-DO) systems.
+
+CDMA Network Acquisition
+========================
+
+- Support reporting of the received signal strength indicator (RSSI)
+  measurement for the currently acquired CDMA network.
+
+- Support reporting of the received signal strength indicator (RSSI)
+  measurement for the currently acquired 1xEV-DO data network.
+
+Bluetooth Sim Access Profile
+============================
+
+- oFono supports certain modems that can utilize remote sim cards
+  (e.g. via SAP).  This is done transparently to the user and all of oFono's
+  APIs are supported on such devices (assuming the device itself supports
+  the required features).  Today the Telit UC864-G is supported in this mode.
+
+Bluetooth Handsfree Profile
+===========================
+
+- Voicecall support.  oFono supports the use of Bluetooth Handsfree capable
+  devices to make voicecalls.  All features are supported, including 3-way
+  calls, multiparty calls, call waiting, etc.
+
+- Support for Handsfree specific protocol features.  oFono clients can gain
+  access to Bluetooth HFP specific features via the oFono Handsfree interface.
+  These features include voice recognition activation, last number redial,
+  etc.

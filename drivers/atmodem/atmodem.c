@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -41,7 +41,6 @@ static int atmodem_init(void)
 	at_call_meter_init();
 	at_call_settings_init();
 	at_phonebook_init();
-	at_ssn_init();
 	at_ussd_init();
 	at_sms_init();
 	at_sim_init();
@@ -52,6 +51,7 @@ static int atmodem_init(void)
 	at_gprs_init();
 	at_gprs_context_init();
 	at_sim_auth_init();
+	at_gnss_init();
 
 	return 0;
 }
@@ -63,7 +63,6 @@ static void atmodem_exit(void)
 	at_sim_exit();
 	at_sms_exit();
 	at_ussd_exit();
-	at_ssn_exit();
 	at_phonebook_exit();
 	at_call_settings_exit();
 	at_call_meter_exit();
@@ -76,6 +75,7 @@ static void atmodem_exit(void)
 	at_call_volume_exit();
 	at_gprs_exit();
 	at_gprs_context_exit();
+	at_gnss_exit();
 }
 
 OFONO_PLUGIN_DEFINE(atmodem, "AT modem driver", VERSION,

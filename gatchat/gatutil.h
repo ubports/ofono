@@ -2,7 +2,7 @@
  *
  *  AT chat library with GLib integration
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -32,6 +32,9 @@ void g_at_util_debug_chat(gboolean in, const char *str, gsize len,
 				GAtDebugFunc debugf, gpointer user_data);
 
 void g_at_util_debug_dump(gboolean in, const unsigned char *buf, gsize len,
+				GAtDebugFunc debugf, gpointer user_data);
+
+void g_at_util_debug_hexdump(gboolean in, const unsigned char *buf, gsize len,
 				GAtDebugFunc debugf, gpointer user_data);
 
 gboolean g_at_util_setup_io(GIOChannel *io, GIOFlags flags);

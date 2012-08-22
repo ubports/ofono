@@ -26,6 +26,7 @@
 #include <string.h>
 #include <gdbus.h>
 #include <stdio.h>
+#include <errno.h>
 
 #include "ofono.h"
 #include "message.h"
@@ -46,6 +47,8 @@ static const char *message_state_to_string(enum message_state s)
 		return "sent";
 	case MESSAGE_STATE_FAILED:
 		return "failed";
+	case MESSAGE_STATE_CANCELLED:
+		return "cancelled";
 	}
 
 	return NULL;
@@ -74,13 +77,43 @@ static DBusMessage *message_get_properties(DBusConnection *conn,
 	return reply;
 }
 
-static GDBusMethodTable message_methods[] = {
-	{ "GetProperties",  "",    "a{sv}",   message_get_properties },
+static DBusMessage *message_cancel(DBusConnection *conn,
+					DBusMessage *msg, void *data)
+{
+	struct message *m = data;
+	int res;
+
+	if (dbus_message_get_args(msg, NULL, DBUS_TYPE_INVALID) == FALSE)
+		return __ofono_error_invalid_args(msg);
+
+	if (m->state != MESSAGE_STATE_PENDING)
+		return __ofono_error_not_available(msg);
+
+	res = __ofono_sms_txq_cancel(__ofono_atom_get_data(m->atom), &m->uuid);
+
+	switch (res) {
+	case -ENOENT:
+		return __ofono_error_not_found(msg);
+	case -EPERM:
+		return __ofono_error_access_denied(msg);
+	case 0:
+		return dbus_message_new_method_return(msg);
+	default:
+		return __ofono_error_failed(msg);
+	}
+}
+
+static const GDBusMethodTable message_methods[] = {
+	{ GDBUS_METHOD("GetProperties",
+				NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
+				message_get_properties) },
+	{ GDBUS_METHOD("Cancel", NULL, NULL, message_cancel) },
 	{ }
 };
 
-static GDBusSignalTable message_signals[] = {
-	{ "PropertyChanged",	"sv" },
+static const GDBusSignalTable message_signals[] = {
+	{ GDBUS_SIGNAL("PropertyChanged",
+			GDBUS_ARGS({ "name", "s" }, { "value", "v" })) },
 	{ }
 };
 

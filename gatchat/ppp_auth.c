@@ -2,7 +2,7 @@
  *
  *  PPP library with GLib integration
  *
- *  Copyright (C) 2009-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2009-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -48,7 +48,7 @@ struct	ppp_chap {
 };
 
 enum chap_code {
-	CHALLENGE=1,
+	CHALLENGE = 1,
 	RESPONSE,
 	SUCCESS,
 	FAILURE
@@ -60,6 +60,7 @@ static void chap_process_challenge(struct ppp_chap *chap, const guint8 *packet)
 	struct chap_header *response;
 	GChecksum *checksum;
 	const char *secret = g_at_ppp_get_password(chap->ppp);
+	const char *username = g_at_ppp_get_username(chap->ppp);
 	guint16 response_length;
 	struct ppp_header *ppp_packet;
 	gsize digest_len;
@@ -83,6 +84,10 @@ static void chap_process_challenge(struct ppp_chap *chap, const guint8 *packet)
 	 */
 	digest_len = g_checksum_type_get_length(chap->method);
 	response_length = digest_len + sizeof(*header) + 1;
+
+	if (username != NULL)
+		response_length += strlen(username);
+
 	ppp_packet = ppp_packet_new(response_length, CHAP_PROTOCOL);
 	if (ppp_packet == NULL)
 		goto challenge_out;
@@ -98,6 +103,10 @@ static void chap_process_challenge(struct ppp_chap *chap, const guint8 *packet)
 		/* leave the name empty? */
 	}
 
+	if (username != NULL)
+		memcpy(response->data + digest_len + 1, username,
+				strlen(username));
+
 	/* transmit the packet */
 	ppp_transmit(chap->ppp, (guint8 *) ppp_packet, response_length);
 	g_free(ppp_packet);
@@ -109,16 +118,21 @@ challenge_out:
 /*
  * parse the packet
  */
-void ppp_chap_process_packet(struct ppp_chap *chap, const guint8 *new_packet)
+void ppp_chap_process_packet(struct ppp_chap *chap, const guint8 *new_packet,
+				gsize len)
 {
-	guint8 code = new_packet[0];
+	guint8 code;
+
+	if (len < sizeof(struct chap_header))
+		return;
+
+	code = new_packet[0];
 
 	switch (code) {
 	case CHALLENGE:
 		chap_process_challenge(chap, new_packet);
 		break;
 	case RESPONSE:
-		g_print("chap: response (not implemented)\n");
 		break;
 	case SUCCESS:
 		ppp_auth_notify(chap->ppp, TRUE);

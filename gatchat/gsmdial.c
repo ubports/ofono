@@ -2,7 +2,7 @@
  *
  *  AT chat library with GLib integration
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -56,6 +56,9 @@ static gboolean option_legacy = FALSE;
 static gchar *option_username = NULL;
 static gchar *option_password = NULL;
 static gchar *option_pppdump = NULL;
+static gboolean option_bluetooth = FALSE;
+static gboolean option_acfc = FALSE;
+static gboolean option_pfc = FALSE;
 
 static GAtPPP *ppp;
 static GAtChat *control;
@@ -88,6 +91,40 @@ static void power_down(gboolean ok, GAtResult *result, gpointer user_data)
 	g_main_loop_quit(event_loop);
 }
 
+static void kill_ppp(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	g_print("kill_ppp: %d\n", ok);
+
+	if (ok == FALSE)
+		return;
+
+	g_at_ppp_unref(ppp);
+	ppp = NULL;
+}
+
+static void ppp_suspend_ath0(gpointer user_data)
+{
+	g_at_chat_resume(modem);
+	g_at_chat_send(modem, "ATH0", none_prefix, kill_ppp, NULL, NULL);
+}
+
+static void resume_ppp(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	g_print("resume_ppp: %d\n", ok);
+
+	if (ok == FALSE)
+		return;
+
+	g_at_chat_suspend(modem);
+	g_at_ppp_resume(ppp);
+}
+
+static void ppp_suspend_ato0(gpointer user_data)
+{
+	g_at_chat_resume(modem);
+	g_at_chat_send(modem, "ATO0", none_prefix, resume_ppp, NULL, NULL);
+}
+
 static gboolean signal_cb(GIOChannel *channel, GIOCondition cond, gpointer data)
 {
 	static int terminated = 0;
@@ -118,6 +155,20 @@ static gboolean signal_cb(GIOChannel *channel, GIOCondition cond, gpointer data)
 		}
 
 		terminated++;
+		break;
+	case SIGUSR1:
+		if (ppp == NULL)
+			break;
+
+		g_at_ppp_set_suspend_function(ppp, ppp_suspend_ato0, NULL);
+		g_at_ppp_suspend(ppp);
+		break;
+	case SIGUSR2:
+		if (ppp == NULL)
+			break;
+
+		g_at_ppp_set_suspend_function(ppp, ppp_suspend_ath0, NULL);
+		g_at_ppp_suspend(ppp);
 		break;
 	default:
 		break;
@@ -266,6 +317,11 @@ static void no_carrier_notify(GAtResult *result, gpointer user_data)
 {
 	char buf[64];
 
+	if (option_bluetooth) {
+		g_main_loop_quit(event_loop);
+		return;
+	}
+
 	sprintf(buf, "AT+CFUN=%u", option_offmode);
 	g_at_chat_send(control, buf, none_prefix, power_down, NULL, NULL);
 }
@@ -277,10 +333,14 @@ static void ppp_disconnect(GAtPPPDisconnectReason reason, gpointer user_data)
 	g_at_ppp_unref(ppp);
 	ppp = NULL;
 
-	g_at_chat_resume(modem);
+	if (option_modem == NULL)
+		g_at_chat_set_debug(modem, gsmdial_debug, "");
+	else
+		g_at_chat_set_debug(modem, gsmdial_debug, "Modem");
 
 	g_at_chat_register(modem, "NO CARRIER", no_carrier_notify,
 					FALSE, NULL, NULL);
+	g_at_chat_resume(modem);
 }
 
 static void connect_cb(gboolean ok, GAtResult *result, gpointer user_data)
@@ -302,24 +362,27 @@ static void connect_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	g_at_chat_suspend(modem);
 
 	/* open ppp */
-	ppp = g_at_ppp_new_from_io(io);
+	ppp = g_at_ppp_new();
 	if (ppp == NULL) {
 		g_print("Unable to create PPP object\n");
 		exit(1);
 	}
 	g_at_ppp_set_debug(ppp, gsmdial_debug, "PPP");
 
-	if (option_pppdump)
-		g_at_ppp_set_recording(ppp, option_pppdump);
-
 	g_at_ppp_set_credentials(ppp, option_username, option_password);
+
+	g_at_ppp_set_acfc_enabled(ppp, option_acfc);
+	g_at_ppp_set_pfc_enabled(ppp, option_pfc);
 
 	/* set connect and disconnect callbacks */
 	g_at_ppp_set_connect_function(ppp, ppp_connect, NULL);
 	g_at_ppp_set_disconnect_function(ppp, ppp_disconnect, NULL);
 
 	/* open the ppp connection */
-	g_at_ppp_open(ppp);
+	g_at_ppp_open(ppp, io);
+
+	if (option_pppdump)
+		g_at_ppp_set_recording(ppp, option_pppdump);
 }
 
 static void at_cgdcont_cb(gboolean ok, GAtResult *result, gpointer user_data)
@@ -612,12 +675,18 @@ static GOptionEntry options[] = {
 				"Specify CFUN offmode" },
 	{ "legacy", 'l', 0, G_OPTION_ARG_NONE, &option_legacy,
 				"Use ATD*99***<cid>#" },
+	{ "bluetooth", 'b', 0, G_OPTION_ARG_NONE, &option_bluetooth,
+				"Use only ATD*99" },
 	{ "username", 'u', 0, G_OPTION_ARG_STRING, &option_username,
 				"Specify PPP username" },
 	{ "password", 'w', 0, G_OPTION_ARG_STRING, &option_password,
 				"Specify PPP password" },
 	{ "pppdump", 'D', 0, G_OPTION_ARG_STRING, &option_pppdump,
 				"Specify pppdump filename" },
+	{ "pfc", 0, 0, G_OPTION_ARG_NONE, &option_pfc,
+				"Use Protocol Field Compression" },
+	{ "acfc", 0, 0, G_OPTION_ARG_NONE, &option_acfc,
+				"Use Address & Control Field Compression" },
 	{ NULL },
 };
 
@@ -677,6 +746,7 @@ int main(int argc, char **argv)
 	sigemptyset(&mask);
 	sigaddset(&mask, SIGTERM);
 	sigaddset(&mask, SIGINT);
+	sigaddset(&mask, SIGUSR1);
 	sigaddset(&mask, SIGUSR2);
 	sigaddset(&mask, SIGPIPE);
 
@@ -700,9 +770,14 @@ int main(int argc, char **argv)
 
 	event_loop = g_main_loop_new(NULL, FALSE);
 
-	g_at_chat_send(control, "ATE0Q0V1", NULL, NULL, NULL, NULL);
-	g_at_chat_send(control, "AT+CFUN?", cfun_prefix,
-						check_mode, NULL, NULL);
+	if (option_bluetooth) {
+		g_at_chat_send(control, "ATD*99#", none_prefix, connect_cb,
+				NULL, NULL);
+	} else {
+		g_at_chat_send(control, "ATE0Q0V1", NULL, NULL, NULL, NULL);
+		g_at_chat_send(control, "AT+CFUN?", cfun_prefix,
+							check_mode, NULL, NULL);
+	}
 
 	g_main_loop_run(event_loop);
 	g_source_remove(signal_source);

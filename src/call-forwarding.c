@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -36,21 +36,24 @@
 #include "common.h"
 #include "simutil.h"
 
-#define CALL_FORWARDING_FLAG_CACHED 0x1
-#define CALL_FORWARDING_FLAG_CPHS_CFF 0x2
+#define CALL_FORWARDING_FLAG_CACHED	0x1
+#define CALL_FORWARDING_FLAG_CPHS_CFF	0x2
 
 /* According to 27.007 Spec */
 #define DEFAULT_NO_REPLY_TIMEOUT 20
 
-static GSList *g_drivers = NULL;
+#define is_cfu_enabled(_cf)				\
+({							\
+	cf_find_unconditional(_cf) ? TRUE : FALSE;	\
+})
 
 enum call_forwarding_type {
-	CALL_FORWARDING_TYPE_UNCONDITIONAL =		0,
-	CALL_FORWARDING_TYPE_BUSY =			1,
-	CALL_FORWARDING_TYPE_NO_REPLY =			2,
-	CALL_FORWARDING_TYPE_NOT_REACHABLE =		3,
-	CALL_FORWARDING_TYPE_ALL =			4,
-	CALL_FORWARDING_TYPE_ALL_CONDITIONAL =		5
+	CALL_FORWARDING_TYPE_UNCONDITIONAL =	0,
+	CALL_FORWARDING_TYPE_BUSY =		1,
+	CALL_FORWARDING_TYPE_NO_REPLY =		2,
+	CALL_FORWARDING_TYPE_NOT_REACHABLE =	3,
+	CALL_FORWARDING_TYPE_ALL =		4,
+	CALL_FORWARDING_TYPE_ALL_CONDITIONAL =	5
 };
 
 struct ofono_call_forwarding {
@@ -70,11 +73,6 @@ struct ofono_call_forwarding {
 	struct ofono_atom *atom;
 };
 
-static void get_query_next_cf_cond(struct ofono_call_forwarding *cf);
-static void set_query_next_cf_cond(struct ofono_call_forwarding *cf);
-static void ss_set_query_next_cf_cond(struct ofono_call_forwarding *cf);
-static void cf_unregister_ss_controls(struct ofono_call_forwarding *cf);
-
 struct cf_ss_request {
 	int ss_type;
 	int cf_type;
@@ -82,56 +80,46 @@ struct cf_ss_request {
 	GSList *cf_list[4];
 };
 
-static gint cf_condition_compare(gconstpointer a, gconstpointer b)
+static GSList *g_drivers = NULL;
+
+static void get_query_next_cf_cond(struct ofono_call_forwarding *cf);
+static void set_query_next_cf_cond(struct ofono_call_forwarding *cf);
+static void ss_set_query_next_cf_cond(struct ofono_call_forwarding *cf);
+
+static gint cf_cond_compare(gconstpointer a, gconstpointer b)
 {
 	const struct ofono_call_forwarding_condition *ca = a;
 	const struct ofono_call_forwarding_condition *cb = b;
 
-	if (ca->cls < cb->cls)
-		return -1;
-
-	if (ca->cls > cb->cls)
-		return 1;
-
-	return 0;
+	return ca->cls - cb->cls;
 }
 
-static gint cf_condition_find_with_cls(gconstpointer a, gconstpointer b)
+static struct ofono_call_forwarding_condition *cf_cond_find(GSList *l, int cls)
 {
-	const struct ofono_call_forwarding_condition *c = a;
-	int cls = GPOINTER_TO_INT(b);
-
-	if (c->cls < cls)
-		return -1;
-
-	if (c->cls > cls)
-		return 1;
-
-	return 0;
-}
-
-static int cf_find_timeout(GSList *cf_list, int cls)
-{
-	GSList *l;
 	struct ofono_call_forwarding_condition *c;
 
-	l = g_slist_find_custom(cf_list, GINT_TO_POINTER(cls),
-		cf_condition_find_with_cls);
+	for (; l; l = l->next) {
+		c = l->data;
 
-	if (l == NULL)
-		return DEFAULT_NO_REPLY_TIMEOUT;
+		if (c->cls == cls)
+			return c;
+	}
 
-	c = l->data;
-
-	return c->time;
+	return NULL;
 }
 
-static void cf_cond_list_print(GSList *list)
+static int cf_cond_find_timeout(GSList *l, int cls)
 {
-	GSList *l;
+	struct ofono_call_forwarding_condition *cond = cf_cond_find(l, cls);
+
+	return cond ? cond->time : DEFAULT_NO_REPLY_TIMEOUT;
+}
+
+static void cf_cond_list_print(GSList *l)
+{
 	struct ofono_call_forwarding_condition *cond;
 
-	for (l = list; l; l = l->next) {
+	for (; l ; l = l->next) {
 		cond = l->data;
 
 		DBG("CF Condition status: %d, class: %d, number: %s,"
@@ -162,7 +150,8 @@ static GSList *cf_cond_list_create(int total,
 			if (list[i].status == 0)
 				continue;
 
-			cond = g_try_new0(struct ofono_call_forwarding_condition, 1);
+			cond = g_try_new0(
+				struct ofono_call_forwarding_condition, 1);
 			if (cond == NULL)
 				continue;
 
@@ -170,22 +159,11 @@ static GSList *cf_cond_list_create(int total,
 				sizeof(struct ofono_call_forwarding_condition));
 			cond->cls = j;
 
-			l = g_slist_insert_sorted(l, cond,
-							cf_condition_compare);
+			l = g_slist_insert_sorted(l, cond, cf_cond_compare);
 		}
 	}
 
 	return l;
-}
-
-static inline void cf_list_clear(GSList *cf_list)
-{
-	GSList *l;
-
-	for (l = cf_list; l; l = l->next)
-		g_free(l->data);
-
-	g_slist_free(cf_list);
 }
 
 static inline void cf_clear_all(struct ofono_call_forwarding *cf)
@@ -193,7 +171,7 @@ static inline void cf_clear_all(struct ofono_call_forwarding *cf)
 	int i;
 
 	for (i = 0; i < 4; i++) {
-		cf_list_clear(cf->cf_conditions[i]);
+		g_slist_free_full(cf->cf_conditions[i], g_free);
 		cf->cf_conditions[i] = NULL;
 	}
 }
@@ -219,37 +197,18 @@ static void sim_cphs_cff_update_cb(int ok, void *data)
 		ofono_info("Failed to update EFcphs-cff");
 }
 
-static gboolean is_cfu_enabled(struct ofono_call_forwarding *cf,
-				struct ofono_call_forwarding_condition **out)
+static inline struct ofono_call_forwarding_condition *cf_find_unconditional(
+					struct ofono_call_forwarding *cf)
 {
-	GSList *l = cf->cf_conditions[CALL_FORWARDING_TYPE_UNCONDITIONAL];
-	struct ofono_call_forwarding_condition *cond;
-
-	/*
-	 * For now we only support Voice, although Fax & all Data
-	 * basic services are applicable as well.
-	 */
-	for (; l; l = l->next) {
-		cond = l->data;
-
-		if (cond->cls > BEARER_CLASS_VOICE)
-			continue;
-
-		if (out)
-			*out = cond;
-
-		return TRUE;
-	}
-
-	return FALSE;
+	return cf_cond_find(
+		cf->cf_conditions[CALL_FORWARDING_TYPE_UNCONDITIONAL],
+		BEARER_CLASS_VOICE);
 }
 
 static void sim_set_cf_indicator(struct ofono_call_forwarding *cf)
 {
-	gboolean cfu_voice;
-	struct ofono_call_forwarding_condition *cond;
-
-	cfu_voice = is_cfu_enabled(cf, &cond);
+	struct ofono_call_forwarding_condition *cfu_voice =
+						cf_find_unconditional(cf);
 
 	if (cf->cfis_record_id) {
 		unsigned char data[16];
@@ -261,15 +220,15 @@ static void sim_set_cf_indicator(struct ofono_call_forwarding *cf)
 		data[0] = 0x01;
 
 		if (cfu_voice) {
-			number_len = strlen(cond->phone_number.number);
+			number_len = strlen(cfu_voice->phone_number.number);
 
 			/* CFU indicator Status - Voice */
 			data[1] = 0x01;
 			number_len = (number_len + 1) / 2;
 			data[2] = number_len + 1;
-			data[3] = cond->phone_number.type;
+			data[3] = cfu_voice->phone_number.type;
 
-			sim_encode_bcd_number(cond->phone_number.number,
+			sim_encode_bcd_number(cfu_voice->phone_number.number,
 						data + 4);
 		} else {
 			data[1] = 0x00;
@@ -315,7 +274,7 @@ static void set_new_cond_list(struct ofono_call_forwarding *cf,
 
 	if ((cf->flags & CALL_FORWARDING_FLAG_CPHS_CFF) ||
 			cf->cfis_record_id > 0)
-		old_cfu = is_cfu_enabled(cf, NULL);
+		old_cfu = is_cfu_enabled(cf);
 	else
 		old_cfu = FALSE;
 
@@ -340,12 +299,8 @@ static void set_new_cond_list(struct ofono_call_forwarding *cf,
 		if (type == CALL_FORWARDING_TYPE_NO_REPLY)
 			snprintf(tattr, sizeof(tattr), "%sTimeout", attr);
 
-		o = g_slist_find_custom(old, GINT_TO_POINTER(lc->cls),
-					cf_condition_find_with_cls);
-
-		if (o) { /* On the old list, must be active */
-			oc = o->data;
-
+		oc = cf_cond_find(old, lc->cls);
+		if (oc) { /* On the old list, must be active */
 			if (oc->phone_number.type != lc->phone_number.type ||
 				strcmp(oc->phone_number.number,
 					lc->phone_number.number)) {
@@ -359,15 +314,15 @@ static void set_new_cond_list(struct ofono_call_forwarding *cf,
 			}
 
 			if (type == CALL_FORWARDING_TYPE_NO_REPLY &&
-				oc->time != lc->time)
+					oc->time != lc->time)
 				ofono_dbus_signal_property_changed(conn, path,
 						OFONO_CALL_FORWARDING_INTERFACE,
 						tattr, DBUS_TYPE_UINT16,
 						&timeout);
 
 			/* Remove from the old list */
-			g_free(o->data);
-			old = g_slist_remove(old, o->data);
+			old = g_slist_remove(old, oc);
+			g_free(oc);
 		} else {
 			number = phone_number_to_string(&lc->phone_number);
 
@@ -380,7 +335,7 @@ static void set_new_cond_list(struct ofono_call_forwarding *cf,
 				update_sim = TRUE;
 
 			if (type == CALL_FORWARDING_TYPE_NO_REPLY &&
-				lc->time != DEFAULT_NO_REPLY_TIMEOUT)
+					lc->time != DEFAULT_NO_REPLY_TIMEOUT)
 				ofono_dbus_signal_property_changed(conn, path,
 						OFONO_CALL_FORWARDING_INTERFACE,
 						tattr, DBUS_TYPE_UINT16,
@@ -415,14 +370,14 @@ static void set_new_cond_list(struct ofono_call_forwarding *cf,
 			update_sim = TRUE;
 
 		if (type == CALL_FORWARDING_TYPE_NO_REPLY &&
-			oc->time != DEFAULT_NO_REPLY_TIMEOUT)
+				oc->time != DEFAULT_NO_REPLY_TIMEOUT)
 			ofono_dbus_signal_property_changed(conn, path,
 						OFONO_CALL_FORWARDING_INTERFACE,
 						tattr, DBUS_TYPE_UINT16,
 						&timeout);
 	}
 
-	cf_list_clear(old);
+	g_slist_free_full(old, g_free);
 	cf->cf_conditions[type] = list;
 
 	if (update_sim == TRUE)
@@ -430,12 +385,37 @@ static void set_new_cond_list(struct ofono_call_forwarding *cf,
 
 	if ((cf->flags & CALL_FORWARDING_FLAG_CPHS_CFF) ||
 			cf->cfis_record_id > 0)
-		new_cfu = is_cfu_enabled(cf, NULL);
+		new_cfu = is_cfu_enabled(cf);
 	else
 		new_cfu = FALSE;
 
 	if (new_cfu != old_cfu) {
 		ofono_bool_t status = new_cfu;
+		int i;
+
+		/*
+		 * Emit signals to mask/unmask conditional cfs on cfu change
+		 */
+		for (i = 0; i < 4; i++) {
+			if (i == CALL_FORWARDING_TYPE_UNCONDITIONAL)
+				continue;
+
+			lc = cf_cond_find(cf->cf_conditions[i],
+						BEARER_CLASS_VOICE);
+			if (lc == NULL)
+				continue;
+
+			if (new_cfu)
+				number = "";
+			else
+				number = phone_number_to_string(
+							&lc->phone_number);
+
+			ofono_dbus_signal_property_changed(conn, path,
+						OFONO_CALL_FORWARDING_INTERFACE,
+						cf_type_lut[i],
+						DBUS_TYPE_STRING, &number);
+		}
 
 		ofono_dbus_signal_property_changed(conn, path,
 					OFONO_CALL_FORWARDING_INTERFACE,
@@ -496,13 +476,15 @@ static void property_append_cf_conditions(DBusMessageIter *dict,
 }
 
 static DBusMessage *cf_get_properties_reply(DBusMessage *msg,
-						struct ofono_call_forwarding *cf)
+					struct ofono_call_forwarding *cf)
 {
 	DBusMessage *reply;
 	DBusMessageIter iter;
 	DBusMessageIter dict;
 	int i;
 	dbus_bool_t status;
+	gboolean cfu_enabled;
+	GSList *cf_list;
 
 	reply = dbus_message_new_method_return(msg);
 	if (reply == NULL)
@@ -514,14 +496,25 @@ static DBusMessage *cf_get_properties_reply(DBusMessage *msg,
 					OFONO_PROPERTIES_ARRAY_SIGNATURE,
 						&dict);
 
-	for (i = 0; i < 4; i++)
-		property_append_cf_conditions(&dict, cf->cf_conditions[i],
+	cfu_enabled = is_cfu_enabled(cf);
+
+	for (i = 0; i < 4; i++) {
+		/*
+		 * Report conditional cfs as empty when CFU is active
+		 */
+		if (cfu_enabled && (i != CALL_FORWARDING_TYPE_UNCONDITIONAL))
+			cf_list = NULL;
+		else
+			cf_list = cf->cf_conditions[i];
+
+		property_append_cf_conditions(&dict, cf_list,
 						BEARER_CLASS_VOICE,
 						cf_type_lut[i]);
+	}
 
 	if ((cf->flags & CALL_FORWARDING_FLAG_CPHS_CFF) ||
 			cf->cfis_record_id > 0)
-		status = is_cfu_enabled(cf, NULL);
+		status = cfu_enabled;
 	else
 		status = FALSE;
 
@@ -540,11 +533,12 @@ static void get_query_cf_callback(const struct ofono_error *error, int total,
 	struct ofono_call_forwarding *cf = data;
 
 	if (error->type == OFONO_ERROR_TYPE_NO_ERROR) {
-		GSList *l;
-		l = cf_cond_list_create(total, list);
+		GSList *l = cf_cond_list_create(total, list);
+
 		set_new_cond_list(cf, cf->query_next, l);
 
 		DBG("%s conditions:", cf_type_lut[cf->query_next]);
+
 		cf_cond_list_print(l);
 
 		if (cf->query_next == CALL_FORWARDING_TYPE_NOT_REACHABLE)
@@ -552,8 +546,8 @@ static void get_query_cf_callback(const struct ofono_error *error, int total,
 	}
 
 	if (cf->query_next == CALL_FORWARDING_TYPE_NOT_REACHABLE) {
-		DBusMessage *reply = cf_get_properties_reply(cf->pending, cf);
-		__ofono_dbus_pending_reply(&cf->pending, reply);
+		__ofono_dbus_pending_reply(&cf->pending,
+				cf_get_properties_reply(cf->pending, cf));
 		return;
 	}
 
@@ -561,10 +555,10 @@ static void get_query_cf_callback(const struct ofono_error *error, int total,
 	get_query_next_cf_cond(cf);
 }
 
-static void get_query_next_cf_cond(struct ofono_call_forwarding *cf)
+static inline void get_query_next_cf_cond(struct ofono_call_forwarding *cf)
 {
 	cf->driver->query(cf, cf->query_next, BEARER_CLASS_DEFAULT,
-			get_query_cf_callback, cf);
+				get_query_cf_callback, cf);
 }
 
 static DBusMessage *cf_get_properties(DBusConnection *conn, DBusMessage *msg,
@@ -652,38 +646,35 @@ static void set_query_cf_callback(const struct ofono_error *error, int total,
 			void *data)
 {
 	struct ofono_call_forwarding *cf = data;
-	GSList *l;
-	DBusMessage *reply;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
 		ofono_error("Setting succeeded, but query failed");
 		cf->flags &= ~CALL_FORWARDING_FLAG_CACHED;
-		reply = __ofono_error_failed(cf->pending);
-		__ofono_dbus_pending_reply(&cf->pending, reply);
+		__ofono_dbus_pending_reply(&cf->pending,
+					__ofono_error_failed(cf->pending));
 		return;
 	}
 
-	if (cf->query_next == cf->query_end) {
-		reply = dbus_message_new_method_return(cf->pending);
-		__ofono_dbus_pending_reply(&cf->pending, reply);
-	}
+	if (cf->query_next == cf->query_end)
+		__ofono_dbus_pending_reply(&cf->pending,
+				dbus_message_new_method_return(cf->pending));
 
-	l = cf_cond_list_create(total, list);
-	set_new_cond_list(cf, cf->query_next, l);
+	set_new_cond_list(cf, cf->query_next, cf_cond_list_create(total, list));
 
 	DBG("%s conditions:", cf_type_lut[cf->query_next]);
-	cf_cond_list_print(l);
+	cf_cond_list_print(cf->cf_conditions[cf->query_next]);
 
-	if (cf->query_next != cf->query_end) {
-		cf->query_next++;
-		set_query_next_cf_cond(cf);
-	}
+	if (cf->query_next == cf->query_end)
+		return;
+
+	cf->query_next++;
+	set_query_next_cf_cond(cf);
 }
 
 static void set_query_next_cf_cond(struct ofono_call_forwarding *cf)
 {
 	cf->driver->query(cf, cf->query_next, BEARER_CLASS_DEFAULT,
-			set_query_cf_callback, cf);
+				set_query_cf_callback, cf);
 }
 
 static void set_property_callback(const struct ofono_error *error, void *data)
@@ -762,7 +753,6 @@ static DBusMessage *cf_set_property(DBusConnection *conn, DBusMessage *msg,
 
 	if (cf_condition_timeout_property(property, &cls)) {
 		dbus_uint16_t timeout;
-		GSList *l;
 		struct ofono_call_forwarding_condition *c;
 
 		type = CALL_FORWARDING_TYPE_NO_REPLY;
@@ -775,14 +765,10 @@ static DBusMessage *cf_set_property(DBusConnection *conn, DBusMessage *msg,
 		if (timeout < 1 || timeout > 30)
 			return __ofono_error_invalid_format(msg);
 
-		l = g_slist_find_custom(cf->cf_conditions[type],
-				GINT_TO_POINTER(cls),
-				cf_condition_find_with_cls);
 
-		if (l == NULL)
+		c = cf_cond_find(cf->cf_conditions[type], cls);
+		if (c == NULL)
 			return __ofono_error_failed(msg);
-
-		c = l->data;
 
 		return set_property_request(cf, msg, type, cls,
 						&c->phone_number, timeout);
@@ -802,10 +788,17 @@ static DBusMessage *cf_set_property(DBusConnection *conn, DBusMessage *msg,
 		if (strlen(number) > 0 && !valid_phone_number_format(number))
 			return __ofono_error_invalid_format(msg);
 
+		/*
+		 * Don't set conditional cfs when cfu is active
+		 */
+		if (type != CALL_FORWARDING_TYPE_UNCONDITIONAL &&
+				number[0] != '\0' && is_cfu_enabled(cf))
+			return __ofono_error_not_available(msg);
+
 		if (number[0] != '\0')
 			string_to_phone_number(number, &ph);
 
-		timeout = cf_find_timeout(cf->cf_conditions[type], cls);
+		timeout = cf_cond_find_timeout(cf->cf_conditions[type], cls);
 
 		return set_property_request(cf, msg, type, cls, &ph,
 						timeout);
@@ -880,26 +873,30 @@ static DBusMessage *cf_disable_all(DBusConnection *conn, DBusMessage *msg,
 
 	if (type == CALL_FORWARDING_TYPE_ALL)
 		cf->driver->erasure(cf, type, BEARER_CLASS_DEFAULT,
-				disable_all_callback, cf);
+					disable_all_callback, cf);
 	else
 		cf->driver->erasure(cf, type, BEARER_CLASS_DEFAULT,
-				disable_conditional_callback, cf);
+					disable_conditional_callback, cf);
 
 	return NULL;
 }
 
-static GDBusMethodTable cf_methods[] = {
-	{ "GetProperties",	"",	"a{sv}",	cf_get_properties,
-							G_DBUS_METHOD_FLAG_ASYNC },
-	{ "SetProperty",	"sv",	"",		cf_set_property,
-							G_DBUS_METHOD_FLAG_ASYNC },
-	{ "DisableAll",		"s",	"",		cf_disable_all,
-							G_DBUS_METHOD_FLAG_ASYNC },
+static const GDBusMethodTable cf_methods[] = {
+	{ GDBUS_ASYNC_METHOD("GetProperties",
+				NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
+				cf_get_properties) },
+	{ GDBUS_ASYNC_METHOD("SetProperty",
+			GDBUS_ARGS({ "property", "s" }, { "value", "v" }),
+			NULL, cf_set_property) },
+	{ GDBUS_ASYNC_METHOD("DisableAll",
+			GDBUS_ARGS({ "type", "s" }), NULL,
+			cf_disable_all) },
 	{ }
 };
 
-static GDBusSignalTable cf_signals[] = {
-	{ "PropertyChanged",	"sv" },
+static const GDBusSignalTable cf_signals[] = {
+	{ GDBUS_SIGNAL("PropertyChanged",
+			GDBUS_ARGS({ "name", "s" }, { "value", "v" })) },
 	{ }
 };
 
@@ -1023,10 +1020,11 @@ static void cf_ss_control_callback(const struct ofono_error *error, void *data)
 	struct ofono_call_forwarding *cf = data;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
-		DBG("Error occurred during cf ss control set/erasure");
 
+		DBG("CF ss control set/erasure failed with error: %s",
+						telephony_error_to_str(error));
 		__ofono_dbus_pending_reply(&cf->pending,
-					__ofono_error_failed(cf->pending));
+				__ofono_error_from_error(error, cf->pending));
 		g_free(cf->ss_req);
 		cf->ss_req = NULL;
 		return;
@@ -1081,9 +1079,9 @@ static gboolean cf_ss_control(int type, const char *sc,
 		return FALSE;
 
 	if (strlen(sia) &&
-		(type == SS_CONTROL_TYPE_QUERY ||
-		type == SS_CONTROL_TYPE_ERASURE ||
-		type == SS_CONTROL_TYPE_DEACTIVATION))
+			(type == SS_CONTROL_TYPE_QUERY ||
+				type == SS_CONTROL_TYPE_ERASURE ||
+				type == SS_CONTROL_TYPE_DEACTIVATION))
 		goto error;
 
 	/*
@@ -1096,7 +1094,7 @@ static gboolean cf_ss_control(int type, const char *sc,
 		type = SS_CONTROL_TYPE_REGISTRATION;
 
 	if (type == SS_CONTROL_TYPE_REGISTRATION &&
-		!valid_phone_number_format(sia))
+			!valid_phone_number_format(sia))
 		goto error;
 
 	if (strlen(sib) > 0) {
@@ -1279,6 +1277,9 @@ static void sim_cfis_read_cb(int ok, int total_length, int record,
 
 	cf->cfis_record_id = record;
 
+	if (cf->flags & CALL_FORWARDING_FLAG_CACHED)
+		return;
+
 	/*
 	 * For now we only support Voice, although Fax & all Data
 	 * basic services are applicable as well.
@@ -1343,6 +1344,9 @@ static void sim_cphs_cff_read_cb(int ok, int total_length, int record,
 
 	cf->flags |= CALL_FORWARDING_FLAG_CPHS_CFF;
 
+	if (cf->flags & CALL_FORWARDING_FLAG_CACHED)
+		return;
+
 	/*
 	 * For now we only support Voice, although Fax & all Data
 	 * basic services are applicable as well.
@@ -1356,39 +1360,6 @@ static void sim_cphs_cff_read_cb(int ok, int total_length, int record,
 					OFONO_CALL_FORWARDING_INTERFACE,
 					"ForwardingFlagOnSim",
 					DBUS_TYPE_BOOLEAN, &cfu_voice);
-}
-
-static void sim_read_cf_indicator(struct ofono_call_forwarding *cf)
-{
-	if (__ofono_sim_service_available(cf->sim,
-			SIM_UST_SERVICE_CFIS,
-			SIM_SST_SERVICE_CFIS) == TRUE)
-		ofono_sim_read(cf->sim_context, SIM_EFCFIS_FILEID,
-				OFONO_SIM_FILE_STRUCTURE_FIXED,
-				sim_cfis_read_cb, cf);
-	else
-		ofono_sim_read(cf->sim_context, SIM_EF_CPHS_CFF_FILEID,
-				OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
-				sim_cphs_cff_read_cb, cf);
-}
-
-int ofono_call_forwarding_driver_register(const struct ofono_call_forwarding_driver *d)
-{
-	DBG("driver: %p, name: %s", d, d->name);
-
-	if (d->probe == NULL)
-		return -EINVAL;
-
-	g_drivers = g_slist_prepend(g_drivers, (void *) d);
-
-	return 0;
-}
-
-void ofono_call_forwarding_driver_unregister(const struct ofono_call_forwarding_driver *d)
-{
-	DBG("driver: %p, name: %s", d, d->name);
-
-	g_drivers = g_slist_remove(g_drivers, (void *) d);
 }
 
 static void call_forwarding_unregister(struct ofono_atom *atom)
@@ -1412,6 +1383,70 @@ static void call_forwarding_unregister(struct ofono_atom *atom)
 
 	if (cf->ussd_watch)
 		__ofono_modem_remove_atom_watch(modem, cf->ussd_watch);
+
+	cf->flags = 0;
+}
+
+static void sim_cfis_changed(int id, void *userdata)
+{
+	struct ofono_call_forwarding *cf = userdata;
+
+	if (!(cf->flags & CALL_FORWARDING_FLAG_CACHED))
+		return;
+
+	/*
+	 * If the values are cached it's because at least one client
+	 * requested them and we need to notify them about this
+	 * change.  However the authoritative source of current
+	 * Call-Forwarding settings is the network operator and the
+	 * query can take a noticeable amount of time.  Instead of
+	 * sending PropertyChanged, we reregister the Call Forwarding
+	 * atom.  The client will invoke GetProperties only if it
+	 * is still interested.
+	 */
+	call_forwarding_unregister(cf->atom);
+	ofono_call_forwarding_register(cf);
+}
+
+static void sim_read_cf_indicator(struct ofono_call_forwarding *cf)
+{
+	if (__ofono_sim_service_available(cf->sim,
+			SIM_UST_SERVICE_CFIS,
+			SIM_SST_SERVICE_CFIS) == TRUE) {
+		ofono_sim_read(cf->sim_context, SIM_EFCFIS_FILEID,
+				OFONO_SIM_FILE_STRUCTURE_FIXED,
+				sim_cfis_read_cb, cf);
+		ofono_sim_add_file_watch(cf->sim_context, SIM_EFCFIS_FILEID,
+						sim_cfis_changed, cf, NULL);
+	} else {
+		ofono_sim_read(cf->sim_context, SIM_EF_CPHS_CFF_FILEID,
+				OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
+				sim_cphs_cff_read_cb, cf);
+		ofono_sim_add_file_watch(cf->sim_context,
+						SIM_EF_CPHS_CFF_FILEID,
+						sim_cfis_changed, cf, NULL);
+	}
+}
+
+int ofono_call_forwarding_driver_register(
+				const struct ofono_call_forwarding_driver *d)
+{
+	DBG("driver: %p, name: %s", d, d->name);
+
+	if (d->probe == NULL)
+		return -EINVAL;
+
+	g_drivers = g_slist_prepend(g_drivers, (void *) d);
+
+	return 0;
+}
+
+void ofono_call_forwarding_driver_unregister(
+				const struct ofono_call_forwarding_driver *d)
+{
+	DBG("driver: %p, name: %s", d, d->name);
+
+	g_drivers = g_slist_remove(g_drivers, (void *) d);
 }
 
 static void call_forwarding_remove(struct ofono_atom *atom)
@@ -1431,10 +1466,10 @@ static void call_forwarding_remove(struct ofono_atom *atom)
 	g_free(cf);
 }
 
-struct ofono_call_forwarding *ofono_call_forwarding_create(struct ofono_modem *modem,
-							unsigned int vendor,
-							const char *driver,
-							void *data)
+struct ofono_call_forwarding *ofono_call_forwarding_create(
+						struct ofono_modem *modem,
+						unsigned int vendor,
+						const char *driver, void *data)
 {
 	struct ofono_call_forwarding *cf;
 	GSList *l;
@@ -1485,8 +1520,6 @@ void ofono_call_forwarding_register(struct ofono_call_forwarding *cf)
 	DBusConnection *conn = ofono_dbus_get_connection();
 	const char *path = __ofono_atom_get_path(cf->atom);
 	struct ofono_modem *modem = __ofono_atom_get_modem(cf->atom);
-	struct ofono_atom *sim_atom;
-	struct ofono_atom *ussd_atom;
 
 	if (!g_dbus_register_interface(conn, path,
 					OFONO_CALL_FORWARDING_INTERFACE,
@@ -1500,24 +1533,15 @@ void ofono_call_forwarding_register(struct ofono_call_forwarding *cf)
 
 	ofono_modem_add_interface(modem, OFONO_CALL_FORWARDING_INTERFACE);
 
-	sim_atom = __ofono_modem_find_atom(modem, OFONO_ATOM_TYPE_SIM);
-
-	if (sim_atom) {
-		cf->sim = __ofono_atom_get_data(sim_atom);
+	cf->sim = __ofono_atom_find(OFONO_ATOM_TYPE_SIM, modem);
+	if (cf->sim) {
 		cf->sim_context = ofono_sim_context_create(cf->sim);
-
 		sim_read_cf_indicator(cf);
 	}
 
 	cf->ussd_watch = __ofono_modem_add_atom_watch(modem,
 					OFONO_ATOM_TYPE_USSD,
 					ussd_watch, cf, NULL);
-
-	ussd_atom = __ofono_modem_find_atom(modem, OFONO_ATOM_TYPE_USSD);
-
-	if (ussd_atom && __ofono_atom_get_registered(ussd_atom))
-		ussd_watch(ussd_atom, OFONO_ATOM_WATCH_CONDITION_REGISTERED,
-				cf);
 
 	__ofono_atom_register(cf->atom, call_forwarding_unregister);
 }
@@ -1527,7 +1551,8 @@ void ofono_call_forwarding_remove(struct ofono_call_forwarding *cf)
 	__ofono_atom_free(cf->atom);
 }
 
-void ofono_call_forwarding_set_data(struct ofono_call_forwarding *cf, void *data)
+void ofono_call_forwarding_set_data(struct ofono_call_forwarding *cf,
+								void *data)
 {
 	cf->driver_data = data;
 }

@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -151,9 +151,11 @@ static DBusMessage *push_notification_unregister_agent(DBusConnection *conn,
 	return dbus_message_new_method_return(msg);
 }
 
-static GDBusMethodTable push_notification_methods[] = {
-	{ "RegisterAgent",    "o",   "",  push_notification_register_agent },
-	{ "UnregisterAgent",  "o",   "",  push_notification_unregister_agent },
+static const GDBusMethodTable push_notification_methods[] = {
+	{ GDBUS_METHOD("RegisterAgent",	GDBUS_ARGS({ "path", "o" }), NULL,
+			push_notification_register_agent) },
+	{ GDBUS_METHOD("UnregisterAgent", GDBUS_ARGS({ "path", "o" }), NULL,
+			push_notification_unregister_agent) },
 	{ }
 };
 

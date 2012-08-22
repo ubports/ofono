@@ -2,7 +2,7 @@
  *
  *  oFono - Open Telephony stack for Linux
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -50,8 +50,10 @@ struct ofono_call_barring_driver {
 			ofono_call_barring_set_cb_t cb, void *data);
 };
 
-int ofono_call_barring_driver_register(const struct ofono_call_barring_driver *d);
-void ofono_call_barring_driver_unregister(const struct ofono_call_barring_driver *d);
+int ofono_call_barring_driver_register(
+				const struct ofono_call_barring_driver *d);
+void ofono_call_barring_driver_unregister(
+				const struct ofono_call_barring_driver *d);
 
 struct ofono_call_barring *ofono_call_barring_create(struct ofono_modem *modem,
 							unsigned int vendor,

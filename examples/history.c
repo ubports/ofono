@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -171,6 +171,11 @@ static void example_history_sms_send_status(
 	case OFONO_HISTORY_SMS_STATUS_SUBMIT_FAILED:
 		ofono_debug("Sending SMS %s failed", ofono_uuid_to_str(uuid));
 		ofono_debug("Failure Time: %s", buf);
+		break;
+	case OFONO_HISTORY_SMS_STATUS_SUBMIT_CANCELLED:
+		ofono_debug("Submission of SMS %s was canceled",
+					ofono_uuid_to_str(uuid));
+		ofono_debug("Cancel time: %s", buf);
 		break;
 	case OFONO_HISTORY_SMS_STATUS_DELIVERED:
 		ofono_debug("SMS delivered, msg_id: %s, time: %s",

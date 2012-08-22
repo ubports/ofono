@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2010-2011  Nokia Corporation. All rights reserved.
+ *  Copyright (C) 2010-2011  Nokia Corporation and/or its subsidiary(-ies).
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -38,13 +38,14 @@ struct ofono_cdma_sms_driver {
 	int (*probe)(struct ofono_cdma_sms *cdma_sms, unsigned int vendor,
 			void *data);
 	void (*remove)(struct ofono_cdma_sms *cdma_sms);
-	void (*submit)(struct ofono_cdma_sms *cdma_sms, unsigned char *tpdu,
+	void (*submit)(struct ofono_cdma_sms *cdma_sms,
+			const unsigned char *tpdu,
 			int tpdu_len, ofono_cdma_sms_submit_cb_t cb,
 			void *data);
 };
 
 void ofono_cdma_sms_deliver_notify(struct ofono_cdma_sms *cdma_sms,
-					unsigned char *pdu, int tpdu_len);
+					const unsigned char *pdu, int tpdu_len);
 
 int ofono_cdma_sms_driver_register(const struct ofono_cdma_sms_driver *d);
 void ofono_cdma_sms_driver_unregister(const struct ofono_cdma_sms_driver *d);

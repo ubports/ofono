@@ -2,7 +2,7 @@
  *
  *  PPP library with GLib integration
  *
- *  Copyright (C) 2009-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2009-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -50,18 +50,22 @@ typedef void (*GAtPPPConnectFunc)(const char *iface, const char *local,
 typedef void (*GAtPPPDisconnectFunc)(GAtPPPDisconnectReason reason,
 					gpointer user_data);
 
-GAtPPP *g_at_ppp_new(GIOChannel *modem);
-GAtPPP *g_at_ppp_new_from_io(GAtIO *io);
-GAtPPP *g_at_ppp_server_new(GIOChannel *modem, const char *local);
-GAtPPP *g_at_ppp_server_new_from_io(GAtIO *io, const char *local);
+GAtPPP *g_at_ppp_new(void);
+GAtPPP *g_at_ppp_server_new(const char *local);
+GAtPPP *g_at_ppp_server_new_full(const char *local, int fd);
 
-void g_at_ppp_open(GAtPPP *ppp);
+gboolean g_at_ppp_open(GAtPPP *ppp, GAtIO *io);
+gboolean g_at_ppp_listen(GAtPPP *ppp, GAtIO *io);
 void g_at_ppp_set_connect_function(GAtPPP *ppp, GAtPPPConnectFunc callback,
 					gpointer user_data);
 void g_at_ppp_set_disconnect_function(GAtPPP *ppp, GAtPPPDisconnectFunc func,
 					gpointer user_data);
+void g_at_ppp_set_suspend_function(GAtPPP *ppp, GAtSuspendFunc func,
+					gpointer user_data);
 void g_at_ppp_set_debug(GAtPPP *ppp, GAtDebugFunc func, gpointer user_data);
 void g_at_ppp_shutdown(GAtPPP *ppp);
+void g_at_ppp_suspend(GAtPPP *ppp);
+void g_at_ppp_resume(GAtPPP *ppp);
 void g_at_ppp_ref(GAtPPP *ppp);
 void g_at_ppp_unref(GAtPPP *ppp);
 
@@ -74,6 +78,9 @@ void g_at_ppp_set_recording(GAtPPP *ppp, const char *filename);
 
 void g_at_ppp_set_server_info(GAtPPP *ppp, const char *remote_ip,
 				const char *dns1, const char *dns2);
+
+void g_at_ppp_set_acfc_enabled(GAtPPP *ppp, gboolean enabled);
+void g_at_ppp_set_pfc_enabled(GAtPPP *ppp, gboolean enabled);
 
 #ifdef __cplusplus
 }

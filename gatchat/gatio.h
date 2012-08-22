@@ -2,7 +2,7 @@
  *
  *  AT chat library with GLib integration
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -49,6 +49,11 @@ gboolean g_at_io_set_read_handler(GAtIO *io, GAtIOReadFunc read_handler,
 					gpointer user_data);
 gboolean g_at_io_set_write_handler(GAtIO *io, GAtIOWriteFunc write_handler,
 					gpointer user_data);
+void g_at_io_set_write_done(GAtIO *io, GAtDisconnectFunc func,
+				gpointer user_data);
+
+void g_at_io_drain_ring_buffer(GAtIO *io, guint len);
+
 gsize g_at_io_write(GAtIO *io, const gchar *data, gsize count);
 
 gboolean g_at_io_set_disconnect_function(GAtIO *io,

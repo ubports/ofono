@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2009-2010 Nokia Corporation and/or its subsidiary(-ies).
+ *  Copyright (C) 2009-2010  Nokia Corporation and/or its subsidiary(-ies).
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -75,9 +75,13 @@ struct network_time {
 
 struct netreg_data {
 	GIsiClient *client;
+	GIsiClient *pn_network;
+	GIsiClient *pn_modem_network;
 	struct reg_info reg;
 	struct gsm_info gsm;
 	struct rat_info rat;
+	GIsiVersion version;
+	char nitz_name[OFONO_MAX_OPERATOR_NAME_LENGTH + 1];
 };
 
 static inline guint8 *mccmnc_to_bcd(const char *mcc, const char *mnc,
@@ -153,15 +157,12 @@ static gboolean check_response_status(const GIsiMessage *msg, uint8_t msgid)
 	uint8_t cause;
 
 	if (g_isi_msg_error(msg) < 0) {
-		DBG("Error: %s", strerror(-g_isi_msg_error(msg)));
+		DBG("Error: %s", g_isi_msg_strerror(msg));
 		return FALSE;
 	}
 
-	if (g_isi_msg_id(msg) != msgid) {
-		DBG("Unexpected msg: %s",
-			net_message_id_name(g_isi_msg_id(msg)));
+	if (g_isi_msg_id(msg) != msgid)
 		return FALSE;
-	}
 
 	if (!g_isi_msg_data_get_byte(msg, 0, &cause))
 		return FALSE;
@@ -197,7 +198,8 @@ static void reg_status_ind_cb(const GIsiMessage *msg, void *data)
 	if (netreg == NULL || nd == NULL)
 		return;
 
-	if (g_isi_msg_id(msg) != NET_REG_STATUS_IND)
+	if (g_isi_msg_id(msg) != NET_REG_STATUS_IND &&
+			g_isi_msg_id(msg) != NET_MODEM_REG_STATUS_IND)
 		return;
 
 	for (g_isi_sb_iter_init(&iter, msg, 2);
@@ -275,7 +277,8 @@ static void reg_status_resp_cb(const GIsiMessage *msg, void *data)
 
 	GIsiSubBlockIter iter;
 
-	if (!check_response_status(msg, NET_REG_STATUS_GET_RESP))
+	if (!check_response_status(msg, NET_MODEM_REG_STATUS_GET_RESP) &&
+			!check_response_status(msg, NET_REG_STATUS_GET_RESP))
 		goto error;
 
 	for (g_isi_sb_iter_init(&iter, msg, 2);
@@ -316,8 +319,8 @@ static void rat_resp_cb(const GIsiMessage *msg, void *data)
 	struct netreg_data *nd = ofono_netreg_get_data(netreg);
 	ofono_netreg_status_cb_t cb = cbd->cb;
 
-	const uint8_t req[] = {
-		NET_REG_STATUS_GET_REQ
+	uint8_t req[] = {
+		NET_REG_STATUS_GET_REQ,
 	};
 	GIsiSubBlockIter iter;
 
@@ -337,6 +340,10 @@ static void rat_resp_cb(const GIsiMessage *msg, void *data)
 		if (!parse_rat_info(&iter, &nd->rat))
 			goto error;
 	}
+
+	if (g_isi_client_resource(nd->client) == PN_MODEM_NETWORK ||
+			nd->version.major < 14)
+		req[0] = NET_MODEM_REG_STATUS_GET_REQ;
 
 	if (g_isi_client_send(nd->client, req, sizeof(req),
 				reg_status_resp_cb, cbd, NULL))
@@ -377,6 +384,78 @@ error:
 	g_free(cbd);
 }
 
+static void cell_info_resp_cb(const GIsiMessage *msg, void *data)
+{
+	struct isi_cb_data *cbd = data;
+	ofono_netreg_operator_cb_t cb = cbd->cb;
+	struct ofono_netreg *netreg = cbd->user;
+	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct ofono_network_operator op;
+	GIsiSubBlockIter iter;
+
+	memset(&op, 0, sizeof(struct ofono_network_operator));
+
+	if (!check_response_status(msg, NET_CELL_INFO_GET_RESP))
+		goto error;
+
+	for (g_isi_sb_iter_init(&iter, msg, 2);
+			g_isi_sb_iter_is_valid(&iter);
+			g_isi_sb_iter_next(&iter)) {
+
+		switch (g_isi_sb_iter_get_id(&iter)) {
+		case NET_GSM_CELL_INFO:
+
+			if (!g_isi_sb_iter_get_oper_code(&iter, op.mcc, op.mnc,
+								12))
+				goto error;
+
+			op.tech = 0;
+			break;
+
+		case NET_WCDMA_CELL_INFO:
+
+			if (!g_isi_sb_iter_get_oper_code(&iter, op.mcc, op.mnc,
+								12))
+				goto error;
+
+			op.tech = 2;
+			break;
+		}
+	}
+
+	if (nd->nitz_name[0] != '\0')
+		strcpy(op.name, nd->nitz_name);
+
+	CALLBACK_WITH_SUCCESS(cb, &op, cbd->data);
+	return;
+
+error:
+	CALLBACK_WITH_FAILURE(cb, NULL, cbd->data);
+}
+
+static void create_cell_info_get_req(struct ofono_netreg *netreg,
+					ofono_netreg_operator_cb_t cb,
+					void *data)
+{
+	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct isi_cb_data *cbd = isi_cb_data_new(netreg, cb, data);
+
+	const uint8_t msg[] = {
+		NET_CELL_INFO_GET_REQ,
+	};
+
+	if (cbd == NULL || nd == NULL)
+		goto error;
+
+	if (g_isi_client_send(nd->client, msg, sizeof(msg), cell_info_resp_cb,
+				cbd, g_free))
+		return;
+
+error:
+	CALLBACK_WITH_FAILURE(cb, NULL, data);
+	g_free(cbd);
+}
+
 static void name_get_resp_cb(const GIsiMessage *msg, void *data)
 {
 	struct isi_cb_data *cbd = data;
@@ -389,7 +468,8 @@ static void name_get_resp_cb(const GIsiMessage *msg, void *data)
 
 	memset(&op, 0, sizeof(struct ofono_network_operator));
 
-	if (!check_response_status(msg, NET_OPER_NAME_READ_RESP))
+	if (!check_response_status(msg, NET_OLD_OPER_NAME_READ_RESP) &&
+			!check_response_status(msg, NET_OPER_NAME_READ_RESP))
 		goto error;
 
 	for (g_isi_sb_iter_init(&iter, msg, 6);
@@ -429,28 +509,30 @@ error:
 	CALLBACK_WITH_FAILURE(cb, NULL, cbd->data);
 }
 
-
-static void isi_current_operator(struct ofono_netreg *netreg,
+static void create_name_get_req(struct ofono_netreg *netreg,
 					ofono_netreg_operator_cb_t cb,
 					void *data)
 {
 	struct netreg_data *nd = ofono_netreg_get_data(netreg);
 	struct isi_cb_data *cbd = isi_cb_data_new(netreg, cb, data);
 
-	const uint8_t msg[] = {
+	uint8_t msg[] = {
 		NET_OPER_NAME_READ_REQ,
 		NET_HARDCODED_LATIN_OPER_NAME,
 		OFONO_MAX_OPERATOR_NAME_LENGTH,
-		0x00, 0x00,  /* Index not used */
-		0x00,  /* Filler */
-		0x00  /* No sub-blocks */
+		0x00, 0x00,	/* Index not used */
+		0x00,		/* Filler */
+		0x00,		/* No sub-blocks */
 	};
 
 	if (cbd == NULL || nd == NULL)
 		goto error;
 
-	if (g_isi_client_send(nd->client, msg, sizeof(msg),
-				name_get_resp_cb, cbd, g_free))
+	if (nd->version.major < 14)
+		msg[0] = NET_OLD_OPER_NAME_READ_REQ;
+
+	if (g_isi_client_send(nd->client, msg, sizeof(msg), name_get_resp_cb,
+				cbd, g_free))
 		return;
 
 error:
@@ -458,6 +540,17 @@ error:
 	g_free(cbd);
 }
 
+static void isi_current_operator(struct ofono_netreg *netreg,
+					ofono_netreg_operator_cb_t cb,
+					void *data)
+{
+	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+
+	if (g_isi_client_resource(nd->client) == PN_MODEM_NETWORK)
+		create_cell_info_get_req(netreg, cb, data);
+	else
+		create_name_get_req(netreg, cb, data);
+}
 
 static void available_resp_cb(const GIsiMessage *msg, void *data)
 {
@@ -472,7 +565,8 @@ static void available_resp_cb(const GIsiMessage *msg, void *data)
 	int common = 0;
 	int detail = 0;
 
-	if (!check_response_status(msg, NET_AVAILABLE_GET_RESP))
+	if (!check_response_status(msg, NET_MODEM_AVAILABLE_GET_RESP) &&
+			!check_response_status(msg, NET_AVAILABLE_GET_RESP))
 		goto error;
 
 	if (!g_isi_msg_data_get_byte(msg, 1, &sb_count))
@@ -493,13 +587,33 @@ static void available_resp_cb(const GIsiMessage *msg, void *data)
 		uint8_t umts = 0;
 
 		switch (g_isi_sb_iter_get_id(&iter)) {
+		case NET_MODEM_AVAIL_NETWORK_INFO_COMMON:
+
+			if (!g_isi_sb_iter_get_byte(&iter, &status, 2))
+				goto error;
+
+			op = list + common++;
+			op->status = status;
+
+			/*
+			 * FIXME: PN_MODEM_NETWORK provides no name
+			 * tags. We need access to the GSMA name list
+			 * here, or alternatively, core has to fill in
+			 * the blanks.
+			 */
+			op->name[0] = '\0';
+			break;
 
 		case NET_AVAIL_NETWORK_INFO_COMMON:
 
-			if (!g_isi_sb_iter_get_byte(&iter, &status, 2)
-				|| !g_isi_sb_iter_get_byte(&iter, &taglen, 5)
-				|| !g_isi_sb_iter_get_alpha_tag(&iter, &tag,
-						taglen * 2, 6))
+			if (!g_isi_sb_iter_get_byte(&iter, &status, 2))
+				goto error;
+
+			if (!g_isi_sb_iter_get_byte(&iter, &taglen, 5))
+				goto error;
+
+			if (!g_isi_sb_iter_get_alpha_tag(&iter, &tag,
+								taglen * 2, 6))
 				goto error;
 
 			op = list + common++;
@@ -510,12 +624,15 @@ static void available_resp_cb(const GIsiMessage *msg, void *data)
 			g_free(tag);
 			break;
 
+		/* case NET_MODEM_DETAILED_NETWORK_INFO: */
 		case NET_DETAILED_NETWORK_INFO:
 			op = list + detail++;
 
 			if (!g_isi_sb_iter_get_oper_code(&iter, op->mcc,
-								op->mnc, 2)
-				|| !g_isi_sb_iter_get_byte(&iter, &umts, 7))
+								op->mnc, 2))
+				goto error;
+
+			if (!g_isi_sb_iter_get_byte(&iter, &umts, 7))
 				goto error;
 
 			op->tech = umts ? 2 : 3;
@@ -539,7 +656,7 @@ static void isi_list_operators(struct ofono_netreg *netreg,
 	struct netreg_data *nd = ofono_netreg_get_data(netreg);
 	struct isi_cb_data *cbd = isi_cb_data_new(netreg, cb, data);
 
-	const unsigned char msg[] = {
+	uint8_t msg[] = {
 		NET_AVAILABLE_GET_REQ,
 		NET_MANUAL_SEARCH,
 		0x01,  /* Sub-block count */
@@ -551,6 +668,10 @@ static void isi_list_operators(struct ofono_netreg *netreg,
 
 	if (cbd == NULL || nd == NULL)
 		goto error;
+
+	if (g_isi_client_resource(nd->client) == PN_MODEM_NETWORK ||
+			nd->version.major < 14)
+		msg[0] = NET_MODEM_AVAILABLE_GET_REQ;
 
 	if (g_isi_client_send_with_timeout(nd->client, msg, sizeof(msg),
 				NETWORK_SCAN_TIMEOUT, available_resp_cb, cbd,
@@ -696,10 +817,12 @@ static gboolean parse_nettime(GIsiSubBlockIter *iter,
 	info->min = time->min != NET_INVALID_TIME ? time->min : -1;
 	info->sec = time->sec != NET_INVALID_TIME ? time->sec : -1;
 
-	/* Most significant bit set indicates negative offset. The
+	/*
+	 * Most significant bit set indicates negative offset. The
 	 * second most significant bit is 'reserved'. The value is the
 	 * offset from UTCin a count of 15min intervals, possibly
-	 * including the current DST adjustment. */
+	 * including the current DST adjustment.
+	 */
 	info->utcoff = (time->utc & 0x3F) * 15 * 60;
 	if (time->utc & 0x80)
 		info->utcoff *= -1;
@@ -732,6 +855,38 @@ static void time_ind_cb(const GIsiMessage *msg, void *data)
 	}
 }
 
+static void name_ind_cb(const GIsiMessage *msg, void *data)
+{
+	struct ofono_netreg *netreg = data;
+	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	GIsiSubBlockIter iter;
+	char *tag;
+	uint8_t taglen;
+
+	if (g_isi_msg_id(msg) != NET_NITZ_NAME_IND)
+		return;
+
+	for (g_isi_sb_iter_init(&iter, msg, 2);
+			g_isi_sb_iter_is_valid(&iter);
+			g_isi_sb_iter_next(&iter)) {
+		uint8_t id;
+
+		id = g_isi_sb_iter_get_id(&iter);
+		if (id != NET_FULL_NITZ_NAME && id != NET_SHORT_NITZ_NAME)
+			continue;
+
+		if (!g_isi_sb_iter_get_byte(&iter, &taglen, 5))
+			return;
+
+		if (!g_isi_sb_iter_get_alpha_tag(&iter, &tag, taglen * 2, 7))
+			return;
+
+		strncpy(nd->nitz_name, tag, OFONO_MAX_OPERATOR_NAME_LENGTH);
+		nd->nitz_name[OFONO_MAX_OPERATOR_NAME_LENGTH] = '\0';
+		g_free(tag);
+	}
+}
+
 static void rssi_resp_cb(const GIsiMessage *msg, void *data)
 {
 	struct isi_cb_data *cbd = data;
@@ -740,10 +895,8 @@ static void rssi_resp_cb(const GIsiMessage *msg, void *data)
 
 	GIsiSubBlockIter iter;
 
-	if (!check_response_status(msg, NET_RSSI_GET_RESP)) {
-		CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
-		return;
-	}
+	if (!check_response_status(msg, NET_RSSI_GET_RESP))
+		goto error;
 
 	for (g_isi_sb_iter_init(&iter, msg, 2);
 			g_isi_sb_iter_is_valid(&iter);
@@ -758,6 +911,9 @@ static void rssi_resp_cb(const GIsiMessage *msg, void *data)
 		CALLBACK_WITH_SUCCESS(cb, rssi ? rssi : -1, cbd->data);
 		return;
 	}
+
+error:
+	CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
 }
 
 static void isi_strength(struct ofono_netreg *netreg,
@@ -771,13 +927,18 @@ static void isi_strength(struct ofono_netreg *netreg,
 		NET_RSSI_GET_REQ,
 		NET_CS_GSM,
 		NET_CURRENT_CELL_RSSI,
+		0, 0, 0, 0,
 	};
+	size_t len = sizeof(msg);
 
 	if (nd == NULL || cbd == NULL)
 		goto error;
 
-	if (g_isi_client_send(nd->client, msg, sizeof(msg),
-				rssi_resp_cb, cbd, g_free))
+	/* Filler is only required by PN_MODEM_NETWORK */
+	if (g_isi_client_resource(nd->client) != PN_MODEM_NETWORK)
+		len -= 4;
+
+	if (g_isi_client_send(nd->client, msg, len, rssi_resp_cb, cbd, g_free))
 		return;
 
 error:
@@ -785,25 +946,176 @@ error:
 	g_free(cbd);
 }
 
-static void reachable_cb(const GIsiMessage *msg, void *data)
+static void cs_access_config_resp_cb(const GIsiMessage *msg, void *data)
+{
+	GIsiSubBlockIter iter;
+
+	DBG("");
+
+	if (g_isi_msg_id(msg) != NET_NW_ACCESS_CONF_RESP)
+		return;
+
+	/*
+	 * TODO: Check that roaming and registration
+	 * are now enabled.
+	 */
+
+	for (g_isi_sb_iter_init(&iter, msg, 2);
+			g_isi_sb_iter_is_valid(&iter);
+			g_isi_sb_iter_next(&iter)) {
+		uint8_t id = g_isi_sb_iter_get_id(&iter);
+		uint8_t mode;
+
+		DBG("SB=%02X", id);
+
+		switch (id) {
+		case NET_REGISTRATION_CONF_INFO:
+		case NET_REGISTRATION_CONF1_INFO:
+			g_isi_sb_iter_get_byte(&iter, &mode, 2);
+			DBG("Reg %X", mode);
+			break;
+
+		case NET_ROAMING_CONF_INFO:
+		case NET_ROAMING_CONF1_INFO:
+			g_isi_sb_iter_get_byte(&iter, &mode, 2);
+			DBG("Roam %X", mode);
+			break;
+
+		default:
+			DBG("Unknown subblock");
+		}
+	}
+}
+
+static void enable_registration(struct ofono_netreg *netreg)
+{
+	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	const uint8_t req[] = {
+		NET_NW_ACCESS_CONF_REQ, 0, 2,
+		/* Subblock 1 */
+		0x59, 4, 1, 0,
+		/* Subblock 2 */
+		0x5A, 4, 1, 0,
+	};
+
+	DBG("");
+	g_isi_client_send(nd->client, req, sizeof(req),
+				cs_access_config_resp_cb, netreg, NULL);
+}
+
+static void activate_cs_and_enable_registration(struct ofono_netreg *netreg)
+{
+	DBG("not implemented");
+}
+
+static void cs_state_resp_cb(const GIsiMessage *msg, void *data)
+{
+	struct ofono_netreg *netreg = data;
+	uint8_t code;
+
+	DBG("");
+
+	if (g_isi_msg_id(msg) != NET_CS_STATE_RESP)
+		return;
+
+	if (!g_isi_msg_data_get_byte(msg, 0, &code))
+		return;
+
+	if (code != NET_CAUSE_OK) {
+		DBG("Failed with cause=%X", code);
+		return;
+	}
+
+	if (!g_isi_msg_data_get_byte(msg, 1, &code))
+		return;
+
+	DBG("CS STATE=%X", code);
+
+	if (code == NET_CS_INACTIVE)
+		activate_cs_and_enable_registration(netreg);
+	else
+		enable_registration(netreg);
+}
+
+static void subscribe_indications(GIsiClient *cl, void *data)
+{
+	g_isi_client_ind_subscribe(cl, NET_RSSI_IND, rssi_ind_cb, data);
+	g_isi_client_ind_subscribe(cl, NET_NITZ_NAME_IND, name_ind_cb, data);
+	g_isi_client_ind_subscribe(cl, NET_RAT_IND, rat_ind_cb, data);
+	g_isi_client_ind_subscribe(cl, NET_TIME_IND, time_ind_cb, data);
+	g_isi_client_ind_subscribe(cl, NET_REG_STATUS_IND, reg_status_ind_cb,
+					data);
+	g_isi_client_ind_subscribe(cl, NET_MODEM_REG_STATUS_IND,reg_status_ind_cb,
+					data);
+}
+
+static void pn_network_reachable_cb(const GIsiMessage *msg, void *data)
 {
 	struct ofono_netreg *netreg = data;
 	struct netreg_data *nd = ofono_netreg_get_data(netreg);
 
-	if (g_isi_msg_error(msg) < 0)
+	if (g_isi_msg_error(msg) < 0) {
+		DBG("PN_NETWORK not reachable, removing client");
+		g_isi_client_destroy(nd->pn_network);
+		nd->pn_network = NULL;
+
+		if (nd->pn_modem_network == NULL)
+			ofono_netreg_remove(netreg);
+
+		return;
+	}
+
+	ISI_RESOURCE_DBG(msg);
+
+	if (nd == NULL || nd->client != NULL)
 		return;
 
-	ISI_VERSION_DBG(msg);
+	nd->client = nd->pn_network;
 
-	g_isi_client_ind_subscribe(nd->client, NET_RSSI_IND, rssi_ind_cb,
-					netreg);
-	g_isi_client_ind_subscribe(nd->client, NET_REG_STATUS_IND,
-					reg_status_ind_cb, netreg);
-	g_isi_client_ind_subscribe(nd->client, NET_RAT_IND, rat_ind_cb, netreg);
-	g_isi_client_ind_subscribe(nd->client, NET_TIME_IND, time_ind_cb,
-					netreg);
+	nd->version.major = g_isi_msg_version_major(msg);
+	nd->version.minor = g_isi_msg_version_minor(msg);
+
+	subscribe_indications(nd->client, netreg);
 
 	ofono_netreg_register(netreg);
+}
+
+static void pn_modem_network_reachable_cb(const GIsiMessage *msg, void *data)
+{
+	struct ofono_netreg *netreg = data;
+	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+
+	const uint8_t req[] = {
+		NET_CS_STATE_REQ,
+	};
+
+
+	if (g_isi_msg_error(msg) < 0) {
+		DBG("PN_MODEM_NETWORK not reachable, removing client");
+		g_isi_client_destroy(nd->pn_modem_network);
+		nd->pn_modem_network = NULL;
+
+		if (nd->pn_network == NULL)
+			ofono_netreg_remove(netreg);
+		return;
+	}
+
+	ISI_RESOURCE_DBG(msg);
+
+	if (nd == NULL || nd->client != NULL)
+		return;
+
+	nd->client = nd->pn_modem_network;
+
+	nd->version.major = g_isi_msg_version_major(msg);
+	nd->version.minor = g_isi_msg_version_minor(msg);
+
+	subscribe_indications(nd->client, netreg);
+
+	ofono_netreg_register(netreg);
+
+	g_isi_client_send(nd->client, req, sizeof(req), cs_state_resp_cb,
+				netreg, NULL);
 }
 
 static int isi_netreg_probe(struct ofono_netreg *netreg, unsigned int vendor,
@@ -816,15 +1128,25 @@ static int isi_netreg_probe(struct ofono_netreg *netreg, unsigned int vendor,
 	if (nd == NULL)
 		return -ENOMEM;
 
-	nd->client = g_isi_client_create(modem, PN_NETWORK);
-	if (nd->client == NULL) {
+	nd->pn_network = g_isi_client_create(modem, PN_NETWORK);
+	if (nd->pn_network == NULL) {
+		g_free(nd);
+		return -ENOMEM;
+	}
+
+	nd->pn_modem_network = g_isi_client_create(modem, PN_MODEM_NETWORK);
+	if (nd->pn_modem_network == NULL) {
+		g_isi_client_destroy(nd->pn_network);
 		g_free(nd);
 		return -ENOMEM;
 	}
 
 	ofono_netreg_set_data(netreg, nd);
 
-	g_isi_client_verify(nd->client, reachable_cb, netreg, NULL);
+	g_isi_client_verify(nd->pn_network, pn_network_reachable_cb,
+				netreg, NULL);
+	g_isi_client_verify(nd->pn_modem_network, pn_modem_network_reachable_cb,
+				netreg, NULL);
 
 	return 0;
 }
@@ -838,11 +1160,12 @@ static void isi_netreg_remove(struct ofono_netreg *netreg)
 	if (data == NULL)
 		return;
 
-	g_isi_client_destroy(data->client);
+	g_isi_client_destroy(data->pn_modem_network);
+	g_isi_client_destroy(data->pn_network);
 	g_free(data);
 }
 
-static struct ofono_netreg_driver driver = {
+static struct ofono_netreg_driver isimodem = {
 	.name			= "isimodem",
 	.probe			= isi_netreg_probe,
 	.remove			= isi_netreg_remove,
@@ -856,10 +1179,10 @@ static struct ofono_netreg_driver driver = {
 
 void isi_netreg_init(void)
 {
-	ofono_netreg_driver_register(&driver);
+	ofono_netreg_driver_register(&isimodem);
 }
 
 void isi_netreg_exit(void)
 {
-	ofono_netreg_driver_unregister(&driver);
+	ofono_netreg_driver_unregister(&isimodem);
 }

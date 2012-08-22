@@ -1,7 +1,7 @@
 oFono - Open Source Telephony
 *****************************
 
-Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
 
 
 Mission statement
@@ -109,7 +109,8 @@ Current implemented features:
 	SIM PIN handling
 
 		SIM PIN locks, network and service provider locks are
-		supported.
+		supported. The SIM Manager also handles retry counter for PIN,
+		PIN2, PUK and PUK2.
 
 	Cell Broadcast
 
@@ -120,8 +121,8 @@ Current implemented features:
 	GPRS
 
 		GPRS data connections are fully supported by oFono.  Multiple
-		active GPRS contexts are supported, but IPv6 context support is
-		currently missing.
+		active GPRS contexts are supported. IPv6 context support is
+		in progress.
 
 	Radio Access Settings
 
@@ -138,12 +139,32 @@ Current implemented features:
 		operation status. Information on the Sim Toolkit feature
 		list can be found in features.txt.
 
+	Supplementary Services
+
+		The Supplementary Services interface handles both recognized
+		supplementary service control string and user/network initiated
+		unstructured supplementary service data (USSD).
+
+	GPS/Location Services
+
+		oFono provides a Location Reporting interface that enables
+		taking advantage of on-board GPS capabilities of modern modems.
+		oFono also provides an Assisted Satellite Navigation interface
+		that allows feeding assistance data to the GPS unit from the
+		network as well as E911 services.
+
 Work in progress features:
 
-	USSD
+	GPRS
 
-		User initiated USSD support is available, but not
-		network-initiated USSD support.
+		IPv6 PS context support is under development.
+
+	Modem Emulator
+
+		To enable DialUp Networking (over Bluetooth or USB), and to
+		allow Bluetooth HandsFree / Headset support, oFono will expose
+		some 'fake' modem to enable the communication with car kits, or
+		other devices.
 
 Not implemented features:
 
@@ -188,4 +209,3 @@ Not implemented features:
 		prominent.
 
 		A similar split like with MMS might be a good idea.
-

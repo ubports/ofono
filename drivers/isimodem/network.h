@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2009-2010 Nokia Corporation and/or its subsidiary(-ies).
+ *  Copyright (C) 2009-2010  Nokia Corporation and/or its subsidiary(-ies).
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -27,21 +27,39 @@ extern "C" {
 #endif
 
 #define PN_NETWORK					0x0A
-#define NETWORK_TIMEOUT					5
+#define PN_MODEM_NETWORK				0xC8
 #define NETWORK_SCAN_TIMEOUT				180
 #define NETWORK_SET_TIMEOUT				240
 #define NET_INVALID_TIME				0x64
 
 enum net_message_id {
+	NET_MODEM_REG_STATUS_GET_REQ =			0x00,
+	NET_MODEM_REG_STATUS_GET_RESP =			0x01,
+	NET_MODEM_REG_STATUS_IND =			0x02,
+	NET_MODEM_AVAILABLE_GET_REQ =			0x03,
+	NET_MODEM_AVAILABLE_GET_RESP =			0x04,
 	NET_SET_REQ =					0x07,
 	NET_SET_RESP =					0x08,
 	NET_RSSI_GET_REQ =				0x0B,
 	NET_RSSI_GET_RESP =				0x0C,
+	NET_CS_STATE_IND =				0x19,
 	NET_RSSI_IND =					0x1E,
+	NET_CIPHERING_IND =				0x20,
 	NET_TIME_IND =					0x27,
+	NET_OLD_OPER_NAME_READ_REQ =			0x28,
+	NET_OLD_OPER_NAME_READ_RESP =			0x29,
+	NET_CHANNEL_INFO_IND =				0x2C,
 	NET_RAT_IND =					0x35,
 	NET_RAT_REQ =					0x36,
 	NET_RAT_RESP =					0x37,
+	NET_CS_STATE_REQ =				0x3A,
+	NET_CS_STATE_RESP =				0x3B,
+	NET_CELL_INFO_GET_REQ =				0x40,
+	NET_CELL_INFO_GET_RESP =			0x41,
+	NET_CELL_INFO_IND =				0x42,
+	NET_NITZ_NAME_IND =				0x43,
+	NET_NW_ACCESS_CONF_REQ =			0x48,
+	NET_NW_ACCESS_CONF_RESP =			0x49,
 	NET_REG_STATUS_GET_REQ =			0xE0,
 	NET_REG_STATUS_GET_RESP =			0xE1,
 	NET_REG_STATUS_IND =				0xE2,
@@ -49,19 +67,28 @@ enum net_message_id {
 	NET_AVAILABLE_GET_RESP =			0xE4,
 	NET_OPER_NAME_READ_REQ =			0xE5,
 	NET_OPER_NAME_READ_RESP =			0xE6,
-	NET_COMMON_MESSAGE =				0xF0,
 };
 
 enum net_subblock {
 	NET_REG_INFO_COMMON =				0x00,
+	NET_MODEM_AVAIL_NETWORK_INFO_COMMON =		0x01,
 	NET_OPERATOR_INFO_COMMON =			0x02,
 	NET_RSSI_CURRENT =				0x04,
 	NET_GSM_REG_INFO =				0x09,
 	NET_DETAILED_NETWORK_INFO =			0x0B,
+	NET_MODEM_DETAILED_NETWORK_INFO =		0x0B,
 	NET_GSM_OPERATOR_INFO =				0x0C,
 	NET_TIME_INFO =					0x10,
 	NET_GSM_BAND_INFO =				0x11,
 	NET_RAT_INFO =					0x2C,
+	NET_GSM_CELL_INFO =				0x46,
+	NET_WCDMA_CELL_INFO =				0x47,
+	NET_FULL_NITZ_NAME =				0x48,
+	NET_SHORT_NITZ_NAME =				0x49,
+	NET_REGISTRATION_CONF_INFO =			0x55,
+	NET_ROAMING_CONF_INFO =				0x56,
+	NET_REGISTRATION_CONF1_INFO =			0x59,
+	NET_ROAMING_CONF1_INFO =			0x5A,
 	NET_AVAIL_NETWORK_INFO_COMMON =			0xE1,
 	NET_OPER_NAME_INFO =				0xE7,
 };
@@ -177,6 +204,11 @@ enum net_select_mode {
 	NET_SELECT_MODE_AUTOMATIC =			0x02,
 	NET_SELECT_MODE_USER_RESELECTION =		0x03,
 	NET_SELECT_MODE_NO_SELECTION =			0x04,
+};
+
+enum net_cs_states {
+	NET_CS_INACTIVE =		0x00,
+	NET_CS_ACTIVE =		0x01,
 };
 
 enum net_isi_cause {

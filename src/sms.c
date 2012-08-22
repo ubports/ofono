@@ -42,11 +42,13 @@
 #define uninitialized_var(x) x = x
 
 #define MESSAGE_MANAGER_FLAG_CACHED 0x1
+#define MESSAGE_MANAGER_FLAG_TXQ_ACTIVE 0x2
 
 #define SETTINGS_STORE "sms"
 #define SETTINGS_GROUP "Settings"
 
 #define TXQ_MAX_RETRIES 4
+#define NETWORK_TIMEOUT 332
 
 static gboolean tx_next(gpointer user_data);
 
@@ -73,10 +75,10 @@ struct ofono_sms {
 	struct ofono_netreg *netreg;
 	unsigned int netreg_watch;
 	unsigned int status_watch;
-	struct ofono_sim *sim;
 	GKeyFile *settings;
 	char *imsi;
 	int bearer;
+	enum sms_alphabet alphabet;
 	const struct ofono_sms_driver *driver;
 	void *driver_data;
 	struct ofono_atom *atom;
@@ -140,21 +142,56 @@ static const char *sms_bearer_to_string(int bearer)
 		return "cs-preferred";
 	};
 
-	return "unknown";
+	return NULL;
 }
 
-static int sms_bearer_from_string(const char *str)
+static gboolean sms_bearer_from_string(const char *str, int *bearer)
 {
 	if (g_str_equal(str, "ps-only"))
-		return 0;
+		*bearer = 0;
 	else if (g_str_equal(str, "cs-only"))
-		return 1;
+		*bearer = 1;
 	else if (g_str_equal(str, "ps-preferred"))
-		return 2;
+		*bearer = 2;
 	else if (g_str_equal(str, "cs-preferred"))
-		return 3;
+		*bearer = 3;
+	else
+		return FALSE;
 
-	return -1;
+	return TRUE;
+}
+
+static const char *sms_alphabet_to_string(enum sms_alphabet alphabet)
+{
+	switch (alphabet) {
+	case SMS_ALPHABET_TURKISH:
+		return "turkish";
+	case SMS_ALPHABET_SPANISH:
+		return "spanish";
+	case SMS_ALPHABET_PORTUGUESE:
+		return "portuguese";
+	case SMS_ALPHABET_DEFAULT:
+		return "default";
+	}
+
+	return NULL;
+}
+
+static gboolean sms_alphabet_from_string(const char *str,
+						enum sms_alphabet *alphabet)
+{
+	if (g_str_equal(str, "default"))
+		*alphabet = SMS_ALPHABET_DEFAULT;
+	else if (g_str_equal(str, "turkish"))
+		*alphabet = SMS_ALPHABET_TURKISH;
+	else if (g_str_equal(str, "spanish"))
+		*alphabet = SMS_ALPHABET_SPANISH;
+	else if (g_str_equal(str, "portuguese"))
+		*alphabet = SMS_ALPHABET_PORTUGUESE;
+	else
+		return FALSE;
+
+	return TRUE;
 }
 
 static unsigned int add_sms_handler(struct ofono_watchlist *watchlist,
@@ -253,6 +290,25 @@ static void set_bearer(struct ofono_sms *sms, int bearer)
 						DBUS_TYPE_STRING, &value);
 }
 
+static void set_alphabet(struct ofono_sms *sms, enum sms_alphabet alphabet)
+{
+	DBusConnection *conn = ofono_dbus_get_connection();
+	const char *path = __ofono_atom_get_path(sms->atom);
+	const char *value;
+
+	if (sms->alphabet == alphabet)
+		return;
+
+	sms->alphabet = alphabet;
+
+	value = sms_alphabet_to_string(sms->alphabet);
+
+	ofono_dbus_signal_property_changed(conn, path,
+						OFONO_MESSAGE_MANAGER_INTERFACE,
+						"Alphabet",
+						DBUS_TYPE_STRING, &value);
+}
+
 static void set_sca(struct ofono_sms *sms,
 			const struct ofono_phone_number *sca)
 {
@@ -284,6 +340,7 @@ static DBusMessage *generate_get_properties_reply(struct ofono_sms *sms,
 	DBusMessageIter dict;
 	const char *sca;
 	const char *bearer;
+	const char *alphabet;
 
 	reply = dbus_message_new_method_return(msg);
 	if (reply == NULL)
@@ -305,6 +362,9 @@ static DBusMessage *generate_get_properties_reply(struct ofono_sms *sms,
 
 	bearer = sms_bearer_to_string(sms->bearer);
 	ofono_dbus_dict_append(&dict, "Bearer", DBUS_TYPE_STRING, &bearer);
+
+	alphabet = sms_alphabet_to_string(sms->alphabet);
+	ofono_dbus_dict_append(&dict, "Alphabet", DBUS_TYPE_STRING, &alphabet);
 
 	dbus_message_iter_close_container(&iter, &dict);
 
@@ -337,14 +397,14 @@ static DBusMessage *sms_get_properties(DBusConnection *conn,
 {
 	struct ofono_sms *sms = data;
 
+	if (sms->flags & MESSAGE_MANAGER_FLAG_CACHED)
+		return generate_get_properties_reply(sms, msg);
+
 	if (sms->pending)
 		return __ofono_error_busy(msg);
 
 	if (sms->driver->sca_query == NULL)
 		return __ofono_error_not_implemented(msg);
-
-	if (sms->flags & MESSAGE_MANAGER_FLAG_CACHED)
-		return generate_get_properties_reply(sms, msg);
 
 	sms->pending = dbus_message_ref(msg);
 
@@ -479,8 +539,7 @@ static DBusMessage *sms_set_property(DBusConnection *conn, DBusMessage *msg,
 
 		dbus_message_iter_get_basic(&var, &value);
 
-		bearer = sms_bearer_from_string(value);
-		if (bearer < 0)
+		if (sms_bearer_from_string(value, &bearer) != TRUE)
 			return __ofono_error_invalid_format(msg);
 
 		if (sms->driver->bearer_set == NULL ||
@@ -515,6 +574,24 @@ static DBusMessage *sms_set_property(DBusConnection *conn, DBusMessage *msg,
 		return NULL;
 	}
 
+	if (!strcmp(property, "Alphabet")) {
+		const char *value;
+		enum sms_alphabet alphabet;
+
+		if (dbus_message_iter_get_arg_type(&var) != DBUS_TYPE_STRING)
+			return __ofono_error_invalid_args(msg);
+
+		dbus_message_iter_get_basic(&var, &value);
+
+		if (!sms_alphabet_from_string(value, &alphabet))
+			return __ofono_error_invalid_format(msg);
+
+		set_alphabet(sms, alphabet);
+
+		g_dbus_send_reply(conn, msg, DBUS_TYPE_INVALID);
+		return NULL;
+	}
+
 	return __ofono_error_invalid_args(msg);
 }
 
@@ -538,21 +615,85 @@ static void tx_queue_entry_destroy_foreach(gpointer _entry, gpointer unused)
 	tx_queue_entry_destroy(_entry);
 }
 
+static void sms_tx_queue_remove_entry(struct ofono_sms *sms, GList *entry_list,
+					enum message_state tx_state)
+{
+	struct tx_queue_entry *entry = entry_list->data;
+	struct ofono_modem *modem = __ofono_atom_get_modem(sms->atom);
+
+	g_queue_delete_link(sms->txq, entry_list);
+
+	DBG("%p", entry);
+
+	if (entry->cb)
+		entry->cb(tx_state == MESSAGE_STATE_SENT, entry->data);
+
+	if (entry->flags & OFONO_SMS_SUBMIT_FLAG_RECORD_HISTORY) {
+		enum ofono_history_sms_status hs;
+
+		switch(tx_state) {
+		case MESSAGE_STATE_SENT:
+			hs = OFONO_HISTORY_SMS_STATUS_SUBMITTED;
+			break;
+		case MESSAGE_STATE_FAILED:
+			hs = OFONO_HISTORY_SMS_STATUS_SUBMIT_FAILED;
+			break;
+		case MESSAGE_STATE_CANCELLED:
+			hs = OFONO_HISTORY_SMS_STATUS_SUBMIT_CANCELLED;
+			break;
+		default:
+			ofono_error("Unexpected sms state %d", tx_state);
+			goto done;
+		}
+
+		__ofono_history_sms_send_status(modem, &entry->uuid,
+								time(NULL), hs);
+	}
+
+	if (entry->flags & OFONO_SMS_SUBMIT_FLAG_EXPOSE_DBUS) {
+		struct message *m;
+
+		sms_tx_backup_free(sms->imsi, entry->id, entry->flags,
+					ofono_uuid_to_str(&entry->uuid));
+
+		m = g_hash_table_lookup(sms->messages, &entry->uuid);
+
+		if (m != NULL) {
+			message_set_state(m, tx_state);
+			g_hash_table_remove(sms->messages, &entry->uuid);
+			message_emit_removed(m,
+					OFONO_MESSAGE_MANAGER_INTERFACE);
+			message_dbus_unregister(m);
+		}
+	}
+
+done:
+	tx_queue_entry_destroy(entry);
+}
+
 static void tx_finished(const struct ofono_error *error, int mr, void *data)
 {
 	struct ofono_sms *sms = data;
-	struct ofono_modem *modem = __ofono_atom_get_modem(sms->atom);
 	struct tx_queue_entry *entry = g_queue_peek_head(sms->txq);
 	gboolean ok = error->type == OFONO_ERROR_TYPE_NO_ERROR;
-	struct message *m = NULL;
+	enum message_state tx_state;
 
-	DBG("tx_finished");
+	DBG("tx_finished %p", entry);
+
+	sms->flags &= ~MESSAGE_MANAGER_FLAG_TXQ_ACTIVE;
 
 	if (ok == FALSE) {
 		/* Retry again when back in online mode */
 		/* Note this does not increment retry count */
 		if (sms->registered == FALSE)
 			return;
+
+		tx_state = MESSAGE_STATE_FAILED;
+
+		/* Retry done only for Network Timeout failure */
+		if (error->type == OFONO_ERROR_TYPE_CMS &&
+				error->error != NETWORK_TIMEOUT)
+			goto next_q;
 
 		if (!(entry->flags & OFONO_SMS_SUBMIT_FLAG_RETRY))
 			goto next_q;
@@ -591,47 +732,11 @@ static void tx_finished(const struct ofono_error *error, int mr, void *data)
 		return;
 	}
 
+	tx_state = MESSAGE_STATE_SENT;
+
 next_q:
-	entry = g_queue_pop_head(sms->txq);
-
-	if (entry->cb)
-		entry->cb(ok, entry->data);
-
-	if (entry->flags & OFONO_SMS_SUBMIT_FLAG_RECORD_HISTORY) {
-		enum ofono_history_sms_status hs;
-
-		if (ok)
-			hs = OFONO_HISTORY_SMS_STATUS_SUBMITTED;
-		else
-			hs = OFONO_HISTORY_SMS_STATUS_SUBMIT_FAILED;
-
-		__ofono_history_sms_send_status(modem, &entry->uuid,
-						time(NULL), hs);
-	}
-
-	if (entry->flags & OFONO_SMS_SUBMIT_FLAG_EXPOSE_DBUS) {
-		enum message_state ms;
-
-		sms_tx_backup_free(sms->imsi, entry->id, entry->flags,
-					ofono_uuid_to_str(&entry->uuid));
-
-		if (ok)
-			ms = MESSAGE_STATE_SENT;
-		else
-			ms = MESSAGE_STATE_FAILED;
-
-		m = g_hash_table_lookup(sms->messages, &entry->uuid);
-
-		if (m != NULL) {
-			message_set_state(m, ms);
-			g_hash_table_remove(sms->messages, &entry->uuid);
-			message_emit_removed(m,
-					OFONO_MESSAGE_MANAGER_INTERFACE);
-			message_dbus_unregister(m);
-		}
-	}
-
-	tx_queue_entry_destroy(entry);
+	sms_tx_queue_remove_entry(sms, g_queue_peek_head_link(sms->txq),
+					tx_state);
 
 	if (sms->registered == FALSE)
 		return;
@@ -648,16 +753,10 @@ static gboolean tx_next(gpointer user_data)
 	int send_mms = 0;
 	struct tx_queue_entry *entry = g_queue_peek_head(sms->txq);
 	struct pending_pdu *pdu = &entry->pdus[entry->cur_pdu];
-	struct ofono_error error;
-
-	error.type = OFONO_ERROR_TYPE_NO_ERROR;
 
 	DBG("tx_next: %p", entry);
 
 	sms->tx_source = 0;
-
-	if (entry == NULL)
-		return FALSE;
 
 	if (sms->registered == FALSE)
 		return FALSE;
@@ -665,6 +764,8 @@ static gboolean tx_next(gpointer user_data)
 	if (g_queue_get_length(sms->txq) > 1
 			|| (entry->num_pdus - entry->cur_pdu) > 1)
 		send_mms = 1;
+
+	sms->flags |= MESSAGE_MANAGER_FLAG_TXQ_ACTIVE;
 
 	sms->driver->submit(sms, pdu->pdu, pdu->pdu_len, pdu->tpdu_len,
 				send_mms, tx_finished, sms);
@@ -867,8 +968,10 @@ static DBusMessage *sms_send_message(DBusConnection *conn, DBusMessage *msg,
 	if (valid_phone_number_format(to) == FALSE)
 		return __ofono_error_invalid_format(msg);
 
-	msg_list = sms_text_prepare(to, text, sms->ref, use_16bit_ref,
-						sms->use_delivery_reports);
+	msg_list = sms_text_prepare_with_alphabet(to, text, sms->ref,
+						use_16bit_ref,
+						sms->use_delivery_reports,
+						sms->alphabet);
 
 	if (msg_list == NULL)
 		return __ofono_error_invalid_format(msg);
@@ -951,23 +1054,84 @@ static DBusMessage *sms_get_messages(DBusConnection *conn, DBusMessage *msg,
 	return reply;
 }
 
-static GDBusMethodTable sms_manager_methods[] = {
-	{ "GetProperties",    "",    "a{sv}",        sms_get_properties,
-						G_DBUS_METHOD_FLAG_ASYNC },
-	{ "SetProperty",      "sv",  "",             sms_set_property,
-						G_DBUS_METHOD_FLAG_ASYNC },
-	{ "SendMessage",      "ss",  "o",             sms_send_message,
-						G_DBUS_METHOD_FLAG_ASYNC },
-	{ "GetMessages",       "",    "a(oa{sv})",    sms_get_messages },
+static gint entry_compare_by_uuid(gconstpointer a, gconstpointer b)
+{
+	const struct tx_queue_entry *entry = a;
+	const struct ofono_uuid *uuid = b;
+
+	return memcmp(&entry->uuid, uuid, sizeof(entry->uuid));
+}
+
+int __ofono_sms_txq_cancel(struct ofono_sms *sms, const struct ofono_uuid *uuid)
+{
+	GList *l;
+	struct tx_queue_entry *entry;
+
+	l = g_queue_find_custom(sms->txq, uuid, entry_compare_by_uuid);
+
+	if (l == NULL)
+		return -ENOENT;
+
+	entry = l->data;
+
+	if (entry == g_queue_peek_head(sms->txq)) {
+		/*
+		 * Fail if any pdu was already transmitted or if we are
+		 * waiting the answer from driver.
+		 */
+		if (entry->cur_pdu > 0)
+			return -EPERM;
+
+		if (sms->flags & MESSAGE_MANAGER_FLAG_TXQ_ACTIVE)
+			return -EPERM;
+		/*
+		 * Make sure we don't call tx_next() if there are no entries
+		 * and that next entry doesn't have to wait a 'retry time'
+		 * from this one.
+		 */
+		if (sms->tx_source) {
+			g_source_remove(sms->tx_source);
+			sms->tx_source = 0;
+
+			if (g_queue_get_length(sms->txq) > 1)
+				sms->tx_source = g_timeout_add(0, tx_next, sms);
+		}
+	}
+
+	sms_tx_queue_remove_entry(sms, l, MESSAGE_STATE_CANCELLED);
+
+	return 0;
+}
+
+static const GDBusMethodTable sms_manager_methods[] = {
+	{ GDBUS_ASYNC_METHOD("GetProperties",
+				NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
+				sms_get_properties) },
+	{ GDBUS_ASYNC_METHOD("SetProperty",
+			GDBUS_ARGS({ "property", "s" }, { "value", "v" }),
+			NULL, sms_set_property) },
+	{ GDBUS_ASYNC_METHOD("SendMessage",
+			GDBUS_ARGS({ "to", "s" }, { "text", "s" }),
+			GDBUS_ARGS({ "path", "o" }),
+			sms_send_message) },
+	{ GDBUS_METHOD("GetMessages",
+			NULL, GDBUS_ARGS({ "messages", "a(oa{sv})" }),
+			sms_get_messages) },
 	{ }
 };
 
-static GDBusSignalTable sms_manager_signals[] = {
-	{ "PropertyChanged",	"sv"		},
-	{ "IncomingMessage",	"sa{sv}"	},
-	{ "ImmediateMessage",	"sa{sv}"	},
-	{ "MessageAdded",	"oa{sv}"	},
-	{ "MessageRemoved",	"o"		},
+static const GDBusSignalTable sms_manager_signals[] = {
+	{ GDBUS_SIGNAL("PropertyChanged",
+			GDBUS_ARGS({ "name", "s" }, { "value", "v" })) },
+	{ GDBUS_SIGNAL("IncomingMessage",
+			GDBUS_ARGS({ "message", "s" }, { "info", "a{sv}" })) },
+	{ GDBUS_SIGNAL("ImmediateMessage",
+			GDBUS_ARGS({ "message", "s" }, { "info", "a{sv}" })) },
+	{ GDBUS_SIGNAL("MessageAdded",
+			GDBUS_ARGS({ "path", "o" },
+						{ "properties", "a{sv}" })) },
+	{ GDBUS_SIGNAL("MessageRemoved",
+			GDBUS_ARGS({ "path", "o" })) },
 	{ }
 };
 
@@ -1180,7 +1344,7 @@ static void sms_dispatch(struct ofono_sms *sms, GSList *sms_list)
 			}
 		}
 
-		DBG("dst %d src %d 8bit %u", cdst, csrc, is_8bit);
+		DBG("dst %d src %d", cdst, csrc);
 
 		if (srcport != csrc || dstport != cdst) {
 			ofono_error("Source / Destination ports across "
@@ -1295,12 +1459,12 @@ static inline gboolean handle_mwi(struct ofono_sms *sms, struct sms *s)
 	return discard;
 }
 
-void ofono_sms_deliver_notify(struct ofono_sms *sms, unsigned char *pdu,
+void ofono_sms_deliver_notify(struct ofono_sms *sms, const unsigned char *pdu,
 				int len, int tpdu_len)
 {
 	struct ofono_modem *modem = __ofono_atom_get_modem(sms->atom);
-	struct ofono_atom *stk_atom;
-	struct ofono_atom *sim_atom;
+	struct ofono_sim *sim;
+	struct ofono_stk *stk;
 	struct sms s;
 	enum sms_class cls;
 
@@ -1369,24 +1533,20 @@ void ofono_sms_deliver_notify(struct ofono_sms *sms, unsigned char *pdu,
 		if (cls != SMS_CLASS_2)
 			break;
 
-		sim_atom = __ofono_modem_find_atom(modem, OFONO_ATOM_TYPE_SIM);
-
-		if (sim_atom == NULL)
+		sim = __ofono_atom_find(OFONO_ATOM_TYPE_SIM, modem);
+		if (sim == NULL)
 			return;
 
-		if (!__ofono_sim_service_available(
-					__ofono_atom_get_data(sim_atom),
+		if (!__ofono_sim_service_available(sim,
 					SIM_UST_SERVICE_DATA_DOWNLOAD_SMS_PP,
 					SIM_SST_SERVICE_DATA_DOWNLOAD_SMS_PP))
 			return;
 
-		stk_atom = __ofono_modem_find_atom(modem, OFONO_ATOM_TYPE_STK);
-
-		if (stk_atom == NULL)
+		stk = __ofono_atom_find(OFONO_ATOM_TYPE_STK, modem);
+		if (stk == NULL)
 			return;
 
-		__ofono_sms_sim_download(__ofono_atom_get_data(stk_atom),
-						&s, NULL, sms);
+		__ofono_sms_sim_download(stk, &s, NULL, sms);
 
 		/*
 		 * Passing the USIM response back to network is not
@@ -1446,7 +1606,7 @@ out:
 	handle_deliver(sms, &s);
 }
 
-void ofono_sms_status_notify(struct ofono_sms *sms, unsigned char *pdu,
+void ofono_sms_status_notify(struct ofono_sms *sms, const unsigned char *pdu,
 				int len, int tpdu_len)
 {
 	struct sms s;
@@ -1585,6 +1745,8 @@ static void sms_remove(struct ofono_atom *atom)
 					sms->use_delivery_reports);
 		g_key_file_set_integer(sms->settings, SETTINGS_GROUP,
 					"Bearer", sms->bearer);
+		g_key_file_set_integer(sms->settings, SETTINGS_GROUP,
+					"Alphabet", sms->alphabet);
 
 		storage_close(sms->imsi, SETTINGS_STORE, sms->settings, TRUE);
 
@@ -1667,7 +1829,7 @@ static void mw_watch(struct ofono_atom *atom,
 
 static void sms_load_settings(struct ofono_sms *sms, const char *imsi)
 {
-	GError *error = NULL;
+	GError *error;
 
 	sms->settings = storage_open(imsi, SETTINGS_STORE);
 
@@ -1676,19 +1838,50 @@ static void sms_load_settings(struct ofono_sms *sms, const char *imsi)
 
 	sms->imsi = g_strdup(imsi);
 
+	error = NULL;
 	sms->ref = g_key_file_get_integer(sms->settings, SETTINGS_GROUP,
-							"NextReference", NULL);
-	if (sms->ref >= 65536)
-		sms->ref = 1;
+						"NextReference", &error);
 
+	if (error || sms->ref > 65536) {
+		g_error_free(error);
+		sms->ref = 1;
+		g_key_file_set_integer(sms->settings, SETTINGS_GROUP,
+					"NextReference", sms->ref);
+	}
+
+	error = NULL;
 	sms->use_delivery_reports =
 		g_key_file_get_boolean(sms->settings, SETTINGS_GROUP,
-					"UseDeliveryReports", NULL);
+					"UseDeliveryReports", &error);
 
+	if (error) {
+		g_error_free(error);
+		g_key_file_set_boolean(sms->settings, SETTINGS_GROUP,
+					"UseDeliveryReports",
+					sms->use_delivery_reports);
+	}
+
+	error = NULL;
 	sms->bearer = g_key_file_get_integer(sms->settings, SETTINGS_GROUP,
 							"Bearer", &error);
-	if (error)
+
+	if (error || sms_bearer_to_string(sms->bearer) == NULL) {
+		g_error_free(error);
 		sms->bearer = 3; /* Default to CS then PS */
+		g_key_file_set_integer(sms->settings, SETTINGS_GROUP,
+					"Bearer", sms->bearer);
+	}
+
+	error = NULL;
+	sms->alphabet = g_key_file_get_integer(sms->settings, SETTINGS_GROUP,
+						"Alphabet", &error);
+
+	if (error || sms_alphabet_to_string(sms->alphabet) == NULL) {
+		g_error_free(error);
+		sms->alphabet = SMS_ALPHABET_DEFAULT;
+		g_key_file_set_integer(sms->settings, SETTINGS_GROUP,
+					"Alphabet", sms->alphabet);
+	}
 }
 
 static void bearer_init_callback(const struct ofono_error *error, void *data)
@@ -1766,8 +1959,7 @@ void ofono_sms_register(struct ofono_sms *sms)
 	DBusConnection *conn = ofono_dbus_get_connection();
 	struct ofono_modem *modem = __ofono_atom_get_modem(sms->atom);
 	const char *path = __ofono_atom_get_path(sms->atom);
-	struct ofono_atom *atom;
-	struct ofono_atom *sim_atom;
+	struct ofono_sim *sim;
 
 	if (!g_dbus_register_interface(conn, path,
 					OFONO_MESSAGE_MANAGER_INTERFACE,
@@ -1785,32 +1977,21 @@ void ofono_sms_register(struct ofono_sms *sms)
 					OFONO_ATOM_TYPE_MESSAGE_WAITING,
 					mw_watch, sms, NULL);
 
-	atom = __ofono_modem_find_atom(modem, OFONO_ATOM_TYPE_MESSAGE_WAITING);
-
-	if (atom && __ofono_atom_get_registered(atom))
-		mw_watch(atom, OFONO_ATOM_WATCH_CONDITION_REGISTERED, sms);
-
 	sms->netreg_watch = __ofono_modem_add_atom_watch(modem,
 					OFONO_ATOM_TYPE_NETREG,
 					netreg_watch, sms, NULL);
 
-	atom = __ofono_modem_find_atom(modem, OFONO_ATOM_TYPE_NETREG);
-
-	if (atom && __ofono_atom_get_registered(atom))
-		netreg_watch(atom, OFONO_ATOM_WATCH_CONDITION_REGISTERED, sms);
-
-	sim_atom = __ofono_modem_find_atom(modem, OFONO_ATOM_TYPE_SIM);
+	sim = __ofono_atom_find(OFONO_ATOM_TYPE_SIM, modem);
 
 	/*
 	 * If we have a sim atom, we can uniquely identify the SIM,
 	 * otherwise create an sms assembly which doesn't backup the fragment
 	 * store.
 	 */
-	if (sim_atom) {
+	if (sim) {
 		const char *imsi;
 
-		sms->sim = __ofono_atom_get_data(sim_atom);
-		imsi = ofono_sim_get_imsi(sms->sim);
+		imsi = ofono_sim_get_imsi(sim);
 		sms->assembly = sms_assembly_new(imsi);
 
 		sms->sr_assembly = status_report_assembly_new(imsi);

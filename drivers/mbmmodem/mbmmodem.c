@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -36,12 +36,14 @@ static int mbmmodem_init(void)
 {
 	mbm_gprs_context_init();
 	mbm_stk_init();
+	mbm_location_reporting_init();
 
 	return 0;
 }
 
 static void mbmmodem_exit(void)
 {
+	mbm_location_reporting_exit();
 	mbm_stk_exit();
 	mbm_gprs_context_exit();
 }

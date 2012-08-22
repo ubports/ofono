@@ -2,8 +2,8 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
- *  Copyright (C) 2010 ST-Ericsson AB.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2010  ST-Ericsson AB.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -47,6 +47,7 @@ static const char *creg_prefix[] = { "+CREG:", NULL };
 static const char *cops_prefix[] = { "+COPS:", NULL };
 static const char *csq_prefix[] = { "+CSQ:", NULL };
 static const char *cind_prefix[] = { "+CIND:", NULL };
+static const char *zpas_prefix[] = { "+ZPAS:", NULL };
 static const char *option_tech_prefix[] = { "_OCTI:", "_OUWCTI:", NULL };
 
 struct netreg_data {
@@ -56,8 +57,10 @@ struct netreg_data {
 	int signal_index; /* If strength is reported via CIND */
 	int signal_min; /* min strength reported via CIND */
 	int signal_max; /* max strength reported via CIND */
+	int signal_invalid; /* invalid strength reported via CIND */
 	int tech;
 	struct ofono_network_time time;
+	guint nitz_timeout;
 	unsigned int vendor;
 };
 
@@ -77,6 +80,40 @@ static void extract_mcc_mnc(const char *str, char *mcc, char *mnc)
 	/* Usually a 2 but sometimes 3 digit network code */
 	strncpy(mnc, str + OFONO_MAX_MCC_LENGTH, OFONO_MAX_MNC_LENGTH);
 	mnc[OFONO_MAX_MNC_LENGTH] = '\0';
+}
+
+static int zte_parse_tech(GAtResult *result)
+{
+	GAtResultIter iter;
+	const char *network, *domain;
+	int tech;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "+ZPAS:"))
+		return -1;
+
+	if (!g_at_result_iter_next_string(&iter, &network))
+		return -1;
+
+	if (!g_at_result_iter_next_string(&iter, &domain))
+		return -1;
+
+	if (g_str_equal(network, "GSM") == TRUE ||
+			g_str_equal(network, "GPRS") == TRUE)
+		tech = ACCESS_TECHNOLOGY_GSM;
+	else if (g_str_equal(network, "EDGE") == TRUE)
+		tech = ACCESS_TECHNOLOGY_GSM_EGPRS;
+	else if (g_str_equal(network, "UMTS") == TRUE)
+		tech = ACCESS_TECHNOLOGY_UTRAN;
+	else if (g_str_equal(network, "HSDPA") == TRUE)
+		tech = ACCESS_TECHNOLOGY_UTRAN_HSDPA;
+	else
+		tech = -1;
+
+	DBG("network %s domain %s tech %d", network, domain, tech);
+
+	return tech;
 }
 
 static int option_parse_tech(GAtResult *result)
@@ -167,6 +204,18 @@ static void at_creg_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	cb(&error, status, lac, ci, tech, cbd->data);
 }
 
+static void zte_tech_cb(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	struct ofono_netreg *netreg = cbd->data;
+	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+
+	if (ok)
+		nd->tech = zte_parse_tech(result);
+	else
+		nd->tech = -1;
+}
+
 static void option_tech_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
@@ -213,10 +262,19 @@ static void at_registration_status(struct ofono_netreg *netreg,
 		g_at_chat_send(nd->chat, "AT$CNTI=0", none_prefix,
 				NULL, NULL, NULL);
 		break;
+	case OFONO_VENDOR_ZTE:
+		/*
+		 * Send +ZPAS? to find out the current tech, zte_tech_cb
+		 * will call, fire CREG? to do the rest.
+		 */
+		if (g_at_chat_send(nd->chat, "AT+ZPAS?", zpas_prefix,
+					zte_tech_cb, cbd, NULL) == 0)
+			nd->tech = -1;
+		break;
 	case OFONO_VENDOR_OPTION_HSO:
 		/*
 		 * Send AT_OCTI?;_OUWCTI? to find out the current tech,
-		 * option_tech_cb will call fire CREG? to do the rest.
+		 * option_tech_cb will call, fire CREG? to do the rest.
 		 */
 		if (g_at_chat_send(nd->chat, "AT_OCTI?;_OUWCTI?",
 					option_tech_prefix,
@@ -622,8 +680,8 @@ static void ifx_xhomezr_notify(GAtResult *result, gpointer user_data)
 
 static void ifx_xciev_notify(GAtResult *result, gpointer user_data)
 {
-	struct ofono_netreg *netreg = user_data;
-	int strength, ind;
+	//struct ofono_netreg *netreg = user_data;
+	int ind;
 	GAtResultIter iter;
 
 	g_at_result_iter_init(&iter, result);
@@ -634,12 +692,39 @@ static void ifx_xciev_notify(GAtResult *result, gpointer user_data)
 	if (!g_at_result_iter_next_number(&iter, &ind))
 		return;
 
-	if (ind == 0)
+	DBG("ind %d", ind);
+
+	/*
+	 * Radio signal strength indicators are defined for 0-7,
+	 * but this notification seems to return CSQ 0-31,99 values.
+	 *
+	 * Ignore this indication for now since it can not be trusted.
+	 */
+}
+
+static void ifx_xcsq_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_netreg *netreg = user_data;
+	int rssi, ber, strength;
+	GAtResultIter iter;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "+XCSQ:"))
+		return;
+
+	if (!g_at_result_iter_next_number(&iter, &rssi))
+		return;
+
+	if (!g_at_result_iter_next_number(&iter, &ber))
+		return;
+
+	DBG("rssi %d ber %d", rssi, ber);
+
+	if (rssi == 99)
 		strength = -1;
-	else if (ind == 7)
-		strength = 100;
 	else
-		strength = (ind * 15);
+		strength = (rssi * 100) / 31;
 
 	ofono_netreg_strength_notify(netreg, strength);
 }
@@ -665,7 +750,11 @@ static void ciev_notify(GAtResult *result, gpointer user_data)
 	if (!g_at_result_iter_next_number(&iter, &strength))
 		return;
 
-	strength = (strength * 100) / (nd->signal_max - nd->signal_min);
+	if (strength == nd->signal_invalid)
+		strength = -1;
+	else
+		strength = (strength * 100) / (nd->signal_max - nd->signal_min);
+
 	ofono_netreg_strength_notify(netreg, strength);
 }
 
@@ -689,6 +778,53 @@ static void ctzv_notify(GAtResult *result, gpointer user_data)
 	nd->time.utcoff = atoi(tz) * 15 * 60;
 
 	ofono_netreg_time_notify(netreg, &nd->time);
+}
+
+static void tlts_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_netreg *netreg = user_data;
+	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	int year, mon, mday, hour, min, sec;
+	char tz[4];
+	const char *time;
+	GAtResultIter iter;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "*TLTS:"))
+		return;
+
+	if (!g_at_result_iter_next_string(&iter, &time))
+		return;
+
+	DBG("time %s", time);
+
+	if (sscanf(time, "%02u/%02u/%02u,%02u:%02u:%02u%s", &year, &mon, &mday,
+						&hour, &min, &sec, tz) != 7)
+                return;
+
+        nd->time.sec = sec;
+        nd->time.min = min;
+        nd->time.hour = hour;
+        nd->time.mday = mday;
+        nd->time.mon = mon;
+        nd->time.year = 2000 + year;
+
+	nd->time.utcoff = atoi(tz) * 15 * 60;
+
+	ofono_netreg_time_notify(netreg, &nd->time);
+}
+
+static gboolean notify_time(gpointer user_data)
+{
+	struct ofono_netreg *netreg = user_data;
+	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+
+	nd->nitz_timeout = 0;
+
+	ofono_netreg_time_notify(netreg, &nd->time);
+
+	return FALSE;
 }
 
 static void ifx_ctzv_notify(GAtResult *result, gpointer user_data)
@@ -722,6 +858,11 @@ static void ifx_ctzv_notify(GAtResult *result, gpointer user_data)
 	nd->time.mday = mday;
 	nd->time.mon = mon;
 	nd->time.year = 2000 + year;
+
+	if (nd->nitz_timeout > 0)
+		g_source_remove(nd->nitz_timeout);
+
+	nd->nitz_timeout = g_timeout_add_seconds(1, notify_time, user_data);
 }
 
 static void ifx_ctzdst_notify(GAtResult *result, gpointer user_data)
@@ -742,6 +883,11 @@ static void ifx_ctzdst_notify(GAtResult *result, gpointer user_data)
 	DBG("dst %d", dst);
 
 	nd->time.dst = dst;
+
+	if (nd->nitz_timeout > 0) {
+		g_source_remove(nd->nitz_timeout);
+		nd->nitz_timeout = 0;
+	}
 
 	ofono_netreg_time_notify(netreg, &nd->time);
 }
@@ -775,7 +921,10 @@ static void cind_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 	g_at_result_iter_next_number(&iter, &strength);
 
-	strength = (strength * 100) / (nd->signal_max - nd->signal_min);
+	if (strength == nd->signal_invalid)
+		strength = -1;
+	else
+		strength = (strength * 100) / (nd->signal_max - nd->signal_min);
 
 	cb(&error, strength, cbd->data);
 }
@@ -796,6 +945,78 @@ static void huawei_rssi_notify(GAtResult *result, gpointer user_data)
 
 	ofono_netreg_strength_notify(netreg,
 				at_util_convert_signal_strength(strength));
+}
+
+static void huawei_mode_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_netreg *netreg = user_data;
+	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	GAtResultIter iter;
+	int mode, submode;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "^MODE:"))
+		return;
+
+	if (!g_at_result_iter_next_number(&iter, &mode))
+		return;
+
+	if (!g_at_result_iter_next_number(&iter, &submode))
+		return;
+
+	switch (mode) {
+	case 3:
+		nd->tech = ACCESS_TECHNOLOGY_GSM;
+		break;
+	case 5:
+		nd->tech = ACCESS_TECHNOLOGY_UTRAN;
+		break;
+	}
+}
+
+static void huawei_nwtime_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_netreg *netreg = user_data;
+	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	int year, mon, mday, hour, min, sec;
+	char tz[4];
+	const char *date, *time, *dst;
+	GAtResultIter iter;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "^NWTIME:"))
+		return;
+
+	if (!g_at_result_iter_next_unquoted_string(&iter, &date))
+		return;
+
+	if (!g_at_result_iter_next_unquoted_string(&iter, &time))
+		return;
+
+	if (!g_at_result_iter_next_unquoted_string(&iter, &dst))
+		return;
+
+	DBG("date %s time %s dst %s", date, time, dst);
+
+	if (sscanf(date, "%u/%u/%u", &year, &mon, &mday) != 3)
+		return;
+
+	if (sscanf(time, "%u:%u:%u%s", &hour, &min, &sec, tz) != 4)
+		return;
+
+	nd->time.utcoff = atoi(tz) * 15 * 60;
+	nd->time.dst = atoi(dst);
+
+	nd->time.sec = sec;
+	nd->time.min = min;
+	nd->time.hour = hour;
+	nd->time.mday = mday;
+	nd->time.mon = mon;
+	nd->time.year = 2000 + year;
+
+	ofono_netreg_time_notify(netreg, &nd->time);
 }
 
 static void csq_cb(gboolean ok, GAtResult *result, gpointer user_data)
@@ -960,6 +1181,57 @@ static void mbm_erinfo_notify(GAtResult *result, gpointer user_data)
 	}
 }
 
+static void icera_nwstate_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_netreg *netreg = user_data;
+	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	GAtResultIter iter;
+	const char *mccmnc, *tech, *state;
+	int rssi;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (g_at_result_iter_next(&iter, "%NWSTATE:") == FALSE)
+		return;
+
+	if (g_at_result_iter_next_number(&iter, &rssi) == FALSE)
+		return;
+
+	if (g_at_result_iter_next_unquoted_string(&iter, &mccmnc) == FALSE)
+		return;
+
+	if (g_at_result_iter_next_unquoted_string(&iter, &tech) == FALSE)
+		return;
+
+	if (g_at_result_iter_next_unquoted_string(&iter, &state) == FALSE)
+		return;
+
+	DBG("rssi %d tech %s state %s", rssi, tech, state);
+
+	/* small 'g' means CS, big 'G' means PS */
+	if (g_str_equal(tech, "2g") == TRUE ||
+				g_str_equal(tech, "2G") == TRUE ||
+				g_str_equal(tech, "2G-GPRS") == TRUE) {
+		nd->tech = ACCESS_TECHNOLOGY_GSM;
+	} else if (g_str_equal(tech, "2G-EDGE") == TRUE) {
+		nd->tech = ACCESS_TECHNOLOGY_GSM_EGPRS;
+	} else if (g_str_equal(tech, "3g") == TRUE ||
+				g_str_equal(tech, "3G") == TRUE ||
+				g_str_equal(tech, "R99") == TRUE) {
+		if (g_str_equal(state, "HSDPA") == TRUE)
+			nd->tech = ACCESS_TECHNOLOGY_UTRAN_HSDPA;
+		else if (g_str_equal(state, "HSUPA") == TRUE)
+			nd->tech = ACCESS_TECHNOLOGY_UTRAN_HSUPA;
+		else if (g_str_equal(state, "HSDPA-HSUPA") == TRUE)
+			nd->tech = ACCESS_TECHNOLOGY_UTRAN_HSDPA_HSUPA;
+		else if (g_str_equal(state, "HSDPA-HSUPA-HSPA+") == TRUE)
+			nd->tech = ACCESS_TECHNOLOGY_UTRAN_HSDPA_HSUPA;
+		else
+			nd->tech = ACCESS_TECHNOLOGY_UTRAN;
+	} else
+		nd->tech = -1;
+}
+
 static int cnti_to_tech(const char *cnti)
 {
 	if (g_str_equal(cnti, "GSM") == TRUE ||
@@ -1037,6 +1309,21 @@ static void cnti_query_tech_cb(gboolean ok, GAtResult *result,
 			tq->status, tq->lac, tq->ci, nd->tech);
 }
 
+static void zte_query_tech_cb(gboolean ok, GAtResult *result,
+						gpointer user_data)
+{
+	struct tech_query *tq = user_data;
+	int tech;
+
+	if (ok)
+		tech = zte_parse_tech(result);
+	else
+		tech = -1;
+
+	ofono_netreg_status_notify(tq->netreg,
+			tq->status, tq->lac, tq->ci, tech);
+}
+
 static void option_query_tech_cb(gboolean ok, GAtResult *result,
 						gpointer user_data)
 {
@@ -1086,6 +1373,11 @@ static void creg_notify(GAtResult *result, gpointer user_data)
 					cnti_query_tech_cb, tq, g_free) > 0)
 			return;
 		break;
+	case OFONO_VENDOR_ZTE:
+		if (g_at_chat_send(nd->chat, "AT+ZPAS?", zpas_prefix,
+					zte_query_tech_cb, tq, g_free) > 0)
+			return;
+		break;
 	case OFONO_VENDOR_OPTION_HSO:
 		if (g_at_chat_send(nd->chat, "AT_OCTI?;_OUWCTI?",
 					option_tech_prefix,
@@ -1109,8 +1401,11 @@ static void cind_support_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	struct netreg_data *nd = ofono_netreg_get_data(netreg);
 	GAtResultIter iter;
 	const char *str;
+	char *signal_identifier = "signal";
 	int index;
-	int min, max;
+	int min = 0;
+	int max = 0;
+	int tmp_min, tmp_max, invalid;
 
 	if (!ok)
 		goto error;
@@ -1121,15 +1416,32 @@ static void cind_support_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 	index = 1;
 
+	/*
+	 * Telit encapsulates the CIND=? tokens with braces
+	 * so we need to skip them
+	 */
+	if (nd->vendor == OFONO_VENDOR_TELIT) {
+		g_at_result_iter_open_list(&iter);
+		signal_identifier = "rssi";
+	}
+
 	while (g_at_result_iter_open_list(&iter)) {
+		/* Reset invalid default value for every token */
+		invalid = 99;
+
 		if (!g_at_result_iter_next_string(&iter, &str))
 			goto error;
 
 		if (!g_at_result_iter_open_list(&iter))
 			goto error;
 
-		while (g_at_result_iter_next_range(&iter, &min, &max))
-			;
+		while (g_at_result_iter_next_range(&iter, &tmp_min, &tmp_max)) {
+			if (tmp_min != tmp_max) {
+				min = tmp_min;
+				max = tmp_max;
+			} else
+				invalid = tmp_min;
+		}
 
 		if (!g_at_result_iter_close_list(&iter))
 			goto error;
@@ -1137,14 +1449,18 @@ static void cind_support_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		if (!g_at_result_iter_close_list(&iter))
 			goto error;
 
-		if (g_str_equal("signal", str) == TRUE) {
+		if (g_str_equal(signal_identifier, str) == TRUE) {
 			nd->signal_index = index;
 			nd->signal_min = min;
 			nd->signal_max = max;
+			nd->signal_invalid = invalid;
 		}
 
 		index += 1;
 	}
+
+	if (nd->vendor == OFONO_VENDOR_TELIT)
+		g_at_result_iter_close_list(&iter);
 
 	if (nd->signal_index == 0)
 		goto error;
@@ -1251,13 +1567,26 @@ static void at_creg_set_cb(gboolean ok, GAtResult *result, gpointer user_data)
 					FALSE, netreg, NULL);
 		break;
 	case OFONO_VENDOR_HUAWEI:
+		/* Register for RSSI reports */
 		g_at_chat_register(nd->chat, "^RSSI:", huawei_rssi_notify,
-					FALSE, netreg, NULL);
+						FALSE, netreg, NULL);
+
+		/* Register for system mode reports */
+		g_at_chat_register(nd->chat, "^MODE:", huawei_mode_notify,
+						FALSE, netreg, NULL);
+
+		/* Register for network time reports */
+		g_at_chat_register(nd->chat, "^NWTIME:", huawei_nwtime_notify,
+						FALSE, netreg, NULL);
 		break;
 	case OFONO_VENDOR_IFX:
 		/* Register for specific signal strength reports */
 		g_at_chat_register(nd->chat, "+XCIEV:", ifx_xciev_notify,
 						FALSE, netreg, NULL);
+		g_at_chat_register(nd->chat, "+XCSQ:", ifx_xcsq_notify,
+						FALSE, netreg, NULL);
+		g_at_chat_send(nd->chat, "AT+XCSQ=1", none_prefix,
+						NULL, NULL, NULL);
 		g_at_chat_send(nd->chat, "AT+XMER=1", none_prefix,
 						NULL, NULL, NULL);
 
@@ -1276,7 +1605,32 @@ static void at_creg_set_cb(gboolean ok, GAtResult *result, gpointer user_data)
 						NULL, NULL, NULL);
 		break;
 	case OFONO_VENDOR_ZTE:
+		/* Register for network time update reports */
+		g_at_chat_register(nd->chat, "+CTZV:", ctzv_notify,
+						FALSE, netreg, NULL);
+		g_at_chat_send(nd->chat, "AT+CTZR=1", none_prefix,
+						NULL, NULL, NULL);
+		break;
+	case OFONO_VENDOR_ICERA:
+		/* Register for network technology updates */
+		g_at_chat_register(nd->chat, "%NWSTATE:", icera_nwstate_notify,
+						FALSE, netreg, NULL);
+		g_at_chat_send(nd->chat, "AT%NWSTATE=1", none_prefix,
+						NULL, NULL, NULL);
+
+		/* Register for radio access technology updates */
+		g_at_chat_send(nd->chat, "AT*TRATD=1", none_prefix,
+						NULL, NULL, NULL);
+
+		/* Register for network time update reports */
+		g_at_chat_register(nd->chat, "*TLTS:", tlts_notify,
+						FALSE, netreg, NULL);
+		g_at_chat_send(nd->chat, "AT*TLTS=1", none_prefix,
+						NULL, NULL, NULL);
+		break;
 	case OFONO_VENDOR_NOKIA:
+	case OFONO_VENDOR_SAMSUNG:
+	case OFONO_VENDOR_SIMCOM:
 		/* Signal strength reporting via CIND is not supported */
 		break;
 	default:
@@ -1304,11 +1658,12 @@ static void at_creg_test_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 	g_at_result_iter_init(&iter, result);
 
+retry:
 	if (!g_at_result_iter_next(&iter, "+CREG:"))
 		goto error;
 
 	if (!g_at_result_iter_open_list(&iter))
-		goto error;
+		goto retry;
 
 	while (g_at_result_iter_next_range(&iter, &range[0], &range[1])) {
 		if (1 >= range[0] && 1 <= range[1])
@@ -1366,6 +1721,9 @@ static int at_netreg_probe(struct ofono_netreg *netreg, unsigned int vendor,
 static void at_netreg_remove(struct ofono_netreg *netreg)
 {
 	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+
+	if (nd->nitz_timeout)
+		g_source_remove(nd->nitz_timeout);
 
 	ofono_netreg_set_data(netreg, NULL);
 

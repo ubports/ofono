@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -46,7 +46,7 @@ typedef void (*ofono_destroy_func)(void *data);
 enum ofono_clir_option {
 	OFONO_CLIR_OPTION_DEFAULT = 0,
 	OFONO_CLIR_OPTION_INVOCATION,
-	OFONO_CLIR_OPTION_SUPPRESSION
+	OFONO_CLIR_OPTION_SUPPRESSION,
 };
 
 enum ofono_error_type {
@@ -55,7 +55,7 @@ enum ofono_error_type {
 	OFONO_ERROR_TYPE_CMS,
 	OFONO_ERROR_TYPE_CEER,
 	OFONO_ERROR_TYPE_SIM,
-	OFONO_ERROR_TYPE_FAILURE
+	OFONO_ERROR_TYPE_FAILURE,
 };
 
 enum ofono_disconnect_reason {
@@ -113,6 +113,32 @@ struct ofono_network_time {
 
 struct ofono_uuid {
 	unsigned char uuid[OFONO_SHA1_UUID_LEN];
+};
+
+/* HFP AG supported features bitmap. Bluetooth HFP 1.6 spec page 88 */
+enum hfp_ag_feature {
+	HFP_AG_FEATURE_3WAY =			0x1,
+	HFP_AG_FEATURE_ECNR =			0x2,
+	HFP_AG_FEATURE_VOICE_RECOG =		0x4,
+	HFP_AG_FEATURE_IN_BAND_RING_TONE =	0x8,
+	HFP_AG_FEATURE_ATTACH_VOICE_TAG =	0x10,
+	HFP_AG_FEATURE_REJECT_CALL =		0x20,
+	HFP_AG_FEATURE_ENHANCED_CALL_STATUS =	0x40,
+	HFP_AG_FEATURE_ENHANCED_CALL_CONTROL =	0x80,
+	HFP_AG_FEATURE_EXTENDED_RES_CODE =	0x100,
+	HFP_AG_FEATURE_CODEC_NEGOTIATION =	0x200,
+};
+
+/* HFP HF supported features bitmap. Bluetooth HFP 1.6 spec page 88 */
+enum hfp_hf_feature {
+	HFP_HF_FEATURE_ECNR =			0x1,
+	HFP_HF_FEATURE_3WAY =			0x2,
+	HFP_HF_FEATURE_CLIP =			0x4,
+	HFP_HF_FEATURE_VOICE_RECOGNITION =	0x8,
+	HFP_HF_FEATURE_REMOTE_VOLUME_CONTROL =	0x10,
+	HFP_HF_FEATURE_ENHANCED_CALL_STATUS =	0x20,
+	HFP_HF_FEATURE_ENHANCED_CALL_CONTROL =	0x40,
+	HFP_HF_FEATURE_CODEC_NEGOTIATION =	0x80,
 };
 
 const char *ofono_uuid_to_str(const struct ofono_uuid *uuid);

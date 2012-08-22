@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2009-2010 Nokia Corporation and/or its subsidiary(-ies).
+ *  Copyright (C) 2009-2010  Nokia Corporation and/or its subsidiary(-ies).
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -62,10 +62,7 @@ struct context_data {
 	uint16_t gpds;	/* GPDS object handle */
 	unsigned cid;	/* oFono core context ID */
 	struct ofono_gprs_context *context;
-	union {
-		ofono_gprs_context_up_cb_t up_cb;
-		ofono_gprs_context_cb_t down_cb;
-	};
+	ofono_gprs_context_cb_t cb;
 	void *data;
 
 	GIsiPEP *pep;
@@ -112,15 +109,14 @@ typedef void (*ContextFailFunc)(struct context_data *cd);
 
 static void gprs_up_fail(struct context_data *cd)
 {
-	CALLBACK_WITH_FAILURE(cd->up_cb, NULL, 0, NULL, NULL, NULL, NULL,
-				cd->data);
 	reset_context(cd);
+	CALLBACK_WITH_FAILURE(cd->cb, cd->data);
 }
 
 static void gprs_down_fail(struct context_data *cd)
 {
-	CALLBACK_WITH_FAILURE(cd->down_cb, cd->data);
 	reset_context(cd);
+	CALLBACK_WITH_FAILURE(cd->cb, cd->data);
 }
 
 static gboolean check_resp(const GIsiMessage *msg, uint8_t id, size_t minlen,
@@ -206,12 +202,12 @@ static void activate_ind_cb(const GIsiMessage *msg, void *opaque)
 {
 	struct context_data *cd = opaque;
 	GIsiSubBlockIter iter;
+	const char *dns[5];
+	int dns_count = 0;
 
 	char ifname[IF_NAMESIZE];
-	char *ip = NULL;
-	char *pdns = NULL;
-	char *sdns = NULL;
-	const char *dns[3];
+	char *ip_addr = NULL;
+	char *ipv6_addr = NULL;
 
 	if (!check_ind(msg, 2, cd))
 		return;
@@ -225,8 +221,6 @@ static void activate_ind_cb(const GIsiMessage *msg, void *opaque)
 
 		switch (g_isi_sb_iter_get_id(&iter)) {
 
-		/* TODO: IPv6 address support */
-
 		case GPDS_PDP_ADDRESS_INFO:
 
 			if (!g_isi_sb_iter_get_byte(&iter, &addr_len, 3))
@@ -236,9 +230,15 @@ static void activate_ind_cb(const GIsiMessage *msg, void *opaque)
 							4))
 				goto error;
 
-			ip = alloca(INET_ADDRSTRLEN);
-			inet_ntop(AF_INET, (const void *)addr_value, ip,
-					INET_ADDRSTRLEN);
+			if (addr_len == 4) {
+				ip_addr = alloca(INET_ADDRSTRLEN);
+				inet_ntop(AF_INET, (const void *)addr_value,
+						ip_addr, INET_ADDRSTRLEN);
+			} else if (addr_len == 16) {
+				ipv6_addr = alloca(INET6_ADDRSTRLEN);
+				inet_ntop(AF_INET6, (const void *)addr_value,
+						ipv6_addr, INET6_ADDRSTRLEN);
+			}
 			break;
 
 		case GPDS_PDNS_ADDRESS_INFO:
@@ -250,9 +250,17 @@ static void activate_ind_cb(const GIsiMessage *msg, void *opaque)
 							4))
 				break;
 
-			pdns = alloca(INET_ADDRSTRLEN);
-			inet_ntop(AF_INET, (const void *)addr_value, pdns,
-					INET_ADDRSTRLEN);
+			if (addr_len == 4) {
+				char *addr = alloca(INET_ADDRSTRLEN);
+				inet_ntop(AF_INET, (const void *)addr_value,
+						addr, INET_ADDRSTRLEN);
+				dns[dns_count++] = addr;
+			} else if (addr_len == 16) {
+				char *addr = alloca(INET6_ADDRSTRLEN);
+				inet_ntop(AF_INET6, (const void *)addr_value,
+						addr, INET6_ADDRSTRLEN);
+				dns[dns_count++] = addr;
+			}
 			break;
 
 		case GPDS_SDNS_ADDRESS_INFO:
@@ -264,9 +272,17 @@ static void activate_ind_cb(const GIsiMessage *msg, void *opaque)
 							4))
 				break;
 
-			sdns = alloca(INET_ADDRSTRLEN);
-			inet_ntop(AF_INET, (const void *)addr_value, sdns,
-					INET_ADDRSTRLEN);
+			if (addr_len == 4) {
+				char *addr = alloca(INET_ADDRSTRLEN);
+				inet_ntop(AF_INET, (const void *)addr_value,
+						addr, INET_ADDRSTRLEN);
+				dns[dns_count++] = addr;
+			} else if (addr_len == 16) {
+				char *addr = alloca(INET6_ADDRSTRLEN);
+				inet_ntop(AF_INET6, (const void *)addr_value,
+						addr, INET6_ADDRSTRLEN);
+				dns[dns_count++] = addr;
+			}
 			break;
 
 		default:
@@ -279,26 +295,24 @@ static void activate_ind_cb(const GIsiMessage *msg, void *opaque)
 	if (!g_isi_pep_get_ifname(cd->pep, ifname))
 		goto error;
 
-	dns[0] = pdns;
-	dns[1] = sdns;
-	dns[2] = 0;
+	dns[dns_count] = 0;
 
-	CALLBACK_WITH_SUCCESS(cd->up_cb, ifname, TRUE, (const char *)ip,
-					STATIC_IP_NETMASK, NULL,
-					dns, cd->data);
+	ofono_gprs_context_set_interface(cd->context, ifname);
+
+	if (ip_addr != NULL) {
+		ofono_gprs_context_set_ipv4_address(cd->context, ip_addr, TRUE);
+		ofono_gprs_context_set_ipv4_netmask(cd->context,
+							STATIC_IP_NETMASK);
+		ofono_gprs_context_set_ipv4_dns_servers(cd->context, dns);
+	} else if (ipv6_addr != NULL) {
+		ofono_gprs_context_set_ipv6_address(cd->context, ipv6_addr);
+		ofono_gprs_context_set_ipv6_dns_servers(cd->context, dns);
+	}
+
+	CALLBACK_WITH_SUCCESS(cd->cb, cd->data);
 	return;
 
 error:
-	gprs_up_fail(cd);
-}
-
-static void activate_fail_ind_cb(const GIsiMessage *msg, void *opaque)
-{
-	struct context_data *cd = opaque;
-
-	if (!check_ind(msg, 2, cd))
-		return;
-
 	gprs_up_fail(cd);
 }
 
@@ -319,8 +333,6 @@ static void send_context_activate(GIsiClient *client, void *opaque)
 
 	g_isi_client_ind_subscribe(client, GPDS_CONTEXT_ACTIVATE_IND,
 				activate_ind_cb, cd);
-	g_isi_client_ind_subscribe(client, GPDS_CONTEXT_ACTIVATE_FAIL_IND,
-				activate_fail_ind_cb, cd);
 	g_isi_client_ind_subscribe(client, GPDS_CONTEXT_DEACTIVATE_IND,
 				deactivate_ind_cb, cd);
 
@@ -348,31 +360,44 @@ static void send_context_authenticate(GIsiClient *client, void *opaque)
 	size_t username_len = strlen(cd->username);
 	size_t password_len = strlen(cd->password);
 
-	const unsigned char top[] = {
+	/* Pad the fields to the next 32bit boundary */
+	size_t sb_userinfo_len = ALIGN4(3 + username_len);
+	size_t userinfo_pad_len = sb_userinfo_len - (3 + username_len);
+
+	size_t sb_password_info_len = ALIGN4(3 + password_len);
+	size_t password_pad_len = sb_password_info_len - (3 + password_len);
+
+	const uint8_t padding[4] = { 0 };
+
+	const uint8_t top[] = {
 		GPDS_CONTEXT_AUTH_REQ,
 		cd->handle,
 		2,	/* sub blocks */
 		GPDS_USER_NAME_INFO,
-		3 + username_len + 3,
+		sb_userinfo_len,
 		username_len,
 		/* Username goes here */
+		/* Possible padding goes here */
 	};
 
-	const unsigned char bottom[] = {
+	const uint8_t bottom[] = {
 		GPDS_PASSWORD_INFO,
-		3 + password_len + 3,
+		sb_password_info_len,
 		password_len,
 		/* Password goes here */
+		/* Possible padding goes here */
 	};
 
-	const struct iovec iov[4] = {
+	const struct iovec iov[6] = {
 		{ (uint8_t *) top, sizeof(top) },
 		{ cd->username, username_len },
+		{ (uint8_t *) padding, userinfo_pad_len },
 		{ (uint8_t *) bottom, sizeof(bottom) },
 		{ cd->password, password_len },
+		{ (uint8_t *) padding, password_pad_len },
 	};
 
-	if (!g_isi_client_vsend(client, iov, 4, context_auth_cb, cd, NULL))
+	if (!g_isi_client_vsend(client, iov, 6, context_auth_cb, cd, NULL))
 		gprs_up_fail(cd);
 }
 
@@ -393,8 +418,12 @@ static void link_conf_cb(const GIsiMessage *msg, void *opaque)
 {
 	struct context_data *cd = opaque;
 	size_t apn_len = strlen(cd->apn);
+	size_t sb_apn_info_len = ALIGN4(3 + apn_len);
+	size_t apn_pad_len = sb_apn_info_len - (3 + apn_len);
 
-	const unsigned char req[] = {
+	const uint8_t padding[4] = { 0 };
+
+	const uint8_t req[] = {
 		GPDS_CONTEXT_CONFIGURE_REQ,
 		cd->handle,	/* context ID */
 		cd->type,	/* PDP type */
@@ -406,20 +435,21 @@ static void link_conf_cb(const GIsiMessage *msg, void *opaque)
 		4,		/* subblock length */
 		0, 0,		/* padding */
 		GPDS_APN_INFO,
-		3 + apn_len + 3,
+		sb_apn_info_len,
 		apn_len,
+		/* Possible padding goes here */
 	};
 
-	const struct iovec iov[2] = {
+	const struct iovec iov[3] = {
 		{ (uint8_t *) req, sizeof(req) },
 		{ cd->apn, apn_len },
+		{ (uint8_t *) padding, apn_pad_len },
 	};
 
 	if (!check_resp(msg, GPDS_LL_CONFIGURE_RESP, 2, cd, gprs_up_fail))
 		return;
 
-	if (!g_isi_client_vsend(cd->client, iov, 2,
-				context_conf_cb, cd, NULL))
+	if (!g_isi_client_vsend(cd->client, iov, 3, context_conf_cb, cd, NULL))
 		gprs_up_fail(cd);
 }
 
@@ -428,7 +458,7 @@ static void create_context_cb(const GIsiMessage *msg, void *opaque)
 	struct context_data *cd = opaque;
 	const uint8_t *data = g_isi_msg_data(msg);
 
-	unsigned char req[] = {
+	uint8_t req[] = {
 		GPDS_LL_CONFIGURE_REQ,
 		0x00,		/* GPDS context ID, added later */
 		g_isi_pipe_get_handle(cd->pipe),
@@ -440,8 +470,8 @@ static void create_context_cb(const GIsiMessage *msg, void *opaque)
 
 	cd->handle = req[1] = data[0];
 
-	if (!g_isi_client_send(cd->client, req, sizeof(req),
-				link_conf_cb, cd, NULL))
+	if (!g_isi_client_send(cd->client, req, sizeof(req), link_conf_cb,
+				cd, NULL))
 		gprs_up_fail(cd);
 }
 
@@ -449,18 +479,18 @@ static void create_pipe_cb(GIsiPipe *pipe)
 {
 	struct context_data *cd = g_isi_pipe_get_userdata(pipe);
 
-	const unsigned char msg[] = {
+	const uint8_t msg[] = {
 		GPDS_CONTEXT_ID_CREATE_REQ,
 	};
 
-	if (!g_isi_client_send(cd->client, msg, sizeof(msg),
-				create_context_cb, cd, NULL))
+	if (!g_isi_client_send(cd->client, msg, sizeof(msg), create_context_cb,
+				cd, NULL))
 		gprs_up_fail(cd);
 }
 
 static void isi_gprs_activate_primary(struct ofono_gprs_context *gc,
 				const struct ofono_gprs_primary_context *ctx,
-				ofono_gprs_context_up_cb_t cb, void *data)
+				ofono_gprs_context_cb_t cb, void *data)
 {
 	struct context_data *cd = ofono_gprs_context_get_data(gc);
 
@@ -468,8 +498,7 @@ static void isi_gprs_activate_primary(struct ofono_gprs_context *gc,
 
 	if (cd == NULL || !cd->gpds) {
 		/* GPDS is not reachable */
-		CALLBACK_WITH_FAILURE(cb, NULL, 0, NULL, NULL, NULL,
-					NULL, data);
+		CALLBACK_WITH_FAILURE(cb, data);
 		return;
 	}
 
@@ -480,12 +509,26 @@ static void isi_gprs_activate_primary(struct ofono_gprs_context *gc,
 	}
 
 	cd->cid = ctx->cid;
-	cd->up_cb = cb;
+	cd->cb = cb;
 	cd->data = data;
 	cd->pep = NULL;
 	cd->pipe = NULL;
 	cd->handle = INVALID_ID;
-	cd->type = GPDS_PDP_TYPE_IPV4;
+
+	switch (ctx->proto) {
+	case OFONO_GPRS_PROTO_IP:
+		cd->type = GPDS_PDP_TYPE_IPV4;
+		break;
+
+	case OFONO_GPRS_PROTO_IPV6:
+		cd->type = GPDS_PDP_TYPE_IPV6;
+		break;
+
+	case OFONO_GPRS_PROTO_IPV4V6:
+		/* Not supported by modem */
+		CALLBACK_WITH_FAILURE(cb, data);
+		return;
+	}
 
 	if (strlen(ctx->apn) >= GPDS_MAX_APN_STRING_LENGTH
 			|| strlen(ctx->username) >= GPDS_MAX_USERNAME_LENGTH
@@ -527,7 +570,7 @@ static void context_deactivate_cb(const GIsiMessage *msg, void *opaque)
 			gprs_down_fail))
 		return;
 
-	CALLBACK_WITH_SUCCESS(cd->down_cb, cd->data);
+	CALLBACK_WITH_SUCCESS(cd->cb, cd->data);
 	reset_context(cd);
 }
 
@@ -545,7 +588,7 @@ static void isi_gprs_deactivate_primary(struct ofono_gprs_context *gc,
 	if (cd == NULL)
 		return;
 
-	cd->down_cb = cb;
+	cd->cb = cb;
 	cd->data = data;
 
 	msg[1] = cd->handle;
@@ -558,10 +601,12 @@ static void isi_gprs_deactivate_primary(struct ofono_gprs_context *gc,
 
 static void gpds_ctx_reachable_cb(const GIsiMessage *msg, void *opaque)
 {
-	struct context_data *cd = opaque;
+	struct ofono_gprs_context *gc = opaque;
+	struct context_data *cd = ofono_gprs_context_get_data(gc);
 
 	if (g_isi_msg_error(msg) < 0) {
 		DBG("unable to bootstrap gprs context driver");
+		ofono_gprs_context_remove(gc);
 		return;
 	}
 
@@ -587,7 +632,7 @@ static int isi_gprs_context_probe(struct ofono_gprs_context *gc,
 	cd->context = gc;
 	ofono_gprs_context_set_data(gc, cd);
 
-	g_isi_client_verify(cd->client, gpds_ctx_reachable_cb, cd, NULL);
+	g_isi_client_verify(cd->client, gpds_ctx_reachable_cb, gc, NULL);
 
 	return 0;
 }

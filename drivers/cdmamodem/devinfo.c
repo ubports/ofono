@@ -2,8 +2,8 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010 Intel Corporation. All rights reserved.
- *  Copyright (C) 2011 Nokia Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2011  Nokia Corporation and/or its subsidiary(-ies).
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -36,6 +36,8 @@
 
 #include "cdmamodem.h"
 
+static const char *gcap_prefix[] = { "+GCAP:", NULL };
+
 static void attr_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
          struct cb_data *cbd = user_data;
@@ -65,7 +67,7 @@ static void cdma_query_manufacturer(struct ofono_devinfo *info,
 	struct cb_data *cbd = cb_data_new(cb, data);
 	GAtChat *chat = ofono_devinfo_get_data(info);
 
-	cbd->user = "AT+GMI";
+	cbd->user = "+GMI:";
 
 	if (g_at_chat_send(chat, "AT+GMI", NULL, attr_cb, cbd, g_free) > 0)
 		return;
@@ -81,7 +83,7 @@ static void cdma_query_model(struct ofono_devinfo *info,
 	struct cb_data *cbd = cb_data_new(cb, data);
 	GAtChat *chat = ofono_devinfo_get_data(info);
 
-	cbd->user = "AT+GMM";
+	cbd->user = "+GMM:";
 
 	if (g_at_chat_send(chat, "AT+GMM", NULL, attr_cb, cbd, g_free) > 0)
 		return;
@@ -97,7 +99,7 @@ static void cdma_query_revision(struct ofono_devinfo *info,
 	struct cb_data *cbd = cb_data_new(cb, data);
 	GAtChat *chat = ofono_devinfo_get_data(info);
 
-	cbd->user = "AT+GMR";
+	cbd->user = "+GMR:";
 
 	if (g_at_chat_send(chat, "AT+GMR", NULL, attr_cb, cbd, g_free) > 0)
 		return;
@@ -113,7 +115,7 @@ static void cdma_query_serial(struct ofono_devinfo *info,
 	struct cb_data *cbd = cb_data_new(cb, data);
 	GAtChat *chat = ofono_devinfo_get_data(info);
 
-	cbd->user = "AT+GSN";
+	cbd->user = "+GSN:";
 
 	if (g_at_chat_send(chat, "AT+GSN", NULL, attr_cb, cbd, g_free) > 0)
 		return;
@@ -123,13 +125,11 @@ static void cdma_query_serial(struct ofono_devinfo *info,
 	CALLBACK_WITH_FAILURE(cb, NULL, data);
 }
 
-static gboolean cdma_devinfo_register(gpointer user_data)
+static void capability_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_devinfo *info = user_data;
 
 	ofono_devinfo_register(info);
-
-	return FALSE;
 }
 
 static int cdma_devinfo_probe(struct ofono_devinfo *info,
@@ -138,7 +138,9 @@ static int cdma_devinfo_probe(struct ofono_devinfo *info,
 	GAtChat *chat = data;
 
 	ofono_devinfo_set_data(info, g_at_chat_clone(chat));
-	g_idle_add(cdma_devinfo_register, info);
+
+	g_at_chat_send(chat, "AT+GCAP", gcap_prefix,
+				capability_cb, info, NULL);
 
 	return 0;
 }

@@ -2,7 +2,7 @@
  *
  *  AT chat library with GLib integration
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -43,7 +43,9 @@ enum GSMV1_STATE {
 	GSMV1_STATE_PDU_CR,
 	GSMV1_STATE_PROMPT,
 	GSMV1_STATE_ECHO,
-	GSMV1_PPP_DATA,
+	GSMV1_STATE_PPP_DATA,
+	GSMV1_STATE_SHORT_PROMPT,
+	GSMV1_STATE_SHORT_PROMPT_CR,
 };
 
 enum GSM_PERMISSIVE_STATE {
@@ -53,6 +55,8 @@ enum GSM_PERMISSIVE_STATE {
 	GSM_PERMISSIVE_STATE_GUESS_PDU,
 	GSM_PERMISSIVE_STATE_PDU,
 	GSM_PERMISSIVE_STATE_PROMPT,
+	GSM_PERMISSIVE_STATE_GUESS_SHORT_PROMPT,
+	GSM_PERMISSIVE_STATE_SHORT_PROMPT,
 };
 
 static void gsmv1_hint(GAtSyntax *syntax, GAtSyntaxExpectHint hint)
@@ -63,6 +67,9 @@ static void gsmv1_hint(GAtSyntax *syntax, GAtSyntaxExpectHint hint)
 		break;
 	case G_AT_SYNTAX_EXPECT_MULTILINE:
 		syntax->state = GSMV1_STATE_GUESS_MULTILINE_RESPONSE;
+		break;
+	case G_AT_SYNTAX_EXPECT_SHORT_PROMPT:
+		syntax->state = GSMV1_STATE_SHORT_PROMPT;
 		break;
 	default:
 		break;
@@ -83,7 +90,7 @@ static GAtSyntaxResult gsmv1_feed(GAtSyntax *syntax,
 			if (byte == '\r')
 				syntax->state = GSMV1_STATE_INITIAL_CR;
 			else if (byte == '~')
-				syntax->state = GSMV1_PPP_DATA;
+				syntax->state = GSMV1_STATE_PPP_DATA;
 			else
 				syntax->state = GSMV1_STATE_ECHO;
 			break;
@@ -91,7 +98,10 @@ static GAtSyntaxResult gsmv1_feed(GAtSyntax *syntax,
 		case GSMV1_STATE_INITIAL_CR:
 			if (byte == '\n')
 				syntax->state = GSMV1_STATE_INITIAL_LF;
-			else
+			else if (byte == '\r') {
+				syntax->state = GSMV1_STATE_IDLE;
+				return G_AT_SYNTAX_RESULT_UNRECOGNIZED;
+			} else
 				syntax->state = GSMV1_STATE_ECHO;
 			break;
 
@@ -213,7 +223,7 @@ static GAtSyntaxResult gsmv1_feed(GAtSyntax *syntax,
 
 			break;
 
-		case GSMV1_PPP_DATA:
+		case GSMV1_STATE_PPP_DATA:
 			if (byte == '~') {
 				syntax->state = GSMV1_STATE_IDLE;
 				res = G_AT_SYNTAX_RESULT_UNRECOGNIZED;
@@ -222,6 +232,25 @@ static GAtSyntaxResult gsmv1_feed(GAtSyntax *syntax,
 			}
 
 			break;
+
+		case GSMV1_STATE_SHORT_PROMPT:
+			if (byte == '\r')
+				syntax->state = GSMV1_STATE_SHORT_PROMPT_CR;
+			else
+				syntax->state = GSMV1_STATE_ECHO;
+
+			break;
+
+		case GSMV1_STATE_SHORT_PROMPT_CR:
+			if (byte == '\n') {
+				syntax->state = GSMV1_STATE_IDLE;
+				i += 1;
+				res = G_AT_SYNTAX_RESULT_PROMPT;
+				goto out;
+			}
+
+			syntax->state = GSMV1_STATE_RESPONSE;
+			return G_AT_SYNTAX_RESULT_UNSURE;
 
 		default:
 			break;
@@ -239,6 +268,8 @@ static void gsm_permissive_hint(GAtSyntax *syntax, GAtSyntaxExpectHint hint)
 {
 	if (hint == G_AT_SYNTAX_EXPECT_PDU)
 		syntax->state = GSM_PERMISSIVE_STATE_GUESS_PDU;
+	else if (hint == G_AT_SYNTAX_EXPECT_SHORT_PROMPT)
+		syntax->state = GSM_PERMISSIVE_STATE_GUESS_SHORT_PROMPT;
 }
 
 static GAtSyntaxResult gsm_permissive_feed(GAtSyntax *syntax,
@@ -256,6 +287,9 @@ static GAtSyntaxResult gsm_permissive_feed(GAtSyntax *syntax,
 				/* ignore */;
 			else if (byte == '>')
 				syntax->state = GSM_PERMISSIVE_STATE_PROMPT;
+			else if (byte == '"')
+				syntax->state =
+					GSM_PERMISSIVE_STATE_RESPONSE_STRING;
 			else
 				syntax->state = GSM_PERMISSIVE_STATE_RESPONSE;
 			break;
@@ -294,6 +328,27 @@ static GAtSyntaxResult gsm_permissive_feed(GAtSyntax *syntax,
 
 		case GSM_PERMISSIVE_STATE_PROMPT:
 			if (byte == ' ') {
+				syntax->state = GSM_PERMISSIVE_STATE_IDLE;
+				i += 1;
+				res = G_AT_SYNTAX_RESULT_PROMPT;
+				goto out;
+			}
+
+			syntax->state = GSM_PERMISSIVE_STATE_RESPONSE;
+			return G_AT_SYNTAX_RESULT_UNSURE;
+
+		case GSM_PERMISSIVE_STATE_GUESS_SHORT_PROMPT:
+			if (byte == '\n')
+				/* ignore */;
+			else if (byte == '\r')
+				syntax->state =
+					GSM_PERMISSIVE_STATE_SHORT_PROMPT;
+			else
+				syntax->state = GSM_PERMISSIVE_STATE_RESPONSE;
+			break;
+
+		case GSM_PERMISSIVE_STATE_SHORT_PROMPT:
+			if (byte == '\n') {
 				syntax->state = GSM_PERMISSIVE_STATE_IDLE;
 				i += 1;
 				res = G_AT_SYNTAX_RESULT_PROMPT;

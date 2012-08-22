@@ -2,7 +2,7 @@
  *
  *  AT chat library with GLib integration
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *  Copyright (C) 2009  Trolltech ASA.
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -183,7 +183,6 @@ static gboolean received_data(GIOChannel *channel, GIOCondition cond,
 {
 	GAtMux *mux = data;
 	int i;
-	GError *error = NULL;
 	GIOStatus status;
 	gsize bytes_read;
 
@@ -195,7 +194,7 @@ static gboolean received_data(GIOChannel *channel, GIOCondition cond,
 	bytes_read = 0;
 	status = g_io_channel_read_chars(mux->channel, mux->buf + mux->buf_used,
 					sizeof(mux->buf) - mux->buf_used,
-					&bytes_read, &error);
+					&bytes_read, NULL);
 
 	mux->buf_used += bytes_read;
 
@@ -243,7 +242,7 @@ static void write_watcher_destroy_notify(gpointer user_data)
 	mux->write_watch = 0;
 }
 
-static gboolean can_write_data(GIOChannel *channel, GIOCondition cond,
+static gboolean can_write_data(GIOChannel *chan, GIOCondition cond,
 				gpointer data)
 {
 	GAtMux *mux = data;
@@ -308,12 +307,11 @@ static void wakeup_writer(GAtMux *mux)
 
 int g_at_mux_raw_write(GAtMux *mux, const void *data, int towrite)
 {
-	GError *error = NULL;
 	gssize count = towrite;
 	gsize bytes_written;
 
 	g_io_channel_write_chars(mux->channel, (gchar *) data,
-					count, &bytes_written, &error);
+					count, &bytes_written, NULL);
 
 	return bytes_written;
 }

@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -210,9 +210,9 @@ err:
 	CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
 }
 
-static void at_cmgs(struct ofono_sms *sms, unsigned char *pdu, int pdu_len,
-			int tpdu_len, int mms, ofono_sms_submit_cb_t cb,
-			void *user_data)
+static void at_cmgs(struct ofono_sms *sms, const unsigned char *pdu,
+			int pdu_len, int tpdu_len, int mms,
+			ofono_sms_submit_cb_t cb, void *user_data)
 {
 	struct sms_data *data = ofono_sms_get_data(sms);
 	struct cb_data *cbd = cb_data_new(cb, user_data);
@@ -319,17 +319,16 @@ static void at_cnma_cb(gboolean ok, GAtResult *result, gpointer user_data)
 				"Further SMS reception is not guaranteed");
 }
 
-static gboolean at_parse_pdu_common(GAtResult *result, const char *prefix,
-					const char **pdu, int *pdulen)
+static gboolean at_parse_cmt(GAtResult *result,	const char **pdu, int *pdulen)
 {
 	GAtResultIter iter;
 
 	g_at_result_iter_init(&iter, result);
 
-	if (!g_at_result_iter_next(&iter, prefix))
+	if (!g_at_result_iter_next(&iter, "+CMT:"))
 		return FALSE;
 
-	if (!strcmp(prefix, "+CMT:") && !g_at_result_iter_skip_next(&iter))
+	if (!g_at_result_iter_skip_next(&iter))
 		return FALSE;
 
 	if (!g_at_result_iter_next_number(&iter, pdulen))
@@ -365,11 +364,26 @@ static void at_cds_notify(GAtResult *result, gpointer user_data)
 	int tpdu_len;
 	const char *hexpdu;
 	unsigned char pdu[176];
+	GAtResultIter iter;
 
-	if (!at_parse_pdu_common(result, "+CDS:", &hexpdu, &tpdu_len)) {
-		ofono_error("Unable to parse CDS notification");
-		return;
-	}
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "+CDS:"))
+		goto err;
+
+	/*
+	 * Quirk for ZTE firmware which is not compliant with 27.005
+	 * The +CDS syntax used by ZTE is including a comma before the length
+	 * +CDS: ,<length><CR><LF><pdu>
+	 * As a result, we need to skip this omitted subparameter
+	 */
+	if (data->vendor == OFONO_VENDOR_ZTE)
+		g_at_result_iter_skip_next(&iter);
+
+	if (!g_at_result_iter_next_number(&iter, &tpdu_len))
+		goto err;
+
+	hexpdu = g_at_result_pdu(result);
 
 	if (strlen(hexpdu) > sizeof(pdu) * 2) {
 		ofono_error("Bad PDU length in CDS notification");
@@ -384,17 +398,23 @@ static void at_cds_notify(GAtResult *result, gpointer user_data)
 
 	if (data->cnma_enabled)
 		at_ack_delivery(sms);
+
+	return;
+
+err:
+	ofono_error("Unable to parse CDS notification");
 }
 
 static void at_cmt_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_sms *sms = user_data;
+	struct sms_data *data = ofono_sms_get_data(sms);
 	const char *hexpdu;
 	long pdu_len;
 	int tpdu_len;
 	unsigned char pdu[176];
 
-	if (!at_parse_pdu_common(result, "+CMT:", &hexpdu, &tpdu_len)) {
+	if (!at_parse_cmt(result, &hexpdu, &tpdu_len)) {
 		ofono_error("Unable to parse CMT notification");
 		return;
 	}
@@ -409,7 +429,8 @@ static void at_cmt_notify(GAtResult *result, gpointer user_data)
 	decode_hex_own_buf(hexpdu, -1, &pdu_len, 0, pdu);
 	ofono_sms_deliver_notify(sms, pdu, pdu_len, tpdu_len);
 
-	at_ack_delivery(sms);
+	if (data->vendor != OFONO_VENDOR_SIMCOM)
+		at_ack_delivery(sms);
 }
 
 static void at_cmgr_notify(GAtResult *result, gpointer user_data)
@@ -783,6 +804,7 @@ static gboolean build_cnmi_string(char *buf, int *cnmi_opts,
 	case OFONO_VENDOR_QUALCOMM_MSM:
 	case OFONO_VENDOR_NOVATEL:
 	case OFONO_VENDOR_HUAWEI:
+	case OFONO_VENDOR_ZTE:
 		/* MSM devices advertise support for mode 2, but return an
 		 * error if we attempt to actually use it. */
 		mode = "1";
@@ -908,6 +930,8 @@ static void at_cnmi_query_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	switch (data->vendor) {
 	case OFONO_VENDOR_IFX:
 	case OFONO_VENDOR_GOBI:
+	case OFONO_VENDOR_ZTE:
+	case OFONO_VENDOR_ICERA:
 	case OFONO_VENDOR_HUAWEI:
 	case OFONO_VENDOR_NOVATEL:
 	case OFONO_VENDOR_OPTION_HSO:
@@ -961,8 +985,11 @@ static gboolean set_cpms(gpointer user_data)
 	const char *incoming = storages[data->incoming];
 	char buf[128];
 
-	snprintf(buf, sizeof(buf), "AT+CPMS=\"%s\",\"%s\",\"%s\"",
-			store, store, incoming);
+	if (data->vendor == OFONO_VENDOR_WAVECOM_Q2XXX)
+		snprintf(buf, sizeof(buf), "AT+CPMS=\"%s\"", store);
+	else
+		snprintf(buf, sizeof(buf), "AT+CPMS=\"%s\",\"%s\",\"%s\"",
+				store, store, incoming);
 
 	g_at_chat_send(data->chat, buf, cpms_prefix,
 			at_cpms_set_cb, sms, NULL);
@@ -1014,7 +1041,7 @@ static void at_cpms_query_cb(gboolean ok, GAtResult *result,
 	gboolean supported = FALSE;
 
 	if (ok) {
-		int mem = 0;
+		int mem = 0, mem_max;
 		GAtResultIter iter;
 		const char *store;
 		gboolean me_supported[3];
@@ -1030,7 +1057,20 @@ static void at_cpms_query_cb(gboolean ok, GAtResult *result,
 		if (!g_at_result_iter_next(&iter, "+CPMS:"))
 			goto out;
 
-		for (mem = 0; mem < 3; mem++) {
+		if (data->vendor == OFONO_VENDOR_WAVECOM_Q2XXX) {
+			/* skip initial `(' */
+			if (!g_at_result_iter_open_list(&iter))
+				goto out;
+
+			/*
+			 * Wavecom Q2 replies: +CPMS: (("SM","BM","SR"),("SM"))
+			 * This reply is broken according to 3GPP TS 07.05.
+			 */
+			mem_max = 2;
+		} else
+			mem_max = 3;
+
+		for (mem = 0; mem < mem_max; mem++) {
 			if (!g_at_result_iter_open_list(&iter))
 				goto out;
 
@@ -1047,7 +1087,9 @@ static void at_cpms_query_cb(gboolean ok, GAtResult *result,
 				goto out;
 		}
 
-		if (!sm_supported[2] && !me_supported[2] && !mt_supported[2])
+		if (data->vendor != OFONO_VENDOR_WAVECOM_Q2XXX &&
+				!sm_supported[2] && !me_supported[2]
+				&& !mt_supported[2])
 			goto out;
 
 		if (sm_supported[0] && sm_supported[1]) {

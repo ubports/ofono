@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -3160,13 +3160,12 @@ void status_report_assembly_expire(struct status_report_assembly *assembly,
 static int sms_tx_load_filter(const struct dirent *dent)
 {
 	char *endp;
-	guint8 seq;
+	guint8 seq __attribute__ ((unused));
 
 	if (dent->d_type != DT_REG)
 		return 0;
 
 	seq = strtol(dent->d_name, &endp, 10);
-
 	if (*endp != '\0')
 		return 0;
 
@@ -3344,7 +3343,7 @@ void sms_tx_backup_free(const char *imsi, unsigned long id,
 	len = scandir(path, &entries, NULL, versionsort);
 
 	if (len < 0)
-		return;
+		goto nodir_exit;
 
 	/* skip '..' and '.' entries */
 	while (len-- > 2) {
@@ -3362,6 +3361,8 @@ void sms_tx_backup_free(const char *imsi, unsigned long id,
 	g_free(entries);
 
 	rmdir(path);
+
+nodir_exit:
 	g_free(path);
 }
 

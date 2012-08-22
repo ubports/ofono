@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -31,11 +31,6 @@ extern "C" {
 struct ofono_voicecall;
 
 typedef void (*ofono_voicecall_cb_t)(const struct ofono_error *error,
-					void *data);
-
-typedef void (*ofono_call_list_cb_t)(const struct ofono_error *error,
-					int numcalls,
-					const struct ofono_call *call_list,
 					void *data);
 
 /* Voice call related functionality, including ATD, ATA, +CHLD, CTFR, CLCC
@@ -140,6 +135,9 @@ struct ofono_voicecall_driver {
 			ofono_voicecall_cb_t cb, void *data);
 };
 
+void ofono_voicecall_en_list_notify(struct ofono_voicecall *vc,
+					char **nw_en_list);
+
 void ofono_voicecall_notify(struct ofono_voicecall *vc,
 				const struct ofono_call *call);
 void ofono_voicecall_disconnected(struct ofono_voicecall *vc, int id,
@@ -159,6 +157,12 @@ void ofono_voicecall_remove(struct ofono_voicecall *vc);
 void ofono_voicecall_set_data(struct ofono_voicecall *vc, void *data);
 void *ofono_voicecall_get_data(struct ofono_voicecall *vc);
 int ofono_voicecall_get_next_callid(struct ofono_voicecall *vc);
+
+void ofono_voicecall_ssn_mo_notify(struct ofono_voicecall *vc, unsigned int id,
+					int code, int index);
+void ofono_voicecall_ssn_mt_notify(struct ofono_voicecall *vc, unsigned int id,
+					int code, int index,
+					const struct ofono_phone_number *ph);
 
 #ifdef __cplusplus
 }

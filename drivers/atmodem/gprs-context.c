@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -41,6 +41,7 @@
 #include "gatppp.h"
 
 #include "atmodem.h"
+#include "vendor.h"
 
 #define TUN_SYSFS_DIR "/sys/devices/virtual/misc/tun"
 
@@ -62,11 +63,9 @@ struct gprs_context_data {
 	char password[OFONO_GPRS_MAX_PASSWORD_LENGTH + 1];
 	GAtPPP *ppp;
 	enum state state;
-	union {
-		ofono_gprs_context_cb_t down_cb;        /* Down callback */
-		ofono_gprs_context_up_cb_t up_cb;       /* Up callback */
-	};
+	ofono_gprs_context_cb_t cb;
 	void *cb_data;                                  /* Callback data */
+	unsigned int vendor;
 };
 
 static void ppp_debug(const char *str, void *data)
@@ -93,9 +92,12 @@ static void ppp_connect(const char *interface, const char *local,
 	ofono_info("DNS: %s, %s", dns1, dns2);
 
 	gcd->state = STATE_ACTIVE;
-	CALLBACK_WITH_SUCCESS(gcd->up_cb, interface, TRUE, local,
-					STATIC_IP_NETMASK, NULL,
-					dns, gcd->cb_data);
+	ofono_gprs_context_set_interface(gc, interface);
+	ofono_gprs_context_set_ipv4_address(gc, local, TRUE);
+	ofono_gprs_context_set_ipv4_netmask(gc, STATIC_IP_NETMASK);
+	ofono_gprs_context_set_ipv4_dns_servers(gc, dns);
+
+	CALLBACK_WITH_SUCCESS(gcd->cb, gcd->cb_data);
 }
 
 static void ppp_disconnect(GAtPPPDisconnectReason reason, gpointer user_data)
@@ -110,11 +112,10 @@ static void ppp_disconnect(GAtPPPDisconnectReason reason, gpointer user_data)
 
 	switch (gcd->state) {
 	case STATE_ENABLING:
-		CALLBACK_WITH_FAILURE(gcd->up_cb, NULL, FALSE, NULL,
-					NULL, NULL, NULL, gcd->cb_data);
+		CALLBACK_WITH_FAILURE(gcd->cb, gcd->cb_data);
 		break;
 	case STATE_DISABLING:
-		CALLBACK_WITH_SUCCESS(gcd->down_cb, gcd->cb_data);
+		CALLBACK_WITH_SUCCESS(gcd->cb, gcd->cb_data);
 		break;
 	default:
 		ofono_gprs_context_deactivated(gc, gcd->active_context);
@@ -143,7 +144,7 @@ static gboolean setup_ppp(struct ofono_gprs_context *gc)
 	g_at_chat_suspend(gcd->chat);
 
 	/* open ppp */
-	gcd->ppp = g_at_ppp_new_from_io(io);
+	gcd->ppp = g_at_ppp_new();
 
 	if (gcd->ppp == NULL) {
 		g_at_chat_resume(gcd->chat);
@@ -160,7 +161,7 @@ static gboolean setup_ppp(struct ofono_gprs_context *gc)
 	g_at_ppp_set_disconnect_function(gcd->ppp, ppp_disconnect, gc);
 
 	/* open the ppp connection */
-	g_at_ppp_open(gcd->ppp);
+	g_at_ppp_open(gcd->ppp, io);
 
 	return TRUE;
 }
@@ -181,8 +182,7 @@ static void at_cgdata_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		gcd->state = STATE_IDLE;
 
 		decode_at_error(&error, g_at_result_final_response(result));
-		gcd->up_cb(&error, NULL, 0, NULL, NULL, NULL, NULL,
-				gcd->cb_data);
+		gcd->cb(&error, gcd->cb_data);
 		return;
 	}
 
@@ -204,8 +204,7 @@ static void at_cgdcont_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		gcd->state = STATE_IDLE;
 
 		decode_at_error(&error, g_at_result_final_response(result));
-		gcd->up_cb(&error, NULL, 0, NULL, NULL, NULL, NULL,
-				gcd->cb_data);
+		gcd->cb(&error, gcd->cb_data);
 		return;
 	}
 
@@ -217,27 +216,51 @@ static void at_cgdcont_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	gcd->active_context = 0;
 	gcd->state = STATE_IDLE;
 
-	CALLBACK_WITH_FAILURE(gcd->up_cb, NULL, 0, NULL, NULL, NULL, NULL,
-				gcd->cb_data);
+	CALLBACK_WITH_FAILURE(gcd->cb, gcd->cb_data);
 }
 
 static void at_gprs_activate_primary(struct ofono_gprs_context *gc,
 				const struct ofono_gprs_primary_context *ctx,
-				ofono_gprs_context_up_cb_t cb, void *data)
+				ofono_gprs_context_cb_t cb, void *data)
 {
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 	char buf[OFONO_GPRS_MAX_APN_LENGTH + 128];
 	int len;
 
+	/* IPv6 support not implemented */
+	if (ctx->proto != OFONO_GPRS_PROTO_IP)
+		goto error;
+
 	DBG("cid %u", ctx->cid);
 
 	gcd->active_context = ctx->cid;
-	gcd->up_cb = cb;
+	gcd->cb = cb;
 	gcd->cb_data = data;
 	memcpy(gcd->username, ctx->username, sizeof(ctx->username));
 	memcpy(gcd->password, ctx->password, sizeof(ctx->password));
 
 	gcd->state = STATE_ENABLING;
+
+	if (gcd->vendor == OFONO_VENDOR_ZTE) {
+		GAtChat *chat = g_at_chat_get_slave(gcd->chat);
+
+		/*
+		 * The modem port of ZTE devices with certain firmware
+		 * versions ends up getting suspended. It will no longer
+		 * signal POLLOUT and becomes pretty unresponsive.
+		 *
+		 * To wake up the modem port, the only reliable method
+		 * found so far is AT+ZOPRT power mode command. It is
+		 * enough to ask for the current mode and the modem
+		 * port wakes up and accepts commands again.
+		 *
+		 * And since the modem port is suspended, this command
+		 * needs to be send on the control port of course.
+		 *
+		 */
+		g_at_chat_send(chat, "AT+ZOPRT?", none_prefix,
+						NULL, NULL, NULL);
+	}
 
 	len = snprintf(buf, sizeof(buf), "AT+CGDCONT=%u,\"IP\"", ctx->cid);
 
@@ -249,7 +272,8 @@ static void at_gprs_activate_primary(struct ofono_gprs_context *gc,
 				at_cgdcont_cb, gc, NULL) > 0)
 		return;
 
-	CALLBACK_WITH_FAILURE(cb, NULL, 0, NULL, NULL, NULL, NULL, data);
+error:
+	CALLBACK_WITH_FAILURE(cb, data);
 }
 
 static void at_gprs_deactivate_primary(struct ofono_gprs_context *gc,
@@ -261,10 +285,54 @@ static void at_gprs_deactivate_primary(struct ofono_gprs_context *gc,
 	DBG("cid %u", cid);
 
 	gcd->state = STATE_DISABLING;
-	gcd->down_cb = cb;
+	gcd->cb = cb;
 	gcd->cb_data = data;
 
 	g_at_ppp_shutdown(gcd->ppp);
+}
+
+static void at_gprs_detach_shutdown(struct ofono_gprs_context *gc,
+					unsigned int cid)
+{
+	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
+
+	DBG("cid %u", cid);
+
+	g_at_ppp_shutdown(gcd->ppp);
+}
+
+static void cgev_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_gprs_context *gc = user_data;
+	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
+	const char *event;
+	int cid;
+	GAtResultIter iter;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "+CGEV:"))
+		return;
+
+	if (!g_at_result_iter_next_unquoted_string(&iter, &event))
+		return;
+
+	if (g_str_has_prefix(event, "NW DEACT") == FALSE)
+		return;
+
+	if (!g_at_result_iter_skip_next(&iter))
+		return;
+
+	if (!g_at_result_iter_next_number(&iter, &cid))
+		return;
+
+	DBG("cid %d", cid);
+
+	if ((unsigned int) cid != gcd->active_context)
+		return;
+
+	if (gcd->state != STATE_IDLE && gcd->ppp)
+		g_at_ppp_shutdown(gcd->ppp);
 }
 
 static int at_gprs_context_probe(struct ofono_gprs_context *gc,
@@ -286,8 +354,15 @@ static int at_gprs_context_probe(struct ofono_gprs_context *gc,
 		return -ENOMEM;
 
 	gcd->chat = g_at_chat_clone(chat);
+	gcd->vendor = vendor;
 
 	ofono_gprs_context_set_data(gc, gcd);
+
+	chat = g_at_chat_get_slave(gcd->chat);
+	if (chat == NULL)
+		return 0;
+
+	g_at_chat_register(chat, "+CGEV:", cgev_notify, FALSE, gc, NULL);
 
 	return 0;
 }
@@ -315,6 +390,7 @@ static struct ofono_gprs_context_driver driver = {
 	.remove			= at_gprs_context_remove,
 	.activate_primary	= at_gprs_activate_primary,
 	.deactivate_primary	= at_gprs_deactivate_primary,
+	.detach_shutdown	= at_gprs_detach_shutdown,
 };
 
 void at_gprs_context_init(void)

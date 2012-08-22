@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2009-2010 Nokia Corporation and/or its subsidiary(-ies).
+ *  Copyright (C) 2009-2010  Nokia Corporation and/or its subsidiary(-ies).
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -27,7 +27,9 @@ extern "C" {
 #endif
 
 #define PN_PHONE_INFO				0x1B
-#define PN_EPOC_INFO				98
+#define PN_MODEM_INFO				0xC5
+
+#define PN_EPOC_INFO				0x62
 #define INFO_TIMEOUT				5
 
 enum info_isi_cause {
@@ -46,10 +48,10 @@ enum info_message_id {
 	INFO_VERSION_READ_RESP =		0x08,
 	INFO_PRODUCT_INFO_READ_REQ =		0x15,
 	INFO_PRODUCT_INFO_READ_RESP =		0x16,
-	INFO_COMMON_MESSAGE =			0xF0,
 };
 
 enum info_subblock {
+	INFO_SB_MODEMSW_VERSION =		0x00,
 	INFO_SB_PRODUCT_INFO_NAME =		0x01,
 	INFO_SB_PRODUCT_INFO_MANUFACTURER =	0x07,
 	INFO_SB_SN_IMEI_PLAIN =			0x41,

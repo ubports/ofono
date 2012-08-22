@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -35,4 +35,10 @@ enum ofono_vendor {
 	OFONO_VENDOR_WAVECOM,
 	OFONO_VENDOR_NOKIA,
 	OFONO_VENDOR_PHONESIM,
+	OFONO_VENDOR_TELIT,
+	OFONO_VENDOR_SPEEDUP,
+	OFONO_VENDOR_SAMSUNG,
+	OFONO_VENDOR_SIMCOM,
+	OFONO_VENDOR_ICERA,
+	OFONO_VENDOR_WAVECOM_Q2XXX,
 };

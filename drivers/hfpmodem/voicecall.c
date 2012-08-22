@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -29,17 +29,20 @@
 #include <stdio.h>
 
 #include <glib.h>
+#include <gatchat.h>
+#include <gatresult.h>
 
 #include <ofono/log.h>
 #include <ofono/modem.h>
 #include <ofono/voicecall.h>
+
 #include "common.h"
-#include "gatchat.h"
-#include "gatresult.h"
 
 #include "hfpmodem.h"
+#include "slc.h"
 
 #define POLL_CLCC_INTERVAL 2000
+#define POLL_CLCC_DELAY 50
 #define CLIP_TIMEOUT 500
 
 static const char *none_prefix[] = { NULL };
@@ -118,19 +121,6 @@ static struct ofono_call *create_call(struct ofono_voicecall *vc, int type,
 	call->clip_validity = clip;
 
 	return call;
-}
-
-static struct ofono_call *new_call_notify(struct ofono_voicecall *vc, int type,
-					int direction, int status,
-					const char *num, int num_type, int clip)
-{
-	struct ofono_call *c;
-
-	c = create_call(vc, type, direction, status, num, num_type, clip);
-
-	ofono_voicecall_notify(vc, c);
-
-	return c;
 }
 
 static void release_call(struct ofono_voicecall *vc, struct ofono_call *call)
@@ -649,7 +639,7 @@ static void ccwa_notify(GAtResult *result, gpointer user_data)
 	DBG("ccwa_notify: %s %d %d", num, num_type, validity);
 
 	call = create_call(vc, 0, 1, CALL_STATUS_WAITING, num, num_type,
-			    validity);
+				validity);
 
 	if (call == NULL) {
 		ofono_error("malloc call struct failed.  "
@@ -846,59 +836,6 @@ static void ciev_call_notify(struct ofono_voicecall *vc,
 	vd->cind_val[HFP_INDICATOR_CALL] = value;
 }
 
-static void sync_dialing_cb(gboolean ok, GAtResult *result, gpointer user_data)
-{
-	struct ofono_voicecall *vc = user_data;
-	struct voicecall_data *vd = ofono_voicecall_get_data(vc);
-	struct ofono_error error;
-	GSList *calls;
-	GSList *o;
-	GSList *n;
-	struct ofono_call *oc;
-	struct ofono_call *nc;
-
-	decode_at_error(&error, g_at_result_final_response(result));
-
-	if (!ok)
-		return;
-
-	calls = at_util_parse_clcc(result);
-
-	if (calls == NULL)
-		return;
-
-	/* Look for dialing or alerting calls on the new list */
-	n = find_dialing(calls);
-
-	/* Let us find if we have done the dial from HF by looking for
-	 * existing dialing or alerting calls
-	 */
-	o = find_dialing(vd->calls);
-
-	if (n == NULL && o) {
-		oc = o->data;
-		release_call(vc, oc);
-		vd->calls = g_slist_remove(vd->calls, oc);
-	} else if (n && o == NULL) {
-		nc = n->data;
-		new_call_notify(vc, nc->type, nc->direction, nc->status,
-				nc->phone_number.number, nc->phone_number.type,
-				nc->clip_validity);
-	} else if (n && o) {
-		oc = o->data;
-		nc = n->data;
-
-		memcpy(&oc->phone_number, &nc->phone_number,
-				sizeof(struct ofono_phone_number));
-		oc->status = nc->status;
-		oc->clip_validity = nc->clip_validity;
-		ofono_voicecall_notify(vc, oc);
-	}
-
-	g_slist_foreach(calls, (GFunc) g_free, NULL);
-	g_slist_free(calls);
-}
-
 static void ciev_callsetup_notify(struct ofono_voicecall *vc,
 					unsigned int value)
 {
@@ -941,7 +878,7 @@ static void ciev_callsetup_notify(struct ofono_voicecall *vc,
 		if (waiting == NULL && dialing == NULL)
 			goto out;
 
-		 /*
+		/*
 		 * If call=1, in the waiting case we have to poll, since we
 		 * have no idea whether a waiting call gave up or we accepted
 		 * using release+accept or hold+accept
@@ -976,7 +913,7 @@ static void ciev_callsetup_notify(struct ofono_voicecall *vc,
 		 * from AG: query and create call.
 		 */
 		g_at_chat_send(vd->chat, "AT+CLCC", clcc_prefix,
-				sync_dialing_cb, vc, NULL);
+				clcc_poll_cb, vc, NULL);
 		break;
 
 	case 3:
@@ -1022,6 +959,11 @@ static void ciev_callheld_notify(struct ofono_voicecall *vc,
 		break;
 
 	case 1:
+		if (vd->clcc_source) {
+			g_source_remove(vd->clcc_source);
+			vd->clcc_source = 0;
+		}
+
 		/* We have to poll here, we have no idea whether the call was
 		 * accepted by CHLD=1 or swapped by CHLD=2 or one call was
 		 * chosed for private chat by CHLD=2x
@@ -1041,7 +983,15 @@ static void ciev_callheld_notify(struct ofono_voicecall *vc,
 				ofono_voicecall_notify(vc, call);
 			}
 		} else if (callheld == 1) {
-			release_with_status(vc, CALL_STATUS_ACTIVE);
+			if (vd->clcc_source)
+				g_source_remove(vd->clcc_source);
+
+			/* We have to schedule a poll here, we have no idea
+			 * whether active call was dropped by remote or if this
+			 * is an intermediate state during call swap
+			 */
+			vd->clcc_source = g_timeout_add(POLL_CLCC_DELAY,
+							poll_clcc, vc);
 		}
 	}
 
@@ -1115,17 +1065,17 @@ static void hfp_voicecall_initialized(gboolean ok, GAtResult *result,
 static int hfp_voicecall_probe(struct ofono_voicecall *vc, unsigned int vendor,
 				gpointer user_data)
 {
-	struct hfp_data *data = user_data;
+	struct hfp_slc_info *info = user_data;
 	struct voicecall_data *vd;
 
 	vd = g_new0(struct voicecall_data, 1);
 
-	vd->chat = data->chat;
-	vd->ag_features = data->ag_features;
-	vd->ag_mpty_features = data->ag_mpty_features;
+	vd->chat = g_at_chat_clone(info->chat);
+	vd->ag_features = info->ag_features;
+	vd->ag_mpty_features = info->ag_mpty_features;
 
-	memcpy(vd->cind_pos, data->cind_pos, HFP_INDICATOR_LAST);
-	memcpy(vd->cind_val, data->cind_val, HFP_INDICATOR_LAST);
+	memcpy(vd->cind_pos, info->cind_pos, HFP_INDICATOR_LAST);
+	memcpy(vd->cind_val, info->cind_val, HFP_INDICATOR_LAST);
 
 	ofono_voicecall_set_data(vc, vd);
 
@@ -1150,6 +1100,7 @@ static void hfp_voicecall_remove(struct ofono_voicecall *vc)
 
 	ofono_voicecall_set_data(vc, NULL);
 
+	g_at_chat_unref(vd->chat);
 	g_free(vd);
 }
 

@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -55,6 +55,7 @@ struct modem_data {
 	guint audio_changed_watch;
 
 	gboolean has_callmanager;
+	gboolean has_audiosettings;
 	gboolean is_huawei;
 	gint audio_users;
 	guint audio_watch;
@@ -92,6 +93,10 @@ static gboolean audio_receive(GIOChannel *channel,
 		return TRUE;
 
 	wlen = write(modem->dsp_out, buf, rlen);
+	if (wlen < 0) {
+		modem->audio_watch = 0;
+		return FALSE;
+	}
 
 	return TRUE;
 }
@@ -448,6 +453,8 @@ static void check_interfaces(struct modem_data *modem, DBusMessageIter *iter)
 		dbus_message_iter_next(&entry);
 	}
 
+	modem->has_audiosettings = has_audiosettings;
+
 	if (modem->has_callmanager == has_callmanager)
 		return;
 
@@ -507,17 +514,18 @@ static void create_modem(DBusConnection *conn,
 
 	modem->conn = conn;
 
-	modem->call_added_watch = g_dbus_add_signal_watch(conn, NULL,
+	modem->call_added_watch = g_dbus_add_signal_watch(conn, OFONO_SERVICE,
 				modem->path, OFONO_CALLMANAGER_INTERFACE,
 				"CallAdded", call_added, modem, NULL);
-	modem->call_removed_watch = g_dbus_add_signal_watch(conn, NULL,
-				modem->path, OFONO_CALLMANAGER_INTERFACE,
-				"CallRemoved", call_removed, modem, NULL);
-	modem->call_changed_watch = g_dbus_add_signal_watch(conn, NULL,
-				NULL, OFONO_CALL_INTERFACE,
+	modem->call_removed_watch = g_dbus_add_signal_watch(conn,
+				OFONO_SERVICE, modem->path,
+				OFONO_CALLMANAGER_INTERFACE, "CallRemoved",
+				call_removed, modem, NULL);
+	modem->call_changed_watch = g_dbus_add_signal_watch(conn,
+				OFONO_SERVICE, NULL, OFONO_CALL_INTERFACE,
 				"PropertyChanged", call_changed, modem, NULL);
-	modem->audio_changed_watch = g_dbus_add_signal_watch(conn, NULL,
-				NULL, OFONO_AUDIO_INTERFACE,
+	modem->audio_changed_watch = g_dbus_add_signal_watch(conn,
+				OFONO_SERVICE, NULL, OFONO_AUDIO_INTERFACE,
 				"PropertyChanged", audio_changed, modem, NULL);
 
 	g_hash_table_replace(modem_list, modem->path, modem);
