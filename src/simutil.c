@@ -53,6 +53,10 @@ struct opl_operator {
 	guint8 id;
 };
 
+#define MF	1
+#define DF	2
+#define EF	4
+
 #define BINARY 0
 #define RECORD 1
 #define CYCLIC 3
@@ -66,60 +70,45 @@ struct opl_operator {
 #define ROOTMF 0x3F00
 
 static struct sim_ef_info ef_db[] = {
-{	0x2F05, ROOTMF, BINARY, 0,	ALW,	PIN	},
-{	0x2F06, ROOTMF, RECORD, 0,	ALW,	PIN	},
-{	0x2FE2, ROOTMF, BINARY, 10,	ALW,	NEV	},
-{	0x4F20, 0x5F50, BINARY, 0,	PIN,	ADM	},
-{	0x6F05, 0x7F20, BINARY, 0,	ALW,	PIN	},
-{	0x6F06, 0x0000, RECORD, 0,	ALW,	ADM	},
-{	0x6F07, 0x0000, BINARY, 9,	PIN,	ADM	},
-{	0x6F14, 0x7F20, BINARY, 0,	PIN,	ADM	},
-{	0x6F15, 0x7F20, BINARY, 0,	PIN,	PIN	},
-{	0x6F18, 0x7F20, BINARY, 10,	PIN,	ADM	},
-{	0x6F2C, 0x7F20, BINARY, 16,	PIN,	PIN	},
-{	0x6F30, 0x7F20, BINARY, 0,	PIN,	PIN	},
-{	0x6F32, 0x7F20, BINARY, 0,	PIN,	ADM	},
-{	0x6F37, 0x7F20, BINARY, 3,	PIN,	PIN2	},
-{	0x6F38, 0x7F20, BINARY, 0,	PIN,	ADM	},
-{	0x6F39, 0x7F20, CYCLIC, 3,	PIN,	PIN2	},
-{	0x6F3B, 0x7F10, RECORD, 0,	PIN,	PIN2	},
-{	0x6F3E, 0x7F20, BINARY, 0,	PIN,	ADM	},
-{	0x6F3F, 0x7F20, BINARY, 0,	PIN,	ADM	},
-{	0x6F40, 0x7F10, RECORD, 0,	PIN,	PIN	},
-{	0x6F41, 0x7F20, BINARY, 5,	PIN,	PIN2	},
-{	0x6F42, 0x7F10, RECORD, 0,	PIN,	PIN	},
-{	0x6F44, 0x7F10, CYCLIC, 0,	PIN,	PIN	},
-{	0x6F45, 0x7F20, BINARY, 0,	PIN,	PIN	},
-{	0x6F46, 0x7F20, BINARY, 17,	ALW,	ADM	},
-{	0x6F48, 0x7F20, BINARY, 0,	PIN,	ADM	},
-{	0x6F49, 0x7F10, RECORD, 0,	PIN,	ADM	},
-{	0x6F4D, 0x7F20, RECORD, 0,	PIN,	PIN2	},
-{	0x6F50, 0x7F20, BINARY, 0,	PIN,	PIN	},
-{	0x6F51, 0x7F20, RECORD, 0,	PIN,	ADM	},
-{	0x6F53, 0x7F20, BINARY, 14,	PIN,	PIN	},
-{	0x6F56, 0x0000, BINARY, 0,	PIN,	PIN2	},
-{	0x6F60, 0x7F20, BINARY, 0,	PIN,	PIN	},
-{	0x6F61, 0x7F20, BINARY, 0,	PIN,	ADM	},
-{	0x6F62, 0x7F20, BINARY, 0,	PIN,	ADM	},
-{	0x6F73, 0x0000, BINARY, 14,	PIN,	PIN	},
-{	0x6F7B, 0x7F20, BINARY, 0,	PIN,	PIN	},
-{	0x6F7E, 0x7F20, BINARY, 11,	PIN,	PIN	},
-{	0x6FAD, 0x7F20, BINARY, 0,	ALW,	ADM	},
-{	0x6FAE, 0x7F20, BINARY, 1,	ALW,	ADM	},
-{	0x6FB7, 0x7F20, BINARY, 0,	ALW,	ADM	},
-{	0x6FC5, 0x7F20, RECORD, 0,	ALW,	ADM	},
-{	0x6FC6, 0x7F20, RECORD, 0,	ALW,	ADM	},
-{	0x6FC7, 0x7F20, RECORD, 0,	PIN,	PIN	},
-{	0x6FC9, 0x7F20, RECORD, 0,	PIN,	PIN	},
-{	0x6FCA, 0x7F20, RECORD, 0,	PIN,	PIN	},
-{	0x6FCB, 0x7F20, RECORD, 16,	PIN,	PIN	},
-{	0x6FCD, 0x7F20, BINARY, 0,	PIN,	ADM	},
-{	0x6FD9, 0x0000, BINARY, 0,	PIN,	ADM	},
-{	0x6FDB, 0x0000, BINARY, 1,	PIN,	ADM	},
-{	0x6FDC, 0x0000, BINARY, 1,	PIN,	ADM	},
-{	0x6FDE, 0x0000, BINARY, 0,	ALW,	ADM	},
-{	0x6FDF, 0x0000, RECORD, 0,	ALW,	ADM	},
-{	0x6FE3, 0x0000, BINARY, 18,	PIN,	PIN	},
+{	0x2F05, ROOTMF, ROOTMF, EF, BINARY, 0,		ALW,	PIN	},
+{	0x2FE2, ROOTMF, ROOTMF, EF, BINARY, 10,		ALW,	NEV	},
+{	0x4F20, 0x5F50, 0x5F50, EF, BINARY, 0,		PIN,	ADM	},
+{	0x5F50, 0x7F10, 0x7F10, DF, 0, 0,		PIN,	ADM	},
+{	0x6F05, 0x7F20, 0x7FFF, EF, BINARY, 0,		ALW,	PIN	},
+{	0x6F07, 0x7F20, 0x7FFF, EF, BINARY, 9,		PIN,	ADM	},
+{	0x6F11, 0x7F20, 0x7FFF, EF, BINARY, 0,		PIN,	PIN	},
+{	0x6F13, 0x7F20, 0x7FFF, EF, BINARY, 0,		PIN,	PIN	},
+{	0x6F14, 0x7F20, 0x7FFF, EF, BINARY, 0,		PIN,	ADM	},
+{	0x6F15, 0x7F20, 0x7FFF, EF, BINARY, 0,		PIN,	PIN	},
+{	0x6F16, 0x7F20, 0x7FFF, EF, BINARY, 0,		PIN,	ADM	},
+{	0x6F17, 0x7F20, 0x7FFF, EF, RECORD, 0,		PIN,	PIN	},
+{	0x6F18, 0x7F20, 0x7FFF, EF, BINARY, 10,		PIN,	ADM	},
+{	0x6F19, 0x7F20, 0x7FFF, EF, RECORD, 0,		PIN,	PIN	},
+{	0x6F38, 0x7F20, 0x7FFF, EF, BINARY, 0,		PIN,	ADM	},
+{	0x6F3A, 0x7F10, 0x7F10, EF, RECORD, 0,		PIN,	PIN	},
+{	0x6F3B, 0x7F10, 0x7FFF, EF, RECORD, 0,		PIN,	PIN2	},
+{	0x6F40, 0x7F10, 0x7FFF, EF, RECORD, 0,		PIN,	PIN	},
+{	0x6F45, 0x7F20, 0x7FFF, EF, BINARY, 0,		PIN,	PIN	},
+{	0x6F46, 0x7F20, 0x7FFF, EF, BINARY, 17,		ALW,	ADM	},
+{	0x6F48, 0x7F20, 0x7FFF, EF, BINARY, 0,		PIN,	ADM	},
+{	0x6F49, 0x7F10, 0x7FFF, EF, RECORD, 0,		PIN,	ADM	},
+{	0x6F4D, 0x7F20, 0x7FFF, EF, RECORD, 0,		PIN,	PIN2	},
+{	0x6F50, 0x7F20, 0x7FFF, EF, BINARY, 0,		PIN,	PIN	},
+{	0x6F56, 0x0000, 0x7FFF, EF, BINARY, 0,		PIN,	PIN2	},
+{	0x6FAD, 0x7F20, 0x7FFF, EF, BINARY, 0,		ALW,	ADM	},
+{	0x6FAE, 0x7F20, 0x0000, EF, BINARY, 1,		ALW,	ADM	},
+{	0x6FB7, 0x7F20, 0x7FFF, EF, BINARY, 0,		ALW,	ADM	},
+{	0x6FC5, 0x7F20, 0x7FFF, EF, RECORD, 0,		ALW,	ADM	},
+{	0x6FC6, 0x7F20, 0x7FFF, EF, RECORD, 0,		ALW,	ADM	},
+{	0x6FC7, 0x7F20, 0x7FFF, EF, RECORD, 0,		PIN,	PIN	},
+{	0x6FC9, 0x7F20, 0x7FFF, EF, RECORD, 0,		PIN,	PIN	},
+{	0x6FCA, 0x7F20, 0x7FFF, EF, RECORD, 0,		PIN,	PIN	},
+{	0x6FCB, 0x7F20, 0x7FFF, EF, RECORD, 16,		PIN,	PIN	},
+{	0x6FCD, 0x7F20, 0x7FFF, EF, BINARY, 0,		PIN,	ADM	},
+{	0x6FDE, 0x7F20, 0x7FFF, EF, BINARY, 0,		ALW,	ADM	},
+{	0x7F10, ROOTMF, ROOTMF, DF, 0, 0,		0,	0	},
+{	0x7F20, ROOTMF, ROOTMF, DF, 0, 0,		0,	0	},
+{	0x7FFF, 0x0000, ROOTMF, DF, 0, 0,		0,	0	}
 };
 
 void simple_tlv_iter_init(struct simple_tlv_iter *iter,
@@ -1298,6 +1287,72 @@ struct sim_ef_info *sim_ef_db_lookup(unsigned short id)
 				sizeof(struct sim_ef_info), find_ef_by_id);
 
 	return result;
+}
+
+unsigned int sim_ef_db_get_path_2g(unsigned short id, unsigned char out_path[])
+{
+	struct sim_ef_info *info;
+	unsigned int nelem = sizeof(ef_db) / sizeof(struct sim_ef_info);
+	unsigned char path[6];
+	int i = 0;
+	int j;
+
+	info = bsearch(GUINT_TO_POINTER((unsigned int) id), ef_db, nelem,
+				sizeof(struct sim_ef_info), find_ef_by_id);
+	if (info == NULL)
+		return 0;
+
+	path[i++] = info->parent2g & 0xff;
+	path[i++] = info->parent2g >> 8;
+
+	while (info->parent2g != ROOTMF) {
+		info = bsearch(GUINT_TO_POINTER((unsigned int) info->parent2g),
+				ef_db, nelem, sizeof(struct sim_ef_info),
+				find_ef_by_id);
+		if (info == NULL)
+			return 0;
+
+		path[i++] = info->parent2g & 0xff;
+		path[i++] = info->parent2g >> 8;
+	}
+
+	for (j = 0; j < i; j++)
+		out_path[j] = path[i - j - 1];
+
+	return i;
+}
+
+unsigned int sim_ef_db_get_path_3g(unsigned short id, unsigned char out_path[])
+{
+	struct sim_ef_info *info;
+	unsigned int nelem = sizeof(ef_db) / sizeof(struct sim_ef_info);
+	unsigned char path[6];
+	int i = 0;
+	int j;
+
+	info = bsearch(GUINT_TO_POINTER((unsigned int) id), ef_db, nelem,
+				sizeof(struct sim_ef_info), find_ef_by_id);
+	if (info == NULL)
+		return 0;
+
+	path[i++] = info->parent3g & 0xff;
+	path[i++] = info->parent3g >> 8;
+
+	while (info->parent3g != ROOTMF) {
+		info = bsearch(GUINT_TO_POINTER((unsigned int) info->parent3g),
+				ef_db, nelem, sizeof(struct sim_ef_info),
+				find_ef_by_id);
+		if (info == NULL)
+			return 0;
+
+		path[i++] = info->parent3g & 0xff;
+		path[i++] = info->parent3g >> 8;
+	}
+
+	for (j = 0; j < i; j++)
+		out_path[j] = path[i - j - 1];
+
+	return i;
 }
 
 gboolean sim_parse_3g_get_response(const unsigned char *data, int len,

@@ -1699,6 +1699,27 @@ static DBusMessage *manager_release_and_answer(DBusConnection *conn,
 	return NULL;
 }
 
+static DBusMessage *manager_release_and_swap(DBusConnection *conn,
+						DBusMessage *msg, void *data)
+{
+	struct ofono_voicecall *vc = data;
+
+	if (vc->pending || vc->dial_req || vc->pending_em)
+		return __ofono_error_busy(msg);
+
+	if (voicecalls_have_waiting(vc))
+		return __ofono_error_failed(msg);
+
+	if (vc->driver->release_all_active == NULL)
+		return __ofono_error_not_implemented(msg);
+
+	vc->pending = dbus_message_ref(msg);
+
+	vc->driver->release_all_active(vc, generic_callback, vc);
+
+	return NULL;
+}
+
 static DBusMessage *manager_hold_and_answer(DBusConnection *conn,
 						DBusMessage *msg, void *data)
 {
@@ -2131,6 +2152,8 @@ static const GDBusMethodTable manager_methods[] = {
 	{ GDBUS_ASYNC_METHOD("SwapCalls",  NULL, NULL, manager_swap_calls) },
 	{ GDBUS_ASYNC_METHOD("ReleaseAndAnswer", NULL, NULL,
 						manager_release_and_answer) },
+	{ GDBUS_ASYNC_METHOD("ReleaseAndSwap", NULL, NULL,
+						manager_release_and_swap) },
 	{ GDBUS_ASYNC_METHOD("HoldAndAnswer", NULL, NULL,
 						manager_hold_and_answer) },
 	{ GDBUS_ASYNC_METHOD("HangupAll", NULL, NULL,
@@ -2811,6 +2834,7 @@ static void sim_state_watch(enum ofono_sim_state new_state, void *user)
 						read_sim_ecc_numbers, vc, NULL);
 		break;
 	case OFONO_SIM_STATE_NOT_PRESENT:
+	case OFONO_SIM_STATE_RESETTING:
 		/* TODO: Must release all non-emergency calls */
 
 		if (vc->sim_context) {
@@ -3652,7 +3676,7 @@ int __ofono_voicecall_dial(struct ofono_voicecall *vc,
 {
 	struct dial_request *req;
 
-	if (!valid_phone_number_format(addr))
+	if (!valid_long_phone_number_format(addr))
 		return -EINVAL;
 
 	if (vc->driver->dial == NULL)
@@ -3845,15 +3869,21 @@ void __ofono_voicecall_set_alpha_and_icon_id(struct ofono_voicecall *vc,
 	vc->dial_req = req;
 
 	vc->flags |= VOICECALL_FLAG_STK_MODEM_CALLSETUP;
+
+	DBG("%p, %p", vc, vc->dial_req);
 }
 
 void __ofono_voicecall_clear_alpha_and_icon_id(struct ofono_voicecall *vc)
 {
-	g_free(vc->dial_req->message);
-	vc->dial_req->message = NULL;
+	DBG("%p, %p", vc, vc->dial_req);
 
-	g_free(vc->dial_req);
-	vc->dial_req = NULL;
+	if (vc->dial_req) {
+		g_free(vc->dial_req->message);
+		vc->dial_req->message = NULL;
+
+		g_free(vc->dial_req);
+		vc->dial_req = NULL;
+	}
 
 	vc->flags &= ~VOICECALL_FLAG_STK_MODEM_CALLSETUP;
 }

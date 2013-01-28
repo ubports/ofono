@@ -47,6 +47,7 @@ static const char *creg_prefix[] = { "+CREG:", NULL };
 static const char *cops_prefix[] = { "+COPS:", NULL };
 static const char *csq_prefix[] = { "+CSQ:", NULL };
 static const char *cind_prefix[] = { "+CIND:", NULL };
+static const char *cmer_prefix[] = { "+CMER:", NULL };
 static const char *zpas_prefix[] = { "+ZPAS:", NULL };
 static const char *option_tech_prefix[] = { "_OCTI:", "_OUWCTI:", NULL };
 
@@ -678,6 +679,54 @@ static void ifx_xhomezr_notify(GAtResult *result, gpointer user_data)
 	ofono_info("Home zone: %s", label);
 }
 
+static void ifx_xreg_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_netreg *netreg = user_data;
+	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	int state;
+	const char *band;
+	GAtResultIter iter;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "+XREG:"))
+		return;
+
+	if (!g_at_result_iter_next_number(&iter, &state))
+		return;
+
+	if (!g_at_result_iter_next_unquoted_string(&iter, &band))
+
+	DBG("state %d band %s", state, band);
+
+	switch (state) {
+	case 0:	/* not registered */
+		nd->tech = -1;
+		break;
+	case 1:	/* registered, GPRS attached */
+		nd->tech = ACCESS_TECHNOLOGY_GSM;
+		break;
+	case 2:	/* registered, EDGE attached */
+		nd->tech = ACCESS_TECHNOLOGY_GSM_EGPRS;
+		break;
+	case 3:	/* registered, WCDMA attached */
+		nd->tech = ACCESS_TECHNOLOGY_UTRAN;
+		break;
+	case 4:	/* registered, HSDPA attached */
+		nd->tech = ACCESS_TECHNOLOGY_UTRAN_HSDPA;
+		break;
+	case 5:	/* registered, HSUPA attached */
+		nd->tech = ACCESS_TECHNOLOGY_UTRAN_HSUPA;
+		break;
+	case 6:	/* registered, HSUPA and HSDPA attached */
+		nd->tech = ACCESS_TECHNOLOGY_UTRAN_HSDPA_HSUPA;
+		break;
+	case 7:	/* registered, GSM */
+		nd->tech = ACCESS_TECHNOLOGY_GSM;
+		break;
+	}
+}
+
 static void ifx_xciev_notify(GAtResult *result, gpointer user_data)
 {
 	//struct ofono_netreg *netreg = user_data;
@@ -745,6 +794,37 @@ static void ciev_notify(GAtResult *result, gpointer user_data)
 		return;
 
 	if (ind != nd->signal_index)
+		return;
+
+	if (!g_at_result_iter_next_number(&iter, &strength))
+		return;
+
+	if (strength == nd->signal_invalid)
+		strength = -1;
+	else
+		strength = (strength * 100) / (nd->signal_max - nd->signal_min);
+
+	ofono_netreg_strength_notify(netreg, strength);
+}
+
+static void telit_ciev_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_netreg *netreg = user_data;
+	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	const char *signal_identifier = "rssi";
+	const char *ind_str;
+	int strength;
+	GAtResultIter iter;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "+CIEV:"))
+		return;
+
+	if (!g_at_result_iter_next_unquoted_string(&iter, &ind_str))
+		return;
+
+	if (!g_str_equal(signal_identifier, ind_str))
 		return;
 
 	if (!g_at_result_iter_next_number(&iter, &strength))
@@ -1395,6 +1475,176 @@ notify:
 	ofono_netreg_status_notify(netreg, status, lac, ci, tech);
 }
 
+static void at_cmer_not_supported(struct ofono_netreg *netreg)
+{
+	ofono_error("+CMER not supported by this modem.  If this is an error"
+			" please submit patches to support this hardware");
+
+	ofono_netreg_remove(netreg);
+}
+
+static void at_cmer_set_cb(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct ofono_netreg *netreg = user_data;
+	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+
+	if (!ok) {
+		at_cmer_not_supported(netreg);
+		return;
+	}
+
+	/*
+	 * Telit uses strings instead of numbers to identify indicators
+	 * in a +CIEV URC.
+	 * Handle them in a separate function to keep the code clean.
+	 */
+	if (nd->vendor == OFONO_VENDOR_TELIT)
+		g_at_chat_register(nd->chat, "+CIEV:",
+				telit_ciev_notify, FALSE, netreg, NULL);
+	else
+		g_at_chat_register(nd->chat, "+CIEV:",
+				ciev_notify, FALSE, netreg, NULL);
+
+	g_at_chat_register(nd->chat, "+CREG:",
+				creg_notify, FALSE, netreg, NULL);
+
+	ofono_netreg_register(netreg);
+}
+
+static inline char wanted_cmer(int supported, const char *pref)
+{
+	while (*pref) {
+		if (supported & (1 << (*pref - '0')))
+			return *pref;
+
+		pref++;
+	}
+
+	return '\0';
+}
+
+static inline ofono_bool_t append_cmer_element(char *buf, int *len, int cap,
+						const char *wanted,
+						ofono_bool_t last)
+{
+	char setting = wanted_cmer(cap, wanted);
+
+	if (!setting)
+		return FALSE;
+
+	buf[*len] = setting;
+
+	if (last)
+		buf[*len + 1] = '\0';
+	else
+		buf[*len + 1] = ',';
+
+	*len += 2;
+
+	return TRUE;
+}
+
+static ofono_bool_t build_cmer_string(char *buf, int *cmer_opts,
+					struct netreg_data *nd)
+{
+	const char *mode;
+	int len = sprintf(buf, "AT+CMER=");
+
+	DBG("");
+
+	/*
+	 * Forward unsolicited result codes directly to the TE;
+	 * TA‑TE link specific inband technique used to embed result codes and
+	 * data when TA is in on‑line data mode
+	 */
+	if (!append_cmer_element(buf, &len, cmer_opts[0], "3", FALSE))
+		return FALSE;
+
+	/* No keypad event reporting */
+	if (!append_cmer_element(buf, &len, cmer_opts[1], "0", FALSE))
+		return FALSE;
+
+	/* No display event reporting */
+	if (!append_cmer_element(buf, &len, cmer_opts[2], "0", FALSE))
+		return FALSE;
+
+	switch (nd->vendor) {
+	case OFONO_VENDOR_TELIT:
+		/*
+		 * Telit does not support mode 1.
+		 * All indicator events shall be directed from TA to TE.
+		 */
+		mode = "2";
+		break;
+	default:
+		/*
+		 * Only those indicator events, which are not caused by +CIND
+		 * shall be indicated by the TA to the TE.
+		 */
+		mode = "1";
+		break;
+	}
+
+	/*
+	 * Indicator event reporting using URC +CIEV: <ind>,<value>.
+	 * <ind> indicates the indicator order number (as specified for +CIND)
+	 * and <value> is the new value of indicator.
+	 */
+	if (!append_cmer_element(buf, &len, cmer_opts[3], mode, TRUE))
+		return FALSE;
+
+	return TRUE;
+}
+
+static void at_cmer_query_cb(ofono_bool_t ok, GAtResult *result,
+				gpointer user_data)
+{
+	struct ofono_netreg *netreg = user_data;
+	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	GAtResultIter iter;
+	int cmer_opts_cnt = 5; /* See 27.007 Section 8.10 */
+	int cmer_opts[cmer_opts_cnt];
+	int opt;
+	int mode;
+	char buf[128];
+
+	if (!ok)
+		goto error;
+
+	memset(cmer_opts, 0, sizeof(cmer_opts));
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "+CMER:"))
+		goto error;
+
+	for (opt = 0; opt < cmer_opts_cnt; opt++) {
+		int min, max;
+
+		if (!g_at_result_iter_open_list(&iter))
+			goto error;
+
+		while (g_at_result_iter_next_range(&iter, &min, &max)) {
+			for (mode = min; mode <= max; mode++)
+				cmer_opts[opt] |= 1 << mode;
+		}
+
+		if (!g_at_result_iter_close_list(&iter))
+			goto error;
+	}
+
+	if (build_cmer_string(buf, cmer_opts, nd) == FALSE)
+		goto error;
+
+	g_at_chat_send(nd->chat, buf, cmer_prefix,
+			at_cmer_set_cb, netreg, NULL);
+
+	return;
+
+error:
+	at_cmer_not_supported(netreg);
+}
+
 static void cind_support_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
@@ -1465,14 +1715,9 @@ static void cind_support_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	if (nd->signal_index == 0)
 		goto error;
 
-	g_at_chat_send(nd->chat, "AT+CMER=3,0,0,1", NULL,
-			NULL, NULL, NULL);
-	g_at_chat_register(nd->chat, "+CIEV:",
-				ciev_notify, FALSE, netreg, NULL);
-	g_at_chat_register(nd->chat, "+CREG:",
-				creg_notify, FALSE, netreg, NULL);
+	g_at_chat_send(nd->chat, "AT+CMER=?", cmer_prefix,
+				at_cmer_query_cb, netreg, NULL);
 
-	ofono_netreg_register(netreg);
 	return;
 
 error:
@@ -1588,6 +1833,16 @@ static void at_creg_set_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		g_at_chat_send(nd->chat, "AT+XCSQ=1", none_prefix,
 						NULL, NULL, NULL);
 		g_at_chat_send(nd->chat, "AT+XMER=1", none_prefix,
+						NULL, NULL, NULL);
+
+		/* Register for network technology updates */
+		g_at_chat_register(nd->chat, "+XREG:", ifx_xreg_notify,
+						FALSE, netreg, NULL);
+		g_at_chat_send(nd->chat, "AT+XREG=1", none_prefix,
+						NULL, NULL, NULL);
+		g_at_chat_send(nd->chat, "AT+XBANDSEL?", none_prefix,
+						NULL, NULL, NULL);
+		g_at_chat_send(nd->chat, "AT+XUBANDSEL?", none_prefix,
 						NULL, NULL, NULL);
 
 		/* Register for home zone reports */

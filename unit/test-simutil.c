@@ -395,9 +395,6 @@ static void test_ef_db(void)
 
 	info = sim_ef_db_lookup(0x2F05);
 	g_assert(info);
-
-	info = sim_ef_db_lookup(0x6FE3);
-	g_assert(info);
 }
 
 static const char *binary_ef = "62178202412183022F058A01058B032F060F8002000A"
@@ -448,7 +445,8 @@ static char *at_cuad_response = "611B4F10A0000000871002FFFFFFFF8905080000"
 	"FFFFFFFFFFFFFFFFFFFFFFFFFF611F4F0CA000000063504B43532D"
 	"313550094D49445066696C657351043F007F80";
 
-static void test_application_entry_decode(void) {
+static void test_application_entry_decode(void)
+{
 	unsigned char *ef_dir;
 	long len;
 	GSList *entries;
@@ -474,6 +472,28 @@ static void test_application_entry_decode(void) {
 	g_free(ef_dir);
 }
 
+static void test_get_3g_path(void)
+{
+	unsigned char path[6];
+	unsigned int len;
+	unsigned char path1[] = { 0x3F, 0x00, 0x7F, 0xFF };
+
+	len = sim_ef_db_get_path_3g(SIM_EFPNN_FILEID, path);
+	g_assert(len == 4);
+	g_assert(!memcmp(path, path1, len));
+}
+
+static void test_get_2g_path(void)
+{
+	unsigned char path[6];
+	unsigned int len;
+	unsigned char path1[] = { 0x3F, 0x00, 0x7F, 0x20 };
+
+	len = sim_ef_db_get_path_2g(SIM_EFPNN_FILEID, path);
+	g_assert(len == 4);
+	g_assert(!memcmp(path, path1, len));
+}
+
 int main(int argc, char **argv)
 {
 	g_test_init(&argc, &argv, NULL);
@@ -490,6 +510,8 @@ int main(int argc, char **argv)
 	g_test_add_func("/testsimutil/3G Status response", test_3g_status_data);
 	g_test_add_func("/testsimutil/Application entries decoding",
 			test_application_entry_decode);
+	g_test_add_func("/testsimutil/3G path", test_get_3g_path);
+	g_test_add_func("/testsimutil/2G path", test_get_2g_path);
 
 	return g_test_run();
 }

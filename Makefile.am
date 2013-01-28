@@ -56,7 +56,7 @@ builtin_libadd =
 builtin_cflags =
 
 gdbus_sources = gdbus/gdbus.h gdbus/mainloop.c gdbus/watch.c \
-					gdbus/object.c gdbus/polkit.c
+				gdbus/object.c gdbus/client.c gdbus/polkit.c
 
 gatchat_sources = gatchat/gatchat.h gatchat/gatchat.c \
 				gatchat/gatresult.h gatchat/gatresult.c \
@@ -156,6 +156,7 @@ qmi_sources = drivers/qmimodem/qmi.h drivers/qmimodem/qmi.c \
 					drivers/qmimodem/ctl.h \
 					drivers/qmimodem/dms.h \
 					drivers/qmimodem/nas.h \
+					drivers/qmimodem/uim.h \
 					drivers/qmimodem/wms.h \
 					drivers/qmimodem/wds.h \
 					drivers/qmimodem/pds.h \
@@ -170,6 +171,7 @@ builtin_sources += $(qmi_sources) \
 			drivers/qmimodem/voicecall.c \
 			drivers/qmimodem/network-registration.c \
 			drivers/qmimodem/sim-legacy.c \
+			drivers/qmimodem/sim.c \
 			drivers/qmimodem/sms.c \
 			drivers/qmimodem/ussd.c \
 			drivers/qmimodem/gprs.c \
@@ -458,6 +460,9 @@ builtin_sources += examples/emulator.c
 
 builtin_modules += example_private_network
 builtin_sources += examples/private-network.c
+
+builtin_modules += stktest
+builtin_sources += plugins/stktest.c
 endif
 
 builtin_modules += smart_messaging
@@ -534,7 +539,8 @@ doc_files = doc/overview.txt doc/ofono-paper.txt doc/release-faq.txt \
 			doc/sim-api.txt doc/stk-api.txt \
 			doc/audio-settings-api.txt doc/text-telephony-api.txt \
 			doc/calypso-modem.txt doc/message-api.txt \
-			doc/location-reporting-api.txt
+			doc/location-reporting-api.txt \
+			doc/certification.txt
 
 
 test_scripts = test/backtrace \
@@ -582,8 +588,7 @@ test_scripts = test/backtrace \
 		test/test-ss-control-cb \
 		test/test-ss-control-cf \
 		test/test-ss-control-cs \
-		test/test-voicecall \
-		test/test-ussd \
+		test/send-ussd \
 		test/cancel-ussd \
 		test/initiate-ussd \
 		test/offline-modem \
@@ -622,7 +627,11 @@ test_scripts = test/backtrace \
 		test/set-context-property \
 		test/test-gnss \
 		test/swap-calls \
-		test/release-and-answer
+		test/release-and-answer \
+		test/release-and-swap \
+		test/hold-and-answer \
+		test/hangup-multiparty \
+		test/hangup-call
 
 if TEST
 testdir = $(pkglibdir)/test
@@ -661,7 +670,8 @@ unit_test_simutil_SOURCES = unit/test-simutil.c src/util.c \
 unit_test_simutil_LDADD = @GLIB_LIBS@
 unit_objects += $(unit_test_simutil_OBJECTS)
 
-unit_test_stkutil_SOURCES = unit/test-stkutil.c src/util.c \
+unit_test_stkutil_SOURCES = unit/test-stkutil.c unit/stk-test-data.h \
+				src/util.c \
                                 src/storage.c src/smsutil.c \
                                 src/simutil.c src/stkutil.c
 unit_test_stkutil_LDADD = @GLIB_LIBS@
@@ -675,7 +685,8 @@ unit_test_cdmasms_SOURCES = unit/test-cdmasms.c src/cdma-smsutil.c
 unit_test_cdmasms_LDADD = @GLIB_LIBS@
 unit_objects += $(unit_test_cdmasms_OBJECTS)
 
-unit_test_sms_root_SOURCES = unit/test-sms.c src/util.c src/smsutil.c src/storage.c
+unit_test_sms_root_SOURCES = unit/test-sms-root.c \
+					src/util.c src/smsutil.c src/storage.c
 unit_test_sms_root_LDADD = @GLIB_LIBS@
 unit_objects += $(unit_test_sms_root_OBJECTS)
 
@@ -694,7 +705,7 @@ TESTS = $(unit_tests)
 if TOOLS
 noinst_PROGRAMS += tools/huawei-audio tools/auto-enable \
 			tools/get-location tools/lookup-apn \
-			tools/lookup-provider-name
+			tools/lookup-provider-name tools/tty-redirector
 
 tools_huawei_audio_SOURCES = $(gdbus_sources) tools/huawei-audio.c
 tools_huawei_audio_LDADD = @GLIB_LIBS@ @DBUS_LIBS@
@@ -712,11 +723,22 @@ tools_lookup_provider_name_SOURCES = plugins/mbpi.c plugins/mbpi.h \
 				tools/lookup-provider-name.c
 tools_lookup_provider_name_LDADD = @GLIB_LIBS@
 
+tools_tty_redirector_SOURCES = tools/tty-redirector.c
+tools_tty_redirector_LDADD = @GLIB_LIBS@
+
 if QMIMODEM
 noinst_PROGRAMS += tools/qmi
 
 tools_qmi_SOURCES = $(qmi_sources) tools/qmi.c
 tools_qmi_LDADD = @GLIB_LIBS@
+endif
+
+if MAINTAINER_MODE
+noinst_PROGRAMS += tools/stktest
+
+tools_stktest_SOURCES = $(gatchat_sources) $(gdbus_sources) tools/stktest.c \
+				unit/stk-test-data.h
+tools_stktest_LDADD = @GLIB_LIBS@ @DBUS_LIBS@
 endif
 endif
 
@@ -752,7 +774,8 @@ gatchat_test_qcdm_SOURCES = gatchat/test-qcdm.c $(gatchat_sources)
 gatchat_test_qcdm_LDADD = @GLIB_LIBS@
 
 
-DISTCHECK_CONFIGURE_FLAGS = --disable-datafiles
+DISTCHECK_CONFIGURE_FLAGS = --disable-datafiles \
+				--enable-dundee --enable-tools
 
 MAINTAINERCLEANFILES = Makefile.in \
 	aclocal.m4 configure config.h.in config.sub config.guess \

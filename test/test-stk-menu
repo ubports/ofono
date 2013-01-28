@@ -6,6 +6,10 @@ import sys
 import dbus
 import dbus.service
 import dbus.mainloop.glib
+import signal
+
+def handler(signum, frame):
+	raise Exception("\nSingle tone is finished!")
 
 class GoBack(dbus.DBusException):
 	_dbus_error_name = "org.ofono.Error.GoBack"
@@ -18,9 +22,22 @@ class Busy(dbus.DBusException):
 
 class StkAgent(dbus.service.Object):
 	exit_on_release = True
+	timeout_id = 0
+	timeout_reply_handler = None
 
 	def set_exit_on_release(self, exit_on_release):
 		self.exit_on_release = exit_on_release
+
+	def timeout_callback(self):
+		self.timeout_id = 0
+		self.timeout_reply_handler()
+		return False
+
+	def call_added(self, path, properties):
+		print "call added %s" % (path)
+		if (self.timeout_id > 0):
+			gobject.source_remove(self.timeout_id)
+			self.timeout_callback()
 
 	@dbus.service.method("org.ofono.SimToolkitAgent",
 					in_signature="", out_signature="")
@@ -34,7 +51,7 @@ class StkAgent(dbus.service.Object):
 	def RequestSelection(self, title, icon, items, default):
 		print "Title: (%s)" % (title)
 		print "Icon: (%d)" % (icon)
-		index = 0;
+		index = 0
 		for item in items:
 			print "%d. %s (icon: %d)" % (index, item[0], item[1])
 			index += 1
@@ -47,16 +64,24 @@ class StkAgent(dbus.service.Object):
 		elif select == 't':
 			raise EndSession("User wishes to terminate session")
 		else:
-			return int(select);
+			return int(select)
 
 	@dbus.service.method("org.ofono.SimToolkitAgent",
-					in_signature="syb", out_signature="")
-	def DisplayText(self, title, icon, urgent):
+					in_signature="syb", out_signature="",
+					async_callbacks=("reply_func",
+								"error_func"))
+	def DisplayText(self, title, icon, urgent, reply_func, error_func):
 		print "DisplayText (%s)" % (title)
 		print "Icon: (%d)" % (icon)
 		print "Urgent: (%d)" % (urgent)
 		key = raw_input("Press return to clear ('t' terminates, "
-				"'b' goes back, 'n' busy):")
+						"'b' goes back, 'n' busy, "
+						"'w' return and wait):")
+
+		if key == 'w':
+			seconds = 60
+		else:
+			seconds = 0
 
 		if key == 'b':
 			raise GoBack("User wishes to go back")
@@ -64,6 +89,13 @@ class StkAgent(dbus.service.Object):
 			raise EndSession("User wishes to terminate session")
 		elif key == 'n':
 			raise Busy("User wishes to simulate busy screen")
+
+		if (seconds > 0):
+			print "Waiting for %d seconds" % (seconds)
+
+		self.timeout_reply_handler = reply_func
+		self.timeout_id = gobject.timeout_add_seconds(seconds,
+							self.timeout_callback)
 
 	@dbus.service.method("org.ofono.SimToolkitAgent",
 				in_signature="sysyyb", out_signature="s")
@@ -75,7 +107,7 @@ class StkAgent(dbus.service.Object):
 		print "Hide typing: (%s)" % (hide_typing)
 		print "Enter characters, min: %d, max: %d:" % (min_chars,
 								max_chars)
-		userin = raw_input("");
+		userin = raw_input("")
 
 		return userin
 
@@ -89,7 +121,7 @@ class StkAgent(dbus.service.Object):
 		print "Hide typing: (%s)" % (hide_typing)
 		print "Enter digits, min: %d, max: %d:" % (min_chars,
 								max_chars)
-		userin = raw_input("'t' terminates, 'b' goes back:");
+		userin = raw_input("'t' terminates, 'b' goes back:")
 
 		if userin == 'b':
 			raise GoBack("User wishes to go back")
@@ -106,9 +138,9 @@ class StkAgent(dbus.service.Object):
 		key = raw_input("Enter Key (t, b):")
 
 		if key == 'b':
-			raise GoBack("User wishes to go back");
+			raise GoBack("User wishes to go back")
 		elif key == 't':
-			raise EndSession("User wishes to terminate session");
+			raise EndSession("User wishes to terminate session")
 		else:
 			return key
 
@@ -120,9 +152,23 @@ class StkAgent(dbus.service.Object):
 		key = raw_input("Enter Digit (t, b):")
 
 		if key == 'b':
-			raise GoBack("User wishes to go back");
+			raise GoBack("User wishes to go back")
 		elif key == 't':
-			raise EndSession("User wishes to terminate session");
+			raise EndSession("User wishes to terminate session")
+		else:
+			return key
+
+	@dbus.service.method("org.ofono.SimToolkitAgent",
+				in_signature="sy", out_signature="s")
+	def RequestQuickDigit(self, title, icon):
+		print "Title: (%s)" % (title)
+		print "Icon: (%d)" % (icon)
+		key = raw_input("Quick digit (0-9, *, #, t, b):")
+
+		if key == 'b':
+			raise GoBack("User wishes to go back")
+		elif key == 't':
+			raise EndSession("User wishes to terminate session")
 		else:
 			return key
 
@@ -134,9 +180,9 @@ class StkAgent(dbus.service.Object):
 		key = raw_input("Enter Confirmation (t, b, y, n):")
 
 		if key == 'b':
-			raise GoBack("User wishes to go back");
+			raise GoBack("User wishes to go back")
 		elif key == 't':
-			raise EndSession("User wishes to terminate session");
+			raise EndSession("User wishes to terminate session")
 		elif key == 'y':
 			return True
 		else:
@@ -150,7 +196,7 @@ class StkAgent(dbus.service.Object):
 		key = raw_input("Enter Confirmation (t, y, n):")
 
 		if key == 't':
-			raise EndSession("User wishes to terminate session");
+			raise EndSession("User wishes to terminate session")
 		elif key == 'y':
 			return True
 		else:
@@ -181,16 +227,45 @@ class StkAgent(dbus.service.Object):
 		print "Text: %s" % (text)
 		print "Icon: %d" % (icon)
 
+		signal.signal(signal.SIGALRM, handler)
+		signal.alarm(5)
+
+		try:
+			key = raw_input("Press return to end before end of"
+							 " single tone (t):")
+			signal.alarm(0)
+
+			if key == 't':
+				raise EndSession("User wishes to terminate"
+								 " session")
+		except Exception, exc:
+			print exc
+
 	@dbus.service.method("org.ofono.SimToolkitAgent",
-					in_signature="ssy", out_signature="")
-	def LoopTone(self, tone, text, icon):
+					in_signature="ssy", out_signature="",
+					async_callbacks=("reply_func",
+								"error_func"))
+	def LoopTone(self, tone, text, icon, reply_func, error_func):
 		print "LoopTone: %s" % (tone)
 		print "Text: %s" % (text)
 		print "Icon: %d" % (icon)
-		key = raw_input("Press return to end before timeout (t):")
+		key = raw_input("Press return to end before timeout "
+				"('t' terminates, 'w' return and wait):")
+
+		if key == 'w':
+			seconds = 60
+		else:
+			seconds = 0
 
 		if key == 't':
-			raise EndSession("User wishes to terminate session");
+			raise EndSession("User wishes to terminate session")
+
+		if (seconds > 0):
+			print "Waiting for %d seconds" % (seconds)
+
+		self.timeout_reply_handler = reply_func
+		self.timeout_id = gobject.timeout_add_seconds(seconds,
+							self.timeout_callback)
 
 	@dbus.service.method("org.ofono.SimToolkitAgent",
 					in_signature="sy", out_signature="")
@@ -216,14 +291,62 @@ class StkAgent(dbus.service.Object):
 		key = raw_input("Enter Confirmation (t, y, n):")
 
 		if key == 't':
-			raise EndSession("User wishes to terminate session");
+			raise EndSession("User wishes to terminate session")
 		elif key == 'y':
 			return True
 		else:
 			return False
 
+_dbus2py = {
+	dbus.String : unicode,
+	dbus.UInt32 : int,
+	dbus.Int32 : int,
+	dbus.Int16 : int,
+	dbus.UInt16 : int,
+	dbus.UInt64 : int,
+	dbus.Int64 : int,
+	dbus.Byte : int,
+	dbus.Boolean : bool,
+	dbus.ByteArray : str,
+	dbus.ObjectPath : str
+    }
+
+def dbus2py(d):
+	t = type(d)
+	if t in _dbus2py:
+		return _dbus2py[t](d)
+	if t is dbus.Dictionary:
+		return dict([(dbus2py(k), dbus2py(v)) for k, v in d.items()])
+	if t is dbus.Array and d.signature == "y":
+		return "".join([chr(b) for b in d])
+	if t is dbus.Array or t is list:
+		return [dbus2py(v) for v in d]
+	if t is dbus.Struct or t is tuple:
+		return tuple([dbus2py(v) for v in d])
+	return d
+
+def pretty(d):
+	d = dbus2py(d)
+	t = type(d)
+
+	if t in (dict, tuple, list) and len(d) > 0:
+		if t is dict:
+			d = ", ".join(["%s = %s" % (k, pretty(v))
+					for k, v in d.items()])
+			return "{ %s }" % d
+
+		d = " ".join([pretty(e) for e in d])
+
+		if t is tuple:
+			return "( %s )" % d
+
+	if t is str:
+		return "%s" % d
+
+	return str(d)
+
 def property_changed(name, value):
-	print "SimToolKit property: %s changed to '%s'" % (name, value)
+	print "SimToolKit property: %s changed to '%s'" % (name, pretty(value))
 
 if __name__ == '__main__':
 	if len(sys.argv) == 2:
@@ -240,11 +363,12 @@ if __name__ == '__main__':
 	modems = manager.GetModems()
 
 	for path, properties in modems:
-		if "org.ofono.SimToolkit" not in properties["Interfaces"]:
-			continue
-
-		stk = dbus.Interface(bus.get_object('org.ofono', path),
-					'org.ofono.SimToolkit')
+		if "org.ofono.SimToolkit" in properties["Interfaces"]:
+			stk = dbus.Interface(bus.get_object('org.ofono', path),
+							'org.ofono.SimToolkit')
+		if "org.ofono.VoiceCallManager" in properties["Interfaces"]:
+			vcm = dbus.Interface(bus.get_object('org.ofono', path),
+						'org.ofono.VoiceCallManager')
 
 	stk.connect_to_signal("PropertyChanged", property_changed)
 
@@ -266,11 +390,21 @@ if __name__ == '__main__':
 		path = "/test/agent"
 		agent = StkAgent(bus, path)
 
+		try:
+			vcm.connect_to_signal("CallAdded", agent.call_added)
+		except:
+			pass
+
 		select = int(raw_input("Enter Selection: "))
 		stk.SelectItem(select, path)
 	elif mode == 'agent':
 		path = "/test/agent"
 		agent = StkAgent(bus, path)
+
+		try:
+			vcm.connect_to_signal("CallAdded", agent.call_added)
+		except:
+			pass
 
 		stk.RegisterAgent(path)
 

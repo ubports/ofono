@@ -104,6 +104,27 @@ static void timers_update(struct ofono_stk *stk);
 		result.additional_len = sizeof(addn_info);	\
 		result.additional = addn_info;			\
 
+static gboolean convert_to_phone_number_format(const char *input_str,
+							char *output_str)
+{
+	char *digit;
+	char *digit_from = "01234567890abcABC";
+	char *digit_to = "01234567890*#p*#p";
+	int pos;
+
+	for (pos = 0; input_str[pos] != '\0'; pos++) {
+		digit = strchr(digit_from, input_str[pos]);
+		if (digit == NULL)
+			return FALSE;
+
+		output_str[pos] = digit_to[digit - digit_from];
+	}
+
+	output_str[pos] = '\0';
+
+	return TRUE;
+}
+
 static int stk_respond(struct ofono_stk *stk, struct stk_response *rsp,
 			ofono_stk_generic_cb_t cb)
 {
@@ -381,6 +402,11 @@ static struct stk_menu *stk_menu_create(const char *title,
 		if (item_icon_ids && item_icon_ids->len)
 			ret->items[i].icon_id = item_icon_ids->list[i];
 
+		if (ret->items[i].icon_id != 0 &&
+				item_icon_ids->qualifier ==
+				STK_ICON_QUALIFIER_TYPE_SELF_EXPLANATORY)
+			ret->items[i].text[0]='\0';
+
 		if (item->id == default_id)
 			ret->default_item = i;
 	}
@@ -515,6 +541,21 @@ static gboolean stk_alpha_id_set(struct ofono_stk *stk,
 	if (alpha == NULL)
 		return FALSE;
 
+	if (stk->current_agent == NULL)
+		return FALSE;
+
+	/*
+	 * According to 3GPP TS 102.223 section 8.31:
+	 * If icon is self-explanatory, it replaces the alpha identifier or
+	 * text string.
+	 * If icon is not self-explanatory, it shall be displayed together
+	 * with the alpha identifier or text string.
+	 */
+
+	if (icon->id != 0 && icon->qualifier ==
+			STK_ICON_QUALIFIER_TYPE_SELF_EXPLANATORY)
+		alpha[0]='\0';
+
 	if (stk->respond_on_exit)
 		stk_agent_display_action(stk->current_agent, alpha, icon,
 						user_termination_cb, stk, NULL);
@@ -576,7 +617,7 @@ static DBusMessage *stk_get_properties(DBusConnection *conn,
 					OFONO_PROPERTIES_ARRAY_SIGNATURE,
 					&dict);
 
-	str = stk->idle_mode_text;
+	str = stk->idle_mode_text ? stk->idle_mode_text : "";
 	ofono_dbus_dict_append(&dict, "IdleModeText", DBUS_TYPE_STRING, &str);
 
 	icon = stk->idle_mode_icon.id;
@@ -934,11 +975,11 @@ static gboolean handle_command_set_idle_text(const struct stk_command *cmd,
 {
 	DBusConnection *conn = ofono_dbus_get_connection();
 	const char *path = __ofono_atom_get_path(stk->atom);
+	const struct stk_command_setup_idle_mode_text *sim =
+						&cmd->setup_idle_mode_text;
 	char *idle_mode_text;
 
-	idle_mode_text = dbus_apply_text_attributes(
-					cmd->setup_idle_mode_text.text,
-					&cmd->setup_idle_mode_text.text_attr);
+	idle_mode_text = dbus_apply_text_attributes(sim->text, &sim->text_attr);
 
 	if (idle_mode_text == NULL) {
 		rsp->result.type = STK_RESULT_TYPE_DATA_NOT_UNDERSTOOD;
@@ -948,6 +989,10 @@ static gboolean handle_command_set_idle_text(const struct stk_command *cmd,
 	if (stk->idle_mode_text)
 		g_free(stk->idle_mode_text);
 
+	if (sim->icon_id.id != 0 && sim->icon_id.qualifier ==
+			STK_ICON_QUALIFIER_TYPE_SELF_EXPLANATORY)
+		idle_mode_text[0]='\0';
+
 	stk->idle_mode_text = idle_mode_text;
 
 	ofono_dbus_signal_property_changed(conn, path, OFONO_STK_INTERFACE,
@@ -955,8 +1000,8 @@ static gboolean handle_command_set_idle_text(const struct stk_command *cmd,
 						DBUS_TYPE_STRING,
 						&idle_mode_text);
 
-	if (stk->idle_mode_icon.id != cmd->setup_idle_mode_text.icon_id.id) {
-		memcpy(&stk->idle_mode_icon, &cmd->setup_idle_mode_text.icon_id,
+	if (stk->idle_mode_icon.id != sim->icon_id.id) {
+		memcpy(&stk->idle_mode_icon, &sim->icon_id,
 				sizeof(stk->idle_mode_icon));
 
 		ofono_dbus_signal_property_changed(conn, path,
@@ -1237,7 +1282,7 @@ static gboolean handle_command_select_item(const struct stk_command *cmd,
 					stk->select_item_menu,
 					request_selection_cb, stk,
 					request_selection_destroy,
-					stk->timeout * 1000) < 0) {
+					stk->short_timeout * 1000) < 0) {
 		unsigned char no_cause_result[] = { 0x00 };
 
 		request_selection_destroy(stk);
@@ -1344,10 +1389,17 @@ static gboolean handle_command_display_text(const struct stk_command *cmd,
 	}
 
 	if (qualifier & (1 << 7))
-		timeout = stk->timeout * 1000;
+		timeout = stk->short_timeout * 1000;
 
 	if (dt->duration.interval)
 		timeout = duration_to_msecs(&dt->duration);
+
+	if (cmd->display_text.immediate_response)
+		timeout = stk->timeout * 1000;
+
+	if (dt->icon_id.id != 0 && dt->icon_id.qualifier ==
+			STK_ICON_QUALIFIER_TYPE_SELF_EXPLANATORY)
+		text[0]='\0';
 
 	err = stk_agent_display_text(stk->current_agent, text, &dt->icon_id,
 					priority, display_text_cb, stk,
@@ -1512,17 +1564,15 @@ static gboolean handle_command_get_inkey(const struct stk_command *cmd,
 						struct stk_response *rsp,
 						struct ofono_stk *stk)
 {
-	int timeout = stk->timeout * 1000;
+	int timeout = stk->short_timeout * 1000;
 	const struct stk_command_get_inkey *gi = &cmd->get_inkey;
 	char *text = dbus_apply_text_attributes(gi->text, &gi->text_attr);
 	uint8_t qualifier = stk->pending_cmd->qualifier;
 	gboolean alphabet = (qualifier & (1 << 0)) != 0;
 	gboolean ucs2 = (qualifier & (1 << 1)) != 0;
 	gboolean yesno = (qualifier & (1 << 2)) != 0;
-	/*
-	 * Note: immediate response and help parameter values are not
-	 * provided by current api.
-	 */
+	gboolean immediate = (qualifier & (1 << 3)) != 0;
+	/* Note: help parameter value is not provided by current api. */
 	int err;
 
 	if (text == NULL) {
@@ -1535,6 +1585,10 @@ static gboolean handle_command_get_inkey(const struct stk_command *cmd,
 
 	gettimeofday(&stk->get_inkey_start_ts, NULL);
 
+	if (gi->icon_id.id != 0 && gi->icon_id.qualifier ==
+			STK_ICON_QUALIFIER_TYPE_SELF_EXPLANATORY)
+		text[0]='\0';
+
 	if (yesno)
 		err = stk_agent_request_confirmation(stk->current_agent,
 							text, &gi->icon_id,
@@ -1545,6 +1599,11 @@ static gboolean handle_command_get_inkey(const struct stk_command *cmd,
 						&gi->icon_id, ucs2,
 						request_key_cb, stk, NULL,
 						timeout);
+	else if (immediate)
+		err = stk_agent_request_quick_digit(stk->current_agent,
+							text, &gi->icon_id,
+							request_key_cb, stk,
+							NULL, timeout);
 	else
 		err = stk_agent_request_digit(stk->current_agent, text,
 						&gi->icon_id, request_key_cb,
@@ -1624,6 +1683,10 @@ static gboolean handle_command_get_input(const struct stk_command *cmd,
 		rsp->result.type = STK_RESULT_TYPE_DATA_NOT_UNDERSTOOD;
 		return TRUE;
 	}
+
+	if (gi->icon_id.id != 0 && gi->icon_id.qualifier ==
+			STK_ICON_QUALIFIER_TYPE_SELF_EXPLANATORY)
+		text[0]='\0';
 
 	if (alphabet)
 		err = stk_agent_request_input(stk->current_agent, text,
@@ -1709,6 +1772,8 @@ static void confirm_call_cb(enum stk_agent_result result, gboolean confirm,
 	char *alpha_id = NULL;
 	struct ofono_voicecall *vc;
 	struct stk_response rsp;
+	char number[256];
+	char *pause_chr;
 	int err;
 
 	switch (result) {
@@ -1746,7 +1811,20 @@ static void confirm_call_cb(enum stk_agent_result result, gboolean confirm,
 		}
 	}
 
-	err = __ofono_voicecall_dial(vc, sc->addr.number, sc->addr.ton_npi,
+	/* Convert the setup call number to phone number format */
+	if (convert_to_phone_number_format(sc->addr.number, number) == FALSE) {
+		send_simple_response(stk, STK_RESULT_TYPE_DATA_NOT_UNDERSTOOD);
+		return;
+	}
+
+	/* Remove the DTMF string from the phone number */
+	pause_chr = strchr(number, 'p');
+
+	if (pause_chr)
+		number[pause_chr - number] = '\0';
+
+	/* TODO: send the DTMF after call is connected */
+	err = __ofono_voicecall_dial(vc, number, sc->addr.ton_npi,
 					alpha_id, sc->icon_id_call_setup.id,
 					qualifier >> 1, call_setup_connected,
 					stk);
@@ -1792,6 +1870,8 @@ static void confirm_handled_call_cb(enum stk_agent_result result,
 	const struct stk_command_setup_call *sc =
 					&stk->pending_cmd->setup_call;
 	struct ofono_voicecall *vc;
+	char number[256];
+	char *pause_chr;
 
 	if (stk->driver->user_confirmation == NULL)
 		goto out;
@@ -1801,6 +1881,17 @@ static void confirm_handled_call_cb(enum stk_agent_result result,
 		goto out;
 	}
 
+	if (convert_to_phone_number_format(sc->addr.number, number) == FALSE) {
+		stk->driver->user_confirmation(stk, FALSE);
+		goto out;
+	}
+
+	/* Remove the DTMF string from the phone number */
+	pause_chr = strchr(number, 'p');
+
+	if (pause_chr)
+		number[pause_chr - number] = '\0';
+
 	stk->driver->user_confirmation(stk, confirm);
 
 	vc = __ofono_atom_find(OFONO_ATOM_TYPE_VOICECALL,
@@ -1808,7 +1899,7 @@ static void confirm_handled_call_cb(enum stk_agent_result result,
 	if (vc == NULL)
 		goto out;
 
-	__ofono_voicecall_set_alpha_and_icon_id(vc, sc->addr.number,
+	__ofono_voicecall_set_alpha_and_icon_id(vc, number,
 						sc->addr.ton_npi,
 						sc->alpha_id_call_setup,
 						sc->icon_id_call_setup.id);
@@ -2021,11 +2112,6 @@ static gboolean handle_command_send_ussd(const struct stk_command *cmd,
 					cmd->send_ussd.ussd_string.len,
 					send_ussd_callback, stk);
 
-	if (err >= 0) {
-		stk->cancel_cmd = send_ussd_cancel;
-
-		return FALSE;
-	}
 
 	if (err == -ENOSYS) {
 		rsp->result.type = STK_RESULT_TYPE_NOT_CAPABLE;
@@ -2037,6 +2123,20 @@ static gboolean handle_command_send_ussd(const struct stk_command *cmd,
 					busy_on_ussd_result);
 		return TRUE;
 	}
+
+	if (err < 0) {
+		unsigned char no_cause_result[] = { 0x00 };
+
+		/*
+		 * We most likely got an out of memory error, tell SIM
+		 * to retry
+		 */
+		ADD_ERROR_RESULT(rsp->result, STK_RESULT_TYPE_TERMINAL_BUSY,
+					no_cause_result);
+		return TRUE;
+	}
+
+	stk->cancel_cmd = send_ussd_cancel;
 
 	stk_alpha_id_set(stk, cmd->send_ussd.alpha_id,
 				&cmd->send_ussd.text_attr,
@@ -2218,7 +2318,7 @@ static gboolean handle_command_refresh(const struct stk_command *cmd,
 		g_slist_foreach(file_list, (GFunc) g_free, NULL);
 		g_slist_free(file_list);
 
-		return FALSE;
+		return TRUE;
 	}
 
 	rsp->result.type = STK_RESULT_TYPE_NOT_CAPABLE;
@@ -2278,22 +2378,64 @@ static gboolean handle_command_provide_local_info(const struct stk_command *cmd,
 				struct stk_response *rsp, struct ofono_stk *stk)
 {
 	switch (cmd->qualifier) {
+	case 0:
+		DBG("Unhandled - Local information according to current NAA");
+		break;
+	case 1:
+		DBG("Unhandled - IMEI");
+		break;
+	case 2:
+		DBG("Unhandled - Network measurement results");
+		break;
 	case 3:
 		DBG("Date, time and time zone");
 		get_time(rsp);
 		return TRUE;
-
 	case 4:
 		DBG("Language setting");
 		get_lang(rsp, stk);
 		return FALSE;
+	case 6:
+		DBG("Unhandled - Access Technology");
+		break;
+	case 7:
+		DBG("Unhandled - ESN of the terminal");
+		break;
+	case 8:
+		DBG("Unhandled - IMEISV of the terminal");
+		break;
+	case 9:
+		DBG("Unhandled - Search mode");
+		break;
+	case 10:
+		DBG("Unhandled - Charge state of Battery");
+		break;
+	case 11:
+		DBG("Unhandled - MEID");
+		break;
+	case 13:
+		DBG("Unhandled - Broadcast Network information");
+		break;
+	case 14:
+		DBG("Unhandled - Multiple Access Technologies");
+		break;
+	case 15:
+		DBG("Unhandled - Location information for multiple access"
+			" technologies");
+		break;
+	case 16:
+		DBG("Unhandled - Measurement results for multiple access"
+			" technologies");
+		break;
 
 	default:
 		ofono_info("Unsupported Provide Local Info qualifier: %d",
 				cmd->qualifier);
-		rsp->result.type = STK_RESULT_TYPE_NOT_CAPABLE;
-		return TRUE;
+		break;
 	}
+
+	rsp->result.type = STK_RESULT_TYPE_NOT_CAPABLE;
+	return TRUE;
 }
 
 static void send_dtmf_cancel(struct ofono_stk *stk)
@@ -2338,10 +2480,8 @@ static gboolean handle_command_send_dtmf(const struct stk_command *cmd,
 {
 	static unsigned char not_in_speech_call_result[] = { 0x07 };
 	struct ofono_voicecall *vc = NULL;
-	char dtmf[256], *digit;
-	char *dtmf_from = "01234567890abcABC";
-	char *dtmf_to = "01234567890*#p*#p";
-	int err, pos;
+	char dtmf[256];
+	int err;
 
 	vc = __ofono_atom_find(OFONO_ATOM_TYPE_VOICECALL,
 				__ofono_atom_get_modem(stk->atom));
@@ -2351,17 +2491,11 @@ static gboolean handle_command_send_dtmf(const struct stk_command *cmd,
 	}
 
 	/* Convert the DTMF string to phone number format */
-	for (pos = 0; cmd->send_dtmf.dtmf[pos] != '\0'; pos++) {
-		digit = strchr(dtmf_from, cmd->send_dtmf.dtmf[pos]);
-		if (digit == NULL) {
-			rsp->result.type = STK_RESULT_TYPE_DATA_NOT_UNDERSTOOD;
-			return TRUE;
-		}
-
-		dtmf[pos] = dtmf_to[digit - dtmf_from];
+	if (convert_to_phone_number_format(cmd->send_dtmf.dtmf, dtmf) ==
+						FALSE) {
+		rsp->result.type = STK_RESULT_TYPE_DATA_NOT_UNDERSTOOD;
+		return TRUE;
 	}
-
-	dtmf[pos] = '\0';
 
 	err = __ofono_voicecall_tone_send(vc, dtmf, dtmf_sent_cb, stk);
 
@@ -2433,7 +2567,7 @@ static gboolean handle_command_play_tone(const struct stk_command *cmd,
 	static const struct {
 		const char *name;
 		/* Continuous true/false according to 02.40 */
-		gboolean continuous;
+		gboolean repeatable;
 	} tone_infos[] = {
 		/* Default */
 		[0x00] = { "general-beep", FALSE },
@@ -2443,9 +2577,9 @@ static gboolean handle_command_play_tone(const struct stk_command *cmd,
 		[0x02] = { "busy", TRUE },
 		[0x03] = { "congestion", TRUE },
 		[0x04] = { "radio-path-acknowledge", FALSE },
-		[0x05] = { "radio-path-not-available", FALSE },
+		[0x05] = { "radio-path-not-available", TRUE },
 		[0x06] = { "error", TRUE },
-		[0x07] = { "call-waiting", FALSE },
+		[0x07] = { "call-waiting", TRUE },
 		[0x08] = { "ringing-tone", TRUE },
 
 		/* Proprietary */
@@ -2502,7 +2636,19 @@ static gboolean handle_command_play_tone(const struct stk_command *cmd,
 	else
 		timeout = manufacturer_timeout;
 
-	if (!tone_infos[pt->tone].continuous)
+	if (pt->icon_id.id != 0 && pt->icon_id.qualifier ==
+			STK_ICON_QUALIFIER_TYPE_SELF_EXPLANATORY)
+		text[0]='\0';
+
+	/*
+	 * According to TS 102.223 section 6.6.6:
+	 * "the length of time for which the Terminal shall generate the tone,
+	 * if the tone is contunious or repeatable.  For single tones, the
+	 * value of this data object shall be ignored by the Terminal.  If no
+	 * duration is specified, the Terminal shall default to a duration
+	 * determined by the Terminal manufacturer
+	 */
+	if (!tone_infos[pt->tone].repeatable)
 		/* Duration ignored */
 		err = stk_agent_play_tone(stk->current_agent, text,
 						&pt->icon_id, vibrate,
@@ -2631,6 +2777,9 @@ static gboolean handle_setup_call_confirmation_req(struct stk_command *cmd,
 	if (alpha_id == NULL)
 		goto out;
 
+	if (stk->current_agent == FALSE)
+		goto out;
+
 	err = stk_agent_confirm_call(stk->current_agent, alpha_id,
 					&sc->icon_id_usr_cfm,
 					confirm_handled_call_cb,
@@ -2738,6 +2887,9 @@ void ofono_stk_proactive_command_notify(struct ofono_stk *stk,
 		case STK_COMMAND_TYPE_GET_INPUT:
 		case STK_COMMAND_TYPE_PLAY_TONE:
 		case STK_COMMAND_TYPE_SETUP_CALL:
+		case STK_COMMAND_TYPE_SEND_SMS:
+		case STK_COMMAND_TYPE_SEND_USSD:
+		case STK_COMMAND_TYPE_SEND_DTMF:
 			send_simple_response(stk, STK_RESULT_TYPE_NOT_CAPABLE);
 			return;
 
@@ -2943,7 +3095,7 @@ void ofono_stk_proactive_command_handled_notify(struct ofono_stk *stk,
 		break;
 
 	case STK_COMMAND_TYPE_REFRESH:
-		handle_command_refresh(stk->pending_cmd, NULL, stk);
+		ok = handle_command_refresh(stk->pending_cmd, NULL, stk);
 		break;
 	}
 
@@ -3082,7 +3234,7 @@ void ofono_stk_register(struct ofono_stk *stk)
 	__ofono_atom_register(stk->atom, stk_unregister);
 
 	stk->timeout = 180; /* 3 minutes */
-	stk->short_timeout = 20; /* 20 seconds */
+	stk->short_timeout = 25; /* 25 seconds */
 	stk->envelope_q = g_queue_new();
 }
 

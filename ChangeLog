@@ -1,3 +1,30 @@
+ver 1.12:
+	Fix issue with alpha ID and self explanatory icons.
+	Fix issue with SIM Refresh handling and resetting state.
+	Fix issue with SMS initiated by STK proactive command.
+	Fix issue with CBS treating carriage return as padding.
+	Fix issue with USSD terminated by network notification.
+	Add support for battery charge level with Handsfree devices.
+	Add support for technology and band changes with IFX modems.
+	Add support for SIM file handling with Qualcomm QMI modems.
+	Add support for SIM file system 2G and 3G path handling.
+	Add support for SIM Toolkit end-to-end testing.
+
+ver 1.11:
+	Fix issue with Bluetooth disconnect handling.
+	Fix issue with handling EFspn with filler characters.
+	Fix issue with processing multiple *EMRDY notifications.
+	Fix issue with wrong data bearer property signal.
+	Add support for data bearer reporting and Telit modems.
+	Add support for SIM status notification and Telit modems.
+	Add support for PIN retry counter status and Telit modems.
+	Add support for long phone number format and SIM Toolkit.
+	Add support for RequestQuickDigit to SIM Toolkit agent.
+
+ver 1.10:
+	Update multiple descriptions of the API documentation.
+	Add support for ReleaseAndSwap call handling.
+
 ver 1.9:
 	Fix issue with missing CSSI and CSSU support for IFX modems.
 	Fix issue with GPRS shutdown handling when network is lost.

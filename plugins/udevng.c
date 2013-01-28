@@ -305,18 +305,25 @@ static gboolean setup_huawei(struct modem_info *modem)
 
 		if (g_strcmp0(info->label, "modem") == 0 ||
 				g_strcmp0(info->interface, "255/1/1") == 0 ||
-				g_strcmp0(info->interface, "255/2/1") == 0) {
+				g_strcmp0(info->interface, "255/2/1") == 0 ||
+				g_strcmp0(info->interface, "255/1/49") == 0) {
 			mdm = info->devnode;
 		} else if (g_strcmp0(info->label, "pcui") == 0 ||
 				g_strcmp0(info->interface, "255/1/2") == 0 ||
-				g_strcmp0(info->interface, "255/2/2") == 0) {
+				g_strcmp0(info->interface, "255/2/2") == 0 ||
+				g_strcmp0(info->interface, "255/1/50") == 0) {
 			pcui = info->devnode;
 		} else if (g_strcmp0(info->label, "diag") == 0 ||
 				g_strcmp0(info->interface, "255/1/3") == 0 ||
-				g_strcmp0(info->interface, "255/2/3") == 0) {
+				g_strcmp0(info->interface, "255/2/3") == 0 ||
+				g_strcmp0(info->interface, "255/1/51") == 0) {
 			diag = info->devnode;
-		} else if (g_strcmp0(info->interface, "255/1/8") == 0) {
+		} else if (g_strcmp0(info->interface, "255/1/8") == 0 ||
+				g_strcmp0(info->interface, "255/1/56") == 0) {
 			net = info->devnode;
+		} else if (g_strcmp0(info->interface, "255/1/9") == 0 ||
+				g_strcmp0(info->interface, "255/1/57") == 0) {
+			qmi = info->devnode;
 		} else if (g_strcmp0(info->interface, "255/255/255") == 0) {
 			if (g_strcmp0(info->number, "00") == 0)
 				mdm = info->devnode;
@@ -331,9 +338,15 @@ static gboolean setup_huawei(struct modem_info *modem)
 		}
 	}
 
+	if (qmi != NULL && net != NULL) {
+		ofono_modem_set_driver(modem->modem, "gobi");
+		goto done;
+	}
+
 	if (mdm == NULL || pcui == NULL)
 		return FALSE;
 
+done:
 	DBG("mdm=%s pcui=%s diag=%s qmi=%s net=%s", mdm, pcui, diag, qmi, net);
 
 	ofono_modem_set_string(modem->modem, "Device", qmi);
@@ -615,7 +628,7 @@ static gboolean setup_telit(struct modem_info *modem)
 	DBG("modem=%s aux=%s gps=%s diag=%s", mdm, aux, gps, diag);
 
 	ofono_modem_set_string(modem->modem, "Modem", mdm);
-	ofono_modem_set_string(modem->modem, "Data", aux);
+	ofono_modem_set_string(modem->modem, "Aux", aux);
 	ofono_modem_set_string(modem->modem, "GPS", gps);
 
 	return TRUE;
@@ -946,7 +959,7 @@ static struct {
 	{ "icera",	"cdc_acm",	"0421", "0633"	},
 	{ "icera",	"cdc_ether",	"0421", "0633"	},
 	{ "mbm",	"cdc_acm",	"0bdb"		},
-	{ "mbm"		"cdc_ether",	"0bdb"		},
+	{ "mbm",	"cdc_ether",	"0bdb"		},
 	{ "mbm",	"cdc_acm",	"0fce"		},
 	{ "mbm",	"cdc_ether",	"0fce"		},
 	{ "mbm",	"cdc_acm",	"413c"		},
@@ -962,6 +975,7 @@ static struct {
 	{ "sierra",	"sierra_net"			},
 	{ "option",	"option",	"0af0"		},
 	{ "huawei",	"option",	"201e"		},
+	{ "huawei",	"cdc_wdm",	"12d1"		},
 	{ "huawei",	"cdc_ether",	"12d1"		},
 	{ "huawei",	"qmi_wwan",	"12d1"		},
 	{ "huawei",	"option",	"12d1"		},
