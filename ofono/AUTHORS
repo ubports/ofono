@@ -1,0 +1,86 @@
+Denis Kenzior <denis.kenzior@intel.com>
+Marcel Holtmann <marcel.holtmann@intel.com>
+Andrzej Zaborowski <andrew.zaborowski@intel.com>
+Minjun Li <minjun.li@intel.com>
+Rémi Denis-Courmont <remi.denis-courmont@nokia.com>
+Aki Niemi <aki.niemi@nokia.com>
+Yang Gu <yang.gu@intel.com>
+Shane Bryan <shane.bryan@linux.intel.com>
+Santtu Lakkala <inz@inz.fi>
+Andres Salomon <dilinger@collabora.co.uk>
+Alexander Kanavin <alexander.kanavin@nokia.com>
+Ismo Puustinen <ismo.h.puustinen@nokia.com>
+Zhenhua Zhang <zhenhua.zhang@intel.com>
+Jukka Saunamäki <jukka.saunamaki@nokia.com>
+Pekka Pessi <pekka.pessi@nokia.com>
+Marko Saukko <marko.saukko@gmail.com>
+Olivier Le Thanh Duong <olivier.le.thanh@collabora.co.uk>
+Ryan Raasch <ryan.raasch@gmail.com>
+Gustavo Padovan <gustavo@padovan.org>
+Martin Xu <martin.xu@intel.com>
+Zhigang Li <zhigang.li@intel.com>
+Anders Gustafsson <agustafsson@gmail.com>
+Jussi Kukkonen <jku@linux.intel.com>
+Sjur Brændeland <sjur.brandeland@stericsson.com>
+João Paulo Rechi Vita <jprvita@profusion.mobi>
+Vinicius Costa Gomes <vinicius.gomes@openbossa.org>
+Inaky Perez-Gonzalez <inaky@linux.intel.com>
+Kristen Carlson Accardi <kristen@linux.intel.com>
+Matthias Günther <matgnt@gmail.com>
+Daniel Wagner <daniel.wagner@bmw-carit.de>
+Kalle Valo <kalle.valo@canonical.com>
+Pasi Miettinen <pasi.miettinen@ixonos.com>
+Florian Steinel <florian.steinel@gmail.com>
+Arun Ravindran <arunlee@gmail.com>
+Thadeu Lima de Souza Cascardo <cascardo@holoscopio.com>
+Petteri Tikander <petteri.tikander@ixonos.com>
+Jeevaka Badrappan <jeevaka.badrappan@elektrobit.com>
+Frank Gau <fgau@gau-net.de>
+Kai Vehmanen <kai.vehmanen@nokia.com>
+Mika Liljeberg <mika.liljeberg@nokia.com>
+Marit Henriksen <marit.henriksen@stericsson.com>
+Guillaume Lucas <guillaumex.lucas@intel.com>
+George Matveev <george@matveev.se>
+Antti Paila <antti.paila@nokia.com>
+Rafael Ignacio Zurita <rafael.zurita@profusion.mobi>
+Helen Clemson <helen.clemson@stericsson.com>
+Jessica Nilsson <jessica.j.nilsson@stericsson.com>
+Oleg Zhurakivskyy <oleg.zhurakivskyy@nokia.com>
+Lasse Kunnasluoto <lasse.kunnasluoto@tieto.com>
+John Mathew <john.mathew@elektrobit.com>
+Benoît Monin <benoit.monin@gmx.fr>
+Dara Spieker-Doyle <dara.spieker-doyle@nokia.com>
+Neil Jerram <neil@ossau.uklinux.net>
+Lei Yu <lei.2.yu@nokia.com>
+Oskari Timperi <oskari.timperi@iki.fi>
+Faiyaz Baxamusa <faiyaz.baxamusa@nokia.com>
+Jussi Kangas <jussi.kangas@tieto.com>
+Guillaume Zajac <guillaume.zajac@linux.intel.com>
+Olivier Guiter <olivier.guiter@linux.intel.com>
+Amit Mendapara <mendapara.amit@gmail.com>
+Frédéric Danis <frederic.danis@linux.intel.com>
+Frédéric Dalleau <frederic.dalleau@linux.intel.com>
+Paavo Leinonen <paavo.leinonen@tieto.com>
+Jan Luebbe <jluebbe@debian.org>
+Antoine Reversat <a.reversat@gmail.com>
+Patrick Porlan <patrick.porlan@linux.intel.com>
+Miia Leinonen <miia.leinonen@tieto.com>
+Jarko Poutiainen <jarko.poutiainen@tieto.com>
+Bertrand Aygon <bertrand.aygon@intel.com>
+Christian Lam <christian.lam@nokia.com>
+Philippe Nunes <philippe.nunes@linux.intel.com>
+Nicolas Bertrand <nicolas.bertrand@linux.intel.com>
+Caiwen Zhang <caiwen.zhang@windriver.com>
+Bernhard Guillon <Bernhard.Guillon@hale.at>
+Michael Schloh von Bennewitz <ofonoconn@encambio.com>
+Luiz Augusto von Dentz <luiz.von.dentz@intel.com>
+Mikel Astiz <mikel.astiz@bmw-carit.de>
+Christopher Vogl <christopher.vogl@hale.at>
+Syam Sidhardhan <syamsidhardh@gmail.com>
+Renat Zaripov <r.r.zaripov@gmail.com>
+Michael Brudevold <michael.brudevold@logicpd.com>
+Pablo Neira Ayuso <pablo@gnumonks.org>
+August Mayer <august.mayer@hale.at>
+Holger Hans Peter Freyther <hfreyther@sysmocom.de>
+Cedric Jehasse <cedric.jehasse@softathome.com>
+Mingli Wu <mingli@southpole.se>

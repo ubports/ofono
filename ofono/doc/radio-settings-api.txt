@@ -1,0 +1,134 @@
+Radio settings hierarchy
+========================
+
+Service		org.ofono
+Interface	org.ofono.RadioSettings
+Object path	[variable prefix]/{modem0,modem1,...}
+
+Methods		dict GetProperties()
+
+			Returns all radio access properties. See the
+			properties section for available properties.
+
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.Failed
+
+		void SetProperty(string name, variant value)
+
+			Changes the value of the specified property. Only
+			properties that are listed as readwrite are
+			changeable. On success a PropertyChanged signal
+			will be emitted.
+
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.InvalidArguments
+					 [service].Error.Failed
+
+Signals		PropertyChanged(string property, variant value)
+
+			This signal indicates a changed value of the given
+			property.
+
+Properties	string TechnologyPreference [readwrite]
+
+			The current radio access selection mode, also known
+			as network preference.
+
+			The possible values are:
+				"any"	Radio access technology
+					selection is done automatically,
+					based on reception and
+					availability.
+				"gsm"	Only GSM used for radio access.
+				"umts"	Only UMTS used for radio access.
+				"lte"	Only LTE used for radio access.
+
+		string GsmBand [readwrite, optional]
+
+			Frequency band in which the modem is allowed to
+			operate when using "gsm" mode. Setting this property
+			has an immediate effect on modem only if
+			TechnologyPreference is set to "gsm" or "any".
+			Otherwise the value is kept and applied whenever modem
+			uses this mode.
+
+			The possible values are:
+				"any"	Frequency band is selected
+					automatically by modem.
+				"850"	Operate only on 850 MHz.
+				"900P"	Operate only on 900 MHz, known as
+					Primary GSM-900 Band
+				"900E"	Operate only on 900 MHz, known as
+					Extended GSM-900 Band.
+				"1800"	Operate only on 1800 MHz, known as DCS.
+				"1900"	Operate only on 1900 MHz, known as PCS.
+
+		string UmtsBand [readwrite, optional]
+
+			Frequency band in which the modem is allowed to
+			operate when using "umts" mode. Setting this property
+			has an immediate effect on modem only if
+			TechnologyPreference is set to "umts" or "any".
+			Otherwise the value is kept and applied whenever modem
+			uses this mode.
+
+			The possible values are:
+				"any"		Frequency band is selected
+						automatically by modem.
+				"850"		Operate only on 850 MHz, known
+						as CLR (class V).
+				"900"		Operate only on 900 MHz, known
+						as GSM (class VIII).
+				"1700AWS"	Operate only on 1700 MHz, known
+						as AWS (class IV).
+				"1900"		Operate only on 1900 MHz, known
+						as PCS (class II).
+				"2100"		Operate only on 2100 MHz, known
+						as IMT (class I).
+
+		boolean	FastDormancy [readwrite, optional]
+
+			This property will enable or disable the fast
+			dormancy feature in the modem. Fast dormancy
+			refers to a modem feature that allows the
+			modem to quickly release radio resources after
+			a burst of data transfer has ended. Normally,
+			radio resources are released by the network
+			after a timeout configured by the network.
+			Fast dormancy allows the modem to release the
+			radio resources more quickly.
+
+			Fast dormancy is a major power-saving feature
+			for mobile devices. Typically, fast dormancy
+			would be enabled when the device is not being
+			interactively used by a human user and only
+			networking applications with keep-alive
+			traffic are active (e.g. mail client or a
+			presence application). In this case it is
+			desirable to release radio resources quickly
+			after a keep-alive transaction has ended,
+			since typically no network traffic will occur
+			until the next keep-alive transaction. Fast
+			dormancy should not be enabled during
+			interactive use because the release and setup
+			of radio resources introduces perceivable
+			delay for the end user.
+
+			The fast dormancy implementation in the modem
+			is vendor specific. The implementation should
+			try to release radio resources more quickly,
+			when the situation allows it, but should also
+			take care not to increase the signalling load
+			on the cellular network by releasing and
+			re-establishing radio resources too often. The
+			modem should adjust its behaviour to the 3GPP
+			release supported by the network and the
+			parameters set by the operator.
+
+			Fast dormancy can be ignored for externally
+			powered modems such as USB sticks or PCI
+			devices. If the modem does not support such a
+			feature the property should never be exposed
+			to the user.

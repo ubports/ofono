@@ -1,0 +1,44 @@
+#!/usr/bin/python
+
+import dbus
+
+bus = dbus.SystemBus()
+
+manager = dbus.Interface(bus.get_object('org.ofono', '/'),
+						'org.ofono.Manager')
+
+modems = manager.GetModems()
+
+for path, properties in modems:
+	print "[ %s ]" % (path)
+
+	if "org.ofono.ConnectionManager" not in properties["Interfaces"]:
+		continue
+
+	connman = dbus.Interface(bus.get_object('org.ofono', path),
+					'org.ofono.ConnectionManager')
+
+	contexts = connman.GetContexts()
+
+	for path, properties in contexts:
+		print "    [ %s ]" % (path)
+
+		for key in properties.keys():
+			if key in ["Settings"] or key in ["IPv6.Settings"]:
+				val = "{"
+				for i in properties[key].keys():
+					val += " " + i + "="
+					if i in ["DomainNameServers"]:
+						for n in properties[key][i]:
+							val += n + ","
+					elif i in ["PrefixLength"]:
+						p = int(properties[key][i])
+						val += str(p)
+					else:
+						val += properties[key][i]
+				val += " }"
+			else:
+				val = str(properties[key])
+			print "        %s = %s" % (key, val)
+
+		print
