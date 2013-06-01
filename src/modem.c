@@ -1142,6 +1142,22 @@ static const GDBusSignalTable modem_signals[] = {
 	{ }
 };
 
+void ofono_modem_set_online(struct ofono_modem *modem, ofono_bool_t online)
+{
+	DBusConnection *conn = ofono_dbus_get_connection();
+	dbus_bool_t dbus_online = online;
+
+	if (modem->online == online)
+		return;
+
+	set_online(modem, online);
+
+	if (online)
+		modem_change_state(modem, MODEM_STATE_ONLINE);
+	else
+		modem_change_state(modem, MODEM_STATE_OFFLINE);
+}
+
 void ofono_modem_set_powered(struct ofono_modem *modem, ofono_bool_t powered)
 {
 	DBusConnection *conn = ofono_dbus_get_connection();
