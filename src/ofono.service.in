@@ -1,0 +1,12 @@
+[Unit]
+Description=Telephony service
+After=syslog.target
+
+[Service]
+Type=dbus
+BusName=org.ofono
+ExecStart=@prefix@/sbin/ofonod -n
+StandardError=null
+
+[Install]
+WantedBy=multi-user.target

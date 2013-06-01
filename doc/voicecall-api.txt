@@ -1,0 +1,185 @@
+VoiceCall hierarchy
+===================
+
+Service		org.ofono
+Interface	org.ofono.VoiceCall
+Object path	[variable prefix]/{modem0,modem1,...}/{voicecall01,voicecall02,...}
+
+Methods		dict GetProperties()
+
+			Returns all properties for this object. See the
+			properties section for available properties.
+
+		void Deflect(string number)
+
+			Deflects the incoming or waiting call to number given
+			in the argument.  This method is only valid if the
+			call is in "incoming" or "waiting" state and the
+			Call Deflection supplementary service is subscribed to.
+
+			This functionality is generally implemented by using
+			the +CHLD=4 * NUMBER command.
+
+			This method should not be confused with the Transfer()
+			method.
+
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.InvalidArguments
+					 [service].Error.InvalidFormat
+					 [service].Error.Failed
+
+		void Hangup()
+
+			Hangs up the voice call.
+
+			For an incoming call, the call is hung up using ATH or
+			equivalent.  For a waiting call, the remote party is
+			notified by using the User Determined User Busy (UDUB)
+			condition.  This is generally implemented using CHLD=0.
+
+			Please note that the GSM specification does not allow
+			the release of a held call when a waiting call exists.
+			This is because 27.007 allows CHLD=1X to operate only
+			on active calls.  Hence a held call cannot be hung up
+			without affecting the state of the incoming call (e.g.
+			using other CHLD alternatives). Most manufacturers
+			provide vendor extensions that do allow the state of
+			the held call to be modified using CHLD=1X or
+			equivalent.  It should be noted that Bluetooth HFP
+			specifies the classic 27.007 behavior and does not
+			allow CHLD=1X to modify the state of held calls.
+
+			Based on the discussion above, it should also be noted
+			that releasing a particular party of a held multiparty
+			call might not be possible on some implementations.
+			It is recommended for the applications to structure
+			their UI accordingly.
+
+			NOTE: Releasing active calls does not produce
+			side-effects.  That is the state of held or waiting
+			calls is not affected.  As an exception, in the case
+			where a single active call and a waiting call are
+			present, releasing the active call will result in the
+			waiting call transitioning to the 'incoming' state.
+
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.Failed
+					 [service].Error.NotImplemented
+
+		void Answer()
+
+			Answers the incoming call.  Only valid if the state
+			of the call is "incoming."
+
+			This functionality is generally implemented by ATA
+			AT command.
+
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.Failed
+					 [service].Error.NotImplemented
+
+Signals		PropertyChanged(string property, variant value)
+
+			Signal is emitted whenever a property has changed.
+			The new value is passed as the signal argument.
+
+		DisconnectReason(string reason)
+
+			This signal is emitted when the modem manager can
+			provide extra information about why this call was
+			released. The possible reason values are:
+				"local" - The call was release due to local
+						user action
+				"remote" - Remote party released the call
+				"network" - Network released the call, most
+						likely due to low signal or
+						other network failure
+
+			Not all implementations are able to provide this
+			information, so applications should treat the emission
+			of this signal as optional. This signal will be
+			emitted before the PropertyChanged signal.
+
+Properties	string LineIdentification [readonly]
+
+			Contains the Line Identification information returned
+			by the network, if present. For incoming calls this is
+			effectively the CLIP. For outgoing calls this attribute
+			will hold the dialed number, or the COLP if received by
+			the underlying implementation.
+
+			Please note that COLP may be different from the
+			dialed number. A special "withheld" value means the
+			remote party refused to provide caller ID and the
+			"override category" option was not provisioned for
+			the current subscriber.
+
+		string IncomingLine [readonly, optional]
+
+			Contains the Called Line Identification information
+			returned by the network. This is only available for
+			incoming calls and indicates the local subscriber
+			number which was dialed by the remote party. This is
+			useful for subscribers which have a multiple line
+			service with their network provider and would like
+			to know what line the call is coming in on.
+
+		string Name [readonly]
+
+			Contains the Name Identification information returned
+			by the network, if present.
+
+		boolean Multiparty [readonly]
+
+			Contains the indication if the voice call is part
+			of a multiparty call or not.
+
+			Notifications if a call becomes part or leaves a
+			multipart call are sent.
+
+		string State [readonly]
+
+			Contains the state of the current call.  The state
+			can be one of:
+				- "active" - The call is active
+				- "held" - The call is on hold
+				- "dialing" - The call is being dialed
+				- "alerting" - The remote party is being alerted
+				- "incoming" - Incoming call in progress
+				- "waiting" - Call is waiting
+				- "disconnected" - No further use of this object
+					is allowed, it will be destroyed shortly
+
+		string StartTime [readonly, optional]
+
+			Contains the starting time of the call.  The time is
+			stamped when the call enters the "active" state.
+			Client applications can use this to infer somewhat
+			reliable call duration information.
+
+		string Information [readonly, optional]
+
+			Contains information related to the call for the
+			user.  Currently this property is set for calls
+			initiated by SIM Toolkit applications.
+
+		byte Icon [readonly, optional]
+
+			Icon identifier to be used instead of or together
+			with the text information.
+
+		boolean Emergency [readonly]
+
+			Contains the indication if the voice call is an
+			emergency call or not.
+
+		boolean RemoteHeld [experimental]
+
+			Contains the indication whether the voice call is put
+			on hold by the remote party or not.
+
+		boolean RemoteMultiparty [experimental]
+
+			Contains the indication whether the voice call is
+			joined in a multiparty call by the remote party or not.

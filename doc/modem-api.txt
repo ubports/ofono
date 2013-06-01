@@ -1,0 +1,170 @@
+Modem hierarchy
+===============
+
+Service		org.ofono
+Interface	org.ofono.Modem
+Object path	[variable prefix]/{modem0,modem1,...}
+
+Methods		dict GetProperties()
+
+			Returns properties for the modem object. See
+			the properties section for available properties.
+
+		void SetProperty(string property, variant value)
+
+			Changes the value of the specified property. Only
+			properties that are listed as readwrite are
+			changeable. On success a PropertyChanged signal
+			will be emitted.
+
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.InvalidArguments
+					 [service].Error.NotAvailable
+					 [service].Error.AccessDenied
+					 [service].Error.Failed
+
+Signals		PropertyChanged(string name, variant value)
+
+			This signal indicates a changed value of the given
+			property.
+
+Properties	boolean Powered [readwrite]
+
+			Boolean representing the power state of the modem
+			device.
+
+		boolean Online [readwrite]
+
+			Boolean representing the rf state of the modem.
+			Online is false in flight mode.
+
+		boolean Lockdown [readwrite]
+
+			Boolean representing the lock state of the modem.
+			Setting it to true, makes the calling application hold
+			the modem lock and power it down. Setting to false
+			makes the it release the modem lock. Only the
+			application that holds the lock can power up the modem.
+			If the the application exits Lockdown is set to false.
+
+		boolean Emergency [readonly, optional, experimental]
+
+			Boolean representing the emergency mode of the
+			modem. The Emergency is true if an emergency call or
+			related operation is currently active.
+
+		string Name [readonly, optional]
+
+			Friendly name of the modem device.  In the case of
+			Bluetooth devices (e.g. Type="sap" or "hfp") this
+			corresponds to the remote device name or it's alias.
+
+		string Manufacturer [readonly, optional]
+
+			String representing the manufacturer of the modem
+			device.
+
+			This is usually obtained by the +CGMI AT command.
+
+		string Model [readonly, optional]
+
+			String representing the model of the modem device.
+
+			This is usually obtained by the +CGMM AT command.
+
+		string Revision [readonly, optional]
+
+			String representing the revision of the modem device.
+
+			This is usually obtained by using the +CGMR AT command.
+
+		string Serial [readonly, optional]
+
+			String represeting the serial number of the modem
+			device.
+
+			This is usually obtained by using the +CGSN AT command.
+
+			In the case of Bluetooth devices (e.g. Type="sap" or
+			"hfp") this corresponds to the Bluetooth Device
+			Address of the remote device.
+
+		array{string} Features [readonly]
+
+			List of currently enabled features. It uses simple
+			string abbreviations like "sms", "sim" etc.
+
+			Currently available features are:
+				"net", "rat", "cbs", "sms", "sim", "stk",
+				"ussd", "gprs", "tty", "gps".
+
+			Please note that this is a convenience property,
+			equivalent results can be obtained by reading the
+			Interfaces property directly.
+
+		array{string} Interfaces [readonly]
+
+			Set of interfaces currently supported by the mode
+			device. The set depends on the state of the device
+			(registration status, SIM inserted status,
+			network capabilities, device capabilities, etc.)
+
+			Each string in the array is an interface from the
+			set supported by oFono by modem objects.  The set
+			includes:
+				org.ofono.AssistedSatelliteNavigation
+				org.ofono.AudioSettings
+				org.ofono.CallBarring
+				org.ofono.CallForwarding
+				org.ofono.CallMeter
+				org.ofono.CallSettings
+				org.ofono.CallVolume
+				org.ofono.CellBroadcast
+				org.ofono.Handsfree
+				org.ofono.LocationReporting
+				org.ofono.MessageManager
+				org.ofono.MessageWaiting
+				org.ofono.NetworkRegistration
+				org.ofono.Phonebook
+				org.ofono.PushNotification
+				org.ofono.RadioSettings
+				org.ofono.SimManager
+				org.ofono.SmartMessaging
+				org.ofono.SimToolkit
+				org.ofono.SupplementaryServices
+				org.ofono.TextTelephony
+				org.ofono.VoiceCallManager
+
+			It is possible for extension interfaces (e.g. APIs
+			that are not part of the oFono standard API) to be
+			available in this list.  Also note that child object
+			interfaces, such as org.ofono.Message,
+			org.ofono.VoiceCall, org.ofono.NetworkOperator,
+			will never be part of this list.
+
+			Please note that the set of Interfaces can and does
+			change frequently (e.g. due to change in Powered
+			and Online properties.)  If a given interface is no
+			longer available, then the application should assume
+			that all data for that interface has become invalid,
+			e.g. calls have been dropped, network registration
+			lost, etc.
+
+			The set of possible interfaces supported is also
+			dependent on the modem hardware and driver support.
+			For example, HFP devices only support
+			org.ofono.VoiceCallManager,
+			org.ofono.NetworkRegistration, org.ofono.Handsfree and
+			org.ofono.CallVolume interfaces.
+
+		string Type [readonly]
+
+			Indicates whether the modem is virtual or a real
+			hardware one. This information should only be used
+			to identify which componet (e.g. ConnMan or a phone
+			dialer) should take control over the modem. It does
+			not give any hints on which Interfaces will be
+			supported by this modem.
+
+			Possible values are "test", "hfp", "sap" and "hardware".

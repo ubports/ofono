@@ -1,0 +1,54 @@
+#!/usr/bin/python
+
+import os
+import dbus
+
+bus = dbus.SystemBus()
+
+manager = dbus.Interface(bus.get_object('org.ofono', '/'),
+						'org.ofono.Manager')
+
+modems = manager.GetModems()
+
+for path, properties in modems:
+	if "org.ofono.ConnectionManager" not in properties["Interfaces"]:
+		continue
+
+	connman = dbus.Interface(bus.get_object('org.ofono', path),
+					'org.ofono.ConnectionManager')
+
+	contexts = connman.GetContexts()
+
+	for path, properties in contexts:
+		if properties["Active"] == dbus.Boolean(0):
+			continue
+
+		print "Configuring %s" % (path)
+
+		settings = properties["Settings"]
+
+		interface = settings["Interface"]
+		address = settings["Address"]
+		try:
+			gateway = settings["Gateway"]
+		except:
+			gateway = "0.0.0.0";
+
+		if settings["Method"] == "dhcp":
+			print "    Run DHCP on interface %s" % (interface)
+		else:
+			print "    Interface is %s" % (interface)
+			print "    IP address is %s" % (address)
+			print "    Gateway is %s" % (gateway)
+
+			cmd = "ifconfig " + interface + " " + address
+			cmd += " netmask 255.255.255.255"
+			os.system(cmd);
+
+			for i in settings["DomainNameServers"]:
+				print "    Nameserver is %s" % (i)
+
+				cmd = "route add -host " + i
+				cmd +=" dev " + interface
+				os.system(cmd);
+		print

@@ -1,0 +1,87 @@
+Call Barring hierarchy
+======================
+
+Service		org.ofono
+Interface	org.ofono.CallBarring
+Object path	[variable prefix]/{modem0,modem1,...}
+
+Methods		dict GetProperties()
+
+			Contains the properties for this object.
+
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+
+		void ChangePassword(string old_password, string new_password)
+
+			Register new network password for the barring
+			services.
+
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.InvalidFormat
+					 [service].Error.Failed
+
+		void DisableAll(string password)
+
+			Disables all call barrings.
+
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.InvalidArguments
+					 [service].Error.InvalidFormat
+					 [service].Error.Failed
+
+		void DisableAllIncoming(string password)
+
+			Disables barrings for incoming calls.
+
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.InvalidArguments
+					 [service].Error.InvalidFormat
+					 [service].Error.Failed
+
+		void DisableAllOutgoing(string password)
+
+			Disables barrings for outgoing calls.
+
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.InvalidArguments
+					 [service].Error.InvalidFormat
+					 [service].Error.Failed
+
+		void SetProperty(string property, variant value, string pin2)
+
+			Sets the given property value to that specified in
+			call parameter.  For all properties, the password
+			(typically PIN2) must be provided.
+
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.InvalidArguments
+					 [service].Error.InvalidFormat
+					 [service].Error.Failed
+
+Signals		PropertyChanged(string property, variant value)
+
+			Signal is emitted whenever a property has changed.
+			The new value is passed as the signal argument.
+
+Properties	string VoiceIncoming [readwrite]
+
+			Contains the value of the barrings for the incoming
+			voice calls. The possible values are:
+			- "always" bar all incoming voice calls
+			- "whenroaming" bar incoming voice calls when roaming,
+			- "disabled" if no barring is active
+
+		string VoiceOutgoing [readwrite]
+
+			Contains the value of the barrings for the outgoing
+			voice calls. The possible values are:
+			- "all" bar all outgoing calls
+			- "international" bar all outgoing international calls
+			- "internationalnothome" bar all outgoing
+			  international calls except to home country
+			- "disabled" if no barring is active

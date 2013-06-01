@@ -1,0 +1,80 @@
+Call Forwarding hierarchy
+===============
+Service		org.ofono
+Interface	org.ofono.CallForwarding
+Object path	[variable prefix]/{modem0,modem1,...}
+
+Methods		dict GetProperties()
+
+			Contains the properties for this object.
+
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+
+		void DisableAll(string type)
+
+			Disables all call forwarding rules for type.
+			Type can be one of:
+				"all" or "" - Disables all rules
+				"conditional" - Disables all conditional rules,
+					e.g. busy, no reply and not reachable.
+
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.InvalidArguments
+					 [service].Error.InvalidFormat
+					 [service].Error.Failed
+
+		void SetProperty(string property, variant value)
+
+			Sets the given property value to that specified in
+			call parameter.
+
+			Possible Errors: [service].Error.NotAvailable
+					 [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.InvalidArguments
+					 [service].Error.InvalidFormat
+					 [service].Error.Failed
+
+Signals		PropertyChanged(string property, variant value)
+
+			Signal is emitted whenever a property has changed.
+			The new value is passed as the signal argument.
+
+Properties	string VoiceUnconditional [readwrite]
+
+			Contains the value of the voice unconditional call
+			forwarding property.  If the value is an empty string,
+			then this call forwarding rule is not active.
+			Otherwise the rule is active with the string value
+			as the phone number.
+
+		string VoiceBusy [readwrite]
+
+			Contains the value of the voice "Busy" call forwarding
+			rule.
+
+		string VoiceNoReply [readwrite]
+
+			Contains the value of the voice "No Reply" call
+			forwarding rule.
+
+		uint16 VoiceNoReplyTimeout [readwrite]
+
+			Contains the value of the voice "No Reply" timeout in
+			seconds. The timeout can be between 1 and 30 seconds.
+			Please note that it is not possible to set this
+			property's value if GetProperties() has not been
+			previously called or the VoiceNoReply property
+			has not been set.
+
+		string VoiceNotReachable [readwrite]
+
+			Contains the value of the voice "Not Reachable" call
+			forwarding rule.
+
+		boolean ForwardingFlagOnSim [readonly]
+
+			Boolean representing the voice unconditional call
+			forwarding rule status.
