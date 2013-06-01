@@ -89,6 +89,12 @@ gisi_sources = gisi/client.c gisi/client.h gisi/common.h \
 				gisi/server.c gisi/server.h \
 				gisi/socket.c gisi/socket.h
 
+gril_sources = gril/gril.h gril/gril.c gril/grilio.h \
+				gril/grilio.c gril/grilutil.h \
+				gril/grilutil.c gril/ringbuffer.h \
+				gril/gfunc.h gril/ril.h \
+				gril/parcel.c gril/parcel.h
+
 btio_sources = btio/btio.h btio/btio.c
 
 if UDEV
@@ -99,6 +105,28 @@ builtin_libadd += @UDEV_LIBS@
 
 builtin_modules += udevng
 builtin_sources += plugins/udevng.c
+endif
+
+if RILMODEM
+builtin_sources += $(gril_sources)
+
+builtin_modules += ril
+builtin_sources += plugins/ril.c
+
+builtin_modules += rilmodem
+builtin_sources += drivers/rilmodem/rilmodem.h \
+			drivers/rilmodem/rilmodem.c \
+			drivers/rilmodem/devinfo.c \
+			drivers/rilmodem/network-registration.c \
+			drivers/rilmodem/voicecall.c \
+			drivers/rilmodem/call-volume.c \
+			drivers/rilmodem/gprs.c \
+			drivers/rilmodem/gprs-context.c \
+			drivers/rilmodem/sim.c \
+			drivers/rilmodem/sms.c \
+			drivers/rilmodem/rilutil.c \
+			drivers/rilmodem/rilutil.h
+
 endif
 
 if ISIMODEM
@@ -210,7 +238,7 @@ builtin_sources += $(gatchat_sources) \
 			drivers/atmodem/gprs-context.c \
 			drivers/atmodem/sim-auth.c \
 			drivers/atmodem/gnss.c
-
+if !RILMODEM
 builtin_modules += nwmodem
 builtin_sources += drivers/atmodem/atutil.h \
 			drivers/nwmodem/nwmodem.h \
@@ -299,6 +327,13 @@ builtin_sources += drivers/atmodem/atutil.h \
 			drivers/dunmodem/network-registration.c \
 			drivers/dunmodem/gprs.c
 
+builtin_modules += speedupmodem
+builtin_sources += drivers/atmodem/atutil.h \
+			drivers/speedupmodem/speedupmodem.h \
+			drivers/speedupmodem/speedupmodem.c \
+			drivers/speedupmodem/ussd.c
+endif
+
 builtin_modules += hfpmodem
 builtin_sources += drivers/atmodem/atutil.h \
 			drivers/hfpmodem/hfpmodem.h \
@@ -310,12 +345,6 @@ builtin_sources += drivers/atmodem/atutil.h \
 			drivers/hfpmodem/call-volume.c \
 			drivers/hfpmodem/devinfo.c \
 			drivers/hfpmodem/handsfree.c
-
-builtin_modules += speedupmodem
-builtin_sources += drivers/atmodem/atutil.h \
-			drivers/speedupmodem/speedupmodem.h \
-			drivers/speedupmodem/speedupmodem.c \
-			drivers/speedupmodem/ussd.c
 
 if PHONESIM
 builtin_modules += phonesim
@@ -335,6 +364,7 @@ builtin_sources += drivers/cdmamodem/cdmamodem.h \
 			drivers/cdmamodem/connman.c
 endif
 
+if !RILMODEM
 builtin_modules += g1
 builtin_sources += plugins/g1.c
 
@@ -406,6 +436,7 @@ builtin_sources += plugins/samsung.c
 
 builtin_modules += sim900
 builtin_sources += plugins/sim900.c
+endif
 
 if BLUETOOTH
 builtin_modules += bluetooth
@@ -501,7 +532,7 @@ src_ofonod_SOURCES = $(gdbus_sources) $(builtin_sources) src/ofono.ver \
 			src/cdma-sms.c src/private-network.c src/cdma-netreg.c \
 			src/cdma-provision.c src/handsfree.c
 
-src_ofonod_LDADD = $(builtin_libadd) @GLIB_LIBS@ @DBUS_LIBS@ -ldl
+src_ofonod_LDADD = $(builtin_libadd) @GLIB_LIBS@ @DBUS_LIBS@ -ldl -lwaudio
 
 src_ofonod_LDFLAGS = -Wl,--export-dynamic \
 				-Wl,--version-script=$(srcdir)/src/ofono.ver
@@ -525,7 +556,7 @@ AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @USB_CFLAGS@ \
 
 INCLUDES = -I$(builddir)/include -I$(builddir)/src -I$(srcdir)/src \
 			-I$(srcdir)/gdbus -I$(srcdir)/gisi -I$(srcdir)/gatchat \
-			-I$(srcdir)/btio
+			-I$(srcdir)/btio -I$(srcdir)/gril
 
 doc_files = doc/overview.txt doc/ofono-paper.txt doc/release-faq.txt \
 		doc/manager-api.txt doc/modem-api.txt doc/network-api.txt \

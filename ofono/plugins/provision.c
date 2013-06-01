@@ -50,7 +50,12 @@ static int provision_get_settings(const char *mcc, const char *mnc,
 
 	DBG("Provisioning for MCC %s, MNC %s, SPN '%s'", mcc, mnc, spn);
 
-	apns = mbpi_lookup_apn(mcc, mnc, FALSE, &error);
+	/*
+	 * TODO: review with upstream.  Default behavior was to
+	 * disallow duplicate APN entries, which unfortunately exist
+	 * in the mobile-broadband-provider-info db.
+	 */
+	apns = mbpi_lookup_apn(mcc, mnc, TRUE, &error);
 	if (apns == NULL) {
 		if (error != NULL) {
 			ofono_error("%s", error->message);
