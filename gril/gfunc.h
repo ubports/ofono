@@ -1,8 +1,9 @@
 /*
  *
- *  oFono - Open Source Telephony
+ *  RIL library with GLib integration
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2012  Canonical Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -19,26 +20,23 @@
  *
  */
 
-#ifdef TEMP_FAILURE_RETRY
-#define TFR TEMP_FAILURE_RETRY
-#else
-#define TFR
+#ifndef __GFUNC_H
+#define __GFUNC_H
+
+#include <glib.h>
+
+#ifdef __cplusplus
+extern "C" {
 #endif
 
-#include <sys/types.h>
-#include <fcntl.h>
+typedef void (*GRilDisconnectFunc)(gpointer user_data);
+typedef void (*GRilReceiveFunc)(const unsigned char *data, gsize size,
+							gpointer user_data);
+typedef void (*GRilDebugFunc)(const char *str, gpointer user_data);
+typedef void (*GRilSuspendFunc)(gpointer user_data);
 
-int create_dirs(const char *filename, const mode_t mode);
+#ifdef __cplusplus
+}
+#endif
 
-ssize_t read_file(unsigned char *buffer, size_t len,
-			const char *path_fmt, ...)
-	__attribute__((format(printf, 3, 4)));
-
-ssize_t write_file(const unsigned char *buffer, size_t len, mode_t mode,
-			const char *path_fmt, ...)
-	__attribute__((format(printf, 4, 5)));
-
-GKeyFile *storage_open(const char *imsi, const char *store);
-void storage_sync(const char *imsi, const char *store, GKeyFile *keyfile);
-void storage_close(const char *imsi, const char *store, GKeyFile *keyfile,
-			gboolean save);
+#endif /* __GFUNC_H */
