@@ -1,0 +1,50 @@
+Name: ofono
+Summary: Open Source Telephony
+Description: Telephony stack
+Version: 1.12
+Release: 1
+Group: Communications/Connectivity Adaptation
+License: GPLv2
+URL: http://ofono.org
+Sources:
+    - http://www.kernel.org/pub/linux/network/ofono/ofono-%{version}.tar.xz
+Requires:
+    - dbus
+PkgBR:
+    - libtool
+    - automake
+    - autoconf
+PkgConfigBR:
+    - glib-2.0
+    - dbus-1
+    - libudev >= 145
+    - bluez >= 4.85
+    - mobile-broadband-provider-info
+SetupOptions: -q -n %{name}-%{version}/%{name}
+ConfigOptions:
+    - --enable-dundee
+    - --enable-test
+    - --with-systemdunitdir="/%{_lib}/systemd/system"
+SubPackages:
+    - Name: devel
+      Summary: Headers for oFono
+      Group: Development/Libraries
+      Description: Development headers and libraries for oFono
+      Files:
+         - "%{_includedir}/ofono/"
+         - "%{_libdir}/pkgconfig/ofono.pc"
+
+    - Name: tests
+      Summary: Test Scripts for oFono
+      Group: Development/Libraries
+      Description: Scripts for testing oFono and its functionality
+      Obsoletes: 
+         - "ofono-test < 1.0"
+      Provides:
+         - "ofono-test >= 1.0"
+      Requires: 
+         - dbus-python
+         - pygobject2
+      Files:
+         - "%{_libdir}/%{name}/test/*"
+
