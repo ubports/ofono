@@ -1,0 +1,15 @@
+Description: fix ftbfs with eglibc 2.17
+   * d/p/fix-ftbfs-glibc-2.17.patch: ftbfs with eglibc-2.17 (Closes: #701435)
+Author: Hector Oron <zumbi@debian.org>
+Bug-Debian: http://bugs.debian.org/701435
+
+--- ofono-1.9.orig/src/storage.h
++++ ofono-1.9/src/storage.h
+@@ -26,6 +26,7 @@
+ #endif
+ 
+ #include <fcntl.h>
++#include <sys/types.h>
+ 
+ int create_dirs(const char *filename, const mode_t mode);
+ 
