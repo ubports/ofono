@@ -404,7 +404,9 @@ char *ril_util_parse_sim_io_rsp(struct ril_msg *message,
 	return hex_response;
 }
 
-gboolean ril_util_parse_sim_status(struct ril_msg *message, struct sim_app *app)
+gboolean ril_util_parse_sim_status(struct ril_msg *message,
+									struct sim_app *app,
+									struct sim_data *sd)
 {
 	struct parcel rilp;
 	gboolean result = FALSE;
@@ -478,6 +480,37 @@ gboolean ril_util_parse_sim_status(struct ril_msg *message, struct sim_app *app)
 		pin_replaced = parcel_r_int32(&rilp);
 		pin1_state = parcel_r_int32(&rilp);
 		pin2_state = parcel_r_int32(&rilp);
+
+		/* PIN state of active application should take precedence
+		* Since qualcomm modem does not seem to give clear
+		* active indication we have to rely to app_type which
+		* according to traces seems to not zero if app is active.
+		*/
+		if (app_type != 0) {
+			DBG("PASSWORD REQUIRED");
+			switch (app_state) {
+			case APPSTATE_PIN:
+				sd->passwd_state = OFONO_SIM_PASSWORD_SIM_PIN;
+				break;
+			case APPSTATE_PUK:
+				sd->passwd_state = OFONO_SIM_PASSWORD_SIM_PUK;
+				break;
+			case APPSTATE_SUBSCRIPTION_PERSO:
+				/* TODO: Check out how to dig out exact
+				* SIM lock.
+				*/
+				sd->passwd_state = OFONO_SIM_PASSWORD_PHSIM_PIN;
+				break;
+			case APPSTATE_READY:
+				sd->passwd_state = OFONO_SIM_PASSWORD_NONE;
+				break;
+			case APPSTATE_UNKNOWN:
+			case APPSTATE_DETECTED:
+			default:
+				sd->passwd_state = OFONO_SIM_PASSWORD_INVALID;
+				break;
+			}
+		}
 
 		ril_append_print_buf("%s[app_type=%d,app_state=%d,perso_substate=%d,aid_ptr=%s,app_label_ptr=%s,pin1_replaced=%d,pin1=%d,pin2=%d],",
 				print_buf,

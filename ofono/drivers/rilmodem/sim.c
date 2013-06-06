@@ -77,11 +77,6 @@ static char print_buf[PRINT_BUF_SIZE];
  *
  * The same applies to the app_type.
  */
-struct sim_data {
-	GRil *ril;
-	char *app_id;
-	guint app_type;
-};
 
 static void sim_debug(const gchar *str, gpointer user_data)
 {
@@ -537,12 +532,14 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 
 	DBG("");
 
-	if (ril_util_parse_sim_status(message, &app)) {
+	if (ril_util_parse_sim_status(message, &app, sd)) {
 		if (app.app_id)
 			sd->app_id = app.app_id;
 
 		if (app.app_type != RIL_APPTYPE_UNKNOWN)
 			sd->app_type = app.app_type;
+
+		sd->ready = TRUE;
 
 		ofono_sim_register(sim);
 	}
@@ -564,6 +561,31 @@ static int send_get_sim_status(struct ofono_sim *sim)
 	/* TODO: make conditional */
 
 	return ret;
+}
+
+static void ril_query_passwd_state(struct ofono_sim *sim,
+				ofono_sim_passwd_cb_t cb, void *data)
+{
+	struct sim_data *sd = ofono_sim_get_data(sim);
+
+	DBG("passwd_state %u", sd->passwd_state);
+
+	sd->notify_ready = TRUE;
+
+	switch (sd->passwd_state) {
+	case OFONO_SIM_PASSWORD_NONE:
+		if (sd->ready)
+			CALLBACK_WITH_SUCCESS(cb, sd->passwd_state, data);
+		else
+			CALLBACK_WITH_FAILURE(cb, -1, data);
+		break;
+	case OFONO_SIM_PASSWORD_INVALID:
+		CALLBACK_WITH_FAILURE(cb, -1, data);
+		break;
+	default:
+		CALLBACK_WITH_SUCCESS(cb, sd->passwd_state, data);
+		break;
+	}
 }
 
 static gboolean ril_sim_register(gpointer user)
@@ -626,6 +648,7 @@ static struct ofono_sim_driver driver = {
 	.read_file_linear	= ril_sim_read_record,
 	.read_file_cyclic	= ril_sim_read_record,
  	.read_imsi		= ril_read_imsi,
+	.query_passwd_state	= ril_query_passwd_state,
 /*
  * TODO: Implmenting PIN/PUK support requires defining
  * the following driver methods.
