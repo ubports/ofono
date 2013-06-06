@@ -22,6 +22,9 @@
 
 #include <stdio.h>
 
+#include <ofono/modem.h>
+#include <ofono/sim.h>
+
 #include "parcel.h"
 
 /* TODO:
@@ -84,6 +87,15 @@ enum at_util_charset {
 	RIL_UTIL_CHARSET_8859_H =	0x10000,
 };
 
+struct sim_data {
+	GRil *ril;
+	char *app_id;
+	guint app_type;
+	enum ofono_sim_password_type passwd_state;
+	ofono_bool_t ready;
+	ofono_bool_t notify_ready;
+};
+
 struct data_call {
     int             status;
     int             retry;
@@ -99,6 +111,15 @@ struct data_call {
 struct sim_app {
 	char *app_id;
 	guint app_type;
+};
+
+enum app_state {
+	APPSTATE_UNKNOWN,
+	APPSTATE_DETECTED,
+	APPSTATE_PIN,
+	APPSTATE_PUK,
+	APPSTATE_SUBSCRIPTION_PERSO,
+	APPSTATE_READY,
 };
 
 typedef void (*ril_util_sim_inserted_cb_t)(gboolean present, void *userdata);
@@ -123,7 +144,9 @@ GSList *ril_util_parse_data_call_list(struct ril_msg *message);
 char *ril_util_parse_sim_io_rsp(struct ril_msg *message,
 				int *sw1, int *sw2,
 				int *hex_len);
-gboolean ril_util_parse_sim_status(struct ril_msg *message, struct sim_app *app);
+gboolean ril_util_parse_sim_status(struct ril_msg *message,
+									struct sim_app *app,
+									struct sim_data *sd);
 gboolean ril_util_parse_reg(struct ril_msg *message, int *status,
 				int *lac, int *ci, int *tech, int *max_calls);
 
