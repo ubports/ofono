@@ -35,6 +35,7 @@
 #include <ofono/log.h>
 #include <ofono/modem.h>
 #include <ofono/sim.h>
+#include "ofono.h"
 #include "simutil.h"
 #include "util.h"
 
@@ -608,7 +609,10 @@ static void ril_pin_cb(struct ril_msg *message, gpointer user_data)
 	 * unsolicited sim status change indication
 	 * Looks like state does not change before that.
 	*/
-	CALLBACK_WITH_SUCCESS(cb, cbd->data);
+	if (message->error == RIL_E_SUCCESS)
+		CALLBACK_WITH_SUCCESS(cb, cbd->data);
+	else
+		CALLBACK_WITH_FAILURE(cb, cbd->data);
 
 }
 
@@ -634,6 +638,91 @@ static void ril_pin_send(struct ofono_sim *sim, const char *passwd,
 
 	parcel_free(&rilp);
 
+	if (ret <= 0) {
+		g_free(cbd);
+		CALLBACK_WITH_FAILURE(cb, data);
+	}
+}
+
+static void ril_pin_change_state_cb(struct ril_msg *message, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_sim_lock_unlock_cb_t cb = cbd->cb;
+
+	DBG("message error is %d ", message->error);
+
+	if (message->error == RIL_E_SUCCESS)
+		CALLBACK_WITH_SUCCESS(cb, cbd->data);
+	else
+		CALLBACK_WITH_FAILURE(cb, cbd->data);
+}
+
+static void ril_pin_change_state(struct ofono_sim *sim,
+		enum ofono_sim_password_type passwd_type,
+		int enable, const char *passwd,
+		ofono_sim_lock_unlock_cb_t cb, void *data)
+{
+	struct sim_data *sd = ofono_sim_get_data(sim);
+	struct cb_data *cbd = cb_data_new(cb, data);
+	struct parcel rilp;
+	char buf[0x0A + 1];
+	int ret = 0;
+
+	parcel_init(&rilp);
+	parcel_w_int32(&rilp, 5);			/* Number of params */
+
+	switch (passwd_type) {
+	case OFONO_SIM_PASSWORD_SIM_PIN:
+		parcel_w_string(&rilp, "SC");
+		break;
+	case OFONO_SIM_PASSWORD_PHSIM_PIN:
+		parcel_w_string(&rilp, "PS");
+		break;
+	case OFONO_SIM_PASSWORD_PHFSIM_PIN:
+		parcel_w_string(&rilp, "PF");
+		break;
+	case OFONO_SIM_PASSWORD_SIM_PIN2:
+		parcel_w_string(&rilp, "P2");
+		break;
+	case OFONO_SIM_PASSWORD_PHNET_PIN:
+		parcel_w_string(&rilp, "PN");
+		break;
+	case OFONO_SIM_PASSWORD_PHNETSUB_PIN:
+		parcel_w_string(&rilp, "PU");
+		break;
+	case OFONO_SIM_PASSWORD_PHSP_PIN:
+		parcel_w_string(&rilp, "PP");
+		break;
+	case OFONO_SIM_PASSWORD_PHCORP_PIN:
+		parcel_w_string(&rilp, "PC");
+		break;
+	default:
+		ret = -1;
+		goto error;
+		break;
+	}
+
+	if (enable)
+		parcel_w_string(&rilp, "1");
+	else
+		parcel_w_string(&rilp, "0");
+
+	snprintf(buf, sizeof(buf), "%s", passwd);
+	parcel_w_string(&rilp, buf);		/* passwd */
+
+	parcel_w_string(&rilp, "0");		/* class */
+
+	parcel_w_string(&rilp, sd->app_id);	/* AID (Application ID) */
+
+	ret = g_ril_send(sd->ril, RIL_REQUEST_SET_FACILITY_LOCK,
+				rilp.data, rilp.size, ril_pin_change_state_cb,
+				cbd, g_free);
+
+	parcel_free(&rilp);
+
+	return;
+
+error:
 	if (ret <= 0) {
 		g_free(cbd);
 		CALLBACK_WITH_FAILURE(cb, data);
@@ -717,6 +806,8 @@ static struct ofono_sim_driver driver = {
  	.read_imsi		= ril_read_imsi,
 	.query_passwd_state	= ril_query_passwd_state,
 	.send_passwd		= ril_pin_send,
+	.lock				= ril_pin_change_state,
+
 /*
  * TODO: Implmenting PIN/PUK support requires defining
  * the following driver methods.
@@ -726,7 +817,6 @@ static struct ofono_sim_driver driver = {
  * presence of query_passwd_state, and if null, then the
  * function sim_initialize_after_pin() is called.
  *
- *	.query_passwd_state	= ril_pin_query,
  *	.query_pin_retries	= ril_pin_retries_query,
  *	.reset_passwd		= ril_pin_send_puk,
  *	.lock			= ril_pin_enable,
