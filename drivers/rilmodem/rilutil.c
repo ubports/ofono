@@ -451,7 +451,7 @@ gboolean ril_util_parse_sim_status(struct ril_msg *message,
 	ims_index = parcel_r_int32(&rilp);
 	num_apps = parcel_r_int32(&rilp);
 
-        ril_start_response;
+	ril_start_response;
 
 	/* TODO:
 	 * How do we handle long (>80 chars) ril_append_print_buf strings?
@@ -487,7 +487,6 @@ gboolean ril_util_parse_sim_status(struct ril_msg *message,
 		* according to traces seems to not zero if app is active.
 		*/
 		if (app_type != 0) {
-			DBG("PASSWORD REQUIRED");
 			switch (app_state) {
 			case APPSTATE_PIN:
 				sd->passwd_state = OFONO_SIM_PASSWORD_SIM_PIN;
