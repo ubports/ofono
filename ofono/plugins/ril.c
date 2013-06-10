@@ -129,7 +129,7 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 	DBG("");
 
 	/* Returns TRUE if cardstate == PRESENT */
-	if (ril_util_parse_sim_status(message, NULL)) {
+	if (ril_util_parse_sim_status(message, NULL, ril)) {
 		DBG("have_sim = TRUE; powering on modem.");
 
 		/* TODO: check PinState=DISABLED, for now just
