@@ -600,12 +600,12 @@ static void sim_pin_status_cb(struct ril_msg *message, gpointer user_data)
 
 }
 
-static void ril_pin_cb(struct ril_msg *message, gpointer user_data)
+static void ril_pin_change_state_cb(struct ril_msg *message, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
 	ofono_sim_lock_unlock_cb_t cb = cbd->cb;
 
-	/* There is no reason to ask PIN status until
+	/* There is no reason to ask SIM status until
 	 * unsolicited sim status change indication
 	 * Looks like state does not change before that.
 	*/
@@ -634,7 +634,8 @@ static void ril_pin_send(struct ofono_sim *sim, const char *passwd,
 	parcel_w_string(&rilp, sd->app_id);	/* AID (Application ID) */
 
 	ret = g_ril_send(sd->ril, RIL_REQUEST_ENTER_SIM_PIN,
-			     rilp.data, rilp.size, ril_pin_cb, cbd, g_free);
+				rilp.data, rilp.size, ril_pin_change_state_cb,
+				cbd, g_free);
 
 	parcel_free(&rilp);
 
@@ -642,19 +643,6 @@ static void ril_pin_send(struct ofono_sim *sim, const char *passwd,
 		g_free(cbd);
 		CALLBACK_WITH_FAILURE(cb, data);
 	}
-}
-
-static void ril_pin_change_state_cb(struct ril_msg *message, gpointer user_data)
-{
-	struct cb_data *cbd = user_data;
-	ofono_sim_lock_unlock_cb_t cb = cbd->cb;
-
-	DBG("message error is %d ", message->error);
-
-	if (message->error == RIL_E_SUCCESS)
-		CALLBACK_WITH_SUCCESS(cb, cbd->data);
-	else
-		CALLBACK_WITH_FAILURE(cb, cbd->data);
 }
 
 static void ril_pin_change_state(struct ofono_sim *sim,
@@ -723,6 +711,43 @@ static void ril_pin_change_state(struct ofono_sim *sim,
 	return;
 
 error:
+	if (ret <= 0) {
+		g_free(cbd);
+		CALLBACK_WITH_FAILURE(cb, data);
+	}
+}
+
+static void ril_pin_send_puk(struct ofono_sim *sim,
+				const char *puk, const char *passwd,
+				ofono_sim_lock_unlock_cb_t cb, void *data)
+{
+	struct sim_data *sd = ofono_sim_get_data(sim);
+	struct cb_data *cbd = cb_data_new(cb, data);
+	struct parcel rilp;
+	char pukbuf[0x0A + 1];
+	char passbuf[0x0A + 1];
+	int ret = 0;
+
+	parcel_init(&rilp);
+
+	parcel_w_int32(&rilp, 3);			/* Number of params */
+
+	snprintf(pukbuf, sizeof(pukbuf), "%s", puk);
+
+	parcel_w_string(&rilp, pukbuf);		/* puk */
+
+	snprintf(passbuf, sizeof(passbuf), "%s", passwd);
+
+	parcel_w_string(&rilp, passbuf);	/* passwd */
+
+	parcel_w_string(&rilp, sd->app_id);	/* AID (Application ID) */
+
+	ret = g_ril_send(sd->ril, RIL_REQUEST_ENTER_SIM_PUK,
+			rilp.data, rilp.size, ril_pin_change_state_cb,
+			cbd, g_free);
+
+	parcel_free(&rilp);
+
 	if (ret <= 0) {
 		g_free(cbd);
 		CALLBACK_WITH_FAILURE(cb, data);
@@ -807,6 +832,7 @@ static struct ofono_sim_driver driver = {
 	.query_passwd_state	= ril_query_passwd_state,
 	.send_passwd		= ril_pin_send,
 	.lock				= ril_pin_change_state,
+	.reset_passwd		= ril_pin_send_puk,
 
 /*
  * TODO: Implmenting PIN/PUK support requires defining
@@ -818,8 +844,6 @@ static struct ofono_sim_driver driver = {
  * function sim_initialize_after_pin() is called.
  *
  *	.query_pin_retries	= ril_pin_retries_query,
- *	.reset_passwd		= ril_pin_send_puk,
- *	.lock			= ril_pin_enable,
  *	.change_passwd		= ril_change_passwd,
  *	.query_locked		= ril_pin_query_enabled,
  *
