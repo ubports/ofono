@@ -54,6 +54,7 @@
 #include <ofono/gprs-context.h>
 #include <ofono/audio-settings.h>
 #include <ofono/types.h>
+#include <ofono.h>
 
 #include "drivers/rilmodem/rilmodem.h"
 
@@ -129,7 +130,12 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 	DBG("");
 
 	/* Returns TRUE if cardstate == PRESENT */
-	if (ril_util_parse_sim_status(message, NULL, ril)) {
+	/* TODO: Third argument of type struct sim_data* is passed as NULL since
+	 * at this point struct ofono_sim contained in modem doesn't have sim_data
+	 * set.
+	 * sim_data is created and added to ofono_sim a bit later on in
+	 * drivers/rilmodem/sim.c:ril_sim_probe() */
+	if (ril_util_parse_sim_status(message, NULL, NULL)) {
 		DBG("have_sim = TRUE; powering on modem.");
 
 		/* TODO: check PinState=DISABLED, for now just
