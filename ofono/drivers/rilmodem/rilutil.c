@@ -486,7 +486,7 @@ gboolean ril_util_parse_sim_status(struct ril_msg *message,
 		* active indication we have to rely to app_type which
 		* according to traces seems to not zero if app is active.
 		*/
-		if (app_type != 0) {
+		if (app_type != 0 && sd) {
 			switch (app_state) {
 			case APPSTATE_PIN:
 				sd->passwd_state = OFONO_SIM_PASSWORD_SIM_PIN;
