@@ -818,11 +818,8 @@ static struct ril_s *create_ril()
 		return NULL;
         }
 
-	g_io_channel_set_buffered(io, FALSE);
-	g_io_channel_set_encoding(io, NULL, NULL);
-	g_io_channel_set_close_on_unref(io, TRUE);
-	g_io_channel_set_flags(io, G_IO_FLAG_NONBLOCK, NULL);
-
+		// g_ril_io_new()->g_ril_util_setup_io() sets encoding, buffering, flags, etc. for
+		// the io channel, so those shouldn't be used here.
         ril->io = g_ril_io_new(io);
         if (ril->io == NULL) {
 		ofono_error("create_ril: can't create ril->io");
