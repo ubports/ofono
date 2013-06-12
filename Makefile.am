@@ -125,7 +125,8 @@ builtin_sources += drivers/rilmodem/rilmodem.h \
 			drivers/rilmodem/sim.c \
 			drivers/rilmodem/sms.c \
 			drivers/rilmodem/rilutil.c \
-			drivers/rilmodem/rilutil.h
+			drivers/rilmodem/rilutil.h \
+			drivers/rilmodem/radio-settings.c
 
 endif
 
