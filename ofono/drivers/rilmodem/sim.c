@@ -277,8 +277,8 @@ static void ril_sim_read_info(struct ofono_sim *sim, int fileid,
 			0,
 			0,
 			15,
-			NULL,
-			NULL,
+			"",
+			"",
 			sd->app_id);
 
 	ril_close_request;
@@ -375,8 +375,8 @@ static void ril_sim_read_binary(struct ofono_sim *sim, int fileid,
 			(start >> 8),
 			(start & 0xff),
 			length,
-			NULL,
-			NULL,
+			"",
+			"",
 			sd->app_id);
 
 	ril_close_request;
@@ -434,8 +434,8 @@ static void ril_sim_read_record(struct ofono_sim *sim, int fileid,
 			record,
 			4,
 			length,
-			NULL,
-			NULL,
+			"",
+			"",
 			sd->app_id);
 	ril_close_request;
 	ril_print_request(ret, RIL_REQUEST_SIM_IO);

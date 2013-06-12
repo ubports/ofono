@@ -32,9 +32,6 @@
 
 #include <glib.h>
 
-/* For AudioFlinger settings */
-#include <waudio.h>
-
 #include <ofono/log.h>
 #include <ofono/modem.h>
 #include <ofono/voicecall.h>
@@ -78,48 +75,6 @@ struct change_state_req {
 	void *data;
 	int affected_types;
 };
-
-static void audioflinger_set_call_mode()
-{
-	char parameter[20];
-	int i;
-
-	/* Set the call mode in AudioFlinger */
-	DBG("Setting AudioFlinger to call state");
-	AudioSystem_setMode(AUDIO_MODE_IN_CALL);
-
-	DBG("Setting sound route to earpiece");
-	sprintf(parameter, "routing=%d", AUDIO_DEVICE_OUT_EARPIECE);
-
-	/* Try the first 3 threads, as this is not fixed and there's no easy
-	 * way to retrieve the default thread/output from Android */
-	for (i = 1; i <= 3; i++) {
-		if (AudioSystem_setParameters(i, parameter) >= 0)
-			break;
-	}
-}
-
-static void audioflinger_set_normal_mode()
-{
-	char parameter[20];
-	int i;
-
-	DBG("Setting AudioFlinger to normal mode");
-	AudioSystem_setMode(AUDIO_MODE_NORMAL);
-
-	DBG("Setting sound route back to speaker");
-
-	/* Get device back to speaker mode, as by default in_call
-	 * mode sets up device out to earpiece */
-	sprintf(parameter, "routing=%d", AUDIO_DEVICE_OUT_SPEAKER);
-
-	/* Try the first 3 threads, as this is not fixed and there's no easy
-	 * way to retrieve the default thread/output from Android */
-	for (i = 1; i <= 3; i++) {
-		if (AudioSystem_setParameters(i, parameter) >= 0)
-			break;
-	}
-}
 
 static void clcc_poll_cb(struct ril_msg *message, gpointer user_data)
 {
@@ -201,11 +156,6 @@ static void clcc_poll_cb(struct ril_msg *message, gpointer user_data)
 			n = n->next;
 			o = o->next;
 		}
-	}
-
-	/* No other calls, get audioflinger into normal state */
-	if (vd->calls && !calls) {
-		audioflinger_set_normal_mode();
 	}
 
 	g_slist_foreach(vd->calls, (GFunc) g_free, NULL);
@@ -321,8 +271,6 @@ static void rild_cb(struct ril_msg *message, gpointer user_data)
 		vd->clcc_source = g_timeout_add(POLL_CLCC_INTERVAL,
 						poll_clcc, vc);
 
-	audioflinger_set_call_mode();
-
 out:
 	cb(&error, cbd->data);
 }
@@ -415,8 +363,6 @@ static void ril_answer(struct ofono_voicecall *vc,
 	/* Send request to RIL */
 	ril_template(RIL_REQUEST_ANSWER, vc, generic_cb, 0,
 				NULL, 0, cb, data);
-
-	audioflinger_set_call_mode();
 }
 
 static void ril_send_dtmf(struct ofono_voicecall *vc, const char *dtmf,

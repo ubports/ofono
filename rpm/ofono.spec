@@ -106,6 +106,7 @@ systemctl daemon-reload
 %{_sbindir}/*
 /%{_lib}/systemd/system/network.target.wants/ofono.service
 /%{_lib}/systemd/system/ofono.service
+/%{_lib}/systemd/system/dundee.service
 %dir %{_sysconfdir}/ofono/
 # This file is part of phonesim and not needed with ofono.
 %exclude %{_sysconfdir}/ofono/phonesim.conf
