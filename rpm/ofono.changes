@@ -1,3 +1,8 @@
+* Wed Jun 12 2013 Juho Hämäläinen <juho.hamalainen@tieto.com> - 1.12
+- Update to upstream 1.12.
+- Add phablet patches for ril (version 1.12phablet3).
+- Additional ril work and fixes.
+
 * Wed Jan 16 2013 Petri M. Gerdt <petri.gerdt@jollamobile.com> - 1.11
 - add patch 0001-Experimental-network-time-plugin.patch which adds
   an API for accessing cellular network time.
