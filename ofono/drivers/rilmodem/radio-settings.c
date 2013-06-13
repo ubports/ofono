@@ -41,9 +41,69 @@
 
 #include "rilmodem.h"
 
+#include "ril_constants.h"
+
 struct radio_data {
 	GRil *ril;
 };
+
+static void ril_rat_mode_cb(struct ril_msg *message, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_radio_settings_rat_mode_query_cb_t cb = cbd->cb;
+	struct parcel rilp;
+	int mode = OFONO_RADIO_BAND_GSM_ANY;
+	int pref;
+
+	if (message->error == RIL_E_SUCCESS) {
+		ril_util_init_parcel(message, &rilp);
+
+		pref = parcel_r_int32(&rilp);
+
+		switch (pref) {
+		case PREF_NET_TYPE_LTE_ONLY:
+			mode = OFONO_RADIO_ACCESS_MODE_LTE;
+		case PREF_NET_TYPE_GSM_ONLY:
+			mode = OFONO_RADIO_ACCESS_MODE_GSM;
+			break;
+		case PREF_NET_TYPE_WCDMA:
+			mode = OFONO_RADIO_ACCESS_MODE_UMTS;
+			break;
+		case PREF_NET_TYPE_GSM_WCDMA:
+		case PREF_NET_TYPE_GSM_WCDMA_AUTO:
+		case PREF_NET_TYPE_CDMA_EVDO_AUTO:
+		case PREF_NET_TYPE_CDMA_ONLY:
+		case PREF_NET_TYPE_EVDO_ONLY:
+		case PREF_NET_TYPE_GSM_WCDMA_CDMA_EVDO_AUTO:
+		case PREF_NET_TYPE_LTE_CDMA_EVDO:
+		case PREF_NET_TYPE_LTE_GSM_WCDMA:
+		case PREF_NET_TYPE_LTE_CMDA_EVDO_GSM_WCDMA:
+		default:
+			break;
+		}
+		CALLBACK_WITH_SUCCESS(cb, mode, cbd->data);
+	} else {
+		CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
+	}
+}
+
+static void ril_query_rat_mode(struct ofono_radio_settings *rs,
+				ofono_radio_settings_rat_mode_query_cb_t cb,
+				void *data){
+
+	struct radio_data *rd = ofono_radio_settings_get_data(rs);
+	struct cb_data *cbd = cb_data_new(cb, data);
+	int ret = 0;
+
+	ret = g_ril_send(rd->ril, RIL_REQUEST_GET_PREFERRED_NETWORK_TYPE,
+					 NULL, 0, ril_rat_mode_cb, cbd, g_free);
+
+	/* In case of error free cbd and return the cb with failure */
+	if (ret <= 0) {
+		g_free(cbd);
+		CALLBACK_WITH_FAILURE(cb, -1, data);
+	}
+}
 
 static gboolean ril_delayed_register(gpointer user_data)
 {
@@ -56,8 +116,12 @@ static int ril_radio_settings_probe(struct ofono_radio_settings *rs,
 					unsigned int vendor,
 					void *user)
 {
-	struct radio_data *rd = g_try_new0(struct radio_data, 1);
-	g_timeout_add_seconds(2, ril_delayed_register, rd);
+	GRil *ril = user;
+	struct radio_data *rsd = g_try_new0(struct radio_data, 1);
+	rsd->ril = g_ril_clone(ril);
+	ofono_radio_settings_set_data(rs, rsd);
+	g_timeout_add_seconds(2, ril_delayed_register, rs);
+
 	return 0;
 }
 
@@ -67,9 +131,10 @@ static void ril_radio_settings_remove(struct ofono_radio_settings *rs)
 }
 
 static struct ofono_radio_settings_driver driver = {
-	.name			= "rilmodem",
-	.probe			= ril_radio_settings_probe,
-	.remove			= ril_radio_settings_remove,
+	.name				= "rilmodem",
+	.probe				= ril_radio_settings_probe,
+	.remove				= ril_radio_settings_remove,
+	.query_rat_mode		= ril_query_rat_mode,
 };
 
 void ril_radio_settings_init(void)
