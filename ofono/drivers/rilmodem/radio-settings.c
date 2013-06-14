@@ -47,6 +47,59 @@ struct radio_data {
 	GRil *ril;
 };
 
+static void ril_set_rat_cb(struct ril_msg *message, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_radio_settings_rat_mode_set_cb_t cb = cbd->cb;
+
+	if (message->error == RIL_E_SUCCESS)
+		CALLBACK_WITH_SUCCESS(cb, cbd->data);
+	else
+		CALLBACK_WITH_FAILURE(cb, cbd->data);
+}
+
+static void ril_set_rat_mode(struct ofono_radio_settings *rs,
+				enum ofono_radio_access_mode mode,
+				ofono_radio_settings_rat_mode_set_cb_t cb,
+				void *data)
+{
+	struct radio_data *rd = ofono_radio_settings_get_data(rs);
+	struct cb_data *cbd = cb_data_new(cb, data);
+	struct parcel rilp;
+	int pref = PREF_NET_TYPE_LTE_GSM_WCDMA;
+	int ret = 0;
+
+	parcel_init(&rilp);
+
+	parcel_w_int32(&rilp, 1);			/* Number of params */
+
+	switch (mode) {
+	case OFONO_RADIO_ACCESS_MODE_GSM:
+		pref = PREF_NET_TYPE_GSM_ONLY;
+		break;
+	case OFONO_RADIO_ACCESS_MODE_UMTS:
+		pref = PREF_NET_TYPE_WCDMA;
+		break;
+	case OFONO_RADIO_ACCESS_MODE_LTE:
+		pref = PREF_NET_TYPE_LTE_ONLY;
+	default:
+		break;
+	}
+
+	parcel_w_int32(&rilp, pref);
+
+	ret = g_ril_send(rd->ril, RIL_REQUEST_SET_PREFERRED_NETWORK_TYPE,
+			rilp.data, rilp.size, ril_set_rat_cb,
+			cbd, g_free);
+
+	parcel_free(&rilp);
+
+	if (ret <= 0) {
+		g_free(cbd);
+		CALLBACK_WITH_FAILURE(cb, data);
+	}
+}
+
 static void ril_rat_mode_cb(struct ril_msg *message, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
@@ -127,7 +180,10 @@ static int ril_radio_settings_probe(struct ofono_radio_settings *rs,
 
 static void ril_radio_settings_remove(struct ofono_radio_settings *rs)
 {
+	struct radio_data *rd = ofono_radio_settings_get_data(rs);
 	ofono_radio_settings_set_data(rs, NULL);
+	g_ril_unref(rd->ril);
+	g_free(rd);
 }
 
 static struct ofono_radio_settings_driver driver = {
@@ -135,6 +191,7 @@ static struct ofono_radio_settings_driver driver = {
 	.probe				= ril_radio_settings_probe,
 	.remove				= ril_radio_settings_remove,
 	.query_rat_mode		= ril_query_rat_mode,
+	.set_rat_mode		= ril_set_rat_mode,
 };
 
 void ril_radio_settings_init(void)
