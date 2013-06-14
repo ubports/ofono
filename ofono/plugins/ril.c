@@ -250,6 +250,8 @@ static void ril_post_sim(struct ofono_modem *modem)
 		DBG("calling gprs_add_context");
 		ofono_gprs_add_context(gprs, gc);
 	}
+
+	ofono_radio_settings_create(modem, 0, "rilmodem", ril->modem);
 }
 
 static void ril_post_online(struct ofono_modem *modem)
