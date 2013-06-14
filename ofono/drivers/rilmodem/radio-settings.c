@@ -180,7 +180,10 @@ static int ril_radio_settings_probe(struct ofono_radio_settings *rs,
 
 static void ril_radio_settings_remove(struct ofono_radio_settings *rs)
 {
+	struct radio_data *rd = ofono_radio_settings_get_data(rs);
 	ofono_radio_settings_set_data(rs, NULL);
+	g_ril_unref(rd->ril);
+	g_free(rd);
 }
 
 static struct ofono_radio_settings_driver driver = {
