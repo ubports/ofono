@@ -48,6 +48,7 @@ static int rilmodem_init(void)
 	ril_gprs_init();
 	ril_gprs_context_init();
 	ril_radio_settings_init();
+	ril_phonebook_init();
 
 	return 0;
 }
@@ -65,6 +66,7 @@ static void rilmodem_exit(void)
 	ril_gprs_exit();
 	ril_gprs_context_exit();
 	ril_radio_settings_exit();
+	ril_phonebook_exit();
 }
 
 OFONO_PLUGIN_DEFINE(rilmodem, "RIL modem driver", VERSION,
