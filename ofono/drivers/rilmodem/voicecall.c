@@ -397,6 +397,71 @@ static void ril_send_dtmf(struct ofono_voicecall *vc, const char *dtmf,
 	cb(&error, data);
 }
 
+static void multiparty_cb(struct ril_msg *message, gpointer user_data)
+{
+	struct ofono_error error;
+
+	if (message->error == RIL_E_SUCCESS) {
+		decode_ril_error(&error, "OK");
+		// Need to update call statuses
+		struct ofono_voicecall *vc = user_data;
+		struct voicecall_data *vd = ofono_voicecall_get_data(vc);
+		g_ril_send(vd->ril, RIL_REQUEST_GET_CURRENT_CALLS, NULL,
+				0, clcc_poll_cb, vc, NULL);
+	} else {
+		decode_ril_error(&error, "FAIL");
+	}
+}
+
+static void ril_create_multiparty(struct ofono_voicecall *vc,
+			ofono_voicecall_cb_t cb, void *data)
+{
+	struct voicecall_data *vd = ofono_voicecall_get_data(vc);
+	g_ril_send(vd->ril, RIL_REQUEST_CONFERENCE, NULL,
+			0, multiparty_cb, vc, NULL);
+
+	struct ofono_error error = { .type = 0, .error = 0 };
+	if (cb) cb(&error, data);
+}
+
+static void private_chat_cb(struct ril_msg *message, gpointer user_data)
+{
+	struct ofono_error error;
+
+	if (message->error == RIL_E_SUCCESS) {
+		decode_ril_error(&error, "OK");
+		// Need to update call statuses
+		struct ofono_voicecall *vc = user_data;
+		struct voicecall_data *vd = ofono_voicecall_get_data(vc);
+		g_ril_send(vd->ril, RIL_REQUEST_GET_CURRENT_CALLS, NULL,
+				0, clcc_poll_cb, vc, NULL);
+	} else {
+		decode_ril_error(&error, "FAIL");
+	}
+}
+
+static void ril_private_chat(struct ofono_voicecall *vc, int id,
+			ofono_voicecall_cb_t cb, void *data)
+{
+	struct voicecall_data *vd = ofono_voicecall_get_data(vc);
+	struct parcel rilp;
+	parcel_init(&rilp);
+	parcel_w_int32(&rilp, 1);
+	parcel_w_int32(&rilp, id);
+	g_ril_send(vd->ril, RIL_REQUEST_SEPARATE_CONNECTION, rilp.data,
+			rilp.size, private_chat_cb, vc, NULL);
+
+	struct ofono_error error = { .type = 0, .error = 0 };
+	if (cb) cb(&error, data);
+}
+
+static void ril_swap_without_accept(struct ofono_voicecall *vc,
+			ofono_voicecall_cb_t cb, void *data)
+{
+	ril_template(RIL_REQUEST_SWITCH_HOLDING_AND_ACTIVE, vc, generic_cb, 0,
+				NULL, 0, cb, data);
+}
+
 static gboolean ril_delayed_register(gpointer user_data)
 {
 	struct ofono_voicecall *vc = user_data;
@@ -471,7 +536,10 @@ static struct ofono_voicecall_driver driver = {
 	.dial			= ril_dial,
 	.answer			= ril_answer,
 	.hangup_all		= ril_hangup_all,
-	.send_tones		= ril_send_dtmf
+	.send_tones		= ril_send_dtmf,
+	.create_multiparty	= ril_create_multiparty,
+	.private_chat		= ril_private_chat,
+	.swap_without_accept	= ril_swap_without_accept
 };
 
 void ril_voicecall_init(void)
