@@ -650,7 +650,7 @@ gboolean ril_util_parse_reg(struct ril_msg *message, int *status,
 			case RADIO_TECH_UNKNOWN:
 				*tech = -1;
 				break;
-			case RADIO_TECH_GPRS:
+			case RADIO_TECH_GSM:
 				*tech = ACCESS_TECHNOLOGY_GSM;
 				break;
 			case RADIO_TECH_EDGE:
