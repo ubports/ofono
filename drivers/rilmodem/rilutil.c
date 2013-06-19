@@ -37,7 +37,6 @@
 #include "rilutil.h"
 #include "simutil.h"
 #include "util.h"
-#include "ril_constants.h"
 
 struct ril_util_sim_state_query {
 	GRil *ril;
@@ -54,6 +53,8 @@ struct ril_util_sim_state_query {
 static char print_buf[PRINT_BUF_SIZE];
 
 static gboolean cpin_check(gpointer userdata);
+
+int current_active_app = RIL_APPTYPE_UNKNOWN;
 
 void decode_ril_error(struct ofono_error *error, const char *final)
 {
@@ -487,6 +488,7 @@ gboolean ril_util_parse_sim_status(struct ril_msg *message,
 		* according to traces seems to not zero if app is active.
 		*/
 		if (app_type != 0 && sd) {
+			current_active_app = app_type;
 			switch (app_state) {
 			case APPSTATE_PIN:
 				sd->passwd_state = OFONO_SIM_PASSWORD_SIM_PIN;
@@ -760,4 +762,9 @@ gint ril_util_get_signal(struct ril_msg *message)
 	}
 
 	return -1;
+}
+
+gint ril_get_app_type()
+{
+	return current_active_app;
 }

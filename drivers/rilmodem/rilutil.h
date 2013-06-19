@@ -26,6 +26,7 @@
 #include <ofono/sim.h>
 
 #include "parcel.h"
+#include "ril_constants.h"
 
 /* TODO:
  *  Guard with #ifdef RIL_DEBUG
@@ -154,6 +155,12 @@ gint ril_util_parse_sms_response(struct ril_msg *message);
 
 gint ril_util_get_signal(struct ril_msg *message);
 
+gint ril_get_app_type();
+
+struct ofono_sim_driver *get_sim_driver();
+
+struct ofono_sim *get_sim();
+
 struct cb_data {
 	void *cb;
 	void *data;
@@ -167,6 +174,22 @@ static inline struct cb_data *cb_data_new(void *cb, void *data)
 	ret = g_new0(struct cb_data, 1);
 	ret->cb = cb;
 	ret->data = data;
+
+	return ret;
+}
+
+static inline struct cb_data *cb_data_new2(void *user, void *cb,
+							void *data)
+{
+	struct cb_data *ret;
+
+	ret = g_try_new0(struct cb_data, 1);
+
+	if (ret) {
+		ret->cb = cb;
+		ret->data = data;
+		ret->user = user;
+	}
 
 	return ret;
 }
