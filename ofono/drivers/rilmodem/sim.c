@@ -67,6 +67,9 @@
 
 static char print_buf[PRINT_BUF_SIZE];
 
+/* Current SIM */
+static struct ofono_sim *current_sim;
+
 /*
  * TODO: CDMA/IMS
  *
@@ -832,6 +835,7 @@ static int ril_sim_probe(struct ofono_sim *sim, unsigned int vendor,
 	sd->app_id = NULL;
 	sd->app_type = RIL_APPTYPE_UNKNOWN;
 	sd->passwd_state = OFONO_SIM_PASSWORD_INVALID;
+	current_sim = sim;
 
 	ofono_sim_set_data(sim, sd);
 
@@ -900,10 +904,21 @@ static struct ofono_sim_driver driver = {
 void ril_sim_init(void)
 {
 	DBG("");
+	current_sim = NULL;
 	ofono_sim_driver_register(&driver);
 }
 
 void ril_sim_exit(void)
 {
 	ofono_sim_driver_unregister(&driver);
+}
+
+struct ofono_sim_driver *get_sim_driver()
+{
+	return &driver;
+}
+
+struct ofono_sim *get_sim()
+{
+	return current_sim;
 }
