@@ -5,6 +5,7 @@ After=syslog.target
 [Service]
 Type=dbus
 BusName=org.ofono
+User=radio
 ExecStart=@prefix@/sbin/ofonod -n
 StandardError=null
 
