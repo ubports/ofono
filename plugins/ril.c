@@ -262,6 +262,7 @@ static void ril_post_online(struct ofono_modem *modem)
 
 	ofono_call_volume_create(modem, 0, "rilmodem", ril->modem);
 	ofono_netreg_create(modem, 0, "rilmodem", ril->modem);
+	ofono_ussd_create(modem, 0, "rilmodem", ril->modem);
 }
 
 static int ril_enable(struct ofono_modem *modem)

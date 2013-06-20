@@ -52,3 +52,7 @@ extern void ril_gprs_context_exit(void);
 
 extern void ril_radio_settings_init(void);
 extern void ril_radio_settings_exit(void);
+
+extern void ril_ussd_init(void);
+extern void ril_ussd_exit(void);
+
