@@ -63,10 +63,74 @@ static void ril_clip_cb(struct ril_msg *message, gpointer user_data)
 			res = parcel_r_int32(&rilp);
 
 		CALLBACK_WITH_SUCCESS(cb, res, cbd->data);
-	} else {
+	} else
 		CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
+}
+
+static void ril_set_cw_cb(struct ril_msg *message, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_call_settings_set_cb_t cb = cbd->cb;
+
+	if (message->error == RIL_E_SUCCESS)
+		CALLBACK_WITH_SUCCESS(cb, cbd->data);
+	else
+		CALLBACK_WITH_FAILURE(cb, cbd->data);
+}
+
+static void ril_cw_set(struct ofono_call_settings *cs, int mode, int cls,
+			ofono_call_settings_set_cb_t cb, void *data){
+	struct settings_data *sd = ofono_call_settings_get_data(cs);
+	struct cb_data *cbd = cb_data_new(cb, data);
+	int ret = 0;
+	struct parcel rilp;
+
+	parcel_init(&rilp);
+
+	parcel_w_int32(&rilp, 2);		/* Number of params */
+
+	parcel_w_int32(&rilp, mode);	/* on/off */
+
+	parcel_w_int32(&rilp, 1);		/* Service class voice */
+
+	ret = g_ril_send(sd->ril, RIL_REQUEST_SET_CALL_WAITING,
+			rilp.data, rilp.size, ril_set_cw_cb, cbd, g_free);
+
+	parcel_free(&rilp);
+
+	/* In case of error free cbd and return the cb with failure */
+	if (ret <= 0) {
+		g_free(cbd);
+		CALLBACK_WITH_FAILURE(cb, data);
 	}
 }
+
+static void ril_cw_query(struct ofono_call_settings *cs, int cls,
+				ofono_call_settings_status_cb_t cb, void *data)
+{
+	struct settings_data *sd = ofono_call_settings_get_data(cs);
+	struct cb_data *cbd = cb_data_new(cb, data);
+	int ret = 0;
+	struct parcel rilp;
+
+	parcel_init(&rilp);
+
+	parcel_w_int32(&rilp, 1);		/* Number of params */
+
+	parcel_w_int32(&rilp, 1);		/* Service class voice */
+
+	ret = g_ril_send(sd->ril, RIL_REQUEST_QUERY_CALL_WAITING,
+			rilp.data, rilp.size, ril_clip_cb, cbd, g_free);
+
+	parcel_free(&rilp);
+
+	/* In case of error free cbd and return the cb with failure */
+	if (ret <= 0) {
+		g_free(cbd);
+		CALLBACK_WITH_FAILURE(cb, -1, data);
+	}
+}
+
 
 static void ril_clip_query(struct ofono_call_settings *cs,
 			ofono_call_settings_status_cb_t cb, void *data)
@@ -122,7 +186,15 @@ static struct ofono_call_settings_driver driver = {
 	.name			= "rilmodem",
 	.probe			= ril_call_settings_probe,
 	.remove			= ril_call_settings_remove,
-	.clip_query		= ril_clip_query
+	.clip_query		= ril_clip_query,
+	.cw_query		= ril_cw_query,
+	.cw_set			= ril_cw_set
+
+	/*
+	 * Not supported in RIL API
+	 * .colp_query		= ril_colp_query,
+	 * .colr_query		= ril_colr_query
+	*/
 };
 
 void ril_call_settings_init(void)
