@@ -35,6 +35,7 @@
 #include <ofono/modem.h>
 #include <ofono/ussd.h>
 #include <smsutil.h>
+#include <util.h>
 
 #include "gril.h"
 #include "grilutil.h"
@@ -105,18 +106,18 @@ static void ril_ussd_notify(struct ril_msg *message,
 	struct ofono_ussd *ussd = user_data;
 	struct parcel rilp;
 	gchar *ussd_from_network;
-	int dummy; /* ignore the first three items from RIL */
 	ril_util_init_parcel(message, &rilp);
-	dummy = parcel_r_int32(&rilp);
-	dummy = parcel_r_int32(&rilp);
-	dummy = parcel_r_int32(&rilp);
+	/* ignore the first three items from RIL */
+	parcel_r_int32(&rilp);
+	parcel_r_int32(&rilp);
+	parcel_r_int32(&rilp);
 	ussd_from_network = parcel_r_string(&rilp);
 
 	int valid = 0;
 	long items_written = 0;
 	unsigned char pdu[200];
 	if (ussd_from_network) {
-		if (ussd_encode(ussd_from_network, &items_written, &pdu)
+		if (ussd_encode(ussd_from_network, &items_written, pdu)
 				&& items_written > 0) {
 			valid = 1;
 		}
