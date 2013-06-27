@@ -252,6 +252,7 @@ static void ril_post_sim(struct ofono_modem *modem)
 
 	ofono_radio_settings_create(modem, 0, "rilmodem", ril->modem);
 	ofono_phonebook_create(modem, 0, "rilmodem", ril->modem);
+	ofono_call_forwarding_create(modem, 0, "rilmodem", ril->modem);
 }
 
 static void ril_post_online(struct ofono_modem *modem)
