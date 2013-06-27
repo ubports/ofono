@@ -56,7 +56,7 @@ enum call_forward_cmd {
 	CF_ACTION_ERASURE,
 };
 
-static void ril_erasure_cb(struct ril_msg *message, gpointer user_data)
+static void ril_set_forward_cb(struct ril_msg *message, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
 	ofono_call_forwarding_set_cb_t cb = cbd->cb;
@@ -65,6 +65,54 @@ static void ril_erasure_cb(struct ril_msg *message, gpointer user_data)
 		CALLBACK_WITH_SUCCESS(cb, cbd->data);
 	else
 		CALLBACK_WITH_FAILURE(cb, cbd->data);
+}
+
+static void ril_registration(struct ofono_call_forwarding *cf, int type,
+				int cls,
+				const struct ofono_phone_number *number,
+				int time, ofono_call_forwarding_set_cb_t cb,
+				void *data)
+{
+	struct forw_data *fd = ofono_call_forwarding_get_data(cf);
+	struct cb_data *cbd = cb_data_new(cb, data);
+	struct parcel rilp;
+	int ret = 0;
+
+	parcel_init(&rilp);
+
+	parcel_w_int32(&rilp, CF_ACTION_REGISTRATION);
+
+	parcel_w_int32(&rilp, type);
+
+	/* Modem seems to respond with error to all queries
+	 * or settings made with bearer class
+	 * BEARER_CLASS_DEFAULT. Design decision: If given
+	 * class is BEARER_CLASS_DEFAULT let's map it to
+	 * SERVICE_CLASS_VOICE effectively making it the
+	 * default bearer. This in line with API which is
+	 * contains only voice anyways. TODO: Checkout
+	 * the behaviour with final modem
+	*/
+
+	if (cls == BEARER_CLASS_DEFAULT)
+		cls = BEARER_CLASS_VOICE;
+
+	parcel_w_int32(&rilp, cls);
+
+	parcel_w_int32(&rilp, number->type);
+
+	parcel_w_string(&rilp, (char *) number->number);
+
+	parcel_w_int32(&rilp, time);
+
+	ret = g_ril_send(fd->ril, RIL_REQUEST_SET_CALL_FORWARD,
+		rilp.data, rilp.size, ril_set_forward_cb, cbd, g_free);
+
+	/* In case of error free cbd and return the cb with failure */
+	if (ret <= 0) {
+		g_free(cbd);
+		CALLBACK_WITH_FAILURE(cb, data);
+	}
 }
 
 static void ril_erasure(struct ofono_call_forwarding *cf,
@@ -109,7 +157,7 @@ static void ril_erasure(struct ofono_call_forwarding *cf,
 	parcel_w_int32(&rilp, 60);
 
 	ret = g_ril_send(fd->ril, RIL_REQUEST_SET_CALL_FORWARD,
-			rilp.data, rilp.size, ril_erasure_cb, cbd, g_free);
+			rilp.data, rilp.size, ril_set_forward_cb, cbd, g_free);
 
 	parcel_free(&rilp);
 
@@ -258,7 +306,8 @@ static struct ofono_call_forwarding_driver driver = {
 	.probe			= ril_call_forwarding_probe,
 	.remove			= ril_call_forwarding_remove,
 	.erasure		= ril_erasure,
-	.query			= ril_query
+	.query			= ril_query,
+	.registration	= ril_registration
 };
 
 void ril_call_forwarding_init(void)
