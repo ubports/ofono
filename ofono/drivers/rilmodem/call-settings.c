@@ -91,7 +91,7 @@ static void ril_cw_set(struct ofono_call_settings *cs, int mode, int cls,
 
 	parcel_w_int32(&rilp, mode);	/* on/off */
 
-	parcel_w_int32(&rilp, 1);		/* Service class voice */
+	parcel_w_int32(&rilp, cls);		/* Service class */
 
 	ret = g_ril_send(sd->ril, RIL_REQUEST_SET_CALL_WAITING,
 			rilp.data, rilp.size, ril_set_cw_cb, cbd, g_free);
@@ -117,7 +117,7 @@ static void ril_cw_query(struct ofono_call_settings *cs, int cls,
 
 	parcel_w_int32(&rilp, 1);		/* Number of params */
 
-	parcel_w_int32(&rilp, 1);		/* Service class voice */
+	parcel_w_int32(&rilp, cls);		/* Service class */
 
 	ret = g_ril_send(sd->ril, RIL_REQUEST_QUERY_CALL_WAITING,
 			rilp.data, rilp.size, ril_clip_cb, cbd, g_free);
