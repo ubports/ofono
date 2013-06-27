@@ -72,15 +72,25 @@ static void ril_csca_set(struct ofono_sms *sms,
 	CALLBACK_WITH_FAILURE(cb, user_data);
 }
 
-static void ril_csca_query_cb(gboolean ok, gpointer user_data)
+static void ril_csca_query_cb(struct ril_msg *message, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
 	ofono_sms_sca_query_cb_t cb = cbd->cb;
 	struct ofono_error error;
 	struct ofono_phone_number sca;
+	struct parcel rilp;
+	gchar *number;
 
-	/* For now setup dummy number */
-        const char *number = "6176666666";
+	if (message->error == RIL_E_SUCCESS) {
+		decode_ril_error(&error, "OK");
+	} else {
+		decode_ril_error(&error, "FAIL");
+		cb(&error, NULL, cbd->data);
+		return;
+	}
+
+	ril_util_init_parcel(message, &rilp);
+	number = parcel_r_string(&rilp);
 
 	if (number[0] == '+') {
 		number = number + 1;
@@ -96,22 +106,26 @@ static void ril_csca_query_cb(gboolean ok, gpointer user_data)
 
 	cb(&error, &sca, cbd->data);
 
-	return;
+	g_free(number);
 }
 
 static void ril_csca_query(struct ofono_sms *sms, ofono_sms_sca_query_cb_t cb,
 					void *user_data)
 {
-	/* TODO:
-	 *
-	 * (1) Need to determine if RIL supports querying the
-	 * SMSC number.
-	 *
-	 * (2) In the short term, this function should return
-	 * a 'not-supported' error.
-	 */
+	struct sms_data *data = ofono_sms_get_data(sms);
+	struct cb_data *cbd = cb_data_new(cb, user_data);
+	int ret = -1;
 
-	CALLBACK_WITH_FAILURE(cb, NULL, user_data);
+	DBG("Sending csca_query");
+
+	ret = g_ril_send(data->ril, RIL_REQUEST_GET_SMSC_ADDRESS, NULL, 0,
+					ril_csca_query_cb, cbd, g_free);
+
+	if (ret <= 0) {
+		g_free(cbd);
+		CALLBACK_WITH_FAILURE(cb, NULL, user_data);
+	}
+
 }
 
 static void submit_sms_cb(struct ril_msg *message, gpointer user_data)
