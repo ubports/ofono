@@ -129,7 +129,8 @@ builtin_sources += drivers/rilmodem/rilmodem.h \
 			drivers/rilmodem/radio-settings.c \
 			drivers/rilmodem/phonebook.c \
 			drivers/rilmodem/ussd.c \
-			drivers/rilmodem/call-settings.c
+			drivers/rilmodem/call-settings.c \
+			drivers/rilmodem/call-forwarding.c
 
 endif
 
