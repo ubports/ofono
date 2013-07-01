@@ -1,0 +1,21 @@
+#!/usr/bin/python
+
+import sys
+import dbus
+
+bus = dbus.SystemBus()
+
+manager = dbus.Interface(bus.get_object('org.ofono', '/'),
+						'org.ofono.Manager')
+
+modems = manager.GetModems()
+path = modems[0][0]
+
+cv = dbus.Interface(bus.get_object('org.ofono', path),
+						'org.ofono.CallVolume')
+
+muted = int(sys.argv[1])
+print "Set Muted to " , muted
+
+cv.SetProperty("Muted", dbus.Boolean(muted))
+
