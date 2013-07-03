@@ -67,7 +67,7 @@ static void ril_clip_cb(struct ril_msg *message, gpointer user_data)
 		CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
 }
 
-static void ril_set_cw_cb(struct ril_msg *message, gpointer user_data)
+static void ril_set_cb(struct ril_msg *message, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
 	ofono_call_settings_set_cb_t cb = cbd->cb;
@@ -94,7 +94,7 @@ static void ril_cw_set(struct ofono_call_settings *cs, int mode, int cls,
 	parcel_w_int32(&rilp, cls);		/* Service class */
 
 	ret = g_ril_send(sd->ril, RIL_REQUEST_SET_CALL_WAITING,
-			rilp.data, rilp.size, ril_set_cw_cb, cbd, g_free);
+			rilp.data, rilp.size, ril_set_cb, cbd, g_free);
 
 	parcel_free(&rilp);
 
@@ -149,6 +149,69 @@ static void ril_clip_query(struct ofono_call_settings *cs,
 	}
 }
 
+static void ril_clir_cb(struct ril_msg *message, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_call_settings_clir_cb_t cb = cbd->cb;
+	struct parcel rilp;
+	int override, network;
+
+
+	if (message->error == RIL_E_SUCCESS) {
+		ril_util_init_parcel(message, &rilp);
+		/* Set HideCallerId property from network */
+		override = parcel_r_int32(&rilp);
+		/* CallingLineRestriction indicates the state of
+		the CLIR supplementary service in the network */
+		network = parcel_r_int32(&rilp);
+
+		CALLBACK_WITH_SUCCESS(cb, override, network, cbd->data);
+	} else
+		CALLBACK_WITH_FAILURE(cb, -1, -1, cbd->data);
+}
+
+static void ril_clir_query(struct ofono_call_settings *cs,
+			ofono_call_settings_clir_cb_t cb, void *data)
+{
+	struct settings_data *sd = ofono_call_settings_get_data(cs);
+	struct cb_data *cbd = cb_data_new(cb, data);
+	int ret = 0;
+
+	ret = g_ril_send(sd->ril, RIL_REQUEST_GET_CLIR,
+			NULL, 0, ril_clir_cb, cbd, g_free);
+
+	if (ret <= 0) {
+		g_free(cbd);
+		CALLBACK_WITH_FAILURE(cb, -1, -1, data);
+	}
+}
+
+
+static void ril_clir_set(struct ofono_call_settings *cs, int mode,
+			ofono_call_settings_set_cb_t cb, void *data)
+{
+	struct settings_data *sd = ofono_call_settings_get_data(cs);
+	struct cb_data *cbd = cb_data_new(cb, data);
+	int ret = 0;
+	struct parcel rilp;
+
+	parcel_init(&rilp);
+
+	parcel_w_int32(&rilp, 1); /* Number of params */
+
+	parcel_w_int32(&rilp, mode); /* for outgoing calls */
+
+	ret = g_ril_send(sd->ril, RIL_REQUEST_SET_CLIR,
+			rilp.data, rilp.size, ril_set_cb, cbd, g_free);
+
+	parcel_free(&rilp);
+
+	if (ret <= 0) {
+		g_free(cbd);
+		CALLBACK_WITH_FAILURE(cb, data);
+	}
+}
+
 static gboolean ril_delayed_register(gpointer user_data)
 {
 	struct ofono_call_settings *cs = user_data;
@@ -188,7 +251,9 @@ static struct ofono_call_settings_driver driver = {
 	.remove			= ril_call_settings_remove,
 	.clip_query		= ril_clip_query,
 	.cw_query		= ril_cw_query,
-	.cw_set			= ril_cw_set
+	.cw_set			= ril_cw_set,
+	.clir_query		= ril_clir_query,
+	.clir_set		= ril_clir_set
 
 	/*
 	 * Not supported in RIL API
