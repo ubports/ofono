@@ -4,6 +4,7 @@
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *  Copyright (C) 2012 Canonical Ltd.
+ *  Copyright (C) 2013 Jolla Ltd
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -24,6 +25,7 @@
 #include <config.h>
 #endif
 
+#include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
@@ -842,16 +844,8 @@ static struct ril_s *create_ril()
 	return ril;
 
 error:
-        g_ril_io_unref(ril->io);
-
-	if (ril->command_queue)
-		g_queue_free(ril->command_queue);
-
-	if (ril->notify_list)
-		g_hash_table_destroy(ril->notify_list);
-
-	g_free(ril);
-	return NULL;
+	ofono_error("Exiting...");
+	exit(EXIT_FAILURE);
 }
 
 static struct ril_notify *ril_notify_create(struct ril_s *ril,
