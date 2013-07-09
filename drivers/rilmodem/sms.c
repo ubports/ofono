@@ -4,6 +4,7 @@
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *  Copyright (C) 2012 Canonical Ltd.
+ *  Copyright (C) 2013 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -54,22 +55,47 @@ static void sms_debug(const gchar *str, gpointer user_data)
 	ofono_info("%s%s", prefix, str);
 }
 
+static void ril_csca_set_cb(struct ril_msg *message, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_sms_sca_set_cb_t cb = cbd->cb;
+
+	if (message->error == RIL_E_SUCCESS)
+		CALLBACK_WITH_SUCCESS(cb, cbd->data);
+	else
+		CALLBACK_WITH_FAILURE(cb, cbd->data);
+}
+
 static void ril_csca_set(struct ofono_sms *sms,
 			const struct ofono_phone_number *sca,
 			ofono_sms_sca_set_cb_t cb, void *user_data)
 {
-	/* TODO:
-	 *
-	 * (1) Need to determine if RIL supports setting the
-	 * SMSC number.
-	 *
-	 * (2) In the short term, this function should return
-	 * a 'not-supported' error.
-	 */
+	struct sms_data *data = ofono_sms_get_data(sms);
+	struct cb_data *cbd = cb_data_new(cb, user_data);
+	struct parcel rilp;
+	int ret = -1;
+	char number[OFONO_MAX_PHONE_NUMBER_LENGTH + 4];
 
-        DBG("");
+	if (sca->type == 129)
+		snprintf(number, sizeof(number), "\"%s\"", sca->number);
+	else
+		snprintf(number, sizeof(number), "\"+%s\"", sca->number);
 
-	CALLBACK_WITH_FAILURE(cb, user_data);
+	DBG("Setting sca: %s", number);
+
+	parcel_init(&rilp);
+	parcel_w_string(&rilp, number);
+
+	/* Send request to RIL */
+	ret = g_ril_send(data->ril, RIL_REQUEST_SET_SMSC_ADDRESS, rilp.data,
+				rilp.size, ril_csca_set_cb, cbd, g_free);
+	parcel_free(&rilp);
+
+	/* In case of error free cbd and return the cb with failure */
+	if (ret <= 0) {
+		g_free(cbd);
+		CALLBACK_WITH_FAILURE(cb, user_data);
+	}
 }
 
 static void ril_csca_query_cb(struct ril_msg *message, gpointer user_data)
