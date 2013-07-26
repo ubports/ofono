@@ -111,6 +111,7 @@ systemctl daemon-reload
 # This file is part of phonesim and not needed with ofono.
 %exclude %{_sysconfdir}/ofono/phonesim.conf
 %doc /usr/share/man/man8/ofonod.8.gz
+%dir %attr(775,radio,radio) /var/lib/ofono
 # << files
 
 %files devel
