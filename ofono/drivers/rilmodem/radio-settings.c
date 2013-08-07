@@ -111,7 +111,8 @@ static void ril_rat_mode_cb(struct ril_msg *message, gpointer user_data)
 
 	if (message->error == RIL_E_SUCCESS) {
 		ril_util_init_parcel(message, &rilp);
-
+		/*Skip length. TODO: proper handling for all responses type of int * */
+		parcel_r_int32(&rilp);
 		pref = parcel_r_int32(&rilp);
 
 		switch (pref) {
