@@ -102,10 +102,11 @@ static void ril_set_rat_mode(struct ofono_radio_settings *rs,
 
 static void ril_rat_mode_cb(struct ril_msg *message, gpointer user_data)
 {
+	DBG("");
 	struct cb_data *cbd = user_data;
 	ofono_radio_settings_rat_mode_query_cb_t cb = cbd->cb;
 	struct parcel rilp;
-	int mode = OFONO_RADIO_BAND_GSM_ANY;
+	int mode = OFONO_RADIO_ACCESS_MODE_ANY;
 	int pref;
 
 	if (message->error == RIL_E_SUCCESS) {
@@ -143,7 +144,7 @@ static void ril_rat_mode_cb(struct ril_msg *message, gpointer user_data)
 static void ril_query_rat_mode(struct ofono_radio_settings *rs,
 				ofono_radio_settings_rat_mode_query_cb_t cb,
 				void *data){
-
+	DBG("");
 	struct radio_data *rd = ofono_radio_settings_get_data(rs);
 	struct cb_data *cbd = cb_data_new(cb, data);
 	int ret = 0;
