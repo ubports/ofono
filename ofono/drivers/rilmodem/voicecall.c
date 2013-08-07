@@ -290,7 +290,7 @@ static void ril_dial(struct ofono_voicecall *vc,
 	parcel_init(&rilp);
 
 	/* Number to dial */
-        parcel_w_string(&rilp, phone_number_to_string(ph));
+	parcel_w_string(&rilp, phone_number_to_string(ph));
 	/* CLIR mode */
 	parcel_w_int32(&rilp, clir);
 	/* USS, need it twice for absent */
@@ -355,6 +355,53 @@ error:
 	ofono_error("Unable to notify about call state changes");
 }
 
+static void ril_ss_notify(struct ril_msg *message, gpointer user_data)
+{
+	struct parcel rilp;
+	struct ofono_voicecall *vc = user_data;
+	struct ofono_phone_number number;
+	int notification_type = 0;
+	int code = 0;
+	int index = 0;
+	int type = 0;
+	char *tmp_number = NULL;
+
+	ril_util_init_parcel(message, &rilp);
+
+	switch (message->req) {
+		case RIL_UNSOL_SUPP_SVC_NOTIFICATION: {
+			notification_type = parcel_r_int32(&rilp);
+			code = parcel_r_int32(&rilp);
+			index = parcel_r_int32(&rilp);
+			type = parcel_r_int32(&rilp);
+			tmp_number = parcel_r_string(&rilp);
+
+			if (tmp_number != NULL) {
+				strncpy(number.number, tmp_number,
+					OFONO_MAX_PHONE_NUMBER_LENGTH);
+
+			DBG("RIL data: MT/MO: %i, code: %i, index: %i",
+				notification_type, code, index);
+			}
+		break;
+		}
+	default:
+		goto error;
+	}
+
+	/* 0 stands for MO intermediate (support TBD), 1 for MT unsolicited */
+	if (notification_type == 1) {
+		ofono_voicecall_ssn_mt_notify(
+			vc, 0, code, index, &number);
+	} else
+		goto error;
+
+	return;
+
+error:
+	ofono_error("Unknown SS notification");
+}
+
 static void ril_answer(struct ofono_voicecall *vc,
 			ofono_voicecall_cb_t cb, void *data)
 {
@@ -403,7 +450,7 @@ static void multiparty_cb(struct ril_msg *message, gpointer user_data)
 
 	if (message->error == RIL_E_SUCCESS) {
 		decode_ril_error(&error, "OK");
-		// Need to update call statuses
+		/* Need to update call statuses */
 		struct ofono_voicecall *vc = user_data;
 		struct voicecall_data *vd = ofono_voicecall_get_data(vc);
 		g_ril_send(vd->ril, RIL_REQUEST_GET_CURRENT_CALLS, NULL,
@@ -421,7 +468,8 @@ static void ril_create_multiparty(struct ofono_voicecall *vc,
 			0, multiparty_cb, vc, NULL);
 
 	struct ofono_error error = { .type = 0, .error = 0 };
-	if (cb) cb(&error, data);
+	if (cb)
+		cb(&error, data);
 }
 
 static void private_chat_cb(struct ril_msg *message, gpointer user_data)
@@ -430,7 +478,7 @@ static void private_chat_cb(struct ril_msg *message, gpointer user_data)
 
 	if (message->error == RIL_E_SUCCESS) {
 		decode_ril_error(&error, "OK");
-		// Need to update call statuses
+		/* Need to update call statuses */
 		struct ofono_voicecall *vc = user_data;
 		struct voicecall_data *vd = ofono_voicecall_get_data(vc);
 		g_ril_send(vd->ril, RIL_REQUEST_GET_CURRENT_CALLS, NULL,
@@ -452,7 +500,8 @@ static void ril_private_chat(struct ofono_voicecall *vc, int id,
 			rilp.size, private_chat_cb, vc, NULL);
 
 	struct ofono_error error = { .type = 0, .error = 0 };
-	if (cb) cb(&error, data);
+	if (cb)
+		cb(&error, data);
 }
 
 static void ril_swap_without_accept(struct ofono_voicecall *vc,
@@ -475,6 +524,10 @@ static gboolean ril_delayed_register(gpointer user_data)
 	g_ril_register(vd->ril, RIL_UNSOL_RESPONSE_CALL_STATE_CHANGED,
 			ril_call_state_notify, vc);
 
+	/* Unsol when call set in hold */
+	g_ril_register(vd->ril, RIL_UNSOL_SUPP_SVC_NOTIFICATION,
+			ril_ss_notify, vc);
+
 	/* This makes the timeout a single-shot */
 	return FALSE;
 }
@@ -495,17 +548,17 @@ static int ril_voicecall_probe(struct ofono_voicecall *vc, unsigned int vendor,
 
 	ofono_voicecall_set_data(vc, vd);
 
-        /*
+	/*
 	 * TODO: analyze if capability check is needed
 	 * and/or timer should be adjusted.
 	 *
 	 * ofono_voicecall_register() needs to be called after
 	 * the driver has been set in ofono_voicecall_create(),
 	 * which calls this function.  Most other drivers make
-         * some kind of capabilities query to the modem, and then
+	 * some kind of capabilities query to the modem, and then
 	 * call register in the callback; we use a timer instead.
 	 */
-        g_timeout_add_seconds(2, ril_delayed_register, vc);
+	g_timeout_add_seconds(2, ril_delayed_register, vc);
 
 	return 0;
 }
