@@ -360,19 +360,16 @@ static void ril_ss_notify(struct ril_msg *message, gpointer user_data)
 	struct parcel rilp;
 	struct ofono_voicecall *vc = user_data;
 	struct ofono_phone_number number;
-	int call_id = 0;
 	int notification_type = 0;
 	int code = 0;
 	int index = 0;
 	int type = 0;
-	char *tmp_number;
+	char *tmp_number = NULL;
 
-	/* Set up Parcel struct for proper parsing */
 	ril_util_init_parcel(message, &rilp);
 
 	switch (message->req) {
 		case RIL_UNSOL_SUPP_SVC_NOTIFICATION: {
-			/* Read the data */
 			notification_type = parcel_r_int32(&rilp);
 			code = parcel_r_int32(&rilp);
 			index = parcel_r_int32(&rilp);
@@ -382,6 +379,9 @@ static void ril_ss_notify(struct ril_msg *message, gpointer user_data)
 			if (tmp_number != NULL) {
 				strncpy(number.number, tmp_number,
 					OFONO_MAX_PHONE_NUMBER_LENGTH);
+
+			DBG("RIL data: MT/MO: %i, code: %i, index: %i",
+				notification_type, code, index);
 			}
 		break;
 		}
@@ -392,7 +392,7 @@ static void ril_ss_notify(struct ril_msg *message, gpointer user_data)
 	/* 0 stands for MO intermediate (support TBD), 1 for MT unsolicited */
 	if (notification_type == 1) {
 		ofono_voicecall_ssn_mt_notify(
-			vc, call_id, code, index, &number);
+			vc, 0, code, index, &number);
 	} else
 		goto error;
 
