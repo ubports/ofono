@@ -58,19 +58,19 @@
 #include "drivers/rilmodem/rilmodem.h"
 
 #define MAX_POWER_ON_RETRIES 5
+#define MAX_SIM_STATUS_RETRIES 15
 
 struct ril_data {
-	const char *ifname;
 	GRil *modem;
 	int power_on_retries;
-
+	int sim_status_retries;
+	ofono_bool_t connected;
 	ofono_bool_t have_sim;
 	ofono_bool_t online;
 	ofono_bool_t reported;
 };
 
-static char print_buf[PRINT_BUF_SIZE];
-
+static int send_get_sim_status(struct ofono_modem *modem);
 static gboolean power_on(gpointer user_data);
 
 static void ril_debug(const char *str, void *user_data)
@@ -87,14 +87,17 @@ static void power_cb(struct ril_msg *message, gpointer user_data)
 
 	if (message->error != RIL_E_SUCCESS) {
 		ril->power_on_retries++;
-		ofono_warn("Radio Power On request failed: %d; retries: %d",
-				message->error, ril->power_on_retries);
+		ofono_warn("Radio Power On request failed: %s; retries: %d",
+				ril_error_to_string(message->error),
+				ril->power_on_retries);
 
 		if (ril->power_on_retries < MAX_POWER_ON_RETRIES)
 			g_timeout_add_seconds(1, power_on, modem);
 		else
 			ofono_error("Max retries for radio power on exceeded!");
 	} else {
+
+		g_ril_print_response_no_args(ril->modem, message);
 		DBG("Radio POWER-ON OK, calling set_powered(TRUE).");
 		ofono_modem_set_powered(modem, TRUE);
 	}
@@ -105,15 +108,18 @@ static gboolean power_on(gpointer user_data)
 	struct ofono_modem *modem = user_data;
 	struct parcel rilp;
 	struct ril_data *ril = ofono_modem_get_data(modem);
-
-	DBG("");
+	int request = RIL_REQUEST_RADIO_POWER;
+	guint ret;
 
 	parcel_init(&rilp);
 	parcel_w_int32(&rilp, 1); /* size of array */
 	parcel_w_int32(&rilp, 1); /* POWER=ON */
 
-	g_ril_send(ril->modem, RIL_REQUEST_RADIO_POWER,
-			rilp.data, rilp.size, power_cb, modem, NULL);
+	ret = g_ril_send(ril->modem, request,
+				rilp.data, rilp.size, power_cb, modem, NULL);
+
+	g_ril_append_print_buf(ril->modem, "(1)");
+	g_ril_print_request(ril->modem, ret, request);
 
 	parcel_free(&rilp);
 
@@ -125,50 +131,66 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 {
 	struct ofono_modem *modem = user_data;
 	struct ril_data *ril = ofono_modem_get_data(modem);
+	struct sim_status status;
+	struct sim_app *apps[MAX_UICC_APPS];
+	guint i = 0;
 
 	DBG("");
 
-	/* Returns TRUE if cardstate == PRESENT */
-	if (ril_util_parse_sim_status(message, NULL)) {
-		DBG("have_sim = TRUE; powering on modem.");
+	/*
+	 * ril.h claims this should NEVER fail!
+	 * However this isn't quite true.  So,
+	 * on anything other than SUCCESS, we
+	 * log an error, and schedule another
+	 * GET_SIM_STATUS request.
+	 */
 
-		/* TODO: check PinState=DISABLED, for now just
-		 * set state to valid... */
-		ril->have_sim = TRUE;
-		power_on(modem);
+	if (message->error != RIL_E_SUCCESS) {
+		ril->sim_status_retries++;
+
+		ofono_error("GET_SIM_STATUS reques failed: %d; retries: %d",
+				message->error, ril->sim_status_retries);
+
+		if (ril->sim_status_retries < MAX_SIM_STATUS_RETRIES)
+			g_timeout_add_seconds(2, (GSourceFunc) send_get_sim_status, (gpointer) modem);
+		else
+			ofono_error("Max retries for GET_SIM_STATUS exceeded!");
+	} else {
+
+		/* Returns TRUE if cardstate == PRESENT */
+		if (ril_util_parse_sim_status(ril->modem, message,
+						&status, apps)) {
+			DBG("have_sim = TRUE; powering on modem; num_apps: %d",
+				status.num_apps);
+
+			if (status.num_apps)
+				ril_util_free_sim_apps(apps, status.num_apps);
+
+			ril->have_sim = TRUE;
+			power_on(modem);
+		} else
+			ofono_warn("No SIM card present.");
 	}
-
 	/* TODO: handle emergency calls if SIM !present or locked */
 }
 
 static int send_get_sim_status(struct ofono_modem *modem)
 {
 	struct ril_data *ril = ofono_modem_get_data(modem);
-	int ret;
+	int request = RIL_REQUEST_GET_SIM_STATUS;
+	guint ret;
 
-	ret = g_ril_send(ril->modem, RIL_REQUEST_GET_SIM_STATUS,
+	ret = g_ril_send(ril->modem, request,
 				NULL, 0, sim_status_cb, modem, NULL);
 
-	/* TODO: make conditional */
-	ril_clear_print_buf;
-	ril_print_request(ret, RIL_REQUEST_GET_SIM_STATUS);
-	/* TODO: make conditional */
+	g_ril_print_request_no_args(ril->modem, ret, request);
 
 	return ret;
 }
 
 static int ril_probe(struct ofono_modem *modem)
 {
-	char const *ifname = ofono_modem_get_string(modem, "Interface");
-	unsigned address = ofono_modem_get_integer(modem, "Address");
 	struct ril_data *ril = NULL;
-
-	if (!ifname) {
-		DBG("(%p) no ifname", modem);
-		return -EINVAL;
-	}
-
-	DBG("(%p) with %s / %d", modem, ifname, address);
 
 	ril = g_try_new0(struct ril_data, 1);
 	if (ril == NULL) {
@@ -177,7 +199,6 @@ static int ril_probe(struct ofono_modem *modem)
 	}
 
         ril->modem = NULL;
-	ril->ifname = ifname;
 
 	ofono_modem_set_data(modem, ril);
 
@@ -193,7 +214,6 @@ static void ril_remove(struct ofono_modem *modem)
 {
 	struct ril_data *ril = ofono_modem_get_data(modem);
 
-	DBG("(%p) with %s", modem, ril->ifname);
 
 	ofono_modem_set_data(modem, NULL);
 
@@ -210,8 +230,6 @@ static void ril_pre_sim(struct ofono_modem *modem)
 	struct ril_data *ril = ofono_modem_get_data(modem);
 	struct ofono_sim *sim;
 
-	DBG("(%p) with %s", modem, ril->ifname);
-
 	sim = ofono_sim_create(modem, 0, "rilmodem", ril->modem);
 	ofono_devinfo_create(modem, 0, "rilmodem", ril->modem);
 	ofono_voicecall_create(modem, 0, "rilmodem", ril->modem);
@@ -225,10 +243,6 @@ static void ril_post_sim(struct ofono_modem *modem)
 	struct ril_data *ril = ofono_modem_get_data(modem);
 	struct ofono_gprs *gprs;
 	struct ofono_gprs_context *gc;
-
-
-
-	DBG("(%p) with %s", modem, ril->ifname);
 
 	/* TODO: this function should setup:
 	 *  - phonebook
@@ -250,28 +264,39 @@ static void ril_post_online(struct ofono_modem *modem)
 {
 	struct ril_data *ril = ofono_modem_get_data(modem);
 
-	DBG("(%p) with %s", modem, ril->ifname);
-
 	ofono_call_volume_create(modem, 0, "rilmodem", ril->modem);
 	ofono_netreg_create(modem, 0, "rilmodem", ril->modem);
+}
+
+static void ril_connected(struct ril_msg *message, gpointer user_data)
+{
+	struct ofono_modem *modem = (struct ofono_modem *) user_data;
+	struct ril_data *ril = ofono_modem_get_data(modem);
+
+	/* TODO: make conditional */
+        ofono_debug("[UNSOL]< %s", ril_unsol_request_to_string(message->req));
+	/* TODO: make conditional */
+
+	/* TODO: need a disconnect function to restart things! */
+	ril->connected = TRUE;
+
+	send_get_sim_status(modem);
 }
 
 static int ril_enable(struct ofono_modem *modem)
 {
 	struct ril_data *ril = ofono_modem_get_data(modem);
 
-	DBG("modem=%p with %s", modem, ril ? ril->ifname : NULL);
-
 	ril->have_sim = FALSE;
 
         ril->modem = g_ril_new();
 
-        /* NOTE: Since AT modems open a tty, and then call 
+        /* NOTE: Since AT modems open a tty, and then call
 	 * g_at_chat_new(), they're able to return -EIO if
 	 * the first fails, and -ENOMEM if the second fails.
 	 * in our case, we already return -EIO if the ril_new
 	 * fails.  If this is important, we can create a ril_socket
-	 * abstraction... ( probaby not a bad idea ). 
+	 * abstraction... ( probaby not a bad idea ).
 	 */
 
         if (ril->modem == NULL) {
@@ -279,12 +304,16 @@ static int ril_enable(struct ofono_modem *modem)
 		return -EIO;
 	}
 
-	if (getenv("OFONO_RIL_DEBUG")) {
-		DBG("calling g_ril_set_debug");
-		g_ril_set_debug(ril->modem, ril_debug, "Device: ");
+	if (getenv("OFONO_RIL_TRACE")) {
+		g_ril_set_trace(ril->modem, TRUE);
 	}
 
-	send_get_sim_status(modem);
+	if (getenv("OFONO_RIL_HEX_TRACE")) {
+		g_ril_set_debugf(ril->modem, ril_debug, "Device: ");
+	}
+
+	g_ril_register(ril->modem, RIL_UNSOL_RIL_CONNECTED,
+			ril_connected, modem);
 
         return -EINPROGRESS;
 }
@@ -292,8 +321,6 @@ static int ril_enable(struct ofono_modem *modem)
 static int ril_disable(struct ofono_modem *modem)
 {
 	struct ril_data *ril = ofono_modem_get_data(modem);
-
-	DBG("modem=%p with %p", modem, ril ? ril->ifname : NULL);
 
         return 0;
 }
@@ -331,8 +358,6 @@ static int ril_init(void)
 	int retval = 0;
 	struct ofono_modem *modem;
 
-	DBG("ofono_modem_register returned: %d", retval);
-        
 	if ((retval = ofono_modem_driver_register(&ril_driver))) {
 		DBG("ofono_modem_driver_register returned: %d", retval);
                 return retval;
@@ -349,12 +374,6 @@ static int ril_init(void)
 		DBG("ofono_modem_create failed for ril");
 		return -ENODEV;
 	}
-
-	/* TODO: these are both placeholders; we should
-	 * determine if they can be removed.
-	 */
-	ofono_modem_set_string(modem, "Interface", "ttys");
-	ofono_modem_set_integer(modem, "Address", 0);
 
 	/* This causes driver->probe() to be called... */
 	retval = ofono_modem_register(modem);
@@ -386,4 +405,3 @@ static void ril_exit(void)
 
 OFONO_PLUGIN_DEFINE(ril, "RIL modem driver", VERSION,
 			OFONO_PLUGIN_PRIORITY_DEFAULT, ril_init, ril_exit)
- 

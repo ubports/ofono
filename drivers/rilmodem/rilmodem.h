@@ -22,6 +22,8 @@
 
 #include "rilutil.h"
 
+#define RILMODEM "rilmodem"
+
 /* Shared constants */
 #define EF_STATUS_INVALIDATED 0
 #define EF_STATUS_VALID 1

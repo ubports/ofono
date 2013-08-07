@@ -35,6 +35,9 @@
 #include <ofono/log.h>
 #include <ofono/modem.h>
 #include <ofono/sim.h>
+
+#include "ofono.h"
+
 #include "simutil.h"
 #include "util.h"
 
@@ -64,7 +67,16 @@
 /* FID/path of SIM/USIM root directory */
 #define ROOTMF "3F00"
 
-static char print_buf[PRINT_BUF_SIZE];
+/* RIL_Request* parameter counts */
+#define GET_IMSI_NUM_PARAMS 1
+#define ENTER_SIM_PIN_PARAMS 2
+#define SET_FACILITY_LOCK_PARAMS 5
+#define ENTER_SIM_PUK_PARAMS 3
+#define CHANGE_SIM_PIN_PARAMS 3
+
+/* RIL_FACILITY_LOCK parameters */
+#define RIL_FACILITY_UNLOCK "0"
+#define RIL_FACILITY_LOCK "1"
 
 /*
  * TODO: CDMA/IMS
@@ -79,16 +91,13 @@ static char print_buf[PRINT_BUF_SIZE];
  */
 struct sim_data {
 	GRil *ril;
-	char *app_id;
+	gchar *aid_str;
 	guint app_type;
+	gchar *app_str;
+	guint app_index;
+	gboolean sim_registered;
+	enum ofono_sim_password_type passwd_state;
 };
-
-static void sim_debug(const gchar *str, gpointer user_data)
-{
-	const char *prefix = user_data;
-
-	ofono_info("%s%s", prefix, str);
-}
 
 static void set_path(struct sim_data *sd, struct parcel *rilp,
 			const int fileid, const guchar *path,
@@ -98,8 +107,6 @@ static void set_path(struct sim_data *sd, struct parcel *rilp,
 	char *hex_path = NULL;
 	int len = 0;
 
-	DBG("");
-
 	if (path_len > 0 && path_len < 7) {
 		memcpy(db_path, path, path_len);
 		len = path_len;
@@ -108,20 +115,17 @@ static void set_path(struct sim_data *sd, struct parcel *rilp,
 	} else if (sd->app_type == RIL_APPTYPE_SIM) {
 		len = sim_ef_db_get_path_2g(fileid, db_path);
 	} else {
-		DBG("Unsupported app_type: 0%x", sd->app_type);
+		ofono_error("Unsupported app_type: 0%x", sd->app_type);
 	}
 
 	if (len > 0) {
 		hex_path = encode_hex(db_path, len, 0);
 		parcel_w_string(rilp, (char *) hex_path);
 
-		DBG("len > 0");
-
-		/* TODO: make conditional */
-		ril_append_print_buf("%spath=%s,",
-				print_buf,
-				hex_path);
-		/* TODO: make conditional */
+		g_ril_append_print_buf(sd->ril,
+					"%spath=%s,",
+					print_buf,
+					hex_path);
 
 		g_free(hex_path);
 	} else if (fileid == SIM_EF_ICCID_FILEID || fileid == SIM_EFPL_FILEID) {
@@ -137,11 +141,10 @@ static void set_path(struct sim_data *sd, struct parcel *rilp,
 		 */
 		parcel_w_string(rilp, (char *) ROOTMF);
 
-		/* TODO: make conditional */
-		ril_append_print_buf("%spath=%s,",
-				print_buf,
-				ROOTMF);
-		/* TODO: make conditional */
+		g_ril_append_print_buf(sd->ril,
+					"%spath=%s,",
+					print_buf,
+					ROOTMF);
 	} else {
 		/*
 		 * The only known case of this is EFPHASE_FILED (0x6FAE).
@@ -150,8 +153,6 @@ static void set_path(struct sim_data *sd, struct parcel *rilp,
 		 * 'parent3g' member.  This causes a NULL path to
 		 * be returned.
 		 */
-
-		DBG("db_get_path*() returned empty path.");
 		parcel_w_string(rilp, NULL);
 	}
 }
@@ -160,6 +161,7 @@ static void ril_file_info_cb(struct ril_msg *message, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
 	ofono_sim_file_info_cb_t cb = cbd->cb;
+	struct sim_data *sd = cbd->user;
 	struct ofono_error error;
 	gboolean ok = FALSE;
 	int sw1 = 0, sw2 = 0, response_len = 0;
@@ -168,18 +170,16 @@ static void ril_file_info_cb(struct ril_msg *message, gpointer user_data)
 	guchar access[3] = { 0x00, 0x00, 0x00 };
 	guchar file_status = EF_STATUS_VALID;
 
-	DBG("");
-
 	if (message->error == RIL_E_SUCCESS) {
 		decode_ril_error(&error, "OK");
 	} else {
-		DBG("Reply failure: %s", ril_error_to_string(message->error));
 		decode_ril_error(&error, "FAIL");
 		goto error;
 	}
 
 	if ((response = (guchar *)
-		ril_util_parse_sim_io_rsp(message,
+		ril_util_parse_sim_io_rsp(sd->ril,
+						message,
 						&sw1,
 						&sw2,
 						&response_len)) == NULL) {
@@ -202,9 +202,6 @@ static void ril_file_info_cb(struct ril_msg *message, gpointer user_data)
 	}
 
 	if (response_len) {
-		g_ril_util_debug_hexdump(FALSE, response, response_len,
-						sim_debug, "sim response: ");
-
 		if (response[0] == 0x62) {
 			ok = sim_parse_3g_get_response(response, response_len,
 							&flen, &rlen, &str, access, NULL);
@@ -236,20 +233,19 @@ static void ril_sim_read_info(struct ofono_sim *sim, int fileid,
 	struct sim_data *sd = ofono_sim_get_data(sim);
 	struct cb_data *cbd = cb_data_new(cb, data);
 	struct parcel rilp;
-	int ret;
+	int request = RIL_REQUEST_SIM_IO;
+	guint ret;
+	cbd->user = sd;
 
 	parcel_init(&rilp);
 
 	parcel_w_int32(&rilp, CMD_GET_RESPONSE);
 	parcel_w_int32(&rilp, fileid);
 
-        /* TODO: make conditional */
-	ril_start_request;
-	ril_append_print_buf("%scmd=0x%.2X,efid=0x%.4X,",
-			print_buf,
-			CMD_GET_RESPONSE,
-			fileid);
-	/* TODO: make conditional */
+	g_ril_append_print_buf(sd->ril,
+				"(cmd=0x%.2X,efid=0x%.4X,",
+				CMD_GET_RESPONSE,
+				fileid);
 
 	set_path(sd, &rilp, fileid, path, path_len);
 
@@ -267,27 +263,19 @@ static void ril_sim_read_info(struct ofono_sim *sim, int fileid,
 	parcel_w_int32(&rilp, 15);         /* P3 - max length */
 	parcel_w_string(&rilp, NULL);       /* data; only req'd for writes */
 	parcel_w_string(&rilp, NULL);       /* pin2; only req'd for writes */
-	parcel_w_string(&rilp, sd->app_id); /* AID (Application ID) */
+	parcel_w_string(&rilp, sd->aid_str); /* AID (Application ID) */
 
 	ret = g_ril_send(sd->ril,
-				RIL_REQUEST_SIM_IO,
+				request,
 				rilp.data,
 				rilp.size,
 				ril_file_info_cb, cbd, g_free);
 
-	/* TODO: make conditional */
-	ril_append_print_buf("%s%d,%d,%d,%s,pin2=%s,aid=%s",
-			print_buf,
-			0,
-			0,
-			15,
-			NULL,
-			NULL,
-			sd->app_id);
-
-	ril_close_request;
-	ril_print_request(ret, RIL_REQUEST_SIM_IO);
-	/* TODO: make conditional */
+	g_ril_append_print_buf(sd->ril,
+				"%s0,0,15,(null),pin2=(null),aid=%s)",
+				print_buf,
+				sd->aid_str);
+	g_ril_print_request(sd->ril, ret, RIL_REQUEST_SIM_IO);
 
 	parcel_free(&rilp);
 
@@ -302,21 +290,20 @@ static void ril_file_io_cb(struct ril_msg *message, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
 	ofono_sim_read_cb_t cb = cbd->cb;
+	struct sim_data *sd = cbd->user;
 	struct ofono_error error;
 	int sw1 = 0, sw2 = 0, response_len = 0;
 	guchar *response = NULL;
 
-	DBG("");
-
 	if (message->error == RIL_E_SUCCESS) {
 		decode_ril_error(&error, "OK");
 	} else {
-		DBG("RILD reply failure: %s", ril_error_to_string(message->error));
 		goto error;
 	}
 
 	if ((response = (guchar *)
-		ril_util_parse_sim_io_rsp(message,
+		ril_util_parse_sim_io_rsp(sd->ril,
+						message,
 						&sw1,
 						&sw2,
 						&response_len)) == NULL) {
@@ -341,18 +328,14 @@ static void ril_sim_read_binary(struct ofono_sim *sim, int fileid,
 	struct sim_data *sd = ofono_sim_get_data(sim);
 	struct cb_data *cbd = cb_data_new(cb, data);
 	struct parcel rilp;
-	int ret;
+	int request = RIL_REQUEST_SIM_IO;
+	guint ret;
+	cbd->user = sd;
 
-	DBG("fileid: %s (%x) path: %s", sim_fileid_to_string(fileid),
-		fileid, path);
-
-        /* TODO: make conditional */
-	ril_start_request;
-	ril_append_print_buf("%scmd=0x%.2X,efid=0x%.4X,",
-			print_buf,
-			CMD_READ_BINARY,
-			fileid);
-	/* TODO: make conditional */
+	g_ril_append_print_buf(sd->ril,
+				"(cmd=0x%.2X,efid=0x%.4X,",
+				CMD_READ_BINARY,
+				fileid);
 
 	parcel_init(&rilp);
 	parcel_w_int32(&rilp, CMD_READ_BINARY);
@@ -365,27 +348,22 @@ static void ril_sim_read_binary(struct ofono_sim *sim, int fileid,
 	parcel_w_int32(&rilp, length);         /* P3 */
 	parcel_w_string(&rilp, NULL);          /* data; only req'd for writes */
 	parcel_w_string(&rilp, NULL);          /* pin2; only req'd for writes */
-	parcel_w_string(&rilp, sd->app_id);    /* AID (Application ID) */
+	parcel_w_string(&rilp, sd->aid_str);
 
 	ret = g_ril_send(sd->ril,
-				RIL_REQUEST_SIM_IO,
+				request,
 				rilp.data,
 				rilp.size,
 				ril_file_io_cb, cbd, g_free);
 
-	/* TODO: make conditional */
-	ril_append_print_buf("%s%d,%d,%d,%s,pin2=%s,aid=%s",
-			print_buf,
-			(start >> 8),
-			(start & 0xff),
-			length,
-			NULL,
-			NULL,
-			sd->app_id);
-
-	ril_close_request;
-	ril_print_request(ret, RIL_REQUEST_SIM_IO);
-	/* TODO: make conditional */
+	g_ril_append_print_buf(sd->ril,
+				"%s%d,%d,%d,(null),pin2=(null),aid=%s)",
+				print_buf,
+				(start >> 8),
+				(start & 0xff),
+				length,
+				sd->aid_str);
+	g_ril_print_request(sd->ril, ret, request);
 
 	parcel_free(&rilp);
 
@@ -403,19 +381,18 @@ static void ril_sim_read_record(struct ofono_sim *sim, int fileid,
 	struct sim_data *sd = ofono_sim_get_data(sim);
 	struct cb_data *cbd = cb_data_new(cb, data);
 	struct parcel rilp;
-	int ret;
-
-        /* TODO: make conditional */
-	ril_start_request;
-	ril_append_print_buf("%scmd=0x%.2X,efid=0x%.4X,",
-			print_buf,
-			CMD_GET_RESPONSE,
-			fileid);
-	/* TODO: make conditional */
+	int request = RIL_REQUEST_SIM_IO;
+	guint ret;
+	cbd->user = sd;
 
 	parcel_init(&rilp);
 	parcel_w_int32(&rilp, CMD_READ_RECORD);
 	parcel_w_int32(&rilp, fileid);
+
+	g_ril_append_print_buf(sd->ril,
+				"(cmd=0x%.2X,efid=0x%.4X,",
+				CMD_GET_RESPONSE,
+				fileid);
 
 	set_path(sd, &rilp, fileid, path, path_len);
 
@@ -424,26 +401,22 @@ static void ril_sim_read_record(struct ofono_sim *sim, int fileid,
 	parcel_w_int32(&rilp, length);      /* P3 */
 	parcel_w_string(&rilp, NULL);       /* data; only req'd for writes */
 	parcel_w_string(&rilp, NULL);       /* pin2; only req'd for writes */
-	parcel_w_string(&rilp, sd->app_id); /* AID (Application ID) */
+	parcel_w_string(&rilp, sd->aid_str); /* AID (Application ID) */
 
 	ret = g_ril_send(sd->ril,
-				RIL_REQUEST_SIM_IO,
+				request,
 				rilp.data,
 				rilp.size,
 				ril_file_io_cb, cbd, g_free);
 
-	/* TODO: make conditional */
-	ril_append_print_buf("%s%d,%d,%d,%s,pin2=%s,aid=%s",
-			print_buf,
-			record,
-			4,
-			length,
-			NULL,
-			NULL,
-			sd->app_id);
-	ril_close_request;
-	ril_print_request(ret, RIL_REQUEST_SIM_IO);
-	/* TODO: make conditional */
+	g_ril_append_print_buf(sd->ril,
+				"%s%d,%d,%d,(null),pin2=(null),aid=%s)",
+				print_buf,
+				record,
+				4,
+				length,
+				sd->aid_str);
+	g_ril_print_request(sd->ril, ret, request);
 
 	parcel_free(&rilp);
 
@@ -457,6 +430,7 @@ static void ril_imsi_cb(struct ril_msg *message, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
 	ofono_sim_imsi_cb_t cb = cbd->cb;
+	struct sim_data *sd = cbd->user;
 	struct ofono_error error;
 	struct parcel rilp;
 	gchar *imsi;
@@ -465,7 +439,6 @@ static void ril_imsi_cb(struct ril_msg *message, gpointer user_data)
 		DBG("GET IMSI reply - OK");
 		decode_ril_error(&error, "OK");
 	} else {
-		DBG("Reply failure: %s", ril_error_to_string(message->error));
 		decode_ril_error(&error, "FAIL");
 		cb(&error, NULL, cbd->data);
 		return;
@@ -478,20 +451,8 @@ static void ril_imsi_cb(struct ril_msg *message, gpointer user_data)
         /* FIXME: g_assert(message->buf_len <= 19); */
 	imsi = parcel_r_string(&rilp);
 
-	/* TODO: make conditional */
-	ril_append_print_buf("[%04d]< %s",
-			message->serial_no,
-			ril_request_id_to_string(message->req));
-
-	ril_start_response;
-
-	ril_append_print_buf("%s%s",
-			print_buf,
-			imsi);
-
-	ril_close_response;
-	ril_print_response;
-	/* TODO: make conditional */
+	g_ril_append_print_buf(sd->ril, "{%s}", imsi);
+	g_ril_print_response(sd->ril, message);
 
 	cb(&error, imsi, cbd->data);
 	g_free(imsi);
@@ -503,23 +464,19 @@ static void ril_read_imsi(struct ofono_sim *sim, ofono_sim_imsi_cb_t cb,
 	struct sim_data *sd = ofono_sim_get_data(sim);
 	struct cb_data *cbd = cb_data_new(cb, data);
 	struct parcel rilp;
-	int ret;
-
-	DBG("");
+	int request = RIL_REQUEST_GET_IMSI;
+	guint ret;
+	cbd->user = sd;
 
 	parcel_init(&rilp);
-	parcel_w_int32(&rilp, 1);            /* Number of params */
-	parcel_w_string(&rilp, sd->app_id);  /* AID (Application ID) */
+	parcel_w_int32(&rilp, GET_IMSI_NUM_PARAMS);
+	parcel_w_string(&rilp, sd->aid_str);
 
-	ret = g_ril_send(sd->ril, RIL_REQUEST_GET_IMSI,
+	ret = g_ril_send(sd->ril, request,
 				rilp.data, rilp.size, ril_imsi_cb, cbd, g_free);
 
-	/* TODO: make conditional */
-	ril_start_request;
-	ril_append_print_buf("%s%s", print_buf, sd->app_id);
-	ril_close_request;
-	ril_print_request(ret, RIL_REQUEST_GET_IMSI);
-	/* TODO: make conditional */
+	g_ril_append_print_buf(sd->ril, "(%s)", sd->aid_str);
+	g_ril_print_request(sd->ril, ret, request);
 
 	parcel_free(&rilp);
 
@@ -529,50 +486,363 @@ static void ril_read_imsi(struct ofono_sim *sim, ofono_sim_imsi_cb_t cb,
 	}
 }
 
+static void configure_active_app(struct sim_data *sd,
+					struct sim_app *app,
+					guint index)
+{
+	size_t aid_size = 0, app_size = 0;
+
+	sd->app_type = app->app_type;
+	sd->aid_str = g_strdup(app->aid_str);
+	sd->app_str = g_strdup(app->app_str);
+	sd->app_index = index;
+
+	DBG("setting aid_str (AID) to: %s", sd->aid_str);
+	switch (app->app_state) {
+	case APPSTATE_PIN:
+		sd->passwd_state = OFONO_SIM_PASSWORD_SIM_PIN;
+		break;
+	case APPSTATE_PUK:
+		sd->passwd_state = OFONO_SIM_PASSWORD_SIM_PUK;
+		break;
+	case APPSTATE_SUBSCRIPTION_PERSO:
+		/* TODO: Check out how to dig out exact
+		 * SIM lock.
+		 */
+		sd->passwd_state = OFONO_SIM_PASSWORD_PHSIM_PIN;
+		break;
+	case APPSTATE_READY:
+		sd->passwd_state = OFONO_SIM_PASSWORD_NONE;
+		break;
+	case APPSTATE_UNKNOWN:
+	case APPSTATE_DETECTED:
+	default:
+		sd->passwd_state = OFONO_SIM_PASSWORD_INVALID;
+		break;
+	}
+}
+
 static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 {
 	struct ofono_sim *sim = user_data;
 	struct sim_data *sd = ofono_sim_get_data(sim);
-	struct sim_app app;
+	struct sim_app *apps[MAX_UICC_APPS];
+	struct sim_status status;
+	guint i = 0;
+	guint search_index = -1;
 
-	DBG("");
+	if (ril_util_parse_sim_status(sd->ril, message,	&status, apps) &&
+		status.num_apps) {
 
-	if (ril_util_parse_sim_status(message, &app)) {
-		if (app.app_id)
-			sd->app_id = app.app_id;
+		DBG("num_apps: %d gsm_umts_index: %d", status.num_apps,
+			status.gsm_umts_index);
 
-		if (app.app_type != RIL_APPTYPE_UNKNOWN)
-			sd->app_type = app.app_type;
+		/* TODO(CDMA): need some kind of logic to
+		 * set the correct app_index,
+		 */
+		search_index = status.gsm_umts_index;
 
-		ofono_sim_register(sim);
+		for (i = 0; i < status.num_apps; i++) {
+			if (i == search_index &&
+				apps[i]->app_type != RIL_APPTYPE_UNKNOWN) {
+				configure_active_app(sd, apps[i], i);
+				break;
+			}
+		}
+
+		if (sd->sim_registered == FALSE) {
+			ofono_sim_register(sim);
+			sd->sim_registered = TRUE;
+		} else
+			/* TODO: There doesn't seem to be any other
+			 * way to force the core SIM code to
+			 * recheck the PIN.
+			 * Wouldn't __ofono_sim_refresh be
+			 * more appropriate call here??
+			 * __ofono_sim_refresh(sim, NULL, TRUE, TRUE);
+			 */
+			__ofono_sim_recheck_pin(sim);
+
+		ril_util_free_sim_apps(apps, status.num_apps);
 	}
 
 	/* TODO: if no SIM present, handle emergency calling. */
 }
 
+
 static int send_get_sim_status(struct ofono_sim *sim)
 {
 	struct sim_data *sd = ofono_sim_get_data(sim);
-	int ret;
+	int request = RIL_REQUEST_GET_SIM_STATUS;
+	guint ret;
 
-	ret = g_ril_send(sd->ril, RIL_REQUEST_GET_SIM_STATUS,
+	ret = g_ril_send(sd->ril, request,
 				NULL, 0, sim_status_cb, sim, NULL);
 
-	/* TODO: make conditional */
-	ril_clear_print_buf;
-	ril_print_request(ret, RIL_REQUEST_GET_SIM_STATUS);
-	/* TODO: make conditional */
+	g_ril_print_request_no_args(sd->ril, ret, request);
 
 	return ret;
+}
+
+static void ril_sim_status_changed(struct ril_msg *message, gpointer user_data)
+{
+	struct ofono_sim *sim = (struct ofono_sim *) user_data;
+	struct sim_data *sd = ofono_sim_get_data(sim);
+
+	DBG("");
+
+	g_ril_print_unsol_no_args(sd->ril, message);
+
+	send_get_sim_status(sim);
+}
+
+static void ril_query_passwd_state(struct ofono_sim *sim,
+					ofono_sim_passwd_cb_t cb, void *data)
+{
+	struct sim_data *sd = ofono_sim_get_data(sim);
+	DBG("passwd_state %u", sd->passwd_state);
+
+	if (sd->passwd_state == OFONO_SIM_PASSWORD_INVALID)
+		CALLBACK_WITH_FAILURE(cb, -1, data);
+
+	CALLBACK_WITH_SUCCESS(cb, sd->passwd_state, data);
+}
+
+static void ril_pin_change_state_cb(struct ril_msg *message, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_sim_lock_unlock_cb_t cb = cbd->cb;
+	struct sim_data *sd = cbd->user;
+
+	/* There is no reason to ask SIM status until
+	 * unsolicited sim status change indication
+	 * Looks like state does not change before that.
+	 */
+
+	/* TODO: re-bfactor to not use macro for FAILURE; doesn't return error! */
+	if (message->error == RIL_E_SUCCESS) {
+		CALLBACK_WITH_SUCCESS(cb, cbd->data);
+		g_ril_print_response_no_args(sd->ril, message);
+
+	} else
+		CALLBACK_WITH_FAILURE(cb, cbd->data);
+
+}
+
+static void ril_pin_send(struct ofono_sim *sim, const char *passwd,
+				ofono_sim_lock_unlock_cb_t cb, void *data)
+{
+	struct sim_data *sd = ofono_sim_get_data(sim);
+	struct cb_data *cbd = cb_data_new(cb, data);
+	struct parcel rilp;
+	int request = RIL_REQUEST_ENTER_SIM_PIN;
+	int ret;
+
+	cbd->user = sd;
+
+	parcel_init(&rilp);
+
+	parcel_w_int32(&rilp, ENTER_SIM_PIN_PARAMS);
+	parcel_w_string(&rilp, (char *) passwd);
+	parcel_w_string(&rilp, sd->aid_str);
+
+	ret = g_ril_send(sd->ril, request,
+				rilp.data, rilp.size, ril_pin_change_state_cb,
+				cbd, g_free);
+
+	g_ril_append_print_buf(sd->ril, "(%s,aid=%s)", passwd, sd->aid_str);
+	g_ril_print_request(sd->ril, ret, request);
+
+	parcel_free(&rilp);
+
+	if (ret <= 0) {
+		g_free(cbd);
+		CALLBACK_WITH_FAILURE(cb, data);
+	}
+}
+
+static void ril_pin_change_state(struct ofono_sim *sim,
+					enum ofono_sim_password_type passwd_type,
+					int enable, const char *passwd,
+					ofono_sim_lock_unlock_cb_t cb, void *data)
+{
+	struct sim_data *sd = ofono_sim_get_data(sim);
+	struct cb_data *cbd = cb_data_new(cb, data);
+	struct parcel rilp;
+	int request = RIL_REQUEST_SET_FACILITY_LOCK;
+	int ret = 0;
+
+	cbd->user = sd;
+
+	parcel_init(&rilp);
+	parcel_w_int32(&rilp, SET_FACILITY_LOCK_PARAMS);
+
+	/*
+	 * TODO: clean up the use of string literals &
+	 * the multiple g_ril_append_print_buf() calls
+	 * by using a table lookup as does the core sim code
+	 */
+	switch (passwd_type) {
+	case OFONO_SIM_PASSWORD_SIM_PIN:
+		g_ril_append_print_buf(sd->ril, "(SC,");
+		parcel_w_string(&rilp, "SC");
+		break;
+	case OFONO_SIM_PASSWORD_PHSIM_PIN:
+		g_ril_append_print_buf(sd->ril, "(PS,");
+		parcel_w_string(&rilp, "PS");
+		break;
+	case OFONO_SIM_PASSWORD_PHFSIM_PIN:
+		g_ril_append_print_buf(sd->ril, "(PF,");
+		parcel_w_string(&rilp, "PF");
+		break;
+	case OFONO_SIM_PASSWORD_SIM_PIN2:
+		g_ril_append_print_buf(sd->ril, "(P2,");
+		parcel_w_string(&rilp, "P2");
+		break;
+	case OFONO_SIM_PASSWORD_PHNET_PIN:
+		g_ril_append_print_buf(sd->ril, "(PN,");
+		parcel_w_string(&rilp, "PN");
+		break;
+	case OFONO_SIM_PASSWORD_PHNETSUB_PIN:
+		g_ril_append_print_buf(sd->ril, "(PU,");
+		parcel_w_string(&rilp, "PU");
+		break;
+	case OFONO_SIM_PASSWORD_PHSP_PIN:
+		g_ril_append_print_buf(sd->ril, "(PP,");
+		parcel_w_string(&rilp, "PP");
+		break;
+	case OFONO_SIM_PASSWORD_PHCORP_PIN:
+		g_ril_append_print_buf(sd->ril, "(PC,");
+		parcel_w_string(&rilp, "PC");
+		break;
+	default:
+		CALLBACK_WITH_FAILURE(cb, data);
+		return;
+	}
+
+	if (enable)
+		parcel_w_string(&rilp, RIL_FACILITY_LOCK);
+	else
+		parcel_w_string(&rilp, RIL_FACILITY_UNLOCK);
+
+	parcel_w_string(&rilp, (char *) passwd);
+
+	/* TODO: make this a constant... */
+	parcel_w_string(&rilp, "0");		/* class */
+
+	parcel_w_string(&rilp, sd->aid_str);
+
+	ret = g_ril_send(sd->ril, request,
+				rilp.data, rilp.size, ril_pin_change_state_cb,
+				cbd, g_free);
+
+	g_ril_append_print_buf(sd->ril, "%s,%d,%s,0,aid=%s)",
+				print_buf,
+				enable,
+				passwd,
+				sd->aid_str);
+
+	g_ril_print_request(sd->ril, ret, request);
+
+	parcel_free(&rilp);
+
+	if (ret <= 0) {
+		g_free(cbd);
+		CALLBACK_WITH_FAILURE(cb, data);
+	}
+}
+
+static void ril_pin_send_puk(struct ofono_sim *sim,
+				const char *puk, const char *passwd,
+				ofono_sim_lock_unlock_cb_t cb, void *data)
+{
+	struct sim_data *sd = ofono_sim_get_data(sim);
+	struct cb_data *cbd = cb_data_new(cb, data);
+	struct parcel rilp;
+	int request = RIL_REQUEST_ENTER_SIM_PUK;
+	int ret = 0;
+
+	cbd->user = sd;
+
+	parcel_init(&rilp);
+
+	parcel_w_int32(&rilp, ENTER_SIM_PUK_PARAMS);
+	parcel_w_string(&rilp, (char *) puk);
+	parcel_w_string(&rilp, (char *) passwd);
+	parcel_w_string(&rilp, sd->aid_str);
+
+	ret = g_ril_send(sd->ril, request,
+			rilp.data, rilp.size, ril_pin_change_state_cb,
+			cbd, g_free);
+
+	g_ril_append_print_buf(sd->ril, "(puk=%s,pin=%s,aid=%s)",
+				puk, passwd,
+				sd->aid_str);
+
+	g_ril_print_request(sd->ril, ret, request);
+
+	parcel_free(&rilp);
+
+	if (ret <= 0) {
+		g_free(cbd);
+		CALLBACK_WITH_FAILURE(cb, data);
+	}
+}
+
+static void ril_change_passwd(struct ofono_sim *sim,
+				enum ofono_sim_password_type passwd_type,
+				const char *old, const char *new,
+				ofono_sim_lock_unlock_cb_t cb, void *data)
+{
+	struct sim_data *sd = ofono_sim_get_data(sim);
+	struct cb_data *cbd = cb_data_new(cb, data);
+	struct parcel rilp;
+	int request = RIL_REQUEST_CHANGE_SIM_PIN;
+	int ret = 0;
+
+	cbd->user = sd;
+
+	parcel_init(&rilp);
+
+	parcel_w_int32(&rilp, CHANGE_SIM_PIN_PARAMS);
+	parcel_w_string(&rilp, (char *) old);	/* PUK */
+	parcel_w_string(&rilp, (char *) new);	/* PIN */
+	parcel_w_string(&rilp, sd->aid_str);
+
+	if (passwd_type == OFONO_SIM_PASSWORD_SIM_PIN2)
+		request = RIL_REQUEST_CHANGE_SIM_PIN2;
+
+	ret = g_ril_send(sd->ril, request, rilp.data, rilp.size,
+			ril_pin_change_state_cb, cbd, g_free);
+
+	g_ril_append_print_buf(sd->ril, "(old=%s,new=%s,aid=%s)",
+				old, new,
+				sd->aid_str);
+
+	g_ril_print_request(sd->ril, ret, request);
+
+	parcel_free(&rilp);
+
+	if (ret <= 0) {
+		g_free(cbd);
+		CALLBACK_WITH_FAILURE(cb, data);
+	}
 }
 
 static gboolean ril_sim_register(gpointer user)
 {
 	struct ofono_sim *sim = user;
+	struct sim_data *sd = ofono_sim_get_data(sim);
 
-	DBG("");
+ 	DBG("");
 
-	send_get_sim_status(sim);
+ 	send_get_sim_status(sim);
+
+	g_ril_register(sd->ril, RIL_UNSOL_RESPONSE_SIM_STATUS_CHANGED,
+			(GRilNotifyFunc) ril_sim_status_changed, sim);
+
+	/* TODO: should we also register for RIL_UNSOL_SIM_REFRESH? */
+
 	return FALSE;
 }
 
@@ -582,12 +852,13 @@ static int ril_sim_probe(struct ofono_sim *sim, unsigned int vendor,
 	GRil *ril = data;
 	struct sim_data *sd;
 
-	DBG("");
-
 	sd = g_new0(struct sim_data, 1);
 	sd->ril = g_ril_clone(ril);
-	sd->app_id = NULL;
+	sd->aid_str = NULL;
+	sd->app_str = NULL;
 	sd->app_type = RIL_APPTYPE_UNKNOWN;
+	sd->passwd_state = OFONO_SIM_PASSWORD_NONE;
+	sd->sim_registered = FALSE;
 
 	ofono_sim_set_data(sim, sd);
 
@@ -626,6 +897,11 @@ static struct ofono_sim_driver driver = {
 	.read_file_linear	= ril_sim_read_record,
 	.read_file_cyclic	= ril_sim_read_record,
  	.read_imsi		= ril_read_imsi,
+	.query_passwd_state	= ril_query_passwd_state,
+	.send_passwd		= ril_pin_send,
+	.lock			= ril_pin_change_state,
+	.reset_passwd		= ril_pin_send_puk,
+	.change_passwd		= ril_change_passwd,
 /*
  * TODO: Implmenting PIN/PUK support requires defining
  * the following driver methods.
@@ -635,12 +911,7 @@ static struct ofono_sim_driver driver = {
  * presence of query_passwd_state, and if null, then the
  * function sim_initialize_after_pin() is called.
  *
- *	.query_passwd_state	= ril_pin_query,
  *	.query_pin_retries	= ril_pin_retries_query,
- *	.send_passwd		= ril_pin_send,
- *	.reset_passwd		= ril_pin_send_puk,
- *	.lock			= ril_pin_enable,
- *	.change_passwd		= ril_change_passwd,
  *	.query_locked		= ril_pin_query_enabled,
  *
  * TODO: Implementing SIM write file IO support requires

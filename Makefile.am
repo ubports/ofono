@@ -93,7 +93,10 @@ gril_sources = gril/gril.h gril/gril.c gril/grilio.h \
 				gril/grilio.c gril/grilutil.h \
 				gril/grilutil.c gril/ringbuffer.h \
 				gril/gfunc.h gril/ril.h \
-				gril/parcel.c gril/parcel.h
+				gril/parcel.c gril/parcel.h \
+				gril/grilreply.c gril/grilreply.h \
+				gril/grilrequest.c gril/grilrequest.h \
+				gril/grilunsol.c gril/grilunsol.h
 
 btio_sources = btio/btio.h btio/btio.c
 
@@ -466,6 +469,11 @@ builtin_libadd += @BLUEZ_LIBS@
 endif
 endif
 
+if NETTIME
+builtin_modules += nettime
+builtin_sources += plugins/nettime.c
+endif
+
 if PROVISION
 builtin_sources += plugins/mbpi.h plugins/mbpi.c
 
@@ -679,7 +687,10 @@ unit_objects =
 
 unit_tests = unit/test-common unit/test-util unit/test-idmap \
 				unit/test-simutil unit/test-stkutil \
-				unit/test-sms unit/test-cdmasms
+				unit/test-sms unit/test-cdmasms \
+				unit/test-grilrequest \
+				unit/test-grilreply \
+				unit/test-grilunsol
 
 noinst_PROGRAMS = $(unit_tests) \
 			unit/test-sms-root unit/test-mux unit/test-caif
@@ -730,6 +741,21 @@ unit_test_caif_SOURCES = unit/test-caif.c $(gatchat_sources) \
 					drivers/stemodem/if_caif.h
 unit_test_caif_LDADD = @GLIB_LIBS@
 unit_objects += $(unit_test_caif_OBJECTS)
+
+unit_test_grilrequest_SOURCES = unit/test-grilrequest.c $(gril_sources) \
+				src/log.c gatchat/ringbuffer.c
+unit_test_grilrequest_LDADD = @GLIB_LIBS@
+unit_objects += $(unit_test_grilrequest_OBJECTS)
+
+unit_test_grilreply_SOURCES = unit/test-grilreply.c $(gril_sources) \
+				src/log.c gatchat/ringbuffer.c
+unit_test_grilreply_LDADD = @GLIB_LIBS@
+unit_objects += $(unit_test_grilreply_OBJECTS)
+
+unit_test_grilunsol_SOURCES = unit/test-grilunsol.c $(gril_sources) \
+				src/log.c gatchat/ringbuffer.c
+unit_test_grilunsol_LDADD = @GLIB_LIBS@
+unit_objects += $(unit_test_grilunsol_OBJECTS)
 
 TESTS = $(unit_tests)
 
