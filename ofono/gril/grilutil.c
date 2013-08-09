@@ -30,8 +30,55 @@
 
 #include <glib.h>
 
+#include <ofono/modem.h>
+#include <ofono/gprs-context.h>
+#include <ofono/types.h>
+
 #include "grilutil.h"
+#include "parcel.h"
 #include "ril_constants.h"
+
+/* Constants used by CALL_LIST, and SETUP_DATA_CALL RIL requests */
+#define PROTO_IP_STR "IP"
+#define PROTO_IPV6_STR "IPV6"
+#define PROTO_IPV4V6_STR "IPV4V6"
+
+const char *ril_ofono_protocol_to_ril_string(guint protocol)
+{
+	char *result;
+
+	switch (protocol) {
+	case OFONO_GPRS_PROTO_IPV6:
+		result = PROTO_IPV6_STR;
+		break;
+	case OFONO_GPRS_PROTO_IPV4V6:
+		result = PROTO_IPV4V6_STR;
+		break;
+	case OFONO_GPRS_PROTO_IP:
+		result = PROTO_IP_STR;
+		break;
+	default:
+		result = NULL;
+	}
+
+	return result;
+}
+
+int ril_protocol_string_to_ofono_protocol(gchar *protocol_str)
+{
+	int result;
+
+	if (g_strcmp0(protocol_str, PROTO_IPV6_STR) == 0)
+		result = OFONO_GPRS_PROTO_IPV6;
+	else if (g_strcmp0(protocol_str, PROTO_IPV4V6_STR) == 0)
+		result = OFONO_GPRS_PROTO_IPV4V6;
+	else if (g_strcmp0(protocol_str, PROTO_IP_STR) == 0)
+		result = OFONO_GPRS_PROTO_IP;
+	else
+		result = -1;
+
+	return result;
+}
 
 const char *ril_appstate_to_string(int app_state)
 {
