@@ -62,29 +62,28 @@
 
 struct gprs_data {
 	GRil *ril;
+	gboolean ofono_attached;
 	int max_cids;
-	int tech;
-	int status;
+	int rild_status;
 };
 
-/* TODO: make conditional */
-static char print_buf[PRINT_BUF_SIZE];
-
 static void ril_gprs_registration_status(struct ofono_gprs *gprs,
-						ofono_gprs_status_cb_t cb,
-						void *data);
+					ofono_gprs_status_cb_t cb,
+					void *data);
 
 static void ril_gprs_state_change(struct ril_msg *message, gpointer user_data)
 {
 	struct ofono_gprs *gprs = user_data;
+	struct gprs_data *gd = ofono_gprs_get_data(gprs);
 
-	if (message->req != RIL_UNSOL_RESPONSE_VOICE_NETWORK_STATE_CHANGED) {
-		ofono_error("ril_gprs_state_change: invalid message received %d",
-				message->req);
-		return;
-	}
+	g_assert(message->req == RIL_UNSOL_RESPONSE_VOICE_NETWORK_STATE_CHANGED);
 
-	ril_gprs_registration_status(gprs, NULL, NULL);
+	/*
+	 * We are just want to track network data status change if ofono
+	 * itself is attached, so we avoid unnecessary data state requests.
+	 */
+	if (gd->ofono_attached == TRUE)
+		ril_gprs_registration_status(gprs, NULL, NULL);
 }
 
 static void ril_gprs_set_pref_network_cb(struct ril_msg *message,
@@ -99,6 +98,8 @@ static void ril_gprs_set_pref_network(struct ofono_gprs *gprs)
 {
 	struct gprs_data *gd = ofono_gprs_get_data(gprs);
 	struct parcel rilp;
+	int request = RIL_REQUEST_SET_PREFERRED_NETWORK_TYPE;
+	int ret;
 
 	DBG("");
 
@@ -113,10 +114,13 @@ static void ril_gprs_set_pref_network(struct ofono_gprs *gprs)
 	parcel_init(&rilp);
 	parcel_w_int32(&rilp, PREF_NET_TYPE_GSM_WCDMA);
 
-	if (g_ril_send(gd->ril, RIL_REQUEST_SET_PREFERRED_NETWORK_TYPE,
-			rilp.data, rilp.size, ril_gprs_set_pref_network_cb, NULL, NULL) <= 0) {
+	ret = g_ril_send(gd->ril, request,
+				rilp.data, rilp.size, ril_gprs_set_pref_network_cb, NULL, NULL);
+
+	g_ril_print_request_no_args(gd->ril, ret, request);
+
+	if (ret <= 0)
 		ofono_error("Send RIL_REQUEST_SET_PREFERRED_NETWORK_TYPE failed.");
-	}
 
 	parcel_free(&rilp);
 }
@@ -125,19 +129,25 @@ static void ril_gprs_set_attached(struct ofono_gprs *gprs, int attached,
 					ofono_gprs_cb_t cb, void *data)
 {
 	struct cb_data *cbd = cb_data_new(cb, data);
+	struct gprs_data *gd = ofono_gprs_get_data(gprs);
 	struct ofono_error error;
 
-	DBG("");
+	DBG("attached: %d", attached);
 
 	decode_ril_error(&error, "OK");
 
-	/* This code should just call the callback with OK, and be done
-	 * there's no explicit RIL command to cause an attach.
+	/*
+	 * As RIL offers no actual control over the GPRS 'attached'
+	 * state, we save the desired state, and use it to override
+	 * the actual modem's state in the 'attached_status' function.
+	 * This is similar to the way the core ofono gprs code handles
+	 * data roaming ( see src/gprs.c gprs_netreg_update().
 	 *
 	 * The core gprs code calls driver->set_attached() when a netreg
 	 * notificaiton is received and any configured roaming conditions
 	 * are met.
 	 */
+	gd->ofono_attached = attached;
 
 	cb(&error, cbd->data);
 	g_free(cbd);
@@ -150,6 +160,7 @@ static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
 	struct ofono_gprs *gprs = cbd->user;
 	struct gprs_data *gd = ofono_gprs_get_data(gprs);
 	struct ofono_error error;
+	gboolean attached;
 	int status, lac, ci, tech;
 	int max_cids = 1;
 
@@ -164,7 +175,7 @@ static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
 		goto error;
 	}
 
-	if (ril_util_parse_reg(message, &status,
+	if (ril_util_parse_reg(gd->ril, message, &status,
 				&lac, &ci, &tech, &max_cids) == FALSE) {
 		ofono_error("Failure parsing data registration response.");
 		decode_ril_error(&error, "FAIL");
@@ -172,10 +183,10 @@ static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
 		goto error;
 	}
 
-	if (gd->status == -1) {
-		DBG("calling ofono_gprs_register...");
+	if (gd->rild_status == -1) {
 		ofono_gprs_register(gprs);
 
+		/* RILD tracks data network state together with voice */
 		g_ril_register(gd->ril, RIL_UNSOL_RESPONSE_VOICE_NETWORK_STATE_CHANGED,
 				ril_gprs_state_change, gprs);
 	}
@@ -186,13 +197,25 @@ static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
 		ofono_gprs_set_cid_range(gprs, 1, max_cids);
 	}
 
-	if (gd->status != status) {
-		DBG("gd->status: %d status: %d", gd->status, status);
+	/* Just need to notify ofono if it's already attached */
+	if (gd->ofono_attached && (gd->rild_status != status)) {
 		ofono_gprs_status_notify(gprs, status);
 	}
 
-	gd->status = status;
-	gd->tech = tech;
+	gd->rild_status = status;
+
+	/*
+	 * Override the actual status based upon the desired
+	 * attached status set by the core GPRS code ( controlled
+	 * by the ConnnectionManager's 'Powered' property ).
+	 */
+	attached = (status == NETWORK_REGISTRATION_STATUS_REGISTERED ||
+			status == NETWORK_REGISTRATION_STATUS_ROAMING);
+
+	if (attached && gd->ofono_attached == FALSE) {
+		DBG("attached=true; ofono_attached=false; return !REGISTERED");
+		status = NETWORK_REGISTRATION_STATUS_NOT_REGISTERED;
+	}
 
 error:
 	if (cb)
@@ -205,15 +228,15 @@ static void ril_gprs_registration_status(struct ofono_gprs *gprs,
 {
 	struct gprs_data *gd = ofono_gprs_get_data(gprs);
 	struct cb_data *cbd = cb_data_new(cb, data);
+	int request = RIL_REQUEST_DATA_REGISTRATION_STATE;
 	guint ret;
 
 	cbd->user = gprs;
 
-	ret = g_ril_send(gd->ril, RIL_REQUEST_DATA_REGISTRATION_STATE,
+	ret = g_ril_send(gd->ril, request,
 				NULL, 0, ril_data_reg_cb, cbd, g_free);
 
-	ril_clear_print_buf;
-	ril_print_request(ret, RIL_REQUEST_DATA_REGISTRATION_STATE);
+	g_ril_print_request_no_args(gd->ril, ret, request);
 
 	if (ret <= 0) {
 		ofono_error("Send RIL_REQUEST_DATA_RESTISTRATION_STATE failed.");
@@ -228,15 +251,14 @@ static int ril_gprs_probe(struct ofono_gprs *gprs,
 	GRil *ril = data;
 	struct gprs_data *gd;
 
-        DBG("");
-
 	gd = g_try_new0(struct gprs_data, 1);
 	if (gd == NULL)
 		return -ENOMEM;
 
 	gd->ril = g_ril_clone(ril);
+	gd->ofono_attached = FALSE;
 	gd->max_cids = 0;
-	gd->status = -1;
+	gd->rild_status = -1;
 
 	ofono_gprs_set_data(gprs, gd);
 

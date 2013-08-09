@@ -22,33 +22,7 @@
 
 #include <stdio.h>
 
-#include <ofono/modem.h>
-#include <ofono/sim.h>
-
 #include "parcel.h"
-#include "ril_constants.h"
-
-/* TODO:
- *  Guard with #ifdef RIL_DEBUG
- *  Based on code from:
- *
- *  $AOSP/hardware/ril/libril/ril.cpp
- */
-#define ril_start_request           sprintf(print_buf, "(")
-#define ril_close_request           sprintf(print_buf, "%s)", print_buf)
-#define ril_print_request(token, req)           \
-        ofono_debug("[%04d]> %s %s", token, ril_request_id_to_string(req), print_buf)
-
-#define ril_start_response          sprintf(print_buf, "%s {", print_buf)
-#define ril_close_response          sprintf(print_buf, "%s}", print_buf)
-#define ril_print_response          ofono_debug("%s", print_buf)
-
-#define ril_clear_print_buf         print_buf[0] = 0
-#define ril_remove_last_char        print_buf[strlen(print_buf)-1] = 0
-#define ril_append_print_buf(x...)  sprintf(print_buf, x)
-
-// request, response, and unsolicited msg print macro
-#define PRINT_BUF_SIZE 8096
 
 /* TODO: create a table lookup*/
 #define PREFIX_30_NETMASK "255.255.255.252"
@@ -88,32 +62,7 @@ enum at_util_charset {
 	RIL_UTIL_CHARSET_8859_H =	0x10000,
 };
 
-struct sim_data {
-	GRil *ril;
-	char *app_id;
-	guint app_type;
-	enum ofono_sim_password_type passwd_state;
-	ofono_bool_t ready;
-	ofono_bool_t notify_ready;
-};
-
-struct data_call {
-    int             status;
-    int             retry;
-    int             cid;
-    int             active;
-    char *          type;
-    char *          ifname;
-    char *          addresses;
-    char *          dnses;
-    char *          gateways;
-};
-
-struct sim_app {
-	char *app_id;
-	guint app_type;
-};
-
+/* TODO: consider moving these to ril_constants.h */
 enum app_state {
 	APPSTATE_UNKNOWN,
 	APPSTATE_DETECTED,
@@ -121,6 +70,28 @@ enum app_state {
 	APPSTATE_PUK,
 	APPSTATE_SUBSCRIPTION_PERSO,
 	APPSTATE_READY,
+};
+
+#define MAX_UICC_APPS 16
+
+struct sim_status {
+	guint card_state;
+	guint pin_state;
+	guint gsm_umts_index;
+	guint cdma_index;
+	guint ims_index;
+	guint num_apps;
+};
+
+struct sim_app {
+	guint app_type;
+	guint app_state;
+	guint perso_substate;
+	char *aid_str;
+	char *app_str;
+	guint pin_replaced;
+	guint pin1_state;
+	guint pin2_state;
 };
 
 typedef void (*ril_util_sim_inserted_cb_t)(gboolean present, void *userdata);
@@ -140,26 +111,27 @@ struct ril_util_sim_state_query *ril_util_sim_state_query_new(GRil *ril,
 						GDestroyNotify destroy);
 void ril_util_sim_state_query_free(struct ril_util_sim_state_query *req);
 
-GSList *ril_util_parse_clcc(struct ril_msg *message);
-GSList *ril_util_parse_data_call_list(struct ril_msg *message);
-char *ril_util_parse_sim_io_rsp(struct ril_msg *message,
+GSList *ril_util_parse_clcc(GRil *gril, struct ril_msg *message);
+char *ril_util_parse_sim_io_rsp(GRil *gril, struct ril_msg *message,
 				int *sw1, int *sw2,
 				int *hex_len);
-gboolean ril_util_parse_sim_status(struct ril_msg *message,
-									struct sim_app *app,
-									struct sim_data *sd);
-gboolean ril_util_parse_reg(struct ril_msg *message, int *status,
+gboolean ril_util_parse_sim_status(GRil *gril, struct ril_msg *message,
+					struct sim_status *status,
+					struct sim_app **apps);
+gboolean ril_util_parse_reg(GRil *gril, struct ril_msg *message, int *status,
 				int *lac, int *ci, int *tech, int *max_calls);
 
-gint ril_util_parse_sms_response(struct ril_msg *message);
+gint ril_util_parse_sms_response(GRil *gril, struct ril_msg *message);
 
-gint ril_util_get_signal(struct ril_msg *message);
+gint ril_util_get_signal(GRil *gril, struct ril_msg *message);
 
 gint ril_get_app_type();
 
 struct ofono_sim_driver *get_sim_driver();
 
 struct ofono_sim *get_sim();
+
+void ril_util_free_sim_apps(struct sim_app **apps, guint num_apps);
 
 struct cb_data {
 	void *cb;

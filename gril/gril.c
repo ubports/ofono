@@ -4,7 +4,6 @@
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *  Copyright (C) 2012 Canonical Ltd.
- *  Copyright (C) 2013 Jolla Ltd
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -41,6 +40,12 @@
 #include "log.h"
 #include "ringbuffer.h"
 #include "gril.h"
+#include "grilutil.h"
+
+#define RIL_TRACE(ril, fmt, arg...) do {	\
+	if (ril->trace == TRUE)		        \
+		ofono_debug(fmt, ## arg); 	\
+} while (0)
 
 #define COMMAND_FLAG_EXPECT_PDU			0x1
 #define COMMAND_FLAG_EXPECT_SHORT_PROMPT	0x2
@@ -86,9 +91,12 @@ struct ril_s {
 	GRilDisconnectFunc user_disconnect;	/* user disconnect func */
 	gpointer user_disconnect_data;		/* user disconnect data */
 	guint read_so_far;			/* Number of bytes processed */
+	gboolean connected;                     /* RIL_UNSOL_CONNECTED rvcd */
 	gboolean suspended;			/* Are we suspended? */
 	GRilDebugFunc debugf;			/* debugging output function */
 	gpointer debug_data;			/* Data to pass to debug func */
+	gboolean debug;
+	gboolean trace;
 	GSList *response_lines;			/* char * lines of the response */
 	gint timeout_source;
 	gboolean destroyed;			/* Re-entrancy guard */
@@ -111,6 +119,9 @@ struct ril_reply {
 	guint32 serial_no;                      /* LE: used to match requests */
 	guint32 error_code;                     /* LE: */
 };
+
+#define RIL_PRINT_BUF_SIZE 8096
+char print_buf[RIL_PRINT_BUF_SIZE] __attribute__((used));
 
 static void ril_wakeup_writer(struct ril_s *ril);
 
@@ -231,8 +242,9 @@ static struct ril_request *ril_request_create(struct ril_s *ril,
 	if (r == NULL)
 		return 0;
 
-        DBG("req: %s, id: %d, data_len: %d",
-		ril_request_id_to_string(req), id, data_len);
+
+	DBG("req: %s, id: %d, data_len: %d",
+		ril_request_id_to_string(req), id, (int) data_len);
 
         /* RIL request: 8 byte header + data */
         len = 8 + data_len;
@@ -298,8 +310,9 @@ static void ril_cleanup(struct ril_s *p)
 	g_slist_free(p->response_lines);
 	p->response_lines = NULL;
 
-	/* Cleanup registered notifications */
+	p->connected = FALSE;
 
+	/* Cleanup registered notifications */
 	if (p->notify_list)
 		g_hash_table_destroy(p->notify_list);
 
@@ -335,19 +348,18 @@ static void handle_response(struct ril_s *p, struct ril_msg *message)
 	for (i = 0; i < count; i++) {
 		req = g_queue_peek_nth(p->command_queue, i);
 
-		/* TODO: make conditional
-		 * DBG("comparing req->id: %d to message->serial_no: %d",
-		 *	req->id, message->serial_no);
-		 */
+		DBG("comparing req->id: %d to message->serial_no: %d",
+			req->id, message->serial_no);
 
 		if (req->id == message->serial_no) {
 			found = TRUE;
 			message->req = req->req;
 
-			DBG("RIL Reply: %s serial-no: %d errno: %s",
-				ril_request_id_to_string(message->req),
-				message->serial_no,
-				ril_error_to_string(message->error));
+			if (message->error != RIL_E_SUCCESS)
+				RIL_TRACE(p, "[%04d]< %s failed %s",
+						message->serial_no,
+						ril_request_id_to_string(message->req),
+						ril_error_to_string(message->error));
 
 			req = g_queue_pop_nth(p->command_queue, i);
 			if (req->callback)
@@ -390,6 +402,7 @@ static void handle_unsol_req(struct ril_s *p, struct ril_msg *message)
 	gpointer key, value;
 	GList *list_item;
 	struct ril_notify_node *node;
+	gboolean found = FALSE;
 
 	if (p->notify_list == NULL)
 		return;
@@ -398,34 +411,32 @@ static void handle_unsol_req(struct ril_s *p, struct ril_msg *message)
 
 	g_hash_table_iter_init(&iter, p->notify_list);
 
+	if (message->req == RIL_UNSOL_RIL_CONNECTED) {
+		p->connected = TRUE;
+	}
+
 	while (g_hash_table_iter_next(&iter, &key, &value)) {
 		req_key = *((int *)key);
 		notify = value;
 
-                /*
-		 * TODO: add #ifdef...
-		 * DBG("checking req_key: %d to req: %d", req_key, message->req);
-		 */
-
 		if (req_key != message->req)
 			continue;
 
-		list_item = notify->nodes;
+		list_item = (GList *) notify->nodes;
 
 		while (list_item != NULL) {
 			node = list_item->data;
 
-			/*
-			 * TODO: add #ifdef...
-			 * DBG("about to callback: notify: %x, node: %x, notify->nodes: %x, callback: %x",
-			 *	notify, node, notify->nodes, node->callback);
-			 */
-
 			node->callback(message, node->user_data);
-
-			list_item = g_slist_next(list_item);
+			found = TRUE;
+			list_item = (GList *) g_slist_next(list_item);
 		}
 	}
+
+	/* Only log events not being listended for... */
+	if (!found)
+		DBG("RIL Event: %s\n",
+			ril_unsol_request_to_string(message->req));
 
 	p->in_notify = FALSE;
 }
@@ -493,9 +504,6 @@ static void dispatch(struct ril_s *p, struct ril_msg *message)
 	}
 
 	if (message->unsolicited == TRUE) {
-		DBG("RIL Event: %s\n",
-			ril_unsol_request_to_string(message->req));
-
 		handle_unsol_req(p, message);
 	} else {
 		handle_response(p, message);
@@ -563,18 +571,13 @@ static void new_bytes(struct ring_buffer *rbuf, gpointer user_data)
 
 	p->in_read_handler = TRUE;
 
-	/*
-	 * TODO: make conditional
-	 *	DBG("len: %d, wrap: %d", len, wrap);
-	 */
+	DBG("len: %d, wrap: %d", len, wrap);
+
 	while (p->suspended == FALSE && (p->read_so_far < len)) {
 		gsize rbytes = MIN(len - p->read_so_far, wrap - p->read_so_far);
 
 		if (rbytes < 4) {
-			/*
-			 * TODO: make conditional
-			 * DBG("Not enough bytes for header length: len: %d", len);
-			 */
+			DBG("Not enough bytes for header length: len: %d", len);
 			return;
 		}
 
@@ -588,10 +591,7 @@ static void new_bytes(struct ring_buffer *rbuf, gpointer user_data)
 
 		/* wait for the rest of the record... */
 		if (message == NULL) {
-
-			/* TODO: make conditional
-			 * DBG("Not enough bytes for fixed record");
-			 */
+			DBG("Not enough bytes for fixed record");
 			break;
 		}
 
@@ -638,10 +638,9 @@ static gboolean can_write_data(gpointer data)
 
 	len = req->data_len;
 
-	/*
-	 * TODO: make conditional:
-	 * DBG("len: %d, req_bytes_written: %d", len, ril->req_bytes_written);
-	 */
+	DBG("len: %d, req_bytes_written: %d",
+		(int) len,
+		ril->req_bytes_written);
 
 	/* For some reason write watcher fired, but we've already
 	 * written the entire command out to the io channel,
@@ -676,11 +675,6 @@ static gboolean can_write_data(gpointer data)
 	bytes_written = g_ril_io_write(ril->io,
 					req->data + ril->req_bytes_written,
 					towrite);
-
-	/*
-	 * TODO: make conditional
-	 * DBG("bytes_written: %d", bytes_written);
-	 */
 
 	if (bytes_written == 0)
 		return FALSE;
@@ -795,6 +789,8 @@ static struct ril_s *create_ril()
 	ril->next_gid = 0;
 	ril->debugf = NULL;
 	ril->req_bytes_written = 0;
+	ril->trace = FALSE;
+	ril->connected = FALSE;
 
 	sk = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (sk < 0) {
@@ -820,8 +816,9 @@ static struct ril_s *create_ril()
 		return NULL;
         }
 
-		// g_ril_io_new()->g_ril_util_setup_io() sets encoding, buffering, flags, etc. for
-		// the io channel, so those shouldn't be used here.
+	g_io_channel_set_close_on_unref(io, TRUE);
+	g_io_channel_set_flags(io, G_IO_FLAG_NONBLOCK, NULL);
+
         ril->io = g_ril_io_new(io);
         if (ril->io == NULL) {
 		ofono_error("create_ril: can't create ril->io");
@@ -875,6 +872,7 @@ static guint ril_register(struct ril_s *ril, guint group,
 {
 	struct ril_notify *notify;
 	struct ril_notify_node *node;
+	struct ril_msg message;
 
 	if (ril->notify_list == NULL)
 		return 0;
@@ -900,8 +898,19 @@ static guint ril_register(struct ril_s *ril, guint group,
 	node->user_data = user_data;
 
 	notify->nodes = g_slist_prepend(notify->nodes, node);
-	DBG("after pre-pend; notify: %x, node %x, notify->nodes: %x, callback: %x",
-		notify, node, notify->nodes, node->callback);
+
+	if ((req == RIL_UNSOL_RIL_CONNECTED) && (ril->connected == TRUE)) {
+		/* fire the callback in a timer, as it won't ever fire */
+		DBG("CONNECTED already received... ");
+
+		message.req = RIL_UNSOL_RIL_CONNECTED;
+		message.unsolicited = TRUE;
+		message.buf_len = 0;
+		message.buf = NULL;
+
+		func(&message, user_data);
+	}
+
 
 	return node->id;
 }
@@ -949,6 +958,15 @@ static gboolean ril_unregister(struct ril_s *ril, gboolean mark_only,
 	}
 
 	return FALSE;
+}
+
+void g_ril_init_parcel(struct ril_msg *message, struct parcel *rilp)
+{
+	/* Set up Parcel struct for proper parsing */
+	rilp->data = message->buf;
+	rilp->size = message->buf_len;
+	rilp->capacity = message->buf_len;
+	rilp->offset = 0;
 }
 
 GRil *g_ril_new()
@@ -1017,7 +1035,7 @@ GRil *g_ril_ref(GRil *ril)
 	return ril;
 }
 
-guint g_ril_send(GRil *ril, const guint req, const char *data,
+guint g_ril_send(GRil *ril, const guint reqid, const char *data,
 			const gsize data_len, GRilResponseFunc func,
 			gpointer user_data, GDestroyNotify notify)
 {
@@ -1029,7 +1047,7 @@ guint g_ril_send(GRil *ril, const guint req, const char *data,
 
         p = ril->parent;
 
-	r = ril_request_create(p, ril->group, req, p->next_cmd_id,
+	r = ril_request_create(p, ril->group, reqid, p->next_cmd_id,
 				data, data_len, func,
 				user_data, notify, FALSE);
 	if (r == NULL)
@@ -1080,7 +1098,25 @@ void g_ril_unref(GRil *ril)
 	g_free(ril);
 }
 
-gboolean g_ril_set_debug(GRil *ril,
+gboolean g_ril_get_trace(GRil *ril)
+{
+
+	if (ril == NULL || ril->parent == NULL)
+		return FALSE;
+
+	return ril->parent->trace;
+}
+
+gboolean g_ril_set_trace(GRil *ril, gboolean trace)
+{
+
+	if (ril == NULL || ril->parent == NULL)
+		return FALSE;
+
+	return (ril->parent->trace = trace);
+}
+
+gboolean g_ril_set_debugf(GRil *ril,
 			GRilDebugFunc func, gpointer user_data)
 {
 
