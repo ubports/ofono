@@ -4,7 +4,6 @@
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *  Copyright (C) 2012 Canonical Ltd.
- *	Copyright (C) 2013 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -113,6 +112,8 @@ static void ril_query_revision(struct ofono_devinfo *info,
 	ret = g_ril_send(ril, request, NULL, 0,
 					query_revision_cb, cbd, g_free);
 
+	g_ril_print_request_no_args(ril, ret, request);
+
 	if (ret <= 0) {
 		g_free(cbd);
 		CALLBACK_WITH_FAILURE(cb, NULL, data);
@@ -158,6 +159,8 @@ static void ril_query_serial(struct ofono_devinfo *info,
 	ret = g_ril_send(ril, request, NULL, 0,
 					query_serial_cb, cbd, g_free);
 
+	g_ril_print_request_no_args(ril, ret, request);
+
 	if (ret <= 0) {
 		g_free(cbd);
 		CALLBACK_WITH_FAILURE(cb, NULL, data);
@@ -183,6 +186,8 @@ static int ril_devinfo_probe(struct ofono_devinfo *info, unsigned int vendor,
 		ril = g_ril_clone(data);
 
 	ofono_devinfo_set_data(info, ril);
+
+	DBG("");
 
 	/*
 	 * TODO: analyze if capability check is needed

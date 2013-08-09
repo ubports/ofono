@@ -76,11 +76,23 @@
 #define RADIO_TECH_HSPAP 15
 #define RADIO_TECH_GSM 16
 
+/* see RIL_REQUEST_DEACTIVATE_DATA_CALL parameter*/
+#define RIL_DEACTIVATE_DATA_CALL_NO_REASON 0
+#define RIL_DEACTIVATE_DATA_CALL_RADIO_SHUTDOWN 1
+
 /* See RIL_REQUEST_SETUP_DATA_CALL */
 
 #define RIL_DATA_PROFILE_DEFAULT 0
 #define RIL_DATA_PROFILE_TETHERED 1
+#define RIL_DATA_PROFILE_IMS 2
+#define RIL_DATA_PROFILE_FOTA 3           /* FOTA = Firmware Over the Air */
+#define RIL_DATA_PROFILE_CBS 4
 #define RIL_DATA_PROFILE_OEM_BASE 1000    /* Start of OEM-specific profiles */
+
+#define RIL_AUTH_NONE 0
+#define RIL_AUTH_PAP 1
+#define RIL_AUTH_CHAP 2
+#define RIL_AUTH_BOTH 3
 
 /* SIM card states */
 #define RIL_CARDSTATE_ABSENT 0

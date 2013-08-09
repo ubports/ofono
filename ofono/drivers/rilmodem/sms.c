@@ -159,6 +159,7 @@ static void submit_sms_cb(struct ril_msg *message, gpointer user_data)
 	struct cb_data *cbd = user_data;
 	struct ofono_error error;
 	ofono_sms_submit_cb_t cb = cbd->cb;
+	struct sms_data *sd = cbd->user;
 	int mr;
 
 	if (message->error == RIL_E_SUCCESS) {
@@ -167,7 +168,7 @@ static void submit_sms_cb(struct ril_msg *message, gpointer user_data)
 		decode_ril_error(&error, "FAIL");
 	}
 
-	mr = ril_util_parse_sms_response(message);
+	mr = ril_util_parse_sms_response(sd->ril, message);
 
 	cb(&error, mr, cbd->data);
 }
@@ -176,14 +177,16 @@ static void ril_cmgs(struct ofono_sms *sms, const unsigned char *pdu,
 			int pdu_len, int tpdu_len, int mms,
 			ofono_sms_submit_cb_t cb, void *user_data)
 {
-	struct sms_data *data = ofono_sms_get_data(sms);
+	struct sms_data *sd = ofono_sms_get_data(sms);
 	struct cb_data *cbd = cb_data_new(cb, user_data);
 	struct parcel rilp;
 	char *tpdu;
+	int request = RIL_REQUEST_SEND_SMS;
 	int ret, smsc_len;
 
+	cbd->user = sd;
+
         DBG("pdu_len: %d, tpdu_len: %d mms: %d", pdu_len, tpdu_len, mms);
-	g_ril_util_debug_hexdump(FALSE, pdu, pdu_len, sms_debug, "sms-pdu: ");
 
 	/* TODO: if (mms) { ... } */
 
@@ -211,25 +214,22 @@ static void ril_cmgs(struct ofono_sms *sms, const unsigned char *pdu,
 	 *  parcel_w_string() encodes utf8 -> utf16
 	 */
 	tpdu = encode_hex(pdu + smsc_len, tpdu_len, 0);
-	g_ril_util_debug_hexdump(FALSE, (guchar *) tpdu, (tpdu_len * 2),
-					sms_debug, "tpdu: ");
-
 	parcel_w_string(&rilp, tpdu);
 
-	/* Dump the entire parcel */
-	g_ril_util_debug_hexdump(FALSE, (guchar *) rilp.data, rilp.size,
-					sms_debug, "sms-encoded-buf: ");
-	ret = g_ril_send(data->ril,
-			RIL_REQUEST_SEND_SMS,
-			rilp.data,
-			rilp.size,
-			submit_sms_cb, cbd, g_free);
+	ret = g_ril_send(sd->ril,
+				request,
+				rilp.data,
+				rilp.size,
+				submit_sms_cb, cbd, g_free);
+
+	g_ril_append_print_buf(sd->ril, "(%s)", tpdu);
+	g_ril_print_request(sd->ril, ret, request);
 
 	parcel_free(&rilp);
 
 	if (ret <= 0) {
 		g_free(cbd);
-		CALLBACK_WITH_FAILURE(cb, -1, data);
+		CALLBACK_WITH_FAILURE(cb, -1, user_data);
 	}
 }
 
@@ -254,27 +254,23 @@ static void ril_cgsms_query(struct ofono_sms *sms,
 static void ril_sms_notify(struct ril_msg *message, gpointer user_data)
 {
 	struct ofono_sms *sms = user_data;
-	struct sms_data *data = ofono_sms_get_data(sms);
+	struct sms_data *sd = ofono_sms_get_data(sms);
 	struct parcel rilp;
 	char *ril_pdu;
 	int ril_pdu_len;
 	unsigned int smsc_len;
 	long ril_buf_len;
 	guchar *ril_data;
+	int request = RIL_REQUEST_SMS_ACKNOWLEDGE;
+	int ret;
 
 	DBG("req: %d; data_len: %d", message->req, message->buf_len);
 
 	if (message->req != RIL_UNSOL_RESPONSE_NEW_SMS)
 		goto error;
 
-	/* Set up Parcel struct for proper parsing */
-	rilp.data = message->buf;
-	rilp.size = message->buf_len;
-	rilp.capacity = message->buf_len;
-	rilp.offset = 0;
 
-	g_ril_util_debug_hexdump(FALSE, (guchar *) message->buf,
-		message->buf_len, sms_debug, "sms-notify: ");
+	ril_util_init_parcel(message, &rilp);
 
 	ril_pdu = parcel_r_string(&rilp);
 	if (ril_pdu == NULL)
@@ -287,22 +283,20 @@ static void ril_sms_notify(struct ril_msg *message, gpointer user_data)
 	if (ril_data == NULL)
 		goto error;
 
-	g_ril_util_debug_hexdump(FALSE,	ril_data,
-					ril_buf_len,
-					sms_debug,
-					"sms-notify-decoded: ");
-
-    /* The first octect in the pdu contains the SMSC address length
-     * which is the X following octects it reads. We add 1 octet to
-     * the read length to take into account this read octet in order
-     * to calculate the proper tpdu length.
-     */
+	/* The first octect in the pdu contains the SMSC address length
+	 * which is the X following octects it reads. We add 1 octet to
+	 * the read length to take into account this read octet in order
+	 * to calculate the proper tpdu length.
+	 */
 	smsc_len = ril_data[0] + 1;
 	DBG("smsc_len is %d", smsc_len);
 
+	g_ril_append_print_buf(sd->ril, "(%s)", ril_pdu);
+	g_ril_print_unsol(sd->ril, message);
+
 	/* Last parameter is 'tpdu_len' ( substract SMSC length ) */
-	ofono_sms_deliver_notify(sms, ril_data, 
-			ril_buf_len, 
+	ofono_sms_deliver_notify(sms, ril_data,
+			ril_buf_len,
 			ril_buf_len - smsc_len);
 
 	/* Re-use rilp, so initilize */
@@ -314,10 +308,13 @@ static void ril_sms_notify(struct ril_msg *message, gpointer user_data)
 	/* TODO: should ACK be sent for either of the error cases? */
 
 	/* ACK the incoming NEW_SMS; ignore response so no cb needed */
-	g_ril_send(data->ril, RIL_REQUEST_SMS_ACKNOWLEDGE,
+	ret = g_ril_send(sd->ril, request,
 			rilp.data,
 			rilp.size,
 			NULL, NULL, NULL);
+
+	g_ril_append_print_buf(sd->ril, "(1,0)");
+	g_ril_print_request(sd->ril, ret, request);
 
 	parcel_free(&rilp);
 	return;
@@ -338,8 +335,6 @@ static gboolean ril_delayed_register(gpointer user_data)
 	g_ril_register(data->ril, RIL_UNSOL_RESPONSE_NEW_SMS,
 			ril_sms_notify,	sms);
 
-	DBG("registered NEW_SMS callback");
-
         /* This makes the timeout a single-shot */
         return FALSE;
 }
@@ -349,8 +344,6 @@ static int ril_sms_probe(struct ofono_sms *sms, unsigned int vendor,
 {
 	GRil *ril = user;
 	struct sms_data *data;
-
-        DBG("");
 
 	data = g_new0(struct sms_data, 1);
 	data->ril = g_ril_clone(ril);

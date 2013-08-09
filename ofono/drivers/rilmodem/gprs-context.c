@@ -38,22 +38,11 @@
 #include <ofono/gprs-context.h>
 #include <ofono/types.h>
 
-#include "gril.h"
-#include "grilutil.h"
+#include "grilreply.h"
+#include "grilrequest.h"
+#include "grilunsol.h"
 
 #include "rilmodem.h"
-
-/* REQUEST_DEACTIVATE_DATA_CALL parameter values */
-#define DEACTIVATE_DATA_CALL_NUM_PARAMS 2
-#define DEACTIVATE_DATA_CALL_NO_REASON "0"
-
-/* REQUEST_SETUP_DATA_CALL parameter values */
-#define SETUP_DATA_CALL_PARAMS 7
-#define CHAP_PAP_OK "3"
-#define DATA_PROFILE_DEFAULT "0"
-#define PROTO_IP "IP"
-#define PROTO_IPV6 "IPV6"
-#define PROTO_IPV4V6 "IPV4V6"
 
 enum state {
 	STATE_IDLE,
@@ -64,15 +53,28 @@ enum state {
 
 struct gprs_context_data {
 	GRil *ril;
-	unsigned int active_ctx_cid;
-	unsigned int active_rild_cid;
-	char username[OFONO_GPRS_MAX_USERNAME_LENGTH + 1];
-	char password[OFONO_GPRS_MAX_PASSWORD_LENGTH + 1];
+	guint active_ctx_cid;
+	gint active_rild_cid;
 	enum state state;
 };
 
-/* TODO: make conditional */
-static char print_buf[PRINT_BUF_SIZE];
+static void ril_gprs_context_deactivate_primary(struct ofono_gprs_context *gc,
+						unsigned int id,
+						ofono_gprs_context_cb_t cb, void *data);
+
+static void set_context_disconnected(struct gprs_context_data *gcd)
+{
+	DBG("");
+
+	gcd->active_ctx_cid = -1;
+	gcd->active_rild_cid = -1;
+	gcd->state = STATE_IDLE;
+}
+
+static void disconnect_context(struct ofono_gprs_context *gc)
+{
+	ril_gprs_context_deactivate_primary(gc, 0, NULL, NULL);
+}
 
 static void ril_gprs_context_call_list_changed(struct ril_msg *message,
 						gpointer user_data)
@@ -80,23 +82,22 @@ static void ril_gprs_context_call_list_changed(struct ril_msg *message,
 	struct ofono_gprs_context *gc = user_data;
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 	struct data_call *call = NULL;
+	struct unsol_data_call_list *unsol;
 	gboolean active_cid_found = FALSE;
 	gboolean disconnect = FALSE;
-	GSList *calls = NULL, *iterator = NULL;
+	GSList *iterator = NULL;
+	struct ofono_error error;
 
 	DBG("");
 
-	if (message->req != RIL_UNSOL_DATA_CALL_LIST_CHANGED) {
-		ofono_error("ril_gprs_update_calls: invalid message received %d",
-				message->req);
-		return;
-	}
+	unsol = g_ril_unsol_parse_data_call_list(gcd->ril, message, &error);
 
-	calls = ril_util_parse_data_call_list(message);
+	if (error.type != OFONO_ERROR_TYPE_NO_ERROR)
+		goto error;
 
-	DBG("number of call in call_list_changed is: %d", g_slist_length(calls));
+	DBG("number of call in call_list_changed is: %d", unsol->num);
 
-	for (iterator = calls; iterator; iterator = iterator->next) {
+	for (iterator = unsol->call_list; iterator; iterator = iterator->next) {
 		call = (struct data_call *) iterator->data;
 
 		if (call->cid == gcd->active_rild_cid) {
@@ -116,13 +117,11 @@ static void ril_gprs_context_call_list_changed(struct ril_msg *message,
 	if (disconnect || active_cid_found == FALSE) {
 		DBG("Clearing active context");
 
-		gcd->active_ctx_cid = -1;
-		gcd->active_rild_cid = -1;
-		gcd->state = STATE_IDLE;
+		set_context_disconnected(gcd);
 	}
 
-	g_slist_foreach(calls, (GFunc) g_free, NULL);
-	g_slist_free(calls);
+error:
+	g_ril_unsol_free_data_call_list(unsol);
 }
 
 static void ril_setup_data_call_cb(struct ril_msg *message, gpointer user_data)
@@ -132,98 +131,67 @@ static void ril_setup_data_call_cb(struct ril_msg *message, gpointer user_data)
 	struct ofono_gprs_context *gc = cbd->user;
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 	struct ofono_error error;
-	struct parcel rilp;
-	int status, retry_time, cid, active, num, version;
-	char *dnses = NULL, *ifname = NULL;
-	char *raw_ip_addrs = NULL, *raw_gws = NULL, *type = NULL;
-	char **dns_addresses = NULL, **gateways = NULL;
-	char **ip_addrs = NULL, **split_ip_addr = NULL;
-
-	/* TODO:
-	 * Cleanup duplicate code between this function and
-	 * ril_util_parse_data_call_list().
-	 */
-
-	/* valid size: 36 (34 if HCRADIO defined) */
-	if (message->buf_len < 36) {
-		DBG("Parcel is less then minimum DataCallResponseV6 size!");
-		decode_ril_error(&error, "FAIL");
-		goto error;
-	}
+	struct reply_setup_data_call *reply;
+	char **split_ip_addr = NULL;
 
 	if (message->error != RIL_E_SUCCESS) {
 		DBG("Reply failure: %s", ril_error_to_string(message->error));
-		decode_ril_error(&error, "FAIL");
+
+		error.type = OFONO_ERROR_TYPE_FAILURE;
 		error.error = message->error;
+
+		set_context_disconnected(gcd);
 		goto error;
 	}
 
-	ril_util_init_parcel(message, &rilp);
+	reply = g_ril_reply_parse_data_call(gcd->ril, message, &error);
+
+	gcd->active_rild_cid = reply->cid;
+
+	if (error.type != OFONO_ERROR_TYPE_NO_ERROR) {
+		if (gcd->active_rild_cid != -1)
+			disconnect_context(gc);
+
+		goto error;
+	}
+
+	if (reply->status != 0) {
+		ofono_error("%s: reply->status is non-zero: %d",
+				__func__,
+				reply->status);
+
+		error.type = OFONO_ERROR_TYPE_FAILURE;
+		error.error = reply->status;
+
+		set_context_disconnected(gcd);
+		goto error;
+	}
 
 	/*
-	 * ril.h documents the reply to a RIL_REQUEST_SETUP_DATA_CALL
-	 * as being a RIL_Data_Call_Response_v6 struct, however in
-	 * reality, the response actually includes the version of the
-	 * struct, followed by an array of calls, so the array size
-	 * also has to be read after the version.
+	 * TODO: consier moving this into parse_data_reply
 	 *
-	 * TODO: What if there's more than 1 call in the list??
+	 * Note - the address may optionally include a prefix size
+	 * ( Eg. "/30" ).  As this confuses NetworkManager, we
+	 * explicitly strip any prefix after calculating the netmask.
 	 */
-	version = parcel_r_int32(&rilp);
-	num = parcel_r_int32(&rilp);
+	split_ip_addr = g_strsplit(reply->ip_addrs[0], "/", 2);
 
-	status = parcel_r_int32(&rilp);
-	retry_time = parcel_r_int32(&rilp);
-	cid = parcel_r_int32(&rilp);
-	active = parcel_r_int32(&rilp);
+	/* TODO: see note above re: invalid messages... */
+	if (split_ip_addr[0] == NULL) {
+		ofono_error("%s: invalid IP address field returned: %s",
+				__func__,
+				reply->ip_addrs[0]);
 
-	type = parcel_r_string(&rilp);
-	ifname = parcel_r_string(&rilp);
-	raw_ip_addrs = parcel_r_string(&rilp);
-	dnses = parcel_r_string(&rilp);
-	raw_gws = parcel_r_string(&rilp);
+		error.type = OFONO_ERROR_TYPE_FAILURE;
+		error.error = EINVAL;
 
-	/* TODO: make conditional */
-	ril_append_print_buf("[%04d]< %s",
-			message->serial_no,
-			ril_request_id_to_string(message->req));
-	ril_start_response;
-
-	ril_append_print_buf("%sversion=%d,num=%d",
-			print_buf,
-			version,
-			num);
-
-	ril_append_print_buf("%s [status=%d,retry=%d,cid=%d,active=%d,type=%s,ifname=%s,address=%s,dns=%s,gateways=%s]",
-			print_buf,
-			status,
-			retry_time,
-			cid,
-			active,
-			type,
-			ifname,
-			raw_ip_addrs,
-			dnses,
-			raw_gws);
-	ril_close_response;
-	ril_print_response;
-	/* TODO: make conditional */
-
-	if (status != 0) {
-		DBG("Reply failure; status %d", status);
-		gcd->state = STATE_IDLE;
+		set_context_disconnected(gcd);
 		goto error;
 	}
 
 	gcd->state = STATE_ACTIVE;
-	gcd->active_rild_cid = cid;
 
-	ofono_gprs_context_set_interface(gc, ifname);
-
-	/*
-	 * TODO: re-factor the following code into a
-	 * ril_util function that can be unit-tested.
-	 */
+	ofono_gprs_context_set_interface(gc, reply->ifname);
 
 	/* TODO:
 	 * RILD can return multiple addresses; oFono only supports
@@ -232,65 +200,19 @@ static void ril_setup_data_call_cb(struct ril_msg *message, gpointer user_data)
 	 * just specify the end-points of the point-to-point
 	 * connection, in which case this code will need to
 	 * changed to handle such a device.
-	 *
-	 * For now split into a maximum of three, and only use
-	 * the first address for the remaining operations.
 	 */
-	ip_addrs = g_strsplit(raw_ip_addrs, " ", 3);
-	if (ip_addrs[0] == NULL) {
-		DBG("No IP address specified: %s", raw_ip_addrs);
-		decode_ril_error(&error, "FAIL");
-		goto error;
-	}
-
 	ofono_gprs_context_set_ipv4_netmask(gc,
-			ril_util_get_netmask(ip_addrs[0]));
-
-	/*
-	 * Note - the address may optionally include a prefix size
-	 * ( Eg. "/30" ).  As this confuses NetworkManager, we
-	 * explicitly strip any prefix after calculating the netmask.
-	 */
-	split_ip_addr = g_strsplit(ip_addrs[0], "/", 2);
-	if (split_ip_addr[0] == NULL) {
-		DBG("Invalid IP address field returned: %s", raw_ip_addrs);
-		decode_ril_error(&error, "FAIL");
-		goto error;
-	}
+			ril_util_get_netmask(reply->ip_addrs[0]));
 
 	ofono_gprs_context_set_ipv4_address(gc, split_ip_addr[0], TRUE);
+	ofono_gprs_context_set_ipv4_gateway(gc, reply->gateways[0]);
 
-	/*
-	 * RILD can return multiple addresses; oFono only supports
-	 * setting a single IPv4 gateway.
-	 */
-	gateways = g_strsplit(raw_gws, " ", 3);
-	if (gateways[0] == NULL) {
-		DBG("Invalid gateways field returned: %s", raw_gws);
-		decode_ril_error(&error, "FAIL");
-		goto error;
-	}
-
-	ofono_gprs_context_set_ipv4_gateway(gc, gateways[0]);
-
-	/* Split DNS addresses */
-	dns_addresses = g_strsplit(dnses, " ", 3);
 	ofono_gprs_context_set_ipv4_dns_servers(gc,
-						(const char **) dns_addresses);
-
-	decode_ril_error(&error, "OK");
+						(const char **) reply->dns_addresses);
 
 error:
-	g_strfreev(dns_addresses);
-	g_strfreev(ip_addrs);
+	g_ril_reply_free_setup_data_call(reply);
 	g_strfreev(split_ip_addr);
-	g_strfreev(gateways);
-
-	g_free(type);
-	g_free(ifname);
-	g_free(raw_ip_addrs);
-	g_free(dnses);
-	g_free(raw_gws);
 
 	cb(&error, cbd->data);
 }
@@ -301,95 +223,60 @@ static void ril_gprs_context_activate_primary(struct ofono_gprs_context *gc,
 {
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 	struct cb_data *cbd = cb_data_new(cb, data);
+	struct req_setup_data_call request;
 	struct parcel rilp;
-	gchar *protocol = PROTO_IP;
-	gchar tech[3];
-	int request = RIL_REQUEST_SETUP_DATA_CALL;
-	int ret;
+	struct ofono_error error;
+	int reqid = RIL_REQUEST_SETUP_DATA_CALL;
+	int ret = 0;
+
+	DBG("Activating contex: %d", ctx->cid);
 
 	cbd->user = gc;
+
+	/* TODO: implement radio technology selection. */
+	request.tech = RADIO_TECH_HSPA;
+
+	/* TODO: add comments about tethering, other non-public
+	 * profiles...
+	 */
+	request.data_profile = RIL_DATA_PROFILE_DEFAULT;
+	request.apn = g_strdup(ctx->apn);
+	request.username = g_strdup(ctx->username);
+	request.password = g_strdup(ctx->password);
+	request.auth_type = RIL_AUTH_BOTH;
+	request.protocol = ctx->proto;
+
+	if (g_ril_request_setup_data_call(gcd->ril,
+						&request,
+						&rilp,
+						&error) == FALSE) {
+		ofono_error("Couldn't build SETUP_DATA_CALL request.");
+		goto error;
+	}
+
 	gcd->active_ctx_cid = ctx->cid;
 	gcd->state = STATE_ENABLING;
 
-	memcpy(gcd->username, ctx->username, sizeof(ctx->username));
-	memcpy(gcd->password, ctx->password, sizeof(ctx->password));
-
-	parcel_init(&rilp);
-	parcel_w_int32(&rilp, SETUP_DATA_CALL_PARAMS);
-
-        /* RadioTech: hardcoded to HSPA for now... */
-	sprintf((char *) tech, "%d", (int) RADIO_TECH_HSPA);
-	DBG("setting tech to: %s", tech);
-	parcel_w_string(&rilp, (char *) tech);
-
-        /*
-	 * TODO ( OEM/Tethering ): DataProfile:
-	 *
-	 * Other options are TETHERING (1) or OEM_BASE (1000).
-	 */
-	parcel_w_string(&rilp, DATA_PROFILE_DEFAULT);
-
-	/* APN */
-	parcel_w_string(&rilp, (char *) (ctx->apn));
-
-	if (ctx->username && strlen(ctx->username)) {
-		parcel_w_string(&rilp, (char *) (ctx->username));
-	} else {
-		parcel_w_string(&rilp, NULL);
-	}
-
-	if (ctx->password && strlen(ctx->password)) {
-		parcel_w_string(&rilp, (char *) (ctx->password));
-	} else {
-		parcel_w_string(&rilp, NULL);
-	}
-
-	/*
-	 * TODO: review with operators...
-         * Auth type: PAP/CHAP may be performed
-	 */
-	parcel_w_string(&rilp, CHAP_PAP_OK);
-
-	switch (ctx->proto) {
-	case OFONO_GPRS_PROTO_IPV6:
-		protocol = PROTO_IPV6;
-		break;
-	case OFONO_GPRS_PROTO_IPV4V6:
-		protocol = PROTO_IPV4V6;
-		break;
-	case OFONO_GPRS_PROTO_IP:
-		break;
-	default:
-		DBG("Invalid protocol: %d", ctx->proto);
-	}
-
-	parcel_w_string(&rilp, protocol);
-
 	ret = g_ril_send(gcd->ril,
-				request,
+				reqid,
 				rilp.data,
 				rilp.size,
 				ril_setup_data_call_cb, cbd, g_free);
 
-        /* TODO: make conditional */
-	ril_start_request;
-	ril_append_print_buf("%s %s,%s,%s,%s,%s,%s,%s",
-			print_buf,
-			tech,
-			DATA_PROFILE_DEFAULT,
-			ctx->apn,
-			ctx->username,
-			ctx->password,
-			CHAP_PAP_OK,
-			protocol);
-
-	ril_close_request;
-	ril_print_request(ret, request);
-	/* TODO: make conditional */
+	/* NOTE - we could make the following function part of g_ril_send? */
+	g_ril_print_request(gcd->ril, ret, reqid);
 
 	parcel_free(&rilp);
+
+error:
+	g_free(request.apn);
+	g_free(request.username);
+	g_free(request.password);
+
 	if (ret <= 0) {
 		ofono_error("Send RIL_REQUEST_SETUP_DATA_CALL failed.");
+
+		set_context_disconnected(gcd);
 
 		g_free(cbd);
 		CALLBACK_WITH_FAILURE(cb, data);
@@ -402,30 +289,32 @@ static void ril_deactivate_data_call_cb(struct ril_msg *message, gpointer user_d
 	ofono_gprs_context_cb_t cb = cbd->cb;
 	struct ofono_gprs_context *gc = cbd->user;
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
-	struct ofono_error error;
 
 	DBG("");
 
 	/* Reply has no data... */
 	if (message->error == RIL_E_SUCCESS) {
 
-		/* TODO: make conditional */
-		ril_append_print_buf("[%04d]< %s",
-				message->serial_no,
-				ril_request_id_to_string(message->req));
-		ril_print_response;
-		/* TODO: make conditional */
+		g_ril_print_response_no_args(gcd->ril, message);
 
-		gcd->state = STATE_IDLE;
-		CALLBACK_WITH_SUCCESS(cb, cbd->data);
+		set_context_disconnected(gcd);
+
+		/* If the deactivate was a result of a shutdown,
+		 * there won't be call back, so _deactivated()
+		 * needs to be called directly.
+		 */
+		if (cb)
+			CALLBACK_WITH_SUCCESS(cb, cbd->data);
+		else
+			ofono_gprs_context_deactivated(gc, gcd->active_ctx_cid);
 
 	} else {
-		DBG("Reply failure: %s", ril_error_to_string(message->error));
+		ofono_error("%s: replay failure: %s",
+				__func__,
+				ril_error_to_string(message->error));
 
-		decode_ril_error(&error, "FAIL");
-		error.error = message->error;
-
-		cb(&error, cbd->data);
+		if (cb)
+			CALLBACK_WITH_FAILURE(cb, cbd->data);
 	}
 }
 
@@ -434,58 +323,67 @@ static void ril_gprs_context_deactivate_primary(struct ofono_gprs_context *gc,
 						ofono_gprs_context_cb_t cb, void *data)
 {
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
-	struct cb_data *cbd = cb_data_new(cb, data);
+	struct cb_data *cbd = NULL;
 	struct parcel rilp;
-	gchar *cid = NULL;
-	int request = RIL_REQUEST_DEACTIVATE_DATA_CALL;
-	int ret;
+	struct req_deactivate_data_call request;
+	struct ofono_error error;
+	int reqid = RIL_REQUEST_DEACTIVATE_DATA_CALL;
+	int ret = 0;
 
+	DBG("");
+
+	if (gcd->active_rild_cid == -1) {
+		set_context_disconnected(gcd);
+
+		if (cb) {
+			CALLBACK_WITH_SUCCESS(cb, data);
+			g_free(cbd);
+		}
+
+		return;
+	}
+
+
+	cbd = cb_data_new(cb, data);
 	cbd->user = gc;
 
 	gcd->state = STATE_DISABLING;
 
-	parcel_init(&rilp);
-	parcel_w_int32(&rilp, DEACTIVATE_DATA_CALL_NUM_PARAMS);
+	request.cid = gcd->active_rild_cid;
+	request.reason = RIL_DEACTIVATE_DATA_CALL_NO_REASON;
 
-	cid = g_strdup_printf("%d", gcd->active_rild_cid);
-	parcel_w_string(&rilp, cid);
-
-	/*
-	 * TODO: airplane-mode; change reason to '1',
-	 * which means "radio power off".
-	 */
-	parcel_w_string(&rilp, DEACTIVATE_DATA_CALL_NO_REASON);
+	if (g_ril_request_deactivate_data_call(gcd->ril, &request,
+						&rilp, &error) == FALSE) {
+		ofono_error("Couldn't build DEACTIVATE_DATA_CALL request.");
+		goto error;
+	}
 
 	ret = g_ril_send(gcd->ril,
-				request,
+				reqid,
 				rilp.data,
 				rilp.size,
 				ril_deactivate_data_call_cb, cbd, g_free);
 
-	/* TODO: make conditional */
-	ril_start_request;
-	ril_append_print_buf("%s%s,0",
-				print_buf,
-				cid);
-
-	ril_close_request;
-	ril_print_request(ret, request);
-	/* TODO: make conditional */
+	g_ril_append_print_buf(gcd->ril, "(%d,0)", request.cid);
+	g_ril_print_request(gcd->ril, ret, reqid);
 
 	parcel_free(&rilp);
-	g_free(cid);
 
+error:
 	if (ret <= 0) {
 		ofono_error("Send RIL_REQUEST_DEACTIVATE_DATA_CALL failed.");
 		g_free(cbd);
-		CALLBACK_WITH_FAILURE(cb, data);
+		if (cb)
+			CALLBACK_WITH_FAILURE(cb, data);
 	}
 }
 
 static void ril_gprs_context_detach_shutdown(struct ofono_gprs_context *gc,
-					unsigned int id)
+						unsigned int id)
 {
-	DBG("");
+	DBG("cid: %d", id);
+
+	ril_gprs_context_deactivate_primary(gc, 0, NULL, NULL);
 }
 
 static int ril_gprs_context_probe(struct ofono_gprs_context *gc,
@@ -494,16 +392,12 @@ static int ril_gprs_context_probe(struct ofono_gprs_context *gc,
 	GRil *ril = data;
 	struct gprs_context_data *gcd;
 
-	DBG("");
-
 	gcd = g_try_new0(struct gprs_context_data, 1);
 	if (gcd == NULL)
 		return -ENOMEM;
 
 	gcd->ril = g_ril_clone(ril);
-	gcd->active_ctx_cid = -1;
-	gcd->active_rild_cid = -1;
-	gcd->state = STATE_IDLE;
+	set_context_disconnected(gcd);
 
 	ofono_gprs_context_set_data(gc, gcd);
 
@@ -519,7 +413,7 @@ static void ril_gprs_context_remove(struct ofono_gprs_context *gc)
 	DBG("");
 
 	if (gcd->state != STATE_IDLE) {
-		/* TODO: call detach_shutdown */
+		ril_gprs_context_detach_shutdown(gc, 0);
 	}
 
 	ofono_gprs_context_set_data(gc, NULL);
@@ -529,7 +423,7 @@ static void ril_gprs_context_remove(struct ofono_gprs_context *gc)
 }
 
 static struct ofono_gprs_context_driver driver = {
-	.name			= "rilmodem",
+	.name			= RILMODEM,
 	.probe			= ril_gprs_context_probe,
 	.remove			= ril_gprs_context_remove,
 	.activate_primary       = ril_gprs_context_activate_primary,
