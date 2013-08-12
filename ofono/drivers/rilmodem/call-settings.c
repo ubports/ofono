@@ -159,6 +159,8 @@ static void ril_clir_cb(struct ril_msg *message, gpointer user_data)
 
 	if (message->error == RIL_E_SUCCESS) {
 		ril_util_init_parcel(message, &rilp);
+		/*first value in int[] is len so let's skip that*/
+		parcel_r_int32(&rilp);
 		/* Set HideCallerId property from network */
 		override = parcel_r_int32(&rilp);
 		/* CallingLineRestriction indicates the state of
