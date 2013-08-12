@@ -111,6 +111,8 @@ static void probe_mute_cb(struct ril_msg *message, gpointer user_data)
 	}
 
 	ril_util_init_parcel(message, &rilp);
+	/*first item in int[] is len so let's skip that*/
+	parcel_r_int32(&rilp);
 	muted = parcel_r_int32(&rilp);
 
 	g_ril_append_print_buf(cvd->ril, "{%d}", muted);
