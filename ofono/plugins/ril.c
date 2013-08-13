@@ -338,11 +338,6 @@ static int ril_disable(struct ofono_modem *modem)
         return 0;
 }
 
-static void ril_set_online(struct ofono_modem *modem, ofono_bool_t online,
-				ofono_modem_online_cb_t cb, void *data){
-	CALLBACK_WITH_SUCCESS(cb, data);
-}
-
 static struct ofono_modem_driver ril_driver = {
 	.name = "ril",
 	.probe = ril_probe,
@@ -352,7 +347,6 @@ static struct ofono_modem_driver ril_driver = {
 	.pre_sim = ril_pre_sim,
 	.post_sim = ril_post_sim,
 	.post_online = ril_post_online,
-	.set_online = ril_set_online,
 };
 
 /*
