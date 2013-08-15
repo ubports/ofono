@@ -361,6 +361,9 @@ builtin_sources += plugins/phonesim.c
 
 if DATAFILES
 dist_conf_DATA += plugins/phonesim.conf
+if RILMODEM
+dist_conf_DATA += gril/ril_subscription.conf
+endif
 endif
 endif
 

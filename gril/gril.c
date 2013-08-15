@@ -4,6 +4,7 @@
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *  Copyright (C) 2012 Canonical Ltd.
+ *  Copyright (C) 2013 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -778,6 +779,11 @@ static struct ril_s *create_ril()
 	struct sockaddr_un addr;
 	int sk;
 	GIOChannel *io;
+	GKeyFile *keyfile;
+	char **subscriptions = NULL;
+	char *value = NULL;
+	GError *err = NULL;
+	char *path = "/etc/ofono/ril_subscription.conf";
 
 	ril = g_try_new0(struct ril_s, 1);
 	if (ril == NULL)
@@ -809,20 +815,20 @@ static struct ril_s *create_ril()
 		goto error;
 	}
 
-        io = g_io_channel_unix_new(sk);
-        if (io == NULL) {
+	io = g_io_channel_unix_new(sk);
+	if (io == NULL) {
 		ofono_error("create_ril: can't connect to RILD: %s (%d)\n",
 				strerror(errno), errno);
 		return NULL;
-        }
+	}
 
 	g_io_channel_set_close_on_unref(io, TRUE);
 	g_io_channel_set_flags(io, G_IO_FLAG_NONBLOCK, NULL);
 
-        ril->io = g_ril_io_new(io);
-        if (ril->io == NULL) {
+	ril->io = g_ril_io_new(io);
+	if (ril->io == NULL) {
 		ofono_error("create_ril: can't create ril->io");
-        	goto error;
+		goto error;
 	}
 
 	g_ril_io_set_disconnect_function(ril->io, io_disconnect, ril);
@@ -836,7 +842,27 @@ static struct ril_s *create_ril()
 	ril->notify_list = g_hash_table_new_full(g_int_hash, g_int_equal,
 							g_free, ril_notify_destroy);
 
-        g_ril_io_set_read_handler(ril->io, new_bytes, ril);
+	g_ril_io_set_read_handler(ril->io, new_bytes, ril);
+
+	keyfile = g_key_file_new();
+	g_key_file_set_list_separator(keyfile, ',');
+
+	if (!g_key_file_load_from_file(keyfile, path, 0, &err)) {
+		g_key_file_free(keyfile);
+		g_error_free(err);
+	} else {
+		if (g_key_file_has_group(keyfile,"sub")) {
+			subscriptions = g_key_file_get_groups(keyfile, NULL);
+			value = g_key_file_get_string(
+				keyfile, subscriptions[0], "sub", NULL);
+			if (value) {
+				g_ril_io_write(ril->io, value, strlen(value));
+				g_free(value);
+			}
+		}
+		g_key_file_free(keyfile);
+		g_strfreev(subscriptions);
+	}
 
 	return ril;
 
