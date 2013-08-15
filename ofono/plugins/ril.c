@@ -334,8 +334,26 @@ static int ril_enable(struct ofono_modem *modem)
 static int ril_disable(struct ofono_modem *modem)
 {
 	struct ril_data *ril = ofono_modem_get_data(modem);
+	struct parcel rilp;
+	int request = RIL_REQUEST_RADIO_POWER;
+	guint ret;
 
-        return 0;
+	DBG("%p", modem);
+
+	parcel_init(&rilp);
+	parcel_w_int32(&rilp, 1); /* size of array */
+	parcel_w_int32(&rilp, 0); /* POWER=OFF */
+
+	/* fire and forget i.e. not waiting for the callback*/
+	ret = g_ril_send(ril->modem, request, rilp.data,
+			 rilp.size, NULL, NULL, NULL);
+
+	g_ril_append_print_buf(ril->modem, "(0)");
+	g_ril_print_request(ril->modem, ret, request);
+
+	parcel_free(&rilp);
+
+	return 0;
 }
 
 static struct ofono_modem_driver ril_driver = {
