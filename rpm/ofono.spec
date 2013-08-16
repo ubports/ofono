@@ -112,6 +112,7 @@ systemctl daemon-reload
 %exclude %{_sysconfdir}/ofono/phonesim.conf
 %doc /usr/share/man/man8/ofonod.8.gz
 %dir %attr(775,radio,radio) /var/lib/ofono
+%config /etc/ofono/ril_subscription.conf
 # << files
 
 %files devel
