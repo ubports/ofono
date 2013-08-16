@@ -42,6 +42,7 @@
 
 #include "rilmodem.h"
 #include "ril_constants.h"
+#include "common.h"
 
 struct settings_data {
 	GRil *ril;
@@ -91,6 +92,17 @@ static void ril_cw_set(struct ofono_call_settings *cs, int mode, int cls,
 
 	parcel_w_int32(&rilp, mode);	/* on/off */
 
+	/* Modem seems to respond with error to all queries
+	 * or settings made with bearer class
+	 * BEARER_CLASS_DEFAULT. Design decision: If given
+	 * class is BEARER_CLASS_DEFAULT let's map it to
+	 * SERVICE_CLASS_VOICE effectively making it the
+	 * default bearer. This in line with API which is
+	 * contains only voice anyways.
+	 */
+	if (cls == BEARER_CLASS_DEFAULT)
+		cls = BEARER_CLASS_VOICE;
+
 	parcel_w_int32(&rilp, cls);		/* Service class */
 
 	ret = g_ril_send(sd->ril, RIL_REQUEST_SET_CALL_WAITING,
@@ -116,6 +128,17 @@ static void ril_cw_query(struct ofono_call_settings *cs, int cls,
 	parcel_init(&rilp);
 
 	parcel_w_int32(&rilp, 1);		/* Number of params */
+
+	/* Modem seems to respond with error to all queries
+	 * or settings made with bearer class
+	 * BEARER_CLASS_DEFAULT. Design decision: If given
+	 * class is BEARER_CLASS_DEFAULT let's map it to
+	 * SERVICE_CLASS_VOICE effectively making it the
+	 * default bearer. This in line with Ofono API which is
+	 * contains only voice anyways.
+	 */
+	if (cls == BEARER_CLASS_DEFAULT)
+		cls = BEARER_CLASS_VOICE;
 
 	parcel_w_int32(&rilp, cls);		/* Service class */
 
