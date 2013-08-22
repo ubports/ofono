@@ -80,6 +80,8 @@
 
 /* Current SIM */
 static struct ofono_sim *current_sim;
+/* Current active app */
+int current_active_app = RIL_APPTYPE_UNKNOWN;
 
 /*
  * TODO: CDMA/IMS
@@ -591,6 +593,7 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 		for (i = 0; i < status.num_apps; i++) {
 			if (i == search_index &&
 				apps[i]->app_type != RIL_APPTYPE_UNKNOWN) {
+				current_active_app = apps[i]->app_type;
 				configure_active_app(sd, apps[i], i);
 				break;
 			}
@@ -907,6 +910,8 @@ static int ril_sim_probe(struct ofono_sim *sim, unsigned int vendor,
 	sd->passwd_state = OFONO_SIM_PASSWORD_NONE;
 	sd->sim_registered = FALSE;
 
+	current_sim = sim;
+
 	ofono_sim_set_data(sim, sd);
 
         /*
@@ -990,4 +995,9 @@ struct ofono_sim_driver *get_sim_driver()
 struct ofono_sim *get_sim()
 {
 	return current_sim;
+}
+
+gint ril_get_app_type()
+{
+	return current_active_app;
 }

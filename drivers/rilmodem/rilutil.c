@@ -52,8 +52,6 @@ struct ril_util_sim_state_query {
 
 static gboolean cpin_check(gpointer userdata);
 
-int current_active_app = RIL_APPTYPE_UNKNOWN;
-
 void decode_ril_error(struct ofono_error *error, const char *final)
 {
 	if (!strcmp(final, "OK")) {
@@ -660,9 +658,3 @@ void ril_util_free_sim_apps(struct sim_app **apps, guint num_apps) {
 		g_free(apps[i]);
 	}
 }
-
-gint ril_get_app_type()
-{
-	return current_active_app;
-}
-
