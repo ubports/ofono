@@ -519,6 +519,7 @@ gboolean ril_util_parse_reg(GRil *gril,
 				*tech = -1;
 				break;
 			case RADIO_TECH_GPRS:
+			case RADIO_TECH_GSM:
 				*tech = ACCESS_TECHNOLOGY_GSM;
 				break;
 			case RADIO_TECH_EDGE:
