@@ -18,6 +18,7 @@ Source0:    http://www.kernel.org/pub/linux/network/ofono/ofono-%{version}.tar.x
 Source100:  ofono.yaml
 Requires:   dbus
 Requires:   systemd
+Requires:   ofono-configs
 Requires(preun): systemd
 Requires(post): systemd
 Requires(postun): systemd
@@ -52,6 +53,15 @@ Obsoletes:  ofono-test < 1.0
 
 %description tests
 Scripts for testing oFono and its functionality
+
+%package configs-mer
+Summary:    Package to provide default configs for ofono
+Group:      Development/Tools
+Requires:   %{name} = %{version}-%{release}
+Provides:   ofono-configs
+
+%description configs-mer
+This package provides default configs for ofono
 
 %prep
 %setup -q -n %{name}-%{version}/%{name}
@@ -112,7 +122,6 @@ systemctl daemon-reload
 %exclude %{_sysconfdir}/ofono/phonesim.conf
 %doc /usr/share/man/man8/ofonod.8.gz
 %dir %attr(775,radio,radio) /var/lib/ofono
-%config /etc/ofono/ril_subscription.conf
 # << files
 
 %files devel
@@ -127,3 +136,9 @@ systemctl daemon-reload
 %{_libdir}/%{name}/test/*
 # >> files tests
 # << files tests
+
+%files configs-mer
+%defattr(-,root,root,-)
+%config /etc/ofono/ril_subscription.conf
+# >> files ofono-configs-mer
+# << files ofono-configs-mer
