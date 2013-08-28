@@ -105,7 +105,7 @@ static void ril_csca_query_cb(struct ril_msg *message, gpointer user_data)
 	struct ofono_error error;
 	struct ofono_phone_number sca;
 	struct parcel rilp;
-	gchar *number;
+	gchar *number, *temp_buf;
 
 	if (message->error == RIL_E_SUCCESS) {
 		decode_ril_error(&error, "OK");
@@ -116,23 +116,27 @@ static void ril_csca_query_cb(struct ril_msg *message, gpointer user_data)
 	}
 
 	ril_util_init_parcel(message, &rilp);
-	number = parcel_r_string(&rilp);
+	temp_buf = parcel_r_string(&rilp);
 
-	if (number[0] == '+') {
-		number = number + 1;
-		sca.type = 145;
+	if (temp_buf != NULL) {
+		/* RIL gives address in quotes */
+		number = strtok(temp_buf, "\"");
+
+		if (number[0] == '+') {
+			number = number + 1;
+			sca.type = 145;
+		} else {
+			sca.type = 129;
+		}
+		strncpy(sca.number, number, OFONO_MAX_PHONE_NUMBER_LENGTH);
+		sca.number[OFONO_MAX_PHONE_NUMBER_LENGTH] = '\0';
+
+		DBG("csca_query_cb: %s, %d", sca.number, sca.type);
+
+		cb(&error, &sca, cbd->data);
 	} else {
-		sca.type = 129;
+		CALLBACK_WITH_FAILURE(cb, NULL, cbd->data);
 	}
-
-	strncpy(sca.number, number, OFONO_MAX_PHONE_NUMBER_LENGTH);
-	sca.number[OFONO_MAX_PHONE_NUMBER_LENGTH] = '\0';
-
-	DBG("csca_query_cb: %s, %d", sca.number, sca.type);
-
-	cb(&error, &sca, cbd->data);
-
-	g_free(number);
 }
 
 static void ril_csca_query(struct ofono_sms *sms, ofono_sms_sca_query_cb_t cb,
