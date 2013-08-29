@@ -101,6 +101,8 @@ struct sim_data {
 	gchar *app_str;
 	guint app_index;
 	gboolean sim_registered;
+	enum ofono_sim_password_type passwd_type;
+	int retries[OFONO_SIM_PASSWORD_INVALID];
 	enum ofono_sim_password_type passwd_state;
 };
 
@@ -462,9 +464,9 @@ static void ril_imsi_cb(struct ril_msg *message, gpointer user_data)
 
 	ril_util_init_parcel(message, &rilp);
 
-        /* 15 is the max length of IMSI
+	/* 15 is the max length of IMSI
 	 * add 4 bytes for string length */
-        /* FIXME: g_assert(message->buf_len <= 19); */
+	/* FIXME: g_assert(message->buf_len <= 19); */
 	imsi = parcel_r_string(&rilp);
 
 	g_ril_append_print_buf(sd->ril, "{%s}", imsi);
@@ -644,6 +646,14 @@ static void ril_sim_status_changed(struct ril_msg *message, gpointer user_data)
 	send_get_sim_status(sim);
 }
 
+static void ril_query_pin_retries(struct ofono_sim *sim,
+					ofono_sim_pin_retries_cb_t cb,
+					void *data)
+{
+	struct sim_data *sd = ofono_sim_get_data(sim);
+	CALLBACK_WITH_SUCCESS(cb, sd->retries, data);
+}
+
 static void ril_query_passwd_state(struct ofono_sim *sim,
 					ofono_sim_passwd_cb_t cb, void *data)
 {
@@ -661,13 +671,24 @@ static void ril_pin_change_state_cb(struct ril_msg *message, gpointer user_data)
 	struct cb_data *cbd = user_data;
 	ofono_sim_lock_unlock_cb_t cb = cbd->cb;
 	struct sim_data *sd = cbd->user;
-
+	struct parcel rilp;
+	int retry_count;
+	int retries[OFONO_SIM_PASSWORD_INVALID];
+	int passwd_type;
 	/* There is no reason to ask SIM status until
 	 * unsolicited sim status change indication
 	 * Looks like state does not change before that.
 	 */
 
+	passwd_type = sd->passwd_type;
+	ril_util_init_parcel(message, &rilp);
+	parcel_r_int32(&rilp);
+	retry_count = parcel_r_int32(&rilp);
+	retries[passwd_type] = retry_count;
+	sd->retries[passwd_type] = retries[passwd_type];
+
 	/* TODO: re-bfactor to not use macro for FAILURE; doesn't return error! */
+
 	if (message->error == RIL_E_SUCCESS) {
 		CALLBACK_WITH_SUCCESS(cb, cbd->data);
 		g_ril_print_response_no_args(sd->ril, message);
@@ -686,6 +707,7 @@ static void ril_pin_send(struct ofono_sim *sim, const char *passwd,
 	int request = RIL_REQUEST_ENTER_SIM_PIN;
 	int ret;
 
+	sd->passwd_type = OFONO_SIM_PASSWORD_SIM_PIN;
 	cbd->user = sd;
 
 	parcel_init(&rilp);
@@ -720,6 +742,7 @@ static void ril_pin_change_state(struct ofono_sim *sim,
 	int request = RIL_REQUEST_SET_FACILITY_LOCK;
 	int ret = 0;
 
+	sd->passwd_type = passwd_type;
 	cbd->user = sd;
 
 	parcel_init(&rilp);
@@ -810,6 +833,7 @@ static void ril_pin_send_puk(struct ofono_sim *sim,
 	int request = RIL_REQUEST_ENTER_SIM_PUK;
 	int ret = 0;
 
+	sd->passwd_type = OFONO_SIM_PASSWORD_SIM_PUK;
 	cbd->user = sd;
 
 	parcel_init(&rilp);
@@ -839,7 +863,7 @@ static void ril_pin_send_puk(struct ofono_sim *sim,
 
 static void ril_change_passwd(struct ofono_sim *sim,
 				enum ofono_sim_password_type passwd_type,
-				const char *old, const char *new,
+				const char *old_passwd, const char *new_passwd,
 				ofono_sim_lock_unlock_cb_t cb, void *data)
 {
 	struct sim_data *sd = ofono_sim_get_data(sim);
@@ -848,13 +872,14 @@ static void ril_change_passwd(struct ofono_sim *sim,
 	int request = RIL_REQUEST_CHANGE_SIM_PIN;
 	int ret = 0;
 
+	sd->passwd_type = passwd_type;
 	cbd->user = sd;
 
 	parcel_init(&rilp);
 
 	parcel_w_int32(&rilp, CHANGE_SIM_PIN_PARAMS);
-	parcel_w_string(&rilp, (char *) old);	/* PUK */
-	parcel_w_string(&rilp, (char *) new);	/* PIN */
+	parcel_w_string(&rilp, (char *) old_passwd);
+	parcel_w_string(&rilp, (char *) new_passwd);
 	parcel_w_string(&rilp, sd->aid_str);
 
 	if (passwd_type == OFONO_SIM_PASSWORD_SIM_PIN2)
@@ -864,7 +889,7 @@ static void ril_change_passwd(struct ofono_sim *sim,
 			ril_pin_change_state_cb, cbd, g_free);
 
 	g_ril_append_print_buf(sd->ril, "(old=%s,new=%s,aid=%s)",
-				old, new,
+				old_passwd, new_passwd,
 				sd->aid_str);
 
 	g_ril_print_request(sd->ril, ret, request);
@@ -899,6 +924,7 @@ static int ril_sim_probe(struct ofono_sim *sim, unsigned int vendor,
 {
 	GRil *ril = data;
 	struct sim_data *sd;
+	int i;
 
 	DBG("");
 
@@ -908,13 +934,17 @@ static int ril_sim_probe(struct ofono_sim *sim, unsigned int vendor,
 	sd->app_str = NULL;
 	sd->app_type = RIL_APPTYPE_UNKNOWN;
 	sd->passwd_state = OFONO_SIM_PASSWORD_NONE;
+	sd->passwd_type = OFONO_SIM_PASSWORD_NONE;
 	sd->sim_registered = FALSE;
+
+	for (i = 0; i < OFONO_SIM_PASSWORD_INVALID; i++)
+		sd->retries[i] = -1;
 
 	current_sim = sim;
 
 	ofono_sim_set_data(sim, sd);
 
-        /*
+	/*
 	 * TODO: analyze if capability check is needed
 	 * and/or timer should be adjusted.
 	 *
@@ -942,18 +972,19 @@ static void ril_sim_remove(struct ofono_sim *sim)
 
 static struct ofono_sim_driver driver = {
 	.name			= "rilmodem",
-	.probe                  = ril_sim_probe,
-	.remove                 = ril_sim_remove,
+	.probe			= ril_sim_probe,
+	.remove			= ril_sim_remove,
 	.read_file_info		= ril_sim_read_info,
 	.read_file_transparent	= ril_sim_read_binary,
 	.read_file_linear	= ril_sim_read_record,
 	.read_file_cyclic	= ril_sim_read_record,
- 	.read_imsi		= ril_read_imsi,
+	.read_imsi		= ril_read_imsi,
 	.query_passwd_state	= ril_query_passwd_state,
 	.send_passwd		= ril_pin_send,
 	.lock			= ril_pin_change_state,
 	.reset_passwd		= ril_pin_send_puk,
 	.change_passwd		= ril_change_passwd,
+	.query_pin_retries	= ril_query_pin_retries,
 /*
  * TODO: Implmenting PIN/PUK support requires defining
  * the following driver methods.
