@@ -232,7 +232,6 @@ static void ril_pre_sim(struct ofono_modem *modem)
 	struct ofono_sim *sim;
 
 	sim = ofono_sim_create(modem, 0, "rilmodem", ril->modem);
-	ofono_devinfo_create(modem, 0, "rilmodem", ril->modem);
 	ofono_voicecall_create(modem, 0, "rilmodem", ril->modem);
 
 	if (sim && ril->have_sim)
@@ -321,6 +320,8 @@ static int ril_enable(struct ofono_modem *modem)
 
 	g_ril_register(ril->modem, RIL_UNSOL_RIL_CONNECTED,
 			ril_connected, modem);
+
+	ofono_devinfo_create(modem, 0, "rilmodem", ril->modem);
 
         return -EINPROGRESS;
 }
