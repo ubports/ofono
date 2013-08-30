@@ -169,11 +169,8 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 
 			ril->have_sim = TRUE;
 			power_on(modem);
-		} else {
+		} else
 			ofono_warn("No SIM card present.");
-			ril->have_sim = FALSE;
-			ofono_modem_set_online(modem, TRUE);
-		}
 	}
 	/* TODO: handle emergency calls if SIM !present or locked */
 }
@@ -235,7 +232,6 @@ static void ril_pre_sim(struct ofono_modem *modem)
 	struct ofono_sim *sim;
 
 	sim = ofono_sim_create(modem, 0, "rilmodem", ril->modem);
-	ofono_devinfo_create(modem, 0, "rilmodem", ril->modem);
 	ofono_voicecall_create(modem, 0, "rilmodem", ril->modem);
 
 	if (sim && ril->have_sim)
@@ -272,13 +268,10 @@ static void ril_post_online(struct ofono_modem *modem)
 
 	ofono_call_volume_create(modem, 0, "rilmodem", ril->modem);
 
-	if (ril->have_sim) {
-		ofono_netreg_create(modem, 0, "rilmodem", ril->modem);
-		ofono_ussd_create(modem, 0, "rilmodem", ril->modem);
-		ofono_call_settings_create(modem, 0, "rilmodem", ril->modem);
-		ofono_cbs_create(modem, 0, "rilmodem", ril->modem);
-	} else
-		ofono_voicecall_create(modem, 0, "rilmodem", ril->modem);
+	ofono_netreg_create(modem, 0, "rilmodem", ril->modem);
+	ofono_ussd_create(modem, 0, "rilmodem", ril->modem);
+	ofono_call_settings_create(modem, 0, "rilmodem", ril->modem);
+	ofono_cbs_create(modem, 0, "rilmodem", ril->modem);
 }
 
 static void ril_connected(struct ril_msg *message, gpointer user_data)
@@ -327,6 +320,8 @@ static int ril_enable(struct ofono_modem *modem)
 
 	g_ril_register(ril->modem, RIL_UNSOL_RIL_CONNECTED,
 			ril_connected, modem);
+
+	ofono_devinfo_create(modem, 0, "rilmodem", ril->modem);
 
         return -EINPROGRESS;
 }
