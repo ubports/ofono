@@ -83,6 +83,7 @@ static void ril_debug(const char *str, void *user_data)
 
 static void power_cb(struct ril_msg *message, gpointer user_data)
 {
+	DBG("enter");
 	struct ofono_modem *modem = user_data;
 	struct ril_data *ril = ofono_modem_get_data(modem);
 
@@ -97,7 +98,6 @@ static void power_cb(struct ril_msg *message, gpointer user_data)
 		else
 			ofono_error("Max retries for radio power on exceeded!");
 	} else {
-
 		g_ril_print_response_no_args(ril->modem, message);
 		DBG("Radio POWER-ON OK, calling set_powered(TRUE).");
 		ofono_modem_set_powered(modem, TRUE);
@@ -106,6 +106,7 @@ static void power_cb(struct ril_msg *message, gpointer user_data)
 
 static gboolean power_on(gpointer user_data)
 {
+	DBG("power_on");
 	struct ofono_modem *modem = user_data;
 	struct parcel rilp;
 	struct ril_data *ril = ofono_modem_get_data(modem);
@@ -134,7 +135,6 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 	struct ril_data *ril = ofono_modem_get_data(modem);
 	struct sim_status status;
 	struct sim_app *apps[MAX_UICC_APPS];
-	guint i = 0;
 
 	DBG("");
 
@@ -153,7 +153,8 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 				message->error, ril->sim_status_retries);
 
 		if (ril->sim_status_retries < MAX_SIM_STATUS_RETRIES)
-			g_timeout_add_seconds(2, (GSourceFunc) send_get_sim_status, (gpointer) modem);
+			g_timeout_add_seconds(2, (GSourceFunc)
+				send_get_sim_status, (gpointer) modem);
 		else
 			ofono_error("Max retries for GET_SIM_STATUS exceeded!");
 	} else {
@@ -199,7 +200,7 @@ static int ril_probe(struct ofono_modem *modem)
 		goto error;
 	}
 
-        ril->modem = NULL;
+	ril->modem = NULL;
 
 	ofono_modem_set_data(modem, ril);
 
@@ -228,6 +229,7 @@ static void ril_remove(struct ofono_modem *modem)
 
 static void ril_pre_sim(struct ofono_modem *modem)
 {
+	DBG("enter");
 	struct ril_data *ril = ofono_modem_get_data(modem);
 	struct ofono_sim *sim;
 
@@ -250,7 +252,7 @@ static void ril_post_sim(struct ofono_modem *modem)
 	ofono_sms_create(modem, 0, "rilmodem", ril->modem);
 
 	gprs = ofono_gprs_create(modem, 0, "rilmodem", ril->modem);
- 	gc = ofono_gprs_context_create(modem, 0, "rilmodem", ril->modem);
+	gc = ofono_gprs_context_create(modem, 0, "rilmodem", ril->modem);
 
 	if (gprs && gc) {
 		DBG("calling gprs_add_context");
@@ -264,6 +266,7 @@ static void ril_post_sim(struct ofono_modem *modem)
 
 static void ril_post_online(struct ofono_modem *modem)
 {
+	DBG("enter");
 	struct ril_data *ril = ofono_modem_get_data(modem);
 
 	ofono_call_volume_create(modem, 0, "rilmodem", ril->modem);
@@ -274,13 +277,51 @@ static void ril_post_online(struct ofono_modem *modem)
 	ofono_cbs_create(modem, 0, "rilmodem", ril->modem);
 }
 
+static void ril_set_online_cb(struct ril_msg *message, gpointer user_data)
+{
+	DBG("enter");
+	ofono_bool_t online_state;
+	struct cb_data *cbd = user_data;
+	ofono_modem_online_cb_t cb = cbd->cb;
+
+	if (message->error == RIL_E_SUCCESS) {
+		CALLBACK_WITH_SUCCESS(cb, cbd->data);
+	}
+	else
+		CALLBACK_WITH_FAILURE(cb, cbd->data);
+}
+
+static void ril_set_online(struct ofono_modem *modem, ofono_bool_t online,
+				ofono_modem_online_cb_t callback, void *data)
+{
+	DBG("Set online state (online = 1, offline = 0)): %i", online);
+	struct ril_data *ril = ofono_modem_get_data(modem);
+	struct cb_data *cbd = cb_data_new(callback, data);
+	struct parcel rilp;
+	int ret = 0;
+
+	parcel_init(&rilp);
+	parcel_w_int32(&rilp, 1);	/* Number of params */
+	parcel_w_int32(&rilp, online);	/* Radio ON = 1, Radio OFF = 0 */
+	DBG("1");
+	ret = g_ril_send(ril->modem, RIL_REQUEST_RADIO_POWER, rilp.data,
+				rilp.size, ril_set_online_cb, cbd, g_free);
+
+	parcel_free(&rilp);
+	DBG("2");
+	if (ret <= 0) {
+		g_free(cbd);
+		CALLBACK_WITH_FAILURE(callback, data);
+	}
+}
+
 static void ril_connected(struct ril_msg *message, gpointer user_data)
 {
 	struct ofono_modem *modem = (struct ofono_modem *) user_data;
 	struct ril_data *ril = ofono_modem_get_data(modem);
 
 	/* TODO: make conditional */
-        ofono_debug("[UNSOL]< %s", ril_unsol_request_to_string(message->req));
+	ofono_debug("[UNSOL]< %s", ril_unsol_request_to_string(message->req));
 	/* TODO: make conditional */
 
 	/* TODO: need a disconnect function to restart things! */
@@ -291,13 +332,14 @@ static void ril_connected(struct ril_msg *message, gpointer user_data)
 
 static int ril_enable(struct ofono_modem *modem)
 {
+	DBG("enter");
 	struct ril_data *ril = ofono_modem_get_data(modem);
 
 	ril->have_sim = FALSE;
 
-        ril->modem = g_ril_new();
+	ril->modem = g_ril_new();
 
-        /* NOTE: Since AT modems open a tty, and then call
+	/* NOTE: Since AT modems open a tty, and then call
 	 * g_at_chat_new(), they're able to return -EIO if
 	 * the first fails, and -ENOMEM if the second fails.
 	 * in our case, we already return -EIO if the ril_new
@@ -305,25 +347,23 @@ static int ril_enable(struct ofono_modem *modem)
 	 * abstraction... ( probaby not a bad idea ).
 	 */
 
-        if (ril->modem == NULL) {
+	if (ril->modem == NULL) {
 		DBG("g_ril_new() failed to create modem!");
 		return -EIO;
 	}
 
-	if (getenv("OFONO_RIL_TRACE")) {
+	if (getenv("OFONO_RIL_TRACE"))
 		g_ril_set_trace(ril->modem, TRUE);
-	}
 
-	if (getenv("OFONO_RIL_HEX_TRACE")) {
+	if (getenv("OFONO_RIL_HEX_TRACE"))
 		g_ril_set_debugf(ril->modem, ril_debug, "Device: ");
-	}
 
 	g_ril_register(ril->modem, RIL_UNSOL_RIL_CONNECTED,
 			ril_connected, modem);
 
 	ofono_devinfo_create(modem, 0, "rilmodem", ril->modem);
 
-        return -EINPROGRESS;
+	return -EINPROGRESS;
 }
 
 static int ril_disable(struct ofono_modem *modem)
@@ -360,6 +400,7 @@ static struct ofono_modem_driver ril_driver = {
 	.pre_sim = ril_pre_sim,
 	.post_sim = ril_post_sim,
 	.post_online = ril_post_online,
+	.set_online = ril_set_online,
 };
 
 /*
@@ -381,15 +422,16 @@ static struct ofono_modem_driver ril_driver = {
  */
 static int ril_init(void)
 {
+	DBG("enter");
 	int retval = 0;
 	struct ofono_modem *modem;
 
 	if ((retval = ofono_modem_driver_register(&ril_driver))) {
 		DBG("ofono_modem_driver_register returned: %d", retval);
-                return retval;
-        }
+	return retval;
+	}
 
-        /* everything after _modem_driver_register, is
+	/* everything after _modem_driver_register, is
 	 * non-standard ( see udev comment above ).
 	 * usually called by undevng::create_modem
 	 *
@@ -405,7 +447,7 @@ static int ril_init(void)
 	retval = ofono_modem_register(modem);
 	DBG("ofono_modem_register returned: %d", retval);
 
-        /* kickstart the modem:
+	/* kickstart the modem:
 	 * causes core modem code to call
 	 * - set_powered(TRUE) - which in turn
 	 *   calls driver->enable()
@@ -418,7 +460,7 @@ static int ril_init(void)
 	 * - sim_state_watch ( handles SIM removal? LOCKED states? **2
 	 * - ofono_modem_set_powered()
 	 */
-        ofono_modem_reset(modem);
+	ofono_modem_reset(modem);
 
 	return retval;
 }
@@ -431,4 +473,4 @@ static void ril_exit(void)
 
 OFONO_PLUGIN_DEFINE(ril, "RIL modem driver", VERSION,
 			OFONO_PLUGIN_PRIORITY_DEFAULT, ril_init, ril_exit)
- 
+

@@ -44,8 +44,8 @@
 #include "grilutil.h"
 
 #define RIL_TRACE(ril, fmt, arg...) do {	\
-	if (ril->trace == TRUE)		        \
-		ofono_debug(fmt, ## arg); 	\
+	if (ril->trace == TRUE)			\
+		ofono_debug(fmt, ## arg);	\
 } while (0)
 
 #define COMMAND_FLAG_EXPECT_PDU			0x1
@@ -98,7 +98,7 @@ struct ril_s {
 	gpointer debug_data;			/* Data to pass to debug func */
 	gboolean debug;
 	gboolean trace;
-	GSList *response_lines;			/* char * lines of the response */
+	GSList *response_lines;			/* char * lines of response */
 	gint timeout_source;
 	gboolean destroyed;			/* Re-entrancy guard */
 	gboolean in_read_handler;		/* Re-entrancy guard */
@@ -247,11 +247,11 @@ static struct ril_request *ril_request_create(struct ril_s *ril,
 	DBG("req: %s, id: %d, data_len: %d",
 		ril_request_id_to_string(req), id, (int) data_len);
 
-        /* RIL request: 8 byte header + data */
-        len = 8 + data_len;
+	/* RIL request: 8 byte header + data */
+	len = 8 + data_len;
 
-        /* Add 4 bytes to buffer length to include length prefix */
-        r->data_len = len + 4;
+	/* Add 4 bytes to buffer length to include length prefix */
+	r->data_len = len + 4;
 
 	r->data = g_try_new(char, r->data_len);
 	if (r->data == NULL) {
@@ -260,12 +260,12 @@ static struct ril_request *ril_request_create(struct ril_s *ril,
 		return 0;
 	}
 
-        /* convert length to network byte order (Big Endian) */
-        net_length = (guint32 *) r->data;
-        *net_length = htonl(len);
+	/* convert length to network byte order (Big Endian) */
+	net_length = (guint32 *) r->data;
+	*net_length = htonl(len);
 
 	/* advance past initial length */
-        cur_bufp = r->data + 4;
+	cur_bufp = r->data + 4;
 
 	/* write request code */
 	request = (guint32 *) cur_bufp;
@@ -304,7 +304,7 @@ static void ril_cleanup(struct ril_s *p)
 	/* Cleanup pending commands */
 
 	g_queue_free(p->command_queue);
-        p->command_queue = NULL;
+	p->command_queue = NULL;
 
 	/* Cleanup any response lines we have pending */
 	g_slist_foreach(p->response_lines, (GFunc)g_free, NULL);
@@ -359,8 +359,10 @@ static void handle_response(struct ril_s *p, struct ril_msg *message)
 			if (message->error != RIL_E_SUCCESS)
 				RIL_TRACE(p, "[%04d]< %s failed %s",
 						message->serial_no,
-						ril_request_id_to_string(message->req),
-						ril_error_to_string(message->error));
+						ril_request_id_to_string(
+							message->req),
+						ril_error_to_string(
+							message->error));
 
 			req = g_queue_pop_nth(p->command_queue, i);
 			if (req->callback)
@@ -412,9 +414,8 @@ static void handle_unsol_req(struct ril_s *p, struct ril_msg *message)
 
 	g_hash_table_iter_init(&iter, p->notify_list);
 
-	if (message->req == RIL_UNSOL_RIL_CONNECTED) {
+	if (message->req == RIL_UNSOL_RIL_CONNECTED)
 		p->connected = TRUE;
-	}
 
 	while (g_hash_table_iter_next(&iter, &key, &value)) {
 		req_key = *((int *)key);
@@ -463,9 +464,9 @@ static void dispatch(struct ril_s *p, struct ril_msg *message)
 		message->req = (int) *id_num_field;
 
 		/*
-		 * A RIL Unsolicited Event is two UINT32 fields ( unsolicited, and req/ev ),
-		 * so subtract the length of the header from the overall length to calculate
-		 * the length of the Event Data.
+		 * A RIL Unsolicited Event is two UINT32 fields ( unsolicited,
+		 * and req/ev ), so subtract the length of the header from the
+		 * overall length to calculate the length of the Event Data.
 		 */
 		data_len = message->buf_len - 8;
 	} else {
@@ -475,14 +476,15 @@ static void dispatch(struct ril_s *p, struct ril_msg *message)
 		message->error = *((guint32 *) bufp);
 
 		/*
-		 * A RIL Solicited Response is three UINT32 fields ( unsolicied, serial_no
-		 * and error ), so subtract the length of the header from the overall length
-		 * to calculate the length of the Event Data.
+		 * A RIL Solicited Response is three UINT32 fields ( unsolicied,
+		 * serial_no and error ), so subtract the length of the header
+		 * from the overall length to calculate the length of the Event
+		 * Data.
 		 */
 		data_len = message->buf_len - 12;
 	}
 
-        /* advance to start of data.. */
+	/* advance to start of data.. */
 	bufp += 4;
 
 	/* Now, allocate new buffer for data only, copy from
@@ -504,11 +506,11 @@ static void dispatch(struct ril_s *p, struct ril_msg *message)
 		message->buf_len = data_len;
 	}
 
-	if (message->unsolicited == TRUE) {
+	if (message->unsolicited == TRUE)
 		handle_unsol_req(p, message);
-	} else {
+	else
 		handle_response(p, message);
-	}
+
 error:
 	g_free(message->buf);
 	g_free(message);
@@ -540,22 +542,21 @@ static struct ril_msg *read_fixed_record(struct ril_s *p,
 	*/
 
 	message_len = *len - 4;
-	if (message_len < plen) {
+	if (message_len < plen)
 		return NULL;
-	}
 
 	/* FIXME: add check for message_len = 0? */
 
-        message = g_try_malloc(sizeof(struct ril_msg));
-        g_assert(message != NULL);
+	message = g_try_malloc(sizeof(struct ril_msg));
+	g_assert(message != NULL);
 
-        /* allocate ril_msg->buffer */
-        message->buf_len = plen;
-        message->buf = g_try_malloc(plen);
-        g_assert(message->buf != NULL);
+	/* allocate ril_msg->buffer */
+	message->buf_len = plen;
+	message->buf = g_try_malloc(plen);
+	g_assert(message->buf != NULL);
 
-        /* Copy bytes into message buffer */
-        memmove(message->buf, (const void *) bytes, plen);
+	/* Copy bytes into message buffer */
+	memmove(message->buf, (const void *) bytes, plen);
 
 	/* Indicate to caller size of record we extracted */
 	*len = plen + 4;
@@ -650,7 +651,7 @@ static gboolean can_write_data(gpointer data)
 	if (ril->req_bytes_written >= len)
 		return FALSE;
 
-        /*
+	/*
 	 * AT modems need to be woken up via a command set by the
 	 * upper layers.  RIL has no such concept, hence wakeup needed
 	 * NOTE - I'm keeping the if statement here commented out, just
@@ -658,7 +659,8 @@ static gboolean can_write_data(gpointer data)
 	 *
 	 * if (ril->req_bytes_written == 0 && wakeup_first == TRUE) {
 	 *		cmd = at_command_create(0, chat->wakeup, none_prefix, 0,
-	 *					NULL, wakeup_cb, chat, NULL, TRUE);
+	 *					NULL, wakeup_cb, chat, NULL,
+	 *					TRUE);
 	 *		g_queue_push_head(chat->command_queue, cmd);
 	 *	len = strlen(chat->wakeup);
 	 *	chat->timeout_source = g_timeout_add(chat->wakeup_timeout,
@@ -698,7 +700,7 @@ static void ril_suspend(struct ril_s *ril)
 
 	g_ril_io_set_write_handler(ril->io, NULL, NULL);
 	g_ril_io_set_read_handler(ril->io, NULL, NULL);
-        g_ril_io_set_debug(ril->io, NULL, NULL);
+	g_ril_io_set_debug(ril->io, NULL, NULL);
 }
 
 /*
@@ -712,9 +714,9 @@ static void ril_resume(struct ril_s *ril)
 	ril->suspended = FALSE;
 
 	if (g_ril_io_get_channel(ril->io) == NULL) {
-        	io_disconnect(ril);
-        	return;
-        }
+		io_disconnect(ril);
+		return;
+	}
 
 	g_ril_io_set_disconnect_function(ril->io, io_disconnect, ril);
 
@@ -723,7 +725,7 @@ static void ril_resume(struct ril_s *ril)
 	g_ril_io_set_read_handler(ril->io, new_bytes, ril);
 
 	if (g_queue_get_length(ril->command_queue) > 0)
-	        ril_wakeup_writer(ril);
+		ril_wakeup_writer(ril);
 }
 
 static gboolean ril_set_debug(struct ril_s *ril,
@@ -748,12 +750,12 @@ static void ril_unref(struct ril_s *ril)
 	if (is_zero == FALSE)
 		return;
 
-        if (ril->io) {
-        	ril_suspend(ril);
+	if (ril->io) {
+		ril_suspend(ril);
 		g_ril_io_unref(ril->io);
-        	ril->io = NULL;
-        	ril_cleanup(ril);
-        }
+		ril->io = NULL;
+		ril_cleanup(ril);
+	}
 
 	if (ril->in_read_handler)
 		ril->destroyed = TRUE;
@@ -840,7 +842,8 @@ static struct ril_s *create_ril()
 	}
 
 	ril->notify_list = g_hash_table_new_full(g_int_hash, g_int_equal,
-							g_free, ril_notify_destroy);
+							g_free,
+							ril_notify_destroy);
 
 	g_ril_io_set_read_handler(ril->io, new_bytes, ril);
 
@@ -851,7 +854,7 @@ static struct ril_s *create_ril()
 		g_key_file_free(keyfile);
 		g_error_free(err);
 	} else {
-		if (g_key_file_has_group(keyfile,"sub")) {
+		if (g_key_file_has_group(keyfile, "sub")) {
 			subscriptions = g_key_file_get_groups(keyfile, NULL);
 			value = g_key_file_get_string(
 				keyfile, subscriptions[0], "sub", NULL);
@@ -890,6 +893,33 @@ static struct ril_notify *ril_notify_create(struct ril_s *ril,
 	g_hash_table_insert(ril->notify_list, key, notify);
 
 	return notify;
+}
+
+static gboolean ril_cancel_group(struct ril_s *ril, guint group)
+{
+	int n = 0;
+	struct ril_request *c;
+
+	if (ril->command_queue == NULL)
+		return FALSE;
+
+	while ((c = g_queue_peek_nth(ril->command_queue, n)) != NULL) {
+		if (c->id == 0 || c->gid != group) {
+			n += 1;
+			continue;
+		}
+
+		if (n == 0 && ril->req_bytes_written > 0) {
+			c->callback = NULL;
+			n += 1;
+			continue;
+		}
+
+		ril_request_destroy(c);
+		g_queue_remove(ril->command_queue, c);
+	}
+
+	return TRUE;
 }
 
 static guint ril_register(struct ril_s *ril, guint group,
@@ -1037,7 +1067,7 @@ GRil *g_ril_clone(GRil *clone)
 GIOChannel *g_ril_get_channel(GRil *ril)
 {
 	if (ril == NULL || ril->parent->io == NULL)
- 		return NULL;
+		return NULL;
 
 	return g_ril_io_get_channel(ril->parent->io);
 
@@ -1065,17 +1095,21 @@ guint g_ril_send(GRil *ril, const guint reqid, const char *data,
 			const gsize data_len, GRilResponseFunc func,
 			gpointer user_data, GDestroyNotify notify)
 {
+	DBG("enter");
 	struct ril_request *r;
 	struct ril_s *p;
 
-	if (ril == NULL || ril->parent == NULL || ril->parent->command_queue == NULL)
-		return 0;
+	if (ril == NULL
+		|| ril->parent == NULL 
+		|| ril->parent->command_queue == NULL)
+			return 0;
 
-        p = ril->parent;
+	p = ril->parent;
 
 	r = ril_request_create(p, ril->group, reqid, p->next_cmd_id,
 				data, data_len, func,
 				user_data, notify, FALSE);
+
 	if (r == NULL)
 		return 0;
 
@@ -1083,11 +1117,12 @@ guint g_ril_send(GRil *ril, const guint reqid, const char *data,
 
 	g_queue_push_tail(p->command_queue, r);
 
-	if (g_queue_get_length(p->command_queue) == 1) {
-		DBG("calling wakeup_writer: qlen: %d", g_queue_get_length(p->command_queue));
+	if (g_queue_get_length(p->command_queue) == 1){
+		DBG("calling wakeup_writer: qlen: %d",
+			g_queue_get_length(p->command_queue));
 		ril_wakeup_writer(p);
 	}
-
+	DBG("exit");
 	return r->id;
 }
 
@@ -1119,6 +1154,8 @@ void g_ril_unref(GRil *ril)
 	if (is_zero == FALSE)
 		return;
 
++	ril_cancel_group(ril->parent, ril->group);
++	g_ril_unregister_all(ril);
 	ril_unref(ril->parent);
 
 	g_free(ril);
@@ -1139,7 +1176,7 @@ gboolean g_ril_set_trace(GRil *ril, gboolean trace)
 	if (ril == NULL || ril->parent == NULL)
 		return FALSE;
 
-	return (ril->parent->trace = trace);
+	return ril->parent->trace = trace;
 }
 
 gboolean g_ril_set_debugf(GRil *ril,
