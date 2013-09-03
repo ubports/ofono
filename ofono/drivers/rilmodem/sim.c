@@ -504,6 +504,41 @@ static void ril_read_imsi(struct ofono_sim *sim, ofono_sim_imsi_cb_t cb,
 	}
 }
 
+void set_pin_lock_state(struct ofono_sim *sim,struct sim_app *app)
+{
+	DBG("pin1:%u,pin2:%u",app->pin1_state,app->pin2_state);
+	/* 
+	 * Updates only pin and pin2 state. Other locks are not dealt here. For
+	 * that a RIL_REQUEST_QUERY_FACILITY_LOCK request should be used.
+	 */
+	switch (app->pin1_state) {
+	case RIL_PINSTATE_ENABLED_NOT_VERIFIED:
+	case RIL_PINSTATE_ENABLED_VERIFIED:
+	case RIL_PINSTATE_ENABLED_BLOCKED:
+	case RIL_PINSTATE_ENABLED_PERM_BLOCKED:
+		ofono_set_pin_lock_state(sim,OFONO_SIM_PASSWORD_SIM_PIN,TRUE);
+		break;
+	case RIL_PINSTATE_DISABLED:
+		ofono_set_pin_lock_state(sim,OFONO_SIM_PASSWORD_SIM_PIN,FALSE);
+		break;
+	default:
+		break;
+	}
+	switch (app->pin2_state) {
+	case RIL_PINSTATE_ENABLED_NOT_VERIFIED:
+	case RIL_PINSTATE_ENABLED_VERIFIED:
+	case RIL_PINSTATE_ENABLED_BLOCKED:
+	case RIL_PINSTATE_ENABLED_PERM_BLOCKED:
+		ofono_set_pin_lock_state(sim,OFONO_SIM_PASSWORD_SIM_PIN2,TRUE);
+		break;
+	case RIL_PINSTATE_DISABLED:
+		ofono_set_pin_lock_state(sim,OFONO_SIM_PASSWORD_SIM_PIN2,FALSE);
+		break;
+	default:
+		break;
+	}
+}
+
 static void configure_active_app(struct sim_data *sd,
 					struct sim_app *app,
 					guint index)
@@ -597,6 +632,7 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 				apps[i]->app_type != RIL_APPTYPE_UNKNOWN) {
 				current_active_app = apps[i]->app_type;
 				configure_active_app(sd, apps[i], i);
+				set_pin_lock_state(sim, apps[i]);
 				break;
 			}
 		}
