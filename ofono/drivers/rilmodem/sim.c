@@ -106,9 +106,6 @@ struct sim_data {
 	enum ofono_sim_password_type passwd_state;
 };
 
-static void ril_pin_change_state_cb(struct ril_msg *message,
-	gpointer user_data);
-
 static void set_path(struct sim_data *sd, struct parcel *rilp,
 			const int fileid, const guchar *path,
 			const guint path_len)
@@ -594,7 +591,6 @@ static void configure_active_app(struct sim_data *sd,
 			sd->passwd_state = OFONO_SIM_PASSWORD_PHFSIM_PUK;
 			break;
 		default:
-			sd->passwd_state = OFONO_SIM_PASSWORD_NONE;
 			break;
 		};
 		break;
@@ -617,7 +613,6 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 	struct sim_status status;
 	guint i = 0;
 	guint search_index = -1;
-	struct parcel rilp;
 
 	DBG("");
 
@@ -653,51 +648,9 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 			 * more appropriate call here??
 			 * __ofono_sim_refresh(sim, NULL, TRUE, TRUE);
 			 */
-		    ofono_sim_inserted_notify(sim, TRUE);
-
-			if (current_passwd) {
-				if (!strcmp(current_passwd, "NOTGIVEN")) {
-					__ofono_sim_recheck_pin(sim);
-				} else if (sd->passwd_state !=
-					OFONO_SIM_PASSWORD_SIM_PIN) {
-					__ofono_sim_recheck_pin(sim);
-				} else if (sd->passwd_state ==
-					OFONO_SIM_PASSWORD_SIM_PIN) {
-					parcel_init(&rilp);
-
-					parcel_w_int32(&rilp,
-						ENTER_SIM_PIN_PARAMS);
-					parcel_w_string(&rilp, current_passwd);
-					parcel_w_string(&rilp, sd->aid_str);
-
-					g_ril_send(sd->ril,
-						RIL_REQUEST_ENTER_SIM_PIN,
-						rilp.data, rilp.size, NULL,
-						NULL, g_free);
-
-					parcel_free(&rilp);
-
-					parcel_init(&rilp);
-
-					parcel_init(&rilp);
-					parcel_w_int32(&rilp, 1);
-					parcel_w_int32(&rilp, 1);
-
-					g_ril_send(sd->ril,
-						RIL_REQUEST_RADIO_POWER,
-						rilp.data,
-						rilp.size,
-						NULL, NULL, g_free);
-
-					parcel_free(&rilp);
-				}
-			} else {
-				__ofono_sim_recheck_pin(sim);
-			}
+			__ofono_sim_recheck_pin(sim);
 
 		ril_util_free_sim_apps(apps, status.num_apps);
-	} else {
-		ofono_sim_inserted_notify(sim, FALSE);
 	}
 
 	/* TODO: if no SIM present, handle emergency calling. */
@@ -776,10 +729,8 @@ static void ril_pin_change_state_cb(struct ril_msg *message, gpointer user_data)
 		CALLBACK_WITH_SUCCESS(cb, cbd->data);
 		g_ril_print_response_no_args(sd->ril, message);
 
-	} else {
-		strcpy(current_passwd, "NOTGIVEN");
+	} else
 		CALLBACK_WITH_FAILURE(cb, cbd->data);
-	}
 
 }
 
@@ -794,8 +745,6 @@ static void ril_pin_send(struct ofono_sim *sim, const char *passwd,
 
 	sd->passwd_type = OFONO_SIM_PASSWORD_SIM_PIN;
 	cbd->user = sd;
-
-	strcpy(current_passwd, passwd);
 
 	parcel_init(&rilp);
 
@@ -831,8 +780,6 @@ static void ril_pin_change_state(struct ofono_sim *sim,
 
 	sd->passwd_type = passwd_type;
 	cbd->user = sd;
-
-	strcpy(current_passwd, passwd);
 
 	parcel_init(&rilp);
 	parcel_w_int32(&rilp, SET_FACILITY_LOCK_PARAMS);
@@ -924,8 +871,6 @@ static void ril_pin_send_puk(struct ofono_sim *sim,
 
 	sd->passwd_type = OFONO_SIM_PASSWORD_SIM_PUK;
 	cbd->user = sd;
-
-	strcpy(current_passwd, passwd);
 
 	parcel_init(&rilp);
 
