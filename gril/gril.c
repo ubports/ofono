@@ -867,10 +867,6 @@ static struct ril_s *create_ril()
 		g_strfreev(subscriptions);
 	}
 
-	DBG("VEX");
-	current_passwd = malloc(15);
-	strcpy(current_passwd, "NOTGIVEN");
-
 	return ril;
 
 error:
@@ -1158,8 +1154,8 @@ void g_ril_unref(GRil *ril)
 	if (is_zero == FALSE)
 		return;
 
-+	ril_cancel_group(ril->parent, ril->group);
-+	g_ril_unregister_all(ril);
+	ril_cancel_group(ril->parent, ril->group);
+	g_ril_unregister_all(ril);
 	ril_unref(ril->parent);
 
 	g_free(ril);
