@@ -864,6 +864,10 @@ static struct ril_s *create_ril()
 		g_strfreev(subscriptions);
 	}
 
+	DBG("VEX");
+	current_passwd = malloc(15);
+	strcpy(current_passwd, "NOTGIVEN");
+
 	return ril;
 
 error:
