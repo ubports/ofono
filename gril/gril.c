@@ -867,6 +867,11 @@ static struct ril_s *create_ril()
 		g_strfreev(subscriptions);
 	}
 
+	current_passwd = g_try_malloc(16);
+	if (current_passwd)
+		g_stpcpy(current_passwd, defaultpasswd);
+	current_online_state = RIL_OFFLINE;
+
 	return ril;
 
 error:

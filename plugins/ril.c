@@ -170,8 +170,10 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 
 			ril->have_sim = TRUE;
 			power_on(modem);
-		} else
+		} else {
 			ofono_warn("No SIM card present.");
+			ofono_modem_set_powered(modem, TRUE);
+	}
 	}
 	/* TODO: handle emergency calls if SIM !present or locked */
 }
@@ -312,6 +314,11 @@ static void ril_set_online(struct ofono_modem *modem, ofono_bool_t online,
 	if (ret <= 0) {
 		g_free(cbd);
 		CALLBACK_WITH_FAILURE(callback, data);
+	} else {
+		if (online)
+			current_online_state = RIL_ONLINE_PREF;
+		else
+			current_online_state = RIL_OFFLINE;
 	}
 }
 
@@ -468,6 +475,8 @@ static int ril_init(void)
 static void ril_exit(void)
 {
 	DBG("");
+	if (current_passwd)
+		g_free(current_passwd);
 	ofono_modem_driver_unregister(&ril_driver);
 }
 
