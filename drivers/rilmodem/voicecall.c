@@ -555,6 +555,14 @@ static void ril_swap_without_accept(struct ofono_voicecall *vc,
 				NULL, 0, cb, data);
 }
 
+static void ril_release_all_held(struct ofono_voicecall *vc,
+					ofono_voicecall_cb_t cb, void *data)
+{
+	ril_template(RIL_REQUEST_HANGUP_WAITING_OR_BACKGROUND, vc,
+		    generic_cb, 0,
+			NULL, 0, cb, data);
+}
+
 static gboolean ril_delayed_register(gpointer user_data)
 {
 	struct ofono_voicecall *vc = user_data;
@@ -636,7 +644,8 @@ static struct ofono_voicecall_driver driver = {
 	.send_tones		= ril_send_dtmf,
 	.create_multiparty	= ril_create_multiparty,
 	.private_chat		= ril_private_chat,
-	.swap_without_accept	= ril_swap_without_accept
+	.swap_without_accept = ril_swap_without_accept,
+	.release_all_held = ril_release_all_held,
 };
 
 void ril_voicecall_init(void)
