@@ -101,36 +101,33 @@ static void ril_ussd_request(struct ofono_ussd *ussd, int dcs,
 
 }
 
-static void ril_ussd_notify(struct ril_msg *message,
-		gpointer user_data) {
+static void ril_ussd_notify(struct ril_msg *message, gpointer user_data)
+{
 	struct ofono_ussd *ussd = user_data;
 	struct parcel rilp;
 	gchar *ussd_from_network;
-	ril_util_init_parcel(message, &rilp);
-	/* ignore the first three items from RIL */
-	parcel_r_int32(&rilp);
-	parcel_r_int32(&rilp);
-	parcel_r_int32(&rilp);
-	ussd_from_network = parcel_r_string(&rilp);
-
+	gchar *type;
+	gint ussdtype;
 	int valid = 0;
 	long items_written = 0;
 	unsigned char pdu[200];
+
+	ril_util_init_parcel(message, &rilp);
+	parcel_r_int32(&rilp);
+	type = parcel_r_string(&rilp);
+	ussdtype = g_ascii_xdigit_value(*type);
+	ussd_from_network = parcel_r_string(&rilp);
+
 	if (ussd_from_network) {
-		if (ussd_encode(ussd_from_network, &items_written, pdu)
-				&& items_written > 0) {
+		if (ussd_encode(ussd_from_network, &items_written, pdu) && items_written > 0)
 			valid = 1;
-		}
 		g_free(ussd_from_network);
 	}
 
-	if (valid) {
-		ofono_ussd_notify(ussd, OFONO_USSD_STATUS_NOTIFY,
-				0, pdu, items_written);
-	} else {
-		ofono_ussd_notify(ussd, OFONO_USSD_STATUS_NOTIFY,
-				0, NULL, 0);
-	}
+	if (valid)
+		ofono_ussd_notify(ussd, ussdtype, 0, pdu, items_written);
+	else
+		ofono_ussd_notify(ussd, ussdtype, 0, NULL, 0);
 
 	return;
 }
