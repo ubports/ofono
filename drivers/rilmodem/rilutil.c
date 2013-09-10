@@ -535,7 +535,11 @@ gboolean ril_util_parse_reg(GRil *gril,
 				*tech = ACCESS_TECHNOLOGY_UTRAN_HSUPA;
 				break;
 			case RADIO_TECH_HSPA:
+			case RADIO_TECH_HSPAP:
 				*tech = ACCESS_TECHNOLOGY_UTRAN_HSDPA_HSUPA;
+				break;
+			case RADIO_TECH_LTE:
+				*tech = ACCESS_TECHNOLOGY_EUTRAN;
 				break;
 			default:
 				*tech = -1;
