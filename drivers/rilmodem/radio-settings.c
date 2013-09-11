@@ -78,7 +78,7 @@ static void ril_set_rat_mode(struct ofono_radio_settings *rs,
 		pref = PREF_NET_TYPE_GSM_ONLY;
 		break;
 	case OFONO_RADIO_ACCESS_MODE_UMTS:
-		pref = PREF_NET_TYPE_WCDMA;
+		pref = PREF_NET_TYPE_GSM_WCDMA;	/* according to UI design */
 		break;
 	case OFONO_RADIO_ACCESS_MODE_LTE:
 		pref = PREF_NET_TYPE_LTE_ONLY;
