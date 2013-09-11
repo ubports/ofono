@@ -603,6 +603,7 @@ test_scripts = test/backtrace \
 		test/dial-number \
 		test/list-calls \
 		test/answer-calls \
+		test/auto-answer-calls \
 		test/reject-calls \
 		test/create-multiparty \
 		test/private-chat \
