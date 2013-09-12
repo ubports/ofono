@@ -61,6 +61,8 @@ struct voicecall_data {
 	guint vts_source;
 	unsigned int vts_delay;
 	unsigned char flags;
+	ofono_voicecall_cb_t cb;
+	void *data;
 };
 
 struct release_id_req {
@@ -84,6 +86,7 @@ static void clcc_poll_cb(struct ril_msg *message, gpointer user_data)
 	GSList *calls;
 	GSList *n, *o;
 	struct ofono_call *nc, *oc;
+	struct ofono_error error;
 
 	if (message->error != RIL_E_SUCCESS) {
 		ofono_error("We are polling CLCC and received an error");
@@ -115,8 +118,16 @@ static void clcc_poll_cb(struct ril_msg *message, gpointer user_data)
 			o = o->next;
 		} else if (nc && (oc == NULL || (nc->id < oc->id))) {
 			/* new call, signal it */
-			if (nc->type)
+			if (nc->type) {
 				ofono_voicecall_notify(vc, nc);
+				if (vd->cb) {
+					ofono_voicecall_cb_t cb = vd->cb;
+					decode_ril_error(&error, "OK");
+					cb(&error, vd->data);
+					vd->cb = NULL;
+					vd->data = NULL;
+				}
+			}
 
 			n = n->next;
 		} else {
@@ -287,6 +298,11 @@ static void rild_cb(struct ril_msg *message, gpointer user_data)
 		vd->clcc_source = g_timeout_add(POLL_CLCC_INTERVAL,
 						poll_clcc, vc);
 
+	/* we cannot answer just yet since we don't know the
+	 * call id */
+	vd->cb = cb;
+	vd->data = cbd->data;
+	return;
 out:
 	cb(&error, cbd->data);
 }
@@ -393,7 +409,6 @@ static void ril_ss_notify(struct ril_msg *message, gpointer user_data)
 	int notification_type = 0;
 	int code = 0;
 	int index = 0;
-	int type = 0;
 	char *tmp_number = NULL;
 
 	ril_util_init_parcel(message, &rilp);
@@ -403,7 +418,7 @@ static void ril_ss_notify(struct ril_msg *message, gpointer user_data)
 			notification_type = parcel_r_int32(&rilp);
 			code = parcel_r_int32(&rilp);
 			index = parcel_r_int32(&rilp);
-			type = parcel_r_int32(&rilp);
+			parcel_r_int32(&rilp);
 			tmp_number = parcel_r_string(&rilp);
 
 			if (tmp_number != NULL) {
@@ -597,6 +612,8 @@ static int ril_voicecall_probe(struct ofono_voicecall *vc, unsigned int vendor,
 	vd->ril = g_ril_clone(ril);
 	vd->vendor = vendor;
 	vd->tone_duration = TONE_DURATION;
+	vd->cb = NULL;
+	vd->data = NULL;
 
 	ofono_voicecall_set_data(vc, vd);
 
