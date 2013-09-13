@@ -122,9 +122,9 @@ static void ril_rat_mode_cb(struct ril_msg *message, gpointer user_data)
 			mode = OFONO_RADIO_ACCESS_MODE_GSM;
 			break;
 		case PREF_NET_TYPE_WCDMA:
+		case PREF_NET_TYPE_GSM_WCDMA: /* according to UI design */
 			mode = OFONO_RADIO_ACCESS_MODE_UMTS;
 			break;
-		case PREF_NET_TYPE_GSM_WCDMA:
 		case PREF_NET_TYPE_GSM_WCDMA_AUTO:
 		case PREF_NET_TYPE_CDMA_EVDO_AUTO:
 		case PREF_NET_TYPE_CDMA_ONLY:
