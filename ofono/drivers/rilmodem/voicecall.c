@@ -451,13 +451,12 @@ static void ril_ss_notify(struct ril_msg *message, gpointer user_data)
 			parcel_r_int32(&rilp);
 			tmp_number = parcel_r_string(&rilp);
 
-			if (tmp_number != NULL) {
+			if (tmp_number != NULL)
 				strncpy(number.number, tmp_number,
 					OFONO_MAX_PHONE_NUMBER_LENGTH);
 
 			DBG("RIL data: MT/MO: %i, code: %i, index: %i",
 				notification_type, code, index);
-			}
 		break;
 		}
 	default:
@@ -608,6 +607,29 @@ static void ril_release_all_held(struct ofono_voicecall *vc,
 			NULL, 0, cb, data);
 }
 
+static gboolean enable_supp_svc(gpointer user_data)
+{
+	struct ofono_voicecall *vc = user_data;
+	struct voicecall_data *vd = ofono_voicecall_get_data(vc);
+	int request = RIL_REQUEST_SET_SUPP_SVC_NOTIFICATION;
+	int ret;
+	struct parcel rilp;
+
+	parcel_init(&rilp);
+	parcel_w_int32(&rilp, 1); /* size of array */
+	parcel_w_int32(&rilp, 1); /* notifications enabled */
+
+	ret = g_ril_send(vd->ril, request, rilp.data,
+			rilp.size, NULL, vc, NULL);
+
+	g_ril_print_request(vd->ril, ret, request);
+
+	parcel_free(&rilp);
+
+	/* Makes this a single shot */
+	return FALSE;
+}
+
 static gboolean ril_delayed_register(gpointer user_data)
 {
 	struct ofono_voicecall *vc = user_data;
@@ -624,6 +646,9 @@ static gboolean ril_delayed_register(gpointer user_data)
 	/* Unsol when call set in hold */
 	g_ril_register(vd->ril, RIL_UNSOL_SUPP_SVC_NOTIFICATION,
 			ril_ss_notify, vc);
+
+	/* request supplementary service notifications*/
+	enable_supp_svc(vc);
 
 	/* This makes the timeout a single-shot */
 	return FALSE;
