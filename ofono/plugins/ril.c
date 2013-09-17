@@ -162,20 +162,21 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 		/* Returns TRUE if cardstate == PRESENT */
 		if (ril_util_parse_sim_status(ril->modem, message,
 						&status, apps)) {
-			DBG("have_sim = TRUE; powering on modem; num_apps: %d",
+			DBG("have_sim = TRUE; num_apps: %d",
 				status.num_apps);
 
 			if (status.num_apps)
 				ril_util_free_sim_apps(apps, status.num_apps);
 
 			ril->have_sim = TRUE;
-			power_on(modem);
 		} else {
 			ofono_warn("No SIM card present.");
-			ofono_modem_set_powered(modem, TRUE);
+		}
+		// We cannot power on modem, but we need to get
+		// certain interfaces up to be able to make emergency calls
+		// in offline mode and without SIM
+		ofono_modem_set_powered(modem, TRUE);
 	}
-	}
-	/* TODO: handle emergency calls if SIM !present or locked */
 }
 
 static int send_get_sim_status(struct ofono_modem *modem)
