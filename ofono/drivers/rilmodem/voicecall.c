@@ -79,6 +79,32 @@ struct change_state_req {
 	int affected_types;
 };
 
+struct lastcause_req {
+	struct ofono_voicecall *vc;
+	int id;
+};
+
+static void lastcause_cb(struct ril_msg *message, gpointer user_data)
+{
+	struct lastcause_req *reqdata = user_data;
+	struct ofono_voicecall *vc = reqdata->vc;
+	int id = reqdata->id;
+
+	enum ofono_disconnect_reason reason = OFONO_DISCONNECT_REASON_ERROR;
+	int last_cause = CALL_FAIL_ERROR_UNSPECIFIED;
+	struct parcel rilp;
+	ril_util_init_parcel(message, &rilp);
+	if (parcel_r_int32(&rilp) > 0)
+		last_cause = parcel_r_int32(&rilp);
+
+	DBG("Call %d ended with RIL cause %d", id, last_cause);
+	if (last_cause == CALL_FAIL_NORMAL) {
+		reason = OFONO_DISCONNECT_REASON_REMOTE_HANGUP;
+	}
+
+	ofono_voicecall_disconnected(vc, id, reason, NULL);
+}
+
 static void clcc_poll_cb(struct ril_msg *message, gpointer user_data)
 {
 	struct ofono_voicecall *vc = user_data;
@@ -104,16 +130,20 @@ static void clcc_poll_cb(struct ril_msg *message, gpointer user_data)
 		oc = o ? o->data : NULL;
 
 		if (oc && (nc == NULL || (nc->id > oc->id))) {
-			enum ofono_disconnect_reason reason;
-
-			if (vd->local_release & (1 << oc->id))
-				reason = OFONO_DISCONNECT_REASON_LOCAL_HANGUP;
-			else
-				reason = OFONO_DISCONNECT_REASON_REMOTE_HANGUP;
-
-			if (oc->type)
+			if (vd->local_release & (1 << oc->id)) {
 				ofono_voicecall_disconnected(vc, oc->id,
-								reason, NULL);
+					OFONO_DISCONNECT_REASON_LOCAL_HANGUP, NULL);
+			} else {
+				/* Get disconnect cause before informing oFono core */
+				struct lastcause_req *reqdata =
+						g_try_new0(struct lastcause_req, 1);
+				if (reqdata) {
+					reqdata->vc = user_data;
+					reqdata->id = oc->id;
+					g_ril_send(vd->ril, RIL_REQUEST_LAST_CALL_FAIL_CAUSE,
+						NULL, 0, lastcause_cb, reqdata, g_free);
+				}
+			}
 
 			o = o->next;
 		} else if (nc && (oc == NULL || (nc->id < oc->id))) {
