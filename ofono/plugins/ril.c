@@ -72,61 +72,12 @@ struct ril_data {
 };
 
 static int send_get_sim_status(struct ofono_modem *modem);
-static gboolean power_on(gpointer user_data);
 
 static void ril_debug(const char *str, void *user_data)
 {
 	const char *prefix = user_data;
 
 	ofono_info("%s%s", prefix, str);
-}
-
-static void power_cb(struct ril_msg *message, gpointer user_data)
-{
-	DBG("enter");
-	struct ofono_modem *modem = user_data;
-	struct ril_data *ril = ofono_modem_get_data(modem);
-
-	if (message->error != RIL_E_SUCCESS) {
-		ril->power_on_retries++;
-		ofono_warn("Radio Power On request failed: %s; retries: %d",
-				ril_error_to_string(message->error),
-				ril->power_on_retries);
-
-		if (ril->power_on_retries < MAX_POWER_ON_RETRIES)
-			g_timeout_add_seconds(1, power_on, modem);
-		else
-			ofono_error("Max retries for radio power on exceeded!");
-	} else {
-		g_ril_print_response_no_args(ril->modem, message);
-		DBG("Radio POWER-ON OK, calling set_powered(TRUE).");
-		ofono_modem_set_powered(modem, TRUE);
-	}
-}
-
-static gboolean power_on(gpointer user_data)
-{
-	DBG("power_on");
-	struct ofono_modem *modem = user_data;
-	struct parcel rilp;
-	struct ril_data *ril = ofono_modem_get_data(modem);
-	int request = RIL_REQUEST_RADIO_POWER;
-	guint ret;
-
-	parcel_init(&rilp);
-	parcel_w_int32(&rilp, 1); /* size of array */
-	parcel_w_int32(&rilp, 1); /* POWER=ON */
-
-	ret = g_ril_send(ril->modem, request,
-				rilp.data, rilp.size, power_cb, modem, NULL);
-
-	g_ril_append_print_buf(ril->modem, "(1)");
-	g_ril_print_request(ril->modem, ret, request);
-
-	parcel_free(&rilp);
-
-	/* Makes this a single shot */
-	return FALSE;
 }
 
 static void sim_status_cb(struct ril_msg *message, gpointer user_data)
@@ -162,20 +113,21 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 		/* Returns TRUE if cardstate == PRESENT */
 		if (ril_util_parse_sim_status(ril->modem, message,
 						&status, apps)) {
-			DBG("have_sim = TRUE; powering on modem; num_apps: %d",
+			DBG("have_sim = TRUE; num_apps: %d",
 				status.num_apps);
 
 			if (status.num_apps)
 				ril_util_free_sim_apps(apps, status.num_apps);
 
 			ril->have_sim = TRUE;
-			power_on(modem);
 		} else {
 			ofono_warn("No SIM card present.");
-			ofono_modem_set_powered(modem, TRUE);
+		}
+		// We cannot power on modem, but we need to get
+		// certain interfaces up to be able to make emergency calls
+		// in offline mode and without SIM
+		ofono_modem_set_powered(modem, TRUE);
 	}
-	}
-	/* TODO: handle emergency calls if SIM !present or locked */
 }
 
 static int send_get_sim_status(struct ofono_modem *modem)
