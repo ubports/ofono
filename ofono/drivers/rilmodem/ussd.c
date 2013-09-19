@@ -71,7 +71,7 @@ static void ril_ussd_request(struct ofono_ussd *ussd, int dcs,
 	if (cbs_dcs_decode(dcs, NULL, NULL, &charset,
 					NULL, NULL, NULL)) {
 		if (charset == SMS_CHARSET_7BIT) {
-			unsigned char unpacked_buf[182];
+			unsigned char unpacked_buf[182] = "";
 			long written;
 
 			unpack_7bit_own_buf(pdu, len, 0, TRUE,

@@ -123,7 +123,7 @@ int parcel_w_string(struct parcel *p, char *str)
 		size_t padded = PAD_SIZE(len);
 
 		DBG("parcel_w_string(\"%s\"): len %d offset %d, cap %d, size %d",
-			str, p->offset, p->capacity, p->size);
+			str, len, p->offset, p->capacity, p->size);
 		if (p->offset + len < p->capacity) {
 			/* There's enough space */
 			memcpy(p->data + p->offset, gs16, gs16_size);
