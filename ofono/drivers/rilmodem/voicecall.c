@@ -98,7 +98,7 @@ static void lastcause_cb(struct ril_msg *message, gpointer user_data)
 		last_cause = parcel_r_int32(&rilp);
 
 	DBG("Call %d ended with RIL cause %d", id, last_cause);
-	if (last_cause == CALL_FAIL_NORMAL) {
+	if (last_cause == CALL_FAIL_NORMAL || last_cause == CALL_FAIL_BUSY) {
 		reason = OFONO_DISCONNECT_REASON_REMOTE_HANGUP;
 	}
 
@@ -729,3 +729,4 @@ void ril_voicecall_exit(void)
 {
 	ofono_voicecall_driver_unregister(&driver);
 }
+
