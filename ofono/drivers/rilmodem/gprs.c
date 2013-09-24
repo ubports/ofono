@@ -197,10 +197,12 @@ static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
 		ofono_gprs_set_cid_range(gprs, 1, max_cids);
 	}
 
-	/* Just need to notify ofono if it's already attached */
-	if (gd->ofono_attached && (gd->rild_status != status)) {
+	/* We need to notify core always to cover situations when
+	 * connection drops temporarily for example when user is
+	 * taking CS voice call from LTE or changing technology
+	 * preference */
+	if (gd->rild_status != status)
 		ofono_gprs_status_notify(gprs, status);
-	}
 
 	gd->rild_status = status;
 
