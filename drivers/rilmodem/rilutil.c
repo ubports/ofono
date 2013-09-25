@@ -4,6 +4,7 @@
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *  Copyright (C) 2012  Canonical Ltd.
+ *  Copyright (C) 2013 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -585,11 +586,11 @@ gint ril_util_parse_sms_response(GRil *gril, struct ril_msg *message)
 	 * BearerData MessageId for CDMA
 	 */
 	mr = parcel_r_int32(&rilp);
-	ack_pdu = parcel_r_int32(&rilp);
+	ack_pdu = parcel_r_string(&rilp);
 	error = parcel_r_int32(&rilp);
 
 
-	g_ril_append_print_buf(gril, "{%d,%d,%d}",
+	g_ril_append_print_buf(gril, "{%d,%s,%d}",
 				mr, ack_pdu, error);
 	g_ril_print_response(gril, message);
 
