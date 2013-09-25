@@ -234,7 +234,6 @@ static void ril_post_online(struct ofono_modem *modem)
 static void ril_set_online_cb(struct ril_msg *message, gpointer user_data)
 {
 	DBG("enter");
-	ofono_bool_t online_state;
 	struct cb_data *cbd = user_data;
 	ofono_modem_online_cb_t cb = cbd->cb;
 

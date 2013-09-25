@@ -3,6 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2013 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -1144,9 +1145,6 @@ static const GDBusSignalTable modem_signals[] = {
 
 void ofono_modem_set_online(struct ofono_modem *modem, ofono_bool_t online)
 {
-	DBusConnection *conn = ofono_dbus_get_connection();
-	dbus_bool_t dbus_online = online;
-
 	if (modem->online == online)
 		return;
 
