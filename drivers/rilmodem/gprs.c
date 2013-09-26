@@ -75,7 +75,6 @@ static void ril_gprs_registration_status(struct ofono_gprs *gprs,
 static void ril_gprs_state_change(struct ril_msg *message, gpointer user_data)
 {
 	struct ofono_gprs *gprs = user_data;
-	struct gprs_data *gd = ofono_gprs_get_data(gprs);
 
 	g_assert(message->req == RIL_UNSOL_RESPONSE_VOICE_NETWORK_STATE_CHANGED);
 
