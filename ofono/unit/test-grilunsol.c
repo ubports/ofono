@@ -3,6 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2013 Canonical Ltd.
+ *  Copyright (C) 2013 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -92,8 +93,7 @@ static const struct ril_msg unsol_data_call_list_changed_valid_1 = {
 
 static void test_unsol_data_call_list_changed_invalid(gconstpointer data)
 {
-	/* TODO: fix de-const cast... */
-	const struct ril_msg *message = (struct ril_msg *) data;
+	struct ril_msg *message = (struct ril_msg *) data;
 	struct ofono_error error;
 	struct unsol_data_call_list *unsol;
 
@@ -107,8 +107,7 @@ static void test_unsol_data_call_list_changed_invalid(gconstpointer data)
 
 static void test_unsol_data_call_list_changed_valid(gconstpointer data)
 {
-	/* TODO: fix de-const cast... */
-	const struct ril_msg *message = (struct ril_msg *) data;
+	struct ril_msg *message = (struct ril_msg *) data;
 	struct ofono_error error;
 	struct unsol_data_call_list *unsol;
 

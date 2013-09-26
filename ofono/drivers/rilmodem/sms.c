@@ -48,12 +48,6 @@ struct sms_data {
 	unsigned int vendor;
 };
 
-static void sms_debug(const gchar *str, gpointer user_data)
-{
-	const char *prefix = user_data;
-
-	ofono_info("%s%s", prefix, str);
-}
 
 static void ril_csca_set_cb(struct ril_msg *message, gpointer user_data)
 {
@@ -235,24 +229,6 @@ static void ril_cmgs(struct ofono_sms *sms, const unsigned char *pdu,
 		g_free(cbd);
 		CALLBACK_WITH_FAILURE(cb, -1, user_data);
 	}
-}
-
-static void ril_cgsms_set(struct ofono_sms *sms, int bearer,
-			ofono_sms_bearer_set_cb_t cb, void *user_data)
-{
-        /* TODO: same as csca_set */
-        DBG("");
-
-	CALLBACK_WITH_FAILURE(cb, user_data);
-}
-
-static void ril_cgsms_query(struct ofono_sms *sms,
-				ofono_sms_bearer_query_cb_t cb, void *user_data)
-{
-        /* TODO: same as csca_query */
-        DBG("");
-
-	CALLBACK_WITH_FAILURE(cb, -1, user_data);
 }
 
 static void ril_ack_delivery_cb(struct ril_msg *message, gpointer user_data)

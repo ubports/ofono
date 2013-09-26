@@ -3,6 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2013 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -67,8 +68,7 @@ static int provision_get_settings(const char *mcc, const char *mnc,
 
 	ap_count = g_slist_length(apns);
 
-	ofono_info("GPRS Provisioning found %d matching APNs for "
-			"SPN: %s MCC: %d MNC: %d",
+	ofono_info("GPRS Provisioning found %d matching APNs for SPN: %s MCC: %s MNC: %s",
 			ap_count, spn, mcc, mnc);
 	/*
 	 * Only keep the first APN found.

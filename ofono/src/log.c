@@ -113,6 +113,13 @@ void ofono_debug(const char *format, ...)
 	va_end(ap);
 }
 
+/**
+ * print_backtrace:
+ *
+ * Currently not used anywhere. Uncomment if needed for debug purposes.
+ */
+
+/*
 static void print_backtrace(unsigned int offset)
 {
 	void *frames[99];
@@ -214,6 +221,7 @@ static void print_backtrace(unsigned int offset)
 	close(outfd[1]);
 	close(infd[0]);
 }
+*/
 
 extern struct ofono_debug_desc __start___debug[];
 extern struct ofono_debug_desc __stop___debug[];
