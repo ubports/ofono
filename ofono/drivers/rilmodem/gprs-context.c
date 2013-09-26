@@ -4,6 +4,7 @@
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *  Copyright (C) 2013 Canonical Ltd.
+ *  Copyright (C) 2013 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -131,7 +132,7 @@ static void ril_setup_data_call_cb(struct ril_msg *message, gpointer user_data)
 	struct ofono_gprs_context *gc = cbd->user;
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 	struct ofono_error error;
-	struct reply_setup_data_call *reply;
+	struct reply_setup_data_call *reply = NULL;
 	char **split_ip_addr = NULL;
 
 	if (message->error != RIL_E_SUCCESS) {

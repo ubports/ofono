@@ -5,6 +5,7 @@
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *  Copyright (C) 2010  ST-Ericsson AB.
  *  Copyright (C) 2013 Canonical Ltd.
+ *  Copyright (C) 2013 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -83,45 +84,6 @@ static void ril_gprs_state_change(struct ril_msg *message, gpointer user_data)
 	 * taking CS voice call from LTE or changing technology
 	 * preference */
 	ril_gprs_registration_status(gprs, NULL, NULL);
-}
-
-static void ril_gprs_set_pref_network_cb(struct ril_msg *message,
-						gpointer user_data)
-{
-	if (message->error != RIL_E_SUCCESS) {
-		ofono_error("SET_PREF_NETWORK reply failure: %s", ril_error_to_string(message->error));
-	}
-}
-
-static void ril_gprs_set_pref_network(struct ofono_gprs *gprs)
-{
-	struct gprs_data *gd = ofono_gprs_get_data(gprs);
-	struct parcel rilp;
-	int request = RIL_REQUEST_SET_PREFERRED_NETWORK_TYPE;
-	int ret;
-
-	DBG("");
-
-	/*
-	 * TODO (OEM):
-	 *
-	 * The preferred network type may need to be set
-	 * on a device-specific basis.  For now, we use
-	 * GSM_WCDMA which prefers WCDMA ( ie. HS* ) over
-	 * the base GSM.
-	 */
-	parcel_init(&rilp);
-	parcel_w_int32(&rilp, PREF_NET_TYPE_GSM_WCDMA);
-
-	ret = g_ril_send(gd->ril, request,
-				rilp.data, rilp.size, ril_gprs_set_pref_network_cb, NULL, NULL);
-
-	g_ril_print_request_no_args(gd->ril, ret, request);
-
-	if (ret <= 0)
-		ofono_error("Send RIL_REQUEST_SET_PREFERRED_NETWORK_TYPE failed.");
-
-	parcel_free(&rilp);
 }
 
 static void ril_gprs_set_attached(struct ofono_gprs *gprs, int attached,
