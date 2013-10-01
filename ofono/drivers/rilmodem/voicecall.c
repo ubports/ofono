@@ -415,6 +415,36 @@ static void ril_hangup_all(struct ofono_voicecall *vc,
 	cb(&error, data);
 }
 
+static void ril_hangup_specific(struct ofono_voicecall *vc,
+		int id, ofono_voicecall_cb_t cb, void *data)
+{
+	struct voicecall_data *vd = ofono_voicecall_get_data(vc);
+	struct parcel rilp;
+	struct ofono_error error;
+	int request = RIL_REQUEST_HANGUP;
+	int ret;
+
+	DBG("Hanging up call with id %d", id);
+	parcel_init(&rilp);
+	parcel_w_int32(&rilp, 1); /* Always 1 - AT+CHLD=1x */
+	parcel_w_int32(&rilp, id);
+
+	/* Send request to RIL */
+	ret = ril_template(request, vc, generic_cb, 0x3f,
+				rilp.data, rilp.size, NULL, NULL);
+
+	g_ril_append_print_buf(vd->ril, "(%d)", id);
+	g_ril_print_request(vd->ril, ret, request);
+
+	parcel_free(&rilp);
+
+	if (ret > 0) {
+		CALLBACK_WITH_SUCCESS(cb, data);
+	} else {
+		CALLBACK_WITH_FAILURE(cb, data);
+	}
+}
+
 static void ril_call_state_notify(struct ril_msg *message, gpointer user_data)
 {
 	struct ofono_voicecall *vc = user_data;
@@ -599,7 +629,22 @@ static void ril_swap_without_accept(struct ofono_voicecall *vc,
 				NULL, 0, cb, data);
 }
 
+static void ril_hold_all_active(struct ofono_voicecall *vc,
+			ofono_voicecall_cb_t cb, void *data)
+{
+	ril_template(RIL_REQUEST_SWITCH_HOLDING_AND_ACTIVE, vc, generic_cb, 0,
+				NULL, 0, cb, data);
+}
+
 static void ril_release_all_held(struct ofono_voicecall *vc,
+					ofono_voicecall_cb_t cb, void *data)
+{
+	ril_template(RIL_REQUEST_HANGUP_WAITING_OR_BACKGROUND, vc,
+		    generic_cb, 0,
+			NULL, 0, cb, data);
+}
+
+static void ril_set_udub(struct ofono_voicecall *vc,
 					ofono_voicecall_cb_t cb, void *data)
 {
 	ril_template(RIL_REQUEST_HANGUP_WAITING_OR_BACKGROUND, vc,
@@ -707,17 +752,20 @@ static void ril_voicecall_remove(struct ofono_voicecall *vc)
 }
 
 static struct ofono_voicecall_driver driver = {
-	.name			= "rilmodem",
-	.probe			= ril_voicecall_probe,
-	.remove			= ril_voicecall_remove,
-	.dial			= ril_dial,
-	.answer			= ril_answer,
-	.hangup_all		= ril_hangup_all,
-	.send_tones		= ril_send_dtmf,
-	.create_multiparty	= ril_create_multiparty,
-	.private_chat		= ril_private_chat,
-	.swap_without_accept = ril_swap_without_accept,
-	.release_all_held = ril_release_all_held,
+	.name				= "rilmodem",
+	.probe				= ril_voicecall_probe,
+	.remove				= ril_voicecall_remove,
+	.dial				= ril_dial,
+	.answer				= ril_answer,
+	.hangup_all			= ril_hangup_all,
+	.release_specific		= ril_hangup_specific,
+	.send_tones			= ril_send_dtmf,
+	.create_multiparty		= ril_create_multiparty,
+	.private_chat			= ril_private_chat,
+	.swap_without_accept		= ril_swap_without_accept,
+	.hold_all_active		= ril_hold_all_active,
+	.release_all_held		= ril_release_all_held,
+	.set_udub			= ril_set_udub,
 };
 
 void ril_voicecall_init(void)
