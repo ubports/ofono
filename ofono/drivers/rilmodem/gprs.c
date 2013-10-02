@@ -85,16 +85,33 @@ static void ril_gprs_state_change(struct ril_msg *message, gpointer user_data)
 	ril_gprs_registration_status(gprs, NULL, NULL);
 }
 
+static gboolean ril_gprs_set_attached_callback(gpointer user_data)
+{
+	struct ofono_error error;
+	struct cb_data *cbd = user_data;
+	ofono_gprs_cb_t cb = cbd->cb;
+
+	decode_ril_error(&error, "OK");
+
+	cb(&error, cbd->data);
+
+	g_free(cbd);
+
+	return FALSE;
+}
+
 static void ril_gprs_set_attached(struct ofono_gprs *gprs, int attached,
 					ofono_gprs_cb_t cb, void *data)
 {
 	struct cb_data *cbd = cb_data_new(cb, data);
 	struct gprs_data *gd = ofono_gprs_get_data(gprs);
-	struct ofono_error error;
 
 	DBG("attached: %d", attached);
 
-	decode_ril_error(&error, "OK");
+	gd->ofono_attached = attached;
+
+	if (!attached)
+		gd->rild_status = NETWORK_REGISTRATION_STATUS_NOT_REGISTERED;
 
 	/*
 	 * As RIL offers no actual control over the GPRS 'attached'
@@ -106,11 +123,14 @@ static void ril_gprs_set_attached(struct ofono_gprs *gprs, int attached,
 	 * The core gprs code calls driver->set_attached() when a netreg
 	 * notificaiton is received and any configured roaming conditions
 	 * are met.
+	 *
+	 * However we cannot respond immediately, since core sets the
+	 * value of driver_attached after calling set_attached and that
+	 * leads to comparison failure in gprs_attached_update in
+	 * connection drop phase
 	 */
-	gd->ofono_attached = attached;
 
-	cb(&error, cbd->data);
-	g_free(cbd);
+	g_timeout_add_seconds(2, ril_gprs_set_attached_callback, cbd);
 }
 
 static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
@@ -120,7 +140,6 @@ static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
 	struct ofono_gprs *gprs = cbd->user;
 	struct gprs_data *gd = ofono_gprs_get_data(gprs);
 	struct ofono_error error;
-	gboolean attached;
 	int status, lac, ci, tech;
 	int max_cids = 1;
 
@@ -157,27 +176,26 @@ static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
 		ofono_gprs_set_cid_range(gprs, 1, max_cids);
 	}
 
-	/* We need to notify core always to cover situations when
-	 * connection drops temporarily for example when user is
-	 * taking CS voice call from LTE or changing technology
-	 * preference */
-	if (gd->rild_status != status)
-		ofono_gprs_status_notify(gprs, status);
-
-	gd->rild_status = status;
+	if (status != NETWORK_REGISTRATION_STATUS_REGISTERED ||
+			status != NETWORK_REGISTRATION_STATUS_ROAMING){
+		/*
+		 * Only core can succesfully drop the connection
+		 * If we drop the connection from here it leads
+		 * to race situation where core asks context
+		 * deactivation and at the same time we get
+		 * Registered notification from modem.
+		*/
+		status = NETWORK_REGISTRATION_STATUS_REGISTERED;
+	}
 
 	/*
-	 * Override the actual status based upon the desired
-	 * attached status set by the core GPRS code ( controlled
-	 * by the ConnnectionManager's 'Powered' property ).
+	 * We need to notify core at the start about connection becoming
+	 * available, otherwise first activation fails. All other
+	 * notifying is ignored by core. If connection drops core
+	 * is informed through network interface
 	 */
-	attached = (status == NETWORK_REGISTRATION_STATUS_REGISTERED ||
-			status == NETWORK_REGISTRATION_STATUS_ROAMING);
-
-	if (attached && gd->ofono_attached == FALSE) {
-		DBG("attached=true; ofono_attached=false; return !REGISTERED");
-		status = NETWORK_REGISTRATION_STATUS_NOT_REGISTERED;
-	}
+	ofono_gprs_status_notify(gprs, status);
+	gd->rild_status = status;
 
 error:
 	if (cb)
