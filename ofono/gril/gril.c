@@ -87,6 +87,7 @@ struct ril_s {
 	guint next_gid;				/* Next group id */
 	GRilIO *io;				/* GRil IO */
 	GQueue *command_queue;			/* Command queue */
+	GQueue *out_queue;			/* Commands sent/been sent */
 	guint req_bytes_written;		/* bytes written from req */
 	GHashTable *notify_list;		/* List of notification reg */
 	GRilDisconnectFunc user_disconnect;	/* user disconnect func */
@@ -305,7 +306,8 @@ static void ril_cleanup(struct ril_s *p)
 
 	g_queue_free(p->command_queue);
 	p->command_queue = NULL;
-
+	g_queue_free(p->out_queue);
+	p->out_queue = NULL;
 	/* Cleanup any response lines we have pending */
 	g_slist_foreach(p->response_lines, (GFunc)g_free, NULL);
 	g_slist_free(p->response_lines);
@@ -343,6 +345,7 @@ static void handle_response(struct ril_s *p, struct ril_msg *message)
 	struct ril_request *req;
 	gboolean found = FALSE;
 	int i;
+	guint len, id;
 
 	g_assert(count > 0);
 
@@ -365,27 +368,27 @@ static void handle_response(struct ril_s *p, struct ril_msg *message)
 							message->error));
 
 			req = g_queue_pop_nth(p->command_queue, i);
-			if (req->callback)
+			if (req->callback) {
+				DBG("req->callback");
 				req->callback(message, req->user_data);
+			}
+
+			len = g_queue_get_length(p->out_queue);
+			DBG("requests in sent queue before removing:%d",len);
+			for (i=0; i<len; i++) {
+				id = (guint) g_queue_peek_nth(p->out_queue, i);
+				DBG("peeked id:%d",id);
+				if (id == req->id) {
+					g_queue_pop_nth(p->out_queue, i);
+					break;
+				}
+			}
 
 			ril_request_destroy(req);
 
 			if (g_queue_peek_head(p->command_queue))
 				ril_wakeup_writer(p);
-			/*
-			 * TODO: there's a flaw in the current logic.
-			 * If a matching response isn't received,
-			 * req_bytes_written doesn't get reset.
-			 * gatchat has the concept of modem wakeup,
-			 * which is a failsafe way of making sure
-			 * cmd_bytes_written gets reset, however if
-			 * the modem isn't configured for wakeup,
-			 * it may have the same problem.  Perhaps
-			 * we should consider adding a timer?
-			 */
-			p->req_bytes_written = 0;
 
-			/* Found our matching one */
 			break;
 		}
 	}
@@ -625,51 +628,71 @@ static gboolean can_write_data(gpointer data)
 {
 	struct ril_s *ril = data;
 	struct ril_request *req;
-	gsize bytes_written;
-	gsize towrite;
-	gsize len;
+	gsize bytes_written, towrite, len;
+	guint qlen, oqlen, id;
+	gboolean written = TRUE;
+	int i, j;
 
-	/* Grab the first command off the queue and write as
-	 * much of it as we can
-	 */
-	req = g_queue_peek_head(ril->command_queue);
+	qlen = g_queue_get_length(ril->command_queue);
+	if (qlen < 1)
+			return FALSE;
 
-	/* For some reason command queue is empty, cancel write watcher */
-	if (req == NULL)
+	/*if the whole request was not written*/
+	if (ril->req_bytes_written != 0) {
+
+		for (i = 0; i < qlen; i++) {
+			req = g_queue_peek_nth(ril->command_queue, i);
+			if(req) {
+				id = (guint) g_queue_peek_head(ril->out_queue);
+				if (req->id == id)
+					goto out;
+			} else {
+				return FALSE;
+			}
+		}
+	}
+	/*if no requests already sent*/
+	oqlen = g_queue_get_length(ril->out_queue);
+	if (oqlen < 1) {
+		req = g_queue_peek_head(ril->command_queue);
+		if (req == NULL)
+			return FALSE;
+
+		g_queue_push_head(ril->out_queue,(gpointer) req->id);
+
+		goto out;
+	}
+
+	for (i = 0; i < qlen; i++) {
+		req = g_queue_peek_nth(ril->command_queue, i);
+		if (req == NULL)
+			return FALSE;
+
+		for (j = 0; j < oqlen; j++) {
+			id = (guint) g_queue_peek_nth(ril->out_queue, j);
+			if (req->id == id) {
+				written = TRUE;
+				break;
+			} else {
+				written = FALSE;
+			}
+		}
+
+		if (written == FALSE)
+			break;
+	}
+
+	/*watcher fired though requests already written*/
+	if (written == TRUE)
 		return FALSE;
 
+	g_queue_push_head(ril->out_queue,(gpointer) req->id);
+
+out:
 	len = req->data_len;
 
-	DBG("len: %d, req_bytes_written: %d",
-		(int) len,
-		ril->req_bytes_written);
-
-	/* For some reason write watcher fired, but we've already
-	 * written the entire command out to the io channel,
-	 * cancel write watcher
-	 */
-	if (ril->req_bytes_written >= len)
-		return FALSE;
-
-	/*
-	 * AT modems need to be woken up via a command set by the
-	 * upper layers.  RIL has no such concept, hence wakeup needed
-	 * NOTE - I'm keeping the if statement here commented out, just
-	 * in case this concept needs to be added back in...
-	 *
-	 * if (ril->req_bytes_written == 0 && wakeup_first == TRUE) {
-	 *		cmd = at_command_create(0, chat->wakeup, none_prefix, 0,
-	 *					NULL, wakeup_cb, chat, NULL,
-	 *					TRUE);
-	 *		g_queue_push_head(chat->command_queue, cmd);
-	 *	len = strlen(chat->wakeup);
-	 *	chat->timeout_source = g_timeout_add(chat->wakeup_timeout,
-	 *					wakeup_no_response, chat);
-	 *	}
-	 */
-
 	towrite = len - ril->req_bytes_written;
-
+	DBG("req:%d,len:%d,towrite:%d",req->id,len,towrite);
 #ifdef WRITE_SCHEDULER_DEBUG
 	if (towrite > 5)
 		towrite = 5;
@@ -685,6 +708,8 @@ static gboolean can_write_data(gpointer data)
 	ril->req_bytes_written += bytes_written;
 	if (bytes_written < towrite)
 		return TRUE;
+	else
+		ril->req_bytes_written = 0;
 
 	return FALSE;
 }
@@ -841,6 +866,12 @@ static struct ril_s *create_ril()
 		goto error;
 	}
 
+	ril->out_queue = g_queue_new();
+	if (ril->out_queue == NULL) {
+		ofono_error("create_ril: Couldn't create out_queue.");
+		goto error;
+	}
+
 	ril->notify_list = g_hash_table_new_full(g_int_hash, g_int_equal,
 							g_free,
 							ril_notify_destroy);
@@ -903,6 +934,8 @@ static struct ril_notify *ril_notify_create(struct ril_s *ril,
 static gboolean ril_cancel_group(struct ril_s *ril, guint group)
 {
 	int n = 0;
+	int i;
+	guint len;
 	struct ril_request *c;
 
 	if (ril->command_queue == NULL)
@@ -914,14 +947,18 @@ static gboolean ril_cancel_group(struct ril_s *ril, guint group)
 			continue;
 		}
 
-		if (n == 0 && ril->req_bytes_written > 0) {
-			c->callback = NULL;
-			n += 1;
-			continue;
+		c->callback= NULL;
+
+		len = g_queue_get_length(ril->out_queue);
+		for (i=0; i<len; i++) {
+			if ((guint) g_queue_peek_nth(ril->out_queue, i)
+				== c->id)
+				g_queue_pop_nth(ril->out_queue, i);
 		}
 
 		ril_request_destroy(c);
 		g_queue_remove(ril->command_queue, c);
+		n += 1;
 	}
 
 	return TRUE;
@@ -1122,11 +1159,8 @@ guint g_ril_send(GRil *ril, const guint reqid, const char *data,
 
 	g_queue_push_tail(p->command_queue, r);
 
-	if (g_queue_get_length(p->command_queue) == 1){
-		DBG("calling wakeup_writer: qlen: %d",
-			g_queue_get_length(p->command_queue));
-		ril_wakeup_writer(p);
-	}
+	DBG("calling wakeup_writer: qlen: %d", g_queue_get_length(p->command_queue));
+	ril_wakeup_writer(p);
 	DBG("exit");
 	return r->id;
 }
