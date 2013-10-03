@@ -129,18 +129,11 @@ static void ril_cw_query(struct ofono_call_settings *cs, int cls,
 
 	parcel_w_int32(&rilp, 1);		/* Number of params */
 
-	/* Modem seems to respond with error to all queries
-	 * or settings made with bearer class
-	 * BEARER_CLASS_DEFAULT. Design decision: If given
-	 * class is BEARER_CLASS_DEFAULT let's map it to
-	 * SERVICE_CLASS_VOICE effectively making it the
-	 * default bearer. This in line with Ofono API which is
-	 * contains only voice anyways.
+	/*
+	 * RILD expects service class to be 0 as certain carriers can reject the
+	 * query with specific service class
 	 */
-	if (cls == BEARER_CLASS_DEFAULT)
-		cls = BEARER_CLASS_VOICE;
-
-	parcel_w_int32(&rilp, cls);		/* Service class */
+	parcel_w_int32(&rilp, 0);
 
 	ret = g_ril_send(sd->ril, RIL_REQUEST_QUERY_CALL_WAITING,
 			rilp.data, rilp.size, ril_clip_cb, cbd, g_free);
