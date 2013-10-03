@@ -103,6 +103,40 @@ static void ril_ussd_request(struct ofono_ussd *ussd, int dcs,
 	}
 
 }
+static void ril_ussd_cancel_cb(struct ril_msg *message, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_ussd_cb_t cb = cbd->cb;
+	struct ofono_error error;
+
+	DBG("%d", message->error);
+
+	if (message->error == RIL_E_SUCCESS)
+		decode_ril_error(&error, "OK");
+	else
+		decode_ril_error(&error, "FAIL");
+
+	cb(&error, cbd->data);
+}
+
+static void ril_ussd_cancel(struct ofono_ussd *ussd,
+				ofono_ussd_cb_t cb, void *user_data)
+{
+	struct ussd_data *ud = ofono_ussd_get_data(ussd);
+	struct cb_data *cbd = cb_data_new(cb, user_data);
+
+	DBG("");
+
+	cbd->user = ud;
+
+	if (g_ril_send(ud->ril, RIL_REQUEST_CANCEL_USSD, NULL, 0,
+				ril_ussd_cancel_cb, cbd, g_free) > 0)
+		return;
+
+	g_free(cbd);
+
+	CALLBACK_WITH_FAILURE(cb, user_data);
+}
 
 static void ril_ussd_notify(struct ril_msg *message, gpointer user_data)
 {
@@ -122,7 +156,8 @@ static void ril_ussd_notify(struct ril_msg *message, gpointer user_data)
 	ussd_from_network = parcel_r_string(&rilp);
 
 	if (ussd_from_network)
-		if (ussd_encode(ussd_from_network, &items_written, pdu)	&& items_written > 0)
+		if (ussd_encode(ussd_from_network, &items_written, pdu)
+							&& items_written > 0)
 			valid = 1;
 
 	if (valid)
@@ -171,7 +206,8 @@ static struct ofono_ussd_driver driver = {
 	.name				= "rilmodem",
 	.probe				= ril_ussd_probe,
 	.remove				= ril_ussd_remove,
-	.request			= ril_ussd_request
+	.request			= ril_ussd_request,
+	.cancel				= ril_ussd_cancel
 };
 
 void ril_ussd_init(void)
