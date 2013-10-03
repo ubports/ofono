@@ -50,13 +50,12 @@ struct ussd_data {
 
 static void ril_ussd_cb(struct ril_msg *message, gpointer user_data)
 {
-	struct cb_data *cbd = user_data;
-	ofono_ussd_cb_t cb = cbd->cb;
-
-	if (message->error == RIL_E_SUCCESS)
-		CALLBACK_WITH_SUCCESS(cb, cbd->data);
-	else
-		CALLBACK_WITH_FAILURE(cb, cbd->data);
+	/*
+	 * Calling oFono callback function at this point may lead to
+	 * segmentation fault. There is theoretical possibility that no
+	 * RIL_UNSOL_ON_USSD is received and therefore the original request
+	 * is not freed in oFono.
+	 */
 }
 
 static void ril_ussd_request(struct ofono_ussd *ussd, int dcs,
@@ -91,7 +90,11 @@ static void ril_ussd_request(struct ofono_ussd *ussd, int dcs,
 		}
 	}
 
-
+	/*
+	 * It cannot be guaranteed that response is received before notify or
+	 * user-activity request so we must complete the request now and later
+	 * ignore the actual response.
+	 */
 	if (ret <= 0) {
 		g_free(cbd);
 		CALLBACK_WITH_FAILURE(cb, data);
@@ -118,11 +121,9 @@ static void ril_ussd_notify(struct ril_msg *message, gpointer user_data)
 	ussdtype = g_ascii_xdigit_value(*type);
 	ussd_from_network = parcel_r_string(&rilp);
 
-	if (ussd_from_network) {
-		if (ussd_encode(ussd_from_network, &items_written, pdu) && items_written > 0)
+	if (ussd_from_network)
+		if (ussd_encode(ussd_from_network, &items_written, pdu)	&& items_written > 0)
 			valid = 1;
-		g_free(ussd_from_network);
-	}
 
 	if (valid)
 		ofono_ussd_notify(ussd, ussdtype, 0, pdu, items_written);
@@ -140,10 +141,6 @@ static gboolean ril_delayed_register(gpointer user_data)
 	struct ussd_data *ud = ofono_ussd_get_data(ussd);
 	/* Register for USSD responses */
 	g_ril_register(ud->ril, RIL_UNSOL_ON_USSD,
-			ril_ussd_notify, ussd);
-
-	/* Register for MT USSD requests  */
-	g_ril_register(ud->ril, RIL_UNSOL_ON_USSD_REQUEST,
 			ril_ussd_notify, ussd);
 
 	return FALSE;
