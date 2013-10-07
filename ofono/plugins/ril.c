@@ -32,6 +32,7 @@
 #include <glib.h>
 #include <gril.h>
 #include <parcel.h>
+#include <gdbus.h>
 
 #define OFONO_API_SUBJECT_TO_CHANGE
 #include <ofono/plugin.h>
@@ -70,6 +71,22 @@ struct ril_data {
 	ofono_bool_t online;
 	ofono_bool_t reported;
 };
+
+/* MCE definitions */
+#define MCE_SERVICE		"com.nokia.mce"
+#define MCE_SIGNAL_IF	"com.nokia.mce.signal"
+
+/* MCE signal definitions */
+#define MCE_DISPLAY_SIG	"display_status_ind"
+
+#define MCE_DISPLAY_ON_STRING	"on"
+/* transitional state between ON and OFF (3 seconds) */
+#define MCE_DISPLAY_DIM_STRING	"dimmed"
+#define MCE_DISPLAY_OFF_STRING	"off"
+
+static guint mce_daemon_watch;
+static guint signal_watch;
+static DBusConnection *connection;
 
 static int send_get_sim_status(struct ofono_modem *modem);
 
@@ -273,6 +290,68 @@ static void ril_set_online(struct ofono_modem *modem, ofono_bool_t online,
 	}
 }
 
+static int ril_screen_state(struct ofono_modem *modem, ofono_bool_t state)
+{
+	struct ril_data *ril = ofono_modem_get_data(modem);
+	struct parcel rilp;
+	int request = RIL_REQUEST_SCREEN_STATE;
+	guint ret;
+
+	parcel_init(&rilp);
+	parcel_w_int32(&rilp, 1);		/* size of array */
+	parcel_w_int32(&rilp, state);	/* screen on/off */
+
+	/* fire and forget i.e. not waiting for the callback*/
+	ret = g_ril_send(ril->modem, request, rilp.data,
+			 rilp.size, NULL, NULL, NULL);
+
+	g_ril_append_print_buf(ril->modem, "(0)");
+	g_ril_print_request(ril->modem, ret, request);
+
+	parcel_free(&rilp);
+
+	return 0;
+}
+
+static gboolean display_changed(DBusConnection *conn,
+					DBusMessage *message, void *user_data)
+{
+	struct ofono_modem *modem = user_data;
+	DBusMessageIter iter;
+	const char *value;
+
+	if (!dbus_message_iter_init(message, &iter))
+		return TRUE;
+
+	dbus_message_iter_get_basic(&iter, &value);
+	DBG("Screen state: %s", value);
+
+	if (g_strcmp0(value, MCE_DISPLAY_ON_STRING) == 0)
+		ril_screen_state(modem, TRUE);
+	else if (g_strcmp0(value, MCE_DISPLAY_OFF_STRING) == 0)
+		ril_screen_state(modem, FALSE);
+	else
+		ril_screen_state(modem, TRUE);	/* Dimmed, interpreted as ON */
+
+	return TRUE;
+}
+
+static void mce_connect(DBusConnection *conn, void *user_data)
+{
+	signal_watch = g_dbus_add_signal_watch(conn,
+						MCE_SERVICE, NULL,
+						MCE_SIGNAL_IF,
+						MCE_DISPLAY_SIG,
+						display_changed,
+						user_data, NULL);
+}
+
+static void mce_disconnect(DBusConnection *conn, void *user_data)
+{
+	g_dbus_remove_watch(conn, signal_watch);
+	signal_watch = 0;
+}
+
 static void ril_connected(struct ril_msg *message, gpointer user_data)
 {
 	struct ofono_modem *modem = (struct ofono_modem *) user_data;
@@ -286,6 +365,10 @@ static void ril_connected(struct ril_msg *message, gpointer user_data)
 	ril->connected = TRUE;
 
 	send_get_sim_status(modem);
+
+	connection = ofono_dbus_get_connection();
+	mce_daemon_watch = g_dbus_add_service_watch(connection, MCE_SERVICE,
+					mce_connect, mce_disconnect, modem, NULL);
 }
 
 static int ril_enable(struct ofono_modem *modem)
@@ -428,6 +511,12 @@ static void ril_exit(void)
 	DBG("");
 	if (current_passwd)
 		g_free(current_passwd);
+
+	g_dbus_remove_watch(connection, mce_daemon_watch);
+
+	if (signal_watch > 0)
+		g_dbus_remove_watch(connection, signal_watch);
+
 	ofono_modem_driver_unregister(&ril_driver);
 }
 
