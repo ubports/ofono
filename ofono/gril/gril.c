@@ -374,10 +374,10 @@ static void handle_response(struct ril_s *p, struct ril_msg *message)
 			}
 
 			len = g_queue_get_length(p->out_queue);
-			DBG("requests in sent queue before removing:%d",len);
-			for (i=0; i<len; i++) {
-				id = (guint) g_queue_peek_nth(p->out_queue, i);
-				DBG("peeked id:%d",id);
+			DBG("requests in sent queue before removing:%d", len);
+			for (i = 0; i < len; i++) {
+				id = *(guint *) g_queue_peek_nth(p->out_queue, i);
+				DBG("peeked id:%d", id);
 				if (id == req->id) {
 					g_queue_pop_nth(p->out_queue, i);
 					break;
@@ -642,8 +642,8 @@ static gboolean can_write_data(gpointer data)
 
 		for (i = 0; i < qlen; i++) {
 			req = g_queue_peek_nth(ril->command_queue, i);
-			if(req) {
-				id = (guint) g_queue_peek_head(ril->out_queue);
+			if (req) {
+				id = *(guint *) g_queue_peek_head(ril->out_queue);
 				if (req->id == id)
 					goto out;
 			} else {
@@ -658,7 +658,7 @@ static gboolean can_write_data(gpointer data)
 		if (req == NULL)
 			return FALSE;
 
-		g_queue_push_head(ril->out_queue,(gpointer) req->id);
+		g_queue_push_head(ril->out_queue, &req->id);
 
 		goto out;
 	}
@@ -669,7 +669,7 @@ static gboolean can_write_data(gpointer data)
 			return FALSE;
 
 		for (j = 0; j < oqlen; j++) {
-			id = (guint) g_queue_peek_nth(ril->out_queue, j);
+			id = *(guint *) g_queue_peek_nth(ril->out_queue, j);
 			if (req->id == id) {
 				written = TRUE;
 				break;
@@ -686,13 +686,13 @@ static gboolean can_write_data(gpointer data)
 	if (written == TRUE)
 		return FALSE;
 
-	g_queue_push_head(ril->out_queue,(gpointer) req->id);
+	g_queue_push_head(ril->out_queue, &req->id);
 
 out:
 	len = req->data_len;
 
 	towrite = len - ril->req_bytes_written;
-	DBG("req:%d,len:%d,towrite:%d",req->id,len,towrite);
+	DBG("req:%d,len:%d,towrite:%d", req->id, len, towrite);
 #ifdef WRITE_SCHEDULER_DEBUG
 	if (towrite > 5)
 		towrite = 5;
@@ -936,6 +936,7 @@ static gboolean ril_cancel_group(struct ril_s *ril, guint group)
 	int n = 0;
 	int i;
 	guint len;
+	gboolean sent;
 	struct ril_request *c;
 
 	if (ril->command_queue == NULL)
@@ -947,14 +948,20 @@ static gboolean ril_cancel_group(struct ril_s *ril, guint group)
 			continue;
 		}
 
-		c->callback= NULL;
-
+		c->callback = NULL;
+		sent = FALSE;
 		len = g_queue_get_length(ril->out_queue);
-		for (i=0; i<len; i++) {
-			if ((guint) g_queue_peek_nth(ril->out_queue, i)
-				== c->id)
-				g_queue_pop_nth(ril->out_queue, i);
+		for (i = 0; i < len; i++) {
+			if (*(guint *) g_queue_peek_nth(ril->out_queue, i)
+				== c->id) {
+				n += 1;
+				sent = TRUE;
+				break;
+			}
 		}
+
+		if (sent)
+			continue;
 
 		ril_request_destroy(c);
 		g_queue_remove(ril->command_queue, c);
@@ -1142,7 +1149,7 @@ guint g_ril_send(GRil *ril, const guint reqid, const char *data,
 	struct ril_s *p;
 
 	if (ril == NULL
-		|| ril->parent == NULL 
+		|| ril->parent == NULL
 		|| ril->parent->command_queue == NULL)
 			return 0;
 
