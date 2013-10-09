@@ -644,6 +644,14 @@ static void ril_release_all_held(struct ofono_voicecall *vc,
 			NULL, 0, cb, data);
 }
 
+static void ril_release_all_active(struct ofono_voicecall *vc,
+					ofono_voicecall_cb_t cb, void *data)
+{
+	ril_template(RIL_REQUEST_HANGUP_FOREGROUND_RESUME_BACKGROUND, vc,
+		    generic_cb, 0,
+			NULL, 0, cb, data);
+}
+
 static void ril_set_udub(struct ofono_voicecall *vc,
 					ofono_voicecall_cb_t cb, void *data)
 {
@@ -766,6 +774,7 @@ static struct ofono_voicecall_driver driver = {
 	.hold_all_active		= ril_hold_all_active,
 	.release_all_held		= ril_release_all_held,
 	.set_udub			= ril_set_udub,
+	.release_all_active	= ril_release_all_active,
 };
 
 void ril_voicecall_init(void)
