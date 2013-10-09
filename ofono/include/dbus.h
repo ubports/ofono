@@ -3,6 +3,7 @@
  *  oFono - Open Telephony stack for Linux
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2013 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -60,6 +61,7 @@ extern "C" {
 #define OFONO_GNSS_POSR_AGENT_INTERFACE "org.ofono.PositioningRequestAgent"
 #define OFONO_HANDSFREE_INTERFACE OFONO_SERVICE ".Handsfree"
 #define OFONO_NETWORK_TIME_INTERFACE OFONO_SERVICE ".NetworkTime"
+#define OFONO_OEM_RAW_INTERFACE "org.ofono.OemRaw"
 
 /* CDMA Interfaces */
 #define OFONO_CDMA_VOICECALL_MANAGER_INTERFACE "org.ofono.cdma.VoiceCallManager"
