@@ -59,6 +59,7 @@
 #include <ofono/audio-settings.h>
 #include <ofono/types.h>
 #include <ofono/message-waiting.h>
+#include <ofono/oemraw.h>
 
 #include "drivers/rilmodem/rilmodem.h"
 
@@ -279,6 +280,7 @@ static void ril_post_online(struct ofono_modem *modem)
 	ofono_ussd_create(modem, 0, "rilmodem", ril->modem);
 	ofono_call_settings_create(modem, 0, "rilmodem", ril->modem);
 	ofono_cbs_create(modem, 0, "rilmodem", ril->modem);
+	ofono_oem_raw_create(modem, 0, "rilmodem", ril->modem);
 }
 
 static void ril_set_online_cb(struct ril_msg *message, gpointer user_data)

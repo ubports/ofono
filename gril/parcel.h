@@ -1,5 +1,6 @@
 /*
  * Copyright © 2011 Joel Armstrong <jcarmst@sandia.gov>
+ * Copyright © 2013 Jolla Ltd.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License (`GPL') as published by
@@ -36,6 +37,7 @@ void parcel_grow(struct parcel *p, size_t size);
 void parcel_free(struct parcel *p);
 int32_t parcel_r_int32(struct parcel *p);
 int parcel_w_int32(struct parcel *p, int32_t val);
+int parcel_w_byte(struct parcel *p, const char val);
 int parcel_w_string(struct parcel *p, char *str);
 char *parcel_r_string(struct parcel *p);
 size_t parcel_data_avail(struct parcel *p);

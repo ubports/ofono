@@ -1,0 +1,19 @@
+OemRaw hierarchy
+==============================
+
+Service		org.ofono
+Interface	org.ofono.OemRaw
+Object path	[variable prefix]/{modem0,modem1,...}
+
+Methods		array{byte} Send(array{byte} req)
+			
+			Sends an array of bytes to modem and returns its 
+			response.
+
+			One potential use is proprietary request handling.
+			Composing a properly formatted request is on the
+			responsibility of the client.
+			Multiple simultaneous requests are supported by ofono
+			core, but driver- or modem-specific restrictions may 
+			exist.
+
