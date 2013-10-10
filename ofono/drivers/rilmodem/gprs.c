@@ -92,7 +92,7 @@ static gboolean ril_gprs_set_attached_callback(gpointer user_data)
 	struct ofono_error error;
 	struct cb_data *cbd = user_data;
 	ofono_gprs_cb_t cb = cbd->cb;
-
+	DBG("");
 	decode_ril_error(&error, "OK");
 
 	cb(&error, cbd->data);
@@ -247,6 +247,9 @@ static void ril_gprs_registration_status(struct ofono_gprs *gprs,
 	struct cb_data *cbd = cb_data_new(cb, data);
 	int request = RIL_REQUEST_DATA_REGISTRATION_STATE;
 	guint ret;
+
+	if (gd == NULL || cbd == NULL)
+		return;
 
 	cbd->user = gprs;
 
