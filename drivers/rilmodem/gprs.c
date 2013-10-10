@@ -66,6 +66,8 @@ struct gprs_data {
 	gboolean ofono_attached;
 	int max_cids;
 	int rild_status;
+	gboolean notified;
+	guint registerid;
 };
 
 static void ril_gprs_registration_status(struct ofono_gprs *gprs,
@@ -107,30 +109,29 @@ static void ril_gprs_set_attached(struct ofono_gprs *gprs, int attached,
 	struct gprs_data *gd = ofono_gprs_get_data(gprs);
 
 	DBG("attached: %d", attached);
+	/*
+	* As RIL offers no actual control over the GPRS 'attached'
+	* state, we save the desired state, and use it to override
+	* the actual modem's state in the 'attached_status' function.
+	* This is similar to the way the core ofono gprs code handles
+	* data roaming ( see src/gprs.c gprs_netreg_update().
+	*
+	* The core gprs code calls driver->set_attached() when a netreg
+	* notification is received and any configured roaming conditions
+	* are met.
+	*/
 
 	gd->ofono_attached = attached;
 
-	if (!attached)
-		gd->rild_status = NETWORK_REGISTRATION_STATUS_NOT_REGISTERED;
-
+	ril_gprs_registration_status(gprs, NULL, NULL);
 	/*
-	 * As RIL offers no actual control over the GPRS 'attached'
-	 * state, we save the desired state, and use it to override
-	 * the actual modem's state in the 'attached_status' function.
-	 * This is similar to the way the core ofono gprs code handles
-	 * data roaming ( see src/gprs.c gprs_netreg_update().
-	 *
-	 * The core gprs code calls driver->set_attached() when a netreg
-	 * notificaiton is received and any configured roaming conditions
-	 * are met.
-	 *
-	 * However we cannot respond immediately, since core sets the
-	 * value of driver_attached after calling set_attached and that
-	 * leads to comparison failure in gprs_attached_update in
-	 * connection drop phase
-	 */
+	* However we cannot respond immediately, since core sets the
+	* value of driver_attached after calling set_attached and that
+	* leads to comparison failure in gprs_attached_update in
+	* connection drop phase
+	*/
 
-	g_timeout_add_seconds(2, ril_gprs_set_attached_callback, cbd);
+	g_timeout_add_seconds(1, ril_gprs_set_attached_callback, cbd);
 }
 
 static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
@@ -142,8 +143,9 @@ static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
 	struct ofono_error error;
 	int status, lac, ci, tech;
 	int max_cids = 1;
+	int id = RIL_UNSOL_RESPONSE_VOICE_NETWORK_STATE_CHANGED;
 
-	if (message->error == RIL_E_SUCCESS) {
+	if (gd && message->error == RIL_E_SUCCESS) {
 		decode_ril_error(&error, "OK");
 	} else {
 		ofono_error("ril_data_reg_cb: reply failure: %s",
@@ -165,9 +167,9 @@ static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
 	if (gd->rild_status == -1) {
 		ofono_gprs_register(gprs);
 
-		/* RILD tracks data network state together with voice */
-		g_ril_register(gd->ril, RIL_UNSOL_RESPONSE_VOICE_NETWORK_STATE_CHANGED,
-				ril_gprs_state_change, gprs);
+		DBG("Starting to listen network status");
+		gd->registerid = g_ril_register(gd->ril,
+			id, ril_gprs_state_change, gprs);
 	}
 
 	if (max_cids > gd->max_cids) {
@@ -176,25 +178,60 @@ static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
 		ofono_gprs_set_cid_range(gprs, 1, max_cids);
 	}
 
-	if (status != NETWORK_REGISTRATION_STATUS_REGISTERED ||
-			status != NETWORK_REGISTRATION_STATUS_ROAMING){
-		/*
-		 * Only core can succesfully drop the connection
-		 * If we drop the connection from here it leads
-		 * to race situation where core asks context
-		 * deactivation and at the same time we get
-		 * Registered notification from modem.
-		*/
-		status = NETWORK_REGISTRATION_STATUS_REGISTERED;
+	DBG("status is %d", status);
+
+	if (gd->ofono_attached && !gd->notified) {
+		if (status == NETWORK_REGISTRATION_STATUS_ROAMING ||
+			status == NETWORK_REGISTRATION_STATUS_REGISTERED) {
+			DBG("connection becomes available");
+			gd->ofono_attached = TRUE;
+			ofono_gprs_status_notify(gprs, status);
+			gd->notified = TRUE;
+			gd->rild_status = status;
+		}
+		goto error;
 	}
 
-	/*
-	 * We need to notify core at the start about connection becoming
-	 * available, otherwise first activation fails. All other
-	 * notifying is ignored by core. If connection drops core
-	 * is informed through network interface
-	 */
-	ofono_gprs_status_notify(gprs, status);
+	if (gd->ofono_attached &&
+			status != NETWORK_REGISTRATION_STATUS_SEARCHING) {
+		DBG("ofono attached, start faking responses");
+		if (status != NETWORK_REGISTRATION_STATUS_ROAMING) {
+			/*
+			* Only core can succesfully drop the connection
+			* If we drop the connection from here it leads
+			* to race situation where core asks context
+			* deactivation and at the same time we get
+			* Registered notification from modem.
+			*/
+			status = NETWORK_REGISTRATION_STATUS_REGISTERED;
+		}
+
+		if (gd->registerid != -1)
+			g_ril_unregister(gd->ril, gd->registerid);
+		gd->registerid = -1;
+	} else {
+		/*
+		 * Client is not approving succesful result
+		 * This covers the situation when context is
+		 * active in roaming situation and client closes
+		 * it directly by calling RoamingAllowed in API
+		 */
+		DBG("status is %d", status);
+
+		if (status != NETWORK_REGISTRATION_STATUS_SEARCHING) {
+			DBG("ofono not attached, notify core");
+			status = NETWORK_REGISTRATION_STATUS_NOT_REGISTERED;
+			ofono_gprs_detached_notify(gprs);
+			gd->notified = FALSE;
+			gd->ofono_attached = FALSE;
+		} else {
+			DBG("hide the searching state");
+			status = NETWORK_REGISTRATION_STATUS_REGISTERED;
+			ofono_gprs_status_notify(gprs, status);
+			gd->ofono_attached = TRUE;
+		}
+	}
+
 	gd->rild_status = status;
 
 error:
@@ -239,6 +276,8 @@ static int ril_gprs_probe(struct ofono_gprs *gprs,
 	gd->ofono_attached = FALSE;
 	gd->max_cids = 0;
 	gd->rild_status = -1;
+	gd->notified = FALSE;
+	gd->registerid = -1;
 
 	ofono_gprs_set_data(gprs, gd);
 
@@ -254,6 +293,9 @@ static void ril_gprs_remove(struct ofono_gprs *gprs)
 	DBG("");
 
 	ofono_gprs_set_data(gprs, NULL);
+
+	if (gd->registerid != -1)
+		g_ril_unregister(gd->ril, gd->registerid);
 
 	g_ril_unref(gd->ril);
 	g_free(gd);
