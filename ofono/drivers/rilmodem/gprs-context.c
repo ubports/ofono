@@ -290,6 +290,7 @@ static void ril_deactivate_data_call_cb(struct ril_msg *message, gpointer user_d
 	ofono_gprs_context_cb_t cb = cbd->cb;
 	struct ofono_gprs_context *gc = cbd->user;
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
+	gint id = gcd->active_ctx_cid;
 
 	DBG("");
 
@@ -307,7 +308,7 @@ static void ril_deactivate_data_call_cb(struct ril_msg *message, gpointer user_d
 		if (cb)
 			CALLBACK_WITH_SUCCESS(cb, cbd->data);
 		else
-			ofono_gprs_context_deactivated(gc, gcd->active_ctx_cid);
+			ofono_gprs_context_deactivated(gc, id);
 
 	} else {
 		ofono_error("%s: replay failure: %s",
