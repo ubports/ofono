@@ -44,6 +44,8 @@
 #include "common.h"
 #include "rilmodem.h"
 
+#include <ofono/netreg.h>
+
 /*
  * This module is the ofono_gprs_driver implementation for rilmodem.
  *
@@ -178,7 +180,10 @@ static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
 		ofono_gprs_set_cid_range(gprs, 1, max_cids);
 	}
 
-	DBG("status is %d", status);
+	DBG("data registration status is %d", status);
+
+	if (status == NETWORK_REGISTRATION_STATUS_ROAMING)
+		status = check_if_really_roaming(status);
 
 	if (gd->ofono_attached && !gd->notified) {
 		if (status == NETWORK_REGISTRATION_STATUS_ROAMING ||
@@ -216,7 +221,7 @@ static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
 		 * active in roaming situation and client closes
 		 * it directly by calling RoamingAllowed in API
 		 */
-		DBG("status is %d", status);
+		DBG("data registration status is %d", status);
 
 		if (status != NETWORK_REGISTRATION_STATUS_SEARCHING) {
 			DBG("ofono not attached, notify core");
