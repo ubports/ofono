@@ -218,8 +218,10 @@ static void ril_cops_cb(struct ril_msg *message, gpointer user_data)
 	/* Try to use long by default */
 	if (lalpha)
 		strncpy(op.name, lalpha, OFONO_MAX_OPERATOR_NAME_LENGTH);
-	else
+	else if (salpha)
 		strncpy(op.name, salpha, OFONO_MAX_OPERATOR_NAME_LENGTH);
+	else
+		goto error;
 
 	extract_mcc_mnc(numeric, op.mcc, op.mnc);
 
@@ -556,6 +558,8 @@ gint check_if_really_roaming(gint status)
 	if (spdi) {
 		if (sim_spdi_lookup(spdi, net_mcc, net_mnc))
 			return NETWORK_REGISTRATION_STATUS_REGISTERED;
+		else
+			return status;
 	} else
 		return status;
 }
