@@ -144,6 +144,8 @@ struct ofono_sim_driver *get_sim_driver();
 
 struct ofono_sim *get_sim();
 
+gint check_if_really_roaming(gint status);
+
 void ril_util_free_sim_apps(struct sim_app **apps, guint num_apps);
 
 struct cb_data {

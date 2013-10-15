@@ -35,10 +35,12 @@
 #include <ofono/log.h>
 #include <ofono/modem.h>
 #include <ofono/netreg.h>
+#include <ofono/sim.h>
 
 #include "common.h"
 #include "gril.h"
 #include "rilmodem.h"
+#include "simutil.h"
 
 struct netreg_data {
 	GRil *ril;
@@ -61,6 +63,8 @@ enum operator_status {
 	OPERATOR_STATUS_CURRENT =	2,
 	OPERATOR_STATUS_FORBIDDEN =	3,
 };
+
+struct ofono_netreg *current_netreg;
 
 static void extract_mcc_mnc(const char *str, char *mcc, char *mnc)
 {
@@ -103,6 +107,16 @@ static void ril_creg_cb(struct ril_msg *message, gpointer user_data)
 		CALLBACK_WITH_FAILURE(cb, -1, -1, -1, -1, cbd->data);
 		return;
 	}
+
+	DBG("voice registration status is %d", status);
+
+	if (status > 10)
+		status = status - 10;
+
+	if (status == NETWORK_REGISTRATION_STATUS_ROAMING)
+		status = check_if_really_roaming(status);
+
+	DBG("voice registration status is %d", status);
 
 	nd->tech = tech;
 	cb(&error, status, lac, ci, tech, cbd->data);
@@ -533,6 +547,19 @@ error:
 	ofono_error("Unable to notify ofono about nitz");
 }
 
+gint check_if_really_roaming(gint status)
+{
+	const char *net_mcc = ofono_netreg_get_mcc(current_netreg);
+	const char *net_mnc = ofono_netreg_get_mnc(current_netreg);
+	struct sim_spdi *spdi = ofono_netreg_get_spdi(current_netreg);
+
+	if (spdi) {
+		if (sim_spdi_lookup(spdi, net_mcc, net_mnc))
+			return NETWORK_REGISTRATION_STATUS_REGISTERED;
+	} else
+		return status;
+}
+
 static gboolean ril_delayed_register(gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
@@ -574,6 +601,8 @@ static int ril_netreg_probe(struct ofono_netreg *netreg, unsigned int vendor,
 	nd->time.year = -1;
 	nd->time.dst = 0;
 	nd->time.utcoff = 0;
+	current_netreg = netreg;
+
 	ofono_netreg_set_data(netreg, nd);
 
         /*
@@ -618,6 +647,7 @@ static struct ofono_netreg_driver driver = {
 
 void ril_netreg_init(void)
 {
+	current_netreg = NULL;
 	ofono_netreg_driver_register(&driver);
 }
 
