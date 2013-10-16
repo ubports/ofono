@@ -424,6 +424,9 @@ static void ril_register_manual(struct ofono_netreg *netreg,
 	int request = RIL_REQUEST_SET_NETWORK_SELECTION_MANUAL;
 	int ret;
 
+	/* add *netreg_data to callback */
+	cbd->user = nd;
+
 	parcel_init(&rilp);
 
 	/* RIL expects a char * specifying MCCMNC of network to select */
