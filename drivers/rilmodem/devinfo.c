@@ -46,6 +46,7 @@
  * will need to be re-worked to talk to the /gril layer
  * in order to get real values from RILD.
  */
+guint timer_id;
 
 static void ril_query_manufacturer(struct ofono_devinfo *info,
 					ofono_devinfo_query_cb_t cb,
@@ -168,6 +169,9 @@ static gboolean ril_delayed_register(gpointer user_data)
 {
 	struct ofono_devinfo *info = user_data;
 	DBG("");
+
+	timer_id = 0;
+
 	ofono_devinfo_register(info);
 
 	/* This makes the timeout a single-shot */
@@ -196,7 +200,7 @@ static int ril_devinfo_probe(struct ofono_devinfo *info, unsigned int vendor,
 	 * some kind of capabilities query to the modem, and then
 	 * call register in the callback; we use a timer instead.
 	 */
-	g_timeout_add_seconds(1, ril_delayed_register, info);
+	timer_id = g_timeout_add_seconds(1, ril_delayed_register, info);
 
 	return 0;
 }
@@ -206,6 +210,9 @@ static void ril_devinfo_remove(struct ofono_devinfo *info)
 	GRil *ril = ofono_devinfo_get_data(info);
 
 	ofono_devinfo_set_data(info, NULL);
+
+	if (timer_id > 0)
+		g_source_remove(timer_id);
 
 	g_ril_unref(ril);
 }
