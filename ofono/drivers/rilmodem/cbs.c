@@ -42,6 +42,7 @@
 
 struct cbs_data {
 	GRil *ril;
+	guint timer_id;
 };
 
 static void ril_set_topics(struct ofono_cbs *cbs, const char *topics,
@@ -100,6 +101,8 @@ static gboolean ril_delayed_register(gpointer user_data)
 	struct ofono_cbs *cbs = user_data;
 	struct cbs_data *cd = ofono_cbs_get_data(cbs);
 
+	cd->timer_id = 0;
+
 	ofono_cbs_register(cbs);
 
 	g_ril_register(cd->ril, RIL_UNSOL_RESPONSE_NEW_BROADCAST_SMS,
@@ -119,7 +122,7 @@ static int ril_cbs_probe(struct ofono_cbs *cbs, unsigned int vendor,
 
 	ofono_cbs_set_data(cbs, cd);
 
-	g_timeout_add_seconds(2, ril_delayed_register, cbs);
+	cd->timer_id = g_timeout_add_seconds(2, ril_delayed_register, cbs);
 
 	return 0;
 }
@@ -128,6 +131,10 @@ static void ril_cbs_remove(struct ofono_cbs *cbs)
 {
 	struct cbs_data *cd = ofono_cbs_get_data(cbs);
 	ofono_cbs_set_data(cbs, NULL);
+
+	if (cd->timer_id > 0)
+		g_source_remove(cd->timer_id);
+
 	g_ril_unref(cd->ril);
 	g_free(cd);
 }
