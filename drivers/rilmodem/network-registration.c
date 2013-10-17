@@ -54,6 +54,7 @@ struct netreg_data {
 	struct ofono_network_time time;
 	guint nitz_timeout;
 	unsigned int vendor;
+	guint timer_id;
 };
 
 /* 27.007 Section 7.3 <stat> */
@@ -568,6 +569,9 @@ static gboolean ril_delayed_register(gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
 	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+
+	nd->timer_id = 0;
+
 	ofono_netreg_register(netreg);
 
 	/* Register for network state changes */
@@ -609,7 +613,7 @@ static int ril_netreg_probe(struct ofono_netreg *netreg, unsigned int vendor,
 
 	ofono_netreg_set_data(netreg, nd);
 
-        /*
+	/*
 	 * TODO: analyze if capability check is needed
 	 * and/or timer should be adjusted.
 	 *
@@ -619,8 +623,7 @@ static int ril_netreg_probe(struct ofono_netreg *netreg, unsigned int vendor,
 	 * some kind of capabilities query to the modem, and then
 	 * call register in the callback; we use a timer instead.
 	 */
-        g_timeout_add_seconds(1, ril_delayed_register, netreg);
-
+	nd->timer_id = g_timeout_add_seconds(1, ril_delayed_register, netreg);
 	return 0;
 }
 
@@ -632,6 +635,9 @@ static void ril_netreg_remove(struct ofono_netreg *netreg)
 		g_source_remove(nd->nitz_timeout);
 
 	ofono_netreg_set_data(netreg, NULL);
+
+	if (nd->timer_id > 0)
+		g_source_remove(nd->timer_id);
 
 	g_ril_unref(nd->ril);
 	g_free(nd);
