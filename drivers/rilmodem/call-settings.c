@@ -46,6 +46,7 @@
 
 struct settings_data {
 	GRil *ril;
+	guint timer_id;
 };
 
 static void ril_clip_cb(struct ril_msg *message, gpointer user_data)
@@ -233,6 +234,9 @@ static void ril_clir_set(struct ofono_call_settings *cs, int mode,
 static gboolean ril_delayed_register(gpointer user_data)
 {
 	struct ofono_call_settings *cs = user_data;
+	struct settings_data *sd = ofono_call_settings_get_data(cs);
+
+	sd->timer_id = 0;
 
 	ofono_call_settings_register(cs);
 
@@ -250,7 +254,7 @@ static int ril_call_settings_probe(struct ofono_call_settings *cs,
 
 	ofono_call_settings_set_data(cs, sd);
 
-	g_timeout_add_seconds(2, ril_delayed_register, cs);
+	sd->timer_id = g_timeout_add_seconds(2, ril_delayed_register, cs);
 
 	return 0;
 }
@@ -259,6 +263,10 @@ static void ril_call_settings_remove(struct ofono_call_settings *cs)
 {
 	struct settings_data *sd = ofono_call_settings_get_data(cs);
 	ofono_call_settings_set_data(cs, NULL);
+
+	if (sd->timer_id > 0)
+		g_source_remove(sd->timer_id);
+
 	g_ril_unref(sd->ril);
 	g_free(sd);
 }

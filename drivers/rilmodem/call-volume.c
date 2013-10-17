@@ -46,6 +46,7 @@
 struct cv_data {
 	GRil *ril;
 	unsigned int vendor;
+	guint timer_id;
 };
 
 static void volume_mute_cb(struct ril_msg *message, gpointer user_data)
@@ -137,7 +138,12 @@ static void call_probe_mute(gpointer user_data)
 static gboolean ril_delayed_register(gpointer user_data)
 {
 	struct ofono_call_volume *cv = user_data;
+	struct cv_data *cvd = ofono_call_volume_get_data(cv);
+
 	DBG("");
+
+	cvd->timer_id = 0;
+
 	ofono_call_volume_register(cv);
 
 	/* Probe the mute state */
@@ -162,17 +168,17 @@ static int ril_call_volume_probe(struct ofono_call_volume *cv,
 
 	ofono_call_volume_set_data(cv, cvd);
 
-        /*
+	/*
 	 * TODO: analyze if capability check is needed
 	 * and/or timer should be adjusted.
 	 *
 	 * ofono_call_volume_register() needs to be called after
 	 * the driver has been set in ofono_call_volume_create(),
 	 * which calls this function.  Most other drivers make
-         * some kind of capabilities query to the modem, and then
+	* some kind of capabilities query to the modem, and then
 	 * call register in the callback; we use a timer instead.
 	 */
-	g_timeout_add_seconds(2, ril_delayed_register, cv);
+	cvd->timer_id = g_timeout_add_seconds(2, ril_delayed_register, cv);
 
 	return 0;
 }
@@ -182,6 +188,9 @@ static void ril_call_volume_remove(struct ofono_call_volume *cv)
 	struct cv_data *cvd = ofono_call_volume_get_data(cv);
 
 	ofono_call_volume_set_data(cv, NULL);
+
+	if (cvd->timer_id > 0)
+		g_source_remove(cvd->timer_id);
 
 	g_ril_unref(cvd->ril);
 	g_free(cvd);

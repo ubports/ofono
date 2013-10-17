@@ -46,6 +46,7 @@
 
 struct forw_data {
 	GRil *ril;
+	guint timer_id;
 };
 
 enum call_forward_cmd {
@@ -277,6 +278,10 @@ static void ril_query(struct ofono_call_forwarding *cf, int type, int cls,
 static gboolean ril_delayed_register(gpointer user_data)
 {
 	struct ofono_call_forwarding *cf = user_data;
+	struct forw_data *fd = ofono_call_forwarding_get_data(cf);
+
+	fd->timer_id = 0;
+
 	ofono_call_forwarding_register(cf);
 	return FALSE;
 }
@@ -288,7 +293,7 @@ static int ril_call_forwarding_probe(struct ofono_call_forwarding *cf,
 	struct forw_data *fd = g_try_new0(struct forw_data, 1);
 	fd->ril = g_ril_clone(ril);
 	ofono_call_forwarding_set_data(cf, fd);
-	g_timeout_add_seconds(2, ril_delayed_register, cf);
+	fd->timer_id = g_timeout_add_seconds(2, ril_delayed_register, cf);
 
 	return 0;
 }
@@ -297,6 +302,10 @@ static void ril_call_forwarding_remove(struct ofono_call_forwarding *cf)
 {
 	struct forw_data *data = ofono_call_forwarding_get_data(cf);
 	ofono_call_forwarding_set_data(cf, NULL);
+
+	if (data->timer_id > 0)
+		g_source_remove(data->timer_id);
+
 	g_ril_unref(data->ril);
 	g_free(data);
 }

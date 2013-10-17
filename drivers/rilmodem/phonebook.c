@@ -138,6 +138,7 @@ struct pb_data {
 	struct pb_file_info *extension_file_info;
 	uint8_t ext1_to_type;
 	uint8_t ext1_to_entry;
+	guint timer_id;
 };
 
 static GSList *pb_files;
@@ -1237,6 +1238,10 @@ error:
 static gboolean ril_delayed_register(gpointer user_data)
 {
 	struct ofono_phonebook *pb = user_data;
+	struct pb_data *pbd = ofono_phonebook_get_data(pb);
+
+	pbd->timer_id = 0;
+
 	ofono_phonebook_register(pb);
 	return FALSE;
 }
@@ -1249,7 +1254,7 @@ static int ril_phonebook_probe(struct ofono_phonebook *pb,
 	pd->ril = g_ril_clone(ril);
 	pd->sim_driver = get_sim_driver();
 	ofono_phonebook_set_data(pb, pd);
-	g_timeout_add_seconds(2, ril_delayed_register, pb);
+	pd->timer_id = g_timeout_add_seconds(2, ril_delayed_register, pb);
 
 	return 0;
 }
@@ -1264,6 +1269,9 @@ static void ril_phonebook_remove(struct ofono_phonebook *pb)
 	pb_next = NULL;
 	phonebook_entry_start = NULL;
 	phonebook_entry_current = NULL;
+
+	if (pd->timer_id > 0)
+		g_source_remove(pd->timer_id);
 
 	g_free(pd);
 }
