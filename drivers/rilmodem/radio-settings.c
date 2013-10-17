@@ -45,6 +45,7 @@
 
 struct radio_data {
 	GRil *ril;
+	guint timer_id;
 };
 
 static void ril_set_rat_cb(struct ril_msg *message, gpointer user_data)
@@ -163,6 +164,10 @@ static void ril_query_rat_mode(struct ofono_radio_settings *rs,
 static gboolean ril_delayed_register(gpointer user_data)
 {
 	struct ofono_radio_settings *rs = user_data;
+	struct radio_data *rd = ofono_radio_settings_get_data(rs);
+
+	rd->timer_id = 0;
+
 	ofono_radio_settings_register(rs);
 	return FALSE;
 }
@@ -175,7 +180,7 @@ static int ril_radio_settings_probe(struct ofono_radio_settings *rs,
 	struct radio_data *rsd = g_try_new0(struct radio_data, 1);
 	rsd->ril = g_ril_clone(ril);
 	ofono_radio_settings_set_data(rs, rsd);
-	g_timeout_add_seconds(2, ril_delayed_register, rs);
+	rsd->timer_id = g_timeout_add_seconds(2, ril_delayed_register, rs);
 
 	return 0;
 }
@@ -184,6 +189,10 @@ static void ril_radio_settings_remove(struct ofono_radio_settings *rs)
 {
 	struct radio_data *rd = ofono_radio_settings_get_data(rs);
 	ofono_radio_settings_set_data(rs, NULL);
+
+	if (rd->timer_id > 0)
+		g_source_remove(rd->timer_id);
+
 	g_ril_unref(rd->ril);
 	g_free(rd);
 }
