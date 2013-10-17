@@ -62,6 +62,7 @@ struct voicecall_data {
 	unsigned char flags;
 	ofono_voicecall_cb_t cb;
 	void *data;
+	guint timer_id;
 };
 
 struct release_id_req {
@@ -686,6 +687,9 @@ static gboolean ril_delayed_register(gpointer user_data)
 {
 	struct ofono_voicecall *vc = user_data;
 	struct voicecall_data *vd = ofono_voicecall_get_data(vc);
+
+	vd->timer_id = 0;
+
 	ofono_voicecall_register(vc);
 
 	/* Initialize call list */
@@ -734,7 +738,7 @@ static int ril_voicecall_probe(struct ofono_voicecall *vc, unsigned int vendor,
 	 * some kind of capabilities query to the modem, and then
 	 * call register in the callback; we use a timer instead.
 	 */
-	g_timeout_add_seconds(2, ril_delayed_register, vc);
+	vd->timer_id = g_timeout_add_seconds(2, ril_delayed_register, vc);
 
 	return 0;
 }
@@ -750,6 +754,9 @@ static void ril_voicecall_remove(struct ofono_voicecall *vc)
 	g_slist_free(vd->calls);
 
 	ofono_voicecall_set_data(vc, NULL);
+
+	if (vd->timer_id > 0)
+		g_source_remove(vd->timer_id);
 
 	g_ril_unref(vd->ril);
 	g_free(vd);
