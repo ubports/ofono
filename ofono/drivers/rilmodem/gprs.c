@@ -70,6 +70,7 @@ struct gprs_data {
 	int rild_status;
 	gboolean notified;
 	guint registerid;
+	guint timer_id;
 };
 
 static void ril_gprs_registration_status(struct ofono_gprs *gprs,
@@ -94,7 +95,12 @@ static gboolean ril_gprs_set_attached_callback(gpointer user_data)
 	struct ofono_error error;
 	struct cb_data *cbd = user_data;
 	ofono_gprs_cb_t cb = cbd->cb;
+	struct ofono_gprs *gprs = cbd->user;
+	struct gprs_data *gd = ofono_gprs_get_data(gprs);
 	DBG("");
+
+	gd->timer_id = 0;
+
 	decode_ril_error(&error, "OK");
 
 	cb(&error, cbd->data);
@@ -125,6 +131,8 @@ static void ril_gprs_set_attached(struct ofono_gprs *gprs, int attached,
 
 	gd->ofono_attached = attached;
 
+	cbd->user = gprs;
+
 	ril_gprs_registration_status(gprs, NULL, NULL);
 	/*
 	* However we cannot respond immediately, since core sets the
@@ -132,8 +140,8 @@ static void ril_gprs_set_attached(struct ofono_gprs *gprs, int attached,
 	* leads to comparison failure in gprs_attached_update in
 	* connection drop phase
 	*/
-
-	g_timeout_add_seconds(1, ril_gprs_set_attached_callback, cbd);
+	gd->timer_id = g_timeout_add_seconds(1, ril_gprs_set_attached_callback,
+						cbd);
 }
 
 static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
@@ -286,7 +294,7 @@ static int ril_gprs_probe(struct ofono_gprs *gprs,
 	gd->rild_status = -1;
 	gd->notified = FALSE;
 	gd->registerid = -1;
-
+	gd->timer_id = 0;
 	ofono_gprs_set_data(gprs, gd);
 
 	ril_gprs_registration_status(gprs, NULL, NULL);
@@ -304,6 +312,9 @@ static void ril_gprs_remove(struct ofono_gprs *gprs)
 
 	if (gd->registerid != -1)
 		g_ril_unregister(gd->ril, gd->registerid);
+
+	if (gd->timer_id > 0)
+		g_source_remove(gd->timer_id);
 
 	g_ril_unref(gd->ril);
 	g_free(gd);

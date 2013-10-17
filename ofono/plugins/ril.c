@@ -71,6 +71,7 @@ struct ril_data {
 	ofono_bool_t have_sim;
 	ofono_bool_t online;
 	ofono_bool_t reported;
+	guint timer_id;
 };
 
 /* MCE definitions */
@@ -122,8 +123,9 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 				message->error, ril->sim_status_retries);
 
 		if (ril->sim_status_retries < MAX_SIM_STATUS_RETRIES)
-			g_timeout_add_seconds(2, (GSourceFunc)
-				send_get_sim_status, (gpointer) modem);
+			ril->timer_id = g_timeout_add_seconds(2, (GSourceFunc)
+							send_get_sim_status,
+							(gpointer) modem);
 		else
 			ofono_error("Max retries for GET_SIM_STATUS exceeded!");
 	} else {
@@ -153,6 +155,8 @@ static int send_get_sim_status(struct ofono_modem *modem)
 	struct ril_data *ril = ofono_modem_get_data(modem);
 	int request = RIL_REQUEST_GET_SIM_STATUS;
 	guint ret;
+
+	ril->timer_id = 0;
 
 	ret = g_ril_send(ril->modem, request,
 				NULL, 0, sim_status_cb, modem, NULL);
@@ -193,6 +197,9 @@ static void ril_remove(struct ofono_modem *modem)
 
 	if (!ril)
 		return;
+
+	if (ril->timer_id > 0)
+		g_source_remove(ril->timer_id);
 
 	g_ril_unref(ril->modem);
 

@@ -46,6 +46,7 @@
 
 struct ussd_data {
 	GRil *ril;
+	guint timer_id;
 };
 
 static void ril_ussd_cb(struct ril_msg *message, gpointer user_data)
@@ -171,9 +172,14 @@ static void ril_ussd_notify(struct ril_msg *message, gpointer user_data)
 static gboolean ril_delayed_register(gpointer user_data)
 {
 	struct ofono_ussd *ussd = user_data;
+	struct ussd_data *ud = ofono_ussd_get_data(ussd);
+
+	DBG("");
+
+	ud->timer_id = 0;
+
 	ofono_ussd_register(ussd);
 
-	struct ussd_data *ud = ofono_ussd_get_data(ussd);
 	/* Register for USSD responses */
 	g_ril_register(ud->ril, RIL_UNSOL_ON_USSD,
 			ril_ussd_notify, ussd);
@@ -189,7 +195,7 @@ static int ril_ussd_probe(struct ofono_ussd *ussd,
 	struct ussd_data *ud = g_try_new0(struct ussd_data, 1);
 	ud->ril = g_ril_clone(ril);
 	ofono_ussd_set_data(ussd, ud);
-	g_timeout_add_seconds(2, ril_delayed_register, ussd);
+	ud->timer_id = g_timeout_add_seconds(2, ril_delayed_register, ussd);
 
 	return 0;
 }
@@ -198,6 +204,10 @@ static void ril_ussd_remove(struct ofono_ussd *ussd)
 {
 	struct ussd_data *ud = ofono_ussd_get_data(ussd);
 	ofono_ussd_set_data(ussd, NULL);
+
+	if (ud->timer_id > 0)
+		g_source_remove(ud->timer_id);
+
 	g_ril_unref(ud->ril);
 	g_free(ud);
 }

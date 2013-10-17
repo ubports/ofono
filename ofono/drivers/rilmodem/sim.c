@@ -104,6 +104,8 @@ struct sim_data {
 	enum ofono_sim_password_type passwd_type;
 	int retries[OFONO_SIM_PASSWORD_INVALID];
 	enum ofono_sim_password_type passwd_state;
+	guint card_state;
+	guint idle_id;
 };
 
 static void ril_pin_change_state_cb(struct ril_msg *message,
@@ -651,7 +653,11 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 			 * more appropriate call here??
 			 * __ofono_sim_refresh(sim, NULL, TRUE, TRUE);
 			 */
-			ofono_sim_inserted_notify(sim, TRUE);
+			DBG("sd->card_state:%u",sd->card_state);
+			if (sd->card_state != RIL_CARDSTATE_PRESENT) {
+				ofono_sim_inserted_notify(sim, TRUE);
+				sd->card_state = RIL_CARDSTATE_PRESENT;
+			}
 
 		if (current_passwd) {
 			if (!strcmp(current_passwd, defaultpasswd)) {
@@ -702,7 +708,10 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 	} else {
 		if (current_online_state == RIL_ONLINE)
 			current_online_state = RIL_ONLINE_PREF;
+
+		DBG("sd->card_state:%u,status.card_state:%u,",sd->card_state,status.card_state);
 		ofono_sim_inserted_notify(sim, FALSE);
+		sd->card_state = RIL_CARDSTATE_ABSENT;
 	}
 
 	/* TODO: if no SIM present, handle emergency calling. */
@@ -1010,7 +1019,9 @@ static gboolean ril_sim_register(gpointer user)
 
 	DBG("");
 
- 	send_get_sim_status(sim);
+	sd->idle_id = 0;
+
+	send_get_sim_status(sim);
 
 	g_ril_register(sd->ril, RIL_UNSOL_RESPONSE_SIM_STATUS_CHANGED,
 			(GRilNotifyFunc) ril_sim_status_changed, sim);
@@ -1037,6 +1048,7 @@ static int ril_sim_probe(struct ofono_sim *sim, unsigned int vendor,
 	sd->passwd_state = OFONO_SIM_PASSWORD_NONE;
 	sd->passwd_type = OFONO_SIM_PASSWORD_NONE;
 	sd->sim_registered = FALSE;
+	sd->card_state = RIL_CARDSTATE_ABSENT;
 
 	for (i = 0; i < OFONO_SIM_PASSWORD_INVALID; i++)
 		sd->retries[i] = -1;
@@ -1056,7 +1068,7 @@ static int ril_sim_probe(struct ofono_sim *sim, unsigned int vendor,
 	 * call register in the callback; we use an idle event
 	 * instead.
 	 */
-	g_idle_add(ril_sim_register, sim);
+	sd->idle_id = g_idle_add(ril_sim_register, sim);
 
 	return 0;
 }
@@ -1066,6 +1078,9 @@ static void ril_sim_remove(struct ofono_sim *sim)
 	struct sim_data *sd = ofono_sim_get_data(sim);
 
 	ofono_sim_set_data(sim, NULL);
+
+	if (sd->idle_id > 0)
+		g_source_remove(sd->idle_id);
 
 	g_ril_unref(sd->ril);
 	g_free(sd);
