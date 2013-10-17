@@ -105,6 +105,7 @@ struct sim_data {
 	int retries[OFONO_SIM_PASSWORD_INVALID];
 	enum ofono_sim_password_type passwd_state;
 	guint card_state;
+	guint idle_id;
 };
 
 static void ril_pin_change_state_cb(struct ril_msg *message,
@@ -1018,7 +1019,9 @@ static gboolean ril_sim_register(gpointer user)
 
 	DBG("");
 
- 	send_get_sim_status(sim);
+	sd->idle_id = 0;
+
+	send_get_sim_status(sim);
 
 	g_ril_register(sd->ril, RIL_UNSOL_RESPONSE_SIM_STATUS_CHANGED,
 			(GRilNotifyFunc) ril_sim_status_changed, sim);
@@ -1065,7 +1068,7 @@ static int ril_sim_probe(struct ofono_sim *sim, unsigned int vendor,
 	 * call register in the callback; we use an idle event
 	 * instead.
 	 */
-	g_idle_add(ril_sim_register, sim);
+	sd->idle_id = g_idle_add(ril_sim_register, sim);
 
 	return 0;
 }
@@ -1075,6 +1078,9 @@ static void ril_sim_remove(struct ofono_sim *sim)
 	struct sim_data *sd = ofono_sim_get_data(sim);
 
 	ofono_sim_set_data(sim, NULL);
+
+	if (sd->idle_id > 0)
+		g_source_remove(sd->idle_id);
 
 	g_ril_unref(sd->ril);
 	g_free(sd);
