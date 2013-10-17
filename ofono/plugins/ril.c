@@ -163,7 +163,13 @@ static int send_get_sim_status(struct ofono_modem *modem)
 
 	g_ril_print_request_no_args(ril->modem, ret, request);
 
-	return ret;
+	/*
+	 * This function is used as a callback function for
+	 * g_timeout_add_seconds therefore we must always return FALSE.
+	 * The other place where this is called is from ril_connected but it
+	 * doesn't even check the return value.
+	 */
+	return FALSE;
 }
 
 static int ril_probe(struct ofono_modem *modem)
