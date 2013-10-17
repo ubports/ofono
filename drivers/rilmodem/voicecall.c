@@ -58,7 +58,6 @@ struct voicecall_data {
 	GRil *ril;
 	unsigned int vendor;
 	unsigned int tone_duration;
-	guint vts_source;
 	unsigned int vts_delay;
 	unsigned char flags;
 	ofono_voicecall_cb_t cb;
@@ -746,9 +745,6 @@ static void ril_voicecall_remove(struct ofono_voicecall *vc)
 
 	if (vd->clcc_source)
 		g_source_remove(vd->clcc_source);
-
-	if (vd->vts_source)
-		g_source_remove(vd->vts_source);
 
 	g_slist_foreach(vd->calls, (GFunc) g_free, NULL);
 	g_slist_free(vd->calls);
