@@ -44,8 +44,9 @@
 #include "rilmodem.h"
 
 struct sms_data {
-        GRil *ril;
+	GRil *ril;
 	unsigned int vendor;
+	guint timer_id;
 };
 
 
@@ -333,6 +334,9 @@ static gboolean ril_delayed_register(gpointer user_data)
 	struct sms_data *data = ofono_sms_get_data(sms);
 
 	DBG("");
+
+	data->timer_id = 0;
+
 	ofono_sms_register(sms);
 
 	g_ril_register(data->ril, RIL_UNSOL_RESPONSE_NEW_SMS,
@@ -356,7 +360,7 @@ static int ril_sms_probe(struct ofono_sms *sms, unsigned int vendor,
 
 	ofono_sms_set_data(sms, data);
 
-        /*
+	/*
 	 * TODO: analyze if capability check is needed
 	 * and/or timer should be adjusted.
 	 *
@@ -366,7 +370,7 @@ static int ril_sms_probe(struct ofono_sms *sms, unsigned int vendor,
 	 * kind of capabilities query to the modem, and then
 	 * call register in the callback; we use a timer instead.
 	 */
-        g_timeout_add_seconds(2, ril_delayed_register, sms);
+	data->timer_id = g_timeout_add_seconds(2, ril_delayed_register, sms);
 
 	return 0;
 }
@@ -375,7 +379,10 @@ static void ril_sms_remove(struct ofono_sms *sms)
 {
 	struct sms_data *data = ofono_sms_get_data(sms);
 
-        DBG("");
+	DBG("");
+
+	if (data->timer_id > 0)
+		g_source_remove(data->timer_id);
 
 	g_ril_unref(data->ril);
 	g_free(data);
