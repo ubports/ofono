@@ -46,6 +46,7 @@
 struct radio_data {
 	GRil *ril;
 	guint timer_id;
+	int ratmode;
 };
 
 static void ril_set_rat_cb(struct ril_msg *message, gpointer user_data)
@@ -67,7 +68,7 @@ static void ril_set_rat_mode(struct ofono_radio_settings *rs,
 	struct radio_data *rd = ofono_radio_settings_get_data(rs);
 	struct cb_data *cbd = cb_data_new(cb, data);
 	struct parcel rilp;
-	int pref = PREF_NET_TYPE_LTE_GSM_WCDMA;
+	int pref = rd->ratmode;
 	int ret = 0;
 
 	parcel_init(&rilp);
@@ -161,6 +162,26 @@ static void ril_query_rat_mode(struct ofono_radio_settings *rs,
 	}
 }
 
+static void ril_get_net_config(struct radio_data *rsd)
+{
+	GKeyFile *keyfile;
+	GError *err = NULL;
+	char *path = RIL_CONFIG;
+	rsd->ratmode = PREF_NET_TYPE_GSM_WCDMA;
+
+	keyfile = g_key_file_new();
+
+	g_key_file_set_list_separator(keyfile, ',');
+
+	if (!g_key_file_load_from_file(keyfile, path, 0, &err))
+		g_error_free(err);
+	else {
+		if (g_key_file_has_group(keyfile, LTE_FLAG))
+			rsd->ratmode = PREF_NET_TYPE_LTE_GSM_WCDMA;
+	}
+	g_key_file_free(keyfile);
+}
+
 static gboolean ril_delayed_register(gpointer user_data)
 {
 	struct ofono_radio_settings *rs = user_data;
@@ -179,6 +200,7 @@ static int ril_radio_settings_probe(struct ofono_radio_settings *rs,
 	GRil *ril = user;
 	struct radio_data *rsd = g_try_new0(struct radio_data, 1);
 	rsd->ril = g_ril_clone(ril);
+	ril_get_net_config(rsd);
 	ofono_radio_settings_set_data(rs, rsd);
 	rsd->timer_id = g_timeout_add_seconds(2, ril_delayed_register, rs);
 
