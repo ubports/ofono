@@ -709,9 +709,15 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 		if (current_online_state == RIL_ONLINE)
 			current_online_state = RIL_ONLINE_PREF;
 
-		DBG("sd->card_state:%u,status.card_state:%u,",sd->card_state,status.card_state);
-		ofono_sim_inserted_notify(sim, FALSE);
-		sd->card_state = RIL_CARDSTATE_ABSENT;
+		if (status.card_state == RIL_CARDSTATE_ABSENT) {
+			DBG("sd->card_state:%u,status.card_state:%u,",
+				sd->card_state, status.card_state);
+			ofono_sim_inserted_notify(sim, FALSE);
+			sd->card_state = RIL_CARDSTATE_ABSENT;
+
+			if (current_passwd)
+				g_stpcpy(current_passwd, defaultpasswd);
+		}
 	}
 
 	/* TODO: if no SIM present, handle emergency calling. */
