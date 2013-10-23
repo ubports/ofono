@@ -344,6 +344,7 @@ gboolean ril_util_parse_sim_status(GRil *gril,
 	if (message->buf_len < 20) {
 		ofono_error("Size of SIM_STATUS reply too small: %d bytes",
 				message->buf_len);
+		status->card_state = RIL_CARDSTATE_ERROR;
 		return FALSE;
 	}
 
