@@ -140,6 +140,7 @@ static void ril_rat_mode_cb(struct ril_msg *message, gpointer user_data)
 					RIL_REQUEST_SET_PREFERRED_NETWORK_TYPE,
 					rilp_out.data, rilp_out.size, NULL,
 					NULL, g_free);
+				parcel_free(&rilp_out);
 			}
 			break;
 		case PREF_NET_TYPE_GSM_WCDMA_AUTO:
