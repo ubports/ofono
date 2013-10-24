@@ -46,9 +46,6 @@
 /* Amount of ms we wait between CLCC calls */
 #define POLL_CLCC_INTERVAL 300
 
-/* When +VTD returns 0, an unspecified manufacturer-specific delay is used */
-#define TONE_DURATION 1000
-
 #define FLAG_NEED_CLIP 1
 
 struct voicecall_data {
@@ -57,8 +54,6 @@ struct voicecall_data {
 	unsigned int clcc_source;
 	GRil *ril;
 	unsigned int vendor;
-	unsigned int tone_duration;
-	unsigned int vts_delay;
 	unsigned char flags;
 	ofono_voicecall_cb_t cb;
 	void *data;
@@ -83,6 +78,8 @@ struct lastcause_req {
 	struct ofono_voicecall *vc;
 	int id;
 };
+
+static int dtmf_pending; /* core may send overlapping requests! */
 
 static void lastcause_cb(struct ril_msg *message, gpointer user_data)
 {
@@ -420,7 +417,6 @@ static void ril_hangup_specific(struct ofono_voicecall *vc,
 {
 	struct voicecall_data *vd = ofono_voicecall_get_data(vc);
 	struct parcel rilp;
-	struct ofono_error error;
 	int request = RIL_REQUEST_HANGUP;
 	int ret;
 
@@ -522,44 +518,74 @@ static void ril_answer(struct ofono_voicecall *vc,
 	g_ril_print_request_no_args(vd->ril, ret, request);
 }
 
+static void ril_send_dtmf_cb(struct ril_msg *message, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_voicecall_cb_t cb = cbd->cb;
+	struct ofono_error error;
+
+	dtmf_pending = 0;
+
+	if (message->error == RIL_E_SUCCESS) {
+		decode_ril_error(&error, "OK");
+	} else {
+		decode_ril_error(&error, "FAIL");
+		DBG("RIL responded with error %d", message->error);
+	}
+
+	if (cb)
+		cb(&error, cbd->data);
+}
+
 static void ril_send_dtmf(struct ofono_voicecall *vc, const char *dtmf,
 		ofono_voicecall_cb_t cb, void *data)
 {
 	struct voicecall_data *vd = ofono_voicecall_get_data(vc);
-	int len = strlen(dtmf);
+	struct cb_data *cbd = cb_data_new(cb, data);
 	struct parcel rilp;
 	struct ofono_error error;
 	char *ril_dtmf = g_try_malloc(sizeof(char) * 2);
 	int request = RIL_REQUEST_DTMF;
-	int i, ret;
+	int ret;
 
 	DBG("");
+	if (dtmf_pending > 0){
+		DBG("ril request pending!");
+		goto error;
+	}
 
 	/* Ril wants just one character, but we need to send as string */
 	ril_dtmf[1] = '\0';
 
-	for (i = 0; i < len; i++) {
-		parcel_init(&rilp);
-		ril_dtmf[0] = dtmf[i];
-		parcel_w_string(&rilp, ril_dtmf);
+	parcel_init(&rilp);
+	/*
+	 * TODO handle strings with more than 1 character
+	 * (but make sure that RIL doesn't choke on it)
+	 */
+	ril_dtmf[0] = dtmf[0];
+	parcel_w_string(&rilp, ril_dtmf);
 
-		ret = g_ril_send(vd->ril, request, rilp.data,
-				rilp.size, NULL, NULL, NULL);
+	ret = g_ril_send(vd->ril, request, rilp.data,
+			rilp.size, ril_send_dtmf_cb, cbd, g_free);
+	dtmf_pending = 1;
 
-		g_ril_append_print_buf(vd->ril, "(%s)", ril_dtmf);
-		g_ril_print_request(vd->ril, ret, request);
-		parcel_free(&rilp);
+	g_ril_append_print_buf(vd->ril, "(%s)", ril_dtmf);
+	g_ril_print_request(vd->ril, ret, request);
+	parcel_free(&rilp);
 
-		/* TODO: should we break out of look on failure? */
-		if (ret <= 0)
-			ofono_error("send REQUEST_DTMF failed");
+	if (ret <= 0) {
+		goto error;
 	}
 
 	free(ril_dtmf);
+	return;
 
-	/* We don't really care about errors here */
-	decode_ril_error(&error, "OK");
+error:
+	ofono_error("Send REQUEST_DTMF failed");
+	decode_ril_error(&error, "FAIL");
 	cb(&error, data);
+	return;
+
 }
 
 static void multiparty_cb(struct ril_msg *message, gpointer user_data)
@@ -722,9 +748,10 @@ static int ril_voicecall_probe(struct ofono_voicecall *vc, unsigned int vendor,
 
 	vd->ril = g_ril_clone(ril);
 	vd->vendor = vendor;
-	vd->tone_duration = TONE_DURATION;
 	vd->cb = NULL;
 	vd->data = NULL;
+
+	dtmf_pending = 0;
 
 	ofono_voicecall_set_data(vc, vd);
 
