@@ -218,7 +218,7 @@ static int ril_radio_settings_probe(struct ofono_radio_settings *rs,
 	struct radio_data *rsd = g_try_new0(struct radio_data, 1);
 	rsd->ril = g_ril_clone(ril);
 	ril_get_net_config(rsd);
-	if (rsd->ratmode == PREF_NET_TYPE_GSM_WCDMA) {
+	if (rsd->ratmode == PREF_NET_TYPE_GSM_WCDMA_AUTO) {
 		cbd = cb_data_new2(rsd, NULL, NULL);
 		ret = g_ril_send(rsd->ril,
 					 RIL_REQUEST_GET_PREFERRED_NETWORK_TYPE,
