@@ -57,6 +57,7 @@ struct gprs_context_data {
 	guint active_ctx_cid;
 	gint active_rild_cid;
 	enum state state;
+	guint regid;
 };
 
 static void ril_gprs_context_deactivate_primary(struct ofono_gprs_context *gc,
@@ -402,9 +403,10 @@ static int ril_gprs_context_probe(struct ofono_gprs_context *gc,
 	set_context_disconnected(gcd);
 
 	ofono_gprs_context_set_data(gc, gcd);
+	gcd->regid = -1;
 
-	g_ril_register(gcd->ril, RIL_UNSOL_DATA_CALL_LIST_CHANGED,
-			ril_gprs_context_call_list_changed, gc);
+	gcd->regid = g_ril_register(gcd->ril, RIL_UNSOL_DATA_CALL_LIST_CHANGED,
+					ril_gprs_context_call_list_changed, gc);
 	return 0;
 }
 
@@ -419,6 +421,9 @@ static void ril_gprs_context_remove(struct ofono_gprs_context *gc)
 	}
 
 	ofono_gprs_context_set_data(gc, NULL);
+	
+	if (gcd->regid != -1)
+		g_ril_unregister(gcd->ril,gcd->regid);
 
 	g_ril_unref(gcd->ril);
 	g_free(gcd);
