@@ -80,7 +80,7 @@ static void ril_set_rat_mode(struct ofono_radio_settings *rs,
 		pref = PREF_NET_TYPE_GSM_ONLY;
 		break;
 	case OFONO_RADIO_ACCESS_MODE_UMTS:
-		pref = PREF_NET_TYPE_GSM_WCDMA;	/* according to UI design */
+		pref = PREF_NET_TYPE_GSM_WCDMA_AUTO; /* according to UI design */
 		break;
 	case OFONO_RADIO_ACCESS_MODE_LTE:
 		pref = PREF_NET_TYPE_LTE_ONLY;
@@ -126,6 +126,7 @@ static void ril_rat_mode_cb(struct ril_msg *message, gpointer user_data)
 			break;
 		case PREF_NET_TYPE_WCDMA:
 		case PREF_NET_TYPE_GSM_WCDMA: /* according to UI design */
+		case PREF_NET_TYPE_GSM_WCDMA_AUTO:/* according to UI design */
 			mode = OFONO_RADIO_ACCESS_MODE_UMTS;
 			break;
 		case PREF_NET_TYPE_LTE_CDMA_EVDO:
@@ -143,7 +144,6 @@ static void ril_rat_mode_cb(struct ril_msg *message, gpointer user_data)
 				parcel_free(&rilp_out);
 			}
 			break;
-		case PREF_NET_TYPE_GSM_WCDMA_AUTO:
 		case PREF_NET_TYPE_CDMA_EVDO_AUTO:
 		case PREF_NET_TYPE_CDMA_ONLY:
 		case PREF_NET_TYPE_EVDO_ONLY:
@@ -182,7 +182,7 @@ static void ril_get_net_config(struct radio_data *rsd)
 	GKeyFile *keyfile;
 	GError *err = NULL;
 	char *path = RIL_CONFIG;
-	rsd->ratmode = PREF_NET_TYPE_GSM_WCDMA;
+	rsd->ratmode = PREF_NET_TYPE_GSM_WCDMA_AUTO;
 
 	keyfile = g_key_file_new();
 
