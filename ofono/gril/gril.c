@@ -965,7 +965,6 @@ static gboolean ril_cancel_group(struct ril_s *ril, guint group)
 
 		ril_request_destroy(c);
 		g_queue_remove(ril->command_queue, c);
-		n += 1;
 	}
 
 	return TRUE;
