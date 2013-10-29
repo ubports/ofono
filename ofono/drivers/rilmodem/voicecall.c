@@ -48,6 +48,8 @@
 
 #define FLAG_NEED_CLIP 1
 
+#define MAX_DTMF_BUFFER 32
+
 struct voicecall_data {
 	GSList *calls;
 	unsigned int local_release;
@@ -58,6 +60,8 @@ struct voicecall_data {
 	ofono_voicecall_cb_t cb;
 	void *data;
 	guint timer_id;
+	gchar* tone_queue;
+	unsigned int tone_pending;
 };
 
 struct release_id_req {
@@ -79,7 +83,8 @@ struct lastcause_req {
 	int id;
 };
 
-static int dtmf_pending; /* core may send overlapping requests! */
+static void send_one_dtmf(struct voicecall_data *vd);
+static void clear_dtmf_queue(struct voicecall_data *vd);
 
 static void lastcause_cb(struct ril_msg *message, gpointer user_data)
 {
@@ -141,6 +146,8 @@ static void clcc_poll_cb(struct ril_msg *message, gpointer user_data)
 						NULL, 0, lastcause_cb, reqdata, g_free);
 				}
 			}
+
+			clear_dtmf_queue(vd);
 
 			o = o->next;
 		} else if (nc && (oc == NULL || (nc->id < oc->id))) {
@@ -520,73 +527,91 @@ static void ril_answer(struct ofono_voicecall *vc,
 
 static void ril_send_dtmf_cb(struct ril_msg *message, gpointer user_data)
 {
-	struct cb_data *cbd = user_data;
-	ofono_voicecall_cb_t cb = cbd->cb;
-	struct ofono_error error;
-
-	dtmf_pending = 0;
+	struct voicecall_data *vd = user_data;
 
 	if (message->error == RIL_E_SUCCESS) {
-		decode_ril_error(&error, "OK");
-	} else {
-		decode_ril_error(&error, "FAIL");
-		DBG("RIL responded with error %d", message->error);
-	}
+		/* Remove sent DTMF character from queue */
+		gchar* tmp_tone_queue = g_strdup(vd->tone_queue + 1);
+		int remaining = strlen(tmp_tone_queue);
+		memcpy(vd->tone_queue, tmp_tone_queue, remaining);
+		vd->tone_queue[remaining] = '\0';
+		g_free(tmp_tone_queue);
 
-	if (cb)
-		cb(&error, cbd->data);
+		vd->tone_pending = 0;
+
+		if (remaining > 0) {
+			send_one_dtmf(vd);
+		}
+	} else {
+		DBG("error=%d", message->error);
+		clear_dtmf_queue(vd);
+	}
+}
+
+static void send_one_dtmf(struct voicecall_data *vd)
+{
+	struct parcel rilp;
+	gchar *ril_dtmf = g_try_malloc(sizeof(char) * 2);
+	int request = RIL_REQUEST_DTMF;
+	int ret;
+
+	DBG("");
+
+	if (ril_dtmf == NULL)
+		goto out;
+
+	if (vd->tone_pending > 0)
+		goto out; /* RIL request pending */
+
+	if (strlen(vd->tone_queue) == 0)
+		goto out; /* nothing to send */
+
+	/* Ril wants just one character, but we need to send as string */
+	parcel_init(&rilp);
+	ril_dtmf[0] = vd->tone_queue[0];
+	ril_dtmf[1] = '\0';
+	parcel_w_string(&rilp, ril_dtmf);
+
+	ret = g_ril_send(vd->ril, request, rilp.data,
+			rilp.size, ril_send_dtmf_cb, vd, NULL);
+
+	vd->tone_pending = 1;
+
+	g_ril_append_print_buf(vd->ril, "(%s)", ril_dtmf);
+	g_ril_print_request(vd->ril, ret, request);
+	parcel_free(&rilp);
+
+out:
+	g_free(ril_dtmf);
 }
 
 static void ril_send_dtmf(struct ofono_voicecall *vc, const char *dtmf,
 		ofono_voicecall_cb_t cb, void *data)
 {
 	struct voicecall_data *vd = ofono_voicecall_get_data(vc);
-	struct cb_data *cbd = cb_data_new(cb, data);
-	struct parcel rilp;
 	struct ofono_error error;
-	char *ril_dtmf = g_try_malloc(sizeof(char) * 2);
-	int request = RIL_REQUEST_DTMF;
-	int ret;
 
-	DBG("");
-	if (dtmf_pending > 0){
-		DBG("ril request pending!");
-		goto error;
-	}
+	DBG("Queue '%s'",dtmf);
 
-	/* Ril wants just one character, but we need to send as string */
-	ril_dtmf[1] = '\0';
-
-	parcel_init(&rilp);
 	/*
-	 * TODO handle strings with more than 1 character
-	 * (but make sure that RIL doesn't choke on it)
+	 * Queue any incoming DTMF (up to MAX_DTMF_BUFFER characters),
+	 * send them to RIL one-by-one, immediately call back
+	 * core with no error
 	 */
-	ril_dtmf[0] = dtmf[0];
-	parcel_w_string(&rilp, ril_dtmf);
+	g_strlcat(vd->tone_queue, dtmf, MAX_DTMF_BUFFER);
+	send_one_dtmf(vd);
 
-	ret = g_ril_send(vd->ril, request, rilp.data,
-			rilp.size, ril_send_dtmf_cb, cbd, g_free);
-	dtmf_pending = 1;
-
-	g_ril_append_print_buf(vd->ril, "(%s)", ril_dtmf);
-	g_ril_print_request(vd->ril, ret, request);
-	parcel_free(&rilp);
-
-	if (ret <= 0) {
-		goto error;
-	}
-
-	free(ril_dtmf);
-	return;
-
-error:
-	ofono_error("Send REQUEST_DTMF failed");
-	decode_ril_error(&error, "FAIL");
+	decode_ril_error(&error, "OK");
 	cb(&error, data);
-	return;
-
 }
+
+static void clear_dtmf_queue(struct voicecall_data *vd)
+{
+	g_free(vd->tone_queue);
+	vd->tone_queue = g_strnfill(MAX_DTMF_BUFFER + 1, '\0');
+	vd->tone_pending = 0;
+}
+
 
 static void multiparty_cb(struct ril_msg *message, gpointer user_data)
 {
@@ -751,7 +776,7 @@ static int ril_voicecall_probe(struct ofono_voicecall *vc, unsigned int vendor,
 	vd->cb = NULL;
 	vd->data = NULL;
 
-	dtmf_pending = 0;
+	clear_dtmf_queue(vd);
 
 	ofono_voicecall_set_data(vc, vd);
 
