@@ -3799,8 +3799,8 @@ static gboolean tone_request_run(gpointer user_data)
 	len = strcspn(entry->left, "pP");
 
 	if (len) {
-		if (len > 1) /* Arbitrary length limit per request */
-			len = 1; /* TODO fix this in driver */
+		if (len > 8) /* Arbitrary length limit per request */
+			len = 8;
 
 		/* Temporarily move the end of the string */
 		final = entry->left[len];
