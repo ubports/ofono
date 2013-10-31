@@ -88,7 +88,13 @@ static gboolean encode_time_format(const struct ofono_network_time *time,
 static time_t get_monotonic_time()
 {
 	struct timespec ts;
-	clock_gettime(CLOCK_MONOTONIC, &ts);
+	memset(&ts, 0, sizeof(struct timespec));
+#if defined(CLOCK_BOOTTIME)
+	if (clock_gettime(CLOCK_BOOTTIME, &ts) < 0)
+		clock_gettime(CLOCK_MONOTONIC, &ts);
+#else
+		clock_gettime(CLOCK_MONOTONIC, &ts);
+#endif
 	return ts.tv_sec;
 }
 
