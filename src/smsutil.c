@@ -2282,7 +2282,6 @@ char *sms_decode_text(GSList *sms_list)
 								locking_shift,
 								single_shift);
 		} else {
-			guint bytes_read;
 			const gchar *from = (const gchar *) (ud + taken);
 			/*
 			 * According to the spec: A UCS2 character shall not be
@@ -2293,19 +2292,9 @@ char *sms_decode_text(GSList *sms_list)
 			gssize num_ucs2_chars = (udl_in_bytes - taken) >> 1;
 			num_ucs2_chars = num_ucs2_chars << 1;
 
-			converted = g_convert(from, num_ucs2_chars,
-						"UTF-8//TRANSLIT", "UCS-2BE",
-						&bytes_read, NULL, NULL);
-
-			/*
-			 * If decoding fails (G_CONVERT_ERROR_ILLEGAL_SEQUENCE), let's
-			 * at least use the left-most valid part
-			 */
-			if (converted == NULL && bytes_read > 0) {
-				converted = g_convert(from, bytes_read,
-							"UTF-8//TRANSLIT", "UCS-2BE",
-							NULL, NULL, NULL);
-			}
+			converted = g_convert_with_fallback(from, num_ucs2_chars,
+						"UTF-8//TRANSLIT", "UTF-16BE",
+						NULL, NULL, NULL, NULL);
 		}
 
 		if (converted) {
