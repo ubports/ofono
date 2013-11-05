@@ -316,17 +316,6 @@ static void rild_cb(struct ril_msg *message, gpointer user_data)
 
 	g_ril_print_response_no_args(vd->ril, message);
 
-	/* On a success, make sure to put all active calls on hold */
-	for (l = vd->calls; l; l = l->next) {
-		call = l->data;
-
-		if (call->status != CALL_STATUS_ACTIVE)
-			continue;
-
-		call->status = CALL_STATUS_HELD;
-		ofono_voicecall_notify(vc, call);
-	}
-
 	/* CLCC will update the oFono call list with proper ids  */
 	if (!vd->clcc_source)
 		vd->clcc_source = g_timeout_add(POLL_CLCC_INTERVAL,
