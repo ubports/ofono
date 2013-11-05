@@ -1,0 +1,26 @@
+#!/usr/bin/python
+
+import sys
+import dbus
+
+bus = dbus.SystemBus()
+
+manager = dbus.Interface(bus.get_object('org.ofono', '/'),
+						'org.ofono.Manager')
+
+modems = manager.GetModems()
+path = modems[0][0]
+
+if (len(sys.argv) == 3):
+	path = sys.argv[1]
+	callid = sys.argv[2]
+else:
+	callid = sys.argv[1]
+
+manager = dbus.Interface(bus.get_object('org.ofono', path),
+						'org.ofono.VoiceCallManager')
+
+mpty = manager.PrivateChat(callid, timeout=100)
+
+for path in mpty:
+	print path

@@ -1,0 +1,29 @@
+#!/usr/bin/python
+
+import sys
+import dbus
+
+bus = dbus.SystemBus()
+
+manager = dbus.Interface(bus.get_object('org.ofono', '/'),
+						'org.ofono.Manager')
+
+modems = manager.GetModems()
+path = modems[0][0]
+
+manager = dbus.Interface(bus.get_object('org.ofono', path),
+						'org.ofono.VoiceCallManager')
+
+calls = manager.GetCalls()
+
+for path, properties in calls:
+		state = properties["State"]
+		print "[ %s ] %s" % (path, state)
+
+		if state != "active":
+			continue
+
+		call = dbus.Interface(bus.get_object('org.ofono', path),
+						'org.ofono.VoiceCall')
+
+		call.Hangup()

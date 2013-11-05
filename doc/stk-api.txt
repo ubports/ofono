@@ -1,0 +1,312 @@
+SimToolkit Hierarchy
+===============
+
+Service		org.ofono
+Interface	org.ofono.SimToolkit
+Object path	[variable prefix]/{modem0,modem1,...}
+
+Methods		dict GetProperties()
+
+			Returns properties for the SimToolkit object.  See the
+			properties section for available properties.
+
+		void SelectItem(byte item, object agent)
+
+			Selects an item from the main menu, thus triggering
+			a new user session.  The agent parameter specifies
+			a new agent to be used for the duration of the
+			user session.
+
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.NotSupported
+					 [service].Error.InvalidArguments
+					 [service].Error.InvalidFormat
+					 [service].Error.Failed
+
+		void RegisterAgent(object path)
+
+			Registers a default agent to be used for SIM initiated
+			actions such as Display Text, Get Inkey or Get Input.
+			These can typically occur when a special SMS is
+			received and might not involve interaction from the
+			user.
+
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.InvalidArguments
+					 [service].Error.InvalidFormat
+					 [service].Error.Failed
+
+		void UnregisterAgent(object path)
+
+			Unregisters the default agent.  If no agent is
+			registered then unsolicited commands from the SIM
+			are rejected.
+
+			Possible Errors: [service].Error.InvalidArguments
+					 [service].Error.Failed
+
+Signals		PropertyChanged(string property, variant value)
+
+			Signal is emitted whenever a property has changed.
+			The new value is passed as the signal argument.
+
+Properties	string IdleModeText [readonly]
+
+			Contains the text to be used when the home screen is
+			idle.  This text is set by the SIM and can change
+			at any time.
+
+		byte IdleModeIcon [readonly]
+
+			Contains the identifier of the icon accompanying
+			the idle mode text.
+
+		array{struct{string, byte}} MainMenu [readonly]
+
+			Contains the items that make up the main menu.  This
+			is populated by the SIM when it sends the Setup Menu
+			Proactive Command.  The main menu is always available,
+			but its contents can be changed at any time.  Each
+			item contains the item label and icon identifier.
+
+		string MainMenuTitle [readonly]
+
+			Contains the title of the main menu.
+
+		string MainMenuIcon [readonly]
+
+			Contains the identifier of the icon for the main menu.
+
+SimToolkitAgent Hierarchy
+===============
+
+Service		unique name
+Interface	org.ofono.SimToolkitAgent
+Object path	freely definable
+
+Methods		byte RequestSelection(string title, byte icon_id,
+					array{struct(string, byte)} items,
+					int16 default)
+
+			Tells the agent to ask the user to select an item
+			from the menu.  The default is set the the default
+			item index or -1 if no default is provided.
+
+			This function should return the index of the item or
+			an error given below.
+
+			Possible Errors: [service].Error.SimToolkit.GoBack
+					 [service].Error.SimToolkit.EndSession
+
+			Implementation notes:
+
+			- Data / Navigation type not indicated
+			- Soft key preferred not indicated
+			- Help available ignored
+
+		void DisplayText(string text, byte icon_id, boolean urgent)
+
+			Tells the agent to display text from the SIM.  The
+			boolean urgent parameter tells the agent whether this
+			is an urgent message and all other messages should be
+			cleared prior to the display of this text.
+
+			Possible Errors: [service].Error.SimToolkit.GoBack
+					 [service].Error.SimToolkit.EndSession
+					 [service].Error.SimToolkit.Busy
+
+			Implementation notes:
+
+			- High / normal priority indicated by urgent
+
+			- The clear message after delay / wait for user to
+			  clear flags are handled as follows.  If the wait for
+			  user flag is set, then oFono sets a higher timeout
+			  for the Agent DisplayText method call.  It will then
+			  call Cancel() on the agent after this timeout
+			  expires and the "No response from user" terminal
+			  response is sent.  If the agent returns earlier from
+			  this method call, a terminal response "Command
+			  "performed successfully" is sent.
+
+			  It might be required to pass a flag to the UI to
+			  hint it that allocation of an 'acknowledgement'
+			  button is required in the case of a longer timeout.
+			  However, the UI can figure this out itself as well
+			  based on a timer threshold.  More input needed.
+
+			- Immediate Response indication is handled internally,
+			  terminal response is sent immediately and no other
+			  indication is given to the user / agent.  Response
+			  from this method call is ignored and a short
+			  timeout is used for the method call.  Once another
+			  proactive command arrives, and the DisplayText is
+			  still pending, Cancel() is called.
+
+		string RequestInput(string alpha, byte icon_id,
+				string default, byte min, byte max,
+				boolean hide_typing)
+
+			Tells the agent to request an input string from the
+			user.  The alpha parameter and icon_id gives context
+			to the user.  The default string contains the suggested
+			default by the SIM.  The min and max parameters contain
+			how many characters the user should enter.  The
+			parameter hide_typing indicates whether user's typing
+			should be opaque.
+
+			Possible Errors: [service].Error.SimToolkit.GoBack
+					 [service].Error.SimToolkit.EndSession
+
+			Implementation notes:
+
+			- It is still unclear how to handle gsm vs ucs2
+			  accepted alphabet selection.  Can the reduced
+			  character set functionality from SMS be applied
+			  here?  If not, then an extra gsm vs ucs2 acceptance
+			  argument needs to be added.
+
+		string RequestDigits(string alpha, byte icon_id,
+					string default, byte min, byte max,
+					boolean hide_typing)
+
+			Same as GetInput but only digit characters (0-9, *#+)
+			are expected.
+
+			Possible Errors: [service].Error.SimToolkit.GoBack
+					 [service].Error.SimToolkit.EndSession
+
+		string RequestKey(string alpha, byte icon_id)
+
+			Tells the agent to request a single input key from
+			the user.  The alpha parameter contains the context
+			for the request.
+
+			Possible Errors: [service].Error.SimToolkit.GoBack
+					 [service].Error.SimToolkit.EndSession
+
+		string RequestDigit(string alpha, byte icon_id)
+
+			Same as above, but only digits (0-9, *#+) are
+			expected.
+
+			Possible Errors: [service].Error.SimToolkit.GoBack
+					 [service].Error.SimToolkit.EndSession
+
+		string RequestQuickDigit(string alpha, byte icon_id)
+
+			Same as above but the entered digit shall not be
+			displayed and the response shall be sent immediately
+			after the key press. "+" is not allowed for user input.
+
+			Possible Errors: [service].Error.SimToolkit.GoBack
+					 [service].Error.SimToolkit.EndSession
+
+		boolean RequestConfirmation(string alpha, byte icon_id)
+
+			Asks the agent to get confirmation from the user.
+
+			Possible Errors: [service].Error.SimToolkit.GoBack
+					 [service].Error.SimToolkit.EndSession
+
+		boolean ConfirmCallSetup(string information, byte icon_id)
+
+			Asks the agent to request user to confirm an
+			outgoing call setup.  If confirmed, the next new
+			outgoing call reported by VoiceCallManager will
+			have the Information and Icon properties set to
+			inform the user.  Hanging up before the call is
+			connected will cause EndSession reply to be sent.
+
+			Possible Errors: [service].Error.SimToolkit.EndSession
+
+		void PlayTone(string tone, string text, byte icon_id)
+
+			Tells the agent to play an audio tone once.  The
+			method should return once the tone is finished
+			playing.  The text parameter contains an optional
+			text to be displayed to the user.  The following
+			tones are defined:
+				"dial-tone"
+				"busy"
+				"congestion"
+				"radio-path-acknowledge"
+				"radio-path-not-available"
+				"error"
+				"call-waiting"
+				"ringing-tone"
+				"general-beep"
+				"positive-acknowledgement"
+				"negative-acknowledgement"
+				"user-ringing-tone"
+				"user-sms-alert"
+				"critical" (high priority)
+				"vibrate"
+				"happy"
+				"sad"
+				"urgent-action"
+				"question"
+				"message-received"
+
+			Possible Errors: [service].Error.SimToolkit.EndSession
+
+		void LoopTone(string tone, string text, byte icon_id)
+
+			Tells the agent to reproduce an audio tone in a
+			loop until the method call is cancelled.  See
+			PlayTone() above for the list of possible tone names.
+			The text parameter contains an optional text to
+			be displayed to the user.
+
+			Possible Errors: [service].Error.SimToolkit.EndSession
+
+		void DisplayActionInformation(string text,
+						byte icon_id)
+
+			Supplies a text string and/or icon concerning the
+			current activity in the terminal and UICC.  The
+			text should be displayed to the user on screen
+			until the call is canceled using Cancel().  If the
+			method returns it is assumed that the user has
+			explicitly dismissed the dialog and no Cancel() is
+			sent.
+
+		boolean ConfirmLaunchBrowser(string information,
+						byte icon_id, string url)
+
+			Asks the agent to request user to confirm launch
+			browser. If confirmed, then the agent should send
+			confirmation message to oFono and then should open
+			the launch browser with the given url.
+
+		void DisplayAction(string text, byte icon_id)
+
+			Supplies a text string and/or icon concerning the
+			current activity in the terminal and UICC. The
+			text should be displayed to the user on screen
+			until the call is canceled using Cancel() or until the
+			user decides to end the session.
+
+			Possible Errors: [service].Error.SimToolkit.EndSession
+
+		boolean ConfirmOpenChannel(string information,
+						byte icon_id) [experimental]
+
+			Asks the agent to request user to confirm the channel
+			set-up.
+
+			Possible Errors: [service].Error.SimToolkit.EndSession
+
+		void Cancel() [noreply]
+
+			Asks the agent to cancel any ongoing operation in
+			progress.  This is usually either because the agent
+			is taking too long to respond, the Sim Application
+			has terminated the session or a task has finished.
+
+		void Release() [noreply]
+
+			Agent is being released, possibly because of oFono
+			terminating, SimToolkit interface torn down or modem
+			off.  If the agent is registered as a global agent,
+			no UnregisterAgent call is expected.

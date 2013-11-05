@@ -1,0 +1,71 @@
+#!/usr/bin/python
+
+import gobject
+import sys
+import dbus
+import dbus.mainloop.glib
+
+def network_property_changed(name, value):
+	print "Network Registration property '%s' changed to '%s'" %\
+		(name, value)
+
+	if name == 'Name' and canexit:
+		mainloop.quit()
+
+if __name__ == "__main__":
+	if len(sys.argv) < 2:
+		print "Usage: %s [modem] <path> - Register to PLMN on <path>" %\
+			(sys.argv[0])
+		print "Usage: %s [modem] default - Register to default PLMN" %\
+			(sys.argv[0])
+		sys.exit(1)
+
+	canexit = False
+
+	dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+
+	bus = dbus.SystemBus()
+
+	manager = dbus.Interface(bus.get_object('org.ofono', '/'),
+							'org.ofono.Manager')
+
+	if len(sys.argv) == 3:
+		path = sys.argv[1]
+		plmn = sys.argv[2]
+	else:
+		modems = manager.GetModems()
+		path = modems[0][0]
+		plmn = sys.argv[1]
+
+	netreg = dbus.Interface(bus.get_object('org.ofono', path),
+				'org.ofono.NetworkRegistration')
+
+	netreg.connect_to_signal("PropertyChanged", network_property_changed)
+
+	props = netreg.GetProperties()
+
+	print "Status is: '%s', Operator Name is: '%s'" %\
+		(props['Status'], props['Name'])
+
+	if props.has_key('LocationAreaCode') and props.has_key('CellId'):
+		print "Location: '%d', Cell: '%d'" %\
+			(props['LocationAreaCode'], props['CellId'])
+
+	if props.has_key('Technology'):
+		print "Technology: '%s'" % (props['Technology'])
+
+	try:
+		if plmn == 'default':
+			netreg.Register()
+		else:
+			obj = bus.get_object('org.ofono', plmn);
+			op = dbus.Interface(obj, 'org.ofono.NetworkOperator')
+			op.Register()
+	except dbus.DBusException, e:
+		print "Unable to register: ", e
+		sys.exit(1)
+
+	canexit = True
+
+	mainloop = gobject.MainLoop()
+	mainloop.run()
