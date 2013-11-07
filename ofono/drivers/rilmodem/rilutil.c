@@ -229,7 +229,9 @@ GSList *ril_util_parse_clcc(GRil *gril, struct ril_msg *message)
 		call->id = parcel_r_int32(&rilp);
 		call->phone_number.type = parcel_r_int32(&rilp);
 		parcel_r_int32(&rilp); /* isMpty */
-		parcel_r_int32(&rilp); /* isMT */
+		call->direction = (parcel_r_int32(&rilp) ? /* isMT */
+			CALL_DIRECTION_MOBILE_TERMINATED :
+			CALL_DIRECTION_MOBILE_ORIGINATED);
 		parcel_r_int32(&rilp); /* als */
 		call->type = parcel_r_int32(&rilp); /* isVoice */
 		parcel_r_int32(&rilp); /* isVoicePrivacy */
