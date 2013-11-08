@@ -559,7 +559,7 @@ gint check_if_really_roaming(gint status)
 	const char *net_mnc = ofono_netreg_get_mnc(current_netreg);
 	struct sim_spdi *spdi = ofono_netreg_get_spdi(current_netreg);
 
-	if (spdi) {
+	if (spdi && net_mcc && net_mnc) {
 		if (sim_spdi_lookup(spdi, net_mcc, net_mnc))
 			return NETWORK_REGISTRATION_STATUS_REGISTERED;
 		else
