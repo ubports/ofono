@@ -444,8 +444,11 @@ void ofono_ussd_notify(struct ofono_ussd *ussd, int status, int dcs,
 		goto out;
 	}
 
-	if (data && data_len > 0)
+	if (data && data_len > 0 && (dcs != 0xFF))
 		utf8_str = ussd_decode(dcs, data_len, data);
+	else
+		/*String is already in UTF-8 format*/
+		utf8_str = (char *)data;
 
 	str = utf8_str;
 
