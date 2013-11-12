@@ -224,7 +224,10 @@ static void ril_cops_cb(struct ril_msg *message, gpointer user_data)
 	else
 		goto error;
 
-	extract_mcc_mnc(numeric, op.mcc, op.mnc);
+	if (numeric)
+		extract_mcc_mnc(numeric, op.mcc, op.mnc);
+	else
+		goto error;
 
 	/* Set to current */
 	op.status = OPERATOR_STATUS_CURRENT;
