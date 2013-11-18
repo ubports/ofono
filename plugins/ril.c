@@ -390,6 +390,21 @@ static void ril_connected(struct ril_msg *message, gpointer user_data)
 					mce_connect, mce_disconnect, modem, NULL);
 }
 
+static void gril_disconnected(gpointer user_data)
+{
+	/* Signal clients modem going down */
+	struct ofono_modem *modem = user_data;
+	if (modem)
+		ofono_modem_remove(modem);
+
+	/*
+	 * Design decision to exit if RIL io connection hangs up/dies.
+	 * Works around ofono/gril messaging getting blocked.
+	 */
+	ofono_error("IO error! Exiting...");
+	exit(EXIT_FAILURE);
+}
+
 static int ril_enable(struct ofono_modem *modem)
 {
 	DBG("enter");
@@ -398,6 +413,7 @@ static int ril_enable(struct ofono_modem *modem)
 	ril->have_sim = FALSE;
 
 	ril->modem = g_ril_new();
+	g_ril_set_disconnect_function(ril->modem, gril_disconnected, modem);
 
 	/* NOTE: Since AT modems open a tty, and then call
 	 * g_at_chat_new(), they're able to return -EIO if
