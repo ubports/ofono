@@ -127,6 +127,18 @@ char print_buf[RIL_PRINT_BUF_SIZE] __attribute__((used));
 
 static void ril_wakeup_writer(struct ril_s *ril);
 
+gboolean g_ril_set_disconnect_function(GRil *ril,
+					GRilDisconnectFunc disconnect,
+					gpointer user_data)
+{
+	if (ril == NULL)
+		return FALSE;
+
+	ril->parent->user_disconnect = disconnect;
+	ril->parent->user_disconnect_data = user_data;
+	return TRUE;
+}
+
 static void ril_notify_node_destroy(gpointer data, gpointer user_data)
 {
 	struct ril_notify_node *node = data;
