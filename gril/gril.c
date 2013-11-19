@@ -908,8 +908,7 @@ static struct ril_s *create_ril()
 	return ril;
 
 error:
-	ofono_error("Exiting...");
-	exit(EXIT_FAILURE);
+	return NULL;
 }
 
 static struct ril_notify *ril_notify_create(struct ril_s *ril,
