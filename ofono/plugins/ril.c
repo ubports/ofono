@@ -90,6 +90,9 @@ static guint mce_daemon_watch;
 static guint signal_watch;
 static DBusConnection *connection;
 
+static int ril_init(void);
+guint reconnect_timer;
+
 static int send_get_sim_status(struct ofono_modem *modem);
 
 static void ril_debug(const char *str, void *user_data)
@@ -205,6 +208,9 @@ static void ril_remove(struct ofono_modem *modem)
 		return;
 
 	if (ril->timer_id > 0)
+		g_source_remove(ril->timer_id);
+
+	if (reconnect_timer > 0)
 		g_source_remove(ril->timer_id);
 
 	g_ril_unref(ril->modem);
@@ -390,19 +396,25 @@ static void ril_connected(struct ril_msg *message, gpointer user_data)
 					mce_connect, mce_disconnect, modem, NULL);
 }
 
+static gboolean ril_re_init(gpointer user_data)
+{
+	ril_init();
+	return FALSE;
+}
+
 static void gril_disconnected(gpointer user_data)
 {
 	/* Signal clients modem going down */
 	struct ofono_modem *modem = user_data;
-	if (modem)
-		ofono_modem_remove(modem);
+	DBusConnection *conn = ofono_dbus_get_connection();
 
-	/*
-	 * Design decision to exit if RIL io connection hangs up/dies.
-	 * Works around ofono/gril messaging getting blocked.
-	 */
-	ofono_error("IO error! Exiting...");
-	exit(EXIT_FAILURE);
+	if (modem) {
+		ofono_modem_remove(modem);
+		mce_disconnect(conn, user_data);
+		reconnect_timer =
+			g_timeout_add_seconds(2, ril_re_init, NULL);
+	}
+
 }
 
 static int ril_enable(struct ofono_modem *modem)
@@ -425,6 +437,7 @@ static int ril_enable(struct ofono_modem *modem)
 
 	if (ril->modem == NULL) {
 		DBG("g_ril_new() failed to create modem!");
+		gril_disconnected(modem);
 		return -EIO;
 	}
 
@@ -537,6 +550,8 @@ static int ril_init(void)
 	 * - ofono_modem_set_powered()
 	 */
 	ofono_modem_reset(modem);
+
+	reconnect_timer = 0;
 
 	return retval;
 }
