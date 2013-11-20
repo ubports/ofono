@@ -737,6 +737,11 @@ static DBusMessage *stk_register_agent(DBusConnection *conn,
 	if (stk->session_agent == NULL)
 		stk->current_agent = stk->default_agent;
 
+	if (stk->driver && stk->driver->ready) {
+		DBG("Report driver agent is ready");
+		stk->driver->ready(stk);
+	}
+
 	return dbus_message_new_method_return(msg);
 }
 

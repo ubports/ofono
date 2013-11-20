@@ -56,6 +56,7 @@ static int rilmodem_init(void)
 	ril_call_barring_init();
 	ril_cbs_init();
 	ril_oemraw_init();
+	ril_stk_init();
 
 	return 0;
 }
@@ -80,6 +81,7 @@ static void rilmodem_exit(void)
 	ril_call_barring_exit();
 	ril_cbs_exit();
 	ril_oemraw_exit();
+	ril_stk_exit();
 }
 
 OFONO_PLUGIN_DEFINE(rilmodem, "RIL modem driver", VERSION,
