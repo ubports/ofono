@@ -79,3 +79,7 @@ extern void ril_phonebook_exit(void);
 
 extern void ril_oemraw_init(void);
 extern void ril_oemraw_exit(void);
+
+extern void ril_stk_init(void);
+extern void ril_stk_exit(void);
+

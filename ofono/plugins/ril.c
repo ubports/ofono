@@ -63,6 +63,7 @@
 #include <ofono/types.h>
 #include <ofono/message-waiting.h>
 #include <ofono/oemraw.h>
+#include <ofono/stk.h>
 
 #include "drivers/rilmodem/rilmodem.h"
 
@@ -270,6 +271,7 @@ static void ril_post_sim(struct ofono_modem *modem)
 	ofono_phonebook_create(modem, 0, "rilmodem", ril->modem);
 	ofono_call_forwarding_create(modem, 0, "rilmodem", ril->modem);
 	ofono_call_barring_create(modem, 0, "rilmodem", ril->modem);
+	ofono_stk_create(modem, 0, "rilmodem", ril->modem);
 
 	mw = ofono_message_waiting_create(modem);
 	if (mw)

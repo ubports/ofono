@@ -143,7 +143,8 @@ builtin_sources += drivers/rilmodem/rilmodem.h \
 			drivers/rilmodem/call-forwarding.c \
 			drivers/rilmodem/cbs.c \
 			drivers/rilmodem/oemraw-messages.c \
-			drivers/rilmodem/call-barring.c
+			drivers/rilmodem/call-barring.c \
+			drivers/rilmodem/stk.c
 
 endif
 
