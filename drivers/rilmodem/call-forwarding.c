@@ -116,9 +116,10 @@ static void ril_registration(struct ofono_call_forwarding *cf, int type,
 	}
 }
 
-static void ril_erasure(struct ofono_call_forwarding *cf,
+static void ril_send_forward_cmd(struct ofono_call_forwarding *cf,
 				int type, int cls,
-				ofono_call_forwarding_set_cb_t cb, void *data)
+				ofono_call_forwarding_set_cb_t cb, void *data,
+				int action)
 {
 	struct forw_data *fd = ofono_call_forwarding_get_data(cf);
 	struct cb_data *cbd = cb_data_new(cb, data);
@@ -127,7 +128,7 @@ static void ril_erasure(struct ofono_call_forwarding *cf,
 
 	parcel_init(&rilp);
 
-	parcel_w_int32(&rilp, CF_ACTION_ERASURE);
+	parcel_w_int32(&rilp, action);
 
 	parcel_w_int32(&rilp, type);
 
@@ -167,6 +168,27 @@ static void ril_erasure(struct ofono_call_forwarding *cf,
 		g_free(cbd);
 		CALLBACK_WITH_FAILURE(cb, data);
 	}
+}
+
+static void ril_erasure(struct ofono_call_forwarding *cf,
+				int type, int cls,
+				ofono_call_forwarding_set_cb_t cb, void *data)
+{
+	ril_send_forward_cmd(cf, type, cls, cb, data, CF_ACTION_ERASURE);
+}
+
+static void ril_deactivate(struct ofono_call_forwarding *cf,
+				int type, int cls,
+				ofono_call_forwarding_set_cb_t cb, void *data)
+{
+	ril_send_forward_cmd(cf, type, cls, cb, data, CF_ACTION_DISABLE);
+}
+
+static void ril_activate(struct ofono_call_forwarding *cf,
+				int type, int cls,
+				ofono_call_forwarding_set_cb_t cb, void *data)
+{
+	ril_send_forward_cmd(cf, type, cls, cb, data, CF_ACTION_ENABLE);
 }
 
 static void ril_query_cb(struct ril_msg *message, gpointer user_data)
@@ -315,8 +337,10 @@ static struct ofono_call_forwarding_driver driver = {
 	.probe			= ril_call_forwarding_probe,
 	.remove			= ril_call_forwarding_remove,
 	.erasure		= ril_erasure,
+	.deactivation	= ril_deactivate,
 	.query			= ril_query,
-	.registration	= ril_registration
+	.registration	= ril_registration,
+	.activation	= ril_activate
 };
 
 void ril_call_forwarding_init(void)
