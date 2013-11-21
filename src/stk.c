@@ -280,7 +280,7 @@ void __ofono_cbs_sim_download(struct ofono_stk *stk, const struct cbs *msg)
 
 	e.type = STK_ENVELOPE_TYPE_CBS_PP_DOWNLOAD;
 	e.src = STK_DEVICE_IDENTITY_TYPE_NETWORK;
-	memcpy(&e.cbs_pp_download.page, msg, sizeof(msg));
+	memcpy(&e.cbs_pp_download.page, msg, sizeof(*msg));
 
 	err = stk_send_envelope(stk, &e, stk_cbs_download_cb,
 				ENVELOPE_RETRIES_DEFAULT);
@@ -2318,7 +2318,7 @@ static gboolean handle_command_refresh(const struct stk_command *cmd,
 		g_slist_foreach(file_list, (GFunc) g_free, NULL);
 		g_slist_free(file_list);
 
-		return TRUE;
+		return FALSE;
 	}
 
 	rsp->result.type = STK_RESULT_TYPE_NOT_CAPABLE;
@@ -3095,8 +3095,14 @@ void ofono_stk_proactive_command_handled_notify(struct ofono_stk *stk,
 		break;
 
 	case STK_COMMAND_TYPE_REFRESH:
-		ok = handle_command_refresh(stk->pending_cmd, NULL, stk);
-		break;
+		/*
+		 * On a refresh we should not try to free the pending command,
+		 * as the stk atom itself likely disappeared as a result.
+		 * If it has not, then any subsequent proactive command, or
+		 * session end notification will free it anyway
+		 */
+		handle_command_refresh(stk->pending_cmd, NULL, stk);
+		return;
 	}
 
 out:

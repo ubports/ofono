@@ -113,13 +113,6 @@ void ofono_debug(const char *format, ...)
 	va_end(ap);
 }
 
-/**
- * print_backtrace:
- *
- * Currently not used anywhere. Uncomment if needed for debug purposes.
- */
-
-/*
 static void print_backtrace(unsigned int offset)
 {
 	void *frames[99];
@@ -221,7 +214,32 @@ static void print_backtrace(unsigned int offset)
 	close(outfd[1]);
 	close(infd[0]);
 }
-*/
+
+static void signal_handler(int signo)
+{
+	ofono_error("Aborting (signal %d) [%s]", signo, program_exec);
+
+	print_backtrace(2);
+
+	exit(EXIT_FAILURE);
+}
+
+static void signal_setup(sighandler_t handler)
+{
+	struct sigaction sa;
+	sigset_t mask;
+
+	sigemptyset(&mask);
+	sa.sa_handler = handler;
+	sa.sa_mask = mask;
+	sa.sa_flags = 0;
+	sigaction(SIGBUS, &sa, NULL);
+	sigaction(SIGILL, &sa, NULL);
+	sigaction(SIGFPE, &sa, NULL);
+	sigaction(SIGSEGV, &sa, NULL);
+	sigaction(SIGABRT, &sa, NULL);
+	sigaction(SIGPIPE, &sa, NULL);
+}
 
 extern struct ofono_debug_desc __start___debug[];
 extern struct ofono_debug_desc __stop___debug[];
@@ -287,6 +305,8 @@ int __ofono_log_init(const char *program, const char *debug,
 	if (detach == FALSE)
 		option |= LOG_PERROR;
 
+	signal_setup(signal_handler);
+
 	openlog(basename(program), option, LOG_DAEMON);
 
 	syslog(LOG_INFO, "oFono version %s", VERSION);
@@ -299,6 +319,8 @@ void __ofono_log_cleanup(void)
 	syslog(LOG_INFO, "Exit");
 
 	closelog();
+
+	signal_setup(SIG_DFL);
 
 	g_strfreev(enabled);
 }
