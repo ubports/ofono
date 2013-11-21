@@ -244,10 +244,6 @@ static struct ril_request *ril_request_create(struct ril_s *ril,
 	if (r == NULL)
 		return 0;
 
-
-	DBG("req: %s, id: %d, data_len: %d",
-		ril_request_id_to_string(req), id, (int) data_len);
-
 	/* RIL request: 8 byte header + data */
 	len = 8 + data_len;
 
@@ -352,9 +348,6 @@ static void handle_response(struct ril_s *p, struct ril_msg *message)
 	for (i = 0; i < count; i++) {
 		req = g_queue_peek_nth(p->command_queue, i);
 
-		DBG("comparing req->id: %d to message->serial_no: %d",
-			req->id, message->serial_no);
-
 		if (req->id == message->serial_no) {
 			found = TRUE;
 			message->req = req->req;
@@ -369,15 +362,12 @@ static void handle_response(struct ril_s *p, struct ril_msg *message)
 
 			req = g_queue_pop_nth(p->command_queue, i);
 			if (req->callback) {
-				DBG("req->callback");
 				req->callback(message, req->user_data);
 			}
 
 			len = g_queue_get_length(p->out_queue);
-			DBG("requests in sent queue before removing:%d", len);
 			for (i = 0; i < len; i++) {
 				id = *(guint *) g_queue_peek_nth(p->out_queue, i);
-				DBG("peeked id:%d", id);
 				if (id == req->id) {
 					g_queue_pop_nth(p->out_queue, i);
 					break;
@@ -576,13 +566,10 @@ static void new_bytes(struct ring_buffer *rbuf, gpointer user_data)
 
 	p->in_read_handler = TRUE;
 
-	DBG("len: %d, wrap: %d", len, wrap);
-
 	while (p->suspended == FALSE && (p->read_so_far < len)) {
 		gsize rbytes = MIN(len - p->read_so_far, wrap - p->read_so_far);
 
 		if (rbytes < 4) {
-			DBG("Not enough bytes for header length: len: %d", len);
 			return;
 		}
 
@@ -596,7 +583,6 @@ static void new_bytes(struct ring_buffer *rbuf, gpointer user_data)
 
 		/* wait for the rest of the record... */
 		if (message == NULL) {
-			DBG("Not enough bytes for fixed record");
 			break;
 		}
 
@@ -692,7 +678,6 @@ out:
 	len = req->data_len;
 
 	towrite = len - ril->req_bytes_written;
-	DBG("req:%d,len:%d,towrite:%d", req->id, len, towrite);
 #ifdef WRITE_SCHEDULER_DEBUG
 	if (towrite > 5)
 		towrite = 5;
@@ -1005,8 +990,6 @@ static guint ril_register(struct ril_s *ril, guint group,
 
 	if ((req == RIL_UNSOL_RIL_CONNECTED) && (ril->connected == TRUE)) {
 		/* fire the callback in a timer, as it won't ever fire */
-		DBG("CONNECTED already received... ");
-
 		message.req = RIL_UNSOL_RIL_CONNECTED;
 		message.unsolicited = TRUE;
 		message.buf_len = 0;
@@ -1143,7 +1126,6 @@ guint g_ril_send(GRil *ril, const guint reqid, const char *data,
 			const gsize data_len, GRilResponseFunc func,
 			gpointer user_data, GDestroyNotify notify)
 {
-	DBG("enter");
 	struct ril_request *r;
 	struct ril_s *p;
 
@@ -1165,9 +1147,7 @@ guint g_ril_send(GRil *ril, const guint reqid, const char *data,
 
 	g_queue_push_tail(p->command_queue, r);
 
-	DBG("calling wakeup_writer: qlen: %d", g_queue_get_length(p->command_queue));
 	ril_wakeup_writer(p);
-	DBG("exit");
 	return r->id;
 }
 

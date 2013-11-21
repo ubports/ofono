@@ -68,6 +68,8 @@ static void ril_ussd_request(struct ofono_ussd *ussd, int dcs,
 	enum sms_charset charset;
 	int ret = -1;
 
+	ofono_info("send ussd");
+
 	if (cbs_dcs_decode(dcs, NULL, NULL, &charset,
 					NULL, NULL, NULL)) {
 		if (charset == SMS_CHARSET_7BIT) {
@@ -114,8 +116,10 @@ static void ril_ussd_cancel_cb(struct ril_msg *message, gpointer user_data)
 
 	if (message->error == RIL_E_SUCCESS)
 		decode_ril_error(&error, "OK");
-	else
+	else {
+		ofono_error("ussd canceling failed");
 		decode_ril_error(&error, "FAIL");
+	}
 
 	cb(&error, cbd->data);
 }
@@ -126,13 +130,15 @@ static void ril_ussd_cancel(struct ofono_ussd *ussd,
 	struct ussd_data *ud = ofono_ussd_get_data(ussd);
 	struct cb_data *cbd = cb_data_new(cb, user_data);
 
-	DBG("");
+	ofono_info("send ussd cancel");
 
 	cbd->user = ud;
 
 	if (g_ril_send(ud->ril, RIL_REQUEST_CANCEL_USSD, NULL, 0,
 				ril_ussd_cancel_cb, cbd, g_free) > 0)
 		return;
+
+	ofono_error("unable cancel ussd");
 
 	g_free(cbd);
 
@@ -146,6 +152,8 @@ static void ril_ussd_notify(struct ril_msg *message, gpointer user_data)
 	gchar *ussd_from_network;
 	gchar *type;
 	gint ussdtype;
+
+	ofono_info("ussd_received");
 
 	ril_util_init_parcel(message, &rilp);
 	parcel_r_int32(&rilp);
