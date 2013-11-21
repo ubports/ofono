@@ -2763,11 +2763,11 @@ static void sim_pin_query_cb(const struct ofono_error *error,
 		break;
 	default:
 		if (sim->state == OFONO_SIM_STATE_READY) {
-			/* Force the sim state out of READY */
-			sim_free_main_state(sim);
 
 			sim->state = OFONO_SIM_STATE_LOCKED_OUT;
 			call_state_watches(sim);
+
+			sim_free_main_state(sim);
 		}
 		break;
 	}
