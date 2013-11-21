@@ -224,7 +224,10 @@ static void ril_cops_cb(struct ril_msg *message, gpointer user_data)
 	else
 		goto error;
 
-	extract_mcc_mnc(numeric, op.mcc, op.mnc);
+	if (numeric)
+		extract_mcc_mnc(numeric, op.mcc, op.mnc);
+	else
+		goto error;
 
 	/* Set to current */
 	op.status = OPERATOR_STATUS_CURRENT;
@@ -559,7 +562,7 @@ gint check_if_really_roaming(gint status)
 	const char *net_mnc = ofono_netreg_get_mnc(current_netreg);
 	struct sim_spdi *spdi = ofono_netreg_get_spdi(current_netreg);
 
-	if (spdi) {
+	if (spdi && net_mcc && net_mnc) {
 		if (sim_spdi_lookup(spdi, net_mcc, net_mnc))
 			return NETWORK_REGISTRATION_STATUS_REGISTERED;
 		else
