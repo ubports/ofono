@@ -64,8 +64,10 @@ static void ril_set_forward_cb(struct ril_msg *message, gpointer user_data)
 
 	if (message->error == RIL_E_SUCCESS)
 		CALLBACK_WITH_SUCCESS(cb, cbd->data);
-	else
+	else {
+		ofono_error("CF setting failed");
 		CALLBACK_WITH_FAILURE(cb, cbd->data);
+	}
 }
 
 static void ril_registration(struct ofono_call_forwarding *cf, int type,
@@ -78,6 +80,8 @@ static void ril_registration(struct ofono_call_forwarding *cf, int type,
 	struct cb_data *cbd = cb_data_new(cb, data);
 	struct parcel rilp;
 	int ret = 0;
+
+	ofono_info("cf registration");
 
 	parcel_init(&rilp);
 
@@ -111,6 +115,7 @@ static void ril_registration(struct ofono_call_forwarding *cf, int type,
 
 	/* In case of error free cbd and return the cb with failure */
 	if (ret <= 0) {
+		ofono_error("CF registration failed");
 		g_free(cbd);
 		CALLBACK_WITH_FAILURE(cb, data);
 	}
@@ -165,6 +170,7 @@ static void ril_send_forward_cmd(struct ofono_call_forwarding *cf,
 
 	/* In case of error free cbd and return the cb with failure */
 	if (ret <= 0) {
+		ofono_error("CF action failed");
 		g_free(cbd);
 		CALLBACK_WITH_FAILURE(cb, data);
 	}
@@ -174,6 +180,7 @@ static void ril_erasure(struct ofono_call_forwarding *cf,
 				int type, int cls,
 				ofono_call_forwarding_set_cb_t cb, void *data)
 {
+	ofono_info("CF_ACTION_ERASURE");
 	ril_send_forward_cmd(cf, type, cls, cb, data, CF_ACTION_ERASURE);
 }
 
@@ -181,6 +188,7 @@ static void ril_deactivate(struct ofono_call_forwarding *cf,
 				int type, int cls,
 				ofono_call_forwarding_set_cb_t cb, void *data)
 {
+	ofono_info("CF_ACTION_DISABLE");
 	ril_send_forward_cmd(cf, type, cls, cb, data, CF_ACTION_DISABLE);
 }
 
@@ -188,6 +196,7 @@ static void ril_activate(struct ofono_call_forwarding *cf,
 				int type, int cls,
 				ofono_call_forwarding_set_cb_t cb, void *data)
 {
+	ofono_info("CF_ACTION_ENABLE");
 	ril_send_forward_cmd(cf, type, cls, cb, data, CF_ACTION_ENABLE);
 }
 
@@ -240,8 +249,10 @@ static void ril_query_cb(struct ril_msg *message, gpointer user_data)
 		CALLBACK_WITH_SUCCESS(cb, 1, list, cbd->data);
 
 		g_free(list);
-	} else
+	} else {
+		ofono_error("CF query failed");
 		CALLBACK_WITH_FAILURE(cb, 0, NULL, cbd->data);
+	}
 }
 
 static void ril_query(struct ofono_call_forwarding *cf, int type, int cls,
@@ -252,6 +263,8 @@ static void ril_query(struct ofono_call_forwarding *cf, int type, int cls,
 	struct cb_data *cbd = cb_data_new(cb, data);
 	struct parcel rilp;
 	int ret = 0;
+
+	ofono_info("cf query");
 
 	parcel_init(&rilp);
 
@@ -292,6 +305,7 @@ static void ril_query(struct ofono_call_forwarding *cf, int type, int cls,
 
 	/* In case of error free cbd and return the cb with failure */
 	if (ret <= 0) {
+		ofono_error("unable to send CF query");
 		g_free(cbd);
 		CALLBACK_WITH_FAILURE(cb, 0, NULL, data);
 	}

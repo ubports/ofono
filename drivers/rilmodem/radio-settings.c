@@ -56,8 +56,10 @@ static void ril_set_rat_cb(struct ril_msg *message, gpointer user_data)
 
 	if (message->error == RIL_E_SUCCESS)
 		CALLBACK_WITH_SUCCESS(cb, cbd->data);
-	else
+	else {
+		ofono_error("rat mode setting failed");
 		CALLBACK_WITH_FAILURE(cb, cbd->data);
+	}
 }
 
 static void ril_set_rat_mode(struct ofono_radio_settings *rs,
@@ -70,6 +72,8 @@ static void ril_set_rat_mode(struct ofono_radio_settings *rs,
 	struct parcel rilp;
 	int pref = rd->ratmode;
 	int ret = 0;
+
+	ofono_info("setting rat mode");
 
 	parcel_init(&rilp);
 
@@ -97,6 +101,7 @@ static void ril_set_rat_mode(struct ofono_radio_settings *rs,
 	parcel_free(&rilp);
 
 	if (ret <= 0) {
+		ofono_error("unable to set rat mode");
 		g_free(cbd);
 		CALLBACK_WITH_FAILURE(cb, data);
 	}
@@ -156,6 +161,7 @@ static void ril_rat_mode_cb(struct ril_msg *message, gpointer user_data)
 	} else {
 		if (cb)
 			CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
+		ofono_error("rat mode query failed");
 	}
 }
 
@@ -167,11 +173,14 @@ static void ril_query_rat_mode(struct ofono_radio_settings *rs,
 	struct cb_data *cbd = cb_data_new(cb, data);
 	int ret = 0;
 
+	ofono_info("rat mode query");
+
 	ret = g_ril_send(rd->ril, RIL_REQUEST_GET_PREFERRED_NETWORK_TYPE,
 					 NULL, 0, ril_rat_mode_cb, cbd, g_free);
 
 	/* In case of error free cbd and return the cb with failure */
 	if (ret <= 0) {
+		ofono_error("unable to send rat mode query");
 		g_free(cbd);
 		CALLBACK_WITH_FAILURE(cb, -1, data);
 	}

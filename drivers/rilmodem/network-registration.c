@@ -117,7 +117,7 @@ static void ril_creg_cb(struct ril_msg *message, gpointer user_data)
 	if (status == NETWORK_REGISTRATION_STATUS_ROAMING)
 		status = check_if_really_roaming(status);
 
-	DBG("voice registration status is %d", status);
+	ofono_info("voice registration status is %d", status);
 
 	nd->tech = tech;
 	cb(&error, status, lac, ci, tech, cbd->data);
@@ -301,7 +301,7 @@ static void ril_cops_list_cb(struct ril_msg *message, gpointer user_data)
 
 	/* Number of operators at the list (4 strings for every operator) */
 	noperators = parcel_r_int32(&rilp) / 4;
-	DBG("noperators = %d", noperators);
+	ofono_info("noperators = %d", noperators);
 
 	list = g_try_new0(struct ofono_network_operator, noperators);
 	if (list == NULL)
@@ -386,6 +386,7 @@ static void ril_list_operators(struct ofono_netreg *netreg,
 	g_ril_print_request_no_args(nd->ril, ret, request);
 
 	if (ret <= 0) {
+		ofono_error("operator listing failed");
 		g_free(cbd);
 		CALLBACK_WITH_FAILURE(cb, 0, NULL, data);
 	}
@@ -404,6 +405,7 @@ static void ril_register_cb(struct ril_msg *message, gpointer user_data)
 		g_ril_print_response_no_args(nd->ril, message);
 
 	} else {
+		ofono_error("registration failed");
 		decode_ril_error(&error, "FAIL");
 	}
 
@@ -425,6 +427,7 @@ static void ril_register_auto(struct ofono_netreg *netreg,
 	g_ril_print_request_no_args(nd->ril, ret, request);
 
 	if (ret <= 0) {
+		ofono_error("auto registration failed");
 		g_free(cbd);
 		CALLBACK_WITH_FAILURE(cb, data);
 	}
@@ -460,6 +463,7 @@ static void ril_register_manual(struct ofono_netreg *netreg,
 
 	/* In case of error free cbd and return the cb with failure */
 	if (ret <= 0) {
+		ofono_error("manual registration failed");
 		g_free(cbd);
 		CALLBACK_WITH_FAILURE(cb, data);
 	}

@@ -82,9 +82,6 @@ int parcel_w_int32(struct parcel *p, int32_t val)
 {
 	for (;;) {
 
-		DBG("parcel_w_int32(%d): offset = %d, cap = %d, size = %d\n",
-			val, p->offset, p->capacity, p->size);
-
 		if (p->offset + sizeof(int32_t) < p->capacity) {
 			/* There's enough space */
 			*((int32_t *) (p->data + p->offset)) = val;
@@ -122,8 +119,6 @@ int parcel_w_string(struct parcel *p, char *str)
 	for (;;) {
 		size_t padded = PAD_SIZE(len);
 
-		DBG("parcel_w_string(\"%s\"): len %d offset %d, cap %d, size %d",
-			str, len, p->offset, p->capacity, p->size);
 		if (p->offset + len < p->capacity) {
 			/* There's enough space */
 			memcpy(p->data + p->offset, gs16, gs16_size);
@@ -131,9 +126,6 @@ int parcel_w_string(struct parcel *p, char *str)
 			p->offset += padded;
 			p->size += padded;
 			if (padded != len) {
-
-				DBG("Writing %d bytes, padded to %d\n",
-					len, padded);
 
 #if BYTE_ORDER == BIG_ENDIAN
 				static const uint32_t mask[4] = {
