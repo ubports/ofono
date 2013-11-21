@@ -376,7 +376,8 @@ static void handle_response(struct ril_s *p, struct ril_msg *message)
 
 			ril_request_destroy(req);
 
-			if (g_queue_peek_head(p->command_queue))
+			if (g_queue_get_length(p->command_queue)
+					> g_queue_get_length(p->out_queue))
 				ril_wakeup_writer(p);
 
 			break;
@@ -695,6 +696,10 @@ out:
 		return TRUE;
 	else
 		ril->req_bytes_written = 0;
+
+	if (g_queue_get_length(ril->command_queue)
+			> g_queue_get_length(ril->out_queue))
+		return TRUE;
 
 	return FALSE;
 }
