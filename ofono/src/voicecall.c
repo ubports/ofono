@@ -2355,6 +2355,46 @@ error:
 		g_free(v);
 }
 
+void ofono_voicecall_mpty_hint(struct ofono_voicecall *vc, unsigned int ids)
+{
+	GSList *old;
+	GSList *l;
+
+	DBG("ids: %u", ids);
+
+	/* id of 0 is never valid for a call */
+	if (ids & 0x1)
+		return;
+
+	/* Ignore the hint if there's nothing to do */
+	if (__builtin_popcount(ids) < 2 && vc->multiparty_list == NULL)
+		return;
+
+	old = vc->multiparty_list;
+	vc->multiparty_list = NULL;
+
+	for (l = vc->call_list; l; l = l->next) {
+		struct voicecall *v = l->data;
+
+		if (ids & (1 << v->call->id))
+			vc->multiparty_list =
+				g_slist_prepend(vc->multiparty_list, v);
+	}
+
+	if (vc->multiparty_list)
+		vc->multiparty_list = g_slist_reverse(vc->multiparty_list);
+
+	if (g_slist_length(vc->multiparty_list) == 1) {
+		ofono_error("Created multiparty list length is 1"
+				", which would indicate a bug in the driver"
+				" or the remote device");
+		vc->multiparty_list = NULL;
+	}
+
+	voicecalls_multiparty_changed(old, vc->multiparty_list);
+	g_slist_free(old);
+}
+
 static void send_ciev_after_swap_callback(const struct ofono_error *error,
 								void *data)
 {
@@ -3775,13 +3815,22 @@ static void tone_request_cb(const struct ofono_error *error, void *data)
 	entry->left += len;
 
 done:
-	/*
-	 * Wait 3 seconds per PAUSE, same as for DTMF separator characters
-	 * passed in a telephone number according to TS 22.101 A.21,
-	 * although 27.007 claims this delay can be set using S8 and
-	 * defaults to 2 seconds.
-	 */
-	vc->tone_source = g_timeout_add_seconds(len * 3, tone_request_run, vc);
+	if (len == 0) {
+		/*
+		 * Continue queue processing; use higher-precision timer
+		 * (resulting in a faster response to the first digit)
+		 * than with g_timeout_add_seconds().
+		 */
+		vc->tone_source = g_timeout_add(0, tone_request_run, vc);
+	} else {
+		/*
+		 * Wait 3 seconds per PAUSE, same as for DTMF separator characters
+		 * passed in a telephone number according to TS 22.101 A.21,
+		 * although 27.007 claims this delay can be set using S8 and
+		 * defaults to 2 seconds.
+		 */
+		vc->tone_source = g_timeout_add_seconds(len * 3, tone_request_run, vc);
+	}
 }
 
 static gboolean tone_request_run(gpointer user_data)
