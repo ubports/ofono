@@ -3815,13 +3815,22 @@ static void tone_request_cb(const struct ofono_error *error, void *data)
 	entry->left += len;
 
 done:
-	/*
-	 * Wait 3 seconds per PAUSE, same as for DTMF separator characters
-	 * passed in a telephone number according to TS 22.101 A.21,
-	 * although 27.007 claims this delay can be set using S8 and
-	 * defaults to 2 seconds.
-	 */
-	vc->tone_source = g_timeout_add_seconds(len * 3, tone_request_run, vc);
+	if (len == 0) {
+		/*
+		 * Continue queue processing; use higher-precision timer
+		 * (resulting in a faster response to the first digit)
+		 * than with g_timeout_add_seconds().
+		 */
+		vc->tone_source = g_timeout_add(0, tone_request_run, vc);
+	} else {
+		/*
+		 * Wait 3 seconds per PAUSE, same as for DTMF separator characters
+		 * passed in a telephone number according to TS 22.101 A.21,
+		 * although 27.007 claims this delay can be set using S8 and
+		 * defaults to 2 seconds.
+		 */
+		vc->tone_source = g_timeout_add_seconds(len * 3, tone_request_run, vc);
+	}
 }
 
 static gboolean tone_request_run(gpointer user_data)

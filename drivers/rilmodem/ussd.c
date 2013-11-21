@@ -146,9 +146,6 @@ static void ril_ussd_notify(struct ril_msg *message, gpointer user_data)
 	gchar *ussd_from_network;
 	gchar *type;
 	gint ussdtype;
-	int valid = 0;
-	long items_written = 0;
-	unsigned char pdu[200];
 
 	ril_util_init_parcel(message, &rilp);
 	parcel_r_int32(&rilp);
@@ -157,12 +154,9 @@ static void ril_ussd_notify(struct ril_msg *message, gpointer user_data)
 	ussd_from_network = parcel_r_string(&rilp);
 
 	if (ussd_from_network)
-		if (ussd_encode(ussd_from_network, &items_written, pdu)
-							&& items_written > 0)
-			valid = 1;
-
-	if (valid)
-		ofono_ussd_notify(ussd, ussdtype, 0, pdu, items_written);
+		ofono_ussd_notify(ussd, ussdtype, 0xFF,
+			(const unsigned char *)ussd_from_network,
+			strlen(ussd_from_network));
 	else
 		ofono_ussd_notify(ussd, ussdtype, 0, NULL, 0);
 
