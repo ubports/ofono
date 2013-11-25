@@ -11,8 +11,6 @@ ExecStart=@prefix@/sbin/ofonod -n $OFONO_ARGS
 StandardError=null
 Restart=always
 RestartSec=3
-ExecStart=@prefix@/sbin/ofonod -n
-StandardError=null
 
 [Install]
 WantedBy=multi-user.target
