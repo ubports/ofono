@@ -110,9 +110,12 @@ static int provision_get_settings(const char *mcc, const char *mnc,
 
 			memcpy(*settings + i, ap,
 				sizeof(struct ofono_gprs_provision_data));
+
+			g_free(ap);
+		} else {
+			mbpi_ap_free(ap);
 		}
 
-		g_free(ap);
 	}
 
 	g_slist_free(apns);
