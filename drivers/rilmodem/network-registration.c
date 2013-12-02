@@ -224,10 +224,14 @@ static void ril_cops_cb(struct ril_msg *message, gpointer user_data)
 	else
 		goto error;
 
-	if (numeric)
+	if (numeric && strlen(numeric) >= 5)
 		extract_mcc_mnc(numeric, op.mcc, op.mnc);
-	else
+	else {
+		g_free(lalpha);
+		g_free(salpha);
+		g_free(numeric);
 		goto error;
+	}
 
 	/* Set to current */
 	op.status = OPERATOR_STATUS_CURRENT;
@@ -318,7 +322,16 @@ static void ril_cops_list_cb(struct ril_msg *message, gpointer user_data)
 					OFONO_MAX_OPERATOR_NAME_LENGTH);
 		}
 
-		extract_mcc_mnc(numeric, list[i].mcc, list[i].mnc);
+		if (numeric && strlen(numeric) >= 5)
+			extract_mcc_mnc(numeric, list[i].mcc, list[i].mnc);
+		else {
+			g_free(lalpha);
+			g_free(salpha);
+			g_free(numeric);
+			g_free(status);
+			g_free(list);
+			goto error;
+		}
 
 		/* FIXME: need to fix this for CDMA */
 		/* Use GSM as default, as RIL doesn't pass that info to us */
