@@ -28,6 +28,7 @@
 #define EF_STATUS_INVALIDATED 0
 #define EF_STATUS_VALID 1
 #define RIL_CONFIG "/etc/ofono/ril_subscription.conf"
+#define RIL_STORE "rilmodem"
 #define LTE_FLAG "4gOn"
 
 extern void ril_devinfo_init(void);
