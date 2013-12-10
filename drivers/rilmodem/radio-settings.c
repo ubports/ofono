@@ -102,15 +102,31 @@ static void ril_set_rat_mode(struct ofono_radio_settings *rs,
 	}
 }
 
+static void ril_force_rat_mode(struct radio_data *rd, int pref)
+{
+	struct parcel rilp;
+
+	if (pref == rd->ratmode)
+		return;
+
+	parcel_init(&rilp);
+	parcel_w_int32(&rilp, 1);
+	parcel_w_int32(&rilp, rd->ratmode);
+	g_ril_send(rd->ril,
+		RIL_REQUEST_SET_PREFERRED_NETWORK_TYPE,
+		rilp.data, rilp.size, NULL,
+		NULL, g_free);
+	parcel_free(&rilp);
+}
+
 static void ril_rat_mode_cb(struct ril_msg *message, gpointer user_data)
 {
 	DBG("");
 	struct cb_data *cbd = user_data;
 	ofono_radio_settings_rat_mode_query_cb_t cb = cbd->cb;
-	struct parcel rilp, rilp_out;
+	struct parcel rilp;
 	int mode = OFONO_RADIO_ACCESS_MODE_ANY;
 	int pref;
-	struct radio_data *rd = NULL;
 
 	if (message->error == RIL_E_SUCCESS) {
 		ril_util_init_parcel(message, &rilp);
@@ -124,25 +140,18 @@ static void ril_rat_mode_cb(struct ril_msg *message, gpointer user_data)
 		case PREF_NET_TYPE_GSM_ONLY:
 			mode = OFONO_RADIO_ACCESS_MODE_GSM;
 			break;
+		case PREF_NET_TYPE_GSM_WCDMA_AUTO:/* according to UI design */
+			if (!cb)
+				ril_force_rat_mode(cbd->user, pref);
 		case PREF_NET_TYPE_WCDMA:
 		case PREF_NET_TYPE_GSM_WCDMA: /* according to UI design */
-		case PREF_NET_TYPE_GSM_WCDMA_AUTO:/* according to UI design */
 			mode = OFONO_RADIO_ACCESS_MODE_UMTS;
 			break;
 		case PREF_NET_TYPE_LTE_CDMA_EVDO:
 		case PREF_NET_TYPE_LTE_GSM_WCDMA:
 		case PREF_NET_TYPE_LTE_CMDA_EVDO_GSM_WCDMA:
-			if (!cb) {
-				rd = cbd->user;
-				parcel_init(&rilp_out);
-				parcel_w_int32(&rilp_out, 1);
-				parcel_w_int32(&rilp_out, rd->ratmode);
-				g_ril_send(rd->ril,
-					RIL_REQUEST_SET_PREFERRED_NETWORK_TYPE,
-					rilp_out.data, rilp_out.size, NULL,
-					NULL, g_free);
-				parcel_free(&rilp_out);
-			}
+			if (!cb)
+				ril_force_rat_mode(cbd->user, pref);
 			break;
 		case PREF_NET_TYPE_CDMA_EVDO_AUTO:
 		case PREF_NET_TYPE_CDMA_ONLY:
@@ -177,11 +186,16 @@ static void ril_query_rat_mode(struct ofono_radio_settings *rs,
 	}
 }
 
-static void ril_get_net_config(struct radio_data *rsd)
+static gboolean ril_get_net_config(struct radio_data *rsd)
 {
 	GKeyFile *keyfile;
 	GError *err = NULL;
 	char *path = RIL_CONFIG;
+	char *data;
+	gsize length = 0;
+	char **alreadyset = NULL;
+	gboolean needsconfig = FALSE;
+	char *value = NULL;
 	rsd->ratmode = PREF_NET_TYPE_GSM_WCDMA_AUTO;
 
 	keyfile = g_key_file_new();
@@ -191,10 +205,26 @@ static void ril_get_net_config(struct radio_data *rsd)
 	if (!g_key_file_load_from_file(keyfile, path, 0, &err))
 		g_error_free(err);
 	else {
-		if (g_key_file_has_group(keyfile, LTE_FLAG))
-			rsd->ratmode = PREF_NET_TYPE_LTE_GSM_WCDMA;
+		if (g_key_file_has_group(keyfile, LTE_FLAG)) {
+			alreadyset = g_key_file_get_groups(keyfile, NULL);
+			value = g_key_file_get_string(
+				keyfile, alreadyset[1], "read", NULL);
+			if (!value) {
+				rsd->ratmode = PREF_NET_TYPE_LTE_GSM_WCDMA;
+				g_key_file_set_boolean(
+				  keyfile, LTE_FLAG, "read", TRUE);
+				data = g_key_file_to_data(
+				  keyfile, &length, NULL);
+				g_file_set_contents(path, data, length, NULL);
+				g_free(data);
+				needsconfig = TRUE;
+			} else
+				g_free(value);
+			g_strfreev(alreadyset);
+		}
 	}
 	g_key_file_free(keyfile);
+	return needsconfig;
 }
 
 static gboolean ril_delayed_register(gpointer user_data)
@@ -217,12 +247,11 @@ static int ril_radio_settings_probe(struct ofono_radio_settings *rs,
 	int ret;
 	struct radio_data *rsd = g_try_new0(struct radio_data, 1);
 	rsd->ril = g_ril_clone(ril);
-	ril_get_net_config(rsd);
-	if (rsd->ratmode == PREF_NET_TYPE_GSM_WCDMA_AUTO) {
+	if (ril_get_net_config(rsd)) {
 		cbd = cb_data_new2(rsd, NULL, NULL);
 		ret = g_ril_send(rsd->ril,
-					 RIL_REQUEST_GET_PREFERRED_NETWORK_TYPE,
-					 NULL, 0, ril_rat_mode_cb, cbd, g_free);
+					RIL_REQUEST_GET_PREFERRED_NETWORK_TYPE,
+					NULL, 0, ril_rat_mode_cb, cbd, g_free);
 		if (ret <= 0)
 			g_free(cbd);
 	}

@@ -446,7 +446,6 @@ const struct sim_eons_operator_info *sim_eons_lookup(struct sim_eons *eons,
 						const char *mnc);
 void sim_eons_free(struct sim_eons *eons);
 
-const char *sim_fileid_to_string(int fileid);
 void sim_parse_mcc_mnc(const guint8 *bcd, char *mcc, char *mnc);
 void sim_encode_mcc_mnc(guint8 *out, const char *mcc, const char *mnc);
 struct sim_spdi *sim_spdi_new(const guint8 *tlv, int length);
