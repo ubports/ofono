@@ -1435,6 +1435,21 @@ static void sim_imsi_obtained(struct ofono_sim *sim, const char *imsi)
 						"SubscriberIdentity",
 						DBUS_TYPE_STRING, &sim->imsi);
 
+	/*
+	 * sim->mnc_length = 0 means that EFad was not present or that EFad did
+	 * not contain the MNC length field (MNC length is not mandatory for
+	 * SIMs (non-USIM) - see TS 51.011).
+	 *
+	 * MNC can have either 2 or 3 digits depending on the MCC: we will try
+	 * to find a correspondence in an MCC-MNC length database
+	 */
+	if (sim->mnc_length == 0) {
+		int mnc_aux =
+			__ofono_sim_mnclength_get_mnclength(sim->imsi);
+		if (mnc_aux > 0)
+			sim->mnc_length = mnc_aux;
+	}
+
 	if (sim->mnc_length) {
 		const char *str;
 
@@ -1772,8 +1787,12 @@ static void sim_ad_read_cb(int ok, int length, int record,
 	if (!ok)
 		return;
 
+	if (length < 3) {
+		ofono_error("EFad should contain at least three bytes");
+		return;
+	}
 	if (length < 4) {
-		ofono_error("EFad should contain at least four bytes");
+		ofono_info("EFad does not contain MNC length");
 		return;
 	}
 

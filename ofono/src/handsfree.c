@@ -40,10 +40,12 @@
 #include <gdbus.h>
 #include "ofono.h"
 #include "common.h"
+#include "hfp.h"
 
 static GSList *g_drivers = NULL;
 
 struct ofono_handsfree {
+	ofono_bool_t nrec;
 	ofono_bool_t inband_ringing;
 	ofono_bool_t voice_recognition;
 	ofono_bool_t voice_recognition_pending;
@@ -60,6 +62,9 @@ static const char **ag_features_list(unsigned int features)
 {
 	static const char *list[33];
 	unsigned int i = 0;
+
+	if (features & HFP_AG_FEATURE_ECNR)
+		list[i++] = "echo-canceling-and-noise-reduction";
 
 	if (features & HFP_AG_FEATURE_VOICE_RECOG)
 		list[i++] = "voice-recognition";
@@ -168,6 +173,10 @@ static DBusMessage *handsfree_get_properties(DBusConnection *conn,
 	ofono_dbus_dict_append(&dict, "InbandRinging", DBUS_TYPE_BOOLEAN,
 				&inband_ringing);
 
+	if (hf->ag_features & HFP_AG_FEATURE_ECNR)
+		ofono_dbus_dict_append(&dict, "EchoCancelingNoiseReduction",
+						DBUS_TYPE_BOOLEAN, &hf->nrec);
+
 	voice_recognition = hf->voice_recognition;
 	ofono_dbus_dict_append(&dict, "VoiceRecognition", DBUS_TYPE_BOOLEAN,
 				&voice_recognition);
@@ -208,11 +217,36 @@ static void voicerec_set_cb(const struct ofono_error *error, void *data)
 					&hf->voice_recognition);
 }
 
+static void nrec_set_cb(const struct ofono_error *error, void *data)
+{
+	struct ofono_handsfree *hf = data;
+	DBusConnection *conn = ofono_dbus_get_connection();
+	const char *path = __ofono_atom_get_path(hf->atom);
+
+	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
+		__ofono_dbus_pending_reply(&hf->pending,
+					__ofono_error_failed(hf->pending));
+		return;
+	}
+
+	hf->nrec = FALSE;
+
+	__ofono_dbus_pending_reply(&hf->pending,
+				dbus_message_new_method_return(hf->pending));
+
+	ofono_dbus_signal_property_changed(conn, path,
+					OFONO_HANDSFREE_INTERFACE,
+					"EchoCancelingNoiseReduction",
+					DBUS_TYPE_BOOLEAN,
+					&hf->nrec);
+}
+
 static DBusMessage *handsfree_set_property(DBusConnection *conn,
 						DBusMessage *msg, void *data)
 {
 	struct ofono_handsfree *hf = data;
 	DBusMessageIter iter, var;
+	ofono_bool_t enabled;
 	const char *name;
 
 	if (hf->pending)
@@ -232,16 +266,15 @@ static DBusMessage *handsfree_set_property(DBusConnection *conn,
 
 	dbus_message_iter_recurse(&iter, &var);
 
+	if (dbus_message_iter_get_arg_type(&var) != DBUS_TYPE_BOOLEAN)
+		return __ofono_error_invalid_args(msg);
+
+	dbus_message_iter_get_basic(&var, &enabled);
+
 	if (g_str_equal(name, "VoiceRecognition") == TRUE) {
-		ofono_bool_t enabled;
 
 		if (!hf->driver->voice_recognition)
 			return __ofono_error_not_implemented(msg);
-
-		if (dbus_message_iter_get_arg_type(&var) != DBUS_TYPE_BOOLEAN)
-			return __ofono_error_invalid_args(msg);
-
-		dbus_message_iter_get_basic(&var, &enabled);
 
 		if (hf->voice_recognition == enabled)
 			return dbus_message_new_method_return(msg);
@@ -249,11 +282,23 @@ static DBusMessage *handsfree_set_property(DBusConnection *conn,
 		hf->voice_recognition_pending = enabled;
 		hf->pending = dbus_message_ref(msg);
 		hf->driver->voice_recognition(hf, enabled, voicerec_set_cb, hf);
+	} else if (g_str_equal(name, "EchoCancelingNoiseReduction") == TRUE) {
 
-		return NULL;
-	}
+		if (!(hf->ag_features & HFP_AG_FEATURE_ECNR))
+			return __ofono_error_not_supported(msg);
 
-	return __ofono_error_invalid_args(msg);
+		if (!hf->driver->disable_nrec || enabled == TRUE)
+			return __ofono_error_not_implemented(msg);
+
+		if (hf->nrec == FALSE)
+			return dbus_message_new_method_return(msg);
+
+		hf->pending = dbus_message_ref(msg);
+		hf->driver->disable_nrec(hf, nrec_set_cb, hf);
+	} else
+		return __ofono_error_invalid_args(msg);
+
+	return NULL;
 }
 
 static void request_phone_number_cb(const struct ofono_error *error,
@@ -349,6 +394,7 @@ struct ofono_handsfree *ofono_handsfree_create(struct ofono_modem *modem,
 	hf->atom = __ofono_modem_add_atom(modem,
 					OFONO_ATOM_TYPE_HANDSFREE,
 					handsfree_remove, hf);
+	hf->nrec = TRUE;
 
 	for (l = g_drivers; l; l = l->next) {
 		const struct ofono_handsfree_driver *drv = l->data;
