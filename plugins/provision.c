@@ -115,15 +115,6 @@ static int provision_get_settings(const char *mcc, const char *mnc,
 		} else {
 			mbpi_ap_free(ap);
 		}
-		DBG("Name: '%s'", ap->name);
-		DBG("APN: '%s'", ap->apn);
-		DBG("Type: %s", mbpi_ap_type(ap->type));
-		DBG("Username: '%s'", ap->username);
-		DBG("Password: '%s'", ap->password);
-
-		memcpy(*settings + i, ap,
-			sizeof(struct ofono_gprs_provision_data));
-
 	}
 
 	g_slist_free(apns);
