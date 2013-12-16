@@ -65,6 +65,7 @@
 #define MAX_POWER_ON_RETRIES 5
 #define MAX_SIM_STATUS_RETRIES 15
 #define	RADIO_ID 1001
+#define MAX_PDP_CONTEXTS	2
 
 struct ril_data {
 	GRil *modem;
@@ -240,14 +241,23 @@ static void ril_post_sim(struct ofono_modem *modem)
 	struct ofono_gprs *gprs;
 	struct ofono_gprs_context *gc;
 	struct ofono_message_waiting *mw;
-
+	int i;
 	/* TODO: this function should setup:
 	 *  - stk ( SIM toolkit )
 	 */
 	ofono_sms_create(modem, 0, "rilmodem", ril->modem);
 
 	gprs = ofono_gprs_create(modem, 0, "rilmodem", ril->modem);
-	gc = ofono_gprs_context_create(modem, 0, "rilmodem", ril->modem);
+	if (gprs) {
+		for (i = 0; i < MAX_PDP_CONTEXTS; i++) {
+			gc = ofono_gprs_context_create(modem, 0, "rilmodem",
+					ril->modem);
+			if (gc == NULL)
+				break;
+				
+			ofono_gprs_add_context(gprs, gc);
+		}
+	}
 
 	if (gprs && gc) {
 		DBG("calling gprs_add_context");
