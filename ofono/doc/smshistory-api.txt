@@ -1,0 +1,18 @@
+SMS History hierarchy
+===============
+
+Service		org.ofono
+Interface	org.ofono.SmsHistory
+Object path	[variable prefix]/{modem0,modem1,...}
+
+Signals		StatusReport(string path, boolean delivered)
+
+			This signal is emitted whenever a SMS Status Report is
+			received for a previously sent message. Note that the
+			path points to a Message object that might already have
+			been removed.
+
+			Possible 'delivered' values are:
+				true  - successfully delivered
+				false - delivery failed
+

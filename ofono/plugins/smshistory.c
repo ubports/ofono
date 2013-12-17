@@ -38,9 +38,54 @@
 #include "ofono.h"
 #include "common.h"
 
+#define SMS_HISTORY_INTERFACE "org.ofono.SmsHistory"
+
+gboolean sms_history_interface_registered = FALSE;
+
+static const GDBusSignalTable sms_history_signals[] = {
+	{ GDBUS_SIGNAL("StatusReport",
+		GDBUS_ARGS({ "message", "s" }, { "Delivered", "a{b}" })) },
+	{ }
+};
+
+static void sms_history_cleanup(gpointer user)
+{
+	struct ofono_modem *modem = user;
+	DBG("modem %p", modem);
+	ofono_modem_remove_interface(modem, SMS_HISTORY_INTERFACE);
+	sms_history_interface_registered = FALSE;
+}
+
+static gboolean sms_history_ensure_interface(
+		struct ofono_modem *modem) {
+
+	if (sms_history_interface_registered)
+		return TRUE;
+
+	/* Late initialization of the D-Bus interface */
+	DBusConnection *conn = ofono_dbus_get_connection();
+	if (conn == NULL)
+		return FALSE;
+	if (!g_dbus_register_interface(conn,
+					ofono_modem_get_path(modem),
+					SMS_HISTORY_INTERFACE,
+					NULL, sms_history_signals, NULL,
+					modem, sms_history_cleanup)) {
+		ofono_error("Could not create %s interface",
+				SMS_HISTORY_INTERFACE);
+		return FALSE;
+	}
+	sms_history_interface_registered = TRUE;
+	ofono_modem_add_interface(modem, SMS_HISTORY_INTERFACE);
+
+	return TRUE;
+}
+
+
 static int sms_history_probe(struct ofono_history_context *context)
 {
 	ofono_debug("SMS History Probe for modem: %p", context->modem);
+	sms_history_ensure_interface(context->modem);
 	return 0;
 }
 
@@ -56,6 +101,10 @@ static void sms_history_sms_send_status(
 					enum ofono_history_sms_status s)
 {
 	DBG("");
+
+	if (!sms_history_ensure_interface(context->modem))
+		return;
+
 	if ((s == OFONO_HISTORY_SMS_STATUS_DELIVERED) 
 			|| (s == OFONO_HISTORY_SMS_STATUS_DELIVER_FAILED)) {
 
@@ -83,22 +132,23 @@ static void sms_history_sms_send_status(
 			"/message_", ofono_uuid_to_str(uuid));
 		DBG("SMS %s delivery success: %d", msg_uuid_str, delivered);
 
-		signal = dbus_message_new_signal(path, OFONO_MESSAGE_MANAGER_INTERFACE,
+		signal = dbus_message_new_signal(path, SMS_HISTORY_INTERFACE,
 			"StatusReport");
-		if (signal != NULL) {
-			dbus_message_iter_init_append(signal, &iter);
-			msg_uuid_ptr = (char *)&msg_uuid_str;
-			dbus_message_iter_append_basic(&iter, DBUS_TYPE_STRING, 
-				&msg_uuid_ptr);
+		if (signal == NULL)
+			return;
 
-			dbus_message_iter_open_container(&iter, DBUS_TYPE_ARRAY,
-				OFONO_PROPERTIES_ARRAY_SIGNATURE, &dict);
-			ofono_dbus_dict_append(&dict, "Delivered", DBUS_TYPE_BOOLEAN,
-				&delivered);
-			dbus_message_iter_close_container(&iter, &dict);
+		dbus_message_iter_init_append(signal, &iter);
+		msg_uuid_ptr = (char *)&msg_uuid_str;
+		dbus_message_iter_append_basic(&iter, DBUS_TYPE_STRING,
+			&msg_uuid_ptr);
 
-			g_dbus_send_message(conn, signal);
-		}
+		dbus_message_iter_open_container(&iter, DBUS_TYPE_ARRAY,
+			OFONO_PROPERTIES_ARRAY_SIGNATURE, &dict);
+		ofono_dbus_dict_append(&dict, "Delivered", DBUS_TYPE_BOOLEAN,
+			&delivered);
+		dbus_message_iter_close_container(&iter, &dict);
+
+		g_dbus_send_message(conn, signal);
 	}
 }
 
