@@ -64,8 +64,8 @@
 
 #define MAX_POWER_ON_RETRIES 5
 #define MAX_SIM_STATUS_RETRIES 15
-#define	RADIO_ID 1001
-#define MAX_PDP_CONTEXTS	2
+#define RADIO_ID 1001
+#define MAX_PDP_CONTEXTS 2
 
 struct ril_data {
 	GRil *modem;
@@ -259,11 +259,6 @@ static void ril_post_sim(struct ofono_modem *modem)
 		}
 	}
 
-	if (gprs && gc) {
-		DBG("calling gprs_add_context");
-		ofono_gprs_add_context(gprs, gc);
-	}
-
 	ofono_radio_settings_create(modem, 0, "rilmodem", ril->modem);
 	ofono_phonebook_create(modem, 0, "rilmodem", ril->modem);
 	ofono_call_forwarding_create(modem, 0, "rilmodem", ril->modem);
@@ -424,22 +419,22 @@ static void gril_disconnected(gpointer user_data)
 	if (modem) {
 		ofono_modem_remove(modem);
 		mce_disconnect(conn, user_data);
-		reconnect_timer =
-			g_timeout_add_seconds(2, ril_re_init, NULL);
+		reconnect_timer = g_timeout_add_seconds(2, ril_re_init, NULL);
 	}
 }
 
 void ril_switchUser()
 {
 	if (prctl(PR_SET_KEEPCAPS, 1, 0, 0, 0) < 0)
-		ofono_error("prctl(PR_SET_KEEPCAPS) failed:%s,%d",strerror(errno), errno);
+		ofono_error("prctl(PR_SET_KEEPCAPS) failed:%s,%d",
+							strerror(errno), errno);
 
-	if (setgid(RADIO_ID) <0 )
+	if (setgid(RADIO_ID) < 0 )
 		ofono_error("setgid(%d) failed:%s,%d",
-				RADIO_ID,strerror(errno), errno);
-	if (setuid(RADIO_ID) <0 )
+				RADIO_ID, strerror(errno), errno);
+	if (setuid(RADIO_ID) < 0 )
 		ofono_error("setuid(%d) failed:%s,%d",
-				RADIO_ID,strerror(errno), errno);
+				RADIO_ID, strerror(errno), errno);
 
 	struct __user_cap_header_struct header;
 	struct __user_cap_data_struct cap;
