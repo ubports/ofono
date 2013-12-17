@@ -615,7 +615,7 @@ doc_files = doc/overview.txt doc/ofono-paper.txt doc/release-faq.txt \
 			doc/sim-api.txt doc/stk-api.txt \
 			doc/audio-settings-api.txt doc/text-telephony-api.txt \
 			doc/calypso-modem.txt doc/message-api.txt \
-			doc/location-reporting-api.txt \
+			doc/location-reporting-api.txt doc/smshistory-api.txt \
 			doc/certification.txt
 
 
