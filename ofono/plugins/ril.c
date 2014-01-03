@@ -34,7 +34,10 @@
 #include <parcel.h>
 #include <gdbus.h>
 #include <linux/capability.h>
-#include <linux/prctl.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <sys/syscall.h>
+#include <sys/prctl.h>
 
 #define OFONO_API_SUBJECT_TO_CHANGE
 #include <ofono/plugin.h>
@@ -443,7 +446,11 @@ void ril_switchUser()
 	cap.effective = cap.permitted = (1 << CAP_NET_ADMIN)
 						| (1 << CAP_NET_RAW);
 	cap.inheritable = 0;
-	capset(&header, &cap);
+
+	if (syscall(SYS_capset, &header, &cap) < 0)
+		ofono_error("syscall(SYS_capset) failed:%s,%d",
+							strerror(errno), errno);
+
 }
 
 static int ril_enable(struct ofono_modem *modem)
