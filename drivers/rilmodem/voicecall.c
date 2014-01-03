@@ -305,8 +305,6 @@ static void rild_cb(struct ril_msg *message, gpointer user_data)
 	struct voicecall_data *vd = ofono_voicecall_get_data(vc);
 	ofono_voicecall_cb_t cb = cbd->cb;
 	struct ofono_error error;
-	struct ofono_call *call;
-	GSList *l;
 
 	if (message->error == RIL_E_SUCCESS) {
 		decode_ril_error(&error, "OK");
