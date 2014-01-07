@@ -33,6 +33,8 @@
 #include <gril.h>
 #include <parcel.h>
 #include <gdbus.h>
+#include <linux/capability.h>
+#include <linux/prctl.h>
 
 #define OFONO_API_SUBJECT_TO_CHANGE
 #include <ofono/plugin.h>
@@ -62,6 +64,8 @@
 
 #define MAX_POWER_ON_RETRIES 5
 #define MAX_SIM_STATUS_RETRIES 15
+#define RADIO_ID 1001
+#define MAX_PDP_CONTEXTS 2
 
 struct ril_data {
 	GRil *modem;
@@ -89,6 +93,9 @@ struct ril_data {
 static guint mce_daemon_watch;
 static guint signal_watch;
 static DBusConnection *connection;
+
+static int ril_init(void);
+guint reconnect_timer;
 
 static int send_get_sim_status(struct ofono_modem *modem);
 
@@ -207,6 +214,9 @@ static void ril_remove(struct ofono_modem *modem)
 	if (ril->timer_id > 0)
 		g_source_remove(ril->timer_id);
 
+	if (reconnect_timer > 0)
+		g_source_remove(ril->timer_id);
+
 	g_ril_unref(ril->modem);
 
 	g_free(ril);
@@ -231,18 +241,22 @@ static void ril_post_sim(struct ofono_modem *modem)
 	struct ofono_gprs *gprs;
 	struct ofono_gprs_context *gc;
 	struct ofono_message_waiting *mw;
-
+	int i;
 	/* TODO: this function should setup:
 	 *  - stk ( SIM toolkit )
 	 */
 	ofono_sms_create(modem, 0, "rilmodem", ril->modem);
 
 	gprs = ofono_gprs_create(modem, 0, "rilmodem", ril->modem);
-	gc = ofono_gprs_context_create(modem, 0, "rilmodem", ril->modem);
-
-	if (gprs && gc) {
-		DBG("calling gprs_add_context");
-		ofono_gprs_add_context(gprs, gc);
+	if (gprs) {
+		for (i = 0; i < MAX_PDP_CONTEXTS; i++) {
+			gc = ofono_gprs_context_create(modem, 0, "rilmodem",
+					ril->modem);
+			if (gc == NULL)
+				break;
+				
+			ofono_gprs_add_context(gprs, gc);
+		}
 	}
 
 	ofono_radio_settings_create(modem, 0, "rilmodem", ril->modem);
@@ -390,6 +404,48 @@ static void ril_connected(struct ril_msg *message, gpointer user_data)
 					mce_connect, mce_disconnect, modem, NULL);
 }
 
+static gboolean ril_re_init(gpointer user_data)
+{
+	ril_init();
+	return FALSE;
+}
+
+static void gril_disconnected(gpointer user_data)
+{
+	/* Signal clients modem going down */
+	struct ofono_modem *modem = user_data;
+	DBusConnection *conn = ofono_dbus_get_connection();
+
+	if (modem) {
+		ofono_modem_remove(modem);
+		mce_disconnect(conn, user_data);
+		reconnect_timer = g_timeout_add_seconds(2, ril_re_init, NULL);
+	}
+}
+
+void ril_switchUser()
+{
+	if (prctl(PR_SET_KEEPCAPS, 1, 0, 0, 0) < 0)
+		ofono_error("prctl(PR_SET_KEEPCAPS) failed:%s,%d",
+							strerror(errno), errno);
+
+	if (setgid(RADIO_ID) < 0 )
+		ofono_error("setgid(%d) failed:%s,%d",
+				RADIO_ID, strerror(errno), errno);
+	if (setuid(RADIO_ID) < 0 )
+		ofono_error("setuid(%d) failed:%s,%d",
+				RADIO_ID, strerror(errno), errno);
+
+	struct __user_cap_header_struct header;
+	struct __user_cap_data_struct cap;
+	header.version = _LINUX_CAPABILITY_VERSION;
+	header.pid = 0;
+	cap.effective = cap.permitted = (1 << CAP_NET_ADMIN)
+						| (1 << CAP_NET_RAW);
+	cap.inheritable = 0;
+	capset(&header, &cap);
+}
+
 static int ril_enable(struct ofono_modem *modem)
 {
 	DBG("enter");
@@ -397,7 +453,11 @@ static int ril_enable(struct ofono_modem *modem)
 
 	ril->have_sim = FALSE;
 
+	/* RIL expects user radio */
+	ril_switchUser();
+
 	ril->modem = g_ril_new();
+	g_ril_set_disconnect_function(ril->modem, gril_disconnected, modem);
 
 	/* NOTE: Since AT modems open a tty, and then call
 	 * g_at_chat_new(), they're able to return -EIO if
@@ -409,6 +469,7 @@ static int ril_enable(struct ofono_modem *modem)
 
 	if (ril->modem == NULL) {
 		DBG("g_ril_new() failed to create modem!");
+		gril_disconnected(modem);
 		return -EIO;
 	}
 
@@ -521,6 +582,8 @@ static int ril_init(void)
 	 * - ofono_modem_set_powered()
 	 */
 	ofono_modem_reset(modem);
+
+	reconnect_timer = 0;
 
 	return retval;
 }

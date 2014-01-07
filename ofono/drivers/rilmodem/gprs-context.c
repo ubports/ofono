@@ -90,8 +90,6 @@ static void ril_gprs_context_call_list_changed(struct ril_msg *message,
 	GSList *iterator = NULL;
 	struct ofono_error error;
 
-	DBG("");
-
 	unsol = g_ril_unsol_parse_data_call_list(gcd->ril, message, &error);
 
 	if (error.type != OFONO_ERROR_TYPE_NO_ERROR)
@@ -103,11 +101,9 @@ static void ril_gprs_context_call_list_changed(struct ril_msg *message,
 		call = (struct data_call *) iterator->data;
 
 		if (call->cid == gcd->active_rild_cid) {
-			DBG("Found current call in call list: %d", call->cid);
 			active_cid_found = TRUE;
 
 			if (call->active == 0) {
-				DBG("call->status is DISCONNECTED for cid: %d", call->cid);
 				disconnect = TRUE;
 				ofono_gprs_context_deactivated(gc, gcd->active_ctx_cid);
 			}
@@ -117,8 +113,7 @@ static void ril_gprs_context_call_list_changed(struct ril_msg *message,
 	}
 
 	if (disconnect || active_cid_found == FALSE) {
-		DBG("Clearing active context");
-
+		ofono_error("Clearing active context");
 		set_context_disconnected(gcd);
 	}
 
@@ -136,8 +131,11 @@ static void ril_setup_data_call_cb(struct ril_msg *message, gpointer user_data)
 	struct reply_setup_data_call *reply = NULL;
 	char **split_ip_addr = NULL;
 
+	ofono_info("setting up data call");
+
 	if (message->error != RIL_E_SUCCESS) {
-		DBG("Reply failure: %s", ril_error_to_string(message->error));
+		ofono_error("GPRS context: Reply failure: %s",
+			    ril_error_to_string(message->error));
 
 		error.type = OFONO_ERROR_TYPE_FAILURE;
 		error.error = message->error;
@@ -151,9 +149,10 @@ static void ril_setup_data_call_cb(struct ril_msg *message, gpointer user_data)
 	gcd->active_rild_cid = reply->cid;
 
 	if (error.type != OFONO_ERROR_TYPE_NO_ERROR) {
-		if (gcd->active_rild_cid != -1)
+		if (gcd->active_rild_cid != -1) {
+			ofono_error("no active context. disconnect");
 			disconnect_context(gc);
-
+		}
 		goto error;
 	}
 
@@ -231,7 +230,7 @@ static void ril_gprs_context_activate_primary(struct ofono_gprs_context *gc,
 	int reqid = RIL_REQUEST_SETUP_DATA_CALL;
 	int ret = 0;
 
-	DBG("Activating contex: %d", ctx->cid);
+	ofono_info("Activating context: %d", ctx->cid);
 
 	cbd->user = gc;
 
@@ -293,7 +292,7 @@ static void ril_deactivate_data_call_cb(struct ril_msg *message, gpointer user_d
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 	gint id = gcd->active_ctx_cid;
 
-	DBG("");
+	ofono_info("deactivating data call");
 
 	/* Reply has no data... */
 	if (message->error == RIL_E_SUCCESS) {
@@ -333,7 +332,7 @@ static void ril_gprs_context_deactivate_primary(struct ofono_gprs_context *gc,
 	int reqid = RIL_REQUEST_DEACTIVATE_DATA_CALL;
 	int ret = 0;
 
-	DBG("");
+	ofono_info("deactivate primary");
 
 	if (gcd->active_rild_cid == -1) {
 		set_context_disconnected(gcd);

@@ -59,6 +59,7 @@ static void ril_clip_cb(struct ril_msg *message, gpointer user_data)
 	if (message->error == RIL_E_SUCCESS) {
 		ril_util_init_parcel(message, &rilp);
 
+		/* data length of the response */
 		res = parcel_r_int32(&rilp);
 
 		if (res > 0)
@@ -118,6 +119,36 @@ static void ril_cw_set(struct ofono_call_settings *cs, int mode, int cls,
 	}
 }
 
+static void ril_cw_query_cb(struct ril_msg *message, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_call_settings_status_cb_t cb = cbd->cb;
+	struct parcel rilp;
+	int res = 0;
+	int sv = 0;
+
+	if (message->error == RIL_E_SUCCESS) {
+		ril_util_init_parcel(message, &rilp);
+
+		/* first value in int[] is len so let's skip that */
+		parcel_r_int32(&rilp);
+
+		/* status of call waiting service, disabled is returned only if
+		 * service is not active for any service class */
+		res = parcel_r_int32(&rilp);
+		DBG("CW enabled/disabled: %d", res);
+
+		if (res > 0) {
+			/* services for which call waiting is enabled, 27.007 7.12 */
+			sv = parcel_r_int32(&rilp);
+			DBG("CW enabled for: %d", sv);
+		}
+
+		CALLBACK_WITH_SUCCESS(cb, sv, cbd->data);
+	} else
+		CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
+}
+
 static void ril_cw_query(struct ofono_call_settings *cs, int cls,
 				ofono_call_settings_status_cb_t cb, void *data)
 {
@@ -137,7 +168,7 @@ static void ril_cw_query(struct ofono_call_settings *cs, int cls,
 	parcel_w_int32(&rilp, 0);
 
 	ret = g_ril_send(sd->ril, RIL_REQUEST_QUERY_CALL_WAITING,
-			rilp.data, rilp.size, ril_clip_cb, cbd, g_free);
+			rilp.data, rilp.size, ril_cw_query_cb, cbd, g_free);
 
 	parcel_free(&rilp);
 

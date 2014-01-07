@@ -115,6 +115,7 @@ static int provision_get_settings(const char *mcc, const char *mnc,
 		} else {
 			mbpi_ap_free(ap);
 		}
+
 	}
 
 	g_slist_free(apns);

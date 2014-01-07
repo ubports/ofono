@@ -57,8 +57,10 @@ static void ril_csca_set_cb(struct ril_msg *message, gpointer user_data)
 
 	if (message->error == RIL_E_SUCCESS)
 		CALLBACK_WITH_SUCCESS(cb, cbd->data);
-	else
+	else {
+		ofono_error("csca setting failed");
 		CALLBACK_WITH_FAILURE(cb, cbd->data);
+	}
 }
 
 static void ril_csca_set(struct ofono_sms *sms,
@@ -88,6 +90,7 @@ static void ril_csca_set(struct ofono_sms *sms,
 
 	/* In case of error free cbd and return the cb with failure */
 	if (ret <= 0) {
+		ofono_error("unable to set csca");
 		g_free(cbd);
 		CALLBACK_WITH_FAILURE(cb, user_data);
 	}
@@ -105,6 +108,7 @@ static void ril_csca_query_cb(struct ril_msg *message, gpointer user_data)
 	if (message->error == RIL_E_SUCCESS) {
 		decode_ril_error(&error, "OK");
 	} else {
+		ofono_error("csca query failed");
 		decode_ril_error(&error, "FAIL");
 		cb(&error, NULL, cbd->data);
 		return;
@@ -130,6 +134,7 @@ static void ril_csca_query_cb(struct ril_msg *message, gpointer user_data)
 
 		cb(&error, &sca, cbd->data);
 	} else {
+		ofono_error("return value invalid");
 		CALLBACK_WITH_FAILURE(cb, NULL, cbd->data);
 	}
 }
@@ -147,6 +152,7 @@ static void ril_csca_query(struct ofono_sms *sms, ofono_sms_sca_query_cb_t cb,
 					ril_csca_query_cb, cbd, g_free);
 
 	if (ret <= 0) {
+		ofono_error("unable to send sca query");
 		g_free(cbd);
 		CALLBACK_WITH_FAILURE(cb, NULL, user_data);
 	}
@@ -162,8 +168,10 @@ static void submit_sms_cb(struct ril_msg *message, gpointer user_data)
 	int mr;
 
 	if (message->error == RIL_E_SUCCESS) {
+		ofono_info("sms sending succesful");
 		decode_ril_error(&error, "OK");
 	} else {
+		ofono_error("sms sending failed");
 		decode_ril_error(&error, "FAIL");
 	}
 
@@ -185,7 +193,7 @@ static void ril_cmgs(struct ofono_sms *sms, const unsigned char *pdu,
 
 	cbd->user = sd;
 
-        DBG("pdu_len: %d, tpdu_len: %d mms: %d", pdu_len, tpdu_len, mms);
+	DBG("pdu_len: %d, tpdu_len: %d mms: %d", pdu_len, tpdu_len, mms);
 
 	/* TODO: if (mms) { ... } */
 
@@ -227,6 +235,7 @@ static void ril_cmgs(struct ofono_sms *sms, const unsigned char *pdu,
 	parcel_free(&rilp);
 
 	if (ret <= 0) {
+		ofono_error("unable to send sms");
 		g_free(cbd);
 		CALLBACK_WITH_FAILURE(cb, -1, user_data);
 	}
@@ -305,7 +314,7 @@ static void ril_sms_notify(struct ril_msg *message, gpointer user_data)
 	 * to calculate the proper tpdu length.
 	 */
 	smsc_len = ril_data[0] + 1;
-	DBG("smsc_len is %d", smsc_len);
+	ofono_info("sms received, smsc_len is %d", smsc_len);
 
 	g_ril_append_print_buf(sd->ril, "(%s)", ril_pdu);
 	g_ril_print_unsol(sd->ril, message);
