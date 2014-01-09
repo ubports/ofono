@@ -567,7 +567,7 @@ static int ril_init(void)
 	 *
 	 * args are name (optional) & type
 	 */
-	modem = ofono_modem_create(NULL, "ril");
+	modem = ofono_modem_create("ril_0", "ril");
 	if (modem == NULL) {
 		DBG("ofono_modem_create failed for ril");
 		return -ENODEV;
