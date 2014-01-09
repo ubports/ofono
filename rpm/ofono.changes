@@ -1,3 +1,6 @@
+* Thu Jan 09 2014 Martti Piirainen <martti.piirainen@oss.tieto.com> - 1.14
+- Update to upstream 1.14.
+
 * Wed Jun 12 2013 Juho Hämäläinen <juho.hamalainen@tieto.com> - 1.12
 - Update to upstream 1.12.
 - Add phablet patches for ril (version 1.12phablet3).
