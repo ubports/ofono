@@ -4,6 +4,7 @@
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *  Copyright (C) 2012 Canonical Ltd.
+ *  Copyright (C) 2013 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -73,3 +74,5 @@ extern void ril_cbs_exit(void);
 extern void ril_phonebook_init(void);
 extern void ril_phonebook_exit(void);
 
+extern void ril_oemraw_init(void);
+extern void ril_oemraw_exit(void);

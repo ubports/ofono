@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2011 Joel Armstrong <jcarmst@sandia.gov>
  * Copyright (C) 2012 Canonical Ltd.
+ * Copyright (C) 2013 Jolla Ltd.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License (`GPL') as published by
@@ -31,8 +32,6 @@
 #include <errno.h>
 
 #include <glib.h>
-
-#include <ofono/log.h>
 
 /* Parcel-handling code */
 #include <sys/types.h>
@@ -87,6 +86,23 @@ int parcel_w_int32(struct parcel *p, int32_t val)
 			*((int32_t *) (p->data + p->offset)) = val;
 			p->offset += sizeof(int32_t);
 			p->size += sizeof(int32_t);
+			break;
+		} else {
+			/* Grow data and retry */
+			parcel_grow(p, sizeof(int32_t));
+		}
+	}
+	return 0;
+}
+
+int parcel_w_byte(struct parcel *p, const char val)
+{
+	for (;;) {
+		if (p->offset + sizeof(char) < p->capacity) {
+			/* There's enough space */
+			*((char *) (p->data + p->offset)) = val;
+			p->offset += sizeof(char);
+			p->size += sizeof(char);
 			break;
 		} else {
 			/* Grow data and retry */

@@ -4,6 +4,7 @@
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *  Copyright (C) 2012 Canonical, Ltd. All rights reserved.
+ *  Copyright (C) 2013 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -53,6 +54,7 @@ static int rilmodem_init(void)
 	ril_call_settings_init();
 	ril_call_forwarding_init();
 	ril_cbs_init();
+	ril_oemraw_init();
 
 	return 0;
 }
@@ -75,6 +77,7 @@ static void rilmodem_exit(void)
 	ril_call_settings_exit();
 	ril_call_forwarding_exit();
 	ril_cbs_exit();
+	ril_oemraw_exit();
 }
 
 OFONO_PLUGIN_DEFINE(rilmodem, "RIL modem driver", VERSION,
