@@ -152,6 +152,7 @@ enum ofono_atom_type {
 	OFONO_ATOM_TYPE_CDMA_NETREG,
 	OFONO_ATOM_TYPE_HANDSFREE,
 	OFONO_ATOM_TYPE_OEM_RAW,
+	OFONO_ATOM_TYPE_SIRI,
 };
 
 enum ofono_atom_watch_condition {

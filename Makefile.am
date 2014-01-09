@@ -22,7 +22,7 @@ pkginclude_HEADERS = include/log.h include/plugin.h include/history.h \
 			include/private-network.h include/cdma-netreg.h \
 			include/cdma-provision.h include/handsfree.h \
 			include/handsfree-audio.h include/sim-mnclength.h \
-			include/oemraw.h
+			include/oemraw.h include/siri.h
 
 nodist_pkginclude_HEADERS = include/version.h
 
@@ -354,7 +354,8 @@ builtin_sources += drivers/atmodem/atutil.h \
 			drivers/hfpmodem/network-registration.c \
 			drivers/hfpmodem/call-volume.c \
 			drivers/hfpmodem/devinfo.c \
-			drivers/hfpmodem/handsfree.c
+			drivers/hfpmodem/handsfree.c \
+			drivers/hfpmodem/siri.c
 
 builtin_modules += speedupmodem
 builtin_sources += drivers/atmodem/atutil.h \
@@ -457,6 +458,12 @@ builtin_modules += sim900
 builtin_sources += plugins/sim900.c
 endif
 
+builtin_modules += connman
+builtin_sources += plugins/connman.c
+
+builtin_modules += he910
+builtin_sources += plugins/he910.c
+
 if BLUETOOTH
 if BLUEZ4
 builtin_modules += bluez4
@@ -476,9 +483,6 @@ builtin_sources += plugins/hfp_ag_bluez4.c plugins/bluez4.h
 
 builtin_modules += dun_gw_bluez4
 builtin_sources += plugins/dun_gw_bluez4.c plugins/bluez4.h
-
-builtin_modules += connman
-builtin_sources += plugins/connman.c
 
 builtin_sources += $(btio_sources)
 builtin_cflags += @BLUEZ_CFLAGS@
@@ -573,7 +577,8 @@ src_ofonod_SOURCES = $(builtin_sources) src/ofono.ver \
 			src/cdma-sms.c src/private-network.c src/cdma-netreg.c \
 			src/cdma-provision.c src/handsfree.c \
 			src/handsfree-audio.c src/bluetooth.h \
-			src/hfp.h src/sim-mnclength.c src/oemraw.c
+			src/hfp.h src/sim-mnclength.c src/oemraw.c \
+			src/siri.c
 
 src_ofonod_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
 			@GLIB_LIBS@ @DBUS_LIBS@ -ldl
@@ -593,8 +598,7 @@ else
 build_plugindir = $(plugindir)
 endif
 
-AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @USB_CFLAGS@ \
-					$(builtin_cflags) \
+AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ $(builtin_cflags) \
 					-DOFONO_PLUGIN_BUILTIN \
 					-DPLUGINDIR=\""$(build_plugindir)"\"
 
@@ -619,7 +623,7 @@ doc_files = doc/overview.txt doc/ofono-paper.txt doc/release-faq.txt \
 			doc/calypso-modem.txt doc/message-api.txt \
 			doc/location-reporting-api.txt doc/smshistory-api.txt \
 			doc/oemraw-api.txt \
-			doc/certification.txt
+			doc/certification.txt doc/siri-api.txt
 
 
 test_scripts = test/backtrace \
