@@ -1,5 +1,5 @@
 AC_PREREQ(2.60)
-AC_INIT(ofono, 1.12)
+AC_INIT(ofono, 1.14)
 
 AM_INIT_AUTOMAKE([foreign subdir-objects color-tests])
 AC_CONFIG_HEADERS(config.h)
@@ -116,12 +116,6 @@ AM_CONDITIONAL(TEST, test "${enable_test}" = "yes")
 
 AC_ARG_ENABLE(tools, AC_HELP_STRING([--enable-tools],
 		[enable testing tools]), [enable_tools=${enableval}])
-if (test "${enable_tools}" = "yes"); then
-	PKG_CHECK_MODULES(USB, libusb-1.0, dummy=yes,
-				AC_MSG_ERROR(USB library is required))
-	AC_SUBST(USB_CFLAGS)
-	AC_SUBST(USB_LIBS)
-fi
 AM_CONDITIONAL(TOOLS, test "${enable_tools}" = "yes")
 
 AC_ARG_ENABLE(dundee, AC_HELP_STRING([--enable-dundee],
