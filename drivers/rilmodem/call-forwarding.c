@@ -100,7 +100,7 @@ static void ril_registration(struct ofono_call_forwarding *cf, int type,
 	*/
 
 	if (cls == BEARER_CLASS_DEFAULT)
-		cls = BEARER_CLASS_VOICE;
+		cls = 0;
 
 	parcel_w_int32(&rilp, cls);
 
@@ -148,7 +148,7 @@ static void ril_send_forward_cmd(struct ofono_call_forwarding *cf,
 	*/
 
 	if (cls == BEARER_CLASS_DEFAULT)
-		cls = BEARER_CLASS_VOICE;
+		cls = 0;
 
 	parcel_w_int32(&rilp, cls);			/* Service class */
 
@@ -246,7 +246,7 @@ static void ril_query_cb(struct ril_msg *message, gpointer user_data)
 
 		}
 
-		CALLBACK_WITH_SUCCESS(cb, 1, list, cbd->data);
+		CALLBACK_WITH_SUCCESS(cb, nmbr_of_resps, list, cbd->data);
 
 		g_free(list);
 	} else {
@@ -283,7 +283,7 @@ static void ril_query(struct ofono_call_forwarding *cf, int type, int cls,
 	*/
 
 	if (cls == BEARER_CLASS_DEFAULT)
-		cls = BEARER_CLASS_VOICE;
+		cls = 0;
 
 	parcel_w_int32(&rilp, cls);
 
@@ -351,10 +351,10 @@ static struct ofono_call_forwarding_driver driver = {
 	.probe			= ril_call_forwarding_probe,
 	.remove			= ril_call_forwarding_remove,
 	.erasure		= ril_erasure,
-	.deactivation	= ril_deactivate,
+	.deactivation		= ril_deactivate,
 	.query			= ril_query,
-	.registration	= ril_registration,
-	.activation	= ril_activate
+	.registration		= ril_registration,
+	.activation		= ril_activate
 };
 
 void ril_call_forwarding_init(void)
