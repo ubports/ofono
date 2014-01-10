@@ -89,16 +89,6 @@ static void ril_registration(struct ofono_call_forwarding *cf, int type,
 
 	parcel_w_int32(&rilp, type);
 
-	/* Modem seems to respond with error to all queries
-	 * or settings made with bearer class
-	 * BEARER_CLASS_DEFAULT. Design decision: If given
-	 * class is BEARER_CLASS_DEFAULT let's map it to
-	 * SERVICE_CLASS_VOICE effectively making it the
-	 * default bearer. This in line with API which is
-	 * contains only voice anyways. TODO: Checkout
-	 * the behaviour with final modem
-	*/
-
 	if (cls == BEARER_CLASS_DEFAULT)
 		cls = 0;
 
@@ -136,16 +126,6 @@ static void ril_send_forward_cmd(struct ofono_call_forwarding *cf,
 	parcel_w_int32(&rilp, action);
 
 	parcel_w_int32(&rilp, type);
-
-	/* Modem seems to respond with error to all queries
-	 * or settings made with bearer class
-	 * BEARER_CLASS_DEFAULT. Design decision: If given
-	 * class is BEARER_CLASS_DEFAULT let's map it to
-	 * SERVICE_CLASS_VOICE effectively making it the
-	 * default bearer. This in line with API which is
-	 * contains only voice anyways. TODO: Checkout
-	 * the behaviour with final modem
-	*/
 
 	if (cls == BEARER_CLASS_DEFAULT)
 		cls = 0;
@@ -271,16 +251,6 @@ static void ril_query(struct ofono_call_forwarding *cf, int type, int cls,
 	parcel_w_int32(&rilp, 2);
 
 	parcel_w_int32(&rilp, type);
-
-	/* Modem seems to respond with error to all queries
-	 * or settings made with bearer class
-	 * BEARER_CLASS_DEFAULT. Design decision: If given
-	 * class is BEARER_CLASS_DEFAULT let's map it to
-	 * SERVICE_CLASS_VOICE effectively making it the
-	 * default bearer. This in line with API which is
-	 * contains only voice anyways. TODO: Checkout
-	 * the behaviour with final modem
-	*/
 
 	if (cls == BEARER_CLASS_DEFAULT)
 		cls = 0;
