@@ -384,4 +384,7 @@
 #define RIL_UNSOL_STK_CC_ALPHA_NOTIFY 1040
 #define RIL_UNSOL_UICC_SUBSCRIPTION_STATUS_CHANGED 1041
 
+/* Suplementary services Service class*/
+#define SERVICE_CLASS_NONE 0
+
 #endif /*__RIL_CONSTANTS_H*/
