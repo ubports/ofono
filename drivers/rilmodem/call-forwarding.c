@@ -89,8 +89,16 @@ static void ril_registration(struct ofono_call_forwarding *cf, int type,
 
 	parcel_w_int32(&rilp, type);
 
+	/*
+	 * Modem seems to respond with error to all queries
+	 * or settings made with bearer class
+	 * BEARER_CLASS_DEFAULT. Design decision: If given
+	 * class is BEARER_CLASS_DEFAULT let's map it to
+	 * SERVICE_CLASS_NONE as with it e.g. ./send-ussd '*21*<phone_number>#'
+	 * returns cls:53 i.e. 1+4+16+32 as service class.
+	*/
 	if (cls == BEARER_CLASS_DEFAULT)
-		cls = 0;
+		cls = SERVICE_CLASS_NONE;
 
 	parcel_w_int32(&rilp, cls);
 
@@ -127,8 +135,16 @@ static void ril_send_forward_cmd(struct ofono_call_forwarding *cf,
 
 	parcel_w_int32(&rilp, type);
 
+	/*
+	 * Modem seems to respond with error to all queries
+	 * or settings made with bearer class
+	 * BEARER_CLASS_DEFAULT. Design decision: If given
+	 * class is BEARER_CLASS_DEFAULT let's map it to
+	 * SERVICE_CLASS_NONE as with it e.g. ./send-ussd '*21*<phone_number>#'
+	 * returns cls:53 i.e. 1+4+16+32 as service class.
+	*/
 	if (cls == BEARER_CLASS_DEFAULT)
-		cls = 0;
+		cls = SERVICE_CLASS_NONE;
 
 	parcel_w_int32(&rilp, cls);			/* Service class */
 
@@ -252,8 +268,16 @@ static void ril_query(struct ofono_call_forwarding *cf, int type, int cls,
 
 	parcel_w_int32(&rilp, type);
 
+	/*
+	 * Modem seems to respond with error to all queries
+	 * or settings made with bearer class
+	 * BEARER_CLASS_DEFAULT. Design decision: If given
+	 * class is BEARER_CLASS_DEFAULT let's map it to
+	 * SERVICE_CLASS_NONE as with it e.g. ./send-ussd '*21*<phone_number>#'
+	 * returns cls:53 i.e. 1+4+16+32 as service class.
+	*/
 	if (cls == BEARER_CLASS_DEFAULT)
-		cls = 0;
+		cls = SERVICE_CLASS_NONE;
 
 	parcel_w_int32(&rilp, cls);
 
