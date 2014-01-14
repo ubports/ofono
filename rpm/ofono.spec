@@ -9,7 +9,7 @@ Name:       ofono
 # << macros
 
 Summary:    Open Source Telephony
-Version:    1.12
+Version:    1.14
 Release:    1
 Group:      Communications/Connectivity Adaptation
 License:    GPLv2
