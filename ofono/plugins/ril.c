@@ -154,9 +154,12 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 		} else {
 			ofono_warn("No SIM card present.");
 		}
-		// We cannot power on modem, but we need to get
-		// certain interfaces up to be able to make emergency calls
-		// in offline mode and without SIM
+
+		/*
+		 * We cannot power on modem, but we need to get
+		 * certain interfaces up to be able to make emergency calls
+		 * in offline mode and without SIM
+		 */
 		ofono_modem_set_powered(modem, TRUE);
 	}
 }
@@ -258,7 +261,7 @@ static void ril_post_sim(struct ofono_modem *modem)
 					ril->modem);
 			if (gc == NULL)
 				break;
-				
+
 			ofono_gprs_add_context(gprs, gc);
 		}
 	}
@@ -266,6 +269,7 @@ static void ril_post_sim(struct ofono_modem *modem)
 	ofono_radio_settings_create(modem, 0, "rilmodem", ril->modem);
 	ofono_phonebook_create(modem, 0, "rilmodem", ril->modem);
 	ofono_call_forwarding_create(modem, 0, "rilmodem", ril->modem);
+	ofono_call_barring_create(modem, 0, "rilmodem", ril->modem);
 
 	mw = ofono_message_waiting_create(modem);
 	if (mw)
@@ -292,9 +296,8 @@ static void ril_set_online_cb(struct ril_msg *message, gpointer user_data)
 	struct cb_data *cbd = user_data;
 	ofono_modem_online_cb_t cb = cbd->cb;
 
-	if (message->error == RIL_E_SUCCESS) {
+	if (message->error == RIL_E_SUCCESS)
 		CALLBACK_WITH_SUCCESS(cb, cbd->data);
-	}
 	else
 		CALLBACK_WITH_FAILURE(cb, cbd->data);
 }
@@ -406,7 +409,7 @@ static void ril_connected(struct ril_msg *message, gpointer user_data)
 
 	connection = ofono_dbus_get_connection();
 	mce_daemon_watch = g_dbus_add_service_watch(connection, MCE_SERVICE,
-					mce_connect, mce_disconnect, modem, NULL);
+				mce_connect, mce_disconnect, modem, NULL);
 }
 
 static gboolean ril_re_init(gpointer user_data)
@@ -434,10 +437,10 @@ void ril_switchUser()
 		ofono_error("prctl(PR_SET_KEEPCAPS) failed:%s,%d",
 							strerror(errno), errno);
 
-	if (setgid(RADIO_ID) < 0 )
+	if (setgid(RADIO_ID) < 0)
 		ofono_error("setgid(%d) failed:%s,%d",
 				RADIO_ID, strerror(errno), errno);
-	if (setuid(RADIO_ID) < 0 )
+	if (setuid(RADIO_ID) < 0)
 		ofono_error("setuid(%d) failed:%s,%d",
 				RADIO_ID, strerror(errno), errno);
 

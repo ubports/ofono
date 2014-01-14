@@ -1,9 +1,14 @@
 #!/usr/bin/python
 
 import gobject
+import sys
 
 import dbus
 import dbus.mainloop.glib
+
+def print_usage():
+	print "Usage: test-ss-control-cb <password>"
+	sys.exit(1);
 
 def property_changed(property, value):
 	print "CallBarring property %s changed to %s" % (property, value)
@@ -15,6 +20,11 @@ def print_properties(cb):
 		print "property %s, value: %s" % (p, properties[p])
 
 if __name__ == "__main__":
+	if (len(sys.argv) != 2):
+			print_usage()
+
+	password = sys.argv[1]
+
 	dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
 
 	bus = dbus.SystemBus()
@@ -29,7 +39,7 @@ if __name__ == "__main__":
 
         cb.connect_to_signal("PropertyChanged", property_changed)
 
-	ss = dbus.Interface(bus.get_object('org.ofono', modems[0]),
+	ss = dbus.Interface(bus.get_object('org.ofono', modems[0][0]),
 							'org.ofono.SupplementaryServices')
 
 	print_properties(cb)
@@ -82,13 +92,19 @@ if __name__ == "__main__":
 	print "Query All"
 	print ss.Initiate("*#330#")
 
+	ss_string = "*33*" + password + "*11#"
+
 	print "Enable Barring for Outgoing International calls for Voice"
-	print ss.Initiate("*33*3579*11#")
+	print ss.Initiate(ss_string)
 
 	print_properties(cb)
 
+	ss_string = "#330*" + password + "#"
+
 	print "Disable All Barrings"
-	print ss.Initiate("#330*3579#")
+	print ss.Initiate(ss_string)
+
+	sys.exit(1);
 
 	mainloop = gobject.MainLoop()
 	mainloop.run()
