@@ -89,18 +89,16 @@ static void ril_registration(struct ofono_call_forwarding *cf, int type,
 
 	parcel_w_int32(&rilp, type);
 
-	/* Modem seems to respond with error to all queries
+	/*
+	 * Modem seems to respond with error to all queries
 	 * or settings made with bearer class
 	 * BEARER_CLASS_DEFAULT. Design decision: If given
 	 * class is BEARER_CLASS_DEFAULT let's map it to
-	 * SERVICE_CLASS_VOICE effectively making it the
-	 * default bearer. This in line with API which is
-	 * contains only voice anyways. TODO: Checkout
-	 * the behaviour with final modem
+	 * SERVICE_CLASS_NONE as with it e.g. ./send-ussd '*21*<phone_number>#'
+	 * returns cls:53 i.e. 1+4+16+32 as service class.
 	*/
-
 	if (cls == BEARER_CLASS_DEFAULT)
-		cls = BEARER_CLASS_VOICE;
+		cls = SERVICE_CLASS_NONE;
 
 	parcel_w_int32(&rilp, cls);
 
@@ -137,18 +135,16 @@ static void ril_send_forward_cmd(struct ofono_call_forwarding *cf,
 
 	parcel_w_int32(&rilp, type);
 
-	/* Modem seems to respond with error to all queries
+	/*
+	 * Modem seems to respond with error to all queries
 	 * or settings made with bearer class
 	 * BEARER_CLASS_DEFAULT. Design decision: If given
 	 * class is BEARER_CLASS_DEFAULT let's map it to
-	 * SERVICE_CLASS_VOICE effectively making it the
-	 * default bearer. This in line with API which is
-	 * contains only voice anyways. TODO: Checkout
-	 * the behaviour with final modem
+	 * SERVICE_CLASS_NONE as with it e.g. ./send-ussd '*21*<phone_number>#'
+	 * returns cls:53 i.e. 1+4+16+32 as service class.
 	*/
-
 	if (cls == BEARER_CLASS_DEFAULT)
-		cls = BEARER_CLASS_VOICE;
+		cls = SERVICE_CLASS_NONE;
 
 	parcel_w_int32(&rilp, cls);			/* Service class */
 
@@ -246,7 +242,7 @@ static void ril_query_cb(struct ril_msg *message, gpointer user_data)
 
 		}
 
-		CALLBACK_WITH_SUCCESS(cb, 1, list, cbd->data);
+		CALLBACK_WITH_SUCCESS(cb, nmbr_of_resps, list, cbd->data);
 
 		g_free(list);
 	} else {
@@ -272,18 +268,16 @@ static void ril_query(struct ofono_call_forwarding *cf, int type, int cls,
 
 	parcel_w_int32(&rilp, type);
 
-	/* Modem seems to respond with error to all queries
+	/*
+	 * Modem seems to respond with error to all queries
 	 * or settings made with bearer class
 	 * BEARER_CLASS_DEFAULT. Design decision: If given
 	 * class is BEARER_CLASS_DEFAULT let's map it to
-	 * SERVICE_CLASS_VOICE effectively making it the
-	 * default bearer. This in line with API which is
-	 * contains only voice anyways. TODO: Checkout
-	 * the behaviour with final modem
+	 * SERVICE_CLASS_NONE as with it e.g. ./send-ussd '*21*<phone_number>#'
+	 * returns cls:53 i.e. 1+4+16+32 as service class.
 	*/
-
 	if (cls == BEARER_CLASS_DEFAULT)
-		cls = BEARER_CLASS_VOICE;
+		cls = SERVICE_CLASS_NONE;
 
 	parcel_w_int32(&rilp, cls);
 
@@ -351,10 +345,10 @@ static struct ofono_call_forwarding_driver driver = {
 	.probe			= ril_call_forwarding_probe,
 	.remove			= ril_call_forwarding_remove,
 	.erasure		= ril_erasure,
-	.deactivation	= ril_deactivate,
+	.deactivation		= ril_deactivate,
 	.query			= ril_query,
-	.registration	= ril_registration,
-	.activation	= ril_activate
+	.registration		= ril_registration,
+	.activation		= ril_activate
 };
 
 void ril_call_forwarding_init(void)
