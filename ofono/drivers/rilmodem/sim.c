@@ -642,7 +642,7 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 		if (sd->sim_registered == FALSE) {
 			ofono_sim_register(sim);
 			sd->sim_registered = TRUE;
-		} else
+		} else {
 			/* TODO: There doesn't seem to be any other
 			 * way to force the core SIM code to
 			 * recheck the PIN.
@@ -655,6 +655,7 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 				ofono_sim_inserted_notify(sim, TRUE);
 				sd->card_state = RIL_CARDSTATE_PRESENT;
 			}
+		}
 
 		if (current_passwd) {
 			if (!strcmp(current_passwd, defaultpasswd)) {
