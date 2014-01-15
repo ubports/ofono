@@ -215,12 +215,12 @@ static gboolean ril_get_net_config(struct radio_data *rsd)
 
 	g_key_file_set_list_separator(keyfile, ',');
 
-	if (!g_key_file_load_from_file(keyfile, path, 0, &err)) {
-		g_error_free(err);
-		return needsconfig;
-	} else {
+	if (g_key_file_load_from_file(keyfile, path, 0, &err)) {
 		if (g_key_file_has_group(keyfile, LTE_FLAG))
 			rsd->ratmode = PREF_NET_TYPE_LTE_GSM_WCDMA;
+	} else {
+		g_error_free(err);
+		needsconfig = TRUE;
 	}
 
 	g_key_file_free(keyfile);
@@ -233,6 +233,8 @@ static gboolean ril_get_net_config(struct radio_data *rsd)
 	if (alreadyset[0])
 		value = g_key_file_get_boolean(
 			keyfile, alreadyset[0], LTE_FLAG, NULL);
+	else if (rsd->ratmode == PREF_NET_TYPE_GSM_WCDMA_AUTO)
+		value = TRUE;
 
 	if (!value && rsd->ratmode == PREF_NET_TYPE_LTE_GSM_WCDMA) {
 			g_key_file_set_boolean(keyfile,
