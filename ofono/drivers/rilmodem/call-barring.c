@@ -56,7 +56,7 @@ static void ril_call_barring_query_cb(struct ril_msg *message,
 	struct parcel rilp;
 	struct ofono_error error;
 	ofono_call_barring_query_cb_t cb = cbd->cb;
-	int bearer_class;
+	int bearer_class = 0;
 
 	if (message->error != RIL_E_SUCCESS) {
 		ofono_error("Call Barring query failed, err: %i",

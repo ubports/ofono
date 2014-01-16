@@ -387,4 +387,8 @@
 /* Suplementary services Service class*/
 #define SERVICE_CLASS_NONE 0
 
+/* RIL_FACILITY_LOCK parameters */
+#define RIL_FACILITY_UNLOCK "0"
+#define RIL_FACILITY_LOCK "1"
+
 #endif /*__RIL_CONSTANTS_H*/
