@@ -38,6 +38,54 @@
 
 #include "mbpi.h"
 
+/* Returns the list containing exactly one INTERNET and one MMS access point */
+static GSList *provision_normalize_apn_list(GSList *apns)
+{
+	struct ofono_gprs_provision_data *internet = NULL;
+	struct ofono_gprs_provision_data *mms = NULL;
+	GSList *l = apns;
+
+	while (l != NULL) {
+		GSList *next = l->next;
+		struct ofono_gprs_provision_data *ap = l->data;
+
+		if (ap->type == OFONO_GPRS_CONTEXT_TYPE_INTERNET && !internet) {
+			internet = ap;
+		} else if (ap->type == OFONO_GPRS_CONTEXT_TYPE_MMS && !mms) {
+			mms = ap;
+		} else {
+			/* Remove duplicate and unnecessary access points */
+			DBG("Discarding APN: '%s' Name: '%s' Type: %s",
+				ap->apn, ap->name, mbpi_ap_type(ap->type));
+			mbpi_ap_free(ap);
+			apns = g_slist_remove_link(apns, l);
+		}
+		l = next;
+	}
+
+	if (!internet) {
+		internet = g_try_new0(struct ofono_gprs_provision_data, 1);
+		if (internet) {
+			internet->type = OFONO_GPRS_CONTEXT_TYPE_INTERNET;
+			internet->name = g_strdup("Internet");
+			internet->apn = g_strdup("internet");
+			apns = g_slist_append(apns, internet);
+		}
+	}
+
+	if (!mms) {
+		mms = g_try_new0(struct ofono_gprs_provision_data, 1);
+		if (mms) {
+			mms->type = OFONO_GPRS_CONTEXT_TYPE_MMS;
+			mms->name = g_strdup("MMS");
+			mms->apn = g_strdup("mms");
+			apns = g_slist_append(apns, mms);
+		}
+	}
+
+	return apns;
+}
+
 static int provision_get_settings(const char *mcc, const char *mnc,
 				const char *spn,
 				struct ofono_gprs_provision_data **settings,
@@ -52,33 +100,22 @@ static int provision_get_settings(const char *mcc, const char *mnc,
 	DBG("Provisioning for MCC %s, MNC %s, SPN '%s'", mcc, mnc, spn);
 
 	/*
-	 * TODO: review with upstream.  Default behavior was to
-	 * disallow duplicate APN entries, which unfortunately exist
-	 * in the mobile-broadband-provider-info db.
+	 * Passing FALSE to mbpi_lookup_apn() would return
+	 * an empty list if duplicates are found.
 	 */
 	apns = mbpi_lookup_apn(mcc, mnc, TRUE, &error);
-	if (apns == NULL) {
-		if (error != NULL) {
-			ofono_error("%s", error->message);
-			g_error_free(error);
-		}
-
-		return -ENOENT;
+	if (error != NULL) {
+		ofono_error("%s", error->message);
+		g_error_free(error);
 	}
+
+	apns = provision_normalize_apn_list(apns);
+	if (apns == NULL)
+		return -ENOENT;
 
 	ap_count = g_slist_length(apns);
 
-	ofono_info("GPRS Provisioning found %d matching APNs for SPN: %s MCC: %s MNC: %s",
-			ap_count, spn, mcc, mnc);
-	/*
-	 * Only keep the first APN found.
-	 *
-	 * This allows auto-provisioning to work most of the time vs.
-	 * passing FALSE to mbpi_lookup_apn() which would return an
-	 * an empty list if duplicates are found.
-	 */
-	if (ap_count > 1)
-		ap_count = 1;
+	DBG("Found %d APs", ap_count);
 
 	*settings = g_try_new0(struct ofono_gprs_provision_data, ap_count);
 	if (*settings == NULL) {
@@ -97,25 +134,16 @@ static int provision_get_settings(const char *mcc, const char *mnc,
 	for (l = apns, i = 0; l; l = l->next, i++) {
 		struct ofono_gprs_provision_data *ap = l->data;
 
-		/*
-		 * Only create a data context for the first matching APN.
-		 * See comment above that restricts restricts apn_count.
-		 */
-		if (i == 0) {
-			ofono_info("Name: '%s'", ap->name);
-			ofono_info("APN: '%s'", ap->apn);
-			ofono_info("Type: %s", mbpi_ap_type(ap->type));
-			ofono_info("Username: '%s'", ap->username);
-			ofono_info("Password: '%s'", ap->password);
+		DBG("Name: '%s'", ap->name);
+		DBG("APN: '%s'", ap->apn);
+		DBG("Type: %s", mbpi_ap_type(ap->type));
+		DBG("Username: '%s'", ap->username);
+		DBG("Password: '%s'", ap->password);
 
-			memcpy(*settings + i, ap,
-				sizeof(struct ofono_gprs_provision_data));
+		memcpy(*settings + i, ap,
+			sizeof(struct ofono_gprs_provision_data));
 
-			g_free(ap);
-		} else {
-			mbpi_ap_free(ap);
-		}
-
+		g_free(ap);
 	}
 
 	g_slist_free(apns);
