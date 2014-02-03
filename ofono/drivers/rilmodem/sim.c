@@ -74,10 +74,6 @@
 #define ENTER_SIM_PUK_PARAMS 3
 #define CHANGE_SIM_PIN_PARAMS 3
 
-/* RIL_FACILITY_LOCK parameters */
-#define RIL_FACILITY_UNLOCK "0"
-#define RIL_FACILITY_LOCK "1"
-
 /* Current SIM */
 static struct ofono_sim *current_sim;
 /* Current active app */
@@ -217,11 +213,13 @@ static void ril_file_info_cb(struct ril_msg *message, gpointer user_data)
 
 	if (response_len) {
 		if (response[0] == 0x62) {
-			ok = sim_parse_3g_get_response(response, response_len,
-							&flen, &rlen, &str, access, NULL);
+			ok = sim_parse_3g_get_response(
+				response, response_len,
+				&flen, &rlen, &str, access, NULL);
 		} else
-			ok = sim_parse_2g_get_response(response, response_len,
-							&flen, &rlen, &str, access, &file_status);
+			ok = sim_parse_2g_get_response(
+				response, response_len,
+				&flen, &rlen, &str, access, &file_status);
 	}
 
 	if (!ok) {
@@ -240,7 +238,8 @@ error:
 }
 
 static void ril_sim_read_info(struct ofono_sim *sim, int fileid,
-				const unsigned char *path, unsigned int path_len,
+				const unsigned char *path,
+				unsigned int path_len,
 				ofono_sim_file_info_cb_t cb,
 				void *data)
 {
@@ -340,7 +339,8 @@ error:
 
 static void ril_sim_read_binary(struct ofono_sim *sim, int fileid,
 				int start, int length,
-				const unsigned char *path, unsigned int path_len,
+				const unsigned char *path,
+				unsigned int path_len,
 				ofono_sim_read_cb_t cb, void *data)
 {
 	struct sim_data *sd = ofono_sim_get_data(sim);
@@ -393,7 +393,8 @@ static void ril_sim_read_binary(struct ofono_sim *sim, int fileid,
 
 static void ril_sim_read_record(struct ofono_sim *sim, int fileid,
 				int record, int length,
-				const unsigned char *path, unsigned int path_len,
+				const unsigned char *path,
+				unsigned int path_len,
 				ofono_sim_read_cb_t cb, void *data)
 {
 	struct sim_data *sd = ofono_sim_get_data(sim);
@@ -506,10 +507,10 @@ static void ril_read_imsi(struct ofono_sim *sim, ofono_sim_imsi_cb_t cb,
 	}
 }
 
-void set_pin_lock_state(struct ofono_sim *sim,struct sim_app *app)
+void set_pin_lock_state(struct ofono_sim *sim, struct sim_app *app)
 {
-	DBG("pin1:%u,pin2:%u",app->pin1_state,app->pin2_state);
-	/* 
+	DBG("pin1:%u,pin2:%u", app->pin1_state, app->pin2_state);
+	/*
 	 * Updates only pin and pin2 state. Other locks are not dealt here. For
 	 * that a RIL_REQUEST_QUERY_FACILITY_LOCK request should be used.
 	 */
@@ -518,10 +519,11 @@ void set_pin_lock_state(struct ofono_sim *sim,struct sim_app *app)
 	case RIL_PINSTATE_ENABLED_VERIFIED:
 	case RIL_PINSTATE_ENABLED_BLOCKED:
 	case RIL_PINSTATE_ENABLED_PERM_BLOCKED:
-		ofono_set_pin_lock_state(sim,OFONO_SIM_PASSWORD_SIM_PIN,TRUE);
+		ofono_set_pin_lock_state(sim, OFONO_SIM_PASSWORD_SIM_PIN, TRUE);
 		break;
 	case RIL_PINSTATE_DISABLED:
-		ofono_set_pin_lock_state(sim,OFONO_SIM_PASSWORD_SIM_PIN,FALSE);
+		ofono_set_pin_lock_state(
+			sim, OFONO_SIM_PASSWORD_SIM_PIN, FALSE);
 		break;
 	default:
 		break;
@@ -531,10 +533,12 @@ void set_pin_lock_state(struct ofono_sim *sim,struct sim_app *app)
 	case RIL_PINSTATE_ENABLED_VERIFIED:
 	case RIL_PINSTATE_ENABLED_BLOCKED:
 	case RIL_PINSTATE_ENABLED_PERM_BLOCKED:
-		ofono_set_pin_lock_state(sim,OFONO_SIM_PASSWORD_SIM_PIN2,TRUE);
+		ofono_set_pin_lock_state(
+			sim, OFONO_SIM_PASSWORD_SIM_PIN2, TRUE);
 		break;
 	case RIL_PINSTATE_DISABLED:
-		ofono_set_pin_lock_state(sim,OFONO_SIM_PASSWORD_SIM_PIN2,FALSE);
+		ofono_set_pin_lock_state(
+			sim, OFONO_SIM_PASSWORD_SIM_PIN2, FALSE);
 		break;
 	default:
 		break;
@@ -650,7 +654,7 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 			 * more appropriate call here??
 			 * __ofono_sim_refresh(sim, NULL, TRUE, TRUE);
 			 */
-			DBG("sd->card_state:%u",sd->card_state);
+			DBG("sd->card_state:%u", sd->card_state);
 			if (sd->card_state != RIL_CARDSTATE_PRESENT) {
 				ofono_sim_inserted_notify(sim, TRUE);
 				sd->card_state = RIL_CARDSTATE_PRESENT;
@@ -659,7 +663,7 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 
 		if (current_passwd) {
 			if (!strcmp(current_passwd, defaultpasswd)) {
-			__ofono_sim_recheck_pin(sim);
+				__ofono_sim_recheck_pin(sim);
 			} else if (sd->passwd_state !=
 						OFONO_SIM_PASSWORD_SIM_PIN) {
 				__ofono_sim_recheck_pin(sim);
@@ -788,7 +792,9 @@ static void ril_pin_change_state_cb(struct ril_msg *message, gpointer user_data)
 	retries[passwd_type] = retry_count;
 	sd->retries[passwd_type] = retries[passwd_type];
 
-	/* TODO: re-bfactor to not use macro for FAILURE; doesn't return error! */
+	/*
+	 * TODO: re-bfactor to not use macro for FAILURE; doesn't return error!
+	 */
 
 	if (message->error == RIL_E_SUCCESS) {
 		CALLBACK_WITH_SUCCESS(cb, cbd->data);
@@ -839,9 +845,9 @@ static void ril_pin_send(struct ofono_sim *sim, const char *passwd,
 }
 
 static void ril_pin_change_state(struct ofono_sim *sim,
-					enum ofono_sim_password_type passwd_type,
-					int enable, const char *passwd,
-					ofono_sim_lock_unlock_cb_t cb, void *data)
+				enum ofono_sim_password_type passwd_type,
+				int enable, const char *passwd,
+				ofono_sim_lock_unlock_cb_t cb, void *data)
 {
 	struct sim_data *sd = ofono_sim_get_data(sim);
 	struct cb_data *cbd = cb_data_new(cb, data);

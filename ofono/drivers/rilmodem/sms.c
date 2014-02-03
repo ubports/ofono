@@ -248,19 +248,21 @@ static void ril_ack_delivery_cb(struct ril_msg *message, gpointer user_data)
 			"SMS acknowledgement failed: Further SMS reception is not guaranteed");
 }
 
-static void ril_ack_delivery(struct ofono_sms *sms)
+static void ril_ack_delivery(struct ofono_sms *sms, int error)
 {
 	struct sms_data *sd = ofono_sms_get_data(sms);
 	struct parcel rilp;
 	int ret;
 	int request = RIL_REQUEST_SMS_ACKNOWLEDGE;
+	int code = 0;
+
+	if (!error)
+		code = 0xFF;
 
 	parcel_init(&rilp);
 	parcel_w_int32(&rilp, 2); /* Number of int32 values in array */
-	parcel_w_int32(&rilp, 1); /* Successful receipt */
-	parcel_w_int32(&rilp, 0); /* error code */
-
-	/* TODO: should ACK be sent for either of the error cases? */
+	parcel_w_int32(&rilp, error); /* Successful (1)/Failed (0) receipt */
+	parcel_w_int32(&rilp, code); /* error code */
 
 	/* ACK the incoming NEW_SMS */
 	ret = g_ril_send(sd->ril, request,
@@ -329,11 +331,13 @@ static void ril_sms_notify(struct ril_msg *message, gpointer user_data)
 						ril_buf_len - smsc_len);
 	}
 
-	ril_ack_delivery(sms);
+	ril_ack_delivery(sms, TRUE);
 
 	return;
 
 error:
+	ril_ack_delivery(sms, FALSE);
+
 	ofono_error("Unable to parse NEW_SMS notification");
 }
 
