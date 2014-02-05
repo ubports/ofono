@@ -373,13 +373,13 @@ static void handle_response(struct ril_s *p, struct ril_msg *message)
 							message->error));
 
 			req = g_queue_pop_nth(p->command_queue, i);
-			if (req->callback) {
+			if (req->callback)
 				req->callback(message, req->user_data);
-			}
 
 			len = g_queue_get_length(p->out_queue);
 			for (i = 0; i < len; i++) {
-				id = *(guint *) g_queue_peek_nth(p->out_queue, i);
+				id = *(guint *) g_queue_peek_nth(
+							p->out_queue, i);
 				if (id == req->id) {
 					g_queue_pop_nth(p->out_queue, i);
 					break;
@@ -403,13 +403,21 @@ static void handle_response(struct ril_s *p, struct ril_msg *message)
 
 }
 
+static void notify_call_callback(gpointer data, gpointer user_data)
+{
+	struct ril_notify_node *node = data;
+	struct ril_msg *message = user_data;
+
+	node->callback(message, node->user_data);
+}
+
 static void handle_unsol_req(struct ril_s *p, struct ril_msg *message)
 {
 	GHashTableIter iter;
 	struct ril_notify *notify;
 	int req_key;
 	gpointer key, value;
-	GList *list_item;
+	GSList *list_item;
 	struct ril_notify_node *node;
 	gboolean found = FALSE;
 
@@ -430,15 +438,12 @@ static void handle_unsol_req(struct ril_s *p, struct ril_msg *message)
 		if (req_key != message->req)
 			continue;
 
-		list_item = (GList *) notify->nodes;
+		list_item = notify->nodes;
 
-		while (list_item != NULL) {
-			node = list_item->data;
-
-			node->callback(message, node->user_data);
+		if (list_item)
 			found = TRUE;
-			list_item = (GList *) g_slist_next(list_item);
-		}
+
+		g_slist_foreach(notify->nodes, notify_call_callback, message);
 	}
 
 	/* Only log events not being listended for... */
@@ -582,9 +587,8 @@ static void new_bytes(struct ring_buffer *rbuf, gpointer user_data)
 	while (p->suspended == FALSE && (p->read_so_far < len)) {
 		gsize rbytes = MIN(len - p->read_so_far, wrap - p->read_so_far);
 
-		if (rbytes < 4) {
+		if (rbytes < 4)
 			return;
-		}
 
 		/* this function attempts to read the next full length
 		 * fixed message from the stream.  if not all bytes are
@@ -595,9 +599,8 @@ static void new_bytes(struct ring_buffer *rbuf, gpointer user_data)
 		message = read_fixed_record(p, buf, &rbytes);
 
 		/* wait for the rest of the record... */
-		if (message == NULL) {
+		if (message == NULL)
 			break;
-		}
 
 		buf += rbytes;
 		p->read_so_far += rbytes;
@@ -642,7 +645,8 @@ static gboolean can_write_data(gpointer data)
 		for (i = 0; i < qlen; i++) {
 			req = g_queue_peek_nth(ril->command_queue, i);
 			if (req) {
-				id = *(guint *) g_queue_peek_head(ril->out_queue);
+				id = *(guint *) g_queue_peek_head(
+							ril->out_queue);
 				if (req->id == id)
 					goto out;
 			} else {
