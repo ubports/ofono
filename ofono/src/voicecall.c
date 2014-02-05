@@ -2859,19 +2859,24 @@ static void read_sim_ecc_numbers(int id, void *userdata)
 			ecc_g3_read_cb, vc);
 }
 
+static void get_ecc_numbers(struct ofono_voicecall *vc)
+{
+	if (vc->sim_context == NULL) {
+		vc->sim_context = ofono_sim_context_create(vc->sim);
+		ofono_sim_add_file_watch(vc->sim_context, SIM_EFECC_FILEID,
+					read_sim_ecc_numbers, vc, NULL);
+	}
+
+	read_sim_ecc_numbers(SIM_EFECC_FILEID, vc);
+}
+
 static void sim_state_watch(enum ofono_sim_state new_state, void *user)
 {
 	struct ofono_voicecall *vc = user;
 
 	switch (new_state) {
 	case OFONO_SIM_STATE_INSERTED:
-		if (vc->sim_context == NULL)
-			vc->sim_context = ofono_sim_context_create(vc->sim);
-
-		read_sim_ecc_numbers(SIM_EFECC_FILEID, vc);
-
-		ofono_sim_add_file_watch(vc->sim_context, SIM_EFECC_FILEID,
-						read_sim_ecc_numbers, vc, NULL);
+		get_ecc_numbers(vc);
 		break;
 	case OFONO_SIM_STATE_NOT_PRESENT:
 	case OFONO_SIM_STATE_RESETTING:
@@ -2888,6 +2893,8 @@ static void sim_state_watch(enum ofono_sim_state new_state, void *user)
 		voicecall_close_settings(vc);
 		break;
 	case OFONO_SIM_STATE_READY:
+		get_ecc_numbers(vc);
+
 		voicecall_load_settings(vc);
 		break;
 	case OFONO_SIM_STATE_LOCKED_OUT:
