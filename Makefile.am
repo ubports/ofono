@@ -549,6 +549,11 @@ builtin_sources += plugins/smart-messaging.c
 builtin_modules += push_notification
 builtin_sources += plugins/push-notification.c
 
+builtin_modules += push_forwarder
+builtin_sources += plugins/push-forwarder.c
+builtin_cflags += @WSPCODEC_CFLAGS@
+builtin_libadd += @WSPCODEC_LIBS@
+
 builtin_modules += sms_history
 builtin_sources += plugins/smshistory.c
 
