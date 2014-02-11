@@ -258,6 +258,26 @@ static void ril_stk_agent_ready(struct ofono_stk *stk)
 	g_ril_print_request_no_args(sd->ril, ret, request);
 }
 
+void ril_stk_set_lang()
+{
+	gchar *contents;
+	GError *err = NULL;
+
+	if (!g_file_get_contents(UI_LANG, &contents, NULL, &err)) {
+		if (err)
+			ofono_error("cannot open %s error: %d: message: %s",
+					UI_LANG, err->code, err->message);
+		g_error_free(err);
+	} else {
+		gchar *pch = g_strrstr(contents, CFG_LANG);
+		/* Set System UI lang to env LANG */
+		if (pch) {
+			setenv("LANG", pch + strlen(CFG_LANG), 1);
+			DBG("LANG %s", getenv("LANG"));
+		}
+	}
+}
+
 static int ril_stk_probe(struct ofono_stk *stk, unsigned int vendor, void *data)
 {
 	GRil *ril = data;
@@ -276,6 +296,9 @@ static int ril_stk_probe(struct ofono_stk *stk, unsigned int vendor, void *data)
 	ofono_stk_register(stk);
 
 	subscribed = FALSE;
+
+	/* UI language for local info */
+	ril_stk_set_lang();
 
 	return 0;
 }
