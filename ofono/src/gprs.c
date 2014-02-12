@@ -3016,14 +3016,56 @@ static void ofono_gprs_finish_register(struct ofono_gprs *gprs)
 	__ofono_atom_register(gprs->atom, gprs_unregister);
 }
 
+static gboolean mms_context_configured(struct ofono_gprs *gprs)
+{
+	GSList *l;
+
+	for (l = gprs->contexts; l; l = l->next) {
+		struct pri_context *ctx = l->data;
+
+		if (ctx->type == OFONO_GPRS_CONTEXT_TYPE_MMS)
+			return TRUE;
+	}
+
+	return FALSE;
+}
+
+static void provision_mms_context(struct ofono_gprs *gprs, const char *mcc,
+				const char *mnc, const char *spn)
+{
+	struct ofono_gprs_provision_data *settings;
+	int count;
+	int i;
+
+	if (__ofono_gprs_provision_get_settings(mcc, mnc, spn,
+						&settings, &count) == FALSE) {
+		ofono_warn("Provisioning failed");
+		return;
+	}
+
+	for (i = 0; i < count; i++) {
+		if (settings[i].type == OFONO_GPRS_CONTEXT_TYPE_MMS) {
+			provision_context(&settings[i], gprs);
+			break;
+		}
+	}
+
+	__ofono_gprs_provision_free_settings(settings, count);
+}
+
 static void spn_read_cb(const char *spn, const char *dc, void *data)
 {
 	struct ofono_gprs *gprs	= data;
 	struct ofono_modem *modem = __ofono_atom_get_modem(gprs->atom);
 	struct ofono_sim *sim = __ofono_atom_find(OFONO_ATOM_TYPE_SIM, modem);
 
-	provision_contexts(gprs, ofono_sim_get_mcc(sim),
+	if (gprs->contexts == NULL) {
+		provision_contexts(gprs, ofono_sim_get_mcc(sim),
 					ofono_sim_get_mnc(sim), spn);
+	} else if (!mms_context_configured(gprs)) {
+		provision_mms_context(gprs, ofono_sim_get_mcc(sim),
+					ofono_sim_get_mnc(sim), spn);
+	}
 
 	ofono_sim_remove_spn_watch(sim, &gprs->spn_watch);
 
@@ -3040,7 +3082,7 @@ void ofono_gprs_register(struct ofono_gprs *gprs)
 
 	gprs_load_settings(gprs, ofono_sim_get_imsi(sim));
 
-	if (gprs->contexts)
+	if (mms_context_configured(gprs))
 		goto finish;
 
 	ofono_sim_add_spn_watch(sim, &gprs->spn_watch, spn_read_cb, gprs, NULL);
