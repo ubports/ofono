@@ -18,6 +18,7 @@ BuildRequires:  pkgconfig(dbus-1)
 BuildRequires:  pkgconfig(libudev) >= 145
 BuildRequires:  pkgconfig(bluez) >= 4.85
 BuildRequires:  pkgconfig(mobile-broadband-provider-info)
+BuildRequires:  pkgconfig(libwspcodec) >= 2.0
 BuildRequires:  libtool
 BuildRequires:  automake
 BuildRequires:  autoconf
