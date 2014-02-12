@@ -91,6 +91,11 @@ else
 fi
 AC_SUBST(DBUS_CONFDIR)
 
+PKG_CHECK_MODULES(WSPCODEC, libwspcodec >= 2.0, dummy=yes,
+	AC_MSG_ERROR(WSP decoder is required))
+AC_SUBST(WSPCODEC_CFLAGS)
+AC_SUBST(WSPCODEC_LIBS)
+
 AC_ARG_WITH(dbusdatadir, AC_HELP_STRING([--with-dbusdatadir=PATH],
 	[path to D-Bus data directory]), [path_dbusdata=${withval}],
 		[path_dbusdata="`$PKG_CONFIG --variable=datadir dbus-1`"])
