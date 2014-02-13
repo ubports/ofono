@@ -46,6 +46,8 @@ struct stk_data {
 	GRil *ril;
 };
 
+gboolean subscribed;
+
 static void ril_envelope_cb(struct ril_msg *message, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
@@ -236,15 +238,18 @@ static void ril_stk_agent_ready(struct ofono_stk *stk)
 
 	DBG("");
 
-	/* register for unsol's only if agent has registered */
-	g_ril_register(sd->ril, RIL_UNSOL_STK_PROACTIVE_COMMAND,
-			ril_stk_pcmd_notify, stk);
+	if (!subscribed) {
+		DBG("Subscribing notifications");
+		g_ril_register(sd->ril, RIL_UNSOL_STK_PROACTIVE_COMMAND,
+				ril_stk_pcmd_notify, stk);
 
-	g_ril_register(sd->ril, RIL_UNSOL_STK_SESSION_END,
-			ril_stk_session_end_notify, stk);
+		g_ril_register(sd->ril, RIL_UNSOL_STK_SESSION_END,
+				ril_stk_session_end_notify, stk);
 
-	g_ril_register(sd->ril, RIL_UNSOL_STK_EVENT_NOTIFY,
-			ril_stk_event_notify, stk);
+		g_ril_register(sd->ril, RIL_UNSOL_STK_EVENT_NOTIFY,
+				ril_stk_event_notify, stk);
+		subscribed = TRUE;
+	}
 
 	/* fire and forget i.e. not waiting for the callback*/
 	ret = g_ril_send(sd->ril, request, NULL, 0,
@@ -269,6 +274,8 @@ static int ril_stk_probe(struct ofono_stk *stk, unsigned int vendor, void *data)
 
 	/* Register interface in this phase for stk agent */
 	ofono_stk_register(stk);
+
+	subscribed = FALSE;
 
 	return 0;
 }
