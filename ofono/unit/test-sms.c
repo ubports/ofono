@@ -1769,6 +1769,63 @@ static void test_wap_push(gconstpointer data)
 	g_slist_free(list);
 }
 
+static const char *simple_deliver_unicode = "0791534850020290"
+		"040c915348608475840008412060610141800e0054006500730074002062116211";
+
+static const char *simple_deliver_unicode_surrogate = "0791534850020290"
+		"040c915348608475840008412060610141800e00540065007300740020D83DDE3B";
+
+static void test_decode_unicode(void)
+{
+	struct sms sms;
+	unsigned char *pdu;
+	long pdu_len;
+	gboolean ret;
+	struct sms_assembly *assembly;
+	GSList *l;
+	char *decoded;
+
+	/* contains UCS-2 (Chinese characters) */
+	pdu = decode_hex(simple_deliver_unicode, -1, &pdu_len, 0);
+	g_assert(pdu);
+	g_assert(pdu_len == (long)strlen(simple_deliver_unicode) / 2);
+	ret = sms_decode(pdu, pdu_len, FALSE, 33, &sms);
+	g_free(pdu);
+
+	g_assert(ret);
+	g_assert(sms.type == SMS_TYPE_DELIVER);
+	g_assert(sms.deliver.udl == 14);
+
+	assembly = sms_assembly_new(NULL);
+	l = sms_assembly_add_fragment(assembly, &sms, time(NULL),
+			&sms.deliver.oaddr, 0, 1, 0);
+	g_assert(l);
+	g_assert(g_slist_length(l) == 1);
+	decoded = sms_decode_text(l);
+	sms_assembly_free(assembly);
+	g_assert(strcmp(decoded, "Test 我我") == 0);
+
+	/* contains UTF-16 (a Unicode surrogate pair representing an emoticon) */
+	pdu = decode_hex(simple_deliver_unicode_surrogate, -1, &pdu_len, 0);
+	g_assert(pdu);
+	g_assert(pdu_len == (long)strlen(simple_deliver_unicode_surrogate) / 2);
+	ret = sms_decode(pdu, pdu_len, FALSE, 33, &sms);
+	g_free(pdu);
+
+	g_assert(ret);
+	g_assert(sms.type == SMS_TYPE_DELIVER);
+	g_assert(sms.deliver.udl == 14);
+
+	assembly = sms_assembly_new(NULL);
+	l = sms_assembly_add_fragment(assembly, &sms, time(NULL),
+			&sms.deliver.oaddr, 0, 1, 0);
+	g_assert(l);
+	g_assert(g_slist_length(l) == 1);
+	decoded = sms_decode_text(l);
+	sms_assembly_free(assembly);
+	g_assert(strcmp(decoded, "Test 😻") == 0);
+}
+
 int main(int argc, char **argv)
 {
 	char long_string[152*33 + 1];
@@ -1849,6 +1906,8 @@ int main(int argc, char **argv)
 
 	g_test_add_data_func("/testsms/Test WAP Push 1", &wap_push_1,
 				test_wap_push);
+
+	g_test_add_func("/testsms/Test Decode Unicode", test_decode_unicode);
 
 	return g_test_run();
 }
