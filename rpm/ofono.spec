@@ -74,6 +74,8 @@ make %{?jobs:-j%jobs}
 %install
 rm -rf %{buildroot}
 %make_install
+
+mkdir -p %{buildroot}/%{_sysconfdir}/ofono/push_forwarder.d
 mkdir -p %{buildroot}/%{_lib}/systemd/system/network.target.wants
 ln -s ../ofono.service %{buildroot}/%{_lib}/systemd/system/network.target.wants/ofono.service
 
@@ -101,6 +103,7 @@ systemctl daemon-reload ||:
 /%{_lib}/systemd/system/ofono.service
 /%{_lib}/systemd/system/dundee.service
 %dir %{_sysconfdir}/ofono/
+%dir %{_sysconfdir}/ofono/push_forwarder.d
 # This file is part of phonesim and not needed with ofono.
 %exclude %{_sysconfdir}/ofono/phonesim.conf
 %doc /usr/share/man/man8/ofonod.8.gz
