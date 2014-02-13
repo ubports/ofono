@@ -418,7 +418,6 @@ static void handle_unsol_req(struct ril_s *p, struct ril_msg *message)
 	int req_key;
 	gpointer key, value;
 	GSList *list_item;
-	struct ril_notify_node *node;
 	gboolean found = FALSE;
 
 	if (p->notify_list == NULL)
