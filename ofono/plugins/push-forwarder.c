@@ -83,7 +83,7 @@ static GIOChannel *inotify_watch_channel;
 static void pf_notify_handler(struct push_datagram_handler *h,
 		const char *imsi, const char *from, const struct tm *remote,
 		const struct tm *local, int dst, int src,
-		const void *data, unsigned int len)
+		const char *ct, const void *data, unsigned int len)
 {
 	struct tm remote_tm = *remote;
 	struct tm local_tm = *local;
@@ -102,6 +102,7 @@ static void pf_notify_handler(struct push_datagram_handler *h,
 				 DBUS_TYPE_UINT32, &local_time_arg,
 				 DBUS_TYPE_INT32,  &dst_arg,
 				 DBUS_TYPE_INT32,  &src_arg,
+				 DBUS_TYPE_STRING, &ct,
 				 DBUS_TYPE_INVALID);
 	dbus_message_iter_init_append(msg, &iter);
 	dbus_message_iter_open_container(&iter, DBUS_TYPE_ARRAY,
@@ -196,8 +197,8 @@ static void pf_handle_datagram(const char *from,
 
 		if (pf_match_handler(h, ct, dst, src) != FALSE) {
 			DBG("notifying %s", h->name);
-			pf_notify_handler(h, imsi, from,
-					remote, local, dst, src, buffer, len);
+			pf_notify_handler(h, imsi, from, remote, local, dst,
+					src, ct, data + hdrlen, len - hdrlen);
 		}
 		link = link->next;
 	}
