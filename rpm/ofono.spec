@@ -83,7 +83,10 @@ fi
 
 %post
 systemctl daemon-reload ||:
-systemctl reload-or-try-restart ofono.service ||:
+# Do not restart during update
+# We don't want to break anything during update
+# New daemon is taken in use after reboot
+# systemctl reload-or-try-restart ofono.service ||:
 
 %postun
 systemctl daemon-reload ||:
