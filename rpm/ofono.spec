@@ -78,15 +78,15 @@ ln -s ../ofono.service %{buildroot}/%{_lib}/systemd/system/network.target.wants/
 
 %preun
 if [ "$1" -eq 0 ]; then
-systemctl stop ofono.service
+systemctl stop ofono.service ||:
 fi
 
 %post
-systemctl daemon-reload
-systemctl reload-or-try-restart ofono.service
+systemctl daemon-reload ||:
+systemctl reload-or-try-restart ofono.service ||:
 
 %postun
-systemctl daemon-reload
+systemctl daemon-reload ||:
 
 %files
 %defattr(-,root,root,-)
