@@ -91,11 +91,6 @@ else
 fi
 AC_SUBST(DBUS_CONFDIR)
 
-PKG_CHECK_MODULES(WSPCODEC, libwspcodec >= 2.0, dummy=yes,
-	AC_MSG_ERROR(WSP decoder is required))
-AC_SUBST(WSPCODEC_CFLAGS)
-AC_SUBST(WSPCODEC_LIBS)
-
 AC_ARG_WITH(dbusdatadir, AC_HELP_STRING([--with-dbusdatadir=PATH],
 	[path to D-Bus data directory]), [path_dbusdata=${withval}],
 		[path_dbusdata="`$PKG_CONFIG --variable=datadir dbus-1`"])
@@ -235,6 +230,12 @@ AC_ARG_ENABLE(pushforwarder, AC_HELP_STRING([--disable-pushforwarder],
                                 [disable Push Forwarder plugin]),
                                         [enable_pushforwarder=${enableval}])
 AM_CONDITIONAL(PUSHFORWARDER, test "${enable_pushforwarder}" != "no")
+if (test "${enable_pushforwarder}" != "no"); then
+	PKG_CHECK_MODULES(WSPCODEC, libwspcodec >= 2.0, dummy=yes,
+		AC_MSG_ERROR(WSP decoder is required))
+	AC_SUBST(WSPCODEC_CFLAGS)
+	AC_SUBST(WSPCODEC_LIBS)
+fi
 
 if (test "${prefix}" = "NONE"); then
 	dnl no prefix and no localstatedir, so default to /var
