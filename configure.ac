@@ -231,6 +231,11 @@ AC_ARG_ENABLE(datafiles, AC_HELP_STRING([--disable-datafiles],
 					[enable_datafiles=${enableval}])
 AM_CONDITIONAL(DATAFILES, test "${enable_datafiles}" != "no")
 
+AC_ARG_ENABLE(pushforwarder, AC_HELP_STRING([--disable-pushforwarder],
+                                [disable Push Forwarder plugin]),
+                                        [enable_pushforwarder=${enableval}])
+AM_CONDITIONAL(PUSHFORWARDER, test "${enable_pushforwarder}" != "no")
+
 if (test "${prefix}" = "NONE"); then
 	dnl no prefix and no localstatedir, so default to /var
 	if (test "$localstatedir" = '${prefix}/var'); then
