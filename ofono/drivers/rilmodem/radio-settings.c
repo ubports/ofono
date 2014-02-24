@@ -35,6 +35,7 @@
 #include <ofono/log.h>
 #include <ofono/modem.h>
 #include <ofono/radio-settings.h>
+#include <ofono/sim.h>
 
 #include "gril.h"
 #include "grilutil.h"
@@ -200,11 +201,18 @@ static gboolean ril_get_net_config(struct radio_data *rsd)
 {
 	GKeyFile *keyfile;
 	GError *err = NULL;
-	char *path = RIL_CONFIG;
+	char *config_path = RIL_CONFIG_DIR;
 	char **alreadyset = NULL;
 	gboolean needsconfig = FALSE;
 	gboolean value = FALSE;
+	gboolean found = FALSE;
 	rsd->ratmode = PREF_NET_TYPE_GSM_WCDMA_AUTO;
+	GDir *config_dir;
+	const gchar *config_file;
+	char *path;
+	gsize length;
+	gchar **codes = NULL;
+	int i;
 
 	/*
 	 * First we need to check should the LTE be on
@@ -215,12 +223,38 @@ static gboolean ril_get_net_config(struct radio_data *rsd)
 
 	g_key_file_set_list_separator(keyfile, ',');
 
-	if (g_key_file_load_from_file(keyfile, path, 0, &err)) {
+	config_dir = g_dir_open(config_path, 0, NULL);
+	while ((config_file = g_dir_read_name(config_dir)) != NULL) {
+		path = g_strconcat(RIL_CONFIG_DIR "/", config_file, NULL);
+
+		if (!g_key_file_load_from_file(keyfile, path, 0, &err)) {
+			g_error_free(err);
+			needsconfig = TRUE;
+			continue;
+		}
+
 		if (g_key_file_has_group(keyfile, LTE_FLAG))
+			found = TRUE;
+		else if (g_key_file_has_group(keyfile, MCC_LIST)) {
+			codes = g_key_file_get_string_list(keyfile, MCC_LIST,
+						MCC_KEY, &length, NULL);
+			if (codes) {
+				for (i = 0; codes[i]; i++) {
+					if (g_str_equal(codes[i],
+						ofono_sim_get_mcc(get_sim()))
+							== TRUE) {
+						found = TRUE;
+						break;
+					}
+				}
+				g_strfreev(codes);
+			}
+		}
+
+		if (found) {
 			rsd->ratmode = PREF_NET_TYPE_LTE_GSM_WCDMA;
-	} else {
-		g_error_free(err);
-		needsconfig = TRUE;
+			break;
+		}
 	}
 
 	g_key_file_free(keyfile);
