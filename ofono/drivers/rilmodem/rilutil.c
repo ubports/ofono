@@ -402,13 +402,25 @@ gboolean ril_util_parse_sim_status(GRil *gril,
 
 		apps[i]->app_type = parcel_r_int32(&rilp);
 		apps[i]->app_state = parcel_r_int32(&rilp);
+
+		/*
+		 * Consider RIL_APPSTATE_ILLEGAL also READY. Even if app state
+		 * is  RIL_APPSTATE_ILLEGAL (-1), ICC operations must be
+		 * permitted. Network access requests will anyway be rejected
+		 * and ME will be in limited service.
+		 */
+		if (apps[i]->app_state == RIL_APPSTATE_ILLEGAL) {
+			DBG("RIL_APPSTATE_ILLEGAL => RIL_APPSTATE_READY");
+			apps[i]->app_state = RIL_APPSTATE_READY;
+		}
+
 		apps[i]->perso_substate = parcel_r_int32(&rilp);
 
 		/* TODO: we need a way to instruct parcel to skip
 		 * a string, without allocating memory...
 		 */
-		apps[i]->aid_str = parcel_r_string(&rilp); /* application ID (AID) */
-		apps[i]->app_str = parcel_r_string(&rilp); /* application label */
+		apps[i]->aid_str = parcel_r_string(&rilp); /* app ID (AID) */
+		apps[i]->app_str = parcel_r_string(&rilp); /* app label */
 
 		apps[i]->pin_replaced = parcel_r_int32(&rilp);
 		apps[i]->pin1_state = parcel_r_int32(&rilp);
@@ -459,7 +471,8 @@ gboolean ril_util_parse_reg(GRil *gril,
 	 *   >= 4 for VOICE_REG reply
 	 *   >= 5 for DATA_REG reply
 	 */
-	if ((tmp = parcel_r_int32(&rilp)) < 4) {
+	tmp = parcel_r_int32(&rilp);
+	if (tmp < 4) {
 		DBG("Size of response array is too small: %d", tmp);
 		goto error;
 	}
@@ -482,10 +495,12 @@ gboolean ril_util_parse_reg(GRil *gril,
 	 * voice & data response.
 	 */
 	if (tmp--) {
-		sreason = parcel_r_string(&rilp);        /* TODO: different use for CDMA */
+		/* TODO: different use for CDMA */
+		sreason = parcel_r_string(&rilp);
 
 		if (tmp--) {
-			smax = parcel_r_string(&rilp);           /* TODO: different use for CDMA */
+			/* TODO: different use for CDMA */
+			smax = parcel_r_string(&rilp);
 
 			if (smax && max_calls)
 				*max_calls = atoi(smax);
@@ -518,7 +533,7 @@ gboolean ril_util_parse_reg(GRil *gril,
 
 	if (tech) {
 		if (stech) {
-			switch(atoi(stech)) {
+			switch (atoi(stech)) {
 			case RADIO_TECH_UNKNOWN:
 				*tech = -1;
 				break;
@@ -659,7 +674,8 @@ gint ril_util_get_signal(GRil *gril, struct ril_msg *message)
 	return -1;
 }
 
-void ril_util_free_sim_apps(struct sim_app **apps, guint num_apps) {
+void ril_util_free_sim_apps(struct sim_app **apps, guint num_apps)
+{
 	guint i;
 
 	for (i = 0; i < num_apps; i++) {
