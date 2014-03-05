@@ -355,7 +355,8 @@ static void handle_response(struct ril_s *p, struct ril_msg *message)
 	int i;
 	guint len, id;
 
-	g_assert(count > 0);
+	if (!count)
+		return;
 
 	for (i = 0; i < count; i++) {
 		req = g_queue_peek_nth(p->command_queue, i);
