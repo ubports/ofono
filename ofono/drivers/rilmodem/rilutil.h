@@ -62,29 +62,6 @@ enum at_util_charset {
 	RIL_UTIL_CHARSET_8859_H =	0x10000,
 };
 
-/* TODO: consider moving these to ril_constants.h */
-enum app_state {
-	APPSTATE_UNKNOWN,
-	APPSTATE_DETECTED,
-	APPSTATE_PIN,
-	APPSTATE_PUK,
-	APPSTATE_SUBSCRIPTION_PERSO,
-	APPSTATE_READY,
-};
-
-enum perso_state {
-	PERSOSUBSTATE_SIM_NETWORK = 3,
-	PERSOSUBSTATE_SIM_NETWORK_SUBSET,
-	PERSOSUBSTATE_SIM_CORPORATE,
-	PERSOSUBSTATE_SIM_SERVICE_PROVIDER,
-	PERSOSUBSTATE_SIM_SIM,
-	PERSOSUBSTATE_SIM_NETWORK_PUK,
-	PERSOSUBSTATE_SIM_NETWORK_SUBSET_PUK,
-	PERSOSUBSTATE_SIM_CORPORATE_PUK,
-	PERSOSUBSTATE_SIM_SERVICE_PROVIDER_PUK,
-	PERSOSUBSTATE_SIM_SIM_PUK,
-};
-
 #define MAX_UICC_APPS 16
 
 struct sim_status {
@@ -193,7 +170,7 @@ static inline int ril_util_convert_signal_strength(int strength)
 	return result;
 }
 
-#define DECLARE_FAILURE(e) 			\
+#define DECLARE_FAILURE(e)			\
 	struct ofono_error e;			\
 	e.type = OFONO_ERROR_TYPE_FAILURE;	\
 	e.error = 0				\
