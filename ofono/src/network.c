@@ -2106,18 +2106,14 @@ void ofono_netreg_register(struct ofono_netreg *netreg)
 		ofono_sim_add_spn_watch(netreg->sim, &netreg->spn_watch,
 						spn_read_cb, netreg, NULL);
 
-		if (__ofono_sim_service_available(netreg->sim,
-				SIM_UST_SERVICE_PROVIDER_DISPLAY_INFO,
-				SIM_SST_SERVICE_PROVIDER_DISPLAY_INFO)) {
-			ofono_sim_read(netreg->sim_context, SIM_EFSPDI_FILEID,
-					OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
-					sim_spdi_read_cb, netreg);
+		ofono_sim_read(netreg->sim_context, SIM_EFSPDI_FILEID,
+				OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
+				sim_spdi_read_cb, netreg);
 
-			ofono_sim_add_file_watch(netreg->sim_context,
-							SIM_EFSPDI_FILEID,
-							sim_spdi_changed,
-							netreg, NULL);
-		}
+		ofono_sim_add_file_watch(netreg->sim_context,
+						SIM_EFSPDI_FILEID,
+						sim_spdi_changed,
+						netreg, NULL);
 	}
 
 	__ofono_atom_register(netreg->atom, netreg_unregister);
