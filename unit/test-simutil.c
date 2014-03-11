@@ -345,10 +345,19 @@ const unsigned char valid_efopl[] = {
 };
 
 const unsigned char valid_efpnn[][28] = {
-	{ 0x43, 0x0a, 0x00, 0x54, 0x75, 0x78, 0x20, 0x43, 0x6f, 0x6d,
-	  0x6d, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, },
+	{ 0x43, 0x08, 0x00, 0xD4, 0x3A, 0x1E, 0x34, 0x7C, 0xB7, 0xDB,
+	  0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, },
 	{ 0x43, 0x05, 0x00, 0x4C, 0x6F, 0x6E, 0x67, 0x45, 0x06, 0x00,
 	  0x53, 0x68, 0x6F, 0x72, 0x74, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, }
+};
+
+const unsigned char valid_efpnn_2[][28] = {
+	/* Solavei */
+	{ 0x43, 0x08, 0x87, 0xD3, 0x37, 0x3B, 0x6C, 0x2F, 0xA7, 0x01 },
+	/* T-Mobile / T-Mobile */
+	{ 0x43, 0x08, 0x80, 0xD4, 0x56, 0xF3, 0x2D, 0x4E, 0xB3, 0xCB,
+	0x45, 0x08, 0x80, 0xD4, 0x56, 0xF3, 0x2D, 0x4E, 0xB3, 0xCB,
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF }
 };
 
 static void test_eons(void)
@@ -360,6 +369,7 @@ static void test_eons(void)
 
 	g_assert(sim_eons_pnn_is_empty(eons_info));
 
+	/* 1. a fictious operator */
 	sim_eons_add_pnn_record(eons_info, 1,
 			valid_efpnn[0], sizeof(valid_efpnn[0]));
 	g_assert(!sim_eons_pnn_is_empty(eons_info));
@@ -377,6 +387,27 @@ static void test_eons(void)
 	g_assert(op_info);
 
 	g_assert(!strcmp(op_info->longname, "Tux Comm"));
+	g_assert(!op_info->shortname);
+	g_assert(!op_info->info);
+
+	/* 2. a real-world MVNO */
+	sim_eons_add_pnn_record(eons_info, 1,
+			valid_efpnn_2[0], sizeof(valid_efpnn_2[0]));
+	g_assert(!sim_eons_pnn_is_empty(eons_info));
+
+	sim_eons_add_pnn_record(eons_info, 2,
+			valid_efpnn_2[1], sizeof(valid_efpnn_2[1]));
+	g_assert(!sim_eons_pnn_is_empty(eons_info));
+
+	sim_eons_add_opl_record(eons_info, valid_efopl, sizeof(valid_efopl));
+	sim_eons_optimize(eons_info);
+
+	op_info = sim_eons_lookup(eons_info, "246", "82");
+	g_assert(op_info == NULL);
+	op_info = sim_eons_lookup(eons_info, "246", "81");
+	g_assert(op_info);
+
+	g_assert(!strcmp(op_info->longname, "Solavei"));
 	g_assert(!op_info->shortname);
 	g_assert(!op_info->info);
 
