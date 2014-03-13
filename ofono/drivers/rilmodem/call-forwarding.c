@@ -3,7 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
- *  Copyright (C) 2013 Jolla Ltd
+ *  Copyright (C) 2013-2014 Jolla Ltd
  *  Contact: Jussi Kangas <jussi.kangas@tieto.com>
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -94,11 +94,10 @@ static void ril_registration(struct ofono_call_forwarding *cf, int type,
 	 * or settings made with bearer class
 	 * BEARER_CLASS_DEFAULT. Design decision: If given
 	 * class is BEARER_CLASS_DEFAULT let's map it to
-	 * SERVICE_CLASS_NONE as with it e.g. ./send-ussd '*21*<phone_number>#'
-	 * returns cls:53 i.e. 1+4+16+32 as service class.
+	 * BEARER_CLASS_VOICE as per RIL design.
 	*/
 	if (cls == BEARER_CLASS_DEFAULT)
-		cls = SERVICE_CLASS_NONE;
+		cls = BEARER_CLASS_VOICE;
 
 	parcel_w_int32(&rilp, cls);
 
@@ -140,11 +139,10 @@ static void ril_send_forward_cmd(struct ofono_call_forwarding *cf,
 	 * or settings made with bearer class
 	 * BEARER_CLASS_DEFAULT. Design decision: If given
 	 * class is BEARER_CLASS_DEFAULT let's map it to
-	 * SERVICE_CLASS_NONE as with it e.g. ./send-ussd '*21*<phone_number>#'
-	 * returns cls:53 i.e. 1+4+16+32 as service class.
+	 * BEARER_CLASS_VOICE as per RIL design.
 	*/
 	if (cls == BEARER_CLASS_DEFAULT)
-		cls = SERVICE_CLASS_NONE;
+		cls = BEARER_CLASS_VOICE;
 
 	parcel_w_int32(&rilp, cls);			/* Service class */
 
@@ -273,8 +271,7 @@ static void ril_query(struct ofono_call_forwarding *cf, int type, int cls,
 	 * or settings made with bearer class
 	 * BEARER_CLASS_DEFAULT. Design decision: If given
 	 * class is BEARER_CLASS_DEFAULT let's map it to
-	 * SERVICE_CLASS_NONE as with it e.g. ./send-ussd '*21*<phone_number>#'
-	 * returns cls:53 i.e. 1+4+16+32 as service class.
+	 * SERVICE_CLASS_NONE as per RIL design.
 	*/
 	if (cls == BEARER_CLASS_DEFAULT)
 		cls = SERVICE_CLASS_NONE;

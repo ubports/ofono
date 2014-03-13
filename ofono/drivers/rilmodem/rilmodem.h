@@ -28,9 +28,14 @@
 /* Shared constants */
 #define EF_STATUS_INVALIDATED 0
 #define EF_STATUS_VALID 1
-#define RIL_CONFIG "/etc/ofono/ril_subscription.conf"
+#define RIL_HW_CONFIG "/etc/ofono/ril_subscription.conf"
+#define RIL_CONFIG_DIR "/etc/ofono/"
 #define RIL_STORE "rilmodem"
 #define LTE_FLAG "4gOn"
+#define MCC_LIST "MCC-whitelist"
+#define MCC_KEY "Countries"
+#define UI_LANG "/var/lib/environment/nemo/locale.conf"
+#define CFG_LANG "LANG="
 
 extern void ril_devinfo_init(void);
 extern void ril_devinfo_exit(void);

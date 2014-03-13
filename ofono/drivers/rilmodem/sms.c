@@ -168,10 +168,14 @@ static void submit_sms_cb(struct ril_msg *message, gpointer user_data)
 	int mr;
 
 	if (message->error == RIL_E_SUCCESS) {
-		ofono_info("sms sending succesful");
+		ofono_info("sms sending successful");
 		decode_ril_error(&error, "OK");
+	} else if (message->error == RIL_E_GENERIC_FAILURE) {
+		ofono_info("not allowed by MO SMS control, do not retry");
+		error.type = OFONO_ERROR_TYPE_CMS;
+		error.error = 500;
 	} else {
-		ofono_error("sms sending failed");
+		ofono_error("sms sending failed, retry");
 		decode_ril_error(&error, "FAIL");
 	}
 

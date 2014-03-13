@@ -192,7 +192,10 @@ AM_CONDITIONAL(BLUETOOTH, test "${enable_bluetooth}" != "no")
 AC_ARG_ENABLE(nettime, AC_HELP_STRING([--disable-nettime],
                                 [disable Nettime plugin]),
                                         [enable_nettime=${enableval}])
-AM_CONDITIONAL(NETTIME, test "${enable_netttime}" != "no")
+if (test "${enable_nettime}" != "no"); then
+	AC_SEARCH_LIBS([clock_gettime], [rt])
+fi
+AM_CONDITIONAL(NETTIME, test "${enable_nettime}" != "no")
 
 AC_ARG_WITH([provisiondb], AC_HELP_STRING([--with-provisiondb=FILE],
 	[location of provision database]), [path_provisiondb=${withval}])
@@ -222,6 +225,17 @@ AC_ARG_ENABLE(datafiles, AC_HELP_STRING([--disable-datafiles],
 			[do not install configuration and data files]),
 					[enable_datafiles=${enableval}])
 AM_CONDITIONAL(DATAFILES, test "${enable_datafiles}" != "no")
+
+AC_ARG_ENABLE(pushforwarder, AC_HELP_STRING([--disable-pushforwarder],
+                                [disable Push Forwarder plugin]),
+                                        [enable_pushforwarder=${enableval}])
+AM_CONDITIONAL(PUSHFORWARDER, test "${enable_pushforwarder}" != "no")
+if (test "${enable_pushforwarder}" != "no"); then
+	PKG_CHECK_MODULES(WSPCODEC, libwspcodec >= 2.0, dummy=yes,
+		AC_MSG_ERROR(WSP decoder is required))
+	AC_SUBST(WSPCODEC_CFLAGS)
+	AC_SUBST(WSPCODEC_LIBS)
+fi
 
 if (test "${prefix}" = "NONE"); then
 	dnl no prefix and no localstatedir, so default to /var

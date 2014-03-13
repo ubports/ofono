@@ -1107,15 +1107,27 @@ static void pb_reference_data_cb(const struct ofono_error *error,
 			pbd->pb_reference_file_info.record_length)) {
 		pbd->pb_reference_file_info.record++;
 		DBG("Next EFpbr record %d", pbd->pb_reference_file_info.record);
-		pbd->sim_driver->read_file_linear(get_sim(),
-						pbd->pb_reference_file_info.
-						file_id,
-						pbd->pb_reference_file_info.
-						record,
-						pbd->pb_reference_file_info.
-						record_length,
-						NULL, 0,
-						pb_reference_data_cb, cbd);
+		if (RIL_APPTYPE_SIM == ril_get_app_type()) {
+			pbd->sim_driver->read_file_linear(get_sim(),
+					pbd->pb_reference_file_info.
+					file_id,
+					pbd->pb_reference_file_info.
+					record,
+					pbd->pb_reference_file_info.
+					record_length,
+					sim_path, sizeof(sim_path),
+					pb_reference_data_cb, cbd);
+		} else {
+			pbd->sim_driver->read_file_linear(get_sim(),
+					pbd->pb_reference_file_info.
+					file_id,
+					pbd->pb_reference_file_info.
+					record,
+					pbd->pb_reference_file_info.
+					record_length,
+					usim_path, sizeof(usim_path),
+					pb_reference_data_cb, cbd);
+		}
 	} else {
 		struct pb_file_info *file_info;
 		DBG("All EFpbr records read");
