@@ -187,8 +187,12 @@ static void pf_handle_datagram(const char *from,
 	if (wsp_decode_content_type(data, hdrlen, &ct, &off, NULL) == FALSE)
 		return;
 
+	data += hdrlen;
+	remain -= hdrlen;
+
 	DBG("  content type %s", (char *)ct);
 	DBG("  imsi %s", imsi);
+	DBG("  data size %u", remain);
 
 	link = handlers;
 
@@ -198,7 +202,7 @@ static void pf_handle_datagram(const char *from,
 		if (pf_match_handler(h, ct, dst, src) != FALSE) {
 			DBG("notifying %s", h->name);
 			pf_notify_handler(h, imsi, from, remote, local, dst,
-					src, ct, data + hdrlen, len - hdrlen);
+					src, ct, data, remain);
 		}
 		link = link->next;
 	}
