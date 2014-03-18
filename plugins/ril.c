@@ -98,10 +98,10 @@ struct ril_data {
 static guint mce_daemon_watch;
 static guint signal_watch;
 static DBusConnection *connection;
+gboolean reconnecting = FALSE;
 
 static int ril_init(void);
-guint reconnect_timer;
-
+static void ril_exit(void);
 static int send_get_sim_status(struct ofono_modem *modem);
 
 static void ril_debug(const char *str, void *user_data)
@@ -220,9 +220,6 @@ static void ril_remove(struct ofono_modem *modem)
 		return;
 
 	if (ril->timer_id > 0)
-		g_source_remove(ril->timer_id);
-
-	if (reconnect_timer > 0)
 		g_source_remove(ril->timer_id);
 
 	g_ril_unref(ril->modem);
@@ -415,20 +412,29 @@ static void ril_connected(struct ril_msg *message, gpointer user_data)
 
 static gboolean ril_re_init(gpointer user_data)
 {
-	ril_init();
-	return FALSE;
+	if (reconnecting) {
+		ril_init();
+		return TRUE;
+	} else {
+		return FALSE;
+	}
 }
 
 static void gril_disconnected(gpointer user_data)
 {
-	/* Signal clients modem going down */
+	/* Signal clients modem going down
+	 */
 	struct ofono_modem *modem = user_data;
 	DBusConnection *conn = ofono_dbus_get_connection();
 
-	if (modem) {
+	if (ofono_modem_is_registered(modem)) {
 		ofono_modem_remove(modem);
 		mce_disconnect(conn, user_data);
-		reconnect_timer = g_timeout_add_seconds(2, ril_re_init, NULL);
+	}
+
+	if (!reconnecting) {
+		reconnecting = TRUE;
+		g_timeout_add_seconds(2, ril_re_init, NULL);
 	}
 }
 
@@ -485,6 +491,8 @@ static int ril_enable(struct ofono_modem *modem)
 		gril_disconnected(modem);
 		return -EIO;
 	}
+
+	reconnecting = FALSE;
 
 	if (getenv("OFONO_RIL_TRACE"))
 		g_ril_set_trace(ril->modem, TRUE);
@@ -580,23 +588,6 @@ static int ril_init(void)
 	/* This causes driver->probe() to be called... */
 	retval = ofono_modem_register(modem);
 	DBG("ofono_modem_register returned: %d", retval);
-
-	/* kickstart the modem:
-	 * causes core modem code to call
-	 * - set_powered(TRUE) - which in turn
-	 *   calls driver->enable()
-	 *
-	 * - driver->pre_sim()
-	 *
-	 * Could also be done via:
-	 *
-	 * - a DBus call to SetProperties w/"Powered=TRUE" *1
-	 * - sim_state_watch ( handles SIM removal? LOCKED states? **2
-	 * - ofono_modem_set_powered()
-	 */
-	ofono_modem_reset(modem);
-
-	reconnect_timer = 0;
 
 	return retval;
 }
