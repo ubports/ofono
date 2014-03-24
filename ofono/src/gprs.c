@@ -57,6 +57,7 @@
 #define MAX_MESSAGE_CENTER_LENGTH 255
 #define MAX_CONTEXTS 256
 #define SUSPEND_TIMEOUT 8
+#define MAX_MMS_MTU 1280
 
 /* 27.007 Section 7.29 */
 enum packet_bearer {
@@ -758,6 +759,31 @@ static void pri_reset_context_settings(struct pri_context *ctx)
 	g_free(interface);
 }
 
+static void pri_limit_mtu(const char *interface, int max_mtu)
+{
+	struct ifreq ifr;
+	int sk;
+
+	if (interface == NULL)
+		return;
+
+	sk = socket(PF_INET, SOCK_DGRAM, 0);
+	if (sk < 0)
+		return;
+
+	memset(&ifr, 0, sizeof(ifr));
+	strncpy(ifr.ifr_name, interface, IFNAMSIZ);
+
+	if (ioctl(sk, SIOCGIFMTU, &ifr) < 0 || ifr.ifr_mtu > max_mtu) {
+		ifr.ifr_mtu = max_mtu;
+
+		if (ioctl(sk, SIOCSIFMTU, &ifr) < 0)
+			ofono_error("Failed to set MTU");
+	}
+
+	close(sk);
+}
+
 static void pri_update_mms_context_settings(struct pri_context *ctx)
 {
 	struct ofono_gprs_context *gc = ctx->context_driver;
@@ -774,6 +800,8 @@ static void pri_update_mms_context_settings(struct pri_context *ctx)
 
 	if (ctx->proxy_host)
 		pri_setproxy(settings->interface, ctx->proxy_host);
+
+	pri_limit_mtu(settings->interface, MAX_MMS_MTU);
 }
 
 static void append_context_properties(struct pri_context *ctx,
