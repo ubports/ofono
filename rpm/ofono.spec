@@ -71,6 +71,10 @@ autoreconf --force --install
 make %{?jobs:-j%jobs}
 
 
+%check
+# run unit tests
+make check
+
 %install
 rm -rf %{buildroot}
 %make_install
