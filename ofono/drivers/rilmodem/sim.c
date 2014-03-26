@@ -902,8 +902,7 @@ static void ril_pin_change_state(struct ofono_sim *sim,
 		parcel_w_string(&rilp, "PC");
 		break;
 	default:
-		CALLBACK_WITH_FAILURE(cb, data);
-		return;
+		goto end;
 	}
 
 	if (enable)
@@ -930,6 +929,7 @@ static void ril_pin_change_state(struct ofono_sim *sim,
 
 	g_ril_print_request(sd->ril, ret, request);
 
+end:
 	parcel_free(&rilp);
 
 	if (ret <= 0) {
