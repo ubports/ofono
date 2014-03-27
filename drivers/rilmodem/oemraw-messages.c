@@ -38,13 +38,17 @@
 struct oem_raw_data {
 	GRil *ril;
 	unsigned int vendor;
+	guint timer_id;
 };
 
 static gboolean ril_oemraw_delayed_register(gpointer user_data)
 {
 	struct ofono_oem_raw *raw = user_data;
+	struct oem_raw_data *od = ofono_oem_raw_get_data(raw);
 
 	DBG("");
+
+	od->timer_id = 0;
 
 	ofono_oem_raw_dbus_register(raw);
 	return FALSE; /* This makes the timeout a single-shot */
@@ -64,7 +68,8 @@ static int ril_oemraw_probe(struct ofono_oem_raw *raw, unsigned int vendor,
 	od->vendor = vendor;
 	ofono_oem_raw_set_data(raw, od);
 
-	g_timeout_add_seconds(1, ril_oemraw_delayed_register, raw);
+	od->timer_id = g_timeout_add_seconds(1, ril_oemraw_delayed_register,
+									raw);
 
 	return 0;
 }
@@ -78,6 +83,9 @@ static void ril_oemraw_remove(struct ofono_oem_raw *raw)
 	od = ofono_oem_raw_get_data(raw);
 
 	ofono_oem_raw_set_data(raw, NULL);
+
+	if (od->timer_id)
+		g_source_remove(od->timer_id);
 
 	g_ril_unref(od->ril);
 	g_free(od);
