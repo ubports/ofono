@@ -86,6 +86,21 @@ struct lastcause_req {
 static void send_one_dtmf(struct voicecall_data *vd);
 static void clear_dtmf_queue(struct voicecall_data *vd);
 
+/*
+ * structs ofono_voicecall and voicecall are fully defined
+ * in src/voicecall.c; we need (read) access to the
+ * call objects, so partially redefine them here.
+ */
+struct ofono_voicecall {
+	GSList *call_list;
+	/* ... */
+};
+
+struct voicecall {
+	struct ofono_call *call;
+	/* ... */
+};
+
 static void lastcause_cb(struct ril_msg *message, gpointer user_data)
 {
 	struct lastcause_req *reqdata = user_data;
@@ -99,9 +114,36 @@ static void lastcause_cb(struct ril_msg *message, gpointer user_data)
 	if (parcel_r_int32(&rilp) > 0)
 		last_cause = parcel_r_int32(&rilp);
 
+	/*
+	 * Not all call control cause values specified in 3GPP TS 24.008
+	 * "Mobile radio interface Layer 3 specification; Core network protocols",
+	 * Annex H, are properly reflected in the RIL API. For example, cause
+	 * #21 "call rejected" is mapped to CALL_FAIL_ERROR_UNSPECIFIED, and
+	 * thus indistinguishable from a network failure.
+	 * We signal disconnect reason "remote" for cause values
+	 *   - #16 "normal call clearing"
+	 *   - #17 "user busy"
+	 *   - UNSPECIFIED for MO calls that are not yet connected
+	 * , and disconnect reason "network" otherwise.
+	 */
 	ofono_info("Call %d ended with RIL cause %d", id, last_cause);
 	if (last_cause == CALL_FAIL_NORMAL || last_cause == CALL_FAIL_BUSY) {
 		reason = OFONO_DISCONNECT_REASON_REMOTE_HANGUP;
+	}
+
+	if (last_cause == CALL_FAIL_ERROR_UNSPECIFIED) {
+		GSList *l;
+		struct voicecall *v;
+		for (l = vc->call_list; l; l = l->next) {
+			v = l->data;
+			if (v->call->id == id) {
+				if (v->call->status == CALL_STATUS_DIALING
+					|| v->call->status == CALL_STATUS_ALERTING) {
+					reason = OFONO_DISCONNECT_REASON_REMOTE_HANGUP;
+				}
+				break;
+			}
+		}
 	}
 
 	ofono_voicecall_disconnected(vc, id, reason, NULL);
