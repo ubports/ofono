@@ -4,6 +4,7 @@
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *  Copyright (C) 2013 Canonical, Ltd. All rights reserved.
+ *  Copyright (C) 2014 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -792,10 +793,8 @@ static void ril_pin_change_state_cb(struct ril_msg *message, gpointer user_data)
 	retries[passwd_type] = retry_count;
 	sd->retries[passwd_type] = retries[passwd_type];
 
-	/*
-	 * TODO: re-bfactor to not use macro for FAILURE; doesn't return error!
-	 */
-
+	DBG("result=%d passwd_type=%d retry_count=%d",
+		message->error, passwd_type, retry_count);
 	if (message->error == RIL_E_SUCCESS) {
 		CALLBACK_WITH_SUCCESS(cb, cbd->data);
 		g_ril_print_response_no_args(sd->ril, message);
@@ -844,11 +843,53 @@ static void ril_pin_send(struct ofono_sim *sim, const char *passwd,
 	}
 }
 
+static int ril_perso_change_state(struct ofono_sim *sim,
+				enum ofono_sim_password_type passwd_type,
+				int enable, const char *passwd,
+				ofono_sim_lock_unlock_cb_t cb, void *data)
+{
+	struct sim_data *sd = ofono_sim_get_data(sim);
+	struct cb_data *cbd = cb_data_new(cb, data);
+	struct parcel rilp;
+	int request = 0;
+	int ret = 0;
+	sd->passwd_type = passwd_type;
+	cbd->user = sd;
+
+	parcel_init(&rilp);
+
+	switch (passwd_type) {
+	case OFONO_SIM_PASSWORD_PHNET_PIN:
+		if (enable) {
+			DBG("Not supported, enable=%d", enable);
+			goto end;
+		}
+		request = RIL_REQUEST_ENTER_NETWORK_DEPERSONALIZATION;
+		parcel_w_int32(&rilp, RIL_PERSOSUBSTATE_SIM_NETWORK);
+		parcel_w_string(&rilp, (char *) passwd);
+		break;
+	default:
+		DBG("Not supported, type=%d", passwd_type);
+		goto end;
+	}
+
+	ret = g_ril_send(sd->ril, request,
+				rilp.data, rilp.size, ril_pin_change_state_cb,
+				cbd, g_free);
+
+	g_ril_print_request(sd->ril, ret, request);
+
+end:
+	parcel_free(&rilp);
+	return ret;
+}
+
 static void ril_pin_change_state(struct ofono_sim *sim,
 				enum ofono_sim_password_type passwd_type,
 				int enable, const char *passwd,
 				ofono_sim_lock_unlock_cb_t cb, void *data)
 {
+	DBG("passwd_type=%d", passwd_type);
 	struct sim_data *sd = ofono_sim_get_data(sim);
 	struct cb_data *cbd = cb_data_new(cb, data);
 	struct parcel rilp;
@@ -886,9 +927,9 @@ static void ril_pin_change_state(struct ofono_sim *sim,
 		parcel_w_string(&rilp, "P2");
 		break;
 	case OFONO_SIM_PASSWORD_PHNET_PIN:
-		g_ril_append_print_buf(sd->ril, "(PN,");
-		parcel_w_string(&rilp, "PN");
-		break;
+		ret = ril_perso_change_state(sim, passwd_type, enable, passwd,
+						cb, data);
+		goto end;
 	case OFONO_SIM_PASSWORD_PHNETSUB_PIN:
 		g_ril_append_print_buf(sd->ril, "(PU,");
 		parcel_w_string(&rilp, "PU");
@@ -1112,17 +1153,6 @@ static struct ofono_sim_driver driver = {
 	.change_passwd		= ril_change_passwd,
 	.query_pin_retries	= ril_query_pin_retries,
 /*
- * TODO: Implmenting PIN/PUK support requires defining
- * the following driver methods.
- *
- * In the meanwhile, as long as the SIM card is present,
- * and unlocked, the core SIM code will check for the
- * presence of query_passwd_state, and if null, then the
- * function sim_initialize_after_pin() is called.
- *
- *	.query_pin_retries	= ril_pin_retries_query,
- *	.query_locked		= ril_pin_query_enabled,
- *
  * TODO: Implementing SIM write file IO support requires
  * the following functions to be defined.
  *
