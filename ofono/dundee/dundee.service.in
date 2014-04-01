@@ -1,6 +1,7 @@
 [Unit]
 Description=DUN service
-After=syslog.target
+Requires=dbus.service
+After=dbus.service
 
 [Service]
 Type=dbus
