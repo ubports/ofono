@@ -273,7 +273,7 @@ static int ril_call_barring_probe(struct ofono_call_barring *cb,
 
 	bd->ril = g_ril_clone(ril);
 	ofono_call_barring_set_data(cb, bd);
-	g_timeout_add_seconds(2, ril_delayed_register, cb);
+	bd->timer_id = g_timeout_add_seconds(2, ril_delayed_register, cb);
 
 	return 0;
 }
