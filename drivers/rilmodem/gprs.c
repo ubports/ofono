@@ -237,7 +237,7 @@ static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
 			ofono_gprs_detached_notify(gprs);
 			gd->notified = FALSE;
 			gd->ofono_attached = FALSE;
-		} else if (gd->notified) {
+		} else if (gd->notified && check_if_really_searching()) {
 			DBG("hide the searching state");
 			status = NETWORK_REGISTRATION_STATUS_REGISTERED;
 			ofono_gprs_status_notify(gprs, status);
