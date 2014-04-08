@@ -573,6 +573,15 @@ error:
 	ofono_error("Unable to notify ofono about nitz");
 }
 
+gboolean check_if_really_searching()
+{
+	int status = NETWORK_REGISTRATION_STATUS_SEARCHING;
+	status = ofono_netreg_get_status(current_netreg);
+	if (status == NETWORK_REGISTRATION_STATUS_SEARCHING)
+		return TRUE;
+	return FALSE;
+}
+
 gint check_if_really_roaming(gint status)
 {
 	const char *net_mcc = ofono_netreg_get_mcc(current_netreg);

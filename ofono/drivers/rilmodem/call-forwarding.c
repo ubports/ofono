@@ -235,9 +235,8 @@ static void ril_query_cb(struct ril_msg *message, gpointer user_data)
 				list[i].phone_number.number[
 					OFONO_MAX_PHONE_NUMBER_LENGTH] = '\0';
 
-				list[i].time = parcel_r_int32(&rilp);
 			}
-
+			list[i].time = parcel_r_int32(&rilp);
 		}
 
 		CALLBACK_WITH_SUCCESS(cb, nmbr_of_resps, list, cbd->data);

@@ -123,6 +123,8 @@ struct ofono_sim *get_sim();
 
 gint check_if_really_roaming(gint status);
 
+gboolean check_if_really_searching();
+
 void ril_util_free_sim_apps(struct sim_app **apps, guint num_apps);
 
 struct cb_data {
