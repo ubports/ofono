@@ -747,7 +747,8 @@ unit_tests = unit/test-common unit/test-util unit/test-idmap \
 				unit/test-grilrequest \
 				unit/test-grilreply \
 				unit/test-grilunsol \
-				unit/test-sms unit/test-cdmasms
+				unit/test-sms unit/test-cdmasms \
+				unit/test-provision
 
 noinst_PROGRAMS = $(unit_tests) \
 			unit/test-sms-root unit/test-mux unit/test-caif
@@ -813,6 +814,13 @@ unit_test_grilunsol_SOURCES = unit/test-grilunsol.c $(gril_sources) \
 				src/log.c gatchat/ringbuffer.c
 unit_test_grilunsol_LDADD = @GLIB_LIBS@ -ldl
 unit_objects += $(unit_test_grilunsol_OBJECTS)
+
+unit_test_provision_SOURCES = unit/test-provision.c \
+				plugins/provision.h plugins/provision.c \
+				plugins/mbpi.c src/gprs-provision.c \
+				src/log.c
+unit_test_provision_LDADD = @GLIB_LIBS@ -ldl
+unit_objects += $(unit_test_provision_OBJECTS)
 
 TESTS = $(unit_tests)
 
