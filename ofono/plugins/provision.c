@@ -36,6 +36,7 @@
 #include <ofono/modem.h>
 #include <ofono/gprs-provision.h>
 
+#include "provision.h"
 #include "mbpi.h"
 
 /* Returns the list containing exactly one INTERNET and one MMS access point */
@@ -86,7 +87,7 @@ static GSList *provision_normalize_apn_list(GSList *apns)
 	return apns;
 }
 
-static int provision_get_settings(const char *mcc, const char *mnc,
+int provision_get_settings(const char *mcc, const char *mnc,
 				const char *spn,
 				struct ofono_gprs_provision_data **settings,
 				int *count)

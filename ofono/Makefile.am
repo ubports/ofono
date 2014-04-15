@@ -514,7 +514,7 @@ if PROVISION
 builtin_sources += plugins/mbpi.h plugins/mbpi.c
 
 builtin_modules += provision
-builtin_sources += plugins/provision.c
+builtin_sources += plugins/provision.h plugins/provision.c
 
 builtin_modules += cdma_provision
 builtin_sources += plugins/cdma-provision.c
