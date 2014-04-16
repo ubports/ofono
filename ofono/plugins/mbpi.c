@@ -53,6 +53,7 @@ enum MBPI_ERROR {
 struct gsm_data {
 	const char *match_mcc;
 	const char *match_mnc;
+	char *provider_name;
 	GSList *apns;
 	gboolean match_found;
 	gboolean allow_duplicates;
@@ -84,6 +85,7 @@ static GQuark mbpi_error_quark(void)
 
 void mbpi_ap_free(struct ofono_gprs_provision_data *ap)
 {
+	g_free(ap->provider_name);
 	g_free(ap->name);
 	g_free(ap->apn);
 	g_free(ap->username);
@@ -117,6 +119,7 @@ static void text_handler(GMarkupParseContext *context,
 {
 	char **string = userdata;
 
+        g_free(*string);
 	*string = g_strndup(text, text_len);
 }
 
@@ -288,6 +291,7 @@ static void apn_handler(GMarkupParseContext *context, struct gsm_data *gsm,
 	}
 
 	ap = g_new0(struct ofono_gprs_provision_data, 1);
+	ap->provider_name = g_strdup(gsm->provider_name);
 	ap->apn = g_strdup(apn);
 	ap->type = OFONO_GPRS_CONTEXT_TYPE_INTERNET;
 	ap->proto = OFONO_GPRS_PROTO_IP;
@@ -454,6 +458,44 @@ static const GMarkupParser provider_parser = {
 	NULL,
 };
 
+static void gsm_provider_start(GMarkupParseContext *context,
+					const gchar *element_name,
+					const gchar **atribute_names,
+					const gchar **attribute_values,
+					gpointer userdata, GError **error)
+{
+	struct gsm_data *gsm = userdata;
+
+	if (g_str_equal(element_name, "name")) {
+		g_free(gsm->provider_name);
+		gsm->provider_name = NULL;
+		g_markup_parse_context_push(context, &text_parser,
+						&gsm->provider_name);
+	} else if (g_str_equal(element_name, "gsm")) {
+		gsm->match_found = FALSE;
+		g_markup_parse_context_push(context, &gsm_parser, gsm);
+	} else if (g_str_equal(element_name, "cdma"))
+		g_markup_parse_context_push(context, &skip_parser, NULL);
+}
+
+static void gsm_provider_end(GMarkupParseContext *context,
+					const gchar *element_name,
+					gpointer userdata, GError **error)
+{
+	if (g_str_equal(element_name, "name") ||
+				g_str_equal(element_name, "gsm") ||
+				g_str_equal(element_name, "cdma"))
+		g_markup_parse_context_pop(context);
+}
+
+static const GMarkupParser gsm_provider_parser = {
+	gsm_provider_start,
+	gsm_provider_end,
+	NULL,
+	NULL,
+	NULL,
+};
+
 static void toplevel_gsm_start(GMarkupParseContext *context,
 					const gchar *element_name,
 					const gchar **atribute_names,
@@ -462,19 +504,15 @@ static void toplevel_gsm_start(GMarkupParseContext *context,
 {
 	struct gsm_data *gsm = userdata;
 
-	if (g_str_equal(element_name, "gsm")) {
-		gsm->match_found = FALSE;
-		g_markup_parse_context_push(context, &gsm_parser, gsm);
-	} else if (g_str_equal(element_name, "cdma"))
-		g_markup_parse_context_push(context, &skip_parser, NULL);
+	if (g_str_equal(element_name, "provider"))
+		g_markup_parse_context_push(context, &gsm_provider_parser, gsm);
 }
 
 static void toplevel_gsm_end(GMarkupParseContext *context,
 					const gchar *element_name,
 					gpointer userdata, GError **error)
 {
-	if (g_str_equal(element_name, "gsm") ||
-			g_str_equal(element_name, "cdma"))
+	if (g_str_equal(element_name, "provider"))
 		g_markup_parse_context_pop(context);
 }
 
@@ -591,6 +629,7 @@ GSList *mbpi_lookup_apn(const char *mcc, const char *mnc,
 		gsm.apns = NULL;
 	}
 
+	g_free(gsm.provider_name);
 	return gsm.apns;
 }
 

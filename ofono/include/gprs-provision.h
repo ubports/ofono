@@ -31,6 +31,7 @@ extern "C" {
 struct ofono_gprs_provision_data {
 	enum ofono_gprs_context_type type;
 	enum ofono_gprs_proto proto;
+	char *provider_name;
 	char *name;
 	char *apn;
 	char *username;
