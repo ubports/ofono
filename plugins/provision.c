@@ -59,7 +59,7 @@ static GSList *provision_normalize_apn_list(GSList *apns)
 			DBG("Discarding APN: '%s' Name: '%s' Type: %s",
 				ap->apn, ap->name, mbpi_ap_type(ap->type));
 			mbpi_ap_free(ap);
-			apns = g_slist_remove_link(apns, l);
+			apns = g_slist_delete_link(apns, l);
 		}
 		l = next;
 	}
