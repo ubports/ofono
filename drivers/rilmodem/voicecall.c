@@ -4,7 +4,7 @@
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *  Copyright (C) 2012 Canonical Ltd.
- *  Copyright (C) 2013 Jolla Ltd.
+ *  Copyright (C) 2014 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -769,6 +769,23 @@ static gboolean enable_supp_svc(gpointer user_data)
 	return FALSE;
 }
 
+static void ril_ringback_tone_notify(struct ril_msg *message,
+	gpointer user_data)
+{
+	struct parcel rilp;
+	struct ofono_voicecall *vc = user_data;
+	gboolean playTone = FALSE;
+
+	ril_util_init_parcel(message, &rilp);
+
+	if (message->req == RIL_UNSOL_RINGBACK_TONE) {
+		if (parcel_r_int32(&rilp) > 0)
+			playTone = parcel_r_int32(&rilp);
+		DBG("play ringback tone: %d", playTone);
+		ofono_voicecall_ringback_tone_notify(vc, playTone);
+	}
+}
+
 static gboolean ril_delayed_register(gpointer user_data)
 {
 	struct ofono_voicecall *vc = user_data;
@@ -788,6 +805,10 @@ static gboolean ril_delayed_register(gpointer user_data)
 	/* Unsol when call set in hold */
 	g_ril_register(vd->ril, RIL_UNSOL_SUPP_SVC_NOTIFICATION,
 			ril_ss_notify, vc);
+
+	/* Register for ringback tone notifications */
+	g_ril_register(vd->ril, RIL_UNSOL_RINGBACK_TONE,
+			ril_ringback_tone_notify, vc);
 
 	/* request supplementary service notifications*/
 	enable_supp_svc(vc);
