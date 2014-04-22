@@ -101,7 +101,7 @@ systemctl daemon-reload ||:
 %files
 %defattr(-,root,root,-)
 %doc COPYING ChangeLog AUTHORS README
-%config(noreplace) %{_sysconfdir}/dbus-1/system.d/*.conf
+%config %{_sysconfdir}/dbus-1/system.d/*.conf
 %{_sbindir}/*
 /%{_lib}/systemd/system/network.target.wants/ofono.service
 /%{_lib}/systemd/system/ofono.service

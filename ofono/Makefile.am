@@ -587,7 +587,7 @@ src_ofonod_SOURCES = $(builtin_sources) src/ofono.ver \
 			src/cdma-provision.c src/handsfree.c \
 			src/handsfree-audio.c src/bluetooth.h \
 			src/hfp.h src/sim-mnclength.c src/oemraw.c \
-			src/siri.c
+			src/siri.c src/voicecallagent.c
 
 src_ofonod_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
 			@GLIB_LIBS@ @DBUS_LIBS@ -ldl
@@ -726,7 +726,8 @@ test_scripts = test/backtrace \
 		test/hangup-multiparty \
 		test/hangup-call \
 		test/display-icon \
-		test/set-msisdn
+		test/set-msisdn \
+		test/test-voicecallagent
 
 if TEST
 testdir = $(pkglibdir)/test
