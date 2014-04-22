@@ -24,6 +24,7 @@
 #include <config.h>
 #endif
 
+#define _GNU_SOURCE
 #include <errno.h>
 #include <string.h>
 
@@ -36,57 +37,102 @@
 #include <ofono/modem.h>
 #include <ofono/gprs-provision.h>
 
+#include "provision.h"
 #include "mbpi.h"
 
 /* Returns the list containing exactly one INTERNET and one MMS access point */
-static GSList *provision_normalize_apn_list(GSList *apns)
+static GSList *provision_normalize_apn_list(GSList *apns, const char* spn)
 {
-	struct ofono_gprs_provision_data *internet = NULL;
-	struct ofono_gprs_provision_data *mms = NULL;
-	GSList *l = apns;
+	struct ofono_gprs_provision_data *best_internet = NULL;
+	struct ofono_gprs_provision_data *best_mms = NULL;
+	struct ofono_gprs_provision_data *second_best_internet = NULL;
+	struct ofono_gprs_provision_data *second_best_mms = NULL;
+	GSList *best_apns = NULL;
+	GSList *l;
 
+	/* 1. save the first found internet APN and the first MMS APN */
+	l = apns;
 	while (l != NULL) {
 		GSList *next = l->next;
 		struct ofono_gprs_provision_data *ap = l->data;
 
-		if (ap->type == OFONO_GPRS_CONTEXT_TYPE_INTERNET && !internet) {
-			internet = ap;
-		} else if (ap->type == OFONO_GPRS_CONTEXT_TYPE_MMS && !mms) {
-			mms = ap;
-		} else {
-			/* Remove duplicate and unnecessary access points */
-			DBG("Discarding APN: '%s' Name: '%s' Type: %s",
-				ap->apn, ap->name, mbpi_ap_type(ap->type));
-			mbpi_ap_free(ap);
-			apns = g_slist_remove_link(apns, l);
+		if (ap->type == OFONO_GPRS_CONTEXT_TYPE_INTERNET
+				&& !best_internet) {
+			best_internet = ap;
+		} else if (ap->type == OFONO_GPRS_CONTEXT_TYPE_MMS
+				&& !best_mms) {
+			best_mms = ap;
 		}
 		l = next;
 	}
 
-	if (!internet) {
-		internet = g_try_new0(struct ofono_gprs_provision_data, 1);
-		if (internet) {
-			internet->type = OFONO_GPRS_CONTEXT_TYPE_INTERNET;
-			internet->name = g_strdup("Internet");
-			internet->apn = g_strdup("internet");
-			apns = g_slist_append(apns, internet);
+	/*
+	 * 2. if there is an SPN given, save the first internet APN and the
+	 * first MMS APN matching the SPN (partially, case-insensitively)
+	 * */
+	if (spn) {
+		second_best_internet = best_internet;
+		best_internet = NULL;
+		second_best_mms = best_mms;
+		best_mms = NULL;
+
+		l = apns;
+		while (l != NULL) {
+			GSList *next = l->next;
+			struct ofono_gprs_provision_data *ap = l->data;
+
+			if ((ap->provider_name && strcasestr(ap->provider_name, spn))
+				|| (ap->name && strcasestr(ap->name, spn))
+				|| (ap->apn && strcasestr(ap->apn, spn))) {
+				if (ap->type == OFONO_GPRS_CONTEXT_TYPE_INTERNET
+						&& !best_internet) {
+					best_internet = ap;
+				} else if (ap->type == OFONO_GPRS_CONTEXT_TYPE_MMS
+						&& !best_mms) {
+					best_mms = ap;
+				}
+			}
+			l = next;
+		}
+
+		/* no better match found */
+		if (!best_internet)
+			best_internet = second_best_internet;
+		if (!best_mms)
+			best_mms = second_best_mms;
+	}
+
+	/* 3. if none found yet, create APNs with default values */
+	if (!best_internet) {
+		best_internet = g_try_new0(struct ofono_gprs_provision_data, 1);
+		if (best_internet) {
+			best_internet->type =
+				OFONO_GPRS_CONTEXT_TYPE_INTERNET;
+			best_internet->name =
+				g_strdup("Internet");
+			best_internet->apn =
+				g_strdup("internet");
 		}
 	}
 
-	if (!mms) {
-		mms = g_try_new0(struct ofono_gprs_provision_data, 1);
-		if (mms) {
-			mms->type = OFONO_GPRS_CONTEXT_TYPE_MMS;
-			mms->name = g_strdup("MMS");
-			mms->apn = g_strdup("mms");
-			apns = g_slist_append(apns, mms);
+	if (!best_mms) {
+		best_mms = g_try_new0(struct ofono_gprs_provision_data, 1);
+		if (best_mms) {
+			best_mms->type =
+				OFONO_GPRS_CONTEXT_TYPE_MMS;
+			best_mms->name =
+				g_strdup("MMS");
+			best_mms->apn =
+				g_strdup("mms");
 		}
 	}
 
-	return apns;
+	best_apns = g_slist_append(best_apns, best_internet);
+	best_apns = g_slist_append(best_apns, best_mms);
+	return best_apns;
 }
 
-static int provision_get_settings(const char *mcc, const char *mnc,
+int provision_get_settings(const char *mcc, const char *mnc,
 				const char *spn,
 				struct ofono_gprs_provision_data **settings,
 				int *count)
@@ -97,7 +143,7 @@ static int provision_get_settings(const char *mcc, const char *mnc,
 	int ap_count;
 	int i;
 
-	DBG("Provisioning for MCC %s, MNC %s, SPN '%s'", mcc, mnc, spn);
+	ofono_info("Provisioning for MCC %s, MNC %s, SPN '%s'", mcc, mnc, spn);
 
 	/*
 	 * Passing FALSE to mbpi_lookup_apn() would return
@@ -109,13 +155,14 @@ static int provision_get_settings(const char *mcc, const char *mnc,
 		g_error_free(error);
 	}
 
-	apns = provision_normalize_apn_list(apns);
+	ofono_info("Found %d APs in MBPI", g_slist_length(apns));
+	apns = provision_normalize_apn_list(apns, spn);
 	if (apns == NULL)
 		return -ENOENT;
 
 	ap_count = g_slist_length(apns);
 
-	DBG("Found %d APs", ap_count);
+	ofono_info("Provisioning %d APs", ap_count);
 
 	*settings = g_try_new0(struct ofono_gprs_provision_data, ap_count);
 	if (*settings == NULL) {
@@ -134,11 +181,11 @@ static int provision_get_settings(const char *mcc, const char *mnc,
 	for (l = apns, i = 0; l; l = l->next, i++) {
 		struct ofono_gprs_provision_data *ap = l->data;
 
-		DBG("Name: '%s'", ap->name);
-		DBG("APN: '%s'", ap->apn);
-		DBG("Type: %s", mbpi_ap_type(ap->type));
-		DBG("Username: '%s'", ap->username);
-		DBG("Password: '%s'", ap->password);
+		ofono_info("Name: '%s'", ap->name);
+		ofono_info("APN: '%s'", ap->apn);
+		ofono_info("Type: %s", mbpi_ap_type(ap->type));
+		ofono_info("Username: '%s'", ap->username);
+		ofono_info("Password: '%s'", ap->password);
 
 		memcpy(*settings + i, ap,
 			sizeof(struct ofono_gprs_provision_data));
