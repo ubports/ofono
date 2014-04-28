@@ -133,6 +133,7 @@ static gchar *option_plugin = NULL;
 static gchar *option_noplugin = NULL;
 static gboolean option_detach = TRUE;
 static gboolean option_version = FALSE;
+static gboolean option_backtrace = TRUE;
 
 static gboolean parse_debug(const char *key, const char *value,
 					gpointer user_data, GError **error)
@@ -158,6 +159,9 @@ static GOptionEntry options[] = {
 				"Don't run as daemon in background" },
 	{ "version", 'v', 0, G_OPTION_ARG_NONE, &option_version,
 				"Show version information and exit" },
+	{ "nobacktrace", 0, G_OPTION_FLAG_REVERSE,
+				G_OPTION_ARG_NONE, &option_backtrace,
+				"Don't print out backtrace information" },
 	{ NULL },
 };
 
@@ -213,7 +217,8 @@ int main(int argc, char **argv)
 
 	signal = setup_signalfd();
 
-	__ofono_log_init(argv[0], option_debug, option_detach);
+	__ofono_log_init(argv[0], option_debug, option_detach,
+							option_backtrace);
 
 	dbus_error_init(&error);
 
@@ -264,7 +269,7 @@ cleanup:
 
 	g_main_loop_unref(event_loop);
 
-	__ofono_log_cleanup();
+	__ofono_log_cleanup(option_backtrace);
 
 	return 0;
 }
