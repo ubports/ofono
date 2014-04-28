@@ -38,8 +38,9 @@ void __ofono_modem_shutdown(void);
 #include <ofono/log.h>
 
 int __ofono_log_init(const char *program, const char *debug,
-						ofono_bool_t detach);
-void __ofono_log_cleanup(void);
+						ofono_bool_t detach,
+						ofono_bool_t backtrace);
+void __ofono_log_cleanup(ofono_bool_t backtrace);
 void __ofono_log_enable(struct ofono_debug_desc *start,
 					struct ofono_debug_desc *stop);
 
