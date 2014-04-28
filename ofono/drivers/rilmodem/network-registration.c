@@ -573,11 +573,13 @@ error:
 	ofono_error("Unable to notify ofono about nitz");
 }
 
-gboolean check_if_really_searching()
+gboolean check_if_ok_to_attach()
 {
 	int status = NETWORK_REGISTRATION_STATUS_SEARCHING;
 	status = ofono_netreg_get_status(current_netreg);
-	if (status == NETWORK_REGISTRATION_STATUS_SEARCHING)
+	if (status == NETWORK_REGISTRATION_STATUS_SEARCHING
+		|| status == NETWORK_REGISTRATION_STATUS_ROAMING
+		|| status == NETWORK_REGISTRATION_STATUS_REGISTERED)
 		return TRUE;
 	return FALSE;
 }
