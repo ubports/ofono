@@ -75,7 +75,7 @@ static void ril_set_rat_mode(struct ofono_radio_settings *rs,
 	int pref = rd->ratmode;
 	int ret = 0;
 
-	ofono_info("setting rat mode");
+	ofono_info("setting rat mode:%d", mode);
 
 	parcel_init(&rilp);
 
@@ -225,12 +225,13 @@ static gboolean ril_get_net_config(struct radio_data *rsd)
 	config_dir = g_dir_open(config_path, 0, NULL);
 	while ((config_file = g_dir_read_name(config_dir)) != NULL) {
 		char *path = g_strconcat(RIL_CONFIG_DIR "/", config_file, NULL);
+		DBG("Rilconfig handling %s", path);
 		gboolean ok = g_key_file_load_from_file(keyfile, path, 0, &err);
 
 		g_free(path);
 		if (!ok) {
 			g_error_free(err);
-			needsconfig = TRUE;
+			DBG("Rilconfig file skipped");
 			continue;
 		}
 
