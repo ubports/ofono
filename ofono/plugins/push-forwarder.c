@@ -282,10 +282,10 @@ static void pf_modem_watch(struct ofono_modem *modem,
 			return;
 
 		pm->modem = modem;
-		pm->sim_watch_id = __ofono_modem_add_atom_watch(modem,
+		pm->sms_watch_id = __ofono_modem_add_atom_watch(modem,
 			OFONO_ATOM_TYPE_SMS, pf_sms_watch, pm,
 			pf_sms_watch_done);
-		pm->sms_watch_id = __ofono_modem_add_atom_watch(modem,
+		pm->sim_watch_id = __ofono_modem_add_atom_watch(modem,
 			OFONO_ATOM_TYPE_SIM, pf_sim_watch, pm,
 			pf_sim_watch_done);
 		modems = g_slist_append(modems, pm);
