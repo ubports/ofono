@@ -275,6 +275,7 @@ void ril_stk_set_lang()
 			setenv("LANG", pch + strlen(CFG_LANG), 1);
 			DBG("LANG %s", getenv("LANG"));
 		}
+		g_free(contents);
 	}
 }
 

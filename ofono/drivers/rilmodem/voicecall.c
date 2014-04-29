@@ -866,6 +866,7 @@ static void ril_voicecall_remove(struct ofono_voicecall *vc)
 	if (vd->timer_id > 0)
 		g_source_remove(vd->timer_id);
 
+	g_free(vd->tone_queue);
 	g_ril_unref(vd->ril);
 	g_free(vd);
 }
