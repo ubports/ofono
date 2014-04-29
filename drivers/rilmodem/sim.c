@@ -1133,6 +1133,8 @@ static void ril_sim_remove(struct ofono_sim *sim)
 	if (sd->idle_id > 0)
 		g_source_remove(sd->idle_id);
 
+	g_free(sd->aid_str);
+	g_free(sd->app_str);
 	g_ril_unref(sd->ril);
 	g_free(sd);
 }
