@@ -713,8 +713,12 @@ static DBusMessage *set_property_request(struct ofono_call_forwarding *cf,
 	if (ph->number[0] != '\0')
 		cf->driver->registration(cf, type, cls, ph, timeout,
 					set_property_callback, cf);
-	else
+	else {
+		if (cf->query_next == CALL_FORWARDING_TYPE_UNCONDITIONAL)
+			cf->query_end = CALL_FORWARDING_TYPE_NOT_REACHABLE;
+
 		cf->driver->erasure(cf, type, cls, set_property_callback, cf);
+	}
 
 	return NULL;
 }
