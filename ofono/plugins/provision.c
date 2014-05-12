@@ -67,7 +67,39 @@ static GSList *provision_normalize_apn_list(GSList *apns, const char* spn)
 	}
 
 	/*
-	 * 2. if there is an SPN given, save the first internet APN and the
+	 * 2. look for a "primary" provider (i.e. an MNO, not
+	 * an MVNO on the same radio network)
+	 */
+	second_best_internet = best_internet;
+	best_internet = NULL;
+	second_best_mms = best_mms;
+	best_mms = NULL;
+
+	l = apns;
+	while (l != NULL) {
+		GSList *next = l->next;
+		struct ofono_gprs_provision_data *ap = l->data;
+
+		if (ap->provider_primary) {
+			if (ap->type == OFONO_GPRS_CONTEXT_TYPE_INTERNET
+					&& !best_internet) {
+				best_internet = ap;
+			} else if (ap->type == OFONO_GPRS_CONTEXT_TYPE_MMS
+					&& !best_mms) {
+				best_mms = ap;
+			}
+		}
+		l = next;
+	}
+
+	/* no better match found */
+	if (!best_internet)
+		best_internet = second_best_internet;
+	if (!best_mms)
+		best_mms = second_best_mms;
+
+	/*
+	 * 3. if there is an SPN given, save the first internet APN and the
 	 * first MMS APN matching the SPN (partially, case-insensitively)
 	 * */
 	if (spn) {
@@ -102,7 +134,7 @@ static GSList *provision_normalize_apn_list(GSList *apns, const char* spn)
 			best_mms = second_best_mms;
 	}
 
-	/* 3. if none found yet, create APNs with default values */
+	/* 4. if none found yet, create APNs with default values */
 	if (!best_internet) {
 		best_internet = g_try_new0(struct ofono_gprs_provision_data, 1);
 		if (best_internet) {

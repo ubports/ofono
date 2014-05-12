@@ -54,6 +54,7 @@ struct gsm_data {
 	const char *match_mcc;
 	const char *match_mnc;
 	char *provider_name;
+	gboolean provider_primary;
 	GSList *apns;
 	gboolean match_found;
 	gboolean allow_duplicates;
@@ -292,6 +293,8 @@ static void apn_handler(GMarkupParseContext *context, struct gsm_data *gsm,
 
 	ap = g_new0(struct ofono_gprs_provision_data, 1);
 	ap->provider_name = g_strdup(gsm->provider_name);
+	ap->provider_primary = gsm->provider_primary;
+
 	ap->apn = g_strdup(apn);
 	ap->type = OFONO_GPRS_CONTEXT_TYPE_INTERNET;
 	ap->proto = OFONO_GPRS_PROTO_IP;
@@ -460,7 +463,7 @@ static const GMarkupParser provider_parser = {
 
 static void gsm_provider_start(GMarkupParseContext *context,
 					const gchar *element_name,
-					const gchar **atribute_names,
+					const gchar **attribute_names,
 					const gchar **attribute_values,
 					gpointer userdata, GError **error)
 {
@@ -498,14 +501,21 @@ static const GMarkupParser gsm_provider_parser = {
 
 static void toplevel_gsm_start(GMarkupParseContext *context,
 					const gchar *element_name,
-					const gchar **atribute_names,
+					const gchar **attribute_names,
 					const gchar **attribute_values,
 					gpointer userdata, GError **error)
 {
 	struct gsm_data *gsm = userdata;
 
-	if (g_str_equal(element_name, "provider"))
+	if (g_str_equal(element_name, "provider")) {
+		g_markup_collect_attributes(element_name, attribute_names,
+				attribute_values, error,
+				G_MARKUP_COLLECT_BOOLEAN | G_MARKUP_COLLECT_OPTIONAL,
+				"primary", &gsm->provider_primary,
+				G_MARKUP_COLLECT_INVALID);
+
 		g_markup_parse_context_push(context, &gsm_provider_parser, gsm);
+	}
 }
 
 static void toplevel_gsm_end(GMarkupParseContext *context,
@@ -526,7 +536,7 @@ static const GMarkupParser toplevel_gsm_parser = {
 
 static void toplevel_cdma_start(GMarkupParseContext *context,
 					const gchar *element_name,
-					const gchar **atribute_names,
+					const gchar **attribute_names,
 					const gchar **attribute_values,
 					gpointer userdata, GError **error)
 {
