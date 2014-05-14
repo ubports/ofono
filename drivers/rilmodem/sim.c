@@ -103,6 +103,7 @@ struct sim_data {
 	enum ofono_sim_password_type passwd_state;
 	guint card_state;
 	guint idle_id;
+	gboolean removed;
 };
 
 static void ril_pin_change_state_cb(struct ril_msg *message,
@@ -179,6 +180,15 @@ static void ril_file_info_cb(struct ril_msg *message, gpointer user_data)
 	guchar file_status = EF_STATUS_VALID;
 
 	DBG("");
+
+	/* In case sim card has been removed prior to this callback has been
+	 * called we must not call the core call back method as otherwise the
+	 * core will crash.
+	 */
+	if (sd->removed == TRUE) {
+		ofono_error("RIL_CARDSTATE_ABSENT");
+		return;
+	}
 
 	if (message->error == RIL_E_SUCCESS) {
 		decode_ril_error(&error, "OK");
@@ -659,6 +669,7 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 			if (sd->card_state != RIL_CARDSTATE_PRESENT) {
 				ofono_sim_inserted_notify(sim, TRUE);
 				sd->card_state = RIL_CARDSTATE_PRESENT;
+				sd->removed = FALSE;
 			}
 		}
 
@@ -716,6 +727,8 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 			DBG("sd->card_state:%u,status.card_state:%u,",
 				sd->card_state, status.card_state);
 			ofono_sim_inserted_notify(sim, FALSE);
+			if (sd->card_state == RIL_CARDSTATE_PRESENT)
+				sd->removed = TRUE;
 			sd->card_state = RIL_CARDSTATE_ABSENT;
 
 			if (current_passwd)
@@ -1100,6 +1113,7 @@ static int ril_sim_probe(struct ofono_sim *sim, unsigned int vendor,
 	sd->passwd_type = OFONO_SIM_PASSWORD_NONE;
 	sd->sim_registered = FALSE;
 	sd->card_state = RIL_CARDSTATE_ABSENT;
+	sd->removed = FALSE;
 
 	for (i = 0; i < OFONO_SIM_PASSWORD_INVALID; i++)
 		sd->retries[i] = -1;
