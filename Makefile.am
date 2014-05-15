@@ -727,7 +727,8 @@ test_scripts = test/backtrace \
 		test/hangup-call \
 		test/display-icon \
 		test/set-msisdn \
-		test/test-voicecallagent
+		test/test-voicecallagent \
+		test/get-network-time
 
 if TEST
 testdir = $(pkglibdir)/test
