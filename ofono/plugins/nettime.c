@@ -188,11 +188,11 @@ static int nettime_probe(struct ofono_nettime_context *context)
 					NULL, // GDBusPropertyTable *properties
 					NULL, // user data
 					NULL)) { // GDBusDestroyFunction destroy
-		ofono_error("Networkt time: Could not register interface %s, path %s",
+		ofono_error("Network time: Could not register interface %s, path %s",
 				OFONO_NETWORK_TIME_INTERFACE, path);
 		return 1;
 	} else {
-		ofono_info("Network time: Registered inteface %s, path %s",
+		ofono_info("Network time: Registered interface %s, path %s",
 				OFONO_NETWORK_TIME_INTERFACE, path);
 	}
 
@@ -235,6 +235,12 @@ static void nettime_info_received(struct ofono_nettime_context *context,
 
 	netreg = __ofono_atom_get_data(__ofono_modem_find_atom(
 						context->modem, OFONO_ATOM_TYPE_NETREG));
+
+	if (!(ofono_netreg_get_mcc(netreg) && ofono_netreg_get_mnc(netreg))) {
+		DBG("Incomplete network time received, ignoring");
+		return;
+	}
+
 	ntd->path = ofono_modem_get_path(context->modem);
 	ntd->mcc = ofono_netreg_get_mcc(netreg);
 	ntd->mnc = ofono_netreg_get_mnc(netreg);
