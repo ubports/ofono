@@ -278,6 +278,8 @@ static void generic_cb(struct ril_msg *message, gpointer user_data)
 	int request = RIL_REQUEST_GET_CURRENT_CALLS;
 	int ret;
 
+	ofono_info("request:%d",message->req);
+
 	if (message->error == RIL_E_SUCCESS) {
 		decode_ril_error(&error, "OK");
 	} else {
