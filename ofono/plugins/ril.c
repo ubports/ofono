@@ -313,6 +313,8 @@ static void ril_set_online(struct ofono_modem *modem, ofono_bool_t online,
 	parcel_w_int32(&rilp, 1);	/* Number of params */
 	parcel_w_int32(&rilp, online);	/* Radio ON = 1, Radio OFF = 0 */
 	DBG("1");
+	ofono_info("RIL_REQUEST_RADIO_POWER %d",online);
+
 	ret = g_ril_send(ril->modem, RIL_REQUEST_RADIO_POWER, rilp.data,
 				rilp.size, ril_set_online_cb, cbd, g_free);
 
@@ -521,6 +523,7 @@ static int ril_disable(struct ofono_modem *modem)
 	parcel_w_int32(&rilp, 1); /* size of array */
 	parcel_w_int32(&rilp, 0); /* POWER=OFF */
 
+	ofono_info("RIL_REQUEST_RADIO_POWER OFF");
 	/* fire and forget i.e. not waiting for the callback*/
 	ret = g_ril_send(ril->modem, request, rilp.data,
 			 rilp.size, NULL, NULL, NULL);
