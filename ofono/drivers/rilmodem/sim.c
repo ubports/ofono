@@ -707,6 +707,7 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 			parcel_w_int32(&rilp, 1);
 			parcel_w_int32(&rilp, 1);
 
+			ofono_info("RIL_REQUEST_RADIO_POWER ON");
 			g_ril_send(sd->ril,
 					RIL_REQUEST_RADIO_POWER,
 					rilp.data,
@@ -726,6 +727,7 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 		if (status.card_state == RIL_CARDSTATE_ABSENT) {
 			DBG("sd->card_state:%u,status.card_state:%u,",
 				sd->card_state, status.card_state);
+			ofono_info("RIL_CARDSTATE_ABSENT");
 			ofono_sim_inserted_notify(sim, FALSE);
 			if (sd->card_state == RIL_CARDSTATE_PRESENT)
 				sd->removed = TRUE;
