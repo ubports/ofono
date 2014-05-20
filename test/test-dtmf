@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
 import sys
 import dbus
@@ -18,12 +18,12 @@ if (len(sys.argv) == 2):
 manager = dbus.Interface(bus.get_object('org.ofono', modem),
 						'org.ofono.VoiceCallManager')
 
-print "Play single tones from 0 to 9"
+print("Play single tones from 0 to 9")
 zeroAscii = ord('0')
 for x in range(0, 9):
 	manager.SendTones(chr(zeroAscii + x))
 
-print "Play longer strings"
+print("Play longer strings")
 manager.SendTones("123")
 manager.SendTones("1234567890*#p987")
 manager.SendTones("123")
