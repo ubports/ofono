@@ -45,6 +45,12 @@ Properties	array{string} Features [readonly]
 				"voice-recognition"
 				"attach-voice-tag"
 				"echo-canceling-and-noise-reduction"
+				"three-way-calling"
+				"release-all-held"
+				"release-specified-active-call"
+				"private-chat"
+				"create-multiparty"
+				"transfer"
 
 		boolean InbandRinging [readonly]
 
@@ -70,3 +76,7 @@ Properties	array{string} Features [readonly]
 
 			The current charge level of the battery.  The value
 			can be between 0 and 5 respectively.
+
+		array{string} SubscriberNumbers [readonly]
+
+			List of subscriber numbers provided by the AG.
