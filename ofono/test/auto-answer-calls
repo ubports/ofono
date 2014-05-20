@@ -1,6 +1,6 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
-import gobject
+from gi.repository import GLib
 
 import dbus
 import dbus.mainloop.glib
@@ -12,23 +12,23 @@ def answer_call(path):
 						'org.ofono.VoiceCall')
 	time.sleep(2)	
 	call.Answer()
-	print "    Voice Call [ %s ] Answered" % (path)
+	print("    Voice Call [ %s ] Answered" % (path))
 
 def voicecalls_call_added(path, properties):
-	print "    Voice Call [ %s ] Added" % (path)
+	print("    Voice Call [ %s ] Added" % (path))
 
 	for key in properties.keys():
 		val = str(properties[key])
-		print "        %s = %s" % (key, val)
-	print
+		print("        %s = %s" % (key, val))
+	print()
 
 	state = properties["State"]
 	if state == "incoming":
 		answer_call(path)
 
 def voicecalls_call_removed(path):
-	print "    Voice Call [ %s ] Removed" % (path)
-	print
+	print("    Voice Call [ %s ] Removed" % (path))
+	print()
 
 if __name__ == "__main__":
 	global vcmanager
@@ -43,7 +43,7 @@ if __name__ == "__main__":
 	modems = manager.GetModems()
 	modem = modems[0][0]
 
-	print "Using modem %s" % modem
+	print("Using modem %s" % modem)
 
 	vcmanager = dbus.Interface(bus.get_object('org.ofono', modem),
 						'org.ofono.VoiceCallManager')
@@ -52,6 +52,6 @@ if __name__ == "__main__":
 
 	vcmanager.connect_to_signal("CallRemoved", voicecalls_call_removed)
 
-	mainloop = gobject.MainLoop()
+	mainloop = GLib.MainLoop()
 	mainloop.run()
 
