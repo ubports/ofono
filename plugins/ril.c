@@ -113,12 +113,11 @@ static void ril_debug(const char *str, void *user_data)
 
 static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 {
+	DBG("error=%d", message->error);
 	struct ofono_modem *modem = user_data;
 	struct ril_data *ril = ofono_modem_get_data(modem);
 	struct sim_status status;
 	struct sim_app *apps[MAX_UICC_APPS];
-
-	DBG("");
 
 	/*
 	 * ril.h claims this should NEVER fail!
@@ -189,6 +188,7 @@ static int send_get_sim_status(struct ofono_modem *modem)
 
 static int ril_probe(struct ofono_modem *modem)
 {
+	DBG("");
 	struct ril_data *ril = NULL;
 
 	ril = g_try_new0(struct ril_data, 1);
@@ -211,8 +211,8 @@ error:
 
 static void ril_remove(struct ofono_modem *modem)
 {
+	DBG("");
 	struct ril_data *ril = ofono_modem_get_data(modem);
-
 
 	ofono_modem_set_data(modem, NULL);
 
@@ -229,7 +229,7 @@ static void ril_remove(struct ofono_modem *modem)
 
 static void ril_pre_sim(struct ofono_modem *modem)
 {
-	DBG("enter");
+	DBG("");
 	struct ril_data *ril = ofono_modem_get_data(modem);
 	struct ofono_sim *sim;
 
@@ -242,6 +242,7 @@ static void ril_pre_sim(struct ofono_modem *modem)
 
 static void ril_post_sim(struct ofono_modem *modem)
 {
+	DBG("");
 	struct ril_data *ril = ofono_modem_get_data(modem);
 	struct ofono_gprs *gprs;
 	struct ofono_gprs_context *gc;
@@ -277,7 +278,7 @@ static void ril_post_sim(struct ofono_modem *modem)
 
 static void ril_post_online(struct ofono_modem *modem)
 {
-	DBG("enter");
+	DBG("");
 	struct ril_data *ril = ofono_modem_get_data(modem);
 
 	ofono_call_volume_create(modem, 0, "rilmodem", ril->modem);
@@ -290,7 +291,7 @@ static void ril_post_online(struct ofono_modem *modem)
 
 static void ril_set_online_cb(struct ril_msg *message, gpointer user_data)
 {
-	DBG("enter");
+	DBG("");
 	struct cb_data *cbd = user_data;
 	ofono_modem_online_cb_t cb = cbd->cb;
 
@@ -312,14 +313,13 @@ static void ril_set_online(struct ofono_modem *modem, ofono_bool_t online,
 	parcel_init(&rilp);
 	parcel_w_int32(&rilp, 1);	/* Number of params */
 	parcel_w_int32(&rilp, online);	/* Radio ON = 1, Radio OFF = 0 */
-	DBG("1");
-	ofono_info("RIL_REQUEST_RADIO_POWER %d",online);
 
+	ofono_info("RIL_REQUEST_RADIO_POWER %d", online);
 	ret = g_ril_send(ril->modem, RIL_REQUEST_RADIO_POWER, rilp.data,
 				rilp.size, ril_set_online_cb, cbd, g_free);
 
 	parcel_free(&rilp);
-	DBG("2");
+	DBG("RIL_REQUEST_RADIO_POWER done");
 	if (ret <= 0) {
 		g_free(cbd);
 		CALLBACK_WITH_FAILURE(callback, data);
@@ -357,6 +357,7 @@ static int ril_screen_state(struct ofono_modem *modem, ofono_bool_t state)
 static gboolean display_changed(DBusConnection *conn,
 					DBusMessage *message, void *user_data)
 {
+	DBG("");
 	struct ofono_modem *modem = user_data;
 	DBusMessageIter iter;
 	const char *value;
@@ -379,6 +380,7 @@ static gboolean display_changed(DBusConnection *conn,
 
 static void mce_connect(DBusConnection *conn, void *user_data)
 {
+	DBG("");
 	signal_watch = g_dbus_add_signal_watch(conn,
 						MCE_SERVICE, NULL,
 						MCE_SIGNAL_IF,
@@ -389,12 +391,15 @@ static void mce_connect(DBusConnection *conn, void *user_data)
 
 static void mce_disconnect(DBusConnection *conn, void *user_data)
 {
+	DBG("");
 	g_dbus_remove_watch(conn, signal_watch);
 	signal_watch = 0;
 }
 
 static void ril_connected(struct ril_msg *message, gpointer user_data)
 {
+	DBG("");
+
 	struct ofono_modem *modem = (struct ofono_modem *) user_data;
 	struct ril_data *ril = ofono_modem_get_data(modem);
 
@@ -414,6 +419,7 @@ static void ril_connected(struct ril_msg *message, gpointer user_data)
 
 static gboolean ril_re_init(gpointer user_data)
 {
+	DBG("");
 	if (reconnecting) {
 		ril_init();
 		return TRUE;
@@ -469,7 +475,7 @@ void ril_switchUser()
 
 static int ril_enable(struct ofono_modem *modem)
 {
-	DBG("enter");
+	DBG("%p", modem);
 	struct ril_data *ril = ofono_modem_get_data(modem);
 
 	ril->have_sim = FALSE;
@@ -512,12 +518,12 @@ static int ril_enable(struct ofono_modem *modem)
 
 static int ril_disable(struct ofono_modem *modem)
 {
+	DBG("%p", modem);
+
 	struct ril_data *ril = ofono_modem_get_data(modem);
 	struct parcel rilp;
 	int request = RIL_REQUEST_RADIO_POWER;
 	guint ret;
-
-	DBG("%p", modem);
 
 	parcel_init(&rilp);
 	parcel_w_int32(&rilp, 1); /* size of array */
@@ -567,7 +573,7 @@ static struct ofono_modem_driver ril_driver = {
  */
 static int ril_init(void)
 {
-	DBG("enter");
+	DBG("");
 	int retval = 0;
 	struct ofono_modem *modem;
 
