@@ -100,7 +100,7 @@ static void ril_gprs_context_call_list_changed(struct ril_msg *message,
 		call = (struct data_call *) iterator->data;
 
 		if (call->status != 0)
-			ofono_error("data call status:%d", call->status);
+			ofono_info("data call status:%d", call->status);
 
 		if (call->active == DATA_CALL_INACTIVE) {
 			disconnect = TRUE;
@@ -134,12 +134,12 @@ static void ril_gprs_context_call_list_changed(struct ril_msg *message,
 
 
 			if (call->dnses)
-				DBG("JPO dnses:%s",call->dnses);
+				DBG("dnses:%s", call->dnses);
 
 			dns_addresses =
 				(const char **)(call->dnses ?
-				g_strsplit((const gchar *)call->dnses, " ", 3) :
-									NULL);
+				g_strsplit((const gchar*)call->dnses, " ", 3)
+									: NULL);
 
 			ofono_gprs_context_set_ipv4_dns_servers(gc,
 								dns_addresses);
@@ -240,7 +240,7 @@ static void ril_setup_data_call_cb(struct ril_msg *message, gpointer user_data)
 	ofono_gprs_context_set_ipv4_gateway(gc, reply->gateways[0]);
 
 	ofono_gprs_context_set_ipv4_dns_servers(gc,
-						(const char **) reply->dns_addresses);
+					(const char **) reply->dns_addresses);
 
 error:
 	g_ril_reply_free_setup_data_call(reply);
@@ -250,8 +250,8 @@ error:
 }
 
 static void ril_gprs_context_activate_primary(struct ofono_gprs_context *gc,
-						const struct ofono_gprs_primary_context *ctx,
-						ofono_gprs_context_cb_t cb, void *data)
+				const struct ofono_gprs_primary_context *ctx,
+				ofono_gprs_context_cb_t cb, void *data)
 {
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 	struct cb_data *cbd = cb_data_new(cb, data);
@@ -315,7 +315,8 @@ error:
 	}
 }
 
-static void ril_deactivate_data_call_cb(struct ril_msg *message, gpointer user_data)
+static void ril_deactivate_data_call_cb(struct ril_msg *message,
+						gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
 	ofono_gprs_context_cb_t cb = cbd->cb;
@@ -353,7 +354,8 @@ static void ril_deactivate_data_call_cb(struct ril_msg *message, gpointer user_d
 
 static void ril_gprs_context_deactivate_primary(struct ofono_gprs_context *gc,
 						unsigned int id,
-						ofono_gprs_context_cb_t cb, void *data)
+						ofono_gprs_context_cb_t cb,
+						void *data)
 {
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 	struct cb_data *cbd = NULL;
@@ -450,11 +452,10 @@ static void ril_gprs_context_remove(struct ofono_gprs_context *gc)
 	if (gcd->state != STATE_IDLE)
 		ril_gprs_context_detach_shutdown(gc, 0);
 
-
 	ofono_gprs_context_set_data(gc, NULL);
-	
+
 	if (gcd->regid != -1)
-		g_ril_unregister(gcd->ril,gcd->regid);
+		g_ril_unregister(gcd->ril, gcd->regid);
 
 	g_ril_unref(gcd->ril);
 	g_free(gcd);
