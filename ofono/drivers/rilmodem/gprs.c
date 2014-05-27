@@ -90,7 +90,8 @@ static void ril_gprs_state_change(struct ril_msg *message, gpointer user_data)
 {
 	struct ofono_gprs *gprs = user_data;
 
-	g_assert(message->req == RIL_UNSOL_RESPONSE_VOICE_NETWORK_STATE_CHANGED);
+	g_assert(message->req ==
+				RIL_UNSOL_RESPONSE_VOICE_NETWORK_STATE_CHANGED);
 
 	DBG("");
 
@@ -188,7 +189,7 @@ static gboolean ril_roaming_allowed()
 	if (error)
 		g_error_free(error);
 
-	storage_close(imsi, "gprs",settings, FALSE);
+	storage_close(imsi, "gprs", settings, FALSE);
 
 	return roaming_allowed;
 }
@@ -224,7 +225,9 @@ static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
 		goto error;
 	}
 
-	if ((gd->fake_timer_id > 0) && ((gd->true_status != status) ||
+	if ((gd->fake_timer_id > 0) &&
+			((status == (NETWORK_REGISTRATION_STATUS_REGISTERED
+			|| NETWORK_REGISTRATION_STATUS_ROAMING)) ||
 			!(gd->ofono_attached))) {
 		g_source_remove(gd->fake_timer_id);
 		gd->true_status = -1;
@@ -249,11 +252,11 @@ static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
 	if (status == NETWORK_REGISTRATION_STATUS_ROAMING)
 		status = check_if_really_roaming(status);
 
-	DBG(" attached:%d, status:%d",gd->ofono_attached,status);
+	DBG(" attached:%d, status:%d", gd->ofono_attached, status);
 
 	if (!gd->ofono_attached) {
 		if (status == NETWORK_REGISTRATION_STATUS_ROAMING) {
-			if(!gd->notified) {
+			if (!gd->notified) {
 				if (ril_roaming_allowed() == FALSE)
 					ofono_gprs_detached_notify(gprs);
 
@@ -269,10 +272,10 @@ static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
 			if (status == NETWORK_REGISTRATION_STATUS_SEARCHING &&
 								!gd->notified)
 				/*
-				 * This prevents core ending
+				 * This is a hack that prevents core ending
 				 * into eternal loop with driver
 				 */
-				decode_ril_error(&error, "FAIL"); //HACKHACK
+				decode_ril_error(&error, "FAIL");
 
 			ofono_gprs_status_notify(gprs, status);
 		}
@@ -392,7 +395,7 @@ static void ril_gprs_registration_status(struct ofono_gprs *gprs,
 	g_ril_print_request_no_args(gd->ril, ret, request);
 
 	if (ret <= 0) {
-		ofono_error("Send RIL_REQUEST_DATA_RESTISTRATION_STATE failed.");
+		ofono_error("Send RIL_REQUEST_DATA_RESTISTRATION_STATE fail.");
 		g_free(cbd);
 
 		if (cb)
