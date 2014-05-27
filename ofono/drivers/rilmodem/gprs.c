@@ -300,7 +300,12 @@ static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
 		}
 
 		gd->true_status = status;
-		status = NETWORK_REGISTRATION_STATUS_REGISTERED;
+
+		if (gd->rild_status == NETWORK_REGISTRATION_STATUS_ROAMING)
+			status = NETWORK_REGISTRATION_STATUS_ROAMING;
+		else
+			status = NETWORK_REGISTRATION_STATUS_REGISTERED;
+
 		gd->rild_status = status;
 	}
 
