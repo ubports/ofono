@@ -45,6 +45,12 @@
 
 #include "rilmodem.h"
 
+enum data_call_state {
+	DATA_CALL_INACTIVE,
+	DATA_CALL_LINK_DOWN,
+	DATA_CALL_ACTIVE,
+};
+
 enum state {
 	STATE_IDLE,
 	STATE_ENABLING,
@@ -62,20 +68,14 @@ struct gprs_context_data {
 
 static void ril_gprs_context_deactivate_primary(struct ofono_gprs_context *gc,
 						unsigned int id,
-						ofono_gprs_context_cb_t cb, void *data);
+						ofono_gprs_context_cb_t cb,
+						void *data);
 
 static void set_context_disconnected(struct gprs_context_data *gcd)
 {
-	DBG("");
-
 	gcd->active_ctx_cid = -1;
 	gcd->active_rild_cid = -1;
 	gcd->state = STATE_IDLE;
-}
-
-static void disconnect_context(struct ofono_gprs_context *gc)
-{
-	ril_gprs_context_deactivate_primary(gc, 0, NULL, NULL);
 }
 
 static void ril_gprs_context_call_list_changed(struct ril_msg *message,
@@ -85,7 +85,6 @@ static void ril_gprs_context_call_list_changed(struct ril_msg *message,
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 	struct data_call *call = NULL;
 	struct unsol_data_call_list *unsol;
-	gboolean active_cid_found = FALSE;
 	gboolean disconnect = FALSE;
 	GSList *iterator = NULL;
 	struct ofono_error error;
@@ -100,19 +99,55 @@ static void ril_gprs_context_call_list_changed(struct ril_msg *message,
 	for (iterator = unsol->call_list; iterator; iterator = iterator->next) {
 		call = (struct data_call *) iterator->data;
 
-		if (call->cid == gcd->active_rild_cid) {
-			active_cid_found = TRUE;
+		if (call->status != 0)
+			ofono_info("data call status:%d", call->status);
 
-			if (call->active == 0) {
-				disconnect = TRUE;
-				ofono_gprs_context_deactivated(gc, gcd->active_ctx_cid);
+		if (call->active == DATA_CALL_INACTIVE) {
+			disconnect = TRUE;
+			ofono_gprs_context_deactivated(gc, gcd->active_ctx_cid);
+			break;
+		}
+
+		if (call->active == DATA_CALL_ACTIVE) {
+			char **split_ip_addr = NULL;
+			const char **dns_addresses;
+
+			if (call->ifname) {
+				ofono_gprs_context_set_interface(gc,
+								call->ifname);
 			}
 
+			if (call->addresses) {
+				ofono_gprs_context_set_ipv4_netmask(gc,
+					ril_util_get_netmask(call->addresses));
+
+				split_ip_addr = g_strsplit(call->addresses,
+									"/", 2);
+				ofono_gprs_context_set_ipv4_address(gc,
+							split_ip_addr[0], TRUE);
+			}
+
+			if (call->gateways) {
+				ofono_gprs_context_set_ipv4_gateway(gc,
+								call->gateways);
+			}
+
+
+			if (call->dnses)
+				DBG("dnses:%s", call->dnses);
+
+			dns_addresses =
+				(const char **)(call->dnses ?
+				g_strsplit((const gchar*)call->dnses, " ", 3)
+									: NULL);
+
+			ofono_gprs_context_set_ipv4_dns_servers(gc,
+								dns_addresses);
 			break;
 		}
 	}
 
-	if (disconnect || active_cid_found == FALSE) {
+	if (disconnect) {
 		ofono_error("Clearing active context");
 		set_context_disconnected(gcd);
 	}
@@ -149,10 +184,7 @@ static void ril_setup_data_call_cb(struct ril_msg *message, gpointer user_data)
 	gcd->active_rild_cid = reply->cid;
 
 	if (error.type != OFONO_ERROR_TYPE_NO_ERROR) {
-		if (gcd->active_rild_cid != -1) {
-			ofono_error("no active context. disconnect");
-			disconnect_context(gc);
-		}
+		ofono_error("no active context. disconnect");
 		goto error;
 	}
 
@@ -164,7 +196,6 @@ static void ril_setup_data_call_cb(struct ril_msg *message, gpointer user_data)
 		error.type = OFONO_ERROR_TYPE_FAILURE;
 		error.error = reply->status;
 
-		set_context_disconnected(gcd);
 		goto error;
 	}
 
@@ -172,7 +203,7 @@ static void ril_setup_data_call_cb(struct ril_msg *message, gpointer user_data)
 	 * TODO: consier moving this into parse_data_reply
 	 *
 	 * Note - the address may optionally include a prefix size
-	 * ( Eg. "/30" ).  As this confuses NetworkManager, we
+	 * ( Eg. "/30" ).  As this may confuse client, we
 	 * explicitly strip any prefix after calculating the netmask.
 	 */
 	split_ip_addr = g_strsplit(reply->ip_addrs[0], "/", 2);
@@ -209,7 +240,7 @@ static void ril_setup_data_call_cb(struct ril_msg *message, gpointer user_data)
 	ofono_gprs_context_set_ipv4_gateway(gc, reply->gateways[0]);
 
 	ofono_gprs_context_set_ipv4_dns_servers(gc,
-						(const char **) reply->dns_addresses);
+					(const char **) reply->dns_addresses);
 
 error:
 	g_ril_reply_free_setup_data_call(reply);
@@ -219,8 +250,8 @@ error:
 }
 
 static void ril_gprs_context_activate_primary(struct ofono_gprs_context *gc,
-						const struct ofono_gprs_primary_context *ctx,
-						ofono_gprs_context_cb_t cb, void *data)
+				const struct ofono_gprs_primary_context *ctx,
+				ofono_gprs_context_cb_t cb, void *data)
 {
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 	struct cb_data *cbd = cb_data_new(cb, data);
@@ -284,7 +315,8 @@ error:
 	}
 }
 
-static void ril_deactivate_data_call_cb(struct ril_msg *message, gpointer user_data)
+static void ril_deactivate_data_call_cb(struct ril_msg *message,
+						gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
 	ofono_gprs_context_cb_t cb = cbd->cb;
@@ -322,7 +354,8 @@ static void ril_deactivate_data_call_cb(struct ril_msg *message, gpointer user_d
 
 static void ril_gprs_context_deactivate_primary(struct ofono_gprs_context *gc,
 						unsigned int id,
-						ofono_gprs_context_cb_t cb, void *data)
+						ofono_gprs_context_cb_t cb,
+						void *data)
 {
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 	struct cb_data *cbd = NULL;
@@ -375,6 +408,7 @@ error:
 	if (ret <= 0) {
 		ofono_error("Send RIL_REQUEST_DEACTIVATE_DATA_CALL failed.");
 		g_free(cbd);
+
 		if (cb)
 			CALLBACK_WITH_FAILURE(cb, data);
 	}
@@ -415,14 +449,13 @@ static void ril_gprs_context_remove(struct ofono_gprs_context *gc)
 
 	DBG("");
 
-	if (gcd->state != STATE_IDLE) {
+	if (gcd->state != STATE_IDLE)
 		ril_gprs_context_detach_shutdown(gc, 0);
-	}
 
 	ofono_gprs_context_set_data(gc, NULL);
-	
+
 	if (gcd->regid != -1)
-		g_ril_unregister(gcd->ril,gcd->regid);
+		g_ril_unregister(gcd->ril, gcd->regid);
 
 	g_ril_unref(gcd->ril);
 	g_free(gcd);
@@ -432,9 +465,9 @@ static struct ofono_gprs_context_driver driver = {
 	.name			= RILMODEM,
 	.probe			= ril_gprs_context_probe,
 	.remove			= ril_gprs_context_remove,
-	.activate_primary       = ril_gprs_context_activate_primary,
-	.deactivate_primary     = ril_gprs_context_deactivate_primary,
-	.detach_shutdown        = ril_gprs_context_detach_shutdown,
+	.activate_primary	= ril_gprs_context_activate_primary,
+	.deactivate_primary	= ril_gprs_context_deactivate_primary,
+	.detach_shutdown	= ril_gprs_context_detach_shutdown,
 };
 
 void ril_gprs_context_init(void)
