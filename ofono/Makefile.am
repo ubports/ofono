@@ -720,6 +720,7 @@ test_scripts = test/backtrace \
 		test/set-context-property \
 		test/test-gnss \
 		test/swap-calls \
+		test/transfer-call \
 		test/release-and-answer \
 		test/release-and-swap \
 		test/hold-and-answer \
