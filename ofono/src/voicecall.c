@@ -558,6 +558,11 @@ static DBusMessage *voicecall_hangup(DBusConnection *conn,
 	struct ofono_voicecall *vc = v->vc;
 	struct ofono_call *call = v->call;
 	gboolean single_call = vc->call_list->next == 0;
+	struct tone_queue_entry *tone_entry = NULL;
+
+	/* clear any remaining tones */
+	while ((tone_entry = g_queue_peek_head(vc->toneq)))
+		tone_request_finish(vc, tone_entry, ENOENT, TRUE);
 
 	if (vc->pending || vc->pending_em)
 		return __ofono_error_busy(msg);
