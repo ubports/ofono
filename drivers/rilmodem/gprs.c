@@ -256,7 +256,7 @@ static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
 
 	if (!gd->ofono_attached) {
 		if (status == NETWORK_REGISTRATION_STATUS_ROAMING) {
-			if (!gd->notified) {
+			if (!gd->notified && cb) {
 				if (ril_roaming_allowed() == FALSE)
 					ofono_gprs_detached_notify(gprs);
 
@@ -270,7 +270,8 @@ static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
 			}
 		} else {
 			if (status == NETWORK_REGISTRATION_STATUS_SEARCHING &&
-								!gd->notified)
+								!gd->notified &&
+								cb)
 				/*
 				 * This is a hack that prevents core ending
 				 * into eternal loop with driver
@@ -280,7 +281,9 @@ static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
 			ofono_gprs_status_notify(gprs, status);
 		}
 
-		gd->notified = TRUE;
+		if (cb)
+			gd->notified = TRUE;
+
 		gd->rild_status = status;
 		goto error;
 	}
