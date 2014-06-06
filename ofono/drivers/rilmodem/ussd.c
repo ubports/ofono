@@ -75,12 +75,30 @@ static void ril_ussd_request(struct ofono_ussd *ussd, int dcs,
 		if (charset == SMS_CHARSET_7BIT) {
 			unsigned char unpacked_buf[182] = "";
 			long written;
+			int length;
 
 			unpack_7bit_own_buf(pdu, len, 0, TRUE,
 					sizeof(unpacked_buf), &written, 0,
 					unpacked_buf);
 
 			if (written >= 1) {
+				/*
+				 * When USSD was packed, additional CR
+				   might have been added (according to
+				   23.038 6.1.2.3.1). So if the last
+				   character is CR, it should be removed
+				   here. And in addition written doesn't
+				   contain correct length...
+
+				   Over 2 characters long USSD string must
+				   end with # (checked in
+				   valid_ussd_string() ), so it should be
+				   safe to remove extra CR.
+				*/
+				length = strlen((char *)unpacked_buf);
+				if (length > 2 &&
+				    unpacked_buf[length-1] == '\r')
+					unpacked_buf[length-1] = 0;
 				struct parcel rilp;
 				parcel_init(&rilp);
 				parcel_w_string(&rilp, (char *)unpacked_buf);
