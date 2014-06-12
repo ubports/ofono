@@ -64,7 +64,6 @@ This package provides default configs for ofono
 autoreconf --force --install
 
 %configure --disable-static \
-    --enable-dundee \
     --enable-test \
     --with-systemdunitdir="/%{_lib}/systemd/system"
 
@@ -105,7 +104,6 @@ systemctl daemon-reload ||:
 %{_sbindir}/*
 /%{_lib}/systemd/system/network.target.wants/ofono.service
 /%{_lib}/systemd/system/ofono.service
-/%{_lib}/systemd/system/dundee.service
 %dir %{_sysconfdir}/ofono/
 %dir %{_sysconfdir}/ofono/push_forwarder.d
 # This file is part of phonesim and not needed with ofono.
