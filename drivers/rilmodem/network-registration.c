@@ -669,6 +669,7 @@ static void ril_netreg_remove(struct ofono_netreg *netreg)
 		g_source_remove(nd->nitz_timeout);
 
 	ofono_netreg_set_data(netreg, NULL);
+	current_netreg = NULL;
 
 	if (nd->timer_id > 0)
 		g_source_remove(nd->timer_id);
