@@ -38,10 +38,18 @@
 #include <ofono/log.h>
 #include <ofono/modem.h>
 #include <ofono/sms.h>
+#include <ofono/types.h>
+#include <ofono/sim.h>
+
 #include "smsutil.h"
 #include "util.h"
-
 #include "rilmodem.h"
+#include "simutil.h"
+
+#define SIM_EFSMS_FILEID	0x6F3C
+#define EFSMS_LENGTH		176
+
+unsigned char path[4] = {0x3F, 0x00, 0x7F, 0x10};
 
 struct sms_data {
 	GRil *ril;
@@ -345,6 +353,103 @@ error:
 	ofono_error("Unable to parse NEW_SMS notification");
 }
 
+static void ril_new_sms_on_sim_cb(struct ril_msg *message, gpointer user_data)
+{
+	DBG("");
+	if (message->error == RIL_E_SUCCESS)
+		ofono_info("sms deleted from sim");
+	else
+		ofono_error("deleting sms from sim failed");
+}
+
+static void ril_request_delete_sms_om_sim(struct ofono_sms *sms,int record)
+{
+
+	struct sms_data *data = ofono_sms_get_data(sms);
+	struct parcel rilp;
+	int request = RIL_REQUEST_DELETE_SMS_ON_SIM;
+	int ret;
+
+	DBG("Deleting record: %d", record);
+
+	parcel_init(&rilp);
+	parcel_w_int32(&rilp, 1); /* Number of int32 values in array */
+	parcel_w_int32(&rilp, record);
+
+	ret = g_ril_send(data->ril, request, rilp.data,
+				rilp.size, ril_new_sms_on_sim_cb, NULL, NULL);
+
+	parcel_free(&rilp);
+
+	if (ret <= 0)
+		ofono_error("cannot delete sms from sim");
+}
+
+static void ril_read_sms_on_sim_cb(const struct ofono_error *error,
+					const unsigned char *sdata,
+					int length, void *data)
+{
+
+	struct cb_data *cbd = data;
+	struct ofono_sms *sms = cbd->user;
+	int sms_len,i,record;
+	unsigned int smsc_len;
+
+	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
+		ofono_error("cannot read sms from sim");
+		goto exit;
+	}
+
+	sms_len = strlen(sdata);
+
+	/*
+	 * It seems when reading EFsms RIL returns the whole record including
+	 * the first status byte therefore we ignore that as we are only
+	 * interested of the following pdu
+	 */
+	/* The first octect in the pdu contains the SMSC address length
+	 * which is the X following octects it reads. We add 1 octet to
+	 * the read length to take into account this read octet in order
+	 * to calculate the proper tpdu length.
+	 */
+	smsc_len = sdata[1] + 1;
+
+	ofono_sms_deliver_notify(sms, sdata + 1, length - 1,
+				 length - smsc_len - 1);
+
+	record = (int)cbd->data;
+	ril_request_delete_sms_om_sim(sms,record);
+
+exit:
+	if (cbd)
+		g_free(cbd);
+
+}
+
+static void ril_new_sms_on_sim(struct ril_msg *message, gpointer user_data)
+{
+	struct ofono_sms *sms = user_data;
+	struct parcel rilp;
+	int record;
+
+	ofono_info("new sms on sim");
+
+	ril_util_init_parcel(message, &rilp);
+
+	/* data length of the response */
+	record = parcel_r_int32(&rilp);
+
+	if (record > 0) {
+		record = parcel_r_int32(&rilp);
+		struct cb_data *cbd = cb_data_new2(sms, NULL, record);
+		DBG(":%d", record);
+		get_sim_driver()->read_file_linear(get_sim(), SIM_EFSMS_FILEID,
+						record, EFSMS_LENGTH, path,
+						sizeof(path),
+						ril_read_sms_on_sim_cb, cbd);
+	}
+}
+
 static gboolean ril_delayed_register(gpointer user_data)
 {
 	struct ofono_sms *sms = user_data;
@@ -360,6 +465,8 @@ static gboolean ril_delayed_register(gpointer user_data)
 			ril_sms_notify, sms);
 	g_ril_register(data->ril, RIL_UNSOL_RESPONSE_NEW_SMS_STATUS_REPORT,
 			ril_sms_notify, sms);
+	g_ril_register(data->ril, RIL_UNSOL_RESPONSE_NEW_SMS_ON_SIM,
+			ril_new_sms_on_sim, sms);
 
 	/* This makes the timeout a single-shot */
 	return FALSE;
