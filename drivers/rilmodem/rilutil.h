@@ -149,7 +149,7 @@ static inline struct cb_data *cb_data_new2(void *user, void *cb,
 {
 	struct cb_data *ret;
 
-	ret = g_try_new0(struct cb_data, 1);
+	ret = g_new0(struct cb_data, 1);
 
 	if (ret) {
 		ret->cb = cb;
