@@ -364,7 +364,6 @@ static void ril_new_sms_on_sim_cb(struct ril_msg *message, gpointer user_data)
 
 static void ril_request_delete_sms_om_sim(struct ofono_sms *sms,int record)
 {
-
 	struct sms_data *data = ofono_sms_get_data(sms);
 	struct parcel rilp;
 	int request = RIL_REQUEST_DELETE_SMS_ON_SIM;
@@ -389,7 +388,6 @@ static void ril_read_sms_on_sim_cb(const struct ofono_error *error,
 					const unsigned char *sdata,
 					int length, void *data)
 {
-
 	struct cb_data *cbd = data;
 	struct ofono_sms *sms = cbd->user;
 	int sms_len,i,record;
@@ -421,9 +419,7 @@ static void ril_read_sms_on_sim_cb(const struct ofono_error *error,
 	ril_request_delete_sms_om_sim(sms,record);
 
 exit:
-	if (cbd)
-		g_free(cbd);
-
+	g_free(cbd);
 }
 
 static void ril_new_sms_on_sim(struct ril_msg *message, gpointer user_data)
