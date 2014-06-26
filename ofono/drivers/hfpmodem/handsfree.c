@@ -49,6 +49,7 @@ static const char *bvra_prefix[] = { "+BVRA:", NULL };
 struct hf_data {
 	GAtChat *chat;
 	unsigned int ag_features;
+	unsigned int ag_chld_features;
 	int battchg_index;
 	guint register_source;
 };
@@ -124,6 +125,87 @@ static void ciev_notify(GAtResult *result, gpointer user_data)
 	ofono_handsfree_battchg_notify(hf, value);
 }
 
+static void cnum_query_cb(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_handsfree_cnum_query_cb_t cb = cbd->cb;
+	GAtResultIter iter;
+	struct ofono_phone_number *list = NULL;
+	int num = 0;
+	struct ofono_error error;
+
+	decode_at_error(&error, g_at_result_final_response(result));
+
+	if (!ok)
+		goto out;
+
+	g_at_result_iter_init(&iter, result);
+
+	while (g_at_result_iter_next(&iter, "+CNUM:"))
+		num++;
+
+	if (num == 0)
+		goto out;
+
+	list = g_new0(struct ofono_phone_number, num);
+
+	g_at_result_iter_init(&iter, result);
+
+	for (num = 0; g_at_result_iter_next(&iter, "+CNUM:"); ) {
+		const char *number;
+		int service;
+		int type;
+
+		if (!g_at_result_iter_skip_next(&iter))
+			continue;
+
+		if (!g_at_result_iter_next_string(&iter, &number))
+			continue;
+
+		if (!g_at_result_iter_next_number(&iter, &type))
+			continue;
+
+		if (!g_at_result_iter_skip_next(&iter))
+			continue;
+
+		if (!g_at_result_iter_next_number(&iter, &service))
+			continue;
+
+		/* We are only interested in Voice services */
+		if (service != 4)
+			continue;
+
+		strncpy(list[num].number, number,
+				OFONO_MAX_PHONE_NUMBER_LENGTH);
+		list[num].number[OFONO_MAX_PHONE_NUMBER_LENGTH] = '\0';
+		list[num].type = type;
+
+		DBG("cnum_notify:%s", list[num].number);
+		num++;
+	}
+
+out:
+	cb(&error, num, list, cbd->data);
+
+	g_free(list);
+
+}
+
+static void hfp_cnum_query(struct ofono_handsfree *hf,
+				ofono_handsfree_cnum_query_cb_t cb, void *data)
+{
+	struct hf_data *hd = ofono_handsfree_get_data(hf);
+	struct cb_data *cbd = cb_data_new(cb, data);
+
+	if (g_at_chat_send(hd->chat, "AT+CNUM", NULL,
+					cnum_query_cb, cbd, g_free) > 0)
+		return;
+
+	g_free(cbd);
+
+	CALLBACK_WITH_FAILURE(cb, -1, NULL, data);
+}
+
 static gboolean hfp_handsfree_register(gpointer user_data)
 {
 	struct ofono_handsfree *hf = user_data;
@@ -139,6 +221,7 @@ static gboolean hfp_handsfree_register(gpointer user_data)
 		ofono_handsfree_set_inband_ringing(hf, TRUE);
 
 	ofono_handsfree_set_ag_features(hf, hd->ag_features);
+	ofono_handsfree_set_ag_chld_features(hf, hd->ag_chld_features);
 	ofono_handsfree_register(hf);
 
 	return FALSE;
@@ -154,6 +237,7 @@ static int hfp_handsfree_probe(struct ofono_handsfree *hf,
 	hd = g_new0(struct hf_data, 1);
 	hd->chat = g_at_chat_clone(info->chat);
 	hd->ag_features = info->ag_features;
+	hd->ag_chld_features = info->ag_mpty_features;
 
 	ofono_handsfree_set_data(hf, hd);
 
@@ -280,6 +364,7 @@ static struct ofono_handsfree_driver driver = {
 	.name			= "hfpmodem",
 	.probe			= hfp_handsfree_probe,
 	.remove			= hfp_handsfree_remove,
+	.cnum_query		= hfp_cnum_query,
 	.request_phone_number	= hfp_request_phone_number,
 	.voice_recognition	= hfp_voice_recognition,
 	.disable_nrec		= hfp_disable_nrec,

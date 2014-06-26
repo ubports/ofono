@@ -38,8 +38,8 @@ Development headers and libraries for oFono
 Summary:    Test Scripts for oFono
 Group:      Development/Libraries
 Requires:   %{name} = %{version}-%{release}
-Requires:   dbus-python
-Requires:   pygobject2
+Requires:   dbus-python3
+Requires:   python3-gobject
 Provides:   ofono-test >= 1.0
 Obsoletes:  ofono-test < 1.0
 
