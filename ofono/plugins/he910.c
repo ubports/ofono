@@ -59,6 +59,7 @@
 #include <drivers/atmodem/vendor.h>
 
 static const char *none_prefix[] = { NULL };
+static const char *qss_prefix[] = { "#QSS:", NULL };
 
 struct he910_data {
 	GAtChat *chat;		/* AT chat */
@@ -101,7 +102,7 @@ static GAtChat *open_device(struct ofono_modem *modem,
 	if (channel == NULL)
 		return NULL;
 
-	syntax = g_at_syntax_new_gsmv1();
+	syntax = g_at_syntax_new_gsm_permissive();
 	chat = g_at_chat_new(channel, syntax);
 	g_at_syntax_unref(syntax);
 	g_io_channel_unref(channel);
@@ -167,6 +168,31 @@ static void he910_qss_notify(GAtResult *result, gpointer user_data)
 	switch_sim_state_status(modem, status);
 }
 
+static void qss_query_cb(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct ofono_modem *modem = user_data;
+	int status, mode;
+	GAtResultIter iter;
+
+	DBG("%p", modem);
+
+	if (!ok)
+		return;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "#QSS:"))
+		return;
+
+	if (!g_at_result_iter_next_number(&iter, &mode))
+		return;
+
+	if (!g_at_result_iter_next_number(&iter, &status))
+		return;
+
+	switch_sim_state_status(modem, status);
+}
+
 static void cfun_enable_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_modem *modem = user_data;
@@ -204,6 +230,15 @@ static void cfun_enable_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	g_at_chat_send(data->chat, "AT#AUTOATT=0", none_prefix,
 				NULL, NULL, NULL);
 
+	/* Follow sim state */
+	g_at_chat_register(data->chat, "#QSS:", he910_qss_notify,
+				FALSE, modem, NULL);
+
+	/* Enable sim state notification */
+	g_at_chat_send(data->chat, "AT#QSS=2", none_prefix, NULL, NULL, NULL);
+
+	g_at_chat_send(data->chat, "AT#QSS?", qss_prefix,
+			qss_query_cb, modem, NULL);
 }
 
 static int he910_enable(struct ofono_modem *modem)
@@ -231,13 +266,6 @@ static int he910_enable(struct ofono_modem *modem)
 	 */
 	g_at_chat_send(data->chat, "ATE0 +CMEE=1", none_prefix,
 				NULL, NULL, NULL);
-
-	/* Follow sim state */
-	g_at_chat_register(data->chat, "#QSS:", he910_qss_notify,
-				FALSE, modem, NULL);
-
-	/* Enable sim state notification */
-	g_at_chat_send(data->chat, "AT#QSS=2", none_prefix, NULL, NULL, NULL);
 
 	/* Set phone functionality */
 	g_at_chat_send(data->chat, "AT+CFUN=1", none_prefix,
