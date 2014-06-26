@@ -3561,7 +3561,7 @@ GSList *sms_text_prepare_with_alphabet(const char *to, const char *utf8,
 	if (gsm_encoded == NULL) {
 		gsize converted;
 
-		ucs2_encoded = g_convert(utf8, -1, "UCS-2BE//TRANSLIT", "UTF-8",
+		ucs2_encoded = g_convert(utf8, -1, "UTF-16BE//TRANSLIT", "UTF-8",
 						NULL, &converted, NULL);
 		written = converted;
 	}
