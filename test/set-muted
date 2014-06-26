@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
 import sys
 import dbus
@@ -15,7 +15,7 @@ cv = dbus.Interface(bus.get_object('org.ofono', path),
 						'org.ofono.CallVolume')
 
 muted = int(sys.argv[1])
-print "Set Muted to " , muted
+print("Set Muted to " , muted)
 
 cv.SetProperty("Muted", dbus.Boolean(muted))
 
