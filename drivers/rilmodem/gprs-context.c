@@ -66,11 +66,6 @@ struct gprs_context_data {
 	guint regid;
 };
 
-static void ril_gprs_context_deactivate_primary(struct ofono_gprs_context *gc,
-						unsigned int id,
-						ofono_gprs_context_cb_t cb,
-						void *data);
-
 static void set_context_disconnected(struct gprs_context_data *gcd)
 {
 	gcd->active_ctx_cid = -1;
@@ -99,6 +94,13 @@ static void ril_gprs_context_call_list_changed(struct ril_msg *message,
 	for (iterator = unsol->call_list; iterator; iterator = iterator->next) {
 		call = (struct data_call *) iterator->data;
 
+		/*
+		 * Every context receives notifications about all data calls
+		 * but should only handle its own.
+		 */
+		if (call->cid != gcd->active_rild_cid)
+			continue;
+
 		if (call->status != 0)
 			ofono_info("data call status:%d", call->status);
 
@@ -109,8 +111,7 @@ static void ril_gprs_context_call_list_changed(struct ril_msg *message,
 		}
 
 		if (call->active == DATA_CALL_ACTIVE) {
-			char **split_ip_addr = NULL;
-			const char **dns_addresses;
+			char **dns_addresses;
 
 			if (call->ifname) {
 				ofono_gprs_context_set_interface(gc,
@@ -118,6 +119,7 @@ static void ril_gprs_context_call_list_changed(struct ril_msg *message,
 			}
 
 			if (call->addresses) {
+				char **split_ip_addr;
 				ofono_gprs_context_set_ipv4_netmask(gc,
 					ril_util_get_netmask(call->addresses));
 
@@ -125,6 +127,7 @@ static void ril_gprs_context_call_list_changed(struct ril_msg *message,
 									"/", 2);
 				ofono_gprs_context_set_ipv4_address(gc,
 							split_ip_addr[0], TRUE);
+				g_strfreev(split_ip_addr);
 			}
 
 			if (call->gateways) {
@@ -136,13 +139,12 @@ static void ril_gprs_context_call_list_changed(struct ril_msg *message,
 			if (call->dnses)
 				DBG("dnses:%s", call->dnses);
 
-			dns_addresses =
-				(const char **)(call->dnses ?
-				g_strsplit((const gchar*)call->dnses, " ", 3)
-									: NULL);
+			dns_addresses =	(call->dnses ?
+				g_strsplit(call->dnses, " ", 3)	: NULL);
 
 			ofono_gprs_context_set_ipv4_dns_servers(gc,
-								dns_addresses);
+						(const char**)dns_addresses);
+			g_strfreev(dns_addresses);
 			break;
 		}
 	}
@@ -436,7 +438,6 @@ static int ril_gprs_context_probe(struct ofono_gprs_context *gc,
 	set_context_disconnected(gcd);
 
 	ofono_gprs_context_set_data(gc, gcd);
-	gcd->regid = -1;
 
 	gcd->regid = g_ril_register(gcd->ril, RIL_UNSOL_DATA_CALL_LIST_CHANGED,
 					ril_gprs_context_call_list_changed, gc);
