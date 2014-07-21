@@ -390,15 +390,13 @@ static void ril_read_sms_on_sim_cb(const struct ofono_error *error,
 {
 	struct cb_data *cbd = data;
 	struct ofono_sms *sms = cbd->user;
-	int sms_len,i,record;
+	int record;
 	unsigned int smsc_len;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
 		ofono_error("cannot read sms from sim");
 		goto exit;
 	}
-
-	sms_len = strlen(sdata);
 
 	/*
 	 * It seems when reading EFsms RIL returns the whole record including
@@ -437,7 +435,7 @@ static void ril_new_sms_on_sim(struct ril_msg *message, gpointer user_data)
 
 	if (record > 0) {
 		record = parcel_r_int32(&rilp);
-		struct cb_data *cbd = cb_data_new2(sms, NULL, record);
+		struct cb_data *cbd = cb_data_new2(sms, NULL, (void*)record);
 		DBG(":%d", record);
 		get_sim_driver()->read_file_linear(get_sim(), SIM_EFSMS_FILEID,
 						record, EFSMS_LENGTH, path,
