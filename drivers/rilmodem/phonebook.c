@@ -6,7 +6,6 @@
  *  Copyright (C) ST-Ericsson SA 2010.
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *  Copyright (C) 2013 Jolla Ltd
- *  Contact: Jussi Kangas <jussi.kangas@tieto.com>
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -823,9 +822,23 @@ static void pb_content_data_cb(const struct ofono_error *error,
 	if (extension_file_info)
 		file_info = decode_read_response(extension_file_info, sdata,
 						 length, pb);
-	else
+	else {
+	/*
+	 * These checks are crash hacks.
+	 * AFAIK there's a possibility that we end up here and pb_next is NULL
+	 * in case remove hase been called while phonebook reading is in
+	 * process. If you find better solution to this issue feel free to
+	 * change this.
+	 */
+		if (pb_next == NULL) {
+			if (cb && cbd && pbd)
+				CALLBACK_WITH_FAILURE(cb, cbd->data);
+			return;
+		}
+
 		file_info =
 			decode_read_response(pb_next->data, sdata, length, pb);
+	}
 
 	if (file_info) {
 		DBG("Reading extension file %04X, record %d, structure %d",
