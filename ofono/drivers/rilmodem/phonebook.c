@@ -831,6 +831,7 @@ static void pb_content_data_cb(const struct ofono_error *error,
 	 * change this.
 	 */
 		if (pb_next == NULL) {
+			ofono_error("phonebook reading failed");
 			if (cb && cbd && pbd)
 				CALLBACK_WITH_FAILURE(cb, cbd->data);
 			return;
