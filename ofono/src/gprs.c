@@ -58,6 +58,7 @@
 #define MAX_CONTEXTS 256
 #define SUSPEND_TIMEOUT 8
 #define MAX_MMS_MTU 1280
+#define MAX_GPRS_MTU 1280
 
 /* 27.007 Section 7.29 */
 enum packet_bearer {
@@ -909,6 +910,9 @@ static void pri_activate_callback(const struct ofono_error *error, void *data)
 
 		pri_context_signal_settings(ctx, gc->settings->ipv4 != NULL,
 						gc->settings->ipv6 != NULL);
+
+		if (ctx->type == OFONO_GPRS_CONTEXT_TYPE_INTERNET)
+			pri_limit_mtu(gc->settings->interface, MAX_GPRS_MTU);
 	}
 
 	value = ctx->active;
