@@ -52,30 +52,14 @@ static void ril_query_manufacturer(struct ofono_devinfo *info,
 					ofono_devinfo_query_cb_t cb,
 					void *data)
 {
-	const char *attr = "Fake Manufacturer";
-	struct cb_data *cbd = cb_data_new(cb, data);
-	struct ofono_error error;
-	decode_ril_error(&error, "OK");
-
-	cb(&error, attr, cbd->data);
-
-	/* Note: this will need to change if cbd passed to gril layer */
-	g_free(cbd);
+	CALLBACK_WITH_FAILURE(cb, "", data);
 }
 
 static void ril_query_model(struct ofono_devinfo *info,
 				ofono_devinfo_query_cb_t cb,
 				void *data)
 {
-	const char *attr = "Fake Modem Model";
-	struct cb_data *cbd = cb_data_new(cb, data);
-	struct ofono_error error;
-	decode_ril_error(&error, "OK");
-
-	cb(&error, attr, cbd->data);
-
-	/* Note: this will need to change if cbd passed to gril layer */
-	g_free(cbd);
+	CALLBACK_WITH_FAILURE(cb, "", data);
 }
 
 static void query_revision_cb(struct ril_msg *message, gpointer user_data)
