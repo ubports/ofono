@@ -344,7 +344,7 @@ void handle_anr(size_t len,const unsigned char *msg,char *anr,
 			prefix = 0;
 
 			if ((msg[2] & TON_MASK) ==
-			    TON_INTERNATIONAL) {
+				TON_INTERNATIONAL) {
 				anr[0] = '+';
 				prefix = 1;
 			}
@@ -517,7 +517,7 @@ void handle_ext1(struct pb_data *pbd, const unsigned char *msg,
 						list_entry->data;
 				if (entry) {
 					strcat(entry->anr,
-				       ext_number);
+						ext_number);
 			}
 		}
 	}
@@ -633,8 +633,10 @@ static void pb_adn_sim_data_cb(const struct ofono_error *error,
 	file_info = cbd_outer->user;
 	cbd = cbd_outer->data;
 
-	if (!cbd)
+	if (!cbd) {
+		g_free(cbd_outer);
 		return;
+		}
 
 	pb = cbd->user;
 	cb = cbd->cb;
@@ -717,8 +719,10 @@ static void pb_adn_sim_data_cb(const struct ofono_error *error,
 			g_slist_free(phonebook_entry_start);
 			g_slist_free(pb_files);
 			g_free(cbd_outer);
+			void *pb = cbd->data;
+			g_free(cbd);
 			DBG("Finally all PB data read");
-			CALLBACK_WITH_SUCCESS(cb, cbd->data);
+			CALLBACK_WITH_SUCCESS(cb, pb);
 			return;
 		}
 	}
@@ -788,8 +792,12 @@ static void pb_adn_sim_info_cb(const struct ofono_error *error,
 	return;
 error:
 
-	if (cb && cbd)
-		CALLBACK_WITH_FAILURE(cb, cbd->data);
+	if (cbd){
+		void *pb = cbd->data;
+		g_free(cbd);
+		if(cb)
+			CALLBACK_WITH_FAILURE(cb, pb);
+	}
 }
 
 static gboolean is_reading_required(uint8_t file_type)
@@ -832,8 +840,12 @@ static void pb_content_data_cb(const struct ofono_error *error,
 	 */
 		if (pb_next == NULL) {
 			ofono_error("phonebook reading failed");
-			if (cb && cbd && pbd)
-				CALLBACK_WITH_FAILURE(cb, cbd->data);
+			if (cbd){
+				void *pb = cbd->data;
+				g_free(cbd);
+				if(cb && pbd)
+					CALLBACK_WITH_FAILURE(cb, pb);
+				}
 			return;
 		}
 
@@ -893,7 +905,7 @@ static void pb_content_data_cb(const struct ofono_error *error,
 				DBG("All data requested, start vCard creation");
 				while (list_entry) {
 					struct phonebook_entry *entry =
-					    list_entry->data;
+							list_entry->data;
 
 					if (entry) {
 						DBG("vCard:\nname=%s\n",
@@ -930,8 +942,10 @@ static void pb_content_data_cb(const struct ofono_error *error,
 
 				g_slist_free(phonebook_entry_start);
 				g_slist_free(pb_files);
+				void *pb = cbd->data;
+				g_free(cbd);
 				DBG("Finally all PB data read");
-				CALLBACK_WITH_SUCCESS(cb, cbd->data);
+				CALLBACK_WITH_SUCCESS(cb, pb);
 				return;
 			}
 
@@ -996,8 +1010,12 @@ static void pb_content_data_read(struct pb_data *pbd,
 	return;
 error:
 
-	if (cb && cbd)
-		CALLBACK_WITH_FAILURE(cb, cbd->data);
+	if (cbd){
+		void *pb = cbd->data;
+		g_free(cbd);
+		if(cb)
+			CALLBACK_WITH_FAILURE(cb, pb);
+	}
 
 out:
 	DBG("Exiting");
@@ -1070,9 +1088,11 @@ static void pb_content_info_cb(const struct ofono_error *error,
 	return;
 error:
 
-	if (cb && cbd) {
-		DBG("Error cbd=%p, pbd=%p, file_info=%p", cbd, pbd, file_info);
-		CALLBACK_WITH_FAILURE(cb, cbd->data);
+	if (cbd){
+		void *pb = cbd->data;
+		g_free(cbd);
+		if(cb)
+			CALLBACK_WITH_FAILURE(cb, pb);
 	}
 }
 
@@ -1187,8 +1207,12 @@ static void pb_reference_data_cb(const struct ofono_error *error,
 	return;
 error:
 
-	if (cb && cbd)
-		CALLBACK_WITH_FAILURE(cb, cbd->data);
+	if (cbd){
+		void *pb = cbd->data;
+		g_free(cbd);
+		if(cb)
+			CALLBACK_WITH_FAILURE(cb, pb);
+	}
 }
 
 static void pb_reference_info_cb(const struct ofono_error *error,
@@ -1239,8 +1263,12 @@ static void pb_reference_info_cb(const struct ofono_error *error,
 					pb_reference_data_cb, cbd);
 	return;
 error:
-	if (cb && cbd)
-		CALLBACK_WITH_FAILURE(cb, cbd->data);
+	if (cbd){
+		void *pb = cbd->data;
+		g_free(cbd);
+		if(cb)
+			CALLBACK_WITH_FAILURE(cb, pb);
+	}
 }
 
 static void ril_export_entries(struct ofono_phonebook *pb,
@@ -1279,10 +1307,12 @@ static void ril_export_entries(struct ofono_phonebook *pb,
 
 error:
 
-	if (cb && cbd)
-		CALLBACK_WITH_FAILURE(cb, cbd->data);
-
-	g_free(cbd);
+	if (cbd){
+		void *pb = cbd->data;
+		g_free(cbd);
+		if(cb)
+			CALLBACK_WITH_FAILURE(cb, pb);
+	}
 }
 
 static gboolean ril_delayed_register(gpointer user_data)
@@ -1330,7 +1360,7 @@ static struct ofono_phonebook_driver driver = {
 	.name				= "rilmodem",
 	.probe				= ril_phonebook_probe,
 	.remove				= ril_phonebook_remove,
-	.export_entries		= ril_export_entries
+	.export_entries			= ril_export_entries
 };
 
 void ril_phonebook_init(void)
