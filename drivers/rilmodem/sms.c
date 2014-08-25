@@ -139,7 +139,7 @@ static void ril_csca_query_cb(struct ril_msg *message, gpointer user_data)
 		sca.number[OFONO_MAX_PHONE_NUMBER_LENGTH] = '\0';
 
 		DBG("csca_query_cb: %s, %d", sca.number, sca.type);
-
+		g_free(temp_buf); /*g_utf16_to_utf8 used by parcel_r_string*/
 		cb(&error, &sca, cbd->data);
 	} else {
 		ofono_error("return value invalid");
