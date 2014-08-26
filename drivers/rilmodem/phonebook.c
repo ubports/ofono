@@ -747,9 +747,6 @@ static void pb_adn_sim_info_cb(const struct ofono_error *error,
 	if (!cbd)
 		goto error;
 
-	pb = cbd->user;
-	cb = cbd->cb;
-	pbd = ofono_phonebook_get_data(pb);
 	file_info = NULL;
 
 	if (!pbd)
@@ -834,7 +831,7 @@ static void pb_content_data_cb(const struct ofono_error *error,
 	/*
 	 * These checks are crash hacks.
 	 * AFAIK there's a possibility that we end up here and pb_next is NULL
-	 * in case remove hase been called while phonebook reading is in
+	 * in case remove has been called while phonebook reading is in
 	 * process. If you find better solution to this issue feel free to
 	 * change this.
 	 */
