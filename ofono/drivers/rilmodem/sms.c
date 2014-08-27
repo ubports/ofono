@@ -242,6 +242,8 @@ static void ril_cmgs(struct ofono_sms *sms, const unsigned char *pdu,
 				submit_sms_cb, cbd, g_free);
 
 	g_ril_append_print_buf(sd->ril, "(%s)", tpdu);
+	g_free(tpdu);
+	tpdu = NULL;
 	g_ril_print_request(sd->ril, ret, request);
 
 	parcel_free(&rilp);
@@ -299,6 +301,9 @@ static void ril_sms_notify(struct ril_msg *message, gpointer user_data)
 	long ril_buf_len;
 	guchar *ril_data;
 
+	ril_pdu = NULL;
+	ril_data = NULL;
+
 	DBG("req: %d; data_len: %d", message->req, message->buf_len);
 
 	switch (message->req) {
@@ -331,6 +336,8 @@ static void ril_sms_notify(struct ril_msg *message, gpointer user_data)
 	ofono_info("sms received, smsc_len is %d", smsc_len);
 
 	g_ril_append_print_buf(sd->ril, "(%s)", ril_pdu);
+	g_free(ril_pdu);
+	ril_pdu = NULL;
 	g_ril_print_unsol(sd->ril, message);
 
 	if (message->req == RIL_UNSOL_RESPONSE_NEW_SMS) {
@@ -343,11 +350,20 @@ static void ril_sms_notify(struct ril_msg *message, gpointer user_data)
 						ril_buf_len - smsc_len);
 	}
 
+	g_free(ril_data);
+	ril_data = NULL;
+
 	ril_ack_delivery(sms, TRUE);
 
 	return;
 
 error:
+	g_free(ril_pdu);
+	ril_pdu = NULL;
+
+	g_free(ril_data);
+	ril_data = NULL;
+
 	ril_ack_delivery(sms, FALSE);
 
 	ofono_error("Unable to parse NEW_SMS notification");
