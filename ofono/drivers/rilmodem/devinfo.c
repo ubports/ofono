@@ -42,9 +42,8 @@
 #include "rilmodem.h"
 
 /*
- * TODO: The functions in this file are stubbed out, and
- * will need to be re-worked to talk to the /gril layer
- * in order to get real values from RILD.
+ * TODO: No public RIL api to query manufacturer or model.
+ * Check where to get, could /system/build.prop be updated to have good values?
  */
 guint timer_id;
 
