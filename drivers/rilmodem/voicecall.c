@@ -525,6 +525,7 @@ static void ril_ss_notify(struct ril_msg *message, gpointer user_data)
 				strncpy(number.number, tmp_number,
 					OFONO_MAX_PHONE_NUMBER_LENGTH);
 
+			g_free(tmp_number);
 			DBG("RIL data: MT/MO: %i, code: %i, index: %i",
 				notification_type, code, index);
 		break;
