@@ -167,9 +167,9 @@ static void ril_ussd_notify(struct ril_msg *message, gpointer user_data)
 {
 	struct ofono_ussd *ussd = user_data;
 	struct parcel rilp;
-	gchar *ussd_from_network;
-	gchar *type;
-	gint ussdtype;
+	gchar *ussd_from_network = NULL;
+	gchar *type = NULL;
+	gint ussdtype = 0;
 
 	ofono_info("ussd_received");
 
@@ -177,6 +177,8 @@ static void ril_ussd_notify(struct ril_msg *message, gpointer user_data)
 	parcel_r_int32(&rilp);
 	type = parcel_r_string(&rilp);
 	ussdtype = g_ascii_xdigit_value(*type);
+	g_free(type);
+	type = NULL;
 	ussd_from_network = parcel_r_string(&rilp);
 
 	if (ussd_from_network)
@@ -186,6 +188,7 @@ static void ril_ussd_notify(struct ril_msg *message, gpointer user_data)
 	else
 		ofono_ussd_notify(ussd, ussdtype, 0, NULL, 0);
 
+	g_free(ussd_from_network);
 	return;
 }
 
