@@ -81,11 +81,12 @@ static void ril_stk_envelope(struct ofono_stk *stk, int length,
 	DBG("");
 
 	hex_envelope = encode_hex(command, length, 0);
-
 	DBG("rilmodem envelope: %s", hex_envelope);
 
 	parcel_init(&rilp);
 	parcel_w_string(&rilp, hex_envelope);
+	g_free(hex_envelope);
+	hex_envelope = NULL;
 
 	ret = g_ril_send(sd->ril, request,
 				rilp.data, rilp.size, ril_envelope_cb,
@@ -132,11 +133,12 @@ static void ril_stk_terminal_response(struct ofono_stk *stk, int length,
 	DBG("");
 
 	hex_tr = encode_hex(resp, length, 0);
-
 	DBG("rilmodem terminal response: %s", hex_tr);
 
 	parcel_init(&rilp);
 	parcel_w_string(&rilp, hex_tr);
+	g_free(hex_tr);
+	hex_tr = NULL;
 
 	ret = g_ril_send(sd->ril, request,
 				rilp.data, rilp.size, ril_tr_cb,
@@ -194,7 +196,9 @@ static void ril_stk_pcmd_notify(struct ril_msg *message, gpointer user_data)
 			strlen(pcmd),
 			&len, -1);
 
+	g_free(pcmd);
 	ofono_stk_proactive_command_notify(stk, len, (const guchar *)pdu);
+	g_free(pdu);
 }
 
 static void ril_stk_event_notify(struct ril_msg *message, gpointer user_data)
@@ -211,13 +215,14 @@ static void ril_stk_event_notify(struct ril_msg *message, gpointer user_data)
 	ril_util_init_parcel(message, &rilp);
 	pcmd = parcel_r_string(&rilp);
 	DBG("pcmd: %s", pcmd);
-
 	pdu = decode_hex((const char *) pcmd,
 			strlen(pcmd),
 			&len, -1);
-
+	g_free(pcmd);
+	pcmd = NULL;
 	ofono_stk_proactive_command_handled_notify(stk, len,
 			(const guchar *)pdu);
+	g_free(pdu);
 }
 
 static void ril_stk_session_end_notify(struct ril_msg *message,
