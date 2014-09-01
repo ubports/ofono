@@ -364,6 +364,7 @@ static void ril_cops_list_cb(struct ril_msg *message, gpointer user_data)
 
 	cb(&error, noperators, list, cbd->data);
 
+	g_free(list);
 	return;
 
 error:
