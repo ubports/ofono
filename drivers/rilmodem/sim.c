@@ -325,7 +325,7 @@ static void ril_file_io_cb(struct ril_msg *message, gpointer user_data)
 		decode_ril_error(&error, "OK");
 	} else {
 		ofono_error("RILD reply failure: %s",
-			    ril_error_to_string(message->error));
+				ril_error_to_string(message->error));
 		goto error;
 	}
 
@@ -633,7 +633,7 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 
 	DBG("");
 
-	if (ril_util_parse_sim_status(sd->ril, message,	&status, apps) &&
+	if (ril_util_parse_sim_status(sd->ril, message, &status, apps) &&
 		status.num_apps) {
 
 		DBG("num_apps: %d gsm_umts_index: %d", status.num_apps,
@@ -700,8 +700,6 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 		}
 
 		if (current_online_state == RIL_ONLINE_PREF) {
-
-			parcel_init(&rilp);
 
 			parcel_init(&rilp);
 			parcel_w_int32(&rilp, 1);
@@ -1108,14 +1106,6 @@ static int ril_sim_probe(struct ofono_sim *sim, unsigned int vendor,
 
 	sd = g_new0(struct sim_data, 1);
 	sd->ril = g_ril_clone(ril);
-	sd->aid_str = NULL;
-	sd->app_str = NULL;
-	sd->app_type = RIL_APPTYPE_UNKNOWN;
-	sd->passwd_state = OFONO_SIM_PASSWORD_NONE;
-	sd->passwd_type = OFONO_SIM_PASSWORD_NONE;
-	sd->sim_registered = FALSE;
-	sd->card_state = RIL_CARDSTATE_ABSENT;
-	sd->removed = FALSE;
 
 	for (i = 0; i < OFONO_SIM_PASSWORD_INVALID; i++)
 		sd->retries[i] = -1;
