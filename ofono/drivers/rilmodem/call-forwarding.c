@@ -214,7 +214,7 @@ static void ril_query_cb(struct ril_msg *message, gpointer user_data)
 				nmbr_of_resps);
 
 		for (i = 0; i < nmbr_of_resps; i++) {
-			const char *str;
+			char *str = NULL;
 
 			list[i].status =  parcel_r_int32(&rilp);
 
@@ -225,16 +225,14 @@ static void ril_query_cb(struct ril_msg *message, gpointer user_data)
 			list[i].phone_number.type = parcel_r_int32(&rilp);
 
 			str = parcel_r_string(&rilp);
-
 			if (str) {
-
 				strncpy(list[i].phone_number.number,
 					str,
 					OFONO_MAX_PHONE_NUMBER_LENGTH);
 
 				list[i].phone_number.number[
 					OFONO_MAX_PHONE_NUMBER_LENGTH] = '\0';
-
+				g_free(str);
 			}
 			list[i].time = parcel_r_int32(&rilp);
 		}
