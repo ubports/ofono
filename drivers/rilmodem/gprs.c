@@ -77,6 +77,7 @@ struct gprs_data {
 	guint registerid;
 	guint timer_id;
 	guint fake_timer_id;
+	struct cb_data *fake_cbd;
 };
 
 /*if we have called ofono_gprs_register or not*/
@@ -158,6 +159,22 @@ static void ril_gprs_set_attached(struct ofono_gprs *gprs, int attached,
 						cbd);
 }
 
+static void remove_fake_timer(struct gprs_data *gd)
+{
+	DBG("");
+
+	if (!gd)
+		return;
+
+	if (gd->fake_timer_id > 0) {
+		g_source_remove(gd->fake_timer_id);
+		gd->fake_timer_id = 0;
+	}
+
+	g_free(gd->fake_cbd);
+	gd->fake_cbd = NULL;
+}
+
 static gboolean ril_fake_response(gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
@@ -166,8 +183,10 @@ static gboolean ril_fake_response(gpointer user_data)
 
 	DBG("");
 
+	gd->fake_timer_id = 0;
 	ofono_gprs_status_notify(gprs, gd->true_status);
-	g_free(cbd);
+	g_free(cbd); /* == gd->fake_cbd */
+	gd->fake_cbd = NULL;
 	return FALSE;
 }
 
@@ -225,11 +244,11 @@ static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
 		goto error;
 	}
 
-	if ((gd->fake_timer_id > 0) &&
-			((status == (NETWORK_REGISTRATION_STATUS_REGISTERED
-			|| NETWORK_REGISTRATION_STATUS_ROAMING)) ||
-			!(gd->ofono_attached))) {
-		g_source_remove(gd->fake_timer_id);
+	if ((gd->fake_timer_id > 0)
+			&& ((status == NETWORK_REGISTRATION_STATUS_REGISTERED
+				|| status == NETWORK_REGISTRATION_STATUS_ROAMING)
+				|| !gd->ofono_attached)) {
+		remove_fake_timer(gd);
 		gd->true_status = -1;
 	}
 
@@ -294,12 +313,12 @@ static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
 			gd->rild_status = status;
 	} else {
 		if (gd->fake_timer_id <= 0) {
-			struct cb_data *fake_cbd = cb_data_new(NULL, NULL);
-
-			fake_cbd->user = gprs;
+			gd->fake_cbd = cb_data_new(NULL, NULL);
+			gd->fake_cbd->user = gprs;
+			DBG("Start rilmodem fake status timer");
 			gd->fake_timer_id = g_timeout_add_seconds(
 						FAKE_STATE_TIMER,
-						ril_fake_response, fake_cbd);
+						ril_fake_response, gd->fake_cbd);
 		}
 
 		gd->true_status = status;
@@ -429,6 +448,8 @@ static int ril_gprs_probe(struct ofono_gprs *gprs,
 	gd->notified = FALSE;
 	gd->registerid = -1;
 	gd->timer_id = 0;
+	gd->fake_timer_id = 0;
+	gd->fake_cbd = NULL;
 
 	registered = FALSE;
 
@@ -445,6 +466,8 @@ static void ril_gprs_remove(struct ofono_gprs *gprs)
 
 	DBG("");
 
+	remove_fake_timer(gd);
+
 	ofono_gprs_set_data(gprs, NULL);
 
 	if (gd->registerid != -1)
@@ -452,9 +475,6 @@ static void ril_gprs_remove(struct ofono_gprs *gprs)
 
 	if (gd->timer_id > 0)
 		g_source_remove(gd->timer_id);
-
-	if (gd->fake_timer_id > 0)
-		g_source_remove(gd->fake_timer_id);
 
 	g_ril_unref(gd->ril);
 	g_free(gd);
