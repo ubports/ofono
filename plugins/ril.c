@@ -539,6 +539,10 @@ static int ril_disable(struct ofono_modem *modem)
 
 	parcel_free(&rilp);
 
+	/* this will trigger the cleanup of g_io_channel */
+	g_ril_unref(ril->modem);
+	ril->modem = NULL;
+
 	return 0;
 }
 
