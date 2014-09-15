@@ -68,7 +68,7 @@ static void ril_ussd_request(struct ofono_ussd *ussd, int dcs,
 	enum sms_charset charset;
 	int ret = -1;
 
-	ofono_info("send ussd");
+	ofono_info("send ussd, len:%d", len);
 
 	if (cbs_dcs_decode(dcs, NULL, NULL, &charset,
 					NULL, NULL, NULL)) {
