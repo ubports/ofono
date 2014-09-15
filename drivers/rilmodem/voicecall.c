@@ -45,9 +45,7 @@
 
 /* Amount of ms we wait between CLCC calls */
 #define POLL_CLCC_INTERVAL 300
-
 #define FLAG_NEED_CLIP 1
-
 #define MAX_DTMF_BUFFER 32
 
 struct voicecall_data {
@@ -384,15 +382,17 @@ static void ril_dial(struct ofono_voicecall *vc,
 	struct parcel rilp;
 	int request = RIL_REQUEST_DIAL;
 	int ret;
+	char *phstr = NULL;
 
-	ofono_info("dialing");
+	phstr = (char *) phone_number_to_string(ph);
+	ofono_info("dialing \"%s\"", phstr);
 
 	cbd->user = vc;
 
 	parcel_init(&rilp);
 
 	/* Number to dial */
-        parcel_w_string(&rilp, (char *) phone_number_to_string(ph));
+	parcel_w_string(&rilp, phstr);
 	/* CLIR mode */
 	parcel_w_int32(&rilp, clir);
 	/* USS, need it twice for absent */
