@@ -85,6 +85,7 @@ struct ril_s {
 	guint next_cmd_id;			/* Next command id */
 	guint next_notify_id;			/* Next notify id */
 	guint next_gid;				/* Next group id */
+	int sk;					/* Socket */
 	GRilIO *io;				/* GRil IO */
 	GQueue *command_queue;			/* Command queue */
 	GQueue *out_queue;			/* Commands sent/been sent */
@@ -786,6 +787,7 @@ static void ril_unref(struct ril_s *ril)
 		g_ril_io_unref(ril->io);
 		ril->io = NULL;
 		ril_cleanup(ril);
+		close(ril->sk);
 	}
 
 	if (ril->in_read_handler)
@@ -810,7 +812,6 @@ static struct ril_s *create_ril()
 {
 	struct ril_s *ril;
 	struct sockaddr_un addr;
-	int sk;
 	GIOChannel *io;
 	GKeyFile *keyfile;
 	char **subscriptions = NULL;
@@ -831,8 +832,8 @@ static struct ril_s *create_ril()
 	ril->trace = FALSE;
 	ril->connected = FALSE;
 
-	sk = socket(AF_UNIX, SOCK_STREAM, 0);
-	if (sk < 0) {
+	ril->sk = socket(AF_UNIX, SOCK_STREAM, 0);
+	if (ril->sk < 0) {
 		ofono_error("create_ril: can't create unix socket: %s (%d)\n",
 				strerror(errno), errno);
 		goto error;
@@ -842,13 +843,13 @@ static struct ril_s *create_ril()
 	addr.sun_family = AF_UNIX;
 	strncpy(addr.sun_path, RILD_CMD_SOCKET, sizeof(addr.sun_path) - 1);
 
-	if (connect(sk, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
+	if (connect(ril->sk, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
 		ofono_error("create_ril: can't connect to RILD: %s (%d)\n",
 				strerror(errno), errno);
 		goto error;
 	}
 
-	io = g_io_channel_unix_new(sk);
+	io = g_io_channel_unix_new(ril->sk);
 	if (io == NULL) {
 		ofono_error("create_ril: can't connect to RILD: %s (%d)\n",
 				strerror(errno), errno);

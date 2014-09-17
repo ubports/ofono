@@ -414,7 +414,9 @@ static void flush_atoms(struct ofono_modem *modem, enum modem_state new_state)
 	while (cur) {
 		struct ofono_atom *atom = cur->data;
 
-		if (atom->modem_state <= new_state) {
+		/* in case we are powering off the modem, flush everything */
+		if (atom->modem_state <= new_state &&
+			new_state > MODEM_STATE_POWER_OFF) {
 			prev = cur;
 			cur = cur->next;
 			continue;
