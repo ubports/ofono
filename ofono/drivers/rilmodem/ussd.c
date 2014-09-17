@@ -181,14 +181,15 @@ static void ril_ussd_notify(struct ril_msg *message, gpointer user_data)
 	type = NULL;
 	ussd_from_network = parcel_r_string(&rilp);
 
-	if (ussd_from_network)
+	/* ussd_from_network not freed because core does that if dcs is 0xFF */
+	if (ussd_from_network) {
+		DBG("ussd_received, length %d", strlen(ussd_from_network));
 		ofono_ussd_notify(ussd, ussdtype, 0xFF,
 			(const unsigned char *)ussd_from_network,
 			strlen(ussd_from_network));
-	else
+	} else
 		ofono_ussd_notify(ussd, ussdtype, 0, NULL, 0);
 
-	g_free(ussd_from_network);
 	return;
 }
 
