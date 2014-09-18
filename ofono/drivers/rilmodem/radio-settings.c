@@ -75,7 +75,7 @@ static void ril_set_rat_mode(struct ofono_radio_settings *rs,
 	int pref = rd->ratmode;
 	int ret = 0;
 
-	ofono_info("setting rat mode:%d", mode);
+	ofono_info("rat mode set %d", mode);
 
 	parcel_init(&rilp);
 
@@ -116,6 +116,8 @@ static void ril_force_rat_mode(struct radio_data *rd, int pref)
 	if (pref == rd->ratmode)
 		return;
 
+	DBG("pref ril rat mode %d, ril current %d", pref, rd->ratmode);
+
 	parcel_init(&rilp);
 	parcel_w_int32(&rilp, 1);
 	parcel_w_int32(&rilp, rd->ratmode);
@@ -137,7 +139,7 @@ static void ril_rat_mode_cb(struct ril_msg *message, gpointer user_data)
 
 	if (message->error == RIL_E_SUCCESS) {
 		ril_util_init_parcel(message, &rilp);
-		/*first item in int[] is len so let's skip that*/
+		/* first item in int[] is len so let's skip that */
 		parcel_r_int32(&rilp);
 		pref = parcel_r_int32(&rilp);
 
@@ -167,6 +169,7 @@ static void ril_rat_mode_cb(struct ril_msg *message, gpointer user_data)
 		default:
 			break;
 		}
+		ofono_info("rat mode %d (ril %d)", mode, pref);
 		if (cb)
 			CALLBACK_WITH_SUCCESS(cb, mode, cbd->data);
 	} else {
@@ -287,6 +290,7 @@ static gboolean ril_get_net_config(struct radio_data *rsd)
 
 	storage_close(NULL, RIL_STORE, keyfile, TRUE);
 
+	DBG("needsconfig %d, rat mode %d", needsconfig, rsd->ratmode);
 	return needsconfig;
 }
 
