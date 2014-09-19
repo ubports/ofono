@@ -55,6 +55,7 @@ struct netreg_data {
 	guint nitz_timeout;
 	unsigned int vendor;
 	guint timer_id;
+	int corestatus; /* Registration status previously reported to core */
 };
 
 /* 27.007 Section 7.3 <stat> */
@@ -78,25 +79,20 @@ static void extract_mcc_mnc(const char *str, char *mcc, char *mnc)
 	mnc[OFONO_MAX_MNC_LENGTH] = '\0';
 }
 
-/*
- * TODO: The functions in this file are stubbed out, and
- * will need to be re-worked to talk to the /gril layer
- * in order to get real values from RILD.
- */
-
 static void ril_creg_cb(struct ril_msg *message, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
 	ofono_netreg_status_cb_t cb = cbd->cb;
 	struct netreg_data *nd = cbd->user;
 	struct ofono_error error;
-	int status, lac, ci, tech;
+	int status, logstatus, lac, ci, tech;
 
 	DBG("");
 
 	if (message->error != RIL_E_SUCCESS) {
 		decode_ril_error(&error, "FAIL");
-		ofono_error("Failed to pull registration state");
+		ofono_error("voice registration status query fail");
+		nd->corestatus = -1;
 		cb(&error, -1, -1, -1, -1, cbd->data);
 		return;
 	}
@@ -105,20 +101,31 @@ static void ril_creg_cb(struct ril_msg *message, gpointer user_data)
 
 	if (ril_util_parse_reg(nd->ril, message, &status,
 				&lac, &ci, &tech, NULL) == FALSE) {
+		DBG("voice registration status parsing fail");
+		nd->corestatus = -1;
 		CALLBACK_WITH_FAILURE(cb, -1, -1, -1, -1, cbd->data);
 		return;
 	}
 
-	DBG("voice registration status is %d", status);
-
 	if (status > 10)
 		status = status - 10;
+
+	logstatus = status;
 
 	if (status == NETWORK_REGISTRATION_STATUS_ROAMING)
 		status = check_if_really_roaming(status);
 
-	ofono_info("voice registration status is %d", status);
+	DBG("status:%d corestatus:%d", status, nd->corestatus);
 
+	if (status != logstatus)
+		ofono_info("voice registration modified %d (%d)",
+				status, logstatus);
+
+	if (nd->corestatus != status)
+		ofono_info("voice registration changes %d (%d)",
+				status, nd->corestatus);
+
+	nd->corestatus = status;
 	nd->tech = tech;
 	cb(&error, status, lac, ci, tech, cbd->data);
 }
@@ -128,15 +135,16 @@ static void ril_creg_notify(struct ofono_error *error, int status, int lac,
 {
 	struct ofono_netreg *netreg = user_data;
 
-        if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
-                DBG("Error during status notification");
-                return;
-        }
+	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
+		DBG("Error during status notification");
+		return;
+	}
 
 	ofono_netreg_status_notify(netreg, status, lac, ci, tech);
 }
 
-static void ril_network_state_change(struct ril_msg *message, gpointer user_data)
+static void ril_network_state_change(struct ril_msg *message,
+		gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
 	struct netreg_data *nd = ofono_netreg_get_data(netreg);
@@ -406,7 +414,8 @@ static void ril_register_cb(struct ril_msg *message, gpointer user_data)
 		g_ril_print_response_no_args(nd->ril, message);
 
 	} else {
-		ofono_error("registration failed");
+		ofono_error("registration failed, ril result %d",
+				message->error);
 		decode_ril_error(&error, "FAIL");
 	}
 
@@ -421,6 +430,8 @@ static void ril_register_auto(struct ofono_netreg *netreg,
 	int request = RIL_REQUEST_SET_NETWORK_SELECTION_AUTOMATIC;
 	int ret;
 	cbd->user = nd;
+
+	ofono_info("nw select automatic");
 
 	ret = g_ril_send(nd->ril, request,
 				NULL, 0, ril_register_cb, cbd, g_free);
@@ -444,6 +455,8 @@ static void ril_register_manual(struct ofono_netreg *netreg,
 	struct parcel rilp;
 	int request = RIL_REQUEST_SET_NETWORK_SELECTION_MANUAL;
 	int ret;
+
+	ofono_info("nw select manual: %s%s", mcc, mnc);
 
 	/* add *netreg_data to callback */
 	cbd->user = nd;
@@ -592,9 +605,10 @@ gint check_if_really_roaming(gint status)
 	struct sim_spdi *spdi = ofono_netreg_get_spdi(current_netreg);
 
 	if (spdi && net_mcc && net_mnc) {
-		if (sim_spdi_lookup(spdi, net_mcc, net_mnc))
+		if (sim_spdi_lookup(spdi, net_mcc, net_mnc)) {
+			ofono_info("voice reg: not roaming based on spdi");
 			return NETWORK_REGISTRATION_STATUS_REGISTERED;
-		else
+		} else
 			return status;
 	} else
 		return status;
@@ -644,6 +658,7 @@ static int ril_netreg_probe(struct ofono_netreg *netreg, unsigned int vendor,
 	nd->time.year = -1;
 	nd->time.dst = 0;
 	nd->time.utcoff = 0;
+	nd->corestatus = -1;
 	current_netreg = netreg;
 
 	ofono_netreg_set_data(netreg, nd);
