@@ -923,6 +923,8 @@ static void sim_iidf_read_cb(int ok, int length, int record,
 	unsigned short iidf_id;
 	unsigned short offset;
 	unsigned short clut_len;
+	unsigned char path[6];
+	unsigned int path_len;
 
 	DBG("ok: %d", ok);
 
@@ -952,8 +954,12 @@ static void sim_iidf_read_cb(int ok, int length, int record,
 	iidf_id = efimg[3] << 8 | efimg[4];
 	sim->iidf_image = g_memdup(data, length);
 
+	/* The path it the same between 2G and 3G */
+	path_len = sim_ef_db_get_path_3g(SIM_EFIMG_FILEID, path);
+
 	/* read the clut data */
 	ofono_sim_read_bytes(sim->context, iidf_id, offset, clut_len,
+					path, path_len,
 					sim_iidf_read_clut_cb, sim);
 }
 
@@ -987,9 +993,16 @@ static void sim_get_image(struct ofono_sim *sim, unsigned char id,
 	iidf_len = efimg[7] << 8 | efimg[8];
 
 	/* read the image data */
-	if (image == NULL)
+	if (image == NULL) {
+		unsigned char path[6];
+		unsigned int path_len;
+
+		/* The path it the same between 2G and 3G */
+		path_len = sim_ef_db_get_path_3g(SIM_EFIMG_FILEID, path);
 		ofono_sim_read_bytes(sim->context, iidf_id, iidf_offset,
-					iidf_len, sim_iidf_read_cb, sim);
+					iidf_len, path, path_len,
+					sim_iidf_read_cb, sim);
+	}
 
 	if (sim->iidf_watch_ids[id] > 0)
 		return;
@@ -1514,7 +1527,7 @@ static void sim_retrieve_imsi(struct ofono_sim *sim)
 	}
 
 	sim->driver->read_file_transparent(sim, SIM_EFIMSI_FILEID, 0, 9,
-						sim_efimsi_cb, sim);
+						NULL, 0, sim_efimsi_cb, sim);
 }
 
 static void sim_fdn_enabled(struct ofono_sim *sim)
@@ -1812,6 +1825,7 @@ static void sim_efphase_read_cb(int ok, int length, int record,
 static void sim_initialize_after_pin(struct ofono_sim *sim)
 {
 	sim->context = ofono_sim_context_create(sim);
+	sim->spn_watches = __ofono_watchlist_new(g_free);
 
 	ofono_sim_read(sim->context, SIM_EFPHASE_FILEID,
 			OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
@@ -2156,20 +2170,21 @@ void ofono_sim_context_free(struct ofono_sim_context *context)
 
 int ofono_sim_read_bytes(struct ofono_sim_context *context, int id,
 			unsigned short offset, unsigned short num_bytes,
+			const unsigned char *path, unsigned int len,
 			ofono_sim_file_read_cb_t cb, void *data)
 {
 	if (num_bytes == 0)
 		return -1;
 
 	return sim_fs_read(context, id, OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
-				offset, num_bytes, cb, data);
+				offset, num_bytes, path, len, cb, data);
 }
 
 int ofono_sim_read(struct ofono_sim_context *context, int id,
 			enum ofono_sim_file_structure expected_type,
 			ofono_sim_file_read_cb_t cb, void *data)
 {
-	return sim_fs_read(context, id, expected_type, 0, 0, cb, data);
+	return sim_fs_read(context, id, expected_type, 0, 0, NULL, 0, cb, data);
 }
 
 int ofono_sim_write(struct ofono_sim_context *context, int id,
@@ -2243,6 +2258,14 @@ enum ofono_sim_cphs_phase ofono_sim_get_cphs_phase(struct ofono_sim *sim)
 	return sim->cphs_phase;
 }
 
+enum ofono_sim_password_type ofono_sim_get_password_type(struct ofono_sim *sim)
+{
+	if (sim == NULL)
+		return OFONO_SIM_PASSWORD_NONE;
+
+	return sim->pin_type;
+}
+
 const unsigned char *ofono_sim_get_cphs_service_table(struct ofono_sim *sim)
 {
 	if (sim == NULL)
@@ -2306,6 +2329,42 @@ static void sim_free_early_state(struct ofono_sim *sim)
 		ofono_sim_context_free(sim->early_context);
 		sim->early_context = NULL;
 	}
+}
+
+static void sim_spn_close(struct ofono_sim *sim)
+{
+	if (sim->spn_watches) {
+		__ofono_watchlist_free(sim->spn_watches);
+		sim->spn_watches = NULL;
+	}
+
+	/*
+	 * We have not initialized SPN logic at all yet, either because
+	 * no netreg / gprs atom has been needed or we have not reached the
+	 * post_sim state
+	 */
+	if (sim->ef_spn_watch == 0)
+		return;
+
+	ofono_sim_remove_file_watch(sim->context, sim->ef_spn_watch);
+	sim->ef_spn_watch = 0;
+
+	ofono_sim_remove_file_watch(sim->context, sim->cphs_spn_watch);
+	sim->cphs_spn_watch = 0;
+
+	if (sim->cphs_spn_short_watch) {
+		ofono_sim_remove_file_watch(sim->context,
+						sim->cphs_spn_short_watch);
+		sim->cphs_spn_short_watch = 0;
+	}
+
+	sim->flags &= ~SIM_FLAG_READING_SPN;
+
+	g_free(sim->spn);
+	sim->spn = NULL;
+
+	g_free(sim->spn_dc);
+	sim->spn_dc = NULL;
 }
 
 static void sim_free_main_state(struct ofono_sim *sim)
@@ -2376,6 +2435,8 @@ static void sim_free_main_state(struct ofono_sim *sim)
 	sim->fixed_dialing = FALSE;
 	sim->barred_dialing = FALSE;
 
+	sim_spn_close(sim);
+
 	if (sim->context) {
 		ofono_sim_context_free(sim->context);
 		sim->context = NULL;
@@ -2390,6 +2451,16 @@ static void sim_free_state(struct ofono_sim *sim)
 
 void ofono_sim_inserted_notify(struct ofono_sim *sim, ofono_bool_t inserted)
 {
+	if (sim->state == OFONO_SIM_STATE_RESETTING && inserted) {
+		/*
+		 * Start initialization procedure from after EFiccid,
+		 * EFli and EFpl are retrieved.
+		 */
+		sim->state = OFONO_SIM_STATE_INSERTED;
+		__ofono_sim_recheck_pin(sim);
+		return;
+	}
+
 	if (inserted == TRUE && sim->state == OFONO_SIM_STATE_NOT_PRESENT)
 		sim->state = OFONO_SIM_STATE_INSERTED;
 	else if (inserted == FALSE && sim->state != OFONO_SIM_STATE_NOT_PRESENT)
@@ -2593,40 +2664,6 @@ static void sim_spn_init(struct ofono_sim *sim)
 				sim_spn_changed, sim, NULL);
 }
 
-static void sim_spn_close(struct ofono_sim *sim)
-{
-	__ofono_watchlist_free(sim->spn_watches);
-	sim->spn_watches = NULL;
-
-	/*
-	 * We have not initialized SPN logic at all yet, either because
-	 * no netreg / gprs atom has been needed or we have not reached the
-	 * post_sim state
-	 */
-	if (sim->ef_spn_watch == 0)
-		return;
-
-	ofono_sim_remove_file_watch(sim->context, sim->ef_spn_watch);
-	sim->ef_spn_watch = 0;
-
-	ofono_sim_remove_file_watch(sim->context, sim->cphs_spn_watch);
-	sim->cphs_spn_watch = 0;
-
-	if (sim->cphs_spn_short_watch) {
-		ofono_sim_remove_file_watch(sim->context,
-						sim->cphs_spn_short_watch);
-		sim->cphs_spn_short_watch = 0;
-	}
-
-	sim->flags &= ~SIM_FLAG_READING_SPN;
-
-	g_free(sim->spn);
-	sim->spn = NULL;
-
-	g_free(sim->spn_dc);
-	sim->spn_dc = NULL;
-}
-
 ofono_bool_t ofono_sim_add_spn_watch(struct ofono_sim *sim, unsigned int *id,
 					ofono_sim_spn_cb_t cb, void *data,
 					ofono_destroy_func destroy)
@@ -2798,8 +2835,6 @@ static void sim_unregister(struct ofono_atom *atom)
 	__ofono_watchlist_free(sim->state_watches);
 	sim->state_watches = NULL;
 
-	sim_spn_close(sim);
-
 	g_dbus_unregister_interface(conn, path, OFONO_SIM_MANAGER_INTERFACE);
 	ofono_modem_remove_interface(modem, OFONO_SIM_MANAGER_INTERFACE);
 }
@@ -2929,7 +2964,6 @@ void ofono_sim_register(struct ofono_sim *sim)
 
 	ofono_modem_add_interface(modem, OFONO_SIM_MANAGER_INTERFACE);
 	sim->state_watches = __ofono_watchlist_new(g_free);
-	sim->spn_watches = __ofono_watchlist_new(g_free);
 	sim->simfs = sim_fs_new(sim, sim->driver);
 
 	__ofono_atom_register(sim->atom, sim_unregister);
@@ -3106,11 +3140,12 @@ void __ofono_sim_refresh(struct ofono_sim *sim, GSList *file_list,
 	}
 
 	if (reinit_naa) {
+		sim->state = OFONO_SIM_STATE_RESETTING;
+		__ofono_modem_sim_reset(__ofono_atom_get_modem(sim->atom));
+
 		/* Force the sim state out of READY */
 		sim_free_main_state(sim);
-
-		sim->state = OFONO_SIM_STATE_INSERTED;
-		__ofono_modem_sim_reset(__ofono_atom_get_modem(sim->atom));
+		call_state_watches(sim);
 	}
 
 	/*
@@ -3127,18 +3162,5 @@ void __ofono_sim_refresh(struct ofono_sim *sim, GSList *file_list,
 
 			sim_fs_notify_file_watches(sim->simfs, id);
 		}
-	}
-
-	if (reinit_naa) {
-		/*
-		 * REVISIT: There's some concern that on re-insertion the
-		 * atoms will start to talk to the SIM before it becomes
-		 * ready, on certain SIMs.
-		 */
-		/*
-		 * Start initialization procedure from after EFiccid,
-		 * EFli and EFpl are retrieved.
-		 */
-		__ofono_sim_recheck_pin(sim);
 	}
 }

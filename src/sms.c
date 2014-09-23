@@ -795,6 +795,9 @@ static void netreg_status_watch(int status, int lac, int ci, int tech,
 	if (sms->tx_source > 0)
 		return;
 
+	if (sms->flags & MESSAGE_MANAGER_FLAG_TXQ_ACTIVE)
+		return;
+
 	if (g_queue_get_length(sms->txq))
 		sms->tx_source = g_timeout_add(0, tx_next, sms);
 }
@@ -2114,16 +2117,17 @@ int __ofono_sms_txq_set_submit_notify(struct ofono_sms *sms,
 					void *data,
 					ofono_destroy_func destroy)
 {
-	struct message *m;
-	struct tx_queue_entry *entry;
+	GList *l;
+	struct tx_queue_entry *entry = g_queue_peek_tail(sms->txq);
 
-	m = g_hash_table_lookup(sms->messages, uuid);
-	if (m == NULL)
-		return -ENOENT;
+	if (memcmp(&entry->uuid, uuid, sizeof(entry->uuid))) {
+		l = g_queue_find_custom(sms->txq, uuid, entry_compare_by_uuid);
 
-	entry = message_get_data(m);
-	if (entry == NULL)
-		return -ENOTSUP;
+		if (l == NULL)
+			return -ENOENT;
+
+		entry = l->data;
+	}
 
 	tx_queue_entry_set_submit_notify(entry, cb, data, destroy);
 

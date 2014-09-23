@@ -27,12 +27,7 @@ enum sim_fileid {
 	SIM_EF_ICCID_FILEID =			0x2FE2,
 	SIM_MF_FILEID =				0x3F00,
 	SIM_EFIMG_FILEID =			0x4F20,
-	SIM_EFPSC_FILEID =			0x4F22,
-	SIM_EFCC_FILEID =			0x4F23,
-	SIM_EFPUID_FILEID =			0x4F24,
-	SIM_EFPBR_FILEID =			0x4F30,
 	SIM_DFPHONEBOOK_FILEID =		0x5F3A,
-	SIM_DFMULTIMEDIA_FILEID =		0x5F3B,
 	SIM_EFLI_FILEID =			0x6F05,
 	SIM_EFARR_FILEID =			0x6F06,
 	SIM_EFIMSI_FILEID =			0x6F07,
@@ -288,8 +283,10 @@ struct sim_eons_operator_info {
 
 struct sim_ef_info {
 	unsigned short id;
-	unsigned short parent;
+	unsigned short parent2g;
+	unsigned short parent3g;
 	unsigned char file_type;
+	unsigned char file_structure;
 	unsigned char size;
 	enum sim_file_access perm_read;
 	enum sim_file_access perm_update;
@@ -473,6 +470,8 @@ void sim_adn_build(unsigned char *data, int length,
 			const char *identifier);
 
 struct sim_ef_info *sim_ef_db_lookup(unsigned short efid);
+unsigned int sim_ef_db_get_path_2g(unsigned short id, unsigned char path[]);
+unsigned int sim_ef_db_get_path_3g(unsigned short id, unsigned char path[]);
 
 gboolean sim_parse_3g_get_response(const unsigned char *data, int len,
 					int *file_len, int *record_len,

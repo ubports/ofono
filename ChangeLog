@@ -1,3 +1,58 @@
+ver 1.15:
+	Fix issue with EF_PNN access affecting PLMN display.
+	Fix issue with SIM detection and Telit HE910 modems.
+	Fix issue with Mobile Provider Database provisioning.
+	Fix issue with bit-shifting and ID mapping allocations.
+	Fix issue with Handsfree and unsolicited notifications.
+	Fix issue with Handsfree and three way calling feature.
+	Add support for Handsfree subscriber number feature.
+	Add support for Handsfree multiple DTMF characters.
+	Add support for PAP authentication.
+
+ver 1.14:
+	Add support for Apple Siri specific Handsfree commands.
+	Add support for provisioning of MMSC and Message Proxy.
+	Add support for Telit HE910 modems.
+
+ver 1.13:
+	Fix issue with parsing SS control strings.
+	Fix issue with error reporting and Sierra modems.
+	Fix issue with GPRS activation and SIM900 modems.
+	Fix issue with serial receiver and SIM900 modems.
+	Fix issue with signal strength and SIM900 modems.
+	Fix issue with AT+CNMI handling and SIM900 modems.
+	Fix issue with broken +CMER behavior and MBM modems.
+	Fix issue with handling +CIEV and release and swap.
+	Add support for Handsfree profile 1.6 functionality.
+	Add support for Handsfree audio interface.
+
+ver 1.12:
+	Fix issue with alpha ID and self explanatory icons.
+	Fix issue with SIM Refresh handling and resetting state.
+	Fix issue with SMS initiated by STK proactive command.
+	Fix issue with CBS treating carriage return as padding.
+	Fix issue with USSD terminated by network notification.
+	Add support for battery charge level with Handsfree devices.
+	Add support for technology and band changes with IFX modems.
+	Add support for SIM file handling with Qualcomm QMI modems.
+	Add support for SIM file system 2G and 3G path handling.
+	Add support for SIM Toolkit end-to-end testing.
+
+ver 1.11:
+	Fix issue with Bluetooth disconnect handling.
+	Fix issue with handling EFspn with filler characters.
+	Fix issue with processing multiple *EMRDY notifications.
+	Fix issue with wrong data bearer property signal.
+	Add support for data bearer reporting and Telit modems.
+	Add support for SIM status notification and Telit modems.
+	Add support for PIN retry counter status and Telit modems.
+	Add support for long phone number format and SIM Toolkit.
+	Add support for RequestQuickDigit to SIM Toolkit agent.
+
+ver 1.10:
+	Update multiple descriptions of the API documentation.
+	Add support for ReleaseAndSwap call handling.
+
 ver 1.9:
 	Fix issue with missing CSSI and CSSU support for IFX modems.
 	Fix issue with GPRS shutdown handling when network is lost.

@@ -128,6 +128,8 @@ static const char *modem_type_to_string(enum ofono_modem_type type)
 		return "hfp";
 	case OFONO_MODEM_TYPE_SAP:
 		return "sap";
+	case OFONO_MODEM_TYPE_TEST:
+		return "test";
 	}
 
 	return "unknown";
@@ -593,6 +595,17 @@ static gboolean modem_has_sim(struct ofono_modem *modem)
 	return FALSE;
 }
 
+static gboolean modem_is_always_online(struct ofono_modem *modem)
+{
+	if (modem->driver->set_online == NULL)
+		return TRUE;
+
+	if (ofono_modem_get_boolean(modem, "AlwaysOnline") == TRUE)
+		return TRUE;
+
+	return FALSE;
+}
+
 static void common_online_cb(const struct ofono_error *error, void *data)
 {
 	struct ofono_modem *modem = data;
@@ -692,6 +705,7 @@ static void sim_state_watch(enum ofono_sim_state new_state, void *user)
 	case OFONO_SIM_STATE_NOT_PRESENT:
 		modem_change_state(modem, MODEM_STATE_PRE_SIM);
 	case OFONO_SIM_STATE_INSERTED:
+	case OFONO_SIM_STATE_RESETTING:
 		break;
 	case OFONO_SIM_STATE_LOCKED_OUT:
 		modem_change_state(modem, MODEM_STATE_PRE_SIM);
@@ -699,11 +713,8 @@ static void sim_state_watch(enum ofono_sim_state new_state, void *user)
 	case OFONO_SIM_STATE_READY:
 		modem_change_state(modem, MODEM_STATE_OFFLINE);
 
-		/*
-		 * If we don't have the set_online method, also proceed
-		 * straight to the online state
-		 */
-		if (modem->driver->set_online == NULL)
+		/* Modem is always online, proceed to online state. */
+		if (modem_is_always_online(modem) == TRUE)
 			set_online(modem, TRUE);
 
 		if (modem->online == TRUE)
@@ -742,7 +753,7 @@ static DBusMessage *set_property_online(struct ofono_modem *modem,
 	if (ofono_modem_get_emergency_mode(modem) == TRUE)
 		return __ofono_error_emergency_active(msg);
 
-	if (driver->set_online == NULL)
+	if (modem_is_always_online(modem) == TRUE)
 		return __ofono_error_not_implemented(msg);
 
 	modem->pending = dbus_message_ref(msg);
@@ -1656,7 +1667,8 @@ static int set_modem_property(struct ofono_modem *modem, const char *name,
 	DBG("modem %p property %s", modem, name);
 
 	if (type != PROPERTY_TYPE_STRING &&
-			type != PROPERTY_TYPE_INTEGER)
+			type != PROPERTY_TYPE_INTEGER &&
+			type != PROPERTY_TYPE_BOOLEAN)
 		return -EINVAL;
 
 	property = g_try_new0(struct modem_property, 1);
@@ -2194,6 +2206,22 @@ void __ofono_modem_foreach(ofono_modem_foreach_func func, void *userdata)
 		modem = l->data;
 		func(modem, userdata);
 	}
+}
+
+struct ofono_modem *ofono_modem_find(ofono_modem_compare_cb_t func,
+					void *user_data)
+{
+	struct ofono_modem *modem;
+	GSList *l;
+
+	for (l = g_modem_list; l; l = l->next) {
+		modem = l->data;
+
+		if (func(modem, user_data) == TRUE)
+			return modem;
+	}
+
+	return NULL;
 }
 
 ofono_bool_t ofono_modem_get_emergency_mode(struct ofono_modem *modem)

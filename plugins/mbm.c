@@ -59,10 +59,13 @@ enum mbm_variant {
 	MBM_DELL_D5530,		/* OEM of F3507g */
 };
 
+#define MBM_FLAG_HAVE_SIM 0x1
+#define MBM_FLAG_SAW_EMRDY 0x2
+
 struct mbm_data {
 	GAtChat *modem_port;
 	GAtChat *data_port;
-	gboolean have_sim;
+	unsigned int flags;
 	struct ofono_location_reporting *lr;
 	enum mbm_variant variant;
 	struct at_util_sim_state_query *sim_state_query;
@@ -134,7 +137,9 @@ static void sim_state_cb(gboolean present, gpointer user_data)
 	at_util_sim_state_query_free(data->sim_state_query);
 	data->sim_state_query = NULL;
 
-	data->have_sim = present;
+	if (present)
+		data->flags |= MBM_FLAG_HAVE_SIM;
+
 	ofono_modem_set_powered(modem, TRUE);
 }
 
@@ -202,6 +207,14 @@ static void cfun_query(gboolean ok, GAtResult *result, gpointer user_data)
 
 	g_at_result_iter_next_number(&iter, &status);
 
+	g_at_chat_send(data->modem_port, "AT&F E0 V1 X4 &C0 +CMEE=1", NULL,
+					NULL, NULL, NULL);
+	g_at_chat_send(data->data_port, "AT&F E0 V1 X4 &C0 +CMEE=1", NULL,
+					NULL, NULL, NULL);
+
+	g_at_chat_send(data->modem_port, "AT*E2CFUN=1", none_prefix,
+					NULL, NULL, NULL);
+
 	if (status != 4) {
 		g_at_chat_send(data->modem_port, "AT+CFUN=4", none_prefix,
 				cfun_enable, modem, NULL);
@@ -220,6 +233,9 @@ static void emrdy_notifier(GAtResult *result, gpointer user_data)
 
 	DBG("");
 
+	if (data->flags & MBM_FLAG_SAW_EMRDY)
+		return;
+
 	g_at_result_iter_init(&iter, result);
 
 	if (g_at_result_iter_next(&iter, "*EMRDY:") == FALSE)
@@ -229,6 +245,8 @@ static void emrdy_notifier(GAtResult *result, gpointer user_data)
 
 	if (status != 1)
 		return;
+
+	data->flags |= MBM_FLAG_SAW_EMRDY;
 
 	g_at_chat_send(data->modem_port, "AT+CFUN?", cfun_prefix,
 					cfun_query, modem, NULL);
@@ -244,6 +262,10 @@ static void emrdy_query(gboolean ok, GAtResult *result, gpointer user_data)
 	if (ok)
 		return;
 
+	/* Sometimes we query EMRDY just as the EMRDY notifier is fired */
+	if (data->flags & MBM_FLAG_SAW_EMRDY)
+		return;
+
 	/* On some MBM hardware the EMRDY cannot be queried, so if this fails
 	 * we try to run CFUN? to check the state.  CFUN? will fail unless
 	 * EMRDY: 1 has been sent, in which case the emrdy_notifier should be
@@ -251,7 +273,7 @@ static void emrdy_query(gboolean ok, GAtResult *result, gpointer user_data)
 	 */
 	g_at_chat_send(data->modem_port, "AT+CFUN?", cfun_prefix,
 					cfun_query, modem, NULL);
-};
+}
 
 static GAtChat *create_port(const char *device)
 {
@@ -321,13 +343,6 @@ static int mbm_enable(struct ofono_modem *modem)
 	g_at_chat_register(data->modem_port, "*EMRDY:", emrdy_notifier,
 					FALSE, modem, NULL);
 
-	g_at_chat_send(data->modem_port, "AT&F E0 V1 X4 &C0 +CMEE=1", NULL,
-					NULL, NULL, NULL);
-	g_at_chat_send(data->data_port, "AT&F E0 V1 X4 &C0 +CMEE=1", NULL,
-					NULL, NULL, NULL);
-
-	g_at_chat_send(data->modem_port, "AT*E2CFUN=1", none_prefix,
-					NULL, NULL, NULL);
 	g_at_chat_send(data->modem_port, "AT*EMRDY?", none_prefix,
 				emrdy_query, modem, NULL);
 
@@ -409,7 +424,7 @@ static void mbm_pre_sim(struct ofono_modem *modem)
 	sim = ofono_sim_create(modem, OFONO_VENDOR_MBM,
 					"atmodem", data->modem_port);
 
-	if (data->have_sim && sim)
+	if ((data->flags & MBM_FLAG_HAVE_SIM) && sim)
 		ofono_sim_inserted_notify(sim, TRUE);
 }
 

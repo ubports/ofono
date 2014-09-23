@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
 import dbus
 
@@ -10,7 +10,7 @@ manager = dbus.Interface(bus.get_object('org.ofono', '/'),
 modems = manager.GetModems()
 
 for path, properties in modems:
-	print "[ %s ]" % (path)
+	print("[ %s ]" % (path))
 
 	for key in properties.keys():
 		if key in ["Interfaces", "Features"]:
@@ -18,14 +18,14 @@ for path, properties in modems:
 			for i in properties[key]:
 				val += i + " "
 		else:
-			val = str(properties[key])
-		print "    %s = %s" % (key, val)
+			val = properties[key]
+		print("    %s = %s" % (key, val))
 
 	for interface in properties["Interfaces"]:
 		object = dbus.Interface(bus.get_object('org.ofono', path),
 								interface)
 
-		print "    [ %s ]" % (interface)
+		print("    [ %s ]" % (interface))
 
 		try:
 			properties = object.GetProperties()
@@ -54,7 +54,8 @@ for path, properties in modems:
 						"MicrophoneVolume",
 						"SpeakerVolume",
 						"Strength",
-						"DataStrength"]:
+						"DataStrength",
+						"BatteryChargeLevel"]:
 				val = int(properties[key])
 			elif key in ["MainMenu"]:
 				val = ", ".join([ text + " (" + str(int(icon)) +
@@ -75,7 +76,7 @@ for path, properties in modems:
 						val += properties[key][i]
 				val += " }"
 			else:
-				val = str(properties[key])
-			print "        %s = %s" % (key, val)
+				val = properties[key]
+			print("        %s = %s" % (key, val))
 
-	print
+	print('')

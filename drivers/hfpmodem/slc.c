@@ -34,9 +34,11 @@
 #include <ofono/log.h>
 #include <ofono/modem.h>
 #include <ofono/emulator.h>
+#include <ofono/handsfree-audio.h>
 
 #include <drivers/atmodem/atutil.h>
 
+#include "hfp.h"
 #include "slc.h"
 
 static const char *brsf_prefix[] = { "+BRSF:", NULL };
@@ -57,15 +59,22 @@ void hfp_slc_info_init(struct hfp_slc_info *info, guint16 version)
 	info->ag_features = 0;
 	info->ag_mpty_features = 0;
 
-	info->hf_features = HFP_HF_FEATURE_3WAY;
+	info->hf_features = HFP_HF_FEATURE_ECNR;
+	info->hf_features |= HFP_HF_FEATURE_3WAY;
 	info->hf_features |= HFP_HF_FEATURE_CLIP;
 	info->hf_features |= HFP_HF_FEATURE_REMOTE_VOLUME_CONTROL;
+	info->hf_features |= HFP_HF_FEATURE_VOICE_RECOGNITION;
 
 	if (version < HFP_VERSION_1_5)
 		goto done;
 
 	info->hf_features |= HFP_HF_FEATURE_ENHANCED_CALL_STATUS;
 	info->hf_features |= HFP_HF_FEATURE_ENHANCED_CALL_CONTROL;
+
+	if (version < HFP_VERSION_1_6)
+		goto done;
+
+	info->hf_features |= HFP_HF_FEATURE_CODEC_NEGOTIATION;
 
 done:
 	memset(info->cind_val, 0, sizeof(info->cind_val));
@@ -119,19 +128,19 @@ static void chld_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 	while (g_at_result_iter_next_unquoted_string(&iter, &str)) {
 		if (!strcmp(str, "0"))
-			ag_mpty_feature |= AG_CHLD_0;
+			ag_mpty_feature |= HFP_AG_CHLD_0;
 		else if (!strcmp(str, "1"))
-			ag_mpty_feature |= AG_CHLD_1;
+			ag_mpty_feature |= HFP_AG_CHLD_1;
 		else if (!strcmp(str, "1x"))
-			ag_mpty_feature |= AG_CHLD_1x;
+			ag_mpty_feature |= HFP_AG_CHLD_1x;
 		else if (!strcmp(str, "2"))
-			ag_mpty_feature |= AG_CHLD_2;
+			ag_mpty_feature |= HFP_AG_CHLD_2;
 		else if (!strcmp(str, "2x"))
-			ag_mpty_feature |= AG_CHLD_2x;
+			ag_mpty_feature |= HFP_AG_CHLD_2x;
 		else if (!strcmp(str, "3"))
-			ag_mpty_feature |= AG_CHLD_3;
+			ag_mpty_feature |= HFP_AG_CHLD_3;
 		else if (!strcmp(str, "4"))
-			ag_mpty_feature |= AG_CHLD_4;
+			ag_mpty_feature |= HFP_AG_CHLD_4;
 	}
 
 	if (!g_at_result_iter_close_list(&iter))
@@ -266,6 +275,21 @@ error:
 	slc_failed(sed);
 }
 
+static void bac_cb(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct slc_establish_data *sed = user_data;
+	struct hfp_slc_info *info = sed->info;
+
+	if (!ok) {
+		slc_failed(sed);
+		return;
+	}
+
+	slc_establish_data_ref(sed);
+	g_at_chat_send(info->chat, "AT+CIND=?", cind_prefix,
+				cind_cb, sed, slc_establish_data_unref);
+}
+
 static void brsf_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct slc_establish_data *sed = user_data;
@@ -281,6 +305,24 @@ static void brsf_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		goto error;
 
 	g_at_result_iter_next_number(&iter, (gint *)&info->ag_features);
+
+	if (info->ag_features & HFP_AG_FEATURE_CODEC_NEGOTIATION &&
+			info->hf_features & HFP_HF_FEATURE_CODEC_NEGOTIATION) {
+		char str[32];
+
+		memset(str, 0, sizeof(str));
+
+		if (ofono_handsfree_audio_has_wideband())
+			sprintf(str, "AT+BAC=%d,%d", HFP_CODEC_CVSD,
+							HFP_CODEC_MSBC);
+		else
+			sprintf(str, "AT+BAC=%d", HFP_CODEC_CVSD);
+
+		slc_establish_data_ref(sed);
+		g_at_chat_send(info->chat, str, NULL, bac_cb, sed,
+						slc_establish_data_unref);
+		return;
+	}
 
 	slc_establish_data_ref(sed);
 	g_at_chat_send(info->chat, "AT+CIND=?", cind_prefix,

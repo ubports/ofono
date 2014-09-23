@@ -41,6 +41,9 @@ static const char *alnum_sender = "0791447758100650"
 static const char *simple_submit = "0011000B916407281553F80000AA"
 		"0AE8329BFD4697D9EC37";
 
+static const char *simple_mwi = "07913366002020F8040B913366600600F100C8318070"
+				"6174148000";
+
 static void print_scts(struct sms_scts *scts, const char *prefix)
 {
 	time_t ts;
@@ -469,6 +472,107 @@ static void test_submit_encode(void)
 	g_assert(strcmp(simple_submit, encoded_pdu) == 0);
 
 	g_free(encoded_pdu);
+}
+
+static void test_simple_mwi(void)
+{
+	struct sms sms;
+	unsigned char *decoded_pdu;
+	long pdu_len;
+	gboolean ret;
+	enum sms_mwi_type type;
+	gboolean active;
+	gboolean discard;
+
+	decoded_pdu = decode_hex(simple_mwi, -1, &pdu_len, 0);
+
+	g_assert(decoded_pdu);
+	g_assert(pdu_len == (long)strlen(simple_mwi) / 2);
+
+	ret = sms_decode(decoded_pdu, pdu_len, FALSE, 19, &sms);
+
+	g_free(decoded_pdu);
+
+	g_assert(ret);
+	g_assert(sms.type == SMS_TYPE_DELIVER);
+
+	if (g_test_verbose())
+		dump_details(&sms);
+
+	g_assert(sms.sc_addr.number_type == SMS_NUMBER_TYPE_INTERNATIONAL);
+	g_assert(sms.sc_addr.numbering_plan == SMS_NUMBERING_PLAN_ISDN);
+	g_assert(strcmp(sms.sc_addr.address, "33660002028") == 0);
+
+	g_assert(sms.deliver.oaddr.number_type ==
+			SMS_NUMBER_TYPE_INTERNATIONAL);
+	g_assert(sms.deliver.oaddr.numbering_plan ==
+			SMS_NUMBERING_PLAN_ISDN);
+	g_assert(strcmp(sms.deliver.oaddr.address, "33660660001") == 0);
+
+	g_assert(sms.deliver.pid == 0);
+	g_assert(sms.deliver.dcs == 200);
+
+	g_assert(sms.deliver.scts.year == 13);
+	g_assert(sms.deliver.scts.month == 8);
+	g_assert(sms.deliver.scts.day == 7);
+	g_assert(sms.deliver.scts.hour == 16);
+	g_assert(sms.deliver.scts.minute == 47);
+	g_assert(sms.deliver.scts.second == 41);
+	g_assert(sms.deliver.scts.timezone == 8);
+
+	g_assert(sms.deliver.udl == 0);
+
+	if (sms.deliver.udhi) {
+		struct sms_udh_iter iter;
+		enum sms_iei iei;
+
+		ret = sms_udh_iter_init(&sms, &iter);
+		g_assert(ret);
+
+		while ((iei = sms_udh_iter_get_ie_type(&iter)) !=
+				SMS_IEI_INVALID) {
+			switch (iei) {
+			case SMS_IEI_ENHANCED_VOICE_MAIL_INFORMATION:
+			{
+				unsigned char evm_iei[140];
+				sms_udh_iter_get_ie_data(&iter, evm_iei);
+				sms_udh_iter_get_ie_length(&iter);
+
+				if (g_test_verbose())
+					g_print("Enhanced Voicemail IEI\n");
+				break;
+			}
+
+			case SMS_IEI_SPECIAL_MESSAGE_INDICATION:
+			{
+				unsigned char special_iei[4];
+
+				sms_udh_iter_get_ie_data(&iter, special_iei);
+				sms_udh_iter_get_ie_length(&iter);
+
+				if (g_test_verbose())
+					g_print("Special Voicemail IEI\n");
+
+				break;
+			}
+
+			default:
+				break;
+			}
+
+			sms_udh_iter_next(&iter);
+		}
+	}
+
+	ret = sms_mwi_dcs_decode(sms.deliver.dcs, &type, NULL, &active,
+					&discard);
+	g_assert(ret);
+
+	if (g_test_verbose()) {
+		g_print("Type: %d, Active: %d, Discard: %d\n",
+				type, active, discard);
+
+	}
 }
 
 struct sms_charset_data {
@@ -1236,6 +1340,10 @@ static const char *cbs2 = "0110003201114679785E96371A8D46A3D168341A8D46A3D1683"
 	"41A8D46A3D168341A8D46A3D168341A8D46A3D168341A8D46A3D168341A8D46A3D168"
 	"341A8D46A3D168341A8D46A3D168341A8D46A3D168341A8D46A3D100";
 
+static const char *cbs3 = "001000000111E280604028180E888462C168381E90886442A95"
+	"82E988C66C3E9783EA09068442A994EA8946AC56AB95EB0986C46ABD96EB89C6EC7EBF"
+	"97EC0A070482C1A8FC8A472C96C3A9FD0A8744AAD5AAFD8AC76CB05";
+
 static void test_cbs_encode_decode(void)
 {
 	unsigned char *decoded_pdu;
@@ -1387,6 +1495,58 @@ static void test_cbs_assembly(void)
 	g_slist_free(l);
 
 	cbs_assembly_free(assembly);
+}
+
+static void test_cbs_padding_character(void)
+{
+	unsigned char *decoded_pdu;
+	long pdu_len;
+	gboolean ret;
+	struct cbs cbs;
+	GSList *l;
+	char iso639_lang[3];
+	char *utf8;
+
+	decoded_pdu = decode_hex(cbs3, -1, &pdu_len, 0);
+
+	g_assert(decoded_pdu);
+	g_assert(pdu_len == 88);
+
+	ret = cbs_decode(decoded_pdu, pdu_len, &cbs);
+
+	g_free(decoded_pdu);
+
+	g_assert(ret);
+
+	g_assert(cbs.gs == CBS_GEO_SCOPE_CELL_IMMEDIATE);
+	g_assert(cbs.message_code == 1);
+	g_assert(cbs.update_number == 0);
+	g_assert(cbs.message_identifier == 0);
+	g_assert(cbs.dcs == 1);
+	g_assert(cbs.max_pages == 1);
+	g_assert(cbs.page == 1);
+
+	l = g_slist_append(NULL, &cbs);
+
+	utf8 = cbs_decode_text(l, iso639_lang);
+
+	g_assert(utf8);
+
+	if (g_test_verbose()) {
+		g_printf("%s\n", utf8);
+		if (iso639_lang[0] == '\0')
+			g_printf("Lang: Unspecified\n");
+		else
+			g_printf("Lang: %s\n", iso639_lang);
+	}
+
+	g_assert(strcmp(utf8, "b£$¥èéùìòÇ\x0AØø\x0DÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !\"#¤"
+				"\x25&'()*+,-./0123456789:;<=>?¡ABCDEFGHIJKLM"
+				"NOPQRSTUVWXYZÄÖ") == 0);
+	g_assert(strcmp(iso639_lang, "en") == 0);
+
+	g_free(utf8);
+	g_slist_free(l);
 }
 
 static const char *ranges[] = { "1-5, 2, 3, 600, 569-900, 999",
@@ -1621,6 +1781,7 @@ int main(int argc, char **argv)
 	g_test_add_func("/testsms/Test Deliver Encode", test_deliver_encode);
 	g_test_add_func("/testsms/Test Simple Submit", test_simple_submit);
 	g_test_add_func("/testsms/Test Submit Encode", test_submit_encode);
+	g_test_add_func("/testsms/Test Simple MWI", test_simple_mwi);
 
 	g_test_add_data_func("/testsms/Test "
 		"GSM 7 bit Default Alphabet Decode",
@@ -1678,6 +1839,9 @@ int main(int argc, char **argv)
 	g_test_add_func("/testsms/Test CBS Encode / Decode",
 			test_cbs_encode_decode);
 	g_test_add_func("/testsms/Test CBS Assembly", test_cbs_assembly);
+
+	g_test_add_func("/testsms/Test CBS Padding Character",
+			test_cbs_padding_character);
 
 	g_test_add_func("/testsms/Range minimizer", test_range_minimizer);
 

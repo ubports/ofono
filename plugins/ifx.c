@@ -95,7 +95,6 @@ struct ifx_data {
 	int mux_ldisc;
 	int saved_ldisc;
 	struct ofono_sim *sim;
-	gboolean have_sim;
 };
 
 static void ifx_debug(const char *str, void *user_data)
@@ -140,24 +139,29 @@ static void ifx_set_sim_state(struct ifx_data *data, int state)
 
 	switch (state) {
 	case 0:	/* SIM not present */
+	case 6:	/* SIM Error */
+	case 8:	/* SIM Technical Problem */
 	case 9:	/* SIM Removed */
-		if (data->have_sim == TRUE) {
-			ofono_sim_inserted_notify(data->sim, FALSE);
-			data->have_sim = FALSE;
-		}
+		ofono_sim_inserted_notify(data->sim, FALSE);
 		break;
 	case 1:	/* PIN verification needed */
-	case 2:	/* PIN verification not needed – Ready */
-	case 3:	/* PIN verified – Ready */
 	case 4:	/* PUK verification needed */
 	case 5:	/* SIM permanently blocked */
-	case 6:	/* SIM Error */
 	case 7:	/* ready for attach (+COPS) */
-	case 8:	/* SIM Technical Problem */
-		if (data->have_sim == FALSE) {
-			ofono_sim_inserted_notify(data->sim, TRUE);
-			data->have_sim = TRUE;
-		}
+		ofono_sim_inserted_notify(data->sim, TRUE);
+		break;
+	case 2:	/* PIN verification not needed – Ready */
+	case 3:	/* PIN verified – Ready */
+		/*
+		 * State 3 is handled in the SIM atom driver
+		 * while for state 2 we should be waiting for state 7
+		 */
+		break;
+	case 10: /* SIM Reactivating */
+	case 11: /* SIM Reactivated */
+	case 12: /* SIM SMS Caching Completed */
+	case 99: /* SIM State Unknown */
+		ofono_warn("Unhandled SIM state %d received", state);
 		break;
 	default:
 		ofono_warn("Unknown SIM state %d received", state);
@@ -317,8 +321,6 @@ static void xgendata_query(gboolean ok, GAtResult *result, gpointer user_data)
 	g_at_chat_send(data->dlcs[AUX_DLC], "AT+XPOW=0,0,0", none_prefix,
 							NULL, NULL, NULL);
 
-	data->have_sim = FALSE;
-
 	/* notify that the modem is ready so that pre_sim gets called */
 	ofono_modem_set_powered(modem, TRUE);
 
@@ -452,7 +454,7 @@ static void setup_internal_mux(struct ofono_modem *modem)
 	}
 
 	/* wait for DLC creation to settle */
-	data->dlc_init_source = g_timeout_add(10, dlc_setup, modem);
+	data->dlc_init_source = g_timeout_add(500, dlc_setup, modem);
 
 	return;
 
@@ -670,6 +672,8 @@ static void ifx_pre_sim(struct ofono_modem *modem)
 static void ifx_post_sim(struct ofono_modem *modem)
 {
 	struct ifx_data *data = ofono_modem_get_data(modem);
+	struct ofono_gprs *gprs;
+	struct ofono_gprs_context *gc;
 
 	DBG("%p", modem);
 
@@ -681,33 +685,6 @@ static void ifx_post_sim(struct ofono_modem *modem)
 
 	ofono_sms_create(modem, OFONO_VENDOR_IFX,
 					"atmodem", data->dlcs[AUX_DLC]);
-}
-
-static void ifx_post_online(struct ofono_modem *modem)
-{
-	struct ifx_data *data = ofono_modem_get_data(modem);
-	struct ofono_message_waiting *mw;
-	struct ofono_gprs *gprs;
-	struct ofono_gprs_context *gc;
-
-	DBG("%p", modem);
-
-	ofono_netreg_create(modem, OFONO_VENDOR_IFX,
-					"atmodem", data->dlcs[NETREG_DLC]);
-
-	ofono_cbs_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
-	ofono_ussd_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
-
-	ofono_gnss_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
-
-	ofono_call_settings_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
-	ofono_call_meter_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
-	ofono_call_barring_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
-	ofono_call_volume_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
-
-	mw = ofono_message_waiting_create(modem);
-	if (mw)
-		ofono_message_waiting_register(mw);
 
 	gprs = ofono_gprs_create(modem, OFONO_VENDOR_IFX,
 					"atmodem", data->dlcs[NETREG_DLC]);
@@ -730,6 +707,31 @@ static void ifx_post_online(struct ofono_modem *modem)
 		if (gc)
 			ofono_gprs_add_context(gprs, gc);
 	}
+}
+
+static void ifx_post_online(struct ofono_modem *modem)
+{
+	struct ifx_data *data = ofono_modem_get_data(modem);
+	struct ofono_message_waiting *mw;
+
+	DBG("%p", modem);
+
+	ofono_netreg_create(modem, OFONO_VENDOR_IFX,
+					"atmodem", data->dlcs[NETREG_DLC]);
+
+	ofono_cbs_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
+	ofono_ussd_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
+
+	ofono_gnss_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
+
+	ofono_call_settings_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
+	ofono_call_meter_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
+	ofono_call_barring_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
+	ofono_call_volume_create(modem, 0, "atmodem", data->dlcs[AUX_DLC]);
+
+	mw = ofono_message_waiting_create(modem);
+	if (mw)
+		ofono_message_waiting_register(mw);
 }
 
 static struct ofono_modem_driver ifx_driver = {

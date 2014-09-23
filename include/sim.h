@@ -77,6 +77,7 @@ enum ofono_sim_state {
 	OFONO_SIM_STATE_INSERTED,
 	OFONO_SIM_STATE_LOCKED_OUT,
 	OFONO_SIM_STATE_READY,
+	OFONO_SIM_STATE_RESETTING,
 };
 
 typedef void (*ofono_sim_file_info_cb_t)(const struct ofono_error *error,
@@ -125,24 +126,31 @@ struct ofono_sim_driver {
 	int (*probe)(struct ofono_sim *sim, unsigned int vendor, void *data);
 	void (*remove)(struct ofono_sim *sim);
 	void (*read_file_info)(struct ofono_sim *sim, int fileid,
+			const unsigned char *path, unsigned int path_len,
 			ofono_sim_file_info_cb_t cb, void *data);
 	void (*read_file_transparent)(struct ofono_sim *sim, int fileid,
 			int start, int length,
+			const unsigned char *path, unsigned int path_len,
 			ofono_sim_read_cb_t cb, void *data);
 	void (*read_file_linear)(struct ofono_sim *sim, int fileid,
 			int record, int length,
+			const unsigned char *path, unsigned int path_len,
 			ofono_sim_read_cb_t cb, void *data);
 	void (*read_file_cyclic)(struct ofono_sim *sim, int fileid,
 			int record, int length,
+			const unsigned char *path, unsigned int path_len,
 			ofono_sim_read_cb_t cb, void *data);
 	void (*write_file_transparent)(struct ofono_sim *sim, int fileid,
 			int start, int length, const unsigned char *value,
+			const unsigned char *path, unsigned int path_len,
 			ofono_sim_write_cb_t cb, void *data);
 	void (*write_file_linear)(struct ofono_sim *sim, int fileid,
 			int record, int length, const unsigned char *value,
+			const unsigned char *path, unsigned int path_len,
 			ofono_sim_write_cb_t cb, void *data);
 	void (*write_file_cyclic)(struct ofono_sim *sim, int fileid,
 			int length, const unsigned char *value,
+			const unsigned char *path, unsigned int path_len,
 			ofono_sim_write_cb_t cb, void *data);
 	void (*read_imsi)(struct ofono_sim *sim,
 			ofono_sim_imsi_cb_t cb, void *data);
@@ -189,6 +197,8 @@ enum ofono_sim_phase ofono_sim_get_phase(struct ofono_sim *sim);
 enum ofono_sim_cphs_phase ofono_sim_get_cphs_phase(struct ofono_sim *sim);
 const unsigned char *ofono_sim_get_cphs_service_table(struct ofono_sim *sim);
 
+enum ofono_sim_password_type ofono_sim_get_password_type(struct ofono_sim *sim);
+
 unsigned int ofono_sim_add_state_watch(struct ofono_sim *sim,
 					ofono_sim_state_event_cb_t cb,
 					void *data, ofono_destroy_func destroy);
@@ -228,6 +238,7 @@ int ofono_sim_write(struct ofono_sim_context *context, int id,
 
 int ofono_sim_read_bytes(struct ofono_sim_context *context, int id,
 			unsigned short offset, unsigned short num_bytes,
+			const unsigned char *path, unsigned int path_len,
 			ofono_sim_file_read_cb_t cb, void *data);
 
 unsigned int ofono_sim_add_file_watch(struct ofono_sim_context *context,

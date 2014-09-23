@@ -345,10 +345,12 @@ const unsigned char valid_efopl[] = {
 };
 
 const unsigned char valid_efpnn[][28] = {
-	{ 0x43, 0x0a, 0x00, 0x54, 0x75, 0x78, 0x20, 0x43, 0x6f, 0x6d,
-	  0x6d, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, },
-	{ 0x43, 0x05, 0x00, 0x4C, 0x6F, 0x6E, 0x67, 0x45, 0x06, 0x00,
-	  0x53, 0x68, 0x6F, 0x72, 0x74, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, }
+	/* Solavei */
+	{ 0x43, 0x08, 0x87, 0xD3, 0x37, 0x3B, 0x6C, 0x2F, 0xA7, 0x01 },
+	/* T-Mobile / T-Mobile */
+	{ 0x43, 0x08, 0x80, 0xD4, 0x56, 0xF3, 0x2D, 0x4E, 0xB3, 0xCB,
+	  0x45, 0x08, 0x80, 0xD4, 0x56, 0xF3, 0x2D, 0x4E, 0xB3, 0xCB,
+	  0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF }
 };
 
 static void test_eons(void)
@@ -376,7 +378,7 @@ static void test_eons(void)
 	op_info = sim_eons_lookup(eons_info, "246", "81");
 	g_assert(op_info);
 
-	g_assert(!strcmp(op_info->longname, "Tux Comm"));
+	g_assert(!strcmp(op_info->longname, "Solavei"));
 	g_assert(!op_info->shortname);
 	g_assert(!op_info->info);
 
@@ -394,9 +396,6 @@ static void test_ef_db(void)
 	g_assert(info == NULL);
 
 	info = sim_ef_db_lookup(0x2F05);
-	g_assert(info);
-
-	info = sim_ef_db_lookup(0x6FE3);
 	g_assert(info);
 }
 
@@ -448,7 +447,8 @@ static char *at_cuad_response = "611B4F10A0000000871002FFFFFFFF8905080000"
 	"FFFFFFFFFFFFFFFFFFFFFFFFFF611F4F0CA000000063504B43532D"
 	"313550094D49445066696C657351043F007F80";
 
-static void test_application_entry_decode(void) {
+static void test_application_entry_decode(void)
+{
 	unsigned char *ef_dir;
 	long len;
 	GSList *entries;
@@ -474,6 +474,28 @@ static void test_application_entry_decode(void) {
 	g_free(ef_dir);
 }
 
+static void test_get_3g_path(void)
+{
+	unsigned char path[6];
+	unsigned int len;
+	unsigned char path1[] = { 0x3F, 0x00, 0x7F, 0xFF };
+
+	len = sim_ef_db_get_path_3g(SIM_EFPNN_FILEID, path);
+	g_assert(len == 4);
+	g_assert(!memcmp(path, path1, len));
+}
+
+static void test_get_2g_path(void)
+{
+	unsigned char path[6];
+	unsigned int len;
+	unsigned char path1[] = { 0x3F, 0x00, 0x7F, 0x20 };
+
+	len = sim_ef_db_get_path_2g(SIM_EFPNN_FILEID, path);
+	g_assert(len == 4);
+	g_assert(!memcmp(path, path1, len));
+}
+
 int main(int argc, char **argv)
 {
 	g_test_init(&argc, &argv, NULL);
@@ -490,6 +512,8 @@ int main(int argc, char **argv)
 	g_test_add_func("/testsimutil/3G Status response", test_3g_status_data);
 	g_test_add_func("/testsimutil/Application entries decoding",
 			test_application_entry_decode);
+	g_test_add_func("/testsimutil/3G path", test_get_3g_path);
+	g_test_add_func("/testsimutil/2G path", test_get_2g_path);
 
 	return g_test_run();
 }
