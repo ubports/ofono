@@ -1,3 +1,9 @@
+ofono (1.15-1) unstable; urgency=medium
+
+  * New upstream release. (Closes: #759516)
+
+ -- Hector Oron <zumbi@debian.org>  Wed, 24 Sep 2014 01:20:27 +0200
+
 ofono (1.9-2) unstable; urgency=low
 
   * Upload to unstable.
