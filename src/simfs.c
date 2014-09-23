@@ -66,6 +66,8 @@ struct sim_fs_op {
 	int length;
 	int record_length;
 	int current;
+	unsigned char path[6];
+	unsigned char path_len;
 	gconstpointer cb;
 	gboolean is_read;
 	void *userdata;
@@ -472,6 +474,8 @@ static gboolean sim_fs_op_read_block(gpointer user_data)
 	fs->driver->read_file_transparent(fs->sim, op->id,
 						op->current * 256,
 						read_bytes,
+						op->path_len ? op->path : NULL,
+						op->path_len,
 						sim_fs_op_read_block_cb, fs);
 
 	return FALSE;
@@ -561,6 +565,7 @@ static gboolean sim_fs_op_read_record(gpointer user)
 
 		driver->read_file_linear(fs->sim, op->id, op->current,
 						op->record_length,
+						NULL, 0,
 						sim_fs_op_retrieve_cb, fs);
 		break;
 	case OFONO_SIM_FILE_STRUCTURE_CYCLIC:
@@ -571,6 +576,7 @@ static gboolean sim_fs_op_read_record(gpointer user)
 
 		driver->read_file_cyclic(fs->sim, op->id, op->current,
 						op->record_length,
+						NULL, 0,
 						sim_fs_op_retrieve_cb, fs);
 		break;
 	default:
@@ -818,23 +824,26 @@ static gboolean sim_fs_op_next(gpointer user_data)
 		if (sim_fs_op_check_cached(fs))
 			return FALSE;
 
-		driver->read_file_info(fs->sim, op->id, sim_fs_op_info_cb, fs);
+		driver->read_file_info(fs->sim, op->id,
+					op->path_len ? op->path : NULL,
+					op->path_len,
+					sim_fs_op_info_cb, fs);
 	} else {
 		switch (op->structure) {
 		case OFONO_SIM_FILE_STRUCTURE_TRANSPARENT:
 			driver->write_file_transparent(fs->sim, op->id, 0,
 					op->length, op->buffer,
-					sim_fs_op_write_cb, fs);
+					NULL, 0, sim_fs_op_write_cb, fs);
 			break;
 		case OFONO_SIM_FILE_STRUCTURE_FIXED:
 			driver->write_file_linear(fs->sim, op->id, op->current,
 					op->length, op->buffer,
-					sim_fs_op_write_cb, fs);
+					NULL, 0, sim_fs_op_write_cb, fs);
 			break;
 		case OFONO_SIM_FILE_STRUCTURE_CYCLIC:
 			driver->write_file_cyclic(fs->sim, op->id,
 					op->length, op->buffer,
-					sim_fs_op_write_cb, fs);
+					NULL, 0, sim_fs_op_write_cb, fs);
 			break;
 		default:
 			ofono_error("Unrecognized file structure, "
@@ -890,6 +899,7 @@ int sim_fs_read_info(struct ofono_sim_context *context, int id,
 int sim_fs_read(struct ofono_sim_context *context, int id,
 		enum ofono_sim_file_structure expected_type,
 		unsigned short offset, unsigned short num_bytes,
+		const unsigned char *path, unsigned int path_len,
 		ofono_sim_file_read_cb_t cb, void *data)
 {
 	struct sim_fs *fs = context->fs;
@@ -922,6 +932,8 @@ int sim_fs_read(struct ofono_sim_context *context, int id,
 	op->num_bytes = num_bytes;
 	op->info_only = FALSE;
 	op->context = context;
+	memcpy(op->path, path, path_len);
+	op->path_len = path_len;
 
 	g_queue_push_tail(fs->op_q, op);
 

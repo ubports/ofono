@@ -31,8 +31,22 @@ extern "C" {
 #include <dbus/dbus.h>
 #include <glib.h>
 
+typedef enum GDBusMethodFlags GDBusMethodFlags;
+typedef enum GDBusSignalFlags GDBusSignalFlags;
+typedef enum GDBusPropertyFlags GDBusPropertyFlags;
+typedef enum GDBusSecurityFlags GDBusSecurityFlags;
+
+typedef struct GDBusArgInfo GDBusArgInfo;
+typedef struct GDBusMethodTable GDBusMethodTable;
+typedef struct GDBusSignalTable GDBusSignalTable;
+typedef struct GDBusPropertyTable GDBusPropertyTable;
+typedef struct GDBusSecurityTable GDBusSecurityTable;
+
 typedef void (* GDBusWatchFunction) (DBusConnection *connection,
 							void *user_data);
+
+typedef void (* GDBusMessageFunction) (DBusConnection *connection,
+					 DBusMessage *message, void *user_data);
 
 typedef gboolean (* GDBusSignalFunction) (DBusConnection *connection,
 					DBusMessage *message, void *user_data);
@@ -55,6 +69,18 @@ typedef void (* GDBusDestroyFunction) (void *user_data);
 typedef DBusMessage * (* GDBusMethodFunction) (DBusConnection *connection,
 					DBusMessage *message, void *user_data);
 
+typedef gboolean (*GDBusPropertyGetter)(const GDBusPropertyTable *property,
+					DBusMessageIter *iter, void *data);
+
+typedef guint32 GDBusPendingPropertySet;
+
+typedef void (*GDBusPropertySetter)(const GDBusPropertyTable *property,
+			DBusMessageIter *value, GDBusPendingPropertySet id,
+			void *data);
+
+typedef gboolean (*GDBusPropertyExists)(const GDBusPropertyTable *property,
+								void *data);
+
 typedef guint32 GDBusPendingReply;
 
 typedef void (* GDBusSecurityFunction) (DBusConnection *connection,
@@ -62,58 +88,68 @@ typedef void (* GDBusSecurityFunction) (DBusConnection *connection,
 						gboolean interaction,
 						GDBusPendingReply pending);
 
-typedef enum {
-	G_DBUS_METHOD_FLAG_DEPRECATED = (1 << 0),
-	G_DBUS_METHOD_FLAG_NOREPLY    = (1 << 1),
-	G_DBUS_METHOD_FLAG_ASYNC      = (1 << 2),
-} GDBusMethodFlags;
+enum GDBusFlags {
+	G_DBUS_FLAG_ENABLE_EXPERIMENTAL = (1 << 0),
+};
 
-typedef enum {
-	G_DBUS_SIGNAL_FLAG_DEPRECATED = (1 << 0),
-} GDBusSignalFlags;
+enum GDBusMethodFlags {
+	G_DBUS_METHOD_FLAG_DEPRECATED   = (1 << 0),
+	G_DBUS_METHOD_FLAG_NOREPLY      = (1 << 1),
+	G_DBUS_METHOD_FLAG_ASYNC        = (1 << 2),
+	G_DBUS_METHOD_FLAG_EXPERIMENTAL = (1 << 3),
+};
 
-typedef enum {
-	G_DBUS_PROPERTY_FLAG_DEPRECATED = (1 << 0),
-} GDBusPropertyFlags;
+enum GDBusSignalFlags {
+	G_DBUS_SIGNAL_FLAG_DEPRECATED   = (1 << 0),
+	G_DBUS_SIGNAL_FLAG_EXPERIMENTAL = (1 << 1),
+};
 
-typedef enum {
+enum GDBusPropertyFlags {
+	G_DBUS_PROPERTY_FLAG_DEPRECATED   = (1 << 0),
+	G_DBUS_PROPERTY_FLAG_EXPERIMENTAL = (1 << 1),
+};
+
+enum GDBusSecurityFlags {
 	G_DBUS_SECURITY_FLAG_DEPRECATED        = (1 << 0),
 	G_DBUS_SECURITY_FLAG_BUILTIN           = (1 << 1),
 	G_DBUS_SECURITY_FLAG_ALLOW_INTERACTION = (1 << 2),
-} GDBusSecurityFlags;
+};
 
-typedef struct {
+struct GDBusArgInfo {
 	const char *name;
 	const char *signature;
-} GDBusArgInfo;
+};
 
-typedef struct {
+struct GDBusMethodTable {
 	const char *name;
 	GDBusMethodFunction function;
 	GDBusMethodFlags flags;
 	unsigned int privilege;
 	const GDBusArgInfo *in_args;
 	const GDBusArgInfo *out_args;
-} GDBusMethodTable;
+};
 
-typedef struct {
+struct GDBusSignalTable {
 	const char *name;
 	GDBusSignalFlags flags;
 	const GDBusArgInfo *args;
-} GDBusSignalTable;
+};
 
-typedef struct {
+struct GDBusPropertyTable {
 	const char *name;
 	const char *type;
+	GDBusPropertyGetter get;
+	GDBusPropertySetter set;
+	GDBusPropertyExists exists;
 	GDBusPropertyFlags flags;
-} GDBusPropertyTable;
+};
 
-typedef struct {
+struct GDBusSecurityTable {
 	unsigned int privilege;
 	const char *action;
 	GDBusSecurityFlags flags;
 	GDBusSecurityFunction function;
-} GDBusSecurityTable;
+};
 
 #define GDBUS_ARGS(args...) (const GDBusArgInfo[]) { args, { } }
 
@@ -144,6 +180,20 @@ typedef struct {
 	.function = _function, \
 	.flags = G_DBUS_METHOD_FLAG_ASYNC | G_DBUS_METHOD_FLAG_DEPRECATED
 
+#define GDBUS_EXPERIMENTAL_METHOD(_name, _in_args, _out_args, _function) \
+	.name = _name, \
+	.in_args = _in_args, \
+	.out_args = _out_args, \
+	.function = _function, \
+	.flags = G_DBUS_METHOD_FLAG_EXPERIMENTAL
+
+#define GDBUS_EXPERIMENTAL_ASYNC_METHOD(_name, _in_args, _out_args, _function) \
+	.name = _name, \
+	.in_args = _in_args, \
+	.out_args = _out_args, \
+	.function = _function, \
+	.flags = G_DBUS_METHOD_FLAG_ASYNC | G_DBUS_METHOD_FLAG_EXPERIMENTAL
+
 #define GDBUS_NOREPLY_METHOD(_name, _in_args, _out_args, _function) \
 	.name = _name, \
 	.in_args = _in_args, \
@@ -159,6 +209,13 @@ typedef struct {
 	.name = _name, \
 	.args = _args, \
 	.flags = G_DBUS_SIGNAL_FLAG_DEPRECATED
+
+#define GDBUS_EXPERIMENTAL_SIGNAL(_name, _args) \
+	.name = _name, \
+	.args = _args, \
+	.flags = G_DBUS_SIGNAL_FLAG_EXPERIMENTAL
+
+void g_dbus_set_flags(int flags);
 
 gboolean g_dbus_register_interface(DBusConnection *connection,
 					const char *path, const char *name,
@@ -193,6 +250,15 @@ DBusMessage *g_dbus_create_reply_valist(DBusMessage *message,
 						int type, va_list args);
 
 gboolean g_dbus_send_message(DBusConnection *connection, DBusMessage *message);
+gboolean g_dbus_send_message_with_reply(DBusConnection *connection,
+					DBusMessage *message,
+					DBusPendingCall **call, int timeout);
+gboolean g_dbus_send_error(DBusConnection *connection, DBusMessage *message,
+				const char *name, const char *format, ...)
+					 __attribute__((format(printf, 4, 5)));
+gboolean g_dbus_send_error_valist(DBusConnection *connection,
+					DBusMessage *message, const char *name,
+					const char *format, va_list args);
 gboolean g_dbus_send_reply(DBusConnection *connection,
 				DBusMessage *message, int type, ...);
 gboolean g_dbus_send_reply_valist(DBusConnection *connection,
@@ -217,8 +283,95 @@ guint g_dbus_add_signal_watch(DBusConnection *connection,
 				const char *interface, const char *member,
 				GDBusSignalFunction function, void *user_data,
 				GDBusDestroyFunction destroy);
+guint g_dbus_add_properties_watch(DBusConnection *connection,
+				const char *sender, const char *path,
+				const char *interface,
+				GDBusSignalFunction function, void *user_data,
+				GDBusDestroyFunction destroy);
 gboolean g_dbus_remove_watch(DBusConnection *connection, guint tag);
 void g_dbus_remove_all_watches(DBusConnection *connection);
+
+void g_dbus_pending_property_success(GDBusPendingPropertySet id);
+void g_dbus_pending_property_error_valist(GDBusPendingReply id,
+			const char *name, const char *format, va_list args);
+void g_dbus_pending_property_error(GDBusPendingReply id, const char *name,
+						const char *format, ...);
+void g_dbus_emit_property_changed(DBusConnection *connection,
+				const char *path, const char *interface,
+				const char *name);
+gboolean g_dbus_get_properties(DBusConnection *connection, const char *path,
+				const char *interface, DBusMessageIter *iter);
+
+gboolean g_dbus_attach_object_manager(DBusConnection *connection);
+gboolean g_dbus_detach_object_manager(DBusConnection *connection);
+
+typedef struct GDBusClient GDBusClient;
+typedef struct GDBusProxy GDBusProxy;
+
+GDBusProxy *g_dbus_proxy_new(GDBusClient *client, const char *path,
+							const char *interface);
+
+GDBusProxy *g_dbus_proxy_ref(GDBusProxy *proxy);
+void g_dbus_proxy_unref(GDBusProxy *proxy);
+
+const char *g_dbus_proxy_get_path(GDBusProxy *proxy);
+const char *g_dbus_proxy_get_interface(GDBusProxy *proxy);
+
+gboolean g_dbus_proxy_get_property(GDBusProxy *proxy, const char *name,
+							DBusMessageIter *iter);
+
+gboolean g_dbus_proxy_refresh_property(GDBusProxy *proxy, const char *name);
+
+typedef void (* GDBusResultFunction) (const DBusError *error, void *user_data);
+
+gboolean g_dbus_proxy_set_property_basic(GDBusProxy *proxy,
+				const char *name, int type, const void *value,
+				GDBusResultFunction function, void *user_data,
+				GDBusDestroyFunction destroy);
+
+gboolean g_dbus_proxy_set_property_array(GDBusProxy *proxy,
+				const char *name, int type, const void *value,
+				size_t size, GDBusResultFunction function,
+				void *user_data, GDBusDestroyFunction destroy);
+
+typedef void (* GDBusSetupFunction) (DBusMessageIter *iter, void *user_data);
+typedef void (* GDBusReturnFunction) (DBusMessage *message, void *user_data);
+
+gboolean g_dbus_proxy_method_call(GDBusProxy *proxy, const char *method,
+				GDBusSetupFunction setup,
+				GDBusReturnFunction function, void *user_data,
+				GDBusDestroyFunction destroy);
+
+typedef void (* GDBusClientFunction) (GDBusClient *client, void *user_data);
+typedef void (* GDBusProxyFunction) (GDBusProxy *proxy, void *user_data);
+typedef void (* GDBusPropertyFunction) (GDBusProxy *proxy, const char *name,
+					DBusMessageIter *iter, void *user_data);
+
+gboolean g_dbus_proxy_set_property_watch(GDBusProxy *proxy,
+			GDBusPropertyFunction function, void *user_data);
+
+gboolean g_dbus_proxy_set_removed_watch(GDBusProxy *proxy,
+			GDBusProxyFunction destroy, void *user_data);
+
+GDBusClient *g_dbus_client_new(DBusConnection *connection,
+					const char *service, const char *path);
+
+GDBusClient *g_dbus_client_ref(GDBusClient *client);
+void g_dbus_client_unref(GDBusClient *client);
+
+gboolean g_dbus_client_set_connect_watch(GDBusClient *client,
+				GDBusWatchFunction function, void *user_data);
+gboolean g_dbus_client_set_disconnect_watch(GDBusClient *client,
+				GDBusWatchFunction function, void *user_data);
+gboolean g_dbus_client_set_signal_watch(GDBusClient *client,
+				GDBusMessageFunction function, void *user_data);
+gboolean g_dbus_client_set_ready_watch(GDBusClient *client,
+				GDBusClientFunction ready, void *user_data);
+gboolean g_dbus_client_set_proxy_handlers(GDBusClient *client,
+					GDBusProxyFunction proxy_added,
+					GDBusProxyFunction proxy_removed,
+					GDBusPropertyFunction property_changed,
+					void *user_data);
 
 #ifdef __cplusplus
 }

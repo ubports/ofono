@@ -327,12 +327,111 @@ static const char *__service_type_to_string(uint8_t type)
 		return "TS";
 	case QMI_SERVICE_TMD:
 		return "TMS";
+	case QMI_SERVICE_PDC:
+		return "PDC";
 	case QMI_SERVICE_CAT_OLD:
 		return "CAT";
 	case QMI_SERVICE_RMS:
 		return "RMS";
 	case QMI_SERVICE_OMA:
 		return "OMA";
+	}
+
+	return NULL;
+}
+
+static const struct {
+	uint16_t err;
+	const char *str;
+} __error_table[] = {
+	{ 0x0000, "NONE"			},
+	{ 0x0001, "MALFORMED_MSG"		},
+	{ 0x0002, "NO_MEMORY"			},
+	{ 0x0003, "INTERNAL"			},
+	{ 0x0004, "ABORTED"			},
+	{ 0x0005, "CLIENT_IDS_EXHAUSTED"	},
+	{ 0x0006, "UNABORTABLE_TRANSACTION"	},
+	{ 0x0007, "INVALID_CLIENT_ID"		},
+	{ 0x0008, "NO_THRESHOLDS"		},
+	{ 0x0009, "INVALID_HANDLE"		},
+	{ 0x000a, "INVALID_PROFILE"		},
+	{ 0x000b, "INVALID_PINID"		},
+	{ 0x000c, "INCORRECT_PIN"		},
+	{ 0x000d, "NO_NETWORK_FOUND"		},
+	{ 0x000e, "CALL_FAILED"			},
+	{ 0x000f, "OUT_OF_CALL"			},
+	{ 0x0010, "NOT_PROVISIONED"		},
+	{ 0x0011, "MISSING_ARG"			},
+	{ 0x0013, "ARG_TOO_LONG"		},
+	{ 0x0016, "INVALID_TX_ID"		},
+	{ 0x0017, "DEVICE_IN_USE"		},
+	{ 0x0018, "OP_NETWORK_UNSUPPORTED"	},
+	{ 0x0019, "OP_DEVICE_UNSUPPORTED"	},
+	{ 0x001a, "NO_EFFECT"			},
+	{ 0x001b, "NO_FREE_PROFILE"		},
+	{ 0x001c, "INVALID_PDP_TYPE"		},
+	{ 0x001d, "INVALID_TECH_PREF"		},
+	{ 0x001e, "INVALID_PROFILE_TYPE"	},
+	{ 0x001f, "INVALID_SERVICE_TYPE"	},
+	{ 0x0020, "INVALID_REGISTER_ACTION"	},
+	{ 0x0021, "INVALID_PS_ATTACH_ACTION"	},
+	{ 0x0022, "AUTHENTICATION_FAILED"	},
+	{ 0x0023, "PIN_BLOCKED"			},
+	{ 0x0024, "PIN_PERM_BLOCKED"		},
+	{ 0x0025, "UIM_NOT_INITIALIZED"		},
+	{ 0x0026, "MAX_QOS_REQUESTS_IN_USE"	},
+	{ 0x0027, "INCORRECT_FLOW_FILTER"	},
+	{ 0x0028, "NETWORK_QOS_UNAWARE"		},
+	{ 0x0029, "INVALID_QOS_ID/INVALID_ID"	},
+	{ 0x002a, "REQUESTED_NUM_UNSUPPORTED"	},
+	{ 0x002b, "INTERFACE_NOT_FOUND"		},
+	{ 0x002c, "FLOW_SUSPENDED"		},
+	{ 0x002d, "INVALID_DATA_FORMAT"		},
+	{ 0x002e, "GENERAL"			},
+	{ 0x002f, "UNKNOWN"			},
+	{ 0x0030, "INVALID_ARG"			},
+	{ 0x0031, "INVALID_INDEX"		},
+	{ 0x0032, "NO_ENTRY"			},
+	{ 0x0033, "DEVICE_STORAGE_FULL"		},
+	{ 0x0034, "DEVICE_NOT_READY"		},
+	{ 0x0035, "NETWORK_NOT_READY"		},
+	{ 0x0036, "CAUSE_CODE"			},
+	{ 0x0037, "MESSAGE_NOT_SENT"		},
+	{ 0x0038, "MESSAGE_DELIVERY_FAILURE"	},
+	{ 0x0039, "INVALID_MESSAGE_ID"		},
+	{ 0x003a, "ENCODING"			},
+	{ 0x003b, "AUTHENTICATION_LOCK"		},
+	{ 0x003c, "INVALID_TRANSACTION"		},
+	{ 0x0041, "SESSION_INACTIVE"		},
+	{ 0x0042, "SESSION_INVALID"		},
+	{ 0x0043, "SESSION_OWNERSHIP"		},
+	{ 0x0044, "INSUFFICIENT_RESOURCES"	},
+	{ 0x0045, "DISABLED"			},
+	{ 0x0046, "INVALID_OPERATION"		},
+	{ 0x0047, "INVALID_QMI_CMD"		},
+	{ 0x0048, "TPDU_TYPE"			},
+	{ 0x0049, "SMSC_ADDR"			},
+	{ 0x004a, "INFO_UNAVAILABLE"		},
+	{ 0x004b, "SEGMENT_TOO_LONG"		},
+	{ 0x004c, "SEGEMENT_ORDER"		},
+	{ 0x004d, "BUNDLING_NOT_SUPPORTED"	},
+	{ 0x004f, "POLICY_MISMATCH"		},
+	{ 0x0050, "SIM_FILE_NOT_FOUND"		},
+	{ 0x0051, "EXTENDED_INTERNAL"		},
+	{ 0x0052, "ACCESS_DENIED"		},
+	{ 0x0053, "HARDWARE_RESTRICTED"		},
+	{ 0x0054, "ACK_NOT_SENT"		},
+	{ 0x0055, "INJECT_TIMEOUT"		},
+	{ }
+};
+
+static const char *__error_to_string(uint16_t error)
+{
+	int i;
+
+	for (i = 0; __error_table[i].str; i++) {
+		if (__error_table[i].err == error)
+			return __error_table[i].str;
 	}
 
 	return NULL;
@@ -347,6 +446,7 @@ static void __debug_msg(const char dir, const void *buf, size_t len,
 	const void *ptr;
 	uint16_t offset;
 	char strbuf[72 + 16], *str;
+	bool pending_print = false;
 
 	if (!function || !len)
 		return;
@@ -442,25 +542,36 @@ static void __debug_msg(const char dir, const void *buf, size_t len,
 		if (tlv->type == 0x02 && tlv_length == QMI_RESULT_CODE_SIZE) {
 			const struct qmi_result_code *result = ptr + offset +
 							QMI_TLV_HDR_SIZE;
+			uint16_t error = GUINT16_FROM_LE(result->error);
+			const char *error_str;
 
-			str += sprintf(str, " {type=%d,error=%d}", tlv->type,
-						GUINT16_FROM_LE(result->error));
+			error_str = __error_to_string(error);
+			if (error_str)
+				str += sprintf(str, " {type=%d,error=%s}",
+							tlv->type, error_str);
+			else
+				str += sprintf(str, " {type=%d,error=%d}",
+							tlv->type, error);
 		} else {
 			str += sprintf(str, " {type=%d,len=%d}", tlv->type,
 								tlv_length);
 		}
 
-		if (str - strbuf > 72) {
+		if (str - strbuf > 60) {
 			function(strbuf, user_data);
 
 			str = strbuf;
 			str += sprintf(str, "      ");
-		}
+
+			pending_print = false;
+		} else
+			pending_print = true;
 
 		offset += QMI_TLV_HDR_SIZE + tlv_length;
 	}
 
-	function(strbuf, user_data);
+	if (pending_print)
+		function(strbuf, user_data);
 }
 
 static void __debug_device(struct qmi_device *device,
@@ -925,6 +1036,7 @@ static void discover_callback(uint16_t message, uint16_t length,
 		uint16_t minor =
 			GUINT16_FROM_LE(service_list->services[i].minor);
 		uint8_t type = service_list->services[i].type;
+		const char *name = __service_type_to_string(type);
 
 		if (type == QMI_SERVICE_CONTROL) {
 			device->control_major = major;
@@ -935,9 +1047,16 @@ static void discover_callback(uint16_t message, uint16_t length,
 		list[count].type = type;
 		list[count].major = major;
 		list[count].minor = minor;
-		list[count].name = __service_type_to_string(type);
+		list[count].name = name;
 
 		count++;
+
+		if (name)
+			__debug_device(device, "found service [%s %d.%d]",
+							name, major, minor);
+		else
+			__debug_device(device, "found service [%d %d.%d]",
+							type, major, minor);
 	}
 
 	ptr = tlv_get(buffer, length, 0x10, &len);
@@ -1260,6 +1379,17 @@ bool qmi_result_set_error(struct qmi_result *result, uint16_t *error)
 		*error = result->error;
 
 	return true;
+}
+
+const char *qmi_result_get_error(struct qmi_result *result)
+{
+	if (!result)
+		return NULL;
+
+	if (result->result == 0x0000)
+		return NULL;
+
+	return __error_to_string(result->error);
 }
 
 const void *qmi_result_get(struct qmi_result *result, uint8_t type,

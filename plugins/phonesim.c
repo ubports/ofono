@@ -60,15 +60,18 @@
 #include <ofono/gprs-context.h>
 #include <ofono/gnss.h>
 #include <ofono/handsfree.h>
+#include <ofono/siri.h>
 
 #include <drivers/atmodem/vendor.h>
 #include <drivers/atmodem/atutil.h>
 #include <drivers/hfpmodem/slc.h>
 
+#include "hfp.h"
 #include "ofono.h"
 
 static const char *none_prefix[] = { NULL };
 static const char *ptty_prefix[] = { "+PTTY:", NULL };
+static const char *simstate_prefix[] = { "+SIMSTATE:", NULL };
 static int next_iface = 0;
 
 struct phonesim_data {
@@ -80,6 +83,7 @@ struct phonesim_data {
 	struct hfp_slc_info hfp_info;
 	unsigned int hfp_watch;
 	int batt_level;
+	struct ofono_sim *sim;
 };
 
 struct gprs_context_data {
@@ -393,6 +397,52 @@ static void phonesim_debug(const char *str, void *prefix)
 	ofono_info("%s%s", (const char *) prefix, str);
 }
 
+static void simstate_query(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct ofono_modem *modem = user_data;
+	struct phonesim_data *data = ofono_modem_get_data(modem);
+	GAtResultIter iter;
+	int inserted;
+
+	/* Assume that is this fails we are dealing with an older phonesim */
+	if (ok == FALSE)
+		goto done;
+
+	g_at_result_iter_init(&iter, result);
+	if (!g_at_result_iter_next(&iter, "+SIMSTATE:"))
+		return;
+
+	if (!g_at_result_iter_next_number(&iter, &inserted))
+		return;
+
+	if (inserted != 1)
+		return;
+
+done:
+	ofono_sim_inserted_notify(data->sim, TRUE);
+}
+
+static void usimstate_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_modem *modem = user_data;
+	struct phonesim_data *data = ofono_modem_get_data(modem);
+	GAtResultIter iter;
+	int inserted;
+
+	if (data->sim == NULL)
+		return;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "+USIMSTATE:"))
+		return;
+
+	if (!g_at_result_iter_next_number(&iter, &inserted))
+		return;
+
+	ofono_sim_inserted_notify(data->sim, inserted);
+}
+
 static void cfun_set_on_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_modem *modem = user_data;
@@ -647,6 +697,11 @@ static int phonesim_enable(struct ofono_modem *modem)
 
 	g_at_chat_send(data->chat, "AT+CBC", none_prefix, NULL, NULL, NULL);
 
+	g_at_chat_send(data->chat, "AT+SIMSTATE?", simstate_prefix,
+					simstate_query, modem, NULL);
+	g_at_chat_register(data->chat, "+USIMSTATE:", usimstate_notify,
+						FALSE, modem, NULL);
+
 	data->hfp_watch = __ofono_modem_add_atom_watch(modem,
 					OFONO_ATOM_TYPE_EMULATOR_HFP,
 					emulator_hfp_watch, data, NULL);
@@ -707,20 +762,16 @@ static int phonesim_disable(struct ofono_modem *modem)
 static void phonesim_pre_sim(struct ofono_modem *modem)
 {
 	struct phonesim_data *data = ofono_modem_get_data(modem);
-	struct ofono_sim *sim;
 
 	DBG("%p", modem);
 
 	ofono_devinfo_create(modem, 0, "atmodem", data->chat);
-	sim = ofono_sim_create(modem, 0, "atmodem", data->chat);
+	data->sim = ofono_sim_create(modem, 0, "atmodem", data->chat);
 
 	if (data->calypso)
 		ofono_voicecall_create(modem, 0, "calypsomodem", data->chat);
 	else
 		ofono_voicecall_create(modem, 0, "atmodem", data->chat);
-
-	if (sim)
-		ofono_sim_inserted_notify(sim, TRUE);
 }
 
 static void phonesim_post_sim(struct ofono_modem *modem)
@@ -907,6 +958,7 @@ static void localhfp_pre_sim(struct ofono_modem *modem)
 	ofono_netreg_create(modem, 0, "hfpmodem", info);
 	ofono_call_volume_create(modem, 0, "hfpmodem", info);
 	ofono_handsfree_create(modem, 0, "hfpmodem", info);
+	ofono_siri_create(modem, 0, "hfpmodem", info);
 }
 
 static struct ofono_modem_driver localhfp_driver = {
@@ -1019,6 +1071,7 @@ done:
 static int phonesim_init(void)
 {
 	int err;
+	char *conf_override = getenv("OFONO_PHONESIM_CONFIG");
 
 	err = ofono_modem_driver_register(&phonesim_driver);
 	if (err < 0)
@@ -1029,7 +1082,10 @@ static int phonesim_init(void)
 	ofono_gprs_context_driver_register(&context_driver);
 	ofono_ctm_driver_register(&ctm_driver);
 
-	parse_config(CONFIGDIR "/phonesim.conf");
+	if (conf_override)
+		parse_config(conf_override);
+	else
+		parse_config(CONFIGDIR "/phonesim.conf");
 
 	return 0;
 }

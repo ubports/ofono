@@ -40,31 +40,61 @@
 #include <gdbus.h>
 #include "ofono.h"
 #include "common.h"
+#include "hfp.h"
 
 static GSList *g_drivers = NULL;
 
+#define HANDSFREE_FLAG_CACHED 0x1
+
 struct ofono_handsfree {
+	ofono_bool_t nrec;
 	ofono_bool_t inband_ringing;
 	ofono_bool_t voice_recognition;
 	ofono_bool_t voice_recognition_pending;
 	unsigned int ag_features;
+	unsigned int ag_chld_features;
+	unsigned char battchg;
+	GSList *subscriber_numbers;
 
 	const struct ofono_handsfree_driver *driver;
 	void *driver_data;
 	struct ofono_atom *atom;
 	DBusMessage *pending;
+	int flags;
 };
 
-static const char **ag_features_list(unsigned int features)
+static const char **ag_features_list(unsigned int features,
+					unsigned int chld_features)
 {
-	static const char *list[33];
+	static const char *list[10];
 	unsigned int i = 0;
+
+	if (features & HFP_AG_FEATURE_3WAY)
+		list[i++] = "three-way-calling";
+
+	if (features & HFP_AG_FEATURE_ECNR)
+		list[i++] = "echo-canceling-and-noise-reduction";
 
 	if (features & HFP_AG_FEATURE_VOICE_RECOG)
 		list[i++] = "voice-recognition";
 
 	if (features & HFP_AG_FEATURE_ATTACH_VOICE_TAG)
 		list[i++] = "attach-voice-tag";
+
+	if (chld_features & HFP_AG_CHLD_0)
+		list[i++] = "release-all-held";
+
+	if (chld_features & HFP_AG_CHLD_1x)
+		list[i++] = "release-specified-active-call";
+
+	if (chld_features & HFP_AG_CHLD_2x)
+		list[i++] = "private-chat";
+
+	if (chld_features & HFP_AG_CHLD_3)
+		list[i++] = "create-multiparty";
+
+	if (chld_features & HFP_AG_CHLD_4)
+		list[i++] = "transfer";
 
 	list[i] = NULL;
 
@@ -119,10 +149,76 @@ void ofono_handsfree_set_ag_features(struct ofono_handsfree *hf,
 	hf->ag_features = ag_features;
 }
 
-static DBusMessage *handsfree_get_properties(DBusConnection *conn,
-						DBusMessage *msg, void *data)
+void ofono_handsfree_set_ag_chld_features(struct ofono_handsfree *hf,
+					unsigned int ag_chld_features)
 {
-	struct ofono_handsfree *hf = data;
+	if (hf == NULL)
+		return;
+
+	hf->ag_chld_features = ag_chld_features;
+}
+
+void ofono_handsfree_battchg_notify(struct ofono_handsfree *hf,
+					unsigned char level)
+{
+	DBusConnection *conn = ofono_dbus_get_connection();
+	const char *path = __ofono_atom_get_path(hf->atom);
+
+	if (hf == NULL)
+		return;
+
+	if (hf->battchg == level)
+		return;
+
+	hf->battchg = level;
+
+	if (__ofono_atom_get_registered(hf->atom) == FALSE)
+		return;
+
+	ofono_dbus_signal_property_changed(conn, path,
+					OFONO_HANDSFREE_INTERFACE,
+					"BatteryChargeLevel", DBUS_TYPE_BYTE,
+					&level);
+}
+
+static void append_subscriber_numbers(GSList *subscriber_numbers,
+						DBusMessageIter *iter)
+{
+	DBusMessageIter entry;
+	DBusMessageIter variant, array;
+	GSList *l;
+	const char *subscriber_number_string;
+	char arraysig[3];
+	const char *key = "SubscriberNumbers";
+
+	arraysig[0] = DBUS_TYPE_ARRAY;
+	arraysig[1] = DBUS_TYPE_STRING;
+	arraysig[2] = '\0';
+
+	dbus_message_iter_open_container(iter, DBUS_TYPE_DICT_ENTRY,
+					NULL, &entry);
+	dbus_message_iter_append_basic(&entry, DBUS_TYPE_STRING,
+					&key);
+	dbus_message_iter_open_container(&entry, DBUS_TYPE_VARIANT,
+					arraysig, &variant);
+	dbus_message_iter_open_container(&variant, DBUS_TYPE_ARRAY,
+					DBUS_TYPE_STRING_AS_STRING, &array);
+
+	for (l = subscriber_numbers; l; l = l->next) {
+		subscriber_number_string = phone_number_to_string(l->data);
+		dbus_message_iter_append_basic(&array, DBUS_TYPE_STRING,
+						&subscriber_number_string);
+	}
+
+	dbus_message_iter_close_container(&variant, &array);
+
+	dbus_message_iter_close_container(&entry, &variant);
+	dbus_message_iter_close_container(iter, &entry);
+}
+
+static DBusMessage *generate_get_properties_reply(struct ofono_handsfree *hf,
+						DBusMessage *msg)
+{
 	DBusMessage *reply;
 	DBusMessageIter iter;
 	DBusMessageIter dict;
@@ -144,17 +240,96 @@ static DBusMessage *handsfree_get_properties(DBusConnection *conn,
 	ofono_dbus_dict_append(&dict, "InbandRinging", DBUS_TYPE_BOOLEAN,
 				&inband_ringing);
 
+	if (hf->ag_features & HFP_AG_FEATURE_ECNR)
+		ofono_dbus_dict_append(&dict, "EchoCancelingNoiseReduction",
+						DBUS_TYPE_BOOLEAN, &hf->nrec);
+
 	voice_recognition = hf->voice_recognition;
 	ofono_dbus_dict_append(&dict, "VoiceRecognition", DBUS_TYPE_BOOLEAN,
 				&voice_recognition);
 
-	features = ag_features_list(hf->ag_features);
+	features = ag_features_list(hf->ag_features, hf->ag_chld_features);
 	ofono_dbus_dict_append_array(&dict, "Features", DBUS_TYPE_STRING,
 					&features);
+
+	ofono_dbus_dict_append(&dict, "BatteryChargeLevel", DBUS_TYPE_BYTE,
+				&hf->battchg);
+
+	if (hf->subscriber_numbers)
+		append_subscriber_numbers(hf->subscriber_numbers, &dict);
 
 	dbus_message_iter_close_container(&iter, &dict);
 
 	return reply;
+}
+
+static void hf_cnum_callback(const struct ofono_error *error, int total,
+				const struct ofono_phone_number *numbers,
+				void *data)
+{
+	struct ofono_handsfree *hf = data;
+	int num;
+	struct ofono_phone_number *subscriber_number;
+
+	if (error->type != OFONO_ERROR_TYPE_NO_ERROR)
+		goto out;
+
+	for (num = 0; num < total; num++) {
+		subscriber_number = g_new0(struct ofono_phone_number, 1);
+
+		subscriber_number->type = numbers[num].type;
+		strncpy(subscriber_number->number, numbers[num].number,
+					OFONO_MAX_PHONE_NUMBER_LENGTH + 1);
+
+		hf->subscriber_numbers = g_slist_prepend(hf->subscriber_numbers,
+					subscriber_number);
+	}
+
+	hf->subscriber_numbers = g_slist_reverse(hf->subscriber_numbers);
+
+out:
+	hf->flags |= HANDSFREE_FLAG_CACHED;
+
+	if (hf->pending) {
+		DBusMessage *reply =
+			generate_get_properties_reply(hf, hf->pending);
+		__ofono_dbus_pending_reply(&hf->pending, reply);
+	}
+}
+
+static void query_cnum(struct ofono_handsfree *hf)
+{
+	DBusMessage *reply;
+
+	if (hf->driver->cnum_query != NULL) {
+		hf->driver->cnum_query(hf, hf_cnum_callback, hf);
+		return;
+	}
+
+	if (hf->pending == NULL)
+		return;
+
+	reply = generate_get_properties_reply(hf, hf->pending);
+	__ofono_dbus_pending_reply(&hf->pending, reply);
+}
+
+static DBusMessage *handsfree_get_properties(DBusConnection *conn,
+						DBusMessage *msg, void *data)
+{
+	struct ofono_handsfree *hf = data;
+
+	if (hf->pending != NULL)
+		return __ofono_error_busy(msg);
+
+	if (hf->flags & HANDSFREE_FLAG_CACHED)
+		return generate_get_properties_reply(hf, msg);
+
+	/* Query the settings and report back */
+	hf->pending = dbus_message_ref(msg);
+
+	query_cnum(hf);
+
+	return NULL;
 }
 
 static void voicerec_set_cb(const struct ofono_error *error, void *data)
@@ -181,11 +356,36 @@ static void voicerec_set_cb(const struct ofono_error *error, void *data)
 					&hf->voice_recognition);
 }
 
+static void nrec_set_cb(const struct ofono_error *error, void *data)
+{
+	struct ofono_handsfree *hf = data;
+	DBusConnection *conn = ofono_dbus_get_connection();
+	const char *path = __ofono_atom_get_path(hf->atom);
+
+	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
+		__ofono_dbus_pending_reply(&hf->pending,
+					__ofono_error_failed(hf->pending));
+		return;
+	}
+
+	hf->nrec = FALSE;
+
+	__ofono_dbus_pending_reply(&hf->pending,
+				dbus_message_new_method_return(hf->pending));
+
+	ofono_dbus_signal_property_changed(conn, path,
+					OFONO_HANDSFREE_INTERFACE,
+					"EchoCancelingNoiseReduction",
+					DBUS_TYPE_BOOLEAN,
+					&hf->nrec);
+}
+
 static DBusMessage *handsfree_set_property(DBusConnection *conn,
 						DBusMessage *msg, void *data)
 {
 	struct ofono_handsfree *hf = data;
 	DBusMessageIter iter, var;
+	ofono_bool_t enabled;
 	const char *name;
 
 	if (hf->pending)
@@ -205,16 +405,15 @@ static DBusMessage *handsfree_set_property(DBusConnection *conn,
 
 	dbus_message_iter_recurse(&iter, &var);
 
+	if (dbus_message_iter_get_arg_type(&var) != DBUS_TYPE_BOOLEAN)
+		return __ofono_error_invalid_args(msg);
+
+	dbus_message_iter_get_basic(&var, &enabled);
+
 	if (g_str_equal(name, "VoiceRecognition") == TRUE) {
-		ofono_bool_t enabled;
 
 		if (!hf->driver->voice_recognition)
 			return __ofono_error_not_implemented(msg);
-
-		if (dbus_message_iter_get_arg_type(&var) != DBUS_TYPE_BOOLEAN)
-			return __ofono_error_invalid_args(msg);
-
-		dbus_message_iter_get_basic(&var, &enabled);
 
 		if (hf->voice_recognition == enabled)
 			return dbus_message_new_method_return(msg);
@@ -222,11 +421,23 @@ static DBusMessage *handsfree_set_property(DBusConnection *conn,
 		hf->voice_recognition_pending = enabled;
 		hf->pending = dbus_message_ref(msg);
 		hf->driver->voice_recognition(hf, enabled, voicerec_set_cb, hf);
+	} else if (g_str_equal(name, "EchoCancelingNoiseReduction") == TRUE) {
 
-		return NULL;
-	}
+		if (!(hf->ag_features & HFP_AG_FEATURE_ECNR))
+			return __ofono_error_not_supported(msg);
 
-	return __ofono_error_invalid_args(msg);
+		if (!hf->driver->disable_nrec || enabled == TRUE)
+			return __ofono_error_not_implemented(msg);
+
+		if (hf->nrec == FALSE)
+			return dbus_message_new_method_return(msg);
+
+		hf->pending = dbus_message_ref(msg);
+		hf->driver->disable_nrec(hf, nrec_set_cb, hf);
+	} else
+		return __ofono_error_invalid_args(msg);
+
+	return NULL;
 }
 
 static void request_phone_number_cb(const struct ofono_error *error,
@@ -322,6 +533,7 @@ struct ofono_handsfree *ofono_handsfree_create(struct ofono_modem *modem,
 	hf->atom = __ofono_modem_add_atom(modem,
 					OFONO_ATOM_TYPE_HANDSFREE,
 					handsfree_remove, hf);
+	hf->nrec = TRUE;
 
 	for (l = g_drivers; l; l = l->next) {
 		const struct ofono_handsfree_driver *drv = l->data;
@@ -350,6 +562,10 @@ static void handsfree_unregister(struct ofono_atom *atom)
 		DBusMessage *reply = __ofono_error_failed(hf->pending);
 		__ofono_dbus_pending_reply(&hf->pending, reply);
 	}
+
+	g_slist_foreach(hf->subscriber_numbers, (GFunc) g_free, NULL);
+	g_slist_free(hf->subscriber_numbers);
+	hf->subscriber_numbers = NULL;
 
 	ofono_modem_remove_interface(modem, OFONO_HANDSFREE_INTERFACE);
 	g_dbus_unregister_interface(conn, path,

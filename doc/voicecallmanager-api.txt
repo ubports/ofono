@@ -33,7 +33,21 @@ Methods		dict GetProperties()
 				"disabled" - Shows callerid, CLIR Suppression
 						is used
 
-			This is usually implemented using the ATD AT command.
+			The number must be a string in the following format:
+				[+][0-9*#]{1,80}
+			In other words, it must be a non-empty string
+			optionally prefixed with a '+' followed by 1 to 80
+			characters.  The character set can contain numbers,
+			'*' and '#'.  Besides this sanity checking no further
+			number validation is performed.  It is assumed the
+			network will perform further validation.  The optional
+			'+' denotes an international number format.  For
+			example:
+				+15551234567 - International format
+				5551234567 - National / Uknown format
+
+			This method is usually implemented using the ATD AT
+			command.
 
 			NOTE: If an active call (single or multiparty) exists,
 			then it is automatically put on hold if the dial
@@ -92,6 +106,17 @@ Methods		dict GetProperties()
 					 [service].Error.NotImplemented
 					 [service].Error.Failed
 
+		void ReleaseAndSwap()
+
+			Releases currently active call (0 or more) and
+			activates any currently held calls. Please note that
+			if the current call is a multiparty call, then all
+			parties in the multi-party call will be released.
+
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+					 [service].Error.Failed
+
 		void HoldAndAnswer()
 
 			Puts the current call (including multi-party calls) on
@@ -100,7 +125,7 @@ Methods		dict GetProperties()
 			Held calls is invalid, since in GSM a user can have
 			only a single Held call at a time.
 
-                        Possible Errors: [service].Error.InProgress
+			Possible Errors: [service].Error.InProgress
 					 [service].Error.NotImplemented
 					 [service].Error.Failed
 
@@ -109,7 +134,7 @@ Methods		dict GetProperties()
 			Releases all calls except waiting calls. This includes
 			multiparty calls.
 
-                        Possible Errors: [service].Error.InProgress
+			Possible Errors: [service].Error.InProgress
 					 [service].Error.NotImplemented
 					 [service].Error.Failed
 
@@ -126,7 +151,7 @@ Methods		dict GetProperties()
 
 			This is usually implemented using the +CHLD=2X command.
 
-                        Possible Errors: [service].Error.InProgress
+			Possible Errors: [service].Error.InProgress
 					 [service].Error.InvalidArguments
 					 [service].Error.InvalidFormat
 					 [service].Error.NotFound
@@ -147,7 +172,7 @@ Methods		dict GetProperties()
 			This is usually implemented using the +CHLD=3 AT
 			command.
 
-                        Possible Errors: [service].Error.InProgress
+			Possible Errors: [service].Error.InProgress
 					 [service].Error.NotImplemented
 					 [service].Error.Failed
 
@@ -156,7 +181,7 @@ Methods		dict GetProperties()
 			Hangs up the multi-party call.  All participating
 			calls are released.
 
-                        Possible Errors: [service].Error.InProgress
+			Possible Errors: [service].Error.InProgress
 					 [service].Error.NotImplemented
 					 [service].Error.Failed
 
@@ -167,7 +192,7 @@ Methods		dict GetProperties()
 			'*', '#', 'A', 'B', 'C', 'D'.  The last four are
 			typically not used in normal circumstances.
 
-                        Possible Errors: [service].Error.InProgress
+			Possible Errors: [service].Error.InProgress
 					 [service].Error.NotImplemented
 					 [service].Error.InvalidArguments
 					 [service].Error.InvalidFormat
