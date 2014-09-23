@@ -16,11 +16,11 @@ are templates for supplementary fields that you might want to add:
 
 Last-Update: <2012-07-30>
 
-Index: ofono-1.9/Makefile.in
+Index: ofono/Makefile.in
 ===================================================================
---- ofono-1.9.orig/Makefile.in	2012-06-02 00:10:07.950794404 +0200
-+++ ofono-1.9/Makefile.in	2012-06-02 00:13:53.130786439 +0200
-@@ -880,7 +880,7 @@
+--- ofono.orig/Makefile.in	2014-09-24 01:23:41.273707009 +0200
++++ ofono/Makefile.in	2014-09-24 01:28:18.021697220 +0200
+@@ -959,7 +959,7 @@
  am__dist_conf_DATA_DIST = plugins/phonesim.conf
  am__dist_dbusconf_DATA_DIST = src/ofono.conf dundee/dundee.conf
  DATA = $(dist_conf_DATA) $(dist_dbusconf_DATA) $(pkgconfig_DATA) \
@@ -29,7 +29,7 @@ Index: ofono-1.9/Makefile.in
  HEADERS = $(nodist_pkginclude_HEADERS) $(pkginclude_HEADERS)
  ETAGS = etags
  CTAGS = ctags
-@@ -1130,6 +1130,9 @@
+@@ -1211,6 +1211,9 @@
  				gisi/socket.c gisi/socket.h
  
  btio_sources = btio/btio.h btio/btio.c
@@ -39,7 +39,7 @@ Index: ofono-1.9/Makefile.in
  @QMIMODEM_TRUE@qmi_sources = drivers/qmimodem/qmi.h drivers/qmimodem/qmi.c \
  @QMIMODEM_TRUE@					drivers/qmimodem/ctl.h \
  @QMIMODEM_TRUE@					drivers/qmimodem/dms.h \
-@@ -1288,7 +1291,7 @@
+@@ -1379,7 +1382,7 @@
  
  @TEST_TRUE@testdir = $(pkglibdir)/test
  @TEST_TRUE@test_SCRIPTS = $(test_scripts)
@@ -48,7 +48,7 @@ Index: ofono-1.9/Makefile.in
  				$(doc_files) $(test_scripts)
  
  dist_man_MANS = doc/ofonod.8
-@@ -2995,6 +2998,26 @@
+@@ -3182,6 +3185,26 @@
  	@list='$(pkgconfig_DATA)'; test -n "$(pkgconfigdir)" || list=; \
  	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
  	dir='$(DESTDIR)$(pkgconfigdir)'; $(am__uninstall_files_from_dir)
@@ -75,7 +75,7 @@ Index: ofono-1.9/Makefile.in
  install-stateDATA: $(state_DATA)
  	@$(NORMAL_INSTALL)
  	@list='$(state_DATA)'; test -n "$(statedir)" || list=; \
-@@ -3525,7 +3548,8 @@
+@@ -3713,7 +3736,8 @@
  install-data-am: install-dist_confDATA install-dist_dbusconfDATA \
  	install-man install-nodist_pkgincludeHEADERS \
  	install-pkgconfigDATA install-pkgincludeHEADERS \
@@ -85,7 +85,7 @@ Index: ofono-1.9/Makefile.in
  
  install-dvi: install-dvi-am
  
-@@ -3576,7 +3600,7 @@
+@@ -3764,7 +3788,7 @@
  uninstall-am: uninstall-dist_confDATA uninstall-dist_dbusconfDATA \
  	uninstall-man uninstall-nodist_pkgincludeHEADERS \
  	uninstall-pkgconfigDATA uninstall-pkgincludeHEADERS \
@@ -94,33 +94,21 @@ Index: ofono-1.9/Makefile.in
  	uninstall-systemdunitDATA uninstall-testSCRIPTS
  
  uninstall-man: uninstall-man8
-@@ -3597,17 +3621,18 @@
- 	install-info install-info-am install-man install-man8 \
- 	install-nodist_pkgincludeHEADERS install-pdf install-pdf-am \
- 	install-pkgconfigDATA install-pkgincludeHEADERS install-ps \
--	install-ps-am install-sbinPROGRAMS install-stateDATA \
--	install-strip install-systemdunitDATA install-testSCRIPTS \
--	installcheck installcheck-am installdirs maintainer-clean \
--	maintainer-clean-generic mostlyclean mostlyclean-compile \
--	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
--	tags uninstall uninstall-am uninstall-dist_confDATA \
--	uninstall-dist_dbusconfDATA uninstall-man uninstall-man8 \
-+	install-ps-am install-rulesDATA install-sbinPROGRAMS \
-+	install-stateDATA install-strip install-systemdunitDATA \
-+	install-testSCRIPTS installcheck installcheck-am installdirs \
-+	maintainer-clean maintainer-clean-generic mostlyclean \
-+	mostlyclean-compile mostlyclean-generic mostlyclean-libtool \
-+	pdf pdf-am ps ps-am tags uninstall uninstall-am \
-+	uninstall-dist_confDATA uninstall-dist_dbusconfDATA \
-+	uninstall-man uninstall-man8 \
+@@ -3785,7 +3809,7 @@
+ 	install-html-am install-info install-info-am install-man \
+ 	install-man8 install-nodist_pkgincludeHEADERS install-pdf \
+ 	install-pdf-am install-pkgconfigDATA install-pkgincludeHEADERS \
+-	install-ps install-ps-am install-sbinPROGRAMS \
++	install-ps install-ps-am install-rulesDATA install-sbinPROGRAMS \
+ 	install-stateDATA install-strip install-systemdunitDATA \
+ 	install-testSCRIPTS installcheck installcheck-am installdirs \
+ 	maintainer-clean maintainer-clean-generic mostlyclean \
+@@ -3794,7 +3818,7 @@
+ 	uninstall-dist_confDATA uninstall-dist_dbusconfDATA \
+ 	uninstall-man uninstall-man8 \
  	uninstall-nodist_pkgincludeHEADERS uninstall-pkgconfigDATA \
 -	uninstall-pkgincludeHEADERS uninstall-sbinPROGRAMS \
--	uninstall-stateDATA uninstall-systemdunitDATA \
--	uninstall-testSCRIPTS
-+	uninstall-pkgincludeHEADERS uninstall-rulesDATA \
-+	uninstall-sbinPROGRAMS uninstall-stateDATA \
-+	uninstall-systemdunitDATA uninstall-testSCRIPTS
++	uninstall-pkgincludeHEADERS uninstall-rulesDATA uninstall-sbinPROGRAMS \
+ 	uninstall-stateDATA uninstall-systemdunitDATA \
+ 	uninstall-testSCRIPTS
  
- 
- src/builtin.h: src/genbuiltin config.status
-
