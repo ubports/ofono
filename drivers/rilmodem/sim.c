@@ -103,6 +103,7 @@ struct sim_data {
 	enum ofono_sim_password_type passwd_state;
 	guint card_state;
 	guint idle_id;
+	gboolean initialized;
 	gboolean removed;
 };
 
@@ -738,6 +739,8 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 
 			if (current_passwd)
 				g_stpcpy(current_passwd, defaultpasswd);
+
+			sd->initialized = FALSE;
 		}
 	}
 
@@ -778,16 +781,78 @@ static void ril_query_pin_retries(struct ofono_sim *sim,
 	CALLBACK_WITH_SUCCESS(cb, sd->retries, data);
 }
 
+static void ril_query_passwd_state_cb(struct ril_msg *message, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	struct ofono_sim *sim = cbd->user;
+	struct sim_data *sd = ofono_sim_get_data(sim);
+	ofono_sim_passwd_cb_t cb = cbd->cb;
+	void *data = cbd->data;
+	struct sim_app *apps[MAX_UICC_APPS];
+	struct sim_status status;
+	guint i = 0;
+	guint search_index = -1;
+	gint state = ofono_sim_get_state(sim);
+
+	if (ril_util_parse_sim_status(sd->ril, message, &status, apps) &&
+		status.num_apps) {
+
+		DBG("num_apps: %d gsm_umts_index: %d", status.num_apps,
+			status.gsm_umts_index);
+
+		/* TODO(CDMA): need some kind of logic to
+		 * set the correct app_index,
+		 */
+		search_index = status.gsm_umts_index;
+
+		for (i = 0; i < status.num_apps; i++) {
+			if (i == search_index &&
+				apps[i]->app_type != RIL_APPTYPE_UNKNOWN) {
+				current_active_app = apps[i]->app_type;
+				configure_active_app(sd, apps[i], i);
+				set_pin_lock_state(sim, apps[i]);
+				break;
+			}
+		}
+		ril_util_free_sim_apps(apps, status.num_apps);
+	}
+	DBG("passwd_state %u", sd->passwd_state);
+
+	/*
+	 * To prevent double call to sim_initialize_after_pin from
+	 * sim_pin_query_cb we must prevent calling sim_pin_query_cb
+	 * when !OFONO_SIM_STATE_READY && OFONO_SIM_PASSWORD_NONE
+	*/
+	if ((state == OFONO_SIM_STATE_READY) || (sd->initialized == FALSE) ||
+				(sd->passwd_state != OFONO_SIM_PASSWORD_NONE)){
+
+		if (sd->passwd_state == OFONO_SIM_PASSWORD_NONE)
+			sd->initialized = TRUE;
+
+		if (state == OFONO_SIM_STATE_LOCKED_OUT)
+			sd->initialized = FALSE;
+
+		if (sd->passwd_state == OFONO_SIM_PASSWORD_INVALID)
+			CALLBACK_WITH_FAILURE(cb, -1, data);
+		else
+			CALLBACK_WITH_SUCCESS(cb, sd->passwd_state, data);
+	}
+
+}
+
 static void ril_query_passwd_state(struct ofono_sim *sim,
 					ofono_sim_passwd_cb_t cb, void *data)
 {
 	struct sim_data *sd = ofono_sim_get_data(sim);
-	DBG("passwd_state %u", sd->passwd_state);
+	struct cb_data *cbd = cb_data_new2(sim, cb, data);
+	int request = RIL_REQUEST_GET_SIM_STATUS;
+	guint ret;
 
-	if (sd->passwd_state == OFONO_SIM_PASSWORD_INVALID)
-		CALLBACK_WITH_FAILURE(cb, -1, data);
-	else
-		CALLBACK_WITH_SUCCESS(cb, sd->passwd_state, data);
+	ret = g_ril_send(sd->ril, request,
+			NULL, 0, ril_query_passwd_state_cb, cbd, g_free);
+
+	g_ril_print_request_no_args(sd->ril, ret, request);
+
 }
 
 static void ril_pin_change_state_cb(struct ril_msg *message, gpointer user_data)
