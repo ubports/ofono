@@ -71,8 +71,8 @@ struct gprs_data {
 	GRil *ril;
 	gboolean ofono_attached;
 	int max_cids;
-	int rild_status;
-	int true_status;
+	int true_status; /* Status by driver before state faking */
+	int rild_status; /* Status for temporary state faking logic */
 	gboolean notified;
 	guint registerid;
 	guint timer_id;
@@ -181,12 +181,13 @@ static gboolean ril_fake_response(gpointer user_data)
 	struct ofono_gprs *gprs = cbd->user;
 	struct gprs_data *gd = ofono_gprs_get_data(gprs);
 
-	DBG("");
+	ofono_info("data reg timeout, status changed to %d", gd->true_status);
 
 	gd->fake_timer_id = 0;
+	gd->fake_cbd = NULL;
+
 	ofono_gprs_status_notify(gprs, gd->true_status);
 	g_free(cbd); /* == gd->fake_cbd */
-	gd->fake_cbd = NULL;
 	return FALSE;
 }
 
@@ -210,6 +211,7 @@ static gboolean ril_roaming_allowed()
 
 	storage_close(imsi, "gprs", settings, FALSE);
 
+	DBG("roaming_allowed: %d", roaming_allowed);
 	return roaming_allowed;
 }
 
@@ -225,6 +227,8 @@ static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
 
 	DBG("");
 
+	status =  -1;
+
 	if (gd && message->error == RIL_E_SUCCESS) {
 		decode_ril_error(&error, "OK");
 	} else {
@@ -232,7 +236,6 @@ static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
 				ril_error_to_string(message->error));
 		decode_ril_error(&error, "FAIL");
 		error.error = message->error;
-		status = -1;
 		goto error;
 	}
 
@@ -240,7 +243,6 @@ static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
 				&lac, &ci, &tech, &max_cids) == FALSE) {
 		ofono_error("Failure parsing data registration response.");
 		decode_ril_error(&error, "FAIL");
-		status = -1;
 		goto error;
 	}
 
@@ -249,7 +251,6 @@ static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
 				|| status == NETWORK_REGISTRATION_STATUS_ROAMING)
 				|| !gd->ofono_attached)) {
 		remove_fake_timer(gd);
-		gd->true_status = -1;
 	}
 
 	if (status > 10)
@@ -266,12 +267,15 @@ static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
 		ofono_gprs_set_cid_range(gprs, 1, max_cids);
 	}
 
-	ofono_info("data registration status is %d", status);
-
 	if (status == NETWORK_REGISTRATION_STATUS_ROAMING)
 		status = check_if_really_roaming(status);
 
-	DBG(" attached:%d, status:%d", gd->ofono_attached, status);
+	if (gd->true_status != status) {
+		ofono_info("data reg changes %d (%d), rilds %d, attached %d",
+			status, gd->true_status, gd->rild_status,
+			gd->ofono_attached);
+		gd->true_status = status;
+	}
 
 	if (!gd->ofono_attached) {
 		if (status == NETWORK_REGISTRATION_STATUS_ROAMING) {
@@ -288,9 +292,9 @@ static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
 				ofono_gprs_status_notify(gprs, status);
 			}
 		} else {
-			if (status == NETWORK_REGISTRATION_STATUS_SEARCHING &&
-								!gd->notified &&
-								cb)
+			if (status == NETWORK_REGISTRATION_STATUS_SEARCHING
+					&& !gd->notified
+					&& cb)
 				/*
 				 * This is a hack that prevents core ending
 				 * into eternal loop with driver
@@ -315,13 +319,12 @@ static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
 		if (gd->fake_timer_id <= 0) {
 			gd->fake_cbd = cb_data_new(NULL, NULL);
 			gd->fake_cbd->user = gprs;
-			DBG("Start rilmodem fake status timer");
+			ofono_info("data reg rilmodem status timer starts");
 			gd->fake_timer_id = g_timeout_add_seconds(
 						FAKE_STATE_TIMER,
-						ril_fake_response, gd->fake_cbd);
+						ril_fake_response,
+						gd->fake_cbd);
 		}
-
-		gd->true_status = status;
 
 		if (gd->rild_status == NETWORK_REGISTRATION_STATUS_ROAMING)
 			status = NETWORK_REGISTRATION_STATUS_ROAMING;
@@ -329,10 +332,14 @@ static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
 			status = NETWORK_REGISTRATION_STATUS_REGISTERED;
 
 		gd->rild_status = status;
+		ofono_info("data reg status mod to %d", status);
 	}
 
 error:
-	ofono_info("data registration status is %d", status);
+
+	DBG("data reg status %d, true_status %d, rilds %d, attached %d",
+			status, gd->true_status, gd->rild_status,
+			gd->ofono_attached);
 
 	if (cb)
 		cb(&error, status, cbd->data);
@@ -386,15 +393,15 @@ static void ril_data_probe_reg_cb(struct ril_msg *message, gpointer user_data)
 	if (status == NETWORK_REGISTRATION_STATUS_ROAMING)
 		status = check_if_really_roaming(status);
 
-out:
-	ofono_info("data registration status is %d", status);
+	gd->true_status = status;
 
-	DBG("Starting to listen network status");
+out:
+	ofono_info("data reg status probed %d", status);
+
 	gd->registerid = g_ril_register(gd->ril,
 			id, ril_gprs_state_change, gprs);
 
 	gd->rild_status = status;
-
 }
 
 static void ril_gprs_registration_status(struct ofono_gprs *gprs,
