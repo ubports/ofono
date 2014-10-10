@@ -561,8 +561,13 @@ static void configure_active_app(struct sim_data *sd,
 					guint index)
 {
 	sd->app_type = app->app_type;
+
+	g_free(sd->aid_str);
 	sd->aid_str = g_strdup(app->aid_str);
+
+	g_free(sd->app_str);
 	sd->app_str = g_strdup(app->app_str);
+
 	sd->app_index = index;
 
 	DBG("setting aid_str (AID) to: %s", sd->aid_str);
