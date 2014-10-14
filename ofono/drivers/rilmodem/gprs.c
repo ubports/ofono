@@ -191,7 +191,7 @@ static gboolean ril_fake_response(gpointer user_data)
 	return FALSE;
 }
 
-static gboolean ril_roaming_allowed()
+gboolean ril_roaming_allowed()
 {
 	GError *error;
 	error = NULL;
