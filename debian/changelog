@@ -1,6 +1,9 @@
 ofono (1.15-2) UNRELEASED; urgency=medium
 
   * d/control: Konstantinos Margaritis drop from uploaders. Thanks.
+  * d/ofono-dev.install: ship pkg-config files.
+    Thanks Graham Inggs for patch.
+    (Closes: #763111)
 
  -- Hector Oron <zumbi@debian.org>  Fri, 26 Sep 2014 13:15:53 +0200
 
