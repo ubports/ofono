@@ -614,6 +614,11 @@ gint check_if_really_roaming(gint status)
 		return status;
 }
 
+gint get_current_network_status()
+{
+	return ofono_netreg_get_status(current_netreg);
+}
+
 static gboolean ril_delayed_register(gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
