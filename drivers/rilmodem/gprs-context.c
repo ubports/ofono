@@ -43,6 +43,8 @@
 #include "grilrequest.h"
 #include "grilunsol.h"
 
+#include "common.h"
+
 #include "rilmodem.h"
 
 enum data_call_state {
@@ -265,6 +267,16 @@ static void ril_gprs_context_activate_primary(struct ofono_gprs_context *gc,
 
 	ofono_info("Activating context: %d", ctx->cid);
 
+	/* Let's make sure that we aren't connecting when roaming not allowed */
+	if (NETWORK_REGISTRATION_STATUS_ROAMING ==
+						get_current_network_status()) {
+		if ((ril_roaming_allowed() == FALSE)
+			&& (NETWORK_REGISTRATION_STATUS_ROAMING
+				== check_if_really_roaming(
+					NETWORK_REGISTRATION_STATUS_ROAMING)))
+			goto exit;
+	}
+
 	cbd->user = gc;
 
 	/* TODO: implement radio technology selection. */
@@ -306,7 +318,7 @@ error:
 	g_free(request.apn);
 	g_free(request.username);
 	g_free(request.password);
-
+exit:
 	if (ret <= 0) {
 		ofono_error("Send RIL_REQUEST_SETUP_DATA_CALL failed.");
 
