@@ -246,15 +246,15 @@ static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
 		goto error;
 	}
 
+	if (status > 10)
+		status = status - 10;
+
 	if ((gd->fake_timer_id > 0)
 			&& ((status == NETWORK_REGISTRATION_STATUS_REGISTERED
 				|| status == NETWORK_REGISTRATION_STATUS_ROAMING)
 				|| !gd->ofono_attached)) {
 		remove_fake_timer(gd);
 	}
-
-	if (status > 10)
-		status = status - 10;
 
 	if (!registered) {
 		ofono_gprs_register(gprs);
