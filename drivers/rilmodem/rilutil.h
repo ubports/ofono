@@ -127,6 +127,8 @@ gboolean ril_roaming_allowed();
 
 gboolean check_if_ok_to_attach();
 
+gint get_current_network_status();
+
 void ril_util_free_sim_apps(struct sim_app **apps, guint num_apps);
 
 struct cb_data {
