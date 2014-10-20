@@ -380,6 +380,9 @@ static void ril_data_probe_reg_cb(struct ril_msg *message, gpointer user_data)
 		goto out;
 	}
 
+	if (status > 10)
+		status = status - 10;
+
 	ofono_gprs_register(gprs);
 
 	registered = TRUE;
