@@ -264,16 +264,16 @@ static void ril_gprs_context_activate_primary(struct ofono_gprs_context *gc,
 	struct ofono_error error;
 	int reqid = RIL_REQUEST_SETUP_DATA_CALL;
 	int ret = 0;
+	int netreg_status;
+	int roaming = NETWORK_REGISTRATION_STATUS_ROAMING;
 
 	ofono_info("Activating context: %d", ctx->cid);
 
 	/* Let's make sure that we aren't connecting when roaming not allowed */
-	if (NETWORK_REGISTRATION_STATUS_ROAMING ==
-						get_current_network_status()) {
-		if ((ril_roaming_allowed() == FALSE)
-			&& (NETWORK_REGISTRATION_STATUS_ROAMING
-				== check_if_really_roaming(
-					NETWORK_REGISTRATION_STATUS_ROAMING)))
+	netreg_status = get_current_network_status();
+	if (netreg_status == roaming) {
+		if (!ril_roaming_allowed() && (roaming
+				== check_if_really_roaming(netreg_status)))
 			goto exit;
 	}
 
