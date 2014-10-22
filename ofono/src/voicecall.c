@@ -1502,6 +1502,19 @@ static void manager_dial_callback(const struct ofono_error *error, void *data)
 		if (is_emergency_number(vc, number) == TRUE)
 			__ofono_modem_dec_emergency_mode(modem);
 
+		if (vc->settings) {
+			/*Save the last dialled number for HFP AT+BLDN*/
+			if (number) {
+				g_key_file_set_string(vc->settings,
+							SETTINGS_GROUP,
+							"Number", number);
+
+				storage_sync(vc->imsi, SETTINGS_STORE,
+						vc->settings);
+			}
+
+		}
+
 		reply = __ofono_error_failed(vc->pending);
 	}
 
@@ -1544,12 +1557,6 @@ static int voicecall_dial(struct ofono_voicecall *vc, const char *number,
 		__ofono_modem_inc_emergency_mode(modem);
 
 	string_to_phone_number(number, &ph);
-
-	if (vc->settings) {
-		g_key_file_set_string(vc->settings, SETTINGS_GROUP,
-					"Number", number);
-		storage_sync(vc->imsi, SETTINGS_STORE, vc->settings);
-	}
 
 	vc->driver->dial(vc, &ph, clir, cb, vc);
 
@@ -2317,6 +2324,19 @@ void ofono_voicecall_disconnected(struct ofono_voicecall *vc, int id,
 		voicecall_emit_disconnect_reason(call, reason);
 
 	number = phone_number_to_string(&call->call->phone_number);
+
+	if (vc->settings) {
+		/*Save the last dialled number for HFP AT+BLDN*/
+		if (call->call->direction == CALL_DIRECTION_MOBILE_ORIGINATED
+					&& number) {
+			g_key_file_set_string(vc->settings, SETTINGS_GROUP,
+						"Number", number);
+
+			storage_sync(vc->imsi, SETTINGS_STORE, vc->settings);
+		}
+
+	}
+
 	if (is_emergency_number(vc, number) == TRUE)
 		__ofono_modem_dec_emergency_mode(modem);
 
@@ -2428,6 +2448,21 @@ void ofono_voicecall_notify(struct ofono_voicecall *vc,
 	return;
 
 error:
+	if (vc->settings) {
+
+		/*Save the last dialled number for HFP AT+BLDN*/
+		if (call->direction == CALL_DIRECTION_MOBILE_ORIGINATED
+					&& call->phone_number.number) {
+			const char *number =
+				phone_number_to_string(&call->phone_number);
+			g_key_file_set_string(vc->settings, SETTINGS_GROUP,
+						"Number", number);
+
+			storage_sync(vc->imsi, SETTINGS_STORE, vc->settings);
+		}
+
+	}
+
 	if (newcall)
 		g_free(newcall);
 
