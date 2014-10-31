@@ -78,6 +78,8 @@ void ofono_gprs_set_cid_range(struct ofono_gprs *gprs,
 void ofono_gprs_add_context(struct ofono_gprs *gprs,
 				struct ofono_gprs_context *gc);
 
+struct ofono_modem *ofono_gprs_get_modem(struct ofono_gprs *gprs);
+
 #ifdef __cplusplus
 }
 #endif
