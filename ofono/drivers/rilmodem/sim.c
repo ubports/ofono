@@ -818,6 +818,9 @@ static void ril_query_passwd_state_cb(struct ril_msg *message, gpointer user_dat
 	}
 	DBG("passwd_state %u", sd->passwd_state);
 
+	/* if pin code required cannot be initialized yet*/
+	if (sd->passwd_state == OFONO_SIM_PASSWORD_SIM_PIN)
+		sd->initialized = FALSE;
 	/*
 	 * To prevent double call to sim_initialize_after_pin from
 	 * sim_pin_query_cb we must prevent calling sim_pin_query_cb
