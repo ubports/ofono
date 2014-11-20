@@ -114,6 +114,10 @@ static void ril_gprs_context_call_list_changed(struct ril_msg *message,
 
 		if (call->active == DATA_CALL_ACTIVE) {
 			char **dns_addresses;
+			int protocol = -1;
+
+			if (call->type)
+				protocol = ril_protocol_string_to_ofono_protocol(call->type);
 
 			if (call->ifname) {
 				ofono_gprs_context_set_interface(gc,
@@ -122,18 +126,31 @@ static void ril_gprs_context_call_list_changed(struct ril_msg *message,
 
 			if (call->addresses) {
 				char **split_ip_addr;
-				ofono_gprs_context_set_ipv4_netmask(gc,
-					ril_util_get_netmask(call->addresses));
 
 				split_ip_addr = g_strsplit(call->addresses,
 									"/", 2);
-				ofono_gprs_context_set_ipv4_address(gc,
+
+				if (protocol == OFONO_GPRS_PROTO_IPV6) {
+					ofono_gprs_context_set_ipv6_address(gc,
+							split_ip_addr[0]);
+
+				} else {
+					ofono_gprs_context_set_ipv4_netmask(gc,
+						ril_util_get_netmask(call->addresses));
+
+					ofono_gprs_context_set_ipv4_address(gc,
 							split_ip_addr[0], TRUE);
+				}
+
 				g_strfreev(split_ip_addr);
 			}
 
 			if (call->gateways) {
-				ofono_gprs_context_set_ipv4_gateway(gc,
+				if (protocol == OFONO_GPRS_PROTO_IPV6)
+					ofono_gprs_context_set_ipv6_gateway(gc,
+								call->gateways);
+				else
+					ofono_gprs_context_set_ipv4_gateway(gc,
 								call->gateways);
 			}
 
@@ -144,8 +161,13 @@ static void ril_gprs_context_call_list_changed(struct ril_msg *message,
 			dns_addresses =	(call->dnses ?
 				g_strsplit(call->dnses, " ", 3)	: NULL);
 
-			ofono_gprs_context_set_ipv4_dns_servers(gc,
+			if (protocol == OFONO_GPRS_PROTO_IPV6)
+				ofono_gprs_context_set_ipv6_dns_servers(gc,
+					(const char **) dns_addresses);
+			else
+				ofono_gprs_context_set_ipv4_dns_servers(gc,
 						(const char**)dns_addresses);
+
 			g_strfreev(dns_addresses);
 			break;
 		}
@@ -237,15 +259,23 @@ static void ril_setup_data_call_cb(struct ril_msg *message, gpointer user_data)
 	 * connection, in which case this code will need to
 	 * changed to handle such a device.
 	 */
-	ofono_gprs_context_set_ipv4_netmask(gc,
-			ril_util_get_netmask(reply->ip_addrs[0]));
+	if (reply->protocol == OFONO_GPRS_PROTO_IPV6 ) {
+		ofono_gprs_context_set_ipv6_address(gc, split_ip_addr[0]);
+		ofono_gprs_context_set_ipv6_gateway(gc, reply->gateways[0]);
 
-	ofono_gprs_context_set_ipv4_address(gc, split_ip_addr[0], TRUE);
-	ofono_gprs_context_set_ipv4_gateway(gc, reply->gateways[0]);
-
-	ofono_gprs_context_set_ipv4_dns_servers(gc,
+		ofono_gprs_context_set_ipv6_dns_servers(gc,
 					(const char **) reply->dns_addresses);
 
+	} else {
+		ofono_gprs_context_set_ipv4_netmask(gc,
+					ril_util_get_netmask(reply->ip_addrs[0]));
+
+		ofono_gprs_context_set_ipv4_address(gc, split_ip_addr[0], TRUE);
+		ofono_gprs_context_set_ipv4_gateway(gc, reply->gateways[0]);
+
+		ofono_gprs_context_set_ipv4_dns_servers(gc,
+					(const char **) reply->dns_addresses);
+	}
 error:
 	g_ril_reply_free_setup_data_call(reply);
 	g_strfreev(split_ip_addr);
