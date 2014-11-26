@@ -1,8 +1,9 @@
 ofono (1.15-3) UNRELEASED; urgency=medium
 
   * debian/control: Use canonical URL for the Vcs-* fields
+  * Install missing dundee daemon and LSB initscript
 
- -- Laurent Bigonville <bigon@debian.org>  Wed, 26 Nov 2014 18:06:51 +0100
+ -- Laurent Bigonville <bigon@debian.org>  Wed, 26 Nov 2014 18:16:37 +0100
 
 ofono (1.15-2) unstable; urgency=medium
 
