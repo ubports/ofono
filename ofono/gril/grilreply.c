@@ -159,21 +159,15 @@ struct reply_setup_data_call *g_ril_reply_parse_data_call(GRil *gril,
 
 	}
 
-	/* TODO:
-	 * RILD can return multiple addresses; oFono only supports
-	 * setting a single IPv4 address.  At this time, we only
-	 * use the first address.  It's possible that a RIL may
-	 * just specify the end-points of the point-to-point
-	 * connection, in which case this code will need to
-	 * changed to handle such a device.
-	 *
-	 * For now split into a maximum of three, and only use
-	 * the first address for the remaining operations.
-	 */
-	if (raw_ip_addrs)
-		reply->ip_addrs = g_strsplit(raw_ip_addrs, " ", 3);
-	else
+	int i, j;
+	if (raw_ip_addrs) {
+		for (i=0, j=0; i < strlen(raw_ip_addrs) ; i++) {
+			j = raw_ip_addrs[i] == ' ' ? j+1: j;
+		}
+		reply->ip_addrs = g_strsplit(raw_ip_addrs, " ", j+1);
+	} else {
 		reply->ip_addrs = NULL;
+	}
 
 	/* TODO: I'm not sure it's possible to specify a zero-length
 	 * in a parcel in a parcel.  If *not*, then this can be
@@ -190,10 +184,14 @@ struct reply_setup_data_call *g_ril_reply_parse_data_call(GRil *gril,
 	 * RILD can return multiple addresses; oFono only supports
 	 * setting a single IPv4 gateway.
 	 */
-	if (raw_gws)
-		reply->gateways = g_strsplit(raw_gws, " ", 3);
-	else
+	if (raw_gws) {
+		for (i=0, j=0; i < strlen(raw_gws) ; i++) {
+			j = raw_gws[i] == ' ' ? j+1 : j;
+		}
+		reply->gateways = g_strsplit(raw_gws, " ", j+1);
+	} else {
 		reply->gateways = NULL;
+	}
 
 	if (reply->gateways == NULL || (sizeof(reply->gateways) == 0)) {
 		ofono_error("%s: no gateways: %s", __func__, raw_gws);
@@ -202,10 +200,14 @@ struct reply_setup_data_call *g_ril_reply_parse_data_call(GRil *gril,
 	}
 
 	/* Split DNS addresses */
-	if (dnses)
-		reply->dns_addresses = g_strsplit(dnses, " ", 3);
-	else
+	if (dnses) {
+		for (i=0, j=0; i < strlen(dnses) ; i++) {
+			j = dnses[i] == ' ' ? j+1 : j;
+		}
+		reply->dns_addresses = g_strsplit(dnses, " ", j+1);
+	} else {
 		reply->dns_addresses = NULL;
+	}
 
 	if (reply->dns_addresses == NULL ||
 		(sizeof(reply->dns_addresses) == 0)) {
