@@ -5,6 +5,7 @@ Maintainer: Debian Telepathy maintainers <pkg-telepathy-maintainers@lists.alioth
 Uploaders: Jonny Lamb <jonny@debian.org>, Hector Oron <zumbi@debian.org>
 Build-Depends: debhelper (>= 5),
                cdbs,
+               dh-systemd (>= 1.5),
                libglib2.0-dev (>= 2.22),
                libdbus-glib-1-dev,
                libudev-dev,
