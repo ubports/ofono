@@ -507,7 +507,7 @@ static void n900_post_online(struct ofono_modem *modem)
 
 	ofono_netreg_create(modem, 0, "isimodem", isi->modem);
 	ofono_sms_create(modem, 0, "isimodem", isi->modem);
-	ofono_cbs_create(modem, 0, "isimodem", isi->modem);
+/*	ofono_cbs_create(modem, 0, "isimodem", isi->modem);*/
 	ofono_ussd_create(modem, 0, "isimodem", isi->modem);
 	ofono_call_settings_create(modem, 0, "isimodem", isi->modem);
 	ofono_call_barring_create(modem, 0, "isimodem", isi->modem);
