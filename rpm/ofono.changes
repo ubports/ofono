@@ -239,7 +239,7 @@
 - upgrade to 0.15
 - add patch 0001-add-netmask-to-hso-gprs-context-driver.patch 
 
-* Monday Dec 14 2009 Martin Xu <martin.xu@intel.com> - 0.14
+* Mon Dec 14 2009 Martin Xu <martin.xu@intel.com> - 0.14
 - upgrade to 0.14
 
 * Thu Dec 7 2009 Martin Xu <martin.xu@intel.com> - 0.13
