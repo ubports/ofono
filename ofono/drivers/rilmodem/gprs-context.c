@@ -75,7 +75,8 @@ static void set_context_disconnected(struct gprs_context_data *gcd)
 	gcd->state = STATE_IDLE;
 }
 
-static void ril_gprs_split_ip_by_protocol(char **ip_array, char ***split_ip_addr,
+static void ril_gprs_split_ip_by_protocol(char **ip_array,
+						char ***split_ip_addr,
 						char ***split_ipv6_addr,
 						char **ip_addr)
 {
@@ -87,12 +88,14 @@ static void ril_gprs_split_ip_by_protocol(char **ip_array, char ***split_ip_addr
 	for (i=0; i< g_strv_length(ip_array); i++) {
 		if (strchr(ip_array[i], ipv6_delimiter)) {
 			if (*split_ipv6_addr == NULL) {
-				*split_ipv6_addr = g_strsplit(ip_array[i], "/", 2);
+				*split_ipv6_addr = g_strsplit(
+							ip_array[i], "/",2);
 			}
 		} else if (strchr(ip_array[i], ip_delimiter)) {
 			if (*split_ip_addr == NULL) {
 				*ip_addr = g_strdup(ip_array[i]);
-				*split_ip_addr = g_strsplit(ip_array[i], "/", 2);
+				*split_ip_addr = g_strsplit(
+							ip_array[i], "/", 2);
 			}
 		}
 	}
@@ -141,8 +144,7 @@ static void ril_gprs_split_dns_by_protocol(char **dns_array, char ***dns_addr,
 				g_free(dnsipv6);
 				temp1 = g_strconcat(temp, dns_array[i], NULL);
 				g_free(temp);
-				dnsipv6 = g_strdup(temp1);
-				g_free(temp1);
+				dnsipv6 = temp1;
 			}
 			dnsipv6_len++;
 		} else if (strchr(dns_array[i],ip_delimiter)) {
@@ -153,8 +155,8 @@ static void ril_gprs_split_dns_by_protocol(char **dns_array, char ***dns_addr,
 				g_free(dnsip);
 				temp1 = g_strconcat(temp, dns_array[i], NULL);
 				g_free(temp);
-				dnsip = g_strdup(temp1);
-				g_free(temp1);
+				dnsip = temp1;
+
 			}
 			dnsip_len++;
 		}
@@ -227,13 +229,8 @@ static void ril_gprs_context_call_list_changed(struct ril_msg *message,
 				char **split_ipv6_addr = NULL;
 				char *ip_addr = NULL;
 
-				int i, j;
-				/*how many adresses*/
-				for (i=0, j=0; i < strlen(call->addresses) ; i++)
-					j = call->addresses[i] == ' ' ? j+1 : j;
-
 				/*addresses to an array*/
-				ip_array = g_strsplit(call->addresses, " ", j+1);
+				ip_array = g_strsplit(call->addresses, " ",-1);
 
 				/*pick 1 address of each protocol*/
 				ril_gprs_split_ip_by_protocol(ip_array,
@@ -269,14 +266,8 @@ static void ril_gprs_context_call_list_changed(struct ril_msg *message,
 				char **gw_array = NULL;
 				char *ip_gw = NULL;
 				char *ipv6_gw = NULL;
-				int i, j;
-
-				/*how many adresses*/
-				for (i=0, j=0; i < strlen(call->gateways) ; i++)
-					j = call->gateways[i] == ' ' ? j+1 : j;
-
 				/*addresses to an array*/
-				gw_array = g_strsplit(call->gateways, " ", j+1);
+				gw_array = g_strsplit(call->gateways, " ", -1);
 
 				/*pick 1 gw for each protocol*/
 				ril_gprs_split_gw_by_protocol(gw_array, &ip_gw,
@@ -304,13 +295,8 @@ static void ril_gprs_context_call_list_changed(struct ril_msg *message,
 				char **dns_ip = NULL;
 				char **dns_ipv6 = NULL;
 
-				/*how many adresses*/
-				int i, j;
-				for (i=0, j=0; i < strlen(call->dnses); i++)
-					j = call->dnses[i] == ' ' ? j+1 : j;
-
 				/*addresses to an array*/
-				dns_array = g_strsplit(call->dnses, " ", j+1);
+				dns_array = g_strsplit(call->dnses, " ", -1);
 
 				/*split based on protocol*/
 				ril_gprs_split_dns_by_protocol(dns_array,
