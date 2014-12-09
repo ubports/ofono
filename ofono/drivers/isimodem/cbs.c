@@ -134,7 +134,9 @@ static void routing_resp_cb(const GIsiMessage *msg, void *data)
 	struct cbs_data *cd = ofono_cbs_get_data(cbs);
 
 	if (!check_resp(msg, SMS_GSM_CB_ROUTING_RESP)) {
-		ofono_cbs_remove(cbs);
+		/* on shutdown, cbs is already being removed */
+		if (g_isi_msg_error(msg) != -ESHUTDOWN)
+			ofono_cbs_remove(cbs);
 		return;
 	}
 
