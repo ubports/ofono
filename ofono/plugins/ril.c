@@ -402,12 +402,14 @@ static void ril_connected(struct ril_msg *message, gpointer user_data)
 
 	struct ofono_modem *modem = (struct ofono_modem *) user_data;
 	struct ril_data *ril = ofono_modem_get_data(modem);
+	int ril_version = 0;
+	struct parcel rilp;
 
-	/* TODO: make conditional */
-	ofono_debug("[UNSOL]< %s", ril_unsol_request_to_string(message->req));
-	/* TODO: make conditional */
+	ril_util_init_parcel(message, &rilp);
+	ril_version = parcel_r_int32(&rilp);
+	ofono_debug("[UNSOL]< %s, RIL_VERSION %d",
+			ril_unsol_request_to_string(message->req), ril_version);
 
-	/* TODO: need a disconnect function to restart things! */
 	ril->connected = TRUE;
 
 	send_get_sim_status(modem);
