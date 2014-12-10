@@ -159,19 +159,8 @@ struct reply_setup_data_call *g_ril_reply_parse_data_call(GRil *gril,
 
 	}
 
-	/* TODO:
-	 * RILD can return multiple addresses; oFono only supports
-	 * setting a single IPv4 address.  At this time, we only
-	 * use the first address.  It's possible that a RIL may
-	 * just specify the end-points of the point-to-point
-	 * connection, in which case this code will need to
-	 * changed to handle such a device.
-	 *
-	 * For now split into a maximum of three, and only use
-	 * the first address for the remaining operations.
-	 */
 	if (raw_ip_addrs)
-		reply->ip_addrs = g_strsplit(raw_ip_addrs, " ", 3);
+		reply->ip_addrs = g_strsplit(raw_ip_addrs, " ", -1);
 	else
 		reply->ip_addrs = NULL;
 
@@ -191,7 +180,7 @@ struct reply_setup_data_call *g_ril_reply_parse_data_call(GRil *gril,
 	 * setting a single IPv4 gateway.
 	 */
 	if (raw_gws)
-		reply->gateways = g_strsplit(raw_gws, " ", 3);
+		reply->gateways = g_strsplit(raw_gws, " ", -1);
 	else
 		reply->gateways = NULL;
 
@@ -203,7 +192,7 @@ struct reply_setup_data_call *g_ril_reply_parse_data_call(GRil *gril,
 
 	/* Split DNS addresses */
 	if (dnses)
-		reply->dns_addresses = g_strsplit(dnses, " ", 3);
+		reply->dns_addresses = g_strsplit(dnses, " ", -1);
 	else
 		reply->dns_addresses = NULL;
 
