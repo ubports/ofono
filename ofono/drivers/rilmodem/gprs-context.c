@@ -112,11 +112,11 @@ static void ril_gprs_split_gw_by_protocol(char **gw_array, char **ip_gw,
 	for (i=0; i< g_strv_length(gw_array); i++) {
 		if (strchr(gw_array[i],ipv6_delimiter)) {
 			if (*ipv6_gw == NULL) {
-				*ipv6_gw = g_strdup(gw_array[0]);
+				*ipv6_gw = g_strdup(gw_array[i]);
 			}
 		} else if (strchr(gw_array[i],ip_delimiter)) {
 			if (*ip_gw == NULL)
-				*ip_gw = g_strdup(gw_array[0]);
+				*ip_gw = g_strdup(gw_array[i]);
 		}
 	}
 }
