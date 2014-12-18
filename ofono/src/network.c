@@ -934,6 +934,40 @@ static void append_operator_struct_list(struct ofono_netreg *netreg,
 	dbus_free_string_array(children);
 }
 
+static void network_signal_operators_changed(struct ofono_netreg *netreg)
+{
+	const char *path = __ofono_atom_get_path(netreg->atom);
+	DBusConnection *conn = ofono_dbus_get_connection();
+	DBusMessage *signal;
+	DBusMessageIter iter;
+	DBusMessageIter array;
+
+	signal = dbus_message_new_signal(path,
+		OFONO_NETWORK_REGISTRATION_INTERFACE, "OperatorsChanged");
+	if (signal == NULL) {
+		ofono_error("Unable to allocate new "
+					OFONO_NETWORK_REGISTRATION_INTERFACE
+					".OperatorsChanged signal");
+		return;
+	}
+
+	dbus_message_iter_init_append(signal, &iter);
+	dbus_message_iter_open_container(&iter, DBUS_TYPE_ARRAY,
+					DBUS_STRUCT_BEGIN_CHAR_AS_STRING
+					DBUS_TYPE_OBJECT_PATH_AS_STRING
+					DBUS_TYPE_ARRAY_AS_STRING
+					DBUS_DICT_ENTRY_BEGIN_CHAR_AS_STRING
+					DBUS_TYPE_STRING_AS_STRING
+					DBUS_TYPE_VARIANT_AS_STRING
+					DBUS_DICT_ENTRY_END_CHAR_AS_STRING
+					DBUS_STRUCT_END_CHAR_AS_STRING,
+					&array);
+	append_operator_struct_list(netreg, &array);
+	dbus_message_iter_close_container(&iter, &array);
+
+	g_dbus_send_message(conn, signal);
+}
+
 static void operator_list_callback(const struct ofono_error *error, int total,
 				const struct ofono_network_operator *list,
 				void *data)
@@ -942,6 +976,7 @@ static void operator_list_callback(const struct ofono_error *error, int total,
 	DBusMessage *reply;
 	DBusMessageIter iter;
 	DBusMessageIter array;
+	gboolean changed;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
 		DBG("Error occurred during operator list");
@@ -950,7 +985,7 @@ static void operator_list_callback(const struct ofono_error *error, int total,
 		return;
 	}
 
-	update_operator_list(netreg, total, list);
+	changed = update_operator_list(netreg, total, list);
 
 	reply = dbus_message_new_method_return(netreg->pending);
 
@@ -970,6 +1005,11 @@ static void operator_list_callback(const struct ofono_error *error, int total,
 	dbus_message_iter_close_container(&iter, &array);
 
 	__ofono_dbus_pending_reply(&netreg->pending, reply);
+
+	DBG("operator list %schanged", changed ? "" : "not ");
+
+	if (changed)
+		network_signal_operators_changed(netreg);
 }
 
 static DBusMessage *network_scan(DBusConnection *conn,
@@ -1041,6 +1081,8 @@ static const GDBusMethodTable network_registration_methods[] = {
 static const GDBusSignalTable network_registration_signals[] = {
 	{ GDBUS_SIGNAL("PropertyChanged",
 			GDBUS_ARGS({ "name", "s" }, { "value", "v" })) },
+	{ GDBUS_SIGNAL("OperatorsChanged",
+			GDBUS_ARGS({ "operators", "a(oa{sv})"})) },
 	{ }
 };
 
