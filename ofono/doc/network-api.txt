@@ -57,6 +57,11 @@ Signals		PropertyChanged(string property, variant value)
 			This signal indicates a changed value of the given
 			property.
 
+		OperatorsChanged(array{object,dict})
+
+			Signal that gets emitted when operator list has
+			changed. It contains the current list of operators.
+
 Properties	string Mode [readonly]
 
 			The current registration mode. The default of this
