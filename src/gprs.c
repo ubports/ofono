@@ -561,13 +561,16 @@ static void pri_context_signal_settings(struct pri_context *ctx,
 				context_settings_append_ipv6);
 }
 
-static void pri_parse_proxy(struct pri_context *ctx, const char *proxy)
+static gboolean pri_parse_proxy(struct pri_context *ctx, const char *proxy)
 {
 	char *scheme, *host, *port, *path;
 
+	if (proxy[0] == 0)
+		return FALSE;
+
 	scheme = g_strdup(proxy);
 	if (scheme == NULL)
-		return;
+		return FALSE;
 
 	host = strstr(scheme, "://");
 	if (host != NULL) {
@@ -580,7 +583,7 @@ static void pri_parse_proxy(struct pri_context *ctx, const char *proxy)
 			ctx->proxy_port = 80;
 		else {
 			g_free(scheme);
-			return;
+			return FALSE;
 		}
 	} else {
 		host = scheme;
@@ -602,10 +605,16 @@ static void pri_parse_proxy(struct pri_context *ctx, const char *proxy)
 		}
 	}
 
+	if (host[0] == 0) {
+		g_free(scheme);
+		return FALSE;
+	}
+
 	g_free(ctx->proxy_host);
 	ctx->proxy_host = g_strdup(host);
 
 	g_free(scheme);
+	return TRUE;
 }
 
 static void pri_ifupdown(const char *interface, ofono_bool_t active)
@@ -691,9 +700,14 @@ static void pri_setproxy(const char *interface, const char *proxy)
 {
 	struct rtentry rt;
 	struct sockaddr_in addr;
+	in_addr_t proxy_addr;
 	int sk;
 
 	if (interface == NULL)
+		return;
+
+	proxy_addr = inet_addr(proxy);
+	if (proxy_addr == INADDR_NONE)
 		return;
 
 	sk = socket(PF_INET, SOCK_DGRAM, 0);
@@ -706,7 +720,7 @@ static void pri_setproxy(const char *interface, const char *proxy)
 
 	memset(&addr, 0, sizeof(addr));
 	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = inet_addr(proxy);
+	addr.sin_addr.s_addr = proxy_addr;
 	memcpy(&rt.rt_dst, &addr, sizeof(rt.rt_dst));
 
 	memset(&addr, 0, sizeof(addr));
@@ -793,7 +807,8 @@ static void pri_update_mms_context_settings(struct pri_context *ctx)
 	if (ctx->message_proxy)
 		settings->ipv4->proxy = g_strdup(ctx->message_proxy);
 
-	pri_parse_proxy(ctx, ctx->message_proxy);
+	if (!pri_parse_proxy(ctx, ctx->message_proxy))
+		pri_parse_proxy(ctx, ctx->message_center);
 
 	DBG("proxy %s port %u", ctx->proxy_host, ctx->proxy_port);
 
