@@ -117,6 +117,10 @@ void ofono_gprs_context_set_ipv6_gateway(struct ofono_gprs_context *gc,
 						const char *gateway);
 void ofono_gprs_context_set_ipv6_dns_servers(struct ofono_gprs_context *gc,
 						const char **dns);
+
+void ofono_gprs_context_signal_change(struct ofono_gprs_context *gc,
+							unsigned int cid);
+
 #ifdef __cplusplus
 }
 #endif
