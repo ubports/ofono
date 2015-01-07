@@ -2550,6 +2550,29 @@ void ofono_gprs_context_set_ipv6_dns_servers(struct ofono_gprs_context *gc,
 	settings->ipv6->dns = g_strdupv((char **) dns);
 }
 
+void ofono_gprs_context_signal_change(struct ofono_gprs_context *gc,
+							unsigned int cid)
+{
+	GSList *l;
+	struct pri_context *ctx;
+
+	if (gc->gprs == NULL)
+		return;
+
+	for (l = gc->gprs->contexts; l; l = l->next) {
+		ctx = l->data;
+
+		if (ctx->context.cid != cid)
+			continue;
+
+		if (ctx->active == FALSE)
+			break;
+
+		pri_context_signal_settings(ctx, gc->settings->ipv4 != NULL,
+						gc->settings->ipv6 != NULL);
+	}
+}
+
 int ofono_gprs_driver_register(const struct ofono_gprs_driver *d)
 {
 	DBG("driver: %p, name: %s", d, d->name);
