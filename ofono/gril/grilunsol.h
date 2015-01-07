@@ -51,6 +51,9 @@ struct data_call {
 
 void g_ril_unsol_free_data_call_list(struct unsol_data_call_list *unsol);
 
+gboolean g_ril_unsol_cmp_dcl(struct unsol_data_call_list *current,
+				struct unsol_data_call_list *old, gint cid);
+
 struct unsol_data_call_list *g_ril_unsol_parse_data_call_list(GRil *gril,
 					struct ril_msg *message,
 					struct ofono_error *error);
