@@ -77,6 +77,58 @@ void g_ril_unsol_free_data_call_list(struct unsol_data_call_list *unsol)
 	}
 }
 
+gboolean g_ril_unsol_cmp_dcl(struct unsol_data_call_list *current,
+				struct unsol_data_call_list *old,
+				gint cid)
+{
+	GSList *nl,*ol;
+	struct data_call *new_call, *old_call;
+
+	new_call = old_call = NULL;
+	gboolean no_cid = TRUE;
+
+
+	if (!current || !old)
+		return FALSE;
+
+	if (current->num != old->num)
+		return FALSE;
+
+	for (nl = current->call_list; nl; nl = nl->next) {
+		new_call = (struct data_call *) nl->data;
+
+		if (new_call->cid != cid)
+			continue;
+
+		for (ol = old->call_list; ol; ol = ol->next) {
+			old_call = (struct data_call *) ol->data; 
+			if(new_call->cid == old_call->cid) {
+				no_cid = FALSE;
+				break;
+			}
+		}
+		if (no_cid)
+			return FALSE;
+
+		if (new_call->active != old_call->active)
+			return FALSE;
+		if (g_strcmp0(new_call->type,old_call->type))
+			return FALSE;
+		if (g_strcmp0(new_call->ifname,old_call->ifname))
+			return FALSE;
+		if (g_strcmp0(new_call->addresses,old_call->addresses))
+			return FALSE;
+		if (g_strcmp0(new_call->dnses,old_call->dnses))
+			return FALSE;
+		if (g_strcmp0(new_call->gateways,old_call->gateways))
+			return FALSE;
+	}
+	if (no_cid)
+		return FALSE;
+
+	return TRUE;
+}
+
 struct unsol_data_call_list *g_ril_unsol_parse_data_call_list(GRil *gril,
 					struct ril_msg *message,
 					struct ofono_error *error)

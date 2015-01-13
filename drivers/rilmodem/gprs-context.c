@@ -66,6 +66,8 @@ struct gprs_context_data {
 	gint active_rild_cid;
 	enum state state;
 	guint regid;
+	struct unsol_data_call_list *old_list;
+	guint prev_active_status;
 };
 
 static void set_context_disconnected(struct gprs_context_data *gcd)
@@ -184,6 +186,7 @@ static void ril_gprs_context_call_list_changed(struct ril_msg *message,
 	struct data_call *call = NULL;
 	struct unsol_data_call_list *unsol;
 	gboolean disconnect = FALSE;
+	gboolean signal = FALSE;
 	GSList *iterator = NULL;
 	struct ofono_error error;
 
@@ -191,6 +194,12 @@ static void ril_gprs_context_call_list_changed(struct ril_msg *message,
 
 	if (error.type != OFONO_ERROR_TYPE_NO_ERROR)
 		goto error;
+
+	if (g_ril_unsol_cmp_dcl(unsol,gcd->old_list,gcd->active_rild_cid))
+		goto error;
+
+	g_ril_unsol_free_data_call_list(gcd->old_list);
+	gcd->old_list = unsol;
 
 	DBG("number of call in call_list_changed is: %d", unsol->num);
 
@@ -204,17 +213,26 @@ static void ril_gprs_context_call_list_changed(struct ril_msg *message,
 		if (call->cid != gcd->active_rild_cid)
 			continue;
 
+		if (call->active == DATA_CALL_LINK_DOWN)
+			gcd->prev_active_status = call->active;
+
 		if (call->status != 0)
 			ofono_info("data call status:%d", call->status);
 
 		if (call->active == DATA_CALL_INACTIVE) {
 			disconnect = TRUE;
+			gcd->prev_active_status = call->active;
 			ofono_gprs_context_deactivated(gc, gcd->active_ctx_cid);
 			break;
 		}
 
 		if (call->active == DATA_CALL_ACTIVE) {
 			int protocol = -1;
+
+			if (gcd->prev_active_status != DATA_CALL_LINK_DOWN)
+				signal = TRUE;
+
+			gcd->prev_active_status = call->active;
 
 			if (call->type)
 				protocol = ril_protocol_string_to_ofono_protocol(call->type);
@@ -326,7 +344,14 @@ static void ril_gprs_context_call_list_changed(struct ril_msg *message,
 	if (disconnect) {
 		ofono_error("Clearing active context");
 		set_context_disconnected(gcd);
+		gcd->old_list = NULL;
+		goto error;
 	}
+
+	if (signal)
+		ofono_gprs_context_signal_change(gc, gcd->active_ctx_cid);
+
+	return;
 
 error:
 	g_ril_unsol_free_data_call_list(unsol);
@@ -655,6 +680,8 @@ static void ril_gprs_context_remove(struct ofono_gprs_context *gc)
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 
 	DBG("");
+
+	g_ril_unsol_free_data_call_list(gcd->old_list);
 
 	if (gcd->state != STATE_IDLE)
 		ril_gprs_context_detach_shutdown(gc, 0);
