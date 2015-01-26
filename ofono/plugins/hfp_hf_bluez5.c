@@ -49,6 +49,7 @@
 #include <ofono/handsfree.h>
 #include <ofono/handsfree-audio.h>
 #include <ofono/siri.h>
+#include <ofono.h>
 
 #include <drivers/atmodem/atutil.h>
 #include <drivers/hfpmodem/slc.h>
@@ -761,6 +762,8 @@ static int hfp_init(void)
 
 	if (DBUS_TYPE_UNIX_FD < 0)
 		return -EBADF;
+
+	__ofono_handsfree_audio_manager_init();
 
 	/* Registers External Profile handler */
 	if (!g_dbus_register_interface(conn, HFP_EXT_PROFILE_PATH,
