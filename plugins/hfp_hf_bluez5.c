@@ -820,6 +820,8 @@ static void hfp_exit(void)
 	g_dbus_client_unref(bluez);
 
 	ofono_handsfree_audio_unref();
+
+	__ofono_handsfree_audio_manager_cleanup()
 }
 
 OFONO_PLUGIN_DEFINE(hfp_bluez5, "External Hands-Free Profile Plugin", VERSION,
