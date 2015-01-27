@@ -259,7 +259,7 @@ int main(int argc, char **argv)
 
 	__ofono_plugin_cleanup();
 
-	__ofono_handsfree_audio_manager_cleanup();
+	//__ofono_handsfree_audio_manager_cleanup(); See comment above
 
 	__ofono_manager_cleanup();
 
