@@ -65,12 +65,26 @@
 #include <ofono/oemraw.h>
 #include <ofono/stk.h>
 
+#include "rildev.h"
 #include "drivers/rilmodem/rilmodem.h"
 
-#define MAX_POWER_ON_RETRIES 5
-#define MAX_SIM_STATUS_RETRIES 15
-#define RADIO_ID 1001
-#define MAX_PDP_CONTEXTS 2
+#define MAX_POWER_ON_RETRIES	5
+#define MAX_SIM_STATUS_RETRIES	15
+#define RADIO_ID		1001
+#define MAX_PDP_CONTEXTS	2
+
+/* MCE definitions */
+#define MCE_SERVICE			"com.nokia.mce"
+#define MCE_SIGNAL_IF			"com.nokia.mce.signal"
+
+/* MCE signal definitions */
+#define MCE_DISPLAY_SIG			"display_status_ind"
+
+#define MCE_DISPLAY_ON_STRING		"on"
+
+/* transitional state between ON and OFF (3 seconds) */
+#define MCE_DISPLAY_DIM_STRING		"dimmed"
+#define MCE_DISPLAY_OFF_STRING		"off"
 
 struct ril_data {
 	GRil *modem;
@@ -83,22 +97,9 @@ struct ril_data {
 	guint timer_id;
 };
 
-/* MCE definitions */
-#define MCE_SERVICE		"com.nokia.mce"
-#define MCE_SIGNAL_IF	"com.nokia.mce.signal"
-
-/* MCE signal definitions */
-#define MCE_DISPLAY_SIG	"display_status_ind"
-
-#define MCE_DISPLAY_ON_STRING	"on"
-/* transitional state between ON and OFF (3 seconds) */
-#define MCE_DISPLAY_DIM_STRING	"dimmed"
-#define MCE_DISPLAY_OFF_STRING	"off"
-
 static guint mce_daemon_watch;
 static guint signal_watch;
 static DBusConnection *connection;
-gboolean reconnecting = FALSE;
 
 static int ril_init(void);
 static void ril_exit(void);
@@ -225,6 +226,13 @@ static void ril_remove(struct ofono_modem *modem)
 	g_ril_unref(ril->modem);
 
 	g_free(ril);
+	/*mce specific this should propably be moved as its own plugin*/
+
+	DBG("");
+	g_dbus_remove_watch(connection, mce_daemon_watch);
+
+	if (signal_watch > 0)
+		g_dbus_remove_watch(connection, signal_watch);
 }
 
 static void ril_pre_sim(struct ofono_modem *modem)
@@ -419,32 +427,32 @@ static void ril_connected(struct ril_msg *message, gpointer user_data)
 				mce_connect, mce_disconnect, modem, NULL);
 }
 
-static gboolean ril_re_init(gpointer user_data)
+static int create_gril(struct ofono_modem *modem);
+
+static gboolean connect_rild(gpointer user_data)
+
 {
-	DBG("");
-	if (reconnecting) {
-		ril_init();
+	struct ofono_modem *modem = (struct ofono_modem *) user_data;
+
+	ofono_info("Trying to reconnect to rild...");
+
+	if (create_gril(modem) < 0)
 		return TRUE;
-	} else {
-		return FALSE;
-	}
+
+
+	return FALSE;
 }
 
 static void gril_disconnected(gpointer user_data)
 {
-	ofono_info("gril disconnected");
 	struct ofono_modem *modem = user_data;
 	DBusConnection *conn = ofono_dbus_get_connection();
 
 	if (ofono_modem_is_registered(modem)) {
-		ofono_modem_remove(modem);
+		ril_modem_remove(modem);
 		mce_disconnect(conn, user_data);
 	}
 
-	if (!reconnecting) {
-		reconnecting = TRUE;
-		g_timeout_add_seconds(2, ril_re_init, NULL);
-	}
 }
 
 void ril_switchUser()
@@ -474,7 +482,7 @@ void ril_switchUser()
 
 }
 
-static int ril_enable(struct ofono_modem *modem)
+static int create_gril(struct ofono_modem *modem)
 {
 	DBG("%p", modem);
 	struct ril_data *ril = ofono_modem_get_data(modem);
@@ -485,6 +493,7 @@ static int ril_enable(struct ofono_modem *modem)
 	ril_switchUser();
 
 	ril->modem = g_ril_new();
+
 	g_ril_set_disconnect_function(ril->modem, gril_disconnected, modem);
 
 	/* NOTE: Since AT modems open a tty, and then call
@@ -501,8 +510,6 @@ static int ril_enable(struct ofono_modem *modem)
 		return -EIO;
 	}
 
-	reconnecting = FALSE;
-
 	if (getenv("OFONO_RIL_TRACE"))
 		g_ril_set_trace(ril->modem, TRUE);
 
@@ -513,6 +520,20 @@ static int ril_enable(struct ofono_modem *modem)
 			ril_connected, modem);
 
 	ofono_devinfo_create(modem, 0, "rilmodem", ril->modem);
+
+	return 0;
+}
+
+
+static int ril_enable(struct ofono_modem *modem)
+{
+	int ret;
+	DBG("");
+
+	ret = create_gril(modem);
+	if (ret < 0)
+		g_timeout_add_seconds(2,
+			connect_rild, modem);
 
 	return -EINPROGRESS;
 }
@@ -559,67 +580,20 @@ static struct ofono_modem_driver ril_driver = {
 	.set_online = ril_set_online,
 };
 
-/*
- * Note - as an aal+ container doesn't include a running udev,
- * the udevng plugin will never detect a modem, and thus modem
- * creation for a RIL-based modem needs to be hard-coded.
- *
- * Typically, udevng would create the modem, which in turn would
- * lead to this plugin's probe function being called.
- *
- * This is a first attempt at registering like this.
- *
- * IMPORTANT - this code relies on the fact that the 'rilmodem' is
- * added to top-level Makefile's builtin_modules *after* 'ril'.
- * This has means 'rilmodem' will already be registered before we try
- * to create and register the modem.  In standard ofono, 'udev'/'udevng'
- * is initialized last due to the fact that it's the first module
- * added in the top-level Makefile.
- */
 static int ril_init(void)
 {
-	DBG("");
 	int retval = 0;
-	struct ofono_modem *modem;
 
-	if ((retval = ofono_modem_driver_register(&ril_driver))) {
+	if ((retval = ofono_modem_driver_register(&ril_driver)))
 		DBG("ofono_modem_driver_register returned: %d", retval);
-	return retval;
-	}
-
-	/* everything after _modem_driver_register, is
-	 * non-standard ( see udev comment above ).
-	 * usually called by undevng::create_modem
-	 *
-	 * args are name (optional) & type
-	 */
-	modem = ofono_modem_create("ril_0", "ril");
-	if (modem == NULL) {
-		DBG("ofono_modem_create failed for ril");
-		return -ENODEV;
-	}
-
-	/* This causes driver->probe() to be called... */
-	retval = ofono_modem_register(modem);
-	DBG("ofono_modem_register returned: %d", retval);
 
 	return retval;
 }
 
 static void ril_exit(void)
 {
-	DBG("");
-	if (current_passwd)
-		g_free(current_passwd);
-
-	g_dbus_remove_watch(connection, mce_daemon_watch);
-
-	if (signal_watch > 0)
-		g_dbus_remove_watch(connection, signal_watch);
-
 	ofono_modem_driver_unregister(&ril_driver);
 }
 
 OFONO_PLUGIN_DEFINE(ril, "RIL modem driver", VERSION,
 			OFONO_PLUGIN_PRIORITY_DEFAULT, ril_init, ril_exit)
-
