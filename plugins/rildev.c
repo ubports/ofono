@@ -44,8 +44,8 @@
 
 static int inotify_fd = -1;
 static int inotify_watch_id = -1;
-static guint inotify_watch_source_id;
-static GIOChannel *inotify_watch_channel;
+static guint inotify_watch_source_id = 0;
+static GIOChannel *inotify_watch_channel = NULL;
 
 static GSList *modem_list;
 static int watch_for_rild_socket(void);
@@ -68,7 +68,7 @@ static struct ofono_modem *find_ril_modem(int slot)
 
 static void remove_watchers(void)
 {
-	if (inotify_watch_source_id == 0)
+	if (inotify_watch_channel == NULL)
 		return;
 
 	g_source_remove(inotify_watch_source_id);
@@ -99,7 +99,6 @@ void ril_modem_remove(struct ofono_modem *modem)
 	}
 
 	detect_rild();
-
 }
 
 static int create_rilmodem(const char *ril_type, int slot)
@@ -170,23 +169,35 @@ static int watch_for_rild_socket(void)
 		return -EIO;
 
 	inotify_watch_channel = g_io_channel_unix_new(inotify_fd);
-	if (inotify_watch_channel == NULL)
+	if (inotify_watch_channel == NULL) {
+		close(inotify_fd);
+		inotify_fd = -1;
 		return -EIO;
+	}
 
-	/* No rild socket found so let's wait and see if one appears */
-	/* Note: We could also use IN_DELETE to follow if rild dissappears */
 	inotify_watch_id = inotify_add_watch(inotify_fd,
 					RILD_SOCKET_DIR,
 					IN_CREATE);
 
-	/* Add more handling here */
-	if (inotify_watch_id < 0)
+	if (inotify_watch_id < 0) {
+		g_io_channel_unref(inotify_watch_channel);
+		inotify_watch_channel = NULL;
+		close(inotify_fd);
+		inotify_fd = -1;
 		return -EIO;
+	}
 
 	inotify_watch_source_id = g_io_add_watch(inotify_watch_channel, G_IO_IN,
 							rild_inotify, NULL);
-	if (inotify_watch_source_id <= 0)
+	if (inotify_watch_source_id <= 0) {
+		g_io_channel_unref(inotify_watch_channel);
+		inotify_watch_channel = NULL;
+		inotify_rm_watch(inotify_fd, inotify_watch_id);
+		inotify_watch_id = -1;
+		close(inotify_fd);
+		inotify_fd = -1;
 		return -EIO;
+	}
 
 	return 0;
 }
