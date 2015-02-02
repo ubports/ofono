@@ -131,22 +131,6 @@ static int create_rilmodem(const char *ril_type, int slot)
 		return retval;
 	}
 
-	/*
-	 * kickstart the modem:
-	 * causes core modem code to call
-	 * - set_powered(TRUE) - which in turn
-	 *   calls driver->enable()
-	 *
-	 * - driver->pre_sim()
-	 *
-	 * Could also be done via:
-	 *
-	 * - a DBus call to SetProperties w/"Powered=TRUE" *1
-	 * - sim_state_watch ( handles SIM removal? LOCKED states? **2
-	 * - ofono_modem_set_powered()
-	 */
-	ofono_modem_reset(modem);
-
 	return 0;
 }
 
