@@ -155,6 +155,15 @@ Methods		dict GetProperties()
 					 [service].Error.AttachInProgress
 					 [service].Error.NotImplemented
 
+Methods		void ProvisionContext()
+			Resets all properties back to default. Fails to make
+			any changes to the context if it is active or in the
+			process of being activated or deactivated.
+
+			Possible Errors: [service].Error.Failed
+					 [service].Error.InProgress
+					 [service].Error.NotAvailable
+
 Signals		PropertyChanged(string property, variant value)
 
 			This signal indicates a changed value of the given
