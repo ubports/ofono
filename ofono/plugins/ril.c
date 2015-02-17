@@ -432,8 +432,7 @@ static gboolean ril_re_init(gpointer user_data)
 
 static void gril_disconnected(gpointer user_data)
 {
-	/* Signal clients modem going down
-	 */
+	ofono_info("gril disconnected");
 	struct ofono_modem *modem = user_data;
 	DBusConnection *conn = ofono_dbus_get_connection();
 
