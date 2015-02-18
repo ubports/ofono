@@ -24,6 +24,8 @@
 
 #define RILD_CMD_SOCKET "/dev/socket/rild"
 #define RILD_SOCKET_DIR "/dev/socket"
+#define RILD_SOCKET_FILE "rild"
+
 
 void ril_modem_remove(struct ofono_modem *modem);
 
