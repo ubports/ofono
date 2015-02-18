@@ -42,10 +42,17 @@
 
 #include "rildev.h"
 
+#define EVENT_SIZE (sizeof(struct inotify_event))
+ /*
+  * As a best guess use a buffer size of 100 inotify events.
+  * NAME_MAX+1 from inotify documentation.
+  */
+#define IBUF_LEN (100*(EVENT_SIZE + NAME_MAX + 1))
+
 static int inotify_fd = -1;
 static int inotify_watch_id = -1;
-static guint inotify_watch_source_id = 0;
-static GIOChannel *inotify_watch_channel = NULL;
+static guint inotify_watch_source_id;
+static GIOChannel *inotify_watch_channel;
 
 static GSList *modem_list;
 static int watch_for_rild_socket(void);
@@ -68,6 +75,7 @@ static struct ofono_modem *find_ril_modem(int slot)
 
 static void remove_watchers(void)
 {
+	DBG("");
 	if (inotify_watch_channel == NULL)
 		return;
 
@@ -81,8 +89,10 @@ static void remove_watchers(void)
 	inotify_fd = -1;
 }
 
+/* Removes a RIL modem and initiates a sequence to create a new one */
 void ril_modem_remove(struct ofono_modem *modem)
 {
+	DBG("modem: %p", modem);
 	struct ofono_modem *list_modem;
 	int slot = -1;
 	list_modem = NULL;
@@ -101,6 +111,7 @@ void ril_modem_remove(struct ofono_modem *modem)
 	detect_rild();
 }
 
+/* return: 0 if successful or modem already exists, otherwise and error */
 static int create_rilmodem(const char *ril_type, int slot)
 {
 	struct ofono_modem *modem;
@@ -116,17 +127,19 @@ static int create_rilmodem(const char *ril_type, int slot)
 	/* Currently there is only one ril implementation, create always */
 	modem = ofono_modem_create(dev_name, ril_type);
 	if (modem == NULL) {
-		DBG("ofono_modem_create failed for type %s", ril_type);
+		DBG("ofono_modem_create failed for type: %s", ril_type);
 		return -ENODEV;
 	}
+	DBG("created modem: %p", modem);
 
 	modem_list = g_slist_prepend(modem_list, modem);
 
 	ofono_modem_set_integer(modem, "Slot", slot);
 
-	/* This causes driver->probe() to be called... */
-	if ((retval = ofono_modem_register(modem)) != 0) {
-		ofono_error("%s: ofono_modem_register returned: %d",
+	/* This causes driver->probe() to be called */
+	retval = ofono_modem_register(modem);
+	if (retval != 0) {
+		ofono_error("%s: ofono_modem_register error: %d",
 				__func__, retval);
 		return retval;
 	}
@@ -134,36 +147,94 @@ static int create_rilmodem(const char *ril_type, int slot)
 	return 0;
 }
 
-static gboolean rild_inotify(GIOChannel *gio, GIOCondition c, gpointer data)
+/*
+ * Try creating a ril modem
+ * return: false if failed, true successful or modem already exists.
+ */
+static gboolean try_create_modem()
 {
-	DBG("");
+	gboolean result = FALSE;
+	int ares = access(RILD_CMD_SOCKET, F_OK);
+	if (ares != -1)
+		result = !create_rilmodem("ril", 0);
+	else
+		DBG("problems accessing rild socket: %d", ares);
 
-	if (access(RILD_CMD_SOCKET, F_OK) != -1){
-		create_rilmodem("ril", 0);
-		return FALSE;
-	}
-
-	return TRUE;
+	return result;
 }
 
+static gboolean rild_inotify(GIOChannel *gio, GIOCondition c,
+		gpointer data)
+{
+	DBG("");
+	struct inotify_event *event = 0;
+	int i = 0;
+	int length = 0;
+	char *ievents = 0; /* inotify event buffer */
+	gboolean result = TRUE;
+
+	ievents = g_try_malloc(IBUF_LEN);
+	if (!ievents) {
+		/* Continue observing so don't set "result" false here */
+		goto end;
+	}
+
+	length = read(inotify_fd, ievents, IBUF_LEN);
+	/*
+	 * If iNotify fd read returns an error, just keep on watching for
+	 * read events.
+	 */
+	while (i < length) {
+		event = (struct inotify_event *) &ievents[i];
+
+		if (event->len && (event->mask & IN_CREATE)
+			&& (!(event->mask & IN_ISDIR))) {
+
+			DBG("File created: %s", event->name);
+			if (!strcmp(event->name, RILD_SOCKET_FILE)) {
+				result = !try_create_modem();
+				/*
+				 * On modem create fail continue observing
+				 * events so don't set result false here.
+				 */
+				goto end;
+			}
+		}
+		i += EVENT_SIZE + event->len;
+	}
+
+end:
+	/* "if" works around potential glib runtime warning */
+	if (ievents)
+		g_free(ievents);
+
+	if (!result)
+		remove_watchers();
+
+	return result;
+}
+
+/* return 0 if successful, otherwise an error */
 static int watch_for_rild_socket(void)
 {
+	DBG("");
 	inotify_fd = inotify_init();
 	if (inotify_fd < 0)
 		return -EIO;
 
 	inotify_watch_channel = g_io_channel_unix_new(inotify_fd);
 	if (inotify_watch_channel == NULL) {
+		ofono_error("%s: rildev gio chan creation fail!", __func__);
 		close(inotify_fd);
 		inotify_fd = -1;
 		return -EIO;
 	}
 
-	inotify_watch_id = inotify_add_watch(inotify_fd,
-					RILD_SOCKET_DIR,
-					IN_CREATE);
-
+	inotify_watch_id = inotify_add_watch(inotify_fd, RILD_SOCKET_DIR,
+						IN_CREATE);
 	if (inotify_watch_id < 0) {
+		ofono_error("%s: inotify says: %d, errno: %d",
+				__func__, inotify_watch_id, errno);
 		g_io_channel_unref(inotify_watch_channel);
 		inotify_watch_channel = NULL;
 		close(inotify_fd);
@@ -171,9 +242,11 @@ static int watch_for_rild_socket(void)
 		return -EIO;
 	}
 
-	inotify_watch_source_id = g_io_add_watch(inotify_watch_channel, G_IO_IN,
+	inotify_watch_source_id = g_io_add_watch(inotify_watch_channel,
+							G_IO_IN,
 							rild_inotify, NULL);
 	if (inotify_watch_source_id <= 0) {
+		ofono_error("%s: rildev add gio watch fail!", __func__);
 		g_io_channel_unref(inotify_watch_channel);
 		inotify_watch_channel = NULL;
 		inotify_rm_watch(inotify_fd, inotify_watch_id);
@@ -188,11 +261,13 @@ static int watch_for_rild_socket(void)
 
 static void detect_rild(void)
 {
-	if (rild_inotify(NULL,0,NULL))
+	DBG("");
+	gboolean created = try_create_modem();
+	if (!created)
 		watch_for_rild_socket();
 
-	/* Let's recheck if we just missed the rild */
-	if (!rild_inotify(NULL,0,NULL))
+	/* Let's re-check if we just missed the notification */
+	if (!created && try_create_modem())
 		remove_watchers();
 }
 
@@ -220,5 +295,5 @@ static void detect_exit(void)
 	remove_watchers();
 }
 
-OFONO_PLUGIN_DEFINE(rildev, "ril type detection", VERSION,
+OFONO_PLUGIN_DEFINE(rildev, "RIL type detection", VERSION,
 		OFONO_PLUGIN_PRIORITY_DEFAULT, detect_init, detect_exit)
