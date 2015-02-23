@@ -523,7 +523,7 @@ static DBusHandlerResult message_filter(DBusConnection *connection,
 	member = dbus_message_get_member(message);
 	dbus_message_get_args(message, NULL, DBUS_TYPE_STRING, &arg, DBUS_TYPE_INVALID);
 
-	/* Sender is always the owner */
+	/* If sender != NULL it is always the owner */
 
 	for (current = listeners; current != NULL; current = current->next) {
 		data = current->data;
@@ -531,19 +531,24 @@ static DBusHandlerResult message_filter(DBusConnection *connection,
 		if (connection != data->connection)
 			continue;
 
-		if (data->owner && g_strcmp0(sender, data->owner) != 0)
+		if (!sender && data->owner)
 			continue;
 
-		if (data->path && g_strcmp0(path, data->path) != 0)
+		if (data->owner && g_str_equal(sender, data->owner) == FALSE)
 			continue;
 
-		if (data->interface && g_strcmp0(iface, data->interface) != 0)
+		if (data->path && g_str_equal(path, data->path) == FALSE)
 			continue;
 
-		if (data->member && g_strcmp0(member, data->member) != 0)
+		if (data->interface && g_str_equal(iface,
+						data->interface) == FALSE)
 			continue;
 
-		if (data->argument && g_strcmp0(arg, data->argument) != 0)
+		if (data->member && g_str_equal(member, data->member) == FALSE)
+			continue;
+
+		if (data->argument && g_str_equal(arg,
+						data->argument) == FALSE)
 			continue;
 
 		if (data->handle_func) {
