@@ -126,7 +126,6 @@ static void ril_gprs_split_dns_by_protocol(char **dns_array, char ***dns_addr,
 {
 	const char ipv6_delimiter = ':';
 	const char ip_delimiter = '.';
-	const char dns_delimiter = ',';
 	char *temp = NULL;
 	char *temp1 = NULL;
 	char *dnsip = NULL;
@@ -162,15 +161,11 @@ static void ril_gprs_split_dns_by_protocol(char **dns_array, char ***dns_addr,
 		}
 	}
 
-	if (dnsip){
-		if (strchr(dnsip,dns_delimiter))
-			*dns_addr = g_strsplit(dnsip, ",", dnsip_len);
-	}
+	if (dnsip)
+		*dns_addr = g_strsplit(dnsip, ",", dnsip_len);
 
-	if (dnsipv6) {
-		if (strchr(dnsipv6,dns_delimiter))
-			*dns_ipv6_addr = g_strsplit(dnsipv6, ",", dnsipv6_len);
-	}
+	if (dnsipv6)
+		*dns_ipv6_addr = g_strsplit(dnsipv6, ",", dnsipv6_len);
 
 	g_free(dnsip);
 	g_free(dnsipv6);
