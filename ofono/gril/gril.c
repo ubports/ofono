@@ -834,8 +834,8 @@ static struct ril_s *create_ril()
 
 	ril->sk = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (ril->sk < 0) {
-		ofono_error("create_ril: can't create unix socket: %s (%d)\n",
-				strerror(errno), errno);
+		ofono_error("%s: can't create unix socket: %s (%d)\n",
+				__func__, strerror(errno), errno);
 		goto error;
 	}
 
@@ -844,15 +844,15 @@ static struct ril_s *create_ril()
 	strncpy(addr.sun_path, RILD_CMD_SOCKET, sizeof(addr.sun_path) - 1);
 
 	if (connect(ril->sk, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
-		ofono_error("create_ril: can't connect to RILD: %s (%d)\n",
-				strerror(errno), errno);
+		ofono_error("%s: can't connect to RILD: %s (%d)\n",
+				__func__, strerror(errno), errno);
 		goto error;
 	}
 
 	io = g_io_channel_unix_new(ril->sk);
 	if (io == NULL) {
-		ofono_error("create_ril: can't connect to RILD: %s (%d)\n",
-				strerror(errno), errno);
+		ofono_error("%s: can't connect to RILD: %s (%d)\n",
+				__func__, strerror(errno), errno);
 		return NULL;
 	}
 
@@ -861,7 +861,7 @@ static struct ril_s *create_ril()
 
 	ril->io = g_ril_io_new(io);
 	if (ril->io == NULL) {
-		ofono_error("create_ril: can't create ril->io");
+		ofono_error("%s: can't create ril->io", __func__);
 		goto error;
 	}
 
@@ -869,13 +869,13 @@ static struct ril_s *create_ril()
 
 	ril->command_queue = g_queue_new();
 	if (ril->command_queue == NULL) {
-		ofono_error("create_ril: Couldn't create command_queue.");
+		ofono_error("%s: Couldn't create command_queue.", __func__);
 		goto error;
 	}
 
 	ril->out_queue = g_queue_new();
 	if (ril->out_queue == NULL) {
-		ofono_error("create_ril: Couldn't create out_queue.");
+		ofono_error("%s: Couldn't create out_queue.", __func__);
 		goto error;
 	}
 
