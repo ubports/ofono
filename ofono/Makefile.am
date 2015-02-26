@@ -120,6 +120,9 @@ endif
 if RILMODEM
 builtin_sources += $(gril_sources)
 
+builtin_modules += rildev
+builtin_sources += plugins/rildev.c
+
 builtin_modules += ril
 builtin_sources += plugins/ril.c
 

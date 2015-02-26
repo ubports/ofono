@@ -679,31 +679,7 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 			}
 		}
 
-		if (current_passwd) {
-			if (!strcmp(current_passwd, defaultpasswd)) {
-				__ofono_sim_recheck_pin(sim);
-			} else if (sd->passwd_state !=
-						OFONO_SIM_PASSWORD_SIM_PIN) {
-				__ofono_sim_recheck_pin(sim);
-			} else if (sd->passwd_state ==
-						OFONO_SIM_PASSWORD_SIM_PIN) {
-				parcel_init(&rilp);
-
-				parcel_w_int32(&rilp,
-					ENTER_SIM_PIN_PARAMS);
-				parcel_w_string(&rilp, current_passwd);
-				parcel_w_string(&rilp, sd->aid_str);
-
-				g_ril_send(sd->ril,
-						RIL_REQUEST_ENTER_SIM_PIN,
-						rilp.data, rilp.size, NULL,
-						NULL, g_free);
-
-				parcel_free(&rilp);
-			}
-		} else {
-			__ofono_sim_recheck_pin(sim);
-		}
+		__ofono_sim_recheck_pin(sim);
 
 		if (current_online_state == RIL_ONLINE_PREF) {
 
@@ -736,9 +712,6 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 			if (sd->card_state == RIL_CARDSTATE_PRESENT)
 				sd->removed = TRUE;
 			sd->card_state = RIL_CARDSTATE_ABSENT;
-
-			if (current_passwd)
-				g_stpcpy(current_passwd, defaultpasswd);
 
 			sd->initialized = FALSE;
 		}
@@ -886,8 +859,6 @@ static void ril_pin_change_state_cb(struct ril_msg *message, gpointer user_data)
 		g_ril_print_response_no_args(sd->ril, message);
 
 	} else {
-		if (current_passwd)
-			g_stpcpy(current_passwd, defaultpasswd);
 		CALLBACK_WITH_FAILURE(cb, cbd->data);
 	}
 
@@ -904,9 +875,6 @@ static void ril_pin_send(struct ofono_sim *sim, const char *passwd,
 
 	sd->passwd_type = OFONO_SIM_PASSWORD_SIM_PIN;
 	cbd->user = sd;
-
-	if (current_passwd)
-		g_stpcpy(current_passwd, passwd);
 
 	parcel_init(&rilp);
 
@@ -995,8 +963,6 @@ static void ril_pin_change_state(struct ofono_sim *sim,
 	 */
 	switch (passwd_type) {
 	case OFONO_SIM_PASSWORD_SIM_PIN:
-		if (current_passwd)
-			g_stpcpy(current_passwd, passwd);
 		g_ril_append_print_buf(sd->ril, "(SC,");
 		parcel_w_string(&rilp, "SC");
 		break;
@@ -1078,9 +1044,6 @@ static void ril_pin_send_puk(struct ofono_sim *sim,
 	sd->passwd_type = OFONO_SIM_PASSWORD_SIM_PUK;
 	cbd->user = sd;
 
-	if (current_passwd)
-		g_stpcpy(current_passwd, passwd);
-
 	parcel_init(&rilp);
 
 	parcel_w_int32(&rilp, ENTER_SIM_PUK_PARAMS);
@@ -1129,8 +1092,6 @@ static void ril_change_passwd(struct ofono_sim *sim,
 
 	if (passwd_type == OFONO_SIM_PASSWORD_SIM_PIN2)
 		request = RIL_REQUEST_CHANGE_SIM_PIN2;
-	else if (current_passwd)
-		g_stpcpy(current_passwd, new_passwd);
 
 	ret = g_ril_send(sd->ril, request, rilp.data, rilp.size,
 			ril_pin_change_state_cb, cbd, g_free);
