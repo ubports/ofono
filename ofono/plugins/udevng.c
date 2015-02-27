@@ -636,7 +636,7 @@ static gboolean setup_telit(struct modem_info *modem)
 
 static gboolean setup_he910(struct modem_info *modem)
 {
-	const char *mdm = NULL, *aux = NULL;
+	const char *mdm = NULL, *aux = NULL, *gps = NULL;
 	GSList *list;
 
 	DBG("%s", modem->syspath);
@@ -652,16 +652,19 @@ static gboolean setup_he910(struct modem_info *modem)
 				mdm = info->devnode;
 			else if (g_strcmp0(info->number, "06") == 0)
 				aux = info->devnode;
+			else if (g_strcmp0(info->number, "0a") == 0)
+				gps = info->devnode;
 		}
 	}
 
 	if (aux == NULL || mdm == NULL)
 		return FALSE;
 
-	DBG("modem=%s aux=%s", mdm, aux);
+	DBG("modem=%s aux=%s gps=%s", mdm, aux, gps);
 
 	ofono_modem_set_string(modem->modem, "Modem", mdm);
 	ofono_modem_set_string(modem->modem, "Aux", aux);
+	ofono_modem_set_string(modem->modem, "GPS", gps);
 
 	return TRUE;
 }
@@ -791,6 +794,86 @@ static gboolean setup_samsung(struct modem_info *modem)
 	return TRUE;
 }
 
+static gboolean setup_quectel(struct modem_info *modem)
+{
+	const char *aux = NULL, *mdm = NULL;
+	GSList *list;
+
+	DBG("%s", modem->syspath);
+
+	for (list = modem->devices; list; list = list->next) {
+		struct device_info *info = list->data;
+
+		DBG("%s %s %s %s", info->devnode, info->interface,
+						info->number, info->label);
+
+		if (g_strcmp0(info->label, "aux") == 0) {
+			aux = info->devnode;
+			if (mdm != NULL)
+				break;
+		} else if (g_strcmp0(info->label, "modem") == 0) {
+			mdm = info->devnode;
+			if (aux != NULL)
+				break;
+		} else if (g_strcmp0(info->interface, "255/255/255") == 0) {
+			if (g_strcmp0(info->number, "02") == 0)
+				aux = info->devnode;
+			else if (g_strcmp0(info->number, "03") == 0)
+				mdm = info->devnode;
+		}
+	}
+
+	if (aux == NULL || mdm == NULL)
+		return FALSE;
+
+	DBG("aux=%s modem=%s", aux, mdm);
+
+	ofono_modem_set_string(modem->modem, "Aux", aux);
+	ofono_modem_set_string(modem->modem, "Modem", mdm);
+
+	return TRUE;
+}
+
+static gboolean setup_ublox(struct modem_info *modem)
+{
+	const char *aux = NULL, *mdm = NULL;
+	GSList *list;
+
+	DBG("%s", modem->syspath);
+
+	for (list = modem->devices; list; list = list->next) {
+		struct device_info *info = list->data;
+
+		DBG("%s %s %s %s", info->devnode, info->interface,
+					info->number, info->label);
+
+		if (g_strcmp0(info->label, "aux") == 0) {
+			aux = info->devnode;
+			if (mdm != NULL)
+				break;
+		} else if (g_strcmp0(info->label, "modem") == 0) {
+			mdm = info->devnode;
+			if (aux != NULL)
+				break;
+		} else if (g_strcmp0(info->interface, "2/2/1") == 0) {
+			if (g_strcmp0(info->number, "02") == 0)
+				aux = info->devnode;
+			else if (g_strcmp0(info->number, "00") == 0)
+				mdm = info->devnode;
+		}
+	}
+
+	if (aux == NULL || mdm == NULL)
+		return FALSE;
+
+	DBG("aux=%s modem=%s", aux, mdm);
+
+	ofono_modem_set_string(modem->modem, "Aux", aux);
+	ofono_modem_set_string(modem->modem, "Modem", mdm);
+
+	return TRUE;
+}
+
 static struct {
 	const char *name;
 	gboolean (*setup)(struct modem_info *modem);
@@ -815,6 +898,8 @@ static struct {
 	{ "zte",	setup_zte	},
 	{ "icera",	setup_icera	},
 	{ "samsung",	setup_samsung	},
+	{ "quectel",	setup_quectel	},
+	{ "ublox",	setup_ublox	},
 	{ }
 };
 
@@ -1026,6 +1111,8 @@ static struct {
 	{ "nokia",	"option",	"0421", "0623"	},
 	{ "samsung",	"option",	"04e8", "6889"	},
 	{ "samsung",	"kalmia"			},
+	{ "quectel",	"option",	"05c6", "9090"	},
+	{ "ublox",	"cdc_acm",	"1546", "1102"	},
 	{ }
 };
 

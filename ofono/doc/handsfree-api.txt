@@ -19,6 +19,8 @@ Methods		dict GetProperties()
 
 			Possible Errors: [service].Error.InProgress
 					 [service].Error.InvalidArguments
+					 [service].Error.NotImplemented
+					 [service].Error.NotSupported
 
 		string RequestPhoneNumber()
 
@@ -51,6 +53,7 @@ Properties	array{string} Features [readonly]
 				"private-chat"
 				"create-multiparty"
 				"transfer"
+				"hf-indicators"
 
 		boolean InbandRinging [readonly]
 
@@ -63,7 +66,7 @@ Properties	array{string} Features [readonly]
 			to activate or deactivate the function from the HF, or
 			the AG could autonomously initiate it.
 
-		boolean EchoCancelingNoiseReduction [readwrite]
+		boolean EchoCancelingNoiseReduction [readwrite, optional]
 
 			Non-persistent Boolean property representing whether
 			echo canceling and noise reduction is enabled in the
@@ -80,3 +83,10 @@ Properties	array{string} Features [readonly]
 		array{string} SubscriberNumbers [readonly]
 
 			List of subscriber numbers provided by the AG.
+
+		boolean DistractedDrivingReduction [readwrite, optional]
+
+			Non-persistent property representing whether
+			distracted driving reduction mode should be enabled in
+			the AG.  Support for this feature is optional on the
+			AG.
