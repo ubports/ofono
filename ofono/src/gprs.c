@@ -827,11 +827,14 @@ static gboolean pri_str_changed(const char *val, const char *newval)
 	return newval ? (strcmp(val, newval) != 0) : (val[0] != 0);
 }
 
-static gboolean pri_str_update(char *val, const char *newval)
+static gboolean pri_str_update(char *val, const char *newval,
+		const int maxlen)
 {
+	DBG("oldval: %s, newval: %s, mmaxlen: %d", val, newval, maxlen);
+
 	if (newval) {
 		if (strcmp(val, newval)) {
-			strcpy(val, newval);
+			strncpy(val, newval, maxlen);
 			return TRUE;
 		}
 	} else {
@@ -862,43 +865,47 @@ static void pri_reset_context_properties(struct pri_context *ctx,
 	if (strcmp(ctx->context.apn, ap->apn)) {
 		changed = TRUE;
 		strcpy(ctx->context.apn, ap->apn);
-		pri_str_signal_change(ctx, "AccessPointName", ap->apn);
+		pri_str_signal_change(ctx, "AccessPointName",
+				ctx->context.apn);
+	}
+	if (ap->name && pri_str_update(ctx->name, ap->name,
+				sizeof(ctx->name))) {
+		changed = TRUE;
+		pri_str_signal_change(ctx, "Name", ctx->name);
 	}
 
-	if (ap->name && strncmp(ctx->name, ap->name, MAX_CONTEXT_NAME_LENGTH)) {
+	if (pri_str_update(ctx->context.username, ap->username,
+				sizeof(ctx->context.username))) {
 		changed = TRUE;
-		strncpy(ctx->name, ap->name, MAX_CONTEXT_NAME_LENGTH);
-		pri_str_signal_change(ctx, "Name", ap->name);
+		pri_str_signal_change(ctx, "Username", ctx->context.username);
 	}
 
-	if (pri_str_update(ctx->context.username, ap->username)) {
+	if (pri_str_update(ctx->context.password, ap->password,
+				sizeof(ctx->context.password))) {
 		changed = TRUE;
-		pri_str_signal_change(ctx, "Username", ap->username);
-	}
-
-	if (pri_str_update(ctx->context.password, ap->password)) {
-		changed = TRUE;
-		pri_str_signal_change(ctx, "Password", ap->password);
+		pri_str_signal_change(ctx, "Password", ctx->context.password);
 	}
 
 	if (ctx->context.proto != ap->proto) {
 		ctx->context.proto = ap->proto;
 		changed = TRUE;
 		pri_str_signal_change(ctx, "Protocol",
-					gprs_proto_to_string(ap->proto));
+				gprs_proto_to_string(ctx->context.proto));
 	}
 
 	if (ap->type == OFONO_GPRS_CONTEXT_TYPE_MMS) {
-		if (pri_str_update(ctx->message_proxy, ap->message_proxy)) {
+		if (pri_str_update(ctx->message_proxy, ap->message_proxy,
+				sizeof(ctx->message_proxy))) {
 			changed = TRUE;
 			pri_str_signal_change(ctx, "MessageProxy",
-							ap->message_proxy);
+						ctx->message_proxy);
 		}
 
-		if (pri_str_update(ctx->message_center, ap->message_center)) {
+		if (pri_str_update(ctx->message_center, ap->message_center,
+				sizeof(ctx->message_center))) {
 			changed = TRUE;
 			pri_str_signal_change(ctx, "MessageCenter",
-							ap->message_center);
+						ctx->message_center);
 		}
 	}
 
@@ -962,6 +969,7 @@ static gboolean pri_deactivation_required(struct pri_context *ctx,
 static DBusMessage *pri_provision_context(DBusConnection *conn,
 					DBusMessage *msg, void *data)
 {
+	DBG("");
 	struct pri_context *ctx = data;
 	struct ofono_gprs *gprs = ctx->gprs;
 	struct ofono_modem *modem = __ofono_atom_get_modem(gprs->atom);
@@ -988,7 +996,7 @@ static DBusMessage *pri_provision_context(DBusConnection *conn,
 				pri_reset_context_properties(ctx, ap);
 				reply =  dbus_message_new_method_return(msg);
 			} else {
-				/* Othwise context must be deactivated first */
+				/* Context should be inactive */
 				if (ctx->gprs->pending || ctx->pending)
 					reply = __ofono_error_busy(msg);
 			}
