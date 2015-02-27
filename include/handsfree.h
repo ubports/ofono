@@ -56,6 +56,9 @@ struct ofono_handsfree_driver {
 					ofono_handsfree_cb_t cb, void *data);
 	void (*disable_nrec)(struct ofono_handsfree *hf,
 					ofono_handsfree_cb_t cb, void *data);
+	void (*hf_indicator)(struct ofono_handsfree *hf,
+				unsigned short indicator, unsigned int value,
+				ofono_handsfree_cb_t cb, void *data);
 };
 
 void ofono_handsfree_set_ag_features(struct ofono_handsfree *hf,
@@ -66,6 +69,13 @@ void ofono_handsfree_set_inband_ringing(struct ofono_handsfree *hf,
 						ofono_bool_t enabled);
 void ofono_handsfree_voice_recognition_notify(struct ofono_handsfree *hf,
 						ofono_bool_t enabled);
+
+void ofono_handsfree_set_hf_indicators(struct ofono_handsfree *hf,
+					const unsigned short *indicators,
+					unsigned int num);
+void ofono_handsfree_hf_indicator_active_notify(struct ofono_handsfree *hf,
+						unsigned int indicator,
+						ofono_bool_t active);
 
 void ofono_handsfree_battchg_notify(struct ofono_handsfree *hf,
 					unsigned char level);

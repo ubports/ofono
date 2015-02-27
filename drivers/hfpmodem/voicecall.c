@@ -46,6 +46,7 @@
 #define POLL_CLCC_DELAY 50
 #define EXPECT_RELEASE_DELAY 50
 #define CLIP_TIMEOUT 500
+#define EXPECT_RING_DELAY 200
 
 static const char *none_prefix[] = { NULL };
 static const char *clcc_prefix[] = { "+CLCC:", NULL };
@@ -294,7 +295,7 @@ static void clcc_poll_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	 * we won't get indicator update if any of them is released by CHLD=1x.
 	 * So we have to poll it.
 	 */
-	if (num_active > 1 || num_held > 1)
+	if ((num_active > 1 || num_held > 1) && !vd->clcc_source)
 		vd->clcc_source = g_timeout_add(POLL_CLCC_INTERVAL, poll_clcc,
 							vc);
 }
@@ -499,6 +500,19 @@ static gboolean expect_release(gpointer user_data)
 	return FALSE;
 }
 
+static gboolean expect_ring(gpointer user_data)
+{
+	struct ofono_voicecall *vc = user_data;
+	struct voicecall_data *vd = ofono_voicecall_get_data(vc);
+
+	g_at_chat_send(vd->chat, "AT+CLCC", clcc_prefix,
+				clcc_poll_cb, vc, NULL);
+
+	vd->clip_source = 0;
+
+	return FALSE;
+}
+
 static void release_all_active_cb(gboolean ok, GAtResult *result,
 							gpointer user_data)
 {
@@ -640,8 +654,10 @@ static void hfp_send_dtmf(struct ofono_voicecall *vc, const char *dtmf,
 {
 	struct voicecall_data *vd = ofono_voicecall_get_data(vc);
 	struct change_state_req *req = g_try_new0(struct change_state_req, 1);
+	int len = strlen(dtmf);
 	char *buf;
 	int s;
+	int i;
 
 	if (req == NULL)
 		goto error;
@@ -651,12 +667,15 @@ static void hfp_send_dtmf(struct ofono_voicecall *vc, const char *dtmf,
 	req->data = data;
 	req->affected_types = 0;
 
-	/* strlen("AT+VTS=) = 7 + NULL */
-	buf = g_try_new(char, strlen(dtmf) + 8);
+	/* strlen("AT") + (n-1) * strlen("+VTS=T;") + strlen(+VTS=T) + null */
+	buf = g_try_new(char, len * 7 + 2);
 	if (buf == NULL)
 		goto error;
 
-	sprintf(buf, "AT+VTS=%s", dtmf);
+	s = sprintf(buf, "AT+VTS=%c", dtmf[0]);
+
+	for (i = 1; i < len; i++)
+		s += sprintf(buf + s, ";+VTS=%c", dtmf[i]);
 
 	s = g_at_chat_send(vd->chat, buf, none_prefix,
 				generic_cb, req, g_free);
@@ -751,6 +770,11 @@ static void ring_notify(GAtResult *result, gpointer user_data)
 	struct voicecall_data *vd = ofono_voicecall_get_data(vc);
 	struct ofono_call *call;
 	GSList *waiting;
+
+	if (vd->clip_source) {
+		g_source_remove(vd->clip_source);
+		vd->clip_source = 0;
+	}
 
 	/* RING can repeat, ignore if we already have an incoming call */
 	if (g_slist_find_custom(vd->calls,
@@ -976,7 +1000,15 @@ static void ciev_callsetup_notify(struct ofono_voicecall *vc,
 		break;
 
 	case 1:
-		/* Handled in RING/CCWA */
+		/*
+		 * Handled in RING/CCWA most of the time, however sometimes
+		 * the call is answered before the RING unsolicited
+		 * notification has a chance to be generated on the device.
+		 * In this case, we use a failsafe CLCC poll in expect_ring
+		 * callback.
+		 * */
+		vd->clip_source = g_timeout_add(EXPECT_RING_DELAY,
+							expect_ring, vc);
 		break;
 
 	case 2:
