@@ -1,7 +1,7 @@
 Name:       ofono
 
 Summary:    Open Source Telephony
-Version:    1.14
+Version:    1.16
 Release:    1
 Group:      Communications/Connectivity Adaptation
 License:    GPLv2

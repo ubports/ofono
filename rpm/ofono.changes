@@ -1,3 +1,8 @@
+* Fri Feb 27 2015 Tommi Kenakkala <tommi.kenakkala@tieto.com> - 1.16
+- Update to upstream 1.16
+- Rilmodem work
+- Some core changes and API extensions
+
 * Thu Jan 09 2014 Martti Piirainen <martti.piirainen@oss.tieto.com> - 1.14
 - Update to upstream 1.14.
 
