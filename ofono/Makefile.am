@@ -21,8 +21,9 @@ pkginclude_HEADERS = include/log.h include/plugin.h include/history.h \
 			include/cdma-connman.h include/gnss.h \
 			include/private-network.h include/cdma-netreg.h \
 			include/cdma-provision.h include/handsfree.h \
-			include/handsfree-audio.h include/sim-mnclength.h \
-			include/oemraw.h include/siri.h
+			include/handsfree-audio.h \
+			include/sim-mnclength.h include/oemraw.h \
+			include/siri.h
 
 nodist_pkginclude_HEADERS = include/version.h
 
@@ -312,6 +313,12 @@ builtin_sources += drivers/atmodem/atutil.h \
 			drivers/mbmmodem/stk.c \
 			drivers/mbmmodem/location-reporting.c
 
+builtin_modules += telitmodem
+builtin_sources += drivers/atmodem/atutil.h \
+			drivers/telitmodem/telitmodem.h \
+			drivers/telitmodem/telitmodem.c \
+			drivers/telitmodem/location-reporting.c
+
 builtin_modules += hsomodem
 builtin_sources += drivers/atmodem/atutil.h \
 			drivers/hsomodem/hsomodem.h \
@@ -461,13 +468,19 @@ builtin_sources += plugins/samsung.c
 
 builtin_modules += sim900
 builtin_sources += plugins/sim900.c
+
+builtin_modules += quectel
+builtin_sources += plugins/quectel.c
+
+builtin_modules += ublox
+builtin_sources += plugins/ublox.c
+
+builtin_modules += he910
+builtin_sources += plugins/he910.c
 endif
 
 builtin_modules += connman
 builtin_sources += plugins/connman.c
-
-builtin_modules += he910
-builtin_sources += plugins/he910.c
 
 if BLUETOOTH
 if BLUEZ4
@@ -544,6 +557,9 @@ builtin_sources += examples/private-network.c
 
 builtin_modules += stktest
 builtin_sources += plugins/stktest.c
+
+builtin_modules += emulator_fuzz
+builtin_sources += plugins/emulator_fuzz.c
 endif
 
 builtin_modules += smart_messaging
@@ -589,8 +605,8 @@ src_ofonod_SOURCES = $(builtin_sources) src/ofono.ver \
 			src/cdma-sms.c src/private-network.c src/cdma-netreg.c \
 			src/cdma-provision.c src/handsfree.c \
 			src/handsfree-audio.c src/bluetooth.h \
-			src/hfp.h src/sim-mnclength.c src/oemraw.c \
-			src/siri.c src/voicecallagent.c
+			src/sim-mnclength.c src/oemraw.c src/voicecallagent.c \
+			src/hfp.h src/siri.c
 
 src_ofonod_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
 			@GLIB_LIBS@ @DBUS_LIBS@ -ldl
@@ -633,9 +649,10 @@ doc_files = doc/overview.txt doc/ofono-paper.txt doc/release-faq.txt \
 			doc/sim-api.txt doc/stk-api.txt \
 			doc/audio-settings-api.txt doc/text-telephony-api.txt \
 			doc/calypso-modem.txt doc/message-api.txt \
-			doc/location-reporting-api.txt doc/smshistory-api.txt \
-			doc/oemraw-api.txt \
-			doc/certification.txt doc/siri-api.txt
+			doc/location-reporting-api.txt \
+			doc/smshistory-api.txt doc/oemraw-api.txt \
+			doc/certification.txt doc/siri-api.txt \
+			doc/telit-modem.txt
 
 
 test_scripts = test/backtrace \
@@ -732,7 +749,8 @@ test_scripts = test/backtrace \
 		test/display-icon \
 		test/set-msisdn \
 		test/test-voicecallagent \
-		test/get-network-time
+		test/get-network-time \
+		test/set-ddr
 
 if TEST
 testdir = $(pkglibdir)/test

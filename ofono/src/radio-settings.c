@@ -26,6 +26,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <errno.h>
+#include <stdint.h>
 
 #include <glib.h>
 #include <gdbus.h>
@@ -48,6 +49,7 @@ struct ofono_radio_settings {
 	enum ofono_radio_band_gsm pending_band_gsm;
 	enum ofono_radio_band_umts pending_band_umts;
 	ofono_bool_t fast_dormancy_pending;
+	uint32_t available_rats;
 	const struct ofono_radio_settings_driver *driver;
 	void *driver_data;
 	struct ofono_atom *atom;
@@ -222,6 +224,27 @@ static DBusMessage *radio_get_properties_reply(DBusMessage *msg,
 					DBUS_TYPE_BOOLEAN, &value);
 	}
 
+	if (rs->available_rats) {
+		const char *rats[sizeof(uint32_t) * CHAR_BIT + 1];
+		const char **dbus_rats = rats;
+		int n = 0;
+		unsigned int i;
+
+		for (i = 0; i < sizeof(uint32_t) * CHAR_BIT; i++) {
+			int tech = 1 << i;
+
+			if (!(rs->available_rats & tech))
+				continue;
+
+			rats[n++] = radio_access_mode_to_string(tech);
+		}
+
+		rats[n] = NULL;
+
+		ofono_dbus_dict_append_array(&dict, "AvailableTechnologies",
+						DBUS_TYPE_STRING, &dbus_rats);
+	}
+
 	dbus_message_iter_close_container(&iter, &dict);
 
 	return reply;
@@ -374,6 +397,32 @@ static void radio_send_properties_reply(struct ofono_radio_settings *rs)
 	__ofono_dbus_pending_reply(&rs->pending, reply);
 }
 
+static void radio_available_rats_query_callback(const struct ofono_error *error,
+						unsigned int available_rats,
+						void *data)
+{
+	struct ofono_radio_settings *rs = data;
+
+	if (error->type == OFONO_ERROR_TYPE_NO_ERROR)
+		rs->available_rats = available_rats & 0x7;
+	else
+		DBG("Error while querying available rats");
+
+	radio_send_properties_reply(rs);
+}
+
+static void radio_query_available_rats(struct ofono_radio_settings *rs)
+{
+	/* Modem technology is not supposed to change, so one query is enough */
+	if (rs->driver->query_available_rats == NULL || rs->available_rats) {
+		radio_send_properties_reply(rs);
+		return;
+	}
+
+	rs->driver->query_available_rats(
+				rs, radio_available_rats_query_callback, rs);
+}
+
 static void radio_fast_dormancy_query_callback(const struct ofono_error *error,
 						ofono_bool_t enable, void *data)
 {
@@ -390,13 +439,13 @@ static void radio_fast_dormancy_query_callback(const struct ofono_error *error,
 	}
 
 	radio_set_fast_dormancy(rs, enable);
-	radio_send_properties_reply(rs);
+	radio_query_available_rats(rs);
 }
 
 static void radio_query_fast_dormancy(struct ofono_radio_settings *rs)
 {
 	if (rs->driver->query_fast_dormancy == NULL) {
-		radio_send_properties_reply(rs);
+		radio_query_available_rats(rs);
 		return;
 	}
 
