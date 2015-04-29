@@ -375,7 +375,14 @@ gboolean ril_util_parse_sim_status(GRil *gril,
 	 * Do we just make a style-guide exception for PrintBuf operations?
 	 */
 	g_ril_append_print_buf(gril,
-				"(card_state=%d,universal_pin_state=%d,gsm_umts_index=%d,cdma_index=%d,ims_index=%d, ",
+				"card_state=%d,universal_pin_state=%d,gsm_umts_index=%d,cdma_index=%d,ims_index=%d, ",
+				status->card_state,
+				status->pin_state,
+				status->gsm_umts_index,
+				status->cdma_index,
+				status->ims_index);
+
+	DBG("card_state=%d, universal_pin_state=%d, gsm_umts_index=%d, cdma_index=%d, ims_index=%d",
 				status->card_state,
 				status->pin_state,
 				status->gsm_umts_index,
@@ -387,6 +394,7 @@ gboolean ril_util_parse_sim_status(GRil *gril,
 	else
 		goto done;
 
+	DBG("sim num_apps: %d", status->num_apps);
 	if (status->num_apps > MAX_UICC_APPS) {
 		ofono_error("SIM error; too many apps: %d", status->num_apps);
 		status->num_apps = MAX_UICC_APPS;
@@ -403,6 +411,8 @@ gboolean ril_util_parse_sim_status(GRil *gril,
 		apps[i]->app_type = parcel_r_int32(&rilp);
 		apps[i]->app_state = parcel_r_int32(&rilp);
 
+		DBG("app[%d]: app_type: %d, app_state: %d", i,
+				apps[i]->app_type, apps[i]->app_state);
 		/*
 		 * Consider RIL_APPSTATE_ILLEGAL also READY. Even if app state
 		 * is  RIL_APPSTATE_ILLEGAL (-1), ICC operations must be
@@ -430,6 +440,16 @@ gboolean ril_util_parse_sim_status(GRil *gril,
 					"%s[app_type=%d,app_state=%d,perso_substate=%d,aid_ptr=%s,app_label_ptr=%s,pin1_replaced=%d,pin1=%d,pin2=%d],",
 					print_buf,
 					apps[i]->app_type,
+					apps[i]->app_state,
+					apps[i]->perso_substate,
+					apps[i]->aid_str,
+					apps[i]->app_str,
+					apps[i]->pin_replaced,
+					apps[i]->pin1_state,
+					apps[i]->pin2_state);
+
+		DBG("app[%d]: type=%d, state=%d, perso_substate=%d, aid_ptr=%s, app_label_ptr=%s, pin1_replaced=%d, pin1=%d, pin2=%d",
+					i, apps[i]->app_type,
 					apps[i]->app_state,
 					apps[i]->perso_substate,
 					apps[i]->aid_str,
@@ -606,8 +626,10 @@ gint ril_util_parse_sms_response(GRil *gril, struct ril_msg *message)
 	 */
 	mr = parcel_r_int32(&rilp);
 	ack_pdu = parcel_r_string(&rilp);
-	error = parcel_r_int32(&rilp);
 
+	/* error: 3GPP 27.005, 3.2.5, -1 if unknown or not applicable */
+	error = parcel_r_int32(&rilp);
+	DBG("sms msg ref: %d, error: %d, ack_pdu: %s", mr, error, ack_pdu);
 
 	g_ril_append_print_buf(gril, "{%d,%s,%d}",
 				mr, ack_pdu, error);

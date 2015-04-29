@@ -145,8 +145,6 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 		/* Returns TRUE if cardstate == PRESENT */
 		if (ril_util_parse_sim_status(ril->modem, message,
 						&status, apps)) {
-			DBG("have_sim = TRUE; num_apps: %d",
-				status.num_apps);
 
 			if (status.num_apps)
 				ril_util_free_sim_apps(apps, status.num_apps);
