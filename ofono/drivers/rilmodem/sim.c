@@ -126,7 +126,8 @@ static void set_path(struct sim_data *sd, struct parcel *rilp,
 	} else if (sd->app_type == RIL_APPTYPE_SIM) {
 		len = sim_ef_db_get_path_2g(fileid, db_path);
 	} else {
-		ofono_error("Unsupported app_type: 0%x", sd->app_type);
+		ofono_error("%s Unsupported app_type: 0%x", __func__,
+				sd->app_type);
 	}
 
 	if (len > 0) {
@@ -203,14 +204,15 @@ static void ril_file_info_cb(struct ril_msg *message, gpointer user_data)
 						&sw1,
 						&sw2,
 						&response_len)) == NULL) {
-		ofono_error("Can't parse SIM IO response from RILD");
+		ofono_error("%s Can't parse SIM IO response", __func__);
 		decode_ril_error(&error, "FAIL");
 		goto error;
 	}
 
 	if ((sw1 != 0x90 && sw1 != 0x91 && sw1 != 0x92 && sw1 != 0x9f) ||
 		(sw1 == 0x90 && sw2 != 0x00)) {
-		ofono_error("invalid values: sw1: %02x sw2: %02x", sw1, sw2);
+		ofono_error("%s invalid values: sw1: %02x sw2: %02x", __func__,
+				sw1, sw2);
 		memset(&error, 0, sizeof(error));
 
 		/* TODO: fix decode_ril_error to take type & error */
@@ -233,7 +235,7 @@ static void ril_file_info_cb(struct ril_msg *message, gpointer user_data)
 	}
 
 	if (!ok) {
-		ofono_error("parse response failed");
+		ofono_error("%s parse response failed", __func__);
 		decode_ril_error(&error, "FAIL");
 		goto error;
 	}
@@ -323,7 +325,7 @@ static void ril_file_io_cb(struct ril_msg *message, gpointer user_data)
 	if (message->error == RIL_E_SUCCESS) {
 		decode_ril_error(&error, "OK");
 	} else {
-		ofono_error("RILD reply failure: %s",
+		ofono_error("%s RILD reply failure: %s", __func__,
 				ril_error_to_string(message->error));
 		goto error;
 	}
@@ -334,7 +336,7 @@ static void ril_file_io_cb(struct ril_msg *message, gpointer user_data)
 						&sw1,
 						&sw2,
 						&response_len)) == NULL) {
-		ofono_error("Error parsing IO response");
+		ofono_error("%s Error parsing IO response", __func__);
 		goto error;
 	}
 
@@ -468,7 +470,7 @@ static void ril_imsi_cb(struct ril_msg *message, gpointer user_data)
 		DBG("GET IMSI reply - OK");
 		decode_ril_error(&error, "OK");
 	} else {
-		ofono_error("Reply failure: %s",
+		ofono_error("%s Reply failure: %s", __func__,
 			    ril_error_to_string(message->error));
 		decode_ril_error(&error, "FAIL");
 		cb(&error, NULL, cbd->data);
