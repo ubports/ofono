@@ -68,6 +68,7 @@ struct ofono_modem {
 	unsigned int		call_ids;
 	DBusMessage		*pending;
 	guint			interface_update;
+	ofono_bool_t		features_update;
 	ofono_bool_t		powered;
 	ofono_bool_t		powered_pending;
 	ofono_bool_t		get_online;
@@ -1247,6 +1248,9 @@ static gboolean trigger_interface_update(void *data)
 						&interfaces);
 	g_free(interfaces);
 
+	if (!modem->features_update)
+		goto out;
+
 	features = g_new0(char *, g_slist_length(modem->feature_list) + 1);
 	for (i = 0, l = modem->feature_list; l; l = l->next, i++)
 		features[i] = l->data;
@@ -1255,7 +1259,9 @@ static gboolean trigger_interface_update(void *data)
 						"Features", DBUS_TYPE_STRING,
 						&features);
 	g_free(features);
+	modem->features_update = FALSE;
 
+out:
 	modem->interface_update = 0;
 
 	return FALSE;
@@ -1299,9 +1305,11 @@ void ofono_modem_add_interface(struct ofono_modem *modem,
 						g_strdup(interface));
 
 	feature = get_feature(interface);
-	if (feature)
+	if (feature) {
+		modem->features_update = TRUE;
 		modem->feature_list = g_slist_prepend(modem->feature_list,
 							g_strdup(feature));
+	}
 
 	if (modem->interface_update != 0)
 		return;
@@ -1333,6 +1341,7 @@ void ofono_modem_remove_interface(struct ofono_modem *modem,
 						(GCompareFunc) strcmp);
 		if (found) {
 			g_free(found->data);
+			modem->features_update = TRUE;
 			modem->feature_list =
 				g_slist_remove(modem->feature_list,
 						found->data);
@@ -2071,6 +2080,7 @@ static void modem_unregister(struct ofono_modem *modem)
 	if (modem->interface_update) {
 		g_source_remove(modem->interface_update);
 		modem->interface_update = 0;
+		modem->features_update = FALSE;
 	}
 
 	if (modem->lock_watch) {
