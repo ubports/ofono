@@ -292,20 +292,17 @@ void handle_sne(size_t len, const unsigned char *msg, char *sne)
 				list_entry->data;
 
 			if (entry) {
-				/* If one already exists,
-						delete it */
-				if (entry->sne)
-					g_free(entry->sne);
-
 				DBG("Adding SNE to entry %d",
 					phonebook_entry_nbr);
 				DBG("name %s", entry->name);
 
+				g_free(entry->sne);
 				entry->sne = sne;
-			} else {
-				g_free(sne);
+				return;
 			}
 		}
+
+		g_free(sne);
 	}
 }
 
