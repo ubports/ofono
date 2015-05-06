@@ -97,11 +97,9 @@ struct sim_data {
 	guint app_type;
 	gchar *app_str;
 	guint app_index;
-	gboolean sim_registered;
 	enum ofono_sim_password_type passwd_type;
 	int retries[OFONO_SIM_PASSWORD_INVALID];
 	enum ofono_sim_password_type passwd_state;
-	guint card_state;
 	guint idle_id;
 	gboolean initialized;
 	gboolean removed;
@@ -128,7 +126,8 @@ static void set_path(struct sim_data *sd, struct parcel *rilp,
 	} else if (sd->app_type == RIL_APPTYPE_SIM) {
 		len = sim_ef_db_get_path_2g(fileid, db_path);
 	} else {
-		ofono_error("Unsupported app_type: 0%x", sd->app_type);
+		ofono_error("%s Unsupported app_type: 0%x", __func__,
+				sd->app_type);
 	}
 
 	if (len > 0) {
@@ -187,7 +186,7 @@ static void ril_file_info_cb(struct ril_msg *message, gpointer user_data)
 	 * core will crash.
 	 */
 	if (sd->removed == TRUE) {
-		ofono_error("RIL_CARDSTATE_ABSENT");
+		ofono_error("%s RIL_CARDSTATE_ABSENT", __func__);
 		return;
 	}
 
@@ -205,14 +204,15 @@ static void ril_file_info_cb(struct ril_msg *message, gpointer user_data)
 						&sw1,
 						&sw2,
 						&response_len)) == NULL) {
-		ofono_error("Can't parse SIM IO response from RILD");
+		ofono_error("%s Can't parse SIM IO response", __func__);
 		decode_ril_error(&error, "FAIL");
 		goto error;
 	}
 
 	if ((sw1 != 0x90 && sw1 != 0x91 && sw1 != 0x92 && sw1 != 0x9f) ||
 		(sw1 == 0x90 && sw2 != 0x00)) {
-		ofono_error("invalid values: sw1: %02x sw2: %02x", sw1, sw2);
+		ofono_error("%s invalid values: sw1: %02x sw2: %02x", __func__,
+				sw1, sw2);
 		memset(&error, 0, sizeof(error));
 
 		/* TODO: fix decode_ril_error to take type & error */
@@ -235,7 +235,7 @@ static void ril_file_info_cb(struct ril_msg *message, gpointer user_data)
 	}
 
 	if (!ok) {
-		ofono_error("parse response failed");
+		ofono_error("%s parse response failed", __func__);
 		decode_ril_error(&error, "FAIL");
 		goto error;
 	}
@@ -325,7 +325,7 @@ static void ril_file_io_cb(struct ril_msg *message, gpointer user_data)
 	if (message->error == RIL_E_SUCCESS) {
 		decode_ril_error(&error, "OK");
 	} else {
-		ofono_error("RILD reply failure: %s",
+		ofono_error("%s RILD reply failure: %s", __func__,
 				ril_error_to_string(message->error));
 		goto error;
 	}
@@ -336,7 +336,7 @@ static void ril_file_io_cb(struct ril_msg *message, gpointer user_data)
 						&sw1,
 						&sw2,
 						&response_len)) == NULL) {
-		ofono_error("Error parsing IO response");
+		ofono_error("%s Error parsing IO response", __func__);
 		goto error;
 	}
 
@@ -470,7 +470,7 @@ static void ril_imsi_cb(struct ril_msg *message, gpointer user_data)
 		DBG("GET IMSI reply - OK");
 		decode_ril_error(&error, "OK");
 	} else {
-		ofono_error("Reply failure: %s",
+		ofono_error("%s Reply failure: %s", __func__,
 			    ril_error_to_string(message->error));
 		decode_ril_error(&error, "FAIL");
 		cb(&error, NULL, cbd->data);
@@ -637,13 +637,10 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 	guint search_index = -1;
 	struct parcel rilp;
 
-	DBG("");
+	DBG("%p", message);
 
 	if (ril_util_parse_sim_status(sd->ril, message, &status, apps) &&
 		status.num_apps) {
-
-		DBG("num_apps: %d gsm_umts_index: %d", status.num_apps,
-			status.gsm_umts_index);
 
 		/* TODO(CDMA): need some kind of logic to
 		 * set the correct app_index,
@@ -660,25 +657,24 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 			}
 		}
 
-		if (sd->sim_registered == FALSE) {
-			ofono_sim_register(sim);
-			sd->sim_registered = TRUE;
-		} else {
-			/* TODO: There doesn't seem to be any other
-			 * way to force the core SIM code to
-			 * recheck the PIN.
-			 * Wouldn't __ofono_sim_refresh be
-			 * more appropriate call here??
-			 * __ofono_sim_refresh(sim, NULL, TRUE, TRUE);
-			 */
-			DBG("sd->card_state:%u", sd->card_state);
-			if (sd->card_state != RIL_CARDSTATE_PRESENT) {
-				ofono_sim_inserted_notify(sim, TRUE);
-				sd->card_state = RIL_CARDSTATE_PRESENT;
-				sd->removed = FALSE;
-			}
-		}
+		/*
+		 * ril_util_parse_sim_status returns true only when
+		 * card status is RIL_CARDSTATE_PRESENT so notify TRUE always.
+		 *
+		 * ofono_sim_inserted_notify skips and returns if
+		 * present/not_present status doesn't change from previous.
+		 */
+		ofono_sim_inserted_notify(sim, TRUE);
 
+		sd->removed = FALSE;
+
+		/* TODO: There doesn't seem to be any other
+		 * way to force the core SIM code to
+		 * recheck the PIN.
+		 * Wouldn't __ofono_sim_refresh be
+		 * more appropriate call here??
+		 * __ofono_sim_refresh(sim, NULL, TRUE, TRUE);
+		 */
 		__ofono_sim_recheck_pin(sim);
 
 		if (current_online_state == RIL_ONLINE_PREF) {
@@ -705,19 +701,14 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 			current_online_state = RIL_ONLINE_PREF;
 
 		if (status.card_state == RIL_CARDSTATE_ABSENT) {
-			DBG("sd->card_state:%u,status.card_state:%u,",
-				sd->card_state, status.card_state);
-			ofono_info("RIL_CARDSTATE_ABSENT");
-			ofono_sim_inserted_notify(sim, FALSE);
-			if (sd->card_state == RIL_CARDSTATE_PRESENT)
-				sd->removed = TRUE;
-			sd->card_state = RIL_CARDSTATE_ABSENT;
+			ofono_info("%s: RIL_CARDSTATE_ABSENT", __func__);
 
+			ofono_sim_inserted_notify(sim, FALSE);
+
+			sd->removed = TRUE;
 			sd->initialized = FALSE;
 		}
 	}
-
-	/* TODO: if no SIM present, handle emergency calling. */
 }
 
 static int send_get_sim_status(struct ofono_sim *sim)
@@ -769,9 +760,6 @@ static void ril_query_passwd_state_cb(struct ril_msg *message, gpointer user_dat
 
 	if (ril_util_parse_sim_status(sd->ril, message, &status, apps) &&
 		status.num_apps) {
-
-		DBG("num_apps: %d gsm_umts_index: %d", status.num_apps,
-			status.gsm_umts_index);
 
 		/* TODO(CDMA): need some kind of logic to
 		 * set the correct app_index,
@@ -1117,15 +1105,14 @@ static gboolean ril_sim_register(gpointer user)
 
 	DBG("");
 
-	sd->idle_id = 0;
+	ofono_sim_register(sim);
 
 	send_get_sim_status(sim);
 
-	g_ril_register(sd->ril, RIL_UNSOL_RESPONSE_SIM_STATUS_CHANGED,
+	sd->idle_id = 0;
+	sd->idle_id = g_ril_register(sd->ril,
+			RIL_UNSOL_RESPONSE_SIM_STATUS_CHANGED,
 			(GRilNotifyFunc) ril_sim_status_changed, sim);
-
-	/* TODO: should we also register for RIL_UNSOL_SIM_REFRESH? */
-
 	return FALSE;
 }
 

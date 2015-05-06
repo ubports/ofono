@@ -91,7 +91,6 @@ struct ril_data {
 	int power_on_retries;
 	int sim_status_retries;
 	ofono_bool_t connected;
-	ofono_bool_t have_sim;
 	ofono_bool_t online;
 	ofono_bool_t reported;
 	guint timer_id;
@@ -141,17 +140,12 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 		else
 			ofono_error("Max retries for GET_SIM_STATUS exceeded!");
 	} else {
-
 		/* Returns TRUE if cardstate == PRESENT */
 		if (ril_util_parse_sim_status(ril->modem, message,
 						&status, apps)) {
-			DBG("have_sim = TRUE; num_apps: %d",
-				status.num_apps);
 
 			if (status.num_apps)
 				ril_util_free_sim_apps(apps, status.num_apps);
-
-			ril->have_sim = TRUE;
 		} else {
 			ofono_warn("No SIM card present.");
 		}
@@ -237,13 +231,8 @@ static void ril_pre_sim(struct ofono_modem *modem)
 {
 	DBG("");
 	struct ril_data *ril = ofono_modem_get_data(modem);
-	struct ofono_sim *sim;
-
-	sim = ofono_sim_create(modem, 0, "rilmodem", ril->modem);
+	ofono_sim_create(modem, 0, "rilmodem", ril->modem);
 	ofono_voicecall_create(modem, 0, "rilmodem", ril->modem);
-
-	if (sim && ril->have_sim)
-		ofono_sim_inserted_notify(sim, TRUE);
 }
 
 static void ril_post_sim(struct ofono_modem *modem)
@@ -490,8 +479,6 @@ static int create_gril(struct ofono_modem *modem)
 {
 	DBG(" modem: %p", modem);
 	struct ril_data *ril = ofono_modem_get_data(modem);
-
-	ril->have_sim = FALSE;
 
 	/* RIL expects user radio */
 	ril_switchUser();
