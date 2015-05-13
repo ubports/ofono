@@ -1,5 +1,6 @@
-ofono (1.15-3) UNRELEASED; urgency=medium
+ofono (1.15-3) unstable; urgency=medium
 
+  * Team upload
   * debian/control: Use canonical URL for the Vcs-* fields
   * Install missing dundee daemon and LSB initscript
   * debian/ofono.install, debian/rules, debian/control: Install .service files
@@ -7,7 +8,7 @@ ofono (1.15-3) UNRELEASED; urgency=medium
   * debian/control: Add build-dependency to autotools-dev
   * debian/ofono.init: Drop the "set -e" from the begining of the script
 
- -- Laurent Bigonville <bigon@debian.org>  Wed, 13 May 2015 15:02:51 +0200
+ -- Laurent Bigonville <bigon@debian.org>  Wed, 13 May 2015 15:03:20 +0200
 
 ofono (1.15-2) unstable; urgency=medium
 
