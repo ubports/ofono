@@ -9,8 +9,6 @@
 # Short-Description:	oFono Mobile Telephony Daemon
 ### END INIT INFO
 
-set -e
-
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 DAEMON=/usr/sbin/ofonod
 NAME=ofonod

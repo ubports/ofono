@@ -5,8 +5,9 @@ ofono (1.15-3) UNRELEASED; urgency=medium
   * debian/ofono.install, debian/rules, debian/control: Install .service files
     (Closes: #771088)
   * debian/control: Add build-dependency to autotools-dev
+  * debian/ofono.init: Drop the "set -e" from the begining of the script
 
- -- Laurent Bigonville <bigon@debian.org>  Tue, 02 Dec 2014 18:41:56 +0100
+ -- Laurent Bigonville <bigon@debian.org>  Wed, 13 May 2015 15:02:51 +0200
 
 ofono (1.15-2) unstable; urgency=medium
 
