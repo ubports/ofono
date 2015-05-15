@@ -1110,7 +1110,7 @@ static gboolean ril_sim_register(gpointer user)
 	send_get_sim_status(sim);
 
 	sd->idle_id = 0;
-	sd->idle_id = g_ril_register(sd->ril,
+	g_ril_register(sd->ril,
 			RIL_UNSOL_RESPONSE_SIM_STATUS_CHANGED,
 			(GRilNotifyFunc) ril_sim_status_changed, sim);
 	return FALSE;
@@ -1153,12 +1153,15 @@ static int ril_sim_probe(struct ofono_sim *sim, unsigned int vendor,
 
 static void ril_sim_remove(struct ofono_sim *sim)
 {
+	DBG("");
 	struct sim_data *sd = ofono_sim_get_data(sim);
 
 	ofono_sim_set_data(sim, NULL);
 
-	if (sd->idle_id > 0)
+	if (sd->idle_id > 0) {
 		g_source_remove(sd->idle_id);
+		sd->idle_id = 0;
+	}
 
 	g_free(sd->aid_str);
 	g_free(sd->app_str);
