@@ -657,25 +657,26 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 			}
 		}
 
-		/*
-		 * ril_util_parse_sim_status returns true only when
-		 * card status is RIL_CARDSTATE_PRESENT so notify TRUE always.
-		 *
-		 * ofono_sim_inserted_notify skips and returns if
-		 * present/not_present status doesn't change from previous.
-		 */
-		ofono_sim_inserted_notify(sim, TRUE);
-
 		sd->removed = FALSE;
 
-		/* TODO: There doesn't seem to be any other
-		 * way to force the core SIM code to
-		 * recheck the PIN.
-		 * Wouldn't __ofono_sim_refresh be
-		 * more appropriate call here??
-		 * __ofono_sim_refresh(sim, NULL, TRUE, TRUE);
-		 */
-		__ofono_sim_recheck_pin(sim);
+		if (sd->passwd_state != OFONO_SIM_PASSWORD_INVALID) {
+			/*
+			 * ril_util_parse_sim_status returns true only when
+			 * card status is RIL_CARDSTATE_PRESENT,
+			 * ofono_sim_inserted_notify returns if status doesn't
+			 * change. So can notify core always in this branch.
+			 */
+			ofono_sim_inserted_notify(sim, TRUE);
+
+			/* TODO: There doesn't seem to be any other
+			 * way to force the core SIM code to
+			 * recheck the PIN.
+			 * Wouldn't __ofono_sim_refresh be
+			 * more appropriate call here??
+			 * __ofono_sim_refresh(sim, NULL, TRUE, TRUE);
+			 */
+			__ofono_sim_recheck_pin(sim);
+		}
 
 		if (current_online_state == RIL_ONLINE_PREF) {
 
