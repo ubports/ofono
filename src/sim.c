@@ -2773,6 +2773,8 @@ static void sim_pin_query_cb(const struct ofono_error *error,
 	DBusConnection *conn = ofono_dbus_get_connection();
 	const char *path = __ofono_atom_get_path(sim->atom);
 	const char *pin_name;
+	char **locked_pins;
+	gboolean lock_changed;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
 		ofono_error("Querying PIN authentication state failed");
@@ -2787,9 +2789,21 @@ static void sim_pin_query_cb(const struct ofono_error *error,
 				password_is_pin(pin_type) == FALSE)
 			pin_type = puk2pin(pin_type);
 
-		if (pin_type != OFONO_SIM_PASSWORD_INVALID)
+		if (pin_type != OFONO_SIM_PASSWORD_INVALID) {
+			lock_changed = !sim->locked_pins[pin_type];
 			sim->locked_pins[pin_type] = TRUE;
 
+			if (lock_changed) {
+				locked_pins = get_locked_pins(sim);
+				ofono_dbus_signal_array_property_changed(conn,
+						path,
+						OFONO_SIM_MANAGER_INTERFACE,
+						"LockedPins", DBUS_TYPE_STRING,
+						&locked_pins);
+				g_strfreev(locked_pins);
+				locked_pins = NULL;
+			}
+		}
 		ofono_dbus_signal_property_changed(conn, path,
 						OFONO_SIM_MANAGER_INTERFACE,
 						"PinRequired", DBUS_TYPE_STRING,
