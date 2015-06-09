@@ -627,6 +627,19 @@ static void configure_active_app(struct sim_data *sd,
 	}
 }
 
+static void free_sim_state(struct sim_data *sd)
+{
+	guint i = 0;
+
+	sd->passwd_state = OFONO_SIM_PASSWORD_INVALID;
+
+	for (i = 0; i < OFONO_SIM_PASSWORD_INVALID; i++)
+		sd->retries[i] = -1;
+
+	sd->removed = TRUE;
+	sd->initialized = FALSE;
+}
+
 static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 {
 	struct ofono_sim *sim = user_data;
@@ -704,12 +717,9 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 		if (status.card_state == RIL_CARDSTATE_ABSENT) {
 			ofono_info("%s: RIL_CARDSTATE_ABSENT", __func__);
 
-			sd->passwd_state = OFONO_SIM_PASSWORD_INVALID;
+			free_sim_state(sd);
 
 			ofono_sim_inserted_notify(sim, FALSE);
-
-			sd->removed = TRUE;
-			sd->initialized = FALSE;
 		}
 	}
 }
@@ -829,8 +839,9 @@ static void ril_pin_change_state_cb(struct ril_msg *message, gpointer user_data)
 	struct sim_data *sd = cbd->user;
 	struct parcel rilp;
 	int retry_count;
-	int retries[OFONO_SIM_PASSWORD_INVALID];
 	int passwd_type;
+	int i;
+
 	/* There is no reason to ask SIM status until
 	 * unsolicited sim status change indication
 	 * Looks like state does not change before that.
@@ -840,8 +851,11 @@ static void ril_pin_change_state_cb(struct ril_msg *message, gpointer user_data)
 	ril_util_init_parcel(message, &rilp);
 	parcel_r_int32(&rilp);
 	retry_count = parcel_r_int32(&rilp);
-	retries[passwd_type] = retry_count;
-	sd->retries[passwd_type] = retries[passwd_type];
+
+	for (i = 0; i < OFONO_SIM_PASSWORD_INVALID; i++)
+		sd->retries[i] = -1;
+
+	sd->retries[passwd_type] = retry_count;
 
 	DBG("result=%d passwd_type=%d retry_count=%d",
 		message->error, passwd_type, retry_count);
