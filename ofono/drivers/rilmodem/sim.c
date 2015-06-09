@@ -612,7 +612,7 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 	guint search_index = -1;
 	struct parcel rilp;
 
-	DBG("%p", message);
+	DBG("");
 
 	if (ril_util_parse_sim_status(sd->ril, message, &status, apps) &&
 		status.num_apps) {
