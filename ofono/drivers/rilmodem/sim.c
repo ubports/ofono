@@ -704,6 +704,8 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 		if (status.card_state == RIL_CARDSTATE_ABSENT) {
 			ofono_info("%s: RIL_CARDSTATE_ABSENT", __func__);
 
+			sd->passwd_state = OFONO_SIM_PASSWORD_INVALID;
+
 			ofono_sim_inserted_notify(sim, FALSE);
 
 			sd->removed = TRUE;
