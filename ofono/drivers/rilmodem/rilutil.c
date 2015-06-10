@@ -401,7 +401,6 @@ gboolean ril_util_parse_sim_status(GRil *gril,
 	}
 
 	for (i = 0; i < status->num_apps; i++) {
-		DBG("processing app[%d]", i);
 		apps[i] = g_try_new0(struct sim_app, 1);
 		if (apps[i] == NULL) {
 			ofono_error("Can't allocate app_data");
@@ -411,8 +410,6 @@ gboolean ril_util_parse_sim_status(GRil *gril,
 		apps[i]->app_type = parcel_r_int32(&rilp);
 		apps[i]->app_state = parcel_r_int32(&rilp);
 
-		DBG("app[%d]: app_type: %d, app_state: %d", i,
-				apps[i]->app_type, apps[i]->app_state);
 		/*
 		 * Consider RIL_APPSTATE_ILLEGAL also READY. Even if app state
 		 * is  RIL_APPSTATE_ILLEGAL (-1), ICC operations must be

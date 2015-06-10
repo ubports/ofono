@@ -519,44 +519,6 @@ static void ril_read_imsi(struct ofono_sim *sim, ofono_sim_imsi_cb_t cb,
 	}
 }
 
-void set_pin_lock_state(struct ofono_sim *sim, struct sim_app *app)
-{
-	DBG("pin1:%u,pin2:%u", app->pin1_state, app->pin2_state);
-	/*
-	 * Updates only pin and pin2 state. Other locks are not dealt here. For
-	 * that a RIL_REQUEST_QUERY_FACILITY_LOCK request should be used.
-	 */
-	switch (app->pin1_state) {
-	case RIL_PINSTATE_ENABLED_NOT_VERIFIED:
-	case RIL_PINSTATE_ENABLED_VERIFIED:
-	case RIL_PINSTATE_ENABLED_BLOCKED:
-	case RIL_PINSTATE_ENABLED_PERM_BLOCKED:
-		ofono_set_pin_lock_state(sim, OFONO_SIM_PASSWORD_SIM_PIN, TRUE);
-		break;
-	case RIL_PINSTATE_DISABLED:
-		ofono_set_pin_lock_state(
-			sim, OFONO_SIM_PASSWORD_SIM_PIN, FALSE);
-		break;
-	default:
-		break;
-	}
-	switch (app->pin2_state) {
-	case RIL_PINSTATE_ENABLED_NOT_VERIFIED:
-	case RIL_PINSTATE_ENABLED_VERIFIED:
-	case RIL_PINSTATE_ENABLED_BLOCKED:
-	case RIL_PINSTATE_ENABLED_PERM_BLOCKED:
-		ofono_set_pin_lock_state(
-			sim, OFONO_SIM_PASSWORD_SIM_PIN2, TRUE);
-		break;
-	case RIL_PINSTATE_DISABLED:
-		ofono_set_pin_lock_state(
-			sim, OFONO_SIM_PASSWORD_SIM_PIN2, FALSE);
-		break;
-	default:
-		break;
-	}
-}
-
 static void configure_active_app(struct sim_data *sd,
 					struct sim_app *app,
 					guint index)
@@ -627,6 +589,19 @@ static void configure_active_app(struct sim_data *sd,
 	}
 }
 
+static void free_sim_state(struct sim_data *sd)
+{
+	guint i = 0;
+
+	sd->passwd_state = OFONO_SIM_PASSWORD_INVALID;
+
+	for (i = 0; i < OFONO_SIM_PASSWORD_INVALID; i++)
+		sd->retries[i] = -1;
+
+	sd->removed = TRUE;
+	sd->initialized = FALSE;
+}
+
 static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 {
 	struct ofono_sim *sim = user_data;
@@ -637,7 +612,7 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 	guint search_index = -1;
 	struct parcel rilp;
 
-	DBG("%p", message);
+	DBG("");
 
 	if (ril_util_parse_sim_status(sd->ril, message, &status, apps) &&
 		status.num_apps) {
@@ -652,30 +627,30 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 				apps[i]->app_type != RIL_APPTYPE_UNKNOWN) {
 				current_active_app = apps[i]->app_type;
 				configure_active_app(sd, apps[i], i);
-				set_pin_lock_state(sim, apps[i]);
 				break;
 			}
 		}
 
-		/*
-		 * ril_util_parse_sim_status returns true only when
-		 * card status is RIL_CARDSTATE_PRESENT so notify TRUE always.
-		 *
-		 * ofono_sim_inserted_notify skips and returns if
-		 * present/not_present status doesn't change from previous.
-		 */
-		ofono_sim_inserted_notify(sim, TRUE);
-
 		sd->removed = FALSE;
 
-		/* TODO: There doesn't seem to be any other
-		 * way to force the core SIM code to
-		 * recheck the PIN.
-		 * Wouldn't __ofono_sim_refresh be
-		 * more appropriate call here??
-		 * __ofono_sim_refresh(sim, NULL, TRUE, TRUE);
-		 */
-		__ofono_sim_recheck_pin(sim);
+		if (sd->passwd_state != OFONO_SIM_PASSWORD_INVALID) {
+			/*
+			 * ril_util_parse_sim_status returns true only when
+			 * card status is RIL_CARDSTATE_PRESENT,
+			 * ofono_sim_inserted_notify returns if status doesn't
+			 * change. So can notify core always in this branch.
+			 */
+			ofono_sim_inserted_notify(sim, TRUE);
+
+			/* TODO: There doesn't seem to be any other
+			 * way to force the core SIM code to
+			 * recheck the PIN.
+			 * Wouldn't __ofono_sim_refresh be
+			 * more appropriate call here??
+			 * __ofono_sim_refresh(sim, NULL, TRUE, TRUE);
+			 */
+			__ofono_sim_recheck_pin(sim);
+		}
 
 		if (current_online_state == RIL_ONLINE_PREF) {
 
@@ -703,10 +678,9 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 		if (status.card_state == RIL_CARDSTATE_ABSENT) {
 			ofono_info("%s: RIL_CARDSTATE_ABSENT", __func__);
 
-			ofono_sim_inserted_notify(sim, FALSE);
+			free_sim_state(sd);
 
-			sd->removed = TRUE;
-			sd->initialized = FALSE;
+			ofono_sim_inserted_notify(sim, FALSE);
 		}
 	}
 }
@@ -771,7 +745,6 @@ static void ril_query_passwd_state_cb(struct ril_msg *message, gpointer user_dat
 				apps[i]->app_type != RIL_APPTYPE_UNKNOWN) {
 				current_active_app = apps[i]->app_type;
 				configure_active_app(sd, apps[i], i);
-				set_pin_lock_state(sim, apps[i]);
 				break;
 			}
 		}
@@ -826,8 +799,9 @@ static void ril_pin_change_state_cb(struct ril_msg *message, gpointer user_data)
 	struct sim_data *sd = cbd->user;
 	struct parcel rilp;
 	int retry_count;
-	int retries[OFONO_SIM_PASSWORD_INVALID];
 	int passwd_type;
+	int i;
+
 	/* There is no reason to ask SIM status until
 	 * unsolicited sim status change indication
 	 * Looks like state does not change before that.
@@ -837,8 +811,11 @@ static void ril_pin_change_state_cb(struct ril_msg *message, gpointer user_data)
 	ril_util_init_parcel(message, &rilp);
 	parcel_r_int32(&rilp);
 	retry_count = parcel_r_int32(&rilp);
-	retries[passwd_type] = retry_count;
-	sd->retries[passwd_type] = retries[passwd_type];
+
+	for (i = 0; i < OFONO_SIM_PASSWORD_INVALID; i++)
+		sd->retries[i] = -1;
+
+	sd->retries[passwd_type] = retry_count;
 
 	DBG("result=%d passwd_type=%d retry_count=%d",
 		message->error, passwd_type, retry_count);

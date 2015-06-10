@@ -2296,13 +2296,6 @@ enum ofono_sim_password_type ofono_sim_get_password_type(struct ofono_sim *sim)
 	return sim->pin_type;
 }
 
-void ofono_set_pin_lock_state(struct ofono_sim *sim,
-				enum ofono_sim_password_type type,
-				ofono_bool_t state)
-{
-	sim->locked_pins[type] = state;
-}
-
 const unsigned char *ofono_sim_get_cphs_service_table(struct ofono_sim *sim)
 {
 	if (sim == NULL)
@@ -2513,8 +2506,18 @@ void ofono_sim_inserted_notify(struct ofono_sim *sim, ofono_bool_t inserted)
 
 	if (inserted)
 		sim_initialize(sim);
-	else
+	else {
+		/*
+		 * Reset type to trigger property change signal after sim is
+		 * removed and inserted.
+		 * Can't reset in sim_free_main_state because it's called also
+		 * when sim state changes to OFONO_SIM_STATE_LOCKED_OUT
+		 * (PUK lock) if user fails to change PIN.
+		 */
+		sim->pin_type = OFONO_SIM_PASSWORD_INVALID;
+
 		sim_free_state(sim);
+	}
 }
 
 unsigned int ofono_sim_add_state_watch(struct ofono_sim *sim,
@@ -2763,6 +2766,8 @@ static void sim_pin_query_cb(const struct ofono_error *error,
 	DBusConnection *conn = ofono_dbus_get_connection();
 	const char *path = __ofono_atom_get_path(sim->atom);
 	const char *pin_name;
+	char **locked_pins;
+	gboolean lock_changed;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
 		ofono_error("Querying PIN authentication state failed");
@@ -2777,9 +2782,21 @@ static void sim_pin_query_cb(const struct ofono_error *error,
 				password_is_pin(pin_type) == FALSE)
 			pin_type = puk2pin(pin_type);
 
-		if (pin_type != OFONO_SIM_PASSWORD_INVALID)
+		if (pin_type != OFONO_SIM_PASSWORD_INVALID) {
+			lock_changed = !sim->locked_pins[pin_type];
 			sim->locked_pins[pin_type] = TRUE;
 
+			if (lock_changed) {
+				locked_pins = get_locked_pins(sim);
+				ofono_dbus_signal_array_property_changed(conn,
+						path,
+						OFONO_SIM_MANAGER_INTERFACE,
+						"LockedPins", DBUS_TYPE_STRING,
+						&locked_pins);
+				g_strfreev(locked_pins);
+				locked_pins = NULL;
+			}
+		}
 		ofono_dbus_signal_property_changed(conn, path,
 						OFONO_SIM_MANAGER_INTERFACE,
 						"PinRequired", DBUS_TYPE_STRING,
