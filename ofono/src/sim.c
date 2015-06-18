@@ -2802,6 +2802,7 @@ static void sim_pin_query_cb(const struct ofono_error *error,
 				g_strfreev(locked_pins);
 			}
 		}
+
 		ofono_dbus_signal_property_changed(conn, path,
 						OFONO_SIM_MANAGER_INTERFACE,
 						"PinRequired", DBUS_TYPE_STRING,
