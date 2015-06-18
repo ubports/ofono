@@ -2784,17 +2784,19 @@ static void sim_pin_query_cb(const struct ofono_error *error,
 
 		if (pin_type != OFONO_SIM_PASSWORD_INVALID) {
 			lock_changed = !sim->locked_pins[pin_type];
+
 			sim->locked_pins[pin_type] = TRUE;
 
 			if (lock_changed) {
 				locked_pins = get_locked_pins(sim);
+
 				ofono_dbus_signal_array_property_changed(conn,
 						path,
 						OFONO_SIM_MANAGER_INTERFACE,
 						"LockedPins", DBUS_TYPE_STRING,
 						&locked_pins);
+
 				g_strfreev(locked_pins);
-				locked_pins = NULL;
 			}
 		}
 		ofono_dbus_signal_property_changed(conn, path,
