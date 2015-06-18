@@ -2514,7 +2514,7 @@ void ofono_sim_inserted_notify(struct ofono_sim *sim, ofono_bool_t inserted)
 		 * when sim state changes to OFONO_SIM_STATE_LOCKED_OUT
 		 * (PUK lock) if user fails to change PIN.
 		 */
-		sim->pin_type = OFONO_SIM_PASSWORD_INVALID;
+		sim->pin_type = OFONO_SIM_PASSWORD_NONE;
 
 		sim_free_state(sim);
 	}
