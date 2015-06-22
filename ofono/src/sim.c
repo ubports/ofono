@@ -2769,6 +2769,8 @@ static void sim_pin_query_cb(const struct ofono_error *error,
 	char **locked_pins;
 	gboolean lock_changed;
 
+	DBG("sim->pin_type: %d, pin_type: %d", sim->pin_type, pin_type);
+
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
 		ofono_error("Querying PIN authentication state failed");
 		return;
@@ -2782,7 +2784,8 @@ static void sim_pin_query_cb(const struct ofono_error *error,
 				password_is_pin(pin_type) == FALSE)
 			pin_type = puk2pin(pin_type);
 
-		if (pin_type != OFONO_SIM_PASSWORD_INVALID) {
+		if (pin_type != OFONO_SIM_PASSWORD_INVALID
+				&& pin_type != OFONO_SIM_PASSWORD_NONE) {
 			lock_changed = !sim->locked_pins[pin_type];
 
 			sim->locked_pins[pin_type] = TRUE;
