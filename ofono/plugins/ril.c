@@ -86,6 +86,11 @@
 #define MCE_DISPLAY_DIM_STRING		"dimmed"
 #define MCE_DISPLAY_OFF_STRING		"off"
 
+#define RILMODEM_CONF_FILE		"/etc/ofono/ril_subscription.conf"
+#define RILSOCK_CONF_GROUP		"cmdsocket"
+#define RILSOCK_CONF_PATH		"path"
+#define DEFAULT_CMD_SOCK		"/dev/socket/rild"
+
 struct ril_data {
 	GRil *modem;
 	int power_on_retries;
@@ -475,6 +480,45 @@ void ril_switchUser()
 
 }
 
+/* TODO: Reading RILD socket path by for now from rilmodem .conf file,
+ * 	but change this later to StateFs when plans are more concrete.
+ * return: Null-terminated path string. Ownership transferred.
+ * */
+static char *ril_socket_path()
+{
+	GError *err = NULL;
+	GKeyFile *keyfile = NULL;
+	char *res = NULL;
+
+	keyfile = g_key_file_new();
+	g_key_file_set_list_separator(keyfile, ',');
+
+	if (!g_key_file_load_from_file(keyfile, RILMODEM_CONF_FILE, 0, &err)) {
+		if (err) {
+			DBG("conf load result: %s", err->message);
+			g_error_free(err);
+		}
+	} else {
+		if (g_key_file_has_group(keyfile, RILSOCK_CONF_GROUP)) {
+			res = g_key_file_get_string(
+				keyfile, RILSOCK_CONF_GROUP, RILSOCK_CONF_PATH, &err);
+			if (err) {
+				DBG("conf get result: %s", err->message);
+				g_error_free(err);
+			}
+		}
+	}
+
+	g_key_file_free(keyfile);
+
+	if (!res) {
+		DBG("Falling back to default cmd sock path");
+		res = g_strdup(DEFAULT_CMD_SOCK);
+	}
+
+	return res;
+}
+
 static int create_gril(struct ofono_modem *modem)
 {
 	DBG(" modem: %p", modem);
@@ -483,7 +527,10 @@ static int create_gril(struct ofono_modem *modem)
 	/* RIL expects user radio */
 	ril_switchUser();
 
-	ril->modem = g_ril_new();
+	char *path = ril_socket_path();
+	ril->modem = g_ril_new(path);
+	g_free(path);
+	path = NULL;
 
 	g_ril_set_disconnect_function(ril->modem, gril_disconnected, modem);
 
