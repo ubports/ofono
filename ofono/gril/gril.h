@@ -93,7 +93,7 @@ extern char print_buf[];
 
 void g_ril_init_parcel(struct ril_msg *message, struct parcel *rilp);
 
-GRil *g_ril_new();
+GRil *g_ril_new(const char *sockpath);
 
 GIOChannel *g_ril_get_channel(GRil *ril);
 GRilIO *g_ril_get_io(GRil *ril);

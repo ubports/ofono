@@ -51,9 +51,6 @@
 #define COMMAND_FLAG_EXPECT_PDU			0x1
 #define COMMAND_FLAG_EXPECT_SHORT_PROMPT	0x2
 
-#define RILD_CMD_SOCKET "/dev/socket/rild"
-#define RILD_DBG_SOCKET "/dev/socket/rild-debug"
-
 struct ril_request {
 	gchar *data;
 	guint data_len;
@@ -807,7 +804,7 @@ static gboolean node_compare_by_group(struct ril_notify_node *node,
 	return FALSE;
 }
 
-static struct ril_s *create_ril()
+static struct ril_s *create_ril(const char *sockpath)
 
 {
 	struct ril_s *ril;
@@ -818,6 +815,10 @@ static struct ril_s *create_ril()
 	char *value = NULL;
 	GError *err = NULL;
 	char *path = "/etc/ofono/ril_subscription.conf";
+
+	DBG("sockpath: %s", sockpath);
+	if (!sockpath)
+		return NULL;
 
 	ril = g_try_new0(struct ril_s, 1);
 	if (ril == NULL)
@@ -841,7 +842,7 @@ static struct ril_s *create_ril()
 
 	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_UNIX;
-	strncpy(addr.sun_path, RILD_CMD_SOCKET, sizeof(addr.sun_path) - 1);
+	strncpy(addr.sun_path, sockpath, sizeof(addr.sun_path) - 1);
 
 	if (connect(ril->sk, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
 		ofono_error("%s: can't connect to RILD: %s (%d)\n",
@@ -1074,15 +1075,16 @@ void g_ril_init_parcel(struct ril_msg *message, struct parcel *rilp)
 	rilp->offset = 0;
 }
 
-GRil *g_ril_new()
+GRil *g_ril_new(const char *sockpath)
 {
+	DBG("");
 	GRil *ril;
 
 	ril = g_try_new0(GRil, 1);
 	if (ril == NULL)
 		return NULL;
 
-	ril->parent = create_ril();
+	ril->parent = create_ril(sockpath);
 	if (ril->parent == NULL) {
 		g_free(ril);
 		return NULL;
