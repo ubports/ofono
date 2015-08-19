@@ -1,0 +1,28 @@
+Debug log control
+=================
+
+Service		org.ofono
+Interface	org.ofono.DebugLog
+Object path	/
+
+Methods		void Enable(string pattern)
+
+			Enables all logs that match the pattern.
+
+		void Disable(string pattern)
+
+			Disables all logs that match the pattern.
+
+		array(string,boolean) List()
+
+			Returns all available log names and their current
+			states.
+
+			In order for Enable or Disable call to have any
+			effect, the pattern must match one or more of
+			these strings.
+
+Signals		Changed(string name, boolean enabled)
+
+			This signal indicates a changed log status of the
+			given log module.
