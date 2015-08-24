@@ -237,6 +237,11 @@ if (test "${enable_pushforwarder}" != "no"); then
 	AC_SUBST(WSPCODEC_LIBS)
 fi
 
+AC_ARG_ENABLE(logcontrol,
+	AC_HELP_STRING([--enable-logcontrol], [enable log control plugin]),
+			[enable_logcontrol=${enableval}], [enable_logcontrol="no"])
+AM_CONDITIONAL(LOGCONTROL, test "${enable_logcontrol}" != "no")
+
 if (test "${prefix}" = "NONE"); then
 	dnl no prefix and no localstatedir, so default to /var
 	if (test "$localstatedir" = '${prefix}/var'); then
