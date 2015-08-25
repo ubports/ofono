@@ -43,6 +43,7 @@
 #include "util.h"
 
 #include "gril.h"
+#include "grilrequest.h"
 #include "grilutil.h"
 #include "parcel.h"
 #include "ril_constants.h"
@@ -165,6 +166,8 @@ static void set_path(struct sim_data *sd, struct parcel *rilp,
 		parcel_w_string(rilp, NULL);
 	}
 }
+
+static int send_get_sim_status(struct ofono_sim *sim);
 
 static void ril_file_info_cb(struct ril_msg *message, gpointer user_data)
 {
@@ -602,6 +605,85 @@ static void free_sim_state(struct sim_data *sd)
 	sd->initialized = FALSE;
 }
 
+static void sim_send_set_uicc_subscription_cb(struct ril_msg *message,
+						gpointer user_data)
+{
+	struct ofono_sim *sim = user_data;
+	struct sim_data *sd = ofono_sim_get_data(sim);
+
+	if (message->error == RIL_E_SUCCESS) {
+		g_ril_print_response_no_args(sd->ril, message);
+	} else {
+		ofono_error("%s: RIL error %s", __func__,
+				ril_error_to_string(message->error));
+		/*
+		 * Send RIL_REQUEST_GET_SIM_STATUS again. The reply will run
+		 * the app selection algorithm again, causing the request to
+		 * be re-sent.
+		 */
+		 send_get_sim_status(sim);
+	}
+}
+
+static void sim_send_set_uicc_subscription(struct ofono_sim *sim, int slot_id,
+						int app_index, int sub_id,
+						int sub_status)
+{
+	struct sim_data *sd = ofono_sim_get_data(sim);
+	struct parcel rilp;
+
+	DBG("");
+
+	g_ril_request_set_uicc_subscription(sd->ril, slot_id, app_index,
+						sub_id, sub_status, &rilp);
+
+
+	g_ril_send(sd->ril, RIL_REQUEST_SET_UICC_SUBSCRIPTION, rilp.data, rilp.size,
+		   sim_send_set_uicc_subscription_cb, sim, NULL);
+}
+
+static int sim_select_uicc_subscription(struct ofono_sim *sim,
+					struct sim_status *status, struct sim_app **apps)
+{
+	struct sim_data *sd = ofono_sim_get_data(sim);
+	int slot_id = 0;
+	int selected_app = -1;
+	unsigned int i;
+
+	for (i = 0; i < status->num_apps; i++) {
+		switch (apps[i]->app_type) {
+		case RIL_APPTYPE_UNKNOWN:
+			continue;
+		case RIL_APPTYPE_USIM:
+		case RIL_APPTYPE_RUIM:
+			if (selected_app != -1) {
+				switch (apps[selected_app]->app_type) {
+				case RIL_APPTYPE_USIM:
+				case RIL_APPTYPE_RUIM:
+					break;
+				default:
+					selected_app = i;
+				}
+			} else {
+				selected_app = i;
+			}
+			break;
+		default:
+			if (selected_app == -1)
+				selected_app = i;
+		}
+	}
+
+	DBG("Select app %d for subscription.", selected_app);
+
+	if (selected_app != -1)
+		/* Number 1 means activates that app */
+		sim_send_set_uicc_subscription(sim, slot_id, selected_app,
+						slot_id, 1);
+
+	return selected_app;
+}
+
 static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 {
 	struct ofono_sim *sim = user_data;
@@ -621,7 +703,11 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 		 * set the correct app_index,
 		 */
 		search_index = status.gsm_umts_index;
-
+		if (search_index > status.num_apps) 
+		{
+			search_index = sim_select_uicc_subscription(sim,
+								&status, apps);
+		}
 		for (i = 0; i < status.num_apps; i++) {
 			if (i == search_index &&
 				apps[i]->app_type != RIL_APPTYPE_UNKNOWN) {
