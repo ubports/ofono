@@ -167,8 +167,6 @@ static void set_path(struct sim_data *sd, struct parcel *rilp,
 	}
 }
 
-static int send_get_sim_status(struct ofono_sim *sim);
-
 static void ril_file_info_cb(struct ril_msg *message, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
@@ -605,31 +603,9 @@ static void free_sim_state(struct sim_data *sd)
 	sd->initialized = FALSE;
 }
 
-static void sim_send_set_uicc_subscription_cb(struct ril_msg *message,
-						gpointer user_data)
+static void sim_send_set_uicc_subscription(struct sim_data *sd, int slot_id,
+				int app_index, int sub_id, int sub_status)
 {
-	struct ofono_sim *sim = user_data;
-	struct sim_data *sd = ofono_sim_get_data(sim);
-
-	if (message->error == RIL_E_SUCCESS) {
-		g_ril_print_response_no_args(sd->ril, message);
-	} else {
-		ofono_error("%s: RIL error %s", __func__,
-				ril_error_to_string(message->error));
-		/*
-		 * Send RIL_REQUEST_GET_SIM_STATUS again. The reply will run
-		 * the app selection algorithm again, causing the request to
-		 * be re-sent.
-		 */
-		 send_get_sim_status(sim);
-	}
-}
-
-static void sim_send_set_uicc_subscription(struct ofono_sim *sim, int slot_id,
-						int app_index, int sub_id,
-						int sub_status)
-{
-	struct sim_data *sd = ofono_sim_get_data(sim);
 	struct parcel rilp;
 
 	DBG("");
@@ -637,15 +613,13 @@ static void sim_send_set_uicc_subscription(struct ofono_sim *sim, int slot_id,
 	g_ril_request_set_uicc_subscription(sd->ril, slot_id, app_index,
 						sub_id, sub_status, &rilp);
 
-
-	g_ril_send(sd->ril, RIL_REQUEST_SET_UICC_SUBSCRIPTION, rilp.data, rilp.size,
-		   sim_send_set_uicc_subscription_cb, sim, NULL);
+	g_ril_send(sd->ril, RIL_REQUEST_SET_UICC_SUBSCRIPTION, rilp.data,
+		rilp.size, NULL, NULL, NULL);
 }
 
-static int sim_select_uicc_subscription(struct ofono_sim *sim,
-					struct sim_status *status, struct sim_app **apps)
+static int sim_select_uicc_subscription(struct sim_data *sim,
+			struct sim_status *status, struct sim_app **apps)
 {
-	struct sim_data *sd = ofono_sim_get_data(sim);
 	int slot_id = 0;
 	int selected_app = -1;
 	unsigned int i;
@@ -690,8 +664,6 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 	struct sim_data *sd = ofono_sim_get_data(sim);
 	struct sim_app *apps[MAX_UICC_APPS];
 	struct sim_status status;
-	guint i = 0;
-	guint search_index = -1;
 	struct parcel rilp;
 
 	DBG("");
@@ -702,19 +674,16 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 		/* TODO(CDMA): need some kind of logic to
 		 * set the correct app_index,
 		 */
-		search_index = status.gsm_umts_index;
-		if (search_index > status.num_apps) 
-		{
-			search_index = sim_select_uicc_subscription(sim,
+		int app_index = status.gsm_umts_index;
+
+		if (app_index < 0) {
+			app_index = sim_select_uicc_subscription(sd,
 								&status, apps);
 		}
-		for (i = 0; i < status.num_apps; i++) {
-			if (i == search_index &&
-				apps[i]->app_type != RIL_APPTYPE_UNKNOWN) {
-				current_active_app = apps[i]->app_type;
-				configure_active_app(sd, apps[i], i);
-				break;
-			}
+		if (app_index >= 0 && app_index < (int)status.num_apps &&
+			apps[app_index]->app_type != RIL_APPTYPE_UNKNOWN) {
+			current_active_app = apps[app_index]->app_type;
+			configure_active_app(sd, apps[app_index], app_index);
 		}
 
 		sd->removed = FALSE;
@@ -814,8 +783,6 @@ static void ril_query_passwd_state_cb(struct ril_msg *message, gpointer user_dat
 	void *data = cbd->data;
 	struct sim_app *apps[MAX_UICC_APPS];
 	struct sim_status status;
-	guint i = 0;
-	guint search_index = -1;
 	gint state = ofono_sim_get_state(sim);
 
 	if (ril_util_parse_sim_status(sd->ril, message, &status, apps) &&
@@ -824,16 +791,14 @@ static void ril_query_passwd_state_cb(struct ril_msg *message, gpointer user_dat
 		/* TODO(CDMA): need some kind of logic to
 		 * set the correct app_index,
 		 */
-		search_index = status.gsm_umts_index;
+		int app_index = status.gsm_umts_index;
 
-		for (i = 0; i < status.num_apps; i++) {
-			if (i == search_index &&
-				apps[i]->app_type != RIL_APPTYPE_UNKNOWN) {
-				current_active_app = apps[i]->app_type;
-				configure_active_app(sd, apps[i], i);
-				break;
-			}
+		if (app_index >= 0 && app_index < (int)status.num_apps &&
+			apps[app_index]->app_type != RIL_APPTYPE_UNKNOWN) {
+			current_active_app = apps[app_index]->app_type;
+			configure_active_app(sd, apps[app_index], app_index);
 		}
+
 		ril_util_free_sim_apps(apps, status.num_apps);
 	}
 	DBG("passwd_state %u", sd->passwd_state);
