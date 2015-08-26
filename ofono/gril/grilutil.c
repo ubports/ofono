@@ -137,6 +137,7 @@ const char *ril_cardstate_to_string(int card_state)
 
 const char *ril_error_to_string(int error)
 {
+	static char unknown[24];
 	switch (error) {
 	case RIL_E_SUCCESS: return "SUCCESS";
 	case RIL_E_RADIO_NOT_AVAILABLE: return "RADIO_NOT_AVAILABLE";
@@ -157,7 +158,9 @@ const char *ril_error_to_string(int error)
 	case RIL_E_MODE_NOT_SUPPORTED: return "MODE_NOT_SUPPORTED";
 	case RIL_E_FDN_CHECK_FAILURE: return "FDN_CHECK_FAILURE";
 	case RIL_E_ILLEGAL_SIM_OR_ME: return "ILLEGAL_SIM_OR_ME";
-	default: return "<unknown errno>";
+	default:
+		snprintf(unknown, sizeof(unknown), "%d", error);
+		return unknown;
 	}
 }
 
@@ -183,6 +186,7 @@ const char *ril_pinstate_to_string(int pin_state)
 
 const char *ril_request_id_to_string(int req)
 {
+	static char unknown[24];
 	switch (req) {
 	case RIL_REQUEST_GET_SIM_STATUS:
 		return "RIL_REQUEST_GET_SIM_STATUS";
@@ -398,13 +402,17 @@ const char *ril_request_id_to_string(int req)
 		return "RIL_REQUEST_ACKNOWLEDGE_INCOMING_GSM_SMS_WITH_PDU";
 	case RIL_REQUEST_STK_SEND_ENVELOPE_WITH_STATUS:
 		return "RIL_REQUEST_STK_SEND_ENVELOPE_WITH_STATUS";
+	case RIL_REQUEST_SET_UICC_SUBSCRIPTION:
+		return "RIL_REQUEST_SET_UICC_SUBSCRIPTION";
 	default:
-		return "<INVALID>";
+		snprintf(unknown, sizeof(unknown), "RIL_REQUEST_%d", req);
+		return unknown;
 	}
 }
 
 const char *ril_unsol_request_to_string(int request)
 {
+	static char unknown[24];
 	switch (request) {
 	case RIL_UNSOL_RESPONSE_RADIO_STATE_CHANGED:
 		return "UNSOL_RESPONSE_RADIO_STATE_CHANGED";
@@ -477,7 +485,8 @@ const char *ril_unsol_request_to_string(int request)
 	case RIL_UNSOL_SUPP_SVC_NOTIFICATION:
 		return "UNSOL_SUPP_SVC_NOTIFICATION";
 	default:
-		return "<unknown request>";
+		snprintf(unknown, sizeof(unknown), "UNSOL_%d", request);
+		return unknown;
 	}
 }
 

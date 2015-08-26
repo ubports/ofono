@@ -56,6 +56,12 @@ gboolean g_ril_request_setup_data_call(GRil *gril,
 					struct parcel *rilp,
 					struct ofono_error *error);
 
+void g_ril_request_set_uicc_subscription(GRil *gril, int slot_id,
+						int app_index,
+						int sub_id,
+						int sub_status,
+						struct parcel *rilp);
+
 #ifdef __cplusplus
 }
 #endif
