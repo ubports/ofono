@@ -65,7 +65,7 @@ autoreconf --force --install
 
 %configure --disable-static \
     --enable-test \
-    --enable-debuglog \
+    --enable-logcontrol \
     --with-systemdunitdir="/%{_lib}/systemd/system"
 
 make %{?jobs:-j%jobs}
