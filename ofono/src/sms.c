@@ -1195,6 +1195,7 @@ static void dispatch_app_datagram(struct ofono_sms *sms,
 	ofono_sms_datagram_notify_cb_t notify;
 	struct sms_handler *h;
 	GSList *l;
+	gboolean dispatched = FALSE;
 
 	ts = sms_scts_to_time(scts, &remote);
 	localtime_r(&ts, &local);
@@ -1206,9 +1207,15 @@ static void dispatch_app_datagram(struct ofono_sms *sms,
 		if (!port_equal(dst, h->dst) || !port_equal(src, h->src))
 			continue;
 
+		dispatched = TRUE;
+
 		notify(sender, &remote, &local, dst, src, buf, len,
 			h->item.notify_data);
 	}
+
+	if (!dispatched)
+		ofono_info("Datagram with ports [%d,%d] not delivered",
+								dst, src);
 }
 
 static void dispatch_text_message(struct ofono_sms *sms,
