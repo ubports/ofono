@@ -97,6 +97,15 @@ gisi_sources = gisi/client.c gisi/client.h gisi/common.h \
 				gisi/server.c gisi/server.h \
 				gisi/socket.c gisi/socket.h
 
+gril_sources = gril/gril.h gril/gril.c gril/grilio.h \
+				gril/grilio.c gril/grilutil.h \
+				gril/grilutil.c gril/ringbuffer.h \
+				gril/gfunc.h gril/ril.h \
+				gril/parcel.c gril/parcel.h \
+				gril/grilreply.c gril/grilreply.h \
+				gril/grilrequest.c gril/grilrequest.h \
+				gril/grilunsol.c gril/grilunsol.h
+
 btio_sources = btio/btio.h btio/btio.c
 
 if UDEV
@@ -111,6 +120,7 @@ endif
 
 if RILMODEM
 if JOLLA_RILMODEM
+
 builtin_modules += ril
 builtin_sources +=	drivers/ril/ril_call_barring.c \
 			drivers/ril/ril_call_forward.c \
@@ -150,6 +160,38 @@ if DATAFILES
 dist_conf_DATA += drivers/ril/ril_subscription.conf
 endif
 
+else
+
+builtin_sources += $(gril_sources)
+
+builtin_modules += rildev
+builtin_sources += plugins/rildev.c
+
+builtin_modules += ril
+builtin_sources += plugins/ril.c
+
+builtin_modules += infineon
+builtin_sources += plugins/infineon.c
+
+builtin_modules += rilmodem
+builtin_sources += drivers/rilmodem/rilmodem.h \
+			drivers/rilmodem/vendor.h \
+			drivers/rilmodem/rilmodem.c \
+			drivers/rilmodem/devinfo.c \
+			drivers/rilmodem/network-registration.c \
+			drivers/rilmodem/voicecall.c \
+			drivers/rilmodem/call-volume.c \
+			drivers/rilmodem/gprs.c \
+			drivers/rilmodem/gprs-context.c \
+			drivers/rilmodem/sim.c \
+			drivers/rilmodem/sms.c \
+			drivers/rilmodem/rilutil.c \
+			drivers/rilmodem/rilutil.h \
+			drivers/rilmodem/ussd.c \
+			drivers/rilmodem/call-settings.c \
+			drivers/rilmodem/call-forwarding.c \
+			drivers/rilmodem/radio-settings.c \
+			drivers/rilmodem/call-barring.c
 endif
 endif
 
@@ -635,7 +677,7 @@ AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ $(builtin_cflags) \
 
 AM_CPPFLAGS = -I$(builddir)/include -I$(builddir)/src -I$(srcdir)/src \
 			-I$(srcdir)/gdbus -I$(srcdir)/gisi -I$(srcdir)/gatchat \
-			-I$(srcdir)/btio
+			-I$(srcdir)/btio -I$(srcdir)/gril
 
 doc_files = doc/overview.txt doc/ofono-paper.txt doc/release-faq.txt \
 		doc/manager-api.txt doc/modem-api.txt doc/network-api.txt \
