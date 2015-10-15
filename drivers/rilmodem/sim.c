@@ -568,11 +568,17 @@ error:
 static void ril_read_imsi(struct ofono_sim *sim, ofono_sim_imsi_cb_t cb,
 				void *data)
 {
+	static const int GET_IMSI_NUM_PARAMS = 1;
 	struct sim_data *sd = ofono_sim_get_data(sim);
 	struct cb_data *cbd = cb_data_new(cb, data, sd);
 	struct parcel rilp;
 
-	g_ril_request_read_imsi(sd->ril, sd->aid_str, &rilp);
+	parcel_init(&rilp);
+	parcel_w_int32(&rilp, GET_IMSI_NUM_PARAMS);
+	parcel_w_string(&rilp, sd->aid_str);
+
+	g_ril_append_print_buf(sd->ril, "(%d,%s)",
+					GET_IMSI_NUM_PARAMS, sd->aid_str);
 
 	if (g_ril_send(sd->ril, RIL_REQUEST_GET_IMSI, &rilp,
 			ril_imsi_cb, cbd, g_free) == 0) {
