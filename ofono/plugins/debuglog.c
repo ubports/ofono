@@ -111,6 +111,9 @@ static void debuglog_update(DBusConnection *conn, const char* pattern,
 			if ((desc->flags & flags) != old_flags) {
 				hash = debuglog_update_flags_hash(hash,
 							matched, desc->flags);
+				if (desc->notify) {
+					desc->notify(desc);
+				}
 			}
 		}
 	}
