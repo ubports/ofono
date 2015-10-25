@@ -41,13 +41,18 @@ extern void ofono_error(const char *format, ...)
 extern void ofono_debug(const char *format, ...)
 				__attribute__((format(printf, 1, 2)));
 
+#define OFONO_DEBUG_ALIGN 8
+#define OFONO_DEBUG_ATTR \
+	__attribute__((used, section("__debug"), aligned(OFONO_DEBUG_ALIGN)))
+
 struct ofono_debug_desc {
 	const char *name;
 	const char *file;
 #define OFONO_DEBUG_FLAG_DEFAULT (0)
 #define OFONO_DEBUG_FLAG_PRINT   (1 << 0)
 	unsigned int flags;
-} __attribute__((aligned(8)));
+	void (*notify)(struct ofono_debug_desc* desc);
+} __attribute__((aligned(OFONO_DEBUG_ALIGN)));
 
 /**
  * DBG:
@@ -58,8 +63,7 @@ struct ofono_debug_desc {
  * name it is called in.
  */
 #define DBG(fmt, arg...) do { \
-	static struct ofono_debug_desc __ofono_debug_desc \
-	__attribute__((used, section("__debug"), aligned(8))) = { \
+	static struct ofono_debug_desc __ofono_debug_desc OFONO_DEBUG_ATTR = { \
 		.file = __FILE__, .flags = OFONO_DEBUG_FLAG_DEFAULT, \
 	}; \
 	if (__ofono_debug_desc.flags & OFONO_DEBUG_FLAG_PRINT) \
