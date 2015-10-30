@@ -42,6 +42,7 @@ AC_ARG_ENABLE(debug, AC_HELP_STRING([--enable-debug],
 	if (test "${enableval}" = "yes" &&
 				test "${ac_cv_prog_cc_g}" = "yes"); then
 		CFLAGS="$CFLAGS -g"
+                CPPFLAGS="$CPPFLAGS -DDEBUG"
 	fi
 ])
 
@@ -165,6 +166,20 @@ AC_ARG_ENABLE(rilmodem, AC_HELP_STRING([--disable-rilmodem],
                                 [disable RIL modem support]),
                                         [enable_rilmodem=${enableval}])
 AM_CONDITIONAL(RILMODEM, test "${enable_rilmodem}" != "no")
+
+AC_ARG_ENABLE(jolla-rilmodem,
+        AC_HELP_STRING([--enable-jolla-rilmodem], [enable Jolla RIL modem]),
+        [enable_jolla_rilmodem=${enableval}], [enable_jolla_rilmodem="no"])
+AM_CONDITIONAL(JOLLA_RILMODEM, test "${enable_jolla_rilmodem}" != "no")
+
+if (test "${enable_jolla_rilmodem}" = "yes"); then
+	PKG_CHECK_MODULES(GRILIO, libgrilio, dummy=yes,
+				AC_MSG_ERROR(libgrilio is required))
+	PKG_CHECK_MODULES(GLIBUTIL, libglibutil, dummy=yes,
+				AC_MSG_ERROR(libglibutil is required))
+	CFLAGS="$CFLAGS $GRILIO_CFLAGS $GLIBUTIL_CFLAGS"
+	LIBS="$LIBS $GRILIO_LIBS $GLIBUTIL_LIBS"
+fi
 
 AC_ARG_ENABLE(qmimodem, AC_HELP_STRING([--disable-qmimodem],
 				[disable Qualcomm QMI modem support]),

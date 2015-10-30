@@ -119,6 +119,32 @@ builtin_sources += plugins/udevng.c
 endif
 
 if RILMODEM
+if JOLLA_RILMODEM
+builtin_modules += ril
+builtin_sources +=	drivers/ril/ril_call_barring.c \
+			drivers/ril/ril_call_forward.c \
+			drivers/ril/ril_call_settings.c \
+			drivers/ril/ril_call_volume.c \
+			drivers/ril/ril_cbs.c \
+			drivers/ril/ril_devinfo.c \
+			drivers/ril/ril_gprs.c \
+			drivers/ril/ril_gprs_context.c \
+			drivers/ril/ril_mce.c \
+			drivers/ril/ril_modem.c \
+			drivers/ril/ril_netreg.c \
+			drivers/ril/ril_oem_raw.c \
+			drivers/ril/ril_phonebook.c \
+			drivers/ril/ril_plugin.c \
+			drivers/ril/ril_plugin_dbus.c \
+			drivers/ril/ril_radio_settings.c \
+			drivers/ril/ril_sim.c \
+			drivers/ril/ril_sim_dbus.c \
+			drivers/ril/ril_sms.c \
+			drivers/ril/ril_stk.c \
+			drivers/ril/ril_ussd.c \
+			drivers/ril/ril_util.c \
+			drivers/ril/ril_voicecall.c
+else
 builtin_sources += $(gril_sources)
 
 builtin_modules += rildev
@@ -149,7 +175,7 @@ builtin_sources += drivers/rilmodem/rilmodem.h \
 			drivers/rilmodem/oemraw-messages.c \
 			drivers/rilmodem/call-barring.c \
 			drivers/rilmodem/stk.c
-
+endif
 endif
 
 if ISIMODEM
