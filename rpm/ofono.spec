@@ -19,6 +19,9 @@ BuildRequires:  pkgconfig(libudev) >= 145
 BuildRequires:  pkgconfig(bluez) >= 4.85
 BuildRequires:  pkgconfig(mobile-broadband-provider-info)
 BuildRequires:  pkgconfig(libwspcodec) >= 2.0
+BuildRequires:  pkgconfig(libglibutil)
+BuildRequires:  pkgconfig(libgrilio)
+BuildRequires:  mce-headers
 BuildRequires:  libtool
 BuildRequires:  automake
 BuildRequires:  autoconf
@@ -66,6 +69,7 @@ autoreconf --force --install
 %configure --disable-static \
     --enable-test \
     --enable-logcontrol \
+    --enable-jolla-rilmodem \
     --with-systemdunitdir="/%{_lib}/systemd/system"
 
 make %{?jobs:-j%jobs}
