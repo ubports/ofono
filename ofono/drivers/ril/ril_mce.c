@@ -19,13 +19,15 @@
 #include <grilio_channel.h>
 #include <grilio_request.h>
 
-#include <mce/dbus-names.h>
-#include <mce/mode-names.h>
-
 #include <ofono/log.h>
 #include <ofono/dbus.h>
 
 #include <gdbus.h>
+
+#define MCE_SERVICE             "com.nokia.mce"
+#define MCE_SIGNAL_IF           "com.nokia.mce.signal"
+#define MCE_DISPLAY_SIG         "display_status_ind"
+#define MCE_DISPLAY_OFF_STRING  "off"
 
 struct ril_mce {
 	GRilIoChannel *io;

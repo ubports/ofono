@@ -21,7 +21,6 @@ BuildRequires:  pkgconfig(mobile-broadband-provider-info)
 BuildRequires:  pkgconfig(libwspcodec) >= 2.0
 BuildRequires:  pkgconfig(libglibutil)
 BuildRequires:  pkgconfig(libgrilio)
-BuildRequires:  mce-headers
 BuildRequires:  libtool
 BuildRequires:  automake
 BuildRequires:  autoconf
