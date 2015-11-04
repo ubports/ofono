@@ -36,6 +36,7 @@ void  __ofono_gprs_provision_free_settings(
 	int i;
 
 	for (i = 0; i < count; i++) {
+		g_free(settings[i].provider_name);
 		g_free(settings[i].name);
 		g_free(settings[i].apn);
 		g_free(settings[i].username);
