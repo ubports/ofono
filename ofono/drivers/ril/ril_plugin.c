@@ -839,14 +839,19 @@ static gboolean ril_plugin_slot_enabled(struct ril_slot *slot)
 	return FALSE;
 }
 
-static void ril_plugin_update_slot(struct ril_slot *slot)
+static void ril_plugin_update_enabled_slot(struct ril_slot *slot)
 {
 	if (ril_plugin_slot_enabled(slot)) {
 		DBG("%s enabled", slot->path + 1);
 		if (!slot->modem) {
 			ril_plugin_create_modem(slot);
 		}
-	} else {
+	}
+}
+
+static void ril_plugin_update_disabled_slot(struct ril_slot *slot)
+{
+	if (!ril_plugin_slot_enabled(slot)) {
 		DBG("%s disabled", slot->path + 1);
 		ril_plugin_shutdown_slot(slot, FALSE);
 	}
@@ -854,7 +859,8 @@ static void ril_plugin_update_slot(struct ril_slot *slot)
 
 static void ril_plugin_update_slots(struct ril_plugin_priv *plugin)
 {
-	ril_plugin_foreach_slot(plugin, ril_plugin_update_slot);
+	ril_plugin_foreach_slot(plugin, ril_plugin_update_disabled_slot);
+	ril_plugin_foreach_slot(plugin, ril_plugin_update_enabled_slot);
 	ril_plugin_dbus_signal(plugin->dbus,
 				ril_plugin_update_modem_paths(plugin));
 }
