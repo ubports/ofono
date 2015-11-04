@@ -61,6 +61,7 @@ struct ril_gprs_context {
 	enum ril_gprs_context_state state;
 	gulong regid;
 	struct ril_gprs_context_data_call *active_call;
+	struct ril_gprs_context_deactivate_req *deactivate_req;
 };
 
 struct ril_gprs_context_data_call {
@@ -88,7 +89,13 @@ struct ril_gprs_context_cbd {
 	gpointer data;
 };
 
+struct ril_gprs_context_deactivate_req {
+	struct ril_gprs_context_cbd cbd;
+	gint cid;
+};
+
 #define ril_gprs_context_cbd_free g_free
+#define ril_gprs_context_deactivate_req_free g_free
 
 static inline struct ril_gprs_context *ril_gprs_context_get_data(
 					struct ofono_gprs_context *gprs)
@@ -107,6 +114,21 @@ static struct ril_gprs_context_cbd *ril_gprs_context_cbd_new(
 	cbd->data = data;
 	return cbd;
 }
+
+static struct ril_gprs_context_deactivate_req *
+	ril_gprs_context_deactivate_req_new(struct ril_gprs_context *gcd,
+	ofono_gprs_context_cb_t cb, void *data)
+{
+	struct ril_gprs_context_deactivate_req *req =
+		g_new0(struct ril_gprs_context_deactivate_req, 1);
+
+	req->cbd.gcd = gcd;
+	req->cbd.cb = cb;
+	req->cbd.data = data;
+	req->cid = gcd->active_call->cid;
+	return req;
+}
+
 
 static char *ril_gprs_context_netmask(const char *address)
 {
@@ -173,6 +195,12 @@ static void ril_gprs_context_set_disconnected(struct ril_gprs_context *gcd)
 {
 	gcd->state = STATE_IDLE;
 	if (gcd->active_call) {
+		if (gcd->deactivate_req &&
+			gcd->deactivate_req->cid == gcd->active_call->cid) {
+			/* Mark this request as done */
+			gcd->deactivate_req->cbd.gcd = NULL;
+			gcd->deactivate_req = NULL;
+		}
 		ril_gprs_context_data_call_free(gcd->active_call);
 		gcd->active_call = NULL;
 	}
@@ -751,40 +779,80 @@ static void ril_gprs_context_activate_primary(struct ofono_gprs_context *gc,
 	grilio_request_unref(req);
 }
 
-static void ril_gprs_context_deactivate_primary_cb(GRilIoChannel *io, int err,
+static void ril_gprs_context_deactivate_data_call_cb(GRilIoChannel *io, int err,
 				const void *data, guint len, void *user_data)
 {
 	struct ofono_error error;
-	struct ril_gprs_context_cbd *cbd = user_data;
-	struct ril_gprs_context *gcd = cbd->gcd;
-	ofono_gprs_context_cb_t cb = cbd->cb;
+	struct ril_gprs_context_deactivate_req *req = user_data;
+	struct ril_gprs_context *gcd = req->cbd.gcd;
 
-	/* Reply has no data... */
-	if (err == RIL_E_SUCCESS) {
-		ofono_info("Deactivated data call");
-		if (gcd->state == STATE_DEACTIVATING) {
-			gcd->state = STATE_IDLE;
+	if (!gcd) {
+		/*
+		 * ril_gprs_context_remove() zeroes gcd pointer for the
+		 * pending ril_gprs_context_deactivate_req. Or we may have
+		 * received RIL_UNSOL_DATA_CALL_LIST_CHANGED event before
+		 * RIL_REQUEST_DEACTIVATE_DATA_CALL completes, in which
+		 * case gcd will also be NULL. In any case, it means that
+		 * there's nothing left for us to do here. Just ignore it.
+		 */
+		DBG("late completion, cid: %d err: %d", req->cid, err);
+	} else {
+		ofono_gprs_context_cb_t cb = req->cbd.cb;
+
+		/* Mark it as done */
+		if (gcd->deactivate_req == req) {
+			gcd->deactivate_req = NULL;
 		}
 
-		cb(ril_error_ok(&error), cbd->data);
-	} else {
-		ofono_error("Deactivate failure: %s", ril_error_to_string(err));
-		cb(ril_error_failure(&error), cbd->data);
+		if (err == RIL_E_SUCCESS) {
+			GASSERT(gcd->active_call &&
+					gcd->active_call->cid == req->cid);
+			ril_gprs_context_set_disconnected(gcd);
+			ofono_info("Deactivated data call");
+			if (cb) {
+				cb(ril_error_ok(&error), req->cbd.data);
+			}
+		} else {
+			ofono_error("Deactivate failure: %s",
+						ril_error_to_string(err));
+			if (cb) {
+				cb(ril_error_failure(&error), req->cbd.data);
+			}
+		}
 	}
 }
 
-static GRilIoRequest *ril_gprs_context_deactivate_req(unsigned int cid)
+static void ril_gprs_context_deactivate_data_call(struct ril_gprs_context *gcd,
+					ofono_gprs_context_cb_t cb, void *data)
 {
-	/*
-	 * TODO: airplane-mode; change reason to '1',
-	 * which means "radio power off".
-	 */
 	GRilIoRequest *req = grilio_request_new();
+
+	/* Overlapping deactivate requests make no sense */
+	GASSERT(!gcd->deactivate_req);
+	if (gcd->deactivate_req) {
+		gcd->deactivate_req->cbd.gcd = NULL;
+	}
+	gcd->deactivate_req =
+		ril_gprs_context_deactivate_req_new(gcd, cb, data);
+
+	/* Caller is responsible for checking gcd->active_call */
+	GASSERT(gcd->active_call);
 	grilio_request_append_int32(req, DEACTIVATE_DATA_CALL_PARAMS);
-	grilio_request_append_format(req, "%d", cid);
+	grilio_request_append_format(req, "%d", gcd->active_call->cid);
 	grilio_request_append_format(req, "%d",
 					RIL_DEACTIVATE_DATA_CALL_NO_REASON);
-	return req;
+
+	/*
+	 * Send it to GRilIoChannel so that it doesn't get cancelled
+	 * by ril_gprs_context_remove()
+	 */
+	grilio_channel_send_request_full(gcd->io, req,
+		RIL_REQUEST_DEACTIVATE_DATA_CALL,
+		ril_gprs_context_deactivate_data_call_cb,
+		ril_gprs_context_deactivate_req_free,
+		gcd->deactivate_req);
+	grilio_request_unref(req);
+	gcd->state = STATE_DEACTIVATING;
 }
 
 static void ril_gprs_context_deactivate_primary(struct ofono_gprs_context *gc,
@@ -792,48 +860,15 @@ static void ril_gprs_context_deactivate_primary(struct ofono_gprs_context *gc,
 {
 	struct ril_gprs_context *gcd = ril_gprs_context_get_data(gc);
 
+	GASSERT(cb);
+	GASSERT(gcd->active_call && gcd->active_ctx_cid == id);
 	ofono_info("Deactivate primary");
 
-	GASSERT(cb);
-	if (gcd->active_call >= 0) {
-		GRilIoRequest* req;
-
-		GASSERT(gcd->active_ctx_cid == id);
-		req = ril_gprs_context_deactivate_req(gcd->active_call->cid);
-		grilio_queue_send_request_full(gcd->q, req,
-			RIL_REQUEST_DEACTIVATE_DATA_CALL,
-			ril_gprs_context_deactivate_primary_cb,
-			ril_gprs_context_cbd_free,
-			ril_gprs_context_cbd_new(gcd, cb, data));
-		grilio_request_unref(req);
-		gcd->state = STATE_DEACTIVATING;
+	if (gcd->active_call && gcd->active_ctx_cid == id) {
+		ril_gprs_context_deactivate_data_call(gcd, cb, data);
 	} else {
 		struct ofono_error error;
 		cb(ril_error_ok(&error), data);
-	}
-}
-
-static void ril_gprs_context_shutdown(struct ril_gprs_context *gcd)
-{
-	if (gcd->active_call && gcd->state == STATE_ACTIVE) {
-		GRilIoRequest* req;
-
-		DBG("cid: %d", gcd->active_call->cid);
-
-		/*
-		 * Send it to GRilIoChannel so that it doesn't get cancelled
-		 * by ril_gprs_context_remove()
-		 */
-		req = ril_gprs_context_deactivate_req(gcd->active_call->cid);
-		grilio_channel_send_request(gcd->io, req,
-					RIL_REQUEST_DEACTIVATE_DATA_CALL);
-		grilio_request_unref(req);
-
-		/*
-		 * When disconnect actually completes, we will receive
-		 * RIL_UNSOL_DATA_CALL_LIST_CHANGED event
-		 */
-		gcd->state = STATE_DEACTIVATING;
 	}
 }
 
@@ -844,7 +879,9 @@ static void ril_gprs_context_detach_shutdown(struct ofono_gprs_context *gc,
 
 	DBG("%d", id);
 	GASSERT(gcd->active_ctx_cid == id);
-	ril_gprs_context_shutdown(gcd);
+	if (gcd->active_call && !gcd->deactivate_req) {
+		ril_gprs_context_deactivate_data_call(gcd, NULL, NULL);
+	}
 }
 
 static int ril_gprs_context_probe(struct ofono_gprs_context *gc,
@@ -871,8 +908,15 @@ static void ril_gprs_context_remove(struct ofono_gprs_context *gc)
 	struct ril_gprs_context *gcd = ril_gprs_context_get_data(gc);
 
 	DBG("");
-	ril_gprs_context_shutdown(gcd);
 	ofono_gprs_context_set_data(gc, NULL);
+
+	if (gcd->active_call && !gcd->deactivate_req) {
+		ril_gprs_context_deactivate_data_call(gcd, NULL, NULL);
+	}
+
+	if (gcd->deactivate_req) {
+		gcd->deactivate_req->cbd.gcd = NULL;
+	}
 
 	grilio_channel_remove_handler(gcd->io, gcd->regid);
 	grilio_channel_unref(gcd->io);
