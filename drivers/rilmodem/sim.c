@@ -537,32 +537,30 @@ static void ril_imsi_cb(struct ril_msg *message, gpointer user_data)
 	struct cb_data *cbd = user_data;
 	ofono_sim_imsi_cb_t cb = cbd->cb;
 	struct sim_data *sd = cbd->user;
-	struct ofono_error error;
+	struct parcel rilp;
 	gchar *imsi;
 
-	if (message->error == RIL_E_SUCCESS) {
-		DBG("GET IMSI reply - OK");
-		decode_ril_error(&error, "OK");
-	} else {
+	if (message->error != RIL_E_SUCCESS) {
 		ofono_error("Reply failure: %s",
 				ril_error_to_string(message->error));
 		goto error;
 	}
 
-	imsi = g_ril_reply_parse_imsi(sd->ril, message);
-	if (imsi == NULL) {
-		ofono_error("Error empty IMSI");
+	g_ril_init_parcel(message, &rilp);
+	imsi = parcel_r_string(&rilp);
+
+	g_ril_append_print_buf(sd->ril, "{%s}", imsi ? imsi : "NULL");
+	g_ril_print_response(sd->ril, message);
+
+	if (imsi == NULL)
 		goto error;
-	}
 
-	cb(&error, imsi, cbd->data);
+	CALLBACK_WITH_SUCCESS(cb, imsi, cbd->data);
 	g_free(imsi);
-
 	return;
 
 error:
-	decode_ril_error(&error, "FAIL");
-	cb(&error, NULL, cbd->data);
+	CALLBACK_WITH_FAILURE(cb, NULL, cbd->data);
 }
 
 static void ril_read_imsi(struct ofono_sim *sim, ofono_sim_imsi_cb_t cb,
