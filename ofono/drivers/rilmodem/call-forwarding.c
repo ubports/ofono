@@ -38,8 +38,6 @@
 #include <ofono/call-forwarding.h>
 
 #include "gril.h"
-#include "grilreply.h"
-#include "grilunsol.h"
 
 #include "rilmodem.h"
 
@@ -56,7 +54,9 @@ static void ril_query_call_fwd_cb(struct ril_msg *message, gpointer user_data)
 	struct forw_data *fd = ofono_call_forwarding_get_data(cbd->user);
 	ofono_call_forwarding_query_cb_t cb = cbd->cb;
 	struct ofono_call_forwarding_condition *list;
+	struct parcel rilp;
 	unsigned int list_size;
+	unsigned int i;
 
 	if (message->error != RIL_E_SUCCESS) {
 		ofono_error("%s: rild error: %s", __func__,
@@ -64,23 +64,68 @@ static void ril_query_call_fwd_cb(struct ril_msg *message, gpointer user_data)
 		goto error;
 	}
 
-	list = g_ril_reply_parse_query_call_fwd(fd->ril, message, &list_size);
-	/*
-	 * From atmodem:
-	 *
-	 * Specification is really unclear about this
-	 * generate status=0 for all classes just in case
-	 */
+	g_ril_init_parcel(message, &rilp);
+
+	if (rilp.size < sizeof(int32_t))
+		goto error;
+
+	list_size = parcel_r_int32(&rilp);
 	if (list_size == 0) {
 		list = g_new0(struct ofono_call_forwarding_condition, 1);
 		list_size = 1;
 
 		list->status = 0;
 		list->cls = fd->last_cls;
-	} else if (list == NULL) {
-		goto error;
+		goto done;
 	}
 
+	list = g_new0(struct ofono_call_forwarding_condition, list_size);
+
+	g_ril_append_print_buf(fd->ril, "{");
+
+	for (i = 0; i < list_size; i++) {
+		char *str;
+
+		list[i].status =  parcel_r_int32(&rilp);
+
+		parcel_r_int32(&rilp); /* skip reason */
+
+		list[i].cls = parcel_r_int32(&rilp);
+		list[i].phone_number.type = parcel_r_int32(&rilp);
+
+		str = parcel_r_string(&rilp);
+
+		if (str != NULL) {
+			strncpy(list[i].phone_number.number, str,
+				OFONO_MAX_PHONE_NUMBER_LENGTH);
+			g_free(str);
+
+			list[i].phone_number.number[
+				OFONO_MAX_PHONE_NUMBER_LENGTH] = '\0';
+		}
+
+		list[i].time = parcel_r_int32(&rilp);
+
+		if (rilp.malformed) {
+			ofono_error("%s: malformed parcel", __func__);
+			g_free(list);
+			goto error;
+		}
+
+		g_ril_append_print_buf(fd->ril, "%s [%d,%d,%d,%s,%d]",
+					print_buf,
+					list[i].status,
+					list[i].cls,
+					list[i].phone_number.type,
+					list[i].phone_number.number,
+					list[i].time);
+
+	}
+
+	g_ril_append_print_buf(fd->ril, "%s}", print_buf);
+	g_ril_print_response(fd->ril, message);
+
+done:
 	CALLBACK_WITH_SUCCESS(cb, (int) list_size, list, cbd->data);
 	g_free(list);
 	return;
