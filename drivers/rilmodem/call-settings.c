@@ -37,15 +37,11 @@
 #include <ofono/log.h>
 #include <ofono/modem.h>
 #include <ofono/call-settings.h>
+#include "common.h"
 
 #include "gril.h"
-#include "grilutil.h"
-#include "grilrequest.h"
-#include "grilreply.h"
 
 #include "rilmodem.h"
-#include "ril_constants.h"
-#include "common.h"
 
 struct settings_data {
 	GRil *ril;
