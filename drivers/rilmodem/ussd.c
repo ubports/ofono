@@ -39,12 +39,8 @@
 #include <util.h>
 
 #include "gril.h"
-#include "grilutil.h"
-#include "grilrequest.h"
 
 #include "rilmodem.h"
-
-#include "ril_constants.h"
 
 struct ussd_data {
 	GRil *ril;
@@ -92,7 +88,10 @@ static void ril_ussd_request(struct ofono_ussd *ussd, int dcs,
 	if (!text)
 		goto error;
 
-	g_ril_request_send_ussd(ud->ril, text, &rilp);
+	parcel_init(&rilp);
+	parcel_w_string(&rilp, text);
+
+	g_ril_append_print_buf(ud->ril, "(%s)", text);
 
 	ret = g_ril_send(ud->ril, RIL_REQUEST_SEND_USSD,
 				&rilp, ril_ussd_cb, ussd, NULL);
