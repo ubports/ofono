@@ -95,9 +95,10 @@ gisi_sources = gisi/client.c gisi/client.h gisi/common.h \
 				gisi/server.c gisi/server.h \
 				gisi/socket.c gisi/socket.h
 
-gril_sources = gril/gril.h gril/gril.c gril/grilio.h \
-				gril/grilio.c gril/grilutil.h \
-				gril/grilutil.c gril/ringbuffer.h \
+gril_sources = gril/gril.h gril/gril.c \
+				gril/grilio.h gril/grilio.c \
+				gril/grilutil.h gril/grilutil.c \
+				gatchat/ringbuffer.h gatchat/ringbuffer.c \
 				gril/gfunc.h gril/ril.h \
 				gril/parcel.c gril/parcel.h \
 				gril/grilreply.c gril/grilreply.h \
@@ -791,7 +792,7 @@ unit_objects += $(unit_test_caif_OBJECTS)
 unit_test_rilmodem_cs_SOURCES = unit/test-rilmodem-cs.c $(gril_sources) \
 			src/log.c src/common.c src/util.c \
 			drivers/rilmodem/call-settings.c \
-			src/simutil.c gatchat/ringbuffer.c
+			src/simutil.c
 unit_test_rilmodem_cs_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
 			@GLIB_LIBS@ @DBUS_LIBS@ -ldl
 unit_objects += $(unit_test_rilmodem_cs_OBJECTS)
