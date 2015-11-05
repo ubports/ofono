@@ -71,6 +71,7 @@ static void ril_call_barring_query(struct ofono_call_barring *cb,
 	struct barring_data *bd = ofono_call_barring_get_data(cb);
 	struct cb_data *cbd = cb_data_new(callback, data, bd);
 	struct parcel rilp;
+	char svcs_str[4];
 
 	DBG("lock: %s, services to query: %d", lock, cls);
 
@@ -82,15 +83,23 @@ static void ril_call_barring_query(struct ofono_call_barring *cb,
 	if (cls == BEARER_CLASS_DEFAULT)
 		cls = SERVICE_CLASS_NONE;
 
-	/* ril.h: password should be empty string "" when not needed */
-	g_ril_request_query_facility_lock(bd->ril, lock, "", cls, &rilp);
+	parcel_init(&rilp);
+	parcel_w_int32(&rilp, 4);	/* # of strings */
+	parcel_w_string(&rilp, lock);
+	parcel_w_string(&rilp, "");	/* Password is empty when not needed */
+	snprintf(svcs_str, sizeof(svcs_str), "%d", cls);
+	parcel_w_string(&rilp, svcs_str);
+	parcel_w_string(&rilp, NULL);	/* AID (for FDN, not yet supported) */
+
+	g_ril_append_print_buf(bd->ril, "(%s,\"\",%s,(null))",
+				lock, svcs_str);
 
 	if (g_ril_send(bd->ril, RIL_REQUEST_QUERY_FACILITY_LOCK, &rilp,
-				ril_call_barring_query_cb, cbd, g_free) <= 0) {
-		ofono_error("%s: sending failed", __func__);
-		g_free(cbd);
-		CALLBACK_WITH_FAILURE(callback, -1, data);
-	}
+				ril_call_barring_query_cb, cbd, g_free) > 0)
+		return;
+
+	g_free(cbd);
+	CALLBACK_WITH_FAILURE(callback, -1, data);
 }
 
 static void ril_call_barring_set_cb(struct ril_msg *message, gpointer user_data)
