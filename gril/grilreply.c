@@ -981,31 +981,6 @@ char *g_ril_reply_parse_get_imei(GRil *gril,
 	return imei;
 }
 
-int g_ril_reply_parse_query_clip(GRil *gril,
-					const struct ril_msg *message)
-{
-	struct parcel rilp;
-	int clip_status, numint;
-
-	g_ril_init_parcel(message, &rilp);
-
-	numint = parcel_r_int32(&rilp);
-	if (numint != 1) {
-		ofono_error("%s Wrong format", __func__);
-		goto error;
-	}
-
-	clip_status = parcel_r_int32(&rilp);
-
-	g_ril_append_print_buf(gril, "{%d}", clip_status);
-	g_ril_print_response(gril, message);
-
-	return clip_status;
-
-error:
-	return -1;
-}
-
 void g_ril_reply_free_get_clir(struct reply_clir *rclir)
 {
 	g_free(rclir);
