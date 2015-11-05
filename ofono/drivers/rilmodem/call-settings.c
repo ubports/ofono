@@ -108,16 +108,36 @@ static void ril_cw_query_cb(struct ril_msg *message, gpointer user_data)
 	struct ofono_call_settings *cs = cbd->user;
 	struct settings_data *sd = ofono_call_settings_get_data(cs);
 	ofono_call_settings_status_cb_t cb = cbd->cb;
+	struct parcel rilp;
+	int numparams;
+	int enabled;
+	int cls;
 
-	if (message->error == RIL_E_SUCCESS) {
-		int res;
+	if (message->error != RIL_E_SUCCESS)
+		goto error;
 
-		res = g_ril_reply_parse_query_call_waiting(sd->ril, message);
+	g_ril_init_parcel(message, &rilp);
+	numparams = parcel_r_int32(&rilp);
+	if (numparams < 1)
+		goto error;
 
-		CALLBACK_WITH_SUCCESS(cb, res, cbd->data);
-	} else {
-		CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
-	}
+	enabled = parcel_r_int32(&rilp);
+	if (enabled && numparams < 2)
+		goto error;
+
+	if (enabled > 0)
+		cls = parcel_r_int32(&rilp);
+	else
+		cls = 0;
+
+	g_ril_append_print_buf(sd->ril, "{%d,0x%x}", enabled, cls);
+	g_ril_print_response(sd->ril, message);
+
+	CALLBACK_WITH_SUCCESS(cb, cls, cbd->data);
+	return;
+
+error:
+	CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
 }
 
 static void ril_cw_query(struct ofono_call_settings *cs, int cls,
