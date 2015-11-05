@@ -128,10 +128,6 @@ gboolean g_ril_request_deactivate_data_call(GRil *gril,
 				struct parcel *rilp,
 				struct ofono_error *error);
 
-void g_ril_request_power(GRil *gril,
-				gboolean power,
-				struct parcel *rilp);
-
 void g_ril_request_set_net_select_manual(GRil *gril,
 					const char *mccmnc,
 					struct parcel *rilp);
