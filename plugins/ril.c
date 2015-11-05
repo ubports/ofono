@@ -304,11 +304,14 @@ static void ril_send_power(struct ril_data *rd, ofono_bool_t online,
 
 	DBG("(online = 1, offline = 0)): %i", online);
 
-	g_ril_request_power(rd->ril, (const gboolean) online, &rilp);
+	parcel_init(&rilp);
+	parcel_w_int32(&rilp, 1);
+	parcel_w_int32(&rilp, online);
+
+	g_ril_append_print_buf(rd->ril, "(%d)", online);
 
 	if (g_ril_send(rd->ril, RIL_REQUEST_RADIO_POWER, &rilp,
 			func, cbd, notify) == 0 && cbd != NULL) {
-
 		CALLBACK_WITH_FAILURE(cb, cbd->data);
 		g_free(cbd);
 	}
