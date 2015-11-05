@@ -117,16 +117,30 @@ static void ril_call_barring_set_cb(struct ril_msg *message, gpointer user_data)
 	struct cb_data *cbd = user_data;
 	ofono_call_barring_set_cb_t cb = cbd->cb;
 	struct barring_data *bd = cbd->user;
+	struct parcel rilp;
+	int retries;
 
-	if (message->error != RIL_E_SUCCESS) {
-		ofono_error("%s: set failed, err: %s", __func__,
-				ril_error_to_string(message->error));
+	if (message->error != RIL_E_SUCCESS)
 		goto error;
-	}
 
-	/* Just for printing return value */
-	g_ril_reply_parse_set_facility_lock(bd->ril, message);
+	g_ril_init_parcel(message, &rilp);
 
+	/* mako reply has no payload for call barring */
+	if (parcel_data_avail(&rilp) == 0)
+		goto done;
+
+	if (parcel_r_int32(&rilp) != 1)
+		goto error;
+
+	retries = parcel_r_int32(&rilp);
+
+	if (rilp.malformed)
+		goto error;
+
+	g_ril_append_print_buf(bd->ril, "{%d}", retries);
+	g_ril_print_response(bd->ril, message);
+
+done:
 	CALLBACK_WITH_SUCCESS(cb, cbd->data);
 	return;
 
