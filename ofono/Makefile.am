@@ -813,8 +813,15 @@ unit_objects =
 unit_tests = unit/test-common unit/test-util unit/test-idmap \
 				unit/test-simutil unit/test-stkutil \
 				unit/test-sms unit/test-cdmasms \
-				unit/test-sms unit/test-cdmasms \
 				unit/test-provision
+
+if RILMODEM
+if JOLLA_RILMODEM
+
+unit_tests += unit/test-rilmodem-cs
+
+endif
+endif
 
 noinst_PROGRAMS = $(unit_tests) \
 			unit/test-sms-root unit/test-mux unit/test-caif
@@ -872,6 +879,20 @@ unit_test_provision_SOURCES = unit/test-provision.c \
 				src/log.c
 unit_test_provision_LDADD = @GLIB_LIBS@ -ldl
 unit_objects += $(unit_test_provision_OBJECTS)
+
+if RILMODEM
+if JOLLA_RILMODEM
+
+unit_test_rilmodem_cs_SOURCES = unit/test-rilmodem-cs.c $(gril_sources) \
+			src/log.c src/common.c src/util.c \
+			drivers/rilmodem/call-settings.c \
+			src/simutil.c gatchat/ringbuffer.c
+unit_test_rilmodem_cs_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
+			@GLIB_LIBS@ @DBUS_LIBS@ -ldl
+unit_objects += $(unit_test_rilmodem_cs_OBJECTS)
+
+endif
+endif
 
 TESTS = $(unit_tests)
 
