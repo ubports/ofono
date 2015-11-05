@@ -847,16 +847,6 @@ void g_ril_request_set_supp_svc_notif(GRil *gril,
 	g_ril_append_print_buf(gril, "(1)");
 }
 
-void g_ril_request_send_ussd(GRil *gril,
-				const char *ussd,
-				struct parcel *rilp)
-{
-	parcel_init(rilp);
-	parcel_w_string(rilp, ussd);
-
-	g_ril_append_print_buf(gril, "(%s)", ussd);
-}
-
 void g_ril_request_screen_state(GRil *gril,
 				int state,
 				struct parcel *rilp)
