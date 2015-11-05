@@ -223,11 +223,6 @@ void g_ril_request_screen_state(GRil *gril,
 void g_ril_request_set_preferred_network_type(GRil *gril, int net_type,
 						struct parcel *rilp);
 
-void g_ril_request_change_barring_password(GRil *gril, const char *facility,
-						const char *old_passwd,
-						const char *new_passwd,
-						struct parcel *rilp);
-
 void g_ril_request_oem_hook_raw(GRil *gril, const void *payload, size_t length,
 					struct parcel *rilp);
 
