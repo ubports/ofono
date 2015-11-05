@@ -42,7 +42,6 @@
 
 #include "rilmodem.h"
 #include "parcel.h"
-#include "grilrequest.h"
 #include "grilreply.h"
 
 struct cv_data {
@@ -77,16 +76,21 @@ static void ril_call_volume_mute(struct ofono_call_volume *cv, int muted,
 	struct cb_data *cbd = cb_data_new(cb, data, cvd);
 	struct parcel rilp;
 
-	DBG("Initial ril muted state: %d", muted);
+	DBG("muted: %d", muted);
 
-	g_ril_request_set_mute(cvd->ril, muted, &rilp);
+	parcel_init(&rilp);
+
+	parcel_w_int32(&rilp, 1);
+	parcel_w_int32(&rilp, muted);
+
+	g_ril_append_print_buf(cvd->ril, "(%d)", muted);
 
 	if (g_ril_send(cvd->ril, RIL_REQUEST_SET_MUTE, &rilp,
-			volume_mute_cb, cbd, g_free) == 0) {
-		ofono_error("Send RIL_REQUEST_SET_MUTE failed.");
-		g_free(cbd);
-		CALLBACK_WITH_FAILURE(cb, data);
-	}
+			volume_mute_cb, cbd, g_free) > 0)
+		return;
+
+	g_free(cbd);
+	CALLBACK_WITH_FAILURE(cb, data);
 }
 
 static void probe_mute_cb(struct ril_msg *message, gpointer user_data)
