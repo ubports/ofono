@@ -847,16 +847,6 @@ void g_ril_request_set_supp_svc_notif(GRil *gril,
 	g_ril_append_print_buf(gril, "(1)");
 }
 
-void g_ril_request_set_mute(GRil *gril, int muted, struct parcel *rilp)
-{
-	parcel_init(rilp);
-
-	parcel_w_int32(rilp, 1);
-	parcel_w_int32(rilp, muted);
-
-	g_ril_append_print_buf(gril, "(%d)", muted);
-}
-
 void g_ril_request_send_ussd(GRil *gril,
 				const char *ussd,
 				struct parcel *rilp)
