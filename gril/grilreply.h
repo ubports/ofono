@@ -142,9 +142,6 @@ char *g_ril_reply_parse_baseband_version(GRil *gril,
 char *g_ril_reply_parse_get_imei(GRil *gril,
 					const struct ril_msg *message);
 
-int g_ril_reply_parse_query_call_waiting(GRil *gril,
-						const struct ril_msg *message);
-
 int g_ril_reply_parse_query_clip(GRil *gril,
 					const struct ril_msg *message);
 
