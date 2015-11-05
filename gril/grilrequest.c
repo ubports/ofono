@@ -883,22 +883,6 @@ void g_ril_request_send_ussd(GRil *gril,
 	g_ril_append_print_buf(gril, "(%s)", ussd);
 }
 
-void g_ril_request_query_call_waiting(GRil *gril,
-					int serviceclass,
-					struct parcel *rilp)
-{
-	parcel_init(rilp);
-
-	parcel_w_int32(rilp, 1);	/* Number of params */
-	/*
-	 * RILD expects service class to be 0 as certain carriers can reject the
-	 * query with specific service class
-	 */
-	parcel_w_int32(rilp, 0);
-
-	g_ril_append_print_buf(gril, "(0)");
-}
-
 void g_ril_request_set_clir(GRil *gril,
 				int mode,
 				struct parcel *rilp)
