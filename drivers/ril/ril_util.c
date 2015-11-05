@@ -414,6 +414,8 @@ int ril_parse_tech(const char *stech, int *ril_tech)
 			break;
 		default:
 			DBG("Unknown RIL tech %s", stech);
+			/* no break */
+		case RADIO_TECH_UNKNOWN:
 			tech = -1;
 			break;
 		}
