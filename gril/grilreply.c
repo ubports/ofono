@@ -596,21 +596,6 @@ error:
 	return NULL;
 }
 
-gchar *g_ril_reply_parse_imsi(GRil *gril, const struct ril_msg *message)
-{
-	struct parcel rilp;
-	gchar *imsi;
-
-	g_ril_init_parcel(message, &rilp);
-
-	imsi = parcel_r_string(&rilp);
-
-	g_ril_append_print_buf(gril, "{%s}", imsi ? imsi : "NULL");
-	g_ril_print_response(gril, message);
-
-	return imsi;
-}
-
 void g_ril_reply_free_sim_status(struct reply_sim_status *status)
 {
 	if (status) {
