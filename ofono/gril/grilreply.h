@@ -106,8 +106,6 @@ void g_ril_reply_free_sim_io(struct reply_sim_io *reply);
 struct reply_sim_io *g_ril_reply_parse_sim_io(GRil *gril,
 						const struct ril_msg *message);
 
-gchar *g_ril_reply_parse_imsi(GRil *gril, const struct ril_msg *message);
-
 struct reply_reg_state *g_ril_reply_parse_voice_reg_state(GRil *gril,
 						const struct ril_msg *message);
 struct reply_data_reg_state *g_ril_reply_parse_data_reg_state(GRil *gril,
