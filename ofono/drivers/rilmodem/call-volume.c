@@ -34,14 +34,11 @@
 #include <ofono/log.h>
 #include <ofono/modem.h>
 #include <ofono/call-volume.h>
-
-#include "gril.h"
-#include "grilutil.h"
-
 #include "common.h"
 
+#include "gril.h"
+
 #include "rilmodem.h"
-#include "parcel.h"
 
 struct cv_data {
 	GRil *ril;
