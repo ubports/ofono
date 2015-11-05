@@ -41,40 +41,20 @@
 #include "rilmodem.h"
 #include "grilreply.h"
 
-/*
- * TODO: The functions in this file are stubbed out, and
- * will need to be re-worked to talk to the /gril layer
- * in order to get real values from RILD.
- */
-
 static void ril_query_manufacturer(struct ofono_devinfo *info,
 					ofono_devinfo_query_cb_t cb,
 					void *data)
 {
-	const char *attr = "Fake Manufacturer";
-	struct cb_data *cbd = cb_data_new(cb, data, NULL);
-	struct ofono_error error;
-	decode_ril_error(&error, "OK");
-
-	cb(&error, attr, cbd->data);
-
-	/* Note: this will need to change if cbd passed to gril layer */
-	g_free(cbd);
+	/* TODO: Implement properly */
+	CALLBACK_WITH_SUCCESS(cb, "Fake Modem Manufacturer", data);
 }
 
 static void ril_query_model(struct ofono_devinfo *info,
 				ofono_devinfo_query_cb_t cb,
 				void *data)
 {
-	const char *attr = "Fake Modem Model";
-	struct cb_data *cbd = cb_data_new(cb, data, NULL);
-	struct ofono_error error;
-	decode_ril_error(&error, "OK");
-
-	cb(&error, attr, cbd->data);
-
-	/* Note: this will need to change if cbd passed to gril layer */
-	g_free(cbd);
+	/* TODO: Implement properly */
+	CALLBACK_WITH_SUCCESS(cb, "Fake Modem Model", data);
 }
 
 static void query_revision_cb(struct ril_msg *message, gpointer user_data)
@@ -148,7 +128,6 @@ static void ril_query_serial(struct ofono_devinfo *info,
 	 * TODO: make it support both RIL_REQUEST_GET_IMEI (deprecated) and
 	 * RIL_REQUEST_DEVICE_IDENTITY depending on the rild version used
 	 */
-
 	if (g_ril_send(ril, RIL_REQUEST_GET_IMEI, NULL,
 			query_serial_cb, cbd, g_free) == 0) {
 		g_free(cbd);
@@ -159,30 +138,20 @@ static void ril_query_serial(struct ofono_devinfo *info,
 static gboolean ril_delayed_register(gpointer user_data)
 {
 	struct ofono_devinfo *info = user_data;
+
 	DBG("");
+
 	ofono_devinfo_register(info);
 
-	/* This makes the timeout a single-shot */
 	return FALSE;
 }
 
 static int ril_devinfo_probe(struct ofono_devinfo *info, unsigned int vendor,
 				void *data)
 {
-	GRil *ril = NULL;
-
-	if (data != NULL)
-		ril = g_ril_clone(data);
+	GRil *ril = g_ril_clone(data);
 
 	ofono_devinfo_set_data(info, ril);
-
-	/*
-	 * ofono_devinfo_register() needs to be called after
-	 * the driver has been set in ofono_devinfo_create(),
-	 * which calls this function.  Most other drivers make
-	 * some kind of capabilities query to the modem, and then
-	 * call register in the callback; we use an idle event instead.
-	 */
 	g_idle_add(ril_delayed_register, info);
 
 	return 0;
