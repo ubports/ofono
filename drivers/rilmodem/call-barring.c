@@ -28,7 +28,6 @@
 #include <ofono/modem.h>
 
 #include "common.h"
-#include "grilrequest.h"
 #include "grilreply.h"
 #include "call-barring.h"
 #include "rilmodem.h"
@@ -197,15 +196,22 @@ static void ril_call_barring_set_passwd(struct ofono_call_barring *barr,
 
 	DBG("lock %s old %s new %s", lock, old_passwd, new_passwd);
 
-	g_ril_request_change_barring_password(bd->ril, lock, old_passwd,
-						new_passwd, &rilp);
+	parcel_init(&rilp);
+
+	parcel_w_int32(&rilp, 3);	/* # of strings */
+	parcel_w_string(&rilp, lock);
+	parcel_w_string(&rilp, old_passwd);
+	parcel_w_string(&rilp, new_passwd);
+
+	g_ril_append_print_buf(bd->ril, "(%s,%s,%s)",
+				lock, old_passwd, new_passwd);
 
 	if (g_ril_send(bd->ril, RIL_REQUEST_CHANGE_BARRING_PASSWORD, &rilp,
-			ril_call_barring_set_passwd_cb, cbd, g_free) <= 0) {
-		ofono_error("%s: sending failed", __func__);
-		g_free(cbd);
-		CALLBACK_WITH_FAILURE(cb, data);
-	}
+			ril_call_barring_set_passwd_cb, cbd, g_free) > 0)
+		return;
+
+	g_free(cbd);
+	CALLBACK_WITH_FAILURE(cb, data);
 }
 
 static gboolean ril_delayed_register(gpointer user_data)
