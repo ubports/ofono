@@ -228,10 +228,6 @@ void g_ril_request_send_ussd(GRil *gril,
 				const char *ussd,
 				struct parcel *rilp);
 
-void g_ril_request_set_call_waiting(GRil *gril,
-					int enabled, int serviceclass,
-					struct parcel *rilp);
-
 void g_ril_request_query_call_waiting(GRil *gril,
 					int serviceclass,
 					struct parcel *rilp);
