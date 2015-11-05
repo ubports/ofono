@@ -889,31 +889,6 @@ void g_ril_request_set_preferred_network_type(GRil *gril, int net_type,
 	g_ril_append_print_buf(gril, "(%d)", net_type);
 }
 
-void g_ril_request_set_facility_lock(GRil *gril, const char *facility,
-					int enable, const char *passwd,
-					int services, struct parcel *rilp)
-{
-	char svcs_str[4];
-	const char *enable_str;
-
-	parcel_init(rilp);
-
-	parcel_w_int32(rilp, 5);	/* # of strings */
-	parcel_w_string(rilp, facility);
-	if (enable)
-		enable_str = "1";
-	else
-		enable_str = "0";
-	parcel_w_string(rilp, enable_str);
-	parcel_w_string(rilp, passwd);
-	snprintf(svcs_str, sizeof(svcs_str), "%d", services);
-	parcel_w_string(rilp, svcs_str);
-	parcel_w_string(rilp, NULL);	/* AID (for FDN, not yet supported) */
-
-	g_ril_append_print_buf(gril, "(%s,%s,%s,%s,(null))",
-				facility, enable_str, passwd, svcs_str);
-}
-
 void g_ril_request_change_barring_password(GRil *gril, const char *facility,
 						const char *old_passwd,
 						const char *new_passwd,
