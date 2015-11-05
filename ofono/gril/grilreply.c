@@ -981,50 +981,6 @@ char *g_ril_reply_parse_get_imei(GRil *gril,
 	return imei;
 }
 
-void g_ril_reply_free_get_clir(struct reply_clir *rclir)
-{
-	g_free(rclir);
-}
-
-struct reply_clir *g_ril_reply_parse_get_clir(GRil *gril,
-						const struct ril_msg *message)
-{
-	struct parcel rilp;
-	struct reply_clir *rclir;
-	int numint;
-
-	rclir = g_try_malloc0(sizeof(*rclir));
-	if (rclir == NULL) {
-		ofono_error("%s Out of memory", __func__);
-		goto error;
-	}
-
-	g_ril_init_parcel(message, &rilp);
-
-	/* Length */
-	numint = parcel_r_int32(&rilp);
-	if (numint != 2) {
-		ofono_error("%s Wrong format", __func__);
-		goto error;
-	}
-
-	/* Set HideCallerId property from network */
-	rclir->status = parcel_r_int32(&rilp);
-
-	/* State of the CLIR supplementary service in the network */
-	rclir->provisioned = parcel_r_int32(&rilp);
-
-	g_ril_append_print_buf(gril, "{%d,%d}",
-				rclir->status, rclir->provisioned);
-	g_ril_print_response(gril, message);
-
-	return rclir;
-
-error:
-	g_free(rclir);
-	return NULL;
-}
-
 struct ofono_call_forwarding_condition
 	*g_ril_reply_parse_query_call_fwd(GRil *gril,
 						const struct ril_msg *message,

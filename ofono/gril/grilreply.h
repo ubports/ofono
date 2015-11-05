@@ -87,11 +87,6 @@ struct reply_sim_status {
 	struct reply_sim_app *apps[MAX_UICC_APPS];
 };
 
-struct reply_clir {
-	int status;
-	int provisioned;
-};
-
 struct reply_oem_hook {
 	int length;
 	void *data;
@@ -141,11 +136,6 @@ char *g_ril_reply_parse_baseband_version(GRil *gril,
 
 char *g_ril_reply_parse_get_imei(GRil *gril,
 					const struct ril_msg *message);
-
-void g_ril_reply_free_get_clir(struct reply_clir *rclir);
-
-struct reply_clir *g_ril_reply_parse_get_clir(GRil *gril,
-						const struct ril_msg *message);
 
 struct ofono_call_forwarding_condition
 	*g_ril_reply_parse_query_call_fwd(GRil *gril,
