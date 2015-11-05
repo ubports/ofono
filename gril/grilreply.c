@@ -916,22 +916,6 @@ enum ofono_disconnect_reason g_ril_reply_parse_call_fail_cause(
 	return reason;
 }
 
-char *g_ril_reply_parse_baseband_version(GRil *gril,
-						const struct ril_msg *message)
-{
-	struct parcel rilp;
-	char *version;
-
-	g_ril_init_parcel(message, &rilp);
-
-	version = parcel_r_string(&rilp);
-
-	g_ril_append_print_buf(gril, "{%s}", version);
-	g_ril_print_response(gril, message);
-
-	return version;
-}
-
 char *g_ril_reply_parse_get_imei(GRil *gril,
 					const struct ril_msg *message)
 {
