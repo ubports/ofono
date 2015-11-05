@@ -1020,37 +1020,6 @@ error:
 	return -1;
 }
 
-int g_ril_reply_parse_query_facility_lock(GRil *gril,
-						const struct ril_msg *message)
-{
-	struct parcel rilp;
-	int status, numint;
-
-	g_ril_init_parcel(message, &rilp);
-
-	/* infineon returns two integers */
-	numint = parcel_r_int32(&rilp);
-	if (numint < 1) {
-		ofono_error("%s: wrong format", __func__);
-		goto error;
-	}
-
-	status = parcel_r_int32(&rilp);
-
-	if (rilp.malformed) {
-		ofono_error("%s: malformed parcel", __func__);
-		goto error;
-	}
-
-	g_ril_append_print_buf(gril, "{%d}", status);
-	g_ril_print_response(gril, message);
-
-	return status;
-
-error:
-	return -1;
-}
-
 int g_ril_reply_parse_set_facility_lock(GRil *gril,
 					const struct ril_msg *message)
 {
