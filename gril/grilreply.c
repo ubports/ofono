@@ -1020,38 +1020,6 @@ error:
 	return -1;
 }
 
-int g_ril_reply_parse_set_facility_lock(GRil *gril,
-					const struct ril_msg *message)
-{
-	struct parcel rilp;
-	int retries = -1, numint;
-
-	g_ril_init_parcel(message, &rilp);
-
-	/* mako reply has no payload for call barring */
-	if (parcel_data_avail(&rilp) == 0)
-		goto end;
-
-	numint = parcel_r_int32(&rilp);
-	if (numint != 1) {
-		ofono_error("%s: wrong format", __func__);
-		goto end;
-	}
-
-	retries = parcel_r_int32(&rilp);
-
-	if (rilp.malformed) {
-		ofono_error("%s: malformed parcel", __func__);
-		goto end;
-	}
-
-end:
-	g_ril_append_print_buf(gril, "{%d}", retries);
-	g_ril_print_response(gril, message);
-
-	return retries;
-}
-
 int *g_ril_reply_parse_retries(GRil *gril, const struct ril_msg *message,
 				enum ofono_sim_password_type passwd_type)
 {
