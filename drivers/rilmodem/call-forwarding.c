@@ -36,12 +36,11 @@
 #include <ofono/log.h>
 #include <ofono/modem.h>
 #include <ofono/call-forwarding.h>
+#include "common.h"
 
 #include "gril.h"
 
 #include "rilmodem.h"
-
-#include "common.h"
 
 struct forw_data {
 	GRil *ril;
