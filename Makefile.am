@@ -735,7 +735,8 @@ unit_objects =
 
 unit_tests = unit/test-common unit/test-util unit/test-idmap \
 				unit/test-simutil unit/test-stkutil \
-				unit/test-sms unit/test-cdmasms
+				unit/test-sms unit/test-cdmasms \
+				unit/test-rilmodem-cs
 
 noinst_PROGRAMS = $(unit_tests) \
 			unit/test-sms-root unit/test-mux unit/test-caif
@@ -786,6 +787,14 @@ unit_test_caif_SOURCES = unit/test-caif.c $(gatchat_sources) \
 					drivers/stemodem/if_caif.h
 unit_test_caif_LDADD = @GLIB_LIBS@
 unit_objects += $(unit_test_caif_OBJECTS)
+
+unit_test_rilmodem_cs_SOURCES = unit/test-rilmodem-cs.c $(gril_sources) \
+			src/log.c src/common.c src/util.c \
+			drivers/rilmodem/call-settings.c \
+			src/simutil.c gatchat/ringbuffer.c
+unit_test_rilmodem_cs_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
+			@GLIB_LIBS@ @DBUS_LIBS@ -ldl
+unit_objects += $(unit_test_rilmodem_cs_OBJECTS)
 
 TESTS = $(unit_tests)
 
