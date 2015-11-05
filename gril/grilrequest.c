@@ -44,9 +44,6 @@
 /* DEACTIVATE_DATA_CALL request parameters */
 #define DEACTIVATE_DATA_CALL_NUM_PARAMS 2
 
-/* POWER request parameters */
-#define POWER_PARAMS 1
-
 /* SETUP_DATA_CALL_PARAMS request parameters */
 #define SETUP_DATA_CALL_PARAMS 7
 #define DATA_PROFILE_DEFAULT_STR "0"
@@ -214,19 +211,6 @@ gboolean g_ril_request_deactivate_data_call(GRil *gril,
 error:
 	OFONO_EINVAL(error);
 	return FALSE;
-}
-
-void g_ril_request_power(GRil *gril,
-				const gboolean power,
-				struct parcel *rilp)
-{
-	DBG("");
-
-	parcel_init(rilp);
-	parcel_w_int32(rilp, POWER_PARAMS);
-	parcel_w_int32(rilp, (int32_t) power);
-
-	g_ril_append_print_buf(gril, "(%d)", power);
 }
 
 void g_ril_request_set_net_select_manual(GRil *gril,
