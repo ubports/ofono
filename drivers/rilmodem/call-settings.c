@@ -74,7 +74,23 @@ static void ril_cw_set(struct ofono_call_settings *cs, int mode, int cls,
 	int ret;
 	struct parcel rilp;
 
-	g_ril_request_set_call_waiting(sd->ril, mode, cls, &rilp);
+	/*
+	 * Modem seems to respond with error to all queries
+	 * or settings made with bearer class
+	 * BEARER_CLASS_DEFAULT. Design decision: If given
+	 * class is BEARER_CLASS_DEFAULT let's map it to
+	 * SERVICE_CLASS_VOICE effectively making it the
+	 * default bearer.
+	 */
+	if (cls == BEARER_CLASS_DEFAULT)
+		cls = BEARER_CLASS_VOICE;
+
+	parcel_init(&rilp);
+	parcel_w_int32(&rilp, 2);	/* Number of params */
+	parcel_w_int32(&rilp, mode);	/* on/off */
+	parcel_w_int32(&rilp, cls);	/* Service class */
+
+	g_ril_append_print_buf(sd->ril, "(%d, 0x%x)", mode, cls);
 
 	ret = g_ril_send(sd->ril, RIL_REQUEST_SET_CALL_WAITING, &rilp,
 				ril_set_cb, cbd, g_free);
