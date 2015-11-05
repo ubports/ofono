@@ -176,16 +176,27 @@ static void ril_clip_query_cb(struct ril_msg *message, gpointer user_data)
 	struct ofono_call_settings *cs = cbd->user;
 	struct settings_data *sd = ofono_call_settings_get_data(cs);
 	ofono_call_settings_status_cb_t cb = cbd->cb;
+	struct parcel rilp;
+	int clip_status;
 
-	if (message->error == RIL_E_SUCCESS) {
-		int res;
+	if (message->error != RIL_E_SUCCESS)
+		goto error;
 
-		res = g_ril_reply_parse_query_clip(sd->ril, message);
+	g_ril_init_parcel(message, &rilp);
 
-		CALLBACK_WITH_SUCCESS(cb, res, cbd->data);
-	} else {
-		CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
-	}
+	if (parcel_r_int32(&rilp) != 1)
+		goto error;
+
+	clip_status = parcel_r_int32(&rilp);
+
+	g_ril_append_print_buf(sd->ril, "{%d}", clip_status);
+	g_ril_print_response(sd->ril, message);
+
+	CALLBACK_WITH_SUCCESS(cb, clip_status, cbd->data);
+	return;
+
+error:
+	CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
 }
 
 static void ril_clip_query(struct ofono_call_settings *cs,
