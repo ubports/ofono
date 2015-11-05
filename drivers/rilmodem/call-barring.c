@@ -52,17 +52,25 @@ static void ril_call_barring_query_cb(struct ril_msg *message,
 	struct cb_data *cbd = user_data;
 	ofono_call_barring_query_cb_t cb = cbd->cb;
 	struct barring_data *bd = cbd->user;
+	struct parcel rilp;
 	int bearer_class;
 
-	if (message->error != RIL_E_SUCCESS) {
-		ofono_error("%s: query failed, err: %s", __func__,
-				ril_error_to_string(message->error));
+	if (message->error != RIL_E_SUCCESS)
 		goto error;
-	}
 
-	bearer_class = g_ril_reply_parse_query_facility_lock(bd->ril, message);
-	if (bearer_class < 0)
+	g_ril_init_parcel(message, &rilp);
+
+	/* TODO: infineon returns two integers, use a quirk here */
+	if (parcel_r_int32(&rilp) < 1)
 		goto error;
+
+	bearer_class = parcel_r_int32(&rilp);
+
+	if (bearer_class < 1 || rilp.malformed)
+		goto error;
+
+	g_ril_append_print_buf(bd->ril, "{%d}", bearer_class);
+	g_ril_print_response(bd->ril, message);
 
 	CALLBACK_WITH_SUCCESS(cb, bearer_class, cbd->data);
 	return;
