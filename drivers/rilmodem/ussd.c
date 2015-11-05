@@ -84,53 +84,36 @@ static void ril_ussd_request(struct ofono_ussd *ussd, int dcs,
 {
 	struct ussd_data *ud = ofono_ussd_get_data(ussd);
 	struct cb_data *cbd = cb_data_new(cb, data, ussd);
-	enum sms_charset charset;
-	char *text = NULL;
-	int ret = 0;
+	char *text;
+	struct parcel rilp;
+	int ret;
 
-	if (cbs_dcs_decode(dcs, NULL, NULL, &charset, NULL, NULL, NULL)) {
+	text = ussd_decode(dcs, len, pdu);
+	if (!text)
+		goto error;
 
-		if (charset == SMS_CHARSET_7BIT) {
-			long written;
+	g_ril_request_send_ussd(ud->ril, text, &rilp);
 
-			text = (char *) unpack_7bit(pdu, len, 0, TRUE,
-							0, &written, 1);
-			if (text != NULL)
-				*(text + written) = '\0';
-
-		} else if (charset == SMS_CHARSET_UCS2) {
-			text = g_convert((char *) pdu, len,
-					"UTF-8//TRANSLIT", "UCS-2BE",
-					NULL, NULL, NULL);
-		} else {
-			ofono_error("%s: No support for charset %d",
-					__func__, charset);
-		}
-	}
-
-	if (text) {
-		struct parcel rilp;
-
-		g_ril_request_send_ussd(ud->ril, text, &rilp);
-
-		ret = g_ril_send(ud->ril, RIL_REQUEST_SEND_USSD,
-					&rilp, ril_ussd_cb, ussd, NULL);
-		g_free(text);
-	}
+	ret = g_ril_send(ud->ril, RIL_REQUEST_SEND_USSD,
+				&rilp, ril_ussd_cb, ussd, NULL);
+	g_free(text);
 
 	/*
+	 * TODO: Is g_idle_add necessary?
 	 * We do not wait for the SEND_USSD reply to do the callback, as some
 	 * networks send it after sending one or more ON_USSD events. From the
 	 * ofono core perspective, Initiate() does not return until one ON_USSD
 	 * event is received: making here a successful callback just makes the
 	 * core wait for that event.
 	 */
-	if (ret <= 0) {
-		g_free(cbd);
-		CALLBACK_WITH_FAILURE(cb, data);
-	} else {
+	if (ret > 0) {
 		g_idle_add(request_success, cbd);
+		return;
 	}
+
+error:
+	g_free(cbd);
+	CALLBACK_WITH_FAILURE(cb, data);
 }
 
 static void ril_ussd_cancel_cb(struct ril_msg *message, gpointer user_data)
