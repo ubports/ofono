@@ -153,15 +153,13 @@ static void ril_ussd_cancel(struct ofono_ussd *ussd,
 {
 	struct ussd_data *ud = ofono_ussd_get_data(ussd);
 	struct cb_data *cbd = cb_data_new(cb, user_data, ussd);
-	int ret;
 
-	ret = g_ril_send(ud->ril, RIL_REQUEST_CANCEL_USSD, NULL,
-				ril_ussd_cancel_cb, cbd, g_free);
+	if (g_ril_send(ud->ril, RIL_REQUEST_CANCEL_USSD, NULL,
+				ril_ussd_cancel_cb, cbd, g_free) > 0)
+		return;
 
-	if (ret <= 0) {
-		g_free(cbd);
-		CALLBACK_WITH_FAILURE(cb, user_data);
-	}
+	g_free(cbd);
+	CALLBACK_WITH_FAILURE(cb, user_data);
 }
 
 static void ril_ussd_notify(struct ril_msg *message, gpointer user_data)
