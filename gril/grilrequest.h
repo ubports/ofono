@@ -228,10 +228,6 @@ void g_ril_request_send_ussd(GRil *gril,
 				const char *ussd,
 				struct parcel *rilp);
 
-void g_ril_request_set_clir(GRil *gril,
-				int mode,
-				struct parcel *rilp);
-
 void g_ril_request_screen_state(GRil *gril,
 				int state,
 				struct parcel *rilp);
