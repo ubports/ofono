@@ -39,7 +39,6 @@
 #include "gril.h"
 
 #include "rilmodem.h"
-#include "grilreply.h"
 
 static void ril_query_manufacturer(struct ofono_devinfo *info,
 					ofono_devinfo_query_cb_t cb,
@@ -62,22 +61,24 @@ static void query_revision_cb(struct ril_msg *message, gpointer user_data)
 	struct cb_data *cbd = user_data;
 	ofono_devinfo_query_cb_t cb = cbd->cb;
 	GRil *ril = cbd->user;
-	struct ofono_error error;
+	struct parcel rilp;
 	char *revision;
 
-	if (message->error == RIL_E_SUCCESS) {
-		decode_ril_error(&error, "OK");
-	} else {
-		decode_ril_error(&error, "FAIL");
-		cb(&error, NULL, cbd->data);
-		return;
-	}
+	if (message->error != RIL_E_SUCCESS)
+		goto error;
 
-	revision = g_ril_reply_parse_baseband_version(ril, message);
+	g_ril_init_parcel(message, &rilp);
+	revision = parcel_r_string(&rilp);
 
-	cb(&error, revision, cbd->data);
+	g_ril_append_print_buf(ril, "{%s}", revision);
+	g_ril_print_response(ril, message);
 
+	CALLBACK_WITH_SUCCESS(cb, revision, cbd->data);
 	g_free(revision);
+	return;
+
+error:
+	CALLBACK_WITH_FAILURE(cb, NULL, cbd->data);
 }
 
 static void ril_query_revision(struct ofono_devinfo *info,
@@ -88,10 +89,11 @@ static void ril_query_revision(struct ofono_devinfo *info,
 	struct cb_data *cbd = cb_data_new(cb, data, ril);
 
 	if (g_ril_send(ril, RIL_REQUEST_BASEBAND_VERSION, NULL,
-			query_revision_cb, cbd, g_free) == 0) {
-		g_free(cbd);
-		CALLBACK_WITH_FAILURE(cb, NULL, data);
-	}
+			query_revision_cb, cbd, g_free) > 0)
+		return;
+
+	g_free(cbd);
+	CALLBACK_WITH_FAILURE(cb, NULL, data);
 }
 
 static void query_serial_cb(struct ril_msg *message, gpointer user_data)
@@ -99,22 +101,24 @@ static void query_serial_cb(struct ril_msg *message, gpointer user_data)
 	struct cb_data *cbd = user_data;
 	ofono_devinfo_query_cb_t cb = cbd->cb;
 	GRil *ril = cbd->user;
-	struct ofono_error error;
-	gchar *imei;
+	struct parcel rilp;
+	char *imei;
 
-	if (message->error == RIL_E_SUCCESS) {
-		decode_ril_error(&error, "OK");
-	} else {
-		decode_ril_error(&error, "FAIL");
-		cb(&error, NULL, cbd->data);
-		return;
-	}
+	if (message->error != RIL_E_SUCCESS)
+		goto error;
 
-	imei = g_ril_reply_parse_baseband_version(ril, message);
+	g_ril_init_parcel(message, &rilp);
+	imei = parcel_r_string(&rilp);
 
-	cb(&error, imei, cbd->data);
+	g_ril_append_print_buf(ril, "{%s}", imei);
+	g_ril_print_response(ril, message);
 
+	CALLBACK_WITH_SUCCESS(cb, imei, cbd->data);
 	g_free(imei);
+	return;
+
+error:
+	CALLBACK_WITH_FAILURE(cb, NULL, cbd->data);
 }
 
 static void ril_query_serial(struct ofono_devinfo *info,
@@ -129,10 +133,11 @@ static void ril_query_serial(struct ofono_devinfo *info,
 	 * RIL_REQUEST_DEVICE_IDENTITY depending on the rild version used
 	 */
 	if (g_ril_send(ril, RIL_REQUEST_GET_IMEI, NULL,
-			query_serial_cb, cbd, g_free) == 0) {
-		g_free(cbd);
-		CALLBACK_WITH_FAILURE(cb, NULL, data);
-	}
+			query_serial_cb, cbd, g_free) > 0)
+		return;
+
+	g_free(cbd);
+	CALLBACK_WITH_FAILURE(cb, NULL, data);
 }
 
 static gboolean ril_delayed_register(gpointer user_data)
