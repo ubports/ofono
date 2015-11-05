@@ -889,22 +889,6 @@ void g_ril_request_set_preferred_network_type(GRil *gril, int net_type,
 	g_ril_append_print_buf(gril, "(%d)", net_type);
 }
 
-void g_ril_request_change_barring_password(GRil *gril, const char *facility,
-						const char *old_passwd,
-						const char *new_passwd,
-						struct parcel *rilp)
-{
-	parcel_init(rilp);
-
-	parcel_w_int32(rilp, 3);	/* # of strings */
-	parcel_w_string(rilp, facility);
-	parcel_w_string(rilp, old_passwd);
-	parcel_w_string(rilp, new_passwd);
-
-	g_ril_append_print_buf(gril, "(%s,%s,%s)",
-				facility, old_passwd, new_passwd);
-}
-
 void g_ril_request_oem_hook_raw(GRil *gril, const void *payload, size_t length,
 					struct parcel *rilp)
 {
