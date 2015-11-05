@@ -222,7 +222,9 @@ static void ril_clir_query_cb(struct ril_msg *message, gpointer user_data)
 	struct ofono_call_settings *cs = cbd->user;
 	struct settings_data *sd = ofono_call_settings_get_data(cs);
 	ofono_call_settings_clir_cb_t cb = cbd->cb;
-	struct reply_clir *rclir;
+	struct parcel rilp;
+	int override;
+	int network;
 
 	if (message->error != RIL_E_SUCCESS) {
 		ofono_error("%s: Reply failure: %s", __func__,
@@ -230,16 +232,18 @@ static void ril_clir_query_cb(struct ril_msg *message, gpointer user_data)
 		goto error;
 	}
 
-	rclir = g_ril_reply_parse_get_clir(sd->ril, message);
-	if (rclir == NULL) {
-		ofono_error("%s: parse error", __func__);
+	g_ril_init_parcel(message, &rilp);
+
+	if (parcel_r_int32(&rilp) != 2)
 		goto error;
-	}
 
-	CALLBACK_WITH_SUCCESS(cb, rclir->status, rclir->provisioned, cbd->data);
+	override = parcel_r_int32(&rilp);
+	network = parcel_r_int32(&rilp);
 
-	g_ril_reply_free_get_clir(rclir);
+	g_ril_append_print_buf(sd->ril, "{%d,%d}", override, network);
+	g_ril_print_response(sd->ril, message);
 
+	CALLBACK_WITH_SUCCESS(cb, override, network, cbd->data);
 	return;
 
 error:
