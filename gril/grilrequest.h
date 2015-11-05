@@ -34,14 +34,6 @@
 extern "C" {
 #endif
 
-struct req_call_fwd {
-	int action;
-	int type;
-	int cls;
-	const struct ofono_phone_number *number;
-	int time;
-};
-
 struct req_deactivate_data_call {
 	gint cid;
 	guint reason;
@@ -230,9 +222,6 @@ void g_ril_request_send_ussd(GRil *gril,
 
 void g_ril_request_screen_state(GRil *gril,
 				int state,
-				struct parcel *rilp);
-
-void g_ril_request_call_fwd(GRil *gril, const struct req_call_fwd *req,
 				struct parcel *rilp);
 
 void g_ril_request_set_preferred_network_type(GRil *gril, int net_type,
