@@ -22,16 +22,17 @@
  */
 
 #include <errno.h>
+
 #include <glib.h>
 
 #include <ofono/log.h>
 #include <ofono/modem.h>
-
+#include <ofono/call-barring.h>
 #include "common.h"
-#include "grilreply.h"
-#include "call-barring.h"
+
+#include "gril.h"
+
 #include "rilmodem.h"
-#include "ril_constants.h"
 
 struct barring_data {
 	GRil *ril;
