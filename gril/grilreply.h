@@ -127,8 +127,6 @@ GSList *g_ril_reply_parse_get_calls(GRil *gril, const struct ril_msg *message);
 enum ofono_disconnect_reason g_ril_reply_parse_call_fail_cause(
 				GRil *gril, const struct ril_msg *message);
 
-int g_ril_reply_parse_get_mute(GRil *gril, const struct ril_msg *message);
-
 char *g_ril_reply_parse_baseband_version(GRil *gril,
 						const struct ril_msg *message);
 
