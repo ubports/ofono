@@ -240,7 +240,12 @@ static void ril_clir_set(struct ofono_call_settings *cs, int mode,
 	struct parcel rilp;
 	int ret;
 
-	g_ril_request_set_clir(sd->ril, mode, &rilp);
+	parcel_init(&rilp);
+
+	parcel_w_int32(&rilp, 1);	/* Number of params */
+	parcel_w_int32(&rilp, mode);
+
+	g_ril_append_print_buf(sd->ril, "(%d)", mode);
 
 	ret = g_ril_send(sd->ril, RIL_REQUEST_SET_CLIR, &rilp,
 				ril_set_cb, cbd, g_free);
