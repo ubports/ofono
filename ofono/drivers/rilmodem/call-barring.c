@@ -38,6 +38,15 @@ struct barring_data {
 	GRil *ril;
 };
 
+/*
+ * RIL modems do not support 7 as default bearer class. According to TS 22.030
+ * Annex C: When service code is not given it corresponds to "All tele and
+ * bearer services"
+ */
+#define FIXUP_CLS() \
+	if (cls == BEARER_CLASS_DEFAULT)	\
+		cls = SERVICE_CLASS_NONE	\
+
 static void ril_call_barring_query_cb(struct ril_msg *message,
 					gpointer user_data)
 {
@@ -75,13 +84,7 @@ static void ril_call_barring_query(struct ofono_call_barring *cb,
 
 	DBG("lock: %s, services to query: %d", lock, cls);
 
-	/*
-	 * RIL modems do not support 7 as default bearer class. According to
-	 * TS 22.030 Annex C: When service code is not given it corresponds to
-	 * "All tele and bearer services"
-	 */
-	if (cls == BEARER_CLASS_DEFAULT)
-		cls = SERVICE_CLASS_NONE;
+	FIXUP_CLS();
 
 	parcel_init(&rilp);
 	parcel_w_int32(&rilp, 4);	/* # of strings */
@@ -133,26 +136,30 @@ static void ril_call_barring_set(struct ofono_call_barring *cb,
 	struct barring_data *bd = ofono_call_barring_get_data(cb);
 	struct cb_data *cbd = cb_data_new(callback, data, bd);
 	struct parcel rilp;
+	char svcs_str[4];
 
 	DBG("lock: %s, enable: %d, bearer class: %d", lock, enable, cls);
 
-	/*
-	 * RIL modem does not support 7 as default bearer class. According to
-	 * the 22.030 Annex C: When service code is not given it corresponds to
-	 * "All tele and bearer services"
-	 */
-	if (cls == BEARER_CLASS_DEFAULT)
-		cls = SERVICE_CLASS_NONE;
+	FIXUP_CLS();
 
-	g_ril_request_set_facility_lock(bd->ril, lock, enable,
-					passwd, cls, &rilp);
+	parcel_init(&rilp);
+	parcel_w_int32(&rilp, 5);	/* # of strings */
+	parcel_w_string(&rilp, lock);
+	parcel_w_string(&rilp, enable ? "1" : "0");
+	parcel_w_string(&rilp, passwd);
+	snprintf(svcs_str, sizeof(svcs_str), "%d", cls);
+	parcel_w_string(&rilp, svcs_str);
+	parcel_w_string(&rilp, NULL);	/* AID (for FDN, not yet supported) */
+
+	g_ril_append_print_buf(bd->ril, "(%s,%s,%s,%s,(null))",
+				lock, enable ? "1" : "0", passwd, svcs_str);
 
 	if (g_ril_send(bd->ril, RIL_REQUEST_SET_FACILITY_LOCK, &rilp,
-			ril_call_barring_set_cb, cbd, g_free) <= 0) {
-		ofono_error("%s: sending failed", __func__);
-		g_free(cbd);
-		CALLBACK_WITH_FAILURE(callback, data);
-	}
+			ril_call_barring_set_cb, cbd, g_free) > 0)
+		return;
+
+	g_free(cbd);
+	CALLBACK_WITH_FAILURE(callback, data);
 }
 
 static void ril_call_barring_set_passwd_cb(struct ril_msg *message,
