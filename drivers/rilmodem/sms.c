@@ -154,23 +154,49 @@ static void ril_cmgs(struct ofono_sms *sms, const unsigned char *pdu,
 	struct sms_data *sd = ofono_sms_get_data(sms);
 	struct cb_data *cbd = cb_data_new(cb, user_data, sd);
 	struct parcel rilp;
-	struct req_sms_cmgs req;
+	int smsc_len;
+	char hexbuf[tpdu_len * 2 + 1];
 
 	DBG("pdu_len: %d, tpdu_len: %d mms: %d", pdu_len, tpdu_len, mms);
 
 	/* TODO: if (mms) { ... } */
 
-	req.pdu = pdu;
-	req.pdu_len = pdu_len;
-	req.tpdu_len = tpdu_len;
+	parcel_init(&rilp);
+	parcel_w_int32(&rilp, 2);	/* Number of strings */
 
-	g_ril_request_sms_cmgs(sd->ril, &req, &rilp);
+	/*
+	 * SMSC address:
+	 *
+	 * smsc_len == 1, then zero-length SMSC was spec'd
+	 * RILD expects a NULL string in this case instead
+	 * of a zero-length string.
+	 */
+	smsc_len = pdu_len - tpdu_len;
+	/* TODO: encode SMSC & write to parcel */
+	if (smsc_len > 1)
+		ofono_error("SMSC address specified (smsc_len %d); "
+				"NOT-IMPLEMENTED", smsc_len);
+
+	parcel_w_string(&rilp, NULL); /* SMSC address; NULL == default */
+
+	/*
+	 * TPDU:
+	 *
+	 * 'pdu' is a raw hexadecimal string
+	 *  encode_hex() turns it into an ASCII/hex UTF8 buffer
+	 *  parcel_w_string() encodes utf8 -> utf16
+	 */
+	encode_hex_own_buf(pdu + smsc_len, tpdu_len, 0, hexbuf);
+	parcel_w_string(&rilp, hexbuf);
+
+	g_ril_append_print_buf(sd->ril, "(%s)", hexbuf);
 
 	if (g_ril_send(sd->ril, RIL_REQUEST_SEND_SMS, &rilp,
-			ril_submit_sms_cb, cbd, g_free) == 0) {
-		g_free(cbd);
-		CALLBACK_WITH_FAILURE(cb, -1, user_data);
-	}
+			ril_submit_sms_cb, cbd, g_free) > 0)
+		return;
+
+	g_free(cbd);
+	CALLBACK_WITH_FAILURE(cb, -1, user_data);
 }
 
 static void ril_ack_delivery_cb(struct ril_msg *message, gpointer user_data)
