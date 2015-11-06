@@ -726,61 +726,6 @@ error:
 	return NULL;
 }
 
-struct ofono_phone_number *g_ril_reply_parse_get_smsc_address(
-						GRil *gril,
-						const struct ril_msg *message)
-{
-	struct ofono_phone_number *sca;
-	struct parcel rilp;
-	char *number, *temp_buf;
-
-	sca = g_new0(struct ofono_phone_number, 1);
-	if (sca == NULL) {
-		ofono_error("%s Out of memory", __func__);
-		goto err_alloc;
-	}
-
-	g_ril_init_parcel(message, &rilp);
-
-	temp_buf = parcel_r_string(&rilp);
-	if (temp_buf == NULL) {
-		ofono_error("%s Cannot read SMSC address", __func__);
-		goto err_readsca;
-	}
-
-	/* RIL gives address in quotes */
-	number = strtok(temp_buf, "\"");
-	if (number == NULL || *number == '\0') {
-		ofono_error("%s Invalid SMSC address", __func__);
-		goto err_scaformat;
-	}
-
-	if (number[0] == '+') {
-		number = number + 1;
-		sca->type = OFONO_NUMBER_TYPE_INTERNATIONAL;
-	} else {
-		sca->type = OFONO_NUMBER_TYPE_UNKNOWN;
-	}
-
-	strncpy(sca->number, number, OFONO_MAX_PHONE_NUMBER_LENGTH);
-	sca->number[OFONO_MAX_PHONE_NUMBER_LENGTH] = '\0';
-
-	g_ril_append_print_buf(gril, "{type=%d,number=%s}",
-				sca->type, sca->number);
-	g_ril_print_response(gril, message);
-
-	g_free(temp_buf);
-
-	return sca;
-
-err_scaformat:
-	g_free(temp_buf);
-err_readsca:
-	g_free(sca);
-err_alloc:
-	return NULL;
-}
-
 static gint g_ril_call_compare(gconstpointer a, gconstpointer b)
 {
 	const struct ofono_call *ca = a;
