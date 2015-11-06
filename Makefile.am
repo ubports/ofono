@@ -149,7 +149,6 @@ builtin_sources += drivers/rilmodem/rilmodem.h \
 			drivers/rilmodem/call-settings.c \
 			drivers/rilmodem/call-forwarding.c \
 			drivers/rilmodem/radio-settings.c \
-			drivers/rilmodem/radio-settings.h \
 			drivers/rilmodem/call-barring.c \
 			drivers/infineonmodem/infineon_constants.h
 endif
