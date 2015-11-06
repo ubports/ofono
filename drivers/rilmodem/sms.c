@@ -211,7 +211,12 @@ static void ril_ack_delivery(struct ofono_sms *sms)
 	struct sms_data *sd = ofono_sms_get_data(sms);
 	struct parcel rilp;
 
-	g_ril_request_sms_acknowledge(sd->ril, &rilp);
+	parcel_init(&rilp);
+	parcel_w_int32(&rilp, 2); /* Number of int32 values in array */
+	parcel_w_int32(&rilp, 1); /* Successful receipt */
+	parcel_w_int32(&rilp, 0); /* error code */
+
+	g_ril_append_print_buf(sd->ril, "(1,0)");
 
 	/* TODO: should ACK be sent for either of the error cases? */
 
