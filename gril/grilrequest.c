@@ -709,17 +709,6 @@ void g_ril_request_change_passwd(GRil *gril,
 				old_passwd, new_passwd, aid_str);
 }
 
-void g_ril_request_sms_acknowledge(GRil *gril,
-					struct parcel *rilp)
-{
-	parcel_init(rilp);
-	parcel_w_int32(rilp, 2); /* Number of int32 values in array */
-	parcel_w_int32(rilp, 1); /* Successful receipt */
-	parcel_w_int32(rilp, 0); /* error code */
-
-	g_ril_append_print_buf(gril, "(1,0)");
-}
-
 void g_ril_request_dial(GRil *gril,
 			const struct ofono_phone_number *ph,
 			enum ofono_clir_option clir,
