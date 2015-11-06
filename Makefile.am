@@ -98,12 +98,12 @@ gisi_sources = gisi/client.c gisi/client.h gisi/common.h \
 gril_sources = gril/gril.h gril/gril.c \
 				gril/grilio.h gril/grilio.c \
 				gril/grilutil.h gril/grilutil.c \
-				gatchat/ringbuffer.h gatchat/ringbuffer.c \
-				gril/gfunc.h gril/ril.h \
+				gril/gfunc.h gril/gril.h \
 				gril/parcel.c gril/parcel.h \
 				gril/grilreply.c gril/grilreply.h \
 				gril/grilrequest.c gril/grilrequest.h \
-				gril/grilunsol.c gril/grilunsol.h
+				gril/grilunsol.c gril/grilunsol.h \
+				gril/ril_constants.h
 
 btio_sources = btio/btio.h btio/btio.c
 
@@ -124,7 +124,7 @@ builtin_modules += rildev
 builtin_sources += plugins/rildev.c
 
 builtin_modules += ril
-builtin_sources += plugins/ril.c
+builtin_sources += plugins/ril.c plugins/ril.h
 
 builtin_modules += infineon
 builtin_sources += plugins/infineon.c
@@ -136,8 +136,10 @@ builtin_sources += drivers/rilmodem/rilmodem.h \
 			drivers/rilmodem/devinfo.c \
 			drivers/rilmodem/network-registration.c \
 			drivers/rilmodem/voicecall.c \
+			drivers/rilmodem/voicecall.h \
 			drivers/rilmodem/call-volume.c \
 			drivers/rilmodem/gprs.c \
+			drivers/rilmodem/gprs.h \
 			drivers/rilmodem/gprs-context.c \
 			drivers/rilmodem/sim.c \
 			drivers/rilmodem/sms.c \
@@ -147,7 +149,9 @@ builtin_sources += drivers/rilmodem/rilmodem.h \
 			drivers/rilmodem/call-settings.c \
 			drivers/rilmodem/call-forwarding.c \
 			drivers/rilmodem/radio-settings.c \
-			drivers/rilmodem/call-barring.c
+			drivers/rilmodem/radio-settings.h \
+			drivers/rilmodem/call-barring.c \
+			drivers/infineonmodem/infineon_constants.h
 endif
 
 if ISIMODEM
@@ -791,6 +795,7 @@ unit_objects += $(unit_test_caif_OBJECTS)
 
 unit_test_rilmodem_cs_SOURCES = unit/test-rilmodem-cs.c $(gril_sources) \
 			src/log.c src/common.c src/util.c \
+			gatchat/ringbuffer.h gatchat/ringbuffer.c \
 			drivers/rilmodem/call-settings.c \
 			src/simutil.c
 unit_test_rilmodem_cs_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
