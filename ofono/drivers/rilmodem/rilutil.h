@@ -89,11 +89,6 @@ struct ril_gprs_driver_data {
 	struct ofono_modem *modem;
 };
 
-struct ril_radio_settings_driver_data {
-	GRil *gril;
-	struct ofono_modem *modem;
-};
-
 typedef void (*ril_util_sim_inserted_cb_t)(gboolean present, void *userdata);
 
 void decode_ril_error(struct ofono_error *error, const char *final);
