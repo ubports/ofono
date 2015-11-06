@@ -108,20 +108,46 @@ static void ril_rat_mode_cb(struct ril_msg *message, gpointer user_data)
 	ofono_radio_settings_rat_mode_query_cb_t cb = cbd->cb;
 	struct ofono_radio_settings *rs = cbd->user;
 	struct radio_data *rd = ofono_radio_settings_get_data(rs);
-	int mode, pref;
+	int mode;
+	struct parcel rilp;
+	int net_type;
 
-	if (message->error != RIL_E_SUCCESS) {
-		ofono_error("%s: error %s", __func__,
-				ril_error_to_string(message->error));
-		CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
-		return;
+	if (message->error != RIL_E_SUCCESS)
+		goto error;
+
+	g_ril_init_parcel(message, &rilp);
+	if (parcel_r_int32(&rilp) != 1)
+		goto error;
+
+	net_type = parcel_r_int32(&rilp);
+
+	if (rilp.malformed)
+		goto error;
+
+	g_ril_append_print_buf(rd->ril, "{%d}", net_type);
+	g_ril_print_response(rd->ril, message);
+
+	/* Try to translate special MTK settings */
+	if (g_ril_vendor(rd->ril) == OFONO_RIL_VENDOR_MTK) {
+		switch (net_type) {
+		/* 4G preferred */
+		case MTK_PREF_NET_TYPE_LTE_GSM_WCDMA:
+		case MTK_PREF_NET_TYPE_LTE_GSM_WCDMA_MMDC:
+		case MTK_PREF_NET_TYPE_LTE_GSM_TYPE:
+		case MTK_PREF_NET_TYPE_LTE_GSM_MMDC_TYPE:
+			net_type = PREF_NET_TYPE_LTE_GSM_WCDMA;
+			break;
+		/* 3G or 2G preferred over LTE */
+		case MTK_PREF_NET_TYPE_GSM_WCDMA_LTE:
+		case MTK_PREF_NET_TYPE_GSM_WCDMA_LTE_MMDC:
+			net_type = PREF_NET_TYPE_GSM_WCDMA;
+			break;
+		}
 	}
 
-	pref = g_ril_reply_parse_get_preferred_network_type(rd->ril, message);
-	if (pref < 0) {
-		ofono_error("%s: parse error", __func__);
-		CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
-		return;
+	if (net_type < 0 || net_type > PREF_NET_TYPE_LTE_ONLY) {
+		ofono_error("%s: unknown network type", __func__);
+		goto error;
 	}
 
 	/*
@@ -130,8 +156,7 @@ static void ril_rat_mode_cb(struct ril_msg *message, gpointer user_data)
 	 * This value is returned when selecting the slot as having 3G
 	 * capabilities, so it is sort of the default for MTK modems.
 	 */
-
-	switch (pref) {
+	switch (net_type) {
 	case PREF_NET_TYPE_GSM_WCDMA:
 	case PREF_NET_TYPE_GSM_WCDMA_AUTO:
 		mode = OFONO_RADIO_ACCESS_MODE_UMTS;
@@ -144,12 +169,16 @@ static void ril_rat_mode_cb(struct ril_msg *message, gpointer user_data)
 		break;
 	default:
 		ofono_error("%s: Unexpected preferred network type (%d)",
-				__func__, pref);
+				__func__, net_type);
 		mode = OFONO_RADIO_ACCESS_MODE_ANY;
 		break;
 	}
 
 	CALLBACK_WITH_SUCCESS(cb, mode, cbd->data);
+	return;
+
+error:
+	CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
 }
 
 static void ril_query_rat_mode(struct ofono_radio_settings *rs,
@@ -160,11 +189,11 @@ static void ril_query_rat_mode(struct ofono_radio_settings *rs,
 	struct cb_data *cbd = cb_data_new(cb, data, rs);
 
 	if (g_ril_send(rd->ril, RIL_REQUEST_GET_PREFERRED_NETWORK_TYPE,
-				NULL, ril_rat_mode_cb, cbd, g_free) == 0) {
-		ofono_error("%s: unable to send rat mode query", __func__);
-		g_free(cbd);
-		CALLBACK_WITH_FAILURE(cb, -1, data);
-	}
+				NULL, ril_rat_mode_cb, cbd, g_free) > 0)
+		return;
+
+	g_free(cbd);
+	CALLBACK_WITH_FAILURE(cb, -1, data);
 }
 
 static void ril_query_fast_dormancy(struct ofono_radio_settings *rs,
