@@ -208,10 +208,6 @@ void g_ril_request_separate_conn(GRil *gril,
 void g_ril_request_set_supp_svc_notif(GRil *gril,
 					struct parcel *rilp);
 
-void g_ril_request_screen_state(GRil *gril,
-				int state,
-				struct parcel *rilp);
-
 void g_ril_request_set_preferred_network_type(GRil *gril, int net_type,
 						struct parcel *rilp);
 
