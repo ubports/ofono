@@ -132,19 +132,33 @@ static void ril_csca_query(struct ofono_sms *sms, ofono_sms_sca_query_cb_t cb,
 static void ril_submit_sms_cb(struct ril_msg *message, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
-	struct ofono_error error;
 	ofono_sms_submit_cb_t cb = cbd->cb;
 	struct sms_data *sd = cbd->user;
-	int mr = 0;
+	struct parcel rilp;
+	int mr;
+	char *ack_pdu;
+	int error;
 
-	if (message->error == RIL_E_SUCCESS) {
-		decode_ril_error(&error, "OK");
-		mr = g_ril_reply_parse_sms_response(sd->ril, message);
-	} else {
-		decode_ril_error(&error, "FAIL");
+	if (message->error != RIL_E_SUCCESS) {
+		CALLBACK_WITH_FAILURE(cb, 0, cbd->data);
+		return;
 	}
 
-	cb(&error, mr, cbd->data);
+	g_ril_init_parcel(message, &rilp);
+
+	/*
+	 * TP-Message-Reference for GSM/
+	 * BearerData MessageId for CDMA
+	 */
+	mr = parcel_r_int32(&rilp);
+	ack_pdu = parcel_r_string(&rilp);
+	error = parcel_r_int32(&rilp);
+
+	g_ril_append_print_buf(sd->ril, "{%d,%s,%d}", mr, ack_pdu, error);
+	g_ril_print_response(sd->ril, message);
+	g_free(ack_pdu);
+
+	CALLBACK_WITH_SUCCESS(cb, mr, cbd->data);
 }
 
 static void ril_cmgs(struct ofono_sms *sms, const unsigned char *pdu,
