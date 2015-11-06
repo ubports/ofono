@@ -252,12 +252,7 @@ static int ril_radio_settings_probe(struct ofono_radio_settings *rs,
 					unsigned int vendor, void *user)
 {
 	struct ril_radio_settings_driver_data *rs_init_data = user;
-	struct radio_data *rsd = g_try_new0(struct radio_data, 1);
-
-	if (rsd == NULL) {
-		ofono_error("%s: cannot allocate memory", __func__);
-		return -ENOMEM;
-	}
+	struct radio_data *rsd = g_new0(struct radio_data, 1);
 
 	rsd->ril = g_ril_clone(rs_init_data->gril);
 	rsd->modem = rs_init_data->modem;
