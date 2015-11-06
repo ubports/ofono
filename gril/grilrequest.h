@@ -172,8 +172,6 @@ void g_ril_request_change_passwd(GRil *gril,
 					const gchar *aid_str,
 					struct parcel *rilp);
 
-void g_ril_request_sms_acknowledge(GRil *gril, struct parcel *rilp);
-
 void g_ril_request_dial(GRil *gril,
 			const struct ofono_phone_number *ph,
 			enum ofono_clir_option clir,
