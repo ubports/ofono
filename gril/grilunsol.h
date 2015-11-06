@@ -47,11 +47,6 @@ struct ril_data_call_list {
 	GSList *calls;
 };
 
-struct unsol_sms_data {
-	long length;
-	unsigned char *data;
-};
-
 struct unsol_supp_svc_notif {
 	int notif_type;
 	int code;
@@ -66,11 +61,6 @@ struct ril_data_call_list *g_ril_unsol_parse_data_call_list(GRil *gril,
 						const struct ril_msg *message);
 
 char *g_ril_unsol_parse_nitz(GRil *gril, const struct ril_msg *message);
-
-void g_ril_unsol_free_sms_data(struct unsol_sms_data *unsol);
-
-struct unsol_sms_data *g_ril_unsol_parse_new_sms(GRil *gril,
-						const struct ril_msg *message);
 
 int g_ril_unsol_parse_radio_state_changed(GRil *gril,
 					const struct ril_msg *message);
