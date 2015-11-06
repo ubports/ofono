@@ -38,7 +38,7 @@
 
 #include <glib.h>
 
-#include "log.h"
+#include <ofono/log.h>
 #include "ringbuffer.h"
 #include "gril.h"
 #include "grilutil.h"
