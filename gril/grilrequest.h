@@ -184,10 +184,6 @@ void g_ril_request_sms_cmgs(GRil *gril,
 
 void g_ril_request_sms_acknowledge(GRil *gril, struct parcel *rilp);
 
-void g_ril_request_set_smsc_address(GRil *gril,
-					const struct ofono_phone_number *sca,
-					struct parcel *rilp);
-
 void g_ril_request_dial(GRil *gril,
 			const struct ofono_phone_number *ph,
 			enum ofono_clir_option clir,
