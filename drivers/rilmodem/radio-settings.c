@@ -45,6 +45,13 @@
 #include "grilreply.h"
 #include "radio-settings.h"
 
+struct radio_data {
+	GRil *ril;
+	struct ofono_modem *modem;
+	gboolean fast_dormancy;
+	gboolean pending_fd;
+};
+
 static void ril_set_rat_cb(struct ril_msg *message, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
@@ -61,7 +68,7 @@ static void ril_set_rat_cb(struct ril_msg *message, gpointer user_data)
 	}
 }
 
-void ril_set_rat_mode(struct ofono_radio_settings *rs,
+static void ril_set_rat_mode(struct ofono_radio_settings *rs,
 			enum ofono_radio_access_mode mode,
 			ofono_radio_settings_rat_mode_set_cb_t cb,
 			void *data)
@@ -146,7 +153,7 @@ static void ril_rat_mode_cb(struct ril_msg *message, gpointer user_data)
 	CALLBACK_WITH_SUCCESS(cb, mode, cbd->data);
 }
 
-void ril_query_rat_mode(struct ofono_radio_settings *rs,
+static void ril_query_rat_mode(struct ofono_radio_settings *rs,
 			ofono_radio_settings_rat_mode_query_cb_t cb,
 			void *data)
 {
@@ -161,7 +168,7 @@ void ril_query_rat_mode(struct ofono_radio_settings *rs,
 	}
 }
 
-void ril_query_fast_dormancy(struct ofono_radio_settings *rs,
+static void ril_query_fast_dormancy(struct ofono_radio_settings *rs,
 			ofono_radio_settings_fast_dormancy_query_cb_t cb,
 			void *data)
 {
@@ -188,7 +195,7 @@ static void ril_display_state_cb(struct ril_msg *message, gpointer user_data)
 	}
 }
 
-void ril_set_fast_dormancy(struct ofono_radio_settings *rs,
+static void ril_set_fast_dormancy(struct ofono_radio_settings *rs,
 				ofono_bool_t enable,
 				ofono_radio_settings_fast_dormancy_set_cb_t cb,
 				void *data)
@@ -229,7 +236,7 @@ static ofono_bool_t query_available_rats_cb(gpointer user_data)
 	return FALSE;
 }
 
-void ril_query_available_rats(struct ofono_radio_settings *rs,
+static void ril_query_available_rats(struct ofono_radio_settings *rs,
 			ofono_radio_settings_available_rats_query_cb_t cb,
 			void *data)
 {
@@ -238,7 +245,8 @@ void ril_query_available_rats(struct ofono_radio_settings *rs,
 	g_idle_add(query_available_rats_cb, cbd);
 }
 
-void ril_delayed_register(const struct ofono_error *error, void *user_data)
+static void ril_delayed_register(const struct ofono_error *error,
+							void *user_data)
 {
 	struct ofono_radio_settings *rs = user_data;
 
@@ -264,7 +272,7 @@ static int ril_radio_settings_probe(struct ofono_radio_settings *rs,
 	return 0;
 }
 
-void ril_radio_settings_remove(struct ofono_radio_settings *rs)
+static void ril_radio_settings_remove(struct ofono_radio_settings *rs)
 {
 	struct radio_data *rd = ofono_radio_settings_get_data(rs);
 	ofono_radio_settings_set_data(rs, NULL);
