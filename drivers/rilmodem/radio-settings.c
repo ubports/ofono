@@ -214,12 +214,11 @@ static void ril_set_fast_dormancy(struct ofono_radio_settings *rs,
 	}
 }
 
-static ofono_bool_t query_available_rats_cb(gpointer user_data)
+static void ril_query_available_rats(struct ofono_radio_settings *rs,
+			ofono_radio_settings_available_rats_query_cb_t cb,
+			void *data)
 {
 	unsigned int available_rats;
-	struct cb_data *cbd = user_data;
-	ofono_radio_settings_available_rats_query_cb_t cb = cbd->cb;
-	struct ofono_radio_settings *rs = cbd->user;
 	struct ofono_modem *modem = ofono_radio_settings_get_modem(rs);
 
 	available_rats = OFONO_RADIO_ACCESS_MODE_GSM
@@ -228,20 +227,7 @@ static ofono_bool_t query_available_rats_cb(gpointer user_data)
 	if (ofono_modem_get_boolean(modem, MODEM_PROP_LTE_CAPABLE))
 		available_rats |= OFONO_RADIO_ACCESS_MODE_LTE;
 
-	CALLBACK_WITH_SUCCESS(cb, available_rats, cbd->data);
-
-	g_free(cbd);
-
-	return FALSE;
-}
-
-static void ril_query_available_rats(struct ofono_radio_settings *rs,
-			ofono_radio_settings_available_rats_query_cb_t cb,
-			void *data)
-{
-	struct cb_data *cbd = cb_data_new(cb, data, rs);
-
-	g_idle_add(query_available_rats_cb, cbd);
+	CALLBACK_WITH_SUCCESS(cb, available_rats, data);
 }
 
 static void ril_delayed_register(const struct ofono_error *error,
