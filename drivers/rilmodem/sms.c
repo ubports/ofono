@@ -40,6 +40,7 @@
 #include <ofono/sms.h>
 #include "smsutil.h"
 #include "util.h"
+#include "common.h"
 
 #include "rilmodem.h"
 #include "grilrequest.h"
@@ -74,14 +75,19 @@ static void ril_csca_set(struct ofono_sms *sms,
 	struct sms_data *sd = ofono_sms_get_data(sms);
 	struct cb_data *cbd = cb_data_new(cb, user_data, sd);
 	struct parcel rilp;
+	const char *number = phone_number_to_string(sca);
 
-	g_ril_request_set_smsc_address(sd->ril, sca, &rilp);
+	parcel_init(&rilp);
+	parcel_w_string(&rilp, number);
+
+	g_ril_append_print_buf(sd->ril, "(%s)", number);
 
 	if (g_ril_send(sd->ril, RIL_REQUEST_SET_SMSC_ADDRESS, &rilp,
-			ril_csca_set_cb, cbd, g_free) == 0) {
-		g_free(cbd);
-		CALLBACK_WITH_FAILURE(cb, user_data);
-	}
+			ril_csca_set_cb, cbd, g_free) > 0)
+		return;
+
+	g_free(cbd);
+	CALLBACK_WITH_FAILURE(cb, user_data);
 }
 
 static void ril_csca_query_cb(struct ril_msg *message, gpointer user_data)
