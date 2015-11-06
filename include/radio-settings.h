@@ -133,6 +133,9 @@ void ofono_radio_settings_remove(struct ofono_radio_settings *rs);
 void ofono_radio_settings_set_data(struct ofono_radio_settings *rs, void *data);
 void *ofono_radio_settings_get_data(struct ofono_radio_settings *rs);
 
+struct ofono_modem *ofono_radio_settings_get_modem(
+					struct ofono_radio_settings *rs);
+
 #ifdef __cplusplus
 }
 #endif
