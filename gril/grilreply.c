@@ -781,32 +781,6 @@ err_alloc:
 	return NULL;
 }
 
-int g_ril_reply_parse_sms_response(GRil *gril, const struct ril_msg *message)
-{
-	struct parcel rilp;
-	int error, mr;
-	char *ack_pdu;
-
-	/* Set up Parcel struct for proper parsing */
-	g_ril_init_parcel(message, &rilp);
-
-	/*
-	 * TP-Message-Reference for GSM/
-	 * BearerData MessageId for CDMA
-	 */
-	mr = parcel_r_int32(&rilp);
-	ack_pdu = parcel_r_string(&rilp);
-	error = parcel_r_int32(&rilp);
-
-	g_ril_append_print_buf(gril, "{%d,%s,%d}",
-				mr, ack_pdu, error);
-	g_ril_print_response(gril, message);
-
-	g_free(ack_pdu);
-
-	return mr;
-}
-
 static gint g_ril_call_compare(gconstpointer a, gconstpointer b)
 {
 	const struct ofono_call *ca = a;
