@@ -77,7 +77,6 @@ static void ril_csca_set(struct ofono_sms *sms,
 
 	g_ril_request_set_smsc_address(sd->ril, sca, &rilp);
 
-	/* Send request to RIL */
 	if (g_ril_send(sd->ril, RIL_REQUEST_SET_SMSC_ADDRESS, &rilp,
 			ril_csca_set_cb, cbd, g_free) == 0) {
 		g_free(cbd);
@@ -187,7 +186,6 @@ static void ril_ack_delivery(struct ofono_sms *sms)
 	/* ACK the incoming NEW_SMS */
 	g_ril_send(sd->ril, RIL_REQUEST_SMS_ACKNOWLEDGE, &rilp,
 			ril_ack_delivery_cb, NULL, NULL);
-
 }
 
 static void ril_sms_notify(struct ril_msg *message, gpointer user_data)
@@ -240,13 +238,11 @@ static gboolean ril_delayed_register(gpointer user_data)
 	DBG("");
 	ofono_sms_register(sms);
 
-	/* register to receive INCOMING_SMS and SMS status reports */
 	g_ril_register(data->ril, RIL_UNSOL_RESPONSE_NEW_SMS,
 			ril_sms_notify,	sms);
 	g_ril_register(data->ril, RIL_UNSOL_RESPONSE_NEW_SMS_STATUS_REPORT,
 			ril_sms_notify, sms);
 
-	/* This makes the delayed call a single-shot */
 	return FALSE;
 }
 
@@ -262,13 +258,6 @@ static int ril_sms_probe(struct ofono_sms *sms, unsigned int vendor,
 
 	ofono_sms_set_data(sms, data);
 
-	/*
-	 * ofono_sms_register() needs to be called after
-	 * the driver has been set in ofono_sms_create(), which
-	 * calls this function.  Most other drivers make some
-	 * kind of capabilities query to the modem, and then
-	 * call register in the callback; we use an idle add instead.
-	 */
 	g_idle_add(ril_delayed_register, sms);
 
 	return 0;
