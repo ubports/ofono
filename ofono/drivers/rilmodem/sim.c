@@ -52,7 +52,7 @@
 #include "grilrequest.h"
 #include "grilunsol.h"
 
-#include "drivers/infineonmodem/infineon_constants.h"
+#include <drivers/infineonmodem/infineon_constants.h>
 
 /* Number of passwords in EPINC response */
 #define MTK_EPINC_NUM_PASSWD 4

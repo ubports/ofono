@@ -23,9 +23,9 @@
 #define RILUTIL_H
 
 #include <stdio.h>
-#include <modem.h>
-#include <sim.h>
-#include <gprs-context.h>
+#include <ofono/modem.h>
+#include <ofono/sim.h>
+#include <ofono/gprs-context.h>
 
 /* TODO: create a table lookup*/
 #define PREFIX_30_NETMASK "255.255.255.252"
