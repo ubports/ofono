@@ -916,60 +916,6 @@ enum ofono_disconnect_reason g_ril_reply_parse_call_fail_cause(
 	return reason;
 }
 
-int g_ril_reply_parse_get_preferred_network_type(GRil *gril,
-						const struct ril_msg *message)
-{
-	struct parcel rilp;
-	int numint, parcel_net_type, net_type;
-
-	g_ril_init_parcel(message, &rilp);
-
-	numint = parcel_r_int32(&rilp);
-	if (numint != 1) {
-		ofono_error("%s: Wrong format", __func__);
-		goto error;
-	}
-
-	parcel_net_type = parcel_r_int32(&rilp);
-	net_type = parcel_net_type;
-
-	/* Try to translate special MTK settings */
-	if (g_ril_vendor(gril) == OFONO_RIL_VENDOR_MTK) {
-		switch (net_type) {
-		/* 4G preferred */
-		case MTK_PREF_NET_TYPE_LTE_GSM_WCDMA:
-		case MTK_PREF_NET_TYPE_LTE_GSM_WCDMA_MMDC:
-		case MTK_PREF_NET_TYPE_LTE_GSM_TYPE:
-		case MTK_PREF_NET_TYPE_LTE_GSM_MMDC_TYPE:
-			net_type = PREF_NET_TYPE_LTE_GSM_WCDMA;
-			break;
-		/* 3G or 2G preferred over LTE */
-		case MTK_PREF_NET_TYPE_GSM_WCDMA_LTE:
-		case MTK_PREF_NET_TYPE_GSM_WCDMA_LTE_MMDC:
-			net_type = PREF_NET_TYPE_GSM_WCDMA;
-			break;
-		}
-	}
-
-	if (net_type < 0 || net_type > PREF_NET_TYPE_LTE_ONLY) {
-		ofono_error("%s: unknown network type", __func__);
-		goto error;
-	}
-
-	if (rilp.malformed) {
-		ofono_error("%s: malformed parcel", __func__);
-		goto error;
-	}
-
-	g_ril_append_print_buf(gril, "{%d}", parcel_net_type);
-	g_ril_print_response(gril, message);
-
-	return net_type;
-
-error:
-	return -1;
-}
-
 int *g_ril_reply_parse_retries(GRil *gril, const struct ril_msg *message,
 				enum ofono_sim_password_type passwd_type)
 {
