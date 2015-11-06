@@ -117,12 +117,6 @@ struct req_pin_change_state {
 	const char *passwd;
 };
 
-struct req_sms_cmgs {
-	const unsigned char *pdu;
-	int pdu_len;
-	int tpdu_len;
-};
-
 gboolean g_ril_request_deactivate_data_call(GRil *gril,
 				const struct req_deactivate_data_call *req,
 				struct parcel *rilp,
@@ -177,10 +171,6 @@ void g_ril_request_change_passwd(GRil *gril,
 					const char *new_passwd,
 					const gchar *aid_str,
 					struct parcel *rilp);
-
-void g_ril_request_sms_cmgs(GRil *gril,
-				const struct req_sms_cmgs *req,
-				struct parcel *rilp);
 
 void g_ril_request_sms_acknowledge(GRil *gril, struct parcel *rilp);
 
