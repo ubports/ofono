@@ -203,15 +203,20 @@ static void ril_set_fast_dormancy(struct ofono_radio_settings *rs,
 	struct cb_data *cbd = cb_data_new(cb, data, rs);
 	struct parcel rilp;
 
-	g_ril_request_screen_state(rd->ril, enable ? 0 : 1, &rilp);
+	parcel_init(&rilp);
+	parcel_w_int32(&rilp, 1);	/* Number of params */
+	parcel_w_int32(&rilp, enable);
+
+	g_ril_append_print_buf(rd->ril, "(%d)", enable);
 
 	rd->pending_fd = enable;
 
 	if (g_ril_send(rd->ril, RIL_REQUEST_SCREEN_STATE, &rilp,
-			ril_display_state_cb, cbd, g_free) <= 0) {
-		g_free(cbd);
-		CALLBACK_WITH_FAILURE(cb, data);
-	}
+			ril_display_state_cb, cbd, g_free) > 0)
+		return;
+
+	g_free(cbd);
+	CALLBACK_WITH_FAILURE(cb, data);
 }
 
 static void ril_query_available_rats(struct ofono_radio_settings *rs,
