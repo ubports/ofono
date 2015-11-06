@@ -847,17 +847,6 @@ void g_ril_request_set_supp_svc_notif(GRil *gril,
 	g_ril_append_print_buf(gril, "(1)");
 }
 
-void g_ril_request_set_preferred_network_type(GRil *gril, int net_type,
-						struct parcel *rilp)
-{
-	parcel_init(rilp);
-
-	parcel_w_int32(rilp, 1);	/* Number of params */
-	parcel_w_int32(rilp, net_type);
-
-	g_ril_append_print_buf(gril, "(%d)", net_type);
-}
-
 void g_ril_request_oem_hook_raw(GRil *gril, const void *payload, size_t length,
 					struct parcel *rilp)
 {
