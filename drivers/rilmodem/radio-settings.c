@@ -92,14 +92,19 @@ static void ril_set_rat_mode(struct ofono_radio_settings *rs,
 		break;
 	}
 
-	g_ril_request_set_preferred_network_type(rd->ril, pref, &rilp);
+	parcel_init(&rilp);
+
+	parcel_w_int32(&rilp, 1);	/* Number of params */
+	parcel_w_int32(&rilp, pref);
+
+	g_ril_append_print_buf(rd->ril, "(%d)", pref);
 
 	if (g_ril_send(rd->ril, RIL_REQUEST_SET_PREFERRED_NETWORK_TYPE,
-				&rilp, ril_set_rat_cb, cbd, g_free) == 0) {
-		ofono_error("%s: unable to set rat mode", __func__);
-		g_free(cbd);
-		CALLBACK_WITH_FAILURE(cb, data);
-	}
+				&rilp, ril_set_rat_cb, cbd, g_free) > 0)
+		return;
+
+	g_free(cbd);
+	CALLBACK_WITH_FAILURE(cb, data);
 }
 
 static void ril_rat_mode_cb(struct ril_msg *message, gpointer user_data)
