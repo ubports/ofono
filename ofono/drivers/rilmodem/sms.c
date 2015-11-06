@@ -95,23 +95,47 @@ static void ril_csca_query_cb(struct ril_msg *message, gpointer user_data)
 	struct cb_data *cbd = user_data;
 	ofono_sms_sca_query_cb_t cb = cbd->cb;
 	struct sms_data *sd = cbd->user;
-	struct ofono_phone_number *sca;
+	struct ofono_phone_number sca;
+	struct parcel rilp;
+	char *temp_buf;
+	char *number;
 
-	if (message->error != RIL_E_SUCCESS) {
-		ofono_error("%s RILD reply failure: %s",
-			g_ril_request_id_to_string(sd->ril, message->req),
-			ril_error_to_string(message->error));
-		CALLBACK_WITH_FAILURE(cb, NULL, cbd->data);
-		return;
+	if (message->error != RIL_E_SUCCESS)
+		goto error;
+
+	g_ril_init_parcel(message, &rilp);
+
+	temp_buf = parcel_r_string(&rilp);
+	if (temp_buf == NULL)
+		goto error;
+
+	/* RIL gives address in quotes */
+	number = strtok(temp_buf, "\"");
+	if (number == NULL || *number == '\0') {
+		g_free(temp_buf);
+		goto error;
 	}
 
-	sca = g_ril_reply_parse_get_smsc_address(sd->ril, message);
-	if (sca == NULL) {
-		CALLBACK_WITH_FAILURE(cb, NULL, cbd->data);
-	} else {
-		CALLBACK_WITH_SUCCESS(cb, sca, cbd->data);
-		g_free(sca);
-	}
+	if (number[0] == '+') {
+		number = number + 1;
+		sca.type = OFONO_NUMBER_TYPE_INTERNATIONAL;
+	} else
+		sca.type = OFONO_NUMBER_TYPE_UNKNOWN;
+
+	strncpy(sca.number, number, OFONO_MAX_PHONE_NUMBER_LENGTH);
+	sca.number[OFONO_MAX_PHONE_NUMBER_LENGTH] = '\0';
+
+	g_ril_append_print_buf(sd->ril, "{type=%d,number=%s}",
+				sca.type, sca.number);
+	g_ril_print_response(sd->ril, message);
+
+	g_free(temp_buf);
+
+	CALLBACK_WITH_SUCCESS(cb, &sca, cbd->data);
+	return;
+
+error:
+	CALLBACK_WITH_FAILURE(cb, NULL, cbd->data);
 }
 
 static void ril_csca_query(struct ofono_sms *sms, ofono_sms_sca_query_cb_t cb,
