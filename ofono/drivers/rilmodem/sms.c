@@ -292,13 +292,10 @@ static struct ofono_sms_driver driver = {
 
 void ril_sms_init(void)
 {
-	DBG("");
-	if (ofono_sms_driver_register(&driver))
-		DBG("ofono_sms_driver_register failed!");
+	ofono_sms_driver_register(&driver);
 }
 
 void ril_sms_exit(void)
 {
-	DBG("");
 	ofono_sms_driver_unregister(&driver);
 }
