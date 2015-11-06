@@ -760,23 +760,6 @@ void g_ril_request_sms_acknowledge(GRil *gril,
 	g_ril_append_print_buf(gril, "(1,0)");
 }
 
-void g_ril_request_set_smsc_address(GRil *gril,
-					const struct ofono_phone_number *sca,
-					struct parcel *rilp)
-{
-	char number[OFONO_MAX_PHONE_NUMBER_LENGTH + 4];
-
-	if (sca->type == OFONO_NUMBER_TYPE_INTERNATIONAL)
-		snprintf(number, sizeof(number), "\"+%s\"", sca->number);
-	else
-		snprintf(number, sizeof(number), "\"%s\"", sca->number);
-
-	parcel_init(rilp);
-	parcel_w_string(rilp, number);
-
-	g_ril_append_print_buf(gril, "(%s)", number);
-}
-
 void g_ril_request_dial(GRil *gril,
 			const struct ofono_phone_number *ph,
 			enum ofono_clir_option clir,
