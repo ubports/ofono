@@ -112,16 +112,11 @@ static void ril_radio_state_changed(struct ril_msg *message, gpointer user_data)
 
 		switch (radio_state) {
 		case RADIO_STATE_ON:
-
-			if (rd->radio_settings == NULL) {
-				struct ril_radio_settings_driver_data
-						rs_data = { rd->ril, modem };
-
+			if (rd->radio_settings == NULL)
 				rd->radio_settings =
 					ofono_radio_settings_create(modem,
 							rd->vendor, RILMODEM,
-							&rs_data);
-			}
+							rd->ril);
 
 			break;
 
