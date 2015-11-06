@@ -785,3 +785,9 @@ void *ofono_radio_settings_get_data(struct ofono_radio_settings *rs)
 {
 	return rs->driver_data;
 }
+
+struct ofono_modem *ofono_radio_settings_get_modem(
+					struct ofono_radio_settings *rs)
+{
+	return __ofono_atom_get_modem(rs->atom);
+}
