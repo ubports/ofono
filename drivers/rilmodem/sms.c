@@ -194,13 +194,30 @@ static void ril_sms_notify(struct ril_msg *message, gpointer user_data)
 	struct sms_data *sd = ofono_sms_get_data(sms);
 	unsigned int smsc_len;
 	long ril_buf_len;
-	struct unsol_sms_data *pdu_data;
+	struct parcel rilp;
+	char *ril_pdu;
+	size_t ril_pdu_len;
+	unsigned char pdu[176];
 
 	DBG("req: %d; data_len: %d", message->req, (int) message->buf_len);
 
-	pdu_data = g_ril_unsol_parse_new_sms(sd->ril, message);
-	if (pdu_data == NULL)
-		goto error;
+	g_ril_init_parcel(message, &rilp);
+
+	ril_pdu = parcel_r_string(&rilp);
+	if (ril_pdu == NULL)
+		return;
+
+	g_ril_append_print_buf(sd->ril, "{%s}", ril_pdu);
+	g_ril_print_unsol(sd->ril, message);
+
+	ril_pdu_len = strlen(ril_pdu);
+
+	if (ril_pdu_len > sizeof(pdu) * 2)
+		goto fail;
+
+	if (decode_hex_own_buf(ril_pdu, ril_pdu_len,
+					&ril_buf_len, -1, pdu) == NULL)
+		goto fail;
 
 	/*
 	 * The first octect in the pdu contains the SMSC address length
@@ -208,26 +225,22 @@ static void ril_sms_notify(struct ril_msg *message, gpointer user_data)
 	 * the read length to take into account this read octet in order
 	 * to calculate the proper tpdu length.
 	 */
-	smsc_len = pdu_data->data[0] + 1;
-	ril_buf_len = pdu_data->length;
+	smsc_len = pdu[0] + 1;
 	DBG("smsc_len is %d", smsc_len);
 
 	if (message->req == RIL_UNSOL_RESPONSE_NEW_SMS)
 		/* Last parameter is 'tpdu_len' ( substract SMSC length ) */
-		ofono_sms_deliver_notify(sms, pdu_data->data,
-						ril_buf_len,
+		ofono_sms_deliver_notify(sms, pdu, ril_buf_len,
 						ril_buf_len - smsc_len);
 	else if (message->req == RIL_UNSOL_RESPONSE_NEW_SMS_STATUS_REPORT)
-		ofono_sms_status_notify(sms, pdu_data->data, ril_buf_len,
+		ofono_sms_status_notify(sms, pdu, ril_buf_len,
 						ril_buf_len - smsc_len);
 
 	/* ACK the incoming NEW_SMS */
 	ril_ack_delivery(sms);
 
-	g_ril_unsol_free_sms_data(pdu_data);
-
-error:
-	;
+fail:
+	g_free(ril_pdu);
 }
 
 static gboolean ril_delayed_register(gpointer user_data)
