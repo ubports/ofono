@@ -38,14 +38,12 @@
 #include <ofono/log.h>
 #include <ofono/modem.h>
 #include <ofono/sms.h>
+
 #include "smsutil.h"
 #include "util.h"
 #include "common.h"
 
 #include "rilmodem.h"
-#include "grilrequest.h"
-#include "grilreply.h"
-#include "grilunsol.h"
 
 struct sms_data {
 	GRil *ril;
