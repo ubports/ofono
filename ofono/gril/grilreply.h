@@ -116,10 +116,6 @@ void g_ril_reply_free_sim_status(struct reply_sim_status *status);
 struct reply_sim_status *g_ril_reply_parse_sim_status(GRil *gril,
 						const struct ril_msg *message);
 
-struct ofono_phone_number *g_ril_reply_parse_get_smsc_address(
-						GRil *gril,
-						const struct ril_msg *message);
-
 GSList *g_ril_reply_parse_get_calls(GRil *gril, const struct ril_msg *message);
 
 enum ofono_disconnect_reason g_ril_reply_parse_call_fail_cause(
