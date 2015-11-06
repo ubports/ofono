@@ -709,46 +709,6 @@ void g_ril_request_change_passwd(GRil *gril,
 				old_passwd, new_passwd, aid_str);
 }
 
-void g_ril_request_sms_cmgs(GRil *gril,
-				const struct req_sms_cmgs *req,
-				struct parcel *rilp)
-{
-	int smsc_len;
-	char *tpdu;
-
-	parcel_init(rilp);
-	parcel_w_int32(rilp, 2);	/* Number of strings */
-
-	/*
-	 * SMSC address:
-	 *
-	 * smsc_len == 1, then zero-length SMSC was spec'd
-	 * RILD expects a NULL string in this case instead
-	 * of a zero-length string.
-	 */
-	smsc_len = req->pdu_len - req->tpdu_len;
-	/* TODO: encode SMSC & write to parcel */
-	if (smsc_len > 1)
-		ofono_error("SMSC address specified (smsc_len %d); "
-				"NOT-IMPLEMENTED", smsc_len);
-
-	parcel_w_string(rilp, NULL); /* SMSC address; NULL == default */
-
-	/*
-	 * TPDU:
-	 *
-	 * 'pdu' is a raw hexadecimal string
-	 *  encode_hex() turns it into an ASCII/hex UTF8 buffer
-	 *  parcel_w_string() encodes utf8 -> utf16
-	 */
-	tpdu = encode_hex(req->pdu + smsc_len, req->tpdu_len, 0);
-	parcel_w_string(rilp, tpdu);
-
-	g_ril_append_print_buf(gril, "(%s)", tpdu);
-
-	g_free(tpdu);
-}
-
 void g_ril_request_sms_acknowledge(GRil *gril,
 					struct parcel *rilp)
 {
