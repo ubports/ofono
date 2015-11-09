@@ -399,12 +399,10 @@ static void ril_netreg_register_manual(struct ofono_netreg *netreg,
 				ofono_netreg_register_cb_t cb, void *data)
 {
 	struct ril_netreg *nd = ril_netreg_get_data(netreg);
-	char buf[OFONO_MAX_MCC_LENGTH + OFONO_MAX_MNC_LENGTH + 1];
-	int len = snprintf(buf, sizeof(buf), "%s%s", mcc, mnc);
 	GRilIoRequest *req = grilio_request_new();
 
 	ofono_info("nw select manual: %s%s", mcc, mnc);
-	grilio_request_append_utf8_chars(req, buf, len);
+	grilio_request_append_format(req, "%s%s+0", mcc, mnc);
 	grilio_queue_send_request_full(nd->q, req,
 			RIL_REQUEST_SET_NETWORK_SELECTION_MANUAL,
 			ril_netreg_register_cb, ril_netreg_cbd_free,
