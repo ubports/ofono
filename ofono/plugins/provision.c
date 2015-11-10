@@ -40,128 +40,104 @@
 #include "provision.h"
 #include "mbpi.h"
 
+struct provision_ap_defaults {
+	enum ofono_gprs_context_type type;
+	const char *name;
+	const char *apn;
+};
+
+static gboolean provision_match_name(const struct ofono_gprs_provision_data *ap,
+							const char* spn)
+{
+	return (ap->provider_name && strcasestr(ap->provider_name, spn)) ||
+		(ap->name && strcasestr(ap->name, spn)) ||
+		(ap->apn && strcasestr(ap->apn, spn));
+}
+
+static void provision_free_ap(gpointer data)
+{
+	mbpi_ap_free(data);
+}
+
+static gint provision_compare_ap(gconstpointer a, gconstpointer b, gpointer data)
+{
+	const struct ofono_gprs_provision_data *ap1 = a;
+	const struct ofono_gprs_provision_data *ap2 = b;
+	const char* spn = data;
+
+	if (spn) {
+		const gboolean match1 = provision_match_name(ap1, spn);
+		const gboolean match2 = provision_match_name(ap2, spn);
+		if (match1 && !match2) {
+			return -1;
+		} else if (match2 && !match1) {
+			return 1;
+		}
+	}
+
+	if (ap1->provider_primary && !ap2->provider_primary) {
+		return -1;
+	} else if (ap2->provider_primary && !ap1->provider_primary) {
+		return 1;
+	} else {
+		return 0;
+	}
+}
+
+/* Picks best ap, deletes the rest. Creates one if necessary */
+static GSList *provision_pick_best_ap(GSList *list, const char* spn,
+	const struct provision_ap_defaults *defaults)
+{
+	/* Sort the list */
+	list = g_slist_sort_with_data(list, provision_compare_ap, (void*)spn);
+	if (list) {
+		/* Pick the best one, delete the rest */
+		GSList *best = list;
+		g_slist_free_full(g_slist_remove_link(list, best),
+							provision_free_ap);
+		return best;
+	} else {
+		/* or create one from the default data */
+		struct ofono_gprs_provision_data *ap =
+			g_new0(struct ofono_gprs_provision_data, 1);
+
+		ap->type = defaults->type;
+		ap->name = g_strdup(defaults->name);
+		ap->apn = g_strdup(defaults->apn);
+		return g_slist_append(NULL, ap);
+	}
+}
+
 /* Returns the list containing exactly one INTERNET and one MMS access point */
 static GSList *provision_normalize_apn_list(GSList *apns, const char* spn)
 {
-	struct ofono_gprs_provision_data *best_internet = NULL;
-	struct ofono_gprs_provision_data *best_mms = NULL;
-	struct ofono_gprs_provision_data *second_best_internet = NULL;
-	struct ofono_gprs_provision_data *second_best_mms = NULL;
-	GSList *best_apns = NULL;
-	GSList *l;
+	static const struct provision_ap_defaults internet_defaults =
+		{ OFONO_GPRS_CONTEXT_TYPE_INTERNET, "Internet", "internet" };
+	static const struct provision_ap_defaults mms_defaults =
+		{ OFONO_GPRS_CONTEXT_TYPE_MMS, "MMS", "mms" };
 
-	/* 1. save the first found internet APN and the first MMS APN */
-	l = apns;
-	while (l != NULL) {
-		GSList *next = l->next;
-		struct ofono_gprs_provision_data *ap = l->data;
+	GSList *internet_apns = NULL;
+	GSList *mms_apns = NULL;
 
-		if (ap->type == OFONO_GPRS_CONTEXT_TYPE_INTERNET
-				&& !best_internet) {
-			best_internet = ap;
-		} else if (ap->type == OFONO_GPRS_CONTEXT_TYPE_MMS
-				&& !best_mms) {
-			best_mms = ap;
-		}
-		l = next;
-	}
+	/* Split internet and mms apns, delete all others */
+	while (apns) {
+		GSList *link = apns;
+		struct ofono_gprs_provision_data *ap = link->data;
 
-	/*
-	 * 2. look for a "primary" provider (i.e. an MNO, not
-	 * an MVNO on the same radio network)
-	 */
-	second_best_internet = best_internet;
-	best_internet = NULL;
-	second_best_mms = best_mms;
-	best_mms = NULL;
-
-	l = apns;
-	while (l != NULL) {
-		GSList *next = l->next;
-		struct ofono_gprs_provision_data *ap = l->data;
-
-		if (ap->provider_primary) {
-			if (ap->type == OFONO_GPRS_CONTEXT_TYPE_INTERNET
-					&& !best_internet) {
-				best_internet = ap;
-			} else if (ap->type == OFONO_GPRS_CONTEXT_TYPE_MMS
-					&& !best_mms) {
-				best_mms = ap;
-			}
-		}
-		l = next;
-	}
-
-	/* no better match found */
-	if (!best_internet)
-		best_internet = second_best_internet;
-	if (!best_mms)
-		best_mms = second_best_mms;
-
-	/*
-	 * 3. if there is an SPN given, save the first internet APN and the
-	 * first MMS APN matching the SPN (partially, case-insensitively)
-	 * */
-	if (spn) {
-		second_best_internet = best_internet;
-		best_internet = NULL;
-		second_best_mms = best_mms;
-		best_mms = NULL;
-
-		l = apns;
-		while (l != NULL) {
-			GSList *next = l->next;
-			struct ofono_gprs_provision_data *ap = l->data;
-
-			if ((ap->provider_name && strcasestr(ap->provider_name, spn))
-				|| (ap->name && strcasestr(ap->name, spn))
-				|| (ap->apn && strcasestr(ap->apn, spn))) {
-				if (ap->type == OFONO_GPRS_CONTEXT_TYPE_INTERNET
-						&& !best_internet) {
-					best_internet = ap;
-				} else if (ap->type == OFONO_GPRS_CONTEXT_TYPE_MMS
-						&& !best_mms) {
-					best_mms = ap;
-				}
-			}
-			l = next;
-		}
-
-		/* no better match found */
-		if (!best_internet)
-			best_internet = second_best_internet;
-		if (!best_mms)
-			best_mms = second_best_mms;
-	}
-
-	/* 4. if none found yet, create APNs with default values */
-	if (!best_internet) {
-		best_internet = g_try_new0(struct ofono_gprs_provision_data, 1);
-		if (best_internet) {
-			best_internet->type =
-				OFONO_GPRS_CONTEXT_TYPE_INTERNET;
-			best_internet->name =
-				g_strdup("Internet");
-			best_internet->apn =
-				g_strdup("internet");
+		apns = g_slist_remove_link(apns, link);
+		if (ap->type == OFONO_GPRS_CONTEXT_TYPE_INTERNET) {
+			internet_apns = g_slist_concat(internet_apns, link);
+		} else if (ap->type == OFONO_GPRS_CONTEXT_TYPE_MMS) {
+			mms_apns = g_slist_concat(mms_apns, link);
+		} else {
+			g_slist_free_full(link, provision_free_ap);
 		}
 	}
 
-	if (!best_mms) {
-		best_mms = g_try_new0(struct ofono_gprs_provision_data, 1);
-		if (best_mms) {
-			best_mms->type =
-				OFONO_GPRS_CONTEXT_TYPE_MMS;
-			best_mms->name =
-				g_strdup("MMS");
-			best_mms->apn =
-				g_strdup("mms");
-		}
-	}
-
-	best_apns = g_slist_append(best_apns, best_internet);
-	best_apns = g_slist_append(best_apns, best_mms);
-	return best_apns;
+	/* Pick the best ap of each type and concatenate them */
+	return g_slist_concat(
+		provision_pick_best_ap(internet_apns, spn, &internet_defaults),
+		provision_pick_best_ap(mms_apns, spn, &mms_defaults));
 }
 
 int provision_get_settings(const char *mcc, const char *mnc,
