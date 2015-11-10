@@ -335,7 +335,7 @@ gboolean ril_util_parse_reg(const void *data, guint len,
 
 	reg->ril_status = atoi(sstatus);
 	if (reg->ril_status > 10) {
-		reg->status = reg->status - 10;
+		reg->status = reg->ril_status - 10;
 	} else {
 		reg->status = reg->ril_status;
 	}
@@ -414,6 +414,8 @@ int ril_parse_tech(const char *stech, int *ril_tech)
 			break;
 		default:
 			DBG("Unknown RIL tech %s", stech);
+			/* no break */
+		case RADIO_TECH_UNKNOWN:
 			tech = -1;
 			break;
 		}
