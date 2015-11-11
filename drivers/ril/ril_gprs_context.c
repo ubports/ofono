@@ -444,6 +444,7 @@ static void ril_gprs_context_call_list_changed(GRilIoChannel *io, guint event,
 			if (call->active == DATA_CALL_INACTIVE) {
 				ofono_error("Clearing active context");
 				ril_gprs_context_set_disconnected(gcd);
+				call = NULL;
 
 				/* Compare it agains the last known state */
 			} else if (ril_gprs_context_data_call_equal(call,
