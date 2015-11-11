@@ -24,7 +24,6 @@
 
 enum ril_modem_power_state {
 	POWERED_OFF,
-	POWERING_ON,
 	POWERED_ON,
 	POWERING_OFF
 };
@@ -34,13 +33,6 @@ enum ril_modem_online_state {
 	GOING_ONLINE,
 	ONLINE,
 	GOING_OFFLINE
-};
-
-enum ril_modem_events {
-	MODEM_EVENT_CONNECTED,
-	MODEM_EVENT_RADIO_STATE_CHANGED,
-	MODEM_EVENT_ERROR,
-	MODEM_EVENT_COUNT
 };
 
 struct ril_modem_online_request {
@@ -59,10 +51,7 @@ struct ril_modem {
 
 	enum ril_radio_state radio_state;
 	enum ril_modem_power_state power_state;
-	gulong event_id[MODEM_EVENT_COUNT];
-
-	ril_modem_cb_t error_cb;
-	void *error_cb_data;
+	gulong radio_state_event_id;
 
 	ril_modem_cb_t removed_cb;
 	void *removed_cb_data;
@@ -122,13 +111,6 @@ void ril_modem_delete(struct ril_modem *md)
 	}
 }
 
-void ril_modem_set_error_cb(struct ril_modem *md, ril_modem_cb_t cb,
-								void *data)
-{
-	md->error_cb = cb;
-	md->error_cb_data = data;
-}
-
 void ril_modem_set_removed_cb(struct ril_modem *md, ril_modem_cb_t cb,
 								void *data)
 {
@@ -146,18 +128,6 @@ void ril_modem_allow_data(struct ril_modem *md)
 		grilio_request_append_int32(req, TRUE);
 		grilio_queue_send_request(md->q, req, RIL_REQUEST_ALLOW_DATA);
 		grilio_request_unref(req);
-	}
-}
-
-static void ril_modem_signal_error(struct ril_modem *md)
-{
-	if (md->modem && md->error_cb) {
-		ril_modem_cb_t cb = md->error_cb;
-		void *data = md->error_cb_data;
-
-		md->error_cb = NULL;
-		md->error_cb_data = NULL;
-		cb(md, data);
 	}
 }
 
@@ -272,21 +242,6 @@ static guint ril_modem_request_power(struct ril_modem *md, gboolean on,
 	return id;
 }
 
-static void ril_modem_connected(struct ril_modem *md)
-{
-	ofono_debug("RIL version %u", md->io->ril_version);
-	ril_modem_request_power(md, FALSE, NULL);
-	if (md->power_state == POWERING_ON) {
-		md->power_state = POWERED_ON;
-		ofono_modem_set_powered(md->modem, TRUE);
-	}
-}
-
-static void ril_modem_connected_cb(GRilIoChannel *io, void *user_data)
-{
-	ril_modem_connected((struct ril_modem *)user_data);
-}
-
 static void ril_modem_pre_sim(struct ofono_modem *modem)
 {
 	struct ril_modem *md = ril_modem_from_ofono(modem);
@@ -346,7 +301,6 @@ static void ril_modem_set_online(struct ofono_modem *modem, ofono_bool_t online,
 	DBG("%s going %sline", ofono_modem_get_path(modem),
 						online ? "on" : "off");
 
-	GASSERT(md->power_state == POWERED_ON);
 	if (online) {
 		req = &md->set_online;
 		GASSERT(!req->id);
@@ -373,14 +327,8 @@ static int ril_modem_enable(struct ofono_modem *modem)
 	struct ril_modem *md = ril_modem_from_ofono(modem);
 
 	DBG("%s", ofono_modem_get_path(modem));
-	if (md->io->connected) {
-		md->power_state = POWERED_ON;
-		return 0;
-	} else {
-		DBG("Waiting for RIL_UNSOL_RIL_CONNECTED");
-		md->power_state = POWERING_ON;
-		return -EINPROGRESS;
-	}
+	md->power_state = POWERED_ON;
+	return 0;
 }
 
 static int ril_modem_disable(struct ofono_modem *modem)
@@ -397,17 +345,6 @@ static int ril_modem_disable(struct ofono_modem *modem)
 	}
 }
 
-static void ril_modem_error(GRilIoChannel *io, const GError *error,
-							void *user_data)
-{
-	struct ril_modem *md = user_data;
-
-	ofono_error("%s", error->message);
-	grilio_channel_remove_handler(io, md->event_id[MODEM_EVENT_ERROR]);
-	md->event_id[MODEM_EVENT_ERROR] = 0;
-	ril_modem_signal_error(md);
-}
-
 static int ril_modem_probe(struct ofono_modem *modem)
 {
 	DBG("%s", ofono_modem_get_path(modem));
@@ -417,7 +354,6 @@ static int ril_modem_probe(struct ofono_modem *modem)
 static void ril_modem_remove(struct ofono_modem *modem)
 {
 	struct ril_modem *md = ril_modem_from_ofono(modem);
-	int i;
 
 	DBG("%s", ofono_modem_get_path(modem));
 	GASSERT(md->modem);
@@ -440,10 +376,7 @@ static void ril_modem_remove(struct ofono_modem *modem)
 
 	ofono_modem_set_data(modem, NULL);
 
-	for (i=0; i<G_N_ELEMENTS(md->event_id); i++) {
-		grilio_channel_remove_handler(md->io, md->event_id[i]);
-	}
-
+	grilio_channel_remove_handler(md->io, md->radio_state_event_id);
 	grilio_channel_unref(md->io);
 	grilio_queue_cancel_all(md->q, FALSE);
 	grilio_queue_unref(md->q);
@@ -503,23 +436,14 @@ struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *dev,
 		ofono_modem_set_data(modem, md);
 		err = ofono_modem_register(modem);
 		if (!err) {
-			md->event_id[MODEM_EVENT_ERROR] =
-				grilio_channel_add_error_handler(io,
-						ril_modem_error, md);
-			md->event_id[MODEM_EVENT_RADIO_STATE_CHANGED] =
+			md->radio_state_event_id =
 				grilio_channel_add_unsol_event_handler(io,
 					ril_modem_radio_state_changed,
 					RIL_UNSOL_RESPONSE_RADIO_STATE_CHANGED,
 					md);
-			if (io->connected) {
-				ril_modem_connected(md);
-			} else {
-				DBG("[%u] waiting for RIL_UNSOL_RIL_CONNECTED",
-							config->slot);
-				md->event_id[MODEM_EVENT_CONNECTED] =
-					grilio_channel_add_connected_handler(
-						io, ril_modem_connected_cb, md);
-			}
+
+			GASSERT(io->connected);
+			ril_modem_request_power(md, FALSE, NULL);
 
 			/*
 			 * ofono_modem_reset sets Powered to TRUE without
@@ -527,6 +451,7 @@ struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *dev,
 			 */
 			ofono_modem_set_powered(md->modem, FALSE);
 			ofono_modem_set_powered(md->modem, TRUE);
+			md->power_state = POWERED_ON;
 			return md;
 		} else {
 			ofono_error("Error %d registering %s",

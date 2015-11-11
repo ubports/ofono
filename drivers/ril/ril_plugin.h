@@ -45,13 +45,18 @@
 #define RIL_RETRY_SECS          (2)
 #define MAX_SIM_STATUS_RETRIES  (15)
 
+struct ril_slot_info {
+	const char *path;
+	gboolean enabled;
+	gboolean sim_present;
+};
+
 struct ril_plugin {
 	const char *default_voice_imsi;
 	const char *default_data_imsi;
 	const char *default_voice_path;
 	const char *default_data_path;
-	char **available_slots;
-	char **enabled_slots;
+	const struct ril_slot_info **slots;
 };
 
 struct ril_modem_config {
@@ -83,6 +88,8 @@ void ril_sim_dbus_free(struct ril_sim_dbus *dbus);
 struct ril_plugin_dbus *ril_plugin_dbus_new(struct ril_plugin *plugin);
 void ril_plugin_dbus_free(struct ril_plugin_dbus *dbus);
 void ril_plugin_dbus_signal(struct ril_plugin_dbus *dbus, int mask);
+void ril_plugin_dbus_signal_sim(struct ril_plugin_dbus *dbus, int index,
+							gboolean present);
 
 struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *dev,
 					const struct ril_modem_config *config);
@@ -94,8 +101,6 @@ struct ofono_sim *ril_modem_ofono_sim(struct ril_modem *modem);
 struct ofono_gprs *ril_modem_ofono_gprs(struct ril_modem *modem);
 struct ofono_netreg *ril_modem_ofono_netreg(struct ril_modem *modem);
 struct ofono_modem *ril_modem_ofono_modem(struct ril_modem *modem);
-void ril_modem_set_error_cb(struct ril_modem *modem, ril_modem_cb_t cb,
-								void *data);
 void ril_modem_set_removed_cb(struct ril_modem *modem, ril_modem_cb_t cb,
 								void *data);
 
