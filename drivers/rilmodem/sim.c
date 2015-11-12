@@ -1060,24 +1060,36 @@ static void ril_change_passwd(struct ofono_sim *sim,
 	struct sim_data *sd = ofono_sim_get_data(sim);
 	struct cb_data *cbd = cb_data_new(cb, data, sim);
 	struct parcel rilp;
-	int request = RIL_REQUEST_CHANGE_SIM_PIN;
+	int request;
 
-	sd->passwd_type = passwd_type;
-
-	g_ril_request_change_passwd(sd->ril,
-					old_passwd,
-					new_passwd,
-					sd->aid_str,
-					&rilp);
-
-	if (passwd_type == OFONO_SIM_PASSWORD_SIM_PIN2)
+	switch (passwd_type) {
+	case OFONO_SIM_PASSWORD_SIM_PIN:
+		request = RIL_REQUEST_CHANGE_SIM_PIN;
+		break;
+	case OFONO_SIM_PASSWORD_SIM_PIN2:
 		request = RIL_REQUEST_CHANGE_SIM_PIN2;
+		break;
+	default:
+		goto error;
+	};
+
+	parcel_init(&rilp);
+
+	parcel_w_int32(&rilp, 3);
+	parcel_w_string(&rilp, old_passwd);
+	parcel_w_string(&rilp, new_passwd);
+	parcel_w_string(&rilp, sd->aid_str);
+
+	g_ril_append_print_buf(sd->ril, "(old=%s,new=%s,aid=%s)",
+				old_passwd, new_passwd, sd->aid_str);
 
 	if (g_ril_send(sd->ril, request, &rilp, ril_pin_change_state_cb,
-			cbd, g_free) == 0) {
-		g_free(cbd);
-		CALLBACK_WITH_FAILURE(cb, data);
-	}
+			cbd, g_free) > 0)
+		return;
+
+error:
+	g_free(cbd);
+	CALLBACK_WITH_FAILURE(cb, data);
 }
 
 static gboolean listen_and_get_sim_status(gpointer user)
