@@ -73,7 +73,6 @@
 
 /* RIL_Request* parameter counts */
 #define SET_FACILITY_LOCK_PARAMS 5
-#define ENTER_SIM_PUK_PARAMS 3
 #define CHANGE_SIM_PIN_PARAMS 3
 
 /* RIL_FACILITY_LOCK parameters */
@@ -658,23 +657,6 @@ gboolean g_ril_request_pin_change_state(GRil *gril,
 
 error:
 	return FALSE;
-}
-
-void g_ril_request_pin_send_puk(GRil *gril,
-				const char *puk,
-				const char *passwd,
-				const gchar *aid_str,
-				struct parcel *rilp)
-{
-	parcel_init(rilp);
-
-	parcel_w_int32(rilp, ENTER_SIM_PUK_PARAMS);
-	parcel_w_string(rilp, puk);
-	parcel_w_string(rilp, passwd);
-	parcel_w_string(rilp, aid_str);
-
-	g_ril_append_print_buf(gril, "(puk=%s,pin=%s,aid=%s)",
-				puk, passwd, aid_str);
 }
 
 void g_ril_request_change_passwd(GRil *gril,
