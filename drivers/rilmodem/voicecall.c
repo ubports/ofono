@@ -556,6 +556,7 @@ static void ril_send_dtmf_cb(struct ril_msg *message, gpointer user_data)
 static void send_one_dtmf(struct ril_voicecall_data *vd)
 {
 	struct parcel rilp;
+	char ril_dtmf[2];
 
 	if (vd->tone_pending == TRUE)
 		return; /* RIL request pending */
@@ -563,7 +564,15 @@ static void send_one_dtmf(struct ril_voicecall_data *vd)
 	if (strlen(vd->tone_queue) == 0)
 		return; /* nothing to send */
 
-	g_ril_request_dtmf(vd->ril, vd->tone_queue[0], &rilp);
+	parcel_init(&rilp);
+
+	/* Ril wants just one character, but we need to send as string */
+	ril_dtmf[0] = vd->tone_queue[0];
+	ril_dtmf[1] = '\0';
+
+	parcel_w_string(&rilp, ril_dtmf);
+
+	g_ril_append_print_buf(vd->ril, "(%s)", ril_dtmf);
 
 	g_ril_send(vd->ril, RIL_REQUEST_DTMF, &rilp,
 			ril_send_dtmf_cb, vd, NULL);
