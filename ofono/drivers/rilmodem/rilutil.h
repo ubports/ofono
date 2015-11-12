@@ -79,11 +79,6 @@ struct ril_gprs_context_data {
 	enum ofono_gprs_context_type type;
 };
 
-struct ril_voicecall_driver_data {
-	GRil *gril;
-	struct ofono_modem *modem;
-};
-
 struct ril_gprs_driver_data {
 	GRil *gril;
 	struct ofono_modem *modem;
