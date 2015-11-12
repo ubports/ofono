@@ -155,12 +155,6 @@ gboolean g_ril_request_pin_change_state(GRil *gril,
 					const struct req_pin_change_state *req,
 					struct parcel *rilp);
 
-void g_ril_request_change_passwd(GRil *gril,
-					const char *old_passwd,
-					const char *new_passwd,
-					const gchar *aid_str,
-					struct parcel *rilp);
-
 void g_ril_request_dial(GRil *gril,
 			const struct ofono_phone_number *ph,
 			enum ofono_clir_option clir,

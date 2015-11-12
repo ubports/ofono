@@ -73,7 +73,6 @@
 
 /* RIL_Request* parameter counts */
 #define SET_FACILITY_LOCK_PARAMS 5
-#define CHANGE_SIM_PIN_PARAMS 3
 
 /* RIL_FACILITY_LOCK parameters */
 #define RIL_FACILITY_UNLOCK "0"
@@ -657,23 +656,6 @@ gboolean g_ril_request_pin_change_state(GRil *gril,
 
 error:
 	return FALSE;
-}
-
-void g_ril_request_change_passwd(GRil *gril,
-					const char *old_passwd,
-					const char *new_passwd,
-					const gchar *aid_str,
-					struct parcel *rilp)
-{
-	parcel_init(rilp);
-
-	parcel_w_int32(rilp, CHANGE_SIM_PIN_PARAMS);
-	parcel_w_string(rilp, old_passwd);
-	parcel_w_string(rilp, new_passwd);
-	parcel_w_string(rilp, aid_str);
-
-	g_ril_append_print_buf(gril, "(old=%s,new=%s,aid=%s)",
-				old_passwd, new_passwd, aid_str);
 }
 
 void g_ril_request_dial(GRil *gril,
