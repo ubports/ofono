@@ -153,10 +153,6 @@ void g_ril_request_hangup(GRil *gril,
 				unsigned call_id,
 				struct parcel *rilp);
 
-void g_ril_request_dtmf(GRil *gril,
-			char dtmf_char,
-			struct parcel *rilp);
-
 void g_ril_request_oem_hook_raw(GRil *gril, const void *payload, size_t length,
 					struct parcel *rilp);
 
