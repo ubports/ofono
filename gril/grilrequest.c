@@ -631,16 +631,6 @@ void g_ril_request_separate_conn(GRil *gril,
 	g_ril_append_print_buf(gril, "(%d)", call_id);
 }
 
-void g_ril_request_set_supp_svc_notif(GRil *gril,
-					struct parcel *rilp)
-{
-	parcel_init(rilp);
-	parcel_w_int32(rilp, 1); /* size of array */
-	parcel_w_int32(rilp, 1); /* notifications enabled */
-
-	g_ril_append_print_buf(gril, "(1)");
-}
-
 void g_ril_request_oem_hook_raw(GRil *gril, const void *payload, size_t length,
 					struct parcel *rilp)
 {
