@@ -707,13 +707,6 @@ void ril_voicecall_start(struct ril_voicecall_driver_data *driver_data,
 
 	ofono_voicecall_set_data(vc, vd);
 
-	/*
-	 * ofono_voicecall_register() needs to be called after
-	 * the driver has been set in ofono_voicecall_create(),
-	 * which calls this function.  Most other drivers make
-	 * some kind of capabilities query to the modem, and then
-	 * call register in the callback; we use an idle event instead.
-	 */
 	g_idle_add(ril_delayed_register, vc);
 }
 
