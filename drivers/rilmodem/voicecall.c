@@ -653,25 +653,12 @@ void ril_set_udub(struct ofono_voicecall *vc,
 			generic_cb, 0, NULL, cb, data);
 }
 
-static gboolean enable_supp_svc(gpointer user_data)
+static gboolean ril_delayed_register(gpointer user_data)
 {
 	struct ofono_voicecall *vc = user_data;
 	struct ril_voicecall_data *vd = ofono_voicecall_get_data(vc);
 	struct parcel rilp;
 
-	g_ril_request_set_supp_svc_notif(vd->ril, &rilp);
-
-	g_ril_send(vd->ril, RIL_REQUEST_SET_SUPP_SVC_NOTIFICATION, &rilp,
-			NULL, vc, NULL);
-
-	/* Makes this a single shot */
-	return FALSE;
-}
-
-static gboolean ril_delayed_register(gpointer user_data)
-{
-	struct ofono_voicecall *vc = user_data;
-	struct ril_voicecall_data *vd = ofono_voicecall_get_data(vc);
 	ofono_voicecall_register(vc);
 
 	/* Initialize call list */
@@ -686,9 +673,15 @@ static gboolean ril_delayed_register(gpointer user_data)
 			ril_ss_notify, vc);
 
 	/* request supplementary service notifications*/
-	enable_supp_svc(vc);
+	parcel_init(&rilp);
+	parcel_w_int32(&rilp, 1); /* size of array */
+	parcel_w_int32(&rilp, 1); /* notifications enabled */
 
-	/* This makes the timeout a single-shot */
+	g_ril_append_print_buf(vd->ril, "(1)");
+
+	g_ril_send(vd->ril, RIL_REQUEST_SET_SUPP_SVC_NOTIFICATION, &rilp,
+			NULL, vc, NULL);
+
 	return FALSE;
 }
 
