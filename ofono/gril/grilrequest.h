@@ -151,11 +151,6 @@ gboolean g_ril_request_sim_write_record(GRil *gril,
 					const struct req_sim_write_record *req,
 					struct parcel *rilp);
 
-void g_ril_request_pin_send(GRil *gril,
-				const char *passwd,
-				const gchar *aid_str,
-				struct parcel *rilp);
-
 gboolean g_ril_request_pin_change_state(GRil *gril,
 					const struct req_pin_change_state *req,
 					struct parcel *rilp);
