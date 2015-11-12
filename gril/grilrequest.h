@@ -149,10 +149,6 @@ void g_ril_request_dial(GRil *gril,
 			enum ofono_clir_option clir,
 			struct parcel *rilp);
 
-void g_ril_request_hangup(GRil *gril,
-				unsigned call_id,
-				struct parcel *rilp);
-
 void g_ril_request_oem_hook_raw(GRil *gril, const void *payload, size_t length,
 					struct parcel *rilp);
 
