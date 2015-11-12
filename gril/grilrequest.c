@@ -71,13 +71,6 @@
 #define ROOTMF ((char[]) {'\x3F', '\x00'})
 #define ROOTMF_SZ sizeof(ROOTMF)
 
-/* RIL_Request* parameter counts */
-#define SET_FACILITY_LOCK_PARAMS 5
-
-/* RIL_FACILITY_LOCK parameters */
-#define RIL_FACILITY_UNLOCK "0"
-#define RIL_FACILITY_LOCK "1"
-
 /* Call ID should not really be a big number */
 #define MAX_CID_DIGITS 3
 
@@ -571,86 +564,6 @@ gboolean g_ril_request_sim_write_record(GRil *gril,
 				req->aid_str);
 
 	g_free(hex_data);
-
-	return TRUE;
-
-error:
-	return FALSE;
-}
-
-gboolean g_ril_request_pin_change_state(GRil *gril,
-					const struct req_pin_change_state *req,
-					struct parcel *rilp)
-{
-	const char *lock_type;
-
-	/*
-	 * TODO: clean up the use of string literals &
-	 * the multiple g_ril_append_print_buf() calls
-	 * by using a table lookup as does the core sim code
-	 */
-	switch (req->passwd_type) {
-	case OFONO_SIM_PASSWORD_SIM_PIN:
-		g_ril_append_print_buf(gril, "(SC,");
-		lock_type = "SC";
-		break;
-	case OFONO_SIM_PASSWORD_PHSIM_PIN:
-		g_ril_append_print_buf(gril, "(PS,");
-		lock_type = "PS";
-		break;
-	case OFONO_SIM_PASSWORD_PHFSIM_PIN:
-		g_ril_append_print_buf(gril, "(PF,");
-		lock_type = "PF";
-		break;
-	case OFONO_SIM_PASSWORD_SIM_PIN2:
-		g_ril_append_print_buf(gril, "(P2,");
-		lock_type = "P2";
-		break;
-	case OFONO_SIM_PASSWORD_PHNET_PIN:
-		g_ril_append_print_buf(gril, "(PN,");
-		lock_type = "PN";
-		break;
-	case OFONO_SIM_PASSWORD_PHNETSUB_PIN:
-		g_ril_append_print_buf(gril, "(PU,");
-		lock_type = "PU";
-		break;
-	case OFONO_SIM_PASSWORD_PHSP_PIN:
-		g_ril_append_print_buf(gril, "(PP,");
-		lock_type = "PP";
-		break;
-	case OFONO_SIM_PASSWORD_PHCORP_PIN:
-		g_ril_append_print_buf(gril, "(PC,");
-		lock_type = "PC";
-		break;
-	default:
-		ofono_error("%s: Invalid password type: %d",
-				__func__,
-				req->passwd_type);
-		goto error;
-	}
-
-	parcel_init(rilp);
-	parcel_w_int32(rilp, SET_FACILITY_LOCK_PARAMS);
-
-	parcel_w_string(rilp, lock_type);
-
-	if (req->enable)
-		parcel_w_string(rilp, RIL_FACILITY_LOCK);
-	else
-		parcel_w_string(rilp, RIL_FACILITY_UNLOCK);
-
-	parcel_w_string(rilp, req->passwd);
-
-	/* TODO: make this a constant... */
-	parcel_w_string(rilp, "0");		/* class */
-
-	parcel_w_string(rilp, req->aid_str);
-
-	g_ril_append_print_buf(gril, "(%s,%d,%s,0,aid=%s)",
-				print_buf,
-				req->enable,
-				req->passwd,
-				req->aid_str);
 
 	return TRUE;
 

@@ -110,13 +110,6 @@ struct req_sim_write_record {
 	const unsigned char *data;
 };
 
-struct req_pin_change_state {
-	const gchar *aid_str;
-	enum ofono_sim_password_type passwd_type;
-	int enable;
-	const char *passwd;
-};
-
 gboolean g_ril_request_deactivate_data_call(GRil *gril,
 				const struct req_deactivate_data_call *req,
 				struct parcel *rilp,
@@ -149,10 +142,6 @@ gboolean g_ril_request_sim_write_binary(GRil *gril,
 
 gboolean g_ril_request_sim_write_record(GRil *gril,
 					const struct req_sim_write_record *req,
-					struct parcel *rilp);
-
-gboolean g_ril_request_pin_change_state(GRil *gril,
-					const struct req_pin_change_state *req,
 					struct parcel *rilp);
 
 void g_ril_request_dial(GRil *gril,
