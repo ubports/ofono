@@ -618,19 +618,6 @@ void g_ril_request_dtmf(GRil *gril,
 	g_ril_append_print_buf(gril, "(%s)", ril_dtmf);
 }
 
-void g_ril_request_separate_conn(GRil *gril,
-					int call_id,
-					struct parcel *rilp)
-{
-	parcel_init(rilp);
-
-	/* Payload is an array that holds just one element */
-	parcel_w_int32(rilp, 1);
-	parcel_w_int32(rilp, call_id);
-
-	g_ril_append_print_buf(gril, "(%d)", call_id);
-}
-
 void g_ril_request_oem_hook_raw(GRil *gril, const void *payload, size_t length,
 					struct parcel *rilp)
 {
