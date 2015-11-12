@@ -930,16 +930,20 @@ static void ril_pin_send(struct ofono_sim *sim, const char *passwd,
 
 	sd->passwd_type = OFONO_SIM_PASSWORD_SIM_PIN;
 
-	g_ril_request_pin_send(sd->ril,
-				passwd,
-				sd->aid_str,
-				&rilp);
+	parcel_init(&rilp);
+
+	parcel_w_int32(&rilp, 2);
+	parcel_w_string(&rilp, passwd);
+	parcel_w_string(&rilp, sd->aid_str);
+
+	g_ril_append_print_buf(sd->ril, "(%s,aid=%s)", passwd, sd->aid_str);
 
 	if (g_ril_send(sd->ril, RIL_REQUEST_ENTER_SIM_PIN, &rilp,
-			ril_pin_change_state_cb, cbd, g_free) == 0) {
-		g_free(cbd);
-		CALLBACK_WITH_FAILURE(cb, data);
-	}
+			ril_pin_change_state_cb, cbd, g_free) > 0)
+		return;
+
+	g_free(cbd);
+	CALLBACK_WITH_FAILURE(cb, data);
 }
 
 static void enter_pin_done(const struct ofono_error *error, void *data)
