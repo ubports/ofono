@@ -105,47 +105,6 @@ static void lastcause_cb(struct ril_msg *message, gpointer user_data)
 	ofono_voicecall_disconnected(vc, reqdata->id, reason, NULL);
 }
 
-static gboolean auto_answer_call(gpointer user_data)
-{
-	struct ofono_voicecall *vc = user_data;
-
-	DBG("");
-
-	ril_answer(vc, NULL, NULL);
-
-	return FALSE;
-}
-
-static gboolean is_auto_answer(struct ril_voicecall_data *vd,
-				struct ofono_call *call)
-{
-	static const char test_mcc_mnc_1[] = "00101";
-	static const char test_mcc_mnc_2[] = "001001";
-
-	const char *imsi;
-	struct ofono_sim *sim;
-
-	if (call->status != CALL_STATUS_INCOMING)
-		return FALSE;
-
-	sim = __ofono_atom_find(OFONO_ATOM_TYPE_SIM, vd->modem);
-	if (sim == NULL)
-		return FALSE;
-
-	imsi = ofono_sim_get_imsi(sim);
-	if (imsi == NULL)
-		return FALSE;
-
-	if (strncmp(imsi, test_mcc_mnc_1, sizeof(test_mcc_mnc_1) - 1) == 0 ||
-		strncmp(imsi, test_mcc_mnc_2, sizeof(test_mcc_mnc_2) - 1)
-			== 0) {
-		ofono_info("Auto answering incoming call, imsi is %s", imsi);
-		return TRUE;
-	}
-
-	return FALSE;
-}
-
 static void clcc_poll_cb(struct ril_msg *message, gpointer user_data)
 {
 	struct ofono_voicecall *vc = user_data;
@@ -216,11 +175,6 @@ static void clcc_poll_cb(struct ril_msg *message, gpointer user_data)
 					vd->cb = NULL;
 					vd->data = NULL;
 				}
-
-				if (is_auto_answer(vd, nc))
-					g_timeout_add_seconds(
-							AUTO_ANSWER_DELAY_S,
-							auto_answer_call, vc);
 			}
 
 			n = n->next;

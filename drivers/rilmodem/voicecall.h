@@ -25,7 +25,6 @@ struct ril_voicecall_data {
 	unsigned int local_release;
 	unsigned int clcc_source;
 	GRil *ril;
-	struct ofono_modem *modem;
 	unsigned int vendor;
 	unsigned char flags;
 	ofono_voicecall_cb_t cb;
