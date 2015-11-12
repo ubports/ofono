@@ -432,7 +432,6 @@ void ril_hangup_all(struct ofono_voicecall *vc, ofono_voicecall_cb_t cb,
 			void *data)
 {
 	struct ril_voicecall_data *vd = ofono_voicecall_get_data(vc);
-	struct parcel rilp;
 	struct ofono_error error;
 	struct ofono_call *call;
 	GSList *l;
@@ -452,10 +451,15 @@ void ril_hangup_all(struct ofono_voicecall *vc, ofono_voicecall_cb_t cb,
 					vc, generic_cb, AFFECTED_STATES_ALL,
 					NULL, NULL, NULL);
 		} else {
+			struct parcel rilp;
 
 			/* TODO: Hangup just the active ones once we have call
 			 * state tracking (otherwise it can't handle ringing) */
-			g_ril_request_hangup(vd->ril, call->id, &rilp);
+			parcel_init(&rilp);
+			parcel_w_int32(&rilp, 1); /* Always 1 - AT+CHLD=1x */
+			parcel_w_int32(&rilp, call->id);
+
+			g_ril_append_print_buf(vd->ril, "(%u)", call->id);
 
 			/* Send request to RIL */
 			ril_template(RIL_REQUEST_HANGUP, vc, generic_cb,
@@ -476,7 +480,11 @@ void ril_hangup_specific(struct ofono_voicecall *vc,
 
 	DBG("Hanging up call with id %d", id);
 
-	g_ril_request_hangup(vd->ril, id, &rilp);
+	parcel_init(&rilp);
+	parcel_w_int32(&rilp, 1); /* Always 1 - AT+CHLD=1x */
+	parcel_w_int32(&rilp, id);
+
+	g_ril_append_print_buf(vd->ril, "(%u)", id);
 
 	/* Send request to RIL */
 	ril_template(RIL_REQUEST_HANGUP, vc, generic_cb,
