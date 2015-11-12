@@ -603,21 +603,6 @@ void g_ril_request_hangup(GRil *gril,
 	g_ril_append_print_buf(gril, "(%u)", call_id);
 }
 
-void g_ril_request_dtmf(GRil *gril,
-			char dtmf_char,
-			struct parcel *rilp)
-{
-	char ril_dtmf[2];
-
-	parcel_init(rilp);
-	/* Ril wants just one character, but we need to send as string */
-	ril_dtmf[0] = dtmf_char;
-	ril_dtmf[1] = '\0';
-	parcel_w_string(rilp, ril_dtmf);
-
-	g_ril_append_print_buf(gril, "(%s)", ril_dtmf);
-}
-
 void g_ril_request_oem_hook_raw(GRil *gril, const void *payload, size_t length,
 					struct parcel *rilp)
 {
