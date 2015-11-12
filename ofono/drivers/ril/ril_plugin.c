@@ -82,6 +82,7 @@ struct ril_plugin_priv {
 struct ril_slot {
 	struct ril_slot_info pub;
 	char *path;
+	char *imei;
 	char *name;
 	char *sockpath;
 	char *sub;
@@ -96,6 +97,7 @@ struct ril_slot {
 	GRilIoChannel *io;
 	gulong io_event_id[IO_EVENT_COUNT];
 	gulong sim_status_req_id;
+	gulong imei_req_id;
 	guint trace_id;
 	guint dump_id;
 	guint retry_id;
@@ -195,7 +197,10 @@ static void ril_plugin_shutdown_slot(struct ril_slot *slot, gboolean kill_io)
 			slot->dump_id = 0;
 
 			grilio_channel_cancel_request(slot->io,
+						slot->imei_req_id, FALSE);
+			grilio_channel_cancel_request(slot->io,
 						slot->sim_status_req_id, FALSE);
+			slot->imei_req_id = 0;
 			slot->sim_status_req_id = 0;
 
 			for (i=0; i<IO_EVENT_COUNT; i++) {
@@ -544,6 +549,11 @@ static void ril_debug_trace_update_slot(struct ril_slot *slot)
 	}
 }
 
+static gboolean ril_plugin_can_create_modem(struct ril_slot *slot)
+{
+	return slot->pub.enabled && slot->io && slot->io->connected;
+}
+
 static void ril_plugin_create_modem(struct ril_slot *slot)
 {
 	struct ril_modem *modem;
@@ -553,7 +563,6 @@ static void ril_plugin_create_modem(struct ril_slot *slot)
 	GASSERT(!slot->modem);
 
 	modem = ril_modem_create(slot->io, slot->path + 1, &slot->config);
-	GASSERT(modem); /* Why would it fail? */
 
 	if (modem) {
 		struct ofono_sim *sim = ril_modem_ofono_sim(modem);
@@ -573,14 +582,56 @@ static void ril_plugin_create_modem(struct ril_slot *slot)
 	}
 }
 
+static void ril_plugin_imei_cb(GRilIoChannel *io, int status,
+			const void *data, guint len, void *user_data)
+{
+	struct ril_slot *slot = user_data;
+	struct ril_plugin_priv *plugin = slot->plugin;
+	gboolean all_done = TRUE;
+	GSList *link;
+
+	GASSERT(!slot->imei);
+	GASSERT(slot->imei_req_id);
+	slot->imei_req_id = 0;
+
+	if (status == RIL_E_SUCCESS) {
+		GRilIoParser rilp;
+		grilio_parser_init(&rilp, data, len);
+		slot->pub.imei = slot->imei = grilio_parser_get_utf8(&rilp);
+		DBG("%s", slot->imei);
+	} else {
+		ofono_error("Slot %u IMEI query error: %s", slot->config.slot,
+						ril_error_to_string(status));
+	}
+
+	for (link = plugin->slots; link && all_done; link = link->next) {
+		if (((struct ril_slot *)link->data)->imei_req_id) {
+			all_done = FALSE;
+		}
+	}
+
+	if (all_done) {
+		DBG("all done");
+		ril_plugin_dbus_block_imei_requests(plugin->dbus, FALSE);
+	}
+}
+
 static void ril_plugin_slot_connected(struct ril_slot *slot)
 {
 	ofono_debug("%s version %u", slot->name, slot->io->ril_version);
+
 	GASSERT(slot->io->connected);
+	GASSERT(!slot->io_event_id[IO_EVENT_CONNECTED]);
+
 	GASSERT(!slot->mce);
 	slot->mce = ril_mce_new(slot->io);
+
+	GASSERT(!slot->imei_req_id);
+	slot->imei_req_id = grilio_channel_send_request_full(slot->io, NULL,
+			RIL_REQUEST_GET_IMEI, ril_plugin_imei_cb, NULL, slot);
+
 	ril_plugin_request_sim_status(slot);
-	if (slot->pub.enabled && !slot->modem) {
+	if (ril_plugin_can_create_modem(slot) && !slot->modem) {
 		ril_plugin_create_modem(slot);
 	}
 }
@@ -772,6 +823,7 @@ static void ril_plugin_delete_slot(struct ril_slot *slot)
 {
 	ril_plugin_shutdown_slot(slot, TRUE);
 	g_free(slot->path);
+	g_free(slot->imei);
 	g_free(slot->name);
 	g_free(slot->sockpath);
 	g_free(slot->sub);
@@ -909,7 +961,7 @@ static void ril_plugin_update_enabled_slot(struct ril_slot *slot)
 {
 	if (slot->pub.enabled) {
 		DBG("%s enabled", slot->path + 1);
-		if (slot->io && slot->io->connected && !slot->modem) {
+		if (ril_plugin_can_create_modem(slot) && !slot->modem) {
 			ril_plugin_create_modem(slot);
 		}
 	}
@@ -1108,6 +1160,14 @@ static int ril_plugin_init(void)
 	ril_plugin->slots = ril_plugin_load_config(RILMODEM_CONF_FILE);
 	ril_plugin_init_slots(ril_plugin);
 	ril_plugin->dbus = ril_plugin_dbus_new(&ril_plugin->pub);
+
+	if (ril_plugin->slots) {
+		/*
+		 * Since IMEI query is asynchronous, we need to hold IMEI
+		 * related requests until all queries complete.
+		 */
+		ril_plugin_dbus_block_imei_requests(ril_plugin->dbus, TRUE);
+	}
 
 	/* Load settings */
 	ril_plugin->storage = storage_open(NULL, RIL_STORE);
