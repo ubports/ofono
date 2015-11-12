@@ -2097,8 +2097,7 @@ static void modem_unregister(struct ofono_modem *modem)
 	if (modem->driver && modem->driver->remove)
 		modem->driver->remove(modem);
 
-	g_hash_table_destroy(modem->properties);
-	modem->properties = NULL;
+	g_hash_table_remove_all(modem->properties);
 
 	modem->driver = NULL;
 
@@ -2118,6 +2117,7 @@ void ofono_modem_remove(struct ofono_modem *modem)
 
 	g_modem_list = g_slist_remove(g_modem_list, modem);
 
+	g_hash_table_destroy(modem->properties);
 	g_free(modem->driver_type);
 	g_free(modem->name);
 	g_free(modem->path);
