@@ -522,26 +522,41 @@ static void ril_ss_notify(struct ril_msg *message, gpointer user_data)
 {
 	struct ofono_voicecall *vc = user_data;
 	struct ril_voicecall_data *vd = ofono_voicecall_get_data(vc);
-	struct unsol_supp_svc_notif *unsol;
+	struct parcel rilp;
+	int notif_type;
+	int code;
+	int index;
+	int ton;
+	char *tmp_number;
+	struct ofono_phone_number number;
 
-	unsol = g_ril_unsol_parse_supp_svc_notif(vd->ril,  message);
-	if (unsol == NULL) {
-		ofono_error("%s: Parsing error", __func__);
-		return;
+	g_ril_init_parcel(message, &rilp);
+
+	notif_type = parcel_r_int32(&rilp);
+	code = parcel_r_int32(&rilp);
+	index = parcel_r_int32(&rilp);
+	ton = parcel_r_int32(&rilp);
+	tmp_number = parcel_r_string(&rilp);
+
+	g_ril_append_print_buf(vd->ril, "{%d,%d,%d,%d,%s}",
+				notif_type, code, index,
+				ton, tmp_number);
+	g_ril_print_unsol(vd->ril, message);
+
+	if (tmp_number != NULL) {
+		strncpy(number.number, tmp_number,
+				OFONO_MAX_PHONE_NUMBER_LENGTH);
+		number.number[OFONO_MAX_PHONE_NUMBER_LENGTH] = '\0';
+		number.type = ton;
+		g_free(tmp_number);
 	}
-
-	DBG("RIL data: MT/MO: %i, code: %i, index: %i",
-		unsol->notif_type, unsol->code, unsol->index);
 
 	/* 0 stands for MO intermediate, 1 for MT unsolicited */
 	/* TODO How do we know the affected call? Refresh call list? */
-	if (unsol->notif_type == 1)
-		ofono_voicecall_ssn_mt_notify(
-			vc, 0, unsol->code, unsol->index, &unsol->number);
+	if (notif_type == 1)
+		ofono_voicecall_ssn_mt_notify(vc, 0, code, index, &number);
 	else
-		ofono_voicecall_ssn_mo_notify(vc, 0, unsol->code, unsol->index);
-
-	g_ril_unsol_free_supp_svc_notif(unsol);
+		ofono_voicecall_ssn_mo_notify(vc, 0, code, index);
 }
 
 void ril_answer(struct ofono_voicecall *vc, ofono_voicecall_cb_t cb, void *data)
