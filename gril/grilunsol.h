@@ -47,13 +47,6 @@ struct ril_data_call_list {
 	GSList *calls;
 };
 
-struct unsol_supp_svc_notif {
-	int notif_type;
-	int code;
-	int index;
-	struct ofono_phone_number number;
-};
-
 void g_ril_unsol_free_data_call_list(struct ril_data_call_list *data_call_list);
 
 
@@ -67,11 +60,6 @@ int g_ril_unsol_parse_radio_state_changed(GRil *gril,
 
 int g_ril_unsol_parse_signal_strength(GRil *gril, const struct ril_msg *message,
 					int ril_tech);
-
-void g_ril_unsol_free_supp_svc_notif(struct unsol_supp_svc_notif *unsol);
-
-struct unsol_supp_svc_notif *g_ril_unsol_parse_supp_svc_notif(GRil *gril,
-						struct ril_msg *message);
 
 #ifdef __cplusplus
 }
