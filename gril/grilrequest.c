@@ -592,17 +592,6 @@ void g_ril_request_dial(GRil *gril,
 				clir);
 }
 
-void g_ril_request_hangup(GRil *gril,
-				unsigned call_id,
-				struct parcel *rilp)
-{
-	parcel_init(rilp);
-	parcel_w_int32(rilp, 1); /* Always 1 - AT+CHLD=1x */
-	parcel_w_int32(rilp, call_id);
-
-	g_ril_append_print_buf(gril, "(%u)", call_id);
-}
-
 void g_ril_request_oem_hook_raw(GRil *gril, const void *payload, size_t length,
 					struct parcel *rilp)
 {
