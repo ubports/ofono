@@ -812,29 +812,6 @@ no_calls:
 	return l;
 }
 
-enum ofono_disconnect_reason g_ril_reply_parse_call_fail_cause(
-				GRil *gril, const struct ril_msg *message)
-{
-	enum ofono_disconnect_reason reason = OFONO_DISCONNECT_REASON_ERROR;
-	int last_cause = CALL_FAIL_ERROR_UNSPECIFIED;
-	struct parcel rilp;
-
-	g_ril_init_parcel(message, &rilp);
-
-	if (rilp.size < sizeof(int32_t))
-		ofono_error("%s: Parcel is too small", __func__);
-	else if (parcel_r_int32(&rilp) > 0)
-		last_cause = parcel_r_int32(&rilp);
-
-	if (last_cause == CALL_FAIL_NORMAL || last_cause == CALL_FAIL_BUSY)
-		reason = OFONO_DISCONNECT_REASON_REMOTE_HANGUP;
-
-	g_ril_append_print_buf(gril, "{%d}", last_cause);
-	g_ril_print_response(gril, message);
-
-	return reason;
-}
-
 int *g_ril_reply_parse_retries(GRil *gril, const struct ril_msg *message,
 				enum ofono_sim_password_type passwd_type)
 {
