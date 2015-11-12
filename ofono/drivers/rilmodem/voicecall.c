@@ -349,14 +349,28 @@ static void dial(struct ofono_voicecall *vc,
 	struct cb_data *cbd = cb_data_new(cb, data, vc);
 	struct parcel rilp;
 
-	g_ril_request_dial(vd->ril, ph, clir, &rilp);
+	parcel_init(&rilp);
+
+	/* Number to dial */
+	parcel_w_string(&rilp, phone_number_to_string(ph));
+	/* CLIR mode */
+	parcel_w_int32(&rilp, clir);
+	/* USS, empty string */
+	/* TODO: Deal with USS properly */
+	parcel_w_int32(&rilp, 0);
+	parcel_w_int32(&rilp, 0);
+
+	g_ril_append_print_buf(vd->ril, "(%s,%d,0,0)",
+				phone_number_to_string(ph),
+				clir);
 
 	/* Send request to RIL */
 	if (g_ril_send(vd->ril, RIL_REQUEST_DIAL, &rilp,
-			rild_cb, cbd, g_free) == 0) {
-		g_free(cbd);
-		CALLBACK_WITH_FAILURE(cb, data);
-	}
+			rild_cb, cbd, g_free) > 0)
+		return;
+
+	g_free(cbd);
+	CALLBACK_WITH_FAILURE(cb, data);
 }
 
 static void hold_before_dial_cb(struct ril_msg *message, gpointer user_data)
