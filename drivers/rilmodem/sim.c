@@ -963,6 +963,19 @@ static void enter_pin_done(const struct ofono_error *error, void *data)
 	g_free(csd);
 }
 
+static const char *const clck_cpwd_fac[] = {
+	[OFONO_SIM_PASSWORD_SIM_PIN] = "SC",
+	[OFONO_SIM_PASSWORD_SIM_PIN2] = "P2",
+	[OFONO_SIM_PASSWORD_PHSIM_PIN] = "PS",
+	[OFONO_SIM_PASSWORD_PHFSIM_PIN] = "PF",
+	[OFONO_SIM_PASSWORD_PHNET_PIN] = "PN",
+	[OFONO_SIM_PASSWORD_PHNETSUB_PIN] = "PU",
+	[OFONO_SIM_PASSWORD_PHSP_PIN] = "PP",
+	[OFONO_SIM_PASSWORD_PHCORP_PIN] = "PC",
+};
+
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+
 static void ril_pin_change_state(struct ofono_sim *sim,
 				enum ofono_sim_password_type passwd_type,
 				int enable, const char *passwd,
@@ -971,8 +984,6 @@ static void ril_pin_change_state(struct ofono_sim *sim,
 	struct sim_data *sd = ofono_sim_get_data(sim);
 	struct cb_data *cbd;
 	struct parcel rilp;
-	struct req_pin_change_state req;
-	int ret = 0;
 
 	/*
 	 * If we want to unlock a password that has not been entered yet,
@@ -998,30 +1009,32 @@ static void ril_pin_change_state(struct ofono_sim *sim,
 
 	sd->unlock_pending = FALSE;
 
+	if (passwd_type >= ARRAY_SIZE(clck_cpwd_fac) ||
+			clck_cpwd_fac[passwd_type] == NULL)
+		goto error;
+
 	cbd = cb_data_new(cb, data, sim);
 
-	sd->passwd_type = passwd_type;
+	parcel_init(&rilp);
+	parcel_w_int32(&rilp, 5);
+	parcel_w_string(&rilp, clck_cpwd_fac[passwd_type]);
+	parcel_w_string(&rilp, enable ? "1" : "0");
+	parcel_w_string(&rilp, passwd);
+	/* TODO: make this a constant... */
+	parcel_w_string(&rilp, "0");		/* class */
+	parcel_w_string(&rilp, sd->aid_str);
 
-	req.aid_str = sd->aid_str;
-	req.passwd_type = passwd_type;
-	req.enable = enable;
-	req.passwd = passwd;
+	g_ril_append_print_buf(sd->ril, "(%s,%d,%s,0,aid=%s)",
+				clck_cpwd_fac[passwd_type], enable, passwd,
+				sd->aid_str);
 
-	if (!g_ril_request_pin_change_state(sd->ril,
-						&req,
-						&rilp)) {
-		ofono_error("Couldn't build pin change state request");
-		goto error;
-	}
+	if (g_ril_send(sd->ril, RIL_REQUEST_SET_FACILITY_LOCK, &rilp,
+				ril_pin_change_state_cb, cbd, g_free) > 0)
+		return;
 
-	ret = g_ril_send(sd->ril, RIL_REQUEST_SET_FACILITY_LOCK, &rilp,
-				ril_pin_change_state_cb, cbd, g_free);
-
+	g_free(cbd);
 error:
-	if (ret == 0) {
-		g_free(cbd);
-		CALLBACK_WITH_FAILURE(cb, data);
-	}
+	CALLBACK_WITH_FAILURE(cb, data);
 }
 
 static void ril_pin_send_puk(struct ofono_sim *sim,
