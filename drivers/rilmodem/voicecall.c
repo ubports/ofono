@@ -96,10 +96,25 @@ static void lastcause_cb(struct ril_msg *message, gpointer user_data)
 	struct lastcause_req *reqdata = user_data;
 	struct ofono_voicecall *vc = reqdata->vc;
 	struct ril_voicecall_data *vd = ofono_voicecall_get_data(vc);
-	enum ofono_disconnect_reason reason;
+	enum ofono_disconnect_reason reason = OFONO_DISCONNECT_REASON_ERROR;
+	int last_cause = CALL_FAIL_ERROR_UNSPECIFIED;
+	struct parcel rilp;
 
-	reason = g_ril_reply_parse_call_fail_cause(vd->ril, message);
+	g_ril_init_parcel(message, &rilp);
 
+	if (rilp.size < sizeof(int32_t))
+		goto done;
+
+	if (parcel_r_int32(&rilp) > 0)
+		last_cause = parcel_r_int32(&rilp);
+
+	g_ril_append_print_buf(vd->ril, "{%d}", last_cause);
+	g_ril_print_response(vd->ril, message);
+
+	if (last_cause == CALL_FAIL_NORMAL || last_cause == CALL_FAIL_BUSY)
+		reason = OFONO_DISCONNECT_REASON_REMOTE_HANGUP;
+
+done:
 	DBG("Call %d ended with reason %d", reqdata->id, reason);
 
 	ofono_voicecall_disconnected(vc, reqdata->id, reason, NULL);
