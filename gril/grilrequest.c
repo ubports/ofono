@@ -571,27 +571,6 @@ error:
 	return FALSE;
 }
 
-void g_ril_request_dial(GRil *gril,
-			const struct ofono_phone_number *ph,
-			enum ofono_clir_option clir,
-			struct parcel *rilp)
-{
-	parcel_init(rilp);
-
-	/* Number to dial */
-	parcel_w_string(rilp, phone_number_to_string(ph));
-	/* CLIR mode */
-	parcel_w_int32(rilp, clir);
-	/* USS, empty string */
-	/* TODO: Deal with USS properly */
-	parcel_w_int32(rilp, 0);
-	parcel_w_int32(rilp, 0);
-
-	g_ril_append_print_buf(gril, "(%s,%d,0,0)",
-				phone_number_to_string(ph),
-				clir);
-}
-
 void g_ril_request_oem_hook_raw(GRil *gril, const void *payload, size_t length,
 					struct parcel *rilp)
 {
