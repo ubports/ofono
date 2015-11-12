@@ -611,7 +611,13 @@ void ril_private_chat(struct ofono_voicecall *vc, int id,
 	struct ril_voicecall_data *vd = ofono_voicecall_get_data(vc);
 	struct parcel rilp;
 
-	g_ril_request_separate_conn(vd->ril, id, &rilp);
+	parcel_init(&rilp);
+
+	/* Payload is an array that holds just one element */
+	parcel_w_int32(&rilp, 1);
+	parcel_w_int32(&rilp, id);
+
+	g_ril_append_print_buf(vd->ril, "(%d)", id);
 
 	/* Send request to RIL */
 	ril_template(RIL_REQUEST_SEPARATE_CONNECTION, vc,
