@@ -692,13 +692,13 @@ static gboolean ril_delayed_register(gpointer user_data)
 	return FALSE;
 }
 
-void ril_voicecall_start(struct ril_voicecall_driver_data *driver_data,
-				struct ofono_voicecall *vc,
-				unsigned int vendor,
-				struct ril_voicecall_data *vd)
+int ril_voicecall_probe(struct ofono_voicecall *vc, unsigned int vendor,
+			void *data)
 {
-	vd->ril = g_ril_clone(driver_data->gril);
-	vd->modem = driver_data->modem;
+	GRil *ril = data;
+	struct ril_voicecall_data *vd = g_new0(struct ril_voicecall_data, 1);
+
+	vd->ril = g_ril_clone(ril);
 	vd->vendor = vendor;
 	vd->cb = NULL;
 	vd->data = NULL;
@@ -708,19 +708,6 @@ void ril_voicecall_start(struct ril_voicecall_driver_data *driver_data,
 	ofono_voicecall_set_data(vc, vd);
 
 	g_idle_add(ril_delayed_register, vc);
-}
-
-int ril_voicecall_probe(struct ofono_voicecall *vc, unsigned int vendor,
-			void *data)
-{
-	struct ril_voicecall_driver_data *driver_data = data;
-	struct ril_voicecall_data *vd;
-
-	vd = g_try_new0(struct ril_voicecall_data, 1);
-	if (vd == NULL)
-		return -ENOMEM;
-
-	ril_voicecall_start(driver_data, vc, vendor, vd);
 
 	return 0;
 }
