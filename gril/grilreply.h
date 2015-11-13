@@ -40,11 +40,6 @@ struct reply_operator {
 	int tech;
 };
 
-struct reply_avail_ops {
-	guint num_ops;
-	GSList *list;
-};
-
 struct reply_reg_state {
 	int status;
 	int lac;
@@ -92,10 +87,6 @@ struct reply_oem_hook {
 	void *data;
 };
 
-void g_ril_reply_free_avail_ops(struct reply_avail_ops *reply);
-
-struct reply_avail_ops *g_ril_reply_parse_avail_ops(GRil *gril,
-						const struct ril_msg *message);
 void g_ril_reply_free_operator(struct reply_operator *reply);
 
 struct reply_operator *g_ril_reply_parse_operator(GRil *gril,
