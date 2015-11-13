@@ -58,9 +58,6 @@ char *g_ril_unsol_parse_nitz(GRil *gril, const struct ril_msg *message);
 int g_ril_unsol_parse_radio_state_changed(GRil *gril,
 					const struct ril_msg *message);
 
-int g_ril_unsol_parse_signal_strength(GRil *gril, const struct ril_msg *message,
-					int ril_tech);
-
 #ifdef __cplusplus
 }
 #endif
