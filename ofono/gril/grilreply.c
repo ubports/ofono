@@ -43,8 +43,6 @@
 #include "grilreply.h"
 #include "grilutil.h"
 
-#define OPERATOR_NUM_PARAMS 3
-
 /* Indexes for registration state replies */
 #define RST_IX_STATE 0
 #define RST_IX_LAC 1
@@ -53,91 +51,6 @@
 #define RDST_IX_MAXDC 5
 
 #define MTK_MODEM_MAX_CIDS 3
-
-static void ril_reply_free_operator(gpointer data)
-{
-	struct reply_operator *reply = data;
-
-	if (reply) {
-		g_free(reply->lalpha);
-		g_free(reply->salpha);
-		g_free(reply->numeric);
-		g_free(reply->status);
-		g_free(reply);
-	}
-}
-
-void g_ril_reply_free_operator(struct reply_operator *reply)
-{
-	ril_reply_free_operator(reply);
-}
-
-struct reply_operator *g_ril_reply_parse_operator(GRil *gril,
-						const struct ril_msg *message)
-{
-	struct parcel rilp;
-	int num_params;
-	struct reply_operator *reply = NULL;
-
-	/*
-	 * Minimum message length is 16:
-	 * - array size
-	 * - 3 NULL strings
-	 */
-	if (message->buf_len < 16) {
-		ofono_error("%s: invalid OPERATOR reply: "
-				"size too small (< 16): %d ",
-				__func__,
-				(int) message->buf_len);
-		goto error;
-	}
-
-	g_ril_init_parcel(message, &rilp);
-
-	num_params = parcel_r_int32(&rilp);
-	if (num_params != OPERATOR_NUM_PARAMS) {
-		ofono_error("%s: invalid OPERATOR reply: "
-				"number of params is %d; should be 3.",
-				__func__,
-				num_params);
-		goto error;
-	}
-
-	reply =	g_new0(struct reply_operator, 1);
-
-	reply->lalpha = parcel_r_string(&rilp);
-	reply->salpha = parcel_r_string(&rilp);
-	reply->numeric = parcel_r_string(&rilp);
-
-	if (reply->lalpha == NULL && reply->salpha == NULL) {
-		ofono_error("%s: invalid OPERATOR reply: "
-				" no names returned.",
-				__func__);
-
-		goto error;
-	}
-
-	if (reply->numeric == NULL) {
-		ofono_error("%s: invalid OPERATOR reply: "
-				" no numeric returned.",
-				__func__);
-		goto error;
-	}
-
-	g_ril_append_print_buf(gril,
-				"(lalpha=%s, salpha=%s, numeric=%s)",
-				reply->lalpha, reply->salpha, reply->numeric);
-
-	g_ril_print_response(gril, message);
-
-	return reply;
-
-error:
-	if (reply)
-		g_ril_reply_free_operator(reply);
-
-	return NULL;
-}
 
 static void set_reg_state(GRil *gril, struct reply_reg_state *reply,
 				int i, const char *str)
