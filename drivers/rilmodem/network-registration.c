@@ -322,16 +322,14 @@ static void ril_registration_status(struct ofono_netreg *netreg,
 	}
 }
 
-static void set_oper_name(const struct reply_operator *reply,
+static void set_oper_name(const char *lalpha, const char *salpha,
 				struct ofono_network_operator *op)
 {
 	/* Try to use long by default */
-	if (reply->lalpha)
-		strncpy(op->name, reply->lalpha,
-			OFONO_MAX_OPERATOR_NAME_LENGTH);
-	else if (reply->salpha)
-		strncpy(op->name, reply->salpha,
-			OFONO_MAX_OPERATOR_NAME_LENGTH);
+	if (lalpha)
+		strncpy(op->name, lalpha, OFONO_MAX_OPERATOR_NAME_LENGTH);
+	else if (salpha)
+		strncpy(op->name, salpha, OFONO_MAX_OPERATOR_NAME_LENGTH);
 }
 
 static void ril_cops_cb(struct ril_msg *message, gpointer user_data)
@@ -352,7 +350,7 @@ static void ril_cops_cb(struct ril_msg *message, gpointer user_data)
 	if (reply == NULL)
 		goto error;
 
-	set_oper_name(reply, &op);
+	set_oper_name(reply->lalpha, reply->salpha, &op);
 
 	extract_mcc_mnc(reply->numeric, op.mcc, op.mnc);
 
@@ -388,60 +386,121 @@ static void ril_cops_list_cb(struct ril_msg *message, gpointer user_data)
 	struct cb_data *cbd = user_data;
 	ofono_netreg_operator_list_cb_t cb = cbd->cb;
 	struct netreg_data *nd = cbd->user;
-	struct reply_avail_ops *reply = NULL;
 	struct ofono_network_operator *ops;
-	struct reply_operator *operator;
-	GSList *l;
+	struct parcel rilp;
+	int num_ops;
 	unsigned int i = 0;
+	unsigned int num_strings;
+	int strings_per_opt = 4;
 
-	if (message->error != RIL_E_SUCCESS) {
-		ofono_error("%s: failed to retrive the list of operators",
-				__func__);
+	DBG("");
+
+	if (message->error != RIL_E_SUCCESS)
+		goto error;
+
+	/*
+	 * Minimum message length is 4:
+	 * - array size
+	 */
+	if (message->buf_len < 4) {
+		ofono_error("%s: invalid QUERY_AVAIL_NETWORKS reply: "
+				"size too small (< 4): %d ",
+				__func__,
+				(int) message->buf_len);
 		goto error;
 	}
 
-	reply = g_ril_reply_parse_avail_ops(nd->ril, message);
-	if (reply == NULL)
-		goto error;
+	g_ril_init_parcel(message, &rilp);
+	g_ril_append_print_buf(nd->ril, "{");
 
-	ops = g_try_new0(struct ofono_network_operator, reply->num_ops);
-	if (ops == NULL) {
-		ofono_error("%s: can't allocate ofono_network_operator",
-				__func__);
+	if (g_ril_vendor(nd->ril) == OFONO_RIL_VENDOR_MTK)
+		strings_per_opt = 5;
 
+	/* Number of operators at the list */
+	num_strings = (unsigned int) parcel_r_int32(&rilp);
+	if (num_strings % strings_per_opt) {
+		ofono_error("%s: invalid QUERY_AVAIL_NETWORKS reply: "
+				"num_strings (%d) MOD %d != 0",
+				__func__,
+				num_strings, strings_per_opt);
 		goto error;
 	}
 
-	for (l = reply->list; l; l = l->next) {
-		operator = l->data;
+	num_ops = num_strings / strings_per_opt;
+	DBG("noperators = %d", num_ops);
+	ops = g_new0(struct ofono_network_operator, num_ops);
 
-		set_oper_name(operator, &ops[i]);
+	for (i = 0; num_ops; num_ops--) {
+		char *lalpha;
+		char *salpha;
+		char *numeric;
+		char *status;
+		int tech = -1;
 
-		extract_mcc_mnc(operator->numeric, ops[i].mcc, ops[i].mnc);
+		lalpha = parcel_r_string(&rilp);
+		salpha = parcel_r_string(&rilp);
+		numeric = parcel_r_string(&rilp);
+		status = parcel_r_string(&rilp);
 
-		ops[i].tech = ril_tech_to_access_tech(operator->tech);
+		/*
+		 * MTK: additional string with technology: 2G/3G are the only
+		 * valid values currently.
+		 */
+		if (g_ril_vendor(nd->ril) == OFONO_RIL_VENDOR_MTK) {
+			char *t = parcel_r_string(&rilp);
+
+			if (strcmp(t, "3G") == 0)
+				tech = ACCESS_TECHNOLOGY_UTRAN;
+			else
+				tech = ACCESS_TECHNOLOGY_GSM;
+
+			g_free(t);
+		}
+
+		if (lalpha == NULL && salpha == NULL)
+			goto next;
+
+		if (numeric == NULL)
+			goto next;
+
+		if (status == NULL)
+			goto next;
+
+		set_oper_name(lalpha, salpha, &ops[i]);
+		extract_mcc_mnc(numeric, ops[i].mcc, ops[i].mnc);
+		ops[i].tech = tech;
 
 		/* Set the proper status  */
-		if (!strcmp(operator->status, "unknown"))
+		if (!strcmp(status, "unknown"))
 			ops[i].status = OPERATOR_STATUS_UNKNOWN;
-		else if (!strcmp(operator->status, "available"))
+		else if (!strcmp(status, "available"))
 			ops[i].status = OPERATOR_STATUS_AVAILABLE;
-		else if (!strcmp(operator->status, "current"))
+		else if (!strcmp(status, "current"))
 			ops[i].status = OPERATOR_STATUS_CURRENT;
-		else if (!strcmp(operator->status, "forbidden"))
+		else if (!strcmp(status, "forbidden"))
 			ops[i].status = OPERATOR_STATUS_FORBIDDEN;
 
 		i++;
+next:
+		g_ril_append_print_buf(nd->ril, "%s [lalpha=%s, salpha=%s, "
+				" numeric=%s status=%s]",
+				print_buf,
+				lalpha, salpha, numeric, status);
+		g_free(lalpha);
+		g_free(salpha);
+		g_free(numeric);
+		g_free(status);
 	}
 
-	CALLBACK_WITH_SUCCESS(cb, reply->num_ops, ops, cbd->data);
-	g_ril_reply_free_avail_ops(reply);
+	g_ril_append_print_buf(nd->ril, "%s}", print_buf);
+	g_ril_print_response(nd->ril, message);
 
+	CALLBACK_WITH_SUCCESS(cb, i, ops, cbd->data);
+	g_free(ops);
 	return;
 
 error:
 	CALLBACK_WITH_FAILURE(cb, 0, NULL, cbd->data);
-	g_ril_reply_free_avail_ops(reply);
 }
 
 static void ril_list_operators(struct ofono_netreg *netreg,
