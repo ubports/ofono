@@ -1651,8 +1651,8 @@ static void gprs_netreg_update(struct ofono_gprs *gprs)
 
 	gprs->flags |= GPRS_FLAG_ATTACHING;
 
-	gprs->driver->set_attached(gprs, attach, gprs_attach_callback, gprs);
 	gprs->driver_attached = attach;
+	gprs->driver->set_attached(gprs, attach, gprs_attach_callback, gprs);
 }
 
 static void netreg_status_changed(int status, int lac, int ci, int tech,
