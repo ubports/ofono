@@ -456,6 +456,13 @@ struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *dev,
 		} else {
 			ofono_error("Error %d registering %s",
 				    err, RILMODEM_DRIVER);
+
+			/*
+			 * If ofono_modem_register() failed, then
+			 * ofono_modem_remove() won't invoke
+			 * ril_modem_remove() callback.
+			 */
+			ril_modem_remove(modem);
 		}
 
 		ofono_modem_remove(modem);

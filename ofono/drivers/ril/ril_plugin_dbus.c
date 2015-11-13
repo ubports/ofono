@@ -24,14 +24,28 @@
 
 #include "ofono.h"
 
+typedef void (*ril_plugin_dbus_append_fn)(DBusMessageIter *it,
+					struct ril_plugin_dbus *dbus);
+typedef gboolean (*ril_plugin_dbus_slot_select_fn)
+					(const struct ril_slot_info *slot);
+typedef const char *(*ril_plugin_dbus_slot_string_fn)
+					(const struct ril_slot_info *slot);
+
+struct ril_plugin_dbus_request {
+	DBusMessage *msg;
+	ril_plugin_dbus_append_fn fn;
+};
+
 struct ril_plugin_dbus {
 	struct ril_plugin *plugin;
 	DBusConnection *conn;
+	gboolean block_imei_req;
+	GSList *blocked_imei_req;
 };
 
 #define RIL_DBUS_PATH               "/"
 #define RIL_DBUS_INTERFACE          "org.nemomobile.ofono.ModemManager"
-#define RIL_DBUS_INTERFACE_VERSION  (2)
+#define RIL_DBUS_INTERFACE_VERSION  (3)
 
 #define RIL_DBUS_ENABLED_MODEMS_CHANGED_SIGNAL      "EnabledModemsChanged"
 #define RIL_DBUS_PRESENT_SIMS_CHANGED_SIGNAL        "PresentSimsChanged"
@@ -41,11 +55,6 @@ struct ril_plugin_dbus {
 #define RIL_DBUS_DEFAULT_DATA_MODEM_CHANGED_SIGNAL  "DefaultDataModemChanged"
 #define RIL_DBUS_IMSI_AUTO                          "auto"
 
-typedef gboolean
-(*ril_plugin_dbus_slot_select_fn) (const struct ril_slot_info *);
-typedef const char *
-(*ril_plugin_dbus_slot_string_fn) (const struct ril_slot_info *);
-
 static gboolean ril_plugin_dbus_enabled(const struct ril_slot_info *slot)
 {
 	return slot->enabled;
@@ -54,6 +63,11 @@ static gboolean ril_plugin_dbus_enabled(const struct ril_slot_info *slot)
 static gboolean ril_plugin_dbus_present(const struct ril_slot_info *slot)
 {
 	return slot->sim_present;
+}
+
+static const char *ril_plugin_dbus_imei(const struct ril_slot_info *slot)
+{
+	return slot->imei;
 }
 
 static void ril_plugin_dbus_append_path_array(DBusMessageIter *it,
@@ -72,6 +86,26 @@ static void ril_plugin_dbus_append_path_array(DBusMessageIter *it,
 			dbus_message_iter_append_basic(&array,
 						DBUS_TYPE_OBJECT_PATH, &path);
 		}
+	}
+
+	dbus_message_iter_close_container(it, &array);
+}
+
+static void ril_plugin_dbus_append_string_array(DBusMessageIter *it,
+	struct ril_plugin_dbus *dbus, ril_plugin_dbus_slot_string_fn fn)
+{
+	DBusMessageIter array;
+	const struct ril_slot_info *const *ptr = dbus->plugin->slots;
+
+	dbus_message_iter_open_container(it, DBUS_TYPE_ARRAY,
+				DBUS_TYPE_STRING_AS_STRING, &array);
+
+	while (*ptr) {
+		const struct ril_slot_info *slot = *ptr++;
+		const char *str = fn(slot);
+
+		if (!str) str = "";
+		dbus_message_iter_append_basic(&array, DBUS_TYPE_STRING, &str);
 	}
 
 	dbus_message_iter_close_container(it, &array);
@@ -196,9 +230,7 @@ static DBusMessage *ril_plugin_dbus_reply_with_path_array(DBusMessage *msg,
 }
 
 static DBusMessage *ril_plugin_dbus_reply(DBusMessage *msg,
-		struct ril_plugin_dbus *dbus,
-		void (*append)(DBusMessageIter *, struct ril_plugin_dbus *))
-
+		struct ril_plugin_dbus *dbus, ril_plugin_dbus_append_fn append)
 {
 	DBusMessage *reply = dbus_message_new_method_return(msg);
 	DBusMessageIter iter;
@@ -206,6 +238,55 @@ static DBusMessage *ril_plugin_dbus_reply(DBusMessage *msg,
 	dbus_message_iter_init_append(reply, &iter);
 	append(&iter, dbus);
 	return reply;
+}
+
+static void ril_plugin_dbus_unblock_request(gpointer data, gpointer user_data)
+{
+	struct ril_plugin_dbus_request *req = data;
+
+	DBG("unblocking IMEI request %p", req);
+	__ofono_dbus_pending_reply(&req->msg, ril_plugin_dbus_reply(req->msg,
+				(struct ril_plugin_dbus *)user_data, req->fn));
+	g_free(req);
+}
+
+static void ril_plugin_dbus_cancel_request(gpointer data)
+{
+	struct ril_plugin_dbus_request *req = data;
+
+	DBG("canceling IMEI request %p", req);
+	__ofono_dbus_pending_reply(&req->msg, __ofono_error_canceled(req->msg));
+	g_free(req);
+}
+
+void ril_plugin_dbus_block_imei_requests(struct ril_plugin_dbus *dbus,
+								gboolean block)
+{
+	dbus->block_imei_req = block;
+	if (!block && dbus->blocked_imei_req) {
+		g_slist_foreach(dbus->blocked_imei_req,
+				ril_plugin_dbus_unblock_request, dbus);
+		g_slist_free(dbus->blocked_imei_req);
+		dbus->blocked_imei_req = NULL;
+	}
+}
+
+static DBusMessage *ril_plugin_dbus_imei_reply(DBusMessage *msg,
+		struct ril_plugin_dbus *dbus, ril_plugin_dbus_append_fn fn)
+{
+	if (dbus->block_imei_req) {
+		struct ril_plugin_dbus_request *req =
+			g_new(struct ril_plugin_dbus_request, 1);
+
+		req->msg = dbus_message_ref(msg);
+		req->fn = fn;
+		dbus->blocked_imei_req = g_slist_append(dbus->blocked_imei_req,
+									req);
+		DBG("blocking IMEI request %p", req);
+		return NULL;
+	} else {
+		return ril_plugin_dbus_reply(msg, dbus, fn);
+	}
 }
 
 static void ril_plugin_dbus_append_version(DBusMessageIter *it,
@@ -235,6 +316,13 @@ static void ril_plugin_dbus_append_all2(DBusMessageIter *it,
 	ril_plugin_dbus_append_boolean_array(it, dbus, ril_plugin_dbus_present);
 }
 
+static void ril_plugin_dbus_append_all3(DBusMessageIter *it,
+						struct ril_plugin_dbus *dbus)
+{
+	ril_plugin_dbus_append_all2(it, dbus);
+	ril_plugin_dbus_append_string_array(it, dbus, ril_plugin_dbus_imei);
+}
+
 static DBusMessage *ril_plugin_dbus_get_all(DBusConnection *conn,
 						DBusMessage *msg, void *data)
 {
@@ -247,6 +335,13 @@ static DBusMessage *ril_plugin_dbus_get_all2(DBusConnection *conn,
 {
 	return ril_plugin_dbus_reply(msg, (struct ril_plugin_dbus *)data,
 						ril_plugin_dbus_append_all2);
+}
+
+static DBusMessage *ril_plugin_dbus_get_all3(DBusConnection *conn,
+						DBusMessage *msg, void *data)
+{
+	return ril_plugin_dbus_imei_reply(msg, (struct ril_plugin_dbus *)data,
+						ril_plugin_dbus_append_all3);
 }
 
 static DBusMessage *ril_plugin_dbus_get_interface_version(DBusConnection *conn,
@@ -281,6 +376,19 @@ static DBusMessage *ril_plugin_dbus_get_present_sims(DBusConnection *conn,
 {
 	return ril_plugin_dbus_reply(msg, (struct ril_plugin_dbus *)data,
 				ril_plugin_dbus_append_present_sims);
+}
+
+static void ril_plugin_dbus_append_imei_array(DBusMessageIter *it,
+						struct ril_plugin_dbus *dbus)
+{
+	ril_plugin_dbus_append_string_array(it, dbus, ril_plugin_dbus_imei);
+}
+
+static DBusMessage *ril_plugin_dbus_get_imei(DBusConnection *conn,
+						DBusMessage *msg, void *data)
+{
+	return ril_plugin_dbus_imei_reply(msg, (struct ril_plugin_dbus *)data,
+					ril_plugin_dbus_append_imei_array);
 }
 
 static DBusMessage *ril_plugin_dbus_reply_with_imsi(DBusMessage *msg,
@@ -431,6 +539,17 @@ static const GDBusMethodTable ril_plugin_dbus_methods[] = {
 			{"defaultVoiceModem" , "s"},
 			{"presentSims" , "ab"}),
 			ril_plugin_dbus_get_all2) },
+	{ GDBUS_ASYNC_METHOD("GetAll3", NULL,
+			GDBUS_ARGS({"version", "i" },
+			{"availableModems", "ao" },
+			{"enabledModems", "ao" },
+			{"defaultDataSim", "s" },
+			{"defaultVoiceSim", "s" },
+			{"defaultDataModem", "s" },
+			{"defaultVoiceModem" , "s"},
+			{"presentSims" , "ab"},
+			{"imei" , "as"}),
+			ril_plugin_dbus_get_all3) },
 	{ GDBUS_METHOD("GetInterfaceVersion",
 			NULL, GDBUS_ARGS({ "version", "i" }),
 			ril_plugin_dbus_get_interface_version) },
@@ -443,6 +562,9 @@ static const GDBusMethodTable ril_plugin_dbus_methods[] = {
 	{ GDBUS_METHOD("GetPresentSims",
 			NULL, GDBUS_ARGS({ "presentSims", "ab" }),
 			ril_plugin_dbus_get_present_sims) },
+	{ GDBUS_ASYNC_METHOD("GetIMEI",
+			NULL, GDBUS_ARGS({ "imei", "as" }),
+			ril_plugin_dbus_get_imei) },
 	{ GDBUS_METHOD("GetDefaultDataSim",
 			NULL, GDBUS_ARGS({ "imsi", "s" }),
 			ril_plugin_dbus_get_default_data_sim) },
@@ -504,6 +626,8 @@ struct ril_plugin_dbus *ril_plugin_dbus_new(struct ril_plugin *plugin)
 void ril_plugin_dbus_free(struct ril_plugin_dbus *dbus)
 {
 	if (dbus) {
+		g_slist_free_full(dbus->blocked_imei_req,
+					ril_plugin_dbus_cancel_request);
 		g_dbus_unregister_interface(dbus->conn, RIL_DBUS_PATH,
 							RIL_DBUS_INTERFACE);
 		dbus_connection_unref(dbus->conn);

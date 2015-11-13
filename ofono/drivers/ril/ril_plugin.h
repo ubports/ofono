@@ -47,6 +47,7 @@
 
 struct ril_slot_info {
 	const char *path;
+	const char *imei;
 	gboolean enabled;
 	gboolean sim_present;
 };
@@ -87,6 +88,8 @@ void ril_sim_dbus_free(struct ril_sim_dbus *dbus);
 
 struct ril_plugin_dbus *ril_plugin_dbus_new(struct ril_plugin *plugin);
 void ril_plugin_dbus_free(struct ril_plugin_dbus *dbus);
+void ril_plugin_dbus_block_imei_requests(struct ril_plugin_dbus *dbus,
+							gboolean clock);
 void ril_plugin_dbus_signal(struct ril_plugin_dbus *dbus, int mask);
 void ril_plugin_dbus_signal_sim(struct ril_plugin_dbus *dbus, int index,
 							gboolean present);
