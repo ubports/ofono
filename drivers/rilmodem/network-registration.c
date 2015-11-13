@@ -59,6 +59,134 @@ struct netreg_data {
 	unsigned int vendor;
 };
 
+/*
+ * This function makes a similar processing to was is done by validateInput()
+ * and getLteLevel() in $AOSP/frameworks/base/telephony/java/android/telephony/
+ * SignalStrength.java. The main difference is that we linearly transform the
+ * ranges to ofono's one, while AOSP gives number of bars in a non-linear way
+ * (bins for each bar have different size). We rely on the indicator to obtain
+ * a translation to bars that makes sense for humans.
+ */
+static int get_lte_strength(int signal, int rsrp, int rssnr)
+{
+	int s_rsrp = -1, s_rssnr = -1, s_signal = -1;
+
+	/*
+	 * The range of signal is specified to be [0, 31] by ril.h, but the code
+	 * in SignalStrength.java contradicts this: valid values are (0-63, 99)
+	 * as defined in TS 36.331 for E-UTRA rssi.
+	 */
+	signal = (signal >= 0 && signal <= 63) ? signal : INT_MAX;
+	rsrp = (rsrp >= 44 && rsrp <= 140) ? -rsrp : INT_MAX;
+	rssnr = (rssnr >= -200 && rssnr <= 300) ? rssnr : INT_MAX;
+
+	/* Linearly transform [-140, -44] to [0, 100] */
+	if (rsrp != INT_MAX)
+		s_rsrp = (25 * rsrp + 3500) / 24;
+
+	/* Linearly transform [-200, 300] to [0, 100] */
+	if (rssnr != INT_MAX)
+		s_rssnr = (rssnr + 200) / 5;
+
+	if (s_rsrp != -1 && s_rssnr != -1)
+		return s_rsrp < s_rssnr ? s_rsrp : s_rssnr;
+
+	if (s_rssnr != -1)
+		return s_rssnr;
+
+	if (s_rsrp != -1)
+		return s_rsrp;
+
+	/* Linearly transform [0, 63] to [0, 100] */
+	if (signal != INT_MAX)
+		s_signal = (100 * signal) / 63;
+
+	return s_signal;
+}
+
+/*
+ * Comments to get_lte_strength() apply here also, changing getLteLevel() with
+ * getGsmLevel(). The atmodem driver does exactly the same transformation with
+ * the rssi from AT+CSQ command.
+ */
+static int get_gsm_strength(int signal)
+{
+	/* Checking the range contemplates also the case signal=99 (invalid) */
+	if (signal >= 0 && signal <= 31)
+		return (signal * 100) / 31;
+	else
+		return -1;
+}
+
+static int parse_signal_strength(GRil *gril, const struct ril_msg *message,
+					int ril_tech)
+{
+	struct parcel rilp;
+	int gw_sigstr, gw_signal, cdma_dbm, evdo_dbm;
+	int lte_sigstr = -1, lte_rsrp = -1, lte_rssnr = -1;
+	int lte_signal;
+	int signal;
+
+	g_ril_init_parcel(message, &rilp);
+
+	/* RIL_SignalStrength_v5 */
+	/* GW_SignalStrength */
+	gw_sigstr = parcel_r_int32(&rilp);
+	gw_signal = get_gsm_strength(gw_sigstr);
+	parcel_r_int32(&rilp); /* bitErrorRate */
+
+	/*
+	 * CDMA/EVDO values are not processed as CDMA is not supported
+	 */
+
+	/* CDMA_SignalStrength */
+	cdma_dbm = parcel_r_int32(&rilp);
+	parcel_r_int32(&rilp); /* ecio */
+
+	/* EVDO_SignalStrength */
+	evdo_dbm = parcel_r_int32(&rilp);
+	parcel_r_int32(&rilp); /* ecio */
+	parcel_r_int32(&rilp); /* signalNoiseRatio */
+
+	/* Present only for RIL_SignalStrength_v6 or newer */
+	if (parcel_data_avail(&rilp) > 0) {
+		/* LTE_SignalStrength */
+		lte_sigstr = parcel_r_int32(&rilp);
+		lte_rsrp = parcel_r_int32(&rilp);
+		parcel_r_int32(&rilp); /* rsrq */
+		lte_rssnr = parcel_r_int32(&rilp);
+		parcel_r_int32(&rilp); /* cqi */
+		lte_signal = get_lte_strength(lte_sigstr, lte_rsrp, lte_rssnr);
+	} else {
+		lte_signal = -1;
+	}
+
+	g_ril_append_print_buf(gril,
+				"{gw: %d, cdma: %d, evdo: %d, lte: %d %d %d}",
+				gw_sigstr, cdma_dbm, evdo_dbm, lte_sigstr,
+				lte_rsrp, lte_rssnr);
+
+	if (message->unsolicited)
+		g_ril_print_unsol(gril, message);
+	else
+		g_ril_print_response(gril, message);
+
+	/* Return the first valid one */
+	if (gw_signal != -1 && lte_signal != -1)
+		if (ril_tech == RADIO_TECH_LTE)
+			signal = lte_signal;
+		else
+			signal = gw_signal;
+	else if (gw_signal != -1)
+		signal = gw_signal;
+	else if (lte_signal != -1)
+		signal = lte_signal;
+	else
+		signal = -1;
+
+	return signal;
+}
+
 static void ril_registration_status(struct ofono_netreg *netreg,
 					ofono_netreg_status_cb_t cb,
 					void *data);
@@ -388,8 +516,7 @@ static void ril_strength_notify(struct ril_msg *message, gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
 	struct netreg_data *nd = ofono_netreg_get_data(netreg);
-	int strength = g_ril_unsol_parse_signal_strength(nd->ril, message,
-								nd->tech);
+	int strength = parse_signal_strength(nd->ril, message, nd->tech);
 
 	ofono_netreg_strength_notify(netreg, strength);
 }
@@ -409,9 +536,8 @@ static void ril_strength_cb(struct ril_msg *message, gpointer user_data)
 		goto error;
 	}
 
-	/* The g_ril_unsol* function handles both reply & unsolicited */
-	strength = g_ril_unsol_parse_signal_strength(nd->ril, message,
-							nd->tech);
+	/* parse_signal_strength() handles both reply & unsolicited */
+	strength = parse_signal_strength(nd->ril, message, nd->tech);
 	cb(&error, strength, cbd->data);
 
 	return;
