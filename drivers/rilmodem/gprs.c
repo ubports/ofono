@@ -115,24 +115,9 @@ static void ril_gprs_state_change(struct ril_msg *message, gpointer user_data)
 		ril_gprs_registration_status(gprs, NULL, NULL);
 }
 
-gboolean ril_gprs_set_attached_cb(gpointer user_data)
-{
-	struct cb_data *cbd = user_data;
-	ofono_gprs_cb_t cb = cbd->cb;
-
-	DBG("");
-
-	CALLBACK_WITH_SUCCESS(cb, cbd->data);
-	g_free(cbd);
-
-	/* Run once per g_idle_add() call */
-	return FALSE;
-}
-
 static void ril_gprs_set_attached(struct ofono_gprs *gprs, int attached,
 					ofono_gprs_cb_t cb, void *data)
 {
-	struct cb_data *cbd = cb_data_new(cb, data, NULL);
 	struct ril_gprs_data *gd = ofono_gprs_get_data(gprs);
 
 	DBG("attached: %d", attached);
@@ -149,12 +134,7 @@ static void ril_gprs_set_attached(struct ofono_gprs *gprs, int attached,
 	 * are met.
 	 */
 	gd->ofono_attached = attached;
-
-	/*
-	 * Call from idle loop, so core can set driver_attached before
-	 * the callback is invoked.
-	 */
-	g_idle_add(ril_gprs_set_attached_cb, cbd);
+	CALLBACK_WITH_SUCCESS(cb, data);
 }
 
 static gboolean ril_get_status_retry(gpointer user_data)
