@@ -32,14 +32,6 @@
 extern "C" {
 #endif
 
-struct reply_operator {
-	char *lalpha;
-	char *salpha;
-	char *numeric;
-	char *status;
-	int tech;
-};
-
 struct reply_reg_state {
 	int status;
 	int lac;
@@ -86,11 +78,6 @@ struct reply_oem_hook {
 	int length;
 	void *data;
 };
-
-void g_ril_reply_free_operator(struct reply_operator *reply);
-
-struct reply_operator *g_ril_reply_parse_operator(GRil *gril,
-						const struct ril_msg *message);
 
 void g_ril_reply_free_sim_io(struct reply_sim_io *reply);
 
