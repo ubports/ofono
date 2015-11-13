@@ -53,8 +53,6 @@ void g_ril_unsol_free_data_call_list(struct ril_data_call_list *data_call_list);
 struct ril_data_call_list *g_ril_unsol_parse_data_call_list(GRil *gril,
 						const struct ril_msg *message);
 
-char *g_ril_unsol_parse_nitz(GRil *gril, const struct ril_msg *message);
-
 int g_ril_unsol_parse_radio_state_changed(GRil *gril,
 					const struct ril_msg *message);
 

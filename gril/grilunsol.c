@@ -42,12 +42,6 @@
 /* Minimum size is two int32s version/number of calls */
 #define MIN_DATA_CALL_LIST_SIZE 8
 
-/*
- * Minimum NITZ is: 'yy/mm/dd,hh:mm:ss'
- * TZ '(+/-)tz,dt' are optional
- */
-#define MIN_NITZ_SIZE 17
-
 static gint data_call_compare(gconstpointer a, gconstpointer b)
 {
 	const struct ril_data_call *ca = a;
@@ -314,31 +308,6 @@ error:
 	g_ril_unsol_free_data_call_list(reply);
 
 	return NULL;
-}
-
-char *g_ril_unsol_parse_nitz(GRil *gril, const struct ril_msg *message)
-{
-	struct parcel rilp;
-	gchar *nitz = NULL;
-
-	DBG("");
-
-	if (message->buf_len < MIN_NITZ_SIZE) {
-		ofono_error("%s: NITZ too small: %d",
-				__func__,
-				(int) message->buf_len);
-		goto error;
-	}
-
-	g_ril_init_parcel(message, &rilp);
-
-	nitz = parcel_r_string(&rilp);
-
-	g_ril_append_print_buf(gril, "(%s)", nitz);
-	g_ril_print_unsol(gril, message);
-
-error:
-	return nitz;
 }
 
 int g_ril_unsol_parse_radio_state_changed(GRil *gril,
