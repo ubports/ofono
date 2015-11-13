@@ -54,7 +54,6 @@ struct netreg_data {
 	int signal_max; /* max strength reported via CIND */
 	int signal_invalid; /* invalid strength reported via CIND */
 	int tech;
-	struct ofono_network_time time;
 	guint nitz_timeout;
 	unsigned int vendor;
 };
@@ -565,11 +564,25 @@ static void ril_nitz_notify(struct ril_msg *message, gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
 	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct parcel rilp;
 	int year, mon, mday, hour, min, sec, dst, tzi, n_match;
 	char tzs, tz[4];
 	gchar *nitz;
+	struct ofono_network_time time;
 
-	nitz = g_ril_unsol_parse_nitz(nd->ril, message);
+	DBG("");
+
+	/* Minimum NITZ is: 'yy/mm/dd,hh:mm:ss' TZ '(+/-)tz,dt' are optional */
+	if (message->buf_len < 17)
+		return;
+
+	g_ril_init_parcel(message, &rilp);
+
+	nitz = parcel_r_string(&rilp);
+
+	g_ril_append_print_buf(nd->ril, "(%s)", nitz);
+	g_ril_print_unsol(nd->ril, message);
+
 	if (nitz == NULL)
 		goto error;
 
@@ -580,24 +593,18 @@ static void ril_nitz_notify(struct ril_msg *message, gpointer user_data)
 
 	sprintf(tz, "%c%d", tzs, tzi);
 
-	nd->time.utcoff = atoi(tz) * 15 * 60;
-	nd->time.dst = dst;
-	nd->time.sec = sec;
-	nd->time.min = min;
-	nd->time.hour = hour;
-	nd->time.mday = mday;
-	nd->time.mon = mon;
-	nd->time.year = 2000 + year;
+	time.utcoff = atoi(tz) * 15 * 60;
+	time.dst = dst;
+	time.sec = sec;
+	time.min = min;
+	time.hour = hour;
+	time.mday = mday;
+	time.mon = mon;
+	time.year = 2000 + year;
 
-	ofono_netreg_time_notify(netreg, &nd->time);
-
-	g_free(nitz);
-
-	return;
+	ofono_netreg_time_notify(netreg, &time);
 
 error:
-	ofono_error("%s: unable to notify ofono about NITZ (%s)",
-						__func__, nitz ? nitz : "null");
 	g_free(nitz);
 }
 
@@ -634,14 +641,7 @@ static int ril_netreg_probe(struct ofono_netreg *netreg, unsigned int vendor,
 	nd->ril = g_ril_clone(ril);
 	nd->vendor = vendor;
 	nd->tech = RADIO_TECH_UNKNOWN;
-	nd->time.sec = -1;
-	nd->time.min = -1;
-	nd->time.hour = -1;
-	nd->time.mday = -1;
-	nd->time.mon = -1;
-	nd->time.year = -1;
-	nd->time.dst = 0;
-	nd->time.utcoff = 0;
+
 	ofono_netreg_set_data(netreg, nd);
 
 	/*
