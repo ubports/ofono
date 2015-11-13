@@ -337,31 +337,69 @@ static void ril_cops_cb(struct ril_msg *message, gpointer user_data)
 	struct cb_data *cbd = user_data;
 	ofono_netreg_operator_cb_t cb = cbd->cb;
 	struct netreg_data *nd = cbd->user;
-	struct reply_operator *reply;
 	struct ofono_network_operator op;
+	struct parcel rilp;
+	int num_params;
+	char *lalpha;
+	char *salpha;
+	char *numeric;
 
-	if (message->error != RIL_E_SUCCESS) {
-		ofono_error("%s: failed to retrive the current operator",
-				__func__);
+	DBG("");
+
+	if (message->error != RIL_E_SUCCESS)
+		goto error;
+
+	/*
+	 * Minimum message length is 16:
+	 * - array size
+	 * - 3 NULL strings
+	 */
+	if (message->buf_len < 16) {
+		ofono_error("%s: invalid OPERATOR reply: "
+				"size too small (< 16): %d ",
+				__func__,
+				(int) message->buf_len);
 		goto error;
 	}
 
-	reply = g_ril_reply_parse_operator(nd->ril, message);
-	if (reply == NULL)
+	g_ril_init_parcel(message, &rilp);
+
+	num_params = parcel_r_int32(&rilp);
+	if (num_params != 3) {
+		ofono_error("%s: invalid OPERATOR reply: "
+				"number of params is %d; should be 3.",
+				__func__,
+				num_params);
 		goto error;
+	}
 
-	set_oper_name(reply->lalpha, reply->salpha, &op);
+	lalpha = parcel_r_string(&rilp);
+	salpha = parcel_r_string(&rilp);
+	numeric = parcel_r_string(&rilp);
 
-	extract_mcc_mnc(reply->numeric, op.mcc, op.mnc);
+	g_ril_append_print_buf(nd->ril,
+				"(lalpha=%s, salpha=%s, numeric=%s)",
+				lalpha, salpha, numeric);
 
-	/* Set to current */
+	g_ril_print_response(nd->ril, message);
+
+	if ((lalpha == NULL && salpha == NULL) || numeric == NULL) {
+		g_free(lalpha);
+		g_free(salpha);
+		g_free(numeric);
+		goto error;
+	}
+
+	set_oper_name(lalpha, salpha, &op);
+	extract_mcc_mnc(numeric, op.mcc, op.mnc);
 	op.status = OPERATOR_STATUS_CURRENT;
 	op.tech = ril_tech_to_access_tech(nd->tech);
 
+	g_free(lalpha);
+	g_free(salpha);
+	g_free(numeric);
+
 	CALLBACK_WITH_SUCCESS(cb, &op, cbd->data);
-
-	g_ril_reply_free_operator(reply);
-
 	return;
 
 error:
