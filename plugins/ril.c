@@ -98,11 +98,24 @@ static void ril_radio_state_changed(struct ril_msg *message, gpointer user_data)
 {
 	struct ofono_modem *modem = user_data;
 	struct ril_data *rd = ofono_modem_get_data(modem);
-	int radio_state = g_ril_unsol_parse_radio_state_changed(rd->ril,
-								message);
+	struct parcel rilp;
+	int radio_state;
+
+	g_ril_init_parcel(message, &rilp);
+
+	radio_state = parcel_r_int32(&rilp);
+
+	if (rilp.malformed) {
+		ofono_error("%s: malformed parcel received", __func__);
+		ofono_modem_set_powered(modem, FALSE);
+		return;
+	}
+
+	g_ril_append_print_buf(rd->ril, "(state: %s)",
+				ril_radio_state_to_string(radio_state));
+	g_ril_print_unsol(rd->ril, message);
 
 	if (radio_state != rd->radio_state) {
-
 		ofono_info("%s: state: %s rd->ofono_online: %d",
 				__func__,
 				ril_radio_state_to_string(radio_state),
@@ -122,7 +135,6 @@ static void ril_radio_state_changed(struct ril_msg *message, gpointer user_data)
 
 		case RADIO_STATE_UNAVAILABLE:
 		case RADIO_STATE_OFF:
-
 			/*
 			 * Unexpected radio state change, as we are supposed to
 			 * be online. UNAVAILABLE has been seen occassionally
@@ -137,9 +149,6 @@ static void ril_radio_state_changed(struct ril_msg *message, gpointer user_data)
 				exit(1);
 			}
 			break;
-		default:
-			/* Malformed parcel; no radio state == broken rild */
-			g_assert(FALSE);
 		}
 	}
 }
