@@ -145,7 +145,6 @@ static void ril_radio_state_changed(struct ril_msg *message, gpointer user_data)
 			if (rd->ofono_online) {
 				ofono_error("%s: radio self-powered off!",
 						__func__);
-				sleep(5);
 				exit(1);
 			}
 			break;
