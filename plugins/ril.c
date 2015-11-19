@@ -142,11 +142,10 @@ static void ril_radio_state_changed(struct ril_msg *message, gpointer user_data)
 			 * too fast re-spawns, then exit with error to make
 			 * upstart re-start ofono.
 			 */
-			if (rd->ofono_online) {
+			if (rd->ofono_online)
 				ofono_error("%s: radio self-powered off!",
 						__func__);
-				exit(1);
-			}
+
 			break;
 		}
 	}
@@ -397,8 +396,8 @@ static gboolean connect_rild(gpointer user_data)
 		if (create_gril(modem) < 0)
 			return TRUE;
 	} else {
-		ofono_error("Exiting, can't connect to rild.");
-		exit(0);
+		ofono_error("Failed to connect to rild.");
+		return TRUE;
 	}
 
 	return FALSE;
