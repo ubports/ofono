@@ -793,24 +793,24 @@ unit_test_caif_SOURCES = unit/test-caif.c $(gatchat_sources) \
 unit_test_caif_LDADD = @GLIB_LIBS@
 unit_objects += $(unit_test_caif_OBJECTS)
 
-unit_test_rilmodem_cs_SOURCES = unit/test-rilmodem-cs.c $(gril_sources) \
-			src/log.c src/common.c src/util.c \
-			gatchat/ringbuffer.h gatchat/ringbuffer.c \
-			drivers/rilmodem/call-settings.c \
-			src/simutil.c
+test_rilmodem_sources = $(gril_sources) src/log.c src/common.c src/util.c \
+				gatchat/ringbuffer.h gatchat/ringbuffer.c \
+				unit/rilmodem-test-server.h \
+				unit/rilmodem-test-server.c \
+				src/simutil.c
+
+unit_test_rilmodem_cs_SOURCES = $(test_rilmodem_sources) \
+					unit/test-rilmodem-cs.c \
+					drivers/rilmodem/call-settings.c
 unit_test_rilmodem_cs_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
-			@GLIB_LIBS@ @DBUS_LIBS@ -ldl
+					@GLIB_LIBS@ @DBUS_LIBS@ -ldl
 unit_objects += $(unit_test_rilmodem_cs_OBJECTS)
 
-unit_test_rilmodem_sms_SOURCES = unit/test-rilmodem-sms.c $(gril_sources) \
-			src/log.c src/common.c src/util.c \
-			gatchat/ringbuffer.h gatchat/ringbuffer.c \
-			drivers/rilmodem/sms.c \
-			unit/rilmodem-test-server.h \
-			unit/rilmodem-test-server.c \
-			src/simutil.c
+unit_test_rilmodem_sms_SOURCES = $(test_rilmodem_sources) \
+					unit/test-rilmodem-sms.c \
+					drivers/rilmodem/sms.c
 unit_test_rilmodem_sms_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
-			@GLIB_LIBS@ @DBUS_LIBS@ -ldl
+					@GLIB_LIBS@ @DBUS_LIBS@ -ldl
 unit_objects += $(unit_test_rilmodem_sms_OBJECTS)
 
 TESTS = $(unit_tests)
