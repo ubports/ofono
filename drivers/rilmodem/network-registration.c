@@ -595,17 +595,23 @@ static void ril_register_manual(struct ofono_netreg *netreg,
 	char buf[OFONO_MAX_MCC_LENGTH + OFONO_MAX_MNC_LENGTH + 1];
 	struct parcel rilp;
 
+	DBG("");
+
 	/* RIL expects a char * specifying MCCMNC of network to select */
 	snprintf(buf, sizeof(buf), "%s%s", mcc, mnc);
 
-	g_ril_request_set_net_select_manual(nd->ril, buf, &rilp);
+	parcel_init(&rilp);
+	parcel_w_string(&rilp, buf);
+
+	g_ril_append_print_buf(nd->ril, "(%s)", buf);
 
 	/* In case of error free cbd and return the cb with failure */
 	if (g_ril_send(nd->ril, RIL_REQUEST_SET_NETWORK_SELECTION_MANUAL, &rilp,
-			ril_register_cb, cbd, g_free) == 0) {
-		g_free(cbd);
-		CALLBACK_WITH_FAILURE(cb, data);
-	}
+			ril_register_cb, cbd, g_free) > 0)
+		return;
+
+	g_free(cbd);
+	CALLBACK_WITH_FAILURE(cb, data);
 }
 
 static void ril_strength_notify(struct ril_msg *message, gpointer user_data)
