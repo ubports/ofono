@@ -41,9 +41,6 @@
 #include "util.h"
 #include "common.h"
 
-/* DEACTIVATE_DATA_CALL request parameters */
-#define DEACTIVATE_DATA_CALL_NUM_PARAMS 2
-
 /* SETUP_DATA_CALL_PARAMS request parameters */
 #define SETUP_DATA_CALL_PARAMS 7
 #define DATA_PROFILE_DEFAULT_STR "0"
@@ -69,45 +66,6 @@
 	error->type = OFONO_ERROR_TYPE_NO_ERROR;	\
 	error->error = 0;				\
 } while (0)
-
-gboolean g_ril_request_deactivate_data_call(GRil *gril,
-				const struct req_deactivate_data_call *req,
-				struct parcel *rilp,
-				struct ofono_error *error)
-{
-	gchar *cid_str = NULL;
-	gchar *reason_str = NULL;
-
-	if (req->reason != RIL_DEACTIVATE_DATA_CALL_NO_REASON &&
-		req->reason != RIL_DEACTIVATE_DATA_CALL_RADIO_SHUTDOWN) {
-		goto error;
-	}
-
-	parcel_init(rilp);
-	parcel_w_int32(rilp, DEACTIVATE_DATA_CALL_NUM_PARAMS);
-
-	cid_str = g_strdup_printf("%d", req->cid);
-	parcel_w_string(rilp, cid_str);
-
-	/*
-	 * TODO: airplane-mode; change reason to '1',
-	 * which means "radio power off".
-	 */
-	reason_str = g_strdup_printf("%d", req->reason);
-	parcel_w_string(rilp, reason_str);
-
-	g_ril_append_print_buf(gril, "(%s,%s)", cid_str, reason_str);
-
-	g_free(cid_str);
-	g_free(reason_str);
-
-	OFONO_NO_ERROR(error);
-	return TRUE;
-
-error:
-	OFONO_EINVAL(error);
-	return FALSE;
-}
 
 void g_ril_request_set_net_select_manual(GRil *gril,
 					const char *mccmnc,
