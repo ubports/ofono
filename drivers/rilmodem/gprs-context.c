@@ -341,9 +341,7 @@ static gboolean retry_deactivate(gpointer user_data)
 	ofono_gprs_context_cb_t cb = cbd->cb;
 	struct ofono_gprs_context *gc = cbd->user;
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
-	struct req_deactivate_data_call request;
 	struct parcel rilp;
-	struct ofono_error error;
 
 	gcd->retry_ev_id = 0;
 
@@ -357,14 +355,12 @@ static gboolean retry_deactivate(gpointer user_data)
 		return FALSE;
 	}
 
-	request.cid = gcd->active_rild_cid;
-	request.reason = RIL_DEACTIVATE_DATA_CALL_NO_REASON;
-
-	g_ril_request_deactivate_data_call(gcd->ril, &request, &rilp, &error);
+	ril_util_build_deactivate_data_call(gcd->ril, &rilp,
+					gcd->active_rild_cid,
+					RIL_DEACTIVATE_DATA_CALL_NO_REASON);
 
 	if (g_ril_send(gcd->ril, RIL_REQUEST_DEACTIVATE_DATA_CALL, &rilp,
 			ril_deactivate_data_call_cb, cbd, g_free) == 0) {
-
 		ofono_error("%s: send DEACTIVATE_DATA_CALL failed for apn: %s",
 				__func__, gcd->apn);
 		if (cb)
@@ -388,7 +384,6 @@ static void ril_deactivate_data_call_cb(struct ril_msg *message,
 	DBG("*gc: %p", gc);
 
 	if (message->error == RIL_E_SUCCESS) {
-
 		g_ril_print_response_no_args(gcd->ril, message);
 
 		active_ctx_cid = gcd->active_ctx_cid;
@@ -444,9 +439,6 @@ static void ril_gprs_context_deactivate_primary(struct ofono_gprs_context *gc,
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 	struct cb_data *cbd = NULL;
 	struct parcel rilp;
-	struct req_deactivate_data_call request;
-	struct ofono_error error;
-	int ret = 0;
 
 	DBG("*gc: %p cid: %d active_rild_cid: %d", gc, id,
 		gcd->active_rild_cid);
@@ -471,32 +463,23 @@ static void ril_gprs_context_deactivate_primary(struct ofono_gprs_context *gc,
 				__func__, gcd->apn);
 	}
 
-	request.cid = gcd->active_rild_cid;
-	request.reason = RIL_DEACTIVATE_DATA_CALL_NO_REASON;
-
-	if (g_ril_request_deactivate_data_call(gcd->ril, &request,
-						&rilp, &error) == FALSE) {
-
-		ofono_error("%s: couldn't build DEACTIVATE_DATA_CALL"
-				" request for apn: %s.",
-				__func__, gcd->apn);
-		goto error;
-	}
-
 	gcd->deact_retries = NUM_DEACTIVATION_RETRIES;
-	ret = g_ril_send(gcd->ril, RIL_REQUEST_DEACTIVATE_DATA_CALL, &rilp,
-				ril_deactivate_data_call_cb, cbd, g_free);
+	ril_util_build_deactivate_data_call(gcd->ril, &rilp,
+					gcd->active_rild_cid,
+					RIL_DEACTIVATE_DATA_CALL_NO_REASON);
 
-error:
-	if (ret == 0) {
-		/* TODO: should we force state to disconnected here? */
+	if (g_ril_send(gcd->ril, RIL_REQUEST_DEACTIVATE_DATA_CALL, &rilp,
+				ril_deactivate_data_call_cb, cbd, g_free) > 0)
+		return;
 
-		ofono_error("%s: send DEACTIVATE_DATA_CALL failed for apn: %s",
+	/* TODO: should we force state to disconnected here? */
+	ofono_error("%s: send DEACTIVATE_DATA_CALL failed for apn: %s",
 				__func__, gcd->apn);
-		g_free(cbd);
-		if (cb)
+
+	if (cb)
 			CALLBACK_WITH_FAILURE(cb, data);
-	}
+
+	g_free(cbd);
 }
 
 static void ril_gprs_context_detach_shutdown(struct ofono_gprs_context *gc,
@@ -538,14 +521,11 @@ static void ril_gprs_context_remove(struct ofono_gprs_context *gc)
 	DBG("*gc: %p", gc);
 
 	if (gcd->state != STATE_IDLE && gcd->state != STATE_DISABLING) {
-		struct req_deactivate_data_call request;
 		struct parcel rilp;
-		struct ofono_error error;
 
-		request.cid = gcd->active_rild_cid;
-		request.reason = RIL_DEACTIVATE_DATA_CALL_NO_REASON;
-		g_ril_request_deactivate_data_call(gcd->ril, &request,
-								&rilp, &error);
+		ril_util_build_deactivate_data_call(gcd->ril, &rilp,
+					gcd->active_rild_cid,
+					RIL_DEACTIVATE_DATA_CALL_NO_REASON);
 
 		g_ril_send(gcd->ril, RIL_REQUEST_DEACTIVATE_DATA_CALL,
 						&rilp, NULL, NULL, NULL);
