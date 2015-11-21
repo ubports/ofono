@@ -74,15 +74,6 @@ gint ril_util_call_compare_by_status(gconstpointer a, gconstpointer b)
 	return 0;
 }
 
-gint ril_util_call_compare_by_phone_number(gconstpointer a, gconstpointer b)
-{
-	const struct ofono_call *call = a;
-	const struct ofono_phone_number *pb = b;
-
-	return memcmp(&call->phone_number, pb,
-				sizeof(struct ofono_phone_number));
-}
-
 static gboolean cpin_check(gpointer userdata)
 {
 	struct ril_util_sim_state_query *req = userdata;
