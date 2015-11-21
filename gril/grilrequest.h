@@ -45,10 +45,6 @@ struct req_setup_data_call {
 	unsigned req_cid;
 };
 
-void g_ril_request_set_net_select_manual(GRil *gril,
-					const char *mccmnc,
-					struct parcel *rilp);
-
 gboolean g_ril_request_setup_data_call(GRil *gril,
 					const struct req_setup_data_call *req,
 					struct parcel *rilp,
