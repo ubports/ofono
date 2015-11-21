@@ -83,20 +83,6 @@ gint ril_util_call_compare_by_phone_number(gconstpointer a, gconstpointer b)
 				sizeof(struct ofono_phone_number));
 }
 
-gint ril_util_call_compare_by_id(gconstpointer a, gconstpointer b)
-{
-	const struct ofono_call *call = a;
-	unsigned int id = GPOINTER_TO_UINT(b);
-
-	if (id < call->id)
-		return -1;
-
-	if (id > call->id)
-		return 1;
-
-	return 0;
-}
-
 gint ril_util_call_compare(gconstpointer a, gconstpointer b)
 {
 	const struct ofono_call *ca = a;
