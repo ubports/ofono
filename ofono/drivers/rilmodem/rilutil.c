@@ -63,17 +63,6 @@ void decode_ril_error(struct ofono_error *error, const char *final)
 	}
 }
 
-gint ril_util_call_compare_by_status(gconstpointer a, gconstpointer b)
-{
-	const struct ofono_call *call = a;
-	int status = GPOINTER_TO_INT(b);
-
-	if (status != call->status)
-		return 1;
-
-	return 0;
-}
-
 static gboolean cpin_check(gpointer userdata)
 {
 	struct ril_util_sim_state_query *req = userdata;
