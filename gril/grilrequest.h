@@ -50,26 +50,6 @@ struct req_setup_data_call {
 	unsigned req_cid;
 };
 
-
-enum req_record_access_mode {
-	GRIL_REC_ACCESS_MODE_CURRENT,
-	GRIL_REC_ACCESS_MODE_ABSOLUTE,
-	GRIL_REC_ACCESS_MODE_NEXT,
-	GRIL_REC_ACCESS_MODE_PREVIOUS,
-};
-
-struct req_sim_write_record {
-	guint app_type;
-	gchar *aid_str;
-	int fileid;
-	const unsigned char *path;
-	unsigned int path_len;
-	enum req_record_access_mode mode;
-	int record;
-	int length;
-	const unsigned char *data;
-};
-
 gboolean g_ril_request_deactivate_data_call(GRil *gril,
 				const struct req_deactivate_data_call *req,
 				struct parcel *rilp,
@@ -83,10 +63,6 @@ gboolean g_ril_request_setup_data_call(GRil *gril,
 					const struct req_setup_data_call *req,
 					struct parcel *rilp,
 					struct ofono_error *error);
-
-gboolean g_ril_request_sim_write_record(GRil *gril,
-					const struct req_sim_write_record *req,
-					struct parcel *rilp);
 
 void g_ril_request_oem_hook_raw(GRil *gril, const void *payload, size_t length,
 					struct parcel *rilp);
