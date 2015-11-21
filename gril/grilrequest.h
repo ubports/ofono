@@ -50,14 +50,6 @@ struct req_setup_data_call {
 	unsigned req_cid;
 };
 
-struct req_sim_read_info {
-	guint app_type;
-	gchar *aid_str;
-	int fileid;
-	const unsigned char *path;
-	unsigned int path_len;
-};
-
 
 struct req_sim_read_binary {
 	guint app_type;
@@ -123,10 +115,6 @@ gboolean g_ril_request_setup_data_call(GRil *gril,
 					const struct req_setup_data_call *req,
 					struct parcel *rilp,
 					struct ofono_error *error);
-
-gboolean g_ril_request_sim_read_info(GRil *gril,
-					const struct req_sim_read_info *req,
-					struct parcel *rilp);
 
 gboolean g_ril_request_sim_read_binary(GRil *gril,
 					const struct req_sim_read_binary *req,

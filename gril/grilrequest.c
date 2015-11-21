@@ -60,7 +60,6 @@
 /* Commands defined for TS 27.007 +CRSM */
 #define CMD_READ_BINARY   176 /* 0xB0   */
 #define CMD_READ_RECORD   178 /* 0xB2   */
-#define CMD_GET_RESPONSE  192 /* 0xC0   */
 #define CMD_UPDATE_BINARY 214 /* 0xD6   */
 #define CMD_UPDATE_RECORD 220 /* 0xDC   */
 #define CMD_STATUS        242 /* 0xF2   */
@@ -337,54 +336,6 @@ gboolean g_ril_request_setup_data_call(GRil *gril,
 
 error:
 	OFONO_EINVAL(error);
-	return FALSE;
-}
-
-gboolean g_ril_request_sim_read_info(GRil *gril,
-					const struct req_sim_read_info *req,
-					struct parcel *rilp)
-{
-	parcel_init(rilp);
-
-	parcel_w_int32(rilp, CMD_GET_RESPONSE);
-	parcel_w_int32(rilp, req->fileid);
-
-	g_ril_append_print_buf(gril,
-				"(cmd=0x%.2X,efid=0x%.4X,",
-				CMD_GET_RESPONSE,
-				req->fileid);
-
-	if (set_path(gril, req->app_type, rilp, req->fileid,
-			req->path, req->path_len) == FALSE)
-		goto error;
-
-	parcel_w_int32(rilp, 0);           /* P1 */
-	parcel_w_int32(rilp, 0);           /* P2 */
-
-	/*
-	 * TODO: review parameters values used by Android.
-	 * The values of P1-P3 in this code were based on
-	 * values used by the atmodem driver impl.
-	 *
-	 * NOTE:
-	 * GET_RESPONSE_EF_SIZE_BYTES == 15; !255
-	 */
-	parcel_w_int32(rilp, 15);         /* P3 - max length */
-	parcel_w_string(rilp, NULL);       /* data; only req'd for writes */
-	parcel_w_string(rilp, NULL);       /* pin2; only req'd for writes */
-	parcel_w_string(rilp, req->aid_str); /* AID (Application ID) */
-
-	/*
-	 * sessionId, specific to latest MTK modems (harmless for older ones).
-	 * It looks like this field selects one or another SIM application, but
-	 * we use only one at a time so using zero here seems safe.
-	 */
-	if (g_ril_vendor(gril) == OFONO_RIL_VENDOR_MTK)
-		parcel_w_int32(rilp, 0);
-
-	return TRUE;
-
-error:
 	return FALSE;
 }
 
