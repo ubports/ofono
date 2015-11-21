@@ -67,18 +67,6 @@
 	error->error = 0;				\
 } while (0)
 
-void g_ril_request_set_net_select_manual(GRil *gril,
-					const char *mccmnc,
-					struct parcel *rilp)
-{
-	DBG("");
-
-	parcel_init(rilp);
-	parcel_w_string(rilp, mccmnc);
-
-	g_ril_append_print_buf(gril, "(%s)", mccmnc);
-}
-
 gboolean g_ril_request_setup_data_call(GRil *gril,
 					const struct req_setup_data_call *req,
 					struct parcel *rilp,
