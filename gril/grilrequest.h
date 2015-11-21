@@ -51,17 +51,6 @@ struct req_setup_data_call {
 };
 
 
-struct req_sim_write_binary {
-	guint app_type;
-	gchar *aid_str;
-	int fileid;
-	const unsigned char *path;
-	unsigned int path_len;
-	int start;
-	int length;
-	const unsigned char *data;
-};
-
 enum req_record_access_mode {
 	GRIL_REC_ACCESS_MODE_CURRENT,
 	GRIL_REC_ACCESS_MODE_ABSOLUTE,
@@ -94,10 +83,6 @@ gboolean g_ril_request_setup_data_call(GRil *gril,
 					const struct req_setup_data_call *req,
 					struct parcel *rilp,
 					struct ofono_error *error);
-
-gboolean g_ril_request_sim_write_binary(GRil *gril,
-					const struct req_sim_write_binary *req,
-					struct parcel *rilp);
 
 gboolean g_ril_request_sim_write_record(GRil *gril,
 					const struct req_sim_write_record *req,
