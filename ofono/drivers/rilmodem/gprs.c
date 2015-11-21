@@ -335,22 +335,16 @@ static void drop_data_call_cb(struct ril_msg *message, gpointer user_data)
 static int drop_data_call(struct ofono_gprs *gprs, int cid)
 {
 	struct ril_gprs_data *gd = ofono_gprs_get_data(gprs);
-	struct req_deactivate_data_call request;
 	struct parcel rilp;
-	struct ofono_error error;
 
-	request.cid = cid;
-	request.reason = RIL_DEACTIVATE_DATA_CALL_NO_REASON;
-
-	g_ril_request_deactivate_data_call(gd->ril, &request, &rilp, &error);
+	ril_util_build_deactivate_data_call(gd->ril, &rilp, cid,
+					RIL_DEACTIVATE_DATA_CALL_NO_REASON);
 
 	if (g_ril_send(gd->ril, RIL_REQUEST_DEACTIVATE_DATA_CALL,
-			&rilp, drop_data_call_cb, gprs, NULL) == 0) {
-		ofono_error("%s: send failed", __func__);
-		return -1;
-	}
+			&rilp, drop_data_call_cb, gprs, NULL) > 0)
+		return 0;
 
-	return 0;
+	return -1;
 }
 
 static void get_active_data_calls_cb(struct ril_msg *message,
