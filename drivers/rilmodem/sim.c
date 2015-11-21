@@ -57,6 +57,9 @@
 /* Number of passwords in EPINC response */
 #define MTK_EPINC_NUM_PASSWD 4
 
+/* Commands defined for TS 27.007 +CRSM */
+#define CMD_GET_RESPONSE  192 /* 0xC0   */
+
 /*
  * Based on ../drivers/atmodem/sim.c.
  *
@@ -209,6 +212,55 @@ error:
 	cb(&error, -1, -1, -1, NULL, EF_STATUS_INVALIDATED, cbd->data);
 }
 
+#define ROOTMF ((char[]) {'\x3F', '\x00'})
+#define ROOTMF_SZ sizeof(ROOTMF)
+
+static char *get_path(int vendor, guint app_type, const int fileid,
+			const unsigned char *path, unsigned int path_len)
+{
+	unsigned char db_path[6] = { 0x00 };
+	unsigned char *comm_path = db_path;
+	int len = 0;
+
+	if (path_len > 0 && path_len < 7) {
+		memcpy(db_path, path, path_len);
+		len = path_len;
+		goto done;
+	}
+
+	switch (app_type) {
+	case RIL_APPTYPE_USIM:
+		len = sim_ef_db_get_path_3g(fileid, db_path);
+		break;
+	case RIL_APPTYPE_SIM:
+		len = sim_ef_db_get_path_2g(fileid, db_path);
+		break;
+	default:
+		ofono_error("Unsupported app_type: 0%x", app_type);
+		return NULL;
+	}
+
+done:
+	/*
+	 * db_path contains the ID of the MF, but MediaTek modems return an
+	 * error if we do not remove it. Other devices work the other way
+	 * around: they need the MF in the path. In fact MTK behaviour seem to
+	 * be the right one: to have the MF in the file is forbidden following
+	 * ETSI TS 102 221, section 8.4.2 (we are accessing the card in mode
+	 * "select by path from MF", see 3gpp 27.007, +CRSM).
+	 */
+	if (vendor == OFONO_RIL_VENDOR_MTK && len >= (int) ROOTMF_SZ &&
+			memcmp(db_path, ROOTMF, ROOTMF_SZ) == 0) {
+		comm_path = db_path + ROOTMF_SZ;
+		len -= ROOTMF_SZ;
+	}
+
+	if (len == 0)
+		return NULL;
+
+	return encode_hex(comm_path, len, 0);
+}
+
 static void ril_sim_read_info(struct ofono_sim *sim, int fileid,
 				const unsigned char *path,
 				unsigned int path_len,
@@ -217,38 +269,60 @@ static void ril_sim_read_info(struct ofono_sim *sim, int fileid,
 	struct sim_data *sd = ofono_sim_get_data(sim);
 	struct cb_data *cbd = cb_data_new(cb, data, sd);
 	struct parcel rilp;
-	struct req_sim_read_info req;
-	guint ret = 0;
+	char *hex_path;
 
 	DBG("file %04x", fileid);
 
-	req.app_type = sd->app_type;
-	req.aid_str = sd->aid_str;
-	req.fileid = fileid;
-	req.path = path;
-	req.path_len = path_len;
-
-	if (!g_ril_request_sim_read_info(sd->ril,
-					&req,
-					&rilp)) {
-		ofono_error("Couldn't build SIM read info request");
+	hex_path = get_path(g_ril_vendor(sd->ril),
+					sd->app_type, fileid, path, path_len);
+	if (hex_path == NULL) {
+		ofono_error("Couldn't build SIM read info request - NULL path");
 		goto error;
 	}
 
-	g_ril_append_print_buf(sd->ril,
-				"%s0,0,15,(null),pin2=(null),aid=%s)",
-				print_buf,
-				sd->aid_str);
+	parcel_init(&rilp);
 
-	ret = g_ril_send(sd->ril, RIL_REQUEST_SIM_IO, &rilp,
-				ril_file_info_cb, cbd, g_free);
+	parcel_w_int32(&rilp, CMD_GET_RESPONSE);
+	parcel_w_int32(&rilp, fileid);
+	parcel_w_string(&rilp, hex_path);
+	parcel_w_int32(&rilp, 0);           /* P1 */
+	parcel_w_int32(&rilp, 0);           /* P2 */
+
+	/*
+	 * TODO: review parameters values used by Android.
+	 * The values of P1-P3 in this code were based on
+	 * values used by the atmodem driver impl.
+	 *
+	 * NOTE:
+	 * GET_RESPONSE_EF_SIZE_BYTES == 15; !255
+	 */
+	parcel_w_int32(&rilp, 15);         /* P3 - max length */
+	parcel_w_string(&rilp, NULL);       /* data; only req'd for writes */
+	parcel_w_string(&rilp, NULL);       /* pin2; only req'd for writes */
+	parcel_w_string(&rilp, sd->aid_str); /* AID (Application ID) */
+
+	/*
+	 * sessionId, specific to latest MTK modems (harmless for older ones).
+	 * It looks like this field selects one or another SIM application, but
+	 * we use only one at a time so using zero here seems safe.
+	 */
+	if (g_ril_vendor(sd->ril) == OFONO_RIL_VENDOR_MTK)
+		parcel_w_int32(&rilp, 0);
+
+	g_ril_append_print_buf(sd->ril, "(cmd=0x%.2X,efid=0x%.4X,path=%s,"
+					"0,0,15,(null),pin2=(null),aid=%s)",
+					CMD_GET_RESPONSE, fileid, hex_path,
+					sd->aid_str);
+	g_free(hex_path);
+
+	if (g_ril_send(sd->ril, RIL_REQUEST_SIM_IO, &rilp,
+				ril_file_info_cb, cbd, g_free) > 0)
+		return;
 
 error:
-	if (ret == 0) {
-		g_free(cbd);
-		CALLBACK_WITH_FAILURE(cb, -1, -1, -1, NULL,
+	g_free(cbd);
+	CALLBACK_WITH_FAILURE(cb, -1, -1, -1, NULL,
 				EF_STATUS_INVALIDATED, data);
-	}
 }
 
 static void ril_file_io_cb(struct ril_msg *message, gpointer user_data)
