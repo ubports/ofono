@@ -58,7 +58,6 @@
 #define MIN_DATA_CALL_REPLY_SIZE 36
 
 /* Commands defined for TS 27.007 +CRSM */
-#define CMD_UPDATE_BINARY 214 /* 0xD6   */
 #define CMD_UPDATE_RECORD 220 /* 0xDC   */
 #define CMD_STATUS        242 /* 0xF2   */
 #define CMD_RETRIEVE_DATA 203 /* 0xCB   */
@@ -334,55 +333,6 @@ gboolean g_ril_request_setup_data_call(GRil *gril,
 
 error:
 	OFONO_EINVAL(error);
-	return FALSE;
-}
-gboolean g_ril_request_sim_write_binary(GRil *gril,
-					const struct req_sim_write_binary *req,
-					struct parcel *rilp)
-{
-	char *hex_data;
-	int p1, p2;
-
-	parcel_init(rilp);
-	parcel_w_int32(rilp, CMD_UPDATE_BINARY);
-	parcel_w_int32(rilp, req->fileid);
-
-	g_ril_append_print_buf(gril, "(cmd=0x%02X,efid=0x%04X,",
-				CMD_UPDATE_BINARY, req->fileid);
-
-	if (set_path(gril, req->app_type, rilp, req->fileid,
-			req->path, req->path_len) == FALSE)
-		goto error;
-
-	p1 = req->start >> 8;
-	p2 = req->start & 0xff;
-	hex_data = encode_hex(req->data, req->length, 0);
-
-	parcel_w_int32(rilp, p1);		/* P1 */
-	parcel_w_int32(rilp, p2);		/* P2 */
-	parcel_w_int32(rilp, req->length);	/* P3 (Lc) */
-	parcel_w_string(rilp, hex_data);	/* data */
-	parcel_w_string(rilp, NULL);		/* pin2; only for FDN/BDN */
-	parcel_w_string(rilp, req->aid_str);	/* AID (Application ID) */
-
-	/* sessionId, specific to latest MTK modems (harmless for older ones) */
-	if (g_ril_vendor(gril) == OFONO_RIL_VENDOR_MTK)
-		parcel_w_int32(rilp, 0);
-
-	g_ril_append_print_buf(gril,
-				"%s%d,%d,%d,%s,pin2=(null),aid=%s)",
-				print_buf,
-				p1,
-				p2,
-				req->length,
-				hex_data,
-				req->aid_str);
-
-	g_free(hex_data);
-
-	return TRUE;
-
-error:
 	return FALSE;
 }
 
