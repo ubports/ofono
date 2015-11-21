@@ -57,16 +57,6 @@
 /* SETUP_DATA_CALL_PARAMS reply parameters */
 #define MIN_DATA_CALL_REPLY_SIZE 36
 
-/* Commands defined for TS 27.007 +CRSM */
-#define CMD_UPDATE_RECORD 220 /* 0xDC   */
-#define CMD_STATUS        242 /* 0xF2   */
-#define CMD_RETRIEVE_DATA 203 /* 0xCB   */
-#define CMD_SET_DATA      219 /* 0xDB   */
-
-/* FID/path of SIM/USIM root directory */
-#define ROOTMF ((char[]) {'\x3F', '\x00'})
-#define ROOTMF_SZ sizeof(ROOTMF)
-
 /* Call ID should not really be a big number */
 #define MAX_CID_DIGITS 3
 
@@ -79,86 +69,6 @@
 	error->type = OFONO_ERROR_TYPE_NO_ERROR;	\
 	error->error = 0;				\
 } while (0)
-
-/*
- * TODO:
- *
- * A potential future change here is to create a driver
- * abstraction for each request/reply/event method, and a
- * corresponding method to allow new per-message implementations
- * to be registered.  This would allow PES to easily add code
- * to quirk a particular RIL implementation.
- *
- * struct g_ril_messages_driver {
- *	const char *name;
- * };
- *
- */
-
-static gboolean set_path(GRil *ril, guint app_type,
-				struct parcel *rilp,
-				const int fileid, const guchar *path,
-				const guint path_len)
-{
-	unsigned char db_path[6] = { 0x00 };
-	unsigned char *comm_path = db_path;
-	char *hex_path = NULL;
-	int len = 0;
-
-	if (path_len > 0 && path_len < 7) {
-		memcpy(db_path, path, path_len);
-		len = path_len;
-	} else if (app_type == RIL_APPTYPE_USIM) {
-		len = sim_ef_db_get_path_3g(fileid, db_path);
-	} else if (app_type == RIL_APPTYPE_SIM) {
-		len = sim_ef_db_get_path_2g(fileid, db_path);
-	} else {
-		ofono_error("Unsupported app_type: 0%x", app_type);
-		return FALSE;
-	}
-
-	/*
-	 * db_path contains the ID of the MF, but MediaTek modems return an
-	 * error if we do not remove it. Other devices work the other way
-	 * around: they need the MF in the path. In fact MTK behaviour seem to
-	 * be the right one: to have the MF in the file is forbidden following
-	 * ETSI TS 102 221, section 8.4.2 (we are accessing the card in mode
-	 * "select by path from MF", see 3gpp 27.007, +CRSM).
-	 */
-	if (g_ril_vendor(ril) == OFONO_RIL_VENDOR_MTK && len >= (int) ROOTMF_SZ
-			&& memcmp(db_path, ROOTMF, ROOTMF_SZ) == 0) {
-		comm_path = db_path + ROOTMF_SZ;
-		len -= ROOTMF_SZ;
-	}
-
-	if (len > 0) {
-		hex_path = encode_hex(comm_path, len, 0);
-		parcel_w_string(rilp, hex_path);
-
-		g_ril_append_print_buf(ril,
-					"%spath=%s,",
-					print_buf,
-					hex_path);
-
-		g_free(hex_path);
-	} else {
-		/*
-		 * The only known case of this is EFPHASE_FILED (0x6FAE).
-		 * The ef_db table ( see /src/simutil.c ) entry for
-		 * EFPHASE contains a value of 0x0000 for it's
-		 * 'parent3g' member.  This causes a NULL path to
-		 * be returned.
-		 * (EF_PHASE does not exist for USIM)
-		 */
-		parcel_w_string(rilp, NULL);
-
-		g_ril_append_print_buf(ril,
-					"%spath=(null),",
-					print_buf);
-	}
-
-	return TRUE;
-}
 
 gboolean g_ril_request_deactivate_data_call(GRil *gril,
 				const struct req_deactivate_data_call *req,
@@ -333,71 +243,6 @@ gboolean g_ril_request_setup_data_call(GRil *gril,
 
 error:
 	OFONO_EINVAL(error);
-	return FALSE;
-}
-
-static int get_sim_record_access_p2(enum req_record_access_mode mode)
-{
-	switch (mode) {
-	case GRIL_REC_ACCESS_MODE_CURRENT:
-		return 4;
-	case GRIL_REC_ACCESS_MODE_ABSOLUTE:
-		return 4;
-	case GRIL_REC_ACCESS_MODE_NEXT:
-		return 2;
-	case GRIL_REC_ACCESS_MODE_PREVIOUS:
-		return 3;
-	}
-
-	return -1;
-}
-
-gboolean g_ril_request_sim_write_record(GRil *gril,
-					const struct req_sim_write_record *req,
-					struct parcel *rilp)
-{
-	char *hex_data;
-	int p2;
-
-	parcel_init(rilp);
-	parcel_w_int32(rilp, CMD_UPDATE_RECORD);
-	parcel_w_int32(rilp, req->fileid);
-
-	g_ril_append_print_buf(gril, "(cmd=0x%02X,efid=0x%04X,",
-				CMD_UPDATE_RECORD, req->fileid);
-
-	if (set_path(gril, req->app_type, rilp, req->fileid,
-			req->path, req->path_len) == FALSE)
-		goto error;
-
-	p2 = get_sim_record_access_p2(req->mode);
-	hex_data = encode_hex(req->data, req->length, 0);
-
-	parcel_w_int32(rilp, req->record);	/* P1 */
-	parcel_w_int32(rilp, p2);		/* P2 (access mode) */
-	parcel_w_int32(rilp, req->length);	/* P3 (Lc) */
-	parcel_w_string(rilp, hex_data);	/* data */
-	parcel_w_string(rilp, NULL);		/* pin2; only for FDN/BDN */
-	parcel_w_string(rilp, req->aid_str);	/* AID (Application ID) */
-
-	/* sessionId, specific to latest MTK modems (harmless for older ones) */
-	if (g_ril_vendor(gril) == OFONO_RIL_VENDOR_MTK)
-		parcel_w_int32(rilp, 0);
-
-	g_ril_append_print_buf(gril,
-				"%s%d,%d,%d,%s,pin2=(null),aid=%s)",
-				print_buf,
-				req->record,
-				p2,
-				req->length,
-				hex_data,
-				req->aid_str);
-
-	g_free(hex_data);
-
-	return TRUE;
-
-error:
 	return FALSE;
 }
 
