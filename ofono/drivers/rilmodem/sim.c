@@ -62,6 +62,7 @@
 #define CMD_READ_RECORD   178 /* 0xB2   */
 #define CMD_GET_RESPONSE  192 /* 0xC0   */
 #define CMD_UPDATE_BINARY 214 /* 0xD6   */
+#define CMD_UPDATE_RECORD 220 /* 0xDC   */
 
 /*
  * Based on ../drivers/atmodem/sim.c.
@@ -574,7 +575,7 @@ error:
 }
 
 static void update_record(struct ofono_sim *sim, int fileid,
-				enum req_record_access_mode mode,
+				int access_mode,
 				int record, int length,
 				const unsigned char *value,
 				const unsigned char *path,
@@ -583,35 +584,50 @@ static void update_record(struct ofono_sim *sim, int fileid,
 {
 	struct sim_data *sd = ofono_sim_get_data(sim);
 	struct cb_data *cbd = cb_data_new(cb, data, sd);
+	char *hex_path;
 	struct parcel rilp;
-	struct req_sim_write_record req;
-	guint ret = 0;
+	char *hex_data;
 
 	DBG("file 0x%04x", fileid);
 
-	req.app_type = sd->app_type;
-	req.aid_str = sd->aid_str;
-	req.fileid = fileid;
-	req.path = path;
-	req.path_len = path_len;
-	req.mode = mode;
-	req.record = record;
-	req.length = length;
-	req.data = value;
-
-	if (!g_ril_request_sim_write_record(sd->ril, &req, &rilp)) {
-		ofono_error("%s: Couldn't build SIM write request", __func__);
+	hex_path = get_path(g_ril_vendor(sd->ril),
+					sd->app_type, fileid, path, path_len);
+	if (hex_path == NULL) {
+		ofono_error("Couldn't build SIM read info request - NULL path");
 		goto error;
 	}
 
-	ret = g_ril_send(sd->ril, RIL_REQUEST_SIM_IO, &rilp,
-				ril_file_write_cb, cbd, g_free);
+	hex_data = encode_hex(value, length, 0);
 
+	parcel_init(&rilp);
+	parcel_w_int32(&rilp, CMD_UPDATE_RECORD);
+	parcel_w_int32(&rilp, fileid);
+	parcel_w_string(&rilp, hex_path);
+	parcel_w_int32(&rilp, record);	/* P1 */
+	parcel_w_int32(&rilp, access_mode);	/* P2 (access mode) */
+	parcel_w_int32(&rilp, length);	/* P3 (Lc) */
+	parcel_w_string(&rilp, hex_data);	/* data */
+	parcel_w_string(&rilp, NULL);		/* pin2; only for FDN/BDN */
+	parcel_w_string(&rilp, sd->aid_str);	/* AID (Application ID) */
+
+	/* sessionId, specific to latest MTK modems (harmless for older ones) */
+	if (g_ril_vendor(sd->ril) == OFONO_RIL_VENDOR_MTK)
+		parcel_w_int32(&rilp, 0);
+
+	g_ril_append_print_buf(sd->ril, "(cmd=0x%02X,efid=0x%04X,path=%s,"
+					"%d,%d,%d,%s,pin2=(null),aid=%s)",
+					CMD_UPDATE_RECORD, fileid, hex_path,
+					record, access_mode, length, hex_data,
+					sd->aid_str);
+	g_free(hex_path);
+	g_free(hex_data);
+
+	if (g_ril_send(sd->ril, RIL_REQUEST_SIM_IO, &rilp,
+				ril_file_write_cb, cbd, g_free) > 0)
+		return;
 error:
-	if (ret == 0) {
-		g_free(cbd);
-		CALLBACK_WITH_FAILURE(cb, data);
-	}
+	g_free(cbd);
+	CALLBACK_WITH_FAILURE(cb, data);
 }
 
 static void ril_sim_update_record(struct ofono_sim *sim, int fileid,
@@ -621,8 +637,8 @@ static void ril_sim_update_record(struct ofono_sim *sim, int fileid,
 					unsigned int path_len,
 					ofono_sim_write_cb_t cb, void *data)
 {
-	update_record(sim, fileid, GRIL_REC_ACCESS_MODE_ABSOLUTE, record,
-			length, value, path, path_len, cb, data);
+	update_record(sim, fileid, 4, record, length, value,
+			path, path_len, cb, data);
 }
 
 static void ril_sim_update_cyclic(struct ofono_sim *sim, int fileid,
@@ -632,8 +648,8 @@ static void ril_sim_update_cyclic(struct ofono_sim *sim, int fileid,
 					ofono_sim_write_cb_t cb, void *data)
 {
 	/* Only mode valid for cyclic files is PREVIOUS */
-	update_record(sim, fileid, GRIL_REC_ACCESS_MODE_PREVIOUS, 0,
-			length, value, path, path_len, cb, data);
+	update_record(sim, fileid, 3, 0, length, value,
+			path, path_len, cb, data);
 }
 
 static void ril_imsi_cb(struct ril_msg *message, gpointer user_data)
