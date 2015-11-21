@@ -192,3 +192,23 @@ void ril_util_sim_state_query_free(struct ril_util_sim_state_query *req)
 
 	g_free(req);
 }
+
+void ril_util_build_deactivate_data_call(GRil *gril, struct parcel *rilp,
+						int cid, unsigned int reason)
+{
+	char *cid_str = NULL;
+	char *reason_str = NULL;
+
+	cid_str = g_strdup_printf("%d", cid);
+	reason_str = g_strdup_printf("%d", reason);
+
+	parcel_init(rilp);
+	parcel_w_int32(rilp, 2);
+	parcel_w_string(rilp, cid_str);
+	parcel_w_string(rilp, reason_str);
+
+	g_ril_append_print_buf(gril, "(%s,%s)", cid_str, reason_str);
+
+	g_free(cid_str);
+	g_free(reason_str);
+}

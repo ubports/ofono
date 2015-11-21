@@ -100,6 +100,9 @@ struct ril_util_sim_state_query *ril_util_sim_state_query_new(GRil *ril,
 						GDestroyNotify destroy);
 void ril_util_sim_state_query_free(struct ril_util_sim_state_query *req);
 
+void ril_util_build_deactivate_data_call(GRil *gril, struct parcel *rilp,
+						int cid, unsigned int reason);
+
 struct cb_data {
 	void *cb;
 	void *data;
