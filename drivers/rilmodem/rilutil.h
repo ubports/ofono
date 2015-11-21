@@ -89,7 +89,6 @@ typedef void (*ril_util_sim_inserted_cb_t)(gboolean present, void *userdata);
 void decode_ril_error(struct ofono_error *error, const char *final);
 gint ril_util_call_compare_by_status(gconstpointer a, gconstpointer b);
 gint ril_util_call_compare_by_phone_number(gconstpointer a, gconstpointer b);
-gint ril_util_call_compare(gconstpointer a, gconstpointer b);
 gchar *ril_util_get_netmask(const char *address);
 
 struct ril_util_sim_state_query *ril_util_sim_state_query_new(GRil *ril,
