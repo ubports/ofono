@@ -58,6 +58,7 @@
 #define MTK_EPINC_NUM_PASSWD 4
 
 /* Commands defined for TS 27.007 +CRSM */
+#define CMD_READ_BINARY   176 /* 0xB0   */
 #define CMD_GET_RESPONSE  192 /* 0xC0   */
 
 /*
@@ -419,42 +420,47 @@ static void ril_sim_read_binary(struct ofono_sim *sim, int fileid,
 {
 	struct sim_data *sd = ofono_sim_get_data(sim);
 	struct cb_data *cbd = cb_data_new(cb, data, sd);
+	char *hex_path;
 	struct parcel rilp;
-	struct req_sim_read_binary req;
-	gint ret = 0;
 
 	DBG("file %04x", fileid);
 
-	req.app_type = sd->app_type;
-	req.aid_str = sd->aid_str;
-	req.fileid = fileid;
-	req.path = path;
-	req.path_len = path_len;
-	req.start = start;
-	req.length = length;
-
-	if (!g_ril_request_sim_read_binary(sd->ril,
-						&req,
-						&rilp)) {
-		ofono_error("Couldn't build SIM read binary request");
+	hex_path = get_path(g_ril_vendor(sd->ril),
+					sd->app_type, fileid, path, path_len);
+	if (hex_path == NULL) {
+		ofono_error("Couldn't build SIM read info request - NULL path");
 		goto error;
 	}
 
-	g_ril_append_print_buf(sd->ril,
-				"%s%d,%d,%d,(null),pin2=(null),aid=%s)",
-				print_buf,
-				(start >> 8),
-				(start & 0xff),
-				length,
-				sd->aid_str);
+	parcel_init(&rilp);
+	parcel_w_int32(&rilp, CMD_READ_BINARY);
+	parcel_w_int32(&rilp, fileid);
+	parcel_w_string(&rilp, hex_path);
+	parcel_w_int32(&rilp, start >> 8);   /* P1 */
+	parcel_w_int32(&rilp, start & 0xff); /* P2 */
+	parcel_w_int32(&rilp, length);         /* P3 */
+	parcel_w_string(&rilp, NULL);          /* data; only req'd for writes */
+	parcel_w_string(&rilp, NULL);          /* pin2; only req'd for writes */
+	parcel_w_string(&rilp, sd->aid_str);
 
-	ret = g_ril_send(sd->ril, RIL_REQUEST_SIM_IO, &rilp,
-				ril_file_io_cb, cbd, g_free);
+	/* sessionId, specific to latest MTK modems (harmless for older ones) */
+	if (g_ril_vendor(sd->ril) == OFONO_RIL_VENDOR_MTK)
+		parcel_w_int32(&rilp, 0);
+
+	g_ril_append_print_buf(sd->ril, "(cmd=0x%.2X,efid=0x%.4X,path=%s,"
+					"%d,%d,%d,(null),pin2=(null),aid=%s)",
+					CMD_READ_BINARY, fileid, hex_path,
+					start >> 8, start & 0xff,
+					length, sd->aid_str);
+	g_free(hex_path);
+
+	if (g_ril_send(sd->ril, RIL_REQUEST_SIM_IO, &rilp,
+				ril_file_io_cb, cbd, g_free) > 0)
+		return;
+
 error:
-	if (ret == 0) {
-		g_free(cbd);
-		CALLBACK_WITH_FAILURE(cb, NULL, 0, data);
-	}
+	g_free(cbd);
+	CALLBACK_WITH_FAILURE(cb, NULL, 0, data);
 }
 
 static void ril_sim_read_record(struct ofono_sim *sim, int fileid,
