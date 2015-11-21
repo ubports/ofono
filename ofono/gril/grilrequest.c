@@ -58,7 +58,6 @@
 #define MIN_DATA_CALL_REPLY_SIZE 36
 
 /* Commands defined for TS 27.007 +CRSM */
-#define CMD_READ_RECORD   178 /* 0xB2   */
 #define CMD_UPDATE_BINARY 214 /* 0xD6   */
 #define CMD_UPDATE_RECORD 220 /* 0xDC   */
 #define CMD_STATUS        242 /* 0xF2   */
@@ -337,40 +336,6 @@ error:
 	OFONO_EINVAL(error);
 	return FALSE;
 }
-gboolean g_ril_request_sim_read_record(GRil *gril,
-					const struct req_sim_read_record *req,
-					struct parcel *rilp)
-{
-	parcel_init(rilp);
-	parcel_w_int32(rilp, CMD_READ_RECORD);
-	parcel_w_int32(rilp, req->fileid);
-
-	g_ril_append_print_buf(gril,
-				"(cmd=0x%.2X,efid=0x%.4X,",
-				CMD_READ_RECORD,
-				req->fileid);
-
-	if (set_path(gril, req->app_type, rilp, req->fileid,
-			req->path, req->path_len) == FALSE)
-		goto error;
-
-	parcel_w_int32(rilp, req->record);      /* P1 */
-	parcel_w_int32(rilp, 4);           /* P2 */
-	parcel_w_int32(rilp, req->length);      /* P3 */
-	parcel_w_string(rilp, NULL);       /* data; only req'd for writes */
-	parcel_w_string(rilp, NULL);       /* pin2; only req'd for writes */
-	parcel_w_string(rilp, req->aid_str); /* AID (Application ID) */
-
-	/* sessionId, specific to latest MTK modems (harmless for older ones) */
-	if (g_ril_vendor(gril) == OFONO_RIL_VENDOR_MTK)
-		parcel_w_int32(rilp, 0);
-
-	return TRUE;
-
-error:
-	return FALSE;
-}
-
 gboolean g_ril_request_sim_write_binary(GRil *gril,
 					const struct req_sim_write_binary *req,
 					struct parcel *rilp)
