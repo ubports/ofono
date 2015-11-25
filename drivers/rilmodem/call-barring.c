@@ -119,7 +119,7 @@ static void ril_call_barring_set_cb(struct ril_msg *message, gpointer user_data)
 	ofono_call_barring_set_cb_t cb = cbd->cb;
 	struct barring_data *bd = cbd->user;
 	struct parcel rilp;
-	int retries;
+	int retries = -1;
 
 	if (message->error != RIL_E_SUCCESS)
 		goto error;
@@ -138,10 +138,10 @@ static void ril_call_barring_set_cb(struct ril_msg *message, gpointer user_data)
 	if (rilp.malformed)
 		goto error;
 
+done:
 	g_ril_append_print_buf(bd->ril, "{%d}", retries);
 	g_ril_print_response(bd->ril, message);
 
-done:
 	CALLBACK_WITH_SUCCESS(cb, cbd->data);
 	return;
 
