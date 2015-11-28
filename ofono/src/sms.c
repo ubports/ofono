@@ -63,6 +63,7 @@ struct sms_handler {
 struct ofono_sms {
 	int flags;
 	DBusMessage *pending;
+	GSList *pending_get_prop;
 	struct ofono_phone_number sca;
 	struct sms_assembly *assembly;
 	guint ref;
@@ -371,6 +372,15 @@ static DBusMessage *generate_get_properties_reply(struct ofono_sms *sms,
 	return reply;
 }
 
+static void sms_reply_get_prop(gpointer data, gpointer user_data)
+{
+	DBusMessage *msg = data;
+	struct ofono_sms *sms = user_data;
+	DBusMessage *reply = generate_get_properties_reply(sms, msg);
+
+	__ofono_dbus_pending_reply(&msg, reply);
+}
+
 static void sms_sca_query_cb(const struct ofono_error *error,
 				const struct ofono_phone_number *sca,
 				void *data)
@@ -385,11 +395,9 @@ static void sms_sca_query_cb(const struct ofono_error *error,
 	sms->flags |= MESSAGE_MANAGER_FLAG_CACHED;
 
 out:
-	if (sms->pending) {
-		DBusMessage *reply = generate_get_properties_reply(sms,
-								sms->pending);
-		__ofono_dbus_pending_reply(&sms->pending, reply);
-	}
+	g_slist_foreach(sms->pending_get_prop, sms_reply_get_prop, sms);
+	g_slist_free(sms->pending_get_prop);
+	sms->pending_get_prop = NULL;
 }
 
 static DBusMessage *sms_get_properties(DBusConnection *conn,
@@ -400,15 +408,18 @@ static DBusMessage *sms_get_properties(DBusConnection *conn,
 	if (sms->flags & MESSAGE_MANAGER_FLAG_CACHED)
 		return generate_get_properties_reply(sms, msg);
 
-	if (sms->pending)
-		return __ofono_error_busy(msg);
-
 	if (sms->driver->sca_query == NULL)
 		return __ofono_error_not_implemented(msg);
 
-	sms->pending = dbus_message_ref(msg);
-
-	sms->driver->sca_query(sms, sms_sca_query_cb, sms);
+	if (sms->pending_get_prop) {
+		/* sms_sca_query_cb will reply to all queued messages */
+		sms->pending_get_prop = g_slist_append(sms->pending_get_prop,
+							dbus_message_ref(msg));
+	} else {
+		sms->pending_get_prop = g_slist_append(NULL,
+							dbus_message_ref(msg));
+		sms->driver->sca_query(sms, sms_sca_query_cb, sms);
+	}
 
 	return NULL;
 }
@@ -1658,12 +1669,24 @@ void ofono_sms_driver_unregister(const struct ofono_sms_driver *d)
 	g_drivers = g_slist_remove(g_drivers, (void *) d);
 }
 
+static void sms_cancel_get_prop(gpointer data)
+{
+	DBusMessage *msg = data;
+
+	__ofono_dbus_pending_reply(&msg, __ofono_error_canceled(msg));
+}
+
 static void sms_unregister(struct ofono_atom *atom)
 {
 	struct ofono_sms *sms = __ofono_atom_get_data(atom);
 	DBusConnection *conn = ofono_dbus_get_connection();
 	struct ofono_modem *modem = __ofono_atom_get_modem(atom);
 	const char *path = __ofono_atom_get_path(atom);
+
+	if (sms->pending_get_prop) {
+		g_slist_free_full(sms->pending_get_prop, sms_cancel_get_prop);
+		sms->pending_get_prop = NULL;
+	}
 
 	g_dbus_unregister_interface(conn, path,
 					OFONO_MESSAGE_MANAGER_INTERFACE);
