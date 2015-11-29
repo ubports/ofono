@@ -308,69 +308,6 @@ out:
 	return reply;
 }
 
-void g_ril_reply_free_sim_io(struct reply_sim_io *reply)
-{
-	if (reply) {
-		g_free(reply->hex_response);
-		g_free(reply);
-	}
-}
-
-struct reply_sim_io *g_ril_reply_parse_sim_io(GRil *gril,
-						const struct ril_msg *message)
-{
-	struct parcel rilp;
-	char *response = NULL;
-	struct reply_sim_io *reply;
-
-	/*
-	 * Minimum length of SIM_IO_Response is 12:
-	 * sw1 (int32)
-	 * sw2 (int32)
-	 * simResponse (string)
-	 */
-	if (message->buf_len < 12) {
-		ofono_error("Invalid SIM IO reply: size too small (< 12): %d ",
-			    (int) message->buf_len);
-		return NULL;
-	}
-
-	reply =	g_new0(struct reply_sim_io, 1);
-
-	g_ril_init_parcel(message, &rilp);
-	reply->sw1 = parcel_r_int32(&rilp);
-	reply->sw2 = parcel_r_int32(&rilp);
-
-	response = parcel_r_string(&rilp);
-
-	g_ril_append_print_buf(gril,
-				"(sw1=0x%.2X,sw2=0x%.2X,%s)",
-				reply->sw1,
-				reply->sw2,
-				response);
-	g_ril_print_response(gril, message);
-
-	if (rilp.malformed)
-		goto error;
-
-	if (response != NULL) {
-		reply->hex_response =
-			decode_hex(response, strlen(response),
-					(long *) &reply->hex_len, -1);
-		g_free(response);
-
-		if (reply->hex_response == NULL)
-			goto error;
-	}
-
-	return reply;
-
-error:
-	g_free(reply);
-
-	return NULL;
-}
-
 void g_ril_reply_free_sim_status(struct reply_sim_status *status)
 {
 	if (status) {
