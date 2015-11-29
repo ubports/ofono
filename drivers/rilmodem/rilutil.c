@@ -39,19 +39,6 @@
 #include "util.h"
 #include "ril_constants.h"
 
-struct ril_util_sim_state_query {
-	GRil *ril;
-	guint cpin_poll_source;
-	guint cpin_poll_count;
-	guint interval;
-	guint num_times;
-	ril_util_sim_inserted_cb_t cb;
-	void *userdata;
-	GDestroyNotify destroy;
-};
-
-static gboolean cpin_check(gpointer userdata);
-
 void decode_ril_error(struct ofono_error *error, const char *final)
 {
 	if (!strcmp(final, "OK")) {
@@ -61,15 +48,6 @@ void decode_ril_error(struct ofono_error *error, const char *final)
 		error->type = OFONO_ERROR_TYPE_FAILURE;
 		error->error = 0;
 	}
-}
-
-static gboolean cpin_check(gpointer userdata)
-{
-	struct ril_util_sim_state_query *req = userdata;
-
-	req->cpin_poll_source = 0;
-
-	return FALSE;
 }
 
 gchar *ril_util_get_netmask(const gchar *address)
@@ -107,42 +85,6 @@ gchar *ril_util_get_netmask(const gchar *address)
 	DBG("address: %s netmask: %s", address, result);
 
 	return result;
-}
-
-struct ril_util_sim_state_query *ril_util_sim_state_query_new(GRil *ril,
-						guint interval, guint num_times,
-						ril_util_sim_inserted_cb_t cb,
-						void *userdata,
-						GDestroyNotify destroy)
-{
-	struct ril_util_sim_state_query *req;
-
-	req = g_new0(struct ril_util_sim_state_query, 1);
-
-	req->ril = ril;
-	req->interval = interval;
-	req->num_times = num_times;
-	req->cb = cb;
-	req->userdata = userdata;
-	req->destroy = destroy;
-
-	cpin_check(req);
-
-	return req;
-}
-
-void ril_util_sim_state_query_free(struct ril_util_sim_state_query *req)
-{
-	if (req == NULL)
-		return;
-
-	if (req->cpin_poll_source > 0)
-		g_source_remove(req->cpin_poll_source);
-
-	if (req->destroy)
-		req->destroy(req->userdata);
-
-	g_free(req);
 }
 
 void ril_util_build_deactivate_data_call(GRil *gril, struct parcel *rilp,

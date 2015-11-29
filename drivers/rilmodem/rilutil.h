@@ -89,13 +89,6 @@ typedef void (*ril_util_sim_inserted_cb_t)(gboolean present, void *userdata);
 void decode_ril_error(struct ofono_error *error, const char *final);
 gchar *ril_util_get_netmask(const char *address);
 
-struct ril_util_sim_state_query *ril_util_sim_state_query_new(GRil *ril,
-						guint interval, guint num_times,
-						ril_util_sim_inserted_cb_t cb,
-						void *userdata,
-						GDestroyNotify destroy);
-void ril_util_sim_state_query_free(struct ril_util_sim_state_query *req);
-
 void ril_util_build_deactivate_data_call(GRil *gril, struct parcel *rilp,
 						int cid, unsigned int reason);
 
