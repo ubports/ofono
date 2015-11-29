@@ -115,39 +115,79 @@ struct change_state_cbd {
 
 static void send_get_sim_status(struct ofono_sim *sim);
 
+static gboolean parse_sim_io(GRil *ril, struct ril_msg *message,
+				int *sw1, int *sw2, char **hex_response)
+{
+	struct parcel rilp;
+
+	/*
+	 * Minimum length of SIM_IO_Response is 12:
+	 * sw1 (int32)
+	 * sw2 (int32)
+	 * simResponse (string)
+	 */
+	if (message->buf_len < 12) {
+		ofono_error("Invalid SIM IO reply: size too small (< 12): %lu",
+				message->buf_len);
+		return FALSE;
+	}
+
+	g_ril_init_parcel(message, &rilp);
+	*sw1 = parcel_r_int32(&rilp);
+	*sw2 = parcel_r_int32(&rilp);
+
+	*hex_response = parcel_r_string(&rilp);
+
+	g_ril_append_print_buf(ril, "(sw1=0x%.2X,sw2=0x%.2X,%s)",
+				*sw1, *sw2, *hex_response);
+	g_ril_print_response(ril, message);
+
+	if (rilp.malformed) {
+		g_free(*hex_response);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
 static void ril_file_info_cb(struct ril_msg *message, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
 	ofono_sim_file_info_cb_t cb = cbd->cb;
 	struct sim_data *sd = cbd->user;
-	struct ofono_error error;
-	gboolean ok = FALSE;
 	int sw1, sw2;
+	char *hex_response;
+	unsigned char *response = NULL;
+	long len;
+	gboolean ok = FALSE;
 	int flen = 0, rlen = 0, str = 0;
 	guchar access[3] = { 0x00, 0x00, 0x00 };
-	guchar file_status = EF_STATUS_VALID;
-	struct reply_sim_io *reply = NULL;
+	guchar file_status;
 
 	/* Error, and no data */
 	if (message->error != RIL_E_SUCCESS && message->buf_len == 0) {
 		ofono_error("%s: Reply failure: %s", __func__,
 				ril_error_to_string(message->error));
-		decode_ril_error(&error, "FAIL");
 		goto error;
 	}
 
 	/*
 	 * The reply can have event data even when message->error is not zero
 	 * in mako.
+	 *
 	 */
-	reply = g_ril_reply_parse_sim_io(sd->ril, message);
-	if (reply == NULL) {
-		decode_ril_error(&error, "FAIL");
-		goto error;
-	}
 
-	sw1 = reply->sw1;
-	sw2 = reply->sw2;
+	if (parse_sim_io(sd->ril, message, &sw1, &sw2, &hex_response) == FALSE)
+		goto error;
+
+	if (hex_response != NULL) {
+		response = decode_hex(hex_response, -1, &len, -1);
+		g_free(hex_response);
+		hex_response = NULL;
+
+		if (response == NULL)
+			goto error;
+	}
 
 	/*
 	 * SIM app file not found || USIM app file not found
@@ -158,62 +198,59 @@ static void ril_file_info_cb(struct ril_msg *message, gpointer user_data)
 	if ((sw1 == 0x94 && sw2 == 0x04) || (sw1 == 0x6A && sw2 == 0x82)) {
 		DBG("File not found. Error %s",
 			ril_error_to_string(message->error));
-		decode_ril_error(&error, "FAIL");
 		goto error;
 	}
 
-	if (message->error == RIL_E_SUCCESS) {
-		decode_ril_error(&error, "OK");
-	} else {
+	if (message->error != RIL_E_SUCCESS) {
 		ofono_error("%s: Reply failure: %s, %02x, %02x", __func__,
 				ril_error_to_string(message->error), sw1, sw2);
-		decode_ril_error(&error, "FAIL");
 		goto error;
 	}
 
 	if ((sw1 != 0x90 && sw1 != 0x91 && sw1 != 0x92 && sw1 != 0x9f) ||
 			(sw1 == 0x90 && sw2 != 0x00)) {
+		struct ofono_error error;
+
 		ofono_error("Error reply, invalid values: sw1: %02x sw2: %02x",
 				sw1, sw2);
 
-		/* TODO: fix decode_ril_error to take type & error */
+		g_free(response);
+		response = NULL;
 
+		memset(&error, 0, sizeof(error));
 		error.type = OFONO_ERROR_TYPE_SIM;
 		error.error = (sw1 << 8) | sw2;
 
+		cb(&error, -1, -1, -1, NULL, EF_STATUS_INVALIDATED, cbd->data);
+		return;
+	}
+
+	if (len < 0)
 		goto error;
-	}
 
-	if (reply->hex_len) {
-		if (reply->hex_response[0] == 0x62) {
-			ok = sim_parse_3g_get_response(reply->hex_response,
-							reply->hex_len,
-							&flen, &rlen, &str,
-							access, NULL);
-		} else {
-			ok = sim_parse_2g_get_response(reply->hex_response,
-							reply->hex_len,
-							&flen, &rlen, &str,
-							access, &file_status);
-		}
-	}
+	if (response[0] == 0x62) {
+		ok = sim_parse_3g_get_response(response, len,
+						&flen, &rlen, &str,
+						access, NULL);
+		file_status = EF_STATUS_VALID;
+	} else
+		ok = sim_parse_2g_get_response(response, len,
+						&flen, &rlen, &str,
+						access, &file_status);
 
-	if (!ok) {
-		ofono_error("%s: parse response failed", __func__);
-		decode_ril_error(&error, "FAIL");
+	g_free(response);
+
+	if (!ok)
 		goto error;
-	}
 
-	cb(&error, flen, str, rlen, access, file_status, cbd->data);
-
-	g_ril_reply_free_sim_io(reply);
-
+	CALLBACK_WITH_SUCCESS(cb, flen, str, rlen,
+					access, file_status, cbd->data);
 	return;
 
 error:
-	g_ril_reply_free_sim_io(reply);
-
-	cb(&error, -1, -1, -1, NULL, EF_STATUS_INVALIDATED, cbd->data);
+	g_free(response);
+	CALLBACK_WITH_FAILURE(cb, -1, -1, -1, NULL,
+				EF_STATUS_INVALIDATED, cbd->data);
 }
 
 #define ROOTMF ((char[]) {'\x3F', '\x00'})
@@ -335,37 +372,39 @@ static void ril_file_io_cb(struct ril_msg *message, gpointer user_data)
 	ofono_sim_read_cb_t cb = cbd->cb;
 	struct sim_data *sd = cbd->user;
 	struct ofono_error error;
-	struct reply_sim_io *reply;
+	int sw1, sw2;
+	char *hex_response;
+	unsigned char *response = NULL;
+	long len;
 
-	if (message->error == RIL_E_SUCCESS) {
-		decode_ril_error(&error, "OK");
-	} else {
+	if (message->error != RIL_E_SUCCESS) {
 		ofono_error("RILD reply failure: %s",
 				ril_error_to_string(message->error));
 		goto error;
 	}
 
-	reply = g_ril_reply_parse_sim_io(sd->ril, message);
-	if (reply == NULL) {
-		ofono_error("Can't parse SIM IO response from RILD");
+	if (parse_sim_io(sd->ril, message, &sw1, &sw2, &hex_response) == FALSE)
 		goto error;
-	}
 
-	if (reply->hex_len == 0) {
+	if (hex_response == NULL)
+		goto error;
+
+	response = decode_hex(hex_response, -1, &len, -1);
+	g_free(hex_response);
+	hex_response = NULL;
+
+	if (response == NULL || len == 0) {
 		ofono_error("Null SIM IO response from RILD");
-		g_ril_reply_free_sim_io(reply);
 		goto error;
 	}
 
-	cb(&error, reply->hex_response, reply->hex_len, cbd->data);
-
-	g_ril_reply_free_sim_io(reply);
-
+	cb(&error, response, len, cbd->data);
+	g_free(response);
 	return;
 
 error:
-	decode_ril_error(&error, "FAIL");
-	cb(&error, NULL, 0, cbd->data);
+	g_free(response);
+	CALLBACK_WITH_FAILURE(cb, NULL, 0, cbd->data);
 }
 
 static void ril_file_write_cb(struct ril_msg *message, gpointer user_data)
@@ -373,8 +412,8 @@ static void ril_file_write_cb(struct ril_msg *message, gpointer user_data)
 	struct cb_data *cbd = user_data;
 	ofono_sim_write_cb_t cb = cbd->cb;
 	struct sim_data *sd = cbd->user;
-	struct reply_sim_io *reply;
 	int sw1, sw2;
+	char *hex_response;
 
 	if (message->error != RIL_E_SUCCESS) {
 		ofono_error("%s: RILD reply failure: %s",
@@ -382,16 +421,10 @@ static void ril_file_write_cb(struct ril_msg *message, gpointer user_data)
 		goto error;
 	}
 
-	reply = g_ril_reply_parse_sim_io(sd->ril, message);
-	if (reply == NULL) {
-		ofono_error("%s: Can't parse SIM IO response", __func__);
+	if (parse_sim_io(sd->ril, message, &sw1, &sw2, &hex_response) == FALSE)
 		goto error;
-	}
 
-	sw1 = reply->sw1;
-	sw2 = reply->sw2;
-
-	g_ril_reply_free_sim_io(reply);
+	g_free(hex_response);
 
 	if ((sw1 != 0x90 && sw1 != 0x91 && sw1 != 0x92 && sw1 != 0x9f) ||
 			(sw1 == 0x90 && sw2 != 0x00)) {
@@ -403,12 +436,10 @@ static void ril_file_write_cb(struct ril_msg *message, gpointer user_data)
 		error.error = (sw1 << 8) | sw2;
 
 		cb(&error, cbd->data);
-
 		return;
 	}
 
 	CALLBACK_WITH_SUCCESS(cb, cbd->data);
-
 	return;
 
 error:
