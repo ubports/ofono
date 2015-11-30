@@ -231,6 +231,14 @@ error:
 	CALLBACK_WITH_FAILURE(cb, cbd->data);
 }
 
+#define DATA_PROFILE_DEFAULT_STR "0"
+#define DATA_PROFILE_TETHERED_STR "1"
+#define DATA_PROFILE_IMS_STR "2"
+#define DATA_PROFILE_FOTA_STR "3"
+#define DATA_PROFILE_CBS_STR "4"
+#define DATA_PROFILE_OEM_BASE_STR "1000"
+#define DATA_PROFILE_MTK_MMS_STR "1001"
+
 static void ril_gprs_context_activate_primary(struct ofono_gprs_context *gc,
 				const struct ofono_gprs_primary_context *ctx,
 				ofono_gprs_context_cb_t cb, void *data)
@@ -242,16 +250,15 @@ static void ril_gprs_context_activate_primary(struct ofono_gprs_context *gc,
 	struct ofono_gprs *gprs = NULL;
 	struct ril_gprs_data *gd = NULL;
 	struct cb_data *cbd = cb_data_new(cb, data, gc);
-	struct req_setup_data_call request;
 	struct parcel rilp;
-	struct ofono_error error;
-	int ret = 0;
+	char buf[256];
+	int num_param = 7;
+	int tech;
+	const char *profile;
+	int auth_type;
 
-	g_assert(gprs_atom != NULL);
 	gprs = __ofono_atom_get_data(gprs_atom);
-	g_assert(gprs != NULL);
 	gd = ofono_gprs_get_data(gprs);
-	g_assert(gd != NULL);
 
 	/*
 	 * 0: CDMA 1: GSM/UMTS, 2...
@@ -260,27 +267,34 @@ static void ril_gprs_context_activate_primary(struct ofono_gprs_context *gc,
 	DBG("*gc: %p activating cid: %d; curr_tech: %d", gc, ctx->cid,
 		gd->tech);
 
+	parcel_init(&rilp);
+
+	if (g_ril_vendor(gcd->ril) == OFONO_RIL_VENDOR_MTK)
+		num_param += 1;
+
+	parcel_w_int32(&rilp, num_param);
+
 	if (gd->tech == RADIO_TECH_UNKNOWN) {
 		ofono_error("%s: radio tech for apn: %s UNKNOWN!", __func__,
 				gcd->apn);
-		request.tech = 1;
-	} else {
-		request.tech = gd->tech + 2;
-	}
+		tech = 1;
+	} else if (gd->tech <= RADIO_TECH_GSM) {
+		tech = gd->tech + 2;
+	} else
 
-	/*
-	 * TODO: add comments about tethering, other non-public
-	 * profiles...
-	 */
+	sprintf(buf, "%d", tech);
+	parcel_w_string(&rilp, buf);
+
+	profile = DATA_PROFILE_DEFAULT_STR;
+
 	if (g_ril_vendor(gcd->ril) == OFONO_RIL_VENDOR_MTK &&
 			gcd->type == OFONO_GPRS_CONTEXT_TYPE_MMS)
-		request.data_profile = RIL_DATA_PROFILE_MTK_MMS;
-	else
-		request.data_profile = RIL_DATA_PROFILE_DEFAULT;
+		profile = DATA_PROFILE_MTK_MMS_STR;
 
-	request.apn = g_strdup(ctx->apn);
-	request.username = g_strdup(ctx->username);
-	request.password = g_strdup(ctx->password);
+	parcel_w_string(&rilp, profile);
+	parcel_w_string(&rilp, ctx->apn);
+	parcel_w_string(&rilp, ctx->username);
+	parcel_w_string(&rilp, ctx->password);
 
 	/*
 	 * We do the same as in $AOSP/frameworks/opt/telephony/src/java/com/
@@ -288,45 +302,42 @@ static void ril_gprs_context_activate_primary(struct ofono_gprs_context *gc,
 	 * onConnect(), and use authentication or not depending on whether
 	 * the user field is empty or not.
 	 */
-	if (request.username != NULL && request.username[0] != '\0')
-		request.auth_type = RIL_AUTH_BOTH;
+	if (ctx->username[0] != '\0')
+		auth_type = RIL_AUTH_BOTH;
 	else
-		request.auth_type = RIL_AUTH_NONE;
+		auth_type = RIL_AUTH_NONE;
 
-	request.protocol = ctx->proto;
-	request.req_cid = ctx->cid;
+	sprintf(buf, "%d", auth_type);
+	parcel_w_string(&rilp, buf);
 
-	if (g_ril_request_setup_data_call(gcd->ril,
-						&request,
-						&rilp,
-						&error) == FALSE) {
-		ofono_error("%s: couldn't build SETUP_DATA_CALL"
-				" request for apn: %s.",
-				__func__, request.apn);
-		goto error;
+	parcel_w_string(&rilp, ril_util_gprs_proto_to_ril_string(ctx->proto));
+
+	if (g_ril_vendor(gcd->ril) == OFONO_RIL_VENDOR_MTK) {
+		sprintf(buf, "%u", ctx->cid);
+		parcel_w_string(&rilp, buf);
+
+		g_ril_append_print_buf(gcd->ril, "(%d,%s,%s,%s,%s,%d,%s,%u)",
+				tech, profile, ctx->apn, ctx->username,
+				ctx->password, auth_type,
+				ril_util_gprs_proto_to_ril_string(ctx->proto),
+				ctx->cid);
+	} else
+		g_ril_append_print_buf(gcd->ril, "(%d,%s,%s,%s,%s,%d,%s)",
+				tech, profile, ctx->apn, ctx->username,
+				ctx->password, auth_type,
+				ril_util_gprs_proto_to_ril_string(ctx->proto));
+
+	if (g_ril_send(gcd->ril, RIL_REQUEST_SETUP_DATA_CALL, &rilp,
+				ril_setup_data_call_cb, cbd, g_free) > 0) {
+		gcd->apn = g_strdup(ctx->apn);
+		gcd->active_ctx_cid = ctx->cid;
+		gcd->state = STATE_ENABLING;
+
+		return;
 	}
 
-	gcd->active_ctx_cid = ctx->cid;
-	gcd->state = STATE_ENABLING;
-	gcd->apn = g_strdup(ctx->apn);
-
-	ret = g_ril_send(gcd->ril, RIL_REQUEST_SETUP_DATA_CALL, &rilp,
-				ril_setup_data_call_cb, cbd, g_free);
-
-error:
-	g_free(request.apn);
-	g_free(request.username);
-	g_free(request.password);
-
-	if (ret == 0) {
-		ofono_error("%s: send SETUP_DATA_CALL failed for apn: %s.",
-				__func__, gcd->apn);
-
-		set_context_disconnected(gcd);
-
-		g_free(cbd);
-		CALLBACK_WITH_FAILURE(cb, data);
-	}
+	g_free(cbd);
+	CALLBACK_WITH_FAILURE(cb, data);
 }
 
 static gboolean reset_modem(gpointer data)
