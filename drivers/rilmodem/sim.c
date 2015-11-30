@@ -94,8 +94,6 @@ struct sim_data {
 	enum ofono_ril_vendor vendor;
 	gchar *aid_str;
 	guint app_type;
-	gchar *app_str;
-	guint app_index;
 	enum ofono_sim_password_type passwd_type;
 	int retries[OFONO_SIM_PASSWORD_INVALID];
 	enum ofono_sim_password_type passwd_state;
@@ -736,19 +734,104 @@ static void ril_read_imsi(struct ofono_sim *sim, ofono_sim_imsi_cb_t cb,
 	}
 }
 
-static void configure_active_app(struct sim_data *sd,
-					struct reply_sim_app *app,
-					guint index)
+static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 {
-	g_free(sd->aid_str);
-	g_free(sd->app_str);
-	sd->app_type = app->app_type;
-	sd->aid_str = g_strdup(app->aid_str);
-	sd->app_str = g_strdup(app->app_str);
-	sd->app_index = index;
+	struct ofono_sim *sim = user_data;
+	struct sim_data *sd = ofono_sim_get_data(sim);
+	struct parcel rilp;
+	int card_state;
+	int universal_pin_state;
+	int gsm_umts_app_index;
+	int cdma_app_index;
+	int ims_app_index;
+	int num_apps;
+	int i;
+	int app_state;
+	int perso_substate;
 
-	DBG("setting aid_str (AID) to: %s", sd->aid_str);
-	switch (app->app_state) {
+	g_ril_init_parcel(message, &rilp);
+
+	card_state = parcel_r_int32(&rilp);
+
+	/*
+	 * NOTE:
+	 *
+	 * The global pin_status is used for multi-application
+	 * UICC cards.  For example, there are SIM cards that
+	 * can be used in both GSM and CDMA phones.  Instead
+	 * of managed PINs for both applications, a global PIN
+	 * is set instead.  It's not clear at this point if
+	 * such SIM cards are supported by ofono or RILD.
+	 */
+	universal_pin_state = parcel_r_int32(&rilp);
+	gsm_umts_app_index = parcel_r_int32(&rilp);
+	cdma_app_index = parcel_r_int32(&rilp);
+	ims_app_index = parcel_r_int32(&rilp);
+	num_apps = parcel_r_int32(&rilp);
+
+	if (rilp.malformed)
+		return;
+
+	if (gsm_umts_app_index >= num_apps)
+		return;
+
+	DBG("[%d,%04d]< %s", g_ril_get_slot(sd->ril),
+				message->serial_no,
+				"RIL_REQUEST_GET_SIM_STATUS");
+
+	DBG("card_state=%d,universal_pin_state=%d,"
+			"gsm_umts_index=%d,cdma_index=%d,ims_index=%d,"
+			"num_apps=%d",
+			card_state, universal_pin_state,
+			gsm_umts_app_index, cdma_app_index, ims_app_index,
+			num_apps);
+
+	switch (card_state) {
+	case RIL_CARDSTATE_PRESENT:
+		break;
+	case RIL_CARDSTATE_ABSENT:
+		ofono_sim_inserted_notify(sim, FALSE);
+		return;
+	default:
+		ofono_error("%s: bad SIM state (%u)", __func__, card_state);
+		return;
+	}
+
+	ofono_sim_inserted_notify(sim, TRUE);
+
+	for (i = 0; i != gsm_umts_app_index; i++) {
+		parcel_r_int32(&rilp);		/* AppType */
+		parcel_r_int32(&rilp);		/* AppState */
+		parcel_r_int32(&rilp);		/* PersoSubstate */
+		parcel_skip_string(&rilp);	/* AID */
+		parcel_skip_string(&rilp);	/* App Label */
+		parcel_r_int32(&rilp);		/* PIN1 Replaced */
+		parcel_r_int32(&rilp);		/* PIN1 PinState */
+		parcel_r_int32(&rilp);		/* PIN2 PinState */
+
+		if (rilp.malformed)
+			return;
+	}
+
+	/*
+	 * We cache the current password state. Ideally this should be done
+	 * by issuing a GET_SIM_STATUS request from ril_query_passwd_state,
+	 * which is called by the core after sending a password, but
+	 * unfortunately the response to GET_SIM_STATUS is not reliable in mako
+	 * when sent just after sending the password. Some time is needed
+	 * before the modem refreshes its internal state, and when it does it
+	 * sends a SIM_STATUS_CHANGED event. In that moment we retrieve the
+	 * status and this function is executed. We call
+	 * __ofono_sim_recheck_pin as it is the only way to indicate the core
+	 * to call query_passwd_state again. An option that can be explored in
+	 * the future is wait before invoking core callback for send_passwd
+	 * until we know the real password state.
+	 */
+	sd->app_type = parcel_r_int32(&rilp);	/* AppType */
+	app_state = parcel_r_int32(&rilp);	/* AppState */
+	perso_substate = parcel_r_int32(&rilp);	/* PersoSubstate */
+
+	switch (app_state) {
 	case RIL_APPSTATE_PIN:
 		sd->passwd_state = OFONO_SIM_PASSWORD_SIM_PIN;
 		break;
@@ -756,7 +839,7 @@ static void configure_active_app(struct sim_data *sd,
 		sd->passwd_state = OFONO_SIM_PASSWORD_SIM_PUK;
 		break;
 	case RIL_APPSTATE_SUBSCRIPTION_PERSO:
-		switch (app->perso_substate) {
+		switch (perso_substate) {
 		case RIL_PERSOSUBSTATE_SIM_NETWORK:
 			sd->passwd_state = OFONO_SIM_PASSWORD_PHNET_PIN;
 			break;
@@ -801,76 +884,19 @@ static void configure_active_app(struct sim_data *sd,
 		sd->passwd_state = OFONO_SIM_PASSWORD_INVALID;
 		break;
 	}
-}
 
-static void sim_status_cb(struct ril_msg *message, gpointer user_data)
-{
-	struct ofono_sim *sim = user_data;
-	struct sim_data *sd = ofono_sim_get_data(sim);
-	struct reply_sim_status *status;
-	guint search_index;
+	g_free(sd->aid_str);
+	sd->aid_str = parcel_r_string(&rilp);	/* AID */
 
-	status = g_ril_reply_parse_sim_status(sd->ril, message);
-	if (status == NULL) {
-		ofono_error("%s: Cannot parse SIM status reply", __func__);
-		return;
-	}
+	DBG("app_type: %d, passwd_state: %d, aid_str (AID): %s",
+		sd->app_type, sd->passwd_state, sd->aid_str);
 
-	DBG("SIM status is %u", status->card_state);
-
-	if (status->card_state == RIL_CARDSTATE_PRESENT)
-		ofono_sim_inserted_notify(sim, TRUE);
-	else if (status && status->card_state == RIL_CARDSTATE_ABSENT)
-		ofono_sim_inserted_notify(sim, FALSE);
-	else
-		ofono_error("%s: bad SIM state (%u)",
-				__func__, status->card_state);
-
-	if (status->card_state == RIL_CARDSTATE_PRESENT) {
-		/*
-		 * TODO(CDMA): need some kind of logic
-		 * to set the correct app_index
-		 */
-		search_index = status->gsm_umts_index;
-		if (search_index < status->num_apps) {
-			struct reply_sim_app *app = status->apps[search_index];
-
-			if (app->app_type != RIL_APPTYPE_UNKNOWN) {
-				/*
-				 * We cache the current password state. Ideally
-				 * this should be done by issuing a
-				 * GET_SIM_STATUS request from
-				 * ril_query_passwd_state, which is called by
-				 * the core after sending a password, but
-				 * unfortunately the response to GET_SIM_STATUS
-				 * is not reliable in mako when sent just after
-				 * sending the password. Some time is needed
-				 * before the modem refreshes its internal
-				 * state, and when it does it sends a
-				 * SIM_STATUS_CHANGED event. In that moment we
-				 * retrieve the status and this function is
-				 * executed. We call __ofono_sim_recheck_pin as
-				 * it is the only way to indicate the core to
-				 * call query_passwd_state again. An option
-				 * that can be explored in the future is wait
-				 * before invoking core callback for send_passwd
-				 * until we know the real password state.
-				 */
-				configure_active_app(sd, app, search_index);
-				DBG("passwd_state: %d", sd->passwd_state);
-
-				/*
-				 * Note: There doesn't seem to be any other way
-				 * to force the core SIM code to recheck the
-				 * PIN. This call causes the core to call this
-				 * atom's query_passwd() function.
-				 */
-				__ofono_sim_recheck_pin(sim);
-			}
-		}
-	}
-
-	g_ril_reply_free_sim_status(status);
+	/*
+	 * Note: There doesn't seem to be any other way to force the core SIM
+	 * code to recheck the PIN. This call causes the core to call this
+	 * atom's query_passwd() function.
+	 */
+	__ofono_sim_recheck_pin(sim);
 }
 
 static void send_get_sim_status(struct ofono_sim *sim)
@@ -1306,7 +1332,6 @@ static int ril_sim_probe(struct ofono_sim *sim, unsigned int vendor,
 	sd->ril = g_ril_clone(ril);
 	sd->vendor = vendor;
 	sd->aid_str = NULL;
-	sd->app_str = NULL;
 	sd->app_type = RIL_APPTYPE_UNKNOWN;
 	sd->passwd_state = OFONO_SIM_PASSWORD_NONE;
 	sd->passwd_type = OFONO_SIM_PASSWORD_NONE;
@@ -1342,7 +1367,6 @@ static void ril_sim_remove(struct ofono_sim *sim)
 
 	g_ril_unref(sd->ril);
 	g_free(sd->aid_str);
-	g_free(sd->app_str);
 	g_free(sd);
 }
 
