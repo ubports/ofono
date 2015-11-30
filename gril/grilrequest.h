@@ -34,22 +34,6 @@
 extern "C" {
 #endif
 
-struct req_setup_data_call {
-	guint tech;
-	guint data_profile;
-	gchar *apn;
-	gchar *username;
-	gchar *password;
-	guint auth_type;
-	guint protocol;
-	unsigned req_cid;
-};
-
-gboolean g_ril_request_setup_data_call(GRil *gril,
-					const struct req_setup_data_call *req,
-					struct parcel *rilp,
-					struct ofono_error *error);
-
 void g_ril_request_oem_hook_raw(GRil *gril, const void *payload, size_t length,
 					struct parcel *rilp);
 
