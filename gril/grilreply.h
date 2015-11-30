@@ -44,29 +44,6 @@ struct reply_data_reg_state {
 	unsigned int max_cids;
 };
 
-#define MAX_UICC_APPS 16
-
-struct reply_sim_app {
-	guint app_type;
-	guint app_state;
-	guint perso_substate;
-	char *aid_str;
-	char *app_str;
-	guint pin_replaced;
-	guint pin1_state;
-	guint pin2_state;
-};
-
-struct reply_sim_status {
-	guint card_state;
-	guint pin_state;
-	guint gsm_umts_index;
-	guint cdma_index;
-	guint ims_index;
-	guint num_apps;
-	struct reply_sim_app *apps[MAX_UICC_APPS];
-};
-
 struct reply_oem_hook {
 	int length;
 	void *data;
@@ -75,11 +52,6 @@ struct reply_oem_hook {
 struct reply_reg_state *g_ril_reply_parse_voice_reg_state(GRil *gril,
 						const struct ril_msg *message);
 struct reply_data_reg_state *g_ril_reply_parse_data_reg_state(GRil *gril,
-						const struct ril_msg *message);
-
-void g_ril_reply_free_sim_status(struct reply_sim_status *status);
-
-struct reply_sim_status *g_ril_reply_parse_sim_status(GRil *gril,
 						const struct ril_msg *message);
 
 GSList *g_ril_reply_parse_get_calls(GRil *gril, const struct ril_msg *message);
