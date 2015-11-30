@@ -106,3 +106,16 @@ void ril_util_build_deactivate_data_call(GRil *gril, struct parcel *rilp,
 	g_free(cid_str);
 	g_free(reason_str);
 }
+
+const char *ril_util_gprs_proto_to_ril_string(enum ofono_gprs_proto proto)
+{
+	switch (proto) {
+	case OFONO_GPRS_PROTO_IPV6:
+		return "IPV6";
+	case OFONO_GPRS_PROTO_IPV4V6:
+		return "IPV4V6";
+	case OFONO_GPRS_PROTO_IP:
+	default:
+		return "IP";
+	}
+}
