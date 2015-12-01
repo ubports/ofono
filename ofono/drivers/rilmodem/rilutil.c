@@ -119,3 +119,27 @@ const char *ril_util_gprs_proto_to_ril_string(enum ofono_gprs_proto proto)
 		return "IP";
 	}
 }
+
+int ril_util_registration_state_to_status(int reg_state)
+{
+	switch (reg_state) {
+	case RIL_REG_STATE_NOT_REGISTERED:
+	case RIL_REG_STATE_REGISTERED:
+	case RIL_REG_STATE_SEARCHING:
+	case RIL_REG_STATE_DENIED:
+	case RIL_REG_STATE_UNKNOWN:
+	case RIL_REG_STATE_ROAMING:
+		break;
+
+	case RIL_REG_STATE_EMERGENCY_NOT_REGISTERED:
+	case RIL_REG_STATE_EMERGENCY_SEARCHING:
+	case RIL_REG_STATE_EMERGENCY_DENIED:
+	case RIL_REG_STATE_EMERGENCY_UNKNOWN:
+		reg_state -= RIL_REG_STATE_EMERGENCY_NOT_REGISTERED;
+		break;
+	default:
+		reg_state = NETWORK_REGISTRATION_STATUS_UNKNOWN;
+	}
+
+	return reg_state;
+}
