@@ -50,5 +50,6 @@ void *parcel_r_raw(struct parcel *p,  int *len);
 size_t parcel_data_avail(struct parcel *p);
 struct parcel_str_array *parcel_r_str_array(struct parcel *p);
 void parcel_free_str_array(struct parcel_str_array *str_arr);
+char **parcel_r_strv(struct parcel *p);
 
 #endif
