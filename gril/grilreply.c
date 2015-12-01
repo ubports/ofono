@@ -146,68 +146,6 @@ no_val:
 	g_ril_append_print_buf(gril, "%s%s", print_buf, str ? str : "(null)");
 }
 
-struct reply_reg_state *g_ril_reply_parse_voice_reg_state(GRil *gril,
-						const struct ril_msg *message)
-{
-	struct parcel rilp;
-	struct parcel_str_array *str_arr;
-	struct reply_reg_state *reply = NULL;
-	int i;
-
-	g_ril_init_parcel(message, &rilp);
-
-	str_arr = parcel_r_str_array(&rilp);
-	if (str_arr == NULL) {
-		ofono_error("%s: parse error for %s", __func__,
-				ril_request_id_to_string(message->req));
-		goto out;
-	}
-
-	reply =	g_try_malloc0(sizeof(*reply));
-	if (reply == NULL) {
-		ofono_error("%s: out of memory", __func__);
-		goto out;
-	}
-
-	reply->status = -1;
-	reply->lac = -1;
-	reply->ci = -1;
-
-	g_ril_append_print_buf(gril, "{");
-
-	for (i = 0; i < str_arr->num_str; ++i) {
-		char *str = str_arr->str[i];
-
-		if (i > 0)
-			g_ril_append_print_buf(gril, "%s,", print_buf);
-
-		switch (i) {
-		case RST_IX_STATE: case RST_IX_LAC:
-		case RST_IX_CID:   case RST_IX_RAT:
-			set_reg_state(gril, reply, i, str);
-			break;
-		default:
-			g_ril_append_print_buf(gril, "%s%s", print_buf,
-						str ? str : "(null)");
-		}
-	}
-
-	g_ril_append_print_buf(gril, "%s}", print_buf);
-	g_ril_print_response(gril, message);
-
-	/* As a minimum we require a valid status string */
-	if (reply->status == -1) {
-		ofono_error("%s: invalid status", __func__);
-		g_free(reply);
-		reply = NULL;
-	}
-
-out:
-	parcel_free_str_array(str_arr);
-
-	return reply;
-}
-
 static void set_data_reg_state(GRil *gril, struct reply_data_reg_state *reply,
 				int i, const char *str)
 {

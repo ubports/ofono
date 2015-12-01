@@ -49,8 +49,6 @@ struct reply_oem_hook {
 	void *data;
 };
 
-struct reply_reg_state *g_ril_reply_parse_voice_reg_state(GRil *gril,
-						const struct ril_msg *message);
 struct reply_data_reg_state *g_ril_reply_parse_data_reg_state(GRil *gril,
 						const struct ril_msg *message);
 
