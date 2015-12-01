@@ -312,3 +312,25 @@ void parcel_free_str_array(struct parcel_str_array *str_arr)
 		g_free(str_arr);
 	}
 }
+
+char **parcel_r_strv(struct parcel *p)
+{
+	int i;
+	int num_str = parcel_r_int32(p);
+	char **strv;
+
+	if (p->malformed || num_str <= 0)
+		return NULL;
+
+	strv = g_new0(char *, num_str + 1);
+
+	for (i = 0; i < num_str; i++)
+		strv[i] = parcel_r_string(p);
+
+	if (p->malformed) {
+		g_strfreev(strv);
+		strv = NULL;
+	}
+
+	return strv;
+}
