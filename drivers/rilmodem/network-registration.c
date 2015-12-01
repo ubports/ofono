@@ -245,7 +245,15 @@ static void ril_creg_cb(struct ril_msg *message, gpointer user_data)
 	struct cb_data *cbd = user_data;
 	ofono_netreg_status_cb_t cb = cbd->cb;
 	struct netreg_data *nd = cbd->user;
-	struct reply_reg_state *reply;
+	struct parcel rilp;
+	char **strv;
+	int num_str;
+	char *debug_str;
+	int status = -1;
+	int lac = -1;
+	int ci = -1;
+	int tech = -1;
+	char *end;
 
 	DBG("");
 
@@ -255,22 +263,77 @@ static void ril_creg_cb(struct ril_msg *message, gpointer user_data)
 		goto error;
 	}
 
-	reply = g_ril_reply_parse_voice_reg_state(nd->ril, message);
-	if (reply == NULL)
+	g_ril_init_parcel(message, &rilp);
+	strv = parcel_r_strv(&rilp);
+	num_str = g_strv_length(strv);
+
+	if (strv == NULL)
 		goto error;
 
-	nd->tech = reply->tech;
+	debug_str = g_strjoinv(",", strv);
+	g_ril_append_print_buf(nd->ril, "{%d,%s}", num_str, debug_str);
+	g_free(debug_str);
+	g_ril_print_response(nd->ril, message);
 
-	CALLBACK_WITH_SUCCESS(cb,
-				reply->status,
-				reply->lac,
-				reply->ci,
-				ril_tech_to_access_tech(reply->tech),
+	status = strtoul(strv[0], &end, 10);
+	if (end == strv[0] || *end != '\0')
+		goto error_free;
+
+	status = ril_util_registration_state_to_status(status);
+	if (status < 0)
+		goto error_free;
+
+	if (num_str >= 2) {
+		lac = strtoul(strv[1], &end, 16);
+		if (end == strv[1] || *end != '\0')
+			lac = -1;
+	}
+
+	if (num_str >= 3) {
+		ci = strtoul(strv[2], &end, 16);
+		if (end == strv[2] || *end != '\0')
+			ci = -1;
+	}
+
+	if (num_str >= 4) {
+		tech = strtoul(strv[3], &end, 10);
+		if (end == strv[3] || *end != '\0')
+			tech = -1;
+
+		if (g_ril_vendor(nd->ril) == OFONO_RIL_VENDOR_MTK) {
+			switch (tech) {
+			case MTK_RADIO_TECH_HSDPAP:
+			case MTK_RADIO_TECH_HSDPAP_UPA:
+			case MTK_RADIO_TECH_HSUPAP:
+			case MTK_RADIO_TECH_HSUPAP_DPA:
+				tech = RADIO_TECH_HSPAP;
+				break;
+			case MTK_RADIO_TECH_DC_DPA:
+				tech = RADIO_TECH_HSDPA;
+				break;
+			case MTK_RADIO_TECH_DC_UPA:
+				tech = RADIO_TECH_HSUPA;
+				break;
+			case MTK_RADIO_TECH_DC_HSDPAP:
+			case MTK_RADIO_TECH_DC_HSDPAP_UPA:
+			case MTK_RADIO_TECH_DC_HSDPAP_DPA:
+			case MTK_RADIO_TECH_DC_HSPAP:
+				tech = RADIO_TECH_HSPAP;
+				break;
+			}
+		}
+	}
+
+	g_strfreev(strv);
+	nd->tech = tech;
+
+	CALLBACK_WITH_SUCCESS(cb, status, lac, ci,
+				ril_tech_to_access_tech(tech),
 				cbd->data);
-
-	g_free(reply);
 	return;
 
+error_free:
+	g_strfreev(strv);
 error:
 	CALLBACK_WITH_FAILURE(cb, -1, -1, -1, -1, cbd->data);
 }
