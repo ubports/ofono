@@ -179,6 +179,35 @@ static int ril_gprs_protocol_to_ofono(gchar *protocol_str)
 	return -1;
 }
 
+static void ril_gprs_context_set_ipv4(struct ofono_gprs_context *gc,
+						char * const *ip_addr)
+{
+	const guint n = gutil_strv_length(ip_addr);
+
+	if (n > 0) {
+		ofono_gprs_context_set_ipv4_address(gc, ip_addr[0], TRUE);
+		if (n > 1) {
+			ofono_gprs_context_set_ipv4_netmask(gc, ip_addr[1]);
+		}
+	}
+}
+
+static void ril_gprs_context_set_ipv6(struct ofono_gprs_context *gc,
+						char * const *ipv6_addr)
+{
+	const guint n = gutil_strv_length(ipv6_addr);
+
+	if (n > 0) {
+		ofono_gprs_context_set_ipv6_address(gc, ipv6_addr[0]);
+		if (n > 1) {
+			const int p = atoi(ipv6_addr[1]);
+			if (p > 0 && p <= 128) {
+				ofono_gprs_context_set_ipv6_prefix_length(gc, p);
+			}
+		}
+	}
+}
+
 static void ril_gprs_context_data_call_free(
 				struct ril_gprs_context_data_call *call)
 {
@@ -502,17 +531,13 @@ static void ril_gprs_context_call_list_changed(GRilIoChannel *io, guint event,
 			if ((call->prot == OFONO_GPRS_PROTO_IPV4V6 ||
 					call->prot == OFONO_GPRS_PROTO_IPV6) &&
 						split_ipv6_addr) {
-				ofono_gprs_context_set_ipv6_address(gc,
-							split_ipv6_addr[0]);
+				ril_gprs_context_set_ipv6(gc, split_ipv6_addr);
 			}
 
 			if ((call->prot == OFONO_GPRS_PROTO_IPV4V6 ||
 					call->prot == OFONO_GPRS_PROTO_IP) &&
 						split_ip_addr) {
-				ofono_gprs_context_set_ipv4_netmask(gc,
-							split_ip_addr[1]);
-				ofono_gprs_context_set_ipv4_address(gc,
-							split_ip_addr[0], TRUE);
+				ril_gprs_context_set_ipv4(gc, split_ip_addr);
 			}
 
 			g_strfreev(split_ip_addr);
@@ -671,7 +696,7 @@ static void ril_gprs_context_activate_primary_cb(GRilIoChannel *io, int status,
 			(call->prot == OFONO_GPRS_PROTO_IPV6 ||
 			call->prot == OFONO_GPRS_PROTO_IPV4V6)) {
 
-		ofono_gprs_context_set_ipv6_address(gc, split_ipv6_addr[0]);
+		ril_gprs_context_set_ipv6(gc, split_ipv6_addr);
 		ofono_gprs_context_set_ipv6_gateway(gc, ipv6_gw);
 		ofono_gprs_context_set_ipv6_dns_servers(gc,
 						(const char **) dns_ipv6_addr);
@@ -680,8 +705,7 @@ static void ril_gprs_context_activate_primary_cb(GRilIoChannel *io, int status,
 	if (split_ip_addr &&
 			(call->prot == OFONO_GPRS_PROTO_IP ||
 			call->prot == OFONO_GPRS_PROTO_IPV4V6)) {
-		ofono_gprs_context_set_ipv4_netmask(gc, split_ip_addr[1]);
-		ofono_gprs_context_set_ipv4_address(gc, split_ip_addr[0], TRUE);
+		ril_gprs_context_set_ipv4(gc, split_ip_addr);
 		ofono_gprs_context_set_ipv4_gateway(gc, ip_gw);
 		ofono_gprs_context_set_ipv4_dns_servers(gc,
 						(const char **) dns_addr);
