@@ -27,7 +27,6 @@ struct ril_gprs_data {
 	gboolean ofono_attached;
 	int rild_status;
 	int tech;
-	int state_changed_unsol;
 	int pending_deact_req;
 };
 
