@@ -101,7 +101,6 @@ gril_sources = gril/gril.h gril/gril.c \
 				gril/gfunc.h gril/gril.h \
 				gril/parcel.c gril/parcel.h \
 				gril/grilreply.c gril/grilreply.h \
-				gril/grilrequest.c gril/grilrequest.h \
 				gril/grilunsol.c gril/grilunsol.h \
 				gril/ril_constants.h
 
