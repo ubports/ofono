@@ -965,7 +965,9 @@ static void mtk_pin_retries_cb(struct ril_msg *message, gpointer user_data)
 	struct cb_data *cbd = user_data;
 	ofono_sim_pin_retries_cb_t cb = cbd->cb;
 	struct sim_data *sd = cbd->user;
-	struct parcel_str_array *str_arr = NULL;
+	struct parcel rilp;
+	char **strv;
+	char *debug_str;
 	int pin[MTK_EPINC_NUM_PASSWD];
 	int num_pin;
 
@@ -975,31 +977,36 @@ static void mtk_pin_retries_cb(struct ril_msg *message, gpointer user_data)
 		goto error;
 	}
 
-	str_arr = g_ril_reply_oem_hook_strings(sd->ril, message);
-	if (str_arr == NULL || str_arr->num_str < 1) {
+	g_ril_init_parcel(message, &rilp);
+
+	strv = parcel_r_strv(&rilp);
+	if (strv == NULL) {
 		ofono_error("%s: parse error", __func__);
 		goto error;
 	}
 
-	num_pin = sscanf(str_arr->str[0], "+EPINC:%d,%d,%d,%d",
-					&pin[0], &pin[1], &pin[2], &pin[3]);
+	debug_str = g_strjoinv(",", strv);
+	g_ril_append_print_buf(sd->ril, "{%d,%s}",
+					g_strv_length(strv), debug_str);
+	g_free(debug_str);
+	g_ril_print_response(sd->ril, message);
 
-	if (num_pin != MTK_EPINC_NUM_PASSWD) {
-		ofono_error("%s: failed parsing %s", __func__, str_arr->str[0]);
+	num_pin = sscanf(strv[0], "+EPINC:%d,%d,%d,%d",
+					&pin[0], &pin[1], &pin[2], &pin[3]);
+	g_strfreev(strv);
+
+	if (num_pin != MTK_EPINC_NUM_PASSWD)
 		goto error;
-	}
 
 	sd->retries[OFONO_SIM_PASSWORD_SIM_PIN] = pin[0];
 	sd->retries[OFONO_SIM_PASSWORD_SIM_PIN2] = pin[1];
 	sd->retries[OFONO_SIM_PASSWORD_SIM_PUK] = pin[2];
 	sd->retries[OFONO_SIM_PASSWORD_SIM_PUK2] = pin[3];
 
-	parcel_free_str_array(str_arr);
 	CALLBACK_WITH_SUCCESS(cb, sd->retries, cbd->data);
 	return;
 
 error:
-	parcel_free_str_array(str_arr);
 	CALLBACK_WITH_FAILURE(cb, NULL, cbd->data);
 }
 
