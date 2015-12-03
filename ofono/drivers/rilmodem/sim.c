@@ -48,7 +48,6 @@
 #include "ril_constants.h"
 #include "rilmodem.h"
 
-#include "grilreply.h"
 #include "grilunsol.h"
 
 #include <drivers/infineonmodem/infineon_constants.h>
