@@ -1018,8 +1018,8 @@ static void ril_query_pin_retries(struct ofono_sim *sim,
 		int32_t oem_req =
 			INF_RIL_REQUEST_OEM_GET_REMAIN_SIM_PIN_ATTEMPTS;
 
-		g_ril_request_oem_hook_raw(sd->ril, &oem_req,
-						sizeof(oem_req), &rilp);
+		parcel_init(&rilp);
+		parcel_w_raw(&rilp, &oem_req, sizeof(oem_req));
 
 		/* Send request to RIL */
 		if (g_ril_send(sd->ril, RIL_REQUEST_OEM_HOOK_RAW, &rilp,
