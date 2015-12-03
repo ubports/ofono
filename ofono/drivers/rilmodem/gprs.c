@@ -98,21 +98,6 @@ static int ril_tech_to_bearer_tech(int ril_tech)
 	}
 }
 
-static void ril_gprs_state_change(struct ril_msg *message, gpointer user_data)
-{
-	struct ofono_gprs *gprs = user_data;
-	struct ril_gprs_data *gd = ofono_gprs_get_data(gprs);
-
-	g_ril_print_unsol_no_args(gd->ril, message);
-
-	/*
-	 * We just want to track network data status if ofono
-	 * itself is attached, so we avoid unnecessary data state requests.
-	 */
-	if (gd->ofono_attached == TRUE)
-		ril_gprs_registration_status(gprs, NULL, NULL);
-}
-
 static void ril_gprs_set_attached(struct ofono_gprs *gprs, int attached,
 					ofono_gprs_cb_t cb, void *data)
 {
@@ -290,7 +275,7 @@ error:
 		CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
 }
 
-void ril_gprs_registration_status(struct ofono_gprs *gprs,
+static void ril_gprs_registration_status(struct ofono_gprs *gprs,
 					ofono_gprs_status_cb_t cb, void *data)
 {
 	struct ril_gprs_data *gd = ofono_gprs_get_data(gprs);
@@ -359,6 +344,21 @@ error_free:
 error:
 	ofono_error("Unable to query max CIDs");
 	ofono_gprs_remove(gprs);
+}
+
+static void ril_gprs_state_change(struct ril_msg *message, gpointer user_data)
+{
+	struct ofono_gprs *gprs = user_data;
+	struct ril_gprs_data *gd = ofono_gprs_get_data(gprs);
+
+	g_ril_print_unsol_no_args(gd->ril, message);
+
+	/*
+	 * We just want to track network data status if ofono
+	 * itself is attached, so we avoid unnecessary data state requests.
+	 */
+	if (gd->ofono_attached == TRUE)
+		ril_gprs_registration_status(gprs, NULL, NULL);
 }
 
 static void query_max_cids(struct ofono_gprs *gprs)
@@ -461,7 +461,8 @@ static void get_active_data_calls(struct ofono_gprs *gprs)
 		ofono_error("%s: send failed", __func__);
 }
 
-int ril_gprs_probe(struct ofono_gprs *gprs, unsigned int vendor, void *userdata)
+static int ril_gprs_probe(struct ofono_gprs *gprs, unsigned int vendor,
+								void *userdata)
 {
 	GRil *ril = userdata;
 	struct ril_gprs_data *gd;
@@ -482,7 +483,7 @@ int ril_gprs_probe(struct ofono_gprs *gprs, unsigned int vendor, void *userdata)
 	return 0;
 }
 
-void ril_gprs_remove(struct ofono_gprs *gprs)
+static void ril_gprs_remove(struct ofono_gprs *gprs)
 {
 	struct ril_gprs_data *gd = ofono_gprs_get_data(gprs);
 
