@@ -25,7 +25,6 @@ struct ril_gprs_data {
 	GRil *ril;
 	struct ofono_modem *modem;
 	gboolean ofono_attached;
-	unsigned int max_cids;
 	int rild_status;
 	int tech;
 	int state_changed_unsol;
