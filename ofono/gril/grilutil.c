@@ -60,27 +60,6 @@ int ril_protocol_string_to_ofono_protocol(gchar *protocol_str)
 	return result;
 }
 
-const char *ril_apptype_to_string(int app_type)
-{
-
-	switch (app_type) {
-	case RIL_APPTYPE_UNKNOWN:
-		return "UNKNOWN";
-	case RIL_APPTYPE_SIM:
-		return "SIM";
-	case RIL_APPTYPE_USIM:
-		return "USIM";
-	case RIL_APPTYPE_RUIM:
-		return "RUIM";
-	case RIL_APPTYPE_CSIM:
-		return "CSIM";
-	case RIL_APPTYPE_ISIM:
-		return "ISIM";
-	default:
-		return "<INVALID>";
-	}
-}
-
 const char *ril_authtype_to_string(int auth_type)
 {
 	switch (auth_type) {
