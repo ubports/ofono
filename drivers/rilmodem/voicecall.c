@@ -40,7 +40,6 @@
 #include <ofono/voicecall.h>
 
 #include "gril.h"
-#include "grilrequest.h"
 #include "grilreply.h"
 #include "grilunsol.h"
 
