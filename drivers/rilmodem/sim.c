@@ -1080,34 +1080,59 @@ static void ril_pin_change_state_cb(struct ril_msg *message, gpointer user_data)
 	ofono_sim_lock_unlock_cb_t cb = cbd->cb;
 	struct ofono_sim *sim = cbd->user;
 	struct sim_data *sd = ofono_sim_get_data(sim);
-	int *retries;
+	struct parcel rilp;
+
 	/*
 	 * There is no reason to ask SIM status until
 	 * unsolicited sim status change indication
 	 * Looks like state does not change before that.
 	 */
-
 	DBG("Enter password: type %d, result %d",
-		sd->passwd_type, message->error);
+				sd->passwd_type, message->error);
 
-	retries = g_ril_reply_parse_retries(sd->ril, message, sd->passwd_type);
-	if (retries != NULL) {
-		memcpy(sd->retries, retries, sizeof(sd->retries));
-		g_free(retries);
+	g_ril_init_parcel(message, &rilp);
+
+	/* maguro/infineon: no data is returned */
+	if (parcel_data_avail(&rilp) == 0)
+		goto done;
+
+	parcel_r_int32(&rilp);
+
+	switch (g_ril_vendor(sd->ril)) {
+	case OFONO_RIL_VENDOR_AOSP:
+	case OFONO_RIL_VENDOR_QCOM_MSIM:
+		/*
+		 * The number of retries is valid only when a wrong password has
+		 * been introduced in Nexus 4. TODO: check Nexus 5 behaviour.
+		 */
+		if (message->error == RIL_E_PASSWORD_INCORRECT)
+			sd->retries[sd->passwd_type] = parcel_r_int32(&rilp);
+
+		g_ril_append_print_buf(sd->ril, "{%d}",
+					sd->retries[sd->passwd_type]);
+		g_ril_print_response(sd->ril, message);
+
+		break;
+	/* Taken care of elsewhere */
+	case OFONO_RIL_VENDOR_INFINEON:
+	case OFONO_RIL_VENDOR_MTK:
+		break;
+	default:
+		break;
 	}
 
-	/* TODO: re-factor to not use macro for FAILURE;
-	   doesn't return error! */
+done:
 	if (message->error == RIL_E_SUCCESS) {
 		CALLBACK_WITH_SUCCESS(cb, cbd->data);
-	} else {
-		CALLBACK_WITH_FAILURE(cb, cbd->data);
-		/*
-		 * Refresh passwd_state (not needed if the unlock is
-		 * successful, as an event will refresh the state in that case)
-		 */
-		send_get_sim_status(sim);
+		return;
 	}
+
+	CALLBACK_WITH_FAILURE(cb, cbd->data);
+	/*
+	 * Refresh passwd_state (not needed if the unlock is
+	 * successful, as an event will refresh the state in that case)
+	 */
+	send_get_sim_status(sim);
 }
 
 static void ril_pin_send(struct ofono_sim *sim, const char *passwd,
