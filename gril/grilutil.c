@@ -44,27 +44,6 @@
 
 static char temp_str[32];
 
-const char *ril_ofono_protocol_to_ril_string(guint protocol)
-{
-	char *result;
-
-	switch (protocol) {
-	case OFONO_GPRS_PROTO_IPV6:
-		result = PROTO_IPV6_STR;
-		break;
-	case OFONO_GPRS_PROTO_IPV4V6:
-		result = PROTO_IPV4V6_STR;
-		break;
-	case OFONO_GPRS_PROTO_IP:
-		result = PROTO_IP_STR;
-		break;
-	default:
-		result = NULL;
-	}
-
-	return result;
-}
-
 int ril_protocol_string_to_ofono_protocol(gchar *protocol_str)
 {
 	int result;
