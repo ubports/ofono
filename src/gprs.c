@@ -3203,6 +3203,11 @@ static void spn_read_cb(const char *spn, const char *dc, void *data)
 	ofono_gprs_finish_register(gprs);
 }
 
+struct ofono_modem *ofono_gprs_get_modem(struct ofono_gprs *gprs)
+{
+	return __ofono_atom_get_modem(gprs->atom);
+}
+
 void ofono_gprs_register(struct ofono_gprs *gprs)
 {
 	struct ofono_modem *modem = __ofono_atom_get_modem(gprs->atom);
