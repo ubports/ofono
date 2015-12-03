@@ -236,15 +236,13 @@ no_calls:
 			} else {
 				/* Get disconnect cause before calling core */
 				struct lastcause_req *reqdata =
-					g_try_new0(struct lastcause_req, 1);
-				if (reqdata != NULL) {
-					reqdata->vc = user_data;
-					reqdata->id = oc->id;
+					g_new0(struct lastcause_req, 1);
 
-					g_ril_send(vd->ril, reqid, NULL,
-							lastcause_cb, reqdata,
-							g_free);
-				}
+				reqdata->vc = user_data;
+				reqdata->id = oc->id;
+
+				g_ril_send(vd->ril, reqid, NULL,
+						lastcause_cb, reqdata, g_free);
 			}
 
 			clear_dtmf_queue(vd);
