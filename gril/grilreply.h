@@ -32,25 +32,10 @@
 extern "C" {
 #endif
 
-struct reply_reg_state {
-	int status;
-	int lac;
-	int ci;
-	int tech;
-};
-
-struct reply_data_reg_state {
-	struct reply_reg_state reg_state;
-	unsigned int max_cids;
-};
-
 struct reply_oem_hook {
 	int length;
 	void *data;
 };
-
-struct reply_data_reg_state *g_ril_reply_parse_data_reg_state(GRil *gril,
-						const struct ril_msg *message);
 
 GSList *g_ril_reply_parse_get_calls(GRil *gril, const struct ril_msg *message);
 
