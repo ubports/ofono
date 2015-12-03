@@ -45,7 +45,6 @@
 #include "rilmodem.h"
 
 #include "grilreply.h"
-#include "grilrequest.h"
 #include "grilunsol.h"
 #include "gprs.h"
 
