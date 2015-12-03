@@ -1030,16 +1030,18 @@ static void ril_query_pin_retries(struct ofono_sim *sim,
 	} else if (sd->vendor == OFONO_RIL_VENDOR_MTK) {
 		struct cb_data *cbd = cb_data_new(cb, data, sd);
 		struct parcel rilp;
-		const char *at_epinc[] = { "AT+EPINC", "+EPINC:" };
 
-		g_ril_request_oem_hook_strings(sd->ril, at_epinc,
-						G_N_ELEMENTS(at_epinc), &rilp);
+		parcel_init(&rilp);
+		parcel_w_int32(&rilp, 2);
+		parcel_w_string(&rilp, "AT+EPINC");
+		parcel_w_string(&rilp, "+EPINC:");
 
 		if (g_ril_send(sd->ril, RIL_REQUEST_OEM_HOOK_STRINGS, &rilp,
-				mtk_pin_retries_cb, cbd, g_free) == 0) {
-			g_free(cbd);
-			CALLBACK_WITH_FAILURE(cb, NULL, data);
-		}
+				mtk_pin_retries_cb, cbd, g_free) > 0)
+			return;
+
+		g_free(cbd);
+		CALLBACK_WITH_FAILURE(cb, NULL, data);
 	} else {
 		CALLBACK_WITH_SUCCESS(cb, sd->retries, data);
 	}
