@@ -923,8 +923,11 @@ static void inf_pin_retries_cb(struct ril_msg *message, gpointer user_data)
 	struct cb_data *cbd = user_data;
 	ofono_sim_pin_retries_cb_t cb = cbd->cb;
 	struct sim_data *sd = cbd->user;
-	struct reply_oem_hook *reply = NULL;
-	int32_t *ret_data;
+	struct parcel rilp;
+	int32_t *data;
+	int len;
+	char *hex_dump;
+	int expected;
 
 	if (message->error != RIL_E_SUCCESS) {
 		ofono_error("Reply failure: %s",
@@ -932,31 +935,37 @@ static void inf_pin_retries_cb(struct ril_msg *message, gpointer user_data)
 		goto error;
 	}
 
-	reply = g_ril_reply_oem_hook_raw(sd->ril, message);
-	if (reply == NULL) {
-		ofono_error("%s: parse error", __func__);
+	g_ril_init_parcel(message, &rilp);
+
+	data = parcel_r_raw(&rilp, &len);
+	if (data == NULL) {
+		ofono_error("%s: malformed parcel", __func__);
 		goto error;
 	}
 
-	if (reply->length < 5 * (int) sizeof(int32_t)) {
+	hex_dump = encode_hex((unsigned char *) data, len, '\0');
+	g_ril_append_print_buf(sd->ril, "{%d,%s}", len, hex_dump);
+	g_ril_print_response(sd->ril, message);
+	g_free(hex_dump);
+
+	expected = sizeof(int32_t) * 5;
+	if (len < expected) {
 		ofono_error("%s: reply too small", __func__);
+		g_free(data);
 		goto error;
 	}
 
 	/* First integer is INF_RIL_REQUEST_OEM_GET_REMAIN_SIM_PIN_ATTEMPTS */
-	ret_data = reply->data;
-	sd->retries[OFONO_SIM_PASSWORD_SIM_PIN] = *(++ret_data);
-	sd->retries[OFONO_SIM_PASSWORD_SIM_PIN2] = *(++ret_data);
-	sd->retries[OFONO_SIM_PASSWORD_SIM_PUK] = *(++ret_data);
-	sd->retries[OFONO_SIM_PASSWORD_SIM_PUK2] = *(++ret_data);
+	sd->retries[OFONO_SIM_PASSWORD_SIM_PIN] = data[1];
+	sd->retries[OFONO_SIM_PASSWORD_SIM_PIN2] = data[2];
+	sd->retries[OFONO_SIM_PASSWORD_SIM_PUK] = data[3];
+	sd->retries[OFONO_SIM_PASSWORD_SIM_PUK2] = data[4];
 
-	g_ril_reply_free_oem_hook(reply);
+	g_free(data);
 	CALLBACK_WITH_SUCCESS(cb, sd->retries, cbd->data);
-
 	return;
 
 error:
-	g_ril_reply_free_oem_hook(reply);
 	CALLBACK_WITH_FAILURE(cb, NULL, cbd->data);
 }
 
