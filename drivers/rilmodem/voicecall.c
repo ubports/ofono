@@ -119,14 +119,31 @@ done:
 	ofono_voicecall_disconnected(vc, reqdata->id, reason, NULL);
 }
 
+static int call_compare(gconstpointer a, gconstpointer b)
+{
+	const struct ofono_call *ca = a;
+	const struct ofono_call *cb = b;
+
+	if (ca->id < cb->id)
+		return -1;
+
+	if (ca->id > cb->id)
+		return 1;
+
+	return 0;
+}
+
 static void clcc_poll_cb(struct ril_msg *message, gpointer user_data)
 {
 	struct ofono_voicecall *vc = user_data;
 	struct ril_voicecall_data *vd = ofono_voicecall_get_data(vc);
 	int reqid = RIL_REQUEST_LAST_CALL_FAIL_CAUSE;
-	GSList *calls;
+	struct parcel rilp;
+	GSList *calls = NULL;
 	GSList *n, *o;
 	struct ofono_call *nc, *oc;
+	int num, i;
+	char *number, *name;
 
 	/*
 	 * We consider all calls have been dropped if there is no radio, which
@@ -139,8 +156,65 @@ static void clcc_poll_cb(struct ril_msg *message, gpointer user_data)
 		return;
 	}
 
-	calls = g_ril_reply_parse_get_calls(vd->ril, message);
 
+	g_ril_init_parcel(message, &rilp);
+
+	/* maguro signals no calls with empty event data */
+	if (rilp.size < sizeof(int32_t))
+		goto no_calls;
+
+	DBG("[%d,%04d]< %s", g_ril_get_slot(vd->ril),
+				message->serial_no,
+				"RIL_REQUEST_GET_CURRENT_CALLS");
+
+	/* Number of RIL_Call structs */
+	num = parcel_r_int32(&rilp);
+
+	for (i = 0; i < num; i++) {
+		struct ofono_call *call;
+
+		call = g_new0(struct ofono_call, 1);
+
+		ofono_call_init(call);
+		call->status = parcel_r_int32(&rilp);
+		call->id = parcel_r_int32(&rilp);
+		call->phone_number.type = parcel_r_int32(&rilp);
+		parcel_r_int32(&rilp); /* isMpty */
+		parcel_r_int32(&rilp); /* isMT */
+		parcel_r_int32(&rilp); /* als */
+		call->type = parcel_r_int32(&rilp); /* isVoice */
+		parcel_r_int32(&rilp); /* isVoicePrivacy */
+		number = parcel_r_string(&rilp);
+		if (number) {
+			strncpy(call->phone_number.number, number,
+				OFONO_MAX_PHONE_NUMBER_LENGTH);
+			g_free(number);
+		}
+
+		parcel_r_int32(&rilp); /* numberPresentation */
+		name = parcel_r_string(&rilp);
+		if (name) {
+			strncpy(call->name, name,
+				OFONO_MAX_CALLER_NAME_LENGTH);
+			g_free(name);
+		}
+
+		parcel_r_int32(&rilp); /* namePresentation */
+		parcel_r_int32(&rilp); /* uusInfo */
+
+		if (strlen(call->phone_number.number) > 0)
+			call->clip_validity = 0;
+		else
+			call->clip_validity = 2;
+
+		DBG("[id=%d,status=%d,type=%d,number=%s,name=%s]",
+			call->id, call->status, call->type,
+			call->phone_number.number, call->name);
+
+		calls = g_slist_insert_sorted(calls, call, call_compare);
+	}
+
+no_calls:
 	n = calls;
 	o = vd->calls;
 
