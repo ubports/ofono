@@ -135,18 +135,6 @@ static void ril_gprs_set_attached(struct ofono_gprs *gprs, int attached,
 	CALLBACK_WITH_SUCCESS(cb, data);
 }
 
-static gboolean ril_get_status_retry(gpointer user_data)
-{
-	struct ofono_gprs *gprs = user_data;
-	struct ril_gprs_data *gd = ofono_gprs_get_data(gprs);
-
-	gd->status_retry_cb_id = 0;
-
-	ril_gprs_registration_status(gprs, NULL, NULL);
-
-	return FALSE;
-}
-
 static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
@@ -298,16 +286,6 @@ error_free:
 	g_strfreev(strv);
 
 error:
-
-	/*
-	 * For some modems DATA_REGISTRATION_STATE will return an error until we
-	 * are registered in the voice network.
-	 */
-	if (old_status == -1 && message->error == RIL_E_GENERIC_FAILURE)
-		gd->status_retry_cb_id =
-			g_timeout_add(GET_STATUS_TIMER_MS,
-					ril_get_status_retry, gprs);
-
 	if (cb)
 		CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
 }
@@ -519,9 +497,6 @@ void ril_gprs_remove(struct ofono_gprs *gprs)
 	struct ril_gprs_data *gd = ofono_gprs_get_data(gprs);
 
 	DBG("");
-
-	if (gd->status_retry_cb_id != 0)
-		g_source_remove(gd->status_retry_cb_id);
 
 	ofono_gprs_set_data(gprs, NULL);
 
