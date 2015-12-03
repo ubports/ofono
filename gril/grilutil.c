@@ -60,24 +60,6 @@ int ril_protocol_string_to_ofono_protocol(gchar *protocol_str)
 	return result;
 }
 
-const char *ril_authtype_to_string(int auth_type)
-{
-	switch (auth_type) {
-	case RIL_AUTH_NONE:
-		return "NONE";
-	case RIL_AUTH_PAP:
-		return "PAP";
-	case RIL_AUTH_CHAP:
-		return "CHAP";
-	case RIL_AUTH_BOTH:
-		return "BOTH";
-	case RIL_AUTH_ANY:
-		return "ANY";
-	default:
-		return "<INVALID>";
-	}
-}
-
 const char *ril_cardstate_to_string(int card_state)
 {
 	switch (card_state) {
