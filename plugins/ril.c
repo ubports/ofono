@@ -221,7 +221,6 @@ void ril_post_sim(struct ofono_modem *modem)
 	struct ofono_gprs *gprs;
 	struct ofono_gprs_context *gc;
 	struct ofono_message_waiting *mw;
-	struct ril_gprs_driver_data gprs_data = { rd->ril, modem };
 	struct ril_gprs_context_data
 		inet_ctx = { rd->ril, modem, OFONO_GPRS_CONTEXT_TYPE_INTERNET };
 	struct ril_gprs_context_data
@@ -234,7 +233,7 @@ void ril_post_sim(struct ofono_modem *modem)
 	 */
 	ofono_sms_create(modem, rd->vendor, RILMODEM, rd->ril);
 
-	gprs = ofono_gprs_create(modem, rd->vendor, RILMODEM, &gprs_data);
+	gprs = ofono_gprs_create(modem, rd->vendor, RILMODEM, rd->ril);
 	gc = ofono_gprs_context_create(modem, rd->vendor, RILMODEM, &inet_ctx);
 
 	if (gc) {
