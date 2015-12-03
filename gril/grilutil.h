@@ -31,7 +31,6 @@ extern "C" {
 #include "parcel.h"
 #include "gril.h"
 
-const char *ril_ofono_protocol_to_ril_string(guint protocol);
 int ril_protocol_string_to_ofono_protocol(gchar *protocol_str);
 const char *ril_appstate_to_string(int app_state);
 const char *ril_apptype_to_string(int app_type);
