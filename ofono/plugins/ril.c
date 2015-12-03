@@ -58,7 +58,6 @@
 
 #include "ofono.h"
 
-#include <grilreply.h>
 #include <grilunsol.h>
 
 #include "ril.h"
