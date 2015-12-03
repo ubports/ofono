@@ -41,7 +41,6 @@
 #include "gril.h"
 #include "rilmodem.h"
 
-#include "grilreply.h"
 #include "grilunsol.h"
 
 struct netreg_data {
