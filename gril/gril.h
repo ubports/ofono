@@ -33,8 +33,6 @@ extern "C" {
 #include "ril_constants.h"
 #include "drivers/rilmodem/vendor.h"
 
-#define RIL_MAX_NUM_ACTIVE_DATA_CALLS 2
-
 struct _GRil;
 
 typedef struct _GRil GRil;
