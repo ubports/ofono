@@ -42,7 +42,6 @@
 
 #include "grilunsol.h"
 
-#include "gprs.h"
 #include "rilmodem.h"
 
 #define NUM_DEACTIVATION_RETRIES 4
@@ -243,10 +242,6 @@ static void ril_gprs_context_activate_primary(struct ofono_gprs_context *gc,
 {
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 	struct ofono_modem *modem = ofono_gprs_context_get_modem(gc);
-	struct ofono_atom *gprs_atom =
-		__ofono_modem_find_atom(modem, OFONO_ATOM_TYPE_GPRS);
-	struct ofono_gprs *gprs = NULL;
-	struct ril_gprs_data *gd = NULL;
 	struct cb_data *cbd = cb_data_new(cb, data, gc);
 	struct parcel rilp;
 	char buf[256];
@@ -255,15 +250,13 @@ static void ril_gprs_context_activate_primary(struct ofono_gprs_context *gc,
 	const char *profile;
 	int auth_type;
 
-	gprs = __ofono_atom_get_data(gprs_atom);
-	gd = ofono_gprs_get_data(gprs);
+	tech = ofono_modem_get_integer(modem, "RilDataRadioTechnology");
 
 	/*
 	 * 0: CDMA 1: GSM/UMTS, 2...
 	 * anything 2+ is a RadioTechnology value +2
 	 */
-	DBG("*gc: %p activating cid: %d; curr_tech: %d", gc, ctx->cid,
-		gd->tech);
+	DBG("*gc: %p activating cid: %d; curr_tech: %d", gc, ctx->cid, tech);
 
 	parcel_init(&rilp);
 
@@ -272,13 +265,12 @@ static void ril_gprs_context_activate_primary(struct ofono_gprs_context *gc,
 
 	parcel_w_int32(&rilp, num_param);
 
-	if (gd->tech == RADIO_TECH_UNKNOWN) {
+	if (tech == RADIO_TECH_UNKNOWN) {
 		ofono_error("%s: radio tech for apn: %s UNKNOWN!", __func__,
 				gcd->apn);
 		tech = 1;
-	} else if (gd->tech <= RADIO_TECH_GSM) {
-		tech = gd->tech + 2;
 	} else
+		tech = tech + 2;
 
 	sprintf(buf, "%d", tech);
 	parcel_w_string(&rilp, buf);
