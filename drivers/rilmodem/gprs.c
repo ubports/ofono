@@ -365,7 +365,7 @@ static void query_max_cids(struct ofono_gprs *gprs)
 {
 	struct ril_gprs_data *gd = ofono_gprs_get_data(gprs);
 
-	g_ril_register(gd->ril, gd->state_changed_unsol,
+	g_ril_register(gd->ril, RIL_UNSOL_RESPONSE_VOICE_NETWORK_STATE_CHANGED,
 					ril_gprs_state_change, gprs);
 
 	/*
@@ -469,9 +469,6 @@ void ril_gprs_start(struct ril_gprs_driver_data *driver_data,
 	gd->ofono_attached = FALSE;
 	gd->rild_status = -1;
 	gd->tech = RADIO_TECH_UNKNOWN;
-	/* AOSP RILD tracks data network state together with voice */
-	gd->state_changed_unsol =
-		RIL_UNSOL_RESPONSE_VOICE_NETWORK_STATE_CHANGED;
 
 	ofono_gprs_set_data(gprs, gd);
 
