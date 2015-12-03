@@ -34,9 +34,6 @@
 extern "C" {
 #endif
 
-void g_ril_request_oem_hook_strings(GRil *gril, const char **strs, int num_str,
-							struct parcel *rilp);
-
 void g_ril_request_set_initial_attach_apn(GRil *gril, const char *apn,
 						int proto,
 						const char *user,
