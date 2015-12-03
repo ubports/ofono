@@ -126,6 +126,7 @@ static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
 	ofono_gprs_status_cb_t cb = cbd->cb;
 	struct ofono_gprs *gprs = cbd->user;
 	struct ril_gprs_data *gd = ofono_gprs_get_data(gprs);
+	struct ofono_modem *modem;
 	struct parcel rilp;
 	int num_str;
 	char **strv;
@@ -256,11 +257,9 @@ static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
 		}
 	}
 
-	if (gd->tech != tech) {
-		gd->tech = tech;
-
-		ofono_gprs_bearer_notify(gprs, ril_tech_to_bearer_tech(tech));
-	}
+	modem = ofono_gprs_get_modem(gprs);
+	ofono_modem_set_integer(modem, "RilDataRadioTechnology", tech);
+	ofono_gprs_bearer_notify(gprs, ril_tech_to_bearer_tech(tech));
 
 	if (cb)
 		CALLBACK_WITH_SUCCESS(cb, status, cbd->data);
@@ -474,7 +473,6 @@ static int ril_gprs_probe(struct ofono_gprs *gprs, unsigned int vendor,
 	gd->ril = g_ril_clone(ril);
 	gd->ofono_attached = FALSE;
 	gd->rild_status = -1;
-	gd->tech = RADIO_TECH_UNKNOWN;
 
 	ofono_gprs_set_data(gprs, gd);
 

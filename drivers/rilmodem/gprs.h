@@ -26,6 +26,5 @@ struct ril_gprs_data {
 	struct ofono_modem *modem;
 	gboolean ofono_attached;
 	int rild_status;
-	int tech;
 	int pending_deact_req;
 };
