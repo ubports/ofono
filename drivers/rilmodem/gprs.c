@@ -461,11 +461,16 @@ static void get_active_data_calls(struct ofono_gprs *gprs)
 		ofono_error("%s: send failed", __func__);
 }
 
-void ril_gprs_start(struct ril_gprs_driver_data *driver_data,
-			struct ofono_gprs *gprs, struct ril_gprs_data *gd)
+int ril_gprs_probe(struct ofono_gprs *gprs, unsigned int vendor, void *userdata)
 {
-	gd->ril = g_ril_clone(driver_data->gril);
-	gd->modem = driver_data->modem;
+	GRil *ril = userdata;
+	struct ril_gprs_data *gd;
+
+	gd = g_try_new0(struct ril_gprs_data, 1);
+	if (gd == NULL)
+		return -ENOMEM;
+
+	gd->ril = g_ril_clone(ril);
 	gd->ofono_attached = FALSE;
 	gd->rild_status = -1;
 	gd->tech = RADIO_TECH_UNKNOWN;
@@ -473,18 +478,6 @@ void ril_gprs_start(struct ril_gprs_driver_data *driver_data,
 	ofono_gprs_set_data(gprs, gd);
 
 	get_active_data_calls(gprs);
-}
-
-int ril_gprs_probe(struct ofono_gprs *gprs, unsigned int vendor, void *data)
-{
-	struct ril_gprs_driver_data *driver_data = data;
-	struct ril_gprs_data *gd;
-
-	gd = g_try_new0(struct ril_gprs_data, 1);
-	if (gd == NULL)
-		return -ENOMEM;
-
-	ril_gprs_start(driver_data, gprs, gd);
 
 	return 0;
 }
