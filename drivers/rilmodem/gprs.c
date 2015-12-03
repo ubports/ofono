@@ -50,6 +50,14 @@
 /* Time between get data status retries */
 #define GET_STATUS_TIMER_MS 5000
 
+struct ril_gprs_data {
+	GRil *ril;
+	struct ofono_modem *modem;
+	gboolean ofono_attached;
+	int rild_status;
+	int pending_deact_req;
+};
+
 /*
  * This module is the ofono_gprs_driver implementation for rilmodem.
  *

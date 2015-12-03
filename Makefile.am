@@ -137,7 +137,6 @@ builtin_sources += drivers/rilmodem/rilmodem.h \
 			drivers/rilmodem/voicecall.h \
 			drivers/rilmodem/call-volume.c \
 			drivers/rilmodem/gprs.c \
-			drivers/rilmodem/gprs.h \
 			drivers/rilmodem/gprs-context.c \
 			drivers/rilmodem/sim.c \
 			drivers/rilmodem/sms.c \
