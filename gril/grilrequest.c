@@ -58,21 +58,6 @@
 	error->error = 0;				\
 } while (0)
 
-void g_ril_request_oem_hook_raw(GRil *gril, const void *payload, size_t length,
-					struct parcel *rilp)
-{
-	char *hex_dump = NULL;
-
-	parcel_init(rilp);
-	parcel_w_raw(rilp, payload, length);
-
-	if (payload != NULL)
-		hex_dump = encode_hex(payload, length, '\0');
-
-	g_ril_append_print_buf(gril, "(%s)", hex_dump ? hex_dump : "(null)");
-	g_free(hex_dump);
-}
-
 void g_ril_request_oem_hook_strings(GRil *gril, const char **strs, int num_str,
 							struct parcel *rilp)
 {

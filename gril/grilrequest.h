@@ -34,9 +34,6 @@
 extern "C" {
 #endif
 
-void g_ril_request_oem_hook_raw(GRil *gril, const void *payload, size_t length,
-					struct parcel *rilp);
-
 void g_ril_request_oem_hook_strings(GRil *gril, const char **strs, int num_str,
 							struct parcel *rilp);
 
