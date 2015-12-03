@@ -60,26 +60,6 @@ int ril_protocol_string_to_ofono_protocol(gchar *protocol_str)
 	return result;
 }
 
-const char *ril_appstate_to_string(int app_state)
-{
-	switch (app_state) {
-	case RIL_APPSTATE_UNKNOWN:
-		return "UNKNOWN";
-	case RIL_APPSTATE_DETECTED:
-		return "DETECTED";
-	case RIL_APPSTATE_PIN:
-		return "PIN";
-	case RIL_APPSTATE_PUK:
-		return "PUK";
-	case RIL_APPSTATE_SUBSCRIPTION_PERSO:
-		return "";
-	case RIL_APPSTATE_READY:
-		return "READY";
-	default:
-		return "<INVALID>";
-	}
-}
-
 const char *ril_apptype_to_string(int app_type)
 {
 
