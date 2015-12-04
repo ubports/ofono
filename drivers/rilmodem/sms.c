@@ -73,7 +73,9 @@ static void ril_csca_set(struct ofono_sms *sms,
 	struct sms_data *sd = ofono_sms_get_data(sms);
 	struct cb_data *cbd = cb_data_new(cb, user_data, sd);
 	struct parcel rilp;
-	const char *number = phone_number_to_string(sca);
+	char number[OFONO_MAX_PHONE_NUMBER_LENGTH + 4];
+
+	snprintf(number, sizeof(number), "\"%s\"", phone_number_to_string(sca));
 
 	parcel_init(&rilp);
 	parcel_w_string(&rilp, number);
