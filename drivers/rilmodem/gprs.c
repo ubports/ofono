@@ -39,12 +39,12 @@
 #include <ofono/gprs.h>
 #include <ofono/types.h>
 
-#include "gril.h"
-#include "grilutil.h"
+#include <gril/gril.h>
+#include <gril/grilutil.h>
+
 #include "common.h"
 #include "rilmodem.h"
 
-#include "grilunsol.h"
 #include "gprs.h"
 
 /* Time between get data status retries */

@@ -39,8 +39,7 @@
 #include <ofono/modem.h>
 #include <ofono/voicecall.h>
 
-#include "gril.h"
-#include "grilunsol.h"
+#include <gril/gril.h>
 
 #include "common.h"
 #include "rilmodem.h"

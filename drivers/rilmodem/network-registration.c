@@ -37,11 +37,10 @@
 #include <ofono/modem.h>
 #include <ofono/netreg.h>
 
-#include "common.h"
-#include "gril.h"
-#include "rilmodem.h"
+#include <gril/gril.h>
 
-#include "grilunsol.h"
+#include "common.h"
+#include "rilmodem.h"
 
 struct netreg_data {
 	GRil *ril;

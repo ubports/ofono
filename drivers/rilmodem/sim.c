@@ -37,18 +37,15 @@
 #include <ofono/modem.h>
 #include <ofono/sim.h>
 
+#include <gril/gril.h>
+#include <gril/grilutil.h>
+
 #include "ofono.h"
 
 #include "simutil.h"
 #include "util.h"
 
-#include "gril.h"
-#include "grilutil.h"
-#include "parcel.h"
-#include "ril_constants.h"
 #include "rilmodem.h"
-
-#include "grilunsol.h"
 
 #include <drivers/infineonmodem/infineon_constants.h>
 
