@@ -100,7 +100,6 @@ gril_sources = gril/gril.h gril/gril.c \
 				gril/grilutil.h gril/grilutil.c \
 				gril/gfunc.h gril/gril.h \
 				gril/parcel.c gril/parcel.h \
-				gril/grilunsol.c gril/grilunsol.h \
 				gril/ril_constants.h
 
 btio_sources = btio/btio.h btio/btio.c
