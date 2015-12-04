@@ -60,20 +60,6 @@ int ril_protocol_string_to_ofono_protocol(gchar *protocol_str)
 	return result;
 }
 
-const char *ril_cardstate_to_string(int card_state)
-{
-	switch (card_state) {
-	case RIL_CARDSTATE_ABSENT:
-		return "ABSENT";
-	case RIL_CARDSTATE_PRESENT:
-		return "PRESENT";
-	case RIL_CARDSTATE_ERROR:
-		return "ERROR";
-	default:
-		return "<INVALID>";
-	}
-}
-
 const char *ril_error_to_string(int error)
 {
 	switch (error) {
