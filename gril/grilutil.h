@@ -32,7 +32,6 @@ extern "C" {
 #include "gril.h"
 
 int ril_protocol_string_to_ofono_protocol(gchar *protocol_str);
-const char *ril_cardstate_to_string(int card_state);
 const char *ril_error_to_string(int error);
 const char *ril_pinstate_to_string(int pin_state);
 const char *ril_radio_state_to_string(int radio_state);
