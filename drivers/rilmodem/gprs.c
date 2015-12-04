@@ -425,9 +425,10 @@ static void get_active_data_calls_cb(struct ril_msg *message,
 {
 	struct ofono_gprs *gprs = user_data;
 	struct ril_gprs_data *gd = ofono_gprs_get_data(gprs);
-	struct ril_data_call_list *call_list = NULL;
-	GSList *iterator;
-	struct ril_data_call *call;
+	struct parcel rilp;
+	int num_calls;
+	int cid;
+	int i;
 
 	if (message->error != RIL_E_SUCCESS) {
 		ofono_error("%s: RIL error %s", __func__,
@@ -435,24 +436,39 @@ static void get_active_data_calls_cb(struct ril_msg *message,
 		goto end;
 	}
 
-	/* reply can be NULL when there are no existing data calls */
-	call_list = g_ril_unsol_parse_data_call_list(gd->ril, message);
-	if (call_list == NULL)
-		goto end;
+	g_ril_init_parcel(message, &rilp);
+
+	/* Version */
+	parcel_r_int32(&rilp);
+	num_calls = parcel_r_int32(&rilp);
 
 	/*
 	 * We disconnect from previous calls here, which might be needed
 	 * because of a previous ofono abort, as some rild implementations do
 	 * not disconnect the calls even after the ril socket is closed.
 	 */
-	for (iterator = call_list->calls; iterator; iterator = iterator->next) {
-		call = iterator->data;
-		DBG("Standing data call with cid %d", call->cid);
-		if (drop_data_call(gprs, call->cid) == 0)
+	for (i = 0; i < num_calls; i++) {
+		parcel_r_int32(&rilp);			/* status */
+		parcel_r_int32(&rilp);			/* ignore */
+		cid = parcel_r_int32(&rilp);
+		parcel_r_int32(&rilp);			/* active */
+		parcel_skip_string(&rilp);		/* type */
+		parcel_skip_string(&rilp);		/* ifname */
+		parcel_skip_string(&rilp);		/* addresses */
+		parcel_skip_string(&rilp);		/* dns */
+		parcel_skip_string(&rilp);		/* gateways */
+
+		/* malformed check */
+		if (rilp.malformed) {
+			ofono_error("%s: malformed parcel received", __func__);
+			goto end;
+		}
+
+		DBG("Standing data call with cid %d", cid);
+
+		if (drop_data_call(gprs, cid) == 0)
 			++(gd->pending_deact_req);
 	}
-
-	g_ril_unsol_free_data_call_list(call_list);
 
 end:
 	if (gd->pending_deact_req == 0)
