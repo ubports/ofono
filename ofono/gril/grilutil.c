@@ -97,26 +97,6 @@ const char *ril_error_to_string(int error)
 	}
 }
 
-const char *ril_pinstate_to_string(int pin_state)
-{
-	switch (pin_state) {
-	case RIL_PINSTATE_UNKNOWN:
-		return "UNKNOWN";
-	case RIL_PINSTATE_ENABLED_NOT_VERIFIED:
-		return "ENABLED_NOT_VERIFIED";
-	case RIL_PINSTATE_ENABLED_VERIFIED:
-		return "ENABLED_VERIFIED";
-	case RIL_PINSTATE_DISABLED:
-		return "DISABLED";
-	case RIL_PINSTATE_ENABLED_BLOCKED:
-		return "ENABLED_BLOCKED";
-	case RIL_PINSTATE_ENABLED_PERM_BLOCKED:
-		return "ENABLED_PERM_BLOCKED";
-	default:
-		return "<INVALID>";
-	}
-}
-
 const char *ril_radio_state_to_string(int radio_state)
 {
 	switch (radio_state) {
