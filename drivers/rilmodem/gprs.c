@@ -45,8 +45,6 @@
 #include "common.h"
 #include "rilmodem.h"
 
-#include "gprs.h"
-
 /* Time between get data status retries */
 #define GET_STATUS_TIMER_MS 5000
 
