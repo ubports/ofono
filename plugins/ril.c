@@ -56,9 +56,9 @@
 #include <ofono/audio-settings.h>
 #include <ofono/types.h>
 
-#include "ofono.h"
+#include <gril/gril.h>
 
-#include <grilunsol.h>
+#include "ofono.h"
 
 #include "ril.h"
 #include "drivers/rilmodem/rilmodem.h"
