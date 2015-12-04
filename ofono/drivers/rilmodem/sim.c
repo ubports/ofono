@@ -774,9 +774,11 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 				message->serial_no,
 				"RIL_REQUEST_GET_SIM_STATUS");
 
-	DBG("card_state=%d,universal_pin_state=%d,"
+	DBG("[%d,%04d]< card_state=%d,universal_pin_state=%d,"
 			"gsm_umts_index=%d,cdma_index=%d,ims_index=%d,"
 			"num_apps=%d",
+			g_ril_get_slot(sd->ril),
+			message->serial_no,
 			card_state, universal_pin_state,
 			gsm_umts_app_index, cdma_app_index, ims_app_index,
 			num_apps);
@@ -883,7 +885,8 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 	g_free(sd->aid_str);
 	sd->aid_str = parcel_r_string(&rilp);	/* AID */
 
-	DBG("app_type: %d, passwd_state: %d, aid_str (AID): %s",
+	DBG("[%d,%04d]< app_type: %d, passwd_state: %d, aid_str (AID): %s",
+		g_ril_get_slot(sd->ril), message->serial_no,
 		sd->app_type, sd->passwd_state, sd->aid_str);
 
 	/*
