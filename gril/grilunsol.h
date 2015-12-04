@@ -31,27 +31,6 @@
 extern "C" {
 #endif
 
-struct ril_data_call {
-	guint status;
-	gint cid;
-	guint active;
-	guint protocol;
-	char *ifname;
-	gchar *ip_addr;
-	gchar **dns_addrs;
-	gchar **gateways;
-};
-
-struct ril_data_call_list {
-	guint version;
-	GSList *calls;
-};
-
-void g_ril_unsol_free_data_call_list(struct ril_data_call_list *data_call_list);
-
-
-struct ril_data_call_list *g_ril_unsol_parse_data_call_list(GRil *gril,
-						const struct ril_msg *message);
 
 #ifdef __cplusplus
 }
