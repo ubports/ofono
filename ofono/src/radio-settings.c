@@ -40,6 +40,7 @@ static GSList *g_drivers = NULL;
 
 struct ofono_radio_settings {
 	DBusMessage *pending;
+	GSList *pending_get_prop;
 	int flags;
 	enum ofono_radio_access_mode mode;
 	enum ofono_radio_band_gsm band_gsm;
@@ -387,14 +388,35 @@ static void radio_mode_set_callback(const struct ofono_error *error, void *data)
 	radio_set_rat_mode(rs, rs->pending_mode);
 }
 
-static void radio_send_properties_reply(struct ofono_radio_settings *rs)
+static void radio_send_properties_ok(gpointer data, gpointer user_data)
 {
-	DBusMessage *reply;
+	DBusMessage *msg = data;
+	struct ofono_radio_settings *rs = user_data;
+	DBusMessage *reply = radio_get_properties_reply(msg, rs);
 
+	__ofono_dbus_pending_reply(&msg, reply);
+}
+
+static void radio_send_properties_error(gpointer data, gpointer user_data)
+{
+	DBusMessage *msg = data;
+	DBusMessage *reply = __ofono_error_failed(msg);
+
+	__ofono_dbus_pending_reply(&msg, reply);
+}
+
+static void radio_send_properties_reply(struct ofono_radio_settings *rs,
+								GFunc func)
+{
+	g_slist_foreach(rs->pending_get_prop, func, rs);
+	g_slist_free(rs->pending_get_prop);
+	rs->pending_get_prop = NULL;
+}
+
+static void radio_send_properties_reply_ok(struct ofono_radio_settings *rs)
+{
 	rs->flags |= RADIO_SETTINGS_FLAG_CACHED;
-
-	reply = radio_get_properties_reply(rs->pending, rs);
-	__ofono_dbus_pending_reply(&rs->pending, reply);
+	radio_send_properties_reply(rs, radio_send_properties_ok);
 }
 
 static void radio_available_rats_query_callback(const struct ofono_error *error,
@@ -408,14 +430,14 @@ static void radio_available_rats_query_callback(const struct ofono_error *error,
 	else
 		DBG("Error while querying available rats");
 
-	radio_send_properties_reply(rs);
+	radio_send_properties_reply_ok(rs);
 }
 
 static void radio_query_available_rats(struct ofono_radio_settings *rs)
 {
 	/* Modem technology is not supposed to change, so one query is enough */
 	if (rs->driver->query_available_rats == NULL || rs->available_rats) {
-		radio_send_properties_reply(rs);
+		radio_send_properties_reply_ok(rs);
 		return;
 	}
 
@@ -427,14 +449,11 @@ static void radio_fast_dormancy_query_callback(const struct ofono_error *error,
 						ofono_bool_t enable, void *data)
 {
 	struct ofono_radio_settings *rs = data;
-	DBusMessage *reply;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
 		DBG("Error during fast dormancy query");
 
-		reply = __ofono_error_failed(rs->pending);
-		__ofono_dbus_pending_reply(&rs->pending, reply);
-
+		radio_send_properties_reply(rs, radio_send_properties_error);
 		return;
 	}
 
@@ -459,14 +478,11 @@ static void radio_band_query_callback(const struct ofono_error *error,
 					void *data)
 {
 	struct ofono_radio_settings *rs = data;
-	DBusMessage *reply;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
 		DBG("Error during radio frequency band query");
 
-		reply = __ofono_error_failed(rs->pending);
-		__ofono_dbus_pending_reply(&rs->pending, reply);
-
+		radio_send_properties_reply(rs, radio_send_properties_error);
 		return;
 	}
 
@@ -492,14 +508,11 @@ static void radio_rat_mode_query_callback(const struct ofono_error *error,
 					void *data)
 {
 	struct ofono_radio_settings *rs = data;
-	DBusMessage *reply;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
 		DBG("Error during radio access mode query");
 
-		reply = __ofono_error_failed(rs->pending);
-		__ofono_dbus_pending_reply(&rs->pending, reply);
-
+		radio_send_properties_reply(rs, radio_send_properties_error);
 		return;
 	}
 
@@ -518,11 +531,15 @@ static DBusMessage *radio_get_properties(DBusConnection *conn,
 	if (rs->driver->query_rat_mode == NULL)
 		return __ofono_error_not_implemented(msg);
 
-	if (rs->pending)
-		return __ofono_error_busy(msg);
-
-	rs->pending = dbus_message_ref(msg);
-	rs->driver->query_rat_mode(rs, radio_rat_mode_query_callback, rs);
+	if (rs->pending_get_prop) {
+		rs->pending_get_prop = g_slist_append(rs->pending_get_prop,
+							dbus_message_ref(msg));
+	} else {
+		rs->pending_get_prop = g_slist_append(NULL,
+							dbus_message_ref(msg));
+		rs->driver->query_rat_mode(rs, radio_rat_mode_query_callback,
+									rs);
+	}
 
 	return NULL;
 }
@@ -688,12 +705,25 @@ void ofono_radio_settings_driver_unregister(const struct ofono_radio_settings_dr
 	g_drivers = g_slist_remove(g_drivers, (void *) d);
 }
 
+static void radio_settings_cancel_get_properties(gpointer data)
+{
+	DBusMessage *msg = data;
+
+	__ofono_dbus_pending_reply(&msg, __ofono_error_canceled(msg));
+}
+
 static void radio_settings_unregister(struct ofono_atom *atom)
 {
 	struct ofono_radio_settings *rs = __ofono_atom_get_data(atom);
 	const char *path = __ofono_atom_get_path(rs->atom);
 	DBusConnection *conn = ofono_dbus_get_connection();
 	struct ofono_modem *modem = __ofono_atom_get_modem(rs->atom);
+
+	if (rs->pending_get_prop) {
+		g_slist_free_full(rs->pending_get_prop,
+					radio_settings_cancel_get_properties);
+		rs->pending_get_prop = NULL;
+	}
 
 	ofono_modem_remove_interface(modem, OFONO_RADIO_SETTINGS_INTERFACE);
 	g_dbus_unregister_interface(conn, path, OFONO_RADIO_SETTINGS_INTERFACE);
