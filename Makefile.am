@@ -126,6 +126,9 @@ builtin_sources += plugins/ril.c plugins/ril.h
 builtin_modules += infineon
 builtin_sources += plugins/infineon.c
 
+builtin_modules += ril_sofia3gr
+builtin_sources += plugins/ril_sofia3gr.c
+
 builtin_modules += rilmodem
 builtin_sources += drivers/rilmodem/rilmodem.h \
 			drivers/rilmodem/vendor.h \
