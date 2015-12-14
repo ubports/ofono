@@ -101,6 +101,8 @@ struct ofono_modem *ofono_gprs_context_get_modem(struct ofono_gprs_context *gc);
 
 void ofono_gprs_context_set_type(struct ofono_gprs_context *gc,
 					enum ofono_gprs_context_type type);
+enum ofono_gprs_context_type ofono_gprs_context_get_type(
+						struct ofono_gprs_context *gc);
 
 void ofono_gprs_context_set_interface(struct ofono_gprs_context *gc,
 					const char *interface);
