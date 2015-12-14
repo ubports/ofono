@@ -780,15 +780,12 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 	if (gsm_umts_app_index >= num_apps)
 		return;
 
-	DBG("[%d,%04d]< %s", g_ril_get_slot(sd->ril),
-				message->serial_no,
-				"RIL_REQUEST_GET_SIM_STATUS");
-
-	DBG("[%d,%04d]< card_state=%d,universal_pin_state=%d,"
+	DBG("[%d,%04d]< %s: card_state=%d,universal_pin_state=%d,"
 			"gsm_umts_index=%d,cdma_index=%d,ims_index=%d,"
 			"num_apps=%d",
 			g_ril_get_slot(sd->ril),
 			message->serial_no,
+			"RIL_REQUEST_GET_SIM_STATUS",
 			card_state, universal_pin_state,
 			gsm_umts_app_index, cdma_app_index, ims_app_index,
 			num_apps);
