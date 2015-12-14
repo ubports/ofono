@@ -2673,6 +2673,12 @@ void ofono_gprs_context_set_type(struct ofono_gprs_context *gc,
 	gc->type = type;
 }
 
+enum ofono_gprs_context_type ofono_gprs_context_get_type(
+						struct ofono_gprs_context *gc)
+{
+	return gc->type;
+}
+
 void ofono_gprs_context_set_interface(struct ofono_gprs_context *gc,
 					const char *interface)
 {
