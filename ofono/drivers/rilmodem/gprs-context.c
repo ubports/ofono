@@ -56,14 +56,12 @@ enum state {
 
 struct gprs_context_data {
 	GRil *ril;
-	struct ofono_modem *modem;
 	unsigned vendor;
 	gint active_ctx_cid;
 	gint active_rild_cid;
 	enum state state;
 	guint call_list_id;
 	char *apn;
-	enum ofono_gprs_context_type type;
 	int deact_retries;
 	guint retry_ev_id;
 	struct cb_data *retry_cbd;
@@ -228,9 +226,11 @@ static void ril_setup_data_call_cb(struct ril_msg *message, gpointer user_data)
 	/* Split DNS addresses */
 	if (raw_dns) {
 		char **dns_addrs = g_strsplit(raw_dns, " ", 3);
+		enum ofono_gprs_context_type type =
+					ofono_gprs_context_get_type(gc);
 
 		/* Check for valid DNS settings, except for MMS contexts */
-		if (gcd->type != OFONO_GPRS_CONTEXT_TYPE_MMS &&
+		if (type != OFONO_GPRS_CONTEXT_TYPE_MMS &&
 				(dns_addrs == NULL ||
 					g_strv_length(dns_addrs) == 0)) {
 			g_strfreev(dns_addrs);
@@ -386,7 +386,8 @@ static void ril_gprs_context_activate_primary(struct ofono_gprs_context *gc,
 	profile = DATA_PROFILE_DEFAULT_STR;
 
 	if (g_ril_vendor(gcd->ril) == OFONO_RIL_VENDOR_MTK &&
-			gcd->type == OFONO_GPRS_CONTEXT_TYPE_MMS)
+			ofono_gprs_context_get_type(gc) ==
+						OFONO_GPRS_CONTEXT_TYPE_MMS)
 		profile = DATA_PROFILE_MTK_MMS_STR;
 
 	parcel_w_string(&rilp, profile);
@@ -602,7 +603,7 @@ static void ril_gprs_context_detach_shutdown(struct ofono_gprs_context *gc,
 static int ril_gprs_context_probe(struct ofono_gprs_context *gc,
 					unsigned int vendor, void *data)
 {
-	struct ril_gprs_context_data *ril_data = data;
+	GRil *ril = data;
 	struct gprs_context_data *gcd;
 
 	DBG("*gc: %p", gc);
@@ -611,12 +612,10 @@ static int ril_gprs_context_probe(struct ofono_gprs_context *gc,
 	if (gcd == NULL)
 		return -ENOMEM;
 
-	gcd->ril = g_ril_clone(ril_data->gril);
-	gcd->modem = ril_data->modem;
+	gcd->ril = g_ril_clone(ril);
 	gcd->vendor = vendor;
 	set_context_disconnected(gcd);
 	gcd->call_list_id = -1;
-	gcd->type = ril_data->type;
 
 	ofono_gprs_context_set_data(gc, gcd);
 
