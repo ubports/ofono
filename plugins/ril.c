@@ -199,7 +199,6 @@ void ril_remove(struct ofono_modem *modem)
 void ril_pre_sim(struct ofono_modem *modem)
 {
 	struct ril_data *rd = ofono_modem_get_data(modem);
-	struct ril_sim_data sim_data;
 
 	DBG("");
 
@@ -207,12 +206,7 @@ void ril_pre_sim(struct ofono_modem *modem)
 	ofono_voicecall_create(modem, rd->vendor, RILMODEM, rd->ril);
 	ofono_call_volume_create(modem, rd->vendor, RILMODEM, rd->ril);
 
-	sim_data.gril = rd->ril;
-	sim_data.modem = modem;
-	sim_data.ril_state_watch = NULL;
-
-	rd->sim = ofono_sim_create(modem, rd->vendor, RILMODEM, &sim_data);
-	g_assert(rd->sim != NULL);
+	rd->sim = ofono_sim_create(modem, rd->vendor, RILMODEM, rd->ril);
 }
 
 void ril_post_sim(struct ofono_modem *modem)
