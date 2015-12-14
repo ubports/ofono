@@ -67,12 +67,6 @@ enum at_util_charset {
 	RIL_UTIL_CHARSET_8859_H =	0x10000,
 };
 
-struct ril_gprs_context_data {
-	GRil *gril;
-	struct ofono_modem *modem;
-	enum ofono_gprs_context_type type;
-};
-
 typedef void (*ril_util_sim_inserted_cb_t)(gboolean present, void *userdata);
 
 void decode_ril_error(struct ofono_error *error, const char *final);
