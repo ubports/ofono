@@ -661,6 +661,8 @@ static void ril_sim_update_record(struct ofono_sim *sim, int fileid,
 					unsigned int path_len,
 					ofono_sim_write_cb_t cb, void *data)
 {
+	DBG("");
+
 	update_record(sim, fileid, 4, record, length, value,
 			path, path_len, cb, data);
 }
@@ -671,6 +673,8 @@ static void ril_sim_update_cyclic(struct ofono_sim *sim, int fileid,
 					unsigned int path_len,
 					ofono_sim_write_cb_t cb, void *data)
 {
+	DBG("");
+
 	/* Only mode valid for cyclic files is PREVIOUS */
 	update_record(sim, fileid, 3, 0, length, value,
 			path, path_len, cb, data);
@@ -683,6 +687,8 @@ static void ril_imsi_cb(struct ril_msg *message, gpointer user_data)
 	struct sim_data *sd = cbd->user;
 	struct parcel rilp;
 	gchar *imsi;
+
+	DBG("");
 
 	if (message->error != RIL_E_SUCCESS) {
 		ofono_error("Reply failure: %s",
@@ -715,6 +721,8 @@ static void ril_read_imsi(struct ofono_sim *sim, ofono_sim_imsi_cb_t cb,
 	struct cb_data *cbd = cb_data_new(cb, data, sd);
 	struct parcel rilp;
 
+	DBG("");
+
 	parcel_init(&rilp);
 	parcel_w_int32(&rilp, GET_IMSI_NUM_PARAMS);
 	parcel_w_string(&rilp, sd->aid_str);
@@ -743,6 +751,8 @@ static void sim_status_cb(struct ril_msg *message, gpointer user_data)
 	int i;
 	int app_state;
 	int perso_substate;
+
+	DBG("");
 
 	g_ril_init_parcel(message, &rilp);
 
@@ -901,6 +911,8 @@ static void send_get_sim_status(struct ofono_sim *sim)
 {
 	struct sim_data *sd = ofono_sim_get_data(sim);
 
+	DBG("");
+
 	g_ril_send(sd->ril, RIL_REQUEST_GET_SIM_STATUS, NULL,
 			sim_status_cb, sim, NULL);
 }
@@ -927,6 +939,8 @@ static void inf_pin_retries_cb(struct ril_msg *message, gpointer user_data)
 	int len;
 	char *hex_dump;
 	int expected;
+
+	DBG("");
 
 	if (message->error != RIL_E_SUCCESS) {
 		ofono_error("Reply failure: %s",
@@ -1328,6 +1342,8 @@ static gboolean listen_and_get_sim_status(gpointer user)
 	struct ofono_sim *sim = user;
 	struct sim_data *sd = ofono_sim_get_data(sim);
 
+	DBG("");
+
 	send_get_sim_status(sim);
 
 	g_ril_register(sd->ril, RIL_UNSOL_RESPONSE_SIM_STATUS_CHANGED,
@@ -1368,6 +1384,8 @@ static int ril_sim_probe(struct ofono_sim *sim, unsigned int vendor,
 	GRil *ril = ril_data->gril;
 	struct sim_data *sd;
 	int i;
+
+	DBG("");
 
 	sd = g_new0(struct sim_data, 1);
 	sd->ril = g_ril_clone(ril);
