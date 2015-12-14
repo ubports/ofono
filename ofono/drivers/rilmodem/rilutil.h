@@ -67,12 +67,6 @@ enum at_util_charset {
 	RIL_UTIL_CHARSET_8859_H =	0x10000,
 };
 
-struct ril_sim_data {
-	struct ofono_modem *modem;
-	GRil *gril;
-	ofono_sim_state_event_cb_t ril_state_watch;
-};
-
 struct ril_gprs_context_data {
 	GRil *gril;
 	struct ofono_modem *modem;
