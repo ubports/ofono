@@ -44,7 +44,7 @@ typedef struct _GRil GRil;
  */
 struct ril_msg {
 	gchar *buf;
-	gsize buf_len;
+	unsigned int buf_len;
 	gboolean unsolicited;
 	int req;
 	int serial_no;
