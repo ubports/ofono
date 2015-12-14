@@ -120,7 +120,7 @@ static gboolean parse_sim_io(GRil *ril, struct ril_msg *message,
 	 * simResponse (string)
 	 */
 	if (message->buf_len < 12) {
-		ofono_error("Invalid SIM IO reply: size too small (< 12): %lu",
+		ofono_error("Invalid SIM IO reply: size too small (< 12): %u",
 				message->buf_len);
 		return FALSE;
 	}
