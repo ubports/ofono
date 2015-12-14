@@ -1353,16 +1353,10 @@ static gboolean listen_and_get_sim_status(gpointer user)
 static gboolean ril_sim_register(gpointer user)
 {
 	struct ofono_sim *sim = user;
-	struct sim_data *sd = ofono_sim_get_data(sim);
 
 	DBG("");
 
 	ofono_sim_register(sim);
-
-	if (sd->ril_state_watch != NULL &&
-			!ofono_sim_add_state_watch(sim, sd->ril_state_watch,
-							sd->modem, NULL))
-		ofono_error("Error registering ril sim watch");
 
 	/*
 	 * We use g_idle_add here to make sure that the presence of the SIM
@@ -1377,8 +1371,7 @@ static gboolean ril_sim_register(gpointer user)
 static int ril_sim_probe(struct ofono_sim *sim, unsigned int vendor,
 				void *data)
 {
-	struct ril_sim_data *ril_data = data;
-	GRil *ril = ril_data->gril;
+	GRil *ril = data;
 	struct sim_data *sd;
 	int i;
 
@@ -1391,8 +1384,6 @@ static int ril_sim_probe(struct ofono_sim *sim, unsigned int vendor,
 	sd->app_type = RIL_APPTYPE_UNKNOWN;
 	sd->passwd_state = OFONO_SIM_PASSWORD_NONE;
 	sd->passwd_type = OFONO_SIM_PASSWORD_NONE;
-	sd->modem = ril_data->modem;
-	sd->ril_state_watch = ril_data->ril_state_watch;
 
 	for (i = 0; i < OFONO_SIM_PASSWORD_INVALID; i++)
 		sd->retries[i] = -1;
