@@ -2132,6 +2132,9 @@ void ofono_modem_reset(struct ofono_modem *modem)
 	if (err == -EINPROGRESS)
 		return;
 
+	if (err < 0)
+		return;
+
 	modem_change_state(modem, MODEM_STATE_PRE_SIM);
 }
 
