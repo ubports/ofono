@@ -279,8 +279,7 @@ endif
 
 if ATMODEM
 builtin_modules += atmodem
-builtin_sources += $(gatchat_sources) \
-			drivers/atmodem/atmodem.h \
+builtin_sources += 	drivers/atmodem/atmodem.h \
 			drivers/atmodem/atmodem.c \
 			drivers/atmodem/call-settings.c \
 			drivers/atmodem/sms.c \
@@ -625,7 +624,7 @@ builtin_sources += plugins/smshistory.c
 
 sbin_PROGRAMS = src/ofonod
 
-src_ofonod_SOURCES = $(builtin_sources) src/ofono.ver \
+src_ofonod_SOURCES = $(builtin_sources) $(gatchat_sources) src/ofono.ver \
 			src/main.c src/ofono.h src/log.c src/plugin.c \
 			src/modem.c src/common.h src/common.c \
 			src/manager.c src/dbus.c src/util.h src/util.c \
