@@ -67,7 +67,7 @@ static void ril_call_barring_query_cb(struct ril_msg *message,
 
 	bearer_class = parcel_r_int32(&rilp);
 
-	if (bearer_class < 1 || rilp.malformed)
+	if (bearer_class < 0 || rilp.malformed)
 		goto error;
 
 	g_ril_append_print_buf(bd->ril, "{%d}", bearer_class);
