@@ -162,11 +162,11 @@ static void set_online_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
 	ofono_modem_online_cb_t callback = cbd->cb;
-	struct ofono_error error;
 
-	decode_at_error(&error, g_at_result_final_response(result));
-
-	callback(&error, cbd->data);
+	if (ok)
+		CALLBACK_WITH_SUCCESS(callback, cbd->data);
+	else
+		CALLBACK_WITH_FAILURE(callback, cbd->data);
 }
 
 static void stktest_set_online(struct ofono_modem *modem, ofono_bool_t online,
