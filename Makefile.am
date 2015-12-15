@@ -820,7 +820,8 @@ if JOLLA_RILMODEM
 
 unit_tests += unit/test-rilmodem-cs \
 				unit/test-rilmodem-cs \
-				unit/test-rilmodem-sms
+				unit/test-rilmodem-sms \
+				unit/test-rilmodem-cb
 
 endif
 endif
@@ -905,8 +906,17 @@ unit_test_rilmodem_sms_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
 					@GLIB_LIBS@ @DBUS_LIBS@ -ldl
 unit_objects += $(unit_test_rilmodem_sms_OBJECTS)
 
+<<<<<<< HEAD
 endif
 endif
+=======
+unit_test_rilmodem_cb_SOURCES = $(test_rilmodem_sources) \
+					unit/test-rilmodem-cb.c \
+					drivers/rilmodem/call-barring.c
+unit_test_rilmodem_cb_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
+					@GLIB_LIBS@ @DBUS_LIBS@ -ldl
+unit_objects += $(unit_test_rilmodem_cb_OBJECTS)
+>>>>>>> 544651c... build: add support for new test-rilmodem-cb
 
 TESTS = $(unit_tests)
 
