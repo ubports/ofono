@@ -317,6 +317,7 @@ static int ril_plugin_update_modem_paths(struct ril_plugin_priv *plugin)
 		DBG("No default data SIM");
 		g_free(plugin->default_data_path);
 		plugin->default_data_path = NULL;
+		plugin->data_modem = NULL;
 		mask |= RIL_PLUGIN_SIGNAL_DATA_PATH;
 	}
 
