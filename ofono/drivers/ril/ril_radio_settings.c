@@ -18,12 +18,13 @@
 #include "ril_log.h"
 #include "ril_constants.h"
 
-#include "storage.h"
-
 struct ril_radio_settings {
 	GRilIoQueue *q;
+	struct ofono_radio_settings *rs;
+	enum ofono_radio_access_mode access_mode;
+	gboolean enable_4g;
 	int ratmode;
-	guint timer_id;
+	guint query_rats_id;
 };
 
 struct ril_radio_settings_cbd {
@@ -31,13 +32,11 @@ struct ril_radio_settings_cbd {
 	union _ofono_radio_settings_cb {
 		ofono_radio_settings_rat_mode_set_cb_t rat_mode_set;
 		ofono_radio_settings_rat_mode_query_cb_t rat_mode_query;
+		ofono_radio_settings_available_rats_query_cb_t available_rats;
 		gpointer ptr;
 	} cb;
 	gpointer data;
 };
-
-#define RIL_STORE "rilmodem"
-#define LTE_FLAG "4gOn"
 
 #define ril_radio_settings_cbd_free g_free
 
@@ -59,6 +58,45 @@ static struct ril_radio_settings_cbd *ril_radio_settings_cbd_new(
 	return cbd;
 }
 
+static enum ofono_radio_access_mode ril_radio_settings_pref_to_mode(int pref)
+{
+	switch (pref) {
+	case PREF_NET_TYPE_LTE_CDMA_EVDO:
+	case PREF_NET_TYPE_LTE_GSM_WCDMA:
+	case PREF_NET_TYPE_LTE_CMDA_EVDO_GSM_WCDMA:
+	case PREF_NET_TYPE_LTE_ONLY:
+	case PREF_NET_TYPE_LTE_WCDMA:
+		return OFONO_RADIO_ACCESS_MODE_LTE;
+	case PREF_NET_TYPE_GSM_ONLY:
+		return OFONO_RADIO_ACCESS_MODE_GSM;
+	case PREF_NET_TYPE_GSM_WCDMA_AUTO:
+	case PREF_NET_TYPE_WCDMA:
+	case PREF_NET_TYPE_GSM_WCDMA:
+		return OFONO_RADIO_ACCESS_MODE_UMTS;
+	default:
+		return OFONO_RADIO_ACCESS_MODE_ANY;
+	}
+}
+
+static int ril_radio_settings_mode_to_pref(struct ril_radio_settings *rsd,
+					enum ofono_radio_access_mode mode)
+{
+	switch (mode) {
+	case OFONO_RADIO_ACCESS_MODE_ANY:
+	case OFONO_RADIO_ACCESS_MODE_LTE:
+		if (rsd->enable_4g) {
+			return PREF_NET_TYPE_LTE_WCDMA;
+		}
+		/* no break */
+	case OFONO_RADIO_ACCESS_MODE_UMTS:
+		return PREF_NET_TYPE_GSM_WCDMA_AUTO;
+	case OFONO_RADIO_ACCESS_MODE_GSM:
+		return PREF_NET_TYPE_GSM_ONLY;
+	default:
+		return -1;
+	}
+}
+
 static void ril_radio_settings_submit_request(struct ril_radio_settings *rsd,
 	GRilIoRequest* req, guint code, GRilIoChannelResponseFunc response,
 							void *cb, void *data)
@@ -78,9 +116,28 @@ static void ril_radio_settings_set_rat_mode_cb(GRilIoChannel *io, int status,
 	if (status == RIL_E_SUCCESS) {
 		cb(ril_error_ok(&error), cbd->data);
 	} else {
-		ofono_error("rat mode setting failed");
+		ofono_error("failed to set rat mode");
 		cb(ril_error_failure(&error), cbd->data);
 	}
+}
+
+static GRilIoRequest *ril_radio_settings_set_pref_req(int pref)
+{
+	GRilIoRequest *req = grilio_request_sized_new(8);
+	grilio_request_append_int32(req, 1);        /* Number of params */
+	grilio_request_append_int32(req, pref);
+	return req;
+}
+
+static int ril_radio_settings_parse_pref_resp(const void *data, guint len)
+{
+	GRilIoParser rilp;
+	int pref = -1;
+
+	grilio_parser_init(&rilp, data, len);
+	grilio_parser_get_int32(&rilp, NULL);
+	grilio_parser_get_int32(&rilp, &pref);
+	return pref;
 }
 
 static void ril_radio_settings_set_rat_mode(struct ofono_radio_settings *rs,
@@ -88,44 +145,16 @@ static void ril_radio_settings_set_rat_mode(struct ofono_radio_settings *rs,
 		ofono_radio_settings_rat_mode_set_cb_t cb, void *data)
 {
 	struct ril_radio_settings *rsd = ril_radio_settings_get_data(rs);
-	GRilIoRequest *req = grilio_request_sized_new(8);
-	int pref = rsd->ratmode;
+	int pref = ril_radio_settings_mode_to_pref(rsd, mode);
+	GRilIoRequest *req;
 
-	ofono_info("rat mode set %d", mode);
-	switch (mode) {
-	case OFONO_RADIO_ACCESS_MODE_GSM:
-		pref = PREF_NET_TYPE_GSM_ONLY;
-		break;
-	case OFONO_RADIO_ACCESS_MODE_UMTS:
-		pref = PREF_NET_TYPE_GSM_WCDMA_AUTO;    /* per UI design */
-		break;
-	case OFONO_RADIO_ACCESS_MODE_LTE:
-		pref = PREF_NET_TYPE_LTE_ONLY;
-	default:
-		break;
-	}
-
-	grilio_request_append_int32(req, 1);            /* Number of params */
-	grilio_request_append_int32(req, pref);
+	if (pref < 0) pref = rsd->ratmode;
+	DBG("rat mode set %d (ril %d)", mode, pref);
+	req = ril_radio_settings_set_pref_req(pref);
 	ril_radio_settings_submit_request(rsd, req,
 			RIL_REQUEST_SET_PREFERRED_NETWORK_TYPE,
 			ril_radio_settings_set_rat_mode_cb, cb, data);
 	grilio_request_unref(req);
-}
-
-static void ril_radio_settings_force_rat(struct ril_radio_settings *rsd,
-								int pref)
-{
-	if (pref != rsd->ratmode) {
-		GRilIoRequest *req = grilio_request_sized_new(8);
-		DBG("pref ril rat mode %d, ril current %d", pref, rsd->ratmode);
-
-		grilio_request_append_int32(req, 1);
-		grilio_request_append_int32(req, rsd->ratmode);
-		grilio_queue_send_request(rsd->q, req,
-				RIL_REQUEST_SET_PREFERRED_NETWORK_TYPE);
-		grilio_request_unref(req);
-	}
 }
 
 static void ril_radio_settings_query_rat_mode_cb(GRilIoChannel *io, int status,
@@ -133,57 +162,28 @@ static void ril_radio_settings_query_rat_mode_cb(GRilIoChannel *io, int status,
 {
 	struct ofono_error error;
 	struct ril_radio_settings_cbd *cbd = user_data;
+	struct ril_radio_settings *rsd = cbd->rsd;
 	ofono_radio_settings_rat_mode_query_cb_t cb = cbd->cb.rat_mode_query;
 
-	DBG("");
 	if (status == RIL_E_SUCCESS) {
-		GRilIoParser rilp;
-		int mode = OFONO_RADIO_ACCESS_MODE_ANY;
-		int pref = -1;
-
-		grilio_parser_init(&rilp, data, len);
-		grilio_parser_get_int32(&rilp, NULL);
-		grilio_parser_get_int32(&rilp, &pref);
-
-		switch (pref) {
-		case PREF_NET_TYPE_LTE_ONLY:
-			mode = OFONO_RADIO_ACCESS_MODE_LTE;
-		case PREF_NET_TYPE_GSM_ONLY:
-			mode = OFONO_RADIO_ACCESS_MODE_GSM;
-			break;
-		case PREF_NET_TYPE_GSM_WCDMA_AUTO:/* according to UI design */
-			if (!cb) {
-				ril_radio_settings_force_rat(cbd->rsd, pref);
-			}
-		case PREF_NET_TYPE_WCDMA:
-		case PREF_NET_TYPE_GSM_WCDMA: /* according to UI design */
-			mode = OFONO_RADIO_ACCESS_MODE_UMTS;
-			break;
-		case PREF_NET_TYPE_LTE_CDMA_EVDO:
-		case PREF_NET_TYPE_LTE_GSM_WCDMA:
-		case PREF_NET_TYPE_LTE_CMDA_EVDO_GSM_WCDMA:
-			if (!cb) {
-				ril_radio_settings_force_rat(cbd->rsd, pref);
-			}
-			break;
-		case PREF_NET_TYPE_CDMA_EVDO_AUTO:
-		case PREF_NET_TYPE_CDMA_ONLY:
-		case PREF_NET_TYPE_EVDO_ONLY:
-		case PREF_NET_TYPE_GSM_WCDMA_CDMA_EVDO_AUTO:
-		default:
-			break;
-		}
-
-		ofono_info("rat mode %d (ril %d)", mode, pref);
-		if (cb) {
-			cb(ril_error_ok(&error), mode, cbd->data);
-		}
+		rsd->ratmode = ril_radio_settings_parse_pref_resp(data, len);
+		DBG("rat mode %d (ril %d)",
+			ril_radio_settings_pref_to_mode(rsd->ratmode),
+			rsd->ratmode);
 	} else {
-		ofono_error("rat mode query failed");
-		if (cb) {
-			cb(ril_error_failure(&error), -1, cbd->data);
-		}
+		/*
+		 * With certain versions of RIL, preferred network type
+		 * queries don't work even though setting preferred network
+		 * type does actually work. In this case, assume that our
+		 * cached network type is the right one.
+		 */
+		ofono_error("rat mode query failed, assuming %d (ril %d)",
+			ril_radio_settings_pref_to_mode(rsd->ratmode),
+			rsd->ratmode);
 	}
+
+	cb(ril_error_ok(&error), ril_radio_settings_pref_to_mode(rsd->ratmode),
+								cbd->data);
 }
 
 static void ril_radio_settings_query_rat_mode(struct ofono_radio_settings *rs,
@@ -191,61 +191,78 @@ static void ril_radio_settings_query_rat_mode(struct ofono_radio_settings *rs,
 {
 	struct ril_radio_settings *rsd = ril_radio_settings_get_data(rs);
 
-	ofono_info("rat mode query");
+	DBG("rat mode query");
 	ril_radio_settings_submit_request(rsd, NULL,
 			RIL_REQUEST_GET_PREFERRED_NETWORK_TYPE,
 			ril_radio_settings_query_rat_mode_cb, cb, data);
 }
 
-static gboolean ril_radio_settings_get_config(struct ril_radio_settings *rsd)
+static gboolean ril_radio_settings_query_available_rats_cb(gpointer data)
 {
-	gboolean needsconfig = FALSE;
-	gboolean value = FALSE;
+	struct ofono_error error;
+	struct ril_radio_settings_cbd *cbd = data;
+	guint rats = OFONO_RADIO_ACCESS_MODE_GSM | OFONO_RADIO_ACCESS_MODE_UMTS;
 
-	/* Hmm... One file shared by all modems... Why?? */
-
-	GKeyFile *keyfile = storage_open(NULL, RIL_STORE);
-	char **alreadyset = g_key_file_get_groups(keyfile, NULL);
-
-	if (alreadyset[0])
-		value = g_key_file_get_boolean(
-			keyfile, alreadyset[0], LTE_FLAG, NULL);
-	else if (rsd->ratmode == PREF_NET_TYPE_GSM_WCDMA_AUTO)
-		value = TRUE;
-
-	if (!value && rsd->ratmode == PREF_NET_TYPE_LTE_GSM_WCDMA) {
-			g_key_file_set_boolean(keyfile,
-				LTE_FLAG, LTE_FLAG, TRUE);
-			needsconfig = TRUE;
-	} else if (value && rsd->ratmode == PREF_NET_TYPE_GSM_WCDMA_AUTO) {
-			g_key_file_set_boolean(keyfile,
-				LTE_FLAG, LTE_FLAG, FALSE);
-			needsconfig = TRUE;
+	if (cbd->rsd->enable_4g) {
+		rats |= OFONO_RADIO_ACCESS_MODE_LTE;
 	}
 
-	g_strfreev(alreadyset);
-	storage_close(NULL, RIL_STORE, keyfile, TRUE);
-
-	DBG("needsconfig %d, rat mode %d", needsconfig, rsd->ratmode);
-	return needsconfig;
+	GASSERT(cbd->rsd->query_rats_id);
+	cbd->rsd->query_rats_id = 0;
+	cbd->cb.available_rats(ril_error_ok(&error), rats, cbd->data);
+	return FALSE;
 }
 
-static gboolean ril_radio_settings_register(gpointer user_data)
+static void ril_radio_settings_query_available_rats(
+		struct ofono_radio_settings *rs,
+		ofono_radio_settings_available_rats_query_cb_t cb, void *data)
 {
-	struct ofono_radio_settings *rs = user_data;
 	struct ril_radio_settings *rsd = ril_radio_settings_get_data(rs);
 
-	rsd->timer_id = 0;
-	ofono_radio_settings_register(rs);
+	DBG("");
+	GASSERT(!rsd->query_rats_id);
+	rsd->query_rats_id = g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,
+				ril_radio_settings_query_available_rats_cb,
+				ril_radio_settings_cbd_new(rsd, cb, data),
+				ril_radio_settings_cbd_free);
+}
 
-	if (ril_radio_settings_get_config(rsd)) {
-		ril_radio_settings_submit_request(rsd, NULL,
-			RIL_REQUEST_GET_PREFERRED_NETWORK_TYPE,
-			ril_radio_settings_query_rat_mode_cb, NULL, NULL);
+static void ril_radio_settings_init_query_cb(GRilIoChannel *io, int status,
+				const void *data, guint len, void *user_data)
+{
+	int pref;
+	struct ril_radio_settings *rsd = user_data;
+	enum ofono_radio_access_mode mode;
+
+	if (status == RIL_E_SUCCESS) {
+		pref = ril_radio_settings_parse_pref_resp(data, len);
+		DBG("rat mode %d", pref);
+	} else {
+		ofono_error("initial rat mode query failed");
+		pref = ril_radio_settings_mode_to_pref(rsd,
+						OFONO_RADIO_ACCESS_MODE_ANY);
 	}
 
-	/* Single shot */
-	return FALSE;
+	mode = ril_radio_settings_pref_to_mode(pref);
+
+	if (!rsd->enable_4g && mode == OFONO_RADIO_ACCESS_MODE_LTE) {
+		rsd->ratmode = ril_radio_settings_mode_to_pref(rsd,
+						OFONO_RADIO_ACCESS_MODE_UMTS);
+	} else {
+		rsd->ratmode = pref;
+	}
+
+	if (rsd->ratmode != pref || status != RIL_E_SUCCESS) {
+		GRilIoRequest *req;
+
+		DBG("forcing rat mode %d", rsd->ratmode);
+		req = ril_radio_settings_set_pref_req(rsd->ratmode);
+		grilio_queue_send_request(rsd->q, req,
+				RIL_REQUEST_SET_PREFERRED_NETWORK_TYPE);
+		grilio_request_unref(req);
+	}
+
+	ofono_radio_settings_register(rsd->rs);
 }
 
 static int ril_radio_settings_probe(struct ofono_radio_settings *rs,
@@ -255,37 +272,39 @@ static int ril_radio_settings_probe(struct ofono_radio_settings *rs,
 	struct ril_radio_settings *rsd = g_new0(struct ril_radio_settings, 1);
 
 	DBG("");
+	rsd->rs = rs;
 	rsd->q = grilio_queue_new(ril_modem_io(modem));
-	rsd->ratmode = ril_modem_4g_enabled(modem) ?
-		PREF_NET_TYPE_LTE_GSM_WCDMA :
-		PREF_NET_TYPE_GSM_WCDMA_AUTO;
+	rsd->enable_4g = ril_modem_4g_enabled(modem);
+	grilio_queue_send_request_full(rsd->q, NULL,
+				RIL_REQUEST_GET_PREFERRED_NETWORK_TYPE,
+				ril_radio_settings_init_query_cb, NULL, rsd);
 
-	rsd->timer_id = g_idle_add(ril_radio_settings_register, rs);
 	ofono_radio_settings_set_data(rs, rsd);
 	return 0;
 }
 
 static void ril_radio_settings_remove(struct ofono_radio_settings *rs)
 {
-	struct ril_radio_settings *rd = ril_radio_settings_get_data(rs);
+	struct ril_radio_settings *rsd = ril_radio_settings_get_data(rs);
 
 	DBG("");
 	ofono_radio_settings_set_data(rs, NULL);
-	if (rd->timer_id > 0) {
-		g_source_remove(rd->timer_id);
+	if (rsd->query_rats_id > 0) {
+		g_source_remove(rsd->query_rats_id);
         }
 
-	grilio_queue_cancel_all(rd->q, FALSE);
-	grilio_queue_unref(rd->q);
-	g_free(rd);
+	grilio_queue_cancel_all(rsd->q, FALSE);
+	grilio_queue_unref(rsd->q);
+	g_free(rsd);
 }
 
 const struct ofono_radio_settings_driver ril_radio_settings_driver = {
-	.name           = RILMODEM_DRIVER,
-	.probe          = ril_radio_settings_probe,
-	.remove         = ril_radio_settings_remove,
-	.query_rat_mode = ril_radio_settings_query_rat_mode,
-	.set_rat_mode   = ril_radio_settings_set_rat_mode,
+	.name                 = RILMODEM_DRIVER,
+	.probe                = ril_radio_settings_probe,
+	.remove               = ril_radio_settings_remove,
+	.query_rat_mode       = ril_radio_settings_query_rat_mode,
+	.set_rat_mode         = ril_radio_settings_set_rat_mode,
+	.query_available_rats = ril_radio_settings_query_available_rats
 };
 
 /*
