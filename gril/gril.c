@@ -48,8 +48,6 @@
 		ofono_debug(fmt, ## arg);	\
 } while (0)
 
-#define COMMAND_FLAG_EXPECT_PDU			0x1
-#define COMMAND_FLAG_EXPECT_SHORT_PROMPT	0x2
 
 #define	RADIO_GID 1001
 #define	RADIO_UID 1001
