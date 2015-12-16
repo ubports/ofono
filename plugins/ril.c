@@ -64,6 +64,9 @@
 #include "drivers/rilmodem/rilmodem.h"
 #include "drivers/rilmodem/vendor.h"
 
+#define	RADIO_GID 1001
+#define	RADIO_UID 1001
+
 #define MAX_SIM_STATUS_RETRIES 15
 
 /* this gives 30s for rild to initialize */
@@ -341,7 +344,11 @@ static int create_gril(struct ofono_modem *modem)
 
 	ofono_info("Using %s as socket for slot %d.",
 					RILD_CMD_SOCKET[slot_id], slot_id);
-	rd->ril = g_ril_new(RILD_CMD_SOCKET[slot_id], OFONO_RIL_VENDOR_AOSP);
+
+	/* RIL expects user radio to connect to the socket */
+	rd->ril = g_ril_new_with_ucred(RILD_CMD_SOCKET[slot_id],
+						OFONO_RIL_VENDOR_AOSP,
+						RADIO_UID, RADIO_GID);
 
 	/* NOTE: Since AT modems open a tty, and then call
 	 * g_at_chat_new(), they're able to return -EIO if
