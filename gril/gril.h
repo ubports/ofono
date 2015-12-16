@@ -109,6 +109,8 @@ extern char print_buf[];
 void g_ril_init_parcel(const struct ril_msg *message, struct parcel *rilp);
 
 GRil *g_ril_new(const char *sock_path, enum ofono_ril_vendor vendor);
+GRil *g_ril_new_with_ucred(const char *sock_path, enum ofono_ril_vendor vendor,
+				unsigned int uid, unsigned int gid);
 
 GIOChannel *g_ril_get_channel(GRil *ril);
 GRilIO *g_ril_get_io(GRil *ril);
