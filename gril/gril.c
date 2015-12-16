@@ -48,10 +48,6 @@
 		ofono_debug(fmt, ## arg);	\
 } while (0)
 
-
-#define	RADIO_GID 1001
-#define	RADIO_UID 1001
-
 struct ril_request {
 	gchar *data;
 	guint data_len;
@@ -792,23 +788,14 @@ static gboolean node_compare_by_group(struct ril_notify_node *node,
 	return FALSE;
 }
 
-static void set_process_id(gid_t gid, uid_t uid)
-{
-	if (setegid(gid) < 0)
-		ofono_error("%s: setegid(%d) failed: %s (%d)",
-				__func__, gid, strerror(errno), errno);
-
-	if (seteuid(uid) < 0)
-		ofono_error("%s: seteuid(%d) failed: %s (%d)",
-				__func__, uid, strerror(errno), errno);
-}
-
-static struct ril_s *create_ril(const char *sock_path)
+static struct ril_s *create_ril(const char *sock_path, unsigned int uid,
+					unsigned int gid)
 
 {
 	struct ril_s *ril;
 	struct sockaddr_un addr;
 	int sk;
+	int r;
 	GIOChannel *io;
 
 	ril = g_try_new0(struct ril_s, 1);
@@ -837,19 +824,30 @@ static struct ril_s *create_ril(const char *sock_path)
 	addr.sun_family = AF_UNIX;
 	strncpy(addr.sun_path, sock_path, sizeof(addr.sun_path) - 1);
 
-	/* RIL expects user radio to connect to the socket */
-	set_process_id(RADIO_GID, RADIO_UID);
+	if (uid != 0 && seteuid(uid) < 0)
+		ofono_error("%s: seteuid(%d) failed: %s (%d)",
+				__func__, uid, strerror(errno), errno);
 
-	if (connect(sk, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
+	if (gid != 0 && setegid(gid) < 0)
+		ofono_error("%s: setegid(%d) failed: %s (%d)",
+				__func__, gid, strerror(errno), errno);
+
+	r = connect(sk, (struct sockaddr *) &addr, sizeof(addr));
+
+	/* Switch back to root as needed */
+	if (uid && seteuid(0) < 0)
+		ofono_error("%s: seteuid(0) failed: %s (%d)",
+				__func__, strerror(errno), errno);
+
+	if (gid && setegid(0) < 0)
+		ofono_error("%s: setegid(0) failed: %s (%d)",
+				__func__, strerror(errno), errno);
+
+	if (r < 0) {
 		ofono_error("create_ril: can't connect to RILD: %s (%d)\n",
 				strerror(errno), errno);
-		/* Switch back to root */
-		set_process_id(0, 0);
 		goto error;
 	}
-
-	/* Switch back to root */
-	set_process_id(0, 0);
 
 	io = g_io_channel_unix_new(sk);
 	if (io == NULL) {
@@ -1046,7 +1044,8 @@ void g_ril_init_parcel(const struct ril_msg *message, struct parcel *rilp)
 	rilp->malformed = 0;
 }
 
-GRil *g_ril_new(const char *sock_path, enum ofono_ril_vendor vendor)
+GRil *g_ril_new_with_ucred(const char *sock_path, enum ofono_ril_vendor vendor,
+				unsigned int uid, unsigned int gid)
 {
 	GRil *ril;
 
@@ -1054,7 +1053,7 @@ GRil *g_ril_new(const char *sock_path, enum ofono_ril_vendor vendor)
 	if (ril == NULL)
 		return NULL;
 
-	ril->parent = create_ril(sock_path);
+	ril->parent = create_ril(sock_path, 0, 0);
 	if (ril->parent == NULL) {
 		g_free(ril);
 		return NULL;
@@ -1066,6 +1065,11 @@ GRil *g_ril_new(const char *sock_path, enum ofono_ril_vendor vendor)
 	ril->parent->vendor = vendor;
 
 	return ril;
+}
+
+GRil *g_ril_new(const char *sock_path, enum ofono_ril_vendor vendor)
+{
+	return g_ril_new_with_ucred(sock_path, vendor, 0, 0);
 }
 
 GRil *g_ril_clone(GRil *clone)
