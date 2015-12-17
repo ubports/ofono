@@ -478,9 +478,6 @@ builtin_sources += plugins/ublox.c
 
 if BLUETOOTH
 if BLUEZ4
-builtin_modules += bluez4
-builtin_sources += plugins/bluez4.c plugins/bluez4.h
-
 builtin_modules += telit
 builtin_sources += plugins/telit.c plugins/bluez4.h
 
@@ -490,11 +487,25 @@ builtin_sources += plugins/sap.c plugins/bluez4.h
 builtin_modules += hfp_bluez4
 builtin_sources += plugins/hfp_hf_bluez4.c plugins/bluez4.h
 
-builtin_modules += hfp_ag_bluez4
-builtin_sources += plugins/hfp_ag_bluez4.c plugins/bluez4.h
-
 builtin_modules += dun_gw_bluez4
 builtin_sources += plugins/dun_gw_bluez4.c plugins/bluez4.h
+else
+builtin_modules += hfp_bluez5
+builtin_sources += plugins/hfp_hf_bluez5.c plugins/bluez5.h
+
+builtin_modules += dun_gw_bluez5
+builtin_sources += plugins/dun_gw_bluez5.c plugins/bluez5.h
+endif
+endif
+endif
+
+if BLUETOOTH
+if BLUEZ4
+builtin_modules += bluez4
+builtin_sources += plugins/bluez4.c plugins/bluez4.h
+
+builtin_modules += hfp_ag_bluez4
+builtin_sources += plugins/hfp_ag_bluez4.c plugins/bluez4.h
 
 builtin_sources += $(btio_sources)
 builtin_cflags += @BLUEZ_CFLAGS@
@@ -503,15 +514,8 @@ else
 builtin_modules += bluez5
 builtin_sources += plugins/bluez5.c plugins/bluez5.h
 
-builtin_modules += hfp_bluez5
-builtin_sources += plugins/hfp_hf_bluez5.c plugins/bluez5.h
-
 builtin_modules += hfp_ag_bluez5
 builtin_sources += plugins/hfp_ag_bluez5.c plugins/bluez5.h
-
-builtin_modules += dun_gw_bluez5
-builtin_sources += plugins/dun_gw_bluez5.c plugins/bluez5.h
-endif
 endif
 endif
 
