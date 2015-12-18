@@ -364,7 +364,6 @@ static void ril_file_io_cb(struct ril_msg *message, gpointer user_data)
 	struct cb_data *cbd = user_data;
 	ofono_sim_read_cb_t cb = cbd->cb;
 	struct sim_data *sd = cbd->user;
-	struct ofono_error error;
 	int sw1, sw2;
 	char *hex_response;
 	unsigned char *response = NULL;
@@ -391,7 +390,7 @@ static void ril_file_io_cb(struct ril_msg *message, gpointer user_data)
 		goto error;
 	}
 
-	cb(&error, response, len, cbd->data);
+	CALLBACK_WITH_SUCCESS(cb, response, len, cbd->data);
 	g_free(response);
 	return;
 
