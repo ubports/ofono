@@ -1029,11 +1029,14 @@ out:
 
 	/*
 	 * In order to minimize signal transmissions we wait about X seconds
-	 * before reseting the base station id.  The hope is that we receive
+	 * before resetting the base station id.  The hope is that we receive
 	 * another cell broadcast with the new base station name within
 	 * that time
 	 */
 	if (lac_changed || ci_changed) {
+		if(cbs->reset_source)
+			g_source_remove(cbs->reset_source);
+
 		cbs->reset_source =
 			g_timeout_add_seconds(3, reset_base_station_name, cbs);
 	}
