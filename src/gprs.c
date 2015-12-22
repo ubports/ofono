@@ -2385,7 +2385,7 @@ static const GDBusSignalTable manager_signals[] = {
 	{ GDBUS_SIGNAL("PropertyChanged",
 			GDBUS_ARGS({ "name", "s" }, { "value", "v" })) },
 	{ GDBUS_SIGNAL("ContextAdded",
-			GDBUS_ARGS({ "path", "o" }, { "properties", "v" })) },
+			GDBUS_ARGS({ "path", "o" }, { "properties", "a{sv}" })) },
 	{ GDBUS_SIGNAL("ContextRemoved", GDBUS_ARGS({ "path", "o" })) },
 	{ }
 };
