@@ -406,7 +406,6 @@ int ril_parse_tech(const char *stech, int *ril_tech)
 			break;
 		case RADIO_TECH_HSPA:
 		case RADIO_TECH_HSPAP:
-		case RADIO_TECH_DC_HSDPA:
 			access_tech = ACCESS_TECHNOLOGY_UTRAN_HSDPA_HSUPA;
 			break;
 		case RADIO_TECH_LTE:
@@ -415,6 +414,7 @@ int ril_parse_tech(const char *stech, int *ril_tech)
 		default:
 			DBG("Unknown RIL tech %s", stech);
 			/* no break */
+		case RADIO_TECH_IWLAN:
 		case RADIO_TECH_UNKNOWN:
 			tech = -1;
 			break;
