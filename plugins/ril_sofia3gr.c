@@ -44,6 +44,7 @@
 #include <ofono/sim.h>
 #include <ofono/gprs.h>
 #include <ofono/gprs-context.h>
+#include <ofono/radio-settings.h>
 
 #include <gril/gril.h>
 
@@ -167,6 +168,7 @@ static void ril_post_online(struct ofono_modem *modem)
 	struct ril_data *rd = ofono_modem_get_data(modem);
 
 	ofono_netreg_create(modem, 0, "rilmodem", rd->ril);
+	ofono_radio_settings_create(modem, 0, "rilmodem", rd->ril);
 }
 
 static void ril_set_online_cb(struct ril_msg *message, gpointer user_data)
