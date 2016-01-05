@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015 Jolla Ltd.
+ *  Copyright (C) 2015-2016 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -16,7 +16,6 @@
 #include "ril_plugin.h"
 #include "ril_log.h"
 
-#include <ofono/log.h>
 #include <ofono/dbus.h>
 
 #include <gdbus.h>
@@ -174,7 +173,7 @@ struct ril_sim_dbus *ril_sim_dbus_new(struct ril_modem *md)
 
 	if (imsi) {
 		GError *error = NULL;
-		const struct ril_modem_config *config= ril_modem_config(md);
+		const struct ril_slot_config *config = &md->config;
 		struct ril_sim_dbus *dbus = g_new0(struct ril_sim_dbus, 1);
 
 		DBG("%s", ril_modem_get_path(md));
@@ -204,7 +203,7 @@ struct ril_sim_dbus *ril_sim_dbus_new(struct ril_modem *md)
 		if (g_dbus_register_interface(dbus->conn, dbus->path,
 				RIL_SIM_DBUS_INTERFACE, ril_sim_dbus_methods,
 				ril_sim_dbus_signals, NULL, dbus, NULL)) {
-			ofono_modem_add_interface(ril_modem_ofono_modem(md),
+			ofono_modem_add_interface(md->ofono,
 						RIL_SIM_DBUS_INTERFACE);
 			return dbus;
 		} else {
@@ -222,7 +221,7 @@ void ril_sim_dbus_free(struct ril_sim_dbus *dbus)
 		DBG("%s", dbus->path);
 		g_dbus_unregister_interface(dbus->conn, dbus->path,
 						RIL_SIM_DBUS_INTERFACE);
-		ofono_modem_remove_interface(ril_modem_ofono_modem(dbus->md),
+		ofono_modem_remove_interface(dbus->md->ofono,
 						RIL_SIM_DBUS_INTERFACE);
 		dbus_connection_unref(dbus->conn);	
 		g_key_file_free(dbus->storage);

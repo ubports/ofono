@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015 Jolla Ltd.
+ *  Copyright (C) 2015-2016 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -14,13 +14,15 @@
  */
 
 #include "ril_plugin.h"
-#include "ril_constants.h"
+#include "ril_radio.h"
+#include "ril_sim_card.h"
 #include "ril_util.h"
 #include "ril_log.h"
 
 #include "ofono.h"
 
 #define MAX_PDP_CONTEXTS        (2)
+#define ONLINE_TIMEOUT_SECS     (15) /* 20 sec is hardcoded in ofono core */
 
 enum ril_modem_power_state {
 	POWERED_OFF,
@@ -37,19 +39,18 @@ enum ril_modem_online_state {
 
 struct ril_modem_online_request {
 	ofono_modem_online_cb_t cb;
+	struct ril_modem_data *md;
 	void *data;
-	guint id;
+	guint timeout_id;
 };
 
-struct ril_modem {
-	GRilIoChannel *io;
+struct ril_modem_data {
+	struct ril_modem modem;
 	GRilIoQueue *q;
-	struct ofono_modem *modem;
 	struct ofono_radio_settings *radio_settings;
-	struct ril_modem_config config;
 	char *default_name;
 
-	enum ril_radio_state radio_state;
+	guint online_check_id;
 	enum ril_modem_power_state power_state;
 	gulong radio_state_event_id;
 
@@ -60,70 +61,64 @@ struct ril_modem {
 	struct ril_modem_online_request set_offline;
 };
 
-static guint ril_modem_request_power(struct ril_modem *md, gboolean on,
-						GRilIoChannelResponseFunc cb);
+#define RADIO_POWER_TAG(md) (md)
 
-static inline struct ril_modem *ril_modem_from_ofono(struct ofono_modem *modem)
+static struct ril_modem_data *ril_modem_data_from_ofono(struct ofono_modem *o)
 {
-	return ofono_modem_get_data(modem);
+	struct ril_modem_data *md = ofono_modem_get_data(o);
+	GASSERT(md->modem.ofono == o);
+	return md;
 }
 
-GRilIoChannel *ril_modem_io(struct ril_modem *md)
+static struct ril_modem_data *ril_modem_data_from_modem(struct ril_modem *m)
 {
-	return md ? md->io : NULL;
-}
-
-const struct ril_modem_config *ril_modem_config(struct ril_modem *md)
-{
-	return md ? &md->config : NULL;
-}
-
-struct ofono_modem *ril_modem_ofono_modem(struct ril_modem *md)
-{
-	return md ? md->modem : NULL;
+	return m ? G_CAST(m, struct ril_modem_data, modem) : NULL;
 }
 
 struct ofono_sim *ril_modem_ofono_sim(struct ril_modem *md)
 {
-	return (md && md->modem) ?
-		__ofono_atom_find(OFONO_ATOM_TYPE_SIM, md->modem) :
+	return (md && md->ofono) ?
+		__ofono_atom_find(OFONO_ATOM_TYPE_SIM, md->ofono) :
 		NULL;
 }
 
 struct ofono_gprs *ril_modem_ofono_gprs(struct ril_modem *md)
 {
-	return (md && md->modem) ?
-		__ofono_atom_find(OFONO_ATOM_TYPE_GPRS, md->modem) :
+	return (md && md->ofono) ?
+		__ofono_atom_find(OFONO_ATOM_TYPE_GPRS, md->ofono) :
 		NULL;
 }
 
 struct ofono_netreg *ril_modem_ofono_netreg(struct ril_modem *md)
 {
-	return (md && md->modem) ?
-		__ofono_atom_find(OFONO_ATOM_TYPE_NETREG, md->modem) :
+	return (md && md->ofono) ?
+		__ofono_atom_find(OFONO_ATOM_TYPE_NETREG, md->ofono) :
 		NULL;
 }
 
 void ril_modem_delete(struct ril_modem *md)
 {
-	if (md && md->modem) {
-		ofono_modem_remove(md->modem);
+	if (md && md->ofono) {
+		ofono_modem_remove(md->ofono);
 	}
 }
 
-void ril_modem_set_removed_cb(struct ril_modem *md, ril_modem_cb_t cb,
+void ril_modem_set_removed_cb(struct ril_modem *modem, ril_modem_cb_t cb,
 								void *data)
 {
+	struct ril_modem_data *md = ril_modem_data_from_modem(modem);
+
 	md->removed_cb = cb;
 	md->removed_cb_data = data;
 }
 
-void ril_modem_allow_data(struct ril_modem *md)
+void ril_modem_allow_data(struct ril_modem *modem)
 {
-	if (md && md->modem) {
+	if (modem) {
+		struct ril_modem_data *md = ril_modem_data_from_modem(modem);
 		GRilIoRequest *req = grilio_request_sized_new(8);
 
-		DBG("%s", ofono_modem_get_path(md->modem));
+		DBG("%u", modem->config.slot);
 		grilio_request_append_int32(req, 1);
 		grilio_request_append_int32(req, TRUE);
 		grilio_queue_send_request(md->q, req, RIL_REQUEST_ALLOW_DATA);
@@ -131,12 +126,11 @@ void ril_modem_allow_data(struct ril_modem *md)
 	}
 }
 
-static void ril_modem_online_request_ok(GRilIoChannel* io,
-		struct ril_modem_online_request *req)
+static void ril_modem_online_request_ok(struct ril_modem_online_request *req)
 {
-	if (req->id) {
-		grilio_channel_cancel_request(io, req->id, FALSE);
-		req->id = 0;
+	if (req->timeout_id) {
+		g_source_remove(req->timeout_id);
+		req->timeout_id = 0;
 	}
 
 	if (req->cb) {
@@ -150,111 +144,112 @@ static void ril_modem_online_request_ok(GRilIoChannel* io,
 	}
 }
 
-static void ril_modem_update_online_state(struct ril_modem *md)
+static void ril_modem_update_online_state(struct ril_modem_data *md)
 {
-	switch (md->radio_state) {
+	switch (md->modem.radio->state) {
 	case RADIO_STATE_ON:
-		ril_modem_online_request_ok(md->io, &md->set_online);
+		DBG("online");
+		ril_modem_online_request_ok(&md->set_online);
 		break;
 
 	case RADIO_STATE_OFF:
 	case RADIO_STATE_UNAVAILABLE:
-		ril_modem_online_request_ok(md->io, &md->set_offline);
+		DBG("offline");
+		ril_modem_online_request_ok(&md->set_offline);
 		break;
 
 	default:
 		break;
 	}
 
-	if (!md->set_offline.id && !md->set_online.id &&
+	if (!md->set_offline.timeout_id && !md->set_online.timeout_id &&
 					md->power_state == POWERING_OFF) {
 		md->power_state = POWERED_OFF;
-		ofono_modem_set_powered(md->modem, FALSE);
+		if (md->modem.ofono) {
+			ofono_modem_set_powered(md->modem.ofono, FALSE);
+		}
 	}
 }
 
-static void ril_modem_online_request_done(struct ril_modem *md,
-		struct ril_modem_online_request *req, int ril_status)
+static gboolean ril_modem_online_request_timeout(gpointer data)
 {
-	GASSERT(req->id);
-	GASSERT(req->cb);
-	GASSERT(req->data);
-	req->id = 0;
+	struct ril_modem_online_request *req = data;
+	struct ofono_error error;
+	ofono_modem_online_cb_t cb = req->cb;
+	void *cb_data = req->data;
 
-	/* If this request has completed successfully, we will
-	 * invoke the callback and notify ofono core when we get
-	 * RIL_UNSOL_RESPONSE_RADIO_STATE_CHANGED, i.e. the power
-	 * state has actually changed */
-	if (ril_status != RIL_E_SUCCESS) {
-		struct ofono_error error;
-		ofono_modem_online_cb_t cb = req->cb;
-		void *data = req->data;
+	GASSERT(req->timeout_id);
+	GASSERT(cb);
 
-		req->cb = NULL;
-		req->data = NULL;
-		cb(ril_error_failure(&error), data);
-	}
+	req->timeout_id = 0;
+	req->cb = NULL;
+	req->data = NULL;
+	cb(ril_error_failure(&error), cb_data);
+	ril_modem_update_online_state(req->md);
+	return FALSE;
+}
 
+static gboolean ril_modem_online_check(gpointer data)
+{
+	struct ril_modem_data *md = data;
+
+	GASSERT(md->online_check_id);
+	md->online_check_id = 0;
 	ril_modem_update_online_state(md);
+	return FALSE;
 }
 
-static void ril_modem_set_online_cb(GRilIoChannel *io, int status,
-				const void *data, guint len, void *user_data)
+static void ril_modem_schedule_online_check(struct ril_modem_data *md)
 {
-	struct ril_modem *md = user_data;
-
-	DBG("Power on status %s", ril_error_to_string(status));
-	ril_modem_online_request_done(md, &md->set_online, status);
-}
-
-static void ril_modem_set_offline_cb(GRilIoChannel *io, int status,
-				const void *data, guint len, void *user_data)
-{
-	struct ril_modem *md = user_data;
-
-	DBG("Power on status %s", ril_error_to_string(status));
-	ril_modem_online_request_done(md, &md->set_offline, status);
-}
-
-static GRilIoRequest *ril_modem_request_radio_power(gboolean on)
-{
-	GRilIoRequest *req = grilio_request_sized_new(8);
-
-	grilio_request_append_int32(req, 1);
-	grilio_request_append_int32(req, on); /* Radio ON=1, OFF=0 */
-	return req;
-}
-
-static guint ril_modem_request_power(struct ril_modem *md, gboolean on,
-						GRilIoChannelResponseFunc cb)
-{
-	guint id = 0;
-
-	if (md->q) {
-		GRilIoRequest *req = ril_modem_request_radio_power(on);
-
-		DBG("[%u] %s", md->config.slot, on ? "ON" : "OFF");
-		id = grilio_queue_send_request_full(md->q, req,
-				RIL_REQUEST_RADIO_POWER, cb, NULL, md);
-		grilio_request_unref(req);
+	if (!md->online_check_id) {
+		md->online_check_id = g_idle_add(ril_modem_online_check, md);
 	}
-
-	return id;
 }
+
+static void ril_modem_update_radio_settings(struct ril_modem_data *md)
+{
+	if (md->modem.radio->state == RADIO_STATE_ON) {
+		if (!md->radio_settings) {
+			DBG("Initializing radio settings interface");
+			md->radio_settings =
+				ofono_radio_settings_create(md->modem.ofono, 0,
+							RILMODEM_DRIVER, md);
+		}
+	} else if (md->radio_settings) {
+		DBG("Removing radio settings interface");
+		ofono_radio_settings_remove(md->radio_settings);
+		md->radio_settings = NULL;
+	}
+}
+
+static void ril_modem_radio_state_cb(struct ril_radio *radio, void *data)
+{
+	struct ril_modem_data *md = data;
+
+	GASSERT(md->modem.radio == radio);
+	ril_modem_update_radio_settings(md);
+	ril_modem_update_online_state(md);
+};
 
 static void ril_modem_pre_sim(struct ofono_modem *modem)
 {
-	struct ril_modem *md = ril_modem_from_ofono(modem);
+	struct ril_modem_data *md = ril_modem_data_from_ofono(modem);
 
 	DBG("");
 	ofono_devinfo_create(modem, 0, RILMODEM_DRIVER, md);
 	ofono_sim_create(modem, 0, RILMODEM_DRIVER, md);
 	ofono_voicecall_create(modem, 0, RILMODEM_DRIVER, md);
+	ril_modem_update_radio_settings(md);
+	if (!md->radio_state_event_id) {
+		md->radio_state_event_id =
+			ril_radio_add_state_changed_handler(md->modem.radio,
+					ril_modem_radio_state_cb, md);
+	}
 }
 
 static void ril_modem_post_sim(struct ofono_modem *modem)
 {
-	struct ril_modem *md = ril_modem_from_ofono(modem);
+	struct ril_modem_data *md = ril_modem_data_from_ofono(modem);
 	struct ofono_gprs *gprs;
 	struct ofono_gprs_context *gc;
 	int i;
@@ -282,7 +277,7 @@ static void ril_modem_post_sim(struct ofono_modem *modem)
 
 static void ril_modem_post_online(struct ofono_modem *modem)
 {
-	struct ril_modem *md = ril_modem_from_ofono(modem);
+	struct ril_modem_data *md = ril_modem_data_from_ofono(modem);
 
 	DBG("");
 	ofono_call_volume_create(modem, 0, RILMODEM_DRIVER, md);
@@ -295,36 +290,33 @@ static void ril_modem_post_online(struct ofono_modem *modem)
 static void ril_modem_set_online(struct ofono_modem *modem, ofono_bool_t online,
 				ofono_modem_online_cb_t cb, void *data)
 {
-	struct ril_modem *md = ril_modem_from_ofono(modem);
+	struct ril_modem_data *md = ril_modem_data_from_ofono(modem);
 	struct ril_modem_online_request *req;
 
 	DBG("%s going %sline", ofono_modem_get_path(modem),
 						online ? "on" : "off");
 
 	if (online) {
+		ril_radio_power_on(md->modem.radio, RADIO_POWER_TAG(md));
 		req = &md->set_online;
-		GASSERT(!req->id);
-		req->id = ril_modem_request_power(md, TRUE,
-						ril_modem_set_online_cb);
 	} else {
+		ril_radio_power_off(md->modem.radio, RADIO_POWER_TAG(md));
 		req = &md->set_offline;
-		GASSERT(!req->id);
-		req->id = ril_modem_request_power(md, FALSE,
-						ril_modem_set_offline_cb);
 	}
 
-	if (req->id) {
-		req->cb = cb;
-		req->data = data;
-	} else {
-		struct ofono_error error;
-		cb(ril_error_failure(&error), data);
+	req->cb = cb;
+	req->data = data;
+	if (req->timeout_id) {
+		g_source_remove(req->timeout_id);
 	}
+	req->timeout_id = g_timeout_add_seconds(ONLINE_TIMEOUT_SECS,
+					ril_modem_online_request_timeout, req);
+	ril_modem_schedule_online_check(md);
 }
 
 static int ril_modem_enable(struct ofono_modem *modem)
 {
-	struct ril_modem *md = ril_modem_from_ofono(modem);
+	struct ril_modem_data *md = ril_modem_data_from_ofono(modem);
 
 	DBG("%s", ofono_modem_get_path(modem));
 	md->power_state = POWERED_ON;
@@ -333,10 +325,10 @@ static int ril_modem_enable(struct ofono_modem *modem)
 
 static int ril_modem_disable(struct ofono_modem *modem)
 {
-	struct ril_modem *md = ril_modem_from_ofono(modem);
+	struct ril_modem_data *md = ril_modem_data_from_ofono(modem);
 
 	DBG("%s", ofono_modem_get_path(modem));
-	if (md->set_online.id || md->set_offline.id) {
+	if (md->set_online.timeout_id || md->set_offline.timeout_id) {
 		md->power_state = POWERING_OFF;
 		return -EINPROGRESS;
 	} else {
@@ -351,108 +343,89 @@ static int ril_modem_probe(struct ofono_modem *modem)
 	return 0;
 }
 
-static void ril_modem_remove(struct ofono_modem *modem)
+static void ril_modem_remove(struct ofono_modem *ofono)
 {
-	struct ril_modem *md = ril_modem_from_ofono(modem);
+	struct ril_modem_data *md = ril_modem_data_from_ofono(ofono);
+	struct ril_modem *modem = &md->modem;
 
-	DBG("%s", ofono_modem_get_path(modem));
-	GASSERT(md->modem);
-
-	if (md->radio_state > RADIO_STATE_UNAVAILABLE) {
-		GRilIoRequest *req = ril_modem_request_radio_power(FALSE);
-		grilio_channel_send_request(md->io, req,
-						RIL_REQUEST_RADIO_POWER);
-		grilio_request_unref(req);
-	}
-
+	DBG("%s", ril_modem_get_path(modem));
 	if (md->removed_cb) {
 		ril_modem_cb_t cb = md->removed_cb;
 		void *data = md->removed_cb_data;
 
 		md->removed_cb = NULL;
 		md->removed_cb_data = NULL;
-		cb(md, data);
+		cb(modem, data);
 	}
 
-	ofono_modem_set_data(modem, NULL);
+	ofono_modem_set_data(ofono, NULL);
 
-	grilio_channel_remove_handler(md->io, md->radio_state_event_id);
-	grilio_channel_unref(md->io);
+	ril_radio_remove_handler(modem->radio, md->radio_state_event_id);
+	ril_radio_power_off(modem->radio, RADIO_POWER_TAG(md));
+	ril_radio_unref(modem->radio);
+
+	if (md->online_check_id) {
+		g_source_remove(md->online_check_id);
+	}
+
+	if (md->set_online.timeout_id) {
+		g_source_remove(md->set_online.timeout_id);
+	}
+
+	if (md->set_offline.timeout_id) {
+		g_source_remove(md->set_offline.timeout_id);
+	}
+
+	ril_sim_card_unref(modem->sim_card);
+	grilio_channel_unref(modem->io);
 	grilio_queue_cancel_all(md->q, FALSE);
 	grilio_queue_unref(md->q);
 	g_free(md->default_name);
 	g_free(md);
 }
 
-static void ril_modem_radio_state_changed(GRilIoChannel *io, guint ril_event,
-				const void *data, guint len, void *user_data)
+struct ril_modem *ril_modem_create(GRilIoChannel *io, struct ril_radio *radio,
+				struct ril_sim_card *sc, const char *dev,
+				const struct ril_slot_config *config)
 {
-	struct ril_modem *md = user_data;
-	GRilIoParser rilp;
-	int radio_state;
+	struct ofono_modem *ofono = ofono_modem_create(dev, RILMODEM_DRIVER);
 
-	GASSERT(ril_event == RIL_UNSOL_RESPONSE_RADIO_STATE_CHANGED);
-	grilio_parser_init(&rilp, data, len);
-	if (grilio_parser_get_int32(&rilp, &radio_state) &&
-						grilio_parser_at_end(&rilp)) {
-		DBG("%s %s", ofono_modem_get_path(md->modem),
-				ril_radio_state_to_string(radio_state));
-		md->radio_state = radio_state;
-		if (radio_state == RADIO_STATE_ON && !md->radio_settings) {
-			DBG("Initializing radio settings interface");
-			md->radio_settings =
-				ofono_radio_settings_create(md->modem, 0,
-							RILMODEM_DRIVER, md);
-		}
-
-		ril_modem_update_online_state(md);
-	} else {
-		ofono_error("Error parsing RADIO_STATE_CHANGED");
-	}
-}
-
-struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *dev,
-					const struct ril_modem_config *config)
-{
-	struct ofono_modem *modem = ofono_modem_create(dev, RILMODEM_DRIVER);
-
-	if (modem) {
+	if (ofono) {
 		int err;
-		struct ril_modem *md = g_new0(struct ril_modem, 1);
+		struct ril_modem_data *md = g_new0(struct ril_modem_data, 1);
+		struct ril_modem *modem = &md->modem;
 
 		/* Copy config */
-		md->config = *config;
+		modem->config = *config;
 		if (config->default_name && config->default_name[0]) {
 			md->default_name = g_strdup(config->default_name);
 		} else {
 			md->default_name = g_strdup_printf("SIM%u",
 							config->slot + 1);
 		}
-		md->config.default_name = md->default_name;
+		modem->config.default_name = md->default_name;
 
-		md->modem = modem;
-		md->io = grilio_channel_ref(io);
+		modem->ofono = ofono;
+		modem->radio = ril_radio_ref(radio);
+		modem->sim_card = ril_sim_card_ref(sc);
+		modem->io = grilio_channel_ref(io);
 		md->q = grilio_queue_new(io);
-		ofono_modem_set_data(modem, md);
-		err = ofono_modem_register(modem);
+		md->set_online.md = md;
+		md->set_offline.md = md;
+		ofono_modem_set_data(ofono, md);
+		err = ofono_modem_register(ofono);
 		if (!err) {
-			md->radio_state_event_id =
-				grilio_channel_add_unsol_event_handler(io,
-					ril_modem_radio_state_changed,
-					RIL_UNSOL_RESPONSE_RADIO_STATE_CHANGED,
-					md);
-
+			ril_radio_power_on(modem->radio, RADIO_POWER_TAG(md));
 			GASSERT(io->connected);
-			ril_modem_request_power(md, FALSE, NULL);
 
 			/*
 			 * ofono_modem_reset sets Powered to TRUE without
 			 * issuing PropertyChange signal.
 			 */
-			ofono_modem_set_powered(md->modem, FALSE);
-			ofono_modem_set_powered(md->modem, TRUE);
+			ofono_modem_set_powered(modem->ofono, FALSE);
+			ofono_modem_set_powered(modem->ofono, TRUE);
 			md->power_state = POWERED_ON;
-			return md;
+			return modem;
 		} else {
 			ofono_error("Error %d registering %s",
 				    err, RILMODEM_DRIVER);
@@ -462,10 +435,10 @@ struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *dev,
 			 * ofono_modem_remove() won't invoke
 			 * ril_modem_remove() callback.
 			 */
-			ril_modem_remove(modem);
+			ril_modem_remove(ofono);
 		}
 
-		ofono_modem_remove(modem);
+		ofono_modem_remove(ofono);
 	}
 
 	return NULL;
