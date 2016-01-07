@@ -710,6 +710,7 @@ static gboolean update_operator_list(struct ofono_netreg *netreg, int total,
 	GSList *o;
 	GSList *compressed;
 	GSList *c;
+	struct network_operator_data *current_op = NULL;
 	gboolean changed = FALSE;
 
 	compressed = compress_operator_list(list, total);
@@ -754,8 +755,19 @@ static gboolean update_operator_list(struct ofono_netreg *netreg, int total,
 	if (netreg->operator_list)
 		changed = TRUE;
 
-	for (o = netreg->operator_list; o; o = o->next)
-		network_operator_dbus_unregister(netreg, o->data);
+	for (o = netreg->operator_list; o; o = o->next) {
+		struct network_operator_data *op = o->data;
+		if (op != op->netreg->current_operator)
+			network_operator_dbus_unregister(netreg, op);
+		else
+			current_op = op;
+	}
+
+	if (current_op) {
+		n = g_slist_prepend(n, current_op);
+		netreg->operator_list =
+			g_slist_remove(netreg->operator_list, current_op);
+	}
 
 	g_slist_free(netreg->operator_list);
 
