@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015 Jolla Ltd.
+ *  Copyright (C) 2015-2016 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -14,36 +14,39 @@
  */
 
 #include "ril_plugin.h"
+#include "ril_network.h"
 #include "ril_util.h"
 #include "ril_log.h"
-#include "ril_constants.h"
 
 #include "common.h"
 #include "simutil.h"
 
-#include <ctype.h>
-
 enum ril_netreg_events {
-	NETREG_EVENT_VOICE_NETWORK_STATE_CHANGED,
-	NETREG_EVENT_NITZ_TIME_RECEIVED,
-	NETREG_EVENT_SIGNAL_STRENGTH,
-	NETREG_EVENT_COUNT
+	NETREG_RIL_EVENT_NITZ_TIME_RECEIVED,
+	NETREG_RIL_EVENT_SIGNAL_STRENGTH,
+	NETREG_RIL_EVENT_COUNT
+};
+
+enum ril_netreg_network_events {
+	NETREG_NETWORK_EVENT_OPERATOR_CHANGED,
+	NETREG_NETWORK_EVENT_VOICE_STATE_CHANGED,
+	NETREG_NETWORK_EVENT_COUNT
 };
 
 struct ril_netreg {
 	GRilIoChannel *io;
 	GRilIoQueue *q;
 	struct ofono_netreg *netreg;
-	char mcc[OFONO_MAX_MCC_LENGTH + 1];
-	char mnc[OFONO_MAX_MNC_LENGTH + 1];
-	int tech;
-	struct ofono_network_time time;
+	struct ril_network *network;
+	char *log_prefix;
 	guint timer_id;
-	int corestatus; /* Registration status previously reported to core */
-	gulong event_id[NETREG_EVENT_COUNT];
+	guint notify_id;
+	guint current_operator_id;
+	gulong ril_event_id[NETREG_RIL_EVENT_COUNT];
+	gulong network_event_id[NETREG_NETWORK_EVENT_COUNT];
 };
 
-/* 27.007 Section 7.3 <stat> */
+/* Defined in src/network.c */
 enum operator_status {
 	OPERATOR_STATUS_UNKNOWN =	0,
 	OPERATOR_STATUS_AVAILABLE =	1,
@@ -66,9 +69,9 @@ struct ril_netreg_cbd {
 
 #define ril_netreg_cbd_free g_free
 
-static inline struct ril_netreg *ril_netreg_get_data(struct ofono_netreg *nr)
+static inline struct ril_netreg *ril_netreg_get_data(struct ofono_netreg *ofono)
 {
-	return ofono_netreg_get_data(nr);
+	return ofono ? ofono_netreg_get_data(ofono) : NULL;
 }
 
 static struct ril_netreg_cbd *ril_netreg_cbd_new(struct ril_netreg *nd,
@@ -82,190 +85,86 @@ static struct ril_netreg_cbd *ril_netreg_cbd_new(struct ril_netreg *nd,
 	return cbd;
 }
 
-static gboolean ril_netreg_extract_mcc_mnc(const char *str,
-					struct ofono_network_operator *op)
+int ril_netreg_check_if_really_roaming(struct ofono_netreg *netreg,
+								gint status)
 {
-	if (str) {
-		int i;
-		const char *ptr = str;
+	if (status == NETWORK_REGISTRATION_STATUS_ROAMING) {
+		/* These functions tolerate NULL argument */
+		const char *net_mcc = ofono_netreg_get_mcc(netreg);
+		const char *net_mnc = ofono_netreg_get_mnc(netreg);
+		struct sim_spdi *spdi = ofono_netreg_get_spdi(netreg);
 
-		/* Three digit country code */
-		for (i = 0;
-		     i < OFONO_MAX_MCC_LENGTH && *ptr && isdigit(*ptr);
-		     i++) {
-			op->mcc[i] = *ptr++;
-		}
-		op->mcc[i] = 0;
-
-		if (i == OFONO_MAX_MCC_LENGTH) {
-			/* Usually a 2 but sometimes 3 digit network code */
-			for (i=0;
-			     i<OFONO_MAX_MNC_LENGTH && *ptr && isdigit(*ptr);
-			     i++) {
-				op->mnc[i] = *ptr++;
-			}
-			op->mnc[i] = 0;
-
-			if (i > 0) {
-
-				/*
-				 * Sometimes MCC/MNC are followed by + and
-				 * what looks like the technology code. This
-				 * is of course completely undocumented.
-				 */
-				if (*ptr == '+') {
-					int tech = ril_parse_tech(ptr+1, NULL);
-					if (tech >= 0) {
-						op->tech = tech;
-					}
-				}
-
-				return TRUE;
+		if (spdi && net_mcc && net_mnc) {
+			if (sim_spdi_lookup(spdi, net_mcc, net_mnc)) {
+				ofono_info("not roaming based on spdi");
+				return NETWORK_REGISTRATION_STATUS_REGISTERED;
 			}
 		}
 	}
+
+	return status;
+}
+
+static int ril_netreg_check_status(struct ril_netreg *nd, int status)
+{
+	return (nd && nd->netreg) ?
+		ril_netreg_check_if_really_roaming(nd->netreg, status) :
+		status;
+}
+
+static gboolean ril_netreg_status_notify_cb(gpointer user_data)
+{
+	struct ril_netreg *nd = user_data;
+	const struct ril_registration_state *reg = &nd->network->voice;
+
+	DBG("%s", nd->log_prefix);
+	GASSERT(nd->notify_id);
+	nd->notify_id = 0;
+	ofono_netreg_status_notify(nd->netreg,
+			ril_netreg_check_status(nd, reg->status),
+			reg->lac, reg->ci, reg->access_tech);
 	return FALSE;
 }
 
-static void ril_netreg_state_cb(GRilIoChannel *io, int call_status,
-				const void *data, guint len, void *user_data)
-{
-	struct ofono_error error;
-	struct ril_netreg_cbd *cbd = user_data;
-	ofono_netreg_status_cb_t cb = cbd->cb.status;
-	struct ril_netreg *nd = cbd->nd;
-	struct ril_reg_data reg;
-	int rawstatus;
-
-	DBG("");
-	if (call_status != RIL_E_SUCCESS || !nd->netreg) {
-		ofono_error("voice registration status query fail");
-		nd->corestatus = -1;
-		cb(ril_error_failure(&error), -1, -1, -1, -1, cbd->data);
-		return;
-	}
-
-	if (!ril_util_parse_reg(data, len, &reg)) {
-		DBG("voice registration status parsing fail");
-		nd->corestatus = -1;
-		cb(ril_error_failure(&error), -1, -1, -1, -1, cbd->data);
-		return;
-	}
-
-	rawstatus = reg.status;
-	if (reg.status == NETWORK_REGISTRATION_STATUS_ROAMING) {
-		reg.status = ril_netreg_check_if_really_roaming(nd->netreg,
-								reg.status);
-	}
-
-	if (rawstatus != reg.status) {
-		ofono_info("voice registration modified %d => %d",
-				rawstatus, reg.status);
-	}
-
-	DBG("status:%d corestatus:%d", reg.status, nd->corestatus);
-
-	if (nd->corestatus != reg.status) {
-		ofono_info("voice registration changes %d (%d)",
-				reg.status, nd->corestatus);
-	}
-
-	nd->corestatus = reg.status;
-	nd->tech = reg.access_tech;
-	cb(ril_error_ok(&error), reg.status, reg.lac, reg.ci, reg.access_tech,
-								cbd->data);
-}
-
-static void ril_netreg_status_notify(struct ofono_error *error, int status,
-				int lac, int ci, int tech, gpointer user_data)
+static void ril_netreg_status_notify(struct ril_network *net, void *user_data)
 {
 	struct ril_netreg *nd = user_data;
 
-	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
-		DBG("Error during status notification");
-	} else if (nd->netreg) {
-		ofono_netreg_status_notify(nd->netreg, status, lac, ci, tech);
+	/* Coalesce multiple notifications into one */
+	if (nd->notify_id) {
+		DBG("%snotification aready queued", nd->log_prefix);
+	} else {
+		DBG("%squeuing notification", nd->log_prefix);
+		nd->notify_id = g_idle_add(ril_netreg_status_notify_cb, nd);
 	}
-}
-
-static void ril_netreg_network_state_change(GRilIoChannel *io,
-		guint ril_event, const void *data, guint len, void *user_data)
-{
-	struct ril_netreg *nd = user_data;
-
-	GASSERT(ril_event == RIL_UNSOL_RESPONSE_VOICE_NETWORK_STATE_CHANGED);
-	grilio_queue_send_request_full(nd->q, NULL,
-			RIL_REQUEST_VOICE_REGISTRATION_STATE,
-			ril_netreg_state_cb, ril_netreg_cbd_free, 
-			ril_netreg_cbd_new(nd, ril_netreg_status_notify, nd));
 }
 
 static void ril_netreg_registration_status(struct ofono_netreg *netreg,
 			ofono_netreg_status_cb_t cb, void *data)
 {
 	struct ril_netreg *nd = ril_netreg_get_data(netreg);
+	const struct ril_registration_state *reg = &nd->network->voice;
+	struct ofono_error error;
 
-	grilio_queue_send_request_full(nd->q, NULL,
-		RIL_REQUEST_VOICE_REGISTRATION_STATE, ril_netreg_state_cb,
-		ril_netreg_cbd_free, ril_netreg_cbd_new(nd, cb, data));
+	DBG("%s", nd->log_prefix);
+	cb(ril_error_ok(&error),
+			ril_netreg_check_status(nd, reg->status),
+			reg->lac, reg->ci, reg->access_tech, data);
 }
 
-static void ril_netreg_current_operator_cb(GRilIoChannel *io, int status,
-				const void *data, guint len, void *user_data)
+static gboolean ril_netreg_current_operator_cb(void *user_data)
 {
 	struct ril_netreg_cbd *cbd = user_data;
 	struct ril_netreg *nd = cbd->nd;
+	ofono_netreg_operator_cb_t cb = cbd->cb.operator;
 	struct ofono_error error;
-	struct ofono_network_operator op;
-	struct ofono_network_operator *result = NULL;
-	gchar *lalpha = NULL, *salpha = NULL, *numeric = NULL;
-	int tmp;
-	GRilIoParser rilp;
 
-	ril_error_init_failure(&error);
-	if (status != RIL_E_SUCCESS) {
-		ofono_error("Failed to retrive the current operator: %s",
-						ril_error_to_string(status));
-		goto done;
-	}
+	DBG("%s", nd->log_prefix);
+	GASSERT(nd->current_operator_id);
+	nd->current_operator_id = 0;
 
-	grilio_parser_init(&rilp, data, len);
-	if (!grilio_parser_get_int32(&rilp, &tmp) || !tmp) {
-		goto done;
-	}
-
-	lalpha = grilio_parser_get_utf8(&rilp);
-	salpha = grilio_parser_get_utf8(&rilp);
-	numeric = grilio_parser_get_utf8(&rilp);
-
-	/* Try to use long by default */
-	if (lalpha) {
-		strncpy(op.name, lalpha, OFONO_MAX_OPERATOR_NAME_LENGTH);
-	} else if (salpha) {
-		strncpy(op.name, salpha, OFONO_MAX_OPERATOR_NAME_LENGTH);
-	} else {
-		goto done;
-	}
-
-	if (!ril_netreg_extract_mcc_mnc(numeric, &op)) {
-		goto done;
-	}
-
-	/* Set to current */
-	op.status = OPERATOR_STATUS_CURRENT;
-	op.tech = nd->tech;
-	result = &op;
-	ril_error_init_ok(&error);
-
-	DBG("lalpha=%s, salpha=%s, numeric=%s, %s, mcc=%s, mnc=%s, %s",
-			lalpha, salpha, numeric, op.name, op.mcc, op.mnc,
-				registration_tech_to_string(op.tech));
-
-done:
-	cbd->cb.operator(&error, result, cbd->data);
-	g_free(lalpha);
-	g_free(salpha);
-	g_free(numeric);
+	cb(ril_error_ok(&error), nd->network->operator, cbd->data);
+	return FALSE;
 }
 
 static void ril_netreg_current_operator(struct ofono_netreg *netreg,
@@ -273,9 +172,15 @@ static void ril_netreg_current_operator(struct ofono_netreg *netreg,
 {
 	struct ril_netreg *nd = ril_netreg_get_data(netreg);
 
-	grilio_queue_send_request_full(nd->q, NULL, RIL_REQUEST_OPERATOR,
-			ril_netreg_current_operator_cb, ril_netreg_cbd_free,
-			ril_netreg_cbd_new(nd, cb, data));
+	GASSERT(!nd->current_operator_id);
+	if (nd->current_operator_id) {
+		g_source_remove(nd->current_operator_id);
+	}
+
+	nd->current_operator_id = g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,
+					ril_netreg_current_operator_cb,
+					ril_netreg_cbd_new(nd, cb, data),
+					ril_netreg_cbd_free);
 }
 
 static void ril_netreg_list_operators_cb(GRilIoChannel *io, int status,
@@ -334,11 +239,16 @@ static void ril_netreg_list_operators_cb(GRilIoChannel *io, int status,
 			list[i].status = OPERATOR_STATUS_UNKNOWN;
 		}
 
-		op->tech = ACCESS_TECHNOLOGY_GSM;
-		ok = ril_netreg_extract_mcc_mnc(numeric, op);
+		op->tech = -1;
+		ok = ril_parse_mcc_mnc(numeric, op);
 		if (ok) {
+			if (op->tech < 0) {
+				op->tech = cbd->nd->network->voice.access_tech;
+			}
 			DBG("[operator=%s, %s, %s, status: %s]", op->name,
 						op->mcc, op->mnc, status);
+		} else {
+			DBG("failed to parse operator list");
 		}
 
 		g_free(lalpha);
@@ -506,6 +416,7 @@ static void ril_netreg_nitz_notify(GRilIoChannel *io, guint ril_event,
 {
 	struct ril_netreg *nd = user_data;
 	GRilIoParser rilp;
+	struct ofono_network_time time;
 	int year, mon, mday, hour, min, sec, dst, tzi;
 	char tzs, tz[4];
 	gchar *nitz;
@@ -520,35 +431,17 @@ static void ril_netreg_nitz_notify(GRilIoChannel *io, guint ril_event,
 			&hour, &min, &sec, &tzs, &tzi, &dst);
 	snprintf(tz, sizeof(tz), "%c%d", tzs, tzi);
 
-	nd->time.utcoff = atoi(tz) * 15 * 60;
-	nd->time.dst = dst;
-	nd->time.sec = sec;
-	nd->time.min = min;
-	nd->time.hour = hour;
-	nd->time.mday = mday;
-	nd->time.mon = mon;
-	nd->time.year = 2000 + year;
+	time.utcoff = atoi(tz) * 15 * 60;
+	time.dst = dst;
+	time.sec = sec;
+	time.min = min;
+	time.hour = hour;
+	time.mday = mday;
+	time.mon = mon;
+	time.year = 2000 + year;
 
-	ofono_netreg_time_notify(nd->netreg, &nd->time);
+	ofono_netreg_time_notify(nd->netreg, &time);
 	g_free(nitz);
-}
-
-int ril_netreg_check_if_really_roaming(struct ofono_netreg *netreg,
-								gint status)
-{
-	/* These functions tolerate NULL argument */
-	const char *net_mcc = ofono_netreg_get_mcc(netreg);
-	const char *net_mnc = ofono_netreg_get_mnc(netreg);
-	struct sim_spdi *spdi = ofono_netreg_get_spdi(netreg);
-
-	if (spdi && net_mcc && net_mnc) {
-		if (sim_spdi_lookup(spdi, net_mcc, net_mnc)) {
-			ofono_info("voice reg: not roaming based on spdi");
-			return NETWORK_REGISTRATION_STATUS_REGISTERED;
-		}
-	}
-
-	return status;
 }
 
 static gboolean ril_netreg_register(gpointer user_data)
@@ -560,19 +453,21 @@ static gboolean ril_netreg_register(gpointer user_data)
 	ofono_netreg_register(nd->netreg);
 
 	/* Register for network state changes */
-	nd->event_id[NETREG_EVENT_VOICE_NETWORK_STATE_CHANGED] =
-		grilio_channel_add_unsol_event_handler(nd->io,
-			ril_netreg_network_state_change,
-			RIL_UNSOL_RESPONSE_VOICE_NETWORK_STATE_CHANGED,	nd);
+	nd->network_event_id[NETREG_NETWORK_EVENT_OPERATOR_CHANGED] =
+		ril_network_add_operator_changed_handler(nd->network,
+			ril_netreg_status_notify, nd);
+	nd->network_event_id[NETREG_NETWORK_EVENT_VOICE_STATE_CHANGED] =
+		ril_network_add_voice_state_changed_handler(nd->network,
+			ril_netreg_status_notify, nd);
 
-	/* Register for network time update reports */
-	nd->event_id[NETREG_EVENT_NITZ_TIME_RECEIVED] =
+	/* Register for network time updates */
+	nd->ril_event_id[NETREG_RIL_EVENT_NITZ_TIME_RECEIVED] =
 		grilio_channel_add_unsol_event_handler(nd->io,
 			ril_netreg_nitz_notify, 
 			RIL_UNSOL_NITZ_TIME_RECEIVED, nd);
 
 	/* Register for signal strength changes */
-	nd->event_id[NETREG_EVENT_SIGNAL_STRENGTH] =
+	nd->ril_event_id[NETREG_RIL_EVENT_SIGNAL_STRENGTH] =
 		grilio_channel_add_unsol_event_handler(nd->io,
 			ril_netreg_strength_notify,
 			RIL_UNSOL_SIGNAL_STRENGTH, nd);
@@ -586,21 +481,14 @@ static int ril_netreg_probe(struct ofono_netreg *netreg, unsigned int vendor,
 {
 	struct ril_modem *modem = data;
 	struct ril_netreg *nd = g_new0(struct ril_netreg, 1);
+	guint slot = ril_modem_slot(modem);
 
-	DBG("[%u] %p", ril_modem_slot(modem), netreg);
+	DBG("[%u] %p", slot, netreg);
+	nd->log_prefix = g_strdup_printf("%s_%u ", RILMODEM_DRIVER, slot);
 	nd->io = grilio_channel_ref(ril_modem_io(modem));
 	nd->q = grilio_queue_new(nd->io);
+	nd->network = ril_network_ref(modem->network);
 	nd->netreg = netreg;
-	nd->tech = -1;
-	nd->time.sec = -1;
-	nd->time.min = -1;
-	nd->time.hour = -1;
-	nd->time.mday = -1;
-	nd->time.mon = -1;
-	nd->time.year = -1;
-	nd->time.dst = 0;
-	nd->time.utcoff = 0;
-	nd->corestatus = -1;
 
 	ofono_netreg_set_data(netreg, nd);
 	nd->timer_id = g_idle_add(ril_netreg_register, nd);
@@ -609,23 +497,36 @@ static int ril_netreg_probe(struct ofono_netreg *netreg, unsigned int vendor,
 
 static void ril_netreg_remove(struct ofono_netreg *netreg)
 {
-	int i;
 	struct ril_netreg *nd = ril_netreg_get_data(netreg);
+	int i;
 
 	DBG("%p", netreg);
 	grilio_queue_cancel_all(nd->q, FALSE);
 	ofono_netreg_set_data(netreg, NULL);
 
-	for (i=0; i<G_N_ELEMENTS(nd->event_id); i++) {
-		grilio_channel_remove_handler(nd->io, nd->event_id[i]);
-	}
-
 	if (nd->timer_id > 0) {
 		g_source_remove(nd->timer_id);
 	}
 
+	if (nd->notify_id) {
+		g_source_remove(nd->notify_id);
+	}
+
+	if (nd->current_operator_id) {
+		g_source_remove(nd->current_operator_id);
+	}
+
+	for (i=0; i<G_N_ELEMENTS(nd->network_event_id); i++) {
+		ril_network_remove_handler(nd->network, nd->network_event_id[i]);
+	}
+	ril_network_unref(nd->network);
+
+	grilio_channel_remove_handlers(nd->io, nd->ril_event_id,
+						G_N_ELEMENTS(nd->ril_event_id));
+
 	grilio_channel_unref(nd->io);
 	grilio_queue_unref(nd->q);
+	g_free(nd->log_prefix);
 	g_free(nd);
 }
 

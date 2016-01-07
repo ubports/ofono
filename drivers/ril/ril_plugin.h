@@ -68,6 +68,7 @@ struct ril_modem {
 	GRilIoChannel *io;
 	struct ofono_modem *ofono;
 	struct ril_radio *radio;
+	struct ril_network *network;
 	struct ril_sim_card *sim_card;
 	struct ril_slot_config config;
 };
@@ -98,11 +99,11 @@ void ril_plugin_dbus_signal(struct ril_plugin_dbus *dbus, int mask);
 void ril_plugin_dbus_signal_sim(struct ril_plugin_dbus *dbus, int index,
 							gboolean present);
 
-struct ril_modem *ril_modem_create(GRilIoChannel *io, struct ril_radio *radio,
-				struct ril_sim_card *sc, const char *dev,
-				const struct ril_slot_config *config);
+struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *dev,
+		struct ril_radio *radio, struct ril_network *network,
+		struct ril_sim_card *sc, const struct ril_slot_config *config);
 void ril_modem_delete(struct ril_modem *modem);
-void ril_modem_allow_data(struct ril_modem *modem);
+void ril_modem_allow_data(struct ril_modem *modem, gboolean allow);
 struct ofono_sim *ril_modem_ofono_sim(struct ril_modem *modem);
 struct ofono_gprs *ril_modem_ofono_gprs(struct ril_modem *modem);
 struct ofono_netreg *ril_modem_ofono_netreg(struct ril_modem *modem);
@@ -128,7 +129,7 @@ void ril_sim_read_file_info(struct ofono_sim *sim, int fileid,
 		ofono_sim_file_info_cb_t cb, void *data);
 
 int ril_sim_app_type(struct ofono_sim *sim);
-int ril_gprs_ril_data_tech(struct ofono_gprs *gprs);
+void ril_gprs_allow_data(struct ofono_gprs *gprs, gboolean allow);
 int ril_netreg_check_if_really_roaming(struct ofono_netreg *netreg, gint status);
 
 extern const struct ofono_call_barring_driver ril_call_barring_driver;

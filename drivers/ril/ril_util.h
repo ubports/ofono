@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015 Jolla Ltd.
+ *  Copyright (C) 2015-2016 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -18,17 +18,7 @@
 
 #include "ril_types.h"
 
-#include <ofono/log.h>
-
-struct ril_reg_data {
-	int ril_status;
-	int ril_tech;
-	int status;        /* enum network_registration_status or -1 if none */
-	int access_tech;   /* enum access_technology or -1 if none */
-	int lac;
-	int ci;
-	int max_calls;
-};
+struct ofono_network_operator;
 
 const char *ril_error_to_string(int error);
 const char *ril_request_to_string(guint request);
@@ -36,8 +26,7 @@ const char *ril_unsol_event_to_string(guint event);
 const char *ril_radio_state_to_string(int radio_state);
 int ril_parse_tech(const char *stech, int *ril_tech);
 int ril_address_family(const char *addr);
-gboolean ril_util_parse_reg(const void *data, guint len,
-						struct ril_reg_data *parsed);
+gboolean ril_parse_mcc_mnc(const char *str, struct ofono_network_operator *op);
 
 #define ril_error_init_ok(err) \
 	((err)->error = 0, (err)->type = OFONO_ERROR_TYPE_NO_ERROR)
