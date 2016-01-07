@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015 Jolla Ltd.
+ *  Copyright (C) 2015-2016 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -14,7 +14,7 @@
  */
 
 #include "ril_plugin.h"
-#include "ril_constants.h"
+#include "ril_network.h"
 #include "ril_util.h"
 #include "ril_log.h"
 
@@ -55,6 +55,7 @@ enum ril_gprs_context_state {
 struct ril_gprs_context {
 	struct ofono_gprs_context *gc;
 	struct ril_modem *modem;
+	struct ril_network *network;
 	GRilIoChannel *io;
 	GRilIoQueue *q;
 	guint active_ctx_cid;
@@ -760,7 +761,7 @@ static void ril_gprs_context_activate_primary(struct ofono_gprs_context *gc,
 	 *
 	 * Makes little sense but it is what it is.
 	 */
-	tech = ril_gprs_ril_data_tech(gprs);
+	tech = gcd->network->data.ril_tech;
 	if (tech > 2) {
 		tech += 2;
 	} else {
@@ -918,6 +919,7 @@ static int ril_gprs_context_probe(struct ofono_gprs_context *gc,
 	DBG("");
 	gcd->gc = gc;
 	gcd->modem = modem;
+	gcd->network = ril_network_ref(modem->network);
 	gcd->io = grilio_channel_ref(ril_modem_io(modem));
 	gcd->q = grilio_queue_new(gcd->io);
 	gcd->regid = grilio_channel_add_unsol_event_handler(gcd->io,
@@ -943,6 +945,7 @@ static void ril_gprs_context_remove(struct ofono_gprs_context *gc)
 		gcd->deactivate_req->cbd.gcd = NULL;
 	}
 
+	ril_network_unref(gcd->network);
 	grilio_channel_remove_handler(gcd->io, gcd->regid);
 	grilio_channel_unref(gcd->io);
 	grilio_queue_cancel_all(gcd->q, FALSE);

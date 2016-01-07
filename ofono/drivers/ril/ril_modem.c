@@ -14,6 +14,7 @@
  */
 
 #include "ril_plugin.h"
+#include "ril_network.h"
 #include "ril_radio.h"
 #include "ril_sim_card.h"
 #include "ril_util.h"
@@ -49,6 +50,7 @@ struct ril_modem_data {
 	GRilIoQueue *q;
 	struct ofono_radio_settings *radio_settings;
 	char *default_name;
+	gboolean allow_data;
 
 	guint online_check_id;
 	enum ril_modem_power_state power_state;
@@ -75,25 +77,34 @@ static struct ril_modem_data *ril_modem_data_from_modem(struct ril_modem *m)
 	return m ? G_CAST(m, struct ril_modem_data, modem) : NULL;
 }
 
-struct ofono_sim *ril_modem_ofono_sim(struct ril_modem *md)
+static void *ril_modem_get_atom_data(struct ril_modem *modem,
+						enum ofono_atom_type type)
 {
-	return (md && md->ofono) ?
-		__ofono_atom_find(OFONO_ATOM_TYPE_SIM, md->ofono) :
-		NULL;
+	if (modem && modem->ofono) {
+		struct ofono_atom *atom =
+			__ofono_modem_find_atom(modem->ofono, type);
+
+		if (atom) {
+			return __ofono_atom_get_data(atom);
+		}
+	}
+
+	return NULL;
 }
 
-struct ofono_gprs *ril_modem_ofono_gprs(struct ril_modem *md)
+struct ofono_sim *ril_modem_ofono_sim(struct ril_modem *modem)
 {
-	return (md && md->ofono) ?
-		__ofono_atom_find(OFONO_ATOM_TYPE_GPRS, md->ofono) :
-		NULL;
+	return ril_modem_get_atom_data(modem, OFONO_ATOM_TYPE_SIM);
 }
 
-struct ofono_netreg *ril_modem_ofono_netreg(struct ril_modem *md)
+struct ofono_gprs *ril_modem_ofono_gprs(struct ril_modem *modem)
 {
-	return (md && md->ofono) ?
-		__ofono_atom_find(OFONO_ATOM_TYPE_NETREG, md->ofono) :
-		NULL;
+	return ril_modem_get_atom_data(modem, OFONO_ATOM_TYPE_GPRS);
+}
+
+struct ofono_netreg *ril_modem_ofono_netreg(struct ril_modem *modem)
+{
+	return ril_modem_get_atom_data(modem, OFONO_ATOM_TYPE_NETREG);
 }
 
 void ril_modem_delete(struct ril_modem *md)
@@ -112,17 +123,21 @@ void ril_modem_set_removed_cb(struct ril_modem *modem, ril_modem_cb_t cb,
 	md->removed_cb_data = data;
 }
 
-void ril_modem_allow_data(struct ril_modem *modem)
+void ril_modem_allow_data(struct ril_modem *modem, gboolean allow)
 {
-	if (modem) {
-		struct ril_modem_data *md = ril_modem_data_from_modem(modem);
-		GRilIoRequest *req = grilio_request_sized_new(8);
+	struct ril_modem_data *md = ril_modem_data_from_modem(modem);
 
-		DBG("%u", modem->config.slot);
-		grilio_request_append_int32(req, 1);
-		grilio_request_append_int32(req, TRUE);
-		grilio_queue_send_request(md->q, req, RIL_REQUEST_ALLOW_DATA);
-		grilio_request_unref(req);
+	if (md && md->allow_data != allow) {
+		struct ofono_gprs *gprs = ril_modem_ofono_gprs(modem);
+		md->allow_data = allow;
+
+		if (gprs) {
+			ril_gprs_allow_data(gprs, allow);
+		}
+		/*
+		 * Otherwise the "allow data" state will be sync'd by
+		 * ril_modem_gprs_watch
+		 */
 	}
 }
 
@@ -231,6 +246,21 @@ static void ril_modem_radio_state_cb(struct ril_radio *radio, void *data)
 	ril_modem_update_online_state(md);
 };
 
+static void ril_modem_gprs_watch(struct ofono_atom *atom,
+			enum ofono_atom_watch_condition cond, void *data)
+{
+	struct ril_modem_data *md = data;
+
+	if (cond == OFONO_ATOM_WATCH_CONDITION_REGISTERED) {
+		DBG("%s gprs registered", ril_modem_get_path(&md->modem));
+		/* Sync "allow data" as it may (and often does) change before
+		 * gprs gets registered*/
+		ril_gprs_allow_data(__ofono_atom_get_data(atom), md->allow_data);
+	} else if (cond == OFONO_ATOM_WATCH_CONDITION_UNREGISTERED) {
+		DBG("%s gprs unregistered", ril_modem_get_path(&md->modem));
+	}
+}
+
 static void ril_modem_pre_sim(struct ofono_modem *modem)
 {
 	struct ril_modem_data *md = ril_modem_data_from_ofono(modem);
@@ -251,15 +281,17 @@ static void ril_modem_post_sim(struct ofono_modem *modem)
 {
 	struct ril_modem_data *md = ril_modem_data_from_ofono(modem);
 	struct ofono_gprs *gprs;
-	struct ofono_gprs_context *gc;
-	int i;
 
 	DBG("");
 	ofono_sms_create(modem, 0, RILMODEM_DRIVER, md);
 	gprs = ofono_gprs_create(modem, 0, RILMODEM_DRIVER, md);
 	if (gprs) {
+		int i;
+
+		ril_gprs_allow_data(gprs, md->allow_data);
 		for (i = 0; i < MAX_PDP_CONTEXTS; i++) {
-			gc = ofono_gprs_context_create(modem, 0,
+			struct ofono_gprs_context *gc =
+				ofono_gprs_context_create(modem, 0,
 						RILMODEM_DRIVER, md);
 			if (gc == NULL)
 				break;
@@ -376,6 +408,7 @@ static void ril_modem_remove(struct ofono_modem *ofono)
 		g_source_remove(md->set_offline.timeout_id);
 	}
 
+	ril_network_unref(modem->network);
 	ril_sim_card_unref(modem->sim_card);
 	grilio_channel_unref(modem->io);
 	grilio_queue_cancel_all(md->q, FALSE);
@@ -384,9 +417,9 @@ static void ril_modem_remove(struct ofono_modem *ofono)
 	g_free(md);
 }
 
-struct ril_modem *ril_modem_create(GRilIoChannel *io, struct ril_radio *radio,
-				struct ril_sim_card *sc, const char *dev,
-				const struct ril_slot_config *config)
+struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *dev,
+		struct ril_radio *radio, struct ril_network *network,
+		struct ril_sim_card *sc, const struct ril_slot_config *config)
 {
 	struct ofono_modem *ofono = ofono_modem_create(dev, RILMODEM_DRIVER);
 
@@ -407,6 +440,7 @@ struct ril_modem *ril_modem_create(GRilIoChannel *io, struct ril_radio *radio,
 
 		modem->ofono = ofono;
 		modem->radio = ril_radio_ref(radio);
+		modem->network = ril_network_ref(network);
 		modem->sim_card = ril_sim_card_ref(sc);
 		modem->io = grilio_channel_ref(io);
 		md->q = grilio_queue_new(io);
@@ -415,6 +449,10 @@ struct ril_modem *ril_modem_create(GRilIoChannel *io, struct ril_radio *radio,
 		ofono_modem_set_data(ofono, md);
 		err = ofono_modem_register(ofono);
 		if (!err) {
+			__ofono_modem_add_atom_watch(ofono, OFONO_ATOM_TYPE_GPRS,
+						ril_modem_gprs_watch, md, NULL);
+
+			ril_radio_power_cycle(modem->radio);
 			ril_radio_power_on(modem->radio, RADIO_POWER_TAG(md));
 			GASSERT(io->connected);
 

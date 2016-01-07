@@ -15,6 +15,7 @@
 
 #include "ril_plugin.h"
 #include "ril_sim_card.h"
+#include "ril_network.h"
 #include "ril_radio.h"
 #include "ril_mce.h"
 #include "ril_util.h"
@@ -95,6 +96,7 @@ struct ril_slot {
 	struct ril_mce *mce;
 	struct ofono_sim *sim;
 	struct ril_radio *radio;
+	struct ril_network *network;
 	struct ril_sim_card *sim_card;
 	GRilIoChannel *io;
 	gulong io_event_id[IO_EVENT_COUNT];
@@ -216,6 +218,9 @@ static void ril_plugin_shutdown_slot(struct ril_slot *slot, gboolean kill_io)
 			ril_radio_unref(slot->radio);
 			slot->radio = NULL;
 
+			ril_network_unref(slot->network);
+			slot->network = NULL;
+
 			ril_sim_card_remove_handler(slot->sim_card,
 						slot->sim_card_state_event_id);
 			ril_sim_card_unref(slot->sim_card);
@@ -321,11 +326,13 @@ static int ril_plugin_update_modem_paths(struct ril_plugin_priv *plugin)
 			mask |= RIL_PLUGIN_SIGNAL_DATA_PATH;
 		}
 		if (plugin->data_modem != data->modem) {
+			ril_modem_allow_data(plugin->data_modem, FALSE);
 			plugin->data_modem = data->modem;
-			ril_modem_allow_data(data->modem);
+			ril_modem_allow_data(plugin->data_modem, TRUE);
 		}
 	} else if (plugin->default_data_path) {
 		DBG("No default data SIM");
+		ril_modem_allow_data(plugin->data_modem, FALSE);
 		g_free(plugin->default_data_path);
 		plugin->default_data_path = NULL;
 		plugin->data_modem = NULL;
@@ -546,8 +553,8 @@ static void ril_plugin_create_modem(struct ril_slot *slot)
 	GASSERT(slot->io && slot->io->connected);
 	GASSERT(!slot->modem);
 
-	modem = ril_modem_create(slot->io, slot->radio, slot->sim_card,
-						slot->path + 1, &slot->config);
+	modem = ril_modem_create(slot->io, slot->path + 1, slot->radio,
+				slot->network, slot->sim_card, &slot->config);
 
 	if (modem) {
 		struct ofono_sim *sim = ril_modem_ofono_sim(modem);
@@ -639,6 +646,7 @@ static void ril_plugin_slot_connected(struct ril_slot *slot)
 	GASSERT(!slot->radio);
 	GASSERT(!slot->radio_state_event_id);
 	slot->radio = ril_radio_new(slot->io);
+	slot->network = ril_network_new(slot->io);
 	slot->radio_state_event_id =
 		ril_radio_add_state_changed_handler(slot->radio,
 			ril_plugin_radio_state_changed, slot);

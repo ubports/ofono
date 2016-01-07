@@ -132,6 +132,7 @@ builtin_sources +=	drivers/ril/ril_call_barring.c \
 			drivers/ril/ril_mce.c \
 			drivers/ril/ril_modem.c \
 			drivers/ril/ril_netreg.c \
+			drivers/ril/ril_network.c \
 			drivers/ril/ril_oem_raw.c \
 			drivers/ril/ril_phonebook.c \
 			drivers/ril/ril_plugin.c \

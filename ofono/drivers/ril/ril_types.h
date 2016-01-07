@@ -22,7 +22,10 @@
 
 #include <grilio_types.h>
 #include <gutil_macros.h>
+
 #include <ofono/types.h>
+
+struct ofono_modem;
 
 #include <stdio.h>
 #include <errno.h>
@@ -36,6 +39,7 @@
 
 struct ril_modem;
 struct ril_radio;
+struct ril_network;
 struct ril_sim_card;
 struct ril_plugin_dbus;
 
