@@ -34,7 +34,6 @@ enum ril_sim_card_event {
 struct ril_sim_card_priv {
 	GRilIoChannel *io;
 	GRilIoQueue *q;
-	guint retry_status_timer_id;
 	guint status_req_id;
 	gulong event_id[EVENT_COUNT];
 };
@@ -342,28 +341,6 @@ static struct ril_sim_card_status *ril_sim_card_status_parse(const void *data,
 	}
 }
 
-static gboolean ril_sim_card_status_retry(gpointer user_data)
-{
-	struct ril_sim_card *self = user_data;
-	struct ril_sim_card_priv *priv = self->priv;
-
-	GASSERT(priv->retry_status_timer_id);
-	priv->retry_status_timer_id = 0;
-	ril_sim_card_request_status(self);
-	return FALSE;
-}
-
-static void ril_sim_card_schedule_retry(struct ril_sim_card *self)
-{
-	struct ril_sim_card_priv *priv = self->priv;
-
-	if (!priv->retry_status_timer_id) {
-		priv->retry_status_timer_id =
-			g_timeout_add_seconds(RIL_RETRY_SECS,
-				ril_sim_card_status_retry, self);
-	}
-}
-
 static void ril_sim_card_status_cb(GRilIoChannel *io, int ril_status,
 				const void *data, guint len, void *user_data)
 {
@@ -379,15 +356,7 @@ static void ril_sim_card_status_cb(GRilIoChannel *io, int ril_status,
 
 		if (status) {
 			ril_sim_card_update_status(self, status);
-		} else {
-			ril_sim_card_schedule_retry(self);
 		}
-	} else if (ril_status != GRILIO_STATUS_CANCELLED) {
-		ofono_error("SIM status request failed: %s",
-					ril_error_to_string(ril_status));
-		ril_sim_card_schedule_retry(self);
-	} else {
-		DBG("cancelled");
 	}
 }
 
@@ -395,15 +364,14 @@ static void ril_sim_card_request_status(struct ril_sim_card *self)
 {
 	struct ril_sim_card_priv *priv = self->priv;
 
-	if (priv->retry_status_timer_id) {
-		g_source_remove(priv->retry_status_timer_id);
-		priv->retry_status_timer_id = 0;
-	}
-
 	if (!priv->status_req_id) {
+		GRilIoRequest* req = grilio_request_new();
+
+		grilio_request_set_retry(req, RIL_RETRY_SECS, -1);
 		priv->status_req_id = grilio_queue_send_request_full(priv->q,
-					NULL, RIL_REQUEST_GET_SIM_STATUS,
+					req, RIL_REQUEST_GET_SIM_STATUS,
 					ril_sim_card_status_cb, NULL, self);
+		grilio_request_unref(req);
 	}
 }
 
@@ -420,6 +388,7 @@ struct ril_sim_card *ril_sim_card_new(GRilIoChannel *io, guint slot)
 	struct ril_sim_card *self = g_object_new(RIL_SIMCARD_TYPE, NULL);
 	struct ril_sim_card_priv *priv = self->priv;
 
+	DBG("%u", slot);
 	self->slot = slot;
 	priv->io = grilio_channel_ref(io);
 	priv->q = grilio_queue_new(io);
@@ -507,10 +476,6 @@ static void ril_sim_card_finalize(GObject *object)
 {
 	struct ril_sim_card *self = RIL_SIMCARD(object);
 	struct ril_sim_card_priv *priv = self->priv;
-
-	if (priv->retry_status_timer_id) {
-		g_source_remove(priv->retry_status_timer_id);
-	}
 
 	grilio_channel_unref(priv->io);
 	grilio_queue_unref(priv->q);
