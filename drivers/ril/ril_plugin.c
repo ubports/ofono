@@ -113,6 +113,7 @@ struct ril_slot {
 
 static void ril_debug_trace_notify(struct ofono_debug_desc *desc);
 static void ril_debug_dump_notify(struct ofono_debug_desc *desc);
+static void ril_debug_grilio_notify(struct ofono_debug_desc *desc);
 static void ril_plugin_retry_init_io(struct ril_slot *slot);
 
 GLOG_MODULE_DEFINE("rilmodem");
@@ -122,10 +123,17 @@ static struct ofono_debug_desc ril_debug_trace OFONO_DEBUG_ATTR = {
 	.flags = OFONO_DEBUG_FLAG_DEFAULT,
 	.notify = ril_debug_trace_notify
 };
+
 static struct ofono_debug_desc ril_debug_dump OFONO_DEBUG_ATTR = {
 	.name = "ril_dump",
 	.flags = OFONO_DEBUG_FLAG_DEFAULT,
 	.notify = ril_debug_dump_notify
+};
+
+static struct ofono_debug_desc grilio_debug OFONO_DEBUG_ATTR = {
+	.name = "grilio",
+	.flags = OFONO_DEBUG_FLAG_DEFAULT,
+	.notify = ril_debug_grilio_notify
 };
 
 static inline struct ril_plugin_priv *ril_plugin_cast(struct ril_plugin *pub)
@@ -1165,6 +1173,15 @@ static void ril_debug_dump_notify(struct ofono_debug_desc *desc)
 	}
 }
 
+static void ril_debug_grilio_notify(struct ofono_debug_desc *desc)
+{
+	if (desc->flags & OFONO_DEBUG_FLAG_PRINT) {
+		grilio_log.level = GLOG_LEVEL_VERBOSE;
+	} else {
+		grilio_log.level = GLOG_LEVEL_INHERIT;
+	}
+}
+
 static int ril_plugin_init(void)
 {
 	char *enabled_slots;
@@ -1172,6 +1189,7 @@ static int ril_plugin_init(void)
 	DBG("");
 	GASSERT(!ril_plugin);
 
+	/* ofono core calls openlog() */
 	gutil_log_func = gutil_log_syslog;
 
 	ril_plugin_switch_user();
