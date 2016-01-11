@@ -147,6 +147,11 @@ builtin_sources +=	drivers/ril/ril_call_barring.c \
 			drivers/ril/ril_ussd.c \
 			drivers/ril/ril_util.c \
 			drivers/ril/ril_voicecall.c
+
+if DATAFILES
+dist_conf_DATA += drivers/ril/ril_subscription.conf
+endif
+
 else
 builtin_sources += $(gril_sources)
 
@@ -178,6 +183,11 @@ builtin_sources += drivers/rilmodem/rilmodem.h \
 			drivers/rilmodem/oemraw-messages.c \
 			drivers/rilmodem/call-barring.c \
 			drivers/rilmodem/stk.c
+
+if DATAFILES
+dist_conf_DATA += gril/ril_subscription.conf
+endif
+
 endif
 endif
 
@@ -410,9 +420,6 @@ builtin_sources += plugins/phonesim.c
 
 if DATAFILES
 dist_conf_DATA += plugins/phonesim.conf
-if RILMODEM
-dist_conf_DATA += gril/ril_subscription.conf
-endif
 endif
 endif
 
