@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015 Jolla Ltd.
+ *  Copyright (C) 2015-2016 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -22,13 +22,26 @@
 
 #include <grilio_types.h>
 #include <gutil_macros.h>
+
 #include <ofono/types.h>
+
+struct ofono_modem;
 
 #include <stdio.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
+#include "ril_constants.h"
+
+#define RIL_RETRY_SECS (2)
+
+struct ril_modem;
+struct ril_radio;
+struct ril_network;
+struct ril_sim_card;
+struct ril_plugin_dbus;
 
 #endif /* RIL_TYPES_H */
 

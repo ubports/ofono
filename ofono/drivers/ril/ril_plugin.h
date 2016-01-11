@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015 Jolla Ltd.
+ *  Copyright (C) 2015-2016 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -42,8 +42,6 @@
 #include <grilio_parser.h>
 
 #define RILMODEM_DRIVER         "ril"
-#define RIL_RETRY_SECS          (2)
-#define MAX_SIM_STATUS_RETRIES  (15)
 
 struct ril_slot_info {
 	const char *path;
@@ -60,10 +58,19 @@ struct ril_plugin {
 	const struct ril_slot_info **slots;
 };
 
-struct ril_modem_config {
+struct ril_slot_config {
 	guint slot;
 	gboolean enable_4g;
 	const char *default_name;
+};
+
+struct ril_modem {
+	GRilIoChannel *io;
+	struct ofono_modem *ofono;
+	struct ril_radio *radio;
+	struct ril_network *network;
+	struct ril_sim_card *sim_card;
+	struct ril_slot_config config;
 };
 
 #define RIL_PLUGIN_SIGNAL_VOICE_IMSI    (0x01)
@@ -72,8 +79,6 @@ struct ril_modem_config {
 #define RIL_PLUGIN_SIGNAL_DATA_PATH     (0x10)
 #define RIL_PLUGIN_SIGNAL_ENABLED_SLOTS (0x20)
 
-struct ril_modem;
-struct ril_plugin_dbus;
 typedef void (*ril_modem_cb_t)(struct ril_modem *modem, void *data);
 
 void ril_plugin_set_enabled_slots(struct ril_plugin *plugin, char **slots);
@@ -95,21 +100,20 @@ void ril_plugin_dbus_signal_sim(struct ril_plugin_dbus *dbus, int index,
 							gboolean present);
 
 struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *dev,
-					const struct ril_modem_config *config);
+		struct ril_radio *radio, struct ril_network *network,
+		struct ril_sim_card *sc, const struct ril_slot_config *config);
 void ril_modem_delete(struct ril_modem *modem);
-void ril_modem_allow_data(struct ril_modem *modem);
-GRilIoChannel *ril_modem_io(struct ril_modem *modem);
-const struct ril_modem_config *ril_modem_config(struct ril_modem *modem);
+void ril_modem_allow_data(struct ril_modem *modem, gboolean allow);
 struct ofono_sim *ril_modem_ofono_sim(struct ril_modem *modem);
 struct ofono_gprs *ril_modem_ofono_gprs(struct ril_modem *modem);
 struct ofono_netreg *ril_modem_ofono_netreg(struct ril_modem *modem);
-struct ofono_modem *ril_modem_ofono_modem(struct ril_modem *modem);
 void ril_modem_set_removed_cb(struct ril_modem *modem, ril_modem_cb_t cb,
 								void *data);
 
-#define ril_modem_slot(md) (ril_modem_config(modem)->slot)
-#define ril_modem_4g_enabled(md) (ril_modem_config(modem)->enable_4g)
-#define ril_modem_get_path(md) ofono_modem_get_path(ril_modem_ofono_modem(md))
+#define ril_modem_get_path(modem) ofono_modem_get_path((modem)->ofono)
+#define ril_modem_4g_enabled(modem) ((modem)->config.enable_4g)
+#define ril_modem_slot(modem) ((modem)->config.slot)
+#define ril_modem_io(modem) ((modem)->io)
 
 void ril_sim_read_file_linear(struct ofono_sim *sim, int fileid,
 		int record, int length, const unsigned char *path,
@@ -125,9 +129,8 @@ void ril_sim_read_file_info(struct ofono_sim *sim, int fileid,
 		ofono_sim_file_info_cb_t cb, void *data);
 
 int ril_sim_app_type(struct ofono_sim *sim);
-int ril_gprs_ril_data_tech(struct ofono_gprs *gprs);
-int ril_netreg_check_if_really_roaming(struct ofono_netreg *netreg,
-								gint status);
+void ril_gprs_allow_data(struct ofono_gprs *gprs, gboolean allow);
+int ril_netreg_check_if_really_roaming(struct ofono_netreg *netreg, gint status);
 
 extern const struct ofono_call_barring_driver ril_call_barring_driver;
 extern const struct ofono_call_forwarding_driver ril_call_forwarding_driver;

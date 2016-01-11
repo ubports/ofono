@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015 Jolla Ltd.
+ *  Copyright (C) 2015-2016 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -14,8 +14,10 @@
  */
 
 #include "ril_plugin.h"
+#include "ril_sim_card.h"
+#include "ril_network.h"
+#include "ril_radio.h"
 #include "ril_mce.h"
-#include "ril_constants.h"
 #include "ril_util.h"
 #include "ril_log.h"
 
@@ -63,7 +65,6 @@ enum ril_plugin_io_events {
 	IO_EVENT_CONNECTED,
 	IO_EVENT_ERROR,
 	IO_EVENT_EOF,
-	IO_EVENT_SIM_STATUS,
 	IO_EVENT_COUNT
 };
 
@@ -88,16 +89,20 @@ struct ril_slot {
 	char *sub;
 	gint timeout;           /* RIL timeout, in seconds */
 	int index;
-	struct ril_modem_config config;
+	struct ril_slot_config config;
 	struct ril_plugin_priv *plugin;
 	struct ril_sim_dbus *sim_dbus;
 	struct ril_modem *modem;
 	struct ril_mce *mce;
 	struct ofono_sim *sim;
+	struct ril_radio *radio;
+	struct ril_network *network;
+	struct ril_sim_card *sim_card;
 	GRilIoChannel *io;
 	gulong io_event_id[IO_EVENT_COUNT];
-	gulong sim_status_req_id;
 	gulong imei_req_id;
+	gulong sim_card_state_event_id;
+	gulong radio_state_event_id;
 	guint trace_id;
 	guint dump_id;
 	guint retry_id;
@@ -108,6 +113,7 @@ struct ril_slot {
 
 static void ril_debug_trace_notify(struct ofono_debug_desc *desc);
 static void ril_debug_dump_notify(struct ofono_debug_desc *desc);
+static void ril_debug_grilio_notify(struct ofono_debug_desc *desc);
 static void ril_plugin_retry_init_io(struct ril_slot *slot);
 
 GLOG_MODULE_DEFINE("rilmodem");
@@ -117,10 +123,17 @@ static struct ofono_debug_desc ril_debug_trace OFONO_DEBUG_ATTR = {
 	.flags = OFONO_DEBUG_FLAG_DEFAULT,
 	.notify = ril_debug_trace_notify
 };
+
 static struct ofono_debug_desc ril_debug_dump OFONO_DEBUG_ATTR = {
 	.name = "ril_dump",
 	.flags = OFONO_DEBUG_FLAG_DEFAULT,
 	.notify = ril_debug_dump_notify
+};
+
+static struct ofono_debug_desc grilio_debug OFONO_DEBUG_ATTR = {
+	.name = "grilio",
+	.flags = OFONO_DEBUG_FLAG_DEFAULT,
+	.notify = ril_debug_grilio_notify
 };
 
 static inline struct ril_plugin_priv *ril_plugin_cast(struct ril_plugin *pub)
@@ -160,7 +173,7 @@ static void ril_plugin_shutdown_slot(struct ril_slot *slot, gboolean kill_io)
 	}
 
 	if (slot->modem) {
-		struct ofono_modem *m = ril_modem_ofono_modem(slot->modem);
+		struct ofono_modem *m = slot->modem->ofono;
 
 		if (m && slot->sim_watch_id) {
 			__ofono_modem_remove_atom_watch(m, slot->sim_watch_id);
@@ -198,10 +211,7 @@ static void ril_plugin_shutdown_slot(struct ril_slot *slot, gboolean kill_io)
 
 			grilio_channel_cancel_request(slot->io,
 						slot->imei_req_id, FALSE);
-			grilio_channel_cancel_request(slot->io,
-						slot->sim_status_req_id, FALSE);
 			slot->imei_req_id = 0;
-			slot->sim_status_req_id = 0;
 
 			for (i=0; i<IO_EVENT_COUNT; i++) {
 				ril_plugin_remove_slot_handler(slot, i);
@@ -210,6 +220,20 @@ static void ril_plugin_shutdown_slot(struct ril_slot *slot, gboolean kill_io)
 			grilio_channel_shutdown(slot->io, FALSE);
 			grilio_channel_unref(slot->io);
 			slot->io = NULL;
+
+			ril_radio_remove_handler(slot->radio,
+						slot->radio_state_event_id);
+			ril_radio_unref(slot->radio);
+			slot->radio = NULL;
+
+			ril_network_unref(slot->network);
+			slot->network = NULL;
+
+			ril_sim_card_remove_handler(slot->sim_card,
+						slot->sim_card_state_event_id);
+			ril_sim_card_unref(slot->sim_card);
+			slot->sim_card_state_event_id = 0;
+			slot->sim_card = NULL;
 		}
 	}
 }
@@ -310,11 +334,13 @@ static int ril_plugin_update_modem_paths(struct ril_plugin_priv *plugin)
 			mask |= RIL_PLUGIN_SIGNAL_DATA_PATH;
 		}
 		if (plugin->data_modem != data->modem) {
+			ril_modem_allow_data(plugin->data_modem, FALSE);
 			plugin->data_modem = data->modem;
-			ril_modem_allow_data(data->modem);
+			ril_modem_allow_data(plugin->data_modem, TRUE);
 		}
 	} else if (plugin->default_data_path) {
 		DBG("No default data SIM");
+		ril_modem_allow_data(plugin->data_modem, FALSE);
 		g_free(plugin->default_data_path);
 		plugin->default_data_path = NULL;
 		plugin->data_modem = NULL;
@@ -342,53 +368,25 @@ static void ril_plugin_check_sim_state(struct ril_slot *slot)
 	}
 }
 
-static void ril_plugin_request_sim_status_cb(GRilIoChannel *io, int err,
-				const void *data, guint len, void *user_data)
+static void ril_plugin_sim_state_changed(struct ril_sim_card *card, void *data)
 {
-	struct ril_slot *slot = user_data;
+	struct ril_slot *slot = data;
+	gboolean present;
 
-	slot->sim_status_req_id = 0;
-	if (err != RIL_E_SUCCESS) {
-		ofono_error("SIM status error %s", ril_error_to_string(err));
+	if (card && card->status &&
+			card->status->card_state == RIL_CARDSTATE_PRESENT) {
+		DBG("SIM found in slot %u", slot->config.slot);
+		present = TRUE;
 	} else {
-		GRilIoParser rilp;
-		guint32 cardstate;
-		gboolean present;
-
-		grilio_parser_init(&rilp, data, len);
-		if (grilio_parser_get_uint32(&rilp, &cardstate) &&
-				(cardstate == RIL_CARDSTATE_PRESENT)) {
-			DBG("SIM found in slot %u", slot->config.slot);
-			present = TRUE;
-		} else {
-			DBG("No SIM in slot %u", slot->config.slot);
-			present = FALSE;
-		}
-
-		if (slot->pub.sim_present != present) {
-			slot->pub.sim_present = present;
-			ril_plugin_dbus_signal_sim(slot->plugin->dbus,
-						slot->index, present);
-		}
+		DBG("No SIM in slot %u", slot->config.slot);
+		present = FALSE;
 	}
-}
 
-static void ril_plugin_request_sim_status(struct ril_slot *slot)
-{
-	grilio_channel_cancel_request(slot->io, slot->sim_status_req_id, FALSE);
-	slot->sim_status_req_id = grilio_channel_send_request_full(slot->io,
-				NULL, RIL_REQUEST_GET_SIM_STATUS,
-				ril_plugin_request_sim_status_cb, NULL, slot);
-}
-
-static void ril_plugin_slot_status_changed(GRilIoChannel *io, guint code,
-				const void *data, guint len, void *user_data)
-{
-	struct ril_slot *slot = user_data;
-
-	DBG("%s", slot->path);
-	GASSERT(code == RIL_UNSOL_RESPONSE_SIM_STATUS_CHANGED);
-	ril_plugin_request_sim_status(slot);
+	if (slot->pub.sim_present != present) {
+		slot->pub.sim_present = present;
+		ril_plugin_dbus_signal_sim(slot->plugin->dbus,
+						slot->index, present);
+	}
 }
 
 static void ril_plugin_sim_watch_done(void *data)
@@ -563,14 +561,14 @@ static void ril_plugin_create_modem(struct ril_slot *slot)
 	GASSERT(slot->io && slot->io->connected);
 	GASSERT(!slot->modem);
 
-	modem = ril_modem_create(slot->io, slot->path + 1, &slot->config);
+	modem = ril_modem_create(slot->io, slot->path + 1, slot->radio,
+				slot->network, slot->sim_card, &slot->config);
 
 	if (modem) {
 		struct ofono_sim *sim = ril_modem_ofono_sim(modem);
 
 		slot->modem = modem;
-		slot->sim_watch_id = __ofono_modem_add_atom_watch(
-				ril_modem_ofono_modem(modem),
+		slot->sim_watch_id = __ofono_modem_add_atom_watch(modem->ofono,
 				OFONO_ATOM_TYPE_SIM, ril_plugin_sim_watch,
 				slot, ril_plugin_sim_watch_done);
 		if (sim) {
@@ -617,9 +615,31 @@ static void ril_plugin_imei_cb(GRilIoChannel *io, int status,
 	}
 }
 
+static void ril_plugin_power_check(struct ril_slot *slot)
+{
+	/*
+	 * It seems to be necessary to kick (with RIL_REQUEST_RADIO_POWER)
+	 * the modems with power on after one of the modems has been powered
+	 * off. Otherwise bad things may happens (like the modem never
+	 * registering on the network).
+	 */
+	ril_radio_confirm_power_on(slot->radio);
+}
+
+static void ril_plugin_radio_state_changed(struct ril_radio *radio, void *data)
+{
+	struct ril_slot *slot = data;
+
+	if (radio->state == RADIO_STATE_OFF) {
+		DBG("power off for slot %u", slot->config.slot);
+		ril_plugin_foreach_slot(slot->plugin, ril_plugin_power_check);
+	}
+}
+
 static void ril_plugin_slot_connected(struct ril_slot *slot)
 {
-	ofono_debug("%s version %u", slot->name, slot->io->ril_version);
+	ofono_debug("%s version %u", (slot->name && slot->name[0]) ?
+				slot->name : "RIL", slot->io->ril_version);
 
 	GASSERT(slot->io->connected);
 	GASSERT(!slot->io_event_id[IO_EVENT_CONNECTED]);
@@ -631,7 +651,19 @@ static void ril_plugin_slot_connected(struct ril_slot *slot)
 	slot->imei_req_id = grilio_channel_send_request_full(slot->io, NULL,
 			RIL_REQUEST_GET_IMEI, ril_plugin_imei_cb, NULL, slot);
 
-	ril_plugin_request_sim_status(slot);
+	GASSERT(!slot->radio);
+	GASSERT(!slot->radio_state_event_id);
+	slot->radio = ril_radio_new(slot->io);
+	slot->network = ril_network_new(slot->io);
+	slot->radio_state_event_id =
+		ril_radio_add_state_changed_handler(slot->radio,
+			ril_plugin_radio_state_changed, slot);
+
+	GASSERT(!slot->sim_card);
+	slot->sim_card = ril_sim_card_new(slot->io, slot->config.slot);
+	slot->sim_card_state_event_id = ril_sim_card_add_state_changed_handler(
+			slot->sim_card, ril_plugin_sim_state_changed, slot);
+
 	if (ril_plugin_can_create_modem(slot) && !slot->modem) {
 		ril_plugin_create_modem(slot);
 	}
@@ -665,11 +697,6 @@ static void ril_plugin_init_io(struct ril_slot *slot)
 			slot->io_event_id[IO_EVENT_EOF] =
 				grilio_channel_add_disconnected_handler(slot->io,
 					ril_plugin_slot_disconnected, slot);
-			slot->io_event_id[IO_EVENT_SIM_STATUS] =
-				grilio_channel_add_unsol_event_handler(slot->io,
-					ril_plugin_slot_status_changed,
-					RIL_UNSOL_RESPONSE_SIM_STATUS_CHANGED,
-					slot);
 
 			if (slot->io->connected) {
 				ril_plugin_slot_connected(slot);
@@ -1146,6 +1173,15 @@ static void ril_debug_dump_notify(struct ofono_debug_desc *desc)
 	}
 }
 
+static void ril_debug_grilio_notify(struct ofono_debug_desc *desc)
+{
+	if (desc->flags & OFONO_DEBUG_FLAG_PRINT) {
+		grilio_log.level = GLOG_LEVEL_VERBOSE;
+	} else {
+		grilio_log.level = GLOG_LEVEL_INHERIT;
+	}
+}
+
 static int ril_plugin_init(void)
 {
 	char *enabled_slots;
@@ -1153,6 +1189,7 @@ static int ril_plugin_init(void)
 	DBG("");
 	GASSERT(!ril_plugin);
 
+	/* ofono core calls openlog() */
 	gutil_log_func = gutil_log_syslog;
 
 	ril_plugin_switch_user();

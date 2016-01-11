@@ -132,12 +132,15 @@ builtin_sources +=	drivers/ril/ril_call_barring.c \
 			drivers/ril/ril_mce.c \
 			drivers/ril/ril_modem.c \
 			drivers/ril/ril_netreg.c \
+			drivers/ril/ril_network.c \
 			drivers/ril/ril_oem_raw.c \
 			drivers/ril/ril_phonebook.c \
 			drivers/ril/ril_plugin.c \
 			drivers/ril/ril_plugin_dbus.c \
+			drivers/ril/ril_radio.c \
 			drivers/ril/ril_radio_settings.c \
 			drivers/ril/ril_sim.c \
+			drivers/ril/ril_sim_card.c \
 			drivers/ril/ril_sim_dbus.c \
 			drivers/ril/ril_sms.c \
 			drivers/ril/ril_stk.c \

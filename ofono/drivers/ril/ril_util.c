@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015 Jolla Ltd.
+ *  Copyright (C) 2015-2016 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -15,15 +15,14 @@
 
 #include "ril_util.h"
 #include "ril_log.h"
-#include "ril_constants.h"
 
 #include <grilio_channel.h>
-#include <grilio_parser.h>
 
 #include <sys/socket.h>
+#include <ctype.h>
 
 #include "common.h"
-#include "util.h"
+#include "netreg.h"
 
 const char *ril_error_to_string(int error)
 {
@@ -300,86 +299,6 @@ int ril_address_family(const char *addr)
 	}
 }
 
-gboolean ril_util_parse_reg(const void *data, guint len,
-						struct ril_reg_data *reg)
-{
-	GRilIoParser rilp;
-	int nparams;
-	gchar *sstatus = NULL, *slac = NULL, *sci = NULL;
-	gchar *stech = NULL, *sreason = NULL, *smax = NULL;
-
-	memset(reg, 0, sizeof(*reg));
-
-	/* Size of response string array
-	 *
-	 * Should be:
-	 *   >= 4 for VOICE_REG reply
-	 *   >= 5 for DATA_REG reply
-	 */
-	grilio_parser_init(&rilp, data, len);
-	if (!grilio_parser_get_int32(&rilp, &nparams) || nparams < 4) {
-		DBG("broken response");
-		return FALSE;
-	}
-
-	sstatus = grilio_parser_get_utf8(&rilp);
-	if (!sstatus) {
-		DBG("No sstatus value returned!");
-		return FALSE;
-	}
-
-	slac = grilio_parser_get_utf8(&rilp);
-	sci = grilio_parser_get_utf8(&rilp);
-	stech = grilio_parser_get_utf8(&rilp);
-	nparams -= 4;
-
-	reg->ril_status = atoi(sstatus);
-	if (reg->ril_status > 10) {
-		reg->status = reg->ril_status - 10;
-	} else {
-		reg->status = reg->ril_status;
-	}
-
-	/* FIXME: need to review VOICE_REGISTRATION response
-	 * as it returns ~15 parameters ( vs. 6 for DATA ).
-	 *
-	 * The first four parameters are the same for both
-	 * responses ( although status includes values for
-	 * emergency calls for VOICE response ).
-	 *
-	 * Parameters 5 & 6 have different meanings for
-	 * voice & data response.
-	 */
-	if (nparams--) {
-		/* TODO: different use for CDMA */
-		sreason = grilio_parser_get_utf8(&rilp);
-		if (nparams--) {
-			/* TODO: different use for CDMA */
-			smax = grilio_parser_get_utf8(&rilp);
-			if (smax) {
-				reg->max_calls = atoi(smax);
-			}
-		}
-	}
-
-	reg->lac = slac ? strtol(slac, NULL, 16) : -1;
-	reg->ci = sci ? strtol(sci, NULL, 16) : -1;
-	reg->access_tech = ril_parse_tech(stech, &reg->ril_tech);
-
-	DBG("%s,%s,%s,%d,%s,%s,%s", registration_status_to_string(reg->status),
-			slac, sci, reg->ril_tech,
-			registration_tech_to_string(reg->access_tech),
-			sreason, smax);
-
-	g_free(sstatus);
-	g_free(slac);
-	g_free(sci);
-	g_free(stech);
-	g_free(sreason);
-	g_free(smax);
-	return TRUE;
-}
-
 /* Returns enum access_technology or -1 on failure. */
 int ril_parse_tech(const char *stech, int *ril_tech)
 {
@@ -406,7 +325,6 @@ int ril_parse_tech(const char *stech, int *ril_tech)
 			break;
 		case RADIO_TECH_HSPA:
 		case RADIO_TECH_HSPAP:
-		case RADIO_TECH_DC_HSDPA:
 			access_tech = ACCESS_TECHNOLOGY_UTRAN_HSDPA_HSUPA;
 			break;
 		case RADIO_TECH_LTE:
@@ -415,6 +333,7 @@ int ril_parse_tech(const char *stech, int *ril_tech)
 		default:
 			DBG("Unknown RIL tech %s", stech);
 			/* no break */
+		case RADIO_TECH_IWLAN:
 		case RADIO_TECH_UNKNOWN:
 			tech = -1;
 			break;
@@ -425,6 +344,50 @@ int ril_parse_tech(const char *stech, int *ril_tech)
 		*ril_tech = tech;
 	}
 	return access_tech;
+}
+
+gboolean ril_parse_mcc_mnc(const char *str, struct ofono_network_operator *op)
+{
+	if (str) {
+		int i;
+		const char *ptr = str;
+
+		/* Three digit country code */
+		for (i = 0;
+		     i < OFONO_MAX_MCC_LENGTH && *ptr && isdigit(*ptr);
+		     i++) {
+			op->mcc[i] = *ptr++;
+		}
+		op->mcc[i] = 0;
+
+		if (i == OFONO_MAX_MCC_LENGTH) {
+			/* Usually 2 but sometimes 3 digit network code */
+			for (i=0;
+			     i<OFONO_MAX_MNC_LENGTH && *ptr && isdigit(*ptr);
+			     i++) {
+				op->mnc[i] = *ptr++;
+			}
+			op->mnc[i] = 0;
+
+			if (i > 0) {
+
+				/*
+				 * Sometimes MCC/MNC are followed by + and
+				 * what looks like the technology code. This
+				 * is of course completely undocumented.
+				 */
+				if (*ptr == '+') {
+					int tech = ril_parse_tech(ptr+1, NULL);
+					if (tech >= 0) {
+						op->tech = tech;
+					}
+				}
+
+				return TRUE;
+			}
+		}
+	}
+	return FALSE;
 }
 
 /*
