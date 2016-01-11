@@ -44,6 +44,7 @@
 #define RILMODEM_DEFAULT_4G         TRUE /* 4G is on by default */
 #define RILMODEM_DEFAULT_SLOT       0xffffffff
 #define RILMODEM_DEFAULT_TIMEOUT    0 /* No timeout */
+#define RILMODEM_DEFAULT_SIM_FLAGS  RIL_SIM_CARD_V9_UICC_SUBSCRIPTION_WORKAROUND
 
 #define RILCONF_DEV_PREFIX          "ril_"
 #define RILCONF_PATH_PREFIX         "/" RILCONF_DEV_PREFIX
@@ -53,6 +54,7 @@
 #define RILCONF_SUB                 "sub"
 #define RILCONF_TIMEOUT             "timeout"
 #define RILCONF_4G                  "enable4G"
+#define RILCONF_UICC_WORKAROUND     "uiccWorkaround"
 
 #define RIL_STORE                   "ril"
 #define RIL_STORE_GROUP             "Settings"
@@ -87,8 +89,9 @@ struct ril_slot {
 	char *name;
 	char *sockpath;
 	char *sub;
-	gint timeout;           /* RIL timeout, in seconds */
+	gint timeout;           /* RIL timeout, in milliseconds */
 	int index;
+	int sim_flags;
 	struct ril_slot_config config;
 	struct ril_plugin_priv *plugin;
 	struct ril_sim_dbus *sim_dbus;
@@ -487,12 +490,20 @@ static void ril_plugin_trace(GRilIoChannel *io, GRILIO_PACKET_TYPE type,
 {
 	/* Use log sub-module to turn prefix off */
 	static GLOG_MODULE_DEFINE2_(log_module, NULL, GLOG_MODULE_NAME);
-        const char *prefix = io->name ? io->name : "";
-        const char dir = (type == GRILIO_PACKET_REQ) ? '<' : '>';
+	const char *prefix = io->name ? io->name : "";
+	const char dir = (type == GRILIO_PACKET_REQ) ? '<' : '>';
+	const char *scode;
+
 	switch (type) {
 	case GRILIO_PACKET_REQ:
+		if (io->ril_version <= 9 &&
+				code == RIL_REQUEST_V9_SET_UICC_SUBSCRIPTION) {
+			scode = "V9_SET_UICC_SUBSCRIPTION";
+		} else {
+			scode = ril_request_to_string(code);
+		}
 		gutil_log(&log_module, GLOG_LEVEL_INFO, "%s%c [%08x] %s",
-				prefix, dir, id, ril_request_to_string(code));
+				prefix, dir, id, scode);
 		break;
 	case GRILIO_PACKET_RESP:
 		gutil_log(&log_module, GLOG_LEVEL_INFO, "%s%c [%08x] %s",
@@ -660,7 +671,8 @@ static void ril_plugin_slot_connected(struct ril_slot *slot)
 			ril_plugin_radio_state_changed, slot);
 
 	GASSERT(!slot->sim_card);
-	slot->sim_card = ril_sim_card_new(slot->io, slot->config.slot);
+	slot->sim_card = ril_sim_card_new(slot->io, slot->config.slot,
+							slot->sim_flags);
 	slot->sim_card_state_event_id = ril_sim_card_add_state_changed_handler(
 			slot->sim_card, ril_plugin_sim_state_changed, slot);
 
@@ -752,6 +764,7 @@ static GSList *ril_plugin_create_default_config()
 			slot->name = g_strdup("RIL1");
 			slot->config.enable_4g = RILMODEM_DEFAULT_4G;
 			slot->timeout = RILMODEM_DEFAULT_TIMEOUT;
+			slot->sim_flags = RILMODEM_DEFAULT_SIM_FLAGS;
 			list = g_slist_append(list, slot);
 
 			slot = g_new0(struct ril_slot, 1);
@@ -760,6 +773,7 @@ static GSList *ril_plugin_create_default_config()
 			slot->name = g_strdup("RIL2");
 			slot->config.enable_4g = RILMODEM_DEFAULT_4G;
 			slot->timeout = RILMODEM_DEFAULT_TIMEOUT;
+			slot->sim_flags = RILMODEM_DEFAULT_SIM_FLAGS;
 			slot->config.slot = 1;
 			list = g_slist_append(list, slot);
 		} else {
@@ -772,6 +786,7 @@ static GSList *ril_plugin_create_default_config()
 			slot->name = g_strdup("");
 			slot->config.enable_4g = RILMODEM_DEFAULT_4G;
 			slot->timeout = RILMODEM_DEFAULT_TIMEOUT;
+			slot->sim_flags = RILMODEM_DEFAULT_SIM_FLAGS;
 			list = g_slist_append(list, slot);
 		}
 	} else {
@@ -779,6 +794,20 @@ static GSList *ril_plugin_create_default_config()
 	}
 
 	return list;
+}
+
+static void ril_plugin_read_config_flag(GKeyFile *file, const char *group,
+					const char *key, int flag, int *flags)
+{
+	GError *err = NULL;
+
+	if (g_key_file_get_boolean(file, group, key, &err)) {
+		*flags |= flag;
+	} else if (!err) {
+		*flags &= ~flag;
+	} else {
+		g_error_free(err);
+	}
 }
 
 static struct ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
@@ -797,6 +826,7 @@ static struct ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 		slot->path = g_strconcat("/", group, NULL);
 		slot->name = g_key_file_get_string(file, group, RILCONF_NAME,
 									NULL);
+		slot->sim_flags = RILMODEM_DEFAULT_SIM_FLAGS;
 
 		if (sub && strlen(sub) == RIL_SUB_SIZE) {
 			DBG("%s: %s:%s", group, sock, sub);
@@ -840,6 +870,14 @@ static struct ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 			err = NULL;
 		}
 		DBG("%s: 4G %s", group, slot->config.enable_4g ? "on" : "off");
+
+		ril_plugin_read_config_flag(file, group,
+			RILCONF_UICC_WORKAROUND,
+			RIL_SIM_CARD_V9_UICC_SUBSCRIPTION_WORKAROUND,
+			&slot->sim_flags);
+		DBG("%s: UICC workaround %s", group, (slot->sim_flags &
+				RIL_SIM_CARD_V9_UICC_SUBSCRIPTION_WORKAROUND) ?
+								"on" : "off");
 	} else {
 		DBG("no socket path in %s", group);
 	}
