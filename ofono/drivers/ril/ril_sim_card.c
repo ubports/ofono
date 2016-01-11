@@ -34,6 +34,7 @@ enum ril_sim_card_event {
 struct ril_sim_card_priv {
 	GRilIoChannel *io;
 	GRilIoQueue *q;
+	int flags;
 	guint status_req_id;
 	gulong event_id[EVENT_COUNT];
 };
@@ -146,8 +147,10 @@ static void ril_sim_card_subscribe(struct ril_sim_card *self,
 	grilio_request_append_int32(req, app_index);
 	grilio_request_append_int32(req, sub_id);
 	grilio_request_append_int32(req, sub_status);
-	grilio_queue_send_request(priv->q, req,
-					RIL_REQUEST_SET_UICC_SUBSCRIPTION);
+	grilio_queue_send_request(priv->q, req, (priv->io->ril_version <= 9 &&
+		(priv->flags & RIL_SIM_CARD_V9_UICC_SUBSCRIPTION_WORKAROUND)) ?
+				RIL_REQUEST_V9_SET_UICC_SUBSCRIPTION :
+				RIL_REQUEST_SET_UICC_SUBSCRIPTION);
 	grilio_request_unref(req);
 }
 
@@ -383,15 +386,24 @@ static void ril_sim_card_status_changed(GRilIoChannel *io, guint code,
 	ril_sim_card_request_status(self);
 }
 
-struct ril_sim_card *ril_sim_card_new(GRilIoChannel *io, guint slot)
+struct ril_sim_card *ril_sim_card_new(GRilIoChannel *io, guint slot, int flags)
 {
 	struct ril_sim_card *self = g_object_new(RIL_SIMCARD_TYPE, NULL);
 	struct ril_sim_card_priv *priv = self->priv;
 
+	/*
+	 * We need to know the RIL version (for UICC subscription hack),
+	 * so we must be connected. The caller is supposed to make sure
+	 * that we get connected first.
+	 */
 	DBG("%u", slot);
+	GASSERT(io->connected);
+
 	self->slot = slot;
 	priv->io = grilio_channel_ref(io);
 	priv->q = grilio_queue_new(io);
+	priv->flags = flags;
+
 	priv->event_id[EVENT_SIM_STATUS_CHANGED] =
 		grilio_channel_add_unsol_event_handler(priv->io,
 			ril_sim_card_status_changed,

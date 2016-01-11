@@ -5,7 +5,7 @@
  *  /hardware/ril/reference_ril/ril.h
  *
  *  Copyright (C) 2013 Canonical Ltd.
- *  Copyright (C) 2013-2015 Jolla Ltd.
+ *  Copyright (C) 2013-2016 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -352,6 +352,8 @@ enum ril_app_type {
 #define RIL_REQUEST_NV_WRITE_ITEM 119
 #define RIL_REQUEST_NV_WRITE_CDMA_PRL 120
 #define RIL_REQUEST_NV_RESET_CONFIG 121
+/* SET_UICC_SUBSCRIPTION was 115 in v9 and 122 in v10 and later */
+#define RIL_REQUEST_V9_SET_UICC_SUBSCRIPTION  115
 #define RIL_REQUEST_SET_UICC_SUBSCRIPTION  122
 #define RIL_REQUEST_ALLOW_DATA  123
 #define RIL_REQUEST_GET_HARDWARE_CONFIG 124
