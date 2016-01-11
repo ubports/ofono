@@ -49,7 +49,10 @@ struct ril_sim_card {
 
 typedef void (*ril_sim_card_cb_t)(struct ril_sim_card *sc, void *arg);
 
-struct ril_sim_card *ril_sim_card_new(GRilIoChannel *io, guint slot);
+/* Flags for ril_sim_card_new */
+#define RIL_SIM_CARD_V9_UICC_SUBSCRIPTION_WORKAROUND    (0x01)
+
+struct ril_sim_card *ril_sim_card_new(GRilIoChannel *io, guint slot, int flags);
 struct ril_sim_card *ril_sim_card_ref(struct ril_sim_card *sc);
 void ril_sim_card_unref(struct ril_sim_card *sc);
 gulong ril_sim_card_add_status_received_handler(struct ril_sim_card *sc,
