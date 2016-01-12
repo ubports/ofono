@@ -1110,6 +1110,17 @@ static void ciev_callheld_notify(struct ofono_voicecall *vc,
 			 */
 			vd->clcc_source = g_timeout_add(POLL_CLCC_DELAY,
 							poll_clcc, vc);
+		} else {
+			if (vd->clcc_source)
+				g_source_remove(vd->clcc_source);
+
+			/*
+			 * We got a notification that there is a held call
+			 * and no active call but we already are in such state.
+			 * Let's schedule a poll to see what happened.
+			 */
+			vd->clcc_source = g_timeout_add(POLL_CLCC_DELAY,
+							poll_clcc, vc);
 		}
 	}
 
