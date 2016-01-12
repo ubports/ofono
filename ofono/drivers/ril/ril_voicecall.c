@@ -175,6 +175,24 @@ static GSList *ril_voicecall_parse_clcc(const void *data, guint len)
 	return l;
 }
 
+/* Valid call statuses have value >= 0 */
+static int call_status_with_id(struct ofono_voicecall *vc, int id)
+{
+	GSList *l;
+	struct voicecall *v;
+
+	GASSERT(vc);
+
+	for (l = vc->call_list; l; l = l->next) {
+		v = l->data;
+		if (v->call->id == id) {
+			return v->call->status;
+		}
+	}
+
+	return -1;
+}
+
 static void ril_voicecall_lastcause_cb(GRilIoChannel *io, int status,
 				const void *data, guint len, void *user_data)
 {
@@ -182,6 +200,7 @@ static void ril_voicecall_lastcause_cb(GRilIoChannel *io, int status,
 	struct ofono_voicecall *vc = reqdata->vc;
 	int tmp;
 	int id = reqdata->id;
+	int call_status;
 
 	enum ofono_disconnect_reason reason = OFONO_DISCONNECT_REASON_ERROR;
 	int last_cause = CALL_FAIL_ERROR_UNSPECIFIED;
@@ -197,32 +216,52 @@ static void ril_voicecall_lastcause_cb(GRilIoChannel *io, int status,
 	 * protocols", Annex H, are properly reflected in the RIL API.
 	 * For example, cause #21 "call rejected" is mapped to
 	 * CALL_FAIL_ERROR_UNSPECIFIED, and thus indistinguishable
-	 * from a network failure. We signal disconnect reason "remote"
-	 * for cause values
-	 *   - #16 "normal call clearing"
-	 *   - #17 "user busy"
-	 *   - UNSPECIFIED for MO calls that are not yet connected
-	 * , and disconnect reason "network" otherwise.
+	 * from a network failure.
 	 */
-	ofono_info("Call %d ended with RIL cause %d", id, last_cause);
-	if (last_cause == CALL_FAIL_NORMAL || last_cause == CALL_FAIL_BUSY) {
-		reason = OFONO_DISCONNECT_REASON_REMOTE_HANGUP;
-	}
+	switch (last_cause) {
+		case CALL_FAIL_UNOBTAINABLE_NUMBER:
+		case CALL_FAIL_NORMAL:
+		case CALL_FAIL_BUSY:
+		case CALL_FAIL_NO_ROUTE_TO_DESTINATION:
+		case CALL_FAIL_CHANNEL_UNACCEPTABLE:
+		case CALL_FAIL_OPERATOR_DETERMINED_BARRING:
+		case CALL_FAIL_NO_USER_RESPONDING:
+		case CALL_FAIL_USER_ALERTING_NO_ANSWER:
+		case CALL_FAIL_CALL_REJECTED:
+		case CALL_FAIL_NUMBER_CHANGED:
+		case CALL_FAIL_ANONYMOUS_CALL_REJECTION:
+		case CALL_FAIL_PRE_EMPTION:
+		case CALL_FAIL_DESTINATION_OUT_OF_ORDER:
+		case CALL_FAIL_INCOMPLETE_NUMBER:
+		case CALL_FAIL_FACILITY_REJECTED:
+			reason = OFONO_DISCONNECT_REASON_REMOTE_HANGUP;
+			break;
 
-	if (last_cause == CALL_FAIL_ERROR_UNSPECIFIED) {
-		GSList *l;
-		struct voicecall *v;
-		for (l = vc->call_list; l; l = l->next) {
-			v = l->data;
-			if (v->call->id == id) {
-				if (v->call->status == CALL_STATUS_DIALING ||
-				    v->call->status == CALL_STATUS_ALERTING) {
-					reason = OFONO_DISCONNECT_REASON_REMOTE_HANGUP;
-				}
-				break;
+		case CALL_FAIL_NORMAL_UNSPECIFIED:
+			call_status = call_status_with_id(vc, id);
+			if (call_status == CALL_STATUS_ACTIVE ||
+			    call_status == CALL_STATUS_HELD ||
+			    call_status == CALL_STATUS_DIALING ||
+			    call_status == CALL_STATUS_ALERTING) {
+				reason = OFONO_DISCONNECT_REASON_REMOTE_HANGUP;
+			} else if (call_status == CALL_STATUS_INCOMING) {
+				reason = OFONO_DISCONNECT_REASON_LOCAL_HANGUP;
 			}
-		}
+			break;
+
+		case CALL_FAIL_ERROR_UNSPECIFIED:
+			call_status = call_status_with_id(vc, id);
+			if (call_status == CALL_STATUS_DIALING ||
+			    call_status == CALL_STATUS_ALERTING) {
+				reason = OFONO_DISCONNECT_REASON_REMOTE_HANGUP;
+			}
+			break;
+
+		default:
+			reason = OFONO_DISCONNECT_REASON_ERROR;
+			break;
 	}
+	ofono_info("Call %d ended with RIL cause %d -> ofono reason %d", id, last_cause, reason);
 
 	ofono_voicecall_disconnected(vc, id, reason, NULL);
 }
