@@ -14,6 +14,7 @@
  */
 
 #include "ril_network.h"
+#include "ril_radio.h"
 #include "ril_util.h"
 #include "ril_log.h"
 
@@ -30,11 +31,13 @@ typedef struct ril_network RilNetwork;
 struct ril_network_priv {
 	GRilIoChannel *io;
 	GRilIoQueue *q;
+	struct ril_radio *radio;
 	char *log_prefix;
 	gulong event_id;
 	guint operator_poll_id;
 	guint voice_poll_id;
 	guint data_poll_id;
+	gulong radio_event_id;
 	struct ofono_network_operator operator;
 };
 
@@ -177,23 +180,10 @@ static gboolean ril_network_op_equal(const struct ofono_network_operator *op1,
 	}
 }
 
-static guint ril_network_poll_and_retry(struct ril_network *self, int code,
-						GRilIoChannelResponseFunc fn)
-{
-	guint id;
-	GRilIoRequest *req = grilio_request_new();
-	struct ril_network_priv *priv = self->priv;
-
-	grilio_request_set_retry(req, RIL_RETRY_SECS*1000, -1);
-	id = grilio_queue_send_request_full(priv->q, req, code, fn, NULL, self);
-	grilio_request_unref(req);
-	return id;
-}
-
 static void ril_network_poll_operator_cb(GRilIoChannel *io, int req_status,
 				const void *data, guint len, void *user_data)
 {
-	struct ril_network *self = user_data;
+	struct ril_network *self = RIL_NETWORK(user_data);
 	struct ril_network_priv *priv = self->priv;
 
 	GASSERT(priv->operator_poll_id);
@@ -262,7 +252,7 @@ static void ril_network_poll_operator_cb(GRilIoChannel *io, int req_status,
 static void ril_network_poll_voice_state_cb(GRilIoChannel *io, int req_status,
 				const void *data, guint len, void *user_data)
 {
-	struct ril_network *self = user_data;
+	struct ril_network *self = RIL_NETWORK(user_data);
 	struct ril_network_priv *priv = self->priv;
 
 	GASSERT(priv->voice_poll_id);
@@ -284,7 +274,7 @@ static void ril_network_poll_voice_state_cb(GRilIoChannel *io, int req_status,
 static void ril_network_poll_data_state_cb(GRilIoChannel *io, int req_status,
 				const void *data, guint len, void *user_data)
 {
-	struct ril_network *self = user_data;
+	struct ril_network *self = RIL_NETWORK(user_data);
 	struct ril_network_priv *priv = self->priv;
 
 	GASSERT(priv->data_poll_id);
@@ -303,46 +293,40 @@ static void ril_network_poll_data_state_cb(GRilIoChannel *io, int req_status,
 	}
 }
 
-static void ril_network_poll_operator(struct ril_network *self)
+static guint ril_network_poll_and_retry(struct ril_network *self, guint id,
+					int code, GRilIoChannelResponseFunc fn)
 {
 	struct ril_network_priv *priv = self->priv;
 
-	if (!priv->operator_poll_id) {
-		DBG("%s", priv->log_prefix);
-		priv->operator_poll_id = ril_network_poll_and_retry(self,
-			RIL_REQUEST_OPERATOR, ril_network_poll_operator_cb);
+	if (id) {
+		/* Retry right away, don't wait for retry timeout to expire */
+		grilio_channel_retry_request(priv->io, id);
+	} else {
+		GRilIoRequest *req = grilio_request_new();
+
+		grilio_request_set_retry(req, RIL_RETRY_SECS*1000, -1);
+		id = grilio_queue_send_request_full(priv->q, req, code, fn,
+								NULL, self);
+		grilio_request_unref(req);
 	}
-}
 
-static void ril_network_poll_voice_state(struct ril_network *self)
-{
-	struct ril_network_priv *priv = self->priv;
-
-	if (!priv->voice_poll_id) {
-		DBG("%s", priv->log_prefix);
-		priv->voice_poll_id = ril_network_poll_and_retry(self,
-				RIL_REQUEST_VOICE_REGISTRATION_STATE,
-				ril_network_poll_voice_state_cb);
-	}
-}
-
-static void ril_network_poll_data_state(struct ril_network *self)
-{
-	struct ril_network_priv *priv = self->priv;
-
-	if (!priv->data_poll_id) {
-		DBG("%s", priv->log_prefix);
-		priv->data_poll_id = ril_network_poll_and_retry(self,
-				RIL_REQUEST_DATA_REGISTRATION_STATE,
-				ril_network_poll_data_state_cb);
-	}
+	return id;
 }
 
 static void ril_network_poll_state(struct ril_network *self)
 {
-	ril_network_poll_operator(self);
-	ril_network_poll_voice_state(self);
-	ril_network_poll_data_state(self);
+	struct ril_network_priv *priv = self->priv;
+
+	DBG("%s", priv->log_prefix);
+	priv->operator_poll_id = ril_network_poll_and_retry(self,
+		priv->operator_poll_id, RIL_REQUEST_OPERATOR,
+		ril_network_poll_operator_cb);
+	priv->voice_poll_id = ril_network_poll_and_retry(self,
+		priv->voice_poll_id, RIL_REQUEST_VOICE_REGISTRATION_STATE,
+		ril_network_poll_voice_state_cb);
+	priv->data_poll_id = ril_network_poll_and_retry(self,
+		priv->data_poll_id, RIL_REQUEST_DATA_REGISTRATION_STATE,
+		ril_network_poll_data_state_cb);
 }
 
 gulong ril_network_add_operator_changed_handler(struct ril_network *self,
@@ -376,7 +360,7 @@ void ril_network_remove_handler(struct ril_network *self, gulong id)
 static void ril_network_voice_state_changed_cb(GRilIoChannel *io, guint code,
 				const void *data, guint len, void *user_data)
 {
-	struct ril_network *self = user_data;
+	struct ril_network *self = RIL_NETWORK(user_data);
 	struct ril_network_priv *priv = self->priv;
 
 	DBG("%s", priv->log_prefix);
@@ -384,13 +368,23 @@ static void ril_network_voice_state_changed_cb(GRilIoChannel *io, guint code,
 	ril_network_poll_state(self);
 }
 
-struct ril_network *ril_network_new(GRilIoChannel *io)
+static void ril_network_radio_state_cb(struct ril_radio *radio, void *user_data)
+{
+	struct ril_network *self = RIL_NETWORK(user_data);
+
+	if (radio->state == RADIO_STATE_ON) {
+		ril_network_poll_state(self);
+	}
+}
+
+struct ril_network *ril_network_new(GRilIoChannel *io, struct ril_radio *radio)
 {
 	struct ril_network *self = g_object_new(RIL_NETWORK_TYPE, NULL);
 	struct ril_network_priv *priv = self->priv;
 
 	priv->io = grilio_channel_ref(io);
 	priv->q = grilio_queue_new(priv->io);
+	priv->radio = ril_radio_ref(radio);
 	priv->log_prefix =
 		(io && io->name && io->name[0] && strcmp(io->name, "RIL")) ?
 		g_strconcat(io->name, " ", NULL) : g_strdup("");
@@ -398,9 +392,17 @@ struct ril_network *ril_network_new(GRilIoChannel *io)
 	priv->event_id = grilio_channel_add_unsol_event_handler(priv->io,
 			ril_network_voice_state_changed_cb,
 			RIL_UNSOL_RESPONSE_VOICE_NETWORK_STATE_CHANGED, self);
+	priv->radio_event_id = ril_radio_add_state_changed_handler(priv->radio,
+		ril_network_radio_state_cb, self);
 
-	/* Query the initial state */
-	ril_network_poll_state(self);
+	/*
+	 * Query the initial state. Querying network state before the radio
+	 * has been turned on makes RIL unhappy.
+	 */
+	if (radio->state == RADIO_STATE_ON) {
+		ril_network_poll_state(self);
+	}
+
 	return self;
 }
 
@@ -441,6 +443,11 @@ static void ril_network_dispose(GObject *object)
 		priv->event_id = 0;
 	}
 
+	if (priv->radio_event_id) {
+		ril_radio_remove_handler(priv->radio, priv->radio_event_id);
+		priv->radio_event_id = 0;
+	}
+
 	grilio_queue_cancel_all(priv->q, FALSE);
 	G_OBJECT_CLASS(ril_network_parent_class)->dispose(object);
 }
@@ -454,6 +461,7 @@ static void ril_network_finalize(GObject *object)
 	g_free(priv->log_prefix);
 	grilio_channel_unref(priv->io);
 	grilio_queue_unref(priv->q);
+	ril_radio_unref(priv->radio);
 	G_OBJECT_CLASS(ril_network_parent_class)->finalize(object);
 }
 
