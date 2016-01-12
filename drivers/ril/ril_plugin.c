@@ -665,7 +665,7 @@ static void ril_plugin_slot_connected(struct ril_slot *slot)
 	GASSERT(!slot->radio);
 	GASSERT(!slot->radio_state_event_id);
 	slot->radio = ril_radio_new(slot->io);
-	slot->network = ril_network_new(slot->io);
+	slot->network = ril_network_new(slot->io, slot->radio);
 	slot->radio_state_event_id =
 		ril_radio_add_state_changed_handler(slot->radio,
 			ril_plugin_radio_state_changed, slot);

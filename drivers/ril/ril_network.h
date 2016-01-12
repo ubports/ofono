@@ -39,7 +39,7 @@ struct ril_network {
 
 typedef void (*ril_network_cb_t)(struct ril_network *net, void *arg);
 
-struct ril_network *ril_network_new(GRilIoChannel *io);
+struct ril_network *ril_network_new(GRilIoChannel *io, struct ril_radio *radio);
 struct ril_network *ril_network_ref(struct ril_network *net);
 void ril_network_unref(struct ril_network *net);
 
