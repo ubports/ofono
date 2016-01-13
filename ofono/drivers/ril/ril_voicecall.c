@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015 Jolla Ltd.
+ *  Copyright (C) 2015-2016 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -261,7 +261,9 @@ static void ril_voicecall_lastcause_cb(GRilIoChannel *io, int status,
 			reason = OFONO_DISCONNECT_REASON_ERROR;
 			break;
 	}
-	ofono_info("Call %d ended with RIL cause %d -> ofono reason %d", id, last_cause, reason);
+
+	ofono_info("Call %d ended with RIL cause %d -> ofono reason %d",
+						id, last_cause, reason);
 
 	ofono_voicecall_disconnected(vc, id, reason, NULL);
 }
