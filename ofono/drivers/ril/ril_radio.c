@@ -266,16 +266,28 @@ void ril_radio_remove_handler(struct ril_radio *self, gulong id)
 	}
 }
 
+enum ril_radio_state ril_radio_state_parse(const void *data, guint len)
+{
+	GRilIoParser rilp;
+	int radio_state;
+
+	grilio_parser_init(&rilp, data, len);
+	if (grilio_parser_get_int32(&rilp, &radio_state)) {
+		return radio_state;
+	} else {
+		ofono_error("Error parsing radio state");
+		return RADIO_STATE_UNAVAILABLE;
+	}
+}
+
 static void ril_radio_state_changed(GRilIoChannel *io, guint code,
 				const void *data, guint len, void *user_data)
 {
 	struct ril_radio *self = user_data;
-	GRilIoParser rilp;
-	int radio_state;
+	enum ril_radio_state radio_state = ril_radio_state_parse(data, len);
 
 	GASSERT(code == RIL_UNSOL_RESPONSE_RADIO_STATE_CHANGED);
-	grilio_parser_init(&rilp, data, len);
-	if (grilio_parser_get_int32(&rilp, &radio_state)) {
+	if (radio_state != RADIO_STATE_UNAVAILABLE) {
 		struct ril_radio_priv *priv = self->priv;
 
 		DBG("%s%s", priv->log_prefix,
@@ -293,8 +305,6 @@ static void ril_radio_state_changed(GRilIoChannel *io, guint code,
 
 		priv->last_known_state = radio_state;
 		ril_radio_check_state(self);
-	} else {
-		ofono_error("Error parsing radio state");
 	}
 }
 

@@ -10,7 +10,7 @@ Source0:    http://www.kernel.org/pub/linux/network/ofono/ofono-%{version}.tar.x
 Requires:   dbus
 Requires:   systemd
 Requires:   ofono-configs
-Requires:   libgrilio >= 1.0.4
+Requires:   libgrilio >= 1.0.6
 Requires(preun): systemd
 Requires(post): systemd
 Requires(postun): systemd
@@ -21,7 +21,7 @@ BuildRequires:  pkgconfig(bluez) >= 4.85
 BuildRequires:  pkgconfig(mobile-broadband-provider-info)
 BuildRequires:  pkgconfig(libwspcodec) >= 2.0
 BuildRequires:  pkgconfig(libglibutil)
-BuildRequires:  pkgconfig(libgrilio) >= 1.0.4
+BuildRequires:  pkgconfig(libgrilio) >= 1.0.6
 BuildRequires:  libtool
 BuildRequires:  automake
 BuildRequires:  autoconf

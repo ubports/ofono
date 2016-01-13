@@ -367,10 +367,13 @@ static void ril_sim_card_request_status(struct ril_sim_card *self)
 {
 	struct ril_sim_card_priv *priv = self->priv;
 
-	if (!priv->status_req_id) {
+	if (priv->status_req_id) {
+		/* Retry right away, don't wait for retry timeout to expire */
+		grilio_channel_retry_request(priv->io, priv->status_req_id);
+	} else {
 		GRilIoRequest* req = grilio_request_new();
 
-		grilio_request_set_retry(req, RIL_RETRY_SECS, -1);
+		grilio_request_set_retry(req, RIL_RETRY_SECS*1000, -1);
 		priv->status_req_id = grilio_queue_send_request_full(priv->q,
 					req, RIL_REQUEST_GET_SIM_STATUS,
 					ril_sim_card_status_cb, NULL, self);

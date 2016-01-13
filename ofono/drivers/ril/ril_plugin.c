@@ -67,6 +67,7 @@ enum ril_plugin_io_events {
 	IO_EVENT_CONNECTED,
 	IO_EVENT_ERROR,
 	IO_EVENT_EOF,
+	IO_EVENT_RADIO_STATE_CHANGED,
 	IO_EVENT_COUNT
 };
 
@@ -105,7 +106,6 @@ struct ril_slot {
 	gulong io_event_id[IO_EVENT_COUNT];
 	gulong imei_req_id;
 	gulong sim_card_state_event_id;
-	gulong radio_state_event_id;
 	guint trace_id;
 	guint dump_id;
 	guint retry_id;
@@ -224,8 +224,6 @@ static void ril_plugin_shutdown_slot(struct ril_slot *slot, gboolean kill_io)
 			grilio_channel_unref(slot->io);
 			slot->io = NULL;
 
-			ril_radio_remove_handler(slot->radio,
-						slot->radio_state_event_id);
 			ril_radio_unref(slot->radio);
 			slot->radio = NULL;
 
@@ -626,22 +624,23 @@ static void ril_plugin_imei_cb(GRilIoChannel *io, int status,
 	}
 }
 
+/*
+ * It seems to be necessary to kick (with RIL_REQUEST_RADIO_POWER) the
+ * modems with power on after one of the modems has been powered off.
+ * Otherwise bad things may happen (like the modem never registering
+ * on the network).
+ */
 static void ril_plugin_power_check(struct ril_slot *slot)
 {
-	/*
-	 * It seems to be necessary to kick (with RIL_REQUEST_RADIO_POWER)
-	 * the modems with power on after one of the modems has been powered
-	 * off. Otherwise bad things may happens (like the modem never
-	 * registering on the network).
-	 */
 	ril_radio_confirm_power_on(slot->radio);
 }
 
-static void ril_plugin_radio_state_changed(struct ril_radio *radio, void *data)
+static void ril_plugin_radio_state_changed(GRilIoChannel *io, guint code,
+				const void *data, guint len, void *user_data)
 {
-	struct ril_slot *slot = data;
+	if (ril_radio_state_parse(data, len) == RADIO_STATE_OFF) {
+		struct ril_slot *slot = user_data;
 
-	if (radio->state == RADIO_STATE_OFF) {
 		DBG("power off for slot %u", slot->config.slot);
 		ril_plugin_foreach_slot(slot->plugin, ril_plugin_power_check);
 	}
@@ -663,12 +662,14 @@ static void ril_plugin_slot_connected(struct ril_slot *slot)
 			RIL_REQUEST_GET_IMEI, ril_plugin_imei_cb, NULL, slot);
 
 	GASSERT(!slot->radio);
-	GASSERT(!slot->radio_state_event_id);
 	slot->radio = ril_radio_new(slot->io);
-	slot->network = ril_network_new(slot->io);
-	slot->radio_state_event_id =
-		ril_radio_add_state_changed_handler(slot->radio,
-			ril_plugin_radio_state_changed, slot);
+	slot->network = ril_network_new(slot->io, slot->radio);
+
+	GASSERT(!slot->io_event_id[IO_EVENT_RADIO_STATE_CHANGED]);
+	slot->io_event_id[IO_EVENT_RADIO_STATE_CHANGED] =
+		grilio_channel_add_unsol_event_handler(slot->io,
+				ril_plugin_radio_state_changed,
+				RIL_UNSOL_RESPONSE_RADIO_STATE_CHANGED, slot);
 
 	GASSERT(!slot->sim_card);
 	slot->sim_card = ril_sim_card_new(slot->io, slot->config.slot,
