@@ -37,6 +37,7 @@ void ril_radio_power_cycle(struct ril_radio *radio);
 gulong ril_radio_add_state_changed_handler(struct ril_radio *radio,
 					ril_radio_cb_t cb, void *arg);
 void ril_radio_remove_handler(struct ril_radio *radio, gulong id);
+enum ril_radio_state ril_radio_state_parse(const void *data, guint len);
 
 #endif /* RIL_RADIO */
 
