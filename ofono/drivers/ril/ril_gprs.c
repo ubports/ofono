@@ -233,6 +233,12 @@ static gboolean ril_gprs_register(gpointer user_data)
 	gd->registration_status = ril_netreg_check_if_really_roaming(
 		ril_modem_ofono_netreg(gd->md), gd->network->data.status);
 
+	gd->max_cids = gd->network->data.max_calls;
+	if (gd->max_cids > 0) {
+		DBG("Setting max cids to %d", gd->max_cids);
+		ofono_gprs_set_cid_range(gd->gprs, 1, gd->max_cids);
+	}
+
 	ofono_gprs_register(gd->gprs);
 	return FALSE;
 }
