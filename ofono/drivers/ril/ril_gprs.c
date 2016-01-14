@@ -60,7 +60,7 @@ struct ril_gprs_cbd {
 
 #define ril_gprs_cbd_free g_free
 
-static inline struct ril_gprs *ril_gprs_get_data(struct ofono_gprs *ofono)
+G_INLINE_FUNC struct ril_gprs *ril_gprs_get_data(struct ofono_gprs *ofono)
 {
 	return ofono ? ofono_gprs_get_data(ofono) : NULL;
 }
@@ -99,36 +99,45 @@ static void ril_gprs_send_allow_data_req(struct ril_gprs *gd, gboolean allow)
 	grilio_request_unref(req);
 }
 
+static enum network_registration_status ril_gprs_fix_registration_status(
+		struct ril_gprs *gd, enum network_registration_status status)
+{
+	if (!gd->attached || !gd->allow_data) {
+		return NETWORK_REGISTRATION_STATUS_NOT_REGISTERED;
+	} else {
+		/* TODO: need a way to make sure that SPDI information has
+		 * already been read from the SIM (i.e. sim_spdi_read_cb in
+		 * network.c has been called) */
+		struct ofono_netreg *netreg = ril_modem_ofono_netreg(gd->md);
+		return ril_netreg_check_if_really_roaming(netreg, status);
+	}
+}
+
+static void ril_gprs_data_update_registration_state(struct ril_gprs *gd)
+{
+	const enum network_registration_status status =
+		ril_gprs_fix_registration_status(gd, gd->network->data.status);
+
+	if (gd->registration_status != status) {
+		ofono_info("data reg changed %d -> %d (%s), attached %d",
+				gd->registration_status, status,
+				registration_status_to_string(status),
+				gd->attached);
+		gd->registration_status = status;
+		ofono_gprs_status_notify(gd->gprs, gd->registration_status);
+	}
+}
+
 static void ril_gprs_check_data_allowed(struct ril_gprs *gd)
 {
-	/* Not doing anything while set_attached call is pending */
-	if (!gd->set_attached_id) {
-		DBG("%d %d", gd->allow_data, gd->attached);
-		if (!gd->allow_data && gd->attached) {
-			gd->attached = FALSE;
-			if (gd->gprs) {
-				ofono_gprs_detached_notify(gd->gprs);
-			}
-		} else if (gd->allow_data && !gd->attached) {
-			switch (gd->registration_status) {
-			case NETWORK_REGISTRATION_STATUS_REGISTERED:
-			case NETWORK_REGISTRATION_STATUS_ROAMING:
-				/*
-				 * Already registered, ofono core should
-				 * call set_attached.
-				 */
-				ofono_gprs_status_notify(gd->gprs,
-						gd->registration_status);
-				break;
-			default:
-				/*
-				 * Otherwise wait for the data registration
-				 * status to change
-				 */
-				break;
-			}
+	DBG("%d %d", gd->allow_data, gd->attached);
+	if (!gd->allow_data && gd->attached) {
+		gd->attached = FALSE;
+		if (gd->gprs) {
+			ofono_gprs_detached_notify(gd->gprs);
 		}
 	}
+	ril_gprs_data_update_registration_state(gd);
 }
 
 static gboolean ril_gprs_set_attached_cb(gpointer user_data)
@@ -139,8 +148,8 @@ static gboolean ril_gprs_set_attached_cb(gpointer user_data)
 
 	GASSERT(gd->set_attached_id);
 	gd->set_attached_id = 0;
-	cbd->cb(ril_error_ok(&error), cbd->data);
 	ril_gprs_check_data_allowed(gd);
+	cbd->cb(ril_error_ok(&error), cbd->data);
 	return FALSE;
 }
 
@@ -175,8 +184,9 @@ void ril_gprs_allow_data(struct ofono_gprs *gprs, gboolean allow)
 		DBG("%s %s", ril_modem_get_path(gd->md), allow ? "yes" : "no");
 		if (gd->allow_data != allow) {
 			gd->allow_data = allow;
-			ril_gprs_send_allow_data_req(gd, allow);
-			ril_gprs_check_data_allowed(gd);
+			if (!gd->set_attached_id) {
+				ril_gprs_check_data_allowed(gd);
+			}
 		}
 	}
 }
@@ -186,30 +196,15 @@ static void ril_gprs_data_registration_state_changed(struct ril_network *net,
 {
 	struct ril_gprs *gd = user_data;
 	const struct ril_registration_state *data = &net->data;
-	enum network_registration_status status;
 
 	GASSERT(gd->network == net);
-
 	if (data->max_calls > gd->max_cids) {
 		DBG("Setting max cids to %d", data->max_calls);
 		gd->max_cids = data->max_calls;
 		ofono_gprs_set_cid_range(gd->gprs, 1, gd->max_cids);
 	}
 
-	/* TODO: need a way to make sure that SPDI information has already
-	 * been read from the SIM (i.e. sim_spdi_read_cb  in network.c has
-	 * been called) */
-	status = ril_netreg_check_if_really_roaming(
-				ril_modem_ofono_netreg(gd->md), data->status);
-
-	if (gd->registration_status != status) {
-		ofono_info("data reg changed %d -> %d (%s), attached %d",
-				gd->registration_status, status,
-				registration_status_to_string(status),
-				gd->attached);
-		gd->registration_status = status;
-		ofono_gprs_status_notify(gd->gprs, gd->registration_status);
-	}
+	ril_gprs_data_update_registration_state(gd);
 }
 
 static void ril_gprs_registration_status(struct ofono_gprs *gprs,
@@ -230,8 +225,9 @@ static gboolean ril_gprs_register(gpointer user_data)
 	gd->register_id = 0;
 	gd->event_id = ril_network_add_data_state_changed_handler(gd->network,
 			ril_gprs_data_registration_state_changed, gd);
-	gd->registration_status = ril_netreg_check_if_really_roaming(
-		ril_modem_ofono_netreg(gd->md), gd->network->data.status);
+	gd->registration_status = ril_gprs_fix_registration_status(gd,
+						gd->network->data.status);
+	ril_gprs_send_allow_data_req(gd, TRUE);
 
 	gd->max_cids = gd->network->data.max_calls;
 	if (gd->max_cids > 0) {
