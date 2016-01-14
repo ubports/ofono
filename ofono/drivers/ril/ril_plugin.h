@@ -43,20 +43,7 @@
 
 #define RILMODEM_DRIVER         "ril"
 
-struct ril_slot_info {
-	const char *path;
-	const char *imei;
-	gboolean enabled;
-	gboolean sim_present;
-};
-
-struct ril_plugin {
-	const char *default_voice_imsi;
-	const char *default_data_imsi;
-	const char *default_voice_path;
-	const char *default_data_path;
-	const struct ril_slot_info **slots;
-};
+typedef struct ril_slot_info const *ril_slot_info_ptr;
 
 struct ril_slot_config {
 	guint slot;
@@ -64,8 +51,25 @@ struct ril_slot_config {
 	const char *default_name;
 };
 
+struct ril_slot_info {
+	const char *path;
+	const char *imei;
+	gboolean enabled;
+	gboolean sim_present;
+	const struct ril_slot_config *config;
+};
+
+struct ril_plugin {
+	const char *default_voice_imsi;
+	const char *default_data_imsi;
+	const char *default_voice_path;
+	const char *default_data_path;
+	const ril_slot_info_ptr *slots;
+};
+
 struct ril_modem {
 	GRilIoChannel *io;
+	const char *imei;
 	struct ofono_modem *ofono;
 	struct ril_radio *radio;
 	struct ril_network *network;
@@ -99,11 +103,12 @@ void ril_plugin_dbus_signal(struct ril_plugin_dbus *dbus, int mask);
 void ril_plugin_dbus_signal_sim(struct ril_plugin_dbus *dbus, int index,
 							gboolean present);
 
-struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *dev,
-		struct ril_radio *radio, struct ril_network *network,
-		struct ril_sim_card *sc, const struct ril_slot_config *config);
+struct ril_modem *ril_modem_create(GRilIoChannel *io,
+		const struct ril_slot_info *slot, struct ril_radio *radio,
+		struct ril_network *network, struct ril_sim_card *sc);
 void ril_modem_delete(struct ril_modem *modem);
 void ril_modem_allow_data(struct ril_modem *modem, gboolean allow);
+void ril_modem_set_imei(struct ril_modem *modem, const char *imei);
 struct ofono_sim *ril_modem_ofono_sim(struct ril_modem *modem);
 struct ofono_gprs *ril_modem_ofono_gprs(struct ril_modem *modem);
 struct ofono_netreg *ril_modem_ofono_netreg(struct ril_modem *modem);
