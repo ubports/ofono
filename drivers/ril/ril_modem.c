@@ -50,6 +50,9 @@ struct ril_modem_data {
 	GRilIoQueue *q;
 	struct ofono_radio_settings *radio_settings;
 	char *default_name;
+	char *imei;
+	gboolean pre_sim_done;
+	gboolean devinfo_created;
 	gboolean allow_data;
 
 	guint online_check_id;
@@ -138,6 +141,27 @@ void ril_modem_allow_data(struct ril_modem *modem, gboolean allow)
 		 * Otherwise the "allow data" state will be sync'd by
 		 * ril_modem_gprs_watch
 		 */
+	}
+}
+
+static void ril_modem_check_devinfo(struct ril_modem_data *md)
+{
+	/* devinfo driver assumes that IMEI is known */
+	if (md->imei && md->pre_sim_done && !md->devinfo_created &&
+							md->modem.ofono) {
+		md->devinfo_created = TRUE;
+		ofono_devinfo_create(md->modem.ofono, 0, RILMODEM_DRIVER, md);
+	}
+}
+
+void ril_modem_set_imei(struct ril_modem *modem, const char *imei)
+{
+	struct ril_modem_data *md = ril_modem_data_from_modem(modem);
+
+	if (md) {
+		g_free(md->imei);
+		modem->imei = md->imei = g_strdup(imei);
+		ril_modem_check_devinfo(md);
 	}
 }
 
@@ -265,8 +289,9 @@ static void ril_modem_pre_sim(struct ofono_modem *modem)
 {
 	struct ril_modem_data *md = ril_modem_data_from_ofono(modem);
 
-	DBG("");
-	ofono_devinfo_create(modem, 0, RILMODEM_DRIVER, md);
+	DBG("%s", ofono_modem_get_path(modem));
+	md->pre_sim_done = TRUE;
+	ril_modem_check_devinfo(md);
 	ofono_sim_create(modem, 0, RILMODEM_DRIVER, md);
 	ofono_voicecall_create(modem, 0, RILMODEM_DRIVER, md);
 	ril_modem_update_radio_settings(md);
@@ -282,7 +307,7 @@ static void ril_modem_post_sim(struct ofono_modem *modem)
 	struct ril_modem_data *md = ril_modem_data_from_ofono(modem);
 	struct ofono_gprs *gprs;
 
-	DBG("");
+	DBG("%s", ofono_modem_get_path(modem));
 	ofono_sms_create(modem, 0, RILMODEM_DRIVER, md);
 	gprs = ofono_gprs_create(modem, 0, RILMODEM_DRIVER, md);
 	if (gprs) {
@@ -311,7 +336,7 @@ static void ril_modem_post_online(struct ofono_modem *modem)
 {
 	struct ril_modem_data *md = ril_modem_data_from_ofono(modem);
 
-	DBG("");
+	DBG("%s", ofono_modem_get_path(modem));
 	ofono_call_volume_create(modem, 0, RILMODEM_DRIVER, md);
 	ofono_netreg_create(modem, 0, RILMODEM_DRIVER, md);
 	ofono_ussd_create(modem, 0, RILMODEM_DRIVER, md);
@@ -414,27 +439,31 @@ static void ril_modem_remove(struct ofono_modem *ofono)
 	grilio_queue_cancel_all(md->q, FALSE);
 	grilio_queue_unref(md->q);
 	g_free(md->default_name);
+	g_free(md->imei);
 	g_free(md);
 }
 
-struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *dev,
-		struct ril_radio *radio, struct ril_network *network,
-		struct ril_sim_card *sc, const struct ril_slot_config *config)
+struct ril_modem *ril_modem_create(GRilIoChannel *io,
+		const struct ril_slot_info *slot, struct ril_radio *radio,
+		struct ril_network *network, struct ril_sim_card *sc)
 {
-	struct ofono_modem *ofono = ofono_modem_create(dev, RILMODEM_DRIVER);
-
+	/* Skip the slash from the path, it looks like "/ril_0" */
+	struct ofono_modem *ofono = ofono_modem_create(slot->path + 1,
+							RILMODEM_DRIVER);
 	if (ofono) {
 		int err;
 		struct ril_modem_data *md = g_new0(struct ril_modem_data, 1);
 		struct ril_modem *modem = &md->modem;
 
 		/* Copy config */
-		modem->config = *config;
-		if (config->default_name && config->default_name[0]) {
-			md->default_name = g_strdup(config->default_name);
+		modem->config = *slot->config;
+		modem->imei = md->imei = g_strdup(slot->imei);
+		if (slot->config->default_name &&
+					slot->config->default_name[0]) {
+			md->default_name = g_strdup(slot->config->default_name);
 		} else {
 			md->default_name = g_strdup_printf("SIM%u",
-							config->slot + 1);
+						slot->config->slot + 1);
 		}
 		modem->config.default_name = md->default_name;
 

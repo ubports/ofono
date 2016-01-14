@@ -75,6 +75,7 @@ struct ril_plugin_priv {
 	struct ril_plugin pub;
 	struct ril_plugin_dbus *dbus;
 	GSList *slots;
+	ril_slot_info_ptr *slots_info;
 	struct ril_modem *data_modem;
 	char *default_voice_imsi;
 	char *default_data_imsi;
@@ -570,8 +571,8 @@ static void ril_plugin_create_modem(struct ril_slot *slot)
 	GASSERT(slot->io && slot->io->connected);
 	GASSERT(!slot->modem);
 
-	modem = ril_modem_create(slot->io, slot->path + 1, slot->radio,
-				slot->network, slot->sim_card, &slot->config);
+	modem = ril_modem_create(slot->io, &slot->pub, slot->radio,
+				slot->network, slot->sim_card);
 
 	if (modem) {
 		struct ofono_sim *sim = ril_modem_ofono_sim(modem);
@@ -607,6 +608,9 @@ static void ril_plugin_imei_cb(GRilIoChannel *io, int status,
 		grilio_parser_init(&rilp, data, len);
 		slot->pub.imei = slot->imei = grilio_parser_get_utf8(&rilp);
 		DBG("%s", slot->imei);
+		if (slot->modem) {
+			ril_modem_set_imei(slot->modem, slot->imei);
+		}
 	} else {
 		ofono_error("Slot %u IMEI query error: %s", slot->config.slot,
 						ril_error_to_string(status));
@@ -1168,21 +1172,21 @@ static void ril_plugin_init_slots(struct ril_plugin_priv *plugin)
 {
 	int i;
 	GSList *link;
-	const struct ril_slot_info **pub =
-		g_new0(const struct ril_slot_info*,
+	ril_slot_info_ptr *info = g_new0(ril_slot_info_ptr,
 			g_slist_length(plugin->slots) + 1);
 
-	plugin->pub.slots = pub;
+	plugin->pub.slots = plugin->slots_info = info;
 	for (i = 0, link = plugin->slots; link; link = link->next, i++) {
 		struct ril_slot *slot = link->data;
 
-		*pub++ = &slot->pub;
+		*info++ = &slot->pub;
 		slot->index = i;
 		slot->plugin = plugin;
 		slot->pub.path = slot->path;
+		slot->pub.config = &slot->config;
 	}
 
-	*pub = NULL;
+	*info = NULL;
 }
 
 static void ril_plugin_enable_disable_slot(gpointer data, gpointer user_data)
@@ -1335,7 +1339,7 @@ static void ril_plugin_exit(void)
 		g_slist_free_full(ril_plugin->slots, ril_plugin_destroy_slot);
 		ril_plugin_dbus_free(ril_plugin->dbus);
 		g_key_file_free(ril_plugin->storage);
-		g_free(ril_plugin->pub.slots);
+		g_free(ril_plugin->slots_info);
 		g_free(ril_plugin->default_voice_imsi);
 		g_free(ril_plugin->default_data_imsi);
 		g_free(ril_plugin->default_voice_path);
