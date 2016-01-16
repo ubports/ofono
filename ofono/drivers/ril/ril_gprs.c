@@ -15,6 +15,7 @@
 
 #include "ril_plugin.h"
 #include "ril_network.h"
+#include "ril_data.h"
 #include "ril_util.h"
 #include "ril_log.h"
 
@@ -40,15 +41,16 @@
 struct ril_gprs {
 	struct ofono_gprs *gprs;
 	struct ril_modem *md;
+	struct ril_data *data;
 	struct ril_network *network;
 	GRilIoChannel *io;
 	GRilIoQueue *q;
-	gboolean allow_data;
 	gboolean attached;
 	int max_cids;
 	enum network_registration_status registration_status;
 	guint register_id;
-	gulong event_id;
+	gulong network_event_id;
+	gulong data_event_id;
 	guint set_attached_id;
 };
 
@@ -60,7 +62,7 @@ struct ril_gprs_cbd {
 
 #define ril_gprs_cbd_free g_free
 
-G_INLINE_FUNC struct ril_gprs *ril_gprs_get_data(struct ofono_gprs *ofono)
+static struct ril_gprs *ril_gprs_get_data(struct ofono_gprs *ofono)
 {
 	return ofono ? ofono_gprs_get_data(ofono) : NULL;
 }
@@ -76,33 +78,10 @@ static struct ril_gprs_cbd *ril_gprs_cbd_new(struct ril_gprs *gd,
 	return cbd;
 }
 
-static void ril_gprs_send_allow_data_req(struct ril_gprs *gd, gboolean allow)
-{
-	GRilIoRequest *req = grilio_request_sized_new(8);
-
-	/*
-	 * Some RILs never respond to RIL_REQUEST_ALLOW_DATA, so it doesn't
-	 * make sense to register the completion callback - without a timeout
-	 * it would just leak memory on our side.
-	 */
-	grilio_request_append_int32(req, 1);
-	grilio_request_append_int32(req, allow != FALSE);
-	if (allow) {
-		grilio_queue_send_request(gd->q, req, RIL_REQUEST_ALLOW_DATA);
-	} else {
-		/*
-		 * Send "off" requests directly to GRilIoChannel so that they
-		 * don't get cancelled by ril_gprs_remove()
-		 */
-		grilio_channel_send_request(gd->io, req, RIL_REQUEST_ALLOW_DATA);
-	}
-	grilio_request_unref(req);
-}
-
 static enum network_registration_status ril_gprs_fix_registration_status(
 		struct ril_gprs *gd, enum network_registration_status status)
 {
-	if (!gd->attached || !gd->allow_data) {
+	if (!ril_data_allowed(gd->data)) {
 		return NETWORK_REGISTRATION_STATUS_NOT_REGISTERED;
 	} else {
 		/* TODO: need a way to make sure that SPDI information has
@@ -130,13 +109,15 @@ static void ril_gprs_data_update_registration_state(struct ril_gprs *gd)
 
 static void ril_gprs_check_data_allowed(struct ril_gprs *gd)
 {
-	DBG("%d %d", gd->allow_data, gd->attached);
-	if (!gd->allow_data && gd->attached) {
+	DBG("%s %d %d", ril_modem_get_path(gd->md), ril_data_allowed(gd->data),
+								gd->attached);
+	if (!ril_data_allowed(gd->data) && gd->attached) {
 		gd->attached = FALSE;
 		if (gd->gprs) {
 			ofono_gprs_detached_notify(gd->gprs);
 		}
 	}
+
 	ril_gprs_data_update_registration_state(gd);
 }
 
@@ -158,7 +139,7 @@ static void ril_gprs_set_attached(struct ofono_gprs *gprs, int attached,
 {
 	struct ril_gprs *gd = ril_gprs_get_data(gprs);
 
-	if (gd && (gd->allow_data || !attached)) {
+	if (ril_data_allowed(gd->data) || !attached) {
 		DBG("%s attached: %d", ril_modem_get_path(gd->md), attached);
 		if (gd->set_attached_id) {
 			g_source_remove(gd->set_attached_id);
@@ -175,19 +156,14 @@ static void ril_gprs_set_attached(struct ofono_gprs *gprs, int attached,
 	}
 }
 
-void ril_gprs_allow_data(struct ofono_gprs *gprs, gboolean allow)
+static void ril_gprs_allow_data_changed(struct ril_data *data, void *user_data)
 {
-	struct ril_gprs *gd = ril_gprs_get_data(gprs);
+	struct ril_gprs *gd = user_data;
 
-	GASSERT(gd);
-	if (gd) {
-		DBG("%s %s", ril_modem_get_path(gd->md), allow ? "yes" : "no");
-		if (gd->allow_data != allow) {
-			gd->allow_data = allow;
-			if (!gd->set_attached_id) {
-				ril_gprs_check_data_allowed(gd);
-			}
-		}
+	GASSERT(gd->data == data);
+	DBG("%s %d", ril_modem_get_path(gd->md), ril_data_allowed(data));
+	if (!gd->set_attached_id) {
+		ril_gprs_check_data_allowed(gd);
 	}
 }
 
@@ -212,10 +188,13 @@ static void ril_gprs_registration_status(struct ofono_gprs *gprs,
 {
 	struct ril_gprs *gd = ril_gprs_get_data(gprs);
 	struct ofono_error error;
+	const enum network_registration_status status = gd->attached ?
+		gd->registration_status :
+		NETWORK_REGISTRATION_STATUS_NOT_REGISTERED;
 
-	DBG("%d (%s)", gd->registration_status,
-			registration_status_to_string(gd->registration_status));
-	cb(ril_error_ok(&error), gd->registration_status, data);
+
+	DBG("%d (%s)", status, registration_status_to_string(status));
+	cb(ril_error_ok(&error), status, data);
 }
 
 static gboolean ril_gprs_register(gpointer user_data)
@@ -223,11 +202,12 @@ static gboolean ril_gprs_register(gpointer user_data)
 	struct ril_gprs *gd = user_data;
 
 	gd->register_id = 0;
-	gd->event_id = ril_network_add_data_state_changed_handler(gd->network,
-			ril_gprs_data_registration_state_changed, gd);
+	gd->network_event_id = ril_network_add_data_state_changed_handler(
+		gd->network, ril_gprs_data_registration_state_changed, gd);
+	gd->data_event_id = ril_data_add_allow_changed_handler(gd->data,
+		ril_gprs_allow_data_changed, gd);
 	gd->registration_status = ril_gprs_fix_registration_status(gd,
 						gd->network->data.status);
-	ril_gprs_send_allow_data_req(gd, TRUE);
 
 	gd->max_cids = gd->network->data.max_calls;
 	if (gd->max_cids > 0) {
@@ -249,6 +229,7 @@ static int ril_gprs_probe(struct ofono_gprs *gprs, unsigned int vendor,
 	gd->md = modem;
 	gd->io = grilio_channel_ref(ril_modem_io(modem));
         gd->q = grilio_queue_new(gd->io);
+	gd->data = ril_data_ref(modem->data);
 	gd->network = ril_network_ref(modem->network);
 	gd->gprs = gprs;
 	ofono_gprs_set_data(gprs, gd);
@@ -265,11 +246,6 @@ static void ril_gprs_remove(struct ofono_gprs *gprs)
 	DBG("%s", ril_modem_get_path(gd->md));
 	ofono_gprs_set_data(gprs, NULL);
 
-	if (gd->attached) {
-		/* This one won't get cancelled by grilio_queue_cancel_all */
-		ril_gprs_send_allow_data_req(gd, FALSE);
-	}
-
 	if (gd->set_attached_id) {
 		g_source_remove(gd->set_attached_id);
 	}
@@ -278,8 +254,11 @@ static void ril_gprs_remove(struct ofono_gprs *gprs)
 		g_source_remove(gd->register_id);
 	}
 
-	ril_network_remove_handler(gd->network, gd->event_id);
+	ril_network_remove_handler(gd->network, gd->network_event_id);
 	ril_network_unref(gd->network);
+
+	ril_data_remove_handler(gd->data, gd->data_event_id);
+	ril_data_unref(gd->data);
 
 	grilio_channel_unref(gd->io);
 	grilio_queue_cancel_all(gd->q, FALSE);

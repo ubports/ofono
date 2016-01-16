@@ -36,7 +36,9 @@ struct ofono_modem;
 #include "ril_constants.h"
 
 #define RIL_RETRY_SECS (2)
+#define RIL_RETRY_MS   (RIL_RETRY_SECS*1000)
 
+struct ril_data;
 struct ril_modem;
 struct ril_radio;
 struct ril_network;
