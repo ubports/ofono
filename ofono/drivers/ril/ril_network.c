@@ -129,6 +129,15 @@ static gboolean ril_network_parse_response(struct ril_network *self,
 		}
 	}
 
+	/*
+	 * Some older RILs don't provide max calls, in that case let's
+	 * supply some reasonable default. We don't need more than 2
+	 * simultaneous data calls anyway.
+	 */
+	if (nparams <= 5) {
+		reg->max_calls = 2;
+	}
+
 	reg->lac = slac ? strtol(slac, NULL, 16) : -1;
 	reg->ci = sci ? strtol(sci, NULL, 16) : -1;
 	reg->access_tech = ril_parse_tech(stech, &reg->ril_tech);
