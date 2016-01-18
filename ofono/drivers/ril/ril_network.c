@@ -80,28 +80,25 @@ static gboolean ril_network_parse_response(struct ril_network *self,
 
 	ril_network_reset_state(reg);
 
-	/* Size of response string array
-	 *
-	 * Should be:
-	 *   >= 4 for VOICE_REG reply
-	 *   >= 5 for DATA_REG reply
-	 */
+	/* Size of response string array. The minimum seen in the wild is 3 */
 	grilio_parser_init(&rilp, data, len);
-	if (!grilio_parser_get_int32(&rilp, &nparams) || nparams < 4) {
+	if (!grilio_parser_get_int32(&rilp, &nparams) || nparams < 3) {
 		DBG("%sbroken response", priv->log_prefix);
 		return FALSE;
 	}
 
-	sstatus = grilio_parser_get_utf8(&rilp);
+	sstatus = grilio_parser_get_utf8(&rilp);              /* response[0] */
 	if (!sstatus) {
 		DBG("%sNo sstatus value returned!", priv->log_prefix);
 		return FALSE;
 	}
 
-	slac = grilio_parser_get_utf8(&rilp);
-	sci = grilio_parser_get_utf8(&rilp);
-	stech = grilio_parser_get_utf8(&rilp);
-	nparams -= 4;
+	slac = grilio_parser_get_utf8(&rilp);                 /* response[1] */
+	sci = grilio_parser_get_utf8(&rilp);                  /* response[2] */
+
+	if (nparams > 3) {
+		stech = grilio_parser_get_utf8(&rilp);        /* response[3] */
+	}
 
 	ril_status = atoi(sstatus);
 	if (ril_status > 10) {
@@ -111,7 +108,7 @@ static gboolean ril_network_parse_response(struct ril_network *self,
 	}
 
 	/* FIXME: need to review VOICE_REGISTRATION response
-	 * as it returns ~15 parameters ( vs. 6 for DATA ).
+	 * as it returns up to 15 parameters ( vs. 6 for DATA ).
 	 *
 	 * The first four parameters are the same for both
 	 * responses ( although status includes values for
@@ -120,23 +117,32 @@ static gboolean ril_network_parse_response(struct ril_network *self,
 	 * Parameters 5 & 6 have different meanings for
 	 * voice & data response.
 	 */
-	if (nparams--) {
+	if (nparams > 4) {
 		/* TODO: different use for CDMA */
-		sreason = grilio_parser_get_utf8(&rilp);
-		if (nparams--) {
+		sreason = grilio_parser_get_utf8(&rilp);      /* response[4] */
+		if (nparams > 5) {
 			/* TODO: different use for CDMA */
-			smax = grilio_parser_get_utf8(&rilp);
+			smax = grilio_parser_get_utf8(&rilp); /* response[5] */
 			if (smax) {
 				reg->max_calls = atoi(smax);
 			}
 		}
 	}
 
+	/*
+	 * Some older RILs don't provide max calls, in that case let's
+	 * supply some reasonable default. We don't need more than 2
+	 * simultaneous data calls anyway.
+	 */
+	if (nparams <= 5) {
+		reg->max_calls = 2;
+	}
+
 	reg->lac = slac ? strtol(slac, NULL, 16) : -1;
 	reg->ci = sci ? strtol(sci, NULL, 16) : -1;
 	reg->access_tech = ril_parse_tech(stech, &reg->ril_tech);
 
-	DBG("%s%s,%s,%s%d,%s,%s,%s", priv->log_prefix,
+	DBG("%s%s,%s,%s,%d,%s,%s,%s", priv->log_prefix,
 				registration_status_to_string(reg->status),
 				slac, sci, reg->ril_tech,
 				registration_tech_to_string(reg->access_tech),
