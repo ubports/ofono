@@ -17,6 +17,7 @@
 #include "ril_sim_card.h"
 #include "ril_network.h"
 #include "ril_radio.h"
+#include "ril_data.h"
 #include "ril_mce.h"
 #include "ril_util.h"
 #include "ril_log.h"
@@ -74,13 +75,13 @@ enum ril_plugin_io_events {
 struct ril_plugin_priv {
 	struct ril_plugin pub;
 	struct ril_plugin_dbus *dbus;
+	struct ril_data_manager *data_manager;
 	GSList *slots;
 	ril_slot_info_ptr *slots_info;
-	struct ril_modem *data_modem;
+	struct ril_slot *data_slot;
+	struct ril_slot *voice_slot;
 	char *default_voice_imsi;
 	char *default_data_imsi;
-	char *default_voice_path;
-	char *default_data_path;
 	GKeyFile *storage;
 };
 
@@ -103,6 +104,7 @@ struct ril_slot {
 	struct ril_radio *radio;
 	struct ril_network *network;
 	struct ril_sim_card *sim_card;
+	struct ril_data *data;
 	GRilIoChannel *io;
 	gulong io_event_id[IO_EVENT_COUNT];
 	gulong imei_req_id;
@@ -119,6 +121,7 @@ static void ril_debug_trace_notify(struct ofono_debug_desc *desc);
 static void ril_debug_dump_notify(struct ofono_debug_desc *desc);
 static void ril_debug_grilio_notify(struct ofono_debug_desc *desc);
 static void ril_plugin_retry_init_io(struct ril_slot *slot);
+static void ril_plugin_update_modem_paths_full(struct ril_plugin_priv *plugin);
 
 GLOG_MODULE_DEFINE("rilmodem");
 
@@ -140,9 +143,14 @@ static struct ofono_debug_desc grilio_debug OFONO_DEBUG_ATTR = {
 	.notify = ril_debug_grilio_notify
 };
 
-static inline struct ril_plugin_priv *ril_plugin_cast(struct ril_plugin *pub)
+static struct ril_plugin_priv *ril_plugin_cast(struct ril_plugin *pub)
 {
 	return G_CAST(pub, struct ril_plugin_priv, pub);
+}
+
+static gboolean ril_plugin_multisim(struct ril_plugin_priv *plugin)
+{
+	return plugin->slots && plugin->slots->next;
 }
 
 static void ril_plugin_foreach_slot_proc(gpointer data, gpointer user_data)
@@ -205,6 +213,30 @@ static void ril_plugin_shutdown_slot(struct ril_slot *slot, gboolean kill_io)
 			slot->retry_id = 0;
 		}
 
+		if (slot->data) {
+			ril_data_allow(slot->data, FALSE);
+			ril_data_unref(slot->data);
+			slot->data = NULL;
+		}
+
+		if (slot->radio) {
+			ril_radio_unref(slot->radio);
+			slot->radio = NULL;
+		}
+
+		if (slot->network) {
+			ril_network_unref(slot->network);
+			slot->network = NULL;
+		}
+
+		if (slot->sim_card) {
+			ril_sim_card_remove_handler(slot->sim_card,
+						slot->sim_card_state_event_id);
+			ril_sim_card_unref(slot->sim_card);
+			slot->sim_card_state_event_id = 0;
+			slot->sim_card = NULL;
+		}
+
 		if (slot->io) {
 			int i;
 
@@ -224,18 +256,6 @@ static void ril_plugin_shutdown_slot(struct ril_slot *slot, gboolean kill_io)
 			grilio_channel_shutdown(slot->io, FALSE);
 			grilio_channel_unref(slot->io);
 			slot->io = NULL;
-
-			ril_radio_unref(slot->radio);
-			slot->radio = NULL;
-
-			ril_network_unref(slot->network);
-			slot->network = NULL;
-
-			ril_sim_card_remove_handler(slot->sim_card,
-						slot->sim_card_state_event_id);
-			ril_sim_card_unref(slot->sim_card);
-			slot->sim_card_state_event_id = 0;
-			slot->sim_card = NULL;
 		}
 	}
 }
@@ -300,58 +320,84 @@ static struct ril_slot *ril_plugin_find_slot_number(GSList *slots, guint number)
 static int ril_plugin_update_modem_paths(struct ril_plugin_priv *plugin)
 {
 	int mask = 0;
-	struct ril_slot *voice = ril_plugin_find_slot_imsi(plugin->slots,
-						plugin->default_voice_imsi);
-	struct ril_slot *data = ril_plugin_find_slot_imsi(plugin->slots,
-						plugin->default_data_imsi);
+	struct ril_slot *slot = NULL;
 
-	if (!voice) {
-		/* If there's no default voice SIM, find any SIM instead.
-		 * One should always be able to make and receive a phone call
-		 * if there's a working SIM in the phone. However if the
-		 * previously selected voice SIM is inserted, we will switch
-		 * back to it. */
-		voice = ril_plugin_find_slot_imsi(plugin->slots, NULL);
+	/* Voice */
+	if (plugin->default_voice_imsi) {
+		slot = ril_plugin_find_slot_imsi(plugin->slots,
+				plugin->default_voice_imsi);
+	} else if (plugin->voice_slot) {
+		/* Make sure that the slot is enabled and SIM is in */
+		slot = ril_plugin_find_slot_imsi(plugin->slots,
+				plugin->voice_slot->modem ?
+				ofono_sim_get_imsi(plugin->voice_slot->sim) :
+				NULL);
 	}
 
-	if (voice) {
-		if (g_strcmp0(plugin->default_voice_path, voice->path)) {
-			DBG("Default voice SIM at %s", voice->path);
-			g_free(plugin->default_voice_path);
-			plugin->default_voice_path = g_strdup(voice->path);
-			mask |= RIL_PLUGIN_SIGNAL_VOICE_PATH;
-		}
-	} else if (plugin->default_voice_path) {
-		DBG("No default voice SIM");
-		g_free(plugin->default_voice_path);
-		plugin->default_voice_path = NULL;
+	/*
+	 * If there's no default voice SIM, we will find any SIM instead.
+	 * One should always be able to make and receive a phone call
+	 * if there's a working SIM in the phone. However if the
+	 * previously selected voice SIM is inserted, we will switch
+	 * back to it.
+	 *
+	 * There is no such fallback for the data.
+	 */
+	if (!slot) {
+		slot = ril_plugin_find_slot_imsi(plugin->slots, NULL);
+	}
+
+	if (plugin->voice_slot != slot) {
 		mask |= RIL_PLUGIN_SIGNAL_VOICE_PATH;
+		plugin->voice_slot = slot;
+		if (slot) {
+			DBG("Default voice SIM at %s", slot->path);
+			plugin->pub.default_voice_path = slot->path;
+		} else {
+			DBG("No default voice SIM");
+			plugin->pub.default_voice_path = NULL;
+		}
 	}
 
-	if (data) {
-		if (g_strcmp0(plugin->default_data_path, data->path)) {
-			DBG("Default data SIM at %s", data->path);
-			g_free(plugin->default_data_path);
-			plugin->default_data_path = g_strdup(data->path);
-			mask |= RIL_PLUGIN_SIGNAL_DATA_PATH;
-		}
-		if (plugin->data_modem != data->modem) {
-			ril_modem_allow_data(plugin->data_modem, FALSE);
-			plugin->data_modem = data->modem;
-			ril_modem_allow_data(plugin->data_modem, TRUE);
-		}
-	} else if (plugin->default_data_path) {
-		DBG("No default data SIM");
-		ril_modem_allow_data(plugin->data_modem, FALSE);
-		g_free(plugin->default_data_path);
-		plugin->default_data_path = NULL;
-		plugin->data_modem = NULL;
+	/* Data */
+	if (plugin->default_data_imsi) {
+		slot = ril_plugin_find_slot_imsi(plugin->slots,
+				plugin->default_data_imsi);
+	} else if (plugin->data_slot) {
+		/* Make sure that the slot is enabled and SIM is in */
+		slot = ril_plugin_find_slot_imsi(plugin->slots,
+				plugin->data_slot->modem ?
+				ofono_sim_get_imsi(plugin->data_slot->sim) :
+				NULL);
+	} else {
+		slot = ril_plugin_find_slot_imsi(plugin->slots, NULL);
+	}
+
+	if (plugin->data_slot != slot) {
 		mask |= RIL_PLUGIN_SIGNAL_DATA_PATH;
+		if (plugin->data_slot) {
+			/* Data no longer required for this slot */
+			ril_data_allow(plugin->data_slot->data, FALSE);
+		}
+		plugin->data_slot = slot;
+		if (slot) {
+			DBG("Default data SIM at %s", slot->path);
+			plugin->pub.default_data_path = slot->path;
+			ril_data_allow(slot->data, TRUE);
+		} else {
+			DBG("No default data SIM");
+			plugin->pub.default_data_path = NULL;
+		}
 	}
 
-	plugin->pub.default_voice_path = plugin->default_voice_path;
-	plugin->pub.default_data_path = plugin->default_data_path;
 	return mask;
+}
+
+/* Update modem paths and emit D-Bus signal if necessary */
+static void ril_plugin_update_modem_paths_full(struct ril_plugin_priv *plugin)
+{
+	ril_plugin_dbus_signal(plugin->dbus,
+					ril_plugin_update_modem_paths(plugin));
 }
 
 static void ril_plugin_check_sim_state(struct ril_slot *slot)
@@ -413,8 +459,7 @@ static void ril_plugin_sim_state_watch(enum ofono_sim_state new_state,
 	DBG("%s sim state %d", slot->path + 1, new_state);
 	slot->sim_state = new_state;
 	ril_plugin_check_sim_state(slot);
-	ril_plugin_dbus_signal(slot->plugin->dbus,
-				ril_plugin_update_modem_paths(slot->plugin));
+	ril_plugin_update_modem_paths_full(slot->plugin);
 }
 
 static void ril_plugin_register_sim(struct ril_slot *slot, struct ofono_sim *sim)
@@ -444,13 +489,13 @@ static void ril_plugin_sim_watch(struct ofono_atom *atom,
 	}
 
 	ril_plugin_check_sim_state(slot);
-	ril_plugin_dbus_signal(slot->plugin->dbus,
-				ril_plugin_update_modem_paths(slot->plugin));
+	ril_plugin_update_modem_paths_full(slot->plugin);
 }
 
 static void ril_plugin_handle_error(struct ril_slot *slot)
 {
 	ril_plugin_shutdown_slot(slot, TRUE);
+	ril_plugin_update_modem_paths_full(slot->plugin);
 	ril_plugin_retry_init_io(slot);
 }
 
@@ -479,9 +524,8 @@ static void ril_plugin_modem_removed(struct ril_modem *modem, void *data)
 	}
 
 	slot->modem = NULL;
-	if (slot->plugin->data_modem == modem) {
-		slot->plugin->data_modem = NULL;
-	}
+	ril_data_allow(slot->data, FALSE);
+	ril_plugin_update_modem_paths_full(slot->plugin);
 }
 
 static void ril_plugin_trace(GRilIoChannel *io, GRILIO_PACKET_TYPE type,
@@ -572,7 +616,7 @@ static void ril_plugin_create_modem(struct ril_slot *slot)
 	GASSERT(!slot->modem);
 
 	modem = ril_modem_create(slot->io, &slot->pub, slot->radio,
-				slot->network, slot->sim_card);
+				 slot->network, slot->sim_card, slot->data);
 
 	if (modem) {
 		struct ofono_sim *sim = ril_modem_ofono_sim(modem);
@@ -589,6 +633,8 @@ static void ril_plugin_create_modem(struct ril_slot *slot)
 	} else {
 		ril_plugin_shutdown_slot(slot, TRUE);
 	}
+
+	ril_plugin_update_modem_paths_full(slot->plugin);
 }
 
 static void ril_plugin_imei_cb(GRilIoChannel *io, int status,
@@ -680,6 +726,13 @@ static void ril_plugin_slot_connected(struct ril_slot *slot)
 							slot->sim_flags);
 	slot->sim_card_state_event_id = ril_sim_card_add_state_changed_handler(
 			slot->sim_card, ril_plugin_sim_state_changed, slot);
+
+	GASSERT(!slot->data);
+	slot->data = ril_data_new(slot->plugin->data_manager, slot->io);
+
+	if (ril_plugin_multisim(slot->plugin)) {
+		ril_data_set_name(slot->data, slot->path + 1);
+	}
 
 	if (ril_plugin_can_create_modem(slot) && !slot->modem) {
 		ril_plugin_create_modem(slot);
@@ -1043,6 +1096,7 @@ static void ril_plugin_update_disabled_slot(struct ril_slot *slot)
 	if (!slot->pub.enabled) {
 		DBG("%s disabled", slot->path + 1);
 		ril_plugin_shutdown_slot(slot, FALSE);
+		ril_plugin_update_modem_paths_full(slot->plugin);
 	}
 }
 
@@ -1050,8 +1104,7 @@ static void ril_plugin_update_slots(struct ril_plugin_priv *plugin)
 {
 	ril_plugin_foreach_slot(plugin, ril_plugin_update_disabled_slot);
 	ril_plugin_foreach_slot(plugin, ril_plugin_update_enabled_slot);
-	ril_plugin_dbus_signal(plugin->dbus,
-				ril_plugin_update_modem_paths(plugin));
+	ril_plugin_update_modem_paths_full(plugin);
 }
 
 struct ril_plugin_set_enabled_slots_data {
@@ -1241,6 +1294,7 @@ static int ril_plugin_init(void)
 	ril_plugin->slots = ril_plugin_load_config(RILMODEM_CONF_FILE);
 	ril_plugin_init_slots(ril_plugin);
 	ril_plugin->dbus = ril_plugin_dbus_new(&ril_plugin->pub);
+	ril_plugin->data_manager = ril_data_manager_new();
 
 	if (ril_plugin->slots) {
 		/*
@@ -1338,12 +1392,11 @@ static void ril_plugin_exit(void)
 	if (ril_plugin) {
 		g_slist_free_full(ril_plugin->slots, ril_plugin_destroy_slot);
 		ril_plugin_dbus_free(ril_plugin->dbus);
+		ril_data_manager_unref(ril_plugin->data_manager);
 		g_key_file_free(ril_plugin->storage);
 		g_free(ril_plugin->slots_info);
 		g_free(ril_plugin->default_voice_imsi);
 		g_free(ril_plugin->default_data_imsi);
-		g_free(ril_plugin->default_voice_path);
-		g_free(ril_plugin->default_data_path);
 		g_free(ril_plugin);
 		ril_plugin = NULL;
 	}

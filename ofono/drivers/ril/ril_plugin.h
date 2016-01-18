@@ -72,6 +72,7 @@ struct ril_modem {
 	const char *imei;
 	struct ofono_modem *ofono;
 	struct ril_radio *radio;
+	struct ril_data *data;
 	struct ril_network *network;
 	struct ril_sim_card *sim_card;
 	struct ril_slot_config config;
@@ -105,9 +106,9 @@ void ril_plugin_dbus_signal_sim(struct ril_plugin_dbus *dbus, int index,
 
 struct ril_modem *ril_modem_create(GRilIoChannel *io,
 		const struct ril_slot_info *slot, struct ril_radio *radio,
-		struct ril_network *network, struct ril_sim_card *sc);
+		struct ril_network *network, struct ril_sim_card *card,
+		struct ril_data *data);
 void ril_modem_delete(struct ril_modem *modem);
-void ril_modem_allow_data(struct ril_modem *modem, gboolean allow);
 void ril_modem_set_imei(struct ril_modem *modem, const char *imei);
 struct ofono_sim *ril_modem_ofono_sim(struct ril_modem *modem);
 struct ofono_gprs *ril_modem_ofono_gprs(struct ril_modem *modem);
@@ -134,7 +135,6 @@ void ril_sim_read_file_info(struct ofono_sim *sim, int fileid,
 		ofono_sim_file_info_cb_t cb, void *data);
 
 int ril_sim_app_type(struct ofono_sim *sim);
-void ril_gprs_allow_data(struct ofono_gprs *gprs, gboolean allow);
 int ril_netreg_check_if_really_roaming(struct ofono_netreg *netreg, gint status);
 
 extern const struct ofono_call_barring_driver ril_call_barring_driver;
