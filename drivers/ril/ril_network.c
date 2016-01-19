@@ -212,7 +212,7 @@ static void ril_network_poll_operator_cb(GRilIoChannel *io, int req_status,
 		op.tech = -1;
 		if (ril_parse_mcc_mnc(numeric, &op)) {
 			if (op.tech < 0) op.tech = self->voice.access_tech;
-			op.status = self->voice.status;
+			op.status = OPERATOR_STATUS_CURRENT;
 			op.name[0] = 0;
 			if (lalpha) {
 				strncpy(op.name, lalpha, sizeof(op.name));
