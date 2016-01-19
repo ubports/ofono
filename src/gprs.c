@@ -3546,11 +3546,6 @@ void *ofono_gprs_get_data(struct ofono_gprs *gprs)
 	return gprs->driver_data;
 }
 
-struct ofono_modem *ofono_gprs_get_modem(struct ofono_gprs *gprs)
-{
-	return __ofono_atom_get_modem(gprs->atom);
-}
-
 ofono_bool_t ofono_gprs_get_roaming_allowed(struct ofono_gprs *gprs)
 {
 	return gprs->roaming_allowed;
