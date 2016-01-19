@@ -2504,16 +2504,9 @@ void ofono_sim_inserted_notify(struct ofono_sim *sim, ofono_bool_t inserted)
 	sim_inserted_update(sim);
 	call_state_watches(sim);
 
-	if (inserted)
+	if (inserted) {
 		sim_initialize(sim);
-	else {
-		/*
-		 * Reset type to trigger property change signal after sim is
-		 * removed and inserted.
-		 * Can't reset in sim_free_main_state because it's called also
-		 * when sim state changes to OFONO_SIM_STATE_LOCKED_OUT
-		 * (PUK lock) if user fails to change PIN.
-		 */
+	} else {
 		sim->pin_type = OFONO_SIM_PASSWORD_NONE;
 
 		sim_free_state(sim);
