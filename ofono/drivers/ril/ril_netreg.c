@@ -46,14 +46,6 @@ struct ril_netreg {
 	gulong network_event_id[NETREG_NETWORK_EVENT_COUNT];
 };
 
-/* Defined in src/network.c */
-enum operator_status {
-	OPERATOR_STATUS_UNKNOWN =	0,
-	OPERATOR_STATUS_AVAILABLE =	1,
-	OPERATOR_STATUS_CURRENT =	2,
-	OPERATOR_STATUS_FORBIDDEN =	3,
-};
-
 struct ril_netreg_cbd {
 	struct ril_netreg *nd;
 	union {
