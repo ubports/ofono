@@ -844,8 +844,6 @@ static gboolean pri_str_changed(const char *val, const char *newval)
 static gboolean pri_str_update(char *val, const char *newval,
 		const int maxlen)
 {
-	DBG("oldval: %s, newval: %s, mmaxlen: %d", val, newval, maxlen);
-
 	if (newval) {
 		if (strcmp(val, newval)) {
 			strncpy(val, newval, maxlen);
