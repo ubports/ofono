@@ -228,12 +228,15 @@ void ril_radio_power_on(struct ril_radio *self, gpointer tag)
 {
 	if (G_LIKELY(self)) {
 		struct ril_radio_priv *priv = self->priv;
-		const gboolean was_on = ril_radio_power_should_be_on(self);
 
-		DBG("%s%p", priv->log_prefix, tag);
-		g_hash_table_insert(priv->req_table, tag, tag);
-		if (!was_on) {
-			ril_radio_power_request(self, TRUE, FALSE);
+		if (!g_hash_table_contains(priv->req_table, tag)) {
+			gboolean was_on = ril_radio_power_should_be_on(self);
+
+			DBG("%s%p", priv->log_prefix, tag);
+			g_hash_table_insert(priv->req_table, tag, tag);
+			if (!was_on) {
+				ril_radio_power_request(self, TRUE, FALSE);
+			}
 		}
 	}
 }
@@ -243,11 +246,12 @@ void ril_radio_power_off(struct ril_radio *self, gpointer tag)
 	if (G_LIKELY(self)) {
 		struct ril_radio_priv *priv = self->priv;
 
-		DBG("%s%p", priv->log_prefix, tag);
-		if (g_hash_table_remove(priv->req_table, tag) &&
-				!ril_radio_power_should_be_on(self)) {
-			/* The last one turns the lights off */
-			ril_radio_power_request(self, FALSE, FALSE);
+		if (g_hash_table_remove(priv->req_table, tag)) {
+			DBG("%s%p", priv->log_prefix, tag);
+			if (!ril_radio_power_should_be_on(self)) {
+				/* The last one turns the lights off */
+				ril_radio_power_request(self, FALSE, FALSE);
+			}
 		}
 	}
 }
