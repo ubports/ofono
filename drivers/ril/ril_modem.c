@@ -63,6 +63,9 @@ struct ril_modem_data {
 	ril_modem_cb_t removed_cb;
 	void *removed_cb_data;
 
+	ril_modem_online_cb_t online_cb;
+	void *online_cb_data;
+
 	struct ril_modem_online_request set_online;
 	struct ril_modem_online_request set_offline;
 };
@@ -125,6 +128,15 @@ void ril_modem_set_removed_cb(struct ril_modem *modem, ril_modem_cb_t cb,
 
 	md->removed_cb = cb;
 	md->removed_cb_data = data;
+}
+
+void ril_modem_set_online_cb(struct ril_modem *modem, ril_modem_online_cb_t cb,
+								void *data)
+{
+	struct ril_modem_data *md = ril_modem_data_from_modem(modem);
+
+	md->online_cb = cb;
+	md->online_cb_data = data;
 }
 
 static void ril_modem_check_devinfo(struct ril_modem_data *md)
@@ -319,6 +331,10 @@ static void ril_modem_set_online(struct ofono_modem *modem, ofono_bool_t online,
 
 	DBG("%s going %sline", ofono_modem_get_path(modem),
 						online ? "on" : "off");
+
+	if (md->online_cb) {
+		md->online_cb(&md->modem, online, md->online_cb_data);
+	}
 
 	if (online) {
 		ril_radio_power_on(md->modem.radio, RADIO_POWER_TAG(md));
