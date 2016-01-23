@@ -85,6 +85,8 @@ struct ril_modem {
 #define RIL_PLUGIN_SIGNAL_ENABLED_SLOTS (0x20)
 
 typedef void (*ril_modem_cb_t)(struct ril_modem *modem, void *data);
+typedef void (*ril_modem_online_cb_t)(struct ril_modem *modem, gboolean online,
+								void *data);
 
 void ril_plugin_set_enabled_slots(struct ril_plugin *plugin, char **slots);
 void ril_plugin_set_default_voice_imsi(struct ril_plugin *plugin,
@@ -114,6 +116,8 @@ struct ofono_sim *ril_modem_ofono_sim(struct ril_modem *modem);
 struct ofono_gprs *ril_modem_ofono_gprs(struct ril_modem *modem);
 struct ofono_netreg *ril_modem_ofono_netreg(struct ril_modem *modem);
 void ril_modem_set_removed_cb(struct ril_modem *modem, ril_modem_cb_t cb,
+								void *data);
+void ril_modem_set_online_cb(struct ril_modem *modem, ril_modem_online_cb_t cb,
 								void *data);
 
 #define ril_modem_get_path(modem) ofono_modem_get_path((modem)->ofono)

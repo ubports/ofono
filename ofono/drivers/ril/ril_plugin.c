@@ -95,6 +95,7 @@ struct ril_slot {
 	gint timeout;           /* RIL timeout, in milliseconds */
 	int index;
 	int sim_flags;
+	gboolean online;
 	struct ril_slot_config config;
 	struct ril_plugin_priv *plugin;
 	struct ril_sim_dbus *sim_dbus;
@@ -121,7 +122,6 @@ static void ril_debug_trace_notify(struct ofono_debug_desc *desc);
 static void ril_debug_dump_notify(struct ofono_debug_desc *desc);
 static void ril_debug_grilio_notify(struct ofono_debug_desc *desc);
 static void ril_plugin_retry_init_io(struct ril_slot *slot);
-static void ril_plugin_update_modem_paths_full(struct ril_plugin_priv *plugin);
 
 GLOG_MODULE_DEFINE("rilmodem");
 
@@ -373,6 +373,10 @@ static int ril_plugin_update_modem_paths(struct ril_plugin_priv *plugin)
 		slot = ril_plugin_find_slot_imsi(plugin->slots, NULL);
 	}
 
+	if (slot && !slot->online) {
+		slot = NULL;
+	}
+
 	if (plugin->data_slot != slot) {
 		mask |= RIL_PLUGIN_SIGNAL_DATA_PATH;
 		if (plugin->data_slot) {
@@ -510,6 +514,19 @@ static void ril_plugin_slot_disconnected(GRilIoChannel *io, void *data)
 	ril_plugin_handle_error((struct ril_slot *)data);
 }
 
+static void ril_plugin_modem_online(struct ril_modem *modem, gboolean online,
+								void *data)
+{
+	struct ril_slot *slot = data;
+
+	DBG("%s %d", slot->path + 1, online);
+	GASSERT(slot->modem);
+	GASSERT(slot->modem == modem);
+
+	slot->online = online;
+	ril_plugin_update_modem_paths_full(slot->plugin);
+}
+
 static void ril_plugin_modem_removed(struct ril_modem *modem, void *data)
 {
 	struct ril_slot *slot = data;
@@ -524,6 +541,7 @@ static void ril_plugin_modem_removed(struct ril_modem *modem, void *data)
 	}
 
 	slot->modem = NULL;
+	slot->online = FALSE;
 	ril_data_allow(slot->data, FALSE);
 	ril_plugin_update_modem_paths_full(slot->plugin);
 }
@@ -630,6 +648,7 @@ static void ril_plugin_create_modem(struct ril_slot *slot)
 		}
 
 		ril_modem_set_removed_cb(modem, ril_plugin_modem_removed, slot);
+		ril_modem_set_online_cb(modem, ril_plugin_modem_online, slot);
 	} else {
 		ril_plugin_shutdown_slot(slot, TRUE);
 	}
@@ -728,7 +747,8 @@ static void ril_plugin_slot_connected(struct ril_slot *slot)
 			slot->sim_card, ril_plugin_sim_state_changed, slot);
 
 	GASSERT(!slot->data);
-	slot->data = ril_data_new(slot->plugin->data_manager, slot->io);
+	slot->data = ril_data_new(slot->plugin->data_manager, slot->radio,
+						slot->network, slot->io);
 
 	if (ril_plugin_multisim(slot->plugin)) {
 		ril_data_set_name(slot->data, slot->path + 1);
