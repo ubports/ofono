@@ -93,6 +93,11 @@ Properties	boolean Present [readonly]
 
 			Contains the IMSI of the SIM, if available.
 
+		string ServiceProviderName [readonly, optional]
+
+			Contains the service provider name fetched from the
+			SIM card, if available.
+
 		string MobileCountryCode [readonly, optional]
 
 			Contains the Mobile Country Code (MCC) of the home
