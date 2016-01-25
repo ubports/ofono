@@ -380,6 +380,10 @@ static DBusMessage *sim_get_properties(DBusConnection *conn,
 		ofono_dbus_dict_append(&dict, "SubscriberIdentity",
 					DBUS_TYPE_STRING, &sim->imsi);
 
+	if (sim->spn)
+		ofono_dbus_dict_append(&dict, "ServiceProviderName",
+					DBUS_TYPE_STRING, &sim->spn);
+
 	fdn = sim->fixed_dialing;
 	ofono_dbus_dict_append(&dict, "FixedDialing", DBUS_TYPE_BOOLEAN, &fdn);
 
@@ -2570,6 +2574,9 @@ static inline void spn_watches_notify(struct ofono_sim *sim)
 static void sim_spn_set(struct ofono_sim *sim, const void *data, int length,
 						const unsigned char *dc)
 {
+	DBusConnection *conn = ofono_dbus_get_connection();
+	const char *path = __ofono_atom_get_path(sim->atom);
+
 	g_free(sim->spn);
 	sim->spn = NULL;
 
@@ -2611,6 +2618,12 @@ static void sim_spn_set(struct ofono_sim *sim, const void *data, int length,
 		sim->spn_dc = g_memdup(dc, 1);
 
 notify:
+	if (sim->spn)
+		ofono_dbus_signal_property_changed(conn, path,
+						OFONO_SIM_MANAGER_INTERFACE,
+						"ServiceProviderName",
+						DBUS_TYPE_STRING, &sim->spn);
+
 	spn_watches_notify(sim);
 }
 
