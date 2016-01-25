@@ -78,10 +78,12 @@ struct ril_plugin_priv {
 	struct ril_data_manager *data_manager;
 	GSList *slots;
 	ril_slot_info_ptr *slots_info;
-	struct ril_slot *data_slot;
 	struct ril_slot *voice_slot;
+	struct ril_slot *data_slot;
+	struct ril_slot *mms_slot;
 	char *default_voice_imsi;
 	char *default_data_imsi;
+	char *mms_imsi;
 	GKeyFile *storage;
 };
 
@@ -321,6 +323,9 @@ static int ril_plugin_update_modem_paths(struct ril_plugin_priv *plugin)
 {
 	int mask = 0;
 	struct ril_slot *slot = NULL;
+	struct ril_slot *mms_slot = NULL;
+	struct ril_slot *old_data_slot = NULL;
+	struct ril_slot *new_data_slot = NULL;
 
 	/* Voice */
 	if (plugin->default_voice_imsi) {
@@ -377,20 +382,54 @@ static int ril_plugin_update_modem_paths(struct ril_plugin_priv *plugin)
 		slot = NULL;
 	}
 
+	if (plugin->mms_imsi) {
+		mms_slot = ril_plugin_find_slot_imsi(plugin->slots,
+						plugin->mms_imsi);
+	}
+
+	if (mms_slot && mms_slot != slot) {
+		/*
+		 * Reset default data SIM if another SIM is
+		 * temporarily selected for MMS.
+		 */
+		slot = NULL;
+	}
+
+	/* Are we actually switching data SIMs? */
+	old_data_slot = plugin->mms_slot ? plugin->mms_slot : plugin->data_slot;
+	new_data_slot = mms_slot ? mms_slot : slot;
+
 	if (plugin->data_slot != slot) {
 		mask |= RIL_PLUGIN_SIGNAL_DATA_PATH;
-		if (plugin->data_slot) {
-			/* Data no longer required for this slot */
-			ril_data_allow(plugin->data_slot->data, FALSE);
-		}
 		plugin->data_slot = slot;
 		if (slot) {
 			DBG("Default data SIM at %s", slot->path);
 			plugin->pub.default_data_path = slot->path;
-			ril_data_allow(slot->data, TRUE);
 		} else {
 			DBG("No default data SIM");
 			plugin->pub.default_data_path = NULL;
+		}
+	}
+
+	if (plugin->mms_slot != mms_slot) {
+		mask |= RIL_PLUGIN_SIGNAL_MMS_PATH;
+		plugin->mms_slot = mms_slot;
+		if (mms_slot) {
+			DBG("MMS data SIM at %s", mms_slot->path);
+			plugin->pub.mms_path = mms_slot->path;
+		} else {
+			DBG("No MMS data SIM");
+			plugin->pub.mms_path = NULL;
+		}
+	}
+
+	if (old_data_slot != new_data_slot) {
+		/* Yes we are switching data SIMs */
+		if (old_data_slot) {
+			ril_data_allow(old_data_slot->data, FALSE);
+		}
+		if (new_data_slot) {
+			ril_data_allow(new_data_slot->data, TRUE);
 		}
 	}
 
@@ -1241,6 +1280,39 @@ void ril_plugin_set_default_data_imsi(struct ril_plugin *pub, const char *imsi)
 	}
 }
 
+gboolean ril_plugin_set_mms_imsi(struct ril_plugin *pub, const char *imsi)
+{
+	struct ril_plugin_priv *plugin = ril_plugin_cast(pub);
+
+	if (imsi && imsi[0]) {
+		if (g_strcmp0(plugin->mms_imsi, imsi)) {
+			if (ril_plugin_find_slot_imsi(plugin->slots, imsi)) {
+				DBG("MMS sim %s", imsi);
+				g_free(plugin->mms_imsi);
+				pub->mms_imsi = plugin->mms_imsi =
+					g_strdup(imsi);
+				ril_plugin_dbus_signal(plugin->dbus,
+					RIL_PLUGIN_SIGNAL_MMS_IMSI |
+					ril_plugin_update_modem_paths(plugin));
+			} else {
+				DBG("IMSI not found: %s", imsi);
+				return FALSE;
+			}
+		}
+	} else {
+		if (plugin->mms_imsi) {
+			DBG("No MMS sim");
+			g_free(plugin->mms_imsi);
+			pub->mms_imsi = plugin->mms_imsi = NULL;
+			ril_plugin_dbus_signal(plugin->dbus,
+					RIL_PLUGIN_SIGNAL_MMS_IMSI |
+					ril_plugin_update_modem_paths(plugin));
+		}
+	}
+
+	return TRUE;
+}
+
 static void ril_plugin_init_slots(struct ril_plugin_priv *plugin)
 {
 	int i;
@@ -1417,6 +1489,7 @@ static void ril_plugin_exit(void)
 		g_free(ril_plugin->slots_info);
 		g_free(ril_plugin->default_voice_imsi);
 		g_free(ril_plugin->default_data_imsi);
+		g_free(ril_plugin->mms_imsi);
 		g_free(ril_plugin);
 		ril_plugin = NULL;
 	}
