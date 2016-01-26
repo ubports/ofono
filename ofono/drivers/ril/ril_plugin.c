@@ -78,10 +78,12 @@ struct ril_plugin_priv {
 	struct ril_data_manager *data_manager;
 	GSList *slots;
 	ril_slot_info_ptr *slots_info;
-	struct ril_slot *data_slot;
 	struct ril_slot *voice_slot;
+	struct ril_slot *data_slot;
+	struct ril_slot *mms_slot;
 	char *default_voice_imsi;
 	char *default_data_imsi;
+	char *mms_imsi;
 	GKeyFile *storage;
 };
 
@@ -95,6 +97,7 @@ struct ril_slot {
 	gint timeout;           /* RIL timeout, in milliseconds */
 	int index;
 	int sim_flags;
+	gboolean online;
 	struct ril_slot_config config;
 	struct ril_plugin_priv *plugin;
 	struct ril_sim_dbus *sim_dbus;
@@ -121,7 +124,6 @@ static void ril_debug_trace_notify(struct ofono_debug_desc *desc);
 static void ril_debug_dump_notify(struct ofono_debug_desc *desc);
 static void ril_debug_grilio_notify(struct ofono_debug_desc *desc);
 static void ril_plugin_retry_init_io(struct ril_slot *slot);
-static void ril_plugin_update_modem_paths_full(struct ril_plugin_priv *plugin);
 
 GLOG_MODULE_DEFINE("rilmodem");
 
@@ -321,6 +323,9 @@ static int ril_plugin_update_modem_paths(struct ril_plugin_priv *plugin)
 {
 	int mask = 0;
 	struct ril_slot *slot = NULL;
+	struct ril_slot *mms_slot = NULL;
+	struct ril_slot *old_data_slot = NULL;
+	struct ril_slot *new_data_slot = NULL;
 
 	/* Voice */
 	if (plugin->default_voice_imsi) {
@@ -373,20 +378,58 @@ static int ril_plugin_update_modem_paths(struct ril_plugin_priv *plugin)
 		slot = ril_plugin_find_slot_imsi(plugin->slots, NULL);
 	}
 
+	if (slot && !slot->online) {
+		slot = NULL;
+	}
+
+	if (plugin->mms_imsi) {
+		mms_slot = ril_plugin_find_slot_imsi(plugin->slots,
+						plugin->mms_imsi);
+	}
+
+	if (mms_slot && mms_slot != slot) {
+		/*
+		 * Reset default data SIM if another SIM is
+		 * temporarily selected for MMS.
+		 */
+		slot = NULL;
+	}
+
+	/* Are we actually switching data SIMs? */
+	old_data_slot = plugin->mms_slot ? plugin->mms_slot : plugin->data_slot;
+	new_data_slot = mms_slot ? mms_slot : slot;
+
 	if (plugin->data_slot != slot) {
 		mask |= RIL_PLUGIN_SIGNAL_DATA_PATH;
-		if (plugin->data_slot) {
-			/* Data no longer required for this slot */
-			ril_data_allow(plugin->data_slot->data, FALSE);
-		}
 		plugin->data_slot = slot;
 		if (slot) {
 			DBG("Default data SIM at %s", slot->path);
 			plugin->pub.default_data_path = slot->path;
-			ril_data_allow(slot->data, TRUE);
 		} else {
 			DBG("No default data SIM");
 			plugin->pub.default_data_path = NULL;
+		}
+	}
+
+	if (plugin->mms_slot != mms_slot) {
+		mask |= RIL_PLUGIN_SIGNAL_MMS_PATH;
+		plugin->mms_slot = mms_slot;
+		if (mms_slot) {
+			DBG("MMS data SIM at %s", mms_slot->path);
+			plugin->pub.mms_path = mms_slot->path;
+		} else {
+			DBG("No MMS data SIM");
+			plugin->pub.mms_path = NULL;
+		}
+	}
+
+	if (old_data_slot != new_data_slot) {
+		/* Yes we are switching data SIMs */
+		if (old_data_slot) {
+			ril_data_allow(old_data_slot->data, FALSE);
+		}
+		if (new_data_slot) {
+			ril_data_allow(new_data_slot->data, TRUE);
 		}
 	}
 
@@ -510,6 +553,19 @@ static void ril_plugin_slot_disconnected(GRilIoChannel *io, void *data)
 	ril_plugin_handle_error((struct ril_slot *)data);
 }
 
+static void ril_plugin_modem_online(struct ril_modem *modem, gboolean online,
+								void *data)
+{
+	struct ril_slot *slot = data;
+
+	DBG("%s %d", slot->path + 1, online);
+	GASSERT(slot->modem);
+	GASSERT(slot->modem == modem);
+
+	slot->online = online;
+	ril_plugin_update_modem_paths_full(slot->plugin);
+}
+
 static void ril_plugin_modem_removed(struct ril_modem *modem, void *data)
 {
 	struct ril_slot *slot = data;
@@ -524,6 +580,7 @@ static void ril_plugin_modem_removed(struct ril_modem *modem, void *data)
 	}
 
 	slot->modem = NULL;
+	slot->online = FALSE;
 	ril_data_allow(slot->data, FALSE);
 	ril_plugin_update_modem_paths_full(slot->plugin);
 }
@@ -630,6 +687,7 @@ static void ril_plugin_create_modem(struct ril_slot *slot)
 		}
 
 		ril_modem_set_removed_cb(modem, ril_plugin_modem_removed, slot);
+		ril_modem_set_online_cb(modem, ril_plugin_modem_online, slot);
 	} else {
 		ril_plugin_shutdown_slot(slot, TRUE);
 	}
@@ -728,7 +786,8 @@ static void ril_plugin_slot_connected(struct ril_slot *slot)
 			slot->sim_card, ril_plugin_sim_state_changed, slot);
 
 	GASSERT(!slot->data);
-	slot->data = ril_data_new(slot->plugin->data_manager, slot->io);
+	slot->data = ril_data_new(slot->plugin->data_manager, slot->radio,
+						slot->network, slot->io);
 
 	if (ril_plugin_multisim(slot->plugin)) {
 		ril_data_set_name(slot->data, slot->path + 1);
@@ -1221,6 +1280,39 @@ void ril_plugin_set_default_data_imsi(struct ril_plugin *pub, const char *imsi)
 	}
 }
 
+gboolean ril_plugin_set_mms_imsi(struct ril_plugin *pub, const char *imsi)
+{
+	struct ril_plugin_priv *plugin = ril_plugin_cast(pub);
+
+	if (imsi && imsi[0]) {
+		if (g_strcmp0(plugin->mms_imsi, imsi)) {
+			if (ril_plugin_find_slot_imsi(plugin->slots, imsi)) {
+				DBG("MMS sim %s", imsi);
+				g_free(plugin->mms_imsi);
+				pub->mms_imsi = plugin->mms_imsi =
+					g_strdup(imsi);
+				ril_plugin_dbus_signal(plugin->dbus,
+					RIL_PLUGIN_SIGNAL_MMS_IMSI |
+					ril_plugin_update_modem_paths(plugin));
+			} else {
+				DBG("IMSI not found: %s", imsi);
+				return FALSE;
+			}
+		}
+	} else {
+		if (plugin->mms_imsi) {
+			DBG("No MMS sim");
+			g_free(plugin->mms_imsi);
+			pub->mms_imsi = plugin->mms_imsi = NULL;
+			ril_plugin_dbus_signal(plugin->dbus,
+					RIL_PLUGIN_SIGNAL_MMS_IMSI |
+					ril_plugin_update_modem_paths(plugin));
+		}
+	}
+
+	return TRUE;
+}
+
 static void ril_plugin_init_slots(struct ril_plugin_priv *plugin)
 {
 	int i;
@@ -1397,6 +1489,7 @@ static void ril_plugin_exit(void)
 		g_free(ril_plugin->slots_info);
 		g_free(ril_plugin->default_voice_imsi);
 		g_free(ril_plugin->default_data_imsi);
+		g_free(ril_plugin->mms_imsi);
 		g_free(ril_plugin);
 		ril_plugin = NULL;
 	}
