@@ -51,7 +51,7 @@ gulong ril_network_add_data_state_changed_handler(struct ril_network *net,
 					ril_network_cb_t cb, void *arg);
 void ril_network_remove_handler(struct ril_network *net, gulong id);
 
-#endif /* RIL_NETWORK */
+#endif /* RIL_NETWORK_H */
 
 /*
  * Local Variables:
