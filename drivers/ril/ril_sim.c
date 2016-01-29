@@ -752,7 +752,8 @@ static gboolean ril_sim_query_passwd_state_timeout_cb(gpointer user_data)
 	GASSERT(sd->query_passwd_state_cb);
 	sd->query_passwd_state_timeout_id = 0;
 	ril_sim_finish_passwd_state_query(sd, OFONO_SIM_PASSWORD_INVALID);
-	return FALSE;
+
+	return G_SOURCE_REMOVE;
 }
 
 static void ril_sim_query_passwd_state(struct ofono_sim *sim,
@@ -795,7 +796,8 @@ static gboolean ril_sim_pin_change_state_timeout_cb(gpointer user_data)
 	sd->pin_cbd_list = g_list_remove(sd->pin_cbd_list, cbd);
 	cbd->cb(ril_error_failure(&error), cbd->data);
 	ril_sim_pin_cbd_free(cbd);
-	return FALSE;
+
+	return G_SOURCE_REMOVE;
 }
 
 static void ril_sim_pin_change_state_status_cb(struct ril_sim_card *sc,

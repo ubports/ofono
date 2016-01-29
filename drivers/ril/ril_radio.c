@@ -89,7 +89,8 @@ static gboolean ril_radio_power_request_retry_cb(gpointer user_data)
 	GASSERT(priv->retry_id);
 	priv->retry_id = 0;
 	ril_radio_submit_power_request(self, ril_radio_power_should_be_on(self));
-	return FALSE;
+
+	return G_SOURCE_REMOVE;
 }
 
 static void ril_radio_cancel_retry(struct ril_radio *self)

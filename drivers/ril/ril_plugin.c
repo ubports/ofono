@@ -851,7 +851,8 @@ static gboolean ril_plugin_retry_init_io_cb(gpointer data)
 	GASSERT(slot->retry_id);
 	slot->retry_id = 0;
 	ril_plugin_init_io(slot);
-	return FALSE;
+
+	return G_SOURCE_REMOVE;
 }
 
 static void ril_plugin_retry_init_io(struct ril_slot *slot)
