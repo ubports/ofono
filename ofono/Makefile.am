@@ -807,7 +807,8 @@ test_scripts = test/backtrace \
 		test/test-voicecallagent \
 		test/get-network-time \
 		test/set-ddr \
-		test/register-auto
+		test/register-auto \
+		test/register-operator
 
 if TEST
 testdir = $(pkglibdir)/test
