@@ -729,7 +729,8 @@ test_scripts = test/backtrace \
 		test/hangup-call \
 		test/display-icon \
 		test/set-msisdn \
-		test/set-ddr
+		test/set-ddr \
+		test/register-auto
 
 if TEST
 testdir = $(pkglibdir)/test
