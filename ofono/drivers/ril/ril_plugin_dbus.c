@@ -179,12 +179,12 @@ static inline void ril_plugin_dbus_signal_imsi(struct ril_plugin_dbus *dbus,
 			name, DBUS_TYPE_STRING, &imsi, DBUS_TYPE_INVALID);
 }
 
-static inline void ril_plugin_dbus_signal_path(struct ril_plugin_dbus *dbus,
-				const char *name, const char *path)
+static inline void ril_plugin_dbus_signal_string(struct ril_plugin_dbus *dbus,
+				const char *name, const char *str)
 {
-	if (!path) path = "";
+	if (!str) str = "";
 	g_dbus_emit_signal(dbus->conn, RIL_DBUS_PATH, RIL_DBUS_INTERFACE,
-			name, DBUS_TYPE_STRING, &path, DBUS_TYPE_INVALID);
+			name, DBUS_TYPE_STRING, &str, DBUS_TYPE_INVALID);
 }
 
 void ril_plugin_dbus_signal(struct ril_plugin_dbus *dbus, int mask)
@@ -201,11 +201,9 @@ void ril_plugin_dbus_signal(struct ril_plugin_dbus *dbus, int mask)
 				dbus->plugin->default_data_imsi);
 		}
 		if (mask & RIL_PLUGIN_SIGNAL_MMS_IMSI) {
-			g_dbus_emit_signal(dbus->conn, RIL_DBUS_PATH,
-				RIL_DBUS_INTERFACE,
+			ril_plugin_dbus_signal_string(dbus,
 				RIL_DBUS_SIGNAL_MMS_SIM_CHANGED,
-				DBUS_TYPE_STRING, &dbus->plugin->mms_imsi,
-				DBUS_TYPE_INVALID);
+				dbus->plugin->mms_imsi);
 		}
 		if (mask & RIL_PLUGIN_SIGNAL_ENABLED_SLOTS) {
 			ril_plugin_dbus_signal_path_array(dbus,
@@ -213,17 +211,17 @@ void ril_plugin_dbus_signal(struct ril_plugin_dbus *dbus, int mask)
 				ril_plugin_dbus_enabled);
 		}
 		if (mask & RIL_PLUGIN_SIGNAL_VOICE_PATH) {
-			ril_plugin_dbus_signal_path(dbus,
+			ril_plugin_dbus_signal_string(dbus,
 				RIL_DBUS_SIGNAL_DEFAULT_VOICE_MODEM_CHANGED,
 				dbus->plugin->default_voice_path);
 		}
 		if (mask & RIL_PLUGIN_SIGNAL_DATA_PATH) {
-			ril_plugin_dbus_signal_path(dbus,
+			ril_plugin_dbus_signal_string(dbus,
 				RIL_DBUS_SIGNAL_DEFAULT_DATA_MODEM_CHANGED,
 				dbus->plugin->default_data_path);
 		}
 		if (mask & RIL_PLUGIN_SIGNAL_MMS_PATH) {
-			ril_plugin_dbus_signal_path(dbus,
+			ril_plugin_dbus_signal_string(dbus,
 				RIL_DBUS_SIGNAL_MMS_MODEM_CHANGED,
 				dbus->plugin->mms_path);
 		}
