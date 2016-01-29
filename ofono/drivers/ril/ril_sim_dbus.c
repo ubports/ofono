@@ -43,7 +43,6 @@ struct ril_sim_dbus {
 #define RIL_SIM_DBUS_INTERFACE_VERSION  (1)
 
 #define RIL_SIM_DBUS_DISPLAY_NAME_CHANGED_SIGNAL    "DisplayNameChanged"
-#define RIL_SIM_DBUS_ENABLE_4G_CHANGED_SIGNAL       "Enable4GChanged"
 
 static DBusMessage *ril_sim_dbus_get_all(DBusConnection *conn,
 						DBusMessage *msg, void *data)
@@ -157,8 +156,6 @@ static const GDBusMethodTable ril_sim_dbus_methods[] = {
 static const GDBusSignalTable ril_sim_dbus_signals[] = {
 	{ GDBUS_SIGNAL(RIL_SIM_DBUS_DISPLAY_NAME_CHANGED_SIGNAL,
 			GDBUS_ARGS({ "name", "s" })) },
-	{ GDBUS_SIGNAL(RIL_SIM_DBUS_ENABLE_4G_CHANGED_SIGNAL,
-			GDBUS_ARGS({ "enabled", "b" })) },
 	{ }
 };
 
