@@ -220,7 +220,8 @@ static gboolean ril_modem_online_request_timeout(gpointer data)
 	req->data = NULL;
 	cb(ril_error_failure(&error), cb_data);
 	ril_modem_update_online_state(req->md);
-	return FALSE;
+
+	return G_SOURCE_REMOVE;
 }
 
 static gboolean ril_modem_online_check(gpointer data)
