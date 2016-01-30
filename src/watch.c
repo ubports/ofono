@@ -41,6 +41,9 @@ unsigned int __ofono_watchlist_add_item(struct ofono_watchlist *watchlist,
 {
 	item->id = ++watchlist->next_id;
 
+	if (item->id == 0)
+		item->id = ++watchlist->next_id;
+
 	watchlist->items = g_slist_prepend(watchlist->items, item);
 
 	return item->id;
