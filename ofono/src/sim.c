@@ -53,6 +53,7 @@ struct ofono_sim {
 
 	/* Contents of the SIM file system, in rough initialization order */
 	char *iccid;
+	struct ofono_watchlist *iccid_watches;
 
 	char **language_prefs;
 	unsigned char *efli;
@@ -80,6 +81,7 @@ struct ofono_sim {
 	char *imsi;
 	char mcc[OFONO_MAX_MCC_LENGTH + 1];
 	char mnc[OFONO_MAX_MNC_LENGTH + 1];
+	struct ofono_watchlist *imsi_watches;
 
 	GSList *own_numbers;
 	GSList *new_numbers;
@@ -338,6 +340,94 @@ static void call_state_watches(struct ofono_sim *sim)
 
 		notify(sim->state, item->notify_data);
 	}
+}
+
+static unsigned int add_watch_item(struct ofono_watchlist *watchlist,
+					void *notify, void *notify_data,
+					ofono_destroy_func destroy)
+{
+	struct ofono_watchlist_item *item;
+
+	item = g_new0(struct ofono_watchlist_item, 1);
+	item->notify = notify;
+	item->notify_data = notify_data;
+	item->destroy = destroy;
+
+	return __ofono_watchlist_add_item(watchlist, item);
+}
+
+static void iccid_watch_cb(gpointer data, gpointer user_data)
+{
+	struct ofono_watchlist_item *item = data;
+	struct ofono_sim *sim = user_data;
+	ofono_sim_iccid_event_cb_t cb = item->notify;
+
+	cb(sim->iccid, item->notify_data);
+}
+
+static inline void iccid_watches_notify(struct ofono_sim *sim)
+{
+	g_slist_foreach(sim->iccid_watches->items, iccid_watch_cb, sim);
+}
+
+unsigned int ofono_sim_add_iccid_watch(struct ofono_sim *sim,
+				ofono_sim_iccid_event_cb_t cb, void *data,
+				ofono_destroy_func destroy)
+{
+	unsigned int watch_id;
+
+	DBG("%p", sim);
+	if (sim == NULL)
+		return 0;
+
+	watch_id = add_watch_item(sim->iccid_watches, cb, data, destroy);
+
+	if (sim->iccid)
+		cb(sim->iccid, data);
+
+	return watch_id;
+}
+
+void ofono_sim_remove_iccid_watch(struct ofono_sim *sim, unsigned int id)
+{
+	__ofono_watchlist_remove_item(sim->iccid_watches, id);
+}
+
+static void imsi_watch_cb(gpointer data, gpointer user_data)
+{
+	struct ofono_watchlist_item *item = data;
+	struct ofono_sim *sim = user_data;
+	ofono_sim_imsi_event_cb_t cb = item->notify;
+
+	cb(sim->imsi, item->notify_data);
+}
+
+static inline void imsi_watches_notify(struct ofono_sim *sim)
+{
+	g_slist_foreach(sim->imsi_watches->items, imsi_watch_cb, sim);
+}
+
+unsigned int ofono_sim_add_imsi_watch(struct ofono_sim *sim,
+				ofono_sim_imsi_event_cb_t cb, void *data,
+				ofono_destroy_func destroy)
+{
+	unsigned int watch_id;
+
+	DBG("%p", sim);
+	if (sim == NULL)
+		return 0;
+
+	watch_id = add_watch_item(sim->imsi_watches, cb, data, destroy);
+
+	if (sim->imsi)
+		cb(sim->imsi, data);
+
+	return watch_id;
+}
+
+void ofono_sim_remove_imsi_watch(struct ofono_sim *sim, unsigned int id)
+{
+	__ofono_watchlist_remove_item(sim->imsi_watches, id);
 }
 
 static DBusMessage *sim_get_properties(DBusConnection *conn,
@@ -1487,6 +1577,7 @@ static void sim_imsi_obtained(struct ofono_sim *sim, const char *imsi)
 						DBUS_TYPE_STRING, &str);
 	}
 
+	imsi_watches_notify(sim);
 	sim_set_ready(sim);
 
 }
@@ -1860,6 +1951,7 @@ static void sim_initialize_after_pin(struct ofono_sim *sim)
 {
 	sim->context = ofono_sim_context_create(sim);
 	sim->spn_watches = __ofono_watchlist_new(g_free);
+	sim->imsi_watches = __ofono_watchlist_new(g_free);
 
 	ofono_sim_read(sim->context, SIM_EFPHASE_FILEID,
 			OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
@@ -2089,6 +2181,7 @@ static void sim_iccid_read_cb(int ok, int length, int record,
 						"CardIdentifier",
 						DBUS_TYPE_STRING,
 						&sim->iccid);
+	iccid_watches_notify(sim);
 }
 
 static void sim_iccid_changed(int id, void *userdata)
@@ -2470,6 +2563,11 @@ static void sim_free_main_state(struct ofono_sim *sim)
 	sim->barred_dialing = FALSE;
 
 	sim_spn_close(sim);
+
+	if (sim->imsi_watches) {
+		__ofono_watchlist_free(sim->imsi_watches);
+		sim->imsi_watches = NULL;
+	}
 
 	if (sim->context) {
 		ofono_sim_context_free(sim->context);
@@ -2898,6 +2996,9 @@ static void sim_unregister(struct ofono_atom *atom)
 
 	__ofono_modem_remove_atom_watch(modem, sim->hfp_watch);
 
+	__ofono_watchlist_free(sim->iccid_watches);
+	sim->iccid_watches = NULL;
+
 	__ofono_watchlist_free(sim->state_watches);
 	sim->state_watches = NULL;
 
@@ -3030,6 +3131,7 @@ void ofono_sim_register(struct ofono_sim *sim)
 
 	ofono_modem_add_interface(modem, OFONO_SIM_MANAGER_INTERFACE);
 	sim->state_watches = __ofono_watchlist_new(g_free);
+	sim->iccid_watches = __ofono_watchlist_new(g_free);
 	sim->simfs = sim_fs_new(sim, sim->driver);
 
 	__ofono_atom_register(sim->atom, sim_unregister);
