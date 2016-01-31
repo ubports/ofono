@@ -58,14 +58,6 @@ struct netreg_data {
 	int corestatus; /* Registration status previously reported to core */
 };
 
-/* 27.007 Section 7.3 <stat> */
-enum operator_status {
-	OPERATOR_STATUS_UNKNOWN =	0,
-	OPERATOR_STATUS_AVAILABLE =	1,
-	OPERATOR_STATUS_CURRENT =	2,
-	OPERATOR_STATUS_FORBIDDEN =	3,
-};
-
 struct ofono_netreg *current_netreg;
 
 static void extract_mcc_mnc(const char *str, char *mcc, char *mnc)
