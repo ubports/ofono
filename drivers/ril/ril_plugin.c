@@ -15,6 +15,7 @@
 
 #include "ril_plugin.h"
 #include "ril_sim_card.h"
+#include "ril_sim_info.h"
 #include "ril_network.h"
 #include "ril_radio.h"
 #include "ril_data.h"
@@ -107,6 +108,8 @@ struct ril_slot {
 	struct ril_radio *radio;
 	struct ril_network *network;
 	struct ril_sim_card *sim_card;
+	struct ril_sim_info *sim_info;
+	struct ril_sim_info_dbus *sim_info_dbus;
 	struct ril_data *data;
 	GRilIoChannel *io;
 	gulong io_event_id[IO_EVENT_COUNT];
@@ -183,6 +186,7 @@ static void ril_plugin_shutdown_slot(struct ril_slot *slot, gboolean kill_io)
 			ofono_sim_remove_state_watch(slot->sim,
 						slot->sim_state_watch_id);
 		}
+		ril_sim_info_set_ofono_sim(slot->sim_info, NULL);
 		slot->sim = NULL;
 	}
 
@@ -511,11 +515,13 @@ static void ril_plugin_register_sim(struct ril_slot *slot, struct ofono_sim *sim
 	GASSERT(!slot->sim);
 	GASSERT(slot->sim_watch_id);
 	GASSERT(!slot->sim_state_watch_id);
+
 	slot->sim = sim;
 	slot->sim_state = ofono_sim_get_state(sim);
 	slot->sim_state_watch_id = ofono_sim_add_state_watch(sim,
 					ril_plugin_sim_state_watch, slot,
 					ril_plugin_sim_state_watch_done);
+	ril_sim_info_set_ofono_sim(slot->sim_info, sim);
 }
 
 static void ril_plugin_sim_watch(struct ofono_atom *atom,
@@ -528,6 +534,7 @@ static void ril_plugin_sim_watch(struct ofono_atom *atom,
 		ril_plugin_register_sim(slot, __ofono_atom_get_data(atom));
 	} else if (cond == OFONO_ATOM_WATCH_CONDITION_UNREGISTERED) {
 		DBG("%s sim unregistered", slot->path + 1);
+		ril_sim_info_set_ofono_sim(slot->sim_info, NULL);
 		slot->sim = NULL;
 	}
 
@@ -579,10 +586,16 @@ static void ril_plugin_modem_removed(struct ril_modem *modem, void *data)
 		slot->sim_dbus = NULL;
 	}
 
+	if (slot->sim_info_dbus) {
+		ril_sim_info_dbus_free(slot->sim_info_dbus);
+		slot->sim_info_dbus = NULL;
+	}
+
 	slot->modem = NULL;
 	slot->online = FALSE;
 	ril_data_allow(slot->data, FALSE);
 	ril_plugin_update_modem_paths_full(slot->plugin);
+	ril_sim_info_set_ofono_sim(slot->sim_info, NULL);
 }
 
 static void ril_plugin_trace(GRilIoChannel *io, GRILIO_PACKET_TYPE type,
@@ -685,6 +698,9 @@ static void ril_plugin_create_modem(struct ril_slot *slot)
 		if (sim) {
 			ril_plugin_register_sim(slot, sim);
 		}
+
+		slot->sim_info_dbus = ril_sim_info_dbus_new(slot->modem,
+							slot->sim_info);
 
 		ril_modem_set_removed_cb(modem, ril_plugin_modem_removed, slot);
 		ril_modem_set_online_cb(modem, ril_plugin_modem_online, slot);
@@ -1006,6 +1022,7 @@ static struct ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 static void ril_plugin_delete_slot(struct ril_slot *slot)
 {
 	ril_plugin_shutdown_slot(slot, TRUE);
+	ril_sim_info_unref(slot->sim_info);
 	g_free(slot->path);
 	g_free(slot->imei);
 	g_free(slot->name);
@@ -1330,6 +1347,7 @@ static void ril_plugin_init_slots(struct ril_plugin_priv *plugin)
 		slot->plugin = plugin;
 		slot->pub.path = slot->path;
 		slot->pub.config = &slot->config;
+		slot->sim_info = ril_sim_info_new(NULL);
 	}
 
 	*info = NULL;
