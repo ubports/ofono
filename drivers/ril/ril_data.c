@@ -514,6 +514,7 @@ void ril_data_call_request_cancel(struct ril_data_call_request *req)
 				/* Request has been submitted already */
 				grilio_queue_cancel_request(priv->q,
 						priv->pending_req_id, FALSE);
+				priv->pending_req = NULL;
 				priv->pending_req_id = 0;
 			} else if (priv->req_queue == req) {
 				/* It's the first one in the queue */
