@@ -43,6 +43,7 @@ struct ril_modem;
 struct ril_radio;
 struct ril_network;
 struct ril_sim_card;
+struct ril_sim_info;
 struct ril_plugin_dbus;
 
 #endif /* RIL_TYPES_H */
