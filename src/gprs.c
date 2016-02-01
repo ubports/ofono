@@ -57,8 +57,6 @@
 #define MAX_MESSAGE_CENTER_LENGTH 255
 #define MAX_CONTEXTS 256
 #define SUSPEND_TIMEOUT 8
-#define MAX_MMS_MTU 1280
-#define MAX_GPRS_MTU 1280
 
 struct ofono_gprs {
 	GSList *contexts;
@@ -790,31 +788,6 @@ static void pri_reset_context_settings(struct pri_context *ctx)
 	g_free(interface);
 }
 
-static void pri_limit_mtu(const char *interface, int max_mtu)
-{
-	struct ifreq ifr;
-	int sk;
-
-	if (interface == NULL)
-		return;
-
-	sk = socket(PF_INET, SOCK_DGRAM, 0);
-	if (sk < 0)
-		return;
-
-	memset(&ifr, 0, sizeof(ifr));
-	strncpy(ifr.ifr_name, interface, IFNAMSIZ);
-
-	if (ioctl(sk, SIOCGIFMTU, &ifr) < 0 || ifr.ifr_mtu > max_mtu) {
-		ifr.ifr_mtu = max_mtu;
-
-		if (ioctl(sk, SIOCSIFMTU, &ifr) < 0)
-			ofono_error("Failed to set MTU");
-	}
-
-	close(sk);
-}
-
 static void pri_update_mms_context_settings(struct pri_context *ctx)
 {
 	struct ofono_gprs_context *gc = ctx->context_driver;
@@ -832,8 +805,6 @@ static void pri_update_mms_context_settings(struct pri_context *ctx)
 
 	if (ctx->proxy_host)
 		pri_setproxy(settings->interface, ctx->proxy_host);
-
-	pri_limit_mtu(settings->interface, MAX_MMS_MTU);
 }
 
 static gboolean pri_str_changed(const char *val, const char *newval)
@@ -1130,9 +1101,6 @@ static void pri_activate_callback(const struct ofono_error *error, void *data)
 
 		pri_context_signal_settings(ctx, gc->settings->ipv4 != NULL,
 						gc->settings->ipv6 != NULL);
-
-		if (ctx->type == OFONO_GPRS_CONTEXT_TYPE_INTERNET)
-			pri_limit_mtu(gc->settings->interface, MAX_GPRS_MTU);
 	}
 
 	value = ctx->active;
