@@ -17,17 +17,18 @@
 #include "ril_network.h"
 #include "ril_data.h"
 #include "ril_util.h"
+#include "ril_mtu.h"
 #include "ril_log.h"
 
 #include <gutil_strv.h>
 
-#include <sys/socket.h>
-#include <netinet/in.h>
 #include <arpa/inet.h>
 
 #include "common.h"
 
 #define CTX_ID_NONE ((unsigned int)(-1))
+
+#define MAX_MTU 1280
 
 struct ril_gprs_context_call {
 	struct ril_data_call_request *req;
@@ -42,6 +43,7 @@ struct ril_gprs_context {
 	struct ril_data *data;
 	guint active_ctx_cid;
 	gulong calls_changed_event_id;
+	struct ril_mtu_watch *mtu_watch;
 	struct ril_data_call *active_call;
 	struct ril_gprs_context_call activate;
 	struct ril_gprs_context_call deactivate;
@@ -123,10 +125,33 @@ static void ril_gprs_context_call_done(struct ril_gprs_context_call *call,
 
 static void ril_gprs_context_free_active_call(struct ril_gprs_context *gcd)
 {
-	ril_data_call_free(gcd->active_call);
-	gcd->active_call = NULL;
-	ril_data_remove_handler(gcd->data, gcd->calls_changed_event_id);
-	gcd->calls_changed_event_id = 0;
+	if (gcd->active_call) {
+		ril_data_call_free(gcd->active_call);
+		gcd->active_call = NULL;
+	}
+	if (gcd->calls_changed_event_id) {
+		ril_data_remove_handler(gcd->data, gcd->calls_changed_event_id);
+		gcd->calls_changed_event_id = 0;
+	}
+	if (gcd->mtu_watch) {
+		ril_mtu_watch_free(gcd->mtu_watch);
+		gcd->mtu_watch = NULL;
+	}
+}
+
+static void ril_gprs_context_set_active_call(struct ril_gprs_context *gcd,
+					const struct ril_data_call *call)
+{
+	if (call) {
+		ril_data_call_free(gcd->active_call);
+		gcd->active_call = ril_data_call_dup(call);
+		if (!gcd->mtu_watch) {
+			gcd->mtu_watch = ril_mtu_watch_new(MAX_MTU);
+		}
+		ril_mtu_watch_set_ifname(gcd->mtu_watch, call->ifname);
+	} else {
+		ril_gprs_context_free_active_call(gcd);
+	}
 }
 
 static void ril_gprs_context_set_disconnected(struct ril_gprs_context *gcd)
@@ -278,8 +303,13 @@ static void ril_gprs_context_call_list_changed(struct ril_data *data, void *arg)
 		return;
 	}
 
-	/* Store the updated call data */
-	gcd->active_call = ril_data_call_dup(call);
+	/*
+	 * prev_call points to the previous active call, and it will
+	 * be deallocated at the end of the this function. Clear the
+	 * gcd->active_call pointer so that we don't deallocate it twice.
+	 */
+	gcd->active_call = NULL;
+	ril_gprs_context_set_active_call(gcd, call);
 
 	if (call->status != PDP_FAIL_NONE) {
 		ofono_info("data call status: %d", call->status);
@@ -431,8 +461,7 @@ static void ril_gprs_context_activate_primary_cb(struct ril_data *data,
 	}
 
 	ril_error_init_ok(&error);
-	ril_data_call_free(gcd->active_call);
-	gcd->active_call = ril_data_call_dup(call);
+	ril_gprs_context_set_active_call(gcd, call);
 
 	GASSERT(!gcd->calls_changed_event_id);
 	ril_data_remove_handler(gcd->data, gcd->calls_changed_event_id);
@@ -612,6 +641,7 @@ static void ril_gprs_context_remove(struct ofono_gprs_context *gc)
 	ril_data_unref(gcd->data);
 	ril_network_unref(gcd->network);
 	ril_data_call_free(gcd->active_call);
+	ril_mtu_watch_free(gcd->mtu_watch);
 	g_free(gcd);
 }
 
