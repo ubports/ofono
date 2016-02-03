@@ -32,9 +32,14 @@
 typedef GObjectClass RilSimInfoClass;
 typedef struct ril_sim_info RilSimInfo;
 
+typedef void (*ril_sim_info_remove_cb_t)(struct ofono_sim *sim, unsigned int id);
+typedef void (*ril_sim_info_set_value_cb_t)(struct ril_sim_info *info,
+							const char *value);
+
 struct ril_sim_info_watch {
-	void (*set_value)(struct ril_sim_info *self, const char *value);
-	void (*remove)(struct ofono_sim *sim, unsigned int id);
+	ril_sim_info_set_value_cb_t set_value;
+	ril_sim_info_remove_cb_t remove;
+	struct ril_sim_info *info;
 	unsigned int id;
 };
 
@@ -58,9 +63,9 @@ enum ril_sim_info_signal {
 	SIGNAL_COUNT
 };
 
-#define SIGNAL_ICCID_CHANGED_NAME   "ril-siminfo-state-changed"
-#define SIGNAL_IMSI_CHANGED_NAME    "ril-siminfo-status-changed"
-#define SIGNAL_SPN_CHANGED_NAME     "ril-siminfo-spn-changed"
+#define SIGNAL_ICCID_CHANGED_NAME   "ril-sim-info-iccid-changed"
+#define SIGNAL_IMSI_CHANGED_NAME    "ril-sim-info-imsi-changed"
+#define SIGNAL_SPN_CHANGED_NAME     "ril-sim-info-spn-changed"
 
 static guint ril_sim_info_signals[SIGNAL_COUNT] = { 0 };
 
@@ -81,21 +86,22 @@ static void ril_sim_info_signal_emit(struct ril_sim_info *self,
 	g_signal_emit(self, ril_sim_info_signals[id], 0);
 }
 
-static void ril_sim_info_watch_remove(struct ril_sim_info *self,
-					struct ril_sim_info_watch *watch)
+static void ril_sim_info_watch_remove(struct ril_sim_info_watch *watch)
 {
 	if (watch->id) {
-		struct ril_sim_info_priv *priv = self->priv;
+		struct ril_sim_info_priv *priv = watch->info->priv;
 
+		GASSERT(priv->sim);
 		if (priv->sim) {
 			watch->remove(priv->sim, watch->id);
+			GASSERT(!watch->id);
 		}
 
 		watch->id = 0;
 	}
 
 	if (watch->set_value) {
-		watch->set_value(self, NULL);
+		watch->set_value(watch->info, NULL);
 	}
 }
 
@@ -233,79 +239,91 @@ static void ril_sim_info_set_iccid(struct ril_sim_info *self, const char *iccid)
 	}
 }
 
-static void ril_sim_info_imsi_event_cb(const char *imsi, void *data)
+static void ril_sim_info_imsi_watch_cb(const char *imsi, void *data)
 {
+	struct ril_sim_info_watch *watch = data;
 	DBG("%s", imsi);
-	ril_sim_info_set_imsi(RIL_SIMINFO(data), imsi);
+	ril_sim_info_set_imsi(watch->info, imsi);
 }
 
-static void ril_sim_info_spn_cb(const char *spn, const char *dc, void *data)
+static void ril_sim_info_spn_watch_cb(const char *spn, const char *dc,
+								void *data)
 {
+	struct ril_sim_info_watch *watch = data;
 	DBG("%s", spn);
-	ril_sim_info_set_spn(RIL_SIMINFO(data), spn);
+	ril_sim_info_set_spn(watch->info, spn);
 }
 
-static void ril_sim_info_iccid_event_cb(const char *iccid, void *data)
+static void ril_sim_info_iccid_watch_cb(const char *iccid, void *data)
 {
+	struct ril_sim_info_watch *watch = data;
 	DBG("%s", iccid);
-	ril_sim_info_set_iccid(RIL_SIMINFO(data), iccid);
+	ril_sim_info_set_iccid(watch->info, iccid);
+}
+
+static void ril_sim_info_watch_done(void *data)
+{
+	struct ril_sim_info_watch *watch = data;
+
+	GASSERT(watch->id);
+	watch->id = 0;
 }
 
 static void ril_sim_info_handle_sim_state(struct ril_sim_info *self,
 						enum ofono_sim_state state)
 {
 	struct ril_sim_info_priv *priv = self->priv;
+	struct ril_sim_info_watch *watch;
 
 	DBG("%d", state);
 
-	if (state != OFONO_SIM_STATE_READY) {
-		/*
-		 * These are only valid in the READY state. When SIM card
-		 * leaves the READY state, these watch ids are silently
-		 * invalidated.
-		 */
-		priv->imsi_watch.id = 0;
-		priv->spn_watch.id = 0;
-	}
+	GASSERT(state == OFONO_SIM_STATE_READY || !priv->imsi_watch.id);
+	GASSERT(state == OFONO_SIM_STATE_READY || !priv->spn_watch.id);
 
 	switch (state) {
 	case OFONO_SIM_STATE_READY:
-		if (!priv->spn_watch.id) {
-			ofono_sim_add_spn_watch(priv->sim, &priv->spn_watch.id,
-					ril_sim_info_spn_cb, self, NULL);
+		/* SPN */
+		watch = &priv->spn_watch;
+		if (!watch->id) {
+			ofono_sim_add_spn_watch(priv->sim, &watch->id,
+					ril_sim_info_spn_watch_cb, watch,
+					ril_sim_info_watch_done);
 			GASSERT(priv->spn_watch.id);
 		}
-		if (!priv->imsi_watch.id) {
-			priv->imsi_watch.id =
-				ofono_sim_add_imsi_watch(priv->sim,
-					ril_sim_info_imsi_event_cb,
-					self, NULL);
-			GASSERT(priv->imsi_watch.id);
+		/* IMSI */
+		watch = &priv->imsi_watch;
+		if (!watch->id) {
+			watch->id = ofono_sim_add_imsi_watch(priv->sim,
+					ril_sim_info_imsi_watch_cb, watch,
+					ril_sim_info_watch_done);
+			GASSERT(watch->id);
 		}
 		/* no break */
 	case OFONO_SIM_STATE_INSERTED:
 	case OFONO_SIM_STATE_LOCKED_OUT:
-		if (!priv->iccid_watch.id) {
-			priv->iccid_watch.id =
-				ofono_sim_add_iccid_watch(priv->sim,
-					ril_sim_info_iccid_event_cb,
-					self, NULL);
-			GASSERT(priv->iccid_watch.id);
+		/* ICCID */
+		watch = &priv->iccid_watch;
+		if (!watch->id) {
+			watch->id = ofono_sim_add_iccid_watch(priv->sim,
+					ril_sim_info_iccid_watch_cb, watch,
+					ril_sim_info_watch_done);
+			GASSERT(watch->id);
 		}
 		break;
 	case OFONO_SIM_STATE_NOT_PRESENT:
 	case OFONO_SIM_STATE_RESETTING:
-		ril_sim_info_watch_remove(self, &priv->spn_watch);
-		ril_sim_info_watch_remove(self, &priv->imsi_watch);
-		ril_sim_info_watch_remove(self, &priv->iccid_watch);
+		ril_sim_info_watch_remove(&priv->spn_watch);
+		ril_sim_info_watch_remove(&priv->imsi_watch);
+		ril_sim_info_watch_remove(&priv->iccid_watch);
 		break;
 	}
 }
 
-static void ril_sim_info_state_event_cb(enum ofono_sim_state new_state,
+static void ril_sim_info_state_watch_cb(enum ofono_sim_state new_state,
 								void *data)
 {
-	ril_sim_info_handle_sim_state(RIL_SIMINFO(data), new_state);
+	struct ril_sim_info_watch *watch = data;
+	ril_sim_info_handle_sim_state(watch->info, new_state);
 }
 
 struct ril_sim_info *ril_sim_info_new(struct ofono_sim *sim)
@@ -339,10 +357,10 @@ void ril_sim_info_set_ofono_sim(struct ril_sim_info *self, struct ofono_sim *sim
 		struct ril_sim_info_priv *priv = self->priv;
 
 		if (priv->sim != sim) {
-			ril_sim_info_watch_remove(self, &priv->state_watch);
-			ril_sim_info_watch_remove(self, &priv->iccid_watch);
-			ril_sim_info_watch_remove(self, &priv->imsi_watch);
-			ril_sim_info_watch_remove(self, &priv->spn_watch);
+			ril_sim_info_watch_remove(&priv->state_watch);
+			ril_sim_info_watch_remove(&priv->iccid_watch);
+			ril_sim_info_watch_remove(&priv->imsi_watch);
+			ril_sim_info_watch_remove(&priv->spn_watch);
 
 			priv->update_imsi_cache = FALSE;
 			priv->update_iccid_map = FALSE;
@@ -351,8 +369,9 @@ void ril_sim_info_set_ofono_sim(struct ril_sim_info *self, struct ofono_sim *sim
 			if (sim) {
 				priv->state_watch.id =
 					ofono_sim_add_state_watch(sim,
-						ril_sim_info_state_event_cb,
-						self, NULL);
+						ril_sim_info_state_watch_cb,
+						&priv->state_watch,
+						ril_sim_info_watch_done);
 				GASSERT(priv->state_watch.id);
 				DBG("Attached to sim");
 				ril_sim_info_handle_sim_state(self,
@@ -390,19 +409,30 @@ void ril_sim_info_remove_handler(struct ril_sim_info *self, gulong id)
 	}
 }
 
+static void ril_sim_info_watch_init(struct ril_sim_info *self,
+				    struct ril_sim_info_watch *watch,
+				    ril_sim_info_set_value_cb_t set_value,
+				    ril_sim_info_remove_cb_t remove)
+{
+	watch->info = self;
+	watch->set_value = set_value;
+	watch->remove = remove;
+}
+
 static void ril_sim_info_init(struct ril_sim_info *self)
 {
 	struct ril_sim_info_priv *priv = G_TYPE_INSTANCE_GET_PRIVATE(self,
 				RIL_SIMINFO_TYPE, struct ril_sim_info_priv);
 
 	self->priv = priv;
-	priv->state_watch.remove = ofono_sim_remove_state_watch;
-	priv->iccid_watch.remove = ofono_sim_remove_iccid_watch;
-	priv->iccid_watch.set_value = ril_sim_info_set_iccid;
-	priv->imsi_watch.remove = ofono_sim_remove_imsi_watch;
-	priv->imsi_watch.set_value = ril_sim_info_set_imsi;
-	priv->spn_watch.remove = ril_sim_info_remove_spn_watch;
-	priv->spn_watch.set_value = ril_sim_info_set_spn;
+	ril_sim_info_watch_init(self, &priv->state_watch, NULL,
+					ofono_sim_remove_state_watch);
+	ril_sim_info_watch_init(self, &priv->iccid_watch, ril_sim_info_set_iccid,
+					ofono_sim_remove_iccid_watch);
+	ril_sim_info_watch_init(self, &priv->imsi_watch, ril_sim_info_set_imsi,
+					ofono_sim_remove_imsi_watch);
+	ril_sim_info_watch_init(self, &priv->spn_watch, ril_sim_info_set_spn,
+					ril_sim_info_remove_spn_watch);
 }
 
 static void ril_sim_info_dispose(GObject *object)
