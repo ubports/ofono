@@ -264,7 +264,7 @@ static void ril_modem_radio_state_cb(struct ril_radio *radio, void *data)
 	GASSERT(md->modem.radio == radio);
 	ril_modem_update_radio_settings(md);
 	ril_modem_update_online_state(md);
-};
+}
 
 static void ril_modem_pre_sim(struct ofono_modem *modem)
 {
