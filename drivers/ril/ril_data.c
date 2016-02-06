@@ -307,11 +307,12 @@ struct ril_data_call_list *ril_data_call_list_parse(const void *data, guint len)
 				call->status, call->retry_time,
 				call->cid, call->active,
 				ril_data_ofono_protocol_to_ril(call->prot),
-				call->ifname, call->mtu, call->addresses[0],
-				call->dnses[0],
-				(call->dnses[0] && call->dnses[1]) ?
-				call->dnses[1] : "",
-				call->gateways[0]);
+				call->ifname, call->mtu,
+				call->addresses ? call->addresses[0] : NULL,
+				call->dnses ? call->dnses[0] : NULL,
+				(call->dnses && call->dnses[0] &&
+				call->dnses[1]) ? call->dnses[1] : "",
+				call->gateways ? call->gateways[0] : NULL);
 
 			list->num++;
 			list->calls = g_slist_insert_sorted(list->calls, call,
