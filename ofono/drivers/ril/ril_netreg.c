@@ -164,7 +164,13 @@ static void ril_netreg_current_operator(struct ofono_netreg *netreg,
 {
 	struct ril_netreg *nd = ril_netreg_get_data(netreg);
 
-	GASSERT(!nd->current_operator_id);
+	/*
+	 * Calling ofono_netreg_status_notify() may result in
+	 * ril_netreg_current_operator() being invoked even if one
+	 * is already pending. Since ofono core doesn't associate
+	 * any context with individual calls, we can safely assume
+	 * that such a call essentially cancels the previous one.
+	 */
 	if (nd->current_operator_id) {
 		g_source_remove(nd->current_operator_id);
 	}
