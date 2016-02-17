@@ -101,7 +101,6 @@ struct ril_slot {
 	gboolean online;
 	struct ril_slot_config config;
 	struct ril_plugin_priv *plugin;
-	struct ril_sim_dbus *sim_dbus;
 	struct ril_modem *modem;
 	struct ril_mce *mce;
 	struct ofono_sim *sim;
@@ -447,22 +446,6 @@ static void ril_plugin_update_modem_paths_full(struct ril_plugin_priv *plugin)
 					ril_plugin_update_modem_paths(plugin));
 }
 
-static void ril_plugin_check_sim_state(struct ril_slot *slot)
-{
-	const char *slot_imsi = ofono_sim_get_imsi(slot->sim);
-	const char *dbus_imsi = ril_sim_dbus_imsi(slot->sim_dbus);
-
-	if (!slot_imsi) {
-		if (slot->sim_dbus) {
-			ril_sim_dbus_free(slot->sim_dbus);
-			slot->sim_dbus = NULL;
-		}
-	} else if (g_strcmp0(slot_imsi, dbus_imsi)) {
-		ril_sim_dbus_free(slot->sim_dbus);
-		slot->sim_dbus = ril_sim_dbus_new(slot->modem);
-	}
-}
-
 static void ril_plugin_sim_state_changed(struct ril_sim_card *card, void *data)
 {
 	struct ril_slot *slot = data;
@@ -505,7 +488,6 @@ static void ril_plugin_sim_state_watch(enum ofono_sim_state new_state,
 
 	DBG("%s sim state %d", slot->path + 1, new_state);
 	slot->sim_state = new_state;
-	ril_plugin_check_sim_state(slot);
 	ril_plugin_update_modem_paths_full(slot->plugin);
 }
 
@@ -538,7 +520,6 @@ static void ril_plugin_sim_watch(struct ofono_atom *atom,
 		slot->sim = NULL;
 	}
 
-	ril_plugin_check_sim_state(slot);
 	ril_plugin_update_modem_paths_full(slot->plugin);
 }
 
@@ -580,11 +561,6 @@ static void ril_plugin_modem_removed(struct ril_modem *modem, void *data)
 	DBG("");
 	GASSERT(slot->modem);
 	GASSERT(slot->modem == modem);
-
-	if (slot->sim_dbus) {
-		ril_sim_dbus_free(slot->sim_dbus);
-		slot->sim_dbus = NULL;
-	}
 
 	if (slot->sim_info_dbus) {
 		ril_sim_info_dbus_free(slot->sim_info_dbus);
