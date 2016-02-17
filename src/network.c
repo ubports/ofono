@@ -62,6 +62,8 @@ struct ofono_netreg {
 	struct ofono_network_registration_ops *ops;
 	int flags;
 	DBusMessage *pending;
+	GSList *pending_auto;
+	GSList *pending_list;
 	int signal_strength;
 	struct sim_spdi *spdi;
 	struct sim_eons *eons;
@@ -599,7 +601,7 @@ static DBusMessage *network_operator_register(DBusConnection *conn,
 	if (netreg->mode == NETWORK_REGISTRATION_MODE_AUTO_ONLY)
 		return __ofono_error_access_denied(msg);
 
-	if (netreg->pending)
+	if (netreg->pending || netreg->pending_auto || netreg->pending_list)
 		return __ofono_error_busy(msg);
 
 	if (netreg->driver->register_manual == NULL)
@@ -854,6 +856,44 @@ static DBusMessage *network_get_properties(DBusConnection *conn,
 	return reply;
 }
 
+static void network_reply_ok(gpointer data)
+{
+	DBusMessage *msg = data;
+
+	__ofono_dbus_pending_reply(&msg, dbus_message_new_method_return(msg));
+}
+
+static void network_reply_failed(gpointer data)
+{
+	DBusMessage *msg = data;
+
+	__ofono_dbus_pending_reply(&msg, __ofono_error_failed(msg));
+}
+
+static void network_reply_canceled(gpointer data)
+{
+	DBusMessage *msg = data;
+
+	__ofono_dbus_pending_reply(&msg, __ofono_error_canceled(msg));
+}
+
+static void register_auto_callback(const struct ofono_error *error, void *data)
+{
+	struct ofono_netreg *netreg = data;
+
+	if (error->type == OFONO_ERROR_TYPE_NO_ERROR)
+		g_slist_free_full(netreg->pending_auto, network_reply_ok);
+	else
+		g_slist_free_full(netreg->pending_auto, network_reply_failed);
+
+	netreg->pending_auto = NULL;
+
+	if (netreg->driver->registration_status)
+		netreg->driver->registration_status(netreg,
+						registration_status_callback,
+						netreg);
+}
+
 static DBusMessage *network_register(DBusConnection *conn,
 					DBusMessage *msg, void *data)
 {
@@ -862,17 +902,19 @@ static DBusMessage *network_register(DBusConnection *conn,
 	if (netreg->mode == NETWORK_REGISTRATION_MODE_AUTO_ONLY)
 		return __ofono_error_access_denied(msg);
 
-	if (netreg->pending)
+	if (netreg->pending || netreg->pending_list)
 		return __ofono_error_busy(msg);
 
 	if (netreg->driver->register_auto == NULL)
 		return __ofono_error_not_implemented(msg);
 
-	netreg->pending = dbus_message_ref(msg);
-
-	netreg->driver->register_auto(netreg, register_callback, netreg);
-
-	set_registration_mode(netreg, NETWORK_REGISTRATION_MODE_AUTO);
+	netreg->pending_auto = g_slist_append(netreg->pending_auto,
+							dbus_message_ref(msg));
+	if (!netreg->pending_auto->next) {
+		netreg->driver->register_auto(netreg, register_auto_callback,
+								netreg);
+		set_registration_mode(netreg, NETWORK_REGISTRATION_MODE_AUTO);
+	}
 
 	return NULL;
 }
@@ -972,26 +1014,15 @@ static void network_signal_operators_changed(struct ofono_netreg *netreg)
 	g_dbus_send_message(conn, signal);
 }
 
-static void operator_list_callback(const struct ofono_error *error, int total,
-				const struct ofono_network_operator *list,
-				void *data)
+static void operator_list_reply(gpointer data, gpointer user_data)
 {
-	struct ofono_netreg *netreg = data;
+	struct ofono_netreg *netreg = user_data;
+	DBusMessage *msg = data;
 	DBusMessage *reply;
 	DBusMessageIter iter;
 	DBusMessageIter array;
-	gboolean changed;
 
-	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
-		DBG("Error occurred during operator list");
-		__ofono_dbus_pending_reply(&netreg->pending,
-					__ofono_error_failed(netreg->pending));
-		return;
-	}
-
-	changed = update_operator_list(netreg, total, list);
-
-	reply = dbus_message_new_method_return(netreg->pending);
+	reply = dbus_message_new_method_return(msg);
 
 	dbus_message_iter_init_append(reply, &iter);
 
@@ -1008,12 +1039,31 @@ static void operator_list_callback(const struct ofono_error *error, int total,
 	append_operator_struct_list(netreg, &array);
 	dbus_message_iter_close_container(&iter, &array);
 
-	__ofono_dbus_pending_reply(&netreg->pending, reply);
+	__ofono_dbus_pending_reply(&msg, reply);
+}
 
-	DBG("operator list %schanged", changed ? "" : "not ");
+static void operator_list_callback(const struct ofono_error *error, int total,
+				const struct ofono_network_operator *list,
+				void *data)
+{
+	struct ofono_netreg *netreg = data;
 
-	if (changed)
-		network_signal_operators_changed(netreg);
+	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
+		DBG("Error occurred during operator list");
+		g_slist_free_full(netreg->pending_list, network_reply_failed);
+	} else {
+		gboolean changed = update_operator_list(netreg, total, list);
+
+		g_slist_foreach(netreg->pending_list, operator_list_reply,
+								netreg);
+		g_slist_free(netreg->pending_list);
+
+		DBG("operator list %schanged", changed ? "" : "not ");
+		if (changed)
+			network_signal_operators_changed(netreg);
+	}
+
+	netreg->pending_list = NULL;
 }
 
 static DBusMessage *network_scan(DBusConnection *conn,
@@ -1024,16 +1074,17 @@ static DBusMessage *network_scan(DBusConnection *conn,
 	if (netreg->mode == NETWORK_REGISTRATION_MODE_AUTO_ONLY)
 		return __ofono_error_access_denied(msg);
 
-	if (netreg->pending)
+	if (netreg->pending || netreg->pending_auto)
 		return __ofono_error_busy(msg);
 
 	if (netreg->driver->list_operators == NULL)
 		return __ofono_error_not_implemented(msg);
 
-	netreg->pending = dbus_message_ref(msg);
-
-	netreg->driver->list_operators(netreg, operator_list_callback, netreg);
-
+	netreg->pending_list = g_slist_append(netreg->pending_list,
+							dbus_message_ref(msg));
+	if (!netreg->pending_list->next)
+		netreg->driver->list_operators(netreg, operator_list_callback,
+								netreg);
 	return NULL;
 }
 
@@ -1897,6 +1948,15 @@ static void netreg_remove(struct ofono_atom *atom)
 
 	if (netreg->driver != NULL && netreg->driver->remove != NULL)
 		netreg->driver->remove(netreg);
+
+	if (netreg->pending) {
+		__ofono_dbus_pending_reply(&netreg->pending,
+				__ofono_error_canceled(netreg->pending));
+	} else if (netreg->pending_auto) {
+		g_slist_free_full(netreg->pending_auto, network_reply_canceled);
+	} else if (netreg->pending_list) {
+		g_slist_free_full(netreg->pending_list, network_reply_canceled);
+	}
 
 	sim_eons_free(netreg->eons);
 	sim_spdi_free(netreg->spdi);
