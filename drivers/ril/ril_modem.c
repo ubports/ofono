@@ -466,7 +466,6 @@ struct ril_modem *ril_modem_create(GRilIoChannel *io,
 		err = ofono_modem_register(ofono);
 		if (!err) {
 			ril_radio_power_cycle(modem->radio);
-			ril_radio_power_on(modem->radio, RADIO_POWER_TAG(md));
 			GASSERT(io->connected);
 
 			/*
