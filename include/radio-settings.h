@@ -136,6 +136,10 @@ void *ofono_radio_settings_get_data(struct ofono_radio_settings *rs);
 struct ofono_modem *ofono_radio_settings_get_modem(
 					struct ofono_radio_settings *rs);
 
+const char *ofono_radio_access_mode_to_string(enum ofono_radio_access_mode m);
+ofono_bool_t ofono_radio_access_mode_from_string(const char *str,
+					enum ofono_radio_access_mode *mode);
+
 #ifdef __cplusplus
 }
 #endif
