@@ -98,7 +98,6 @@ struct ril_slot {
 	gint timeout;           /* RIL timeout, in milliseconds */
 	int index;
 	int sim_flags;
-	gboolean online;
 	struct ril_slot_config config;
 	struct ril_plugin_priv *plugin;
 	struct ril_modem *modem;
@@ -381,7 +380,7 @@ static int ril_plugin_update_modem_paths(struct ril_plugin_priv *plugin)
 		slot = ril_plugin_find_slot_imsi(plugin->slots, NULL);
 	}
 
-	if (slot && !slot->online) {
+	if (slot && !slot->radio->online) {
 		slot = NULL;
 	}
 
@@ -605,7 +604,7 @@ static void ril_plugin_modem_online(struct ril_modem *modem, gboolean online,
 	GASSERT(slot->modem);
 	GASSERT(slot->modem == modem);
 
-	slot->online = online;
+	ril_radio_set_online(slot->radio, online);
 	ril_plugin_update_modem_paths_full(slot->plugin);
 }
 
@@ -623,7 +622,7 @@ static void ril_plugin_modem_removed(struct ril_modem *modem, void *data)
 	}
 
 	slot->modem = NULL;
-	slot->online = FALSE;
+	ril_radio_set_online(slot->radio, FALSE);
 	ril_data_allow(slot->data, FALSE);
 	ril_plugin_update_modem_paths_full(slot->plugin);
 	ril_sim_info_set_ofono_sim(slot->sim_info, NULL);

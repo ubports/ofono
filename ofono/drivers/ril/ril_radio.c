@@ -9,7 +9,7 @@
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  *  GNU General Public License for more details.
  */
 
@@ -48,14 +48,22 @@ struct ril_radio_priv {
 
 enum ril_radio_signal {
 	SIGNAL_STATE_CHANGED,
+	SIGNAL_ONLINE_CHANGED,
 	SIGNAL_COUNT
 };
 
 #define POWER_RETRY_SECS (1)
 
 #define SIGNAL_STATE_CHANGED_NAME       "ril-radio-state-changed"
+#define SIGNAL_ONLINE_CHANGED_NAME      "ril-radio-online-changed"
 
 static guint ril_radio_signals[SIGNAL_COUNT] = { 0 };
+
+#define NEW_SIGNAL(klass,name) \
+	ril_radio_signals[SIGNAL_##name##_CHANGED] = \
+		g_signal_new(SIGNAL_##name##_CHANGED_NAME, \
+			G_OBJECT_CLASS_TYPE(klass), G_SIGNAL_RUN_FIRST, \
+			0, NULL, NULL, NULL, G_TYPE_NONE, 0)
 
 G_DEFINE_TYPE(RilRadio, ril_radio, G_TYPE_OBJECT)
 #define RIL_RADIO_TYPE (ril_radio_get_type())
@@ -67,7 +75,8 @@ G_INLINE_FUNC gboolean ril_radio_power_should_be_on(struct ril_radio *self)
 {
 	struct ril_radio_priv *priv = self->priv;
 
-	return g_hash_table_size(priv->req_table) && !priv->power_cycle;
+	return self->online && !priv->power_cycle &&
+				g_hash_table_size(priv->req_table) > 0;
 }
 
 G_INLINE_FUNC gboolean ril_radio_state_off(enum ril_radio_state radio_state)
@@ -78,6 +87,12 @@ G_INLINE_FUNC gboolean ril_radio_state_off(enum ril_radio_state radio_state)
 G_INLINE_FUNC gboolean ril_radio_state_on(enum ril_radio_state radio_state)
 {
 	return !ril_radio_state_off(radio_state);
+}
+
+G_INLINE_FUNC void ril_radio_emit_signal(struct ril_radio *self,
+						enum ril_radio_signal id)
+{
+	g_signal_emit(self, ril_radio_signals[id], 0);
 }
 
 static gboolean ril_radio_power_request_retry_cb(gpointer user_data)
@@ -133,7 +148,7 @@ static void ril_radio_check_state(struct ril_radio *self)
 			ril_radio_state_to_string(self->state),
 			ril_radio_state_to_string(priv->last_known_state));
 		self->state = priv->last_known_state;
-		g_signal_emit(self, ril_radio_signals[SIGNAL_STATE_CHANGED], 0);
+		ril_radio_emit_signal(self, SIGNAL_STATE_CHANGED);
 	}
 }
 
@@ -235,7 +250,7 @@ void ril_radio_power_on(struct ril_radio *self, gpointer tag)
 
 			DBG("%s%p", priv->log_prefix, tag);
 			g_hash_table_insert(priv->req_table, tag, tag);
-			if (!was_on) {
+			if (!was_on && ril_radio_power_should_be_on(self)) {
 				ril_radio_power_request(self, TRUE, FALSE);
 			}
 		}
@@ -257,11 +272,31 @@ void ril_radio_power_off(struct ril_radio *self, gpointer tag)
 	}
 }
 
+void ril_radio_set_online(struct ril_radio *self, gboolean online)
+{
+	if (G_LIKELY(self) && self->online != online) {
+		gboolean on, was_on = ril_radio_power_should_be_on(self);
+		self->online = online;
+		on = ril_radio_power_should_be_on(self);
+		if (was_on != on) {
+			ril_radio_power_request(self, on, FALSE);
+		}
+		ril_radio_emit_signal(self, SIGNAL_ONLINE_CHANGED);
+	}
+}
+
 gulong ril_radio_add_state_changed_handler(struct ril_radio *self,
 					ril_radio_cb_t cb, void *arg)
 {
 	return (G_LIKELY(self) && G_LIKELY(cb)) ? g_signal_connect(self,
 		SIGNAL_STATE_CHANGED_NAME, G_CALLBACK(cb), arg) : 0;
+}
+
+gulong ril_radio_add_online_changed_handler(struct ril_radio *self,
+					ril_radio_cb_t cb, void *arg)
+{
+	return (G_LIKELY(self) && G_LIKELY(cb)) ? g_signal_connect(self,
+		SIGNAL_ONLINE_CHANGED_NAME, G_CALLBACK(cb), arg) : 0;
 }
 
 void ril_radio_remove_handler(struct ril_radio *self, gulong id)
@@ -395,10 +430,8 @@ static void ril_radio_class_init(RilRadioClass *klass)
 	object_class->dispose = ril_radio_dispose;
 	object_class->finalize = ril_radio_finalize;
 	g_type_class_add_private(klass, sizeof(struct ril_radio_priv));
-	ril_radio_signals[SIGNAL_STATE_CHANGED] =
-		g_signal_new(SIGNAL_STATE_CHANGED_NAME,
-			G_OBJECT_CLASS_TYPE(klass), G_SIGNAL_RUN_FIRST,
-			0, NULL, NULL, NULL, G_TYPE_NONE, 0);
+	NEW_SIGNAL(klass, STATE);
+	NEW_SIGNAL(klass, ONLINE);
 }
 
 /*

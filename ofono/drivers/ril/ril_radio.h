@@ -9,7 +9,7 @@
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  *  GNU General Public License for more details.
  */
 
@@ -22,6 +22,7 @@ struct ril_radio {
 	GObject object;
 	struct ril_radio_priv *priv;
 	enum ril_radio_state state;
+	gboolean online;
 };
 
 typedef void (*ril_radio_cb_t)(struct ril_radio *radio, void *arg);
@@ -32,9 +33,12 @@ void ril_radio_unref(struct ril_radio *radio);
 
 void ril_radio_power_on(struct ril_radio *radio, gpointer tag);
 void ril_radio_power_off(struct ril_radio *radio, gpointer tag);
-void ril_radio_confirm_power_on(struct ril_radio *radio);
 void ril_radio_power_cycle(struct ril_radio *radio);
+void ril_radio_confirm_power_on(struct ril_radio *radio);
+void ril_radio_set_online(struct ril_radio *radio, gboolean online);
 gulong ril_radio_add_state_changed_handler(struct ril_radio *radio,
+					ril_radio_cb_t cb, void *arg);
+gulong ril_radio_add_online_changed_handler(struct ril_radio *radio,
 					ril_radio_cb_t cb, void *arg);
 void ril_radio_remove_handler(struct ril_radio *radio, gulong id);
 enum ril_radio_state ril_radio_state_parse(const void *data, guint len);
