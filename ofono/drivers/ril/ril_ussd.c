@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015 Jolla Ltd.
+ *  Copyright (C) 2015-2016 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -9,7 +9,7 @@
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  *  GNU General Public License for more details.
  */
 
@@ -101,11 +101,10 @@ static void ril_ussd_request(struct ofono_ussd *ussd, int dcs,
 				}
 				grilio_request_append_utf8_chars(req, (char*)
 						unpacked_buf, length);
-				grilio_queue_send_request_full(ud->q, req,
-					RIL_REQUEST_SEND_USSD, ril_ussd_cb,
-					ril_ussd_cbd_free,
-					ril_ussd_cbd_new(cb, data));
+				grilio_queue_send_request(ud->q, req,
+					RIL_REQUEST_SEND_USSD);
 				grilio_request_unref(req);
+				cb(ril_error_ok(&error), data);
 				return;
 			}
 		}
