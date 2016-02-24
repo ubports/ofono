@@ -485,10 +485,42 @@ static void ril_plugin_sim_state_watch(enum ofono_sim_state new_state,
 								void *data)
 {
 	struct ril_slot *slot = data;
+	struct ril_plugin_priv *plugin = slot->plugin;
 
 	DBG("%s sim state %d", slot->path + 1, new_state);
 	slot->sim_state = new_state;
-	ril_plugin_update_modem_paths_full(slot->plugin);
+	if (new_state == OFONO_SIM_STATE_READY) {
+		struct ril_slot *voice_slot = plugin->voice_slot;
+		struct ril_slot *data_slot = plugin->data_slot;
+		int signal_mask;
+
+		/*
+		 * OFONO_SIM_STATE_READY means that pin code has been
+		 * entered (if necessary) and IMSI has been obtained.
+		 *
+		 * We want the first slot to be selected by default.
+		 * However, things may become available in pretty much
+		 * any order, so reset the slot pointers to NULL and let
+		 * ril_plugin_update_modem_paths() to pick them again.
+		 *
+		 * Only affects the very first boot and first boot after
+		 * the default voice SIM has been removed.
+		 */
+		plugin->voice_slot = NULL;
+		plugin->data_slot = NULL;
+		signal_mask = ril_plugin_update_modem_paths(plugin);
+		if (voice_slot != plugin->voice_slot) {
+			DBG("Voice slot changed");
+			signal_mask |= RIL_PLUGIN_SIGNAL_VOICE_PATH;
+		}
+		if (data_slot != plugin->data_slot) {
+			DBG("Data slot changed");
+			signal_mask |= RIL_PLUGIN_SIGNAL_DATA_PATH;
+		}
+		ril_plugin_dbus_signal(plugin->dbus, signal_mask);
+	} else {
+		ril_plugin_update_modem_paths_full(plugin);
+	}
 }
 
 static void ril_plugin_register_sim(struct ril_slot *slot, struct ofono_sim *sim)
