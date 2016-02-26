@@ -67,6 +67,7 @@ struct ril_plugin {
 	const char *default_voice_path;
 	const char *default_data_path;
 	const ril_slot_info_ptr *slots;
+	gboolean ready;
 };
 
 struct ril_modem {
@@ -87,6 +88,7 @@ struct ril_modem {
 #define RIL_PLUGIN_SIGNAL_ENABLED_SLOTS (0x10)
 #define RIL_PLUGIN_SIGNAL_MMS_IMSI      (0x20)
 #define RIL_PLUGIN_SIGNAL_MMS_PATH      (0x40)
+#define RIL_PLUGIN_SIGNAL_READY         (0x80)
 
 typedef void (*ril_modem_cb_t)(struct ril_modem *modem, void *data);
 typedef void (*ril_modem_online_cb_t)(struct ril_modem *modem, gboolean online,
