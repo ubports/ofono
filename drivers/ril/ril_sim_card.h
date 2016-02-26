@@ -66,7 +66,7 @@ gulong ril_sim_card_add_app_changed_handler(struct ril_sim_card *sc,
 void ril_sim_card_remove_handler(struct ril_sim_card *sc, gulong id);
 
 /* Inline wrappers */
-G_INLINE_FUNC enum ril_app_type
+static inline enum ril_app_type
 ril_sim_card_app_type(struct ril_sim_card *sc)
 	{ return (sc && sc->app) ? sc->app->app_type : RIL_APPTYPE_UNKNOWN; }
 
