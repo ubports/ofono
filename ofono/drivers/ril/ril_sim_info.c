@@ -277,9 +277,6 @@ static void ril_sim_info_handle_sim_state(struct ril_sim_info *self,
 
 	DBG("%d", state);
 
-	GASSERT(state == OFONO_SIM_STATE_READY || !priv->imsi_watch.id);
-	GASSERT(state == OFONO_SIM_STATE_READY || !priv->spn_watch.id);
-
 	switch (state) {
 	case OFONO_SIM_STATE_READY:
 		/* SPN */
