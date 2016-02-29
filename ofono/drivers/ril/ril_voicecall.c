@@ -322,9 +322,10 @@ static void ril_voicecall_clcc_poll_cb(GRilIoChannel *io, int status,
 				ofono_voicecall_notify(vd->vc, nc);
 				if (vd->cb) {
 					ofono_voicecall_cb_t cb = vd->cb;
-					cb(ril_error_ok(&error), vd->data);
+					void *cbdata = vd->data;
 					vd->cb = NULL;
 					vd->data = NULL;
+					cb(ril_error_ok(&error), cbdata);
 				}
 			}
 
@@ -456,8 +457,8 @@ static void ril_voicecall_dial_cb(GRilIoChannel *io, int status,
 	} else {
 		struct ofono_error error;
 		ofono_error("call failed.");
-		vd->cb = cbd->cb;
-		vd->data = cbd->data;
+		vd->cb = NULL;
+		vd->data = NULL;
 		cbd->cb(ril_error_failure(&error), cbd->data);
 	}
 }
