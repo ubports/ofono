@@ -46,7 +46,7 @@ struct ril_plugin_dbus {
 
 #define RIL_DBUS_PATH               "/"
 #define RIL_DBUS_INTERFACE          "org.nemomobile.ofono.ModemManager"
-#define RIL_DBUS_INTERFACE_VERSION  (4)
+#define RIL_DBUS_INTERFACE_VERSION  (5)
 
 #define RIL_DBUS_SIGNAL_ENABLED_MODEMS_CHANGED      "EnabledModemsChanged"
 #define RIL_DBUS_SIGNAL_PRESENT_SIMS_CHANGED        "PresentSimsChanged"
@@ -56,6 +56,7 @@ struct ril_plugin_dbus {
 #define RIL_DBUS_SIGNAL_DEFAULT_DATA_MODEM_CHANGED  "DefaultDataModemChanged"
 #define RIL_DBUS_SIGNAL_MMS_SIM_CHANGED             "MmsSimChanged"
 #define RIL_DBUS_SIGNAL_MMS_MODEM_CHANGED           "MmsModemChanged"
+#define RIL_DBUS_SIGNAL_READY_CHANGED               "ReadyChanged"
 #define RIL_DBUS_IMSI_AUTO                          "auto"
 
 static gboolean ril_plugin_dbus_enabled(const struct ril_slot_info *slot)
@@ -133,6 +134,11 @@ static void ril_plugin_dbus_append_boolean_array(DBusMessageIter *it,
 	dbus_message_iter_close_container(it, &array);
 }
 
+static void ril_plugin_dbus_append_boolean(DBusMessageIter *it, dbus_bool_t b)
+{
+	dbus_message_iter_append_basic(it, DBUS_TYPE_BOOLEAN, &b);
+}
+
 static void ril_plugin_dbus_append_string(DBusMessageIter *it, const char *str)
 {
 	if (!str) str = "";
@@ -187,6 +193,13 @@ static inline void ril_plugin_dbus_signal_string(struct ril_plugin_dbus *dbus,
 			name, DBUS_TYPE_STRING, &str, DBUS_TYPE_INVALID);
 }
 
+static inline void ril_plugin_dbus_signal_boolean(struct ril_plugin_dbus *dbus,
+				const char *name, dbus_bool_t value)
+{
+	g_dbus_emit_signal(dbus->conn, RIL_DBUS_PATH, RIL_DBUS_INTERFACE,
+			name, DBUS_TYPE_BOOLEAN, &value, DBUS_TYPE_INVALID);
+}
+
 void ril_plugin_dbus_signal(struct ril_plugin_dbus *dbus, int mask)
 {
 	if (dbus) {
@@ -224,6 +237,11 @@ void ril_plugin_dbus_signal(struct ril_plugin_dbus *dbus, int mask)
 			ril_plugin_dbus_signal_string(dbus,
 				RIL_DBUS_SIGNAL_MMS_MODEM_CHANGED,
 				dbus->plugin->mms_path);
+		}
+		if (mask & RIL_PLUGIN_SIGNAL_READY) {
+			ril_plugin_dbus_signal_boolean(dbus,
+				RIL_DBUS_SIGNAL_READY_CHANGED,
+				dbus->plugin->ready);
 		}
 	}
 }
@@ -350,6 +368,13 @@ static void ril_plugin_dbus_append_all4(DBusMessageIter *it,
 	ril_plugin_dbus_append_path(it, dbus->plugin->mms_path);
 }
 
+static void ril_plugin_dbus_append_all5(DBusMessageIter *it,
+						struct ril_plugin_dbus *dbus)
+{
+	ril_plugin_dbus_append_all4(it, dbus);
+	ril_plugin_dbus_append_boolean(it, dbus->plugin->ready);
+}
+
 static DBusMessage *ril_plugin_dbus_get_all(DBusConnection *conn,
 						DBusMessage *msg, void *data)
 {
@@ -376,6 +401,13 @@ static DBusMessage *ril_plugin_dbus_get_all4(DBusConnection *conn,
 {
 	return ril_plugin_dbus_imei_reply(msg, (struct ril_plugin_dbus *)data,
 						ril_plugin_dbus_append_all4);
+}
+
+static DBusMessage *ril_plugin_dbus_get_all5(DBusConnection *conn,
+						DBusMessage *msg, void *data)
+{
+	return ril_plugin_dbus_imei_reply(msg, (struct ril_plugin_dbus *)data,
+						ril_plugin_dbus_append_all5);
 }
 
 static DBusMessage *ril_plugin_dbus_get_interface_version(DBusConnection *conn,
@@ -508,6 +540,18 @@ static DBusMessage *ril_plugin_dbus_get_mms_modem(DBusConnection *conn,
 	struct ril_plugin_dbus *dbus = data;
 
 	return ril_plugin_dbus_reply_with_path(msg, dbus->plugin->mms_path);
+}
+
+static DBusMessage *ril_plugin_dbus_get_ready(DBusConnection *conn,
+						DBusMessage *msg, void *data)
+{
+	struct ril_plugin_dbus *dbus = data;
+	DBusMessage *reply = dbus_message_new_method_return(msg);
+	DBusMessageIter it;
+
+	dbus_message_iter_init_append(reply, &it);
+	ril_plugin_dbus_append_boolean(&it, dbus->plugin->ready);
+	return reply;
 }
 
 static DBusMessage *ril_plugin_dbus_set_enabled_modems(DBusConnection *conn,
@@ -671,6 +715,9 @@ static DBusMessage *ril_plugin_dbus_set_mms_sim(DBusConnection *conn,
 	RIL_DBUS_GET_ALL3_ARGS, \
 	{"mmsSim", "s" }, \
 	{"mmsModem" , "s"}
+#define RIL_DBUS_GET_ALL5_ARGS \
+	RIL_DBUS_GET_ALL4_ARGS, \
+	{"ready" , "b"}
 
 static const GDBusMethodTable ril_plugin_dbus_methods[] = {
 	{ GDBUS_METHOD("GetAll",
@@ -685,6 +732,9 @@ static const GDBusMethodTable ril_plugin_dbus_methods[] = {
 	{ GDBUS_ASYNC_METHOD("GetAll4",
 			NULL, GDBUS_ARGS(RIL_DBUS_GET_ALL4_ARGS),
 			ril_plugin_dbus_get_all4) },
+	{ GDBUS_ASYNC_METHOD("GetAll5",
+			NULL, GDBUS_ARGS(RIL_DBUS_GET_ALL5_ARGS),
+			ril_plugin_dbus_get_all5) },
 	{ GDBUS_METHOD("GetInterfaceVersion",
 			NULL, GDBUS_ARGS({ "version", "i" }),
 			ril_plugin_dbus_get_interface_version) },
@@ -718,6 +768,9 @@ static const GDBusMethodTable ril_plugin_dbus_methods[] = {
 	{ GDBUS_METHOD("GetMmsModem",
 			NULL, GDBUS_ARGS({ "path", "s" }),
 			ril_plugin_dbus_get_mms_modem) },
+	{ GDBUS_METHOD("GetReady",
+			NULL, GDBUS_ARGS({ "ready", "b" }),
+			ril_plugin_dbus_get_ready) },
 	{ GDBUS_METHOD("SetEnabledModems",
 			GDBUS_ARGS({ "modems", "ao" }), NULL,
 			ril_plugin_dbus_set_enabled_modems) },
@@ -751,6 +804,8 @@ static const GDBusSignalTable ril_plugin_dbus_signals[] = {
 			GDBUS_ARGS({ "imsi", "s" })) },
 	{ GDBUS_SIGNAL(RIL_DBUS_SIGNAL_MMS_MODEM_CHANGED,
 			GDBUS_ARGS({ "path", "s" })) },
+	{ GDBUS_SIGNAL(RIL_DBUS_SIGNAL_READY_CHANGED,
+			GDBUS_ARGS({ "ready", "b" })) },
 	{ }
 };
 

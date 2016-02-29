@@ -446,9 +446,31 @@ static void ril_plugin_update_modem_paths_full(struct ril_plugin_priv *plugin)
 					ril_plugin_update_modem_paths(plugin));
 }
 
+static void ril_plugin_update_ready(struct ril_plugin_priv *plugin)
+{
+	GSList *link;
+	gboolean ready = TRUE;
+
+	for (link = plugin->slots; link; link = link->next) {
+		struct ril_slot *slot = link->data;
+
+		if (!slot->imei || !slot->sim_card || !slot->sim_card->status) {
+			ready = FALSE;
+			break;
+		}
+	}
+
+	if (plugin->pub.ready != ready) {
+		DBG("%sready", ready ? "" : "not ");
+		plugin->pub.ready = ready;
+		ril_plugin_dbus_signal(plugin->dbus, RIL_PLUGIN_SIGNAL_READY);
+	}
+}
+
 static void ril_plugin_sim_state_changed(struct ril_sim_card *card, void *data)
 {
 	struct ril_slot *slot = data;
+	struct ril_plugin_priv *plugin = slot->plugin;
 	gboolean present;
 
 	if (card && card->status &&
@@ -462,9 +484,10 @@ static void ril_plugin_sim_state_changed(struct ril_sim_card *card, void *data)
 
 	if (slot->pub.sim_present != present) {
 		slot->pub.sim_present = present;
-		ril_plugin_dbus_signal_sim(slot->plugin->dbus,
-						slot->index, present);
+		ril_plugin_dbus_signal_sim(plugin->dbus, slot->index, present);
 	}
+
+	ril_plugin_update_ready(plugin);
 }
 
 static void ril_plugin_sim_watch_done(void *data)
@@ -739,6 +762,7 @@ static void ril_plugin_imei_cb(GRilIoChannel *io, int status,
 		if (slot->modem) {
 			ril_modem_set_imei(slot->modem, slot->imei);
 		}
+		ril_plugin_update_ready(plugin);
 	} else {
 		ofono_error("Slot %u IMEI query error: %s", slot->config.slot,
 						ril_error_to_string(status));
@@ -780,6 +804,8 @@ static void ril_plugin_radio_state_changed(GRilIoChannel *io, guint code,
 
 static void ril_plugin_slot_connected(struct ril_slot *slot)
 {
+	struct ril_plugin_priv *plugin = slot->plugin;
+
 	ofono_debug("%s version %u", (slot->name && slot->name[0]) ?
 				slot->name : "RIL", slot->io->ril_version);
 
@@ -810,16 +836,18 @@ static void ril_plugin_slot_connected(struct ril_slot *slot)
 			slot->sim_card, ril_plugin_sim_state_changed, slot);
 
 	GASSERT(!slot->data);
-	slot->data = ril_data_new(slot->plugin->data_manager, slot->radio,
+	slot->data = ril_data_new(plugin->data_manager, slot->radio,
 						slot->network, slot->io);
 
-	if (ril_plugin_multisim(slot->plugin)) {
+	if (ril_plugin_multisim(plugin)) {
 		ril_data_set_name(slot->data, slot->path + 1);
 	}
 
 	if (ril_plugin_can_create_modem(slot) && !slot->modem) {
 		ril_plugin_create_modem(slot);
 	}
+
+	ril_plugin_update_ready(plugin);
 }
 
 static void ril_plugin_slot_connected_cb(GRilIoChannel *io, void *user_data)
