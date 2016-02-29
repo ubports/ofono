@@ -1028,6 +1028,7 @@ static void ril_sim_change_passwd(struct ofono_sim *sim,
 		RIL_REQUEST_CHANGE_SIM_PIN2 : RIL_REQUEST_CHANGE_SIM_PIN,
 		ril_sim_pin_change_state_cb, ril_sim_pin_req_done,
 		ril_sim_pin_cbd_new(sd, passwd_type, cb, data));
+	grilio_request_unref(req);
 }
 
 static gboolean ril_sim_register(gpointer user)
