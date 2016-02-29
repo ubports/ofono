@@ -9,7 +9,7 @@
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  *  GNU General Public License for more details.
  */
 
@@ -50,8 +50,12 @@ struct ril_data {
 	struct ril_data_call_list *data_calls;
 };
 
+enum ril_data_manager_flags {
+	RIL_DATA_MANAGER_3GLTE_HANDOVER = 0x01
+};
+
 struct ril_data_manager;
-struct ril_data_manager *ril_data_manager_new(void);
+struct ril_data_manager *ril_data_manager_new(enum ril_data_manager_flags flg);
 struct ril_data_manager *ril_data_manager_ref(struct ril_data_manager *dm);
 void ril_data_manager_unref(struct ril_data_manager *dm);
 
@@ -62,12 +66,11 @@ typedef void (*ril_data_call_setup_cb_t)(struct ril_data *data,
 typedef void (*ril_data_call_deactivate_cb_t)(struct ril_data *data,
 			int ril_status, void *arg);
 
-struct ril_data *ril_data_new(struct ril_data_manager *dm,
+struct ril_data *ril_data_new(struct ril_data_manager *dm, const char *name,
 			struct ril_radio *radio, struct ril_network *network,
 			GRilIoChannel *io);
 struct ril_data *ril_data_ref(struct ril_data *data);
 void ril_data_unref(struct ril_data *data);
-void ril_data_set_name(struct ril_data *data, const char *name);
 gboolean ril_data_allowed(struct ril_data *data);
 
 gulong ril_data_add_allow_changed_handler(struct ril_data *data,
@@ -78,14 +81,14 @@ void ril_data_remove_handler(struct ril_data *data, gulong id);
 
 void ril_data_allow(struct ril_data *data, gboolean allow);
 
-struct ril_data_call_request;
-struct ril_data_call_request *ril_data_call_setup(struct ril_data *data,
+struct ril_data_request;
+struct ril_data_request *ril_data_call_setup(struct ril_data *data,
 				const struct ofono_gprs_primary_context *ctx,
 				ril_data_call_setup_cb_t cb, void *arg);
-struct ril_data_call_request *ril_data_call_deactivate(struct ril_data *data,
+struct ril_data_request *ril_data_call_deactivate(struct ril_data *data,
 			int cid, ril_data_call_deactivate_cb_t cb, void *arg);
-void ril_data_call_request_detach(struct ril_data_call_request *req);
-void ril_data_call_request_cancel(struct ril_data_call_request *req);
+void ril_data_request_detach(struct ril_data_request *req);
+void ril_data_request_cancel(struct ril_data_request *req);
 
 void ril_data_call_free(struct ril_data_call *call);
 struct ril_data_call *ril_data_call_dup(const struct ril_data_call *call);

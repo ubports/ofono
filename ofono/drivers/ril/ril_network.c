@@ -9,35 +9,59 @@
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  *  GNU General Public License for more details.
  */
 
 #include "ril_network.h"
 #include "ril_radio.h"
 #include "ril_util.h"
+#include "ril_sim_settings.h"
 #include "ril_log.h"
 
 #include <grilio_queue.h>
 #include <grilio_request.h>
 #include <grilio_parser.h>
 
+#include <gutil_misc.h>
+
 #include <ofono/netreg.h>
+
 #include "common.h"
+
+#define SET_PREF_MODE_HOLDOFF_SEC RIL_RETRY_SECS
 
 typedef GObjectClass RilNetworkClass;
 typedef struct ril_network RilNetwork;
+
+enum ril_network_timer {
+	TIMER_SET_RAT_HOLDOFF,
+	TIMER_FORCE_CHECK_PREF_MODE,
+	TIMER_COUNT
+};
+
+enum ril_network_radio_event {
+	RADIO_EVENT_STATE_CHANGED,
+	RADIO_EVENT_ONLINE_CHANGED,
+	RADIO_EVENT_COUNT
+};
 
 struct ril_network_priv {
 	GRilIoChannel *io;
 	GRilIoQueue *q;
 	struct ril_radio *radio;
+	enum ofono_radio_access_mode max_pref_mode;
+	int rat;
 	char *log_prefix;
-	gulong event_id;
 	guint operator_poll_id;
 	guint voice_poll_id;
 	guint data_poll_id;
-	gulong radio_event_id;
+	guint timer[TIMER_COUNT];
+	gulong query_rat_id;
+	gulong set_rat_id;
+	gulong ril_event_id;
+	gulong settings_event_id;
+	gulong radio_event_id[RADIO_EVENT_COUNT];
 	struct ofono_network_operator operator;
 };
 
@@ -45,12 +69,14 @@ enum ril_network_signal {
 	SIGNAL_OPERATOR_CHANGED,
 	SIGNAL_VOICE_STATE_CHANGED,
 	SIGNAL_DATA_STATE_CHANGED,
+	SIGNAL_PREF_MODE_CHANGED,
 	SIGNAL_COUNT
 };
 
 #define SIGNAL_OPERATOR_CHANGED_NAME    "ril-network-operator-changed"
 #define SIGNAL_VOICE_STATE_CHANGED_NAME "ril-network-voice-state-changed"
 #define SIGNAL_DATA_STATE_CHANGED_NAME  "ril-network-data-state-changed"
+#define SIGNAL_PREF_MODE_CHANGED_NAME   "ril-network-pref-mode-changed"
 
 static guint ril_network_signals[SIGNAL_COUNT] = { 0 };
 
@@ -58,6 +84,40 @@ G_DEFINE_TYPE(RilNetwork, ril_network, G_TYPE_OBJECT)
 #define RIL_NETWORK_TYPE (ril_network_get_type())
 #define RIL_NETWORK(obj) (G_TYPE_CHECK_INSTANCE_CAST(obj,\
         RIL_NETWORK_TYPE,RilNetwork))
+
+#define RIL_NETWORK_SIGNAL(klass,name) \
+	ril_network_signals[SIGNAL_##name##_CHANGED] = \
+		g_signal_new(SIGNAL_##name##_CHANGED_NAME, \
+			G_OBJECT_CLASS_TYPE(klass), G_SIGNAL_RUN_FIRST, \
+			0, NULL, NULL, NULL, G_TYPE_NONE, 0)
+
+#define DBG_(self,fmt,args...) DBG("%s" fmt, (self)->priv->log_prefix, ##args)
+
+/* Some assumptions: */
+G_STATIC_ASSERT(OFONO_RADIO_ACCESS_MODE_ANY == 0);
+G_STATIC_ASSERT(OFONO_RADIO_ACCESS_MODE_GSM > OFONO_RADIO_ACCESS_MODE_ANY);
+G_STATIC_ASSERT(OFONO_RADIO_ACCESS_MODE_UMTS > OFONO_RADIO_ACCESS_MODE_GSM);
+G_STATIC_ASSERT(OFONO_RADIO_ACCESS_MODE_LTE > OFONO_RADIO_ACCESS_MODE_UMTS);
+
+static void ril_network_query_pref_mode(struct ril_network *self);
+static void ril_network_set_pref_mode(struct ril_network *self, int rat);
+
+static void ril_network_emit(struct ril_network *self,
+						enum ril_network_signal sig)
+{
+	g_signal_emit(self, ril_network_signals[sig], 0);
+}
+
+static void ril_network_stop_timer(struct ril_network *self,
+					enum ril_network_timer tid)
+{
+	struct ril_network_priv *priv = self->priv;
+
+	if (priv->timer[tid]) {
+		g_source_remove(priv->timer[tid]);
+		priv->timer[tid] = 0;
+	}
+}
 
 static void ril_network_reset_state(struct ril_registration_state *reg)
 {
@@ -72,7 +132,6 @@ static void ril_network_reset_state(struct ril_registration_state *reg)
 static gboolean ril_network_parse_response(struct ril_network *self,
 	const void *data, guint len, struct ril_registration_state *reg)
 {
-	struct ril_network_priv *priv = self->priv;
 	int nparams, ril_status;
 	gchar *sstatus = NULL, *slac = NULL, *sci = NULL;
 	gchar *stech = NULL, *sreason = NULL, *smax = NULL;
@@ -83,13 +142,13 @@ static gboolean ril_network_parse_response(struct ril_network *self,
 	/* Size of response string array. The minimum seen in the wild is 3 */
 	grilio_parser_init(&rilp, data, len);
 	if (!grilio_parser_get_int32(&rilp, &nparams) || nparams < 3) {
-		DBG("%sbroken response", priv->log_prefix);
+		DBG_(self, "broken response");
 		return FALSE;
 	}
 
 	sstatus = grilio_parser_get_utf8(&rilp);              /* response[0] */
 	if (!sstatus) {
-		DBG("%sNo sstatus value returned!", priv->log_prefix);
+		DBG_(self, "No sstatus value returned!");
 		return FALSE;
 	}
 
@@ -142,7 +201,7 @@ static gboolean ril_network_parse_response(struct ril_network *self,
 	reg->ci = sci ? strtol(sci, NULL, 16) : -1;
 	reg->access_tech = ril_parse_tech(stech, &reg->ril_tech);
 
-	DBG("%s%s,%s,%s,%d,%s,%s,%s", priv->log_prefix,
+	DBG_(self, "%s,%s,%s,%d,%s,%s,%s",
 				registration_status_to_string(reg->status),
 				slac, sci, reg->ril_tech,
 				registration_tech_to_string(reg->access_tech),
@@ -237,16 +296,15 @@ static void ril_network_poll_operator_cb(GRilIoChannel *io, int req_status,
 
 		if (changed) {
 			if (self->operator) {
-				DBG("%slalpha=%s, salpha=%s, numeric=%s, %s, "
-					"mcc=%s, mnc=%s, %s", priv->log_prefix,
+				DBG_(self, "lalpha=%s, salpha=%s, numeric=%s, "
+					"%s, mcc=%s, mnc=%s, %s",
 					lalpha, salpha, numeric,
 					op.name, op.mcc, op.mnc,
 					registration_tech_to_string(op.tech));
 			} else {
-				DBG("%sno operator", priv->log_prefix);
+				DBG_(self, "no operator");
 			}
-			g_signal_emit(self, ril_network_signals[
-					SIGNAL_OPERATOR_CHANGED], 0);
+			ril_network_emit(self, SIGNAL_OPERATOR_CHANGED);
 		}
 
 		g_free(lalpha);
@@ -269,10 +327,9 @@ static void ril_network_poll_voice_state_cb(GRilIoChannel *io, int req_status,
 
 		ril_network_parse_response(self, data, len, &state);
 		if (memcmp(&state, &self->voice, sizeof(state))) {
-			DBG("%svoice registration changed", priv->log_prefix);
+			DBG_(self, "voice registration changed");
 			self->voice = state;
-			g_signal_emit(self, ril_network_signals[
-					SIGNAL_VOICE_STATE_CHANGED], 0);
+			ril_network_emit(self, SIGNAL_VOICE_STATE_CHANGED);
 		}
 	}
 }
@@ -291,10 +348,9 @@ static void ril_network_poll_data_state_cb(GRilIoChannel *io, int req_status,
 
 		ril_network_parse_response(self, data, len, &state);
 		if (memcmp(&state, &self->data, sizeof(state))) {
-			DBG("%sdata registration changed", priv->log_prefix);
+			DBG_(self, "data registration changed");
 			self->data = state;
-			g_signal_emit(self, ril_network_signals[
-					SIGNAL_DATA_STATE_CHANGED], 0);
+			ril_network_emit(self, SIGNAL_DATA_STATE_CHANGED);
 		}
 	}
 }
@@ -323,7 +379,7 @@ static void ril_network_poll_state(struct ril_network *self)
 {
 	struct ril_network_priv *priv = self->priv;
 
-	DBG("%s", priv->log_prefix);
+	DBG_(self, "");
 	priv->operator_poll_id = ril_network_poll_and_retry(self,
 		priv->operator_poll_id, RIL_REQUEST_OPERATOR,
 		ril_network_poll_operator_cb);
@@ -333,6 +389,210 @@ static void ril_network_poll_state(struct ril_network *self)
 	priv->data_poll_id = ril_network_poll_and_retry(self,
 		priv->data_poll_id, RIL_REQUEST_DATA_REGISTRATION_STATE,
 		ril_network_poll_data_state_cb);
+}
+
+static enum ofono_radio_access_mode ril_network_rat_to_mode(int rat)
+{
+	switch (rat) {
+	case PREF_NET_TYPE_LTE_CDMA_EVDO:
+	case PREF_NET_TYPE_LTE_GSM_WCDMA:
+	case PREF_NET_TYPE_LTE_CMDA_EVDO_GSM_WCDMA:
+	case PREF_NET_TYPE_LTE_ONLY:
+	case PREF_NET_TYPE_LTE_WCDMA:
+		return OFONO_RADIO_ACCESS_MODE_LTE;
+	case PREF_NET_TYPE_GSM_WCDMA_AUTO:
+	case PREF_NET_TYPE_WCDMA:
+	case PREF_NET_TYPE_GSM_WCDMA:
+		return OFONO_RADIO_ACCESS_MODE_UMTS;
+	default:
+		DBG("unexpected rat mode %d", rat);
+	case PREF_NET_TYPE_GSM_ONLY:
+		return OFONO_RADIO_ACCESS_MODE_GSM;
+	}
+}
+
+static int ril_network_mode_to_rat(struct ril_network *self,
+					enum ofono_radio_access_mode mode)
+{
+	switch (mode) {
+	case OFONO_RADIO_ACCESS_MODE_ANY:
+	case OFONO_RADIO_ACCESS_MODE_LTE:
+		if (self->settings->enable_4g) {
+			return PREF_NET_TYPE_LTE_GSM_WCDMA;
+		}
+		/* no break */
+	default:
+	case OFONO_RADIO_ACCESS_MODE_UMTS:
+		return PREF_NET_TYPE_GSM_WCDMA_AUTO;
+	case OFONO_RADIO_ACCESS_MODE_GSM:
+		return PREF_NET_TYPE_GSM_ONLY;
+	}
+}
+
+static int ril_network_pref_mode_expected(struct ril_network *self)
+{
+	struct ril_sim_settings *settings = self->settings;
+	struct ril_network_priv *priv = self->priv;
+	const enum ofono_radio_access_mode pref_mode = priv->max_pref_mode ?
+		MIN(settings->pref_mode, priv->max_pref_mode) :
+		settings->pref_mode;
+	return ril_network_mode_to_rat(self, pref_mode);
+}
+
+static gboolean ril_network_set_rat_holdoff_cb(gpointer user_data)
+{
+	struct ril_network *self = RIL_NETWORK(user_data);
+	struct ril_network_priv *priv = self->priv;
+	const int rat = ril_network_pref_mode_expected(self);
+
+	DBG_(self, "rat mode %d, expected %d", priv->rat, rat);
+	GASSERT(priv->timer[TIMER_SET_RAT_HOLDOFF]);
+	priv->timer[TIMER_SET_RAT_HOLDOFF] = 0;
+
+	/*
+	 * Don't retry the request if modem is offline. When it goes online,
+	 * another check will be scheduled by ril_network_radio_online_cb
+	 */
+	if (priv->rat != rat) {
+		if (priv->radio->online) {
+			ril_network_set_pref_mode(self, rat);
+		} else {
+			DBG_(self, "offline, giving up");
+		}
+	}
+
+	return G_SOURCE_REMOVE;
+}
+
+static void ril_network_set_pref_mode_cb(GRilIoChannel *io, int status,
+				const void *data, guint len, void *user_data)
+{
+	struct ril_network *self = RIL_NETWORK(user_data);
+	struct ril_network_priv *priv = self->priv;
+
+	GASSERT(priv->set_rat_id);
+	priv->set_rat_id = 0;
+	if (status != RIL_E_SUCCESS) {
+		ofono_error("failed to set rat mode");
+	}
+
+	ril_network_query_pref_mode(self);
+}
+
+static void ril_network_set_pref_mode(struct ril_network *self, int rat)
+{
+	struct ril_network_priv *priv = self->priv;
+	GRilIoRequest *req = grilio_request_sized_new(8);
+
+	DBG_(self, "setting rat mode %d", rat);
+	grilio_request_append_int32(req, 1);    /* Number of params */
+	grilio_request_append_int32(req, rat);
+
+	grilio_queue_cancel_request(priv->q, priv->set_rat_id, FALSE);
+	priv->set_rat_id = grilio_queue_send_request_full(priv->q, req,
+				RIL_REQUEST_SET_PREFERRED_NETWORK_TYPE,
+				ril_network_set_pref_mode_cb, NULL, self);
+	grilio_request_unref(req);
+
+	/* Don't do it too often */
+	GASSERT(!priv->timer[TIMER_SET_RAT_HOLDOFF]);
+	priv->timer[TIMER_SET_RAT_HOLDOFF] =
+		g_timeout_add_seconds(SET_PREF_MODE_HOLDOFF_SEC,
+			ril_network_set_rat_holdoff_cb, self);
+}
+
+static void ril_network_check_pref_mode(struct ril_network *self,
+							gboolean force)
+{
+	struct ril_network_priv *priv = self->priv;
+	const int rat = ril_network_pref_mode_expected(self);
+
+	if (priv->timer[TIMER_FORCE_CHECK_PREF_MODE]) {
+		ril_network_stop_timer(self, TIMER_FORCE_CHECK_PREF_MODE);
+		/*
+		 * TIMER_FORCE_CHECK_PREF_MODE is scheduled by
+		 * ril_network_pref_mode_changed_cb and is meant
+		 * to force radio tech check right now.
+		 */
+		force = TRUE;
+	}
+
+	if (priv->rat == rat || force) {
+		ril_network_stop_timer(self, TIMER_SET_RAT_HOLDOFF);
+	}
+
+	if (priv->rat != rat) {
+		/* Something isn't right, we need to fix it */
+		if (!priv->timer[TIMER_SET_RAT_HOLDOFF]) {
+			ril_network_set_pref_mode(self, rat);
+		} else {
+			/* OK, later */
+			DBG_(self, "need to set rat mode %d", rat);
+		}
+	}
+}
+
+static int ril_network_parse_pref_resp(const void *data, guint len)
+{
+	GRilIoParser rilp;
+	int pref = -1;
+
+	grilio_parser_init(&rilp, data, len);
+	grilio_parser_get_int32(&rilp, NULL);
+	grilio_parser_get_int32(&rilp, &pref);
+	return pref;
+}
+
+static void ril_network_query_pref_mode_cb(GRilIoChannel *io, int status,
+				const void *data, guint len, void *user_data)
+{
+	struct ril_network *self = RIL_NETWORK(user_data);
+	struct ril_network_priv *priv = self->priv;
+	const enum ofono_radio_access_mode pref_mode = self->pref_mode;
+
+	/* This request never fails because in case of error it gets retried */
+	GASSERT(status == RIL_E_SUCCESS);
+	GASSERT(priv->query_rat_id);
+
+	priv->query_rat_id = 0;
+	priv->rat = ril_network_parse_pref_resp(data, len);
+	self->pref_mode = ril_network_rat_to_mode(priv->rat);
+	DBG_(self, "rat mode %d (%s)", priv->rat,
+			ofono_radio_access_mode_to_string(self->pref_mode));
+
+	if (self->pref_mode != pref_mode) {
+		ril_network_emit(self, SIGNAL_PREF_MODE_CHANGED);
+	}
+
+	ril_network_check_pref_mode(self, FALSE);
+}
+
+static void ril_network_query_pref_mode(struct ril_network *self)
+{
+	struct ril_network_priv *priv = self->priv;
+	GRilIoRequest *req = grilio_request_new();
+
+	grilio_request_set_retry(req, RIL_RETRY_SECS*1000, -1);
+	grilio_queue_cancel_request(priv->q, priv->query_rat_id, FALSE);
+	priv->query_rat_id = grilio_queue_send_request_full(priv->q, req,
+				RIL_REQUEST_GET_PREFERRED_NETWORK_TYPE,
+				ril_network_query_pref_mode_cb, NULL, self);
+	grilio_request_unref(req);
+}
+
+void ril_network_set_max_pref_mode(struct ril_network *self,
+				enum ofono_radio_access_mode max_mode,
+				gboolean force_check)
+{
+	if (G_LIKELY(self)) {
+		struct ril_network_priv *priv = self->priv;
+		if (priv->max_pref_mode != max_mode || force_check) {
+			DBG_(self, "rat mode %d (%s)", max_mode,
+				ofono_radio_access_mode_to_string(max_mode));
+			priv->max_pref_mode = max_mode;
+			ril_network_check_pref_mode(self, TRUE);
+		}
+	}
 }
 
 gulong ril_network_add_operator_changed_handler(struct ril_network *self,
@@ -356,6 +616,13 @@ gulong ril_network_add_data_state_changed_handler(struct ril_network *self,
 		SIGNAL_DATA_STATE_CHANGED_NAME, G_CALLBACK(cb), arg) : 0;
 }
 
+gulong ril_network_add_pref_mode_changed_handler(struct ril_network *self,
+					ril_network_cb_t cb, void *arg)
+{
+	return (G_LIKELY(self) && G_LIKELY(cb)) ? g_signal_connect(self,
+		SIGNAL_PREF_MODE_CHANGED_NAME, G_CALLBACK(cb), arg) : 0;
+}
+
 void ril_network_remove_handler(struct ril_network *self, gulong id)
 {
 	if (G_LIKELY(self) && G_LIKELY(id)) {
@@ -363,43 +630,93 @@ void ril_network_remove_handler(struct ril_network *self, gulong id)
 	}
 }
 
+void ril_network_remove_handlers(struct ril_network *self, gulong *ids, int n)
+{
+	gutil_disconnect_handlers(self, ids, n);
+}
+
 static void ril_network_voice_state_changed_cb(GRilIoChannel *io, guint code,
 				const void *data, guint len, void *user_data)
 {
 	struct ril_network *self = RIL_NETWORK(user_data);
-	struct ril_network_priv *priv = self->priv;
 
-	DBG("%s", priv->log_prefix);
+	DBG_(self, "");
 	GASSERT(code == RIL_UNSOL_RESPONSE_VOICE_NETWORK_STATE_CHANGED);
 	ril_network_poll_state(self);
 }
 
-static void ril_network_radio_state_cb(struct ril_radio *radio, void *user_data)
+static void ril_network_radio_state_cb(struct ril_radio *radio, void *data)
 {
-	struct ril_network *self = RIL_NETWORK(user_data);
-
 	if (radio->state == RADIO_STATE_ON) {
-		ril_network_poll_state(self);
+		ril_network_poll_state(RIL_NETWORK(data));
 	}
 }
 
-struct ril_network *ril_network_new(GRilIoChannel *io, struct ril_radio *radio)
+static void ril_network_radio_online_cb(struct ril_radio *radio, void *data)
+{
+	if (radio->online) {
+		ril_network_check_pref_mode(RIL_NETWORK(data), TRUE);
+	}
+}
+
+static gboolean ril_network_check_pref_mode_cb(gpointer user_data)
+{
+	struct ril_network *self = RIL_NETWORK(user_data);
+	struct ril_network_priv *priv = self->priv;
+
+	GASSERT(priv->timer[TIMER_FORCE_CHECK_PREF_MODE]);
+	priv->timer[TIMER_FORCE_CHECK_PREF_MODE] = 0;
+
+	DBG_(self, "checking pref mode");
+	ril_network_check_pref_mode(self, TRUE);
+
+	return G_SOURCE_REMOVE;
+}
+
+static void ril_network_pref_mode_changed_cb(struct ril_sim_settings *settings,
+							void *user_data)
+{
+	struct ril_network *self = RIL_NETWORK(user_data);
+	struct ril_network_priv *priv = self->priv;
+
+	/*
+	 * Postpone ril_network_check_pref_mode because other pref_mode
+	 * listeners (namely, ril_data) may want to tweak max_pref_mode
+	 */
+	if (!priv->timer[TIMER_FORCE_CHECK_PREF_MODE]) {
+		DBG_(self, "scheduling pref mode check");
+		priv->timer[TIMER_FORCE_CHECK_PREF_MODE] =
+			g_idle_add(ril_network_check_pref_mode_cb, self);
+	} else {
+		DBG_(self, "pref mode check already scheduled");
+	}
+}
+
+struct ril_network *ril_network_new(GRilIoChannel *io, const char *log_prefix,
+		struct ril_radio *radio, struct ril_sim_settings *settings)
 {
 	struct ril_network *self = g_object_new(RIL_NETWORK_TYPE, NULL);
 	struct ril_network_priv *priv = self->priv;
 
+	self->settings = ril_sim_settings_ref(settings);
 	priv->io = grilio_channel_ref(io);
 	priv->q = grilio_queue_new(priv->io);
 	priv->radio = ril_radio_ref(radio);
-	priv->log_prefix =
-		(io && io->name && io->name[0] && strcmp(io->name, "RIL")) ?
-		g_strconcat(io->name, " ", NULL) : g_strdup("");
-	DBG("%s", priv->log_prefix);
-	priv->event_id = grilio_channel_add_unsol_event_handler(priv->io,
+	priv->log_prefix = (log_prefix && log_prefix[0]) ?
+		g_strconcat(log_prefix, " ", NULL) : g_strdup("");
+	DBG_(self, "");
+	priv->ril_event_id = grilio_channel_add_unsol_event_handler(priv->io,
 			ril_network_voice_state_changed_cb,
 			RIL_UNSOL_RESPONSE_VOICE_NETWORK_STATE_CHANGED, self);
-	priv->radio_event_id = ril_radio_add_state_changed_handler(priv->radio,
-		ril_network_radio_state_cb, self);
+	priv->radio_event_id[RADIO_EVENT_STATE_CHANGED] =
+		ril_radio_add_state_changed_handler(priv->radio,
+			ril_network_radio_state_cb, self);
+	priv->radio_event_id[RADIO_EVENT_ONLINE_CHANGED] =
+		ril_radio_add_online_changed_handler(priv->radio,
+			ril_network_radio_online_cb, self);
+	priv->settings_event_id =
+		ril_sim_settings_add_pref_mode_changed_handler(settings,
+			ril_network_pref_mode_changed_cb, self);
 
 	/*
 	 * Query the initial state. Querying network state before the radio
@@ -437,24 +754,29 @@ static void ril_network_init(struct ril_network *self)
 	self->priv = priv;
 	ril_network_reset_state(&self->voice);
 	ril_network_reset_state(&self->data);
+	priv->rat = -1;
 }
 
 static void ril_network_dispose(GObject *object)
 {
 	struct ril_network *self = RIL_NETWORK(object);
 	struct ril_network_priv *priv = self->priv;
+	enum ril_network_timer tid;
 
-	if (priv->event_id) {
-		grilio_channel_remove_handler(priv->io, priv->event_id);
-		priv->event_id = 0;
-	}
+	grilio_channel_remove_handlers(priv->io, &priv->ril_event_id, 1);
+	ril_radio_remove_handlers(priv->radio, priv->radio_event_id,
+					G_N_ELEMENTS(priv->radio_event_id));
+	ril_sim_settings_remove_handlers(self->settings,
+						&priv->settings_event_id, 1);
 
-	if (priv->radio_event_id) {
-		ril_radio_remove_handler(priv->radio, priv->radio_event_id);
-		priv->radio_event_id = 0;
+	for (tid=0; tid<TIMER_COUNT; tid++) {
+		ril_network_stop_timer(self, tid);
 	}
 
 	grilio_queue_cancel_all(priv->q, FALSE);
+	priv->set_rat_id = 0;
+	priv->query_rat_id = 0;
+
 	G_OBJECT_CLASS(ril_network_parent_class)->dispose(object);
 }
 
@@ -463,11 +785,12 @@ static void ril_network_finalize(GObject *object)
 	struct ril_network *self = RIL_NETWORK(object);
 	struct ril_network_priv *priv = self->priv;
 
-	DBG("%s", priv->log_prefix);
+	DBG_(self, "");
 	g_free(priv->log_prefix);
 	grilio_channel_unref(priv->io);
 	grilio_queue_unref(priv->q);
 	ril_radio_unref(priv->radio);
+	ril_sim_settings_unref(self->settings);
 	G_OBJECT_CLASS(ril_network_parent_class)->finalize(object);
 }
 
@@ -478,18 +801,10 @@ static void ril_network_class_init(RilNetworkClass *klass)
 	object_class->dispose = ril_network_dispose;
 	object_class->finalize = ril_network_finalize;
 	g_type_class_add_private(klass, sizeof(struct ril_network_priv));
-	ril_network_signals[SIGNAL_OPERATOR_CHANGED] =
-		g_signal_new(SIGNAL_OPERATOR_CHANGED_NAME,
-			G_OBJECT_CLASS_TYPE(klass), G_SIGNAL_RUN_FIRST,
-			0, NULL, NULL, NULL, G_TYPE_NONE, 0);
-	ril_network_signals[SIGNAL_VOICE_STATE_CHANGED] =
-		g_signal_new(SIGNAL_VOICE_STATE_CHANGED_NAME,
-			G_OBJECT_CLASS_TYPE(klass), G_SIGNAL_RUN_FIRST,
-			0, NULL, NULL, NULL, G_TYPE_NONE, 0);
-	ril_network_signals[SIGNAL_DATA_STATE_CHANGED] =
-		g_signal_new(SIGNAL_DATA_STATE_CHANGED_NAME,
-			G_OBJECT_CLASS_TYPE(klass), G_SIGNAL_RUN_FIRST,
-			0, NULL, NULL, NULL, G_TYPE_NONE, 0);
+	RIL_NETWORK_SIGNAL(klass, OPERATOR);
+	RIL_NETWORK_SIGNAL(klass, VOICE_STATE);
+	RIL_NETWORK_SIGNAL(klass, DATA_STATE);
+	RIL_NETWORK_SIGNAL(klass, PREF_MODE);
 }
 
 /*

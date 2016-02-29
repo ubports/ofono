@@ -26,6 +26,7 @@
 #include <ofono/types.h>
 
 struct ofono_modem;
+struct ofono_sim;
 
 #include <stdio.h>
 #include <errno.h>
@@ -44,7 +45,12 @@ struct ril_radio;
 struct ril_network;
 struct ril_sim_card;
 struct ril_sim_info;
-struct ril_plugin_dbus;
+struct ril_sim_settings;
+
+struct ril_slot_config {
+	guint slot;
+	gboolean enable_4g;
+};
 
 #endif /* RIL_TYPES_H */
 
