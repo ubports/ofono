@@ -16,6 +16,7 @@
 #include "ril_plugin.h"
 #include "ril_sim_card.h"
 #include "ril_sim_info.h"
+#include "ril_sim_settings.h"
 #include "ril_network.h"
 #include "ril_radio.h"
 #include "ril_data.h"
@@ -47,6 +48,10 @@
 #define RILMODEM_DEFAULT_SLOT       0xffffffff
 #define RILMODEM_DEFAULT_TIMEOUT    0 /* No timeout */
 #define RILMODEM_DEFAULT_SIM_FLAGS  RIL_SIM_CARD_V9_UICC_SUBSCRIPTION_WORKAROUND
+#define RILMODEM_DEFAULT_DM_FLAGS   RIL_DATA_MANAGER_3GLTE_HANDOVER
+
+#define RILMODEM_CONF_GROUP         "Settings"
+#define RILMODEM_CONF_3GHANDOVER    "3GLTEHandover"
 
 #define RILCONF_DEV_PREFIX          "ril_"
 #define RILCONF_PATH_PREFIX         "/" RILCONF_DEV_PREFIX
@@ -108,6 +113,7 @@ struct ril_slot {
 	struct ril_sim_card *sim_card;
 	struct ril_sim_info *sim_info;
 	struct ril_sim_info_dbus *sim_info_dbus;
+	struct ril_sim_settings *sim_settings;
 	struct ril_data *data;
 	GRilIoChannel *io;
 	gulong io_event_id[IO_EVENT_COUNT];
@@ -119,6 +125,10 @@ struct ril_slot {
 	guint sim_watch_id;
 	guint sim_state_watch_id;
 	enum ofono_sim_state sim_state;
+};
+
+struct ril_plugin_settings {
+	int dm_flags;
 };
 
 static void ril_debug_trace_notify(struct ofono_debug_desc *desc);
@@ -177,15 +187,22 @@ static void ril_plugin_remove_slot_handler(struct ril_slot *slot, int id)
 	}
 }
 
+static void ril_plugin_update_ofono_sim(struct ril_slot *slot)
+{
+	ril_sim_settings_set_ofono_sim(slot->sim_settings, slot->sim);
+	ril_sim_info_set_ofono_sim(slot->sim_info, slot->sim);
+}
+
 static void ril_plugin_shutdown_slot(struct ril_slot *slot, gboolean kill_io)
 {
 	if (slot->sim) {
 		if (slot->sim_state_watch_id) {
 			ofono_sim_remove_state_watch(slot->sim,
 						slot->sim_state_watch_id);
+			GASSERT(!slot->sim_state_watch_id);
 		}
-		ril_sim_info_set_ofono_sim(slot->sim_info, NULL);
 		slot->sim = NULL;
+		ril_plugin_update_ofono_sim(slot);
 	}
 
 	if (slot->modem) {
@@ -557,7 +574,6 @@ static void ril_plugin_register_sim(struct ril_slot *slot, struct ofono_sim *sim
 	slot->sim_state_watch_id = ofono_sim_add_state_watch(sim,
 					ril_plugin_sim_state_watch, slot,
 					ril_plugin_sim_state_watch_done);
-	ril_sim_info_set_ofono_sim(slot->sim_info, sim);
 }
 
 static void ril_plugin_sim_watch(struct ofono_atom *atom,
@@ -570,10 +586,10 @@ static void ril_plugin_sim_watch(struct ofono_atom *atom,
 		ril_plugin_register_sim(slot, __ofono_atom_get_data(atom));
 	} else if (cond == OFONO_ATOM_WATCH_CONDITION_UNREGISTERED) {
 		DBG("%s sim unregistered", slot->path + 1);
-		ril_sim_info_set_ofono_sim(slot->sim_info, NULL);
 		slot->sim = NULL;
 	}
 
+	ril_plugin_update_ofono_sim(slot);
 	ril_plugin_update_modem_paths_full(slot->plugin);
 }
 
@@ -625,7 +641,6 @@ static void ril_plugin_modem_removed(struct ril_modem *modem, void *data)
 	ril_radio_set_online(slot->radio, FALSE);
 	ril_data_allow(slot->data, FALSE);
 	ril_plugin_update_modem_paths_full(slot->plugin);
-	ril_sim_info_set_ofono_sim(slot->sim_info, NULL);
 }
 
 static void ril_plugin_trace(GRilIoChannel *io, GRILIO_PACKET_TYPE type,
@@ -702,6 +717,11 @@ static void ril_debug_trace_update_slot(struct ril_slot *slot)
 	}
 }
 
+static const char *ril_plugin_log_prefix(struct ril_slot *slot)
+{
+	return ril_plugin_multisim(slot->plugin) ? (slot->path + 1) : "";
+}
+
 static gboolean ril_plugin_can_create_modem(struct ril_slot *slot)
 {
 	return slot->pub.enabled && slot->io && slot->io->connected;
@@ -715,8 +735,9 @@ static void ril_plugin_create_modem(struct ril_slot *slot)
 	GASSERT(slot->io && slot->io->connected);
 	GASSERT(!slot->modem);
 
-	modem = ril_modem_create(slot->io, &slot->pub, slot->radio,
-				 slot->network, slot->sim_card, slot->data);
+	modem = ril_modem_create(slot->io, ril_plugin_log_prefix(slot),
+			&slot->pub, slot->radio, slot->network, slot->sim_card,
+			slot->data, slot->sim_settings);
 
 	if (modem) {
 		struct ofono_sim *sim = ril_modem_ofono_sim(modem);
@@ -727,6 +748,7 @@ static void ril_plugin_create_modem(struct ril_slot *slot)
 				slot, ril_plugin_sim_watch_done);
 		if (sim) {
 			ril_plugin_register_sim(slot, sim);
+			ril_plugin_update_ofono_sim(slot);
 		}
 
 		slot->sim_info_dbus = ril_sim_info_dbus_new(slot->modem,
@@ -804,6 +826,7 @@ static void ril_plugin_radio_state_changed(GRilIoChannel *io, guint code,
 static void ril_plugin_slot_connected(struct ril_slot *slot)
 {
 	struct ril_plugin_priv *plugin = slot->plugin;
+	const char *log_prefix = ril_plugin_log_prefix(slot);
 
 	ofono_debug("%s version %u", (slot->name && slot->name[0]) ?
 				slot->name : "RIL", slot->io->ril_version);
@@ -820,7 +843,8 @@ static void ril_plugin_slot_connected(struct ril_slot *slot)
 
 	GASSERT(!slot->radio);
 	slot->radio = ril_radio_new(slot->io);
-	slot->network = ril_network_new(slot->io, slot->radio);
+	slot->network = ril_network_new(slot->io, log_prefix, slot->radio,
+							slot->sim_settings);
 
 	GASSERT(!slot->io_event_id[IO_EVENT_RADIO_STATE_CHANGED]);
 	slot->io_event_id[IO_EVENT_RADIO_STATE_CHANGED] =
@@ -835,12 +859,8 @@ static void ril_plugin_slot_connected(struct ril_slot *slot)
 			slot->sim_card, ril_plugin_sim_state_changed, slot);
 
 	GASSERT(!slot->data);
-	slot->data = ril_data_new(plugin->data_manager, slot->radio,
-						slot->network, slot->io);
-
-	if (ril_plugin_multisim(plugin)) {
-		ril_data_set_name(slot->data, slot->path + 1);
-	}
+	slot->data = ril_data_new(slot->plugin->data_manager, log_prefix,
+				slot->radio, slot->network, slot->io);
 
 	if (ril_plugin_can_create_modem(slot) && !slot->modem) {
 		ril_plugin_create_modem(slot);
@@ -1058,6 +1078,7 @@ static void ril_plugin_delete_slot(struct ril_slot *slot)
 {
 	ril_plugin_shutdown_slot(slot, TRUE);
 	ril_sim_info_unref(slot->sim_info);
+	ril_sim_settings_unref(slot->sim_settings);
 	g_free(slot->path);
 	g_free(slot->imei);
 	g_free(slot->name);
@@ -1104,7 +1125,8 @@ static guint ril_plugin_find_unused_slot(GSList *slots)
 	return number;
 }
 
-static GSList *ril_plugin_parse_config_file(GKeyFile *file)
+static GSList *ril_plugin_parse_config_file(GKeyFile *file,
+					struct ril_plugin_settings *ps)
 {
 	GSList *list = NULL;
 	GSList *link;
@@ -1112,13 +1134,21 @@ static GSList *ril_plugin_parse_config_file(GKeyFile *file)
 	gchar **groups = g_key_file_get_groups(file, &n);
 
 	for (i=0; i<n; i++) {
-		if (g_str_has_prefix(groups[i], RILCONF_DEV_PREFIX)) {
+		const char *group = groups[i];
+		if (g_str_has_prefix(group, RILCONF_DEV_PREFIX)) {
+			/* Modem configuration */
 			struct ril_slot *slot =
-				ril_plugin_parse_config_group(file, groups[i]);
+				ril_plugin_parse_config_group(file, group);
 
 			if (slot) {
 				list = ril_plugin_add_slot(list, slot);
 			}
+		} else if (!strcmp(group, RILMODEM_CONF_GROUP)) {
+			/* Plugin configuration */
+			ril_plugin_read_config_flag(file, group,
+				RILMODEM_CONF_3GHANDOVER,
+				RIL_DATA_MANAGER_3GLTE_HANDOVER,
+				&ps->dm_flags);
 		}
 	}
 
@@ -1136,7 +1166,8 @@ static GSList *ril_plugin_parse_config_file(GKeyFile *file)
 	return list;
 }
 
-static GSList *ril_plugin_load_config(const char *path)
+ static GSList *ril_plugin_load_config(const char *path,
+				struct ril_plugin_settings *ps)
 {
 	GError *err = NULL;
 	GSList *list = NULL;
@@ -1144,9 +1175,9 @@ static GSList *ril_plugin_load_config(const char *path)
 
 	if (g_key_file_load_from_file(file, path, 0, &err)) {
 		DBG("loading %s", path);
-		list = ril_plugin_parse_config_file(file);
+		list = ril_plugin_parse_config_file(file, ps);
 	} else {
-		DBG("conf load result: %s", err->message);
+		DBG("conf load error: %s", err->message);
 		g_error_free(err);
 	}
 
@@ -1383,6 +1414,7 @@ static void ril_plugin_init_slots(struct ril_plugin_priv *plugin)
 		slot->pub.path = slot->path;
 		slot->pub.config = &slot->config;
 		slot->sim_info = ril_sim_info_new(NULL);
+		slot->sim_settings = ril_sim_settings_new(&slot->config);
 	}
 
 	*info = NULL;
@@ -1427,6 +1459,10 @@ static void ril_debug_grilio_notify(struct ofono_debug_desc *desc)
 static int ril_plugin_init(void)
 {
 	char *enabled_slots;
+	struct ril_plugin_settings ps;
+
+	/* Default settings */
+	ps.dm_flags = RILMODEM_DEFAULT_DM_FLAGS;
 
 	DBG("");
 	GASSERT(!ril_plugin);
@@ -1437,10 +1473,10 @@ static int ril_plugin_init(void)
 	ril_plugin_switch_user();
 
 	ril_plugin = g_new0(struct ril_plugin_priv, 1);
-	ril_plugin->slots = ril_plugin_load_config(RILMODEM_CONF_FILE);
+	ril_plugin->slots = ril_plugin_load_config(RILMODEM_CONF_FILE, &ps);
 	ril_plugin_init_slots(ril_plugin);
 	ril_plugin->dbus = ril_plugin_dbus_new(&ril_plugin->pub);
-	ril_plugin->data_manager = ril_data_manager_new();
+	ril_plugin->data_manager = ril_data_manager_new(ps.dm_flags);
 
 	if (ril_plugin->slots) {
 		/*

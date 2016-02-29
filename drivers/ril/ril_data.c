@@ -9,13 +9,14 @@
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  *  GNU General Public License for more details.
  */
 
 #include "ril_data.h"
 #include "ril_radio.h"
 #include "ril_network.h"
+#include "ril_sim_settings.h"
 #include "ril_util.h"
 #include "ril_log.h"
 
@@ -51,14 +52,15 @@ enum ril_data_priv_flags {
  * was called. No more than one SIM at a time has this flag set.
  *
  * RIL_DATA_FLAG_ON is set for the active SIM after RIL_REQUEST_ALLOW_DATA
- * has been submitted.
+ * has successfully completed. For RIL version < 10 it's set immediately.
  *
  * Each ril_data has a request queue which serializes RIL_REQUEST_ALLOW_DATA,
  * RIL_REQUEST_SETUP_DATA_CALL and RIL_REQUEST_DEACTIVATE_DATA_CALL requests
  * for this SIM.
  *
  * RIL_REQUEST_ALLOW_DATA isn't sent to the selected data SIM until all
- * requests are finished for the other SIM.
+ * requests are finished for the other SIM. It's not set at all if RIL
+ * version is less than 10.
  *
  * Power on is requested with ril_radio_power_on while data is allowed or
  * any requests are pending for the SIM. Once data is disallowed and all
@@ -68,9 +70,16 @@ enum ril_data_priv_flags {
 typedef GObjectClass RilDataClass;
 typedef struct ril_data RilData;
 
+enum ril_data_settings_event_id {
+	SETTINGS_EVENT_IMSI_CHANGED,
+	SETTINGS_EVENT_PREF_MODE,
+	SETTINGS_EVENT_COUNT
+};
+
 struct ril_data_manager {
 	gint ref_count;
 	GSList *data_list;
+	enum ril_data_manager_flags flags;
 };
 
 struct ril_data_priv {
@@ -81,14 +90,13 @@ struct ril_data_priv {
 	struct ril_data_manager *dm;
 	enum ril_data_priv_flags flags;
 
-	struct ril_data_call_request *req_queue;
-	struct ril_data_call_request *pending_req;
-	guint pending_req_id;
+	struct ril_data_request *req_queue;
+	struct ril_data_request *pending_req;
 
-	const char *log_prefix;
-	char *custom_log_prefix;
+	char *log_prefix;
 	guint query_id;
-	gulong event_id;
+	gulong io_event_id;
+	gulong settings_event_id[SETTINGS_EVENT_COUNT];
 };
 
 enum ril_data_signal {
@@ -112,25 +120,33 @@ G_DEFINE_TYPE(RilData, ril_data, G_TYPE_OBJECT)
 #define RIL_DATA_TYPE (ril_data_get_type())
 #define RIL_DATA(obj) (G_TYPE_CHECK_INSTANCE_CAST(obj, RIL_DATA_TYPE,RilData))
 
-#define DBG_(data,msg) DBG1_(data,"%s",msg)
-#define DBG1_(data,format,p1) DBG("%s" format, (data)->priv->log_prefix, p1)
+#define DBG_(data,fmt,args...) DBG("%s" fmt, (data)->priv->log_prefix, ##args)
 
-struct ril_data_call_request {
-	struct ril_data_call_request *next;
+enum ril_data_request_flags {
+	DATA_REQUEST_FLAG_COMPLETED = 0x1,
+	DATA_REQUEST_FLAG_CANCEL_WHEN_ALLOWED = 0x2,
+	DATA_REQUEST_FLAG_CANCEL_WHEN_DISALLOWED = 0x4
+};
+
+struct ril_data_request {
+	struct ril_data_request *next;
 	struct ril_data *data;
-	union ril_data_call_request_cb {
+	union ril_data_request_cb {
 		ril_data_call_setup_cb_t setup;
 		ril_data_call_deactivate_cb_t deact;
 		void (*ptr)();
 	} cb;
 	void *arg;
-	guint (*submit)(struct ril_data_call_request *req);
-	void (*free)(struct ril_data_call_request *req);
-	gboolean completed;
+	gboolean (*submit)(struct ril_data_request *req);
+	void (*cancel)(struct ril_data_request *req);
+	void (*free)(struct ril_data_request *req);
+	guint pending_id;
+	enum ril_data_request_flags flags;
+	const char *name;
 };
 
-struct ril_data_call_request_setup {
-	struct ril_data_call_request req;
+struct ril_data_request_setup {
+	struct ril_data_request req;
 	char *apn;
 	char *username;
 	char *password;
@@ -138,12 +154,19 @@ struct ril_data_call_request_setup {
 	enum ofono_gprs_auth_method auth_method;
 };
 
-struct ril_data_call_request_deact {
-	struct ril_data_call_request req;
+struct ril_data_request_deact {
+	struct ril_data_request req;
 	int cid;
 };
 
-static void ril_data_manager_check(struct ril_data_manager *self);
+struct ril_data_request_2g {
+	struct ril_data_request req;
+	gulong handler_id;
+};
+
+static gboolean ril_data_manager_handover(struct ril_data_manager *dm);
+static void ril_data_manager_check_data(struct ril_data_manager *dm);
+static void ril_data_manager_check_network_mode(struct ril_data_manager *dm);
 static void ril_data_manager_disallow_all_except(struct ril_data_manager *dm,
 						struct ril_data *allowed);
 
@@ -454,7 +477,7 @@ static void ril_data_set_calls(struct ril_data *self,
 static void ril_data_call_list_changed_cb(GRilIoChannel *io, guint event,
 				const void *data, guint len, void *user_data)
 {
-	struct ril_data *self = user_data;
+	struct ril_data *self = RIL_DATA(user_data);
 	struct ril_data_priv *priv = self->priv;
 
 	GASSERT(event == RIL_UNSOL_DATA_CALL_LIST_CHANGED);
@@ -471,7 +494,7 @@ static void ril_data_call_list_changed_cb(GRilIoChannel *io, guint event,
 static void ril_data_query_data_calls_cb(GRilIoChannel *io, int ril_status,
 				const void *data, guint len, void *user_data)
 {
-	struct ril_data *self = user_data;
+	struct ril_data *self = RIL_DATA(user_data);
 	struct ril_data_priv *priv = self->priv;
 
 	GASSERT(priv->query_id);
@@ -482,10 +505,10 @@ static void ril_data_query_data_calls_cb(GRilIoChannel *io, int ril_status,
 }
 
 /*==========================================================================*
- * ril_data_call_request
+ * ril_data_request
  *==========================================================================*/
 
-static void ril_data_call_request_free(struct ril_data_call_request *req)
+static void ril_data_request_free(struct ril_data_request *req)
 {
 	if (req->free) {
 		req->free(req);
@@ -494,7 +517,7 @@ static void ril_data_call_request_free(struct ril_data_call_request *req)
 	}
 }
 
-void ril_data_call_request_detach(struct ril_data_call_request *req)
+void ril_data_request_detach(struct ril_data_request *req)
 {
 	if (req) {
 		req->cb.ptr = NULL;
@@ -502,94 +525,117 @@ void ril_data_call_request_detach(struct ril_data_call_request *req)
 	}
 }
 
-void ril_data_call_request_cancel(struct ril_data_call_request *req)
+static void ril_data_request_cancel_io(struct ril_data_request *req)
 {
-	if (req) {
-		if (req->completed) {
-			req->cb.ptr = NULL;
-			req->arg = NULL;
-		} else {
-			struct ril_data_priv *priv = req->data->priv;
-
-			if (priv->pending_req == req) {
-				/* Request has been submitted already */
-				grilio_queue_cancel_request(priv->q,
-						priv->pending_req_id, FALSE);
-				priv->pending_req = NULL;
-				priv->pending_req_id = 0;
-			} else if (priv->req_queue == req) {
-				/* It's the first one in the queue */
-				priv->req_queue = req->next;
-			} else {
-				/* It's somewhere in the queue */
-				struct ril_data_call_request* prev =
-					priv->req_queue;
-
-				while (prev->next && prev->next != req) {
-					prev = prev->next;
-				}
-
-				/* Assert that it's there */
-				GASSERT(prev);
-				if (prev) {
-					prev->next = req->next;
-				}
-			}
-
-			ril_data_call_request_free(req);
-		}
+	if (req->pending_id) {
+		grilio_queue_cancel_request(req->data->priv->q,
+						req->pending_id, FALSE);
+		req->pending_id = 0;
 	}
 }
 
-static void ril_data_call_request_submit_next(struct ril_data *data)
+static void ril_data_request_submit_next(struct ril_data *data)
 {
 	struct ril_data_priv *priv = data->priv;
 
 	if (!priv->pending_req) {
-		GASSERT(!priv->pending_req_id);
 		ril_data_power_update(data);
 
 		while (priv->req_queue) {
-			struct ril_data_call_request *req = priv->req_queue;
+			struct ril_data_request *req = priv->req_queue;
 
+			GASSERT(req->data == data);
 			priv->req_queue = req->next;
 			req->next = NULL;
 
 			priv->pending_req = req;
-			priv->pending_req_id = req->submit(req);
-			if (priv->pending_req_id) {
+			if (req->submit(req)) {
+				DBG_(data, "submitted %s request %p",
+							req->name, req);
 				break;
 			} else {
+				DBG_(data, "%s request %p is done (or failed)",
+							req->name, req);
 				priv->pending_req = NULL;
-				priv->pending_req_id = 0;
-				ril_data_call_request_free(req);
+				ril_data_request_free(req);
 			}
 		}
 
 		if (!priv->pending_req) {
-			ril_data_manager_check(priv->dm);
+			ril_data_manager_check_data(priv->dm);
 		}
 	}
 
 	ril_data_power_update(data);
 }
 
-static void ril_data_call_request_finish(struct ril_data_call_request *req)
+static gboolean ril_data_request_do_cancel(struct ril_data_request *req)
+{
+	if (req && !(req->flags & DATA_REQUEST_FLAG_COMPLETED)) {
+		struct ril_data_priv *priv = req->data->priv;
+
+		DBG_(req->data, "canceling %s request %p", req->name, req);
+		if (priv->pending_req == req) {
+			/* Request has been submitted already */
+			if (req->cancel) {
+				req->cancel(req);
+			}
+			priv->pending_req = NULL;
+		} else if (priv->req_queue == req) {
+			/* It's the first one in the queue */
+			priv->req_queue = req->next;
+		} else {
+			/* It's somewhere in the queue */
+			struct ril_data_request* prev = priv->req_queue;
+
+			while (prev->next && prev->next != req) {
+				prev = prev->next;
+			}
+
+			/* Assert that it's there */
+			GASSERT(prev);
+			if (prev) {
+				prev->next = req->next;
+			}
+		}
+
+		ril_data_request_free(req);
+		return TRUE;
+	} else {
+		return FALSE;
+	}
+}
+
+void ril_data_request_cancel(struct ril_data_request *req)
+{
+	if (req) {
+		struct ril_data *data = req->data;
+		if (ril_data_request_do_cancel(req)) {
+			ril_data_request_submit_next(data);
+		}
+	}
+}
+
+static void ril_data_request_completed(struct ril_data_request *req)
+{
+	GASSERT(!(req->flags & DATA_REQUEST_FLAG_COMPLETED));
+	req->flags |= DATA_REQUEST_FLAG_COMPLETED;
+}
+
+static void ril_data_request_finish(struct ril_data_request *req)
 {
 	struct ril_data *data = req->data;
 	struct ril_data_priv *priv = data->priv;
 
 	GASSERT(req == priv->pending_req);
-	GASSERT(priv->pending_req_id);
 	GASSERT(!req->next);
 	priv->pending_req = NULL;
-	priv->pending_req_id = 0;
 
-	ril_data_call_request_free(req);
-	ril_data_call_request_submit_next(data);
+	ril_data_request_free(req);
+	ril_data_request_submit_next(data);
 }
 
-static void ril_data_call_request_queue(struct ril_data_call_request *req)
+static void ril_data_request_queue(struct ril_data_request *req)
 {
 	struct ril_data *data = req->data;
 	struct ril_data_priv *priv = data->priv;
@@ -599,31 +645,44 @@ static void ril_data_call_request_queue(struct ril_data_call_request *req)
 	if (!priv->req_queue) {
 		priv->req_queue = req;
 	} else {
-		struct ril_data_call_request* last = priv->req_queue;
+		struct ril_data_request* last = priv->req_queue;
 		while (last->next) {
 			last = last->next;
 		}
 		last->next = req;
 	}
 
-	ril_data_call_request_submit_next(data);
+	DBG_(data, "queued %s request %p", req->name, req);
+	ril_data_request_submit_next(data);
 }
 
 /*==========================================================================*
- * ril_data_call_request_setup
+ * ril_data_request_setup
  *==========================================================================*/
+
+static void ril_data_call_setup_cancel(struct ril_data_request *req)
+{
+	if (req->pending_id) {
+		grilio_queue_cancel_request(req->data->priv->q,
+						req->pending_id, FALSE);
+		req->pending_id = 0;
+		if (req->cb.setup) {
+			req->cb.setup(req->data, GRILIO_STATUS_CANCELLED,
+							NULL, req->arg);
+		}
+	}
+}
 
 static void ril_data_call_setup_cb(GRilIoChannel *io, int ril_status,
 				const void *data, guint len, void *user_data)
 {
-	struct ril_data_call_request_setup *setup = user_data;
-	struct ril_data_call_request *req = &setup->req;
+	struct ril_data_request_setup *setup = user_data;
+	struct ril_data_request *req = &setup->req;
 	struct ril_data *self = req->data;
 	struct ril_data_call_list *list = NULL;
 	struct ril_data_call *call = NULL;
 
-	GASSERT(!req->completed);
-	req->completed = TRUE;
+	ril_data_request_completed(req);
 
 	if (ril_status == RIL_E_SUCCESS) {
 		list = ril_data_call_list_parse(data, len);
@@ -653,19 +712,18 @@ static void ril_data_call_setup_cb(GRilIoChannel *io, int ril_status,
 		req->cb.setup(req->data, ril_status, call, req->arg);
 	}
 
-	ril_data_call_request_finish(req);
+	ril_data_request_finish(req);
 	ril_data_call_list_free(list);
 }
 
-static guint ril_data_call_setup_submit(struct ril_data_call_request *req)
+static gboolean ril_data_call_setup_submit(struct ril_data_request *req)
 {
-	struct ril_data_call_request_setup *setup =
-		G_CAST(req, struct ril_data_call_request_setup, req);
+	struct ril_data_request_setup *setup =
+		G_CAST(req, struct ril_data_request_setup, req);
 	struct ril_data_priv *priv = req->data->priv;
 	const char *proto_str = ril_data_ofono_protocol_to_ril(setup->proto);
 	GRilIoRequest* ioreq;
 	int tech, auth;
-	guint id;
 
 	GASSERT(proto_str);
 
@@ -711,17 +769,18 @@ static guint ril_data_call_setup_submit(struct ril_data_call_request *req)
 	grilio_request_append_format(ioreq, "%d", auth);
 	grilio_request_append_utf8(ioreq, proto_str);
 
-	id = grilio_queue_send_request_full(priv->q, ioreq,
+	GASSERT(!req->pending_id);
+	req->pending_id = grilio_queue_send_request_full(priv->q, ioreq,
 			RIL_REQUEST_SETUP_DATA_CALL, ril_data_call_setup_cb,
 			NULL, setup);
 	grilio_request_unref(ioreq);
-	return id;
+	return TRUE;
 }
 
-static void ril_data_call_setup_free(struct ril_data_call_request *req)
+static void ril_data_call_setup_free(struct ril_data_request *req)
 {
-	struct ril_data_call_request_setup *setup =
-		G_CAST(req, struct ril_data_call_request_setup, req);
+	struct ril_data_request_setup *setup =
+		G_CAST(req, struct ril_data_request_setup, req);
 
 	g_free(setup->apn);
 	g_free(setup->username);
@@ -729,14 +788,13 @@ static void ril_data_call_setup_free(struct ril_data_call_request *req)
 	g_free(setup);
 }
 
-static struct ril_data_call_request *ril_data_call_setup_new(
-				struct ril_data *data,
+static struct ril_data_request *ril_data_call_setup_new(struct ril_data *data,
 				const struct ofono_gprs_primary_context *ctx,
 				ril_data_call_setup_cb_t cb, void *arg)
 {
-	struct ril_data_call_request_setup *setup =
-		g_new0(struct ril_data_call_request_setup, 1);
-	struct ril_data_call_request *req = &setup->req;
+	struct ril_data_request_setup *setup =
+		g_new0(struct ril_data_request_setup, 1);
+	struct ril_data_request *req = &setup->req;
 
 	setup->apn = g_strdup(ctx->apn);
 	setup->username = g_strdup(ctx->username);
@@ -744,28 +802,42 @@ static struct ril_data_call_request *ril_data_call_setup_new(
 	setup->proto = ctx->proto;
 	setup->auth_method = ctx->auth_method;
 
+	req->name = "CALL_SETUP";
 	req->cb.setup = cb;
 	req->arg = arg;
 	req->data = data;
 	req->submit = ril_data_call_setup_submit;
+	req->cancel = ril_data_call_setup_cancel;
 	req->free = ril_data_call_setup_free;
-
+	req->flags = DATA_REQUEST_FLAG_CANCEL_WHEN_DISALLOWED;
 	return req;
 }
 
 /*==========================================================================*
- * ril_data_call_request_deact
+ * ril_data_request_deact
  *==========================================================================*/
+
+static void ril_data_call_deact_cancel(struct ril_data_request *req)
+{
+	if (req->pending_id) {
+		grilio_queue_cancel_request(req->data->priv->q,
+						req->pending_id, FALSE);
+		req->pending_id = 0;
+		if (req->cb.setup) {
+			req->cb.deact(req->data, GRILIO_STATUS_CANCELLED,
+								req->arg);
+		}
+	}
+}
 
 static void ril_data_call_deact_cb(GRilIoChannel *io, int ril_status,
 			const void *ril_data, guint len, void *user_data)
 {
-	struct ril_data_call_request_deact *deact = user_data;
-	struct ril_data_call_request *req = &deact->req;
+	struct ril_data_request_deact *deact = user_data;
+	struct ril_data_request *req = &deact->req;
 	struct ril_data *data = req->data;
 
-	GASSERT(!req->completed);
-	req->completed = TRUE;
+	ril_data_request_completed(req);
 
 	/*
 	 * If RIL_REQUEST_DEACTIVATE_DATA_CALL succeeds, some RILs don't
@@ -777,7 +849,7 @@ static void ril_data_call_deact_cb(GRilIoChannel *io, int ril_status,
 		struct ril_data_call *call = ril_data_call_find(list,
 								deact->cid);
 		if (call) {
-			DBG1_(data, "removing call %d", deact->cid);
+			DBG_(data, "removing call %d", deact->cid);
 			list->calls = g_slist_remove(list->calls, call);
 			if (list->calls) {
 				list->num--;
@@ -796,15 +868,14 @@ static void ril_data_call_deact_cb(GRilIoChannel *io, int ril_status,
 		req->cb.deact(req->data, ril_status, req->arg);
 	}
 
-	ril_data_call_request_finish(req);
+	ril_data_request_finish(req);
 }
 
-static guint ril_data_call_deact_submit(struct ril_data_call_request *req)
+static gboolean ril_data_call_deact_submit(struct ril_data_request *req)
 {
-	struct ril_data_call_request_deact *deact =
-		G_CAST(req, struct ril_data_call_request_deact, req);
+	struct ril_data_request_deact *deact =
+		G_CAST(req, struct ril_data_request_deact, req);
 	struct ril_data_priv *priv = req->data->priv;
-	guint id;
 	GRilIoRequest* ioreq = grilio_request_new();
 
 	grilio_request_append_int32(ioreq, DEACTIVATE_DATA_CALL_PARAMS);
@@ -812,20 +883,19 @@ static guint ril_data_call_deact_submit(struct ril_data_call_request *req)
 	grilio_request_append_format(ioreq, "%d",
 					RIL_DEACTIVATE_DATA_CALL_NO_REASON);
 
-	id = grilio_queue_send_request_full(priv->q, ioreq,
+	req->pending_id = grilio_queue_send_request_full(priv->q, ioreq,
 				RIL_REQUEST_DEACTIVATE_DATA_CALL,
 				ril_data_call_deact_cb, NULL, deact);
 	grilio_request_unref(ioreq);
-	return id;
+	return TRUE;
 }
 
-static struct ril_data_call_request *ril_data_call_deact_new(
-				struct ril_data *data, int cid,
-				ril_data_call_deactivate_cb_t cb, void *arg)
+static struct ril_data_request *ril_data_call_deact_new(struct ril_data *data,
+		int cid, ril_data_call_deactivate_cb_t cb, void *arg)
 {
-	struct ril_data_call_request_deact *deact =
-		g_new0(struct ril_data_call_request_deact, 1);
-	struct ril_data_call_request *req = &deact->req;
+	struct ril_data_request_deact *deact =
+		g_new0(struct ril_data_request_deact, 1);
+	struct ril_data_request *req = &deact->req;
 
 	deact->cid = cid;
 
@@ -833,12 +903,14 @@ static struct ril_data_call_request *ril_data_call_deact_new(
 	req->arg = arg;
 	req->data = data;
 	req->submit = ril_data_call_deact_submit;
+	req->cancel = ril_data_call_deact_cancel;
+	req->name = "DEACTIVATE";
 
 	return req;
 }
 
 /*==========================================================================*
- * ril_data_allow_data_request
+ * ril_data_allow_request
  *==========================================================================*/
 
 static GRilIoRequest *ril_data_allow_req(gboolean allow)
@@ -851,16 +923,16 @@ static GRilIoRequest *ril_data_allow_req(gboolean allow)
 }
 
 static void ril_data_allow_cb(GRilIoChannel *io, int ril_status,
-				const void *req_data, guint len, void *user_data)
+			const void *req_data, guint len, void *user_data)
 {
-	struct ril_data_call_request *req = user_data;
+	struct ril_data_request *req = user_data;
 	struct ril_data *data = req->data;
 	struct ril_data_priv *priv = data->priv;
 
-	GASSERT(!req->completed);
-	req->completed = TRUE;
+	ril_data_request_completed(req);
 
-	if (priv->flags & RIL_DATA_FLAG_ALLOWED) {
+	if (ril_status == RIL_E_SUCCESS &&
+				(priv->flags & RIL_DATA_FLAG_ALLOWED)) {
 		GASSERT(!ril_data_allowed(data));
 		priv->flags |= RIL_DATA_FLAG_ON;
 		GASSERT(ril_data_allowed(data));
@@ -868,34 +940,30 @@ static void ril_data_allow_cb(GRilIoChannel *io, int ril_status,
 		ril_data_signal_emit(data, SIGNAL_ALLOW_CHANGED);
 	}
 
-	ril_data_call_request_finish(req);
+	ril_data_request_finish(req);
 }
 
-static guint ril_data_allow_submit(struct ril_data_call_request *req)
+static gboolean ril_data_allow_submit(struct ril_data_request *req)
 {
 	GRilIoRequest *ioreq = ril_data_allow_req(TRUE);
 	struct ril_data_priv *priv = req->data->priv;
-	guint id;
 
-	/*
-	 * With some older RILs this request will never get completed
-	 * (no reply from rild will ever come) so consider it done
-	 * pretty much immediately after it has been sent.
-	 */
-	grilio_request_set_timeout(ioreq, 1);
-	id = grilio_queue_send_request_full(priv->q, ioreq,
+	grilio_request_set_retry(ioreq, RIL_RETRY_SECS*1000, -1);
+	req->pending_id = grilio_queue_send_request_full(priv->q, ioreq,
 		RIL_REQUEST_ALLOW_DATA, ril_data_allow_cb, NULL, req);
 	grilio_request_unref(ioreq);
-	return id;
+	return TRUE;
 }
 
-static struct ril_data_call_request *ril_data_allow_new(struct ril_data *data)
+static struct ril_data_request *ril_data_allow_new(struct ril_data *data)
 {
-	struct ril_data_call_request *req =
-		g_new0(struct ril_data_call_request, 1);
+	struct ril_data_request *req = g_new0(struct ril_data_request, 1);
 
+	req->name = "ALLOW_DATA";
 	req->data = data;
 	req->submit = ril_data_allow_submit;
+	req->cancel = ril_data_request_cancel_io;
+	req->flags = DATA_REQUEST_FLAG_CANCEL_WHEN_DISALLOWED;
 	return req;
 }
 
@@ -924,7 +992,13 @@ void ril_data_remove_handler(struct ril_data *self, gulong id)
 	}
 }
 
-struct ril_data *ril_data_new(struct ril_data_manager *dm,
+static void ril_data_settings_changed(struct ril_sim_settings *settings,
+							void *user_data)
+{
+	ril_data_manager_check_network_mode(RIL_DATA(user_data)->priv->dm);
+}
+
+struct ril_data *ril_data_new(struct ril_data_manager *dm, const char *name,
 			struct ril_radio *radio, struct ril_network *network,
 			GRilIoChannel *io)
 {
@@ -932,16 +1006,27 @@ struct ril_data *ril_data_new(struct ril_data_manager *dm,
 	if (G_LIKELY(dm)) {
 		struct ril_data *self = g_object_new(RIL_DATA_TYPE, NULL);
 		struct ril_data_priv *priv = self->priv;
+		struct ril_sim_settings *settings = network->settings;
 		GRilIoRequest *req = grilio_request_new();
+
+		priv->log_prefix = (name && name[0]) ?
+			g_strconcat(name, " ", NULL) : g_strdup("");
 
 		priv->q = grilio_queue_new(io);
 		priv->io = grilio_channel_ref(io);
 		priv->dm = ril_data_manager_ref(dm);
 		priv->radio = ril_radio_ref(radio);
 		priv->network = ril_network_ref(network);
-		priv->event_id = grilio_channel_add_unsol_event_handler(io,
+		priv->io_event_id = grilio_channel_add_unsol_event_handler(io,
 				ril_data_call_list_changed_cb,
 				RIL_UNSOL_DATA_CALL_LIST_CHANGED, self);
+
+		priv->settings_event_id[SETTINGS_EVENT_IMSI_CHANGED] =
+			ril_sim_settings_add_imsi_changed_handler(settings,
+					ril_data_settings_changed, self);
+		priv->settings_event_id[SETTINGS_EVENT_PREF_MODE] =
+			ril_sim_settings_add_pref_mode_changed_handler(settings,
+					ril_data_settings_changed, self);
 
 		/* Request the current state */
 		grilio_request_set_retry(req, RIL_RETRY_SECS*1000, -1);
@@ -977,8 +1062,9 @@ void ril_data_unref(struct ril_data *self)
 gboolean ril_data_allowed(struct ril_data *self)
 {
 	return G_LIKELY(self) &&
-			(self->priv->flags & RIL_DATA_FLAG_ALLOWED) &&
-			(self->priv->flags & RIL_DATA_FLAG_ON);
+		(self->priv->flags &
+			(RIL_DATA_FLAG_ALLOWED | RIL_DATA_FLAG_ON)) ==
+			(RIL_DATA_FLAG_ALLOWED | RIL_DATA_FLAG_ON);
 }
 
 static void ril_data_deactivate_all(struct ril_data *self)
@@ -989,8 +1075,8 @@ static void ril_data_deactivate_all(struct ril_data *self)
 		for (l = self->data_calls->calls; l; l = l->next) {
 			struct ril_data_call *call = l->data;
 			if (call->status == PDP_FAIL_NONE) {
-				DBG1_(self, "deactivating call %u", call->cid);
-				ril_data_call_request_queue(
+				DBG_(self, "deactivating call %u", call->cid);
+				ril_data_request_queue(
 					ril_data_call_deact_new(self,
 						call->cid, NULL, NULL));
 			}
@@ -1010,72 +1096,98 @@ static void ril_data_power_update(struct ril_data *self)
 	}
 }
 
+static void ril_data_cancel_requests(struct ril_data *self,
+					enum ril_data_request_flags flags)
+{
+	struct ril_data_priv *priv = self->priv;
+	struct ril_data_request *req = priv->req_queue;
+
+	while (req) {
+		struct ril_data_request *next = req->next;
+		GASSERT(req->data == self);
+		if (req->flags & flags) {
+			ril_data_request_do_cancel(req);
+		}
+		req = next;
+	}
+
+	if (priv->pending_req && (priv->pending_req->flags & flags)) {
+		ril_data_request_cancel(priv->pending_req);
+	}
+}
+
+static void ril_data_disallow(struct ril_data *self)
+{
+	struct ril_data_priv *priv = self->priv;
+
+	DBG_(self, "disallowed");
+	GASSERT(priv->flags & RIL_DATA_FLAG_ALLOWED);
+	priv->flags &= ~(RIL_DATA_FLAG_ALLOWED | RIL_DATA_FLAG_ON);
+
+	/*
+	 * Cancel all requests that can be canceled.
+	 */
+	ril_data_cancel_requests(self,
+				DATA_REQUEST_FLAG_CANCEL_WHEN_DISALLOWED);
+
+	/*
+	 * Then deactivate active contexts (Hmm... what if deactivate
+	 * requests are already pending? That's quite unlikely though)
+	 */
+	ril_data_deactivate_all(self);
+	ril_data_power_update(self);
+}
+
 void ril_data_allow(struct ril_data *self, gboolean allow)
 {
 	if (G_LIKELY(self)) {
 		struct ril_data_priv *priv = self->priv;
 		struct ril_data_manager *dm = priv->dm;
 
-		DBG1_(self, "%s", allow ? "yes" : "no");
+		DBG_(self, "%s", allow ? "yes" : "no");
 		if (allow) {
 			if (!(priv->flags & RIL_DATA_FLAG_ALLOWED)) {
 				priv->flags |= RIL_DATA_FLAG_ALLOWED;
 				priv->flags &= ~RIL_DATA_FLAG_ON;
+				ril_data_cancel_requests(self,
+					DATA_REQUEST_FLAG_CANCEL_WHEN_ALLOWED);
 				ril_data_power_update(self);
 				ril_data_manager_disallow_all_except(dm, self);
-				ril_data_manager_check(dm);
+				ril_data_manager_check_data(dm);
 			}
 		} else {
 			if (priv->flags & RIL_DATA_FLAG_ALLOWED) {
 				gboolean was_allowed = ril_data_allowed(self);
-				priv->flags &= ~(RIL_DATA_FLAG_ALLOWED |
-							RIL_DATA_FLAG_ON);
+
+				ril_data_disallow(self);
 				if (was_allowed) {
-					ril_data_deactivate_all(self);
 					ril_data_signal_emit(self,
 							SIGNAL_ALLOW_CHANGED);
 				}
-				ril_data_power_update(self);
-				ril_data_manager_check(dm);
+				ril_data_manager_check_data(dm);
 			}
 		}
 	}
 }
 
-void ril_data_set_name(struct ril_data *self, const char *name)
-{
-	if (G_LIKELY(self)) {
-		struct ril_data_priv *priv = self->priv;
-
-		g_free(priv->custom_log_prefix);
-		if (name) {
-			priv->custom_log_prefix = g_strconcat(name, " ", NULL);
-			priv->log_prefix = priv->custom_log_prefix;
-		} else {
-			priv->custom_log_prefix = NULL;
-			priv->log_prefix = "";
-		}
-	}
-}
-
-struct ril_data_call_request *ril_data_call_setup(struct ril_data *self,
+struct ril_data_request *ril_data_call_setup(struct ril_data *self,
 				const struct ofono_gprs_primary_context *ctx,
 				ril_data_call_setup_cb_t cb, void *arg)
 {
-	struct ril_data_call_request *req =
+	struct ril_data_request *req =
 		ril_data_call_setup_new(self, ctx, cb, arg);
 
-	ril_data_call_request_queue(req);
+	ril_data_request_queue(req);
 	return req;
 }
 
-struct ril_data_call_request *ril_data_call_deactivate(struct ril_data *self,
+struct ril_data_request *ril_data_call_deactivate(struct ril_data *self,
 			int cid, ril_data_call_deactivate_cb_t cb, void *arg)
 {
-	struct ril_data_call_request *req =
+	struct ril_data_request *req =
 		ril_data_call_deact_new(self, cid, cb, arg);
 
-	ril_data_call_request_queue(req);
+	ril_data_request_queue(req);
 	return req;
 }
 
@@ -1085,7 +1197,6 @@ static void ril_data_init(struct ril_data *self)
 		RIL_DATA_TYPE, struct ril_data_priv);
 
 	self->priv = priv;
-	priv->log_prefix = "";
 }
 
 static void ril_data_dispose(GObject *object)
@@ -1093,22 +1204,26 @@ static void ril_data_dispose(GObject *object)
 	struct ril_data *self = RIL_DATA(object);
 	struct ril_data_priv *priv = self->priv;
 	struct ril_data_manager	*dm = priv->dm;
+	struct ril_network *network = priv->network;
+	struct ril_sim_settings *settings = network->settings;
+	struct ril_data_request *req;
 
-	if (priv->event_id) {
-		grilio_channel_remove_handler(priv->io, priv->event_id);
-		priv->event_id = 0;
-	}
-
+	ril_sim_settings_remove_handlers(settings, priv->settings_event_id,
+					G_N_ELEMENTS(priv->settings_event_id));
+	grilio_channel_remove_handlers(priv->io, &priv->io_event_id, 1);
 	grilio_queue_cancel_all(priv->q, FALSE);
 	priv->query_id = 0;
 
-	ril_data_call_request_cancel(priv->pending_req);
-	while (priv->req_queue) {
-		ril_data_call_request_cancel(priv->req_queue);
+	ril_data_request_do_cancel(priv->pending_req);
+	req = priv->req_queue;
+	while (req) {
+		struct ril_data_request *next = req->next;
+		ril_data_request_do_cancel(req);
+		req = next;
 	}
 
 	dm->data_list = g_slist_remove(dm->data_list, self);
-	ril_data_manager_check(dm);
+	ril_data_manager_check_data(dm);
 	G_OBJECT_CLASS(ril_data_parent_class)->dispose(object);
 }
 
@@ -1117,10 +1232,10 @@ static void ril_data_finalize(GObject *object)
 	struct ril_data *self = RIL_DATA(object);
 	struct ril_data_priv *priv = self->priv;
 
-	g_free(priv->custom_log_prefix);
+	g_free(priv->log_prefix);
 	grilio_queue_unref(priv->q);
 	grilio_channel_unref(priv->io);
-	ril_radio_power_off(self->priv->radio, self);
+	ril_radio_power_off(priv->radio, self);
 	ril_radio_unref(priv->radio);
 	ril_network_unref(priv->network);
 	ril_data_manager_unref(priv->dm);
@@ -1143,10 +1258,11 @@ static void ril_data_class_init(RilDataClass *klass)
  * ril_data_manager
  *==========================================================================*/
 
-struct ril_data_manager *ril_data_manager_new()
+struct ril_data_manager *ril_data_manager_new(enum ril_data_manager_flags flg)
 {
 	struct ril_data_manager *self = g_new0(struct ril_data_manager, 1);
 	self->ref_count = 1;
+	self->flags = flg;
 	return self;
 }
 
@@ -1179,26 +1295,20 @@ static void ril_data_manager_disallow_all_except(struct ril_data_manager *self,
 
 		if (data != allowed &&
 				(data->priv->flags & RIL_DATA_FLAG_ALLOWED)) {
-
 			const gboolean was_allowed = ril_data_allowed(data);
 
-			data->priv->flags &= ~(RIL_DATA_FLAG_ALLOWED |
-							RIL_DATA_FLAG_ON);
+			/*
+			 * Since there cannot be more than one active data
+			 * SIM at a time, no more than one at a time can
+			 * get disallowed. We could break the loop once we
+			 * have found it but since the list is quite small,
+			 * why bother.
+			 */
+			ril_data_disallow(data);
 			if (was_allowed) {
-
-				/*
-				 * Since there cannot be more than one active
-				 * data SIM at a time, no more than one at a
-				 * time can get disallowed. We could break the
-				 * loop once we have found it but since the
-				 * list is quite small, why bother.
-				 */
-				DBG_(data, "disallowed");
-				ril_data_deactivate_all(data);
-				ril_data_signal_emit(data, SIGNAL_ALLOW_CHANGED);
+				ril_data_signal_emit(data,
+						SIGNAL_ALLOW_CHANGED);
 			}
-
-			ril_data_power_update(data);
 		}
 	}
 }
@@ -1217,6 +1327,61 @@ static gboolean ril_data_manager_requests_pending(struct ril_data_manager *self)
 	return FALSE;
 }
 
+static void ril_data_manager_check_network_mode(struct ril_data_manager *self)
+{
+	GSList *l;
+
+	if (ril_data_manager_handover(self)) {
+		gboolean non_gsm_selected = FALSE;
+		int non_gsm_count = 0;
+
+		/*
+		 * Count number of SIMs for which GSM is selected
+		 */
+		for (l= self->data_list; l; l = l->next) {
+			struct ril_data *data = l->data;
+			struct ril_data_priv *priv = data->priv;
+			struct ril_sim_settings *sim = priv->network->settings;
+
+			if (sim->pref_mode != OFONO_RADIO_ACCESS_MODE_GSM &&
+							sim->imsi) {
+				non_gsm_count++;
+				if (priv->flags & RIL_DATA_FLAG_ALLOWED) {
+					non_gsm_selected = TRUE;
+				}
+			}
+		}
+
+		/*
+		 * If the selected data SIM has non-GSM mode enabled and
+		 * non-GSM mode is enabled for more than one SIM, then
+		 * we need to limit other SIMs to GSM. Otherwise, turn
+		 * all the limits off.
+		 */
+		if (non_gsm_selected && non_gsm_count > 1) {
+			for (l= self->data_list; l; l = l->next) {
+				struct ril_data *data = l->data;
+				struct ril_data_priv *priv = data->priv;
+
+				ril_network_set_max_pref_mode(priv->network,
+					(priv->flags & RIL_DATA_FLAG_ALLOWED) ?
+						OFONO_RADIO_ACCESS_MODE_ANY :
+						OFONO_RADIO_ACCESS_MODE_GSM,
+								FALSE);
+			}
+
+			return;
+		}
+	}
+
+	/* Otherwise there's no reason to limit anything */
+	for (l= self->data_list; l; l = l->next) {
+		struct ril_data *data = l->data;
+		ril_network_set_max_pref_mode(data->priv->network,
+					OFONO_RADIO_ACCESS_MODE_ANY, FALSE);
+	}
+}
+
 static struct ril_data *ril_data_manager_allowed(struct ril_data_manager *self)
 {
 	GSList *l;
@@ -1231,16 +1396,53 @@ static struct ril_data *ril_data_manager_allowed(struct ril_data_manager *self)
 	return NULL;
 }
 
-static void ril_data_manager_check(struct ril_data_manager *self)
+static gboolean ril_data_manager_handover(struct ril_data_manager *self)
+{
+	/*
+	 * The 3G/LTE handover thing only makes sense if we are managing
+	 * more than one SIM slot. Otherwise leave things where they are.
+	 */
+	return (self->data_list && self->data_list->next &&
+			(self->flags & RIL_DATA_MANAGER_3GLTE_HANDOVER));
+}
+
+static void ril_data_manager_switch_data_on(struct ril_data_manager *self,
+						struct ril_data *data)
+{
+	struct ril_data_priv *priv = data->priv;
+
+	DBG_(data, "allowing data");
+	GASSERT(!(priv->flags & RIL_DATA_FLAG_ON));
+
+	if (ril_data_manager_handover(self)) {
+		ril_network_set_max_pref_mode(priv->network,
+					OFONO_RADIO_ACCESS_MODE_ANY, TRUE);
+	}
+
+	/*
+	 * RIL_VERSION in ril.h was 10 when RIL_REQUEST_ALLOW_DATA first
+	 * appeared there.
+	 */
+	if (priv->io->ril_version >= 10) {
+		ril_data_request_queue(ril_data_allow_new(data));
+	} else {
+		priv->flags |= RIL_DATA_FLAG_ON;
+		GASSERT(ril_data_allowed(data));
+		DBG_(data, "data on");
+		ril_data_signal_emit(data, SIGNAL_ALLOW_CHANGED);
+	}
+}
+
+static void ril_data_manager_check_data(struct ril_data_manager *self)
 {
 	/*
 	 * Don't do anything if there any requests pending.
 	 */
 	if (!ril_data_manager_requests_pending(self)) {
 		struct ril_data *data = ril_data_manager_allowed(self);
+		ril_data_manager_check_network_mode(self);
 		if (data && !(data->priv->flags & RIL_DATA_FLAG_ON)) {
-			DBG_(data, "allowing data");
-			ril_data_call_request_queue(ril_data_allow_new(data));
+			ril_data_manager_switch_data_on(self, data);
 		}
 	}
 }

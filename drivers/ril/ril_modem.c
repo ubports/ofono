@@ -9,7 +9,7 @@
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  *  GNU General Public License for more details.
  */
 
@@ -17,6 +17,7 @@
 #include "ril_network.h"
 #include "ril_radio.h"
 #include "ril_sim_card.h"
+#include "ril_sim_settings.h"
 #include "ril_data.h"
 #include "ril_util.h"
 #include "ril_log.h"
@@ -50,7 +51,6 @@ struct ril_modem_data {
 	struct ril_modem modem;
 	GRilIoQueue *q;
 	struct ofono_radio_settings *radio_settings;
-	char *default_name;
 	char *imei;
 	gboolean pre_sim_done;
 	gboolean devinfo_created;
@@ -419,19 +419,19 @@ static void ril_modem_remove(struct ofono_modem *ofono)
 
 	ril_network_unref(modem->network);
 	ril_sim_card_unref(modem->sim_card);
+	ril_sim_settings_unref(modem->sim_settings);
 	ril_data_unref(modem->data);
 	grilio_channel_unref(modem->io);
 	grilio_queue_cancel_all(md->q, FALSE);
 	grilio_queue_unref(md->q);
-	g_free(md->default_name);
 	g_free(md->imei);
 	g_free(md);
 }
 
-struct ril_modem *ril_modem_create(GRilIoChannel *io,
+struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *log_prefix,
 		const struct ril_slot_info *slot, struct ril_radio *radio,
 		struct ril_network *network, struct ril_sim_card *card,
-		struct ril_data *data)
+		struct ril_data *data, struct ril_sim_settings *settings)
 {
 	/* Skip the slash from the path, it looks like "/ril_0" */
 	struct ofono_modem *ofono = ofono_modem_create(slot->path + 1,
@@ -444,19 +444,13 @@ struct ril_modem *ril_modem_create(GRilIoChannel *io,
 		/* Copy config */
 		modem->config = *slot->config;
 		modem->imei = md->imei = g_strdup(slot->imei);
-		if (slot->config->default_name &&
-					slot->config->default_name[0]) {
-			md->default_name = g_strdup(slot->config->default_name);
-		} else {
-			md->default_name = g_strdup_printf("SIM%u",
-						slot->config->slot + 1);
-		}
-		modem->config.default_name = md->default_name;
+		modem->log_prefix = log_prefix;
 
 		modem->ofono = ofono;
 		modem->radio = ril_radio_ref(radio);
 		modem->network = ril_network_ref(network);
 		modem->sim_card = ril_sim_card_ref(card);
+		modem->sim_settings = ril_sim_settings_ref(settings);
 		modem->data = ril_data_ref(data);
 		modem->io = grilio_channel_ref(io);
 		md->q = grilio_queue_new(io);

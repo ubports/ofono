@@ -21,6 +21,8 @@
 #include <grilio_request.h>
 #include <grilio_parser.h>
 
+#include <gutil_misc.h>
+
 typedef GObjectClass RilRadioClass;
 typedef struct ril_radio RilRadio;
 
@@ -71,7 +73,7 @@ G_DEFINE_TYPE(RilRadio, ril_radio, G_TYPE_OBJECT)
 
 static void ril_radio_submit_power_request(struct ril_radio *self, gboolean on);
 
-G_INLINE_FUNC gboolean ril_radio_power_should_be_on(struct ril_radio *self)
+static inline gboolean ril_radio_power_should_be_on(struct ril_radio *self)
 {
 	struct ril_radio_priv *priv = self->priv;
 
@@ -79,17 +81,17 @@ G_INLINE_FUNC gboolean ril_radio_power_should_be_on(struct ril_radio *self)
 				g_hash_table_size(priv->req_table) > 0;
 }
 
-G_INLINE_FUNC gboolean ril_radio_state_off(enum ril_radio_state radio_state)
+static inline gboolean ril_radio_state_off(enum ril_radio_state radio_state)
 {
 	return radio_state == RADIO_STATE_OFF;
 }
 
-G_INLINE_FUNC gboolean ril_radio_state_on(enum ril_radio_state radio_state)
+static inline gboolean ril_radio_state_on(enum ril_radio_state radio_state)
 {
 	return !ril_radio_state_off(radio_state);
 }
 
-G_INLINE_FUNC void ril_radio_emit_signal(struct ril_radio *self,
+static inline void ril_radio_emit_signal(struct ril_radio *self,
 						enum ril_radio_signal id)
 {
 	g_signal_emit(self, ril_radio_signals[id], 0);
@@ -304,6 +306,11 @@ void ril_radio_remove_handler(struct ril_radio *self, gulong id)
 	if (G_LIKELY(self) && G_LIKELY(id)) {
 		g_signal_handler_disconnect(self, id);
 	}
+}
+
+void ril_radio_remove_handlers(struct ril_radio *self, gulong *ids, int count)
+{
+	gutil_disconnect_handlers(self, ids, count);
 }
 
 enum ril_radio_state ril_radio_state_parse(const void *data, guint len)
