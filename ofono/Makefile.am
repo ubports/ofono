@@ -145,6 +145,7 @@ builtin_sources +=	drivers/ril/ril_call_barring.c \
 			drivers/ril/ril_sim_card.c \
 			drivers/ril/ril_sim_info.c \
 			drivers/ril/ril_sim_info_dbus.c \
+			drivers/ril/ril_sim_settings.c \
 			drivers/ril/ril_sms.c \
 			drivers/ril/ril_stk.c \
 			drivers/ril/ril_ussd.c \

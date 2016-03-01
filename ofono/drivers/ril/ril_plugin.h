@@ -45,12 +45,6 @@
 
 typedef struct ril_slot_info const *ril_slot_info_ptr;
 
-struct ril_slot_config {
-	guint slot;
-	gboolean enable_4g;
-	const char *default_name;
-};
-
 struct ril_slot_info {
 	const char *path;
 	const char *imei;
@@ -73,11 +67,13 @@ struct ril_plugin {
 struct ril_modem {
 	GRilIoChannel *io;
 	const char *imei;
+	const char *log_prefix;
 	struct ofono_modem *ofono;
 	struct ril_radio *radio;
 	struct ril_data *data;
 	struct ril_network *network;
 	struct ril_sim_card *sim_card;
+	struct ril_sim_settings *sim_settings;
 	struct ril_slot_config config;
 };
 
@@ -101,15 +97,12 @@ void ril_plugin_set_default_voice_imsi(struct ril_plugin *plugin,
 void ril_plugin_set_default_data_imsi(struct ril_plugin *plugin,
 							const char *imsi);
 
-struct ril_sim_dbus *ril_sim_dbus_new(struct ril_modem *modem);
-const char *ril_sim_dbus_imsi(struct ril_sim_dbus *dbus);
-void ril_sim_dbus_free(struct ril_sim_dbus *dbus);
-
 struct ril_sim_info_dbus;
 struct ril_sim_info_dbus *ril_sim_info_dbus_new(struct ril_modem *md,
 						struct ril_sim_info *info);
 void ril_sim_info_dbus_free(struct ril_sim_info_dbus *dbus);
 
+struct ril_plugin_dbus;
 struct ril_plugin_dbus *ril_plugin_dbus_new(struct ril_plugin *plugin);
 void ril_plugin_dbus_free(struct ril_plugin_dbus *dbus);
 void ril_plugin_dbus_block_imei_requests(struct ril_plugin_dbus *dbus,
@@ -118,10 +111,10 @@ void ril_plugin_dbus_signal(struct ril_plugin_dbus *dbus, int mask);
 void ril_plugin_dbus_signal_sim(struct ril_plugin_dbus *dbus, int index,
 							gboolean present);
 
-struct ril_modem *ril_modem_create(GRilIoChannel *io,
+struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *log_prefix,
 		const struct ril_slot_info *slot, struct ril_radio *radio,
 		struct ril_network *network, struct ril_sim_card *card,
-		struct ril_data *data);
+		struct ril_data *data, struct ril_sim_settings *settings);
 void ril_modem_delete(struct ril_modem *modem);
 void ril_modem_set_imei(struct ril_modem *modem, const char *imei);
 struct ofono_sim *ril_modem_ofono_sim(struct ril_modem *modem);

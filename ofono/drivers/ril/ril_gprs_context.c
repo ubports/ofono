@@ -9,7 +9,7 @@
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  *  GNU General Public License for more details.
  */
 
@@ -31,7 +31,7 @@
 #define MAX_MTU 1280
 
 struct ril_gprs_context_call {
-	struct ril_data_call_request *req;
+	struct ril_data_request *req;
 	ofono_gprs_context_cb_t cb;
 	gpointer data;
 };
@@ -111,7 +111,7 @@ static void ril_gprs_context_call_done(struct ril_gprs_context_call *call,
 	ofono_gprs_context_cb_t cb = call->cb;
 	gpointer data = call->data;
 
-	ril_data_call_request_cancel(call->req);
+	ril_data_request_cancel(call->req);
 
 	call->req = NULL;
 	call->cb = NULL;
@@ -627,11 +627,11 @@ static void ril_gprs_context_remove(struct ofono_gprs_context *gc)
 	DBG("");
 	ofono_gprs_context_set_data(gc, NULL);
 
-	ril_data_call_request_cancel(gcd->activate.req);
+	ril_data_request_cancel(gcd->activate.req);
 
 	if (gcd->deactivate.req) {
 		/* Let it complete but we won't be around to be notified. */
-		ril_data_call_request_detach(gcd->deactivate.req);
+		ril_data_request_detach(gcd->deactivate.req);
 	} else if (gcd->active_call) {
 		ril_data_call_deactivate(gcd->data, gcd->active_call->cid,
 								NULL, NULL);
