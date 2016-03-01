@@ -134,6 +134,7 @@ struct ril_plugin_settings {
 static void ril_debug_trace_notify(struct ofono_debug_desc *desc);
 static void ril_debug_dump_notify(struct ofono_debug_desc *desc);
 static void ril_debug_grilio_notify(struct ofono_debug_desc *desc);
+static void ril_plugin_debug_notify(struct ofono_debug_desc *desc);
 static void ril_plugin_retry_init_io(struct ril_slot *slot);
 
 GLOG_MODULE_DEFINE("rilmodem");
@@ -154,6 +155,12 @@ static struct ofono_debug_desc grilio_debug OFONO_DEBUG_ATTR = {
 	.name = "grilio",
 	.flags = OFONO_DEBUG_FLAG_DEFAULT,
 	.notify = ril_debug_grilio_notify
+};
+
+static struct ofono_debug_desc ril_plugin_debug OFONO_DEBUG_ATTR = {
+	.name = "ril_plugin",
+	.flags = OFONO_DEBUG_FLAG_DEFAULT,
+	.notify = ril_plugin_debug_notify
 };
 
 static struct ril_plugin_priv *ril_plugin_cast(struct ril_plugin *pub)
@@ -646,8 +653,12 @@ static void ril_plugin_modem_removed(struct ril_modem *modem, void *data)
 static void ril_plugin_trace(GRilIoChannel *io, GRILIO_PACKET_TYPE type,
 	guint id, guint code, const void *data, guint data_len, void *user_data)
 {
-	/* Use log sub-module to turn prefix off */
-	static GLOG_MODULE_DEFINE2_(log_module, NULL, GLOG_MODULE_NAME);
+	/* Turn prefix off */
+	static GLogModule log_module = {
+		.max_level = GLOG_LEVEL_MAX,
+		.level     = GLOG_LEVEL_MAX
+	};
+
 	const char *prefix = io->name ? io->name : "";
 	const char dir = (type == GRILIO_PACKET_REQ) ? '<' : '>';
 	const char *scode;
@@ -660,15 +671,15 @@ static void ril_plugin_trace(GRilIoChannel *io, GRILIO_PACKET_TYPE type,
 		} else {
 			scode = ril_request_to_string(code);
 		}
-		gutil_log(&log_module, GLOG_LEVEL_INFO, "%s%c [%08x] %s",
+		gutil_log(&log_module, GLOG_LEVEL_VERBOSE, "%s%c [%08x] %s",
 				prefix, dir, id, scode);
 		break;
 	case GRILIO_PACKET_RESP:
-		gutil_log(&log_module, GLOG_LEVEL_INFO, "%s%c [%08x] %s",
+		gutil_log(&log_module, GLOG_LEVEL_VERBOSE, "%s%c [%08x] %s",
 				prefix, dir, id, ril_error_to_string(code));
 		break;
 	case GRILIO_PACKET_UNSOL:
-		gutil_log(&log_module, GLOG_LEVEL_INFO, "%s%c %s",
+		gutil_log(&log_module, GLOG_LEVEL_VERBOSE, "%s%c %s",
 				prefix, dir, ril_unsol_event_to_string(code));
 		break;
 	}
@@ -681,7 +692,7 @@ static void ril_debug_dump_update_slot(struct ril_slot *slot)
 			if (!slot->dump_id) {
 				slot->dump_id =
 					grilio_channel_add_default_logger(
-						slot->io, GLOG_LEVEL_INFO);
+						slot->io, GLOG_LEVEL_VERBOSE);
 			}
 		} else if (slot->dump_id) {
 			grilio_channel_remove_logger(slot->io, slot->dump_id);
@@ -1449,11 +1460,14 @@ static void ril_debug_dump_notify(struct ofono_debug_desc *desc)
 
 static void ril_debug_grilio_notify(struct ofono_debug_desc *desc)
 {
-	if (desc->flags & OFONO_DEBUG_FLAG_PRINT) {
-		grilio_log.level = GLOG_LEVEL_VERBOSE;
-	} else {
-		grilio_log.level = GLOG_LEVEL_INHERIT;
-	}
+	grilio_log.level = (desc->flags & OFONO_DEBUG_FLAG_PRINT) ?
+		GLOG_LEVEL_VERBOSE : GLOG_LEVEL_INHERIT;
+}
+
+static void ril_plugin_debug_notify(struct ofono_debug_desc *desc)
+{
+	GLOG_MODULE_NAME.level = (desc->flags & OFONO_DEBUG_FLAG_PRINT) ?
+		GLOG_LEVEL_VERBOSE : GLOG_LEVEL_INHERIT;
 }
 
 static int ril_plugin_init(void)
