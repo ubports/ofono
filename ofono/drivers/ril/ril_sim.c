@@ -14,7 +14,6 @@
  */
 
 #include "ril_plugin.h"
-#include "ril_radio.h"
 #include "ril_sim_card.h"
 #include "ril_util.h"
 #include "ril_log.h"
@@ -72,14 +71,12 @@ struct ril_sim {
 	GList *pin_cbd_list;
 	struct ofono_sim *sim;
 	struct ril_sim_card *card;
-	struct ril_radio *radio;
 	enum ofono_sim_password_type ofono_passwd_state;
 	int retries[OFONO_SIM_PASSWORD_INVALID];
 	guint slot;
 	gboolean inserted;
 	guint idle_id;
 	gulong card_status_id;
-	gulong radio_state_id;
 
 	/* query_passwd_state context */
 	ofono_sim_passwd_cb_t query_passwd_state_cb;
@@ -648,24 +645,6 @@ static gboolean ril_sim_app_in_transient_state(struct ril_sim *sd)
 	return FALSE;
 }
 
-static void ril_sim_insert_check(struct ril_sim *sd)
-{
-	if (!sd->inserted &&
-			ril_sim_passwd_state(sd) != OFONO_SIM_PASSWORD_INVALID) {
-		switch (sd->radio->state) {
-		case RADIO_STATE_SIM_READY:
-		case RADIO_STATE_RUIM_READY:
-		case RADIO_STATE_ON:
-			sd->inserted = TRUE;
-			ofono_info("SIM card OK");
-			ofono_sim_inserted_notify(sd->sim, TRUE);
-			break;
-		default:
-			break;
-		}
-	}
-}
-
 static void ril_sim_finish_passwd_state_query(struct ril_sim *sd,
 					enum ofono_sim_password_type state)
 {
@@ -713,7 +692,12 @@ static void ril_sim_status_cb(struct ril_sim_card *sc, void *user_data)
 		if (sc->app) {
 			enum ofono_sim_password_type ps;
 
-			ril_sim_insert_check(sd);
+			if (!sd->inserted) {
+				sd->inserted = TRUE;
+				ofono_info("SIM card OK");
+				ofono_sim_inserted_notify(sd->sim, TRUE);
+			}
+
 			ps = ril_sim_passwd_state(sd);
 			if (ps != OFONO_SIM_PASSWORD_INVALID) {
 				ril_sim_finish_passwd_state_query(sd, ps);
@@ -729,13 +713,6 @@ static void ril_sim_status_cb(struct ril_sim_card *sc, void *user_data)
 			ofono_sim_inserted_notify(sd->sim, FALSE);
 		}
 	}
-}
-
-static void ril_sim_radio_state_cb(struct ril_radio *radio, void *user_data)
-{
-	struct ril_sim *sd = user_data;
-
-	ril_sim_insert_check(sd);
 }
 
 static void ril_sim_query_pin_retries(struct ofono_sim *sim,
@@ -1049,8 +1026,6 @@ static gboolean ril_sim_register(gpointer user)
 	ofono_sim_register(sd->sim);
 
 	/* Register for change notifications */
-	sd->radio_state_id = ril_radio_add_state_changed_handler(sd->radio,
-				ril_sim_radio_state_cb, sd);
 	sd->card_status_id = ril_sim_card_add_status_changed_handler(sd->card,
 						ril_sim_status_cb, sd);
 
@@ -1070,7 +1045,6 @@ static int ril_sim_probe(struct ofono_sim *sim, unsigned int vendor,
 	sd->slot = ril_modem_slot(modem);
 	sd->io = grilio_channel_ref(ril_modem_io(modem));
 	sd->card = ril_sim_card_ref(modem->sim_card);
-	sd->radio = ril_radio_ref(modem->radio);
 
 	/* NB: One queue is used for the requests originated from the ofono
 	 * core, and the second one if for the requests initiated internally
@@ -1113,9 +1087,6 @@ static void ril_sim_remove(struct ofono_sim *sim)
 	if (sd->query_passwd_state_timeout_id) {
 		g_source_remove(sd->query_passwd_state_timeout_id);
 	}
-
-	ril_radio_remove_handler(sd->radio, sd->radio_state_id);
-	ril_radio_unref(sd->radio);
 
 	ril_sim_card_remove_handler(sd->card, sd->card_status_id);
 	ril_sim_card_unref(sd->card);
