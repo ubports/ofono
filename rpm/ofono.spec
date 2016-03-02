@@ -11,7 +11,7 @@ Requires:   dbus
 Requires:   systemd
 Requires:   ofono-configs
 Requires:   libgrilio >= 1.0.6
-Requires:   libglibutil >= 1.0.4
+Requires:   libglibutil >= 1.0.5
 Requires(preun): systemd
 Requires(post): systemd
 Requires(postun): systemd
@@ -22,7 +22,7 @@ BuildRequires:  pkgconfig(bluez) >= 4.85
 BuildRequires:  pkgconfig(mobile-broadband-provider-info)
 BuildRequires:  pkgconfig(libwspcodec) >= 2.0
 BuildRequires:  pkgconfig(libgrilio) >= 1.0.6
-BuildRequires:  pkgconfig(libglibutil) >= 1.0.4
+BuildRequires:  pkgconfig(libglibutil) >= 1.0.5
 BuildRequires:  libtool
 BuildRequires:  automake
 BuildRequires:  autoconf
