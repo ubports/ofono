@@ -15,8 +15,9 @@
 
 #include "ril_network.h"
 #include "ril_radio.h"
-#include "ril_util.h"
+#include "ril_sim_card.h"
 #include "ril_sim_settings.h"
+#include "ril_util.h"
 #include "ril_log.h"
 
 #include <grilio_queue.h>
@@ -50,6 +51,7 @@ struct ril_network_priv {
 	GRilIoChannel *io;
 	GRilIoQueue *q;
 	struct ril_radio *radio;
+	struct ril_sim_card *sim_card;
 	enum ofono_radio_access_mode max_pref_mode;
 	int rat;
 	char *log_prefix;
@@ -61,6 +63,7 @@ struct ril_network_priv {
 	gulong set_rat_id;
 	gulong ril_event_id;
 	gulong settings_event_id;
+	gulong sim_status_event_id;
 	gulong radio_event_id[RADIO_EVENT_COUNT];
 	struct ofono_network_operator operator;
 };
@@ -439,6 +442,13 @@ static int ril_network_pref_mode_expected(struct ril_network *self)
 	return ril_network_mode_to_rat(self, pref_mode);
 }
 
+static gboolean ril_network_can_set_pref_mode(struct ril_network *self)
+{
+	struct ril_network_priv *priv = self->priv;
+
+	return priv->radio->online && ril_sim_card_ready(priv->sim_card);
+}
+
 static gboolean ril_network_set_rat_holdoff_cb(gpointer user_data)
 {
 	struct ril_network *self = RIL_NETWORK(user_data);
@@ -450,14 +460,16 @@ static gboolean ril_network_set_rat_holdoff_cb(gpointer user_data)
 	priv->timer[TIMER_SET_RAT_HOLDOFF] = 0;
 
 	/*
-	 * Don't retry the request if modem is offline. When it goes online,
-	 * another check will be scheduled by ril_network_radio_online_cb
+	 * Don't retry the request if modem is offline or SIM card isn't
+	 * ready, to avoid spamming system log with error messages. Radio
+	 * and SIM card state change callbacks will schedule a new check
+	 * when it's appropriate.
 	 */
 	if (priv->rat != rat) {
-		if (priv->radio->online) {
+		if (ril_network_can_set_pref_mode(self)) {
 			ril_network_set_pref_mode(self, rat);
 		} else {
-			DBG_(self, "offline, giving up");
+			DBG_(self, "giving up");
 		}
 	}
 
@@ -564,7 +576,9 @@ static void ril_network_query_pref_mode_cb(GRilIoChannel *io, int status,
 		ril_network_emit(self, SIGNAL_PREF_MODE_CHANGED);
 	}
 
-	ril_network_check_pref_mode(self, FALSE);
+	if (ril_network_can_set_pref_mode(self)) {
+		ril_network_check_pref_mode(self, FALSE);
+	}
 }
 
 static void ril_network_query_pref_mode(struct ril_network *self)
@@ -654,8 +668,10 @@ static void ril_network_radio_state_cb(struct ril_radio *radio, void *data)
 
 static void ril_network_radio_online_cb(struct ril_radio *radio, void *data)
 {
-	if (radio->online) {
-		ril_network_check_pref_mode(RIL_NETWORK(data), TRUE);
+	struct ril_network *self = RIL_NETWORK(data);
+
+	if (ril_network_can_set_pref_mode(self)) {
+		ril_network_check_pref_mode(self, TRUE);
 	}
 }
 
@@ -692,8 +708,19 @@ static void ril_network_pref_mode_changed_cb(struct ril_sim_settings *settings,
 	}
 }
 
+static void ril_network_sim_status_changed_cb(struct ril_sim_card *sc,
+							void *user_data)
+{
+	struct ril_network *self = RIL_NETWORK(user_data);
+
+	if (ril_network_can_set_pref_mode(self)) {
+		ril_network_check_pref_mode(self, FALSE);
+	}
+}
+
 struct ril_network *ril_network_new(GRilIoChannel *io, const char *log_prefix,
-		struct ril_radio *radio, struct ril_sim_settings *settings)
+			struct ril_radio *radio, struct ril_sim_card *sim_card,
+			struct ril_sim_settings *settings)
 {
 	struct ril_network *self = g_object_new(RIL_NETWORK_TYPE, NULL);
 	struct ril_network_priv *priv = self->priv;
@@ -702,6 +729,7 @@ struct ril_network *ril_network_new(GRilIoChannel *io, const char *log_prefix,
 	priv->io = grilio_channel_ref(io);
 	priv->q = grilio_queue_new(priv->io);
 	priv->radio = ril_radio_ref(radio);
+	priv->sim_card = ril_sim_card_ref(sim_card);
 	priv->log_prefix = (log_prefix && log_prefix[0]) ?
 		g_strconcat(log_prefix, " ", NULL) : g_strdup("");
 	DBG_(self, "");
@@ -717,6 +745,9 @@ struct ril_network *ril_network_new(GRilIoChannel *io, const char *log_prefix,
 	priv->settings_event_id =
 		ril_sim_settings_add_pref_mode_changed_handler(settings,
 			ril_network_pref_mode_changed_cb, self);
+	priv->sim_status_event_id =
+		ril_sim_card_add_status_changed_handler(priv->sim_card,
+			ril_network_sim_status_changed_cb, self);
 
 	/*
 	 * Query the initial state. Querying network state before the radio
@@ -768,6 +799,8 @@ static void ril_network_dispose(GObject *object)
 					G_N_ELEMENTS(priv->radio_event_id));
 	ril_sim_settings_remove_handlers(self->settings,
 						&priv->settings_event_id, 1);
+	ril_sim_card_remove_handlers(priv->sim_card,
+						&priv->sim_status_event_id, 1);
 
 	for (tid=0; tid<TIMER_COUNT; tid++) {
 		ril_network_stop_timer(self, tid);
@@ -790,6 +823,7 @@ static void ril_network_finalize(GObject *object)
 	grilio_channel_unref(priv->io);
 	grilio_queue_unref(priv->q);
 	ril_radio_unref(priv->radio);
+	ril_sim_card_unref(priv->sim_card);
 	ril_sim_settings_unref(self->settings);
 	G_OBJECT_CLASS(ril_network_parent_class)->finalize(object);
 }
