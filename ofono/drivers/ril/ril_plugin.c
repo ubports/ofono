@@ -655,8 +655,8 @@ static void ril_plugin_trace(GRilIoChannel *io, GRILIO_PACKET_TYPE type,
 {
 	/* Turn prefix off */
 	static GLogModule log_module = {
-		.max_level = GLOG_LEVEL_MAX,
-		.level     = GLOG_LEVEL_MAX
+		.max_level = GLOG_LEVEL_VERBOSE,
+		.level     = GLOG_LEVEL_VERBOSE
 	};
 
 	const char *prefix = io->name ? io->name : "";
