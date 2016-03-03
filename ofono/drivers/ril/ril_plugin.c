@@ -854,8 +854,6 @@ static void ril_plugin_slot_connected(struct ril_slot *slot)
 
 	GASSERT(!slot->radio);
 	slot->radio = ril_radio_new(slot->io);
-	slot->network = ril_network_new(slot->io, log_prefix, slot->radio,
-							slot->sim_settings);
 
 	GASSERT(!slot->io_event_id[IO_EVENT_RADIO_STATE_CHANGED]);
 	slot->io_event_id[IO_EVENT_RADIO_STATE_CHANGED] =
@@ -868,6 +866,10 @@ static void ril_plugin_slot_connected(struct ril_slot *slot)
 							slot->sim_flags);
 	slot->sim_card_state_event_id = ril_sim_card_add_state_changed_handler(
 			slot->sim_card, ril_plugin_sim_state_changed, slot);
+
+	GASSERT(!slot->network);
+	slot->network = ril_network_new(slot->io, log_prefix, slot->radio,
+					slot->sim_card, slot->sim_settings);
 
 	GASSERT(!slot->data);
 	slot->data = ril_data_new(slot->plugin->data_manager, log_prefix,

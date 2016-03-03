@@ -22,6 +22,8 @@
 #include <grilio_request.h>
 #include <grilio_parser.h>
 
+#include <gutil_misc.h>
+
 typedef GObjectClass RilSimCardClass;
 typedef struct ril_sim_card RilSimCard;
 
@@ -436,6 +438,14 @@ void ril_sim_card_unref(struct ril_sim_card *self)
 	}
 }
 
+gboolean ril_sim_card_ready(struct ril_sim_card *self)
+{
+	return self && self->app &&
+		((self->app->app_state == RIL_APPSTATE_READY) ||
+		(self->app->app_state == RIL_APPSTATE_SUBSCRIPTION_PERSO &&
+		self->app->perso_substate == RIL_PERSOSUBSTATE_READY));
+}
+
 gulong ril_sim_card_add_status_received_handler(struct ril_sim_card *self,
 					ril_sim_card_cb_t cb, void *arg)
 {
@@ -469,6 +479,11 @@ void ril_sim_card_remove_handler(struct ril_sim_card *self, gulong id)
 	if (G_LIKELY(self) && G_LIKELY(id)) {
 		g_signal_handler_disconnect(self, id);
 	}
+}
+
+void ril_sim_card_remove_handlers(struct ril_sim_card *self, gulong *ids, int n)
+{
+	gutil_disconnect_handlers(self, ids, n);
 }
 
 static void ril_sim_card_init(struct ril_sim_card *self)
