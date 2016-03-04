@@ -1560,6 +1560,9 @@ static int ril_plugin_init(void)
 	 * SIM insertion/removal notifications
 	 */
 	ril_plugin_foreach_slot(ril_plugin, ril_plugin_init_io);
+
+	/* This will set 'ready' flag if we have no modems at all */
+	ril_plugin_update_ready(ril_plugin);
 	return 0;
 }
 
