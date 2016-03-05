@@ -62,6 +62,7 @@
 #define RILCONF_TIMEOUT             "timeout"
 #define RILCONF_4G                  "enable4G"
 #define RILCONF_UICC_WORKAROUND     "uiccWorkaround"
+#define RILCONF_ECCLIST_FILE        "ecclistFile"
 
 #define RIL_STORE                   "ril"
 #define RIL_STORE_GROUP             "Settings"
@@ -100,6 +101,7 @@ struct ril_slot {
 	char *name;
 	char *sockpath;
 	char *sub;
+	char *ecclist_file;
 	gint timeout;           /* RIL timeout, in milliseconds */
 	int index;
 	int sim_flags;
@@ -1080,6 +1082,16 @@ static struct ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 		DBG("%s: UICC workaround %s", group, (slot->sim_flags &
 				RIL_SIM_CARD_V9_UICC_SUBSCRIPTION_WORKAROUND) ?
 								"on" : "off");
+
+		slot->ecclist_file = g_key_file_get_string(file, group,
+						RILCONF_ECCLIST_FILE, NULL);
+		if (slot->ecclist_file && slot->ecclist_file[0]) {
+			DBG("%s: ecclist file %s", group, slot->ecclist_file);
+			slot->pub.ecclist_file = slot->ecclist_file;
+		} else {
+			g_free(slot->ecclist_file);
+			slot->ecclist_file = NULL;
+		}
 	} else {
 		DBG("no socket path in %s", group);
 	}
@@ -1097,6 +1109,7 @@ static void ril_plugin_delete_slot(struct ril_slot *slot)
 	g_free(slot->name);
 	g_free(slot->sockpath);
 	g_free(slot->sub);
+	g_free(slot->ecclist_file);
 	g_free(slot);
 }
 

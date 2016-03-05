@@ -48,6 +48,7 @@ typedef struct ril_slot_info const *ril_slot_info_ptr;
 struct ril_slot_info {
 	const char *path;
 	const char *imei;
+	const char *ecclist_file;
 	gboolean enabled;
 	gboolean sim_present;
 	const struct ril_slot_config *config;
@@ -68,6 +69,7 @@ struct ril_modem {
 	GRilIoChannel *io;
 	const char *imei;
 	const char *log_prefix;
+	const char *ecclist_file;
 	struct ofono_modem *ofono;
 	struct ril_radio *radio;
 	struct ril_data *data;

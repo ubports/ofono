@@ -128,6 +128,7 @@ builtin_sources +=	drivers/ril/ril_call_barring.c \
 			drivers/ril/ril_cbs.c \
 			drivers/ril/ril_data.c \
 			drivers/ril/ril_devinfo.c \
+			drivers/ril/ril_ecclist.c \
 			drivers/ril/ril_gprs.c \
 			drivers/ril/ril_gprs_context.c \
 			drivers/ril/ril_mce.c \
