@@ -15,6 +15,7 @@
 
 #include "ril_plugin.h"
 #include "ril_constants.h"
+#include "ril_ecclist.h"
 #include "ril_util.h"
 #include "ril_log.h"
 
@@ -36,6 +37,7 @@ struct ril_voicecall {
 	GRilIoChannel *io;
 	GRilIoQueue *q;
 	struct ofono_voicecall *vc;
+	struct ril_ecclist *ecclist;
 	unsigned int local_release;
 	unsigned char flags;
 	ofono_voicecall_cb_t cb;
@@ -47,6 +49,7 @@ struct ril_voicecall {
 	gulong event_id[VOICECALL_EVENT_COUNT];
 	gulong supp_svc_notification_id;
 	gulong ringback_tone_event_id;
+	gulong ecclist_change_id;
 };
 
 struct release_id_req {
@@ -760,6 +763,13 @@ static void ril_voicecall_ringback_tone_event(GRilIoChannel *io,
 	ofono_voicecall_ringback_tone_notify(vd->vc, playTone);
 }
 
+static void ril_voicecall_ecclist_changed(struct ril_ecclist *list, void *data)
+{
+	struct ril_voicecall *vd = data;
+
+	ofono_voicecall_en_list_notify(vd->vc, vd->ecclist->list);
+}
+
 static gboolean ril_delayed_register(gpointer user_data)
 {
 	struct ril_voicecall *vd = user_data;
@@ -767,6 +777,14 @@ static gboolean ril_delayed_register(gpointer user_data)
 	GASSERT(vd->timer_id);
 	vd->timer_id = 0;
 	ofono_voicecall_register(vd->vc);
+
+	/* Emergency Call Codes */
+	if (vd->ecclist) {
+		ofono_voicecall_en_list_notify(vd->vc, vd->ecclist->list);
+		vd->ecclist_change_id =
+			ril_ecclist_add_list_changed_handler(vd->ecclist,
+					ril_voicecall_ecclist_changed, vd);
+	}
 
 	/* Initialize call list */
 	ril_voicecall_clcc_poll(vd);
@@ -808,6 +826,9 @@ static int ril_voicecall_probe(struct ofono_voicecall *vc, unsigned int vendor,
 	vd->q = grilio_queue_new(vd->io);
 	vd->vc = vc;
 	vd->timer_id = g_idle_add(ril_delayed_register, vd);
+	if (modem->ecclist_file) {
+		vd->ecclist = ril_ecclist_new(modem->ecclist_file);
+	}
 	ril_voicecall_clear_dtmf_queue(vd);
 	ofono_voicecall_set_data(vc, vd);
 	return 0;
@@ -830,6 +851,9 @@ static void ril_voicecall_remove(struct ofono_voicecall *vc)
 	if (vd->timer_id > 0) {
 		g_source_remove(vd->timer_id);
 	}
+
+	ril_ecclist_remove_handler(vd->ecclist, vd->ecclist_change_id);
+	ril_ecclist_unref(vd->ecclist);
 
 	grilio_channel_unref(vd->io);
 	grilio_queue_cancel_all(vd->q, FALSE);

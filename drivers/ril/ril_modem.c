@@ -52,6 +52,7 @@ struct ril_modem_data {
 	GRilIoQueue *q;
 	struct ofono_radio_settings *radio_settings;
 	char *imei;
+	char *ecclist_file;
 	gboolean pre_sim_done;
 	gboolean devinfo_created;
 	gboolean allow_data;
@@ -424,6 +425,7 @@ static void ril_modem_remove(struct ofono_modem *ofono)
 	grilio_channel_unref(modem->io);
 	grilio_queue_cancel_all(md->q, FALSE);
 	grilio_queue_unref(md->q);
+	g_free(md->ecclist_file);
 	g_free(md->imei);
 	g_free(md);
 }
@@ -445,6 +447,8 @@ struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *log_prefix,
 		modem->config = *slot->config;
 		modem->imei = md->imei = g_strdup(slot->imei);
 		modem->log_prefix = log_prefix;
+		modem->ecclist_file =
+		md->ecclist_file = g_strdup(slot->ecclist_file);
 
 		modem->ofono = ofono;
 		modem->radio = ril_radio_ref(radio);
