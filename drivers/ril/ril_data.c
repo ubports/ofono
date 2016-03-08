@@ -37,7 +37,8 @@
 
 enum ril_data_priv_flags {
 	RIL_DATA_FLAG_ALLOWED = 0x01,
-	RIL_DATA_FLAG_ON = 0x02
+	RIL_DATA_FLAG_MAX_SPEED = 0x02,
+	RIL_DATA_FLAG_ON = 0x04
 };
 
 /*
@@ -48,8 +49,13 @@ enum ril_data_priv_flags {
  *
  * There's one ril_data per slot.
  *
- * RIL_DATA_FLAG_ALLOWED is set for the last SIM for which ril_data_allow(TRUE)
- * was called. No more than one SIM at a time has this flag set.
+ * RIL_DATA_FLAG_ALLOWED is set for the last SIM for which ril_data_allow()
+ * was called with non-zero role. No more than one SIM at a time has this
+ * flag set.
+ *
+ * RIL_DATA_FLAG_MAX_SPEED is set for the last SIM for which ril_data_allow()
+ * was called with RIL_DATA_ROLE_INTERNET. No more than one SIM at a time has
+ * this flag set.
  *
  * RIL_DATA_FLAG_ON is set for the active SIM after RIL_REQUEST_ALLOW_DATA
  * has successfully completed. For RIL version < 10 it's set immediately.
@@ -167,8 +173,6 @@ struct ril_data_request_2g {
 static gboolean ril_data_manager_handover(struct ril_data_manager *dm);
 static void ril_data_manager_check_data(struct ril_data_manager *dm);
 static void ril_data_manager_check_network_mode(struct ril_data_manager *dm);
-static void ril_data_manager_disallow_all_except(struct ril_data_manager *dm,
-						struct ril_data *allowed);
 
 static void ril_data_power_update(struct ril_data *self);
 static void ril_data_signal_emit(struct ril_data *self, enum ril_data_signal id)
@@ -842,7 +846,7 @@ static void ril_data_call_deact_cb(GRilIoChannel *io, int ril_status,
 	/*
 	 * If RIL_REQUEST_DEACTIVATE_DATA_CALL succeeds, some RILs don't
 	 * send RIL_UNSOL_DATA_CALL_LIST_CHANGED even though the list of
-	 * calls has change. Update the list of calls to account for that.
+	 * calls has changed. Update the list of calls to account for that.
 	 */
 	if (ril_status == RIL_E_SUCCESS) {
 		struct ril_data_call_list *list = data->data_calls;
@@ -1138,22 +1142,76 @@ static void ril_data_disallow(struct ril_data *self)
 	ril_data_power_update(self);
 }
 
-void ril_data_allow(struct ril_data *self, gboolean allow)
+static void ril_data_max_speed_cb(gpointer data, gpointer max_speed)
+{
+	if (data != max_speed) {
+		((struct ril_data *)data)->priv->flags &=
+						~RIL_DATA_FLAG_MAX_SPEED;
+	}
+}
+
+static void ril_data_disallow_cb(gpointer data_ptr, gpointer allowed)
+{
+	if (data_ptr != allowed) {
+		struct ril_data *data = data_ptr;
+
+		if (data->priv->flags & RIL_DATA_FLAG_ALLOWED) {
+			const gboolean was_allowed = ril_data_allowed(data);
+			ril_data_disallow(data);
+			if (was_allowed) {
+				ril_data_signal_emit(data,
+						SIGNAL_ALLOW_CHANGED);
+			}
+		}
+	}
+}
+
+void ril_data_allow(struct ril_data *self, enum ril_data_role role)
 {
 	if (G_LIKELY(self)) {
 		struct ril_data_priv *priv = self->priv;
 		struct ril_data_manager *dm = priv->dm;
 
-		DBG_(self, "%s", allow ? "yes" : "no");
-		if (allow) {
-			if (!(priv->flags & RIL_DATA_FLAG_ALLOWED)) {
+		DBG_(self, "%s", (role == RIL_DATA_ROLE_NONE) ? "none" :
+			(role == RIL_DATA_ROLE_MMS) ? "mms" : "internet");
+
+		if (role != RIL_DATA_ROLE_NONE) {
+			gboolean speed_changed = FALSE;
+			if (role == RIL_DATA_ROLE_INTERNET &&
+				!(priv->flags & RIL_DATA_FLAG_MAX_SPEED)) {
+				priv->flags |= RIL_DATA_FLAG_MAX_SPEED;
+				speed_changed = TRUE;
+
+				/*
+				 * Clear RIL_DATA_FLAG_MAX_SPEED for
+				 * all other slots
+				 */
+				g_slist_foreach(dm->data_list,
+						ril_data_max_speed_cb, self);
+			}
+			if (priv->flags & RIL_DATA_FLAG_ALLOWED) {
+				/*
+				 * Data is already allowed for this slot,
+				 * just adjust the speed if necessary.
+				 */
+				if (speed_changed) {
+					ril_data_manager_check_network_mode(dm);
+				}
+			} else {
 				priv->flags |= RIL_DATA_FLAG_ALLOWED;
 				priv->flags &= ~RIL_DATA_FLAG_ON;
+
+				/*
+				 * Clear RIL_DATA_FLAG_ALLOWED for all
+				 * other slots
+				 */
+				g_slist_foreach(dm->data_list,
+						ril_data_disallow_cb, self);
+
 				ril_data_cancel_requests(self,
 					DATA_REQUEST_FLAG_CANCEL_WHEN_ALLOWED);
-				ril_data_power_update(self);
-				ril_data_manager_disallow_all_except(dm, self);
 				ril_data_manager_check_data(dm);
+				ril_data_power_update(self);
 			}
 		} else {
 			if (priv->flags & RIL_DATA_FLAG_ALLOWED) {
@@ -1285,34 +1343,6 @@ void ril_data_manager_unref(struct ril_data_manager *self)
 	}
 }
 
-static void ril_data_manager_disallow_all_except(struct ril_data_manager *self,
-						struct ril_data *allowed)
-{
-	GSList *l;
-
-	for (l= self->data_list; l; l = l->next) {
-		struct ril_data *data = l->data;
-
-		if (data != allowed &&
-				(data->priv->flags & RIL_DATA_FLAG_ALLOWED)) {
-			const gboolean was_allowed = ril_data_allowed(data);
-
-			/*
-			 * Since there cannot be more than one active data
-			 * SIM at a time, no more than one at a time can
-			 * get disallowed. We could break the loop once we
-			 * have found it but since the list is quite small,
-			 * why bother.
-			 */
-			ril_data_disallow(data);
-			if (was_allowed) {
-				ril_data_signal_emit(data,
-						SIGNAL_ALLOW_CHANGED);
-			}
-		}
-	}
-}
-
 static gboolean ril_data_manager_requests_pending(struct ril_data_manager *self)
 {
 	GSList *l;
@@ -1332,7 +1362,7 @@ static void ril_data_manager_check_network_mode(struct ril_data_manager *self)
 	GSList *l;
 
 	if (ril_data_manager_handover(self)) {
-		gboolean non_gsm_selected = FALSE;
+		gboolean need_fast_access = FALSE;
 		int non_gsm_count = 0;
 
 		/*
@@ -1346,25 +1376,25 @@ static void ril_data_manager_check_network_mode(struct ril_data_manager *self)
 			if (sim->pref_mode != OFONO_RADIO_ACCESS_MODE_GSM &&
 							sim->imsi) {
 				non_gsm_count++;
-				if (priv->flags & RIL_DATA_FLAG_ALLOWED) {
-					non_gsm_selected = TRUE;
+				if (priv->flags & RIL_DATA_FLAG_MAX_SPEED) {
+					need_fast_access = TRUE;
 				}
 			}
 		}
 
 		/*
-		 * If the selected data SIM has non-GSM mode enabled and
-		 * non-GSM mode is enabled for more than one SIM, then
-		 * we need to limit other SIMs to GSM. Otherwise, turn
-		 * all the limits off.
+		 * If the SIM selected for internet access has non-GSM mode
+		 * enabled and non-GSM mode is enabled for more than one SIM,
+		 * then we need to limit other SIMs to GSM. Otherwise, turn
+		 * all limits off.
 		 */
-		if (non_gsm_selected && non_gsm_count > 1) {
+		if (need_fast_access && non_gsm_count > 1) {
 			for (l= self->data_list; l; l = l->next) {
 				struct ril_data *data = l->data;
 				struct ril_data_priv *priv = data->priv;
 
 				ril_network_set_max_pref_mode(priv->network,
-					(priv->flags & RIL_DATA_FLAG_ALLOWED) ?
+					(priv->flags & RIL_DATA_FLAG_MAX_SPEED) ?
 						OFONO_RADIO_ACCESS_MODE_ANY :
 						OFONO_RADIO_ACCESS_MODE_GSM,
 								FALSE);

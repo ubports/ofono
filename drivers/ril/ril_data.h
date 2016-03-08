@@ -54,6 +54,12 @@ enum ril_data_manager_flags {
 	RIL_DATA_MANAGER_3GLTE_HANDOVER = 0x01
 };
 
+enum ril_data_role {
+	RIL_DATA_ROLE_NONE,    /* Data not allowed */
+	RIL_DATA_ROLE_MMS,     /* Data is allowed at any speed */
+	RIL_DATA_ROLE_INTERNET /* Data is allowed at full speed */
+};
+
 struct ril_data_manager;
 struct ril_data_manager *ril_data_manager_new(enum ril_data_manager_flags flg);
 struct ril_data_manager *ril_data_manager_ref(struct ril_data_manager *dm);
@@ -79,7 +85,7 @@ gulong ril_data_add_calls_changed_handler(struct ril_data *data,
 					ril_data_cb_t cb, void *arg);
 void ril_data_remove_handler(struct ril_data *data, gulong id);
 
-void ril_data_allow(struct ril_data *data, gboolean allow);
+void ril_data_allow(struct ril_data *data, enum ril_data_role role);
 
 struct ril_data_request;
 struct ril_data_request *ril_data_call_setup(struct ril_data *data,
