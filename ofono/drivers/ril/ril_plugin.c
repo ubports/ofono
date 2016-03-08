@@ -244,7 +244,7 @@ static void ril_plugin_shutdown_slot(struct ril_slot *slot, gboolean kill_io)
 		}
 
 		if (slot->data) {
-			ril_data_allow(slot->data, FALSE);
+			ril_data_allow(slot->data, RIL_DATA_ROLE_NONE);
 			ril_data_unref(slot->data);
 			slot->data = NULL;
 		}
@@ -454,10 +454,12 @@ static int ril_plugin_update_modem_paths(struct ril_plugin_priv *plugin)
 	if (old_data_slot != new_data_slot) {
 		/* Yes we are switching data SIMs */
 		if (old_data_slot) {
-			ril_data_allow(old_data_slot->data, FALSE);
+			ril_data_allow(old_data_slot->data, RIL_DATA_ROLE_NONE);
 		}
 		if (new_data_slot) {
-			ril_data_allow(new_data_slot->data, TRUE);
+			ril_data_allow(new_data_slot->data,
+				(new_data_slot == plugin->data_slot) ?
+				RIL_DATA_ROLE_INTERNET : RIL_DATA_ROLE_MMS);
 		}
 	}
 
@@ -648,7 +650,7 @@ static void ril_plugin_modem_removed(struct ril_modem *modem, void *data)
 
 	slot->modem = NULL;
 	ril_radio_set_online(slot->radio, FALSE);
-	ril_data_allow(slot->data, FALSE);
+	ril_data_allow(slot->data, RIL_DATA_ROLE_NONE);
 	ril_plugin_update_modem_paths_full(slot->plugin);
 }
 
