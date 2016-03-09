@@ -38,7 +38,7 @@ enum ril_ecclist_signal {
 	SIGNAL_COUNT
 };
 
-#define SIGNAL_LIST_CHANGED_NAME        "ril-sim-settings-imsi-changed"
+#define SIGNAL_LIST_CHANGED_NAME        "ril-ecclist-changed"
 
 static guint ril_ecclist_signals[SIGNAL_COUNT] = { 0 };
 
