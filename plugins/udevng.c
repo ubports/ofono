@@ -467,6 +467,7 @@ static gboolean setup_icera(struct modem_info *modem)
 	ofono_modem_set_string(modem->modem, "Aux", aux);
 	ofono_modem_set_string(modem->modem, "Modem", mdm);
 	ofono_modem_set_string(modem->modem, "NetworkInterface", net);
+	ofono_modem_set_string(modem->modem, "Model", modem->model);
 
 	return TRUE;
 }
