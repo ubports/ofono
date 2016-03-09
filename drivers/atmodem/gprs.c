@@ -303,10 +303,6 @@ static void ublox_ureg_notify(GAtResult *result, gpointer user_data)
 	case 5:
 		bearer = 4;
 		break;
-	case 7:
-		/* XXX: reserved - assume none. */
-		bearer = 0;
-		break;
 	case 8:
 		bearer = 1;
 		break;
