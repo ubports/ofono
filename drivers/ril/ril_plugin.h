@@ -132,19 +132,6 @@ void ril_modem_set_online_cb(struct ril_modem *modem, ril_modem_online_cb_t cb,
 #define ril_modem_slot(modem) ((modem)->config.slot)
 #define ril_modem_io(modem) ((modem)->io)
 
-void ril_sim_read_file_linear(struct ofono_sim *sim, int fileid,
-		int record, int length, const unsigned char *path,
-		unsigned int path_len, ofono_sim_read_cb_t cb, void *data);
-void ril_sim_read_file_cyclic(struct ofono_sim *sim, int fileid,
-		int record, int length, const unsigned char *path,
-		unsigned int path_len, ofono_sim_read_cb_t cb, void *data);
-void ril_sim_read_file_transparent(struct ofono_sim *sim, int fileid,
-		int start, int length, const unsigned char *path,
-		unsigned int path_len, ofono_sim_read_cb_t cb, void *data);
-void ril_sim_read_file_info(struct ofono_sim *sim, int fileid,
-		const unsigned char *path, unsigned int path_len,
-		ofono_sim_file_info_cb_t cb, void *data);
-
 int ril_sim_app_type(struct ofono_sim *sim);
 int ril_netreg_check_if_really_roaming(struct ofono_netreg *netreg, gint status);
 
