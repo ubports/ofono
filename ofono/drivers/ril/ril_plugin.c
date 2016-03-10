@@ -83,6 +83,9 @@ struct ril_plugin_priv {
 	struct ril_plugin pub;
 	struct ril_plugin_dbus *dbus;
 	struct ril_data_manager *data_manager;
+	struct ril_mce *mce;
+	gboolean display_on;
+	gulong display_state_change_id;
 	GSList *slots;
 	ril_slot_info_ptr *slots_info;
 	struct ril_slot *voice_slot;
@@ -187,6 +190,29 @@ static void ril_plugin_foreach_slot(struct ril_plugin_priv *plugin,
 	g_slist_foreach(plugin->slots, ril_plugin_foreach_slot_proc, fn);
 }
 
+static void ril_plugin_send_screen_state(struct ril_slot *slot)
+{
+	if (slot->io) {
+		GRilIoRequest *req = grilio_request_sized_new(8);
+		grilio_request_append_int32(req, 1);    /* Number of params */
+		grilio_request_append_int32(req, slot->plugin->display_on);
+		grilio_channel_send_request(slot->io, req,
+				RIL_REQUEST_SCREEN_STATE);
+		grilio_request_unref(req);
+	}
+}
+
+static void ril_plugin_display_state_cb(struct ril_mce *mce, void *user_data)
+{
+	struct ril_plugin_priv *plugin = user_data;
+	const gboolean display_was_on = plugin->display_on;
+
+	plugin->display_on = (mce->display_state != RIL_MCE_DISPLAY_OFF);
+	if (plugin->display_on != display_was_on) {
+		ril_plugin_foreach_slot(plugin, ril_plugin_send_screen_state);
+	}
+}
+
 static void ril_plugin_remove_slot_handler(struct ril_slot *slot, int id)
 {
 	GASSERT(id >= 0 && id<IO_EVENT_COUNT);
@@ -233,11 +259,6 @@ static void ril_plugin_shutdown_slot(struct ril_slot *slot, gboolean kill_io)
 	GASSERT(!slot->sim_watch_id);
 
 	if (kill_io) {
-		if (slot->mce) {
-			ril_mce_free(slot->mce);
-			slot->mce = NULL;
-		}
-
 		if (slot->retry_id) {
 			g_source_remove(slot->retry_id);
 			slot->retry_id = 0;
@@ -848,9 +869,6 @@ static void ril_plugin_slot_connected(struct ril_slot *slot)
 
 	GASSERT(slot->io->connected);
 	GASSERT(!slot->io_event_id[IO_EVENT_CONNECTED]);
-
-	GASSERT(!slot->mce);
-	slot->mce = ril_mce_new(slot->io);
 
 	GASSERT(!slot->imei_req_id);
 	slot->imei_req_id = grilio_channel_send_request_full(slot->io, NULL,
@@ -1508,6 +1526,9 @@ static int ril_plugin_init(void)
 	ril_plugin_init_slots(ril_plugin);
 	ril_plugin->dbus = ril_plugin_dbus_new(&ril_plugin->pub);
 	ril_plugin->data_manager = ril_data_manager_new(ps.dm_flags);
+	ril_plugin->mce = ril_mce_new();
+	ril_plugin->display_on =
+		(ril_plugin->mce->display_state != RIL_MCE_DISPLAY_OFF);
 
 	if (ril_plugin->slots) {
 		/*
@@ -1576,6 +1597,12 @@ static int ril_plugin_init(void)
 	 */
 	ril_plugin_foreach_slot(ril_plugin, ril_plugin_init_io);
 
+	/* Set initial screen state and register for updates */
+	ril_plugin_foreach_slot(ril_plugin, ril_plugin_send_screen_state);
+	ril_plugin->display_state_change_id =
+		ril_mce_add_display_state_changed_handler(ril_plugin->mce,
+				ril_plugin_display_state_cb, ril_plugin);
+
 	/* This will set 'ready' flag if we have no modems at all */
 	ril_plugin_update_ready(ril_plugin);
 	return 0;
@@ -1609,6 +1636,9 @@ static void ril_plugin_exit(void)
 		g_slist_free_full(ril_plugin->slots, ril_plugin_destroy_slot);
 		ril_plugin_dbus_free(ril_plugin->dbus);
 		ril_data_manager_unref(ril_plugin->data_manager);
+		ril_mce_remove_handler(ril_plugin->mce,
+					ril_plugin->display_state_change_id);
+		ril_mce_unref(ril_plugin->mce);
 		g_key_file_free(ril_plugin->storage);
 		g_free(ril_plugin->slots_info);
 		g_free(ril_plugin->default_voice_imsi);
