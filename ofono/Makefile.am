@@ -22,8 +22,8 @@ pkginclude_HEADERS = include/log.h include/plugin.h include/history.h \
 			include/private-network.h include/cdma-netreg.h \
 			include/cdma-provision.h include/handsfree.h \
 			include/handsfree-audio.h \
-			include/sim-mnclength.h \
-			include/siri.h
+			include/handsfree-audio.h include/siri.h \
+			include/netmon.h
 
 nodist_pkginclude_HEADERS = include/version.h
 
