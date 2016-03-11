@@ -1,0 +1,83 @@
+Network Monitor hierarchy
+=========================
+
+Service		org.ofono
+Interface	org.ofono.NetworkMonitor
+Object path	[variable prefix]/{modem0,modem1,...}
+
+Methods		a{sv} GetServingCellInformation()
+
+			Requests the latest serving cell information and basic
+			measurements from oFono.  The returned value is a
+			dictionary with the possible key / values documented
+			below.  The type of cell is given by the 'Technology'
+			property.
+
+			Based on the type of cell, the dictionary will contain
+			additional key/value pairs.  If a given key/value pair
+			is not present, then it is not known or unsupported
+			by the underlying driver.
+
+			Refer to the sections below for which property types
+			are available, their valid value ranges and
+			applicability to different cell types.
+
+
+Network Monitor Property Types
+==============================
+
+string Technology
+
+	Contains the cell type.  Possible values are:
+			"gsm", "umts", "lte"
+
+uint16 LocationAreaCode [optional, gsm, umts]
+
+	Contains the current location area code.  Valid range of values is
+	0-65535.
+
+uint32 CellId [optional, gsm, umts]
+
+	Contains the current network cell id.  Valid range of values is
+	0-65535 for gsm and 0-268435455 in umts.
+
+string MobileNetworkCode [optional, gsm, umts]
+
+	Contains the MNC of the cell.
+
+string MobileCountryCode [optional, gsm, umts]
+
+	Contains the MCC of the cell.
+
+uint16 ARFCN [optional, gsm]
+
+	Contains the Absolute Radio Frequency Channel Number.  Valid range of
+	values is 0-1023.
+
+byte ReceivedSignalStrength [optional, gsm]
+
+	Contains the received signal strength level in dBm.  Refer to <rxlev>
+	in 27.007, Section 8.69 for more details.  Valid range of values is
+	0-63.
+
+byte BSIC [optional, gsm]
+
+	Contains the Base Station Identity Code. Valid range of values is 0-63.
+
+byte BitErrorRate [optional, gsm]
+
+	Contains the bit error rate.  Refer to <ber> in 27.007, Section 8.69
+	for more details.  Valid range of values is 0-7.
+
+uint16 PrimaryScramblingCode [optional, umts]
+
+	Contains the scrambling code.  Valid range of values is 0-512.
+
+byte TimingAdvance [optional, gsm]
+
+	Contains the Timing Advance.  Valid range of values is 0-219.
+
+byte Strength [optional, gsm, umts]
+
+	Contains the signal strength.  Valid values are 0-31.  Refer to <rssi>
+	in 27.007, Section 8.5.
