@@ -47,6 +47,7 @@ static const char *none_prefix[] = { NULL };
 struct ublox_data {
 	GAtChat *modem;
 	GAtChat *aux;
+	enum ofono_vendor vendor_family;
 };
 
 static void ublox_debug(const char *str, void *user_data)
@@ -138,24 +139,56 @@ static void cfun_enable(gboolean ok, GAtResult *result, gpointer user_data)
 static int ublox_enable(struct ofono_modem *modem)
 {
 	struct ublox_data *data = ofono_modem_get_data(modem);
+	const char *model_str = NULL;
+	int model_id;
 
 	DBG("%p", modem);
 
-	data->modem = open_device(modem, "Modem", "Modem: ");
-	if (data->modem == NULL)
+	model_str = ofono_modem_get_string(modem, "Model");
+	if (model_str == NULL)
 		return -EINVAL;
 
-	data->aux = open_device(modem, "Aux", "Aux: ");
-	if (data->aux == NULL) {
-		g_at_chat_unref(data->modem);
-		data->modem = NULL;
-		return -EIO;
+	/*
+	 * Toby L2 devices are more complex and special than previously
+	 * supported U-Blox devices. So they need a vendor of their own.
+	 */
+	model_id = atoi(model_str);
+	switch (model_id) {
+	case 1102:
+		data->vendor_family = OFONO_VENDOR_UBLOX;
+		break;
+	case 1141:
+	case 1146:
+		data->vendor_family = OFONO_VENDOR_UBLOX_TOBY_L2;
+		break;
+	case 1143:
+		DBG("low/medium throughtput profile unsupported");
+	default:
+		DBG("unknown ublox model id %d", model_id);
+		return -EINVAL;
 	}
 
-	g_at_chat_set_slave(data->modem, data->aux);
+	data->aux = open_device(modem, "Aux", "Aux: ");
+	if (data->aux == NULL)
+		return -EINVAL;
 
-	g_at_chat_send(data->modem, "ATE0 +CMEE=1", none_prefix,
-					NULL, NULL, NULL);
+	if (data->vendor_family == OFONO_VENDOR_UBLOX) {
+		data->modem = open_device(modem, "Modem", "Modem: ");
+		if (data->modem == NULL) {
+			g_at_chat_unref(data->aux);
+			data->aux = NULL;
+			return -EIO;
+		}
+
+		g_at_chat_set_slave(data->modem, data->aux);
+
+		g_at_chat_send(data->modem, "ATE0 +CMEE=1", none_prefix,
+						NULL, NULL, NULL);
+	}
+
+	/* The modem can take a while to wake up if just powered on. */
+	g_at_chat_set_wakeup_command(data->aux, "AT\r", 1000, 11000);
+
 	g_at_chat_send(data->aux, "ATE0 +CMEE=1", none_prefix,
 					NULL, NULL, NULL);
 
