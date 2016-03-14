@@ -838,7 +838,7 @@ static gboolean setup_quectel(struct modem_info *modem)
 
 static gboolean setup_ublox(struct modem_info *modem)
 {
-	const char *aux = NULL, *mdm = NULL;
+	const char *aux = NULL, *mdm = NULL, *net = NULL;
 	GSList *list;
 
 	DBG("%s", modem->syspath);
@@ -857,22 +857,40 @@ static gboolean setup_ublox(struct modem_info *modem)
 			mdm = info->devnode;
 			if (aux != NULL)
 				break;
+		/*
+		 * "2/2/1"
+		 *  - a common modem interface both for older models like LISA,
+		 *    and for newer models like TOBY.
+		 * For TOBY-L2, NetworkInterface can be detected for each
+		 * profile:
+		 *  - low-medium throughput profile : 2/6/0
+		 *  - fairly backward-compatible profile : 10/0/0
+		 *  - high throughput profile : 224/1/3
+		 */
 		} else if (g_strcmp0(info->interface, "2/2/1") == 0) {
 			if (g_strcmp0(info->number, "02") == 0)
 				aux = info->devnode;
 			else if (g_strcmp0(info->number, "00") == 0)
 				mdm = info->devnode;
+		} else if (g_strcmp0(info->interface, "2/6/0") == 0 ||
+			   g_strcmp0(info->interface, "10/0/0") == 0 ||
+			   g_strcmp0(info->interface, "224/1/3") == 0) {
+			net = info->devnode;
 		}
 	}
 
-	if (aux == NULL || mdm == NULL)
+	/* Abort only if both interfaces are NULL, as it's highly possible that
+	 * only one of 2 interfaces is available for U-blox modem.
+	 */
+	if (aux == NULL && mdm == NULL)
 		return FALSE;
 
-	DBG("aux=%s modem=%s", aux, mdm);
+	DBG("aux=%s modem=%s net=%s", aux, mdm, net);
 
 	ofono_modem_set_string(modem->modem, "Aux", aux);
 	ofono_modem_set_string(modem->modem, "Modem", mdm);
 	ofono_modem_set_string(modem->modem, "Model", modem->model);
+	ofono_modem_set_string(modem->modem, "NetworkInterface", net);
 
 	return TRUE;
 }
