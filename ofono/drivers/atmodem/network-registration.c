@@ -1580,17 +1580,28 @@ static inline ofono_bool_t append_cmer_element(char *buf, int *len, int cap,
 static ofono_bool_t build_cmer_string(char *buf, int *cmer_opts,
 					struct netreg_data *nd)
 {
-	const char *mode;
+	const char *ind;
 	int len = sprintf(buf, "AT+CMER=");
+	const char *mode;
 
 	DBG("");
+
+	switch (nd->vendor) {
+	case OFONO_VENDOR_UBLOX_TOBY_L2:
+		/* UBX-13002752 R33: TOBY L2 doesn't support mode 2 and 3 */
+		mode = "1";
+		break;
+	default:
+		mode = "3";
+		break;
+	}
 
 	/*
 	 * Forward unsolicited result codes directly to the TE;
 	 * TA‑TE link specific inband technique used to embed result codes and
 	 * data when TA is in on‑line data mode
 	 */
-	if (!append_cmer_element(buf, &len, cmer_opts[0], "3", FALSE))
+	if (!append_cmer_element(buf, &len, cmer_opts[0], mode, FALSE))
 		return FALSE;
 
 	/* No keypad event reporting */
@@ -1607,14 +1618,14 @@ static ofono_bool_t build_cmer_string(char *buf, int *cmer_opts,
 		 * Telit does not support mode 1.
 		 * All indicator events shall be directed from TA to TE.
 		 */
-		mode = "2";
+		ind = "2";
 		break;
 	default:
 		/*
 		 * Only those indicator events, which are not caused by +CIND
 		 * shall be indicated by the TA to the TE.
 		 */
-		mode = "1";
+		ind = "1";
 		break;
 	}
 
@@ -1623,7 +1634,7 @@ static ofono_bool_t build_cmer_string(char *buf, int *cmer_opts,
 	 * <ind> indicates the indicator order number (as specified for +CIND)
 	 * and <value> is the new value of indicator.
 	 */
-	if (!append_cmer_element(buf, &len, cmer_opts[3], mode, TRUE))
+	if (!append_cmer_element(buf, &len, cmer_opts[3], ind, TRUE))
 		return FALSE;
 
 	return TRUE;
