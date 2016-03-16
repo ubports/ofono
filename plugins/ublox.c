@@ -267,7 +267,7 @@ static void ublox_pre_sim(struct ofono_modem *modem)
 
 	DBG("%p", modem);
 
-	ofono_devinfo_create(modem, data->vendor_family, "atmodem", data->aux);
+	ofono_devinfo_create(modem, 0, "atmodem", data->aux);
 	sim = ofono_sim_create(modem, data->vendor_family, "atmodem",
 					data->aux);
 
