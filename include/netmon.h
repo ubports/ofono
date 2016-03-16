@@ -59,7 +59,7 @@ enum ofono_netmon_info {
 	OFONO_NETMON_INFO_RSSI, /* int */
 	OFONO_NETMON_INFO_TIMING_ADVANCE, /* int */
 	OFONO_NETMON_INFO_PSC, /* int */
-	OFONO_NETMON_INVALID,
+	OFONO_NETMON_INFO_INVALID,
 };
 
 /*
@@ -71,7 +71,7 @@ enum ofono_netmon_info {
  *					OFONO_NETMON_INFO_CI, ci,
  *					OFONO_NETMON_INFO_RSSI, rssi,
  *					OFONO_NETMON_INFO_RXLEV, rxlev,
- *					OFONO_NETMON_INVALID);
+ *					OFONO_NETMON_INFO_INVALID);
  */
 void ofono_netmon_serving_cell_notify(struct ofono_netmon *netmon,
 					enum ofono_netmon_cell_type type,
