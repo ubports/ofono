@@ -45,6 +45,7 @@
 #include <ofono/gprs.h>
 #include <ofono/gprs-context.h>
 #include <ofono/radio-settings.h>
+#include <ofono/ussd.h>
 
 #include <gril/gril.h>
 
