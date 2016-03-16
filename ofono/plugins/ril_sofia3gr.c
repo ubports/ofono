@@ -169,6 +169,7 @@ static void ril_post_online(struct ofono_modem *modem)
 
 	ofono_netreg_create(modem, 0, "rilmodem", rd->ril);
 	ofono_radio_settings_create(modem, 0, "rilmodem", rd->ril);
+	ofono_ussd_create(modem, 0, "rilmodem", rd->ril);
 }
 
 static void ril_set_online_cb(struct ril_msg *message, gpointer user_data)
