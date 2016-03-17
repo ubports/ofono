@@ -375,6 +375,13 @@ builtin_sources += drivers/atmodem/atutil.h \
 			drivers/speedupmodem/speedupmodem.c \
 			drivers/speedupmodem/ussd.c
 
+builtin_modules += ubloxmodem
+builtin_sources += drivers/atmodem/atutil.h \
+			drivers/ubloxmodem/ubloxmodem.h \
+			drivers/ubloxmodem/ubloxmodem.c \
+			drivers/ubloxmodem/gprs-context.c
+
+
 if PHONESIM
 builtin_modules += phonesim
 builtin_sources += plugins/phonesim.c
