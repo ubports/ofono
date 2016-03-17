@@ -44,9 +44,17 @@
 
 static const char *none_prefix[] = { NULL };
 
+enum supported_models {
+	SARA_G270			= 1102,
+	TOBYL2_COMPATIBLE_MODE 		= 1141,
+	TOBYL2_MEDIUM_THROUGHPUT_MODE 	= 1143,
+	TOBYL2_HIGH_THROUGHPUT_MODE 	= 1146,
+};
+
 struct ublox_data {
 	GAtChat *modem;
 	GAtChat *aux;
+	int model_id;
 	enum ofono_vendor vendor_family;
 };
 
@@ -140,7 +148,6 @@ static int ublox_enable(struct ofono_modem *modem)
 {
 	struct ublox_data *data = ofono_modem_get_data(modem);
 	const char *model_str = NULL;
-	int model_id;
 
 	DBG("%p", modem);
 
@@ -152,19 +159,20 @@ static int ublox_enable(struct ofono_modem *modem)
 	 * Toby L2 devices are more complex and special than previously
 	 * supported U-Blox devices. So they need a vendor of their own.
 	 */
-	model_id = atoi(model_str);
-	switch (model_id) {
-	case 1102:
+	data->model_id = atoi(model_str);
+
+	switch (data->model_id) {
+	case SARA_G270:
 		data->vendor_family = OFONO_VENDOR_UBLOX;
 		break;
-	case 1141:
-	case 1146:
+	case TOBYL2_COMPATIBLE_MODE:
+	case TOBYL2_HIGH_THROUGHPUT_MODE:
 		data->vendor_family = OFONO_VENDOR_UBLOX_TOBY_L2;
 		break;
-	case 1143:
+	case TOBYL2_MEDIUM_THROUGHPUT_MODE:
 		DBG("low/medium throughtput profile unsupported");
 	default:
-		DBG("unknown ublox model id %d", model_id);
+		DBG("unknown ublox model id %d", data->model_id);
 		return -EINVAL;
 	}
 
