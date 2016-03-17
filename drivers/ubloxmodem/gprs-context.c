@@ -230,10 +230,44 @@ static void cgdcont_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	CALLBACK_WITH_FAILURE(gcd->cb, gcd->cb_data);
 }
 
-static void ublox_send_cgdcont(struct ofono_gprs_context *gc, const char *apn)
+#define UBLOX_MAX_USER_LEN 50
+#define UBLOX_MAX_PASS_LEN 50
+
+static void ublox_send_uauthreq(struct ofono_gprs_context *gc,
+				const char *username, const char *password,
+				enum ofono_gprs_auth_method auth_method)
+
+{
+	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
+	char buf[UBLOX_MAX_USER_LEN + UBLOX_MAX_PASS_LEN + 32];
+	unsigned auth;
+
+	switch (auth_method) {
+	case OFONO_GPRS_AUTH_METHOD_PAP:
+		auth = 1;
+		break;
+	case OFONO_GPRS_AUTH_METHOD_CHAP:
+		auth = 2;
+		break;
+	default:
+		ofono_error("Unsupported auth type %u", auth_method);
+		return;
+	}
+
+	snprintf(buf, sizeof(buf), "AT+UAUTHREQ=%u,%u,\"%s\",\"%s\"",
+			gcd->active_context, auth, username, password);
+
+	/* If this failed, we will see it during context activation. */
+	g_at_chat_send(gcd->chat, buf, none_prefix, NULL, NULL, NULL);
+}
+
+static void ublox_send_cgdcont(struct ofono_gprs_context *gc, const char *apn,
+				const char *username, const char *password,
+				enum ofono_gprs_auth_method auth_method)
 {
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 	char buf[OFONO_GPRS_MAX_APN_LENGTH + 128];
+	size_t u_len, p_len;
 	int len;
 
 	len = snprintf(buf, sizeof(buf), "AT+CGDCONT=%u,\"IP\"",
@@ -243,9 +277,26 @@ static void ublox_send_cgdcont(struct ofono_gprs_context *gc, const char *apn)
 		snprintf(buf + len, sizeof(buf) - len - 3, ",\"%s\"", apn);
 
 	if (g_at_chat_send(gcd->chat, buf, none_prefix,
-				cgdcont_cb, gc, NULL) > 0)
-		return;
+				cgdcont_cb, gc, NULL) == 0)
+		goto error;
 
+	u_len = strlen(username);
+	p_len = strlen(password);
+
+	if (u_len && p_len) {
+		if (u_len >= UBLOX_MAX_USER_LEN ||
+			p_len >= UBLOX_MAX_PASS_LEN) {
+			ofono_error("Toby L2: user or password length too big");
+
+			goto error;
+		}
+
+		ublox_send_uauthreq(gc, username, password, auth_method);
+	}
+
+	return;
+
+error:
 	CALLBACK_WITH_FAILURE(gcd->cb, gcd->cb_data);
 }
 
@@ -274,7 +325,8 @@ static void ublox_gprs_activate_primary(struct ofono_gprs_context *gc,
 	gcd->cb = cb;
 	gcd->cb_data = data;
 
-	ublox_send_cgdcont(gc, ctx->apn);
+	ublox_send_cgdcont(gc, ctx->apn, ctx->username, ctx->password,
+				ctx->auth_method);
 }
 
 static void cgact_disable_cb(gboolean ok, GAtResult *result, gpointer user_data)
