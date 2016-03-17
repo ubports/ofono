@@ -285,12 +285,17 @@ static unsigned int gprs_cid_alloc(struct ofono_gprs *gprs)
 	return idmap_alloc(gprs->cid_map);
 }
 
+static void gprs_cid_take(struct ofono_gprs *gprs, unsigned int id)
+{
+	idmap_take(gprs->cid_map, id);
+}
+
 static void gprs_cid_release(struct ofono_gprs *gprs, unsigned int id)
 {
 	idmap_put(gprs->cid_map, id);
 }
 
-static gboolean assign_context(struct pri_context *ctx)
+static gboolean assign_context(struct pri_context *ctx, int use_cid)
 {
 	struct idmap *cidmap = ctx->gprs->cid_map;
 	GSList *l;
@@ -298,7 +303,12 @@ static gboolean assign_context(struct pri_context *ctx)
 	if (cidmap == NULL)
 		return FALSE;
 
-	ctx->context.cid = gprs_cid_alloc(ctx->gprs);
+	if (use_cid > 0) {
+		gprs_cid_take(ctx->gprs, use_cid);
+		ctx->context.cid = use_cid;
+	} else
+		ctx->context.cid = gprs_cid_alloc(ctx->gprs);
+
 	if (ctx->context.cid == 0)
 		return FALSE;
 
@@ -1447,7 +1457,7 @@ static DBusMessage *pri_set_property(DBusConnection *conn,
 		if (ctx->gprs->flags & GPRS_FLAG_ATTACHING)
 			return __ofono_error_attach_in_progress(msg);
 
-		if (value && assign_context(ctx) == FALSE)
+		if (value && assign_context(ctx, 0) == FALSE)
 			return __ofono_error_not_implemented(msg);
 
 		gc = ctx->context_driver;
