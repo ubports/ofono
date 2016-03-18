@@ -35,6 +35,7 @@
 #include <ofono/log.h>
 #include <ofono/modem.h>
 #include <ofono/gprs-context.h>
+#include <ofono/gprs.h>
 
 #include "gatchat.h"
 #include "gatresult.h"
@@ -179,6 +180,21 @@ static void ublox_read_settings(struct ofono_gprs_context *gc)
 
 	if (ublox_send_cgcontrdp(gc) < 0)
 		CALLBACK_WITH_FAILURE(gcd->cb, gcd->cb_data);
+}
+
+static void ublox_gprs_read_settings(struct ofono_gprs_context *gc,
+					unsigned int cid,
+					ofono_gprs_context_cb_t cb, void *data)
+{
+	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
+
+	DBG("cid %u", cid);
+
+	gcd->active_context = cid;
+	gcd->cb = cb;
+	gcd->cb_data = data;
+
+	ublox_read_settings(gc);
 }
 
 static void cgact_enable_cb(gboolean ok, GAtResult *result, gpointer user_data)
@@ -379,16 +395,11 @@ static void cgev_notify(GAtResult *result, gpointer user_data)
 	if (!g_at_result_iter_next_unquoted_string(&iter, &event))
 		return;
 
-	if (g_str_has_prefix(event, "NW PDN DEACT")) {
-		if (!g_at_result_iter_skip_next(&iter))
-			return;
-	} else if (g_str_has_prefix(event, "NW DEACT") == FALSE)
-		return;
-
-	if (!g_at_result_iter_skip_next(&iter))
-		return;
-
-	if (!g_at_result_iter_next_number(&iter, &cid))
+	if (g_str_has_prefix(event, "NW PDN DEACT"))
+		sscanf(event, "%*s %*s %*s %u", &cid);
+	else if (g_str_has_prefix(event, "NW DEACT"))
+		sscanf(event, "%*s %*s %u", &cid);
+	else
 		return;
 
 	DBG("cid %d", cid);
@@ -440,6 +451,7 @@ static struct ofono_gprs_context_driver driver = {
 	.remove			= ublox_gprs_context_remove,
 	.activate_primary	= ublox_gprs_activate_primary,
 	.deactivate_primary	= ublox_gprs_deactivate_primary,
+	.read_settings		= ublox_gprs_read_settings,
 };
 
 void ublox_gprs_context_init(void)
