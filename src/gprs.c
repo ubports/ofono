@@ -293,6 +293,11 @@ static void gprs_cid_release(struct ofono_gprs *gprs, unsigned int id)
 	idmap_put(gprs->cid_map, id);
 }
 
+static gboolean gprs_cid_taken(struct ofono_gprs *gprs, unsigned int id)
+{
+	return idmap_find(gprs->cid_map, id) != 0;
+}
+
 static gboolean assign_context(struct pri_context *ctx, int use_cid)
 {
 	struct idmap *cidmap = ctx->gprs->cid_map;
@@ -939,6 +944,39 @@ static void pri_deactivate_callback(const struct ofono_error *error, void *data)
 
 	value = ctx->active;
 	ofono_dbus_signal_property_changed(conn, ctx->path,
+					OFONO_CONNECTION_CONTEXT_INTERFACE,
+					"Active", DBUS_TYPE_BOOLEAN, &value);
+}
+
+static void pri_read_settings_callback(const struct ofono_error *error,
+					void *data)
+{
+	struct pri_context *pri_ctx = data;
+	struct ofono_gprs_context *gc = pri_ctx->context_driver;
+	DBusConnection *conn = ofono_dbus_get_connection();
+	dbus_bool_t value;
+
+	DBG("%p", pri_ctx);
+
+	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
+		DBG("Reading context settings failed with error: %s",
+				telephony_error_to_str(error));
+		context_settings_free(pri_ctx->context_driver->settings);
+		release_context(pri_ctx);
+		return;
+	}
+
+	pri_ctx->active = TRUE;
+
+	if (gc->settings->interface != NULL) {
+		pri_ifupdown(gc->settings->interface, TRUE);
+
+		pri_context_signal_settings(pri_ctx, gc->settings->ipv4 != NULL,
+						gc->settings->ipv6 != NULL);
+	}
+
+	value = pri_ctx->active;
+	ofono_dbus_signal_property_changed(conn, pri_ctx->path,
 					OFONO_CONNECTION_CONTEXT_INTERFACE,
 					"Active", DBUS_TYPE_BOOLEAN, &value);
 }
@@ -1840,6 +1878,35 @@ static void write_context_settings(struct ofono_gprs *gprs,
 	}
 }
 
+static struct pri_context *find_usable_context(struct ofono_gprs *gprs,
+					const char *apn)
+{
+	GSList *l;
+	struct pri_context *pri_ctx;
+
+	/* Look for matching APN: */
+	for (l = gprs->contexts; l; l = l->next) {
+		pri_ctx = l->data;
+
+		/* Looking only at prefix for the LTE case when a user APN is
+		 * web.provider.com but it apepars as
+		 * web.provider.com.mncX.mccY.gprs .
+		 */
+		if (g_str_has_prefix(apn, pri_ctx->context.apn))
+			return pri_ctx;
+	}
+
+	/* Look for a provision failed pri context: */
+	for (l = gprs->contexts; l; l = l->next) {
+		pri_ctx = l->data;
+
+		if (pri_ctx->context.apn == NULL)
+			return pri_ctx;
+	}
+
+	return NULL;
+}
+
 static struct pri_context *add_context(struct ofono_gprs *gprs,
 					const char *name,
 					enum ofono_gprs_context_type type)
@@ -1881,6 +1948,53 @@ static struct pri_context *add_context(struct ofono_gprs *gprs,
 	gprs->contexts = g_slist_append(gprs->contexts, context);
 
 	return context;
+}
+
+void ofono_gprs_cid_activated(struct ofono_gprs  *gprs, unsigned int cid,
+				const char *apn)
+{
+	struct pri_context *pri_ctx;
+	struct ofono_gprs_context *gc;
+
+	DBG("");
+
+	if (gprs_cid_taken(gprs, cid)) {
+		DBG("cid %u already activated", cid);
+		return;
+	}
+
+	pri_ctx = find_usable_context(gprs, apn);
+
+	if (!pri_ctx) {
+		pri_ctx = add_context(gprs, apn,
+					OFONO_GPRS_CONTEXT_TYPE_INTERNET);
+		if (!pri_ctx) {
+			ofono_error("Can't find/create automatic context %d "
+					"with APN %s.", cid, apn);
+			return;
+		}
+	}
+
+	if (assign_context(pri_ctx, cid) == FALSE) {
+		ofono_warn("Can't assign context to driver for APN.");
+		release_context(pri_ctx);
+		return;
+	}
+
+	gc = pri_ctx->context_driver;
+
+	if (gc->driver->read_settings == NULL) {
+		ofono_warn("Context activated for driver that doesn't support "
+				"automatic context activation.");
+		release_context(pri_ctx);
+	}
+
+	if (strlen(pri_ctx->context.apn) == 0) {
+		DBusConnection *conn = ofono_dbus_get_connection();
+		pri_set_apn(pri_ctx, conn, NULL, apn);
+	}
+
+	gc->driver->read_settings(gc, cid, pri_read_settings_callback, pri_ctx);
 }
 
 static void send_context_added_signal(struct ofono_gprs *gprs,
