@@ -49,6 +49,7 @@ static const char *none_prefix[] = { NULL };
 struct gprs_data {
 	GAtChat *chat;
 	unsigned int vendor;
+	unsigned int last_auto_context_id;
 };
 
 static void at_cgatt_cb(gboolean ok, GAtResult *result, gpointer user_data)
@@ -141,6 +142,48 @@ static void at_gprs_registration_status(struct ofono_gprs *gprs,
 	CALLBACK_WITH_FAILURE(cb, -1, data);
 }
 
+static void at_cgdcont_read_cb(gboolean ok, GAtResult *result,
+				gpointer user_data)
+{
+	struct ofono_gprs *gprs = user_data;
+	struct gprs_data *gd = ofono_gprs_get_data(gprs);
+	int activated_cid = gd->last_auto_context_id;
+	const char *apn = NULL;
+	GAtResultIter iter;
+
+	DBG("ok %d", ok);
+
+	if (!ok) {
+		ofono_warn("Can't read CGDCONT contexts.");
+		return;
+	}
+
+	g_at_result_iter_init(&iter, result);
+
+	while (g_at_result_iter_next(&iter, "+CGDCONT:")) {
+		int read_cid;
+
+		if (!g_at_result_iter_next_number(&iter, &read_cid))
+			break;
+
+		if (read_cid != activated_cid)
+			continue;
+
+		/* ignore protocol */
+		g_at_result_iter_skip_next(&iter);
+
+		g_at_result_iter_next_string(&iter, &apn);
+
+		break;
+	}
+
+	if (apn)
+		ofono_gprs_cid_activated(gprs, activated_cid, apn);
+	else
+		ofono_warn("cid %u: Received activated but no apn present",
+				activated_cid);
+}
+
 static void cgreg_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_gprs *gprs = user_data;
@@ -157,6 +200,7 @@ static void cgreg_notify(GAtResult *result, gpointer user_data)
 static void cgev_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_gprs *gprs = user_data;
+	struct gprs_data *gd = ofono_gprs_get_data(gprs);
 	GAtResultIter iter;
 	const char *event;
 
@@ -172,6 +216,11 @@ static void cgev_notify(GAtResult *result, gpointer user_data)
 			g_str_equal(event, "ME DETACH")) {
 		ofono_gprs_detached_notify(gprs);
 		return;
+	} else if (g_str_has_prefix(event, "ME PDN ACT")) {
+		sscanf(event, "%*s %*s %*s %u", &gd->last_auto_context_id);
+
+		g_at_chat_send(gd->chat, "AT+CGDCONT?", cgdcont_prefix,
+				at_cgdcont_read_cb, gprs, NULL);
 	}
 }
 
