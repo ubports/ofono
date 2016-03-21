@@ -28,7 +28,7 @@
 #define TYPE_LOCAL              129
 #define TYPE_INTERNATIONAL      145
 
-static unsigned char path[4] = {0x3F, 0x00, 0x7F, 0x10};
+static unsigned char sim_path[4] = {0x3F, 0x00, 0x7F, 0x10};
 
 enum ril_sms_events {
 	SMS_EVENT_NEW_SMS,
@@ -42,6 +42,7 @@ struct ril_sms {
 	GRilIoQueue *q;
 	struct ril_modem *modem;
 	struct ofono_sms *sms;
+	struct ofono_sim_context *sim_context;
 	gulong event_id[SMS_EVENT_COUNT];
 	guint timer_id;
 };
@@ -366,11 +367,10 @@ static void ril_request_delete_sms_om_sim(struct ril_sms *sd, int record)
 	grilio_request_unref(req);
 }
 
-static void ril_sms_on_sim_cb(const struct ofono_error *error,
-					const unsigned char *sdata,
-					int length, void *data)
+static void ril_sms_on_sim_cb(int ok, int total_length, int record,
+		const unsigned char *sdata, int length, void *userdata)
 {
-	struct ril_sms_on_sim_req *cbd = data;
+	struct ril_sms_on_sim_req *cbd = userdata;
 	struct ril_sms *sd = cbd->sd;
 
 	/*
@@ -383,7 +383,7 @@ static void ril_sms_on_sim_cb(const struct ofono_error *error,
 	 * the read length to take into account this read octet in order
 	 * to calculate the proper tpdu length.
 	 */
-	if (error->type == OFONO_ERROR_TYPE_NO_ERROR) {
+	if (ok) {
 		unsigned int smsc_len = sdata[1] + 1;
 		ofono_sms_deliver_notify(sd->sms, sdata + 1, length - 1,
 						length - smsc_len - 1);
@@ -409,10 +409,15 @@ static void ril_sms_on_sim(GRilIoChannel *io, guint ril_event,
 		grilio_parser_get_int32(&rilp, &data_len) && data_len > 0 &&
 		grilio_parser_get_int32(&rilp, &rec)) {
 		DBG("rec %d", rec);
-		ril_sim_read_file_linear(sim, SIM_EFSMS_FILEID, rec,
-				EFSMS_LENGTH, path, sizeof(path),
-				ril_sms_on_sim_cb,
-				ril_sms_on_sim_req_new(sd,rec));
+		if (sd->sim_context) {
+			ofono_sim_read_record(sd->sim_context,
+					SIM_EFSMS_FILEID,
+					OFONO_SIM_FILE_STRUCTURE_FIXED,
+					rec, EFSMS_LENGTH,
+					sim_path, sizeof(sim_path),
+					ril_sms_on_sim_cb,
+					ril_sms_on_sim_req_new(sd,rec));
+		}
 	}
 }
 
@@ -444,14 +449,18 @@ static int ril_sms_probe(struct ofono_sms *sms, unsigned int vendor,
 								void *data)
 {
 	struct ril_modem *modem = data;
+	struct ofono_sim *sim = ril_modem_ofono_sim(modem);
 	struct ril_sms *sd = g_new0(struct ril_sms, 1);
 
 	sd->modem = modem;
 	sd->sms = sms;
 	sd->io = grilio_channel_ref(ril_modem_io(modem));
+	sd->sim_context = ofono_sim_context_create(sim);
 	sd->q = grilio_queue_new(sd->io);
 	sd->timer_id = g_idle_add(ril_sms_register, sd);
 	ofono_sms_set_data(sms, sd);
+
+	GASSERT(sd->sim_context);
 	return 0;
 }
 
@@ -462,6 +471,10 @@ static void ril_sms_remove(struct ofono_sms *sms)
 
 	DBG("");
 	ofono_sms_set_data(sms, NULL);
+
+	if (sd->sim_context) {
+		ofono_sim_context_free(sd->sim_context);
+	}
 
 	for (i=0; i<G_N_ELEMENTS(sd->event_id); i++) {
 		grilio_channel_remove_handler(sd->io, sd->event_id[i]);

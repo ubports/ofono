@@ -67,7 +67,6 @@
 struct ril_sim {
 	GRilIoChannel *io;
 	GRilIoQueue *q;
-	GRilIoQueue *q2;
 	GList *pin_cbd_list;
 	struct ofono_sim *sim;
 	struct ril_sim_card *card;
@@ -386,36 +385,19 @@ static guint ril_sim_request_io(struct ril_sim *sd, GRilIoQueue *q, int fileid,
 	return id;
 }
 
-static void ril_sim_internal_read_file_info(struct ril_sim *sd, GRilIoQueue *q,
-		int fileid, const unsigned char *path, unsigned int path_len,
-		ofono_sim_file_info_cb_t cb, void *data)
-{
-	if (!sd || !ril_sim_request_io(sd, q, fileid, CMD_GET_RESPONSE,
-			0, 0, 15, path, path_len, ril_sim_file_info_cb,
-					ril_sim_cbd_new(sd, cb, data))) {
-		struct ofono_error error;
-		cb(ril_error_failure(&error), -1, -1, -1, NULL,
-			EF_STATUS_INVALIDATED, data);
-	}
-}
-
 static void ril_sim_ofono_read_file_info(struct ofono_sim *sim, int fileid,
 		const unsigned char *path, unsigned int len,
 		ofono_sim_file_info_cb_t cb, void *data)
 {
 	struct ril_sim *sd = ril_sim_get_data(sim);
 
-	ril_sim_internal_read_file_info(sd, sd->q, fileid, path, len, cb, data);
-}
-
-void ril_sim_read_file_info(struct ofono_sim *sim, int fileid,
-		const unsigned char *path, unsigned int path_len,
-		ofono_sim_file_info_cb_t cb, void *data)
-{
-	struct ril_sim *sd = ril_sim_get_data(sim);
-
-	ril_sim_internal_read_file_info(sd, sd->q2, fileid, path, path_len,
-								cb, data);
+	if (!sd || !ril_sim_request_io(sd, sd->q, fileid, CMD_GET_RESPONSE,
+			0, 0, 15, path, len, ril_sim_file_info_cb,
+					ril_sim_cbd_new(sd, cb, data))) {
+		struct ofono_error error;
+		cb(ril_error_failure(&error), -1, -1, -1, NULL,
+			EF_STATUS_INVALIDATED, data);
+	}
 }
 
 static void ril_sim_read_cb(GRilIoChannel *io, int status,
@@ -458,42 +440,14 @@ static void ril_sim_read(struct ril_sim *sd, GRilIoQueue *q, int fileid,
 	}
 }
 
-static inline void ril_sim_internal_read_file_transparent(struct ril_sim *sd,
-		GRilIoQueue *q, int fileid, int start, int length,
-		const unsigned char *path, unsigned int path_len,
-		ofono_sim_read_cb_t cb, void *data)
-{
-	ril_sim_read(sd, q, fileid, CMD_READ_BINARY, (start >> 8),
-			(start & 0xff), length, path, path_len, cb, data);
-}
-
 static void ril_sim_ofono_read_file_transparent(struct ofono_sim *sim,
 		int fileid, int start, int length, const unsigned char *path,
 		unsigned int path_len, ofono_sim_read_cb_t cb, void *data)
 {
 	struct ril_sim *sd = ril_sim_get_data(sim);
 
-	ril_sim_internal_read_file_transparent(sd, sd->q, fileid, start, length,
-						path, path_len, cb, data);
-}
-
-void ril_sim_read_file_transparent(struct ofono_sim *sim, int fileid,
-		int start, int length, const unsigned char *path,
-		unsigned int path_len, ofono_sim_read_cb_t cb, void *data)
-{
-	struct ril_sim *sd = ril_sim_get_data(sim);
-
-	ril_sim_internal_read_file_transparent(sd, sd->q2, fileid, start,
-					length, path, path_len, cb, data);
-}
-
-static inline void ril_sim_internal_read_file_linear(struct ril_sim *sd,
-		GRilIoQueue *q, int fileid, int record, int length,
-		const unsigned char *path, unsigned int path_len,
-		ofono_sim_read_cb_t cb, void *data)
-{
-	ril_sim_read(sd, q, fileid, CMD_READ_RECORD, record, 4, length,
-						path, path_len, cb, data);
+	ril_sim_read(sd, sd->q, fileid, CMD_READ_BINARY, (start >> 8),
+			(start & 0xff), length, path, path_len, cb, data);
 }
 
 static void ril_sim_ofono_read_file_linear(struct ofono_sim *sim, int fileid,
@@ -502,27 +456,8 @@ static void ril_sim_ofono_read_file_linear(struct ofono_sim *sim, int fileid,
 {
 	struct ril_sim *sd = ril_sim_get_data(sim);
 
-	ril_sim_internal_read_file_linear(sd, sd->q, fileid, record, length,
+	ril_sim_read(sd, sd->q, fileid, CMD_READ_RECORD, record, 4, length,
 						path, path_len, cb, data);
-}
-
-void ril_sim_read_file_linear(struct ofono_sim *sim, int fileid,
-		int record, int length, const unsigned char *path,
-		unsigned int path_len, ofono_sim_read_cb_t cb, void *data)
-{
-	struct ril_sim *sd = ril_sim_get_data(sim);
-
-	ril_sim_internal_read_file_linear(sd, sd->q2, fileid, record, length,
-						path, path_len, cb, data);
-}
-
-void ril_sim_read_file_cyclic(struct ofono_sim *sim, int fileid,
-		int rec, int length, const unsigned char *path,
-		unsigned int path_len, ofono_sim_read_cb_t cb, void *data)
-{
-	/* Hmmm... Is this right? */
-	ril_sim_read_file_linear(sim, fileid, rec, length, path, path_len,
-								cb, data);
 }
 
 static void ril_sim_ofono_read_file_cyclic(struct ofono_sim *sim, int fileid,
@@ -1045,18 +980,7 @@ static int ril_sim_probe(struct ofono_sim *sim, unsigned int vendor,
 	sd->slot = ril_modem_slot(modem);
 	sd->io = grilio_channel_ref(ril_modem_io(modem));
 	sd->card = ril_sim_card_ref(modem->sim_card);
-
-	/* NB: One queue is used for the requests originated from the ofono
-	 * core, and the second one if for the requests initiated internally
-	 * by the RIL code.
-	 *
-	 * The difference is that when SIM card is removed, ofono requests
-	 * are cancelled without invoking the completion callbacks (otherwise
-	 * ofono would crash) while our completion callbacks have to be
-	 * notified in this case (otherwise we would leak memory)
-	 */
 	sd->q = grilio_queue_new(sd->io);
-	sd->q2 = grilio_queue_new(sd->io);
 
 	DBG("[%u]", sd->slot);
 
@@ -1077,7 +1001,6 @@ static void ril_sim_remove(struct ofono_sim *sim)
 	DBG("[%u]", sd->slot);
 	g_list_free_full(sd->pin_cbd_list, ril_sim_pin_cbd_list_free_cb);
 	grilio_queue_cancel_all(sd->q, FALSE);
-	grilio_queue_cancel_all(sd->q2, TRUE);
 	ofono_sim_set_data(sim, NULL);
 
 	if (sd->idle_id) {
@@ -1093,7 +1016,6 @@ static void ril_sim_remove(struct ofono_sim *sim)
 
 	grilio_channel_unref(sd->io);
 	grilio_queue_unref(sd->q);
-	grilio_queue_unref(sd->q2);
 	g_free(sd);
 }
 
