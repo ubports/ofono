@@ -104,6 +104,11 @@ struct ril_sim_info_dbus *ril_sim_info_dbus_new(struct ril_modem *md,
 						struct ril_sim_info *info);
 void ril_sim_info_dbus_free(struct ril_sim_info_dbus *dbus);
 
+struct ril_cell_info_dbus;
+struct ril_cell_info_dbus *ril_cell_info_dbus_new(struct ril_modem *md,
+						struct ril_cell_info *info);
+void ril_cell_info_dbus_free(struct ril_cell_info_dbus *dbus);
+
 struct ril_plugin_dbus;
 struct ril_plugin_dbus *ril_plugin_dbus_new(struct ril_plugin *plugin);
 void ril_plugin_dbus_free(struct ril_plugin_dbus *dbus);

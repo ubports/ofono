@@ -47,6 +47,7 @@ struct ril_network;
 struct ril_sim_card;
 struct ril_sim_info;
 struct ril_sim_settings;
+struct ril_cell_info;
 
 struct ril_slot_config {
 	guint slot;

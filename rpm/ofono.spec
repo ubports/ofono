@@ -10,7 +10,7 @@ Source:     %{name}-%{version}.tar.bz2
 Requires:   dbus
 Requires:   systemd
 Requires:   ofono-configs
-Requires:   libgrilio >= 1.0.6
+Requires:   libgrilio >= 1.0.8
 Requires:   libglibutil >= 1.0.6
 Requires(preun): systemd
 Requires(post): systemd
@@ -21,7 +21,7 @@ BuildRequires:  pkgconfig(libudev) >= 145
 BuildRequires:  pkgconfig(bluez) >= 4.85
 BuildRequires:  pkgconfig(mobile-broadband-provider-info)
 BuildRequires:  pkgconfig(libwspcodec) >= 2.0
-BuildRequires:  pkgconfig(libgrilio) >= 1.0.6
+BuildRequires:  pkgconfig(libgrilio) >= 1.0.8
 BuildRequires:  pkgconfig(libglibutil) >= 1.0.6
 BuildRequires:  libtool
 BuildRequires:  automake
