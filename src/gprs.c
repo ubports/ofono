@@ -1789,12 +1789,27 @@ static void release_active_contexts(struct ofono_gprs *gprs)
 	}
 }
 
+static void gprs_set_attached_property(struct ofono_gprs *gprs,
+					ofono_bool_t attached)
+{
+	const char *path;
+	DBusConnection *conn = ofono_dbus_get_connection();
+	dbus_bool_t value = attached;
+
+	if (gprs->attached == attached)
+		return;
+
+	gprs->attached = attached;
+
+	path = __ofono_atom_get_path(gprs->atom);
+	ofono_dbus_signal_property_changed(conn, path,
+				OFONO_CONNECTION_MANAGER_INTERFACE,
+				"Attached", DBUS_TYPE_BOOLEAN, &value);
+}
+
 static void gprs_attached_update(struct ofono_gprs *gprs)
 {
-	DBusConnection *conn = ofono_dbus_get_connection();
-	const char *path;
 	ofono_bool_t attached;
-	dbus_bool_t value;
 
 	attached = gprs->driver_attached &&
 		(gprs->status == NETWORK_REGISTRATION_STATUS_REGISTERED ||
@@ -1817,13 +1832,7 @@ static void gprs_attached_update(struct ofono_gprs *gprs)
 		return;
 	}
 
-	gprs->attached = attached;
-
-	path = __ofono_atom_get_path(gprs->atom);
-	value = attached;
-	ofono_dbus_signal_property_changed(conn, path,
-				OFONO_CONNECTION_MANAGER_INTERFACE,
-				"Attached", DBUS_TYPE_BOOLEAN, &value);
+	gprs_set_attached_property(gprs, attached);
 }
 
 static void registration_status_cb(const struct ofono_error *error,
@@ -1893,6 +1902,13 @@ static void gprs_netreg_update(struct ofono_gprs *gprs)
 	attach = attach && gprs->powered;
 
 	DBG("attach: %u, driver_attached: %u", attach, gprs->driver_attached);
+
+	if (ofono_netreg_get_technology(gprs->netreg) ==
+			ACCESS_TECHNOLOGY_EUTRAN) {
+		/* Ignore attach logic for LTE. There is no such concept. */
+		gprs_set_attached_property(gprs, attach);
+		return;
+	}
 
 	if (gprs->driver_attached == attach)
 		return;
