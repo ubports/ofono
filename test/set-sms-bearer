@@ -1,0 +1,31 @@
+#!/usr/bin/python3
+import sys
+import dbus
+
+if len(sys.argv) < 2:
+        print("Usage: %s <bearer> Bearer types: <cs-only> <ps-only> <cs-preferred> <ps-preferred>" %\
+                                        (sys.argv[0]))
+        sys.exit(1)
+
+def message_bearer(sms, value):
+	try:
+            sms.SetProperty("Bearer", dbus.String(value))
+	except dbus.DBusException as e:
+            print("Unable to set Bearer[%s] - FAIL" % (value))
+            exit(1)
+
+bus = dbus.SystemBus()
+manager = dbus.Interface(bus.get_object('org.ofono', '/'),'org.ofono.Manager')
+modems = manager.GetModems()
+value  = sys.argv[1]
+
+for path, properties in modems:
+	print("Setting bearer for [ %s ]" % (path))
+
+	if "org.ofono.MessageManager" not in properties["Interfaces"]:
+		continue
+
+        sms = dbus.Interface(bus.get_object('org.ofono', path), 'org.ofono.MessageManager')
+
+        message_bearer(sms, value)
+        print("SMS Bearer updated for [ %s ]" % (path))
