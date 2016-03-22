@@ -816,7 +816,9 @@ test_scripts = test/backtrace \
 		test/get-network-time \
 		test/set-ddr \
 		test/register-auto \
-		test/register-operator
+		test/register-operator \
+		test/set-sms-smsc \
+		test/set-sms-bearer
 
 if TEST
 testdir = $(pkglibdir)/test
