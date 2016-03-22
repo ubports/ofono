@@ -152,7 +152,8 @@ static void ril_post_sim(struct ofono_modem *modem)
 	struct ofono_gprs *gprs;
 	struct ofono_gprs_context *gc;
 
-	ofono_sms_create(modem, OFONO_RIL_VENDOR_IMC_SOFIA3GR, "rilmodem", rd->ril);
+	ofono_sms_create(modem, OFONO_RIL_VENDOR_IMC_SOFIA3GR,
+					"rilmodem", rd->ril);
 
 	gprs = ofono_gprs_create(modem, 0, "rilmodem", rd->ril);
 	gc = ofono_gprs_context_create(modem, 0, "rilmodem", rd->ril);
