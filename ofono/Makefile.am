@@ -125,6 +125,8 @@ builtin_sources +=	drivers/ril/ril_call_barring.c \
 			drivers/ril/ril_call_forward.c \
 			drivers/ril/ril_call_settings.c \
 			drivers/ril/ril_call_volume.c \
+			drivers/ril/ril_cell_info.c \
+			drivers/ril/ril_cell_info_dbus.c \
 			drivers/ril/ril_cbs.c \
 			drivers/ril/ril_data.c \
 			drivers/ril/ril_devinfo.c \

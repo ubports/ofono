@@ -205,7 +205,7 @@ struct ril_sim_info_dbus *ril_sim_info_dbus_new(struct ril_modem *md,
 
 		return dbus;
 	} else {
-		ofono_error("RIL D-Bus register failed");
+		ofono_error("CellInfo D-Bus register failed");
 		ril_sim_info_dbus_free(dbus);
 		return NULL;
 	}

@@ -17,6 +17,7 @@
 #include "ril_sim_card.h"
 #include "ril_sim_info.h"
 #include "ril_sim_settings.h"
+#include "ril_cell_info.h"
 #include "ril_network.h"
 #include "ril_radio.h"
 #include "ril_data.h"
@@ -119,6 +120,8 @@ struct ril_slot {
 	struct ril_sim_info *sim_info;
 	struct ril_sim_info_dbus *sim_info_dbus;
 	struct ril_sim_settings *sim_settings;
+	struct ril_cell_info *cell_info;
+	struct ril_cell_info_dbus *cell_info_dbus;
 	struct ril_data *data;
 	GRilIoChannel *io;
 	gulong io_event_id[IO_EVENT_COUNT];
@@ -262,6 +265,11 @@ static void ril_plugin_shutdown_slot(struct ril_slot *slot, gboolean kill_io)
 		if (slot->retry_id) {
 			g_source_remove(slot->retry_id);
 			slot->retry_id = 0;
+		}
+
+		if (slot->cell_info) {
+			ril_cell_info_unref(slot->cell_info);
+			slot->cell_info = NULL;
 		}
 
 		if (slot->data) {
@@ -669,6 +677,11 @@ static void ril_plugin_modem_removed(struct ril_modem *modem, void *data)
 		slot->sim_info_dbus = NULL;
 	}
 
+	if (slot->cell_info_dbus) {
+		ril_cell_info_dbus_free(slot->cell_info_dbus);
+		slot->cell_info_dbus = NULL;
+	}
+
 	slot->modem = NULL;
 	ril_radio_set_online(slot->radio, FALSE);
 	ril_data_allow(slot->data, RIL_DATA_ROLE_NONE);
@@ -789,6 +802,11 @@ static void ril_plugin_create_modem(struct ril_slot *slot)
 
 		slot->sim_info_dbus = ril_sim_info_dbus_new(slot->modem,
 							slot->sim_info);
+		if (slot->cell_info) {
+			slot->cell_info_dbus =
+				ril_cell_info_dbus_new(slot->modem,
+							slot->cell_info);
+		}
 
 		ril_modem_set_removed_cb(modem, ril_plugin_modem_removed, slot);
 		ril_modem_set_online_cb(modem, ril_plugin_modem_online, slot);
@@ -896,6 +914,12 @@ static void ril_plugin_slot_connected(struct ril_slot *slot)
 	GASSERT(!slot->data);
 	slot->data = ril_data_new(slot->plugin->data_manager, log_prefix,
 				slot->radio, slot->network, slot->io);
+
+	GASSERT(!slot->cell_info);
+	if (slot->io->ril_version > 8) {
+		slot->cell_info = ril_cell_info_new(slot->io, log_prefix,
+						plugin->mce, slot->sim_card);
+	}
 
 	if (ril_plugin_can_create_modem(slot) && !slot->modem) {
 		ril_plugin_create_modem(slot);
