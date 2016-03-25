@@ -54,7 +54,6 @@ struct ril_modem_data {
 	char *imei;
 	char *ecclist_file;
 	gboolean pre_sim_done;
-	gboolean devinfo_created;
 	gboolean allow_data;
 
 	guint online_check_id;
@@ -138,27 +137,6 @@ void ril_modem_set_online_cb(struct ril_modem *modem, ril_modem_online_cb_t cb,
 
 	md->online_cb = cb;
 	md->online_cb_data = data;
-}
-
-static void ril_modem_check_devinfo(struct ril_modem_data *md)
-{
-	/* devinfo driver assumes that IMEI is known */
-	if (md->imei && md->pre_sim_done && !md->devinfo_created &&
-							md->modem.ofono) {
-		md->devinfo_created = TRUE;
-		ofono_devinfo_create(md->modem.ofono, 0, RILMODEM_DRIVER, md);
-	}
-}
-
-void ril_modem_set_imei(struct ril_modem *modem, const char *imei)
-{
-	struct ril_modem_data *md = ril_modem_data_from_modem(modem);
-
-	if (md) {
-		g_free(md->imei);
-		modem->imei = md->imei = g_strdup(imei);
-		ril_modem_check_devinfo(md);
-	}
 }
 
 static void ril_modem_online_request_ok(struct ril_modem_online_request *req)
@@ -273,7 +251,7 @@ static void ril_modem_pre_sim(struct ofono_modem *modem)
 
 	DBG("%s", ofono_modem_get_path(modem));
 	md->pre_sim_done = TRUE;
-	ril_modem_check_devinfo(md);
+	ofono_devinfo_create(modem, 0, RILMODEM_DRIVER, md);
 	ofono_sim_create(modem, 0, RILMODEM_DRIVER, md);
 	ofono_voicecall_create(modem, 0, RILMODEM_DRIVER, md);
 	ril_modem_update_radio_settings(md);
@@ -442,6 +420,12 @@ struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *log_prefix,
 		int err;
 		struct ril_modem_data *md = g_new0(struct ril_modem_data, 1);
 		struct ril_modem *modem = &md->modem;
+
+		/*
+		 * ril_plugin.c must wait until IMEI becomes known before
+		 * creating the modem
+		 */
+		GASSERT(slot->imei);
 
 		/* Copy config */
 		modem->config = *slot->config;
