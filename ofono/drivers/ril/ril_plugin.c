@@ -771,11 +771,6 @@ static const char *ril_plugin_log_prefix(struct ril_slot *slot)
 	return ril_plugin_multisim(slot->plugin) ? (slot->path + 1) : "";
 }
 
-static gboolean ril_plugin_can_create_modem(struct ril_slot *slot)
-{
-	return slot->pub.enabled && slot->io && slot->io->connected;
-}
-
 static void ril_plugin_create_modem(struct ril_slot *slot)
 {
 	struct ril_modem *modem;
@@ -817,6 +812,16 @@ static void ril_plugin_create_modem(struct ril_slot *slot)
 	ril_plugin_update_modem_paths_full(slot->plugin);
 }
 
+static void ril_plugin_check_modem(struct ril_slot *slot)
+{
+	if (!slot->modem && slot->pub.enabled &&
+			slot->io && slot->io->connected &&
+			!slot->imei_req_id && slot->imei) {
+		ril_plugin_create_modem(slot);
+	}
+}
+
+
 static void ril_plugin_imei_cb(GRilIoChannel *io, int status,
 			const void *data, guint len, void *user_data)
 {
@@ -825,18 +830,28 @@ static void ril_plugin_imei_cb(GRilIoChannel *io, int status,
 	gboolean all_done = TRUE;
 	GSList *link;
 
-	GASSERT(!slot->imei);
 	GASSERT(slot->imei_req_id);
 	slot->imei_req_id = 0;
 
 	if (status == RIL_E_SUCCESS) {
 		GRilIoParser rilp;
+		char *imei;
+
 		grilio_parser_init(&rilp, data, len);
-		slot->pub.imei = slot->imei = grilio_parser_get_utf8(&rilp);
-		DBG("%s", slot->imei);
-		if (slot->modem) {
-			ril_modem_set_imei(slot->modem, slot->imei);
-		}
+		imei = grilio_parser_get_utf8(&rilp);
+
+		DBG("%s", imei);
+
+		/*
+		 * slot->imei should be either NULL (when we get connected
+		 * to rild the very first time) or match the already known
+		 * IMEI (if rild crashed and we have reconnected)
+		 */
+		GASSERT(!slot->imei || !g_strcmp0(slot->imei, imei));
+		g_free(slot->imei);
+		slot->pub.imei = slot->imei = imei;
+
+		ril_plugin_check_modem(slot);
 		ril_plugin_update_ready(plugin);
 	} else {
 		ofono_error("Slot %u IMEI query error: %s", slot->config.slot,
@@ -881,6 +896,7 @@ static void ril_plugin_slot_connected(struct ril_slot *slot)
 {
 	struct ril_plugin_priv *plugin = slot->plugin;
 	const char *log_prefix = ril_plugin_log_prefix(slot);
+	GRilIoRequest* req;
 
 	ofono_debug("%s version %u", (slot->name && slot->name[0]) ?
 				slot->name : "RIL", slot->io->ril_version);
@@ -888,9 +904,19 @@ static void ril_plugin_slot_connected(struct ril_slot *slot)
 	GASSERT(slot->io->connected);
 	GASSERT(!slot->io_event_id[IO_EVENT_CONNECTED]);
 
+	/*
+	 * Modem will be registered after RIL_REQUEST_GET_IMEI successfully
+	 * completes. By the time ofono starts, rild may not be completely
+	 * functional. Waiting until it responds to RIL_REQUEST_GET_IMEI
+	 * (and retrying the request on failure) gives rild time to finish
+	 * whatever it's doing during initialization.
+	 */
 	GASSERT(!slot->imei_req_id);
-	slot->imei_req_id = grilio_channel_send_request_full(slot->io, NULL,
+	req = grilio_request_new();
+	grilio_request_set_retry(req, RIL_RETRY_MS, -1);
+	slot->imei_req_id = grilio_channel_send_request_full(slot->io, req,
 			RIL_REQUEST_GET_IMEI, ril_plugin_imei_cb, NULL, slot);
+	grilio_request_unref(req);
 
 	GASSERT(!slot->radio);
 	slot->radio = ril_radio_new(slot->io);
@@ -921,10 +947,8 @@ static void ril_plugin_slot_connected(struct ril_slot *slot)
 						plugin->mce, slot->sim_card);
 	}
 
-	if (ril_plugin_can_create_modem(slot) && !slot->modem) {
-		ril_plugin_create_modem(slot);
-	}
-
+	ril_plugin_send_screen_state(slot);
+	ril_plugin_check_modem(slot);
 	ril_plugin_update_ready(plugin);
 }
 
@@ -1298,9 +1322,7 @@ static void ril_plugin_update_enabled_slot(struct ril_slot *slot)
 {
 	if (slot->pub.enabled) {
 		DBG("%s enabled", slot->path + 1);
-		if (ril_plugin_can_create_modem(slot) && !slot->modem) {
-			ril_plugin_create_modem(slot);
-		}
+		ril_plugin_check_modem(slot);
 	}
 }
 
