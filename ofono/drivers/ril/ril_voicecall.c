@@ -52,13 +52,6 @@ struct ril_voicecall {
 	gulong ecclist_change_id;
 };
 
-struct release_id_req {
-	struct ofono_voicecall *vc;
-	ofono_voicecall_cb_t cb;
-	gpointer data;
-	int id;
-};
-
 struct ril_voicecall_change_state_req {
 	struct ofono_voicecall *vc;
 	ofono_voicecall_cb_t cb;
@@ -69,12 +62,6 @@ struct ril_voicecall_change_state_req {
 struct lastcause_req {
 	struct ofono_voicecall *vc;
 	int id;
-};
-
-struct ril_voicecall_req {
-	struct ofono_voicecall *vc;
-	ofono_voicecall_cb_t cb;
-	gpointer data;
 };
 
 static void ril_voicecall_send_one_dtmf(struct ril_voicecall *vd);
@@ -447,9 +434,7 @@ static void ril_voicecall_request(const guint rreq, struct ofono_voicecall *vc,
 static void ril_voicecall_dial_cb(GRilIoChannel *io, int status,
 				const void *data, guint len, void *user_data)
 {
-	struct ril_voicecall_req *cbd = user_data;
-	struct ofono_voicecall *vc = cbd->vc;
-	struct ril_voicecall *vd = ril_voicecall_get_data(vc);
+	struct ril_voicecall *vd = user_data;
 
 	if (status == RIL_E_SUCCESS) {
 		if (vd->cb) {
@@ -458,11 +443,21 @@ static void ril_voicecall_dial_cb(GRilIoChannel *io, int status,
 			ril_voicecall_clcc_poll(vd);
 		}
 	} else {
-		struct ofono_error error;
 		ofono_error("call failed.");
-		vd->cb = NULL;
-		vd->data = NULL;
-		cbd->cb(ril_error_failure(&error), cbd->data);
+
+		/*
+		 * Even though this dial request may have already been
+		 * completed (successfully) by ril_voicecall_clcc_poll_cb,
+		 * RIL_REQUEST_DIAL may still fail.
+		 */
+		if (vd->cb) {
+			struct ofono_error error;
+			ofono_voicecall_cb_t cb = vd->cb;
+			void *cbdata = vd->data;
+			vd->cb = NULL;
+			vd->data = NULL;
+			cb(ril_error_failure(&error), cbdata);
+		}
 	}
 }
 
@@ -472,27 +467,22 @@ static void ril_voicecall_dial(struct ofono_voicecall *vc,
 			void *data)
 {
 	struct ril_voicecall *vd = ril_voicecall_get_data(vc);
-	struct ril_voicecall_req *cbd = g_new(struct ril_voicecall_req, 1);
 	const char *phstr =  phone_number_to_string(ph);
 	GRilIoRequest *req = grilio_request_new();
 
 	ofono_info("dialing \"%s\"", phstr);
 
 	DBG("%s,%d,0", phstr, clir);
-	cbd->vc = vc;
-	cbd->cb = cb;
-	cbd->data = data;
-
 	GASSERT(!vd->cb);
-	vd->cb = cbd->cb;
-	vd->data = cbd->data;
+	vd->cb = cb;
+	vd->data = data;
 
 	grilio_request_append_utf8(req, phstr); /* Number to dial */
 	grilio_request_append_int32(req, clir); /* CLIR mode */
 	grilio_request_append_int32(req, 0);    /* UUS information (absent) */
 
 	grilio_queue_send_request_full(vd->q, req, RIL_REQUEST_DIAL,
-					ril_voicecall_dial_cb, g_free, cbd);
+					ril_voicecall_dial_cb, NULL, vd);
 	grilio_request_unref(req);
 }
 
@@ -836,17 +826,11 @@ static int ril_voicecall_probe(struct ofono_voicecall *vc, unsigned int vendor,
 
 static void ril_voicecall_remove(struct ofono_voicecall *vc)
 {
-	int i;
 	struct ril_voicecall *vd = ril_voicecall_get_data(vc);
 
 	DBG("");
 	ofono_voicecall_set_data(vc, NULL);
-	g_slist_foreach(vd->calls, (GFunc) g_free, NULL);
-	g_slist_free(vd->calls);
-
-	for (i=0; i<G_N_ELEMENTS(vd->event_id); i++) {
-		grilio_channel_remove_handler(vd->io, vd->event_id[i]);
-	}
+	g_slist_free_full(vd->calls, g_free);
 
 	if (vd->timer_id > 0) {
 		g_source_remove(vd->timer_id);
@@ -855,6 +839,8 @@ static void ril_voicecall_remove(struct ofono_voicecall *vc)
 	ril_ecclist_remove_handler(vd->ecclist, vd->ecclist_change_id);
 	ril_ecclist_unref(vd->ecclist);
 
+	grilio_channel_remove_handlers(vd->io, vd->event_id,
+						G_N_ELEMENTS(vd->event_id));
 	grilio_channel_unref(vd->io);
 	grilio_queue_cancel_all(vd->q, FALSE);
 	grilio_queue_unref(vd->q);
