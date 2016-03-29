@@ -505,6 +505,13 @@ static void ril_sim_read_imsi(struct ofono_sim *sim, ofono_sim_imsi_cb_t cb,
 	DBG("%s", ril_sim_app_id(sd));
 	grilio_request_append_int32(req, GET_IMSI_NUM_PARAMS);
 	grilio_request_append_utf8(req, ril_sim_app_id(sd));
+
+	/*
+	 * If we fail the .read_imsi call, ofono gets into "Unable to
+	 * read IMSI, emergency calls only" state. Retry the request
+	 * on failure.
+	 */
+	grilio_request_set_retry(req, RIL_RETRY_MS, -1);
 	grilio_queue_send_request_full(sd->q, req, RIL_REQUEST_GET_IMSI,
 				ril_sim_get_imsi_cb, ril_sim_cbd_free,
 				ril_sim_cbd_new(sd, cb, data));

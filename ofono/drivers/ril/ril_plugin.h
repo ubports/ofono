@@ -123,7 +123,6 @@ struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *log_prefix,
 		struct ril_network *network, struct ril_sim_card *card,
 		struct ril_data *data, struct ril_sim_settings *settings);
 void ril_modem_delete(struct ril_modem *modem);
-void ril_modem_set_imei(struct ril_modem *modem, const char *imei);
 struct ofono_sim *ril_modem_ofono_sim(struct ril_modem *modem);
 struct ofono_gprs *ril_modem_ofono_gprs(struct ril_modem *modem);
 struct ofono_netreg *ril_modem_ofono_netreg(struct ril_modem *modem);
