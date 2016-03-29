@@ -387,9 +387,12 @@ static void ril_voicecall_clcc_poll(struct ril_voicecall *vd)
 {
 	GASSERT(vd);
 	if (!vd->clcc_poll_id) {
+		GRilIoRequest* req = grilio_request_new();
+		grilio_request_set_retry(req, RIL_RETRY_MS, -1);
 		vd->clcc_poll_id = grilio_queue_send_request_full(vd->q,
-					NULL, RIL_REQUEST_GET_CURRENT_CALLS,
+					req, RIL_REQUEST_GET_CURRENT_CALLS,
 					ril_voicecall_clcc_poll_cb, NULL, vd);
+		grilio_request_unref(req);
 	}
 }
 

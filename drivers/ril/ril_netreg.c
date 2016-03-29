@@ -403,10 +403,13 @@ static void ril_netreg_strength(struct ofono_netreg *netreg,
 				ofono_netreg_strength_cb_t cb, void *data)
 {
 	struct ril_netreg *nd = ril_netreg_get_data(netreg);
+	GRilIoRequest* req = grilio_request_new();
 
-	grilio_queue_send_request_full(nd->q, NULL,
+	grilio_request_set_retry(req, RIL_RETRY_MS, -1);
+	grilio_queue_send_request_full(nd->q, req,
 			RIL_REQUEST_SIGNAL_STRENGTH, ril_netreg_strength_cb,
 			ril_netreg_cbd_free, ril_netreg_cbd_new(nd, cb, data));
+	grilio_request_unref(req);
 }
 
 static void ril_netreg_nitz_notify(GRilIoChannel *io, guint ril_event,
