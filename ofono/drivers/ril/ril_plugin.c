@@ -284,6 +284,7 @@ static void ril_plugin_shutdown_slot(struct ril_slot *slot, gboolean kill_io)
 		}
 
 		if (slot->network) {
+			ril_sim_info_set_network(slot->sim_info, slot->network);
 			ril_network_unref(slot->network);
 			slot->network = NULL;
 		}
@@ -910,6 +911,7 @@ static void ril_plugin_slot_connected(struct ril_slot *slot)
 	GASSERT(!slot->network);
 	slot->network = ril_network_new(slot->io, log_prefix, slot->radio,
 					slot->sim_card, slot->sim_settings);
+	ril_sim_info_set_network(slot->sim_info, slot->network);
 
 	GASSERT(!slot->data);
 	slot->data = ril_data_new(slot->plugin->data_manager, log_prefix,
@@ -1483,7 +1485,7 @@ static void ril_plugin_init_slots(struct ril_plugin_priv *plugin)
 		slot->plugin = plugin;
 		slot->pub.path = slot->path;
 		slot->pub.config = &slot->config;
-		slot->sim_info = ril_sim_info_new(NULL);
+		slot->sim_info = ril_sim_info_new(ril_plugin_log_prefix(slot));
 		slot->sim_settings = ril_sim_settings_new(&slot->config);
 	}
 

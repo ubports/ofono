@@ -29,10 +29,11 @@ struct ril_sim_info {
 struct ofono_sim;
 typedef void (*ril_sim_info_cb_t)(struct ril_sim_info *info, void *arg);
 
-struct ril_sim_info *ril_sim_info_new(struct ofono_sim *sim);
+struct ril_sim_info *ril_sim_info_new(const char *log_prefix);
 struct ril_sim_info *ril_sim_info_ref(struct ril_sim_info *info);
 void ril_sim_info_unref(struct ril_sim_info *si);
 void ril_sim_info_set_ofono_sim(struct ril_sim_info *si, struct ofono_sim *sim);
+void ril_sim_info_set_network(struct ril_sim_info *si, struct ril_network *net);
 gulong ril_sim_info_add_iccid_changed_handler(struct ril_sim_info *si,
 					ril_sim_info_cb_t cb, void *arg);
 gulong ril_sim_info_add_imsi_changed_handler(struct ril_sim_info *si,
