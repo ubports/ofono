@@ -46,6 +46,7 @@
 #include <ofono/gprs-context.h>
 #include <ofono/radio-settings.h>
 #include <ofono/ussd.h>
+#include <ofono/netmon.h>
 
 #include <gril/gril.h>
 
@@ -172,6 +173,7 @@ static void ril_post_online(struct ofono_modem *modem)
 	ofono_netreg_create(modem, 0, "rilmodem", rd->ril);
 	ofono_radio_settings_create(modem, 0, "rilmodem", rd->ril);
 	ofono_ussd_create(modem, 0, "rilmodem", rd->ril);
+	ofono_netmon_create(modem, 0, "rilmodem", rd->ril);
 }
 
 static void ril_set_online_cb(struct ril_msg *message, gpointer user_data)
