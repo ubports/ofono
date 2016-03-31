@@ -96,6 +96,47 @@ static void ril_query_revision(struct ofono_devinfo *info,
 	CALLBACK_WITH_FAILURE(cb, NULL, data);
 }
 
+static void query_svn_cb(struct ril_msg *message, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_devinfo_query_cb_t cb = cbd->cb;
+	GRil *ril = cbd->user;
+	struct parcel rilp;
+	char *imeisv;
+
+	if (message->error != RIL_E_SUCCESS)
+		goto error;
+
+	g_ril_init_parcel(message, &rilp);
+
+	imeisv = parcel_r_string(&rilp);
+
+	g_ril_append_print_buf(ril, "{%s}", imeisv);
+	g_ril_print_response(ril, message);
+
+	CALLBACK_WITH_SUCCESS(cb, imeisv, cbd->data);
+	g_free(imeisv);
+	return;
+
+error:
+	CALLBACK_WITH_FAILURE(cb, NULL, cbd->data);
+}
+
+static void ril_query_svn(struct ofono_devinfo *info,
+				ofono_devinfo_query_cb_t cb,
+				void *data)
+{
+	GRil *ril = ofono_devinfo_get_data(info);
+	struct cb_data *cbd = cb_data_new(cb, data, ril);
+
+	if (g_ril_send(ril, RIL_REQUEST_GET_IMEISV, NULL,
+			query_svn_cb, cbd, g_free) > 0)
+		return;
+
+	g_free(cbd);
+	CALLBACK_WITH_FAILURE(cb, NULL, data);
+}
+
 static void query_serial_cb(struct ril_msg *message, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
@@ -178,7 +219,8 @@ static struct ofono_devinfo_driver driver = {
 	.query_manufacturer	= ril_query_manufacturer,
 	.query_model		= ril_query_model,
 	.query_revision		= ril_query_revision,
-	.query_serial		= ril_query_serial
+	.query_serial		= ril_query_serial,
+	.query_svn		= ril_query_svn
 };
 
 void ril_devinfo_init(void)
