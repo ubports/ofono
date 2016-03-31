@@ -1372,10 +1372,8 @@ static void query_svn_cb(const struct ofono_error *error,
 
 	info->svn = g_strdup(svn);
 
-	ofono_dbus_signal_property_changed(conn, path,
-						OFONO_MODEM_INTERFACE,
-						"SoftwareVersionNumber", DBUS_TYPE_STRING,
-						&info->svn);
+	ofono_dbus_signal_property_changed(conn, path, OFONO_MODEM_INTERFACE,
+			"SoftwareVersionNumber", DBUS_TYPE_STRING, &info->svn);
 }
 
 static void query_svn(struct ofono_devinfo *info)
