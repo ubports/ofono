@@ -744,7 +744,8 @@ test_scripts = test/backtrace \
 		test/register-auto \
 		test/register-operator \
 		test/set-sms-smsc \
-		test/set-sms-bearer
+		test/set-sms-bearer \
+		test/get-serving-cell-info
 
 if TEST
 testdir = $(pkglibdir)/test

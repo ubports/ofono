@@ -1,0 +1,56 @@
+#!/usr/bin/python3
+
+import dbus
+
+bus = dbus.SystemBus()
+
+manager = dbus.Interface(bus.get_object('org.ofono', '/'), 'org.ofono.Manager')
+
+modems = manager.GetModems()
+path = modems[0][0]
+
+monitor = dbus.Interface(bus.get_object('org.ofono', path),
+						'org.ofono.NetworkMonitor')
+
+try:
+	servingcell = monitor.GetServingCellInformation()
+except dbus.DBusException as e:
+	print("Unable to get serving cell information")
+	exit()
+
+tech = 'Technology'
+mcc = 'MobileCountryCode'
+mnc = 'MobileNetworkCode'
+lac = 'LocationAreaCode'
+cid = 'CellId'
+psc = 'PrimaryScramblingCode'
+rssi = 'Strength'
+ber = 'BitErrorRate'
+
+print("Current serving cell information:")
+
+if tech in servingcell:
+	print("    [ Radio Access Technology = %s]" % (servingcell[tech]))
+
+if mcc in servingcell:
+	print("    [ Mobile Country Code = %s]" % (servingcell[mcc]))
+
+if mnc in servingcell:
+	print("    [ Mobile Network Code = %s]" % (servingcell[mnc]))
+
+if lac in servingcell:
+	print("    [ Location Area Code = %d]" % (servingcell[lac]))
+
+if cid in servingcell:
+	print("    [ Cell Identity = %d]" % (servingcell[cid]))
+
+if psc in servingcell:
+	print("    [ Primary Scrambling Code = %d]" % (servingcell[psc]))
+
+if rssi in servingcell:
+	print("    [ Signal Strength = %d]" % (servingcell[rssi]))
+
+if ber in servingcell:
+	print("    [ Bit Error Rate = %d]" % (servingcell[ber]))
+
+print('')
