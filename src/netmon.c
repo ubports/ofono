@@ -43,7 +43,6 @@
 	ofono_dbus_dict_append(p_dict, key, dbus_type, &value); \
 } while (0)
 
-
 static GSList *g_drivers = NULL;
 
 struct ofono_netmon {
@@ -104,26 +103,25 @@ void ofono_netmon_serving_cell_notify(struct ofono_netmon *netmon,
 			mcc = va_arg(arglist, char *);
 
 			if (mcc && strlen(mcc))
-				ofono_dbus_dict_append(&dict, "MobileCountryCode",
+				ofono_dbus_dict_append(&dict,
+						"MobileCountryCode",
 						DBUS_TYPE_STRING, &mcc);
-
 			break;
 
 		case OFONO_NETMON_INFO_MNC:
 			mnc = va_arg(arglist, char *);
 
 			if (mnc && strlen(mnc))
-				ofono_dbus_dict_append(&dict, "MobileNetworkCode", \
+				ofono_dbus_dict_append(&dict,
+						"MobileNetworkCode",
 						DBUS_TYPE_STRING, &mnc);
-
 			break;
 
 		case OFONO_NETMON_INFO_LAC:
 			intval = va_arg(arglist, int);
 
-			CELL_INFO_DICT_APPEND(&dict, "LocationAreaCode", \
+			CELL_INFO_DICT_APPEND(&dict, "LocationAreaCode",
 					intval, uint16_t, DBUS_TYPE_UINT16);
-
 			break;
 
 		case OFONO_NETMON_INFO_CI:
@@ -131,7 +129,6 @@ void ofono_netmon_serving_cell_notify(struct ofono_netmon *netmon,
 
 			CELL_INFO_DICT_APPEND(&dict, "CellId",
 					intval, uint32_t, DBUS_TYPE_UINT32);
-
 			break;
 
 		case OFONO_NETMON_INFO_ARFCN:
@@ -146,7 +143,6 @@ void ofono_netmon_serving_cell_notify(struct ofono_netmon *netmon,
 
 			CELL_INFO_DICT_APPEND(&dict, "BSIC",
 					intval, uint8_t, DBUS_TYPE_BYTE);
-
 			break;
 
 		case OFONO_NETMON_INFO_RXLEV:
@@ -154,7 +150,6 @@ void ofono_netmon_serving_cell_notify(struct ofono_netmon *netmon,
 
 			CELL_INFO_DICT_APPEND(&dict, "ReceivedSignalStrength",
 					intval, uint8_t, DBUS_TYPE_BYTE);
-
 			break;
 
 		case OFONO_NETMON_INFO_TIMING_ADVANCE:
@@ -162,7 +157,6 @@ void ofono_netmon_serving_cell_notify(struct ofono_netmon *netmon,
 
 			CELL_INFO_DICT_APPEND(&dict, "TimingAdvance",
 					intval, uint8_t, DBUS_TYPE_BYTE);
-
 			break;
 
 		case OFONO_NETMON_INFO_PSC:
@@ -170,21 +164,19 @@ void ofono_netmon_serving_cell_notify(struct ofono_netmon *netmon,
 
 			CELL_INFO_DICT_APPEND(&dict, "PrimaryScramblingCode",
 					intval, uint16_t, DBUS_TYPE_UINT16);
-
 			break;
 
 		case OFONO_NETMON_INFO_BER:
 			intval = va_arg(arglist, int);
 
-			CELL_INFO_DICT_APPEND(&dict, "BitErrorRate", \
+			CELL_INFO_DICT_APPEND(&dict, "BitErrorRate",
 					intval, uint8_t, DBUS_TYPE_BYTE);
-
 			break;
 
 		case OFONO_NETMON_INFO_RSSI:
 			intval = va_arg(arglist, int);
 
-			CELL_INFO_DICT_APPEND(&dict, "Strength", \
+			CELL_INFO_DICT_APPEND(&dict, "Strength",
 					intval, uint8_t, DBUS_TYPE_BYTE);
 			break;
 
@@ -226,7 +218,8 @@ static DBusMessage *netmon_get_serving_cell_info(DBusConnection *conn,
 
 	netmon->pending = dbus_message_ref(msg);
 
-	netmon->driver->request_update(netmon, serving_cell_info_callback, netmon);
+	netmon->driver->request_update(netmon,
+					serving_cell_info_callback, netmon);
 
 	return NULL;
 }
