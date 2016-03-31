@@ -82,7 +82,8 @@ int ofono_netmon_driver_register(const struct ofono_netmon_driver *d);
 void ofono_netmon_driver_unregister(const struct ofono_netmon_driver *d);
 
 struct ofono_netmon *ofono_netmon_create(struct ofono_modem *modem,
-    unsigned int vendor, const char *driver, void *data);
+						unsigned int vendor,
+						const char *driver, void *data);
 
 void ofono_netmon_register(struct ofono_netmon *netmon);
 
