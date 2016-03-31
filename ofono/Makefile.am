@@ -194,6 +194,7 @@ builtin_sources += drivers/rilmodem/rilmodem.h \
 			drivers/rilmodem/call-forwarding.c \
 			drivers/rilmodem/radio-settings.c \
 			drivers/rilmodem/call-barring.c \
+			drivers/rilmodem/netmon.c \
 			drivers/infineonmodem/infineon_constants.h
 endif
 endif
