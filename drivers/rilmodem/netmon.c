@@ -125,7 +125,7 @@ static void ril_netmon_update_cb(struct ril_msg *message, gpointer user_data)
 
 		registered = parcel_r_int32(&rilp);
 
-		/* skipping timeStampType in Ril cell info which is not needed */
+		/* skipping unneeded timeStampType in Ril cell info */
 		(void)parcel_r_int32(&rilp);
 
 		/*skipping timeStamp which is a uint64_t type */
@@ -143,7 +143,6 @@ static void ril_netmon_update_cb(struct ril_msg *message, gpointer user_data)
 
 		for (j = 0; j < skip_len; j++)
 			(void)parcel_r_int32(&rilp);
-
 	}
 
 	if (!registered)
@@ -168,14 +167,12 @@ static void ril_netmon_update_cb(struct ril_msg *message, gpointer user_data)
 			strcpy(s_mnc, "");
 
 		lac = (lac >= 0 && lac <= 65535) ? lac : -1;
-
 		cid = (cid >= 0 && cid <= 65535) ? cid : -1;
-
 		rssi = (rssi >= 0 && rssi <= 31) ? rssi : -1;
-
 		ber = (ber >= 0 && ber <= 7) ? ber : -1;
 
-		ofono_netmon_serving_cell_notify(netmon, OFONO_NETMON_CELL_TYPE_GSM,
+		ofono_netmon_serving_cell_notify(netmon,
+				OFONO_NETMON_CELL_TYPE_GSM,
 				OFONO_NETMON_INFO_MCC, s_mcc,
 				OFONO_NETMON_INFO_MNC, s_mnc,
 				OFONO_NETMON_INFO_LAC, lac,
@@ -183,7 +180,6 @@ static void ril_netmon_update_cb(struct ril_msg *message, gpointer user_data)
 				OFONO_NETMON_INFO_RSSI, rssi,
 				OFONO_NETMON_INFO_BER, ber,
 				OFONO_NETMON_INFO_INVALID);
-
 	} else if (cell_type == NETMON_RIL_CELLINFO_TYPE_UMTS) {
 		mcc = parcel_r_int32(&rilp);
 		mnc = parcel_r_int32(&rilp);
@@ -204,16 +200,13 @@ static void ril_netmon_update_cb(struct ril_msg *message, gpointer user_data)
 			strcpy(s_mnc, "");
 
 		lac = (lac >= 0 && lac <= 65535) ? lac : -1;
-
 		cid = (cid >= 0 && cid <= 268435455) ? cid : -1;
-
 		psc = (psc >= 0 && rssi <= 511) ? psc : -1;
-
 		rssi = (rssi >= 0 && rssi <= 31) ? rssi : -1;
-
 		ber = (ber >= 0 && ber <= 7) ? ber : -1;
 
-		ofono_netmon_serving_cell_notify(netmon, OFONO_NETMON_CELL_TYPE_UMTS,
+		ofono_netmon_serving_cell_notify(netmon,
+				OFONO_NETMON_CELL_TYPE_UMTS,
 				OFONO_NETMON_INFO_MCC, s_mcc,
 				OFONO_NETMON_INFO_MNC, s_mnc,
 				OFONO_NETMON_INFO_LAC, lac,
@@ -232,14 +225,12 @@ static void ril_netmon_update_cb(struct ril_msg *message, gpointer user_data)
 
 error:
 	CALLBACK_WITH_FAILURE(cb, cbd->data);
-	return;
 }
 
 static int ril_netmon_probe(struct ofono_netmon *netmon,
 		unsigned int vendor, void *user)
 {
 	GRil *ril = user;
-
 	struct netmon_data *ud = g_new0(struct netmon_data, 1);
 
 	ud->ril = g_ril_clone(ril);
@@ -256,7 +247,6 @@ static void ril_netmon_remove(struct ofono_netmon *netmon)
 	struct netmon_data *nmd = ofono_netmon_get_data(netmon);
 
 	ofono_netmon_set_data(netmon, NULL);
-
 	g_ril_unref(nmd->ril);
 }
 
