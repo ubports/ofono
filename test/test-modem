@@ -39,6 +39,9 @@ if __name__ == "__main__":
 	if 'Serial' in properties:
 		print("Serial: %s" % (properties['Serial']))
 
+	if 'SoftwareVersionNumber' in properties:
+		print("SoftwareVersionNumber: %s" % (properties['SoftwareVersionNumber']))
+
 	if 'Powered' in properties:
 		print("Powered: %s" % (properties['Powered']))
 
