@@ -77,6 +77,20 @@ void ofono_netmon_serving_cell_notify(struct ofono_netmon *netmon,
 					enum ofono_netmon_cell_type type,
 					int info_type, ...);
 
+int ofono_netmon_driver_register(const struct ofono_netmon_driver *d);
+
+void ofono_netmon_driver_unregister(const struct ofono_netmon_driver *d);
+
+struct ofono_netmon *ofono_netmon_create(struct ofono_modem *modem,
+    unsigned int vendor, const char *driver, void *data);
+
+void ofono_netmon_register(struct ofono_netmon *netmon);
+
+void ofono_netmon_remove(struct ofono_netmon *netmon);
+
+void ofono_netmon_set_data(struct ofono_netmon *netmon, void *data);
+
+void *ofono_netmon_get_data(struct ofono_netmon *netmon);
 
 #ifdef __cplusplus
 }
