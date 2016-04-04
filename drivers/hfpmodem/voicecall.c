@@ -709,6 +709,15 @@ static void ccwa_notify(GAtResult *result, gpointer user_data)
 	int num_type, validity;
 	struct ofono_call *call;
 
+	/* Waiting call notification makes no sense, when there are
+	 * no calls at all. This can happen when a phone already has
+	 * waiting and active calls and is being connected over HFP
+	 * but it first sends +CCWA before we manage to synchronize
+	 * calls with AT+CLCC.
+	 */
+	if (!vd->calls)
+		return;
+
 	/* CCWA can repeat, ignore if we already have an waiting call */
 	if (g_slist_find_custom(vd->calls,
 				GINT_TO_POINTER(CALL_STATUS_WAITING),
