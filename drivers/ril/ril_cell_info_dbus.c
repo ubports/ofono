@@ -144,11 +144,6 @@ static void ril_cell_info_destroy_entry(struct ril_cell_entry *entry)
 	}
 }
 
-static void ril_cell_info_destroy_entry_cb(gpointer data)
-{
-	ril_cell_info_destroy_entry((struct ril_cell_entry *)data);
-}
-
 static DBusMessage *ril_cell_info_dbus_reply(DBusMessage *msg,
 				const struct ril_cell_entry *entry,
 				ril_cell_info_dbus_append_fn append)
@@ -520,18 +515,30 @@ struct ril_cell_info_dbus *ril_cell_info_dbus_new(struct ril_modem *md,
 void ril_cell_info_dbus_free(struct ril_cell_info_dbus *dbus)
 {
 	if (dbus) {
+		GSList *l;
+
 		DBG("%s", dbus->path);
 		g_dbus_unregister_interface(dbus->conn, dbus->path,
 						RIL_CELL_INFO_DBUS_INTERFACE);
 		ofono_modem_remove_interface(dbus->md->ofono,
 						RIL_CELL_INFO_DBUS_INTERFACE);
+
+		/* Unregister cells */
+		l = dbus->entries;
+		while (l) {
+			struct ril_cell_entry *entry = l->data;
+			g_dbus_unregister_interface(dbus->conn, entry->path,
+						RIL_CELL_DBUS_INTERFACE);
+			ril_cell_info_destroy_entry(entry);
+			l = l->next;
+		}
+		g_slist_free(dbus->entries);
+
 		dbus_connection_unref(dbus->conn);
 
 		ril_cell_info_remove_handler(dbus->info, dbus->handler_id);
 		ril_cell_info_unref(dbus->info);
 
-		g_slist_free_full(dbus->entries,
-					ril_cell_info_destroy_entry_cb);
 		g_free(dbus->path);
 		g_free(dbus);
 	}
