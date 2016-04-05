@@ -15,6 +15,8 @@
 
 #include "ril_cell_info.h"
 #include "ril_sim_card.h"
+#include "ril_radio.h"
+#include "ril_util.h"
 #include "ril_mce.h"
 #include "ril_log.h"
 
@@ -31,8 +33,10 @@ typedef struct ril_cell_info RilCellInfo;
 struct ril_cell_info_priv {
 	GRilIoChannel *io;
 	struct ril_mce *mce;
+	struct ril_radio *radio;
 	struct ril_sim_card *sim_card;
 	gulong display_state_event_id;
+	gulong radio_state_event_id;
 	gulong sim_status_event_id;
 	gboolean sim_card_ready;
 	char *log_prefix;
@@ -365,16 +369,39 @@ static void ril_cell_info_display_state_cb(struct ril_mce *mce, void *arg)
 	}
 }
 
+static void ril_cell_info_refresh(struct ril_cell_info *self)
+{
+	struct ril_cell_info_priv *priv = self->priv;
+
+	/* RIL_REQUEST_GET_CELL_INFO_LIST fails without SIM card */
+	if (priv->radio->state == RADIO_STATE_ON && priv->sim_card_ready) {
+		ril_cell_info_query(self);
+	} else {
+		ril_cell_info_update_cells(self, NULL);
+	}
+}
+
+static void ril_cell_info_radio_state_cb(struct ril_radio *radio, void *arg)
+{
+	struct ril_cell_info *self = RIL_CELL_INFO(arg);
+
+	DBG_(self, "%s", ril_radio_state_to_string(radio->state));
+	ril_cell_info_refresh(self);
+}
+
 static void ril_cell_info_sim_status_cb(struct ril_sim_card *sim, void *arg)
 {
 	struct ril_cell_info *self = RIL_CELL_INFO(arg);
 	struct ril_cell_info_priv *priv = self->priv;
 	const gboolean sim_card_was_ready = priv->sim_card_ready;
 
+	DBG_(self, "%sready", ril_sim_card_ready(sim) ? "" : "not ");
 	priv->sim_card_ready = ril_sim_card_ready(sim);
-	if (priv->sim_card_ready && !sim_card_was_ready) {
-		ril_cell_info_query(self);
-		ril_cell_info_update_rate(self);
+	if (priv->sim_card_ready != sim_card_was_ready) {
+		ril_cell_info_refresh(self);
+		if (priv->sim_card_ready) {
+			ril_cell_info_update_rate(self);
+		}
 	}
 }
 
@@ -393,14 +420,15 @@ void ril_cell_info_remove_handler(struct ril_cell_info *self, gulong id)
 }
 
 struct ril_cell_info *ril_cell_info_new(GRilIoChannel *io,
-				const char *log_prefix, struct ril_mce *mce,
-				struct ril_sim_card *sim_card)
+		const char *log_prefix, struct ril_mce *mce,
+		struct ril_radio *radio, struct ril_sim_card *sim_card)
 {
 	struct ril_cell_info *self = g_object_new(RIL_CELL_INFO_TYPE, 0);
 	struct ril_cell_info_priv *priv = self->priv;
 
 	priv->io = grilio_channel_ref(io);
 	priv->mce = ril_mce_ref(mce);
+	priv->radio = ril_radio_ref(radio);
 	priv->sim_card = ril_sim_card_ref(sim_card);
 	priv->log_prefix = (log_prefix && log_prefix[0]) ?
 		g_strconcat(log_prefix, " ", NULL) : g_strdup("");
@@ -410,6 +438,9 @@ struct ril_cell_info *ril_cell_info_new(GRilIoChannel *io,
 	priv->display_state_event_id =
 		ril_mce_add_display_state_changed_handler(mce,
 			ril_cell_info_display_state_cb, self);
+	priv->radio_state_event_id =
+		ril_radio_add_state_changed_handler(radio,
+			ril_cell_info_radio_state_cb, self);
 	priv->sim_status_event_id =
 		ril_sim_card_add_status_changed_handler(priv->sim_card,
 			ril_cell_info_sim_status_cb, self);
@@ -463,6 +494,7 @@ static void ril_cell_info_dispose(GObject *object)
 		ril_mce_remove_handler(priv->mce, priv->display_state_event_id);
 		priv->display_state_event_id = 0;
 	}
+	ril_radio_remove_handlers(priv->radio, &priv->radio_state_event_id, 1);
 	ril_sim_card_remove_handlers(priv->sim_card,
 					&priv->sim_status_event_id, 1);
 	G_OBJECT_CLASS(ril_cell_info_parent_class)->dispose(object);
@@ -477,6 +509,7 @@ static void ril_cell_info_finalize(GObject *object)
 	g_free(priv->log_prefix);
 	grilio_channel_unref(priv->io);
 	ril_mce_unref(priv->mce);
+	ril_radio_unref(priv->radio);
 	ril_sim_card_unref(priv->sim_card);
 	g_slist_free_full(self->cells, g_free);
 	G_OBJECT_CLASS(ril_cell_info_parent_class)->finalize(object);

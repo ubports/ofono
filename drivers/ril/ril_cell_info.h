@@ -42,8 +42,8 @@ gint ril_cell_compare_location(const struct ril_cell *c1,
 					const struct ril_cell *c2);
 
 struct ril_cell_info *ril_cell_info_new(GRilIoChannel *io,
-				const char *log_prefix, struct ril_mce *mce,
-				struct ril_sim_card *sim_card);
+		const char *log_prefix, struct ril_mce *mce,
+		struct ril_radio *radio, struct ril_sim_card *sim_card);
 struct ril_cell_info *ril_cell_info_ref(struct ril_cell_info *info);
 void ril_cell_info_unref(struct ril_cell_info *info);
 struct ril_cell *ril_cell_find_cell(struct ril_cell_info *info,
