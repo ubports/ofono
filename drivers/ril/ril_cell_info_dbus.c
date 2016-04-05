@@ -38,8 +38,8 @@ struct ril_cell_info_dbus {
 };
 
 #define RIL_CELL_INFO_DBUS_INTERFACE             "org.nemomobile.ofono.CellInfo"
-#define RIL_CELL_INFO_DBUS_CELL_ADDED_SIGNAL     "CellAdded"
-#define RIL_CELL_INFO_DBUS_CELL_REMOVED_SIGNAL   "CellRemoved"
+#define RIL_CELL_INFO_DBUS_CELLS_ADDED_SIGNAL    "CellsAdded"
+#define RIL_CELL_INFO_DBUS_CELLS_REMOVED_SIGNAL  "CellsRemoved"
 
 #define RIL_CELL_DBUS_INTERFACE_VERSION          (1)
 #define RIL_CELL_DBUS_INTERFACE                  "org.nemomobile.ofono.Cell"
@@ -312,11 +312,24 @@ static struct ril_cell_entry *ril_cell_info_dbus_find_cell(
 	return NULL;
 }
 
-static void ril_cell_info_dbus_emit(struct ril_cell_info_dbus *dbus,
-					const char *signal, const char *path)
+static void ril_cell_info_dbus_emit_path_list(struct ril_cell_info_dbus *dbus,
+					const char *name, GPtrArray *list)
 {
-	g_dbus_emit_signal(dbus->conn, dbus->path, RIL_CELL_INFO_DBUS_INTERFACE,
-		signal, DBUS_TYPE_OBJECT_PATH, &path, DBUS_TYPE_INVALID);
+	guint i;
+	DBusMessageIter it, array;
+	DBusMessage *signal = dbus_message_new_signal(dbus->path,
+					RIL_CELL_INFO_DBUS_INTERFACE, name);
+
+	dbus_message_iter_init_append(signal, &it);
+	dbus_message_iter_open_container(&it, DBUS_TYPE_ARRAY, "o", &array);
+	for (i = 0; i < list->len; i++) {
+		const char* path = list->pdata[i];
+		dbus_message_iter_append_basic(&array, DBUS_TYPE_OBJECT_PATH,
+								&path);
+	}
+	dbus_message_iter_close_container(&it, &array);
+
+	g_dbus_send_message(dbus->conn, signal);
 }
 
 static int ril_cell_info_dbus_compare(const struct ril_cell *c1,
@@ -378,6 +391,8 @@ static void ril_cell_info_dbus_update_entries(struct ril_cell_info_dbus *dbus,
 							gboolean emit_signals)
 {
 	GSList *l;
+	GPtrArray* added = NULL;
+	GPtrArray* removed = NULL;
 
 	/* Remove non-existent cells */
 	l = dbus->entries;
@@ -395,9 +410,14 @@ static void ril_cell_info_dbus_update_entries(struct ril_cell_info_dbus *dbus,
 			g_dbus_unregister_interface(dbus->conn, entry->path,
 						RIL_CELL_DBUS_INTERFACE);
 			if (emit_signals) {
-				ril_cell_info_dbus_emit(dbus,
-					RIL_CELL_INFO_DBUS_CELL_REMOVED_SIGNAL,
-					entry->path);
+				if (!removed) {
+					removed =
+						g_ptr_array_new_with_free_func(
+								g_free);
+				}
+				/* Steal the path */
+				g_ptr_array_add(removed, entry->path);
+				entry->path = NULL;
 			}
 			ril_cell_info_destroy_entry(entry);
 		}
@@ -434,11 +454,24 @@ static void ril_cell_info_dbus_update_entries(struct ril_cell_info_dbus *dbus,
 					ril_cell_info_dbus_cell_signals, NULL,
 					entry, NULL);
 			if (emit_signals) {
-				ril_cell_info_dbus_emit(dbus,
-					RIL_CELL_INFO_DBUS_CELL_ADDED_SIGNAL,
-					entry->path);
+				if (!added) {
+					added = g_ptr_array_new();
+				}
+				g_ptr_array_add(added, entry->path);
 			}
 		}
+	}
+
+	if (removed) {
+		ril_cell_info_dbus_emit_path_list(dbus,
+			RIL_CELL_INFO_DBUS_CELLS_REMOVED_SIGNAL, removed);
+		g_ptr_array_free(removed, TRUE);
+	}
+
+	if (added) {
+		ril_cell_info_dbus_emit_path_list(dbus,
+			RIL_CELL_INFO_DBUS_CELLS_ADDED_SIGNAL, added);
+		g_ptr_array_free(added, TRUE);
 	}
 }
 
@@ -477,10 +510,10 @@ static const GDBusMethodTable ril_cell_info_dbus_methods[] = {
 };
 
 static const GDBusSignalTable ril_cell_info_dbus_signals[] = {
-	{ GDBUS_SIGNAL(RIL_CELL_INFO_DBUS_CELL_ADDED_SIGNAL,
-			GDBUS_ARGS({ "path", "o" })) },
-	{ GDBUS_SIGNAL(RIL_CELL_INFO_DBUS_CELL_REMOVED_SIGNAL,
-			GDBUS_ARGS({ "path", "o" })) },
+	{ GDBUS_SIGNAL(RIL_CELL_INFO_DBUS_CELLS_ADDED_SIGNAL,
+			GDBUS_ARGS({ "paths", "ao" })) },
+	{ GDBUS_SIGNAL(RIL_CELL_INFO_DBUS_CELLS_REMOVED_SIGNAL,
+			GDBUS_ARGS({ "paths", "ao" })) },
 	{ }
 };
 
