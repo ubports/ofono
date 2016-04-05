@@ -946,7 +946,7 @@ static void ril_plugin_slot_connected(struct ril_slot *slot)
 	GASSERT(!slot->cell_info);
 	if (slot->io->ril_version > 8) {
 		slot->cell_info = ril_cell_info_new(slot->io, log_prefix,
-						plugin->mce, slot->sim_card);
+				plugin->mce, slot->radio, slot->sim_card);
 	}
 
 	ril_plugin_send_screen_state(slot);
