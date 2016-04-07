@@ -823,7 +823,8 @@ static void ofono_radio_finish_register(struct ofono_radio_settings *rs)
 	__ofono_atom_register(rs->atom, radio_settings_unregister);
 }
 
-static void radio_mode_set_callback_at_reg(const struct ofono_error *error, void *data)
+static void radio_mode_set_callback_at_reg(const struct ofono_error *error,
+						void *data)
 {
 	struct ofono_radio_settings *rs = data;
 
@@ -849,7 +850,6 @@ static void radio_load_settings(struct ofono_radio_settings *rs,
 	 * If no settings present or error; Set default.
 	 * Default RAT mode: ANY (LTE > UMTS > GSM)
 	 */
-
 	if (rs->settings == NULL) {
 		DBG("radiosetting storage open failed");
 		rs->mode = OFONO_RADIO_ACCESS_MODE_ANY;
