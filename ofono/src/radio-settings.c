@@ -33,7 +33,10 @@
 
 #include "ofono.h"
 #include "common.h"
+#include "storage.h"
 
+#define SETTINGS_STORE "radiosetting"
+#define SETTINGS_GROUP "Settings"
 #define RADIO_SETTINGS_FLAG_CACHED 0x1
 
 static GSList *g_drivers = NULL;
@@ -51,6 +54,8 @@ struct ofono_radio_settings {
 	enum ofono_radio_band_umts pending_band_umts;
 	ofono_bool_t fast_dormancy_pending;
 	uint32_t available_rats;
+	GKeyFile *settings;
+	char *imsi;
 	const struct ofono_radio_settings_driver *driver;
 	void *driver_data;
 	struct ofono_atom *atom;
@@ -593,6 +598,14 @@ static DBusMessage *radio_set_property(DBusConnection *conn, DBusMessage *msg,
 
 		rs->driver->set_rat_mode(rs, mode, radio_mode_set_callback, rs);
 
+		if (rs->settings) {
+			const char *mode_str;
+			mode_str = radio_access_mode_to_string(mode);
+			g_key_file_set_string(rs->settings, SETTINGS_GROUP,
+					"TechnologyPreference", mode_str);
+			storage_sync(rs->imsi, SETTINGS_STORE, rs->settings);
+		}
+
 		return NULL;
 	} else if (g_strcmp0(property, "GsmBand") == 0) {
 		const char *value;
@@ -729,6 +742,14 @@ static void radio_settings_unregister(struct ofono_atom *atom)
 
 	ofono_modem_remove_interface(modem, OFONO_RADIO_SETTINGS_INTERFACE);
 	g_dbus_unregister_interface(conn, path, OFONO_RADIO_SETTINGS_INTERFACE);
+
+	if (rs->settings) {
+		storage_close(rs->imsi, SETTINGS_STORE, rs->settings, TRUE);
+
+		g_free(rs->imsi);
+		rs->imsi = NULL;
+		rs->settings = NULL;
+	}
 }
 
 static void radio_settings_remove(struct ofono_atom *atom)
@@ -782,7 +803,7 @@ struct ofono_radio_settings *ofono_radio_settings_create(struct ofono_modem *mod
 	return rs;
 }
 
-void ofono_radio_settings_register(struct ofono_radio_settings *rs)
+static void ofono_radio_finish_register(struct ofono_radio_settings *rs)
 {
 	DBusConnection *conn = ofono_dbus_get_connection();
 	struct ofono_modem *modem = __ofono_atom_get_modem(rs->atom);
@@ -794,12 +815,95 @@ void ofono_radio_settings_register(struct ofono_radio_settings *rs)
 					NULL, rs, NULL)) {
 		ofono_error("Could not create %s interface",
 				OFONO_RADIO_SETTINGS_INTERFACE);
-
 		return;
 	}
 
 	ofono_modem_add_interface(modem, OFONO_RADIO_SETTINGS_INTERFACE);
+
 	__ofono_atom_register(rs->atom, radio_settings_unregister);
+}
+
+static void radio_mode_set_callback_at_reg(const struct ofono_error *error, void *data)
+{
+	struct ofono_radio_settings *rs = data;
+
+	if (error->type != OFONO_ERROR_TYPE_NO_ERROR)
+		DBG("Error setting radio access mode register time");
+
+	/*
+	 * Continue with atom register even if request fail at modem
+	 */
+	ofono_radio_finish_register(rs);
+}
+
+static void radio_load_settings(struct ofono_radio_settings *rs,
+					const char *imsi)
+{
+	GError *error;
+	char *strmode;
+
+	rs->imsi = g_strdup(imsi);
+	rs->settings = storage_open(rs->imsi, SETTINGS_STORE);
+
+	/*
+	 * If no settings present or error; Set default.
+	 * Default RAT mode: ANY (LTE > UMTS > GSM)
+	 */
+
+	if (rs->settings == NULL) {
+		DBG("radiosetting storage open failed");
+		rs->mode = OFONO_RADIO_ACCESS_MODE_ANY;
+		return;
+	}
+
+	error = NULL;
+	strmode = g_key_file_get_string(rs->settings, SETTINGS_GROUP,
+					"TechnologyPreference", &error);
+
+	if (error) {
+		g_error_free(error);
+		goto setdefault;
+	}
+
+	if (radio_access_mode_from_string(strmode, &rs->mode) == FALSE) {
+		DBG("Invalid rat mode in storage; Setting default");
+		goto setdefault;
+	}
+
+	g_free(strmode);
+	return;
+
+setdefault:
+	rs->mode = OFONO_RADIO_ACCESS_MODE_ANY;
+	g_key_file_set_string(rs->settings, SETTINGS_GROUP,
+					"TechnologyPreference", "any");
+	storage_sync(rs->imsi, SETTINGS_STORE, rs->settings);
+	g_free(strmode);
+}
+
+void ofono_radio_settings_register(struct ofono_radio_settings *rs)
+{
+	struct ofono_modem *modem = __ofono_atom_get_modem(rs->atom);
+	struct ofono_sim *sim = __ofono_atom_find(OFONO_ATOM_TYPE_SIM, modem);
+
+	if (sim == NULL)
+		goto finish;
+
+	radio_load_settings(rs, ofono_sim_get_imsi(sim));
+
+	if (rs->driver->set_rat_mode == NULL)
+		goto finish;
+
+	/*
+	 * Diff callback used. No need of using DBUS pending concept.
+	 * As its atom registration time - no DBUS clients.
+	 */
+	rs->driver->set_rat_mode(rs, rs->mode,
+					radio_mode_set_callback_at_reg, rs);
+	return;
+
+finish:
+	ofono_radio_finish_register(rs);
 }
 
 void ofono_radio_settings_remove(struct ofono_radio_settings *rs)
