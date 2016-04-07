@@ -811,8 +811,7 @@ static void radio_load_settings(struct ofono_radio_settings *rs,
 	GError *error;
 	char *strmode;
 
-	rs->imsi = g_strdup(imsi);
-	rs->settings = storage_open(rs->imsi, SETTINGS_STORE);
+	rs->settings = storage_open(imsi, SETTINGS_STORE);
 
 	/*
 	 * If no settings present or error; Set default.
@@ -823,6 +822,8 @@ static void radio_load_settings(struct ofono_radio_settings *rs,
 		rs->mode = OFONO_RADIO_ACCESS_MODE_ANY;
 		return;
 	}
+
+	rs->imsi = g_strdup(imsi);
 
 	error = NULL;
 	strmode = g_key_file_get_string(rs->settings, SETTINGS_GROUP,
