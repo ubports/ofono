@@ -141,16 +141,28 @@ static void ril_gprs_context_set_disconnected(struct ril_gprs_context *gcd)
 	if (gcd->active_call) {
 		ril_gprs_context_free_active_call(gcd);
 		if (gcd->deactivate.req) {
-			/* Complete the deactivate request */
-			ofono_gprs_context_cb_t cb = gcd->deactivate.cb;
-			gpointer data = gcd->deactivate.data;
+			struct ril_gprs_context_call deact = gcd->deactivate;
 
-			ril_data_request_cancel(gcd->deactivate.req);
+			/*
+			 * Complete the deactivate request. We need to
+			 * clear gcd->deactivate first because cancelling
+			 * the deactivation request will probably result
+			 * in ril_gprs_context_deactivate_primary_cb() being
+			 * invoked with GRILIO_CANCELLED status. And we don't
+			 * want to fail the disconnect request because this
+			 * is a success (we wanted to disconnect the data
+			 * call and it's gone).
+			 *
+			 * Additionally, we need to make sure that we don't
+			 * complete the same request twice - that would crash
+			 * the core.
+			 */
 			memset(&gcd->deactivate, 0, sizeof(gcd->deactivate));
-			if (cb) {
+			ril_data_request_cancel(deact.req);
+			if (deact.cb) {
 				struct ofono_error error;
 				ofono_info("Deactivated data call");
-				cb(ril_error_ok(&error), data);
+				deact.cb(ril_error_ok(&error), deact.data);
 			}
 		}
 	}
