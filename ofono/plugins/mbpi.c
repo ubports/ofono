@@ -120,7 +120,7 @@ static void text_handler(GMarkupParseContext *context,
 {
 	char **string = userdata;
 
-        g_free(*string);
+	g_free(*string);
 	*string = g_strndup(text, text_len);
 }
 
