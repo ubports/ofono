@@ -20,6 +20,9 @@
  */
 
 extern const char *mbpi_database;
+extern enum ofono_gprs_proto mbpi_default_internet_proto;
+extern enum ofono_gprs_proto mbpi_default_mms_proto;
+extern enum ofono_gprs_proto mbpi_default_proto;
 
 const char *mbpi_ap_type(enum ofono_gprs_context_type type);
 
