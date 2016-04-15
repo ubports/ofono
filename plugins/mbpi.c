@@ -44,6 +44,8 @@
 
 #include "mbpi.h"
 
+const char *mbpi_database = MBPI_DATABASE;
+
 #define _(x) case x: return (#x)
 
 enum MBPI_ERROR {
@@ -111,7 +113,7 @@ static void mbpi_g_set_error(GMarkupParseContext *context, GError **error,
 
 	va_end(ap);
 
-	g_prefix_error(error, "%s:%d ", MBPI_DATABASE, line_number);
+	g_prefix_error(error, "%s:%d ", mbpi_database, line_number);
 }
 
 static void text_handler(GMarkupParseContext *context,
@@ -611,11 +613,11 @@ static gboolean mbpi_parse(const GMarkupParser *parser, gpointer userdata,
 	GMarkupParseContext *context;
 	gboolean ret;
 
-	fd = open(MBPI_DATABASE, O_RDONLY);
+	fd = open(mbpi_database, O_RDONLY);
 	if (fd < 0) {
 		g_set_error(error, G_FILE_ERROR,
 				g_file_error_from_errno(errno),
-				"open(%s) failed: %s", MBPI_DATABASE,
+				"open(%s) failed: %s", mbpi_database,
 				g_strerror(errno));
 		return FALSE;
 	}
@@ -624,7 +626,7 @@ static gboolean mbpi_parse(const GMarkupParser *parser, gpointer userdata,
 		close(fd);
 		g_set_error(error, G_FILE_ERROR,
 				g_file_error_from_errno(errno),
-				"fstat(%s) failed: %s", MBPI_DATABASE,
+				"fstat(%s) failed: %s", mbpi_database,
 				g_strerror(errno));
 		return FALSE;
 	}
@@ -634,7 +636,7 @@ static gboolean mbpi_parse(const GMarkupParser *parser, gpointer userdata,
 		close(fd);
 		g_set_error(error, G_FILE_ERROR,
 				g_file_error_from_errno(errno),
-				"mmap(%s) failed: %s", MBPI_DATABASE,
+				"mmap(%s) failed: %s", mbpi_database,
 				g_strerror(errno));
 		return FALSE;
 	}
