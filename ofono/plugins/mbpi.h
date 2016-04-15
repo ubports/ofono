@@ -19,6 +19,8 @@
  *
  */
 
+extern const char *mbpi_database;
+
 const char *mbpi_ap_type(enum ofono_gprs_context_type type);
 
 void mbpi_ap_free(struct ofono_gprs_provision_data *data);
