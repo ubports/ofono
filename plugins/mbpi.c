@@ -45,6 +45,9 @@
 #include "mbpi.h"
 
 const char *mbpi_database = MBPI_DATABASE;
+enum ofono_gprs_proto mbpi_default_internet_proto = OFONO_GPRS_PROTO_IP;
+enum ofono_gprs_proto mbpi_default_mms_proto = OFONO_GPRS_PROTO_IP;
+enum ofono_gprs_proto mbpi_default_proto = OFONO_GPRS_PROTO_IP;
 
 #define _(x) case x: return (#x)
 
@@ -168,7 +171,7 @@ static void authentication_start(GMarkupParseContext *context,
 static void usage_start(GMarkupParseContext *context,
 			const gchar **attribute_names,
 			const gchar **attribute_values,
-			enum ofono_gprs_context_type *type, GError **error)
+			struct ofono_gprs_provision_data *apn, GError **error)
 {
 	const char *text = NULL;
 	int i;
@@ -184,12 +187,14 @@ static void usage_start(GMarkupParseContext *context,
 		return;
 	}
 
-	if (strcmp(text, "internet") == 0)
-		*type = OFONO_GPRS_CONTEXT_TYPE_INTERNET;
-	else if (strcmp(text, "mms") == 0)
-		*type = OFONO_GPRS_CONTEXT_TYPE_MMS;
-	else if (strcmp(text, "wap") == 0)
-		*type = OFONO_GPRS_CONTEXT_TYPE_WAP;
+	if (strcmp(text, "internet") == 0) {
+		apn->type = OFONO_GPRS_CONTEXT_TYPE_INTERNET;
+		apn->proto = mbpi_default_internet_proto;
+	} else if (strcmp(text, "mms") == 0) {
+		apn->type = OFONO_GPRS_CONTEXT_TYPE_MMS;
+		apn->proto = mbpi_default_mms_proto;
+	} else if (strcmp(text, "wap") == 0)
+		apn->type = OFONO_GPRS_CONTEXT_TYPE_WAP;
 	else
 		mbpi_g_set_error(context, error, G_MARKUP_ERROR,
 					G_MARKUP_ERROR_UNKNOWN_ATTRIBUTE,
@@ -222,7 +227,7 @@ static void apn_start(GMarkupParseContext *context, const gchar *element_name,
 						&apn->message_proxy);
 	else if (g_str_equal(element_name, "usage"))
 		usage_start(context, attribute_names, attribute_values,
-				&apn->type, error);
+				apn, error);
 }
 
 static void apn_end(GMarkupParseContext *context, const gchar *element_name,
@@ -333,7 +338,7 @@ static void apn_handler(GMarkupParseContext *context, struct gsm_data *gsm,
 
 	ap->apn = g_strdup(apn);
 	ap->type = OFONO_GPRS_CONTEXT_TYPE_INTERNET;
-	ap->proto = OFONO_GPRS_PROTO_IP;
+	ap->proto = mbpi_default_proto;
 	ap->auth_method = OFONO_GPRS_AUTH_METHOD_CHAP;
 
 	g_markup_parse_context_push(context, &apn_parser, ap);
