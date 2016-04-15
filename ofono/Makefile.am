@@ -22,7 +22,7 @@ pkginclude_HEADERS = include/log.h include/plugin.h include/history.h \
 			include/private-network.h include/cdma-netreg.h \
 			include/cdma-provision.h include/handsfree.h \
 			include/handsfree-audio.h \
-			include/sim-mnclength.h include/oemraw.h \
+			include/sim-mnclength.h \
 			include/siri.h
 
 nodist_pkginclude_HEADERS = include/version.h
@@ -653,7 +653,7 @@ src_ofonod_SOURCES = $(builtin_sources) src/ofono.ver \
 			src/cdma-sms.c src/private-network.c src/cdma-netreg.c \
 			src/cdma-provision.c src/handsfree.c \
 			src/handsfree-audio.c src/bluetooth.h \
-			src/sim-mnclength.c src/oemraw.c src/voicecallagent.c \
+			src/sim-mnclength.c src/voicecallagent.c \
 			src/hfp.h src/siri.c
 
 src_ofonod_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \

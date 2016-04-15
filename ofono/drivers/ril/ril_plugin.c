@@ -122,6 +122,7 @@ struct ril_slot {
 	struct ril_sim_settings *sim_settings;
 	struct ril_cell_info *cell_info;
 	struct ril_cell_info_dbus *cell_info_dbus;
+	struct ril_oem_raw *oem_raw;
 	struct ril_data *data;
 	GRilIoChannel *io;
 	gulong io_event_id[IO_EVENT_COUNT];
@@ -673,6 +674,11 @@ static void ril_plugin_modem_removed(struct ril_modem *modem, void *data)
 	GASSERT(slot->modem);
 	GASSERT(slot->modem == modem);
 
+	if (slot->oem_raw) {
+		ril_oem_raw_free(slot->oem_raw);
+		slot->oem_raw = NULL;
+	}
+
 	if (slot->sim_info_dbus) {
 		ril_sim_info_dbus_free(slot->sim_info_dbus);
 		slot->sim_info_dbus = NULL;
@@ -803,6 +809,9 @@ static void ril_plugin_create_modem(struct ril_slot *slot)
 				ril_cell_info_dbus_new(slot->modem,
 							slot->cell_info);
 		}
+
+		slot->oem_raw = ril_oem_raw_new(slot->modem,
+						ril_plugin_log_prefix(slot));
 
 		ril_modem_set_removed_cb(modem, ril_plugin_modem_removed, slot);
 		ril_modem_set_online_cb(modem, ril_plugin_modem_online, slot);
@@ -1633,7 +1642,6 @@ static int ril_plugin_init(void)
 	ofono_phonebook_driver_register(&ril_phonebook_driver);
 	ofono_ussd_driver_register(&ril_ussd_driver);
 	ofono_cbs_driver_register(&ril_cbs_driver);
-	ofono_oem_raw_driver_register(&ril_oem_raw_driver);
 	ofono_stk_driver_register(&ril_stk_driver);
 
 	/* This will create the modems (those that are enabled) */
@@ -1677,7 +1685,6 @@ static void ril_plugin_exit(void)
 	ofono_phonebook_driver_unregister(&ril_phonebook_driver);
 	ofono_ussd_driver_unregister(&ril_ussd_driver);
 	ofono_cbs_driver_unregister(&ril_cbs_driver);
-	ofono_oem_raw_driver_unregister(&ril_oem_raw_driver);
 	ofono_stk_driver_unregister(&ril_stk_driver);
 
 	if (ril_plugin) {

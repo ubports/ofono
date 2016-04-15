@@ -28,7 +28,6 @@
 #include <ofono/gprs-context.h>
 #include <ofono/gprs.h>
 #include <ofono/netreg.h>
-#include <ofono/oemraw.h>
 #include <ofono/phonebook.h>
 #include <ofono/radio-settings.h>
 #include <ofono/sim.h>
@@ -99,6 +98,11 @@ void ril_plugin_set_default_voice_imsi(struct ril_plugin *plugin,
 void ril_plugin_set_default_data_imsi(struct ril_plugin *plugin,
 							const char *imsi);
 
+struct ril_oem_raw;
+struct ril_oem_raw *ril_oem_raw_new(struct ril_modem *md,
+						const char *log_prefix);
+void ril_oem_raw_free(struct ril_oem_raw *raw);
+
 struct ril_sim_info_dbus;
 struct ril_sim_info_dbus *ril_sim_info_dbus_new(struct ril_modem *md,
 						struct ril_sim_info *info);
@@ -149,7 +153,6 @@ extern const struct ofono_gprs_context_driver ril_gprs_context_driver;
 extern const struct ofono_gprs_driver ril_gprs_driver;
 extern const struct ofono_modem_driver ril_modem_driver;
 extern const struct ofono_netreg_driver ril_netreg_driver;
-extern /* const */ struct ofono_oem_raw_driver ril_oem_raw_driver;
 extern const struct ofono_phonebook_driver ril_phonebook_driver;
 extern const struct ofono_radio_settings_driver ril_radio_settings_driver;
 extern const struct ofono_sim_driver ril_sim_driver;
