@@ -194,6 +194,7 @@ static void print_backtrace(unsigned int offset)
 		pos = strchr(buf, '\n');
 		if (!pos)
 			break;
+
 		*pos++ = '\0';
 
 		if (strcmp(buf, "??") == 0) {
