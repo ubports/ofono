@@ -275,6 +275,7 @@ static void ril_setup_data_call_cb(struct ril_msg *message, gpointer user_data)
 	if (raw_addrs) {
 		char **ip_addrs = g_strsplit(raw_addrs, " ", 3);
 		char **split_ip_addr;
+		char *netmask;
 
 		if (ip_addrs == NULL || g_strv_length(ip_addrs) == 0) {
 			g_strfreev(ip_addrs);
@@ -292,6 +293,9 @@ static void ril_setup_data_call_cb(struct ril_msg *message, gpointer user_data)
 		 * explicitly strip any prefix after calculating the netmask
 		 */
 		split_ip_addr = g_strsplit(ip_addrs[0], "/", 2);
+
+		netmask = ril_util_get_netmask(ip_addrs[0]);
+
 		g_strfreev(ip_addrs);
 
 		if (split_ip_addr == NULL ||
@@ -300,8 +304,7 @@ static void ril_setup_data_call_cb(struct ril_msg *message, gpointer user_data)
 			goto error_free;
 		}
 
-		ofono_gprs_context_set_ipv4_netmask(gc,
-					ril_util_get_netmask(split_ip_addr[0]));
+		ofono_gprs_context_set_ipv4_netmask(gc, netmask);
 
 		ofono_gprs_context_set_ipv4_address(gc, split_ip_addr[0], TRUE);
 	}
