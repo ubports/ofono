@@ -234,29 +234,6 @@ static const struct cb_data testdata_query_invalid_3 = {
 	.error_type = OFONO_ERROR_TYPE_FAILURE,
 };
 
-/*
- * The following structure contains test data for a
- * RIL_REQUEST_GET_FACILITY_LOCK reply with an incomplete
- * integer parameter, which will trigger a malformed parcel
- * error.
- */
-static const guchar reply_get_facility_lock_data_invalid_4[] = {
-	0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00
-};
-
-static const struct cb_data testdata_query_invalid_4 = {
-	.start_func = trigger_query,
-	.lock = "OI",
-	.cls = BEARER_CLASS_VOICE,
-	.rtd = {
-		.req_data = req_get_facility_lock_parcel_1,
-		.req_size = sizeof(req_get_facility_lock_parcel_1),
-		.rsp_data = reply_get_facility_lock_data_invalid_4,
-		.rsp_size = sizeof(reply_get_facility_lock_data_invalid_4),
-	},
-	.error_type = OFONO_ERROR_TYPE_FAILURE,
-};
-
 /* RIL_REQUEST_SET_FACILITY_LOCK witht the following parameters:
  *
  * facility="OI" (outgoing international calls)
