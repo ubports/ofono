@@ -153,6 +153,7 @@ struct pb_data {
 	struct ofono_sim *sim;
 	struct ofono_sim_context *sim_context;
 	const unsigned char *df_path;
+	guint register_id;
 	size_t df_size;
 };
 
@@ -1017,7 +1018,9 @@ static void ril_export_entries(struct ofono_phonebook *pb,
 static gboolean ril_delayed_register(gpointer user_data)
 {
 	struct ofono_phonebook *pb = user_data;
+	struct pb_data *pbd = ofono_phonebook_get_data(pb);
 
+	pbd->register_id = 0;
 	ofono_phonebook_register(pb);
 	return FALSE;
 }
@@ -1040,7 +1043,7 @@ static int ril_phonebook_probe(struct ofono_phonebook *pb,
 
 	ofono_phonebook_set_data(pb, pd);
 
-	g_idle_add(ril_delayed_register, pb);
+	pd->register_id = g_idle_add(ril_delayed_register, pb);
 
 	return 0;
 }
@@ -1048,6 +1051,10 @@ static int ril_phonebook_probe(struct ofono_phonebook *pb,
 static void ril_phonebook_remove(struct ofono_phonebook *pb)
 {
 	struct pb_data *pbd = ofono_phonebook_get_data(pb);
+
+	if (pbd->register_id) {
+		g_source_remove(pbd->register_id);
+	}
 
 	ofono_phonebook_set_data(pb, NULL);
 	ofono_sim_context_free(pbd->sim_context);
