@@ -518,8 +518,9 @@ static void ril_plugin_update_ready(struct ril_plugin_priv *plugin)
 	}
 
 	if (plugin->pub.ready != ready) {
-		DBG("%sready", ready ? "" : "not ");
 		plugin->pub.ready = ready;
+		ril_plugin_dbus_block_imei_requests(plugin->dbus, !ready);
+		DBG("%sready", ready ? "" : "not ");
 		ril_plugin_dbus_signal(plugin->dbus, RIL_PLUGIN_SIGNAL_READY);
 	}
 }
@@ -827,16 +828,13 @@ static void ril_plugin_imei_cb(GRilIoChannel *io, int status,
 			const void *data, guint len, void *user_data)
 {
 	struct ril_slot *slot = user_data;
-	struct ril_plugin_priv *plugin = slot->plugin;
-	gboolean all_done = TRUE;
-	GSList *link;
+	char *imei = NULL;
 
 	GASSERT(slot->imei_req_id);
 	slot->imei_req_id = 0;
 
 	if (status == RIL_E_SUCCESS) {
 		GRilIoParser rilp;
-		char *imei;
 
 		grilio_parser_init(&rilp, data, len);
 		imei = grilio_parser_get_utf8(&rilp);
@@ -849,26 +847,16 @@ static void ril_plugin_imei_cb(GRilIoChannel *io, int status,
 		 * IMEI (if rild crashed and we have reconnected)
 		 */
 		GASSERT(!slot->imei || !g_strcmp0(slot->imei, imei));
-		g_free(slot->imei);
-		slot->pub.imei = slot->imei = imei;
-
-		ril_plugin_check_modem(slot);
-		ril_plugin_update_ready(plugin);
 	} else {
 		ofono_error("Slot %u IMEI query error: %s", slot->config.slot,
 						ril_error_to_string(status));
 	}
 
-	for (link = plugin->slots; link && all_done; link = link->next) {
-		if (((struct ril_slot *)link->data)->imei_req_id) {
-			all_done = FALSE;
-		}
-	}
+	g_free(slot->imei);
+	slot->pub.imei = slot->imei = (imei ? imei : g_strdup("ERROR"));
 
-	if (all_done) {
-		DBG("all done");
-		ril_plugin_dbus_block_imei_requests(plugin->dbus, FALSE);
-	}
+	ril_plugin_check_modem(slot);
+	ril_plugin_update_ready(slot->plugin);
 }
 
 /*
