@@ -44,6 +44,16 @@
 
 #include "mbpi.h"
 
+const char *mbpi_database = MBPI_DATABASE;
+
+/*
+ * Use IPv4 for MMS contexts because gprs.c assumes that MMS proxy
+ * address is IPv4.
+ */
+enum ofono_gprs_proto mbpi_default_internet_proto = OFONO_GPRS_PROTO_IPV4V6;
+enum ofono_gprs_proto mbpi_default_mms_proto = OFONO_GPRS_PROTO_IP;
+enum ofono_gprs_proto mbpi_default_proto = OFONO_GPRS_PROTO_IP;
+
 #define _(x) case x: return (#x)
 
 enum MBPI_ERROR {
@@ -111,7 +121,7 @@ static void mbpi_g_set_error(GMarkupParseContext *context, GError **error,
 
 	va_end(ap);
 
-	g_prefix_error(error, "%s:%d ", MBPI_DATABASE, line_number);
+	g_prefix_error(error, "%s:%d ", mbpi_database, line_number);
 }
 
 static void text_handler(GMarkupParseContext *context,
@@ -166,7 +176,7 @@ static void authentication_start(GMarkupParseContext *context,
 static void usage_start(GMarkupParseContext *context,
 			const gchar **attribute_names,
 			const gchar **attribute_values,
-			enum ofono_gprs_context_type *type, GError **error)
+			struct ofono_gprs_provision_data *apn, GError **error)
 {
 	const char *text = NULL;
 	int i;
@@ -182,12 +192,14 @@ static void usage_start(GMarkupParseContext *context,
 		return;
 	}
 
-	if (strcmp(text, "internet") == 0)
-		*type = OFONO_GPRS_CONTEXT_TYPE_INTERNET;
-	else if (strcmp(text, "mms") == 0)
-		*type = OFONO_GPRS_CONTEXT_TYPE_MMS;
-	else if (strcmp(text, "wap") == 0)
-		*type = OFONO_GPRS_CONTEXT_TYPE_WAP;
+	if (strcmp(text, "internet") == 0) {
+		apn->type = OFONO_GPRS_CONTEXT_TYPE_INTERNET;
+		apn->proto = mbpi_default_internet_proto;
+	} else if (strcmp(text, "mms") == 0) {
+		apn->type = OFONO_GPRS_CONTEXT_TYPE_MMS;
+		apn->proto = mbpi_default_mms_proto;
+	} else if (strcmp(text, "wap") == 0)
+		apn->type = OFONO_GPRS_CONTEXT_TYPE_WAP;
 	else
 		mbpi_g_set_error(context, error, G_MARKUP_ERROR,
 					G_MARKUP_ERROR_UNKNOWN_ATTRIBUTE,
@@ -220,7 +232,7 @@ static void apn_start(GMarkupParseContext *context, const gchar *element_name,
 						&apn->message_proxy);
 	else if (g_str_equal(element_name, "usage"))
 		usage_start(context, attribute_names, attribute_values,
-				&apn->type, error);
+				apn, error);
 }
 
 static void apn_end(GMarkupParseContext *context, const gchar *element_name,
@@ -331,7 +343,7 @@ static void apn_handler(GMarkupParseContext *context, struct gsm_data *gsm,
 
 	ap->apn = g_strdup(apn);
 	ap->type = OFONO_GPRS_CONTEXT_TYPE_INTERNET;
-	ap->proto = OFONO_GPRS_PROTO_IP;
+	ap->proto = mbpi_default_proto;
 	ap->auth_method = OFONO_GPRS_AUTH_METHOD_CHAP;
 
 	g_markup_parse_context_push(context, &apn_parser, ap);
@@ -611,11 +623,11 @@ static gboolean mbpi_parse(const GMarkupParser *parser, gpointer userdata,
 	GMarkupParseContext *context;
 	gboolean ret;
 
-	fd = open(MBPI_DATABASE, O_RDONLY);
+	fd = open(mbpi_database, O_RDONLY);
 	if (fd < 0) {
 		g_set_error(error, G_FILE_ERROR,
 				g_file_error_from_errno(errno),
-				"open(%s) failed: %s", MBPI_DATABASE,
+				"open(%s) failed: %s", mbpi_database,
 				g_strerror(errno));
 		return FALSE;
 	}
@@ -624,7 +636,7 @@ static gboolean mbpi_parse(const GMarkupParser *parser, gpointer userdata,
 		close(fd);
 		g_set_error(error, G_FILE_ERROR,
 				g_file_error_from_errno(errno),
-				"fstat(%s) failed: %s", MBPI_DATABASE,
+				"fstat(%s) failed: %s", mbpi_database,
 				g_strerror(errno));
 		return FALSE;
 	}
@@ -634,7 +646,7 @@ static gboolean mbpi_parse(const GMarkupParser *parser, gpointer userdata,
 		close(fd);
 		g_set_error(error, G_FILE_ERROR,
 				g_file_error_from_errno(errno),
-				"mmap(%s) failed: %s", MBPI_DATABASE,
+				"mmap(%s) failed: %s", mbpi_database,
 				g_strerror(errno));
 		return FALSE;
 	}
