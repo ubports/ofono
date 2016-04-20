@@ -1326,7 +1326,7 @@ void ofono_modem_remove_interface(struct ofono_modem *modem,
 	found = g_slist_find_custom(modem->interface_list, interface,
 						(GCompareFunc) strcmp);
 	if (found == NULL) {
-		ofono_error("Interface %s not found on the interface_list",
+		DBG("Interface %s not found on the interface_list",
 				interface);
 		return;
 	}
