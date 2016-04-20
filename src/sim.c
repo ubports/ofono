@@ -1950,8 +1950,6 @@ static void sim_efphase_read_cb(int ok, int length, int record,
 static void sim_initialize_after_pin(struct ofono_sim *sim)
 {
 	sim->context = ofono_sim_context_create(sim);
-	sim->spn_watches = __ofono_watchlist_new(g_free);
-	sim->imsi_watches = __ofono_watchlist_new(g_free);
 
 	ofono_sim_read(sim->context, SIM_EFPHASE_FILEID,
 			OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
@@ -2488,11 +2486,6 @@ static void sim_free_early_state(struct ofono_sim *sim)
 
 static void sim_spn_close(struct ofono_sim *sim)
 {
-	if (sim->spn_watches) {
-		__ofono_watchlist_free(sim->spn_watches);
-		sim->spn_watches = NULL;
-	}
-
 	/*
 	 * We have not initialized SPN logic at all yet, either because
 	 * no netreg / gprs atom has been needed or we have not reached the
@@ -2591,11 +2584,6 @@ static void sim_free_main_state(struct ofono_sim *sim)
 	sim->barred_dialing = FALSE;
 
 	sim_spn_close(sim);
-
-	if (sim->imsi_watches) {
-		__ofono_watchlist_free(sim->imsi_watches);
-		sim->imsi_watches = NULL;
-	}
 
 	if (sim->context) {
 		ofono_sim_context_free(sim->context);
@@ -3086,9 +3074,13 @@ static void sim_unregister(struct ofono_atom *atom)
 
 	__ofono_watchlist_free(sim->iccid_watches);
 	sim->iccid_watches = NULL;
+	__ofono_watchlist_free(sim->imsi_watches);
+	sim->imsi_watches = NULL;
 
 	__ofono_watchlist_free(sim->state_watches);
 	sim->state_watches = NULL;
+	__ofono_watchlist_free(sim->spn_watches);
+	sim->spn_watches = NULL;
 
 	g_dbus_unregister_interface(conn, path, OFONO_SIM_MANAGER_INTERFACE);
 	ofono_modem_remove_interface(modem, OFONO_SIM_MANAGER_INTERFACE);
@@ -3218,8 +3210,10 @@ void ofono_sim_register(struct ofono_sim *sim)
 	}
 
 	ofono_modem_add_interface(modem, OFONO_SIM_MANAGER_INTERFACE);
-	sim->state_watches = __ofono_watchlist_new(g_free);
 	sim->iccid_watches = __ofono_watchlist_new(g_free);
+	sim->imsi_watches = __ofono_watchlist_new(g_free);
+	sim->state_watches = __ofono_watchlist_new(g_free);
+	sim->spn_watches = __ofono_watchlist_new(g_free);
 	sim->simfs = sim_fs_new(sim, sim->driver);
 
 	__ofono_atom_register(sim->atom, sim_unregister);
