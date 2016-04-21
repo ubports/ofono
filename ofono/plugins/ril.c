@@ -215,8 +215,6 @@ void ril_pre_sim(struct ofono_modem *modem)
 void ril_post_sim(struct ofono_modem *modem)
 {
 	struct ril_data *rd = ofono_modem_get_data(modem);
-	struct ofono_gprs *gprs;
-	struct ofono_gprs_context *gc;
 	struct ofono_message_waiting *mw;
 
 	/* TODO: this function should setup:
@@ -225,23 +223,6 @@ void ril_post_sim(struct ofono_modem *modem)
 	 *  - radio_settings
 	 */
 	ofono_sms_create(modem, rd->vendor, RILMODEM, rd->ril);
-
-	gprs = ofono_gprs_create(modem, rd->vendor, RILMODEM, rd->ril);
-	gc = ofono_gprs_context_create(modem, rd->vendor, RILMODEM, rd->ril);
-
-	if (gc) {
-		ofono_gprs_context_set_type(gc,
-					OFONO_GPRS_CONTEXT_TYPE_INTERNET);
-		ofono_gprs_add_context(gprs, gc);
-	}
-
-	gc = ofono_gprs_context_create(modem, rd->vendor, RILMODEM, rd->ril);
-
-	if (gc) {
-		ofono_gprs_context_set_type(gc,
-					OFONO_GPRS_CONTEXT_TYPE_MMS);
-		ofono_gprs_add_context(gprs, gc);
-	}
 
 	mw = ofono_message_waiting_create(modem);
 	if (mw)
@@ -255,11 +236,28 @@ void ril_post_sim(struct ofono_modem *modem)
 void ril_post_online(struct ofono_modem *modem)
 {
 	struct ril_data *rd = ofono_modem_get_data(modem);
+	struct ofono_gprs *gprs;
+	struct ofono_gprs_context *gc;
 
 	ofono_netreg_create(modem, rd->vendor, RILMODEM, rd->ril);
 	ofono_ussd_create(modem, rd->vendor, RILMODEM, rd->ril);
 	ofono_call_settings_create(modem, rd->vendor, RILMODEM, rd->ril);
 	ofono_call_barring_create(modem, rd->vendor, RILMODEM, rd->ril);
+	gprs = ofono_gprs_create(modem, rd->vendor, RILMODEM, rd->ril);
+	gc = ofono_gprs_context_create(modem, rd->vendor, RILMODEM, rd->ril);
+
+	if (gc) {
+		ofono_gprs_context_set_type(gc,
+					OFONO_GPRS_CONTEXT_TYPE_INTERNET);
+		ofono_gprs_add_context(gprs, gc);
+	}
+
+	gc = ofono_gprs_context_create(modem, rd->vendor, RILMODEM, rd->ril);
+
+	if (gc) {
+		ofono_gprs_context_set_type(gc, OFONO_GPRS_CONTEXT_TYPE_MMS);
+		ofono_gprs_add_context(gprs, gc);
+	}
 }
 
 static void ril_set_online_cb(struct ril_msg *message, gpointer user_data)
