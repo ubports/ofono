@@ -95,6 +95,7 @@ static struct sim_ef_info ef_db[] = {
 {	0x6F4D, 0x7F20, 0x7FFF, EF, RECORD, 0,		PIN,	PIN2	},
 {	0x6F50, 0x7F20, 0x7FFF, EF, BINARY, 0,		PIN,	PIN	},
 {	0x6F56, 0x0000, 0x7FFF, EF, BINARY, 0,		PIN,	PIN2	},
+{	0x6F57,	0x7F20,	0x7FFF,	EF, BINARY, 0,		PIN,	PIN2	},
 {	0x6FAD, 0x7F20, 0x7FFF, EF, BINARY, 0,		ALW,	ADM	},
 {	0x6FAE, 0x7F20, 0x0000, EF, BINARY, 1,		ALW,	ADM	},
 {	0x6FB7, 0x7F20, 0x7FFF, EF, BINARY, 0,		ALW,	ADM	},
