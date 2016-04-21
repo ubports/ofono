@@ -304,7 +304,8 @@ static void ril_setup_data_call_cb(struct ril_msg *message, gpointer user_data)
 			goto error_free;
 		}
 
-		ofono_gprs_context_set_ipv4_netmask(gc, netmask);
+		if (netmask)
+			ofono_gprs_context_set_ipv4_netmask(gc, netmask);
 
 		ofono_gprs_context_set_ipv4_address(gc, split_ip_addr[0], TRUE);
 	}
