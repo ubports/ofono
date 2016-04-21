@@ -642,6 +642,9 @@ endif
 builtin_modules += sms_history
 builtin_sources += plugins/smshistory.c
 
+builtin_modules += allowed_apns
+builtin_sources += plugins/allowed-apns.c
+
 sbin_PROGRAMS = src/ofonod
 
 src_ofonod_SOURCES = $(builtin_sources) $(gatchat_sources) src/ofono.ver \
