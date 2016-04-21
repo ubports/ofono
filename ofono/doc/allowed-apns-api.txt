@@ -1,0 +1,17 @@
+Allowed APNs hierarchy
+=========================
+
+Service		org.ofono
+Interface	org.ofono.AllowedAccessPoints
+Object path	[variable prefix]/{modem0,modem1,...}
+
+Methods		array{string} GetAllowedAccessPoints()
+
+			Get the list of allowed access points provided
+			in the SIM card.
+
+			This method returns an array of strings which
+			contains a list of Access Point Names supported
+			by network provider. Returns with an error if
+			SIM reading failed or an empty list if there
+			are no access points listed on the SIM.
