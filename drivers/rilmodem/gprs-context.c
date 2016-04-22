@@ -221,7 +221,6 @@ static int gprs_context_set_gateway(struct ofono_gprs_context *gc,
 			ofono_gprs_context_set_ipv4_gateway(gc, gateways[i]);
 
 			ipv4_flag = TRUE;
-
 		} else if (!ipv6_flag && proto == OFONO_GPRS_PROTO_IPV6) {
 			ofono_gprs_context_set_ipv6_gateway(gc, gateways[i]);
 
@@ -334,7 +333,6 @@ static int gprs_context_set_address(struct ofono_gprs_context *gc,
 				return -1;
 
 			ipv4_flag = TRUE;
-
 		} else if (!ipv6_flag &&
 			proto == OFONO_GPRS_PROTO_IPV6) {
 			if (gprs_context_set_ipv6_address(gc,
