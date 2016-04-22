@@ -2094,12 +2094,10 @@ static void modem_unregister(struct ofono_modem *modem)
 	modem->sim_watch = 0;
 	modem->sim_ready_watch = 0;
 
-	g_slist_foreach(modem->interface_list, (GFunc) g_free, NULL);
-	g_slist_free(modem->interface_list);
+	g_slist_free_full(modem->interface_list, g_free);
 	modem->interface_list = NULL;
 
-	g_slist_foreach(modem->feature_list, (GFunc) g_free, NULL);
-	g_slist_free(modem->feature_list);
+	g_slist_free_full(modem->feature_list, g_free);
 	modem->feature_list = NULL;
 
 	if (modem->timeout) {
