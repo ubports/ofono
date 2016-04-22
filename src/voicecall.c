@@ -47,7 +47,7 @@
 #define SETTINGS_STORE "voicecall"
 #define SETTINGS_GROUP "Settings"
 
-GSList *g_drivers = NULL;
+static GSList *g_drivers = NULL;
 
 struct ofono_voicecall {
 	GSList *call_list;
