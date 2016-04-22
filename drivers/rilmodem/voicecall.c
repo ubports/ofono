@@ -302,8 +302,7 @@ no_calls:
 		}
 	}
 
-	g_slist_foreach(vd->calls, (GFunc) g_free, NULL);
-	g_slist_free(vd->calls);
+	g_slist_free_full(vd->calls, g_free);
 
 	vd->calls = calls;
 	vd->local_release = 0;
@@ -848,8 +847,7 @@ void ril_voicecall_remove(struct ofono_voicecall *vc)
 	if (vd->clcc_source)
 		g_source_remove(vd->clcc_source);
 
-	g_slist_foreach(vd->calls, (GFunc) g_free, NULL);
-	g_slist_free(vd->calls);
+	g_slist_free_full(vd->calls, g_free);
 
 	ofono_voicecall_set_data(vc, NULL);
 
