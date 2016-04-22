@@ -216,8 +216,7 @@ static DBusMessage *smart_messaging_send_vcard(DBusConnection *conn,
 	err = __ofono_sms_txq_submit(sm->sms, msg_list, flags, &uuid,
 					message_queued, msg);
 
-	g_slist_foreach(msg_list, (GFunc)g_free, NULL);
-	g_slist_free(msg_list);
+	g_slist_free_full(msg_list, g_free);
 
 	if (err < 0)
 		return __ofono_error_failed(msg);
@@ -259,8 +258,7 @@ static DBusMessage *smart_messaging_send_vcal(DBusConnection *conn,
 	err = __ofono_sms_txq_submit(sm->sms, msg_list, flags, &uuid,
 					message_queued, msg);
 
-	g_slist_foreach(msg_list, (GFunc)g_free, NULL);
-	g_slist_free(msg_list);
+	g_slist_free_full(msg_list, g_free);
 
 	if (err < 0)
 		return __ofono_error_failed(msg);
