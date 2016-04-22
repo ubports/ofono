@@ -2541,8 +2541,7 @@ void sms_assembly_free(struct sms_assembly *assembly)
 	for (l = assembly->assembly_list; l; l = l->next) {
 		struct sms_assembly_node *node = l->data;
 
-		g_slist_foreach(node->fragment_list, (GFunc) g_free, 0);
-		g_slist_free(node->fragment_list);
+		g_slist_free_full(node->fragment_list, g_free);
 		g_free(node);
 	}
 
@@ -2692,8 +2691,7 @@ void sms_assembly_expire(struct sms_assembly *assembly, time_t before)
 
 		sms_assembly_backup_free(assembly, node);
 
-		g_slist_foreach(node->fragment_list, (GFunc) g_free, 0);
-		g_slist_free(node->fragment_list);
+		g_slist_free_full(node->fragment_list, g_free);
 		g_free(node);
 
 		if (prev)
@@ -3506,8 +3504,7 @@ GSList *sms_datagram_prepare(const char *to,
 	}
 
 	if (left > 0) {
-		g_slist_foreach(r, (GFunc) g_free, NULL);
-		g_slist_free(r);
+		g_slist_free_full(r, g_free);
 
 		return NULL;
 	} else {
@@ -3698,8 +3695,7 @@ GSList *sms_text_prepare_with_alphabet(const char *to, const char *utf8,
 		g_free(ucs2_encoded);
 
 	if (left > 0) {
-		g_slist_foreach(r, (GFunc) g_free, NULL);
-		g_slist_free(r);
+		g_slist_free_full(r, g_free);
 
 		return NULL;
 	} else {
@@ -4214,8 +4210,7 @@ void cbs_assembly_free(struct cbs_assembly *assembly)
 	for (l = assembly->assembly_list; l; l = l->next) {
 		struct cbs_assembly_node *node = l->data;
 
-		g_slist_foreach(node->pages, (GFunc) g_free, 0);
-		g_slist_free(node->pages);
+		g_slist_free_full(node->pages, g_free);
 		g_free(node);
 	}
 
@@ -4294,8 +4289,7 @@ static void cbs_assembly_expire(struct cbs_assembly *assembly,
 		else
 			assembly->assembly_list = l->next;
 
-		g_slist_foreach(node->pages, (GFunc) g_free, NULL);
-		g_slist_free(node->pages);
+		g_slist_free_full(node->pages, g_free);
 		g_free(node->pages);
 		tmp = l;
 		l = l->next;
@@ -4604,8 +4598,7 @@ GSList *cbs_extract_topic_ranges(const char *ranges)
 	}
 
 	tmp = cbs_optimize_ranges(ret);
-	g_slist_foreach(ret, (GFunc) g_free, NULL);
-	g_slist_free(ret);
+	g_slist_free_full(ret, g_free);
 
 	return tmp;
 }
