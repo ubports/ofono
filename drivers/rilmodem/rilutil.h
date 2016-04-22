@@ -109,6 +109,8 @@ const char *ril_util_gprs_proto_to_ril_string(enum ofono_gprs_proto);
 
 int ril_util_registration_state_to_status(int reg_state);
 
+int ril_util_address_to_gprs_proto(const char *addr);
+
 #define DECLARE_FAILURE(e)			\
 	struct ofono_error e;			\
 	e.type = OFONO_ERROR_TYPE_FAILURE;	\

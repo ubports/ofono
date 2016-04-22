@@ -28,6 +28,7 @@
 #include <gril.h>
 #include <string.h>
 #include <stdlib.h>
+#include <arpa/inet.h>
 
 #define OFONO_API_SUBJECT_TO_CHANGE
 #include <ofono/log.h>
@@ -131,4 +132,30 @@ int ril_util_registration_state_to_status(int reg_state)
 	}
 
 	return reg_state;
+}
+
+int ril_util_address_to_gprs_proto(const char *addr)
+{
+	int ret = -1;
+	struct in_addr ipv4;
+	struct in6_addr ipv6;
+	char **addr_split = g_strsplit(addr, "/", 2);
+
+	if (addr_split == NULL || g_strv_length(addr_split) == 0)
+		goto done;
+
+	if (inet_pton(AF_INET, addr_split[0], &ipv4) > 0) {
+		ret = OFONO_GPRS_PROTO_IP;
+		goto done;
+	}
+
+	if (inet_pton(AF_INET6, addr_split[0], &ipv6) > 0) {
+		ret = OFONO_GPRS_PROTO_IPV6;
+		goto done;
+	}
+
+done:
+	g_strfreev(addr_split);
+
+	return ret;
 }
