@@ -687,8 +687,7 @@ static void handsfree_unregister(struct ofono_atom *atom)
 		__ofono_dbus_pending_reply(&hf->pending, reply);
 	}
 
-	g_slist_foreach(hf->subscriber_numbers, (GFunc) g_free, NULL);
-	g_slist_free(hf->subscriber_numbers);
+	g_slist_free_full(hf->subscriber_numbers, g_free);
 	hf->subscriber_numbers = NULL;
 
 	ofono_modem_remove_interface(modem, OFONO_HANDSFREE_INTERFACE);
