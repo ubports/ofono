@@ -980,8 +980,7 @@ void sim_spdi_free(struct sim_spdi *spdi)
 	if (spdi == NULL)
 		return;
 
-	g_slist_foreach(spdi->operators, (GFunc)g_free, NULL);
-	g_slist_free(spdi->operators);
+	g_slist_free_full(spdi->operators, g_free);
 	g_free(spdi);
 }
 
@@ -1088,8 +1087,7 @@ void sim_eons_free(struct sim_eons *eons)
 
 	g_free(eons->pnn_list);
 
-	g_slist_foreach(eons->opl_list, (GFunc)g_free, NULL);
-	g_slist_free(eons->opl_list);
+	g_slist_free_full(eons->opl_list, g_free);
 
 	g_free(eons);
 }
