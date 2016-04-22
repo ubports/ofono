@@ -146,7 +146,7 @@ static int gprs_context_set_dns_servers(struct ofono_gprs_context *gc,
 					enum ofono_gprs_proto protocol,
 					char **dns_addrs)
 {
-	char **dns_ipv4_addrs, **dns_ipv6_addrs;
+	const char **dns_ipv4_addrs, **dns_ipv6_addrs;
 	int proto;
 	int ipv4_idx, ipv6_idx;
 	int dns_strv_len;
@@ -166,8 +166,8 @@ static int gprs_context_set_dns_servers(struct ofono_gprs_context *gc,
 
 	dns_strv_len = g_strv_length(dns_addrs);
 
-	dns_ipv4_addrs = g_new0(char *, dns_strv_len + 1);
-	dns_ipv6_addrs = g_new0(char *, dns_strv_len + 1);
+	dns_ipv4_addrs = g_new0(const char *, dns_strv_len + 1);
+	dns_ipv6_addrs = g_new0(const char *, dns_strv_len + 1);
 
 	for (i = 0, ipv4_idx = 0, ipv6_idx = 0; dns_addrs[i]; i++) {
 		proto = ril_util_address_to_gprs_proto(dns_addrs[i]);
@@ -180,12 +180,10 @@ static int gprs_context_set_dns_servers(struct ofono_gprs_context *gc,
 	}
 
 	if (ipv4_idx)
-		ofono_gprs_context_set_ipv4_dns_servers(gc,
-					(const char **) dns_ipv4_addrs);
+		ofono_gprs_context_set_ipv4_dns_servers(gc, dns_ipv4_addrs);
 
 	if (ipv6_idx)
-		ofono_gprs_context_set_ipv6_dns_servers(gc,
-					(const char **) dns_ipv6_addrs);
+		ofono_gprs_context_set_ipv6_dns_servers(gc, dns_ipv6_addrs);
 
 	g_free(dns_ipv4_addrs);
 	g_free(dns_ipv6_addrs);
