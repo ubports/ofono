@@ -240,9 +240,9 @@ static int gprs_context_set_gateway(struct ofono_gprs_context *gc,
 }
 
 static int gprs_context_set_ipv4_address(struct ofono_gprs_context *gc,
-				const char *addrs)
+				const char *addr)
 {
-	char **split_addrs = g_strsplit(addrs, "/", 2);
+	char **split_addr = g_strsplit(addr, "/", 2);
 	char *netmask;
 
 	/*
@@ -250,52 +250,52 @@ static int gprs_context_set_ipv4_address(struct ofono_gprs_context *gc,
 	 * ( Eg. "/30" ).  As this confuses NetworkManager, we
 	 * explicitly strip any prefix after calculating the netmask
 	 */
-	if (split_addrs == NULL || g_strv_length(split_addrs) == 0) {
-		g_strfreev(split_addrs);
+	if (split_addr == NULL || g_strv_length(split_addr) == 0) {
+		g_strfreev(split_addr);
 		return -1;
 	}
 
-	netmask = ril_util_get_netmask(addrs);
+	netmask = ril_util_get_netmask(addr);
 
 	if (netmask)
 		ofono_gprs_context_set_ipv4_netmask(gc, netmask);
 
-	ofono_gprs_context_set_ipv4_address(gc, split_addrs[0], TRUE);
+	ofono_gprs_context_set_ipv4_address(gc, split_addr[0], TRUE);
 
-	g_strfreev(split_addrs);
+	g_strfreev(split_addr);
 
 	return 0;
 }
 
 static int gprs_context_set_ipv6_address(struct ofono_gprs_context *gc,
-				const char *addrs)
+				const char *addr)
 {
-	char **split_addrs = g_strsplit(addrs, "/", 2);
+	char **split_addr = g_strsplit(addr, "/", 2);
 	guint64 prefix_ull;
 	char *endptr;
 	unsigned char prefix;
 
-	if (split_addrs == NULL || g_strv_length(split_addrs) == 0) {
-		g_strfreev(split_addrs);
+	if (split_addr == NULL || g_strv_length(split_addr) == 0) {
+		g_strfreev(split_addr);
 		return -1;
 	}
 
-	ofono_gprs_context_set_ipv6_address(gc, split_addrs[0]);
+	ofono_gprs_context_set_ipv6_address(gc, split_addr[0]);
 
 	/*
 	 * We will set ipv6 prefix length if present
 	 * otherwise let connection manager decide
 	 */
-	if (!split_addrs[1]) {
-		g_strfreev(split_addrs);
+	if (!split_addr[1]) {
+		g_strfreev(split_addr);
 		return 0;
 	}
 
-	prefix_ull = g_ascii_strtoull(split_addrs[1], &endptr, 10);
+	prefix_ull = g_ascii_strtoull(split_addr[1], &endptr, 10);
 
 	/* Discard in case of conversion failure or invalid prefix length */
-	if (split_addrs[1] == endptr || *endptr != '\0' || prefix_ull > 128) {
-		g_strfreev(split_addrs);
+	if (split_addr[1] == endptr || *endptr != '\0' || prefix_ull > 128) {
+		g_strfreev(split_addr);
 		return -1;
 	}
 
@@ -303,7 +303,7 @@ static int gprs_context_set_ipv6_address(struct ofono_gprs_context *gc,
 
 	ofono_gprs_context_set_ipv6_prefix_length(gc, prefix);
 
-	g_strfreev(split_addrs);
+	g_strfreev(split_addr);
 
 	return 0;
 }
