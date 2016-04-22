@@ -2246,7 +2246,7 @@ static const GDBusMethodTable manager_methods[] = {
 						GDBUS_ARGS({ "calls", "ao" }),
 						multiparty_private_chat) },
 	{ GDBUS_ASYNC_METHOD("CreateMultiparty",
-					NULL, GDBUS_ARGS({ "calls", "o" }),
+					NULL, GDBUS_ARGS({ "calls", "ao" }),
 					multiparty_create) },
 	{ GDBUS_ASYNC_METHOD("HangupMultiparty", NULL, NULL,
 							multiparty_hangup) },
