@@ -2649,9 +2649,7 @@ static void free_sim_ecc_numbers(struct ofono_voicecall *vc, gboolean old_only)
 	 */
 	if (old_only == FALSE) {
 		if (vc->new_sim_en_list) {
-			g_slist_foreach(vc->new_sim_en_list, (GFunc) g_free,
-					NULL);
-			g_slist_free(vc->new_sim_en_list);
+			g_slist_free_full(vc->new_sim_en_list, g_free);
 			vc->new_sim_en_list = NULL;
 		}
 
@@ -2659,8 +2657,7 @@ static void free_sim_ecc_numbers(struct ofono_voicecall *vc, gboolean old_only)
 	}
 
 	if (vc->sim_en_list) {
-		g_slist_foreach(vc->sim_en_list, (GFunc) g_free, NULL);
-		g_slist_free(vc->sim_en_list);
+		g_slist_free_full(vc->sim_en_list, g_free);
 		vc->sim_en_list = NULL;
 	}
 }
