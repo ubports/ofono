@@ -988,8 +988,7 @@ static DBusMessage *sms_send_message(DBusConnection *conn, DBusMessage *msg,
 	err = __ofono_sms_txq_submit(sms, msg_list, flags, &uuid,
 					message_queued, msg);
 
-	g_slist_foreach(msg_list, (GFunc) g_free, NULL);
-	g_slist_free(msg_list);
+	g_slist_free_full(msg_list, g_free);
 
 	if (err < 0)
 		return __ofono_error_failed(msg);
@@ -1425,8 +1424,7 @@ static void handle_deliver(struct ofono_sms *sms, const struct sms *incoming)
 			return;
 
 		sms_dispatch(sms, sms_list);
-		g_slist_foreach(sms_list, (GFunc) g_free, NULL);
-		g_slist_free(sms_list);
+		g_slist_free_full(sms_list, g_free);
 
 		return;
 	}
@@ -1946,8 +1944,7 @@ static void sms_restore_tx_queue(struct ofono_sms *sms)
 		g_queue_push_tail(sms->txq, txq_entry);
 
 loop_out:
-		g_slist_foreach(backup_entry->msg_list, (GFunc)g_free, NULL);
-		g_slist_free(backup_entry->msg_list);
+		g_slist_free_full(backup_entry->msg_list, g_free);
 		g_free(backup_entry);
 	}
 
