@@ -233,23 +233,28 @@ static void vcard_printf_end(GString *vcards)
 	vcard_printf(vcards, "");
 }
 
-static void print_number(struct phonebook_number *pn, GString *vcards)
+static void print_number(gpointer pointer, gpointer user_data)
 {
+	struct phonebook_number *pn = pointer;
+	GString *vcards = user_data;
 	vcard_printf_number(vcards, pn->number, pn->type, pn->category);
 }
 
-static void destroy_number(struct phonebook_number *pn)
+static void destroy_number(gpointer pointer)
 {
+	struct phonebook_number *pn = pointer;
 	g_free(pn->number);
 	g_free(pn);
 }
 
-static void print_merged_entry(struct phonebook_person *person, GString *vcards)
+static void print_merged_entry(gpointer pointer, gpointer user_data)
 {
+	struct phonebook_person *person = pointer;
+	GString *vcards = user_data;
 	vcard_printf_begin(vcards);
 	vcard_printf_text(vcards, person->text);
 
-	g_slist_foreach(person->number_list, (GFunc) print_number, vcards);
+	g_slist_foreach(person->number_list, print_number, vcards);
 
 	vcard_printf_group(vcards, person->group);
 	vcard_printf_email(vcards, person->email);
@@ -257,15 +262,15 @@ static void print_merged_entry(struct phonebook_person *person, GString *vcards)
 	vcard_printf_end(vcards);
 }
 
-static void destroy_merged_entry(struct phonebook_person *person)
+static void destroy_merged_entry(gpointer pointer)
 {
+	struct phonebook_person *person = pointer;
 	g_free(person->text);
 	g_free(person->group);
 	g_free(person->email);
 	g_free(person->sip_uri);
 
-	g_slist_foreach(person->number_list, (GFunc) destroy_number, NULL);
-	g_slist_free(person->number_list);
+	g_slist_free_full(person->number_list, destroy_number);
 
 	g_free(person);
 }
@@ -419,10 +424,9 @@ static void export_phonebook_cb(const struct ofono_error *error, void *data)
 
 	/* convert the collected entries that are already merged to vcard */
 	phonebook->merge_list = g_slist_reverse(phonebook->merge_list);
-	g_slist_foreach(phonebook->merge_list, (GFunc) print_merged_entry,
+	g_slist_foreach(phonebook->merge_list, print_merged_entry,
 				phonebook->vcards);
-	g_slist_foreach(phonebook->merge_list, (GFunc) destroy_merged_entry,
-				NULL);
+	g_slist_free_full(phonebook->merge_list, destroy_merged_entry);
 	g_slist_free(phonebook->merge_list);
 	phonebook->merge_list = NULL;
 
