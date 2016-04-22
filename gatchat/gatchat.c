@@ -305,8 +305,9 @@ static void at_command_destroy(struct at_command *cmd)
 	g_free(cmd);
 }
 
-static void free_terminator(struct terminator_info *info)
+static void free_terminator(gpointer pointer)
 {
+	struct terminator_info *info = pointer;
 	g_free(info->terminator);
 	info->terminator = NULL;
 	g_free(info);
@@ -325,8 +326,7 @@ static void chat_cleanup(struct at_chat *chat)
 	chat->command_queue = NULL;
 
 	/* Cleanup any response lines we have pending */
-	g_slist_foreach(chat->response_lines, (GFunc)g_free, NULL);
-	g_slist_free(chat->response_lines);
+	g_slist_free_full(chat->response_lines, g_free);
 	chat->response_lines = NULL;
 
 	/* Cleanup registered notifications */
@@ -357,9 +357,7 @@ static void chat_cleanup(struct at_chat *chat)
 	chat->syntax = NULL;
 
 	if (chat->terminator_list) {
-		g_slist_foreach(chat->terminator_list,
-					(GFunc)free_terminator, NULL);
-		g_slist_free(chat->terminator_list);
+		g_slist_free_full(chat->terminator_list, free_terminator);
 		chat->terminator_list = NULL;
 	}
 }
@@ -461,8 +459,7 @@ static void at_chat_finish_command(struct at_chat *p, gboolean ok, char *final)
 		cmd->callback(ok, &result, cmd->user_data);
 	}
 
-	g_slist_foreach(response_lines, (GFunc)g_free, NULL);
-	g_slist_free(response_lines);
+	g_slist_free_full(response_lines, g_free);
 
 	g_free(final);
 	at_command_destroy(cmd);
