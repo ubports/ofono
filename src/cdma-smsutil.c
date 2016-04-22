@@ -533,8 +533,7 @@ static gboolean decode_subparams(struct simple_iter *iter, guint32 *bitmap,
 		}
 	}
 
-	g_slist_foreach(entries, (GFunc) g_free, NULL);
-	g_slist_free(entries);
+	g_slist_free_full(entries, g_free);
 
 	return decode_result;
 }
