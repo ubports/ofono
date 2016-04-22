@@ -1132,8 +1132,7 @@ static void test_assembly(void)
 
 	utf8 = sms_decode_text(l);
 
-	g_slist_foreach(l, (GFunc)g_free, NULL);
-	g_slist_free(l);
+	g_slist_free_full(l, g_free);
 
 	sms_assembly_free(assembly);
 
@@ -1214,8 +1213,7 @@ static void test_prepare_7bit(void)
 	g_assert(strcmp(expected_no_fragmentation_7bit, encoded_pdu) == 0);
 
 	g_free(encoded_pdu);
-	g_slist_foreach(r, (GFunc)g_free, NULL);
-	g_slist_free(r);
+	g_slist_free_full(r, g_free);
 }
 
 struct sms_concat_data {
@@ -1273,8 +1271,7 @@ static void test_prepare_concat(gconstpointer data)
 		pdus = g_slist_append(pdus, strpdu);
 	}
 
-	g_slist_foreach(r, (GFunc)g_free, NULL);
-	g_slist_free(r);
+	g_slist_free_full(r, g_free);
 
 	for (l = pdus; l; l = l->next) {
 		long len;
@@ -1474,16 +1471,14 @@ static void test_cbs_assembly(void)
 	l = cbs_assembly_add_page(assembly, &dec1);
 	g_assert(l);
 	g_assert(g_slist_length(assembly->recv_cell) == 1);
-	g_slist_foreach(l, (GFunc)g_free, NULL);
-	g_slist_free(l);
+	g_slist_free_full(l, g_free);
 
 	/* Can we receive new updates ? */
 	dec1.update_number = 8;
 	l = cbs_assembly_add_page(assembly, &dec1);
 	g_assert(l);
 	g_assert(g_slist_length(assembly->recv_cell) == 1);
-	g_slist_foreach(l, (GFunc)g_free, NULL);
-	g_slist_free(l);
+	g_slist_free_full(l, g_free);
 
 	/* Do we ignore old pages ? */
 	l = cbs_assembly_add_page(assembly, &dec1);
@@ -1529,8 +1524,7 @@ static void test_cbs_assembly(void)
 	g_assert(strcmp(utf8, "BelconnenFraserBelconnen") == 0);
 
 	g_free(utf8);
-	g_slist_foreach(l, (GFunc)g_free, NULL);
-	g_slist_free(l);
+	g_slist_free_full(l, g_free);
 
 	cbs_assembly_free(assembly);
 }
@@ -1621,8 +1615,7 @@ static void test_range_minimizer(void)
 			g_print("range: %s\n", rangestr);
 
 		g_free(rangestr);
-		g_slist_foreach(r, (GFunc)g_free, NULL);
-		g_slist_free(r);
+		g_slist_free_full(r, g_free);
 	}
 }
 
