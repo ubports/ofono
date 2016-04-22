@@ -74,8 +74,9 @@ struct sim_fs_op {
 	struct ofono_sim_context *context;
 };
 
-static void sim_fs_op_free(struct sim_fs_op *node)
+static void sim_fs_op_free(gpointer pointer)
 {
+	struct sim_fs_op *node = pointer;
 	g_free(node->buffer);
 	g_free(node);
 }
@@ -105,8 +106,7 @@ void sim_fs_free(struct sim_fs *fs)
 	 * for operations still in progress
 	 */
 	if (fs->op_q) {
-		g_queue_foreach(fs->op_q, (GFunc) sim_fs_op_free, NULL);
-		g_queue_free(fs->op_q);
+		g_queue_free_full(fs->op_q, sim_fs_op_free);
 		fs->op_q = NULL;
 	}
 
