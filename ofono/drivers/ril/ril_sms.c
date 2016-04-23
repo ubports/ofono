@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015 Jolla Ltd.
+ *  Copyright (C) 2015-2016 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -21,6 +21,9 @@
 #include "smsutil.h"
 #include "util.h"
 #include "simutil.h"
+
+#define RIL_SMS_ACK_RETRY_MS    1000
+#define RIL_SMS_ACK_RETRY_COUNT 10
 
 #define SIM_EFSMS_FILEID        0x6F3C
 #define EFSMS_LENGTH            176
@@ -278,6 +281,8 @@ static void ril_ack_delivery(struct ril_sms *sd, gboolean error)
 	grilio_request_append_int32(req, code);  /* error code */
 
 	/* ACK the incoming NEW_SMS */
+	grilio_request_set_retry(req, RIL_SMS_ACK_RETRY_MS,
+						RIL_SMS_ACK_RETRY_COUNT);
 	grilio_queue_send_request_full(sd->q, req,
 		RIL_REQUEST_SMS_ACKNOWLEDGE, ril_ack_delivery_cb, NULL, NULL);
 	grilio_request_unref(req);
