@@ -84,6 +84,7 @@ struct radio_data {
 	GRil *ril;
 	gboolean fast_dormancy;
 	gboolean pending_fd;
+	unsigned int vendor;
 };
 
 static void ril_set_rat_cb(struct ril_msg *message, gpointer user_data)
@@ -320,11 +321,11 @@ static void ril_set_band_cb(struct ril_msg *message, gpointer user_data)
 	}
 }
 
-static void ril_set_band(struct ofono_radio_settings *rs,
-			enum ofono_radio_band_gsm band_gsm,
-			enum ofono_radio_band_umts band_umts,
-			ofono_radio_settings_band_set_cb_t cb,
-			void *data)
+static void ril_sofia3gr_set_band(struct ofono_radio_settings *rs,
+					enum ofono_radio_band_gsm band_gsm,
+					enum ofono_radio_band_umts band_umts,
+					ofono_radio_settings_band_set_cb_t cb,
+					void *data)
 {
 	struct radio_data *rd = ofono_radio_settings_get_data(rs);
 	struct cb_data *cbd = cb_data_new(cb, data, rs);
@@ -393,7 +394,26 @@ static void ril_set_band(struct ofono_radio_settings *rs,
 		return;
 
 	g_free(cbd);
-	CALLBACK_WITH_FAILURE(cb,data);
+	CALLBACK_WITH_FAILURE(cb, data);
+}
+
+static void ril_set_band(struct ofono_radio_settings *rs,
+			enum ofono_radio_band_gsm band_gsm,
+			enum ofono_radio_band_umts band_umts,
+			ofono_radio_settings_band_set_cb_t cb,
+			void *data)
+{
+	struct radio_data *rd = ofono_radio_settings_get_data(rs);
+
+	switch (rd->vendor) {
+	case OFONO_RIL_VENDOR_IMC_SOFIA3GR:
+		ril_sofia3gr_set_band(rs, band_gsm, band_umts, cb, data);
+		return;
+	default:
+		break;
+	}
+
+	CALLBACK_WITH_FAILURE(cb, data);
 }
 
 static void ril_delayed_register(const struct ofono_error *error,
@@ -414,6 +434,7 @@ static int ril_radio_settings_probe(struct ofono_radio_settings *rs,
 	struct radio_data *rsd = g_new0(struct radio_data, 1);
 
 	rsd->ril = g_ril_clone(ril);
+	rsd->vendor = vendor;
 
 	ofono_radio_settings_set_data(rs, rsd);
 
