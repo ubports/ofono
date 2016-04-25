@@ -171,7 +171,8 @@ static void ril_post_online(struct ofono_modem *modem)
 	struct ril_data *rd = ofono_modem_get_data(modem);
 
 	ofono_netreg_create(modem, 0, "rilmodem", rd->ril);
-	ofono_radio_settings_create(modem, 0, "rilmodem", rd->ril);
+	ofono_radio_settings_create(modem, OFONO_RIL_VENDOR_IMC_SOFIA3GR,
+					"rilmodem", rd->ril);
 	ofono_ussd_create(modem, 0, "rilmodem", rd->ril);
 	ofono_netmon_create(modem, 0, "rilmodem", rd->ril);
 }
