@@ -148,15 +148,24 @@ static void ril_plugin_retry_init_io(struct ril_slot *slot);
 
 GLOG_MODULE_DEFINE("rilmodem");
 
+static const char ril_debug_trace_name[] = "ril_trace";
+
+static GLogModule ril_debug_trace_module = {
+    .name = ril_debug_trace_name,
+    .max_level = GLOG_LEVEL_VERBOSE,
+    .level = GLOG_LEVEL_VERBOSE,
+    .flags = GLOG_FLAG_HIDE_NAME
+};
+
 static struct ofono_debug_desc ril_debug_trace OFONO_DEBUG_ATTR = {
-	.name = "ril_trace",
-	.flags = OFONO_DEBUG_FLAG_DEFAULT,
+	.name = ril_debug_trace_name,
+	.flags = OFONO_DEBUG_FLAG_DEFAULT | OFONO_DEBUG_FLAG_HIDE_NAME,
 	.notify = ril_debug_trace_notify
 };
 
 static struct ofono_debug_desc ril_debug_dump OFONO_DEBUG_ATTR = {
 	.name = "ril_dump",
-	.flags = OFONO_DEBUG_FLAG_DEFAULT,
+	.flags = OFONO_DEBUG_FLAG_DEFAULT | OFONO_DEBUG_FLAG_HIDE_NAME,
 	.notify = ril_debug_dump_notify
 };
 
@@ -699,12 +708,7 @@ static void ril_plugin_modem_removed(struct ril_modem *modem, void *data)
 static void ril_plugin_trace(GRilIoChannel *io, GRILIO_PACKET_TYPE type,
 	guint id, guint code, const void *data, guint data_len, void *user_data)
 {
-	/* Turn prefix off */
-	static GLogModule log_module = {
-		.max_level = GLOG_LEVEL_VERBOSE,
-		.level     = GLOG_LEVEL_VERBOSE
-	};
-
+	static const GLogModule* log_module = &ril_debug_trace_module;
 	const char *prefix = io->name ? io->name : "";
 	const char dir = (type == GRILIO_PACKET_REQ) ? '<' : '>';
 	const char *scode;
@@ -717,21 +721,21 @@ static void ril_plugin_trace(GRilIoChannel *io, GRILIO_PACKET_TYPE type,
 		} else {
 			scode = ril_request_to_string(code);
 		}
-		gutil_log(&log_module, GLOG_LEVEL_VERBOSE, "%s%c [%08x] %s",
+		gutil_log(log_module, GLOG_LEVEL_VERBOSE, "%s%c [%08x] %s",
 				prefix, dir, id, scode);
 		break;
 	case GRILIO_PACKET_RESP:
-		gutil_log(&log_module, GLOG_LEVEL_VERBOSE, "%s%c [%08x] %s",
+		gutil_log(log_module, GLOG_LEVEL_VERBOSE, "%s%c [%08x] %s",
 				prefix, dir, id, ril_error_to_string(code));
 		break;
 	case GRILIO_PACKET_UNSOL:
-		gutil_log(&log_module, GLOG_LEVEL_VERBOSE, "%s%c %s",
+		gutil_log(log_module, GLOG_LEVEL_VERBOSE, "%s%c %s",
 				prefix, dir, ril_unsol_event_to_string(code));
 		break;
 	}
 }
 
-static void ril_debug_dump_update_slot(struct ril_slot *slot)
+static void ril_debug_dump_update(struct ril_slot *slot)
 {
 	if (slot->io) {
 		if (ril_debug_dump.flags & OFONO_DEBUG_FLAG_PRINT) {
@@ -747,7 +751,7 @@ static void ril_debug_dump_update_slot(struct ril_slot *slot)
 	}
 }
 
-static void ril_debug_trace_update_slot(struct ril_slot *slot)
+static void ril_debug_trace_update(struct ril_slot *slot)
 {
 	if (slot->io) {
 		if (ril_debug_trace.flags & OFONO_DEBUG_FLAG_PRINT) {
@@ -765,7 +769,7 @@ static void ril_debug_trace_update_slot(struct ril_slot *slot)
 								slot->dump_id);
 					slot->dump_id = 0;
 				}
-				ril_debug_dump_update_slot(slot);
+				ril_debug_dump_update(slot);
 			}
 		} else if (slot->trace_id) {
 			grilio_channel_remove_logger(slot->io, slot->trace_id);
@@ -965,8 +969,8 @@ static void ril_plugin_init_io(struct ril_slot *slot)
 		DBG("%s %s", slot->sockpath, slot->sub);
 		slot->io = grilio_channel_new_socket(slot->sockpath, slot->sub);
 		if (slot->io) {
-			ril_debug_trace_update_slot(slot);
-			ril_debug_dump_update_slot(slot);
+			ril_debug_trace_update(slot);
+			ril_debug_dump_update(slot);
 
 			if (slot->name) {
 				grilio_channel_set_name(slot->io, slot->name);
@@ -1522,19 +1526,19 @@ static void ril_plugin_enable_slot(struct ril_slot *slot)
 	slot->pub.enabled = TRUE;
 }
 
-struct ril_plugin_priv *ril_plugin = NULL;
+static struct ril_plugin_priv *ril_plugin = NULL;
 
 static void ril_debug_trace_notify(struct ofono_debug_desc *desc)
 {
 	if (ril_plugin) {
-		ril_plugin_foreach_slot(ril_plugin, ril_debug_trace_update_slot);
+		ril_plugin_foreach_slot(ril_plugin, ril_debug_trace_update);
 	}
 }
 
 static void ril_debug_dump_notify(struct ofono_debug_desc *desc)
 {
 	if (ril_plugin) {
-		ril_plugin_foreach_slot(ril_plugin, ril_debug_dump_update_slot);
+		ril_plugin_foreach_slot(ril_plugin, ril_debug_dump_update);
 	}
 }
 
@@ -1561,7 +1565,22 @@ static int ril_plugin_init(void)
 	DBG("");
 	GASSERT(!ril_plugin);
 
-	/* ofono core calls openlog() */
+	/*
+	 * Log categories (accessible via D-Bus) are generated from
+	 * ofono_debug_desc structures, while libglibutil based log
+	 * functions receive the log module name. Those should match
+	 * otherwise the client receiving the log won't get the category
+	 * information.
+	 */
+	grilio_hexdump_log.name = ril_debug_dump.name;
+	grilio_log.name = grilio_debug.name;
+
+	/*
+	 * Debug log plugin hooks gutil_log_func2 while we replace
+	 * gutil_log_func, they don't interfere with each other.
+	 *
+	 * Note that ofono core calls openlog(), so we don't need to.
+	 */
 	gutil_log_func = gutil_log_syslog;
 
 	ril_plugin_switch_user();

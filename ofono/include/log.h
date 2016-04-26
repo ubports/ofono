@@ -3,6 +3,7 @@
  *  oFono - Open Telephony stack for Linux
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2013-2016  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -21,6 +22,8 @@
 
 #ifndef __OFONO_LOG_H
 #define __OFONO_LOG_H
+
+#include <stdarg.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -50,6 +53,7 @@ struct ofono_debug_desc {
 	const char *file;
 #define OFONO_DEBUG_FLAG_DEFAULT (0)
 #define OFONO_DEBUG_FLAG_PRINT   (1 << 0)
+#define OFONO_DEBUG_FLAG_HIDE_NAME (1 << 1)
 	unsigned int flags;
 	void (*notify)(struct ofono_debug_desc* desc);
 } __attribute__((aligned(OFONO_DEBUG_ALIGN)));
@@ -67,9 +71,19 @@ struct ofono_debug_desc {
 		.file = __FILE__, .flags = OFONO_DEBUG_FLAG_DEFAULT, \
 	}; \
 	if (__ofono_debug_desc.flags & OFONO_DEBUG_FLAG_PRINT) \
-		ofono_debug("%s:%s() " fmt, \
-					__FILE__, __FUNCTION__ , ## arg); \
+		__ofono_dbg(&__ofono_debug_desc, "%s() " fmt, \
+					 __FUNCTION__ , ## arg); \
 } while (0)
+
+void __ofono_dbg(const struct ofono_debug_desc *desc, const char *format, ...)
+				__attribute__((format(printf, 2, 3)));
+
+typedef void (*ofono_log_hook_cb_t)(const struct ofono_debug_desc *desc,
+			int priority, const char *format, va_list va);
+
+extern ofono_log_hook_cb_t ofono_log_hook;
+extern struct ofono_debug_desc __start___debug[];
+extern struct ofono_debug_desc __stop___debug[];
 
 #ifdef __cplusplus
 }

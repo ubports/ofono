@@ -618,7 +618,7 @@ builtin_cflags += @WSPCODEC_CFLAGS@
 builtin_libadd += @WSPCODEC_LIBS@
 endif
 
-if LOGCONTROL
+if DEBUGLOG
 builtin_modules += debuglog
 builtin_sources += plugins/debuglog.c
 endif

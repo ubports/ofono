@@ -10,8 +10,8 @@ Source:     %{name}-%{version}.tar.bz2
 Requires:   dbus
 Requires:   systemd
 Requires:   ofono-configs
-Requires:   libgrilio >= 1.0.8
-Requires:   libglibutil >= 1.0.6
+Requires:   libgrilio >= 1.0.10
+Requires:   libglibutil >= 1.0.10
 Requires(preun): systemd
 Requires(post): systemd
 Requires(postun): systemd
@@ -21,8 +21,9 @@ BuildRequires:  pkgconfig(libudev) >= 145
 BuildRequires:  pkgconfig(bluez) >= 4.85
 BuildRequires:  pkgconfig(mobile-broadband-provider-info)
 BuildRequires:  pkgconfig(libwspcodec) >= 2.0
-BuildRequires:  pkgconfig(libgrilio) >= 1.0.8
-BuildRequires:  pkgconfig(libglibutil) >= 1.0.6
+BuildRequires:  pkgconfig(libgrilio) >= 1.0.10
+BuildRequires:  pkgconfig(libglibutil) >= 1.0.10
+BuildRequires:  pkgconfig(libdbuslogserver-dbus)
 BuildRequires:  libtool
 BuildRequires:  automake
 BuildRequires:  autoconf
@@ -69,7 +70,7 @@ autoreconf --force --install
 
 %configure --disable-static \
     --enable-test \
-    --enable-logcontrol \
+    --enable-debuglog \
     --enable-jolla-rilmodem \
     --with-systemdunitdir="/%{_lib}/systemd/system"
 
