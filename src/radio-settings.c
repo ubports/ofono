@@ -872,7 +872,7 @@ static void radio_load_settings(struct ofono_radio_settings *rs,
 	if (error || radio_access_mode_to_string(rs->mode) == NULL) {
 		rs->mode = OFONO_RADIO_ACCESS_MODE_ANY;
 		g_key_file_set_integer(rs->settings, SETTINGS_GROUP,
-						"TechnologyPreference", rs->mode);
+					"TechnologyPreference", rs->mode);
 	}
 
 	DBG("TechnologyPreference: %d", rs->mode);
