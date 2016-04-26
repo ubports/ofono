@@ -2320,8 +2320,7 @@ static gboolean handle_command_refresh(const struct stk_command *cmd,
 			break;
 		}
 
-		g_slist_foreach(file_list, (GFunc) g_free, NULL);
-		g_slist_free(file_list);
+		g_slist_free_full(file_list, g_free);
 
 		return FALSE;
 	}
@@ -3168,8 +3167,7 @@ static void stk_unregister(struct ofono_atom *atom)
 		stk->main_menu = NULL;
 	}
 
-	g_queue_foreach(stk->envelope_q, (GFunc) g_free, NULL);
-	g_queue_free(stk->envelope_q);
+	g_queue_free_full(stk->envelope_q, g_free);
 
 	ofono_modem_remove_interface(modem, OFONO_STK_INTERFACE);
 	g_dbus_unregister_interface(conn, path, OFONO_STK_INTERFACE);
