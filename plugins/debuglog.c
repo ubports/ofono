@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2015 Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2015-2016 Jolla Ltd.
  *  Contact: Slava Monich <slava.monich@jolla.com>
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -13,49 +13,148 @@
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
- *
  */
 
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
 
-#include <gdbus.h>
-#include <string.h>
-
 #define OFONO_API_SUBJECT_TO_CHANGE
 #include <ofono/plugin.h>
+#include <ofono/dbus.h>
 #include <ofono/log.h>
-#include <ofono.h>
 
-#define DEBUGLOG_INTERFACE      OFONO_SERVICE ".DebugLog"
-#define DEBUGLOG_PATH           "/"
-#define DEBUGLOG_CHANGED_SIGNAL "Changed"
+#include <dbuslog_server_dbus.h>
+#include <gutil_log.h>
 
-static DBusConnection *connection = NULL;
+#include <string.h>
+#include <syslog.h>
 
-extern struct ofono_debug_desc __start___debug[];
-extern struct ofono_debug_desc __stop___debug[];
+#define DEBUGLOG_PATH       "/"
 
-static void debuglog_signal(DBusConnection *conn, const char *name,
-								guint flags)
+enum _debug_server_event {
+	DEBUG_EVENT_CATEGORY_ENABLED,
+	DEBUG_EVENT_CATEGORY_DISABLED,
+	DEBUG_EVENT_COUNT
+};
+
+static DBusLogServer *debuglog_server;
+static GLogProc2 debuglog_default_log_proc;
+static gulong debuglog_event_id[DEBUG_EVENT_COUNT];
+
+static void debuglog_ofono_log_hook(const struct ofono_debug_desc *desc,
+				int priority, const char *format, va_list va)
 {
-	DBusMessage *signal = dbus_message_new_signal(DEBUGLOG_PATH,
-				DEBUGLOG_INTERFACE, DEBUGLOG_CHANGED_SIGNAL);
+	DBUSLOG_LEVEL dbuslevel;
+	const char *category;
 
-	if (signal) {
-		DBusMessageIter iter;
-		const dbus_bool_t on = (flags & OFONO_DEBUG_FLAG_PRINT) != 0;
-
-		dbus_message_iter_init_append(signal, &iter);
-		dbus_message_iter_append_basic(&iter, DBUS_TYPE_STRING, &name);
-		dbus_message_iter_append_basic(&iter, DBUS_TYPE_BOOLEAN, &on);
-		g_dbus_send_message(conn, signal);
+	if (desc) {
+		category = desc->name ? desc->name : desc->file;
+	} else {
+		category = NULL;
 	}
+
+	/* ofono is only using these four priorities: */
+	switch (priority) {
+	case LOG_ERR:
+		dbuslevel = DBUSLOG_LEVEL_ERROR;
+		break;
+	case LOG_WARNING:
+		dbuslevel = DBUSLOG_LEVEL_WARNING;
+		break;
+	case LOG_INFO:
+		dbuslevel = DBUSLOG_LEVEL_INFO;
+		break;
+	case LOG_DEBUG:
+		dbuslevel = DBUSLOG_LEVEL_DEBUG;
+		break;
+	default:
+		dbuslevel = DBUSLOG_LEVEL_UNDEFINED;
+		break;
+	}
+
+	dbus_log_server_logv(debuglog_server, dbuslevel, category, format, va);
+}
+
+static void debuglog_gutil_log_func(const GLogModule* log, int level,
+					const char* format, va_list va)
+{
+	DBUSLOG_LEVEL loglevel;
+
+	switch (level) {
+	case GLOG_LEVEL_ERR:
+		loglevel = DBUSLOG_LEVEL_ERROR;
+		break;
+	case GLOG_LEVEL_WARN:
+		loglevel = DBUSLOG_LEVEL_WARNING;
+		break;
+	case GLOG_LEVEL_INFO:
+		loglevel = DBUSLOG_LEVEL_INFO;
+		break;
+	case GLOG_LEVEL_DEBUG:
+		loglevel = DBUSLOG_LEVEL_DEBUG;
+		break;
+	case GLOG_LEVEL_VERBOSE:
+		loglevel = DBUSLOG_LEVEL_VERBOSE;
+		break;
+	default:
+		loglevel = DBUSLOG_LEVEL_UNDEFINED;
+		break;
+	}
+
+	dbus_log_server_logv(debuglog_server, loglevel, log->name, format, va);
+	if (debuglog_default_log_proc) {
+		debuglog_default_log_proc(log, level, format, va);
+	}
+}
+
+static gboolean debuglog_match(const char* s1, const char* s2)
+{
+	return s1 && s2 && !strcmp(s1, s2);
+}
+
+static void debuglog_update_flags(const char* name, guint set, guint clear)
+{
+	const guint flags = set | clear;
+	struct ofono_debug_desc *start = __start___debug;
+	struct ofono_debug_desc *stop = __stop___debug;
+
+	if (start && stop) {
+		struct ofono_debug_desc *desc;
+
+		for (desc = start; desc < stop; desc++) {
+			const char *matched = NULL;
+
+			if (debuglog_match(desc->file, name)) {
+				matched = desc->file;
+			} else if (debuglog_match(desc->name, name)) {
+				matched = desc->name;
+			}
+
+			if (matched) {
+				const guint old_flags = (desc->flags & flags);
+				desc->flags |= set;
+				desc->flags &= ~clear;
+				if ((desc->flags & flags) != old_flags &&
+							desc->notify) {
+					desc->notify(desc);
+				}
+			}
+		}
+	}
+
+}
+
+static void debuglog_category_enabled(DBusLogServer* server,
+				const char* category, gpointer user_data)
+{
+	debuglog_update_flags(category, OFONO_DEBUG_FLAG_PRINT, 0);
+}
+
+static void debuglog_category_disabled(DBusLogServer* server,
+				const char* category, gpointer user_data)
+{
+	debuglog_update_flags(category, 0, OFONO_DEBUG_FLAG_PRINT);
 }
 
 static GHashTable *debuglog_update_flags_hash(GHashTable *hash,
@@ -77,197 +176,80 @@ static GHashTable *debuglog_update_flags_hash(GHashTable *hash,
 	return hash;
 }
 
-static gboolean debuglog_match(const char* name, const char* pattern)
+static guint debuglog_translate_flags(unsigned int ofono_flags)
 {
-	return name && g_pattern_match_simple(pattern, name);
+	guint flags = 0;
+
+	if (ofono_flags & OFONO_DEBUG_FLAG_PRINT)
+		flags |= DBUSLOG_CATEGORY_FLAG_ENABLED;
+
+	if (ofono_flags & OFONO_DEBUG_FLAG_HIDE_NAME)
+		flags |= DBUSLOG_CATEGORY_FLAG_HIDE_NAME;
+
+	return flags;
 }
-
-static void debuglog_update(DBusConnection *conn, const char* pattern,
-					guint set_flags, guint clear_flags)
-{
-	const guint flags = set_flags | clear_flags;
-	struct ofono_debug_desc *start = __start___debug;
-	struct ofono_debug_desc *stop = __stop___debug;
-	struct ofono_debug_desc *desc;
-	GHashTable *hash = NULL;
-
-	if (!start || !stop)
-		return;
-
-
-	for (desc = start; desc < stop; desc++) {
-		const char *matched = NULL;
-
-		if (debuglog_match(desc->file, pattern)) {
-			matched = desc->file;
-		} else if (debuglog_match(desc->name, pattern)) {
-			matched = desc->name;
-		}
-
-		if (matched) {
-			const guint old_flags = (desc->flags & flags);
-			desc->flags |= set_flags;
-			desc->flags &= ~clear_flags;
-			if ((desc->flags & flags) != old_flags) {
-				hash = debuglog_update_flags_hash(hash,
-							matched, desc->flags);
-				if (desc->notify) {
-					desc->notify(desc);
-				}
-			}
-		}
-	}
-
-	if (hash) {
-		GList *entry, *names = g_hash_table_get_keys(hash);
-
-		for (entry = names; entry; entry = entry->next) {
-			debuglog_signal(conn, entry->data,
-				GPOINTER_TO_INT(g_hash_table_lookup(
-						hash, entry->data)));
-		}
-
-		g_list_free(names);
-		g_hash_table_destroy(hash);
-	}
-}
-
-static DBusMessage *debuglog_handle(DBusConnection *conn, DBusMessage *msg,
-					guint set_flags, guint clear_flags)
-{
-	const char *pattern;
-
-	if (dbus_message_get_args(msg, NULL, DBUS_TYPE_STRING, &pattern,
-							DBUS_TYPE_INVALID)) {
-		debuglog_update(conn, pattern, set_flags, clear_flags);
-		return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
-	} else {
-		return __ofono_error_invalid_args(msg);
-	}
-}
-
-static DBusMessage *debuglog_enable(DBusConnection *conn,
-					DBusMessage *msg, void *data)
-{
-	return debuglog_handle(conn, msg, OFONO_DEBUG_FLAG_PRINT, 0);
-}
-
-static DBusMessage *debuglog_disable(DBusConnection *conn,
-					DBusMessage *msg, void *data)
-{
-	return debuglog_handle(conn, msg, 0, OFONO_DEBUG_FLAG_PRINT);
-}
-
-static gint debuglog_list_compare(gconstpointer a, gconstpointer b)
-{
-	return strcmp(a, b);
-}
-
-static void debuglog_list_append(DBusMessageIter *iter, const char *name,
-							guint flags)
-{
-	DBusMessageIter entry;
-	dbus_bool_t enabled = (flags & OFONO_DEBUG_FLAG_PRINT) != 0;
-
-	dbus_message_iter_open_container(iter, DBUS_TYPE_STRUCT, NULL, &entry);
-	dbus_message_iter_append_basic(&entry, DBUS_TYPE_STRING, &name);
-	dbus_message_iter_append_basic(&entry, DBUS_TYPE_BOOLEAN, &enabled);
-	dbus_message_iter_close_container(iter, &entry);
-}
-
-static DBusMessage *debuglog_list(DBusConnection *conn,
-					DBusMessage *msg, void *data)
-{
-	DBusMessage *reply = dbus_message_new_method_return(msg);
-
-	if (reply) {
-		struct ofono_debug_desc *start = __start___debug;
-		struct ofono_debug_desc *stop = __stop___debug;
-		DBusMessageIter iter, array;
-
-		dbus_message_iter_init_append(reply, &iter);
-		dbus_message_iter_open_container(&iter, DBUS_TYPE_ARRAY,
-							"(sb)", &array);
-
-		if (start && stop) {
-			struct ofono_debug_desc *desc;
-			GList *names, *entry;
-			GHashTable *hash = g_hash_table_new_full(g_str_hash,
-						g_str_equal, NULL, NULL);
-
-			for (desc = start; desc < stop; desc++) {
-				debuglog_update_flags_hash(hash, desc->file,
-								desc->flags);
-				debuglog_update_flags_hash(hash, desc->name,
-								desc->flags);
-			}
-
-			names = g_list_sort(g_hash_table_get_keys(hash),
-						debuglog_list_compare);
-			for (entry = names; entry; entry = entry->next) {
-				const char *name = entry->data;
-				debuglog_list_append(&array, name,
-					GPOINTER_TO_INT(g_hash_table_lookup(
-								hash, name)));
-			}
-
-			g_list_free(names);
-			g_hash_table_destroy(hash);
-		}
-
-		dbus_message_iter_close_container(&iter, &array);
-	}
-
-	return reply;
-}
-
-static const GDBusMethodTable debuglog_methods[] = {
-	{ GDBUS_METHOD("Enable", GDBUS_ARGS({ "pattern", "s" }), NULL,
-							debuglog_enable) },
-	{ GDBUS_METHOD("Disable", GDBUS_ARGS({ "pattern", "s" }), NULL,
-							debuglog_disable) },
-	{ GDBUS_METHOD("List", NULL, GDBUS_ARGS({ "list", "a(sb)" }),
-							debuglog_list) },
-	{ },
-};
-
-static const GDBusSignalTable debuglog_signals[] = {
-	{ GDBUS_SIGNAL(DEBUGLOG_CHANGED_SIGNAL,
-			GDBUS_ARGS({ "name", "s" }, { "enabled", "b" })) },
-	{ }
-};
 
 static int debuglog_init(void)
 {
-	DBG("");
+	const struct ofono_debug_desc *start = __start___debug;
+	const struct ofono_debug_desc *stop = __stop___debug;
 
-	connection = ofono_dbus_get_connection();
-	if (!connection)
-		return -1;
+	debuglog_server = dbus_log_server_new(ofono_dbus_get_connection(),
+							DEBUGLOG_PATH);
 
-	if (!g_dbus_register_interface(connection, DEBUGLOG_PATH,
-		DEBUGLOG_INTERFACE, debuglog_methods, debuglog_signals,
-		NULL, NULL, NULL)) {
-		ofono_error("debuglog: failed to register "
-							DEBUGLOG_INTERFACE);
-		return -1;
+	if (start && stop) {
+		const struct ofono_debug_desc *desc;
+		GHashTable *hash = NULL;
+
+		for (desc = start; desc < stop; desc++) {
+			const guint f = debuglog_translate_flags(desc->flags);
+			hash = debuglog_update_flags_hash(hash, desc->file, f);
+			hash = debuglog_update_flags_hash(hash, desc->name, f);
+		}
+
+		if (hash) {
+			gpointer key, value;
+			GHashTableIter it;
+
+			g_hash_table_iter_init(&it, hash);
+
+			while (g_hash_table_iter_next(&it, &key, &value)) {
+				dbus_log_server_add_category(debuglog_server,
+						key, DBUSLOG_LEVEL_UNDEFINED,
+						GPOINTER_TO_INT(value));
+			}
+
+			g_hash_table_destroy(hash);
+		}
+
+		debuglog_event_id[DEBUG_EVENT_CATEGORY_ENABLED] =
+			dbus_log_server_add_category_enabled_handler(
+				debuglog_server, debuglog_category_enabled,
+				NULL);
+		debuglog_event_id[DEBUG_EVENT_CATEGORY_DISABLED] =
+			dbus_log_server_add_category_disabled_handler(
+				debuglog_server, debuglog_category_disabled,
+				NULL);
 	}
 
+	debuglog_default_log_proc = gutil_log_func2;
+	gutil_log_func2 = debuglog_gutil_log_func;
+	ofono_log_hook = debuglog_ofono_log_hook;
+
+	dbus_log_server_set_default_level(debuglog_server, DBUSLOG_LEVEL_DEBUG);
+	dbus_log_server_start(debuglog_server);
 	return 0;
 }
 
 static void debuglog_exit(void)
 {
-	DBG("");
-
-	if (connection) {
-		g_dbus_unregister_interface(connection, DEBUGLOG_PATH,
-							DEBUGLOG_INTERFACE);
-		dbus_connection_unref(connection);
-		connection = NULL;
-	}
+	gutil_log_func2 = debuglog_default_log_proc;
+	dbus_log_server_remove_handlers(debuglog_server, debuglog_event_id,
+					G_N_ELEMENTS(debuglog_event_id));
+	dbus_log_server_unref(debuglog_server);
+	debuglog_server = NULL;
 }
 
-OFONO_PLUGIN_DEFINE(debuglog, "Debug log control interface",
+OFONO_PLUGIN_DEFINE(debuglog, "Debug log interface",
 			VERSION, OFONO_PLUGIN_PRIORITY_DEFAULT,
 			debuglog_init, debuglog_exit)
