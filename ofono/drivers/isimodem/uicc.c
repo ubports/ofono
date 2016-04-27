@@ -1032,14 +1032,6 @@ static void uicc_lock(struct ofono_sim *sim, enum ofono_sim_password_type type,
 	CALLBACK_WITH_FAILURE(cb, data);
 }
 
-static void uicc_query_locked(struct ofono_sim *sim,
-				enum ofono_sim_password_type type,
-				ofono_sim_locked_cb_t cb, void *data)
-{
-	DBG("Not implemented");
-	CALLBACK_WITH_FAILURE(cb, -1, data);
-}
-
 static gboolean decode_fcp_pin_status(const GIsiSubBlockIter *iter, uint8_t read,
 					uint8_t *pin1, uint8_t *pin2)
 {
@@ -1677,7 +1669,6 @@ static struct ofono_sim_driver driver = {
 	.reset_passwd		= uicc_reset_passwd,
 	.change_passwd		= uicc_change_passwd,
 	.lock			= uicc_lock,
-	.query_locked		= uicc_query_locked,
 };
 
 void isi_uicc_init(void)
