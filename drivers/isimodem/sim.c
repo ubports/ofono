@@ -652,7 +652,7 @@ static void sec_code_state_resp_cb(const GIsiMessage *msg, void *opaque)
 
 static void isi_query_locked(struct ofono_sim *sim,
 				enum ofono_sim_password_type passwd_type,
-				ofono_sim_locked_cb_t cb, void *data)
+				ofono_query_facility_lock_cb_t cb, void *data)
 {
 	struct sim_data *sd = ofono_sim_get_data(sim);
 	struct isi_cb_data *cbd = isi_cb_data_new(sim, cb, data);
@@ -963,7 +963,7 @@ static struct ofono_sim_driver driver = {
 	.reset_passwd		= isi_reset_passwd,
 	.lock			= isi_lock,
 	.change_passwd		= isi_change_passwd,
-	.query_locked		= isi_query_locked,
+	.query_facility_lock	= isi_query_locked,
 };
 
 void isi_sim_init(void)
