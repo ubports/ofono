@@ -1485,17 +1485,6 @@ static struct ofono_sim_driver driver = {
 	.change_passwd		= ril_change_passwd,
 	.lock			= ril_pin_change_state,
 	.query_facility_lock    = ril_query_facility_lock,
-/*
- * TODO: Implmenting PIN/PUK support requires defining
- * the following driver methods.
- *
- * In the meanwhile, as long as the SIM card is present,
- * and unlocked, the core SIM code will check for the
- * presence of query_passwd_state, and if null, then the
- * function sim_initialize_after_pin() is called.
- *
- *	.query_locked		= ril_pin_query_enabled,
- */
 };
 
 void ril_sim_init(void)
