@@ -1405,6 +1405,54 @@ static int ril_sim_probe(struct ofono_sim *sim, unsigned int vendor,
 	return 0;
 }
 
+static void ril_query_facility_lock_cb(struct ril_msg *message, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_query_facility_lock_cb_t cb = cbd->cb;
+	struct sim_data *sd = cbd->user;
+	struct parcel rilp;
+	ofono_bool_t status;
+
+	if (message->error != RIL_E_SUCCESS)
+		goto error;
+
+	g_ril_init_parcel(message, &rilp);
+
+	status = (ofono_bool_t)parcel_r_int32(&rilp);
+
+	g_ril_append_print_buf(sd->ril, "{%d}", status);
+	g_ril_print_response(sd->ril, message);
+
+	CALLBACK_WITH_SUCCESS(cb, status, cbd->data);
+	return;
+
+error:
+	CALLBACK_WITH_FAILURE(cb, 0, cbd->data);
+}
+
+static void ril_query_facility_lock(struct ofono_sim *sim,
+					enum ofono_sim_password_type lock,
+					ofono_query_facility_lock_cb_t cb, void *data)
+{
+	struct sim_data *sd = ofono_sim_get_data(sim);
+	struct cb_data *cbd = cb_data_new(cb, data, sim);
+	struct parcel rilp;
+
+	parcel_init(&rilp);
+	parcel_w_int32(&rilp, 4);	/* # of strings */
+	parcel_w_string(&rilp, clck_cpwd_fac[lock]);
+	parcel_w_string(&rilp, "");	/* Password is empty when not needed */
+	parcel_w_string(&rilp, "0"); /* Class is "0" */
+	parcel_w_string(&rilp, NULL); /* AID value is NULL */
+
+	if (g_ril_send(sd->ril, RIL_REQUEST_QUERY_FACILITY_LOCK, &rilp,
+			ril_query_facility_lock_cb, cbd, g_free) > 0)
+		return;
+
+	g_free(cbd);
+	CALLBACK_WITH_FAILURE(cb, 0, data);
+}
+
 static void ril_sim_remove(struct ofono_sim *sim)
 {
 	struct sim_data *sd = ofono_sim_get_data(sim);
@@ -1434,6 +1482,7 @@ static struct ofono_sim_driver driver = {
 	.reset_passwd		= ril_pin_send_puk,
 	.change_passwd		= ril_change_passwd,
 	.lock			= ril_pin_change_state,
+	.query_facility_lock    = ril_query_facility_lock,
 /*
  * TODO: Implmenting PIN/PUK support requires defining
  * the following driver methods.
