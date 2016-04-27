@@ -887,6 +887,8 @@ static void radio_load_settings(struct ofono_radio_settings *rs,
 						"GsmBand", rs->band_gsm);
 	}
 
+	rs->pending_band_gsm = rs->band_gsm;
+
 	error = NULL;
 	rs->band_umts = g_key_file_get_integer(rs->settings, SETTINGS_GROUP,
 					"UmtsBand", &error);
@@ -896,6 +898,8 @@ static void radio_load_settings(struct ofono_radio_settings *rs,
 		g_key_file_set_integer(rs->settings, SETTINGS_GROUP,
 						"UmtsBand", rs->band_umts);
 	}
+
+	rs->pending_band_umts = rs->band_umts;
 
 	error = NULL;
 	rs->mode = g_key_file_get_integer(rs->settings, SETTINGS_GROUP,
@@ -922,10 +926,8 @@ void ofono_radio_settings_register(struct ofono_radio_settings *rs)
 
 	radio_load_settings(rs, ofono_sim_get_imsi(sim));
 
-	if (rs->driver->set_band == NULL)
-		goto finish;
-
-	rs->driver->set_band(rs, rs->band_gsm, rs->band_umts,
+	if (rs->driver->set_band != NULL)
+		rs->driver->set_band(rs, rs->band_gsm, rs->band_umts,
 					radio_band_set_callback_at_reg, rs);
 
 	if (rs->driver->set_rat_mode == NULL)
