@@ -845,6 +845,7 @@ static void radio_mode_set_callback_at_reg(const struct ofono_error *error,
 	 */
 	ofono_radio_finish_register(rs);
 }
+
 static void radio_band_set_callback_at_reg(const struct ofono_error *error,
 						void *data)
 {
