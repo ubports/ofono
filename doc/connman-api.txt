@@ -106,7 +106,7 @@ Properties	boolean Attached [readonly]
 			GPRS service registration (if known).
 
 			Possible values are:
-			"none", "gsm", "edge", "umts", "hsdpa", "hsupa",
+			"none", "gprs", "edge", "umts", "hsdpa", "hsupa",
 			"hspa" (HSDPA and HSUPA at the same time) and
 			"lte"
 
