@@ -1405,7 +1405,8 @@ static int ril_sim_probe(struct ofono_sim *sim, unsigned int vendor,
 	return 0;
 }
 
-static void ril_query_facility_lock_cb(struct ril_msg *message, gpointer user_data)
+static void ril_query_facility_lock_cb(struct ril_msg *message,
+							gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
 	ofono_query_facility_lock_cb_t cb = cbd->cb;
@@ -1418,7 +1419,7 @@ static void ril_query_facility_lock_cb(struct ril_msg *message, gpointer user_da
 
 	g_ril_init_parcel(message, &rilp);
 
-	status = (ofono_bool_t)parcel_r_int32(&rilp);
+	status = (ofono_bool_t) parcel_r_int32(&rilp);
 
 	g_ril_append_print_buf(sd->ril, "{%d}", status);
 	g_ril_print_response(sd->ril, message);
@@ -1432,7 +1433,8 @@ error:
 
 static void ril_query_facility_lock(struct ofono_sim *sim,
 					enum ofono_sim_password_type lock,
-					ofono_query_facility_lock_cb_t cb, void *data)
+					ofono_query_facility_lock_cb_t cb,
+					void *data)
 {
 	struct sim_data *sd = ofono_sim_get_data(sim);
 	struct cb_data *cbd = cb_data_new(cb, data, sim);
