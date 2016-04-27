@@ -2449,6 +2449,60 @@ static void sim_free_state(struct ofono_sim *sim)
 	sim_free_main_state(sim);
 }
 
+static void sim_query_fac_imsilock_cb(const struct ofono_error *error,
+				ofono_bool_t status,
+				void *data)
+{
+	struct ofono_sim *sim = data;
+	DBusConnection *conn = ofono_dbus_get_connection();
+	const char *path = __ofono_atom_get_path(sim->atom);
+	char **locked_pins;
+
+	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
+		ofono_error("Querying Facility Lock for IMSI Lock failed");
+		return;
+	}
+
+	sim->locked_pins[OFONO_SIM_PASSWORD_PHSIM_PIN] = status;
+
+	locked_pins = get_locked_pins(sim);
+
+	ofono_dbus_signal_array_property_changed(conn,
+				path,
+				OFONO_SIM_MANAGER_INTERFACE,
+				"LockedPins", DBUS_TYPE_STRING,
+				&locked_pins);
+
+	g_strfreev(locked_pins);
+}
+
+static void sim_query_fac_networklock_cb(const struct ofono_error *error,
+				ofono_bool_t status,
+				void *data)
+{
+	struct ofono_sim *sim = data;
+	DBusConnection *conn = ofono_dbus_get_connection();
+	const char *path = __ofono_atom_get_path(sim->atom);
+	char **locked_pins;
+
+	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
+		ofono_error("Querying Facility Lock for Network Lock failed");
+		return;
+	}
+
+	sim->locked_pins[OFONO_SIM_PASSWORD_PHNET_PIN] = status;
+
+	locked_pins = get_locked_pins(sim);
+
+	ofono_dbus_signal_array_property_changed(conn,
+				path,
+				OFONO_SIM_MANAGER_INTERFACE,
+				"LockedPins", DBUS_TYPE_STRING,
+				&locked_pins);
+
+	g_strfreev(locked_pins);
+}
+
 void ofono_sim_inserted_notify(struct ofono_sim *sim, ofono_bool_t inserted)
 {
 	if (sim->state == OFONO_SIM_STATE_RESETTING && inserted) {
@@ -2475,6 +2529,14 @@ void ofono_sim_inserted_notify(struct ofono_sim *sim, ofono_bool_t inserted)
 	call_state_watches(sim);
 
 	if (inserted) {
+		sim->driver->query_facility_lock(sim,
+					OFONO_SIM_PASSWORD_PHSIM_PIN,
+					sim_query_fac_imsilock_cb, sim);
+
+		sim->driver->query_facility_lock(sim,
+					OFONO_SIM_PASSWORD_PHNET_PIN,
+					sim_query_fac_networklock_cb, sim);
+
 		sim_initialize(sim);
 	} else {
 		sim->pin_type = OFONO_SIM_PASSWORD_NONE;
