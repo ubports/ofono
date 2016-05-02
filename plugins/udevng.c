@@ -1238,7 +1238,7 @@ static void check_device(struct udev_device *device)
 			return;
 	}
 
-	if (g_str_equal(bus, "usb") == TRUE)
+	if ((g_str_equal(bus, "usb") == TRUE) || (g_str_equal(bus, "usbmisc") == TRUE))
 		check_usb_device(device);
 }
 
@@ -1288,6 +1288,7 @@ static void enumerate_devices(struct udev *context)
 
 	udev_enumerate_add_match_subsystem(enumerate, "tty");
 	udev_enumerate_add_match_subsystem(enumerate, "usb");
+	udev_enumerate_add_match_subsystem(enumerate, "usbmisc");
 	udev_enumerate_add_match_subsystem(enumerate, "net");
 
 	udev_enumerate_scan_devices(enumerate);
@@ -1410,6 +1411,7 @@ static int detect_init(void)
 
 	udev_monitor_filter_add_match_subsystem_devtype(udev_mon, "tty", NULL);
 	udev_monitor_filter_add_match_subsystem_devtype(udev_mon, "usb", NULL);
+	udev_monitor_filter_add_match_subsystem_devtype(udev_mon, "usbmisc", NULL);
 	udev_monitor_filter_add_match_subsystem_devtype(udev_mon, "net", NULL);
 
 	udev_monitor_filter_update(udev_mon);
