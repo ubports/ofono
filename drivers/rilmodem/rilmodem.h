@@ -67,3 +67,6 @@ extern void ril_call_barring_exit(void);
 
 extern void ril_phonebook_init(void);
 extern void ril_phonebook_exit(void);
+
+extern void ril_stk_init(void);
+extern void ril_stk_exit(void);
