@@ -55,6 +55,7 @@ struct device_info {
 	char *number;
 	char *label;
 	char *sysattr;
+	char *subsystem;
 };
 
 static gboolean setup_isi(struct modem_info *modem)
@@ -958,6 +959,7 @@ static void destroy_modem(gpointer data)
 		g_free(info->number);
 		g_free(info->label);
 		g_free(info->sysattr);
+		g_free(info->subsystem);
 		g_free(info);
 
 		list->data = NULL;
@@ -1016,9 +1018,10 @@ static void add_device(const char *syspath, const char *devname,
 			const char *model, struct udev_device *device)
 {
 	struct udev_device *intf;
-	const char *devpath, *devnode, *interface, *number, *label, *sysattr;
+	const char *devpath, *devnode, *interface, *number, *label, *sysattr, *subsystem;
 	struct modem_info *modem;
 	struct device_info *info;
+	struct udev_device *parent;
 
 	devpath = udev_device_get_syspath(device);
 	if (devpath == NULL)
@@ -1056,7 +1059,17 @@ static void add_device(const char *syspath, const char *devname,
 	interface = udev_device_get_property_value(intf, "INTERFACE");
 	number = udev_device_get_property_value(device, "ID_USB_INTERFACE_NUM");
 
+	/* If environment variable is not set, get value from attributes (or parent's ones) */
+	if(number == NULL) {
+		number = udev_device_get_sysattr_value(device, "bInterfaceNumber");
+		if(number == NULL) {
+			parent = udev_device_get_parent(device);
+			number = udev_device_get_sysattr_value(parent, "bInterfaceNumber");
+		}
+	}
+
 	label = udev_device_get_property_value(device, "OFONO_LABEL");
+	subsystem = udev_device_get_subsystem(device);
 
 	if (modem->sysattr != NULL)
 		sysattr = udev_device_get_sysattr_value(device, modem->sysattr);
@@ -1078,6 +1091,7 @@ static void add_device(const char *syspath, const char *devname,
 	info->number = g_strdup(number);
 	info->label = g_strdup(label);
 	info->sysattr = g_strdup(sysattr);
+	info->subsystem = g_strdup(subsystem);
 
 	modem->devices = g_slist_insert_sorted(modem->devices, info,
 							compare_device);
