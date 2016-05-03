@@ -52,6 +52,7 @@ static int rilmodem_init(void)
 	ril_radio_settings_init();
 	ril_call_barring_init();
 	ril_netmon_init();
+	ril_stk_init();
 
 	return 0;
 }
@@ -74,6 +75,7 @@ static void rilmodem_exit(void)
 	ril_radio_settings_exit();
 	ril_call_barring_exit();
 	ril_netmon_exit();
+	ril_stk_exit();
 }
 
 OFONO_PLUGIN_DEFINE(rilmodem, "RIL modem driver", VERSION,
