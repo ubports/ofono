@@ -414,7 +414,7 @@ error:
 static void gobi_pre_sim(struct ofono_modem *modem)
 {
 	struct gobi_data *data = ofono_modem_get_data(modem);
-	const char *sim_driver;
+	const char *sim_driver = NULL;
 
 	DBG("%p", modem);
 
@@ -428,7 +428,8 @@ static void gobi_pre_sim(struct ofono_modem *modem)
 	if (ofono_modem_get_boolean(modem, "ForceSimLegacy"))
 		sim_driver = "qmimodem-legacy";
 
-	ofono_sim_create(modem, 0, sim_driver, data->device);
+	if (sim_driver)
+		ofono_sim_create(modem, 0, sim_driver, data->device);
 
 	if (data->features & GOBI_VOICE)
 		ofono_voicecall_create(modem, 0, "qmimodem", data->device);
