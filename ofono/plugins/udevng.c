@@ -220,7 +220,7 @@ static gboolean setup_gobi(struct modem_info *modem)
 
 static gboolean setup_sierra(struct modem_info *modem)
 {
-	const char *mdm = NULL, *app = NULL, *net = NULL, *diag = NULL;
+	const char *mdm = NULL, *app = NULL, *net = NULL, *diag = NULL, *qmi = NULL;
 	GSList *list;
 
 	DBG("%s", modem->syspath);
@@ -228,8 +228,8 @@ static gboolean setup_sierra(struct modem_info *modem)
 	for (list = modem->devices; list; list = list->next) {
 		struct device_info *info = list->data;
 
-		DBG("%s %s %s %s", info->devnode, info->interface,
-						info->number, info->label);
+		DBG("%s %s %s %s %s", info->devnode, info->interface,
+						info->number, info->label, info->subsystem);
 
 		if (g_strcmp0(info->interface, "255/255/255") == 0) {
 			if (g_strcmp0(info->number, "01") == 0)
@@ -240,14 +240,29 @@ static gboolean setup_sierra(struct modem_info *modem)
 				app = info->devnode;
 			else if (g_strcmp0(info->number, "07") == 0)
 				net = info->devnode;
+			else if (g_strcmp0(info->number, "0a") == 0) {
+				if (g_strcmp0(info->subsystem, "net") == 0)
+					net = info->devnode;
+				else if (g_strcmp0(info->subsystem, "usbmisc") == 0)
+					qmi = info->devnode;
+			}
 		}
+	}
+
+	if (qmi != NULL && net != NULL) {
+		ofono_modem_set_driver(modem->modem, "gobi");
+		/* Fixup SIM interface for Sierra QMI devices */
+		ofono_modem_set_boolean(modem->modem, "ForceSimLegacy", TRUE);
+		goto done;
 	}
 
 	if (mdm == NULL || net == NULL)
 		return FALSE;
 
-	DBG("modem=%s app=%s net=%s diag=%s", mdm, app, net, diag);
+done:
+	DBG("modem=%s app=%s net=%s diag=%s qmi=%s", mdm, app, net, diag, qmi);
 
+	ofono_modem_set_string(modem->modem, "Device", qmi);
 	ofono_modem_set_string(modem->modem, "Modem", mdm);
 	ofono_modem_set_string(modem->modem, "App", app);
 	ofono_modem_set_string(modem->modem, "Diag", diag);
@@ -1129,6 +1144,8 @@ static struct {
 	{ "hso",	"hso"				},
 	{ "gobi",	"qmi_wwan"			},
 	{ "gobi",	"qcserial"			},
+	{ "sierra",	"qmi_wwan",	"1199"		},
+	{ "sierra",	"qcserial",	"1199"		},
 	{ "sierra",	"sierra"			},
 	{ "sierra",	"sierra_net"			},
 	{ "option",	"option",	"0af0"		},
