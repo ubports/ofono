@@ -229,7 +229,7 @@ static gboolean setup_sierra(struct modem_info *modem)
 		struct device_info *info = list->data;
 
 		DBG("%s %s %s %s %s", info->devnode, info->interface,
-						info->number, info->label, info->subsystem);
+				info->number, info->label, info->subsystem);
 
 		if (g_strcmp0(info->interface, "255/255/255") == 0) {
 			if (g_strcmp0(info->number, "01") == 0)
@@ -243,7 +243,8 @@ static gboolean setup_sierra(struct modem_info *modem)
 			else if (g_strcmp0(info->number, "0a") == 0) {
 				if (g_strcmp0(info->subsystem, "net") == 0)
 					net = info->devnode;
-				else if (g_strcmp0(info->subsystem, "usbmisc") == 0)
+				else if (g_strcmp0(info->subsystem,
+								"usbmisc") == 0)
 					qmi = info->devnode;
 			}
 		}
@@ -889,8 +890,8 @@ static gboolean setup_ublox(struct modem_info *modem)
 			else if (g_strcmp0(info->number, "00") == 0)
 				mdm = info->devnode;
 		} else if (g_strcmp0(info->interface, "2/6/0") == 0 ||
-			   g_strcmp0(info->interface, "10/0/0") == 0 ||
-			   g_strcmp0(info->interface, "224/1/3") == 0) {
+				g_strcmp0(info->interface, "10/0/0") == 0 ||
+				g_strcmp0(info->interface, "224/1/3") == 0) {
 			net = info->devnode;
 		}
 	}
@@ -1033,7 +1034,8 @@ static void add_device(const char *syspath, const char *devname,
 			const char *model, struct udev_device *device)
 {
 	struct udev_device *intf;
-	const char *devpath, *devnode, *interface, *number, *label, *sysattr, *subsystem;
+	const char *devpath, *devnode, *interface, *number;
+	const char *label, *sysattr, *subsystem;
 	struct modem_info *modem;
 	struct device_info *info;
 	struct udev_device *parent;
@@ -1075,11 +1077,14 @@ static void add_device(const char *syspath, const char *devname,
 	number = udev_device_get_property_value(device, "ID_USB_INTERFACE_NUM");
 
 	/* If environment variable is not set, get value from attributes (or parent's ones) */
-	if(number == NULL) {
-		number = udev_device_get_sysattr_value(device, "bInterfaceNumber");
-		if(number == NULL) {
+	if (number == NULL) {
+		number = udev_device_get_sysattr_value(device,
+							"bInterfaceNumber");
+
+		if (number == NULL) {
 			parent = udev_device_get_parent(device);
-			number = udev_device_get_sysattr_value(parent, "bInterfaceNumber");
+			number = udev_device_get_sysattr_value(parent,
+							"bInterfaceNumber");
 		}
 	}
 
@@ -1269,7 +1274,8 @@ static void check_device(struct udev_device *device)
 			return;
 	}
 
-	if ((g_str_equal(bus, "usb") == TRUE) || (g_str_equal(bus, "usbmisc") == TRUE))
+	if ((g_str_equal(bus, "usb") == TRUE) ||
+			(g_str_equal(bus, "usbmisc") == TRUE))
 		check_usb_device(device);
 }
 
@@ -1442,7 +1448,8 @@ static int detect_init(void)
 
 	udev_monitor_filter_add_match_subsystem_devtype(udev_mon, "tty", NULL);
 	udev_monitor_filter_add_match_subsystem_devtype(udev_mon, "usb", NULL);
-	udev_monitor_filter_add_match_subsystem_devtype(udev_mon, "usbmisc", NULL);
+	udev_monitor_filter_add_match_subsystem_devtype(udev_mon,
+							"usbmisc", NULL);
 	udev_monitor_filter_add_match_subsystem_devtype(udev_mon, "net", NULL);
 
 	udev_monitor_filter_update(udev_mon);
