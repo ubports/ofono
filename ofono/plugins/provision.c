@@ -3,7 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
- *  Copyright (C) 2013 Jolla Ltd.
+ *  Copyright (C) 2013-2016  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -86,6 +86,7 @@ static gint provision_compare_ap(gconstpointer a, gconstpointer b, gpointer data
 
 /* Picks best ap, deletes the rest. Creates one if necessary */
 static GSList *provision_pick_best_ap(GSList *list, const char* spn,
+	const enum ofono_gprs_proto default_proto,
 	const struct provision_ap_defaults *defaults)
 {
 	/* Sort the list */
@@ -101,6 +102,7 @@ static GSList *provision_pick_best_ap(GSList *list, const char* spn,
 		struct ofono_gprs_provision_data *ap =
 			g_new0(struct ofono_gprs_provision_data, 1);
 
+		ap->proto = default_proto;
 		ap->type = defaults->type;
 		ap->name = g_strdup(defaults->name);
 		ap->apn = g_strdup(defaults->apn);
@@ -136,8 +138,10 @@ static GSList *provision_normalize_apn_list(GSList *apns, const char* spn)
 
 	/* Pick the best ap of each type and concatenate them */
 	return g_slist_concat(
-		provision_pick_best_ap(internet_apns, spn, &internet_defaults),
-		provision_pick_best_ap(mms_apns, spn, &mms_defaults));
+		provision_pick_best_ap(internet_apns, spn,
+			mbpi_default_internet_proto, &internet_defaults),
+		provision_pick_best_ap(mms_apns, spn,
+			mbpi_default_mms_proto, &mms_defaults));
 }
 
 int provision_get_settings(const char *mcc, const char *mnc,
