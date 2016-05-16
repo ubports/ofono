@@ -1116,6 +1116,8 @@ static void ril_pin_change_state_cb(struct ril_msg *message, gpointer user_data)
 		 */
 		if (message->error == RIL_E_PASSWORD_INCORRECT)
 			sd->retries[sd->passwd_type] = parcel_r_int32(&rilp);
+		else
+			sd->retries[sd->passwd_type] = -1;
 
 		g_ril_append_print_buf(sd->ril, "{%d}",
 					sd->retries[sd->passwd_type]);
