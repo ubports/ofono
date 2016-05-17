@@ -434,8 +434,6 @@ static void ril_gprs_context_activate_primary_cb(struct ril_data *data,
 	ofono_gprs_context_cb_t cb;
 	gpointer cb_data;
 
-	ofono_info("setting up data call");
-
 	ril_error_init_failure(&error);
 	if (ril_status != RIL_E_SUCCESS) {
 		ofono_error("GPRS context: Reply failure: %s",
@@ -455,6 +453,8 @@ static void ril_gprs_context_activate_primary_cb(struct ril_data *data,
 		ofono_error("GPRS context: No interface");
 		goto done;
 	}
+
+	ofono_info("setting up data call");
 
 	/* Check the ip address */
 	ril_gprs_split_ip_by_protocol(call->addresses, &split_ip_addr,
@@ -636,7 +636,15 @@ static void ril_gprs_context_remove(struct ofono_gprs_context *gc)
 	DBG("");
 	ofono_gprs_context_set_data(gc, NULL);
 
-	ril_data_request_cancel(gcd->activate.req);
+	if (gcd->activate.req) {
+		/*
+		 * The core has already completed its pending D-Bus
+		 * request, invoking the completion callback will
+		 * cause libdbus to panic.
+		 */
+		ril_data_request_detach(gcd->activate.req);
+		ril_data_request_cancel(gcd->activate.req);
+	}
 
 	if (gcd->deactivate.req) {
 		/* Let it complete but we won't be around to be notified. */
