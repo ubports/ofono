@@ -239,6 +239,7 @@ void ril_post_online(struct ofono_modem *modem)
 	struct ofono_gprs *gprs;
 	struct ofono_gprs_context *gc;
 
+	ofono_cbs_create(modem, rd->vendor, RILMODEM, rd->ril);
 	ofono_netreg_create(modem, rd->vendor, RILMODEM, rd->ril);
 	ofono_ussd_create(modem, rd->vendor, RILMODEM, rd->ril);
 	ofono_call_settings_create(modem, rd->vendor, RILMODEM, rd->ril);
