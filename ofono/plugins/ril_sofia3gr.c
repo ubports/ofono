@@ -255,14 +255,24 @@ static int ril_enable(struct ofono_modem *modem)
 	return -EINPROGRESS;
 }
 
+static void ril_send_power_off_cb(struct ril_msg *message, gpointer user_data)
+{
+	struct ofono_modem *modem = (struct ofono_modem *) user_data;
+	struct ril_data *rd = ofono_modem_get_data(modem);
+
+	g_ril_unref(rd->ril);
+
+	ofono_modem_set_powered(modem, FALSE);
+}
+
 static int ril_disable(struct ofono_modem *modem)
 {
 	struct ril_data *rd = ofono_modem_get_data(modem);
 
 	DBG("%p", modem);
-	ril_send_power(rd->ril, FALSE, NULL, NULL, NULL);
+	ril_send_power(rd->ril, FALSE, ril_send_power_off_cb, modem, NULL);
 
-	return 0;
+	return -EINPROGRESS;
 }
 
 static struct ofono_modem_driver ril_driver = {
