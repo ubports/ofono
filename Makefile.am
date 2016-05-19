@@ -53,7 +53,7 @@ dist_conf_DATA =
 
 rules_files = plugins/ofono.rules plugins/ofono-speedup.rules
 rulesdir = @UDEV_DATADIR@
-rules_DATA = $(foreach file,$(rules_files), plugins/97-$(notdir $(file))) 
+rules_DATA = $(foreach file,$(rules_files), plugins/97-$(notdir $(file)))
 
 statedir = $(localstatedir)/lib/ofono
 
@@ -197,6 +197,7 @@ builtin_sources += drivers/rilmodem/rilmodem.h \
 			drivers/rilmodem/call-forwarding.c \
 			drivers/rilmodem/radio-settings.c \
 			drivers/rilmodem/call-barring.c \
+			drivers/rilmodem/cbs.c \
 			drivers/rilmodem/phonebook.c
 
 builtin_modules += qcommsimmodem
