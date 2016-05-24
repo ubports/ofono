@@ -753,7 +753,8 @@ test_scripts = test/backtrace \
 		test/set-sms-bearer \
 		test/get-serving-cell-info \
 		test/list-allowed-access-points \
-		test/enable-throttling
+		test/enable-throttling \
+		test/disable-throttling
 
 if TEST
 testdir = $(pkglibdir)/test
