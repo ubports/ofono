@@ -1,0 +1,18 @@
+#!/usr/bin/python3
+
+import dbus, sys
+
+bus = dbus.SystemBus()
+
+if len(sys.argv) == 2:
+	path = sys.argv[1]
+else:
+	manager = dbus.Interface(bus.get_object('org.ofono', '/'),
+			'org.ofono.Manager')
+	modems = manager.GetModems()
+	path = modems[0][0]
+
+print("Enabling transmit power throttling of modem %s ..." % path)
+thermal_management = dbus.Interface(bus.get_object('org.ofono', path),
+		'org.ofono.sofia3gr.ThermalManagement')
+thermal_management.SetProperty("TransmitPowerThrottling", dbus.Boolean(1), timeout = 30)
