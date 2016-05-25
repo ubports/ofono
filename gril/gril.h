@@ -75,7 +75,8 @@ extern char print_buf[];
 #define g_ril_print_request(gril, token, req)				\
 	G_RIL_TRACE(gril, "[%d,%04d]> %s %s",				\
 		g_ril_get_slot(gril), token,				\
-		g_ril_request_id_to_string(gril, req), print_buf)
+		g_ril_request_id_to_string(gril, req), print_buf);	\
+		print_buf[0] = '\0';
 #define g_ril_print_request_no_args(gril, token, req)			\
 	G_RIL_TRACE(gril, "[%d,%04d]> %s",				\
 			g_ril_get_slot(gril), token,			\
@@ -85,7 +86,8 @@ extern char print_buf[];
 			g_ril_get_slot(gril),				\
 			message->serial_no,				\
 			g_ril_request_id_to_string(gril, message->req), \
-							print_buf)
+							print_buf);	\
+			print_buf[0] = '\0';
 #define g_ril_print_response_no_args(gril, message)			\
 	G_RIL_TRACE(gril, "[%d,%04d]< %s",				\
 		g_ril_get_slot(gril), message->serial_no,		\
