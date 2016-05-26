@@ -32,7 +32,6 @@
 
 #define OFONO_API_SUBJECT_TO_CHANGE
 #include <ofono/plugin.h>
-#include <ofono/log.h>
 #include <ofono/modem.h>
 #include <ofono/sim.h>
 #include <ofono/dbus.h>
@@ -43,6 +42,7 @@
 #define ALLOWED_ACCESS_POINTS_INTERFACE "org.ofono.AllowedAccessPoints"
 
 guint modemwatch_id;
+GSList *context_list;
 
 struct allowed_apns_ctx {
 	guint simwatch_id;
@@ -53,8 +53,6 @@ struct allowed_apns_ctx {
 	DBusMessage *pending;
 	DBusMessage *reply;
 };
-
-GSList *context_list;
 
 static void context_destroy(gpointer data)
 {
@@ -70,8 +68,6 @@ static void context_destroy(gpointer data)
 
 	if (ctx->sim_context)
 		ofono_sim_context_free(ctx->sim_context);
-
-	context_list = g_slist_remove(context_list, ctx);
 
 	g_free(ctx);
 }
@@ -191,8 +187,15 @@ static void sim_watch(struct ofono_atom *atom,
 	struct allowed_apns_ctx *ctx = data;
 
 	if (cond == OFONO_ATOM_WATCH_CONDITION_UNREGISTERED) {
-		if (ctx->sim_context)
+		if (ctx->simwatch_id) {
+			ofono_sim_remove_state_watch(ctx->sim, ctx->simwatch_id);
+			ctx->simwatch_id = 0;
+		}
+
+		if (ctx->sim_context) {
 			ofono_sim_context_free(ctx->sim_context);
+			ctx->sim_context = NULL;
+		}
 
 		return;
 	}
