@@ -21,9 +21,9 @@
 
 #include "common.h"
 
-/* Amount of ms we wait between CLCC calls */
+#include <gutil_ring.h>
+
 #define FLAG_NEED_CLIP 1
-#define MAX_DTMF_BUFFER 32
 
 enum ril_voicecall_events {
 	VOICECALL_EVENT_CALL_STATE_CHANGED,
@@ -43,7 +43,7 @@ struct ril_voicecall {
 	ofono_voicecall_cb_t cb;
 	void *data;
 	guint timer_id;
-	gchar *tone_queue;
+	GUtilRing* dtmf_queue;
 	guint send_dtmf_id;
 	guint clcc_poll_id;
 	gulong event_id[VOICECALL_EVENT_COUNT];
@@ -596,11 +596,6 @@ static void ril_voicecall_send_dtmf_cb(GRilIoChannel *io, int status,
 	vd->send_dtmf_id = 0;
 
 	if (status == RIL_E_SUCCESS) {
-		/* Remove sent DTMF character from queue */
-		gchar *tmp = g_strdup(vd->tone_queue + 1);
-		g_free(vd->tone_queue);
-		vd->tone_queue = tmp;
-
 		/* Send the next one */
 		ril_voicecall_send_one_dtmf(vd);
 	} else {
@@ -611,12 +606,15 @@ static void ril_voicecall_send_dtmf_cb(GRilIoChannel *io, int status,
 
 static void ril_voicecall_send_one_dtmf(struct ril_voicecall *vd)
 {
-	if (!vd->send_dtmf_id && vd->tone_queue && vd->tone_queue[0]) {
+	if (!vd->send_dtmf_id && gutil_ring_size(vd->dtmf_queue) > 0) {
 		GRilIoRequest *req = grilio_request_sized_new(4);
+		const char dtmf_char = (char)
+			GPOINTER_TO_UINT(gutil_ring_get(vd->dtmf_queue));
 
 		/* RIL wants just one character */
-		DBG("%c", vd->tone_queue[0]);
-		grilio_request_append_utf8_chars(req, vd->tone_queue, 1);
+		GASSERT(dtmf_char);
+		DBG("%c", dtmf_char);
+		grilio_request_append_utf8_chars(req, &dtmf_char, 1);
 		vd->send_dtmf_id = grilio_queue_send_request_full(vd->q, req,
 			RIL_REQUEST_DTMF, ril_voicecall_send_dtmf_cb, NULL, vd);
 		grilio_request_unref(req);
@@ -629,23 +627,23 @@ static void ril_voicecall_send_dtmf(struct ofono_voicecall *vc,
 	struct ril_voicecall *vd = ril_voicecall_get_data(vc);
 	struct ofono_error error;
 
-	DBG("Queue '%s'",dtmf);
-
 	/*
-	 * Queue any incoming DTMF (up to MAX_DTMF_BUFFER characters),
-	 * send them to RIL one-by-one, immediately call back
-	 * core with no error
+	 * Queue any incoming DTMF, send them to RIL one-by-one,
+	 * immediately call back core with no error
 	 */
-	g_strlcat(vd->tone_queue, dtmf, MAX_DTMF_BUFFER);
-	ril_voicecall_send_one_dtmf(vd);
+	DBG("Queue '%s'", dtmf);
+	while (*dtmf) {
+		gutil_ring_put(vd->dtmf_queue, GUINT_TO_POINTER(*dtmf));
+		dtmf++;
+	}
 
+	ril_voicecall_send_one_dtmf(vd);
 	cb(ril_error_ok(&error), data);
 }
 
 static void ril_voicecall_clear_dtmf_queue(struct ril_voicecall *vd)
 {
-	g_free(vd->tone_queue);
-	vd->tone_queue = g_strnfill(MAX_DTMF_BUFFER + 1, '\0');
+	gutil_ring_clear(vd->dtmf_queue);
 	if (vd->send_dtmf_id) {
 		grilio_channel_cancel_request(vd->io, vd->send_dtmf_id, FALSE);
 		vd->send_dtmf_id = 0;
@@ -817,6 +815,7 @@ static int ril_voicecall_probe(struct ofono_voicecall *vc, unsigned int vendor,
 	vd = g_new0(struct ril_voicecall, 1);
 	vd->io = grilio_channel_ref(ril_modem_io(modem));
 	vd->q = grilio_queue_new(vd->io);
+	vd->dtmf_queue = gutil_ring_new();
 	vd->vc = vc;
 	vd->timer_id = g_idle_add(ril_delayed_register, vd);
 	if (modem->ecclist_file) {
@@ -847,7 +846,7 @@ static void ril_voicecall_remove(struct ofono_voicecall *vc)
 	grilio_channel_unref(vd->io);
 	grilio_queue_cancel_all(vd->q, FALSE);
 	grilio_queue_unref(vd->q);
-	g_free(vd->tone_queue);
+	gutil_ring_unref(vd->dtmf_queue);
 	g_free(vd);
 }
 
