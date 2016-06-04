@@ -574,8 +574,7 @@ static void ste_voicecall_remove(struct ofono_voicecall *vc)
 {
 	struct voicecall_data *vd = ofono_voicecall_get_data(vc);
 
-	g_slist_foreach(vd->calls, (GFunc) g_free, NULL);
-	g_slist_free(vd->calls);
+	g_slist_free_full(vd->calls, g_free);
 
 	ofono_voicecall_set_data(vc, NULL);
 

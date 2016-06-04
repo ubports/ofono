@@ -256,6 +256,16 @@ Voicecall
   Priority: Medium
   Complexity: C1
 
+- DTMF Driver hints
+
+  Currently multiple DTMF tones are sent to the driver in batches of up to 8
+  characters.  For those drivers that can only accept a limited set of DTMF
+  characters at a time (e.g. one), add a setting to the core that will change
+  this batch size limit.
+
+  Priority: Medium
+  Complexity: C1
+
 
 Sim Toolkit
 ===========

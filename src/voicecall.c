@@ -47,7 +47,7 @@
 #define SETTINGS_STORE "voicecall"
 #define SETTINGS_GROUP "Settings"
 
-GSList *g_drivers = NULL;
+static GSList *g_drivers = NULL;
 
 struct ofono_voicecall {
 	GSList *call_list;
@@ -1513,6 +1513,9 @@ static int voicecall_dial(struct ofono_voicecall *vc, const char *number,
 	if (g_slist_length(vc->call_list) >= MAX_VOICE_CALLS)
 		return -EPERM;
 
+	if (valid_ussd_string(number, vc->call_list != NULL))
+		return -EINVAL;
+
 	if (!valid_long_phone_number_format(number))
 		return -EINVAL;
 
@@ -2162,7 +2165,7 @@ static const GDBusMethodTable manager_methods[] = {
 						GDBUS_ARGS({ "calls", "ao" }),
 						multiparty_private_chat) },
 	{ GDBUS_ASYNC_METHOD("CreateMultiparty",
-					NULL, GDBUS_ARGS({ "calls", "o" }),
+					NULL, GDBUS_ARGS({ "calls", "ao" }),
 					multiparty_create) },
 	{ GDBUS_ASYNC_METHOD("HangupMultiparty", NULL, NULL,
 							multiparty_hangup) },
@@ -2531,9 +2534,7 @@ static void free_sim_ecc_numbers(struct ofono_voicecall *vc, gboolean old_only)
 	 */
 	if (old_only == FALSE) {
 		if (vc->new_sim_en_list) {
-			g_slist_foreach(vc->new_sim_en_list, (GFunc) g_free,
-					NULL);
-			g_slist_free(vc->new_sim_en_list);
+			g_slist_free_full(vc->new_sim_en_list, g_free);
 			vc->new_sim_en_list = NULL;
 		}
 
@@ -2541,8 +2542,7 @@ static void free_sim_ecc_numbers(struct ofono_voicecall *vc, gboolean old_only)
 	}
 
 	if (vc->sim_en_list) {
-		g_slist_foreach(vc->sim_en_list, (GFunc) g_free, NULL);
-		g_slist_free(vc->sim_en_list);
+		g_slist_free_full(vc->sim_en_list, g_free);
 		vc->sim_en_list = NULL;
 	}
 }
@@ -2662,16 +2662,25 @@ static void emulator_hfp_unregister(struct ofono_atom *atom)
 	struct ofono_voicecall *vc = __ofono_atom_get_data(atom);
 	struct ofono_modem *modem = __ofono_atom_get_modem(atom);
 
+	struct emulator_status data;
+	data.vc = vc;
+
+	data.status = OFONO_EMULATOR_CALL_INACTIVE;
 	__ofono_modem_foreach_registered_atom(modem,
 						OFONO_ATOM_TYPE_EMULATOR_HFP,
-						emulator_call_status_cb, 0);
+						emulator_call_status_cb, &data);
+
+	data.status = OFONO_EMULATOR_CALLSETUP_INACTIVE;
 	__ofono_modem_foreach_registered_atom(modem,
 						OFONO_ATOM_TYPE_EMULATOR_HFP,
 						emulator_callsetup_status_cb,
-						0);
+						&data);
+
+	data.status = OFONO_EMULATOR_CALLHELD_NONE;
 	__ofono_modem_foreach_registered_atom(modem,
 						OFONO_ATOM_TYPE_EMULATOR_HFP,
-						emulator_callheld_status_cb, 0);
+						emulator_callheld_status_cb,
+						&data);
 
 	__ofono_modem_foreach_registered_atom(modem,
 						OFONO_ATOM_TYPE_EMULATOR_HFP,
@@ -3304,6 +3313,10 @@ static void emulator_chld_cb(struct ofono_emulator *em,
 
 		ofono_emulator_send_info(em, buf, TRUE);
 		result.type = OFONO_ERROR_TYPE_NO_ERROR;
+
+		__ofono_emulator_slc_condition(em,
+					OFONO_EMULATOR_SLC_CONDITION_CHLD);
+
 		break;
 
 	case OFONO_EMULATOR_REQUEST_TYPE_QUERY:

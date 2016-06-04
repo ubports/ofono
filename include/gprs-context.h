@@ -79,6 +79,9 @@ struct ofono_gprs_context_driver {
 					ofono_gprs_context_cb_t cb, void *data);
 	void (*detach_shutdown)(struct ofono_gprs_context *gc,
 					unsigned int id);
+	void (*read_settings)(struct ofono_gprs_context *gc,
+				unsigned int cid,
+				ofono_gprs_context_cb_t cb, void *data);
 };
 
 void ofono_gprs_context_deactivated(struct ofono_gprs_context *gc,
@@ -101,6 +104,8 @@ struct ofono_modem *ofono_gprs_context_get_modem(struct ofono_gprs_context *gc);
 
 void ofono_gprs_context_set_type(struct ofono_gprs_context *gc,
 					enum ofono_gprs_context_type type);
+enum ofono_gprs_context_type ofono_gprs_context_get_type(
+						struct ofono_gprs_context *gc);
 
 void ofono_gprs_context_set_interface(struct ofono_gprs_context *gc,
 					const char *interface);

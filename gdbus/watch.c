@@ -362,6 +362,7 @@ static void service_data_free(struct service_data *data)
 	callback->data = NULL;
 }
 
+/* Returns TRUE if data is freed */
 static gboolean filter_data_remove_callback(struct filter_data *data,
 						struct filter_callback *cb)
 {
@@ -383,7 +384,7 @@ static gboolean filter_data_remove_callback(struct filter_data *data,
 	/* Don't remove the filter if other callbacks exist or data is lock
 	 * processing callbacks */
 	if (data->callbacks || data->lock)
-		return TRUE;
+		return FALSE;
 
 	if (data->registered && !remove_match(data))
 		return FALSE;
@@ -405,7 +406,9 @@ static DBusHandlerResult signal_filter(DBusConnection *connection,
 
 		if (cb->signal_func && !cb->signal_func(connection, message,
 							cb->user_data)) {
-			filter_data_remove_callback(data, cb);
+			if (filter_data_remove_callback(data, cb))
+				break;
+
 			continue;
 		}
 
@@ -489,7 +492,9 @@ static DBusHandlerResult service_filter(DBusConnection *connection,
 		/* Only auto remove if it is a bus name watch */
 		if (data->argument[0] == ':' &&
 				(cb->conn_func == NULL || cb->disc_func == NULL)) {
-			filter_data_remove_callback(data, cb);
+			if (filter_data_remove_callback(data, cb))
+				break;
+
 			continue;
 		}
 
@@ -518,14 +523,15 @@ static DBusHandlerResult message_filter(DBusConnection *connection,
 	member = dbus_message_get_member(message);
 	dbus_message_get_args(message, NULL, DBUS_TYPE_STRING, &arg, DBUS_TYPE_INVALID);
 
-	/* Sender is always the owner */
-	if (sender == NULL)
-		return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+	/* If sender != NULL it is always the owner */
 
 	for (current = listeners; current != NULL; current = current->next) {
 		data = current->data;
 
 		if (connection != data->connection)
+			continue;
+
+		if (!sender && data->owner)
 			continue;
 
 		if (data->owner && g_str_equal(sender, data->owner) == FALSE)
@@ -590,7 +596,6 @@ static gboolean update_service(void *user_data)
 	struct filter_callback *cb = data->callback;
 	DBusConnection *conn;
 
-	update_name_cache(data->name, data->owner);
 	conn = dbus_connection_ref(data->conn);
 	service_data_free(data);
 
@@ -699,7 +704,8 @@ guint g_dbus_add_service_watch(DBusConnection *connection, const char *name,
 	if (name == NULL)
 		return 0;
 
-	data = filter_data_get(connection, service_filter, NULL, NULL,
+	data = filter_data_get(connection, service_filter,
+				DBUS_SERVICE_DBUS, DBUS_PATH_DBUS,
 				DBUS_INTERFACE_DBUS, "NameOwnerChanged",
 				name);
 	if (data == NULL)

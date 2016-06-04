@@ -988,8 +988,7 @@ static DBusMessage *sms_send_message(DBusConnection *conn, DBusMessage *msg,
 	err = __ofono_sms_txq_submit(sms, msg_list, flags, &uuid,
 					message_queued, msg);
 
-	g_slist_foreach(msg_list, (GFunc) g_free, NULL);
-	g_slist_free(msg_list);
+	g_slist_free_full(msg_list, g_free);
 
 	if (err < 0)
 		return __ofono_error_failed(msg);
@@ -1184,6 +1183,7 @@ static void dispatch_app_datagram(struct ofono_sms *sms,
 	ofono_sms_datagram_notify_cb_t notify;
 	struct sms_handler *h;
 	GSList *l;
+	gboolean dispatched = FALSE;
 
 	ts = sms_scts_to_time(scts, &remote);
 	localtime_r(&ts, &local);
@@ -1195,9 +1195,15 @@ static void dispatch_app_datagram(struct ofono_sms *sms,
 		if (!port_equal(dst, h->dst) || !port_equal(src, h->src))
 			continue;
 
+		dispatched = TRUE;
+
 		notify(sender, &remote, &local, dst, src, buf, len,
 			h->item.notify_data);
 	}
+
+	if (!dispatched)
+		ofono_info("Datagram with ports [%d,%d] not delivered",
+								dst, src);
 }
 
 static void dispatch_text_message(struct ofono_sms *sms,
@@ -1418,8 +1424,7 @@ static void handle_deliver(struct ofono_sms *sms, const struct sms *incoming)
 			return;
 
 		sms_dispatch(sms, sms_list);
-		g_slist_foreach(sms_list, (GFunc) g_free, NULL);
-		g_slist_free(sms_list);
+		g_slist_free_full(sms_list, g_free);
 
 		return;
 	}
@@ -1939,8 +1944,7 @@ static void sms_restore_tx_queue(struct ofono_sms *sms)
 		g_queue_push_tail(sms->txq, txq_entry);
 
 loop_out:
-		g_slist_foreach(backup_entry->msg_list, (GFunc)g_free, NULL);
-		g_slist_free(backup_entry->msg_list);
+		g_slist_free_full(backup_entry->msg_list, g_free);
 		g_free(backup_entry);
 	}
 

@@ -524,7 +524,8 @@ static gboolean encode_validity_period(const struct sms_validity_period *vp,
 gboolean sms_encode_address_field(const struct sms_address *in, gboolean sc,
 					unsigned char *pdu, int *offset)
 {
-	size_t len = strlen(in->address);
+	const char *addr = (const char *)&in->address;
+	size_t len = strlen(addr);
 	unsigned char addr_len = 0;
 	unsigned char p[10];
 
@@ -546,12 +547,18 @@ gboolean sms_encode_address_field(const struct sms_address *in, gboolean sc,
 		unsigned char *gsm;
 		unsigned char *r;
 
-		if (len > 11)
+		/* TP-OA's 10 octets transport 11 8-bit chars */
+		if (g_utf8_strlen(addr, strlen(addr)) > 11)
 			return FALSE;
 
 		gsm = convert_utf8_to_gsm(in->address, len, NULL, &written, 0);
 		if (gsm == NULL)
 			return FALSE;
+
+		if (written > 11) {
+			g_free(gsm);
+			return FALSE;
+		}
 
 		r = pack_7bit_own_buf(gsm, written, 0, FALSE, &packed, 0, p);
 
@@ -675,7 +682,11 @@ gboolean sms_decode_address_field(const unsigned char *pdu, int len,
 		if (utf8 == NULL)
 			return FALSE;
 
-		if (strlen(utf8) > 20) {
+		/*
+		 * TP-OA's 10 octets transport 11 8-bit chars,
+		 * 22 bytes+terminator in UTF-8.
+		 */
+		if (strlen(utf8) > 22) {
 			g_free(utf8);
 			return FALSE;
 		}
@@ -1935,9 +1946,6 @@ static gboolean extract_app_port_common(struct sms_udh_iter *iter, int *dst,
 			if (((addr_hdr[0] << 8) | addr_hdr[1]) > 49151)
 				break;
 
-			if (((addr_hdr[2] << 8) | addr_hdr[3]) > 49151)
-				break;
-
 			dstport = (addr_hdr[0] << 8) | addr_hdr[1];
 			srcport = (addr_hdr[2] << 8) | addr_hdr[3];
 			is_addr_8bit = FALSE;
@@ -2533,8 +2541,7 @@ void sms_assembly_free(struct sms_assembly *assembly)
 	for (l = assembly->assembly_list; l; l = l->next) {
 		struct sms_assembly_node *node = l->data;
 
-		g_slist_foreach(node->fragment_list, (GFunc) g_free, 0);
-		g_slist_free(node->fragment_list);
+		g_slist_free_full(node->fragment_list, g_free);
 		g_free(node);
 	}
 
@@ -2684,8 +2691,7 @@ void sms_assembly_expire(struct sms_assembly *assembly, time_t before)
 
 		sms_assembly_backup_free(assembly, node);
 
-		g_slist_foreach(node->fragment_list, (GFunc) g_free, 0);
-		g_slist_free(node->fragment_list);
+		g_slist_free_full(node->fragment_list, g_free);
 		g_free(node);
 
 		if (prev)
@@ -3498,8 +3504,7 @@ GSList *sms_datagram_prepare(const char *to,
 	}
 
 	if (left > 0) {
-		g_slist_foreach(r, (GFunc) g_free, NULL);
-		g_slist_free(r);
+		g_slist_free_full(r, g_free);
 
 		return NULL;
 	} else {
@@ -3690,8 +3695,7 @@ GSList *sms_text_prepare_with_alphabet(const char *to, const char *utf8,
 		g_free(ucs2_encoded);
 
 	if (left > 0) {
-		g_slist_foreach(r, (GFunc) g_free, NULL);
-		g_slist_free(r);
+		g_slist_free_full(r, g_free);
 
 		return NULL;
 	} else {
@@ -4206,8 +4210,7 @@ void cbs_assembly_free(struct cbs_assembly *assembly)
 	for (l = assembly->assembly_list; l; l = l->next) {
 		struct cbs_assembly_node *node = l->data;
 
-		g_slist_foreach(node->pages, (GFunc) g_free, 0);
-		g_slist_free(node->pages);
+		g_slist_free_full(node->pages, g_free);
 		g_free(node);
 	}
 
@@ -4286,8 +4289,7 @@ static void cbs_assembly_expire(struct cbs_assembly *assembly,
 		else
 			assembly->assembly_list = l->next;
 
-		g_slist_foreach(node->pages, (GFunc) g_free, NULL);
-		g_slist_free(node->pages);
+		g_slist_free_full(node->pages, g_free);
 		g_free(node->pages);
 		tmp = l;
 		l = l->next;
@@ -4596,8 +4598,7 @@ GSList *cbs_extract_topic_ranges(const char *ranges)
 	}
 
 	tmp = cbs_optimize_ranges(ret);
-	g_slist_foreach(ret, (GFunc) g_free, NULL);
-	g_slist_free(ret);
+	g_slist_free_full(ret, g_free);
 
 	return tmp;
 }

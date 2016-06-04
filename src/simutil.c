@@ -95,6 +95,7 @@ static struct sim_ef_info ef_db[] = {
 {	0x6F4D, 0x7F20, 0x7FFF, EF, RECORD, 0,		PIN,	PIN2	},
 {	0x6F50, 0x7F20, 0x7FFF, EF, BINARY, 0,		PIN,	PIN	},
 {	0x6F56, 0x0000, 0x7FFF, EF, BINARY, 0,		PIN,	PIN2	},
+{	0x6F57,	0x7F20,	0x7FFF,	EF, BINARY, 0,		PIN,	PIN2	},
 {	0x6FAD, 0x7F20, 0x7FFF, EF, BINARY, 0,		ALW,	ADM	},
 {	0x6FAE, 0x7F20, 0x0000, EF, BINARY, 1,		ALW,	ADM	},
 {	0x6FB7, 0x7F20, 0x7FFF, EF, BINARY, 0,		ALW,	ADM	},
@@ -979,8 +980,7 @@ void sim_spdi_free(struct sim_spdi *spdi)
 	if (spdi == NULL)
 		return;
 
-	g_slist_foreach(spdi->operators, (GFunc)g_free, NULL);
-	g_slist_free(spdi->operators);
+	g_slist_free_full(spdi->operators, g_free);
 	g_free(spdi);
 }
 
@@ -1087,8 +1087,7 @@ void sim_eons_free(struct sim_eons *eons)
 
 	g_free(eons->pnn_list);
 
-	g_slist_foreach(eons->opl_list, (GFunc)g_free, NULL);
-	g_slist_free(eons->opl_list);
+	g_slist_free_full(eons->opl_list, g_free);
 
 	g_free(eons);
 }

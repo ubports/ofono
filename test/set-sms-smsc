@@ -1,0 +1,31 @@
+#!/usr/bin/python3
+import sys
+import dbus
+
+if len(sys.argv) < 2:
+        print("Usage: %s <SMSC address>" % (sys.argv[0]))
+        sys.exit(1)
+
+def message_service_center_address(sms, value):
+        try:
+            sms.SetProperty("ServiceCenterAddress", dbus.String(value))
+        except dbus.DBusException as e:
+            print("Unable to set correct Service Center Address - FAIL")
+            exit(1)
+
+bus = dbus.SystemBus()
+manager = dbus.Interface(bus.get_object('org.ofono', '/'),'org.ofono.Manager')
+modems = manager.GetModems()
+value  = sys.argv[1]
+
+for path, properties in modems:
+	print("Setting SMSC for [ %s ]" % (path))
+
+	if "org.ofono.MessageManager" not in properties["Interfaces"]:
+		continue
+
+	sms = dbus.Interface(bus.get_object('org.ofono', path),
+					'org.ofono.MessageManager')
+
+        message_service_center_address(sms, value)
+        print("SMSC address Updated for [ %s ]" % (path))

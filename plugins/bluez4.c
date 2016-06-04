@@ -225,8 +225,7 @@ void bluetooth_parse_properties(DBusMessage *reply, const char *property, ...)
 	}
 
 done:
-	g_slist_foreach(prop_handlers, (GFunc) g_free, NULL);
-	g_slist_free(prop_handlers);
+	g_slist_free_full(prop_handlers, g_free);
 }
 
 static void parse_uuids(DBusMessageIter *array, gpointer user_data)
@@ -692,7 +691,7 @@ static void find_adapter_cb(DBusPendingCall *call, gpointer user_data)
 
 	adapter_any_path = g_strdup(path);
 
-	g_slist_foreach(server_list, (GFunc) add_record, NULL);
+	g_slist_foreach(server_list, add_record, NULL);
 
 done:
 	dbus_message_unref(reply);
@@ -820,7 +819,7 @@ static void bluetooth_disconnect(DBusConnection *conn, void *user_data)
 
 	g_hash_table_foreach(uuid_hash, bluetooth_remove, NULL);
 
-	g_slist_foreach(server_list, (GFunc) remove_service_handle, NULL);
+	g_slist_foreach(server_list, remove_service_handle, NULL);
 }
 
 static guint bluetooth_watch;

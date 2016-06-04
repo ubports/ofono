@@ -94,6 +94,7 @@ struct ofono_devinfo {
 	char *model;
 	char *revision;
 	char *serial;
+	char *svn;
 	unsigned int dun_watch;
 	const struct ofono_devinfo_driver *driver;
 	void *driver_data;
@@ -815,6 +816,11 @@ void __ofono_modem_append_properties(struct ofono_modem *modem,
 			ofono_dbus_dict_append(dict, "Serial",
 						DBUS_TYPE_STRING,
 						&info->serial);
+
+		if (info->svn)
+			ofono_dbus_dict_append(dict, "SoftwareVersionNumber",
+						DBUS_TYPE_STRING,
+						&info->svn);
 	}
 
 	interfaces = g_new0(char *, g_slist_length(modem->interface_list) + 1);
@@ -1343,8 +1349,8 @@ void ofono_modem_remove_interface(struct ofono_modem *modem,
 	modem->interface_update = g_idle_add(trigger_interface_update, modem);
 }
 
-static void query_serial_cb(const struct ofono_error *error,
-				const char *serial, void *user)
+static void query_svn_cb(const struct ofono_error *error,
+				const char *svn, void *user)
 {
 	struct ofono_devinfo *info = user;
 	DBusConnection *conn = ofono_dbus_get_connection();
@@ -1353,12 +1359,38 @@ static void query_serial_cb(const struct ofono_error *error,
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR)
 		return;
 
+	info->svn = g_strdup(svn);
+
+	ofono_dbus_signal_property_changed(conn, path, OFONO_MODEM_INTERFACE,
+			"SoftwareVersionNumber", DBUS_TYPE_STRING, &info->svn);
+}
+
+static void query_svn(struct ofono_devinfo *info)
+{
+	if (info->driver->query_svn == NULL)
+		return;
+
+	info->driver->query_svn(info, query_svn_cb, info);
+}
+
+static void query_serial_cb(const struct ofono_error *error,
+				const char *serial, void *user)
+{
+	struct ofono_devinfo *info = user;
+	DBusConnection *conn = ofono_dbus_get_connection();
+	const char *path = __ofono_atom_get_path(info->atom);
+
+	if (error->type != OFONO_ERROR_TYPE_NO_ERROR)
+		goto out;
+
 	info->serial = g_strdup(serial);
 
 	ofono_dbus_signal_property_changed(conn, path,
 						OFONO_MODEM_INTERFACE,
 						"Serial", DBUS_TYPE_STRING,
 						&info->serial);
+out:
+	query_svn(info);
 }
 
 static void query_serial(struct ofono_devinfo *info)
@@ -1619,6 +1651,9 @@ static void devinfo_unregister(struct ofono_atom *atom)
 
 	g_free(info->serial);
 	info->serial = NULL;
+
+	g_free(info->svn);
+	info->svn = NULL;
 }
 
 void ofono_devinfo_register(struct ofono_devinfo *info)
@@ -2048,12 +2083,10 @@ static void modem_unregister(struct ofono_modem *modem)
 	modem->sim_watch = 0;
 	modem->sim_ready_watch = 0;
 
-	g_slist_foreach(modem->interface_list, (GFunc) g_free, NULL);
-	g_slist_free(modem->interface_list);
+	g_slist_free_full(modem->interface_list, g_free);
 	modem->interface_list = NULL;
 
-	g_slist_foreach(modem->feature_list, (GFunc) g_free, NULL);
-	g_slist_free(modem->feature_list);
+	g_slist_free_full(modem->feature_list, g_free);
 	modem->feature_list = NULL;
 
 	if (modem->timeout) {
@@ -2130,6 +2163,9 @@ void ofono_modem_reset(struct ofono_modem *modem)
 
 	err = set_powered(modem, TRUE);
 	if (err == -EINPROGRESS)
+		return;
+
+	if (err < 0)
 		return;
 
 	modem_change_state(modem, MODEM_STATE_PRE_SIM);

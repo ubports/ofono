@@ -102,8 +102,10 @@ static struct ssc_entry *ssc_entry_create(const char *sc, void *cb, void *data,
 	return r;
 }
 
-static void ssc_entry_destroy(struct ssc_entry *ca)
+static void ssc_entry_destroy(gpointer pointer)
 {
+	struct ssc_entry *ca = pointer;
+
 	if (ca->destroy)
 		ca->destroy(ca->user);
 
@@ -790,12 +792,10 @@ static void ussd_unregister(struct ofono_atom *atom)
 	struct ofono_modem *modem = __ofono_atom_get_modem(atom);
 	const char *path = __ofono_atom_get_path(atom);
 
-	g_slist_foreach(ussd->ss_control_list, (GFunc) ssc_entry_destroy, NULL);
-	g_slist_free(ussd->ss_control_list);
+	g_slist_free_full(ussd->ss_control_list, ssc_entry_destroy);
 	ussd->ss_control_list = NULL;
 
-	g_slist_foreach(ussd->ss_passwd_list, (GFunc) ssc_entry_destroy, NULL);
-	g_slist_free(ussd->ss_passwd_list);
+	g_slist_free_full(ussd->ss_passwd_list, ssc_entry_destroy);
 	ussd->ss_passwd_list = NULL;
 
 	ofono_modem_remove_interface(modem,

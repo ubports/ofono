@@ -67,6 +67,8 @@ static const char *epin_prefix[] = { "*EPIN:", NULL };
 static const char *spic_prefix[] = { "+SPIC:", NULL };
 static const char *pct_prefix[] = { "#PCT:", NULL };
 static const char *pnnm_prefix[] = { "+PNNM:", NULL };
+static const char *qpinc_prefix[] = { "+QPINC:", NULL };
+static const char *upincnt_prefix[] = { "+UPINCNT:", NULL };
 static const char *none_prefix[] = { NULL };
 
 static void at_crsm_info_cb(gboolean ok, GAtResult *result, gpointer user_data)
@@ -825,7 +827,7 @@ static void at_cpinr_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 		for (i = 1; i < len; i++) {
 			if (!strcmp(name, at_sim_name[i].name)) {
-				retries[i] = val;
+				retries[at_sim_name[i].type] = val;
 				break;
 			}
 		}
@@ -967,6 +969,90 @@ error:
 	CALLBACK_WITH_FAILURE(cb, NULL, cbd->data);
 }
 
+static void at_qpinc_cb(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_sim_pin_retries_cb_t cb = cbd->cb;
+	const char *final = g_at_result_final_response(result);
+	GAtResultIter iter;
+	struct ofono_error error;
+	int retries[OFONO_SIM_PASSWORD_INVALID];
+	size_t i;
+
+	decode_at_error(&error, final);
+
+	if (!ok) {
+		cb(&error, NULL, cbd->data);
+		return;
+	}
+
+	for (i = 0; i < OFONO_SIM_PASSWORD_INVALID; i++)
+		retries[i] = -1;
+
+	g_at_result_iter_init(&iter, result);
+
+	while (g_at_result_iter_next(&iter, "+QPINC:")) {
+		const char *name;
+		int pin, puk;
+
+		if (!g_at_result_iter_next_string(&iter, &name))
+			continue;
+		if (!g_at_result_iter_next_number(&iter, &pin))
+			continue;
+		if (!g_at_result_iter_next_number(&iter, &puk))
+			continue;
+
+		if (!strcmp(name, "SC")) {
+			retries[OFONO_SIM_PASSWORD_SIM_PIN] = pin;
+			retries[OFONO_SIM_PASSWORD_SIM_PUK] = puk;
+		} else if (!strcmp(name, "P2")) {
+			retries[OFONO_SIM_PASSWORD_SIM_PIN2] = pin;
+			retries[OFONO_SIM_PASSWORD_SIM_PUK2] = puk;
+		}
+	}
+
+	cb(&error, retries, cbd->data);
+}
+
+static void upincnt_cb(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_sim_pin_retries_cb_t cb = cbd->cb;
+	const char *final = g_at_result_final_response(result);
+	GAtResultIter iter;
+	struct ofono_error error;
+	int retries[OFONO_SIM_PASSWORD_INVALID];
+	size_t i;
+	static enum ofono_sim_password_type password_types[] = {
+		OFONO_SIM_PASSWORD_SIM_PIN,
+		OFONO_SIM_PASSWORD_SIM_PIN2,
+		OFONO_SIM_PASSWORD_SIM_PUK,
+		OFONO_SIM_PASSWORD_SIM_PUK2,
+	};
+
+	decode_at_error(&error, final);
+
+	if (!ok) {
+		cb(&error, NULL, cbd->data);
+		return;
+	}
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "+UPINCNT:"))
+		goto error;
+
+	BUILD_PIN_RETRIES_ARRAY(password_types, ARRAY_SIZE(password_types),
+				retries);
+
+	cb(&error, retries, cbd->data);
+
+	return;
+
+error:
+	CALLBACK_WITH_FAILURE(cb, NULL, cbd->data);
+}
+
 static void at_pin_retries_query(struct ofono_sim *sim,
 					ofono_sim_pin_retries_cb_t cb,
 					void *data)
@@ -1026,6 +1112,17 @@ static void at_pin_retries_query(struct ofono_sim *sim,
 	case OFONO_VENDOR_ALCATEL:
 		if (g_at_chat_send(sd->chat, "AT+PNNM?", pnnm_prefix,
 					at_pnnm_cb, cbd, g_free) > 0)
+			return;
+		break;
+	case OFONO_VENDOR_QUECTEL:
+		if (g_at_chat_send(sd->chat, "AT+QPINC?", qpinc_prefix,
+					at_qpinc_cb, cbd, g_free) > 0)
+			return;
+		break;
+	case OFONO_VENDOR_UBLOX:
+	case OFONO_VENDOR_UBLOX_TOBY_L2:
+		if (g_at_chat_send(sd->chat, "AT+UPINCNT", upincnt_prefix,
+					upincnt_cb, cbd, g_free) > 0)
 			return;
 		break;
 	default:
@@ -1254,6 +1351,7 @@ static void at_pin_send_cb(gboolean ok, GAtResult *result,
 	case OFONO_VENDOR_ALCATEL:
 	case OFONO_VENDOR_HUAWEI:
 	case OFONO_VENDOR_SIMCOM:
+	case OFONO_VENDOR_SIERRA:
 		/*
 		 * On ZTE modems, after pin is entered, SIM state is checked
 		 * by polling CPIN as their modem doesn't provide unsolicited
@@ -1419,7 +1517,7 @@ static void at_lock_status_cb(gboolean ok, GAtResult *result,
 {
 	struct cb_data *cbd = user_data;
 	GAtResultIter iter;
-	ofono_sim_locked_cb_t cb = cbd->cb;
+	ofono_query_facility_lock_cb_t cb = cbd->cb;
 	struct ofono_error error;
 	int locked;
 
@@ -1444,9 +1542,9 @@ static void at_lock_status_cb(gboolean ok, GAtResult *result,
 	cb(&error, locked, cbd->data);
 }
 
-static void at_pin_query_enabled(struct ofono_sim *sim,
+static void at_query_clck(struct ofono_sim *sim,
 				enum ofono_sim_password_type passwd_type,
-				ofono_sim_locked_cb_t cb, void *data)
+				ofono_query_facility_lock_cb_t cb, void *data)
 {
 	struct sim_data *sd = ofono_sim_get_data(sim);
 	struct cb_data *cbd = cb_data_new(cb, data);
@@ -1529,7 +1627,7 @@ static struct ofono_sim_driver driver = {
 	.reset_passwd		= at_pin_send_puk,
 	.lock			= at_pin_enable,
 	.change_passwd		= at_change_passwd,
-	.query_locked		= at_pin_query_enabled,
+	.query_facility_lock	= at_query_clck,
 };
 
 static struct ofono_sim_driver driver_noef = {
@@ -1543,7 +1641,7 @@ static struct ofono_sim_driver driver_noef = {
 	.reset_passwd		= at_pin_send_puk,
 	.lock			= at_pin_enable,
 	.change_passwd		= at_change_passwd,
-	.query_locked		= at_pin_query_enabled,
+	.query_facility_lock	= at_query_clck,
 };
 
 void at_sim_init(void)

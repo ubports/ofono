@@ -1073,6 +1073,9 @@ static gboolean signal_cb(GIOChannel *channel, GIOCondition cond, gpointer data)
 	case SIGTERM:
 		server_cleanup();
 		break;
+	case SIGUSR1:
+		g_at_ppp_shutdown(ppp);
+		break;
 	default:
 		break;
 	}
@@ -1089,6 +1092,7 @@ static int create_signal_io(void)
 	sigemptyset(&mask);
 	sigaddset(&mask, SIGTERM);
 	sigaddset(&mask, SIGINT);
+	sigaddset(&mask, SIGUSR1);
 
 	if (sigprocmask(SIG_BLOCK, &mask, NULL) < 0) {
 		g_error("Can't set signal mask");

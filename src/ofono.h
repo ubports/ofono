@@ -152,6 +152,7 @@ enum ofono_atom_type {
 	OFONO_ATOM_TYPE_CDMA_NETREG,
 	OFONO_ATOM_TYPE_HANDSFREE,
 	OFONO_ATOM_TYPE_SIRI,
+	OFONO_ATOM_TYPE_NETMON,
 };
 
 enum ofono_atom_watch_condition {
@@ -505,8 +506,17 @@ void __ofono_gprs_provision_free_settings(
 				int count);
 
 #include <ofono/emulator.h>
+
+enum ofono_emulator_slc_condition {
+	OFONO_EMULATOR_SLC_CONDITION_CMER,
+	OFONO_EMULATOR_SLC_CONDITION_CHLD,
+	OFONO_EMULATOR_SLC_CONDITION_BIND,
+};
+
 void __ofono_emulator_set_indicator_forced(struct ofono_emulator *em,
 						const char *name, int value);
+void __ofono_emulator_slc_condition(struct ofono_emulator *em,
+					enum ofono_emulator_slc_condition cond);
 
 #include <ofono/gnss.h>
 #include <ofono/cdma-sms.h>
@@ -520,3 +530,5 @@ ofono_bool_t __ofono_cdma_provision_get_name(const char *sid, char **name);
 void __ofono_private_network_release(int id);
 ofono_bool_t __ofono_private_network_request(ofono_private_network_cb_t cb,
 						int *id, void *data);
+
+#include <ofono/netmon.h>

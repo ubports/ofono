@@ -286,8 +286,7 @@ static void clcc_poll_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 	ofono_voicecall_mpty_hint(vc, mpty_ids);
 
-	g_slist_foreach(vd->calls, (GFunc) g_free, NULL);
-	g_slist_free(vd->calls);
+	g_slist_free_full(vd->calls, g_free);
 
 	vd->calls = calls;
 
@@ -295,7 +294,7 @@ static void clcc_poll_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	 * we won't get indicator update if any of them is released by CHLD=1x.
 	 * So we have to poll it.
 	 */
-	if (num_active > 1 || num_held > 1)
+	if ((num_active > 1 || num_held > 1) && !vd->clcc_source)
 		vd->clcc_source = g_timeout_add(POLL_CLCC_INTERVAL, poll_clcc,
 							vc);
 }
@@ -332,6 +331,10 @@ static void generic_cb(gboolean ok, GAtResult *result, gpointer user_data)
 				vd->local_release |= (1 << call->id);
 		}
 	}
+
+	if (!ok && vd->calls)
+		g_at_chat_send(vd->chat, "AT+CLCC", clcc_prefix,
+					clcc_poll_cb, req->vc, NULL);
 
 	req->cb(&error, req->data);
 }
@@ -705,11 +708,30 @@ static void ccwa_notify(GAtResult *result, gpointer user_data)
 	int num_type, validity;
 	struct ofono_call *call;
 
+	/* Waiting call notification makes no sense, when there are
+	 * no calls at all. This can happen when a phone already has
+	 * waiting and active calls and is being connected over HFP
+	 * but it first sends +CCWA before we manage to synchronize
+	 * calls with AT+CLCC.
+	 */
+	if (!vd->calls)
+		return;
+
 	/* CCWA can repeat, ignore if we already have an waiting call */
 	if (g_slist_find_custom(vd->calls,
 				GINT_TO_POINTER(CALL_STATUS_WAITING),
 				at_util_call_compare_by_status))
 		return;
+
+	/* some phones may send extra CCWA after active call is ended
+	 * this would trigger creation of second call in state 'WAITING'
+	 * as our previous WAITING call has been promoted to INCOMING
+	 */
+	if (g_slist_find_custom(vd->calls,
+				GINT_TO_POINTER(CALL_STATUS_INCOMING),
+				at_util_call_compare_by_status))
+		return;
+
 
 	g_at_result_iter_init(&iter, result);
 
@@ -1096,6 +1118,17 @@ static void ciev_callheld_notify(struct ofono_voicecall *vc,
 			 */
 			vd->clcc_source = g_timeout_add(POLL_CLCC_DELAY,
 							poll_clcc, vc);
+		} else {
+			if (vd->clcc_source)
+				g_source_remove(vd->clcc_source);
+
+			/*
+			 * We got a notification that there is a held call
+			 * and no active call but we already are in such state.
+			 * Let's schedule a poll to see what happened.
+			 */
+			vd->clcc_source = g_timeout_add(POLL_CLCC_DELAY,
+							poll_clcc, vc);
 		}
 	}
 
@@ -1134,6 +1167,10 @@ static void hfp_clcc_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	struct ofono_voicecall *vc = user_data;
 	struct voicecall_data *vd = ofono_voicecall_get_data(vc);
 	unsigned int mpty_ids;
+	GSList *n;
+	struct ofono_call *nc;
+	unsigned int num_active = 0;
+	unsigned int num_held = 0;
 
 	if (!ok)
 		return;
@@ -1142,6 +1179,22 @@ static void hfp_clcc_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 	g_slist_foreach(vd->calls, voicecall_notify, vc);
 	ofono_voicecall_mpty_hint(vc, mpty_ids);
+
+	n = vd->calls;
+
+	while (n) {
+		nc = n->data;
+
+		if (nc->status == CALL_STATUS_ACTIVE)
+			num_active++;
+		else if (nc->status == CALL_STATUS_HELD)
+			num_held++;
+
+		n = n->next;
+	}
+
+	if ((num_active > 1 || num_held > 1) && !vd->clcc_source)
+		vd->clcc_source = g_timeout_add(POLL_CLCC_INTERVAL, poll_clcc, vc);
 }
 
 static void hfp_voicecall_initialized(gboolean ok, GAtResult *result,
@@ -1183,8 +1236,8 @@ static int hfp_voicecall_probe(struct ofono_voicecall *vc, unsigned int vendor,
 
 	ofono_voicecall_set_data(vc, vd);
 
-	g_at_chat_send(vd->chat, "AT+CLIP=1", NULL, NULL, NULL, NULL);
-	g_at_chat_send(vd->chat, "AT+CCWA=1", NULL,
+	g_at_chat_send(vd->chat, "AT+CLIP=1", none_prefix, NULL, NULL, NULL);
+	g_at_chat_send(vd->chat, "AT+CCWA=1", none_prefix,
 				hfp_voicecall_initialized, vc, NULL);
 	return 0;
 }
@@ -1202,8 +1255,7 @@ static void hfp_voicecall_remove(struct ofono_voicecall *vc)
 	if (vd->expect_release_source)
 		g_source_remove(vd->expect_release_source);
 
-	g_slist_foreach(vd->calls, (GFunc) g_free, NULL);
-	g_slist_free(vd->calls);
+	g_slist_free_full(vd->calls, g_free);
 
 	ofono_voicecall_set_data(vc, NULL);
 
