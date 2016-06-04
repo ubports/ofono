@@ -2,8 +2,10 @@ ofono (1.18-1) UNRELEASED; urgency=medium
 
   * New upstream release. (Closes: #792632)
     - Bump libglib2.0-dev to >= 2.32
+  * debian/control:
+    - Bump Standards-Version to 3.9.8 (no further changes)
 
- -- Laurent Bigonville <bigon@debian.org>  Sat, 04 Jun 2016 14:59:09 +0200
+ -- Laurent Bigonville <bigon@debian.org>  Sat, 04 Jun 2016 15:00:43 +0200
 
 ofono (1.15-3) unstable; urgency=medium
 
