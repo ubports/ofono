@@ -60,6 +60,16 @@ Methods		dict GetProperties()
 					 [service].Error.NotFound
 					 [service].Error.Failed
 
+		void ResetContexts()
+
+			Removes all contexts and re-provisions from the APN
+			database. Contexts must all be deactivated for this
+			method to work, and the atom must not be powered.
+
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.InvalidArguments
+					 [service].Error.NotAllowed
+
 Signals		PropertyChanged(string property, variant value)
 
 			This signal indicates a changed value of the given
@@ -96,7 +106,7 @@ Properties	boolean Attached [readonly]
 			GPRS service registration (if known).
 
 			Possible values are:
-			"none", "gsm", "edge", "umts", "hsdpa", "hsupa",
+			"none", "gprs", "edge", "umts", "hsdpa", "hsupa",
 			"hspa" (HSDPA and HSUPA at the same time) and
 			"lte"
 

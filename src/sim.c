@@ -267,10 +267,12 @@ static char **get_locked_pins(struct ofono_sim *sim)
 	return ret;
 }
 
-static void **get_pin_retries(struct ofono_sim *sim)
+static void get_pin_retries(struct ofono_sim *sim, void ***out_dict,
+				unsigned char **out_retries)
 {
 	int i, nelem;
-	void **ret;
+	void **dict;
+	unsigned char *retries;
 
 	for (i = 1, nelem = 0; i < OFONO_SIM_PASSWORD_INVALID; i++) {
 		if (sim->pin_retries[i] == -1)
@@ -279,17 +281,22 @@ static void **get_pin_retries(struct ofono_sim *sim)
 		nelem += 1;
 	}
 
-	ret = g_new0(void *, nelem * 2 + 1);
+	dict = g_new0(void *, nelem * 2 + 1);
+	retries = g_new0(unsigned char, nelem);
 
 	for (i = 1, nelem = 0; i < OFONO_SIM_PASSWORD_INVALID; i++) {
 		if (sim->pin_retries[i] == -1)
 			continue;
 
-		ret[nelem++] = (void *) sim_passwd_name(i);
-		ret[nelem++] = &sim->pin_retries[i];
+		retries[nelem] = sim->pin_retries[i];
+
+		dict[nelem * 2] = (void *) sim_passwd_name(i);
+		dict[nelem * 2 + 1] = &retries[nelem];
+		nelem += 1;
 	}
 
-	return ret;
+	*out_dict = dict;
+	*out_retries = retries;
 }
 
 static char **get_service_numbers(GSList *service_numbers)
@@ -314,8 +321,9 @@ static char **get_service_numbers(GSList *service_numbers)
 	return ret;
 }
 
-static void service_number_free(struct service_number *num)
+static void service_number_free(gpointer pointer)
 {
+	struct service_number *num = pointer;
 	g_free(num->id);
 	g_free(num);
 }
@@ -344,7 +352,8 @@ static DBusMessage *sim_get_properties(DBusConnection *conn,
 	char **service_numbers;
 	char **locked_pins;
 	const char *pin_name;
-	void **pin_retries;
+	void **pin_retries_dict;
+	unsigned char *dbus_retries;
 	dbus_bool_t present = sim->state != OFONO_SIM_STATE_NOT_PRESENT;
 	dbus_bool_t fdn;
 	dbus_bool_t bdn;
@@ -371,6 +380,10 @@ static DBusMessage *sim_get_properties(DBusConnection *conn,
 	if (sim->imsi)
 		ofono_dbus_dict_append(&dict, "SubscriberIdentity",
 					DBUS_TYPE_STRING, &sim->imsi);
+
+	if (sim->spn)
+		ofono_dbus_dict_append(&dict, "ServiceProviderName",
+					DBUS_TYPE_STRING, &sim->spn);
 
 	fdn = sim->fixed_dialing;
 	ofono_dbus_dict_append(&dict, "FixedDialing", DBUS_TYPE_BOOLEAN, &fdn);
@@ -419,10 +432,11 @@ static DBusMessage *sim_get_properties(DBusConnection *conn,
 				DBUS_TYPE_STRING,
 				(void *) &pin_name);
 
-	pin_retries = get_pin_retries(sim);
+	get_pin_retries(sim, &pin_retries_dict, &dbus_retries);
 	ofono_dbus_dict_append_dict(&dict, "Retries", DBUS_TYPE_BYTE,
-								&pin_retries);
-	g_free(pin_retries);
+							&pin_retries_dict);
+	g_free(pin_retries_dict);
+	g_free(dbus_retries);
 
 done:
 	dbus_message_iter_close_container(&iter, &dict);
@@ -437,7 +451,8 @@ static void sim_pin_retries_query_cb(const struct ofono_error *error,
 	struct ofono_sim *sim = data;
 	DBusConnection *conn = ofono_dbus_get_connection();
 	const char *path = __ofono_atom_get_path(sim->atom);
-	void **pin_retries;
+	void **pin_retries_dict;
+	unsigned char *dbus_retries;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
 		ofono_error("Querying remaining pin retries failed");
@@ -449,11 +464,12 @@ static void sim_pin_retries_query_cb(const struct ofono_error *error,
 
 	memcpy(sim->pin_retries, retries, sizeof(sim->pin_retries));
 
-	pin_retries = get_pin_retries(sim);
+	get_pin_retries(sim, &pin_retries_dict, &dbus_retries);
 	ofono_dbus_signal_dict_property_changed(conn, path,
 					OFONO_SIM_MANAGER_INTERFACE, "Retries",
-					DBUS_TYPE_BYTE,	&pin_retries);
-	g_free(pin_retries);
+					DBUS_TYPE_BYTE,	&pin_retries_dict);
+	g_free(pin_retries_dict);
+	g_free(dbus_retries);
 }
 
 static void sim_pin_retries_check(struct ofono_sim *sim)
@@ -600,8 +616,7 @@ static DBusMessage *sim_set_property(DBusConnection *conn, DBusMessage *msg,
 		set_ok = set_own_numbers(sim, own_numbers, msg);
 
 error:
-		g_slist_foreach(own_numbers, (GFunc) g_free, 0);
-		g_slist_free(own_numbers);
+		g_slist_free_full(own_numbers, g_free);
 
 		if (set_ok)
 			return NULL;
@@ -1180,8 +1195,7 @@ check:
 		char **own_numbers;
 		DBusConnection *conn = ofono_dbus_get_connection();
 
-		g_slist_foreach(sim->own_numbers, (GFunc) g_free, NULL);
-		g_slist_free(sim->own_numbers);
+		g_slist_free_full(sim->own_numbers, g_free);
 		sim->own_numbers = sim->new_numbers;
 
 		own_numbers = get_own_numbers(sim->own_numbers);
@@ -1193,8 +1207,7 @@ check:
 
 		g_strfreev(own_numbers);
 	} else {
-		g_slist_foreach(sim->new_numbers, (GFunc) g_free, NULL);
-		g_slist_free(sim->new_numbers);
+		g_slist_free_full(sim->new_numbers, g_free);
 	}
 
 	sim->new_numbers = NULL;
@@ -1287,9 +1300,7 @@ static void sim_service_numbers_changed(int id, void *userdata)
 	struct ofono_sim *sim = userdata;
 
 	if (sim->service_numbers) {
-		g_slist_foreach(sim->service_numbers,
-				(GFunc)service_number_free, NULL);
-		g_slist_free(sim->service_numbers);
+		g_slist_free_full(sim->service_numbers, service_number_free);
 		sim->service_numbers = NULL;
 	}
 
@@ -1825,7 +1836,6 @@ static void sim_efphase_read_cb(int ok, int length, int record,
 static void sim_initialize_after_pin(struct ofono_sim *sim)
 {
 	sim->context = ofono_sim_context_create(sim);
-	sim->spn_watches = __ofono_watchlist_new(g_free);
 
 	ofono_sim_read(sim->context, SIM_EFPHASE_FILEID,
 			OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
@@ -2011,13 +2021,11 @@ skip_efpl:
 	}
 
 	if (efli) {
-		g_slist_foreach(efli, (GFunc)g_free, NULL);
-		g_slist_free(efli);
+		g_slist_free_full(efli, g_free);
 	}
 
 	if (efpl) {
-		g_slist_foreach(efpl, (GFunc)g_free, NULL);
-		g_slist_free(efpl);
+		g_slist_free_full(efpl, g_free);
 	}
 
 	if (sim->language_prefs != NULL)
@@ -2333,11 +2341,6 @@ static void sim_free_early_state(struct ofono_sim *sim)
 
 static void sim_spn_close(struct ofono_sim *sim)
 {
-	if (sim->spn_watches) {
-		__ofono_watchlist_free(sim->spn_watches);
-		sim->spn_watches = NULL;
-	}
-
 	/*
 	 * We have not initialized SPN logic at all yet, either because
 	 * no netreg / gprs atom has been needed or we have not reached the
@@ -2385,15 +2388,12 @@ static void sim_free_main_state(struct ofono_sim *sim)
 	sim->mnc[0] = '\0';
 
 	if (sim->own_numbers) {
-		g_slist_foreach(sim->own_numbers, (GFunc)g_free, NULL);
-		g_slist_free(sim->own_numbers);
+		g_slist_free_full(sim->own_numbers, g_free);
 		sim->own_numbers = NULL;
 	}
 
 	if (sim->service_numbers) {
-		g_slist_foreach(sim->service_numbers,
-				(GFunc)service_number_free, NULL);
-		g_slist_free(sim->service_numbers);
+		g_slist_free_full(sim->service_numbers, service_number_free);
 		sim->service_numbers = NULL;
 		sim->sdn_ready = FALSE;
 	}
@@ -2449,6 +2449,60 @@ static void sim_free_state(struct ofono_sim *sim)
 	sim_free_main_state(sim);
 }
 
+static void sim_query_fac_imsilock_cb(const struct ofono_error *error,
+				ofono_bool_t status,
+				void *data)
+{
+	struct ofono_sim *sim = data;
+	DBusConnection *conn = ofono_dbus_get_connection();
+	const char *path = __ofono_atom_get_path(sim->atom);
+	char **locked_pins;
+
+	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
+		ofono_error("Querying Facility Lock for IMSI Lock failed");
+		return;
+	}
+
+	sim->locked_pins[OFONO_SIM_PASSWORD_PHSIM_PIN] = status;
+
+	locked_pins = get_locked_pins(sim);
+
+	ofono_dbus_signal_array_property_changed(conn,
+				path,
+				OFONO_SIM_MANAGER_INTERFACE,
+				"LockedPins", DBUS_TYPE_STRING,
+				&locked_pins);
+
+	g_strfreev(locked_pins);
+}
+
+static void sim_query_fac_networklock_cb(const struct ofono_error *error,
+				ofono_bool_t status,
+				void *data)
+{
+	struct ofono_sim *sim = data;
+	DBusConnection *conn = ofono_dbus_get_connection();
+	const char *path = __ofono_atom_get_path(sim->atom);
+	char **locked_pins;
+
+	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
+		ofono_error("Querying Facility Lock for Network Lock failed");
+		return;
+	}
+
+	sim->locked_pins[OFONO_SIM_PASSWORD_PHNET_PIN] = status;
+
+	locked_pins = get_locked_pins(sim);
+
+	ofono_dbus_signal_array_property_changed(conn,
+				path,
+				OFONO_SIM_MANAGER_INTERFACE,
+				"LockedPins", DBUS_TYPE_STRING,
+				&locked_pins);
+
+	g_strfreev(locked_pins);
+}
+
 void ofono_sim_inserted_notify(struct ofono_sim *sim, ofono_bool_t inserted)
 {
 	if (sim->state == OFONO_SIM_STATE_RESETTING && inserted) {
@@ -2474,10 +2528,21 @@ void ofono_sim_inserted_notify(struct ofono_sim *sim, ofono_bool_t inserted)
 	sim_inserted_update(sim);
 	call_state_watches(sim);
 
-	if (inserted)
+	if (inserted) {
+		sim->driver->query_facility_lock(sim,
+					OFONO_SIM_PASSWORD_PHSIM_PIN,
+					sim_query_fac_imsilock_cb, sim);
+
+		sim->driver->query_facility_lock(sim,
+					OFONO_SIM_PASSWORD_PHNET_PIN,
+					sim_query_fac_networklock_cb, sim);
+
 		sim_initialize(sim);
-	else
+	} else {
+		sim->pin_type = OFONO_SIM_PASSWORD_NONE;
+
 		sim_free_state(sim);
+	}
 }
 
 unsigned int ofono_sim_add_state_watch(struct ofono_sim *sim,
@@ -2537,6 +2602,9 @@ static inline void spn_watches_notify(struct ofono_sim *sim)
 static void sim_spn_set(struct ofono_sim *sim, const void *data, int length,
 						const unsigned char *dc)
 {
+	DBusConnection *conn = ofono_dbus_get_connection();
+	const char *path = __ofono_atom_get_path(sim->atom);
+
 	g_free(sim->spn);
 	sim->spn = NULL;
 
@@ -2578,6 +2646,12 @@ static void sim_spn_set(struct ofono_sim *sim, const void *data, int length,
 		sim->spn_dc = g_memdup(dc, 1);
 
 notify:
+	if (sim->spn)
+		ofono_dbus_signal_property_changed(conn, path,
+						OFONO_SIM_MANAGER_INTERFACE,
+						"ServiceProviderName",
+						DBUS_TYPE_STRING, &sim->spn);
+
 	spn_watches_notify(sim);
 }
 
@@ -2726,6 +2800,10 @@ static void sim_pin_query_cb(const struct ofono_error *error,
 	DBusConnection *conn = ofono_dbus_get_connection();
 	const char *path = __ofono_atom_get_path(sim->atom);
 	const char *pin_name;
+	char **locked_pins;
+	gboolean lock_changed;
+
+	DBG("sim->pin_type: %d, pin_type: %d", sim->pin_type, pin_type);
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
 		ofono_error("Querying PIN authentication state failed");
@@ -2740,8 +2818,24 @@ static void sim_pin_query_cb(const struct ofono_error *error,
 				password_is_pin(pin_type) == FALSE)
 			pin_type = puk2pin(pin_type);
 
-		if (pin_type != OFONO_SIM_PASSWORD_INVALID)
+		if (pin_type != OFONO_SIM_PASSWORD_INVALID
+				&& pin_type != OFONO_SIM_PASSWORD_NONE) {
+			lock_changed = !sim->locked_pins[pin_type];
+
 			sim->locked_pins[pin_type] = TRUE;
+
+			if (lock_changed) {
+				locked_pins = get_locked_pins(sim);
+
+				ofono_dbus_signal_array_property_changed(conn,
+						path,
+						OFONO_SIM_MANAGER_INTERFACE,
+						"LockedPins", DBUS_TYPE_STRING,
+						&locked_pins);
+
+				g_strfreev(locked_pins);
+			}
+		}
 
 		ofono_dbus_signal_property_changed(conn, path,
 						OFONO_SIM_MANAGER_INTERFACE,
@@ -2834,6 +2928,8 @@ static void sim_unregister(struct ofono_atom *atom)
 
 	__ofono_watchlist_free(sim->state_watches);
 	sim->state_watches = NULL;
+	__ofono_watchlist_free(sim->spn_watches);
+	sim->spn_watches = NULL;
 
 	g_dbus_unregister_interface(conn, path, OFONO_SIM_MANAGER_INTERFACE);
 	ofono_modem_remove_interface(modem, OFONO_SIM_MANAGER_INTERFACE);
@@ -2964,6 +3060,7 @@ void ofono_sim_register(struct ofono_sim *sim)
 
 	ofono_modem_add_interface(modem, OFONO_SIM_MANAGER_INTERFACE);
 	sim->state_watches = __ofono_watchlist_new(g_free);
+	sim->spn_watches = __ofono_watchlist_new(g_free);
 	sim->simfs = sim_fs_new(sim, sim->driver);
 
 	__ofono_atom_register(sim->atom, sim_unregister);

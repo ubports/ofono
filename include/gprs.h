@@ -61,6 +61,8 @@ void ofono_gprs_suspend_notify(struct ofono_gprs *gprs, int cause);
 void ofono_gprs_resume_notify(struct ofono_gprs *gprs);
 void ofono_gprs_bearer_notify(struct ofono_gprs *gprs, int bearer);
 
+struct ofono_modem *ofono_gprs_get_modem(struct ofono_gprs *gprs);
+
 int ofono_gprs_driver_register(const struct ofono_gprs_driver *d);
 void ofono_gprs_driver_unregister(const struct ofono_gprs_driver *d);
 
@@ -77,6 +79,9 @@ void ofono_gprs_set_cid_range(struct ofono_gprs *gprs,
 				unsigned int min, unsigned int max);
 void ofono_gprs_add_context(struct ofono_gprs *gprs,
 				struct ofono_gprs_context *gc);
+
+void ofono_gprs_cid_activated(struct ofono_gprs  *gprs, unsigned int cid,
+				const char *apn);
 
 #ifdef __cplusplus
 }

@@ -1,0 +1,39 @@
+#!/usr/bin/python3
+
+import dbus
+import sys
+
+bus = dbus.SystemBus()
+
+if len(sys.argv) == 4:
+    path = sys.argv[1]
+    mcc = sys.argv[2]
+    mnc = sys.argv[3]
+elif len(sys.argv) == 3:
+    manager = dbus.Interface(bus.get_object('org.ofono', '/'),
+                                            'org.ofono.Manager')
+    modems = manager.GetModems()
+    path = modems[0][0]
+    mcc = sys.argv[1]
+    mnc = sys.argv[2]
+else:
+    print("%s [path] <mcc> <mnc>" % (sys.argv[0]))
+    sys.exit(0)
+
+netreg = dbus.Interface(bus.get_object('org.ofono', path),
+                                'org.ofono.NetworkRegistration')
+
+operators = netreg.GetOperators()
+for path, properties in operators:
+        if properties['MobileCountryCode'] != mcc:
+            continue
+
+        if properties['MobileNetworkCode'] != mnc:
+            continue
+
+        operator = dbus.Interface(bus.get_object('org.ofono', path),
+                                    'org.ofono.NetworkOperator')
+        operator.Register()
+        sys.exit(0)
+
+print("No operator matching mcc: %s, mnc: %s found" % (mcc, mnc))

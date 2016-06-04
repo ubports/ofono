@@ -1,5 +1,5 @@
 AC_PREREQ(2.60)
-AC_INIT(ofono, 1.15)
+AC_INIT(ofono, 1.18)
 
 AM_INIT_AUTOMAKE([foreign subdir-objects color-tests])
 AC_CONFIG_HEADERS(config.h)
@@ -63,8 +63,8 @@ AC_CHECK_FUNC(signalfd, dummy=yes,
 AC_CHECK_LIB(dl, dlopen, dummy=yes,
 			AC_MSG_ERROR(dynamic linking loader is required))
 
-PKG_CHECK_MODULES(GLIB, glib-2.0 >= 2.28, dummy=yes,
-				AC_MSG_ERROR(GLib >= 2.28 is required))
+PKG_CHECK_MODULES(GLIB, glib-2.0 >= 2.32, dummy=yes,
+				AC_MSG_ERROR(GLib >= 2.32 is required))
 AC_SUBST(GLIB_CFLAGS)
 AC_SUBST(GLIB_LIBS)
 
@@ -161,6 +161,11 @@ AC_ARG_ENABLE(isimodem, AC_HELP_STRING([--disable-isimodem],
 					[enable_isimodem=${enableval}])
 AM_CONDITIONAL(ISIMODEM, test "${enable_isimodem}" != "no")
 
+AC_ARG_ENABLE(rilmodem, AC_HELP_STRING([--disable-rilmodem],
+				[disable RIL modem support]),
+					[enable_rilmodem=${enableval}])
+AM_CONDITIONAL(RILMODEM, test "${enable_rilmodem}" != "no")
+
 AC_ARG_ENABLE(qmimodem, AC_HELP_STRING([--disable-qmimodem],
 				[disable Qualcomm QMI modem support]),
 					[enable_qmimodem=${enableval}])
@@ -188,7 +193,7 @@ AC_ARG_WITH([provisiondb], AC_HELP_STRING([--with-provisiondb=FILE],
 	[location of provision database]), [path_provisiondb=${withval}])
 
 AC_ARG_ENABLE(provision, AC_HELP_STRING([--disable-provision],
-				[disable provisioning suport]),
+				[disable provisioning support]),
 					[enable_provision=${enableval}])
 if (test "${enable_provision}" != "no"); then
 	if (test -n "${path_provisiondb}"); then
@@ -207,6 +212,11 @@ if (test "${enable_provision}" != "no"); then
 	fi
 fi
 AM_CONDITIONAL(PROVISION, test "${enable_provision}" != "no")
+
+AC_ARG_ENABLE(upower, AC_HELP_STRING([--disable-upower],
+			[disable UPower plugin]),
+					[enable_upower=${enableval}])
+AM_CONDITIONAL(UPOWER, test "${enable_power}" != "no")
 
 AC_ARG_ENABLE(datafiles, AC_HELP_STRING([--disable-datafiles],
 			[do not install configuration and data files]),

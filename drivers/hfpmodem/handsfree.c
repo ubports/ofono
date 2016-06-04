@@ -45,6 +45,7 @@
 
 static const char *binp_prefix[] = { "+BINP:", NULL };
 static const char *bvra_prefix[] = { "+BVRA:", NULL };
+static const char *none_prefix[] = { NULL };
 
 struct hf_data {
 	GAtChat *chat;
@@ -197,13 +198,34 @@ static void hfp_cnum_query(struct ofono_handsfree *hf,
 	struct hf_data *hd = ofono_handsfree_get_data(hf);
 	struct cb_data *cbd = cb_data_new(cb, data);
 
-	if (g_at_chat_send(hd->chat, "AT+CNUM", NULL,
+	if (g_at_chat_send(hd->chat, "AT+CNUM", none_prefix,
 					cnum_query_cb, cbd, g_free) > 0)
 		return;
 
 	g_free(cbd);
 
 	CALLBACK_WITH_FAILURE(cb, -1, NULL, data);
+}
+
+static void bind_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_handsfree *hf = user_data;
+	int hf_indicator;
+	int active;
+	GAtResultIter iter;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "+BIND:"))
+		return;
+
+	if (!g_at_result_iter_next_number(&iter, &hf_indicator))
+		return;
+
+	if (!g_at_result_iter_next_number(&iter, &active))
+		return;
+
+	ofono_handsfree_hf_indicator_active_notify(hf, hf_indicator, active);
 }
 
 static gboolean hfp_handsfree_register(gpointer user_data)
@@ -216,6 +238,7 @@ static gboolean hfp_handsfree_register(gpointer user_data)
 	g_at_chat_register(hd->chat, "+BSIR:", bsir_notify, FALSE, hf, NULL);
 	g_at_chat_register(hd->chat, "+BVRA:", bvra_notify, FALSE, hf, NULL);
 	g_at_chat_register(hd->chat, "+CIEV:", ciev_notify, FALSE, hf, NULL);
+	g_at_chat_register(hd->chat, "+BIND:", bind_notify, FALSE, hf, NULL);
 
 	if (hd->ag_features & HFP_AG_FEATURE_IN_BAND_RING_TONE)
 		ofono_handsfree_set_inband_ringing(hf, TRUE);
@@ -232,6 +255,7 @@ static int hfp_handsfree_probe(struct ofono_handsfree *hf,
 {
 	struct hfp_slc_info *info = data;
 	struct hf_data *hd;
+	unsigned int i;
 
 	DBG("");
 	hd = g_new0(struct hf_data, 1);
@@ -244,6 +268,14 @@ static int hfp_handsfree_probe(struct ofono_handsfree *hf,
 	hd->battchg_index = info->cind_pos[HFP_INDICATOR_BATTCHG];
 	ofono_handsfree_battchg_notify(hf,
 					info->cind_val[HFP_INDICATOR_BATTCHG]);
+
+	ofono_handsfree_set_hf_indicators(hf, info->hf_indicators,
+						info->num_hf_indicators);
+
+	for (i = 0; i < info->num_hf_indicators; i++)
+		ofono_handsfree_hf_indicator_active_notify(hf,
+			info->hf_indicators[i],
+			info->hf_indicator_active_map & (1 << i));
 
 	hd->register_source = g_idle_add(hfp_handsfree_register, hf);
 
@@ -351,8 +383,27 @@ static void hfp_disable_nrec(struct ofono_handsfree *hf,
 	struct cb_data *cbd = cb_data_new(cb, data);
 	const char *buf = "AT+NREC=0";
 
-	if (g_at_chat_send(hd->chat, buf, NULL, hf_generic_set_cb,
-							cbd, g_free) > 0)
+	if (g_at_chat_send(hd->chat, buf, none_prefix,
+				hf_generic_set_cb, cbd, g_free) > 0)
+		return;
+
+	g_free(cbd);
+
+	CALLBACK_WITH_FAILURE(cb, data);
+}
+
+static void hfp_hf_indicator(struct ofono_handsfree *hf,
+				unsigned short indicator, unsigned int value,
+				ofono_handsfree_cb_t cb, void *data)
+{
+	struct hf_data *hd = ofono_handsfree_get_data(hf);
+	struct cb_data *cbd = cb_data_new(cb, data);
+	char buf[128];
+
+	snprintf(buf, sizeof(buf), "AT+BIEV=%u,%u", indicator, value);
+
+	if (g_at_chat_send(hd->chat, buf, none_prefix,
+				hf_generic_set_cb, cbd, g_free) > 0)
 		return;
 
 	g_free(cbd);
@@ -368,6 +419,7 @@ static struct ofono_handsfree_driver driver = {
 	.request_phone_number	= hfp_request_phone_number,
 	.voice_recognition	= hfp_voice_recognition,
 	.disable_nrec		= hfp_disable_nrec,
+	.hf_indicator		= hfp_hf_indicator,
 };
 
 void hfp_handsfree_init(void)

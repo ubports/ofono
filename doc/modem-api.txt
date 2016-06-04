@@ -90,6 +90,11 @@ Properties	boolean Powered [readwrite]
 			"hfp") this corresponds to the Bluetooth Device
 			Address of the remote device.
 
+		string SoftwareVersionNumber [readonly, optional]
+
+			String representing the software version number of the
+			modem device.
+
 		array{string} Features [readonly]
 
 			List of currently enabled features. It uses simple

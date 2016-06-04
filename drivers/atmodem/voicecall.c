@@ -253,8 +253,7 @@ static void clcc_poll_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		}
 	}
 
-	g_slist_foreach(vd->calls, (GFunc) g_free, NULL);
-	g_slist_free(vd->calls);
+	g_slist_free_full(vd->calls, g_free);
 
 	vd->calls = calls;
 
@@ -1147,8 +1146,7 @@ static void at_voicecall_remove(struct ofono_voicecall *vc)
 	if (vd->vts_source)
 		g_source_remove(vd->vts_source);
 
-	g_slist_foreach(vd->calls, (GFunc) g_free, NULL);
-	g_slist_free(vd->calls);
+	g_slist_free_full(vd->calls, g_free);
 
 	ofono_voicecall_set_data(vc, NULL);
 

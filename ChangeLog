@@ -1,3 +1,43 @@
+ver 1.18:
+	Fix issue with cell broadcast and use-after-fee.
+	Fix issue with repeated held call indicator.
+	Fix issue with +CCWA and connection setup.
+	Fix issue with empty operator scan results.
+	Fix issue with persistent RAT mode handling.
+	Fix issue with multiparty call introspection.
+	Fix issue with GRPS context introspection.
+	Fix issue with stale context deactivation.
+	Add support for automatic context activation.
+	Add support for SIM service provider names.
+	Add support for handling allowed APN lists.
+	Add support for network monitoring interface.
+	Add support for U-Blox TOBY-L2 modem series.
+	Add support for Sierra MC73xx QMI modems.
+	Add support for SoFIA 3GR modem series.
+	Add support for upower battery monitoring.
+	Add support for gateway audio card types.
+	Add support for Handsfree audio driver.
+	Add support for Android RIL integration.
+
+ver 1.17:
+	Fix issue with alphanumeric TP-OA handling.
+	Fix issue with push notification origin port.
+	Fix issue with reading of EF_MWIS records.
+	Fix issue with handling AT+CPINR results.
+	Fix issue with SIM state polling for Sierra modems.
+	Fix issue with HFP handling and AT command prefixes.
+	Fix issue with HFP and extra CCWA event handling.
+	Fix issue with HFP call state and +CHUP errors.
+
+ver 1.16:
+	Fix issue with PIN retry handling.
+	Fix issue with HFP and multiple calls.
+	Add support for Distracted Driving Reduction.
+	Add support for available technologies property.
+	Add support for Telit location reporting driver.
+	Add support for u-blox SARA-U270 modems.
+	Add support for Quectel UC15 modems.
+
 ver 1.15:
 	Fix issue with EF_PNN access affecting PLMN display.
 	Fix issue with SIM detection and Telit HE910 modems.

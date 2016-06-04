@@ -272,8 +272,7 @@ void ofono_cbs_notify(struct ofono_cbs *cbs, const unsigned char *pdu,
 
 out:
 	g_free(message);
-	g_slist_foreach(cbs_list, (GFunc)g_free, NULL);
-	g_slist_free(cbs_list);
+	g_slist_free_full(cbs_list, g_free);
 }
 
 static DBusMessage *cbs_get_properties(DBusConnection *conn,
@@ -337,8 +336,7 @@ static void cbs_set_topics_cb(const struct ofono_error *error, void *data)
 	char *topics;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
-		g_slist_foreach(cbs->new_topics, (GFunc)g_free, NULL);
-		g_slist_free(cbs->new_topics);
+		g_slist_free_full(cbs->new_topics, g_free);
 		cbs->new_topics = NULL;
 
 		DBG("Setting Cell Broadcast topics failed");
@@ -347,8 +345,7 @@ static void cbs_set_topics_cb(const struct ofono_error *error, void *data)
 		return;
 	}
 
-	g_slist_foreach(cbs->topics, (GFunc)g_free, NULL);
-	g_slist_free(cbs->topics);
+	g_slist_free_full(cbs->topics, g_free);
 	cbs->topics = cbs->new_topics;
 	cbs->new_topics = NULL;
 
@@ -590,21 +587,18 @@ static void cbs_unregister(struct ofono_atom *atom)
 	ofono_modem_remove_interface(modem, OFONO_CELL_BROADCAST_INTERFACE);
 
 	if (cbs->topics) {
-		g_slist_foreach(cbs->topics, (GFunc) g_free, NULL);
-		g_slist_free(cbs->topics);
+		g_slist_free_full(cbs->topics, g_free);
 		cbs->topics = NULL;
 	}
 
 	if (cbs->new_topics) {
-		g_slist_foreach(cbs->new_topics, (GFunc) g_free, NULL);
-		g_slist_free(cbs->new_topics);
+		g_slist_free_full(cbs->new_topics, g_free);
 		cbs->new_topics = NULL;
 	}
 
 	if (cbs->efcbmid_length) {
 		cbs->efcbmid_length = 0;
-		g_slist_foreach(cbs->efcbmid_contents, (GFunc) g_free, NULL);
-		g_slist_free(cbs->efcbmid_contents);
+		g_slist_free_full(cbs->efcbmid_contents, g_free);
 		cbs->efcbmid_contents = NULL;
 	}
 
@@ -729,15 +723,13 @@ static void cbs_got_file_contents(struct ofono_cbs *cbs)
 
 	if (cbs->efcbmi_length) {
 		cbs->efcbmi_length = 0;
-		g_slist_foreach(cbs->efcbmi_contents, (GFunc) g_free, NULL);
-		g_slist_free(cbs->efcbmi_contents);
+		g_slist_free_full(cbs->efcbmi_contents, g_free);
 		cbs->efcbmi_contents = NULL;
 	}
 
 	if (cbs->efcbmir_length) {
 		cbs->efcbmir_length = 0;
-		g_slist_foreach(cbs->efcbmir_contents, (GFunc) g_free, NULL);
-		g_slist_free(cbs->efcbmir_contents);
+		g_slist_free_full(cbs->efcbmir_contents, g_free);
 		cbs->efcbmir_contents = NULL;
 	}
 
@@ -907,8 +899,7 @@ static void cbs_efcbmid_changed(int id, void *userdata)
 
 	if (cbs->efcbmid_length) {
 		cbs->efcbmid_length = 0;
-		g_slist_foreach(cbs->efcbmid_contents, (GFunc) g_free, NULL);
-		g_slist_free(cbs->efcbmid_contents);
+		g_slist_free_full(cbs->efcbmid_contents, g_free);
 		cbs->efcbmid_contents = NULL;
 	}
 
@@ -1029,11 +1020,14 @@ out:
 
 	/*
 	 * In order to minimize signal transmissions we wait about X seconds
-	 * before reseting the base station id.  The hope is that we receive
+	 * before resetting the base station id.  The hope is that we receive
 	 * another cell broadcast with the new base station name within
 	 * that time
 	 */
 	if (lac_changed || ci_changed) {
+		if(cbs->reset_source)
+			g_source_remove(cbs->reset_source);
+
 		cbs->reset_source =
 			g_timeout_add_seconds(3, reset_base_station_name, cbs);
 	}
