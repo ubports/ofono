@@ -15,8 +15,8 @@ Build-Depends: debhelper (>= 5),
                mobile-broadband-provider-info
 Standards-Version: 3.9.8
 Homepage: http://www.ofono.org/
-Vcs-Git: git://anonscm.debian.org/pkg-telepathy/ofono.git
-Vcs-Browser: http://anonscm.debian.org/gitweb/?p=pkg-telepathy/ofono.git
+Vcs-Git: https://anonscm.debian.org/git/pkg-telepathy/ofono.git
+Vcs-Browser: https://anonscm.debian.org/gitweb/?p=pkg-telepathy/ofono.git
 
 Package: ofono
 Architecture: any
