@@ -17,3 +17,5 @@ include $(CURDIR)/debian/update-patches.mk
 
 install/ofono::
 	dh_installinit -pofono --name=dundee
+	install -D -m 0644 plugins/ofono.rules debian/tmp/lib/udev/rules.d/97-ofono.rules
+	install -D -m 0644 plugins/ofono-speedup.rules debian/tmp/lib/udev/rules.d/97-ofono-speedup.rules
