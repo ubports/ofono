@@ -3,7 +3,7 @@ Section: admin
 Priority: optional
 Maintainer: Debian Telepathy maintainers <pkg-telepathy-maintainers@lists.alioth.debian.org>
 Uploaders: Jonny Lamb <jonny@debian.org>, Hector Oron <zumbi@debian.org>
-Build-Depends: debhelper (>= 5),
+Build-Depends: debhelper (>= 9.20160114~),
                cdbs,
                autotools-dev,
                dh-systemd (>= 1.5),
@@ -48,20 +48,3 @@ Description: Mobile telephony stack (development files)
  3GPP TS 27.007 "AT command set for User Equipment (UE)."
  .
  This package includes the header files for building oFono plugins.
-
-Package: ofono-dbg
-Section: debug
-Priority: extra
-Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, ofono (= ${binary:Version})
-Description: Mobile telephony stack (debugging files)
- oFono is a stack for mobile telephony devices on Linux.  oFono supports
- speaking to telephony devices through specific drivers, or with generic
- AT commands.
- .
- oFono also includes a low-level plug-in API for integrating with other
- telephony stacks, cellular modems and storage back-ends. The plug-in API
- functionality is modeled on public standards, in particular
- 3GPP TS 27.007 "AT command set for User Equipment (UE)."
- .
- This package contains detached debugging symbols for the daemon.

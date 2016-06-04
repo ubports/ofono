@@ -10,6 +10,8 @@ common-binary-post-install-arch:: list-missing
 
 DEB_CONFIGURE_EXTRA_FLAGS := --enable-bluetooth --enable-dundee --with-systemdunitdir=/lib/systemd/system
 
+DEB_DH_STRIP_ARGS_ALL := --dbgsym-migration='ofono-dbg (<< 1.18-1~)'
+
 include $(CURDIR)/debian/update-patches.mk
 
 
