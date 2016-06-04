@@ -1,3 +1,9 @@
+ofono (1.18-1) UNRELEASED; urgency=medium
+
+  * New upstream release. (Closes: #792632)
+
+ -- Laurent Bigonville <bigon@debian.org>  Sat, 04 Jun 2016 14:57:22 +0200
+
 ofono (1.15-3) unstable; urgency=medium
 
   * Team upload
