@@ -1,21 +1,22 @@
 #!/usr/bin/make -f
-DEB_AUTO_CLEANUP_RCS := yes
 
-include /usr/share/cdbs/1/class/autotools.mk
-include /usr/share/cdbs/1/rules/debhelper.mk
-#include /usr/share/cdbs/1/rules/simple-patchsys.mk
-include /usr/share/cdbs/1/rules/utils.mk
+%:
+	dh $@ --with systemd,autotools_dev
 
-common-binary-post-install-arch:: list-missing
+override_dh_auto_configure:
+	dh_auto_configure -- --libdir=/usr/lib \
+                             --enable-bluetooth \
+                             --enable-dundee \
+                             --with-systemdunitdir=/lib/systemd/system
 
-DEB_CONFIGURE_EXTRA_FLAGS := --enable-bluetooth --enable-dundee --with-systemdunitdir=/lib/systemd/system
+override_dh_strip:
+	dh_strip --dbgsym-migration='ofono-dbg (<< 1.18-1~)'
 
-DEB_DH_STRIP_ARGS_ALL := --dbgsym-migration='ofono-dbg (<< 1.18-1~)'
+override_dh_installinit:
+	dh_installinit --name=dundee
+	dh_installinit
 
-include $(CURDIR)/debian/update-patches.mk
-
-
-install/ofono::
-	dh_installinit -pofono --name=dundee
+override_dh_install:
 	install -D -m 0644 plugins/ofono.rules debian/tmp/lib/udev/rules.d/97-ofono.rules
 	install -D -m 0644 plugins/ofono-speedup.rules debian/tmp/lib/udev/rules.d/97-ofono-speedup.rules
+	dh_install --list-missing

@@ -4,7 +4,6 @@ Priority: optional
 Maintainer: Debian Telepathy maintainers <pkg-telepathy-maintainers@lists.alioth.debian.org>
 Uploaders: Jonny Lamb <jonny@debian.org>, Hector Oron <zumbi@debian.org>
 Build-Depends: debhelper (>= 9.20160114~),
-               cdbs,
                autotools-dev,
                dh-systemd (>= 1.5),
                libglib2.0-dev (>= 2.32),
