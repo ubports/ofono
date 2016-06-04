@@ -6,8 +6,9 @@ ofono (1.18-1) UNRELEASED; urgency=medium
     - Bump Standards-Version to 3.9.8 (no further changes)
     - Switch to https URL for Vcs-* fields
   * Drop ofono-dbg package, rely on automatically built dbgsym package
+  * debian/compat: Bump Debhelper compatibility to 9
 
- -- Laurent Bigonville <bigon@debian.org>  Sat, 04 Jun 2016 15:17:22 +0200
+ -- Laurent Bigonville <bigon@debian.org>  Sat, 04 Jun 2016 15:18:37 +0200
 
 ofono (1.15-3) unstable; urgency=medium
 
