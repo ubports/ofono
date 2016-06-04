@@ -31,7 +31,7 @@ do_start()
 
 do_stop()
 {
-	start-stop-daemon --stop --quiet --oknodo --name $NAME
+	start-stop-daemon --stop --quiet --oknodo --exec $DAEMON
 }
 
 case "$1" in

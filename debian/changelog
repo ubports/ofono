@@ -10,8 +10,10 @@ ofono (1.18-1) UNRELEASED; urgency=medium
   * debian/compat: Bump Debhelper compatibility to 9
   * Drop useless files in debian/patches/
   * Switch from cdbs to dh
+  * debian/*.init: Use the executable path to better identify the running
+    processes (Closes: #825134)
 
- -- Laurent Bigonville <bigon@debian.org>  Sat, 04 Jun 2016 21:11:36 +0200
+ -- Laurent Bigonville <bigon@debian.org>  Sat, 04 Jun 2016 21:54:51 +0200
 
 ofono (1.15-3) unstable; urgency=medium
 
