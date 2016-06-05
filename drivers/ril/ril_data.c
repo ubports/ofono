@@ -158,6 +158,7 @@ struct ril_data_request_setup {
 	char *password;
 	enum ofono_gprs_proto proto;
 	enum ofono_gprs_auth_method auth_method;
+	int retry_count;
 };
 
 struct ril_data_request_deact {
@@ -686,8 +687,6 @@ static void ril_data_call_setup_cb(GRilIoChannel *io, int ril_status,
 	struct ril_data_call_list *list = NULL;
 	struct ril_data_call *call = NULL;
 
-	ril_data_request_completed(req);
-
 	if (ril_status == RIL_E_SUCCESS) {
 		list = ril_data_call_list_parse(data, len);
 	}
@@ -700,6 +699,22 @@ static void ril_data_call_setup_cb(GRilIoChannel *io, int ril_status,
 			ril_status = RIL_E_GENERIC_FAILURE;
 		}
 	}
+
+	if (call && call->status == PDP_FAIL_ERROR_UNSPECIFIED &&
+						!setup->retry_count) {
+		/*
+		 * Retry silently according to comment in ril.h
+		 * (no more than once though)
+		 */
+		DBG("retrying silently");
+		setup->retry_count++;
+		req->pending_id = 0;
+		req->submit(req);
+		ril_data_call_list_free(list);
+		return;
+	}
+
+	ril_data_request_completed(req);
 
 	if (call && call->status == PDP_FAIL_NONE) {
 		if (ril_data_call_list_move_calls(self->data_calls, list) > 0) {
