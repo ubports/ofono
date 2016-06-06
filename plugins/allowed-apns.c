@@ -72,6 +72,13 @@ static void context_destroy(gpointer data)
 	g_free(ctx);
 }
 
+static void atomwatch_destroy(gpointer data)
+{
+	struct allowed_apns_ctx *ctx = data;
+
+	ctx->atomwatch_id = 0;
+}
+
 static void sim_acl_read_cb(int ok, int total_length, int record,
 			const unsigned char *data, int record_length,
 			void *userdata)
@@ -246,7 +253,8 @@ static void modem_watch(struct ofono_modem *modem,
 
 	ctx->atomwatch_id = __ofono_modem_add_atom_watch(ctx->modem,
 						OFONO_ATOM_TYPE_SIM,
-						sim_watch, ctx, NULL);
+						sim_watch, ctx,
+						atomwatch_destroy);
 }
 
 static void call_modemwatch(struct ofono_modem *modem, void *userdata)
