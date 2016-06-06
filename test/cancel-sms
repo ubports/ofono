@@ -1,0 +1,15 @@
+#!/usr/bin/python3
+
+import sys
+import dbus
+
+bus = dbus.SystemBus()
+
+manager = dbus.Interface(bus.get_object('org.ofono', '/'),
+						'org.ofono.Manager')
+
+path = sys.argv[1]
+message = dbus.Interface(bus.get_object('org.ofono', path),
+					'org.ofono.Message')
+
+message.Cancel()

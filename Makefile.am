@@ -685,6 +685,7 @@ test_scripts = test/backtrace \
 		test/receive-sms \
 		test/remove-contexts \
 		test/send-sms \
+		test/cancel-sms \
 		test/set-mic-volume \
 		test/set-speaker-volume \
 		test/test-stk-menu \
