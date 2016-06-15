@@ -1,3 +1,9 @@
+ofono (1.18-2) UNRELEASED; urgency=medium
+
+  * Remove myself from Uploaders.
+
+ -- Jonny Lamb <jonny@debian.org>  Wed, 15 Jun 2016 12:18:43 +0100
+
 ofono (1.18-1) unstable; urgency=medium
 
   * Team upload
