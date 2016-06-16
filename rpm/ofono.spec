@@ -87,6 +87,7 @@ rm -rf %{buildroot}
 
 mkdir -p %{buildroot}/%{_sysconfdir}/ofono/push_forwarder.d
 mkdir -p %{buildroot}/%{_lib}/systemd/system/network.target.wants
+mkdir -p %{buildroot}/var/lib/ofono
 ln -s ../ofono.service %{buildroot}/%{_lib}/systemd/system/network.target.wants/ofono.service
 
 %preun
