@@ -99,6 +99,7 @@ struct ril_data_priv {
 	struct ril_data_request *req_queue;
 	struct ril_data_request *pending_req;
 
+	enum ril_data_allow_data_opt allow_data;
 	char *log_prefix;
 	guint query_id;
 	gulong io_event_id;
@@ -1019,7 +1020,7 @@ static void ril_data_settings_changed(struct ril_sim_settings *settings,
 
 struct ril_data *ril_data_new(struct ril_data_manager *dm, const char *name,
 			struct ril_radio *radio, struct ril_network *network,
-			GRilIoChannel *io)
+			GRilIoChannel *io, enum ril_data_allow_data_opt opt)
 {
 	GASSERT(dm);
 	if (G_LIKELY(dm)) {
@@ -1027,6 +1028,21 @@ struct ril_data *ril_data_new(struct ril_data_manager *dm, const char *name,
 		struct ril_data_priv *priv = self->priv;
 		struct ril_sim_settings *settings = network->settings;
 		GRilIoRequest *req = grilio_request_new();
+
+		switch (opt) {
+		case RIL_ALLOW_DATA_ON:
+		case RIL_ALLOW_DATA_OFF:
+			priv->allow_data = opt;
+			break;
+		default:
+			/*
+			 * When RIL_REQUEST_ALLOW_DATA first appeared in ril.h
+			 * RIL_VERSION was 10
+			 */
+			priv->allow_data = (io->ril_version > 10) ?
+				RIL_ALLOW_DATA_ON : RIL_ALLOW_DATA_OFF;
+			break;
+		}
 
 		priv->log_prefix = (name && name[0]) ?
 			g_strconcat(name, " ", NULL) : g_strdup("");
@@ -1464,11 +1480,8 @@ static void ril_data_manager_switch_data_on(struct ril_data_manager *self,
 					OFONO_RADIO_ACCESS_MODE_ANY, TRUE);
 	}
 
-	/*
-	 * RIL_VERSION in ril.h was 10 when RIL_REQUEST_ALLOW_DATA first
-	 * appeared there.
-	 */
-	if (priv->io->ril_version >= 10) {
+
+	if (priv->allow_data == RIL_ALLOW_DATA_ON) {
 		ril_data_request_queue(ril_data_allow_new(data));
 	} else {
 		priv->flags |= RIL_DATA_FLAG_ON;
