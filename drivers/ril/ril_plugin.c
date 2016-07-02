@@ -49,6 +49,7 @@
 #define RILMODEM_DEFAULT_SLOT       0xffffffff
 #define RILMODEM_DEFAULT_TIMEOUT    0 /* No timeout */
 #define RILMODEM_DEFAULT_SIM_FLAGS  RIL_SIM_CARD_V9_UICC_SUBSCRIPTION_WORKAROUND
+#define RILMODEM_DEFAULT_DATA_OPT   RIL_ALLOW_DATA_AUTO
 #define RILMODEM_DEFAULT_DM_FLAGS   RIL_DATA_MANAGER_3GLTE_HANDOVER
 
 #define RILMODEM_CONF_GROUP         "Settings"
@@ -64,6 +65,7 @@
 #define RILCONF_4G                  "enable4G"
 #define RILCONF_UICC_WORKAROUND     "uiccWorkaround"
 #define RILCONF_ECCLIST_FILE        "ecclistFile"
+#define RILCONF_ALLOW_DATA_REQ      "allowDataReq"
 
 #define RIL_STORE                   "ril"
 #define RIL_STORE_GROUP             "Settings"
@@ -109,6 +111,7 @@ struct ril_slot {
 	gint timeout;           /* RIL timeout, in milliseconds */
 	int index;
 	int sim_flags;
+	enum ril_data_allow_data_opt allow_data_opt;
 	struct ril_slot_config config;
 	struct ril_plugin_priv *plugin;
 	struct ril_modem *modem;
@@ -942,7 +945,7 @@ static void ril_plugin_slot_connected(struct ril_slot *slot)
 
 	GASSERT(!slot->data);
 	slot->data = ril_data_new(slot->plugin->data_manager, log_prefix,
-				slot->radio, slot->network, slot->io);
+		slot->radio, slot->network, slot->io, slot->allow_data_opt);
 
 	GASSERT(!slot->cell_info);
 	if (slot->io->ril_version > 8) {
@@ -1040,6 +1043,7 @@ static GSList *ril_plugin_create_default_config()
 			slot->config.enable_4g = RILMODEM_DEFAULT_4G;
 			slot->timeout = RILMODEM_DEFAULT_TIMEOUT;
 			slot->sim_flags = RILMODEM_DEFAULT_SIM_FLAGS;
+			slot->allow_data_opt = RILMODEM_DEFAULT_DATA_OPT;
 			list = g_slist_append(list, slot);
 
 			slot = g_new0(struct ril_slot, 1);
@@ -1049,6 +1053,7 @@ static GSList *ril_plugin_create_default_config()
 			slot->config.enable_4g = RILMODEM_DEFAULT_4G;
 			slot->timeout = RILMODEM_DEFAULT_TIMEOUT;
 			slot->sim_flags = RILMODEM_DEFAULT_SIM_FLAGS;
+			slot->allow_data_opt = RILMODEM_DEFAULT_DATA_OPT;
 			slot->config.slot = 1;
 			list = g_slist_append(list, slot);
 		} else {
@@ -1062,6 +1067,7 @@ static GSList *ril_plugin_create_default_config()
 			slot->config.enable_4g = RILMODEM_DEFAULT_4G;
 			slot->timeout = RILMODEM_DEFAULT_TIMEOUT;
 			slot->sim_flags = RILMODEM_DEFAULT_SIM_FLAGS;
+			slot->allow_data_opt = RILMODEM_DEFAULT_DATA_OPT;
 			list = g_slist_append(list, slot);
 		}
 	} else {
@@ -1093,6 +1099,7 @@ static struct ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 	if (sock) {
 		int value;
 		GError *err = NULL;
+		char* strval;
 		char *sub = g_key_file_get_string(file, group, RILCONF_SUB,
 									NULL);
 
@@ -1102,6 +1109,7 @@ static struct ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 		slot->name = g_key_file_get_string(file, group, RILCONF_NAME,
 									NULL);
 		slot->sim_flags = RILMODEM_DEFAULT_SIM_FLAGS;
+		slot->allow_data_opt = RILMODEM_DEFAULT_DATA_OPT;
 
 		if (sub && strlen(sub) == RIL_SUB_SIZE) {
 			DBG("%s: %s:%s", group, sock, sub);
@@ -1153,6 +1161,20 @@ static struct ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 		DBG("%s: UICC workaround %s", group, (slot->sim_flags &
 				RIL_SIM_CARD_V9_UICC_SUBSCRIPTION_WORKAROUND) ?
 								"on" : "off");
+
+		strval = g_key_file_get_string(file, group,
+				RILCONF_ALLOW_DATA_REQ, NULL);
+		if (strval) {
+			slot->allow_data_opt =
+				!strcasecmp(strval, "on") ? RIL_ALLOW_DATA_ON :
+				!strcasecmp(strval, "off")? RIL_ALLOW_DATA_OFF :
+				RIL_ALLOW_DATA_AUTO;
+			g_free(strval);
+		}
+		DBG("%s: AllowDataReq %s", group,
+			(slot->allow_data_opt == RIL_ALLOW_DATA_ON) ? "on" :
+			(slot->allow_data_opt == RIL_ALLOW_DATA_OFF) ? "off" :
+			"auto");
 
 		slot->ecclist_file = g_key_file_get_string(file, group,
 						RILCONF_ECCLIST_FILE, NULL);

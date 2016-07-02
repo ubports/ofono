@@ -54,6 +54,12 @@ enum ril_data_manager_flags {
 	RIL_DATA_MANAGER_3GLTE_HANDOVER = 0x01
 };
 
+enum ril_data_allow_data_opt {
+	RIL_ALLOW_DATA_AUTO,
+	RIL_ALLOW_DATA_ON,
+	RIL_ALLOW_DATA_OFF
+};
+
 enum ril_data_role {
 	RIL_DATA_ROLE_NONE,    /* Data not allowed */
 	RIL_DATA_ROLE_MMS,     /* Data is allowed at any speed */
@@ -74,7 +80,7 @@ typedef void (*ril_data_call_deactivate_cb_t)(struct ril_data *data,
 
 struct ril_data *ril_data_new(struct ril_data_manager *dm, const char *name,
 			struct ril_radio *radio, struct ril_network *network,
-			GRilIoChannel *io);
+			GRilIoChannel *io, enum ril_data_allow_data_opt opt);
 struct ril_data *ril_data_ref(struct ril_data *data);
 void ril_data_unref(struct ril_data *data);
 gboolean ril_data_allowed(struct ril_data *data);
