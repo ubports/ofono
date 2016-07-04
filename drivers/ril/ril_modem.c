@@ -456,6 +456,15 @@ struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *log_prefix,
 			ofono_modem_set_powered(modem->ofono, FALSE);
 			ofono_modem_set_powered(modem->ofono, TRUE);
 			md->power_state = POWERED_ON;
+
+			/*
+			 * With some RIL implementations, querying available
+			 * band modes causes some magic Android properties to
+			 * appear. Otherwise this request is pretty harmless
+			 * and useless.
+			 */
+			grilio_queue_send_request(md->q, NULL,
+				RIL_REQUEST_QUERY_AVAILABLE_BAND_MODE);
 			return modem;
 		} else {
 			ofono_error("Error %d registering %s",
