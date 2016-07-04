@@ -54,7 +54,6 @@ Scripts for testing oFono and its functionality
 %package configs-mer
 Summary:    Package to provide default configs for ofono
 Group:      Development/Tools
-Requires:   %{name} = %{version}-%{release}
 Provides:   ofono-configs
 
 %description configs-mer
