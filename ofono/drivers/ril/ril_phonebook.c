@@ -4,8 +4,8 @@
  *
  *  Copyright (C) 2009 Nokia Corporation and/or its subsidiary(-ies).
  *  Copyright (C) ST-Ericsson SA 2010.
- *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
- *  Copyright (C) 2013 Jolla Ltd
+ *  Copyright (C) 2008-2011 Intel Corporation. All rights reserved.
+ *  Copyright (C) 2013-2016 Jolla Ltd
  *  Contact: Jussi Kangas <jussi.kangas@tieto.com>
  *  Copyright (C) 2014  Canonical Ltd
  *
@@ -17,11 +17,6 @@
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
- *
  */
 
 #include "ril_plugin.h"
@@ -588,6 +583,20 @@ static void decode_read_response(const struct record_to_read *rec_data,
 	}
 }
 
+static gboolean free_entry(gpointer key, gpointer value, gpointer data)
+{
+	struct phonebook_entry *entry = value;
+
+	g_free(entry->name);
+	g_free(entry->number);
+	g_free(entry->email);
+	g_free(entry->anr);
+	g_free(entry->sne);
+	g_free(entry);
+
+	return FALSE;
+}
+
 static gboolean export_entry(gpointer key, gpointer value, gpointer data)
 {
 	struct ofono_phonebook *pb = data;
@@ -602,29 +611,18 @@ static gboolean export_entry(gpointer key, gpointer value, gpointer data)
 				entry->email,
 				NULL, NULL);
 
-	g_free(entry->name);
-	g_free(entry->number);
-	g_free(entry->email);
-	g_free(entry->anr);
-	g_free(entry->sne);
-	g_free(entry);
-
-	return FALSE;
+	return free_entry(key, value, NULL);
 }
 
-static void export_and_return(gboolean ok, struct cb_data *cbd)
+static void free_pb_refs(struct pb_data *pbd, GTraverseFunc entry_func,
+						struct ofono_phonebook *pb)
 {
-	struct ofono_phonebook *pb = cbd->user;
-	ofono_phonebook_cb_t cb = cbd->cb;
-	struct pb_data *pbd = ofono_phonebook_get_data(pb);
 	GSList *l;
-
-	DBG("phonebook fully read");
 
 	for (l = pbd->pb_refs; l != NULL; l = l->next) {
 		struct pb_ref_rec *ref = l->data;
 
-		g_tree_foreach(ref->phonebook, export_entry, pb);
+		g_tree_foreach(ref->phonebook, entry_func, pb);
 		g_tree_destroy(ref->phonebook);
 		g_slist_free_full(ref->pending_records, g_free);
 		g_slist_free_full(ref->pb_files, g_free);
@@ -632,6 +630,16 @@ static void export_and_return(gboolean ok, struct cb_data *cbd)
 
 	g_slist_free_full(pbd->pb_refs, g_free);
 	pbd->pb_refs = NULL;
+}
+
+static void export_and_return(gboolean ok, struct cb_data *cbd)
+{
+	struct ofono_phonebook *pb = cbd->user;
+	ofono_phonebook_cb_t cb = cbd->cb;
+	struct pb_data *pbd = ofono_phonebook_get_data(pb);
+
+	DBG("phonebook fully read");
+	free_pb_refs(pbd, export_entry, pb);
 
 	if (ok)
 		CALLBACK_WITH_SUCCESS(cb, cbd->data);
@@ -1059,6 +1067,7 @@ static void ril_phonebook_remove(struct ofono_phonebook *pb)
 	ofono_phonebook_set_data(pb, NULL);
 	ofono_sim_context_free(pbd->sim_context);
 
+	free_pb_refs(pbd, free_entry, NULL);
 	g_free(pbd);
 }
 
