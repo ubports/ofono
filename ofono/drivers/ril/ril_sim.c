@@ -89,6 +89,7 @@ struct ril_sim_cbd {
 		ofono_sim_file_info_cb_t file_info;
 		ofono_sim_read_cb_t read;
 		ofono_sim_imsi_cb_t imsi;
+		ofono_query_facility_lock_cb_t query_facility_lock;
 		gpointer ptr;
 	} cb;
 	gpointer data;
@@ -851,49 +852,46 @@ static guint ril_perso_change_state(struct ofono_sim *sim,
 	return id;
 }
 
+static const char *ril_sim_facility_code(enum ofono_sim_password_type type)
+{
+	switch (type) {
+	case OFONO_SIM_PASSWORD_SIM_PIN:
+		return "SC";
+	case OFONO_SIM_PASSWORD_SIM_PIN2:
+		return "P2";
+	case OFONO_SIM_PASSWORD_PHSIM_PIN:
+		return "PS";
+	case OFONO_SIM_PASSWORD_PHFSIM_PIN:
+		return "PF";
+	case OFONO_SIM_PASSWORD_PHNET_PIN:
+		return "PN";
+	case OFONO_SIM_PASSWORD_PHNETSUB_PIN:
+		return "PU";
+	case OFONO_SIM_PASSWORD_PHSP_PIN:
+		return "PP";
+	case OFONO_SIM_PASSWORD_PHCORP_PIN:
+		return "PC";
+	default:
+		return NULL;
+	}
+};
+
 static void ril_sim_pin_change_state(struct ofono_sim *sim,
 	enum ofono_sim_password_type passwd_type, int enable,
 	const char *passwd, ofono_sim_lock_unlock_cb_t cb, void *data)
 {
 	struct ril_sim *sd = ril_sim_get_data(sim);
 	struct ofono_error error;
-	const char *type_str = NULL;
+	const char *type_str = ril_sim_facility_code(passwd_type);
 	guint id = 0;
-
-	switch (passwd_type) {
-	case OFONO_SIM_PASSWORD_SIM_PIN:
-		type_str = "SC";
-		break;
-	case OFONO_SIM_PASSWORD_PHSIM_PIN:
-		type_str = "PS";
-		break;
-	case OFONO_SIM_PASSWORD_PHFSIM_PIN:
-		type_str = "PF";
-		break;
-	case OFONO_SIM_PASSWORD_SIM_PIN2:
-		type_str = "P2";
-		break;
-	case OFONO_SIM_PASSWORD_PHNET_PIN:
-		id = ril_perso_change_state(sim, passwd_type, enable, passwd,
-								cb, data);
-		break;
-	case OFONO_SIM_PASSWORD_PHNETSUB_PIN:
-		type_str = "PU";
-		break;
-	case OFONO_SIM_PASSWORD_PHSP_PIN:
-		type_str = "PP";
-		break;
-	case OFONO_SIM_PASSWORD_PHCORP_PIN:
-		type_str = "PC";
-		break;
-	default:
-		break;
-	}
 
 	DBG("%d,%s,%d,%s,0,aid=%s", passwd_type, type_str, enable, passwd,
 							ril_sim_app_id(sd));
 
-	if (type_str) {
+	if (passwd_type == OFONO_SIM_PASSWORD_PHNET_PIN) {
+		id = ril_perso_change_state(sim, passwd_type, enable, passwd,
+								cb, data);
+	} else if (type_str) {
 		GRilIoRequest *req = grilio_request_sized_new(60);
 		grilio_request_append_int32(req, SET_FACILITY_LOCK_PARAMS);
 		grilio_request_append_utf8(req, type_str);
@@ -954,6 +952,47 @@ static void ril_sim_change_passwd(struct ofono_sim *sim,
 		RIL_REQUEST_CHANGE_SIM_PIN2 : RIL_REQUEST_CHANGE_SIM_PIN,
 		ril_sim_pin_change_state_cb, ril_sim_pin_req_done,
 		ril_sim_pin_cbd_new(sd, passwd_type, FALSE, cb, data));
+	grilio_request_unref(req);
+}
+
+static void ril_sim_query_facility_lock_cb(GRilIoChannel *io, int status,
+				const void *data, guint len, void *user_data)
+{
+	struct ofono_error error;
+	struct ril_sim_cbd *cbd = user_data;
+	ofono_query_facility_lock_cb_t cb = cbd->cb.query_facility_lock;
+
+	if (status == RIL_E_SUCCESS) {
+		int locked = 0;
+		GRilIoParser rilp;
+
+		grilio_parser_init(&rilp, data, len);
+		if (grilio_parser_get_int32(&rilp, NULL) &&
+				grilio_parser_get_int32(&rilp, &locked)) {
+			DBG("%d", locked);
+			cb(ril_error_ok(&error), locked != 0, cbd->data);
+			return;
+		}
+	}
+
+	cb(ril_error_failure(&error), FALSE, cbd->data);
+}
+
+static void ril_sim_query_facility_lock(struct ofono_sim *sim,
+				enum ofono_sim_password_type type,
+				ofono_query_facility_lock_cb_t cb, void *data)
+{
+	struct ril_sim *sd = ril_sim_get_data(sim);
+	GRilIoRequest *req = grilio_request_new();
+
+	grilio_request_append_int32(req, 4);
+	grilio_request_append_utf8(req, ril_sim_facility_code(type));
+	grilio_request_append_utf8(req, "");
+	grilio_request_append_utf8(req, "0"); /* class */
+	grilio_request_append_utf8(req, ril_sim_app_id(sd));
+	grilio_queue_send_request_full(sd->q, req,
+		RIL_REQUEST_QUERY_FACILITY_LOCK, ril_sim_query_facility_lock_cb,
+		ril_sim_cbd_free, ril_sim_cbd_new(sd, cb, data));
 	grilio_request_unref(req);
 }
 
@@ -1040,7 +1079,8 @@ const struct ofono_sim_driver ril_sim_driver = {
 	.lock                   = ril_sim_pin_change_state,
 	.reset_passwd           = ril_sim_pin_send_puk,
 	.change_passwd          = ril_sim_change_passwd,
-	.query_pin_retries      = ril_sim_query_pin_retries
+	.query_pin_retries      = ril_sim_query_pin_retries,
+	.query_facility_lock    = ril_sim_query_facility_lock
 /*
  * TODO: Implementing SIM write file IO support requires
  * the following functions to be defined.
