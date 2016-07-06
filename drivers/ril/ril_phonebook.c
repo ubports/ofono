@@ -26,24 +26,6 @@
 #include "simutil.h"
 #include "util.h"
 
-struct cb_data {
-	void *cb;
-	void *data;
-	void *user;
-};
-
-static inline struct cb_data *cb_data_new(void *cb, void *data, void *user)
-{
-	struct cb_data *ret;
-
-	ret = g_new0(struct cb_data, 1);
-	ret->cb = cb;
-	ret->data = data;
-	ret->user = user;
-
-	return ret;
-}
-
 #define CALLBACK_WITH_FAILURE(cb, args...)		\
 	do {						\
 		struct ofono_error cb_e;		\
@@ -150,6 +132,8 @@ struct pb_data {
 	const unsigned char *df_path;
 	guint register_id;
 	size_t df_size;
+	ofono_phonebook_cb_t cb;
+	void *cb_data;
 };
 
 static void read_info_cb(int ok, unsigned char file_status,
@@ -632,36 +616,36 @@ static void free_pb_refs(struct pb_data *pbd, GTraverseFunc entry_func,
 	pbd->pb_refs = NULL;
 }
 
-static void export_and_return(gboolean ok, struct cb_data *cbd)
+static void export_and_return(struct ofono_phonebook *pb, gboolean ok)
 {
-	struct ofono_phonebook *pb = cbd->user;
-	ofono_phonebook_cb_t cb = cbd->cb;
 	struct pb_data *pbd = ofono_phonebook_get_data(pb);
 
 	DBG("phonebook fully read");
 	free_pb_refs(pbd, export_entry, pb);
 
-	if (ok)
-		CALLBACK_WITH_SUCCESS(cb, cbd->data);
-	else
-		CALLBACK_WITH_FAILURE(cb, cbd->data);
-
-	g_free(cbd);
+	if (pbd->cb) {
+		if (ok) {
+			CALLBACK_WITH_SUCCESS(pbd->cb, pbd->cb_data);
+		} else {
+			CALLBACK_WITH_FAILURE(pbd->cb, pbd->cb_data);
+		}
+		pbd->cb = NULL;
+		pbd->cb_data = NULL;
+	}
 }
 
 static void read_record_cb(int ok, int total_length, int record,
 			const unsigned char *data,
 			int record_length, void *userdata)
 {
-	struct cb_data *cbd = userdata;
-	struct ofono_phonebook *pb = cbd->user;
+	struct ofono_phonebook *pb = userdata;
 	struct pb_data *pbd = ofono_phonebook_get_data(pb);
 	struct pb_ref_rec *ref = pbd->pb_ref_next->data;
 	struct record_to_read *rec;
 
 	if (!ok) {
 		ofono_error("%s: error %d", __func__, ok);
-		export_and_return(FALSE, cbd);
+		export_and_return(pb, FALSE);
 		return;
 	}
 
@@ -687,13 +671,13 @@ static void read_record_cb(int ok, int total_length, int record,
 					rec->record,
 					rec->record_length,
 					pbd->df_path, pbd->df_size,
-					read_record_cb, cbd);
+					read_record_cb, pb);
 	} else {
 		/* Read files from next EF_PBR record, if any */
 
 		pbd->pb_ref_next = pbd->pb_ref_next->next;
 		if (pbd->pb_ref_next == NULL) {
-			export_and_return(TRUE, cbd);
+			export_and_return(pb, TRUE);
 		} else {
 			struct pb_ref_rec *ref;
 
@@ -702,7 +686,7 @@ static void read_record_cb(int ok, int total_length, int record,
 			ref = pbd->pb_ref_next->data;
 
 			if (!ref->pb_files) {
-				export_and_return(TRUE, cbd);
+				export_and_return(pb, TRUE);
 			} else {
 				struct pb_file_info *file_info;
 
@@ -713,7 +697,7 @@ static void read_record_cb(int ok, int total_length, int record,
 						file_info->file_id,
 						OFONO_SIM_FILE_STRUCTURE_FIXED,
 						pbd->df_path, pbd->df_size,
-						read_info_cb, cbd);
+						read_info_cb, pb);
 			}
 		}
 	}
@@ -723,15 +707,14 @@ static void pb_adn_cb(int ok, int total_length, int record,
 			const unsigned char *data,
 			int record_length, void *userdata)
 {
-	struct cb_data *cbd = userdata;
-	struct ofono_phonebook *pb = cbd->user;
+	struct ofono_phonebook *pb = userdata;
 	struct pb_data *pbd = ofono_phonebook_get_data(pb);
 	struct pb_ref_rec *ref = pbd->pb_ref_next->data;
 	GSList *l;
 
 	if (!ok) {
 		ofono_error("%s: error %d", __func__, ok);
-		export_and_return(FALSE, cbd);
+		export_and_return(pb, FALSE);
 		return;
 	}
 
@@ -777,9 +760,9 @@ static void pb_adn_cb(int ok, int total_length, int record,
 						rec->record,
 						rec->record_length,
 						pbd->df_path, pbd->df_size,
-						read_record_cb, cbd);
+						read_record_cb, pb);
 		} else {
-			export_and_return(TRUE, cbd);
+			export_and_return(pb, TRUE);
 		}
 	}
 }
@@ -788,8 +771,7 @@ static void read_info_cb(int ok, unsigned char file_status,
 				int total_length, int record_length,
 				void *userdata)
 {
-	struct cb_data *cbd = userdata;
-	struct ofono_phonebook *pb = cbd->user;
+	struct ofono_phonebook *pb = userdata;
 	struct pb_data *pbd = ofono_phonebook_get_data(pb);
 	struct pb_file_info *file_info;
 	struct pb_ref_rec *ref = pbd->pb_ref_next->data;
@@ -812,7 +794,7 @@ static void read_info_cb(int ok, unsigned char file_status,
 	if (ref->pb_next == NULL) {
 		if (ref->pb_files == NULL) {
 			ofono_warn("%s: no phonebook on SIM", __func__);
-			export_and_return(FALSE, cbd);
+			export_and_return(pb, FALSE);
 			return;
 		}
 
@@ -822,20 +804,19 @@ static void read_info_cb(int ok, unsigned char file_status,
 		ofono_sim_read_path(pbd->sim_context, file_info->file_id,
 					OFONO_SIM_FILE_STRUCTURE_FIXED,
 					pbd->df_path, pbd->df_size,
-					pb_adn_cb, cbd);
+					pb_adn_cb, pb);
 	} else {
 		file_info = ref->pb_next->data;
 
 		ofono_sim_read_info(pbd->sim_context, file_info->file_id,
 					OFONO_SIM_FILE_STRUCTURE_FIXED,
 					pbd->df_path, pbd->df_size,
-					read_info_cb, cbd);
+					read_info_cb, pb);
 	}
 }
 
-static void start_sim_app_read(struct cb_data *cbd)
+static void start_sim_app_read(struct ofono_phonebook *pb)
 {
-	struct ofono_phonebook *pb = cbd->user;
 	struct pb_data *pbd = ofono_phonebook_get_data(pb);
 	struct pb_ref_rec *ref_rec;
 	struct pb_file_info *f_info;
@@ -847,7 +828,7 @@ static void start_sim_app_read(struct cb_data *cbd)
 	ref_rec = g_try_malloc0(sizeof(*ref_rec));
 	if (ref_rec == NULL) {
 		ofono_error("%s: OOM", __func__);
-		export_and_return(FALSE, cbd);
+		export_and_return(pb, FALSE);
 		return;
 	}
 
@@ -858,7 +839,7 @@ static void start_sim_app_read(struct cb_data *cbd)
 	f_info = g_try_malloc0(sizeof(*f_info));
 	if (f_info == NULL) {
 		ofono_error("%s: OOM", __func__);
-		export_and_return(FALSE, cbd);
+		export_and_return(pb, FALSE);
 		return;
 	}
 
@@ -870,7 +851,7 @@ static void start_sim_app_read(struct cb_data *cbd)
 	f_ext1 = g_try_malloc0(sizeof(*f_ext1));
 	if (f_ext1 == NULL) {
 		ofono_error("%s: OOM", __func__);
-		export_and_return(FALSE, cbd);
+		export_and_return(pb, FALSE);
 		return;
 	}
 
@@ -888,15 +869,14 @@ static void start_sim_app_read(struct cb_data *cbd)
 	ofono_sim_read_info(pbd->sim_context, f_info->file_id,
 				OFONO_SIM_FILE_STRUCTURE_FIXED,
 				pbd->df_path, pbd->df_size,
-				read_info_cb, cbd);
+				read_info_cb, pb);
 }
 
 static void pb_reference_data_cb(int ok, int total_length, int record,
 					const unsigned char *sdata,
 					int record_length, void *userdata)
 {
-	struct cb_data *cbd = userdata;
-	struct ofono_phonebook *pb = cbd->user;
+	struct ofono_phonebook *pb = userdata;
 	struct pb_data *pbd = ofono_phonebook_get_data(pb);
 	const unsigned char *ptr = sdata;
 	gboolean finished = FALSE;
@@ -908,14 +888,14 @@ static void pb_reference_data_cb(int ok, int total_length, int record,
 	if (!ok) {
 		/* We migh have a SIM instead of USIM application: try that */
 		DBG("%s: error %d, trying SIM files", __func__, ok);
-		start_sim_app_read(cbd);
+		start_sim_app_read(pb);
 		return;
 	}
 
 	ref_rec = g_try_malloc0(sizeof(*ref_rec));
 	if (ref_rec == NULL) {
 		ofono_error("%s: OOM", __func__);
-		export_and_return(FALSE, cbd);
+		export_and_return(pb, FALSE);
 		return;
 	}
 
@@ -939,7 +919,7 @@ static void pb_reference_data_cb(int ok, int total_length, int record,
 					g_try_new0(struct pb_file_info, 1);
 				if (!file_info) {
 					ofono_error("%s: OOM", __func__);
-					export_and_return(FALSE, cbd);
+					export_and_return(pb, FALSE);
 					return;
 				}
 
@@ -981,7 +961,7 @@ static void pb_reference_data_cb(int ok, int total_length, int record,
 
 		if (ref->pb_files == NULL) {
 			ofono_error("%s: no files to read", __func__);
-			export_and_return(FALSE, cbd);
+			export_and_return(pb, FALSE);
 			return;
 		}
 
@@ -993,7 +973,7 @@ static void pb_reference_data_cb(int ok, int total_length, int record,
 		ofono_sim_read_info(pbd->sim_context, file_info->file_id,
 					OFONO_SIM_FILE_STRUCTURE_FIXED,
 					pbd->df_path, pbd->df_size,
-					read_info_cb, cbd);
+					read_info_cb, pb);
 	}
 }
 
@@ -1002,7 +982,6 @@ static void ril_export_entries(struct ofono_phonebook *pb,
 				ofono_phonebook_cb_t cb, void *data)
 {
 	struct pb_data *pbd = ofono_phonebook_get_data(pb);
-	struct cb_data *cbd;
 
 	DBG("Storage %s", storage);
 
@@ -1012,7 +991,8 @@ static void ril_export_entries(struct ofono_phonebook *pb,
 		return;
 	}
 
-	cbd = cb_data_new(cb, data, pb);
+	pbd->cb = cb;
+	pbd->cb_data = data;
 
 	/* Assume USIM, change in case EF_PBR is not present */
 	pbd->df_path = usim_path;
@@ -1020,7 +1000,7 @@ static void ril_export_entries(struct ofono_phonebook *pb,
 
 	ofono_sim_read(pbd->sim_context, SIM_EFPBR_FILEID,
 			OFONO_SIM_FILE_STRUCTURE_FIXED,
-			pb_reference_data_cb, cbd);
+			pb_reference_data_cb, pb);
 }
 
 static gboolean ril_delayed_register(gpointer user_data)
