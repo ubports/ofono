@@ -554,6 +554,9 @@ static int ril_disable(struct ofono_modem *modem)
 	DBusConnection *conn = ofono_dbus_get_connection();
 	struct ril_data *rd = ofono_modem_get_data(modem);
 	const char *path = ofono_modem_get_path(modem);
+	struct parcel rilp;
+	int cmd_id;
+	char buf[4];
 
 	DBG("%p", modem);
 
@@ -562,7 +565,17 @@ static int ril_disable(struct ofono_modem *modem)
 		ofono_modem_remove_interface(modem,
 						THERMAL_MANAGEMENT_INTERFACE);
 
-	ril_send_power(rd->ril, FALSE, ril_send_power_off_cb, modem, NULL);
+	/* RIL_OEM_HOOK_STRING_SET_MODEM_OFF = 0x000000CF */
+	cmd_id = 0x000000CF;
+	sprintf(buf, "%d", cmd_id);
+	parcel_init(&rilp);
+	parcel_w_int32(&rilp, 1);
+	parcel_w_string(&rilp, buf);
+
+	g_ril_append_print_buf(rd->ril, "{cmd_id=0x%02X}", cmd_id);
+
+	g_ril_send(rd->ril, RIL_REQUEST_OEM_HOOK_STRINGS, &rilp,
+					ril_send_power_off_cb, modem, NULL);
 
 	return -EINPROGRESS;
 }
