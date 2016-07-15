@@ -52,6 +52,7 @@ struct ril_cell_info;
 struct ril_slot_config {
 	guint slot;
 	gboolean enable_4g;
+	gboolean empty_pin_query;
 };
 
 #endif /* RIL_TYPES_H */
