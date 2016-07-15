@@ -72,10 +72,13 @@ struct ril_sim {
 	struct ril_sim_card *card;
 	enum ofono_sim_password_type ofono_passwd_state;
 	int retries[OFONO_SIM_PASSWORD_INVALID];
-	guint slot;
+	gboolean empty_pin_query_allowed;
 	gboolean inserted;
 	guint idle_id;
 	gulong card_status_id;
+
+	const char *log_prefix;
+	char *allocated_log_prefix;
 
 	/* query_passwd_state context */
 	ofono_sim_passwd_cb_t query_passwd_state_cb;
@@ -89,6 +92,7 @@ struct ril_sim_cbd {
 		ofono_sim_file_info_cb_t file_info;
 		ofono_sim_read_cb_t read;
 		ofono_sim_imsi_cb_t imsi;
+		ofono_sim_pin_retries_cb_t retries;
 		ofono_query_facility_lock_cb_t query_facility_lock;
 		gpointer ptr;
 	} cb;
@@ -106,6 +110,8 @@ struct ril_sim_pin_cbd {
 	guint timeout_id;
 	gulong card_status_id;
 };
+
+#define DBG_(sd,fmt,args...) DBG("%s" fmt, (sd)->log_prefix, ##args)
 
 #define ril_sim_cbd_free g_free
 
@@ -158,7 +164,6 @@ static struct ril_sim_pin_cbd *ril_sim_pin_cbd_new(struct ril_sim *sd,
 
 static void ril_sim_pin_cbd_free(struct ril_sim_pin_cbd *cbd)
 {
-	DBG("%p", cbd);
 	if (cbd->timeout_id) {
 		g_source_remove(cbd->timeout_id);
 	}
@@ -186,7 +191,7 @@ static void ril_sim_pin_req_done(gpointer ptr)
 
 static const char *ril_sim_app_id(struct ril_sim *sd)
 {
-	return (sd->card && sd->card->app) ? sd->card->app->aid : NULL;
+	return sd->card->app ? sd->card->app->aid : NULL;
 }
 
 int ril_sim_app_type(struct ofono_sim *sim)
@@ -203,8 +208,6 @@ static void ril_sim_append_path(struct ril_sim *sd, GRilIoRequest *req,
 	char *hex_path = NULL;
 	int len;
 
-	DBG("");
-
 	if (path_len > 0 && path_len < 7) {
 		memcpy(db_path, path, path_len);
 		len = path_len;
@@ -220,7 +223,7 @@ static void ril_sim_append_path(struct ril_sim *sd, GRilIoRequest *req,
 	if (len > 0) {
 		hex_path = encode_hex(db_path, len, 0);
 		grilio_request_append_utf8(req, hex_path);
-		DBG("%s", hex_path);
+		DBG_(sd, "%s", hex_path);
 		g_free(hex_path);
 	} else if (fileid == SIM_EF_ICCID_FILEID || fileid == SIM_EFPL_FILEID) {
 		/*
@@ -233,7 +236,7 @@ static void ril_sim_append_path(struct ril_sim *sd, GRilIoRequest *req,
 		 * See 'struct ef_db' in:
 		 * ../../src/simutil.c for more details.
 		 */
-		DBG("%s", ROOTMF);
+		DBG_(sd, "%s", ROOTMF);
 		grilio_request_append_utf8(req, ROOTMF);
 	} else {
 		/*
@@ -244,7 +247,7 @@ static void ril_sim_append_path(struct ril_sim *sd, GRilIoRequest *req,
 		 * be returned.
 		 */
 
-		DBG("returning empty path.");
+		DBG_(sd, "returning empty path.");
 		grilio_request_append_utf8(req, NULL);
 	}
 }
@@ -300,7 +303,7 @@ static void ril_sim_file_info_cb(GRilIoChannel *io, int status,
 	guchar access[3] = { 0x00, 0x00, 0x00 };
 	guchar file_status = EF_STATUS_VALID;
 
-	DBG("");
+	DBG_(sd, "");
 
 	/* In case sim card has been removed prior to this callback has been
 	 * called we must not call the core call back method as otherwise the
@@ -314,7 +317,6 @@ static void ril_sim_file_info_cb(GRilIoChannel *io, int status,
 	error.error = 0;
 	error.type = OFONO_ERROR_TYPE_FAILURE;
 	if (status != RIL_E_SUCCESS) {
-		DBG("Reply failure: %s", ril_error_to_string(status));
 		goto error;
 	}
 
@@ -367,7 +369,7 @@ static guint ril_sim_request_io(struct ril_sim *sd, GRilIoQueue *q, int fileid,
 	guint id;
 	GRilIoRequest *req = grilio_request_sized_new(80);
 
-	DBG("cmd=0x%.2X,efid=0x%.4X,%d,%d,%d,(null),pin2=(null),aid=%s",
+	DBG_(sd, "cmd=0x%.2X,efid=0x%.4X,%d,%d,%d,(null),pin2=(null),aid=%s",
 		cmd, fileid, p1, p2, p3, ril_sim_app_id(sd));
 
 	grilio_request_append_int32(req, cmd);
@@ -410,7 +412,7 @@ static void ril_sim_read_cb(GRilIoChannel *io, int status,
 	int sw1 = 0, sw2 = 0, response_len = 0;
 	guchar *response = NULL;
 
-	DBG("");
+	DBG_(cbd->sd, "");
 	if (status != RIL_E_SUCCESS) {
 		ofono_error("Error: %s", ril_error_to_string(status));
 		goto error;
@@ -482,7 +484,7 @@ static void ril_sim_get_imsi_cb(GRilIoChannel *io, int status,
 		GRilIoParser rilp;
 		grilio_parser_init(&rilp, data, len);
 		imsi = grilio_parser_get_utf8(&rilp);
-		DBG("%s", imsi);
+		DBG_(cbd->sd, "%s", imsi);
 		if (imsi) {
 			/* 15 is the max length of IMSI */
 			GASSERT(strlen(imsi) == 15);
@@ -503,7 +505,7 @@ static void ril_sim_read_imsi(struct ofono_sim *sim, ofono_sim_imsi_cb_t cb,
 	struct ril_sim *sd = ril_sim_get_data(sim);
 	GRilIoRequest *req = grilio_request_sized_new(60);
 
-	DBG("%s", ril_sim_app_id(sd));
+	DBG_(sd, "%s", ril_sim_app_id(sd));
 	grilio_request_append_int32(req, GET_IMSI_NUM_PARAMS);
 	grilio_request_append_utf8(req, ril_sim_app_id(sd));
 
@@ -521,9 +523,8 @@ static void ril_sim_read_imsi(struct ofono_sim *sim, ofono_sim_imsi_cb_t cb,
 
 static enum ofono_sim_password_type ril_sim_passwd_state(struct ril_sim *sd)
 {
-	if (sd->card && sd->card->app) {
-		const struct ril_sim_card_app *app = sd->card->app;
-
+	const struct ril_sim_card_app *app = sd->card->app;
+	if (app) {
 		switch (app->app_state) {
 		case RIL_APPSTATE_PIN:
 			return OFONO_SIM_PASSWORD_SIM_PIN;
@@ -567,9 +568,8 @@ static enum ofono_sim_password_type ril_sim_passwd_state(struct ril_sim *sd)
 
 static gboolean ril_sim_app_in_transient_state(struct ril_sim *sd)
 {
-	if (sd->card && sd->card->app) {
-		const struct ril_sim_card_app *app = sd->card->app;
-
+	const struct ril_sim_card_app *app = sd->card->app;
+	if (app) {
 		switch (app->app_state) {
 		case RIL_APPSTATE_DETECTED:
 			return TRUE;
@@ -658,14 +658,134 @@ static void ril_sim_status_cb(struct ril_sim_card *sc, void *user_data)
 	}
 }
 
+static int ril_sim_parse_retry_count(const void *data, guint len)
+{
+	int retry_count = -1;
+	GRilIoParser rilp;
+
+	grilio_parser_init(&rilp, data, len);
+	grilio_parser_get_int32(&rilp, NULL);
+	grilio_parser_get_int32(&rilp, &retry_count);
+	return retry_count;
+}
+
+static GRilIoRequest *ril_sim_enter_sim_req(struct ril_sim *sd, const char* pw)
+{
+	const char *app_id = ril_sim_app_id(sd);
+	if (app_id) {
+		GRilIoRequest *req = grilio_request_new();
+		grilio_request_append_int32(req, ENTER_SIM_PIN_PARAMS);
+		grilio_request_append_utf8(req, pw);
+		grilio_request_append_utf8(req, app_id);
+		return req;
+	}
+	return NULL;
+}
+
+/*
+ * Some RIL implementations allow to query the retry count
+ * by sending the empty pin in any state.
+ */
+static void ril_sim_query_pin2_retries_cb(GRilIoChannel *io, int status,
+				const void *data, guint len, void *user_data)
+{
+	struct ril_sim_cbd *cbd = user_data;
+	struct ril_sim *sd = cbd->sd;
+	ofono_sim_pin_retries_cb_t cb = cbd->cb.retries;
+	struct ofono_error error;
+
+	if (status == RIL_E_SUCCESS) {
+		const int retry_count = ril_sim_parse_retry_count(data, len);
+		DBG_(sd, "pin2 retry_count=%d", retry_count);
+		sd->retries[OFONO_SIM_PASSWORD_SIM_PIN2] = retry_count;
+	} else {
+		ofono_error("pin2 retry query is not supported");
+		sd->empty_pin_query_allowed = FALSE;
+	}
+
+	cb(ril_error_ok(&error), sd->retries, cbd->data);
+}
+
+static gboolean ril_sim_query_pin2_retry_count(struct ril_sim *sd,
+				ofono_sim_pin_retries_cb_t cb, void *data)
+{
+	if (sd->empty_pin_query_allowed &&
+				sd->retries[OFONO_SIM_PASSWORD_SIM_PIN2] < 0) {
+		GRilIoRequest *req = ril_sim_enter_sim_req(sd, "");
+		if (req) {
+			DBG_(sd, "querying pin2 retry count...");
+			grilio_queue_send_request_full(sd->q, req,
+				RIL_REQUEST_ENTER_SIM_PIN2,
+				ril_sim_query_pin2_retries_cb,
+				ril_sim_cbd_free,
+				ril_sim_cbd_new(sd, cb, data));
+			grilio_request_unref(req);
+			return TRUE;
+		}
+	}
+	return FALSE;
+}
+
+static void ril_sim_query_pin_retries_cb(GRilIoChannel *io, int status,
+				const void *data, guint len, void *user_data)
+{
+	struct ril_sim_cbd *cbd = user_data;
+	struct ril_sim *sd = cbd->sd;
+	ofono_sim_pin_retries_cb_t cb = cbd->cb.retries;
+	struct ofono_error error;
+
+	if (status == RIL_E_SUCCESS) {
+		const int retry_count = ril_sim_parse_retry_count(data, len);
+		DBG_(sd, "pin retry_count=%d", retry_count);
+		sd->retries[OFONO_SIM_PASSWORD_SIM_PIN] = retry_count;
+		if (ril_sim_query_pin2_retry_count(sd, cb, cbd->data)) {
+			/*
+			 * ril_sim_query_pin2_retries_cb will invoke
+			 * the completion callback
+			 */
+			return;
+		}
+	} else {
+		ofono_error("pin retry query is not supported");
+		sd->empty_pin_query_allowed = FALSE;
+	}
+
+	cb(ril_error_ok(&error), sd->retries, cbd->data);
+}
+
+static gboolean ril_sim_query_pin_retry_count(struct ril_sim *sd,
+				ofono_sim_pin_retries_cb_t cb, void *data)
+{
+	if (sd->empty_pin_query_allowed &&
+				sd->retries[OFONO_SIM_PASSWORD_SIM_PIN] < 0) {
+		GRilIoRequest *req = ril_sim_enter_sim_req(sd, "");
+		if (req) {
+			DBG_(sd, "querying pin retry count...");
+			grilio_queue_send_request_full(sd->q, req,
+				RIL_REQUEST_ENTER_SIM_PIN,
+				ril_sim_query_pin_retries_cb,
+				ril_sim_cbd_free,
+				ril_sim_cbd_new(sd, cb, data));
+			grilio_request_unref(req);
+			return TRUE;
+		}
+	}
+	return FALSE;
+}
+
 static void ril_sim_query_pin_retries(struct ofono_sim *sim,
 				ofono_sim_pin_retries_cb_t cb, void *data)
 {
-	struct ril_sim *sd = ril_sim_get_data(sim);
 	struct ofono_error error;
+	struct ril_sim *sd = ril_sim_get_data(sim);
 
-	DBG("%d", sd->ofono_passwd_state == OFONO_SIM_PASSWORD_INVALID ? -1 :
-					sd->retries[sd->ofono_passwd_state]);
+	DBG_(sd, "");
+	if (ril_sim_query_pin_retry_count(sd, cb, data) ||
+			ril_sim_query_pin2_retry_count(sd, cb, data)) {
+		/* Wait for completion of PIN and then PIN2 query */
+		return;
+	}
+
 	cb(ril_error_ok(&error), sd->retries, data);
 }
 
@@ -693,14 +813,14 @@ static void ril_sim_query_passwd_state(struct ofono_sim *sim,
 	}
 
 	if (passwd_state != OFONO_SIM_PASSWORD_INVALID) {
-		DBG("%d", passwd_state);
+		DBG_(sd, "%d", passwd_state);
 		sd->query_passwd_state_cb = NULL;
 		sd->query_passwd_state_cb_data = NULL;
 		sd->ofono_passwd_state = passwd_state;
 		cb(ril_error_ok(&error), passwd_state, data);
 	} else {
 		/* Wait for the state to change */
-		DBG("waiting for the SIM state to change");
+		DBG_(sd, "waiting for the SIM state to change");
 		sd->query_passwd_state_cb = cb;
 		sd->query_passwd_state_cb_data = data;
 		sd->query_passwd_state_timeout_id =
@@ -715,7 +835,7 @@ static gboolean ril_sim_pin_change_state_timeout_cb(gpointer user_data)
 	struct ril_sim *sd = cbd->sd;
 	struct ofono_error error;
 
-	DBG("oops...");
+	DBG_(sd, "oops...");
 	cbd->timeout_id = 0;
 	sd->pin_cbd_list = g_list_remove(sd->pin_cbd_list, cbd);
 	cbd->cb(ril_error_failure(&error), cbd->data);
@@ -736,17 +856,17 @@ static void ril_sim_pin_change_state_status_cb(struct ril_sim_card *sc,
 
 		if (ps == OFONO_SIM_PASSWORD_INVALID ||
 				cbd->ril_status != RIL_E_SUCCESS) {
-			DBG("failure");
+			DBG_(sd, "failure");
 			cbd->cb(ril_error_failure(&error), cbd->data);
 		} else {
-			DBG("success, passwd_state=%d", ps);
+			DBG_(sd, "success, passwd_state=%d", ps);
 			cbd->cb(ril_error_ok(&error), cbd->data);
 		}
 
 		sd->pin_cbd_list = g_list_remove(sd->pin_cbd_list, cbd);
 		ril_sim_pin_cbd_free(cbd);
 	} else {
-		DBG("will keep waiting");
+		DBG_(sd, "will keep waiting");
 	}
 }
 
@@ -755,16 +875,20 @@ static void ril_sim_pin_change_state_cb(GRilIoChannel *io, int ril_status,
 {
 	struct ril_sim_pin_cbd *cbd = user_data;
 	struct ril_sim *sd = cbd->sd;
-	GRilIoParser rilp;
-	int retry_count = -1;
+	const int retry_count = ril_sim_parse_retry_count(data, len);
 
-	grilio_parser_init(&rilp, data, len);
-	grilio_parser_get_int32(&rilp, NULL);
-	grilio_parser_get_int32(&rilp, &retry_count);
-
-	sd->retries[cbd->passwd_type] = retry_count;
-	DBG("result=%d passwd_type=%d retry_count=%d",
+	DBG_(sd, "result=%d passwd_type=%d retry_count=%d",
 			ril_status, cbd->passwd_type, retry_count);
+
+	if (ril_status == RIL_E_SUCCESS && retry_count == 0 &&
+			sd->empty_pin_query_allowed &&
+			(cbd->passwd_type == OFONO_SIM_PASSWORD_SIM_PIN ||
+			cbd->passwd_type == OFONO_SIM_PASSWORD_SIM_PIN2)) {
+		/* Will query it */
+		sd->retries[cbd->passwd_type] = -1;
+	} else {
+		sd->retries[cbd->passwd_type] = retry_count;
+	}
 
 	cbd->ril_status = ril_status;
 	if (cbd->card_status_id && (!cbd->state_event_count ||
@@ -774,7 +898,7 @@ static void ril_sim_pin_change_state_cb(GRilIoChannel *io, int ril_status,
 		GASSERT(!cbd->timeout_id);
 
 		/* Wait for rild to change the state */
-		DBG("waiting for SIM state change");
+		DBG_(sd, "waiting for SIM state change");
 		sd->pin_cbd_list = g_list_append(sd->pin_cbd_list, cbd);
 		cbd->timeout_id =
 			g_timeout_add_seconds(SIM_STATE_CHANGE_TIMEOUT_SECS,
@@ -802,13 +926,13 @@ static void ril_sim_pin_send(struct ofono_sim *sim, const char *passwd,
 				ofono_sim_lock_unlock_cb_t cb, void *data)
 {
 	struct ril_sim *sd = ril_sim_get_data(sim);
-	GRilIoRequest *req = grilio_request_sized_new(60);
+	GRilIoRequest *req = grilio_request_new();
 
 	grilio_request_append_int32(req, ENTER_SIM_PIN_PARAMS);
 	grilio_request_append_utf8(req, passwd);
 	grilio_request_append_utf8(req, ril_sim_app_id(sd));
 
-	DBG("%s,aid=%s", passwd, ril_sim_app_id(sd));
+	DBG_(sd, "%s,aid=%s", passwd, ril_sim_app_id(sd));
 	grilio_queue_send_request_full(sd->q, req, RIL_REQUEST_ENTER_SIM_PIN,
 		ril_sim_pin_change_state_cb, ril_sim_pin_req_done,
 		ril_sim_pin_cbd_new(sd, OFONO_SIM_PASSWORD_SIM_PIN,
@@ -834,11 +958,11 @@ static guint ril_perso_change_state(struct ofono_sim *sim,
 					RIL_PERSOSUBSTATE_SIM_NETWORK);
 			grilio_request_append_utf8(req, passwd);
 		} else {
-			DBG("Not supported, enable=%d", enable);
+			DBG_(sd, "Not supported, enable=%d", enable);
 		}
 		break;
 	default:
-		DBG("Not supported, type=%d", passwd_type);
+		DBG_(sd, "Not supported, type=%d", passwd_type);
 		break;
 	}
 
@@ -885,14 +1009,14 @@ static void ril_sim_pin_change_state(struct ofono_sim *sim,
 	const char *type_str = ril_sim_facility_code(passwd_type);
 	guint id = 0;
 
-	DBG("%d,%s,%d,%s,0,aid=%s", passwd_type, type_str, enable, passwd,
+	DBG_(sd, "%d,%s,%d,%s,0,aid=%s", passwd_type, type_str, enable, passwd,
 							ril_sim_app_id(sd));
 
 	if (passwd_type == OFONO_SIM_PASSWORD_PHNET_PIN) {
 		id = ril_perso_change_state(sim, passwd_type, enable, passwd,
 								cb, data);
 	} else if (type_str) {
-		GRilIoRequest *req = grilio_request_sized_new(60);
+		GRilIoRequest *req = grilio_request_new();
 		grilio_request_append_int32(req, SET_FACILITY_LOCK_PARAMS);
 		grilio_request_append_utf8(req, type_str);
 		grilio_request_append_utf8(req, enable ?
@@ -925,7 +1049,7 @@ static void ril_sim_pin_send_puk(struct ofono_sim *sim,
 	grilio_request_append_utf8(req, passwd);
 	grilio_request_append_utf8(req, ril_sim_app_id(sd));
 
-	DBG("puk=%s,pin=%s,aid=%s", puk, passwd, ril_sim_app_id(sd));
+	DBG_(sd, "puk=%s,pin=%s,aid=%s", puk, passwd, ril_sim_app_id(sd));
 	grilio_queue_send_request_full(sd->q, req, RIL_REQUEST_ENTER_SIM_PUK,
 		ril_sim_pin_change_state_cb, ril_sim_pin_req_done,
 		ril_sim_pin_cbd_new(sd, OFONO_SIM_PASSWORD_SIM_PUK,
@@ -946,7 +1070,8 @@ static void ril_sim_change_passwd(struct ofono_sim *sim,
 	grilio_request_append_utf8(req, new_passwd);
 	grilio_request_append_utf8(req, ril_sim_app_id(sd));
 
-	DBG("old=%s,new=%s,aid=%s", old_passwd, new_passwd, ril_sim_app_id(sd));
+	DBG_(sd, "old=%s,new=%s,aid=%s", old_passwd, new_passwd,
+							ril_sim_app_id(sd));
 	grilio_queue_send_request_full(sd->q, req,
 		(passwd_type == OFONO_SIM_PASSWORD_SIM_PIN2) ?
 		RIL_REQUEST_CHANGE_SIM_PIN2 : RIL_REQUEST_CHANGE_SIM_PIN,
@@ -969,7 +1094,7 @@ static void ril_sim_query_facility_lock_cb(GRilIoChannel *io, int status,
 		grilio_parser_init(&rilp, data, len);
 		if (grilio_parser_get_int32(&rilp, NULL) &&
 				grilio_parser_get_int32(&rilp, &locked)) {
-			DBG("%d", locked);
+			DBG_(cbd->sd, "%d", locked);
 			cb(ril_error_ok(&error), locked != 0, cbd->data);
 			return;
 		}
@@ -984,9 +1109,11 @@ static void ril_sim_query_facility_lock(struct ofono_sim *sim,
 {
 	struct ril_sim *sd = ril_sim_get_data(sim);
 	GRilIoRequest *req = grilio_request_new();
+	const char *type_str = ril_sim_facility_code(type);
 
+	DBG_(sd, "%s", type_str);
 	grilio_request_append_int32(req, 4);
-	grilio_request_append_utf8(req, ril_sim_facility_code(type));
+	grilio_request_append_utf8(req, type_str);
 	grilio_request_append_utf8(req, "");
 	grilio_request_append_utf8(req, "0"); /* class */
 	grilio_request_append_utf8(req, ril_sim_app_id(sd));
@@ -1000,7 +1127,7 @@ static gboolean ril_sim_register(gpointer user)
 {
 	struct ril_sim *sd = user;
 
-	DBG("[%u]", sd->slot);
+	DBG_(sd, "");
 	GASSERT(sd->idle_id);
 	sd->idle_id = 0;
 
@@ -1020,21 +1147,22 @@ static int ril_sim_probe(struct ofono_sim *sim, unsigned int vendor,
 {
 	struct ril_modem *modem = data;
 	struct ril_sim *sd = g_new0(struct ril_sim, 1);
-	int i;
 
+	DBG("%s", modem->log_prefix);
 	sd->sim = sim;
-	sd->slot = ril_modem_slot(modem);
+	sd->empty_pin_query_allowed = modem->config.empty_pin_query;
 	sd->io = grilio_channel_ref(ril_modem_io(modem));
 	sd->card = ril_sim_card_ref(modem->sim_card);
 	sd->q = grilio_queue_new(sd->io);
 
-	DBG("[%u]", sd->slot);
-
-	sd->ofono_passwd_state = OFONO_SIM_PASSWORD_INVALID;
-	for (i = 0; i < OFONO_SIM_PASSWORD_INVALID; i++) {
-		sd->retries[i] = -1;
+	if (modem->log_prefix && modem->log_prefix[0]) {
+		sd->log_prefix = sd->allocated_log_prefix =
+			g_strconcat(modem->log_prefix, " ", NULL);
+	} else {
+		sd->log_prefix = "";
 	}
 
+	ril_sim_invalidate_passwd_state(sd);
 	sd->idle_id = g_idle_add(ril_sim_register, sd);
 	ofono_sim_set_data(sim, sd);
 	return 0;
@@ -1044,7 +1172,7 @@ static void ril_sim_remove(struct ofono_sim *sim)
 {
 	struct ril_sim *sd = ril_sim_get_data(sim);
 
-	DBG("[%u]", sd->slot);
+	DBG_(sd, "");
 	g_list_free_full(sd->pin_cbd_list, ril_sim_pin_cbd_list_free_cb);
 	grilio_queue_cancel_all(sd->q, FALSE);
 	ofono_sim_set_data(sim, NULL);
@@ -1062,6 +1190,7 @@ static void ril_sim_remove(struct ofono_sim *sim)
 
 	grilio_channel_unref(sd->io);
 	grilio_queue_unref(sd->q);
+	g_free(sd->allocated_log_prefix);
 	g_free(sd);
 }
 
