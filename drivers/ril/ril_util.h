@@ -32,9 +32,12 @@ gboolean ril_parse_mcc_mnc(const char *str, struct ofono_network_operator *op);
 	((err)->error = 0, (err)->type = OFONO_ERROR_TYPE_NO_ERROR)
 #define ril_error_init_failure(err) \
 	((err)->error = 0, (err)->type = OFONO_ERROR_TYPE_FAILURE)
+#define ril_error_init_sim_error(err,sw1,sw2) \
+	((err)->error = ((sw1) << 8)|(sw2), (err)->type = OFONO_ERROR_TYPE_SIM)
 
 #define ril_error_ok(err) (ril_error_init_ok(err), err)
 #define ril_error_failure(err) (ril_error_init_failure(err), err)
+#define ril_error_sim(err,sw1,sw2) (ril_error_init_sim_error(err,sw1,sw2), err)
 
 #endif /* RIL_UTIL_H */
 
