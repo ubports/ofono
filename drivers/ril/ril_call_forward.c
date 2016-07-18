@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015 Jolla Ltd.
+ *  Copyright (C) 2015-2016 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -25,13 +25,15 @@ struct ril_call_forward {
 	guint timer_id;
 };
 
-enum ril_call_forward_cmd {
+enum ril_call_forward_action {
 	CF_ACTION_DISABLE,
 	CF_ACTION_ENABLE,
-	CF_ACTION_UNUSED,
+	CF_ACTION_INTERROGATE,
 	CF_ACTION_REGISTRATION,
 	CF_ACTION_ERASURE
 };
+
+#define CF_TIME_DEFAULT (0)
 
 struct ril_call_forward_cbd {
 	struct ril_call_forward *fd;
@@ -43,12 +45,15 @@ struct ril_call_forward_cbd {
 	gpointer data;
 };
 
-#define ril_call_forward_cbd_free g_free
-
 static inline struct ril_call_forward *ril_call_forward_get_data(
 					struct ofono_call_forwarding *cf)
 {
 	return ofono_call_forwarding_get_data(cf);
+}
+
+static void ril_call_forward_cbd_free(gpointer cbd)
+{
+	g_slice_free(struct ril_call_forward_cbd, cbd);
 }
 
 static struct ril_call_forward_cbd *ril_call_forward_cbd_new(void *cb,
@@ -56,22 +61,41 @@ static struct ril_call_forward_cbd *ril_call_forward_cbd_new(void *cb,
 {
 	struct ril_call_forward_cbd *cbd;
 
-	cbd = g_new0(struct ril_call_forward_cbd, 1);
+	cbd = g_slice_new0(struct ril_call_forward_cbd);
 	cbd->cb.ptr = cb;
 	cbd->data = data;
 	return cbd;
 }
 
-static inline void ril_call_forward_submit_request(struct ril_call_forward *fd,
-	GRilIoRequest* req, guint code, GRilIoChannelResponseFunc response,
-							void *cb, void *data)
+static GRilIoRequest *ril_call_forward_req(enum ril_call_forward_action action,
+	int type, int cls, const struct ofono_phone_number *number, int time)
 {
-	grilio_queue_send_request_full(fd->q, req, code, response,
-				ril_call_forward_cbd_free,
-				ril_call_forward_cbd_new(cb, data));
+	GRilIoRequest *req = grilio_request_new();
+
+	/*
+	 * Modem seems to respond with error to all requests
+	 * made with bearer class BEARER_CLASS_DEFAULT.
+	 */
+	if (cls == BEARER_CLASS_DEFAULT) {
+		cls = SERVICE_CLASS_NONE;
+	}
+
+	grilio_request_append_int32(req, action);
+	grilio_request_append_int32(req, type);
+	grilio_request_append_int32(req, cls);          /* Service class */
+	if (number) {
+		grilio_request_append_int32(req, number->type);
+		grilio_request_append_utf8(req, number->number);
+	} else {
+		grilio_request_append_int32(req, 0x81); /* TOA unknown */
+		grilio_request_append_utf8(req, NULL);  /* No number */
+	}
+	grilio_request_append_int32(req, time);
+
+	return req;
 }
 
-static void ril_forward_set_cb(GRilIoChannel *io, int status,
+static void ril_call_forward_set_cb(GRilIoChannel *io, int status,
 				const void *data, guint len, void *user_data)
 {
 	struct ofono_error error;
@@ -86,93 +110,51 @@ static void ril_forward_set_cb(GRilIoChannel *io, int status,
 	}
 }
 
+static void ril_call_forward_set(struct ofono_call_forwarding *cf,
+		enum ril_call_forward_action cmd, int type, int cls,
+		const struct ofono_phone_number *number, int time,
+		ofono_call_forwarding_set_cb_t cb, void *data)
+{
+	struct ril_call_forward *fd = ril_call_forward_get_data(cf);
+	GRilIoRequest *req = ril_call_forward_req(cmd, type, cls, number, time);
+
+	grilio_queue_send_request_full(fd->q, req, RIL_REQUEST_SET_CALL_FORWARD,
+			ril_call_forward_set_cb, ril_call_forward_cbd_free,
+			ril_call_forward_cbd_new(cb, data));
+	grilio_request_unref(req);
+}
+
 static void ril_call_forward_registration(struct ofono_call_forwarding *cf,
 		int type, int cls, const struct ofono_phone_number *number,
 		int time, ofono_call_forwarding_set_cb_t cb, void *data)
 {
-	struct ril_call_forward *fd = ril_call_forward_get_data(cf);
-	GRilIoRequest *req = grilio_request_new();
-
 	ofono_info("cf registration");
-	grilio_request_append_int32(req, CF_ACTION_REGISTRATION);
-	grilio_request_append_int32(req, type);
-
-	/*
-	 * Modem seems to respond with error to all queries
-	 * or settings made with bearer class
-	 * BEARER_CLASS_DEFAULT. Design decision: If given
-	 * class is BEARER_CLASS_DEFAULT let's map it to
-	 * BEARER_CLASS_VOICE as per RIL design.
-	 */
-	if (cls == BEARER_CLASS_DEFAULT) {
-		cls = BEARER_CLASS_VOICE;
-	}
-
-	grilio_request_append_int32(req, cls);
-	grilio_request_append_int32(req, number->type);
-	grilio_request_append_utf8(req, number->number);
-	grilio_request_append_int32(req, time);
-
-	ril_call_forward_submit_request(fd, req, RIL_REQUEST_SET_CALL_FORWARD,
-					ril_forward_set_cb, cb, data);
-	grilio_request_unref(req);
-}
-
-static void ril_call_forward_send_cmd(struct ofono_call_forwarding *cf,
-		int type, int cls, ofono_call_forwarding_set_cb_t cb,
-		void *data, int action)
-{
-	struct ril_call_forward *fd = ril_call_forward_get_data(cf);
-	GRilIoRequest *req = grilio_request_new();
-
-	grilio_request_append_int32(req, action);
-	grilio_request_append_int32(req, type);
-
-	/*
-	 * Modem seems to respond with error to all queries
-	 * or settings made with bearer class
-	 * BEARER_CLASS_DEFAULT. Design decision: If given
-	 * class is BEARER_CLASS_DEFAULT let's map it to
-	 * BEARER_CLASS_VOICE as per RIL design.
-	 */
-	if (cls == BEARER_CLASS_DEFAULT) {
-		cls = BEARER_CLASS_VOICE;
-	}
-
-	grilio_request_append_int32(req, cls);          /* Service class */
-
-	/* Following 3 values have no real meaning in erasure
-	 * but apparently RIL expects them so fields need to
-	 * be filled. Otherwise there is no response
-	 */
-	grilio_request_append_int32(req, 0x81);		/* TOA unknown */
-	grilio_request_append_utf8(req, "1234567890");
-	grilio_request_append_int32(req, 60);
-
-	ril_call_forward_submit_request(fd, req, RIL_REQUEST_SET_CALL_FORWARD,
-					ril_forward_set_cb, cb, data);
-	grilio_request_unref(req);
+	ril_call_forward_set(cf, CF_ACTION_REGISTRATION, type, cls,
+						number, time, cb, data);
 }
 
 static void ril_call_forward_erasure(struct ofono_call_forwarding *cf,
 	int type, int cls, ofono_call_forwarding_set_cb_t cb, void *data)
 {
-	ofono_info("CF_ACTION_ERASURE");
-	ril_call_forward_send_cmd(cf, type, cls, cb, data, CF_ACTION_ERASURE);
+	ofono_info("cf erasure");
+	ril_call_forward_set(cf, CF_ACTION_ERASURE, type, cls,
+					NULL, CF_TIME_DEFAULT, cb, data);
 }
 
 static void ril_call_forward_deactivate(struct ofono_call_forwarding *cf,
 	int type, int cls, ofono_call_forwarding_set_cb_t cb, void *data)
 {
-	ofono_info("CF_ACTION_DISABLE");
-	ril_call_forward_send_cmd(cf, type, cls, cb, data, CF_ACTION_DISABLE);
+	ofono_info("cf disable");
+	ril_call_forward_set(cf, CF_ACTION_DISABLE, type, cls,
+					NULL, CF_TIME_DEFAULT, cb, data);
 }
 
 static void ril_call_forward_activate(struct ofono_call_forwarding *cf,
 	int type, int cls, ofono_call_forwarding_set_cb_t cb, void *data)
 {
-	ofono_info("CF_ACTION_ENABLE");
-	ril_call_forward_send_cmd(cf, type, cls, cb, data, CF_ACTION_ENABLE);
+	ofono_info("cf enable");
+	ril_call_forward_set(cf, CF_ACTION_ENABLE, type, cls,
+					NULL, CF_TIME_DEFAULT, cb, data);
 }
 
 static void ril_call_forward_query_cb(GRilIoChannel *io, int status,
@@ -223,36 +205,14 @@ static void ril_call_forward_query(struct ofono_call_forwarding *cf, int type,
 		int cls, ofono_call_forwarding_query_cb_t cb, void *data)
 {
 	struct ril_call_forward *fd = ril_call_forward_get_data(cf);
-	GRilIoRequest *req = grilio_request_new();
+	GRilIoRequest *req = ril_call_forward_req(CF_ACTION_INTERROGATE,
+					type, cls, NULL, CF_TIME_DEFAULT);
 
 	ofono_info("cf query");
-	grilio_request_append_int32(req, 2);
-	grilio_request_append_int32(req, type);
-
-	/*
-	 * Modem seems to respond with error to all queries
-	 * or settings made with bearer class
-	 * BEARER_CLASS_DEFAULT. Design decision: If given
-	 * class is BEARER_CLASS_DEFAULT let's map it to
-	 * SERVICE_CLASS_NONE as per RIL design.
-	 */
-	if (cls == BEARER_CLASS_DEFAULT) {
-		cls = SERVICE_CLASS_NONE;
-	}
-
-	grilio_request_append_int32(req, cls);
-
-	/* Following 3 values have no real meaning in query
-	 * but apparently RIL expects them so fields need to
-	 * be filled. Otherwise there is no response
-	 */
-	grilio_request_append_int32(req, 0x81);	        /* TOA unknown */
-	grilio_request_append_utf8(req, "1234567890");
-	grilio_request_append_int32(req, 0);
-
-	ril_call_forward_submit_request(fd, req,
-					RIL_REQUEST_QUERY_CALL_FORWARD_STATUS,
-					ril_call_forward_query_cb, cb, data);
+	grilio_queue_send_request_full(fd->q, req,
+			RIL_REQUEST_QUERY_CALL_FORWARD_STATUS,
+			ril_call_forward_query_cb, ril_call_forward_cbd_free,
+			ril_call_forward_cbd_new(cb, data));
 	grilio_request_unref(req);
 }
 
@@ -286,7 +246,7 @@ static void ril_call_forward_remove(struct ofono_call_forwarding *cf)
 	DBG("");
 	ofono_call_forwarding_set_data(cf, NULL);
 
-	if (fd->timer_id > 0) {
+	if (fd->timer_id) {
 		g_source_remove(fd->timer_id);
 	}
 
