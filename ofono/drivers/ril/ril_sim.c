@@ -24,12 +24,6 @@
 
 #define SIM_STATE_CHANGE_TIMEOUT_SECS (5)
 
-/*
- * TODO:
- * 1. Define constants for hex literals
- * 2. Document P1-P3 usage (+CSRM)
- */
-
 #define EF_STATUS_INVALIDATED 0
 #define EF_STATUS_VALID 1
 
@@ -52,6 +46,13 @@
 #define SET_FACILITY_LOCK_PARAMS 5
 #define ENTER_SIM_PUK_PARAMS 3
 #define CHANGE_SIM_PIN_PARAMS 3
+
+/* P2 coding (modes) for READ RECORD and UPDATE RECORD (see TS 102.221) */
+#define MODE_SELECTED (0x00) /* Currently selected EF */
+#define MODE_CURRENT  (0x04) /* P1='00' denotes the current record */
+#define MODE_ABSOLUTE (0x04) /* The record number is given in P1 */
+#define MODE_NEXT     (0x02) /* Next record */
+#define MODE_PREVIOUS (0x03) /* Previous record */
 
 /*
  * TODO: CDMA/IMS
@@ -86,11 +87,18 @@ struct ril_sim {
 	guint query_passwd_state_timeout_id;
 };
 
+struct ril_sim_io_response {
+	guint sw1, sw2;
+	guchar* data;
+	guint data_len;
+};
+
 struct ril_sim_cbd {
 	struct ril_sim *sd;
 	union _ofono_sim_cb {
 		ofono_sim_file_info_cb_t file_info;
 		ofono_sim_read_cb_t read;
+		ofono_sim_write_cb_t write;
 		ofono_sim_imsi_cb_t imsi;
 		ofono_sim_pin_retries_cb_t retries;
 		ofono_query_facility_lock_cb_t query_facility_lock;
@@ -252,41 +260,112 @@ static void ril_sim_append_path(struct ril_sim *sd, GRilIoRequest *req,
 	}
 }
 
-static guchar *ril_sim_parse_io_response(const void *data, guint len,
-				int *sw1, int *sw2, int *hex_len)
+static struct ril_sim_io_response *ril_sim_parse_io_response(const void *data,
+								guint len)
 {
+	struct ril_sim_io_response *res = NULL;
 	GRilIoParser rilp;
-	char *response = NULL;
-	guchar *hex_response = NULL;
+	int sw1, sw2;
 
-	/* Minimum length of SIM_IO_Response is 12:
-	 * sw1 (int32)
-	 * sw2 (int32)
-	 * simResponse (string)
-	 */
-	if (len < 12) {
-		ofono_error("SIM IO reply too small (< 12): %d", len);
-		return NULL;
-	}
-
-	DBG("length is: %d", len);
 	grilio_parser_init(&rilp, data, len);
-	grilio_parser_get_int32(&rilp, sw1);
-	grilio_parser_get_int32(&rilp, sw2);
 
-	response = grilio_parser_get_utf8(&rilp);
-	if (response) {
-		long items_written = 0;
-		const long response_len = strlen(response);
-		DBG("response is set; len is: %ld", response_len);
-		hex_response = decode_hex(response, response_len,
-			&items_written, -1);
-		*hex_len = items_written;
+	if (grilio_parser_get_int32(&rilp, &sw1) &&
+			grilio_parser_get_int32(&rilp, &sw2)) {
+		char *hex_data = grilio_parser_get_utf8(&rilp);
+
+		DBG("sw1=0x%02X,sw2=0x%02X,%s", sw1, sw2, hex_data);
+		res = g_slice_new0(struct ril_sim_io_response);
+		res->sw1 = sw1;
+		res->sw2 = sw2;
+		if (hex_data) {
+			long num_bytes = 0;
+			res->data = decode_hex(hex_data, -1, &num_bytes, 0);
+			res->data_len = num_bytes;
+			g_free(hex_data);
+		}
 	}
 
-	DBG("sw1=0x%.2X,sw2=0x%.2X,%s", *sw1, *sw2, response);
-	g_free(response);
-	return hex_response;
+	return res;
+}
+
+static gboolean ril_sim_io_response_ok(const struct ril_sim_io_response *res)
+{
+	if (res) {
+		static const struct ril_sim_io_error {
+			int sw;
+			const char* msg;
+		} errmsg [] = {
+			/* TS 102.221 */
+			{ 0x6a80, "Incorrect parameters in the data field" },
+			{ 0x6a81, "Function not supported" },
+			{ 0x6a82, "File not found" },
+			{ 0x6a83, "Record not found" },
+			{ 0x6a84, "Not enough memory space" },
+			{ 0x6a86, "Incorrect parameters P1 to P2" },
+			{ 0x6a87, "Lc inconsistent with P1 to P2" },
+			{ 0x6a88, "Referenced data not found" },
+			/* TS 51.011 */
+			{ 0x9240, "Memory problem" },
+			{ 0x9400, "No EF selected" },
+			{ 0x9402, "Out of range (invalid address)" },
+			{ 0x9404, "File id/pattern not found" },
+			{ 0x9408, "File is inconsistent with the command" }
+		};
+
+		int low, high, sw;
+
+		switch (res->sw1) {
+		case 0x90:
+			/* '90 00' is the normal completion */
+			if (res->sw2 != 0x00) {
+				break;
+			}
+			/* fall through */
+		case 0x91:
+		case 0x9e:
+		case 0x9f:
+			return TRUE;
+		case 0x92:
+			if (res->sw2 != 0x40) {
+				/* '92 40' is "memory problem" */
+				return TRUE;
+			}
+			break;
+		default:
+			break;
+		}
+
+		/* Find the error message */
+		low = 0;
+		high = G_N_ELEMENTS(errmsg)-1;
+		sw = (res->sw1 << 8) | res->sw2;
+
+		while (low <= high) {
+			const int mid = (low + high)/2;
+			const int val = errmsg[mid].sw;
+			if (val < sw) {
+				low = mid + 1;
+			} else if (val > sw) {
+				high = mid - 1;
+			} else {
+				/* Message found */
+				DBG("error: %s", errmsg[mid].msg);
+				return FALSE;
+			}
+		}
+
+		/* No message */
+		DBG("error %02x %02x", res->sw1, res->sw2);
+	}
+	return FALSE;
+}
+
+static void ril_sim_io_response_free(struct ril_sim_io_response *res)
+{
+	if (res) {
+		g_free(res->data);
+		g_slice_free(struct ril_sim_io_response, res);
+	}
 }
 
 static void ril_sim_file_info_cb(GRilIoChannel *io, int status,
@@ -295,17 +374,14 @@ static void ril_sim_file_info_cb(GRilIoChannel *io, int status,
 	struct ril_sim_cbd *cbd = user_data;
 	ofono_sim_file_info_cb_t cb = cbd->cb.file_info;
 	struct ril_sim *sd = cbd->sd;
+	struct ril_sim_io_response *res = NULL;
 	struct ofono_error error;
-	gboolean ok = FALSE;
-	int sw1 = 0, sw2 = 0, response_len = 0;
-	int flen = 0, rlen = 0, str = 0;
-	guchar *response = NULL;
-	guchar access[3] = { 0x00, 0x00, 0x00 };
-	guchar file_status = EF_STATUS_VALID;
 
 	DBG_(sd, "");
 
-	/* In case sim card has been removed prior to this callback has been
+
+	/*
+	 * In case sim card has been removed prior to this callback has been
 	 * called we must not call the core call back method as otherwise the
 	 * core will crash.
 	 */
@@ -314,78 +390,66 @@ static void ril_sim_file_info_cb(GRilIoChannel *io, int status,
 		return;
 	}
 
-	error.error = 0;
-	error.type = OFONO_ERROR_TYPE_FAILURE;
-	if (status != RIL_E_SUCCESS) {
-		goto error;
-	}
+	ril_error_init_failure(&error);
+	res = ril_sim_parse_io_response(data, len);
+	if (ril_sim_io_response_ok(res) && status == RIL_E_SUCCESS) {
+		gboolean ok = FALSE;
+		guchar access[3] = { 0x00, 0x00, 0x00 };
+		guchar file_status = EF_STATUS_VALID;
+		int flen = 0, rlen = 0, str = 0;
 
-	if ((response = ril_sim_parse_io_response(data, len,
-					&sw1, &sw2, &response_len)) == NULL) {
-		ofono_error("Can't parse SIM IO response");
-		goto error;
-	}
-
-	if ((sw1 != 0x90 && sw1 != 0x91 && sw1 != 0x92 && sw1 != 0x9f) ||
-		(sw1 == 0x90 && sw2 != 0x00)) {
-		ofono_error("Invalid values: sw1: %02x sw2: %02x", sw1, sw2);
-		error.type = OFONO_ERROR_TYPE_SIM;
-		error.error = (sw1 << 8) | sw2;
-		goto error;
-	}
-
-	if (response_len) {
-		if (response[0] == 0x62) {
-			ok = sim_parse_3g_get_response(
-				response, response_len,
-				&flen, &rlen, &str, access, NULL);
-		} else {
-			ok = sim_parse_2g_get_response(
-				response, response_len,
-				&flen, &rlen, &str, access, &file_status);
+		if (res->data_len) {
+			if (res->data[0] == 0x62) {
+				ok = sim_parse_3g_get_response(res->data,
+					res->data_len, &flen, &rlen, &str,
+					access, NULL);
+			} else {
+				ok = sim_parse_2g_get_response(res->data,
+					res->data_len, &flen, &rlen, &str,
+					access, &file_status);
+			}
 		}
+
+		if (ok) {
+			/* Success */
+			cb(ril_error_ok(&error), flen, str, rlen, access,
+				file_status, cbd->data);
+			ril_sim_io_response_free(res);
+			return;
+		} else {
+			ofono_error("file info parse error");
+		}
+	} else if (res) {
+		ril_error_init_sim_error(&error, res->sw1, res->sw2);
 	}
 
-	if (!ok) {
-		ofono_error("%s parse response failed", __func__);
-		goto error;
-	}
-
-	error.type = OFONO_ERROR_TYPE_NO_ERROR;
-	cb(&error, flen, str, rlen, access, file_status, cbd->data);
-	g_free(response);
-	return;
-
-error:
 	cb(&error, -1, -1, -1, NULL, EF_STATUS_INVALIDATED, cbd->data);
-	g_free(response);
+	ril_sim_io_response_free(res);
 }
 
-static guint ril_sim_request_io(struct ril_sim *sd, GRilIoQueue *q, int fileid,
-		guint cmd, guint p1, guint p2, guint p3, const guchar *path,
-		unsigned int path_len, GRilIoChannelResponseFunc cb,
-		struct ril_sim_cbd *cbd)
+static void ril_sim_request_io(struct ril_sim *sd, guint cmd, int fileid,
+		guint p1, guint p2, guint p3, const char *hex_data,
+		const guchar *path, guint path_len,
+		GRilIoChannelResponseFunc cb, struct ril_sim_cbd *cbd)
 {
-	guint id;
-	GRilIoRequest *req = grilio_request_sized_new(80);
+	GRilIoRequest *req = grilio_request_new();
 
-	DBG_(sd, "cmd=0x%.2X,efid=0x%.4X,%d,%d,%d,(null),pin2=(null),aid=%s",
-		cmd, fileid, p1, p2, p3, ril_sim_app_id(sd));
+	DBG_(sd, "cmd=0x%.2X,efid=0x%.4X,%d,%d,%d,%s,pin2=(null),aid=%s",
+			cmd, fileid, p1, p2, p3, hex_data, ril_sim_app_id(sd));
 
 	grilio_request_append_int32(req, cmd);
 	grilio_request_append_int32(req, fileid);
 	ril_sim_append_path(sd, req, fileid, path, path_len);
-	grilio_request_append_int32(req, p1);   /* P1 */
-	grilio_request_append_int32(req, p2);   /* P2 */
-	grilio_request_append_int32(req, p3);   /* P3 */
-	grilio_request_append_utf8(req, NULL);  /* data; only for writes */
-	grilio_request_append_utf8(req, NULL);  /* pin2; only for writes */
+	grilio_request_append_int32(req, p1);       /* P1 */
+	grilio_request_append_int32(req, p2);       /* P2 */
+	grilio_request_append_int32(req, p3);       /* P3 */
+	grilio_request_append_utf8(req, hex_data);  /* data; only for writes */
+	grilio_request_append_utf8(req, NULL);      /* pin2; only for writes */
 	grilio_request_append_utf8(req, ril_sim_app_id(sd));
 
-	id = grilio_queue_send_request_full(q, req, RIL_REQUEST_SIM_IO,
+	grilio_queue_send_request_full(sd->q, req, RIL_REQUEST_SIM_IO,
 					cb, ril_sim_cbd_free, cbd);
 	grilio_request_unref(req);
-	return id;
 }
 
 static void ril_sim_ofono_read_file_info(struct ofono_sim *sim, int fileid,
@@ -393,14 +457,8 @@ static void ril_sim_ofono_read_file_info(struct ofono_sim *sim, int fileid,
 		ofono_sim_file_info_cb_t cb, void *data)
 {
 	struct ril_sim *sd = ril_sim_get_data(sim);
-
-	if (!sd || !ril_sim_request_io(sd, sd->q, fileid, CMD_GET_RESPONSE,
-			0, 0, 15, path, len, ril_sim_file_info_cb,
-					ril_sim_cbd_new(sd, cb, data))) {
-		struct ofono_error error;
-		cb(ril_error_failure(&error), -1, -1, -1, NULL,
-			EF_STATUS_INVALIDATED, data);
-	}
+	ril_sim_request_io(sd, CMD_GET_RESPONSE, fileid, 0, 0, 15, NULL,
+		path, len, ril_sim_file_info_cb, ril_sim_cbd_new(sd, cb, data));
 }
 
 static void ril_sim_read_cb(GRilIoChannel *io, int status,
@@ -408,68 +466,114 @@ static void ril_sim_read_cb(GRilIoChannel *io, int status,
 {
 	struct ril_sim_cbd *cbd = user_data;
 	ofono_sim_read_cb_t cb = cbd->cb.read;
-	struct ofono_error error;
-	int sw1 = 0, sw2 = 0, response_len = 0;
-	guchar *response = NULL;
+	struct ril_sim_io_response *res;
+	struct ofono_error err;
 
 	DBG_(cbd->sd, "");
-	if (status != RIL_E_SUCCESS) {
-		ofono_error("Error: %s", ril_error_to_string(status));
-		goto error;
+	res = ril_sim_parse_io_response(data, len);
+	if (ril_sim_io_response_ok(res) && status == RIL_E_SUCCESS) {
+		cb(ril_error_ok(&err), res->data, res->data_len, cbd->data);
+	} else if (res) {
+		cb(ril_error_sim(&err, res->sw1, res->sw2), NULL, 0, cbd->data);
+	} else {
+		cb(ril_error_failure(&err), NULL, 0, cbd->data);
 	}
-
-	if ((response = ril_sim_parse_io_response(data, len,
-					&sw1, &sw2, &response_len)) == NULL) {
-		ofono_error("Error parsing IO response");
-		goto error;
-	}
-
-	cb(ril_error_ok(&error), response, response_len, cbd->data);
-	g_free(response);
-	return;
-
-error:
-	cb(ril_error_failure(&error), NULL, 0, cbd->data);
+	ril_sim_io_response_free(res);
 }
 
-static void ril_sim_read(struct ril_sim *sd, GRilIoQueue *q, int fileid,
-		guint cmd, guint p1, guint p2, guint p3, const guchar *path,
-		unsigned int path_len, ofono_sim_read_cb_t cb, void *data)
+static void ril_sim_read(struct ofono_sim *sim, guint cmd, int fileid,
+		guint p1, guint p2, guint p3, const guchar *path,
+		guint path_len, ofono_sim_read_cb_t cb, void *data)
 {
-	if (!sd || !ril_sim_request_io(sd, q, fileid, cmd, p1, p2, p3, path,
-		path_len, ril_sim_read_cb, ril_sim_cbd_new(sd, cb, data))) {
-		struct ofono_error error;
-		cb(ril_error_failure(&error), NULL, 0, data);
-	}
+	struct ril_sim *sd = ril_sim_get_data(sim);
+	ril_sim_request_io(sd, cmd, fileid, p1, p2, p3, NULL, path, path_len,
+			ril_sim_read_cb, ril_sim_cbd_new(sd, cb, data));
 }
 
 static void ril_sim_ofono_read_file_transparent(struct ofono_sim *sim,
 		int fileid, int start, int length, const unsigned char *path,
 		unsigned int path_len, ofono_sim_read_cb_t cb, void *data)
 {
-	struct ril_sim *sd = ril_sim_get_data(sim);
-
-	ril_sim_read(sd, sd->q, fileid, CMD_READ_BINARY, (start >> 8),
-			(start & 0xff), length, path, path_len, cb, data);
+	ril_sim_read(sim, CMD_READ_BINARY, fileid, (start >> 8), (start & 0xff),
+					length, path, path_len, cb, data);
 }
 
 static void ril_sim_ofono_read_file_linear(struct ofono_sim *sim, int fileid,
 		int record, int length, const unsigned char *path,
 		unsigned int path_len, ofono_sim_read_cb_t cb, void *data)
 {
-	struct ril_sim *sd = ril_sim_get_data(sim);
-
-	ril_sim_read(sd, sd->q, fileid, CMD_READ_RECORD, record, 4, length,
-						path, path_len, cb, data);
+	ril_sim_read(sim, CMD_READ_RECORD, fileid, record, MODE_ABSOLUTE,
+					length, path, path_len, cb, data);
 }
 
 static void ril_sim_ofono_read_file_cyclic(struct ofono_sim *sim, int fileid,
-		int rec, int length, const unsigned char *path,
+		int record, int length, const unsigned char *path,
 		unsigned int path_len, ofono_sim_read_cb_t cb, void *data)
 {
-	/* Hmmm... Is this right? */
-	ril_sim_ofono_read_file_linear(sim, fileid, rec, length, path, path_len,
-								cb, data);
+	ril_sim_read(sim, CMD_READ_RECORD, fileid, record, MODE_ABSOLUTE,
+					length, path, path_len, cb, data);
+}
+
+static void ril_sim_write_cb(GRilIoChannel *io, int status,
+				const void *data, guint len, void *user_data)
+{
+	struct ril_sim_cbd *cbd = user_data;
+	ofono_sim_write_cb_t cb = cbd->cb.write;
+	struct ril_sim_io_response *res;
+	struct ofono_error err;
+
+	DBG_(cbd->sd, "");
+	res = ril_sim_parse_io_response(data, len);
+	if (ril_sim_io_response_ok(res) && status == RIL_E_SUCCESS) {
+		cb(ril_error_ok(&err), cbd->data);
+	} else if (res) {
+		cb(ril_error_sim(&err, res->sw1, res->sw2), cbd->data);
+	} else {
+		cb(ril_error_failure(&err), cbd->data);
+	}
+	ril_sim_io_response_free(res);
+}
+
+static void ril_sim_write(struct ofono_sim *sim, guint cmd, int fileid,
+			guint p1, guint p2, guint length, const void *value,
+			const guchar *path, guint path_len,
+			ofono_sim_write_cb_t cb, void *data)
+{
+	struct ril_sim *sd = ril_sim_get_data(sim);
+	char *hex_data = encode_hex(value, length, 0);
+	ril_sim_request_io(sd, cmd, fileid, p1, p2, length, hex_data, path,
+		path_len, ril_sim_write_cb, ril_sim_cbd_new(sd, cb, data));
+	g_free(hex_data);
+}
+
+static void ril_sim_write_file_transparent(struct ofono_sim *sim, int fileid,
+			int start, int length, const unsigned char *value,
+			const unsigned char *path, unsigned int path_len,
+			ofono_sim_write_cb_t cb, void *data)
+{
+	ril_sim_write(sim, CMD_UPDATE_BINARY, fileid,
+				(start >> 8), (start & 0xff), length, value,
+				path, path_len, cb, data);
+}
+
+static void ril_sim_write_file_linear(struct ofono_sim *sim, int fileid,
+			int record, int length, const unsigned char *value,
+			const unsigned char *path, unsigned int path_len,
+			ofono_sim_write_cb_t cb, void *data)
+{
+	ril_sim_write(sim, CMD_UPDATE_RECORD, fileid,
+				record, MODE_ABSOLUTE, length, value,
+				path, path_len, cb, data);
+}
+
+static void ril_sim_write_file_cyclic(struct ofono_sim *sim, int fileid,
+			int length, const unsigned char *value,
+			const unsigned char *path, unsigned int path_len,
+			ofono_sim_write_cb_t cb, void *data)
+{
+	ril_sim_write(sim, CMD_UPDATE_RECORD, fileid,
+				0, MODE_PREVIOUS, length, value,
+				path, path_len, cb, data);
 }
 
 static void ril_sim_get_imsi_cb(GRilIoChannel *io, int status,
@@ -669,7 +773,7 @@ static int ril_sim_parse_retry_count(const void *data, guint len)
 	return retry_count;
 }
 
-static GRilIoRequest *ril_sim_enter_sim_req(struct ril_sim *sd, const char* pw)
+static GRilIoRequest *ril_sim_enter_sim_req(struct ril_sim *sd, const char *pw)
 {
 	const char *app_id = ril_sim_app_id(sd);
 	if (app_id) {
@@ -1202,6 +1306,9 @@ const struct ofono_sim_driver ril_sim_driver = {
 	.read_file_transparent  = ril_sim_ofono_read_file_transparent,
 	.read_file_linear       = ril_sim_ofono_read_file_linear,
 	.read_file_cyclic       = ril_sim_ofono_read_file_cyclic,
+	.write_file_transparent = ril_sim_write_file_transparent,
+	.write_file_linear      = ril_sim_write_file_linear,
+	.write_file_cyclic      = ril_sim_write_file_cyclic,
 	.read_imsi              = ril_sim_read_imsi,
 	.query_passwd_state     = ril_sim_query_passwd_state,
 	.send_passwd            = ril_sim_pin_send,
@@ -1210,14 +1317,6 @@ const struct ofono_sim_driver ril_sim_driver = {
 	.change_passwd          = ril_sim_change_passwd,
 	.query_pin_retries      = ril_sim_query_pin_retries,
 	.query_facility_lock    = ril_sim_query_facility_lock
-/*
- * TODO: Implementing SIM write file IO support requires
- * the following functions to be defined.
- *
- *	.write_file_transparent	= ril_sim_update_binary,
- *	.write_file_linear	= ril_sim_update_record,
- *	.write_file_cyclic	= ril_sim_update_cyclic,
- */
 };
 
 /*
