@@ -3282,8 +3282,6 @@ ofono_bool_t __ofono_is_valid_sim_pin(const char *pin,
 		return is_valid_pin(pin, 8, 8);
 		break;
 	case OFONO_SIM_PASSWORD_NONE:
-		return is_valid_pin(pin, 0, 8);
-		break;
 	case OFONO_SIM_PASSWORD_INVALID:
 		break;
 	}
