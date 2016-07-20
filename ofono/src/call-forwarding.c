@@ -60,6 +60,7 @@ struct ofono_call_forwarding {
 	GSList *cf_conditions[4];
 	int flags;
 	DBusMessage *pending;
+	GSList *pending_get_prop;
 	int query_next;
 	int query_end;
 	struct cf_ss_request *ss_req;
@@ -529,6 +530,14 @@ static DBusMessage *cf_get_properties_reply(DBusMessage *msg,
 	return reply;
 }
 
+static void cf_send_properties(gpointer data, gpointer user_data)
+{
+	DBusMessage *msg = data;
+	DBusMessage *reply = cf_get_properties_reply(msg, user_data);
+
+	__ofono_dbus_pending_reply(&msg, reply);
+}
+
 static void get_query_cf_callback(const struct ofono_error *error, int total,
 			const struct ofono_call_forwarding_condition *list,
 			void *data)
@@ -549,8 +558,9 @@ static void get_query_cf_callback(const struct ofono_error *error, int total,
 	}
 
 	if (cf->query_next == CALL_FORWARDING_TYPE_NOT_REACHABLE) {
-		__ofono_dbus_pending_reply(&cf->pending,
-				cf_get_properties_reply(cf->pending, cf));
+		g_slist_foreach(cf->pending_get_prop, cf_send_properties, cf);
+		g_slist_free(cf->pending_get_prop);
+		cf->pending_get_prop = NULL;
 		return;
 	}
 
@@ -577,11 +587,18 @@ static DBusMessage *cf_get_properties(DBusConnection *conn, DBusMessage *msg,
 	if (cf->driver->query == NULL)
 		return __ofono_error_not_implemented(msg);
 
+	if (cf->pending_get_prop) {
+		/* GetProperties is already in progress */
+		cf->pending_get_prop = g_slist_append(cf->pending_get_prop,
+							dbus_message_ref(msg));
+		return NULL;
+	}
+
 	if (__ofono_call_forwarding_is_busy(cf) ||
 			__ofono_ussd_is_busy(cf->ussd))
 		return __ofono_error_busy(msg);
 
-	cf->pending = dbus_message_ref(msg);
+	cf->pending_get_prop = g_slist_append(NULL, dbus_message_ref(msg));
 	cf->query_next = 0;
 
 	get_query_next_cf_cond(cf);
@@ -1268,7 +1285,7 @@ static void cf_unregister_ss_controls(struct ofono_call_forwarding *cf)
 
 gboolean __ofono_call_forwarding_is_busy(struct ofono_call_forwarding *cf)
 {
-	return cf->pending ? TRUE : FALSE;
+	return cf->pending || cf->pending_get_prop;
 }
 
 static void sim_cfis_read_cb(int ok, int total_length, int record,
@@ -1378,12 +1395,24 @@ static void sim_cphs_cff_read_cb(int ok, int total_length, int record,
 					DBUS_TYPE_BOOLEAN, &cfu_voice);
 }
 
+static void cf_cancel_get_prop(gpointer data)
+{
+	DBusMessage *msg = data;
+
+	__ofono_dbus_pending_reply(&msg, __ofono_error_canceled(msg));
+}
+
 static void call_forwarding_unregister(struct ofono_atom *atom)
 {
 	struct ofono_call_forwarding *cf = __ofono_atom_get_data(atom);
 	const char *path = __ofono_atom_get_path(cf->atom);
 	DBusConnection *conn = ofono_dbus_get_connection();
 	struct ofono_modem *modem = __ofono_atom_get_modem(cf->atom);
+
+	if (cf->pending_get_prop) {
+		g_slist_free_full(cf->pending_get_prop, cf_cancel_get_prop);
+		cf->pending_get_prop = NULL;
+	}
 
 	ofono_modem_remove_interface(modem, OFONO_CALL_FORWARDING_INTERFACE);
 	g_dbus_unregister_interface(conn, path,
