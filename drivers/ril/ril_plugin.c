@@ -45,6 +45,7 @@
 #define RILMODEM_CONF_FILE          CONFIGDIR "/ril_subscription.conf"
 #define RILMODEM_DEFAULT_SOCK       "/dev/socket/rild"
 #define RILMODEM_DEFAULT_SOCK2      "/dev/socket/rild2"
+#define RILMODEM_DEFAULT_SUB        "SUB1"
 #define RILMODEM_DEFAULT_4G         TRUE /* 4G is on by default */
 #define RILMODEM_DEFAULT_SLOT       0xffffffff
 #define RILMODEM_DEFAULT_TIMEOUT    0 /* No timeout */
@@ -1058,10 +1059,13 @@ static GSList *ril_plugin_create_default_config()
 				ril_plugin_slot_new(RILMODEM_DEFAULT_SOCK2,
 					RILCONF_PATH_PREFIX "1", "RIL2", 1));
 		} else {
-			DBG("Falling back to default single SIM config");
-			list = g_slist_append(list,
+			struct ril_slot * slot =
 				ril_plugin_slot_new(RILMODEM_DEFAULT_SOCK,
-					RILCONF_PATH_PREFIX "0", "", 0));
+					RILCONF_PATH_PREFIX "0", "RIL", 0);
+
+			DBG("Falling back to default single SIM config");
+			slot->sub = g_strdup(RILMODEM_DEFAULT_SUB);
+			list = g_slist_append(list, slot);
 		}
 	} else {
 		DBG("No default config");
