@@ -1454,7 +1454,7 @@ static void ril_query_facility_lock(struct ofono_sim *sim,
 					void *data)
 {
 	struct sim_data *sd = ofono_sim_get_data(sim);
-	struct cb_data *cbd = cb_data_new(cb, data, sim);
+	struct cb_data *cbd = cb_data_new(cb, data, sd);
 	struct parcel rilp;
 
 	parcel_init(&rilp);
