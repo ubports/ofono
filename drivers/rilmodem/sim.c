@@ -1125,43 +1125,6 @@ static void ril_enter_sim_pin_cb(struct ril_msg *message, gpointer user_data)
 	send_get_sim_status(sim);
 }
 
-static void ril_set_facility_lock_cb(struct ril_msg *message, gpointer user_data)
-{
-	struct cb_data *cbd = user_data;
-	ofono_sim_lock_unlock_cb_t cb = cbd->cb;
-	struct ofono_sim *sim = cbd->user;
-	struct sim_data *sd = ofono_sim_get_data(sim);
-	struct parcel rilp;
-
-	/*
-	 * There is no reason to ask SIM status until
-	 * unsolicited sim status change indication
-	 * Looks like state does not change before that.
-	 */
-	DBG("Enter password: type %d, result %d",
-				sd->passwd_type, message->error);
-
-	g_ril_init_parcel(message, &rilp);
-
-	parcel_r_int32(&rilp);
-
-	if (message->error == RIL_E_SUCCESS)
-		sd->retries[sd->passwd_type] = -1;
-	else
-		sd->retries[sd->passwd_type] = parcel_r_int32(&rilp);
-
-	g_ril_append_print_buf(sd->ril, "{%d}",
-				sd->retries[sd->passwd_type]);
-	g_ril_print_response(sd->ril, message);
-
-	if (message->error == RIL_E_SUCCESS) {
-		CALLBACK_WITH_SUCCESS(cb, cbd->data);
-		return;
-	}
-
-	CALLBACK_WITH_FAILURE(cb, cbd->data);
-}
-
 static void ril_pin_send(struct ofono_sim *sim, const char *passwd,
 				ofono_sim_lock_unlock_cb_t cb, void *data)
 {
@@ -1204,6 +1167,44 @@ static const char *const clck_cpwd_fac[] = {
 };
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+
+static void ril_set_facility_lock_cb(struct ril_msg *message,
+							gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_sim_lock_unlock_cb_t cb = cbd->cb;
+	struct ofono_sim *sim = cbd->user;
+	struct sim_data *sd = ofono_sim_get_data(sim);
+	struct parcel rilp;
+
+	/*
+	 * There is no reason to ask SIM status until
+	 * unsolicited sim status change indication
+	 * Looks like state does not change before that.
+	 */
+	DBG("Enter password: type %d, result %d",
+				sd->passwd_type, message->error);
+
+	g_ril_init_parcel(message, &rilp);
+
+	parcel_r_int32(&rilp);
+
+	if (message->error == RIL_E_SUCCESS)
+		sd->retries[sd->passwd_type] = -1;
+	else
+		sd->retries[sd->passwd_type] = parcel_r_int32(&rilp);
+
+	g_ril_append_print_buf(sd->ril, "{%d}",
+				sd->retries[sd->passwd_type]);
+	g_ril_print_response(sd->ril, message);
+
+	if (message->error == RIL_E_SUCCESS) {
+		CALLBACK_WITH_SUCCESS(cb, cbd->data);
+		return;
+	}
+
+	CALLBACK_WITH_FAILURE(cb, cbd->data);
+}
 
 static void ril_set_facility_lock(struct ofono_sim *sim,
 				enum ofono_sim_password_type passwd_type,
