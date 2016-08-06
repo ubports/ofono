@@ -1125,37 +1125,6 @@ static void ril_enter_sim_pin_cb(struct ril_msg *message, gpointer user_data)
 	send_get_sim_status(sim);
 }
 
-static void ril_enter_sim_puk_cb(struct ril_msg *message, gpointer user_data)
-{
-	struct cb_data *cbd = user_data;
-	ofono_sim_lock_unlock_cb_t cb = cbd->cb;
-	struct ofono_sim *sim = cbd->user;
-	struct sim_data *sd = ofono_sim_get_data(sim);
-	struct parcel rilp;
-
-	g_ril_init_parcel(message, &rilp);
-
-	parcel_r_int32(&rilp);
-
-	if (message->error != RIL_E_SUCCESS) {
-		sd->retries[OFONO_SIM_PASSWORD_SIM_PUK] = parcel_r_int32(&rilp);
-	} else {
-		sd->retries[OFONO_SIM_PASSWORD_SIM_PIN] = -1;
-		sd->retries[OFONO_SIM_PASSWORD_SIM_PUK] = -1;
-	}
-
-	g_ril_append_print_buf(sd->ril, "{%d}",
-				sd->retries[OFONO_SIM_PASSWORD_SIM_PUK]);
-	g_ril_print_response(sd->ril, message);
-
-	if (message->error == RIL_E_SUCCESS) {
-		CALLBACK_WITH_SUCCESS(cb, cbd->data);
-		return;
-	}
-
-	CALLBACK_WITH_FAILURE(cb, cbd->data);
-}
-
 static void ril_set_facility_lock_cb(struct ril_msg *message, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
@@ -1274,6 +1243,37 @@ static void ril_set_facility_lock(struct ofono_sim *sim,
 	g_free(cbd);
 error:
 	CALLBACK_WITH_FAILURE(cb, data);
+}
+
+static void ril_enter_sim_puk_cb(struct ril_msg *message, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_sim_lock_unlock_cb_t cb = cbd->cb;
+	struct ofono_sim *sim = cbd->user;
+	struct sim_data *sd = ofono_sim_get_data(sim);
+	struct parcel rilp;
+
+	g_ril_init_parcel(message, &rilp);
+
+	parcel_r_int32(&rilp);
+
+	if (message->error != RIL_E_SUCCESS) {
+		sd->retries[OFONO_SIM_PASSWORD_SIM_PUK] = parcel_r_int32(&rilp);
+	} else {
+		sd->retries[OFONO_SIM_PASSWORD_SIM_PIN] = -1;
+		sd->retries[OFONO_SIM_PASSWORD_SIM_PUK] = -1;
+	}
+
+	g_ril_append_print_buf(sd->ril, "{%d}",
+				sd->retries[OFONO_SIM_PASSWORD_SIM_PUK]);
+	g_ril_print_response(sd->ril, message);
+
+	if (message->error == RIL_E_SUCCESS) {
+		CALLBACK_WITH_SUCCESS(cb, cbd->data);
+		return;
+	}
+
+	CALLBACK_WITH_FAILURE(cb, cbd->data);
 }
 
 static void ril_pin_send_puk(struct ofono_sim *sim,
