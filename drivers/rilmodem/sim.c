@@ -1176,23 +1176,6 @@ static void ril_pin_send(struct ofono_sim *sim, const char *passwd,
 	CALLBACK_WITH_FAILURE(cb, data);
 }
 
-static void enter_pin_done(const struct ofono_error *error, void *data)
-{
-	struct change_state_cbd *csd = data;
-	struct sim_data *sd = ofono_sim_get_data(csd->sim);
-
-	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
-		ofono_error("%s: wrong password", __func__);
-		sd->unlock_pending = FALSE;
-		CALLBACK_WITH_FAILURE(csd->cb, csd->data);
-	} else {
-		ril_pin_change_state(csd->sim, csd->passwd_type, csd->enable,
-					csd->passwd, csd->cb, csd->data);
-	}
-
-	g_free(csd);
-}
-
 static const char *const clck_cpwd_fac[] = {
 	[OFONO_SIM_PASSWORD_SIM_PIN] = "SC",
 	[OFONO_SIM_PASSWORD_SIM_PIN2] = "P2",
@@ -1214,28 +1197,6 @@ static void ril_pin_change_state(struct ofono_sim *sim,
 	struct sim_data *sd = ofono_sim_get_data(sim);
 	struct cb_data *cbd;
 	struct parcel rilp;
-
-	/*
-	 * If we want to unlock a password that has not been entered yet,
-	 * we enter it before trying to unlock. We need sd->unlock_pending as
-	 * the password still has not yet been refreshed when this function is
-	 * called from enter_pin_done().
-	 */
-	if (ofono_sim_get_password_type(sim) == passwd_type
-			&& enable == FALSE && sd->unlock_pending == FALSE) {
-		struct change_state_cbd *csd = g_malloc0(sizeof(*csd));
-		csd->sim = sim;
-		csd->passwd_type = passwd_type;
-		csd->enable = enable;
-		csd->passwd = passwd;
-		csd->cb = cb;
-		csd->data = data;
-		sd->unlock_pending = TRUE;
-
-		ril_pin_send(sim, passwd, enter_pin_done, csd);
-
-		return;
-	}
 
 	sd->unlock_pending = FALSE;
 
