@@ -2607,31 +2607,48 @@ static void sim_set_locked_pin(struct ofono_sim *sim,
 	g_strfreev(locked_pins);
 }
 
-static void sim_query_fac_imsilock_cb(const struct ofono_error *error,
+static void sim_query_fac_pinlock_cb(const struct ofono_error *error,
 				ofono_bool_t status, void *data)
 {
-	if (error->type != OFONO_ERROR_TYPE_NO_ERROR)
-		return;
+	struct ofono_sim *sim = data;
 
-	sim_set_locked_pin(data, OFONO_SIM_PASSWORD_PHSIM_PIN, status);
+	if (error->type != OFONO_ERROR_TYPE_NO_ERROR)
+		goto done;
+
+	sim_set_locked_pin(data, OFONO_SIM_PASSWORD_SIM_PIN, status);
+
+done:
+	sim_initialize(sim);
 }
 
 static void sim_query_fac_networklock_cb(const struct ofono_error *error,
 				ofono_bool_t status, void *data)
 {
+	struct ofono_sim *sim = data;
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR)
-		return;
+		goto done;
 
 	sim_set_locked_pin(data, OFONO_SIM_PASSWORD_PHNET_PIN, status);
+
+done:
+	sim->driver->query_facility_lock(sim,
+					OFONO_SIM_PASSWORD_SIM_PIN,
+					sim_query_fac_pinlock_cb, sim);
 }
 
-static void sim_query_fac_pinlock_cb(const struct ofono_error *error,
+static void sim_query_fac_imsilock_cb(const struct ofono_error *error,
 				ofono_bool_t status, void *data)
 {
+	struct ofono_sim *sim = data;
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR)
-		return;
+		goto done;
 
-	sim_set_locked_pin(data, OFONO_SIM_PASSWORD_SIM_PIN, status);
+	sim_set_locked_pin(data, OFONO_SIM_PASSWORD_PHSIM_PIN, status);
+
+done:
+	sim->driver->query_facility_lock(sim,
+					OFONO_SIM_PASSWORD_PHNET_PIN,
+					sim_query_fac_networklock_cb, sim);
 }
 
 void ofono_sim_inserted_notify(struct ofono_sim *sim, ofono_bool_t inserted)
@@ -2665,16 +2682,9 @@ void ofono_sim_inserted_notify(struct ofono_sim *sim, ofono_bool_t inserted)
 					OFONO_SIM_PASSWORD_PHSIM_PIN,
 					sim_query_fac_imsilock_cb, sim);
 
-			sim->driver->query_facility_lock(sim,
-					OFONO_SIM_PASSWORD_PHNET_PIN,
-					sim_query_fac_networklock_cb, sim);
-
-			sim->driver->query_facility_lock(sim,
-					OFONO_SIM_PASSWORD_SIM_PIN,
-					sim_query_fac_pinlock_cb, sim);
+		} else {
+			sim_initialize(sim);
 		}
-
-		sim_initialize(sim);
 	} else {
 		sim->pin_type = OFONO_SIM_PASSWORD_NONE;
 
