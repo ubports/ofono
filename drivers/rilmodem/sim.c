@@ -1425,11 +1425,16 @@ static void ril_query_facility_lock_cb(struct ril_msg *message,
 	struct sim_data *sd = cbd->user;
 	struct parcel rilp;
 	ofono_bool_t status;
+	int numparams;
 
 	if (message->error != RIL_E_SUCCESS)
 		goto error;
 
 	g_ril_init_parcel(message, &rilp);
+
+	numparams = parcel_r_int32(&rilp);
+	if (numparams < 1)
+		goto error;
 
 	status = (ofono_bool_t) parcel_r_int32(&rilp);
 
