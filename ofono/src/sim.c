@@ -2511,13 +2511,6 @@ static void sim_spn_close(struct ofono_sim *sim)
 
 static void sim_free_main_state(struct ofono_sim *sim)
 {
-	int i;
-
-	for (i = 0; i < OFONO_SIM_PASSWORD_INVALID; i++)
-		sim->pin_retries[i] = -1;
-
-	memset(sim->locked_pins, 0, sizeof(sim->locked_pins));
-
 	if (sim->imsi) {
 		g_free(sim->imsi);
 		sim->imsi = NULL;
@@ -2688,7 +2681,24 @@ void ofono_sim_inserted_notify(struct ofono_sim *sim, ofono_bool_t inserted)
 			sim_initialize(sim);
 		}
 	} else {
-		sim->pin_type = OFONO_SIM_PASSWORD_NONE;
+		switch (sim->pin_type) {
+		case OFONO_SIM_PASSWORD_SIM_PIN:
+		case OFONO_SIM_PASSWORD_SIM_PUK:
+		case OFONO_SIM_PASSWORD_SIM_PIN2:
+		case OFONO_SIM_PASSWORD_SIM_PUK2:
+			sim->pin_type = OFONO_SIM_PASSWORD_NONE;
+			break;
+		default:
+			break;
+		}
+
+		sim->locked_pins[OFONO_SIM_PASSWORD_SIM_PIN] = FALSE;
+		sim->locked_pins[OFONO_SIM_PASSWORD_SIM_PIN2] = FALSE;
+
+		sim->pin_retries[OFONO_SIM_PASSWORD_SIM_PIN] = -1;
+		sim->pin_retries[OFONO_SIM_PASSWORD_SIM_PUK] = -1;
+		sim->pin_retries[OFONO_SIM_PASSWORD_SIM_PIN2] = -1;
+		sim->pin_retries[OFONO_SIM_PASSWORD_SIM_PUK2] = -1;
 
 		sim_free_state(sim);
 	}
