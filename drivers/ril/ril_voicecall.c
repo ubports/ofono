@@ -650,20 +650,11 @@ static void ril_voicecall_clear_dtmf_queue(struct ril_voicecall *vd)
 	}
 }
 
-static void ril_voicecall_clcc_poll_on_success(GRilIoChannel *io,
-		int status, const void *data, guint len, void *user_data)
-{
-	if (status == RIL_E_SUCCESS) {
-		ril_voicecall_clcc_poll((struct ril_voicecall *)user_data);
-	}
-}
-
 static void ril_voicecall_create_multiparty(struct ofono_voicecall *vc,
 			ofono_voicecall_cb_t cb, void *data)
 {
-	struct ril_voicecall *vd = ril_voicecall_get_data(vc);
-	grilio_queue_send_request_full(vd->q, NULL, RIL_REQUEST_CONFERENCE,
-			ril_voicecall_clcc_poll_on_success, NULL, vd);
+	ril_voicecall_request(RIL_REQUEST_CONFERENCE,
+			vc, 0, NULL, cb, data);
 }
 
 static void ril_voicecall_transfer(struct ofono_voicecall *vc,
@@ -676,14 +667,17 @@ static void ril_voicecall_transfer(struct ofono_voicecall *vc,
 static void ril_voicecall_private_chat(struct ofono_voicecall *vc, int id,
 			ofono_voicecall_cb_t cb, void *data)
 {
-	struct ril_voicecall *vd = ril_voicecall_get_data(vc);
 	GRilIoRequest *req = grilio_request_sized_new(8);
+	struct ofono_error error;
+
+	DBG("Private chat with id %d", id);
 	grilio_request_append_int32(req, 1);
 	grilio_request_append_int32(req, id);
-	grilio_queue_send_request_full(vd->q, req,
-				RIL_REQUEST_SEPARATE_CONNECTION,
-				ril_voicecall_clcc_poll_on_success, NULL, vd);
+
+	ril_voicecall_request(RIL_REQUEST_SEPARATE_CONNECTION,
+			vc, 0, req, NULL, NULL);
 	grilio_request_unref(req);
+	cb(ril_error_ok(&error), data);
 }
 
 static void ril_voicecall_swap_without_accept(struct ofono_voicecall *vc,
