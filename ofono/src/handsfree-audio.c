@@ -203,7 +203,7 @@ static gboolean sco_accept(GIOChannel *io, GIOCondition cond,
 	send_new_connection(card->path, nsk, card->selected_codec);
 	close(nsk);
 
-	if (card->driver->sco_connected_hint)
+	if (card->driver && card->driver->sco_connected_hint)
 		card->driver->sco_connected_hint(card);
 
 	return TRUE;
