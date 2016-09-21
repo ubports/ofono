@@ -50,17 +50,15 @@ static struct ril_ussd_cbd *ril_ussd_cbd_new(ofono_ussd_cb_t cb, void *data)
 	return cbd;
 }
 
-static void ril_ussd_cb(GRilIoChannel *io, int status,
+static void ril_ussd_cancel_cb(GRilIoChannel *io, int status,
 			const void *data, guint len, void *user_data)
 {
 	struct ofono_error error;
 	struct ril_ussd_cbd *cbd = user_data;
 
-	if (status == RIL_E_SUCCESS) {
-		cbd->cb(ril_error_ok(&error), cbd->data);
-	} else {
-		cbd->cb(ril_error_failure(&error), cbd->data);
-	}
+	/* Always report sucessful completion, otherwise ofono may get
+	 * stuck in the USSD_STATE_ACTIVE state */
+	cbd->cb(ril_error_ok(&error), cbd->data);
 }
 
 static void ril_ussd_request(struct ofono_ussd *ussd, int dcs,
@@ -120,7 +118,8 @@ static void ril_ussd_cancel(struct ofono_ussd *ussd,
 
 	ofono_info("send ussd cancel");
 	grilio_queue_send_request_full(ud->q, NULL, RIL_REQUEST_CANCEL_USSD,
-		ril_ussd_cb, ril_ussd_cbd_free, ril_ussd_cbd_new(cb, data));
+				ril_ussd_cancel_cb, ril_ussd_cbd_free,
+				ril_ussd_cbd_new(cb, data));
 }
 
 static void ril_ussd_notify(GRilIoChannel *io, guint code,
