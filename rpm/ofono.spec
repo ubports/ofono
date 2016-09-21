@@ -18,7 +18,6 @@ Requires(postun): systemd
 BuildRequires:  pkgconfig(glib-2.0)
 BuildRequires:  pkgconfig(dbus-1)
 BuildRequires:  pkgconfig(libudev) >= 145
-BuildRequires:  pkgconfig(bluez) >= 4.85
 BuildRequires:  pkgconfig(mobile-broadband-provider-info)
 BuildRequires:  pkgconfig(libwspcodec) >= 2.0
 BuildRequires:  pkgconfig(libgrilio) >= 1.0.10
