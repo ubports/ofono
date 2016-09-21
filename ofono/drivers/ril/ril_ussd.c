@@ -128,32 +128,32 @@ static void ril_ussd_notify(GRilIoChannel *io, guint code,
 {
 	struct ril_ussd *ud = user_data;
 	GRilIoParser rilp;
-	char *ussd_from_network = NULL;
-	char *type = NULL;
-	int ussdtype = 0;
+	char *type;
+	guint32 n = 0;
 
-	ofono_info("ussd_received");
+	ofono_info("ussd received");
 
 	GASSERT(code == RIL_UNSOL_ON_USSD);
 	grilio_parser_init(&rilp, data, len);
-	grilio_parser_get_uint32(&rilp, NULL);
+	grilio_parser_get_uint32(&rilp, &n);
 	type = grilio_parser_get_utf8(&rilp);
-	ussd_from_network = grilio_parser_get_utf8(&rilp);
 
-	ussdtype = g_ascii_xdigit_value(*type);
+	if (type) {
+		int ussdtype = g_ascii_xdigit_value(*type);
+		char *msg = (n > 1) ? grilio_parser_get_utf8(&rilp) : NULL;
 
-	if (ussd_from_network) {
-		const int data_len = strlen(ussd_from_network);
-		DBG("ussd_received, length %d", data_len);
-		ofono_ussd_notify(ud->ussd, ussdtype, 0xFF,
-			(const unsigned char *) ussd_from_network, data_len);
-	} else {
-		ofono_ussd_notify(ud->ussd, ussdtype, 0, NULL, 0);
+		if (msg) {
+			const int msglen = strlen(msg);
+			DBG("ussd length %d", msglen);
+			ofono_ussd_notify(ud->ussd, ussdtype, 0xFF,
+					  (const unsigned char *)msg, msglen);
+			/* msg is freed by core if dcs is 0xFF */
+		} else {
+			ofono_ussd_notify(ud->ussd, ussdtype, 0, NULL, 0);
+		}
+
+		g_free(type);
 	}
-
-	/* ussd_from_network not freed because core does that if dcs is 0xFF */
-	g_free(type);
-	return;
 }
 
 static gboolean ril_ussd_register(gpointer user_data)
@@ -170,7 +170,7 @@ static gboolean ril_ussd_register(gpointer user_data)
 				ril_ussd_notify, RIL_UNSOL_ON_USSD, ud);
 
 	/* Single-shot */
-	return FALSE;
+	return G_SOURCE_REMOVE;
 }
 
 static int ril_ussd_probe(struct ofono_ussd *ussd, unsigned int vendor,
