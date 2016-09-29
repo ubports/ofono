@@ -57,6 +57,7 @@ struct ril_sim_info_priv {
 	char *sim_spn;
 	char *public_spn;
 	char default_spn[RIL_SIM_DEFAULT_SPN_BUFSIZE];
+	int public_spn_block;
 	struct ofono_sim *sim;
 	struct ril_sim_info_watch state_watch;
 	struct ril_sim_info_watch iccid_watch;
@@ -209,14 +210,18 @@ static void ril_sim_info_set_imsi(struct ril_sim_info *self, const char *imsi)
 static void ril_sim_info_update_public_spn(struct ril_sim_info *self)
 {
 	struct ril_sim_info_priv *priv = self->priv;
-	const char *spn = priv->sim_spn ? priv->sim_spn :
+
+	GASSERT(priv->public_spn_block >= 0);
+	if (!priv->public_spn_block) {
+		const char *spn = priv->sim_spn ? priv->sim_spn :
 				priv->cached_spn ? priv->cached_spn :
 				priv->default_spn;
 
-	if (g_strcmp0(priv->public_spn, spn)) {
-		g_free(priv->public_spn);
-		self->spn = priv->public_spn = g_strdup(spn);
-		ril_sim_info_signal_emit(self, SIGNAL_SPN_CHANGED);
+		if (g_strcmp0(priv->public_spn, spn)) {
+			g_free(priv->public_spn);
+			self->spn = priv->public_spn = g_strdup(spn);
+			ril_sim_info_signal_emit(self, SIGNAL_SPN_CHANGED);
+		}
 	}
 }
 
@@ -226,11 +231,15 @@ static void ril_sim_info_set_cached_spn(struct ril_sim_info *self,
 	struct ril_sim_info_priv *priv = self->priv;
 
 	if (g_strcmp0(priv->cached_spn, spn)) {
-		DBG_(self, "cached spn \"%s\"", spn);
 		g_free(priv->cached_spn);
-		priv->cached_spn = g_strdup(spn);
-		priv->update_imsi_cache = TRUE;
-		ril_sim_info_update_imsi_cache(self);
+		if (spn) {
+			DBG_(self, "cached spn \"%s\"", spn);
+			priv->cached_spn = g_strdup(spn);
+			priv->update_imsi_cache = TRUE;
+			ril_sim_info_update_imsi_cache(self);
+		} else {
+			priv->cached_spn = NULL;
+		}
 		ril_sim_info_update_public_spn(self);
 	}
 }
@@ -505,6 +514,7 @@ void ril_sim_info_set_ofono_sim(struct ril_sim_info *self,
 		struct ril_sim_info_priv *priv = self->priv;
 
 		if (priv->sim != sim) {
+			priv->public_spn_block++;
 			ril_sim_info_watch_remove(&priv->state_watch);
 			ril_sim_info_watch_remove(&priv->iccid_watch);
 			ril_sim_info_watch_remove(&priv->imsi_watch);
@@ -524,9 +534,14 @@ void ril_sim_info_set_ofono_sim(struct ril_sim_info *self,
 				DBG_(self, "attached to sim");
 				ril_sim_info_handle_sim_state(self,
 						ofono_sim_get_state(sim));
+			} else {
+				DBG_(self, "detached from sim");
+				ril_sim_info_update_default_spn(self);
+				ril_sim_info_network_check(self);
 			}
 
-			ril_sim_info_network_check(self);
+			priv->public_spn_block--;
+			ril_sim_info_update_public_spn(self);
 		}
 	}
 }
