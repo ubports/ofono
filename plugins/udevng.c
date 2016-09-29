@@ -330,6 +330,7 @@ static gboolean setup_huawei(struct modem_info *modem)
 		} else if (g_strcmp0(info->label, "pcui") == 0 ||
 				g_strcmp0(info->interface, "255/1/2") == 0 ||
 				g_strcmp0(info->interface, "255/2/2") == 0 ||
+				g_strcmp0(info->interface, "255/2/18") == 0 ||
 				g_strcmp0(info->interface, "255/1/50") == 0) {
 			pcui = info->devnode;
 		} else if (g_strcmp0(info->label, "diag") == 0 ||
