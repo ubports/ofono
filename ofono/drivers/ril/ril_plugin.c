@@ -54,6 +54,7 @@
 #define RILMODEM_DEFAULT_DM_FLAGS   RIL_DATA_MANAGER_3GLTE_HANDOVER
 #define RILMODEM_DEFAULT_EMPTY_PIN_QUERY TRUE /* optimistic */
 
+#define RILCONF_SETTINGS_EMPTY      "EmptyConfig"
 #define RILCONF_SETTINGS_3GHANDOVER "3GLTEHandover"
 
 #define RILCONF_DEV_PREFIX          "ril_"
@@ -1258,16 +1259,22 @@ static GSList *ril_plugin_parse_config_file(GKeyFile *file,
 	GError *err = NULL;
 	GSList *list = NULL;
 	GKeyFile *file = g_key_file_new();
+	gboolean empty = FALSE;
 
 	if (g_key_file_load_from_file(file, path, 0, &err)) {
-		DBG("loading %s", path);
-		list = ril_plugin_parse_config_file(file, ps);
+		DBG("Loading %s", path);
+		if (ril_config_get_boolean(file, RILCONF_SETTINGS_GROUP,
+				RILCONF_SETTINGS_EMPTY, &empty) && empty) {
+			DBG("Empty config");
+		} else {
+			list = ril_plugin_parse_config_file(file, ps);
+		}
 	} else {
 		DBG("conf load error: %s", err->message);
 		g_error_free(err);
 	}
 
-	if (!list) {
+	if (!list && !empty) {
 		list = ril_plugin_create_default_config();
 	}
 
