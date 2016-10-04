@@ -278,5 +278,7 @@ cleanup:
 
 	g_free(option_debug);
 
+	g_free(option_debug);
+
 	return 0;
 }
