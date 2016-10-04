@@ -138,10 +138,19 @@ static gboolean option_backtrace = TRUE;
 static gboolean parse_debug(const char *key, const char *value,
 					gpointer user_data, GError **error)
 {
-	if (value)
-		option_debug = g_strdup(value);
-	else
+	if (value) {
+		if (option_debug) {
+			char *prev = option_debug;
+
+			option_debug = g_strconcat(prev, ",", value, NULL);
+			g_free(prev);
+		} else {
+			option_debug = g_strdup(value);
+		}
+	} else {
+		g_free(option_debug);
 		option_debug = g_strdup("*");
+	}
 
 	return TRUE;
 }
@@ -266,6 +275,8 @@ cleanup:
 	g_main_loop_unref(event_loop);
 
 	__ofono_log_cleanup(option_backtrace);
+
+	g_free(option_debug);
 
 	return 0;
 }
