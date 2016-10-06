@@ -22,12 +22,14 @@
 #include "ril_network.h"
 #include "ril_radio.h"
 #include "ril_data.h"
-#include "ril_mce.h"
 #include "ril_util.h"
 #include "ril_log.h"
 
 #include <gdbus.h>
 #include <gutil_strv.h>
+#include <gutil_misc.h>
+#include <mce_display.h>
+#include <mce_log.h>
 #include <linux/capability.h>
 #include <sys/types.h>
 #include <sys/syscall.h>
@@ -85,13 +87,19 @@ enum ril_plugin_io_events {
 	IO_EVENT_COUNT
 };
 
+enum ril_plugin_display_events {
+	DISPLAY_EVENT_VALID,
+	DISPLAY_EVENT_STATE,
+	DISPLAY_EVENT_COUNT
+};
+
 struct ril_plugin_priv {
 	struct ril_plugin pub;
 	struct ril_plugin_dbus *dbus;
 	struct ril_data_manager *data_manager;
-	struct ril_mce *mce;
+	MceDisplay *display;
 	gboolean display_on;
-	gulong display_state_change_id;
+	gulong display_event_id[DISPLAY_EVENT_COUNT];
 	GSList *slots;
 	ril_slot_info_ptr *slots_info;
 	struct ril_slot *voice_slot;
@@ -118,7 +126,6 @@ struct ril_slot {
 	struct ril_slot_config config;
 	struct ril_plugin_priv *plugin;
 	struct ril_modem *modem;
-	struct ril_mce *mce;
 	struct ofono_sim *sim;
 	struct ril_radio *radio;
 	struct ril_network *network;
@@ -130,6 +137,7 @@ struct ril_slot {
 	struct ril_cell_info_dbus *cell_info_dbus;
 	struct ril_oem_raw *oem_raw;
 	struct ril_data *data;
+	MceDisplay *display;
 	GRilIoChannel *io;
 	gulong io_event_id[IO_EVENT_COUNT];
 	gulong imei_req_id;
@@ -149,6 +157,7 @@ struct ril_plugin_settings {
 static void ril_debug_trace_notify(struct ofono_debug_desc *desc);
 static void ril_debug_dump_notify(struct ofono_debug_desc *desc);
 static void ril_debug_grilio_notify(struct ofono_debug_desc *desc);
+static void ril_debug_mce_notify(struct ofono_debug_desc *desc);
 static void ril_plugin_debug_notify(struct ofono_debug_desc *desc);
 static void ril_plugin_retry_init_io(struct ril_slot *slot);
 
@@ -179,6 +188,12 @@ static struct ofono_debug_desc grilio_debug OFONO_DEBUG_ATTR = {
 	.name = "grilio",
 	.flags = OFONO_DEBUG_FLAG_DEFAULT,
 	.notify = ril_debug_grilio_notify
+};
+
+static struct ofono_debug_desc mce_debug OFONO_DEBUG_ATTR = {
+	.name = "mce",
+	.flags = OFONO_DEBUG_FLAG_DEFAULT,
+	.notify = ril_debug_mce_notify
 };
 
 static struct ofono_debug_desc ril_plugin_debug OFONO_DEBUG_ATTR = {
@@ -221,12 +236,18 @@ static void ril_plugin_send_screen_state(struct ril_slot *slot)
 	}
 }
 
-static void ril_plugin_display_state_cb(struct ril_mce *mce, void *user_data)
+static gboolean ril_plugin_display_on(MceDisplay *display)
+{
+	return display && display->valid &&
+				display->state != MCE_DISPLAY_STATE_OFF;
+}
+
+static void ril_plugin_display_cb(MceDisplay *display, void *user_data)
 {
 	struct ril_plugin_priv *plugin = user_data;
 	const gboolean display_was_on = plugin->display_on;
 
-	plugin->display_on = (mce->display_state != RIL_MCE_DISPLAY_OFF);
+	plugin->display_on = ril_plugin_display_on(display);
 	if (plugin->display_on != display_was_on) {
 		ril_plugin_foreach_slot(plugin, ril_plugin_send_screen_state);
 	}
@@ -953,7 +974,7 @@ static void ril_plugin_slot_connected(struct ril_slot *slot)
 	GASSERT(!slot->cell_info);
 	if (slot->io->ril_version > 8) {
 		slot->cell_info = ril_cell_info_new(slot->io, log_prefix,
-				plugin->mce, slot->radio, slot->sim_card);
+				plugin->display, slot->radio, slot->sim_card);
 	}
 
 	ril_plugin_send_screen_state(slot);
@@ -1544,6 +1565,12 @@ static void ril_debug_grilio_notify(struct ofono_debug_desc *desc)
 		GLOG_LEVEL_VERBOSE : GLOG_LEVEL_INHERIT;
 }
 
+static void ril_debug_mce_notify(struct ofono_debug_desc *desc)
+{
+	mce_log.level = (desc->flags & OFONO_DEBUG_FLAG_PRINT) ?
+		GLOG_LEVEL_VERBOSE : GLOG_LEVEL_INHERIT;
+}
+
 static void ril_plugin_debug_notify(struct ofono_debug_desc *desc)
 {
 	GLOG_MODULE_NAME.level = (desc->flags & OFONO_DEBUG_FLAG_PRINT) ?
@@ -1570,6 +1597,7 @@ static int ril_plugin_init(void)
 	 */
 	grilio_hexdump_log.name = ril_debug_dump.name;
 	grilio_log.name = grilio_debug.name;
+	mce_log.name = mce_debug.name;
 
 	/*
 	 * Debug log plugin hooks gutil_log_func2 while we replace
@@ -1586,9 +1614,8 @@ static int ril_plugin_init(void)
 	ril_plugin_init_slots(ril_plugin);
 	ril_plugin->dbus = ril_plugin_dbus_new(&ril_plugin->pub);
 	ril_plugin->data_manager = ril_data_manager_new(ps.dm_flags);
-	ril_plugin->mce = ril_mce_new();
-	ril_plugin->display_on =
-		(ril_plugin->mce->display_state != RIL_MCE_DISPLAY_OFF);
+	ril_plugin->display = mce_display_new();
+	ril_plugin->display_on = ril_plugin_display_on(ril_plugin->display);
 
 	if (ril_plugin->slots) {
 		/*
@@ -1658,9 +1685,12 @@ static int ril_plugin_init(void)
 
 	/* Set initial screen state and register for updates */
 	ril_plugin_foreach_slot(ril_plugin, ril_plugin_send_screen_state);
-	ril_plugin->display_state_change_id =
-		ril_mce_add_display_state_changed_handler(ril_plugin->mce,
-				ril_plugin_display_state_cb, ril_plugin);
+	ril_plugin->display_event_id[DISPLAY_EVENT_VALID] =
+		mce_display_add_valid_changed_handler(ril_plugin->display,
+				ril_plugin_display_cb, ril_plugin);
+	ril_plugin->display_event_id[DISPLAY_EVENT_STATE] =
+		mce_display_add_state_changed_handler(ril_plugin->display,
+				ril_plugin_display_cb, ril_plugin);
 
 	/* This will set 'ready' flag if we have no modems at all */
 	ril_plugin_update_ready(ril_plugin);
@@ -1694,9 +1724,9 @@ static void ril_plugin_exit(void)
 		g_slist_free_full(ril_plugin->slots, ril_plugin_destroy_slot);
 		ril_plugin_dbus_free(ril_plugin->dbus);
 		ril_data_manager_unref(ril_plugin->data_manager);
-		ril_mce_remove_handler(ril_plugin->mce,
-					ril_plugin->display_state_change_id);
-		ril_mce_unref(ril_plugin->mce);
+		gutil_disconnect_handlers(ril_plugin->display,
+			ril_plugin->display_event_id, DISPLAY_EVENT_COUNT);
+		mce_display_unref(ril_plugin->display);
 		g_key_file_free(ril_plugin->storage);
 		g_free(ril_plugin->slots_info);
 		g_free(ril_plugin->default_voice_imsi);
