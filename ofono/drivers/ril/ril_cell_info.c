@@ -17,12 +17,13 @@
 #include "ril_sim_card.h"
 #include "ril_radio.h"
 #include "ril_util.h"
-#include "ril_mce.h"
 #include "ril_log.h"
 
 #include <grilio_channel.h>
 #include <grilio_request.h>
 #include <grilio_parser.h>
+
+#include <gutil_misc.h>
 
 #define DISPLAY_ON_UPDATE_RATE  (1000)  /* 1 sec */
 #define DISPLAY_OFF_UPDATE_RATE (60000) /* 1 min */
@@ -32,7 +33,7 @@ typedef struct ril_cell_info RilCellInfo;
 
 struct ril_cell_info_priv {
 	GRilIoChannel *io;
-	struct ril_mce *mce;
+	MceDisplay *display;
 	struct ril_radio *radio;
 	struct ril_sim_card *sim_card;
 	gulong display_state_event_id;
@@ -355,11 +356,11 @@ static void ril_cell_info_update_rate(struct ril_cell_info *self)
 	struct ril_cell_info_priv *priv = self->priv;
 
 	ril_cell_info_set_rate(self,
-		(priv->mce->display_state == RIL_MCE_DISPLAY_OFF) ?
+		(priv->display->state == MCE_DISPLAY_STATE_OFF) ?
 		DISPLAY_OFF_UPDATE_RATE : DISPLAY_ON_UPDATE_RATE);
 }
 
-static void ril_cell_info_display_state_cb(struct ril_mce *mce, void *arg)
+static void ril_cell_info_display_state_cb(MceDisplay *display, void *arg)
 {
 	struct ril_cell_info *self = RIL_CELL_INFO(arg);
 	struct ril_cell_info_priv *priv = self->priv;
@@ -420,14 +421,14 @@ void ril_cell_info_remove_handler(struct ril_cell_info *self, gulong id)
 }
 
 struct ril_cell_info *ril_cell_info_new(GRilIoChannel *io,
-		const char *log_prefix, struct ril_mce *mce,
+		const char *log_prefix, MceDisplay *display,
 		struct ril_radio *radio, struct ril_sim_card *sim_card)
 {
 	struct ril_cell_info *self = g_object_new(RIL_CELL_INFO_TYPE, 0);
 	struct ril_cell_info_priv *priv = self->priv;
 
 	priv->io = grilio_channel_ref(io);
-	priv->mce = ril_mce_ref(mce);
+	priv->display = mce_display_ref(display);
 	priv->radio = ril_radio_ref(radio);
 	priv->sim_card = ril_sim_card_ref(sim_card);
 	priv->log_prefix = (log_prefix && log_prefix[0]) ?
@@ -436,7 +437,7 @@ struct ril_cell_info *ril_cell_info_new(GRilIoChannel *io,
 	priv->event_id = grilio_channel_add_unsol_event_handler(priv->io,
 		ril_cell_info_list_changed_cb, RIL_UNSOL_CELL_INFO_LIST, self);
 	priv->display_state_event_id =
-		ril_mce_add_display_state_changed_handler(mce,
+		mce_display_add_state_changed_handler(display,
 			ril_cell_info_display_state_cb, self);
 	priv->radio_state_event_id =
 		ril_radio_add_state_changed_handler(radio,
@@ -490,10 +491,8 @@ static void ril_cell_info_dispose(GObject *object)
 									FALSE);
 		priv->set_rate_id = 0;
 	}
-	if (priv->display_state_event_id) {
-		ril_mce_remove_handler(priv->mce, priv->display_state_event_id);
-		priv->display_state_event_id = 0;
-	}
+	gutil_disconnect_handlers(priv->display,
+					&priv->display_state_event_id, 1);
 	ril_radio_remove_handlers(priv->radio, &priv->radio_state_event_id, 1);
 	ril_sim_card_remove_handlers(priv->sim_card,
 					&priv->sim_status_event_id, 1);
@@ -508,7 +507,7 @@ static void ril_cell_info_finalize(GObject *object)
 	DBG_(self, "");
 	g_free(priv->log_prefix);
 	grilio_channel_unref(priv->io);
-	ril_mce_unref(priv->mce);
+	mce_display_unref(priv->display);
 	ril_radio_unref(priv->radio);
 	ril_sim_card_unref(priv->sim_card);
 	g_slist_free_full(self->cells, g_free);

@@ -177,8 +177,10 @@ if (test "${enable_jolla_rilmodem}" = "yes"); then
 				AC_MSG_ERROR(libgrilio >= 1.0.6 is required))
 	PKG_CHECK_MODULES(GLIBUTIL, libglibutil >= 1.0.5, dummy=yes,
 				AC_MSG_ERROR(libglibutil >= 1.0.5 is required))
-	CFLAGS="$CFLAGS $GRILIO_CFLAGS $GLIBUTIL_CFLAGS"
-	LIBS="$LIBS $GRILIO_LIBS $GLIBUTIL_LIBS"
+	PKG_CHECK_MODULES(LIBMCE, libmce-glib, dummy=yes,
+				AC_MSG_ERROR(libmce-glib is required))
+	CFLAGS="$CFLAGS $GRILIO_CFLAGS $GLIBUTIL_CFLAGS $LIBMCE_CFLAGS"
+	LIBS="$LIBS $GRILIO_LIBS $GLIBUTIL_LIBS $LIBMCE_LIBS"
 fi
 
 AC_ARG_ENABLE(qmimodem, AC_HELP_STRING([--disable-qmimodem],
