@@ -42,7 +42,7 @@ struct ril_gprs_context {
 	struct ril_network *network;
 	struct ril_data *data;
 	guint active_ctx_cid;
-	gulong calls_changed_event_id;
+	gulong calls_changed_id;
 	struct ril_mtu_watch *mtu_watch;
 	struct ril_data_call *active_call;
 	struct ril_gprs_context_call activate;
@@ -55,53 +55,32 @@ static inline struct ril_gprs_context *ril_gprs_context_get_data(
 	return ofono_gprs_context_get_data(gprs);
 }
 
-static char *ril_gprs_context_netmask(const char *address)
+static char *ril_gprs_context_netmask(const char *bits)
 {
-	if (address) {
-		const char *suffix = strchr(address, '/');
-		if (suffix) {
-			int nbits = atoi(suffix + 1);
-			if (nbits > 0 && nbits < 33) {
-				const char* str;
-				struct in_addr in;
-				in.s_addr = htonl((nbits == 32) ? 0xffffffff :
+	if (bits) {
+		int nbits = atoi(bits);
+		if (nbits > 0 && nbits < 33) {
+			const char* str;
+			struct in_addr in;
+			in.s_addr = htonl((nbits == 32) ? 0xffffffff :
 					((1 << nbits)-1) << (32-nbits));
-				str = inet_ntoa(in);
-				if (str) {
-					return g_strdup(str);
-				}
+			str = inet_ntoa(in);
+			if (str) {
+				return g_strdup(str);
 			}
 		}
 	}
-	return g_strdup("255.255.255.0");
+	return NULL;
 }
 
-static void ril_gprs_context_set_ipv4(struct ofono_gprs_context *gc,
-						char * const *ip_addr)
+static int ril_gprs_context_address_family(const char *addr)
 {
-	const guint n = gutil_strv_length(ip_addr);
-
-	if (n > 0) {
-		ofono_gprs_context_set_ipv4_address(gc, ip_addr[0], TRUE);
-		if (n > 1) {
-			ofono_gprs_context_set_ipv4_netmask(gc, ip_addr[1]);
-		}
-	}
-}
-
-static void ril_gprs_context_set_ipv6(struct ofono_gprs_context *gc,
-						char * const *ipv6_addr)
-{
-	const guint n = gutil_strv_length(ipv6_addr);
-
-	if (n > 0) {
-		ofono_gprs_context_set_ipv6_address(gc, ipv6_addr[0]);
-		if (n > 1) {
-			const int p = atoi(ipv6_addr[1]);
-			if (p > 0 && p <= 128) {
-				ofono_gprs_context_set_ipv6_prefix_length(gc, p);
-			}
-		}
+	if (strchr(addr, ':')) {
+		return AF_INET6;
+	} else if (strchr(addr, '.')) {
+		return AF_INET;
+	} else {
+		return AF_UNSPEC;
 	}
 }
 
@@ -111,9 +90,9 @@ static void ril_gprs_context_free_active_call(struct ril_gprs_context *gcd)
 		ril_data_call_free(gcd->active_call);
 		gcd->active_call = NULL;
 	}
-	if (gcd->calls_changed_event_id) {
-		ril_data_remove_handler(gcd->data, gcd->calls_changed_event_id);
-		gcd->calls_changed_event_id = 0;
+	if (gcd->calls_changed_id) {
+		ril_data_remove_handler(gcd->data, gcd->calls_changed_id);
+		gcd->calls_changed_id = 0;
 	}
 	if (gcd->mtu_watch) {
 		ril_mtu_watch_free(gcd->mtu_watch);
@@ -174,97 +153,161 @@ static void ril_gprs_context_set_disconnected(struct ril_gprs_context *gcd)
 	}
 }
 
-static void ril_gprs_split_ip_by_protocol(char **ip_array,
-						char ***split_ip_addr,
-						char ***split_ipv6_addr)
+static void ril_gprs_context_set_address(struct ofono_gprs_context *gc,
+					const struct ril_data_call *call)
 {
-	const int n = gutil_strv_length(ip_array);
+	const char *ip_addr = NULL;
+	char *ip_mask = NULL;
+	const char *ipv6_addr = NULL;
+	unsigned char ipv6_prefix_length = 0;
+	char *tmp_ip_addr = NULL;
+	char *tmp_ipv6_addr = NULL;
+	char * const *list = call->addresses;
+	const int n = gutil_strv_length(list);
 	int i;
 
-	*split_ipv6_addr = *split_ip_addr = NULL;
-	for (i = 0; i < n && (!*split_ipv6_addr || !*split_ip_addr); i++) {
-		const char *addr = ip_array[i];
-		switch (ril_address_family(addr)) {
+	for (i = 0; i < n && (!ipv6_addr || !ip_addr); i++) {
+		const char *addr = list[i];
+		switch (ril_gprs_context_address_family(addr)) {
 		case AF_INET:
-			if (!*split_ip_addr) {
-				char *mask = ril_gprs_context_netmask(addr);
-				*split_ip_addr = g_strsplit(addr, "/", 2);
-				if (gutil_strv_length(*split_ip_addr) == 2) {
-					g_free((*split_ip_addr)[1]);
-					(*split_ip_addr)[1] = mask;
+			if (!ip_addr) {
+				const char* s = strstr(addr, "/");
+				if (s) {
+					const gsize len = s - addr;
+					tmp_ip_addr = g_strndup(addr, len);
+					ip_addr = tmp_ip_addr;
+					ip_mask = ril_gprs_context_netmask(s+1);
 				} else {
-					/* This is rather unlikely to happen */
-					*split_ip_addr =
-						gutil_strv_add(*split_ip_addr,
-									mask);
-					g_free(mask);
+					ip_addr = addr;
+				}
+				if (!ip_mask) {
+					ip_mask = g_strdup("255.255.255.0");
 				}
 			}
 			break;
 		case AF_INET6:
-			if (!*split_ipv6_addr) {
-				*split_ipv6_addr = g_strsplit(addr, "/", 2);
+			if (!ipv6_addr) {
+				const char* s = strstr(addr, "/");
+				if (s) {
+					const gsize len = s - addr;
+					const int prefix = atoi(s + 1);
+					tmp_ipv6_addr = g_strndup(addr, len);
+					ipv6_addr = tmp_ipv6_addr;
+					if (prefix >= 0 && prefix <= 128) {
+						ipv6_prefix_length = prefix;
+					}
+				} else {
+					ipv6_addr = addr;
+				}
 			}
 		}
 	}
+
+	ofono_gprs_context_set_ipv4_address(gc, ip_addr, TRUE);
+	ofono_gprs_context_set_ipv4_netmask(gc, ip_mask);
+	ofono_gprs_context_set_ipv6_address(gc, ipv6_addr);
+	ofono_gprs_context_set_ipv6_prefix_length(gc, ipv6_prefix_length);
+
+	if (!ip_addr && !ipv6_addr) {
+		ofono_error("GPRS context: No IP address");
+	}
+
+	/* Allocate temporary strings */
+	g_free(ip_mask);
+	g_free(tmp_ip_addr);
+	g_free(tmp_ipv6_addr);
 }
 
-static void ril_gprs_split_gw_by_protocol(char **gw_array, char **ip_gw,
-								char **ipv6_gw)
+static void ril_gprs_context_set_gateway(struct ofono_gprs_context *gc,
+					const struct ril_data_call *call)
 {
-	const int n = gutil_strv_length(gw_array);
+	const char *ip_gw = NULL;
+	const char *ipv6_gw = NULL;
+	char * const *list = call->gateways;
+	const int n = gutil_strv_length(list);
 	int i;
 
-	*ip_gw = *ipv6_gw = NULL;
-	for (i = 0; i < n && (!*ipv6_gw || !*ip_gw); i++) {
-		const char *gw_addr = gw_array[i];
-		switch (ril_address_family(gw_addr)) {
+	/* Pick 1 gw for each protocol*/
+	for (i = 0; i < n && (!ipv6_gw || !ip_gw); i++) {
+		const char *addr = list[i];
+		switch (ril_gprs_context_address_family(addr)) {
 		case AF_INET:
-			if (!*ip_gw) *ip_gw = g_strdup(gw_addr);
+			if (!ip_gw) ip_gw = addr;
 			break;
 		case AF_INET6:
-			if (!*ipv6_gw) *ipv6_gw = g_strdup(gw_addr);
+			if (!ipv6_gw) ipv6_gw = addr;
 			break;
 		}
 	}
+
+	ofono_gprs_context_set_ipv4_gateway(gc, ip_gw);
+	ofono_gprs_context_set_ipv6_gateway(gc, ipv6_gw);
 }
 
-static void ril_gprs_split_dns_by_protocol(char **dns_array, char ***dns_addr,
-							char ***dns_ipv6_addr)
+static void ril_gprs_context_set_dns_servers(struct ofono_gprs_context *gc,
+					const struct ril_data_call *call)
 {
-	const int n = gutil_strv_length(dns_array);
 	int i;
+	char * const *list = call->dnses;
+	const int n = gutil_strv_length(list);
+	const char **ip_dns = g_new0(const char *, n+1);
+	const char **ipv6_dns = g_new0(const char *, n+1);
+	const char **ip_ptr = ip_dns;
+	const char **ipv6_ptr = ipv6_dns;
 
-	*dns_ipv6_addr = *dns_addr = 0;
 	for (i = 0; i < n; i++) {
-		const char *addr = dns_array[i];
-		switch (ril_address_family(addr)) {
+		const char *addr = list[i];
+		switch (ril_gprs_context_address_family(addr)) {
 		case AF_INET:
-			*dns_addr = gutil_strv_add(*dns_addr, addr);
+			*ip_ptr++ = addr;
 			break;
 		case AF_INET6:
-			*dns_ipv6_addr = gutil_strv_add(*dns_ipv6_addr, addr);
+			*ipv6_ptr++ = addr;
 			break;
 		}
 	}
+
+	ofono_gprs_context_set_ipv4_dns_servers(gc, ip_dns);
+	ofono_gprs_context_set_ipv6_dns_servers(gc, ipv6_dns);
+
+	g_free(ip_dns);
+	g_free(ipv6_dns);
 }
 
 /* Only compares the stuff that's important to us */
-static gboolean ril_gprs_context_data_call_equal(
+#define DATA_CALL_IFNAME_CHANGED    (0x01)
+#define DATA_CALL_ADDRESS_CHANGED   (0x02)
+#define DATA_CALL_GATEWAY_CHANGED   (0x04)
+#define DATA_CALL_DNS_CHANGED       (0x08)
+#define DATA_CALL_ALL_CHANGED       (0x0f)
+static int ril_gprs_context_data_call_change(
 			const struct ril_data_call *c1,
 			const struct ril_data_call *c2)
 {
 	if (!c1 && !c2) {
-		return TRUE;
+		return 0;
 	} else if (c1 && c2) {
-		return c1->cid == c2->cid &&
-			c1->active == c2->active && c1->prot == c2->prot &&
-			!g_strcmp0(c1->ifname, c2->ifname) &&
-			gutil_strv_equal(c1->dnses, c2->dnses) &&
-			gutil_strv_equal(c1->gateways, c2->gateways) &&
-			gutil_strv_equal(c1->addresses, c2->addresses);
+		int changes = 0;
+
+		if (g_strcmp0(c1->ifname, c2->ifname)) {
+			changes |= DATA_CALL_IFNAME_CHANGED;
+		}
+
+		if (!gutil_strv_equal(c1->addresses, c2->addresses)) {
+			changes |= DATA_CALL_ADDRESS_CHANGED;
+		}
+
+		if (!gutil_strv_equal(c1->gateways, c2->gateways)) {
+			changes |= DATA_CALL_GATEWAY_CHANGED;
+		}
+
+		if (!gutil_strv_equal(c1->dnses, c2->dnses)) {
+			changes |= DATA_CALL_DNS_CHANGED;
+		}
+
+		return changes;
 	} else {
-		return FALSE;
+		return DATA_CALL_ALL_CHANGED;
 	}
 }
 
@@ -281,30 +324,25 @@ static void ril_gprs_context_call_list_changed(struct ril_data *data, void *arg)
 	struct ril_data_call *prev_call = gcd->active_call;
 	const struct ril_data_call *call =
 		ril_data_call_find(data->data_calls, prev_call->cid);
+	int change = 0;
 
-	if (call) {
-		/* Check if the call has been disconnected */
-		if (call->active == RIL_DATA_CALL_INACTIVE) {
-			ofono_error("Clearing active context");
-			ril_gprs_context_set_disconnected(gcd);
-			call = NULL;
-
+	if (call && call->active != RIL_DATA_CALL_INACTIVE) {
 		/* Compare it against the last known state */
-		} else if (ril_gprs_context_data_call_equal(call, prev_call)) {
-			DBG("call %u didn't change", call->cid);
-			call = NULL;
-
-		} else {
-			DBG("call %u changed", call->cid);
-		}
+		change = ril_gprs_context_data_call_change(call, prev_call);
 	} else {
 		ofono_error("Clearing active context");
 		ril_gprs_context_set_disconnected(gcd);
+		call = NULL;
 	}
 
 	if (!call) {
 		/* We are not interested */
 		return;
+	} else if (!change) {
+		DBG("call %u didn't change", call->cid);
+		return;
+	} else {
+		DBG("call %u changed", call->cid);
 	}
 
 	/*
@@ -319,102 +357,27 @@ static void ril_gprs_context_call_list_changed(struct ril_data *data, void *arg)
 		ofono_info("data call status: %d", call->status);
 	}
 
-	if (call->active == RIL_DATA_CALL_ACTIVE) {
-		gboolean signal = FALSE;
-
-		if (call->ifname && g_strcmp0(call->ifname, prev_call->ifname)) {
-			DBG("interface changed");
-			signal = TRUE;
-			ofono_gprs_context_set_interface(gc, call->ifname);
-		}
-
-		if (!gutil_strv_equal(call->addresses, prev_call->addresses)) {
-			char **split_ip_addr = NULL;
-			char **split_ipv6_addr = NULL;
-
-			DBG("address changed");
-			signal = TRUE;
-
-			/* Pick 1 address of each protocol */
-			ril_gprs_split_ip_by_protocol(call->addresses,
-					&split_ip_addr, &split_ipv6_addr);
-
-			if ((call->prot == OFONO_GPRS_PROTO_IPV4V6 ||
-					call->prot == OFONO_GPRS_PROTO_IPV6) &&
-						split_ipv6_addr) {
-				ril_gprs_context_set_ipv6(gc, split_ipv6_addr);
-			}
-
-			if ((call->prot == OFONO_GPRS_PROTO_IPV4V6 ||
-					call->prot == OFONO_GPRS_PROTO_IP) &&
-						split_ip_addr) {
-				ril_gprs_context_set_ipv4(gc, split_ip_addr);
-			}
-
-			g_strfreev(split_ip_addr);
-			g_strfreev(split_ipv6_addr);
-		}
-
-		if (!gutil_strv_equal(call->gateways, prev_call->gateways)){
-			char *ip_gw = NULL;
-			char *ipv6_gw = NULL;
-
-			DBG("gateway changed");
-			signal = TRUE;
-
-			/* Pick 1 gw for each protocol*/
-			ril_gprs_split_gw_by_protocol(call->gateways,
-							&ip_gw, &ipv6_gw);
-
-			if ((call->prot == OFONO_GPRS_PROTO_IPV4V6 ||
-					call->prot == OFONO_GPRS_PROTO_IPV6) &&
-						ipv6_gw) {
-				ofono_gprs_context_set_ipv6_gateway(gc, ipv6_gw);
-			}
-
-			if ((call->prot == OFONO_GPRS_PROTO_IPV4V6 ||
-					call->prot == OFONO_GPRS_PROTO_IP) &&
-						ip_gw) {
-				ofono_gprs_context_set_ipv4_gateway(gc, ip_gw);
-			}
-
-			g_free(ip_gw);
-			g_free(ipv6_gw);
-		}
-
-		if (!gutil_strv_equal(call->dnses, prev_call->dnses)){
-			char **dns_ip = NULL;
-			char **dns_ipv6 = NULL;
-
-			DBG("name server(s) changed");
-			signal = TRUE;
-
-			/* split based on protocol*/
-			ril_gprs_split_dns_by_protocol(call->dnses,
-							&dns_ip, &dns_ipv6);
-
-			if ((call->prot == OFONO_GPRS_PROTO_IPV4V6 ||
-					call->prot == OFONO_GPRS_PROTO_IPV6) &&
-						dns_ipv6) {
-				ofono_gprs_context_set_ipv6_dns_servers(gc,
-						(const char **) dns_ipv6);
-			}
-
-			if ((call->prot == OFONO_GPRS_PROTO_IPV4V6 ||
-				call->prot == OFONO_GPRS_PROTO_IP) && dns_ip) {
-				ofono_gprs_context_set_ipv4_dns_servers(gc,
-							(const char**)dns_ip);
-			}
-
-			g_strfreev(dns_ip);
-			g_strfreev(dns_ipv6);
-		}
-
-		if (signal) {
-			ofono_gprs_context_signal_change(gc, call->cid);
-		}
+	if (change & DATA_CALL_IFNAME_CHANGED) {
+		DBG("interface changed");
+		ofono_gprs_context_set_interface(gc, call->ifname);
 	}
 
+	if (change & DATA_CALL_ADDRESS_CHANGED) {
+		DBG("address changed");
+		ril_gprs_context_set_address(gc, call);
+	}
+
+	if (change & DATA_CALL_GATEWAY_CHANGED) {
+		DBG("gateway changed");
+		ril_gprs_context_set_gateway(gc, call);
+	}
+
+	if (change & DATA_CALL_DNS_CHANGED) {
+		DBG("name server(s) changed");
+		ril_gprs_context_set_dns_servers(gc, call);
+	}
+
+	ofono_gprs_context_signal_change(gc, call->cid);
 	ril_data_call_free(prev_call);
 }
 
@@ -425,12 +388,6 @@ static void ril_gprs_context_activate_primary_cb(struct ril_data *data,
 	struct ril_gprs_context *gcd = user_data;
 	struct ofono_gprs_context *gc = gcd->gc;
 	struct ofono_error error;
-	char **split_ip_addr = NULL;
-	char **split_ipv6_addr = NULL;
-	char* ip_gw = NULL;
-	char* ipv6_gw = NULL;
-	char** dns_addr = NULL;
-	char** dns_ipv6_addr = NULL;
 	ofono_gprs_context_cb_t cb;
 	gpointer cb_data;
 
@@ -438,70 +395,33 @@ static void ril_gprs_context_activate_primary_cb(struct ril_data *data,
 	if (ril_status != RIL_E_SUCCESS) {
 		ofono_error("GPRS context: Reply failure: %s",
 					ril_error_to_string(ril_status));
-		goto done;
-	}
-
-	if (call->status != PDP_FAIL_NONE) {
+	} else if (call->status != PDP_FAIL_NONE) {
 		ofono_error("Unexpected data call status %d", call->status);
 		error.type = OFONO_ERROR_TYPE_CMS;
 		error.error = call->status;
-		goto done;
-	}
-
-	/* Must have interface */
-	if (!call->ifname) {
+	} else if (!call->ifname) {
+		/* Must have interface */
 		ofono_error("GPRS context: No interface");
-		goto done;
+	} else {
+		ofono_info("setting up data call");
+
+		GASSERT(!gcd->calls_changed_id);
+		ril_data_remove_handler(gcd->data, gcd->calls_changed_id);
+		gcd->calls_changed_id =
+			ril_data_add_calls_changed_handler(gcd->data,
+				ril_gprs_context_call_list_changed, gcd);
+
+		ril_gprs_context_set_active_call(gcd, call);
+		ofono_gprs_context_set_interface(gc, call->ifname);
+		ril_gprs_context_set_address(gc, call);
+		ril_gprs_context_set_gateway(gc, call);
+		ril_gprs_context_set_dns_servers(gc, call);
+		ril_error_init_ok(&error);
 	}
 
-	ofono_info("setting up data call");
-
-	/* Check the ip address */
-	ril_gprs_split_ip_by_protocol(call->addresses, &split_ip_addr,
-						&split_ipv6_addr);
-	if (!split_ip_addr && !split_ipv6_addr) {
-		ofono_error("GPRS context: No IP address");
-		goto done;
+	if (error.type != OFONO_ERROR_TYPE_NO_ERROR) {
+		gcd->active_ctx_cid = CTX_ID_NONE;
 	}
-
-	ril_error_init_ok(&error);
-	ril_gprs_context_set_active_call(gcd, call);
-
-	GASSERT(!gcd->calls_changed_event_id);
-	ril_data_remove_handler(gcd->data, gcd->calls_changed_event_id);
-	gcd->calls_changed_event_id =
-		ril_data_add_calls_changed_handler(gcd->data,
-			ril_gprs_context_call_list_changed, gcd);
-
-	ofono_gprs_context_set_interface(gc, call->ifname);
-	ril_gprs_split_gw_by_protocol(call->gateways, &ip_gw, &ipv6_gw);
-	ril_gprs_split_dns_by_protocol(call->dnses, &dns_addr, &dns_ipv6_addr);
-
-	if (split_ipv6_addr &&
-			(call->prot == OFONO_GPRS_PROTO_IPV6 ||
-			call->prot == OFONO_GPRS_PROTO_IPV4V6)) {
-		ril_gprs_context_set_ipv6(gc, split_ipv6_addr);
-		ofono_gprs_context_set_ipv6_gateway(gc, ipv6_gw);
-		ofono_gprs_context_set_ipv6_dns_servers(gc,
-						(const char **) dns_ipv6_addr);
-	}
-
-	if (split_ip_addr &&
-			(call->prot == OFONO_GPRS_PROTO_IP ||
-			call->prot == OFONO_GPRS_PROTO_IPV4V6)) {
-		ril_gprs_context_set_ipv4(gc, split_ip_addr);
-		ofono_gprs_context_set_ipv4_gateway(gc, ip_gw);
-		ofono_gprs_context_set_ipv4_dns_servers(gc,
-						(const char **) dns_addr);
-	}
-
-done:
-	g_strfreev(split_ip_addr);
-	g_strfreev(split_ipv6_addr);
-	g_strfreev(dns_addr);
-	g_strfreev(dns_ipv6_addr);
-	g_free(ip_gw);
-	g_free(ipv6_gw);
 
 	cb = gcd->activate.cb;
 	cb_data = gcd->activate.data;
@@ -509,9 +429,6 @@ done:
 	memset(&gcd->activate, 0, sizeof(gcd->activate));
 
 	if (cb) {
-		if (error.type != OFONO_ERROR_TYPE_NO_ERROR) {
-			gcd->active_ctx_cid = CTX_ID_NONE;
-		}
 		cb(&error, cb_data);
 	}
 }
@@ -654,7 +571,7 @@ static void ril_gprs_context_remove(struct ofono_gprs_context *gc)
 								NULL, NULL);
 	}
 
-	ril_data_remove_handler(gcd->data, gcd->calls_changed_event_id);
+	ril_data_remove_handler(gcd->data, gcd->calls_changed_id);
 	ril_data_unref(gcd->data);
 	ril_network_unref(gcd->network);
 	ril_data_call_free(gcd->active_call);
