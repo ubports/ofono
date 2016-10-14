@@ -196,7 +196,7 @@ static gboolean ril_network_parse_response(struct ril_network *self,
 	 * supply some reasonable default. We don't need more than 2
 	 * simultaneous data calls anyway.
 	 */
-	if (nparams <= 5) {
+	if (reg->max_calls < 1) {
 		reg->max_calls = 2;
 	}
 
