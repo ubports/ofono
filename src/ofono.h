@@ -537,3 +537,5 @@ ofono_bool_t __ofono_private_network_request(ofono_private_network_cb_t cb,
 int __ofono_sim_mnclength_get_mnclength(const char *imsi);
 
 #include <ofono/netmon.h>
+
+int mnclength(int mcc, int mnc);
