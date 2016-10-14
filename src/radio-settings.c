@@ -61,6 +61,7 @@ struct ofono_radio_settings {
 	struct ofono_atom *atom;
 };
 
+#define radio_access_mode_to_string ofono_radio_access_mode_to_string
 const char *ofono_radio_access_mode_to_string(enum ofono_radio_access_mode m)
 {
 	switch (m) {
@@ -76,7 +77,7 @@ const char *ofono_radio_access_mode_to_string(enum ofono_radio_access_mode m)
 		return NULL;
 	}
 }
-
+#define radio_access_mode_from_string ofono_radio_access_mode_from_string
 ofono_bool_t ofono_radio_access_mode_from_string(const char *str,
 					enum ofono_radio_access_mode *mode)
 
@@ -199,7 +200,7 @@ static DBusMessage *radio_get_properties_reply(DBusMessage *msg,
 	DBusMessageIter iter;
 	DBusMessageIter dict;
 
-	const char *mode = ofono_radio_access_mode_to_string(rs->mode);
+	const char *mode = radio_access_mode_to_string(rs->mode);
 
 	reply = dbus_message_new_method_return(msg);
 	if (reply == NULL)
@@ -244,7 +245,7 @@ static DBusMessage *radio_get_properties_reply(DBusMessage *msg,
 			if (!(rs->available_rats & tech))
 				continue;
 
-			rats[n++] = ofono_radio_access_mode_to_string(tech);
+			rats[n++] = radio_access_mode_to_string(tech);
 		}
 
 		rats[n] = NULL;
@@ -376,7 +377,7 @@ static void radio_set_rat_mode(struct ofono_radio_settings *rs,
 	rs->mode = mode;
 
 	path = __ofono_atom_get_path(rs->atom);
-	str_mode = ofono_radio_access_mode_to_string(rs->mode);
+	str_mode = radio_access_mode_to_string(rs->mode);
 
 	ofono_dbus_signal_property_changed(conn, path,
 						OFONO_RADIO_SETTINGS_INTERFACE,
@@ -604,7 +605,7 @@ static DBusMessage *radio_set_property(DBusConnection *conn, DBusMessage *msg,
 			return __ofono_error_invalid_args(msg);
 
 		dbus_message_iter_get_basic(&var, &value);
-		if (ofono_radio_access_mode_from_string(value, &mode) == FALSE)
+		if (radio_access_mode_from_string(value, &mode) == FALSE)
 			return __ofono_error_invalid_args(msg);
 
 		if (rs->mode == mode)
