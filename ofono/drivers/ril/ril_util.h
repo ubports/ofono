@@ -25,7 +25,6 @@ const char *ril_request_to_string(guint request);
 const char *ril_unsol_event_to_string(guint event);
 const char *ril_radio_state_to_string(int radio_state);
 int ril_parse_tech(const char *stech, int *ril_tech);
-int ril_address_family(const char *addr);
 gboolean ril_parse_mcc_mnc(const char *str, struct ofono_network_operator *op);
 
 #define ril_error_init_ok(err) \

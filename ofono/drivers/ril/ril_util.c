@@ -288,17 +288,6 @@ const char *ril_radio_state_to_string(int radio_state)
 	}
 }
 
-int ril_address_family(const char *addr)
-{
-	if (strchr(addr, ':')) {
-		return AF_INET6;
-	} else if (strchr(addr, '.')) {
-		return AF_INET;
-	} else {
-		return AF_UNSPEC;
-	}
-}
-
 /* Returns enum access_technology or -1 on failure. */
 int ril_parse_tech(const char *stech, int *ril_tech)
 {
