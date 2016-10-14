@@ -753,6 +753,7 @@ struct ril_network *ril_network_new(GRilIoChannel *io, const char *log_prefix,
 	 * Query the initial state. Querying network state before the radio
 	 * has been turned on makes RIL unhappy.
 	 */
+	ril_network_query_pref_mode(self);
 	if (radio->state == RADIO_STATE_ON) {
 		ril_network_poll_state(self);
 	}
