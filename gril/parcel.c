@@ -1,7 +1,6 @@
 /*
  * Copyright (C) 2011 Joel Armstrong <jcarmst@sandia.gov>
  * Copyright (C) 2012 Canonical Ltd.
- * Copyright (C) 2013 Jolla Ltd.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License (`GPL') as published by
@@ -33,6 +32,8 @@
 
 #include <glib.h>
 
+#include <ofono/log.h>
+
 /* Parcel-handling code */
 #include <sys/types.h>
 #include <string.h>
@@ -52,6 +53,7 @@ void parcel_init(struct parcel *p)
 	p->size = 0;
 	p->capacity = sizeof(int32_t);
 	p->offset = 0;
+	p->malformed = 0;
 }
 
 void parcel_grow(struct parcel *p, size_t size)
@@ -72,7 +74,17 @@ void parcel_free(struct parcel *p)
 int32_t parcel_r_int32(struct parcel *p)
 {
 	int32_t ret;
-	ret = *((int32_t *) (p->data + p->offset));
+
+	if (p->malformed)
+		return 0;
+
+	if (p->offset + sizeof(int32_t) > p->size) {
+		ofono_error("%s: parcel is too small", __func__);
+		p->malformed = 1;
+		return 0;
+	}
+
+	ret = *((int32_t *) (void *) (p->data + p->offset));
 	p->offset += sizeof(int32_t);
 	return ret;
 }
@@ -83,7 +95,7 @@ int parcel_w_int32(struct parcel *p, int32_t val)
 
 		if (p->offset + sizeof(int32_t) < p->capacity) {
 			/* There's enough space */
-			*((int32_t *) (p->data + p->offset)) = val;
+			*((int32_t *) (void *) (p->data + p->offset)) = val;
 			p->offset += sizeof(int32_t);
 			p->size += sizeof(int32_t);
 			break;
@@ -95,24 +107,7 @@ int parcel_w_int32(struct parcel *p, int32_t val)
 	return 0;
 }
 
-int parcel_w_byte(struct parcel *p, const char val)
-{
-	for (;;) {
-		if (p->offset + sizeof(char) < p->capacity) {
-			/* There's enough space */
-			*((char *) (p->data + p->offset)) = val;
-			p->offset += sizeof(char);
-			p->size += sizeof(char);
-			break;
-		} else {
-			/* Grow data and retry */
-			parcel_grow(p, sizeof(int32_t));
-		}
-	}
-	return 0;
-}
-
-int parcel_w_string(struct parcel *p, char *str)
+int parcel_w_string(struct parcel *p, const char *str)
 {
 	gunichar2 *gs16;
 	glong gs16_len;
@@ -126,9 +121,8 @@ int parcel_w_string(struct parcel *p, char *str)
 
 	gs16 = g_utf8_to_utf16(str, -1, NULL, &gs16_len, NULL);
 
-	if (parcel_w_int32(p, gs16_len) == -1) {
+	if (parcel_w_int32(p, gs16_len) == -1)
 		return -1;
-	}
 
 	gs16_size = gs16_len * sizeof(char16_t);
 	len = gs16_size + sizeof(char16_t);
@@ -138,7 +132,8 @@ int parcel_w_string(struct parcel *p, char *str)
 		if (p->offset + len < p->capacity) {
 			/* There's enough space */
 			memcpy(p->data + p->offset, gs16, gs16_size);
-			*((char16_t *) (p->data + p->offset + gs16_size)) = 0;
+			*((char16_t *) (void *)
+				(p->data + p->offset + gs16_size)) = 0;
 			p->offset += padded;
 			p->size += padded;
 			if (padded != len) {
@@ -155,7 +150,9 @@ int parcel_w_string(struct parcel *p, char *str)
 					0x0000ffff, 0x000000ff
 				};
 #endif
-				*((uint32_t*)(p->data + p->offset - 4)) &=
+
+				*((uint32_t *) (void *)
+					(p->data + p->offset - 4)) &=
 							mask[padded - len];
 			}
 			break;
@@ -170,26 +167,135 @@ int parcel_w_string(struct parcel *p, char *str)
 	return 0;
 }
 
-char* parcel_r_string(struct parcel *p)
+char *parcel_r_string(struct parcel *p)
 {
 	char *ret;
 	int len16 = parcel_r_int32(p);
+	int strbytes;
+
+	if (p->malformed)
+		return NULL;
 
 	/* This is how a null string is sent */
 	if (len16 < 0)
 		return NULL;
 
-	ret = g_utf16_to_utf8((gunichar2 *) (p->data + p->offset),
+	strbytes = PAD_SIZE((len16 + 1) * sizeof(char16_t));
+	if (p->offset + strbytes > p->size) {
+		ofono_error("%s: parcel is too small", __func__);
+		p->malformed = 1;
+		return NULL;
+	}
+
+	ret = g_utf16_to_utf8((gunichar2 *) (void *) (p->data + p->offset),
 				len16, NULL, NULL, NULL);
-	if (ret == NULL)
+	if (ret == NULL) {
+		ofono_error("%s: wrong UTF16 coding", __func__);
+		p->malformed = 1;
+		return NULL;
+	}
+
+	p->offset += strbytes;
+
+	return ret;
+}
+
+void parcel_skip_string(struct parcel *p)
+{
+	int len16 = parcel_r_int32(p);
+	int strbytes;
+
+	if (p->malformed)
+		return;
+
+	/* This is how a null string is sent */
+	if (len16 < 0)
+		return;
+
+	strbytes = PAD_SIZE((len16 + 1) * sizeof(char16_t));
+	if (p->offset + strbytes > p->size) {
+		p->malformed = 1;
+		return;
+	}
+
+	p->offset += strbytes;
+}
+
+int parcel_w_raw(struct parcel *p, const void *data, size_t len)
+{
+	if (data == NULL) {
+		parcel_w_int32(p, -1);
+		return 0;
+	}
+
+	parcel_w_int32(p, len);
+
+	for (;;) {
+
+		if (p->offset + len < p->capacity) {
+			/* There's enough space */
+			memcpy(p->data + p->offset, data, len);
+			p->offset += len;
+			p->size += len;
+			break;
+		} else {
+			/* Grow data and retry */
+			parcel_grow(p, len);
+		}
+	}
+	return 0;
+}
+
+void *parcel_r_raw(struct parcel *p, int *len)
+{
+	char *ret;
+
+	*len = parcel_r_int32(p);
+
+	if (p->malformed || *len <= 0)
 		return NULL;
 
-	p->offset += PAD_SIZE((len16 + 1) * sizeof(char16_t));
+	if (p->offset + *len > p->size) {
+		ofono_error("%s: parcel is too small", __func__);
+		p->malformed = 1;
+		return NULL;
+	}
+
+	ret = g_try_malloc0(*len);
+	if (ret == NULL) {
+		ofono_error("%s: out of memory (%d bytes)", __func__, *len);
+		return NULL;
+	}
+
+	memcpy(ret, p->data + p->offset, *len);
+	p->offset += *len;
 
 	return ret;
 }
 
 size_t parcel_data_avail(struct parcel *p)
 {
-	return (p->size - p->offset);
+	return p->size - p->offset;
+}
+
+char **parcel_r_strv(struct parcel *p)
+{
+	int i;
+	int num_str = parcel_r_int32(p);
+	char **strv;
+
+	if (p->malformed || num_str <= 0)
+		return NULL;
+
+	strv = g_new0(char *, num_str + 1);
+
+	for (i = 0; i < num_str; i++)
+		strv[i] = parcel_r_string(p);
+
+	if (p->malformed) {
+		g_strfreev(strv);
+		strv = NULL;
+	}
+
+	return strv;
 }

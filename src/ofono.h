@@ -153,6 +153,7 @@ enum ofono_atom_type {
 	OFONO_ATOM_TYPE_CDMA_NETREG,
 	OFONO_ATOM_TYPE_HANDSFREE,
 	OFONO_ATOM_TYPE_SIRI,
+	OFONO_ATOM_TYPE_NETMON,
 };
 
 enum ofono_atom_watch_condition {
@@ -534,3 +535,7 @@ ofono_bool_t __ofono_private_network_request(ofono_private_network_cb_t cb,
 #include <ofono/sim-mnclength.h>
 
 int __ofono_sim_mnclength_get_mnclength(const char *imsi);
+
+#include <ofono/netmon.h>
+
+int mnclength(int mcc, int mnc);

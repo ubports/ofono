@@ -42,6 +42,11 @@ unit/test-mux
 unit/test-caif
 unit/test-stkutil
 unit/test-cdmasms
+unit/test-rilmodem-cb
+unit/test-rilmodem-cs
+unit/test-rilmodem-sms
+unit/test-*.log
+unit/test-*.trs
 
 tools/huawei-audio
 tools/auto-enable

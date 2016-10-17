@@ -748,8 +748,7 @@ static gboolean update_operator_list(struct ofono_netreg *netreg, int total,
 		}
 	}
 
-	g_slist_foreach(compressed, (GFunc)g_free, NULL);
-	g_slist_free(compressed);
+	g_slist_free_full(compressed, g_free);
 
 	if (n)
 		n = g_slist_reverse(n);

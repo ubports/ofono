@@ -81,6 +81,8 @@ void ofono_gprs_add_context(struct ofono_gprs *gprs,
 				struct ofono_gprs_context *gc);
 
 ofono_bool_t ofono_gprs_get_roaming_allowed(struct ofono_gprs *gprs);
+void ofono_gprs_cid_activated(struct ofono_gprs  *gprs, unsigned int cid,
+				const char *apn);
 
 #ifdef __cplusplus
 }

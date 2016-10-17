@@ -49,7 +49,7 @@
 #define SETTINGS_STORE "voicecall"
 #define SETTINGS_GROUP "Settings"
 
-GSList *g_drivers = NULL;
+static GSList *g_drivers = NULL;
 
 struct ofono_voicecall {
 	GSList *call_list;
@@ -2246,7 +2246,7 @@ static const GDBusMethodTable manager_methods[] = {
 						GDBUS_ARGS({ "calls", "ao" }),
 						multiparty_private_chat) },
 	{ GDBUS_ASYNC_METHOD("CreateMultiparty",
-					NULL, GDBUS_ARGS({ "calls", "o" }),
+					NULL, GDBUS_ARGS({ "calls", "ao" }),
 					multiparty_create) },
 	{ GDBUS_ASYNC_METHOD("HangupMultiparty", NULL, NULL,
 							multiparty_hangup) },
@@ -2649,9 +2649,7 @@ static void free_sim_ecc_numbers(struct ofono_voicecall *vc, gboolean old_only)
 	 */
 	if (old_only == FALSE) {
 		if (vc->new_sim_en_list) {
-			g_slist_foreach(vc->new_sim_en_list, (GFunc) g_free,
-					NULL);
-			g_slist_free(vc->new_sim_en_list);
+			g_slist_free_full(vc->new_sim_en_list, g_free);
 			vc->new_sim_en_list = NULL;
 		}
 
@@ -2659,8 +2657,7 @@ static void free_sim_ecc_numbers(struct ofono_voicecall *vc, gboolean old_only)
 	}
 
 	if (vc->sim_en_list) {
-		g_slist_foreach(vc->sim_en_list, (GFunc) g_free, NULL);
-		g_slist_free(vc->sim_en_list);
+		g_slist_free_full(vc->sim_en_list, g_free);
 		vc->sim_en_list = NULL;
 	}
 }

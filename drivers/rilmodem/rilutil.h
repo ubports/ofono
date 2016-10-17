@@ -19,10 +19,13 @@
  *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
  */
+#ifndef RILUTIL_H
+#define RILUTIL_H
 
 #include <stdio.h>
-
-#include "parcel.h"
+#include <ofono/modem.h>
+#include <ofono/sim.h>
+#include <ofono/gprs-context.h>
 
 /* TODO: create a table lookup*/
 #define PREFIX_30_NETMASK "255.255.255.252"
@@ -32,6 +35,8 @@
 #define PREFIX_26_NETMASK "255.255.255.192"
 #define PREFIX_25_NETMASK "255.255.255.128"
 #define PREFIX_24_NETMASK "255.255.255.0"
+
+#define MODEM_PROP_LTE_CAPABLE "lte-capable"
 
 enum ril_util_sms_store {
 	RIL_UTIL_SMS_STORE_SM =	0,
@@ -62,74 +67,13 @@ enum at_util_charset {
 	RIL_UTIL_CHARSET_8859_H =	0x10000,
 };
 
-#define MAX_UICC_APPS 16
-
-struct sim_status {
-	guint card_state;
-	guint pin_state;
-	guint gsm_umts_index;
-	guint cdma_index;
-	guint ims_index;
-	guint num_apps;
-};
-
-struct sim_app {
-	guint app_type;
-	guint app_state;
-	guint perso_substate;
-	char *aid_str;
-	char *app_str;
-	guint pin_replaced;
-	guint pin1_state;
-	guint pin2_state;
-};
-
 typedef void (*ril_util_sim_inserted_cb_t)(gboolean present, void *userdata);
 
 void decode_ril_error(struct ofono_error *error, const char *final);
-gint ril_util_call_compare_by_status(gconstpointer a, gconstpointer b);
-gint ril_util_call_compare_by_phone_number(gconstpointer a, gconstpointer b);
-gint ril_util_call_compare_by_id(gconstpointer a, gconstpointer b);
-gint ril_util_call_compare(gconstpointer a, gconstpointer b);
 gchar *ril_util_get_netmask(const char *address);
-void ril_util_init_parcel(struct ril_msg *message, struct parcel *rilp);
 
-struct ril_util_sim_state_query *ril_util_sim_state_query_new(GRil *ril,
-						guint interval, guint num_times,
-						ril_util_sim_inserted_cb_t cb,
-						void *userdata,
-						GDestroyNotify destroy);
-void ril_util_sim_state_query_free(struct ril_util_sim_state_query *req);
-
-GSList *ril_util_parse_clcc(GRil *gril, struct ril_msg *message);
-char *ril_util_parse_sim_io_rsp(GRil *gril, struct ril_msg *message,
-				int *sw1, int *sw2,
-				int *hex_len);
-gboolean ril_util_parse_sim_status(GRil *gril, struct ril_msg *message,
-					struct sim_status *status,
-					struct sim_app **apps);
-gboolean ril_util_parse_reg(GRil *gril, struct ril_msg *message, int *status,
-				int *lac, int *ci, int *tech, int *max_calls);
-
-gint ril_util_parse_sms_response(GRil *gril, struct ril_msg *message);
-
-gint ril_util_get_signal(GRil *gril, struct ril_msg *message);
-
-gint ril_get_app_type();
-
-struct ofono_sim_driver *get_sim_driver();
-
-struct ofono_sim *get_sim();
-
-gint check_if_really_roaming(gint status);
-
-gboolean ril_roaming_allowed();
-
-gboolean check_if_ok_to_attach();
-
-gint get_current_network_status();
-
-void ril_util_free_sim_apps(struct sim_app **apps, guint num_apps);
+void ril_util_build_deactivate_data_call(GRil *gril, struct parcel *rilp,
+						int cid, unsigned int reason);
 
 struct cb_data {
 	void *cb;
@@ -137,29 +81,14 @@ struct cb_data {
 	void *user;
 };
 
-static inline struct cb_data *cb_data_new(void *cb, void *data)
+static inline struct cb_data *cb_data_new(void *cb, void *data, void *user)
 {
 	struct cb_data *ret;
 
 	ret = g_new0(struct cb_data, 1);
 	ret->cb = cb;
 	ret->data = data;
-
-	return ret;
-}
-
-static inline struct cb_data *cb_data_new2(void *user, void *cb,
-							void *data)
-{
-	struct cb_data *ret;
-
-	ret = g_new0(struct cb_data, 1);
-
-	if (ret) {
-		ret->cb = cb;
-		ret->data = data;
-		ret->user = user;
-	}
+	ret->user = user;
 
 	return ret;
 }
@@ -175,6 +104,12 @@ static inline int ril_util_convert_signal_strength(int strength)
 
 	return result;
 }
+
+const char *ril_util_gprs_proto_to_ril_string(enum ofono_gprs_proto);
+
+int ril_util_registration_state_to_status(int reg_state);
+
+int ril_util_address_to_gprs_proto(const char *addr);
 
 #define DECLARE_FAILURE(e)			\
 	struct ofono_error e;			\
@@ -197,3 +132,5 @@ static inline int ril_util_convert_signal_strength(int strength)
 		e.error = 0;				\
 		f(&e, ##args);				\
 	} while (0)
+
+#endif /* RILUTIL_H */

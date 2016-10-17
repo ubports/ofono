@@ -318,6 +318,26 @@ static int comp_mcc(const void *key, const void *value)
 	return mcc - mccmnc->mcc;
 }
 
+int mnclength(int mcc, int mnc)
+{
+	int mccmnc_num = 1000*mcc + mnc;
+	int *mccmnc3_res = bsearch(&mccmnc_num, codes_mnclen3_db,
+				G_N_ELEMENTS(codes_mnclen3_db),
+				sizeof(codes_mnclen3_db[0]), comp_int);
+	if (mccmnc3_res) {
+		return 3;
+	} else {
+		const struct mcc_mnclength *mccmnc_res =
+			bsearch(&mcc, mnclen_db, G_N_ELEMENTS(mnclen_db),
+				sizeof(mnclen_db[0]), comp_mcc);
+		if (mccmnc_res) {
+			return mccmnc_res->mnclength;
+		}
+	}
+
+	return -ENOENT;
+}
+
 static int mnclength_get_mnclength(const char *imsi)
 {
 	char mccmnc[OFONO_MAX_MCC_LENGTH + OFONO_MAX_MNC_LENGTH + 1];

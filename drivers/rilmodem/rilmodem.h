@@ -4,7 +4,6 @@
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *  Copyright (C) 2012 Canonical Ltd.
- *  Copyright (C) 2013 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -28,14 +27,6 @@
 /* Shared constants */
 #define EF_STATUS_INVALIDATED 0
 #define EF_STATUS_VALID 1
-#define RIL_HW_CONFIG "/etc/ofono/ril_subscription.conf"
-#define RIL_CONFIG_DIR "/etc/ofono/"
-#define RIL_STORE "rilmodem"
-#define LTE_FLAG "4gOn"
-#define MCC_LIST "MCC-whitelist"
-#define MCC_KEY "Countries"
-#define UI_LANG "/var/lib/environment/nemo/locale.conf"
-#define CFG_LANG "LANG="
 
 extern void ril_devinfo_init(void);
 extern void ril_devinfo_exit(void);
@@ -61,9 +52,6 @@ extern void ril_gprs_exit(void);
 extern void ril_gprs_context_init(void);
 extern void ril_gprs_context_exit(void);
 
-extern void ril_radio_settings_init(void);
-extern void ril_radio_settings_exit(void);
-
 extern void ril_ussd_init(void);
 extern void ril_ussd_exit(void);
 
@@ -73,18 +61,17 @@ extern void ril_call_settings_exit(void);
 extern void ril_call_forwarding_init(void);
 extern void ril_call_forwarding_exit(void);
 
+extern void ril_radio_settings_init(void);
+extern void ril_radio_settings_exit(void);
+
 extern void ril_call_barring_init(void);
 extern void ril_call_barring_exit(void);
-
-extern void ril_cbs_init(void);
-extern void ril_cbs_exit(void);
 
 extern void ril_phonebook_init(void);
 extern void ril_phonebook_exit(void);
 
-extern void ril_oemraw_init(void);
-extern void ril_oemraw_exit(void);
+extern void ril_netmon_init(void);
+extern void ril_netmon_exit(void);
 
 extern void ril_stk_init(void);
 extern void ril_stk_exit(void);
-

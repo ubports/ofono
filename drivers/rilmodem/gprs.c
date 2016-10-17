@@ -39,14 +39,22 @@
 #include <ofono/gprs.h>
 #include <ofono/types.h>
 
-#include "gril.h"
-#include "grilutil.h"
+#include <gril/gril.h>
+#include <gril/grilutil.h>
+
 #include "common.h"
 #include "rilmodem.h"
 
-#include <ofono/netreg.h>
-#include <ofono/sim.h>
-#include "storage.h"
+/* Time between get data status retries */
+#define GET_STATUS_TIMER_MS 5000
+
+struct ril_gprs_data {
+	GRil *ril;
+	struct ofono_modem *modem;
+	gboolean ofono_attached;
+	int rild_status;
+	int pending_deact_req;
+};
 
 /*
  * This module is the ofono_gprs_driver implementation for rilmodem.
@@ -55,128 +63,67 @@
  *
  * 1. ofono_gprs_suspend/resume() are not used by this module, as
  *    the concept of suspended GPRS is not exposed by RILD.
- *
- * 2. ofono_gprs_bearer_notify() is never called as RILD does not
- *    expose an unsolicited event equivalent to +CPSB ( see 27.007
- *    7.29 ), and the tech values returned by REQUEST_DATA/VOICE
- *    _REGISTRATION requests do not match the values defined for
- *    <AcT> in the +CPSB definition.  Note, the values returned by
- *    the *REGISTRATION commands are aligned with those defined by
- *    +CREG ( see 27.003 7.2 ).
  */
 
-struct gprs_data {
-	GRil *ril;
-	gboolean ofono_attached;
-	int max_cids;
-	int rild_status; /* Driver Status */
-	guint registerid;
-	guint timer_id;
-};
-
-/* Following constants are purely to improve readability */
-static const int roaming = NETWORK_REGISTRATION_STATUS_ROAMING;
-static const int registered = NETWORK_REGISTRATION_STATUS_REGISTERED;
-
-/*if we have called ofono_gprs_register or not*/
-static gboolean ofono_registered;
-
-static void ril_gprs_registration_status(struct ofono_gprs *gprs,
-					ofono_gprs_status_cb_t cb,
-					void *data);
-
-static void ril_gprs_state_change(struct ril_msg *message, gpointer user_data)
+static int ril_tech_to_bearer_tech(int ril_tech)
 {
-	struct ofono_gprs *gprs = user_data;
+	/*
+	 * This code handles the mapping between the RIL_RadioTechnology
+	 * and packet bearer values ( see <curr_bearer> values - 27.007
+	 * Section 7.29 ).
+	 */
 
-	g_assert(message->req ==
-				RIL_UNSOL_RESPONSE_VOICE_NETWORK_STATE_CHANGED);
-
-	DBG("");
-
-	/* We need to notify core always to cover situations when
-	 * connection drops temporarily for example when user is
-	 * taking CS voice call from LTE or changing technology
-	 * preference */
-	ril_gprs_registration_status(gprs, NULL, NULL);
-}
-
-static gboolean ril_gprs_set_attached_callback(gpointer user_data)
-{
-	struct ofono_error error;
-	struct cb_data *cbd = user_data;
-	ofono_gprs_cb_t cb = cbd->cb;
-	struct ofono_gprs *gprs = cbd->user;
-	struct gprs_data *gd = ofono_gprs_get_data(gprs);
-
-	DBG("");
-
-	gd->timer_id = 0;
-
-	decode_ril_error(&error, "OK");
-
-	cb(&error, cbd->data);
-
-	g_free(cbd);
-
-	return FALSE;
+	switch (ril_tech) {
+	case RADIO_TECH_GSM:
+	case RADIO_TECH_UNKNOWN:
+		return PACKET_BEARER_NONE;
+	case RADIO_TECH_GPRS:
+		return PACKET_BEARER_GPRS;
+	case RADIO_TECH_EDGE:
+		return PACKET_BEARER_EGPRS;
+	case RADIO_TECH_UMTS:
+		return PACKET_BEARER_UMTS;
+	case RADIO_TECH_HSDPA:
+		return PACKET_BEARER_HSDPA;
+	case RADIO_TECH_HSUPA:
+		return PACKET_BEARER_HSUPA;
+	case RADIO_TECH_HSPAP:
+	case RADIO_TECH_HSPA:
+		/*
+		 * HSPAP is HSPA+; which ofono doesn't define;
+		 * so, if differentiating HSPA and HSPA+ is
+		 * important, then ofono needs to be patched,
+		 * and we probably also need to introduce a
+		 * new indicator icon.
+		 */
+		return PACKET_BEARER_HSUPA_HSDPA;
+	case RADIO_TECH_LTE:
+		return PACKET_BEARER_EPS;
+	default:
+		return PACKET_BEARER_NONE;
+	}
 }
 
 static void ril_gprs_set_attached(struct ofono_gprs *gprs, int attached,
 					ofono_gprs_cb_t cb, void *data)
 {
-	struct cb_data *cbd = cb_data_new(cb, data);
-	struct gprs_data *gd = ofono_gprs_get_data(gprs);
+	struct ril_gprs_data *gd = ofono_gprs_get_data(gprs);
 
 	DBG("attached: %d", attached);
-	/*
-	* As RIL offers no actual control over the GPRS 'attached'
-	* state, we save the desired state, and use it to override
-	* the actual modem's state in the 'attached_status' function.
-	* This is similar to the way the core ofono gprs code handles
-	* data roaming ( see src/gprs.c gprs_netreg_update().
-	*
-	* The core gprs code calls driver->set_attached() when a netreg
-	* notification is received and any configured roaming conditions
-	* are met.
-	*/
 
+	/*
+	 * As RIL offers no actual control over the GPRS 'attached'
+	 * state, we save the desired state, and use it to override
+	 * the actual modem's state in the 'attached_status' function.
+	 * This is similar to the way the core ofono gprs code handles
+	 * data roaming ( see src/gprs.c gprs_netreg_update().
+	 *
+	 * The core gprs code calls driver->set_attached() when a netreg
+	 * notificaiton is received and any configured roaming conditions
+	 * are met.
+	 */
 	gd->ofono_attached = attached;
-
-	cbd->user = gprs;
-
-	/*
-	* However we cannot respond immediately, since core sets the
-	* value of driver_attached after calling set_attached and that
-	* leads to comparison failure in gprs_attached_update in
-	* connection drop phase
-	*/
-	gd->timer_id = g_timeout_add_seconds(1, ril_gprs_set_attached_callback,
-						cbd);
-}
-
-gboolean ril_roaming_allowed()
-{
-	GError *error;
-	error = NULL;
-	GKeyFile *settings;
-	struct ofono_sim *sim;
-
-	sim = get_sim();
-	const char *imsi = ofono_sim_get_imsi(sim);
-	settings = storage_open(imsi, "gprs");
-	gboolean roaming_allowed = g_key_file_get_boolean(settings,
-							"Settings",
-							"RoamingAllowed",
-							&error);
-
-	if (error)
-		g_error_free(error);
-
-	storage_close(imsi, "gprs", settings, FALSE);
-
-	DBG("roaming_allowed: %d", roaming_allowed);
-	return roaming_allowed;
+	CALLBACK_WITH_SUCCESS(cb, data);
 }
 
 static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
@@ -184,245 +131,392 @@ static void ril_data_reg_cb(struct ril_msg *message, gpointer user_data)
 	struct cb_data *cbd = user_data;
 	ofono_gprs_status_cb_t cb = cbd->cb;
 	struct ofono_gprs *gprs = cbd->user;
-	struct gprs_data *gd = ofono_gprs_get_data(gprs);
-	struct ofono_error error;
-	int lac, ci, tech;
-	int max_cids = 1;
-	int status = -1;
+	struct ril_gprs_data *gd = ofono_gprs_get_data(gprs);
+	struct ofono_modem *modem;
+	struct parcel rilp;
+	int num_str;
+	char **strv;
+	char *debug_str;
+	char *end;
+	int status;
+	int tech = -1;
+	gboolean attached = FALSE;
+	gboolean notify_status = FALSE;
+	int old_status;
 
-	if (gd && message->error == RIL_E_SUCCESS) {
-		decode_ril_error(&error, "OK");
-	} else {
-		ofono_error("ril_data_reg_cb: reply failure: %s",
+	old_status = gd->rild_status;
+
+	if (message->error != RIL_E_SUCCESS) {
+		ofono_error("%s: DATA_REGISTRATION_STATE reply failure: %s",
+				__func__,
 				ril_error_to_string(message->error));
-		decode_ril_error(&error, "FAIL");
-		error.error = message->error;
-		goto exit;
+		goto error;
 	}
 
-	if (ril_util_parse_reg(gd->ril, message, &status,
-				&lac, &ci, &tech, &max_cids) == FALSE) {
-		ofono_error("Failure parsing data registration response.");
-		decode_ril_error(&error, "FAIL");
-		goto exit;
-	}
+	g_ril_init_parcel(message, &rilp);
+	strv = parcel_r_strv(&rilp);
+	num_str = g_strv_length(strv);
 
-	if (status > 10)
-		status = status - 10;
+	if (strv == NULL)
+		goto error;
 
-	if (!ofono_registered) {
-		ofono_gprs_register(gprs);
-		ofono_registered = TRUE;
-	}
+	debug_str = g_strjoinv(",", strv);
+	g_ril_append_print_buf(gd->ril, "{%d,%s}", num_str, debug_str);
+	g_free(debug_str);
+	g_ril_print_response(gd->ril, message);
 
-	if (max_cids > gd->max_cids) {
-		DBG("Setting max cids to %d", max_cids);
-		gd->max_cids = max_cids;
-		ofono_gprs_set_cid_range(gprs, 1, max_cids);
-	}
+	status = strtoul(strv[0], &end, 10);
+	if (end == strv[0] || *end != '\0')
+		goto error_free;
 
-	if (status == roaming)
-		status = check_if_really_roaming(status);
+	status = ril_util_registration_state_to_status(status);
+	if (status < 0)
+		goto error_free;
 
-	/* Let's minimize logging */
-	if (status != gd->rild_status)
-		ofono_info("data reg changes %d (%d), attached %d",
-				status, gd->rild_status, gd->ofono_attached);
+	if (num_str >= 4) {
+		tech = strtoul(strv[3], &end, 10);
+		if (end == strv[3] || *end != '\0')
+			tech = -1;
 
-	/* Must be attached if registered or roaming */
-	if ((gd->rild_status != registered) && (gd->rild_status != roaming)) {
-		if (status == registered)
-			gd->ofono_attached = TRUE;
-		else if ((status == roaming) && (ril_roaming_allowed() == TRUE))
-			gd->ofono_attached = TRUE;
-	}
-
-	if (!ofono_modem_get_online(ofono_gprs_get_modem(gprs)))
-		gd->ofono_attached = FALSE;
-
-	/* if unsolicitated and no state change let's not notify core */
-	if ((status == gd->rild_status) && gd->ofono_attached)
-		goto cb_out;
-
-	if (!gd->ofono_attached) {
-		if (!cb) {
-			if (status == roaming) {
-				if (ril_roaming_allowed() == FALSE)
-					ofono_gprs_detached_notify(gprs);
-
-				/*
-				 * This prevents core ending
-				 * into eternal loop with driver
-				 */
-				decode_ril_error(&error, "FAIL");
+		if (g_ril_vendor(gd->ril) == OFONO_RIL_VENDOR_MTK) {
+			switch (tech) {
+			case MTK_RADIO_TECH_HSDPAP:
+			case MTK_RADIO_TECH_HSDPAP_UPA:
+			case MTK_RADIO_TECH_HSUPAP:
+			case MTK_RADIO_TECH_HSUPAP_DPA:
+				tech = RADIO_TECH_HSPAP;
+				break;
+			case MTK_RADIO_TECH_DC_DPA:
+				tech = RADIO_TECH_HSDPA;
+				break;
+			case MTK_RADIO_TECH_DC_UPA:
+				tech = RADIO_TECH_HSUPA;
+				break;
+			case MTK_RADIO_TECH_DC_HSDPAP:
+			case MTK_RADIO_TECH_DC_HSDPAP_UPA:
+			case MTK_RADIO_TECH_DC_HSDPAP_DPA:
+			case MTK_RADIO_TECH_DC_HSPAP:
+				tech = RADIO_TECH_HSPAP;
+				break;
 			}
-
-			ofono_gprs_status_notify(gprs, status);
-
-		} else {
-			/*
-			 * This prevents core ending
-			 * into eternal loop with driver
-			 */
-			decode_ril_error(&error, "FAIL");
 		}
+	}
 
+	/*
+	 * There are two cases that can result in this callback
+	 * running:
+	 *
+	 * 1) ril_gprs_state_change() is called due to an unsolicited
+	 *    event from RILD.  No ofono cb exists.
+	 *
+	 * 2) The ofono code code calls the driver's attached_status()
+	 *    function.  A valid ofono cb exists.
+	 */
+
+	if (gd->rild_status != status) {
 		gd->rild_status = status;
-		goto exit;
+
+		if (cb == NULL)
+			notify_status = TRUE;
 	}
 
-	if (!cb)
-		ofono_gprs_status_notify(gprs, status);
+	/*
+	 * Override the actual status based upon the desired
+	 * attached status set by the core GPRS code ( controlled
+	 * by the ConnnectionManager's 'Powered' property ).
+	 */
+	attached = status == NETWORK_REGISTRATION_STATUS_REGISTERED ||
+			status == NETWORK_REGISTRATION_STATUS_ROAMING;
 
-	gd->rild_status = status;
+	if (attached && gd->ofono_attached == FALSE) {
+		DBG("attached=true; ofono_attached=false; return !REGISTERED");
+		status = NETWORK_REGISTRATION_STATUS_NOT_REGISTERED;
 
-exit:
-	DBG("data reg status %d, rild_status %d, attached %d",
-		status, gd->rild_status, gd->ofono_attached);
-cb_out:
+		/*
+		 * Further optimization so that if ril_status ==
+		 * NOT_REGISTERED, ofono_attached == false, and status ==
+		 * ROAMING | REGISTERED, then notify gets cleared...
+		 *
+		 * As is, this results in unecessary status notify calls
+		 * when nothing has changed.
+		 */
+		if (notify_status && status == old_status)
+			notify_status = FALSE;
+	}
+
+	/* Just need to notify ofono if it's already attached */
+	if (notify_status) {
+		/*
+		 * If network disconnect has occurred, call detached_notify()
+		 * instead of status_notify().
+		 */
+		if (!attached &&
+			(old_status == NETWORK_REGISTRATION_STATUS_REGISTERED ||
+				old_status ==
+					NETWORK_REGISTRATION_STATUS_ROAMING)) {
+			DBG("calling ofono_gprs_detached_notify()");
+			ofono_gprs_detached_notify(gprs);
+			tech = RADIO_TECH_UNKNOWN;
+		} else {
+			DBG("calling ofono_gprs_status_notify()");
+			ofono_gprs_status_notify(gprs, status);
+		}
+	}
+
+	modem = ofono_gprs_get_modem(gprs);
+	ofono_modem_set_integer(modem, "RilDataRadioTechnology", tech);
+	ofono_gprs_bearer_notify(gprs, ril_tech_to_bearer_tech(tech));
+
 	if (cb)
-		cb(&error, status, cbd->data);
-}
+		CALLBACK_WITH_SUCCESS(cb, status, cbd->data);
 
-static void ril_data_probe_reg_cb(struct ril_msg *message, gpointer user_data)
-{
-	struct cb_data *cbd = user_data;
-	struct ofono_gprs *gprs = cbd->user;
-	struct gprs_data *gd = ofono_gprs_get_data(gprs);
-	struct ofono_error error;
-	int status, lac, ci, tech;
-	int max_cids = 1;
-	int id = RIL_UNSOL_RESPONSE_VOICE_NETWORK_STATE_CHANGED;
+	return;
 
-	DBG("");
+error_free:
+	g_strfreev(strv);
 
-	if (!(gd && message->error == RIL_E_SUCCESS)) {
-		ofono_error("ril_data_reg_cb: reply failure: %s",
-				ril_error_to_string(message->error));
-		decode_ril_error(&error, "FAIL");
-		error.error = message->error;
-		status = NETWORK_REGISTRATION_STATUS_UNKNOWN;
-		goto out;
-	}
-
-	decode_ril_error(&error, "OK");
-	status = -1;
-
-	if (ril_util_parse_reg(gd->ril, message, &status,
-				&lac, &ci, &tech, &max_cids) == FALSE) {
-		ofono_error("Failure parsing data registration response.");
-		decode_ril_error(&error, "FAIL");
-
-		if (status == -1)
-			status = NETWORK_REGISTRATION_STATUS_UNKNOWN;
-
-		goto out;
-	}
-
-	if (status > 10)
-		status = status - 10;
-
-	ofono_gprs_register(gprs);
-
-	ofono_registered = TRUE;
-
-	if (max_cids > gd->max_cids) {
-		DBG("Setting max cids to %d", max_cids);
-		gd->max_cids = max_cids;
-		ofono_gprs_set_cid_range(gprs, 1, max_cids);
-	}
-
-	if (status == roaming)
-		status = check_if_really_roaming(status);
-
-out:
-	ofono_info("data reg status probed %d", status);
-
-	gd->registerid = g_ril_register(gd->ril,
-			id, ril_gprs_state_change, gprs);
-
-	gd->rild_status = status;
+error:
+	if (cb)
+		CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
 }
 
 static void ril_gprs_registration_status(struct ofono_gprs *gprs,
-					ofono_gprs_status_cb_t cb,
-					void *data)
+					ofono_gprs_status_cb_t cb, void *data)
 {
-	struct gprs_data *gd = ofono_gprs_get_data(gprs);
-	struct cb_data *cbd = cb_data_new(cb, data);
-	int request = RIL_REQUEST_DATA_REGISTRATION_STATE;
-	guint ret;
+	struct ril_gprs_data *gd = ofono_gprs_get_data(gprs);
+	struct cb_data *cbd = cb_data_new(cb, data, gprs);
 
 	DBG("");
 
-	if (gd == NULL || cbd == NULL)
-		return;
-
-	cbd->user = gprs;
-
-	ret = g_ril_send(gd->ril, request,
-				NULL, 0,
-				((gd->rild_status == -1)
-				? ril_data_probe_reg_cb
-				: ril_data_reg_cb), cbd, g_free);
-
-	g_ril_print_request_no_args(gd->ril, ret, request);
-
-	if (ret <= 0) {
-		ofono_error("Send RIL_REQUEST_DATA_RESTISTRATION_STATE fail.");
+	if (g_ril_send(gd->ril, RIL_REQUEST_DATA_REGISTRATION_STATE, NULL,
+			ril_data_reg_cb, cbd, g_free) == 0) {
+		ofono_error("%s: send "
+				"RIL_REQUEST_DATA_REGISTRATION_STATE failed",
+				__func__);
 		g_free(cbd);
 
-		if (cb)
+		if (cb != NULL)
 			CALLBACK_WITH_FAILURE(cb, -1, data);
 	}
 }
 
-static int ril_gprs_probe(struct ofono_gprs *gprs,
-				unsigned int vendor, void *data)
+static void query_max_cids_cb(struct ril_msg *message, gpointer user_data)
 {
-	GRil *ril = data;
-	struct gprs_data *gd;
+	struct ofono_gprs *gprs = user_data;
+	struct ril_gprs_data *gd = ofono_gprs_get_data(gprs);
+	struct parcel rilp;
+	int num_str;
+	char **strv;
+	char *debug_str;
+	char *end;
+	int max_calls = 2;
 
-	gd = g_try_new0(struct gprs_data, 1);
+	if (message->error != RIL_E_SUCCESS) {
+		ofono_error("%s: DATA_REGISTRATION_STATE reply failure: %s",
+				__func__,
+				ril_error_to_string(message->error));
+		goto error;
+	}
+
+	g_ril_init_parcel(message, &rilp);
+	strv = parcel_r_strv(&rilp);
+
+	if (strv == NULL)
+		goto error;
+
+	num_str = g_strv_length(strv);
+	debug_str = g_strjoinv(",", strv);
+	g_ril_append_print_buf(gd->ril, "{%d,%s}", num_str, debug_str);
+	g_free(debug_str);
+	g_ril_print_response(gd->ril, message);
+
+	if (num_str < 6)
+		goto reg_atom;
+
+	max_calls = strtoul(strv[5], &end, 10);
+	if (end == strv[5] || *end != '\0')
+		goto error_free;
+
+reg_atom:
+	g_strfreev(strv);
+	ofono_gprs_set_cid_range(gprs, 1, max_calls);
+	ofono_gprs_register(gprs);
+	return;
+
+error_free:
+	g_strfreev(strv);
+
+error:
+	ofono_error("Unable to query max CIDs");
+	ofono_gprs_remove(gprs);
+}
+
+static void ril_gprs_state_change(struct ril_msg *message, gpointer user_data)
+{
+	struct ofono_gprs *gprs = user_data;
+	struct ril_gprs_data *gd = ofono_gprs_get_data(gprs);
+
+	g_ril_print_unsol_no_args(gd->ril, message);
+
+	/*
+	 * We just want to track network data status if ofono
+	 * itself is attached, so we avoid unnecessary data state requests.
+	 */
+	if (gd->ofono_attached == TRUE)
+		ril_gprs_registration_status(gprs, NULL, NULL);
+}
+
+static void query_max_cids(struct ofono_gprs *gprs)
+{
+	struct ril_gprs_data *gd = ofono_gprs_get_data(gprs);
+
+	g_ril_register(gd->ril, RIL_UNSOL_RESPONSE_VOICE_NETWORK_STATE_CHANGED,
+					ril_gprs_state_change, gprs);
+
+	/*
+	 * MTK modem does not return max_cids, string, so hard-code it
+	 * here
+	 */
+	if (g_ril_vendor(gd->ril) == OFONO_RIL_VENDOR_MTK) {
+		ofono_gprs_set_cid_range(gprs, 1, 3);
+		ofono_gprs_register(gprs);
+		return;
+	}
+
+	if (g_ril_send(gd->ril, RIL_REQUEST_DATA_REGISTRATION_STATE, NULL,
+			query_max_cids_cb, gprs, NULL) < 0)
+		ofono_gprs_remove(gprs);
+}
+
+static void drop_data_call_cb(struct ril_msg *message, gpointer user_data)
+{
+	struct ofono_gprs *gprs = user_data;
+	struct ril_gprs_data *gd = ofono_gprs_get_data(gprs);
+
+	if (message->error == RIL_E_SUCCESS)
+		g_ril_print_response_no_args(gd->ril, message);
+	else
+		ofono_error("%s: RIL error %s", __func__,
+				ril_error_to_string(message->error));
+
+	if (--(gd->pending_deact_req) == 0)
+		query_max_cids(gprs);
+}
+
+static int drop_data_call(struct ofono_gprs *gprs, int cid)
+{
+	struct ril_gprs_data *gd = ofono_gprs_get_data(gprs);
+	struct parcel rilp;
+
+	ril_util_build_deactivate_data_call(gd->ril, &rilp, cid,
+					RIL_DEACTIVATE_DATA_CALL_NO_REASON);
+
+	if (g_ril_send(gd->ril, RIL_REQUEST_DEACTIVATE_DATA_CALL,
+			&rilp, drop_data_call_cb, gprs, NULL) > 0)
+		return 0;
+
+	return -1;
+}
+
+static void get_active_data_calls_cb(struct ril_msg *message,
+					gpointer user_data)
+{
+	struct ofono_gprs *gprs = user_data;
+	struct ril_gprs_data *gd = ofono_gprs_get_data(gprs);
+	struct parcel rilp;
+	int num_calls;
+	int cid;
+	int i;
+
+	if (message->error != RIL_E_SUCCESS) {
+		ofono_error("%s: RIL error %s", __func__,
+				ril_error_to_string(message->error));
+		goto end;
+	}
+
+	g_ril_init_parcel(message, &rilp);
+
+	/* Version */
+	parcel_r_int32(&rilp);
+	num_calls = parcel_r_int32(&rilp);
+
+	/*
+	 * We disconnect from previous calls here, which might be needed
+	 * because of a previous ofono abort, as some rild implementations do
+	 * not disconnect the calls even after the ril socket is closed.
+	 */
+	for (i = 0; i < num_calls; i++) {
+		parcel_r_int32(&rilp);			/* status */
+		parcel_r_int32(&rilp);			/* ignore */
+		cid = parcel_r_int32(&rilp);
+		parcel_r_int32(&rilp);			/* active */
+		parcel_skip_string(&rilp);		/* type */
+		parcel_skip_string(&rilp);		/* ifname */
+		parcel_skip_string(&rilp);		/* addresses */
+		parcel_skip_string(&rilp);		/* dns */
+		parcel_skip_string(&rilp);		/* gateways */
+
+		/* malformed check */
+		if (rilp.malformed) {
+			ofono_error("%s: malformed parcel received", __func__);
+			goto end;
+		}
+
+		DBG("Standing data call with cid %d", cid);
+
+		if (drop_data_call(gprs, cid) == 0)
+			++(gd->pending_deact_req);
+	}
+
+end:
+	if (gd->pending_deact_req == 0)
+		query_max_cids(gprs);
+}
+
+static void get_active_data_calls(struct ofono_gprs *gprs)
+{
+	struct ril_gprs_data *gd = ofono_gprs_get_data(gprs);
+
+	if (g_ril_send(gd->ril, RIL_REQUEST_DATA_CALL_LIST, NULL,
+			get_active_data_calls_cb, gprs, NULL) == 0)
+		ofono_error("%s: send failed", __func__);
+}
+
+static int ril_gprs_probe(struct ofono_gprs *gprs, unsigned int vendor,
+								void *userdata)
+{
+	GRil *ril = userdata;
+	struct ril_gprs_data *gd;
+
+	gd = g_try_new0(struct ril_gprs_data, 1);
 	if (gd == NULL)
 		return -ENOMEM;
 
 	gd->ril = g_ril_clone(ril);
 	gd->ofono_attached = FALSE;
-	gd->max_cids = 0;
 	gd->rild_status = -1;
-	gd->registerid = -1;
-	gd->timer_id = 0;
-
-	ofono_registered = FALSE;
 
 	ofono_gprs_set_data(gprs, gd);
 
-	ril_gprs_registration_status(gprs, NULL, NULL);
+	get_active_data_calls(gprs);
 
 	return 0;
 }
 
 static void ril_gprs_remove(struct ofono_gprs *gprs)
 {
-	struct gprs_data *gd = ofono_gprs_get_data(gprs);
+	struct ril_gprs_data *gd = ofono_gprs_get_data(gprs);
 
 	DBG("");
 
 	ofono_gprs_set_data(gprs, NULL);
-
-	if (gd->registerid != -1)
-		g_ril_unregister(gd->ril, gd->registerid);
-
-	if (gd->timer_id > 0)
-		g_source_remove(gd->timer_id);
 
 	g_ril_unref(gd->ril);
 	g_free(gd);
 }
 
 static struct ofono_gprs_driver driver = {
-	.name			= "rilmodem",
+	.name			= RILMODEM,
 	.probe			= ril_gprs_probe,
 	.remove			= ril_gprs_remove,
 	.set_attached		= ril_gprs_set_attached,

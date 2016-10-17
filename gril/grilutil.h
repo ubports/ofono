@@ -31,29 +31,12 @@ extern "C" {
 #include "parcel.h"
 #include "gril.h"
 
-enum online_states {
-	RIL_OFFLINE,
-	RIL_ONLINE_PREF,
-	RIL_ONLINE,
-};
-
-static const char defaultpasswd[] = "NOTGIVEN";
-
-const char *ril_ofono_protocol_to_ril_string(guint protocol);
 int ril_protocol_string_to_ofono_protocol(gchar *protocol_str);
-const char *ril_appstate_to_string(int app_state);
-const char *ril_apptype_to_string(int app_type);
-const char *ril_cardstate_to_string(int card_state);
 const char *ril_error_to_string(int error);
-const char *ril_pinstate_to_string(int pin_state);
+const char *ril_radio_state_to_string(int radio_state);
 const char *ril_request_id_to_string(int req);
 const char *ril_unsol_request_to_string(int request);
-
-void g_ril_util_debug_chat(gboolean in, const char *str, gsize len,
-				GRilDebugFunc debugf, gpointer user_data);
-
-void g_ril_util_debug_dump(gboolean in, const unsigned char *buf, gsize len,
-				GRilDebugFunc debugf, gpointer user_data);
+const char *ril_pdp_fail_to_string(int status);
 
 void g_ril_util_debug_hexdump(gboolean in, const unsigned char *buf, gsize len,
 				GRilDebugFunc debugf, gpointer user_data);

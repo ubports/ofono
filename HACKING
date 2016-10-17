@@ -113,3 +113,5 @@ doc/coding-style.txt.
 a feature that touches files under 'include/', 'src/' and 'drivers/'
 directories, split in three separated patches, taking care not to
 break compilation.
+
+4) Submit patches using git send-email to ofono@ofono.org

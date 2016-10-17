@@ -1,0 +1,25 @@
+#!/usr/bin/python3
+
+import dbus
+
+bus = dbus.SystemBus()
+
+manager = dbus.Interface(bus.get_object('org.ofono', '/'),
+						'org.ofono.Manager')
+
+modems = manager.GetModems()
+
+for path, properties in modems:
+	if "org.ofono.AllowedAccessPoints" not in properties["Interfaces"]:
+		continue
+
+	allowedAccessPoints = dbus.Interface(bus.get_object('org.ofono',
+					path), 'org.ofono.AllowedAccessPoints')
+
+	apns = allowedAccessPoints.GetAllowedAccessPoints()
+
+	print("Allowed Access Points for [ %s ]" % (path))
+	for apn in apns:
+		print("    [ %s]" % (apn))
+
+print("")

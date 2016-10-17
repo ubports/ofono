@@ -1,3 +1,24 @@
+ver 1.18:
+	Fix issue with cell broadcast and use-after-fee.
+	Fix issue with repeated held call indicator.
+	Fix issue with +CCWA and connection setup.
+	Fix issue with empty operator scan results.
+	Fix issue with persistent RAT mode handling.
+	Fix issue with multiparty call introspection.
+	Fix issue with GRPS context introspection.
+	Fix issue with stale context deactivation.
+	Add support for automatic context activation.
+	Add support for SIM service provider names.
+	Add support for handling allowed APN lists.
+	Add support for network monitoring interface.
+	Add support for U-Blox TOBY-L2 modem series.
+	Add support for Sierra MC73xx QMI modems.
+	Add support for SoFIA 3GR modem series.
+	Add support for upower battery monitoring.
+	Add support for gateway audio card types.
+	Add support for Handsfree audio driver.
+	Add support for Android RIL integration.
+
 ver 1.17:
 	Fix issue with alphanumeric TP-OA handling.
 	Fix issue with push notification origin port.
