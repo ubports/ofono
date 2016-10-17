@@ -1,9 +1,8 @@
 /*
  *
- *  RIL chat library with GLib integration
+ *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
- *  Copyright (C) 2012  Canonical Ltd.
+ *  Copyright (C) 2014  Canonical Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -20,27 +19,12 @@
  *
  */
 
-#ifndef __GRIL_RESPONSE_H
-#define __GRIL_RESPONSE_H
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-struct _GRilResponse {
-	GSList *lines;
-	char *final_or_pdu;
-};
-
-typedef struct _GRilResponse GRilResponse;
-
-#define G_RIL_RESPONSE_LINE_LENGTH_MAX 2048
-
-const char *g_ril_final_response(GRilResponse *response);
-const char *g_ril_response_pdu(GRilResponse *response);
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif /* __GRIL_RESPONSE_H */
+int ril_create(struct ofono_modem *modem, enum ofono_ril_vendor vendor);
+void ril_remove(struct ofono_modem *modem);
+int ril_enable(struct ofono_modem *modem);
+int ril_disable(struct ofono_modem *modem);
+void ril_pre_sim(struct ofono_modem *modem);
+void ril_post_sim(struct ofono_modem *modem);
+void ril_post_online(struct ofono_modem *modem);
+void ril_set_online(struct ofono_modem *modem, ofono_bool_t online,
+			ofono_modem_online_cb_t callback, void *data);

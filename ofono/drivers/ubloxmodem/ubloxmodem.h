@@ -1,8 +1,8 @@
 /*
  *
- *  oFono - Open Source Telephony - RIL-based devices
+ *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2015 Jolla Ltd.
+ *  Copyright (C) 2016  Endocode AG. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -19,14 +19,7 @@
  *
  */
 
-#ifndef __RILDEV_H
-#define __RILDEV_H
+#include <drivers/atmodem/atutil.h>
 
-#define RILD_CMD_SOCKET "/dev/socket/rild"
-#define RILD_SOCKET_DIR "/dev/socket"
-#define RILD_SOCKET_FILE "rild"
-
-
-void ril_modem_remove(struct ofono_modem *modem);
-
-#endif /* __RILDEV_H */
+extern void ublox_gprs_context_init(void);
+extern void ublox_gprs_context_exit(void);

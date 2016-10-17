@@ -4,7 +4,6 @@
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *  Copyright (C) 2012  Canonical Ltd.
- *  Copyright (C) 2013 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -28,7 +27,6 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
-#include <assert.h>
 #include <ctype.h>
 #include <errno.h>
 
@@ -73,7 +71,6 @@ static void read_watcher_destroy_notify(gpointer user_data)
 	io->read_handler = NULL;
 	io->read_data = NULL;
 
-	g_io_channel_unref(io->channel);
 	io->channel = NULL;
 
 	if (io->destroyed)
@@ -109,7 +106,7 @@ static gboolean received_data(GIOChannel *channel, GIOCondition cond,
 		status = g_io_channel_read_chars(channel, (char *) buf,
 							toread, &rbytes, NULL);
 
-		g_ril_util_debug_hexdump(TRUE, buf, rbytes,
+		g_ril_util_debug_hexdump(TRUE, (guchar *) buf, rbytes,
 						io->debugf, io->debug_data);
 
 		read_count++;
@@ -151,8 +148,8 @@ gsize g_ril_io_write(GRilIO *io, const gchar *data, gsize count)
 		return 0;
 	}
 
-	g_ril_util_debug_hexdump(FALSE, (const unsigned char *)data,
-				bytes_written, io->debugf, io->debug_data);
+	g_ril_util_debug_hexdump(FALSE, (guchar *) data, bytes_written,
+				io->debugf, io->debug_data);
 
 	return bytes_written;
 }
@@ -208,7 +205,7 @@ static GRilIO *create_io(GIOChannel *channel, GIOFlags flags)
 		io->use_write_watch = FALSE;
 	}
 
-	io->buf = ring_buffer_new(8192);
+	io->buf = ring_buffer_new(GRIL_BUFFER_SIZE);
 
 	if (!io->buf)
 		goto error;
@@ -270,7 +267,9 @@ static gboolean call_blocking_read(gpointer user_data)
 {
 	GRilIO *io = user_data;
 
-	while (can_write_data(io->channel, G_IO_OUT, io) == TRUE);
+	while (can_write_data(io->channel, G_IO_OUT, io) == TRUE)
+		;
+
 	write_watcher_destroy_notify(io);
 
 	return FALSE;
@@ -288,7 +287,7 @@ gboolean g_ril_io_set_write_handler(GRilIO *io, GRilIOWriteFunc write_handler,
 			return TRUE;
 		}
 
-	return FALSE;
+		return FALSE;
 	}
 
 	if (write_handler == NULL)

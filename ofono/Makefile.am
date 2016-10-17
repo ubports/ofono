@@ -21,9 +21,9 @@ pkginclude_HEADERS = include/log.h include/plugin.h include/history.h \
 			include/cdma-connman.h include/gnss.h \
 			include/private-network.h include/cdma-netreg.h \
 			include/cdma-provision.h include/handsfree.h \
-			include/handsfree-audio.h \
 			include/sim-mnclength.h \
-			include/siri.h
+			include/handsfree-audio.h include/siri.h \
+			include/netmon.h
 
 nodist_pkginclude_HEADERS = include/version.h
 
@@ -97,14 +97,12 @@ gisi_sources = gisi/client.c gisi/client.h gisi/common.h \
 				gisi/server.c gisi/server.h \
 				gisi/socket.c gisi/socket.h
 
-gril_sources = gril/gril.h gril/gril.c gril/grilio.h \
-				gril/grilio.c gril/grilutil.h \
-				gril/grilutil.c gril/ringbuffer.h \
-				gril/gfunc.h gril/ril.h \
+gril_sources = gril/gril.h gril/gril.c \
+				gril/grilio.h gril/grilio.c \
+				gril/grilutil.h gril/grilutil.c \
+				gril/gfunc.h gril/gril.h \
 				gril/parcel.c gril/parcel.h \
-				gril/grilreply.c gril/grilreply.h \
-				gril/grilrequest.c gril/grilrequest.h \
-				gril/grilunsol.c gril/grilunsol.h
+				gril/ril_constants.h
 
 btio_sources = btio/btio.h btio/btio.c
 
@@ -120,6 +118,7 @@ endif
 
 if RILMODEM
 if JOLLA_RILMODEM
+
 builtin_modules += ril
 builtin_sources +=	drivers/ril/ril_call_barring.c \
 			drivers/ril/ril_call_forward.c \
@@ -136,6 +135,7 @@ builtin_sources +=	drivers/ril/ril_call_barring.c \
 			drivers/ril/ril_gprs_context.c \
 			drivers/ril/ril_modem.c \
 			drivers/ril/ril_mtu.c \
+			drivers/ril/ril_netmon.c \
 			drivers/ril/ril_netreg.c \
 			drivers/ril/ril_network.c \
 			drivers/ril/ril_oem_raw.c \
@@ -160,20 +160,29 @@ dist_conf_DATA += drivers/ril/ril_subscription.conf
 endif
 
 else
+
 builtin_sources += $(gril_sources)
 
 builtin_modules += rildev
 builtin_sources += plugins/rildev.c
 
 builtin_modules += ril
-builtin_sources += plugins/ril.c
+builtin_sources += plugins/ril.c plugins/ril.h
+
+builtin_modules += infineon
+builtin_sources += plugins/infineon.c
+
+builtin_modules += ril_sofia3gr
+builtin_sources += plugins/ril_sofia3gr.c
 
 builtin_modules += rilmodem
 builtin_sources += drivers/rilmodem/rilmodem.h \
+			drivers/rilmodem/vendor.h \
 			drivers/rilmodem/rilmodem.c \
 			drivers/rilmodem/devinfo.c \
 			drivers/rilmodem/network-registration.c \
 			drivers/rilmodem/voicecall.c \
+			drivers/rilmodem/voicecall.h \
 			drivers/rilmodem/call-volume.c \
 			drivers/rilmodem/gprs.c \
 			drivers/rilmodem/gprs-context.c \
@@ -181,20 +190,14 @@ builtin_sources += drivers/rilmodem/rilmodem.h \
 			drivers/rilmodem/sms.c \
 			drivers/rilmodem/rilutil.c \
 			drivers/rilmodem/rilutil.h \
-			drivers/rilmodem/radio-settings.c \
-			drivers/rilmodem/phonebook.c \
 			drivers/rilmodem/ussd.c \
 			drivers/rilmodem/call-settings.c \
 			drivers/rilmodem/call-forwarding.c \
-			drivers/rilmodem/cbs.c \
-			drivers/rilmodem/oemraw-messages.c \
+			drivers/rilmodem/radio-settings.c \
 			drivers/rilmodem/call-barring.c \
-			drivers/rilmodem/stk.c
-
-if DATAFILES
-dist_conf_DATA += gril/ril_subscription.conf
-endif
-
+			drivers/rilmodem/netmon.c \
+			drivers/rilmodem/stk.c \
+			drivers/infineonmodem/infineon_constants.h
 endif
 endif
 
@@ -282,8 +285,7 @@ endif
 
 if ATMODEM
 builtin_modules += atmodem
-builtin_sources += $(gatchat_sources) \
-			drivers/atmodem/atmodem.h \
+builtin_sources += 	drivers/atmodem/atmodem.h \
 			drivers/atmodem/atmodem.c \
 			drivers/atmodem/call-settings.c \
 			drivers/atmodem/sms.c \
@@ -421,6 +423,13 @@ builtin_sources += drivers/atmodem/atutil.h \
 			drivers/speedupmodem/speedupmodem.c \
 			drivers/speedupmodem/ussd.c
 
+builtin_modules += ubloxmodem
+builtin_sources += drivers/atmodem/atutil.h \
+			drivers/ubloxmodem/ubloxmodem.h \
+			drivers/ubloxmodem/ubloxmodem.c \
+			drivers/ubloxmodem/gprs-context.c
+
+
 if PHONESIM
 builtin_modules += phonesim
 builtin_sources += plugins/phonesim.c
@@ -527,9 +536,6 @@ builtin_sources += plugins/connman.c
 
 if BLUETOOTH
 if BLUEZ4
-builtin_modules += bluez4
-builtin_sources += plugins/bluez4.c plugins/bluez4.h
-
 builtin_modules += telit
 builtin_sources += plugins/telit.c plugins/bluez4.h
 
@@ -539,11 +545,25 @@ builtin_sources += plugins/sap.c plugins/bluez4.h
 builtin_modules += hfp_bluez4
 builtin_sources += plugins/hfp_hf_bluez4.c plugins/bluez4.h
 
-builtin_modules += hfp_ag_bluez4
-builtin_sources += plugins/hfp_ag_bluez4.c plugins/bluez4.h
-
 builtin_modules += dun_gw_bluez4
 builtin_sources += plugins/dun_gw_bluez4.c plugins/bluez4.h
+else
+builtin_modules += hfp_bluez5
+builtin_sources += plugins/hfp_hf_bluez5.c plugins/bluez5.h
+
+builtin_modules += dun_gw_bluez5
+builtin_sources += plugins/dun_gw_bluez5.c plugins/bluez5.h
+endif
+endif
+endif
+
+if BLUETOOTH
+if BLUEZ4
+builtin_modules += bluez4
+builtin_sources += plugins/bluez4.c plugins/bluez4.h
+
+builtin_modules += hfp_ag_bluez4
+builtin_sources += plugins/hfp_ag_bluez4.c plugins/bluez4.h
 
 builtin_sources += $(btio_sources)
 builtin_cflags += @BLUEZ_CFLAGS@
@@ -552,15 +572,13 @@ else
 builtin_modules += bluez5
 builtin_sources += plugins/bluez5.c plugins/bluez5.h
 
-builtin_modules += hfp_bluez5
-builtin_sources += plugins/hfp_hf_bluez5.c plugins/bluez5.h
-
 builtin_modules += hfp_ag_bluez5
 builtin_sources += plugins/hfp_ag_bluez5.c plugins/bluez5.h
-
-builtin_modules += dun_gw_bluez5
-builtin_sources += plugins/dun_gw_bluez5.c plugins/bluez5.h
 endif
+
+if UPOWER
+builtin_modules += upower
+builtin_sources += plugins/upower.c
 endif
 endif
 
@@ -626,9 +644,12 @@ endif
 builtin_modules += sms_history
 builtin_sources += plugins/smshistory.c
 
+builtin_modules += allowed_apns
+builtin_sources += plugins/allowed-apns.c
+
 sbin_PROGRAMS = src/ofonod
 
-src_ofonod_SOURCES = $(builtin_sources) src/ofono.ver \
+src_ofonod_SOURCES = $(builtin_sources) $(gatchat_sources) src/ofono.ver \
 			src/main.c src/ofono.h src/log.c src/plugin.c \
 			src/modem.c src/common.h src/common.c \
 			src/manager.c src/dbus.c src/util.h src/util.c \
@@ -654,7 +675,8 @@ src_ofonod_SOURCES = $(builtin_sources) src/ofono.ver \
 			src/cdma-provision.c src/handsfree.c \
 			src/handsfree-audio.c src/bluetooth.h \
 			src/sim-mnclength.c src/voicecallagent.c \
-			src/hfp.h src/siri.c
+			src/hfp.h src/siri.c \
+			src/netmon.c
 
 src_ofonod_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
 			@GLIB_LIBS@ @DBUS_LIBS@ -ldl
@@ -700,7 +722,9 @@ doc_files = doc/overview.txt doc/ofono-paper.txt doc/release-faq.txt \
 			doc/location-reporting-api.txt \
 			doc/smshistory-api.txt doc/oemraw-api.txt \
 			doc/certification.txt doc/siri-api.txt \
-			doc/telit-modem.txt
+			doc/telit-modem.txt \
+			doc/networkmonitor-api.txt \
+			doc/allowed-apns-api.txt
 
 
 test_scripts = test/backtrace \
@@ -798,7 +822,13 @@ test_scripts = test/backtrace \
 		test/set-msisdn \
 		test/test-voicecallagent \
 		test/get-network-time \
-		test/set-ddr
+		test/set-ddr \
+		test/register-auto \
+		test/register-operator \
+		test/set-sms-smsc \
+		test/set-sms-bearer \
+		test/get-serving-cell-info \
+		test/list-allowed-access-points
 
 if TEST
 testdir = $(pkglibdir)/test
@@ -816,11 +846,18 @@ unit_objects =
 unit_tests = unit/test-common unit/test-util unit/test-idmap \
 				unit/test-simutil unit/test-stkutil \
 				unit/test-sms unit/test-cdmasms \
-				unit/test-grilrequest \
-				unit/test-grilreply \
-				unit/test-grilunsol \
-				unit/test-sms unit/test-cdmasms \
 				unit/test-provision
+
+if RILMODEM
+if JOLLA_RILMODEM
+
+unit_tests += unit/test-rilmodem-cs \
+				unit/test-rilmodem-cs \
+				unit/test-rilmodem-sms \
+				unit/test-rilmodem-cb
+
+endif
+endif
 
 noinst_PROGRAMS = $(unit_tests) \
 			unit/test-sms-root unit/test-mux unit/test-caif
@@ -872,27 +909,45 @@ unit_test_caif_SOURCES = unit/test-caif.c $(gatchat_sources) \
 unit_test_caif_LDADD = @GLIB_LIBS@
 unit_objects += $(unit_test_caif_OBJECTS)
 
-unit_test_grilrequest_SOURCES = unit/test-grilrequest.c $(gril_sources) \
-				src/log.c gatchat/ringbuffer.c
-unit_test_grilrequest_LDADD = @GLIB_LIBS@ -ldl
-unit_objects += $(unit_test_grilrequest_OBJECTS)
-
-unit_test_grilreply_SOURCES = unit/test-grilreply.c $(gril_sources) \
-				src/log.c gatchat/ringbuffer.c
-unit_test_grilreply_LDADD = @GLIB_LIBS@ -ldl
-unit_objects += $(unit_test_grilreply_OBJECTS)
-
-unit_test_grilunsol_SOURCES = unit/test-grilunsol.c $(gril_sources) \
-				src/log.c gatchat/ringbuffer.c
-unit_test_grilunsol_LDADD = @GLIB_LIBS@ -ldl
-unit_objects += $(unit_test_grilunsol_OBJECTS)
-
 unit_test_provision_SOURCES = unit/test-provision.c \
 				plugins/provision.h plugins/provision.c \
 				plugins/mbpi.c src/gprs-provision.c \
 				src/log.c
 unit_test_provision_LDADD = @GLIB_LIBS@ -ldl
 unit_objects += $(unit_test_provision_OBJECTS)
+
+if RILMODEM
+if JOLLA_RILMODEM
+
+test_rilmodem_sources = $(gril_sources) src/log.c src/common.c src/util.c \
+				gatchat/ringbuffer.h gatchat/ringbuffer.c \
+				unit/rilmodem-test-server.h \
+				unit/rilmodem-test-server.c \
+				src/simutil.c
+
+unit_test_rilmodem_cs_SOURCES = $(test_rilmodem_sources) \
+					unit/test-rilmodem-cs.c \
+					drivers/rilmodem/call-settings.c
+unit_test_rilmodem_cs_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
+					@GLIB_LIBS@ @DBUS_LIBS@ -ldl
+unit_objects += $(unit_test_rilmodem_cs_OBJECTS)
+
+unit_test_rilmodem_sms_SOURCES = $(test_rilmodem_sources) \
+					unit/test-rilmodem-sms.c \
+					drivers/rilmodem/sms.c
+unit_test_rilmodem_sms_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
+					@GLIB_LIBS@ @DBUS_LIBS@ -ldl
+unit_objects += $(unit_test_rilmodem_sms_OBJECTS)
+
+unit_test_rilmodem_cb_SOURCES = $(test_rilmodem_sources) \
+					unit/test-rilmodem-cb.c \
+					drivers/rilmodem/call-barring.c
+unit_test_rilmodem_cb_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
+					@GLIB_LIBS@ @DBUS_LIBS@ -ldl
+unit_objects += $(unit_test_rilmodem_cb_OBJECTS)
+
+endif
+endif
 
 TESTS = $(unit_tests)
 

@@ -1,6 +1,5 @@
 /*
  * Copyright © 2011 Joel Armstrong <jcarmst@sandia.gov>
- * Copyright © 2013 Jolla Ltd.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License (`GPL') as published by
@@ -30,6 +29,7 @@ struct parcel {
 	size_t offset;
 	size_t capacity;
 	size_t size;
+	int malformed;
 };
 
 void parcel_init(struct parcel *p);
@@ -37,9 +37,12 @@ void parcel_grow(struct parcel *p, size_t size);
 void parcel_free(struct parcel *p);
 int32_t parcel_r_int32(struct parcel *p);
 int parcel_w_int32(struct parcel *p, int32_t val);
-int parcel_w_byte(struct parcel *p, const char val);
-int parcel_w_string(struct parcel *p, char *str);
+int parcel_w_string(struct parcel *p, const char *str);
 char *parcel_r_string(struct parcel *p);
+void parcel_skip_string(struct parcel *p);
+int parcel_w_raw(struct parcel *p, const void *data, size_t len);
+void *parcel_r_raw(struct parcel *p,  int *len);
 size_t parcel_data_avail(struct parcel *p);
+char **parcel_r_strv(struct parcel *p);
 
 #endif

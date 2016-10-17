@@ -35,7 +35,6 @@
 #include <ofono/types.h>
 
 #include "grilutil.h"
-#include "parcel.h"
 #include "ril_constants.h"
 
 /* Constants used by CALL_LIST, and SETUP_DATA_CALL RIL requests */
@@ -43,26 +42,7 @@
 #define PROTO_IPV6_STR "IPV6"
 #define PROTO_IPV4V6_STR "IPV4V6"
 
-const char *ril_ofono_protocol_to_ril_string(guint protocol)
-{
-	char *result;
-
-	switch (protocol) {
-	case OFONO_GPRS_PROTO_IPV6:
-		result = PROTO_IPV6_STR;
-		break;
-	case OFONO_GPRS_PROTO_IPV4V6:
-		result = PROTO_IPV4V6_STR;
-		break;
-	case OFONO_GPRS_PROTO_IP:
-		result = PROTO_IP_STR;
-		break;
-	default:
-		result = NULL;
-	}
-
-	return result;
-}
+static char temp_str[32];
 
 int ril_protocol_string_to_ofono_protocol(gchar *protocol_str)
 {
@@ -80,64 +60,8 @@ int ril_protocol_string_to_ofono_protocol(gchar *protocol_str)
 	return result;
 }
 
-const char *ril_appstate_to_string(int app_state)
-{
-	switch (app_state) {
-	case RIL_APPSTATE_UNKNOWN:
-		return "UNKNOWN";
-	case RIL_APPSTATE_DETECTED:
-		return "DETECTED";
-	case RIL_APPSTATE_PIN:
-		return "PIN";
-	case RIL_APPSTATE_PUK:
-		return "PUK";
-	case RIL_APPSTATE_SUBSCRIPTION_PERSO:
-		return "";
-	case RIL_APPSTATE_READY:
-		return "READY";
-	default:
-		return "<INVALID>";
-	}
-}
-
-const char *ril_apptype_to_string(int app_type)
-{
-
-	switch (app_type) {
-	case RIL_APPTYPE_UNKNOWN:
-		return "UNKNOWN";
-	case RIL_APPTYPE_SIM:
-		return "SIM";
-	case RIL_APPTYPE_USIM:
-		return "USIM";
-	case RIL_APPTYPE_RUIM:
-		return "RUIM";
-	case RIL_APPTYPE_CSIM:
-		return "CSIM";
-	case RIL_APPTYPE_ISIM:
-		return "ISIM";
-	default:
-		return "<INVALID>";
-	}
-}
-
-const char *ril_cardstate_to_string(int card_state)
-{
-	switch (card_state) {
-	case RIL_CARDSTATE_ABSENT:
-		return "ABSENT";
-	case RIL_CARDSTATE_PRESENT:
-		return "PRESENT";
-	case RIL_CARDSTATE_ERROR:
-		return "ERROR";
-	default:
-		return "<INVALID>";
-	}
-}
-
 const char *ril_error_to_string(int error)
 {
-	static char unknown[24];
 	switch (error) {
 	case RIL_E_SUCCESS: return "SUCCESS";
 	case RIL_E_RADIO_NOT_AVAILABLE: return "RADIO_NOT_AVAILABLE";
@@ -158,27 +82,36 @@ const char *ril_error_to_string(int error)
 	case RIL_E_MODE_NOT_SUPPORTED: return "MODE_NOT_SUPPORTED";
 	case RIL_E_FDN_CHECK_FAILURE: return "FDN_CHECK_FAILURE";
 	case RIL_E_ILLEGAL_SIM_OR_ME: return "ILLEGAL_SIM_OR_ME";
-	default:
-		snprintf(unknown, sizeof(unknown), "%d", error);
-		return unknown;
+	case RIL_E_DIAL_MODIFIED_TO_USSD: return "DIAL_MODIFIED_TO_USSD";
+	case RIL_E_DIAL_MODIFIED_TO_SS: return "DIAL_MODIFIED_TO_SS";
+	case RIL_E_DIAL_MODIFIED_TO_DIAL: return "DIAL_MODIFIED_TO_DIAL";
+	case RIL_E_USSD_MODIFIED_TO_DIAL: return "USSD_MODIFIED_TO_DIAL";
+	case RIL_E_USSD_MODIFIED_TO_SS: return "USSD_MODIFIED_TO_SS";
+	case RIL_E_USSD_MODIFIED_TO_USSD: return "USSD_MODIFIED_TO_USSD";
+	case RIL_E_SS_MODIFIED_TO_DIAL: return "SS_MODIFIED_TO_DIAL";
+	case RIL_E_SS_MODIFIED_TO_USSD: return "SS_MODIFIED_TO_USSD";
+	case RIL_E_SS_MODIFIED_TO_SS: return "SS_MODIFIED_TO_SS";
+	case RIL_E_SUBSCRIPTION_NOT_SUPPORTED:
+		return "SUBSCRIPTION_NOT_SUPPORTED";
+	default: return "<unknown errno>";
 	}
 }
 
-const char *ril_pinstate_to_string(int pin_state)
+const char *ril_radio_state_to_string(int radio_state)
 {
-	switch (pin_state) {
-	case RIL_PINSTATE_UNKNOWN:
-		return "UNKNOWN";
-	case RIL_PINSTATE_ENABLED_NOT_VERIFIED:
-		return "ENABLED_NOT_VERIFIED";
-	case RIL_PINSTATE_ENABLED_VERIFIED:
-		return "ENABLED_VERIFIED";
-	case RIL_PINSTATE_DISABLED:
-		return "DISABLED";
-	case RIL_PINSTATE_ENABLED_BLOCKED:
-		return "ENABLED_BLOCKED";
-	case RIL_PINSTATE_ENABLED_PERM_BLOCKED:
-		return "ENABLED_PERM_BLOCKED";
+	switch (radio_state) {
+	case RADIO_STATE_OFF:
+		return "OFF";
+	case RADIO_STATE_UNAVAILABLE:
+		return "UNAVAILABLE";
+	case RADIO_STATE_SIM_NOT_READY:
+		return "SIM_NOT_READY";
+	case RADIO_STATE_SIM_LOCKED_OR_ABSENT:
+		return "SIM_LOCKED_OR_ABSENT";
+	case RADIO_STATE_SIM_READY:
+		return "SIM_READY";
+	case RADIO_STATE_ON:
+		return "ON";
 	default:
 		return "<INVALID>";
 	}
@@ -186,7 +119,6 @@ const char *ril_pinstate_to_string(int pin_state)
 
 const char *ril_request_id_to_string(int req)
 {
-	static char unknown[24];
 	switch (req) {
 	case RIL_REQUEST_GET_SIM_STATUS:
 		return "RIL_REQUEST_GET_SIM_STATUS";
@@ -402,17 +334,17 @@ const char *ril_request_id_to_string(int req)
 		return "RIL_REQUEST_ACKNOWLEDGE_INCOMING_GSM_SMS_WITH_PDU";
 	case RIL_REQUEST_STK_SEND_ENVELOPE_WITH_STATUS:
 		return "RIL_REQUEST_STK_SEND_ENVELOPE_WITH_STATUS";
-	case RIL_REQUEST_SET_UICC_SUBSCRIPTION:
-		return "RIL_REQUEST_SET_UICC_SUBSCRIPTION";
+	case RIL_REQUEST_GET_CELL_INFO_LIST:
+		return "RIL_REQUEST_GET_CELL_INFO_LIST";
+	case RIL_REQUEST_SET_INITIAL_ATTACH_APN:
+		return "RIL_REQUEST_SET_INITIAL_ATTACH_APN";
 	default:
-		snprintf(unknown, sizeof(unknown), "RIL_REQUEST_%d", req);
-		return unknown;
+		return "<INVALID>";
 	}
 }
 
 const char *ril_unsol_request_to_string(int request)
 {
-	static char unknown[24];
 	switch (request) {
 	case RIL_UNSOL_RESPONSE_RADIO_STATE_CHANGED:
 		return "UNSOL_RESPONSE_RADIO_STATE_CHANGED";
@@ -434,6 +366,8 @@ const char *ril_unsol_request_to_string(int request)
 		return "UNSOL_NITZ_TIME_RECEIVED";
 	case RIL_UNSOL_SIGNAL_STRENGTH:
 		return "UNSOL_SIGNAL_STRENGTH";
+	case RIL_UNSOL_SUPP_SVC_NOTIFICATION:
+		return "UNSOL_SUPP_SVC_NOTIFICATION";
 	case RIL_UNSOL_STK_SESSION_END:
 		return "UNSOL_STK_SESSION_END";
 	case RIL_UNSOL_STK_PROACTIVE_COMMAND:
@@ -482,114 +416,69 @@ const char *ril_unsol_request_to_string(int request)
 		return "UNSOL_EXIT_EMERGENCY_CALLBACK_MODE";
 	case RIL_UNSOL_RIL_CONNECTED:
 		return "UNSOL_RIL_CONNECTED";
-	case RIL_UNSOL_SUPP_SVC_NOTIFICATION:
-		return "UNSOL_SUPP_SVC_NOTIFICATION";
 	default:
-		snprintf(unknown, sizeof(unknown), "UNSOL_%d", request);
-		return unknown;
+		return "<unknown request>";
 	}
 }
 
-void g_ril_util_debug_chat(gboolean in, const char *str, gsize len,
-				GRilDebugFunc debugf, gpointer user_data)
+const char *ril_pdp_fail_to_string(int status)
 {
-	char type = in ? '<' : '>';
-	gsize escaped = 2; /* Enough for '<', ' ' */
-	char *escaped_str;
-	const char *esc = "<ESC>";
-	gsize esc_size = strlen(esc);
-	const char *ctrlz = "<CtrlZ>";
-	gsize ctrlz_size = strlen(ctrlz);
-	gsize i;
-
-	if (debugf == NULL || !len)
-		return;
-
-	for (i = 0; i < len; i++) {
-		char c = str[i];
-
-		if (g_ascii_isprint(c))
-			escaped += 1;
-		else if (c == '\r' || c == '\t' || c == '\n')
-			escaped += 2;
-		else if (c == 26)
-			escaped += ctrlz_size;
-		else if (c == 25)
-			escaped += esc_size;
+	switch (status) {
+	case PDP_FAIL_NONE:
+		return "NONE";
+	case PDP_FAIL_OPERATOR_BARRED:
+		return "OPERATOR_BARRED";
+	case PDP_FAIL_INSUFFICIENT_RESOURCES:
+		return "INSUFFICIENT_RESOURCES";
+	case PDP_FAIL_MISSING_UKNOWN_APN:
+		return "MISSING_UKNOWN_APN";
+	case PDP_FAIL_UNKNOWN_PDP_ADDRESS_TYPE:
+		return "UNKNOWN_PDP_ADDRESS_TYPE";
+	case PDP_FAIL_USER_AUTHENTICATION:
+		return "USER_AUTHENTICATION";
+	case PDP_FAIL_ACTIVATION_REJECT_GGSN:
+		return "ACTIVATION_REJECT_GGSN";
+	case PDP_FAIL_ACTIVATION_REJECT_UNSPECIFIED:
+		return "ACTIVATION_REJECT_UNSPECIFIED";
+	case PDP_FAIL_SERVICE_OPTION_NOT_SUPPORTED:
+		return "SERVICE_OPTION_NOT_SUPPORTED";
+	case PDP_FAIL_SERVICE_OPTION_NOT_SUBSCRIBED:
+		return "SERVICE_OPTION_NOT_SUBSCRIBED";
+	case PDP_FAIL_SERVICE_OPTION_OUT_OF_ORDER:
+		return "SERVICE_OPTION_OUT_OF_ORDER";
+	case PDP_FAIL_NSAPI_IN_USE:
+		return "NSAPI_IN_USE";
+	case PDP_FAIL_REGULAR_DEACTIVATION:
+		return "REGULAR_DEACTIVATION";
+	case PDP_FAIL_ONLY_IPV4_ALLOWED:
+		return "ONLY_IPV4_ALLOWED";
+	case PDP_FAIL_ONLY_IPV6_ALLOWED:
+		return "ONLY_IPV6_ALLOWED";
+	case PDP_FAIL_ONLY_SINGLE_BEARER_ALLOWED:
+		return "ONLY_SINGLE_BEARER_ALLOWED";
+	case PDP_FAIL_PROTOCOL_ERRORS:
+		return "PROTOCOL_ERRORS";
+	case PDP_FAIL_VOICE_REGISTRATION_FAIL:
+		return "VOICE_REGISTRATION_FAIL";
+	case PDP_FAIL_DATA_REGISTRATION_FAIL:
+		return "DATA_REGISTRATION_FAIL";
+	case PDP_FAIL_SIGNAL_LOST:
+		return "SIGNAL_LOST";
+	case PDP_FAIL_PREF_RADIO_TECH_CHANGED:
+		return "PREF_RADIO_TECH_CHANGED";
+	case PDP_FAIL_RADIO_POWER_OFF:
+		return "RADIO_POWER_OFF";
+	case PDP_FAIL_TETHERED_CALL_ACTIVE:
+		return "TETHERED_CALL_ACTIVE";
+	case PDP_FAIL_ERROR_UNSPECIFIED:
+		return "ERROR_UNSPECIFIED";
+	default:
+		if (g_snprintf(temp_str, sizeof(temp_str),
+				"<UNKNOWN (%d)>", status))
+			return temp_str;
 		else
-			escaped += 4;
+			return "<UNKNOWN>";
 	}
-
-	escaped_str = g_try_malloc(escaped + 1);
-	if (escaped_str == NULL)
-		return;
-
-	escaped_str[0] = type;
-	escaped_str[1] = ' ';
-	escaped_str[2] = '\0';
-	escaped_str[escaped] = '\0';
-
-	for (escaped = 2, i = 0; i < len; i++) {
-		unsigned char c = str[i];
-
-		switch (c) {
-		case '\r':
-			escaped_str[escaped++] = '\\';
-			escaped_str[escaped++] = 'r';
-			break;
-		case '\t':
-			escaped_str[escaped++] = '\\';
-			escaped_str[escaped++] = 't';
-			break;
-		case '\n':
-			escaped_str[escaped++] = '\\';
-			escaped_str[escaped++] = 'n';
-			break;
-		case 26:
-			strncpy(&escaped_str[escaped], ctrlz, ctrlz_size);
-			escaped += ctrlz_size;
-			break;
-		case 25:
-			strncpy(&escaped_str[escaped], esc, esc_size);
-			escaped += esc_size;
-			break;
-		default:
-			if (g_ascii_isprint(c))
-				escaped_str[escaped++] = c;
-			else {
-				escaped_str[escaped++] = '\\';
-				escaped_str[escaped++] = '0' + ((c >> 6) & 07);
-				escaped_str[escaped++] = '0' + ((c >> 3) & 07);
-				escaped_str[escaped++] = '0' + (c & 07);
-			}
-		}
-	}
-
-	debugf(escaped_str, user_data);
-	g_free(escaped_str);
-}
-
-void g_ril_util_debug_dump(gboolean in, const unsigned char *buf, gsize len,
-				GRilDebugFunc debugf, gpointer user_data)
-{
-	char type = in ? '<' : '>';
-	GString *str;
-	gsize i;
-
-	if (debugf == NULL || !len)
-		return;
-
-	str = g_string_sized_new(1 + (len * 2));
-	if (str == NULL)
-		return;
-
-	g_string_append_c(str, type);
-
-	for (i = 0; i < len; i++)
-		g_string_append_printf(str, " %02x", buf[i]);
-
-	debugf(str->str, user_data);
-	g_string_free(str, TRUE);
 }
 
 void g_ril_util_debug_hexdump(gboolean in, const unsigned char *buf, gsize len,

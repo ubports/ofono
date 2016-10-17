@@ -18,6 +18,7 @@
 #include "ril_radio.h"
 #include "ril_sim_card.h"
 #include "ril_sim_settings.h"
+#include "ril_cell_info.h"
 #include "ril_data.h"
 #include "ril_util.h"
 #include "ril_log.h"
@@ -300,6 +301,7 @@ static void ril_modem_post_online(struct ofono_modem *modem)
 	ofono_netreg_create(modem, 0, RILMODEM_DRIVER, md);
 	ofono_ussd_create(modem, 0, RILMODEM_DRIVER, md);
 	ofono_call_settings_create(modem, 0, RILMODEM_DRIVER, md);
+	ofono_netmon_create(modem, 0, RILMODEM_DRIVER, md);
 }
 
 static void ril_modem_set_online(struct ofono_modem *modem, ofono_bool_t online,
@@ -398,6 +400,7 @@ static void ril_modem_remove(struct ofono_modem *ofono)
 	ril_network_unref(modem->network);
 	ril_sim_card_unref(modem->sim_card);
 	ril_sim_settings_unref(modem->sim_settings);
+	ril_cell_info_unref(modem->cell_info);
 	ril_data_unref(modem->data);
 	grilio_channel_unref(modem->io);
 	grilio_queue_cancel_all(md->q, FALSE);
@@ -410,7 +413,8 @@ static void ril_modem_remove(struct ofono_modem *ofono)
 struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *log_prefix,
 		const struct ril_slot_info *slot, struct ril_radio *radio,
 		struct ril_network *network, struct ril_sim_card *card,
-		struct ril_data *data, struct ril_sim_settings *settings)
+		struct ril_data *data, struct ril_sim_settings *settings,
+		struct ril_cell_info *cell_info)
 {
 	/* Skip the slash from the path, it looks like "/ril_0" */
 	struct ofono_modem *ofono = ofono_modem_create(slot->path + 1,
@@ -438,6 +442,7 @@ struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *log_prefix,
 		modem->network = ril_network_ref(network);
 		modem->sim_card = ril_sim_card_ref(card);
 		modem->sim_settings = ril_sim_settings_ref(settings);
+		modem->cell_info = ril_cell_info_ref(cell_info);
 		modem->data = ril_data_ref(data);
 		modem->io = grilio_channel_ref(io);
 		md->q = grilio_queue_new(io);

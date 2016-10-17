@@ -820,7 +820,7 @@ static void ril_plugin_create_modem(struct ril_slot *slot)
 
 	modem = ril_modem_create(slot->io, ril_plugin_log_prefix(slot),
 			&slot->pub, slot->radio, slot->network, slot->sim_card,
-			slot->data, slot->sim_settings);
+			slot->data, slot->sim_settings, slot->cell_info);
 
 	if (modem) {
 		struct ofono_sim *sim = ril_modem_ofono_sim(modem);
@@ -1659,6 +1659,7 @@ static int ril_plugin_init(void)
 	ofono_modem_driver_register(&ril_modem_driver);
 	ofono_sim_driver_register(&ril_sim_driver);
 	ofono_sms_driver_register(&ril_sms_driver);
+	ofono_netmon_driver_register(&ril_netmon_driver);
 	ofono_netreg_driver_register(&ril_netreg_driver);
 	ofono_devinfo_driver_register(&ril_devinfo_driver);
 	ofono_voicecall_driver_register(&ril_voicecall_driver);
@@ -1706,6 +1707,7 @@ static void ril_plugin_exit(void)
 	ofono_sim_driver_unregister(&ril_sim_driver);
 	ofono_sms_driver_unregister(&ril_sms_driver);
 	ofono_devinfo_driver_unregister(&ril_devinfo_driver);
+	ofono_netmon_driver_unregister(&ril_netmon_driver);
 	ofono_netreg_driver_unregister(&ril_netreg_driver);
 	ofono_voicecall_driver_unregister(&ril_voicecall_driver);
 	ofono_call_barring_driver_unregister(&ril_call_barring_driver);

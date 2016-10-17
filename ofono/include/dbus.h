@@ -62,6 +62,7 @@ extern "C" {
 #define OFONO_HANDSFREE_INTERFACE OFONO_SERVICE ".Handsfree"
 #define OFONO_NETWORK_TIME_INTERFACE OFONO_SERVICE ".NetworkTime"
 #define OFONO_SIRI_INTERFACE OFONO_SERVICE ".Siri"
+#define OFONO_NETMON_INTERFACE OFONO_SERVICE ".NetworkMonitor"
 
 /* CDMA Interfaces */
 #define OFONO_CDMA_VOICECALL_MANAGER_INTERFACE "org.ofono.cdma.VoiceCallManager"

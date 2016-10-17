@@ -4,6 +4,7 @@
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *  Copyright (C) 2013 Jolla Ltd
+ *  Copyright (C) 2013 Canonical Ltd
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -38,25 +39,39 @@
 #include <util.h>
 
 #include "gril.h"
-#include "grilutil.h"
 
 #include "rilmodem.h"
 
-#include "ril_constants.h"
-
 struct ussd_data {
 	GRil *ril;
-	guint timer_id;
 };
+
+static gboolean request_success(gpointer data)
+{
+	struct cb_data *cbd = data;
+	ofono_ussd_cb_t cb = cbd->cb;
+
+	CALLBACK_WITH_SUCCESS(cb, cbd->data);
+	g_free(cbd);
+
+	return FALSE;
+}
 
 static void ril_ussd_cb(struct ril_msg *message, gpointer user_data)
 {
+	struct ofono_ussd *ussd = user_data;
+	struct ussd_data *ud = ofono_ussd_get_data(ussd);
+
 	/*
-	 * Calling oFono callback function at this point may lead to
-	 * segmentation fault. There is theoretical possibility that no
-	 * RIL_UNSOL_ON_USSD is received and therefore the original request
-	 * is not freed in oFono.
+	 * We fake an ON_USSD event if there was an error sending the request,
+	 * as core will be waiting for one to respond to the Initiate() call.
+	 * Note that we already made the callback (see ril_ussd_request()).
 	 */
+	if (message->error == RIL_E_SUCCESS)
+		g_ril_print_response_no_args(ud->ril, message);
+	else
+		ofono_ussd_notify(ussd, OFONO_USSD_STATUS_NOT_SUPPORTED,
+					0, NULL, 0);
 }
 
 static void ril_ussd_request(struct ofono_ussd *ussd, int dcs,
@@ -64,133 +79,129 @@ static void ril_ussd_request(struct ofono_ussd *ussd, int dcs,
 			ofono_ussd_cb_t cb, void *data)
 {
 	struct ussd_data *ud = ofono_ussd_get_data(ussd);
-	struct cb_data *cbd = cb_data_new(cb, data);
-	enum sms_charset charset;
-	int ret = -1;
+	struct cb_data *cbd = cb_data_new(cb, data, ussd);
+	char *text;
+	struct parcel rilp;
+	int ret;
 
-	ofono_info("send ussd, len:%d", len);
+	text = ussd_decode(dcs, len, pdu);
+	if (!text)
+		goto error;
 
-	if (cbs_dcs_decode(dcs, NULL, NULL, &charset,
-					NULL, NULL, NULL)) {
-		if (charset == SMS_CHARSET_7BIT) {
-			unsigned char unpacked_buf[182] = "";
-			long written;
-			int length;
+	parcel_init(&rilp);
+	parcel_w_string(&rilp, text);
 
-			unpack_7bit_own_buf(pdu, len, 0, TRUE,
-					sizeof(unpacked_buf), &written, 0,
-					unpacked_buf);
+	g_ril_append_print_buf(ud->ril, "(%s)", text);
 
-			if (written >= 1) {
-				/*
-				 * When USSD was packed, additional CR
-				   might have been added (according to
-				   23.038 6.1.2.3.1). So if the last
-				   character is CR, it should be removed
-				   here. And in addition written doesn't
-				   contain correct length...
-
-				   Over 2 characters long USSD string must
-				   end with # (checked in
-				   valid_ussd_string() ), so it should be
-				   safe to remove extra CR.
-				*/
-				length = strlen((char *)unpacked_buf);
-				if (length > 2 &&
-				    unpacked_buf[length-1] == '\r')
-					unpacked_buf[length-1] = 0;
-				struct parcel rilp;
-				parcel_init(&rilp);
-				parcel_w_string(&rilp, (char *)unpacked_buf);
-				ret = g_ril_send(ud->ril,
-						RIL_REQUEST_SEND_USSD,
-						rilp.data, rilp.size,
-						ril_ussd_cb, cbd, g_free);
-				parcel_free(&rilp);
-			}
-		}
-	}
+	ret = g_ril_send(ud->ril, RIL_REQUEST_SEND_USSD,
+				&rilp, ril_ussd_cb, ussd, NULL);
+	g_free(text);
 
 	/*
-	 * It cannot be guaranteed that response is received before notify or
-	 * user-activity request so we must complete the request now and later
-	 * ignore the actual response.
+	 * TODO: Is g_idle_add necessary?
+	 * We do not wait for the SEND_USSD reply to do the callback, as some
+	 * networks send it after sending one or more ON_USSD events. From the
+	 * ofono core perspective, Initiate() does not return until one ON_USSD
+	 * event is received: making here a successful callback just makes the
+	 * core wait for that event.
 	 */
-	if (ret <= 0) {
-		g_free(cbd);
-		CALLBACK_WITH_FAILURE(cb, data);
-	} else {
-		CALLBACK_WITH_SUCCESS(cb, cbd->data);
+	if (ret > 0) {
+		g_idle_add(request_success, cbd);
+		return;
 	}
 
+error:
+	g_free(cbd);
+	CALLBACK_WITH_FAILURE(cb, data);
 }
+
 static void ril_ussd_cancel_cb(struct ril_msg *message, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
+	struct ofono_ussd *ussd = cbd->user;
+	struct ussd_data *ud = ofono_ussd_get_data(ussd);
 	ofono_ussd_cb_t cb = cbd->cb;
-	struct ofono_error error;
 
-	DBG("%d", message->error);
-
-	if (message->error == RIL_E_SUCCESS)
-		decode_ril_error(&error, "OK");
-	else {
-		ofono_error("ussd canceling failed");
-		decode_ril_error(&error, "FAIL");
+	if (message->error == RIL_E_SUCCESS) {
+		g_ril_print_response_no_args(ud->ril, message);
+		CALLBACK_WITH_SUCCESS(cb, cbd->data);
+	} else {
+		CALLBACK_WITH_FAILURE(cb, cbd->data);
 	}
-
-	cb(&error, cbd->data);
 }
 
 static void ril_ussd_cancel(struct ofono_ussd *ussd,
 				ofono_ussd_cb_t cb, void *user_data)
 {
 	struct ussd_data *ud = ofono_ussd_get_data(ussd);
-	struct cb_data *cbd = cb_data_new(cb, user_data);
+	struct cb_data *cbd = cb_data_new(cb, user_data, ussd);
 
-	ofono_info("send ussd cancel");
-
-	cbd->user = ud;
-
-	if (g_ril_send(ud->ril, RIL_REQUEST_CANCEL_USSD, NULL, 0,
+	if (g_ril_send(ud->ril, RIL_REQUEST_CANCEL_USSD, NULL,
 				ril_ussd_cancel_cb, cbd, g_free) > 0)
 		return;
 
-	ofono_error("unable cancel ussd");
-
 	g_free(cbd);
-
 	CALLBACK_WITH_FAILURE(cb, user_data);
 }
 
 static void ril_ussd_notify(struct ril_msg *message, gpointer user_data)
 {
 	struct ofono_ussd *ussd = user_data;
+	struct ussd_data *ud = ofono_ussd_get_data(ussd);
 	struct parcel rilp;
-	gchar *ussd_from_network = NULL;
-	gchar *type = NULL;
-	gint ussdtype = 0;
+	int numstr;
+	char *typestr;
+	int type;
+	char *str = NULL;
+	gsize written;
+	char *ucs2;
 
-	ofono_info("ussd_received");
+	g_ril_init_parcel(message, &rilp);
 
-	ril_util_init_parcel(message, &rilp);
-	parcel_r_int32(&rilp);
-	type = parcel_r_string(&rilp);
-	ussdtype = g_ascii_xdigit_value(*type);
-	g_free(type);
-	type = NULL;
-	ussd_from_network = parcel_r_string(&rilp);
+	numstr = parcel_r_int32(&rilp);
+	if (numstr < 1)
+		return;
 
-	/* ussd_from_network not freed because core does that if dcs is 0xFF */
-	if (ussd_from_network) {
-		DBG("ussd_received, length %d", strlen(ussd_from_network));
-		ofono_ussd_notify(ussd, ussdtype, 0xFF,
-			(const unsigned char *)ussd_from_network,
-			strlen(ussd_from_network));
-	} else
-		ofono_ussd_notify(ussd, ussdtype, 0, NULL, 0);
+	typestr = parcel_r_string(&rilp);
+	if (typestr == NULL || *typestr == '\0')
+		return;
 
-	return;
+	type = *typestr - '0';
+	g_free(typestr);
+
+	if (numstr > 1)
+		str = parcel_r_string(&rilp);
+
+	g_ril_append_print_buf(ud->ril, "{%d,%s}", type, str);
+
+	g_ril_print_unsol(ud->ril, message);
+
+	/* To fix bug in MTK: USSD-Notify arrive with type 2 instead of 0 */
+	if (g_ril_vendor(ud->ril) == OFONO_RIL_VENDOR_MTK &&
+			str != NULL && type == 2)
+		type = 0;
+
+	if (str == NULL) {
+		ofono_ussd_notify(ussd, type, 0, NULL, 0);
+		return;
+	}
+
+	/*
+	 * With data coding scheme 0x48, we are saying that the ussd string is a
+	 * UCS-2 string, uncompressed, and with unspecified message class. For
+	 * the DCS coding, see 3gpp 23.038, sect. 5.
+	 */
+	ucs2 = g_convert(str, -1, "UCS-2BE//TRANSLIT",
+					"UTF-8", NULL, &written, NULL);
+	g_free(str);
+
+	if (ucs2 == NULL) {
+		ofono_error("%s: Error transcoding", __func__);
+		return;
+	}
+
+	ofono_ussd_notify(ussd, type, 0x48, (unsigned char *) ucs2, written);
+	g_free(ucs2);
 }
 
 static gboolean ril_delayed_register(gpointer user_data)
@@ -200,13 +211,10 @@ static gboolean ril_delayed_register(gpointer user_data)
 
 	DBG("");
 
-	ud->timer_id = 0;
-
 	ofono_ussd_register(ussd);
 
 	/* Register for USSD responses */
-	g_ril_register(ud->ril, RIL_UNSOL_ON_USSD,
-			ril_ussd_notify, ussd);
+	g_ril_register(ud->ril, RIL_UNSOL_ON_USSD, ril_ussd_notify, ussd);
 
 	return FALSE;
 }
@@ -216,10 +224,11 @@ static int ril_ussd_probe(struct ofono_ussd *ussd,
 					void *user)
 {
 	GRil *ril = user;
-	struct ussd_data *ud = g_try_new0(struct ussd_data, 1);
+	struct ussd_data *ud = g_new0(struct ussd_data, 1);
+
 	ud->ril = g_ril_clone(ril);
 	ofono_ussd_set_data(ussd, ud);
-	ud->timer_id = g_timeout_add_seconds(2, ril_delayed_register, ussd);
+	g_idle_add(ril_delayed_register, ussd);
 
 	return 0;
 }
@@ -229,19 +238,16 @@ static void ril_ussd_remove(struct ofono_ussd *ussd)
 	struct ussd_data *ud = ofono_ussd_get_data(ussd);
 	ofono_ussd_set_data(ussd, NULL);
 
-	if (ud->timer_id > 0)
-		g_source_remove(ud->timer_id);
-
 	g_ril_unref(ud->ril);
 	g_free(ud);
 }
 
 static struct ofono_ussd_driver driver = {
-	.name				= "rilmodem",
-	.probe				= ril_ussd_probe,
-	.remove				= ril_ussd_remove,
-	.request			= ril_ussd_request,
-	.cancel				= ril_ussd_cancel
+	.name		= RILMODEM,
+	.probe		= ril_ussd_probe,
+	.remove		= ril_ussd_remove,
+	.request	= ril_ussd_request,
+	.cancel		= ril_ussd_cancel
 };
 
 void ril_ussd_init(void)
@@ -253,4 +259,3 @@ void ril_ussd_exit(void)
 {
 	ofono_ussd_driver_unregister(&driver);
 }
-

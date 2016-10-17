@@ -166,6 +166,18 @@ void idmap_take(struct idmap *idmap, unsigned int id)
 	idmap->bits[offset] |= 1UL << (bit % BITS_PER_LONG);
 }
 
+int idmap_find(struct idmap *idmap, unsigned int id)
+{
+	unsigned int bit = id - idmap->min;
+	unsigned int offset;
+
+	if (bit >= idmap->size)
+		return 0;
+
+	offset = bit / BITS_PER_LONG;
+	return (idmap->bits[offset] & (1UL << (bit % BITS_PER_LONG))) != 0;
+}
+
 /*
  * Allocate the next bit skipping the ids up to and including last.  If there
  * is no free ids until the max id is encountered, the counter is wrapped back

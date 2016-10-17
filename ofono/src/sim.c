@@ -323,8 +323,9 @@ static char **get_service_numbers(GSList *service_numbers)
 	return ret;
 }
 
-static void service_number_free(struct service_number *num)
+static void service_number_free(gpointer pointer)
 {
+	struct service_number *num = pointer;
 	g_free(num->id);
 	g_free(num);
 }
@@ -705,8 +706,7 @@ static DBusMessage *sim_set_property(DBusConnection *conn, DBusMessage *msg,
 		set_ok = set_own_numbers(sim, own_numbers, msg);
 
 error:
-		g_slist_foreach(own_numbers, (GFunc) g_free, 0);
-		g_slist_free(own_numbers);
+		g_slist_free_full(own_numbers, g_free);
 
 		if (set_ok)
 			return NULL;
@@ -1285,8 +1285,7 @@ check:
 		char **own_numbers;
 		DBusConnection *conn = ofono_dbus_get_connection();
 
-		g_slist_foreach(sim->own_numbers, (GFunc) g_free, NULL);
-		g_slist_free(sim->own_numbers);
+		g_slist_free_full(sim->own_numbers, g_free);
 		sim->own_numbers = sim->new_numbers;
 
 		own_numbers = get_own_numbers(sim->own_numbers);
@@ -1298,8 +1297,7 @@ check:
 
 		g_strfreev(own_numbers);
 	} else {
-		g_slist_foreach(sim->new_numbers, (GFunc) g_free, NULL);
-		g_slist_free(sim->new_numbers);
+		g_slist_free_full(sim->new_numbers, g_free);
 	}
 
 	sim->new_numbers = NULL;
@@ -1392,9 +1390,7 @@ static void sim_service_numbers_changed(int id, void *userdata)
 	struct ofono_sim *sim = userdata;
 
 	if (sim->service_numbers) {
-		g_slist_foreach(sim->service_numbers,
-				(GFunc)service_number_free, NULL);
-		g_slist_free(sim->service_numbers);
+		g_slist_free_full(sim->service_numbers, service_number_free);
 		sim->service_numbers = NULL;
 	}
 
@@ -1950,8 +1946,6 @@ static void sim_efphase_read_cb(int ok, int length, int record,
 static void sim_initialize_after_pin(struct ofono_sim *sim)
 {
 	sim->context = ofono_sim_context_create(sim);
-	sim->spn_watches = __ofono_watchlist_new(g_free);
-	sim->imsi_watches = __ofono_watchlist_new(g_free);
 
 	ofono_sim_read(sim->context, SIM_EFPHASE_FILEID,
 			OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
@@ -2137,13 +2131,11 @@ skip_efpl:
 	}
 
 	if (efli) {
-		g_slist_foreach(efli, (GFunc)g_free, NULL);
-		g_slist_free(efli);
+		g_slist_free_full(efli, g_free);
 	}
 
 	if (efpl) {
-		g_slist_foreach(efpl, (GFunc)g_free, NULL);
-		g_slist_free(efpl);
+		g_slist_free_full(efpl, g_free);
 	}
 
 	if (sim->language_prefs != NULL)
@@ -2488,11 +2480,6 @@ static void sim_free_early_state(struct ofono_sim *sim)
 
 static void sim_spn_close(struct ofono_sim *sim)
 {
-	if (sim->spn_watches) {
-		__ofono_watchlist_free(sim->spn_watches);
-		sim->spn_watches = NULL;
-	}
-
 	/*
 	 * We have not initialized SPN logic at all yet, either because
 	 * no netreg / gprs atom has been needed or we have not reached the
@@ -2540,15 +2527,12 @@ static void sim_free_main_state(struct ofono_sim *sim)
 	sim->mnc[0] = '\0';
 
 	if (sim->own_numbers) {
-		g_slist_foreach(sim->own_numbers, (GFunc)g_free, NULL);
-		g_slist_free(sim->own_numbers);
+		g_slist_free_full(sim->own_numbers, g_free);
 		sim->own_numbers = NULL;
 	}
 
 	if (sim->service_numbers) {
-		g_slist_foreach(sim->service_numbers,
-				(GFunc)service_number_free, NULL);
-		g_slist_free(sim->service_numbers);
+		g_slist_free_full(sim->service_numbers, service_number_free);
 		sim->service_numbers = NULL;
 		sim->sdn_ready = FALSE;
 	}
@@ -2591,11 +2575,6 @@ static void sim_free_main_state(struct ofono_sim *sim)
 	sim->barred_dialing = FALSE;
 
 	sim_spn_close(sim);
-
-	if (sim->imsi_watches) {
-		__ofono_watchlist_free(sim->imsi_watches);
-		sim->imsi_watches = NULL;
-	}
 
 	if (sim->context) {
 		ofono_sim_context_free(sim->context);
@@ -3086,9 +3065,13 @@ static void sim_unregister(struct ofono_atom *atom)
 
 	__ofono_watchlist_free(sim->iccid_watches);
 	sim->iccid_watches = NULL;
+	__ofono_watchlist_free(sim->imsi_watches);
+	sim->imsi_watches = NULL;
 
 	__ofono_watchlist_free(sim->state_watches);
 	sim->state_watches = NULL;
+	__ofono_watchlist_free(sim->spn_watches);
+	sim->spn_watches = NULL;
 
 	g_dbus_unregister_interface(conn, path, OFONO_SIM_MANAGER_INTERFACE);
 	ofono_modem_remove_interface(modem, OFONO_SIM_MANAGER_INTERFACE);
@@ -3218,8 +3201,10 @@ void ofono_sim_register(struct ofono_sim *sim)
 	}
 
 	ofono_modem_add_interface(modem, OFONO_SIM_MANAGER_INTERFACE);
-	sim->state_watches = __ofono_watchlist_new(g_free);
 	sim->iccid_watches = __ofono_watchlist_new(g_free);
+	sim->imsi_watches = __ofono_watchlist_new(g_free);
+	sim->state_watches = __ofono_watchlist_new(g_free);
+	sim->spn_watches = __ofono_watchlist_new(g_free);
 	sim->simfs = sim_fs_new(sim, sim->driver);
 
 	__ofono_atom_register(sim->atom, sim_unregister);

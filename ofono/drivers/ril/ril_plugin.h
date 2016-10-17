@@ -35,6 +35,7 @@
 #include <ofono/stk.h>
 #include <ofono/ussd.h>
 #include <ofono/voicecall.h>
+#include <ofono/netmon.h>
 
 #include <grilio_queue.h>
 #include <grilio_request.h>
@@ -75,6 +76,7 @@ struct ril_modem {
 	struct ril_network *network;
 	struct ril_sim_card *sim_card;
 	struct ril_sim_settings *sim_settings;
+	struct ril_cell_info *cell_info;
 	struct ril_slot_config config;
 };
 
@@ -125,7 +127,8 @@ void ril_plugin_dbus_signal_sim(struct ril_plugin_dbus *dbus, int index,
 struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *log_prefix,
 		const struct ril_slot_info *slot, struct ril_radio *radio,
 		struct ril_network *network, struct ril_sim_card *card,
-		struct ril_data *data, struct ril_sim_settings *settings);
+		struct ril_data *data, struct ril_sim_settings *settings,
+		struct ril_cell_info *cell_info);
 void ril_modem_delete(struct ril_modem *modem);
 struct ofono_sim *ril_modem_ofono_sim(struct ril_modem *modem);
 struct ofono_gprs *ril_modem_ofono_gprs(struct ril_modem *modem);
@@ -160,6 +163,7 @@ extern const struct ofono_sms_driver ril_sms_driver;
 extern const struct ofono_stk_driver ril_stk_driver;
 extern const struct ofono_ussd_driver ril_ussd_driver;
 extern const struct ofono_voicecall_driver ril_voicecall_driver;
+extern const struct ofono_netmon_driver ril_netmon_driver;
 
 #endif /* RIL_PLUGIN_H */
 
