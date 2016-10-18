@@ -302,7 +302,12 @@ static struct ril_data_call *ril_data_call_parse(int version, GRilIoParser *rilp
 	if (version >= 9) {
 		/* PCSCF */
 		grilio_parser_skip_string(rilp);
-		if (version >= 11) {
+
+		/*
+		 * All known rils that report version 10 are using
+		 * RIL_Data_Call_Response_v11 (FairPhone 2, Nexus 4)
+		 */
+		if (version >= 10) {
 			/* MTU */
 			grilio_parser_get_int32(rilp, &call->mtu);
 		}
