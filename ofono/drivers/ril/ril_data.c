@@ -100,6 +100,7 @@ struct ril_data_priv {
 	struct ril_data_request *pending_req;
 
 	enum ril_data_allow_data_opt allow_data;
+	enum ril_data_call_format data_call_format;
 	char *log_prefix;
 	guint query_id;
 	gulong io_event_id;
@@ -272,7 +273,8 @@ static int ril_data_protocol_to_ofono(gchar *str)
 	return -1;
 }
 
-static struct ril_data_call *ril_data_call_parse(int version, GRilIoParser *rilp)
+static struct ril_data_call *ril_data_call_parse(int version,
+							GRilIoParser *rilp)
 {
 	int prot;
 	char *prot_str;
@@ -280,6 +282,7 @@ static struct ril_data_call *ril_data_call_parse(int version, GRilIoParser *rilp
 	guint32 active = RIL_DATA_CALL_INACTIVE;
 	struct ril_data_call *call = g_new0(struct ril_data_call, 1);
 
+	/* RIL_Data_Call_Response_v6 (see ril.h) */
 	grilio_parser_get_uint32(rilp, &status);
 	grilio_parser_get_int32(rilp, &call->retry_time);
 	grilio_parser_get_int32(rilp, &call->cid);
@@ -299,15 +302,13 @@ static struct ril_data_call *ril_data_call_parse(int version, GRilIoParser *rilp
 	call->status = status;
 	call->active = active;
 
+	/* RIL_Data_Call_Response_v9 */
 	if (version >= 9) {
 		/* PCSCF */
 		grilio_parser_skip_string(rilp);
 
-		/*
-		 * All known rils that report version 10 are using
-		 * RIL_Data_Call_Response_v11 (FairPhone 2, Nexus 4)
-		 */
-		if (version >= 10) {
+		/* RIL_Data_Call_Response_v11 */
+		if (version >= 11) {
 			/* MTU */
 			grilio_parser_get_int32(rilp, &call->mtu);
 		}
@@ -317,7 +318,8 @@ static struct ril_data_call *ril_data_call_parse(int version, GRilIoParser *rilp
 	return call;
 }
 
-struct ril_data_call_list *ril_data_call_list_parse(const void *data, guint len)
+static struct ril_data_call_list *ril_data_call_list_parse(const void *data,
+			guint len, enum ril_data_call_format format)
 {
 	unsigned int version, n, i;
 	GRilIoParser rilp;
@@ -328,8 +330,13 @@ struct ril_data_call_list *ril_data_call_list_parse(const void *data, guint len)
 		struct ril_data_call_list *list =
 			g_new0(struct ril_data_call_list, 1);
 
-		DBG("version=%u,num=%u", version, n);
-		list->version = version;
+		if (format == RIL_DATA_CALL_FORMAT_AUTO || format == version) {
+			DBG("version=%u,num=%u", version, n);
+			list->version = version;
+		} else {
+			DBG("version=%u(%d),num=%u", version, format, n);
+			list->version = format;
+		}
 
 		for (i = 0; i < n && !grilio_parser_at_end(&rilp); i++) {
 			struct ril_data_call *call =
@@ -499,7 +506,8 @@ static void ril_data_call_list_changed_cb(GRilIoChannel *io, guint event,
 		priv->query_id = 0;
 	}
 
-	ril_data_set_calls(self, ril_data_call_list_parse(data, len));
+	ril_data_set_calls(self, ril_data_call_list_parse(data, len,
+						priv->data_call_format));
 }
 
 static void ril_data_query_data_calls_cb(GRilIoChannel *io, int ril_status,
@@ -511,7 +519,8 @@ static void ril_data_query_data_calls_cb(GRilIoChannel *io, int ril_status,
 	GASSERT(priv->query_id);
 	priv->query_id = 0;
 	if (ril_status == RIL_E_SUCCESS) {
-		ril_data_set_calls(self, ril_data_call_list_parse(data, len));
+		ril_data_set_calls(self, ril_data_call_list_parse(data, len,
+						priv->data_call_format));
 	}
 }
 
@@ -690,11 +699,13 @@ static void ril_data_call_setup_cb(GRilIoChannel *io, int ril_status,
 	struct ril_data_request_setup *setup = user_data;
 	struct ril_data_request *req = &setup->req;
 	struct ril_data *self = req->data;
+	struct ril_data_priv *priv = self->priv;
 	struct ril_data_call_list *list = NULL;
 	struct ril_data_call *call = NULL;
 
 	if (ril_status == RIL_E_SUCCESS) {
-		list = ril_data_call_list_parse(data, len);
+		list = ril_data_call_list_parse(data, len,
+						priv->data_call_format);
 	}
 
 	if (list) {
@@ -1024,8 +1035,9 @@ static void ril_data_settings_changed(struct ril_sim_settings *settings,
 }
 
 struct ril_data *ril_data_new(struct ril_data_manager *dm, const char *name,
-			struct ril_radio *radio, struct ril_network *network,
-			GRilIoChannel *io, enum ril_data_allow_data_opt opt)
+		struct ril_radio *radio, struct ril_network *network,
+		GRilIoChannel *io, enum ril_data_allow_data_opt allow_data,
+		enum ril_data_call_format data_call_format)
 {
 	GASSERT(dm);
 	if (G_LIKELY(dm)) {
@@ -1034,10 +1046,10 @@ struct ril_data *ril_data_new(struct ril_data_manager *dm, const char *name,
 		struct ril_sim_settings *settings = network->settings;
 		GRilIoRequest *req = grilio_request_new();
 
-		switch (opt) {
+		switch (allow_data) {
 		case RIL_ALLOW_DATA_ON:
 		case RIL_ALLOW_DATA_OFF:
-			priv->allow_data = opt;
+			priv->allow_data = allow_data;
 			break;
 		default:
 			/*
@@ -1049,6 +1061,7 @@ struct ril_data *ril_data_new(struct ril_data_manager *dm, const char *name,
 			break;
 		}
 
+		priv->data_call_format = data_call_format;
 		priv->log_prefix = (name && name[0]) ?
 			g_strconcat(name, " ", NULL) : g_strdup("");
 
