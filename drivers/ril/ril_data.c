@@ -172,7 +172,6 @@ struct ril_data_request_2g {
 	gulong handler_id;
 };
 
-static gboolean ril_data_manager_handover(struct ril_data_manager *dm);
 static void ril_data_manager_check_data(struct ril_data_manager *dm);
 static void ril_data_manager_check_network_mode(struct ril_data_manager *dm);
 
@@ -1379,6 +1378,16 @@ void ril_data_manager_unref(struct ril_data_manager *self)
 	}
 }
 
+static gboolean ril_data_manager_handover(struct ril_data_manager *self)
+{
+	/*
+	 * The 3G/LTE handover thing only makes sense if we are managing
+	 * more than one SIM slot. Otherwise leave things where they are.
+	 */
+	return (self->data_list && self->data_list->next &&
+			(self->flags & RIL_DATA_MANAGER_3GLTE_HANDOVER));
+}
+
 static gboolean ril_data_manager_requests_pending(struct ril_data_manager *self)
 {
 	GSList *l;
@@ -1460,16 +1469,6 @@ static struct ril_data *ril_data_manager_allowed(struct ril_data_manager *self)
 	}
 
 	return NULL;
-}
-
-static gboolean ril_data_manager_handover(struct ril_data_manager *self)
-{
-	/*
-	 * The 3G/LTE handover thing only makes sense if we are managing
-	 * more than one SIM slot. Otherwise leave things where they are.
-	 */
-	return (self->data_list && self->data_list->next &&
-			(self->flags & RIL_DATA_MANAGER_3GLTE_HANDOVER));
 }
 
 static void ril_data_manager_switch_data_on(struct ril_data_manager *self,
