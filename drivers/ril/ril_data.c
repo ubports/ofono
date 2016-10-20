@@ -1076,6 +1076,7 @@ struct ril_data *ril_data_new(struct ril_data_manager *dm, const char *name,
 		grilio_request_unref(req);
 
 		dm->data_list = g_slist_append(dm->data_list, self);
+		ril_data_manager_check_network_mode(dm);
 		return self;
 	}
 	return NULL;
