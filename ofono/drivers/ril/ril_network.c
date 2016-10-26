@@ -436,9 +436,30 @@ static int ril_network_pref_mode_expected(struct ril_network *self)
 {
 	struct ril_sim_settings *settings = self->settings;
 	struct ril_network_priv *priv = self->priv;
-	const enum ofono_radio_access_mode pref_mode = priv->max_pref_mode ?
-		MIN(settings->pref_mode, priv->max_pref_mode) :
-		settings->pref_mode;
+
+	/*
+	 * On dual-SIM phones such as Jolla C only one slot at a time
+	 * is allowed to use LTE. Even if the slot which has been using
+	 * LTE gets powered off, we still need to explicitely set its
+	 * preferred mode to GSM, to make LTE machinery available to
+	 * the other slot. This sort of behaviour might not be necessary
+	 * on some hardware and can (should) be made configurable when
+	 * it becomes necessary.
+	 */
+	const enum ofono_radio_access_mode max_pref_mode =
+		(priv->radio->state == RADIO_STATE_ON) ? priv->max_pref_mode :
+		OFONO_RADIO_ACCESS_MODE_GSM;
+
+	/*
+	 * OFONO_RADIO_ACCESS_MODE_ANY is zero. If both pref_mode
+	 * and max_pref_mode are not ANY, we pick the smallest value.
+	 * Otherwise we take any non-zero value if there is one.
+	 */
+	const enum ofono_radio_access_mode pref_mode =
+		(settings->pref_mode && max_pref_mode) ?
+		MIN(settings->pref_mode, max_pref_mode) :
+		settings->pref_mode ? settings->pref_mode :
+		max_pref_mode;
 	return ril_network_mode_to_rat(self, pref_mode);
 }
 
@@ -555,6 +576,31 @@ static int ril_network_parse_pref_resp(const void *data, guint len)
 	return pref;
 }
 
+static void ril_network_startup_query_pref_mode_cb(GRilIoChannel *io,
+		int status, const void *data, guint len, void *user_data)
+{
+	if (status == RIL_E_SUCCESS) {
+		struct ril_network *self = RIL_NETWORK(user_data);
+		struct ril_network_priv *priv = self->priv;
+		const enum ofono_radio_access_mode pref_mode = self->pref_mode;
+
+		priv->rat = ril_network_parse_pref_resp(data, len);
+		self->pref_mode = ril_network_rat_to_mode(priv->rat);
+		DBG_(self, "rat mode %d (%s)", priv->rat,
+			ofono_radio_access_mode_to_string(self->pref_mode));
+
+		if (self->pref_mode != pref_mode) {
+			ril_network_emit(self, SIGNAL_PREF_MODE_CHANGED);
+		}
+
+		/*
+		 * Unlike ril_network_query_pref_mode_cb, this one always
+		 * checks the preferred mode.
+		 */
+		ril_network_check_pref_mode(self, FALSE);
+	}
+}
+
 static void ril_network_query_pref_mode_cb(GRilIoChannel *io, int status,
 				const void *data, guint len, void *user_data)
 {
@@ -661,8 +707,11 @@ static void ril_network_voice_state_changed_cb(GRilIoChannel *io, guint code,
 
 static void ril_network_radio_state_cb(struct ril_radio *radio, void *data)
 {
+	struct ril_network *self = RIL_NETWORK(data);
+
+	ril_network_check_pref_mode(self, FALSE);
 	if (radio->state == RADIO_STATE_ON) {
-		ril_network_poll_state(RIL_NETWORK(data));
+		ril_network_poll_state(self);
 	}
 }
 
@@ -753,7 +802,9 @@ struct ril_network *ril_network_new(GRilIoChannel *io, const char *log_prefix,
 	 * Query the initial state. Querying network state before the radio
 	 * has been turned on makes RIL unhappy.
 	 */
-	ril_network_query_pref_mode(self);
+	grilio_queue_send_request_full(priv->q, NULL,
+			RIL_REQUEST_GET_PREFERRED_NETWORK_TYPE,
+			ril_network_startup_query_pref_mode_cb, NULL, self);
 	if (radio->state == RADIO_STATE_ON) {
 		ril_network_poll_state(self);
 	}
