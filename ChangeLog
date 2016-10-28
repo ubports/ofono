@@ -1,3 +1,13 @@
+ver 1.19:
+	Fix issue with DHCP parsing and Huawei modems.
+	Fix issue with detecting Huawei E3372 modem.
+	Fix issue with handling serving cell info.
+	Fix issue with handling SIM SC facility lock.
+	Fix issue with Android RIL PIN retry logic.
+	Fix issue with Android RIL and RAT handling.
+	Add support for Android RIL cell broadcast.
+	Add support for SoFIA 3GR thermal management.
+
 ver 1.18:
 	Fix issue with cell broadcast and use-after-fee.
 	Fix issue with repeated held call indicator.
