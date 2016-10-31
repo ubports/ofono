@@ -594,11 +594,11 @@ static gboolean ril_data_request_do_cancel(struct ril_data_request *req)
 		struct ril_data_priv *priv = req->data->priv;
 
 		DBG_(req->data, "canceling %s request %p", req->name, req);
+		if (req->cancel) {
+			req->cancel(req);
+		}
 		if (priv->pending_req == req) {
 			/* Request has been submitted already */
-			if (req->cancel) {
-				req->cancel(req);
-			}
 			priv->pending_req = NULL;
 		} else if (priv->req_queue == req) {
 			/* It's the first one in the queue */
@@ -681,14 +681,11 @@ static void ril_data_request_queue(struct ril_data_request *req)
 
 static void ril_data_call_setup_cancel(struct ril_data_request *req)
 {
-	if (req->pending_id) {
-		grilio_queue_cancel_request(req->data->priv->q,
-						req->pending_id, FALSE);
-		req->pending_id = 0;
-		if (req->cb.setup) {
-			req->cb.setup(req->data, GRILIO_STATUS_CANCELLED,
-							NULL, req->arg);
-		}
+	ril_data_request_cancel_io(req);
+	if (req->cb.setup) {
+		ril_data_call_setup_cb_t cb = req->cb.setup;
+		req->cb.setup = NULL;
+		cb(req->data, GRILIO_STATUS_CANCELLED, NULL, req->arg);
 	}
 }
 
@@ -854,14 +851,11 @@ static struct ril_data_request *ril_data_call_setup_new(struct ril_data *data,
 
 static void ril_data_call_deact_cancel(struct ril_data_request *req)
 {
-	if (req->pending_id) {
-		grilio_queue_cancel_request(req->data->priv->q,
-						req->pending_id, FALSE);
-		req->pending_id = 0;
-		if (req->cb.setup) {
-			req->cb.deact(req->data, GRILIO_STATUS_CANCELLED,
-								req->arg);
-		}
+	ril_data_request_cancel_io(req);
+	if (req->cb.deact) {
+		ril_data_call_deactivate_cb_t cb = req->cb.deact;
+		req->cb.deact = NULL;
+		cb(req->data, GRILIO_STATUS_CANCELLED, req->arg);
 	}
 }
 
