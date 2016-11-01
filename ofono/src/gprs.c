@@ -2358,12 +2358,12 @@ static DBusMessage *gprs_remove_context(DBusConnection *conn,
 	if (ctx == NULL)
 		return __ofono_error_not_found(msg);
 
+	/* This context is already being messed with */
+	if (ctx->pending)
+		return __ofono_error_busy(msg);
+
 	if (ctx->active) {
 		struct ofono_gprs_context *gc = ctx->context_driver;
-
-		/* This context is already being messed with */
-		if (ctx->pending)
-			return __ofono_error_busy(msg);
 
 		gprs->pending = dbus_message_ref(msg);
 		gc->driver->deactivate_primary(gc, ctx->context.cid,
