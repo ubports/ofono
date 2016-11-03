@@ -135,6 +135,7 @@ struct pri_context {
 	struct ofono_gprs *gprs;
 };
 
+static void gprs_attached_update(struct ofono_gprs *gprs);
 static void gprs_netreg_update(struct ofono_gprs *gprs);
 static void gprs_deactivate_next(struct ofono_gprs *gprs);
 static void write_context_settings(struct ofono_gprs *gprs,
@@ -1133,6 +1134,16 @@ static void pri_deactivate_callback(const struct ofono_error *error, void *data)
 	ofono_dbus_signal_property_changed(conn, ctx->path,
 					OFONO_CONNECTION_CONTEXT_INTERFACE,
 					"Active", DBUS_TYPE_BOOLEAN, &value);
+
+	/*
+	 * If "Attached" property was about to be signalled as TRUE but there
+	 * were still active contexts, try again to signal "Attached" property
+	 * to registered applications after active contexts have been released.
+	 */
+	if (ctx->gprs->flags & GPRS_FLAG_ATTACHED_UPDATE) {
+		ctx->gprs->flags &= ~GPRS_FLAG_ATTACHED_UPDATE;
+		gprs_attached_update(ctx->gprs);
+	}
 }
 
 static DBusMessage *pri_set_apn(struct pri_context *ctx, DBusConnection *conn,
