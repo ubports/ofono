@@ -135,6 +135,7 @@ struct pri_context {
 	struct ofono_gprs *gprs;
 };
 
+static void gprs_attached_update(struct ofono_gprs *gprs);
 static void gprs_netreg_update(struct ofono_gprs *gprs);
 static void gprs_deactivate_next(struct ofono_gprs *gprs);
 static void write_context_settings(struct ofono_gprs *gprs,
@@ -1148,6 +1149,16 @@ static void pri_deactivate_callback(const struct ofono_error *error, void *data)
 	ofono_dbus_signal_property_changed(conn, ctx->path,
 					OFONO_CONNECTION_CONTEXT_INTERFACE,
 					"Active", DBUS_TYPE_BOOLEAN, &value);
+
+	/*
+	 * If "Attached" property was about to be signalled as TRUE but there
+	 * were still active contexts, try again to signal "Attached" property
+	 * to registered applications after active contexts have been released.
+	 */
+	if (ctx->gprs->flags & GPRS_FLAG_ATTACHED_UPDATE) {
+		ctx->gprs->flags &= ~GPRS_FLAG_ATTACHED_UPDATE;
+		gprs_attached_update(ctx->gprs);
+	}
 }
 
 static void pri_read_settings_callback(const struct ofono_error *error,
@@ -2358,12 +2369,12 @@ static DBusMessage *gprs_remove_context(DBusConnection *conn,
 	if (ctx == NULL)
 		return __ofono_error_not_found(msg);
 
+	/* This context is already being messed with */
+	if (ctx->pending)
+		return __ofono_error_busy(msg);
+
 	if (ctx->active) {
 		struct ofono_gprs_context *gc = ctx->context_driver;
-
-		/* This context is already being messed with */
-		if (ctx->pending)
-			return __ofono_error_busy(msg);
 
 		gprs->pending = dbus_message_ref(msg);
 		gc->driver->deactivate_primary(gc, ctx->context.cid,
