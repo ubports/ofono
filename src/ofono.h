@@ -153,6 +153,7 @@ enum ofono_atom_type {
 	OFONO_ATOM_TYPE_HANDSFREE,
 	OFONO_ATOM_TYPE_SIRI,
 	OFONO_ATOM_TYPE_NETMON,
+	OFONO_ATOM_TYPE_LTE,
 };
 
 enum ofono_atom_watch_condition {
