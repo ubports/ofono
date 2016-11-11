@@ -41,7 +41,7 @@ struct ofono_lte_driver {
 	int (*probe)(struct ofono_lte *lte, void *data);
 	void (*remove)(struct ofono_lte *lte);
 	int (*set_default_attach_info)(const struct ofono_lte *lte,
-			struct ofono_lte_default_attach_info *info,
+			const struct ofono_lte_default_attach_info *info,
 			ofono_lte_cb_t cb, void *data);
 
 };
