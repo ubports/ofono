@@ -40,10 +40,9 @@ struct ofono_lte_driver {
 	const char *name;
 	int (*probe)(struct ofono_lte *lte, void *data);
 	void (*remove)(struct ofono_lte *lte);
-	int (*set_default_attach_info)(const struct ofono_lte *lte,
+	void (*set_default_attach_info)(const struct ofono_lte *lte,
 			const struct ofono_lte_default_attach_info *info,
 			ofono_lte_cb_t cb, void *data);
-
 };
 
 int ofono_lte_driver_register(const struct ofono_lte_driver *d);
