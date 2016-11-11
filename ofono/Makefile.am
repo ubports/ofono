@@ -752,7 +752,8 @@ doc_files = doc/overview.txt doc/ofono-paper.txt doc/release-faq.txt \
 			doc/certification.txt doc/siri-api.txt \
 			doc/telit-modem.txt \
 			doc/networkmonitor-api.txt \
-			doc/allowed-apns-api.txt
+			doc/allowed-apns-api.txt \
+			doc/lte-api.txt
 
 
 test_scripts = test/backtrace \
