@@ -442,6 +442,7 @@ static void ublox_gprs_context_remove(struct ofono_gprs_context *gc)
 	g_at_chat_unref(gcd->chat);
 
 	memset(gcd, 0, sizeof(*gcd));
+	g_free(gcd);
 }
 
 static struct ofono_gprs_context_driver driver = {
