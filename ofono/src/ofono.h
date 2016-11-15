@@ -594,4 +594,4 @@ int __ofono_sim_mnclength_get_mnclength(const char *imsi);
 int mnclength(int mcc, int mnc);
 
 #include <ofono/netmon.h>
-
+#include <ofono/lte.h>
