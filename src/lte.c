@@ -230,11 +230,11 @@ static void lte_atom_remove(struct ofono_atom *atom)
 	if (lte == NULL)
 		return;
 
+	g_free(lte->imsi);
+	lte->imsi = NULL;
+
 	if (lte->settings) {
 		storage_close(lte->imsi, SETTINGS_STORE, lte->settings, TRUE);
-
-		g_free(lte->imsi);
-		lte->imsi = NULL;
 		lte->settings = NULL;
 	}
 
