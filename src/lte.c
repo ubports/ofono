@@ -146,6 +146,12 @@ static DBusMessage *lte_set_default_apn(struct ofono_lte *lte,
 				DBusConnection *conn, DBusMessage *msg,
 				const char *apn)
 {
+	if (lte->driver->set_default_attach_info == NULL)
+		return __ofono_error_not_implemented(msg);
+
+	if (lte->pending)
+		return __ofono_error_busy(msg);
+
 	if (strlen(apn) > OFONO_GPRS_MAX_APN_LENGTH)
 		return __ofono_error_invalid_format(msg);
 
@@ -156,15 +162,11 @@ static DBusMessage *lte_set_default_apn(struct ofono_lte *lte,
 	if (is_valid_apn(apn) == FALSE && apn[0] != '\0')
 		return __ofono_error_invalid_format(msg);
 
-	if (lte->pending)
-		return __ofono_error_busy(msg);
-
 	lte->pending = dbus_message_ref(msg);
 
 	g_strlcpy(lte->pending_info.apn, apn, OFONO_GPRS_MAX_APN_LENGTH + 1);
 
-	if (lte->driver->set_default_attach_info)
-		lte->driver->set_default_attach_info(lte, &lte->pending_info,
+	lte->driver->set_default_attach_info(lte, &lte->pending_info,
 					lte_set_default_attach_info_cb, lte);
 
 	return NULL;
