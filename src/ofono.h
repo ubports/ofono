@@ -533,3 +533,4 @@ ofono_bool_t __ofono_private_network_request(ofono_private_network_cb_t cb,
 						int *id, void *data);
 
 #include <ofono/netmon.h>
+#include <ofono/lte.h>
