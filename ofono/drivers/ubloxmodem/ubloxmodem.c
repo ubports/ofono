@@ -29,12 +29,14 @@
 #define OFONO_API_SUBJECT_TO_CHANGE
 #include <ofono/plugin.h>
 #include <ofono/types.h>
+#include <ofono/modem.h>
 
 #include "ubloxmodem.h"
 
 static int ubloxmodem_init(void)
 {
 	ublox_gprs_context_init();
+	ublox_lte_init();
 
 	return 0;
 }
@@ -42,6 +44,7 @@ static int ubloxmodem_init(void)
 static void ubloxmodem_exit(void)
 {
 	ublox_gprs_context_exit();
+	ublox_lte_exit();
 }
 
 OFONO_PLUGIN_DEFINE(ubloxmodem, "U-Blox Toby L2 high speed modem driver",
