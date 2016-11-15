@@ -24,7 +24,7 @@ pkginclude_HEADERS = include/log.h include/plugin.h include/history.h \
 			include/sim-mnclength.h \
 			include/handsfree-audio.h include/siri.h \
 			include/sms-filter.h \
-			include/netmon.h
+			include/netmon.h include/lte.h
 
 nodist_pkginclude_HEADERS = include/version.h
 
@@ -704,7 +704,7 @@ src_ofonod_SOURCES = $(builtin_sources) $(gatchat_sources) src/ofono.ver \
 			src/sim-mnclength.c src/voicecallagent.c \
 			src/sms-filter.c src/dbus-queue.c \
 			src/hfp.h src/siri.c \
-			src/netmon.c
+			src/netmon.c src/lte.c
 
 src_ofonod_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
 			@GLIB_LIBS@ @DBUS_LIBS@ -ldl
