@@ -22,7 +22,7 @@ pkginclude_HEADERS = include/log.h include/plugin.h include/history.h \
 			include/private-network.h include/cdma-netreg.h \
 			include/cdma-provision.h include/handsfree.h \
 			include/handsfree-audio.h include/siri.h \
-			include/netmon.h
+			include/netmon.h include/lte.h
 
 nodist_pkginclude_HEADERS = include/version.h
 
@@ -605,7 +605,7 @@ src_ofonod_SOURCES = $(builtin_sources) $(gatchat_sources) src/ofono.ver \
 			src/cdma-provision.c src/handsfree.c \
 			src/handsfree-audio.c src/bluetooth.h \
 			src/hfp.h src/siri.c \
-			src/netmon.c
+			src/netmon.c src/lte.c
 
 src_ofonod_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
 			@GLIB_LIBS@ @DBUS_LIBS@ -ldl
