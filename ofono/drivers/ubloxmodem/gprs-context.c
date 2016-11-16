@@ -43,6 +43,7 @@
 
 static const char *none_prefix[] = { NULL };
 static const char *cgcontrdp_prefix[] = { "+CGCONTRDP:", NULL };
+static const char *uipaddr_prefix[] = { "+UIPADDR:", NULL };
 
 struct gprs_context_data {
 	GAtChat *chat;
@@ -50,6 +51,44 @@ struct gprs_context_data {
 	ofono_gprs_context_cb_t cb;
 	void *cb_data;
 };
+
+static void uipaddr_cb(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct ofono_gprs_context *gc = user_data;
+	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
+	GAtResultIter iter;
+
+	const char *gw = NULL;
+	const char *netmask = NULL;
+
+	DBG("ok %d", ok);
+
+	if (!ok) {
+		CALLBACK_WITH_SUCCESS(gcd->cb, gcd->cb_data);
+		return;
+	}
+
+	g_at_result_iter_init(&iter, result);
+
+	while (g_at_result_iter_next(&iter, "+UIPADDR:")) {
+		g_at_result_iter_skip_next(&iter);
+		g_at_result_iter_skip_next(&iter);
+
+		if (!g_at_result_iter_next_string(&iter, &gw))
+			break;
+
+		if (!g_at_result_iter_next_string(&iter, &netmask))
+			break;
+	}
+
+	if (gw)
+		ofono_gprs_context_set_ipv4_gateway(gc, gw);
+
+	if (netmask)
+		ofono_gprs_context_set_ipv4_netmask(gc, netmask);
+
+	CALLBACK_WITH_SUCCESS(gcd->cb, gcd->cb_data);
+}
 
 /*
  * CGCONTRDP returns addr + netmask in the same string in the form
@@ -113,6 +152,7 @@ static void cgcontrdp_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	const char *laddrnetmask = NULL;
 	const char *gw = NULL;
 	const char *dns[3] = { NULL, NULL, NULL };
+	char buf[64];
 
 	DBG("ok %d", ok);
 
@@ -159,6 +199,17 @@ static void cgcontrdp_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	if (dns[0])
 		ofono_gprs_context_set_ipv4_dns_servers(gc, dns);
 
+	/*
+	 * Some older versions of Toby L2 need to issue AT+UIPADDR to get the
+	 * the correct gateway and netmask. The newer version will return an
+	 * empty ok reply.
+	 */
+	snprintf(buf, sizeof(buf), "AT+UIPADDR=%u", gcd->active_context);
+	if (g_at_chat_send(gcd->chat, buf, uipaddr_prefix,
+				uipaddr_cb, gc, NULL) > 0)
+		return;
+
+	/* Even if UIPADDR failed, we still have enough data. */
 	CALLBACK_WITH_SUCCESS(gcd->cb, gcd->cb_data);
 }
 
