@@ -2330,6 +2330,7 @@ char *sms_decode_text(GSList *sms_list)
 			g_string_append(str, converted);
 			g_free(converted);
 		}
+
 		g_byte_array_free(utf16, TRUE);
 	}
 
