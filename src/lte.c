@@ -232,9 +232,6 @@ static void lte_atom_remove(struct ofono_atom *atom)
 	if (lte == NULL)
 		return;
 
-	g_free(lte->imsi);
-	lte->imsi = NULL;
-
 	if (lte->settings) {
 		storage_close(lte->imsi, SETTINGS_STORE, lte->settings, TRUE);
 		lte->settings = NULL;
@@ -242,6 +239,9 @@ static void lte_atom_remove(struct ofono_atom *atom)
 
 	if (lte->driver && lte->driver->remove)
 		lte->driver->remove(lte);
+
+	g_free(lte->imsi);
+	lte->imsi = NULL;
 
 	g_free(lte);
 }
