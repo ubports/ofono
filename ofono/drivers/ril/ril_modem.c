@@ -51,11 +51,12 @@ struct ril_modem_online_request {
 struct ril_modem_data {
 	struct ril_modem modem;
 	GRilIoQueue *q;
-	struct ofono_radio_settings *radio_settings;
+	char *log_prefix;
 	char *imei;
 	char *ecclist_file;
 	gboolean pre_sim_done;
 	gboolean allow_data;
+	gulong sim_imsi_event_id;
 
 	guint online_check_id;
 	enum ril_modem_power_state power_state;
@@ -72,6 +73,8 @@ struct ril_modem_data {
 };
 
 #define RADIO_POWER_TAG(md) (md)
+
+#define DBG_(md,fmt,args...) DBG("%s" fmt, (md)->log_prefix, ##args)
 
 static struct ril_modem_data *ril_modem_data_from_ofono(struct ofono_modem *o)
 {
@@ -113,6 +116,12 @@ struct ofono_gprs *ril_modem_ofono_gprs(struct ril_modem *modem)
 struct ofono_netreg *ril_modem_ofono_netreg(struct ril_modem *modem)
 {
 	return ril_modem_get_atom_data(modem, OFONO_ATOM_TYPE_NETREG);
+}
+
+static inline struct ofono_radio_settings *ril_modem_radio_settings(
+						struct ril_modem *modem)
+{
+	return ril_modem_get_atom_data(modem, OFONO_ATOM_TYPE_RADIO_SETTINGS);
 }
 
 void ril_modem_delete(struct ril_modem *md)
@@ -223,17 +232,23 @@ static void ril_modem_schedule_online_check(struct ril_modem_data *md)
 
 static void ril_modem_update_radio_settings(struct ril_modem_data *md)
 {
-	if (md->modem.radio->state == RADIO_STATE_ON) {
-		if (!md->radio_settings) {
-			DBG("Initializing radio settings interface");
-			md->radio_settings =
-				ofono_radio_settings_create(md->modem.ofono, 0,
-							RILMODEM_DRIVER, md);
+	struct ril_modem *m = &md->modem;
+	if (m->radio->state == RADIO_STATE_ON && m->sim_settings->imsi) {
+		/* radio-settings.c assumes that IMSI is available */
+		if (!ril_modem_radio_settings(m)) {
+			DBG_(md, "initializing radio settings interface");
+			ofono_radio_settings_create(m->ofono, 0,
+						RILMODEM_DRIVER, md);
 		}
-	} else if (md->radio_settings) {
-		DBG("Removing radio settings interface");
-		ofono_radio_settings_remove(md->radio_settings);
-		md->radio_settings = NULL;
+	} else {
+		/* ofono core may remove radio settings atom internally */
+		struct ofono_radio_settings *rs = ril_modem_radio_settings(m);
+		if (rs) {
+			DBG_(md, "removing radio settings interface");
+			ofono_radio_settings_remove(rs);
+		} else {
+			DBG_(md, "radio settings interface is already gone");
+		}
 	}
 }
 
@@ -246,6 +261,14 @@ static void ril_modem_radio_state_cb(struct ril_radio *radio, void *data)
 	ril_modem_update_online_state(md);
 }
 
+static void ril_modem_imsi_cb(struct ril_sim_settings *settings, void *data)
+{
+	struct ril_modem_data *md = data;
+
+	GASSERT(md->modem.sim_settings == settings);
+	ril_modem_update_radio_settings(md);
+}
+
 static void ril_modem_pre_sim(struct ofono_modem *modem)
 {
 	struct ril_modem_data *md = ril_modem_data_from_ofono(modem);
@@ -255,7 +278,6 @@ static void ril_modem_pre_sim(struct ofono_modem *modem)
 	ofono_devinfo_create(modem, 0, RILMODEM_DRIVER, md);
 	ofono_sim_create(modem, 0, RILMODEM_DRIVER, md);
 	ofono_voicecall_create(modem, 0, RILMODEM_DRIVER, md);
-	ril_modem_update_radio_settings(md);
 	if (!md->radio_state_event_id) {
 		md->radio_state_event_id =
 			ril_radio_add_state_changed_handler(md->modem.radio,
@@ -385,6 +407,10 @@ static void ril_modem_remove(struct ofono_modem *ofono)
 	ril_radio_power_off(modem->radio, RADIO_POWER_TAG(md));
 	ril_radio_unref(modem->radio);
 
+	ril_sim_settings_remove_handler(modem->sim_settings,
+					md->sim_imsi_event_id);
+	ril_sim_settings_unref(modem->sim_settings);
+
 	if (md->online_check_id) {
 		g_source_remove(md->online_check_id);
 	}
@@ -399,13 +425,13 @@ static void ril_modem_remove(struct ofono_modem *ofono)
 
 	ril_network_unref(modem->network);
 	ril_sim_card_unref(modem->sim_card);
-	ril_sim_settings_unref(modem->sim_settings);
 	ril_cell_info_unref(modem->cell_info);
 	ril_data_unref(modem->data);
 	grilio_channel_unref(modem->io);
 	grilio_queue_cancel_all(md->q, FALSE);
 	grilio_queue_unref(md->q);
 	g_free(md->ecclist_file);
+	g_free(md->log_prefix);
 	g_free(md->imei);
 	g_free(md);
 }
@@ -436,6 +462,8 @@ struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *log_prefix,
 		modem->log_prefix = log_prefix;
 		modem->ecclist_file =
 		md->ecclist_file = g_strdup(slot->ecclist_file);
+		md->log_prefix = (log_prefix && log_prefix[0]) ?
+			g_strconcat(log_prefix, " ", NULL) : g_strdup("");
 
 		modem->ofono = ofono;
 		modem->radio = ril_radio_ref(radio);
@@ -446,6 +474,16 @@ struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *log_prefix,
 		modem->data = ril_data_ref(data);
 		modem->io = grilio_channel_ref(io);
 		md->q = grilio_queue_new(io);
+
+		/*
+		 * modem->sim_settings->imsi follows IMSI known to the ofono
+		 * core, unlike ril_sim_info->imsi which may point to the
+		 * cached IMSI even before the PIN code is entered.
+		 */
+		md->sim_imsi_event_id =
+			ril_sim_settings_add_imsi_changed_handler(settings,
+						ril_modem_imsi_cb, md);
+
 		md->set_online.md = md;
 		md->set_offline.md = md;
 		ofono_modem_set_data(ofono, md);
@@ -470,6 +508,8 @@ struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *log_prefix,
 			 */
 			grilio_queue_send_request(md->q, NULL,
 				RIL_REQUEST_QUERY_AVAILABLE_BAND_MODE);
+
+			ril_modem_update_radio_settings(md);
 			return modem;
 		} else {
 			ofono_error("Error %d registering %s",
