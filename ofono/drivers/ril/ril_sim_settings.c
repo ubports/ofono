@@ -154,22 +154,18 @@ static void ril_sim_settings_imsi_watch_done(void *user_data)
 	priv->imsi_watch_id = 0;
 }
 
-static void ril_sim_settings_ready(struct ril_sim_settings *self)
+static void ril_sim_settings_state_check(struct ril_sim_settings *self,
+					enum ofono_sim_state new_state)
 {
-	struct ril_sim_settings_priv *priv = self->priv;
-
-	GASSERT(!priv->imsi_watch_id);
-	priv->imsi_watch_id = ofono_sim_add_imsi_watch(priv->sim,
-				ril_sim_settings_imsi_watch_cb, self,
-				ril_sim_settings_imsi_watch_done);
+	if (new_state != OFONO_SIM_STATE_READY) {
+		ril_sim_settings_set_imsi(self, NULL);
+	}
 }
 
 static void ril_sim_settings_state_watch(enum ofono_sim_state new_state,
 							void *user_data)
 {
-	if (new_state == OFONO_SIM_STATE_READY) {
-		ril_sim_settings_ready(RIL_SIM_SETTINGS(user_data));
-	}
+	ril_sim_settings_state_check(RIL_SIM_SETTINGS(user_data), new_state);
 }
 
 static void ril_sim_settings_state_watch_done(void *user_data)
@@ -191,13 +187,19 @@ void ril_sim_settings_set_ofono_sim(struct ril_sim_settings *self,
 			if (priv->imsi_watch_id) {
 				ofono_sim_remove_imsi_watch(priv->sim,
 							priv->imsi_watch_id);
-				/* ril_sim_settings_imsi_watch_done clears it */
+				/*
+				 * ril_sim_settings_imsi_watch_done
+				 * clears it
+				 */
 				GASSERT(!priv->imsi_watch_id);
 			}
 			if (priv->state_watch_id) {
 				ofono_sim_remove_state_watch(priv->sim,
 						priv->state_watch_id);
-				/* ril_sim_settings_state_watch_done clears it */
+				/*
+				 * ril_sim_settings_state_watch_done
+				 * clears it
+				 */
 				GASSERT(!priv->state_watch_id);
 			}
 			priv->sim = sim;
@@ -207,13 +209,25 @@ void ril_sim_settings_set_ofono_sim(struct ril_sim_settings *self,
 					ril_sim_settings_state_watch, self,
 					ril_sim_settings_state_watch_done);
 				GASSERT(priv->state_watch_id);
-				if (ofono_sim_get_state(sim) ==
-						OFONO_SIM_STATE_READY) {
-					ril_sim_settings_ready(self);
-				}
-			} else {
-				ril_sim_settings_set_imsi(self, NULL);
+				ril_sim_settings_state_check(self,
+						ofono_sim_get_state(sim));
+				/*
+				 * ofono_sim_add_imsi_watch immediately
+				 * calls the event callback if IMSI is
+				 * already known. It's useless though
+				 * because we still have to check the
+				 * current state in case if IMSI is not
+				 * available yet.
+				 */
+				priv->imsi_watch_id =
+					ofono_sim_add_imsi_watch(priv->sim,
+					ril_sim_settings_imsi_watch_cb, self,
+					ril_sim_settings_imsi_watch_done);
+				GASSERT(priv->state_watch_id);
 			}
+			/* Luckily, ofono_sim_get_imsi handles NULL pointer */
+			ril_sim_settings_set_imsi(self,
+						ofono_sim_get_imsi(sim));
 		}
 	}
 }
