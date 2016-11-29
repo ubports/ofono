@@ -76,8 +76,8 @@ void ofono_netmon_serving_cell_notify(struct ofono_netmon *netmon,
 	DBusMessageIter dict;
 	enum ofono_netmon_info next_info_type = info_type;
 	const char *technology = cell_type_to_tech_name(type);
-	char *mcc = NULL;
-	char *mnc = NULL;
+	char *mcc;
+	char *mnc;
 	int intval;
 	netmon->reply = dbus_message_new_method_return(netmon->pending);
 
