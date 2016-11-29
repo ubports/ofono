@@ -95,7 +95,8 @@ void ofono_netmon_serving_cell_notify(struct ofono_netmon *netmon,
 	if (technology == NULL)
 		goto done;
 
-	ofono_dbus_dict_append(&dict, "Technology", DBUS_TYPE_STRING, &technology);
+	ofono_dbus_dict_append(&dict, "Technology",
+						DBUS_TYPE_STRING, &technology);
 
 	while (next_info_type != OFONO_NETMON_INFO_INVALID) {
 		switch (next_info_type) {
