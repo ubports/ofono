@@ -181,6 +181,36 @@ void ofono_netmon_serving_cell_notify(struct ofono_netmon *netmon,
 					intval, uint8_t, DBUS_TYPE_BYTE);
 			break;
 
+		case OFONO_NETMON_INFO_RSCP:
+			intval = va_arg(arglist, int);
+
+			CELL_INFO_DICT_APPEND(&dict, "ReceivedSignalCodePower",
+					intval, uint8_t, DBUS_TYPE_BYTE);
+			break;
+
+		case OFONO_NETMON_INFO_ECN0:
+			intval = va_arg(arglist, int);
+
+			CELL_INFO_DICT_APPEND(&dict, "ReceivedEnergyRatio",
+					intval, uint8_t, DBUS_TYPE_BYTE);
+			break;
+
+		case OFONO_NETMON_INFO_RSRQ:
+			intval = va_arg(arglist, int);
+
+			CELL_INFO_DICT_APPEND(&dict,
+					"ReferenceSignalReceivedQuality",
+					intval, uint8_t, DBUS_TYPE_BYTE);
+			break;
+
+		case OFONO_NETMON_INFO_RSRP:
+			intval = va_arg(arglist, int);
+
+			CELL_INFO_DICT_APPEND(&dict,
+					"ReferenceSignalReceivedPower",
+					intval, uint8_t, DBUS_TYPE_BYTE);
+			break;
+
 		case OFONO_NETMON_INFO_INVALID:
 			break;
 		}
