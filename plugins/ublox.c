@@ -38,6 +38,7 @@
 #include <ofono/sim.h>
 #include <ofono/gprs.h>
 #include <ofono/gprs-context.h>
+#include <ofono/netmon.h>
 #include <ofono/lte.h>
 
 #include <drivers/atmodem/atutil.h>
@@ -323,6 +324,8 @@ static void ublox_post_online(struct ofono_modem *modem)
 	struct ublox_data *data = ofono_modem_get_data(modem);
 
 	ofono_netreg_create(modem, data->vendor_family, "atmodem", data->aux);
+
+	ofono_netmon_create(modem, data->vendor_family, "ubloxmodem", data->aux);
 }
 
 static struct ofono_modem_driver ublox_driver = {
