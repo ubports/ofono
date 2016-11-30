@@ -59,6 +59,10 @@ enum ofono_netmon_info {
 	OFONO_NETMON_INFO_RSSI, /* int */
 	OFONO_NETMON_INFO_TIMING_ADVANCE, /* int */
 	OFONO_NETMON_INFO_PSC, /* int */
+	OFONO_NETMON_INFO_RSCP, /* int */
+	OFONO_NETMON_INFO_ECN0, /* int */
+	OFONO_NETMON_INFO_RSRQ, /* int */
+	OFONO_NETMON_INFO_RSRP, /* int */
 	OFONO_NETMON_INFO_INVALID,
 };
 
