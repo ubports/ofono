@@ -128,7 +128,7 @@ static void req_cb_data_unref(gpointer user_data)
 	struct req_cb_data *cbd = user_data;
 
 	if (cbd == NULL)
-		return NULL;
+		return;
 
 	is_zero = g_atomic_int_dec_and_test(&cbd->ref_count);
 
