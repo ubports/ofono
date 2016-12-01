@@ -196,8 +196,8 @@ static void cesq_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	}
 
 	for (idx = 0; idx < _MAX; idx++) {
-
 		ok = g_at_result_iter_next_number(&iter, &number);
+
 		if (!ok) {
 			/* Ignore and do not fail */
 			DBG(" CESQ: error parsing idx: %d ", idx);
@@ -233,10 +233,12 @@ static void cesq_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	DBG(" RSRQ	%d ", cbd->rsrq);
 	DBG(" RSRP	%d ", cbd->rsrp);
 
-	/* We never fail at this point we always send what we collected so far */
+	/*
+	 * We never fail at this point we always send what we collected so
+	 * far
+	 */
 out:
 	ublox_netmon_finish_success(cbd);
-	return;
 }
 
 static void cops_cb(gboolean ok, GAtResult *result, gpointer user_data)
@@ -271,13 +273,13 @@ static void cops_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 	/* Default to GSM */
 	if (g_at_result_iter_next_number(&iter, &tech) == FALSE)
-		cbd->op.tech = ublox_map_radio_access_technology(ACCESS_TECHNOLOGY_GSM);
+		cbd->op.tech = OFONO_NETMON_CELL_TYPE_GSM;
 	else
 		cbd->op.tech = ublox_map_radio_access_technology(tech);
 
 	cbd = req_cb_data_ref(cbd);
 	if (g_at_chat_send(nmd->chat, "AT+CESQ", cesq_prefix,
-			   cesq_cb, cbd, req_cb_data_unref) == 0) {
+				cesq_cb, cbd, req_cb_data_unref) == 0) {
 		CALLBACK_WITH_FAILURE(cbd->cb, cbd->data);
 		req_cb_data_unref(cbd);
 	}
@@ -294,7 +296,7 @@ static void ublox_netmon_request_update(struct ofono_netmon *netmon,
 	cbd = req_cb_data_new0(cb, data, netmon);
 
 	if (g_at_chat_send(nmd->chat, "AT+COPS?", cops_prefix,
-			   cops_cb, cbd, req_cb_data_unref) == 0) {
+				cops_cb, cbd, req_cb_data_unref) == 0) {
 		CALLBACK_WITH_FAILURE(cbd->cb, cbd->data);
 		req_cb_data_unref(cbd);
 	}
