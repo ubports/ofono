@@ -211,7 +211,8 @@ builtin_sources += drivers/rilmodem/rilmodem.h \
 			drivers/rilmodem/netmon.c \
 			drivers/rilmodem/stk.c \
 			drivers/rilmodem/cbs.c \
-			drivers/infineonmodem/infineon_constants.h
+			drivers/infineonmodem/infineon_constants.h \
+			drivers/rilmodem/lte.c
 endif
 endif
 
