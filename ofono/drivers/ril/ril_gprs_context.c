@@ -448,14 +448,14 @@ static void ril_gprs_context_activate_primary(struct ofono_gprs_context *gc,
 			ril_netreg_check_if_really_roaming(netreg, rs) ==
 					NETWORK_REGISTRATION_STATUS_ROAMING) {
 			struct ofono_error error;
-			ofono_info("Can't activate context %d (roaming)",
+			ofono_info("Can't activate context %u (roaming)",
 								ctx->cid);
 			cb(ril_error_failure(&error), data);
 			return;
 		}
 	}
 
-	ofono_info("Activating context: %d", ctx->cid);
+	ofono_info("Activating context: %u", ctx->cid);
 	GASSERT(!gcd->activate.req);
 	GASSERT(ctx->cid != CTX_ID_NONE);
 
@@ -509,7 +509,7 @@ static void ril_gprs_context_deactivate_primary(struct ofono_gprs_context *gc,
 	struct ril_gprs_context *gcd = ril_gprs_context_get_data(gc);
 
 	GASSERT(gcd->active_call && gcd->active_ctx_cid == id);
-	ofono_info("Deactivate primary");
+	ofono_info("Deactivating context: %u", id);
 
 	if (gcd->active_call && gcd->active_ctx_cid == id) {
 		gcd->deactivate.cb = cb;
@@ -526,7 +526,7 @@ static void ril_gprs_context_deactivate_primary(struct ofono_gprs_context *gc,
 static void ril_gprs_context_detach_shutdown(struct ofono_gprs_context *gc,
 						unsigned int id)
 {
-	DBG("%d", id);
+	DBG("%u", id);
 	ril_gprs_context_deactivate_primary(gc, id, NULL, NULL);
 }
 
