@@ -99,8 +99,7 @@ struct ril_data_priv {
 	struct ril_data_request *req_queue;
 	struct ril_data_request *pending_req;
 
-	enum ril_data_allow_data_opt allow_data;
-	enum ril_data_call_format data_call_format;
+	struct ril_data_options options;
 	char *log_prefix;
 	guint query_id;
 	gulong io_event_id;
@@ -160,7 +159,8 @@ struct ril_data_request_setup {
 	char *password;
 	enum ofono_gprs_proto proto;
 	enum ofono_gprs_auth_method auth_method;
-	int retry_count;
+	guint retry_count;
+	guint retry_delay_id;
 };
 
 struct ril_data_request_deact {
@@ -506,7 +506,7 @@ static void ril_data_call_list_changed_cb(GRilIoChannel *io, guint event,
 	}
 
 	ril_data_set_calls(self, ril_data_call_list_parse(data, len,
-						priv->data_call_format));
+	       				priv->options.data_call_format));
 }
 
 static void ril_data_query_data_calls_cb(GRilIoChannel *io, int ril_status,
@@ -519,7 +519,7 @@ static void ril_data_query_data_calls_cb(GRilIoChannel *io, int ril_status,
 	priv->query_id = 0;
 	if (ril_status == RIL_E_SUCCESS) {
 		ril_data_set_calls(self, ril_data_call_list_parse(data, len,
-						priv->data_call_format));
+       					priv->options.data_call_format));
 	}
 }
 
@@ -681,12 +681,33 @@ static void ril_data_request_queue(struct ril_data_request *req)
 
 static void ril_data_call_setup_cancel(struct ril_data_request *req)
 {
+	struct ril_data_request_setup *setup =
+		G_CAST(req, struct ril_data_request_setup, req);
+
 	ril_data_request_cancel_io(req);
+	if (setup->retry_delay_id) {
+		g_source_remove(setup->retry_delay_id);
+		setup->retry_delay_id = 0;
+	}
 	if (req->cb.setup) {
 		ril_data_call_setup_cb_t cb = req->cb.setup;
 		req->cb.setup = NULL;
 		cb(req->data, GRILIO_STATUS_CANCELLED, NULL, req->arg);
 	}
+}
+
+static gboolean ril_data_call_setup_retry(void *user_data)
+{
+	struct ril_data_request_setup *setup = user_data;
+	struct ril_data_request *req = &setup->req;
+
+	GASSERT(setup->retry_delay_id);
+	setup->retry_delay_id = 0;
+	setup->retry_count++;
+	DBG("silent retry %u out of %u", setup->retry_count,
+			req->data->priv->options.data_call_retry_limit);
+	req->submit(req);
+	return G_SOURCE_REMOVE;
 }
 
 static void ril_data_call_setup_cb(GRilIoChannel *io, int ril_status,
@@ -701,7 +722,7 @@ static void ril_data_call_setup_cb(GRilIoChannel *io, int ril_status,
 
 	if (ril_status == RIL_E_SUCCESS) {
 		list = ril_data_call_list_parse(data, len,
-						priv->data_call_format);
+					priv->options.data_call_format);
 	}
 
 	if (list) {
@@ -714,15 +735,25 @@ static void ril_data_call_setup_cb(GRilIoChannel *io, int ril_status,
 	}
 
 	if (call && call->status == PDP_FAIL_ERROR_UNSPECIFIED &&
-						!setup->retry_count) {
+		setup->retry_count < priv->options.data_call_retry_limit) {
 		/*
-		 * Retry silently according to comment in ril.h
-		 * (no more than once though)
+		 * According to the comment from ril.h we should silently
+		 * retry. First time we retry immediately and if that doedsn't
+		 * work, then after certain delay.
 		 */
-		DBG("retrying silently");
-		setup->retry_count++;
 		req->pending_id = 0;
-		req->submit(req);
+		GASSERT(!setup->retry_delay_id);
+		if (!setup->retry_count) {
+			setup->retry_count++;
+			DBG("silent retry %u out of %u", setup->retry_count,
+					priv->options.data_call_retry_limit);
+			req->submit(req);
+		} else {
+			guint ms = priv->options.data_call_retry_delay_ms;
+			DBG("silent retry scheduled in %u ms", ms);
+			setup->retry_delay_id = g_timeout_add(ms,
+					ril_data_call_setup_retry, setup);
+		}
 		ril_data_call_list_free(list);
 		return;
 	}
@@ -1029,8 +1060,7 @@ static void ril_data_settings_changed(struct ril_sim_settings *settings,
 
 struct ril_data *ril_data_new(struct ril_data_manager *dm, const char *name,
 		struct ril_radio *radio, struct ril_network *network,
-		GRilIoChannel *io, enum ril_data_allow_data_opt allow_data,
-		enum ril_data_call_format data_call_format)
+		GRilIoChannel *io, const struct ril_data_options *options)
 {
 	GASSERT(dm);
 	if (G_LIKELY(dm)) {
@@ -1039,22 +1069,21 @@ struct ril_data *ril_data_new(struct ril_data_manager *dm, const char *name,
 		struct ril_sim_settings *settings = network->settings;
 		GRilIoRequest *req = grilio_request_new();
 
-		switch (allow_data) {
+		priv->options = *options;
+		switch (priv->options.allow_data) {
 		case RIL_ALLOW_DATA_ON:
 		case RIL_ALLOW_DATA_OFF:
-			priv->allow_data = allow_data;
 			break;
 		default:
 			/*
 			 * When RIL_REQUEST_ALLOW_DATA first appeared in ril.h
 			 * RIL_VERSION was 10
 			 */
-			priv->allow_data = (io->ril_version > 10) ?
+			priv->options.allow_data = (io->ril_version > 10) ?
 				RIL_ALLOW_DATA_ON : RIL_ALLOW_DATA_OFF;
 			break;
 		}
 
-		priv->data_call_format = data_call_format;
 		priv->log_prefix = (name && name[0]) ?
 			g_strconcat(name, " ", NULL) : g_strdup("");
 
@@ -1493,7 +1522,7 @@ static void ril_data_manager_switch_data_on(struct ril_data_manager *self,
 	}
 
 
-	if (priv->allow_data == RIL_ALLOW_DATA_ON) {
+	if (priv->options.allow_data == RIL_ALLOW_DATA_ON) {
 		ril_data_request_queue(ril_data_allow_new(data));
 	} else {
 		priv->flags |= RIL_DATA_FLAG_ON;
