@@ -67,6 +67,13 @@ enum ril_data_call_format {
 	RIL_DATA_CALL_FORMAT_11 = 11
 };
 
+struct ril_data_options {
+	enum ril_data_allow_data_opt allow_data;
+	enum ril_data_call_format data_call_format;
+	unsigned int data_call_retry_limit;
+	unsigned int data_call_retry_delay_ms;
+};
+
 enum ril_data_role {
 	RIL_DATA_ROLE_NONE,    /* Data not allowed */
 	RIL_DATA_ROLE_MMS,     /* Data is allowed at any speed */
@@ -87,8 +94,7 @@ typedef void (*ril_data_call_deactivate_cb_t)(struct ril_data *data,
 
 struct ril_data *ril_data_new(struct ril_data_manager *dm, const char *name,
 		struct ril_radio *radio, struct ril_network *network,
-		GRilIoChannel *io, enum ril_data_allow_data_opt allow_data,
-		enum ril_data_call_format data_call_format);
+		GRilIoChannel *io, const struct ril_data_options *options);
 struct ril_data *ril_data_ref(struct ril_data *data);
 void ril_data_unref(struct ril_data *data);
 gboolean ril_data_allowed(struct ril_data *data);

@@ -55,6 +55,8 @@
 #define RILMODEM_DEFAULT_DATA_OPT   RIL_ALLOW_DATA_AUTO
 #define RILMODEM_DEFAULT_DM_FLAGS   RIL_DATA_MANAGER_3GLTE_HANDOVER
 #define RILMODEM_DEFAULT_DATA_CALL_FORMAT RIL_DATA_CALL_FORMAT_AUTO
+#define RILMODEM_DEFAULT_DATA_CALL_RETRY_LIMIT 4
+#define RILMODEM_DEFAULT_DATA_CALL_RETRY_DELAY 200 /* ms */
 #define RILMODEM_DEFAULT_EMPTY_PIN_QUERY TRUE /* optimistic */
 
 #define RILCONF_SETTINGS_EMPTY      "EmptyConfig"
@@ -73,6 +75,8 @@
 #define RILCONF_ALLOW_DATA_REQ      "allowDataReq"
 #define RILCONF_EMPTY_PIN_QUERY     "emptyPinQuery"
 #define RILCONF_DATA_CALL_FORMAT    "dataCallFormat"
+#define RILCONF_DATA_CALL_RETRY_LIMIT "dataCallRetryLimit"
+#define RILCONF_DATA_CALL_RETRY_DELAY "dataCallRetryDelay"
 
 #define RIL_STORE                   "ril"
 #define RIL_STORE_GROUP             "Settings"
@@ -124,8 +128,7 @@ struct ril_slot {
 	int timeout;            /* RIL timeout, in milliseconds */
 	int index;
 	int sim_flags;
-	enum ril_data_allow_data_opt allow_data_opt;
-	enum ril_data_call_format data_call_format;
+	struct ril_data_options data_opt;
 	struct ril_slot_config config;
 	struct ril_plugin_priv *plugin;
 	struct ril_modem *modem;
@@ -972,8 +975,7 @@ static void ril_plugin_slot_connected(struct ril_slot *slot)
 
 	GASSERT(!slot->data);
 	slot->data = ril_data_new(slot->plugin->data_manager, log_prefix,
-		slot->radio, slot->network, slot->io, slot->allow_data_opt,
-		slot->data_call_format);
+		slot->radio, slot->network, slot->io, &slot->data_opt);
 
 	GASSERT(!slot->cell_info);
 	if (slot->io->ril_version > 8) {
@@ -1067,8 +1069,12 @@ static struct ril_slot *ril_plugin_slot_new(const char *sockpath,
 	slot->config.empty_pin_query = RILMODEM_DEFAULT_EMPTY_PIN_QUERY;
 	slot->timeout = RILMODEM_DEFAULT_TIMEOUT;
 	slot->sim_flags = RILMODEM_DEFAULT_SIM_FLAGS;
-	slot->allow_data_opt = RILMODEM_DEFAULT_DATA_OPT;
-	slot->data_call_format = RILMODEM_DEFAULT_DATA_CALL_FORMAT;
+	slot->data_opt.allow_data = RILMODEM_DEFAULT_DATA_OPT;
+	slot->data_opt.data_call_format = RILMODEM_DEFAULT_DATA_CALL_FORMAT;
+	slot->data_opt.data_call_retry_limit =
+		RILMODEM_DEFAULT_DATA_CALL_RETRY_LIMIT;
+	slot->data_opt.data_call_retry_delay_ms =
+		RILMODEM_DEFAULT_DATA_CALL_RETRY_DELAY;
 	return slot;
 }
 
@@ -1158,37 +1164,65 @@ static struct ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 		strval = ril_config_get_string(file, group,
 						RILCONF_ALLOW_DATA_REQ);
 		if (strval) {
-			strval = g_strstrip(strval);
-			slot->allow_data_opt =
+			/*
+			 * Some people are thinking that # is a comment
+			 * anywhere on the line, not just at the beginning
+			 */
+			char *comment = strchr(strval, '#');
+			if (comment) *comment = 0;
+			g_strstrip(strval);
+			slot->data_opt.allow_data =
 				!strcasecmp(strval, "on") ? RIL_ALLOW_DATA_ON :
 				!strcasecmp(strval, "off")? RIL_ALLOW_DATA_OFF :
 				RIL_ALLOW_DATA_AUTO;
 			DBG("%s: %s %s", group, RILCONF_ALLOW_DATA_REQ,
-				slot->allow_data_opt==RIL_ALLOW_DATA_ON? "on":
-				slot->allow_data_opt==RIL_ALLOW_DATA_OFF? "off":
-				"auto");
+				slot->data_opt.allow_data ==
+					RIL_ALLOW_DATA_ON ? "on":
+				slot->data_opt.allow_data ==
+					RIL_ALLOW_DATA_OFF ? "off":
+					"auto");
 			g_free(strval);
 		}
 
 		strval = ril_config_get_string(file, group,
 						RILCONF_DATA_CALL_FORMAT);
 		if (strval) {
-			strval = g_strstrip(strval);
-			slot->data_call_format =
+			/*
+			 * Some people are thinking that # is a comment
+			 * anywhere on the line, not just at the beginning
+			 */
+			char *comment = strchr(strval, '#');
+			if (comment) *comment = 0;
+			g_strstrip(strval);
+			slot->data_opt.data_call_format =
 				!strcmp(strval, "6") ? RIL_DATA_CALL_FORMAT_6:
 				!strcmp(strval, "9") ? RIL_DATA_CALL_FORMAT_9:
 				!strcmp(strval, "11")? RIL_DATA_CALL_FORMAT_11:
 				RIL_DATA_CALL_FORMAT_AUTO;
-			if (slot->data_call_format ==
+			if (slot->data_opt.data_call_format ==
 						RIL_DATA_CALL_FORMAT_AUTO) {
 				DBG("%s: %s auto", group,
-						RILCONF_DATA_CALL_FORMAT);
+					RILCONF_DATA_CALL_FORMAT);
 			} else {
 				DBG("%s: %s %d", group,
-						RILCONF_DATA_CALL_FORMAT,
-						slot->data_call_format);
+					RILCONF_DATA_CALL_FORMAT,
+					slot->data_opt.data_call_format);
 			}
 			g_free(strval);
+		}
+
+		if (ril_config_get_integer(file, group,
+			RILCONF_DATA_CALL_RETRY_LIMIT, &value) && value >= 0) {
+			DBG("%s: %s %d", group,
+					RILCONF_DATA_CALL_RETRY_LIMIT, value);
+			slot->data_opt.data_call_retry_limit = value;
+		}
+
+		if (ril_config_get_integer(file, group,
+			RILCONF_DATA_CALL_RETRY_DELAY, &value) && value >= 0) {
+			DBG("%s: %s %d ms", group,
+					RILCONF_DATA_CALL_RETRY_DELAY, value);
+			slot->data_opt.data_call_retry_delay_ms = value;
 		}
 
 		slot->ecclist_file = ril_config_get_string(file, group,
