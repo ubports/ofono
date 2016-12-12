@@ -528,7 +528,7 @@ static int ril_enable(struct ofono_modem *modem)
 		g_ril_set_trace(rd->ril, TRUE);
 
 	if (getenv("OFONO_RIL_HEX_TRACE"))
-		g_ril_set_debugf(rd->ril, ril_debug, "Sofia3GR:");
+		g_ril_set_debugf(rd->ril, ril_debug, "IntelModem:");
 
 	g_ril_register(rd->ril, RIL_UNSOL_RIL_CONNECTED,
 						ril_connected, modem);
@@ -581,7 +581,7 @@ static int ril_disable(struct ofono_modem *modem)
 }
 
 static struct ofono_modem_driver ril_driver = {
-	.name = "ril_sofia3gr",
+	.name = "ril_intel",
 	.probe = ril_probe,
 	.remove = ril_remove,
 	.enable = ril_enable,
@@ -602,5 +602,5 @@ static void ril_exit(void)
 	ofono_modem_driver_unregister(&ril_driver);
 }
 
-OFONO_PLUGIN_DEFINE(ril_sofia3gr, "SoFiA 3GR RIL-based modem driver", VERSION,
+OFONO_PLUGIN_DEFINE(ril_intel, "Intel RIL-based modem driver", VERSION,
 			OFONO_PLUGIN_PRIORITY_DEFAULT, ril_init, ril_exit)
