@@ -211,6 +211,27 @@ void ofono_netmon_serving_cell_notify(struct ofono_netmon *netmon,
 					intval, uint8_t, DBUS_TYPE_BYTE);
 			break;
 
+		case OFONO_NETMON_INFO_EARFCN:
+			intval = va_arg(arglist, int);
+
+			CELL_INFO_DICT_APPEND(&dict, "EARFCN",
+					intval, uint16_t, DBUS_TYPE_UINT16);
+			break;
+
+		case OFONO_NETMON_INFO_EBAND:
+			intval = va_arg(arglist, int);
+
+			CELL_INFO_DICT_APPEND(&dict, "EBand",
+					intval, uint8_t, DBUS_TYPE_BYTE);
+			break;
+
+		case OFONO_NETMON_INFO_CQI:
+			intval = va_arg(arglist, int);
+
+			CELL_INFO_DICT_APPEND(&dict, "ChannelQualityIndicator",
+					intval, uint8_t, DBUS_TYPE_BYTE);
+			break;
+
 		case OFONO_NETMON_INFO_INVALID:
 			break;
 		}
