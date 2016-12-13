@@ -63,6 +63,9 @@ enum ofono_netmon_info {
 	OFONO_NETMON_INFO_ECN0, /* int */
 	OFONO_NETMON_INFO_RSRQ, /* int */
 	OFONO_NETMON_INFO_RSRP, /* int */
+	OFONO_NETMON_INFO_EARFCN, /* int */
+	OFONO_NETMON_INFO_EBAND, /* int */
+	OFONO_NETMON_INFO_CQI, /* int */
 	OFONO_NETMON_INFO_INVALID,
 };
 
