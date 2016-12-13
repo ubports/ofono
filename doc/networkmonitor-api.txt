@@ -103,3 +103,20 @@ byte ReferenceSignalReceivedPower [optional, lte]
 
         Contains the Reference Signal Received Power.  Valid range of values
         is 0-97. Refer to <rsrp> in 27.007, Section 8.69 for more details.
+
+uint16 EARFCN [optional, lte]
+
+	Contains E-UTRA Absolute Radio Frequency Channel Number.  Valid
+	range of values is 0-65535. Refer to Carrier frequency and
+	EARFCN in 36.101, Section 5.7.3 for more details.
+
+byte EBand [optional, lte]
+
+	Contains E-UTRA operating Band.  Valid range of values is 1-43.
+	Refer to Operating bands in 36.101, Section 5.5 for more
+	details.
+
+byte ChannelQualityIndicator [optional, lte]
+
+	Contains Channel Quality Indicator.  Refer to Channel Quality
+	Indicator definition in 36.213, Section 7.2.3 for more details.
