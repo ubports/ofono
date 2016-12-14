@@ -742,7 +742,7 @@ static void at_sms_initialized(struct ofono_sms *sms)
 
 static void at_sms_not_supported(struct ofono_sms *sms)
 {
-	ofono_error("SMS not supported by this modem.  If this is in error"
+	ofono_error("SMS not supported by this modem.  If this is an error"
 			" please submit patches to support this hardware");
 
 	ofono_sms_remove(sms);
