@@ -758,7 +758,7 @@ static void handle_packet(struct qmi_device *device,
 
 		tid = GUINT16_FROM_LE(service->transaction);
 
-		if (service->type == 0x04 && tid == 0x0000) {
+		if (service->type == 0x04) {
 			handle_indication(device, hdr->service, hdr->client,
 							message, length, data);
 			return;
