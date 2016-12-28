@@ -63,7 +63,7 @@ struct qmi_nas_rf_info {
 } __attribute__((__packed__));
 
 /* Get the signal strength */
-#define QMI_NAS_RESULT_SIGNAL_STRENGTH		0x10
+#define QMI_NAS_RESULT_SIGNAL_STRENGTH		0x01
 
 /* Scan for visible network */
 #define QMI_NAS_PARAM_NETWORK_MASK		0x10	/* uint8 bitmask */
