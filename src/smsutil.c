@@ -4134,12 +4134,13 @@ char *cbs_decode_text(GSList *cbs_list, char *iso639_lang)
 			 */
 			for (; i < written; i++, bufsize++) {
 				if (unpacked[i] == '\r') {
-					int t;
+					int j;
 
-					t = strspn((const char *) unpacked + i,
-							"\r");
+					for (j = i + 1; j < written; j++)
+						if (unpacked[j] != '\r')
+							break;
 
-					if (t + i == written)
+					if (j == written)
 						break;
 				}
 
