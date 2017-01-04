@@ -975,7 +975,8 @@ static void ril_plugin_slot_connected(struct ril_slot *slot)
 
 	GASSERT(!slot->data);
 	slot->data = ril_data_new(slot->plugin->data_manager, log_prefix,
-		slot->radio, slot->network, slot->io, &slot->data_opt);
+		slot->radio, slot->network, slot->io, &slot->data_opt,
+		&slot->config);
 
 	GASSERT(!slot->cell_info);
 	if (slot->io->ril_version > 8) {
