@@ -94,7 +94,8 @@ typedef void (*ril_data_call_deactivate_cb_t)(struct ril_data *data,
 
 struct ril_data *ril_data_new(struct ril_data_manager *dm, const char *name,
 		struct ril_radio *radio, struct ril_network *network,
-		GRilIoChannel *io, const struct ril_data_options *options);
+		GRilIoChannel *io, const struct ril_data_options *options,
+		const struct ril_slot_config *config);
 struct ril_data *ril_data_ref(struct ril_data *data);
 void ril_data_unref(struct ril_data *data);
 gboolean ril_data_allowed(struct ril_data *data);
