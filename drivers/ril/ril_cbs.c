@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2016 Jolla Ltd.
+ *  Copyright (C) 2015-2017 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -32,6 +32,9 @@ struct ril_cbs_cbd {
 	ofono_cbs_set_cb_t cb;
 	gpointer data;
 };
+
+#define RIL_CBS_CHECK_RETRY_MS    1000
+#define RIL_CBS_CHECK_RETRY_COUNT 30
 
 #define DBG_(cd,fmt,args...) DBG("%s" fmt, (cd)->log_prefix, ##args)
 
@@ -169,6 +172,7 @@ static int ril_cbs_probe(struct ofono_cbs *cbs, unsigned int vendor,
 {
 	struct ril_modem *modem = data;
 	struct ril_cbs *cd = g_try_new0(struct ril_cbs, 1);
+	GRilIoRequest* req = grilio_request_new();
 
 	ofono_cbs_set_data(cbs, cd);
 	cd->log_prefix = (modem->log_prefix && modem->log_prefix[0]) ?
@@ -178,9 +182,17 @@ static int ril_cbs_probe(struct ofono_cbs *cbs, unsigned int vendor,
 	DBG_(cd, "");
 	cd->io = grilio_channel_ref(ril_modem_io(modem));
 	cd->q = grilio_queue_new(cd->io);
-	grilio_queue_send_request_full(cd->q, NULL,
+
+	/*
+	 * RIL_REQUEST_GSM_GET_BROADCAST_SMS_CONFIG often fails at startup.
+	 * We may have to retry a few times.
+	 */
+	grilio_request_set_retry(req, RIL_CBS_CHECK_RETRY_MS,
+						RIL_CBS_CHECK_RETRY_COUNT);
+	grilio_queue_send_request_full(cd->q, req,
 				RIL_REQUEST_GSM_GET_BROADCAST_SMS_CONFIG,
 				ril_cbs_probe_done_cb, NULL, cd);
+	grilio_request_unref(req);
 	return 0;
 }
 
