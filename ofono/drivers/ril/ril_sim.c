@@ -379,20 +379,11 @@ static void ril_sim_file_info_cb(GRilIoChannel *io, int status,
 
 	DBG_(sd, "");
 
-
-	/*
-	 * In case sim card has been removed prior to this callback has been
-	 * called we must not call the core call back method as otherwise the
-	 * core will crash.
-	 */
-	if (!sd->inserted) {
-		ofono_error("No SIM card");
-		return;
-	}
-
 	ril_error_init_failure(&error);
 	res = ril_sim_parse_io_response(data, len);
-	if (ril_sim_io_response_ok(res) && status == RIL_E_SUCCESS) {
+	if (!sd->inserted) {
+		DBG_(sd, "No SIM card");
+	} else if (ril_sim_io_response_ok(res) && status == RIL_E_SUCCESS) {
 		gboolean ok = FALSE;
 		guchar access[3] = { 0x00, 0x00, 0x00 };
 		guchar file_status = EF_STATUS_VALID;
