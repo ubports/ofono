@@ -598,6 +598,13 @@ void g_at_mux_unref(GAtMux *mux)
 	}
 }
 
+static void read_watcher_destroy_notify(gpointer user_data)
+{
+	GAtMux *mux = user_data;
+
+	mux->read_watch = 0;
+}
+
 gboolean g_at_mux_start(GAtMux *mux)
 {
 	if (mux->channel == NULL)
@@ -611,7 +618,8 @@ gboolean g_at_mux_start(GAtMux *mux)
 
 	mux->read_watch = g_io_add_watch_full(mux->channel, G_PRIORITY_DEFAULT,
 				G_IO_IN | G_IO_HUP | G_IO_ERR | G_IO_NVAL,
-						received_data, mux, NULL);
+						received_data, mux,
+						read_watcher_destroy_notify);
 
 	mux->shutdown = FALSE;
 

@@ -325,11 +325,14 @@ static gboolean setup_huawei(struct modem_info *modem)
 		if (g_strcmp0(info->label, "modem") == 0 ||
 				g_strcmp0(info->interface, "255/1/1") == 0 ||
 				g_strcmp0(info->interface, "255/2/1") == 0 ||
+				g_strcmp0(info->interface, "255/3/1") == 0 ||
 				g_strcmp0(info->interface, "255/1/49") == 0) {
 			mdm = info->devnode;
 		} else if (g_strcmp0(info->label, "pcui") == 0 ||
 				g_strcmp0(info->interface, "255/1/2") == 0 ||
 				g_strcmp0(info->interface, "255/2/2") == 0 ||
+				g_strcmp0(info->interface, "255/2/18") == 0 ||
+				g_strcmp0(info->interface, "255/3/18") == 0 ||
 				g_strcmp0(info->interface, "255/1/50") == 0) {
 			pcui = info->devnode;
 		} else if (g_strcmp0(info->label, "diag") == 0 ||

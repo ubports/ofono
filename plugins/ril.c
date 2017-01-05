@@ -239,6 +239,7 @@ void ril_post_online(struct ofono_modem *modem)
 	struct ofono_gprs *gprs;
 	struct ofono_gprs_context *gc;
 
+	ofono_cbs_create(modem, rd->vendor, RILMODEM, rd->ril);
 	ofono_netreg_create(modem, rd->vendor, RILMODEM, rd->ril);
 	ofono_ussd_create(modem, rd->vendor, RILMODEM, rd->ril);
 	ofono_call_settings_create(modem, rd->vendor, RILMODEM, rd->ril);
@@ -409,15 +410,30 @@ int ril_enable(struct ofono_modem *modem)
 	return -EINPROGRESS;
 }
 
+static void power_off_cb(struct ril_msg *message, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	struct ril_data *rd = cbd->user;
+	struct ofono_modem *modem = cbd->data;
+
+	if (rd) {
+		g_ril_unref(rd->ril);
+		rd->ril = NULL;
+	}
+
+	ofono_modem_set_powered(modem, FALSE);
+}
+
 int ril_disable(struct ofono_modem *modem)
 {
 	struct ril_data *rd = ofono_modem_get_data(modem);
+	struct cb_data *cbd = cb_data_new(NULL, modem, rd);
 
 	DBG("%p", modem);
 
-	ril_send_power(rd, FALSE, NULL, NULL);
+	ril_send_power(rd, FALSE, power_off_cb, cbd);
 
-	return 0;
+	return -EINPROGRESS;
 }
 
 static struct ofono_modem_driver ril_driver = {
