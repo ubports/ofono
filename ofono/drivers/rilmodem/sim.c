@@ -79,7 +79,7 @@
  * The same applies to the app_type.
  */
 
-static void ril_pin_change_state(struct ofono_sim *sim,
+static void ril_set_facility_lock(struct ofono_sim *sim,
 				enum ofono_sim_password_type passwd_type,
 				int enable, const char *passwd,
 				ofono_sim_lock_unlock_cb_t cb, void *data);
@@ -1083,7 +1083,7 @@ static void ril_query_passwd_state(struct ofono_sim *sim,
 		CALLBACK_WITH_SUCCESS(cb, sd->passwd_state, data);
 }
 
-static void ril_pin_change_state_cb(struct ril_msg *message, gpointer user_data)
+static void ril_enter_sim_pin_cb(struct ril_msg *message, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
 	ofono_sim_lock_unlock_cb_t cb = cbd->cb;
@@ -1101,36 +1101,17 @@ static void ril_pin_change_state_cb(struct ril_msg *message, gpointer user_data)
 
 	g_ril_init_parcel(message, &rilp);
 
-	/* maguro/infineon: no data is returned */
-	if (parcel_data_avail(&rilp) == 0)
-		goto done;
-
 	parcel_r_int32(&rilp);
 
-	switch (g_ril_vendor(sd->ril)) {
-	case OFONO_RIL_VENDOR_AOSP:
-	case OFONO_RIL_VENDOR_QCOM_MSIM:
-		/*
-		 * The number of retries is valid only when a wrong password has
-		 * been introduced in Nexus 4. TODO: check Nexus 5 behaviour.
-		 */
-		if (message->error == RIL_E_PASSWORD_INCORRECT)
-			sd->retries[sd->passwd_type] = parcel_r_int32(&rilp);
+	if (message->error == RIL_E_SUCCESS)
+		sd->retries[sd->passwd_type] = -1;
+	else
+		sd->retries[sd->passwd_type] = parcel_r_int32(&rilp);
 
-		g_ril_append_print_buf(sd->ril, "{%d}",
-					sd->retries[sd->passwd_type]);
-		g_ril_print_response(sd->ril, message);
+	g_ril_append_print_buf(sd->ril, "{%d}",
+				sd->retries[sd->passwd_type]);
+	g_ril_print_response(sd->ril, message);
 
-		break;
-	/* Taken care of elsewhere */
-	case OFONO_RIL_VENDOR_INFINEON:
-	case OFONO_RIL_VENDOR_MTK:
-		break;
-	default:
-		break;
-	}
-
-done:
 	if (message->error == RIL_E_SUCCESS) {
 		CALLBACK_WITH_SUCCESS(cb, cbd->data);
 		return;
@@ -1167,28 +1148,11 @@ static void ril_pin_send(struct ofono_sim *sim, const char *passwd,
 	g_ril_append_print_buf(sd->ril, "(%s,aid=%s)", passwd, sd->aid_str);
 
 	if (g_ril_send(sd->ril, RIL_REQUEST_ENTER_SIM_PIN, &rilp,
-			ril_pin_change_state_cb, cbd, g_free) > 0)
+			ril_enter_sim_pin_cb, cbd, g_free) > 0)
 		return;
 
 	g_free(cbd);
 	CALLBACK_WITH_FAILURE(cb, data);
-}
-
-static void enter_pin_done(const struct ofono_error *error, void *data)
-{
-	struct change_state_cbd *csd = data;
-	struct sim_data *sd = ofono_sim_get_data(csd->sim);
-
-	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
-		ofono_error("%s: wrong password", __func__);
-		sd->unlock_pending = FALSE;
-		CALLBACK_WITH_FAILURE(csd->cb, csd->data);
-	} else {
-		ril_pin_change_state(csd->sim, csd->passwd_type, csd->enable,
-					csd->passwd, csd->cb, csd->data);
-	}
-
-	g_free(csd);
 }
 
 static const char *const clck_cpwd_fac[] = {
@@ -1204,7 +1168,45 @@ static const char *const clck_cpwd_fac[] = {
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
-static void ril_pin_change_state(struct ofono_sim *sim,
+static void ril_set_facility_lock_cb(struct ril_msg *message,
+							gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_sim_lock_unlock_cb_t cb = cbd->cb;
+	struct ofono_sim *sim = cbd->user;
+	struct sim_data *sd = ofono_sim_get_data(sim);
+	struct parcel rilp;
+
+	/*
+	 * There is no reason to ask SIM status until
+	 * unsolicited sim status change indication
+	 * Looks like state does not change before that.
+	 */
+	DBG("Enter password: type %d, result %d",
+				sd->passwd_type, message->error);
+
+	g_ril_init_parcel(message, &rilp);
+
+	parcel_r_int32(&rilp);
+
+	if (message->error == RIL_E_SUCCESS)
+		sd->retries[sd->passwd_type] = -1;
+	else
+		sd->retries[sd->passwd_type] = parcel_r_int32(&rilp);
+
+	g_ril_append_print_buf(sd->ril, "{%d}",
+				sd->retries[sd->passwd_type]);
+	g_ril_print_response(sd->ril, message);
+
+	if (message->error == RIL_E_SUCCESS) {
+		CALLBACK_WITH_SUCCESS(cb, cbd->data);
+		return;
+	}
+
+	CALLBACK_WITH_FAILURE(cb, cbd->data);
+}
+
+static void ril_set_facility_lock(struct ofono_sim *sim,
 				enum ofono_sim_password_type passwd_type,
 				int enable, const char *passwd,
 				ofono_sim_lock_unlock_cb_t cb, void *data)
@@ -1213,29 +1215,8 @@ static void ril_pin_change_state(struct ofono_sim *sim,
 	struct cb_data *cbd;
 	struct parcel rilp;
 
-	/*
-	 * If we want to unlock a password that has not been entered yet,
-	 * we enter it before trying to unlock. We need sd->unlock_pending as
-	 * the password still has not yet been refreshed when this function is
-	 * called from enter_pin_done().
-	 */
-	if (ofono_sim_get_password_type(sim) == passwd_type
-			&& enable == FALSE && sd->unlock_pending == FALSE) {
-		struct change_state_cbd *csd = g_malloc0(sizeof(*csd));
-		csd->sim = sim;
-		csd->passwd_type = passwd_type;
-		csd->enable = enable;
-		csd->passwd = passwd;
-		csd->cb = cb;
-		csd->data = data;
-		sd->unlock_pending = TRUE;
-
-		ril_pin_send(sim, passwd, enter_pin_done, csd);
-
-		return;
-	}
-
 	sd->unlock_pending = FALSE;
+	sd->passwd_type = passwd_type;
 
 	if (passwd_type >= ARRAY_SIZE(clck_cpwd_fac) ||
 			clck_cpwd_fac[passwd_type] == NULL)
@@ -1257,12 +1238,43 @@ static void ril_pin_change_state(struct ofono_sim *sim,
 				sd->aid_str);
 
 	if (g_ril_send(sd->ril, RIL_REQUEST_SET_FACILITY_LOCK, &rilp,
-				ril_pin_change_state_cb, cbd, g_free) > 0)
+				ril_set_facility_lock_cb, cbd, g_free) > 0)
 		return;
 
 	g_free(cbd);
 error:
 	CALLBACK_WITH_FAILURE(cb, data);
+}
+
+static void ril_enter_sim_puk_cb(struct ril_msg *message, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_sim_lock_unlock_cb_t cb = cbd->cb;
+	struct ofono_sim *sim = cbd->user;
+	struct sim_data *sd = ofono_sim_get_data(sim);
+	struct parcel rilp;
+
+	g_ril_init_parcel(message, &rilp);
+
+	parcel_r_int32(&rilp);
+
+	if (message->error != RIL_E_SUCCESS) {
+		sd->retries[OFONO_SIM_PASSWORD_SIM_PUK] = parcel_r_int32(&rilp);
+	} else {
+		sd->retries[OFONO_SIM_PASSWORD_SIM_PIN] = -1;
+		sd->retries[OFONO_SIM_PASSWORD_SIM_PUK] = -1;
+	}
+
+	g_ril_append_print_buf(sd->ril, "{%d}",
+				sd->retries[OFONO_SIM_PASSWORD_SIM_PUK]);
+	g_ril_print_response(sd->ril, message);
+
+	if (message->error == RIL_E_SUCCESS) {
+		CALLBACK_WITH_SUCCESS(cb, cbd->data);
+		return;
+	}
+
+	CALLBACK_WITH_FAILURE(cb, cbd->data);
 }
 
 static void ril_pin_send_puk(struct ofono_sim *sim,
@@ -1286,7 +1298,7 @@ static void ril_pin_send_puk(struct ofono_sim *sim,
 				puk, passwd, sd->aid_str);
 
 	if (g_ril_send(sd->ril, RIL_REQUEST_ENTER_SIM_PUK, &rilp,
-			ril_pin_change_state_cb, cbd, g_free) > 0)
+			ril_enter_sim_puk_cb, cbd, g_free) > 0)
 		return;
 
 	g_free(cbd);
@@ -1324,7 +1336,7 @@ static void ril_change_passwd(struct ofono_sim *sim,
 	g_ril_append_print_buf(sd->ril, "(old=%s,new=%s,aid=%s)",
 				old_passwd, new_passwd, sd->aid_str);
 
-	if (g_ril_send(sd->ril, request, &rilp, ril_pin_change_state_cb,
+	if (g_ril_send(sd->ril, request, &rilp, ril_enter_sim_pin_cb,
 			cbd, g_free) > 0)
 		return;
 
@@ -1413,11 +1425,16 @@ static void ril_query_facility_lock_cb(struct ril_msg *message,
 	struct sim_data *sd = cbd->user;
 	struct parcel rilp;
 	ofono_bool_t status;
+	int numparams;
 
 	if (message->error != RIL_E_SUCCESS)
 		goto error;
 
 	g_ril_init_parcel(message, &rilp);
+
+	numparams = parcel_r_int32(&rilp);
+	if (numparams < 1)
+		goto error;
 
 	status = (ofono_bool_t) parcel_r_int32(&rilp);
 
@@ -1437,7 +1454,7 @@ static void ril_query_facility_lock(struct ofono_sim *sim,
 					void *data)
 {
 	struct sim_data *sd = ofono_sim_get_data(sim);
-	struct cb_data *cbd = cb_data_new(cb, data, sim);
+	struct cb_data *cbd = cb_data_new(cb, data, sd);
 	struct parcel rilp;
 
 	parcel_init(&rilp);
@@ -1483,7 +1500,7 @@ static struct ofono_sim_driver driver = {
 	.query_pin_retries	= ril_query_pin_retries,
 	.reset_passwd		= ril_pin_send_puk,
 	.change_passwd		= ril_change_passwd,
-	.lock			= ril_pin_change_state,
+	.lock			= ril_set_facility_lock,
 	.query_facility_lock    = ril_query_facility_lock,
 };
 

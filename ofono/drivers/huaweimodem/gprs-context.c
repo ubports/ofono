@@ -80,7 +80,7 @@ static gboolean get_next_addr(GAtResultIter *iter, char **addr)
 	if (g_at_result_iter_next_unquoted_string(iter, &str) == FALSE)
 		return FALSE;
 
-	val = strtol(str, NULL, 16);
+	val = strtoul(str, NULL, 16);
 
 	if (addr)
 		*addr = g_strdup_printf("%u.%u.%u.%u",
