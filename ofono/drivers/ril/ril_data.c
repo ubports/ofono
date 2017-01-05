@@ -36,6 +36,7 @@
 #define PROTO_IPV4V6_STR "IPV4V6"
 
 enum ril_data_priv_flags {
+	RIL_DATA_FLAG_NONE = 0x00,
 	RIL_DATA_FLAG_ALLOWED = 0x01,
 	RIL_DATA_FLAG_MAX_SPEED = 0x02,
 	RIL_DATA_FLAG_ON = 0x04
@@ -100,6 +101,7 @@ struct ril_data_priv {
 	struct ril_data_request *pending_req;
 
 	struct ril_data_options options;
+	guint slot;
 	char *log_prefix;
 	guint query_id;
 	gulong io_event_id;
@@ -1058,9 +1060,20 @@ static void ril_data_settings_changed(struct ril_sim_settings *settings,
 	ril_data_manager_check_network_mode(RIL_DATA(user_data)->priv->dm);
 }
 
+static gint ril_data_compare_cb(gconstpointer a, gconstpointer b)
+{
+	const struct ril_data *d1 = a;
+	const struct ril_data *d2 = b;
+	const struct ril_data_priv *p1 = d1->priv;
+	const struct ril_data_priv *p2 = d2->priv;
+
+	return p1->slot < p2->slot ? (-1) : p1->slot > p2->slot ? 1 : 0;
+}
+
 struct ril_data *ril_data_new(struct ril_data_manager *dm, const char *name,
 		struct ril_radio *radio, struct ril_network *network,
-		GRilIoChannel *io, const struct ril_data_options *options)
+		GRilIoChannel *io, const struct ril_data_options *options,
+		const struct ril_slot_config *config)
 {
 	GASSERT(dm);
 	if (G_LIKELY(dm)) {
@@ -1087,6 +1100,7 @@ struct ril_data *ril_data_new(struct ril_data_manager *dm, const char *name,
 		priv->log_prefix = (name && name[0]) ?
 			g_strconcat(name, " ", NULL) : g_strdup("");
 
+		priv->slot = config->slot;
 		priv->q = grilio_queue_new(io);
 		priv->io = grilio_channel_ref(io);
 		priv->dm = ril_data_manager_ref(dm);
@@ -1111,7 +1125,9 @@ struct ril_data *ril_data_new(struct ril_data_manager *dm, const char *name,
 					NULL, self);
 		grilio_request_unref(req);
 
-		dm->data_list = g_slist_append(dm->data_list, self);
+		/* Order data contexts according to slot numbers */
+		dm->data_list = g_slist_insert_sorted(dm->data_list, self,
+							ril_data_compare_cb);
 		ril_data_manager_check_network_mode(dm);
 		return self;
 	}
@@ -1444,53 +1460,54 @@ static void ril_data_manager_check_network_mode(struct ril_data_manager *self)
 	GSList *l;
 
 	if (ril_data_manager_handover(self)) {
-		gboolean need_fast_access = FALSE;
+		struct ril_network *lte_network = NULL;
 		int non_gsm_count = 0;
 
 		/*
-		 * Count number of SIMs for which GSM is selected
+		 * Count number of SIMs for which non-GSM mode is selected
 		 */
 		for (l= self->data_list; l; l = l->next) {
 			struct ril_data *data = l->data;
 			struct ril_data_priv *priv = data->priv;
-			struct ril_sim_settings *sim = priv->network->settings;
+			struct ril_network *network = priv->network;
+			struct ril_sim_settings *sim = network->settings;
 
-			if (sim->pref_mode != OFONO_RADIO_ACCESS_MODE_GSM &&
-							sim->imsi) {
+			if (sim->pref_mode != OFONO_RADIO_ACCESS_MODE_GSM) {
 				non_gsm_count++;
-				if (priv->flags & RIL_DATA_FLAG_MAX_SPEED) {
-					need_fast_access = TRUE;
+				if ((priv->flags & RIL_DATA_FLAG_MAX_SPEED) &&
+							!lte_network) {
+					lte_network = network;
 				}
 			}
 		}
 
 		/*
-		 * If the SIM selected for internet access has non-GSM mode
-		 * enabled and non-GSM mode is enabled for more than one SIM,
-		 * then we need to limit other SIMs to GSM. Otherwise, turn
-		 * all limits off.
+		 * If there's no SIM selected for internet access
+		 * then choose the first slot for LTE.
 		 */
-		if (need_fast_access && non_gsm_count > 1) {
-			for (l= self->data_list; l; l = l->next) {
-				struct ril_data *data = l->data;
-				struct ril_data_priv *priv = data->priv;
-
-				ril_network_set_max_pref_mode(priv->network,
-					(priv->flags & RIL_DATA_FLAG_MAX_SPEED) ?
-						OFONO_RADIO_ACCESS_MODE_ANY :
-						OFONO_RADIO_ACCESS_MODE_GSM,
-								FALSE);
-			}
-
-			return;
+		if (!lte_network) {
+			struct ril_data *data = self->data_list->data;
+			lte_network = data->priv->network;
 		}
-	}
 
-	/* Otherwise there's no reason to limit anything */
-	for (l= self->data_list; l; l = l->next) {
-		struct ril_data *data = l->data;
-		ril_network_set_max_pref_mode(data->priv->network,
+		for (l= self->data_list; l; l = l->next) {
+			struct ril_data *data = l->data;
+			struct ril_network *network = data->priv->network;
+
+			ril_network_set_max_pref_mode(network,
+					(network == lte_network) ?
+					OFONO_RADIO_ACCESS_MODE_ANY :
+					OFONO_RADIO_ACCESS_MODE_GSM,
+					FALSE);
+		}
+
+	} else {
+		/* Otherwise there's no reason to limit anything */
+		for (l= self->data_list; l; l = l->next) {
+			struct ril_data *data = l->data;
+			ril_network_set_max_pref_mode(data->priv->network,
 					OFONO_RADIO_ACCESS_MODE_ANY, FALSE);
+		}
 	}
 }
 
