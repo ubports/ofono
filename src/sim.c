@@ -2608,6 +2608,9 @@ static void sim_query_fac_pinlock_cb(const struct ofono_error *error,
 {
 	struct ofono_sim *sim = data;
 
+	if (sim->state == OFONO_SIM_STATE_NOT_PRESENT)
+		return;
+
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR)
 		goto done;
 
@@ -2621,6 +2624,9 @@ static void sim_query_fac_networklock_cb(const struct ofono_error *error,
 				ofono_bool_t status, void *data)
 {
 	struct ofono_sim *sim = data;
+
+	if (sim->state == OFONO_SIM_STATE_NOT_PRESENT)
+		return;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR)
 		goto done;
@@ -2637,6 +2643,9 @@ static void sim_query_fac_imsilock_cb(const struct ofono_error *error,
 				ofono_bool_t status, void *data)
 {
 	struct ofono_sim *sim = data;
+
+	if (sim->state == OFONO_SIM_STATE_NOT_PRESENT)
+		return;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR)
 		goto done;
