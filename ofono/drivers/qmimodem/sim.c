@@ -30,6 +30,7 @@
 #include <ofono/sim.h>
 
 #include "qmi.h"
+#include "dms.h"
 #include "uim.h"
 
 #include "qmimodem.h"
@@ -39,6 +40,8 @@
 #define EF_STATUS_VALID 1
 
 struct sim_data {
+	struct qmi_device *qmi_dev;
+	struct qmi_service *dms;
 	struct qmi_service *uim;
 	uint32_t event_mask;
 	uint8_t card_state;
@@ -295,6 +298,47 @@ error:
 	g_free(cbd);
 }
 
+static void get_imsi_cb(struct qmi_result *result, void *user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_sim_imsi_cb_t cb = cbd->cb;
+	char *str;
+
+	DBG("");
+
+	if (qmi_result_set_error(result, NULL)) {
+		CALLBACK_WITH_FAILURE(cb, NULL, cbd->data);
+		return;
+	}
+
+	str = qmi_result_get_string(result, QMI_DMS_RESULT_IMSI);
+	if (!str) {
+		CALLBACK_WITH_FAILURE(cb, NULL, cbd->data);
+		return;
+	}
+
+	CALLBACK_WITH_SUCCESS(cb, str, cbd->data);
+
+	qmi_free(str);
+}
+
+static void qmi_read_imsi(struct ofono_sim *sim,
+				ofono_sim_imsi_cb_t cb, void *user_data)
+{
+	struct sim_data *data = ofono_sim_get_data(sim);
+	struct cb_data *cbd = cb_data_new(cb, user_data);
+
+	DBG("");
+
+	if (qmi_service_send(data->dms, QMI_DMS_GET_IMSI, NULL,
+					get_imsi_cb, cbd, g_free) > 0)
+		return;
+
+	CALLBACK_WITH_FAILURE(cb, NULL, cbd->data);
+
+	g_free(cbd);
+}
+
 static void qmi_query_passwd_state(struct ofono_sim *sim,
 				ofono_sim_passwd_cb_t cb, void *user_data)
 {
@@ -465,9 +509,26 @@ static void create_uim_cb(struct qmi_service *service, void *user_data)
 		return;
 
 error:
-	qmi_service_unref(data->uim);
-
 	ofono_sim_remove(sim);
+}
+
+static void create_dms_cb(struct qmi_service *service, void *user_data)
+{
+	struct ofono_sim *sim = user_data;
+	struct sim_data *data = ofono_sim_get_data(sim);
+
+	DBG("");
+
+	if (!service) {
+		ofono_error("Failed to request DMS service");
+		ofono_sim_remove(sim);
+		return;
+	}
+
+	data->dms = qmi_service_ref(service);
+
+	qmi_service_create(data->qmi_dev, QMI_SERVICE_UIM, create_uim_cb, sim,
+					NULL);
 }
 
 static int qmi_sim_probe(struct ofono_sim *sim,
@@ -486,9 +547,12 @@ static int qmi_sim_probe(struct ofono_sim *sim,
 	for (i = 0; i < OFONO_SIM_PASSWORD_INVALID; i++)
 		data->retries[i] = -1;
 
+	data->qmi_dev = device;
+
 	ofono_sim_set_data(sim, data);
 
-	qmi_service_create(device, QMI_SERVICE_UIM, create_uim_cb, sim, NULL);
+	qmi_service_create_shared(device, QMI_SERVICE_DMS,
+						create_dms_cb, sim, NULL);
 
 	return 0;
 }
@@ -501,9 +565,15 @@ static void qmi_sim_remove(struct ofono_sim *sim)
 
 	ofono_sim_set_data(sim, NULL);
 
-	qmi_service_unregister_all(data->uim);
-
-	qmi_service_unref(data->uim);
+	if (data->uim) {
+		qmi_service_unregister_all(data->uim);
+		qmi_service_unref(data->uim);
+		data->uim = NULL;
+	}
+	if (data->dms) {
+		qmi_service_unregister_all(data->dms);
+		qmi_service_unref(data->dms);
+	}
 
 	g_free(data);
 }
@@ -516,6 +586,7 @@ static struct ofono_sim_driver driver = {
 	.read_file_transparent	= qmi_read_transparent,
 	.read_file_linear	= qmi_read_record,
 	.read_file_cyclic	= qmi_read_record,
+	.read_imsi		= qmi_read_imsi,
 	.query_passwd_state	= qmi_query_passwd_state,
 	.query_pin_retries	= qmi_query_pin_retries,
 };
