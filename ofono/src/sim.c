@@ -1581,19 +1581,6 @@ static void sim_imsi_obtained(struct ofono_sim *sim, const char *imsi)
 
 }
 
-static void sim_imsi_cb(const struct ofono_error *error, const char *imsi,
-			void *data)
-{
-	struct ofono_sim *sim = data;
-
-	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
-		ofono_error("Unable to read IMSI, emergency calls only");
-		return;
-	}
-
-	sim_imsi_obtained(sim, imsi);
-}
-
 static void sim_efimsi_cb(const struct ofono_error *error,
 				const unsigned char *data, int len, void *user)
 {
@@ -1631,6 +1618,26 @@ static void sim_efimsi_cb(const struct ofono_error *error,
 
 error:
 	ofono_error("Unable to read IMSI, emergency calls only");
+}
+
+static void sim_imsi_cb(const struct ofono_error *error, const char *imsi,
+			void *data)
+{
+	struct ofono_sim *sim = data;
+
+	if (error->type == OFONO_ERROR_TYPE_NO_ERROR) {
+		sim_imsi_obtained(sim, imsi);
+		return;
+	}
+
+	/* Driver function failed, try via EF reads if possible */
+	if (sim->driver->read_file_transparent == NULL) {
+		ofono_error("Unable to read IMSI, emergency calls only");
+		return;
+	}
+
+	sim->driver->read_file_transparent(sim, SIM_EFIMSI_FILEID, 0, 9,
+						NULL, 0, sim_efimsi_cb, sim);
 }
 
 static void sim_retrieve_imsi(struct ofono_sim *sim)
