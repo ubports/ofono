@@ -498,6 +498,70 @@ static void qmi_query_pin_retries(struct ofono_sim *sim,
 	g_free(cbd);
 }
 
+static void pin_send_cb(struct qmi_result *result, void *user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_sim_lock_unlock_cb_t cb = cbd->cb;
+
+	DBG("");
+
+	if (qmi_result_set_error(result, NULL)) {
+		CALLBACK_WITH_FAILURE(cb, cbd->data);
+		return;
+	}
+
+	CALLBACK_WITH_SUCCESS(cb, cbd->data);
+}
+
+static void qmi_pin_send(struct ofono_sim *sim, const char *passwd,
+			ofono_sim_lock_unlock_cb_t cb, void *user_data)
+{
+	struct sim_data *data = ofono_sim_get_data(sim);
+	struct cb_data *cbd = cb_data_new(cb, user_data);
+	int passwd_len;
+	struct qmi_param *param;
+	struct qmi_uim_param_message_info *info_data;
+	unsigned char session_info_data[2];
+
+	DBG("");
+
+	if (!passwd)
+		goto error;
+
+	passwd_len = strlen(passwd);
+
+	if (passwd_len <= 0 || passwd_len > 0xFF)
+		goto error;
+
+	param = qmi_param_new();
+	if (!param)
+		goto error;
+
+	/* param info */
+	info_data = alloca(2 + passwd_len);
+	info_data->pin_id = 0x01; /* PIN 1 */
+	info_data->length = (uint8_t) passwd_len;
+	memcpy(info_data->pin_value, passwd, passwd_len);
+	qmi_param_append(param, QMI_UIM_PARAM_MESSAGE_INFO, 2 + passwd_len,
+					info_data);
+	/* param Session Information */
+	session_info_data[0] = 0x6;
+	session_info_data[1] = 0x0;
+	qmi_param_append(param, QMI_UIM_PARAM_MESSAGE_SESSION_INFO, 2,
+					session_info_data);
+
+	if (qmi_service_send(data->uim, QMI_UIM_VERIFY_PIN, param,
+					pin_send_cb, cbd, g_free) > 0)
+		return;
+
+	qmi_param_free(param);
+
+error:
+	CALLBACK_WITH_FAILURE(cb, cbd->data);
+
+	g_free(cbd);
+}
+
 static void get_card_status_cb(struct qmi_result *result, void *user_data)
 {
 	struct ofono_sim *sim = user_data;
@@ -649,6 +713,7 @@ static struct ofono_sim_driver driver = {
 	.read_imsi		= qmi_read_imsi,
 	.query_passwd_state	= qmi_query_passwd_state,
 	.query_pin_retries	= qmi_query_pin_retries,
+	.send_passwd		= qmi_pin_send,
 };
 
 void qmi_sim_init(void)
