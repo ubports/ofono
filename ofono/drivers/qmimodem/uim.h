@@ -25,6 +25,8 @@
 #define QMI_UIM_WRITE_RECORD		35	/* Write a record */
 #define QMI_UIM_GET_FILE_ATTRIBUTES	36	/* Get file attributes */
 
+#define QMI_UIM_VERIFY_PIN		38	/* Verify PIN */
+
 #define QMI_UIM_EVENT_REGISTRATION	46	/* Register for indications */
 #define QMI_UIM_GET_CARD_STATUS		47	/* Get card status */
 
@@ -90,4 +92,13 @@ struct qmi_uim_file_attributes {
 	uint16_t sec_activate_mask;
 	uint16_t raw_len;
 	uint8_t raw_value[0];
+} __attribute__((__packed__));
+
+/* Verify PIN parameter */
+#define QMI_UIM_PARAM_MESSAGE_SESSION_INFO	0x01
+#define QMI_UIM_PARAM_MESSAGE_INFO	0x02
+struct qmi_uim_param_message_info {
+	uint8_t pin_id;
+	uint8_t length;
+	uint8_t pin_value[0];
 } __attribute__((__packed__));
