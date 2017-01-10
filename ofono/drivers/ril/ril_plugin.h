@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2016 Jolla Ltd.
+ *  Copyright (C) 2015-2017 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -52,6 +52,7 @@ struct ril_slot_info {
 	gboolean enabled;
 	gboolean sim_present;
 	const struct ril_slot_config *config;
+	GHashTable *errors;
 };
 
 struct ril_plugin {
@@ -123,6 +124,8 @@ void ril_plugin_dbus_block_imei_requests(struct ril_plugin_dbus *dbus,
 void ril_plugin_dbus_signal(struct ril_plugin_dbus *dbus, int mask);
 void ril_plugin_dbus_signal_sim(struct ril_plugin_dbus *dbus, int index,
 							gboolean present);
+void ril_plugin_dbus_signal_modem_error(struct ril_plugin_dbus *dbus,
+			int index, const char *id, const char *message);
 
 struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *log_prefix,
 		const struct ril_slot_info *slot, struct ril_radio *radio,
