@@ -252,8 +252,6 @@ static gboolean setup_sierra(struct modem_info *modem)
 
 	if (qmi != NULL && net != NULL) {
 		ofono_modem_set_driver(modem->modem, "gobi");
-		/* Fixup SIM interface for Sierra QMI devices */
-		ofono_modem_set_boolean(modem->modem, "ForceSimLegacy", TRUE);
 		goto done;
 	}
 
