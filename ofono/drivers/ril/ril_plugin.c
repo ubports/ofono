@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2016 Jolla Ltd.
+ *  Copyright (C) 2015-2017 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -84,6 +84,12 @@
 #define RIL_STORE_DEFAULT_VOICE_SIM "DefaultVoiceSim"
 #define RIL_STORE_DEFAULT_DATA_SIM  "DefaultDataSim"
 #define RIL_STORE_SLOTS_SEP         ","
+
+/* The file where error statistics is stored */
+#define RIL_ERROR_STORAGE            "rilerror"
+
+/* Modem error ids, must be static strings (only one is defined for now) */
+static const char RIL_ERROR_ID_RILD_RESTART[] = "rild-restart";
 
 enum ril_plugin_io_events {
 	IO_EVENT_CONNECTED,
@@ -207,6 +213,12 @@ static struct ofono_debug_desc ril_plugin_debug OFONO_DEBUG_ATTR = {
 	.flags = OFONO_DEBUG_FLAG_DEFAULT,
 	.notify = ril_plugin_debug_notify
 };
+
+static inline const char *ril_slot_debug_prefix(const struct ril_slot *slot)
+{
+	/* slot->path always starts with a slash, skip it */
+	return slot->path + 1;
+}
 
 static struct ril_plugin_priv *ril_plugin_cast(struct ril_plugin *pub)
 {
@@ -611,7 +623,7 @@ static void ril_plugin_sim_state_watch(enum ofono_sim_state new_state,
 	struct ril_slot *slot = data;
 	struct ril_plugin_priv *plugin = slot->plugin;
 
-	DBG("%s sim state %d", slot->path + 1, new_state);
+	DBG("%s sim state %d", ril_slot_debug_prefix(slot), new_state);
 	slot->sim_state = new_state;
 	if (new_state == OFONO_SIM_STATE_READY) {
 		struct ril_slot *voice_slot = plugin->voice_slot;
@@ -667,10 +679,10 @@ static void ril_plugin_sim_watch(struct ofono_atom *atom,
 	struct ril_slot *slot = data;
 
 	if (cond == OFONO_ATOM_WATCH_CONDITION_REGISTERED) {
-		DBG("%s sim registered", slot->path + 1);
+		DBG("%s sim registered", ril_slot_debug_prefix(slot));
 		ril_plugin_register_sim(slot, __ofono_atom_get_data(atom));
 	} else if (cond == OFONO_ATOM_WATCH_CONDITION_UNREGISTERED) {
-		DBG("%s sim unregistered", slot->path + 1);
+		DBG("%s sim unregistered", ril_slot_debug_prefix(slot));
 		slot->sim = NULL;
 	}
 
@@ -678,8 +690,35 @@ static void ril_plugin_sim_watch(struct ofono_atom *atom,
 	ril_plugin_update_modem_paths_full(slot->plugin);
 }
 
-static void ril_plugin_handle_error(struct ril_slot *slot)
+static void ril_plugin_count_error(struct ril_slot *slot, const char *key,
+							const char *message)
 {
+	GHashTable *errors = slot->pub.errors;
+	GKeyFile *storage = storage_open(NULL, RIL_ERROR_STORAGE);
+
+	/* Update life-time statistics */
+	if (storage) {
+		/* slot->path always starts with a slash, skip it */
+		const char *group = slot->path + 1;
+		g_key_file_set_integer(storage, group, key,
+			g_key_file_get_integer(storage, group, key, NULL) + 1);
+		storage_close(NULL, RIL_ERROR_STORAGE, storage, TRUE);
+	}
+
+	/* Update run-time error counts. The key is the error id which
+	 * is always a static string */
+	g_hash_table_insert(errors, (void*)key, GINT_TO_POINTER(
+		GPOINTER_TO_INT(g_hash_table_lookup(errors, key)) + 1));
+
+	/* Issue the D-Bus signal */
+	ril_plugin_dbus_signal_modem_error(slot->plugin->dbus,
+					slot->index, key, message);
+}
+
+static void ril_plugin_handle_error(struct ril_slot *slot, const char *msg)
+{
+	ofono_error("%s %s", ril_slot_debug_prefix(slot), msg);
+	ril_plugin_count_error(slot, RIL_ERROR_ID_RILD_RESTART, msg);
 	ril_plugin_shutdown_slot(slot, TRUE);
 	ril_plugin_update_modem_paths_full(slot->plugin);
 	ril_plugin_retry_init_io(slot);
@@ -688,12 +727,12 @@ static void ril_plugin_handle_error(struct ril_slot *slot)
 static void ril_plugin_slot_error(GRilIoChannel *io, const GError *error,
 								void *data)
 {
-	ril_plugin_handle_error((struct ril_slot *)data);
+	ril_plugin_handle_error((struct ril_slot *)data, GERRMSG(error));
 }
 
 static void ril_plugin_slot_disconnected(GRilIoChannel *io, void *data)
 {
-	ril_plugin_handle_error((struct ril_slot *)data);
+	ril_plugin_handle_error((struct ril_slot *)data, "disconnected");
 }
 
 static void ril_plugin_modem_online(struct ril_modem *modem, gboolean online,
@@ -701,7 +740,7 @@ static void ril_plugin_modem_online(struct ril_modem *modem, gboolean online,
 {
 	struct ril_slot *slot = data;
 
-	DBG("%s %d", slot->path + 1, online);
+	DBG("%s %d", ril_slot_debug_prefix(slot), online);
 	GASSERT(slot->modem);
 	GASSERT(slot->modem == modem);
 
@@ -813,14 +852,15 @@ static void ril_debug_trace_update(struct ril_slot *slot)
 
 static const char *ril_plugin_log_prefix(struct ril_slot *slot)
 {
-	return ril_plugin_multisim(slot->plugin) ? (slot->path + 1) : "";
+	return ril_plugin_multisim(slot->plugin) ?
+					ril_slot_debug_prefix(slot) : "";
 }
 
 static void ril_plugin_create_modem(struct ril_slot *slot)
 {
 	struct ril_modem *modem;
 
-	DBG("%s", slot->path);
+	DBG("%s", ril_slot_debug_prefix(slot));
 	GASSERT(slot->io && slot->io->connected);
 	GASSERT(!slot->modem);
 
@@ -1076,6 +1116,7 @@ static struct ril_slot *ril_plugin_slot_new(const char *sockpath,
 		RILMODEM_DEFAULT_DATA_CALL_RETRY_LIMIT;
 	slot->data_opt.data_call_retry_delay_ms =
 		RILMODEM_DEFAULT_DATA_CALL_RETRY_DELAY;
+	slot->pub.errors = g_hash_table_new(g_str_hash, g_str_equal);
 	return slot;
 }
 
@@ -1248,6 +1289,7 @@ static void ril_plugin_delete_slot(struct ril_slot *slot)
 	ril_plugin_shutdown_slot(slot, TRUE);
 	ril_sim_info_unref(slot->sim_info);
 	ril_sim_settings_unref(slot->sim_settings);
+	g_hash_table_destroy(slot->pub.errors);
 	g_free(slot->path);
 	g_free(slot->imei);
 	g_free(slot->name);
@@ -1403,7 +1445,7 @@ static void ril_plugin_switch_user()
 static void ril_plugin_update_enabled_slot(struct ril_slot *slot)
 {
 	if (slot->pub.enabled) {
-		DBG("%s enabled", slot->path + 1);
+		DBG("%s enabled", ril_slot_debug_prefix(slot));
 		ril_plugin_check_modem(slot);
 	}
 }
@@ -1411,7 +1453,7 @@ static void ril_plugin_update_enabled_slot(struct ril_slot *slot)
 static void ril_plugin_update_disabled_slot(struct ril_slot *slot)
 {
 	if (!slot->pub.enabled) {
-		DBG("%s disabled", slot->path + 1);
+		DBG("%s disabled", ril_slot_debug_prefix(slot));
 		ril_plugin_shutdown_slot(slot, FALSE);
 		ril_plugin_update_modem_paths_full(slot->plugin);
 	}
