@@ -2274,6 +2274,11 @@ static DBusMessage *gprs_add_context(DBusConnection *conn,
 	const char *path;
 	enum ofono_gprs_context_type type;
 
+#ifdef DISABLE_ADD_REMOVE_CONTEXT
+	ofono_error("AddContext not allowed");
+	return __ofono_error_not_supported(msg);
+#endif
+
 	if (!dbus_message_get_args(msg, NULL, DBUS_TYPE_STRING, &typestr,
 					DBUS_TYPE_INVALID))
 		return __ofono_error_invalid_args(msg);
@@ -2354,6 +2359,11 @@ static DBusMessage *gprs_remove_context(DBusConnection *conn,
 	struct pri_context *ctx;
 	const char *path;
 	const char *atompath;
+
+#ifdef DISABLE_ADD_REMOVE_CONTEXT
+	ofono_error("RemoveContext not allowed");
+	return __ofono_error_not_supported(msg);
+#endif
 
 	if (gprs->pending)
 		return __ofono_error_busy(msg);

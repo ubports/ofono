@@ -183,6 +183,13 @@ if (test "${enable_jolla_rilmodem}" = "yes"); then
 	LIBS="$LIBS $GRILIO_LIBS $GLIBUTIL_LIBS $LIBMCE_LIBS"
 fi
 
+AC_ARG_ENABLE(add-remove-context, AC_HELP_STRING([--disable-add-remove-context],
+		[don't allow to add or remove connection context over D-Bus]), [
+	if (test "${enableval}" = "no"); then
+		CFLAGS="$CFLAGS -DDISABLE_ADD_REMOVE_CONTEXT"
+	fi
+])
+
 AC_ARG_ENABLE(qmimodem, AC_HELP_STRING([--disable-qmimodem],
 				[disable Qualcomm QMI modem support]),
 					[enable_qmimodem=${enableval}])
