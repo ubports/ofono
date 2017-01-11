@@ -39,15 +39,20 @@
 #define EF_STATUS_INVALIDATED 0
 #define EF_STATUS_VALID 1
 
+/* information from QMI_UIM_GET_CARD_STATUS command */
+struct sim_status {
+	uint8_t card_state;
+	uint8_t app_type;
+	uint8_t passwd_state;
+	int retries[OFONO_SIM_PASSWORD_INVALID];
+};
+
 struct sim_data {
 	struct qmi_device *qmi_dev;
 	struct qmi_service *dms;
 	struct qmi_service *uim;
 	uint32_t event_mask;
-	uint8_t card_state;
 	uint8_t app_type;
-	uint8_t passwd_state;
-	int retries[OFONO_SIM_PASSWORD_INVALID];
 };
 
 static int create_fileid_data(uint8_t app_type, int fileid,
@@ -339,76 +344,50 @@ static void qmi_read_imsi(struct ofono_sim *sim,
 	g_free(cbd);
 }
 
-static void qmi_query_passwd_state(struct ofono_sim *sim,
-				ofono_sim_passwd_cb_t cb, void *user_data)
-{
-	struct sim_data *data = ofono_sim_get_data(sim);
-
-	DBG("passwd state %d", data->passwd_state);
-
-	if (data->passwd_state == OFONO_SIM_PASSWORD_INVALID) {
-		CALLBACK_WITH_FAILURE(cb, -1, user_data);
-		return;
-	}
-
-	CALLBACK_WITH_SUCCESS(cb, data->passwd_state, user_data);
-}
-
-static void qmi_query_pin_retries(struct ofono_sim *sim,
-				ofono_sim_pin_retries_cb_t cb, void *user_data)
-{
-	struct sim_data *data = ofono_sim_get_data(sim);
-
-	DBG("passwd state %d", data->passwd_state);
-
-	if (data->passwd_state == OFONO_SIM_PASSWORD_INVALID) {
-		CALLBACK_WITH_FAILURE(cb, NULL, user_data);
-		return;
-	}
-
-	CALLBACK_WITH_SUCCESS(cb, data->retries, user_data);
-}
-
-static void card_setup(const struct qmi_uim_slot_info *slot,
+static void get_card_status(const struct qmi_uim_slot_info *slot,
 					const struct qmi_uim_app_info1 *info1,
 					const struct qmi_uim_app_info2 *info2,
-							struct sim_data *data)
+					struct sim_status *sim_stat)
 {
-	data->card_state = slot->card_state;
-	data->app_type = info1->app_type;
+	sim_stat->card_state = slot->card_state;
+	sim_stat->app_type = info1->app_type;
 
 	switch (info1->app_state) {
 	case 0x02:	/* PIN1 or UPIN is required */
-		data->passwd_state = OFONO_SIM_PASSWORD_SIM_PIN;
+		sim_stat->passwd_state = OFONO_SIM_PASSWORD_SIM_PIN;
 		break;
 	case 0x03:	/* PUK1 or PUK for UPIN is required */
-		data->passwd_state = OFONO_SIM_PASSWORD_SIM_PUK;
+		sim_stat->passwd_state = OFONO_SIM_PASSWORD_SIM_PUK;
+		break;
+	case 0x04:	/* Personalization state must be checked. */
+		/* This is temporary, we could retry and get another result */
+		sim_stat->passwd_state = OFONO_SIM_PASSWORD_INVALID;
 		break;
 	case 0x07:	/* Ready */
-		data->passwd_state = OFONO_SIM_PASSWORD_NONE;
+		sim_stat->passwd_state = OFONO_SIM_PASSWORD_NONE;
 		break;
 	default:
-		data->passwd_state = OFONO_SIM_PASSWORD_INVALID;
+		DBG("info1->app_state:0x%x: OFONO_SIM_PASSWORD_INVALID",
+			info1->app_state);
+		sim_stat->passwd_state = OFONO_SIM_PASSWORD_INVALID;
 		break;
 	}
 
-	data->retries[OFONO_SIM_PASSWORD_SIM_PIN] = info2->pin1_retries;
-	data->retries[OFONO_SIM_PASSWORD_SIM_PUK] = info2->puk1_retries;
+	sim_stat->retries[OFONO_SIM_PASSWORD_SIM_PIN] = info2->pin1_retries;
+	sim_stat->retries[OFONO_SIM_PASSWORD_SIM_PUK] = info2->puk1_retries;
 
-	data->retries[OFONO_SIM_PASSWORD_SIM_PIN2] = info2->pin2_retries;
-	data->retries[OFONO_SIM_PASSWORD_SIM_PUK2] = info2->puk2_retries;
+	sim_stat->retries[OFONO_SIM_PASSWORD_SIM_PIN2] = info2->pin2_retries;
+	sim_stat->retries[OFONO_SIM_PASSWORD_SIM_PUK2] = info2->puk2_retries;
 }
 
-static void get_card_status_cb(struct qmi_result *result, void *user_data)
+static bool handle_get_card_status_result(
+		struct qmi_result *result, struct sim_status *sim_stat)
 {
-	struct ofono_sim *sim = user_data;
-	struct sim_data *data = ofono_sim_get_data(sim);
 	const void *ptr;
 	const struct qmi_uim_card_status *status;
 	uint16_t len, offset;
 	uint8_t i;
-
-	DBG("");
+	bool res = false;
 
 	if (qmi_result_set_error(result, NULL))
 		goto done;
@@ -441,15 +420,102 @@ static void get_card_status_cb(struct qmi_result *result, void *user_data)
 
 			index = GUINT16_FROM_LE(status->index_gw_pri);
 
-			if ((index & 0xff) == i && (index >> 8) == n)
-				card_setup(slot, info1, info2, data);
+			if ((index & 0xff) == i && (index >> 8) == n) {
+				get_card_status(slot, info1, info2, sim_stat);
+				res = true;
+			}
 		}
 	}
 
 done:
+	return res;
+}
+
+static void query_passwd_state_cb(struct qmi_result *result,
+					void *user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_sim_passwd_cb_t cb = cbd->cb;
+	struct sim_status sim_stat;
+
+	DBG("");
+
+	if (!handle_get_card_status_result(result, &sim_stat)) {
+		CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
+		return;
+	}
+
+	CALLBACK_WITH_SUCCESS(cb, sim_stat.passwd_state, cbd->data);
+}
+
+static void qmi_query_passwd_state(struct ofono_sim *sim,
+				ofono_sim_passwd_cb_t cb, void *user_data)
+{
+	struct sim_data *data = ofono_sim_get_data(sim);
+	struct cb_data *cbd = cb_data_new(cb, user_data);
+
+	DBG("");
+
+	if (qmi_service_send(data->uim, QMI_UIM_GET_CARD_STATUS, NULL,
+					query_passwd_state_cb, cbd, g_free) > 0)
+		return;
+
+	CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
+
+	g_free(cbd);
+}
+
+static void query_pin_retries_cb(struct qmi_result *result, void *user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_sim_pin_retries_cb_t cb = cbd->cb;
+	struct sim_status sim_stat;
+
+	DBG("");
+
+	if (!handle_get_card_status_result(result, &sim_stat)) {
+		CALLBACK_WITH_FAILURE(cb, NULL, cbd->data);
+		return;
+	}
+
+	CALLBACK_WITH_SUCCESS(cb, sim_stat.retries, cbd->data);
+}
+
+static void qmi_query_pin_retries(struct ofono_sim *sim,
+				ofono_sim_pin_retries_cb_t cb, void *user_data)
+{
+	struct sim_data *data = ofono_sim_get_data(sim);
+	struct cb_data *cbd = cb_data_new(cb, user_data);
+
+	DBG("");
+
+	if (qmi_service_send(data->uim, QMI_UIM_GET_CARD_STATUS, NULL,
+					query_pin_retries_cb, cbd, g_free) > 0)
+		return;
+
+	CALLBACK_WITH_FAILURE(cb, NULL, cbd->data);
+
+	g_free(cbd);
+}
+
+static void get_card_status_cb(struct qmi_result *result, void *user_data)
+{
+	struct ofono_sim *sim = user_data;
+	struct sim_data *data = ofono_sim_get_data(sim);
+	struct sim_status sim_stat;
+
+	DBG("");
+
+	if (!handle_get_card_status_result(result, &sim_stat)) {
+		data->app_type = 0;	/* Unknown */
+		sim_stat.card_state = 0x00;	/* Absent */
+	} else {
+		data->app_type = sim_stat.app_type;
+	}
+
 	ofono_sim_register(sim);
 
-	switch (data->card_state) {
+	switch (sim_stat.card_state) {
 	case 0x00:	/* Absent */
 	case 0x02:	/* Error */
 		break;
@@ -536,16 +602,10 @@ static int qmi_sim_probe(struct ofono_sim *sim,
 {
 	struct qmi_device *device = user_data;
 	struct sim_data *data;
-	int i;
 
 	DBG("");
 
 	data = g_new0(struct sim_data, 1);
-
-	data->passwd_state = OFONO_SIM_PASSWORD_INVALID;
-
-	for (i = 0; i < OFONO_SIM_PASSWORD_INVALID; i++)
-		data->retries[i] = -1;
 
 	data->qmi_dev = device;
 
