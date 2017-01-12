@@ -71,6 +71,9 @@ autoreconf --force --install
     --enable-test \
     --enable-debuglog \
     --enable-jolla-rilmodem \
+    --disable-add-remove-context \
+    --disable-isimodem \
+    --disable-qmimodem \
     --with-systemdunitdir="/%{_lib}/systemd/system"
 
 make %{?jobs:-j%jobs}
