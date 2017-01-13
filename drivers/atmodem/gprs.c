@@ -522,7 +522,7 @@ static void at_cgdcont_test_cb(gboolean ok, GAtResult *result,
 		if (g_at_result_iter_next_range(&iter, &min, &max) == FALSE)
 			continue;
 
-		if (!g_at_result_iter_close_list(&iter))
+		if (!g_at_result_iter_skip_next(&iter))
 			continue;
 
 		if (g_at_result_iter_open_list(&iter))
