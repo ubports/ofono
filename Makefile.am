@@ -512,6 +512,9 @@ builtin_sources += plugins/caif.c
 builtin_modules += cinterion
 builtin_sources += plugins/cinterion.c
 
+builtin_modules += gemalto
+builtin_sources += plugins/gemalto.c
+
 builtin_modules += nokia
 builtin_sources += plugins/nokia.c
 
