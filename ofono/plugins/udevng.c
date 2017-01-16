@@ -913,6 +913,42 @@ static gboolean setup_ublox(struct modem_info *modem)
 	return TRUE;
 }
 
+static gboolean setup_gemalto(struct modem_info* modem)
+{
+	const char *app = NULL, *gps = NULL, *mdm = NULL;
+
+	GSList *list;
+
+	DBG("%s", modem->syspath);
+
+	for (list = modem->devices; list; list = list->next) {
+		struct device_info *info = list->data;
+
+		DBG("%s %s %s %s %s", info->devnode, info->interface,
+				info->number, info->label, info->subsystem);
+
+		if (g_strcmp0(info->interface, "255/255/255") == 0) {
+			if (g_strcmp0(info->number, "01") == 0)
+				gps = info->devnode;
+			else if (g_strcmp0(info->number, "02") == 0)
+				app = info->devnode;
+			else if (g_strcmp0(info->number, "03") == 0)
+				mdm = info->devnode;
+		}
+	}
+
+	DBG("application=%s gps=%s modem=%s", app, gps, mdm);
+
+	if (app == NULL || mdm == NULL)
+		return FALSE;
+
+	ofono_modem_set_string(modem->modem, "Application", app);
+	ofono_modem_set_string(modem->modem, "GPS", gps);
+	ofono_modem_set_string(modem->modem, "Modem", mdm);
+
+	return TRUE;
+}
+
 static struct {
 	const char *name;
 	gboolean (*setup)(struct modem_info *modem);
@@ -939,6 +975,7 @@ static struct {
 	{ "samsung",	setup_samsung	},
 	{ "quectel",	setup_quectel	},
 	{ "ublox",	setup_ublox	},
+	{ "gemalto",	setup_gemalto	},
 	{ }
 };
 
@@ -1178,6 +1215,7 @@ static struct {
 	{ "ublox",	"cdc_acm",	"1546", "1102"	},
 	{ "ublox",	"rndis_host",	"1546", "1146"	},
 	{ "ublox",	"cdc_acm",	"1546", "1146"	},
+	{ "gemalto",	"option",	"1e2d",	"0053"	},
 	{ }
 };
 
