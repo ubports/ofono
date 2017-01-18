@@ -46,13 +46,13 @@
 #include <ofono/sms.h>
 #include <ofono/ussd.h>
 #include <ofono/voicecall.h>
-
-#include <drivers/atmodem/atutil.h>
-
 #include <ofono/gprs.h>
 #include <ofono/gprs-context.h>
+#include <ofono/location-reporting.h>
 
+#include <drivers/atmodem/atutil.h>
 #include <drivers/atmodem/vendor.h>
+
 
 struct gemalto_data {
 	GAtChat *app;
@@ -194,6 +194,7 @@ static void gemalto_pre_sim(struct ofono_modem *modem)
 	ofono_devinfo_create(modem, 0, "atmodem", data->app);
 	sim = ofono_sim_create(modem, 0, "atmodem", data->app);
 	ofono_voicecall_create(modem, 0, "atmodem", data->app);
+	ofono_location_reporting_create(modem, 0, "gemaltomodem", data->app);
 
 	if (sim)
 		ofono_sim_inserted_notify(sim, TRUE);
