@@ -447,6 +447,12 @@ builtin_sources += drivers/atmodem/atutil.h \
 			drivers/ubloxmodem/lte.c
 
 
+builtin_modules += gemaltomodem
+builtin_sources += drivers/atmodem/atutil.h \
+			drivers/gemaltomodem/gemaltomodem.h \
+			drivers/gemaltomodem/gemaltomodem.c \
+			drivers/gemaltomodem/location-reporting.c
+
 
 if PHONESIM
 builtin_modules += phonesim
