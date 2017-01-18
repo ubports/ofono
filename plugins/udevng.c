@@ -915,7 +915,8 @@ static gboolean setup_ublox(struct modem_info *modem)
 
 static gboolean setup_gemalto(struct modem_info* modem)
 {
-	const char *app = NULL, *gps = NULL, *mdm = NULL;
+	const char *app = NULL, *gps = NULL, *mdm = NULL,
+		*net = NULL, *qmi = NULL;
 
 	GSList *list;
 
@@ -934,10 +935,15 @@ static gboolean setup_gemalto(struct modem_info* modem)
 				app = info->devnode;
 			else if (g_strcmp0(info->number, "03") == 0)
 				mdm = info->devnode;
+			else if (g_strcmp0(info->subsystem, "net") == 0)
+				net = info->devnode;
+			else if (g_strcmp0(info->subsystem, "usbmisc") == 0)
+				qmi = info->devnode;
 		}
 	}
 
-	DBG("application=%s gps=%s modem=%s", app, gps, mdm);
+	DBG("application=%s gps=%s modem=%s network=%s qmi=%s",
+			app, gps, mdm, net, qmi);
 
 	if (app == NULL || mdm == NULL)
 		return FALSE;
@@ -945,6 +951,8 @@ static gboolean setup_gemalto(struct modem_info* modem)
 	ofono_modem_set_string(modem->modem, "Application", app);
 	ofono_modem_set_string(modem->modem, "GPS", gps);
 	ofono_modem_set_string(modem->modem, "Modem", mdm);
+	ofono_modem_set_string(modem->modem, "Device", qmi);
+	ofono_modem_set_string(modem->modem, "NetworkInterface", net);
 
 	return TRUE;
 }
@@ -1216,6 +1224,8 @@ static struct {
 	{ "ublox",	"rndis_host",	"1546", "1146"	},
 	{ "ublox",	"cdc_acm",	"1546", "1146"	},
 	{ "gemalto",	"option",	"1e2d",	"0053"	},
+	{ "gemalto",	"cdc_wdm",	"1e2d",	"0053"	},
+	{ "gemalto",	"qmi_wwan",	"1e2d",	"0053"	},
 	{ }
 };
 
