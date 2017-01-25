@@ -323,6 +323,9 @@ static void telit_mode_notify(GAtResult *result, gpointer user_data)
 	case 3:
 		bearer = 5;    /* HSDPA */
 		break;
+	case 4:
+		bearer = 7;    /* LTE */
+		break;
 	default:
 		bearer = 0;
 		break;
