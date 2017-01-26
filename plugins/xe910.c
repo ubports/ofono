@@ -62,7 +62,7 @@
 static const char *none_prefix[] = { NULL };
 static const char *qss_prefix[] = { "#QSS:", NULL };
 
-struct he910_data {
+struct xe910_data {
 	GAtChat *chat;		/* AT chat */
 	GAtChat *modem;		/* Data port */
 	struct ofono_sim *sim;
@@ -70,7 +70,7 @@ struct he910_data {
 	ofono_bool_t sms_phonebook_added;
 };
 
-static void he910_debug(const char *str, void *user_data)
+static void xe910_debug(const char *str, void *user_data)
 {
 	const char *prefix = user_data;
 
@@ -112,14 +112,14 @@ static GAtChat *open_device(struct ofono_modem *modem,
 		return NULL;
 
 	if (getenv("OFONO_AT_DEBUG"))
-		g_at_chat_set_debug(chat, he910_debug, debug);
+		g_at_chat_set_debug(chat, xe910_debug, debug);
 
 	return chat;
 }
 
 static void switch_sim_state_status(struct ofono_modem *modem, int status)
 {
-	struct he910_data *data = ofono_modem_get_data(modem);
+	struct xe910_data *data = ofono_modem_get_data(modem);
 
 	DBG("%p, SIM status: %d", modem, status);
 
@@ -151,7 +151,7 @@ static void switch_sim_state_status(struct ofono_modem *modem, int status)
 	}
 }
 
-static void he910_qss_notify(GAtResult *result, gpointer user_data)
+static void xe910_qss_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_modem *modem = user_data;
 	int status;
@@ -197,7 +197,7 @@ static void qss_query_cb(gboolean ok, GAtResult *result, gpointer user_data)
 static void cfun_enable_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_modem *modem = user_data;
-	struct he910_data *data = ofono_modem_get_data(modem);
+	struct xe910_data *data = ofono_modem_get_data(modem);
 
 	DBG("%p", modem);
 
@@ -232,7 +232,7 @@ static void cfun_enable_cb(gboolean ok, GAtResult *result, gpointer user_data)
 				NULL, NULL, NULL);
 
 	/* Follow sim state */
-	g_at_chat_register(data->chat, "#QSS:", he910_qss_notify,
+	g_at_chat_register(data->chat, "#QSS:", xe910_qss_notify,
 				FALSE, modem, NULL);
 
 	/* Enable sim state notification */
@@ -242,9 +242,9 @@ static void cfun_enable_cb(gboolean ok, GAtResult *result, gpointer user_data)
 			qss_query_cb, modem, NULL);
 }
 
-static int he910_enable(struct ofono_modem *modem)
+static int xe910_enable(struct ofono_modem *modem)
 {
-	struct he910_data *data = ofono_modem_get_data(modem);
+	struct xe910_data *data = ofono_modem_get_data(modem);
 
 	DBG("%p", modem);
 
@@ -278,7 +278,7 @@ static int he910_enable(struct ofono_modem *modem)
 static void cfun_disable_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_modem *modem = user_data;
-	struct he910_data *data = ofono_modem_get_data(modem);
+	struct xe910_data *data = ofono_modem_get_data(modem);
 
 	DBG("%p", modem);
 
@@ -289,9 +289,9 @@ static void cfun_disable_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		ofono_modem_set_powered(modem, FALSE);
 }
 
-static int he910_disable(struct ofono_modem *modem)
+static int xe910_disable(struct ofono_modem *modem)
 {
-	struct he910_data *data = ofono_modem_get_data(modem);
+	struct xe910_data *data = ofono_modem_get_data(modem);
 
 	DBG("%p", modem);
 
@@ -310,9 +310,9 @@ static int he910_disable(struct ofono_modem *modem)
 	return -EINPROGRESS;
 }
 
-static void he910_pre_sim(struct ofono_modem *modem)
+static void xe910_pre_sim(struct ofono_modem *modem)
 {
-	struct he910_data *data = ofono_modem_get_data(modem);
+	struct xe910_data *data = ofono_modem_get_data(modem);
 
 	DBG("%p", modem);
 
@@ -322,9 +322,9 @@ static void he910_pre_sim(struct ofono_modem *modem)
 	ofono_location_reporting_create(modem, 0, "telitmodem", data->chat);
 }
 
-static void he910_post_online(struct ofono_modem *modem)
+static void xe910_post_online(struct ofono_modem *modem)
 {
-	struct he910_data *data = ofono_modem_get_data(modem);
+	struct xe910_data *data = ofono_modem_get_data(modem);
 	struct ofono_message_waiting *mw;
 	struct ofono_gprs *gprs;
 	struct ofono_gprs_context *gc;
@@ -351,13 +351,13 @@ static void he910_post_online(struct ofono_modem *modem)
 		ofono_gprs_add_context(gprs, gc);
 }
 
-static int he910_probe(struct ofono_modem *modem)
+static int xe910_probe(struct ofono_modem *modem)
 {
-	struct he910_data *data;
+	struct xe910_data *data;
 
 	DBG("%p", modem);
 
-	data = g_try_new0(struct he910_data, 1);
+	data = g_try_new0(struct xe910_data, 1);
 	if (data == NULL)
 		return -ENOMEM;
 
@@ -366,9 +366,9 @@ static int he910_probe(struct ofono_modem *modem)
 	return 0;
 }
 
-static void he910_remove(struct ofono_modem *modem)
+static void xe910_remove(struct ofono_modem *modem)
 {
-	struct he910_data *data = ofono_modem_get_data(modem);
+	struct xe910_data *data = ofono_modem_get_data(modem);
 
 	DBG("%p", modem);
 
@@ -381,27 +381,27 @@ static void he910_remove(struct ofono_modem *modem)
 	g_free(data);
 }
 
-static struct ofono_modem_driver he910_driver = {
-	.name		= "he910",
-	.probe		= he910_probe,
-	.remove		= he910_remove,
-	.enable		= he910_enable,
-	.disable	= he910_disable,
-	.pre_sim	= he910_pre_sim,
-	.post_online	= he910_post_online,
+static struct ofono_modem_driver xe910_driver = {
+	.name		= "xe910",
+	.probe		= xe910_probe,
+	.remove		= xe910_remove,
+	.enable		= xe910_enable,
+	.disable	= xe910_disable,
+	.pre_sim	= xe910_pre_sim,
+	.post_online	= xe910_post_online,
 };
 
-static int he910_init(void)
+static int xe910_init(void)
 {
 	DBG("");
 
-	return ofono_modem_driver_register(&he910_driver);
+	return ofono_modem_driver_register(&xe910_driver);
 }
 
-static void he910_exit(void)
+static void xe910_exit(void)
 {
-	ofono_modem_driver_unregister(&he910_driver);
+	ofono_modem_driver_unregister(&xe910_driver);
 }
 
-OFONO_PLUGIN_DEFINE(he910, "Telit HE910 driver", VERSION,
-		OFONO_PLUGIN_PRIORITY_DEFAULT, he910_init, he910_exit)
+OFONO_PLUGIN_DEFINE(xe910, "Telit HE910 driver", VERSION,
+		OFONO_PLUGIN_PRIORITY_DEFAULT, xe910_init, xe910_exit)

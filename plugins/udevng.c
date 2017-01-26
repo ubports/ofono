@@ -654,7 +654,7 @@ static gboolean setup_telit(struct modem_info *modem)
 	return TRUE;
 }
 
-static gboolean setup_he910(struct modem_info *modem)
+static gboolean setup_xe910(struct modem_info *modem)
 {
 	const char *mdm = NULL, *aux = NULL, *gps = NULL;
 	GSList *list;
@@ -976,7 +976,7 @@ static struct {
 	{ "novatel",	setup_novatel	},
 	{ "nokia",	setup_nokia	},
 	{ "telit",	setup_telit	},
-	{ "he910",	setup_he910	},
+	{ "xe910",	setup_xe910	},
 	{ "simcom",	setup_simcom	},
 	{ "zte",	setup_zte	},
 	{ "icera",	setup_icera	},
@@ -1214,7 +1214,7 @@ static struct {
 	{ "simcom",	"option",	"05c6", "9000"	},
 	{ "telit",	"usbserial",	"1bc7"		},
 	{ "telit",	"option",	"1bc7"		},
-	{ "he910",	"cdc_acm",	"1bc7", "0021"	},
+	{ "xe910",	"cdc_acm",	"1bc7", "0021"	},
 	{ "nokia",	"option",	"0421", "060e"	},
 	{ "nokia",	"option",	"0421", "0623"	},
 	{ "samsung",	"option",	"04e8", "6889"	},

@@ -491,8 +491,8 @@ builtin_sources += plugins/sim900.c
 builtin_modules += connman
 builtin_sources += plugins/connman.c
 
-builtin_modules += he910
-builtin_sources += plugins/he910.c
+builtin_modules += xe910
+builtin_sources += plugins/xe910.c
 
 builtin_modules += quectel
 builtin_sources += plugins/quectel.c
