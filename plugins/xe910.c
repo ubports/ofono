@@ -62,12 +62,40 @@
 static const char *none_prefix[] = { NULL };
 static const char *qss_prefix[] = { "#QSS:", NULL };
 
+enum modem_model {
+	HE910 = 1,
+	UE910
+};
+
+static struct {
+	enum modem_model model;
+	const char *variant;
+	gboolean has_voice;
+	gboolean has_gps;
+} variants_list[] = {
+	{ HE910,	NULL,	FALSE,	FALSE },
+	{ HE910,	"G",	TRUE,	TRUE },
+	{ HE910,	"GL",	TRUE,	FALSE },
+	{ HE910,	"EUR",	TRUE,	FALSE },
+	{ HE910,	"NAR",	TRUE,	FALSE },
+	{ HE910,	"DG",	FALSE,	TRUE },
+	{ HE910,	"EUG",	FALSE,	TRUE },
+	{ HE910,	"NAG",	FALSE,	TRUE },
+	{ UE910,	NULL,	FALSE,	FALSE },
+	{ UE910,	"EUR",	TRUE,	FALSE },
+	{ UE910,	"NAR",	TRUE,	FALSE },
+	{ }
+};
+
 struct xe910_data {
 	GAtChat *chat;		/* AT chat */
 	GAtChat *modem;		/* Data port */
 	struct ofono_sim *sim;
 	ofono_bool_t have_sim;
 	ofono_bool_t sms_phonebook_added;
+	enum modem_model model;
+	gboolean has_voice;
+	gboolean has_gps;
 };
 
 static void xe910_debug(const char *str, void *user_data)
@@ -242,6 +270,96 @@ static void cfun_enable_cb(gboolean ok, GAtResult *result, gpointer user_data)
 			qss_query_cb, modem, NULL);
 }
 
+static gboolean find_model_variant(struct ofono_modem *modem,
+						const char * model_variant)
+{
+	struct xe910_data *data = ofono_modem_get_data(modem);
+	char model[32];
+	char variant[32];
+	gchar **tokens;
+	int i;
+
+	if (!model_variant || model_variant[0] == '\0')
+		return FALSE;
+
+	DBG("%s", model_variant);
+
+	tokens = g_strsplit(model_variant, "-", 2);
+
+	if (!tokens || !tokens[0] || !tokens[1])
+		return FALSE;
+
+	g_strlcpy(model, tokens[0], sizeof(model));
+	g_strlcpy(variant, tokens[1], sizeof(variant));
+	g_strfreev(tokens);
+
+	if (g_str_equal(model, "HE910"))
+		data->model = HE910;
+	else if (g_str_equal(model, "UE910"))
+		data->model = UE910;
+	else
+		return FALSE;
+
+	DBG("Model: %s", model);
+
+	for (i = 0; variants_list[i].model; i++) {
+		if (variants_list[i].model != data->model)
+			continue;
+
+		/* Set model defaults */
+		if (variants_list[i].variant == NULL) {
+			data->has_voice = variants_list[i].has_voice;
+			data->has_gps = variants_list[i].has_gps;
+			continue;
+		}
+
+		/* Specific variant match */
+		if (g_str_equal(variant, variants_list[i].variant)) {
+			DBG("Variant: %s", variant);
+			data->has_voice = variants_list[i].has_voice;
+			data->has_gps = variants_list[i].has_gps;
+		}
+	}
+
+	return TRUE;
+}
+
+static void cfun_gmm_cb(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct ofono_modem *modem = user_data;
+	struct xe910_data *data = ofono_modem_get_data(modem);
+	const char * model_variant;
+
+	DBG("%p", modem);
+
+	if (!ok)
+		goto error;
+
+	/* Get +GMM response */
+	if (!at_util_parse_attr(result, "", &model_variant))
+		goto error;
+
+	/* Try to find modem model and variant */
+	if (!find_model_variant(modem, model_variant)) {
+		ofono_info("Unknown xE910 model/variant %s", model_variant);
+		goto error;
+	}
+
+	/* Set phone functionality */
+	if (g_at_chat_send(data->chat, "AT+CFUN=1", none_prefix,
+				cfun_enable_cb, modem, NULL) > 0)
+		return;
+
+error:
+	g_at_chat_unref(data->chat);
+	data->chat = NULL;
+
+	g_at_chat_unref(data->modem);
+	data->modem = NULL;
+
+	ofono_modem_set_powered(modem, FALSE);
+}
+
 static int xe910_enable(struct ofono_modem *modem)
 {
 	struct xe910_data *data = ofono_modem_get_data(modem);
@@ -268,9 +386,11 @@ static int xe910_enable(struct ofono_modem *modem)
 	g_at_chat_send(data->chat, "ATE0 +CMEE=1", none_prefix,
 				NULL, NULL, NULL);
 
-	/* Set phone functionality */
-	g_at_chat_send(data->chat, "AT+CFUN=1", none_prefix,
-				cfun_enable_cb, modem, NULL);
+
+	/* Get modem model and variant */
+	g_at_chat_send(data->chat, "AT+GMM", NULL,
+				cfun_gmm_cb, modem, NULL);
+
 
 	return -EINPROGRESS;
 }
@@ -319,29 +439,36 @@ static void xe910_pre_sim(struct ofono_modem *modem)
 	ofono_devinfo_create(modem, 0, "atmodem", data->chat);
 	data->sim = ofono_sim_create(modem, OFONO_VENDOR_TELIT, "atmodem",
 					data->chat);
-	ofono_location_reporting_create(modem, 0, "telitmodem", data->chat);
+
+	if (data->has_gps)
+		ofono_location_reporting_create(modem, 0, "telitmodem",
+								data->chat);
 }
 
 static void xe910_post_online(struct ofono_modem *modem)
 {
 	struct xe910_data *data = ofono_modem_get_data(modem);
-	struct ofono_message_waiting *mw;
 	struct ofono_gprs *gprs;
 	struct ofono_gprs_context *gc;
 
 	DBG("%p", modem);
 
-	ofono_voicecall_create(modem, 0, "atmodem", data->chat);
 	ofono_netreg_create(modem, OFONO_VENDOR_TELIT, "atmodem", data->chat);
-	ofono_ussd_create(modem, 0, "atmodem", data->chat);
-	ofono_call_forwarding_create(modem, 0, "atmodem", data->chat);
-	ofono_call_settings_create(modem, 0, "atmodem", data->chat);
-	ofono_call_meter_create(modem, 0, "atmodem", data->chat);
-	ofono_call_barring_create(modem, 0, "atmodem", data->chat);
 
-	mw = ofono_message_waiting_create(modem);
-	if (mw)
-		ofono_message_waiting_register(mw);
+	if (data->has_voice) {
+		struct ofono_message_waiting *mw;
+
+		ofono_voicecall_create(modem, 0, "atmodem", data->chat);
+		ofono_ussd_create(modem, 0, "atmodem", data->chat);
+		ofono_call_forwarding_create(modem, 0, "atmodem", data->chat);
+		ofono_call_settings_create(modem, 0, "atmodem", data->chat);
+		ofono_call_meter_create(modem, 0, "atmodem", data->chat);
+		ofono_call_barring_create(modem, 0, "atmodem", data->chat);
+
+		mw = ofono_message_waiting_create(modem);
+		if (mw)
+			ofono_message_waiting_register(mw);
+	}
 
 	gprs = ofono_gprs_create(modem, OFONO_VENDOR_TELIT, "atmodem",
 					data->chat);
