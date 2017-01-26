@@ -151,6 +151,7 @@ static void qmi_activate_primary(struct ofono_gprs_context *gc,
 	struct cb_data *cbd = cb_data_new(cb, user_data);
 	struct qmi_param *param;
 	uint8_t ip_family;
+	uint8_t auth;
 
 	DBG("cid %u", ctx->cid);
 
@@ -177,6 +178,29 @@ static void qmi_activate_primary(struct ofono_gprs_context *gc,
 					strlen(ctx->apn), ctx->apn);
 
 	qmi_param_append_uint8(param, QMI_WDS_PARAM_IP_FAMILY, ip_family);
+
+	switch (ctx->auth_method) {
+	case OFONO_GPRS_AUTH_METHOD_CHAP:
+		auth = QMI_WDS_AUTHENTICATION_CHAP;
+		break;
+	case OFONO_GPRS_AUTH_METHOD_PAP:
+		auth = QMI_WDS_AUTHENTICATION_PAP;
+		break;
+	default:
+		auth = QMI_WDS_AUTHENTICATION_NONE;
+		break;
+	}
+
+	qmi_param_append_uint8(param, QMI_WDS_PARAM_AUTHENTICATION_PREFERENCE,
+					auth);
+
+	if (ctx->username[0] != '\0')
+		qmi_param_append(param, QMI_WDS_PARAM_USERNAME,
+					strlen(ctx->username), ctx->username);
+
+	if (ctx->password[0] != '\0')
+		qmi_param_append(param, QMI_WDS_PARAM_PASSWORD,
+					strlen(ctx->password), ctx->password);
 
 	if (qmi_service_send(data->wds, QMI_WDS_START_NET, param,
 					start_net_cb, cbd, NULL) > 0)
