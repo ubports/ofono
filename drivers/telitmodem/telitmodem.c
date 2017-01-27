@@ -35,6 +35,7 @@
 static int telitmodem_init(void)
 {
 	telit_location_reporting_init();
+	telitncm_gprs_context_init();
 
 	return 0;
 }
@@ -42,6 +43,7 @@ static int telitmodem_init(void)
 static void telitmodem_exit(void)
 {
 	telit_location_reporting_exit();
+	telitncm_gprs_context_exit();
 }
 
 OFONO_PLUGIN_DEFINE(telitmodem, "Telit modem driver", VERSION,
