@@ -656,7 +656,7 @@ static gboolean setup_telit(struct modem_info *modem)
 
 static gboolean setup_xe910(struct modem_info *modem)
 {
-	const char *mdm = NULL, *aux = NULL, *gps = NULL;
+	const char *mdm = NULL, *aux = NULL, *gps = NULL, *net = NULL;
 	GSList *list;
 
 	DBG("%s", modem->syspath);
@@ -674,17 +674,23 @@ static gboolean setup_xe910(struct modem_info *modem)
 				aux = info->devnode;
 			else if (g_strcmp0(info->number, "0a") == 0)
 				gps = info->devnode;
+		} else if (info->sysattr && (g_str_has_suffix(info->sysattr,
+						"CDC NCM") == TRUE)) {
+			net = info->devnode;
 		}
 	}
 
 	if (aux == NULL || mdm == NULL)
 		return FALSE;
 
-	DBG("modem=%s aux=%s gps=%s", mdm, aux, gps);
+	DBG("modem=%s aux=%s gps=%s net=%s", mdm, aux, gps, net);
 
 	ofono_modem_set_string(modem->modem, "Modem", mdm);
 	ofono_modem_set_string(modem->modem, "Aux", aux);
 	ofono_modem_set_string(modem->modem, "GPS", gps);
+
+	if (net != NULL)
+		ofono_modem_set_string(modem->modem, "NetworkInterface", net);
 
 	return TRUE;
 }
@@ -976,7 +982,7 @@ static struct {
 	{ "novatel",	setup_novatel	},
 	{ "nokia",	setup_nokia	},
 	{ "telit",	setup_telit	},
-	{ "xe910",	setup_xe910	},
+	{ "xe910",	setup_xe910,	"device/interface"	},
 	{ "simcom",	setup_simcom	},
 	{ "zte",	setup_zte	},
 	{ "icera",	setup_icera	},
@@ -1226,6 +1232,8 @@ static struct {
 	{ "gemalto",	"option",	"1e2d",	"0053"	},
 	{ "gemalto",	"cdc_wdm",	"1e2d",	"0053"	},
 	{ "gemalto",	"qmi_wwan",	"1e2d",	"0053"	},
+	{ "xe910",	"cdc_ncm",	"1bc7", "0036"	},
+	{ "xe910",	"cdc_acm",	"1bc7", "0036"	},
 	{ }
 };
 
