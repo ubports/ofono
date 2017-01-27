@@ -64,7 +64,8 @@ static const char *qss_prefix[] = { "#QSS:", NULL };
 
 enum modem_model {
 	HE910 = 1,
-	UE910
+	UE910,
+	LE910
 };
 
 static struct {
@@ -84,6 +85,7 @@ static struct {
 	{ UE910,	NULL,	FALSE,	FALSE },
 	{ UE910,	"EUR",	TRUE,	FALSE },
 	{ UE910,	"NAR",	TRUE,	FALSE },
+	{ LE910,	NULL,	FALSE,	FALSE },
 	{ }
 };
 
@@ -297,6 +299,8 @@ static gboolean find_model_variant(struct ofono_modem *modem,
 		data->model = HE910;
 	else if (g_str_equal(model, "UE910"))
 		data->model = UE910;
+	else if (g_str_equal(model, "LE910"))
+		data->model = LE910;
 	else
 		return FALSE;
 
@@ -385,6 +389,8 @@ static int xe910_enable(struct ofono_modem *modem)
 	 */
 	g_at_chat_send(data->chat, "ATE0 +CMEE=1", none_prefix,
 				NULL, NULL, NULL);
+	g_at_chat_send(data->modem, "ATE0", none_prefix,
+				NULL, NULL, NULL);
 
 
 	/* Get modem model and variant */
@@ -472,7 +478,13 @@ static void xe910_post_online(struct ofono_modem *modem)
 
 	gprs = ofono_gprs_create(modem, OFONO_VENDOR_TELIT, "atmodem",
 					data->chat);
-	gc = ofono_gprs_context_create(modem, 0, "atmodem", data->modem);
+
+	if (data->model == LE910)
+		gc = ofono_gprs_context_create(modem, OFONO_VENDOR_TELIT,
+						"telitncmmodem", data->modem);
+	else
+		gc = ofono_gprs_context_create(modem, 0, "atmodem",
+						data->modem);
 
 	if (gprs && gc)
 		ofono_gprs_add_context(gprs, gc);
