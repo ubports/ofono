@@ -26,12 +26,16 @@
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <ctype.h>
+#include <dirent.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include <glib.h>
+
+#include <ofono/log.h>
 
 #include "qmi.h"
 #include "ctl.h"
@@ -1232,6 +1236,202 @@ bool qmi_device_shutdown(struct qmi_device *device, qmi_shutdown_func_t func,
 		g_timeout_add_seconds(0, shutdown_reply, data);
 
 	return true;
+}
+
+static bool get_device_file_name(struct qmi_device *device,
+					char *file_name, int size)
+{
+	pid_t pid;
+	char temp[100];
+	ssize_t result;
+
+	if (size <= 0)
+		return false;
+
+	pid = getpid();
+
+	snprintf(temp, 100, "/proc/%d/fd/%d", (int) pid, device->fd);
+	temp[99] = 0;
+
+	result = readlink(temp, file_name, size - 1);
+
+	if (result == -1 || result >= size - 1) {
+		DBG("Error %d in readlink", errno);
+		return false;
+	}
+
+	file_name[result] = 0;
+
+	return true;
+}
+
+static char *get_first_dir_in_directory(char *dir_path)
+{
+	DIR *dir;
+	struct dirent *dir_entry;
+	char *dir_name = NULL;
+
+	dir = opendir(dir_path);
+
+	if (!dir)
+		return NULL;
+
+	dir_entry = readdir(dir);
+
+	while ((dir_entry != NULL)) {
+		if (dir_entry->d_type == DT_DIR &&
+				strcmp(dir_entry->d_name, ".") != 0 &&
+				strcmp(dir_entry->d_name, "..") != 0) {
+			dir_name = g_strdup(dir_entry->d_name);
+			break;
+		}
+
+		dir_entry = readdir(dir);
+	}
+
+	closedir(dir);
+	return dir_name;
+}
+
+static char *get_device_interface(struct qmi_device *device)
+{
+	char * const driver_names[] = { "usbmisc", "usb" };
+	unsigned int i;
+	char file_path[PATH_MAX];
+	char *file_name;
+	char *interface = NULL;
+
+	if (!get_device_file_name(device, file_path, sizeof(file_path)))
+		return NULL;
+
+	file_name = basename(file_path);
+
+	for (i = 0; i < G_N_ELEMENTS(driver_names) && !interface; i++) {
+		gchar *sysfs_path;
+
+		sysfs_path = g_strdup_printf("/sys/class/%s/%s/device/net/",
+						driver_names[i], file_name);
+		interface = get_first_dir_in_directory(sysfs_path);
+		g_free(sysfs_path);
+	}
+
+	return interface;
+}
+
+enum qmi_device_expected_data_format qmi_device_get_expected_data_format(
+						struct qmi_device *device)
+{
+	char *sysfs_path = NULL;
+	char *interface = NULL;
+	int fd = -1;
+	char value;
+	enum qmi_device_expected_data_format expected =
+					QMI_DEVICE_EXPECTED_DATA_FORMAT_UNKNOWN;
+
+	if (!device)
+		goto done;
+
+	interface = get_device_interface(device);
+
+	if (!interface) {
+		DBG("Error while getting interface name");
+		goto done;
+	}
+
+	/* Build sysfs file path and open it */
+	sysfs_path = g_strdup_printf("/sys/class/net/%s/qmi/raw_ip", interface);
+
+	fd = open(sysfs_path, O_RDONLY);
+	if (fd < 0) {
+		/* maybe not supported by kernel */
+		DBG("Error %d in open(%s)", errno, sysfs_path);
+		goto done;
+	}
+
+	if (read(fd, &value, 1) != 1) {
+		DBG("Error %d in read(%s)", errno, sysfs_path);
+		goto done;
+	}
+
+	if (value == 'Y')
+		expected = QMI_DEVICE_EXPECTED_DATA_FORMAT_RAW_IP;
+	else if (value == 'N')
+		expected = QMI_DEVICE_EXPECTED_DATA_FORMAT_802_3;
+	else
+		DBG("Unexpected sysfs file contents");
+
+done:
+	if (fd >= 0)
+		close(fd);
+
+	if (sysfs_path)
+		g_free(sysfs_path);
+
+	if (interface)
+		g_free(interface);
+
+	return expected;
+}
+
+bool qmi_device_set_expected_data_format(struct qmi_device *device,
+			enum qmi_device_expected_data_format format)
+{
+	bool res = false;
+	char *sysfs_path = NULL;
+	char *interface = NULL;
+	int fd = -1;
+	char value;
+
+	if (!device)
+		goto done;
+
+	switch (format) {
+	case QMI_DEVICE_EXPECTED_DATA_FORMAT_802_3:
+		value = 'N';
+		break;
+	case QMI_DEVICE_EXPECTED_DATA_FORMAT_RAW_IP:
+		value = 'Y';
+		break;
+	default:
+		DBG("Unhandled firmat: %d", (int) format);
+		goto done;
+	}
+
+	interface = get_device_interface(device);
+
+	if (!interface) {
+		DBG("Error while getting interface name");
+		goto done;
+	}
+
+	/* Build sysfs file path and open it */
+	sysfs_path = g_strdup_printf("/sys/class/net/%s/qmi/raw_ip", interface);
+
+	fd = open(sysfs_path, O_WRONLY);
+	if (fd < 0) {
+		/* maybe not supported by kernel */
+		DBG("Error %d in open(%s)", errno, sysfs_path);
+		goto done;
+	}
+
+	if (write(fd, &value, 1) != 1) {
+		DBG("Error %d in write(%s)", errno, sysfs_path);
+		goto done;
+	}
+
+	res = true;
+
+done:
+	if (fd >= 0)
+		close(fd);
+
+	if (sysfs_path)
+		g_free(sysfs_path);
+
+	if (interface)
+		g_free(interface);
+
+	return res;
 }
 
 struct qmi_param *qmi_param_new(void)

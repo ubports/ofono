@@ -47,6 +47,12 @@
 #define QMI_SERVICE_RMS		225	/* Remote management service */
 #define QMI_SERVICE_OMA		226	/* OMA device management service */
 
+enum qmi_device_expected_data_format {
+	QMI_DEVICE_EXPECTED_DATA_FORMAT_UNKNOWN,
+	QMI_DEVICE_EXPECTED_DATA_FORMAT_802_3,
+	QMI_DEVICE_EXPECTED_DATA_FORMAT_RAW_IP,
+};
+
 struct qmi_version {
 	uint8_t type;
 	uint16_t major;
@@ -82,6 +88,10 @@ bool qmi_device_discover(struct qmi_device *device, qmi_discover_func_t func,
 bool qmi_device_shutdown(struct qmi_device *device, qmi_shutdown_func_t func,
 				void *user_data, qmi_destroy_func_t destroy);
 
+enum qmi_device_expected_data_format qmi_device_get_expected_data_format(
+						struct qmi_device *device);
+bool qmi_device_set_expected_data_format(struct qmi_device *device,
+			enum qmi_device_expected_data_format format);
 
 struct qmi_param;
 
