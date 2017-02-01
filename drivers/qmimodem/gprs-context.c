@@ -30,12 +30,15 @@
 #include <ofono/gprs-context.h>
 
 #include "qmi.h"
+#include "wda.h"
 #include "wds.h"
 
 #include "qmimodem.h"
 
 struct gprs_context_data {
 	struct qmi_service *wds;
+	struct qmi_service *wda;
+	struct qmi_device *dev;
 	unsigned int active_context;
 	uint32_t pkt_handle;
 };
@@ -287,6 +290,69 @@ static void create_wds_cb(struct qmi_service *service, void *user_data)
 					pkt_status_notify, gc, NULL);
 }
 
+static void get_data_format_cb(struct qmi_result *result, void *user_data)
+{
+	struct ofono_gprs_context *gc = user_data;
+	struct gprs_context_data *data = ofono_gprs_context_get_data(gc);
+	uint32_t llproto;
+	enum qmi_device_expected_data_format expected_llproto;
+
+	DBG("");
+
+	if (qmi_result_set_error(result, NULL))
+		goto done;
+
+	if (!qmi_result_get_uint32(result, QMI_WDA_LL_PROTOCOL, &llproto))
+		goto done;
+
+	expected_llproto = qmi_device_get_expected_data_format(data->dev);
+
+	if ((llproto == QMI_WDA_DATA_LINK_PROTOCOL_802_3) &&
+			(expected_llproto ==
+				QMI_DEVICE_EXPECTED_DATA_FORMAT_RAW_IP)) {
+		if (!qmi_device_set_expected_data_format(data->dev,
+					QMI_DEVICE_EXPECTED_DATA_FORMAT_802_3))
+			DBG("Fail to set expected data to 802.3");
+		else
+			DBG("expected data set to 802.3");
+	} else if ((llproto == QMI_WDA_DATA_LINK_PROTOCOL_RAW_IP) &&
+			(expected_llproto ==
+				QMI_DEVICE_EXPECTED_DATA_FORMAT_802_3)) {
+		if (!qmi_device_set_expected_data_format(data->dev,
+					QMI_DEVICE_EXPECTED_DATA_FORMAT_RAW_IP))
+			DBG("Fail to set expected data to raw-ip");
+		else
+			DBG("expected data set to raw-ip");
+	}
+
+done:
+	qmi_service_create(data->dev, QMI_SERVICE_WDS, create_wds_cb, gc,
+									NULL);
+}
+
+static void create_wda_cb(struct qmi_service *service, void *user_data)
+{
+	struct ofono_gprs_context *gc = user_data;
+	struct gprs_context_data *data = ofono_gprs_context_get_data(gc);
+
+	DBG("");
+
+	if (!service) {
+		DBG("Failed to request WDA service, continue initialization");
+		goto error;
+	}
+
+	data->wda = qmi_service_ref(service);
+
+	if (qmi_service_send(data->wda, QMI_WDA_GET_DATA_FORMAT, NULL,
+					get_data_format_cb, gc, NULL) > 0)
+		return;
+
+error:
+	qmi_service_create(data->dev, QMI_SERVICE_WDS, create_wds_cb, gc,
+									NULL);
+}
+
 static int qmi_gprs_context_probe(struct ofono_gprs_context *gc,
 					unsigned int vendor, void *user_data)
 {
@@ -298,8 +364,9 @@ static int qmi_gprs_context_probe(struct ofono_gprs_context *gc,
 	data = g_new0(struct gprs_context_data, 1);
 
 	ofono_gprs_context_set_data(gc, data);
+	data->dev = device;
 
-	qmi_service_create(device, QMI_SERVICE_WDS, create_wds_cb, gc, NULL);
+	qmi_service_create(device, QMI_SERVICE_WDA, create_wda_cb, gc, NULL);
 
 	return 0;
 }
@@ -312,9 +379,15 @@ static void qmi_gprs_context_remove(struct ofono_gprs_context *gc)
 
 	ofono_gprs_context_set_data(gc, NULL);
 
-	qmi_service_unregister_all(data->wds);
+	if (data->wds) {
+		qmi_service_unregister_all(data->wds);
+		qmi_service_unref(data->wds);
+	}
 
-	qmi_service_unref(data->wds);
+	if (data->wda) {
+		qmi_service_unregister_all(data->wda);
+		qmi_service_unref(data->wda);
+	}
 
 	g_free(data);
 }
