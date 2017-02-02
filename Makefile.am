@@ -907,13 +907,6 @@ tools_lookup_provider_name_LDADD = @GLIB_LIBS@
 tools_tty_redirector_SOURCES = tools/tty-redirector.c
 tools_tty_redirector_LDADD = @GLIB_LIBS@
 
-if QMIMODEM
-noinst_PROGRAMS += tools/qmi
-
-tools_qmi_SOURCES = $(qmi_sources) tools/qmi.c
-tools_qmi_LDADD = @GLIB_LIBS@
-endif
-
 if MAINTAINER_MODE
 noinst_PROGRAMS += tools/stktest
 
