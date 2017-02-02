@@ -611,7 +611,7 @@ static gboolean setup_nokia(struct modem_info *modem)
 
 static gboolean setup_telit(struct modem_info *modem)
 {
-	const char *mdm = NULL, *aux = NULL, *gps = NULL, *diag = NULL;
+	const char *mdm = NULL, *aux = NULL, *gps = NULL, *net = NULL;
 	GSList *list;
 
 	DBG("%s", modem->syspath);
@@ -633,41 +633,11 @@ static gboolean setup_telit(struct modem_info *modem)
 		} else if (g_strcmp0(info->interface, "255/255/255") == 0) {
 			if (g_strcmp0(info->number, "00") == 0)
 				mdm = info->devnode;
-			else if (g_strcmp0(info->number, "01") == 0)
-				diag = info->devnode;
 			else if (g_strcmp0(info->number, "02") == 0)
 				gps = info->devnode;
 			else if (g_strcmp0(info->number, "03") == 0)
 				aux = info->devnode;
-		}
-	}
-
-	if (aux == NULL || mdm == NULL)
-		return FALSE;
-
-	DBG("modem=%s aux=%s gps=%s diag=%s", mdm, aux, gps, diag);
-
-	ofono_modem_set_string(modem->modem, "Modem", mdm);
-	ofono_modem_set_string(modem->modem, "Aux", aux);
-	ofono_modem_set_string(modem->modem, "GPS", gps);
-
-	return TRUE;
-}
-
-static gboolean setup_xe910(struct modem_info *modem)
-{
-	const char *mdm = NULL, *aux = NULL, *gps = NULL, *net = NULL;
-	GSList *list;
-
-	DBG("%s", modem->syspath);
-
-	for (list = modem->devices; list; list = list->next) {
-		struct device_info *info = list->data;
-
-		DBG("%s %s %s %s", info->devnode, info->interface,
-						info->number, info->label);
-
-		if (g_strcmp0(info->interface, "2/2/1") == 0) {
+		} else if (g_strcmp0(info->interface, "2/2/1") == 0) {
 			if (g_strcmp0(info->number, "00") == 0)
 				mdm = info->devnode;
 			else if (g_strcmp0(info->number, "06") == 0)
@@ -981,8 +951,7 @@ static struct {
 	{ "alcatel",	setup_alcatel	},
 	{ "novatel",	setup_novatel	},
 	{ "nokia",	setup_nokia	},
-	{ "telit",	setup_telit	},
-	{ "xe910",	setup_xe910,	"device/interface"	},
+	{ "telit",	setup_telit,	"device/interface"	},
 	{ "simcom",	setup_simcom	},
 	{ "zte",	setup_zte	},
 	{ "icera",	setup_icera	},
@@ -1220,7 +1189,7 @@ static struct {
 	{ "simcom",	"option",	"05c6", "9000"	},
 	{ "telit",	"usbserial",	"1bc7"		},
 	{ "telit",	"option",	"1bc7"		},
-	{ "xe910",	"cdc_acm",	"1bc7", "0021"	},
+	{ "telit",	"cdc_acm",	"1bc7", "0021"	},
 	{ "nokia",	"option",	"0421", "060e"	},
 	{ "nokia",	"option",	"0421", "0623"	},
 	{ "samsung",	"option",	"04e8", "6889"	},
@@ -1232,8 +1201,8 @@ static struct {
 	{ "gemalto",	"option",	"1e2d",	"0053"	},
 	{ "gemalto",	"cdc_wdm",	"1e2d",	"0053"	},
 	{ "gemalto",	"qmi_wwan",	"1e2d",	"0053"	},
-	{ "xe910",	"cdc_ncm",	"1bc7", "0036"	},
-	{ "xe910",	"cdc_acm",	"1bc7", "0036"	},
+	{ "telit",	"cdc_ncm",	"1bc7", "0036"	},
+	{ "telit",	"cdc_acm",	"1bc7", "0036"	},
 	{ }
 };
 
