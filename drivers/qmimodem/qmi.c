@@ -1393,7 +1393,7 @@ bool qmi_device_set_expected_data_format(struct qmi_device *device,
 		value = 'Y';
 		break;
 	default:
-		DBG("Unhandled firmat: %d", (int) format);
+		DBG("Unhandled format: %d", (int) format);
 		goto done;
 	}
 
