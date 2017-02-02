@@ -67,6 +67,7 @@ enum modem_model {
 	UE910,
 	LE910,
 	UC864,
+	UE866,
 };
 
 static struct {
@@ -90,6 +91,7 @@ static struct {
 	{ UC864,	NULL,	TRUE,	FALSE },
 	{ UC864,	"G",	TRUE,	TRUE },
 	{ UC864,	"WD",	FALSE,	FALSE },
+	{ UE866,	NULL,	FALSE,	FALSE },
 	{ }
 };
 
@@ -307,6 +309,8 @@ static gboolean find_model_variant(struct ofono_modem *modem,
 		data->model = LE910;
 	else if (g_str_equal(model, "UC864"))
 		data->model = UC864;
+	else if (g_str_equal(model, "UE866"))
+		data->model = UE866;
 	else
 		return FALSE;
 
