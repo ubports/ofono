@@ -553,8 +553,8 @@ builtin_sources += plugins/sim900.c
 builtin_modules += connman
 builtin_sources += plugins/connman.c
 
-builtin_modules += xe910
-builtin_sources += plugins/xe910.c
+builtin_modules += telit
+builtin_sources += plugins/telit.c
 
 builtin_modules += quectel
 builtin_sources += plugins/quectel.c
@@ -571,9 +571,6 @@ builtin_sources += plugins/connman.c
 
 if BLUETOOTH
 if BLUEZ4
-builtin_modules += telit
-builtin_sources += plugins/telit.c plugins/bluez4.h
-
 builtin_modules += sap
 builtin_sources += plugins/sap.c plugins/bluez4.h
 
