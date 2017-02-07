@@ -186,9 +186,8 @@ static void ril_stk_session_end_notify(struct ril_msg *message,
 static void ril_stk_initialize_cb(struct ril_msg *message,
 				gpointer user_data)
 {
-	struct cb_data *cbd = user_data;
-	struct ofono_stk *stk = cbd->cb;
-	struct stk_data *sd = cbd->user;
+	struct ofono_stk *stk = user_data;
+	struct stk_data *sd = ofono_stk_get_data(stk);
 
 	if (message->error != RIL_E_SUCCESS) {
 		ofono_error("%s RILD reply failure: %s",
@@ -207,7 +206,6 @@ static int ril_stk_probe(struct ofono_stk *stk, unsigned int vendor,
 {
 	GRil *ril = user;
 	struct stk_data *data;
-	struct cb_data *cbd = cb_data_new(stk, NULL, data);
 
 	data = g_new0(struct stk_data, 1);
 	data->ril = g_ril_clone(ril);
@@ -225,7 +223,7 @@ static int ril_stk_probe(struct ofono_stk *stk, unsigned int vendor,
 					ril_stk_event_notify, stk);
 
 	g_ril_send(data->ril, RIL_REQUEST_REPORT_STK_SERVICE_IS_RUNNING, NULL,
-					ril_stk_initialize_cb, cbd, g_free);
+					ril_stk_initialize_cb, stk, NULL);
 
 	return 0;
 }
