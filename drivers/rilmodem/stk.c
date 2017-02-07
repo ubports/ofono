@@ -184,11 +184,31 @@ static void ril_stk_session_end_notify(struct ril_msg *message,
 	ofono_stk_proactive_session_end_notify(stk);
 }
 
+static void ril_stk_initialize_cb(struct ril_msg *message,
+				gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	struct ofono_stk *stk = cbd->cb;
+	struct stk_data *sd = cbd->user;
+
+	if (message->error != RIL_E_SUCCESS) {
+		ofono_error("%s RILD reply failure: %s",
+			g_ril_request_id_to_string(sd->ril, message->req),
+			ril_error_to_string(message->error));
+		ofono_stk_remove(stk);
+
+		return;
+	}
+
+	ofono_stk_register(stk);
+}
+
 static int ril_stk_probe(struct ofono_stk *stk, unsigned int vendor,
 				void *user)
 {
 	GRil *ril = user;
 	struct stk_data *data;
+	struct cb_data *cbd = cb_data_new(stk, NULL, data);
 
 	data = g_new0(struct stk_data, 1);
 	data->ril = g_ril_clone(ril);
@@ -205,7 +225,8 @@ static int ril_stk_probe(struct ofono_stk *stk, unsigned int vendor,
 	g_ril_register(ril, RIL_UNSOL_STK_EVENT_NOTIFY,
 					ril_stk_event_notify, stk);
 
-	ofono_stk_register(stk);
+	g_ril_send(data->ril, RIL_REQUEST_REPORT_STK_SERVICE_IS_RUNNING, NULL,
+					ril_stk_initialize_cb, cbd, g_free);
 
 	return 0;
 }
