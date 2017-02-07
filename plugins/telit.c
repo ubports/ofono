@@ -251,9 +251,10 @@ static void cfun_enable_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	/*
 	 * Switch data carrier detect signal off.
 	 * When the DCD is disabled the modem does not hangup anymore
-	 * after the data connection.
+	 * after the data connection. We need to do that on both channels.
 	 */
 	g_at_chat_send(data->chat, "AT&C0", NULL, NULL, NULL, NULL);
+	g_at_chat_send(data->modem, "AT&C0", NULL, NULL, NULL, NULL);
 
 	data->have_sim = FALSE;
 	data->sms_phonebook_added = FALSE;
