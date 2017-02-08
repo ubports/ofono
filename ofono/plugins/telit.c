@@ -175,6 +175,11 @@ static void switch_sim_state_status(struct ofono_modem *modem, int status)
 		}
 		break;
 	case 3:	/* SIM inserted, SMS and phonebook ready */
+		if (data->have_sim == FALSE) {
+			ofono_sim_inserted_notify(data->sim, TRUE);
+			data->have_sim = TRUE;
+		}
+
 		if (data->sms_phonebook_added == FALSE) {
 			ofono_phonebook_create(modem, 0, "atmodem", data->chat);
 			ofono_sms_create(modem, 0, "atmodem", data->chat);
