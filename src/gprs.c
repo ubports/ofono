@@ -313,7 +313,7 @@ static gboolean assign_context(struct pri_context *ctx, int use_cid)
 	} else
 		ctx->context.cid = gprs_cid_alloc(ctx->gprs);
 
-	if (ctx->context.cid == 0)
+	if (ctx->context.cid > idmap_get_max(cidmap))
 		return FALSE;
 
 	for (l = ctx->gprs->context_drivers; l; l = l->next) {
