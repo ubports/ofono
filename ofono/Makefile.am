@@ -569,6 +569,9 @@ endif
 builtin_modules += connman
 builtin_sources += plugins/connman.c
 
+builtin_modules += mnclength
+builtin_sources += plugins/mnclength.c
+
 if BLUETOOTH
 if BLUEZ4
 builtin_modules += sap
@@ -647,8 +650,9 @@ builtin_sources += plugins/provision.h
 builtin_modules += cdma_provision
 builtin_sources += plugins/cdma-provision.c
 
-builtin_modules += mnclength
-builtin_sources += plugins/mnclength.c
+builtin_modules += file_provision
+builtin_sources += plugins/file-provision.c
+
 endif
 
 if MAINTAINER_MODE
