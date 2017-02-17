@@ -555,6 +555,10 @@ builtin_sources += plugins/provision.c
 
 builtin_modules += cdma_provision
 builtin_sources += plugins/cdma-provision.c
+
+builtin_modules += file_provision
+builtin_sources += plugins/file-provision.c
+
 endif
 
 if MAINTAINER_MODE
