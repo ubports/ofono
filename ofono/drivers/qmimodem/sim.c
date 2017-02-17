@@ -168,7 +168,7 @@ static void qmi_read_attributes(struct ofono_sim *sim, int fileid,
 {
 	struct sim_data *data = ofono_sim_get_data(sim);
 	struct cb_data *cbd = cb_data_new(cb, user_data);
-	unsigned char aid_data[2] = { 0x06, 0x00 };
+	unsigned char aid_data[2] = { 0x00, 0x00 };
 	unsigned char fileid_data[9];
 	int fileid_len;
 	struct qmi_param *param;
@@ -233,7 +233,7 @@ static void qmi_read_transparent(struct ofono_sim *sim,
 {
 	struct sim_data *data = ofono_sim_get_data(sim);
 	struct cb_data *cbd = cb_data_new(cb, user_data);
-	unsigned char aid_data[2] = { 0x06, 0x00 };
+	unsigned char aid_data[2] = { 0x00, 0x00 };
 	unsigned char read_data[4];
 	unsigned char fileid_data[9];
 	int fileid_len;
@@ -279,7 +279,7 @@ static void qmi_read_record(struct ofono_sim *sim,
 {
 	struct sim_data *data = ofono_sim_get_data(sim);
 	struct cb_data *cbd = cb_data_new(cb, user_data);
-	unsigned char aid_data[2] = { 0x06, 0x00 };
+	unsigned char aid_data[2] = { 0x00, 0x00 };
 	unsigned char read_data[4];
 	unsigned char fileid_data[9];
 	int fileid_len;
