@@ -67,21 +67,6 @@ struct lastcause_req {
 static void ril_voicecall_send_one_dtmf(struct ril_voicecall *vd);
 static void ril_voicecall_clear_dtmf_queue(struct ril_voicecall *vd);
 
-/*
- * structs ofono_voicecall and voicecall are fully defined
- * in src/voicecall.c; we need (read) access to the
- * call objects, so partially redefine them here.
- */
-struct ofono_voicecall {
-	GSList *call_list;
-	/* ... */
-};
-
-struct voicecall {
-	struct ofono_call *call;
-	/* ... */
-};
-
 static inline struct ril_voicecall *ril_voicecall_get_data(
 						struct ofono_voicecall *vc)
 {
@@ -166,21 +151,12 @@ static GSList *ril_voicecall_parse_clcc(const void *data, guint len)
 }
 
 /* Valid call statuses have value >= 0 */
-static int call_status_with_id(struct ofono_voicecall *vc, int id)
+static int ril_voicecall_status_with_id(struct ofono_voicecall *vc,
+							unsigned int id)
 {
-	GSList *l;
-	struct voicecall *v;
+	struct ofono_call *call = ofono_voicecall_find_call(vc, id);
 
-	GASSERT(vc);
-
-	for (l = vc->call_list; l; l = l->next) {
-		v = l->data;
-		if (v->call->id == id) {
-			return v->call->status;
-		}
-	}
-
-	return -1;
+	return call ? call->status : -1;
 }
 
 static void ril_voicecall_lastcause_cb(GRilIoChannel *io, int status,
@@ -228,7 +204,7 @@ static void ril_voicecall_lastcause_cb(GRilIoChannel *io, int status,
 			break;
 
 		case CALL_FAIL_NORMAL_UNSPECIFIED:
-			call_status = call_status_with_id(vc, id);
+			call_status = ril_voicecall_status_with_id(vc, id);
 			if (call_status == CALL_STATUS_ACTIVE ||
 			    call_status == CALL_STATUS_HELD ||
 			    call_status == CALL_STATUS_DIALING ||
@@ -240,7 +216,7 @@ static void ril_voicecall_lastcause_cb(GRilIoChannel *io, int status,
 			break;
 
 		case CALL_FAIL_ERROR_UNSPECIFIED:
-			call_status = call_status_with_id(vc, id);
+			call_status = ril_voicecall_status_with_id(vc, id);
 			if (call_status == CALL_STATUS_DIALING ||
 			    call_status == CALL_STATUS_ALERTING) {
 				reason = OFONO_DISCONNECT_REASON_REMOTE_HANGUP;
