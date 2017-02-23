@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2016 Jolla Ltd.
+ *  Copyright (C) 2015-2017 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -14,6 +14,9 @@
  */
 
 #include "ril_config.h"
+
+#include <gutil_intarray.h>
+#include <gutil_ints.h>
 
 /* Utilities for parsing ril_subscription.conf */
 
@@ -104,6 +107,51 @@ gboolean ril_config_get_flag(GKeyFile *file, const char *group,
 	} else {
 		return FALSE;
 	}
+}
+
+GUtilInts *ril_config_get_ints(GKeyFile *file, const char *group,
+					const char *key)
+{
+	char* value = ril_config_get_string(file, group, key);
+
+	if (value) {
+		char **values = g_strsplit(value, ",", -1);
+		char **ptr = values;
+		GUtilIntArray* array = gutil_int_array_new();
+
+		while (*ptr) {
+			const char *str = *ptr++;
+			char *end = NULL;
+			long ival = strtol(str, &end, 0);
+
+			if (str[0] && !end[0]) {
+				gutil_int_array_append(array, ival);
+			}
+		}
+
+		g_free(value);
+		g_strfreev(values);
+		return gutil_int_array_free_to_ints(array);
+	}
+	return NULL;
+}
+
+char *ril_config_ints_to_string(GUtilInts *ints, char separator)
+{
+	if (ints) {
+		guint i, n;
+		const int *data = gutil_ints_get_data(ints, &n);
+		GString* buf = g_string_new(NULL);
+
+		for (i=0; i<n; i++) {
+			if (buf->len > 0) {
+				g_string_append_c(buf, separator);
+			}
+			g_string_append_printf(buf, "%d", data[i]);
+		}
+		return g_string_free(buf, FALSE);
+	}
+	return NULL;
 }
 
 /*

@@ -26,6 +26,7 @@
 #include "ril_log.h"
 
 #include <gdbus.h>
+#include <gutil_ints.h>
 #include <gutil_strv.h>
 #include <gutil_misc.h>
 #include <mce_display.h>
@@ -77,6 +78,8 @@
 #define RILCONF_DATA_CALL_FORMAT    "dataCallFormat"
 #define RILCONF_DATA_CALL_RETRY_LIMIT "dataCallRetryLimit"
 #define RILCONF_DATA_CALL_RETRY_DELAY "dataCallRetryDelay"
+#define RILCONF_LOCAL_HANGUP_REASONS  "localHangupReasons"
+#define RILCONF_REMOTE_HANGUP_REASONS "remoteHangupReasons"
 
 #define RIL_STORE                   "ril"
 #define RIL_STORE_GROUP             "Settings"
@@ -1277,6 +1280,27 @@ static struct ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 			g_free(slot->ecclist_file);
 			slot->ecclist_file = NULL;
 		}
+
+		slot->config.local_hangup_reasons = ril_config_get_ints(file,
+					group, RILCONF_LOCAL_HANGUP_REASONS);
+		strval = ril_config_ints_to_string(
+				slot->config.local_hangup_reasons, ',');
+		if (strval) {
+			DBG("%s: %s %s", group, RILCONF_LOCAL_HANGUP_REASONS,
+								strval);
+			g_free(strval);
+		}
+
+		slot->config.remote_hangup_reasons = ril_config_get_ints(file,
+					group, RILCONF_REMOTE_HANGUP_REASONS);
+		strval = ril_config_ints_to_string(
+				slot->config.remote_hangup_reasons, ',');
+		if (strval) {
+			DBG("%s: %s %s", group, RILCONF_REMOTE_HANGUP_REASONS,
+								strval);
+			g_free(strval);
+		}
+
 	} else {
 		DBG("no socket path in %s", group);
 	}
@@ -1289,6 +1313,8 @@ static void ril_plugin_delete_slot(struct ril_slot *slot)
 	ril_plugin_shutdown_slot(slot, TRUE);
 	ril_sim_info_unref(slot->sim_info);
 	ril_sim_settings_unref(slot->sim_settings);
+	gutil_ints_unref(slot->config.local_hangup_reasons);
+	gutil_ints_unref(slot->config.remote_hangup_reasons);
 	g_hash_table_destroy(slot->pub.errors);
 	g_free(slot->path);
 	g_free(slot->imei);
