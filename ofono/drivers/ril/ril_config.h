@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2016 Jolla Ltd.
+ *  Copyright (C) 2015-2017 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -22,13 +22,16 @@
 
 #define RILCONF_SETTINGS_GROUP      "Settings"
 
-char* ril_config_get_string(GKeyFile *file, const char *group, const char *key);
+char *ril_config_get_string(GKeyFile *file, const char *group, const char *key);
 gboolean ril_config_get_integer(GKeyFile *file, const char *group,
 					const char *key, int *value);
 gboolean ril_config_get_boolean(GKeyFile *file, const char *group,
 					const char *key, gboolean *value);
 gboolean ril_config_get_flag(GKeyFile *file, const char *group,
 					const char *key, int flag, int *flags);
+GUtilInts *ril_config_get_ints(GKeyFile *file, const char *group,
+					const char *key);
+char *ril_config_ints_to_string(GUtilInts *ints, char separator);
 
 #endif /* RIL_CONFIG_H */
 
