@@ -172,6 +172,8 @@ void ofono_voicecall_ssn_mt_notify(struct ofono_voicecall *vc, unsigned int id,
 					int code, int index,
 					const struct ofono_phone_number *ph);
 
+struct ofono_call *ofono_voicecall_find_call(struct ofono_voicecall *vc,
+						unsigned int id);
 void ofono_voicecall_ringback_tone_notify(struct ofono_voicecall *vc,
 						const ofono_bool_t playTone);
 
