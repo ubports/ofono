@@ -3748,6 +3748,15 @@ int ofono_voicecall_get_next_callid(struct ofono_voicecall *vc)
 	return __ofono_modem_callid_next(modem);
 }
 
+struct ofono_call *ofono_voicecall_find_call(struct ofono_voicecall *vc,
+						unsigned int id)
+{
+	GSList *l = g_slist_find_custom(vc->call_list, GUINT_TO_POINTER(id),
+						call_compare_by_id);
+
+	return l ? ((struct voicecall *)l->data)->call : NULL;
+}
+
 ofono_bool_t __ofono_voicecall_is_busy(struct ofono_voicecall *vc,
 					enum ofono_voicecall_interaction type)
 {
