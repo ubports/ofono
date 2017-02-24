@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2016 Jolla Ltd.
+ *  Copyright (C) 2015-2017 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -21,6 +21,7 @@
 
 #include "common.h"
 
+#include <gutil_ints.h>
 #include <gutil_ring.h>
 
 #define FLAG_NEED_CLIP 1
@@ -43,7 +44,9 @@ struct ril_voicecall {
 	ofono_voicecall_cb_t cb;
 	void *data;
 	guint timer_id;
-	GUtilRing* dtmf_queue;
+	GUtilRing *dtmf_queue;
+	GUtilInts *local_hangup_reasons;
+	GUtilInts *remote_hangup_reasons;
 	guint send_dtmf_id;
 	guint clcc_poll_id;
 	gulong event_id[VOICECALL_EVENT_COUNT];
@@ -60,7 +63,7 @@ struct ril_voicecall_change_state_req {
 };
 
 struct lastcause_req {
-	struct ofono_voicecall *vc;
+	struct ril_voicecall *vd;
 	int id;
 };
 
@@ -163,7 +166,8 @@ static void ril_voicecall_lastcause_cb(GRilIoChannel *io, int status,
 				const void *data, guint len, void *user_data)
 {
 	struct lastcause_req *reqdata = user_data;
-	struct ofono_voicecall *vc = reqdata->vc;
+	struct ril_voicecall *vd = reqdata->vd;
+	struct ofono_voicecall *vc = vd->vc;
 	int tmp;
 	int id = reqdata->id;
 	int call_status;
@@ -184,7 +188,14 @@ static void ril_voicecall_lastcause_cb(GRilIoChannel *io, int status,
 	 * CALL_FAIL_ERROR_UNSPECIFIED, and thus indistinguishable
 	 * from a network failure.
 	 */
-	switch (last_cause) {
+	if (gutil_ints_contains(vd->remote_hangup_reasons, last_cause)) {
+		DBG("hangup cause %d => remote hangup", last_cause);
+		reason = OFONO_DISCONNECT_REASON_REMOTE_HANGUP;
+	} else if (gutil_ints_contains(vd->local_hangup_reasons, last_cause)) {
+		DBG("hangup cause %d => local hangup", last_cause);
+		reason = OFONO_DISCONNECT_REASON_LOCAL_HANGUP;
+	} else {
+		switch (last_cause) {
 		case CALL_FAIL_UNOBTAINABLE_NUMBER:
 		case CALL_FAIL_NORMAL:
 		case CALL_FAIL_BUSY:
@@ -192,13 +203,13 @@ static void ril_voicecall_lastcause_cb(GRilIoChannel *io, int status,
 		case CALL_FAIL_CHANNEL_UNACCEPTABLE:
 		case CALL_FAIL_OPERATOR_DETERMINED_BARRING:
 		case CALL_FAIL_NO_USER_RESPONDING:
-		case CALL_FAIL_USER_ALERTING_NO_ANSWER:
+		case CALL_FAIL_NO_ANSWER_FROM_USER:
 		case CALL_FAIL_CALL_REJECTED:
 		case CALL_FAIL_NUMBER_CHANGED:
 		case CALL_FAIL_ANONYMOUS_CALL_REJECTION:
 		case CALL_FAIL_PRE_EMPTION:
 		case CALL_FAIL_DESTINATION_OUT_OF_ORDER:
-		case CALL_FAIL_INCOMPLETE_NUMBER:
+		case CALL_FAIL_INVALID_NUMBER_FORMAT:
 		case CALL_FAIL_FACILITY_REJECTED:
 			reason = OFONO_DISCONNECT_REASON_REMOTE_HANGUP;
 			break;
@@ -226,6 +237,7 @@ static void ril_voicecall_lastcause_cb(GRilIoChannel *io, int status,
 		default:
 			reason = OFONO_DISCONNECT_REASON_ERROR;
 			break;
+		}
 	}
 
 	ofono_info("Call %d ended with RIL cause %d -> ofono reason %d",
@@ -271,7 +283,7 @@ static void ril_voicecall_clcc_poll_cb(GRilIoChannel *io, int status,
 				struct lastcause_req *reqdata =
 					g_new0(struct lastcause_req, 1);
 
-				reqdata->vc = vd->vc;
+				reqdata->vd = vd;
 				reqdata->id = oc->id;
 				grilio_queue_send_request_full(vd->q, NULL,
 					RIL_REQUEST_LAST_CALL_FAIL_CAUSE,
@@ -779,6 +791,7 @@ static int ril_voicecall_probe(struct ofono_voicecall *vc, unsigned int vendor,
 				void *data)
 {
 	struct ril_modem *modem = data;
+	const struct ril_slot_config *cfg = &modem->config;
 	struct ril_voicecall *vd;
 
 	DBG("");
@@ -786,6 +799,8 @@ static int ril_voicecall_probe(struct ofono_voicecall *vc, unsigned int vendor,
 	vd->io = grilio_channel_ref(ril_modem_io(modem));
 	vd->q = grilio_queue_new(vd->io);
 	vd->dtmf_queue = gutil_ring_new();
+	vd->local_hangup_reasons = gutil_ints_ref(cfg->local_hangup_reasons);
+	vd->remote_hangup_reasons = gutil_ints_ref(cfg->remote_hangup_reasons);
 	vd->vc = vc;
 	vd->timer_id = g_idle_add(ril_delayed_register, vd);
 	if (modem->ecclist_file) {
@@ -817,6 +832,8 @@ static void ril_voicecall_remove(struct ofono_voicecall *vc)
 	grilio_queue_cancel_all(vd->q, FALSE);
 	grilio_queue_unref(vd->q);
 	gutil_ring_unref(vd->dtmf_queue);
+	gutil_ints_unref(vd->local_hangup_reasons);
+	gutil_ints_unref(vd->remote_hangup_reasons);
 	g_free(vd);
 }
 

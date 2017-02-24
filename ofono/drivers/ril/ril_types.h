@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2016 Jolla Ltd.
+ *  Copyright (C) 2015-2017 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -53,6 +53,8 @@ struct ril_slot_config {
 	guint slot;
 	gboolean enable_4g;
 	gboolean empty_pin_query;
+	GUtilInts *local_hangup_reasons;
+	GUtilInts *remote_hangup_reasons;
 };
 
 #endif /* RIL_TYPES_H */
