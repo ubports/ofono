@@ -162,22 +162,68 @@ static int ril_voicecall_status_with_id(struct ofono_voicecall *vc,
 	return call ? call->status : -1;
 }
 
+/* Tries to parse the payload as a uint followed by a string */
+static int ril_voicecall_parse_lastcause_1(const void *data, guint len)
+{
+	int result = -1;
+
+	if (len > 8) {
+		int code;
+		char *msg = NULL;
+		GRilIoParser rilp;
+
+		grilio_parser_init(&rilp, data, len);
+		if (grilio_parser_get_int32(&rilp, &code) && code >= 0 &&
+				(msg = grilio_parser_get_utf8(&rilp)) &&
+				grilio_parser_at_end(&rilp)) {
+			DBG("%d \"%s\"", code, msg);
+			result = code;
+		}
+		g_free(msg);
+	}
+
+	return result;
+}
+
 static void ril_voicecall_lastcause_cb(GRilIoChannel *io, int status,
 				const void *data, guint len, void *user_data)
 {
 	struct lastcause_req *reqdata = user_data;
 	struct ril_voicecall *vd = reqdata->vd;
 	struct ofono_voicecall *vc = vd->vc;
-	int tmp;
 	int id = reqdata->id;
 	int call_status;
 
 	enum ofono_disconnect_reason reason = OFONO_DISCONNECT_REASON_ERROR;
-	int last_cause = CALL_FAIL_ERROR_UNSPECIFIED;
-	GRilIoParser rilp;
-	grilio_parser_init(&rilp, data, len);
-	if (grilio_parser_get_int32(&rilp, &tmp) && tmp > 0) {
-		grilio_parser_get_int32(&rilp, &last_cause);
+	int last_cause;
+
+	/*
+	 * According to ril.h:
+	 *
+	 *   "response" is a "int *"
+	 *   ((int *)response)[0] is RIL_LastCallFailCause. GSM failure
+	 *   reasons are mapped to cause codes defined in TS 24.008 Annex H
+	 *   where possible.
+	 *
+	 * However some RILs feel free to invent their own formats,
+	 * try those first.
+	 */
+
+	last_cause = ril_voicecall_parse_lastcause_1(data, len);
+	if (last_cause < 0) {
+		GRilIoParser rilp;
+		int num, code;
+
+		/* Default format described in ril.h */
+		grilio_parser_init(&rilp, data, len);
+		if (grilio_parser_get_int32(&rilp, &num) && num == 1 &&
+				grilio_parser_get_int32(&rilp, &code) &&
+				grilio_parser_at_end(&rilp)) {
+			last_cause = code;
+		} else {
+			ofono_warn("Unable to parse last call fail cause");
+			last_cause = CALL_FAIL_ERROR_UNSPECIFIED;
+		}
 	}
 
 	/*
