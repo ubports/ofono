@@ -174,6 +174,13 @@ static void create_nas_cb(struct qmi_service *service, void *user_data)
 
 	data->nas = qmi_service_ref(service);
 
+	/*
+	 * First get the SS info - the modem may already be connected,
+	 * and the state-change notification may never arrive
+	 */
+	qmi_service_send(data->nas, QMI_NAS_GET_SS_INFO, NULL,
+					ss_info_notify, gprs, NULL);
+
 	qmi_service_register(data->nas, QMI_NAS_SS_INFO_IND,
 					ss_info_notify, gprs, NULL);
 
