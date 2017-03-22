@@ -125,7 +125,8 @@ static void get_ids_cb(struct qmi_result *result, void *user_data)
 	}
 
 	str = qmi_result_get_string(result, QMI_DMS_RESULT_ESN);
-	if (!str) {
+	/* Telit qmi modems return a "0" string when ESN is not available. */
+	if (!str || strcmp(str, "0") == 0) {
 		str = qmi_result_get_string(result, QMI_DMS_RESULT_IMEI);
 		if (!str) {
 			CALLBACK_WITH_FAILURE(cb, NULL, cbd->data);
