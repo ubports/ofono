@@ -23,6 +23,8 @@
 #include <config.h>
 #endif
 
+#include <string.h>
+
 #include <ofono/log.h>
 #include <ofono/modem.h>
 #include <ofono/devinfo.h>
