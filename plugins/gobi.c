@@ -168,6 +168,16 @@ static void get_oper_mode_cb(struct qmi_result *result, void *user_data)
 
 	data->oper_mode = mode;
 
+	/*
+	 * Telit QMI LTE modem must remain online. If powered down, it also
+	 * powers down the sim card, and QMI interface has no way to bring
+	 * it back alive.
+	 */
+	if (ofono_modem_get_boolean(modem, "AlwaysOnline")) {
+		ofono_modem_set_powered(modem, TRUE);
+		return;
+	}
+
 	switch (data->oper_mode) {
 	case QMI_DMS_OPER_MODE_ONLINE:
 		param = qmi_param_new_uint8(QMI_DMS_PARAM_OPER_MODE,
@@ -353,6 +363,14 @@ static int gobi_disable(struct ofono_modem *modem)
 	qmi_service_cancel_all(data->dms);
 	qmi_service_unregister_all(data->dms);
 
+	/*
+	 * Telit QMI modem must remain online. If powered down, it also
+	 * powers down the sim card, and QMI interface has no way to bring
+	 * it back alive.
+	 */
+	if (ofono_modem_get_boolean(modem, "AlwaysOnline"))
+		goto out;
+
 	param = qmi_param_new_uint8(QMI_DMS_PARAM_OPER_MODE,
 					QMI_DMS_OPER_MODE_PERSIST_LOW_POWER);
 	if (!param)
@@ -362,6 +380,7 @@ static int gobi_disable(struct ofono_modem *modem)
 					power_disable_cb, modem, NULL) > 0)
 		return -EINPROGRESS;
 
+out:
 	shutdown_device(modem);
 
 	return -EINPROGRESS;
