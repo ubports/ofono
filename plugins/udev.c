@@ -155,29 +155,15 @@ static void add_isi(struct ofono_modem *modem,
 	ofono_modem_register(modem);
 }
 
-static void add_wavecom(struct ofono_modem *modem,
-					struct udev_device *udev_device)
+static void add_wavecom(struct ofono_modem *modem, struct udev_device *dev)
 {
-	const char *devnode;
-	struct udev_list_entry *entry;
+	const char *value;
 
-	DBG("modem %p", modem);
+	value = udev_device_get_property_value(dev, "OFONO_WAVECOM_MODEL");
+	if (value)
+		ofono_modem_set_string(modem, "Model", value);
 
-	devnode = udev_device_get_devnode(udev_device);
-	ofono_modem_set_string(modem, "Device", devnode);
-
-	entry = udev_device_get_properties_list_entry(udev_device);
-	while (entry) {
-		const char *name = udev_list_entry_get_name(entry);
-		const char *value = udev_list_entry_get_value(entry);
-
-		if (g_str_equal(name, "OFONO_WAVECOM_MODEL") == TRUE)
-			ofono_modem_set_string(modem, "Model", value);
-
-		entry = udev_list_entry_get_next(entry);
-	}
-
-	ofono_modem_register(modem);
+	__add_common(modem, dev);
 }
 
 static void add_modem(struct udev_device *udev_device)
