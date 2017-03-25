@@ -410,7 +410,7 @@ static gboolean udev_event(GIOChannel *channel, GIOCondition cond,
 							gpointer user_data)
 {
 	struct udev_device *device;
-	const char *subsystem, *action;
+	const char *action;
 
 	if (cond & (G_IO_ERR | G_IO_HUP | G_IO_NVAL)) {
 		ofono_warn("Error with udev monitor channel");
@@ -422,29 +422,14 @@ static gboolean udev_event(GIOChannel *channel, GIOCondition cond,
 	if (device == NULL)
 		return TRUE;
 
-	subsystem = udev_device_get_subsystem(device);
-	if (subsystem == NULL)
-		goto done;
-
 	action = udev_device_get_action(device);
 	if (action == NULL)
 		goto done;
 
-	DBG("subsystem %s %s", subsystem, action);
-
-	if (g_str_equal(action, "add") == TRUE) {
-		if (g_strcmp0(subsystem, "tty") == 0 ||
-				g_strcmp0(subsystem, "net") == 0 ||
-					g_strcmp0(subsystem, "hsi") == 0)
-			add_modem(device);
-	} else if (g_str_equal(action, "remove") == TRUE) {
-		if (g_strcmp0(subsystem, "tty") == 0 ||
-				g_strcmp0(subsystem, "net") == 0 ||
-					g_strcmp0(subsystem, "hsi") == 0)
-			remove_modem(device);
-	}
-
-	DBG("subsystem %s finished", subsystem);
+	if (g_str_equal(action, "add") == TRUE)
+		add_modem(device);
+	else if (g_str_equal(action, "remove") == TRUE)
+		remove_modem(device);
 
 done:
 	udev_device_unref(device);
