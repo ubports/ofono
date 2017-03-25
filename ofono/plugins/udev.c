@@ -270,7 +270,6 @@ static void add_modem(struct udev_device *udev_device)
 			return;
 
 		ofono_modem_set_string(modem, "Path", devpath);
-		ofono_modem_set_integer(modem, "Registered", 0);
 
 		modem_list = g_slist_prepend(modem_list, modem);
 	}
