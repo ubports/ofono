@@ -96,10 +96,9 @@ static const char *get_serial(struct udev_device *udev_device)
 	return serial;
 }
 
-static void add_ifx(struct ofono_modem *modem,
+static void __add_common(struct ofono_modem *modem,
 					struct udev_device *udev_device)
 {
-	struct udev_list_entry *entry;
 	const char *devnode;
 
 	DBG("modem %p", modem);
@@ -107,22 +106,24 @@ static void add_ifx(struct ofono_modem *modem,
 	devnode = udev_device_get_devnode(udev_device);
 	ofono_modem_set_string(modem, "Device", devnode);
 
-	entry = udev_device_get_properties_list_entry(udev_device);
-	while (entry) {
-		const char *name = udev_list_entry_get_name(entry);
-		const char *value = udev_list_entry_get_value(entry);
-
-		if (g_str_equal(name, "OFONO_IFX_LDISC") == TRUE)
-			ofono_modem_set_string(modem, "LineDiscipline", value);
-		else if (g_str_equal(name, "OFONO_IFX_AUDIO") == TRUE)
-			ofono_modem_set_string(modem, "AudioSetting", value);
-		else if (g_str_equal(name, "OFONO_IFX_LOOPBACK") == TRUE)
-			ofono_modem_set_string(modem, "AudioLoopback", value);
-
-		entry = udev_list_entry_get_next(entry);
-	}
-
 	ofono_modem_register(modem);
+}
+
+static void add_ifx(struct ofono_modem *modem, struct udev_device *dev)
+{
+	const char *value;
+
+	value = udev_device_get_property_value(dev, "OFONO_IFX_LDISC");
+	if (value)
+		ofono_modem_set_string(modem, "LineDiscipline", value);
+	value = udev_device_get_property_value(dev, "OFONO_IFX_AUDIO");
+	if (value)
+		ofono_modem_set_string(modem, "AudioSetting", value);
+	value = udev_device_get_property_value(dev, "OFONO_IFX_LOOPBACK");
+	if (value)
+		ofono_modem_set_string(modem, "AudioLoopback", value);
+
+	__add_common(modem, dev);
 }
 
 static void add_isi(struct ofono_modem *modem,
@@ -150,19 +151,6 @@ static void add_isi(struct ofono_modem *modem,
 	ofono_modem_set_string(modem, "Interface", ifname);
 
 	DBG("interface %s", ifname);
-
-	ofono_modem_register(modem);
-}
-
-static void __add_common(struct ofono_modem *modem,
-					struct udev_device *udev_device)
-{
-	const char *devnode;
-
-	DBG("modem %p", modem);
-
-	devnode = udev_device_get_devnode(udev_device);
-	ofono_modem_set_string(modem, "Device", devnode);
 
 	ofono_modem_register(modem);
 }
