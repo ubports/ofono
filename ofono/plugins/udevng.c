@@ -1225,9 +1225,12 @@ static void check_usb_device(struct udev_device *device)
 	if (devname == NULL)
 		return;
 
+	vendor = udev_device_get_property_value(usb_device, "ID_VENDOR_ID");
+	model = udev_device_get_property_value(usb_device, "ID_MODEL_ID");
+
 	driver = udev_device_get_property_value(usb_device, "OFONO_DRIVER");
 	if (driver == NULL) {
-		const char *drv, *vid, *pid;
+		const char *drv;
 		unsigned int i;
 
 		drv = udev_device_get_property_value(device, "ID_USB_DRIVER");
@@ -1246,40 +1249,24 @@ static void check_usb_device(struct udev_device *device)
 			}
 		}
 
-		vid = udev_device_get_property_value(device, "ID_VENDOR_ID");
-		pid = udev_device_get_property_value(device, "ID_MODEL_ID");
 
-		DBG("%s [%s:%s]", drv, vid, pid);
+		DBG("%s [%s:%s]", drv, vendor, model);
 
 		for (i = 0; vendor_list[i].driver; i++) {
 			if (g_str_equal(vendor_list[i].drv, drv) == FALSE)
 				continue;
 
-			if (vendor_list[i].vid == NULL) {
-				driver = vendor_list[i].driver;
-				vendor = vid;
-				model = pid;
-				continue;
-			}
-
-			if (vid == NULL || pid == NULL)
-				continue;
-
-			if (g_str_equal(vendor_list[i].vid, vid) == TRUE) {
-				if (vendor_list[i].pid == NULL) {
-					driver = vendor_list[i].driver;
-					vendor = vid;
-					model = pid;
+			if (vendor_list[i].vid) {
+				if (!g_str_equal(vendor_list[i].vid, vendor))
 					continue;
-				}
-
-				if (g_strcmp0(vendor_list[i].pid, pid) == 0) {
-					driver = vendor_list[i].driver;
-					vendor = vid;
-					model = pid;
-					break;
-				}
 			}
+
+			if (vendor_list[i].pid) {
+				if (!g_str_equal(vendor_list[i].pid, model))
+					continue;
+			}
+
+			driver = vendor_list[i].driver;
 		}
 
 		if (driver == NULL)
