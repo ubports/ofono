@@ -55,34 +55,16 @@ static struct ofono_modem *find_modem(const char *devpath)
 	return NULL;
 }
 
-static const char *get_property(struct udev_device *device,
-				char const *property_name)
-{
-	struct udev_list_entry *entry;
-
-	entry = udev_device_get_properties_list_entry(device);
-	while (entry) {
-		const char *name = udev_list_entry_get_name(entry);
-
-		if (g_strcmp0(name, property_name) == 0)
-			return udev_list_entry_get_value(entry);
-
-		entry = udev_list_entry_get_next(entry);
-	}
-
-	return NULL;
-}
-
 static const char *get_driver(struct udev_device *udev_device)
 {
-	return get_property(udev_device, "OFONO_DRIVER");
+	return udev_device_get_property_value(udev_device, "OFONO_DRIVER");
 }
 
 static const char *get_serial(struct udev_device *udev_device)
 {
 	const char *serial;
 
-	serial = get_property(udev_device, "ID_SERIAL_SHORT");
+	serial = udev_device_get_property_value(udev_device, "ID_SERIAL_SHORT");
 
 	if (serial != NULL) {
 		unsigned int i, len = strlen(serial);
@@ -135,7 +117,7 @@ static void add_isi(struct ofono_modem *modem,
 	if (ofono_modem_get_string(modem, "Interface"))
 		return;
 
-	addr = get_property(udev_device, "OFONO_ISI_ADDRESS");
+	addr = udev_device_get_property_value(udev_device, "OFONO_ISI_ADDRESS");
 	if (addr != NULL)
 		ofono_modem_set_integer(modem, "Address", atoi(addr));
 
