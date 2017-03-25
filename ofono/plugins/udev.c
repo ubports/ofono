@@ -292,14 +292,7 @@ static void enumerate_devices(struct udev *context)
 
 		device = udev_device_new_from_syspath(context, syspath);
 		if (device != NULL) {
-			const char *subsystem;
-
-			subsystem = udev_device_get_subsystem(device);
-
-			if (g_strcmp0(subsystem, "tty") == 0 ||
-					g_strcmp0(subsystem, "net") == 0 ||
-					g_strcmp0(subsystem, "hsi") == 0)
-				add_modem(device);
+			add_modem(device);
 
 			udev_device_unref(device);
 		}
