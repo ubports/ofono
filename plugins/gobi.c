@@ -48,6 +48,7 @@
 
 #include <drivers/qmimodem/qmi.h>
 #include <drivers/qmimodem/dms.h>
+#include <drivers/qmimodem/wda.h>
 #include <drivers/qmimodem/util.h>
 
 #define GOBI_DMS	(1 << 0)
@@ -60,6 +61,7 @@
 #define GOBI_CAT	(1 << 7)
 #define GOBI_CAT_OLD	(1 << 8)
 #define GOBI_VOICE	(1 << 9)
+#define GOBI_WDA	(1 << 10)
 
 struct gobi_data {
 	struct qmi_device *device;
@@ -274,6 +276,9 @@ static void discover_cb(uint8_t count, const struct qmi_version *list,
 			break;
 		case QMI_SERVICE_WDS:
 			data->features |= GOBI_WDS;
+			break;
+		case QMI_SERVICE_WDA:
+			data->features |= GOBI_WDA;
 			break;
 		case QMI_SERVICE_PDS:
 			data->features |= GOBI_PDS;
