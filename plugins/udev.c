@@ -55,9 +55,27 @@ static struct ofono_modem *find_modem(const char *devpath)
 	return NULL;
 }
 
-static const char *get_driver(struct udev_device *udev_device)
+/*
+ * Here we try to find the "modem device".
+ *
+ * In this variant we identify the "modem device" as simply the device
+ * that has the OFONO_DRIVER property.  If the device node doesn't
+ * have this property itself, then we do a brute force search for it
+ * through the device hierarchy.
+ *
+ */
+static struct udev_device* get_modem_device(struct udev_device *dev)
 {
-	return udev_device_get_property_value(udev_device, "OFONO_DRIVER");
+	const char* driver;
+
+	while (dev) {
+		driver = udev_device_get_property_value(dev, "OFONO_DRIVER");
+		if (driver)
+			return dev;
+		dev = udev_device_get_parent(dev);
+	}
+
+	return NULL;
 }
 
 static const char *get_serial(struct udev_device *udev_device)
@@ -216,54 +234,29 @@ static void add_sim900(struct ofono_modem *modem,
 static void add_modem(struct udev_device *udev_device)
 {
 	struct ofono_modem *modem;
-	struct udev_device *parent;
 	const char *devpath, *curpath, *driver;
+	struct udev_device *mdev;
 
-	driver = get_driver(udev_device);
-	if (driver != NULL) {
-		devpath = udev_device_get_devpath(udev_device);
-		if (devpath == NULL)
-			return;
-
-		if(g_strcmp0(driver, "tc65") == 0)
-			driver = "cinterion";
-		if(g_strcmp0(driver, "ehs6") == 0)
-			driver = "cinterion";
-
-		modem = ofono_modem_create(NULL, driver);
-		if (modem == NULL)
-			return;
-
-		ofono_modem_set_string(modem, "Path", devpath);
-
-		modem_list = g_slist_prepend(modem_list, modem);
-
-		goto done;
-	}
-
-	parent = udev_device_get_parent(udev_device);
-	if (parent == NULL)
+	mdev = get_modem_device(udev_device);
+	if (!mdev) {
+		DBG("Device has no OFONO_DRIVER property");
 		return;
-
-	driver = get_driver(parent);
-	if (driver == NULL) {
-		parent = udev_device_get_parent(parent);
-		driver = get_driver(parent);
-		if (driver == NULL) {
-			parent = udev_device_get_parent(parent);
-			driver = get_driver(parent);
-			if (driver == NULL)
-				return;
-		}
 	}
 
-	devpath = udev_device_get_devpath(parent);
+	driver = udev_device_get_property_value(mdev, "OFONO_DRIVER");
+
+	if(g_strcmp0(driver, "tc65") == 0)
+		driver = "cinterion";
+	if(g_strcmp0(driver, "ehs6") == 0)
+		driver = "cinterion";
+
+	devpath = udev_device_get_devpath(mdev);
 	if (devpath == NULL)
 		return;
 
 	modem = find_modem(devpath);
 	if (modem == NULL) {
-		const char *serial = get_serial(parent);
+		const char *serial = get_serial(mdev);
 
 		modem = ofono_modem_create(serial, driver);
 		if (modem == NULL)
@@ -274,7 +267,6 @@ static void add_modem(struct udev_device *udev_device)
 		modem_list = g_slist_prepend(modem_list, modem);
 	}
 
-done:
 	curpath = udev_device_get_devpath(udev_device);
 	if (curpath == NULL)
 		return;
