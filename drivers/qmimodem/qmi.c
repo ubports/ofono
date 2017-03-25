@@ -330,7 +330,7 @@ static const char *__service_type_to_string(uint8_t type)
 	case QMI_SERVICE_TS:
 		return "TS";
 	case QMI_SERVICE_TMD:
-		return "TMS";
+		return "TMD";
 	case QMI_SERVICE_PDC:
 		return "PDC";
 	case QMI_SERVICE_CAT_OLD:
