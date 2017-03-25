@@ -154,7 +154,7 @@ static void add_isi(struct ofono_modem *modem,
 	ofono_modem_register(modem);
 }
 
-static void add_calypso(struct ofono_modem *modem,
+static void __add_common(struct ofono_modem *modem,
 					struct udev_device *udev_device)
 {
 	const char *devnode;
@@ -188,45 +188,6 @@ static void add_wavecom(struct ofono_modem *modem,
 
 		entry = udev_list_entry_get_next(entry);
 	}
-
-	ofono_modem_register(modem);
-}
-
-static void add_cinterion(struct ofono_modem *modem,
-			struct udev_device *udev_device)
-{
-	const char *devnode;
-
-	DBG("modem %p", modem);
-
-	devnode = udev_device_get_devnode(udev_device);
-	ofono_modem_set_string(modem, "Device", devnode);
-
-	ofono_modem_register(modem);
-}
-
-static void add_nokiacdma(struct ofono_modem *modem,
-					struct udev_device *udev_device)
-{
-	const char *devnode;
-
-	DBG("modem %p", modem);
-
-	devnode = udev_device_get_devnode(udev_device);
-	ofono_modem_set_string(modem, "Device", devnode);
-
-	ofono_modem_register(modem);
-}
-
-static void add_sim900(struct ofono_modem *modem,
-					struct udev_device *udev_device)
-{
-	const char *devnode;
-
-	DBG("modem %p", modem);
-
-	devnode = udev_device_get_devnode(udev_device);
-	ofono_modem_set_string(modem, "Device", devnode);
 
 	ofono_modem_register(modem);
 }
@@ -282,13 +243,13 @@ static void add_modem(struct udev_device *udev_device)
 	else if (g_strcmp0(driver, "n900") == 0)
 		add_isi(modem, udev_device);
 	else if (g_strcmp0(driver, "calypso") == 0)
-		add_calypso(modem, udev_device);
+		__add_common(modem, udev_device);
 	else if (g_strcmp0(driver, "cinterion") == 0)
-		add_cinterion(modem, udev_device);
+		__add_common(modem, udev_device);
 	else if (g_strcmp0(driver, "nokiacdma") == 0)
-		add_nokiacdma(modem, udev_device);
+		__add_common(modem, udev_device);
 	else if (g_strcmp0(driver, "sim900") == 0)
-		add_sim900(modem, udev_device);
+		__add_common(modem, udev_device);
 	else if (g_strcmp0(driver, "wavecom") == 0)
 		add_wavecom(modem, udev_device);
 }
