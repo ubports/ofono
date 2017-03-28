@@ -1323,7 +1323,7 @@ static void add_device(const char *syspath, const char *devname,
 			const char *driver, const char *vendor,
 			const char *model, struct udev_device *device)
 {
-	struct udev_device *intf;
+	struct udev_device *usb_interface;
 	const char *devpath, *devnode, *interface, *number;
 	const char *label, *sysattr, *subsystem;
 	struct modem_info *modem;
@@ -1341,9 +1341,9 @@ static void add_device(const char *syspath, const char *devname,
 			return;
 	}
 
-	intf = udev_device_get_parent_with_subsystem_devtype(device,
+	usb_interface = udev_device_get_parent_with_subsystem_devtype(device,
 						"usb", "usb_interface");
-	if (intf == NULL)
+	if (usb_interface == NULL)
 		return;
 
 	modem = g_hash_table_lookup(modem_list, syspath);
@@ -1364,7 +1364,7 @@ static void add_device(const char *syspath, const char *devname,
 		g_hash_table_replace(modem_list, modem->syspath, modem);
 	}
 
-	interface = udev_device_get_property_value(intf, "INTERFACE");
+	interface = udev_device_get_property_value(usb_interface, "INTERFACE");
 	number = udev_device_get_property_value(device, "ID_USB_INTERFACE_NUM");
 
 	/* If environment variable is not set, get value from attributes (or parent's ones) */
@@ -1380,6 +1380,10 @@ static void add_device(const char *syspath, const char *devname,
 	}
 
 	label = udev_device_get_property_value(device, "OFONO_LABEL");
+	if (!label)
+		label = udev_device_get_property_value(usb_interface,
+							"OFONO_LABEL");
+
 	subsystem = udev_device_get_subsystem(device);
 
 	if (modem->sysattr != NULL)
@@ -1501,6 +1505,16 @@ static void check_usb_device(struct udev_device *device)
 	model = udev_device_get_property_value(usb_device, "ID_MODEL_ID");
 
 	driver = udev_device_get_property_value(usb_device, "OFONO_DRIVER");
+	if (!driver) {
+		struct udev_device *usb_interface =
+			udev_device_get_parent_with_subsystem_devtype(
+				device, "usb", "usb_interface");
+
+		if (usb_interface)
+			driver = udev_device_get_property_value(
+					usb_interface, "OFONO_DRIVER");
+	}
+
 	if (driver == NULL) {
 		const char *drv;
 		unsigned int i;
