@@ -43,6 +43,11 @@
 typedef void (*qmi_message_func_t)(uint16_t message, uint16_t length,
 					const void *buffer, void *user_data);
 
+struct discovery {
+	void *discover_data;
+	qmi_destroy_func_t destroy;
+};
+
 struct qmi_device {
 	int ref_count;
 	int fd;
@@ -53,6 +58,7 @@ struct qmi_device {
 	GQueue *req_queue;
 	GQueue *control_queue;
 	GQueue *service_queue;
+	GQueue *discovery_queue;
 	uint8_t next_control_tid;
 	uint16_t next_service_tid;
 	qmi_debug_func_t debug_func;
@@ -211,6 +217,24 @@ static gint __request_compare(gconstpointer a, gconstpointer b)
 	uint16_t tid = GPOINTER_TO_UINT(b);
 
 	return req->tid - tid;
+}
+
+static void __discovery_free(gpointer data, gpointer user_data)
+{
+	struct discovery *d = data;
+	qmi_destroy_func_t destroy = d->destroy;
+
+	destroy(d->discover_data);
+}
+
+static gint __discovery_compare(gconstpointer a, gconstpointer b)
+{
+	const struct discovery *d = a;
+
+	if (d->discover_data == b)
+		return 0;
+
+	return 1;
 }
 
 static void __notify_free(gpointer data, gpointer user_data)
@@ -844,6 +868,37 @@ static void read_watch_destroy(gpointer user_data)
 	device->read_watch = 0;
 }
 
+static void __qmi_device_discovery_started(struct qmi_device *device,
+						void *discover_data,
+						qmi_destroy_func_t destroy)
+{
+	struct discovery *d;
+
+	d = g_new0(struct discovery, 1);
+	d->discover_data = discover_data;
+	d->destroy = destroy;
+
+	g_queue_push_tail(device->discovery_queue, d);
+}
+
+static void __qmi_device_discovery_complete(struct qmi_device *device,
+						void *discover_data)
+{
+	GList *list;
+	struct discovery *d;
+
+	list = g_queue_find_custom(device->req_queue,
+				discover_data, __discovery_compare);
+	if (!list)
+		return;
+
+	d = list->data;
+	g_queue_delete_link(device->discovery_queue, list);
+
+	d->destroy(d->discover_data);
+	__discovery_free(d, NULL);
+}
+
 static void service_destroy(gpointer data)
 {
 	struct qmi_service *service = data;
@@ -897,6 +952,7 @@ struct qmi_device *qmi_device_new(int fd)
 	device->req_queue = g_queue_new();
 	device->control_queue = g_queue_new();
 	device->service_queue = g_queue_new();
+	device->discovery_queue = g_queue_new();
 
 	device->service_list = g_hash_table_new_full(g_direct_hash,
 					g_direct_equal, NULL, service_destroy);
@@ -932,6 +988,9 @@ void qmi_device_unref(struct qmi_device *device)
 
 	g_queue_foreach(device->req_queue, __request_free, NULL);
 	g_queue_free(device->req_queue);
+
+	g_queue_foreach(device->discovery_queue, __discovery_free, NULL);
+	g_queue_free(device->discovery_queue);
 
 	if (device->write_watch > 0)
 		g_source_remove(device->write_watch);
@@ -1000,6 +1059,21 @@ struct discover_data {
 	guint timeout;
 };
 
+static void discover_data_free(gpointer user_data)
+{
+	struct discover_data *data = user_data;
+
+	if (data->timeout) {
+		g_source_remove(data->timeout);
+		data->timeout = 0;
+	}
+
+	if (data->destroy)
+		data->destroy(data->user_data);
+
+	g_free(data);
+}
+
 static void discover_callback(uint16_t message, uint16_t length,
 					const void *buffer, void *user_data)
 {
@@ -1012,8 +1086,6 @@ static void discover_callback(uint16_t message, uint16_t length,
 	struct qmi_version *list;
 	uint8_t count;
 	unsigned int i;
-
-	g_source_remove(data->timeout);
 
 	count = 0;
 	list = NULL;
@@ -1085,10 +1157,7 @@ done:
 	if (data->func)
 		data->func(count, list, data->user_data);
 
-	if (data->destroy)
-		data->destroy(data->user_data);
-
-	g_free(data);
+	__qmi_device_discovery_complete(data->device, data);
 }
 
 static gboolean discover_reply(gpointer user_data)
@@ -1102,10 +1171,7 @@ static gboolean discover_reply(gpointer user_data)
 		data->func(device->version_count,
 				device->version_list, data->user_data);
 
-	if (data->destroy)
-		data->destroy(data->user_data);
-
-	g_free(data);
+	__qmi_device_discovery_complete(data->device, data);
 
 	return FALSE;
 }
@@ -1132,7 +1198,9 @@ bool qmi_device_discover(struct qmi_device *device, qmi_discover_func_t func,
 	data->destroy = destroy;
 
 	if (device->version_list) {
-		g_timeout_add_seconds(0, discover_reply, data);
+		data->timeout = g_timeout_add_seconds(0, discover_reply, data);
+		__qmi_device_discovery_started(device, data,
+							discover_data_free);
 		return true;
 	}
 
@@ -1153,6 +1221,7 @@ bool qmi_device_discover(struct qmi_device *device, qmi_discover_func_t func,
 	__request_submit(device, req, hdr->transaction);
 
 	data->timeout = g_timeout_add_seconds(5, discover_reply, data);
+	__qmi_device_discovery_started(device, data, discover_data_free);
 
 	return true;
 }
@@ -1714,16 +1783,29 @@ struct service_create_data {
 	guint timeout;
 };
 
-static gboolean service_create_reply(gpointer user_data)
+static void service_create_data_free(gpointer user_data)
 {
 	struct service_create_data *data = user_data;
 
-	data->func(NULL, data->user_data);
+	if (data->timeout) {
+		g_source_remove(data->timeout);
+		data->timeout = 0;
+	}
 
 	if (data->destroy)
 		data->destroy(data->user_data);
 
 	g_free(data);
+}
+
+static gboolean service_create_reply(gpointer user_data)
+{
+	struct service_create_data *data = user_data;
+
+	data->timeout = 0;
+	data->func(NULL, data->user_data);
+
+	__qmi_device_discovery_complete(data->device, data);
 
 	return FALSE;
 }
@@ -1738,8 +1820,6 @@ static void service_create_callback(uint16_t message, uint16_t length,
 	const struct qmi_client_id *client_id;
 	uint16_t len;
 	unsigned int hash_id;
-
-	g_source_remove(data->timeout);
 
 	result_code = tlv_get(buffer, length, 0x02, &len);
 	if (!result_code)
@@ -1782,13 +1862,9 @@ static void service_create_callback(uint16_t message, uint16_t length,
 
 done:
 	data->func(service, data->user_data);
-
 	qmi_service_unref(service);
 
-	if (data->destroy)
-		data->destroy(data->user_data);
-
-	g_free(data);
+	__qmi_device_discovery_complete(data->device, data);
 }
 
 static void service_create_discover(uint8_t count,
@@ -1819,7 +1895,10 @@ static void service_create_discover(uint8_t count,
 		if (data->timeout > 0)
 			g_source_remove(data->timeout);
 
-		g_timeout_add_seconds(0, service_create_reply, data);
+		data->timeout = g_timeout_add_seconds(0,
+						service_create_reply, data);
+		__qmi_device_discovery_started(device, data,
+						service_create_data_free);
 		return;
 	}
 
@@ -1864,6 +1943,8 @@ static bool service_create(struct qmi_device *device, bool shared,
 
 done:
 	data->timeout = g_timeout_add_seconds(8, service_create_reply, data);
+	__qmi_device_discovery_started(device, data,
+						service_create_data_free);
 
 	return true;
 }
@@ -1883,16 +1964,21 @@ bool qmi_service_create(struct qmi_device *device,
 
 struct service_create_shared_data {
 	struct qmi_service *service;
+	struct qmi_device *device;
 	qmi_create_func_t func;
 	void *user_data;
 	qmi_destroy_func_t destroy;
+	guint timeout;
 };
 
-static gboolean service_create_shared_reply(gpointer user_data)
+static void service_create_shared_data_free(gpointer user_data)
 {
 	struct service_create_shared_data *data = user_data;
 
-	data->func(data->service, data->user_data);
+	if (data->timeout) {
+		g_source_remove(data->timeout);
+		data->timeout = 0;
+	}
 
 	qmi_service_unref(data->service);
 
@@ -1900,6 +1986,16 @@ static gboolean service_create_shared_reply(gpointer user_data)
 		data->destroy(data->user_data);
 
 	g_free(data);
+}
+
+static gboolean service_create_shared_reply(gpointer user_data)
+{
+	struct service_create_shared_data *data = user_data;
+
+	data->timeout = 0;
+	data->func(data->service, data->user_data);
+
+	__qmi_device_discovery_complete(data->device, data);
 
 	return FALSE;
 }
@@ -1927,12 +2023,15 @@ bool qmi_service_create_shared(struct qmi_device *device,
 			return false;
 
 		data->service = qmi_service_ref(service);
-
+		data->device = device;
 		data->func = func;
 		data->user_data = user_data;
 		data->destroy = destroy;
 
-		g_timeout_add(0, service_create_shared_reply, data);
+		data->timeout = g_timeout_add(0,
+					service_create_shared_reply, data);
+		__qmi_device_discovery_started(device, data,
+					service_create_shared_data_free);
 
 		return 0;
 	}
