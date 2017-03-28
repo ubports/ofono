@@ -37,13 +37,22 @@
 #include <ofono/modem.h>
 #include <ofono/log.h>
 
+enum modem_type {
+	MODEM_TYPE_USB,
+	MODEM_TYPE_SERIAL,
+};
+
 struct modem_info {
 	char *syspath;
 	char *devname;
 	char *driver;
 	char *vendor;
 	char *model;
-	GSList *devices;
+	enum modem_type type;
+	union {
+		GSList *devices;
+		struct serial_device_info* serial;
+	};
 	struct ofono_modem *modem;
 	const char *sysattr;
 };
@@ -56,6 +65,13 @@ struct device_info {
 	char *label;
 	char *sysattr;
 	char *subsystem;
+};
+
+struct serial_device_info {
+	char *devpath;
+	char *devnode;
+	char *subsystem;
+	struct udev_device* dev;
 };
 
 static gboolean setup_isi(struct modem_info *modem)
@@ -867,6 +883,100 @@ static gboolean setup_quectel(struct modem_info *modem)
 	return TRUE;
 }
 
+static gboolean setup_serial_modem(struct modem_info* modem)
+{
+	struct serial_device_info* info;
+
+	info = modem->serial;
+
+	ofono_modem_set_string(modem->modem, "Device", info->devnode);
+
+	return TRUE;
+}
+
+static gboolean setup_tc65(struct modem_info* modem)
+{
+	ofono_modem_set_driver(modem->modem, "cinterion");
+
+	return setup_serial_modem(modem);
+}
+
+static gboolean setup_ehs6(struct modem_info* modem)
+{
+	ofono_modem_set_driver(modem->modem, "cinterion");
+
+	return setup_serial_modem(modem);
+}
+
+static gboolean setup_ifx(struct modem_info* modem)
+{
+	struct serial_device_info* info;
+	const char *value;
+
+	info = modem->serial;
+
+	value = udev_device_get_property_value(info->dev, "OFONO_IFX_LDISC");
+	if (value)
+		ofono_modem_set_string(modem->modem, "LineDiscipline", value);
+
+	value = udev_device_get_property_value(info->dev, "OFONO_IFX_AUDIO");
+	if (value)
+		ofono_modem_set_string(modem->modem, "AudioSetting", value);
+
+	value = udev_device_get_property_value(info->dev, "OFONO_IFX_LOOPBACK");
+	if (value)
+		ofono_modem_set_string(modem->modem, "AudioLoopback", value);
+
+	ofono_modem_set_string(modem->modem, "Device", info->devnode);
+
+	return TRUE;
+}
+
+static gboolean setup_wavecom(struct modem_info* modem)
+{
+	struct serial_device_info* info;
+	const char *value;
+
+	info = modem->serial;
+
+	value = udev_device_get_property_value(info->dev,
+						"OFONO_WAVECOM_MODEL");
+	if (value)
+		ofono_modem_set_string(modem->modem, "Model", value);
+
+	ofono_modem_set_string(modem->modem, "Device", info->devnode);
+
+	return TRUE;
+}
+
+static gboolean setup_isi_serial(struct modem_info* modem)
+{
+	struct serial_device_info* info;
+	const char *value;
+
+	info = modem->serial;
+
+	if (g_strcmp0(udev_device_get_subsystem(info->dev), "net") != 0)
+		return FALSE;
+
+	value = udev_device_get_sysattr_value(info->dev, "type");
+	if (g_strcmp0(value, "820") != 0)
+		return FALSE;
+
+	/* OK, we want this device to be a modem */
+	value = udev_device_get_sysname(info->dev);
+	if (value)
+		ofono_modem_set_string(modem->modem, "Interface", value);
+
+	value = udev_device_get_property_value(info->dev, "OFONO_ISI_ADDRESS");
+	if (value)
+		ofono_modem_set_integer(modem->modem, "Address", atoi(value));
+
+	ofono_modem_set_string(modem->modem, "Device", info->devnode);
+
+	return TRUE;
+}
+
 static gboolean setup_ublox(struct modem_info *modem)
 {
 	const char *aux = NULL, *mdm = NULL, *net = NULL;
@@ -997,6 +1107,17 @@ static struct {
 	{ "quectel",	setup_quectel	},
 	{ "ublox",	setup_ublox	},
 	{ "gemalto",	setup_gemalto	},
+	/* Following are non-USB modems */
+	{ "ifx",	setup_ifx		},
+	{ "u8500",	setup_isi_serial	},
+	{ "n900",	setup_isi_serial	},
+	{ "calypso",	setup_serial_modem	},
+	{ "cinterion",	setup_serial_modem	},
+	{ "nokiacdma",	setup_serial_modem	},
+	{ "sim900",	setup_serial_modem	},
+	{ "wavecom",	setup_wavecom		},
+	{ "tc65",	setup_tc65		},
+	{ "ehs6",	setup_ehs6		},
 	{ }
 };
 
@@ -1014,6 +1135,27 @@ static const char *get_sysattr(const char *driver)
 	return NULL;
 }
 
+static void device_info_free(struct device_info* info)
+{
+	g_free(info->devpath);
+	g_free(info->devnode);
+	g_free(info->interface);
+	g_free(info->number);
+	g_free(info->label);
+	g_free(info->sysattr);
+	g_free(info->subsystem);
+	g_free(info);
+}
+
+static void serial_device_info_free(struct serial_device_info* info)
+{
+	g_free(info->devpath);
+	g_free(info->devnode);
+	g_free(info->subsystem);
+	udev_device_unref(info->dev);
+	g_free(info);
+}
+
 static void destroy_modem(gpointer data)
 {
 	struct modem_info *modem = data;
@@ -1023,24 +1165,21 @@ static void destroy_modem(gpointer data)
 
 	ofono_modem_remove(modem->modem);
 
-	for (list = modem->devices; list; list = list->next) {
-		struct device_info *info = list->data;
+	switch (modem->type) {
+	case MODEM_TYPE_USB:
+		for (list = modem->devices; list; list = list->next) {
+			struct device_info *info = list->data;
 
-		DBG("%s", info->devnode);
+			DBG("%s", info->devnode);
+			device_info_free(info);
+		}
 
-		g_free(info->devpath);
-		g_free(info->devnode);
-		g_free(info->interface);
-		g_free(info->number);
-		g_free(info->label);
-		g_free(info->sysattr);
-		g_free(info->subsystem);
-		g_free(info);
-
-		list->data = NULL;
+		g_slist_free(modem->devices);
+		break;
+	case MODEM_TYPE_SERIAL:
+		serial_device_info_free(modem->serial);
+		break;
 	}
-
-	g_slist_free(modem->devices);
 
 	g_free(modem->syspath);
 	g_free(modem->devname);
@@ -1088,6 +1227,98 @@ static gint compare_device(gconstpointer a, gconstpointer b)
 	return g_strcmp0(info1->number, info2->number);
 }
 
+/*
+ * Here we try to find the "modem device".
+ *
+ * In this variant we identify the "modem device" as simply the device
+ * that has the OFONO_DRIVER property.  If the device node doesn't
+ * have this property itself, then we do a brute force search for it
+ * through the device hierarchy.
+ *
+ */
+static struct udev_device* get_serial_modem_device(struct udev_device *dev)
+{
+	const char* driver;
+
+	while (dev) {
+		driver = udev_device_get_property_value(dev, "OFONO_DRIVER");
+		if (driver)
+			return dev;
+
+		dev = udev_device_get_parent(dev);
+	}
+
+	return NULL;
+}
+
+/*
+ * Add 'legacy' device
+ *
+ * The term legacy is a bit misleading, but this adds devices according
+ * to the original ofono model.
+ *
+ * - We cannot assume that these are USB devices
+ * - The modem consists of only a single interface
+ * - The device must have an OFONO_DRIVER property from udev
+ */
+static void add_serial_device(struct udev_device *dev)
+{
+	const char *syspath, *devpath, *devname, *devnode;
+	struct modem_info *modem;
+	struct serial_device_info *info;
+	const char *subsystem;
+	struct udev_device* mdev;
+	const char* driver;
+
+	mdev = get_serial_modem_device(dev);
+	if (!mdev) {
+		DBG("Device is missing required OFONO_DRIVER property");
+		return;
+	}
+
+	driver = udev_device_get_property_value(mdev, "OFONO_DRIVER");
+
+	syspath = udev_device_get_syspath(mdev);
+	devname = udev_device_get_devnode(mdev);
+	devpath = udev_device_get_devpath(mdev);
+
+	devnode = udev_device_get_devnode(dev);
+
+	if (!syspath || !devname || !devpath || !devnode)
+		return;
+
+	modem = g_hash_table_lookup(modem_list, syspath);
+	if (modem == NULL) {
+		modem = g_try_new0(struct modem_info, 1);
+		if (modem == NULL)
+			return;
+
+		modem->type = MODEM_TYPE_SERIAL;
+		modem->syspath = g_strdup(syspath);
+		modem->devname = g_strdup(devname);
+		modem->driver = g_strdup("legacy");
+
+		g_hash_table_replace(modem_list, modem->syspath, modem);
+	}
+
+	subsystem = udev_device_get_subsystem(dev);
+
+	DBG("%s", syspath);
+	DBG("%s", devpath);
+	DBG("%s (%s)", devnode, driver);
+
+	info = g_try_new0(struct serial_device_info, 1);
+	if (info == NULL)
+		return;
+
+	info->devpath = g_strdup(devpath);
+	info->devnode = g_strdup(devnode);
+	info->subsystem = g_strdup(subsystem);
+	info->dev = udev_device_ref(dev);
+
+	modem->devices = g_slist_append(modem->devices, info);
+}
+
 static void add_device(const char *syspath, const char *devname,
 			const char *driver, const char *vendor,
 			const char *model, struct udev_device *device)
@@ -1121,6 +1352,7 @@ static void add_device(const char *syspath, const char *devname,
 		if (modem == NULL)
 			return;
 
+		modem->type = MODEM_TYPE_USB;
 		modem->syspath = g_strdup(syspath);
 		modem->devname = g_strdup(devname);
 		modem->driver = g_strdup(driver);
