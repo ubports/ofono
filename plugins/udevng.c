@@ -1562,6 +1562,9 @@ static void check_device(struct udev_device *device)
 	if ((g_str_equal(bus, "usb") == TRUE) ||
 			(g_str_equal(bus, "usbmisc") == TRUE))
 		check_usb_device(device);
+	else
+		add_serial_device(device);
+
 }
 
 static gboolean create_modem(gpointer key, gpointer value, gpointer user_data)
