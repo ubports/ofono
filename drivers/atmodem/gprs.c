@@ -50,6 +50,8 @@ struct gprs_data {
 	GAtChat *chat;
 	unsigned int vendor;
 	unsigned int last_auto_context_id;
+	gboolean telit_try_reattach;
+	int attached;
 };
 
 static void at_cgatt_cb(gboolean ok, GAtResult *result, gpointer user_data)
@@ -73,8 +75,10 @@ static void at_gprs_set_attached(struct ofono_gprs *gprs, int attached,
 	snprintf(buf, sizeof(buf), "AT+CGATT=%i", attached ? 1 : 0);
 
 	if (g_at_chat_send(gd->chat, buf, none_prefix,
-				at_cgatt_cb, cbd, g_free) > 0)
+				at_cgatt_cb, cbd, g_free) > 0) {
+		gd->attached = attached;
 		return;
+	}
 
 	g_free(cbd);
 
@@ -194,6 +198,28 @@ static void cgreg_notify(GAtResult *result, gpointer user_data)
 				NULL, NULL, NULL, gd->vendor) == FALSE)
 		return;
 
+	/*
+	 * Telit AT modem firmware (tested with UE910-EUR) generates
+	 * +CGREG: 0\r\n\r\n+CGEV: NW DETACH
+	 * after a context is de-activated and ppp connection closed.
+	 * Then, after a random amount of time (observed from a few seconds
+	 * to a few hours), an unsolicited +CGREG: 1 arrives.
+	 * Attempt to fix the problem, by sending AT+CGATT=1 once.
+	 * This does not re-activate the context, but if a network connection
+	 * is still correct, will generate an immediate +CGREG: 1.
+	 */
+	if (gd->vendor == OFONO_VENDOR_TELIT) {
+		if (gd->attached && !status && !gd->telit_try_reattach) {
+			DBG("Trying to re-attach gprs network");
+			gd->telit_try_reattach = TRUE;
+			g_at_chat_send(gd->chat, "AT+CGATT=1", none_prefix,
+					NULL, NULL, NULL);
+			return;
+		}
+
+		gd->telit_try_reattach = FALSE;
+	}
+
 	ofono_gprs_status_notify(gprs, status);
 }
 
@@ -214,6 +240,11 @@ static void cgev_notify(GAtResult *result, gpointer user_data)
 
 	if (g_str_equal(event, "NW DETACH") ||
 			g_str_equal(event, "ME DETACH")) {
+		if (gd->vendor == OFONO_VENDOR_TELIT &&
+				gd->telit_try_reattach)
+			return;
+
+		gd->attached = FALSE;
 		ofono_gprs_detached_notify(gprs);
 		return;
 	} else if (g_str_has_prefix(event, "ME PDN ACT")) {
