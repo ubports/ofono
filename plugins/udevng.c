@@ -286,42 +286,6 @@ done:
 	return TRUE;
 }
 
-static gboolean setup_option(struct modem_info *modem)
-{
-	const char *aux = NULL, *mdm = NULL, *diag = NULL;
-	GSList *list;
-
-	DBG("%s", modem->syspath);
-
-	for (list = modem->devices; list; list = list->next) {
-		struct device_info *info = list->data;
-
-		DBG("%s %s %s %s", info->devnode, info->interface,
-						info->number, info->label);
-
-		if (g_strcmp0(info->interface, "255/255/255") == 0) {
-			if (g_strcmp0(info->number, "00") == 0)
-				mdm = info->devnode;
-			else if (g_strcmp0(info->number, "01") == 0)
-				diag = info->devnode;
-			else if (g_strcmp0(info->number, "02") == 0)
-				aux = info->devnode;
-		}
-
-	}
-
-	if (aux == NULL || mdm == NULL)
-		return FALSE;
-
-	DBG("aux=%s modem=%s diag=%s", aux, mdm, diag);
-
-	ofono_modem_set_string(modem->modem, "Aux", aux);
-	ofono_modem_set_string(modem->modem, "Modem", mdm);
-	ofono_modem_set_string(modem->modem, "Diag", diag);
-
-	return TRUE;
-}
-
 static gboolean setup_huawei(struct modem_info *modem)
 {
 	const char *qmi = NULL, *mdm = NULL, *net = NULL;
@@ -1090,7 +1054,6 @@ static struct {
 	{ "hso",	setup_hso,	"hsotype"		},
 	{ "gobi",	setup_gobi	},
 	{ "sierra",	setup_sierra	},
-	{ "option",	setup_option	},
 	{ "huawei",	setup_huawei	},
 	{ "speedupcdma",setup_speedup	},
 	{ "speedup",	setup_speedup	},
