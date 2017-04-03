@@ -35,7 +35,9 @@
 #define QMI_SERVICE_CAT		10	/* Card application toolkit service */
 #define QMI_SERVICE_UIM		11	/* UIM service */
 #define QMI_SERVICE_PBM		12	/* Phonebook service */
+#define QMI_SERVICE_QCHAT	13
 #define QMI_SERVICE_RMTFS	14	/* Remote file system service */
+#define QMI_SERVICE_TEST	15
 #define QMI_SERVICE_LOC		16	/* Location service */
 #define QMI_SERVICE_SAR		17	/* Specific absorption rate service */
 #define QMI_SERVICE_CSD		20	/* Core sound driver service */
@@ -43,7 +45,12 @@
 #define QMI_SERVICE_TS		23	/* Thermal sensors service */
 #define QMI_SERVICE_TMD		24	/* Thermal mitigation device service */
 #define QMI_SERVICE_WDA		26	/* Wireless data administrative service */
+#define QMI_SERVICE_CSVT	29
+#define QMI_SERVICE_COEX	34
 #define QMI_SERVICE_PDC		36	/* Persistent device configuration service */
+#define QMI_SERVICE_RFRPE	41
+#define QMI_SERVICE_DSD		42
+#define QMI_SERVICE_SSCTL	43
 #define QMI_SERVICE_CAT_OLD	224	/* Card application toolkit service */
 #define QMI_SERVICE_RMS		225	/* Remote management service */
 #define QMI_SERVICE_OMA		226	/* OMA device management service */
