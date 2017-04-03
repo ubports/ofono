@@ -762,8 +762,12 @@ static DBusMessage *set_property_online(struct ofono_modem *modem,
 	if (ofono_modem_get_emergency_mode(modem) == TRUE)
 		return __ofono_error_emergency_active(msg);
 
-	if (modem_is_always_online(modem) == TRUE)
-		return __ofono_error_not_implemented(msg);
+	if (modem_is_always_online(modem) == TRUE) {
+		if (online)
+			return dbus_message_new_method_return(msg);
+		else
+			return __ofono_error_not_implemented(msg);
+	}
 
 	modem->pending = dbus_message_ref(msg);
 
