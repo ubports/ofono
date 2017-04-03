@@ -901,7 +901,7 @@ static void __qmi_device_discovery_complete(struct qmi_device *device,
 	GList *list;
 	struct discovery *d;
 
-	list = g_queue_find_custom(device->req_queue,
+	list = g_queue_find_custom(device->discovery_queue,
 				discover_data, __discovery_compare);
 	if (!list)
 		return;
@@ -909,7 +909,6 @@ static void __qmi_device_discovery_complete(struct qmi_device *device,
 	d = list->data;
 	g_queue_delete_link(device->discovery_queue, list);
 
-	d->destroy(d->discover_data);
 	__discovery_free(d, NULL);
 }
 
