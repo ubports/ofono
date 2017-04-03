@@ -341,8 +341,12 @@ static const char *__service_type_to_string(uint8_t type)
 		return "UIM";
 	case QMI_SERVICE_PBM:
 		return "PBM";
+	case QMI_SERVICE_QCHAT:
+		return "QCHAT";
 	case QMI_SERVICE_RMTFS:
 		return "RMTFS";
+	case QMI_SERVICE_TEST:
+		return "TEST";
 	case QMI_SERVICE_LOC:
 		return "LOC";
 	case QMI_SERVICE_SAR:
@@ -357,8 +361,18 @@ static const char *__service_type_to_string(uint8_t type)
 		return "TMD";
 	case QMI_SERVICE_WDA:
 		return "WDA";
+	case QMI_SERVICE_CSVT:
+		return "CSVT";
+	case QMI_SERVICE_COEX:
+		return "COEX";
 	case QMI_SERVICE_PDC:
 		return "PDC";
+	case QMI_SERVICE_RFRPE:
+		return "RFRPE";
+	case QMI_SERVICE_DSD:
+		return "DSD";
+	case QMI_SERVICE_SSCTL:
+		return "SSCTL";
 	case QMI_SERVICE_CAT_OLD:
 		return "CAT";
 	case QMI_SERVICE_RMS:
