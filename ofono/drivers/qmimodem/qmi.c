@@ -69,6 +69,10 @@ struct qmi_device {
 	uint8_t version_count;
 	GHashTable *service_list;
 	unsigned int release_users;
+	qmi_shutdown_func_t shutdown_func;
+	void *shutdown_user_data;
+	qmi_destroy_func_t shutdown_destroy;
+	guint shutdown_source;
 };
 
 struct qmi_service {
@@ -988,6 +992,9 @@ void qmi_device_unref(struct qmi_device *device)
 	if (device->close_on_unref)
 		close(device->fd);
 
+	if (device->shutdown_source)
+		g_source_remove(device->shutdown_source);
+
 	g_hash_table_destroy(device->service_list);
 
 	g_free(device->version_str);
@@ -1240,59 +1247,49 @@ static void release_client(struct qmi_device *device,
 	__request_submit(device, req, hdr->transaction);
 }
 
-struct shutdown_data {
-	struct qmi_device *device;
-	qmi_shutdown_func_t func;
-	void *user_data;
-	qmi_destroy_func_t destroy;
-};
-
-static gboolean shutdown_reply(gpointer user_data)
+static void shutdown_destroy(gpointer user_data)
 {
-	struct shutdown_data *data = user_data;
+	struct qmi_device *device = user_data;
 
-	if (data->func)
-		data->func(data->user_data);
+	if (device->shutdown_destroy)
+		device->shutdown_destroy(device->shutdown_user_data);
 
-	g_free(data);
-
-	return FALSE;
+	device->shutdown_source = 0;
 }
 
-static gboolean shutdown_timeout(gpointer user_data)
+static gboolean shutdown_callback(gpointer user_data)
 {
-	struct shutdown_data *data = user_data;
-	struct qmi_device *device = data->device;
+	struct qmi_device *device = user_data;
 
 	if (device->release_users > 0)
 		return TRUE;
 
-	return shutdown_reply(data);
+	if (device->shutdown_func)
+		device->shutdown_func(device->shutdown_user_data);
+
+	return FALSE;
 }
 
 bool qmi_device_shutdown(struct qmi_device *device, qmi_shutdown_func_t func,
 				void *user_data, qmi_destroy_func_t destroy)
 {
-	struct shutdown_data *data;
-
 	if (!device)
+		return false;
+
+	if (device->shutdown_source > 0)
 		return false;
 
 	__debug_device(device, "device %p shutdown", device);
 
-	data = g_try_new0(struct shutdown_data, 1);
-	if (!data)
+	device->shutdown_source = g_timeout_add_seconds_full(G_PRIORITY_DEFAULT,
+						0, shutdown_callback, device,
+						shutdown_destroy);
+	if (device->shutdown_source == 0)
 		return false;
 
-	data->device = device;
-	data->func = func;
-	data->user_data = user_data;
-	data->destroy = destroy;
-
-	if (device->release_users > 0)
-		g_timeout_add_seconds(0, shutdown_timeout, data);
-	else
-		g_timeout_add_seconds(0, shutdown_reply, data);
+	device->shutdown_func = func;
+	device->shutdown_user_data = user_data;
+	device->shutdown_destroy = destroy;
 
 	return true;
 }
