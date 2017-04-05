@@ -575,6 +575,11 @@ builtin_sources += plugins/bluez5.c plugins/bluez5.h
 
 builtin_modules += hfp_ag_bluez5
 builtin_sources += plugins/hfp_ag_bluez5.c plugins/bluez5.h
+
+if SAILFISHFOS
+builtin_modules += sfos_bt
+builtin_sources += plugins/sfos_bt.c
+endif
 endif
 
 if UPOWER
