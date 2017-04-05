@@ -213,6 +213,10 @@ fi
 AM_CONDITIONAL(BLUEZ4, test "${enable_bluetooth}" != "no" && test "${enable_bluez4}" = "yes")
 AM_CONDITIONAL(BLUETOOTH, test "${enable_bluetooth}" != "no")
 
+AC_ARG_ENABLE(sailfishos, AC_HELP_STRING([--enable-sailfishos],
+                [enable sailfishos plugin]), [enable_sailfishos=${enableval}])
+AM_CONDITIONAL(SAILFISHFOS, test "${enable_sailfishos}" = "yes")
+
 AC_ARG_ENABLE(nettime, AC_HELP_STRING([--disable-nettime],
                                 [disable Nettime plugin]),
                                         [enable_nettime=${enableval}])
