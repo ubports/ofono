@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2016 Jolla Ltd.
+ *  Copyright (C) 2016-2017 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -26,8 +26,12 @@
 #define RIL_SIM_STORE_GROUP             "Settings"
 #define RIL_SIM_STORE_PREF_MODE         "TechnologyPreference"
 
-#define RIL_SIM_STORE_PREF_MODE_DEFAULT(self) ((self)->enable_4g ? \
-	OFONO_RADIO_ACCESS_MODE_LTE : OFONO_RADIO_ACCESS_MODE_UMTS)
+#define RIL_SIM_STORE_PREF_MODE_DEFAULT(self)           (\
+	((self)->techs & OFONO_RADIO_ACCESS_MODE_LTE) ?  \
+	OFONO_RADIO_ACCESS_MODE_LTE :                    \
+	((self)->techs & OFONO_RADIO_ACCESS_MODE_UMTS) ? \
+	OFONO_RADIO_ACCESS_MODE_UMTS :                   \
+	OFONO_RADIO_ACCESS_MODE_GSM)
 
 typedef GObjectClass RilSimSettingsClass;
 typedef struct ril_sim_settings RilSimSettings;
@@ -84,8 +88,7 @@ static void ril_sim_settings_reload(struct ril_sim_settings *self)
 		mode_str = g_key_file_get_string(priv->storage,
 			RIL_SIM_STORE_GROUP, RIL_SIM_STORE_PREF_MODE, NULL);
 		if (ofono_radio_access_mode_from_string(mode_str, &mode)) {
-			if (!self->enable_4g &&
-					mode == OFONO_RADIO_ACCESS_MODE_LTE) {
+			if (!(self->techs & mode)) {
 				mode = OFONO_RADIO_ACCESS_MODE_ANY;
 			}
 		} else {
@@ -263,7 +266,7 @@ void ril_sim_settings_remove_handlers(struct ril_sim_settings *self,
 struct ril_sim_settings *ril_sim_settings_new(const struct ril_slot_config *sc)
 {
 	struct ril_sim_settings *self = g_object_new(RIL_SIM_SETTINGS_TYPE, 0);
-	self->enable_4g = sc->enable_4g;
+	self->techs = sc->techs;
 	self->slot = sc->slot;
 	self->pref_mode = RIL_SIM_STORE_PREF_MODE_DEFAULT(self);
 	return self;

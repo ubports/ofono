@@ -23,10 +23,11 @@
 #include <grilio_types.h>
 #include <gutil_macros.h>
 
-#include <ofono/types.h>
-
 struct ofono_modem;
 struct ofono_sim;
+
+#include <ofono/types.h>
+#include <ofono/radio-settings.h>
 
 #include <stdio.h>
 #include <errno.h>
@@ -51,7 +52,7 @@ struct ril_cell_info;
 
 struct ril_slot_config {
 	guint slot;
-	gboolean enable_4g;
+	enum ofono_radio_access_mode techs;
 	gboolean empty_pin_query;
 	GUtilInts *local_hangup_reasons;
 	GUtilInts *remote_hangup_reasons;
