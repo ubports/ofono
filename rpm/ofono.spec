@@ -71,6 +71,7 @@ autoreconf --force --install
     --enable-test \
     --enable-debuglog \
     --enable-jolla-rilmodem \
+    --enable-sailfishos \
     --disable-add-remove-context \
     --disable-isimodem \
     --disable-qmimodem \
