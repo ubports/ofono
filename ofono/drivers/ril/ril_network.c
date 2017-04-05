@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2016 Jolla Ltd.
+ *  Copyright (C) 2015-2017 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -420,13 +420,16 @@ static int ril_network_mode_to_rat(struct ril_network *self,
 	switch (mode) {
 	case OFONO_RADIO_ACCESS_MODE_ANY:
 	case OFONO_RADIO_ACCESS_MODE_LTE:
-		if (self->settings->enable_4g) {
+		if (self->settings->techs & OFONO_RADIO_ACCESS_MODE_LTE) {
 			return PREF_NET_TYPE_LTE_GSM_WCDMA;
 		}
 		/* no break */
 	default:
 	case OFONO_RADIO_ACCESS_MODE_UMTS:
-		return PREF_NET_TYPE_GSM_WCDMA_AUTO;
+		if (self->settings->techs & OFONO_RADIO_ACCESS_MODE_UMTS) {
+			return PREF_NET_TYPE_GSM_WCDMA_AUTO;
+		}
+		/* no break */
 	case OFONO_RADIO_ACCESS_MODE_GSM:
 		return PREF_NET_TYPE_GSM_ONLY;
 	}

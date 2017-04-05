@@ -22,7 +22,10 @@
 
 #define RILCONF_SETTINGS_GROUP      "Settings"
 
-char *ril_config_get_string(GKeyFile *file, const char *group, const char *key);
+char *ril_config_get_string(GKeyFile *file, const char *group,
+					const char *key);
+char **ril_config_get_strings(GKeyFile *file, const char *group,
+			      const char *key, char delimiter);
 gboolean ril_config_get_integer(GKeyFile *file, const char *group,
 					const char *key, int *value);
 gboolean ril_config_get_boolean(GKeyFile *file, const char *group,
