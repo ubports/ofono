@@ -41,6 +41,10 @@
 #include "ofono.h"
 #include "storage.h"
 
+#define OFONO_RADIO_ACCESS_MODE_ALL (OFONO_RADIO_ACCESS_MODE_GSM |\
+                                     OFONO_RADIO_ACCESS_MODE_UMTS |\
+                                     OFONO_RADIO_ACCESS_MODE_LTE)
+
 #define RADIO_GID                   1001
 #define RADIO_UID                   1001
 #define RIL_SUB_SIZE                4
@@ -49,7 +53,7 @@
 #define RILMODEM_DEFAULT_SOCK       "/dev/socket/rild"
 #define RILMODEM_DEFAULT_SOCK2      "/dev/socket/rild2"
 #define RILMODEM_DEFAULT_SUB        "SUB1"
-#define RILMODEM_DEFAULT_4G         TRUE /* 4G is on by default */
+#define RILMODEM_DEFAULT_TECHS      OFONO_RADIO_ACCESS_MODE_ALL
 #define RILMODEM_DEFAULT_SLOT       0xffffffff
 #define RILMODEM_DEFAULT_TIMEOUT    0 /* No timeout */
 #define RILMODEM_DEFAULT_SIM_FLAGS  RIL_SIM_CARD_V9_UICC_SUBSCRIPTION_WORKAROUND
@@ -70,7 +74,8 @@
 #define RILCONF_SLOT                "slot"
 #define RILCONF_SUB                 "sub"
 #define RILCONF_TIMEOUT             "timeout"
-#define RILCONF_4G                  "enable4G"
+#define RILCONF_4G                  "enable4G" /* Deprecated */
+#define RILCONF_TECHS               "technologies"
 #define RILCONF_UICC_WORKAROUND     "uiccWorkaround"
 #define RILCONF_ECCLIST_FILE        "ecclistFile"
 #define RILCONF_ALLOW_DATA_REQ      "allowDataReq"
@@ -1109,7 +1114,7 @@ static struct ril_slot *ril_plugin_slot_new(const char *sockpath,
 	slot->path = g_strdup(path);
 	slot->name = g_strdup(name);
 	slot->config.slot = slot_index;
-	slot->config.enable_4g = RILMODEM_DEFAULT_4G;
+	slot->config.techs = RILMODEM_DEFAULT_TECHS;
 	slot->config.empty_pin_query = RILMODEM_DEFAULT_EMPTY_PIN_QUERY;
 	slot->timeout = RILMODEM_DEFAULT_TIMEOUT;
 	slot->sim_flags = RILMODEM_DEFAULT_SIM_FLAGS;
@@ -1159,7 +1164,8 @@ static struct ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 	char *sock = g_key_file_get_string(file, group, RILCONF_SOCKET, NULL);
 	if (sock) {
 		int value;
-		char* strval;
+		char *strval;
+		char **strv;
 		char *sub = ril_config_get_string(file, group, RILCONF_SUB);
 
 		slot = ril_plugin_slot_new(NULL, NULL, NULL,
@@ -1187,9 +1193,52 @@ static struct ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 			DBG("%s: timeout %d", group, slot->timeout);
 		}
 
-		ril_config_get_boolean(file, group, RILCONF_4G,
-						&slot->config.enable_4g);
-		DBG("%s: 4G %s", group, slot->config.enable_4g ? "on" : "off");
+		strv = ril_config_get_strings(file, group, RILCONF_TECHS, ',');
+		if (strv) {
+			char **p;
+
+			slot->config.techs = 0;
+			for (p = strv; *p; p++) {
+				const char *s = *p;
+				enum ofono_radio_access_mode m;
+
+				if (!s[0]) {
+					continue;
+				}
+
+				if (!strcmp(s, "all")) {
+					slot->config.techs =
+						OFONO_RADIO_ACCESS_MODE_ALL;
+					break;
+				}
+
+				if (!ofono_radio_access_mode_from_string(s,
+									&m)) {
+					ofono_warn("Unknown technology %s "
+						"in [%s] section of %s", s,
+						group, RILMODEM_CONF_FILE);
+					continue;
+				}
+
+				if (m == OFONO_RADIO_ACCESS_MODE_ANY) {
+					slot->config.techs =
+						OFONO_RADIO_ACCESS_MODE_ALL;
+					break;
+				}
+
+				slot->config.techs |= m;
+			}
+			g_strfreev(strv);
+		}
+
+		/* "enable4G" is deprecated */
+		value = slot->config.techs;
+		if (ril_config_get_flag(file, group, RILCONF_4G,
+				OFONO_RADIO_ACCESS_MODE_LTE, &value)) {
+			slot->config.techs = value;
+		}
+
+		DBG("%s: technologies 0x%02x", group, slot->config.techs);
 
 		if (ril_config_get_boolean(file, group, RILCONF_EMPTY_PIN_QUERY,
 					&slot->config.empty_pin_query)) {

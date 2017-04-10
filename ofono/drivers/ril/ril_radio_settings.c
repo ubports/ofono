@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2016 Jolla Ltd.
+ *  Copyright (C) 2015-2017 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -113,15 +113,11 @@ static gboolean ril_radio_settings_query_available_rats_cb(gpointer data)
 	struct ofono_error error;
 	struct ril_radio_settings_cbd *cbd = data;
 	struct ril_radio_settings *rsd = cbd->rsd;
-	guint rats = OFONO_RADIO_ACCESS_MODE_GSM | OFONO_RADIO_ACCESS_MODE_UMTS;
 
-	if (cbd->rsd->settings->enable_4g) {
-		rats |= OFONO_RADIO_ACCESS_MODE_LTE;
-	}
-
-	GASSERT(cbd->rsd->source_id);
+	GASSERT(rsd->source_id);
 	rsd->source_id = 0;
-	cbd->cb.available_rats(ril_error_ok(&error), rats, cbd->data);
+	cbd->cb.available_rats(ril_error_ok(&error), rsd->settings->techs,
+								cbd->data);
 	return G_SOURCE_REMOVE;
 }
 
@@ -132,8 +128,8 @@ static void ril_radio_settings_query_available_rats(
 	struct ril_radio_settings *rsd = ril_radio_settings_get_data(rs);
 
 	DBG_(rsd, "");
-	ril_radio_settings_later(rsd, ril_radio_settings_query_available_rats_cb,
-								cb, data);
+	ril_radio_settings_later(rsd,
+			ril_radio_settings_query_available_rats_cb, cb, data);
 }
 
 static gboolean ril_radio_settings_register(gpointer user_data)

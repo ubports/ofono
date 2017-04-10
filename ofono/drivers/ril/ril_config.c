@@ -20,7 +20,7 @@
 
 /* Utilities for parsing ril_subscription.conf */
 
-char* ril_config_get_string(GKeyFile *file, const char *group, const char *key)
+char *ril_config_get_string(GKeyFile *file, const char *group, const char *key)
 {
 	char *val = g_key_file_get_string(file, group, key, NULL);
 
@@ -30,6 +30,31 @@ char* ril_config_get_string(GKeyFile *file, const char *group, const char *key)
 									NULL);
 	}
 	return val;
+}
+
+char **ril_config_get_strings(GKeyFile *file, const char *group,
+					const char *key, char delimiter)
+{
+	char *str = ril_config_get_string(file, group, key);
+
+	if (str) {
+		char **strv, **p;
+		char delimiter_str[2];
+
+		delimiter_str[0] = delimiter;
+		delimiter_str[1] = 0;
+		strv = g_strsplit(str, delimiter_str, -1);
+
+		/* Strip whitespaces */
+		for (p = strv; *p; p++) {
+			*p = g_strstrip(*p);
+		}
+
+		g_free(str);
+		return strv;
+	}
+
+	return NULL;
 }
 
 gboolean ril_config_get_integer(GKeyFile *file, const char *group,
@@ -112,12 +137,12 @@ gboolean ril_config_get_flag(GKeyFile *file, const char *group,
 GUtilInts *ril_config_get_ints(GKeyFile *file, const char *group,
 					const char *key)
 {
-	char* value = ril_config_get_string(file, group, key);
+	char *value = ril_config_get_string(file, group, key);
 
 	if (value) {
 		char **values = g_strsplit(value, ",", -1);
 		char **ptr = values;
-		GUtilIntArray* array = gutil_int_array_new();
+		GUtilIntArray *array = gutil_int_array_new();
 
 		while (*ptr) {
 			const char *str = *ptr++;
@@ -141,7 +166,7 @@ char *ril_config_ints_to_string(GUtilInts *ints, char separator)
 	if (ints) {
 		guint i, n;
 		const int *data = gutil_ints_get_data(ints, &n);
-		GString* buf = g_string_new(NULL);
+		GString *buf = g_string_new(NULL);
 
 		for (i=0; i<n; i++) {
 			if (buf->len > 0) {
