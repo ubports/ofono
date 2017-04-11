@@ -152,6 +152,31 @@ done:
 	g_free(cbd);
 }
 
+static void qmi_gprs_read_settings(struct ofono_gprs_context* gc,
+					unsigned int cid,
+					ofono_gprs_context_cb_t cb,
+					void *user_data)
+{
+	struct cb_data *cbd = cb_data_new(cb, user_data);
+	struct gprs_context_data *data = ofono_gprs_context_get_data(gc);
+
+	DBG("cid %u", cid);
+
+	data->active_context = cid;
+
+	cbd->user = gc;
+
+	if (qmi_service_send(data->wds, QMI_WDS_GET_SETTINGS, NULL,
+					get_settings_cb, cbd, NULL) > 0)
+		return;
+
+	data->active_context = 0;
+
+	CALLBACK_WITH_FAILURE(cb, cbd->data);
+
+	g_free(cbd);
+}
+
 static void start_net_cb(struct qmi_result *result, void *user_data)
 {
 	struct cb_data *cbd = user_data;
@@ -449,6 +474,7 @@ static struct ofono_gprs_context_driver driver = {
 	.remove			= qmi_gprs_context_remove,
 	.activate_primary	= qmi_activate_primary,
 	.deactivate_primary	= qmi_deactivate_primary,
+	.read_settings		= qmi_gprs_read_settings,
 };
 
 void qmi_gprs_context_init(void)
