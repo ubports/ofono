@@ -47,7 +47,7 @@ static bool extract_ss_info(struct qmi_result *result, int *status)
 	if (!ss)
 		return false;
 
-	if (ss->ps_state == QMI_NAS_ATTACH_STATUS_ATTACHED)
+	if (ss->ps_state == QMI_NAS_ATTACH_STATE_ATTACHED)
 		*status = 0x01;
 	else
 		*status = 0x00;
