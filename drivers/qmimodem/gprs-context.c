@@ -148,8 +148,6 @@ done:
 	ofono_gprs_context_set_interface(gc, interface);
 
 	CALLBACK_WITH_SUCCESS(cb, cbd->data);
-
-	g_free(cbd);
 }
 
 static void qmi_gprs_read_settings(struct ofono_gprs_context* gc,
@@ -167,7 +165,7 @@ static void qmi_gprs_read_settings(struct ofono_gprs_context* gc,
 	cbd->user = gc;
 
 	if (qmi_service_send(data->wds, QMI_WDS_GET_SETTINGS, NULL,
-					get_settings_cb, cbd, NULL) > 0)
+					get_settings_cb, cbd, g_free) > 0)
 		return;
 
 	data->active_context = 0;
@@ -199,8 +197,12 @@ static void start_net_cb(struct qmi_result *result, void *user_data)
 
 	data->pkt_handle = handle;
 
+	/* Duplicate cbd, the old one will be freed when this method returns */
+	cbd = cb_data_new(cb, user_data);
+	cbd->user = gc;
+
 	if (qmi_service_send(data->wds, QMI_WDS_GET_SETTINGS, NULL,
-					get_settings_cb, cbd, NULL) > 0)
+					get_settings_cb, cbd, g_free) > 0)
 		return;
 
 	modem = ofono_gprs_context_get_modem(gc);
@@ -216,10 +218,7 @@ static void start_net_cb(struct qmi_result *result, void *user_data)
 
 error:
 	data->active_context = 0;
-
 	CALLBACK_WITH_FAILURE(cb, cbd->data);
-
-	g_free(cbd);
 }
 
 static void qmi_activate_primary(struct ofono_gprs_context *gc,
@@ -282,7 +281,7 @@ static void qmi_activate_primary(struct ofono_gprs_context *gc,
 					strlen(ctx->password), ctx->password);
 
 	if (qmi_service_send(data->wds, QMI_WDS_START_NET, param,
-					start_net_cb, cbd, NULL) > 0)
+					start_net_cb, cbd, g_free) > 0)
 		return;
 
 	qmi_param_free(param);
