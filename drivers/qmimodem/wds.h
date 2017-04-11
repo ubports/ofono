@@ -62,6 +62,7 @@ struct qmi_wds_notify_conn_status {
 #define QMI_WDS_RESULT_SECONDARY_DNS		0x16	/* uint32 IPv4 */
 #define QMI_WDS_RESULT_IP_ADDRESS		0x1e	/* uint32 IPv4 */
 #define QMI_WDS_RESULT_GATEWAY			0x20	/* uint32 IPv4 */
+#define QMI_WDS_RESULT_GATEWAY_NETMASK		0x21	/* uint32 IPv4 */
 #define QMI_WDS_RESULT_IP_FAMILY		0x2b	/* uint8 */
 
 #define QMI_WDS_PDP_TYPE_IPV4			0x00
