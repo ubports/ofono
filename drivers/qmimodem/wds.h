@@ -58,6 +58,7 @@ struct qmi_wds_notify_conn_status {
 
 /* Get the runtime data session settings */
 #define QMI_WDS_RESULT_PDP_TYPE			0x11	/* uint8 */
+#define QMI_WDS_RESULT_APN			0x14	/* string */
 #define QMI_WDS_RESULT_PRIMARY_DNS		0x15	/* uint32 IPv4 */
 #define QMI_WDS_RESULT_SECONDARY_DNS		0x16	/* uint32 IPv4 */
 #define QMI_WDS_RESULT_IP_ADDRESS		0x1e	/* uint32 IPv4 */

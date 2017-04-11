@@ -24,6 +24,7 @@
 #endif
 
 #include <string.h>
+#include <arpa/inet.h>
 
 #include <ofono/log.h>
 #include <ofono/modem.h>
@@ -78,17 +79,67 @@ static void get_settings_cb(struct qmi_result *result, void *user_data)
 	struct ofono_modem *modem;
 	const char *interface;
 	uint8_t pdp_type, ip_family;
+	uint32_t ip_addr;
+	struct in_addr addr;
+	char* straddr;
+	char* apn;
+	const char *dns[3] = { NULL, NULL, NULL };
 
 	DBG("");
 
 	if (qmi_result_set_error(result, NULL))
 		goto done;
 
+	apn = qmi_result_get_string(result, QMI_WDS_RESULT_APN);
+	if (apn) {
+		DBG("APN: %s", apn);
+		g_free(apn);
+	}
+
 	if (qmi_result_get_uint8(result, QMI_WDS_RESULT_PDP_TYPE, &pdp_type))
 		DBG("PDP type %d", pdp_type);
 
 	if (qmi_result_get_uint8(result, QMI_WDS_RESULT_IP_FAMILY, &ip_family))
 		DBG("IP family %d", ip_family);
+
+	if (qmi_result_get_uint32(result,QMI_WDS_RESULT_IP_ADDRESS, &ip_addr)) {
+		addr.s_addr = htonl(ip_addr);
+		straddr = inet_ntoa(addr);
+		DBG("IP addr: %s", straddr);
+		ofono_gprs_context_set_ipv4_address(gc, straddr, 1);
+	}
+
+	if (qmi_result_get_uint32(result,QMI_WDS_RESULT_GATEWAY, &ip_addr)) {
+		addr.s_addr = htonl(ip_addr);
+		straddr = inet_ntoa(addr);
+		DBG("Gateway: %s", straddr);
+		ofono_gprs_context_set_ipv4_gateway(gc, straddr);
+	}
+
+	if (qmi_result_get_uint32(result,
+				QMI_WDS_RESULT_GATEWAY_NETMASK, &ip_addr)) {
+		addr.s_addr = htonl(ip_addr);
+		straddr = inet_ntoa(addr);
+		DBG("Gateway netmask: %s", straddr);
+		ofono_gprs_context_set_ipv4_netmask(gc, straddr);
+	}
+
+	if (qmi_result_get_uint32(result,
+				QMI_WDS_RESULT_PRIMARY_DNS, &ip_addr)) {
+		addr.s_addr = htonl(ip_addr);
+		dns[0] = inet_ntoa(addr);
+		DBG("Primary DNS: %s", dns[0]);
+	}
+
+	if (qmi_result_get_uint32(result,
+				QMI_WDS_RESULT_SECONDARY_DNS, &ip_addr)) {
+		addr.s_addr = htonl(ip_addr);
+		dns[1] = inet_ntoa(addr);
+		DBG("Secondary DNS: %s", dns[1]);
+	}
+
+	if (dns[0])
+		ofono_gprs_context_set_ipv4_dns_servers(gc, dns);
 
 done:
 	modem = ofono_gprs_context_get_modem(gc);
