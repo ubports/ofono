@@ -165,7 +165,7 @@ static void gemalto_set_online(struct ofono_modem *modem, ofono_bool_t online,
 {
 	struct gemalto_data *data = ofono_modem_get_data(modem);
 	struct cb_data *cbd = cb_data_new(cb, user_data);
-	char const *command = online ? "AT+CFUN=1" : "AT+CFUN=0";
+	char const *command = online ? "AT+CFUN=1" : "AT+CFUN=4";
 
 	DBG("modem %p %s", modem, online ? "online" : "offline");
 
