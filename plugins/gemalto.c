@@ -34,18 +34,11 @@
 #include <ofono/plugin.h>
 #include <ofono/log.h>
 #include <ofono/modem.h>
-#include <ofono/call-barring.h>
-#include <ofono/call-forwarding.h>
-#include <ofono/call-meter.h>
-#include <ofono/call-settings.h>
 #include <ofono/devinfo.h>
-#include <ofono/message-waiting.h>
 #include <ofono/netreg.h>
 #include <ofono/phonebook.h>
 #include <ofono/sim.h>
 #include <ofono/sms.h>
-#include <ofono/ussd.h>
-#include <ofono/voicecall.h>
 #include <ofono/gprs.h>
 #include <ofono/gprs-context.h>
 #include <ofono/location-reporting.h>
@@ -193,7 +186,6 @@ static void gemalto_pre_sim(struct ofono_modem *modem)
 
 	ofono_devinfo_create(modem, 0, "atmodem", data->app);
 	sim = ofono_sim_create(modem, 0, "atmodem", data->app);
-	ofono_voicecall_create(modem, 0, "atmodem", data->app);
 	ofono_location_reporting_create(modem, 0, "gemaltomodem", data->app);
 
 	if (sim)
@@ -203,39 +195,29 @@ static void gemalto_pre_sim(struct ofono_modem *modem)
 static void gemalto_post_sim(struct ofono_modem *modem)
 {
 	struct gemalto_data *data = ofono_modem_get_data(modem);
+	struct ofono_gprs *gprs;
+	struct ofono_gprs_context *gc;
 
 	DBG("%p", modem);
 
 	ofono_phonebook_create(modem, 0, "atmodem", data->app);
 
 	ofono_sms_create(modem, 0, "atmodem", data->app);
-}
-
-static void gemalto_post_online(struct ofono_modem *modem)
-{
-	struct gemalto_data *data = ofono_modem_get_data(modem);
-	struct ofono_message_waiting *mw;
-	struct ofono_gprs *gprs;
-	struct ofono_gprs_context *gc;
-
-	DBG("%p", modem);
-
-	ofono_ussd_create(modem, 0, "atmodem", data->app);
-	ofono_call_forwarding_create(modem, 0, "atmodem", data->app);
-	ofono_call_settings_create(modem, 0, "atmodem", data->app);
-	ofono_netreg_create(modem, OFONO_VENDOR_CINTERION, "atmodem", data->app);
-	ofono_call_meter_create(modem, 0, "atmodem", data->app);
-	ofono_call_barring_create(modem, 0, "atmodem", data->app);
 
 	gprs = ofono_gprs_create(modem, 0, "atmodem", data->app);
 	gc = ofono_gprs_context_create(modem, 0, "atmodem", data->mdm);
 
 	if (gprs && gc)
 		ofono_gprs_add_context(gprs, gc);
+}
 
-	mw = ofono_message_waiting_create(modem);
-	if (mw)
-		ofono_message_waiting_register(mw);
+static void gemalto_post_online(struct ofono_modem *modem)
+{
+	struct gemalto_data *data = ofono_modem_get_data(modem);
+
+	DBG("%p", modem);
+
+	ofono_netreg_create(modem, OFONO_VENDOR_CINTERION, "atmodem", data->app);
 }
 
 static struct ofono_modem_driver gemalto_driver = {
