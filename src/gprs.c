@@ -982,6 +982,7 @@ static void pri_read_settings_callback(const struct ofono_error *error,
 {
 	struct pri_context *pri_ctx = data;
 	struct ofono_gprs_context *gc = pri_ctx->context_driver;
+	struct ofono_gprs *gprs = pri_ctx->gprs;
 	DBusConnection *conn = ofono_dbus_get_connection();
 	dbus_bool_t value;
 
@@ -1006,11 +1007,18 @@ static void pri_read_settings_callback(const struct ofono_error *error,
 
 	value = pri_ctx->active;
 
-	gprs_set_attached_property(pri_ctx->gprs, TRUE);
+	gprs->flags &= !GPRS_FLAG_ATTACHING;
+
+	gprs_set_attached_property(gprs, TRUE);
 
 	ofono_dbus_signal_property_changed(conn, pri_ctx->path,
 					OFONO_CONNECTION_CONTEXT_INTERFACE,
 					"Active", DBUS_TYPE_BOOLEAN, &value);
+
+	if (gprs->flags & GPRS_FLAG_RECHECK) {
+		gprs->flags &= ~GPRS_FLAG_RECHECK;
+		gprs_netreg_update(gprs);
+	}
 }
 
 static DBusMessage *pri_set_apn(struct pri_context *ctx, DBusConnection *conn,
@@ -2030,6 +2038,14 @@ void ofono_gprs_cid_activated(struct ofono_gprs  *gprs, unsigned int cid,
 		DBusConnection *conn = ofono_dbus_get_connection();
 		pri_set_apn(pri_ctx, conn, NULL, apn);
 	}
+
+	/* Prevent ofono_gprs_status_notify from changing the 'attached'
+	 * state until after the context has been set to 'active' in
+	 * the pri_read_settings_callback; this prevents a race where
+	 * the connection manager sees the modem as attached before there
+	 * is an active context.
+	 */
+	gprs->flags |= GPRS_FLAG_ATTACHING;
 
 	gc->driver->read_settings(gc, cid, pri_read_settings_callback, pri_ctx);
 }
