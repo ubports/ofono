@@ -198,7 +198,7 @@ static void start_net_cb(struct qmi_result *result, void *user_data)
 	data->pkt_handle = handle;
 
 	/* Duplicate cbd, the old one will be freed when this method returns */
-	cbd = cb_data_new(cb, user_data);
+	cbd = cb_data_new(cb, cbd->data);
 	cbd->user = gc;
 
 	if (qmi_service_send(data->wds, QMI_WDS_GET_SETTINGS, NULL,
