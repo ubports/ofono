@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2016 Jolla Ltd.
+ *  Copyright (C) 2016-2017 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -16,6 +16,8 @@
 #include "ril_plugin.h"
 #include "ril_sim_info.h"
 #include "ril_log.h"
+
+#include <gutil_misc.h>
 
 #include <ofono/dbus.h>
 
@@ -32,7 +34,7 @@ enum sim_info_event_id {
 };
 
 struct ril_sim_info_dbus {
-	struct ril_modem *md;
+	struct ril_modem *modem;
 	struct ril_sim_info *info;
 	DBusConnection *conn;
 	char *path;
@@ -113,35 +115,43 @@ static DBusMessage *ril_sim_info_dbus_get_spn(DBusConnection *conn,
 	return ril_sim_info_dbus_reply_with_string(msg, dbus->info->spn);
 }
 
+#define RIL_SIM_INFO_DBUS_VERSION_ARG   {"version", "i"}
+#define RIL_SIM_INFO_DBUS_ICCID_ARG     {"iccid", "s"}
+#define RIL_SIM_INFO_DBUS_IMSI_ARG      {"imsi", "s"}
+#define RIL_SIM_INFO_DBUS_SPN_ARG       {"spn" , "s"}
+
+#define RIL_SIM_INFO_DBUS_GET_ALL_ARGS \
+	RIL_SIM_INFO_DBUS_VERSION_ARG, \
+	RIL_SIM_INFO_DBUS_ICCID_ARG, \
+	RIL_SIM_INFO_DBUS_IMSI_ARG, \
+	RIL_SIM_INFO_DBUS_SPN_ARG
+
 static const GDBusMethodTable ril_sim_info_dbus_methods[] = {
 	{ GDBUS_METHOD("GetAll",
-			NULL, GDBUS_ARGS({"version", "i" },
-					 {"iccid", "s" },
-					 {"imsi", "s" }, 
-					 {"spn" , "s"}),
+			NULL, GDBUS_ARGS(RIL_SIM_INFO_DBUS_GET_ALL_ARGS),
 			ril_sim_info_dbus_get_all) },
 	{ GDBUS_METHOD("GetInterfaceVersion",
-			NULL, GDBUS_ARGS({ "version", "i" }),
+			NULL, GDBUS_ARGS(RIL_SIM_INFO_DBUS_VERSION_ARG),
 			ril_sim_info_dbus_get_version) },
 	{ GDBUS_METHOD("GetCardIdentifier",
-			NULL, GDBUS_ARGS({ "iccid", "s" }),
+			NULL, GDBUS_ARGS(RIL_SIM_INFO_DBUS_ICCID_ARG),
 			ril_sim_info_dbus_get_iccid) },
 	{ GDBUS_METHOD("GetSubscriberIdentity",
-			NULL, GDBUS_ARGS({ "imsi", "s" }),
+			NULL, GDBUS_ARGS(RIL_SIM_INFO_DBUS_IMSI_ARG),
 			ril_sim_info_dbus_get_imsi) },
 	{ GDBUS_METHOD("GetServiceProviderName",
-			NULL, GDBUS_ARGS({ "spn", "s" }),
+			NULL, GDBUS_ARGS(RIL_SIM_INFO_DBUS_SPN_ARG),
 			ril_sim_info_dbus_get_spn) },
 	{ }
 };
 
 static const GDBusSignalTable ril_sim_info_dbus_signals[] = {
 	{ GDBUS_SIGNAL(RIL_SIM_INFO_DBUS_ICCID_CHANGED_SIGNAL,
-			GDBUS_ARGS({ "iccid", "s" })) },
+			GDBUS_ARGS(RIL_SIM_INFO_DBUS_ICCID_ARG)) },
 	{ GDBUS_SIGNAL(RIL_SIM_INFO_DBUS_IMSI_CHANGED_SIGNAL,
-			GDBUS_ARGS({ "imsi", "s" })) },
+			GDBUS_ARGS(RIL_SIM_INFO_DBUS_IMSI_ARG)) },
 	{ GDBUS_SIGNAL(RIL_SIM_INFO_DBUS_SPN_CHANGED_SIGNAL,
-			GDBUS_ARGS({ "spn", "s" })) },
+			GDBUS_ARGS(RIL_SIM_INFO_DBUS_SPN_ARG)) },
 	{ }
 };
 
@@ -156,23 +166,20 @@ static void ril_sim_info_dbus_emit(struct ril_sim_info_dbus *dbus,
 
 static void ril_sim_info_dbus_iccid_cb(struct ril_sim_info *info, void *arg)
 {
-	struct ril_sim_info_dbus *dbus = arg;
-	ril_sim_info_dbus_emit(dbus, RIL_SIM_INFO_DBUS_ICCID_CHANGED_SIGNAL,
-								info->iccid);
+	ril_sim_info_dbus_emit((struct ril_sim_info_dbus *)arg,
+			RIL_SIM_INFO_DBUS_ICCID_CHANGED_SIGNAL, info->iccid);
 }
 
 static void ril_sim_info_dbus_imsi_cb(struct ril_sim_info *info, void *arg)
 {
-	struct ril_sim_info_dbus *dbus = arg;
-	ril_sim_info_dbus_emit(dbus, RIL_SIM_INFO_DBUS_IMSI_CHANGED_SIGNAL,
-								info->imsi);
+	ril_sim_info_dbus_emit((struct ril_sim_info_dbus *)arg,
+			RIL_SIM_INFO_DBUS_IMSI_CHANGED_SIGNAL, info->imsi);
 }
 
 static void ril_sim_info_dbus_spn_cb(struct ril_sim_info *info, void *arg)
 {
-	struct ril_sim_info_dbus *dbus = arg;
-	ril_sim_info_dbus_emit(dbus, RIL_SIM_INFO_DBUS_SPN_CHANGED_SIGNAL,
-								info->spn);
+	ril_sim_info_dbus_emit((struct ril_sim_info_dbus *)arg,
+			RIL_SIM_INFO_DBUS_SPN_CHANGED_SIGNAL, info->spn);
 }
 
 struct ril_sim_info_dbus *ril_sim_info_dbus_new(struct ril_modem *md,
@@ -181,7 +188,7 @@ struct ril_sim_info_dbus *ril_sim_info_dbus_new(struct ril_modem *md,
 	struct ril_sim_info_dbus *dbus = g_new0(struct ril_sim_info_dbus, 1);
 
 	DBG("%s", ril_modem_get_path(md));
-	dbus->md = md;
+	dbus->modem = md;
 	dbus->path = g_strdup(ril_modem_get_path(md));
 	dbus->info = ril_sim_info_ref(info);
 	dbus->conn = dbus_connection_ref(ofono_dbus_get_connection());
@@ -205,7 +212,7 @@ struct ril_sim_info_dbus *ril_sim_info_dbus_new(struct ril_modem *md,
 
 		return dbus;
 	} else {
-		ofono_error("CellInfo D-Bus register failed");
+		ofono_error("SimInfo D-Bus register failed");
 		ril_sim_info_dbus_free(dbus);
 		return NULL;
 	}
@@ -214,19 +221,15 @@ struct ril_sim_info_dbus *ril_sim_info_dbus_new(struct ril_modem *md,
 void ril_sim_info_dbus_free(struct ril_sim_info_dbus *dbus)
 {
 	if (dbus) {
-		unsigned int i;
-
 		DBG("%s", dbus->path);
 		g_dbus_unregister_interface(dbus->conn, dbus->path,
 						RIL_SIM_INFO_DBUS_INTERFACE);
-		ofono_modem_remove_interface(dbus->md->ofono,
+		ofono_modem_remove_interface(dbus->modem->ofono,
 						RIL_SIM_INFO_DBUS_INTERFACE);
 		dbus_connection_unref(dbus->conn);
 
-		for (i=0; i<G_N_ELEMENTS(dbus->handler_id); i++) {
-			ril_sim_info_remove_handler(dbus->info,
-							dbus->handler_id[i]);
-		}
+		gutil_disconnect_handlers(dbus->info, dbus->handler_id,
+					  G_N_ELEMENTS(dbus->handler_id));
 		ril_sim_info_unref(dbus->info);
 
 		g_free(dbus->path);
