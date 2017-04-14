@@ -150,31 +150,6 @@ done:
 	CALLBACK_WITH_SUCCESS(cb, cbd->data);
 }
 
-static void qmi_gprs_read_settings(struct ofono_gprs_context* gc,
-					unsigned int cid,
-					ofono_gprs_context_cb_t cb,
-					void *user_data)
-{
-	struct cb_data *cbd = cb_data_new(cb, user_data);
-	struct gprs_context_data *data = ofono_gprs_context_get_data(gc);
-
-	DBG("cid %u", cid);
-
-	data->active_context = cid;
-
-	cbd->user = gc;
-
-	if (qmi_service_send(data->wds, QMI_WDS_GET_SETTINGS, NULL,
-					get_settings_cb, cbd, g_free) > 0)
-		return;
-
-	data->active_context = 0;
-
-	CALLBACK_WITH_FAILURE(cb, cbd->data);
-
-	g_free(cbd);
-}
-
 static void start_net_cb(struct qmi_result *result, void *user_data)
 {
 	struct cb_data *cbd = user_data;
@@ -212,12 +187,41 @@ static void start_net_cb(struct qmi_result *result, void *user_data)
 
 	CALLBACK_WITH_SUCCESS(cb, cbd->data);
 
-	g_free(cbd);
-
 	return;
 
 error:
 	data->active_context = 0;
+	CALLBACK_WITH_FAILURE(cb, cbd->data);
+}
+
+/*
+ * This function gets called for "automatic" contexts, those which are
+ * not activated via activate_primary.  For these, we will still need
+ * to call start_net in order to get the packet handle for the context.
+ * The process for automatic contexts is essentially identical to that
+ * for others.
+ */
+static void qmi_gprs_read_settings(struct ofono_gprs_context* gc,
+					unsigned int cid,
+					ofono_gprs_context_cb_t cb,
+					void *user_data)
+{
+	struct gprs_context_data *data = ofono_gprs_context_get_data(gc);
+	struct cb_data *cbd;
+
+	DBG("cid %u", cid);
+
+	data->active_context = cid;
+
+	cbd  = cb_data_new(cb, user_data);
+	cbd->user = gc;
+
+	if (qmi_service_send(data->wds, QMI_WDS_START_NET, NULL,
+					start_net_cb, cbd, g_free) > 0)
+		return;
+
+	data->active_context = 0;
+
 	CALLBACK_WITH_FAILURE(cb, cbd->data);
 }
 
