@@ -1270,6 +1270,7 @@ static void pri_read_settings_callback(const struct ofono_error *error,
 
 	gprs->flags &= !GPRS_FLAG_ATTACHING;
 
+	gprs->driver_attached = TRUE;
 	gprs_set_attached_property(gprs, TRUE);
 
 	ofono_dbus_signal_property_changed(conn, pri_ctx->path,
