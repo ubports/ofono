@@ -88,7 +88,7 @@ static bool extract_ss_info(struct qmi_result *result, int *status,
 	if (qmi_result_get_uint8(result, QMI_NAS_RESULT_ROAMING_STATUS,
 								&roaming)) {
 		if (ss->status == 1 && roaming == 0)
-			*status = 5;
+			*status = NETWORK_REGISTRATION_STATUS_ROAMING;
 	}
 
 	if (!operator)
