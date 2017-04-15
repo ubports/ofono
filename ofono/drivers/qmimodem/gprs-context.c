@@ -309,14 +309,19 @@ static void stop_net_cb(struct qmi_result *result, void *user_data)
 	DBG("");
 
 	if (qmi_result_set_error(result, NULL)) {
-		CALLBACK_WITH_FAILURE(cb, cbd->data);
+		if (cb)
+			CALLBACK_WITH_FAILURE(cb, cbd->data);
 		return;
 	}
 
-	data->active_context = 0;
 	data->pkt_handle = 0;
 
-	CALLBACK_WITH_SUCCESS(cb, cbd->data);
+	if (cb)
+		CALLBACK_WITH_SUCCESS(cb, cbd->data);
+	else
+		ofono_gprs_context_deactivated(gc, data->active_context);
+
+	data->active_context = 0;
 }
 
 static void qmi_deactivate_primary(struct ofono_gprs_context *gc,
@@ -343,9 +348,18 @@ static void qmi_deactivate_primary(struct ofono_gprs_context *gc,
 	qmi_param_free(param);
 
 error:
-	CALLBACK_WITH_FAILURE(cb, cbd->data);
+	if (cb)
+		CALLBACK_WITH_FAILURE(cb, user_data);
 
 	g_free(cbd);
+}
+
+static void qmi_gprs_context_detach_shutdown(struct ofono_gprs_context *gc,
+						unsigned int cid)
+{
+	DBG("");
+
+	qmi_deactivate_primary(gc, cid, NULL, NULL);
 }
 
 static void create_wds_cb(struct qmi_service *service, void *user_data)
@@ -476,6 +490,7 @@ static struct ofono_gprs_context_driver driver = {
 	.activate_primary	= qmi_activate_primary,
 	.deactivate_primary	= qmi_deactivate_primary,
 	.read_settings		= qmi_gprs_read_settings,
+	.detach_shutdown	= qmi_gprs_context_detach_shutdown,
 };
 
 void qmi_gprs_context_init(void)
