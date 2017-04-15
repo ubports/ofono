@@ -207,13 +207,12 @@ static void qmi_gprs_read_settings(struct ofono_gprs_context* gc,
 					void *user_data)
 {
 	struct gprs_context_data *data = ofono_gprs_context_get_data(gc);
-	struct cb_data *cbd;
+	struct cb_data *cbd = cb_data_new(cb, user_data);
 
 	DBG("cid %u", cid);
 
 	data->active_context = cid;
 
-	cbd  = cb_data_new(cb, user_data);
 	cbd->user = gc;
 
 	if (qmi_service_send(data->wds, QMI_WDS_START_NET, NULL,
@@ -223,6 +222,8 @@ static void qmi_gprs_read_settings(struct ofono_gprs_context* gc,
 	data->active_context = 0;
 
 	CALLBACK_WITH_FAILURE(cb, cbd->data);
+
+	g_free(cbd);
 }
 
 static void qmi_activate_primary(struct ofono_gprs_context *gc,
