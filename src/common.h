@@ -19,6 +19,10 @@
  *
  */
 
+#include <glib.h>
+
+#include <ofono/types.h>
+
 /* 27.007 Section 7.3 <AcT> */
 enum access_technology {
 	ACCESS_TECHNOLOGY_GSM =			0,
