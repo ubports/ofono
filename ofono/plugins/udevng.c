@@ -847,6 +847,49 @@ static gboolean setup_quectel(struct modem_info *modem)
 	return TRUE;
 }
 
+static gboolean setup_quectelqmi(struct modem_info *modem)
+{
+	const char *qmi = NULL, *net = NULL, *gps = NULL;
+	GSList *list;
+
+	DBG("%s", modem->syspath);
+
+	for (list = modem->devices; list; list = g_slist_next(list)) {
+		struct device_info *info = list->data;
+
+		DBG("%s %s %s %s %s", info->devnode, info->interface,
+				info->number, info->label, info->subsystem);
+
+		if (g_strcmp0(info->interface, "255/255/255") == 0 &&
+				g_strcmp0(info->number, "04") == 0) {
+			if (g_strcmp0(info->subsystem, "net") == 0)
+				net = info->devnode;
+			else if (g_strcmp0(info->subsystem, "usbmisc") == 0)
+				qmi = info->devnode;
+		} else if (g_strcmp0(info->interface, "255/0/0") == 0 &&
+				g_strcmp0(info->number, "02") == 0) {
+			gps = info->devnode;
+		}
+	}
+
+	DBG("qmi=%s net=%s", qmi, net);
+
+	if (qmi == NULL || net == NULL)
+		return FALSE;
+
+	DBG("qmi=%s net=%s", qmi, net);
+
+	ofono_modem_set_string(modem->modem, "Device", qmi);
+	ofono_modem_set_string(modem->modem, "NetworkInterface", net);
+
+	if (gps)
+		ofono_modem_set_string(modem->modem, "GPS", gps);
+
+	ofono_modem_set_driver(modem->modem, "gobi");
+
+	return TRUE;
+}
+
 static gboolean setup_serial_modem(struct modem_info* modem)
 {
 	struct serial_device_info* info;
@@ -1068,6 +1111,7 @@ static struct {
 	{ "icera",	setup_icera	},
 	{ "samsung",	setup_samsung	},
 	{ "quectel",	setup_quectel	},
+	{ "quectelqmi",	setup_quectelqmi},
 	{ "ublox",	setup_ublox	},
 	{ "gemalto",	setup_gemalto	},
 	/* Following are non-USB modems */
@@ -1434,6 +1478,10 @@ static struct {
 	{ "samsung",	"option",	"04e8", "6889"	},
 	{ "samsung",	"kalmia"			},
 	{ "quectel",	"option",	"05c6", "9090"	},
+	{ "quectelqmi",	"qmi_wwan",	"2c7c", "0121"	},
+	{ "quectelqmi",	"qcserial",	"2c7c", "0121"	},
+	{ "quectelqmi",	"qmi_wwan",	"2c7c", "0125"	},
+	{ "quectelqmi",	"qcserial",	"2c7c", "0125"	},
 	{ "ublox",	"cdc_acm",	"1546", "1102"	},
 	{ "ublox",	"rndis_host",	"1546", "1146"	},
 	{ "ublox",	"cdc_acm",	"1546", "1146"	},
