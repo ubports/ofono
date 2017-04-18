@@ -19,6 +19,8 @@
  *
  */
 
+#include <stdint.h>
+
 #define QMI_NAS_RESET			0	/* Reset NAS service state variables */
 #define QMI_NAS_ABORT			1	/* Abort previously issued NAS command */
 #define QMI_NAS_EVENT			2	/* Connection state report indication */
