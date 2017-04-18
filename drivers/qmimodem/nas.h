@@ -162,3 +162,5 @@ struct qmi_nas_home_network {
 	uint8_t desc_len;
 	char desc[0];
 } __attribute__((__packed__));
+
+int qmi_nas_rat_to_tech(uint8_t rat);
