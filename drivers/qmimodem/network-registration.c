@@ -43,20 +43,6 @@ struct netreg_data {
 	uint8_t current_rat;
 };
 
-static int rat_to_tech(uint8_t rat)
-{
-	switch (rat) {
-	case QMI_NAS_NETWORK_RAT_GSM:
-		return ACCESS_TECHNOLOGY_GSM;
-	case QMI_NAS_NETWORK_RAT_UMTS:
-		return ACCESS_TECHNOLOGY_UTRAN;
-	case QMI_NAS_NETWORK_RAT_LTE:
-		return ACCESS_TECHNOLOGY_EUTRAN;
-	}
-
-	return -1;
-}
-
 static bool extract_ss_info(struct qmi_result *result, int *status,
 				int *lac, int *cellid, int *tech,
 				struct ofono_network_operator *operator)
@@ -82,7 +68,7 @@ static bool extract_ss_info(struct qmi_result *result, int *status,
 	for (i = 0; i < ss->radio_if_count; i++) {
 		DBG("radio in use %d", ss->radio_if[i]);
 
-		*tech = rat_to_tech(ss->radio_if[i]);
+		*tech = qmi_nas_rat_to_tech(ss->radio_if[i]);
 	}
 
 	if (qmi_result_get_uint8(result, QMI_NAS_RESULT_ROAMING_STATUS,
@@ -278,7 +264,7 @@ static void scan_nets_cb(struct qmi_result *result, void *user_data)
 		DBG("%03d:%02d %d", netrat->info[i].mcc, netrat->info[i].mnc,
 							netrat->info[i].rat);
 
-		list[i].tech = rat_to_tech(netrat->info[i].rat);
+		list[i].tech = qmi_nas_rat_to_tech(netrat->info[i].rat);
 	}
 
 done:
