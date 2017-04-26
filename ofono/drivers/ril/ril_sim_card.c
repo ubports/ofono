@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2016 Jolla Ltd.
+ *  Copyright (C) 2015-2017 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -63,8 +63,6 @@ G_DEFINE_TYPE(RilSimCard, ril_sim_card, G_TYPE_OBJECT)
 
 #define RIL_SIMCARD_STATE_CHANGED  (0x01)
 #define RIL_SIMCARD_STATUS_CHANGED (0x02)
-
-static void ril_sim_card_request_status(struct ril_sim_card *self);
 
 static gboolean ril_sim_card_app_equal(const struct ril_sim_card_app *a1,
 					const struct ril_sim_card_app *a2)
@@ -365,7 +363,7 @@ static void ril_sim_card_status_cb(GRilIoChannel *io, int ril_status,
 	}
 }
 
-static void ril_sim_card_request_status(struct ril_sim_card *self)
+void ril_sim_card_request_status(struct ril_sim_card *self)
 {
 	struct ril_sim_card_priv *priv = self->priv;
 
