@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2016 Jolla Ltd.
+ *  Copyright (C) 2015-2017 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -85,6 +85,7 @@ struct ril_sim {
 	ofono_sim_passwd_cb_t query_passwd_state_cb;
 	void *query_passwd_state_cb_data;
 	guint query_passwd_state_timeout_id;
+	gulong query_passwd_state_sim_status_refresh_id;
 };
 
 struct ril_sim_io_response {
@@ -691,6 +692,12 @@ static void ril_sim_finish_passwd_state_query(struct ril_sim *sd,
 		sd->query_passwd_state_timeout_id = 0;
 	}
 
+	if (sd->query_passwd_state_sim_status_refresh_id) {
+		ril_sim_card_remove_handler(sd->card,
+			sd->query_passwd_state_sim_status_refresh_id);
+		sd->query_passwd_state_sim_status_refresh_id = 0;
+	}
+
 	if (sd->query_passwd_state_cb) {
 		ofono_sim_passwd_cb_t cb = sd->query_passwd_state_cb;
 		void *data = sd->query_passwd_state_cb_data;
@@ -884,6 +891,15 @@ static void ril_sim_query_pin_retries(struct ofono_sim *sim,
 	cb(ril_error_ok(&error), sd->retries, data);
 }
 
+static void ril_sim_query_passwd_state_complete_cb(struct ril_sim_card *sc,
+							void *user_data)
+{
+	struct ril_sim *sd = user_data;
+
+	GASSERT(sd->query_passwd_state_sim_status_refresh_id);
+	ril_sim_finish_passwd_state_query(sd, ril_sim_passwd_state(sd));
+}
+
 static gboolean ril_sim_query_passwd_state_timeout_cb(gpointer user_data)
 {
 	struct ril_sim *sd = user_data;
@@ -899,29 +915,41 @@ static void ril_sim_query_passwd_state(struct ofono_sim *sim,
 					ofono_sim_passwd_cb_t cb, void *data)
 {
 	struct ril_sim *sd = ril_sim_get_data(sim);
-	enum ofono_sim_password_type passwd_state = ril_sim_passwd_state(sd);
-	struct ofono_error error;
 
 	if (sd->query_passwd_state_timeout_id) {
 		g_source_remove(sd->query_passwd_state_timeout_id);
 		sd->query_passwd_state_timeout_id = 0;
 	}
 
-	if (passwd_state != OFONO_SIM_PASSWORD_INVALID) {
-		DBG_(sd, "%d", passwd_state);
-		sd->query_passwd_state_cb = NULL;
-		sd->query_passwd_state_cb_data = NULL;
-		sd->ofono_passwd_state = passwd_state;
-		cb(ril_error_ok(&error), passwd_state, data);
+	if (!sd->query_passwd_state_sim_status_refresh_id) {
+		ril_sim_card_remove_handler(sd->card,
+			sd->query_passwd_state_sim_status_refresh_id);
+		sd->query_passwd_state_sim_status_refresh_id = 0;
+	}
+
+	/* Always request fresh status, just in case. */
+	ril_sim_card_request_status(sd->card);
+	sd->query_passwd_state_cb = cb;
+	sd->query_passwd_state_cb_data = data;
+
+	if (ril_sim_passwd_state(sd) != OFONO_SIM_PASSWORD_INVALID) {
+		/* Just wait for GET_SIM_STATUS completion */
+		DBG_(sd, "waiting for SIM status query to complete");
+		sd->query_passwd_state_sim_status_refresh_id =
+			ril_sim_card_add_status_received_handler(sd->card,
+				ril_sim_query_passwd_state_complete_cb, sd);
 	} else {
 		/* Wait for the state to change */
 		DBG_(sd, "waiting for the SIM state to change");
-		sd->query_passwd_state_cb = cb;
-		sd->query_passwd_state_cb_data = data;
-		sd->query_passwd_state_timeout_id =
-			g_timeout_add_seconds(SIM_STATE_CHANGE_TIMEOUT_SECS,
-				ril_sim_query_passwd_state_timeout_cb, sd);
 	}
+
+	/*
+	 * We still need to complete the request somehow, even if
+	 * GET_STATUS never completes or SIM status never changes.
+	 */
+	sd->query_passwd_state_timeout_id =
+		g_timeout_add_seconds(SIM_STATE_CHANGE_TIMEOUT_SECS,
+			ril_sim_query_passwd_state_timeout_cb, sd);
 }
 
 static gboolean ril_sim_pin_change_state_timeout_cb(gpointer user_data)
@@ -1278,6 +1306,11 @@ static void ril_sim_remove(struct ofono_sim *sim)
 
 	if (sd->query_passwd_state_timeout_id) {
 		g_source_remove(sd->query_passwd_state_timeout_id);
+	}
+
+	if (sd->query_passwd_state_sim_status_refresh_id) {
+		ril_sim_card_remove_handler(sd->card,
+			sd->query_passwd_state_sim_status_refresh_id);
 	}
 
 	ril_sim_card_remove_handler(sd->card, sd->card_status_id);
