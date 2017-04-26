@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2016 Jolla Ltd.
+ *  Copyright (C) 2015-2017 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -55,6 +55,7 @@ typedef void (*ril_sim_card_cb_t)(struct ril_sim_card *sc, void *arg);
 struct ril_sim_card *ril_sim_card_new(GRilIoChannel *io, guint slot, int flags);
 struct ril_sim_card *ril_sim_card_ref(struct ril_sim_card *sc);
 void ril_sim_card_unref(struct ril_sim_card *sc);
+void ril_sim_card_request_status(struct ril_sim_card *self);
 gboolean ril_sim_card_ready(struct ril_sim_card *sc);
 gulong ril_sim_card_add_status_received_handler(struct ril_sim_card *sc,
 					ril_sim_card_cb_t cb, void *arg);
