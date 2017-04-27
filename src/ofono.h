@@ -386,6 +386,9 @@ void __ofono_sim_refresh(struct ofono_sim *sim, GSList *file_list,
 
 void __ofono_sim_recheck_pin(struct ofono_sim *sim);
 
+enum ofono_sim_password_type __ofono_sim_puk2pin(
+					enum ofono_sim_password_type type);
+
 #include <ofono/stk.h>
 
 typedef void (*__ofono_sms_sim_download_cb_t)(ofono_bool_t ok,
