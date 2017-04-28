@@ -555,9 +555,9 @@ static struct ofono_modem *modem_register_from_proxy(GDBusProxy *proxy,
 
 	dbus_message_iter_get_basic(&iter, &paired);
 
-	if (paired == FALSE) {
-		modem = ofono_modem_find(device_path_compare, (void *) path);
+	modem = ofono_modem_find(device_path_compare, (void *) path);
 
+	if (paired == FALSE) {
 		if (modem != NULL) {
 			ofono_modem_remove(modem);
 			g_dbus_proxy_set_removed_watch(proxy, NULL, NULL);
@@ -565,6 +565,9 @@ static struct ofono_modem *modem_register_from_proxy(GDBusProxy *proxy,
 		}
 		return NULL;
 	}
+
+	if (modem)
+		return modem;
 
 	if (g_dbus_proxy_get_property(proxy, "UUIDs", &iter) == FALSE)
 		return NULL;
@@ -808,7 +811,8 @@ static void property_changed(GDBusProxy *proxy, const char *name,
 	if (g_str_equal(BLUEZ_DEVICE_INTERFACE, interface) == FALSE)
 		return;
 
-	if (g_str_equal("Paired", name) != TRUE)
+	if (g_str_equal("Paired", name) != TRUE &&
+			g_str_equal("ServicesResolved", name) != TRUE)
 		return;
 
 	modem_register_from_proxy(proxy, path);
