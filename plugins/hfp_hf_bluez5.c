@@ -499,6 +499,96 @@ static int get_version(DBusMessageIter *iter, uint16_t *version)
 	return -ENOENT;
 }
 
+static gboolean has_hfp_ag_uuid(DBusMessageIter *array)
+{
+	DBusMessageIter value;
+
+	if (dbus_message_iter_get_arg_type(array) != DBUS_TYPE_ARRAY)
+		return FALSE;
+
+	dbus_message_iter_recurse(array, &value);
+
+	while (dbus_message_iter_get_arg_type(&value) == DBUS_TYPE_STRING) {
+		const char *uuid;
+
+		dbus_message_iter_get_basic(&value, &uuid);
+
+		if (g_str_equal(uuid, HFP_AG_UUID) == TRUE)
+			return TRUE;
+
+		dbus_message_iter_next(&value);
+	}
+
+	return FALSE;
+}
+
+static void modem_removed(GDBusProxy *proxy, void *user_data)
+{
+	struct ofono_modem *modem = user_data;
+
+	ofono_modem_remove(modem);
+}
+
+static void alias_changed(GDBusProxy *proxy, const char *name,
+					DBusMessageIter *iter, void *user_data)
+{
+	const char *alias;
+	struct ofono_modem *modem = user_data;
+
+	if (g_str_equal("Alias", name) == FALSE)
+		return;
+
+	dbus_message_iter_get_basic(iter, &alias);
+	ofono_modem_set_name(modem, alias);
+}
+
+static struct ofono_modem *modem_register_from_proxy(GDBusProxy *proxy,
+							const char *path)
+{
+	const char *alias, *remote;
+	DBusMessageIter iter;
+	dbus_bool_t paired;
+	struct ofono_modem *modem;
+
+	if (g_dbus_proxy_get_property(proxy, "Paired", &iter) == FALSE)
+		return NULL;
+
+	dbus_message_iter_get_basic(&iter, &paired);
+
+	if (paired == FALSE) {
+		modem = ofono_modem_find(device_path_compare, (void *) path);
+
+		if (modem != NULL) {
+			ofono_modem_remove(modem);
+			g_dbus_proxy_set_removed_watch(proxy, NULL, NULL);
+			g_dbus_proxy_set_property_watch(proxy, NULL, NULL);
+		}
+		return NULL;
+	}
+
+	if (g_dbus_proxy_get_property(proxy, "UUIDs", &iter) == FALSE)
+		return NULL;
+
+	if (has_hfp_ag_uuid(&iter) == FALSE)
+		return NULL;
+
+	if (g_dbus_proxy_get_property(proxy, "Alias", &iter) == FALSE)
+		return NULL;
+
+	dbus_message_iter_get_basic(&iter, &alias);
+
+	if (g_dbus_proxy_get_property(proxy, "Address", &iter) == FALSE)
+		return NULL;
+
+	dbus_message_iter_get_basic(&iter, &remote);
+
+	modem = modem_register(path, remote, alias);
+	g_dbus_proxy_set_property_watch(proxy, alias_changed, modem);
+	g_dbus_proxy_set_removed_watch(proxy, modem_removed, modem);
+
+	return modem;
+}
+
 static DBusMessage *profile_new_connection(DBusConnection *conn,
 					DBusMessage *msg, void *user_data)
 {
@@ -541,10 +631,18 @@ static DBusMessage *profile_new_connection(DBusConnection *conn,
 
 	modem = ofono_modem_find(device_path_compare, (void *) device);
 	if (modem == NULL) {
-		close(fd);
-		return g_dbus_create_error(msg, BLUEZ_ERROR_INTERFACE
-					".Rejected",
-					"Unknown Bluetooth device");
+		GDBusProxy *proxy;
+
+		proxy = g_dbus_proxy_new(bluez, device, BLUEZ_DEVICE_INTERFACE);
+		modem = modem_register_from_proxy(proxy, device);
+		g_dbus_proxy_unref(proxy);
+
+		if (!modem) {
+			close(fd);
+			return g_dbus_create_error(msg, BLUEZ_ERROR_INTERFACE
+						".Rejected",
+						"Unknown Bluetooth device");
+		}
 	}
 
 	err = service_level_connection(modem, fd, version);
@@ -684,93 +782,6 @@ static void connect_handler(DBusConnection *conn, void *user_data)
 
 	bt_register_profile(conn, HFP_HS_UUID, HFP_VERSION_1_7, "hfp_hf",
 					HFP_EXT_PROFILE_PATH, NULL, features);
-}
-
-static gboolean has_hfp_ag_uuid(DBusMessageIter *array)
-{
-	DBusMessageIter value;
-
-	if (dbus_message_iter_get_arg_type(array) != DBUS_TYPE_ARRAY)
-		return FALSE;
-
-	dbus_message_iter_recurse(array, &value);
-
-	while (dbus_message_iter_get_arg_type(&value) == DBUS_TYPE_STRING) {
-		const char *uuid;
-
-		dbus_message_iter_get_basic(&value, &uuid);
-
-		if (g_str_equal(uuid, HFP_AG_UUID) == TRUE)
-			return TRUE;
-
-		dbus_message_iter_next(&value);
-	}
-
-	return FALSE;
-}
-
-static void modem_removed(GDBusProxy *proxy, void *user_data)
-{
-	struct ofono_modem *modem = user_data;
-
-	ofono_modem_remove(modem);
-}
-
-static void alias_changed(GDBusProxy *proxy, const char *name,
-					DBusMessageIter *iter, void *user_data)
-{
-	const char *alias;
-	struct ofono_modem *modem = user_data;
-
-	if (g_str_equal("Alias", name) == FALSE)
-		return;
-
-	dbus_message_iter_get_basic(iter, &alias);
-	ofono_modem_set_name(modem, alias);
-}
-
-static void modem_register_from_proxy(GDBusProxy *proxy, const char *path)
-{
-	const char *alias, *remote;
-	DBusMessageIter iter;
-	dbus_bool_t paired;
-	struct ofono_modem *modem;
-
-	if (g_dbus_proxy_get_property(proxy, "Paired", &iter) == FALSE)
-		return;
-
-	dbus_message_iter_get_basic(&iter, &paired);
-
-	if (paired == FALSE) {
-		modem = ofono_modem_find(device_path_compare, (void *) path);
-
-		if (modem != NULL) {
-			ofono_modem_remove(modem);
-			g_dbus_proxy_set_removed_watch(proxy, NULL, NULL);
-			g_dbus_proxy_set_property_watch(proxy, NULL, NULL);
-		}
-		return;
-	}
-
-	if (g_dbus_proxy_get_property(proxy, "UUIDs", &iter) == FALSE)
-		return;
-
-	if (has_hfp_ag_uuid(&iter) == FALSE)
-		return;
-
-	if (g_dbus_proxy_get_property(proxy, "Alias", &iter) == FALSE)
-		return;
-
-	dbus_message_iter_get_basic(&iter, &alias);
-
-	if (g_dbus_proxy_get_property(proxy, "Address", &iter) == FALSE)
-		return;
-
-	dbus_message_iter_get_basic(&iter, &remote);
-
-	modem = modem_register(path, remote, alias);
-	g_dbus_proxy_set_property_watch(proxy, alias_changed, modem);
-	g_dbus_proxy_set_removed_watch(proxy, modem_removed, modem);
 }
 
 static void proxy_added(GDBusProxy *proxy, void *user_data)
