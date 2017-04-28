@@ -65,6 +65,13 @@
  *
  * The same applies to the app_type.
  */
+
+enum ril_sim_card_event {
+	SIM_CARD_STATUS_EVENT,
+	SIM_CARD_APP_EVENT,
+	SIM_CARD_EVENT_COUNT
+};
+
 struct ril_sim {
 	GRilIoChannel *io;
 	GRilIoQueue *q;
@@ -76,7 +83,7 @@ struct ril_sim {
 	gboolean empty_pin_query_allowed;
 	gboolean inserted;
 	guint idle_id;
-	gulong card_status_id;
+	gulong card_event_id[SIM_CARD_EVENT_COUNT];
 	guint query_pin_retries_id;
 
 	const char *log_prefix;
@@ -759,6 +766,34 @@ static void ril_sim_finish_passwd_state_query(struct ril_sim *sd,
 	}
 }
 
+static void ril_sim_check_perm_lock(struct ril_sim *sd)
+{
+	struct ril_sim_card *sc = sd->card;
+
+	/*
+	 * Zero number of retries in the PUK state indicates to the ofono
+	 * client that the card is permanently locked. This is different
+	 * from the case when the number of retries is negative (which
+	 * means that PUK is required but the number of remaining attempts
+	 * is not available).
+	 */
+	if (sc->app && sc->app->app_state == RIL_APPSTATE_PUK &&
+		sc->app->pin1_state == RIL_PINSTATE_ENABLED_PERM_BLOCKED) {
+
+		/*
+		 * It makes no sense for RIL to return non-zero number of
+		 * remaining attempts in PERM_LOCKED state. So when we get
+		 * here, the number of retries has to be negative (unknown)
+		 * or zero. Otherwise, something must be broken.
+		 */
+		GASSERT(sd->retries[OFONO_SIM_PASSWORD_SIM_PUK] <= 0);
+		if (sd->retries[OFONO_SIM_PASSWORD_SIM_PUK] < 0) {
+			sd->retries[OFONO_SIM_PASSWORD_SIM_PUK] = 0;
+			DBG_(sd, "SIM card is locked");
+		}
+	}
+}
+
 static void ril_sim_invalidate_passwd_state(struct ril_sim *sd)
 {
 	guint i;
@@ -768,10 +803,16 @@ static void ril_sim_invalidate_passwd_state(struct ril_sim *sd)
 		sd->retries[i] = -1;
 	}
 
+	ril_sim_check_perm_lock(sd);
 	ril_sim_finish_passwd_state_query(sd, OFONO_SIM_PASSWORD_INVALID);
 }
 
-static void ril_sim_status_cb(struct ril_sim_card *sc, void *user_data)
+static void ril_sim_app_changed_cb(struct ril_sim_card *sc, void *user_data)
+{
+	ril_sim_check_perm_lock((struct ril_sim *)user_data);
+}
+
+static void ril_sim_status_changed_cb(struct ril_sim_card *sc, void *user_data)
 {
 	struct ril_sim *sd = user_data;
 
@@ -780,6 +821,7 @@ static void ril_sim_status_cb(struct ril_sim_card *sc, void *user_data)
 		if (sc->app) {
 			enum ofono_sim_password_type ps;
 
+			ril_sim_check_perm_lock(sd);
 			if (!sd->inserted) {
 				sd->inserted = TRUE;
 				ofono_info("SIM card OK");
@@ -870,21 +912,6 @@ static struct ril_sim_retry_query_cbd *ril_sim_retry_query_cbd_new(
 	cbd->data = data;
 	cbd->query_index = query_index;
 	return cbd;
-}
-
-static gboolean ril_sim_can_query_retry_count(struct ril_sim *sd,
-					enum ofono_sim_password_type type)
-{
-	if (sd->empty_pin_query_allowed) {
-		guint i;
-
-		for (i = 0; i < G_N_ELEMENTS(ril_sim_retry_query_types); i++) {
-			if (ril_sim_retry_query_types[i].passwd_type == type) {
-				return TRUE;
-			}
-		}
-	}
-	return FALSE;
 }
 
 static gboolean ril_sim_query_retry_count(struct ril_sim *sd,
@@ -1085,20 +1112,25 @@ static void ril_sim_pin_change_state_cb(GRilIoChannel *io, int ril_status,
 	DBG_(sd, "result=%d passwd_type=%d retry_count=%d",
 			ril_status, cbd->passwd_type, retry_count);
 
-	if (ril_status == RIL_E_SUCCESS && retry_count == 0 &&
-				ril_sim_can_query_retry_count(sd, type)) {
+	if (ril_status == RIL_E_SUCCESS && retry_count == 0) {
 		enum ofono_sim_password_type associated_pin =
 						__ofono_sim_puk2pin(type);
-		/* Will query it */
+		/*
+		 * If PIN/PUK request has succeeded, zero retry count
+		 * makes no sense, we have to assume that it's unknown.
+		 * If it can be queried, it will be queried later. If
+		 * it can't be queried it will remain unknown.
+		 */
 		sd->retries[type] = -1;
 		if (associated_pin != OFONO_SIM_PASSWORD_INVALID) {
-			/* Query PIN retry count too */
+			/* Successful PUK requests affect PIN retry count */
 			sd->retries[associated_pin] = -1;
 		}
 	} else {
 		sd->retries[type] = retry_count;
 	}
 
+	ril_sim_check_perm_lock(sd);
 	cbd->ril_status = ril_status;
 	if (cbd->card_status_id && (!cbd->state_event_count ||
 					ril_sim_app_in_transient_state(sd))) {
@@ -1356,11 +1388,15 @@ static gboolean ril_sim_register(gpointer user)
 	ofono_sim_register(sd->sim);
 
 	/* Register for change notifications */
-	sd->card_status_id = ril_sim_card_add_status_changed_handler(sd->card,
-						ril_sim_status_cb, sd);
+	sd->card_event_id[SIM_CARD_STATUS_EVENT] =
+		ril_sim_card_add_status_changed_handler(sd->card,
+					ril_sim_status_changed_cb, sd);
+	sd->card_event_id[SIM_CARD_APP_EVENT] =
+		ril_sim_card_add_app_changed_handler(sd->card,
+					ril_sim_app_changed_cb, sd);
 
 	/* Check the current state */
-	ril_sim_status_cb(sd->card, sd);
+	ril_sim_status_changed_cb(sd->card, sd);
 	return FALSE;
 }
 
@@ -1412,7 +1448,8 @@ static void ril_sim_remove(struct ofono_sim *sim)
 			sd->query_passwd_state_sim_status_refresh_id);
 	}
 
-	ril_sim_card_remove_handler(sd->card, sd->card_status_id);
+	ril_sim_card_remove_handlers(sd->card, sd->card_event_id,
+					G_N_ELEMENTS(sd->card_event_id));
 	ril_sim_card_unref(sd->card);
 
 	grilio_channel_unref(sd->io);
