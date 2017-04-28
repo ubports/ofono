@@ -197,7 +197,10 @@ static gboolean password_is_pin(enum ofono_sim_password_type type)
 	return FALSE;
 }
 
-static enum ofono_sim_password_type puk2pin(enum ofono_sim_password_type type)
+#define puk2pin(type) __ofono_sim_puk2pin(type)
+
+enum ofono_sim_password_type __ofono_sim_puk2pin(
+					enum ofono_sim_password_type type)
 {
 	switch (type) {
 	case OFONO_SIM_PASSWORD_SIM_PUK:
