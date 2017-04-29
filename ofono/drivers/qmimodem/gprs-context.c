@@ -421,7 +421,7 @@ static void get_data_format_cb(struct qmi_result *result, void *user_data)
 	}
 
 done:
-	qmi_service_create(data->dev, QMI_SERVICE_WDS, create_wds_cb, gc,
+	qmi_service_create_shared(data->dev, QMI_SERVICE_WDS, create_wds_cb, gc,
 									NULL);
 }
 
@@ -444,7 +444,7 @@ static void create_wda_cb(struct qmi_service *service, void *user_data)
 		return;
 
 error:
-	qmi_service_create(data->dev, QMI_SERVICE_WDS, create_wds_cb, gc,
+	qmi_service_create_shared(data->dev, QMI_SERVICE_WDS, create_wds_cb, gc,
 									NULL);
 }
 
