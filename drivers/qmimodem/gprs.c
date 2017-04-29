@@ -30,6 +30,7 @@
 #include "qmi.h"
 #include "nas.h"
 
+#include "src/common.h"
 #include "qmimodem.h"
 
 struct gprs_data {
@@ -48,9 +49,9 @@ static bool extract_ss_info(struct qmi_result *result, int *status)
 		return false;
 
 	if (ss->ps_state == QMI_NAS_ATTACH_STATE_ATTACHED)
-		*status = 0x01;
+		*status = NETWORK_REGISTRATION_STATUS_REGISTERED;
 	else
-		*status = 0x00;
+		*status = NETWORK_REGISTRATION_STATUS_NOT_REGISTERED;
 
 	return true;
 }
