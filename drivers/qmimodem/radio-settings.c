@@ -74,7 +74,8 @@ static int qmi_radio_settings_probe(struct ofono_radio_settings *rs,
 
 	ofono_radio_settings_set_data(rs, data);
 
-	qmi_service_create(device, QMI_SERVICE_NAS, create_nas_cb, rs, NULL);
+	qmi_service_create_shared(device, QMI_SERVICE_NAS,
+						create_nas_cb, rs, NULL);
 
 	return 0;
 

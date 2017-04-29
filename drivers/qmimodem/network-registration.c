@@ -542,7 +542,7 @@ static int qmi_netreg_probe(struct ofono_netreg *netreg,
 
 	ofono_netreg_set_data(netreg, data);
 
-	qmi_service_create(device, QMI_SERVICE_NAS,
+	qmi_service_create_shared(device, QMI_SERVICE_NAS,
 					create_nas_cb, netreg, NULL);
 
 	return 0;
