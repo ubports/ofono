@@ -201,7 +201,8 @@ static int qmi_gprs_probe(struct ofono_gprs *gprs,
 
 	ofono_gprs_set_data(gprs, data);
 
-	qmi_service_create(device, QMI_SERVICE_NAS, create_nas_cb, gprs, NULL);
+	qmi_service_create_shared(device, QMI_SERVICE_NAS,
+						create_nas_cb, gprs, NULL);
 
 	return 0;
 }
