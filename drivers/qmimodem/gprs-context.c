@@ -65,8 +65,12 @@ static void pkt_status_notify(struct qmi_result *result, void *user_data)
 
 	switch (status->status) {
 	case QMI_WDS_CONN_STATUS_DISCONNECTED:
-		ofono_gprs_context_deactivated(gc, data->active_context);
-		data->active_context = 0;
+		if (data->pkt_handle) {
+			/* The context has been disconnected by the network */
+			ofono_gprs_context_deactivated(gc, data->active_context);
+			data->pkt_handle = 0;
+			data->active_context = 0;
+		}
 		break;
 	}
 }
