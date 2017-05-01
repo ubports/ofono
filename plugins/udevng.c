@@ -208,17 +208,19 @@ static gboolean setup_gobi(struct modem_info *modem)
 						info->number, info->label,
 						info->sysattr, info->subsystem);
 
-		if (g_strcmp0(info->interface, "255/255/255") == 0) {
-			if (info->number == NULL)
-				qmi = info->devnode;
-			else if (g_strcmp0(info->number, "00") == 0)
-				net = info->devnode;
-			else if (g_strcmp0(info->number, "01") == 0)
-				diag = info->devnode;
-			else if (g_strcmp0(info->number, "02") == 0)
-				mdm = info->devnode;
-			else if (g_strcmp0(info->number, "03") == 0)
-				gps = info->devnode;
+		if (g_strcmp0(info->subsystem, "usbmisc") == 0) /* cdc-wdm */
+			qmi = info->devnode;
+		else if (g_strcmp0(info->subsystem, "net") == 0) /* wwan */
+			net = info->devnode;
+		else if (g_strcmp0(info->subsystem, "tty") == 0) {
+			if (g_strcmp0(info->interface, "255/255/255") == 0) {
+				if (g_strcmp0(info->number, "01") == 0)
+					diag = info->devnode;
+				else if (g_strcmp0(info->number, "02") == 0)
+					mdm = info->devnode;
+				else if (g_strcmp0(info->number, "03") == 0)
+					gps = info->devnode;
+			}
 		}
 	}
 
