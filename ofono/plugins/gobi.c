@@ -262,7 +262,8 @@ static void discover_cb(uint8_t count, const struct qmi_version *list,
 	DBG("");
 
 	for (i = 0; i < count; i++) {
-		DBG("%s %d.%d", list[i].name, list[i].major, list[i].minor);
+		DBG("%s %d.%d - %d", list[i].name, list[i].major, list[i].minor,
+				list[i].type);
 
 		switch (list[i].type) {
 		case QMI_SERVICE_DMS:
