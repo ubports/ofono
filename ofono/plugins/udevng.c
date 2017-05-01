@@ -204,8 +204,9 @@ static gboolean setup_gobi(struct modem_info *modem)
 	for (list = modem->devices; list; list = list->next) {
 		struct device_info *info = list->data;
 
-		DBG("%s %s %s %s", info->devnode, info->interface,
-						info->number, info->label);
+		DBG("%s %s %s %s %s %s", info->devnode, info->interface,
+						info->number, info->label,
+						info->sysattr, info->subsystem);
 
 		if (g_strcmp0(info->interface, "255/255/255") == 0) {
 			if (info->number == NULL)
