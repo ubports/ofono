@@ -176,11 +176,42 @@ static int service_level_connection(struct ofono_modem *modem,
 	return -EINPROGRESS;
 }
 
-static struct ofono_modem *modem_register(const char *device,
-				const char *device_address, const char *alias)
+static void modem_removed(GDBusProxy *proxy, void *user_data)
+{
+	struct ofono_modem *modem = user_data;
+
+	ofono_modem_remove(modem);
+}
+
+static void alias_changed(GDBusProxy *proxy, const char *name,
+					DBusMessageIter *iter, void *user_data)
+{
+	const char *alias;
+	struct ofono_modem *modem = user_data;
+
+	if (g_str_equal("Alias", name) == FALSE)
+		return;
+
+	dbus_message_iter_get_basic(iter, &alias);
+	ofono_modem_set_name(modem, alias);
+}
+
+static struct ofono_modem *modem_register(const char *device, GDBusProxy *proxy)
 {
 	struct ofono_modem *modem;
 	char *path;
+	DBusMessageIter iter;
+	const char *alias, *remote;
+
+	if (g_dbus_proxy_get_property(proxy, "Alias", &iter) == FALSE)
+		return NULL;
+
+	dbus_message_iter_get_basic(&iter, &alias);
+
+	if (g_dbus_proxy_get_property(proxy, "Address", &iter) == FALSE)
+		return NULL;
+
+	dbus_message_iter_get_basic(&iter, &remote);
 
 	path = g_strconcat("hfp", device, NULL);
 
@@ -191,11 +222,14 @@ static struct ofono_modem *modem_register(const char *device,
 	if (modem == NULL)
 		return NULL;
 
-	ofono_modem_set_string(modem, "Remote", device_address);
+	ofono_modem_set_string(modem, "Remote", remote);
 	ofono_modem_set_string(modem, "DevicePath", device);
 
 	ofono_modem_set_name(modem, alias);
 	ofono_modem_register(modem);
+
+	g_dbus_proxy_set_property_watch(proxy, alias_changed, modem);
+	g_dbus_proxy_set_removed_watch(proxy, modem_removed, modem);
 
 	return modem;
 }
@@ -522,30 +556,15 @@ static gboolean has_hfp_ag_uuid(DBusMessageIter *array)
 	return FALSE;
 }
 
-static void modem_removed(GDBusProxy *proxy, void *user_data)
+static void modem_unregister(struct ofono_modem *modem, GDBusProxy *proxy)
 {
-	struct ofono_modem *modem = user_data;
-
 	ofono_modem_remove(modem);
+	g_dbus_proxy_set_removed_watch(proxy, NULL, NULL);
+	g_dbus_proxy_set_property_watch(proxy, NULL, NULL);
 }
 
-static void alias_changed(GDBusProxy *proxy, const char *name,
-					DBusMessageIter *iter, void *user_data)
+static void *device_changed(GDBusProxy *proxy, const char *path)
 {
-	const char *alias;
-	struct ofono_modem *modem = user_data;
-
-	if (g_str_equal("Alias", name) == FALSE)
-		return;
-
-	dbus_message_iter_get_basic(iter, &alias);
-	ofono_modem_set_name(modem, alias);
-}
-
-static struct ofono_modem *modem_register_from_proxy(GDBusProxy *proxy,
-							const char *path)
-{
-	const char *alias, *remote;
 	DBusMessageIter iter;
 	dbus_bool_t paired;
 	struct ofono_modem *modem;
@@ -558,36 +577,23 @@ static struct ofono_modem *modem_register_from_proxy(GDBusProxy *proxy,
 	modem = ofono_modem_find(device_path_compare, (void *) path);
 
 	if (paired == FALSE) {
-		if (modem != NULL) {
-			ofono_modem_remove(modem);
-			g_dbus_proxy_set_removed_watch(proxy, NULL, NULL);
-			g_dbus_proxy_set_property_watch(proxy, NULL, NULL);
-		}
+		if (modem != NULL)
+			modem_unregister(modem, proxy);
 		return NULL;
 	}
 
+	if (g_dbus_proxy_get_property(proxy, "UUIDs", &iter) == FALSE ||
+					has_hfp_ag_uuid(&iter) == FALSE) {
+		if (modem != NULL)
+			modem_unregister(modem, proxy);
+		return NULL;
+	}
+
+	/* Skip if modem already registered */
 	if (modem)
 		return modem;
 
-	if (g_dbus_proxy_get_property(proxy, "UUIDs", &iter) == FALSE)
-		return NULL;
-
-	if (has_hfp_ag_uuid(&iter) == FALSE)
-		return NULL;
-
-	if (g_dbus_proxy_get_property(proxy, "Alias", &iter) == FALSE)
-		return NULL;
-
-	dbus_message_iter_get_basic(&iter, &alias);
-
-	if (g_dbus_proxy_get_property(proxy, "Address", &iter) == FALSE)
-		return NULL;
-
-	dbus_message_iter_get_basic(&iter, &remote);
-
-	modem = modem_register(path, remote, alias);
-	g_dbus_proxy_set_property_watch(proxy, alias_changed, modem);
-	g_dbus_proxy_set_removed_watch(proxy, modem_removed, modem);
+	modem = modem_register(path, proxy);
 
 	return modem;
 }
@@ -637,7 +643,7 @@ static DBusMessage *profile_new_connection(DBusConnection *conn,
 		GDBusProxy *proxy;
 
 		proxy = g_dbus_proxy_new(bluez, device, BLUEZ_DEVICE_INTERFACE);
-		modem = modem_register_from_proxy(proxy, device);
+		modem = modem_register(device, proxy);
 		g_dbus_proxy_unref(proxy);
 
 		if (!modem) {
@@ -797,7 +803,7 @@ static void proxy_added(GDBusProxy *proxy, void *user_data)
 	if (g_str_equal(BLUEZ_DEVICE_INTERFACE, interface) == FALSE)
 		return;
 
-	modem_register_from_proxy(proxy, path);
+	device_changed(proxy, path);
 }
 
 static void property_changed(GDBusProxy *proxy, const char *name,
@@ -815,7 +821,7 @@ static void property_changed(GDBusProxy *proxy, const char *name,
 			g_str_equal("ServicesResolved", name) != TRUE)
 		return;
 
-	modem_register_from_proxy(proxy, path);
+	device_changed(proxy, path);
 }
 
 static int hfp_init(void)
