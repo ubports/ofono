@@ -326,6 +326,13 @@ static gboolean sco_connect_cb(GIOChannel *io, GIOCondition cond,
 
 	sk = g_io_channel_unix_get_fd(io);
 
+	if (card->msg && dbus_message_has_member(card->msg, "Acquire")) {
+		reply = g_dbus_create_reply(card->msg, DBUS_TYPE_UNIX_FD, &sk,
+					DBUS_TYPE_BYTE, &card->selected_codec,
+					DBUS_TYPE_INVALID);
+		goto done;
+	}
+
 	send_new_connection(card->path, sk, card->selected_codec);
 
 	close(sk);
@@ -403,6 +410,9 @@ static const GDBusMethodTable card_methods[] = {
 			NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
 			card_get_properties) },
 	{ GDBUS_ASYNC_METHOD("Connect", NULL, NULL, card_connect) },
+	{ GDBUS_ASYNC_METHOD("Acquire", NULL,
+			GDBUS_ARGS({"sco", "h"}, {"codec", "y"}),
+			card_connect) },
 	{ }
 };
 
