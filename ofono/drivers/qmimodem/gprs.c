@@ -83,7 +83,7 @@ static int handle_ss_info(struct qmi_result *result, struct ofono_gprs *gprs)
 			/* FIXME: query default profile number and APN
 			 * instead of assuming profile 1 and ""
 			 */
-			ofono_gprs_cid_activated(gprs, 1 , "");
+			ofono_gprs_cid_activated(gprs, 1 , "automatic");
 		}
 
 	return status;
