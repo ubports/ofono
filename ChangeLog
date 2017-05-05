@@ -1,3 +1,23 @@
+ver 1.20:
+	Fix issue with context removal before activation.
+	Fix issue with update during GPRS context activation.
+	Fix issue with receiving UTF-16 encoded messages.
+	Fix issue with invalid access in CBS decoding.
+	Fix issue with signal strength on QMI modems.
+	Fix issue with PIN handling with QMI modems.
+	Fix issue with QMI notification message handling.
+	Fix issue with facility lock query on SIM removal.
+	Fix issue with parsing +CLCC and +CCWA fields.
+	Add support for obtaining IMSI via EF reading.
+	Add support for additional netmon info types.
+	Add support for provisioning via configuration files.
+	Add support for Gemalto P-family series of modems.
+	Add support for Telit HE910 and UE910 variants.
+	Add support for Intel SoFIA SIM Toolkit interfaces.
+	Add support for Intel SoFIA LTE features.
+	Add support for U-Blox TOBY-L2 LTE feature.
+	Add support for dedicated LTE atom.
+
 ver 1.19:
 	Fix issue with DHCP parsing and Huawei modems.
 	Fix issue with detecting Huawei E3372 modem.
