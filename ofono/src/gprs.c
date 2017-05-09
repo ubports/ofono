@@ -2296,6 +2296,7 @@ void ofono_gprs_cid_activated(struct ofono_gprs  *gprs, unsigned int cid,
 		ofono_warn("Context activated for driver that doesn't support "
 				"automatic context activation.");
 		release_context(pri_ctx);
+		return;
 	}
 
 	if (strlen(pri_ctx->context.apn) == 0) {
