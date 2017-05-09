@@ -2272,6 +2272,12 @@ void ofono_gprs_cid_activated(struct ofono_gprs  *gprs, unsigned int cid,
 		return;
 	}
 
+	if (strlen(apn) > OFONO_GPRS_MAX_APN_LENGTH
+				|| is_valid_apn(apn) == FALSE) {
+		ofono_error("Context activated with an invalid APN");
+		return;
+	}
+
 	pri_ctx = find_usable_context(gprs, apn);
 
 	if (!pri_ctx) {
@@ -2299,9 +2305,19 @@ void ofono_gprs_cid_activated(struct ofono_gprs  *gprs, unsigned int cid,
 		return;
 	}
 
+	/*
+	 * We weren't able to find a context with a matching APN and allocated
+	 * a brand new one instead.  Set the APN accordingly
+	 */
 	if (strlen(pri_ctx->context.apn) == 0) {
 		DBusConnection *conn = ofono_dbus_get_connection();
-		pri_set_apn(pri_ctx, conn, NULL, apn);
+
+		strcpy(pri_ctx->context.apn, apn);
+
+		ofono_dbus_signal_property_changed(conn, pri_ctx->path,
+					OFONO_CONNECTION_CONTEXT_INTERFACE,
+					"AccessPointName",
+					DBUS_TYPE_STRING, &apn);
 	}
 
 	/* Prevent ofono_gprs_status_notify from changing the 'attached'
