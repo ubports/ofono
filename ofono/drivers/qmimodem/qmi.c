@@ -73,6 +73,8 @@ struct qmi_device {
 	void *shutdown_user_data;
 	qmi_destroy_func_t shutdown_destroy;
 	guint shutdown_source;
+	bool shutting_down : 1;
+	bool destroyed : 1;
 };
 
 struct qmi_service {
@@ -1000,7 +1002,10 @@ void qmi_device_unref(struct qmi_device *device)
 	g_free(device->version_str);
 	g_free(device->version_list);
 
-	g_free(device);
+	if (device->shutting_down)
+		device->destroyed = true;
+	else
+		g_free(device);
 }
 
 void qmi_device_set_debug(struct qmi_device *device,
@@ -1255,6 +1260,9 @@ static void shutdown_destroy(gpointer user_data)
 		device->shutdown_destroy(device->shutdown_user_data);
 
 	device->shutdown_source = 0;
+
+	if (device->destroyed)
+		g_free(device);
 }
 
 static gboolean shutdown_callback(gpointer user_data)
@@ -1264,8 +1272,12 @@ static gboolean shutdown_callback(gpointer user_data)
 	if (device->release_users > 0)
 		return TRUE;
 
+	device->shutting_down = true;
+
 	if (device->shutdown_func)
 		device->shutdown_func(device->shutdown_user_data);
+
+	device->shutting_down = true;
 
 	return FALSE;
 }
