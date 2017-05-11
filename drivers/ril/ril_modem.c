@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2016 Jolla Ltd.
+ *  Copyright (C) 2015-2017 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -52,6 +52,7 @@ struct ril_modem_data {
 	struct ril_modem modem;
 	GRilIoQueue *q;
 	char *log_prefix;
+	char *imeisv;
 	char *imei;
 	char *ecclist_file;
 	gboolean pre_sim_done;
@@ -433,6 +434,7 @@ static void ril_modem_remove(struct ofono_modem *ofono)
 	grilio_queue_unref(md->q);
 	g_free(md->ecclist_file);
 	g_free(md->log_prefix);
+	g_free(md->imeisv);
 	g_free(md->imei);
 	g_free(md);
 }
@@ -460,6 +462,7 @@ struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *log_prefix,
 		/* Copy config */
 		modem->config = *slot->config;
 		modem->imei = md->imei = g_strdup(slot->imei);
+		modem->imeisv = md->imeisv = g_strdup(slot->imeisv);
 		modem->log_prefix = log_prefix;
 		modem->ecclist_file =
 		md->ecclist_file = g_strdup(slot->ecclist_file);
