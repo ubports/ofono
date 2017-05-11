@@ -130,6 +130,7 @@ struct ril_slot {
 	struct ril_slot_info pub;
 	char *path;
 	char *imei;
+	char *imeisv;
 	char *name;
 	char *sockpath;
 	char *sub;
@@ -175,6 +176,7 @@ static void ril_debug_grilio_notify(struct ofono_debug_desc *desc);
 static void ril_debug_mce_notify(struct ofono_debug_desc *desc);
 static void ril_plugin_debug_notify(struct ofono_debug_desc *desc);
 static void ril_plugin_retry_init_io(struct ril_slot *slot);
+static void ril_plugin_check_modem(struct ril_slot *slot);
 
 GLOG_MODULE_DEFINE("rilmodem");
 
@@ -583,6 +585,71 @@ static void ril_plugin_update_ready(struct ril_plugin_priv *plugin)
 	}
 }
 
+static void ril_plugin_device_identity_cb(GRilIoChannel *io, int status,
+			const void *data, guint len, void *user_data)
+{
+	struct ril_slot *slot = user_data;
+	char *imei = NULL;
+	char *imeisv = NULL;
+
+	GASSERT(slot->imei_req_id);
+	slot->imei_req_id = 0;
+
+	if (status == RIL_E_SUCCESS) {
+		GRilIoParser rilp;
+		guint32 n;
+
+		/*
+		 * RIL_REQUEST_DEVICE_IDENTITY
+		 *
+		 * "response" is const char **
+		 * ((const char **)response)[0] is IMEI (for GSM)
+		 * ((const char **)response)[1] is IMEISV (for GSM)
+		 * ((const char **)response)[2] is ESN (for CDMA)
+		 * ((const char **)response)[3] is MEID (for CDMA)
+		 */
+		grilio_parser_init(&rilp, data, len);
+		if (grilio_parser_get_uint32(&rilp, &n) && n >= 2) {
+			imei = grilio_parser_get_utf8(&rilp);
+			imeisv = grilio_parser_get_utf8(&rilp);
+			DBG("%s %s", imei, imeisv);
+		} else {
+			DBG("parsing failure!");
+		}
+
+		/*
+		 * slot->imei should be either NULL (when we get connected
+		 * to rild the very first time) or match the already known
+		 * IMEI (if rild crashed and we have reconnected)
+		 */
+		if (slot->imei && imei && strcmp(slot->imei, imei)) {
+			ofono_warn("IMEI has changed \"%s\" -> \"%s\"",
+							slot->imei, imei);
+		}
+	} else {
+		ofono_error("Slot %u IMEI query error: %s", slot->config.slot,
+						ril_error_to_string(status));
+	}
+
+	if (slot->imei) {
+		/* We assume that IMEI never changes */
+		g_free(imei);
+	} else {
+		slot->pub.imei =
+		slot->imei = imei ? imei : g_strdup_printf("%d", slot->index);
+	}
+
+	if (slot->imeisv) {
+		g_free(imeisv);
+	} else {
+		slot->pub.imeisv =
+		slot->imeisv = (imeisv ? imeisv : g_strdup(""));
+	}
+
+	ril_plugin_check_modem(slot);
+	ril_plugin_update_ready(slot->plugin);
+}
+
 static void ril_plugin_sim_state_changed(struct ril_sim_card *card, void *data)
 {
 	struct ril_slot *slot = data;
@@ -912,42 +979,6 @@ static void ril_plugin_check_modem(struct ril_slot *slot)
 	}
 }
 
-
-static void ril_plugin_imei_cb(GRilIoChannel *io, int status,
-			const void *data, guint len, void *user_data)
-{
-	struct ril_slot *slot = user_data;
-	char *imei = NULL;
-
-	GASSERT(slot->imei_req_id);
-	slot->imei_req_id = 0;
-
-	if (status == RIL_E_SUCCESS) {
-		GRilIoParser rilp;
-
-		grilio_parser_init(&rilp, data, len);
-		imei = grilio_parser_get_utf8(&rilp);
-
-		DBG("%s", imei);
-
-		/*
-		 * slot->imei should be either NULL (when we get connected
-		 * to rild the very first time) or match the already known
-		 * IMEI (if rild crashed and we have reconnected)
-		 */
-		GASSERT(!slot->imei || !g_strcmp0(slot->imei, imei));
-	} else {
-		ofono_error("Slot %u IMEI query error: %s", slot->config.slot,
-						ril_error_to_string(status));
-	}
-
-	g_free(slot->imei);
-	slot->pub.imei = slot->imei = (imei ? imei : g_strdup("ERROR"));
-
-	ril_plugin_check_modem(slot);
-	ril_plugin_update_ready(slot->plugin);
-}
-
 /*
  * It seems to be necessary to kick (with RIL_REQUEST_RADIO_POWER) the
  * modems with power on after one of the modems has been powered off.
@@ -983,17 +1014,19 @@ static void ril_plugin_slot_connected(struct ril_slot *slot)
 	GASSERT(!slot->io_event_id[IO_EVENT_CONNECTED]);
 
 	/*
-	 * Modem will be registered after RIL_REQUEST_GET_IMEI successfully
-	 * completes. By the time ofono starts, rild may not be completely
-	 * functional. Waiting until it responds to RIL_REQUEST_GET_IMEI
-	 * (and retrying the request on failure) gives rild time to finish
-	 * whatever it's doing during initialization.
+	 * Modem will be registered after RIL_REQUEST_DEVICE_IDENTITY
+	 * successfully completes. By the time ofono starts, rild may
+	 * not be completely functional. Waiting until it responds to
+	 * RIL_REQUEST_DEVICE_IDENTITY (and retrying the request on
+	 * failure) gives rild time to finish whatever it's doing during
+	 * initialization.
 	 */
 	GASSERT(!slot->imei_req_id);
 	req = grilio_request_new();
 	grilio_request_set_retry(req, RIL_RETRY_MS, -1);
-	slot->imei_req_id = grilio_channel_send_request_full(slot->io, req,
-			RIL_REQUEST_GET_IMEI, ril_plugin_imei_cb, NULL, slot);
+	slot->imei_req_id = grilio_channel_send_request_full(slot->io,
+				req, RIL_REQUEST_DEVICE_IDENTITY,
+				ril_plugin_device_identity_cb, NULL, slot);
 	grilio_request_unref(req);
 
 	GASSERT(!slot->radio);
@@ -1318,6 +1351,7 @@ static void ril_plugin_delete_slot(struct ril_slot *slot)
 	g_hash_table_destroy(slot->pub.errors);
 	g_free(slot->path);
 	g_free(slot->imei);
+	g_free(slot->imeisv);
 	g_free(slot->name);
 	g_free(slot->sockpath);
 	g_free(slot->sub);
