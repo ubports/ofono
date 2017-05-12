@@ -45,6 +45,8 @@
                                      OFONO_RADIO_ACCESS_MODE_UMTS |\
                                      OFONO_RADIO_ACCESS_MODE_LTE)
 
+#define RIL_DEVICE_IDENTITY_RETRIES_LAST 2
+
 #define RADIO_GID                   1001
 #define RADIO_UID                   1001
 #define RIL_SUB_SIZE                4
@@ -163,6 +165,7 @@ struct ril_slot {
 	gulong io_event_id[IO_EVENT_COUNT];
 	gulong imei_req_id;
 	gulong sim_card_state_event_id;
+	gboolean received_sim_status;
 	guint trace_id;
 	guint dump_id;
 	guint retry_id;
@@ -254,7 +257,7 @@ static void ril_plugin_foreach_slot(struct ril_plugin_priv *plugin,
 
 static void ril_plugin_send_screen_state(struct ril_slot *slot)
 {
-	if (slot->io) {
+	if (slot->io && slot->io->connected) {
 		GRilIoRequest *req = grilio_request_sized_new(8);
 		grilio_request_append_int32(req, 1);    /* Number of params */
 		grilio_request_append_int32(req, slot->plugin->display_on);
@@ -360,6 +363,7 @@ static void ril_plugin_shutdown_slot(struct ril_slot *slot, gboolean kill_io)
 			ril_sim_card_unref(slot->sim_card);
 			slot->sim_card_state_event_id = 0;
 			slot->sim_card = NULL;
+			slot->received_sim_status = FALSE;
 		}
 
 		if (slot->io) {
@@ -659,15 +663,45 @@ static void ril_plugin_sim_state_changed(struct ril_sim_card *card, void *data)
 {
 	struct ril_slot *slot = data;
 	struct ril_plugin_priv *plugin = slot->plugin;
+	const struct ril_sim_card_status *status = card->status;
 	gboolean present;
 
-	if (card && card->status &&
-			card->status->card_state == RIL_CARDSTATE_PRESENT) {
+	if (status && status->card_state == RIL_CARDSTATE_PRESENT) {
 		DBG("SIM found in slot %u", slot->config.slot);
 		present = TRUE;
 	} else {
 		DBG("No SIM in slot %u", slot->config.slot);
 		present = FALSE;
+	}
+
+	if (status) {
+		if (!slot->received_sim_status && slot->imei_req_id) {
+			/*
+			 * We have received the SIM status but haven't yet
+			 * got IMEI from the modem. Some RILs behave this
+			 * way if the modem doesn't have IMEI initialized
+			 * yet. Cancel the current request (with unlimited
+			 * number of retries) and give a few more tries
+			 * (this time, limited number).
+			 *
+			 * Some RILs fail RIL_REQUEST_DEVICE_IDENTITY until
+			 * the modem hasn't been properly initialized.
+			 */
+			GRilIoRequest* req = grilio_request_new();
+
+			DBG("Giving slot %u last chance", slot->config.slot);
+			grilio_request_set_retry(req, RIL_RETRY_MS,
+					 RIL_DEVICE_IDENTITY_RETRIES_LAST);
+			grilio_channel_cancel_request(slot->io,
+						slot->imei_req_id, FALSE);
+			slot->imei_req_id =
+				grilio_channel_send_request_full(slot->io,
+					req, RIL_REQUEST_DEVICE_IDENTITY,
+					ril_plugin_device_identity_cb,
+					NULL, slot);
+			grilio_request_unref(req);
+		}
+		slot->received_sim_status = TRUE;
 	}
 
 	if (slot->pub.sim_present != present) {
@@ -1048,6 +1082,10 @@ static void ril_plugin_slot_connected(struct ril_slot *slot)
 							slot->sim_flags);
 	slot->sim_card_state_event_id = ril_sim_card_add_state_changed_handler(
 			slot->sim_card, ril_plugin_sim_state_changed, slot);
+	/* ril_sim_card is expected to perform RIL_REQUEST_GET_SIM_STATUS
+	 * asynchronously and report back when request has completed: */
+	GASSERT(!slot->sim_card->status);
+	GASSERT(!slot->received_sim_status);
 
 	GASSERT(!slot->network);
 	slot->network = ril_network_new(slot->io, log_prefix, slot->radio,
