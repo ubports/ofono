@@ -53,6 +53,8 @@
 #define HARDWARE_MONITOR_INTERFACE OFONO_SERVICE ".cinterion.HardwareMonitor"
 
 static const char *none_prefix[] = { NULL };
+static const char *sctm_prefix[] = { "^SCTM:", NULL };
+static const char *sbv_prefix[] = { "^SBV:", NULL };
 
 struct gemalto_hardware_monitor {
 	DBusMessage *msg;
@@ -155,13 +157,102 @@ static void cfun_enable(gboolean ok, GAtResult *result, gpointer user_data)
 						NULL);
 }
 
+static void gemalto_sctm_cb(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct gemalto_data *data = user_data;
+	DBusMessage *reply;
+	GAtResultIter iter;
+	DBusMessageIter dbus_iter;
+	DBusMessageIter dbus_dict;
+
+	if (data->hm->msg == NULL)
+		return;
+
+	if (!ok)
+		goto error;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "^SCTM:"))
+		goto error;
+
+	if (!g_at_result_iter_skip_next(&iter))
+		goto error;
+
+	if (!g_at_result_iter_skip_next(&iter))
+		goto error;
+
+	if (!g_at_result_iter_next_number(&iter, &data->hm->temperature))
+		goto error;
+
+	reply = dbus_message_new_method_return(data->hm->msg);
+
+	dbus_message_iter_init_append(reply, &dbus_iter);
+
+	dbus_message_iter_open_container(&dbus_iter, DBUS_TYPE_ARRAY,
+			OFONO_PROPERTIES_ARRAY_SIGNATURE,
+			&dbus_dict);
+
+	ofono_dbus_dict_append(&dbus_dict, "Temperature",
+			DBUS_TYPE_INT32, &data->hm->temperature);
+
+	ofono_dbus_dict_append(&dbus_dict, "Voltage",
+			DBUS_TYPE_UINT32, &data->hm->voltage);
+
+	dbus_message_iter_close_container(&dbus_iter, &dbus_dict);
+
+	__ofono_dbus_pending_reply(&data->hm->msg, reply);
+
+	return;
+
+error:
+	__ofono_dbus_pending_reply(&data->hm->msg,
+			__ofono_error_failed(data->hm->msg));
+}
+
+static void gemalto_sbv_cb(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct gemalto_data *data = user_data;
+	GAtResultIter iter;
+
+	if (!ok)
+		goto error;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "^SBV:"))
+		goto error;
+
+	if (!g_at_result_iter_next_number(&iter, &data->hm->voltage))
+		goto error;
+
+	if (g_at_chat_send(data->app, "AT^SCTM?", sctm_prefix, gemalto_sctm_cb,
+				data, NULL) > 0)
+		return;
+
+error:
+	__ofono_dbus_pending_reply(&data->hm->msg,
+			__ofono_error_failed(data->hm->msg));
+}
+
 static DBusMessage *hardware_monitor_get_statistics(DBusConnection *conn,
 							DBusMessage *msg,
 							void *user_data)
 {
+	struct gemalto_data *data = user_data;
+
 	DBG("");
 
-	return __ofono_error_not_implemented(msg);
+	if (data->hm->msg != NULL)
+		return __ofono_error_busy(msg);
+
+	if (!g_at_chat_send(data->app, "AT^SBV", sbv_prefix, gemalto_sbv_cb,
+			data, NULL))
+		return __ofono_error_failed(msg);
+
+	data->hm->msg = dbus_message_ref(msg);
+
+	return NULL;
 }
 
 static const GDBusMethodTable hardware_monitor_methods[] = {
