@@ -1026,6 +1026,23 @@ void qmi_device_set_close_on_unref(struct qmi_device *device, bool do_close)
 	device->close_on_unref = do_close;
 }
 
+void qmi_result_print_tlvs(struct qmi_result *result)
+{
+	const void *ptr = result->data;
+	uint16_t len = result->length;
+
+	while (len > QMI_TLV_HDR_SIZE) {
+		const struct qmi_tlv_hdr *tlv = ptr;
+		uint16_t tlv_length = GUINT16_FROM_LE(tlv->length);
+
+		DBG("tlv: 0x%02x len 0x%04x", tlv->type, tlv->length);
+
+		ptr += QMI_TLV_HDR_SIZE + tlv_length;
+		len -= QMI_TLV_HDR_SIZE + tlv_length;
+	}
+}
+
+
 static const void *tlv_get(const void *data, uint16_t size,
 					uint8_t type, uint16_t *length)
 {
