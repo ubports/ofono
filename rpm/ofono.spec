@@ -77,7 +77,7 @@ autoreconf --force --install
     --disable-qmimodem \
     --with-systemdunitdir="/%{_lib}/systemd/system"
 
-make %{?jobs:-j%jobs}
+make %{_smp_mflags}
 
 
 %check
