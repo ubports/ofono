@@ -336,6 +336,7 @@ static struct ril_sim_card_status *ril_sim_card_status_parse(const void *data,
 		}
 
 		if (i == num_apps) {
+			GASSERT(grilio_parser_at_end(&rilp));
 			return status;
 		} else {
 			ril_sim_card_status_free(status);
