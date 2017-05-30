@@ -62,6 +62,7 @@ struct qmi_wms_param_message {
 #define QMI_WMS_STORAGE_TYPE_UIM		0
 #define QMI_WMS_STORAGE_TYPE_NV			1
 #define QMI_WMS_STORAGE_TYPE_UNKNOWN		2
+#define QMI_WMS_STORAGE_TYPE_NONE		255
 
 #define QMI_WMS_MESSAGE_MODE_GSMWCDMA		1
 
