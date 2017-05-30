@@ -1346,14 +1346,16 @@ static struct ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 			if (comment) *comment = 0;
 			g_strstrip(strval);
 			slot->data_opt.allow_data =
-				!strcasecmp(strval, "on") ? RIL_ALLOW_DATA_ON :
-				!strcasecmp(strval, "off")? RIL_ALLOW_DATA_OFF :
-				RIL_ALLOW_DATA_AUTO;
+				!strcasecmp(strval, "on") ?
+					RIL_ALLOW_DATA_ENABLED :
+				!strcasecmp(strval, "off") ?
+					RIL_ALLOW_DATA_DISABLED :
+					RIL_ALLOW_DATA_AUTO;
 			DBG("%s: %s %s", group, RILCONF_ALLOW_DATA_REQ,
 				slot->data_opt.allow_data ==
-					RIL_ALLOW_DATA_ON ? "on":
+					RIL_ALLOW_DATA_ENABLED ? "enabled":
 				slot->data_opt.allow_data ==
-					RIL_ALLOW_DATA_OFF ? "off":
+					RIL_ALLOW_DATA_DISABLED ? "disabled":
 					"auto");
 			g_free(strval);
 		}
