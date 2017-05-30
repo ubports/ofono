@@ -490,14 +490,23 @@ static int ril_plugin_update_modem_paths(struct ril_plugin_priv *plugin)
 	if (plugin->default_data_imsi) {
 		slot = ril_plugin_find_slot_imsi(plugin->slots,
 				plugin->default_data_imsi);
-	} else if (plugin->data_slot) {
-		/* Make sure that the slot is enabled and SIM is in */
-		slot = ril_plugin_find_slot_imsi(plugin->slots,
+	} else if (!ril_plugin_multisim(plugin)) {
+		if (plugin->data_slot) {
+			/* Make sure that the slot is enabled and SIM is in */
+			slot = ril_plugin_find_slot_imsi(plugin->slots,
 				plugin->data_slot->modem ?
 				ofono_sim_get_imsi(plugin->data_slot->sim) :
 				NULL);
+		} else {
+			/* Check if anything is available */
+			slot = ril_plugin_find_slot_imsi(plugin->slots, NULL);
+		}
 	} else {
-		slot = ril_plugin_find_slot_imsi(plugin->slots, NULL);
+		/*
+		 * Should we automatically select the default data sim
+		 * on a multisim phone that has only one sim inserted?
+		 */
+		slot = NULL;
 	}
 
 	if (slot && !slot->radio->online) {
