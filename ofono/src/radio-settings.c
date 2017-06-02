@@ -889,9 +889,13 @@ static void radio_load_settings(struct ofono_radio_settings *rs,
 						"GsmBand", rs->band_gsm);
 	}
 
+	if (error) {
+		g_error_free(error);
+		error = NULL;
+	}
+
 	rs->pending_band_gsm = rs->band_gsm;
 
-	error = NULL;
 	rs->band_umts = g_key_file_get_integer(rs->settings, SETTINGS_GROUP,
 					"UmtsBand", &error);
 
@@ -901,9 +905,13 @@ static void radio_load_settings(struct ofono_radio_settings *rs,
 						"UmtsBand", rs->band_umts);
 	}
 
+	if (error) {
+		g_error_free(error);
+		error = NULL;
+	}
+
 	rs->pending_band_umts = rs->band_umts;
 
-	error = NULL;
 	rs->mode = g_key_file_get_integer(rs->settings, SETTINGS_GROUP,
 					"TechnologyPreference", &error);
 
@@ -911,6 +919,11 @@ static void radio_load_settings(struct ofono_radio_settings *rs,
 		rs->mode = OFONO_RADIO_ACCESS_MODE_ANY;
 		g_key_file_set_integer(rs->settings, SETTINGS_GROUP,
 					"TechnologyPreference", rs->mode);
+	}
+
+	if (error) {
+		g_error_free(error);
+		error = NULL;
 	}
 
 	DBG("TechnologyPreference: %d", rs->mode);
