@@ -84,6 +84,7 @@ struct ril_data_manager;
 struct ril_data_manager *ril_data_manager_new(enum ril_data_manager_flags flg);
 struct ril_data_manager *ril_data_manager_ref(struct ril_data_manager *dm);
 void ril_data_manager_unref(struct ril_data_manager *dm);
+void ril_data_manager_assert_data_on(struct ril_data_manager *dm);
 
 typedef void (*ril_data_cb_t)(struct ril_data *data, void *arg);
 typedef void (*ril_data_call_setup_cb_t)(struct ril_data *data,

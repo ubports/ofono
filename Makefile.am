@@ -143,6 +143,7 @@ builtin_sources +=	drivers/ril/ril_call_barring.c \
 			drivers/ril/ril_plugin.c \
 			drivers/ril/ril_plugin_dbus.c \
 			drivers/ril/ril_radio.c \
+			drivers/ril/ril_radio_caps.c \
 			drivers/ril/ril_radio_settings.c \
 			drivers/ril/ril_sim.c \
 			drivers/ril/ril_sim_card.c \
