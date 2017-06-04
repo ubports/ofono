@@ -14,6 +14,7 @@
  */
 
 #include "ril_config.h"
+#include "ril_log.h"
 
 #include <gutil_intarray.h>
 #include <gutil_ints.h>
@@ -132,6 +133,50 @@ gboolean ril_config_get_flag(GKeyFile *file, const char *group,
 	} else {
 		return FALSE;
 	}
+}
+
+gboolean ril_config_get_enum(GKeyFile *file, const char *group,
+					const char *key, int *result,
+					const char *name, int value, ...)
+{
+	char *str = ril_config_get_string(file, group, key);
+
+	if (str) {
+		/*
+		 * Some people are thinking that # is a comment
+		 * anywhere on the line, not just at the beginning
+		 */
+		char *comment = strchr(str, '#');
+
+		if (comment) *comment = 0;
+		g_strstrip(str);
+		if (strcasecmp(str, name)) {
+			va_list args;
+			va_start(args, value);
+			while ((name = va_arg(args, char*)) != NULL) {
+				value = va_arg(args, int);
+				if (!strcasecmp(str, name)) {
+					break;
+				}
+			}
+			va_end(args);
+		}
+
+		if (!name) {
+			ofono_error("Invalid %s config value (%s)", key, str);
+		}
+
+		g_free(str);
+
+		if (name) {
+			if (result) {
+				*result = value;
+			}
+			return TRUE;
+		}
+	}
+
+	return FALSE;
 }
 
 GUtilInts *ril_config_get_ints(GKeyFile *file, const char *group,

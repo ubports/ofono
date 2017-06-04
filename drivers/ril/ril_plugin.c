@@ -69,6 +69,7 @@
 
 #define RILCONF_SETTINGS_EMPTY      "EmptyConfig"
 #define RILCONF_SETTINGS_3GHANDOVER "3GLTEHandover"
+#define RILCONF_SETTINGS_SET_RADIO_CAP "SetRadioCapability"
 
 #define RILCONF_DEV_PREFIX          "ril_"
 #define RILCONF_PATH_PREFIX         "/" RILCONF_DEV_PREFIX
@@ -116,11 +117,23 @@ enum ril_plugin_display_events {
 	DISPLAY_EVENT_COUNT
 };
 
+enum ril_set_radio_cap_opt {
+	RIL_SET_RADIO_CAP_AUTO,
+	RIL_SET_RADIO_CAP_ENABLED,
+	RIL_SET_RADIO_CAP_DISABLED
+};
+
+struct ril_plugin_settings {
+	int dm_flags;
+	enum ril_set_radio_cap_opt set_radio_cap;
+};
+
 struct ril_plugin_priv {
 	struct ril_plugin pub;
 	struct ril_plugin_dbus *dbus;
 	struct ril_data_manager *data_manager;
 	struct ril_radio_caps_manager *caps_manager;
+	struct ril_plugin_settings settings;
 	MceDisplay *display;
 	gboolean display_on;
 	gulong display_event_id[DISPLAY_EVENT_COUNT];
@@ -176,10 +189,6 @@ struct ril_slot {
 	guint sim_watch_id;
 	guint sim_state_watch_id;
 	enum ofono_sim_state sim_state;
-};
-
-struct ril_plugin_settings {
-	int dm_flags;
 };
 
 static void ril_debug_trace_notify(struct ofono_debug_desc *desc);
@@ -1093,6 +1102,7 @@ static void ril_plugin_radio_caps_cb(const struct ril_radio_capability *cap,
 static void ril_plugin_slot_connected(struct ril_slot *slot)
 {
 	struct ril_plugin_priv *plugin = slot->plugin;
+	const struct ril_plugin_settings *ps = &plugin->settings;
 	const char *log_prefix = ril_plugin_log_prefix(slot);
 	GRilIoRequest* req;
 
@@ -1155,7 +1165,11 @@ static void ril_plugin_slot_connected(struct ril_slot *slot)
 
 	GASSERT(!slot->caps);
 	GASSERT(!slot->caps_check_id);
-	if (ril_plugin_multisim(plugin) && slot->io->ril_version >= 11) {
+	if (ril_plugin_multisim(plugin) &&
+		(ps->set_radio_cap == RIL_SET_RADIO_CAP_ENABLED ||
+		(ps->set_radio_cap == RIL_SET_RADIO_CAP_AUTO &&
+					slot->io->ril_version >= 11))) {
+		/* Check if RIL really support radio capability management */
 		slot->caps_check_id = ril_radio_caps_check(slot->io,
 					ril_plugin_radio_caps_cb, slot);
 	}
@@ -1383,56 +1397,30 @@ static struct ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 				"on" : "off");
 		}
 
-		strval = ril_config_get_string(file, group,
-						RILCONF_ALLOW_DATA_REQ);
-		if (strval) {
-			/*
-			 * Some people are thinking that # is a comment
-			 * anywhere on the line, not just at the beginning
-			 */
-			char *comment = strchr(strval, '#');
-			if (comment) *comment = 0;
-			g_strstrip(strval);
-			slot->data_opt.allow_data =
-				!strcasecmp(strval, "on") ?
-					RIL_ALLOW_DATA_ENABLED :
-				!strcasecmp(strval, "off") ?
-					RIL_ALLOW_DATA_DISABLED :
-					RIL_ALLOW_DATA_AUTO;
+		if (ril_config_get_enum(file, group, RILCONF_ALLOW_DATA_REQ,
+				&value, "auto", RIL_ALLOW_DATA_AUTO,
+				"on", RIL_ALLOW_DATA_ENABLED,
+				"off", RIL_ALLOW_DATA_DISABLED, NULL)) {
 			DBG("%s: %s %s", group, RILCONF_ALLOW_DATA_REQ,
-				slot->data_opt.allow_data ==
-					RIL_ALLOW_DATA_ENABLED ? "enabled":
-				slot->data_opt.allow_data ==
-					RIL_ALLOW_DATA_DISABLED ? "disabled":
-					"auto");
-			g_free(strval);
+				value == RIL_ALLOW_DATA_ENABLED ? "enabled":
+				value == RIL_ALLOW_DATA_DISABLED ? "disabled":
+				"auto");
+			slot->data_opt.allow_data = value;
 		}
 
-		strval = ril_config_get_string(file, group,
-						RILCONF_DATA_CALL_FORMAT);
-		if (strval) {
-			/*
-			 * Some people are thinking that # is a comment
-			 * anywhere on the line, not just at the beginning
-			 */
-			char *comment = strchr(strval, '#');
-			if (comment) *comment = 0;
-			g_strstrip(strval);
-			slot->data_opt.data_call_format =
-				!strcmp(strval, "6") ? RIL_DATA_CALL_FORMAT_6:
-				!strcmp(strval, "9") ? RIL_DATA_CALL_FORMAT_9:
-				!strcmp(strval, "11")? RIL_DATA_CALL_FORMAT_11:
-				RIL_DATA_CALL_FORMAT_AUTO;
-			if (slot->data_opt.data_call_format ==
-						RIL_DATA_CALL_FORMAT_AUTO) {
+		if (ril_config_get_enum(file, group, RILCONF_DATA_CALL_FORMAT,
+				&value, "auto", RIL_DATA_CALL_FORMAT_AUTO,
+					"6", RIL_DATA_CALL_FORMAT_6,
+					"9", RIL_DATA_CALL_FORMAT_9,
+					"11", RIL_DATA_CALL_FORMAT_11, NULL)) {
+			if (value == RIL_DATA_CALL_FORMAT_AUTO) {
 				DBG("%s: %s auto", group,
 					RILCONF_DATA_CALL_FORMAT);
 			} else {
 				DBG("%s: %s %d", group,
-					RILCONF_DATA_CALL_FORMAT,
-					slot->data_opt.data_call_format);
+					RILCONF_DATA_CALL_FORMAT, value);
 			}
-			g_free(strval);
+			slot->data_opt.data_call_format = value;
 		}
 
 		if (ril_config_get_integer(file, group,
@@ -1563,10 +1551,20 @@ static GSList *ril_plugin_parse_config_file(GKeyFile *file,
 			}
 		} else if (!strcmp(group, RILCONF_SETTINGS_GROUP)) {
 			/* Plugin configuration */
+			int value;
+
 			ril_config_get_flag(file, group,
 				RILCONF_SETTINGS_3GHANDOVER,
 				RIL_DATA_MANAGER_3GLTE_HANDOVER,
 				&ps->dm_flags);
+
+			if (ril_config_get_enum(file, group,
+				RILCONF_SETTINGS_SET_RADIO_CAP, &value,
+				"auto", RIL_SET_RADIO_CAP_AUTO,
+				"on", RIL_SET_RADIO_CAP_ENABLED,
+				"off", RIL_SET_RADIO_CAP_DISABLED, NULL)) {
+				ps->set_radio_cap = value;
+			}
 		}
 	}
 
@@ -1890,10 +1888,7 @@ static void ril_plugin_debug_notify(struct ofono_debug_desc *desc)
 static int ril_plugin_init(void)
 {
 	char *enabled_slots;
-	struct ril_plugin_settings ps;
-
-	/* Default settings */
-	ps.dm_flags = RILMODEM_DEFAULT_DM_FLAGS;
+	struct ril_plugin_settings *ps;
 
 	DBG("");
 	GASSERT(!ril_plugin);
@@ -1920,10 +1915,12 @@ static int ril_plugin_init(void)
 	ril_plugin_switch_user();
 
 	ril_plugin = g_new0(struct ril_plugin_priv, 1);
-	ril_plugin->slots = ril_plugin_load_config(RILMODEM_CONF_FILE, &ps);
+	ps = &ril_plugin->settings;
+	ps->dm_flags = RILMODEM_DEFAULT_DM_FLAGS;
+	ril_plugin->slots = ril_plugin_load_config(RILMODEM_CONF_FILE, ps);
 	ril_plugin_init_slots(ril_plugin);
 	ril_plugin->dbus = ril_plugin_dbus_new(&ril_plugin->pub);
-	ril_plugin->data_manager = ril_data_manager_new(ps.dm_flags);
+	ril_plugin->data_manager = ril_data_manager_new(ps->dm_flags);
 	ril_plugin->display = mce_display_new();
 	ril_plugin->display_on = ril_plugin_display_on(ril_plugin->display);
 

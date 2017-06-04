@@ -32,6 +32,9 @@ gboolean ril_config_get_boolean(GKeyFile *file, const char *group,
 					const char *key, gboolean *value);
 gboolean ril_config_get_flag(GKeyFile *file, const char *group,
 					const char *key, int flag, int *flags);
+gboolean ril_config_get_enum(GKeyFile *file, const char *group,
+					const char *key, int *result,
+					const char *name, int value, ...);
 GUtilInts *ril_config_get_ints(GKeyFile *file, const char *group,
 					const char *key);
 char *ril_config_ints_to_string(GUtilInts *ints, char separator);
