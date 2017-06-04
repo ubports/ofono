@@ -21,6 +21,7 @@
 #include "ril_cell_info.h"
 #include "ril_network.h"
 #include "ril_radio.h"
+#include "ril_radio_caps.h"
 #include "ril_data.h"
 #include "ril_util.h"
 #include "ril_log.h"
@@ -119,6 +120,7 @@ struct ril_plugin_priv {
 	struct ril_plugin pub;
 	struct ril_plugin_dbus *dbus;
 	struct ril_data_manager *data_manager;
+	struct ril_radio_caps_manager *caps_manager;
 	MceDisplay *display;
 	gboolean display_on;
 	gulong display_event_id[DISPLAY_EVENT_COUNT];
@@ -151,6 +153,7 @@ struct ril_slot {
 	struct ril_modem *modem;
 	struct ofono_sim *sim;
 	struct ril_radio *radio;
+	struct ril_radio_caps *caps;
 	struct ril_network *network;
 	struct ril_sim_card *sim_card;
 	struct ril_sim_info *sim_info;
@@ -163,9 +166,10 @@ struct ril_slot {
 	MceDisplay *display;
 	GRilIoChannel *io;
 	gulong io_event_id[IO_EVENT_COUNT];
-	gulong imei_req_id;
 	gulong sim_card_state_event_id;
 	gboolean received_sim_status;
+	guint caps_check_id;
+	guint imei_req_id;
 	guint trace_id;
 	guint dump_id;
 	guint retry_id;
@@ -340,6 +344,11 @@ static void ril_plugin_shutdown_slot(struct ril_slot *slot, gboolean kill_io)
 			slot->cell_info = NULL;
 		}
 
+		if (slot->caps) {
+			ril_radio_caps_unref(slot->caps);
+			slot->caps = NULL;
+		}
+
 		if (slot->data) {
 			ril_data_allow(slot->data, RIL_DATA_ROLE_NONE);
 			ril_data_unref(slot->data);
@@ -374,9 +383,17 @@ static void ril_plugin_shutdown_slot(struct ril_slot *slot, gboolean kill_io)
 			slot->trace_id = 0;
 			slot->dump_id = 0;
 
-			grilio_channel_cancel_request(slot->io,
+			if (slot->caps_check_id) {
+				grilio_channel_cancel_request(slot->io,
+						slot->caps_check_id, FALSE);
+				slot->caps_check_id = 0;
+			}
+
+			if (slot->imei_req_id) {
+				grilio_channel_cancel_request(slot->io,
 						slot->imei_req_id, FALSE);
-			slot->imei_req_id = 0;
+				slot->imei_req_id = 0;
+			}
 
 			for (i=0; i<IO_EVENT_COUNT; i++) {
 				ril_plugin_remove_slot_handler(slot, i);
@@ -1049,6 +1066,30 @@ static void ril_plugin_radio_state_changed(GRilIoChannel *io, guint code,
 	}
 }
 
+static void ril_plugin_radio_caps_cb(const struct ril_radio_capability *cap,
+							void *user_data)
+{
+	struct ril_slot *slot = user_data;
+
+	DBG("radio caps %s", cap ? "ok" : "NOT supported");
+	GASSERT(slot->caps_check_id);
+	slot->caps_check_id = 0;
+
+	if (cap) {
+		struct ril_plugin_priv *plugin = slot->plugin;
+
+		if (!plugin->caps_manager) {
+			plugin->caps_manager = ril_radio_caps_manager_new
+				(plugin->data_manager);
+		}
+
+		GASSERT(!slot->caps);
+		slot->caps = ril_radio_caps_new(plugin->caps_manager,
+			ril_plugin_log_prefix(slot), slot->io, slot->radio,
+			slot->network, &slot->config, cap);
+	}
+}
+
 static void ril_plugin_slot_connected(struct ril_slot *slot)
 {
 	struct ril_plugin_priv *plugin = slot->plugin;
@@ -1102,14 +1143,21 @@ static void ril_plugin_slot_connected(struct ril_slot *slot)
 	ril_sim_info_set_network(slot->sim_info, slot->network);
 
 	GASSERT(!slot->data);
-	slot->data = ril_data_new(slot->plugin->data_manager, log_prefix,
+	slot->data = ril_data_new(plugin->data_manager, log_prefix,
 		slot->radio, slot->network, slot->io, &slot->data_opt,
 		&slot->config);
 
 	GASSERT(!slot->cell_info);
-	if (slot->io->ril_version > 8) {
+	if (slot->io->ril_version >= 9) {
 		slot->cell_info = ril_cell_info_new(slot->io, log_prefix,
 				plugin->display, slot->radio, slot->sim_card);
+	}
+
+	GASSERT(!slot->caps);
+	GASSERT(!slot->caps_check_id);
+	if (ril_plugin_multisim(plugin) && slot->io->ril_version >= 11) {
+		slot->caps_check_id = ril_radio_caps_check(slot->io,
+					ril_plugin_radio_caps_cb, slot);
 	}
 
 	ril_plugin_send_screen_state(slot);
@@ -1988,6 +2036,7 @@ static void ril_plugin_exit(void)
 		g_slist_free_full(ril_plugin->slots, ril_plugin_destroy_slot);
 		ril_plugin_dbus_free(ril_plugin->dbus);
 		ril_data_manager_unref(ril_plugin->data_manager);
+		ril_radio_caps_manager_unref(ril_plugin->caps_manager);
 		gutil_disconnect_handlers(ril_plugin->display,
 			ril_plugin->display_event_id, DISPLAY_EVENT_COUNT);
 		mce_display_unref(ril_plugin->display);

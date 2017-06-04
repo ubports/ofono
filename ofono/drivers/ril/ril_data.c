@@ -1572,6 +1572,16 @@ static void ril_data_manager_check_data(struct ril_data_manager *self)
 	}
 }
 
+void ril_data_manager_assert_data_on(struct ril_data_manager *self)
+{
+	if (self) {
+		struct ril_data *data = ril_data_manager_allowed(self);
+		if (data) {
+			ril_data_request_queue(ril_data_allow_new(data, TRUE));
+		}
+	}
+}
+
 /*
  * Local Variables:
  * mode: C

@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2016 Jolla Ltd.
+ *  Copyright (C) 2015-2017 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -48,7 +48,8 @@ const char *ril_error_to_string(int error)
 	RIL_E_(MODE_NOT_SUPPORTED);
 	RIL_E_(FDN_CHECK_FAILURE);
 	RIL_E_(ILLEGAL_SIM_OR_ME);
-	RIL_E_(UNUSED);
+	RIL_E_(MISSING_RESOURCE);
+	RIL_E_(NO_SUCH_ELEMENT);
 	RIL_E_(DIAL_MODIFIED_TO_USSD);
 	RIL_E_(DIAL_MODIFIED_TO_SS);
 	RIL_E_(DIAL_MODIFIED_TO_DIAL);
@@ -57,11 +58,39 @@ const char *ril_error_to_string(int error)
 	RIL_E_(USSD_MODIFIED_TO_USSD);
 	RIL_E_(SS_MODIFIED_TO_DIAL);
 	RIL_E_(SS_MODIFIED_TO_USSD);
-	RIL_E_(SS_MODIFIED_TO_SS);
 	RIL_E_(SUBSCRIPTION_NOT_SUPPORTED);
-	RIL_E_(MISSING_RESOURCE);
-	RIL_E_(NO_SUCH_ELEMENT);
-	RIL_E_(INVALID_PARAMETER);
+	RIL_E_(SS_MODIFIED_TO_SS);
+	RIL_E_(LCE_NOT_SUPPORTED);
+	RIL_E_(NO_MEMORY);
+	RIL_E_(INTERNAL_ERR);
+	RIL_E_(SYSTEM_ERR);
+	RIL_E_(MODEM_ERR);
+	RIL_E_(INVALID_STATE);
+	RIL_E_(NO_RESOURCES);
+	RIL_E_(SIM_ERR);
+	RIL_E_(INVALID_ARGUMENTS);
+	RIL_E_(INVALID_SIM_STATE);
+	RIL_E_(INVALID_MODEM_STATE);
+	RIL_E_(INVALID_CALL_ID);
+	RIL_E_(NO_SMS_TO_ACK);
+	RIL_E_(NETWORK_ERR);
+	RIL_E_(REQUEST_RATE_LIMITED);
+	RIL_E_(SIM_BUSY);
+	RIL_E_(SIM_FULL);
+	RIL_E_(NETWORK_REJECT);
+	RIL_E_(OPERATION_NOT_ALLOWED);
+	RIL_E_(EMPTY_RECORD);
+	RIL_E_(INVALID_SMS_FORMAT);
+	RIL_E_(ENCODING_ERR);
+	RIL_E_(INVALID_SMSC_ADDRESS);
+	RIL_E_(NO_SUCH_ENTRY);
+	RIL_E_(NETWORK_NOT_READY);
+	RIL_E_(NOT_PROVISIONED);
+	RIL_E_(NO_SUBSCRIPTION);
+	RIL_E_(NO_NETWORK_FOUND);
+	RIL_E_(DEVICE_IN_USE);
+	RIL_E_(ABORTED);
+	RIL_E_(INVALID_RESPONSE);
 	default:
 		snprintf(unknown, sizeof(unknown), "%d", error);
 		return unknown;

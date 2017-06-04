@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2016 Jolla Ltd.
+ *  Copyright (C) 2015-2017 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -38,6 +38,7 @@ struct ril_network {
 	struct ril_registration_state data;
 	const struct ofono_network_operator *operator;
 	enum ofono_radio_access_mode pref_mode;
+	enum ofono_radio_access_mode max_pref_mode;
 	struct ril_sim_settings *settings;
 };
 
@@ -53,6 +54,7 @@ void ril_network_unref(struct ril_network *net);
 void ril_network_set_max_pref_mode(struct ril_network *net,
 				enum ofono_radio_access_mode max_pref_mode,
 				gboolean force_check);
+void ril_network_assert_pref_mode(struct ril_network *net, gboolean immediate);
 gulong ril_network_add_operator_changed_handler(struct ril_network *net,
 					ril_network_cb_t cb, void *arg);
 gulong ril_network_add_voice_state_changed_handler(struct ril_network *net,
@@ -60,6 +62,8 @@ gulong ril_network_add_voice_state_changed_handler(struct ril_network *net,
 gulong ril_network_add_data_state_changed_handler(struct ril_network *net,
 					ril_network_cb_t cb, void *arg);
 gulong ril_network_add_pref_mode_changed_handler(struct ril_network *net,
+					ril_network_cb_t cb, void *arg);
+gulong ril_network_add_max_pref_mode_changed_handler(struct ril_network *net,
 					ril_network_cb_t cb, void *arg);
 void ril_network_remove_handler(struct ril_network *net, gulong id);
 void ril_network_remove_handlers(struct ril_network *net, gulong *ids, int n);
