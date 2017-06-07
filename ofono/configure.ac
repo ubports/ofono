@@ -173,10 +173,10 @@ AC_ARG_ENABLE(jolla-rilmodem,
 AM_CONDITIONAL(JOLLA_RILMODEM, test "${enable_jolla_rilmodem}" != "no")
 
 if (test "${enable_jolla_rilmodem}" = "yes"); then
-	PKG_CHECK_MODULES(GRILIO, libgrilio >= 1.0.6, dummy=yes,
-				AC_MSG_ERROR(libgrilio >= 1.0.6 is required))
-	PKG_CHECK_MODULES(GLIBUTIL, libglibutil >= 1.0.5, dummy=yes,
-				AC_MSG_ERROR(libglibutil >= 1.0.5 is required))
+	PKG_CHECK_MODULES(GRILIO, libgrilio >= 1.0.13, dummy=yes,
+				AC_MSG_ERROR(libgrilio >= 1.0.13 is required))
+	PKG_CHECK_MODULES(GLIBUTIL, libglibutil >= 1.0.23, dummy=yes,
+				AC_MSG_ERROR(libglibutil >= 1.0.23 is required))
 	PKG_CHECK_MODULES(LIBMCE, libmce-glib, dummy=yes,
 				AC_MSG_ERROR(libmce-glib is required))
 	CFLAGS="$CFLAGS $GRILIO_CFLAGS $GLIBUTIL_CFLAGS $LIBMCE_CFLAGS"
