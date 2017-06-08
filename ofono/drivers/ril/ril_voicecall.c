@@ -23,6 +23,8 @@
 
 #include <gutil_ints.h>
 #include <gutil_ring.h>
+#include <gutil_idlequeue.h>
+#include <gutil_intarray.h>
 
 #define FLAG_NEED_CLIP 1
 
@@ -39,11 +41,11 @@ struct ril_voicecall {
 	GRilIoQueue *q;
 	struct ofono_voicecall *vc;
 	struct ril_ecclist *ecclist;
-	unsigned int local_release;
 	unsigned char flags;
 	ofono_voicecall_cb_t cb;
 	void *data;
-	guint timer_id;
+	GUtilIntArray *local_release_ids;
+	GUtilIdleQueue *idleq;
 	GUtilRing *dtmf_queue;
 	GUtilInts *local_hangup_reasons;
 	GUtilInts *remote_hangup_reasons;
@@ -55,11 +57,13 @@ struct ril_voicecall {
 	gulong ecclist_change_id;
 };
 
-struct ril_voicecall_change_state_req {
+struct ril_voicecall_request_data {
+	int ref_count;
+	int pending_call_count;
+	int success;
 	struct ofono_voicecall *vc;
 	ofono_voicecall_cb_t cb;
 	gpointer data;
-	int affected_types;
 };
 
 struct lastcause_req {
@@ -69,6 +73,32 @@ struct lastcause_req {
 
 static void ril_voicecall_send_one_dtmf(struct ril_voicecall *vd);
 static void ril_voicecall_clear_dtmf_queue(struct ril_voicecall *vd);
+
+struct ril_voicecall_request_data *ril_voicecall_request_data_new
+	(struct ofono_voicecall *vc, ofono_voicecall_cb_t cb, void *data)
+{
+	struct ril_voicecall_request_data *req =
+		g_slice_new0(struct ril_voicecall_request_data);
+
+	req->ref_count = 1;
+	req->vc = vc;
+	req->cb = cb;
+	req->data = data;
+	return req;
+}
+
+static void ril_voicecall_request_data_unref
+				(struct ril_voicecall_request_data *req)
+{
+	if (!--req->ref_count) {
+		g_slice_free(struct ril_voicecall_request_data, req);
+	}
+}
+
+static void ril_voicecall_request_data_free(gpointer data)
+{
+	ril_voicecall_request_data_unref(data);
+}
 
 static inline struct ril_voicecall *ril_voicecall_get_data(
 						struct ofono_voicecall *vc)
@@ -319,7 +349,9 @@ static void ril_voicecall_clcc_poll_cb(GRilIoChannel *io, int status,
 		struct ofono_call *oc = o ? o->data : NULL;
 
 		if (oc && (nc == NULL || (nc->id > oc->id))) {
-			if (vd->local_release & (1 << oc->id)) {
+			/* old call is gone */
+			if (gutil_int_array_remove_all_fast(
+					vd->local_release_ids, oc->id)) {
 				ofono_voicecall_disconnected(vd->vc, oc->id,
 					OFONO_DISCONNECT_REASON_LOCAL_HANGUP,
 					NULL);
@@ -399,9 +431,7 @@ static void ril_voicecall_clcc_poll_cb(GRilIoChannel *io, int status,
 	}
 
 	g_slist_free_full(vd->calls, g_free);
-
 	vd->calls = calls;
-	vd->local_release = 0;
 }
 
 static void ril_voicecall_clcc_poll(struct ril_voicecall *vd)
@@ -420,52 +450,43 @@ static void ril_voicecall_clcc_poll(struct ril_voicecall *vd)
 static void ril_voicecall_request_cb(GRilIoChannel *io, int status,
 				const void *data, guint len, void *user_data)
 {
-	struct ril_voicecall_change_state_req *req = user_data;
+	struct ril_voicecall_request_data *req = user_data;
 	struct ril_voicecall *vd = ril_voicecall_get_data(req->vc);
-	struct ofono_error error;
-
-	if (status == RIL_E_SUCCESS) {
-		GSList *l;
-
-		if (req->affected_types) {
-			for (l = vd->calls; l; l = l->next) {
-				struct ofono_call *call = l->data;
-
-				if (req->affected_types & (1 << call->status)) {
-					vd->local_release |= (1 << call->id);
-				}
-			}
-		}
-
-		ril_error_init_ok(&error);
-	} else {
-		ofono_error("generic fail");
-		ril_error_init_failure(&error);
-	}
 
 	ril_voicecall_clcc_poll(vd);
 
-	/* We have to callback after we schedule a poll if required */
-	if (req->cb) {
+	/*
+	 * The ofono API call is considered successful if at least one
+	 * associated RIL request succeeds.
+	 */
+	if (status == RIL_E_SUCCESS) {
+		req->success++;
+	}
+
+	/*
+	 * Only invoke the callback if this is the last request associated
+	 * with this ofono api call (pending call count becomes zero).
+	 */
+	if (!--req->pending_call_count && req->cb) {
+		struct ofono_error error;
+
+		if (req->success) {
+			ril_error_init_ok(&error);
+		} else {
+			ril_error_init_failure(&error);
+		}
+
 		req->cb(&error, req->data);
 	}
 }
 
-static void ril_voicecall_request(const guint rreq, struct ofono_voicecall *vc,
-		unsigned int affected_types, GRilIoRequest *ioreq,
-		ofono_voicecall_cb_t cb, void *data)
+static void ril_voicecall_request(const guint code, struct ofono_voicecall *vc,
+		GRilIoRequest *req, ofono_voicecall_cb_t cb, void *data)
 {
-	struct ril_voicecall *vd = ril_voicecall_get_data(vc);
-	struct ril_voicecall_change_state_req *req;
-
-	req = g_new0(struct ril_voicecall_change_state_req, 1);
-	req->vc = vc;
-	req->cb = cb;
-	req->data = data;
-	req->affected_types = affected_types;
-
-	grilio_queue_send_request_full(vd->q, ioreq, rreq,
-				ril_voicecall_request_cb, g_free, req);
+	grilio_queue_send_request_full(ril_voicecall_get_data(vc)->q, req,
+				code, ril_voicecall_request_cb,
+				ril_voicecall_request_data_free,
+				ril_voicecall_request_data_new(vc, cb, data));
 }
 
 static void ril_voicecall_dial_cb(GRilIoChannel *io, int status,
@@ -523,47 +544,68 @@ static void ril_voicecall_dial(struct ofono_voicecall *vc,
 	grilio_request_unref(req);
 }
 
+static void ril_voicecall_submit_hangup_req(struct ofono_voicecall *vc,
+			int id, struct ril_voicecall_request_data *req)
+{
+	struct ril_voicecall *vd = ril_voicecall_get_data(vc);
+	GRilIoRequest *ioreq = grilio_request_array_int32_new(1, id);
+
+	/* Append the call id to the list of calls being released locally */
+	GASSERT(!gutil_int_array_contains(vd->local_release_ids, id));
+	gutil_int_array_append(vd->local_release_ids, id);
+
+	/* Send request to RIL. ril_voicecall_request_data_free will unref
+	 * the request data */
+	req->ref_count++;
+	req->pending_call_count++;
+	grilio_queue_send_request_full(vd->q, ioreq, RIL_REQUEST_HANGUP,
+				ril_voicecall_request_cb,
+				ril_voicecall_request_data_free, req);
+	grilio_request_unref(ioreq);
+}
+
 static void ril_voicecall_hangup_all(struct ofono_voicecall *vc,
 			ofono_voicecall_cb_t cb, void *data)
 {
 	struct ril_voicecall *vd = ril_voicecall_get_data(vc);
-	struct ofono_error error;
-	GSList *l;
 
-	for (l = vd->calls; l; l = l->next) {
-		struct ofono_call *call = l->data;
-		GRilIoRequest *req = grilio_request_sized_new(8);
+	if (vd->calls) {
+		GSList *l;
+		struct ril_voicecall_request_data *req =
+			ril_voicecall_request_data_new(vc, cb, data);
 
-		/* TODO: Hangup just the active ones once we have call
-		 * state tracking (otherwise it can't handle ringing) */
-		DBG("Hanging up call with id %d", call->id);
-		grilio_request_append_int32(req, 1); /* Always 1 - AT+CHLD=1x */
-		grilio_request_append_int32(req, call->id);
+		/*
+		 * Here the idea is that we submit (potentially) multiple
+		 * hangup requests to RIL and invoke the callback after
+		 * the last request has completed (pending call count
+		 * becomes zero).
+		 */
+		for (l = vd->calls; l; l = l->next) {
+			struct ofono_call *call = l->data;
 
-		/* Send request to RIL */
-		ril_voicecall_request(RIL_REQUEST_HANGUP, vc, 0x3f, req,
-								NULL, NULL);
-		grilio_request_unref(req);
+			/* Send request to RIL */
+			DBG("Hanging up call with id %d", call->id);
+			ril_voicecall_submit_hangup_req(vc, call->id, req);
+		}
+
+		/* Release our reference */
+		ril_voicecall_request_data_unref(req);
+	} else {
+		/* No calls */
+		struct ofono_error error;
+		cb(ril_error_ok(&error), data);
 	}
-
-	/* TODO: Deal in case of an error at hungup */
-	cb(ril_error_ok(&error), data);
 }
 
-static void ril_voicecall_hangup_specific(struct ofono_voicecall *vc,
+static void ril_voicecall_release_specific(struct ofono_voicecall *vc,
 		int id, ofono_voicecall_cb_t cb, void *data)
 {
-	GRilIoRequest *req = grilio_request_sized_new(8);
-	struct ofono_error error;
+	struct ril_voicecall_request_data *req =
+		ril_voicecall_request_data_new(vc, cb, data);
 
 	DBG("Hanging up call with id %d", id);
-	grilio_request_append_int32(req, 1); /* Always 1 - AT+CHLD=1x */
-	grilio_request_append_int32(req, id);
-
-	/* Send request to RIL */
-	ril_voicecall_request(RIL_REQUEST_HANGUP, vc, 0x3f, req, NULL, NULL);
-	grilio_request_unref(req);
-	cb(ril_error_ok(&error), data);
+	ril_voicecall_submit_hangup_req(vc, id, req);
+	ril_voicecall_request_data_unref(req);
 }
 
 static void ril_voicecall_call_state_changed_event(GRilIoChannel *io,
@@ -618,7 +660,7 @@ static void ril_voicecall_answer(struct ofono_voicecall *vc,
 {
 	/* Send request to RIL */
 	DBG("Answering current call");
-	ril_voicecall_request(RIL_REQUEST_ANSWER, vc, 0, NULL, cb, data);
+	ril_voicecall_request(RIL_REQUEST_ANSWER, vc, NULL, cb, data);
 }
 
 static void ril_voicecall_send_dtmf_cb(GRilIoChannel *io, int status,
@@ -687,29 +729,25 @@ static void ril_voicecall_clear_dtmf_queue(struct ril_voicecall *vd)
 static void ril_voicecall_create_multiparty(struct ofono_voicecall *vc,
 			ofono_voicecall_cb_t cb, void *data)
 {
-	ril_voicecall_request(RIL_REQUEST_CONFERENCE,
-			vc, 0, NULL, cb, data);
+	ril_voicecall_request(RIL_REQUEST_CONFERENCE, vc, NULL, cb, data);
 }
 
 static void ril_voicecall_transfer(struct ofono_voicecall *vc,
 			ofono_voicecall_cb_t cb, void *data)
 {
 	ril_voicecall_request(RIL_REQUEST_EXPLICIT_CALL_TRANSFER,
-			vc, 0, NULL, cb, data);
+						vc, NULL, cb, data);
 }
 
 static void ril_voicecall_private_chat(struct ofono_voicecall *vc, int id,
 			ofono_voicecall_cb_t cb, void *data)
 {
-	GRilIoRequest *req = grilio_request_sized_new(8);
+	GRilIoRequest *req = grilio_request_array_int32_new(1, id);
 	struct ofono_error error;
 
 	DBG("Private chat with id %d", id);
-	grilio_request_append_int32(req, 1);
-	grilio_request_append_int32(req, id);
-
 	ril_voicecall_request(RIL_REQUEST_SEPARATE_CONNECTION,
-			vc, 0, req, NULL, NULL);
+			vc, req, NULL, NULL);
 	grilio_request_unref(req);
 	cb(ril_error_ok(&error), data);
 }
@@ -717,51 +755,50 @@ static void ril_voicecall_private_chat(struct ofono_voicecall *vc, int id,
 static void ril_voicecall_swap_without_accept(struct ofono_voicecall *vc,
 			ofono_voicecall_cb_t cb, void *data)
 {
+	DBG("");
 	ril_voicecall_request(RIL_REQUEST_SWITCH_HOLDING_AND_ACTIVE,
-			vc, 0, NULL, cb, data);
+						vc, NULL, cb, data);
 }
 
 static void ril_voicecall_hold_all_active(struct ofono_voicecall *vc,
 			ofono_voicecall_cb_t cb, void *data)
 {
+	DBG("");
 	ril_voicecall_request(RIL_REQUEST_SWITCH_HOLDING_AND_ACTIVE,
-			vc, 0, NULL, cb, data);
+						vc, NULL, cb, data);
 }
 
 static void ril_voicecall_release_all_held(struct ofono_voicecall *vc,
 					ofono_voicecall_cb_t cb, void *data)
 {
+	DBG("");
 	ril_voicecall_request(RIL_REQUEST_HANGUP_WAITING_OR_BACKGROUND,
-			vc, 0, NULL, cb, data);
+						vc, NULL, cb, data);
 }
 
 static void ril_voicecall_release_all_active(struct ofono_voicecall *vc,
 					ofono_voicecall_cb_t cb, void *data)
 {
+	DBG("");
 	ril_voicecall_request(RIL_REQUEST_HANGUP_FOREGROUND_RESUME_BACKGROUND,
-			vc, 0, NULL, cb, data);
+						vc, NULL, cb, data);
 }
 
 static void ril_voicecall_set_udub(struct ofono_voicecall *vc,
 					ofono_voicecall_cb_t cb, void *data)
 {
+	DBG("");
 	ril_voicecall_request(RIL_REQUEST_HANGUP_WAITING_OR_BACKGROUND,
-			vc, 0, NULL, cb, data);
+						vc, NULL, cb, data);
 }
 
-static gboolean ril_voicecall_enable_supp_svc(struct ril_voicecall *vd)
+static void ril_voicecall_enable_supp_svc(struct ril_voicecall *vd)
 {
-	GRilIoRequest *req = grilio_request_sized_new(8);
-
-	grilio_request_append_int32(req, 1); /* size of array */
-	grilio_request_append_int32(req, 1); /* notifications enabled */
+	GRilIoRequest *req = grilio_request_array_int32_new(1, 1);
 
 	grilio_queue_send_request(vd->q, req,
 				RIL_REQUEST_SET_SUPP_SVC_NOTIFICATION);
 	grilio_request_unref(req);
-
-	/* Makes this a single shot */
-	return FALSE;
 }
 
 static void ril_voicecall_ringback_tone_event(GRilIoChannel *io,
@@ -789,12 +826,10 @@ static void ril_voicecall_ecclist_changed(struct ril_ecclist *list, void *data)
 	ofono_voicecall_en_list_notify(vd->vc, vd->ecclist->list);
 }
 
-static gboolean ril_delayed_register(gpointer user_data)
+static void ril_voicecall_register(gpointer user_data)
 {
 	struct ril_voicecall *vd = user_data;
 
-	GASSERT(vd->timer_id);
-	vd->timer_id = 0;
 	ofono_voicecall_register(vd->vc);
 
 	/* Emergency Call Codes */
@@ -828,9 +863,6 @@ static gboolean ril_delayed_register(gpointer user_data)
 		grilio_channel_add_unsol_event_handler(vd->io,
 				ril_voicecall_ringback_tone_event,
 				RIL_UNSOL_RINGBACK_TONE, vd);
-
-	/* This makes the timeout a single-shot */
-	return FALSE;
 }
 
 static int ril_voicecall_probe(struct ofono_voicecall *vc, unsigned int vendor,
@@ -847,13 +879,15 @@ static int ril_voicecall_probe(struct ofono_voicecall *vc, unsigned int vendor,
 	vd->dtmf_queue = gutil_ring_new();
 	vd->local_hangup_reasons = gutil_ints_ref(cfg->local_hangup_reasons);
 	vd->remote_hangup_reasons = gutil_ints_ref(cfg->remote_hangup_reasons);
+	vd->local_release_ids = gutil_int_array_new();
+	vd->idleq = gutil_idle_queue_new();
 	vd->vc = vc;
-	vd->timer_id = g_idle_add(ril_delayed_register, vd);
 	if (modem->ecclist_file) {
 		vd->ecclist = ril_ecclist_new(modem->ecclist_file);
 	}
 	ril_voicecall_clear_dtmf_queue(vd);
 	ofono_voicecall_set_data(vc, vd);
+	gutil_idle_queue_add(vd->idleq, ril_voicecall_register, vd);
 	return 0;
 }
 
@@ -864,10 +898,6 @@ static void ril_voicecall_remove(struct ofono_voicecall *vc)
 	DBG("");
 	ofono_voicecall_set_data(vc, NULL);
 	g_slist_free_full(vd->calls, g_free);
-
-	if (vd->timer_id > 0) {
-		g_source_remove(vd->timer_id);
-	}
 
 	ril_ecclist_remove_handler(vd->ecclist, vd->ecclist_change_id);
 	ril_ecclist_unref(vd->ecclist);
@@ -880,6 +910,8 @@ static void ril_voicecall_remove(struct ofono_voicecall *vc)
 	gutil_ring_unref(vd->dtmf_queue);
 	gutil_ints_unref(vd->local_hangup_reasons);
 	gutil_ints_unref(vd->remote_hangup_reasons);
+	gutil_int_array_free(vd->local_release_ids, TRUE);
+	gutil_idle_queue_free(vd->idleq);
 	g_free(vd);
 }
 
@@ -890,7 +922,7 @@ const struct ofono_voicecall_driver ril_voicecall_driver = {
 	.dial                   = ril_voicecall_dial,
 	.answer                 = ril_voicecall_answer,
 	.hangup_all             = ril_voicecall_hangup_all,
-	.release_specific       = ril_voicecall_hangup_specific,
+	.release_specific       = ril_voicecall_release_specific,
 	.send_tones             = ril_voicecall_send_dtmf,
 	.create_multiparty      = ril_voicecall_create_multiparty,
 	.transfer               = ril_voicecall_transfer,
