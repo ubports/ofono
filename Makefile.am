@@ -859,6 +859,9 @@ EXTRA_DIST = src/genbuiltin plugins/ofono.rules plugins/ofono-speedup.rules \
 
 dist_man_MANS = doc/ofonod.8
 
+if TEST_COVERAGE
+COVERAGE_OPT = --coverage
+endif
 
 unit_objects =
 
@@ -883,19 +886,23 @@ noinst_PROGRAMS = $(unit_tests) \
 			unit/test-sms-root unit/test-mux unit/test-caif
 
 unit_test_common_SOURCES = unit/test-common.c src/common.c src/util.c
+unit_test_common_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
 unit_test_common_LDADD = @GLIB_LIBS@
 unit_objects += $(unit_test_common_OBJECTS)
 
 unit_test_util_SOURCES = unit/test-util.c src/util.c
+unit_test_util_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
 unit_test_util_LDADD = @GLIB_LIBS@
 unit_objects += $(unit_test_utils_OBJECTS)
 
 unit_test_idmap_SOURCES = unit/test-idmap.c src/idmap.c
+unit_test_idmap_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
 unit_test_idmap_LDADD = @GLIB_LIBS@
 unit_objects += $(unit_test_idmap_OBJECTS)
 
 unit_test_simutil_SOURCES = unit/test-simutil.c src/util.c \
                                 src/simutil.c src/smsutil.c src/storage.c
+unit_test_simutil_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
 unit_test_simutil_LDADD = @GLIB_LIBS@
 unit_objects += $(unit_test_simutil_OBJECTS)
 
@@ -903,19 +910,23 @@ unit_test_stkutil_SOURCES = unit/test-stkutil.c unit/stk-test-data.h \
 				src/util.c \
                                 src/storage.c src/smsutil.c \
                                 src/simutil.c src/stkutil.c
+unit_test_stkutil_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
 unit_test_stkutil_LDADD = @GLIB_LIBS@
 unit_objects += $(unit_test_stkutil_OBJECTS)
 
 unit_test_sms_SOURCES = unit/test-sms.c src/util.c src/smsutil.c src/storage.c
+unit_test_sms_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
 unit_test_sms_LDADD = @GLIB_LIBS@
 unit_objects += $(unit_test_sms_OBJECTS)
 
 unit_test_cdmasms_SOURCES = unit/test-cdmasms.c src/cdma-smsutil.c
+unit_test_cdmasms_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
 unit_test_cdmasms_LDADD = @GLIB_LIBS@
 unit_objects += $(unit_test_cdmasms_OBJECTS)
 
 unit_test_sms_root_SOURCES = unit/test-sms-root.c \
 					src/util.c src/smsutil.c src/storage.c
+unit_test_sms_root_CFLAGS = -DSTORAGEDIR='"/tmp/ofono"' $(COVERAGE_OPT) $(AM_CFLAGS)
 unit_test_sms_root_LDADD = @GLIB_LIBS@
 unit_objects += $(unit_test_sms_root_OBJECTS)
 
@@ -926,6 +937,7 @@ unit_objects += $(unit_test_mux_OBJECTS)
 unit_test_caif_SOURCES = unit/test-caif.c $(gatchat_sources) \
 					drivers/stemodem/caif_socket.h \
 					drivers/stemodem/if_caif.h
+unit_test_caif_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
 unit_test_caif_LDADD = @GLIB_LIBS@
 unit_objects += $(unit_test_caif_OBJECTS)
 
@@ -933,6 +945,7 @@ unit_test_provision_SOURCES = unit/test-provision.c \
 				plugins/provision.h plugins/mbpi.c \
 				plugins/sailfish_provision.c \
 				src/gprs-provision.c src/log.c
+unit_test_provision_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
 unit_test_provision_LDADD = @GLIB_LIBS@ -ldl
 unit_objects += $(unit_test_provision_OBJECTS)
 

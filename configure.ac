@@ -191,6 +191,12 @@ AC_ARG_ENABLE(add-remove-context, AC_HELP_STRING([--disable-add-remove-context],
 	fi
 ])
 
+AC_ARG_ENABLE(test-coverage,
+	AC_HELP_STRING([--enable-test-coverage], [enable test code coverage]),
+				[enable_test_coverage=${enableval}],
+					[enable_test_coverage="no"])
+AM_CONDITIONAL(TEST_COVERAGE, test "${enable_test_coverage}" != "no")
+
 AC_ARG_ENABLE(qmimodem, AC_HELP_STRING([--disable-qmimodem],
 				[disable Qualcomm QMI modem support]),
 					[enable_qmimodem=${enableval}])
@@ -304,7 +310,7 @@ if (test "$localstatedir" = '${prefix}/var'); then
 else
 	storagedir="${localstatedir}/lib/ofono"
 fi
-AC_DEFINE_UNQUOTED(STORAGEDIR, "${storagedir}",
+AC_DEFINE_UNQUOTED(DEFAULT_STORAGEDIR, "${storagedir}",
 			[Directory for the storage files])
 
 if (test "$sysconfdir" = '${prefix}/etc'); then
