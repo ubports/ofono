@@ -593,11 +593,20 @@ builtin_modules += nettime
 builtin_sources += plugins/nettime.c
 endif
 
+if SAILFISH_PROVISION
+builtin_sources += plugins/sailfish_provision.c
+PROVISION = 1
+else
+if PROVISION
+builtin_sources += plugins/provision.c
+endif
+endif
+
 if PROVISION
 builtin_sources += plugins/mbpi.h plugins/mbpi.c
 
 builtin_modules += provision
-builtin_sources += plugins/provision.h plugins/provision.c
+builtin_sources += plugins/provision.h
 
 builtin_modules += cdma_provision
 builtin_sources += plugins/cdma-provision.c
@@ -920,9 +929,9 @@ unit_test_caif_LDADD = @GLIB_LIBS@
 unit_objects += $(unit_test_caif_OBJECTS)
 
 unit_test_provision_SOURCES = unit/test-provision.c \
-				plugins/provision.h plugins/provision.c \
-				plugins/mbpi.c src/gprs-provision.c \
-				src/log.c
+				plugins/provision.h plugins/mbpi.c \
+				plugins/sailfish_provision.c \
+				src/gprs-provision.c src/log.c
 unit_test_provision_LDADD = @GLIB_LIBS@ -ldl
 unit_objects += $(unit_test_provision_OBJECTS)
 
