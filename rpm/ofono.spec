@@ -69,8 +69,8 @@ autoreconf --force --install
 
 %configure --disable-static \
     --enable-test \
-    --enable-debuglog \
     --enable-sailfish-bt \
+    --enable-sailfish-debuglog \
     --enable-sailfish-provision \
     --enable-sailfish-rilmodem \
     --disable-add-remove-context \

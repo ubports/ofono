@@ -593,6 +593,11 @@ builtin_modules += nettime
 builtin_sources += plugins/nettime.c
 endif
 
+if SAILFISH_DEBUGLOG
+builtin_modules += debuglog
+builtin_sources += plugins/sailfish_debuglog.c
+endif
+
 if SAILFISH_PROVISION
 builtin_sources += plugins/sailfish_provision.c
 PROVISION = 1
@@ -649,11 +654,6 @@ builtin_modules += push_forwarder
 builtin_sources += plugins/push-forwarder.c
 builtin_cflags += @WSPCODEC_CFLAGS@
 builtin_libadd += @WSPCODEC_LIBS@
-endif
-
-if DEBUGLOG
-builtin_modules += debuglog
-builtin_sources += plugins/debuglog.c
 endif
 
 builtin_modules += sms_history

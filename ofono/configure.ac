@@ -277,11 +277,12 @@ if (test "${enable_pushforwarder}" != "no"); then
 	AC_SUBST(WSPCODEC_LIBS)
 fi
 
-AC_ARG_ENABLE(debuglog,
-	AC_HELP_STRING([--enable-debuglog], [enable log control plugin]),
-			[enable_debuglog=${enableval}], [enable_debuglog="no"])
-AM_CONDITIONAL(DEBUGLOG, test "${enable_debuglog}" != "no")
-if (test "${enable_debuglog}" = "yes"); then
+AC_ARG_ENABLE(sailfish-debuglog, AC_HELP_STRING([--enable-sailfish-debuglog],
+			[enable Sailfish OS debug log plugin]),
+			[enable_sailfish_debuglog=${enableval}],
+			[enable_sailfish_debuglog="no"])
+AM_CONDITIONAL(SAILFISH_DEBUGLOG, test "${enable_sailfish_debuglog}" != "no")
+if (test "${enable_sailfish_debuglog}" = "yes"); then
 	PKG_CHECK_MODULES(DBUSLOG, libdbuslogserver-dbus, dummy=yes,
 				AC_MSG_ERROR(libdbuslogserver-dbus is required))
 	CFLAGS="$CFLAGS $DBUSLOG_CFLAGS"
