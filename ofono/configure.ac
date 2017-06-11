@@ -217,6 +217,11 @@ AC_ARG_ENABLE(sailfishos, AC_HELP_STRING([--enable-sailfishos],
                 [enable sailfishos plugin]), [enable_sailfishos=${enableval}])
 AM_CONDITIONAL(SAILFISHFOS, test "${enable_sailfishos}" = "yes")
 
+AC_ARG_ENABLE(sailfish-provision, AC_HELP_STRING([--enable-sailfish-provision],
+			[enable Sailfish OS provisioning plugin]),
+				[enable_sailfish_provision=${enableval}])
+AM_CONDITIONAL(SAILFISH_PROVISION, test "${enable_sailfish_provision=$}" = "yes")
+
 AC_ARG_ENABLE(nettime, AC_HELP_STRING([--disable-nettime],
                                 [disable Nettime plugin]),
                                         [enable_nettime=${enableval}])
