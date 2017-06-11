@@ -70,9 +70,9 @@ autoreconf --force --install
 %configure --disable-static \
     --enable-test \
     --enable-debuglog \
-    --enable-jolla-rilmodem \
     --enable-sailfish-bt \
     --enable-sailfish-provision \
+    --enable-sailfish-rilmodem \
     --disable-add-remove-context \
     --disable-isimodem \
     --disable-qmimodem \

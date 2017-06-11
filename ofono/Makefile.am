@@ -117,7 +117,7 @@ builtin_sources += plugins/udevng.c
 endif
 
 if RILMODEM
-if JOLLA_RILMODEM
+if SAILFISH_RILMODEM
 
 builtin_modules += ril
 builtin_sources +=	drivers/ril/ril_call_barring.c \
@@ -867,7 +867,7 @@ unit_tests = unit/test-common unit/test-util unit/test-idmap \
 				unit/test-provision
 
 if RILMODEM
-if JOLLA_RILMODEM
+if SAILFISH_RILMODEM
 
 unit_tests += unit/test-rilmodem-cs \
 				unit/test-rilmodem-cs \
