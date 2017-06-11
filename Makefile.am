@@ -576,9 +576,9 @@ builtin_sources += plugins/bluez5.c plugins/bluez5.h
 builtin_modules += hfp_ag_bluez5
 builtin_sources += plugins/hfp_ag_bluez5.c plugins/bluez5.h
 
-if SAILFISHFOS
+if SAILFISH_BT
 builtin_modules += sfos_bt
-builtin_sources += plugins/sfos_bt.c
+builtin_sources += plugins/sailfish_bt.c
 endif
 endif
 
