@@ -49,7 +49,9 @@ enum ofono_gprs_context_type {
 };
 
 enum ofono_gprs_auth_method {
-	OFONO_GPRS_AUTH_METHOD_CHAP = 0,
+	OFONO_GPRS_AUTH_METHOD_ANY = 0,
+	OFONO_GPRS_AUTH_METHOD_NONE,
+	OFONO_GPRS_AUTH_METHOD_CHAP,
 	OFONO_GPRS_AUTH_METHOD_PAP,
 };
 
