@@ -117,7 +117,7 @@ builtin_sources += plugins/udevng.c
 endif
 
 if RILMODEM
-if JOLLA_RILMODEM
+if SAILFISH_RILMODEM
 
 builtin_modules += ril
 builtin_sources +=	drivers/ril/ril_call_barring.c \
@@ -576,9 +576,9 @@ builtin_sources += plugins/bluez5.c plugins/bluez5.h
 builtin_modules += hfp_ag_bluez5
 builtin_sources += plugins/hfp_ag_bluez5.c plugins/bluez5.h
 
-if SAILFISHFOS
+if SAILFISH_BT
 builtin_modules += sfos_bt
-builtin_sources += plugins/sfos_bt.c
+builtin_sources += plugins/sailfish_bt.c
 endif
 endif
 
@@ -593,11 +593,25 @@ builtin_modules += nettime
 builtin_sources += plugins/nettime.c
 endif
 
+if SAILFISH_DEBUGLOG
+builtin_modules += debuglog
+builtin_sources += plugins/sailfish_debuglog.c
+endif
+
+if SAILFISH_PROVISION
+builtin_sources += plugins/sailfish_provision.c
+PROVISION = 1
+else
+if PROVISION
+builtin_sources += plugins/provision.c
+endif
+endif
+
 if PROVISION
 builtin_sources += plugins/mbpi.h plugins/mbpi.c
 
 builtin_modules += provision
-builtin_sources += plugins/provision.h plugins/provision.c
+builtin_sources += plugins/provision.h
 
 builtin_modules += cdma_provision
 builtin_sources += plugins/cdma-provision.c
@@ -635,16 +649,11 @@ builtin_sources += plugins/smart-messaging.c
 builtin_modules += push_notification
 builtin_sources += plugins/push-notification.c
 
-if PUSHFORWARDER
-builtin_modules += push_forwarder
-builtin_sources += plugins/push-forwarder.c
+if SAILFISH_PUSHFORWARDER
+builtin_modules += pushforwarder
+builtin_sources += plugins/sailfish_pushforwarder.c
 builtin_cflags += @WSPCODEC_CFLAGS@
 builtin_libadd += @WSPCODEC_LIBS@
-endif
-
-if DEBUGLOG
-builtin_modules += debuglog
-builtin_sources += plugins/debuglog.c
 endif
 
 builtin_modules += sms_history
@@ -858,7 +867,7 @@ unit_tests = unit/test-common unit/test-util unit/test-idmap \
 				unit/test-provision
 
 if RILMODEM
-if JOLLA_RILMODEM
+if SAILFISH_RILMODEM
 
 unit_tests += unit/test-rilmodem-cs \
 				unit/test-rilmodem-cs \
@@ -920,9 +929,9 @@ unit_test_caif_LDADD = @GLIB_LIBS@
 unit_objects += $(unit_test_caif_OBJECTS)
 
 unit_test_provision_SOURCES = unit/test-provision.c \
-				plugins/provision.h plugins/provision.c \
-				plugins/mbpi.c src/gprs-provision.c \
-				src/log.c
+				plugins/provision.h plugins/mbpi.c \
+				plugins/sailfish_provision.c \
+				src/gprs-provision.c src/log.c
 unit_test_provision_LDADD = @GLIB_LIBS@ -ldl
 unit_objects += $(unit_test_provision_OBJECTS)
 

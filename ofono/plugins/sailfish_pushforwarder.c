@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2013-2014 Jolla Ltd.
+ *  Copyright (C) 2013-2017 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -9,7 +9,6 @@
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
- *
  */
 
 #ifdef HAVE_CONFIG_H
@@ -536,6 +535,6 @@ static void pf_plugin_exit(void)
 	inotify_fd = -1;
 }
 
-OFONO_PLUGIN_DEFINE(push_forwarder, "Push Forwarder Plugin", VERSION,
+OFONO_PLUGIN_DEFINE(pushforwarder, "Push Forwarder Plugin", VERSION,
 		OFONO_PLUGIN_PRIORITY_DEFAULT, pf_plugin_init,
 		pf_plugin_exit)

@@ -167,12 +167,13 @@ AC_ARG_ENABLE(rilmodem, AC_HELP_STRING([--disable-rilmodem],
                                         [enable_rilmodem=${enableval}])
 AM_CONDITIONAL(RILMODEM, test "${enable_rilmodem}" != "no")
 
-AC_ARG_ENABLE(jolla-rilmodem,
-        AC_HELP_STRING([--enable-jolla-rilmodem], [enable Jolla RIL modem]),
-        [enable_jolla_rilmodem=${enableval}], [enable_jolla_rilmodem="no"])
-AM_CONDITIONAL(JOLLA_RILMODEM, test "${enable_jolla_rilmodem}" != "no")
+AC_ARG_ENABLE(sailfish-rilmodem, AC_HELP_STRING([--enable-sailfish-rilmodem],
+				[enable Sailfish RIL modem]),
+				[enable_sailfish_rilmodem=${enableval}],
+				[enable_sailfish_rilmodem="no"])
+AM_CONDITIONAL(SAILFISH_RILMODEM, test "${enable_sailfish_rilmodem}" != "no")
 
-if (test "${enable_jolla_rilmodem}" = "yes"); then
+if (test "${enable_sailfish_rilmodem}" = "yes"); then
 	PKG_CHECK_MODULES(GRILIO, libgrilio >= 1.0.13, dummy=yes,
 				AC_MSG_ERROR(libgrilio >= 1.0.13 is required))
 	PKG_CHECK_MODULES(GLIBUTIL, libglibutil >= 1.0.23, dummy=yes,
@@ -213,9 +214,15 @@ fi
 AM_CONDITIONAL(BLUEZ4, test "${enable_bluetooth}" != "no" && test "${enable_bluez4}" = "yes")
 AM_CONDITIONAL(BLUETOOTH, test "${enable_bluetooth}" != "no")
 
-AC_ARG_ENABLE(sailfishos, AC_HELP_STRING([--enable-sailfishos],
-                [enable sailfishos plugin]), [enable_sailfishos=${enableval}])
-AM_CONDITIONAL(SAILFISHFOS, test "${enable_sailfishos}" = "yes")
+AC_ARG_ENABLE(sailfish-bt, AC_HELP_STRING([--enable-sailfish-bt],
+			[enable Sailfish OS Bluetooth plugin]),
+					[enable_sailfish_bt=${enableval}])
+AM_CONDITIONAL(SAILFISH_BT, test "${enable_sailfish_bt}" = "yes")
+
+AC_ARG_ENABLE(sailfish-provision, AC_HELP_STRING([--enable-sailfish-provision],
+			[enable Sailfish OS provisioning plugin]),
+				[enable_sailfish_provision=${enableval}])
+AM_CONDITIONAL(SAILFISH_PROVISION, test "${enable_sailfish_provision=$}" = "yes")
 
 AC_ARG_ENABLE(nettime, AC_HELP_STRING([--disable-nettime],
                                 [disable Nettime plugin]),
@@ -259,22 +266,24 @@ AC_ARG_ENABLE(datafiles, AC_HELP_STRING([--disable-datafiles],
 					[enable_datafiles=${enableval}])
 AM_CONDITIONAL(DATAFILES, test "${enable_datafiles}" != "no")
 
-AC_ARG_ENABLE(pushforwarder, AC_HELP_STRING([--disable-pushforwarder],
-                                [disable Push Forwarder plugin]),
-                                        [enable_pushforwarder=${enableval}])
-AM_CONDITIONAL(PUSHFORWARDER, test "${enable_pushforwarder}" != "no")
-if (test "${enable_pushforwarder}" != "no"); then
+AC_ARG_ENABLE(sailfish-pushforwarder, AC_HELP_STRING([--enable-sailfish-pushforwarder],
+			[enable Sailfish OS push forwarder plugin]),
+			[enable_sailfish_pushforwarder=${enableval}],
+			[enable_sailfish_pushforwarder="no"])
+AM_CONDITIONAL(SAILFISH_PUSHFORWARDER, test "${enable_sailfish_pushforwarder}" != "no")
+if (test "${enable_sailfish_pushforwarder}" != "no"); then
 	PKG_CHECK_MODULES(WSPCODEC, libwspcodec >= 2.0, dummy=yes,
 		AC_MSG_ERROR(WSP decoder is required))
 	AC_SUBST(WSPCODEC_CFLAGS)
 	AC_SUBST(WSPCODEC_LIBS)
 fi
 
-AC_ARG_ENABLE(debuglog,
-	AC_HELP_STRING([--enable-debuglog], [enable log control plugin]),
-			[enable_debuglog=${enableval}], [enable_debuglog="no"])
-AM_CONDITIONAL(DEBUGLOG, test "${enable_debuglog}" != "no")
-if (test "${enable_debuglog}" = "yes"); then
+AC_ARG_ENABLE(sailfish-debuglog, AC_HELP_STRING([--enable-sailfish-debuglog],
+			[enable Sailfish OS debug log plugin]),
+			[enable_sailfish_debuglog=${enableval}],
+			[enable_sailfish_debuglog="no"])
+AM_CONDITIONAL(SAILFISH_DEBUGLOG, test "${enable_sailfish_debuglog}" != "no")
+if (test "${enable_sailfish_debuglog}" = "yes"); then
 	PKG_CHECK_MODULES(DBUSLOG, libdbuslogserver-dbus, dummy=yes,
 				AC_MSG_ERROR(libdbuslogserver-dbus is required))
 	CFLAGS="$CFLAGS $DBUSLOG_CFLAGS"
