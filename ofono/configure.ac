@@ -213,9 +213,10 @@ fi
 AM_CONDITIONAL(BLUEZ4, test "${enable_bluetooth}" != "no" && test "${enable_bluez4}" = "yes")
 AM_CONDITIONAL(BLUETOOTH, test "${enable_bluetooth}" != "no")
 
-AC_ARG_ENABLE(sailfishos, AC_HELP_STRING([--enable-sailfishos],
-                [enable sailfishos plugin]), [enable_sailfishos=${enableval}])
-AM_CONDITIONAL(SAILFISHFOS, test "${enable_sailfishos}" = "yes")
+AC_ARG_ENABLE(sailfish-bt, AC_HELP_STRING([--enable-sailfish-bt],
+			[enable Sailfish OS Bluetooth plugin]),
+					[enable_sailfish_bt=${enableval}])
+AM_CONDITIONAL(SAILFISH_BT, test "${enable_sailfish_bt}" = "yes")
 
 AC_ARG_ENABLE(sailfish-provision, AC_HELP_STRING([--enable-sailfish-provision],
 			[enable Sailfish OS provisioning plugin]),
