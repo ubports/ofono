@@ -167,12 +167,13 @@ AC_ARG_ENABLE(rilmodem, AC_HELP_STRING([--disable-rilmodem],
                                         [enable_rilmodem=${enableval}])
 AM_CONDITIONAL(RILMODEM, test "${enable_rilmodem}" != "no")
 
-AC_ARG_ENABLE(jolla-rilmodem,
-        AC_HELP_STRING([--enable-jolla-rilmodem], [enable Jolla RIL modem]),
-        [enable_jolla_rilmodem=${enableval}], [enable_jolla_rilmodem="no"])
-AM_CONDITIONAL(JOLLA_RILMODEM, test "${enable_jolla_rilmodem}" != "no")
+AC_ARG_ENABLE(sailfish-rilmodem, AC_HELP_STRING([--enable-sailfish-rilmodem],
+				[enable Sailfish RIL modem]),
+				[enable_sailfish_rilmodem=${enableval}],
+				[enable_sailfish_rilmodem="no"])
+AM_CONDITIONAL(SAILFISH_RILMODEM, test "${enable_sailfish_rilmodem}" != "no")
 
-if (test "${enable_jolla_rilmodem}" = "yes"); then
+if (test "${enable_sailfish_rilmodem}" = "yes"); then
 	PKG_CHECK_MODULES(GRILIO, libgrilio >= 1.0.13, dummy=yes,
 				AC_MSG_ERROR(libgrilio >= 1.0.13 is required))
 	PKG_CHECK_MODULES(GLIBUTIL, libglibutil >= 1.0.23, dummy=yes,
