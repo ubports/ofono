@@ -261,6 +261,7 @@ static void ublox_send_uauthreq(struct ofono_gprs_context *gc,
 	case OFONO_GPRS_AUTH_METHOD_PAP:
 		auth = 1;
 		break;
+	case OFONO_GPRS_AUTH_METHOD_ANY:
 	case OFONO_GPRS_AUTH_METHOD_CHAP:
 		auth = 2;
 		break;

@@ -131,6 +131,7 @@ static GSList *provision_pick_best_ap(GSList *list, const char *spn,
 		ap->type = defaults->type;
 		ap->name = g_strdup(defaults->name);
 		ap->apn = g_strdup(defaults->apn);
+		ap->auth_method = OFONO_GPRS_AUTH_METHOD_NONE;
 		return g_slist_append(NULL, ap);
 	}
 }

@@ -247,6 +247,8 @@ static void at_gprs_activate_primary(struct ofono_gprs_context *gc,
 
 	/* We only support CHAP and PAP */
 	switch (ctx->auth_method) {
+	case OFONO_GPRS_AUTH_METHOD_ANY:
+	case OFONO_GPRS_AUTH_METHOD_NONE:
 	case OFONO_GPRS_AUTH_METHOD_CHAP:
 		gcd->auth_method = G_AT_PPP_AUTH_METHOD_CHAP;
 		break;
@@ -294,6 +296,8 @@ static void at_gprs_activate_primary(struct ofono_gprs_context *gc,
 			 * prefix, this is the least invasive place to set it.
 			 */
 			switch (ctx->auth_method) {
+			case OFONO_GPRS_AUTH_METHOD_ANY:
+			case OFONO_GPRS_AUTH_METHOD_NONE:
 			case OFONO_GPRS_AUTH_METHOD_CHAP:
 				snprintf(buf + len, sizeof(buf) - len - 3,
 						",\"CHAP:%s\"", ctx->apn);
