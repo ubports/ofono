@@ -649,9 +649,9 @@ builtin_sources += plugins/smart-messaging.c
 builtin_modules += push_notification
 builtin_sources += plugins/push-notification.c
 
-if PUSHFORWARDER
-builtin_modules += push_forwarder
-builtin_sources += plugins/push-forwarder.c
+if SAILFISH_PUSHFORWARDER
+builtin_modules += pushforwarder
+builtin_sources += plugins/sailfish_pushforwarder.c
 builtin_cflags += @WSPCODEC_CFLAGS@
 builtin_libadd += @WSPCODEC_LIBS@
 endif
