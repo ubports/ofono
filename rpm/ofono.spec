@@ -72,6 +72,7 @@ autoreconf --force --install
     --enable-sailfish-bt \
     --enable-sailfish-debuglog \
     --enable-sailfish-provision \
+    --enable-sailfish-pushforwarder \
     --enable-sailfish-rilmodem \
     --disable-add-remove-context \
     --disable-isimodem \
