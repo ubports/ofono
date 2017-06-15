@@ -788,7 +788,7 @@ static gboolean ril_data_call_setup_submit(struct ril_data_request *req)
 	struct ril_data_priv *priv = req->data->priv;
 	const char *proto_str = ril_data_ofono_protocol_to_ril(setup->proto);
 	GRilIoRequest* ioreq;
-	int tech, auth;
+	int tech, auth = RIL_AUTH_NONE;
 
 	GASSERT(proto_str);
 
@@ -811,14 +811,22 @@ static gboolean ril_data_call_setup_submit(struct ril_data_request *req)
 		tech = RADIO_TECH_HSPA;
 	}
 
-        /*
-         * We do the same as in $AOSP/frameworks/opt/telephony/src/java/com/
-         * android/internal/telephony/dataconnection/DataConnection.java,
-         * onConnect(), and use authentication or not depending on whether
-         * the user field is empty or not.
-         */
-	auth = (setup->username && setup->username[0]) ?
-					RIL_AUTH_BOTH : RIL_AUTH_NONE;
+	if (setup->username && setup->username[0]) {
+		switch (setup->auth_method) {
+		case OFONO_GPRS_AUTH_METHOD_ANY:
+			auth = RIL_AUTH_BOTH;
+			break;
+		case OFONO_GPRS_AUTH_METHOD_NONE:
+			auth = RIL_AUTH_NONE;
+			break;
+		case OFONO_GPRS_AUTH_METHOD_CHAP:
+			auth = RIL_AUTH_CHAP;
+			break;
+		case OFONO_GPRS_AUTH_METHOD_PAP:
+			auth = RIL_AUTH_PAP;
+			break;
+		}
+	}
 
 	/*
 	 * TODO: add comments about tethering, other non-public
