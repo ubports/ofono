@@ -46,7 +46,7 @@ struct ril_plugin_dbus {
 
 #define RIL_DBUS_PATH               "/"
 #define RIL_DBUS_INTERFACE          "org.nemomobile.ofono.ModemManager"
-#define RIL_DBUS_INTERFACE_VERSION  (6)
+#define RIL_DBUS_INTERFACE_VERSION  (7)
 
 #define RIL_DBUS_SIGNAL_ENABLED_MODEMS_CHANGED      "EnabledModemsChanged"
 #define RIL_DBUS_SIGNAL_PRESENT_SIMS_CHANGED        "PresentSimsChanged"
@@ -75,6 +75,11 @@ static gboolean ril_plugin_dbus_present(const struct ril_slot_info *slot)
 static const char *ril_plugin_dbus_imei(const struct ril_slot_info *slot)
 {
 	return slot->imei;
+}
+
+static const char *ril_plugin_dbus_imeisv(const struct ril_slot_info *slot)
+{
+	return slot->imeisv;
 }
 
 static void ril_plugin_dbus_append_path_array(DBusMessageIter *it,
@@ -440,6 +445,13 @@ static void ril_plugin_dbus_append_all6(DBusMessageIter *it,
 	ril_plugin_dbus_append_modem_errors(it, dbus);
 }
 
+static void ril_plugin_dbus_append_all7(DBusMessageIter *it,
+						struct ril_plugin_dbus *dbus)
+{
+	ril_plugin_dbus_append_all6(it, dbus);
+	ril_plugin_dbus_append_string_array(it, dbus, ril_plugin_dbus_imeisv);
+}
+
 static DBusMessage *ril_plugin_dbus_get_all(DBusConnection *conn,
 						DBusMessage *msg, void *data)
 {
@@ -480,6 +492,13 @@ static DBusMessage *ril_plugin_dbus_get_all6(DBusConnection *conn,
 {
 	return ril_plugin_dbus_imei_reply(msg, (struct ril_plugin_dbus *)data,
 						ril_plugin_dbus_append_all6);
+}
+
+static DBusMessage *ril_plugin_dbus_get_all7(DBusConnection *conn,
+						DBusMessage *msg, void *data)
+{
+	return ril_plugin_dbus_imei_reply(msg, (struct ril_plugin_dbus *)data,
+						ril_plugin_dbus_append_all7);
 }
 
 static DBusMessage *ril_plugin_dbus_get_interface_version(DBusConnection *conn,
@@ -527,6 +546,19 @@ static DBusMessage *ril_plugin_dbus_get_imei(DBusConnection *conn,
 {
 	return ril_plugin_dbus_imei_reply(msg, (struct ril_plugin_dbus *)data,
 					ril_plugin_dbus_append_imei_array);
+}
+
+static void ril_plugin_dbus_append_imeisv_array(DBusMessageIter *it,
+						struct ril_plugin_dbus *dbus)
+{
+	ril_plugin_dbus_append_string_array(it, dbus, ril_plugin_dbus_imeisv);
+}
+
+static DBusMessage *ril_plugin_dbus_get_imeisv(DBusConnection *conn,
+						DBusMessage *msg, void *data)
+{
+	return ril_plugin_dbus_imei_reply(msg, (struct ril_plugin_dbus *)data,
+					ril_plugin_dbus_append_imeisv_array);
 }
 
 static DBusMessage *ril_plugin_dbus_reply_with_string(DBusMessage *msg,
@@ -790,6 +822,7 @@ static DBusMessage *ril_plugin_dbus_set_mms_sim(DBusConnection *conn,
 #define RIL_DBUS_READY_ARG               {"ready" , "b"}
 #define RIL_DBUS_MODEM_ERRORS_ARG        {"errors" , \
                                           "aa(" RIL_DBUS_ERROR_SIGNATURE ")"}
+#define RIL_DBUS_IMEISV_ARG              {"imeisv" , "as"}
 #define RIL_DBUS_GET_ALL_ARGS \
 	RIL_DBUS_VERSION_ARG, \
 	RIL_DBUS_AVAILABLE_MODEMS_ARG, \
@@ -814,6 +847,9 @@ static DBusMessage *ril_plugin_dbus_set_mms_sim(DBusConnection *conn,
 #define RIL_DBUS_GET_ALL6_ARGS \
 	RIL_DBUS_GET_ALL5_ARGS, \
 	RIL_DBUS_MODEM_ERRORS_ARG
+#define RIL_DBUS_GET_ALL7_ARGS \
+	RIL_DBUS_GET_ALL6_ARGS, \
+	RIL_DBUS_IMEISV_ARG
 static const GDBusMethodTable ril_plugin_dbus_methods[] = {
 	{ GDBUS_METHOD("GetAll",
 			NULL, GDBUS_ARGS(RIL_DBUS_GET_ALL_ARGS),
@@ -833,6 +869,9 @@ static const GDBusMethodTable ril_plugin_dbus_methods[] = {
 	{ GDBUS_ASYNC_METHOD("GetAll6",
 			NULL, GDBUS_ARGS(RIL_DBUS_GET_ALL6_ARGS),
 			ril_plugin_dbus_get_all6) },
+	{ GDBUS_ASYNC_METHOD("GetAll7",
+			NULL, GDBUS_ARGS(RIL_DBUS_GET_ALL7_ARGS),
+			ril_plugin_dbus_get_all7) },
 	{ GDBUS_METHOD("GetInterfaceVersion",
 			NULL, GDBUS_ARGS(RIL_DBUS_VERSION_ARG),
 			ril_plugin_dbus_get_interface_version) },
@@ -848,6 +887,9 @@ static const GDBusMethodTable ril_plugin_dbus_methods[] = {
 	{ GDBUS_ASYNC_METHOD("GetIMEI",
 			NULL, GDBUS_ARGS(RIL_DBUS_IMEI_ARG),
 			ril_plugin_dbus_get_imei) },
+	{ GDBUS_ASYNC_METHOD("GetIMEISV",
+			NULL, GDBUS_ARGS(RIL_DBUS_IMEISV_ARG),
+			ril_plugin_dbus_get_imeisv) },
 	{ GDBUS_METHOD("GetDefaultDataSim",
 			NULL, GDBUS_ARGS(RIL_DBUS_DEFAULT_DATA_SIM_ARG),
 			ril_plugin_dbus_get_default_data_sim) },
