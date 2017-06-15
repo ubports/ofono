@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2016 Jolla Ltd.
+ *  Copyright (C) 2016-2017 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -170,9 +170,9 @@ struct ril_data_request_deact {
 	int cid;
 };
 
-struct ril_data_request_2g {
+struct ril_data_request_allow_data {
 	struct ril_data_request req;
-	gulong handler_id;
+	gboolean allow;
 };
 
 static void ril_data_manager_check_data(struct ril_data_manager *dm);
@@ -975,15 +975,6 @@ static struct ril_data_request *ril_data_call_deact_new(struct ril_data *data,
  * ril_data_allow_request
  *==========================================================================*/
 
-static GRilIoRequest *ril_data_allow_req(gboolean allow)
-{
-	GRilIoRequest *req = grilio_request_sized_new(8);
-
-	grilio_request_append_int32(req, 1);
-	grilio_request_append_int32(req, allow != FALSE);
-	return req;
-}
-
 static void ril_data_allow_cb(GRilIoChannel *io, int ril_status,
 			const void *req_data, guint len, void *user_data)
 {
@@ -993,13 +984,22 @@ static void ril_data_allow_cb(GRilIoChannel *io, int ril_status,
 
 	ril_data_request_completed(req);
 
-	if (ril_status == RIL_E_SUCCESS &&
-				(priv->flags & RIL_DATA_FLAG_ALLOWED)) {
-		GASSERT(!ril_data_allowed(data));
-		priv->flags |= RIL_DATA_FLAG_ON;
-		GASSERT(ril_data_allowed(data));
-		DBG_(data, "data on");
-		ril_data_signal_emit(data, SIGNAL_ALLOW_CHANGED);
+	if (ril_status == RIL_E_SUCCESS) {
+		const gboolean was_allowed = ril_data_allowed(data);
+		struct ril_data_request_allow_data *ad =
+			G_CAST(req, struct ril_data_request_allow_data, req);
+
+		if (ad->allow) {
+			priv->flags |= RIL_DATA_FLAG_ON;
+			DBG_(data, "data on");
+		} else {
+			priv->flags &= ~RIL_DATA_FLAG_ON;
+			DBG_(data, "data off");
+		}
+
+		if (ril_data_allowed(data) != was_allowed) {
+			ril_data_signal_emit(data, SIGNAL_ALLOW_CHANGED);
+		}
 	}
 
 	ril_data_request_finish(req);
@@ -1007,7 +1007,9 @@ static void ril_data_allow_cb(GRilIoChannel *io, int ril_status,
 
 static gboolean ril_data_allow_submit(struct ril_data_request *req)
 {
-	GRilIoRequest *ioreq = ril_data_allow_req(TRUE);
+	struct ril_data_request_allow_data *ad =
+		G_CAST(req, struct ril_data_request_allow_data, req);
+	GRilIoRequest *ioreq = grilio_request_array_int32_new(1, ad->allow);
 	struct ril_data_priv *priv = req->data->priv;
 
 	grilio_request_set_retry(ioreq, RIL_RETRY_SECS*1000, -1);
@@ -1017,15 +1019,19 @@ static gboolean ril_data_allow_submit(struct ril_data_request *req)
 	return TRUE;
 }
 
-static struct ril_data_request *ril_data_allow_new(struct ril_data *data)
+static struct ril_data_request *ril_data_allow_new(struct ril_data *data,
+							gboolean allow)
 {
-	struct ril_data_request *req = g_new0(struct ril_data_request, 1);
+	struct ril_data_request_allow_data *ad =
+		g_new0(struct ril_data_request_allow_data, 1);
+	struct ril_data_request *req = &ad->req;
 
 	req->name = "ALLOW_DATA";
 	req->data = data;
 	req->submit = ril_data_allow_submit;
 	req->cancel = ril_data_request_cancel_io;
 	req->flags = DATA_REQUEST_FLAG_CANCEL_WHEN_DISALLOWED;
+	ad->allow = allow;
 	return req;
 }
 
@@ -1084,8 +1090,8 @@ struct ril_data *ril_data_new(struct ril_data_manager *dm, const char *name,
 
 		priv->options = *options;
 		switch (priv->options.allow_data) {
-		case RIL_ALLOW_DATA_ON:
-		case RIL_ALLOW_DATA_OFF:
+		case RIL_ALLOW_DATA_ENABLED:
+		case RIL_ALLOW_DATA_DISABLED:
 			break;
 		default:
 			/*
@@ -1093,7 +1099,8 @@ struct ril_data *ril_data_new(struct ril_data_manager *dm, const char *name,
 			 * RIL_VERSION was 10
 			 */
 			priv->options.allow_data = (io->ril_version > 10) ?
-				RIL_ALLOW_DATA_ON : RIL_ALLOW_DATA_OFF;
+						RIL_ALLOW_DATA_ENABLED :
+						RIL_ALLOW_DATA_DISABLED;
 			break;
 		}
 
@@ -1211,10 +1218,11 @@ static void ril_data_cancel_requests(struct ril_data *self,
 static void ril_data_disallow(struct ril_data *self)
 {
 	struct ril_data_priv *priv = self->priv;
+	const gboolean was_allowed = ril_data_allowed(self);
 
 	DBG_(self, "disallowed");
 	GASSERT(priv->flags & RIL_DATA_FLAG_ALLOWED);
-	priv->flags &= ~(RIL_DATA_FLAG_ALLOWED | RIL_DATA_FLAG_ON);
+	priv->flags &= ~RIL_DATA_FLAG_ALLOWED;
 
 	/*
 	 * Cancel all requests that can be canceled.
@@ -1227,7 +1235,20 @@ static void ril_data_disallow(struct ril_data *self)
 	 * requests are already pending? That's quite unlikely though)
 	 */
 	ril_data_deactivate_all(self);
-	ril_data_power_update(self);
+
+	if (priv->options.allow_data == RIL_ALLOW_DATA_ENABLED) {
+		/* Tell rild that the data is now disabled */
+		ril_data_request_queue(ril_data_allow_new(self, FALSE));
+	} else {
+		priv->flags &= ~RIL_DATA_FLAG_ON;
+		GASSERT(!ril_data_allowed(self));
+		DBG_(self, "data off");
+		ril_data_power_update(self);
+	}
+
+	if (ril_data_allowed(self) != was_allowed) {
+		ril_data_signal_emit(self, SIGNAL_ALLOW_CHANGED);
+	}
 }
 
 static void ril_data_max_speed_cb(gpointer data, gpointer max_speed)
@@ -1244,12 +1265,7 @@ static void ril_data_disallow_cb(gpointer data_ptr, gpointer allowed)
 		struct ril_data *data = data_ptr;
 
 		if (data->priv->flags & RIL_DATA_FLAG_ALLOWED) {
-			const gboolean was_allowed = ril_data_allowed(data);
 			ril_data_disallow(data);
-			if (was_allowed) {
-				ril_data_signal_emit(data,
-						SIGNAL_ALLOW_CHANGED);
-			}
 		}
 	}
 }
@@ -1303,13 +1319,7 @@ void ril_data_allow(struct ril_data *self, enum ril_data_role role)
 			}
 		} else {
 			if (priv->flags & RIL_DATA_FLAG_ALLOWED) {
-				gboolean was_allowed = ril_data_allowed(self);
-
 				ril_data_disallow(self);
-				if (was_allowed) {
-					ril_data_signal_emit(self,
-							SIGNAL_ALLOW_CHANGED);
-				}
 				ril_data_manager_check_data(dm);
 			}
 		}
@@ -1538,9 +1548,8 @@ static void ril_data_manager_switch_data_on(struct ril_data_manager *self,
 					OFONO_RADIO_ACCESS_MODE_ANY, TRUE);
 	}
 
-
-	if (priv->options.allow_data == RIL_ALLOW_DATA_ON) {
-		ril_data_request_queue(ril_data_allow_new(data));
+	if (priv->options.allow_data == RIL_ALLOW_DATA_ENABLED) {
+		ril_data_request_queue(ril_data_allow_new(data, TRUE));
 	} else {
 		priv->flags |= RIL_DATA_FLAG_ON;
 		GASSERT(ril_data_allowed(data));
@@ -1559,6 +1568,16 @@ static void ril_data_manager_check_data(struct ril_data_manager *self)
 		ril_data_manager_check_network_mode(self);
 		if (data && !(data->priv->flags & RIL_DATA_FLAG_ON)) {
 			ril_data_manager_switch_data_on(self, data);
+		}
+	}
+}
+
+void ril_data_manager_assert_data_on(struct ril_data_manager *self)
+{
+	if (self) {
+		struct ril_data *data = ril_data_manager_allowed(self);
+		if (data) {
+			ril_data_request_queue(ril_data_allow_new(data, TRUE));
 		}
 	}
 }

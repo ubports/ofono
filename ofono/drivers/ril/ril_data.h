@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2016 Jolla Ltd.
+ *  Copyright (C) 2016-2017 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -56,8 +56,8 @@ enum ril_data_manager_flags {
 
 enum ril_data_allow_data_opt {
 	RIL_ALLOW_DATA_AUTO,
-	RIL_ALLOW_DATA_ON,
-	RIL_ALLOW_DATA_OFF
+	RIL_ALLOW_DATA_ENABLED,
+	RIL_ALLOW_DATA_DISABLED
 };
 
 enum ril_data_call_format {
@@ -84,6 +84,7 @@ struct ril_data_manager;
 struct ril_data_manager *ril_data_manager_new(enum ril_data_manager_flags flg);
 struct ril_data_manager *ril_data_manager_ref(struct ril_data_manager *dm);
 void ril_data_manager_unref(struct ril_data_manager *dm);
+void ril_data_manager_assert_data_on(struct ril_data_manager *dm);
 
 typedef void (*ril_data_cb_t)(struct ril_data *data, void *arg);
 typedef void (*ril_data_call_setup_cb_t)(struct ril_data *data,
