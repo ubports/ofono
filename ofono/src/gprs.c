@@ -902,6 +902,13 @@ static void pri_reset_context_properties(struct pri_context *ctx,
 				gprs_proto_to_string(ctx->context.proto));
 	}
 
+	if (ctx->context.auth_method != ap->auth_method) {
+		ctx->context.auth_method = ap->auth_method;
+		changed = TRUE;
+		pri_str_signal_change(ctx, "AuthenticationMethod",
+			gprs_auth_method_to_string(ctx->context.auth_method));
+	}
+
 	if (ap->type == OFONO_GPRS_CONTEXT_TYPE_MMS) {
 		if (pri_str_update(ctx->message_proxy, ap->message_proxy,
 				sizeof(ctx->message_proxy))) {
