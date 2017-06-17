@@ -12,18 +12,19 @@ Requires:   systemd
 Requires:   ofono-configs
 Requires:   libgrilio >= 1.0.14
 Requires:   libglibutil >= 1.0.23
+Requires:   mobile-broadband-provider-info
 Requires(preun): systemd
 Requires(post): systemd
 Requires(postun): systemd
-BuildRequires:  pkgconfig(glib-2.0)
 BuildRequires:  pkgconfig(dbus-1)
+BuildRequires:  pkgconfig(glib-2.0)
 BuildRequires:  pkgconfig(libudev) >= 145
-BuildRequires:  pkgconfig(mobile-broadband-provider-info)
 BuildRequires:  pkgconfig(libwspcodec) >= 2.0
 BuildRequires:  pkgconfig(libgrilio) >= 1.0.14
 BuildRequires:  pkgconfig(libglibutil) >= 1.0.23
 BuildRequires:  pkgconfig(libdbuslogserver-dbus)
 BuildRequires:  pkgconfig(libmce-glib)
+BuildRequires:  pkgconfig(mobile-broadband-provider-info)
 BuildRequires:  libtool
 BuildRequires:  automake
 BuildRequires:  autoconf

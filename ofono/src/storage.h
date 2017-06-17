@@ -28,6 +28,11 @@
 #include <fcntl.h>
 #include <sys/types.h>
 
+/* STORAGEDIR may need to be redefined in unit tests */
+#ifndef STORAGEDIR
+#  define STORAGEDIR DEFAULT_STORAGEDIR
+#endif
+
 int create_dirs(const char *filename, const mode_t mode);
 
 ssize_t read_file(unsigned char *buffer, size_t len,

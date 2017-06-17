@@ -49,6 +49,19 @@ unit/test-rilmodem-sms
 unit/test-*.log
 unit/test-*.trs
 
+unit/test-grilreply
+unit/test-grilrequest
+unit/test-grilunsol
+unit/test-provision
+unit/html
+
+drivers/*/*.gcda
+drivers/*/*.gcno
+drivers/*/*.gcov
+*/*.gcda
+*/*.gcno
+*/*.gcov
+
 tools/huawei-audio
 tools/auto-enable
 tools/get-location

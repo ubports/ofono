@@ -258,6 +258,10 @@ static gboolean gprs_proto_from_string(const char *str,
 static const char *gprs_auth_method_to_string(enum ofono_gprs_auth_method auth)
 {
 	switch (auth) {
+	case OFONO_GPRS_AUTH_METHOD_ANY:
+		return "any";
+	case OFONO_GPRS_AUTH_METHOD_NONE:
+		return "none";
 	case OFONO_GPRS_AUTH_METHOD_CHAP:
 		return "chap";
 	case OFONO_GPRS_AUTH_METHOD_PAP:
@@ -275,6 +279,12 @@ static gboolean gprs_auth_method_from_string(const char *str,
 		return TRUE;
 	} else if (g_str_equal(str, "pap")) {
 		*auth = OFONO_GPRS_AUTH_METHOD_PAP;
+		return TRUE;
+	} else if (g_str_equal(str, "any")) {
+		*auth = OFONO_GPRS_AUTH_METHOD_ANY;
+		return TRUE;
+	} else if (g_str_equal(str, "none")) {
+		*auth = OFONO_GPRS_AUTH_METHOD_NONE;
 		return TRUE;
 	}
 
@@ -890,6 +900,13 @@ static void pri_reset_context_properties(struct pri_context *ctx,
 		changed = TRUE;
 		pri_str_signal_change(ctx, "Protocol",
 				gprs_proto_to_string(ctx->context.proto));
+	}
+
+	if (ctx->context.auth_method != ap->auth_method) {
+		ctx->context.auth_method = ap->auth_method;
+		changed = TRUE;
+		pri_str_signal_change(ctx, "AuthenticationMethod",
+			gprs_auth_method_to_string(ctx->context.auth_method));
 	}
 
 	if (ap->type == OFONO_GPRS_CONTEXT_TYPE_MMS) {

@@ -53,6 +53,9 @@ const char *mbpi_database = MBPI_DATABASE;
 enum ofono_gprs_proto mbpi_default_internet_proto = OFONO_GPRS_PROTO_IPV4V6;
 enum ofono_gprs_proto mbpi_default_mms_proto = OFONO_GPRS_PROTO_IP;
 enum ofono_gprs_proto mbpi_default_proto = OFONO_GPRS_PROTO_IP;
+enum ofono_gprs_auth_method mbpi_default_auth_method = OFONO_GPRS_AUTH_METHOD_ANY;
+
+#define OFONO_GPRS_AUTH_METHOD_UNSPECIFIED ((enum ofono_gprs_auth_method)(-1))
 
 #define _(x) case x: return (#x)
 
@@ -166,6 +169,10 @@ static void authentication_start(GMarkupParseContext *context,
 		*auth_method = OFONO_GPRS_AUTH_METHOD_CHAP;
 	else if (strcmp(text, "pap") == 0)
 		*auth_method = OFONO_GPRS_AUTH_METHOD_PAP;
+	else if (strcmp(text, "any") == 0)
+		*auth_method = OFONO_GPRS_AUTH_METHOD_ANY;
+	else if (strcmp(text, "none") == 0)
+		*auth_method = OFONO_GPRS_AUTH_METHOD_NONE;
 	else
 		mbpi_g_set_error(context, error, G_MARKUP_ERROR,
 					G_MARKUP_ERROR_UNKNOWN_ATTRIBUTE,
@@ -344,7 +351,7 @@ static void apn_handler(GMarkupParseContext *context, struct gsm_data *gsm,
 	ap->apn = g_strdup(apn);
 	ap->type = OFONO_GPRS_CONTEXT_TYPE_INTERNET;
 	ap->proto = mbpi_default_proto;
-	ap->auth_method = OFONO_GPRS_AUTH_METHOD_CHAP;
+	ap->auth_method = OFONO_GPRS_AUTH_METHOD_UNSPECIFIED;
 
 	g_markup_parse_context_push(context, &apn_parser, ap);
 }
@@ -413,6 +420,17 @@ static void gsm_end(GMarkupParseContext *context, const gchar *element_name,
 	ap = g_markup_parse_context_pop(context);
 	if (ap == NULL)
 		return;
+
+	/* Fix the authentication method if none was specified */
+	if (ap->auth_method == OFONO_GPRS_AUTH_METHOD_UNSPECIFIED) {
+		if ((!ap->username || !ap->username[0]) &&
+				(!ap->password || !ap->password[0])) {
+			/* No username or password => no authentication */
+			ap->auth_method = OFONO_GPRS_AUTH_METHOD_NONE;
+		} else {
+			ap->auth_method = mbpi_default_auth_method;
+		}
+	}
 
 	if (gsm->allow_duplicates == FALSE) {
 		GSList *l;
