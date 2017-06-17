@@ -467,6 +467,7 @@ static void ril_voicecall_request_cb(GRilIoChannel *io, int status,
 	 * Only invoke the callback if this is the last request associated
 	 * with this ofono api call (pending call count becomes zero).
 	 */
+	GASSERT(req->pending_call_count > 0);
 	if (!--req->pending_call_count && req->cb) {
 		struct ofono_error error;
 
@@ -483,10 +484,13 @@ static void ril_voicecall_request_cb(GRilIoChannel *io, int status,
 static void ril_voicecall_request(const guint code, struct ofono_voicecall *vc,
 		GRilIoRequest *req, ofono_voicecall_cb_t cb, void *data)
 {
+	struct ril_voicecall_request_data *req_data =
+		ril_voicecall_request_data_new(vc, cb, data);
+
+	req_data->pending_call_count++;
 	grilio_queue_send_request_full(ril_voicecall_get_data(vc)->q, req,
 				code, ril_voicecall_request_cb,
-				ril_voicecall_request_data_free,
-				ril_voicecall_request_data_new(vc, cb, data));
+				ril_voicecall_request_data_free, req_data);
 }
 
 static void ril_voicecall_dial_cb(GRilIoChannel *io, int status,
