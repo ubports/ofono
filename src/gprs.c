@@ -34,6 +34,7 @@
 #include <net/route.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <ctype.h>
 
 #include <glib.h>
 #include <gdbus.h>
@@ -651,7 +652,48 @@ static gboolean pri_parse_proxy(struct pri_context *ctx, const char *proxy)
 	}
 
 	g_free(ctx->proxy_host);
-	ctx->proxy_host = g_strdup(host);
+	ctx->proxy_host = NULL;
+
+	if (host[0] == '0' || strstr(host, ".0")) {
+		/*
+		 * Some operators provide IP address of the MMS proxy
+		 * prepending zeros to each number shorter then 3 digits,
+		 * e.g. "192.168.094.023" instead of "192.168.94.23".
+		 * That may look nicer but it's actually wrong because
+		 * the numbers starting with zeros are interpreted as
+		 * octal numbers. In the example above 023 actually means
+		 * 16 and 094 is not a valid number at all.
+		 *
+		 * In addition to publishing these broken settings on their
+		 * web sites, some of the operators send them over the air,
+		 * in which case we can't even blame the user for entering
+		 * an invalid IP address. We better be prepared to deal with
+		 * those.
+		 *
+		 * Since nobody in the world seems to be actually using the
+		 * octal notation to write an IP address, let's remove the
+		 * leading zeros if we find them in the host part of the MMS
+		 * proxy URL.
+		 */
+		char** parts = g_strsplit(host, ".", -1);
+		guint count = g_strv_length(parts);
+		if (count == 4) {
+			char** ptr = parts;
+			while (*ptr) {
+				char* part = *ptr;
+				while (part[0] == '0' && isdigit(part[1])) {
+					memmove(part, part+1, strlen(part));
+				}
+				*ptr++ = part;
+			}
+			ctx->proxy_host = g_strjoinv(".", parts);
+			DBG("%s => %s", host, ctx->proxy_host);
+		}
+		g_strfreev(parts);
+	}
+
+	if (!ctx->proxy_host)
+		ctx->proxy_host = g_strdup(host);
 
 	g_free(scheme);
 	return TRUE;
