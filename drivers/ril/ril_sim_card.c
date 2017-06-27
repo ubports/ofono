@@ -24,6 +24,8 @@
 
 #include <gutil_misc.h>
 
+#define UICC_SUBSCRIPTION_TIMEOUT_MS (60000)
+
 typedef GObjectClass RilSimCardClass;
 typedef struct ril_sim_card RilSimCard;
 
@@ -38,6 +40,7 @@ struct ril_sim_card_priv {
 	GRilIoQueue *q;
 	int flags;
 	guint status_req_id;
+	guint subscription_req_id;
 	gulong event_id[EVENT_COUNT];
 };
 
@@ -135,22 +138,61 @@ static void ril_sim_card_status_free(struct ril_sim_card_status *status)
 	}
 }
 
-static void ril_sim_card_subscribe(struct ril_sim_card *self,
-						int app_index, int sub_status)
+static void ril_sim_card_subscription_done(struct ril_sim_card *self)
+{
+	struct ril_sim_card_priv *priv = self->priv;
+
+	if (priv->subscription_req_id) {
+		grilio_queue_cancel_request(priv->q,
+				priv->subscription_req_id, FALSE);
+		priv->subscription_req_id = 0;
+	}
+	grilio_queue_transaction_finish(priv->q);
+}
+
+static void ril_sim_card_subscribe_cb(GRilIoChannel* io, int status,
+				const void* data, guint len, void* user_data)
+{
+	struct ril_sim_card *self = RIL_SIMCARD(user_data);
+	struct ril_sim_card_priv *priv = self->priv;
+
+	GASSERT(status == GRILIO_STATUS_OK);
+	GASSERT(priv->subscription_req_id);
+	priv->subscription_req_id = 0;
+	DBG("UICC subscription OK for slot %u", self->slot);
+	ril_sim_card_subscription_done(self);
+}
+
+static void ril_sim_card_subscribe(struct ril_sim_card *self, int app_index,
+				enum ril_uicc_subscription_action sub_action)
 {
 	struct ril_sim_card_priv *priv = self->priv;
 	GRilIoRequest *req = grilio_request_sized_new(16);
 	const guint sub_id = self->slot;
+	guint code;
 
-	DBG("%u,%d,%u,%d", self->slot, app_index, sub_id, sub_status);
+	DBG("%u,%d,%u,%d", self->slot, app_index, sub_id, sub_action);
 	grilio_request_append_int32(req, self->slot);
 	grilio_request_append_int32(req, app_index);
 	grilio_request_append_int32(req, sub_id);
-	grilio_request_append_int32(req, sub_status);
-	grilio_queue_send_request(priv->q, req, (priv->io->ril_version <= 9 &&
+	grilio_request_append_int32(req, sub_action);
+
+	grilio_request_set_retry(req, 0, -1);
+	grilio_request_set_timeout(req, UICC_SUBSCRIPTION_TIMEOUT_MS);
+	code = (priv->io->ril_version <= 9 &&
 		(priv->flags & RIL_SIM_CARD_V9_UICC_SUBSCRIPTION_WORKAROUND)) ?
-				RIL_REQUEST_V9_SET_UICC_SUBSCRIPTION :
-				RIL_REQUEST_SET_UICC_SUBSCRIPTION);
+			RIL_REQUEST_V9_SET_UICC_SUBSCRIPTION :
+			RIL_REQUEST_SET_UICC_SUBSCRIPTION;
+	if (priv->subscription_req_id) {
+		grilio_queue_cancel_request(priv->q,
+					priv->subscription_req_id, FALSE);
+	}
+
+	/* Don't allow any requests other that GET_SIM_STATUS until
+	 * we are done with the subscription */
+	grilio_queue_transaction_start(priv->q);
+	priv->subscription_req_id = grilio_queue_send_request_full(priv->q,
+			req, code, ril_sim_card_subscribe_cb, NULL, self);
 	grilio_request_unref(req);
 }
 
@@ -183,14 +225,17 @@ static void ril_sim_card_update_app(struct ril_sim_card *self)
 		if (status->gsm_umts_index >= 0 &&
 				status->gsm_umts_index < status->num_apps) {
 			app_index = status->gsm_umts_index;
+			ril_sim_card_subscription_done(self);
 		} else {
 			app_index = ril_sim_card_select_app(status);
 			if (app_index >= 0) {
-				ril_sim_card_subscribe(self, app_index, 1);
+				ril_sim_card_subscribe(self, app_index,
+						RIL_UICC_SUBSCRIPTION_ACTIVATE);
 			}
 		}
 	} else {
 		app_index = -1;
+		ril_sim_card_subscription_done(self);
 	}
 
 	if (app_index >= 0 &&
@@ -348,7 +393,7 @@ static struct ril_sim_card_status *ril_sim_card_status_parse(const void *data,
 static void ril_sim_card_status_cb(GRilIoChannel *io, int ril_status,
 				const void *data, guint len, void *user_data)
 {
-	struct ril_sim_card *self = user_data;
+	struct ril_sim_card *self = RIL_SIMCARD(user_data);
 	struct ril_sim_card_priv *priv = self->priv;
 
 	GASSERT(priv->status_req_id);
@@ -385,7 +430,7 @@ void ril_sim_card_request_status(struct ril_sim_card *self)
 static void ril_sim_card_status_changed(GRilIoChannel *io, guint code,
 				const void *data, guint len, void *user_data)
 {
-	struct ril_sim_card *self = user_data;
+	struct ril_sim_card *self = RIL_SIMCARD(user_data);
 
 	ril_sim_card_request_status(self);
 }

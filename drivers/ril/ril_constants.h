@@ -197,6 +197,11 @@ struct ril_radio_capability {
 	int status;
 };
 
+enum ril_uicc_subscription_action {
+	RIL_UICC_SUBSCRIPTION_DEACTIVATE = 0,
+	RIL_UICC_SUBSCRIPTION_ACTIVATE = 1
+};
+
 /* See RIL_REQUEST_LAST_CALL_FAIL_CAUSE */
 enum ril_call_fail_cause {
 	CALL_FAIL_UNOBTAINABLE_NUMBER = 1,
