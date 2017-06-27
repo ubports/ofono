@@ -189,8 +189,10 @@ static void ril_radio_submit_power_request(struct ril_radio *self, gboolean on)
 	ril_radio_cancel_retry(self);
 
 	GASSERT(!priv->pending_id);
+	grilio_request_set_blocking(req, TRUE);
 	priv->pending_id = grilio_queue_send_request_full(priv->q, req,
-		RIL_REQUEST_RADIO_POWER, ril_radio_power_request_cb, NULL, self);
+			RIL_REQUEST_RADIO_POWER, ril_radio_power_request_cb,
+			NULL, self);
 	grilio_request_unref(req);
 }
 
