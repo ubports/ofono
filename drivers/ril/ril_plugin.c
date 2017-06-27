@@ -181,6 +181,7 @@ struct ril_slot {
 	gulong io_event_id[IO_EVENT_COUNT];
 	gulong sim_card_state_event_id;
 	gboolean received_sim_status;
+	guint serialize_id;
 	guint caps_check_id;
 	guint imei_req_id;
 	guint trace_id;
@@ -404,6 +405,12 @@ static void ril_plugin_shutdown_slot(struct ril_slot *slot, gboolean kill_io)
 				slot->imei_req_id = 0;
 			}
 
+			if (slot->serialize_id) {
+				grilio_channel_deserialize(slot->io,
+							slot->serialize_id);
+				slot->serialize_id = 0;
+			}
+
 			for (i=0; i<IO_EVENT_COUNT; i++) {
 				ril_plugin_remove_slot_handler(slot, i);
 			}
@@ -615,9 +622,16 @@ static void ril_plugin_update_ready(struct ril_plugin_priv *plugin)
 	for (link = plugin->slots; link; link = link->next) {
 		struct ril_slot *slot = link->data;
 
-		if (!slot->imei || !slot->sim_card || !slot->sim_card->status) {
+		if (slot->imei && slot->sim_card && slot->sim_card->status) {
+			if (slot->serialize_id) {
+				/* This one is ready, deserialize it */
+				grilio_channel_deserialize(slot->io,
+							slot->serialize_id);
+				slot->serialize_id = 0;
+			}
+
+		} else {
 			ready = FALSE;
-			break;
 		}
 	}
 
@@ -1122,6 +1136,8 @@ static void ril_plugin_slot_connected(struct ril_slot *slot)
 	 */
 	GASSERT(!slot->imei_req_id);
 	req = grilio_request_new();
+	/* Don't allow any other requests while this one is pending */
+	grilio_request_set_blocking(req, TRUE);
 	grilio_request_set_retry(req, RIL_RETRY_MS, -1);
 	slot->imei_req_id = grilio_channel_send_request_full(slot->io,
 				req, RIL_REQUEST_DEVICE_IDENTITY,
@@ -1205,8 +1221,13 @@ static void ril_plugin_init_io(struct ril_slot *slot)
 				grilio_channel_add_error_handler(slot->io,
 					ril_plugin_slot_error, slot);
 			slot->io_event_id[IO_EVENT_EOF] =
-				grilio_channel_add_disconnected_handler(slot->io,
-					ril_plugin_slot_disconnected, slot);
+				grilio_channel_add_disconnected_handler(
+						slot->io,
+						ril_plugin_slot_disconnected,
+						slot);
+
+			/* Serialize requests at startup */
+			slot->serialize_id = grilio_channel_serialize(slot->io);
 
 			if (slot->io->connected) {
 				ril_plugin_slot_connected(slot);
