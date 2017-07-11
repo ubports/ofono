@@ -365,7 +365,7 @@ static void get_rf_power_status_cb(struct ril_msg *message, gpointer user_data)
 	}
 
 	power_status = parcel_r_string(&rilp);
-	if (power_status == NULL || power_status == '\0')
+	if (power_status == NULL || *power_status == '\0')
 		return;
 
 	enabled = strtol(power_status, &endptr, 10);
