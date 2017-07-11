@@ -283,7 +283,7 @@ static void setup_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_gprs_context *gc = user_data;
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
-	char buf[128];
+	char buf[384];
 
 	DBG("ok %d", ok);
 
