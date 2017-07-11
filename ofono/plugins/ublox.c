@@ -48,9 +48,9 @@ static const char *none_prefix[] = { NULL };
 
 enum supported_models {
 	SARA_G270			= 1102,
-	TOBYL2_COMPATIBLE_MODE 		= 1141,
-	TOBYL2_MEDIUM_THROUGHPUT_MODE 	= 1143,
-	TOBYL2_HIGH_THROUGHPUT_MODE 	= 1146,
+	TOBYL2_COMPATIBLE_MODE		= 1141,
+	TOBYL2_MEDIUM_THROUGHPUT_MODE	= 1143,
+	TOBYL2_HIGH_THROUGHPUT_MODE	= 1146,
 };
 
 struct ublox_data {
@@ -178,6 +178,7 @@ static int ublox_enable(struct ofono_modem *modem)
 		break;
 	case TOBYL2_MEDIUM_THROUGHPUT_MODE:
 		DBG("low/medium throughtput profile unsupported");
+		break;
 	default:
 		DBG("unknown ublox model id %d", data->model_id);
 		return -EINVAL;
