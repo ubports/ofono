@@ -611,10 +611,11 @@ static DBusMessage *voicecall_hangup(DBusConnection *conn,
 		}
 
 		/*
-		 * Fall through, we check if we have a single alerting,
-		 * dialing or active call and try to hang it up with
-		 * hangup_all or hangup_active
+		 * We check if we have a single alerting, dialing or activeo
+		 * call and try to hang it up with hangup_all or hangup_active
 		 */
+
+		/* fall through */
 	case CALL_STATUS_ACTIVE:
 		if (single_call == TRUE && vc->driver->hangup_all != NULL) {
 			vc->pending = dbus_message_ref(msg);
