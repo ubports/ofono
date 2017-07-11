@@ -1448,8 +1448,10 @@ static void set_get_inkey_duration(struct stk_duration *duration,
 	switch (duration->unit) {
 	case STK_DURATION_TYPE_MINUTES:
 		interval = (interval + 59) / 60;
+		break;
 	case STK_DURATION_TYPE_SECONDS:
 		interval = (interval + 9) / 10;
+		break;
 	case STK_DURATION_TYPE_SECOND_TENTHS:
 		break;
 	}
