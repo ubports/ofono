@@ -34,6 +34,8 @@
 #include <ofono/log.h>
 #include <ofono/types.h>
 
+#include <drivers/common/call_list.h>
+
 #include "atutil.h"
 #include "vendor.h"
 
@@ -103,20 +105,6 @@ gint at_util_call_compare_by_id(gconstpointer a, gconstpointer b)
 	return 0;
 }
 
-gint at_util_call_compare(gconstpointer a, gconstpointer b)
-{
-	const struct ofono_call *ca = a;
-	const struct ofono_call *cb = b;
-
-	if (ca->id < cb->id)
-		return -1;
-
-	if (ca->id > cb->id)
-		return 1;
-
-	return 0;
-}
-
 GSList *at_util_parse_clcc(GAtResult *result, unsigned int *ret_mpty_ids)
 {
 	GAtResultIter iter;
@@ -175,7 +163,7 @@ GSList *at_util_parse_clcc(GAtResult *result, unsigned int *ret_mpty_ids)
 		else
 			call->clip_validity = 2;
 
-		l = g_slist_insert_sorted(l, call, at_util_call_compare);
+		l = g_slist_insert_sorted(l, call, ofono_call_compare);
 
 		if (mpty)
 			mpty_ids |= 1 << id;
