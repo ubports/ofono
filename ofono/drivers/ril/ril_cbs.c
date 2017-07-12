@@ -184,11 +184,14 @@ static int ril_cbs_probe(struct ofono_cbs *cbs, unsigned int vendor,
 	cd->q = grilio_queue_new(cd->io);
 
 	/*
-	 * RIL_REQUEST_GSM_GET_BROADCAST_SMS_CONFIG often fails at startup.
-	 * We may have to retry a few times.
+	 * RIL_REQUEST_GSM_GET_BROADCAST_SMS_CONFIG often fails at startup
+	 * especially if other RIL requests are running in parallel. We may
+	 * have to retry a few times. Also, make it blocking in order to
+	 * improve the chance of success.
 	 */
 	grilio_request_set_retry(req, RIL_CBS_CHECK_RETRY_MS,
 						RIL_CBS_CHECK_RETRY_COUNT);
+	grilio_request_set_blocking(req, TRUE);
 	grilio_queue_send_request_full(cd->q, req,
 				RIL_REQUEST_GSM_GET_BROADCAST_SMS_CONFIG,
 				ril_cbs_probe_done_cb, NULL, cd);
