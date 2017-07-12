@@ -1108,8 +1108,9 @@ static void ril_plugin_radio_caps_cb(const struct ril_radio_capability *cap,
 
 		GASSERT(!slot->caps);
 		slot->caps = ril_radio_caps_new(plugin->caps_manager,
-			ril_plugin_log_prefix(slot), slot->io, slot->radio,
-			slot->network, &slot->config, cap);
+			ril_plugin_log_prefix(slot), slot->io, slot->data,
+			slot->radio, slot->sim_card, slot->network,
+			&slot->config, cap);
 	}
 }
 
