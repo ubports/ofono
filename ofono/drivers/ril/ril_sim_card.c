@@ -24,7 +24,7 @@
 
 #include <gutil_misc.h>
 
-#define UICC_SUBSCRIPTION_TIMEOUT_MS (60000)
+#define UICC_SUBSCRIPTION_TIMEOUT_MS (30000)
 
 typedef GObjectClass RilSimCardClass;
 typedef struct ril_sim_card RilSimCard;
@@ -40,7 +40,7 @@ struct ril_sim_card_priv {
 	GRilIoQueue *q;
 	int flags;
 	guint status_req_id;
-	guint subscription_req_id;
+	guint sub_req_id;
 	gulong event_id[EVENT_COUNT];
 };
 
@@ -142,10 +142,12 @@ static void ril_sim_card_subscription_done(struct ril_sim_card *self)
 {
 	struct ril_sim_card_priv *priv = self->priv;
 
-	if (priv->subscription_req_id) {
-		grilio_queue_cancel_request(priv->q,
-				priv->subscription_req_id, FALSE);
-		priv->subscription_req_id = 0;
+	if (priv->sub_req_id) {
+		/* Some RILs never reply to SET_UICC_SUBSCRIPTION requst,
+		 * so we better drop rather than cancel it (so that it gets
+		 * removed from the list of pending requests) */
+		grilio_channel_drop_request(priv->io, priv->sub_req_id);
+		priv->sub_req_id = 0;
 	}
 	grilio_queue_transaction_finish(priv->q);
 }
@@ -157,8 +159,8 @@ static void ril_sim_card_subscribe_cb(GRilIoChannel* io, int status,
 	struct ril_sim_card_priv *priv = self->priv;
 
 	GASSERT(status == GRILIO_STATUS_OK);
-	GASSERT(priv->subscription_req_id);
-	priv->subscription_req_id = 0;
+	GASSERT(priv->sub_req_id);
+	priv->sub_req_id = 0;
 	DBG("UICC subscription OK for slot %u", self->slot);
 	ril_sim_card_subscription_done(self);
 }
@@ -183,15 +185,17 @@ static void ril_sim_card_subscribe(struct ril_sim_card *self, int app_index,
 		(priv->flags & RIL_SIM_CARD_V9_UICC_SUBSCRIPTION_WORKAROUND)) ?
 			RIL_REQUEST_V9_SET_UICC_SUBSCRIPTION :
 			RIL_REQUEST_SET_UICC_SUBSCRIPTION;
-	if (priv->subscription_req_id) {
-		grilio_queue_cancel_request(priv->q,
-					priv->subscription_req_id, FALSE);
+	if (priv->sub_req_id) {
+		/* Some RILs never reply to SET_UICC_SUBSCRIPTION requst,
+		 * so we better drop rather than cancel it (so that it gets
+		 * removed from the list of pending requests) */
+		grilio_channel_drop_request(priv->io, priv->sub_req_id);
 	}
 
 	/* Don't allow any requests other that GET_SIM_STATUS until
 	 * we are done with the subscription */
 	grilio_queue_transaction_start(priv->q);
-	priv->subscription_req_id = grilio_queue_send_request_full(priv->q,
+	priv->sub_req_id = grilio_queue_send_request_full(priv->q,
 			req, code, ril_sim_card_subscribe_cb, NULL, self);
 	grilio_request_unref(req);
 }
