@@ -41,9 +41,10 @@ void ril_radio_caps_manager_unref(struct ril_radio_caps_manager *mgr);
 /* And one ril_radio_caps object per modem */
 struct ril_radio_caps *ril_radio_caps_new(struct ril_radio_caps_manager *mgr,
 		const char *log_prefix, GRilIoChannel *io,
-		struct ril_radio *radio, struct ril_network *net,
+		struct ril_data *data, struct ril_radio *radio,
+		struct ril_sim_card *sim, struct ril_network *net,
 		const struct ril_slot_config *config,
-		const struct ril_radio_capability *cap /* optional */);
+		const struct ril_radio_capability *cap);
 struct ril_radio_caps *ril_radio_caps_ref(struct ril_radio_caps *caps);
 void ril_radio_caps_unref(struct ril_radio_caps *caps);
 
