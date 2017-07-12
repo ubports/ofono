@@ -28,6 +28,8 @@
 
 #define FLAG_NEED_CLIP 1
 
+#define VOICECALL_BLOCK_TIMEOUT_MS (5*1000)
+
 enum ril_voicecall_events {
 	VOICECALL_EVENT_CALL_STATE_CHANGED,
 	VOICECALL_EVENT_SUPP_SVC_NOTIFICATION,
@@ -800,6 +802,8 @@ static void ril_voicecall_enable_supp_svc(struct ril_voicecall *vd)
 {
 	GRilIoRequest *req = grilio_request_array_int32_new(1, 1);
 
+	grilio_request_set_timeout(req, VOICECALL_BLOCK_TIMEOUT_MS);
+	grilio_request_set_blocking(req, TRUE);
 	grilio_queue_send_request(vd->q, req,
 				RIL_REQUEST_SET_SUPP_SVC_NOTIFICATION);
 	grilio_request_unref(req);
