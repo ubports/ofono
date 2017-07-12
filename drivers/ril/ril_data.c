@@ -27,9 +27,7 @@
 #include <grilio_parser.h>
 #include <grilio_request.h>
 
-#define SETUP_DATA_CALL_PARAMS 7
 #define DATA_PROFILE_DEFAULT_STR "0"
-#define DEACTIVATE_DATA_CALL_PARAMS 2
 
 #define PROTO_IP_STR "IP"
 #define PROTO_IPV6_STR "IPV6"
@@ -182,6 +180,26 @@ static void ril_data_power_update(struct ril_data *self);
 static void ril_data_signal_emit(struct ril_data *self, enum ril_data_signal id)
 {
 	g_signal_emit(self, ril_data_signals[id], 0);
+}
+
+/*==========================================================================*
+ * RIL requests
+ *==========================================================================*/
+
+GRilIoRequest *ril_request_allow_data_new(gboolean allow)
+{
+	return grilio_request_array_int32_new(1, allow);
+}
+
+GRilIoRequest *ril_request_deactivate_data_call_new(int cid)
+{
+	GRilIoRequest *req = grilio_request_new();
+
+	grilio_request_append_int32(req, 2 /* Parameter count */);
+	grilio_request_append_format(req, "%d", cid);
+	grilio_request_append_format(req, "%d",
+					RIL_DEACTIVATE_DATA_CALL_NO_REASON);
+	return req;
 }
 
 /*==========================================================================*
@@ -787,7 +805,7 @@ static gboolean ril_data_call_setup_submit(struct ril_data_request *req)
 		G_CAST(req, struct ril_data_request_setup, req);
 	struct ril_data_priv *priv = req->data->priv;
 	const char *proto_str = ril_data_ofono_protocol_to_ril(setup->proto);
-	GRilIoRequest* ioreq;
+	GRilIoRequest *ioreq;
 	int tech, auth = RIL_AUTH_NONE;
 
 	GASSERT(proto_str);
@@ -833,7 +851,7 @@ static gboolean ril_data_call_setup_submit(struct ril_data_request *req)
 	 * profiles...
 	 */
 	ioreq = grilio_request_new();
-	grilio_request_append_int32(ioreq, SETUP_DATA_CALL_PARAMS);
+	grilio_request_append_int32(ioreq, 7 /* Parameter count */);
 	grilio_request_append_format(ioreq, "%d", tech);
 	grilio_request_append_utf8(ioreq, DATA_PROFILE_DEFAULT_STR);
 	grilio_request_append_utf8(ioreq, setup->apn);
@@ -932,6 +950,10 @@ static void ril_data_call_deact_cb(GRilIoChannel *io, int ril_status,
 			ril_data_call_free(call);
 			ril_data_signal_emit(data, SIGNAL_CALLS_CHANGED);
 		}
+	} else {
+		/* Something seems to be slightly broken, request the
+		 * current state */
+		ril_data_poll_call_state(data);
 	}
 
 	if (req->cb.deact) {
@@ -946,12 +968,8 @@ static gboolean ril_data_call_deact_submit(struct ril_data_request *req)
 	struct ril_data_request_deact *deact =
 		G_CAST(req, struct ril_data_request_deact, req);
 	struct ril_data_priv *priv = req->data->priv;
-	GRilIoRequest* ioreq = grilio_request_new();
-
-	grilio_request_append_int32(ioreq, DEACTIVATE_DATA_CALL_PARAMS);
-	grilio_request_append_format(ioreq, "%d", deact->cid);
-	grilio_request_append_format(ioreq, "%d",
-					RIL_DEACTIVATE_DATA_CALL_NO_REASON);
+	GRilIoRequest *ioreq =
+		ril_request_deactivate_data_call_new(deact->cid);
 
 	req->pending_id = grilio_queue_send_request_full(priv->q, ioreq,
 				RIL_REQUEST_DEACTIVATE_DATA_CALL,
@@ -1017,10 +1035,11 @@ static gboolean ril_data_allow_submit(struct ril_data_request *req)
 {
 	struct ril_data_request_allow_data *ad =
 		G_CAST(req, struct ril_data_request_allow_data, req);
-	GRilIoRequest *ioreq = grilio_request_array_int32_new(1, ad->allow);
+	GRilIoRequest *ioreq = ril_request_allow_data_new(ad->allow);
 	struct ril_data_priv *priv = req->data->priv;
 
 	grilio_request_set_retry(ioreq, RIL_RETRY_SECS*1000, -1);
+	grilio_request_set_blocking(ioreq, TRUE);
 	req->pending_id = grilio_queue_send_request_full(priv->q, ioreq,
 		RIL_REQUEST_ALLOW_DATA, ril_data_allow_cb, NULL, req);
 	grilio_request_unref(ioreq);
@@ -1094,7 +1113,6 @@ struct ril_data *ril_data_new(struct ril_data_manager *dm, const char *name,
 		struct ril_data *self = g_object_new(RIL_DATA_TYPE, NULL);
 		struct ril_data_priv *priv = self->priv;
 		struct ril_sim_settings *settings = network->settings;
-		GRilIoRequest *req = grilio_request_new();
 
 		priv->options = *options;
 		switch (priv->options.allow_data) {
@@ -1133,12 +1151,7 @@ struct ril_data *ril_data_new(struct ril_data_manager *dm, const char *name,
 					ril_data_settings_changed, self);
 
 		/* Request the current state */
-		grilio_request_set_retry(req, RIL_RETRY_SECS*1000, -1);
-		priv->query_id = grilio_queue_send_request_full(priv->q, req,
-					RIL_REQUEST_DATA_CALL_LIST,
-					ril_data_query_data_calls_cb,
-					NULL, self);
-		grilio_request_unref(req);
+		ril_data_poll_call_state(self);
 
 		/* Order data contexts according to slot numbers */
 		dm->data_list = g_slist_insert_sorted(dm->data_list, self,
@@ -1147,6 +1160,25 @@ struct ril_data *ril_data_new(struct ril_data_manager *dm, const char *name,
 		return self;
 	}
 	return NULL;
+}
+
+void ril_data_poll_call_state(struct ril_data *self)
+{
+	if (G_LIKELY(self)) {
+		struct ril_data_priv *priv = self->priv;
+
+		if (!priv->query_id) {
+			GRilIoRequest *req = grilio_request_new();
+
+			grilio_request_set_retry(req, RIL_RETRY_SECS*1000, -1);
+			priv->query_id =
+				grilio_queue_send_request_full(priv->q, req,
+					RIL_REQUEST_DATA_CALL_LIST,
+					ril_data_query_data_calls_cb,
+					NULL, self);
+			grilio_request_unref(req);
+		}
+	}
 }
 
 struct ril_data *ril_data_ref(struct ril_data *self)

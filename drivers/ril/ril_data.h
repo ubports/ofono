@@ -100,6 +100,7 @@ struct ril_data *ril_data_new(struct ril_data_manager *dm, const char *name,
 struct ril_data *ril_data_ref(struct ril_data *data);
 void ril_data_unref(struct ril_data *data);
 gboolean ril_data_allowed(struct ril_data *data);
+void ril_data_poll_call_state(struct ril_data *data);
 
 gulong ril_data_add_allow_changed_handler(struct ril_data *data,
 					ril_data_cb_t cb, void *arg);
@@ -122,6 +123,10 @@ void ril_data_call_free(struct ril_data_call *call);
 struct ril_data_call *ril_data_call_dup(const struct ril_data_call *call);
 struct ril_data_call *ril_data_call_find(struct ril_data_call_list *list,
 								int cid);
+
+/* Constructors of various kinds of RIL requests */
+GRilIoRequest *ril_request_allow_data_new(gboolean allow);
+GRilIoRequest *ril_request_deactivate_data_call_new(int cid);
 
 #endif /* RIL_DATA_H */
 
