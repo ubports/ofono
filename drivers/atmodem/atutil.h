@@ -59,7 +59,6 @@ void decode_at_error(struct ofono_error *error, const char *final);
 gint at_util_call_compare_by_status(gconstpointer a, gconstpointer b);
 gint at_util_call_compare_by_phone_number(gconstpointer a, gconstpointer b);
 gint at_util_call_compare_by_id(gconstpointer a, gconstpointer b);
-gint at_util_call_compare(gconstpointer a, gconstpointer b);
 GSList *at_util_parse_clcc(GAtResult *result, unsigned int *mpty_ids);
 gboolean at_util_parse_reg(GAtResult *result, const char *prefix,
 				int *mode, int *status,

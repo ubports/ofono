@@ -34,6 +34,8 @@
 #include <ofono/modem.h>
 #include <ofono/voicecall.h>
 
+#include <drivers/common/call_list.h>
+
 #include "gatchat.h"
 #include "gatresult.h"
 
@@ -75,7 +77,7 @@ static struct ofono_call *create_call(struct ofono_voicecall *vc, int type,
 
 	call->clip_validity = clip;
 
-	d->calls = g_slist_insert_sorted(d->calls, call, at_util_call_compare);
+	d->calls = g_slist_insert_sorted(d->calls, call, ofono_call_compare);
 
 	return call;
 }
