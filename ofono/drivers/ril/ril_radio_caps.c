@@ -247,7 +247,7 @@ static enum ofono_radio_access_mode ril_radio_caps_access_mode
 	}
 }
 
-static gboolean ril_radio_caps_pref_mode_limit
+static enum ofono_radio_access_mode ril_radio_caps_pref_mode_limit
 					(const struct ril_radio_caps *caps)
 {
 	struct ril_network *network = caps->network;
@@ -282,6 +282,35 @@ static gboolean ril_radio_caps_ok(const struct ril_radio_caps *caps,
 		!caps->network->settings->imsi ||
 		limit == OFONO_RADIO_ACCESS_MODE_ANY ||
 		ril_radio_caps_access_mode(caps) <= limit;
+}
+
+static gboolean ril_radio_caps_wants_upgrade(const struct ril_radio_caps *caps)
+{
+	if (caps->radio->state == RADIO_STATE_ON &&
+		caps->simcard->status &&
+		caps->simcard->status->card_state == RIL_CARDSTATE_PRESENT &&
+		caps->network->settings->imsi) {
+		enum ofono_radio_access_mode limit =
+			ril_radio_caps_pref_mode_limit(caps);
+
+		if (!limit) limit = OFONO_RADIO_ACCESS_MODE_LTE;
+		return ril_radio_caps_access_mode(caps) < limit;
+	}
+	return FALSE;
+}
+
+static int ril_radio_caps_index(const struct ril_radio_caps * caps)
+{
+	guint i;
+	const GPtrArray *list = caps->mgr->caps_list;
+
+	for (i = 0; i < list->len; i++) {
+		if (list->pdata[i] == caps) {
+			return i;
+		}
+	}
+
+	return -1;
 }
 
 static void ril_radio_caps_radio_event(struct ril_radio *radio, void *arg)
@@ -1081,6 +1110,81 @@ static void ril_radio_caps_manager_start_transaction
 	}
 }
 
+static GSList *ril_radio_caps_manager_upgradable_slots
+					(struct ril_radio_caps_manager *self)
+{
+	GSList *found = NULL;
+	const GPtrArray *list = self->caps_list;
+	guint i;
+
+	for (i = 0; i < list->len; i++) {
+		struct ril_radio_caps *caps = list->pdata[i];
+
+		if (ril_radio_caps_wants_upgrade(caps)) {
+			found = g_slist_append(found, caps);
+		}
+	}
+
+	return found;
+}
+
+static GSList *ril_radio_caps_manager_empty_slots
+					(struct ril_radio_caps_manager *self)
+{
+	GSList *found = NULL;
+	const GPtrArray *list = self->caps_list;
+	guint i;
+
+	for (i = 0; i < list->len; i++) {
+		struct ril_radio_caps *caps = list->pdata[i];
+
+		if (ril_radio_caps_ready(caps) &&
+					caps->simcard->status->card_state !=
+						RIL_CARDSTATE_PRESENT) {
+			found = g_slist_append(found, caps);
+		}
+	}
+
+	return found;
+}
+
+/**
+ * There could be no capability mismatch but LTE could be enabled for
+ * the slot that has no SIM card in it. That's a waste, fix it.
+ */
+static gboolean ril_radio_caps_manager_upgrade_caps
+					(struct ril_radio_caps_manager *self)
+{
+	gboolean upgrading = FALSE;
+	GSList *upgradable = ril_radio_caps_manager_upgradable_slots(self);
+
+	if (upgradable) {
+		GSList *empty = ril_radio_caps_manager_empty_slots(self);
+
+		if (empty) {
+			struct ril_radio_caps *dest = upgradable->data;
+			struct ril_radio_caps *src = empty->data;
+
+			if (ril_radio_caps_access_mode(src) >
+					ril_radio_caps_access_mode(dest)) {
+
+				DBG("%d <-> %d", ril_radio_caps_index(src),
+						ril_radio_caps_index(dest));
+				src->old_cap = src->cap;
+				src->new_cap = dest->cap;
+				dest->old_cap = dest->cap;
+				dest->new_cap = src->cap;
+				ril_radio_caps_manager_start_transaction(self);
+				upgrading = TRUE;
+			}
+			g_slist_free(empty);
+		}
+		g_slist_free(upgradable);
+	}
+
+	return upgrading;
+}
+
 static void ril_radio_caps_manager_check(struct ril_radio_caps_manager *self)
 {
 	DBG("");
@@ -1091,10 +1195,7 @@ static void ril_radio_caps_manager_check(struct ril_radio_caps_manager *self)
 			if (ril_radio_caps_manager_update_caps(self, first)) {
 				ril_radio_caps_manager_start_transaction(self);
 			}
-		} else {
-			/* There's no mismatch but it could be that LTE is
-			 * enabled for the slot that has no SIM card in it
-			 * which is a waste. */
+		} else if (!ril_radio_caps_manager_upgrade_caps(self)) {
 			DBG("nothing to do");
 		}
 	}
