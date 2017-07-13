@@ -106,6 +106,7 @@ struct ril_sim_cbd {
 		gpointer ptr;
 	} cb;
 	gpointer data;
+	guint req_id;
 };
 
 struct ril_sim_pin_cbd {
@@ -422,6 +423,7 @@ static void ril_sim_file_info_cb(GRilIoChannel *io, int status,
 	struct ofono_error error;
 
 	DBG_(sd, "");
+	ril_sim_card_sim_io_finished(sd->card, cbd->req_id);
 
 	ril_error_init_failure(&error);
 	res = ril_sim_parse_io_response(data, len);
@@ -483,8 +485,9 @@ static void ril_sim_request_io(struct ril_sim *sd, guint cmd, int fileid,
 	grilio_request_append_utf8(req, ril_sim_app_id(sd));
 
 	grilio_request_set_blocking(req, TRUE);
-	grilio_queue_send_request_full(sd->q, req, RIL_REQUEST_SIM_IO,
-					cb, ril_sim_cbd_free, cbd);
+	cbd->req_id = grilio_queue_send_request_full(sd->q, req,
+				RIL_REQUEST_SIM_IO, cb, ril_sim_cbd_free, cbd);
+	ril_sim_card_sim_io_started(sd->card, cbd->req_id);
 	grilio_request_unref(req);
 }
 
@@ -506,6 +509,8 @@ static void ril_sim_read_cb(GRilIoChannel *io, int status,
 	struct ofono_error err;
 
 	DBG_(cbd->sd, "");
+	ril_sim_card_sim_io_finished(cbd->sd->card, cbd->req_id);
+
 	res = ril_sim_parse_io_response(data, len);
 	if (ril_sim_io_response_ok(res) && status == RIL_E_SUCCESS) {
 		cb(ril_error_ok(&err), res->data, res->data_len, cbd->data);
@@ -559,6 +564,8 @@ static void ril_sim_write_cb(GRilIoChannel *io, int status,
 	struct ofono_error err;
 
 	DBG_(cbd->sd, "");
+	ril_sim_card_sim_io_finished(cbd->sd->card, cbd->req_id);
+
 	res = ril_sim_parse_io_response(data, len);
 	if (ril_sim_io_response_ok(res) && status == RIL_E_SUCCESS) {
 		cb(ril_error_ok(&err), cbd->data);
@@ -619,6 +626,8 @@ static void ril_sim_get_imsi_cb(GRilIoChannel *io, int status,
 	ofono_sim_imsi_cb_t cb = cbd->cb.imsi;
 	struct ofono_error error;
 
+	ril_sim_card_sim_io_finished(cbd->sd->card, cbd->req_id);
+
 	if (status == RIL_E_SUCCESS) {
 		gchar *imsi;
 		GRilIoParser rilp;
@@ -644,6 +653,7 @@ static void ril_sim_read_imsi(struct ofono_sim *sim, ofono_sim_imsi_cb_t cb,
 {
 	struct ril_sim *sd = ril_sim_get_data(sim);
 	const char *app_id = ril_sim_app_id(sd);
+	struct ril_sim_cbd *cbd = ril_sim_cbd_new(sd, cb, data);
 	GRilIoRequest *req = grilio_request_array_utf8_new(1, app_id);
 
 	DBG_(sd, "%s", app_id);
@@ -655,9 +665,10 @@ static void ril_sim_read_imsi(struct ofono_sim *sim, ofono_sim_imsi_cb_t cb,
 	 */
 	grilio_request_set_retry(req, RIL_RETRY_MS, -1);
 	grilio_request_set_blocking(req, TRUE);
-	grilio_queue_send_request_full(sd->q, req, RIL_REQUEST_GET_IMSI,
-				ril_sim_get_imsi_cb, ril_sim_cbd_free,
-				ril_sim_cbd_new(sd, cb, data));
+	cbd->req_id = grilio_queue_send_request_full(sd->q, req,
+				RIL_REQUEST_GET_IMSI, ril_sim_get_imsi_cb,
+				ril_sim_cbd_free, cbd);
+	ril_sim_card_sim_io_started(sd->card, cbd->req_id);
 	grilio_request_unref(req);
 }
 
@@ -1327,6 +1338,8 @@ static void ril_sim_query_facility_lock_cb(GRilIoChannel *io, int status,
 	struct ril_sim_cbd *cbd = user_data;
 	ofono_query_facility_lock_cb_t cb = cbd->cb.query_facility_lock;
 
+	ril_sim_card_sim_io_finished(cbd->sd->card, cbd->req_id);
+
 	if (status == RIL_E_SUCCESS) {
 		int locked = 0;
 		GRilIoParser rilp;
@@ -1349,13 +1362,15 @@ static void ril_sim_query_facility_lock(struct ofono_sim *sim,
 {
 	struct ril_sim *sd = ril_sim_get_data(sim);
 	const char *type_str = ril_sim_facility_code(type);
+	struct ril_sim_cbd *cbd = ril_sim_cbd_new(sd, cb, data);
 	GRilIoRequest *req = grilio_request_array_utf8_new(4,
 			type_str, "", "0" /* class */, ril_sim_app_id(sd));
 
 	DBG_(sd, "%s", type_str);
-	grilio_queue_send_request_full(sd->q, req,
+	cbd->req_id = grilio_queue_send_request_full(sd->q, req,
 		RIL_REQUEST_QUERY_FACILITY_LOCK, ril_sim_query_facility_lock_cb,
-		ril_sim_cbd_free, ril_sim_cbd_new(sd, cb, data));
+		ril_sim_cbd_free, cbd);
+	ril_sim_card_sim_io_started(sd->card, cbd->req_id);
 	grilio_request_unref(req);
 }
 

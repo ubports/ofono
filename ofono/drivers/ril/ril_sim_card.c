@@ -26,6 +26,13 @@
 
 #define UICC_SUBSCRIPTION_TIMEOUT_MS (30000)
 
+/* SIM I/O idle timeout is measured in the number of idle loops.
+ * When active SIM I/O is going on, the idle loop count very rarely
+ * exceeds 1 between the requests, so 10 is more than enough. Idle
+ * loop is actually more accurate criteria than a timeout because
+ * it doesn't depend that much on the system load. */
+#define SIM_IO_IDLE_LOOPS (10)
+
 typedef GObjectClass RilSimCardClass;
 typedef struct ril_sim_card RilSimCard;
 
@@ -42,6 +49,9 @@ struct ril_sim_card_priv {
 	guint status_req_id;
 	guint sub_req_id;
 	gulong event_id[EVENT_COUNT];
+	guint sim_io_idle_id;
+	guint sim_io_idle_count;
+	GHashTable* sim_io_pending;
 };
 
 enum ril_sim_card_signal {
@@ -49,13 +59,15 @@ enum ril_sim_card_signal {
 	SIGNAL_STATUS_CHANGED,
 	SIGNAL_STATE_CHANGED,
 	SIGNAL_APP_CHANGED,
+	SIGNAL_SIM_IO_ACTIVE_CHANGED,
 	SIGNAL_COUNT
 };
 
-#define SIGNAL_STATUS_RECEIVED_NAME     "ril-simcard-status-received"
-#define SIGNAL_STATUS_CHANGED_NAME      "ril-simcard-status-changed"
-#define SIGNAL_STATE_CHANGED_NAME       "ril-simcard-state-changed"
-#define SIGNAL_APP_CHANGED_NAME         "ril-simcard-app-changed"
+#define SIGNAL_STATUS_RECEIVED_NAME         "ril-simcard-status-received"
+#define SIGNAL_STATUS_CHANGED_NAME          "ril-simcard-status-changed"
+#define SIGNAL_STATE_CHANGED_NAME           "ril-simcard-state-changed"
+#define SIGNAL_APP_CHANGED_NAME             "ril-simcard-app-changed"
+#define SIGNAL_SIM_IO_ACTIVE_CHANGED_NAME   "ril-simcard-sim-io-active-changed"
 
 static guint ril_sim_card_signals[SIGNAL_COUNT] = { 0 };
 
@@ -63,6 +75,13 @@ G_DEFINE_TYPE(RilSimCard, ril_sim_card, G_TYPE_OBJECT)
 #define RIL_SIMCARD_TYPE (ril_sim_card_get_type())
 #define RIL_SIMCARD(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), \
 	RIL_SIMCARD_TYPE, RilSimCard))
+
+#define NEW_SIGNAL(klass,name) NEW_SIGNAL_(klass,name##_CHANGED)
+#define NEW_SIGNAL_(klass,name) \
+	ril_sim_card_signals[SIGNAL_##name] = \
+		g_signal_new(SIGNAL_##name##_NAME, \
+			G_OBJECT_CLASS_TYPE(klass), G_SIGNAL_RUN_FIRST, \
+			0, NULL, NULL, NULL, G_TYPE_NONE, 0)
 
 #define RIL_SIMCARD_STATE_CHANGED  (0x01)
 #define RIL_SIMCARD_STATUS_CHANGED (0x02)
@@ -250,8 +269,8 @@ static void ril_sim_card_update_app(struct ril_sim_card *self)
 	}
 
 	if (!ril_sim_card_app_equal(old_app, self->app)) {
-		g_signal_emit(self,
-			ril_sim_card_signals[SIGNAL_APP_CHANGED], 0);
+		g_signal_emit(self, ril_sim_card_signals
+					[SIGNAL_APP_CHANGED], 0);
 	}
 }
 
@@ -265,23 +284,23 @@ static void ril_sim_card_update_status(struct ril_sim_card *self,
 
 		self->status = status;
 		ril_sim_card_update_app(self);
-		g_signal_emit(self, ril_sim_card_signals[
-						SIGNAL_STATUS_RECEIVED], 0);
+		g_signal_emit(self, ril_sim_card_signals
+					[SIGNAL_STATUS_RECEIVED], 0);
 		if (diff & RIL_SIMCARD_STATUS_CHANGED) {
 			DBG("status changed");
-			g_signal_emit(self, ril_sim_card_signals[
-						SIGNAL_STATUS_CHANGED], 0);
+			g_signal_emit(self, ril_sim_card_signals
+					[SIGNAL_STATUS_CHANGED], 0);
 		}
 		if (diff & RIL_SIMCARD_STATE_CHANGED) {
 			DBG("state changed");
-			g_signal_emit(self, ril_sim_card_signals[
-						SIGNAL_STATE_CHANGED], 0);
+			g_signal_emit(self, ril_sim_card_signals
+					[SIGNAL_STATE_CHANGED], 0);
 		}
 		ril_sim_card_status_free(old_status);
 	} else {
 		ril_sim_card_status_free(status);
-		g_signal_emit(self, ril_sim_card_signals[
-						SIGNAL_STATUS_RECEIVED], 0);
+		g_signal_emit(self, ril_sim_card_signals
+					[SIGNAL_STATUS_RECEIVED], 0);
 	}
 }
 
@@ -364,7 +383,8 @@ static struct ril_sim_card_status *ril_sim_card_status_parse(const void *data,
 		status->num_apps = num_apps;
 
 		if (num_apps > 0) {
-			status->apps = g_new0(struct ril_sim_card_app, num_apps);
+			status->apps =
+				g_new0(struct ril_sim_card_app, num_apps);
 		}
 
 		for (i = 0; i < num_apps; i++) {
@@ -415,19 +435,96 @@ static void ril_sim_card_status_cb(GRilIoChannel *io, int ril_status,
 
 void ril_sim_card_request_status(struct ril_sim_card *self)
 {
-	struct ril_sim_card_priv *priv = self->priv;
+	if (G_LIKELY(self)) {
+		struct ril_sim_card_priv *priv = self->priv;
 
-	if (priv->status_req_id) {
-		/* Retry right away, don't wait for retry timeout to expire */
-		grilio_channel_retry_request(priv->io, priv->status_req_id);
-	} else {
-		GRilIoRequest* req = grilio_request_new();
+		if (priv->status_req_id) {
+			/* Retry right away, don't wait for retry
+			 * timeout to expire */
+			grilio_channel_retry_request(priv->io,
+						priv->status_req_id);
+		} else {
+			GRilIoRequest* req = grilio_request_new();
 
-		grilio_request_set_retry(req, RIL_RETRY_SECS*1000, -1);
-		priv->status_req_id = grilio_queue_send_request_full(priv->q,
+			grilio_request_set_retry(req, RIL_RETRY_SECS*1000, -1);
+			priv->status_req_id =
+				grilio_queue_send_request_full(priv->q,
 					req, RIL_REQUEST_GET_SIM_STATUS,
 					ril_sim_card_status_cb, NULL, self);
-		grilio_request_unref(req);
+			grilio_request_unref(req);
+		}
+	}
+}
+
+static void ril_sim_card_update_sim_io_active(struct ril_sim_card *self)
+{
+	/* SIM I/O is considered active for certain period of time after
+	 * the last request has completed. That's because SIM_IO requests
+	 * are usually submitted in large quantities and quick succession.
+	 * Some RILs don't like being bothered while they are doing SIM I/O
+	 * and some time after that too. That sucks but what else can we
+	 * do about it? */
+	struct ril_sim_card_priv *priv = self->priv;
+	const gboolean active = priv->sim_io_idle_id ||
+		g_hash_table_size(priv->sim_io_pending);
+
+	if (self->sim_io_active != active) {
+		self->sim_io_active = active;
+		DBG("SIM I/O for slot %u is %sactive", self->slot,
+						active ? "" : "in");
+		g_signal_emit(self, ril_sim_card_signals
+					[SIGNAL_SIM_IO_ACTIVE_CHANGED], 0);
+	}
+}
+
+void ril_sim_card_sim_io_started(struct ril_sim_card *self, guint id)
+{
+	if (G_LIKELY(self) && G_LIKELY(id)) {
+		struct ril_sim_card_priv *priv = self->priv;
+		gpointer key = GINT_TO_POINTER(id);
+
+		g_hash_table_insert(priv->sim_io_pending, key, key);
+		if (priv->sim_io_idle_id) {
+			g_source_remove(priv->sim_io_idle_id);
+			priv->sim_io_idle_id = 0;
+			priv->sim_io_idle_count = 0;
+		}
+		ril_sim_card_update_sim_io_active(self);
+	}
+}
+
+static gboolean ril_sim_card_sim_io_idle_cb(gpointer user_data)
+{
+	struct ril_sim_card *self = RIL_SIMCARD(user_data);
+	struct ril_sim_card_priv *priv = self->priv;
+
+	if (++(priv->sim_io_idle_count) >= SIM_IO_IDLE_LOOPS) {
+		priv->sim_io_idle_id = 0;
+		priv->sim_io_idle_count = 0;
+		ril_sim_card_update_sim_io_active(self);
+		return G_SOURCE_REMOVE;
+	} else {
+		return G_SOURCE_CONTINUE;
+	}
+}
+
+void ril_sim_card_sim_io_finished(struct ril_sim_card *self, guint id)
+{
+	if (G_LIKELY(self) && G_LIKELY(id)) {
+		struct ril_sim_card_priv *priv = self->priv;
+		gpointer key = GINT_TO_POINTER(id);
+
+		if (g_hash_table_remove(priv->sim_io_pending, key) &&
+				!g_hash_table_size(priv->sim_io_pending)) {
+			/* Reset the idle loop count */
+			if (priv->sim_io_idle_id) {
+				g_source_remove(priv->sim_io_idle_id);
+				priv->sim_io_idle_count = 0;
+			}
+			priv->sim_io_idle_id =
+				g_idle_add(ril_sim_card_sim_io_idle_cb, self);
+		}
+		ril_sim_card_update_sim_io_active(self);
 	}
 }
 
@@ -522,6 +619,13 @@ gulong ril_sim_card_add_app_changed_handler(struct ril_sim_card *self,
 		SIGNAL_APP_CHANGED_NAME, G_CALLBACK(cb), arg) : 0;
 }
 
+gulong ril_sim_card_add_sim_io_active_changed_handler(struct ril_sim_card *self,
+					ril_sim_card_cb_t cb, void *arg)
+{
+	return (G_LIKELY(self) && G_LIKELY(cb)) ? g_signal_connect(self,
+		SIGNAL_SIM_IO_ACTIVE_CHANGED_NAME, G_CALLBACK(cb), arg) : 0;
+}
+
 void ril_sim_card_remove_handler(struct ril_sim_card *self, gulong id)
 {
 	if (G_LIKELY(self) && G_LIKELY(id)) {
@@ -536,8 +640,11 @@ void ril_sim_card_remove_handlers(struct ril_sim_card *self, gulong *ids, int n)
 
 static void ril_sim_card_init(struct ril_sim_card *self)
 {
-	self->priv = G_TYPE_INSTANCE_GET_PRIVATE(self, RIL_SIMCARD_TYPE,
-						struct ril_sim_card_priv);
+	struct ril_sim_card_priv *priv = G_TYPE_INSTANCE_GET_PRIVATE(self,
+				RIL_SIMCARD_TYPE, struct ril_sim_card_priv);
+
+	self->priv = priv;
+	priv->sim_io_pending = g_hash_table_new(g_direct_hash, g_direct_equal);
 }
 
 static void ril_sim_card_dispose(GObject *object)
@@ -555,6 +662,10 @@ static void ril_sim_card_finalize(GObject *object)
 	struct ril_sim_card *self = RIL_SIMCARD(object);
 	struct ril_sim_card_priv *priv = self->priv;
 
+	if (priv->sim_io_idle_id) {
+		g_source_remove(priv->sim_io_idle_id);
+	}
+	g_hash_table_destroy(priv->sim_io_pending);
 	grilio_channel_unref(priv->io);
 	grilio_queue_unref(priv->q);
 	ril_sim_card_status_free(self->status);
@@ -568,22 +679,11 @@ static void ril_sim_card_class_init(RilSimCardClass *klass)
 	object_class->dispose = ril_sim_card_dispose;
 	object_class->finalize = ril_sim_card_finalize;
 	g_type_class_add_private(klass, sizeof(struct ril_sim_card_priv));
-	ril_sim_card_signals[SIGNAL_STATUS_RECEIVED] =
-		g_signal_new(SIGNAL_STATUS_RECEIVED_NAME,
-			G_OBJECT_CLASS_TYPE(klass), G_SIGNAL_RUN_FIRST,
-			0, NULL, NULL, NULL, G_TYPE_NONE, 0);
-	ril_sim_card_signals[SIGNAL_STATUS_CHANGED] =
-		g_signal_new(SIGNAL_STATUS_CHANGED_NAME,
-			G_OBJECT_CLASS_TYPE(klass), G_SIGNAL_RUN_FIRST,
-			0, NULL, NULL, NULL, G_TYPE_NONE, 0);
-	ril_sim_card_signals[SIGNAL_STATE_CHANGED] =
-		g_signal_new(SIGNAL_STATE_CHANGED_NAME,
-			G_OBJECT_CLASS_TYPE(klass), G_SIGNAL_RUN_FIRST,
-			0, NULL, NULL, NULL, G_TYPE_NONE, 0);
-	ril_sim_card_signals[SIGNAL_APP_CHANGED] =
-		g_signal_new(SIGNAL_APP_CHANGED_NAME,
-			G_OBJECT_CLASS_TYPE(klass), G_SIGNAL_RUN_FIRST,
-			0, NULL, NULL, NULL, G_TYPE_NONE, 0);
+	NEW_SIGNAL_(klass,STATUS_RECEIVED);
+	NEW_SIGNAL(klass,STATUS);
+	NEW_SIGNAL(klass,STATE);
+	NEW_SIGNAL(klass,APP);
+	NEW_SIGNAL(klass,SIM_IO_ACTIVE);
 }
 
 /*

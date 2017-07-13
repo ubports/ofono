@@ -42,6 +42,7 @@
 
 enum ril_radio_caps_sim_events {
 	SIM_EVENT_STATE_CHANGED,
+	SIM_EVENT_IO_ACTIVE_CHANGED,
 	SIM_EVENT_COUNT
 };
 
@@ -768,10 +769,12 @@ static void ril_radio_caps_manager_next_transaction_cb
 						 struct ril_radio_caps *caps)
 {
 	grilio_queue_cancel_all(caps->q, FALSE);
-	grilio_channel_remove_handlers(caps->io,
-				caps->io_event_id + IO_EVENT_PENDING, 1);
-	grilio_channel_remove_handlers(caps->io,
-				caps->io_event_id + IO_EVENT_OWNER, 1);
+	grilio_channel_remove_handlers(caps->io, caps->io_event_id +
+					IO_EVENT_PENDING, 1);
+	grilio_channel_remove_handlers(caps->io, caps->io_event_id +
+					IO_EVENT_OWNER, 1);
+	ril_sim_card_remove_handlers(caps->simcard, caps->simcard_event_id +
+					SIM_EVENT_IO_ACTIVE_CHANGED, 1);
 }
 
 static void ril_radio_caps_manager_next_transaction
@@ -912,7 +915,7 @@ static void ril_radio_caps_manager_next_phase
 static void ril_radio_caps_manager_data_off_done(GRilIoChannel *io,
 		int status, const void *req_data, guint len, void *user_data)
 {
-	struct ril_radio_caps_manager *self = user_data;
+	struct ril_radio_caps_manager *self = RADIO_CAPS_MANAGER(user_data);
 
 	DBG("%d", self->tx_pending);
 	GASSERT(self->tx_pending > 0);
@@ -1024,7 +1027,7 @@ static void ril_radio_caps_manager_deactivate_all
 	}
 }
 
-static void ril_radio_caps_tx_wait_cb(GRilIoChannel *channel, void *user_data)
+static void ril_radio_caps_tx_wait_cb(GRilIoChannel *io, void *user_data)
 {
 	struct ril_radio_caps *caps = user_data;
 	struct ril_radio_caps_manager *self = caps->mgr;
@@ -1064,38 +1067,28 @@ static void ril_radio_caps_tx_wait_cb(GRilIoChannel *channel, void *user_data)
 	}
 }
 
-static void ril_radio_caps_manager_start_transaction
+static void ril_radio_caps_manager_lock_io_for_transaction
 					(struct ril_radio_caps_manager *self)
 {
 	const GPtrArray *list = self->caps_list;
 	gboolean can_start = TRUE;
 	guint i;
 
-	/* Start the new request transaction */
-	ril_radio_caps_manager_next_transaction(self);
-	DBG("new transaction %d", self->tx_id);
-
 	/* We want to actually start the transaction when all the
-	 * modems involved will stop doing other things. Otherwise
-	 * some RILs get confused and break. We use the completion
-	 * of all DEACTIVATE_DATA_CALL and ALLOW_DATA requests as
-	 * the synchronization point when we can actually start the
-	 * capability switch transaction. */
+	 * involved modems stop doing other things. Otherwise some
+	 * RILs get confused and break. We have already checked that
+	 * SIM I/O has stopped. The next synchronization point is the
+	 * completion of all DEACTIVATE_DATA_CALL and ALLOW_DATA requests.
+	 * Then we can start the capability switch transaction. */
 	for (i = 0; i < list->len; i++) {
 		struct ril_radio_caps *caps = list->pdata[i];
 		GRILIO_TRANSACTION_STATE state;
 
-		if (!memcmp(&caps->new_cap, &caps->old_cap,
-						sizeof(caps->cap))) {
-			continue;
-		}
-
-		/* Associate it with the transaction. Restart the
-		 * transation to make sure that we get to the end
-		 * of the owner queue (to avoid deadlocks since we
-		 * are going to wait for all queues to become the
-		 * owners before actually starting the transaction) */
-		caps->tx_id = self->tx_id;
+		/* Restart the queue transation to make sure that
+		 * we get to the end of the owner queue (to avoid
+		 * deadlocks since we are going to wait for all
+		 * queues to become the owners before actually
+		 * starting the transaction) */
 		grilio_queue_transaction_finish(caps->q);
 		state = grilio_queue_transaction_start(caps->q);
 
@@ -1126,6 +1119,93 @@ static void ril_radio_caps_manager_start_transaction
 		/* All modems are ready */
 		ril_radio_caps_manager_deactivate_all(self);
 	}
+}
+
+static void ril_radio_caps_manager_stop_sim_io_watch
+					(struct ril_radio_caps_manager *self,
+						 struct ril_radio_caps *caps)
+{
+	/* ril_sim_card_remove_handlers zeros the id */
+	ril_sim_card_remove_handlers(caps->simcard, caps->simcard_event_id +
+					SIM_EVENT_IO_ACTIVE_CHANGED, 1);
+}
+
+static void ril_radio_caps_tx_wait_sim_io_cb(struct ril_sim_card *simcard,
+								void *data)
+{
+	struct ril_radio_caps *caps = data;
+	struct ril_radio_caps_manager *self = caps->mgr;
+	const GPtrArray *list = self->caps_list;
+	guint i;
+
+	for (i = 0; i < list->len; i++) {
+		const struct ril_radio_caps *caps = list->pdata[i];
+
+		if (caps->simcard->sim_io_active) {
+			DBG_(caps, "still waiting for SIM I/O to calm down");
+			return;
+		}
+	}
+
+	/* We no longer need to be notified about SIM I/O activity */
+	DBG("SIM I/O has calmed down");
+	ril_radio_caps_manager_foreach(self,
+				ril_radio_caps_manager_stop_sim_io_watch);
+
+	/* Now this looks like a good moment to start the transaction */
+	ril_radio_caps_manager_lock_io_for_transaction(self);
+}
+
+static void ril_radio_caps_manager_start_sim_io_watch
+					(struct ril_radio_caps_manager *self,
+						 struct ril_radio_caps *caps)
+{
+	caps->simcard_event_id[SIM_EVENT_IO_ACTIVE_CHANGED] =
+		ril_sim_card_add_sim_io_active_changed_handler(caps->simcard,
+				ril_radio_caps_tx_wait_sim_io_cb, caps);
+}
+
+static void ril_radio_caps_manager_start_transaction
+					(struct ril_radio_caps_manager *self)
+{
+	const GPtrArray *list = self->caps_list;
+	gboolean sim_io_active = FALSE;
+	guint i, count = 0;
+
+	/* Start the new request transaction */
+	ril_radio_caps_manager_next_transaction(self);
+	DBG("transaction %d", self->tx_id);
+
+	for (i = 0; i < list->len; i++) {
+		struct ril_radio_caps *caps = list->pdata[i];
+
+		if (memcmp(&caps->new_cap, &caps->old_cap, sizeof(caps->cap))) {
+			/* Mark it as taking part in this transaction */
+			caps->tx_id = self->tx_id;
+			count++;
+			if (caps->simcard->sim_io_active) {
+				sim_io_active = TRUE;
+			}
+		}
+	}
+
+	GASSERT(count);
+	if (!count) {
+		/* This is not supposed to happen */
+		DBG("nothing to do!");
+	} else if (sim_io_active) {
+		DBG("waiting for SIM I/O to calm down");
+		ril_radio_caps_manager_foreach_tx(self,
+				ril_radio_caps_manager_start_sim_io_watch);
+	} else {
+		/* Make sure we don't get notified about SIM I/O activity */
+		ril_radio_caps_manager_foreach(self,
+				ril_radio_caps_manager_stop_sim_io_watch);
+
+		/* And continue with locking RIL I/O for the transaction */
+		ril_radio_caps_manager_lock_io_for_transaction(self);
+	}
+
 }
 
 static GSList *ril_radio_caps_manager_upgradable_slots
@@ -1219,9 +1299,9 @@ static void ril_radio_caps_manager_check(struct ril_radio_caps_manager *self)
 	}
 }
 
-static gboolean ril_radio_caps_manager_check_cb(gpointer user_data)
+static gboolean ril_radio_caps_manager_check_cb(gpointer data)
 {
-	struct ril_radio_caps_manager *self = user_data;
+	struct ril_radio_caps_manager *self = RADIO_CAPS_MANAGER(data);
 
 	GASSERT(self->check_id);
 	self->check_id = 0;
