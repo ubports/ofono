@@ -98,10 +98,12 @@
 #define RIL_STORE_SLOTS_SEP         ","
 
 /* The file where error statistics is stored */
-#define RIL_ERROR_STORAGE            "rilerror"
+#define RIL_ERROR_STORAGE            "rilerror" /* File name */
+#define RIL_ERROR_COMMON_SECTION     "ril"      /* Modem independent section */
 
-/* Modem error ids, must be static strings (only one is defined for now) */
+/* Modem error ids, must be static strings */
 static const char RIL_ERROR_ID_RILD_RESTART[] = "rild-restart";
+static const char RIL_ERROR_ID_CAPS_SWITCH_ABORTED[]  = "caps-switch-aborted";
 
 enum ril_plugin_io_events {
 	IO_EVENT_CONNECTED,
@@ -137,6 +139,7 @@ struct ril_plugin_priv {
 	MceDisplay *display;
 	gboolean display_on;
 	gulong display_event_id[DISPLAY_EVENT_COUNT];
+	gulong caps_manager_event_id;
 	GSList *slots;
 	ril_slot_info_ptr *slots_info;
 	struct ril_slot *voice_slot;
@@ -181,6 +184,7 @@ struct ril_slot {
 	gulong io_event_id[IO_EVENT_COUNT];
 	gulong sim_card_state_event_id;
 	gboolean received_sim_status;
+	guint serialize_id;
 	guint caps_check_id;
 	guint imei_req_id;
 	guint trace_id;
@@ -404,6 +408,12 @@ static void ril_plugin_shutdown_slot(struct ril_slot *slot, gboolean kill_io)
 				slot->imei_req_id = 0;
 			}
 
+			if (slot->serialize_id) {
+				grilio_channel_deserialize(slot->io,
+							slot->serialize_id);
+				slot->serialize_id = 0;
+			}
+
 			for (i=0; i<IO_EVENT_COUNT; i++) {
 				ril_plugin_remove_slot_handler(slot, i);
 			}
@@ -615,9 +625,16 @@ static void ril_plugin_update_ready(struct ril_plugin_priv *plugin)
 	for (link = plugin->slots; link; link = link->next) {
 		struct ril_slot *slot = link->data;
 
-		if (!slot->imei || !slot->sim_card || !slot->sim_card->status) {
+		if (slot->imei && slot->sim_card && slot->sim_card->status) {
+			if (slot->serialize_id) {
+				/* This one is ready, deserialize it */
+				grilio_channel_deserialize(slot->io,
+							slot->serialize_id);
+				slot->serialize_id = 0;
+			}
+
+		} else {
 			ready = FALSE;
-			break;
 		}
 	}
 
@@ -834,16 +851,13 @@ static void ril_plugin_sim_watch(struct ofono_atom *atom,
 	ril_plugin_update_modem_paths_full(slot->plugin);
 }
 
-static void ril_plugin_count_error(struct ril_slot *slot, const char *key,
-							const char *message)
+static void ril_plugin_inc_error_count(GHashTable *errors,
+				const char *group, const char *key)
 {
-	GHashTable *errors = slot->pub.errors;
 	GKeyFile *storage = storage_open(NULL, RIL_ERROR_STORAGE);
 
 	/* Update life-time statistics */
 	if (storage) {
-		/* slot->path always starts with a slash, skip it */
-		const char *group = slot->path + 1;
 		g_key_file_set_integer(storage, group, key,
 			g_key_file_get_integer(storage, group, key, NULL) + 1);
 		storage_close(NULL, RIL_ERROR_STORAGE, storage, TRUE);
@@ -853,8 +867,21 @@ static void ril_plugin_count_error(struct ril_slot *slot, const char *key,
 	 * is always a static string */
 	g_hash_table_insert(errors, (void*)key, GINT_TO_POINTER(
 		GPOINTER_TO_INT(g_hash_table_lookup(errors, key)) + 1));
+}
 
-	/* Issue the D-Bus signal */
+static void ril_plugin_count_error(struct ril_plugin_priv *plugin,
+				const char *key, const char *message)
+{
+	ril_plugin_inc_error_count(plugin->pub.errors,
+					RIL_ERROR_COMMON_SECTION, key);
+	ril_plugin_dbus_signal_error(plugin->dbus, key, message);
+}
+
+static void ril_plugin_count_slot_error(struct ril_slot *slot, const char *key,
+							const char *message)
+{
+	/* slot->path always starts with a slash, skip it */
+	ril_plugin_inc_error_count(slot->pub.errors, slot->path + 1, key);
 	ril_plugin_dbus_signal_modem_error(slot->plugin->dbus,
 					slot->index, key, message);
 }
@@ -862,7 +889,7 @@ static void ril_plugin_count_error(struct ril_slot *slot, const char *key,
 static void ril_plugin_handle_error(struct ril_slot *slot, const char *msg)
 {
 	ofono_error("%s %s", ril_slot_debug_prefix(slot), msg);
-	ril_plugin_count_error(slot, RIL_ERROR_ID_RILD_RESTART, msg);
+	ril_plugin_count_slot_error(slot, RIL_ERROR_ID_RILD_RESTART, msg);
 	ril_plugin_shutdown_slot(slot, TRUE);
 	ril_plugin_update_modem_paths_full(slot->plugin);
 	ril_plugin_retry_init_io(slot);
@@ -877,6 +904,15 @@ static void ril_plugin_slot_error(GRilIoChannel *io, const GError *error,
 static void ril_plugin_slot_disconnected(GRilIoChannel *io, void *data)
 {
 	ril_plugin_handle_error((struct ril_slot *)data, "disconnected");
+}
+
+static void ril_plugin_caps_switch_aborted(struct ril_radio_caps_manager *mgr,
+								void *data)
+{
+	struct ril_plugin_priv *plugin = data;
+	DBG("radio caps switch aborted");
+	ril_plugin_count_error(plugin, RIL_ERROR_ID_CAPS_SWITCH_ABORTED,
+				"Capability switch transaction aborted");
 }
 
 static void ril_plugin_modem_online(struct ril_modem *modem, gboolean online,
@@ -1090,12 +1126,18 @@ static void ril_plugin_radio_caps_cb(const struct ril_radio_capability *cap,
 		if (!plugin->caps_manager) {
 			plugin->caps_manager = ril_radio_caps_manager_new
 				(plugin->data_manager);
+			plugin->caps_manager_event_id =
+				ril_radio_caps_manager_add_aborted_handler(
+					plugin->caps_manager,
+					ril_plugin_caps_switch_aborted,
+					plugin);
 		}
 
 		GASSERT(!slot->caps);
 		slot->caps = ril_radio_caps_new(plugin->caps_manager,
-			ril_plugin_log_prefix(slot), slot->io, slot->radio,
-			slot->network, &slot->config, cap);
+			ril_plugin_log_prefix(slot), slot->io, slot->data,
+			slot->radio, slot->sim_card, slot->network,
+			&slot->config, cap);
 	}
 }
 
@@ -1122,6 +1164,8 @@ static void ril_plugin_slot_connected(struct ril_slot *slot)
 	 */
 	GASSERT(!slot->imei_req_id);
 	req = grilio_request_new();
+	/* Don't allow any other requests while this one is pending */
+	grilio_request_set_blocking(req, TRUE);
 	grilio_request_set_retry(req, RIL_RETRY_MS, -1);
 	slot->imei_req_id = grilio_channel_send_request_full(slot->io,
 				req, RIL_REQUEST_DEVICE_IDENTITY,
@@ -1205,8 +1249,13 @@ static void ril_plugin_init_io(struct ril_slot *slot)
 				grilio_channel_add_error_handler(slot->io,
 					ril_plugin_slot_error, slot);
 			slot->io_event_id[IO_EVENT_EOF] =
-				grilio_channel_add_disconnected_handler(slot->io,
-					ril_plugin_slot_disconnected, slot);
+				grilio_channel_add_disconnected_handler(
+						slot->io,
+						ril_plugin_slot_disconnected,
+						slot);
+
+			/* Serialize requests at startup */
+			slot->serialize_id = grilio_channel_serialize(slot->io);
 
 			if (slot->io->connected) {
 				ril_plugin_slot_connected(slot);
@@ -1917,6 +1966,7 @@ static int ril_plugin_init(void)
 	ril_plugin = g_new0(struct ril_plugin_priv, 1);
 	ps = &ril_plugin->settings;
 	ps->dm_flags = RILMODEM_DEFAULT_DM_FLAGS;
+	ril_plugin->pub.errors = g_hash_table_new(g_str_hash, g_str_equal);
 	ril_plugin->slots = ril_plugin_load_config(RILMODEM_CONF_FILE, ps);
 	ril_plugin_init_slots(ril_plugin);
 	ril_plugin->dbus = ril_plugin_dbus_new(&ril_plugin->pub);
@@ -2033,10 +2083,13 @@ static void ril_plugin_exit(void)
 		g_slist_free_full(ril_plugin->slots, ril_plugin_destroy_slot);
 		ril_plugin_dbus_free(ril_plugin->dbus);
 		ril_data_manager_unref(ril_plugin->data_manager);
+		ril_radio_caps_manager_remove_handler(ril_plugin->caps_manager,
+					ril_plugin->caps_manager_event_id);
 		ril_radio_caps_manager_unref(ril_plugin->caps_manager);
 		gutil_disconnect_handlers(ril_plugin->display,
 			ril_plugin->display_event_id, DISPLAY_EVENT_COUNT);
 		mce_display_unref(ril_plugin->display);
+		g_hash_table_destroy(ril_plugin->pub.errors);
 		g_key_file_free(ril_plugin->storage);
 		g_free(ril_plugin->slots_info);
 		g_free(ril_plugin->default_voice_imsi);

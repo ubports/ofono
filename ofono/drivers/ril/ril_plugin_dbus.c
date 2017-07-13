@@ -46,7 +46,7 @@ struct ril_plugin_dbus {
 
 #define RIL_DBUS_PATH               "/"
 #define RIL_DBUS_INTERFACE          "org.nemomobile.ofono.ModemManager"
-#define RIL_DBUS_INTERFACE_VERSION  (7)
+#define RIL_DBUS_INTERFACE_VERSION  (8)
 
 #define RIL_DBUS_SIGNAL_ENABLED_MODEMS_CHANGED      "EnabledModemsChanged"
 #define RIL_DBUS_SIGNAL_PRESENT_SIMS_CHANGED        "PresentSimsChanged"
@@ -175,14 +175,37 @@ static void ril_plugin_dbus_message_append_path_array(DBusMessage *msg,
 	ril_plugin_dbus_append_path_array(&iter, dbus, fn);
 }
 
-static void ril_plugin_dbus_append_modem_error(DBusMessageIter *it,
+static void ril_plugin_dbus_append_error_count(DBusMessageIter *it,
 					const char *id, dbus_uint32_t count)
 {
 	DBusMessageIter sub;
+
 	dbus_message_iter_open_container(it, DBUS_TYPE_STRUCT, NULL, &sub);
 	dbus_message_iter_append_basic(&sub, DBUS_TYPE_STRING, &id);
 	dbus_message_iter_append_basic(&sub, DBUS_TYPE_INT32, &count);
 	dbus_message_iter_close_container(it, &sub);
+}
+
+static void ril_plugin_dbus_append_error_counts(DBusMessageIter *it,
+							GHashTable *errors)
+{
+	DBusMessageIter counts;
+
+	dbus_message_iter_open_container(it, DBUS_TYPE_ARRAY,
+				"(" RIL_DBUS_ERROR_SIGNATURE ")", &counts);
+
+	if (g_hash_table_size(errors)) {
+		gpointer key, value;
+		GHashTableIter iter;
+
+		g_hash_table_iter_init(&iter, errors);
+		while (g_hash_table_iter_next(&iter, &key, &value)) {
+			ril_plugin_dbus_append_error_count(&counts,
+						key, GPOINTER_TO_INT(value));
+		}
+	}
+
+	dbus_message_iter_close_container(it, &counts);
 }
 
 static void ril_plugin_dbus_append_modem_errors(DBusMessageIter *it,
@@ -196,25 +219,16 @@ static void ril_plugin_dbus_append_modem_errors(DBusMessageIter *it,
 
 	while (*ptr) {
 		const struct ril_slot_info *slot = *ptr++;
-		DBusMessageIter errors;
-
-		dbus_message_iter_open_container(&slots, DBUS_TYPE_ARRAY,
-				"(" RIL_DBUS_ERROR_SIGNATURE ")", &errors);
-
-		if (g_hash_table_size(slot->errors)) {
-			gpointer key, value;
-			GHashTableIter iter;
-			g_hash_table_iter_init(&iter, slot->errors);
-			while (g_hash_table_iter_next(&iter, &key, &value)) {
-				ril_plugin_dbus_append_modem_error(&errors,
-						key, GPOINTER_TO_INT(value));
-			}
-		}
-
-		dbus_message_iter_close_container(&slots, &errors);
+		ril_plugin_dbus_append_error_counts(&slots, slot->errors);
 	}
 
 	dbus_message_iter_close_container(it, &slots);
+}
+
+static void ril_plugin_dbus_append_errors(DBusMessageIter *it,
+						struct ril_plugin_dbus *dbus)
+{
+	ril_plugin_dbus_append_error_counts(it, dbus->plugin->errors);
 }
 
 static void ril_plugin_dbus_signal_path_array(struct ril_plugin_dbus *dbus,
@@ -300,6 +314,7 @@ void ril_plugin_dbus_signal_sim(struct ril_plugin_dbus *dbus, int index,
 							gboolean present)
 {
 	dbus_bool_t value = present;
+
 	g_dbus_emit_signal(dbus->conn, RIL_DBUS_PATH, RIL_DBUS_INTERFACE,
 			RIL_DBUS_SIGNAL_PRESENT_SIMS_CHANGED,
 			DBUS_TYPE_INT32, &index,
@@ -307,10 +322,9 @@ void ril_plugin_dbus_signal_sim(struct ril_plugin_dbus *dbus, int index,
 			DBUS_TYPE_INVALID);
 }
 
-void ril_plugin_dbus_signal_modem_error(struct ril_plugin_dbus *dbus,
-			int index, const char *id, const char *message)
+void ril_plugin_dbus_emit_modem_error(struct ril_plugin_dbus *dbus,
+			const char *path, const char *id, const char *message)
 {
-	const char *path = dbus->plugin->slots[index]->path;
 	if (!message) message = "";
 	g_dbus_emit_signal(dbus->conn, RIL_DBUS_PATH, RIL_DBUS_INTERFACE,
 			RIL_DBUS_SIGNAL_MODEM_ERROR,
@@ -318,6 +332,19 @@ void ril_plugin_dbus_signal_modem_error(struct ril_plugin_dbus *dbus,
 			DBUS_TYPE_STRING, &id,
 			DBUS_TYPE_STRING, &message,
 			DBUS_TYPE_INVALID);
+}
+
+void ril_plugin_dbus_signal_modem_error(struct ril_plugin_dbus *dbus,
+			int index, const char *id, const char *message)
+{
+	ril_plugin_dbus_emit_modem_error(dbus,
+			dbus->plugin->slots[index]->path, id, message);
+}
+
+void ril_plugin_dbus_signal_error(struct ril_plugin_dbus *dbus,
+				const char *id, const char *message)
+{
+	ril_plugin_dbus_emit_modem_error(dbus, "/", id, message);
 }
 
 static DBusMessage *ril_plugin_dbus_reply_with_path_array(DBusMessage *msg,
@@ -452,6 +479,13 @@ static void ril_plugin_dbus_append_all7(DBusMessageIter *it,
 	ril_plugin_dbus_append_string_array(it, dbus, ril_plugin_dbus_imeisv);
 }
 
+static void ril_plugin_dbus_append_all8(DBusMessageIter *it,
+						struct ril_plugin_dbus *dbus)
+{
+	ril_plugin_dbus_append_all7(it, dbus);
+	ril_plugin_dbus_append_errors(it, dbus);
+}
+
 static DBusMessage *ril_plugin_dbus_get_all(DBusConnection *conn,
 						DBusMessage *msg, void *data)
 {
@@ -499,6 +533,13 @@ static DBusMessage *ril_plugin_dbus_get_all7(DBusConnection *conn,
 {
 	return ril_plugin_dbus_imei_reply(msg, (struct ril_plugin_dbus *)data,
 						ril_plugin_dbus_append_all7);
+}
+
+static DBusMessage *ril_plugin_dbus_get_all8(DBusConnection *conn,
+						DBusMessage *msg, void *data)
+{
+	return ril_plugin_dbus_imei_reply(msg, (struct ril_plugin_dbus *)data,
+						ril_plugin_dbus_append_all8);
 }
 
 static DBusMessage *ril_plugin_dbus_get_interface_version(DBusConnection *conn,
@@ -665,6 +706,13 @@ static DBusMessage *ril_plugin_dbus_get_modem_errors(DBusConnection *conn,
 					ril_plugin_dbus_append_modem_errors);
 }
 
+static DBusMessage *ril_plugin_dbus_get_errors(DBusConnection *conn,
+						DBusMessage *msg, void *data)
+{
+	return ril_plugin_dbus_reply(msg, (struct ril_plugin_dbus *)data,
+					ril_plugin_dbus_append_errors);
+}
+
 static DBusMessage *ril_plugin_dbus_set_enabled_modems(DBusConnection *conn,
 						DBusMessage *msg, void *data)
 {
@@ -820,9 +868,11 @@ static DBusMessage *ril_plugin_dbus_set_mms_sim(DBusConnection *conn,
 #define RIL_DBUS_MMS_SIM_ARG             {"mmsSim", "s"}
 #define RIL_DBUS_MMS_MODEM_ARG           {"mmsModem" , "s"}
 #define RIL_DBUS_READY_ARG               {"ready" , "b"}
-#define RIL_DBUS_MODEM_ERRORS_ARG        {"errors" , \
+#define RIL_DBUS_MODEM_ERRORS_ARG        {"modemErrors" , \
                                           "aa(" RIL_DBUS_ERROR_SIGNATURE ")"}
 #define RIL_DBUS_IMEISV_ARG              {"imeisv" , "as"}
+#define RIL_DBUS_ERRORS_ARG              {"errors" , \
+                                          "a(" RIL_DBUS_ERROR_SIGNATURE ")"}
 #define RIL_DBUS_GET_ALL_ARGS \
 	RIL_DBUS_VERSION_ARG, \
 	RIL_DBUS_AVAILABLE_MODEMS_ARG, \
@@ -850,6 +900,9 @@ static DBusMessage *ril_plugin_dbus_set_mms_sim(DBusConnection *conn,
 #define RIL_DBUS_GET_ALL7_ARGS \
 	RIL_DBUS_GET_ALL6_ARGS, \
 	RIL_DBUS_IMEISV_ARG
+#define RIL_DBUS_GET_ALL8_ARGS \
+	RIL_DBUS_GET_ALL7_ARGS, \
+	RIL_DBUS_ERRORS_ARG
 static const GDBusMethodTable ril_plugin_dbus_methods[] = {
 	{ GDBUS_METHOD("GetAll",
 			NULL, GDBUS_ARGS(RIL_DBUS_GET_ALL_ARGS),
@@ -872,6 +925,9 @@ static const GDBusMethodTable ril_plugin_dbus_methods[] = {
 	{ GDBUS_ASYNC_METHOD("GetAll7",
 			NULL, GDBUS_ARGS(RIL_DBUS_GET_ALL7_ARGS),
 			ril_plugin_dbus_get_all7) },
+	{ GDBUS_ASYNC_METHOD("GetAll8",
+			NULL, GDBUS_ARGS(RIL_DBUS_GET_ALL8_ARGS),
+			ril_plugin_dbus_get_all8) },
 	{ GDBUS_METHOD("GetInterfaceVersion",
 			NULL, GDBUS_ARGS(RIL_DBUS_VERSION_ARG),
 			ril_plugin_dbus_get_interface_version) },
@@ -914,6 +970,9 @@ static const GDBusMethodTable ril_plugin_dbus_methods[] = {
 	{ GDBUS_METHOD("GetModemErrors",
 			NULL, GDBUS_ARGS(RIL_DBUS_MODEM_ERRORS_ARG),
 			ril_plugin_dbus_get_modem_errors) },
+	{ GDBUS_METHOD("GetErrors",
+			NULL, GDBUS_ARGS(RIL_DBUS_ERRORS_ARG),
+			ril_plugin_dbus_get_errors) },
 	{ GDBUS_METHOD("SetEnabledModems",
 			GDBUS_ARGS({ "modems", "ao" }), NULL,
 			ril_plugin_dbus_set_enabled_modems) },

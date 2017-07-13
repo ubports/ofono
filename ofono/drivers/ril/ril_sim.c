@@ -40,13 +40,6 @@
 /* FID/path of SIM/USIM root directory */
 #define ROOTMF "3F00"
 
-/* RIL_Request* parameter counts */
-#define GET_IMSI_NUM_PARAMS 1
-#define ENTER_SIM_PIN_PARAMS 2
-#define SET_FACILITY_LOCK_PARAMS 5
-#define ENTER_SIM_PUK_PARAMS 3
-#define CHANGE_SIM_PIN_PARAMS 3
-
 /* P2 coding (modes) for READ RECORD and UPDATE RECORD (see TS 102.221) */
 #define MODE_SELECTED (0x00) /* Currently selected EF */
 #define MODE_CURRENT  (0x04) /* P1='00' denotes the current record */
@@ -113,6 +106,7 @@ struct ril_sim_cbd {
 		gpointer ptr;
 	} cb;
 	gpointer data;
+	guint req_id;
 };
 
 struct ril_sim_pin_cbd {
@@ -429,6 +423,7 @@ static void ril_sim_file_info_cb(GRilIoChannel *io, int status,
 	struct ofono_error error;
 
 	DBG_(sd, "");
+	ril_sim_card_sim_io_finished(sd->card, cbd->req_id);
 
 	ril_error_init_failure(&error);
 	res = ril_sim_parse_io_response(data, len);
@@ -489,8 +484,10 @@ static void ril_sim_request_io(struct ril_sim *sd, guint cmd, int fileid,
 	grilio_request_append_utf8(req, NULL);      /* pin2; only for writes */
 	grilio_request_append_utf8(req, ril_sim_app_id(sd));
 
-	grilio_queue_send_request_full(sd->q, req, RIL_REQUEST_SIM_IO,
-					cb, ril_sim_cbd_free, cbd);
+	grilio_request_set_blocking(req, TRUE);
+	cbd->req_id = grilio_queue_send_request_full(sd->q, req,
+				RIL_REQUEST_SIM_IO, cb, ril_sim_cbd_free, cbd);
+	ril_sim_card_sim_io_started(sd->card, cbd->req_id);
 	grilio_request_unref(req);
 }
 
@@ -512,6 +509,8 @@ static void ril_sim_read_cb(GRilIoChannel *io, int status,
 	struct ofono_error err;
 
 	DBG_(cbd->sd, "");
+	ril_sim_card_sim_io_finished(cbd->sd->card, cbd->req_id);
+
 	res = ril_sim_parse_io_response(data, len);
 	if (ril_sim_io_response_ok(res) && status == RIL_E_SUCCESS) {
 		cb(ril_error_ok(&err), res->data, res->data_len, cbd->data);
@@ -565,6 +564,8 @@ static void ril_sim_write_cb(GRilIoChannel *io, int status,
 	struct ofono_error err;
 
 	DBG_(cbd->sd, "");
+	ril_sim_card_sim_io_finished(cbd->sd->card, cbd->req_id);
+
 	res = ril_sim_parse_io_response(data, len);
 	if (ril_sim_io_response_ok(res) && status == RIL_E_SUCCESS) {
 		cb(ril_error_ok(&err), cbd->data);
@@ -625,6 +626,8 @@ static void ril_sim_get_imsi_cb(GRilIoChannel *io, int status,
 	ofono_sim_imsi_cb_t cb = cbd->cb.imsi;
 	struct ofono_error error;
 
+	ril_sim_card_sim_io_finished(cbd->sd->card, cbd->req_id);
+
 	if (status == RIL_E_SUCCESS) {
 		gchar *imsi;
 		GRilIoParser rilp;
@@ -649,11 +652,11 @@ static void ril_sim_read_imsi(struct ofono_sim *sim, ofono_sim_imsi_cb_t cb,
 				void *data)
 {
 	struct ril_sim *sd = ril_sim_get_data(sim);
-	GRilIoRequest *req = grilio_request_sized_new(60);
+	const char *app_id = ril_sim_app_id(sd);
+	struct ril_sim_cbd *cbd = ril_sim_cbd_new(sd, cb, data);
+	GRilIoRequest *req = grilio_request_array_utf8_new(1, app_id);
 
-	DBG_(sd, "%s", ril_sim_app_id(sd));
-	grilio_request_append_int32(req, GET_IMSI_NUM_PARAMS);
-	grilio_request_append_utf8(req, ril_sim_app_id(sd));
+	DBG_(sd, "%s", app_id);
 
 	/*
 	 * If we fail the .read_imsi call, ofono gets into "Unable to
@@ -661,9 +664,11 @@ static void ril_sim_read_imsi(struct ofono_sim *sim, ofono_sim_imsi_cb_t cb,
 	 * on failure.
 	 */
 	grilio_request_set_retry(req, RIL_RETRY_MS, -1);
-	grilio_queue_send_request_full(sd->q, req, RIL_REQUEST_GET_IMSI,
-				ril_sim_get_imsi_cb, ril_sim_cbd_free,
-				ril_sim_cbd_new(sd, cb, data));
+	grilio_request_set_blocking(req, TRUE);
+	cbd->req_id = grilio_queue_send_request_full(sd->q, req,
+				RIL_REQUEST_GET_IMSI, ril_sim_get_imsi_cb,
+				ril_sim_cbd_free, cbd);
+	ril_sim_card_sim_io_started(sd->card, cbd->req_id);
 	grilio_request_unref(req);
 }
 
@@ -861,10 +866,10 @@ static GRilIoRequest *ril_sim_enter_sim_pin_req(struct ril_sim *sd,
 {
 	const char *app_id = ril_sim_app_id(sd);
 	if (app_id) {
-		GRilIoRequest *req = grilio_request_new();
-		grilio_request_append_int32(req, ENTER_SIM_PIN_PARAMS);
-		grilio_request_append_utf8(req, pin);
-		grilio_request_append_utf8(req, app_id);
+		GRilIoRequest *req = grilio_request_array_utf8_new(2,
+							pin, app_id);
+
+		grilio_request_set_blocking(req, TRUE);
 		return req;
 	}
 	return NULL;
@@ -875,11 +880,9 @@ static GRilIoRequest *ril_sim_enter_sim_puk_req(struct ril_sim *sd,
 {
 	const char *app_id = ril_sim_app_id(sd);
 	if (app_id) {
-		GRilIoRequest *req = grilio_request_new();
-		grilio_request_append_int32(req, ENTER_SIM_PUK_PARAMS);
-		grilio_request_append_utf8(req, puk);
-		grilio_request_append_utf8(req, pin);
-		grilio_request_append_utf8(req, app_id);
+		GRilIoRequest *req = grilio_request_array_utf8_new(3,
+							puk, pin, app_id);
+		grilio_request_set_blocking(req, TRUE);
 		return req;
 	}
 	return NULL;
@@ -1256,26 +1259,23 @@ static void ril_sim_pin_change_state(struct ofono_sim *sim,
 	const char *passwd, ofono_sim_lock_unlock_cb_t cb, void *data)
 {
 	struct ril_sim *sd = ril_sim_get_data(sim);
-	struct ofono_error error;
+	const char *app_id = ril_sim_app_id(sd);
 	const char *type_str = ril_sim_facility_code(passwd_type);
+	struct ofono_error error;
 	guint id = 0;
 
-	DBG_(sd, "%d,%s,%d,%s,0,aid=%s", passwd_type, type_str, enable, passwd,
-							ril_sim_app_id(sd));
+	DBG_(sd, "%d,%s,%d,%s,0,aid=%s", passwd_type, type_str,
+						enable, passwd, app_id);
 
 	if (passwd_type == OFONO_SIM_PASSWORD_PHNET_PIN) {
 		id = ril_perso_change_state(sim, passwd_type, enable, passwd,
 								cb, data);
 	} else if (type_str) {
-		GRilIoRequest *req = grilio_request_new();
-		grilio_request_append_int32(req, SET_FACILITY_LOCK_PARAMS);
-		grilio_request_append_utf8(req, type_str);
-		grilio_request_append_utf8(req, enable ?
-			RIL_FACILITY_LOCK : RIL_FACILITY_UNLOCK);
-		grilio_request_append_utf8(req, passwd);
-		grilio_request_append_utf8(req, "0");		/* class */
-		grilio_request_append_utf8(req, ril_sim_app_id(sd));
+		GRilIoRequest *req = grilio_request_array_utf8_new(5, type_str,
+			enable ? RIL_FACILITY_LOCK : RIL_FACILITY_UNLOCK,
+			passwd, "0" /* class */, app_id);
 
+		grilio_request_set_blocking(req, TRUE);
 		id = grilio_queue_send_request_full(sd->q, req,
 			RIL_REQUEST_SET_FACILITY_LOCK,
 			ril_sim_pin_change_state_cb, ril_sim_pin_req_done,
@@ -1317,15 +1317,12 @@ static void ril_sim_change_passwd(struct ofono_sim *sim,
 				ofono_sim_lock_unlock_cb_t cb, void *data)
 {
 	struct ril_sim *sd = ril_sim_get_data(sim);
-	GRilIoRequest *req = grilio_request_sized_new(60);
+	const char *app_id = ril_sim_app_id(sd);
+	GRilIoRequest *req = grilio_request_array_utf8_new(3,
+					old_passwd, new_passwd, app_id);
 
-	grilio_request_append_int32(req, CHANGE_SIM_PIN_PARAMS);
-	grilio_request_append_utf8(req, old_passwd);
-	grilio_request_append_utf8(req, new_passwd);
-	grilio_request_append_utf8(req, ril_sim_app_id(sd));
-
-	DBG_(sd, "old=%s,new=%s,aid=%s", old_passwd, new_passwd,
-							ril_sim_app_id(sd));
+	DBG_(sd, "old=%s,new=%s,aid=%s", old_passwd, new_passwd, app_id);
+	grilio_request_set_blocking(req, TRUE);
 	grilio_queue_send_request_full(sd->q, req,
 		(passwd_type == OFONO_SIM_PASSWORD_SIM_PIN2) ?
 		RIL_REQUEST_CHANGE_SIM_PIN2 : RIL_REQUEST_CHANGE_SIM_PIN,
@@ -1340,6 +1337,8 @@ static void ril_sim_query_facility_lock_cb(GRilIoChannel *io, int status,
 	struct ofono_error error;
 	struct ril_sim_cbd *cbd = user_data;
 	ofono_query_facility_lock_cb_t cb = cbd->cb.query_facility_lock;
+
+	ril_sim_card_sim_io_finished(cbd->sd->card, cbd->req_id);
 
 	if (status == RIL_E_SUCCESS) {
 		int locked = 0;
@@ -1362,18 +1361,16 @@ static void ril_sim_query_facility_lock(struct ofono_sim *sim,
 				ofono_query_facility_lock_cb_t cb, void *data)
 {
 	struct ril_sim *sd = ril_sim_get_data(sim);
-	GRilIoRequest *req = grilio_request_new();
 	const char *type_str = ril_sim_facility_code(type);
+	struct ril_sim_cbd *cbd = ril_sim_cbd_new(sd, cb, data);
+	GRilIoRequest *req = grilio_request_array_utf8_new(4,
+			type_str, "", "0" /* class */, ril_sim_app_id(sd));
 
 	DBG_(sd, "%s", type_str);
-	grilio_request_append_int32(req, 4);
-	grilio_request_append_utf8(req, type_str);
-	grilio_request_append_utf8(req, "");
-	grilio_request_append_utf8(req, "0"); /* class */
-	grilio_request_append_utf8(req, ril_sim_app_id(sd));
-	grilio_queue_send_request_full(sd->q, req,
+	cbd->req_id = grilio_queue_send_request_full(sd->q, req,
 		RIL_REQUEST_QUERY_FACILITY_LOCK, ril_sim_query_facility_lock_cb,
-		ril_sim_cbd_free, ril_sim_cbd_new(sd, cb, data));
+		ril_sim_cbd_free, cbd);
+	ril_sim_card_sim_io_started(sd->card, cbd->req_id);
 	grilio_request_unref(req);
 }
 

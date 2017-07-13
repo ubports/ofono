@@ -44,6 +44,7 @@ struct ril_sim_card {
 	struct ril_sim_card_priv *priv;
 	struct ril_sim_card_status *status;
 	const struct ril_sim_card_app *app;
+	gboolean sim_io_active;
 	guint slot;
 };
 
@@ -55,7 +56,9 @@ typedef void (*ril_sim_card_cb_t)(struct ril_sim_card *sc, void *arg);
 struct ril_sim_card *ril_sim_card_new(GRilIoChannel *io, guint slot, int flags);
 struct ril_sim_card *ril_sim_card_ref(struct ril_sim_card *sc);
 void ril_sim_card_unref(struct ril_sim_card *sc);
-void ril_sim_card_request_status(struct ril_sim_card *self);
+void ril_sim_card_request_status(struct ril_sim_card *sc);
+void ril_sim_card_sim_io_started(struct ril_sim_card *sc, guint id);
+void ril_sim_card_sim_io_finished(struct ril_sim_card *sc, guint id);
 gboolean ril_sim_card_ready(struct ril_sim_card *sc);
 gulong ril_sim_card_add_status_received_handler(struct ril_sim_card *sc,
 					ril_sim_card_cb_t cb, void *arg);
@@ -64,6 +67,8 @@ gulong ril_sim_card_add_status_changed_handler(struct ril_sim_card *sc,
 gulong ril_sim_card_add_state_changed_handler(struct ril_sim_card *sc,
 					ril_sim_card_cb_t cb, void *arg);
 gulong ril_sim_card_add_app_changed_handler(struct ril_sim_card *sc,
+					ril_sim_card_cb_t cb, void *arg);
+gulong ril_sim_card_add_sim_io_active_changed_handler(struct ril_sim_card *sc,
 					ril_sim_card_cb_t cb, void *arg);
 void ril_sim_card_remove_handler(struct ril_sim_card *sc, gulong id);
 void ril_sim_card_remove_handlers(struct ril_sim_card *sc, gulong *ids, int n);
