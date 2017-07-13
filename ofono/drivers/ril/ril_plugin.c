@@ -98,10 +98,12 @@
 #define RIL_STORE_SLOTS_SEP         ","
 
 /* The file where error statistics is stored */
-#define RIL_ERROR_STORAGE            "rilerror"
+#define RIL_ERROR_STORAGE            "rilerror" /* File name */
+#define RIL_ERROR_COMMON_SECTION     "ril"      /* Modem independent section */
 
-/* Modem error ids, must be static strings (only one is defined for now) */
+/* Modem error ids, must be static strings */
 static const char RIL_ERROR_ID_RILD_RESTART[] = "rild-restart";
+static const char RIL_ERROR_ID_CAPS_SWITCH_ABORTED[]  = "caps-switch-aborted";
 
 enum ril_plugin_io_events {
 	IO_EVENT_CONNECTED,
@@ -137,6 +139,7 @@ struct ril_plugin_priv {
 	MceDisplay *display;
 	gboolean display_on;
 	gulong display_event_id[DISPLAY_EVENT_COUNT];
+	gulong caps_manager_event_id;
 	GSList *slots;
 	ril_slot_info_ptr *slots_info;
 	struct ril_slot *voice_slot;
@@ -848,16 +851,13 @@ static void ril_plugin_sim_watch(struct ofono_atom *atom,
 	ril_plugin_update_modem_paths_full(slot->plugin);
 }
 
-static void ril_plugin_count_error(struct ril_slot *slot, const char *key,
-							const char *message)
+static void ril_plugin_inc_error_count(GHashTable *errors,
+				const char *group, const char *key)
 {
-	GHashTable *errors = slot->pub.errors;
 	GKeyFile *storage = storage_open(NULL, RIL_ERROR_STORAGE);
 
 	/* Update life-time statistics */
 	if (storage) {
-		/* slot->path always starts with a slash, skip it */
-		const char *group = slot->path + 1;
 		g_key_file_set_integer(storage, group, key,
 			g_key_file_get_integer(storage, group, key, NULL) + 1);
 		storage_close(NULL, RIL_ERROR_STORAGE, storage, TRUE);
@@ -867,8 +867,21 @@ static void ril_plugin_count_error(struct ril_slot *slot, const char *key,
 	 * is always a static string */
 	g_hash_table_insert(errors, (void*)key, GINT_TO_POINTER(
 		GPOINTER_TO_INT(g_hash_table_lookup(errors, key)) + 1));
+}
 
-	/* Issue the D-Bus signal */
+static void ril_plugin_count_error(struct ril_plugin_priv *plugin,
+				const char *key, const char *message)
+{
+	ril_plugin_inc_error_count(plugin->pub.errors,
+					RIL_ERROR_COMMON_SECTION, key);
+	ril_plugin_dbus_signal_error(plugin->dbus, key, message);
+}
+
+static void ril_plugin_count_slot_error(struct ril_slot *slot, const char *key,
+							const char *message)
+{
+	/* slot->path always starts with a slash, skip it */
+	ril_plugin_inc_error_count(slot->pub.errors, slot->path + 1, key);
 	ril_plugin_dbus_signal_modem_error(slot->plugin->dbus,
 					slot->index, key, message);
 }
@@ -876,7 +889,7 @@ static void ril_plugin_count_error(struct ril_slot *slot, const char *key,
 static void ril_plugin_handle_error(struct ril_slot *slot, const char *msg)
 {
 	ofono_error("%s %s", ril_slot_debug_prefix(slot), msg);
-	ril_plugin_count_error(slot, RIL_ERROR_ID_RILD_RESTART, msg);
+	ril_plugin_count_slot_error(slot, RIL_ERROR_ID_RILD_RESTART, msg);
 	ril_plugin_shutdown_slot(slot, TRUE);
 	ril_plugin_update_modem_paths_full(slot->plugin);
 	ril_plugin_retry_init_io(slot);
@@ -891,6 +904,15 @@ static void ril_plugin_slot_error(GRilIoChannel *io, const GError *error,
 static void ril_plugin_slot_disconnected(GRilIoChannel *io, void *data)
 {
 	ril_plugin_handle_error((struct ril_slot *)data, "disconnected");
+}
+
+static void ril_plugin_caps_switch_aborted(struct ril_radio_caps_manager *mgr,
+								void *data)
+{
+	struct ril_plugin_priv *plugin = data;
+	DBG("radio caps switch aborted");
+	ril_plugin_count_error(plugin, RIL_ERROR_ID_CAPS_SWITCH_ABORTED,
+				"Capability switch transaction aborted");
 }
 
 static void ril_plugin_modem_online(struct ril_modem *modem, gboolean online,
@@ -1104,6 +1126,11 @@ static void ril_plugin_radio_caps_cb(const struct ril_radio_capability *cap,
 		if (!plugin->caps_manager) {
 			plugin->caps_manager = ril_radio_caps_manager_new
 				(plugin->data_manager);
+			plugin->caps_manager_event_id =
+				ril_radio_caps_manager_add_aborted_handler(
+					plugin->caps_manager,
+					ril_plugin_caps_switch_aborted,
+					plugin);
 		}
 
 		GASSERT(!slot->caps);
@@ -1939,6 +1966,7 @@ static int ril_plugin_init(void)
 	ril_plugin = g_new0(struct ril_plugin_priv, 1);
 	ps = &ril_plugin->settings;
 	ps->dm_flags = RILMODEM_DEFAULT_DM_FLAGS;
+	ril_plugin->pub.errors = g_hash_table_new(g_str_hash, g_str_equal);
 	ril_plugin->slots = ril_plugin_load_config(RILMODEM_CONF_FILE, ps);
 	ril_plugin_init_slots(ril_plugin);
 	ril_plugin->dbus = ril_plugin_dbus_new(&ril_plugin->pub);
@@ -2055,10 +2083,13 @@ static void ril_plugin_exit(void)
 		g_slist_free_full(ril_plugin->slots, ril_plugin_destroy_slot);
 		ril_plugin_dbus_free(ril_plugin->dbus);
 		ril_data_manager_unref(ril_plugin->data_manager);
+		ril_radio_caps_manager_remove_handler(ril_plugin->caps_manager,
+					ril_plugin->caps_manager_event_id);
 		ril_radio_caps_manager_unref(ril_plugin->caps_manager);
 		gutil_disconnect_handlers(ril_plugin->display,
 			ril_plugin->display_event_id, DISPLAY_EVENT_COUNT);
 		mce_display_unref(ril_plugin->display);
+		g_hash_table_destroy(ril_plugin->pub.errors);
 		g_key_file_free(ril_plugin->storage);
 		g_free(ril_plugin->slots_info);
 		g_free(ril_plugin->default_voice_imsi);

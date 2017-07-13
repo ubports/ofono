@@ -80,8 +80,8 @@ struct ril_radio_caps {
 	struct ril_radio_capability new_cap;
 };
 
-struct ril_radio_caps_manager {
-	gint ref_count;
+typedef struct ril_radio_caps_manager {
+	GObject object;
 	GPtrArray *caps_list;
 	guint check_id;
 	int tx_pending;
@@ -89,10 +89,10 @@ struct ril_radio_caps_manager {
 	int tx_phase_index;
 	gboolean tx_failed;
 	struct ril_data_manager *data_manager;
-};
+} RilRadioCapsManager;
 
 struct ril_radio_caps_check_data {
-	ril_radio_caps_check_cb cb;
+	ril_radio_caps_check_cb_t cb;
 	void *data;
 };
 
@@ -105,6 +105,21 @@ struct ril_radio_caps_request_tx_phase {
 
 typedef void (*ril_radio_caps_cb_t)(struct ril_radio_caps_manager *self,
 						struct ril_radio_caps *caps);
+
+typedef GObjectClass RilRadioCapsManagerClass;
+G_DEFINE_TYPE(RilRadioCapsManager, ril_radio_caps_manager, G_TYPE_OBJECT)
+#define RADIO_CAPS_MANAGER_TYPE (ril_radio_caps_manager_get_type())
+#define RADIO_CAPS_MANAGER(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), \
+        RADIO_CAPS_MANAGER_TYPE, RilRadioCapsManager))
+
+enum ril_radio_caps_manager_signal {
+    SIGNAL_ABORTED,
+    SIGNAL_COUNT
+};
+
+#define SIGNAL_ABORTED_NAME  "ril-capsmgr-aborted"
+
+static guint ril_radio_caps_manager_signals[SIGNAL_COUNT] = { 0 };
 
 static const struct ril_radio_caps_request_tx_phase
 					ril_radio_caps_tx_phase[] = {
@@ -202,7 +217,7 @@ static gboolean ril_radio_caps_check_retry(GRilIoRequest *request,
 	}
 }
 
-guint ril_radio_caps_check(GRilIoChannel *io, ril_radio_caps_check_cb cb,
+guint ril_radio_caps_check(GRilIoChannel *io, ril_radio_caps_check_cb_t cb,
 								void *data)
 {
 	guint id;
@@ -836,6 +851,9 @@ static void ril_radio_caps_manager_abort_transaction
 	 */
 	ril_radio_caps_manager_issue_requests(self, &ril_radio_caps_fail_phase,
 					ril_radio_caps_manager_abort_cb);
+
+	/* Notify the listeners */
+	g_signal_emit(self, ril_radio_caps_manager_signals[SIGNAL_ABORTED], 0);
 }
 
 static void ril_radio_caps_manager_next_phase_cb(GRilIoChannel *io,
@@ -1233,48 +1251,71 @@ static void ril_radio_caps_manager_schedule_check
 	}
 }
 
-static void ril_radio_caps_manager_free(struct ril_radio_caps_manager *self)
+gulong ril_radio_caps_manager_add_aborted_handler
+				(struct ril_radio_caps_manager *self,
+				ril_radio_caps_manager_cb_t cb, void *arg)
 {
+	return (G_LIKELY(self) && G_LIKELY(cb)) ? g_signal_connect(self,
+		SIGNAL_ABORTED_NAME, G_CALLBACK(cb), arg) : 0;
+}
+
+void ril_radio_caps_manager_remove_handler(struct ril_radio_caps_manager *self,
+								gulong id)
+{
+	if (G_LIKELY(self) && G_LIKELY(id)) {
+		g_signal_handler_disconnect(self, id);
+	}
+}
+
+RilRadioCapsManager *ril_radio_caps_manager_ref(RilRadioCapsManager *self)
+{
+	if (G_LIKELY(self)) {
+		g_object_ref(RADIO_CAPS_MANAGER(self));
+	}
+	return self;
+}
+
+void ril_radio_caps_manager_unref(RilRadioCapsManager *self)
+{
+	if (G_LIKELY(self)) {
+		g_object_ref(RADIO_CAPS_MANAGER(self));
+	}
+}
+
+RilRadioCapsManager *ril_radio_caps_manager_new(struct ril_data_manager *dm)
+{
+	RilRadioCapsManager *self = g_object_new(RADIO_CAPS_MANAGER_TYPE, 0);
+
+	self->data_manager = ril_data_manager_ref(dm);
+	return self;
+}
+
+static void ril_radio_caps_manager_init(RilRadioCapsManager *self)
+{
+	self->caps_list = g_ptr_array_new();
+	self->tx_phase_index = -1;
+}
+
+static void ril_radio_caps_manager_finalize(GObject *object)
+{
+	RilRadioCapsManager *self = RADIO_CAPS_MANAGER(object);
+
 	GASSERT(!self->caps_list->len);
 	g_ptr_array_free(self->caps_list, TRUE);
 	if (self->check_id) {
 		g_source_remove(self->check_id);
 	}
 	ril_data_manager_unref(self->data_manager);
-	g_slice_free(struct ril_radio_caps_manager, self);
+	G_OBJECT_CLASS(ril_radio_caps_manager_parent_class)->finalize(object);
 }
 
-struct ril_radio_caps_manager *ril_radio_caps_manager_new
-						(struct ril_data_manager *dm)
+static void ril_radio_caps_manager_class_init(RilRadioCapsManagerClass *klass)
 {
-	struct ril_radio_caps_manager *self =
-		g_slice_new0(struct ril_radio_caps_manager);
-
-	self->ref_count = 1;
-	self->caps_list = g_ptr_array_new();
-	self->tx_phase_index = -1;
-	self->data_manager = ril_data_manager_ref(dm);
-	return self;
-}
-
-struct ril_radio_caps_manager *ril_radio_caps_manager_ref
-					(struct ril_radio_caps_manager *self)
-{
-	if (G_LIKELY(self)) {
-		GASSERT(self->ref_count > 0);
-		g_atomic_int_inc(&self->ref_count);
-	}
-	return self;
-}
-
-void ril_radio_caps_manager_unref(struct ril_radio_caps_manager *self)
-{
-	if (G_LIKELY(self)) {
-		GASSERT(self->ref_count > 0);
-		if (g_atomic_int_dec_and_test(&self->ref_count)) {
-			ril_radio_caps_manager_free(self);
-		}
-	}
+	G_OBJECT_CLASS(klass)->finalize = ril_radio_caps_manager_finalize;
+	ril_radio_caps_manager_signals[SIGNAL_ABORTED] =
+		g_signal_new(SIGNAL_ABORTED_NAME,
+			G_OBJECT_CLASS_TYPE(klass), G_SIGNAL_RUN_FIRST,
+			0, NULL, NULL, NULL, G_TYPE_NONE, 0);
 }
 
 /*

@@ -23,12 +23,14 @@ struct ril_radio_caps;
 struct ril_radio_caps_manager;
 struct ril_radio_capability;
 
-/* ril_radio_capability pointer is NULL if functionality is unsupported */
-typedef void (*ril_radio_caps_check_cb)(const struct ril_radio_capability *cap,
+typedef void (*ril_radio_caps_manager_cb_t)(struct ril_radio_caps_manager *mgr,
 							void *user_data);
+/* ril_radio_capability pointer is NULL if functionality is unsupported */
+typedef void (*ril_radio_caps_check_cb_t)
+		(const struct ril_radio_capability *cap, void *user_data);
 
 /* The check can be cancelled with grilio_channel_cancel_request */
-guint ril_radio_caps_check(GRilIoChannel *io, ril_radio_caps_check_cb cb,
+guint ril_radio_caps_check(GRilIoChannel *io, ril_radio_caps_check_cb_t cb,
 							void *user_data);
 
 /* There should be a single ril_radio_caps_manager shared by all all modems */
@@ -37,6 +39,11 @@ struct ril_radio_caps_manager *ril_radio_caps_manager_new
 struct ril_radio_caps_manager *ril_radio_caps_manager_ref
 					(struct ril_radio_caps_manager *mgr);
 void ril_radio_caps_manager_unref(struct ril_radio_caps_manager *mgr);
+gulong ril_radio_caps_manager_add_aborted_handler
+				(struct ril_radio_caps_manager *mgr,
+				ril_radio_caps_manager_cb_t cb, void *arg);
+void ril_radio_caps_manager_remove_handler(struct ril_radio_caps_manager *mgr,
+								gulong id);
 
 /* And one ril_radio_caps object per modem */
 struct ril_radio_caps *ril_radio_caps_new(struct ril_radio_caps_manager *mgr,
