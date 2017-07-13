@@ -64,6 +64,7 @@ struct ril_plugin {
 	const char *default_voice_path;
 	const char *default_data_path;
 	const ril_slot_info_ptr *slots;
+	GHashTable *errors;
 	gboolean ready;
 };
 
@@ -126,6 +127,8 @@ void ril_plugin_dbus_block_imei_requests(struct ril_plugin_dbus *dbus,
 void ril_plugin_dbus_signal(struct ril_plugin_dbus *dbus, int mask);
 void ril_plugin_dbus_signal_sim(struct ril_plugin_dbus *dbus, int index,
 							gboolean present);
+void ril_plugin_dbus_signal_error(struct ril_plugin_dbus *dbus,
+				const char *id, const char *message);
 void ril_plugin_dbus_signal_modem_error(struct ril_plugin_dbus *dbus,
 			int index, const char *id, const char *message);
 
