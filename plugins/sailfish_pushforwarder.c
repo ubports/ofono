@@ -15,10 +15,7 @@
 #include <config.h>
 #endif
 
-#include <glib.h>
-#include <string.h>
-#include <unistd.h>
-#include <sys/ioctl.h>
+#include <gutil_inotify.h>
 #include <sys/inotify.h>
 #include <wspcodec.h>
 
@@ -74,10 +71,7 @@ struct push_datagram_handler {
 static GSList *handlers;
 static GSList *modems;
 static unsigned int modem_watch_id;
-static int inotify_fd = -1;
-static int inotify_watch_id = -1;
-static guint inotify_watch_source_id;
-static GIOChannel *inotify_watch_channel;
+static GUtilInotifyWatchCallback *inotify_cb;
 
 static void pf_notify_handler(struct push_datagram_handler *h,
 		const char *imsi, const char *from, const struct tm *remote,
@@ -276,10 +270,7 @@ static void pf_modem_watch(struct ofono_modem *modem,
 	if (added != FALSE) {
 		struct pf_modem *pm;
 
-		pm = g_try_new0(struct pf_modem, 1);
-		if (pm == NULL)
-			return;
-
+		pm = g_new0(struct pf_modem, 1);
 		pm->modem = modem;
 		pm->sms_watch_id = __ofono_modem_add_atom_watch(modem,
 			OFONO_ATOM_TYPE_SMS, pf_sms_watch, pm,
@@ -348,10 +339,7 @@ static void pf_parse_handler(GKeyFile *conf, const char *g)
 	if (path == NULL)
 		goto no_path;
 
-	h = g_try_new0(struct push_datagram_handler, 1);
-	if (h == NULL)
-		goto no_memory;
-
+	h = g_new0(struct push_datagram_handler, 1);
 	h->name = g_strdup(g);
 	h->interface = interface;
 	h->service = service;
@@ -383,9 +371,6 @@ static void pf_parse_handler(GKeyFile *conf, const char *g)
 	DBG("  Path: %s", path);
 	handlers = g_slist_append(handlers, h);
 	return;
-
-no_memory:
-	g_free(path);
 
 no_path:
 	g_free(method);
@@ -447,30 +432,11 @@ static void pf_parse_config(void)
 	g_dir_close(dir);
 }
 
-static gboolean pf_inotify(GIOChannel *gio, GIOCondition c, gpointer data)
+static void pf_inotify(GUtilInotifyWatch *watch, guint mask, guint cookie,
+					const char *name, void *user_data)
 {
-	int avail;
-	gsize len;
-	void *buf;
-	GError *error;
-
-	if (ioctl(inotify_fd, FIONREAD, &avail) < 0)
-		return FALSE;
-
-	buf = g_try_malloc(avail);
-	if (buf == NULL)
-		return FALSE;
-
-	error = NULL;
-	if (g_io_channel_read_chars(gio, buf, avail, &len, &error) !=
-							G_IO_STATUS_NORMAL) {
-		g_free(buf);
-		return FALSE;
-	}
-
+	DBG("'%s' changed (0x%04x)", name, mask);
 	pf_parse_config();
-	g_free(buf);
-	return TRUE;
 }
 
 static int pf_plugin_init(void)
@@ -479,37 +445,8 @@ static int pf_plugin_init(void)
 	pf_parse_config();
 	modem_watch_id = __ofono_modemwatch_add(pf_modem_watch, NULL, NULL);
 	__ofono_modem_foreach(pf_modem_init, NULL);
-	inotify_fd = inotify_init();
-	if (inotify_fd < 0)
-		return 0;
-
-	inotify_watch_id = inotify_add_watch(inotify_fd,
-					PF_CONFIG_DIR,
-					IN_CLOSE_WRITE | IN_DELETE | IN_MOVE);
-	if (inotify_watch_id < 0)
-		goto no_inotify_watch_id;
-
-	inotify_watch_channel = g_io_channel_unix_new(inotify_fd);
-	if (inotify_watch_channel == NULL)
-		goto no_inotify_watch_channel;
-
-	g_io_channel_set_encoding(inotify_watch_channel, NULL, NULL);
-	g_io_channel_set_buffered(inotify_watch_channel, FALSE);
-	inotify_watch_source_id = g_io_add_watch(inotify_watch_channel,
-						G_IO_IN, pf_inotify, NULL);
-	if (inotify_watch_source_id != 0)
-		return 0;
-
-	g_io_channel_unref(inotify_watch_channel);
-	inotify_watch_channel = NULL;
-
-no_inotify_watch_channel:
-	inotify_rm_watch(inotify_fd, inotify_watch_id);
-	inotify_watch_id = -1;
-
-no_inotify_watch_id:
-	close(inotify_fd);
-	inotify_fd = -1;
+	inotify_cb = gutil_inotify_watch_callback_new(PF_CONFIG_DIR,
+		IN_CLOSE_WRITE | IN_DELETE | IN_MOVE, pf_inotify, NULL);
 	return 0;
 }
 
@@ -522,19 +459,18 @@ static void pf_plugin_exit(void)
 	modems = NULL;
 	g_slist_free_full(handlers, pf_free_handler);
 	handlers = NULL;
-	if (inotify_watch_source_id == 0)
-		return;
-
-	g_source_remove(inotify_watch_source_id);
-	inotify_watch_source_id = 0;
-	g_io_channel_unref(inotify_watch_channel);
-	inotify_watch_channel = NULL;
-	inotify_rm_watch(inotify_fd, inotify_watch_id);
-	inotify_watch_id = -1;
-	close(inotify_fd);
-	inotify_fd = -1;
+	gutil_inotify_watch_callback_free(inotify_cb);
+	inotify_cb = NULL;
 }
 
 OFONO_PLUGIN_DEFINE(pushforwarder, "Push Forwarder Plugin", VERSION,
 		OFONO_PLUGIN_PRIORITY_DEFAULT, pf_plugin_init,
 		pf_plugin_exit)
+
+/*
+ * Local Variables:
+ * mode: C
+ * c-basic-offset: 8
+ * indent-tabs-mode: t
+ * End:
+ */
