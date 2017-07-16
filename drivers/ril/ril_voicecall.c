@@ -14,7 +14,6 @@
  */
 
 #include "ril_plugin.h"
-#include "ril_constants.h"
 #include "ril_ecclist.h"
 #include "ril_util.h"
 #include "ril_log.h"

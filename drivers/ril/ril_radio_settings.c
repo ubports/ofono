@@ -17,7 +17,6 @@
 #include "ril_sim_settings.h"
 #include "ril_util.h"
 #include "ril_log.h"
-#include "ril_constants.h"
 
 struct ril_radio_settings {
 	struct ofono_radio_settings *rs;
