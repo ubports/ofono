@@ -99,7 +99,7 @@
 
 /* The file where error statistics is stored */
 #define RIL_ERROR_STORAGE            "rilerror" /* File name */
-#define RIL_ERROR_COMMON_SECTION     "ril"      /* Modem independent section */
+#define RIL_ERROR_COMMON_SECTION     "common"   /* Modem independent section */
 
 /* Modem error ids, must be static strings */
 static const char RIL_ERROR_ID_RILD_RESTART[] = "rild-restart";
