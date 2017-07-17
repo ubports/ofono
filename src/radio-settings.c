@@ -171,7 +171,7 @@ static gboolean radio_band_umts_from_string(const char *str,
 					enum ofono_radio_band_umts *band)
 {
 	if (g_str_equal(str, "any")) {
-		*band = OFONO_RADIO_BAND_GSM_ANY;
+		*band = OFONO_RADIO_BAND_UMTS_ANY;
 		return TRUE;
 	} else if (g_str_equal(str, "850")) {
 		*band = OFONO_RADIO_BAND_UMTS_850;
