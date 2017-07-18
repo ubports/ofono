@@ -1828,6 +1828,17 @@ const char *ofono_netreg_get_mnc(struct ofono_netreg *netreg)
 	return netreg->current_operator->mnc;
 }
 
+const char *ofono_netreg_get_name(struct ofono_netreg *netreg)
+{
+	if (netreg == NULL)
+		return NULL;
+
+	if (netreg->current_operator == NULL)
+		return NULL;
+
+	return netreg->current_operator->name;
+}
+
 struct sim_spdi *ofono_netreg_get_spdi(struct ofono_netreg *netreg)
 {
 	if (netreg == NULL)
