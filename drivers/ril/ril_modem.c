@@ -278,7 +278,9 @@ static void ril_modem_pre_sim(struct ofono_modem *modem)
 	md->pre_sim_done = TRUE;
 	ofono_devinfo_create(modem, 0, RILMODEM_DRIVER, md);
 	ofono_sim_create(modem, 0, RILMODEM_DRIVER, md);
-	ofono_voicecall_create(modem, 0, RILMODEM_DRIVER, md);
+	if (md->modem.config.enable_voicecall) {
+		ofono_voicecall_create(modem, 0, RILMODEM_DRIVER, md);
+	}
 	if (!md->radio_state_event_id) {
 		md->radio_state_event_id =
 			ril_radio_add_state_changed_handler(md->modem.radio,

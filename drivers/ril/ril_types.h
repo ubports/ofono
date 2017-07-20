@@ -54,6 +54,7 @@ struct ril_slot_config {
 	guint slot;
 	enum ofono_radio_access_mode techs;
 	gboolean empty_pin_query;
+	gboolean enable_voicecall;
 	GUtilInts *local_hangup_reasons;
 	GUtilInts *remote_hangup_reasons;
 };

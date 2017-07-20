@@ -57,6 +57,7 @@
 #define RILMODEM_DEFAULT_SOCK2      "/dev/socket/rild2"
 #define RILMODEM_DEFAULT_SUB        "SUB1"
 #define RILMODEM_DEFAULT_TECHS      OFONO_RADIO_ACCESS_MODE_ALL
+#define RILMODEM_DEFAULT_ENABLE_VOICECALL TRUE
 #define RILMODEM_DEFAULT_SLOT       0xffffffff
 #define RILMODEM_DEFAULT_TIMEOUT    0 /* No timeout */
 #define RILMODEM_DEFAULT_SIM_FLAGS  RIL_SIM_CARD_V9_UICC_SUBSCRIPTION_WORKAROUND
@@ -79,6 +80,7 @@
 #define RILCONF_SUB                 "sub"
 #define RILCONF_TIMEOUT             "timeout"
 #define RILCONF_4G                  "enable4G" /* Deprecated */
+#define RILCONF_ENABLE_VOICECALL    "enableVoicecall"
 #define RILCONF_TECHS               "technologies"
 #define RILCONF_UICC_WORKAROUND     "uiccWorkaround"
 #define RILCONF_ECCLIST_FILE        "ecclistFile"
@@ -1307,6 +1309,7 @@ static struct ril_slot *ril_plugin_slot_new(const char *sockpath,
 	slot->config.slot = slot_index;
 	slot->config.techs = RILMODEM_DEFAULT_TECHS;
 	slot->config.empty_pin_query = RILMODEM_DEFAULT_EMPTY_PIN_QUERY;
+	slot->config.enable_voicecall = RILMODEM_DEFAULT_ENABLE_VOICECALL;
 	slot->timeout = RILMODEM_DEFAULT_TIMEOUT;
 	slot->sim_flags = RILMODEM_DEFAULT_SIM_FLAGS;
 	slot->data_opt.allow_data = RILMODEM_DEFAULT_DATA_OPT;
@@ -1382,6 +1385,13 @@ static struct ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 		if (ril_config_get_integer(file, group, RILCONF_TIMEOUT,
 							&slot->timeout)) {
 			DBG("%s: timeout %d", group, slot->timeout);
+		}
+
+		if (ril_config_get_boolean(file, group,
+					RILCONF_ENABLE_VOICECALL,
+					&slot->config.enable_voicecall)) {
+			DBG("%s: %s %s", group, RILCONF_ENABLE_VOICECALL,
+				slot->config.enable_voicecall ? "yes" : "no");
 		}
 
 		strv = ril_config_get_strings(file, group, RILCONF_TECHS, ',');
