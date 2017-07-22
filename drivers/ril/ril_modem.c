@@ -25,6 +25,8 @@
 
 #include "ofono.h"
 
+#include "sailfish_watch.h"
+
 #define MAX_PDP_CONTEXTS        (2)
 #define ONLINE_TIMEOUT_SECS     (15) /* 20 sec is hardcoded in ofono core */
 
@@ -50,6 +52,7 @@ struct ril_modem_online_request {
 
 struct ril_modem_data {
 	struct ril_modem modem;
+	struct sailfish_watch *watch;
 	GRilIoQueue *q;
 	char *log_prefix;
 	char *imeisv;
@@ -57,17 +60,11 @@ struct ril_modem_data {
 	char *ecclist_file;
 	gboolean pre_sim_done;
 	gboolean allow_data;
-	gulong sim_imsi_event_id;
+	gulong imsi_event_id;
 
 	guint online_check_id;
 	enum ril_modem_power_state power_state;
 	gulong radio_state_event_id;
-
-	ril_modem_cb_t removed_cb;
-	void *removed_cb_data;
-
-	ril_modem_online_cb_t online_cb;
-	void *online_cb_data;
 
 	struct ril_modem_online_request set_online;
 	struct ril_modem_online_request set_offline;
@@ -82,11 +79,6 @@ static struct ril_modem_data *ril_modem_data_from_ofono(struct ofono_modem *o)
 	struct ril_modem_data *md = ofono_modem_get_data(o);
 	GASSERT(md->modem.ofono == o);
 	return md;
-}
-
-static struct ril_modem_data *ril_modem_data_from_modem(struct ril_modem *m)
-{
-	return m ? G_CAST(m, struct ril_modem_data, modem) : NULL;
 }
 
 static void *ril_modem_get_atom_data(struct ril_modem *modem,
@@ -130,24 +122,6 @@ void ril_modem_delete(struct ril_modem *md)
 	if (md && md->ofono) {
 		ofono_modem_remove(md->ofono);
 	}
-}
-
-void ril_modem_set_removed_cb(struct ril_modem *modem, ril_modem_cb_t cb,
-								void *data)
-{
-	struct ril_modem_data *md = ril_modem_data_from_modem(modem);
-
-	md->removed_cb = cb;
-	md->removed_cb_data = data;
-}
-
-void ril_modem_set_online_cb(struct ril_modem *modem, ril_modem_online_cb_t cb,
-								void *data)
-{
-	struct ril_modem_data *md = ril_modem_data_from_modem(modem);
-
-	md->online_cb = cb;
-	md->online_cb_data = data;
 }
 
 static void ril_modem_online_request_ok(struct ril_modem_online_request *req)
@@ -234,7 +208,7 @@ static void ril_modem_schedule_online_check(struct ril_modem_data *md)
 static void ril_modem_update_radio_settings(struct ril_modem_data *md)
 {
 	struct ril_modem *m = &md->modem;
-	if (m->radio->state == RADIO_STATE_ON && m->sim_settings->imsi) {
+	if (m->radio->state == RADIO_STATE_ON && md->watch->imsi) {
 		/* radio-settings.c assumes that IMSI is available */
 		if (!ril_modem_radio_settings(m)) {
 			DBG_(md, "initializing radio settings interface");
@@ -262,11 +236,11 @@ static void ril_modem_radio_state_cb(struct ril_radio *radio, void *data)
 	ril_modem_update_online_state(md);
 }
 
-static void ril_modem_imsi_cb(struct ril_sim_settings *settings, void *data)
+static void ril_modem_imsi_cb(struct sailfish_watch *watch, void *data)
 {
 	struct ril_modem_data *md = data;
 
-	GASSERT(md->modem.sim_settings == settings);
+	GASSERT(md->watch == watch);
 	ril_modem_update_radio_settings(md);
 }
 
@@ -339,10 +313,6 @@ static void ril_modem_set_online(struct ofono_modem *modem, ofono_bool_t online,
 	DBG("%s going %sline", ofono_modem_get_path(modem),
 						online ? "on" : "off");
 
-	if (md->online_cb) {
-		md->online_cb(&md->modem, online, md->online_cb_data);
-	}
-
 	if (online) {
 		ril_radio_power_on(md->modem.radio, RADIO_POWER_TAG(md));
 		req = &md->set_online;
@@ -396,24 +366,15 @@ static void ril_modem_remove(struct ofono_modem *ofono)
 	struct ril_modem *modem = &md->modem;
 
 	DBG("%s", ril_modem_get_path(modem));
-	if (md->removed_cb) {
-		ril_modem_cb_t cb = md->removed_cb;
-		void *data = md->removed_cb_data;
-
-		md->removed_cb = NULL;
-		md->removed_cb_data = NULL;
-		cb(modem, data);
-	}
-
 	ofono_modem_set_data(ofono, NULL);
 
 	ril_radio_remove_handler(modem->radio, md->radio_state_event_id);
 	ril_radio_power_off(modem->radio, RADIO_POWER_TAG(md));
 	ril_radio_unref(modem->radio);
-
-	ril_sim_settings_remove_handler(modem->sim_settings,
-					md->sim_imsi_event_id);
 	ril_sim_settings_unref(modem->sim_settings);
+
+	sailfish_watch_remove_handler(md->watch, md->imsi_event_id);
+	sailfish_watch_unref(md->watch);
 
 	if (md->online_check_id) {
 		g_source_remove(md->online_check_id);
@@ -442,13 +403,15 @@ static void ril_modem_remove(struct ofono_modem *ofono)
 }
 
 struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *log_prefix,
-		const struct ril_slot_info *slot, struct ril_radio *radio,
-		struct ril_network *network, struct ril_sim_card *card,
-		struct ril_data *data, struct ril_sim_settings *settings,
+		const char *path, const char *imei, const char *imeisv,
+		const char *ecclist_file, const struct ril_slot_config *config,
+		struct ril_radio *radio, struct ril_network *network,
+		struct ril_sim_card *card, struct ril_data *data,
+		struct ril_sim_settings *settings,
 		struct ril_cell_info *cell_info)
 {
 	/* Skip the slash from the path, it looks like "/ril_0" */
-	struct ofono_modem *ofono = ofono_modem_create(slot->path + 1,
+	struct ofono_modem *ofono = ofono_modem_create(path + 1,
 							RILMODEM_DRIVER);
 	if (ofono) {
 		int err;
@@ -459,15 +422,14 @@ struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *log_prefix,
 		 * ril_plugin.c must wait until IMEI becomes known before
 		 * creating the modem
 		 */
-		GASSERT(slot->imei);
+		GASSERT(imei);
 
 		/* Copy config */
-		modem->config = *slot->config;
-		modem->imei = md->imei = g_strdup(slot->imei);
-		modem->imeisv = md->imeisv = g_strdup(slot->imeisv);
-		modem->log_prefix = log_prefix;
-		modem->ecclist_file =
-		md->ecclist_file = g_strdup(slot->ecclist_file);
+		modem->config = *config;
+		modem->imei = md->imei = g_strdup(imei);
+		modem->imeisv = md->imeisv = g_strdup(imeisv);
+		modem->log_prefix = log_prefix;     /* No need to strdup */
+		modem->ecclist_file = ecclist_file; /* No need to strdup */
 		md->log_prefix = (log_prefix && log_prefix[0]) ?
 			g_strconcat(log_prefix, " ", NULL) : g_strdup("");
 
@@ -480,14 +442,10 @@ struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *log_prefix,
 		modem->data = ril_data_ref(data);
 		modem->io = grilio_channel_ref(io);
 		md->q = grilio_queue_new(io);
+		md->watch = sailfish_watch_new(path);
 
-		/*
-		 * modem->sim_settings->imsi follows IMSI known to the ofono
-		 * core, unlike ril_sim_info->imsi which may point to the
-		 * cached IMSI even before the PIN code is entered.
-		 */
-		md->sim_imsi_event_id =
-			ril_sim_settings_add_imsi_changed_handler(settings,
+		md->imsi_event_id =
+			sailfish_watch_add_imsi_changed_handler(md->watch,
 						ril_modem_imsi_cb, md);
 
 		md->set_online.md = md;

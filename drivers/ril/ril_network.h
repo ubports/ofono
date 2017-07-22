@@ -18,8 +18,6 @@
 
 #include "ril_types.h"
 
-#include <ofono/radio-settings.h>
-
 struct ofono_network_operator;
 
 struct ril_registration_state {
@@ -45,8 +43,9 @@ struct ril_network {
 struct ofono_sim;
 typedef void (*ril_network_cb_t)(struct ril_network *net, void *arg);
 
-struct ril_network *ril_network_new(GRilIoChannel *io, const char *log_prefix,
-			struct ril_radio *radio, struct ril_sim_card *sim_card,
+struct ril_network *ril_network_new(const char *path, GRilIoChannel *io,
+			const char *log_prefix, struct ril_radio *radio,
+			struct ril_sim_card *sim_card,
 			struct ril_sim_settings *settings);
 struct ril_network *ril_network_ref(struct ril_network *net);
 void ril_network_unref(struct ril_network *net);

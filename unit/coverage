@@ -16,7 +16,9 @@ TESTS="\
  test-cdmasms \
  test-sms-root \
  test-caif \
- test-provision"
+ test-provision \
+ test-sailfish_manager \
+ test-sailfish_sim_info"
 
 pushd `dirname $0` > /dev/null
 TEST_DIR="$PWD"

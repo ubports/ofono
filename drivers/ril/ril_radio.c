@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2016 Jolla Ltd.
+ *  Copyright (C) 2015-2017 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -50,14 +50,12 @@ struct ril_radio_priv {
 
 enum ril_radio_signal {
 	SIGNAL_STATE_CHANGED,
-	SIGNAL_ONLINE_CHANGED,
 	SIGNAL_COUNT
 };
 
 #define POWER_RETRY_SECS (1)
 
 #define SIGNAL_STATE_CHANGED_NAME       "ril-radio-state-changed"
-#define SIGNAL_ONLINE_CHANGED_NAME      "ril-radio-online-changed"
 
 static guint ril_radio_signals[SIGNAL_COUNT] = { 0 };
 
@@ -77,8 +75,7 @@ static inline gboolean ril_radio_power_should_be_on(struct ril_radio *self)
 {
 	struct ril_radio_priv *priv = self->priv;
 
-	return self->online && !priv->power_cycle &&
-				g_hash_table_size(priv->req_table) > 0;
+	return !priv->power_cycle && g_hash_table_size(priv->req_table) > 0;
 }
 
 static inline gboolean ril_radio_state_off(enum ril_radio_state radio_state)
@@ -99,13 +96,14 @@ static inline void ril_radio_emit_signal(struct ril_radio *self,
 
 static gboolean ril_radio_power_request_retry_cb(gpointer user_data)
 {
-	struct ril_radio *self = user_data;
+	struct ril_radio *self = RIL_RADIO(user_data);
 	struct ril_radio_priv *priv = self->priv;
 
 	DBG("%s", priv->log_prefix);
 	GASSERT(priv->retry_id);
 	priv->retry_id = 0;
-	ril_radio_submit_power_request(self, ril_radio_power_should_be_on(self));
+	ril_radio_submit_power_request(self,
+				ril_radio_power_should_be_on(self));
 
 	return G_SOURCE_REMOVE;
 }
@@ -126,7 +124,7 @@ static void ril_radio_check_state(struct ril_radio *self)
 	struct ril_radio_priv *priv = self->priv;
 
 	if (!priv->pending_id) {
-		const gboolean should_be_on = ril_radio_power_should_be_on(self);
+		gboolean should_be_on = ril_radio_power_should_be_on(self);
 
 		if (ril_radio_state_on(self->priv->last_known_state) ==
 								should_be_on) {
@@ -157,7 +155,7 @@ static void ril_radio_check_state(struct ril_radio *self)
 static void ril_radio_power_request_cb(GRilIoChannel *channel, int ril_status,
 				const void *data, guint len, void *user_data)
 {
-	struct ril_radio *self = user_data;
+	struct ril_radio *self = RIL_RADIO(user_data);
 	struct ril_radio_priv *priv = self->priv;
 
 	GASSERT(priv->pending_id);
@@ -177,11 +175,17 @@ static void ril_radio_power_request_cb(GRilIoChannel *channel, int ril_status,
 
 static void ril_radio_submit_power_request(struct ril_radio *self, gboolean on)
 {
+	/*
+	 * RIL_REQUEST_RADIO_POWER
+	 *
+	 * "data" is int *
+	 * ((int *)data)[0] is > 0 for "Radio On"
+	 * ((int *)data)[0] is == 0 for "Radio Off"
+	 *
+	 * "response" is NULL
+	 **/
+	GRilIoRequest *req = grilio_request_array_int32_new(1, on);
 	struct ril_radio_priv *priv = self->priv;
-	GRilIoRequest *req = grilio_request_sized_new(8);
-
-	grilio_request_append_int32(req, 1);
-	grilio_request_append_int32(req, on); /* Radio ON=1, OFF=0 */
 
 	priv->next_state_valid = FALSE;
 	priv->next_state = on;
@@ -276,31 +280,11 @@ void ril_radio_power_off(struct ril_radio *self, gpointer tag)
 	}
 }
 
-void ril_radio_set_online(struct ril_radio *self, gboolean online)
-{
-	if (G_LIKELY(self) && self->online != online) {
-		gboolean on, was_on = ril_radio_power_should_be_on(self);
-		self->online = online;
-		on = ril_radio_power_should_be_on(self);
-		if (was_on != on) {
-			ril_radio_power_request(self, on, FALSE);
-		}
-		ril_radio_emit_signal(self, SIGNAL_ONLINE_CHANGED);
-	}
-}
-
 gulong ril_radio_add_state_changed_handler(struct ril_radio *self,
 					ril_radio_cb_t cb, void *arg)
 {
 	return (G_LIKELY(self) && G_LIKELY(cb)) ? g_signal_connect(self,
 		SIGNAL_STATE_CHANGED_NAME, G_CALLBACK(cb), arg) : 0;
-}
-
-gulong ril_radio_add_online_changed_handler(struct ril_radio *self,
-					ril_radio_cb_t cb, void *arg)
-{
-	return (G_LIKELY(self) && G_LIKELY(cb)) ? g_signal_connect(self,
-		SIGNAL_ONLINE_CHANGED_NAME, G_CALLBACK(cb), arg) : 0;
 }
 
 void ril_radio_remove_handler(struct ril_radio *self, gulong id)
@@ -332,7 +316,7 @@ enum ril_radio_state ril_radio_state_parse(const void *data, guint len)
 static void ril_radio_state_changed(GRilIoChannel *io, guint code,
 				const void *data, guint len, void *user_data)
 {
-	struct ril_radio *self = user_data;
+	struct ril_radio *self = RIL_RADIO(user_data);
 	enum ril_radio_state radio_state = ril_radio_state_parse(data, len);
 
 	GASSERT(code == RIL_UNSOL_RESPONSE_RADIO_STATE_CHANGED);
@@ -440,7 +424,6 @@ static void ril_radio_class_init(RilRadioClass *klass)
 	object_class->finalize = ril_radio_finalize;
 	g_type_class_add_private(klass, sizeof(struct ril_radio_priv));
 	NEW_SIGNAL(klass, STATE);
-	NEW_SIGNAL(klass, ONLINE);
 }
 
 /*
