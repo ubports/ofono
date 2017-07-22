@@ -1,7 +1,7 @@
 /*
- *  oFono - Open Source Telephony - RIL-based devices
+ *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2016 Jolla Ltd.
+ *  Copyright (C) 2016-2017 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -13,16 +13,23 @@
  *  GNU General Public License for more details.
  */
 
-#include "ril_mtu.h"
-#include "ril_log.h"
+#include "mtu-watch.h"
 
-#include <net/if.h>
+#include <ofono/log.h>
+
+#include <glib.h>
+
+#include <unistd.h>
+#include <string.h>
+#include <errno.h>
 #include <sys/ioctl.h>
+#include <sys/types.h>
+#include <net/if.h>
 
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
 
-struct ril_mtu_watch {
+struct mtu_watch {
 	int max_mtu;
 	char *ifname;
 	void *buf;
@@ -32,7 +39,7 @@ struct ril_mtu_watch {
 	int fd;
 };
 
-static void ril_mtu_watch_limit_mtu(struct ril_mtu_watch *self)
+static void mtu_watch_limit_mtu(struct mtu_watch *self)
 {
 	int fd = socket(PF_INET, SOCK_DGRAM, 0);
 	if (fd >= 0) {
@@ -52,7 +59,7 @@ static void ril_mtu_watch_limit_mtu(struct ril_mtu_watch *self)
 	}
 }
 
-static void ril_mtu_watch_handle_rtattr(struct ril_mtu_watch *self,
+static void mtu_watch_handle_rtattr(struct mtu_watch *self,
 					const struct rtattr *rta, int len)
 {
 	int mtu = 0;
@@ -70,43 +77,43 @@ static void ril_mtu_watch_handle_rtattr(struct ril_mtu_watch *self,
 	}
 	if (mtu > self->max_mtu && !g_strcmp0(ifname, self->ifname)) {
 		DBG("%s %d", ifname, mtu);
-		ril_mtu_watch_limit_mtu(self);
+		mtu_watch_limit_mtu(self);
 	}
 }
 
-static void ril_mtu_watch_handle_ifinfomsg(struct ril_mtu_watch *self,
+static void mtu_watch_handle_ifinfomsg(struct mtu_watch *self,
 					const struct ifinfomsg *ifi, int len)
 {
 	if (ifi->ifi_flags & IFF_UP) {
 		const struct rtattr *rta = IFLA_RTA(ifi);
-		ril_mtu_watch_handle_rtattr(self, rta,
+		mtu_watch_handle_rtattr(self, rta,
 					len - ((char*)rta - (char*)ifi));
 	}
 }
 
-static void ril_mtu_watch_handle_nlmsg(struct ril_mtu_watch *self,
+static void mtu_watch_handle_nlmsg(struct mtu_watch *self,
 					const struct nlmsghdr *hdr, int len)
 {
 	while (len > 0 && NLMSG_OK(hdr, len)) {
 		if (hdr->nlmsg_type == RTM_NEWLINK) {
-			ril_mtu_watch_handle_ifinfomsg(self, NLMSG_DATA(hdr),
+			mtu_watch_handle_ifinfomsg(self, NLMSG_DATA(hdr),
 						IFLA_PAYLOAD(hdr));
 		}
 		hdr = NLMSG_NEXT(hdr, len);
         }
 }
 
-static gboolean ril_mtu_watch_event(GIOChannel *ch, GIOCondition cond,
+static gboolean mtu_watch_event(GIOChannel *ch, GIOCondition cond,
 							gpointer data)
 {
-	struct ril_mtu_watch *self = data;
+	struct mtu_watch *self = data;
 	struct sockaddr_nl addr;
 	socklen_t addrlen = sizeof(addr);
 	ssize_t result = recvfrom(self->fd, self->buf, self->bufsize, 0,
 				(struct sockaddr *)&addr, &addrlen);
 	if (result > 0) {
 		if (!addr.nl_pid) {
-			ril_mtu_watch_handle_nlmsg(self, self->buf, result);
+			mtu_watch_handle_nlmsg(self, self->buf, result);
 		}
 		return G_SOURCE_CONTINUE;
 	} else if (result == 0 || errno == EINTR || errno == EAGAIN) {
@@ -118,9 +125,8 @@ static gboolean ril_mtu_watch_event(GIOChannel *ch, GIOCondition cond,
 	}
 }
 
-static gboolean ril_mtu_watch_open_socket(struct ril_mtu_watch *self)
+static gboolean mtu_watch_open_socket(struct mtu_watch *self)
 {
-	GASSERT(self->fd < 0);
 	self->fd = socket(PF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
 	if (self->fd >= 0) {
 		struct sockaddr_nl nl;
@@ -140,20 +146,18 @@ static gboolean ril_mtu_watch_open_socket(struct ril_mtu_watch *self)
 	return FALSE;
 }
 
-static gboolean ril_mtu_watch_start(struct ril_mtu_watch *self)
+static gboolean mtu_watch_start(struct mtu_watch *self)
 {
 	if (self->fd >= 0) {
 		return TRUE;
-	} else if (ril_mtu_watch_open_socket(self)) {
-		GASSERT(!self->channel);
-		GASSERT(!self->io_watch);
+	} else if (mtu_watch_open_socket(self)) {
 		self->channel = g_io_channel_unix_new(self->fd);
 		if (self->channel) {
 			g_io_channel_set_encoding(self->channel, NULL, NULL);
 			g_io_channel_set_buffered(self->channel, FALSE);
 			self->io_watch = g_io_add_watch(self->channel,
 					G_IO_IN | G_IO_NVAL | G_IO_HUP,
-					ril_mtu_watch_event, self);
+					mtu_watch_event, self);
 			return TRUE;
 		}
 		close(self->fd);
@@ -162,7 +166,7 @@ static gboolean ril_mtu_watch_start(struct ril_mtu_watch *self)
 	return FALSE;
 }
 
-static void ril_mtu_watch_stop(struct ril_mtu_watch *self)
+static void mtu_watch_stop(struct mtu_watch *self)
 {
 	if (self->io_watch) {
 		g_source_remove(self->io_watch);
@@ -179,9 +183,9 @@ static void ril_mtu_watch_stop(struct ril_mtu_watch *self)
 	}
 }
 
-struct ril_mtu_watch *ril_mtu_watch_new(int max_mtu)
+struct mtu_watch *mtu_watch_new(int max_mtu)
 {
-	struct ril_mtu_watch *self = g_new0(struct ril_mtu_watch, 1);
+	struct mtu_watch *self = g_new0(struct mtu_watch, 1);
 	self->fd = -1;
 	self->max_mtu = max_mtu;
 	self->bufsize = 4096;
@@ -189,35 +193,27 @@ struct ril_mtu_watch *ril_mtu_watch_new(int max_mtu)
 	return self;
 }
 
-void ril_mtu_watch_free(struct ril_mtu_watch *self)
+void mtu_watch_free(struct mtu_watch *self)
 {
 	if (self) {
-		ril_mtu_watch_stop(self);
+		mtu_watch_stop(self);
 		g_free(self->ifname);
 		g_free(self->buf);
 		g_free(self);
 	}
 }
 
-void ril_mtu_watch_set_ifname(struct ril_mtu_watch *self, const char *ifname)
+void mtu_watch_set_ifname(struct mtu_watch *self, const char *ifname)
 {
 	if (self && g_strcmp0(self->ifname, ifname)) {
 		g_free(self->ifname);
 		if (ifname) {
 			self->ifname = g_strdup(ifname);
-			ril_mtu_watch_limit_mtu(self);
-			ril_mtu_watch_start(self);
+			mtu_watch_limit_mtu(self);
+			mtu_watch_start(self);
 		} else {
 			self->ifname = NULL;
-			ril_mtu_watch_stop(self);
+			mtu_watch_stop(self);
 		}
 	}
 }
-
-/*
- * Local Variables:
- * mode: C
- * c-basic-offset: 8
- * indent-tabs-mode: t
- * End:
- */

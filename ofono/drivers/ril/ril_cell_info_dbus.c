@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2016 Jolla Ltd.
+ *  Copyright (C) 2016-2017 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -28,7 +28,6 @@ struct ril_cell_entry {
 };
 
 struct ril_cell_info_dbus {
-	struct ril_modem *md;
 	struct ril_cell_info *info;
 	DBusConnection *conn;
 	char *path;
@@ -523,7 +522,6 @@ struct ril_cell_info_dbus *ril_cell_info_dbus_new(struct ril_modem *md,
 	struct ril_cell_info_dbus *dbus = g_new0(struct ril_cell_info_dbus, 1);
 
 	DBG("%s", ril_modem_get_path(md));
-	dbus->md = md;
 	dbus->path = g_strdup(ril_modem_get_path(md));
 	dbus->conn = dbus_connection_ref(ofono_dbus_get_connection());
 	dbus->info = ril_cell_info_ref(info);
@@ -552,8 +550,6 @@ void ril_cell_info_dbus_free(struct ril_cell_info_dbus *dbus)
 
 		DBG("%s", dbus->path);
 		g_dbus_unregister_interface(dbus->conn, dbus->path,
-						RIL_CELL_INFO_DBUS_INTERFACE);
-		ofono_modem_remove_interface(dbus->md->ofono,
 						RIL_CELL_INFO_DBUS_INTERFACE);
 
 		/* Unregister cells */

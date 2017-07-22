@@ -72,6 +72,7 @@ autoreconf --force --install
     --enable-test \
     --enable-sailfish-bt \
     --enable-sailfish-debuglog \
+    --enable-sailfish-manager \
     --enable-sailfish-provision \
     --enable-sailfish-pushforwarder \
     --enable-sailfish-rilmodem \

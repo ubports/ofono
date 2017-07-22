@@ -20,6 +20,8 @@
 #include "ril_util.h"
 #include "ril_log.h"
 
+#include "sailfish_watch.h"
+
 #include <grilio_queue.h>
 #include <grilio_request.h>
 #include <grilio_parser.h>
@@ -41,6 +43,11 @@ enum ril_network_timer {
 	TIMER_COUNT
 };
 
+enum ril_network_watch_events {
+	WATCH_EVENT_ONLINE,
+	WATCH_EVENT_COUNT
+};
+
 enum ril_network_radio_event {
 	RADIO_EVENT_STATE_CHANGED,
 	RADIO_EVENT_ONLINE_CHANGED,
@@ -58,6 +65,8 @@ struct ril_network_priv {
 	GRilIoQueue *q;
 	struct ril_radio *radio;
 	struct ril_sim_card *sim_card;
+	struct sailfish_watch *watch;
+	gulong watch_event_id[WATCH_EVENT_COUNT];
 	int rat;
 	char *log_prefix;
 	guint operator_poll_id;
@@ -478,7 +487,7 @@ static gboolean ril_network_can_set_pref_mode(struct ril_network *self)
 {
 	struct ril_network_priv *priv = self->priv;
 
-	return priv->radio->online && ril_sim_card_ready(priv->sim_card);
+	return priv->watch->online && ril_sim_card_ready(priv->sim_card);
 }
 
 static gboolean ril_network_set_rat_holdoff_cb(gpointer user_data)
@@ -753,7 +762,7 @@ static void ril_network_radio_state_cb(struct ril_radio *radio, void *data)
 	}
 }
 
-static void ril_network_radio_online_cb(struct ril_radio *radio, void *data)
+static void ril_network_online_cb(struct sailfish_watch *watch, void *data)
 {
 	struct ril_network *self = RIL_NETWORK(data);
 
@@ -805,8 +814,9 @@ static void ril_network_sim_status_changed_cb(struct ril_sim_card *sc,
 	}
 }
 
-struct ril_network *ril_network_new(GRilIoChannel *io, const char *log_prefix,
-			struct ril_radio *radio, struct ril_sim_card *sim_card,
+struct ril_network *ril_network_new(const char *path, GRilIoChannel *io,
+			const char *log_prefix, struct ril_radio *radio,
+			struct ril_sim_card *sim_card,
 			struct ril_sim_settings *settings)
 {
 	struct ril_network *self = g_object_new(RIL_NETWORK_TYPE, NULL);
@@ -815,6 +825,7 @@ struct ril_network *ril_network_new(GRilIoChannel *io, const char *log_prefix,
 	self->settings = ril_sim_settings_ref(settings);
 	priv->io = grilio_channel_ref(io);
 	priv->q = grilio_queue_new(priv->io);
+	priv->watch = sailfish_watch_new(path);
 	priv->radio = ril_radio_ref(radio);
 	priv->sim_card = ril_sim_card_ref(sim_card);
 	priv->log_prefix = (log_prefix && log_prefix[0]) ?
@@ -831,9 +842,9 @@ struct ril_network *ril_network_new(GRilIoChannel *io, const char *log_prefix,
 	priv->radio_event_id[RADIO_EVENT_STATE_CHANGED] =
 		ril_radio_add_state_changed_handler(priv->radio,
 			ril_network_radio_state_cb, self);
-	priv->radio_event_id[RADIO_EVENT_ONLINE_CHANGED] =
-		ril_radio_add_online_changed_handler(priv->radio,
-			ril_network_radio_online_cb, self);
+	priv->watch_event_id[WATCH_EVENT_ONLINE] =
+		sailfish_watch_add_modem_changed_handler(priv->watch,
+			ril_network_online_cb, self);
 	priv->settings_event_id =
 		ril_sim_settings_add_pref_mode_changed_handler(settings,
 			ril_network_pref_mode_changed_cb, self);
@@ -883,53 +894,40 @@ static void ril_network_init(struct ril_network *self)
 	priv->rat = -1;
 }
 
-static void ril_network_dispose(GObject *object)
+static void ril_network_finalize(GObject *object)
 {
 	struct ril_network *self = RIL_NETWORK(object);
 	struct ril_network_priv *priv = self->priv;
 	enum ril_network_timer tid;
 
-	grilio_channel_remove_handlers(priv->io, priv->unsol_event_id,
-					G_N_ELEMENTS(priv->unsol_event_id));
-	ril_radio_remove_handlers(priv->radio, priv->radio_event_id,
-					G_N_ELEMENTS(priv->radio_event_id));
-	ril_sim_settings_remove_handlers(self->settings,
-						&priv->settings_event_id, 1);
-	ril_sim_card_remove_handlers(priv->sim_card,
-						&priv->sim_status_event_id, 1);
-
+	DBG_(self, "");
 	for (tid=0; tid<TIMER_COUNT; tid++) {
 		ril_network_stop_timer(self, tid);
 	}
 
 	grilio_queue_cancel_all(priv->q, FALSE);
-	priv->set_rat_id = 0;
-	priv->query_rat_id = 0;
+	grilio_channel_remove_handlers(priv->io, priv->unsol_event_id,
+					G_N_ELEMENTS(priv->unsol_event_id));
 
-	G_OBJECT_CLASS(ril_network_parent_class)->dispose(object);
-}
-
-static void ril_network_finalize(GObject *object)
-{
-	struct ril_network *self = RIL_NETWORK(object);
-	struct ril_network_priv *priv = self->priv;
-
-	DBG_(self, "");
-	g_free(priv->log_prefix);
 	grilio_channel_unref(priv->io);
 	grilio_queue_unref(priv->q);
+	sailfish_watch_remove_all_handlers(priv->watch, priv->watch_event_id);
+	sailfish_watch_unref(priv->watch);
+	ril_radio_remove_all_handlers(priv->radio, priv->radio_event_id);
 	ril_radio_unref(priv->radio);
+	ril_sim_card_remove_handler(priv->sim_card,
+						priv->sim_status_event_id);
 	ril_sim_card_unref(priv->sim_card);
+	ril_sim_settings_remove_handler(self->settings,
+						priv->settings_event_id);
 	ril_sim_settings_unref(self->settings);
+	g_free(priv->log_prefix);
 	G_OBJECT_CLASS(ril_network_parent_class)->finalize(object);
 }
 
 static void ril_network_class_init(RilNetworkClass *klass)
 {
-	GObjectClass *object_class = G_OBJECT_CLASS(klass);
-
-	object_class->dispose = ril_network_dispose;
-	object_class->finalize = ril_network_finalize;
+	G_OBJECT_CLASS(klass)->finalize = ril_network_finalize;
 	g_type_class_add_private(klass, sizeof(struct ril_network_priv));
 	RIL_NETWORK_SIGNAL(klass, OPERATOR);
 	RIL_NETWORK_SIGNAL(klass, VOICE_STATE);

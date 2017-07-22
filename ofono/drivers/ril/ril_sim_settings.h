@@ -23,7 +23,6 @@ struct ril_sim_settings_priv;
 struct ril_sim_settings {
 	GObject object;
 	struct ril_sim_settings_priv *priv;
-	guint slot;
 	const char *imsi;
 	enum ofono_radio_access_mode techs;
 	enum ofono_radio_access_mode pref_mode;
@@ -31,7 +30,8 @@ struct ril_sim_settings {
 
 typedef void (*ril_sim_settings_cb_t)(struct ril_sim_settings *s, void *arg);
 
-struct ril_sim_settings *ril_sim_settings_new(const struct ril_slot_config *sc);
+struct ril_sim_settings *ril_sim_settings_new(const char *path,
+					enum ofono_radio_access_mode techs);
 struct ril_sim_settings *ril_sim_settings_ref(struct ril_sim_settings *s);
 void ril_sim_settings_unref(struct ril_sim_settings *s);
 void ril_sim_settings_set_ofono_sim(struct ril_sim_settings *s,
