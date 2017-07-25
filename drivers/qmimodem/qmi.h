@@ -19,6 +19,9 @@
  *
  */
 
+#ifndef __OFONO_QMI_QMI_H
+#define __OFONO_QMI_QMI_H
+
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -174,3 +177,13 @@ uint16_t qmi_service_register(struct qmi_service *service,
 				void *user_data, qmi_destroy_func_t destroy);
 bool qmi_service_unregister(struct qmi_service *service, uint16_t id);
 bool qmi_service_unregister_all(struct qmi_service *service);
+
+
+/* FIXME: find a place for parse_error */
+enum parse_error {
+	NONE = 0,
+	MISSING_MANDATORY = 1,
+	INVALID_LENGTH = 2,
+};
+
+#endif /* __OFONO_QMI_QMI_H */

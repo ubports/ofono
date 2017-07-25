@@ -274,7 +274,8 @@ qmi_sources = drivers/qmimodem/qmi.h drivers/qmimodem/qmi.c \
 					drivers/qmimodem/pds.h \
 					drivers/qmimodem/common.h \
 					drivers/qmimodem/wda.h \
-					drivers/qmimodem/voice.h
+					drivers/qmimodem/voice.h \
+					drivers/qmimodem/voice.c
 
 builtin_modules += qmimodem
 builtin_sources += $(qmi_sources) \
@@ -283,6 +284,7 @@ builtin_sources += $(qmi_sources) \
 			drivers/qmimodem/qmimodem.c \
 			drivers/qmimodem/devinfo.c \
 			drivers/qmimodem/voicecall.c \
+			drivers/qmimodem/voice_generated.c \
 			drivers/qmimodem/network-registration.c \
 			drivers/qmimodem/sim-legacy.c \
 			drivers/qmimodem/sim.c \

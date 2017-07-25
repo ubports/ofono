@@ -15,6 +15,9 @@
  *
  */
 
+#define QMI_VOICE_IND_ALL_STATUS 0x2e
+
+
 #define QMI_VOICE_PARAM_USS_DATA 0x01
 
 #define QMI_VOICE_PARAM_ASYNC_USSD_ERROR 0x10
@@ -55,8 +58,34 @@ enum voice_commands {
 	QMI_VOICE_ASYNC_ORIG_USSD =	0x43,
 };
 
+enum qmi_voice_call_state {
+	QMI_CALL_STATE_IDLE = 0x0,
+	QMI_CALL_STATE_ORIG,
+	QMI_CALL_STATE_INCOMING,
+	QMI_CALL_STATE_CONV,
+	QMI_CALL_STATE_CC_IN_PROG,
+	QMI_CALL_STATE_ALERTING,
+	QMI_CALL_STATE_HOLD,
+	QMI_CALL_STATE_WAITING,
+	QMI_CALL_STATE_DISCONNECTING,
+	QMI_CALL_STATE_END,
+	QMI_CALL_STATE_SETUP
+};
+
+enum qmi_voice_call_type {
+	QMI_CALL_TYPE_VOICE = 0x0,
+	QMI_CALL_TYPE_VOICE_FORCE,
+};
+
 struct qmi_ussd_data {
 	uint8_t dcs;
 	uint8_t length;
 	uint8_t data[0];
 } __attribute__((__packed__));
+
+enum call_direction;
+
+const char *qmi_voice_call_state_name(enum qmi_voice_call_state value);
+uint8_t ofono_to_qmi_direction(enum call_direction ofono_direction);
+enum call_direction qmi_to_ofono_direction(uint8_t qmi_direction);
+int qmi_to_ofono_status(uint8_t status, int *ret);
