@@ -195,6 +195,7 @@ static void sim_watch(struct ofono_atom *atom,
 
 	if (cond == OFONO_ATOM_WATCH_CONDITION_UNREGISTERED) {
 		if (ctx->simwatch_id) {
+			sim_state_watch(OFONO_SIM_STATE_NOT_PRESENT, data);
 			ofono_sim_remove_state_watch(ctx->sim, ctx->simwatch_id);
 			ctx->simwatch_id = 0;
 		}
