@@ -82,20 +82,6 @@ gint at_util_call_compare_by_phone_number(gconstpointer a, gconstpointer b)
 				sizeof(struct ofono_phone_number));
 }
 
-gint at_util_call_compare_by_id(gconstpointer a, gconstpointer b)
-{
-	const struct ofono_call *call = a;
-	unsigned int id = GPOINTER_TO_UINT(b);
-
-	if (id < call->id)
-		return -1;
-
-	if (id > call->id)
-		return 1;
-
-	return 0;
-}
-
 GSList *at_util_parse_clcc(GAtResult *result, unsigned int *ret_mpty_ids)
 {
 	GAtResultIter iter;

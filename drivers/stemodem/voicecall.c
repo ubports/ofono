@@ -463,7 +463,7 @@ static void ecav_notify(GAtResult *result, gpointer user_data)
 	 * If it doesn't exists we make a new one
 	 */
 	l = g_slist_find_custom(vd->calls, GUINT_TO_POINTER(id),
-				at_util_call_compare_by_id);
+				ofono_call_compare_by_id);
 
 	if (l)
 		existing_call = l->data;
