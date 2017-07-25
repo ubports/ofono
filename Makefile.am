@@ -907,7 +907,8 @@ unit_tests = unit/test-common unit/test-util \
 				unit/test-rilmodem-cs \
 				unit/test-rilmodem-sms \
 				unit/test-rilmodem-cb \
-				unit/test-rilmodem-gprs
+				unit/test-rilmodem-gprs \
+				unit/test-call-list
 
 noinst_PROGRAMS = $(unit_tests) \
 			unit/test-sms-root unit/test-mux unit/test-caif
@@ -944,6 +945,12 @@ unit_test_sms_root_SOURCES = unit/test-sms-root.c \
 					src/util.c src/smsutil.c src/storage.c
 unit_test_sms_root_LDADD = @GLIB_LIBS@ $(ell_ldadd)
 unit_objects += $(unit_test_sms_root_OBJECTS)
+
+unit_test_call_list_SOURCES = \
+				     src/common.c src/util.c \
+				     drivers/common/call_list.c unit/test-call-list.c
+unit_test_call_list_LDADD = @GLIB_LIBS@ $(ell_ldadd)
+unit_objects += $(unit_test_call_list_OBJECTS)
 
 unit_test_mux_SOURCES = unit/test-mux.c $(gatchat_sources)
 unit_test_mux_LDADD = @GLIB_LIBS@
