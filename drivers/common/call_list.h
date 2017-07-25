@@ -25,5 +25,7 @@
 #include <glib.h>
 
 gint ofono_call_compare(gconstpointer a, gconstpointer b);
+gint ofono_call_compare_by_status(gconstpointer a, gconstpointer b);
+gint ofono_call_compare_by_id(gconstpointer a, gconstpointer b);
 
 #endif /* __OFONO_DRIVER_COMMON_CALL_LIST */
