@@ -356,7 +356,7 @@ static void qmi_register_manual(struct ofono_netreg *netreg,
 
 	info.mcc = atoi(mcc);
 	info.mnc = atoi(mnc);
-	info.rat = data->current_rat;
+	info.rat = QMI_NAS_NETWORK_RAT_NO_CHANGE;
 
 	qmi_param_append(param, QMI_NAS_PARAM_REGISTER_MANUAL_INFO,
 						sizeof(info), &info);
