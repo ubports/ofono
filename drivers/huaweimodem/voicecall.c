@@ -180,7 +180,7 @@ static void cring_notify(GAtResult *result, gpointer user_data)
 	/* CRING can repeat, ignore if we already have an incoming call */
 	if (g_slist_find_custom(vd->calls,
 				GINT_TO_POINTER(CALL_STATUS_INCOMING),
-				at_util_call_compare_by_status))
+				ofono_call_compare_by_status))
 		return;
 
 	g_at_result_iter_init(&iter, result);
@@ -219,7 +219,7 @@ static void clip_notify(GAtResult *result, gpointer user_data)
 
 	l = g_slist_find_custom(vd->calls,
 				GINT_TO_POINTER(CALL_STATUS_INCOMING),
-				at_util_call_compare_by_status);
+				ofono_call_compare_by_status);
 	if (l == NULL) {
 		ofono_error("CLIP for unknown call");
 		return;

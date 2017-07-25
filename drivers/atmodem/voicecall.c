@@ -662,13 +662,13 @@ static void ring_notify(GAtResult *result, gpointer user_data)
 	/* See comment in CRING */
 	if (g_slist_find_custom(vd->calls,
 				GINT_TO_POINTER(CALL_STATUS_WAITING),
-				at_util_call_compare_by_status))
+				ofono_call_compare_by_status))
 		return;
 
 	/* RING can repeat, ignore if we already have an incoming call */
 	if (g_slist_find_custom(vd->calls,
 				GINT_TO_POINTER(CALL_STATUS_INCOMING),
-				at_util_call_compare_by_status))
+				ofono_call_compare_by_status))
 		return;
 
 	/* Generate an incoming call of unknown type */
@@ -700,13 +700,13 @@ static void cring_notify(GAtResult *result, gpointer user_data)
 	 */
 	if (g_slist_find_custom(vd->calls,
 				GINT_TO_POINTER(CALL_STATUS_WAITING),
-				at_util_call_compare_by_status))
+				ofono_call_compare_by_status))
 		return;
 
 	/* CRING can repeat, ignore if we already have an incoming call */
 	if (g_slist_find_custom(vd->calls,
 				GINT_TO_POINTER(CALL_STATUS_INCOMING),
-				at_util_call_compare_by_status))
+				ofono_call_compare_by_status))
 		return;
 
 	g_at_result_iter_init(&iter, result);
@@ -750,7 +750,7 @@ static void clip_notify(GAtResult *result, gpointer user_data)
 
 	l = g_slist_find_custom(vd->calls,
 				GINT_TO_POINTER(CALL_STATUS_INCOMING),
-				at_util_call_compare_by_status);
+				ofono_call_compare_by_status);
 	if (l == NULL) {
 		ofono_error("CLIP for unknown call");
 		return;
@@ -812,7 +812,7 @@ static void cdip_notify(GAtResult *result, gpointer user_data)
 
 	l = g_slist_find_custom(vd->calls,
 				GINT_TO_POINTER(CALL_STATUS_INCOMING),
-				at_util_call_compare_by_status);
+				ofono_call_compare_by_status);
 	if (l == NULL) {
 		ofono_error("CDIP for unknown call");
 		return;
@@ -861,7 +861,7 @@ static void cnap_notify(GAtResult *result, gpointer user_data)
 
 	l = g_slist_find_custom(vd->calls,
 				GINT_TO_POINTER(CALL_STATUS_INCOMING),
-				at_util_call_compare_by_status);
+				ofono_call_compare_by_status);
 	if (l == NULL) {
 		ofono_error("CNAP for unknown call");
 		return;
@@ -915,7 +915,7 @@ static void ccwa_notify(GAtResult *result, gpointer user_data)
 	/* Some modems resend CCWA, ignore it the second time around */
 	if (g_slist_find_custom(vd->calls,
 				GINT_TO_POINTER(CALL_STATUS_WAITING),
-				at_util_call_compare_by_status))
+				ofono_call_compare_by_status))
 		return;
 
 	g_at_result_iter_init(&iter, result);

@@ -73,17 +73,6 @@ void decode_at_error(struct ofono_error *error, const char *final)
 	}
 }
 
-gint at_util_call_compare_by_status(gconstpointer a, gconstpointer b)
-{
-	const struct ofono_call *call = a;
-	int status = GPOINTER_TO_INT(b);
-
-	if (status != call->status)
-		return 1;
-
-	return 0;
-}
-
 gint at_util_call_compare_by_phone_number(gconstpointer a, gconstpointer b)
 {
 	const struct ofono_call *call = a;

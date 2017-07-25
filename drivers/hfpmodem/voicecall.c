@@ -86,12 +86,12 @@ static GSList *find_dialing(GSList *calls)
 	GSList *c;
 
 	c = g_slist_find_custom(calls, GINT_TO_POINTER(CALL_STATUS_DIALING),
-				at_util_call_compare_by_status);
+				ofono_call_compare_by_status);
 
 	if (c == NULL)
 		c = g_slist_find_custom(calls,
 					GINT_TO_POINTER(CALL_STATUS_ALERTING),
-					at_util_call_compare_by_status);
+					ofono_call_compare_by_status);
 
 	return c;
 }
@@ -761,7 +761,7 @@ static void ccwa_notify(GAtResult *result, gpointer user_data)
 	/* CCWA can repeat, ignore if we already have an waiting call */
 	if (g_slist_find_custom(vd->calls,
 				GINT_TO_POINTER(CALL_STATUS_WAITING),
-				at_util_call_compare_by_status))
+				ofono_call_compare_by_status))
 		return;
 
 	/* some phones may send extra CCWA after active call is ended
@@ -770,7 +770,7 @@ static void ccwa_notify(GAtResult *result, gpointer user_data)
 	 */
 	if (g_slist_find_custom(vd->calls,
 				GINT_TO_POINTER(CALL_STATUS_INCOMING),
-				at_util_call_compare_by_status))
+				ofono_call_compare_by_status))
 		return;
 
 
@@ -813,7 +813,7 @@ static gboolean clip_timeout(gpointer user_data)
 
 	l = g_slist_find_custom(vd->calls,
 				GINT_TO_POINTER(CALL_STATUS_INCOMING),
-				at_util_call_compare_by_status);
+				ofono_call_compare_by_status);
 
 	if (l == NULL)
 		return FALSE;
@@ -842,12 +842,12 @@ static void ring_notify(GAtResult *result, gpointer user_data)
 	/* RING can repeat, ignore if we already have an incoming call */
 	if (g_slist_find_custom(vd->calls,
 				GINT_TO_POINTER(CALL_STATUS_INCOMING),
-				at_util_call_compare_by_status))
+				ofono_call_compare_by_status))
 		return;
 
 	waiting = g_slist_find_custom(vd->calls,
 					GINT_TO_POINTER(CALL_STATUS_WAITING),
-					at_util_call_compare_by_status);
+					ofono_call_compare_by_status);
 
 	/* If we started receiving RINGS but have a waiting call, most
 	 * likely all other calls were dropped and we just didn't get
@@ -892,7 +892,7 @@ static void clip_notify(GAtResult *result, gpointer user_data)
 
 	l = g_slist_find_custom(vd->calls,
 				GINT_TO_POINTER(CALL_STATUS_INCOMING),
-				at_util_call_compare_by_status);
+				ofono_call_compare_by_status);
 
 	if (l == NULL) {
 		ofono_error("CLIP for unknown call");
@@ -1008,7 +1008,7 @@ static void ciev_callsetup_notify(struct ofono_voicecall *vc,
 
 	waiting = g_slist_find_custom(vd->calls,
 					GINT_TO_POINTER(CALL_STATUS_WAITING),
-					at_util_call_compare_by_status);
+					ofono_call_compare_by_status);
 
 	/* This is a truly bizarre case not covered at all by the specification
 	 * (yes, they are complete idiots).  Here we assume the other side is
@@ -1087,7 +1087,7 @@ static void ciev_callsetup_notify(struct ofono_voicecall *vc,
 	{
 		GSList *o = g_slist_find_custom(vd->calls,
 					GINT_TO_POINTER(CALL_STATUS_DIALING),
-					at_util_call_compare_by_status);
+					ofono_call_compare_by_status);
 
 		if (o) {
 			struct ofono_call *call = o->data;
