@@ -97,6 +97,7 @@ struct qmi_nas_network_rat {
 	} __attribute__((__packed__)) info[0];
 } __attribute__((__packed__));
 
+#define QMI_NAS_NETWORK_RAT_NONE		0x00
 #define QMI_NAS_NETWORK_RAT_GSM			0x04
 #define QMI_NAS_NETWORK_RAT_UMTS		0x05
 #define QMI_NAS_NETWORK_RAT_LTE			0x08
