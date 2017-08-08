@@ -30,7 +30,7 @@ extern "C" {
 
 struct ofono_gprs_context;
 
-#define OFONO_GPRS_MAX_APN_LENGTH 127
+#define OFONO_GPRS_MAX_APN_LENGTH 100
 #define OFONO_GPRS_MAX_USERNAME_LENGTH 63
 #define OFONO_GPRS_MAX_PASSWORD_LENGTH 255
 
