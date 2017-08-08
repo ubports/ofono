@@ -30,6 +30,11 @@ extern "C" {
 
 struct ofono_gprs_context;
 
+/*
+ * ETSI 123.003, Section 9.1:
+ * the APN has, after encoding as defined in the paragraph below, a maximum
+ * length of 100 octets
+ */
 #define OFONO_GPRS_MAX_APN_LENGTH 100
 #define OFONO_GPRS_MAX_USERNAME_LENGTH 63
 #define OFONO_GPRS_MAX_PASSWORD_LENGTH 255
