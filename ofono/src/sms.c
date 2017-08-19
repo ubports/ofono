@@ -1182,7 +1182,8 @@ static gboolean compute_incoming_msgid(GSList *sms_list,
 static void dispatch_app_datagram(struct ofono_sms *sms,
 					const struct ofono_uuid *uuid,
 					int dst, int src,
-					unsigned char *buf, unsigned len,
+					const unsigned char *buf,
+					unsigned int len,
 					const struct sms_address *addr,
 					const struct sms_scts *scts)
 {
