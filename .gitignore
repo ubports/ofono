@@ -46,6 +46,8 @@ unit/test-rilmodem-cb
 unit/test-rilmodem-cs
 unit/test-rilmodem-gprs
 unit/test-rilmodem-sms
+unit/test-sailfish_manager
+unit/test-sailfish_sim_info
 unit/test-*.log
 unit/test-*.trs
 
