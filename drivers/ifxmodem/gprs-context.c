@@ -42,7 +42,7 @@
 
 #include "ifxmodem.h"
 
-#define TUN_SYSFS_DIR "/sys/devices/virtual/misc/tun"
+#define TUN_DEV "/dev/net/tun"
 
 #define STATIC_IP_NETMASK "255.255.255.255"
 
@@ -470,7 +470,7 @@ static int ifx_gprs_context_probe(struct ofono_gprs_context *gc,
 
 	DBG("");
 
-	if (stat(TUN_SYSFS_DIR, &st) < 0) {
+	if (stat(TUN_DEV, &st) < 0) {
 		ofono_error("Missing support for TUN/TAP devices");
 		return -ENODEV;
 	}
