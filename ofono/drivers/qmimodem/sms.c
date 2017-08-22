@@ -277,7 +277,7 @@ static void qmi_bearer_query(struct ofono_sms *sms,
 
 	DBG("");
 
-	if (data->major < 1 && data->minor < 2)
+	if (data->major < 1 || (data->major == 1 && data->minor < 2))
 		goto error;
 
 	if (qmi_service_send(data->wms, QMI_WMS_GET_DOMAIN_PREF, NULL,
@@ -315,7 +315,7 @@ static void qmi_bearer_set(struct ofono_sms *sms, int bearer,
 
 	DBG("bearer %d", bearer);
 
-	if (data->major < 1 && data->minor < 2)
+	if (data->major < 1 || (data->major == 1 && data->minor < 2))
 		goto error;
 
 	domain = bearer_to_domain(bearer);
