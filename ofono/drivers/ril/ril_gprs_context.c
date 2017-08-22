@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2016 Jolla Ltd.
+ *  Copyright (C) 2015-2017 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -17,7 +17,6 @@
 #include "ril_network.h"
 #include "ril_data.h"
 #include "ril_util.h"
-#include "ril_mtu.h"
 #include "ril_log.h"
 
 #include <gutil_strv.h>
@@ -25,6 +24,7 @@
 #include <arpa/inet.h>
 
 #include "common.h"
+#include "mtu-watch.h"
 
 #define CTX_ID_NONE ((unsigned int)(-1))
 
@@ -43,7 +43,7 @@ struct ril_gprs_context {
 	struct ril_data *data;
 	guint active_ctx_cid;
 	gulong calls_changed_id;
-	struct ril_mtu_watch *mtu_watch;
+	struct mtu_watch *mtu_watch;
 	struct ril_data_call *active_call;
 	struct ril_gprs_context_call activate;
 	struct ril_gprs_context_call deactivate;
@@ -95,7 +95,7 @@ static void ril_gprs_context_free_active_call(struct ril_gprs_context *gcd)
 		gcd->calls_changed_id = 0;
 	}
 	if (gcd->mtu_watch) {
-		ril_mtu_watch_free(gcd->mtu_watch);
+		mtu_watch_free(gcd->mtu_watch);
 		gcd->mtu_watch = NULL;
 	}
 }
@@ -107,9 +107,9 @@ static void ril_gprs_context_set_active_call(struct ril_gprs_context *gcd,
 		ril_data_call_free(gcd->active_call);
 		gcd->active_call = ril_data_call_dup(call);
 		if (!gcd->mtu_watch) {
-			gcd->mtu_watch = ril_mtu_watch_new(MAX_MTU);
+			gcd->mtu_watch = mtu_watch_new(MAX_MTU);
 		}
-		ril_mtu_watch_set_ifname(gcd->mtu_watch, call->ifname);
+		mtu_watch_set_ifname(gcd->mtu_watch, call->ifname);
 	} else {
 		ril_gprs_context_free_active_call(gcd);
 	}
@@ -575,7 +575,7 @@ static void ril_gprs_context_remove(struct ofono_gprs_context *gc)
 	ril_data_unref(gcd->data);
 	ril_network_unref(gcd->network);
 	ril_data_call_free(gcd->active_call);
-	ril_mtu_watch_free(gcd->mtu_watch);
+	mtu_watch_free(gcd->mtu_watch);
 	g_free(gcd);
 }
 

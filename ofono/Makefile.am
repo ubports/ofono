@@ -27,6 +27,11 @@ pkginclude_HEADERS = include/log.h include/plugin.h include/history.h \
 
 nodist_pkginclude_HEADERS = include/version.h
 
+if SAILFISH_MANAGER
+nodist_pkginclude_HEADERS += include/sailfish_manager.h \
+			include/sailfish_watch.h
+endif
+
 local_headers = $(foreach file,$(pkginclude_HEADERS) \
 				$(nodist_pkginclude_HEADERS), \
 					include/ofono/$(notdir $(file)))
@@ -116,6 +121,15 @@ builtin_modules += udevng
 builtin_sources += plugins/udevng.c
 endif
 
+if SAILFISH_MANAGER
+builtin_modules += sailfish_manager
+builtin_sources += plugins/sailfish_manager/sailfish_manager.c \
+			plugins/sailfish_manager/sailfish_manager_dbus.c \
+			plugins/sailfish_manager/sailfish_sim_info.c \
+			plugins/sailfish_manager/sailfish_sim_info_dbus.c \
+			plugins/sailfish_manager/sailfish_watch.c
+endif
+
 if RILMODEM
 if SAILFISH_RILMODEM
 
@@ -134,21 +148,17 @@ builtin_sources +=	drivers/ril/ril_call_barring.c \
 			drivers/ril/ril_gprs.c \
 			drivers/ril/ril_gprs_context.c \
 			drivers/ril/ril_modem.c \
-			drivers/ril/ril_mtu.c \
 			drivers/ril/ril_netmon.c \
 			drivers/ril/ril_netreg.c \
 			drivers/ril/ril_network.c \
 			drivers/ril/ril_oem_raw.c \
 			drivers/ril/ril_phonebook.c \
 			drivers/ril/ril_plugin.c \
-			drivers/ril/ril_plugin_dbus.c \
 			drivers/ril/ril_radio.c \
 			drivers/ril/ril_radio_caps.c \
 			drivers/ril/ril_radio_settings.c \
 			drivers/ril/ril_sim.c \
 			drivers/ril/ril_sim_card.c \
-			drivers/ril/ril_sim_info.c \
-			drivers/ril/ril_sim_info_dbus.c \
 			drivers/ril/ril_sim_settings.c \
 			drivers/ril/ril_sms.c \
 			drivers/ril/ril_stk.c \
@@ -653,8 +663,6 @@ builtin_sources += plugins/push-notification.c
 if SAILFISH_PUSHFORWARDER
 builtin_modules += pushforwarder
 builtin_sources += plugins/sailfish_pushforwarder.c
-builtin_cflags += @WSPCODEC_CFLAGS@
-builtin_libadd += @WSPCODEC_LIBS@
 endif
 
 builtin_modules += sms_history
@@ -666,6 +674,7 @@ builtin_sources += plugins/allowed-apns.c
 sbin_PROGRAMS = src/ofonod
 
 src_ofonod_SOURCES = $(builtin_sources) $(gatchat_sources) src/ofono.ver \
+			src/mtu-watch.c \
 			src/main.c src/ofono.h src/log.c src/plugin.c \
 			src/modem.c src/common.h src/common.c \
 			src/manager.c src/dbus.c src/util.h src/util.c \
@@ -869,6 +878,31 @@ unit_tests = unit/test-common unit/test-util unit/test-idmap \
 				unit/test-simutil unit/test-stkutil \
 				unit/test-sms unit/test-cdmasms \
 				unit/test-provision
+
+if SAILFISH_MANAGER
+
+unit_test_sailfish_sim_info_SOURCES = unit/test-sailfish_sim_info.c \
+			unit/fake_sailfish_watch.c \
+			plugins/sailfish_manager/sailfish_sim_info.c \
+			src/storage.c src/watch.c src/log.c
+unit_test_sailfish_sim_info_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
+			-DSTORAGEDIR='"/tmp/ofono"' -Iplugins/sailfish_manager
+unit_test_sailfish_sim_info_LDADD = @GLIB_LIBS@ -ldl
+unit_objects += $(unit_test_sailfish_sim_info_OBJECTS)
+unit_tests += unit/test-sailfish_sim_info
+
+unit_test_sailfish_manager_SOURCES = unit/test-sailfish_manager.c \
+			unit/fake_sailfish_watch.c \
+			plugins/sailfish_manager/sailfish_manager.c \
+			plugins/sailfish_manager/sailfish_sim_info.c \
+			src/storage.c src/log.c
+unit_test_sailfish_manager_CFLAGS = $(AM_CFLAGS) $(COVERAGE_OPT) \
+			-DSTORAGEDIR='"/tmp/ofono"' -Iplugins/sailfish_manager
+unit_test_sailfish_manager_LDADD = @GLIB_LIBS@ -ldl
+unit_objects += $(unit_test_sailfish_manager_OBJECTS)
+unit_tests += unit/test-sailfish_manager
+
+endif
 
 if RILMODEM
 if SAILFISH_RILMODEM

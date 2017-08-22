@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2016 Jolla Ltd.
+ *  Copyright (C) 2015-2017 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -24,7 +24,6 @@
 #define RIL_OEM_RAW_TIMEOUT   (60*1000) /* 60 sec */
 
 struct ril_oem_raw {
-	struct ril_modem *modem;
 	GRilIoQueue *q;
 	DBusConnection *conn;
 	char *path;
@@ -118,7 +117,6 @@ struct ril_oem_raw *ril_oem_raw_new(struct ril_modem *modem,
 	struct ril_oem_raw *oem = g_new0(struct ril_oem_raw, 1);
 
 	DBG("%s", ril_modem_get_path(modem));
-	oem->modem = modem;
 	oem->path = g_strdup(ril_modem_get_path(modem));
 	oem->conn = dbus_connection_ref(ofono_dbus_get_connection());
 	oem->q = grilio_queue_new(ril_modem_io(modem));
@@ -143,8 +141,6 @@ void ril_oem_raw_free(struct ril_oem_raw *oem)
 	if (oem) {
 		DBG("%s", oem->path);
 		g_dbus_unregister_interface(oem->conn, oem->path,
-						RIL_OEM_RAW_INTERFACE);
-		ofono_modem_remove_interface(oem->modem->ofono,
 						RIL_OEM_RAW_INTERFACE);
 		dbus_connection_unref(oem->conn);
 

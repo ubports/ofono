@@ -69,6 +69,16 @@ PKG_CHECK_MODULES(GLIB, glib-2.0 >= 2.32, dummy=yes,
 AC_SUBST(GLIB_CFLAGS)
 AC_SUBST(GLIB_LIBS)
 
+PKG_CHECK_MODULES(GOBJECT, gobject-2.0, dummy=yes,
+				AC_MSG_ERROR(GObject is required))
+GLIB_CFLAGS="$GLIB_CFLAGS $GOBJECT_CFLAGS"
+GLIB_LIBS="$GLIB_LIBS $GOBJECT_LIBS"
+
+PKG_CHECK_MODULES(GIO, gio-2.0, dummy=yes,
+				AC_MSG_ERROR(GIO is required))
+GLIB_CFLAGS="$GLIB_CFLAGS $GIO_CFLAGS"
+GLIB_LIBS="$GLIB_LIBS $GIO_LIBS"
+
 if (test "${enable_threads}" = "yes"); then
 	AC_DEFINE(NEED_THREADS, 1, [Define if threading support is required])
 	PKG_CHECK_MODULES(GTHREAD, gthread-2.0 >= 2.16, dummy=yes,
@@ -180,9 +190,17 @@ if (test "${enable_sailfish_rilmodem}" = "yes"); then
 				AC_MSG_ERROR(libglibutil >= 1.0.23 is required))
 	PKG_CHECK_MODULES(LIBMCE, libmce-glib, dummy=yes,
 				AC_MSG_ERROR(libmce-glib is required))
-	CFLAGS="$CFLAGS $GRILIO_CFLAGS $GLIBUTIL_CFLAGS $LIBMCE_CFLAGS"
-	LIBS="$LIBS $GRILIO_LIBS $GLIBUTIL_LIBS $LIBMCE_LIBS"
+	CFLAGS="$CFLAGS $GRILIO_CFLAGS $LIBMCE_CFLAGS"
+	LIBS="$LIBS $GRILIO_LIBS $LIBMCE_LIBS"
+	enable_sailfish_manager=yes
+	need_glibutil=yes
 fi
+
+AC_ARG_ENABLE(sailfish-manager,
+		AC_HELP_STRING([--enable-sailfish-manager],
+			[enable Sailfish OS modem manager plugin]),
+					[enable_sailfish_manager=${enableval}])
+AM_CONDITIONAL(SAILFISH_MANAGER, test "${enable_sailfish_manager}" = "yes")
 
 AC_ARG_ENABLE(add-remove-context, AC_HELP_STRING([--disable-add-remove-context],
 		[don't allow to add or remove connection context over D-Bus]), [
@@ -278,10 +296,13 @@ AC_ARG_ENABLE(sailfish-pushforwarder, AC_HELP_STRING([--enable-sailfish-pushforw
 			[enable_sailfish_pushforwarder="no"])
 AM_CONDITIONAL(SAILFISH_PUSHFORWARDER, test "${enable_sailfish_pushforwarder}" != "no")
 if (test "${enable_sailfish_pushforwarder}" != "no"); then
+	PKG_CHECK_MODULES(GLIBUTIL, libglibutil >= 1.0.15, dummy=yes,
+			AC_MSG_ERROR(libglibutil >= 1.0.15 is required))
 	PKG_CHECK_MODULES(WSPCODEC, libwspcodec >= 2.0, dummy=yes,
-		AC_MSG_ERROR(WSP decoder is required))
-	AC_SUBST(WSPCODEC_CFLAGS)
-	AC_SUBST(WSPCODEC_LIBS)
+			AC_MSG_ERROR(WSP decoder is required))
+	CFLAGS="$CFLAGS $WSPCODEC_CFLAGS"
+	LIBS="$LIBS $WSPCODEC_LIBS"
+	need_glibutil=yes
 fi
 
 AC_ARG_ENABLE(sailfish-debuglog, AC_HELP_STRING([--enable-sailfish-debuglog],
@@ -294,6 +315,11 @@ if (test "${enable_sailfish_debuglog}" = "yes"); then
 				AC_MSG_ERROR(libdbuslogserver-dbus is required))
 	CFLAGS="$CFLAGS $DBUSLOG_CFLAGS"
 	LIBS="$LIBS $DBUSLOG_LIBS"
+fi
+
+if (test "${need_glibutil}" = "yes"); then
+	CFLAGS="$CFLAGS $GLIBUTIL_CFLAGS"
+	LIBS="$LIBS $GLIBUTIL_LIBS"
 fi
 
 if (test "${prefix}" = "NONE"); then

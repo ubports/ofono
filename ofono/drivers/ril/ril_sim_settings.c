@@ -16,17 +16,14 @@
 #include "ril_sim_settings.h"
 #include "ril_log.h"
 
+#include "sailfish_watch.h"
+
 #include <gutil_misc.h>
 
-#include <ofono/sim.h>
-
+#include "ofono.h"
 #include "storage.h"
 
-#define RIL_SIM_STORE                   "ril"
-#define RIL_SIM_STORE_GROUP             "Settings"
-#define RIL_SIM_STORE_PREF_MODE         "TechnologyPreference"
-
-#define RIL_SIM_STORE_PREF_MODE_DEFAULT(self)           (\
+#define RIL_PREF_MODE_DEFAULT(self)                     (\
 	((self)->techs & OFONO_RADIO_ACCESS_MODE_LTE) ?  \
 	OFONO_RADIO_ACCESS_MODE_LTE :                    \
 	((self)->techs & OFONO_RADIO_ACCESS_MODE_UMTS) ? \
@@ -36,10 +33,14 @@
 typedef GObjectClass RilSimSettingsClass;
 typedef struct ril_sim_settings RilSimSettings;
 
+enum sailfish_watch_events {
+	WATCH_EVENT_IMSI,
+	WATCH_EVENT_COUNT
+};
+
 struct ril_sim_settings_priv {
-	struct ofono_sim *sim;
-	guint imsi_watch_id;
-	guint state_watch_id;
+	gulong watch_event_id[WATCH_EVENT_COUNT];
+	struct sailfish_watch *watch;
 	GKeyFile *storage;
 	char *imsi;
 };
@@ -66,174 +67,76 @@ G_DEFINE_TYPE(RilSimSettings, ril_sim_settings, G_TYPE_OBJECT)
 			G_OBJECT_CLASS_TYPE(klass), G_SIGNAL_RUN_FIRST, \
 			0, NULL, NULL, NULL, G_TYPE_NONE, 0)
 
+/* Skip the leading slash from the modem path: */
+#define DBG_(obj,fmt,args...) DBG("%s " fmt, (obj)->path+1, ##args)
+
 static void ril_sim_settings_signal_emit(struct ril_sim_settings *self,
 					enum ril_sim_settings_signal id)
 {
 	g_signal_emit(self, ril_sim_settings_signals[id], 0);
 }
 
-static void ril_sim_settings_reload(struct ril_sim_settings *self)
-{
-	struct ril_sim_settings_priv *priv = self->priv;
-
-	if (priv->storage) {
-		g_key_file_free(priv->storage);
-		priv->storage = NULL;
-	}
-
-	if (priv->imsi) {
-		char *mode_str;
-		enum ofono_radio_access_mode mode;
-		priv->storage = storage_open(priv->imsi, RIL_SIM_STORE);
-		mode_str = g_key_file_get_string(priv->storage,
-			RIL_SIM_STORE_GROUP, RIL_SIM_STORE_PREF_MODE, NULL);
-		if (ofono_radio_access_mode_from_string(mode_str, &mode)) {
-			if (!(self->techs & mode)) {
-				mode = OFONO_RADIO_ACCESS_MODE_ANY;
-			}
-		} else {
-			mode = OFONO_RADIO_ACCESS_MODE_ANY;
-		}
-		if (mode == OFONO_RADIO_ACCESS_MODE_ANY) {
-			self->pref_mode = RIL_SIM_STORE_PREF_MODE_DEFAULT(self);
-		} else {
-			self->pref_mode = mode;
-		}
-		g_free(mode_str);
-	}
-}
-
 void ril_sim_settings_set_pref_mode(struct ril_sim_settings *self,
 					enum ofono_radio_access_mode mode)
 {
 	if (G_LIKELY(self) && self->pref_mode != mode) {
-		struct ril_sim_settings_priv *priv = self->priv;
-		const char *mode_str = ofono_radio_access_mode_to_string(mode);
-
-		GASSERT(priv->storage);
-		if (mode_str) {
-			if (priv->storage) {
-				g_key_file_set_string(priv->storage,
-					RIL_SIM_STORE_GROUP,
-					RIL_SIM_STORE_PREF_MODE, mode_str);
-				storage_sync(self->imsi, RIL_SIM_STORE,
-							priv->storage);
-			}
-			self->pref_mode = mode;
-			ril_sim_settings_signal_emit(self,
-						SIGNAL_PREF_MODE_CHANGED);
-		}
+		self->pref_mode = mode;
+		ril_sim_settings_signal_emit(self, SIGNAL_PREF_MODE_CHANGED);
 	}
 }
 
-static void ril_sim_settings_set_imsi(struct ril_sim_settings *self,
-							const char *imsi)
-{
-	struct ril_sim_settings_priv *priv = self->priv;
-	if (g_strcmp0(priv->imsi, imsi)) {
-		enum ofono_radio_access_mode prev_mode = self->pref_mode;
-		g_free(priv->imsi);
-		self->imsi = priv->imsi = g_strdup(imsi);
-		ril_sim_settings_reload(self);
-		ril_sim_settings_signal_emit(self, SIGNAL_IMSI_CHANGED);
-		if (prev_mode != self->pref_mode) {
-			ril_sim_settings_signal_emit(self,
-						SIGNAL_PREF_MODE_CHANGED);
-		}
-	}
-}
-
-static void ril_sim_settings_imsi_watch_cb(const char *imsi, void *user_data)
-{
-	ril_sim_settings_set_imsi(RIL_SIM_SETTINGS(user_data), imsi);
-}
-
-static void ril_sim_settings_imsi_watch_done(void *user_data)
-{
-	struct ril_sim_settings *self = RIL_SIM_SETTINGS(user_data);
-	struct ril_sim_settings_priv *priv = self->priv;
-
-	GASSERT(priv->imsi_watch_id);
-	priv->imsi_watch_id = 0;
-}
-
-static void ril_sim_settings_state_check(struct ril_sim_settings *self,
-					enum ofono_sim_state new_state)
-{
-	if (new_state != OFONO_SIM_STATE_READY) {
-		ril_sim_settings_set_imsi(self, NULL);
-	}
-}
-
-static void ril_sim_settings_state_watch(enum ofono_sim_state new_state,
+static void ril_sim_settings_imsi_changed(struct sailfish_watch *watch,
 							void *user_data)
 {
-	ril_sim_settings_state_check(RIL_SIM_SETTINGS(user_data), new_state);
-}
-
-static void ril_sim_settings_state_watch_done(void *user_data)
-{
 	struct ril_sim_settings *self = RIL_SIM_SETTINGS(user_data);
 	struct ril_sim_settings_priv *priv = self->priv;
 
-	GASSERT(priv->state_watch_id);
-	priv->state_watch_id = 0;
-}
-
-void ril_sim_settings_set_ofono_sim(struct ril_sim_settings *self,
-						struct ofono_sim *sim)
-{
-	if (G_LIKELY(self)) {
-		struct ril_sim_settings_priv *priv = self->priv;
-		if (priv->sim != sim) {
-			GASSERT(priv->sim || !priv->imsi_watch_id);
-			if (priv->imsi_watch_id) {
-				ofono_sim_remove_imsi_watch(priv->sim,
-							priv->imsi_watch_id);
-				/*
-				 * ril_sim_settings_imsi_watch_done
-				 * clears it
-				 */
-				GASSERT(!priv->imsi_watch_id);
-			}
-			if (priv->state_watch_id) {
-				ofono_sim_remove_state_watch(priv->sim,
-						priv->state_watch_id);
-				/*
-				 * ril_sim_settings_state_watch_done
-				 * clears it
-				 */
-				GASSERT(!priv->state_watch_id);
-			}
-			priv->sim = sim;
-			if (sim) {
-				priv->state_watch_id =
-					ofono_sim_add_state_watch(sim,
-					ril_sim_settings_state_watch, self,
-					ril_sim_settings_state_watch_done);
-				GASSERT(priv->state_watch_id);
-				ril_sim_settings_state_check(self,
-						ofono_sim_get_state(sim));
-				/*
-				 * ofono_sim_add_imsi_watch immediately
-				 * calls the event callback if IMSI is
-				 * already known. It's useless though
-				 * because we still have to check the
-				 * current state in case if IMSI is not
-				 * available yet.
-				 */
-				priv->imsi_watch_id =
-					ofono_sim_add_imsi_watch(priv->sim,
-					ril_sim_settings_imsi_watch_cb, self,
-					ril_sim_settings_imsi_watch_done);
-				GASSERT(priv->state_watch_id);
-			}
-			/* Luckily, ofono_sim_get_imsi handles NULL pointer */
-			ril_sim_settings_set_imsi(self,
-						ofono_sim_get_imsi(sim));
-		}
+	if (g_strcmp0(priv->imsi, watch->imsi)) {
+		g_free(priv->imsi);
+		self->imsi = priv->imsi = g_strdup(watch->imsi);
+		ril_sim_settings_signal_emit(self, SIGNAL_IMSI_CHANGED);
 	}
 }
+
+struct ril_sim_settings *ril_sim_settings_new(const char *path,
+					enum ofono_radio_access_mode techs)
+{
+	struct ril_sim_settings *self = NULL;
+
+	if (G_LIKELY(path)) {
+		struct ril_sim_settings_priv *priv;
+
+		self = g_object_new(RIL_SIM_SETTINGS_TYPE, NULL);
+		priv = self->priv;
+		self->techs = techs;
+		self->pref_mode = RIL_PREF_MODE_DEFAULT(self);
+		priv->watch = sailfish_watch_new(path);
+		priv->watch_event_id[WATCH_EVENT_IMSI] =
+			sailfish_watch_add_imsi_changed_handler(priv->watch,
+				ril_sim_settings_imsi_changed, self);
+		self->imsi = priv->imsi = g_strdup(priv->watch->imsi);
+	}
+
+	return self;
+}
+
+struct ril_sim_settings *ril_sim_settings_ref(struct ril_sim_settings *self)
+{
+	if (G_LIKELY(self)) {
+		g_object_ref(RIL_SIM_SETTINGS(self));
+		return self;
+	} else {
+		return NULL;
+	}
+}
+
+void ril_sim_settings_unref(struct ril_sim_settings *self)
+{
+	if (G_LIKELY(self)) {
+		g_object_unref(RIL_SIM_SETTINGS(self));
+	}
+}
+
 
 gulong ril_sim_settings_add_imsi_changed_handler(struct ril_sim_settings *self,
 					ril_sim_settings_cb_t cb, void *arg)
@@ -263,51 +166,26 @@ void ril_sim_settings_remove_handlers(struct ril_sim_settings *self,
 	gutil_disconnect_handlers(self, ids, count);
 }
 
-struct ril_sim_settings *ril_sim_settings_new(const struct ril_slot_config *sc)
-{
-	struct ril_sim_settings *self = g_object_new(RIL_SIM_SETTINGS_TYPE, 0);
-	self->techs = sc->techs;
-	self->slot = sc->slot;
-	self->pref_mode = RIL_SIM_STORE_PREF_MODE_DEFAULT(self);
-	return self;
-}
-
-struct ril_sim_settings *ril_sim_settings_ref(struct ril_sim_settings *self)
-{
-	if (G_LIKELY(self)) {
-		g_object_ref(RIL_SIM_SETTINGS(self));
-		return self;
-	} else {
-		return NULL;
-	}
-}
-
-void ril_sim_settings_unref(struct ril_sim_settings *self)
-{
-	if (G_LIKELY(self)) {
-		g_object_unref(RIL_SIM_SETTINGS(self));
-	}
-}
-
 static void ril_sim_settings_init(struct ril_sim_settings *self)
 {
 	self->priv =  G_TYPE_INSTANCE_GET_PRIVATE(self, RIL_SIM_SETTINGS_TYPE,
 						struct ril_sim_settings_priv);
 }
 
-static void ril_sim_settings_dispose(GObject *object)
+static void ril_sim_settings_finalize(GObject *object)
 {
 	struct ril_sim_settings *self = RIL_SIM_SETTINGS(object);
+	struct ril_sim_settings_priv *priv = self->priv;
 
-	ril_sim_settings_set_ofono_sim(self, NULL);
-	G_OBJECT_CLASS(ril_sim_settings_parent_class)->dispose(object);
+	sailfish_watch_remove_all_handlers(priv->watch, priv->watch_event_id);
+	sailfish_watch_unref(priv->watch);
+	g_free(priv->imsi);
+	G_OBJECT_CLASS(ril_sim_settings_parent_class)->finalize(object);
 }
 
 static void ril_sim_settings_class_init(RilSimSettingsClass *klass)
 {
-	GObjectClass *object_class = G_OBJECT_CLASS(klass);
-
-	object_class->dispose = ril_sim_settings_dispose;
+	G_OBJECT_CLASS(klass)->finalize = ril_sim_settings_finalize;
 	g_type_class_add_private(klass, sizeof(struct ril_sim_settings_priv));
 	NEW_SIGNAL(klass, IMSI);
 	NEW_SIGNAL(klass, PREF_MODE);
