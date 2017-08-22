@@ -143,7 +143,7 @@ void ofono_debug(const char *format, ...)
 	}
 }
 
-void __ofono_dbg(const struct ofono_debug_desc *desc, const char *format, ...)
+void ofono_dbg(const struct ofono_debug_desc *desc, const char *format, ...)
 {
 	va_list ap;
 
