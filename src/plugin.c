@@ -24,6 +24,7 @@
 #endif
 
 #include <dlfcn.h>
+#include <string.h>
 
 #include <glib.h>
 
@@ -52,7 +53,8 @@ static gboolean add_plugin(void *handle, struct ofono_plugin_desc *desc)
 	if (desc->init == NULL)
 		return FALSE;
 
-	if (g_str_equal(desc->version, OFONO_VERSION) == FALSE) {
+	/* Allow older versions (assuming that API is backward compatible) */
+	if (!desc->version || strcmp(desc->version, OFONO_VERSION) > 0) {
 		ofono_error("Invalid version %s for %s", desc->version,
 							desc->description);
 		return FALSE;
