@@ -410,6 +410,15 @@ static void ril_plugin_shutdown_slot(ril_slot *slot, gboolean kill_io)
 	}
 }
 
+static void ril_plugin_check_ready(ril_slot *slot)
+{
+	if (slot->serialize_id && slot->imei && slot->sim_card &&
+						slot->sim_card->status) {
+		grilio_channel_deserialize(slot->io, slot->serialize_id);
+		slot->serialize_id = 0;
+	}
+}
+
 static void ril_plugin_device_identity_cb(GRilIoChannel *io, int status,
 			const void *data, guint len, void *user_data)
 {
@@ -472,6 +481,7 @@ static void ril_plugin_device_identity_cb(GRilIoChannel *io, int status,
 	}
 
 	ril_plugin_check_modem(slot);
+	ril_plugin_check_ready(slot);
 }
 
 static enum sailfish_sim_state ril_plugin_sim_state(ril_slot *slot)
@@ -540,6 +550,7 @@ static void ril_plugin_sim_state_changed(struct ril_sim_card *card, void *data)
 	}
 
 	sailfish_manager_set_sim_state(slot->handle, sim_state);
+	ril_plugin_check_ready(slot);
 }
 
 static void ril_plugin_handle_error(ril_slot *slot, const char *message)
@@ -842,6 +853,7 @@ static void ril_plugin_slot_connected(ril_slot *slot)
 
 	ril_plugin_send_screen_state(slot);
 	ril_plugin_check_modem(slot);
+	ril_plugin_check_ready(slot);
 }
 
 static void ril_plugin_slot_connected_cb(GRilIoChannel *io, void *user_data)
