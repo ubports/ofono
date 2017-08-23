@@ -1270,7 +1270,7 @@ static guint ril_plugin_find_unused_slot(GSList *slots)
 {
 	guint number = 0;
 
-	while (ril_plugin_find_slot_number(slots, number)); number++;
+	while (ril_plugin_find_slot_number(slots, number)) number++;
 	return number;
 }
 
