@@ -178,12 +178,12 @@ static void test_ber_tlv_builder_efpnn(void)
 	ber_tlv_builder_optimize(&builder, NULL, NULL);
 
 	eons_info = sim_eons_new(1);
-	sim_eons_add_pnn_record(eons_info, 1, efpnn0, sizeof(efpnn0));
+	sim_eons_add_pnn_record(eons_info, 1, efpnn0, 8 + 10);
 	g_assert(!sim_eons_pnn_is_empty(eons_info));
 	sim_eons_free(eons_info);
 
 	eons_info = sim_eons_new(1);
-	sim_eons_add_pnn_record(eons_info, 1, efpnn1, sizeof(efpnn1));
+	sim_eons_add_pnn_record(eons_info, 1, efpnn1, 8 + 6);
 	g_assert(!sim_eons_pnn_is_empty(eons_info));
 	sim_eons_free(eons_info);
 }
