@@ -142,6 +142,33 @@ static void test_no_driver()
 
 	g_assert(!__ofono_gprs_provision_get_settings("000", "01", NULL,
 							&settings, &count));
+        g_assert(!settings);
+        g_assert(!count);
+}
+
+static void test_bad_driver()
+{
+	static const struct ofono_gprs_provision_driver bad_driver1 = {
+		.name = "Bad driver 1",
+	};
+
+	static const struct ofono_gprs_provision_driver bad_driver2 = {
+		.name = "Bad driver 2",
+	};
+
+	struct ofono_gprs_provision_data *settings = NULL;
+	int count = 0;
+
+	g_assert(!ofono_gprs_provision_driver_register(&bad_driver1));
+	g_assert(!ofono_gprs_provision_driver_register(&bad_driver2));
+
+	g_assert(!__ofono_gprs_provision_get_settings("000", "01", NULL,
+							&settings, &count));
+        g_assert(!settings);
+        g_assert(!count);
+
+	ofono_gprs_provision_driver_unregister(&bad_driver1);
+	ofono_gprs_provision_driver_unregister(&bad_driver2);
 }
 
 static void test_no_mcc_mnc()
@@ -168,6 +195,22 @@ static char telia_fi_apn_internet [] = "internet";
 static char telia_fi_apn_mms [] = "mms";
 static char telia_fi_message_proxy [] = "195.156.25.33:8080";
 static char telia_fi_message_center [] = "http://mms/";
+
+/* Default Internet settings */
+#define DEFAILT_INTERNET_SETTINGS \
+	.type = OFONO_GPRS_CONTEXT_TYPE_INTERNET, \
+	.proto = OFONO_GPRS_PROTO_IPV4V6, \
+	.name = "Internet", \
+	.apn = "internet", \
+	.auth_method = OFONO_GPRS_AUTH_METHOD_NONE
+
+/* Default MMS settings */
+#define DEFAULT_MMS_SETTINGS \
+	.type = OFONO_GPRS_CONTEXT_TYPE_MMS, \
+	.proto = OFONO_GPRS_PROTO_IP, \
+	.name = "MMS", \
+	.apn = "mms", \
+	.auth_method = OFONO_GPRS_AUTH_METHOD_NONE
 
 static const struct ofono_gprs_provision_data telia_fi_internet_mms_p[] = {
 	{
@@ -219,23 +262,13 @@ static const struct ofono_gprs_provision_data telia_fi_internet[] = {
 		.name = telia_fi_name_internet,
 		.apn = telia_fi_apn_internet,
 		.auth_method = OFONO_GPRS_AUTH_METHOD_NONE
-	}, {	/* Default MMS settings: */
-		.type = OFONO_GPRS_CONTEXT_TYPE_MMS,
-		.proto = OFONO_GPRS_PROTO_IP,
-		.name = "MMS",
-		.apn = "mms",
-		.auth_method = OFONO_GPRS_AUTH_METHOD_NONE
-	}
+	},
+	{ DEFAULT_MMS_SETTINGS }
 };
 
 static const struct ofono_gprs_provision_data telia_fi_mms[] = {
-	{	/* Default Internet settings: */
-		.type = OFONO_GPRS_CONTEXT_TYPE_INTERNET,
-		.proto = OFONO_GPRS_PROTO_IPV4V6,
-		.name = "Internet",
-		.apn = "internet",
-		.auth_method = OFONO_GPRS_AUTH_METHOD_NONE
-	}, {
+	{ DEFAILT_INTERNET_SETTINGS },
+	{
 		.type = OFONO_GPRS_CONTEXT_TYPE_MMS,
 		.proto = OFONO_GPRS_PROTO_IP,
 		.provider_name = telia_fi_provider_name,
@@ -248,19 +281,8 @@ static const struct ofono_gprs_provision_data telia_fi_mms[] = {
 };
 
 static const struct ofono_gprs_provision_data default_settings[] = {
-	{	/* Default Internet settings: */
-		.type = OFONO_GPRS_CONTEXT_TYPE_INTERNET,
-		.proto = OFONO_GPRS_PROTO_IPV4V6,
-		.name = "Internet",
-		.apn = "internet",
-		.auth_method = OFONO_GPRS_AUTH_METHOD_NONE
-	}, {	/* Default MMS settings: */
-		.type = OFONO_GPRS_CONTEXT_TYPE_MMS,
-		.proto = OFONO_GPRS_PROTO_IP,
-		.name = "MMS",
-		.apn = "mms",
-		.auth_method = OFONO_GPRS_AUTH_METHOD_NONE
-	}
+	{ DEFAILT_INTERNET_SETTINGS },
+	{ DEFAULT_MMS_SETTINGS }
 };
 
 static const struct ofono_gprs_provision_data no_auth_settings[] = {
@@ -296,6 +318,44 @@ static const struct ofono_gprs_provision_data auth_settings[] = {
 		.apn = "mms",
 		.password = "password",
 		.auth_method = OFONO_GPRS_AUTH_METHOD_ANY
+	}
+};
+
+static const struct ofono_gprs_provision_data settings_ip[] = {
+	{
+		.type = OFONO_GPRS_CONTEXT_TYPE_INTERNET,
+		.proto = OFONO_GPRS_PROTO_IP,
+		.name = "Internet",
+		.apn = "internet",
+		.auth_method = OFONO_GPRS_AUTH_METHOD_NONE
+	},
+	{ DEFAULT_MMS_SETTINGS }
+};
+
+static const struct ofono_gprs_provision_data settings_ipv6[] = {
+	{
+		.type = OFONO_GPRS_CONTEXT_TYPE_INTERNET,
+		.proto = OFONO_GPRS_PROTO_IPV6,
+		.name = "Internet",
+		.apn = "internet",
+		.auth_method = OFONO_GPRS_AUTH_METHOD_NONE
+	}, {
+		.type = OFONO_GPRS_CONTEXT_TYPE_MMS,
+		.proto = OFONO_GPRS_PROTO_IPV6,
+		.name = "MMS",
+		.apn = "mms",
+		.auth_method = OFONO_GPRS_AUTH_METHOD_NONE
+	}
+};
+
+static const struct ofono_gprs_provision_data settings_ipv4v6[] = {
+	{ DEFAILT_INTERNET_SETTINGS },
+	{
+		.type = OFONO_GPRS_CONTEXT_TYPE_MMS,
+		.proto = OFONO_GPRS_PROTO_IPV4V6,
+		.name = "MMS",
+		.apn = "mms",
+		.auth_method = OFONO_GPRS_AUTH_METHOD_NONE
 	}
 };
 
@@ -871,6 +931,121 @@ static const struct provision_test_case test_cases[] = {
 		.settings = auth_settings,
 		.count = G_N_ELEMENTS(auth_settings)
 	},{
+		.name = TEST_SUITE "protocol_data_ip",
+		.xml =
+"<serviceproviders format=\"2.0\">\n\
+<country code=\"xx\">\n\
+  <provider>\n\
+    <gsm>\n\
+      <network-id mcc=\"123\" mnc=\"45\"/>\n\
+      <apn value=\"internet\">\n\
+        <usage type=\"internet\"/>\n\
+        <name>Internet</name>\n\
+        <protocol type=\"ip\"/>\n\
+      </apn>\n\
+    </gsm>\n\
+  </provider>\n\
+</country>\n\
+</serviceproviders>\n",
+		.mcc = "123",
+		.mnc = "45",
+		.settings = settings_ip,
+		.count = G_N_ELEMENTS(settings_ip)
+	},{
+		.name = TEST_SUITE "protocol_ipv6",
+		.xml =
+"<serviceproviders format=\"2.0\">\n\
+<country code=\"xx\">\n\
+  <provider>\n\
+    <gsm>\n\
+      <network-id mcc=\"123\" mnc=\"45\"/>\n\
+      <apn value=\"internet\">\n\
+        <usage type=\"internet\"/>\n\
+        <name>Internet</name>\n\
+        <protocol type=\"ipv6\"/>\n\
+      </apn>\n\
+      <apn value=\"mms\">\n\
+        <usage type=\"mms\"/>\n\
+        <name>MMS</name>\n\
+        <protocol type=\"ipv6\"/>\n\
+      </apn>\n\
+    </gsm>\n\
+  </provider>\n\
+</country>\n\
+</serviceproviders>\n",
+		.mcc = "123",
+		.mnc = "45",
+		.settings = settings_ipv6,
+		.count = G_N_ELEMENTS(settings_ipv6)
+	},{
+		.name = TEST_SUITE "protocol_ipv4v6",
+		.xml =
+"<serviceproviders format=\"2.0\">\n\
+<country code=\"xx\">\n\
+  <provider>\n\
+    <gsm>\n\
+      <network-id mcc=\"123\" mnc=\"45\"/>\n\
+      <apn value=\"internet\">\n\
+        <usage type=\"internet\"/>\n\
+        <name>Internet</name>\n\
+        <protocol type=\"ipv4v6\"/>\n\
+      </apn>\n\
+      <apn value=\"mms\">\n\
+        <usage type=\"mms\"/>\n\
+        <name>MMS</name>\n\
+        <protocol type=\"ipv4v6\"/>\n\
+      </apn>\n\
+    </gsm>\n\
+  </provider>\n\
+</country>\n\
+</serviceproviders>\n",
+		.mcc = "123",
+		.mnc = "45",
+		.settings = settings_ipv4v6,
+		.count = G_N_ELEMENTS(settings_ipv4v6)
+	},{
+		.name = TEST_SUITE "invalid_protocol",
+		.xml =
+"<serviceproviders format=\"2.0\">\n\
+<country code=\"xx\">\n\
+  <provider>\n\
+    <gsm>\n\
+      <network-id mcc=\"123\" mnc=\"45\"/>\n\
+      <apn value=\"internet\">\n\
+        <usage type=\"internet\"/>\n\
+        <name>Internet</name>\n\
+        <protocol type=\"foo\"/>\n\
+      </apn>\n\
+    </gsm>\n\
+  </provider>\n\
+</country>\n\
+</serviceproviders>\n",
+		.mcc = "123",
+		.mnc = "45",
+		.settings = default_settings,
+		.count = G_N_ELEMENTS(default_settings)
+	},{
+		.name = TEST_SUITE "missing_protocol_type",
+		.xml =
+"<serviceproviders format=\"2.0\">\n\
+<country code=\"xx\">\n\
+  <provider>\n\
+    <gsm>\n\
+      <network-id mcc=\"123\" mnc=\"45\"/>\n\
+      <apn value=\"internet\">\n\
+        <usage type=\"internet\"/>\n\
+        <name>Internet</name>\n\
+        <protocol foo=\"bar\"/>\n\
+      </apn>\n\
+    </gsm>\n\
+  </provider>\n\
+</country>\n\
+</serviceproviders>\n",
+		.mcc = "123",
+		.mnc = "45",
+		.settings = default_settings,
+		.count = G_N_ELEMENTS(default_settings)
+	},{
 		.name = TEST_SUITE "duplicate_network",
 		.xml =
 "<serviceproviders format=\"2.0\">\n\
@@ -1114,6 +1289,7 @@ int main(int argc, char **argv)
 
 	g_test_init(&argc, &argv, NULL);
 	g_test_add_func(TEST_SUITE "no_driver", test_no_driver);
+	g_test_add_func(TEST_SUITE "bad_driver", test_bad_driver);
 	g_test_add_func(TEST_SUITE "no_mcc_mnc", test_no_mcc_mnc);
 	for (i = 0; i < G_N_ELEMENTS(test_cases); i++) {
 		const struct provision_test_case *test = test_cases + i;
