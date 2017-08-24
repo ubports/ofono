@@ -3,6 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2015-2017  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -145,6 +146,39 @@ static const GMarkupParser text_parser = {
 	NULL,
 };
 
+static void protocol_start(GMarkupParseContext *context,
+			const gchar **attribute_names,
+			const gchar **attribute_values,
+			enum ofono_gprs_proto *proto,
+			GError **error)
+{
+	const char *text = NULL;
+	int i;
+
+	for (i = 0; attribute_names[i]; i++)
+		if (g_str_equal(attribute_names[i], "type") == TRUE)
+			text = attribute_values[i];
+
+	if (text == NULL) {
+		mbpi_g_set_error(context, error, G_MARKUP_ERROR,
+					G_MARKUP_ERROR_MISSING_ATTRIBUTE,
+					"Missing attribute: type");
+		return;
+	}
+
+	if (strcmp(text, "ip") == 0)
+		*proto = OFONO_GPRS_PROTO_IP;
+	else if (strcmp(text, "ipv6") == 0)
+		*proto = OFONO_GPRS_PROTO_IPV6;
+	else if (strcmp(text, "ipv4v6") == 0)
+		*proto = OFONO_GPRS_PROTO_IPV4V6;
+	else
+		mbpi_g_set_error(context, error, G_MARKUP_ERROR,
+					G_MARKUP_ERROR_UNKNOWN_ATTRIBUTE,
+					"Unknown authentication method: %s",
+					text);
+}
+
 static void authentication_start(GMarkupParseContext *context,
 			const gchar **attribute_names,
 			const gchar **attribute_values,
@@ -228,6 +262,9 @@ static void apn_start(GMarkupParseContext *context, const gchar *element_name,
 	else if (g_str_equal(element_name, "password"))
 		g_markup_parse_context_push(context, &text_parser,
 						&apn->password);
+	else if (g_str_equal(element_name, "protocol"))
+		protocol_start(context, attribute_names,
+				attribute_values, &apn->proto, error);
 	else if (g_str_equal(element_name, "authentication"))
 		authentication_start(context, attribute_names,
 				attribute_values, &apn->auth_method, error);
