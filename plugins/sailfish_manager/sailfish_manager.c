@@ -1016,19 +1016,20 @@ static struct sailfish_slot_manager *sailfish_slot_manager_new
 				(struct sailfish_slot_driver_reg *r)
 {
 	const struct sailfish_slot_driver *d = r->driver;
-	struct sailfish_slot_manager *m =
-		g_slice_new0(struct sailfish_slot_manager);
 
-	m->driver = d;
-	m->plugin = r->plugin;
 	if (d->manager_create) {
+		struct sailfish_slot_manager *m =
+			g_slice_new0(struct sailfish_slot_manager);
+
+		m->driver = d;
+		m->plugin = r->plugin;
 		m->impl = d->manager_create(m);
-		if (!m->impl) {
-			g_slice_free(struct sailfish_slot_manager, m);
-			return NULL;
+		if (m->impl) {
+			return m;
 		}
+		g_slice_free(struct sailfish_slot_manager, m);
 	}
-	return m;
+	return NULL;
 }
 
 static void sailfish_slot_manager_free(struct sailfish_slot_manager *m)
