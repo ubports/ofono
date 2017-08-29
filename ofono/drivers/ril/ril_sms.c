@@ -254,8 +254,9 @@ static void ril_sms_submit(struct ofono_sms *sms, const unsigned char *pdu,
 
 	DBG("%s", tpdu);
 	grilio_queue_send_request_full(sd->q, req,
-			RIL_REQUEST_SEND_SMS, ril_sms_submit_cb,
-			ril_sms_cbd_free, ril_sms_cbd_new(sd, cb, data));
+		mms ? RIL_REQUEST_SEND_SMS_EXPECT_MORE : RIL_REQUEST_SEND_SMS,
+		ril_sms_submit_cb, ril_sms_cbd_free,
+		ril_sms_cbd_new(sd, cb, data));
 	grilio_request_unref(req);
 	g_free(tpdu);
 }
