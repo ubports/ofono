@@ -74,3 +74,6 @@ extern void at_sim_auth_exit(void);
 
 extern void at_gnss_init(void);
 extern void at_gnss_exit(void);
+
+extern void at_lte_init(void);
+extern void at_lte_exit(void);
