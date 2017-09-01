@@ -396,6 +396,11 @@ builtin_sources += drivers/atmodem/atutil.h \
 			drivers/gemaltomodem/gemaltomodem.c \
 			drivers/gemaltomodem/location-reporting.c
 
+builtin_modules += xmm7modem
+builtin_sources += drivers/atmodem/atutil.h \
+			drivers/xmm7modem/xmm7modem.h \
+			drivers/xmm7modem/xmm7modem.c \
+			drivers/xmm7modem/radio-settings.c
 
 if PHONESIM
 builtin_modules += phonesim
