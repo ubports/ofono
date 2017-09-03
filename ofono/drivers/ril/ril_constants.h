@@ -400,8 +400,11 @@ struct ril_cell_info_gsm {
 	int mnc;            /* Mobile Network Code (0..999) */
 	int lac;            /* Location Area Code (0..65535) */
 	int cid;            /* GSM Cell Identity (0..65535) TS 27.007 */
+	int arfcn;          /* 16-bit GSM Absolute RF channel number */
+	int bsic;           /* 6-bit Base Station Identity Code */
 	int signalStrength; /* (0-31, 99) TS 27.007 */
 	int bitErrorRate;   /* (0-7, 99) TS 27.007 */
+	int timingAdvance;  /* Timing Advance. 1 period = 48/13 us */
 };
 
 struct ril_cell_info_wcdma {
@@ -410,6 +413,7 @@ struct ril_cell_info_wcdma {
 	int lac;            /* Location Area Code (0..65535) */
 	int cid;            /* UMTS Cell Identity (0..268435455) TS 25.331 */
 	int psc;            /* Primary Scrambling Code (0..511) TS 25.331) */
+	int uarfcn;         /* 16-bit UMTS Absolute RF Channel Number */
 	int signalStrength; /* (0-31, 99) TS 27.007 */
 	int bitErrorRate;   /* (0-7, 99) TS 27.007 */
 };
@@ -420,6 +424,7 @@ struct ril_cell_info_lte {
 	int ci;             /* Cell Identity */
 	int pci;            /* Physical cell id (0..503) */
 	int tac;            /* Tracking area code */
+	int earfcn;         /* 18-bit LTE Absolute RC Channel Number */
 	int signalStrength; /* (0-31, 99) TS 27.007 8.5 */
 	int rsrp;           /* Reference Signal Receive Power TS 36.133 */
 	int rsrq;           /* Reference Signal Receive Quality TS 36.133 */
