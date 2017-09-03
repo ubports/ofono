@@ -60,12 +60,15 @@ struct ril_cell_property {
 	{ #name, G_STRUCT_OFFSET(struct ril_cell_info_lte,name), value }
 
 static const struct ril_cell_property ril_cell_gsm_properties [] = {
-	RIL_CELL_GSM_PROPERTY(0x01,mcc),
-	RIL_CELL_GSM_PROPERTY(0x02,mnc),
-	RIL_CELL_GSM_PROPERTY(0x04,lac),
-	RIL_CELL_GSM_PROPERTY(0x08,cid),
-	RIL_CELL_GSM_PROPERTY(0x10,signalStrength),
-	RIL_CELL_GSM_PROPERTY(0x20,bitErrorRate)
+	RIL_CELL_GSM_PROPERTY(0x001,mcc),
+	RIL_CELL_GSM_PROPERTY(0x002,mnc),
+	RIL_CELL_GSM_PROPERTY(0x004,lac),
+	RIL_CELL_GSM_PROPERTY(0x008,cid),
+	RIL_CELL_GSM_PROPERTY(0x010,arfcn),
+	RIL_CELL_GSM_PROPERTY(0x020,bsic),
+	RIL_CELL_GSM_PROPERTY(0x040,signalStrength),
+	RIL_CELL_GSM_PROPERTY(0x080,bitErrorRate),
+	RIL_CELL_GSM_PROPERTY(0x100,timingAdvance)
 };
 
 static const struct ril_cell_property ril_cell_wcdma_properties [] = {
@@ -74,8 +77,9 @@ static const struct ril_cell_property ril_cell_wcdma_properties [] = {
 	RIL_CELL_WCDMA_PROPERTY(0x04,lac),
 	RIL_CELL_WCDMA_PROPERTY(0x08,cid),
 	RIL_CELL_WCDMA_PROPERTY(0x10,psc),
-	RIL_CELL_WCDMA_PROPERTY(0x20,signalStrength),
-	RIL_CELL_WCDMA_PROPERTY(0x40,bitErrorRate)
+	RIL_CELL_WCDMA_PROPERTY(0x20,uarfcn),
+	RIL_CELL_WCDMA_PROPERTY(0x40,signalStrength),
+	RIL_CELL_WCDMA_PROPERTY(0x80,bitErrorRate)
 };
 
 static const struct ril_cell_property ril_cell_lte_properties [] = {
@@ -84,12 +88,13 @@ static const struct ril_cell_property ril_cell_lte_properties [] = {
 	RIL_CELL_LTE_PROPERTY(0x004,ci),
 	RIL_CELL_LTE_PROPERTY(0x008,pci),
 	RIL_CELL_LTE_PROPERTY(0x010,tac),
-	RIL_CELL_LTE_PROPERTY(0x020,signalStrength),
-	RIL_CELL_LTE_PROPERTY(0x040,rsrp),
-	RIL_CELL_LTE_PROPERTY(0x080,rsrq),
-	RIL_CELL_LTE_PROPERTY(0x100,rssnr),
-	RIL_CELL_LTE_PROPERTY(0x200,cqi),
-	RIL_CELL_LTE_PROPERTY(0x400,timingAdvance)
+	RIL_CELL_LTE_PROPERTY(0x020,earfcn),
+	RIL_CELL_LTE_PROPERTY(0x040,signalStrength),
+	RIL_CELL_LTE_PROPERTY(0x080,rsrp),
+	RIL_CELL_LTE_PROPERTY(0x100,rsrq),
+	RIL_CELL_LTE_PROPERTY(0x200,rssnr),
+	RIL_CELL_LTE_PROPERTY(0x400,cqi),
+	RIL_CELL_LTE_PROPERTY(0x800,timingAdvance)
 };
 
 #define RIL_CELL_PROPERTY_REGISTERED 0x1000
