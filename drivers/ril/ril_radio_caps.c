@@ -565,11 +565,13 @@ static void ril_radio_caps_manager_foreach_tx
  * GET_RADIO_CAPABILITY requests have completed) and there's no transaction
  * in progress.
  */
-static gboolean ril_radio_caps_manager_ready
+static gboolean ril_radio_caps_manager_can_check
 				(struct ril_radio_caps_manager *self)
 {
 	if (self->caps_list && !self->tx_pending) {
 		const GPtrArray *list = self->caps_list;
+		const struct ril_radio_caps *prev_caps = NULL;
+		gboolean all_modes_equal = TRUE;
 		guint i;
 
 		for (i = 0; i < list->len; i++) {
@@ -579,6 +581,13 @@ static gboolean ril_radio_caps_manager_ready
 						!caps->cap.rat) {
 				DBG_(caps, "not ready");
 				return FALSE;
+			}
+
+			if (!prev_caps) {
+				prev_caps = caps;
+			} else if (ril_radio_caps_access_mode(prev_caps) !=
+					ril_radio_caps_access_mode(caps)) {
+				all_modes_equal = FALSE;
 			}
 
 			DBG_(caps, "radio=%s,sim=%s,imsi=%s,raf=0x%x(%s),"
@@ -596,7 +605,7 @@ static gboolean ril_radio_caps_manager_ready
 				ofono_radio_access_mode_to_string
 				(ril_radio_caps_pref_mode_limit(caps)));
 		}
-		return TRUE;
+		return !all_modes_equal;
 	}
 	return FALSE;
 }
@@ -1286,7 +1295,7 @@ static gboolean ril_radio_caps_manager_upgrade_caps
 static void ril_radio_caps_manager_check(struct ril_radio_caps_manager *self)
 {
 	DBG("");
-	if (ril_radio_caps_manager_ready(self)) {
+	if (ril_radio_caps_manager_can_check(self)) {
 		const int first = ril_radio_caps_manager_first_mismatch(self);
 
 		if (first >= 0) {
