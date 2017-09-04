@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2016 Jolla Ltd.
+ *  Copyright (C) 2016-2017 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -138,21 +138,34 @@ static void ril_cell_info_update_cells(struct ril_cell_info *self, GSList *l)
 }
 
 static struct ril_cell *ril_cell_info_parse_cell_gsm(GRilIoParser *rilp,
-							gboolean registered)
+					guint version, gboolean registered)
 {
 	struct ril_cell *cell = g_new0(struct ril_cell, 1);
 	struct ril_cell_info_gsm *gsm = &cell->info.gsm;
 
+	/* Optional RIL_CellIdentityGsm_v12 part */
+	gsm->arfcn = INT_MAX;
+	gsm->bsic = INT_MAX;
+	/* Optional RIL_GSM_SignalStrength_v12 part */
+	gsm->timingAdvance = INT_MAX;
+	/* RIL_CellIdentityGsm */
 	if (grilio_parser_get_int32(rilp, &gsm->mcc) &&
 		grilio_parser_get_int32(rilp, &gsm->mnc) &&
 		grilio_parser_get_int32(rilp, &gsm->lac) &&
 		grilio_parser_get_int32(rilp, &gsm->cid) &&
+		(version < 12 || /* RIL_CellIdentityGsm_v12 part */
+			(grilio_parser_get_int32(rilp, &gsm->arfcn) &&
+			grilio_parser_get_int32(rilp, &gsm->bsic))) &&
+		/* RIL_GW_SignalStrength */
 		grilio_parser_get_int32(rilp, &gsm->signalStrength) &&
-		grilio_parser_get_int32(rilp, &gsm->bitErrorRate)) {
-		DBG("[gsm] reg=%d,mcc=%d,mnc=%d,lac=%d,cid=%d,"
-			"strength=%d,err=%d", registered, gsm->mcc, gsm->mnc,
-			gsm->lac, gsm->cid, gsm->signalStrength,
-			gsm->bitErrorRate);
+		grilio_parser_get_int32(rilp, &gsm->bitErrorRate) &&
+		(version < 12 || /* RIL_GSM_SignalStrength_v12 part */
+			grilio_parser_get_int32(rilp, &gsm->timingAdvance))) {
+		DBG("[gsm] reg=%d,mcc=%d,mnc=%d,lac=%d,cid=%d,arfcn=%d,"
+			"bsic=%d,strength=%d,err=%d,t=%d", registered,
+			gsm->mcc, gsm->mnc, gsm->lac, gsm->cid, gsm->arfcn,
+			gsm->bsic, gsm->signalStrength, gsm->bitErrorRate,
+			gsm->timingAdvance);
 		cell->type = RIL_CELL_INFO_TYPE_GSM;
 		cell->registered = registered;
 		return cell;
@@ -164,16 +177,20 @@ static struct ril_cell *ril_cell_info_parse_cell_gsm(GRilIoParser *rilp,
 }
 
 static struct ril_cell *ril_cell_info_parse_cell_wcdma(GRilIoParser *rilp,
-							gboolean registered)
+					guint version, gboolean registered)
 {
 	struct ril_cell *cell = g_new0(struct ril_cell, 1);
 	struct ril_cell_info_wcdma *wcdma = &cell->info.wcdma;
 
+	/* Optional RIL_CellIdentityWcdma_v12 part */
+	wcdma->uarfcn = INT_MAX;
 	if (grilio_parser_get_int32(rilp, &wcdma->mcc) &&
 		grilio_parser_get_int32(rilp, &wcdma->mnc) &&
 		grilio_parser_get_int32(rilp, &wcdma->lac) &&
 		grilio_parser_get_int32(rilp, &wcdma->cid) &&
 		grilio_parser_get_int32(rilp, &wcdma->psc) &&
+		(version < 12 || /* RIL_CellIdentityWcdma_v12 part */
+			grilio_parser_get_int32(rilp, &wcdma->uarfcn)) &&
 		grilio_parser_get_int32(rilp, &wcdma->signalStrength) &&
 		grilio_parser_get_int32(rilp, &wcdma->bitErrorRate)) {
 		DBG("[wcdma] reg=%d,mcc=%d,mnc=%d,lac=%d,cid=%d,psc=%d,"
@@ -191,16 +208,20 @@ static struct ril_cell *ril_cell_info_parse_cell_wcdma(GRilIoParser *rilp,
 }
 
 static struct ril_cell *ril_cell_info_parse_cell_lte(GRilIoParser *rilp,
-							gboolean registered)
+					guint version, gboolean registered)
 {
 	struct ril_cell *cell = g_new0(struct ril_cell, 1);
 	struct ril_cell_info_lte *lte = &cell->info.lte;
 
+	/* Optional RIL_CellIdentityLte_v12 part */
+	lte->earfcn = INT_MAX;
 	if (grilio_parser_get_int32(rilp, &lte->mcc) &&
 		grilio_parser_get_int32(rilp, &lte->mnc) &&
 		grilio_parser_get_int32(rilp, &lte->ci) &&
 		grilio_parser_get_int32(rilp, &lte->pci) &&
 		grilio_parser_get_int32(rilp, &lte->tac) &&
+		(version < 12 || /* RIL_CellIdentityLte_v12 part */
+			grilio_parser_get_int32(rilp, &lte->earfcn)) &&
 		grilio_parser_get_int32(rilp, &lte->signalStrength) &&
 		grilio_parser_get_int32(rilp, &lte->rsrp) &&
 		grilio_parser_get_int32(rilp, &lte->rsrq) &&
@@ -208,7 +229,7 @@ static struct ril_cell *ril_cell_info_parse_cell_lte(GRilIoParser *rilp,
 		grilio_parser_get_int32(rilp, &lte->cqi) &&
 		grilio_parser_get_int32(rilp, &lte->timingAdvance)) {
 		DBG("[lte] reg=%d,mcc=%d,mnc=%d,ci=%d,pci=%d,tac=%d,"
-			"strength=%d,rsrp=%d,rsrq=0x%x,rssnr=0x%x,cqi=%d,"
+			"strength=%d,rsrp=%d,rsrq=%d,rssnr=%d,cqi=%d,"
 			"t=0x%x", registered, lte->mcc, lte->mnc, lte->ci,
 			lte->pci, lte->tac, lte->signalStrength, lte->rsrp,
 			lte->rsrq, lte->rssnr, lte->cqi, lte->timingAdvance);
@@ -222,26 +243,30 @@ static struct ril_cell *ril_cell_info_parse_cell_lte(GRilIoParser *rilp,
 	return NULL;
 }
 
-static enum ril_cell_info_type ril_cell_info_parse_cell(GRilIoParser *rilp,
+static gboolean ril_cell_info_parse_cell(GRilIoParser *rilp, guint v,
 						struct ril_cell **cell_ptr)
 {
 	int type, reg;
 
 	if (grilio_parser_get_int32(rilp, &type) &&
 			grilio_parser_get_int32(rilp, &reg) &&
+			/* Skip timestamp */
 			grilio_parser_get_int32_array(rilp, NULL, 3)) {
 		int skip = 0;
 		struct ril_cell *cell = NULL;
 
+		/* Normalize the boolean value */
+		reg = (reg != FALSE);
+
 		switch (type) {
 		case RIL_CELL_INFO_TYPE_GSM:
-			cell = ril_cell_info_parse_cell_gsm(rilp, reg);
+			cell = ril_cell_info_parse_cell_gsm(rilp, v, reg);
 			break;
 		case RIL_CELL_INFO_TYPE_WCDMA:
-			cell = ril_cell_info_parse_cell_wcdma(rilp, reg);
+			cell = ril_cell_info_parse_cell_wcdma(rilp, v, reg);
 			break;
 		case RIL_CELL_INFO_TYPE_LTE:
-			cell = ril_cell_info_parse_cell_lte(rilp, reg);
+			cell = ril_cell_info_parse_cell_lte(rilp, v, reg);
 			break;
 		case RIL_CELL_INFO_TYPE_CDMA:
 			skip = 10;
@@ -256,20 +281,20 @@ static enum ril_cell_info_type ril_cell_info_parse_cell(GRilIoParser *rilp,
 
 		if (cell) {
 			*cell_ptr = cell;
-			return type;
+			return TRUE;
 		}
 
 		if (skip && grilio_parser_get_int32_array(rilp, NULL, skip)) {
 			*cell_ptr = NULL;
-			return type;
+			return TRUE;
 		}
 	}
 
 	*cell_ptr = NULL;
-	return RIL_CELL_INFO_TYPE_NONE;
+	return FALSE;
 }
 
-static GSList *ril_cell_info_parse_list(const void *data, guint len)
+static GSList *ril_cell_info_parse_list(guint v, const void *data, guint len)
 {
 	GSList *l = NULL;
 	GRilIoParser rilp;
@@ -280,7 +305,7 @@ static GSList *ril_cell_info_parse_list(const void *data, guint len)
 		struct ril_cell *c;
 
 		DBG("%d cell(s):", n);
-		for (i=0; i<n && ril_cell_info_parse_cell(&rilp, &c); i++) {
+		for (i=0; i<n && ril_cell_info_parse_cell(&rilp, v, &c); i++) {
 			if (c) {
 				l = g_slist_insert_sorted(l, c,
 						ril_cell_compare_func);
@@ -288,6 +313,7 @@ static GSList *ril_cell_info_parse_list(const void *data, guint len)
 		}
 	}
 
+	GASSERT(grilio_parser_at_end(&rilp));
 	return l;
 }
 
@@ -297,7 +323,8 @@ static void ril_cell_info_list_changed_cb(GRilIoChannel *io, guint code,
 	struct ril_cell_info *self = RIL_CELL_INFO(user_data);
 
 	DBG_(self, "");
-	ril_cell_info_update_cells(self, ril_cell_info_parse_list(data, len));
+	ril_cell_info_update_cells(self, ril_cell_info_parse_list
+						(io->ril_version, data, len));
 }
 
 static void ril_cell_info_list_cb(GRilIoChannel *io, int status,
@@ -309,7 +336,8 @@ static void ril_cell_info_list_cb(GRilIoChannel *io, int status,
 	DBG_(self, "");
 	GASSERT(priv->query_id);
 	priv->query_id = 0;
-	ril_cell_info_update_cells(self, ril_cell_info_parse_list(data, len));
+	ril_cell_info_update_cells(self, ril_cell_info_parse_list
+						(io->ril_version, data, len));
 }
 
 static void ril_cell_info_set_rate_cb(GRilIoChannel *io, int status,
