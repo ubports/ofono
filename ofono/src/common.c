@@ -31,6 +31,7 @@
 
 #include <ofono/types.h>
 #include "common.h"
+#include "gprs-context.h"
 #include "util.h"
 
 struct error_entry {
@@ -702,7 +703,13 @@ gboolean is_valid_apn(const char *apn)
 	int i;
 	int last_period = 0;
 
+	if (apn == NULL)
+		return FALSE;
+
 	if (apn[0] == '.' || apn[0] == '\0')
+		return FALSE;
+
+	if (strlen(apn) > OFONO_GPRS_MAX_APN_LENGTH)
 		return FALSE;
 
 	for (i = 0; apn[i] != '\0'; i++) {
