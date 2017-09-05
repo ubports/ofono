@@ -29,6 +29,7 @@ extern "C" {
 #include <ofono/types.h>
 
 struct ofono_gprs_context;
+struct ofono_modem;
 
 /*
  * ETSI 123.003, Section 9.1:
