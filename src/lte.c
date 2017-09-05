@@ -152,9 +152,6 @@ static DBusMessage *lte_set_default_apn(struct ofono_lte *lte,
 	if (lte->pending)
 		return __ofono_error_busy(msg);
 
-	if (strlen(apn) > OFONO_GPRS_MAX_APN_LENGTH)
-		return __ofono_error_invalid_format(msg);
-
 	if (g_str_equal(apn, lte->info.apn))
 		return dbus_message_new_method_return(msg);
 

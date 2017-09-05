@@ -1027,9 +1027,6 @@ static DBusMessage *pri_set_apn(struct pri_context *ctx, DBusConnection *conn,
 {
 	GKeyFile *settings = ctx->gprs->settings;
 
-	if (strlen(apn) > OFONO_GPRS_MAX_APN_LENGTH)
-		return __ofono_error_invalid_format(msg);
-
 	if (g_str_equal(apn, ctx->context.apn))
 		return dbus_message_new_method_return(msg);
 
@@ -2376,9 +2373,6 @@ static void provision_context(const struct ofono_gprs_provision_data *ap,
 	if (ap->name && strlen(ap->name) > MAX_CONTEXT_NAME_LENGTH)
 		return;
 
-	if (ap->apn == NULL || strlen(ap->apn) > OFONO_GPRS_MAX_APN_LENGTH)
-		return;
-
 	if (is_valid_apn(ap->apn) == FALSE)
 		return;
 
@@ -3226,9 +3220,6 @@ static gboolean load_context(struct ofono_gprs *gprs, const char *group)
 	apn = g_key_file_get_string(gprs->settings, group,
 					"AccessPointName", NULL);
 	if (apn == NULL)
-		goto error;
-
-	if (strlen(apn) > OFONO_GPRS_MAX_APN_LENGTH)
 		goto error;
 
 	if (type == OFONO_GPRS_CONTEXT_TYPE_MMS) {
