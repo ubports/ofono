@@ -20,8 +20,6 @@
 #include "ril_util.h"
 #include "ril_log.h"
 
-#include "sailfish_watch.h"
-
 #include <grilio_queue.h>
 #include <grilio_request.h>
 #include <grilio_parser.h>
@@ -43,11 +41,6 @@ enum ril_network_timer {
 	TIMER_COUNT
 };
 
-enum ril_network_watch_events {
-	WATCH_EVENT_ONLINE,
-	WATCH_EVENT_COUNT
-};
-
 enum ril_network_radio_event {
 	RADIO_EVENT_STATE_CHANGED,
 	RADIO_EVENT_ONLINE_CHANGED,
@@ -65,8 +58,6 @@ struct ril_network_priv {
 	GRilIoQueue *q;
 	struct ril_radio *radio;
 	struct ril_sim_card *sim_card;
-	struct sailfish_watch *watch;
-	gulong watch_event_id[WATCH_EVENT_COUNT];
 	int rat;
 	char *log_prefix;
 	guint operator_poll_id;
@@ -487,7 +478,7 @@ static gboolean ril_network_can_set_pref_mode(struct ril_network *self)
 {
 	struct ril_network_priv *priv = self->priv;
 
-	return priv->watch->online && ril_sim_card_ready(priv->sim_card);
+	return priv->radio->online && ril_sim_card_ready(priv->sim_card);
 }
 
 static gboolean ril_network_set_rat_holdoff_cb(gpointer user_data)
@@ -762,7 +753,7 @@ static void ril_network_radio_state_cb(struct ril_radio *radio, void *data)
 	}
 }
 
-static void ril_network_online_cb(struct sailfish_watch *watch, void *data)
+static void ril_network_radio_online_cb(struct ril_radio *radio, void *data)
 {
 	struct ril_network *self = RIL_NETWORK(data);
 
@@ -825,7 +816,6 @@ struct ril_network *ril_network_new(const char *path, GRilIoChannel *io,
 	self->settings = ril_sim_settings_ref(settings);
 	priv->io = grilio_channel_ref(io);
 	priv->q = grilio_queue_new(priv->io);
-	priv->watch = sailfish_watch_new(path);
 	priv->radio = ril_radio_ref(radio);
 	priv->sim_card = ril_sim_card_ref(sim_card);
 	priv->log_prefix = (log_prefix && log_prefix[0]) ?
@@ -842,9 +832,9 @@ struct ril_network *ril_network_new(const char *path, GRilIoChannel *io,
 	priv->radio_event_id[RADIO_EVENT_STATE_CHANGED] =
 		ril_radio_add_state_changed_handler(priv->radio,
 			ril_network_radio_state_cb, self);
-	priv->watch_event_id[WATCH_EVENT_ONLINE] =
-		sailfish_watch_add_modem_changed_handler(priv->watch,
-			ril_network_online_cb, self);
+	priv->radio_event_id[RADIO_EVENT_ONLINE_CHANGED] =
+		ril_radio_add_online_changed_handler(priv->radio,
+			ril_network_radio_online_cb, self);
 	priv->settings_event_id =
 		ril_sim_settings_add_pref_mode_changed_handler(settings,
 			ril_network_pref_mode_changed_cb, self);
@@ -901,6 +891,7 @@ static void ril_network_finalize(GObject *object)
 	enum ril_network_timer tid;
 
 	DBG_(self, "");
+
 	for (tid=0; tid<TIMER_COUNT; tid++) {
 		ril_network_stop_timer(self, tid);
 	}
@@ -911,8 +902,6 @@ static void ril_network_finalize(GObject *object)
 
 	grilio_channel_unref(priv->io);
 	grilio_queue_unref(priv->q);
-	sailfish_watch_remove_all_handlers(priv->watch, priv->watch_event_id);
-	sailfish_watch_unref(priv->watch);
 	ril_radio_remove_all_handlers(priv->radio, priv->radio_event_id);
 	ril_radio_unref(priv->radio);
 	ril_sim_card_remove_handler(priv->sim_card,

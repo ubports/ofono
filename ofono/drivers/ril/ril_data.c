@@ -1227,8 +1227,7 @@ static void ril_data_power_update(struct ril_data *self)
 {
 	struct ril_data_priv *priv = self->priv;
 
-	if (priv->pending_req || priv->req_queue ||
-				(priv->flags & RIL_DATA_FLAG_ALLOWED)) {
+	if (priv->pending_req || priv->req_queue) {
 		ril_radio_power_on(priv->radio, self);
 	} else {
 		ril_radio_power_off(priv->radio, self);
