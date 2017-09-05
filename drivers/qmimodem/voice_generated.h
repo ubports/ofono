@@ -110,4 +110,27 @@ enum parse_error qmi_voice_call_status(
 		struct qmi_result *qmi_result,
 		struct qmi_voice_all_call_status_ind *result);
 
+struct qmi_voice_start_cont_dtmf_arg {
+	uint8_t call_id;
+	uint8_t dtmf_char;
+};
+
+int qmi_voice_start_cont_dtmf(
+		struct qmi_voice_start_cont_dtmf_arg *arg,
+		struct qmi_service *service,
+		qmi_result_func_t func,
+		void *user_data,
+		qmi_destroy_func_t destroy);
+
+struct qmi_voice_stop_cont_dtmf_arg {
+	uint8_t call_id;
+};
+
+int qmi_voice_stop_cont_dtmf(
+		struct qmi_voice_stop_cont_dtmf_arg *arg,
+		struct qmi_service *service,
+		qmi_result_func_t func,
+		void *user_data,
+		qmi_destroy_func_t destroy);
+
 #endif /* __OFONO_QMI_VOICE_GENERATED_H */

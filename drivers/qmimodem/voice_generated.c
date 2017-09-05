@@ -216,3 +216,72 @@ enum parse_error qmi_voice_call_status(
 
 	return err;
 }
+
+int qmi_voice_start_cont_dtmf(
+		struct qmi_voice_start_cont_dtmf_arg *arg,
+		struct qmi_service *service,
+		qmi_result_func_t func,
+		void *user_data,
+		qmi_destroy_func_t destroy)
+{
+	struct qmi_param *param = NULL;
+	uint8_t param_body[2];
+
+	param = qmi_param_new();
+	if (!param)
+		goto error;
+
+	param_body[0] = arg->call_id;
+	param_body[1] = arg->dtmf_char;
+
+	if (!qmi_param_append(
+			param,
+			0x1,
+			sizeof(param_body),
+			param_body))
+		goto error;
+
+	if (qmi_service_send(service,
+						 0x29,
+						 param,
+						 func,
+						 user_data,
+						 destroy) > 0)
+		return 0;
+
+error:
+	g_free(param);
+	return 1;
+}
+
+int qmi_voice_stop_cont_dtmf(
+		struct qmi_voice_stop_cont_dtmf_arg *arg,
+		struct qmi_service *service,
+		qmi_result_func_t func,
+		void *user_data,
+		qmi_destroy_func_t destroy)
+{
+	struct qmi_param *param = NULL;
+
+	param = qmi_param_new();
+	if (!param)
+		goto error;
+
+	if (!qmi_param_append_uint8(
+			param,
+			0x1,
+			arg->call_id))
+		goto error;
+
+	if (qmi_service_send(service,
+						 0x2a,
+						 param,
+						 func,
+						 user_data,
+						 destroy) > 0)
+		return 0;
+
+error:
+	g_free(param);
+	return 1;
+}
