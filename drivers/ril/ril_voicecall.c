@@ -306,7 +306,8 @@ static void ril_voicecall_lastcause_cb(GRilIoChannel *io, int status,
 		case CALL_FAIL_ERROR_UNSPECIFIED:
 			call_status = ril_voicecall_status_with_id(vc, id);
 			if (call_status == CALL_STATUS_DIALING ||
-			    call_status == CALL_STATUS_ALERTING) {
+			    call_status == CALL_STATUS_ALERTING ||
+			    call_status == CALL_STATUS_INCOMING) {
 				reason = OFONO_DISCONNECT_REASON_REMOTE_HANGUP;
 			}
 			break;
