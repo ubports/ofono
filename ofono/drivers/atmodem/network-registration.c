@@ -1088,6 +1088,27 @@ static void huawei_mode_notify(GAtResult *result, gpointer user_data)
 	}
 }
 
+static void huawei_hcsq_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_netreg *netreg = user_data;
+	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	GAtResultIter iter;
+	const char *mode;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "^HCSQ:"))
+		return;
+
+	if (!g_at_result_iter_next_string(&iter, &mode))
+		return;
+
+	if (!strcmp("LTE", mode))
+		nd->tech = ACCESS_TECHNOLOGY_EUTRAN;
+
+	/* for other technologies, notification ^MODE is used */
+}
+
 static void huawei_nwtime_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
@@ -1894,6 +1915,10 @@ static void at_creg_set_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 		/* Register for system mode reports */
 		g_at_chat_register(nd->chat, "^MODE:", huawei_mode_notify,
+						FALSE, netreg, NULL);
+
+		/* Register for 4G system mode reports */
+		g_at_chat_register(nd->chat, "^HCSQ:", huawei_hcsq_notify,
 						FALSE, netreg, NULL);
 
 		/* Register for network time reports */
