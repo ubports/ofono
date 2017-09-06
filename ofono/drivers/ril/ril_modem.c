@@ -308,16 +308,18 @@ static void ril_modem_set_online(struct ofono_modem *modem, ofono_bool_t online,
 				ofono_modem_online_cb_t cb, void *data)
 {
 	struct ril_modem_data *md = ril_modem_data_from_ofono(modem);
+	struct ril_radio *radio = md->modem.radio;
 	struct ril_modem_online_request *req;
 
 	DBG("%s going %sline", ofono_modem_get_path(modem),
 						online ? "on" : "off");
 
+	ril_radio_set_online(radio, online);
 	if (online) {
-		ril_radio_power_on(md->modem.radio, RADIO_POWER_TAG(md));
+		ril_radio_power_on(radio, RADIO_POWER_TAG(md));
 		req = &md->set_online;
 	} else {
-		ril_radio_power_off(md->modem.radio, RADIO_POWER_TAG(md));
+		ril_radio_power_off(radio, RADIO_POWER_TAG(md));
 		req = &md->set_offline;
 	}
 
