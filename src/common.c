@@ -743,3 +743,25 @@ void ofono_call_init(struct ofono_call *call)
 	call->cnap_validity = CNAP_VALIDITY_NOT_AVAILABLE;
 	call->clip_validity = CLIP_VALIDITY_NOT_AVAILABLE;
 }
+
+const char *call_status_to_string(enum call_status status)
+{
+	switch (status) {
+	case CALL_STATUS_ACTIVE:
+		return "active";
+	case CALL_STATUS_HELD:
+		return "held";
+	case CALL_STATUS_DIALING:
+		return "dialing";
+	case CALL_STATUS_ALERTING:
+		return "alerting";
+	case CALL_STATUS_INCOMING:
+		return "incoming";
+	case CALL_STATUS_WAITING:
+		return "waiting";
+	case CALL_STATUS_DISCONNECTED:
+		return "disconnected";
+	}
+
+	return "unknown";
+}
