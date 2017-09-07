@@ -450,9 +450,10 @@ static void event_notify(struct qmi_result *result, void *user_data)
         if (ss) {
 		int strength;
 
-		DBG("signal with %d dBm on %d", ss->dbm, ss->rat);
-
 		strength = dbm_to_strength(ss->dbm);
+
+		DBG("signal with %d%%(%d dBm) on %d",
+				strength, ss->dbm, ss->rat);
 
 		ofono_netreg_strength_notify(netreg, strength);
 	}
