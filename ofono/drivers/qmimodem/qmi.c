@@ -1720,6 +1720,27 @@ bool qmi_result_get_uint8(struct qmi_result *result, uint8_t type,
 	return true;
 }
 
+bool qmi_result_get_int16(struct qmi_result *result, uint8_t type,
+							int16_t *value)
+{
+	const unsigned char *ptr;
+	uint16_t len, tmp;
+
+	if (!result || !type)
+		return false;
+
+	ptr = tlv_get(result->data, result->length, type, &len);
+	if (!ptr)
+		return false;
+
+	memcpy(&tmp, ptr, 2);
+
+	if (value)
+		*value = GINT16_FROM_LE(tmp);
+
+	return true;
+}
+
 bool qmi_result_get_uint16(struct qmi_result *result, uint8_t type,
 							uint16_t *value)
 {
