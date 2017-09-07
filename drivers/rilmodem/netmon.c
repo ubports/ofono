@@ -61,6 +61,9 @@
 /* size of RIL_CellInfoTdscdma */
 #define NETMON_RIL_CELLINFO_SIZE_TDSCDMA	24
 
+#define MSECS_RATE_INVALID	(0x7fffffff)
+#define SECS_TO_MSECS(x)	((x) * 1000)
+
 struct netmon_data {
 	GRil *ril;
 };
@@ -96,11 +99,9 @@ static int ril_cell_type_to_size(int cell_type)
 	return 0;
 }
 
-static void ril_netmon_update_cb(struct ril_msg *message, gpointer user_data)
+static int process_cellinfo_list(struct ril_msg *message,
+					struct ofono_netmon *netmon)
 {
-	struct cb_data *cbd = user_data;
-	ofono_netmon_cb_t cb = cbd->cb;
-	struct ofono_netmon *netmon = cbd->data;
 	struct parcel rilp;
 	int skip_len;
 	int cell_info_cnt;
@@ -114,7 +115,7 @@ static void ril_netmon_update_cb(struct ril_msg *message, gpointer user_data)
 	int i, j;
 
 	if (message->error != RIL_E_SUCCESS)
-		goto error;
+		return OFONO_ERROR_TYPE_FAILURE;
 
 	g_ril_init_parcel(message, &rilp);
 
@@ -146,7 +147,7 @@ static void ril_netmon_update_cb(struct ril_msg *message, gpointer user_data)
 	}
 
 	if (!registered)
-		goto error;
+		return OFONO_ERROR_TYPE_FAILURE;
 
 	if (cell_type == NETMON_RIL_CELLINFO_TYPE_GSM) {
 		mcc = parcel_r_int32(&rilp);
@@ -216,15 +217,51 @@ static void ril_netmon_update_cb(struct ril_msg *message, gpointer user_data)
 				OFONO_NETMON_INFO_BER, ber,
 				OFONO_NETMON_INFO_INVALID);
 
-	} else {
-		goto error;
 	}
 
-	CALLBACK_WITH_SUCCESS(cb, cbd->data);
-	return;
+	return OFONO_ERROR_TYPE_NO_ERROR;
+}
 
-error:
+static void ril_netmon_update_cb(struct ril_msg *message, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_netmon_cb_t cb = cbd->cb;
+	struct ofono_netmon *netmon = cbd->data;
+
+	if (process_cellinfo_list(message, netmon) ==
+			OFONO_ERROR_TYPE_NO_ERROR) {
+		CALLBACK_WITH_SUCCESS(cb, cbd->data);
+		return;
+	}
+
 	CALLBACK_WITH_FAILURE(cb, cbd->data);
+}
+
+static void ril_cellinfo_notify(struct ril_msg *message, gpointer user_data)
+{
+	struct ofono_netmon *netmon = user_data;
+
+	process_cellinfo_list(message, netmon);
+}
+
+static void setup_cell_info_notify(struct ofono_netmon *netmon)
+{
+	struct netmon_data *nmd = ofono_netmon_get_data(netmon);
+	struct parcel rilp;
+
+	parcel_init(&rilp);
+
+	parcel_w_int32(&rilp, 1);	/* Number of elements */
+
+	parcel_w_int32(&rilp, MSECS_RATE_INVALID);
+
+	if (g_ril_send(nmd->ril, RIL_REQUEST_SET_UNSOL_CELL_INFO_LIST_RATE,
+			&rilp, NULL, NULL, NULL) == 0)
+		ofono_error("%s: setup failed\n", __func__);
+
+	if (g_ril_register(nmd->ril, RIL_UNSOL_CELL_INFO_LIST,
+				ril_cellinfo_notify, netmon) == 0)
+		ofono_error("%s: setup failed\n", __func__);
 }
 
 static int ril_netmon_probe(struct ofono_netmon *netmon,
@@ -236,6 +273,8 @@ static int ril_netmon_probe(struct ofono_netmon *netmon,
 	ud->ril = g_ril_clone(ril);
 
 	ofono_netmon_set_data(netmon, ud);
+
+	setup_cell_info_notify(netmon);
 
 	g_idle_add(ril_delayed_register, netmon);
 
@@ -264,11 +303,48 @@ static void ril_netmon_request_update(struct ofono_netmon *netmon,
 	CALLBACK_WITH_FAILURE(cb, data);
 }
 
+static void periodic_update_cb(struct ril_msg *message, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_netmon_cb_t cb = cbd->cb;
+
+	if (message->error != RIL_E_SUCCESS)
+		CALLBACK_WITH_FAILURE(cb, cbd->data);
+
+	CALLBACK_WITH_SUCCESS(cb, cbd->data);
+}
+
+static void ril_netmon_periodic_update(struct ofono_netmon *netmon,
+			unsigned int enable, unsigned int period,
+			ofono_netmon_cb_t cb, void *data)
+{
+	struct netmon_data *nmd = ofono_netmon_get_data(netmon);
+	struct cb_data *cbd = cb_data_new(cb, data, nmd);
+	struct parcel rilp;
+
+	parcel_init(&rilp);
+
+	parcel_w_int32(&rilp, 1);	/* Number of elements */
+
+	if (enable)
+		parcel_w_int32(&rilp, SECS_TO_MSECS(period));
+	else
+		parcel_w_int32(&rilp, MSECS_RATE_INVALID);
+
+	if (g_ril_send(nmd->ril, RIL_REQUEST_SET_UNSOL_CELL_INFO_LIST_RATE,
+			&rilp, periodic_update_cb, cbd, g_free) > 0)
+		return;
+
+	g_free(cbd);
+	CALLBACK_WITH_FAILURE(cb, cbd->data);
+}
+
 static struct ofono_netmon_driver driver = {
 	.name			= RILMODEM,
 	.probe			= ril_netmon_probe,
 	.remove			= ril_netmon_remove,
 	.request_update		= ril_netmon_request_update,
+	.enable_periodic_update	= ril_netmon_periodic_update,
 };
 
 void ril_netmon_init(void)
