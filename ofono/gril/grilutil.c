@@ -338,6 +338,8 @@ const char *ril_request_id_to_string(int req)
 		return "RIL_REQUEST_GET_CELL_INFO_LIST";
 	case RIL_REQUEST_SET_INITIAL_ATTACH_APN:
 		return "RIL_REQUEST_SET_INITIAL_ATTACH_APN";
+	case RIL_REQUEST_SET_UNSOL_CELL_INFO_LIST_RATE:
+		return "RIL_REQUEST_SET_UNSOL_CELL_INFO_LIST_RATE";
 	default:
 		return "<INVALID>";
 	}
@@ -416,6 +418,8 @@ const char *ril_unsol_request_to_string(int request)
 		return "UNSOL_EXIT_EMERGENCY_CALLBACK_MODE";
 	case RIL_UNSOL_RIL_CONNECTED:
 		return "UNSOL_RIL_CONNECTED";
+	case RIL_UNSOL_CELL_INFO_LIST:
+		return "RIL_UNSOL_CELL_INFO_LIST";
 	default:
 		return "<unknown request>";
 	}
