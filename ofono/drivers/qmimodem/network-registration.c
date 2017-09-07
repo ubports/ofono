@@ -23,6 +23,7 @@
 #include <config.h>
 #endif
 
+#include <endian.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -42,6 +43,38 @@ struct netreg_data {
 	struct ofono_network_operator operator;
 	uint8_t current_rat;
 };
+
+static bool extract_ss_info_time(
+		struct qmi_result *result,
+		struct ofono_network_time *time)
+{
+	const struct qmi_nas_3gpp_time *time_3gpp = NULL;
+	uint8_t dst_3gpp;
+	bool dst_3gpp_valid;
+	uint16_t len;
+
+	/* parse 3gpp time & dst */
+	dst_3gpp_valid = qmi_result_get_uint8(result, QMI_NAS_RESULT_3GGP_DST,
+					      &dst_3gpp);
+
+	time_3gpp = qmi_result_get(result, QMI_NAS_RESULT_3GPP_TIME, &len);
+	if (time_3gpp && len == sizeof(struct qmi_nas_3gpp_time) &&
+			dst_3gpp_valid) {
+		time->year = le16toh(time_3gpp->year);
+		time->mon = time_3gpp->month;
+		time->mday = time_3gpp->day;
+		time->hour = time_3gpp->hour;
+		time->min = time_3gpp->minute;
+		time->sec = time_3gpp->second;
+		time->utcoff = time_3gpp->timezone * 15 * 60;
+		time->dst = dst_3gpp;
+		return true;
+	}
+
+	/* TODO: 3gpp2 */
+
+	return false;
+}
 
 static bool extract_ss_info(struct qmi_result *result, int *status,
 				int *lac, int *cellid, int *tech,
@@ -124,10 +157,14 @@ static bool extract_ss_info(struct qmi_result *result, int *status,
 static void ss_info_notify(struct qmi_result *result, void *user_data)
 {
 	struct ofono_netreg *netreg = user_data;
+	struct ofono_network_time net_time;
 	struct netreg_data *data = ofono_netreg_get_data(netreg);
 	int status, lac, cellid, tech;
 
 	DBG("");
+
+	if (extract_ss_info_time(result, &net_time))
+		ofono_netreg_time_notify(netreg, &net_time);
 
 	if (!extract_ss_info(result, &status, &lac, &cellid, &tech,
 							&data->operator))

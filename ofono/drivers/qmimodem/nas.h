@@ -152,6 +152,18 @@ struct qmi_nas_current_plmn {
 #define QMI_NAS_REGISTRATION_STATE_DENIED		0x03
 #define QMI_NAS_REGISTRATION_STATE_UNKNOWN		0x04
 
+#define QMI_NAS_RESULT_3GGP_DST 0x1b
+#define QMI_NAS_RESULT_3GPP_TIME 0x1c
+struct qmi_nas_3gpp_time {
+	uint16_t year;
+	uint8_t month;
+	uint8_t day;
+	uint8_t hour;
+	uint8_t minute;
+	uint8_t second;
+	uint8_t timezone;
+} __attribute__((__packed__));
+
 /* cs_state/ps_state */
 #define QMI_NAS_ATTACH_STATE_INVALID		0x00
 #define QMI_NAS_ATTACH_STATE_ATTACHED		0x01
