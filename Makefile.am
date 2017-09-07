@@ -780,7 +780,9 @@ test_scripts = test/backtrace \
 		test/list-allowed-access-points \
 		test/enable-throttling \
 		test/disable-throttling \
-		test/set-lte-property
+		test/set-lte-property \
+		test/test-serving-cell-info
+
 
 if TEST
 testdir = $(pkglibdir)/test
