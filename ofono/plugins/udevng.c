@@ -267,12 +267,28 @@ static gboolean setup_sierra(struct modem_info *modem)
 				app = info->devnode;
 			else if (g_strcmp0(info->number, "07") == 0)
 				net = info->devnode;
-			else if (g_strcmp0(info->number, "0a") == 0) {
-				if (g_strcmp0(info->subsystem, "net") == 0)
+			else if (g_strcmp0(info->subsystem, "net") == 0) {
+				/*
+				 * When using the voice firmware on a mc7304
+				 * the second cdc-wdm interface doesn't handle
+				 * qmi messages properly.
+				 * Some modems still have a working second
+				 * cdc-wdm interface, some are not. But always
+				 * the first interface works.
+				 */
+				if (g_strcmp0(info->number, "08") == 0) {
 					net = info->devnode;
-				else if (g_strcmp0(info->subsystem,
-								"usbmisc") == 0)
+				} else if (g_strcmp0(info->number, "0a") == 0) {
+					if (net == NULL)
+						net = info->devnode;
+				}
+			} else if (g_strcmp0(info->subsystem, "usbmisc") == 0) {
+				if (g_strcmp0(info->number, "08") == 0) {
 					qmi = info->devnode;
+				} else if (g_strcmp0(info->number, "0a") == 0) {
+					if (qmi == NULL)
+						qmi = info->devnode;
+				}
 			}
 		}
 	}
