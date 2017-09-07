@@ -2350,9 +2350,10 @@ void ofono_voicecall_notify(struct ofono_voicecall *vc,
 	struct voicecall *v = NULL;
 	struct ofono_call *newcall;
 
-	DBG("Got a voicecall event, status: %d, id: %u, number: %s"
-			" called_number: %s, called_name %s", call->status,
-			call->id, call->phone_number.number,
+	DBG("Got a voicecall event, status: %s (%d), id: %u, number: %s"
+			" called_number: %s, called_name %s",
+			call_status_to_string(call->status),
+			call->status, call->id, call->phone_number.number,
 			call->called_number.number, call->name);
 
 	l = g_slist_find_custom(vc->call_list, GUINT_TO_POINTER(call->id),
