@@ -38,6 +38,118 @@ struct settings_data {
 	uint16_t minor;
 };
 
+static void get_system_selection_pref_cb(struct qmi_result *result,
+							void* user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_radio_settings_rat_mode_query_cb_t cb = cbd->cb;
+	enum ofono_radio_access_mode mode = OFONO_RADIO_ACCESS_MODE_ANY;
+	uint16_t pref;
+
+	DBG("");
+
+	if (qmi_result_set_error(result, NULL)) {
+		CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
+		return;
+	}
+
+	qmi_result_get_uint16(result,
+			QMI_NAS_RESULT_SYSTEM_SELECTION_PREF_MODE, &pref);
+
+	switch (pref) {
+	case QMI_NAS_RAT_MODE_PREF_GSM:
+		mode = OFONO_RADIO_ACCESS_MODE_GSM;
+		break;
+	case QMI_NAS_RAT_MODE_PREF_UMTS:
+		mode = OFONO_RADIO_ACCESS_MODE_UMTS;
+		break;
+	case QMI_NAS_RAT_MODE_PREF_LTE:
+		mode = OFONO_RADIO_ACCESS_MODE_LTE;
+		break;
+	}
+
+	CALLBACK_WITH_SUCCESS(cb, mode, cbd->data);
+}
+
+static void qmi_query_rat_mode(struct ofono_radio_settings *rs,
+			ofono_radio_settings_rat_mode_query_cb_t cb,
+			void *user_data)
+{
+	struct settings_data *data = ofono_radio_settings_get_data(rs);
+	struct cb_data *cbd = cb_data_new(cb, user_data);
+
+	DBG("");
+
+	if (qmi_service_send(data->nas,
+				QMI_NAS_GET_SYSTEM_SELECTION_PREF, NULL,
+				get_system_selection_pref_cb, cbd, g_free) > 0)
+		return;
+
+	CALLBACK_WITH_FAILURE(cb, -1, data);
+}
+
+static void set_system_selection_pref_cb(struct qmi_result *result,
+							void* user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_radio_settings_rat_mode_set_cb_t cb = cbd->cb;
+
+	DBG("");
+
+	if (qmi_result_set_error(result, NULL)) {
+		CALLBACK_WITH_FAILURE(cb, cbd->data);
+		return;
+	}
+
+	CALLBACK_WITH_SUCCESS(cb, cbd->data);
+}
+
+static void qmi_set_rat_mode(struct ofono_radio_settings *rs,
+			enum ofono_radio_access_mode mode,
+			ofono_radio_settings_rat_mode_set_cb_t cb,
+			void *user_data)
+{
+	struct settings_data *data = ofono_radio_settings_get_data(rs);
+	struct cb_data *cbd = cb_data_new(cb, user_data);
+	uint16_t pref = QMI_NAS_RAT_MODE_PREF_ANY;
+	struct qmi_param *param;
+
+	DBG("");
+
+	switch (mode) {
+	case OFONO_RADIO_ACCESS_MODE_ANY:
+		pref = QMI_NAS_RAT_MODE_PREF_ANY;
+		break;
+	case OFONO_RADIO_ACCESS_MODE_GSM:
+		pref = QMI_NAS_RAT_MODE_PREF_GSM;
+		break;
+	case OFONO_RADIO_ACCESS_MODE_UMTS:
+		pref = QMI_NAS_RAT_MODE_PREF_UMTS;
+		break;
+	case OFONO_RADIO_ACCESS_MODE_LTE:
+		pref = QMI_NAS_RAT_MODE_PREF_LTE;
+		break;
+	}
+
+	param = qmi_param_new();
+	if (!param) {
+		CALLBACK_WITH_FAILURE(cb, user_data);
+		return;
+	}
+
+	qmi_param_append_uint16(param, QMI_NAS_PARAM_SYSTEM_SELECTION_PREF_MODE,
+			pref);
+
+	if (qmi_service_send(data->nas,
+				QMI_NAS_SET_SYSTEM_SELECTION_PREF, param,
+				set_system_selection_pref_cb, cbd, g_free) > 0)
+		return;
+
+	qmi_param_free(param);
+	CALLBACK_WITH_FAILURE(cb, user_data);
+	g_free(cbd);
+}
+
 static void create_nas_cb(struct qmi_service *service, void *user_data)
 {
 	struct ofono_radio_settings *rs = user_data;
@@ -78,7 +190,6 @@ static int qmi_radio_settings_probe(struct ofono_radio_settings *rs,
 						create_nas_cb, rs, NULL);
 
 	return 0;
-
 }
 
 static void qmi_radio_settings_remove(struct ofono_radio_settings *rs)
@@ -100,6 +211,8 @@ static struct ofono_radio_settings_driver driver = {
 	.name		= "qmimodem",
 	.probe		= qmi_radio_settings_probe,
 	.remove		= qmi_radio_settings_remove,
+	.set_rat_mode	= qmi_set_rat_mode,
+	.query_rat_mode = qmi_query_rat_mode,
 };
 
 void qmi_radio_settings_init(void)
