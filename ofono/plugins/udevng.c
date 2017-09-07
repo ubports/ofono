@@ -261,7 +261,7 @@ static gboolean setup_sierra(struct modem_info *modem)
 		if (g_strcmp0(info->interface, "255/255/255") == 0) {
 			if (g_strcmp0(info->number, "01") == 0)
 				diag = info->devnode;
-			if (g_strcmp0(info->number, "03") == 0)
+			else if (g_strcmp0(info->number, "03") == 0)
 				mdm = info->devnode;
 			else if (g_strcmp0(info->number, "04") == 0)
 				app = info->devnode;
