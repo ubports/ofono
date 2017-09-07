@@ -2596,7 +2596,8 @@ void ofono_gprs_detached_notify(struct ofono_gprs *gprs)
 
 void ofono_gprs_status_notify(struct ofono_gprs *gprs, int status)
 {
-	DBG("%s status %d", __ofono_atom_get_path(gprs->atom), status);
+	DBG("%s status %s (%d)", __ofono_atom_get_path(gprs->atom),
+			registration_status_to_string(status), status);
 
 	gprs->status = status;
 
