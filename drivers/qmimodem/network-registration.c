@@ -55,7 +55,7 @@ static bool extract_ss_info_time(
 
 	/* parse 3gpp time & dst */
 	dst_3gpp_valid = qmi_result_get_uint8(result, QMI_NAS_RESULT_3GGP_DST,
-					      &dst_3gpp);
+						&dst_3gpp);
 
 	time_3gpp = qmi_result_get(result, QMI_NAS_RESULT_3GPP_TIME, &len);
 	if (time_3gpp && len == sizeof(struct qmi_nas_3gpp_time) &&
