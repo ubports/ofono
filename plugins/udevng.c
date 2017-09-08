@@ -876,7 +876,7 @@ static gboolean setup_quectel(struct modem_info *modem)
 
 static gboolean setup_quectelqmi(struct modem_info *modem)
 {
-	const char *qmi = NULL, *net = NULL, *gps = NULL;
+	const char *qmi = NULL, *net = NULL, *gps = NULL, *aux = NULL;
 	GSList *list;
 
 	DBG("%s", modem->syspath);
@@ -894,8 +894,11 @@ static gboolean setup_quectelqmi(struct modem_info *modem)
 			else if (g_strcmp0(info->subsystem, "usbmisc") == 0)
 				qmi = info->devnode;
 		} else if (g_strcmp0(info->interface, "255/0/0") == 0 &&
-				g_strcmp0(info->number, "02") == 0) {
+				g_strcmp0(info->number, "01") == 0) {
 			gps = info->devnode;
+		} else if (g_strcmp0(info->interface, "255/0/0") == 0 &&
+				g_strcmp0(info->number, "02") == 0) {
+			aux = info->devnode;
 		}
 	}
 
@@ -909,8 +912,12 @@ static gboolean setup_quectelqmi(struct modem_info *modem)
 	ofono_modem_set_string(modem->modem, "Device", qmi);
 	ofono_modem_set_string(modem->modem, "NetworkInterface", net);
 
+	DBG("gps=%s aux=%s", gps, aux);
+
 	if (gps)
 		ofono_modem_set_string(modem->modem, "GPS", gps);
+	if (aux)
+		ofono_modem_set_string(modem->modem, "Aux", aux);
 
 	ofono_modem_set_driver(modem->modem, "gobi");
 
