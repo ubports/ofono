@@ -23,6 +23,7 @@
 #define __PARCEL_H
 
 #include <stdlib.h>
+#include <stdint.h>
 
 struct parcel {
 	char *data;
