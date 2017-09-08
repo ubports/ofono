@@ -77,7 +77,7 @@ byte TimingAdvance [optional, gsm]
 
 	Contains the Timing Advance.  Valid range of values is 0-219.
 
-byte Strength [optional, gsm, umts]
+byte Strength [optional, gsm, umts, lte]
 
 	Contains the signal strength.  Valid values are 0-31.  Refer to <rssi>
 	in 27.007, Section 8.5.
