@@ -25,6 +25,7 @@
 
 #include <errno.h>
 #include <stdlib.h>
+#include <stdint.h>
 
 #include <glib.h>
 #include <gatchat.h>
