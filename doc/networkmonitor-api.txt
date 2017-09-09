@@ -38,7 +38,7 @@ Service		unique name
 Interface	org.ofono.NetworkMonitorAgent
 Object path	freely definable
 
-Methods		void ServingCellInformationChanged(a{sv})
+Methods		void ServingCellInformationChanged(a{sv}) [noreply]
 
 			This method is called whenever the serving cell
 			information has been updated.
