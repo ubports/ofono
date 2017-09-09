@@ -95,7 +95,7 @@ static void netmon_agent_disconnect_cb(DBusConnection *conn, void *user_data)
 {
 	struct netmon_agent *agent = user_data;
 
-	ofono_debug("Agent excited without calling UnregisterAgent");
+	ofono_debug("Agent exited without calling UnregisterAgent");
 
 	agent->disconnect_watch = 0;
 
