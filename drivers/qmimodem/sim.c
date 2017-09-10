@@ -317,6 +317,124 @@ error:
 	g_free(cbd);
 }
 
+static void write_generic_cb(struct qmi_result *result, void *user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_sim_write_cb_t cb = cbd->cb;
+	uint16_t len;
+	const uint8_t *card_result;
+	uint8_t sw1, sw2;
+
+	card_result = qmi_result_get(result, 0x10, &len);
+	if (card_result == NULL || len != 2) {
+		DBG("card_result: %p, len: %d", card_result, (int) len);
+		CALLBACK_WITH_FAILURE(cb, cbd->data);
+		return;
+	}
+
+	sw1 = card_result[0];
+	sw2 = card_result[1];
+
+	DBG("%02x, %02x", sw1, sw2);
+
+	if ((sw1 != 0x90 && sw1 != 0x91 && sw1 != 0x92 && sw1 != 0x9f) ||
+			(sw1 == 0x90 && sw2 != 0x00)) {
+		struct ofono_error error;
+
+		ofono_error("%s: error sw1 %02x sw2 %02x", __func__, sw1, sw2);
+
+		error.type = OFONO_ERROR_TYPE_SIM;
+		error.error = (sw1 << 8) | sw2;
+
+		cb(&error, cbd->data);
+		return;
+	}
+
+	CALLBACK_WITH_SUCCESS(cb, cbd->data);
+}
+
+static void write_generic(struct ofono_sim *sim,
+			uint16_t qmi_message, int fileid,
+			int start_or_recordnum,
+			int length, const unsigned char *value,
+			const unsigned char *path, unsigned int path_len,
+			ofono_sim_write_cb_t cb, void *user_data)
+{
+	struct sim_data *data = ofono_sim_get_data(sim);
+	struct cb_data *cbd = cb_data_new(cb, user_data);
+	unsigned char aid_data[2] = { 0x00, 0x00 };
+	unsigned char write_data[4 + length];
+	unsigned char fileid_data[9];
+	int fileid_len;
+	struct qmi_param *param;
+
+	DBG("file id 0x%04x path len %d", fileid, path_len);
+
+	fileid_len = create_fileid_data(data->app_type, fileid,
+			path, path_len, fileid_data);
+
+	if (fileid_len < 0)
+		goto error;
+
+	write_data[0] = start_or_recordnum & 0xff;
+	write_data[1] = (start_or_recordnum & 0xff00) >> 8;
+	write_data[2] = length & 0xff;
+	write_data[3] = (length & 0xff00) >> 8;
+	memcpy(&write_data[4], value, length);
+
+	param = qmi_param_new();
+	if (!param)
+		goto error;
+
+	qmi_param_append(param, 0x01, sizeof(aid_data), aid_data);
+	qmi_param_append(param, 0x02, fileid_len, fileid_data);
+	qmi_param_append(param, 0x03, 4 + length, write_data);
+
+	if (qmi_service_send(data->uim, qmi_message, param,
+					write_generic_cb, cbd, g_free) > 0)
+		return;
+
+	qmi_param_free(param);
+
+error:
+	CALLBACK_WITH_FAILURE(cb, user_data);
+
+	g_free(cbd);
+}
+
+static void qmi_write_transparent(struct ofono_sim *sim,
+				int fileid, int start, int length,
+				const unsigned char *value,
+				const unsigned char *path,
+				unsigned int path_len,
+				ofono_sim_write_cb_t cb, void *user_data)
+{
+	write_generic(sim, QMI_UIM_WRITE_TRANSPARENT, fileid, start,
+				length, value, path, path_len, cb, user_data);
+}
+
+static void qmi_write_linear(struct ofono_sim *sim,
+				int fileid, int record, int length,
+				const unsigned char *value,
+				const unsigned char *path,
+				unsigned int path_len,
+				ofono_sim_write_cb_t cb, void *user_data)
+{
+	write_generic(sim, QMI_UIM_WRITE_RECORD, fileid, record,
+				length, value, path, path_len, cb, user_data);
+}
+
+static void qmi_write_cyclic(struct ofono_sim *sim,
+				int fileid, int length,
+				const unsigned char *value,
+				const unsigned char *path,
+				unsigned int path_len,
+				ofono_sim_write_cb_t cb, void *user_data)
+{
+	write_generic(sim, QMI_UIM_WRITE_RECORD, fileid, 0,
+				length, value, path, path_len, cb, user_data);
+}
+
 static void get_imsi_cb(struct qmi_result *result, void *user_data)
 {
 	struct cb_data *cbd = user_data;
@@ -777,6 +895,9 @@ static struct ofono_sim_driver driver = {
 	.read_file_transparent	= qmi_read_transparent,
 	.read_file_linear	= qmi_read_record,
 	.read_file_cyclic	= qmi_read_record,
+	.write_file_transparent = qmi_write_transparent,
+	.write_file_linear	= qmi_write_linear,
+	.write_file_cyclic	= qmi_write_cyclic,
 	.read_imsi		= qmi_read_imsi,
 	.query_passwd_state	= qmi_query_passwd_state,
 	.query_pin_retries	= qmi_query_pin_retries,
