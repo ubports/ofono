@@ -646,8 +646,31 @@ error:
 /* ISI callback: PIN state (enabled/disabled) query */
 static void sec_code_state_resp_cb(const GIsiMessage *msg, void *opaque)
 {
-	check_sec_response(msg, opaque, SEC_CODE_STATE_OK_RESP,
-				SEC_CODE_STATE_FAIL_RESP);
+	struct isi_cb_data *cbd = opaque;
+	ofono_query_facility_lock_cb_t cb = cbd->cb;
+	int locked;
+	uint8_t state;
+	uint8_t status;
+
+	if (!g_isi_msg_data_get_byte(msg, 0, &state) ||
+			!g_isi_msg_data_get_byte(msg, 1, &status))
+		goto error;
+
+	if (state != SEC_CODE_STATE_OK_RESP)
+		goto error;
+
+	if (status == SEC_CODE_ENABLE)
+		locked = 1;
+	else if (status == SEC_CODE_DISABLE)
+		locked = 0;
+	else
+		goto error;
+
+	CALLBACK_WITH_SUCCESS(cb, locked, cbd->data);
+	return;
+
+error:
+	CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
 }
 
 static void isi_query_locked(struct ofono_sim *sim,
