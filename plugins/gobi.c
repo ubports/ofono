@@ -45,6 +45,7 @@
 #include <ofono/radio-settings.h>
 #include <ofono/location-reporting.h>
 #include <ofono/log.h>
+#include <ofono/message-waiting.h>
 
 #include <drivers/qmimodem/qmi.h>
 #include <drivers/qmimodem/dms.h>
@@ -483,6 +484,15 @@ static void gobi_post_sim(struct ofono_modem *modem)
 
 	if (data->features & GOBI_WMS)
 		ofono_sms_create(modem, 0, "qmimodem", data->device);
+
+	if ((data->features & GOBI_WMS) && (data->features & GOBI_UIM) &&
+			!ofono_modem_get_boolean(modem, "ForceSimLegacy")) {
+		struct ofono_message_waiting *mw =
+					ofono_message_waiting_create(modem);
+
+		if (mw)
+			ofono_message_waiting_register(mw);
+	}
 }
 
 static void gobi_post_online(struct ofono_modem *modem)
