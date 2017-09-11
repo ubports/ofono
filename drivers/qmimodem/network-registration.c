@@ -511,10 +511,17 @@ static void event_notify(struct qmi_result *result, void *user_data)
 static void set_event_cb(struct qmi_result *result, void *user_data)
 {
 	struct ofono_netreg *netreg = user_data;
+	struct netreg_data *data = ofono_netreg_get_data(netreg);
 
 	DBG("");
 
 	ofono_netreg_register(netreg);
+
+	qmi_service_register(data->nas, QMI_NAS_EVENT,
+					event_notify, netreg, NULL);
+
+	qmi_service_register(data->nas, QMI_NAS_SS_INFO_IND,
+					ss_info_notify, netreg, NULL);
 }
 
 static void create_nas_cb(struct qmi_service *service, void *user_data)
@@ -535,12 +542,6 @@ static void create_nas_cb(struct qmi_service *service, void *user_data)
 	}
 
 	data->nas = qmi_service_ref(service);
-
-	qmi_service_register(data->nas, QMI_NAS_EVENT,
-					event_notify, netreg, NULL);
-
-	qmi_service_register(data->nas, QMI_NAS_SS_INFO_IND,
-					ss_info_notify, netreg, NULL);
 
 	param = qmi_param_new();
 	if (!param)
