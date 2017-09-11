@@ -296,7 +296,7 @@ static void ril_netmon_request_update(struct ofono_netmon *netmon,
 	struct cb_data *cbd = cb_data_new(cb, data, nmd);
 
 	if (g_ril_send(nmd->ril, RIL_REQUEST_GET_CELL_INFO_LIST, NULL,
-			ril_netmon_update_cb, cbd, NULL) > 0)
+			ril_netmon_update_cb, cbd, g_free) > 0)
 		return;
 
 	g_free(cbd);
