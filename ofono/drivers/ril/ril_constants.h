@@ -433,7 +433,7 @@ struct ril_cell_info_lte {
 	int timingAdvance;  /* (Distance = 300m/us) TS 36.321 */
 };
 
-/* RIL Request Messages */
+/* RIL Request Messages, ofono -> rild */
 #define RIL_REQUEST_GET_SIM_STATUS 1
 #define RIL_REQUEST_ENTER_SIM_PIN 2
 #define RIL_REQUEST_ENTER_SIM_PUK 3
@@ -568,7 +568,7 @@ struct ril_cell_info_lte {
 #define RIL_REQUEST_GET_RADIO_CAPABILITY 130
 #define RIL_REQUEST_SET_RADIO_CAPABILITY 131
 
-/* RIL Unsolicited Messages */
+/* RIL Unsolicited Messages, rild -> ofono */
 #define RIL_UNSOL_RESPONSE_BASE 1000
 #define RIL_UNSOL_RESPONSE_RADIO_STATE_CHANGED 1000
 #define RIL_UNSOL_RESPONSE_CALL_STATE_CHANGED 1001
@@ -615,6 +615,9 @@ struct ril_cell_info_lte {
 #define RIL_UNSOL_RADIO_CAPABILITY 1042
 #define RIL_UNSOL_ON_SS 1043
 #define RIL_UNSOL_STK_CC_ALPHA_NOTIFY 1044
+
+/* A special request, ofono -> rild */
+#define RIL_RESPONSE_ACKNOWLEDGEMENT 800
 
 /* Suplementary services Service class*/
 #define SERVICE_CLASS_NONE 0
