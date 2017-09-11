@@ -233,6 +233,8 @@ const char *ril_request_to_string(guint request)
 	RIL_REQUEST_(SHUTDOWN);
 	RIL_REQUEST_(GET_RADIO_CAPABILITY);
 	RIL_REQUEST_(SET_RADIO_CAPABILITY);
+	case RIL_RESPONSE_ACKNOWLEDGEMENT:
+		return "RESPONSE_ACK";
 	default:
 		snprintf(unknown, sizeof(unknown), "RIL_REQUEST_%d", request);
 		return unknown;
