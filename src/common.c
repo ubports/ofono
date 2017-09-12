@@ -30,8 +30,8 @@
 #include <glib.h>
 
 #include <ofono/types.h>
+#include <ofono/gprs-context.h>
 #include "common.h"
-#include "gprs-context.h"
 #include "util.h"
 
 struct error_entry {
