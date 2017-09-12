@@ -19,5 +19,3 @@ DBusMessage *netmon_agent_new_method_call(struct netmon_agent *netmon,
 
 void netmon_agent_send_no_reply(struct netmon_agent *agent,
 				DBusMessage *message);
-
-void netmon_agent_test(struct netmon_agent *agent);
