@@ -1325,7 +1325,7 @@ static void add_serial_device(struct udev_device *dev)
 
 	devnode = udev_device_get_devnode(dev);
 
-	if (!syspath || !devname || !devpath || !devnode)
+	if (!syspath || !devpath)
 		return;
 
 	modem = g_hash_table_lookup(modem_list, syspath);
@@ -1337,7 +1337,7 @@ static void add_serial_device(struct udev_device *dev)
 		modem->type = MODEM_TYPE_SERIAL;
 		modem->syspath = g_strdup(syspath);
 		modem->devname = g_strdup(devname);
-		modem->driver = g_strdup("legacy");
+		modem->driver = g_strdup(driver);
 
 		g_hash_table_replace(modem_list, modem->syspath, modem);
 	}
@@ -1357,7 +1357,7 @@ static void add_serial_device(struct udev_device *dev)
 	info->subsystem = g_strdup(subsystem);
 	info->dev = udev_device_ref(dev);
 
-	modem->devices = g_slist_append(modem->devices, info);
+	modem->serial = info;
 }
 
 static void add_device(const char *syspath, const char *devname,
