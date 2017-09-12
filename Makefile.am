@@ -233,7 +233,8 @@ builtin_sources += $(qmi_sources) \
 			drivers/qmimodem/gprs.c \
 			drivers/qmimodem/gprs-context.c \
 			drivers/qmimodem/radio-settings.c \
-			drivers/qmimodem/location-reporting.c
+			drivers/qmimodem/location-reporting.c \
+			drivers/qmimodem/netmon.c
 
 builtin_modules += gobi
 builtin_sources += plugins/gobi.c
