@@ -1013,8 +1013,6 @@ static gboolean setup_isi_serial(struct modem_info* modem)
 	if (value)
 		ofono_modem_set_integer(modem->modem, "Address", atoi(value));
 
-	ofono_modem_set_string(modem->modem, "Device", info->devnode);
-
 	return TRUE;
 }
 
