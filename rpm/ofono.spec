@@ -20,7 +20,7 @@ BuildRequires:  pkgconfig(dbus-1)
 BuildRequires:  pkgconfig(glib-2.0)
 BuildRequires:  pkgconfig(libudev) >= 145
 BuildRequires:  pkgconfig(libwspcodec) >= 2.0
-BuildRequires:  pkgconfig(libgrilio) >= 1.0.16
+BuildRequires:  pkgconfig(libgrilio) >= 1.0.18
 BuildRequires:  pkgconfig(libglibutil) >= 1.0.23
 BuildRequires:  pkgconfig(libdbuslogserver-dbus)
 BuildRequires:  pkgconfig(libmce-glib)

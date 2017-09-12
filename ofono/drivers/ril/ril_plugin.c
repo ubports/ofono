@@ -602,11 +602,17 @@ static void ril_plugin_trace(GRilIoChannel *io, GRILIO_PACKET_TYPE type,
 		gutil_log(log_module, GLOG_LEVEL_VERBOSE, "%s%c [%08x] %s",
 				prefix, dir, id, scode);
 		break;
+	case GRILIO_PACKET_ACK:
+		gutil_log(log_module, GLOG_LEVEL_VERBOSE, "%s%c [%08x] ACK",
+				prefix, dir, id);
+		break;
 	case GRILIO_PACKET_RESP:
+	case GRILIO_PACKET_RESP_ACK_EXP:
 		gutil_log(log_module, GLOG_LEVEL_VERBOSE, "%s%c [%08x] %s",
 				prefix, dir, id, ril_error_to_string(code));
 		break;
 	case GRILIO_PACKET_UNSOL:
+	case GRILIO_PACKET_UNSOL_ACK_EXP:
 		gutil_log(log_module, GLOG_LEVEL_VERBOSE, "%s%c %s",
 				prefix, dir, ril_unsol_event_to_string(code));
 		break;
