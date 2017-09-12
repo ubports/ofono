@@ -53,3 +53,6 @@ extern void qmi_radio_settings_exit(void);
 
 extern void qmi_location_reporting_init(void);
 extern void qmi_location_reporting_exit(void);
+
+extern void qmi_netmon_init(void);
+extern void qmi_netmon_exit(void);
