@@ -574,8 +574,8 @@ builtin_sources += plugins/quectel.c
 builtin_modules += ublox
 builtin_sources += plugins/ublox.c
 
-builtin_modules += he910
-builtin_sources += plugins/he910.c
+builtin_modules += xmm7xxx
+builtin_sources += plugins/xmm7xxx.c
 endif
 
 builtin_modules += connman
