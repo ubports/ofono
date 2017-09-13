@@ -73,7 +73,7 @@ struct gprs_context_data {
 	char dns1[64];
 	char dns2[64];
 	ofono_gprs_context_cb_t cb;
-	void *cb_data;                                  /* Callback data */
+	void *cb_data;
 };
 
 static void rawip_debug(const char *str, void *data)
@@ -357,13 +357,15 @@ static void ifx_read_settings(struct ofono_gprs_context *gc)
 
 	/* read IP configuration info */
 	if(gcd->vendor == OFONO_VENDOR_XMM) {
-		snprintf(buf, sizeof(buf), "AT+CGCONTRDP=%u", gcd->active_context);
+		snprintf(buf, sizeof(buf), "AT+CGCONTRDP=%u",
+							gcd->active_context);
 
 		if (g_at_chat_send(gcd->chat, buf, cgcontrdp_prefix,
 					cgcontrdp_cb, gc, NULL) > 0)
 			return;
 	} else {
 		sprintf(buf, "AT+CGPADDR=%u", gcd->active_context);
+
 		if (g_at_chat_send(gcd->chat, buf, cgpaddr_prefix,
 						address_cb, gc, NULL) > 0)
 			return;
