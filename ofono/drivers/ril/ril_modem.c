@@ -392,8 +392,8 @@ static void ril_modem_remove(struct ofono_modem *ofono)
 
 	ril_network_unref(modem->network);
 	ril_sim_card_unref(modem->sim_card);
-	ril_cell_info_unref(modem->cell_info);
 	ril_data_unref(modem->data);
+	sailfish_cell_info_unref(modem->cell_info);
 	grilio_channel_unref(modem->io);
 	grilio_queue_cancel_all(md->q, FALSE);
 	grilio_queue_unref(md->q);
@@ -410,7 +410,7 @@ struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *log_prefix,
 		struct ril_radio *radio, struct ril_network *network,
 		struct ril_sim_card *card, struct ril_data *data,
 		struct ril_sim_settings *settings,
-		struct ril_cell_info *cell_info)
+		struct sailfish_cell_info *cell_info)
 {
 	/* Skip the slash from the path, it looks like "/ril_0" */
 	struct ofono_modem *ofono = ofono_modem_create(path + 1,
@@ -440,7 +440,7 @@ struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *log_prefix,
 		modem->network = ril_network_ref(network);
 		modem->sim_card = ril_sim_card_ref(card);
 		modem->sim_settings = ril_sim_settings_ref(settings);
-		modem->cell_info = ril_cell_info_ref(cell_info);
+		modem->cell_info = sailfish_cell_info_ref(cell_info);
 		modem->data = ril_data_ref(data);
 		modem->io = grilio_channel_ref(io);
 		md->q = grilio_queue_new(io);

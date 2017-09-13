@@ -188,6 +188,21 @@ struct sailfish_sim_info_dbus *sailfish_sim_info_dbus_new
 
 void sailfish_sim_info_dbus_free(struct sailfish_sim_info_dbus *dbus) {}
 
+/* Fake sailfish_cell_info_dbus */
+
+struct sailfish_cell_info_dbus {
+	int unused;
+};
+
+struct sailfish_cell_info_dbus *sailfish_cell_info_dbus_new
+		(struct ofono_modem *modem, struct sailfish_cell_info *info)
+{
+	static struct sailfish_cell_info_dbus fake_sailfish_cell_info_dbus;
+	return &fake_sailfish_cell_info_dbus;
+}
+
+void sailfish_cell_info_dbus_free(struct sailfish_cell_info_dbus *dbus) {}
+
 /* Code shared by all tests */
 
 typedef struct sailfish_slot_impl {

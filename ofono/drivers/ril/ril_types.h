@@ -45,7 +45,6 @@ struct ril_modem;
 struct ril_radio;
 struct ril_network;
 struct ril_sim_card;
-struct ril_cell_info;
 
 struct ril_slot_config {
 	guint slot;

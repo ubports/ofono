@@ -141,6 +141,7 @@ typedef struct sailfish_slot_manager_impl {
 typedef struct sailfish_slot_impl {
 	ril_plugin* plugin;
 	struct sailfish_slot *handle;
+	struct sailfish_cell_info *cell_info;
 	struct sailfish_watch *watch;
 	gulong watch_event_id[WATCH_EVENT_COUNT];
 	char *path;
@@ -161,8 +162,6 @@ typedef struct sailfish_slot_impl {
 	struct ril_network *network;
 	struct ril_sim_card *sim_card;
 	struct ril_sim_settings *sim_settings;
-	struct ril_cell_info *cell_info;
-	struct ril_cell_info_dbus *cell_info_dbus;
 	struct ril_oem_raw *oem_raw;
 	struct ril_data *data;
 	MceDisplay *display;
@@ -339,7 +338,7 @@ static void ril_plugin_shutdown_slot(ril_slot *slot, gboolean kill_io)
 		}
 
 		if (slot->cell_info) {
-			ril_cell_info_unref(slot->cell_info);
+			sailfish_cell_info_unref(slot->cell_info);
 			slot->cell_info = NULL;
 		}
 
@@ -684,11 +683,6 @@ static void ril_plugin_create_modem(ril_slot *slot)
 
 	if (modem) {
 		slot->modem = modem;
-		if (slot->cell_info) {
-#pragma message("Cell info interfaces need to be moved to the common Sailfish OS area")
-			slot->cell_info_dbus = ril_cell_info_dbus_new(modem,
-							slot->cell_info);
-		}
 		slot->oem_raw = ril_oem_raw_new(modem, log_prefix);
 	} else {
 		ril_plugin_shutdown_slot(slot, TRUE);
@@ -849,6 +843,7 @@ static void ril_plugin_slot_connected(ril_slot *slot)
 
 		ril_plugin_foreach_slot_param(plugin,
 					ril_plugin_slot_connected_all, &all);
+		sailfish_manager_set_cell_info(slot->handle, slot->cell_info);
 		if (all && plugin->start_timeout_id) {
 			DBG("Startup done!");
 			g_source_remove(plugin->start_timeout_id);
@@ -947,11 +942,6 @@ static void ril_plugin_slot_modem_changed(struct sailfish_watch *w,
 		if (slot->oem_raw) {
 			ril_oem_raw_free(slot->oem_raw);
 			slot->oem_raw = NULL;
-		}
-
-		if (slot->cell_info_dbus) {
-			ril_cell_info_dbus_free(slot->cell_info_dbus);
-			slot->cell_info_dbus = NULL;
 		}
 
 		slot->modem = NULL;

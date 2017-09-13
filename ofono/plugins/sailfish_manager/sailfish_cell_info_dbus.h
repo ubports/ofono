@@ -9,22 +9,23 @@
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
  */
 
-#ifndef RIL_CELL_INFO_H
-#define RIL_CELL_INFO_H
+#ifndef SAILFISH_CELL_INFO_DBUS_H
+#define SAILFISH_CELL_INFO_DBUS_H
 
-#include "ril_types.h"
-#include <mce_display.h>
-#include <sailfish_cell_info.h>
+struct ofono_modem;
 
-struct sailfish_cell_info *ril_cell_info_new(GRilIoChannel *io,
-		const char *log_prefix, MceDisplay *display,
-		struct ril_radio *radio, struct ril_sim_card *sim_card);
+struct sailfish_cell_info;
+struct sailfish_cell_info_dbus;
 
-#endif /* RIL_CELL_INFO_H */
+struct sailfish_cell_info_dbus *sailfish_cell_info_dbus_new
+		(struct ofono_modem *modem, struct sailfish_cell_info *info);
+void sailfish_cell_info_dbus_free(struct sailfish_cell_info_dbus *dbus);
+
+#endif /* SAILFISH_CELL_INFO_DBUS_H */
 
 /*
  * Local Variables:

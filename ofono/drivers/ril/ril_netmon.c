@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2016 Jolla Ltd.
+ *  Copyright (C) 2016-2017 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -14,15 +14,16 @@
  */
 
 #include "ril_plugin.h"
-#include "ril_cell_info.h"
 #include "ril_util.h"
 #include "ril_log.h"
+
+#include <sailfish_cell_info.h>
 
 #include "ofono.h"
 
 struct ril_netmon {
 	struct ofono_netmon *netmon;
-	struct ril_cell_info *cell_info;
+	struct sailfish_cell_info *cell_info;
 	guint register_id;
 };
 
@@ -50,7 +51,7 @@ static void ril_netmon_format_mccmnc(char *s_mcc, char *s_mnc, int mcc, int mnc)
 }
 
 static void ril_netmon_notify_gsm(struct ofono_netmon *netmon,
-				const struct ril_cell_info_gsm *gsm)
+				const struct sailfish_cell_info_gsm *gsm)
 {
 	char mcc[OFONO_MAX_MCC_LENGTH + 1];
 	char mnc[OFONO_MAX_MNC_LENGTH + 1];
@@ -68,7 +69,7 @@ static void ril_netmon_notify_gsm(struct ofono_netmon *netmon,
 }
 
 static void ril_netmon_notify_wcdma(struct ofono_netmon *netmon,
-				const struct ril_cell_info_wcdma *wcdma)
+				const struct sailfish_cell_info_wcdma *wcdma)
 {
 	char mcc[OFONO_MAX_MCC_LENGTH + 1];
 	char mnc[OFONO_MAX_MNC_LENGTH + 1];
@@ -87,7 +88,7 @@ static void ril_netmon_notify_wcdma(struct ofono_netmon *netmon,
 }
 
 static void ril_netmon_notify_lte(struct ofono_netmon *netmon,
-				const struct ril_cell_info_lte *lte)
+				const struct sailfish_cell_info_lte *lte)
 {
 	char mcc[OFONO_MAX_MCC_LENGTH + 1];
 	char mnc[OFONO_MAX_MNC_LENGTH + 1];
@@ -111,19 +112,19 @@ static void ril_netmon_request_update(struct ofono_netmon *netmon,
 	GSList *l;
 
 	for (l = nm->cell_info->cells; l; l = l->next) {
-		const struct ril_cell *cell = l->data;
+		const struct sailfish_cell *cell = l->data;
 
 		if (cell->registered) {
 			switch (cell->type) {
-			case RIL_CELL_INFO_TYPE_GSM:
+			case SAILFISH_CELL_TYPE_GSM:
 				ril_netmon_notify_gsm(netmon,
 							&cell->info.gsm);
 				break;
-			case RIL_CELL_INFO_TYPE_WCDMA:
+			case SAILFISH_CELL_TYPE_WCDMA:
 				ril_netmon_notify_wcdma(netmon,
 							&cell->info.wcdma);
 				break;
-			case RIL_CELL_INFO_TYPE_LTE:
+			case SAILFISH_CELL_TYPE_LTE:
 				ril_netmon_notify_lte(netmon,
 							&cell->info.lte);
 				break;
@@ -156,7 +157,7 @@ static int ril_netmon_probe(struct ofono_netmon *netmon, unsigned int vendor,
 	if (modem->cell_info) {
 		struct ril_netmon *nm = g_slice_new0(struct ril_netmon);
 
-		nm->cell_info = ril_cell_info_ref(modem->cell_info);
+		nm->cell_info = sailfish_cell_info_ref(modem->cell_info);
 		nm->netmon = netmon;
 
 		ofono_netmon_set_data(netmon, nm);
@@ -182,7 +183,7 @@ static void ril_netmon_remove(struct ofono_netmon *netmon)
 		g_source_remove(nm->register_id);
 	}
 
-	ril_cell_info_unref(nm->cell_info);
+	sailfish_cell_info_unref(nm->cell_info);
 	g_slice_free(struct ril_netmon, nm);
 }
 
