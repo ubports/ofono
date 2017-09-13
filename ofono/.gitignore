@@ -46,6 +46,7 @@ unit/test-rilmodem-cb
 unit/test-rilmodem-cs
 unit/test-rilmodem-gprs
 unit/test-rilmodem-sms
+unit/test-sailfish_cell_info
 unit/test-sailfish_manager
 unit/test-sailfish_sim_info
 unit/test-*.log
@@ -57,6 +58,8 @@ unit/test-grilunsol
 unit/test-provision
 unit/html
 
+plugins/sailfish_manager/*.gcda
+plugins/sailfish_manager/*.gcno
 drivers/*/*.gcda
 drivers/*/*.gcno
 drivers/*/*.gcov

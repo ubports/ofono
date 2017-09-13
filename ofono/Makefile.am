@@ -882,6 +882,14 @@ unit_tests = unit/test-common unit/test-util unit/test-idmap \
 
 if SAILFISH_MANAGER
 
+unit_test_sailfish_cell_info_SOURCES = unit/test-sailfish_cell_info.c \
+			plugins/sailfish_manager/sailfish_cell_info.c
+unit_test_sailfish_cell_info_CFLAGS = $(AM_CFLAGS) $(COVERAGE_OPT) \
+			-Iplugins/sailfish_cell_info
+unit_test_sailfish_cell_info_LDADD = @GLIB_LIBS@ -ldl
+unit_objects += $(unit_test_sailfish_cell_info_OBJECTS)
+unit_tests += unit/test-sailfish_cell_info
+
 unit_test_sailfish_sim_info_SOURCES = unit/test-sailfish_sim_info.c \
 			unit/fake_sailfish_watch.c \
 			plugins/sailfish_manager/sailfish_sim_info.c \

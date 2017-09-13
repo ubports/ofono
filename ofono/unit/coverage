@@ -17,6 +17,7 @@ TESTS="\
  test-sms-root \
  test-caif \
  test-provision \
+ test-sailfish_cell_info \
  test-sailfish_manager \
  test-sailfish_sim_info"
 
