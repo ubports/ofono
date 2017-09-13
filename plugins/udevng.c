@@ -1119,6 +1119,42 @@ static gboolean setup_gemalto(struct modem_info* modem)
 	return TRUE;
 }
 
+static gboolean setup_xmm7xxx(struct modem_info *modem)
+{
+	const char *mdm = NULL, *net = NULL;
+	GSList *list;
+
+	DBG("%s %s\n", __DATE__, __TIME__);
+	DBG("%s %s %s %s %s %s\n", modem->syspath, modem->devname,
+		modem->driver, modem->vendor, modem->model, modem->sysattr);
+
+	for (list = modem->devices; list; list = list->next) {
+		struct device_info *info = list->data;
+
+		DBG("%s %s %s %s %s %s %s\n", info->devpath, info->devnode,
+				info->interface, info->number, info->label,
+				info->sysattr, info->subsystem);
+
+		if (g_strcmp0(info->subsystem, "tty") == 0) {
+			if (g_strcmp0(info->number, "02") == 0)
+				mdm = info->devnode;
+		} else if (g_strcmp0(info->subsystem, "net") == 0) {
+			if (g_strcmp0(info->number, "00") == 0)
+				net = info->devnode;
+		}
+	}
+
+	if (mdm == NULL || net == NULL)
+		return FALSE;
+
+	DBG("modem=%s net=%s\n", mdm, net);
+
+	ofono_modem_set_string(modem->modem, "Modem", mdm);
+	ofono_modem_set_string(modem->modem, "NetworkInterface", net);
+
+	return TRUE;
+}
+
 static struct {
 	const char *name;
 	gboolean (*setup)(struct modem_info *modem);
@@ -1146,6 +1182,7 @@ static struct {
 	{ "quectelqmi",	setup_quectelqmi},
 	{ "ublox",	setup_ublox	},
 	{ "gemalto",	setup_gemalto	},
+	{ "xmm7xxx",	setup_xmm7xxx	},
 	/* Following are non-USB modems */
 	{ "ifx",	setup_ifx		},
 	{ "u8500",	setup_isi_serial	},
@@ -1522,6 +1559,8 @@ static struct {
 	{ "gemalto",	"qmi_wwan",	"1e2d",	"0053"	},
 	{ "telit",	"cdc_ncm",	"1bc7", "0036"	},
 	{ "telit",	"cdc_acm",	"1bc7", "0036"	},
+	{ "xmm7xxx",	"cdc_acm",	"8087", "0930"	},
+	{ "xmm7xxx",	"cdc_ncm",	"8087", "0930"	},
 	{ }
 };
 
