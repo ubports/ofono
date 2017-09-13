@@ -20,6 +20,7 @@
  */
 
 #include <drivers/atmodem/atutil.h>
+#include <drivers/atmodem/vendor.h>
 
 extern void ifx_voicecall_init(void);
 extern void ifx_voicecall_exit(void);
