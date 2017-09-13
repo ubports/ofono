@@ -508,6 +508,9 @@ builtin_sources += plugins/quectel.c
 builtin_modules += ublox
 builtin_sources += plugins/ublox.c
 
+builtin_modules += xmm7xxx
+builtin_sources += plugins/xmm7xxx.c
+
 if BLUETOOTH
 if BLUEZ4
 builtin_modules += sap
