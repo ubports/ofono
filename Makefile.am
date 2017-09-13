@@ -28,8 +28,8 @@ pkginclude_HEADERS = include/log.h include/plugin.h include/history.h \
 nodist_pkginclude_HEADERS = include/version.h
 
 if SAILFISH_MANAGER
-nodist_pkginclude_HEADERS += include/sailfish_manager.h \
-			include/sailfish_watch.h
+nodist_pkginclude_HEADERS += include/sailfish_cell_info.h \
+			include/sailfish_manager.h include/sailfish_watch.h
 endif
 
 local_headers = $(foreach file,$(pkginclude_HEADERS) \
@@ -123,7 +123,9 @@ endif
 
 if SAILFISH_MANAGER
 builtin_modules += sailfish_manager
-builtin_sources += plugins/sailfish_manager/sailfish_manager.c \
+builtin_sources += plugins/sailfish_manager/sailfish_cell_info.c \
+			plugins/sailfish_manager/sailfish_cell_info_dbus.c \
+			plugins/sailfish_manager/sailfish_manager.c \
 			plugins/sailfish_manager/sailfish_manager_dbus.c \
 			plugins/sailfish_manager/sailfish_sim_info.c \
 			plugins/sailfish_manager/sailfish_sim_info_dbus.c \
@@ -139,7 +141,6 @@ builtin_sources +=	drivers/ril/ril_call_barring.c \
 			drivers/ril/ril_call_settings.c \
 			drivers/ril/ril_call_volume.c \
 			drivers/ril/ril_cell_info.c \
-			drivers/ril/ril_cell_info_dbus.c \
 			drivers/ril/ril_config.c \
 			drivers/ril/ril_cbs.c \
 			drivers/ril/ril_data.c \
@@ -894,6 +895,7 @@ unit_tests += unit/test-sailfish_sim_info
 unit_test_sailfish_manager_SOURCES = unit/test-sailfish_manager.c \
 			unit/fake_sailfish_watch.c \
 			plugins/sailfish_manager/sailfish_manager.c \
+			plugins/sailfish_manager/sailfish_cell_info.c \
 			plugins/sailfish_manager/sailfish_sim_info.c \
 			src/storage.c src/log.c
 unit_test_sailfish_manager_CFLAGS = $(AM_CFLAGS) $(COVERAGE_OPT) \

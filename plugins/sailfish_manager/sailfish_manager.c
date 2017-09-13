@@ -27,7 +27,10 @@
 #include "storage.h"
 
 #include <sailfish_manager.h>
+#include <sailfish_cell_info.h>
+
 #include "sailfish_manager_dbus.h"
+#include "sailfish_cell_info_dbus.h"
 #include "sailfish_sim_info.h"
 #include "sailfish_watch.h"
 
@@ -84,6 +87,8 @@ struct sailfish_slot_priv {
 	struct sailfish_watch *watch;
 	struct sailfish_sim_info *siminfo;
 	struct sailfish_sim_info_dbus *siminfo_dbus;
+	struct sailfish_cell_info *cellinfo;
+	struct sailfish_cell_info_dbus *cellinfo_dbus;
 	enum sailfish_sim_state sim_state;
 	gulong watch_event_id[WATCH_EVENT_COUNT];
 	char *imei;
@@ -189,12 +194,31 @@ static gboolean sailfish_manager_foreach_slot
 	return done;
 }
 
+static void sailfish_manager_slot_update_cell_info_dbus
+					(struct sailfish_slot_priv *s)
+{
+	struct ofono_modem *modem = s->watch->modem;
+
+	if (modem && s->cellinfo) {
+		if (!s->cellinfo_dbus) {
+			s->cellinfo_dbus = sailfish_cell_info_dbus_new(modem,
+								s->cellinfo);
+		}
+	} else {
+		if (s->cellinfo_dbus) {
+			sailfish_cell_info_dbus_free(s->cellinfo_dbus);
+			s->cellinfo_dbus = NULL;
+		}
+	}
+}
+
 static void sailfish_manager_slot_modem_changed(struct sailfish_watch *w,
 							void *user_data)
 {
 	struct sailfish_slot_priv *s = user_data;
 	struct sailfish_manager_priv *p = s->manager->plugin;
 
+	sailfish_manager_slot_update_cell_info_dbus(s);
 	sailfish_manager_update_modem_paths_full(p);
 	sailfish_manager_update_ready(p);
 }
@@ -382,6 +406,8 @@ static void sailfish_slot_free(struct sailfish_slot_priv *s)
 	}
 	sailfish_sim_info_unref(s->siminfo);
 	sailfish_sim_info_dbus_free(s->siminfo_dbus);
+	sailfish_cell_info_dbus_free(s->cellinfo_dbus);
+	sailfish_cell_info_unref(s->cellinfo);
 	sailfish_watch_remove_all_handlers(s->watch, s->watch_event_id);
 	sailfish_watch_unref(s->watch);
 	g_free(s->imei);
@@ -390,6 +416,22 @@ static void sailfish_slot_free(struct sailfish_slot_priv *s)
 	s->manager = NULL;
 	g_slice_free(struct sailfish_slot_priv, s);
 	sailfish_manager_reindex_slots(p);
+}
+
+void sailfish_manager_set_cell_info(struct sailfish_slot *s,
+					struct sailfish_cell_info *info)
+{
+	if (s) {
+		struct sailfish_slot_priv *slot = sailfish_slot_priv_cast(s);
+
+		if (slot->cellinfo != info) {
+			sailfish_cell_info_dbus_free(slot->cellinfo_dbus);
+			sailfish_cell_info_unref(slot->cellinfo);
+			slot->cellinfo = sailfish_cell_info_ref(info);
+			slot->cellinfo_dbus = NULL;
+			sailfish_manager_slot_update_cell_info_dbus(slot);
+		}
+	}
 }
 
 static void sailfish_manager_update_dbus_block(struct sailfish_manager_priv *p)
@@ -437,16 +479,14 @@ static void sailfish_manager_update_dbus_block(struct sailfish_manager_priv *p)
 
 static void sailfish_manager_set_config_string
 			(struct sailfish_manager_priv *p, const char *key,
-					const char *value, gboolean sync)
+					const char *value)
 {
 	if (value) {
 		g_key_file_set_string(p->storage, SF_STORE_GROUP, key, value);
 	} else {
 		g_key_file_remove_key(p->storage, SF_STORE_GROUP, key, NULL);
 	}
-	if (sync) {
-		storage_sync(NULL, SF_STORE, p->storage);
-	}
+	storage_sync(NULL, SF_STORE, p->storage);
 }
 
 struct sailfish_manager_slot_imsi_data {
@@ -827,7 +867,7 @@ static void sailfish_manager_set_enabled_slots(struct sailfish_manager *m,
 		 * default behavior. */
 		if (data.all_enabled) {
 			sailfish_manager_set_config_string(p,
-					SF_STORE_ENABLED_SLOTS, NULL, TRUE);
+					SF_STORE_ENABLED_SLOTS, NULL);
 		} else {
 			const char *value;
 			char *tmp;
@@ -841,7 +881,7 @@ static void sailfish_manager_set_enabled_slots(struct sailfish_manager *m,
 			}
 
 			sailfish_manager_set_config_string(p,
-					SF_STORE_ENABLED_SLOTS, value, TRUE);
+					SF_STORE_ENABLED_SLOTS, value);
 			g_free(tmp);
 		}
 		g_strfreev(new_slots);
@@ -864,7 +904,7 @@ static void sailfish_manager_set_default_voice_imsi(struct sailfish_manager *m,
 		m->default_voice_imsi =
 		p->default_voice_imsi = g_strdup(imsi);
 		sailfish_manager_set_config_string(p,
-				SF_STORE_DEFAULT_VOICE_SIM, imsi, TRUE);
+				SF_STORE_DEFAULT_VOICE_SIM, imsi);
 		sailfish_manager_dbus_signal(p->dbus,
 				SAILFISH_MANAGER_SIGNAL_VOICE_IMSI |
 				sailfish_manager_update_modem_paths(p));
@@ -882,7 +922,7 @@ static void sailfish_manager_set_default_data_imsi(struct sailfish_manager *m,
 		m->default_data_imsi =
 		p->default_data_imsi = g_strdup(imsi);
 		sailfish_manager_set_config_string(p,
-				SF_STORE_DEFAULT_DATA_SIM, imsi, TRUE);
+				SF_STORE_DEFAULT_DATA_SIM, imsi);
 		sailfish_manager_dbus_signal(p->dbus,
 				SAILFISH_MANAGER_SIGNAL_DATA_IMSI |
 				sailfish_manager_update_modem_paths(p));
@@ -964,6 +1004,7 @@ void sailfish_manager_slot_error(struct sailfish_slot *s, const char *key,
 		struct sailfish_slot_priv *priv = sailfish_slot_priv_cast(s);
 		/* slot->path always starts with a slash, skip it */
 		const char *section = s->path + 1;
+
 		priv->errors = sailfish_manager_inc_error_count(priv->errors,
 								section, key);
 		sailfish_manager_dbus_signal_modem_error
