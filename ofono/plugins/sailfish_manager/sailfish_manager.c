@@ -153,13 +153,32 @@ static void sailfish_manager_update_modem_paths_full
 }
 
 /*
- * sailfish_manager_foreach_slot() terminates the loop and returns
- * TRUE if the callback returns TRUE. If all callbacks return FALSE, it
- * returns FALSE. It there are no slots, it returns FALSE too.
+ * sailfish_manager_foreach_driver() and sailfish_manager_foreach_slot()
+ * terminate the loop and return TRUE if the callback returns TRUE. If all
+ * callbacks return FALSE, they returns FALSE. It there are no drivers/slots,
+ * they return FALSE too.
  */
 
 #define SF_LOOP_CONTINUE (FALSE)
 #define SF_LOOP_DONE (TRUE)
+
+static gboolean sailfish_manager_foreach_driver(struct sailfish_manager_priv *p,
+	gboolean (*fn)(struct sailfish_slot_driver_reg *r, void *user_data),
+	void *user_data)
+{
+	struct sailfish_slot_driver_reg *r = p->drivers;
+	gboolean done = FALSE;
+
+	while (r && !done) {
+		struct sailfish_slot_driver_reg *rnext = r->next;
+
+		/* The callback returns TRUE to terminate the loop */
+		done = fn(r, user_data);
+		r = rnext;
+	}
+
+	return done;
+}
 
 static gboolean sailfish_manager_foreach_slot
 		(struct sailfish_manager_priv *p,
@@ -434,6 +453,39 @@ void sailfish_manager_set_cell_info(struct sailfish_slot *s,
 	}
 }
 
+static gboolean sailfish_manager_update_dbus_block_proc
+			(struct sailfish_slot_driver_reg *r, void *data)
+{
+	enum sailfish_manager_dbus_block *block = data;
+	struct sailfish_slot_manager *m;
+	struct sailfish_slot_priv *s;
+
+	if (r->init_id) {
+		/* Driver is being initialized */
+		(*block) |= SAILFISH_MANAGER_DBUS_BLOCK_ALL;
+		return SF_LOOP_DONE;
+	}
+
+	m = r->manager;
+	if (!m) {
+		return SF_LOOP_CONTINUE;
+	}
+
+	if (!m->started) {
+		/* Slots are being initialized */
+		(*block) |= SAILFISH_MANAGER_DBUS_BLOCK_ALL;
+		return SF_LOOP_DONE;
+	}
+
+	for (s = m->slots; s && s->imei; s = s->next);
+	if (s) {
+		/* IMEI is not available (yet) */
+		(*block) |= SAILFISH_MANAGER_DBUS_BLOCK_IMEI;
+	}
+
+	return SF_LOOP_CONTINUE;
+}
+
 static void sailfish_manager_update_dbus_block(struct sailfish_manager_priv *p)
 {
 	enum sailfish_manager_dbus_block block =
@@ -443,35 +495,8 @@ static void sailfish_manager_update_dbus_block(struct sailfish_manager_priv *p)
 		/* Plugin is being initialized */
 		block |= SAILFISH_MANAGER_DBUS_BLOCK_ALL;
 	} else {
-		struct sailfish_slot_driver_reg *r;
-
-		for (r = p->drivers; r; r = r->next) {
-			struct sailfish_slot_manager *m;
-			struct sailfish_slot_priv *s;
-
-			if (r->init_id) {
-				/* Driver is being initialized */
-				block |= SAILFISH_MANAGER_DBUS_BLOCK_ALL;
-				break;
-			}
-
-			m = r->manager;
-			if (!m) {
-				continue;
-			}
-
-			if (!m->started) {
-				/* Slots are being initialized */
-				block |= SAILFISH_MANAGER_DBUS_BLOCK_ALL;
-				break;
-			}
-
-			for (s = m->slots; s && s->imei; s = s->next);
-			if (s) {
-				/* IMEI is not available (yet) */
-				block |= SAILFISH_MANAGER_DBUS_BLOCK_IMEI;
-			}
-		}
+		sailfish_manager_foreach_driver(p,
+			sailfish_manager_update_dbus_block_proc, &block);
 	}
 
 	sailfish_manager_dbus_set_block(p->dbus, block);
@@ -680,8 +705,22 @@ static int sailfish_manager_update_modem_paths(struct sailfish_manager_priv *p)
 	return mask;
 }
 
-static gboolean sailfish_manager_update_ready_proc
-				(struct sailfish_slot_priv *s, void *unused)
+static gboolean sailfish_manager_update_ready_driver_proc
+			(struct sailfish_slot_driver_reg *r, void *unused)
+{
+	struct sailfish_slot_manager *m = r->manager;
+
+	if (!m || m->started) {
+		/* This one is either missing or ready */
+		return SF_LOOP_CONTINUE;
+	} else {
+		/* This one is not */
+		return SF_LOOP_DONE;
+	}
+}
+
+static gboolean sailfish_manager_update_ready_slot_proc
+			(struct sailfish_slot_priv *s, void *unused)
 {
 	if (s->imei && s->sim_state != SAILFISH_SIM_STATE_UNKNOWN) {
 		/* This one is ready */
@@ -695,11 +734,14 @@ static gboolean sailfish_manager_update_ready_proc
 static gboolean sailfish_manager_update_ready(struct sailfish_manager_priv *p)
 {
 	/*
-	 * sailfish_manager_foreach_slot() returns FALSE if either all
-	 * callbacks returned FALSE (SF_LOOP_CONTINUE) or there are no
-	 * slots. In either case we are ready. */
-	const gboolean ready = !sailfish_manager_foreach_slot(p,
-				sailfish_manager_update_ready_proc, NULL);
+	 * sailfish_manager_foreach_driver and sailfish_manager_foreach_slot
+	 * return FALSE if either all callbacks returned SF_LOOP_CONTINUE or
+	 * there are no drivers/slots. In either case we are ready. */
+	const gboolean ready =
+		!sailfish_manager_foreach_driver
+			(p,sailfish_manager_update_ready_driver_proc, NULL) &&
+		!sailfish_manager_foreach_slot
+			(p, sailfish_manager_update_ready_slot_proc, NULL);
 	
 	if (p->pub.ready != ready) {
 		p->pub.ready = ready;
@@ -1195,7 +1237,9 @@ static gboolean sailfish_manager_priv_init(gpointer user_data)
 	if (!p->init_countdown) {
 		p->init_id = 0;
 		DBG("done with registrations");
-		sailfish_manager_update_dbus_block(p);
+		if (!sailfish_manager_update_ready(p)) {
+			sailfish_manager_update_dbus_block(p);
+		}
 		return G_SOURCE_REMOVE;
 	} else {
 		/* Keep on waiting */
