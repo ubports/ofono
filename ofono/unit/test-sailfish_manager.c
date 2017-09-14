@@ -14,6 +14,8 @@
  */
 
 #include <sailfish_manager.h>
+#include <sailfish_cell_info.h>
+
 #include "sailfish_sim_info.h"
 #include "sailfish_manager_dbus.h"
 #include "fake_sailfish_watch.h"
@@ -173,7 +175,7 @@ void sailfish_manager_dbus_signal_error(struct sailfish_manager_dbus *d,
 void sailfish_manager_dbus_signal_modem_error(struct sailfish_manager_dbus *d,
 				int index, const char *id, const char *msg) {}
 
-/* Fake sailfish_sim_info_dbus */
+/* Fake sailfish_sim_info */
 
 struct sailfish_sim_info_dbus {
 	int unused;
@@ -187,6 +189,61 @@ struct sailfish_sim_info_dbus *sailfish_sim_info_dbus_new
 }
 
 void sailfish_sim_info_dbus_free(struct sailfish_sim_info_dbus *dbus) {}
+
+/* Fake sailfish_cell_info */
+
+static int fake_sailfish_cell_info_ref_count = 0;
+
+static void fake_sailfish_cell_info_ref(struct sailfish_cell_info *info)
+{
+	g_assert(fake_sailfish_cell_info_ref_count >= 0);
+	fake_sailfish_cell_info_ref_count++;
+}
+
+static void fake_sailfish_cell_info_unref(struct sailfish_cell_info *info)
+{
+	g_assert(fake_sailfish_cell_info_ref_count > 0);
+	fake_sailfish_cell_info_ref_count--;
+}
+
+static gulong fake_sailfish_cell_info_add_cells_changed_handler
+	(struct sailfish_cell_info *info, sailfish_cell_info_cb_t cb, void *arg)
+{
+	return 1;
+}
+
+static void fake_sailfish_cell_info_remove_handler
+				(struct sailfish_cell_info *info, gulong id)
+{
+	g_assert(id == 1);
+}
+
+static const struct sailfish_cell_info_proc fake_sailfish_cell_info_proc = {
+	fake_sailfish_cell_info_ref,
+	fake_sailfish_cell_info_unref,
+	fake_sailfish_cell_info_add_cells_changed_handler,
+	fake_sailfish_cell_info_remove_handler
+};
+
+static struct sailfish_cell_info fake_sailfish_cell_info = {
+	&fake_sailfish_cell_info_proc,
+	NULL
+};
+
+/* Fake sailfish_cell_info_dbus */
+
+struct sailfish_cell_info_dbus {
+	int unused;
+};
+
+struct sailfish_cell_info_dbus *sailfish_cell_info_dbus_new
+		(struct ofono_modem *modem, struct sailfish_cell_info *info)
+{
+	static struct sailfish_cell_info_dbus fake_sailfish_cell_info_dbus;
+	return &fake_sailfish_cell_info_dbus;
+}
+
+void sailfish_cell_info_dbus_free(struct sailfish_cell_info_dbus *dbus) {}
 
 /* Code shared by all tests */
 
@@ -347,6 +404,7 @@ static void test_basic(void)
 	sailfish_manager_foreach_slot_manager(NULL, NULL, NULL);
 	sailfish_manager_imei_obtained(NULL, NULL);
 	sailfish_manager_imeisv_obtained(NULL, NULL);
+	sailfish_manager_set_cell_info(NULL, NULL);
 	sailfish_manager_set_sim_state(NULL, SAILFISH_SIM_STATE_UNKNOWN);
 	sailfish_manager_slot_error(NULL, NULL, NULL);
 	sailfish_manager_error(NULL, NULL, NULL);
@@ -510,11 +568,36 @@ static gboolean test_sync_start_done(gpointer user_data)
 {
 	test_slot_manager *sm = user_data;
 	test_slot *s = sm->slot;
+	struct sailfish_watch *w = sailfish_watch_new(TEST_PATH);
 	struct sailfish_manager *m = fake_sailfish_manager_dbus.m;
+	struct ofono_modem modem;
 	char **slots;
 	GHashTable *errors;
 
 	g_assert(m);
+
+	/* Poke cell info API */
+	sailfish_manager_set_cell_info(s->handle, NULL);
+	sailfish_manager_set_cell_info(s->handle, &fake_sailfish_cell_info);
+
+	memset(&modem, 0, sizeof(modem));
+	w->modem = &modem;
+	w->online = TRUE;
+	fake_sailfish_watch_signal_queue(w, WATCH_SIGNAL_ONLINE_CHANGED);
+	fake_sailfish_watch_signal_queue(w, WATCH_SIGNAL_MODEM_CHANGED);
+	fake_sailfish_watch_emit_queued_signals(w);
+
+	sailfish_manager_set_cell_info(s->handle, NULL);
+	sailfish_manager_set_cell_info(s->handle, &fake_sailfish_cell_info);
+
+	w->modem = NULL;
+	w->online = FALSE;
+	fake_sailfish_watch_signal_queue(w, WATCH_SIGNAL_ONLINE_CHANGED);
+	fake_sailfish_watch_signal_queue(w, WATCH_SIGNAL_MODEM_CHANGED);
+	fake_sailfish_watch_emit_queued_signals(w);
+
+	sailfish_manager_set_cell_info(s->handle, NULL);
+	g_assert(!fake_sailfish_cell_info_ref_count);
 
 	/* Poke error counters */
 	sailfish_manager_error(sm->handle, TEST_ERROR_KEY, "Aaah!");
@@ -582,6 +665,8 @@ static gboolean test_sync_start_done(gpointer user_data)
 		 SAILFISH_MANAGER_DBUS_BLOCK_ALL);
 	fake_sailfish_manager_dbus.fn_block_changed =
 		test_quit_loop_when_unblocked;
+
+	sailfish_watch_unref(w);
 	return G_SOURCE_REMOVE;
 }
 
@@ -621,6 +706,7 @@ static void test_sync_start(void)
 		.slot_enabled_changed = test_slot_enabled_changed,
 		.slot_free = test_slot_free
 	};
+
 	struct sailfish_slot_driver_reg *reg;
 
 	test_common_init();

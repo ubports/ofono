@@ -13,8 +13,8 @@
  *  GNU General Public License for more details.
  */
 
-#ifndef SAILFISHOS_MANAGER_H
-#define SAILFISHOS_MANAGER_H
+#ifndef SAILFISH_MANAGER_H
+#define SAILFISH_MANAGER_H
 
 struct ofono_modem;
 
@@ -30,6 +30,8 @@ struct sailfish_slot_driver;
 struct sailfish_slot_driver_reg;
 struct sailfish_slot_manager;
 struct sailfish_slot_manager_impl;
+struct sailfish_cell_info;
+
 typedef void (*sailfish_slot_manager_impl_cb_t)
 		(struct sailfish_slot_manager_impl *impl, void *user_data);
 
@@ -81,14 +83,16 @@ struct sailfish_slot *sailfish_manager_slot_add
 			enum sailfish_sim_state sim_state);
 void sailfish_manager_imei_obtained(struct sailfish_slot *s, const char *imei);
 void sailfish_manager_imeisv_obtained(struct sailfish_slot *s,
-							const char *imeisv);
+						const char *imeisv);
 void sailfish_manager_set_sim_state(struct sailfish_slot *s,
-					enum sailfish_sim_state state);
+						enum sailfish_sim_state state);
 void sailfish_slot_manager_started(struct sailfish_slot_manager *m);
 void sailfish_manager_slot_error(struct sailfish_slot *s, const char *key,
-							const char *message);
+						const char *message);
 void sailfish_manager_error(struct sailfish_slot_manager *m, const char *key,
-							const char *message);
+						const char *message);
+void sailfish_manager_set_cell_info(struct sailfish_slot *s,
+						struct sailfish_cell_info *ci);
 
 /* Callbacks provided by slot plugins */
 struct sailfish_slot_driver {
@@ -110,7 +114,7 @@ struct sailfish_slot_driver {
 	void (*slot_free)(struct sailfish_slot_impl *s);
 };
 
-#endif /* SAILFISHOS_MANAGER_H */
+#endif /* SAILFISH_MANAGER_H */
 
 /*
  * Local Variables:

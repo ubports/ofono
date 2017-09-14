@@ -51,12 +51,12 @@ struct ril_modem {
 	const char *log_prefix;
 	const char *ecclist_file;
 	struct ofono_modem *ofono;
+	struct sailfish_cell_info *cell_info;
 	struct ril_radio *radio;
 	struct ril_data *data;
 	struct ril_network *network;
 	struct ril_sim_card *sim_card;
 	struct ril_sim_settings *sim_settings;
-	struct ril_cell_info *cell_info;
 	struct ril_slot_config config;
 };
 
@@ -65,18 +65,13 @@ struct ril_oem_raw *ril_oem_raw_new(struct ril_modem *modem,
 						const char *log_prefix);
 void ril_oem_raw_free(struct ril_oem_raw *raw);
 
-struct ril_cell_info_dbus;
-struct ril_cell_info_dbus *ril_cell_info_dbus_new(struct ril_modem *md,
-						struct ril_cell_info *info);
-void ril_cell_info_dbus_free(struct ril_cell_info_dbus *dbus);
-
 struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *log_prefix,
 		const char *path, const char *imei, const char *imeisv,
 		const char *ecclist_file, const struct ril_slot_config *config,
 		struct ril_radio *radio, struct ril_network *network,
 		struct ril_sim_card *card, struct ril_data *data,
 		struct ril_sim_settings *settings,
-		struct ril_cell_info *cell_info);
+		struct sailfish_cell_info *cell_info);
 void ril_modem_delete(struct ril_modem *modem);
 struct ofono_sim *ril_modem_ofono_sim(struct ril_modem *modem);
 struct ofono_gprs *ril_modem_ofono_gprs(struct ril_modem *modem);

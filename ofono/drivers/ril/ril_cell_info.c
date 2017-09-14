@@ -31,7 +31,9 @@
 typedef GObjectClass RilCellInfoClass;
 typedef struct ril_cell_info RilCellInfo;
 
-struct ril_cell_info_priv {
+struct ril_cell_info {
+	GObject object;
+	struct sailfish_cell_info info;
 	GRilIoChannel *io;
 	MceDisplay *display;
 	struct ril_radio *radio;
@@ -60,63 +62,22 @@ G_DEFINE_TYPE(RilCellInfo, ril_cell_info, G_TYPE_OBJECT)
 #define RIL_CELL_INFO(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj),\
 	RIL_CELL_INFO_TYPE, RilCellInfo))
 
-#define DBG_(self,fmt,args...) DBG("%s" fmt, (self)->priv->log_prefix, ##args)
+#define DBG_(self,fmt,args...) DBG("%s" fmt, (self)->log_prefix, ##args)
 
-gint ril_cell_compare_location(const struct ril_cell *c1,
-					const struct ril_cell *c2)
+static inline void ril_cell_free(struct sailfish_cell *cell)
 {
-	if (c1 && c2) {
-		if (c1->type != c2->type) {
-			return c1->type - c2->type;
-		} else if (c1->type == RIL_CELL_INFO_TYPE_GSM) {
-			const struct ril_cell_info_gsm *g1 = &c1->info.gsm;
-			const struct ril_cell_info_gsm *g2 = &c2->info.gsm;
-
-			if (g1->lac != g2->lac) {
-				return g1->lac - g2->lac;
-			} else {
-				return g1->cid - g2->cid;
-			}
-		} else if (c2->type == RIL_CELL_INFO_TYPE_WCDMA) {
-			const struct ril_cell_info_wcdma *w1 = &c1->info.wcdma;
-			const struct ril_cell_info_wcdma *w2 = &c2->info.wcdma;
-
-			if (w1->lac != w2->lac) {
-				return w1->lac - w2->lac;
-			} else {
-				return w1->cid - w2->cid;
-			}
-		} else {
-			const struct ril_cell_info_lte *l1 = &c1->info.lte;
-			const struct ril_cell_info_lte *l2 = &c2->info.lte;
-
-			GASSERT(c1->type == RIL_CELL_INFO_TYPE_LTE);
-			if (l1->ci != l2->ci) {
-				return l1->ci - l2->ci;
-			} else if (l1->pci != l2->pci) {
-				return l1->pci - l2->pci;
-			} else {
-				return l1->tac - l2->tac;
-			}
-		}
-	} else if (c1) {
-		return 1;
-	} else if (c2) {
-		return -1;
-	} else {
-		return 0;
-	}
+	g_slice_free(struct sailfish_cell, cell);
 }
 
-gint ril_cell_compare_func(gconstpointer v1, gconstpointer v2)
+static void ril_cell_free1(gpointer cell)
 {
-	return ril_cell_compare_location(v1, v2);
+	ril_cell_free(cell);
 }
 
 static gboolean ril_cell_info_list_identical(GSList *l1, GSList *l2)
 {
 	while (l1 && l2) {
-		if (memcmp(l1->data, l2->data, sizeof(struct ril_cell))) {
+		if (memcmp(l1->data, l2->data, sizeof(struct sailfish_cell))) {
 			return FALSE;
 		}
 		l1 = l1->next;
@@ -127,21 +88,21 @@ static gboolean ril_cell_info_list_identical(GSList *l1, GSList *l2)
 
 static void ril_cell_info_update_cells(struct ril_cell_info *self, GSList *l)
 {
-	if (!ril_cell_info_list_identical(self->cells, l)) {
-		g_slist_free_full(self->cells, g_free);
-		self->cells = l;
-		g_signal_emit(self, ril_cell_info_signals[
-						SIGNAL_CELLS_CHANGED], 0);
+	if (!ril_cell_info_list_identical(self->info.cells, l)) {
+		g_slist_free_full(self->info.cells, ril_cell_free1);
+		self->info.cells = l;
+		g_signal_emit(self, ril_cell_info_signals
+			[SIGNAL_CELLS_CHANGED], 0);
 	} else {
-		g_slist_free_full(l, g_free);
+		g_slist_free_full(l, ril_cell_free1);
 	}
 }
 
-static struct ril_cell *ril_cell_info_parse_cell_gsm(GRilIoParser *rilp,
+static struct sailfish_cell *ril_cell_info_parse_cell_gsm(GRilIoParser *rilp,
 					guint version, gboolean registered)
 {
-	struct ril_cell *cell = g_new0(struct ril_cell, 1);
-	struct ril_cell_info_gsm *gsm = &cell->info.gsm;
+	struct sailfish_cell *cell = g_slice_new0(struct sailfish_cell);
+	struct sailfish_cell_info_gsm *gsm = &cell->info.gsm;
 
 	/* Optional RIL_CellIdentityGsm_v12 part */
 	gsm->arfcn = INT_MAX;
@@ -166,21 +127,21 @@ static struct ril_cell *ril_cell_info_parse_cell_gsm(GRilIoParser *rilp,
 			gsm->mcc, gsm->mnc, gsm->lac, gsm->cid, gsm->arfcn,
 			gsm->bsic, gsm->signalStrength, gsm->bitErrorRate,
 			gsm->timingAdvance);
-		cell->type = RIL_CELL_INFO_TYPE_GSM;
+		cell->type = SAILFISH_CELL_TYPE_GSM;
 		cell->registered = registered;
 		return cell;
 	}
 
 	ofono_error("failed to parse GSM cell info");
-	g_free(cell);
+	ril_cell_free(cell);
 	return NULL;
 }
 
-static struct ril_cell *ril_cell_info_parse_cell_wcdma(GRilIoParser *rilp,
+static struct sailfish_cell *ril_cell_info_parse_cell_wcdma(GRilIoParser *rilp,
 					guint version, gboolean registered)
 {
-	struct ril_cell *cell = g_new0(struct ril_cell, 1);
-	struct ril_cell_info_wcdma *wcdma = &cell->info.wcdma;
+	struct sailfish_cell *cell = g_slice_new0(struct sailfish_cell);
+	struct sailfish_cell_info_wcdma *wcdma = &cell->info.wcdma;
 
 	/* Optional RIL_CellIdentityWcdma_v12 part */
 	wcdma->uarfcn = INT_MAX;
@@ -197,21 +158,21 @@ static struct ril_cell *ril_cell_info_parse_cell_wcdma(GRilIoParser *rilp,
 			"strength=%d,err=%d", registered, wcdma->mcc,
 			wcdma->mnc, wcdma->lac, wcdma->cid, wcdma->psc,
 			wcdma->signalStrength, wcdma->bitErrorRate);
-		cell->type = RIL_CELL_INFO_TYPE_WCDMA;
+		cell->type = SAILFISH_CELL_TYPE_WCDMA;
 		cell->registered = registered;
 		return cell;
 	}
 
 	ofono_error("failed to parse WCDMA cell info");
-	g_free(cell);
+	ril_cell_free(cell);
 	return NULL;
 }
 
-static struct ril_cell *ril_cell_info_parse_cell_lte(GRilIoParser *rilp,
+static struct sailfish_cell *ril_cell_info_parse_cell_lte(GRilIoParser *rilp,
 					guint version, gboolean registered)
 {
-	struct ril_cell *cell = g_new0(struct ril_cell, 1);
-	struct ril_cell_info_lte *lte = &cell->info.lte;
+	struct sailfish_cell *cell = g_slice_new0(struct sailfish_cell);
+	struct sailfish_cell_info_lte *lte = &cell->info.lte;
 
 	/* Optional RIL_CellIdentityLte_v12 part */
 	lte->earfcn = INT_MAX;
@@ -233,18 +194,18 @@ static struct ril_cell *ril_cell_info_parse_cell_lte(GRilIoParser *rilp,
 			"t=0x%x", registered, lte->mcc, lte->mnc, lte->ci,
 			lte->pci, lte->tac, lte->signalStrength, lte->rsrp,
 			lte->rsrq, lte->rssnr, lte->cqi, lte->timingAdvance);
-		cell->type = RIL_CELL_INFO_TYPE_LTE;
+		cell->type = SAILFISH_CELL_TYPE_LTE;
 		cell->registered = registered;
 		return cell;
 	}
 
 	ofono_error("failed to parse LTE cell info");
-	g_free(cell);
+	ril_cell_free(cell);
 	return NULL;
 }
 
 static gboolean ril_cell_info_parse_cell(GRilIoParser *rilp, guint v,
-						struct ril_cell **cell_ptr)
+					struct sailfish_cell **cell_ptr)
 {
 	int type, reg;
 
@@ -253,7 +214,7 @@ static gboolean ril_cell_info_parse_cell(GRilIoParser *rilp, guint v,
 			/* Skip timestamp */
 			grilio_parser_get_int32_array(rilp, NULL, 3)) {
 		int skip = 0;
-		struct ril_cell *cell = NULL;
+		struct sailfish_cell *cell = NULL;
 
 		/* Normalize the boolean value */
 		reg = (reg != FALSE);
@@ -302,13 +263,13 @@ static GSList *ril_cell_info_parse_list(guint v, const void *data, guint len)
 
 	grilio_parser_init(&rilp, data, len);
 	if (grilio_parser_get_int32(&rilp, &n) && n > 0) {
-		struct ril_cell *c;
+		struct sailfish_cell *c;
 
 		DBG("%d cell(s):", n);
 		for (i=0; i<n && ril_cell_info_parse_cell(&rilp, v, &c); i++) {
 			if (c) {
 				l = g_slist_insert_sorted(l, c,
-						ril_cell_compare_func);
+						sailfish_cell_compare_func);
 			}
 		}
 	}
@@ -331,11 +292,10 @@ static void ril_cell_info_list_cb(GRilIoChannel *io, int status,
 				const void *data, guint len, void *user_data)
 {
 	struct ril_cell_info *self = RIL_CELL_INFO(user_data);
-	struct ril_cell_info_priv *priv = self->priv;
 
 	DBG_(self, "");
-	GASSERT(priv->query_id);
-	priv->query_id = 0;
+	GASSERT(self->query_id);
+	self->query_id = 0;
 	ril_cell_info_update_cells(self, ril_cell_info_parse_list
 						(io->ril_version, data, len));
 }
@@ -344,21 +304,19 @@ static void ril_cell_info_set_rate_cb(GRilIoChannel *io, int status,
 				const void *data, guint len, void *user_data)
 {
 	struct ril_cell_info *self = RIL_CELL_INFO(user_data);
-	struct ril_cell_info_priv *priv = self->priv;
 
 	DBG_(self, "");
-	GASSERT(priv->set_rate_id);
-	priv->set_rate_id = 0;
+	GASSERT(self->set_rate_id);
+	self->set_rate_id = 0;
 }
 
 static void ril_cell_info_query(struct ril_cell_info *self)
 {
-	struct ril_cell_info_priv *priv = self->priv;
 	GRilIoRequest *req = grilio_request_new();
 
 	grilio_request_set_retry(req, RIL_RETRY_MS, -1);
-	grilio_channel_cancel_request(priv->io, priv->query_id, FALSE);
-	priv->query_id = grilio_channel_send_request_full(priv->io, req,
+	grilio_channel_cancel_request(self->io, self->query_id, FALSE);
+	self->query_id = grilio_channel_send_request_full(self->io, req,
 		RIL_REQUEST_GET_CELL_INFO_LIST, ril_cell_info_list_cb,
 		NULL, self);
 	grilio_request_unref(req);
@@ -366,14 +324,13 @@ static void ril_cell_info_query(struct ril_cell_info *self)
 
 static void ril_cell_info_set_rate(struct ril_cell_info *self, int ms)
 {
-	struct ril_cell_info_priv *priv = self->priv;
 	GRilIoRequest *req = grilio_request_sized_new(8);
 
 	grilio_request_append_int32(req, 1);
 	grilio_request_append_int32(req, ms);
 	grilio_request_set_retry(req, RIL_RETRY_MS, -1);
-	grilio_channel_cancel_request(priv->io, priv->set_rate_id, FALSE);
-	priv->set_rate_id = grilio_channel_send_request_full(priv->io, req,
+	grilio_channel_cancel_request(self->io, self->set_rate_id, FALSE);
+	self->set_rate_id = grilio_channel_send_request_full(self->io, req,
 			RIL_REQUEST_SET_UNSOL_CELL_INFO_LIST_RATE,
 			ril_cell_info_set_rate_cb, NULL, self);
 	grilio_request_unref(req);
@@ -381,29 +338,24 @@ static void ril_cell_info_set_rate(struct ril_cell_info *self, int ms)
 
 static void ril_cell_info_update_rate(struct ril_cell_info *self)
 {
-	struct ril_cell_info_priv *priv = self->priv;
-
 	ril_cell_info_set_rate(self,
-		(priv->display->state == MCE_DISPLAY_STATE_OFF) ?
+		(self->display->state == MCE_DISPLAY_STATE_OFF) ?
 		DISPLAY_OFF_UPDATE_RATE : DISPLAY_ON_UPDATE_RATE);
 }
 
 static void ril_cell_info_display_state_cb(MceDisplay *display, void *arg)
 {
 	struct ril_cell_info *self = RIL_CELL_INFO(arg);
-	struct ril_cell_info_priv *priv = self->priv;
 
-	if (priv->sim_card_ready) {
+	if (self->sim_card_ready) {
 		ril_cell_info_update_rate(self);
 	}
 }
 
 static void ril_cell_info_refresh(struct ril_cell_info *self)
 {
-	struct ril_cell_info_priv *priv = self->priv;
-
 	/* RIL_REQUEST_GET_CELL_INFO_LIST fails without SIM card */
-	if (priv->radio->state == RADIO_STATE_ON && priv->sim_card_ready) {
+	if (self->radio->state == RADIO_STATE_ON && self->sim_card_ready) {
 		ril_cell_info_query(self);
 	} else {
 		ril_cell_info_update_cells(self, NULL);
@@ -421,124 +373,160 @@ static void ril_cell_info_radio_state_cb(struct ril_radio *radio, void *arg)
 static void ril_cell_info_sim_status_cb(struct ril_sim_card *sim, void *arg)
 {
 	struct ril_cell_info *self = RIL_CELL_INFO(arg);
-	struct ril_cell_info_priv *priv = self->priv;
-	const gboolean sim_card_was_ready = priv->sim_card_ready;
+	const gboolean sim_card_was_ready = self->sim_card_ready;
 
 	DBG_(self, "%sready", ril_sim_card_ready(sim) ? "" : "not ");
-	priv->sim_card_ready = ril_sim_card_ready(sim);
-	if (priv->sim_card_ready != sim_card_was_ready) {
+	self->sim_card_ready = ril_sim_card_ready(sim);
+	if (self->sim_card_ready != sim_card_was_ready) {
 		ril_cell_info_refresh(self);
-		if (priv->sim_card_ready) {
+		if (self->sim_card_ready) {
 			ril_cell_info_update_rate(self);
 		}
 	}
 }
 
-gulong ril_cell_info_add_cells_changed_handler(struct ril_cell_info *self,
-					ril_cell_info_cb_t cb, void *arg)
+/* sailfish_cell_info interface callbacks */
+
+struct ril_cell_info_signal_data {
+	sailfish_cell_info_cb_t cb;
+	void *arg;
+};
+
+static inline struct ril_cell_info *ril_cell_info_cast
+					(struct sailfish_cell_info *info)
 {
-	return (G_LIKELY(self) && G_LIKELY(cb)) ? g_signal_connect(self,
-		SIGNAL_CELLS_CHANGED_NAME, G_CALLBACK(cb), arg) : 0;
+	return G_CAST(info, struct ril_cell_info, info);
 }
 
-void ril_cell_info_remove_handler(struct ril_cell_info *self, gulong id)
+static void ril_cell_info_ref_proc(struct sailfish_cell_info *info)
 {
-	if (G_LIKELY(self) && G_LIKELY(id)) {
-		g_signal_handler_disconnect(self, id);
+	g_object_ref(ril_cell_info_cast(info));
+}
+
+static void ril_cell_info_unref_proc(struct sailfish_cell_info *info)
+{
+	g_object_unref(ril_cell_info_cast(info));
+}
+
+static void ril_cell_info_cells_changed_cb(struct ril_cell_info *self,
+							void *user_data)
+{
+	struct ril_cell_info_signal_data *data = user_data;
+
+	data->cb(&self->info, data->arg);
+}
+
+static void ril_cell_info_cells_disconnect_notify(gpointer  data,
+							GClosure *closure)
+{
+	g_slice_free1(sizeof(struct ril_cell_info_signal_data), data);
+}
+
+static gulong ril_cell_info_add_cells_changed_handler_proc
+				(struct sailfish_cell_info *info,
+					sailfish_cell_info_cb_t cb, void *arg)
+{
+	if (cb) {
+		struct ril_cell_info_signal_data *data =
+			g_slice_new(struct ril_cell_info_signal_data);
+
+		data->cb = cb;
+		data->arg = arg;
+		return g_signal_connect_data(ril_cell_info_cast(info),
+				SIGNAL_CELLS_CHANGED_NAME,
+				G_CALLBACK(ril_cell_info_cells_changed_cb),
+				data, ril_cell_info_cells_disconnect_notify,
+				G_CONNECT_AFTER);
+	} else {
+		return 0;
 	}
 }
 
-struct ril_cell_info *ril_cell_info_new(GRilIoChannel *io,
+static void ril_cell_info_remove_handler_proc(struct sailfish_cell_info *info,
+								gulong id)
+{
+	if (G_LIKELY(id)) {
+		g_signal_handler_disconnect(ril_cell_info_cast(info), id);
+	}
+}
+
+struct sailfish_cell_info *ril_cell_info_new(GRilIoChannel *io,
 		const char *log_prefix, MceDisplay *display,
 		struct ril_radio *radio, struct ril_sim_card *sim_card)
 {
-	struct ril_cell_info *self = g_object_new(RIL_CELL_INFO_TYPE, 0);
-	struct ril_cell_info_priv *priv = self->priv;
+	static const struct sailfish_cell_info_proc ril_cell_info_proc = {
+		ril_cell_info_ref_proc,
+		ril_cell_info_unref_proc,
+		ril_cell_info_add_cells_changed_handler_proc,
+		ril_cell_info_remove_handler_proc
+	};
 
-	priv->io = grilio_channel_ref(io);
-	priv->display = mce_display_ref(display);
-	priv->radio = ril_radio_ref(radio);
-	priv->sim_card = ril_sim_card_ref(sim_card);
-	priv->log_prefix = (log_prefix && log_prefix[0]) ?
+	struct ril_cell_info *self = g_object_new(RIL_CELL_INFO_TYPE, 0);
+
+	self->info.proc = &ril_cell_info_proc;
+	self->io = grilio_channel_ref(io);
+	self->display = mce_display_ref(display);
+	self->radio = ril_radio_ref(radio);
+	self->sim_card = ril_sim_card_ref(sim_card);
+	self->log_prefix = (log_prefix && log_prefix[0]) ?
 		g_strconcat(log_prefix, " ", NULL) : g_strdup("");
 	DBG_(self, "");
-	priv->event_id = grilio_channel_add_unsol_event_handler(priv->io,
+	self->event_id = grilio_channel_add_unsol_event_handler(self->io,
 		ril_cell_info_list_changed_cb, RIL_UNSOL_CELL_INFO_LIST, self);
-	priv->display_state_event_id =
+	self->display_state_event_id =
 		mce_display_add_state_changed_handler(display,
 			ril_cell_info_display_state_cb, self);
-	priv->radio_state_event_id =
+	self->radio_state_event_id =
 		ril_radio_add_state_changed_handler(radio,
 			ril_cell_info_radio_state_cb, self);
-	priv->sim_status_event_id =
-		ril_sim_card_add_status_changed_handler(priv->sim_card,
+	self->sim_status_event_id =
+		ril_sim_card_add_status_changed_handler(self->sim_card,
 			ril_cell_info_sim_status_cb, self);
-	priv->sim_card_ready = ril_sim_card_ready(sim_card);
-	if (priv->sim_card_ready) {
+	self->sim_card_ready = ril_sim_card_ready(sim_card);
+	if (self->sim_card_ready) {
 		ril_cell_info_query(self);
 		ril_cell_info_update_rate(self);
 	}
-	return self;
-}
-
-struct ril_cell_info *ril_cell_info_ref(struct ril_cell_info *self)
-{
-	if (G_LIKELY(self)) {
-		g_object_ref(RIL_CELL_INFO(self));
-		return self;
-	} else {
-		return NULL;
-	}
-}
-
-void ril_cell_info_unref(struct ril_cell_info *self)
-{
-	if (G_LIKELY(self)) {
-		g_object_unref(RIL_CELL_INFO(self));
-	}
+	return &self->info;
 }
 
 static void ril_cell_info_init(struct ril_cell_info *self)
 {
-	self->priv = G_TYPE_INSTANCE_GET_PRIVATE(self, RIL_CELL_INFO_TYPE,
-						struct ril_cell_info_priv);
 }
 
 static void ril_cell_info_dispose(GObject *object)
 {
 	struct ril_cell_info *self = RIL_CELL_INFO(object);
-	struct ril_cell_info_priv *priv = self->priv;
 
-	grilio_channel_remove_handlers(priv->io, &priv->event_id, 1);
-	if (priv->query_id) {
-		grilio_channel_cancel_request(priv->io, priv->query_id, FALSE);
-		priv->query_id = 0;
+	grilio_channel_remove_handlers(self->io, &self->event_id, 1);
+	if (self->query_id) {
+		grilio_channel_cancel_request(self->io, self->query_id, FALSE);
+		self->query_id = 0;
 	}
-	if (priv->set_rate_id) {
-		grilio_channel_cancel_request(priv->io, priv->set_rate_id,
+	if (self->set_rate_id) {
+		grilio_channel_cancel_request(self->io, self->set_rate_id,
 									FALSE);
-		priv->set_rate_id = 0;
+		self->set_rate_id = 0;
 	}
-	gutil_disconnect_handlers(priv->display,
-					&priv->display_state_event_id, 1);
-	ril_radio_remove_handlers(priv->radio, &priv->radio_state_event_id, 1);
-	ril_sim_card_remove_handlers(priv->sim_card,
-					&priv->sim_status_event_id, 1);
+	gutil_disconnect_handlers(self->display,
+					&self->display_state_event_id, 1);
+	ril_radio_remove_handlers(self->radio, &self->radio_state_event_id, 1);
+	ril_sim_card_remove_handlers(self->sim_card,
+					&self->sim_status_event_id, 1);
 	G_OBJECT_CLASS(ril_cell_info_parent_class)->dispose(object);
 }
 
 static void ril_cell_info_finalize(GObject *object)
 {
 	struct ril_cell_info *self = RIL_CELL_INFO(object);
-	struct ril_cell_info_priv *priv = self->priv;
 
 	DBG_(self, "");
-	g_free(priv->log_prefix);
-	grilio_channel_unref(priv->io);
-	mce_display_unref(priv->display);
-	ril_radio_unref(priv->radio);
-	ril_sim_card_unref(priv->sim_card);
-	g_slist_free_full(self->cells, g_free);
+	g_free(self->log_prefix);
+	grilio_channel_unref(self->io);
+	mce_display_unref(self->display);
+	ril_radio_unref(self->radio);
+	ril_sim_card_unref(self->sim_card);
+	g_slist_free_full(self->info.cells, ril_cell_free1);
 	G_OBJECT_CLASS(ril_cell_info_parent_class)->finalize(object);
 }
 
@@ -548,7 +536,6 @@ static void ril_cell_info_class_init(RilCellInfoClass *klass)
 
 	object_class->dispose = ril_cell_info_dispose;
 	object_class->finalize = ril_cell_info_finalize;
-	g_type_class_add_private(klass, sizeof(struct ril_cell_info_priv));
 	ril_cell_info_signals[SIGNAL_CELLS_CHANGED] =
 		g_signal_new(SIGNAL_CELLS_CHANGED_NAME,
 			G_OBJECT_CLASS_TYPE(klass), G_SIGNAL_RUN_FIRST,

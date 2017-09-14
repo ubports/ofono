@@ -395,44 +395,6 @@ enum ril_cell_info_type {
 	RIL_CELL_INFO_TYPE_TD_SCDMA = 5
 };
 
-struct ril_cell_info_gsm {
-	int mcc;            /* Mobile Country Code (0..999) */
-	int mnc;            /* Mobile Network Code (0..999) */
-	int lac;            /* Location Area Code (0..65535) */
-	int cid;            /* GSM Cell Identity (0..65535) TS 27.007 */
-	int arfcn;          /* 16-bit GSM Absolute RF channel number */
-	int bsic;           /* 6-bit Base Station Identity Code */
-	int signalStrength; /* (0-31, 99) TS 27.007 */
-	int bitErrorRate;   /* (0-7, 99) TS 27.007 */
-	int timingAdvance;  /* Timing Advance. 1 period = 48/13 us */
-};
-
-struct ril_cell_info_wcdma {
-	int mcc;            /* Mobile Country Code (0..999) */
-	int mnc;            /* Mobile Network Code (0..999) */
-	int lac;            /* Location Area Code (0..65535) */
-	int cid;            /* UMTS Cell Identity (0..268435455) TS 25.331 */
-	int psc;            /* Primary Scrambling Code (0..511) TS 25.331) */
-	int uarfcn;         /* 16-bit UMTS Absolute RF Channel Number */
-	int signalStrength; /* (0-31, 99) TS 27.007 */
-	int bitErrorRate;   /* (0-7, 99) TS 27.007 */
-};
-
-struct ril_cell_info_lte {
-	int mcc;            /* Mobile Country Code (0..999) */
-	int mnc;            /* Mobile Network Code (0..999) */
-	int ci;             /* Cell Identity */
-	int pci;            /* Physical cell id (0..503) */
-	int tac;            /* Tracking area code */
-	int earfcn;         /* 18-bit LTE Absolute RC Channel Number */
-	int signalStrength; /* (0-31, 99) TS 27.007 8.5 */
-	int rsrp;           /* Reference Signal Receive Power TS 36.133 */
-	int rsrq;           /* Reference Signal Receive Quality TS 36.133 */
-	int rssnr;          /* Reference Signal-to-Noise Ratio TS 36.101*/
-	int cqi;            /* Channel Quality Indicator TS 36.101 */
-	int timingAdvance;  /* (Distance = 300m/us) TS 36.321 */
-};
-
 /* RIL Request Messages, ofono -> rild */
 #define RIL_REQUEST_GET_SIM_STATUS 1
 #define RIL_REQUEST_ENTER_SIM_PIN 2
