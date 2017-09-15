@@ -23,7 +23,7 @@ BuildRequires:  pkgconfig(libwspcodec) >= 2.0
 BuildRequires:  pkgconfig(libgrilio) >= 1.0.18
 BuildRequires:  pkgconfig(libglibutil) >= 1.0.23
 BuildRequires:  pkgconfig(libdbuslogserver-dbus)
-BuildRequires:  pkgconfig(libmce-glib)
+BuildRequires:  pkgconfig(libmce-glib) >= 1.0.5
 BuildRequires:  pkgconfig(mobile-broadband-provider-info)
 BuildRequires:  libtool
 BuildRequires:  automake
