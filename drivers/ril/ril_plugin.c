@@ -48,7 +48,6 @@
                                      OFONO_RADIO_ACCESS_MODE_LTE)
 
 #define RIL_DEVICE_IDENTITY_RETRIES_LAST 2
-#define RIL_START_TIMEOUT_SEC       20 /* seconds */
 
 #define RADIO_GID                   1001
 #define RADIO_UID                   1001
@@ -65,11 +64,18 @@
 #define RILMODEM_DEFAULT_SIM_FLAGS  RIL_SIM_CARD_V9_UICC_SUBSCRIPTION_WORKAROUND
 #define RILMODEM_DEFAULT_DATA_OPT   RIL_ALLOW_DATA_AUTO
 #define RILMODEM_DEFAULT_DM_FLAGS   RIL_DATA_MANAGER_3GLTE_HANDOVER
+#define RILMODEM_DEFAULT_START_TIMEOUT 20000 /* ms */
 #define RILMODEM_DEFAULT_DATA_CALL_FORMAT RIL_DATA_CALL_FORMAT_AUTO
 #define RILMODEM_DEFAULT_DATA_CALL_RETRY_LIMIT 4
 #define RILMODEM_DEFAULT_DATA_CALL_RETRY_DELAY 200 /* ms */
 #define RILMODEM_DEFAULT_EMPTY_PIN_QUERY TRUE /* optimistic */
 
+/*
+ * The convention is that the keys which can only appear in the [Settings]
+ * section start with the upper case, those which appear in the [ril_*]
+ * modem section (OR in the [Settings] if they apply to all modems) start
+ * with lower case.
+ */
 #define RILCONF_SETTINGS_EMPTY      "EmptyConfig"
 #define RILCONF_SETTINGS_3GHANDOVER "3GLTEHandover"
 #define RILCONF_SETTINGS_SET_RADIO_CAP "SetRadioCapability"
@@ -80,10 +86,11 @@
 #define RILCONF_SOCKET              "socket"
 #define RILCONF_SLOT                "slot"
 #define RILCONF_SUB                 "sub"
+#define RILCONF_START_TIMEOUT       "startTimeout"
 #define RILCONF_TIMEOUT             "timeout"
 #define RILCONF_4G                  "enable4G" /* Deprecated */
 #define RILCONF_ENABLE_VOICECALL    "enableVoicecall"
-#define RILCONF_TECHS               "technologies"
+#define RILCONF_TECHNOLOGIES        "technologies"
 #define RILCONF_UICC_WORKAROUND     "uiccWorkaround"
 #define RILCONF_ECCLIST_FILE        "ecclistFile"
 #define RILCONF_ALLOW_DATA_REQ      "allowDataReq"
@@ -164,6 +171,8 @@ typedef struct sailfish_slot_impl {
 	struct ril_sim_settings *sim_settings;
 	struct ril_oem_raw *oem_raw;
 	struct ril_data *data;
+	guint start_timeout;
+	guint start_timeout_id;
 	MceDisplay *display;
 	gboolean display_on;
 	gulong display_event_id[DISPLAY_EVENT_COUNT];
@@ -750,10 +759,27 @@ static void ril_plugin_radio_caps_cb(const struct ril_radio_capability *cap,
 	}
 }
 
-static void ril_plugin_slot_connected_all(ril_slot *slot, void *param)
+static void ril_plugin_all_slots_started_cb(ril_slot *slot, void *param)
 {
 	if (!slot->handle) {
 		(*((gboolean*)param)) = FALSE; /* Not all */
+	}
+}
+
+static void ril_plugin_check_if_started(ril_plugin* plugin)
+{
+	if (plugin->start_timeout_id) {
+		gboolean all = TRUE;
+
+		ril_plugin_foreach_slot_param(plugin,
+				ril_plugin_all_slots_started_cb, &all);
+		if (all) {
+			DBG("Startup done!");
+			g_source_remove(plugin->start_timeout_id);
+			/* id is zeroed by ril_plugin_manager_start_done */
+			GASSERT(!plugin->start_timeout_id);
+			sailfish_slot_manager_started(plugin->handle);
+		}
 	}
 }
 
@@ -828,28 +854,27 @@ static void ril_plugin_slot_connected(ril_slot *slot)
 		(ps->set_radio_cap == RIL_SET_RADIO_CAP_ENABLED ||
 		(ps->set_radio_cap == RIL_SET_RADIO_CAP_AUTO &&
 					slot->io->ril_version >= 11))) {
-		/* Check if RIL really support radio capability management */
+		/* Check if RIL really supports radio capability management */
 		slot->caps_check_id = ril_radio_caps_check(slot->io,
 					ril_plugin_radio_caps_cb, slot);
 	}
 
 	if (!slot->handle) {
-		gboolean all = TRUE;
-
 		GASSERT(plugin->start_timeout_id);
+		GASSERT(slot->start_timeout_id);
+
+		/* We have made it before the timeout expired */
+		g_source_remove(slot->start_timeout_id);
+		slot->start_timeout_id = 0;
+
+		/* Register this slot with the sailfish manager plugin */
 		slot->handle = sailfish_manager_slot_add(plugin->handle, slot,
 				slot->path, slot->config.techs, slot->imei,
 				slot->imeisv, ril_plugin_sim_state(slot));
-
-		ril_plugin_foreach_slot_param(plugin,
-					ril_plugin_slot_connected_all, &all);
 		sailfish_manager_set_cell_info(slot->handle, slot->cell_info);
-		if (all && plugin->start_timeout_id) {
-			DBG("Startup done!");
-			g_source_remove(plugin->start_timeout_id);
-			GASSERT(!plugin->start_timeout_id);
-			sailfish_slot_manager_started(plugin->handle);
-		}
+
+		/* Check if this was the last slot we were waiting for */
+		ril_plugin_check_if_started(plugin);
 	}
 
 	ril_plugin_send_screen_state(slot);
@@ -949,6 +974,43 @@ static void ril_plugin_slot_modem_changed(struct sailfish_watch *w,
 	}
 }
 
+static void ril_slot_free(ril_slot *slot)
+{
+	ril_plugin* plugin = slot->plugin;
+
+	DBG("%s", slot->sockpath);
+	ril_plugin_shutdown_slot(slot, TRUE);
+	plugin->slots = g_slist_remove(plugin->slots, slot);
+	mce_display_remove_all_handlers(slot->display, slot->display_event_id);
+	mce_display_unref(slot->display);
+	sailfish_watch_remove_all_handlers(slot->watch, slot->watch_event_id);
+	sailfish_watch_unref(slot->watch);
+	ril_sim_settings_unref(slot->sim_settings);
+	gutil_ints_unref(slot->config.local_hangup_reasons);
+	gutil_ints_unref(slot->config.remote_hangup_reasons);
+	g_free(slot->path);
+	g_free(slot->imei);
+	g_free(slot->imeisv);
+	g_free(slot->name);
+	g_free(slot->sockpath);
+	g_free(slot->sub);
+	g_free(slot->ecclist_file);
+	g_slice_free(ril_slot, slot);
+}
+
+static gboolean ril_plugin_slot_start_timeout(gpointer user_data)
+{
+	ril_slot *slot = user_data;
+	ril_plugin* plugin = slot->plugin;
+
+	DBG("%s", slot->sockpath);
+	plugin->slots = g_slist_remove(plugin->slots, slot);
+	slot->start_timeout_id = 0;
+	ril_slot_free(slot);
+	ril_plugin_check_if_started(plugin);
+	return G_SOURCE_REMOVE;
+}
+
 static ril_slot *ril_plugin_slot_new_take(char *sockpath, char *path,
 						char *name, guint slot_index)
 {
@@ -1025,198 +1087,198 @@ static GSList *ril_plugin_create_default_config()
 static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 							const char *group)
 {
-	ril_slot *slot = NULL;
+	ril_slot *slot;
+	struct ril_slot_config *config;
+	int ival;
+	char *sval;
+	char **strv;
 	char *sock = g_key_file_get_string(file, group, RILCONF_SOCKET, NULL);
-	if (sock) {
-		int value;
-		char *strval;
-		char **strv;
-		char *sub = ril_config_get_string(file, group, RILCONF_SUB);
 
-		slot = ril_plugin_slot_new_take(sock,
+	if (!sock) {
+		ofono_warn("no socket path for %s", group);
+		return NULL;
+	}
+
+	slot = ril_plugin_slot_new_take(sock,
 			g_strconcat("/", group, NULL),
 			ril_config_get_string(file, group, RILCONF_NAME),
 			RILMODEM_DEFAULT_SLOT);
+	config = &slot->config;
 
-		if (sub && strlen(sub) == RIL_SUB_SIZE) {
-			DBG("%s: %s:%s", group, sock, sub);
-			slot->sub = sub;
-		} else {
-			DBG("%s: %s", group, sock);
-			g_free(sub);
-		}
+	/* sub */
+	sval = ril_config_get_string(file, group, RILCONF_SUB);
+	if (sval && strlen(sval) == RIL_SUB_SIZE) {
+		DBG("%s: %s:%s", group, sock, sval);
+		slot->sub = sval;
+	} else {
+		DBG("%s: %s", group, sock);
+		g_free(sval);
+	}
 
-		if (ril_config_get_integer(file, group, RILCONF_SLOT, &value) &&
-								value >= 0) {
-			slot->config.slot = value;
-			DBG("%s: slot %u", group, slot->config.slot);
-		}
+	/* slot */
+	if (ril_config_get_integer(file, group, RILCONF_SLOT, &ival) &&
+								ival >= 0) {
+		config->slot = ival;
+		DBG("%s: " RILCONF_SLOT " %u", group, config->slot);
+	}
 
-		if (ril_config_get_integer(file, group, RILCONF_TIMEOUT,
+	/* startTimeout */
+	if (ril_config_get_integer(file, group, RILCONF_START_TIMEOUT,
+							&ival) && ival >= 0) {
+		DBG("%s: " RILCONF_START_TIMEOUT " %d ms", group, ival);
+		slot->start_timeout = ival;
+	} else {
+		slot->start_timeout = RILMODEM_DEFAULT_START_TIMEOUT;
+	}
+
+	slot->start_timeout_id = g_timeout_add(slot->start_timeout,
+					ril_plugin_slot_start_timeout, slot);
+
+	/* timeout */
+	if (ril_config_get_integer(file, group, RILCONF_TIMEOUT,
 							&slot->timeout)) {
-			DBG("%s: timeout %d", group, slot->timeout);
-		}
+		DBG("%s: " RILCONF_TIMEOUT " %d", group, slot->timeout);
+	}
 
-		if (ril_config_get_boolean(file, group,
-					RILCONF_ENABLE_VOICECALL,
-					&slot->config.enable_voicecall)) {
-			DBG("%s: %s %s", group, RILCONF_ENABLE_VOICECALL,
-				slot->config.enable_voicecall ? "yes" : "no");
-		}
+	/* enableVoicecall */
+	if (ril_config_get_boolean(file, group, RILCONF_ENABLE_VOICECALL,
+					&config->enable_voicecall)) {
+		DBG("%s: " RILCONF_ENABLE_VOICECALL " %s", group,
+				config->enable_voicecall ? "yes" : "no");
+	}
 
-		strv = ril_config_get_strings(file, group, RILCONF_TECHS, ',');
-		if (strv) {
-			char **p;
+	/* technologies */
+	strv = ril_config_get_strings(file, group, RILCONF_TECHNOLOGIES, ',');
+	if (strv) {
+		char **p;
 
-			slot->config.techs = 0;
-			for (p = strv; *p; p++) {
-				const char *s = *p;
-				enum ofono_radio_access_mode m;
+		config->techs = 0;
+		for (p = strv; *p; p++) {
+			const char *s = *p;
+			enum ofono_radio_access_mode m;
 
-				if (!s[0]) {
-					continue;
-				}
-
-				if (!strcmp(s, "all")) {
-					slot->config.techs =
-						OFONO_RADIO_ACCESS_MODE_ALL;
-					break;
-				}
-
-				if (!ofono_radio_access_mode_from_string(s,
-									&m)) {
-					ofono_warn("Unknown technology %s "
-						"in [%s] section of %s", s,
-						group, RILMODEM_CONF_FILE);
-					continue;
-				}
-
-				if (m == OFONO_RADIO_ACCESS_MODE_ANY) {
-					slot->config.techs =
-						OFONO_RADIO_ACCESS_MODE_ALL;
-					break;
-				}
-
-				slot->config.techs |= m;
+			if (!s[0]) {
+				continue;
 			}
-			g_strfreev(strv);
+
+			if (!strcmp(s, "all")) {
+				config->techs = OFONO_RADIO_ACCESS_MODE_ALL;
+				break;
+			}
+
+			if (!ofono_radio_access_mode_from_string(s, &m)) {
+				ofono_warn("Unknown technology %s in [%s] "
+					"section of %s", s, group,
+					RILMODEM_CONF_FILE);
+				continue;
+			}
+
+			if (m == OFONO_RADIO_ACCESS_MODE_ANY) {
+				config->techs = OFONO_RADIO_ACCESS_MODE_ALL;
+				break;
+			}
+
+			config->techs |= m;
 		}
+		g_strfreev(strv);
+	}
 
-		/* "enable4G" is deprecated */
-		value = slot->config.techs;
-		if (ril_config_get_flag(file, group, RILCONF_4G,
-				OFONO_RADIO_ACCESS_MODE_LTE, &value)) {
-			slot->config.techs = value;
-		}
+	/* enable4G (deprecated but still supported) */
+	ival = config->techs;
+	if (ril_config_get_flag(file, group, RILCONF_4G,
+			OFONO_RADIO_ACCESS_MODE_LTE, &ival)) {
+		config->techs = ival;
+	}
 
-		DBG("%s: technologies 0x%02x", group, slot->config.techs);
+	DBG("%s: technologies 0x%02x", group, config->techs);
 
-		if (ril_config_get_boolean(file, group, RILCONF_EMPTY_PIN_QUERY,
-					&slot->config.empty_pin_query)) {
-			DBG("%s: %s %s", group, RILCONF_EMPTY_PIN_QUERY,
-				slot->config.empty_pin_query ? "on" : "off");
-		}
+	/* emptyPinQuery */
+	if (ril_config_get_boolean(file, group, RILCONF_EMPTY_PIN_QUERY,
+					&config->empty_pin_query)) {
+		DBG("%s: " RILCONF_EMPTY_PIN_QUERY " %s", group,
+				config->empty_pin_query ? "on" : "off");
+	}
 
-		if (ril_config_get_flag(file, group, RILCONF_UICC_WORKAROUND,
-				RIL_SIM_CARD_V9_UICC_SUBSCRIPTION_WORKAROUND,
-				&slot->sim_flags)) {
-			DBG("%s: %s %s", group, RILCONF_UICC_WORKAROUND,
-				(slot->sim_flags &
-				RIL_SIM_CARD_V9_UICC_SUBSCRIPTION_WORKAROUND) ?
-				"on" : "off");
-		}
+	/* uiccWorkaround */
+	if (ril_config_get_flag(file, group, RILCONF_UICC_WORKAROUND,
+			RIL_SIM_CARD_V9_UICC_SUBSCRIPTION_WORKAROUND,
+			&slot->sim_flags)) {
+		DBG("%s: " RILCONF_UICC_WORKAROUND " %s",
+			group, (slot->sim_flags &
+			RIL_SIM_CARD_V9_UICC_SUBSCRIPTION_WORKAROUND) ?
+			"on" : "off");
+	}
 
-		if (ril_config_get_enum(file, group, RILCONF_ALLOW_DATA_REQ,
-				&value, "auto", RIL_ALLOW_DATA_AUTO,
+	/* allowDataReq */
+	if (ril_config_get_enum(file, group, RILCONF_ALLOW_DATA_REQ, &ival,
+				"auto", RIL_ALLOW_DATA_AUTO,
 				"on", RIL_ALLOW_DATA_ENABLED,
 				"off", RIL_ALLOW_DATA_DISABLED, NULL)) {
-			DBG("%s: %s %s", group, RILCONF_ALLOW_DATA_REQ,
-				value == RIL_ALLOW_DATA_ENABLED ? "enabled":
-				value == RIL_ALLOW_DATA_DISABLED ? "disabled":
+		DBG("%s: " RILCONF_ALLOW_DATA_REQ " %s", group,
+				ival == RIL_ALLOW_DATA_ENABLED ? "enabled":
+				ival == RIL_ALLOW_DATA_DISABLED ? "disabled":
 				"auto");
-			slot->data_opt.allow_data = value;
-		}
+		slot->data_opt.allow_data = ival;
+	}
 
-		if (ril_config_get_enum(file, group, RILCONF_DATA_CALL_FORMAT,
-				&value, "auto", RIL_DATA_CALL_FORMAT_AUTO,
-					"6", RIL_DATA_CALL_FORMAT_6,
-					"9", RIL_DATA_CALL_FORMAT_9,
-					"11", RIL_DATA_CALL_FORMAT_11, NULL)) {
-			if (value == RIL_DATA_CALL_FORMAT_AUTO) {
-				DBG("%s: %s auto", group,
-					RILCONF_DATA_CALL_FORMAT);
-			} else {
-				DBG("%s: %s %d", group,
-					RILCONF_DATA_CALL_FORMAT, value);
-			}
-			slot->data_opt.data_call_format = value;
-		}
-
-		if (ril_config_get_integer(file, group,
-			RILCONF_DATA_CALL_RETRY_LIMIT, &value) && value >= 0) {
-			DBG("%s: %s %d", group,
-					RILCONF_DATA_CALL_RETRY_LIMIT, value);
-			slot->data_opt.data_call_retry_limit = value;
-		}
-
-		if (ril_config_get_integer(file, group,
-			RILCONF_DATA_CALL_RETRY_DELAY, &value) && value >= 0) {
-			DBG("%s: %s %d ms", group,
-					RILCONF_DATA_CALL_RETRY_DELAY, value);
-			slot->data_opt.data_call_retry_delay_ms = value;
-		}
-
-		slot->ecclist_file = ril_config_get_string(file, group,
-							RILCONF_ECCLIST_FILE);
-		if (slot->ecclist_file && slot->ecclist_file[0]) {
-			DBG("%s: %s %s", group, RILCONF_ECCLIST_FILE,
-							slot->ecclist_file);
+	/* dataCallFormat */
+	if (ril_config_get_enum(file, group, RILCONF_DATA_CALL_FORMAT, &ival,
+				"auto", RIL_DATA_CALL_FORMAT_AUTO,
+				"6", RIL_DATA_CALL_FORMAT_6,
+				"9", RIL_DATA_CALL_FORMAT_9,
+				"11", RIL_DATA_CALL_FORMAT_11, NULL)) {
+		if (ival == RIL_DATA_CALL_FORMAT_AUTO) {
+			DBG("%s: " RILCONF_DATA_CALL_FORMAT " auto", group);
 		} else {
-			g_free(slot->ecclist_file);
-			slot->ecclist_file = NULL;
+			DBG("%s: " RILCONF_DATA_CALL_FORMAT " %d", group, ival);
 		}
+		slot->data_opt.data_call_format = ival;
+	}
 
-		slot->config.local_hangup_reasons = ril_config_get_ints(file,
-					group, RILCONF_LOCAL_HANGUP_REASONS);
-		strval = ril_config_ints_to_string(
-				slot->config.local_hangup_reasons, ',');
-		if (strval) {
-			DBG("%s: %s %s", group, RILCONF_LOCAL_HANGUP_REASONS,
-								strval);
-			g_free(strval);
-		}
+	/* dataCallRetryLimit */
+	if (ril_config_get_integer(file, group, RILCONF_DATA_CALL_RETRY_LIMIT,
+						&ival) && ival >= 0) {
+		DBG("%s: " RILCONF_DATA_CALL_RETRY_LIMIT " %d", group, ival);
+		slot->data_opt.data_call_retry_limit = ival;
+	}
 
-		slot->config.remote_hangup_reasons = ril_config_get_ints(file,
-					group, RILCONF_REMOTE_HANGUP_REASONS);
-		strval = ril_config_ints_to_string(
-				slot->config.remote_hangup_reasons, ',');
-		if (strval) {
-			DBG("%s: %s %s", group, RILCONF_REMOTE_HANGUP_REASONS,
-								strval);
-			g_free(strval);
-		}
+	/* dataCallRetryDelay */
+	if (ril_config_get_integer(file, group, RILCONF_DATA_CALL_RETRY_DELAY,
+						&ival) && ival >= 0) {
+		DBG("%s: " RILCONF_DATA_CALL_RETRY_DELAY " %d ms", group, ival);
+		slot->data_opt.data_call_retry_delay_ms = ival;
+	}
 
+	/* ecclistFile */
+	slot->ecclist_file = ril_config_get_string(file, group,
+						RILCONF_ECCLIST_FILE);
+	if (slot->ecclist_file && slot->ecclist_file[0]) {
+		DBG("%s: " RILCONF_ECCLIST_FILE " %s", group,
+							slot->ecclist_file);
 	} else {
-		DBG("no socket path in %s", group);
+		g_free(slot->ecclist_file);
+		slot->ecclist_file = NULL;
+	}
+
+	/* localHangupReasons */
+	config->local_hangup_reasons = ril_config_get_ints(file, group,
+						RILCONF_LOCAL_HANGUP_REASONS);
+	sval = ril_config_ints_to_string(config->local_hangup_reasons, ',');
+	if (sval) {
+		DBG("%s: " RILCONF_LOCAL_HANGUP_REASONS " %s", group, sval);
+		g_free(sval);
+	}
+
+	/* remoteHangupReasons */
+	config->remote_hangup_reasons = ril_config_get_ints(file, group,
+						RILCONF_REMOTE_HANGUP_REASONS);
+	sval = ril_config_ints_to_string(config->remote_hangup_reasons, ',');
+	if (sval) {
+		DBG("%s: " RILCONF_REMOTE_HANGUP_REASONS " %s", group, sval);
+		g_free(sval);
 	}
 
 	return slot;
-}
-
-static void ril_plugin_delete_slot(ril_slot *slot)
-{
-	ril_plugin_shutdown_slot(slot, TRUE);
-	ril_sim_settings_unref(slot->sim_settings);
-	gutil_ints_unref(slot->config.local_hangup_reasons);
-	gutil_ints_unref(slot->config.remote_hangup_reasons);
-	g_free(slot->path);
-	g_free(slot->imei);
-	g_free(slot->imeisv);
-	g_free(slot->name);
-	g_free(slot->sockpath);
-	g_free(slot->sub);
-	g_free(slot->ecclist_file);
-	g_free(slot);
 }
 
 static GSList *ril_plugin_add_slot(GSList *slots, ril_slot *new_slot)
@@ -1240,7 +1302,7 @@ static GSList *ril_plugin_add_slot(GSList *slots, ril_slot *new_slot)
 
 		if (delete_this_slot) {
 			slots = g_slist_delete_link(slots, link);
-			ril_plugin_delete_slot(slot);
+			ril_slot_free(slot);
 		}
 
 		link = next;
@@ -1290,19 +1352,21 @@ static GSList *ril_plugin_parse_config_file(GKeyFile *file,
 			}
 		} else if (!strcmp(group, RILCONF_SETTINGS_GROUP)) {
 			/* Plugin configuration */
-			int value;
+			int ival;
 
+			/* 3GLTEHandover */
 			ril_config_get_flag(file, group,
 				RILCONF_SETTINGS_3GHANDOVER,
 				RIL_DATA_MANAGER_3GLTE_HANDOVER,
 				&ps->dm_flags);
 
+			/* SetRadioCapability */
 			if (ril_config_get_enum(file, group,
-				RILCONF_SETTINGS_SET_RADIO_CAP, &value,
+				RILCONF_SETTINGS_SET_RADIO_CAP, &ival,
 				"auto", RIL_SET_RADIO_CAP_AUTO,
 				"on", RIL_SET_RADIO_CAP_ENABLED,
 				"off", RIL_SET_RADIO_CAP_DISABLED, NULL)) {
-				ps->set_radio_cap = value;
+				ps->set_radio_cap = ival;
 			}
 		}
 	}
@@ -1405,8 +1469,8 @@ static void ril_plugin_drop_orphan_slots(ril_plugin *plugin)
 		ril_slot *slot = l->data;
 
 		if (!slot->handle) {
-			ril_plugin_delete_slot(slot);
 			plugin->slots = g_slist_delete_link(plugin->slots, l);
+			ril_slot_free(slot);
 		}
 		l = next;
 	}
@@ -1428,8 +1492,11 @@ static void ril_plugin_manager_start_done(gpointer user_data)
 	ril_plugin *plugin = user_data;
 
 	DBG("");
-	plugin->start_timeout_id = 0;
-	ril_plugin_drop_orphan_slots(plugin);
+	if (plugin->start_timeout_id) {
+		/* Startup was cancelled */
+		plugin->start_timeout_id = 0;
+		ril_plugin_drop_orphan_slots(plugin);
+	}
 }
 
 static ril_plugin *ril_plugin_manager_create(struct sailfish_slot_manager *m)
@@ -1443,9 +1510,19 @@ static ril_plugin *ril_plugin_manager_create(struct sailfish_slot_manager *m)
 	return plugin;
 }
 
+static void ril_plugin_slot_check_timeout_cb(ril_slot *slot, void *param)
+{
+	guint *timeout = param;
+
+	if ((*timeout) < slot->start_timeout) {
+		(*timeout) = slot->start_timeout;
+	}
+}
+
 static guint ril_plugin_manager_start(ril_plugin *plugin)
 {
 	struct ril_plugin_settings *ps = &plugin->settings;
+	guint start_timeout = 0;
 
 	DBG("");
 	GASSERT(!plugin->start_timeout_id);
@@ -1472,14 +1549,11 @@ static guint ril_plugin_manager_start(ril_plugin *plugin)
 	ofono_cbs_driver_register(&ril_cbs_driver);
 	ofono_stk_driver_register(&ril_stk_driver);
 
-	if (plugin->slots) {
-		plugin->start_timeout_id =
-			g_timeout_add_seconds_full(G_PRIORITY_DEFAULT,
-				RIL_START_TIMEOUT_SEC,
-				ril_plugin_manager_start_timeout, plugin,
-				ril_plugin_manager_start_done);
-	}
-
+	ril_plugin_foreach_slot_param(plugin, ril_plugin_slot_check_timeout_cb,
+							&start_timeout);
+	plugin->start_timeout_id = g_timeout_add_full(G_PRIORITY_DEFAULT,
+			start_timeout, ril_plugin_manager_start_timeout,
+			plugin, ril_plugin_manager_start_done);
 	return plugin->start_timeout_id;
 }
 
@@ -1515,30 +1589,6 @@ static void ril_slot_enabled_changed(struct sailfish_slot_impl *s)
 	} else {
 		ril_plugin_shutdown_slot(s, FALSE);
 	}
-}
-
-static void ril_slot_free(ril_slot *slot)
-{
-	ril_plugin* plugin = slot->plugin;
-
-	ril_plugin_shutdown_slot(slot, TRUE);
-	plugin->slots = g_slist_remove(plugin->slots, slot);
-	mce_display_remove_handlers(slot->display, slot->display_event_id,
-					G_N_ELEMENTS(slot->display_event_id));
-	mce_display_unref(slot->display);
-	sailfish_watch_remove_all_handlers(slot->watch, slot->watch_event_id);
-	sailfish_watch_unref(slot->watch);
-	ril_sim_settings_unref(slot->sim_settings);
-	gutil_ints_unref(slot->config.local_hangup_reasons);
-	gutil_ints_unref(slot->config.remote_hangup_reasons);
-	g_free(slot->path);
-	g_free(slot->imei);
-	g_free(slot->imeisv);
-	g_free(slot->name);
-	g_free(slot->sockpath);
-	g_free(slot->sub);
-	g_free(slot->ecclist_file);
-	g_slice_free(ril_slot, slot);
 }
 
 /* Global part (that requires access to global variables) */
