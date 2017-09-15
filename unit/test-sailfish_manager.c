@@ -129,6 +129,8 @@ static struct sailfish_manager_dbus {
 	struct sailfish_manager_dbus_cb cb;
 	enum sailfish_manager_dbus_block block;
 	void (*fn_block_changed)(struct sailfish_manager_dbus *d);
+	void (*fn_signal)(struct sailfish_manager_dbus *d,
+					enum sailfish_manager_dbus_signal m);
 	int signals;
 } fake_sailfish_manager_dbus;
 
@@ -166,6 +168,9 @@ void sailfish_manager_dbus_signal(struct sailfish_manager_dbus *d,
 				enum sailfish_manager_dbus_signal m)
 {
 	d->signals |= m;
+	if (d->fn_signal) {
+		d->fn_signal(d, m);
+	}
 }
 
 void sailfish_manager_dbus_signal_sim(struct sailfish_manager_dbus *d,
@@ -532,6 +537,43 @@ static void test_create_fail(void)
 	sailfish_manager_foreach_slot_manager(reg,
 					test_slot_manager_count_cb, &count);
 	g_assert(!count);
+	test_common_deinit();
+}
+
+/* ==== no_plugins ==== */
+
+static void test_quit_when_ready(struct sailfish_manager_dbus *d,
+					enum sailfish_manager_dbus_signal m)
+{
+	DBG("%d", m);
+	if (d->m->ready) {
+		DBG("Ready!");
+		g_main_loop_quit(test_loop);
+	}
+}
+
+static void test_no_plugins(void)
+{
+	test_common_init();
+	fake_sailfish_manager_dbus.fn_signal = test_quit_when_ready;
+	g_main_loop_run(test_loop);
+	test_common_deinit();
+}
+
+/* ==== no_manager ==== */
+
+static void test_no_manager(void)
+{
+	static const struct sailfish_slot_driver no_manager_driver = {
+		.name = "no_manager",
+	};
+
+	test_common_init();
+	g_assert(sailfish_slot_driver_register(&no_manager_driver));
+	fake_sailfish_manager_dbus.fn_signal = test_quit_when_ready;
+	g_main_loop_run(test_loop);
+	g_assert(fake_sailfish_manager_dbus.m->ready);
+
 	test_common_deinit();
 }
 
@@ -1441,7 +1483,9 @@ int main(int argc, char *argv[])
 	g_test_add_func(TEST_("early_init"), test_early_init);
 	g_test_add_func(TEST_("too_late"), test_too_late);
 	g_test_add_func(TEST_("create_fail"), test_create_fail);
+	g_test_add_func(TEST_("no_plugins"), test_no_plugins);
 	g_test_add_func(TEST_("no_slots"), test_no_slots);
+	g_test_add_func(TEST_("no_manager"), test_no_manager);
 	g_test_add_func(TEST_("sync_start"), test_sync_start);
 	g_test_add_func(TEST_("async_start"), test_async_start);
 	g_test_add_func(TEST_("cancel_start"), test_cancel_start);
