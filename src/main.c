@@ -32,6 +32,10 @@
 
 #include <gdbus.h>
 
+#ifdef HAVE_ELL
+#include <ell/ell.h>
+#endif
+
 #include "ofono.h"
 
 #define SHUTDOWN_GRACE_SECONDS 10
@@ -170,6 +174,32 @@ static GOptionEntry options[] = {
 	{ NULL },
 };
 
+#ifdef HAVE_ELL
+struct ell_event_source {
+	GSource source;
+	GPollFD pollfd;
+};
+
+static gboolean event_prepare(GSource *source, gint *timeout)
+{
+	int r = l_main_prepare();
+	*timeout = r;
+
+	return FALSE;
+}
+
+static gboolean event_check(GSource *source)
+{
+	l_main_iterate(0);
+	return FALSE;
+}
+
+static GSourceFuncs event_funcs = {
+	.prepare = event_prepare,
+	.check = event_check,
+};
+#endif
+
 int main(int argc, char **argv)
 {
 	GOptionContext *context;
@@ -177,6 +207,9 @@ int main(int argc, char **argv)
 	DBusConnection *conn;
 	DBusError error;
 	guint signal;
+#ifdef HAVE_ELL
+	struct ell_event_source *source;
+#endif
 
 #ifdef NEED_THREADS
 	if (g_thread_supported() == FALSE)
@@ -219,6 +252,23 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 #endif
+
+#ifdef HAVE_ELL
+	l_log_set_stderr();
+	l_debug_enable("*");
+	l_main_init();
+
+	source = (struct ell_event_source *) g_source_new(&event_funcs,
+					sizeof(struct ell_event_source));
+
+	source->pollfd.fd = l_main_get_epoll_fd();
+	source->pollfd.events = G_IO_IN | G_IO_HUP | G_IO_ERR;
+
+	g_source_add_poll((GSource *)source, &source->pollfd);
+	g_source_attach((GSource *) source,
+					g_main_loop_get_context(event_loop));
+#endif
+
 
 	signal = setup_signalfd();
 
@@ -267,6 +317,10 @@ int main(int argc, char **argv)
 cleanup:
 	g_source_remove(signal);
 
+#ifdef HAVE_ELL
+	g_source_destroy((GSource *) source);
+	l_main_exit();
+#endif
 	g_main_loop_unref(event_loop);
 
 	__ofono_log_cleanup();

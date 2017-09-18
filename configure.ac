@@ -218,6 +218,20 @@ AC_ARG_ENABLE(upower, AC_HELP_STRING([--disable-upower],
 					[enable_upower=${enableval}])
 AM_CONDITIONAL(UPOWER, test "${enable_power}" != "no")
 
+AC_ARG_ENABLE(ell, AC_HELP_STRING([--enable-ell],
+				[enable support for ell]),
+					[enable_ell=${enableval}])
+
+if (test "${enable_ell}" = "yes"); then
+	AC_DEFINE(HAVE_ELL, 1, [Defined if Ell is enabled])
+	PKG_CHECK_MODULES(ELL, ell >= 0.2, dummy=yes,
+			  AC_MSG_ERROR(ell library >= 0.2 is required))
+	AC_SUBST(ELL_CFLAGS)
+	AC_SUBST(ELL_LIBS)
+fi
+
+AM_CONDITIONAL(ELL, test "${enable_ell}" != "no")
+
 AC_ARG_ENABLE(datafiles, AC_HELP_STRING([--disable-datafiles],
 			[do not install configuration and data files]),
 					[enable_datafiles=${enableval}])

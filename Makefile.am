@@ -602,6 +602,11 @@ builtin_sources += plugins/push-notification.c
 builtin_modules += allowed_apns
 builtin_sources += plugins/allowed-apns.c
 
+if ELL
+builtin_cflags += @ELL_CFLAGS@
+builtin_libadd += @ELL_LIBS@
+endif
+
 sbin_PROGRAMS = src/ofonod
 
 src_ofonod_SOURCES = $(builtin_sources) $(gatchat_sources) src/ofono.ver \
