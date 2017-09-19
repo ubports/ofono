@@ -292,6 +292,10 @@ AC_ARG_ENABLE(upower, AC_HELP_STRING([--disable-upower],
 					[enable_upower=${enableval}])
 AM_CONDITIONAL(UPOWER, test "${enable_power}" != "no")
 
+AC_ARG_ENABLE(mbimmodem, AC_HELP_STRING([--enable-mbimmodem],
+				[enable MBIM based modem support]),
+					[enable_mbimmodem=${enableval}])
+
 AC_ARG_ENABLE(ell, AC_HELP_STRING([--enable-ell],
 				[enable support for ell]),
 					[enable_ell=${enableval}])
@@ -304,6 +308,7 @@ if (test "${enable_ell}" = "yes"); then
 	AC_SUBST(ELL_LIBS)
 fi
 
+AM_CONDITIONAL(MBIMMODEM, test "${enable_ell}" != "no" && test "${enable_mbimmodem}" = "yes")
 AM_CONDITIONAL(ELL, test "${enable_ell}" != "no")
 
 AC_ARG_ENABLE(datafiles, AC_HELP_STRING([--disable-datafiles],

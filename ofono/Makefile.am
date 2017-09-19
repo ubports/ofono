@@ -719,6 +719,13 @@ builtin_sources += plugins/allowed-apns.c
 if ELL
 builtin_cflags += @ELL_CFLAGS@
 builtin_libadd += @ELL_LIBS@
+
+if MBIMMODEM
+builtin_modules += mbimmodem
+builtin_sources +=	drivers/mbimmodem/util.h \
+			drivers/mbimmodem/mbimmodem.h \
+			drivers/mbimmodem/mbimmodem.c
+endif
 endif
 
 sbin_PROGRAMS = src/ofonod
