@@ -721,8 +721,12 @@ builtin_cflags += @ELL_CFLAGS@
 builtin_libadd += @ELL_LIBS@
 
 if MBIMMODEM
+mbim_sources =	drivers/mbimmodem/mbim.h \
+		drivers/mbimmodem/mbim.c
+
 builtin_modules += mbimmodem
-builtin_sources +=	drivers/mbimmodem/util.h \
+builtin_sources += $(mbim_sources) \
+			drivers/mbimmodem/util.h \
 			drivers/mbimmodem/mbimmodem.h \
 			drivers/mbimmodem/mbimmodem.c
 
