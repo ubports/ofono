@@ -27,6 +27,7 @@
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 #include <libudev.h>
 
@@ -928,6 +929,7 @@ static gboolean setup_mbim(struct modem_info *modem)
 {
 	const char *ctl = NULL, *net = NULL, *atcmd = NULL;
 	GSList *list;
+	char descriptors[PATH_MAX];
 
 	DBG("%s", modem->syspath);
 
@@ -953,8 +955,11 @@ static gboolean setup_mbim(struct modem_info *modem)
 
 	DBG("ctl=%s net=%s atcmd=%s", ctl, net, atcmd);
 
+	sprintf(descriptors, "%s/descriptors", modem->syspath);
+
 	ofono_modem_set_string(modem->modem, "Device", ctl);
 	ofono_modem_set_string(modem->modem, "NetworkInterface", net);
+	ofono_modem_set_string(modem->modem, "DescriptorFile", descriptors);
 
 	return TRUE;
 }
