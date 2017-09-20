@@ -26,6 +26,10 @@
 #define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/mman.h>
+#include <linux/types.h>
 #include <unistd.h>
 #include <stdlib.h>
 
@@ -36,19 +40,66 @@
 
 #include <ell/ell.h>
 
+#include <drivers/mbimmodem/mbim-desc.h>
 #include <drivers/mbimmodem/util.h>
 
 struct mbim_data {
 	struct mbim_device *device;
+	uint16_t max_segment;
+	uint8_t max_outstanding;
 };
+
+static int mbim_parse_descriptors(struct mbim_data *md, const char *file)
+{
+	void *data;
+	size_t len;
+	const struct mbim_desc *desc = NULL;
+	const struct mbim_extended_desc *ext_desc = NULL;
+
+	data = l_file_get_contents(file, &len);
+	if (!data)
+		return -EIO;
+
+	if (!mbim_find_descriptors(data, len, &desc, &ext_desc)) {
+		l_free(data);
+		return -ENOENT;
+	}
+
+	if (desc)
+		md->max_segment = L_LE16_TO_CPU(desc->wMaxControlMessage);
+
+	if (ext_desc)
+		md->max_outstanding = ext_desc->bMaxOutstandingCommandMessages;
+
+	l_free(data);
+	return 0;
+}
 
 static int mbim_probe(struct ofono_modem *modem)
 {
+	const char *descriptors;
 	struct mbim_data *data;
+	int err;
 
 	DBG("%p", modem);
 
+	descriptors = ofono_modem_get_string(modem, "DescriptorFile");
+
+	if (!descriptors)
+		return -EINVAL;
+
 	data = l_new(struct mbim_data, 1);
+	data->max_outstanding = 1;
+
+	err = mbim_parse_descriptors(data, descriptors);
+	if (err < 0) {
+		DBG("Warning, unable to load descriptors, setting defaults");
+		data->max_segment = 512;
+	}
+
+	DBG("MaxSegment: %d, MaxOutstanding: %d",
+			data->max_segment, data->max_outstanding);
+
 	ofono_modem_set_data(modem, data);
 
 	return 0;
