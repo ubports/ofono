@@ -610,7 +610,9 @@ if MBIMMODEM
 mbim_sources =	drivers/mbimmodem/mbim.h \
 		drivers/mbimmodem/mbim.c \
 		drivers/mbimmodem/mbim-desc.h \
-		drivers/mbimmodem/mbim-desc.c
+		drivers/mbimmodem/mbim-desc.c \
+		drivers/mbimmodem/mbim-message.h \
+		drivers/mbimmodem/mbim-message.c
 
 builtin_modules += mbimmodem
 builtin_sources += $(mbim_sources) \
