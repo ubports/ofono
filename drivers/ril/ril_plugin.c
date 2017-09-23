@@ -1025,6 +1025,7 @@ static ril_slot *ril_plugin_slot_new_take(char *sockpath, char *path,
 	slot->config.enable_voicecall = RILMODEM_DEFAULT_ENABLE_VOICECALL;
 	slot->timeout = RILMODEM_DEFAULT_TIMEOUT;
 	slot->sim_flags = RILMODEM_DEFAULT_SIM_FLAGS;
+	slot->start_timeout = RILMODEM_DEFAULT_START_TIMEOUT;
 	slot->data_opt.allow_data = RILMODEM_DEFAULT_DATA_OPT;
 	slot->data_opt.data_call_format = RILMODEM_DEFAULT_DATA_CALL_FORMAT;
 	slot->data_opt.data_call_retry_limit =
@@ -1059,26 +1060,21 @@ static GSList *ril_plugin_create_default_config()
 {
 	GSList *list = NULL;
 
-	if (g_file_test(RILMODEM_DEFAULT_SOCK, G_FILE_TEST_EXISTS)) {
-		if (g_file_test(RILMODEM_DEFAULT_SOCK2, G_FILE_TEST_EXISTS)) {
-			DBG("Falling back to default dual SIM config");
-			list = g_slist_append(list,
+	if (g_file_test(RILMODEM_DEFAULT_SOCK2, G_FILE_TEST_EXISTS)) {
+		DBG("Falling back to default dual SIM config");
+		list = g_slist_append(list,
 				ril_plugin_slot_new(RILMODEM_DEFAULT_SOCK,
 					RILCONF_PATH_PREFIX "0", "RIL1", 0));
-			list = g_slist_append(list,
+		list = g_slist_append(list,
 				ril_plugin_slot_new(RILMODEM_DEFAULT_SOCK2,
 					RILCONF_PATH_PREFIX "1", "RIL2", 1));
-		} else {
-			ril_slot *slot =
-				ril_plugin_slot_new(RILMODEM_DEFAULT_SOCK,
+	} else {
+		ril_slot *slot = ril_plugin_slot_new(RILMODEM_DEFAULT_SOCK,
 					RILCONF_PATH_PREFIX "0", "RIL", 0);
 
-			DBG("Falling back to default single SIM config");
-			slot->sub = g_strdup(RILMODEM_DEFAULT_SUB);
-			list = g_slist_append(list, slot);
-		}
-	} else {
-		DBG("No default config");
+		DBG("Falling back to default single SIM config");
+		slot->sub = g_strdup(RILMODEM_DEFAULT_SUB);
+		list = g_slist_append(list, slot);
 	}
 
 	return list;
@@ -1127,12 +1123,7 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 							&ival) && ival >= 0) {
 		DBG("%s: " RILCONF_START_TIMEOUT " %d ms", group, ival);
 		slot->start_timeout = ival;
-	} else {
-		slot->start_timeout = RILMODEM_DEFAULT_START_TIMEOUT;
 	}
-
-	slot->start_timeout_id = g_timeout_add(slot->start_timeout,
-					ril_plugin_slot_start_timeout, slot);
 
 	/* timeout */
 	if (ril_config_get_integer(file, group, RILCONF_TIMEOUT,
@@ -1335,8 +1326,7 @@ static guint ril_plugin_find_unused_slot(GSList *slots)
 static GSList *ril_plugin_parse_config_file(GKeyFile *file,
 					struct ril_plugin_settings *ps)
 {
-	GSList *list = NULL;
-	GSList *link;
+	GSList *l, *list = NULL;
 	gsize i, n = 0;
 	gchar **groups = g_key_file_get_groups(file, &n);
 
@@ -1372,24 +1362,23 @@ static GSList *ril_plugin_parse_config_file(GKeyFile *file,
 	}
 
 	/* Automatically assign slot numbers */
-	link = list;
-	while (link) {
-		ril_slot *slot = link->data;
+	for (l = list; l; l = l->next) {
+		ril_slot *slot = l->data;
+
 		if (slot->config.slot == RILMODEM_DEFAULT_SLOT) {
 			slot->config.slot = ril_plugin_find_unused_slot(list);
 		}
-		link = link->next;
 	}
 
 	g_strfreev(groups);
 	return list;
 }
 
- static GSList *ril_plugin_load_config(const char *path,
+static GSList *ril_plugin_load_config(const char *path,
 				struct ril_plugin_settings *ps)
 {
 	GError *err = NULL;
-	GSList *list = NULL;
+	GSList *l, *list = NULL;
 	GKeyFile *file = g_key_file_new();
 	gboolean empty = FALSE;
 
@@ -1408,6 +1397,15 @@ static GSList *ril_plugin_parse_config_file(GKeyFile *file,
 
 	if (!list && !empty) {
 		list = ril_plugin_create_default_config();
+	}
+
+	/* Initialize start timeouts */
+	for (l = list; l; l = l->next) {
+		ril_slot *slot = l->data;
+
+		GASSERT(slot->start_timeout_id);
+		slot->start_timeout_id = g_timeout_add(slot->start_timeout,
+					ril_plugin_slot_start_timeout, slot);
 	}
 
 	g_key_file_free(file);
