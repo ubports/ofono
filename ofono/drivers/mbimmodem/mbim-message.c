@@ -93,6 +93,63 @@ static inline const void *_iter_get_data(struct mbim_message_iter *iter,
 	return iter->iov[iter->cur_iov].iov_base + pos - iter->cur_iov_offset;
 }
 
+static bool _iter_copy_string(struct mbim_message_iter *iter,
+					uint32_t offset, uint32_t len,
+					char **out)
+{
+	uint8_t buf[len];
+	uint8_t *dest = buf;
+	uint32_t remaining = len;
+	uint32_t iov_start = 0;
+	uint32_t i = 0;
+	uint32_t tocopy;
+
+	if (!len) {
+		*out = NULL;
+		return true;
+	}
+
+	if (offset + len > iter->len)
+		return false;
+
+	offset += iter->base_offset;
+
+	while (offset >= iov_start + iter->iov[i].iov_len)
+		iov_start += iter->iov[i++].iov_len;
+
+	tocopy = iter->iov[i].iov_len - (offset - iov_start);
+
+	if (tocopy > remaining)
+		tocopy = remaining;
+
+	memcpy(dest, iter->iov[i].iov_base + offset - iov_start, tocopy);
+	remaining -= tocopy;
+	dest += tocopy;
+	i += 1;
+
+	while (remaining) {
+		tocopy = remaining;
+
+		if (remaining > iter->iov[i].iov_len)
+			tocopy = iter->iov[i].iov_len;
+
+		memcpy(dest, iter->iov[i].iov_base, tocopy);
+		remaining -= tocopy;
+		dest += tocopy;
+	}
+
+	/* Strings are in UTF16-LE, so convert to UTF16-CPU first if needed */
+	if (L_CPU_TO_LE16(0x8000) != 0x8000) {
+		uint16_t *le = (uint16_t *) buf;
+
+		for (i = 0; i < len; i+= 2)
+			le[i] = __builtin_bswap16(le[i]);
+	}
+
+	*out = l_utf8_from_utf16(buf, len);
+	return true;
+}
+
 static inline void _iter_init_internal(struct mbim_message_iter *iter,
 					char container_type,
 					const char *sig_start,
@@ -130,6 +187,7 @@ static bool _iter_next_entry_basic(struct mbim_message_iter *iter,
 	uint8_t uint8_val;
 	uint16_t uint16_val;
 	uint32_t uint32_val;
+	uint32_t offset, length;
 	const void *data;
 	size_t pos;
 
@@ -163,6 +221,24 @@ static bool _iter_next_entry_basic(struct mbim_message_iter *iter,
 		uint32_val = l_get_le32(data);
 		*(uint32_t *) out = uint32_val;
 		iter->pos = pos + 4;
+		break;
+	case 's':
+		/*
+		 * String consists of two uint32_t values:
+		 * offset followed by length
+		 */
+		if (pos + 8 > iter->len)
+			return false;
+
+		data = _iter_get_data(iter, pos);
+		offset = l_get_le32(data);
+		data = _iter_get_data(iter, pos + 4);
+		length = l_get_le32(data);
+
+		if (!_iter_copy_string(iter, offset, length, out))
+			return false;
+
+		iter->pos = pos + 8;
 		break;
 	default:
 		return false;
