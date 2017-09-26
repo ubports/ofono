@@ -43,4 +43,7 @@ struct mbim_message *mbim_message_new(const uint8_t *uuid, uint32_t cid);
 struct mbim_message *mbim_message_ref(struct mbim_message *msg);
 void mbim_message_unref(struct mbim_message *msg);
 
+bool mbim_message_get_arguments(struct mbim_message *message,
+						const char *signature, ...);
+
 bool mbim_message_iter_next_entry(struct mbim_message_iter *iter, ...);

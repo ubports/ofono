@@ -412,3 +412,35 @@ struct mbim_message *_mbim_message_build(const void *header,
 
 	return msg;
 }
+
+bool mbim_message_get_arguments(struct mbim_message *message,
+						const char *signature, ...)
+{
+	struct mbim_message_iter iter;
+	va_list args;
+	bool result;
+	struct mbim_message_header *hdr;
+	uint32_t type;
+	size_t begin;
+
+	if (unlikely(!message))
+		return false;
+
+	if (unlikely(!message->sealed))
+		return false;
+
+	hdr = (struct mbim_message_header *) message->header;
+	type = L_LE32_TO_CPU(hdr->type);
+	begin = _mbim_information_buffer_offset(type);
+
+	_iter_init_internal(&iter, CONTAINER_TYPE_STRUCT,
+				signature, NULL,
+				message->frags, message->n_frags,
+				message->info_buf_len, begin, 0, 0);
+
+	va_start(args, signature);
+	result = message_iter_next_entry_valist(&iter, args);
+	va_end(args);
+
+	return result;
+}
