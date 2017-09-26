@@ -1,0 +1,158 @@
+/*
+ *
+ *  oFono - Open Source Telephony
+ *
+ *  Copyright (C) 2017  Intel Corporation. All rights reserved.
+ *
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program; if not, write to the Free Software
+ *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+ *
+ */
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
+
+#include <sys/uio.h>
+#include <linux/types.h>
+#include <assert.h>
+
+#include <ell/ell.h>
+
+#include "drivers/mbimmodem/mbim-message.h"
+#include "drivers/mbimmodem/mbim-private.h"
+
+struct message_data {
+	uint32_t tid;
+	const unsigned char *binary;
+	size_t binary_len;
+};
+
+static const unsigned char message_binary_device_caps[] = {
+	0x03, 0x00, 0x00, 0x80, 0x08, 0x01, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
+	0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xA2, 0x89, 0xCC, 0x33,
+	0xBC, 0xBB, 0x8B, 0x4F, 0xB6, 0xB0, 0x13, 0x3E, 0xC2, 0xAA, 0xE6, 0xDF,
+	0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xD8, 0x00, 0x00, 0x00,
+	0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+	0x02, 0x00, 0x00, 0x00, 0x3F, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+	0x01, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x1E, 0x00, 0x00, 0x00,
+	0x60, 0x00, 0x00, 0x00, 0x3A, 0x00, 0x00, 0x00, 0x9C, 0x00, 0x00, 0x00,
+	0x3C, 0x00, 0x00, 0x00, 0x33, 0x00, 0x35, 0x00, 0x39, 0x00, 0x33, 0x00,
+	0x33, 0x00, 0x36, 0x00, 0x30, 0x00, 0x35, 0x00, 0x30, 0x00, 0x30, 0x00,
+	0x31, 0x00, 0x38, 0x00, 0x37, 0x00, 0x31, 0x00, 0x37, 0x00, 0x00, 0x00,
+	0x46, 0x00, 0x49, 0x00, 0x48, 0x00, 0x37, 0x00, 0x31, 0x00, 0x36, 0x00,
+	0x30, 0x00, 0x5F, 0x00, 0x56, 0x00, 0x31, 0x00, 0x2E, 0x00, 0x31, 0x00,
+	0x5F, 0x00, 0x4D, 0x00, 0x4F, 0x00, 0x44, 0x00, 0x45, 0x00, 0x4D, 0x00,
+	0x5F, 0x00, 0x30, 0x00, 0x31, 0x00, 0x2E, 0x00, 0x31, 0x00, 0x34, 0x00,
+	0x30, 0x00, 0x38, 0x00, 0x2E, 0x00, 0x30, 0x00, 0x37, 0x00, 0x00, 0x00,
+	0x58, 0x00, 0x4D, 0x00, 0x4D, 0x00, 0x37, 0x00, 0x31, 0x00, 0x36, 0x00,
+	0x30, 0x00, 0x5F, 0x00, 0x56, 0x00, 0x31, 0x00, 0x2E, 0x00, 0x31, 0x00,
+	0x5F, 0x00, 0x4D, 0x00, 0x42, 0x00, 0x49, 0x00, 0x4D, 0x00, 0x5F, 0x00,
+	0x47, 0x00, 0x4E, 0x00, 0x53, 0x00, 0x53, 0x00, 0x5F, 0x00, 0x4E, 0x00,
+	0x41, 0x00, 0x4E, 0x00, 0x44, 0x00, 0x5F, 0x00, 0x52, 0x00, 0x45, 0x00
+};
+
+static const struct message_data message_data_device_caps = {
+	.tid		= 0,
+	.binary		= message_binary_device_caps,
+	.binary_len	= sizeof(message_binary_device_caps),
+};
+
+static struct mbim_message *build_message(const struct message_data *msg_data)
+{
+	static const int frag_size = 64;
+	struct mbim_message *msg;
+	struct iovec *iov;
+	size_t n_iov;
+	unsigned int i;
+
+	n_iov = align_len(msg_data->binary_len, frag_size) / frag_size;
+	iov = l_new(struct iovec, n_iov);
+
+	iov[0].iov_len = frag_size - 20;
+	iov[0].iov_base = l_memdup(msg_data->binary + 20, iov[0].iov_len);
+
+	for (i = 1; i < n_iov - 1; i++) {
+		iov[i].iov_base = l_memdup(msg_data->binary + i * frag_size,
+							frag_size);
+		iov[i].iov_len = frag_size;
+	}
+
+	iov[i].iov_len = msg_data->binary_len - i * frag_size;
+	iov[i].iov_base = l_memdup(msg_data->binary + i * frag_size,
+							iov[i].iov_len);
+
+	msg = _mbim_message_build(msg_data->binary, iov, n_iov);
+	assert(msg);
+
+	return msg;
+}
+
+static void parse_device_caps(const void *data)
+{
+	struct mbim_message *msg = build_message(data);
+	uint32_t device_type;
+	uint32_t cellular_class;
+	uint32_t voice_class;
+	uint32_t sim_class;
+	uint32_t data_class;
+	uint32_t sms_caps;
+	uint32_t control_caps;
+	uint32_t max_sessions;
+	char *custom_data_class;
+	char *device_id;
+	char *firmware_info;
+	char *hardware_info;
+	bool r;
+
+	r = mbim_message_get_arguments(msg, "uuuuuuuussss",
+					&device_type, &cellular_class,
+					&voice_class, &sim_class, &data_class,
+					&sms_caps, &control_caps, &max_sessions,
+					&custom_data_class, &device_id,
+					&firmware_info, &hardware_info);
+	assert(r);
+
+	assert(device_type == 1);
+	assert(cellular_class = 1);
+	assert(voice_class == 1);
+	assert(sim_class == 2);
+	assert(data_class == 0x3f);
+	assert(sms_caps == 0x3);
+	assert(control_caps == 1);
+	assert(max_sessions == 16);
+	assert(custom_data_class == NULL);
+	assert(device_id);
+	assert(!strcmp(device_id, "359336050018717"));
+	assert(firmware_info);
+	assert(!strcmp(firmware_info, "FIH7160_V1.1_MODEM_01.1408.07"));
+	assert(hardware_info);
+	assert(!strcmp(hardware_info, "XMM7160_V1.1_MBIM_GNSS_NAND_RE"));
+
+	l_free(custom_data_class);
+	l_free(device_id);
+	l_free(firmware_info);
+	l_free(hardware_info);
+	mbim_message_unref(msg);
+}
+
+int main(int argc, char *argv[])
+{
+	l_test_init(&argc, &argv);
+
+	l_test_add("Device Caps (parse)",
+			parse_device_caps, &message_data_device_caps);
+
+	return l_test_run();
+}
