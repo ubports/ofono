@@ -345,6 +345,48 @@ static bool _iter_enter_array(struct mbim_message_iter *iter,
 	return true;
 }
 
+static bool _iter_enter_struct(struct mbim_message_iter *iter,
+					struct mbim_message_iter *structure)
+{
+	size_t offset;
+	size_t len;
+	size_t pos;
+	const char *sig_start;
+	const char *sig_end;
+	const void *data;
+
+	if (iter->sig_start[iter->sig_pos] != '(')
+		return false;
+
+	sig_start = iter->sig_start + iter->sig_pos + 1;
+	sig_end = _signature_end(iter->sig_start + iter->sig_pos);
+
+	/* TODO: support fixed size structures */
+	if (is_fixed_size(sig_start, sig_end))
+		return false;
+
+	pos = align_len(iter->pos, 4);
+	if (pos + 8 > iter->len)
+		return false;
+
+	data = _iter_get_data(iter, pos);
+	offset = l_get_le32(data);
+	pos += 4;
+	data = _iter_get_data(iter, pos);
+	len = l_get_le32(data);
+
+	_iter_init_internal(structure, CONTAINER_TYPE_STRUCT,
+				sig_start, sig_end, iter->iov, iter->n_iov,
+				len, iter->base_offset + offset, 0, 0);
+
+	if (iter->container_type != CONTAINER_TYPE_ARRAY)
+		iter->sig_pos += sig_end - sig_start + 2;
+
+	iter->pos = pos + len;
+
+	return true;
+}
+
 static bool message_iter_next_entry_valist(struct mbim_message_iter *orig,
 						va_list args)
 {
@@ -354,6 +396,8 @@ static bool message_iter_next_entry_valist(struct mbim_message_iter *orig,
 	const char *end;
 	uint32_t *out_n_elem;
 	struct mbim_message_iter *sub_iter;
+	struct mbim_message_iter stack[2];
+	unsigned int indent = 0;
 	void *arg;
 
 	while (signature < orig->sig_start + orig->sig_len) {
@@ -397,6 +441,25 @@ static bool message_iter_next_entry_valist(struct mbim_message_iter *orig,
 			signature = end + 1;
 			break;
 		}
+		case '(':
+			signature += 1;
+			indent += 1;
+
+			if (!_iter_enter_struct(iter, &stack[indent - 1]))
+				return false;
+
+			iter = &stack[indent - 1];
+
+			break;
+		case ')':
+			signature += 1;
+			indent -= 1;
+
+			if (indent == 0)
+				iter = orig;
+			else
+				iter = &stack[indent - 1];
+			break;
 		case 'a':
 			out_n_elem = va_arg(args, uint32_t *);
 			sub_iter = va_arg(args, void *);
