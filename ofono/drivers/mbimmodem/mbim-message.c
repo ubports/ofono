@@ -97,6 +97,18 @@ static int get_alignment(const char type)
 	}
 }
 
+static bool is_fixed_size(const char *sig_start, const char *sig_end)
+{
+	while (sig_start <= sig_end) {
+		if (*sig_start == 'a' || *sig_start == 's')
+			return false;
+
+		sig_start++;
+	}
+
+	return true;
+}
+
 static inline const void *_iter_get_data(struct mbim_message_iter *iter,
 						size_t pos)
 {
@@ -278,12 +290,31 @@ static bool _iter_enter_array(struct mbim_message_iter *iter,
 	const char *sig_start;
 	const char *sig_end;
 	const void *data;
+	bool fixed;
+	uint32_t offset;
 
 	if (iter->sig_start[iter->sig_pos] != 'a')
 		return false;
 
 	sig_start = iter->sig_start + iter->sig_pos + 1;
 	sig_end = _signature_end(sig_start) + 1;
+
+	/*
+	 * Two possibilities:
+	 * 1. Element Count, followed by OL_PAIR_LIST
+	 * 2. Offset, followed by element length or size for raw buffers
+	 */
+	fixed = is_fixed_size(sig_start, sig_end);
+
+	if (fixed) {
+		pos = align_len(iter->pos, 4);
+		if (pos + 4 > iter->len)
+			return false;
+
+		data = _iter_get_data(iter, pos);
+		offset = l_get_le32(data);
+		pos += 4;
+	}
 
 	pos = align_len(iter->pos, 4);
 	if (pos + 4 > iter->len)
@@ -293,13 +324,21 @@ static bool _iter_enter_array(struct mbim_message_iter *iter,
 	n_elem = l_get_le32(data);
 	pos += 4;
 
-	_iter_init_internal(array, CONTAINER_TYPE_ARRAY, sig_start, sig_end,
-					iter->iov, iter->n_iov,
-					iter->len, iter->base_offset,
-					pos, n_elem);
-
 	if (iter->container_type != CONTAINER_TYPE_ARRAY)
 		iter->sig_pos += sig_end - sig_start + 1;
+
+	if (fixed) {
+		_iter_init_internal(array, CONTAINER_TYPE_ARRAY,
+					sig_start, sig_end,
+					iter->iov, iter->n_iov,
+					iter->len, iter->base_offset,
+					offset, n_elem);
+		return true;
+	}
+
+	_iter_init_internal(array, CONTAINER_TYPE_ARRAY, sig_start, sig_end,
+				iter->iov, iter->n_iov,
+				iter->len, iter->base_offset, pos, n_elem);
 
 	iter->pos = pos + 8 * n_elem;
 
