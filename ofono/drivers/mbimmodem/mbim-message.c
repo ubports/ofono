@@ -80,6 +80,23 @@ static const char *_signature_end(const char *signature)
 	return NULL;
 }
 
+static int get_alignment(const char type)
+{
+	switch (type) {
+	case 'y':
+		return 1;
+	case 'q':
+		return 2;
+	case 'u':
+	case 's':
+		return 4;
+	case 'a':
+		return 4;
+	default:
+		return 0;
+	}
+}
+
 static inline const void *_iter_get_data(struct mbim_message_iter *iter,
 						size_t pos)
 {
@@ -197,7 +214,7 @@ static bool _iter_next_entry_basic(struct mbim_message_iter *iter,
 	if (iter->pos >= iter->len)
 		return false;
 
-	pos = align_len(iter->pos, 4);
+	pos = align_len(iter->pos, get_alignment(type));
 
 	switch (type) {
 	case 'y':
