@@ -53,3 +53,4 @@ struct mbim_message *_mbim_message_new_command_done(const uint8_t *uuid,
 					uint32_t cid, uint32_t status);
 uint32_t _mbim_information_buffer_offset(uint32_t type);
 void _mbim_message_set_tid(struct mbim_message *message, uint32_t tid);
+void *_mbim_message_to_bytearray(struct mbim_message *message, size_t *out_len);
