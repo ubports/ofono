@@ -1,5 +1,4 @@
 /*
- *
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2015-2016 Jolla Ltd.
@@ -19,10 +18,7 @@
 #include <config.h>
 #endif
 
-#define OFONO_API_SUBJECT_TO_CHANGE
-#include <ofono/plugin.h>
-#include <ofono/dbus.h>
-#include <ofono/log.h>
+#include "src/ofono.h"
 
 #include <dbuslog_server_dbus.h>
 #include <gutil_log.h>
@@ -189,14 +185,9 @@ static guint debuglog_translate_flags(unsigned int ofono_flags)
 	return flags;
 }
 
-static int debuglog_init(void)
+static void debuglog_add_categories(const struct ofono_debug_desc *start,
+				const struct ofono_debug_desc *stop)
 {
-	const struct ofono_debug_desc *start = __start___debug;
-	const struct ofono_debug_desc *stop = __stop___debug;
-
-	debuglog_server = dbus_log_server_new(ofono_dbus_get_connection(),
-							DEBUGLOG_PATH);
-
 	if (start && stop) {
 		const struct ofono_debug_desc *desc;
 		GHashTable *hash = NULL;
@@ -221,16 +212,46 @@ static int debuglog_init(void)
 
 			g_hash_table_destroy(hash);
 		}
-
-		debuglog_event_id[DEBUG_EVENT_CATEGORY_ENABLED] =
-			dbus_log_server_add_category_enabled_handler(
-				debuglog_server, debuglog_category_enabled,
-				NULL);
-		debuglog_event_id[DEBUG_EVENT_CATEGORY_DISABLED] =
-			dbus_log_server_add_category_disabled_handler(
-				debuglog_server, debuglog_category_disabled,
-				NULL);
 	}
+}
+
+static void debuglog_add_external_plugin(struct ofono_plugin_desc *desc,
+						int flags, void *user_data)
+{
+	/*
+	 * We are only interested in the external plugins here because
+	 * they don't fall into __start___debug .. __stop___debug range.
+	 */
+	if (!(flags & OFONO_PLUGIN_FLAG_BUILTIN)) {
+		if (desc->debug_start && desc->debug_stop) {
+			DBG("Adding \"%s\" plugin", desc->name);
+			debuglog_add_categories(desc->debug_start,
+							desc->debug_stop);
+		} else {
+			DBG("No debug descriptors for \"%s\" plugin",
+							desc->name);
+		}
+	}
+}
+
+static int debuglog_init(void)
+{
+	debuglog_server = dbus_log_server_new(ofono_dbus_get_connection(),
+							DEBUGLOG_PATH);
+
+	/*
+	 * First handle the executable and the builtin plugins (including
+	 * this one) then the external plugins.
+	 */
+	debuglog_add_categories(__start___debug, __stop___debug);
+	__ofono_plugin_foreach(debuglog_add_external_plugin, NULL);
+
+        debuglog_event_id[DEBUG_EVENT_CATEGORY_ENABLED] =
+		dbus_log_server_add_category_enabled_handler(debuglog_server,
+			debuglog_category_enabled, NULL);
+	debuglog_event_id[DEBUG_EVENT_CATEGORY_DISABLED] =
+		dbus_log_server_add_category_disabled_handler(debuglog_server,
+			debuglog_category_disabled, NULL);
 
 	debuglog_default_log_proc = gutil_log_func2;
 	gutil_log_func2 = debuglog_gutil_log_func;
@@ -251,5 +272,5 @@ static void debuglog_exit(void)
 }
 
 OFONO_PLUGIN_DEFINE(debuglog, "Debug log interface",
-			VERSION, OFONO_PLUGIN_PRIORITY_DEFAULT,
+			VERSION, OFONO_PLUGIN_PRIORITY_HIGH,
 			debuglog_init, debuglog_exit)
