@@ -99,6 +99,25 @@ static gboolean check_plugin(struct ofono_plugin_desc *desc,
 	return TRUE;
 }
 
+void __ofono_plugin_foreach(void (*fn) (struct ofono_plugin_desc *desc,
+				int flags, void *user_data), void *user_data)
+{
+	GSList *list;
+
+	for (list = plugins; list; list = list->next) {
+		struct ofono_plugin *plugin = list->data;
+		int flags = 0;
+
+		if (!plugin->handle)
+			flags |= OFONO_PLUGIN_FLAG_BUILTIN;
+
+		if (plugin->active)
+			flags |= OFONO_PLUGIN_FLAG_ACTIVE;
+
+		fn(plugin->desc, flags, user_data);
+	}
+}
+
 #include "builtin.h"
 
 int __ofono_plugin_init(const char *pattern, const char *exclude)
