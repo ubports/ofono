@@ -927,7 +927,8 @@ unit_test_rilmodem_gprs_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
 unit_objects += $(unit_test_rilmodem_gprs_OBJECTS)
 
 unit_test_mbim_SOURCES = unit/test-mbim.c \
-			 drivers/mbimmodem/mbim-message.c
+			 drivers/mbimmodem/mbim-message.c \
+			 drivers/mbimmodem/mbim.c
 unit_test_mbim_LDADD = @ELL_LIBS@
 unit_objects += $(unit_test_mbim_OBJECTS)
 
