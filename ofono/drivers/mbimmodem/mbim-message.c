@@ -561,6 +561,14 @@ struct mbim_message *_mbim_message_new_command_done(const uint8_t *uuid,
 	return message;
 }
 
+void _mbim_message_set_tid(struct mbim_message *message, uint32_t tid)
+{
+	struct mbim_message_header *hdr =
+				(struct mbim_message_header *) message->header;
+
+	hdr->tid = L_CPU_TO_LE32(tid);
+}
+
 struct mbim_message *mbim_message_new(const uint8_t *uuid, uint32_t cid)
 {
 	struct mbim_message *msg;
