@@ -60,3 +60,6 @@ bool mbim_message_builder_enter_array(struct mbim_message_builder *builder,
 bool mbim_message_builder_leave_array(struct mbim_message_builder *builder);
 struct mbim_message *mbim_message_builder_finalize(
 					struct mbim_message_builder *builder);
+
+bool mbim_message_set_arguments(struct mbim_message *message,
+						const char *signature, ...);

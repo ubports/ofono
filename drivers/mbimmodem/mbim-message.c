@@ -1111,3 +1111,165 @@ struct mbim_message *mbim_message_builder_finalize(
 
 	return builder->message;
 }
+
+static bool append_arguments(struct mbim_message *message,
+					const char *signature, va_list args)
+{
+	struct mbim_message_builder *builder;
+	char subsig[256];
+	const char *sigend;
+	struct {
+		char type;
+		const char *sig_start;
+		const char *sig_end;
+		unsigned int n_items;
+	} stack[4];
+	unsigned int stack_index = 0;
+
+	builder = mbim_message_builder_new(message);
+
+	stack[stack_index].type = CONTAINER_TYPE_STRUCT;
+	stack[stack_index].sig_start = signature;
+	stack[stack_index].sig_end = signature + strlen(signature);
+	stack[stack_index].n_items = 0;
+
+	while (stack_index != 0 || stack[0].sig_start != stack[0].sig_end) {
+		const char *s;
+		const char *str;
+
+		if (stack[stack_index].type == CONTAINER_TYPE_ARRAY &&
+				stack[stack_index].n_items == 0)
+			stack[stack_index].sig_start =
+				stack[stack_index].sig_end;
+
+		if (stack[stack_index].sig_start ==
+				stack[stack_index].sig_end) {
+			bool r = false;
+
+			if (stack[stack_index].type == CONTAINER_TYPE_ARRAY)
+				r = mbim_message_builder_leave_array(builder);
+			if (stack[stack_index].type == CONTAINER_TYPE_STRUCT)
+				r = mbim_message_builder_leave_struct(builder);
+
+			if (!r)
+				goto error;
+
+			stack_index -= 1;
+			continue;
+		}
+
+		s = stack[stack_index].sig_start;
+
+		if (stack[stack_index].type != CONTAINER_TYPE_ARRAY)
+			stack[stack_index].sig_start += 1;
+		else
+			stack[stack_index].n_items -= 1;
+
+		switch (*s) {
+		case 's':
+			str = va_arg(args, const char *);
+
+			if (!mbim_message_builder_append_basic(builder,
+								*s, str))
+				goto error;
+			break;
+		case 'y':
+		{
+			uint8_t y = (uint8_t) va_arg(args, int);
+
+			if (!mbim_message_builder_append_basic(builder, *s, &y))
+				goto error;
+
+			break;
+		}
+		case 'q':
+		{
+			uint16_t n = (uint16_t) va_arg(args, int);
+
+			if (!mbim_message_builder_append_basic(builder, *s, &n))
+				goto error;
+
+			break;
+		}
+		case 'u':
+		{
+			uint32_t u = va_arg(args, uint32_t);
+
+			if (!mbim_message_builder_append_basic(builder, *s, &u))
+				goto error;
+
+			break;
+		}
+		case '(':
+			sigend = _signature_end(s);
+			memcpy(subsig, s + 1, sigend - s - 1);
+			subsig[sigend - s - 1] = '\0';
+
+			if (!mbim_message_builder_enter_struct(builder, subsig))
+				goto error;
+
+			if (stack[stack_index].type !=
+					CONTAINER_TYPE_ARRAY)
+				stack[stack_index].sig_start = sigend + 1;
+
+			stack_index += 1;
+			stack[stack_index].sig_start = s + 1;
+			stack[stack_index].sig_end = sigend;
+			stack[stack_index].n_items = 0;
+			stack[stack_index].type = CONTAINER_TYPE_STRUCT;
+
+			break;
+		case 'a':
+			sigend = _signature_end(s + 1) + 1;
+			memcpy(subsig, s + 1, sigend - s - 1);
+			subsig[sigend - s - 1] = '\0';
+
+			if (!mbim_message_builder_enter_array(builder, subsig))
+				goto error;
+
+			if (stack[stack_index].type != CONTAINER_TYPE_ARRAY)
+				stack[stack_index].sig_start = sigend;
+
+			stack_index += 1;
+			stack[stack_index].sig_start = s + 1;
+			stack[stack_index].sig_end = sigend;
+			stack[stack_index].n_items = va_arg(args, unsigned int);
+			stack[stack_index].type = CONTAINER_TYPE_ARRAY;
+
+			break;
+		default:
+			goto error;
+		}
+	}
+
+	mbim_message_builder_finalize(builder);
+	mbim_message_builder_free(builder);
+
+	return true;
+
+error:
+	mbim_message_builder_free(builder);
+	return false;
+}
+
+bool mbim_message_set_arguments(struct mbim_message *message,
+						const char *signature, ...)
+{
+	va_list args;
+	bool result;
+
+	if (unlikely(!message))
+		return false;
+
+	if (unlikely(message->sealed))
+		return false;
+
+	if (!signature)
+		return true;
+
+	va_start(args, signature);
+	result = append_arguments(message, signature, args);
+	va_end(args);
+
+	return result;
+}
