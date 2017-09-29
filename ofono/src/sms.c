@@ -66,6 +66,7 @@ struct ofono_sms {
 	GSList *pending_get_prop;
 	struct ofono_phone_number sca;
 	struct sms_assembly *assembly;
+	struct sms_filter_chain *filter_chain;
 	guint ref;
 	GQueue *txq;
 	unsigned long tx_counter;
@@ -948,6 +949,68 @@ static void message_queued(struct ofono_sms *sms,
 					DBUS_TYPE_INVALID);
 }
 
+struct sms_message_data {
+	DBusMessage *pending;
+};
+
+static void sms_send_message_submit(struct ofono_sms *sms,
+		const struct sms_address *addr, const char *text, void *data)
+{
+	struct sms_message_data *message = data;
+	const char *to = sms_address_to_string(addr);
+	GSList *msg_list;
+	struct ofono_modem *modem;
+	unsigned int flags;
+	gboolean use_16bit_ref = FALSE;
+	int err;
+	struct ofono_uuid uuid;
+
+	msg_list = sms_text_prepare_with_alphabet(to, text, sms->ref,
+						use_16bit_ref,
+						sms->use_delivery_reports,
+						sms->alphabet);
+
+	if (msg_list == NULL) {
+		__ofono_dbus_pending_reply(&message->pending,
+			__ofono_error_invalid_format(message->pending));
+		return;
+	}
+
+	flags = OFONO_SMS_SUBMIT_FLAG_RECORD_HISTORY;
+	flags |= OFONO_SMS_SUBMIT_FLAG_RETRY;
+	flags |= OFONO_SMS_SUBMIT_FLAG_EXPOSE_DBUS;
+	if (sms->use_delivery_reports)
+		flags |= OFONO_SMS_SUBMIT_FLAG_REQUEST_SR;
+
+	err = __ofono_sms_txq_submit(sms, msg_list, flags, &uuid,
+					message_queued, message->pending);
+
+	g_slist_free_full(msg_list, g_free);
+
+	if (err < 0) {
+		__ofono_dbus_pending_reply(&message->pending,
+				__ofono_error_failed(message->pending));
+		return;
+	}
+
+	modem = __ofono_atom_get_modem(sms->atom);
+	__ofono_history_sms_send_pending(modem, &uuid, to, time(NULL), text);
+
+	/* Ownership has been transfered to the message queue */
+	message->pending = NULL;
+}
+
+static void sms_send_message_destroy(void *data)
+{
+	struct sms_message_data *message = data;
+
+	if (message->pending) {
+		__ofono_dbus_pending_reply(&message->pending,
+				   __ofono_error_canceled(message->pending));
+	}
+	g_free(message);
+}
+
 /*
  * Pre-process a SMS text message and deliver it [D-Bus SendMessage()]
  *
@@ -967,12 +1030,8 @@ static DBusMessage *sms_send_message(DBusConnection *conn, DBusMessage *msg,
 	struct ofono_sms *sms = data;
 	const char *to;
 	const char *text;
-	GSList *msg_list;
-	struct ofono_modem *modem;
-	unsigned int flags;
-	gboolean use_16bit_ref = FALSE;
-	int err;
-	struct ofono_uuid uuid;
+	struct sms_message_data *message;
+	struct sms_address addr;
 
 	if (!dbus_message_get_args(msg, NULL, DBUS_TYPE_STRING, &to,
 					DBUS_TYPE_STRING, &text,
@@ -982,30 +1041,12 @@ static DBusMessage *sms_send_message(DBusConnection *conn, DBusMessage *msg,
 	if (valid_phone_number_format(to) == FALSE)
 		return __ofono_error_invalid_format(msg);
 
-	msg_list = sms_text_prepare_with_alphabet(to, text, sms->ref,
-						use_16bit_ref,
-						sms->use_delivery_reports,
-						sms->alphabet);
+	message = g_new0(struct sms_message_data, 1);
+	message->pending = dbus_message_ref(msg);
 
-	if (msg_list == NULL)
-		return __ofono_error_invalid_format(msg);
-
-	flags = OFONO_SMS_SUBMIT_FLAG_RECORD_HISTORY;
-	flags |= OFONO_SMS_SUBMIT_FLAG_RETRY;
-	flags |= OFONO_SMS_SUBMIT_FLAG_EXPOSE_DBUS;
-	if (sms->use_delivery_reports)
-		flags |= OFONO_SMS_SUBMIT_FLAG_REQUEST_SR;
-
-	err = __ofono_sms_txq_submit(sms, msg_list, flags, &uuid,
-					message_queued, msg);
-
-	g_slist_free_full(msg_list, g_free);
-
-	if (err < 0)
-		return __ofono_error_failed(msg);
-
-	modem = __ofono_atom_get_modem(sms->atom);
-	__ofono_history_sms_send_pending(modem, &uuid, to, time(NULL), text);
+	sms_address_from_string(&addr, to);
+	__ofono_sms_filter_chain_send_text(sms->filter_chain, &addr, text,
+		sms_send_message_submit, sms_send_message_destroy, message);
 
 	return NULL;
 }
@@ -1394,20 +1435,18 @@ static void sms_dispatch(struct ofono_sms *sms, GSList *sms_list)
 		if (buf == NULL)
 			return;
 
-		dispatch_app_datagram(sms, &uuid, dstport, srcport, buf, len,
-					&s->deliver.oaddr, &s->deliver.scts);
-
-		g_free(buf);
+		__ofono_sms_filter_chain_recv_datagram(sms->filter_chain,
+			&uuid, dstport, srcport, buf, len, &s->deliver.oaddr,
+			&s->deliver.scts, dispatch_app_datagram);
 	} else {
 		char *message = sms_decode_text(sms_list);
 
 		if (message == NULL)
 			return;
 
-		dispatch_text_message(sms, &uuid, message, cls,
-					&s->deliver.oaddr, &s->deliver.scts);
-
-		g_free(message);
+		__ofono_sms_filter_chain_recv_text(sms->filter_chain, &uuid,
+			message, cls, &s->deliver.oaddr, &s->deliver.scts,
+			dispatch_text_message);
 	}
 }
 
@@ -1749,6 +1788,8 @@ static void sms_remove(struct ofono_atom *atom)
 	if (sms == NULL)
 		return;
 
+	__ofono_sms_filter_chain_free(sms->filter_chain);
+
 	if (sms->driver && sms->driver->remove)
 		sms->driver->remove(sms);
 
@@ -1841,6 +1882,8 @@ struct ofono_sms *ofono_sms_create(struct ofono_modem *modem,
 		sms->driver = drv;
 		break;
 	}
+
+	sms->filter_chain = __ofono_sms_filter_chain_new(sms, modem);
 
 	return sms;
 }
