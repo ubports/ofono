@@ -66,7 +66,6 @@ const uint8_t mbim_uuid_dss[] = {
 
 struct mbim_device {
 	int ref_count;
-	int fd;
 	struct l_io *io;
 	uint32_t max_outstanding;
 	mbim_device_debug_func_t debug_handler;
@@ -75,8 +74,6 @@ struct mbim_device {
 	mbim_device_disconnect_func_t disconnect_handler;
 	void *disconnect_data;
 	mbim_device_destroy_func_t disconnect_destroy;
-
-	bool close_on_unref : 1;
 };
 
 static void disconnect_handler(struct l_io *io, void *user_data)
@@ -107,9 +104,6 @@ struct mbim_device *mbim_device_new(int fd)
 		return NULL;
 
 	device = l_new(struct mbim_device, 1);
-
-	device->fd = fd;
-	device->close_on_unref = false;
 	device->max_outstanding = 1;
 
 	device->io = l_io_new(fd);
@@ -141,9 +135,6 @@ void mbim_device_unref(struct mbim_device *device)
 		return;
 
 	l_io_destroy(device->io);
-
-	if (device->close_on_unref)
-		close(device->fd);
 
 	if (device->debug_destroy)
 		device->debug_destroy(device->debug_data);
@@ -203,6 +194,9 @@ bool mbim_device_set_close_on_unref(struct mbim_device *device, bool do_close)
 	if (unlikely(!device))
 		return false;
 
-	device->close_on_unref = do_close;
+	if (!device->io)
+		return false;
+
+	l_io_set_close_on_destroy(device->io, do_close);
 	return true;
 }
