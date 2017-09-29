@@ -25,6 +25,14 @@ typedef void (*mbim_device_debug_func_t) (const char *str, void *user_data);
 typedef void (*mbim_device_disconnect_func_t) (void *user_data);
 typedef void (*mbim_device_destroy_func_t) (void *user_data);
 
+extern const uint8_t mbim_uuid_basic_connect[];
+extern const uint8_t mbim_uuid_sms[];
+extern const uint8_t mbim_uuid_ussd[];
+extern const uint8_t mbim_uuid_phonebook[];
+extern const uint8_t mbim_uuid_stk[];
+extern const uint8_t mbim_uuid_auth[];
+extern const uint8_t mbim_uuid_dss[];
+
 struct mbim_device *mbim_device_new(int fd);
 bool mbim_device_set_close_on_unref(struct mbim_device *device, bool do_close);
 struct mbim_device *mbim_device_ref(struct mbim_device *device);
