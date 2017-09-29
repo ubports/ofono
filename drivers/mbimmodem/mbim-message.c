@@ -940,6 +940,75 @@ done:
 	return true;
 }
 
+bool mbim_message_builder_enter_struct(struct mbim_message_builder *builder,
+					const char *signature)
+{
+	struct container *container;
+
+	if (builder->index == L_ARRAY_SIZE(builder->stack) - 1)
+		return false;
+
+	builder->index += 1;
+
+	container = &builder->stack[builder->index];
+	memset(container, 0, sizeof(*container));
+	strcpy(container->signature, signature);
+	container->sigindex = 0;
+	container->container_type = CONTAINER_TYPE_STRUCT;
+
+	return true;
+}
+
+bool mbim_message_builder_leave_struct(struct mbim_message_builder *builder)
+{
+	struct container *container;
+	struct container *parent;
+	struct container *array = NULL;
+	size_t start;
+
+	if (unlikely(builder->index == 0))
+		return false;
+
+	container = &builder->stack[builder->index];
+
+	if (unlikely(container->container_type != CONTAINER_TYPE_STRUCT))
+		return false;
+
+	builder->index -= 1;
+	parent = &builder->stack[builder->index];
+	GROW_DBUF(container, 0, 4);
+	container_update_offsets(container);
+
+	if (parent->container_type == CONTAINER_TYPE_ARRAY) {
+		array = parent;
+		parent = &builder->stack[builder->index - 1];
+	}
+
+	/*
+	 * Copy the structure buffers into parent's buffers
+	 */
+	start = GROW_DBUF(parent, container->sbuf_pos + container->dbuf_pos, 4);
+	memcpy(parent->dbuf + start, container->sbuf, container->sbuf_pos);
+	memcpy(parent->dbuf + start + container->sbuf_pos,
+				container->dbuf, container->dbuf_pos);
+	l_free(container->sbuf);
+	l_free(container->dbuf);
+
+	add_offset_and_length(parent, start,
+			container->sbuf_pos + container->dbuf_pos);
+
+	if (array) {
+		uint32_t n_elem = l_get_le32(parent->sbuf +
+						array->array_start);
+		l_put_le32(n_elem + 1,
+				parent->sbuf + array->array_start);
+	}
+
+	memset(container, 0, sizeof(*container));
+
+	return true;
+}
+
 bool mbim_message_builder_enter_array(struct mbim_message_builder *builder,
 					const char *signature)
 {
