@@ -683,6 +683,24 @@ struct mbim_message *_mbim_message_build(const void *header,
 	return msg;
 }
 
+uint32_t mbim_message_get_error(struct mbim_message *message)
+{
+	struct mbim_message_header *hdr;
+
+	if (unlikely(!message))
+		return false;
+
+	if (unlikely(!message->sealed))
+		return false;
+
+	hdr = (struct mbim_message_header *) message->header;
+
+	if (L_LE32_TO_CPU(hdr->type) != MBIM_COMMAND_DONE)
+		return 0;
+
+	return message->status;
+}
+
 bool mbim_message_get_arguments(struct mbim_message *message,
 						const char *signature, ...)
 {
