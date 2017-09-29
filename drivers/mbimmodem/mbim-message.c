@@ -722,6 +722,7 @@ struct container {
 	char signature[256];
 	uint8_t sigindex;
 	uint32_t base_offset;
+	uint32_t array_start;
 };
 
 static void container_update_offsets(struct container *container)
@@ -835,6 +836,9 @@ void mbim_message_builder_free(struct mbim_message_builder *builder)
 	mbim_message_unref(builder->message);
 
 	for (i = 0; i <= builder->index; i++) {
+		if (builder->stack[i].container_type == CONTAINER_TYPE_ARRAY)
+			continue;
+
 		l_free(builder->stack[i].sbuf);
 		l_free(builder->stack[i].dbuf);
 		l_free(builder->stack[i].obuf);
@@ -847,6 +851,7 @@ bool mbim_message_builder_append_basic(struct mbim_message_builder *builder,
 					char type, const void *value)
 {
 	struct container *container = &builder->stack[builder->index];
+	struct container *array = NULL;
 	size_t start;
 	unsigned int alignment;
 	size_t len;
@@ -868,9 +873,24 @@ bool mbim_message_builder_append_basic(struct mbim_message_builder *builder,
 
 	len = get_basic_size(type);
 
+	if (container->container_type == CONTAINER_TYPE_ARRAY) {
+		array = container;
+		container = &builder->stack[builder->index - 1];
+	}
+
 	if (len) {
-		start = GROW_SBUF(container, len, alignment);
-		memcpy(container->sbuf + start, value, len);
+		if (array) {
+			uint32_t n_elem = l_get_le32(container->sbuf +
+					array->array_start + 4);
+			start = GROW_DBUF(container, len, alignment);
+			memcpy(container->dbuf + start, value, len);
+			l_put_le32(n_elem + 1,
+				container->sbuf + array->array_start + 4);
+		} else {
+			start = GROW_SBUF(container, len, alignment);
+			memcpy(container->sbuf + start, value, len);
+		}
+
 		goto done;
 	}
 
@@ -907,9 +927,75 @@ bool mbim_message_builder_append_basic(struct mbim_message_builder *builder,
 
 	add_offset_and_length(container, start, len - 2);
 
+	if (array) {
+		uint32_t n_elem = l_get_le32(container->sbuf +
+						array->array_start);
+		l_put_le32(n_elem + 1,
+				container->sbuf + array->array_start);
+	}
 done:
-	if (container->container_type != CONTAINER_TYPE_ARRAY)
+	if (!array)
 		container->sigindex += 1;
+
+	return true;
+}
+
+bool mbim_message_builder_enter_array(struct mbim_message_builder *builder,
+					const char *signature)
+{
+	struct container *parent;
+	struct container *container;
+
+	if (builder->index == L_ARRAY_SIZE(builder->stack) - 1)
+		return false;
+
+	/*
+	 * TODO: validate that arrays consist of a single simple type or
+	 * a single struct
+	 */
+	parent = &builder->stack[builder->index++];
+	container = &builder->stack[builder->index];
+
+	/* Arrays add on to the parent's buffers */
+	container->container_type = CONTAINER_TYPE_ARRAY;
+	strcpy(container->signature, signature);
+	container->sigindex = 0;
+
+	/* First grow the body enough to cover preceding length */
+	container->array_start = GROW_SBUF(parent, 4, 4);
+	l_put_le32(0, parent->sbuf + container->array_start);
+
+	/* For arrays of fixed-size elements, it is offset followed by length */
+	if (is_fixed_size(container->signature,
+				_signature_end(container->signature))) {
+		/* Note down offset into the data buffer */
+		size_t start = GROW_DBUF(parent, 0, 4);
+		l_put_u32(start, parent->sbuf + container->array_start);
+		/* Set length to 0 */
+		start = GROW_SBUF(parent, 4, 4);
+		l_put_le32(0, parent->sbuf + start);
+		/* Note down offset position to recalculate */
+		start = GROW_OBUF(parent);
+		l_put_u32(container->array_start, parent->obuf + start);
+	}
+
+	return true;
+}
+
+bool mbim_message_builder_leave_array(struct mbim_message_builder *builder)
+{
+	struct container *container;
+
+	if (unlikely(builder->index == 0))
+		return false;
+
+	container = &builder->stack[builder->index];
+
+	if (unlikely(container->container_type != CONTAINER_TYPE_ARRAY))
+		return false;
+
+	builder->index -= 1;
+	memset(container, 0, sizeof(*container));
 
 	return true;
 }
