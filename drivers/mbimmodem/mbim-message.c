@@ -46,7 +46,10 @@ struct mbim_message {
 	uint32_t n_frags;
 	uint8_t uuid[16];
 	uint32_t cid;
-	uint32_t status;
+	union {
+		uint32_t status;
+		uint32_t command_type;
+	};
 	uint32_t info_buf_len;
 
 	bool sealed : 1;
@@ -606,13 +609,18 @@ void *_mbim_message_to_bytearray(struct mbim_message *message, size_t *out_len)
 	return binary;
 }
 
-struct mbim_message *mbim_message_new(const uint8_t *uuid, uint32_t cid)
+struct mbim_message *mbim_message_new(const uint8_t *uuid, uint32_t cid,
+					enum mbim_command_type type)
 {
-	struct mbim_message *msg;
+	struct mbim_message *message =
+		_mbim_message_new_common(MBIM_COMMAND_MSG, uuid, cid);
 
-	msg = l_new(struct mbim_message, 1);
+	if (!message)
+		return NULL;
 
-	return mbim_message_ref(msg);
+	message->command_type = type;
+
+	return message;
 }
 
 struct mbim_message *mbim_message_ref(struct mbim_message *msg)
@@ -1112,13 +1120,25 @@ struct mbim_message *mbim_message_builder_finalize(
 	if (builder->index != 0)
 		return NULL;
 
+	hdr = (struct mbim_message_header *) builder->message->header;
+
 	root = &builder->stack[0];
 	GROW_DBUF(root, 0, 4);
 	container_update_offsets(root);
 
 	memcpy(root->sbuf, builder->message->uuid, 16);
 	l_put_le32(builder->message->cid, root->sbuf + 16);
-	l_put_le32(builder->message->status, root->sbuf + 20);
+
+	switch (L_LE32_TO_CPU(hdr->type)) {
+	case MBIM_COMMAND_DONE:
+		l_put_le32(builder->message->status, root->sbuf + 20);
+		break;
+	case MBIM_COMMAND_MSG:
+		l_put_le32(builder->message->command_type, root->sbuf + 20);
+		break;
+	default:
+		break;
+	}
 
 	builder->message->info_buf_len = root->dbuf_pos + root->sbuf_pos -
 						root->base_offset;
@@ -1135,7 +1155,6 @@ struct mbim_message *mbim_message_builder_finalize(
 	root->sbuf = NULL;
 	root->dbuf = NULL;
 
-	hdr = (struct mbim_message_header *) builder->message->header;
 	hdr->len = L_CPU_TO_LE32(HEADER_SIZE + root->dbuf_pos + root->sbuf_pos);
 
 	builder->message->sealed = true;

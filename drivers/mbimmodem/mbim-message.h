@@ -24,6 +24,11 @@
 struct mbim_message;
 struct mbim_message_iter;
 
+enum mbim_command_type {
+	MBIM_COMMAND_TYPE_QUERY = 0,
+	MBIM_COMMAND_TYPE_SET = 1,
+};
+
 struct mbim_message_iter {
 	const char *sig_start;
 	uint8_t sig_len;
@@ -39,7 +44,8 @@ struct mbim_message_iter {
 	char container_type;
 };
 
-struct mbim_message *mbim_message_new(const uint8_t *uuid, uint32_t cid);
+struct mbim_message *mbim_message_new(const uint8_t *uuid, uint32_t cid,
+					enum mbim_command_type type);
 struct mbim_message *mbim_message_ref(struct mbim_message *msg);
 void mbim_message_unref(struct mbim_message *msg);
 
