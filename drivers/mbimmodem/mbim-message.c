@@ -709,6 +709,14 @@ uint32_t mbim_message_get_error(struct mbim_message *message)
 	return message->status;
 }
 
+uint32_t mbim_message_get_cid(struct mbim_message *message)
+{
+	if (unlikely(!message))
+		return false;
+
+	return message->cid;
+}
+
 bool mbim_message_get_arguments(struct mbim_message *message,
 						const char *signature, ...)
 {
