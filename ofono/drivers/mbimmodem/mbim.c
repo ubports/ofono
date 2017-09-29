@@ -75,6 +75,9 @@ struct mbim_device {
 	mbim_device_disconnect_func_t disconnect_handler;
 	void *disconnect_data;
 	mbim_device_destroy_func_t disconnect_destroy;
+	mbim_device_ready_func_t ready_handler;
+	mbim_device_destroy_func_t ready_destroy;
+	void *ready_data;
 };
 
 static void disconnect_handler(struct l_io *io, void *user_data)
@@ -200,5 +203,23 @@ bool mbim_device_set_close_on_unref(struct mbim_device *device, bool do_close)
 		return false;
 
 	l_io_set_close_on_destroy(device->io, do_close);
+	return true;
+}
+
+bool mbim_device_set_ready_handler(struct mbim_device *device,
+					mbim_device_ready_func_t function,
+					void *user_data,
+					mbim_device_destroy_func_t destroy)
+{
+	if (unlikely(!device))
+		return false;
+
+	if (device->ready_destroy)
+		device->ready_destroy(device->ready_data);
+
+	device->ready_handler = function;
+	device->ready_destroy = destroy;
+	device->ready_data = user_data;
+
 	return true;
 }
