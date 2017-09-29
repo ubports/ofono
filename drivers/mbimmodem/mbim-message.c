@@ -569,6 +569,36 @@ void _mbim_message_set_tid(struct mbim_message *message, uint32_t tid)
 	hdr->tid = L_CPU_TO_LE32(tid);
 }
 
+void *_mbim_message_to_bytearray(struct mbim_message *message, size_t *out_len)
+{
+	unsigned int i;
+	struct mbim_message_header *hdr;
+	void *binary;
+	size_t pos;
+	size_t len;
+
+	if (!message->sealed)
+		return NULL;
+
+	hdr = (struct mbim_message_header *) message->header;
+	len = L_LE32_TO_CPU(hdr->len);
+	binary = l_malloc(len);
+
+	memcpy(binary, message->header, HEADER_SIZE);
+	pos = HEADER_SIZE;
+
+	for (i = 0; i < message->n_frags; i++) {
+		memcpy(binary + pos, message->frags[i].iov_base,
+				message->frags[i].iov_len);
+		pos += message->frags[i].iov_len;
+	}
+
+	if (out_len)
+		*out_len = len;
+
+	return binary;
+}
+
 struct mbim_message *mbim_message_new(const uint8_t *uuid, uint32_t cid)
 {
 	struct mbim_message *msg;
