@@ -717,6 +717,14 @@ uint32_t mbim_message_get_cid(struct mbim_message *message)
 	return message->cid;
 }
 
+const uint8_t *mbim_message_get_uuid(struct mbim_message *message)
+{
+	if (unlikely(!message))
+		return false;
+
+	return message->uuid;
+}
+
 bool mbim_message_get_arguments(struct mbim_message *message,
 						const char *signature, ...)
 {
