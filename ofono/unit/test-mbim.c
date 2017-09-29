@@ -29,6 +29,7 @@
 
 #include <ell/ell.h>
 
+#include "drivers/mbimmodem/mbim.h"
 #include "drivers/mbimmodem/mbim-message.h"
 #include "drivers/mbimmodem/mbim-private.h"
 
@@ -64,7 +65,7 @@ static const unsigned char message_binary_device_caps[] = {
 };
 
 static const struct message_data message_data_device_caps = {
-	.tid		= 0,
+	.tid		= 2,
 	.binary		= message_binary_device_caps,
 	.binary_len	= sizeof(message_binary_device_caps),
 };
@@ -141,6 +142,23 @@ static struct mbim_message *build_message(const struct message_data *msg_data)
 	return msg;
 }
 
+static bool check_message(struct mbim_message *message,
+					const struct message_data *msg_data)
+{
+	size_t len;
+	void *message_binary = _mbim_message_to_bytearray(message, &len);
+	bool r = false;
+
+	assert(message_binary);
+	if (len != msg_data->binary_len)
+		goto done;
+
+	r = memcmp(message_binary, msg_data->binary, len) == 0;
+done:
+	l_free(message_binary);
+	return r;
+}
+
 static void parse_device_caps(const void *data)
 {
 	struct mbim_message *msg = build_message(data);
@@ -187,6 +205,69 @@ static void parse_device_caps(const void *data)
 	l_free(firmware_info);
 	l_free(hardware_info);
 	mbim_message_unref(msg);
+}
+
+static void build_device_caps(const void *data)
+{
+	const struct message_data *msg_data = data;
+	bool r;
+	struct mbim_message *message;
+	struct mbim_message_builder *builder;
+	uint32_t device_type = 1;
+	uint32_t cellular_class = 1;
+	uint32_t voice_class = 1;
+	uint32_t sim_class = 2;
+	uint32_t data_class = 0x3f;
+	uint32_t sms_caps = 0x3;
+	uint32_t control_caps = 1;
+	uint32_t max_sessions = 16;
+
+	message = _mbim_message_new_command_done(mbim_uuid_basic_connect,
+							1, 0);
+	assert(message);
+
+	builder = mbim_message_builder_new(message);
+	assert(builder);
+
+	assert(mbim_message_builder_append_basic(builder, 'u', &device_type));
+	assert(mbim_message_builder_append_basic(builder, 'u',
+							&cellular_class));
+	assert(mbim_message_builder_append_basic(builder, 'u', &voice_class));
+	assert(mbim_message_builder_append_basic(builder, 'u', &sim_class));
+	assert(mbim_message_builder_append_basic(builder, 'u', &data_class));
+	assert(mbim_message_builder_append_basic(builder, 'u', &sms_caps));
+	assert(mbim_message_builder_append_basic(builder, 'u', &control_caps));
+	assert(mbim_message_builder_append_basic(builder, 'u', &max_sessions));
+
+	assert(mbim_message_builder_append_basic(builder, 's', NULL));
+	assert(mbim_message_builder_append_basic(builder, 's',
+							"359336050018717"));
+	assert(mbim_message_builder_append_basic(builder, 's',
+					"FIH7160_V1.1_MODEM_01.1408.07"));
+	assert(mbim_message_builder_append_basic(builder, 's',
+					"XMM7160_V1.1_MBIM_GNSS_NAND_RE"));
+
+	assert(mbim_message_builder_finalize(builder));
+	mbim_message_builder_free(builder);
+
+	_mbim_message_set_tid(message, msg_data->tid);
+	assert(check_message(message, msg_data));
+	mbim_message_unref(message);
+
+	/* now try to build the same message using set_arguments */
+	message = _mbim_message_new_command_done(mbim_uuid_basic_connect,
+							1, 0);
+	assert(message);
+	r = mbim_message_set_arguments(message, "uuuuuuuussss",
+					1, 1, 1, 2, 0x3f, 0x3, 1, 16,
+					NULL, "359336050018717",
+					"FIH7160_V1.1_MODEM_01.1408.07",
+					"XMM7160_V1.1_MBIM_GNSS_NAND_RE");
+	assert(r);
+
+	_mbim_message_set_tid(message, msg_data->tid);
+	assert(check_message(message, msg_data));
+	mbim_message_unref(message);
 }
 
 static void parse_subscriber_ready_status(const void *data)
@@ -261,6 +342,8 @@ int main(int argc, char *argv[])
 
 	l_test_add("Device Caps (parse)",
 			parse_device_caps, &message_data_device_caps);
+	l_test_add("Device Caps (build)",
+			build_device_caps, &message_data_device_caps);
 
 	l_test_add("Subscriber Ready Status (parse)",
 			parse_subscriber_ready_status,
