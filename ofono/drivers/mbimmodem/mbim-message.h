@@ -47,3 +47,10 @@ bool mbim_message_get_arguments(struct mbim_message *message,
 						const char *signature, ...);
 
 bool mbim_message_iter_next_entry(struct mbim_message_iter *iter, ...);
+
+struct mbim_message_builder *mbim_message_builder_new(struct mbim_message *msg);
+void mbim_message_builder_free(struct mbim_message_builder *builder);
+bool mbim_message_builder_append_basic(struct mbim_message_builder *builder,
+					char type, const void *value);
+struct mbim_message *mbim_message_builder_finalize(
+					struct mbim_message_builder *builder);
