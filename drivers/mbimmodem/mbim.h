@@ -38,6 +38,8 @@ bool mbim_device_set_close_on_unref(struct mbim_device *device, bool do_close);
 struct mbim_device *mbim_device_ref(struct mbim_device *device);
 void mbim_device_unref(struct mbim_device *device);
 
+bool mbim_device_set_max_outstanding(struct mbim_device *device, uint32_t max);
+
 bool mbim_device_set_debug(struct mbim_device *device,
 				mbim_device_debug_func_t func, void *user_data,
 				mbim_device_destroy_func_t destroy);

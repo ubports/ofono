@@ -68,6 +68,7 @@ struct mbim_device {
 	int ref_count;
 	int fd;
 	struct l_io *io;
+	uint32_t max_outstanding;
 	mbim_device_debug_func_t debug_handler;
 	void *debug_data;
 	mbim_device_destroy_func_t debug_destroy;
@@ -109,6 +110,7 @@ struct mbim_device *mbim_device_new(int fd)
 
 	device->fd = fd;
 	device->close_on_unref = false;
+	device->max_outstanding = 1;
 
 	device->io = l_io_new(fd);
 	l_io_set_disconnect_handler(device->io, disconnect_handler,
@@ -150,6 +152,15 @@ void mbim_device_unref(struct mbim_device *device)
 		device->disconnect_destroy(device->disconnect_data);
 
 	l_free(device);
+}
+
+bool mbim_device_set_max_outstanding(struct mbim_device *device, uint32_t max)
+{
+	if (unlikely(!device))
+		return false;
+
+	device->max_outstanding = max;
+	return true;
 }
 
 bool mbim_device_set_disconnect_handler(struct mbim_device *device,
