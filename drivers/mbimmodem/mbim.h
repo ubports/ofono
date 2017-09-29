@@ -33,7 +33,7 @@ extern const uint8_t mbim_uuid_stk[];
 extern const uint8_t mbim_uuid_auth[];
 extern const uint8_t mbim_uuid_dss[];
 
-struct mbim_device *mbim_device_new(int fd);
+struct mbim_device *mbim_device_new(int fd, uint32_t max_segment_size);
 bool mbim_device_set_close_on_unref(struct mbim_device *device, bool do_close);
 struct mbim_device *mbim_device_ref(struct mbim_device *device);
 void mbim_device_unref(struct mbim_device *device);

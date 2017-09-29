@@ -67,6 +67,7 @@ const uint8_t mbim_uuid_dss[] = {
 struct mbim_device {
 	int ref_count;
 	struct l_io *io;
+	uint32_t max_segment_size;
 	uint32_t max_outstanding;
 	mbim_device_debug_func_t debug_handler;
 	void *debug_data;
@@ -96,7 +97,7 @@ static bool open_read_handler(struct l_io *io, void *user_data)
 	return true;
 }
 
-struct mbim_device *mbim_device_new(int fd)
+struct mbim_device *mbim_device_new(int fd, uint32_t max_segment_size)
 {
 	struct mbim_device *device;
 
@@ -104,6 +105,7 @@ struct mbim_device *mbim_device_new(int fd)
 		return NULL;
 
 	device = l_new(struct mbim_device, 1);
+	device->max_segment_size = max_segment_size;
 	device->max_outstanding = 1;
 
 	device->io = l_io_new(fd);
