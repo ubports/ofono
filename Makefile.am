@@ -23,6 +23,7 @@ pkginclude_HEADERS = include/log.h include/plugin.h include/history.h \
 			include/cdma-provision.h include/handsfree.h \
 			include/sim-mnclength.h \
 			include/handsfree-audio.h include/siri.h \
+			include/sms-filter.h \
 			include/netmon.h
 
 nodist_pkginclude_HEADERS = include/version.h
@@ -701,6 +702,7 @@ src_ofonod_SOURCES = $(builtin_sources) $(gatchat_sources) src/ofono.ver \
 			src/cdma-provision.c src/handsfree.c \
 			src/handsfree-audio.c src/bluetooth.h \
 			src/sim-mnclength.c src/voicecallagent.c \
+			src/sms-filter.c \
 			src/hfp.h src/siri.c \
 			src/netmon.c
 
@@ -878,7 +880,7 @@ unit_objects =
 unit_tests = unit/test-common unit/test-util unit/test-idmap \
 				unit/test-simutil unit/test-stkutil \
 				unit/test-sms unit/test-cdmasms \
-				unit/test-provision
+				unit/test-provision unit/test-sms-filter
 
 if SAILFISH_MANAGER
 
@@ -992,6 +994,12 @@ unit_test_provision_SOURCES = unit/test-provision.c \
 unit_test_provision_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
 unit_test_provision_LDADD = @GLIB_LIBS@ -ldl
 unit_objects += $(unit_test_provision_OBJECTS)
+
+unit_test_sms_filter_SOURCES = unit/test-sms-filter.c \
+				src/sms-filter.c src/log.c
+unit_test_sms_filter_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
+unit_test_sms_filter_LDADD = @GLIB_LIBS@ -ldl
+unit_objects += $(unit_test_sms_filter_OBJECTS)
 
 test_rilmodem_sources = $(gril_sources) src/log.c src/common.c src/util.c \
 				gatchat/ringbuffer.h gatchat/ringbuffer.c \

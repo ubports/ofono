@@ -541,10 +541,53 @@ void __ofono_private_network_release(int id);
 ofono_bool_t __ofono_private_network_request(ofono_private_network_cb_t cb,
 						int *id, void *data);
 
+#include <ofono/sms-filter.h>
+
+struct sms_filter_chain;
+struct sms_address;
+struct sms_scts;
+enum sms_class;
+
+typedef void (*sms_send_text_cb_t)(struct ofono_sms *sms,
+		const struct sms_address *addr, const char *text, void *data);
+
+typedef void (*sms_dispatch_recv_text_cb_t)
+	(struct ofono_sms *sms, const struct ofono_uuid *uuid,
+		const char *message, enum sms_class cls,
+		const struct sms_address *addr, const struct sms_scts *scts);
+
+typedef void (*sms_dispatch_recv_datagram_cb_t)
+	(struct ofono_sms *sms, const struct ofono_uuid *uuid,
+		int dst, int src, const unsigned char *buf, unsigned int len,
+		const struct sms_address *addr, const struct sms_scts *scts);
+
+struct sms_filter_chain *__ofono_sms_filter_chain_new(struct ofono_sms *sms,
+						struct ofono_modem *modem);
+void __ofono_sms_filter_chain_free(struct sms_filter_chain *chain);
+
+void __ofono_sms_filter_chain_send_text(struct sms_filter_chain *chain,
+		const struct sms_address *addr, const char *text,
+		sms_send_text_cb_t sender, ofono_destroy_func destroy,
+		void *data);
+
+/* Does g_free(buf) when done */
+void __ofono_sms_filter_chain_recv_datagram(struct sms_filter_chain *chain,
+		const struct ofono_uuid *uuid, int dst_port, int src_port,
+		unsigned char *buf, unsigned int len,
+		const struct sms_address *addr, const struct sms_scts *scts,
+		sms_dispatch_recv_datagram_cb_t default_handler);
+
+/* Does g_free(message) when done */
+void __ofono_sms_filter_chain_recv_text(struct sms_filter_chain *chain,
+		const struct ofono_uuid *uuid, char *message,
+		enum sms_class cls, const struct sms_address *addr,
+		const struct sms_scts *scts,
+		sms_dispatch_recv_text_cb_t default_handler);
+
 #include <ofono/sim-mnclength.h>
 
 int __ofono_sim_mnclength_get_mnclength(const char *imsi);
+int mnclength(int mcc, int mnc);
 
 #include <ofono/netmon.h>
 
-int mnclength(int mcc, int mnc);

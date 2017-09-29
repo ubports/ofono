@@ -49,6 +49,7 @@ unit/test-rilmodem-sms
 unit/test-sailfish_cell_info
 unit/test-sailfish_manager
 unit/test-sailfish_sim_info
+unit/test-sms-filter
 unit/test-*.log
 unit/test-*.trs
 
@@ -63,6 +64,9 @@ plugins/sailfish_manager/*.gcno
 drivers/*/*.gcda
 drivers/*/*.gcno
 drivers/*/*.gcov
+plugins/*/*.gcda
+plugins/*/*.gcno
+plugins/*/*.gcov
 */*.gcda
 */*.gcno
 */*.gcov
