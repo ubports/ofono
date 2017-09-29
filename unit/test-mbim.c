@@ -368,6 +368,24 @@ static void parse_phonebook_read(const void *data)
 	mbim_message_unref(msg);
 }
 
+static void build_phonebook_read(const void *data)
+{
+	const struct message_data *msg_data = data;
+	bool r;
+	struct mbim_message *message;
+
+	message = _mbim_message_new_command_done(mbim_uuid_phonebook, 2, 0);
+	assert(message);
+
+	r = mbim_message_set_arguments(message, "a(uss)", 1,
+			3, "921123456", "TS");
+	assert(r);
+
+	_mbim_message_set_tid(message, msg_data->tid);
+	assert(check_message(message, msg_data));
+	mbim_message_unref(message);
+}
+
 int main(int argc, char *argv[])
 {
 	l_test_init(&argc, &argv);
@@ -385,6 +403,8 @@ int main(int argc, char *argv[])
 			&message_data_subscriber_ready_status);
 
 	l_test_add("Phonebook Read (parse)", parse_phonebook_read,
+			&message_data_phonebook_read);
+	l_test_add("Phonebook Read (build)", build_phonebook_read,
 			&message_data_phonebook_read);
 
 	return l_test_run();

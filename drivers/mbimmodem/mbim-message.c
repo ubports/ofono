@@ -31,6 +31,7 @@
 #include "mbim-message.h"
 #include "mbim-private.h"
 
+#define MAX_NESTING 2 /* a(uss) */
 #define HEADER_SIZE (sizeof(struct mbim_message_header) + \
 					sizeof(struct mbim_fragment_header))
 
@@ -410,7 +411,7 @@ static bool message_iter_next_entry_valist(struct mbim_message_iter *orig,
 	const char *end;
 	uint32_t *out_n_elem;
 	struct mbim_message_iter *sub_iter;
-	struct mbim_message_iter stack[2];
+	struct mbim_message_iter stack[MAX_NESTING];
 	unsigned int indent = 0;
 	void *arg;
 
@@ -459,6 +460,9 @@ static bool message_iter_next_entry_valist(struct mbim_message_iter *orig,
 			signature += 1;
 			indent += 1;
 
+			if (unlikely(indent > MAX_NESTING))
+				return false;
+
 			if (!_iter_enter_struct(iter, &stack[indent - 1]))
 				return false;
 
@@ -466,6 +470,9 @@ static bool message_iter_next_entry_valist(struct mbim_message_iter *orig,
 
 			break;
 		case ')':
+			if (unlikely(indent == 0))
+				return false;
+
 			signature += 1;
 			indent -= 1;
 
@@ -719,7 +726,7 @@ struct container {
 	size_t obuf_size;
 	size_t obuf_pos;
 	char container_type;
-	char signature[256];
+	char signature[64];
 	uint8_t sigindex;
 	uint32_t base_offset;
 	uint32_t array_start;
@@ -748,7 +755,7 @@ static void container_update_offsets(struct container *container)
 
 struct mbim_message_builder {
 	struct mbim_message *message;
-	struct container stack[3];
+	struct container stack[MAX_NESTING + 1];
 	uint32_t index;
 };
 
@@ -945,6 +952,9 @@ bool mbim_message_builder_enter_struct(struct mbim_message_builder *builder,
 {
 	struct container *container;
 
+	if (strlen(signature) > sizeof(((struct container *) 0)->signature) - 1)
+		return false;
+
 	if (builder->index == L_ARRAY_SIZE(builder->stack) - 1)
 		return false;
 
@@ -1014,6 +1024,9 @@ bool mbim_message_builder_enter_array(struct mbim_message_builder *builder,
 {
 	struct container *parent;
 	struct container *container;
+
+	if (strlen(signature) > sizeof(((struct container *) 0)->signature) - 1)
+		return false;
 
 	if (builder->index == L_ARRAY_SIZE(builder->stack) - 1)
 		return false;
@@ -1116,15 +1129,18 @@ static bool append_arguments(struct mbim_message *message,
 					const char *signature, va_list args)
 {
 	struct mbim_message_builder *builder;
-	char subsig[256];
+	char subsig[64];
 	const char *sigend;
 	struct {
 		char type;
 		const char *sig_start;
 		const char *sig_end;
 		unsigned int n_items;
-	} stack[4];
+	} stack[MAX_NESTING + 1];
 	unsigned int stack_index = 0;
+
+	if (strlen(signature) > sizeof(subsig) - 1)
+		return false;
 
 	builder = mbim_message_builder_new(message);
 
@@ -1145,6 +1161,9 @@ static bool append_arguments(struct mbim_message *message,
 		if (stack[stack_index].sig_start ==
 				stack[stack_index].sig_end) {
 			bool r = false;
+
+			if (stack_index == 0)
+				goto error;
 
 			if (stack[stack_index].type == CONTAINER_TYPE_ARRAY)
 				r = mbim_message_builder_leave_array(builder);
@@ -1201,6 +1220,9 @@ static bool append_arguments(struct mbim_message *message,
 			break;
 		}
 		case '(':
+			if (stack_index == MAX_NESTING)
+				goto error;
+
 			sigend = _signature_end(s);
 			memcpy(subsig, s + 1, sigend - s - 1);
 			subsig[sigend - s - 1] = '\0';
@@ -1220,6 +1242,9 @@ static bool append_arguments(struct mbim_message *message,
 
 			break;
 		case 'a':
+			if (stack_index == MAX_NESTING)
+				goto error;
+
 			sigend = _signature_end(s + 1) + 1;
 			memcpy(subsig, s + 1, sigend - s - 1);
 			subsig[sigend - s - 1] = '\0';
