@@ -321,6 +321,26 @@ static void parse_subscriber_ready_status(const void *data)
 	mbim_message_unref(msg);
 }
 
+static void build_subscriber_ready_status(const void *data)
+{
+	const struct message_data *msg_data = data;
+	bool r;
+	struct mbim_message *message;
+
+	message = _mbim_message_new_command_done(mbim_uuid_basic_connect,
+							2, 0);
+	assert(message);
+
+	r = mbim_message_set_arguments(message, "ussuas",
+			1, "310410227923374", "89014104212279233747", 0,
+			1, "15124310596");
+	assert(r);
+
+	_mbim_message_set_tid(message, msg_data->tid);
+	assert(check_message(message, msg_data));
+	mbim_message_unref(message);
+}
+
 static void parse_phonebook_read(const void *data)
 {
 	struct mbim_message *msg = build_message(data);
@@ -359,6 +379,9 @@ int main(int argc, char *argv[])
 
 	l_test_add("Subscriber Ready Status (parse)",
 			parse_subscriber_ready_status,
+			&message_data_subscriber_ready_status);
+	l_test_add("Subscriber Ready Status (build)",
+			build_subscriber_ready_status,
 			&message_data_subscriber_ready_status);
 
 	l_test_add("Phonebook Read (parse)", parse_phonebook_read,
