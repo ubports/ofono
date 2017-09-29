@@ -525,6 +525,42 @@ uint32_t _mbim_information_buffer_offset(uint32_t type)
 	return 0;
 }
 
+static struct mbim_message *_mbim_message_new_common(uint32_t type,
+							const uint8_t *uuid,
+							uint32_t cid)
+{
+	struct mbim_message *msg;
+	struct mbim_message_header *hdr;
+	struct mbim_fragment_header *frag;
+
+	msg = l_new(struct mbim_message, 1);
+	hdr = (struct mbim_message_header *) msg->header;
+	hdr->type = L_CPU_TO_LE32(type);
+
+	frag = (struct mbim_fragment_header *) (msg->header + sizeof(*hdr));
+	frag->num_frags = L_CPU_TO_LE32(1);
+	frag->cur_frag = L_CPU_TO_LE32(0);
+
+	memcpy(msg->uuid, uuid, 16);
+	msg->cid = cid;
+
+	return mbim_message_ref(msg);
+}
+
+struct mbim_message *_mbim_message_new_command_done(const uint8_t *uuid,
+					uint32_t cid, uint32_t status)
+{
+	struct mbim_message *message =
+		_mbim_message_new_common(MBIM_COMMAND_DONE, uuid, cid);
+
+	if (!message)
+		return NULL;
+
+	message->status = status;
+
+	return message;
+}
+
 struct mbim_message *mbim_message_new(const uint8_t *uuid, uint32_t cid)
 {
 	struct mbim_message *msg;
