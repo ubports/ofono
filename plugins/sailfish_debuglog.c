@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2015-2016 Jolla Ltd.
+ *  Copyright (C) 2015-2017 Jolla Ltd.
  *  Contact: Slava Monich <slava.monich@jolla.com>
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -255,6 +255,7 @@ static int debuglog_init(void)
 
 	debuglog_default_log_proc = gutil_log_func2;
 	gutil_log_func2 = debuglog_gutil_log_func;
+	gutil_log_func = gutil_log_syslog;
 	ofono_log_hook = debuglog_ofono_log_hook;
 
 	dbus_log_server_set_default_level(debuglog_server, DBUSLOG_LEVEL_DEBUG);

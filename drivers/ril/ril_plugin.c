@@ -2,6 +2,7 @@
  *  oFono - Open Source Telephony - RIL-based devices
  *
  *  Copyright (C) 2015-2017 Jolla Ltd.
+ *  Contact: Slava Monich <slava.monich@jolla.com>
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -1661,14 +1662,6 @@ static int ril_plugin_init(void)
 	grilio_hexdump_log.name = ril_debug_dump.name;
 	grilio_log.name = grilio_debug.name;
 	mce_log.name = mce_debug.name;
-
-	/*
-	 * Debug log plugin hooks gutil_log_func2 while we replace
-	 * gutil_log_func, they don't interfere with each other.
-	 *
-	 * Note that ofono core calls openlog(), so we don't need to.
-	 */
-	gutil_log_func = gutil_log_syslog;
 
 	/*
 	 * The real initialization happens later, to make sure that
