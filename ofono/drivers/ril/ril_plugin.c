@@ -995,7 +995,7 @@ static void ril_slot_free(ril_slot *slot)
 	g_free(slot->sockpath);
 	g_free(slot->sub);
 	g_free(slot->ecclist_file);
-	g_slice_free(ril_slot, slot);
+	g_free(slot);
 }
 
 static gboolean ril_plugin_slot_start_timeout(gpointer user_data)
@@ -1499,7 +1499,7 @@ static void ril_plugin_manager_start_done(gpointer user_data)
 
 static ril_plugin *ril_plugin_manager_create(struct sailfish_slot_manager *m)
 {
-	ril_plugin *plugin = g_slice_new0(ril_plugin);
+	ril_plugin *plugin = g_new0(ril_plugin, 1);
 
 	DBG("");
 	plugin->handle = m;
@@ -1568,7 +1568,7 @@ static void ril_plugin_manager_free(ril_plugin *plugin)
 		ril_radio_caps_manager_remove_handler(plugin->caps_manager,
 					plugin->caps_manager_event_id);
 		ril_radio_caps_manager_unref(plugin->caps_manager);
-		g_slice_free(ril_plugin, plugin);
+		g_free(plugin);
 	}
 }
 
