@@ -23,11 +23,23 @@
 #include <config.h>
 #endif
 
+#define _GNU_SOURCE
 #include <unistd.h>
+#include <limits.h>
+#include <errno.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <linux/types.h>
 
 #include <ell/ell.h>
 
 #include "mbim.h"
+#include "mbim-message.h"
+#include "mbim-private.h"
+
+#define MAX_CONTROL_TRANSFER 4096
+#define HEADER_SIZE (sizeof(struct mbim_message_header) + \
+					sizeof(struct mbim_fragment_header))
 
 const uint8_t mbim_uuid_basic_connect[] = {
 	0xa2, 0x89, 0xcc, 0x33, 0xbc, 0xbb, 0x8b, 0x4f, 0xb6, 0xb0,
@@ -69,6 +81,7 @@ struct mbim_device {
 	struct l_io *io;
 	uint32_t max_segment_size;
 	uint32_t max_outstanding;
+	uint32_t next_tid;
 	mbim_device_debug_func_t debug_handler;
 	void *debug_data;
 	mbim_device_destroy_func_t debug_destroy;
@@ -78,7 +91,22 @@ struct mbim_device {
 	mbim_device_ready_func_t ready_handler;
 	mbim_device_destroy_func_t ready_destroy;
 	void *ready_data;
+	uint8_t header[HEADER_SIZE];
+	size_t header_offset;
+	size_t segment_bytes_remaining;
 };
+
+static inline uint32_t _mbim_device_get_next_tid(struct mbim_device *device)
+{
+	uint32_t tid = device->next_tid;
+
+	if (device->next_tid == UINT_MAX)
+		device->next_tid = 1;
+	else
+		device->next_tid += 1;
+
+	return tid;
+}
 
 static void disconnect_handler(struct l_io *io, void *user_data)
 {
@@ -90,13 +118,126 @@ static void disconnect_handler(struct l_io *io, void *user_data)
 		device->disconnect_handler(device->disconnect_data);
 }
 
+static int receive_header(struct mbim_device *device, int fd)
+{
+	size_t to_read = sizeof(struct mbim_message_header) -
+							device->header_offset;
+	ssize_t len = TEMP_FAILURE_RETRY(read(fd,
+					device->header + device->header_offset,
+					to_read));
+
+	if (len < 0) {
+		if (errno == EAGAIN)
+			return true;
+
+		return false;
+	}
+
+	l_util_hexdump(true, device->header + device->header_offset, len,
+				device->debug_handler, device->debug_data);
+	device->header_offset += len;
+
+	return true;
+}
+
+static bool command_write_handler(struct l_io *io, void *user_data)
+{
+	return false;
+}
+
+static bool command_read_handler(struct l_io *io, void *user_data)
+{
+	return false;
+}
+
 static bool open_write_handler(struct l_io *io, void *user_data)
 {
+	struct mbim_device *device = user_data;
+	ssize_t written;
+	int fd;
+	uint32_t buf[4];
+
+	/* Fill out buf with a MBIM_OPEN_MSG pdu */
+	buf[0] = L_CPU_TO_LE32(MBIM_OPEN_MSG);
+	buf[1] = L_CPU_TO_LE32(sizeof(buf));
+	buf[2] = L_CPU_TO_LE32(_mbim_device_get_next_tid(device));
+	buf[3] = L_CPU_TO_LE32(device->max_segment_size);
+
+	fd = l_io_get_fd(io);
+
+	written = TEMP_FAILURE_RETRY(write(fd, buf, sizeof(buf)));
+	if (written < 0)
+		return false;
+
+	l_util_hexdump(false, buf, written,
+				device->debug_handler, device->debug_data);
+
 	return false;
 }
 
 static bool open_read_handler(struct l_io *io, void *user_data)
 {
+	struct mbim_device *device = user_data;
+	uint8_t buf[MAX_CONTROL_TRANSFER];
+	ssize_t len;
+	uint32_t type;
+	int fd;
+	struct mbim_message_header *hdr;
+
+	fd = l_io_get_fd(io);
+
+	if (device->header_offset < sizeof(struct mbim_message_header)) {
+		if (!receive_header(device, fd))
+			return false;
+
+		if (device->header_offset != sizeof(struct mbim_message_header))
+			return true;
+	}
+
+	hdr = (struct mbim_message_header *) device->header;
+	type = L_LE32_TO_CPU(hdr->type);
+
+	if (device->segment_bytes_remaining == 0) {
+		if (type == MBIM_OPEN_DONE)
+			device->segment_bytes_remaining = 4;
+		else
+			device->segment_bytes_remaining =
+					L_LE32_TO_CPU(hdr->len) -
+					sizeof(struct mbim_message_header);
+	}
+
+	len = TEMP_FAILURE_RETRY(read(fd, buf,
+					device->segment_bytes_remaining));
+	if (len < 0) {
+		if (errno == EAGAIN)
+			return true;
+
+		return false;
+	}
+
+	l_util_hexdump(true, buf, len,
+				device->debug_handler, device->debug_data);
+	device->segment_bytes_remaining -= len;
+
+	/* Ready to read next packet */
+	if (!device->segment_bytes_remaining)
+		device->header_offset = 0;
+
+	if (type != MBIM_OPEN_DONE)
+		return true;
+
+	/* Grab OPEN_DONE Status field */
+	if (l_get_le32(buf) != 0) {
+		close(fd);
+		return false;
+	}
+
+	if (device->ready_handler)
+		device->ready_handler(device->ready_data);
+
+	l_io_set_read_handler(device->io, command_read_handler, device, NULL);
+	l_io_set_write_handler(device->io, command_write_handler, device, NULL);
+
 	return true;
 }
 
@@ -108,8 +249,14 @@ struct mbim_device *mbim_device_new(int fd, uint32_t max_segment_size)
 		return NULL;
 
 	device = l_new(struct mbim_device, 1);
+
+	if (max_segment_size > MAX_CONTROL_TRANSFER)
+		max_segment_size = MAX_CONTROL_TRANSFER;
+
 	device->max_segment_size = max_segment_size;
 	device->max_outstanding = 1;
+	device->next_tid = 1;
+
 
 	device->io = l_io_new(fd);
 	l_io_set_disconnect_handler(device->io, disconnect_handler,
@@ -139,7 +286,10 @@ void mbim_device_unref(struct mbim_device *device)
 	if (__sync_sub_and_fetch(&device->ref_count, 1))
 		return;
 
-	l_io_destroy(device->io);
+	if (device->io) {
+		l_io_destroy(device->io);
+		device->io = NULL;
+	}
 
 	if (device->debug_destroy)
 		device->debug_destroy(device->debug_data);
