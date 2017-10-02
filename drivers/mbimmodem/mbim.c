@@ -241,6 +241,87 @@ static bool open_read_handler(struct l_io *io, void *user_data)
 	return true;
 }
 
+static bool close_write_handler(struct l_io *io, void *user_data)
+{
+	struct mbim_device *device = user_data;
+	ssize_t written;
+	int fd;
+	uint32_t buf[3];
+
+	/* Fill out buf with a MBIM_CLOSE_MSG pdu */
+	buf[0] = L_CPU_TO_LE32(MBIM_CLOSE_MSG);
+	buf[1] = L_CPU_TO_LE32(sizeof(buf));
+	buf[2] = L_CPU_TO_LE32(_mbim_device_get_next_tid(device));
+
+	fd = l_io_get_fd(io);
+
+	written = TEMP_FAILURE_RETRY(write(fd, buf, sizeof(buf)));
+	if (written < 0)
+		return false;
+
+	l_util_hexdump(false, buf, written,
+				device->debug_handler, device->debug_data);
+
+	return false;
+}
+
+static bool close_read_handler(struct l_io *io, void *user_data)
+{
+	struct mbim_device *device = user_data;
+	uint8_t buf[MAX_CONTROL_TRANSFER];
+	ssize_t len;
+	uint32_t type;
+	int fd;
+	struct mbim_message_header *hdr;
+
+	fd = l_io_get_fd(io);
+
+	if (device->header_offset < sizeof(struct mbim_message_header)) {
+		if (!receive_header(device, fd))
+			return false;
+
+		if (device->header_offset != sizeof(struct mbim_message_header))
+			return true;
+	}
+
+	hdr = (struct mbim_message_header *) device->header;
+	type = L_LE32_TO_CPU(hdr->type);
+
+	if (!device->segment_bytes_remaining) {
+		if (type == MBIM_CLOSE_DONE)
+			device->segment_bytes_remaining = 4;
+		else
+			device->segment_bytes_remaining =
+					L_LE32_TO_CPU(hdr->len) -
+					sizeof(struct mbim_message_header);
+	}
+
+	len = TEMP_FAILURE_RETRY(read(fd, buf,
+					device->segment_bytes_remaining));
+	if (len < 0) {
+		if (errno == EAGAIN)
+			return true;
+
+		return false;
+	}
+
+	l_util_hexdump(true, buf, len,
+				device->debug_handler, device->debug_data);
+	device->segment_bytes_remaining -= len;
+
+	/* Ready to read next packet */
+	if (!device->segment_bytes_remaining)
+		device->header_offset = 0;
+
+	if (type == MBIM_CLOSE_DONE) {
+		l_io_destroy(io);
+		device->io = NULL;
+		return false;
+	}
+
+	return true;
+}
+
 struct mbim_device *mbim_device_new(int fd, uint32_t max_segment_size)
 {
 	struct mbim_device *device;
@@ -298,6 +379,17 @@ void mbim_device_unref(struct mbim_device *device)
 		device->disconnect_destroy(device->disconnect_data);
 
 	l_free(device);
+}
+
+bool mbim_device_shutdown(struct mbim_device *device)
+{
+	if (unlikely(!device))
+		return false;
+
+	l_io_set_read_handler(device->io, close_read_handler, device, NULL);
+	l_io_set_write_handler(device->io, close_write_handler, device, NULL);
+
+	return true;
 }
 
 bool mbim_device_set_max_outstanding(struct mbim_device *device, uint32_t max)
