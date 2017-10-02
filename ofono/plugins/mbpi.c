@@ -39,8 +39,15 @@
 #include <ofono/gprs-provision.h>
 
 #ifndef MBPI_DATABASE
-#define MBPI_DATABASE  "/usr/share/mobile-broadband-provider-info/" \
+#  ifdef PROVIDER_DATABASE
+     /* This one is pulled from mobile-broadband-provider-info.pc
+      * by the configure script, we should trust it. */
+#    define MBPI_DATABASE PROVIDER_DATABASE
+#  else
+     /* The default one */
+#    define MBPI_DATABASE "/usr/share/mobile-broadband-provider-info/" \
 							"serviceproviders.xml"
+#  endif
 #endif
 
 #include "mbpi.h"
