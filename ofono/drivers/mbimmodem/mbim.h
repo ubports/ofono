@@ -38,6 +38,7 @@ struct mbim_device *mbim_device_new(int fd, uint32_t max_segment_size);
 bool mbim_device_set_close_on_unref(struct mbim_device *device, bool do_close);
 struct mbim_device *mbim_device_ref(struct mbim_device *device);
 void mbim_device_unref(struct mbim_device *device);
+bool mbim_device_shutdown(struct mbim_device *device);
 
 bool mbim_device_set_max_outstanding(struct mbim_device *device, uint32_t max);
 
