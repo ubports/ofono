@@ -1404,7 +1404,7 @@ static GSList *ril_plugin_load_config(const char *path,
 	for (l = list; l; l = l->next) {
 		ril_slot *slot = l->data;
 
-		GASSERT(slot->start_timeout_id);
+		GASSERT(!slot->start_timeout_id);
 		slot->start_timeout_id = g_timeout_add(slot->start_timeout,
 					ril_plugin_slot_start_timeout, slot);
 	}
