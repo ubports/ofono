@@ -76,6 +76,126 @@ const uint8_t mbim_uuid_dss[] = {
 	0x6e, 0x0d, 0x58, 0x3c, 0x4d ,0x0e
 };
 
+struct message_assembly_node {
+	struct mbim_message_header msg_hdr;
+	struct mbim_fragment_header frag_hdr;
+	struct iovec *iov;
+	size_t n_iov;
+	size_t cur_iov;
+} __attribute((packed))__;
+
+struct message_assembly {
+	struct l_queue *transactions;
+};
+
+static bool message_assembly_node_match_tid(const void *a, const void *b)
+{
+	const struct message_assembly_node *node = a;
+	uint32_t tid = L_PTR_TO_UINT(b);
+
+	return L_LE32_TO_CPU(node->msg_hdr.tid) == tid;
+}
+
+static void message_assembly_node_free(void *data)
+{
+	struct message_assembly_node *node = data;
+	size_t i;
+
+	for (i = 0; i < node->n_iov; i++)
+		l_free(node->iov[i].iov_base);
+
+	l_free(node->iov);
+	l_free(node);
+}
+
+static struct message_assembly *message_assembly_new()
+{
+	struct message_assembly *assembly = l_new(struct message_assembly, 1);
+
+	assembly->transactions = l_queue_new();
+
+	return assembly;
+}
+
+static void message_assembly_free(struct message_assembly *assembly)
+{
+	l_queue_destroy(assembly->transactions, message_assembly_node_free);
+	l_free(assembly);
+}
+
+static struct mbim_message *message_assembly_add(
+					struct message_assembly *assembly,
+					const void *header,
+					void *frag, size_t frag_len)
+{
+	const struct mbim_message_header *msg_hdr = header;
+	const struct mbim_fragment_header *frag_hdr = header +
+					sizeof(struct mbim_message_header);
+	uint32_t tid = L_LE32_TO_CPU(msg_hdr->tid);
+	uint32_t type = L_LE32_TO_CPU(msg_hdr->type);
+	uint32_t n_frags = L_LE32_TO_CPU(frag_hdr->num_frags);
+	uint32_t cur_frag = L_LE32_TO_CPU(frag_hdr->cur_frag);
+	struct message_assembly_node *node;
+	struct mbim_message *message;
+
+	if (unlikely(type != MBIM_COMMAND_DONE))
+		return NULL;
+
+	node = l_queue_find(assembly->transactions,
+				message_assembly_node_match_tid,
+				L_UINT_TO_PTR(tid));
+
+	if (!node) {
+		if (cur_frag != 0)
+			return NULL;
+
+		if (n_frags == 1) {
+			struct iovec *iov = l_new(struct iovec, 1);
+
+			iov[0].iov_base = frag;
+			iov[0].iov_len = frag_len;
+
+			return _mbim_message_build(header, iov, 1);
+		}
+
+		node = l_new(struct message_assembly_node, 1);
+		memcpy(&node->msg_hdr, msg_hdr, sizeof(*msg_hdr));
+		memcpy(&node->frag_hdr, frag_hdr, sizeof(*frag_hdr));
+		node->iov = l_new(struct iovec, n_frags);
+		node->n_iov = n_frags;
+		node->cur_iov = cur_frag;
+		node->iov[node->cur_iov].iov_base = frag;
+		node->iov[node->cur_iov].iov_len = frag_len;
+
+		l_queue_push_head(assembly->transactions, node);
+
+		return NULL;
+	}
+
+	if (node->n_iov != n_frags)
+		return NULL;
+
+	if (node->cur_iov + 1 != cur_frag)
+		return NULL;
+
+	node->cur_iov = cur_frag;
+	node->iov[node->cur_iov].iov_base = frag;
+	node->iov[node->cur_iov].iov_len = frag_len;
+
+	if (node->cur_iov + 1 < node->n_iov)
+		return NULL;
+
+	l_queue_remove(assembly->transactions, node);
+	message = _mbim_message_build(&node->msg_hdr, node->iov, node->n_iov);
+
+	if (!message)
+		message_assembly_node_free(node);
+	else
+		l_free(node);
+
+	return message;
+}
+
 struct mbim_device {
 	int ref_count;
 	struct l_io *io;
@@ -94,6 +214,7 @@ struct mbim_device {
 	uint8_t header[HEADER_SIZE];
 	size_t header_offset;
 	size_t segment_bytes_remaining;
+	struct message_assembly *assembly;
 };
 
 static inline uint32_t _mbim_device_get_next_tid(struct mbim_device *device)
@@ -346,6 +467,8 @@ struct mbim_device *mbim_device_new(int fd, uint32_t max_segment_size)
 	l_io_set_read_handler(device->io, open_read_handler, device, NULL);
 	l_io_set_write_handler(device->io, open_write_handler, device, NULL);
 
+	device->assembly = message_assembly_new();
+
 	return mbim_device_ref(device);
 }
 
@@ -378,6 +501,7 @@ void mbim_device_unref(struct mbim_device *device)
 	if (device->disconnect_destroy)
 		device->disconnect_destroy(device->disconnect_data);
 
+	message_assembly_free(device->assembly);
 	l_free(device);
 }
 
