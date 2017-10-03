@@ -112,6 +112,13 @@ static const struct message_data message_data_phonebook_read = {
 	.binary_len	= sizeof(message_binary_phonebook_read),
 };
 
+static void do_debug(const char *str, void *user_data)
+{
+	const char *prefix = user_data;
+
+	l_info("%s%s", prefix, str);
+}
+
 static struct mbim_message *build_message(const struct message_data *msg_data)
 {
 	static const int frag_size = 64;
@@ -148,6 +155,11 @@ static bool check_message(struct mbim_message *message,
 	size_t len;
 	void *message_binary = _mbim_message_to_bytearray(message, &len);
 	bool r = false;
+
+	l_util_hexdump(false, msg_data->binary, msg_data->binary_len,
+			do_debug, "[MSG] ");
+
+	l_util_hexdump(true, message_binary, len, do_debug, "[MSG] ");
 
 	assert(message_binary);
 	if (len != msg_data->binary_len)
