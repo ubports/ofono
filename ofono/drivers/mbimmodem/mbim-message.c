@@ -191,6 +191,9 @@ static bool _iter_next_entry_basic(struct mbim_message_iter *iter,
 	const void *data;
 	size_t pos;
 
+	if (iter->container_type == CONTAINER_TYPE_ARRAY && !iter->n_elem)
+		return false;
+
 	if (iter->pos >= iter->len)
 		return false;
 
@@ -250,6 +253,42 @@ static bool _iter_next_entry_basic(struct mbim_message_iter *iter,
 	return true;
 }
 
+static bool _iter_enter_array(struct mbim_message_iter *iter,
+					struct mbim_message_iter *array)
+{
+	size_t pos;
+	uint32_t n_elem;
+	const char *sig_start;
+	const char *sig_end;
+	const void *data;
+
+	if (iter->sig_start[iter->sig_pos] != 'a')
+		return false;
+
+	sig_start = iter->sig_start + iter->sig_pos + 1;
+	sig_end = _signature_end(sig_start) + 1;
+
+	pos = align_len(iter->pos, 4);
+	if (pos + 4 > iter->len)
+		return false;
+
+	data = _iter_get_data(iter, pos);
+	n_elem = l_get_le32(data);
+	pos += 4;
+
+	_iter_init_internal(array, CONTAINER_TYPE_ARRAY, sig_start, sig_end,
+					iter->iov, iter->n_iov,
+					iter->len, iter->base_offset,
+					pos, n_elem);
+
+	if (iter->container_type != CONTAINER_TYPE_ARRAY)
+		iter->sig_pos += sig_end - sig_start + 1;
+
+	iter->pos = pos + 8 * n_elem;
+
+	return true;
+}
+
 static bool message_iter_next_entry_valist(struct mbim_message_iter *orig,
 						va_list args)
 {
@@ -257,6 +296,8 @@ static bool message_iter_next_entry_valist(struct mbim_message_iter *orig,
 	struct mbim_message_iter *iter = orig;
 	const char *signature = orig->sig_start + orig->sig_pos;
 	const char *end;
+	uint32_t *out_n_elem;
+	struct mbim_message_iter *sub_iter;
 	void *arg;
 
 	while (signature < orig->sig_start + orig->sig_len) {
@@ -300,10 +341,25 @@ static bool message_iter_next_entry_valist(struct mbim_message_iter *orig,
 			signature = end + 1;
 			break;
 		}
+		case 'a':
+			out_n_elem = va_arg(args, uint32_t *);
+			sub_iter = va_arg(args, void *);
+
+			if (!_iter_enter_array(iter, sub_iter))
+				return false;
+
+			*out_n_elem = sub_iter->n_elem;
+
+			end = _signature_end(signature + 1);
+			signature = end + 1;
+			break;
 		default:
 			return false;
 		}
 	}
+
+	if (iter->container_type == CONTAINER_TYPE_ARRAY)
+		iter->n_elem -= 1;
 
 	return true;
 }
