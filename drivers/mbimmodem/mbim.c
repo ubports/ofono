@@ -215,6 +215,8 @@ struct mbim_device {
 	size_t header_offset;
 	size_t segment_bytes_remaining;
 	struct message_assembly *assembly;
+
+	bool is_ready : 1;
 };
 
 static inline uint32_t _mbim_device_get_next_tid(struct mbim_device *device)
@@ -355,6 +357,8 @@ static bool open_read_handler(struct l_io *io, void *user_data)
 
 	if (device->ready_handler)
 		device->ready_handler(device->ready_data);
+
+	device->is_ready = true;
 
 	l_io_set_read_handler(device->io, command_read_handler, device, NULL);
 	l_io_set_write_handler(device->io, command_write_handler, device, NULL);
@@ -513,6 +517,7 @@ bool mbim_device_shutdown(struct mbim_device *device)
 	l_io_set_read_handler(device->io, close_read_handler, device, NULL);
 	l_io_set_write_handler(device->io, close_write_handler, device, NULL);
 
+	device->is_ready = false;
 	return true;
 }
 
