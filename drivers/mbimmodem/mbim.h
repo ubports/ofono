@@ -20,11 +20,14 @@
  */
 
 struct mbim_device;
+struct mbim_message;
 
 typedef void (*mbim_device_debug_func_t) (const char *str, void *user_data);
 typedef void (*mbim_device_disconnect_func_t) (void *user_data);
 typedef void (*mbim_device_destroy_func_t) (void *user_data);
 typedef void (*mbim_device_ready_func_t) (void *user_data);
+typedef void (*mbim_device_reply_func_t) (struct mbim_message *message,
+							void *user_data);
 
 extern const uint8_t mbim_uuid_basic_connect[];
 extern const uint8_t mbim_uuid_sms[];
@@ -53,3 +56,9 @@ bool mbim_device_set_ready_handler(struct mbim_device *device,
 					mbim_device_ready_func_t function,
 					void *user_data,
 					mbim_device_destroy_func_t destroy);
+
+uint32_t mbim_device_send(struct mbim_device *device, uint32_t gid,
+				struct mbim_message *message,
+				mbim_device_reply_func_t function,
+				void *user_data,
+				mbim_device_destroy_func_t destroy);

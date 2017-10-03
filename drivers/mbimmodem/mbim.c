@@ -214,11 +214,42 @@ struct mbim_device {
 	uint8_t header[HEADER_SIZE];
 	size_t header_offset;
 	size_t segment_bytes_remaining;
+	struct l_queue *pending_commands;
+	struct l_queue *sent_commands;
 	struct message_assembly *assembly;
 	struct l_idle *close_io;
 
 	bool is_ready : 1;
 };
+
+struct pending_command {
+	uint32_t tid;
+	uint32_t gid;
+	struct mbim_message *message;
+	mbim_device_reply_func_t callback;
+	mbim_device_destroy_func_t destroy;
+	void *user_data;
+};
+
+static bool pending_command_match_tid(const void *a, const void *b)
+{
+	const struct pending_command *pending = a;
+	uint32_t tid = L_PTR_TO_UINT(b);
+
+	return pending->tid == tid;
+}
+
+static void pending_command_free(void *data)
+{
+	struct pending_command *pending = data;
+
+	mbim_message_unref(pending->message);
+
+	if (pending->destroy)
+		pending->destroy(pending->user_data);
+
+	l_free(pending);
+}
 
 static inline uint32_t _mbim_device_get_next_tid(struct mbim_device *device)
 {
@@ -266,7 +297,80 @@ static int receive_header(struct mbim_device *device, int fd)
 
 static bool command_write_handler(struct l_io *io, void *user_data)
 {
-	return false;
+	struct mbim_device *device = user_data;
+	struct mbim_message *message;
+	struct pending_command *pending;
+	void *header;
+	size_t header_size;
+	size_t info_buf_len;
+	size_t n_iov;
+	struct iovec *body;
+	int fd;
+	ssize_t written;
+
+	/*
+	 * For now assume we write out the entire command in one go without
+	 * hitting an EAGAIN
+	 */
+	pending = l_queue_pop_head(device->pending_commands);
+	if (!pending)
+		return false;
+
+	message = pending->message;
+	_mbim_message_set_tid(message, pending->tid);
+
+	header = _mbim_message_get_header(message, &header_size);
+	body = _mbim_message_get_body(message, &n_iov, &info_buf_len);
+
+	fd = l_io_get_fd(io);
+
+	if (info_buf_len + header_size < device->max_segment_size) {
+		/*
+		 * cdc-wdm* doesn't seem to support scatter-gather writes
+		 * properly.  So copy into a temporary buffer instead
+		 */
+		uint8_t buf[device->max_segment_size];
+		size_t pos;
+		unsigned int i;
+
+		memcpy(buf, header, header_size);
+		pos = header_size;
+
+		for (i = 0; i < n_iov; i++) {
+			memcpy(buf + pos, body[i].iov_base, body[i].iov_len);
+			pos += body[i].iov_len;
+		}
+
+		written = TEMP_FAILURE_RETRY(write(fd, buf, pos));
+
+		l_info("n_iov: %lu, %lu", n_iov + 1, (size_t) written);
+
+		if (written < 0)
+			return false;
+
+		l_util_hexdump(false, buf, written, device->debug_handler,
+				device->debug_data);
+	} else {
+		/* TODO: Handle fragmented writes */
+		l_util_debug(device->debug_handler, device->debug_data,
+				"fragment me");
+	}
+
+	if (pending->callback == NULL) {
+		pending_command_free(pending);
+		goto done;
+	}
+
+	l_queue_push_tail(device->sent_commands, pending);
+done:
+	if (l_queue_isempty(device->pending_commands))
+		return false;
+
+	if (l_queue_length(device->sent_commands) >= device->max_outstanding)
+		return false;
+
+	/* Only continue sending messages if the connection is ready */
+	return device->is_ready;
 }
 
 static bool command_read_handler(struct l_io *io, void *user_data)
@@ -362,7 +466,10 @@ static bool open_read_handler(struct l_io *io, void *user_data)
 	device->is_ready = true;
 
 	l_io_set_read_handler(device->io, command_read_handler, device, NULL);
-	l_io_set_write_handler(device->io, command_write_handler, device, NULL);
+
+	if (l_queue_length(device->pending_commands) > 0)
+		l_io_set_write_handler(device->io, command_write_handler,
+								device, NULL);
 
 	return true;
 }
@@ -483,6 +590,8 @@ struct mbim_device *mbim_device_new(int fd, uint32_t max_segment_size)
 	l_io_set_read_handler(device->io, open_read_handler, device, NULL);
 	l_io_set_write_handler(device->io, open_write_handler, device, NULL);
 
+	device->pending_commands = l_queue_new();
+	device->sent_commands = l_queue_new();
 	device->assembly = message_assembly_new();
 
 	return mbim_device_ref(device);
@@ -519,6 +628,8 @@ void mbim_device_unref(struct mbim_device *device)
 	if (device->disconnect_destroy)
 		device->disconnect_destroy(device->disconnect_data);
 
+	l_queue_destroy(device->pending_commands, pending_command_free);
+	l_queue_destroy(device->sent_commands, pending_command_free);
 	message_assembly_free(device->assembly);
 	l_free(device);
 }
@@ -607,4 +718,38 @@ bool mbim_device_set_ready_handler(struct mbim_device *device,
 	device->ready_data = user_data;
 
 	return true;
+}
+
+uint32_t mbim_device_send(struct mbim_device *device, uint32_t gid,
+				struct mbim_message *message,
+				mbim_device_reply_func_t function,
+				void *user_data,
+				mbim_device_destroy_func_t destroy)
+{
+	struct pending_command *pending;
+
+	if (unlikely(!device || !message))
+		return 0;
+
+	pending = l_new(struct pending_command, 1);
+
+	pending->tid = _mbim_device_get_next_tid(device);
+	pending->gid = gid;
+	pending->message = message;
+	pending->callback = function;
+	pending->destroy = destroy;
+	pending->user_data = user_data;
+
+	l_queue_push_tail(device->pending_commands, pending);
+
+	if (!device->is_ready)
+		goto done;
+
+	if (l_queue_length(device->sent_commands) >= device->max_outstanding)
+		goto done;
+
+	l_io_set_write_handler(device->io, command_write_handler,
+								device, NULL);
+done:
+	return pending->tid;
 }
