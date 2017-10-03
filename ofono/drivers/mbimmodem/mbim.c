@@ -214,6 +214,7 @@ struct mbim_device {
 	uint8_t header[HEADER_SIZE];
 	size_t header_offset;
 	size_t segment_bytes_remaining;
+	void *segment;
 	struct l_queue *pending_commands;
 	struct l_queue *sent_commands;
 	struct message_assembly *assembly;
@@ -373,9 +374,129 @@ done:
 	return device->is_ready;
 }
 
+static void dispatch_message(struct mbim_device *device, uint32_t type,
+						struct mbim_message *message)
+{
+	struct mbim_message_header *hdr =
+			_mbim_message_get_header(message, NULL);
+	struct pending_command *pending;
+
+	pending = l_queue_remove_if(device->sent_commands,
+					pending_command_match_tid,
+					L_UINT_TO_PTR(L_LE32_TO_CPU(hdr->tid)));
+	if (!pending)
+		goto done;
+
+	pending->callback(message, pending->user_data);
+	pending_command_free(pending);
+
+	if (l_queue_isempty(device->pending_commands))
+		goto done;
+
+	l_io_set_write_handler(device->io, command_write_handler, device, NULL);
+done:
+	mbim_message_unref(message);
+}
+
 static bool command_read_handler(struct l_io *io, void *user_data)
 {
-	return false;
+	struct mbim_device *device = user_data;
+	ssize_t len;
+	uint32_t type;
+	int fd;
+	struct mbim_message_header *hdr;
+	struct iovec iov[2];
+	uint32_t n_iov = 0;
+	uint32_t header_size;
+	struct mbim_message *message;
+	uint32_t i;
+
+	fd = l_io_get_fd(io);
+
+	if (device->header_offset < sizeof(struct mbim_message_header)) {
+		if (!receive_header(device, fd))
+			return false;
+
+		if (device->header_offset != sizeof(struct mbim_message_header))
+			return true;
+	}
+
+	hdr = (struct mbim_message_header *) device->header;
+	type = L_LE32_TO_CPU(hdr->type);
+
+	if (device->segment_bytes_remaining == 0)
+		device->segment_bytes_remaining =
+					L_LE32_TO_CPU(hdr->len) -
+					sizeof(struct mbim_message_header);
+
+	if (type == MBIM_COMMAND_DONE || type == MBIM_INDICATE_STATUS_MSG)
+		header_size = HEADER_SIZE;
+	else
+		header_size = sizeof(struct mbim_message_header);
+
+	/* Put the rest of the header into the first chunk */
+	if (device->header_offset < header_size) {
+		iov[n_iov].iov_base = device->header + device->header_offset;
+		iov[n_iov].iov_len = header_size - device->header_offset;
+		n_iov += 1;
+	}
+
+	l_info("hdr->len: %u", L_LE32_TO_CPU(hdr->len));
+	l_info("header_size: %u", header_size);
+	l_info("header_offset: %lu", device->header_offset);
+	l_info("segment_bytes_remaining: %lu", device->segment_bytes_remaining);
+
+	iov[n_iov].iov_base = device->segment + L_LE32_TO_CPU(hdr->len) -
+				device->header_offset -
+				device->segment_bytes_remaining;
+	iov[n_iov].iov_len = device->segment_bytes_remaining -
+				(header_size - device->header_offset);
+	n_iov += 1;
+
+	len = TEMP_FAILURE_RETRY(readv(fd, iov, n_iov));
+	if (len < 0) {
+		if (errno == EAGAIN)
+			return true;
+
+		return false;
+	}
+
+	device->segment_bytes_remaining -= len;
+
+	if (n_iov == 2) {
+		if ((size_t) len >= iov[0].iov_len)
+			device->header_offset += iov[0].iov_len;
+		else
+			device->header_offset += len;
+	}
+
+	for (i = 0; i < n_iov; i++) {
+		if ((size_t) len < iov[i].iov_len) {
+			iov[i].iov_len = len;
+			n_iov = i;
+			break;
+		}
+
+		len -= iov[i].iov_len;
+	}
+
+	l_util_hexdumpv(true, iov, n_iov,
+				device->debug_handler, device->debug_data);
+
+	if (device->segment_bytes_remaining > 0)
+		return true;
+
+	device->header_offset = 0;
+	message = message_assembly_add(device->assembly, device->header,
+					device->segment,
+					L_LE32_TO_CPU(hdr->len) - header_size);
+	device->segment = l_malloc(device->max_segment_size - HEADER_SIZE);
+
+	if (!message)
+		return true;
+
+	dispatch_message(device, type, message);
+	return true;
 }
 
 static bool open_write_handler(struct l_io *io, void *user_data)
@@ -582,6 +703,7 @@ struct mbim_device *mbim_device_new(int fd, uint32_t max_segment_size)
 	device->max_outstanding = 1;
 	device->next_tid = 1;
 
+	device->segment = l_malloc(max_segment_size - HEADER_SIZE);
 
 	device->io = l_io_new(fd);
 	l_io_set_disconnect_handler(device->io, disconnect_handler,
@@ -621,6 +743,8 @@ void mbim_device_unref(struct mbim_device *device)
 		l_io_destroy(device->io);
 		device->io = NULL;
 	}
+
+	l_free(device->segment);
 
 	if (device->debug_destroy)
 		device->debug_destroy(device->debug_data);
