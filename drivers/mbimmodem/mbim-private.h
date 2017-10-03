@@ -49,3 +49,4 @@ struct mbim_fragment_header {
 struct mbim_message *_mbim_message_build(const void *header,
 						struct iovec *frags,
 						uint32_t n_frags);
+uint32_t _mbim_information_buffer_offset(uint32_t type);
