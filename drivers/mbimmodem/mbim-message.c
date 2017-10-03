@@ -1351,3 +1351,24 @@ bool mbim_message_set_arguments(struct mbim_message *message,
 
 	return result;
 }
+
+void *_mbim_message_get_header(struct mbim_message *message, size_t *out_len)
+{
+	if (out_len)
+		*out_len = HEADER_SIZE;
+
+	return message->header;
+}
+
+struct iovec *_mbim_message_get_body(struct mbim_message *message,
+					size_t *out_n_iov, size_t *out_len)
+{
+	if (out_len)
+		*out_len = message->info_buf_len;
+
+	if (out_n_iov)
+		*out_n_iov = message->info_buf_len ? message->n_frags :
+							message->n_frags - 1;
+
+	return message->frags;
+}
