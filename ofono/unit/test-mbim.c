@@ -93,6 +93,24 @@ static const struct message_data message_data_subscriber_ready_status = {
 	.binary_len	= sizeof(message_binary_subscriber_ready_status),
 };
 
+static const unsigned char message_binary_phonebook_read[] = {
+	0x03, 0x00, 0x00, 0x80, 0x68, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
+	0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x4B, 0xF3, 0x84, 0x76,
+	0x1E, 0x6A, 0x41, 0xDB, 0xB1, 0xD8, 0xBE, 0xD2, 0x89, 0xC2, 0x5B, 0xDB,
+	0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x38, 0x00, 0x00, 0x00,
+	0x01, 0x00, 0x00, 0x00, 0x0C, 0x00, 0x00, 0x00, 0x2C, 0x00, 0x00, 0x00,
+	0x03, 0x00, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x12, 0x00, 0x00, 0x00,
+	0x28, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x39, 0x00, 0x32, 0x00,
+	0x31, 0x00, 0x31, 0x00, 0x32, 0x00, 0x33, 0x00, 0x34, 0x00, 0x35, 0x00,
+	0x36, 0x00, 0x00, 0x00, 0x54, 0x00, 0x53, 0x00,
+};
+
+static const struct message_data message_data_phonebook_read = {
+	.tid		= 2,
+	.binary		= message_binary_phonebook_read,
+	.binary_len	= sizeof(message_binary_phonebook_read),
+};
+
 static struct mbim_message *build_message(const struct message_data *msg_data)
 {
 	static const int frag_size = 64;
@@ -210,6 +228,33 @@ static void parse_subscriber_ready_status(const void *data)
 	mbim_message_unref(msg);
 }
 
+static void parse_phonebook_read(const void *data)
+{
+	struct mbim_message *msg = build_message(data);
+	uint32_t n_items;
+	struct mbim_message_iter array;
+	uint32_t index;
+	char *number;
+	char *name;
+	bool r;
+
+	r = mbim_message_get_arguments(msg, "a(uss)", &n_items, &array);
+	assert(r);
+
+	assert(n_items == 1);
+	assert(mbim_message_iter_next_entry(&array, &index, &number, &name));
+	assert(index == 3);
+	assert(number);
+	assert(!strcmp(number, "921123456"));
+	assert(name);
+	assert(!strcmp(name, "TS"));
+	l_free(number);
+	l_free(name);
+
+	assert(!mbim_message_iter_next_entry(&array, &index, &number, &name));
+	mbim_message_unref(msg);
+}
+
 int main(int argc, char *argv[])
 {
 	l_test_init(&argc, &argv);
@@ -220,6 +265,9 @@ int main(int argc, char *argv[])
 	l_test_add("Subscriber Ready Status (parse)",
 			parse_subscriber_ready_status,
 			&message_data_subscriber_ready_status);
+
+	l_test_add("Phonebook Read (parse)", parse_phonebook_read,
+			&message_data_phonebook_read);
 
 	return l_test_run();
 }
