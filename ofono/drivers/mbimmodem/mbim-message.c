@@ -247,6 +247,19 @@ bool mbim_message_iter_next_entry(struct mbim_message_iter *iter, ...)
 	return result;
 }
 
+uint32_t _mbim_information_buffer_offset(uint32_t type)
+{
+	switch (type) {
+	case MBIM_COMMAND_MSG:
+	case MBIM_COMMAND_DONE:
+		return 28;
+	case MBIM_INDICATE_STATUS_MSG:
+		return 24;
+	}
+
+	return 0;
+}
+
 struct mbim_message *mbim_message_new(const uint8_t *uuid, uint32_t cid)
 {
 	struct mbim_message *msg;
