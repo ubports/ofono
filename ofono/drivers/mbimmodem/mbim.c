@@ -215,6 +215,7 @@ struct mbim_device {
 	size_t header_offset;
 	size_t segment_bytes_remaining;
 	struct message_assembly *assembly;
+	struct l_idle *close_io;
 
 	bool is_ready : 1;
 };
@@ -390,6 +391,18 @@ static bool close_write_handler(struct l_io *io, void *user_data)
 	return false;
 }
 
+static void close_io(struct l_idle *idle, void *user_data)
+{
+	struct mbim_device *device = user_data;
+	struct l_io *io = device->io;
+
+	l_idle_remove(idle);
+	device->close_io = NULL;
+
+	device->io = NULL;
+	l_io_destroy(io);
+}
+
 static bool close_read_handler(struct l_io *io, void *user_data)
 {
 	struct mbim_device *device = user_data;
@@ -439,8 +452,7 @@ static bool close_read_handler(struct l_io *io, void *user_data)
 		device->header_offset = 0;
 
 	if (type == MBIM_CLOSE_DONE) {
-		l_io_destroy(io);
-		device->io = NULL;
+		device->close_io = l_idle_create(close_io, device, NULL);
 		return false;
 	}
 
@@ -493,6 +505,8 @@ void mbim_device_unref(struct mbim_device *device)
 
 	if (__sync_sub_and_fetch(&device->ref_count, 1))
 		return;
+
+	l_idle_remove(device->close_io);
 
 	if (device->io) {
 		l_io_destroy(device->io);
