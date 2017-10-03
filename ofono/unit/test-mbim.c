@@ -70,6 +70,19 @@ static const struct message_data message_data_device_caps = {
 	.binary_len	= sizeof(message_binary_device_caps),
 };
 
+static const unsigned char message_binary_device_caps_query[] = {
+	0x03, 0x00, 0x00, 0x00, 0x30, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
+	0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xA2, 0x89, 0xCC, 0x33,
+	0xBC, 0xBB, 0x8B, 0x4F, 0xB6, 0xB0, 0x13, 0x3E, 0xC2, 0xAA, 0xE6, 0xDF,
+	0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+
+static const struct message_data message_data_device_caps_query = {
+	.tid = 2,
+	.binary = message_binary_device_caps_query,
+	.binary_len = sizeof(message_binary_device_caps_query),
+};
+
 static const unsigned char message_binary_subscriber_ready_status[] = {
 	0x03, 0x00, 0x00, 0x80, 0xB4, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
 	0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xA2, 0x89, 0xCC, 0x33,
@@ -282,6 +295,21 @@ static void build_device_caps(const void *data)
 	mbim_message_unref(message);
 }
 
+static void build_device_caps_query(const void *data)
+{
+	const struct message_data *msg_data = data;
+	struct mbim_message *message;
+
+	message = mbim_message_new(mbim_uuid_basic_connect, 1,
+						MBIM_COMMAND_TYPE_QUERY);
+	assert(message);
+	assert(mbim_message_set_arguments(message, ""));
+
+	_mbim_message_set_tid(message, msg_data->tid);
+	assert(check_message(message, msg_data));
+	mbim_message_unref(message);
+}
+
 static void parse_subscriber_ready_status(const void *data)
 {
 	struct mbim_message *msg = build_message(data);
@@ -394,6 +422,9 @@ int main(int argc, char *argv[])
 			parse_device_caps, &message_data_device_caps);
 	l_test_add("Device Caps (build)",
 			build_device_caps, &message_data_device_caps);
+
+	l_test_add("Device Caps Query (build)", build_device_caps_query,
+					&message_data_device_caps_query);
 
 	l_test_add("Subscriber Ready Status (parse)",
 			parse_subscriber_ready_status,
