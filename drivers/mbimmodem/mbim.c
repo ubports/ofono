@@ -240,15 +240,30 @@ static bool pending_command_match_tid(const void *a, const void *b)
 	return pending->tid == tid;
 }
 
-static void pending_command_free(void *data)
+/*
+ * Since we have to track how many outstanding requests we have issues, we
+ * have to keep a pending_command structure around until it is replied to
+ * by the function.  However, all resources associated with the command
+ * can be freed
+ */
+static void pending_command_cancel(void *data)
 {
 	struct pending_command *pending = data;
 
 	mbim_message_unref(pending->message);
+	pending->message = NULL;
 
 	if (pending->destroy)
 		pending->destroy(pending->user_data);
 
+	pending->callback = NULL;
+	pending->user_data = NULL;
+	pending->destroy = NULL;
+}
+
+static void pending_command_free(void *pending)
+{
+	pending_command_cancel(pending);
 	l_free(pending);
 }
 
@@ -357,13 +372,8 @@ static bool command_write_handler(struct l_io *io, void *user_data)
 				"fragment me");
 	}
 
-	if (pending->callback == NULL) {
-		pending_command_free(pending);
-		goto done;
-	}
-
 	l_queue_push_tail(device->sent_commands, pending);
-done:
+
 	if (l_queue_isempty(device->pending_commands))
 		return false;
 
@@ -387,7 +397,9 @@ static void dispatch_message(struct mbim_device *device, uint32_t type,
 	if (!pending)
 		goto done;
 
-	pending->callback(message, pending->user_data);
+	if (pending->callback)
+		pending->callback(message, pending->user_data);
+
 	pending_command_free(pending);
 
 	if (l_queue_isempty(device->pending_commands))
@@ -876,4 +888,30 @@ uint32_t mbim_device_send(struct mbim_device *device, uint32_t gid,
 								device, NULL);
 done:
 	return pending->tid;
+}
+
+bool mbim_device_cancel(struct mbim_device *device, uint32_t tid)
+{
+	struct pending_command *pending;
+
+	if (unlikely(!device))
+		return false;
+
+	pending = l_queue_remove_if(device->pending_commands,
+					pending_command_match_tid,
+					L_UINT_TO_PTR(tid));
+	if (pending) {
+		pending_command_free(pending);
+		return true;
+	}
+
+	pending = l_queue_find(device->sent_commands,
+					pending_command_match_tid,
+					L_UINT_TO_PTR(tid));
+
+	if (!pending)
+		return false;
+
+	pending_command_cancel(pending);
+	return true;
 }

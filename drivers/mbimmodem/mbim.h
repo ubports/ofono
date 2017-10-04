@@ -62,3 +62,4 @@ uint32_t mbim_device_send(struct mbim_device *device, uint32_t gid,
 				mbim_device_reply_func_t function,
 				void *user_data,
 				mbim_device_destroy_func_t destroy);
+bool mbim_device_cancel(struct mbim_device *device, uint32_t tid);
