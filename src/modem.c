@@ -1688,6 +1688,11 @@ void *ofono_devinfo_get_data(struct ofono_devinfo *info)
 	return info->driver_data;
 }
 
+struct ofono_modem *ofono_devinfo_get_modem(struct ofono_devinfo *info)
+{
+	return __ofono_atom_get_modem(info->atom);
+}
+
 static void unregister_property(gpointer data)
 {
 	struct modem_property *property = data;
