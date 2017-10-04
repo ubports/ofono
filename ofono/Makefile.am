@@ -825,7 +825,8 @@ doc_files = doc/overview.txt doc/ofono-paper.txt doc/release-faq.txt \
 			doc/networkmonitor-api.txt \
 			doc/allowed-apns-api.txt \
 			doc/lte-api.txt \
-			doc/cinterion-hardware-monitor-api.txt
+			doc/cinterion-hardware-monitor-api.txt \
+			doc/ims-api.txt
 
 
 test_scripts = test/backtrace \

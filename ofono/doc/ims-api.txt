@@ -1,0 +1,59 @@
+IpMultimediaSystem Hierarchy
+============================
+
+Service		org.ofono
+Interface	org.ofono.IpMultimediaSystem
+Object path	[variable prefix]/{modem0,modem1,...}
+
+Methods		dict GetProperties()
+
+			Returns all IpMultimediaSystem configuration properties.
+
+		void SetProperty(string property, variant value)
+
+			Changes the value of the specified property. Only
+			properties that are listed as readwrite are
+			changeable. On success a PropertyChanged signal
+			will be emitted.
+
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.InvalidArguments
+					 [service].Error.Failed
+
+		void Register()
+
+			Attempts to register to IMS. A successful method return
+			indicates that the registration process could be
+			initiated successfully. The actual registration state
+			will be reflected by the 'Registered' property.
+
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+
+		void Unregister()
+
+			Attempts to unregister from IMS. A successful method
+			return indicates that the unregistration process could
+			be initiated successfully. The actual unregistration
+			state will be reflected by the 'Registered' property.
+
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.NotImplemented
+
+Signals		PropertyChanged(string property, variant value)
+
+			This signal indicates a changed value of the given
+			property.
+
+Properties	boolean Registered [readonly]
+
+			Contains the current IMS registration state.
+
+		boolean VoiceCapable [readonly, optional]
+
+			Boolean representing whether voice call transfer over
+			RTP (IMS) is available.
+
+		boolean SmsCapable [readonly, optional]
+
+			Boolean representing whether SMS-over-IMS is available.
