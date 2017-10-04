@@ -37,6 +37,7 @@
 #include <ofono/plugin.h>
 #include <ofono/modem.h>
 #include <ofono/log.h>
+#include <ofono/devinfo.h>
 
 #include <ell/ell.h>
 
@@ -160,6 +161,9 @@ static void mbim_device_caps_info_cb(struct mbim_message *message, void *user)
 	DBG("FirmwareInfo: %s", firmware_info);
 	DBG("HardwareInfo: %s", hardware_info);
 
+	ofono_modem_set_string(modem, "DeviceId", device_id);
+	ofono_modem_set_string(modem, "FirmwareInfo", firmware_info);
+
 	l_free(custom_data_class);
 	l_free(device_id);
 	l_free(firmware_info);
@@ -250,6 +254,8 @@ static void mbim_set_online(struct ofono_modem *modem, ofono_bool_t online,
 static void mbim_pre_sim(struct ofono_modem *modem)
 {
 	DBG("%p", modem);
+
+	ofono_devinfo_create(modem, 0, "mbim", NULL);
 }
 
 static void mbim_post_sim(struct ofono_modem *modem)
