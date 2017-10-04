@@ -267,6 +267,29 @@ static void pending_command_free(void *pending)
 	l_free(pending);
 }
 
+static void pending_command_cancel_by_gid(void *data, void *user_data)
+{
+	struct pending_command *pending = data;
+	uint32_t gid = L_PTR_TO_UINT(user_data);
+
+	if (pending->gid != gid)
+		return;
+
+	pending_command_cancel(pending);
+}
+
+static bool pending_command_free_by_gid(void *data, void *user_data)
+{
+	struct pending_command *pending = data;
+	uint32_t gid = L_PTR_TO_UINT(user_data);
+
+	if (pending->gid != gid)
+		return false;
+
+	pending_command_free(pending);
+	return true;
+}
+
 static inline uint32_t _mbim_device_get_next_tid(struct mbim_device *device)
 {
 	uint32_t tid = device->next_tid;
@@ -913,5 +936,21 @@ bool mbim_device_cancel(struct mbim_device *device, uint32_t tid)
 		return false;
 
 	pending_command_cancel(pending);
+	return true;
+}
+
+bool mbim_device_cancel_group(struct mbim_device *device, uint32_t gid)
+{
+	if (unlikely(!device))
+		return false;
+
+	l_queue_foreach_remove(device->pending_commands,
+					pending_command_free_by_gid,
+					L_UINT_TO_PTR(gid));
+
+	l_queue_foreach(device->sent_commands,
+					pending_command_cancel_by_gid,
+					L_UINT_TO_PTR(gid));
+
 	return true;
 }
