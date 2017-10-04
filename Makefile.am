@@ -810,7 +810,9 @@ test_scripts = test/backtrace \
 		test/enable-throttling \
 		test/disable-throttling \
 		test/set-lte-property \
-		test/test-serving-cell-info
+		test/test-serving-cell-info \
+		test/ims-register \
+		test/ims-unregister
 
 
 if TEST
