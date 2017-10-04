@@ -63,6 +63,7 @@ extern "C" {
 #define OFONO_NETMON_INTERFACE OFONO_SERVICE ".NetworkMonitor"
 #define OFONO_NETMON_AGENT_INTERFACE OFONO_SERVICE ".NetworkMonitorAgent"
 #define OFONO_LTE_INTERFACE OFONO_SERVICE ".LongTermEvolution"
+#define OFONO_IMS_INTERFACE OFONO_SERVICE ".IpMultimediaSystem"
 
 /* CDMA Interfaces */
 #define OFONO_CDMA_VOICECALL_MANAGER_INTERFACE "org.ofono.cdma.VoiceCallManager"
