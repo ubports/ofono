@@ -30,11 +30,13 @@
 
 static int mbimmodem_init(void)
 {
+	mbim_devinfo_init();
 	return 0;
 }
 
 static void mbimmodem_exit(void)
 {
+	mbim_devinfo_exit();
 }
 
 OFONO_PLUGIN_DEFINE(mbimmodem, "MBIM modem driver", VERSION,

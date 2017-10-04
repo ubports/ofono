@@ -732,7 +732,8 @@ builtin_modules += mbimmodem
 builtin_sources += $(mbim_sources) \
 			drivers/mbimmodem/util.h \
 			drivers/mbimmodem/mbimmodem.h \
-			drivers/mbimmodem/mbimmodem.c
+			drivers/mbimmodem/mbimmodem.c \
+			drivers/mbimmodem/devinfo.c
 
 builtin_modules += mbim
 builtin_sources += plugins/mbim.c
