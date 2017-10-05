@@ -22,6 +22,52 @@
 struct mbim_device;
 struct mbim_message;
 
+#define MBIM_CID_DEVICE_CAPS			1
+#define MBIM_CID_SUBSCRIBER_READY_STATUS	2
+#define MBIM_CID_RADIO_STATE			3
+#define MBIM_CID_PIN				4
+#define MBIM_CID_PIN_LIST			5
+#define MBIM_CID_HOME_PROVIDER			6
+#define MBIM_CID_PREFERRED_PROVIDERS		7
+#define MBIM_CID_VISIBLE_PROVIDERS		8
+#define MBIM_CID_REGISTER_STATE			9
+#define MBIM_CID_PACKET_SERVICE			10
+#define MBIM_CID_SIGNAL_STATE			11
+#define MBIM_CID_CONNECT			12
+#define MBIM_CID_PROVISIONED_CONTEXTS		13
+#define MBIM_CID_SERVICE_ACTIVATION		14
+#define MBIM_CID_IP_CONFIGURATION		15
+#define MBIM_CID_DEVICE_SERVICES		16
+#define MBIM_CID_DEVICE_SERVICE_SUBSCRIBE_LIST	19
+#define MBIM_CID_PACKET_STATISTICS		20
+#define MBIM_CID_NETWORK_IDLE_HINT		21
+#define MBIM_CID_EMERGENCY_MODE			22
+#define MBIM_CID_IP_PACKET_FILTERS		23
+#define MBIM_CID_MULTICARRIER_PROVIDERS		24
+
+#define MBIM_CID_SMS_CONFIGURATION		1
+#define MBIM_CID_SMS_READ			2
+#define MBIM_CID_SMS_SEND			3
+#define MBIM_CID_SMS_DELETE			4
+#define MBIM_CID_SMS_MESSAGE_STORE_STATUS	5
+
+#define MBIM_CID_USSD				1
+
+#define MBIM_CID_PHONEBOOK_CONFIGURATION	1
+#define MBIM_CID_PHONEBOOK_READ			2
+#define MBIM_CID_PHONEBOOK_DELETE		3
+#define MBIM_CID_PHONEBOOK_WRITE		4
+
+#define MBIM_CID_STK_PAC			1
+#define MBIM_CID_STK_TERMINAL_RESPONSE		2
+#define MBIM_CID_STK_ENVELOPE			3
+
+#define MBIM_CID_AKA_AUTH			1
+#define MBIM_CID_AKAP_AUTH			2
+#define MBIM_CID_SIM_AUTH			3
+
+#define MBIM_CID_DSS_CONNECT			1
+
 typedef void (*mbim_device_debug_func_t) (const char *str, void *user_data);
 typedef void (*mbim_device_disconnect_func_t) (void *user_data);
 typedef void (*mbim_device_destroy_func_t) (void *user_data);
