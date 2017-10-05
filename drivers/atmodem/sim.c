@@ -1293,14 +1293,15 @@ static void sim_state_cb(gboolean present, gpointer user_data)
 	struct cb_data *cbd = user_data;
 	struct sim_data *sd = cbd->user;
 	ofono_sim_lock_unlock_cb_t cb = cbd->cb;
+	void *data = cbd->data;
 
 	at_util_sim_state_query_free(sd->sim_state_query);
 	sd->sim_state_query = NULL;
 
 	if (present == 1)
-		CALLBACK_WITH_SUCCESS(cb, cbd->data);
+		CALLBACK_WITH_SUCCESS(cb, data);
 	else
-		CALLBACK_WITH_FAILURE(cb, cbd->data);
+		CALLBACK_WITH_FAILURE(cb, data);
 }
 
 static void at_pin_send_cb(gboolean ok, GAtResult *result,
