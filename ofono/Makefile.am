@@ -478,7 +478,8 @@ builtin_modules += xmm7modem
 builtin_sources += drivers/atmodem/atutil.h \
 			drivers/xmm7modem/xmm7modem.h \
 			drivers/xmm7modem/xmm7modem.c \
-			drivers/xmm7modem/radio-settings.c
+			drivers/xmm7modem/radio-settings.c \
+			drivers/xmm7modem/ims.c
 
 if PHONESIM
 builtin_modules += phonesim
