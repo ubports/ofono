@@ -160,6 +160,7 @@ enum ofono_atom_type {
 	OFONO_ATOM_TYPE_SIRI,
 	OFONO_ATOM_TYPE_NETMON,
 	OFONO_ATOM_TYPE_LTE,
+	OFONO_ATOM_TYPE_IMS,
 };
 
 enum ofono_atom_watch_condition {
@@ -649,3 +650,4 @@ int mnclength(int mcc, int mnc);
 
 #include <ofono/netmon.h>
 #include <ofono/lte.h>
+#include <ofono/ims.h>
