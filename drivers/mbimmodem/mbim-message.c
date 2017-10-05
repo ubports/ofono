@@ -677,7 +677,22 @@ struct mbim_message *_mbim_message_build(const void *header,
 						&msg->status,
 						&msg->info_buf_len);
 		break;
+	case MBIM_COMMAND_MSG:
+		_iter_init_internal(&iter, CONTAINER_TYPE_STRUCT,
+						"16yuuu", NULL,
+						frags, n_frags,
+						frags[0].iov_len, 0, 0, 0);
+		r = mbim_message_iter_next_entry(&iter, msg->uuid, &msg->cid,
+						&msg->command_type,
+						&msg->info_buf_len);
+		break;
 	case MBIM_INDICATE_STATUS_MSG:
+		_iter_init_internal(&iter, CONTAINER_TYPE_STRUCT,
+						"16yuu", NULL,
+						frags, n_frags,
+						frags[0].iov_len, 0, 0, 0);
+		r = mbim_message_iter_next_entry(&iter, msg->uuid, &msg->cid,
+						&msg->info_buf_len);
 		break;
 	default:
 		break;
