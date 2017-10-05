@@ -48,6 +48,7 @@
 #include <ofono/gprs-context.h>
 #include <ofono/stk.h>
 #include <ofono/lte.h>
+#include <ofono/ims.h>
 
 #include <drivers/atmodem/atutil.h>
 #include <drivers/atmodem/vendor.h>
@@ -340,6 +341,8 @@ static void xmm7xxx_post_online(struct ofono_modem *modem)
 
 	if (gprs && gc)
 		ofono_gprs_add_context(gprs, gc);
+
+	ofono_ims_create(modem, "xmm7modem", data->chat);
 }
 
 static int xmm7xxx_probe(struct ofono_modem *modem)
