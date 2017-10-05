@@ -1,3 +1,16 @@
+ver 1.21:
+	Fix issue with USSD notification received handling.
+	Fix issue with crashing SIM filesystem notifications.
+	Fix issue with LTE bearer reporting and Huawei modems.
+	Fix issue with invalid memory access and QMI.
+	Add support for QMI SIM writing functionality.
+	Add support for RAT selection for QMI modems.
+	Add support for network monitor agent interface.
+	Add support for Cinterion Hardware Monitor interface.
+	Add support for LTE atom driver for Huawei modems.
+	Add support for LTE atom driver for AT modems.
+	Add support for Intel xmm7xxx series modems.
+
 ver 1.20:
 	Fix issue with context removal before activation.
 	Fix issue with update during GPRS context activation.
