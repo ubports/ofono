@@ -31,11 +31,13 @@
 static int mbimmodem_init(void)
 {
 	mbim_devinfo_init();
+	mbim_sim_init();
 	return 0;
 }
 
 static void mbimmodem_exit(void)
 {
+	mbim_sim_exit();
 	mbim_devinfo_exit();
 }
 
