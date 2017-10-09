@@ -21,5 +21,12 @@
 
 #include "util.h"
 
+enum MBIM_GROUP {
+	SIM_GROUP = 1,
+};
+
 extern void mbim_devinfo_init(void);
 extern void mbim_devinfo_exit(void);
+
+extern void mbim_sim_init(void);
+extern void mbim_sim_exit(void);
