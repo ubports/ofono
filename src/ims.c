@@ -361,15 +361,6 @@ static void ofono_ims_finish_register(struct ofono_ims *ims)
 
 void ofono_ims_register(struct ofono_ims *ims)
 {
-	struct ofono_modem *modem = __ofono_atom_get_modem(ims->atom);
-	struct ofono_sim *sim = __ofono_atom_find(OFONO_ATOM_TYPE_SIM, modem);
-	const char *imsi = ofono_sim_get_imsi(sim);
-
-	if (imsi == NULL) {
-		ofono_error("No sim atom required for registering IMS atom.");
-		return;
-	}
-
 	ofono_ims_finish_register(ims);
 }
 
