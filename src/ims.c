@@ -288,6 +288,9 @@ struct ofono_ims *ofono_ims_create(struct ofono_modem *modem,
 	ims->atom = __ofono_modem_add_atom(modem, OFONO_ATOM_TYPE_IMS,
 						ims_atom_remove, ims);
 
+	ims->reg_info = 0;
+	ims->ext_info = -1;
+
 	for (l = g_drivers; l; l = l->next) {
 		const struct ofono_ims_driver *drv = l->data;
 
@@ -351,17 +354,31 @@ static void ofono_ims_finish_register(struct ofono_ims *ims)
 	}
 
 	ofono_modem_add_interface(modem, OFONO_IMS_INTERFACE);
-
-	if (ims->driver->registration_status)
-		ims->driver->registration_status(ims,
-					registration_status_cb, ims);
-
 	__ofono_atom_register(ims->atom, ims_atom_unregister);
+}
+
+static void registration_init_cb(const struct ofono_error *error,
+						int reg_info, int ext_info,
+						void *data)
+{
+	struct ofono_ims *ims = data;
+
+	if (error->type == OFONO_ERROR_TYPE_NO_ERROR) {
+		ims->reg_info = reg_info;
+		ims->ext_info = ext_info;
+	}
+
+	ofono_ims_finish_register(ims);
 }
 
 void ofono_ims_register(struct ofono_ims *ims)
 {
-	ofono_ims_finish_register(ims);
+	if (!ims->driver->registration_status) {
+		ofono_ims_finish_register(ims);
+		return;
+	}
+
+	ims->driver->registration_status(ims, registration_init_cb, ims);
 }
 
 void ofono_ims_remove(struct ofono_ims *ims)
