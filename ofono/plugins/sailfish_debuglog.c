@@ -109,13 +109,13 @@ static gboolean debuglog_match(const char* s1, const char* s2)
 	return s1 && s2 && !strcmp(s1, s2);
 }
 
-static void debuglog_update_flags(const char* name, guint set, guint clear)
+static void debuglog_update_flags_range(struct ofono_debug_desc *start,
+			struct ofono_debug_desc *stop, const char* name,
+			guint set, guint clear)
 {
 	const guint flags = set | clear;
-	struct ofono_debug_desc *start = __start___debug;
-	struct ofono_debug_desc *stop = __stop___debug;
 
-	if (start && stop) {
+	if (start && stop && start < stop) {
 		struct ofono_debug_desc *desc;
 
 		for (desc = start; desc < stop; desc++) {
@@ -138,7 +138,44 @@ static void debuglog_update_flags(const char* name, guint set, guint clear)
 			}
 		}
 	}
+}
 
+struct debuglog_update_flags_data {
+	const char* name;
+	guint set;
+	guint clear;
+};
+
+static void debuglog_update_flags_plugin(struct ofono_plugin_desc *desc,
+						int flags, void *user_data)
+{
+	/*
+	 * We are only interested in the external plugins here because
+	 * they don't fall into __start___debug .. __stop___debug range.
+	 */
+	if (!(flags & OFONO_PLUGIN_FLAG_BUILTIN) &&
+				desc->debug_start && desc->debug_stop) {
+		const struct debuglog_update_flags_data *update = user_data;
+
+		debuglog_update_flags_range(desc->debug_start,
+					desc->debug_stop, update->name,
+					update->set, update->clear);
+	}
+}
+
+static void debuglog_update_flags(const char* name, guint set, guint clear)
+{
+	struct debuglog_update_flags_data update;
+
+	/* Builtin plugins */
+	debuglog_update_flags_range(__start___debug, __stop___debug, name,
+								set, clear);
+
+	/* External plugins */
+	update.name = name;
+	update.set = set;
+	update.clear = clear;
+	__ofono_plugin_foreach(debuglog_update_flags_plugin, &update);
 }
 
 static void debuglog_category_enabled(DBusLogServer* server,
@@ -188,7 +225,7 @@ static guint debuglog_translate_flags(unsigned int ofono_flags)
 static void debuglog_add_categories(const struct ofono_debug_desc *start,
 				const struct ofono_debug_desc *stop)
 {
-	if (start && stop) {
+	if (start && stop && start < stop) {
 		const struct ofono_debug_desc *desc;
 		GHashTable *hash = NULL;
 
