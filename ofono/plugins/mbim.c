@@ -128,6 +128,31 @@ static void mbim_remove(struct ofono_modem *modem)
 	l_free(data);
 }
 
+static void mbim_radio_state_init_cb(struct mbim_message *message, void *user)
+{
+	struct ofono_modem *modem = user;
+	struct mbim_data *md = ofono_modem_get_data(modem);
+	uint32_t hw_state;
+	uint32_t sw_state;
+	bool r;
+
+	if (mbim_message_get_error(message) != 0)
+		goto error;
+
+	r = mbim_message_get_arguments(message, "uu",
+					&hw_state, &sw_state);
+	if (!r)
+		goto error;
+
+	/* TODO: How to handle HwRadioState != 1 */
+	DBG("HwRadioState: %u, SwRadioState: %u", hw_state, sw_state);
+	ofono_modem_set_powered(modem, TRUE);
+	return;
+
+error:
+	mbim_device_shutdown(md->device);
+}
+
 static void mbim_device_caps_info_cb(struct mbim_message *message, void *user)
 {
 	struct ofono_modem *modem = user;
@@ -170,7 +195,13 @@ static void mbim_device_caps_info_cb(struct mbim_message *message, void *user)
 	l_free(firmware_info);
 	l_free(hardware_info);
 
-	ofono_modem_set_powered(modem, TRUE);
+	message = mbim_message_new(mbim_uuid_basic_connect,
+					MBIM_CID_RADIO_STATE,
+					MBIM_COMMAND_TYPE_SET);
+
+	mbim_message_set_arguments(message, "u", 0);
+	mbim_device_send(md->device, 0, message,
+				mbim_radio_state_init_cb, modem, NULL);
 	return;
 
 error:
@@ -241,15 +272,37 @@ static int mbim_disable(struct ofono_modem *modem)
 	return -EINPROGRESS;
 }
 
+static void mbim_set_online_cb(struct mbim_message *message, void *user)
+{
+	struct cb_data *cbd = user;
+	ofono_modem_online_cb_t cb = cbd->cb;
+
+	if (mbim_message_get_error(message) != 0)
+		CALLBACK_WITH_FAILURE(cb, cbd->data);
+	else
+		CALLBACK_WITH_SUCCESS(cb, cbd->data);
+}
+
 static void mbim_set_online(struct ofono_modem *modem, ofono_bool_t online,
 				ofono_modem_online_cb_t cb, void *user_data)
 {
+	struct mbim_data *md = ofono_modem_get_data(modem);
 	struct cb_data *cbd = cb_data_new(cb, user_data);
+	struct mbim_message *message;
 
 	DBG("%p %s", modem, online ? "online" : "offline");
 
-	CALLBACK_WITH_FAILURE(cb, cbd->data);
+	message = mbim_message_new(mbim_uuid_basic_connect,
+					MBIM_CID_RADIO_STATE,
+					MBIM_COMMAND_TYPE_SET);
+	mbim_message_set_arguments(message, "u", online ? 1 : 0);
+
+	if (mbim_device_send(md->device, 0, message,
+				mbim_set_online_cb, cbd, l_free) > 0)
+		return;
+
 	l_free(cbd);
+	CALLBACK_WITH_FAILURE(cb, user_data);
 }
 
 static void mbim_pre_sim(struct ofono_modem *modem)
