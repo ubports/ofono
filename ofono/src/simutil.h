@@ -261,6 +261,17 @@ enum sim_csp_entry {
 	SIM_CSP_ENTRY_INFORMATION_NUMBERS =	0xD5,
 };
 
+/* 101.220 Annex E */
+enum sim_app_type {
+	SIM_APP_TYPE_UICC =		0x1001,
+	SIM_APP_TYPE_USIM =		0x1002,
+	SIM_APP_TYPE_USIM_TOOLKIT =	0x1003,
+	SIM_APP_TYPE_ISIM =		0x1004,
+	SIM_APP_TYPE_USIM_API =		0x1005,
+	SIM_APP_TYPE_ISIM_API =		0x1006,
+	SIM_APP_TYPE_CONTACT_MGR =	0x1007
+};
+
 enum ber_tlv_data_type {
 	BER_TLV_DATA_TYPE_UNIVERSAL =		0,
 	BER_TLV_DATA_TYPE_APPLICATION =		1,
@@ -296,6 +307,7 @@ struct sim_app_record {
 	unsigned char aid[16];
 	int aid_len;
 	char *label;
+	enum sim_app_type type;
 };
 
 struct simple_tlv_iter {
