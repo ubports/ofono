@@ -1609,3 +1609,131 @@ error:
 
 	return NULL;
 }
+
+static int build_authenticate(unsigned char *buffer, const unsigned char *rand,
+		const unsigned char *autn)
+{
+	int pos = 0;
+
+	buffer[pos++] = 0x00;
+	buffer[pos++] = 0x88;
+	buffer[pos++] = 0x00;
+	buffer[pos++] = autn ? 0x81 : 0x80;
+	buffer[pos++] = autn ? 0x22 : 0x11;
+	buffer[pos++] = 0x10;
+	memcpy(buffer + pos, rand, 16);
+	pos += 16;
+
+	if (autn) {
+		buffer[pos++] = 0x10;
+		memcpy(buffer + pos, autn, 16);
+		pos += 16;
+		buffer[pos++] = 0x00;
+	}
+
+	return pos;
+}
+
+int sim_build_umts_authenticate(unsigned char *buffer, int len,
+		const unsigned char *rand, const unsigned char *autn)
+{
+	if (len < 40 || !rand || !autn)
+		return FALSE;
+
+	return build_authenticate(buffer, rand, autn);
+}
+
+int sim_build_gsm_authenticate(unsigned char *buffer, int len,
+		const unsigned char *rand)
+{
+	if (len < 22 || !rand)
+		return FALSE;
+
+	return build_authenticate(buffer, rand, NULL);
+}
+
+gboolean sim_parse_umts_authenticate(const unsigned char *buffer,
+		int len, const unsigned char **res, const unsigned char **ck,
+		const unsigned char **ik, const unsigned char **auts,
+		const unsigned char **kc)
+{
+	if (len < 18 || !buffer)
+		return FALSE;
+
+	switch (buffer[0]) {
+	case 0xdb:
+		/* 'DB' + '08' + RES(16) + '10' + CK(32) + '10' + IK(32) = 43 */
+		if (len < 43)
+			goto umts_end;
+
+		/* success */
+		if (buffer[1] != 0x08)
+			goto umts_end;
+
+		*res = buffer + 2;
+
+		if (buffer[10] != 0x10)
+			goto umts_end;
+
+		*ck = buffer + 11;
+
+		if (buffer[27] != 0x10)
+			goto umts_end;
+
+		*ik = buffer + 28;
+
+		if (len >= 53 && kc) {
+			if (buffer[44] != 0x08)
+				goto umts_end;
+
+			*kc = buffer + 45;
+		} else {
+			*kc = NULL;
+		}
+
+		*auts = NULL;
+
+		break;
+	case 0xdc:
+		/* 'DB' + '10' + AUTS(16) = 18 */
+		if (len < 18)
+			goto umts_end;
+
+		/* sync error */
+		if (buffer[1] != 0x10)
+			goto umts_end;
+
+		*auts = buffer + 2;
+
+		break;
+	default:
+		goto umts_end;
+	}
+
+	return TRUE;
+
+umts_end:
+	return FALSE;
+}
+
+gboolean sim_parse_gsm_authenticate(const unsigned char *buffer, int len,
+		const unsigned char **sres, const unsigned char **kc)
+{
+	if (len < 14 || !buffer)
+		goto gsm_end;
+
+	if (buffer[0] != 0x04)
+		goto gsm_end;
+
+	*sres = buffer + 1;
+
+	if (buffer[5] != 0x08)
+		goto gsm_end;
+
+	*kc = buffer + 6;
+
+	return TRUE;
+
+gsm_end:
+	return FALSE;
+}
