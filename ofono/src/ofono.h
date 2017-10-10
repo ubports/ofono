@@ -383,6 +383,8 @@ unsigned short __ofono_sms_get_next_ref(struct ofono_sms *sms);
 
 #include <ofono/sim.h>
 
+ofono_bool_t __ofono_sim_ust_service_available(struct ofono_sim *sim,
+						int ust_service);
 ofono_bool_t __ofono_sim_service_available(struct ofono_sim *sim,
 						int ust_service,
 						int sst_service);

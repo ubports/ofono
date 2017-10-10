@@ -2459,6 +2459,15 @@ const unsigned char *ofono_sim_get_cphs_service_table(struct ofono_sim *sim)
 	return sim->cphs_service_table;
 }
 
+ofono_bool_t __ofono_sim_ust_service_available(struct ofono_sim *sim,
+						int ust_service)
+{
+	if (sim->efust)
+		return sim_ust_is_available(sim->efust, sim->efust_length,
+						ust_service);
+	return FALSE;
+}
+
 ofono_bool_t __ofono_sim_service_available(struct ofono_sim *sim,
 						int ust_service,
 						int sst_service)
