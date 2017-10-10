@@ -507,3 +507,17 @@ gboolean sim_cphs_is_active(unsigned char *service_cphs,
 				enum sim_cphs_service index);
 
 GSList *sim_parse_app_template_entries(const unsigned char *buffer, int len);
+
+int sim_build_umts_authenticate(unsigned char *buffer, int len,
+		const unsigned char *rand, const unsigned char *autn);
+
+int sim_build_gsm_authenticate(unsigned char *buffer, int len,
+		const unsigned char *rand);
+
+gboolean sim_parse_umts_authenticate(const unsigned char *buffer,
+		int len, const unsigned char **res, const unsigned char **ck,
+		const unsigned char **ik, const unsigned char **auts,
+		const unsigned char **kc);
+
+gboolean sim_parse_gsm_authenticate(const unsigned char *buffer, int len,
+		const unsigned char **sres, const unsigned char **kc);
