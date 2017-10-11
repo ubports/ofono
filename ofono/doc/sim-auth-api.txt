@@ -1,0 +1,104 @@
+SimAuthentication heiarchy [experimental]
+===========================================
+
+Service		org.ofono
+Interface	org.ofono.SimAuthentication
+Object path	[variable prefix]/{modem0,modem1,...}
+
+Methods		array{object,dict} GetApplications()
+
+			Get an array of all SIM applications found during
+			discovery. In the format "a{oa{sv}}" where 'o' is
+			the object path for the application e.g.
+
+			o = "/modem1/A0000000871004FFFFFFFF8906190000"
+
+			Each dictionary will contain 'Type' e.g. 'Ims' and
+			'Name' e.g. 'ISim'
+
+			For each application there will be a corresponding
+			object that matches the path (o). The type will
+			signify which interfaces are under that object (below).
+
+			type = Umts --> org.ofono.USimApplication
+			type = Ims  --> org.ofono.ISimApplication
+
+SimAuth USIM application heiarchy [experimental]
+===========================================
+
+Service		org.ofono
+Interface	org.ofono.USimApplication
+Object path	[variable prefix]/{modem0,modem1,...}/{AID name}
+
+Methods		dict GetProperties()
+
+			Returns properties for the USimApplication. See
+			properties section for available properties.
+
+		array{dict{string, array{byte}}}
+			GsmAuthenticate(array{array{byte}} rands)
+
+			Run the USIM application GSM AUTHENTICATE algorithm
+			with N random challenges 'rands'. This should be an
+			array of an array of bytes ("aay"). The number of
+			random challenges is limited to a maximum of 3.
+
+			Returns the derived Kc/SRES values as an array of
+			dictionaries. The index of each dictionary matches
+			the index of the rand value in the method call. The
+			keys for each dictionary are "Kc" and "SRES" and both
+			are arrays of bytes.
+
+			Possible Errors:
+				[service].Error.NotSupported
+				[service].Error.Busy
+
+		dict{string, array{byte}}
+			UmtsAuthenticate(array{byte} rand, array{byte} autn)
+
+			Run the UMTS AUTHENTICATE algorithm in the 3G
+			context with 'rand' and 'autn'. A dictionary will be
+			returned containing 'RES', 'CK', 'IK' and possibly
+			'Kc' if service 27 is available. If there was a
+			sync error 'AUTS' will be returned.
+
+			Possible Errors: [service].Error.NotSupported
+
+Properties	string Type [readonly]
+
+			Type of application: 'Umts'
+
+		string Name [readonly]
+
+			Human readable name: 'USim'
+
+SimAuth ISIM application heiarchy [experimental]
+===========================================
+
+Service		org.ofono
+Interface	org.ofono.ISimApplication
+Object		[variable prefix]/{modem0,modem1,...}/{AID name}
+
+Methods		dict GetProperties()
+
+			Returns properties for the ISimApplication. See
+			the properties section for available properties.
+
+		dict{string, array{byte}
+			ImsAuthenticate(array{byte} rand, array{byte} autn)
+
+			Run the UMTS AUTHENTICATE algorithm in the IMS
+			context with 'rand' and 'autn'. A dictionary will be
+			returned containing 'RES', 'CK', 'IK' and possibly
+			'Kc' if service 27 is available. If there was a
+			sync error 'AUTS' will be returned.
+
+			Possible Errors: [service].Error.NotSupported
+
+Properties	string Type [readonly]
+
+			Type of application: 'Ims'
+
+		string Name [readonly]
+
+			Human readable name: 'ISim'
