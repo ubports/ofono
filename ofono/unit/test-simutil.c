@@ -614,19 +614,22 @@ static void test_auth_build_parse(void)
 	g_assert(!auts_p && !kc_p);
 
 	/* test UMTS sync failure */
-	g_assert(sim_parse_umts_authenticate(umts_sync_failure, sizeof(umts_sync_failure),
-			&res_p, &ck_p, &ik_p, &auts_p, &kc_p));
+	g_assert(sim_parse_umts_authenticate(umts_sync_failure,
+						sizeof(umts_sync_failure),
+						&res_p, &ck_p, &ik_p, &auts_p,
+						&kc_p));
 	g_assert(!memcmp(auts_p, auts, 16));
 
 	/* test UMTS success parse, with kc */
-	g_assert(sim_parse_umts_authenticate(umts_success_kc, sizeof(umts_success_kc),
-			&res_p, &ck_p, &ik_p, &auts_p, &kc_p));
+	g_assert(sim_parse_umts_authenticate(umts_success_kc,
+						sizeof(umts_success_kc),
+						&res_p, &ck_p, &ik_p, &auts_p,
+						&kc_p));
 	g_assert(!memcmp(res_p, res, 8));
 	g_assert(!memcmp(ck_p, ck, 16));
 	g_assert(!memcmp(ik_p, ik, 16));
 	g_assert(!memcmp(kc_p, kc, 8));
 	g_assert(!auts_p);
-
 }
 
 int main(int argc, char **argv)
