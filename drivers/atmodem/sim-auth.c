@@ -25,6 +25,7 @@
 
 #define _GNU_SOURCE
 #include <string.h>
+#include <stdio.h>
 
 #include <glib.h>
 
@@ -35,6 +36,7 @@
 #include "gatresult.h"
 #include "simutil.h"
 #include "vendor.h"
+#include "util.h"
 
 #include "atmodem.h"
 
@@ -44,6 +46,8 @@ struct sim_auth_data {
 };
 
 static const char *cuad_prefix[] = { "+CUAD:", NULL };
+static const char *ccho_prefix[] = { "+CCHO:", NULL };
+static const char *cgla_prefix[] = { "+CGLA:", NULL };
 
 static void at_discover_apps_cb(gboolean ok, GAtResult *result,
 				gpointer user_data)
@@ -110,6 +114,151 @@ static void at_discover_apps(struct ofono_sim_auth *sa,
 	CALLBACK_WITH_FAILURE(cb, NULL, 0, data);
 }
 
+static void at_open_channel_cb(gboolean ok, GAtResult *result,
+		gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	GAtResultIter iter;
+	ofono_sim_open_channel_cb_t cb = cbd->cb;
+	struct ofono_error error;
+	int session_id = -1;
+
+	decode_at_error(&error, g_at_result_final_response(result));
+
+	if (!ok)
+		goto error;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "+CCHO:"))
+		goto error;
+
+	if (!g_at_result_iter_next_number(&iter, &session_id))
+		goto error;
+
+	cb(&error, session_id, cbd->data);
+
+	return;
+
+error:
+	cb(&error, -1, cbd->data);
+}
+
+static void at_open_channel(struct ofono_sim_auth *sa, const uint8_t *aid,
+		ofono_sim_open_channel_cb_t cb, void *data)
+{
+	struct sim_auth_data *sad = ofono_sim_auth_get_data(sa);
+	struct cb_data *cbd = cb_data_new(cb, data);
+	char cmd[43];
+	int ret = 0;
+
+	strcpy(cmd, "AT+CCHO=\"");
+	ret += 9;
+
+	encode_hex_own_buf(aid, 16, 0, cmd + ret);
+	ret += 32;
+
+	strcpy(cmd + ret, "\"");
+
+	if (g_at_chat_send(sad->chat, cmd, ccho_prefix, at_open_channel_cb,
+			cbd, g_free) > 0)
+		return;
+
+	g_free(cbd);
+
+	CALLBACK_WITH_FAILURE(cb, -1, data);
+}
+
+static void at_close_channel_cb(gboolean ok, GAtResult *result,
+		gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_sim_close_channel_cb_t cb = cbd->cb;
+	struct ofono_error error;
+
+	decode_at_error(&error, g_at_result_final_response(result));
+
+	if (cb)
+		cb(&error, cbd->data);
+}
+
+static void at_close_channel(struct ofono_sim_auth *sa, int session_id,
+		ofono_sim_close_channel_cb_t cb, void *data)
+{
+	struct sim_auth_data *sad = ofono_sim_auth_get_data(sa);
+	struct cb_data *cbd = cb_data_new(cb, data);
+	char cmd[15];
+
+	sprintf(cmd, "AT+CCHC=%d", session_id);
+
+	g_at_chat_send(sad->chat, cmd, NULL, at_close_channel_cb, cbd, g_free);
+}
+
+static void logical_access_cb(gboolean ok, GAtResult *result,
+		gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_logical_access_cb_t cb = cbd->cb;
+	struct ofono_error error;
+	const char *str_data;
+	uint8_t *raw;
+	gint len = 0;
+	GAtResultIter iter;
+
+	decode_at_error(&error, g_at_result_final_response(result));
+
+	if (!ok)
+		goto error;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "+CGLA:"))
+		goto error;
+
+	if (!g_at_result_iter_next_number(&iter, &len))
+		goto error;
+
+	if (!g_at_result_iter_next_string(&iter, &str_data))
+		goto error;
+
+	raw = alloca(len / 2);
+
+	decode_hex_own_buf(str_data, len, NULL, 0, raw);
+
+	cb(&error, raw, len / 2, cbd->data);
+
+	return;
+
+error:
+	cb(&error, NULL, 0, cbd->data);
+}
+
+static void at_logical_access(struct ofono_sim_auth *sa, int session_id,
+		const uint8_t *pdu, uint16_t len, ofono_logical_access_cb_t cb,
+		void *data)
+
+{
+	struct sim_auth_data *sad = ofono_sim_auth_get_data(sa);
+	struct cb_data *cbd = cb_data_new(cb, data);
+	int ret = 0;
+	char cmd[(len * 2) + 19];
+
+	ret = sprintf(cmd, "AT+CGLA=%d,%d,\"", session_id, len * 2);
+
+	encode_hex_own_buf(pdu, len, 0, cmd + ret);
+	ret += len * 2;
+
+	strcpy(cmd + ret, "\"");
+
+	if (g_at_chat_send(sad->chat, cmd, cgla_prefix, logical_access_cb,
+			cbd, g_free) > 0)
+		return;
+
+	g_free(cbd);
+
+	CALLBACK_WITH_FAILURE(cb, NULL, 0, data);
+}
+
 static gboolean at_sim_auth_register(gpointer user)
 {
 	struct ofono_sim_auth *sa = user;
@@ -151,6 +300,9 @@ static struct ofono_sim_auth_driver driver = {
 	.probe		= at_sim_auth_probe,
 	.remove		= at_sim_auth_remove,
 	.list_apps	= at_discover_apps,
+	.open_channel	= at_open_channel,
+	.close_channel	= at_close_channel,
+	.logical_access = at_logical_access
 };
 
 void at_sim_auth_init(void)
