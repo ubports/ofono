@@ -20,6 +20,8 @@
 
 #include <sys/socket.h>
 #include <ctype.h>
+#include <errno.h>
+#include <limits.h>
 
 #include "common.h"
 #include "netreg.h"
@@ -324,8 +326,7 @@ int ril_parse_tech(const char *stech, int *ril_tech)
 {
 	int access_tech = -1;
 	int tech = -1;
-	if (stech && stech[0]) {
-		tech = atoi(stech);
+	if (ril_parse_int(stech, 0, &tech)) {
 		switch (tech) {
 		case RADIO_TECH_GPRS:
 		case RADIO_TECH_GSM:
@@ -382,8 +383,8 @@ gboolean ril_parse_mcc_mnc(const char *str, struct ofono_network_operator *op)
 
 		if (i == OFONO_MAX_MCC_LENGTH) {
 			/* Usually 2 but sometimes 3 digit network code */
-			for (i=0;
-			     i<OFONO_MAX_MNC_LENGTH && *ptr && isdigit(*ptr);
+			for (i = 0;
+			     i < OFONO_MAX_MNC_LENGTH && *ptr && isdigit(*ptr);
 			     i++) {
 				op->mnc[i] = *ptr++;
 			}
@@ -408,6 +409,26 @@ gboolean ril_parse_mcc_mnc(const char *str, struct ofono_network_operator *op)
 		}
 	}
 	return FALSE;
+}
+
+gboolean ril_parse_int(const char *str, int base, int *value)
+{
+	gboolean ok = FALSE;
+
+	if (str && str[0]) {
+		char *str2 = g_strstrip(g_strdup(str));
+		char *end = str2;
+		long l;
+
+		errno = 0;
+		l = strtol(str2, &end, base);
+		ok = !*end && errno != ERANGE && l >= INT_MIN && l <= INT_MAX;
+		if (ok && value) {
+			*value = (int)l;
+		}
+		g_free(str2);
+	}
+	return ok;
 }
 
 /*
