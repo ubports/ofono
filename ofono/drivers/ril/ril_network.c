@@ -208,8 +208,14 @@ static gboolean ril_network_parse_response(struct ril_network *self,
 		reg->max_calls = 2;
 	}
 
-	reg->lac = slac ? strtol(slac, NULL, 16) : -1;
-	reg->ci = sci ? strtol(sci, NULL, 16) : -1;
+	if (!ril_parse_int(slac, 16, &reg->lac)) {
+		reg->lac = -1;
+	}
+
+	if (!ril_parse_int(sci, 16, &reg->ci)) {
+		reg->ci = -1;
+	}
+
 	reg->access_tech = ril_parse_tech(stech, &reg->ril_tech);
 
 	DBG_(self, "%s,%s,%s,%d,%s,%s,%s",
