@@ -38,10 +38,14 @@
 #include <sys/types.h>
 #include <sys/syscall.h>
 #include <sys/prctl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <pwd.h>
+#include <grp.h>
 
 #define OFONO_API_SUBJECT_TO_CHANGE
 #include <ofono/plugin.h>
-#include "ofono.h"
+#include "storage.h"
 
 #define OFONO_RADIO_ACCESS_MODE_ALL (OFONO_RADIO_ACCESS_MODE_GSM |\
                                      OFONO_RADIO_ACCESS_MODE_UMTS |\
@@ -49,11 +53,10 @@
 
 #define RIL_DEVICE_IDENTITY_RETRIES_LAST 2
 
-#define RADIO_GID                   1001
-#define RADIO_UID                   1001
 #define RIL_SUB_SIZE                4
 
 #define RILMODEM_CONF_FILE          CONFIGDIR "/ril_subscription.conf"
+#define RILMODEM_DEFAULT_IDENTITY   "radio:radio"
 #define RILMODEM_DEFAULT_SOCK       "/dev/socket/rild"
 #define RILMODEM_DEFAULT_SOCK2      "/dev/socket/rild2"
 #define RILMODEM_DEFAULT_SUB        "SUB1"
@@ -77,6 +80,7 @@
  * with lower case.
  */
 #define RILCONF_SETTINGS_EMPTY      "EmptyConfig"
+#define RILCONF_SETTINGS_IDENTITY   "Identity"
 #define RILCONF_SETTINGS_3GHANDOVER "3GLTEHandover"
 #define RILCONF_SETTINGS_SET_RADIO_CAP "SetRadioCapability"
 
@@ -130,9 +134,15 @@ enum ril_set_radio_cap_opt {
 	RIL_SET_RADIO_CAP_DISABLED
 };
 
+struct ril_plugin_identity {
+	uid_t uid;
+	gid_t gid;
+};
+
 struct ril_plugin_settings {
 	int dm_flags;
 	enum ril_set_radio_cap_opt set_radio_cap;
+	struct ril_plugin_identity identity;
 };
 
 typedef struct sailfish_slot_manager_impl {
@@ -142,6 +152,7 @@ typedef struct sailfish_slot_manager_impl {
 	struct ril_plugin_settings settings;
 	gulong caps_manager_event_id;
 	guint start_timeout_id;
+	MceDisplay *display;
 	GSList *slots;
 } ril_plugin;
 
@@ -196,6 +207,7 @@ static void ril_debug_dump_notify(struct ofono_debug_desc *desc);
 static void ril_debug_grilio_notify(struct ofono_debug_desc *desc);
 static void ril_debug_mce_notify(struct ofono_debug_desc *desc);
 static void ril_plugin_debug_notify(struct ofono_debug_desc *desc);
+static void ril_plugin_drop_orphan_slots(ril_plugin *plugin);
 static void ril_plugin_retry_init_io(ril_slot *slot);
 static void ril_plugin_check_modem(ril_slot *slot);
 
@@ -759,6 +771,19 @@ static void ril_plugin_radio_caps_cb(const struct ril_radio_capability *cap,
 	}
 }
 
+static void ril_plugin_manager_started(ril_plugin *plugin)
+{
+	ril_plugin_drop_orphan_slots(plugin);
+	sailfish_slot_manager_started(plugin->handle);
+
+	/*
+	 * We no longer need this MceDisplay reference, the slots
+	 * (if there are any) are holding references of their own.
+	 */
+	mce_display_unref(plugin->display);
+	plugin->display = NULL;
+}
+
 static void ril_plugin_all_slots_started_cb(ril_slot *slot, void *param)
 {
 	if (!slot->handle) {
@@ -778,7 +803,7 @@ static void ril_plugin_check_if_started(ril_plugin* plugin)
 			g_source_remove(plugin->start_timeout_id);
 			/* id is zeroed by ril_plugin_manager_start_done */
 			GASSERT(!plugin->start_timeout_id);
-			sailfish_slot_manager_started(plugin->handle);
+			ril_plugin_manager_started(plugin);
 		}
 	}
 }
@@ -1323,6 +1348,60 @@ static guint ril_plugin_find_unused_slot(GSList *slots)
 	return number;
 }
 
+static void ril_plugin_parse_identity(struct ril_plugin_identity *identity,
+							const char *value)
+{
+	char *sep = strchr(value, ':');
+	const char *user = value;
+	const char *group = NULL;
+	char *tmp_user = NULL;
+	const struct passwd *pw = NULL;
+	const struct group *gr = NULL;
+
+	if (sep) {
+		/* Group */
+		group = sep + 1;
+		gr = getgrnam(group);
+		user = tmp_user = g_strndup(value, sep - value);
+
+		if (!gr) {
+			int n;
+
+			/* Try numeric */
+			if (ril_parse_int(group, 0, &n)) {
+				gr = getgrgid(n);
+			}
+		}
+	}
+
+	/* User */
+	pw = getpwnam(user);
+	if (!pw) {
+		int n;
+
+		/* Try numeric */
+		if (ril_parse_int(user, 0, &n)) {
+			pw = getpwuid(n);
+		}
+	}
+
+	if (pw) {
+		DBG("User %s -> %d", user, pw->pw_uid);
+		identity->uid = pw->pw_uid;
+	} else {
+		ofono_warn("Invalid user '%s'", user);
+	}
+
+	if (gr) {
+		DBG("Group %s -> %d", group, gr->gr_gid);
+		identity->gid = gr->gr_gid;
+	} else if (group) {
+		ofono_warn("Invalid group '%s'", group);
+	}
+
+	g_free(tmp_user);
+}
+
 static GSList *ril_plugin_parse_config_file(GKeyFile *file,
 					struct ril_plugin_settings *ps)
 {
@@ -1343,6 +1422,7 @@ static GSList *ril_plugin_parse_config_file(GKeyFile *file,
 		} else if (!strcmp(group, RILCONF_SETTINGS_GROUP)) {
 			/* Plugin configuration */
 			int ival;
+			char *sval;
 
 			/* 3GLTEHandover */
 			ril_config_get_flag(file, group,
@@ -1357,6 +1437,14 @@ static GSList *ril_plugin_parse_config_file(GKeyFile *file,
 				"on", RIL_SET_RADIO_CAP_ENABLED,
 				"off", RIL_SET_RADIO_CAP_DISABLED, NULL)) {
 				ps->set_radio_cap = ival;
+			}
+
+			/* Identity */
+			sval = g_key_file_get_string(file, group,
+					RILCONF_SETTINGS_IDENTITY, NULL);
+			if (sval) {
+				ril_plugin_parse_identity(&ps->identity, sval);
+				g_free(sval);
 			}
 		}
 	}
@@ -1412,18 +1500,68 @@ static GSList *ril_plugin_load_config(const char *path,
 	return list;
 }
 
-/* RIL expects user radio */
-static void ril_plugin_switch_user()
+static void ril_plugin_set_perm(const char *path, mode_t mode,
+					const struct ril_plugin_identity *id)
 {
+	if (chmod(path, mode)) {
+		ofono_error("chmod(%s,%o) failed: %s", path, mode,
+							strerror(errno));
+	}
+	if (chown(path, id->uid, id->gid)) {
+		ofono_error("chown(%s,%d,%d) failed: %s", path, id->uid,
+						id->gid, strerror(errno));
+	}
+}
+
+/* Recursively updates file and directory ownership and permissions */
+static void ril_plugin_set_storage_perm(const char *path,
+			const struct ril_plugin_identity *id)
+{
+	DIR *d = opendir(path);
+	const mode_t dir_mode = S_IRUSR | S_IWUSR | S_IXUSR;
+	const mode_t file_mode = S_IRUSR | S_IWUSR;
+
+	if (d) {
+		const struct dirent *p;
+
+		while ((p = readdir(d)) != NULL) {
+			char *buf;
+			struct stat st;
+
+			if (!strcmp(p->d_name, ".") ||
+					!strcmp(p->d_name, "..")) {
+				continue;
+			}
+
+			buf = g_strdup_printf("%s/%s", path, p->d_name);
+			if (!stat(buf, &st)) {
+				mode_t mode;
+
+				if (S_ISDIR(st.st_mode)) {
+					ril_plugin_set_storage_perm(buf, id);
+					mode = dir_mode;
+				} else {
+					mode = file_mode;
+				}
+				ril_plugin_set_perm(buf, mode, id);
+			}
+			g_free(buf);
+		}
+		closedir(d);
+		ril_plugin_set_perm(path, dir_mode, id);
+	}
+}
+
+static void ril_plugin_switch_identity(const struct ril_plugin_identity *id)
+{
+	ril_plugin_set_storage_perm(STORAGEDIR, id);
 	if (prctl(PR_SET_KEEPCAPS, 1, 0, 0, 0) < 0) {
 		ofono_error("prctl(PR_SET_KEEPCAPS) failed: %s",
 							strerror(errno));
-	} else if (setgid(RADIO_GID) < 0) {
-		ofono_error("setgid(%d) failed: %s", RADIO_GID,
-							strerror(errno));
-	} else if (setuid(RADIO_UID) < 0) {
-		ofono_error("setuid(%d) failed: %s", RADIO_UID,
-							strerror(errno));
+	} else if (setgid(id->gid) < 0) {
+		ofono_error("setgid(%d) failed: %s", id->gid, strerror(errno));
+	} else if (setuid(id->uid) < 0) {
+		ofono_error("setuid(%d) failed: %s", id->uid, strerror(errno));
 	} else {
 		struct __user_cap_header_struct header;
 		struct __user_cap_data_struct cap;
@@ -1480,8 +1618,7 @@ static gboolean ril_plugin_manager_start_timeout(gpointer user_data)
 
 	DBG("");
 	plugin->start_timeout_id = 0;
-	ril_plugin_drop_orphan_slots(plugin);
-	sailfish_slot_manager_started(plugin->handle);
+	ril_plugin_manager_started(plugin);
 	return G_SOURCE_REMOVE;
 }
 
@@ -1500,11 +1637,20 @@ static void ril_plugin_manager_start_done(gpointer user_data)
 static ril_plugin *ril_plugin_manager_create(struct sailfish_slot_manager *m)
 {
 	ril_plugin *plugin = g_new0(ril_plugin, 1);
+	struct ril_plugin_settings *ps = &plugin->settings;
 
 	DBG("");
+
+	/*
+	 * Create the MCE client instance early so that connection
+	 * to the system bus gets established before we switch the
+	 * identity.
+	 */
+	plugin->display = mce_display_new();
 	plugin->handle = m;
-	plugin->settings.dm_flags = RILMODEM_DEFAULT_DM_FLAGS;
-	plugin->settings.set_radio_cap = RIL_SET_RADIO_CAP_AUTO;
+	ril_plugin_parse_identity(&ps->identity, RILMODEM_DEFAULT_IDENTITY);
+	ps->dm_flags = RILMODEM_DEFAULT_DM_FLAGS;
+	ps->set_radio_cap = RIL_SET_RADIO_CAP_AUTO;
 	return plugin;
 }
 
@@ -1549,6 +1695,10 @@ static guint ril_plugin_manager_start(ril_plugin *plugin)
 
 	ril_plugin_foreach_slot_param(plugin, ril_plugin_slot_check_timeout_cb,
 							&start_timeout);
+
+	/* Switch the user to the one RIL expects */
+	ril_plugin_switch_identity(&ps->identity);
+
 	plugin->start_timeout_id = g_timeout_add_full(G_PRIORITY_DEFAULT,
 			start_timeout, ril_plugin_manager_start_timeout,
 			plugin, ril_plugin_manager_start_done);
@@ -1564,6 +1714,7 @@ static void ril_plugin_manager_free(ril_plugin *plugin)
 {
 	if (plugin) {
 		GASSERT(!plugin->slots);
+		mce_display_unref(plugin->display);
 		ril_data_manager_unref(plugin->data_manager);
 		ril_radio_caps_manager_remove_handler(plugin->caps_manager,
 					plugin->caps_manager_event_id);
@@ -1637,9 +1788,6 @@ static gboolean ril_plugin_start(gpointer user_data)
 
 	DBG("");
 	ril_driver_init_id = 0;
-
-	/* Switch the user to the one RIL expects */
-	ril_plugin_switch_user();
 
 	/* Register the driver */
 	ril_driver = sailfish_slot_driver_register(&ril_slot_driver);
