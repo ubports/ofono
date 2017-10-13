@@ -14,6 +14,7 @@
  */
 
 #include "ril_config.h"
+#include "ril_util.h"
 #include "ril_log.h"
 
 #include <gutil_intarray.h>
@@ -190,12 +191,10 @@ GUtilInts *ril_config_get_ints(GKeyFile *file, const char *group,
 		GUtilIntArray *array = gutil_int_array_new();
 
 		while (*ptr) {
-			const char *str = *ptr++;
-			char *end = NULL;
-			long ival = strtol(str, &end, 0);
+			int val;
 
-			if (str[0] && !end[0]) {
-				gutil_int_array_append(array, ival);
+			if (ril_parse_int(*ptr++, 0, &val)) {
+				gutil_int_array_append(array, val);
 			}
 		}
 
