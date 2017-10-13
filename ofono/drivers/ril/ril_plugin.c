@@ -1517,10 +1517,12 @@ static void ril_plugin_set_perm(const char *path, mode_t mode,
 static void ril_plugin_set_storage_perm(const char *path,
 			const struct ril_plugin_identity *id)
 {
-	DIR *d = opendir(path);
+	DIR *d;
 	const mode_t dir_mode = S_IRUSR | S_IWUSR | S_IXUSR;
 	const mode_t file_mode = S_IRUSR | S_IWUSR;
 
+	ril_plugin_set_perm(path, dir_mode, id);
+	d = opendir(path);
 	if (d) {
 		const struct dirent *p;
 
@@ -1548,7 +1550,6 @@ static void ril_plugin_set_storage_perm(const char *path,
 			g_free(buf);
 		}
 		closedir(d);
-		ril_plugin_set_perm(path, dir_mode, id);
 	}
 }
 
