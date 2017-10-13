@@ -917,6 +917,14 @@ endif
 if RILMODEM
 if SAILFISH_RILMODEM
 
+unit_test_ril_util_SOURCES = unit/test-ril_util.c drivers/ril/ril_util.c \
+				src/log.c
+unit_test_ril_util_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
+unit_test_ril_util_LDADD = @GLIB_LIBS@ -ldl
+unit_objects += $(unit_test_ril_util_OBJECTS)
+unit_tests += unit/test-ril_util
+
+else
 unit_tests += unit/test-rilmodem-cs \
 				unit/test-rilmodem-cs \
 				unit/test-rilmodem-sms \
