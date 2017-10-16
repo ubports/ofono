@@ -427,6 +427,7 @@ static DBusMessage *usim_gsm_authenticate(DBusConnection *conn,
 	DBusMessageIter array;
 	int i;
 	struct sim_app_record *app;
+	int rands;
 
 	if (sim->pending)
 		return __ofono_error_busy(msg);
@@ -436,11 +437,16 @@ static DBusMessage *usim_gsm_authenticate(DBusConnection *conn,
 	if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_ARRAY)
 		return __ofono_error_invalid_format(msg);
 
+	rands = dbus_message_iter_get_element_count(&iter);
+
+	if (rands > 3 || rands < 2)
+		return __ofono_error_invalid_format(msg);
+
 	sim->pending = malloc(sizeof(struct auth_request));
 	sim->pending->msg = dbus_message_ref(msg);
 	sim->pending->umts = 0;
 	sim->pending->cb_count = 0;
-	sim->pending->num_rands = dbus_message_iter_get_element_count(&iter);
+	sim->pending->num_rands = rands;
 
 	dbus_message_iter_recurse(&iter, &array);
 
@@ -450,14 +456,14 @@ static DBusMessage *usim_gsm_authenticate(DBusConnection *conn,
 
 		dbus_message_iter_recurse(&array, &in);
 
+		if (dbus_message_iter_get_arg_type(&in) != DBUS_TYPE_BYTE)
+			goto format_error;
+
 		dbus_message_iter_get_fixed_array(&in, &sim->pending->rands[i],
 				&nelement);
 
-		if (nelement != 16) {
-			g_free(sim->pending);
-			sim->pending = NULL;
-			return __ofono_error_invalid_format(msg);
-		}
+		if (nelement != 16)
+			goto format_error;
 
 		dbus_message_iter_next(&array);
 	}
@@ -467,6 +473,11 @@ static DBusMessage *usim_gsm_authenticate(DBusConnection *conn,
 	sim->driver->open_channel(sim, app->aid, open_channel_cb, sim);
 
 	return NULL;
+
+format_error:
+	g_free(sim->pending);
+	sim->pending = NULL;
+	return __ofono_error_invalid_format(msg);
 }
 
 static DBusMessage *umts_common(DBusConnection *conn, DBusMessage *msg,
