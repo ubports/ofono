@@ -34,8 +34,6 @@ struct ril_sim_settings *ril_sim_settings_new(const char *path,
 					enum ofono_radio_access_mode techs);
 struct ril_sim_settings *ril_sim_settings_ref(struct ril_sim_settings *s);
 void ril_sim_settings_unref(struct ril_sim_settings *s);
-void ril_sim_settings_set_ofono_sim(struct ril_sim_settings *s,
-					struct ofono_sim *sim);
 void ril_sim_settings_set_pref_mode(struct ril_sim_settings *s,
 					enum ofono_radio_access_mode mode);
 gulong ril_sim_settings_add_imsi_changed_handler(struct ril_sim_settings *s,
