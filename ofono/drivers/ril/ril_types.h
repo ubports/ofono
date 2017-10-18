@@ -65,6 +65,7 @@ struct ril_slot_config {
 	gboolean enable_voicecall;
 	gboolean enable_cbs;
 	gboolean enable_stk;
+	gboolean replace_strange_oper;
 	gboolean network_selection_manual_0;
 	gboolean force_gsm_when_radio_off;
 	gboolean use_data_profiles;

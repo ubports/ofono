@@ -20,8 +20,11 @@
 #include "ril_vendor.h"
 #include "ril_log.h"
 
+#include "ofono.h"
 #include "common.h"
 #include "simutil.h"
+
+#include <ofono/watch.h>
 
 #define REGISTRATION_MAX_RETRIES (2)
 
@@ -40,9 +43,11 @@ enum ril_netreg_network_events {
 struct ril_netreg {
 	GRilIoChannel *io;
 	GRilIoQueue *q;
+	gboolean replace_strange_oper;
 	gboolean network_selection_manual_0;
 	int signal_strength_dbm_weak;
 	int signal_strength_dbm_strong;
+	struct ofono_watch *watch;
 	struct ofono_netreg *netreg;
 	struct ril_network *network;
 	struct ril_vendor *vendor;
@@ -192,11 +197,74 @@ static void ril_netreg_current_operator(struct ofono_netreg *netreg,
 					ril_netreg_cbd_free);
 }
 
+static gboolean ril_netreg_strange(const struct ofono_network_operator *op,
+							struct ofono_sim *sim)
+{
+	gsize mcclen;
+
+	if (sim && op->status != OPERATOR_STATUS_CURRENT) {
+		const char *spn = ofono_sim_get_spn(sim);
+		const char *mcc = ofono_sim_get_mcc(sim);
+		const char *mnc = ofono_sim_get_mnc(sim);
+
+		if (spn && mcc && mnc && !strcmp(op->name, spn) &&
+			(strcmp(op->mcc, mcc) || strcmp(op->mnc, mnc))) {
+			/*
+			 * Status is not "current", SPN matches the SIM, but
+			 * MCC and/or MNC don't (e.g. Sony Xperia X where all
+			 * operators could be reported with the same name
+			 * which equals SPN).
+			 */
+			DBG("%s %s%s (sim spn?)", op->name, op->mcc, op->mnc);
+			return TRUE;
+		}
+	}
+
+	mcclen = strlen(op->mcc);
+	if (!strncmp(op->name, op->mcc, mcclen) &&
+				!strcmp(op->name + mcclen, op->mnc)) {
+		/* Some MediaTek RILs only report numeric operator name */
+		DBG("%s %s%s (numeric?)", op->name, op->mcc, op->mnc);
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
+static void ril_netreg_process_operators(struct ril_netreg *nd,
+			struct ofono_network_operator *ops, int nops)
+{
+	if (nd->replace_strange_oper) {
+		int i;
+
+		for (i = 0; i < nops; i++) {
+			struct ofono_network_operator *op = ops + i;
+			struct ofono_gprs_provision_data *prov = NULL;
+			int np = 0;
+
+			if (ril_netreg_strange(op, nd->watch->sim) &&
+				__ofono_gprs_provision_get_settings(op->mcc,
+						op->mnc, NULL, &prov, &np)) {
+				/* Use the first entry */
+				if (np > 0 && prov->provider_name &&
+						prov->provider_name[0]) {
+					DBG("%s %s%s -> %s", op->name, op->mcc,
+						op->mnc, prov->provider_name);
+					strncpy(op->name, prov->provider_name,
+						OFONO_MAX_OPERATOR_NAME_LENGTH);
+				}
+				__ofono_gprs_provision_free_settings(prov, np);
+			}
+		}
+	}
+}
+
 static void ril_netreg_list_operators_cb(GRilIoChannel *io, int status,
 				const void *data, guint len, void *user_data)
 {
 	struct ril_netreg_cbd *cbd = user_data;
 	ofono_netreg_operator_list_cb_t cb = cbd->cb.operator_list;
+	struct ril_netreg *nd = cbd->nd;
 	struct ofono_network_operator *list;
 	struct ofono_error error;
 	int noperators = 0, i;
@@ -238,21 +306,23 @@ static void ril_netreg_list_operators_cb(GRilIoChannel *io, int status,
 		}
 
 		/* Set the proper status  */
-		if (!strcmp(status, "available")) {
-			list[i].status = OPERATOR_STATUS_AVAILABLE;
+		if (!status) {
+			op->status = OPERATOR_STATUS_UNKNOWN;
+		} else if (!strcmp(status, "available")) {
+			op->status = OPERATOR_STATUS_AVAILABLE;
 		} else if (!strcmp(status, "current")) {
-			list[i].status = OPERATOR_STATUS_CURRENT;
+			op->status = OPERATOR_STATUS_CURRENT;
 		} else if (!strcmp(status, "forbidden")) {
-			list[i].status = OPERATOR_STATUS_FORBIDDEN;
+			op->status = OPERATOR_STATUS_FORBIDDEN;
 		} else {
-			list[i].status = OPERATOR_STATUS_UNKNOWN;
+			op->status = OPERATOR_STATUS_UNKNOWN;
 		}
 
 		op->tech = -1;
 		ok = ril_parse_mcc_mnc(numeric, op);
 		if (ok) {
 			if (op->tech < 0) {
-				op->tech = cbd->nd->network->voice.access_tech;
+				op->tech = nd->network->voice.access_tech;
 			}
 			DBG("[operator=%s, %s, %s, status: %s]", op->name,
 						op->mcc, op->mnc, status);
@@ -267,6 +337,7 @@ static void ril_netreg_list_operators_cb(GRilIoChannel *io, int status,
 	}
 
 	if (ok) {
+		ril_netreg_process_operators(nd, list, noperators);
 		cb(ril_error_ok(&error), noperators, list, cbd->data);
 	} else {
 		cb(ril_error_failure(&error), 0, NULL, cbd->data);
@@ -594,9 +665,11 @@ static int ril_netreg_probe(struct ofono_netreg *netreg, unsigned int vendor,
 	DBG_(nd, "%p", netreg);
 	nd->io = grilio_channel_ref(ril_modem_io(modem));
 	nd->q = grilio_queue_new(nd->io);
+	nd->watch = ofono_watch_new(ril_modem_get_path(modem));
 	nd->vendor = ril_vendor_ref(modem->vendor);
 	nd->network = ril_network_ref(modem->network);
 	nd->netreg = netreg;
+	nd->replace_strange_oper = config->replace_strange_oper;
 	nd->network_selection_manual_0 = config->network_selection_manual_0;
 	nd->signal_strength_dbm_weak = config->signal_strength_dbm_weak;
 	nd->signal_strength_dbm_strong = config->signal_strength_dbm_strong;
@@ -627,6 +700,7 @@ static void ril_netreg_remove(struct ofono_netreg *netreg)
 		g_source_remove(nd->current_operator_id);
 	}
 
+	ofono_watch_unref(nd->watch);
 	ril_network_remove_all_handlers(nd->network, nd->network_event_id);
 	ril_network_unref(nd->network);
 	ril_vendor_unref(nd->vendor);
