@@ -20,9 +20,6 @@
 
 #include <gutil_misc.h>
 
-#include "ofono.h"
-#include "storage.h"
-
 #define RIL_PREF_MODE_DEFAULT(self)                     (\
 	((self)->techs & OFONO_RADIO_ACCESS_MODE_LTE) ?  \
 	OFONO_RADIO_ACCESS_MODE_LTE :                    \
@@ -41,7 +38,6 @@ enum sailfish_watch_events {
 struct ril_sim_settings_priv {
 	gulong watch_event_id[WATCH_EVENT_COUNT];
 	struct sailfish_watch *watch;
-	GKeyFile *storage;
 	char *imsi;
 };
 
