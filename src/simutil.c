@@ -1657,7 +1657,7 @@ gboolean sim_parse_umts_authenticate(const unsigned char *buffer,
 		const unsigned char **ik, const unsigned char **auts,
 		const unsigned char **kc)
 {
-	if (len < 18 || !buffer)
+	if (len < 16 || !buffer)
 		return FALSE;
 
 	switch (buffer[0]) {
@@ -1695,12 +1695,12 @@ gboolean sim_parse_umts_authenticate(const unsigned char *buffer,
 
 		break;
 	case 0xdc:
-		/* 'DB' + '10' + AUTS(16) = 18 */
-		if (len < 18)
+		/* 'DC' + '0E' + AUTS(14) = 16 */
+		if (len < 16)
 			goto umts_end;
 
 		/* sync error */
-		if (buffer[1] != 0x10)
+		if (buffer[1] != 0x0e)
 			goto umts_end;
 
 		*auts = buffer + 2;
