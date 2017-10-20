@@ -272,7 +272,7 @@ static void handle_umts(struct ofono_sim_auth *sim, const uint8_t *resp,
 			"{say}", &dict);
 
 	if (auts) {
-		append_dict_byte_array(&dict, "AUTS", auts, 16);
+		append_dict_byte_array(&dict, "AUTS", auts, 14);
 	} else {
 		append_dict_byte_array(&dict, "RES", res, 8);
 		append_dict_byte_array(&dict, "CK", ck, 16);
