@@ -40,7 +40,7 @@ static void ril_netmon_format_mccmnc(char *s_mcc, char *s_mnc, int mcc, int mnc)
 	if (mcc >= 0 && mcc <= 999) {
 		snprintf(s_mcc, OFONO_MAX_MCC_LENGTH + 1, "%03d", mcc);
 		if (mnc >= 0 && mnc <= 999) {
-			const int mnclen = mnclength(mcc, mnc);
+			const unsigned int mnclen = mnclength(mcc, mnc);
 			const char *format[] = { "%d", "%02d", "%03d" };
 			const char *fmt = (mnclen > 0 &&
 				mnclen <= G_N_ELEMENTS(format)) ? 
