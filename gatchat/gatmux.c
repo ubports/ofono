@@ -684,6 +684,9 @@ gboolean g_at_mux_shutdown(GAtMux *mux)
 	if (mux->read_watch > 0)
 		g_source_remove(mux->read_watch);
 
+	if (mux->write_watch > 0)
+		g_source_remove(mux->write_watch);
+
 	for (i = 0; i < MAX_CHANNELS; i++) {
 		if (mux->dlcs[i] == NULL)
 			continue;
