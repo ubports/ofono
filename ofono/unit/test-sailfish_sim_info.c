@@ -83,7 +83,7 @@ struct ofono_netreg {
 
 int ofono_netreg_get_status(struct ofono_netreg *netreg)
 {
-	return netreg ? netreg->status : -1;
+	return netreg ? (int) netreg->status : -1;
 }
 
 const char *ofono_netreg_get_mcc(struct ofono_netreg *netreg)
