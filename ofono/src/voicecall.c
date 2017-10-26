@@ -1392,15 +1392,16 @@ static ofono_bool_t clir_string_to_clir(const char *clirstr,
 	}
 }
 
-static struct ofono_call *synthesize_outgoing_call(struct ofono_voicecall *vc,
-							const char *number)
+static struct voicecall *synthesize_outgoing_call(struct ofono_voicecall *vc,
+					const char *number)
 {
 	struct ofono_modem *modem = __ofono_atom_get_modem(vc->atom);
 	struct ofono_call *call;
+	struct voicecall *v;
 
 	call = g_try_new0(struct ofono_call, 1);
 	if (call == NULL)
-		return call;
+		return NULL;
 
 	call->id = __ofono_modem_callid_next(modem);
 
@@ -1419,7 +1420,20 @@ static struct ofono_call *synthesize_outgoing_call(struct ofono_voicecall *vc,
 	call->status = CALL_STATUS_DIALING;
 	call->clip_validity = CLIP_VALIDITY_VALID;
 
-	return call;
+	v = voicecall_create(vc, call);
+	if (v == NULL) {
+		g_free(call);
+		return NULL;
+	}
+
+	v->detect_time = time(NULL);
+
+	DBG("Registering new call: %d", call->id);
+	voicecall_dbus_register(v);
+
+	vc->call_list = g_slist_insert_sorted(vc->call_list, v, call_compare);
+
+	return v;
 }
 
 static struct voicecall *dial_handle_result(struct ofono_voicecall *vc,
@@ -1429,7 +1443,6 @@ static struct voicecall *dial_handle_result(struct ofono_voicecall *vc,
 {
 	GSList *l;
 	struct voicecall *v;
-	struct ofono_call *call;
 
 	*need_to_emit = FALSE;
 
@@ -1462,21 +1475,9 @@ static struct voicecall *dial_handle_result(struct ofono_voicecall *vc,
 			goto handled;
 	}
 
-	call = synthesize_outgoing_call(vc, number);
-	if (call == NULL)
+	v = synthesize_outgoing_call(vc, number);
+	if (!v)
 		return NULL;
-
-	v = voicecall_create(vc, call);
-	if (v == NULL)
-		return NULL;
-
-	v->detect_time = time(NULL);
-
-	DBG("Registering new call: %d", call->id);
-	voicecall_dbus_register(v);
-
-	vc->call_list = g_slist_insert_sorted(vc->call_list, v,
-				call_compare);
 
 	*need_to_emit = TRUE;
 
