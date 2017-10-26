@@ -47,6 +47,7 @@
 #include <ofono/radio-settings.h>
 #include <ofono/log.h>
 #include <ofono/location-reporting.h>
+#include <ofono/sim-auth.h>
 
 #include <drivers/atmodem/atutil.h>
 #include <drivers/atmodem/vendor.h>
@@ -438,6 +439,7 @@ static void mbm_post_sim(struct ofono_modem *modem)
 	ofono_radio_settings_create(modem, 0, "stemodem", data->modem_port);
 
 	ofono_sms_create(modem, 0, "atmodem", data->modem_port);
+	ofono_sim_auth_create(modem, 0, "atmodem", data->modem_port);
 }
 
 static void mbm_post_online(struct ofono_modem *modem)
