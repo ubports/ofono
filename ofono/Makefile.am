@@ -939,7 +939,8 @@ test_scripts = test/backtrace \
 		test/set-lte-property \
 		test/test-serving-cell-info \
 		test/ims-register \
-		test/ims-unregister
+		test/ims-unregister \
+		test/list-applications
 
 
 if TEST
