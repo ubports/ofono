@@ -3232,8 +3232,6 @@ void ofono_sim_register(struct ofono_sim *sim)
 	sim->spn_watches = __ofono_watchlist_new(g_free);
 	sim->simfs = sim_fs_new(sim, sim->driver);
 
-	__ofono_atom_register(sim->atom, sim_unregister);
-
 	ofono_sim_add_state_watch(sim, sim_ready, sim, NULL);
 
 	if (sim->state > OFONO_SIM_STATE_NOT_PRESENT)
@@ -3242,6 +3240,8 @@ void ofono_sim_register(struct ofono_sim *sim)
 	sim->hfp_watch = __ofono_modem_add_atom_watch(modem,
 					OFONO_ATOM_TYPE_EMULATOR_HFP,
 					emulator_hfp_watch, sim, NULL);
+
+	__ofono_atom_register(sim->atom, sim_unregister);
 }
 
 void ofono_sim_remove(struct ofono_sim *sim)
