@@ -1073,6 +1073,7 @@ struct discover_data {
 	qmi_discover_func_t func;
 	void *user_data;
 	qmi_destroy_func_t destroy;
+	uint8_t tid;
 	guint timeout;
 };
 
@@ -1181,14 +1182,38 @@ static gboolean discover_reply(gpointer user_data)
 {
 	struct discover_data *data = user_data;
 	struct qmi_device *device = data->device;
+	unsigned int tid = data->tid;
+	GList *list;
+	struct qmi_request *req = NULL;
 
 	data->timeout = 0;
+
+	/* remove request from queues */
+	if (tid != 0) {
+		list = g_queue_find_custom(device->req_queue,
+				GUINT_TO_POINTER(tid), __request_compare);
+
+		if (list) {
+			req = list->data;
+			g_queue_delete_link(device->req_queue, list);
+		} else {
+			list = g_queue_find_custom(device->control_queue,
+				GUINT_TO_POINTER(tid), __request_compare);
+
+			if (list) {
+				req = list->data;
+				g_queue_delete_link(device->control_queue,
+								list);
+			}
+		}
+	}
 
 	if (data->func)
 		data->func(device->version_count,
 				device->version_list, data->user_data);
 
 	__qmi_device_discovery_complete(data->device, &data->super);
+	__request_free(req, NULL);
 
 	return FALSE;
 }
@@ -1234,6 +1259,7 @@ bool qmi_device_discover(struct qmi_device *device, qmi_discover_func_t func,
 
 	hdr->type = 0x00;
 	hdr->transaction = device->next_control_tid++;
+	data->tid = hdr->transaction;
 
 	__request_submit(device, req, hdr->transaction);
 
