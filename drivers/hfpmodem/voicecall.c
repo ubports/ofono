@@ -125,6 +125,7 @@ static struct ofono_call *create_call(struct ofono_voicecall *vc, int type,
 	if (clip != 2) {
 		strncpy(call->phone_number.number, num,
 			OFONO_MAX_PHONE_NUMBER_LENGTH);
+		call->phone_number.number[OFONO_MAX_PHONE_NUMBER_LENGTH] = '\0';
 		call->phone_number.type = num_type;
 	}
 
