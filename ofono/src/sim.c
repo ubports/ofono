@@ -75,7 +75,6 @@ struct ofono_sim {
 	char **language_prefs;
 	unsigned char *efli;
 	unsigned char efli_length;
-	gboolean language_prefs_update;
 
 	enum ofono_sim_password_type pin_type;
 	gboolean locked_pins[OFONO_SIM_PASSWORD_SIM_PUK]; /* Number of PINs */
@@ -92,8 +91,6 @@ struct ofono_sim {
 	unsigned char efest_length;
 	unsigned char *efsst;
 	unsigned char efsst_length;
-	gboolean fixed_dialing;
-	gboolean barred_dialing;
 
 	char *imsi;
 	char mcc[OFONO_MAX_MCC_LENGTH + 1];
@@ -106,7 +103,6 @@ struct ofono_sim {
 	unsigned char efmsisdn_records;
 
 	GSList *service_numbers;
-	gboolean sdn_ready;
 
 	unsigned char *efimg;
 	unsigned short efimg_length;
@@ -140,6 +136,10 @@ struct ofono_sim {
 	GSList *aid_list;
 	char *impi;
 	bool reading_spn : 1;
+	bool language_prefs_update : 1;
+	bool fixed_dialing : 1;
+	bool barred_dialing : 1;
+	bool sdn_ready : 1;
 };
 
 struct msisdn_set_request {
@@ -1424,7 +1424,7 @@ check:
 	/* All records retrieved */
 	if (sim->service_numbers) {
 		sim->service_numbers = g_slist_reverse(sim->service_numbers);
-		sim->sdn_ready = TRUE;
+		sim->sdn_ready = true;
 	}
 
 	if (sim->sdn_ready) {
@@ -1779,7 +1779,7 @@ static void sim_fdn_enabled(struct ofono_sim *sim)
 	const char *path = __ofono_atom_get_path(sim->atom);
 	dbus_bool_t val;
 
-	sim->fixed_dialing = TRUE;
+	sim->fixed_dialing = true;
 
 	val = sim->fixed_dialing;
 	ofono_dbus_signal_property_changed(conn, path,
@@ -1816,8 +1816,7 @@ static void sim_efbdn_info_read_cb(int ok, unsigned char file_status,
 		sim_bdn_enabled(sim);
 
 out:
-	if (sim->fixed_dialing != TRUE &&
-			sim->barred_dialing != TRUE)
+	if (!sim->fixed_dialing && !sim->barred_dialing)
 		sim_retrieve_imsi(sim);
 }
 
@@ -1854,8 +1853,7 @@ static void sim_efadn_info_read_cb(int ok, unsigned char file_status,
 
 out:
 	if (check_bdn_status(sim) != TRUE) {
-		if (sim->fixed_dialing != TRUE &&
-				sim->barred_dialing != TRUE)
+		if (!sim->fixed_dialing && !sim->barred_dialing)
 			sim_retrieve_imsi(sim);
 	}
 }
@@ -1939,8 +1937,7 @@ static void sim_efest_read_cb(int ok, int length, int record,
 		sim_bdn_enabled(sim);
 
 out:
-	if (sim->fixed_dialing != TRUE &&
-			sim->barred_dialing != TRUE)
+	if (!sim->fixed_dialing && !sim->barred_dialing)
 		sim_retrieve_imsi(sim);
 }
 
@@ -2281,7 +2278,7 @@ skip_efpl:
 	if (!sim->language_prefs_update)
 		__ofono_sim_recheck_pin(sim);
 
-	sim->language_prefs_update = FALSE;
+	sim->language_prefs_update = false;
 }
 
 static void sim_iccid_read_cb(int ok, int length, int record,
@@ -2337,7 +2334,7 @@ static void sim_efli_efpl_changed(int id, void *userdata)
 		sim->language_prefs = NULL;
 	}
 
-	sim->language_prefs_update = TRUE;
+	sim->language_prefs_update = true;
 
 	ofono_sim_read(sim->early_context, SIM_EFLI_FILEID,
 			OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
@@ -2703,7 +2700,7 @@ static void sim_free_main_state(struct ofono_sim *sim)
 	if (sim->service_numbers) {
 		g_slist_free_full(sim->service_numbers, service_number_free);
 		sim->service_numbers = NULL;
-		sim->sdn_ready = FALSE;
+		sim->sdn_ready = false;
 	}
 
 	if (sim->efust) {
@@ -2740,8 +2737,8 @@ static void sim_free_main_state(struct ofono_sim *sim)
 	g_free(sim->iidf_image);
 	sim->iidf_image = NULL;
 
-	sim->fixed_dialing = FALSE;
-	sim->barred_dialing = FALSE;
+	sim->fixed_dialing = false;
+	sim->barred_dialing = false;
 
 	sim_spn_close(sim);
 
