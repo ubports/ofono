@@ -27,6 +27,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 #include <glib.h>
 #include <gdbus.h>
@@ -45,8 +46,6 @@
 #include "storage.h"
 #include "simfs.h"
 #include "stkutil.h"
-
-#define SIM_FLAG_READING_SPN	0x1
 
 /*
  * A new session object will be created if a USim/ISim applications are
@@ -69,8 +68,6 @@ struct ofono_sim_aid_session {
 };
 
 struct ofono_sim {
-	int flags;
-
 	/* Contents of the SIM file system, in rough initialization order */
 	char *iccid;
 	struct ofono_watchlist *iccid_watches;
@@ -142,6 +139,7 @@ struct ofono_sim {
 	GSList *aid_sessions;
 	GSList *aid_list;
 	char *impi;
+	bool reading_spn : 1;
 };
 
 struct msisdn_set_request {
@@ -2669,7 +2667,7 @@ static void sim_spn_close(struct ofono_sim *sim)
 		sim->cphs_spn_short_watch = 0;
 	}
 
-	sim->flags &= ~SIM_FLAG_READING_SPN;
+	sim->reading_spn = false;
 
 	g_free(sim->spn);
 	sim->spn = NULL;
@@ -2953,7 +2951,7 @@ static inline void spn_watches_notify(struct ofono_sim *sim)
 	if (sim->spn_watches->items)
 		g_slist_foreach(sim->spn_watches->items, spn_watch_cb, sim);
 
-	sim->flags &= ~SIM_FLAG_READING_SPN;
+	sim->reading_spn = false;
 }
 
 static void sim_spn_set(struct ofono_sim *sim, const void *data, int length,
@@ -3069,10 +3067,10 @@ static void sim_spn_changed(int id, void *userdata)
 {
 	struct ofono_sim *sim = userdata;
 
-	if (sim->flags & SIM_FLAG_READING_SPN)
+	if (sim->reading_spn)
 		return;
 
-	sim->flags |= SIM_FLAG_READING_SPN;
+	sim->reading_spn = true;
 	ofono_sim_read(sim->context, SIM_EFSPN_FILEID,
 			OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
 			sim_spn_read_cb, sim);
@@ -3125,7 +3123,7 @@ ofono_bool_t ofono_sim_add_spn_watch(struct ofono_sim *sim, unsigned int *id,
 		return TRUE;
 	}
 
-	if (sim->flags & SIM_FLAG_READING_SPN)
+	if (sim->reading_spn)
 		return TRUE;
 
 	((ofono_sim_spn_cb_t) item->notify)(sim->spn, sim->spn_dc,
