@@ -138,6 +138,8 @@ struct ofono_sim {
 	bool fixed_dialing : 1;
 	bool barred_dialing : 1;
 	bool sdn_ready : 1;
+	bool initialized : 1;
+	bool wait_initialized : 1;
 };
 
 struct msisdn_set_request {
@@ -845,6 +847,17 @@ static void sim_enter_pin_cb(const struct ofono_error *error, void *data)
 
 	__ofono_dbus_pending_reply(&sim->pending, reply);
 
+	if (sim->initialized)
+		goto recheck;
+
+	if (sim->pin_type == OFONO_SIM_PASSWORD_SIM_PIN ||
+			sim->pin_type == OFONO_SIM_PASSWORD_SIM_PUK) {
+		sim->wait_initialized = true;
+		DBG("Waiting for ofono_sim_initialized_notify");
+		return;
+	}
+
+recheck:
 	__ofono_sim_recheck_pin(sim);
 }
 
@@ -2587,6 +2600,9 @@ static void sim_free_main_state(struct ofono_sim *sim)
 
 	if (sim->aid_sessions)
 		g_slist_free_full(sim->aid_sessions, aid_session_free);
+
+	sim->initialized = false;
+	sim->wait_initialized = false;
 }
 
 static void sim_free_state(struct ofono_sim *sim)
@@ -2725,6 +2741,21 @@ void ofono_sim_inserted_notify(struct ofono_sim *sim, ofono_bool_t inserted)
 
 		sim_free_state(sim);
 	}
+}
+
+void ofono_sim_initialized_notify(struct ofono_sim *sim)
+{
+	if (sim->state != OFONO_SIM_STATE_INSERTED &&
+				sim->state != OFONO_SIM_STATE_LOCKED_OUT)
+		return;
+
+	sim->initialized = true;
+
+	if (!sim->wait_initialized)
+		return;
+
+	sim->wait_initialized = false;
+	__ofono_sim_recheck_pin(sim);
 }
 
 unsigned int ofono_sim_add_state_watch(struct ofono_sim *sim,
