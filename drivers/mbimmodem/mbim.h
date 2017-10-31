@@ -110,3 +110,11 @@ uint32_t mbim_device_send(struct mbim_device *device, uint32_t gid,
 				mbim_device_destroy_func_t destroy);
 bool mbim_device_cancel(struct mbim_device *device, uint32_t tid);
 bool mbim_device_cancel_group(struct mbim_device *device, uint32_t gid);
+
+uint32_t mbim_device_register(struct mbim_device *device, uint32_t gid,
+				const uint8_t *uuid, uint32_t cid,
+				mbim_device_reply_func_t notify,
+				void *user_data,
+				mbim_device_destroy_func_t destroy);
+bool mbim_device_unregister(struct mbim_device *device, uint32_t id);
+bool mbim_device_unregister_group(struct mbim_device *device, uint32_t gid);
