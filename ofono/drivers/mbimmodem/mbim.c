@@ -138,7 +138,8 @@ static struct mbim_message *message_assembly_add(
 	struct message_assembly_node *node;
 	struct mbim_message *message;
 
-	if (unlikely(type != MBIM_COMMAND_DONE))
+	if (unlikely(type != MBIM_COMMAND_DONE &&
+				type != MBIM_INDICATE_STATUS_MSG))
 		return NULL;
 
 	node = l_queue_find(assembly->transactions,
@@ -202,6 +203,7 @@ struct mbim_device {
 	uint32_t max_segment_size;
 	uint32_t max_outstanding;
 	uint32_t next_tid;
+	uint32_t next_notification;
 	mbim_device_debug_func_t debug_handler;
 	void *debug_data;
 	mbim_device_destroy_func_t debug_destroy;
@@ -217,10 +219,12 @@ struct mbim_device {
 	void *segment;
 	struct l_queue *pending_commands;
 	struct l_queue *sent_commands;
+	struct l_queue *notifications;
 	struct message_assembly *assembly;
 	struct l_idle *close_io;
 
 	bool is_ready : 1;
+	bool in_notify : 1;
 };
 
 struct pending_command {
@@ -287,6 +291,62 @@ static bool pending_command_free_by_gid(void *data, void *user_data)
 		return false;
 
 	pending_command_free(pending);
+	return true;
+}
+
+struct notification {
+	uint32_t id;
+	uint32_t gid;
+	uint8_t uuid[16];
+	uint32_t cid;
+	mbim_device_reply_func_t notify;
+	mbim_device_destroy_func_t destroy;
+	void *user_data;
+
+	bool destroyed : 1;
+};
+
+static bool notification_match_id(const void *a, const void *b)
+{
+	const struct notification *notification = a;
+	uint32_t id = L_PTR_TO_UINT(b);
+
+	return notification->id == id;
+}
+
+static void notification_free(void *data)
+{
+	struct notification *notification = data;
+
+	if (notification->destroy)
+		notification->destroy(notification->user_data);
+
+	notification->notify = NULL;
+	notification->user_data = NULL;
+	notification->destroy = NULL;
+	l_free(notification);
+}
+
+static bool notification_free_by_gid(void *data, void *user_data)
+{
+	struct notification *notification = data;
+	uint32_t gid = L_PTR_TO_UINT(user_data);
+
+	if (notification->gid != gid)
+		return false;
+
+	notification_free(notification);
+	return true;
+}
+
+static bool notification_free_destroyed(void *data, void *user_data)
+{
+	struct notification *notification = data;
+
+	if (!notification->destroyed)
+		return false;
+
+	notification_free(notification);
 	return true;
 }
 
@@ -407,8 +467,8 @@ static bool command_write_handler(struct l_io *io, void *user_data)
 	return device->is_ready;
 }
 
-static void dispatch_message(struct mbim_device *device, uint32_t type,
-						struct mbim_message *message)
+static void dispatch_command_done(struct mbim_device *device,
+					struct mbim_message *message)
 {
 	struct mbim_message_header *hdr =
 			_mbim_message_get_header(message, NULL);
@@ -431,6 +491,69 @@ static void dispatch_message(struct mbim_device *device, uint32_t type,
 	l_io_set_write_handler(device->io, command_write_handler, device, NULL);
 done:
 	mbim_message_unref(message);
+}
+
+static void dispatch_notification(struct mbim_device *device,
+						struct mbim_message *message)
+{
+	const struct l_queue_entry *entry =
+				l_queue_get_entries(device->notifications);
+	uint32_t cid = mbim_message_get_cid(message);
+	const uint8_t *uuid = mbim_message_get_uuid(message);
+	bool handled = false;
+
+	device->in_notify = true;
+
+	while (entry) {
+		struct notification *notification = entry->data;
+
+		if (notification->cid != cid)
+			goto next;
+
+		if (memcmp(notification->uuid, uuid, 16))
+			goto next;
+
+		if (notification->notify)
+			notification->notify(message, notification->user_data);
+
+		handled = true;
+
+next:
+		entry = entry->next;
+	}
+
+	device->in_notify = false;
+
+	l_queue_foreach_remove(device->notifications,
+					notification_free_destroyed, NULL);
+
+	if (!handled) {
+		char uuidstr[37];
+
+		if (!l_uuid_to_string(uuid, uuidstr, sizeof(uuidstr)))
+			memset(uuidstr, 0, sizeof(uuidstr));
+
+		l_util_debug(device->debug_handler, device->debug_data,
+				"Unhandled notification (%s) %u",
+				uuidstr, cid);
+	}
+
+	mbim_message_unref(message);
+}
+
+static void dispatch_message(struct mbim_device *device, uint32_t type,
+						struct mbim_message *message)
+{
+	switch (type) {
+	case MBIM_COMMAND_DONE:
+		dispatch_command_done(device, message);
+		break;
+	case MBIM_INDICATE_STATUS_MSG:
+		dispatch_notification(device, message);
+		break;
+	default:
+		mbim_message_unref(message);
+	}
 }
 
 static bool command_read_handler(struct l_io *io, void *user_data)
@@ -737,6 +860,7 @@ struct mbim_device *mbim_device_new(int fd, uint32_t max_segment_size)
 	device->max_segment_size = max_segment_size;
 	device->max_outstanding = 1;
 	device->next_tid = 1;
+	device->next_notification = 1;
 
 	device->segment = l_malloc(max_segment_size - HEADER_SIZE);
 
@@ -749,6 +873,7 @@ struct mbim_device *mbim_device_new(int fd, uint32_t max_segment_size)
 
 	device->pending_commands = l_queue_new();
 	device->sent_commands = l_queue_new();
+	device->notifications = l_queue_new();
 	device->assembly = message_assembly_new();
 
 	return mbim_device_ref(device);
@@ -789,6 +914,7 @@ void mbim_device_unref(struct mbim_device *device)
 
 	l_queue_destroy(device->pending_commands, pending_command_free);
 	l_queue_destroy(device->sent_commands, pending_command_free);
+	l_queue_destroy(device->notifications, notification_free);
 	message_assembly_free(device->assembly);
 	l_free(device);
 }
@@ -953,4 +1079,95 @@ bool mbim_device_cancel_group(struct mbim_device *device, uint32_t gid)
 					L_UINT_TO_PTR(gid));
 
 	return true;
+}
+
+uint32_t mbim_device_register(struct mbim_device *device, uint32_t gid,
+				const uint8_t *uuid, uint32_t cid,
+				mbim_device_reply_func_t notify,
+				void *user_data,
+				mbim_device_destroy_func_t destroy)
+{
+	struct notification *notification;
+	uint32_t id;
+
+	if (unlikely(!device))
+		return 0;
+
+	id = device->next_notification;
+
+	if (device->next_notification == UINT_MAX)
+		device->next_notification = 1;
+	else
+		device->next_notification += 1;
+
+	notification = l_new(struct notification, 1);
+	notification->id = id;
+	notification->gid = gid;
+	memcpy(notification->uuid, uuid, sizeof(notification->uuid));
+	notification->cid = cid;
+	notification->notify = notify;
+	notification->destroy = destroy;
+	notification->user_data = user_data;
+
+	l_queue_push_tail(device->notifications, notification);
+
+	return notification->id;
+}
+
+bool mbim_device_unregister(struct mbim_device *device, uint32_t id)
+{
+	struct notification *notification;
+
+	if (unlikely(!device))
+		return false;
+
+	if (device->in_notify) {
+		notification = l_queue_find(device->notifications,
+						notification_match_id,
+						L_UINT_TO_PTR(id));
+		if (!notification)
+			return false;
+
+		notification->destroyed = true;
+		return true;
+	}
+
+	notification = l_queue_remove_if(device->notifications,
+					notification_match_id,
+					L_UINT_TO_PTR(id));
+	if (!notification)
+		return false;
+
+	notification_free(notification);
+	return true;
+}
+
+bool mbim_device_unregister_group(struct mbim_device *device, uint32_t gid)
+{
+	const struct l_queue_entry *entry;
+	bool r;
+
+	if (unlikely(!device))
+		return false;
+
+	if (!device->in_notify)
+		return l_queue_foreach_remove(device->notifications,
+					notification_free_by_gid,
+					L_UINT_TO_PTR(gid)) > 0;
+
+	entry = l_queue_get_entries(device->notifications);
+	r = false;
+
+	while (entry) {
+		struct notification *notification = entry->data;
+
+		if (notification->gid == gid) {
+			notification->destroyed = true;
+			r = true;
+		}
+
+		entry = entry->next;
+	}
+
+	return r;
 }
