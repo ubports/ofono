@@ -3081,7 +3081,6 @@ static void sim_pin_query_cb(const struct ofono_error *error,
 		if (sim->state == OFONO_SIM_STATE_READY)
 			break;
 
-		/* Fall through */
 		sim_initialize_after_pin(sim);
 		break;
 	default:
