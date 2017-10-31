@@ -68,6 +68,25 @@ struct mbim_message;
 
 #define MBIM_CID_DSS_CONNECT			1
 
+/* Table 10-11 */
+enum mbim_data_class {
+	MBIM_DATA_CLASS_NONE		= 0x00,
+	MBIM_DATA_CLASS_GPRS		= 0x01,
+	MBIM_DATA_CLASS_EDGE		= 0x02,
+	MBIM_DATA_CLASS_UMTS		= 0x04,
+	MBIM_DATA_CLASS_HSDPA		= 0x08,
+	MBIM_DATA_CLASS_HSUPA		= 0x10,
+	MBIM_DATA_CLASS_LTE		= 0x20,
+	MBIM_DATA_CLASS_1XRTT		= 0x10000,
+	MBIM_DATA_CLASS_EVDO		= 0x20000,
+	MBIM_DATA_CLASS_EVDO_REVA	= 0x40000,
+	MBIM_DATA_CLASS_1XEVDV		= 0x80000,
+	MBIM_DATA_CLASS_3XRTT		= 0x100000,
+	MBIM_DATA_CLASS_1XEVDO_REVB	= 0x200000,
+	MBIM_DATA_CLASS_UMB		= 0x400000,
+	MBIM_DATA_CLASS_CUSTOM		= 0x80000000,
+};
+
 typedef void (*mbim_device_debug_func_t) (const char *str, void *user_data);
 typedef void (*mbim_device_disconnect_func_t) (void *user_data);
 typedef void (*mbim_device_destroy_func_t) (void *user_data);
