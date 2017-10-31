@@ -1798,6 +1798,92 @@ static DBusMessage *manager_dial(DBusConnection *conn,
 	return __ofono_error_failed(msg);
 }
 
+static void manager_dial_last_callback(const struct ofono_error *error, void *data)
+{
+	struct ofono_voicecall *vc = data;
+	DBusMessage *reply;
+	struct voicecall *v;
+
+	v = synthesize_outgoing_call(vc, NULL);
+
+	if (v) {
+		const char *path = voicecall_build_path(vc, v->call);
+
+		reply = dbus_message_new_method_return(vc->pending);
+
+		dbus_message_append_args(reply, DBUS_TYPE_OBJECT_PATH, &path,
+						DBUS_TYPE_INVALID);
+	} else {
+		reply = __ofono_error_failed(vc->pending);
+	}
+
+	__ofono_dbus_pending_reply(&vc->pending, reply);
+
+	voicecalls_emit_call_added(vc, v);
+}
+
+static int voicecall_dial_last(struct ofono_voicecall *vc,
+					ofono_voicecall_cb_t cb, void *data)
+{
+	struct ofono_modem *modem = __ofono_atom_get_modem(vc->atom);
+
+	if (g_slist_length(vc->call_list) >= MAX_VOICE_CALLS)
+		return -EPERM;
+
+	if (ofono_modem_get_online(modem) == FALSE)
+		return -ENETDOWN;
+
+	if (vc->driver->dial_last == NULL)
+		return -ENOTSUP;
+
+	if (voicecalls_have_incoming(vc))
+		return -EBUSY;
+
+	/* We can't have two dialing/alerting calls, reject outright */
+	if (voicecalls_num_connecting(vc) > 0)
+		return -EBUSY;
+
+	if (voicecalls_have_active(vc) && voicecalls_have_held(vc))
+		return -EBUSY;
+
+	vc->driver->dial_last(vc, cb, vc);
+
+	return 0;
+}
+
+static DBusMessage *manager_dial_last(DBusConnection *conn,
+					DBusMessage *msg, void *data)
+{
+	struct ofono_voicecall *vc = data;
+	int err;
+
+	if (vc->pending || vc->dial_req || vc->pending_em)
+		return __ofono_error_busy(msg);
+
+	vc->pending = dbus_message_ref(msg);
+
+	err = voicecall_dial_last(vc, manager_dial_last_callback, vc);
+
+	if (err >= 0)
+		return NULL;
+
+	vc->pending = NULL;
+	dbus_message_unref(msg);
+
+	switch (err) {
+	case -EINVAL:
+		return __ofono_error_invalid_format(msg);
+
+	case -ENETDOWN:
+		return __ofono_error_not_available(msg);
+
+	case -ENOTSUP:
+		return __ofono_error_not_implemented(msg);
+	}
+
+	return __ofono_error_failed(msg);
+}
+
 static DBusMessage *manager_transfer(DBusConnection *conn,
 					DBusMessage *msg, void *data)
 {
@@ -2460,6 +2546,7 @@ static const GDBusMethodTable manager_methods[] = {
 		GDBUS_ARGS({ "number", "s" }, { "hide_callerid", "s" }),
 		GDBUS_ARGS({ "path", "o" }),
 		manager_dial) },
+	{ GDBUS_ASYNC_METHOD("DialLast", NULL, NULL, manager_dial_last)},
 	{ GDBUS_ASYNC_METHOD("Transfer", NULL, NULL, manager_transfer) },
 	{ GDBUS_ASYNC_METHOD("SwapCalls",  NULL, NULL, manager_swap_calls) },
 	{ GDBUS_ASYNC_METHOD("ReleaseAndAnswer", NULL, NULL,
