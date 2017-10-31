@@ -245,7 +245,7 @@ static bool pending_command_match_tid(const void *a, const void *b)
 }
 
 /*
- * Since we have to track how many outstanding requests we have issues, we
+ * Since we have to track how many outstanding requests we have issued, we
  * have to keep a pending_command structure around until it is replied to
  * by the function.  However, all resources associated with the command
  * can be freed
