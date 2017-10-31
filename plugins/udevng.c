@@ -931,7 +931,7 @@ static gboolean setup_mbim(struct modem_info *modem)
 	GSList *list;
 	char descriptors[PATH_MAX];
 
-	DBG("%s", modem->syspath);
+	DBG("%s [%s:%s]", modem->syspath, modem->vendor, modem->model);
 
 	for (list = modem->devices; list; list = list->next) {
 		struct device_info *info = list->data;
@@ -960,6 +960,8 @@ static gboolean setup_mbim(struct modem_info *modem)
 	ofono_modem_set_string(modem->modem, "Device", ctl);
 	ofono_modem_set_string(modem->modem, "NetworkInterface", net);
 	ofono_modem_set_string(modem->modem, "DescriptorFile", descriptors);
+	ofono_modem_set_string(modem->modem, "Vendor", modem->vendor);
+	ofono_modem_set_string(modem->modem, "Model", modem->model);
 
 	return TRUE;
 }
