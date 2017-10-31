@@ -61,6 +61,10 @@ struct ofono_voicecall_driver {
 			const struct ofono_phone_number *number,
 			enum ofono_clir_option clir, ofono_voicecall_cb_t cb,
 			void *data);
+	/* Dials the last number again, this handles the hfp profile last number
+         * dialing with the +BLDN AT command
+         */
+	void (*dial_last)(struct ofono_voicecall *vc, ofono_voicecall_cb_t cb, void *data);
 	/* Answers an incoming call, this usually corresponds to ATA */
 	void (*answer)(struct ofono_voicecall *vc,
 			ofono_voicecall_cb_t cb, void *data);
