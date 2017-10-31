@@ -268,7 +268,20 @@ unsigned int ofono_sim_add_imsi_watch(struct ofono_sim *sim,
 
 void ofono_sim_remove_imsi_watch(struct ofono_sim *sim, unsigned int id);
 
+/*
+ * It is assumed that when ofono_sim_inserted_notify is called, the SIM is
+ * ready to be queried for files that are always available even if SIM
+ * PIN has not been entered.  This is EFiccid and a few others
+ */
 void ofono_sim_inserted_notify(struct ofono_sim *sim, ofono_bool_t inserted);
+
+/*
+ * When the SIM PIN has been entered, many devices require some time to
+ * initialize the SIM and calls to CPIN? will return a SIM BUSY error.  Or
+ * sometimes report ready but fail in any subsequent SIM requests.  This is
+ * used to notify oFono core when the SIM / firmware is truly ready
+ */
+void ofono_sim_initialized_notify(struct ofono_sim *sim);
 
 struct ofono_sim_context *ofono_sim_context_create(struct ofono_sim *sim);
 
