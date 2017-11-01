@@ -23,6 +23,7 @@
 
 enum MBIM_GROUP {
 	SIM_GROUP = 1,
+	NETREG_GROUP = 2,
 };
 
 extern void mbim_devinfo_init(void);
@@ -30,3 +31,6 @@ extern void mbim_devinfo_exit(void);
 
 extern void mbim_sim_init(void);
 extern void mbim_sim_exit(void);
+
+extern void mbim_netreg_init(void);
+extern void mbim_netreg_exit(void);
