@@ -1628,8 +1628,9 @@ static int build_authenticate(unsigned char *buffer, const unsigned char *rand,
 		buffer[pos++] = 0x10;
 		memcpy(buffer + pos, autn, 16);
 		pos += 16;
-		buffer[pos++] = 0x00;
 	}
+
+	buffer[pos++] = 0x00;
 
 	return pos;
 }
