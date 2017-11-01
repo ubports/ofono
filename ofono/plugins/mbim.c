@@ -39,6 +39,7 @@
 #include <ofono/log.h>
 #include <ofono/devinfo.h>
 #include <ofono/sim.h>
+#include <ofono/netreg.h>
 
 #include <ell/ell.h>
 
@@ -322,7 +323,11 @@ static void mbim_post_sim(struct ofono_modem *modem)
 
 static void mbim_post_online(struct ofono_modem *modem)
 {
+	struct mbim_data *md = ofono_modem_get_data(modem);
+
 	DBG("%p", modem);
+
+	ofono_netreg_create(modem, 0, "mbim", md->device);
 }
 
 static struct ofono_modem_driver mbim_driver = {
