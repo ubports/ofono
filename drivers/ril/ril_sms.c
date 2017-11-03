@@ -471,7 +471,7 @@ static int ril_sms_probe(struct ofono_sms *sms, unsigned int vendor,
 
 static void ril_sms_remove(struct ofono_sms *sms)
 {
-	int i;
+	unsigned int i;
 	struct ril_sms *sd = ril_sms_get_data(sms);
 
 	DBG("");

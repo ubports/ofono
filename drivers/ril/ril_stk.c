@@ -268,7 +268,7 @@ static int ril_stk_probe(struct ofono_stk *stk, unsigned int vendor, void *data)
 static void ril_stk_remove(struct ofono_stk *stk)
 {
 	struct ril_stk *sd = ril_stk_get_data(stk);
-	int i;
+	unsigned int i;
 
 	DBG("");
 	ofono_stk_set_data(stk, NULL);
