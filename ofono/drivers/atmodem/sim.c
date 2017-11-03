@@ -72,6 +72,22 @@ static const char *qpinc_prefix[] = { "+QPINC:", NULL };
 static const char *upincnt_prefix[] = { "+UPINCNT:", NULL };
 static const char *none_prefix[] = { NULL };
 
+static void append_file_path(char *buf, const unsigned char *path,
+		unsigned int path_len)
+{
+	if (path_len > 0) {
+		*buf++ = ',';
+		*buf++ = ',';
+		*buf++ = '\"';
+
+		for (; path_len; path_len--)
+			buf += sprintf(buf, "%02hhX", *path++);
+
+		*buf++ = '\"';
+		*buf = '\0';
+	}
+}
+
 static void at_crsm_info_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
@@ -176,15 +192,7 @@ static void at_sim_read_info(struct ofono_sim *sim, int fileid,
 		break;
 	}
 
-	if (path_len > 0) {
-		len += sprintf(buf + len, ",,\"");
-
-		for (; path_len; path_len--)
-			len += sprintf(buf + len, "%02hhX", *path++);
-
-		buf[len++] = '\"';
-		buf[len] = '\0';
-	}
+	append_file_path(buf + len, path, path_len);
 
 	if (g_at_chat_send(sd->chat, buf, crsm_prefix,
 				at_crsm_info_cb, cbd, g_free) > 0)
@@ -258,17 +266,7 @@ static void at_sim_read_binary(struct ofono_sim *sim, int fileid,
 	len = snprintf(buf, sizeof(buf), "AT+CRSM=176,%i,%i,%i,%i", fileid,
 			start >> 8, start & 0xff, length);
 
-	if (path_len > 0) {
-		buf[len++] = ',';
-		buf[len++] = ',';
-		buf[len++] = '\"';
-
-		for (; path_len; path_len--)
-			len += sprintf(buf + len, "%02hhX", *path++);
-
-		buf[len++] = '\"';
-		buf[len] = '\0';
-	}
+	append_file_path(buf + len, path, path_len);
 
 	if (g_at_chat_send(sd->chat, buf, crsm_prefix,
 				at_crsm_read_cb, cbd, g_free) > 0)
@@ -288,9 +286,12 @@ static void at_sim_read_record(struct ofono_sim *sim, int fileid,
 	struct sim_data *sd = ofono_sim_get_data(sim);
 	struct cb_data *cbd = cb_data_new(cb, data);
 	char buf[128];
+	unsigned int len;
 
-	snprintf(buf, sizeof(buf), "AT+CRSM=178,%i,%i,4,%i", fileid,
+	len = snprintf(buf, sizeof(buf), "AT+CRSM=178,%i,%i,4,%i", fileid,
 			record, length);
+
+	append_file_path(buf + len, path, path_len);
 
 	if (g_at_chat_send(sd->chat, buf, crsm_prefix,
 				at_crsm_read_cb, cbd, g_free) > 0)
