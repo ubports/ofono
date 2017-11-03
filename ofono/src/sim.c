@@ -48,6 +48,26 @@
 
 #define SIM_FLAG_READING_SPN	0x1
 
+/*
+ * A new session object will be created if a USim/ISim applications are
+ * found during app discovery. Any concurrent file/logical access to
+ * these applications will share the same session ID.
+ */
+enum session_state {
+	SESSION_STATE_INACTIVE,
+	SESSION_STATE_OPENING,
+	SESSION_STATE_CLOSING,
+	SESSION_STATE_OPEN
+};
+
+struct ofono_sim_aid_session {
+	struct sim_app_record *record;
+	int session_id;
+	struct ofono_sim *sim;
+	struct ofono_watchlist *watches;
+	enum session_state state;
+};
+
 struct ofono_sim {
 	int flags;
 
@@ -116,6 +136,9 @@ struct ofono_sim {
 	void *driver_data;
 	struct ofono_atom *atom;
 	unsigned int hfp_watch;
+
+	GSList *aid_sessions;
+	GSList *aid_list;
 };
 
 struct msisdn_set_request {
@@ -1552,6 +1575,36 @@ static void sim_set_ready(struct ofono_sim *sim)
 	call_state_watches(sim);
 }
 
+static void discover_apps_cb(const struct ofono_error *error,
+		const unsigned char *dataobj,
+		int len, void *data)
+{
+	GSList *iter;
+	struct ofono_sim *sim = data;
+
+	if (error->type != OFONO_ERROR_TYPE_NO_ERROR)
+		return;
+
+	sim->aid_list = sim_parse_app_template_entries(dataobj, len);
+
+	iter = sim->aid_list;
+
+	while (iter) {
+		struct sim_app_record *app = iter->data;
+		struct ofono_sim_aid_session *s =
+					g_new0(struct ofono_sim_aid_session, 1);
+
+		s->watches = __ofono_watchlist_new(g_free);
+		s->record = app;
+		s->sim = sim;
+		s->session_id = -1;
+		s->state = SESSION_STATE_INACTIVE;
+		sim->aid_sessions = g_slist_prepend(sim->aid_sessions, s);
+
+		iter = g_slist_next(iter);
+	}
+}
+
 static void sim_imsi_obtained(struct ofono_sim *sim, const char *imsi)
 {
 	DBusConnection *conn = ofono_dbus_get_connection();
@@ -1981,6 +2034,12 @@ static void sim_efphase_read_cb(int ok, int length, int record,
 static void sim_initialize_after_pin(struct ofono_sim *sim)
 {
 	sim->context = ofono_sim_context_create(sim);
+
+	/*
+	 * Discover applications on SIM
+	 */
+	if (sim->driver->list_apps)
+		sim->driver->list_apps(sim, discover_apps_cb, sim);
 
 	ofono_sim_read(sim->context, SIM_EFPHASE_FILEID,
 			OFONO_SIM_FILE_STRUCTURE_TRANSPARENT,
@@ -2556,6 +2615,15 @@ static void sim_spn_close(struct ofono_sim *sim)
 	sim->spn_dc = NULL;
 }
 
+static void aid_session_free(gpointer data)
+{
+	struct ofono_sim_aid_session *session = data;
+
+	__ofono_watchlist_free(session->watches);
+
+	g_free(session);
+}
+
 static void sim_free_main_state(struct ofono_sim *sim)
 {
 	if (sim->imsi) {
@@ -2620,6 +2688,9 @@ static void sim_free_main_state(struct ofono_sim *sim)
 		ofono_sim_context_free(sim->context);
 		sim->context = NULL;
 	}
+
+	if (sim->aid_sessions)
+		g_slist_free_full(sim->aid_sessions, aid_session_free);
 }
 
 static void sim_free_state(struct ofono_sim *sim)
@@ -3480,4 +3551,188 @@ void __ofono_sim_refresh(struct ofono_sim *sim, GSList *file_list,
 			sim_fs_notify_file_watches(sim->simfs, id);
 		}
 	}
+}
+
+static void open_channel_cb(const struct ofono_error *error, int session_id,
+		void *data);
+
+static void close_channel_cb(const struct ofono_error *error, void *data)
+{
+	struct ofono_sim_aid_session *session = data;
+
+	if (error->type != OFONO_ERROR_TYPE_NO_ERROR)
+		DBG("session %d failed to close", session->session_id);
+
+	if (g_slist_length(session->watches->items) > 0 &&
+				session->state == SESSION_STATE_OPENING) {
+		/*
+		 * An atom requested to open during a close, we can re-open
+		 * here.
+		 */
+		session->sim->driver->open_channel(session->sim,
+				session->record->aid, open_channel_cb,
+				session);
+		return;
+	}
+
+	session->state = SESSION_STATE_INACTIVE;
+}
+
+static void open_channel_cb(const struct ofono_error *error, int session_id,
+		void *data)
+{
+	struct ofono_sim_aid_session *session = data;
+	GSList *iter = session->watches->items;
+	ofono_bool_t active = TRUE;
+
+	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
+		session->state = SESSION_STATE_INACTIVE;
+		session->session_id = 0;
+		active = FALSE;
+		goto end;
+	}
+
+	if (g_slist_length(iter) == 0) {
+		/*
+		 * All watchers stopped watching before the channel could open.
+		 * Close the channel.
+		 */
+		session->state = SESSION_STATE_CLOSING;
+		session->sim->driver->close_channel(session->sim,
+				session->session_id, close_channel_cb, session);
+		return;
+	}
+
+	session->session_id = session_id;
+	session->state = SESSION_STATE_OPEN;
+end:
+	/*
+	 * Notify any watchers, after this point, all future watchers will be
+	 * immediately notified with the session ID.
+	 */
+	while (iter) {
+		struct ofono_watchlist_item *item = iter->data;
+		ofono_sim_session_event_cb_t notify = item->notify;
+
+		notify(active, session->session_id, item->notify_data);
+
+		iter = g_slist_next(iter);
+	}
+}
+
+unsigned int __ofono_sim_add_session_watch(
+		struct ofono_sim_aid_session *session,
+		ofono_sim_session_event_cb_t notify, void *data,
+		ofono_destroy_func destroy)
+{
+	struct ofono_watchlist_item *item;
+
+	DBG("%p", session);
+
+	if (session == NULL)
+		return 0;
+
+	if (notify == NULL)
+		return 0;
+
+	item = g_new0(struct ofono_watchlist_item, 1);
+
+	item->notify = notify;
+	item->destroy = destroy;
+	item->notify_data = data;
+
+	if (g_slist_length(session->watches->items) == 0 &&
+			session->state == SESSION_STATE_INACTIVE) {
+		/*
+		 * If the session is inactive and there are no watchers, open
+		 * a new session.
+		 */
+		session->state = SESSION_STATE_OPENING;
+		session->sim->driver->open_channel(session->sim,
+				session->record->aid, open_channel_cb,
+				session);
+	} else if (session->state == SESSION_STATE_OPEN) {
+		/*
+		 * Session is already open and available, just call the
+		 * notify callback immediately.
+		 */
+		notify(TRUE, session->session_id, data);
+	} else if (session->state == SESSION_STATE_CLOSING) {
+		/*
+		 * There is a pending close, the close callback will handle
+		 * re-opening the session.
+		 */
+		session->state = SESSION_STATE_OPENING;
+	}
+
+	return __ofono_watchlist_add_item(session->watches, item);
+}
+
+void __ofono_sim_remove_session_watch(struct ofono_sim_aid_session *session,
+		unsigned int id)
+{
+	__ofono_watchlist_remove_item(session->watches, id);
+
+	if (g_slist_length(session->watches->items) == 0) {
+		/* last watcher, close session */
+		session->state = SESSION_STATE_CLOSING;
+		session->sim->driver->close_channel(session->sim,
+				session->session_id, close_channel_cb, session);
+	}
+}
+
+struct ofono_sim_aid_session *__ofono_sim_get_session_by_aid(
+		struct ofono_sim *sim, unsigned char *aid)
+{
+	GSList *iter = sim->aid_sessions;
+
+	while (iter) {
+		struct ofono_sim_aid_session *session = iter->data;
+
+		if (!memcmp(session->record->aid, aid, 16))
+			return session;
+
+		iter = g_slist_next(iter);
+	}
+
+	return NULL;
+}
+
+struct ofono_sim_aid_session *__ofono_sim_get_session_by_type(
+		struct ofono_sim *sim, enum sim_app_type type)
+{
+	GSList *iter = sim->aid_sessions;
+
+	while (iter) {
+		struct ofono_sim_aid_session *session = iter->data;
+
+		if (session->record->type == type)
+			return session;
+
+		iter = g_slist_next(iter);
+	}
+
+	return NULL;
+}
+
+int __ofono_sim_session_get_id(struct ofono_sim_aid_session *session)
+{
+	return session->session_id;
+}
+
+enum sim_app_type __ofono_sim_session_get_type(
+		struct ofono_sim_aid_session *session)
+{
+	return session->record->type;
+}
+
+unsigned char *__ofono_sim_session_get_aid(
+		struct ofono_sim_aid_session *session)
+{
+	return session->record->aid;
+}
+
+GSList *__ofono_sim_get_aid_list(struct ofono_sim *sim)
+{
+	return sim->aid_list;
 }
