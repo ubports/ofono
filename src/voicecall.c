@@ -1577,28 +1577,32 @@ static DBusMessage *manager_dial(DBusConnection *conn,
 	return __ofono_error_failed(msg);
 }
 
-static void manager_dial_last_callback(const struct ofono_error *error, void *data)
+static void manager_dial_last_callback(const struct ofono_error *error,
+								void *data)
 {
 	struct ofono_voicecall *vc = data;
-	DBusMessage *reply;
 	struct voicecall *v;
+	DBusMessage *reply;
+	const char *path;
+
+	if (error->type != OFONO_ERROR_TYPE_NO_ERROR)
+		goto error;
 
 	v = synthesize_outgoing_call(vc, NULL);
+	if (!v)
+		goto error;
 
-	if (v) {
-		const char *path = voicecall_build_path(vc, v->call);
-
-		reply = dbus_message_new_method_return(vc->pending);
-
-		dbus_message_append_args(reply, DBUS_TYPE_OBJECT_PATH, &path,
+	reply = dbus_message_new_method_return(vc->pending);
+	dbus_message_append_args(reply, DBUS_TYPE_OBJECT_PATH, &path,
 						DBUS_TYPE_INVALID);
-	} else {
-		reply = __ofono_error_failed(vc->pending);
-	}
-
 	__ofono_dbus_pending_reply(&vc->pending, reply);
 
 	voicecalls_emit_call_added(vc, v);
+	return;
+
+error:
+	__ofono_dbus_pending_reply(&vc->pending,
+					__ofono_error_failed(vc->pending));
 }
 
 static int voicecall_dial_last(struct ofono_voicecall *vc,
