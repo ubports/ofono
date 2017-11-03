@@ -60,7 +60,7 @@ static void mtu_watch_limit_mtu(struct mtu_watch *self)
 }
 
 static void mtu_watch_handle_rtattr(struct mtu_watch *self,
-					const struct rtattr *rta, int len)
+				const struct rtattr *rta, unsigned int len)
 {
 	int mtu = 0;
 	const char *ifname = NULL;
@@ -82,7 +82,7 @@ static void mtu_watch_handle_rtattr(struct mtu_watch *self,
 }
 
 static void mtu_watch_handle_ifinfomsg(struct mtu_watch *self,
-					const struct ifinfomsg *ifi, int len)
+				const struct ifinfomsg *ifi, unsigned int len)
 {
 	if (ifi->ifi_flags & IFF_UP) {
 		const struct rtattr *rta = IFLA_RTA(ifi);
@@ -92,7 +92,7 @@ static void mtu_watch_handle_ifinfomsg(struct mtu_watch *self,
 }
 
 static void mtu_watch_handle_nlmsg(struct mtu_watch *self,
-					const struct nlmsghdr *hdr, int len)
+				const struct nlmsghdr *hdr, unsigned int len)
 {
 	while (len > 0 && NLMSG_OK(hdr, len)) {
 		if (hdr->nlmsg_type == RTM_NEWLINK) {

@@ -499,7 +499,7 @@ static int ril_netreg_probe(struct ofono_netreg *netreg, unsigned int vendor,
 static void ril_netreg_remove(struct ofono_netreg *netreg)
 {
 	struct ril_netreg *nd = ril_netreg_get_data(netreg);
-	int i;
+	unsigned int i;
 
 	DBG("%p", netreg);
 	grilio_queue_cancel_all(nd->q, FALSE);

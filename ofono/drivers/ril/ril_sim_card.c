@@ -221,8 +221,7 @@ static void ril_sim_card_subscribe(struct ril_sim_card *self, int app_index,
 
 static int ril_sim_card_select_app(const struct ril_sim_card_status *status)
 {
-	int selected_app = -1;
-	guint i;
+	int i, selected_app = -1;
 
 	for (i = 0; i < status->num_apps; i++) {
 		const int type = status->apps[i].app_type;
