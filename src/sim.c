@@ -123,6 +123,7 @@ struct ofono_sim {
 	unsigned int cphs_spn_short_watch;
 
 	struct sim_fs *simfs;
+	struct sim_fs *simfs_isim;
 	struct ofono_sim_context *context;
 	struct ofono_sim_context *early_context;
 
@@ -1483,6 +1484,14 @@ static void discover_apps_cb(const struct ofono_error *error,
 		s->state = SESSION_STATE_INACTIVE;
 		sim->aid_sessions = g_slist_prepend(sim->aid_sessions, s);
 
+		if (app->type == SIM_APP_TYPE_ISIM) {
+			/*
+			 * If an ISIM application is found, we should init
+			 * the FS structure so the ISIM EF's can be accessed.
+			 */
+			sim->simfs_isim = sim_fs_new(sim, sim->driver);
+		}
+
 		iter = g_slist_next(iter);
 	}
 }
@@ -2235,6 +2244,29 @@ struct ofono_sim_context *ofono_sim_context_create(struct ofono_sim *sim)
 		return NULL;
 
 	return sim_fs_context_new(sim->simfs);
+}
+
+struct ofono_sim_context *ofono_sim_context_create_isim(
+		struct ofono_sim *sim)
+{
+	GSList *iter = sim->aid_sessions;
+
+	if (sim == NULL || sim->simfs_isim == NULL)
+		return NULL;
+
+	/* Find the AID */
+	while (iter) {
+		struct ofono_sim_aid_session *session = iter->data;
+
+		if (session->record->type == SIM_APP_TYPE_ISIM) {
+			return sim_fs_context_new_with_aid(sim->simfs_isim,
+					session->record->aid);
+		}
+
+		iter = g_slist_next(iter);
+	}
+
+	return NULL;
 }
 
 void ofono_sim_context_free(struct ofono_sim_context *context)
@@ -3067,6 +3099,8 @@ static void sim_remove(struct ofono_atom *atom)
 
 	sim_fs_free(sim->simfs);
 	sim->simfs = NULL;
+	sim_fs_free(sim->simfs_isim);
+	sim->simfs_isim = NULL;
 
 	g_free(sim);
 }
