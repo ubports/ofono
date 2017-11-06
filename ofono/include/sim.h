@@ -265,6 +265,10 @@ void ofono_sim_remove_imsi_watch(struct ofono_sim *sim, unsigned int id);
 void ofono_sim_inserted_notify(struct ofono_sim *sim, ofono_bool_t inserted);
 
 struct ofono_sim_context *ofono_sim_context_create(struct ofono_sim *sim);
+
+struct ofono_sim_context *ofono_sim_context_create_isim(
+		struct ofono_sim *sim);
+
 void ofono_sim_context_free(struct ofono_sim_context *context);
 
 /* This will queue an operation to read all available records with id from the
