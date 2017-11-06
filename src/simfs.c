@@ -74,12 +74,10 @@ struct sim_fs_op {
 	struct ofono_sim_context *context;
 };
 
-static void sim_fs_op_free(gpointer pointer)
-{
-	struct sim_fs_op *node = pointer;
-	g_free(node->buffer);
-	g_free(node);
-}
+struct ofono_sim_context {
+	struct sim_fs *fs;
+	struct ofono_watchlist *file_watches;
+};
 
 struct sim_fs {
 	GQueue *op_q;
@@ -89,7 +87,25 @@ struct sim_fs {
 	struct ofono_sim *sim;
 	const struct ofono_sim_driver *driver;
 	GSList *contexts;
+	struct ofono_sim_aid_session *session;
+	int session_id;
+	unsigned int watch_id;
 };
+
+static void sim_fs_op_free(gpointer pointer)
+{
+	struct sim_fs_op *node = pointer;
+	struct sim_fs *fs = node->context->fs;
+
+	/* only release the session if there are no pending reads */
+	if (fs->session && g_queue_is_empty(fs->op_q)) {
+		__ofono_sim_remove_session_watch(fs->session, fs->watch_id);
+		fs->watch_id = 0;
+	}
+
+	g_free(node->buffer);
+	g_free(node);
+}
 
 void sim_fs_free(struct sim_fs *fs)
 {
@@ -121,11 +137,6 @@ struct file_watch {
 	int ef;
 };
 
-struct ofono_sim_context {
-	struct sim_fs *fs;
-	struct ofono_watchlist *file_watches;
-};
-
 struct sim_fs *sim_fs_new(struct ofono_sim *sim,
 				const struct ofono_sim_driver *driver)
 {
@@ -152,6 +163,23 @@ struct ofono_sim_context *sim_fs_context_new(struct sim_fs *fs)
 
 	context->fs = fs;
 	fs->contexts = g_slist_prepend(fs->contexts, context);
+
+	return context;
+}
+
+struct ofono_sim_context *sim_fs_context_new_with_aid(struct sim_fs *fs,
+		unsigned char *aid)
+{
+	struct ofono_sim_context *context = sim_fs_context_new(fs);
+
+	if (context == NULL)
+		return NULL;
+
+	context->fs->session = __ofono_sim_get_session_by_aid(fs->sim, aid);
+	if (!context->fs->session) {
+		sim_fs_context_free(context);
+		return NULL;
+	}
 
 	return context;
 }
@@ -805,6 +833,92 @@ error:
 	return FALSE;
 }
 
+static void sim_fs_read_session_cb(const struct ofono_error *error,
+		const unsigned char *sdata, int length, void *data)
+{
+	struct sim_fs *fs = data;
+	struct sim_fs_op *op = g_queue_peek_head(fs->op_q);
+	ofono_sim_file_read_cb_t cb;
+
+	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
+		sim_fs_op_error(fs);
+		return;
+	}
+
+	cb = op->cb;
+	cb(TRUE, length, 0, sdata, length, op->userdata);
+
+	sim_fs_end_current(fs);
+}
+
+static void session_read_info_cb(const struct ofono_error *error,
+					int filelength,
+					enum ofono_sim_file_structure structure,
+					int recordlength,
+					const unsigned char access[3],
+					unsigned char file_status,
+					void *data)
+{
+	struct sim_fs *fs = data;
+	struct sim_fs_op *op = g_queue_peek_head(fs->op_q);
+
+	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
+		sim_fs_op_error(fs);
+		return;
+	}
+
+	sim_fs_op_cache_fileinfo(fs, error, filelength, structure, recordlength,
+			access, file_status);
+
+	if (op->info_only) {
+		sim_fs_read_info_cb_t cb = op->cb;
+
+		cb(1, file_status, filelength, recordlength, op->userdata);
+
+		sim_fs_end_current(fs);
+		return;
+	}
+
+	if (op->structure == OFONO_SIM_FILE_STRUCTURE_TRANSPARENT) {
+		if (!fs->driver->session_read_binary) {
+			sim_fs_op_error(fs);
+			return;
+		}
+
+		fs->driver->session_read_binary(fs->sim, fs->session_id,
+				op->id, op->offset, filelength, op->path,
+				op->path_len, sim_fs_read_session_cb, fs);
+	} else {
+		if (!fs->driver->session_read_record) {
+			sim_fs_op_error(fs);
+			return;
+		}
+
+		fs->driver->session_read_record(fs->sim, fs->session_id,
+				op->id, op->offset, recordlength, op->path,
+				op->path_len, sim_fs_read_session_cb, fs);
+	}
+}
+
+static void get_session_cb(ofono_bool_t active, int session_id,
+		void *data)
+{
+	struct sim_fs *fs = data;
+	struct sim_fs_op *op;
+
+	if (!active) {
+		sim_fs_op_error(fs);
+		return;
+	}
+
+	op = g_queue_peek_head(fs->op_q);
+
+	fs->session_id = session_id;
+
+	fs->driver->session_read_info(fs->sim, session_id, op->id, op->path,
+			op->path_len, session_read_info_cb, fs);
+}
+
 static gboolean sim_fs_op_next(gpointer user_data)
 {
 	struct sim_fs *fs = user_data;
@@ -827,10 +941,22 @@ static gboolean sim_fs_op_next(gpointer user_data)
 		if (sim_fs_op_check_cached(fs))
 			return FALSE;
 
-		driver->read_file_info(fs->sim, op->id,
-					op->path_len ? op->path : NULL,
-					op->path_len,
-					sim_fs_op_info_cb, fs);
+		if (!fs->session) {
+			driver->read_file_info(fs->sim, op->id,
+						op->path_len ? op->path : NULL,
+						op->path_len,
+						sim_fs_op_info_cb, fs);
+		} else {
+			if (fs->watch_id)
+				fs->driver->session_read_info(fs->sim,
+						fs->session_id, op->id,
+						op->path, op->path_len,
+						session_read_info_cb, fs);
+			else
+				fs->watch_id = __ofono_sim_add_session_watch(
+						fs->session, get_session_cb,
+						fs, NULL);
+		}
 	} else {
 		switch (op->structure) {
 		case OFONO_SIM_FILE_STRUCTURE_TRANSPARENT:
@@ -914,9 +1040,17 @@ int sim_fs_read(struct ofono_sim_context *context, int id,
 	if (fs->driver == NULL)
 		return -EINVAL;
 
-	if (fs->driver->read_file_info == NULL) {
-		cb(0, 0, 0, NULL, 0, data);
-		return -ENOSYS;
+	/* check driver support for session based read */
+	if (fs->session) {
+		if (!fs->driver->session_read_info) {
+			cb(0, 0, 0, NULL, 0, data);
+			return -ENOSYS;
+		}
+	} else {
+		if (!fs->driver->read_file_info) {
+			cb(0, 0, 0, NULL, 0, data);
+			return -ENOSYS;
+		}
 	}
 
 	if (fs->op_q == NULL)
