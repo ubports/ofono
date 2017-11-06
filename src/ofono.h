@@ -419,6 +419,8 @@ enum sim_app_type __ofono_sim_session_get_type(
 unsigned char *__ofono_sim_session_get_aid(
 		struct ofono_sim_aid_session *session);
 
+const char *__ofono_sim_get_impi(struct ofono_sim *sim);
+
 #include <ofono/stk.h>
 
 typedef void (*__ofono_sms_sim_download_cb_t)(ofono_bool_t ok,

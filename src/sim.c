@@ -126,6 +126,7 @@ struct ofono_sim {
 	struct sim_fs *simfs_isim;
 	struct ofono_sim_context *context;
 	struct ofono_sim_context *early_context;
+	struct ofono_sim_context *isim_context;
 
 	unsigned char *iidf_image;
 	unsigned int *iidf_watch_ids;
@@ -138,6 +139,7 @@ struct ofono_sim {
 
 	GSList *aid_sessions;
 	GSList *aid_list;
+	char *impi;
 };
 
 struct msisdn_set_request {
@@ -408,6 +410,10 @@ static DBusMessage *sim_get_properties(DBusConnection *conn,
 	if (sim->spn)
 		ofono_dbus_dict_append(&dict, "ServiceProviderName",
 					DBUS_TYPE_STRING, &sim->spn);
+
+	if (sim->impi)
+		ofono_dbus_dict_append(&dict, "ImsPrivateIdentity",
+					DBUS_TYPE_STRING, &sim->impi);
 
 	fdn = sim->fixed_dialing;
 	ofono_dbus_dict_append(&dict, "FixedDialing", DBUS_TYPE_BOOLEAN, &fdn);
@@ -1458,6 +1464,25 @@ static void sim_set_ready(struct ofono_sim *sim)
 	call_state_watches(sim);
 }
 
+static void impi_read_cb(int ok, int total_length, int record,
+		const unsigned char *data,
+		int record_length, void *userdata)
+{
+	struct ofono_sim *sim = userdata;
+
+	if (!ok) {
+		DBG("error reading IMPI");
+		return;
+	}
+
+	if (data[0] != 0x80) {
+		DBG("invalid TLV tag 0x%02x", data[0]);
+		return;
+	}
+
+	sim->impi = g_strndup((const char *)data + 2, data[1]);
+}
+
 static void discover_apps_cb(const struct ofono_error *error,
 		const unsigned char *dataobj,
 		int len, void *data)
@@ -1490,6 +1515,12 @@ static void discover_apps_cb(const struct ofono_error *error,
 			 * the FS structure so the ISIM EF's can be accessed.
 			 */
 			sim->simfs_isim = sim_fs_new(sim, sim->driver);
+			sim->isim_context = ofono_sim_context_create_isim(
+					sim);
+			/* attempt to get the NAI from EFimpi */
+			ofono_sim_read_bytes(sim->isim_context,
+					SIM_ISIM_EFIMPI_FILEID, 0, 255, NULL,
+					0, impi_read_cb, sim);
 		}
 
 		iter = g_slist_next(iter);
@@ -2551,6 +2582,14 @@ static void sim_free_main_state(struct ofono_sim *sim)
 		sim->context = NULL;
 	}
 
+	if (sim->isim_context) {
+		ofono_sim_context_free(sim->isim_context);
+		sim->isim_context = NULL;
+	}
+
+	if (sim->impi)
+		g_free(sim->impi);
+
 	if (sim->aid_sessions)
 		g_slist_free_full(sim->aid_sessions, aid_session_free);
 }
@@ -3408,6 +3447,11 @@ void __ofono_sim_refresh(struct ofono_sim *sim, GSList *file_list,
 			sim_fs_notify_file_watches(sim->simfs, id);
 		}
 	}
+}
+
+const char *__ofono_sim_get_impi(struct ofono_sim *sim)
+{
+	return sim->impi;
 }
 
 static void open_channel_cb(const struct ofono_error *error, int session_id,
