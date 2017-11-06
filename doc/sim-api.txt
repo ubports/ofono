@@ -200,3 +200,8 @@ Properties	boolean Present [readonly]
 			might have changed the retry counters, i.e. calls to
 			ChangePin(), EnterPin(), ResetPin() LockPin(),
 			UnlockPin().
+
+		string ImsPrivateIdentity [readonly, optional]
+
+			Contains the SIM's ImsPrivateIdentity, read from the
+			ISIM.
