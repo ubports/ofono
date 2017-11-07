@@ -75,6 +75,7 @@ static const char *upincnt_prefix[] = { "+UPINCNT:", NULL };
 static const char *cuad_prefix[] = { "+CUAD:", NULL };
 static const char *ccho_prefix[] = { "+CCHO:", NULL };
 static const char *crla_prefix[] = { "+CRLA:", NULL };
+static const char *cgla_prefix[] = { "+CGLA:", NULL };
 static const char *none_prefix[] = { NULL };
 
 static void append_file_path(char *buf, const unsigned char *path,
@@ -1917,6 +1918,70 @@ static void at_session_read_info(struct ofono_sim *sim, int session_id,
 				EF_STATUS_INVALIDATED, data);
 }
 
+static void logical_access_cb(gboolean ok, GAtResult *result,
+		gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_sim_logical_access_cb_t cb = cbd->cb;
+	struct ofono_error error;
+	const char *str_data;
+	unsigned char *raw;
+	gint len = 0;
+	GAtResultIter iter;
+
+	decode_at_error(&error, g_at_result_final_response(result));
+
+	if (!ok)
+		goto error;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "+CGLA:"))
+		goto error;
+
+	if (!g_at_result_iter_next_number(&iter, &len))
+		goto error;
+
+	if (!g_at_result_iter_next_string(&iter, &str_data))
+		goto error;
+
+	raw = alloca(len / 2);
+
+	decode_hex_own_buf(str_data, len, NULL, 0, raw);
+
+	cb(&error, raw, len / 2, cbd->data);
+
+	return;
+
+error:
+	cb(&error, NULL, 0, cbd->data);
+}
+
+static void at_logical_access(struct ofono_sim *sim, int session_id,
+		const unsigned char *pdu, unsigned int len,
+		ofono_sim_logical_access_cb_t cb, void *data)
+{
+	struct sim_data *sd = ofono_sim_get_data(sim);
+	struct cb_data *cbd = cb_data_new(cb, data);
+	int ret = 0;
+	char cmd[(len * 2) + 19];
+
+	ret = sprintf(cmd, "AT+CGLA=%d,%d,\"", session_id, len * 2);
+
+	encode_hex_own_buf(pdu, len, 0, cmd + ret);
+	ret += len * 2;
+
+	strcpy(cmd + ret, "\"");
+
+	if (g_at_chat_send(sd->chat, cmd, cgla_prefix, logical_access_cb,
+			cbd, g_free) > 0)
+		return;
+
+	g_free(cbd);
+
+	CALLBACK_WITH_FAILURE(cb, NULL, 0, data);
+}
+
 static int at_sim_probe(struct ofono_sim *sim, unsigned int vendor,
 				void *data)
 {
@@ -1982,6 +2047,7 @@ static struct ofono_sim_driver driver = {
 	.session_read_binary	= at_session_read_binary,
 	.session_read_record	= at_session_read_record,
 	.session_read_info	= at_session_read_info,
+	.logical_access		= at_logical_access
 };
 
 static struct ofono_sim_driver driver_noef = {
