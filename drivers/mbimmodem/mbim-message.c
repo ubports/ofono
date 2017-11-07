@@ -225,8 +225,6 @@ static inline void _iter_init_internal(struct mbim_message_iter *iter,
 	iter->pos = pos;
 	iter->n_elem = n_elem;
 	iter->container_type = container_type;
-
-	_iter_get_data(iter, iter->pos);
 }
 
 static bool _iter_next_entry_basic(struct mbim_message_iter *iter,
@@ -312,6 +310,9 @@ static bool _iter_enter_array(struct mbim_message_iter *iter,
 	bool fixed;
 	uint32_t offset;
 
+	if (iter->container_type == CONTAINER_TYPE_ARRAY && !iter->n_elem)
+		return false;
+
 	if (iter->sig_start[iter->sig_pos] != 'a')
 		return false;
 
@@ -373,6 +374,9 @@ static bool _iter_enter_struct(struct mbim_message_iter *iter,
 	const char *sig_start;
 	const char *sig_end;
 	const void *data;
+
+	if (iter->container_type == CONTAINER_TYPE_ARRAY && !iter->n_elem)
+		return false;
 
 	if (iter->sig_start[iter->sig_pos] != '(')
 		return false;
