@@ -134,7 +134,7 @@ static void do_debug(const char *str, void *user_data)
 
 static struct mbim_message *build_message(const struct message_data *msg_data)
 {
-	static const int frag_size = 64;
+	static const unsigned int frag_size = 64;
 	struct mbim_message *msg;
 	struct iovec *iov;
 	size_t n_iov;
@@ -143,8 +143,13 @@ static struct mbim_message *build_message(const struct message_data *msg_data)
 	n_iov = align_len(msg_data->binary_len, frag_size) / frag_size;
 	iov = l_new(struct iovec, n_iov);
 
-	iov[0].iov_len = frag_size - 20;
+	iov[0].iov_len = msg_data->binary_len < frag_size ?
+					msg_data->binary_len - 20 :
+					frag_size - 20;
 	iov[0].iov_base = l_memdup(msg_data->binary + 20, iov[0].iov_len);
+
+	if (n_iov == 1)
+		goto done;
 
 	for (i = 1; i < n_iov - 1; i++) {
 		iov[i].iov_base = l_memdup(msg_data->binary + i * frag_size,
@@ -156,6 +161,7 @@ static struct mbim_message *build_message(const struct message_data *msg_data)
 	iov[i].iov_base = l_memdup(msg_data->binary + i * frag_size,
 							iov[i].iov_len);
 
+done:
 	msg = _mbim_message_build(msg_data->binary, iov, n_iov);
 	assert(msg);
 
