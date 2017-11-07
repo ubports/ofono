@@ -263,14 +263,34 @@ static int mbim_enable(struct ofono_modem *modem)
 	return -EINPROGRESS;
 }
 
-static int mbim_disable(struct ofono_modem *modem)
+static void mbim_radio_off_for_disable(struct mbim_message *message, void *user)
 {
+	struct ofono_modem *modem = user;
 	struct mbim_data *md = ofono_modem_get_data(modem);
 
 	DBG("%p", modem);
 
 	mbim_device_shutdown(md->device);
-	return -EINPROGRESS;
+}
+
+static int mbim_disable(struct ofono_modem *modem)
+{
+	struct mbim_data *md = ofono_modem_get_data(modem);
+	struct mbim_message *message;
+
+	DBG("%p", modem);
+
+	message = mbim_message_new(mbim_uuid_basic_connect,
+					MBIM_CID_RADIO_STATE,
+					MBIM_COMMAND_TYPE_SET);
+	mbim_message_set_arguments(message, "u", 0);
+
+	if (mbim_device_send(md->device, 0, message,
+				mbim_radio_off_for_disable, modem, NULL) > 0)
+		return -EINPROGRESS;
+
+	mbim_device_closed(modem);
+	return 0;
 }
 
 static void mbim_set_online_cb(struct mbim_message *message, void *user)
