@@ -74,6 +74,7 @@ static const char *upincnt_prefix[] = { "+UPINCNT:", NULL };
 static const char *cuad_prefix[] = { "+CUAD:", NULL };
 static const char *ccho_prefix[] = { "+CCHO:", NULL };
 static const char *crla_prefix[] = { "+CRLA:", NULL };
+static const char *cinterion_spic_prefix[] = { "^SPIC:", NULL };
 static const char *none_prefix[] = { NULL };
 
 static void append_file_path(char *buf, const unsigned char *path,
@@ -1065,6 +1066,45 @@ error:
 	CALLBACK_WITH_FAILURE(cb, NULL, cbd->data);
 }
 
+static void spic_cb(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	struct ofono_sim *sim = cbd->user;
+	ofono_sim_pin_retries_cb_t cb = cbd->cb;
+	const char *final = g_at_result_final_response(result);
+	GAtResultIter iter;
+	struct ofono_error error;
+	int retries[OFONO_SIM_PASSWORD_INVALID];
+	size_t i;
+	int pin_type = ofono_sim_get_password_type(sim);
+
+	decode_at_error(&error, final);
+
+	if (!ok) {
+		cb(&error, NULL, cbd->data);
+		return;
+	}
+
+	for (i = 0; i < OFONO_SIM_PASSWORD_INVALID; i++)
+		retries[i] = -1;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "^SPIC:"))
+		goto error;
+
+	if (!g_at_result_iter_next_number(&iter, &retries[pin_type]))
+		goto error;
+
+	DBG("Retry : %d, type : %d", retries[pin_type], pin_type);
+	cb(&error, retries, cbd->data);
+
+	return;
+
+error:
+	CALLBACK_WITH_FAILURE(cb, NULL, cbd->data);
+}
+
 static void at_pin_retries_query(struct ofono_sim *sim,
 					ofono_sim_pin_retries_cb_t cb,
 					void *data)
@@ -1135,6 +1175,11 @@ static void at_pin_retries_query(struct ofono_sim *sim,
 	case OFONO_VENDOR_UBLOX_TOBY_L2:
 		if (g_at_chat_send(sd->chat, "AT+UPINCNT", upincnt_prefix,
 					upincnt_cb, cbd, g_free) > 0)
+			return;
+		break;
+	case OFONO_VENDOR_CINTERION:
+		if (g_at_chat_send(sd->chat, "AT^SPIC", cinterion_spic_prefix,
+					spic_cb, cbd, g_free) > 0)
 			return;
 		break;
 	default:
