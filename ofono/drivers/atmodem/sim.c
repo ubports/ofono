@@ -66,7 +66,8 @@ static const char *pinnum_prefix[] = { "%PINNUM:", NULL };
 static const char *oercn_prefix[] = { "_OERCN:", NULL };
 static const char *cpinr_prefixes[] = { "+CPINR:", "+CPINRE:", NULL };
 static const char *epin_prefix[] = { "*EPIN:", NULL };
-static const char *spic_prefix[] = { "+SPIC:", NULL };
+static const char *simcom_spic_prefix[] = { "+SPIC:", NULL };
+static const char *cinterion_spic_prefix[] = { "^SPIC:", NULL };
 static const char *pct_prefix[] = { "#PCT:", NULL };
 static const char *pnnm_prefix[] = { "+PNNM:", NULL };
 static const char *qpinc_prefix[] = { "+QPINC:", NULL };
@@ -74,7 +75,6 @@ static const char *upincnt_prefix[] = { "+UPINCNT:", NULL };
 static const char *cuad_prefix[] = { "+CUAD:", NULL };
 static const char *ccho_prefix[] = { "+CCHO:", NULL };
 static const char *crla_prefix[] = { "+CRLA:", NULL };
-static const char *cinterion_spic_prefix[] = { "^SPIC:", NULL };
 static const char *none_prefix[] = { NULL };
 
 static void append_file_path(char *buf, const unsigned char *path,
@@ -849,7 +849,7 @@ static void at_cpinr_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	cb(&error, retries, cbd->data);
 }
 
-static void at_spic_cb(gboolean ok, GAtResult *result, gpointer user_data)
+static void simcom_spic_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
 	ofono_sim_pin_retries_cb_t cb = cbd->cb;
@@ -1066,7 +1066,8 @@ error:
 	CALLBACK_WITH_FAILURE(cb, NULL, cbd->data);
 }
 
-static void spic_cb(gboolean ok, GAtResult *result, gpointer user_data)
+static void cinterion_spic_cb(gboolean ok, GAtResult *result,
+							gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
 	struct ofono_sim *sim = cbd->user;
@@ -1152,8 +1153,8 @@ static void at_pin_retries_query(struct ofono_sim *sim,
 			return;
 		break;
 	case OFONO_VENDOR_SIMCOM:
-		if (g_at_chat_send(sd->chat, "AT+SPIC", spic_prefix,
-					at_spic_cb, cbd, g_free) > 0)
+		if (g_at_chat_send(sd->chat, "AT+SPIC", simcom_spic_prefix,
+					simcom_spic_cb, cbd, g_free) > 0)
 			return;
 		break;
 	case OFONO_VENDOR_TELIT:
@@ -1179,7 +1180,7 @@ static void at_pin_retries_query(struct ofono_sim *sim,
 		break;
 	case OFONO_VENDOR_CINTERION:
 		if (g_at_chat_send(sd->chat, "AT^SPIC", cinterion_spic_prefix,
-					spic_cb, cbd, g_free) > 0)
+					cinterion_spic_cb, cbd, g_free) > 0)
 			return;
 		break;
 	default:
