@@ -3637,3 +3637,18 @@ GSList *__ofono_sim_get_aid_list(struct ofono_sim *sim)
 {
 	return sim->aid_list;
 }
+
+int ofono_sim_logical_access(struct ofono_sim *sim, int session_id,
+		unsigned char *pdu, unsigned int len,
+		ofono_sim_logical_access_cb_t cb, void *data)
+{
+	if (!sim->driver->logical_access)
+		return -ENOTSUP;
+
+	if (session_id <= 0)
+		return -EINVAL;
+
+	sim->driver->logical_access(sim, session_id, pdu, len, cb, data);
+
+	return 0;
+}
