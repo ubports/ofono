@@ -129,6 +129,9 @@ typedef void (*ofono_sim_open_channel_cb_t)(const struct ofono_error *error,
 typedef void (*ofono_sim_close_channel_cb_t)(const struct ofono_error *error,
 					void *data);
 
+typedef void (*ofono_sim_logical_access_cb_t)(const struct ofono_error *error,
+		const unsigned char *resp, unsigned int len, void *data);
+
 struct ofono_sim_driver {
 	const char *name;
 	int (*probe)(struct ofono_sim *sim, unsigned int vendor, void *data);
@@ -199,6 +202,9 @@ struct ofono_sim_driver {
 			int fileid, const unsigned char *path,
 			unsigned int path_len, ofono_sim_file_info_cb_t cb,
 			void *data);
+	void (*logical_access)(struct ofono_sim *sim, int session_id,
+			const unsigned char *pdu, unsigned int len,
+			ofono_sim_logical_access_cb_t cb, void *data);
 };
 
 int ofono_sim_driver_register(const struct ofono_sim_driver *d);
@@ -277,6 +283,10 @@ unsigned int ofono_sim_add_file_watch(struct ofono_sim_context *context,
 					ofono_destroy_func destroy);
 void ofono_sim_remove_file_watch(struct ofono_sim_context *context,
 					unsigned int id);
+
+int ofono_sim_logical_access(struct ofono_sim *sim, int session_id,
+		unsigned char *pdu, unsigned int len,
+		ofono_sim_logical_access_cb_t cb, void *data);
 
 #ifdef __cplusplus
 }
