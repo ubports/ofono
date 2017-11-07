@@ -33,11 +33,13 @@ static int mbimmodem_init(void)
 	mbim_devinfo_init();
 	mbim_sim_init();
 	mbim_netreg_init();
+	mbim_sms_init();
 	return 0;
 }
 
 static void mbimmodem_exit(void)
 {
+	mbim_sms_exit();
 	mbim_netreg_exit();
 	mbim_sim_exit();
 	mbim_devinfo_exit();
