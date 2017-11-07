@@ -885,6 +885,7 @@ struct mbim_message_builder *mbim_message_builder_new(struct mbim_message *msg)
 	/* Reserve space in the static buffer for UUID, CID, Status, etc */
 	container = &ret->stack[ret->index];
 	container->base_offset = _mbim_information_buffer_offset(type);
+	container->container_type = CONTAINER_TYPE_STRUCT;
 	GROW_SBUF(container, container->base_offset, 0);
 
 	return ret;
@@ -1002,6 +1003,62 @@ done:
 		container->sigindex += 1;
 
 	return true;
+}
+
+bool mbim_message_builder_append_bytes(struct mbim_message_builder *builder,
+					size_t len, const uint8_t *bytes)
+{
+	struct container *container = &builder->stack[builder->index];
+	size_t start;
+
+	if (unlikely(!builder))
+		return false;
+
+	if (container->container_type == CONTAINER_TYPE_ARRAY) {
+		struct container *array;
+
+		if (unlikely(container->sigindex != 0))
+			return false;
+
+		if (unlikely(container->signature[container->sigindex] != 'y'))
+			return false;
+
+		array = container;
+		container = &builder->stack[builder->index - 1];
+
+		start = GROW_DBUF(container, len, 1);
+		memcpy(container->dbuf + start, bytes, len);
+		l_put_le32(len, container->sbuf + array->array_start + 4);
+
+		return true;
+	} else if (container->container_type == CONTAINER_TYPE_STRUCT) {
+		if (builder->index > 0) {
+			unsigned int i = container->sigindex;
+			const char *sig = container->signature + i;
+			size_t n_elem;
+			const char *sigend;
+
+			if (*sig < '0' || *sig > '9')
+				return false;
+
+			n_elem = strtol(sig, NULL, 10);
+			if (n_elem != len)
+				return false;
+
+			sigend = _signature_end(sig);
+			if (!sigend)
+				return false;
+
+			container->sigindex += sigend - sig + 1;
+		}
+
+		start = GROW_SBUF(container, len, 1);
+		memcpy(container->sbuf + start, bytes, len);
+
+		return true;
+	}
+
+	return false;
 }
 
 bool mbim_message_builder_enter_struct(struct mbim_message_builder *builder,
@@ -1253,6 +1310,22 @@ static bool append_arguments(struct mbim_message *message,
 			stack[stack_index].n_items -= 1;
 
 		switch (*s) {
+		case '0' ... '9':
+		{
+			uint32_t n_elem = strtol(s, NULL, 10);
+			const uint8_t *arg = va_arg(args, const uint8_t *);
+
+			sigend = _signature_end(s);
+			if (!sigend)
+				goto error;
+
+			if (!mbim_message_builder_append_bytes(builder,
+								n_elem, arg))
+				goto error;
+
+			stack[stack_index].sig_start = sigend + 1;
+			break;
+		}
 		case 's':
 			str = va_arg(args, const char *);
 
@@ -1328,6 +1401,19 @@ static bool append_arguments(struct mbim_message *message,
 			stack[stack_index].sig_end = sigend;
 			stack[stack_index].n_items = va_arg(args, unsigned int);
 			stack[stack_index].type = CONTAINER_TYPE_ARRAY;
+
+			/* Special case of byte arrays, just copy the data */
+			if (!strcmp(subsig, "y")) {
+				const uint8_t *bytes =
+						va_arg(args, const uint8_t *);
+
+				if (!mbim_message_builder_append_bytes(builder,
+						stack[stack_index].n_items,
+						bytes))
+					goto error;
+
+				stack[stack_index].n_items = 0;
+			}
 
 			break;
 		default:
