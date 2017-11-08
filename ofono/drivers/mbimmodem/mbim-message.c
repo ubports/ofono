@@ -333,7 +333,7 @@ static bool _iter_enter_array(struct mbim_message_iter *iter,
 
 		data = _iter_get_data(iter, pos);
 		offset = l_get_le32(data);
-		pos += 4;
+		iter->pos += 4;
 	}
 
 	pos = align_len(iter->pos, 4);
