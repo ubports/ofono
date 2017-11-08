@@ -37,6 +37,7 @@
 
 static const char CONTAINER_TYPE_ARRAY	= 'a';
 static const char CONTAINER_TYPE_STRUCT	= 'r';
+static const char CONTAINER_TYPE_DATABUF = 'd';
 static const char *simple_types = "syqu";
 
 struct mbim_message {
@@ -410,6 +411,23 @@ static bool _iter_enter_struct(struct mbim_message_iter *iter,
 	return true;
 }
 
+static bool _iter_enter_databuf(struct mbim_message_iter *iter,
+					const char *signature,
+					struct mbim_message_iter *databuf)
+{
+	if (iter->container_type != CONTAINER_TYPE_STRUCT)
+		return false;
+
+	_iter_init_internal(databuf, CONTAINER_TYPE_DATABUF,
+				signature, NULL, iter->iov, iter->n_iov,
+				iter->len - iter->pos,
+				iter->base_offset + iter->pos, 0, 0);
+
+	iter->pos = iter->len;
+
+	return true;
+}
+
 static bool message_iter_next_entry_valist(struct mbim_message_iter *orig,
 						va_list args)
 {
@@ -500,6 +518,18 @@ static bool message_iter_next_entry_valist(struct mbim_message_iter *orig,
 			end = _signature_end(signature + 1);
 			signature = end + 1;
 			break;
+		case 'd':
+		{
+			const char *s = va_arg(args, const char *);
+			sub_iter = va_arg(args, void *);
+
+			if (!_iter_enter_databuf(iter, s, sub_iter))
+				return false;
+
+			signature += 1;
+			break;
+		}
+
 		default:
 			return false;
 		}
@@ -1200,6 +1230,62 @@ bool mbim_message_builder_leave_array(struct mbim_message_builder *builder)
 	return true;
 }
 
+bool mbim_message_builder_enter_databuf(struct mbim_message_builder *builder,
+					const char *signature)
+{
+	struct container *container;
+
+	if (strlen(signature) > sizeof(((struct container *) 0)->signature) - 1)
+		return false;
+
+	if (builder->index != 0)
+		return false;
+
+	builder->index += 1;
+
+	container = &builder->stack[builder->index];
+	memset(container, 0, sizeof(*container));
+	strcpy(container->signature, signature);
+	container->sigindex = 0;
+	container->container_type = CONTAINER_TYPE_DATABUF;
+
+	return true;
+}
+
+bool mbim_message_builder_leave_databuf(struct mbim_message_builder *builder)
+{
+	struct container *container;
+	struct container *parent;
+	size_t start;
+
+	if (unlikely(builder->index == 0))
+		return false;
+
+	container = &builder->stack[builder->index];
+
+	if (unlikely(container->container_type != CONTAINER_TYPE_DATABUF))
+		return false;
+
+	builder->index -= 1;
+	parent = &builder->stack[builder->index];
+	GROW_DBUF(container, 0, 4);
+	container_update_offsets(container);
+
+	/*
+	 * Copy the structure buffers into parent's buffers
+	 */
+	start = GROW_SBUF(parent, container->sbuf_pos + container->dbuf_pos, 4);
+	memcpy(parent->sbuf + start, container->sbuf, container->sbuf_pos);
+	memcpy(parent->sbuf + start + container->sbuf_pos,
+				container->dbuf, container->dbuf_pos);
+	l_free(container->sbuf);
+	l_free(container->dbuf);
+
+	memset(container, 0, sizeof(*container));
+
+	return true;
+}
+
 struct mbim_message *mbim_message_builder_finalize(
 					struct mbim_message_builder *builder)
 {
@@ -1298,6 +1384,8 @@ static bool append_arguments(struct mbim_message *message,
 				r = mbim_message_builder_leave_array(builder);
 			if (stack[stack_index].type == CONTAINER_TYPE_STRUCT)
 				r = mbim_message_builder_leave_struct(builder);
+			if (stack[stack_index].type == CONTAINER_TYPE_DATABUF)
+				r = mbim_message_builder_leave_databuf(builder);
 
 			if (!r)
 				goto error;
@@ -1361,6 +1449,26 @@ static bool append_arguments(struct mbim_message *message,
 
 			if (!mbim_message_builder_append_basic(builder, *s, &u))
 				goto error;
+
+			break;
+		}
+		case 'd':
+		{
+			if (stack_index == MAX_NESTING)
+				goto error;
+
+			str = va_arg(args, const char *);
+			if (!str)
+				goto error;
+
+			if (!mbim_message_builder_enter_databuf(builder, str))
+				goto error;
+
+			stack_index += 1;
+			stack[stack_index].sig_start = str;
+			stack[stack_index].sig_end = str + strlen(str);
+			stack[stack_index].n_items = 0;
+			stack[stack_index].type = CONTAINER_TYPE_DATABUF;
 
 			break;
 		}

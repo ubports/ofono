@@ -69,6 +69,9 @@ bool mbim_message_builder_leave_struct(struct mbim_message_builder *builder);
 bool mbim_message_builder_enter_array(struct mbim_message_builder *builder,
 					const char *signature);
 bool mbim_message_builder_leave_array(struct mbim_message_builder *builder);
+bool mbim_message_builder_enter_databuf(struct mbim_message_builder *builder,
+					const char *signature);
+bool mbim_message_builder_leave_databuf(struct mbim_message_builder *builder);
 struct mbim_message *mbim_message_builder_finalize(
 					struct mbim_message_builder *builder);
 
