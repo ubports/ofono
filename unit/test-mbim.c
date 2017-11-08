@@ -163,6 +163,22 @@ static const struct message_data message_data_sms_read_all = {
 	.binary_len	= sizeof(message_binary_sms_read_all),
 };
 
+static const unsigned char message_binary_sms_send[] = {
+	0x03, 0x00, 0x00, 0x00, 0x50, 0x00, 0x00, 0x00, 0x22, 0x00, 0x00, 0x00,
+	0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x53, 0x3F, 0xBE, 0xEB,
+	0x14, 0xFE, 0x44, 0x67, 0x9F, 0x90, 0x33, 0xA2, 0x23, 0xE5, 0x6C, 0x3F,
+	0x03, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00,
+	0x00, 0x01, 0x00, 0x0B, 0x91, 0x99, 0x99, 0x99, 0x99, 0x99, 0xF9, 0x00,
+	0x00, 0x06, 0xC6, 0xF7, 0x5B, 0x1C, 0x96, 0x03
+};
+
+static const struct message_data message_data_sms_send = {
+	.tid		= 34,
+	.binary		= message_binary_sms_send,
+	.binary_len	= sizeof(message_binary_sms_send),
+};
+
 static void do_debug(const char *str, void *user_data)
 {
 	const char *prefix = user_data;
@@ -495,6 +511,55 @@ static void parse_sms_read_all(const void *data)
 	mbim_message_unref(msg);
 }
 
+static const uint8_t sms_pdu[] = {
+	0x00, 0x01, 0x00, 0x0B, 0x91, 0x99, 0x99, 0x99, 0x99, 0x99,
+	0xF9, 0x00, 0x00, 0x06, 0xC6, 0xF7, 0x5B, 0x1C, 0x96, 0x03
+};
+
+static void parse_sms_send(const void *data)
+{
+	struct mbim_message *msg = build_message(data);
+	uint32_t format;
+	uint32_t pdu_len;
+	struct mbim_message_iter pdu;
+	struct mbim_message_iter databuf;
+	uint8_t buf[182];
+	uint8_t b;
+	int i;
+
+	assert(mbim_message_get_arguments(msg, "ud", &format, "ay", &databuf));
+
+	assert(format == 0);
+
+	assert(mbim_message_iter_next_entry(&databuf, &pdu_len, &pdu));
+	assert(pdu_len == 20);
+
+	i = 0;
+	while (mbim_message_iter_next_entry(&pdu, &b))
+		buf[i++] = b;
+
+	assert(i == 20);
+	assert(!memcmp(buf, sms_pdu, i));
+
+	mbim_message_unref(msg);
+}
+
+static void build_sms_send(const void *data)
+{
+	const struct message_data *msg_data = data;
+	struct mbim_message *message;
+
+	message = mbim_message_new(mbim_uuid_sms,
+					MBIM_CID_SMS_SEND,
+					MBIM_COMMAND_TYPE_SET);
+	assert(message);
+	assert(mbim_message_set_arguments(message, "ud", 0,
+					"ay", sizeof(sms_pdu), sms_pdu));
+	_mbim_message_set_tid(message, msg_data->tid);
+	assert(check_message(message, msg_data));
+	mbim_message_unref(message);
+}
+
 int main(int argc, char *argv[])
 {
 	l_test_init(&argc, &argv);
@@ -523,6 +588,11 @@ int main(int argc, char *argv[])
 			&message_data_sms_read_all_empty);
 	l_test_add("SMS Read All [1] (parse)", parse_sms_read_all,
 			&message_data_sms_read_all);
+
+	l_test_add("SMS Send (parse)", parse_sms_send,
+			&message_data_sms_send);
+	l_test_add("SMS Send (build)", build_sms_send,
+			&message_data_sms_send);
 
 	return l_test_run();
 }
