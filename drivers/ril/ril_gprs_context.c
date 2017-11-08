@@ -444,7 +444,7 @@ static void ril_gprs_context_activate_primary(struct ofono_gprs_context *gc,
 	/* Let's make sure that we aren't connecting when roaming not allowed */
 	if (rs == NETWORK_REGISTRATION_STATUS_ROAMING) {
 		struct ofono_gprs *gprs = ril_modem_ofono_gprs(gcd->modem);
-		if (!ofono_gprs_get_roaming_allowed(gprs) &&
+		if (!__ofono_gprs_get_roaming_allowed(gprs) &&
 			ril_netreg_check_if_really_roaming(netreg, rs) ==
 					NETWORK_REGISTRATION_STATUS_ROAMING) {
 			struct ofono_error error;
