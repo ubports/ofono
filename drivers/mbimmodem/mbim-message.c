@@ -38,6 +38,7 @@
 static const char CONTAINER_TYPE_ARRAY	= 'a';
 static const char CONTAINER_TYPE_STRUCT	= 'r';
 static const char CONTAINER_TYPE_DATABUF = 'd';
+static const char CONTAINER_TYPE_VARIANT = 'v';
 static const char *simple_types = "syqu";
 
 struct mbim_message {
@@ -98,6 +99,8 @@ static int get_alignment(const char type)
 		return 4;
 	case 'a':
 		return 4;
+	case 'v':
+		return 4;
 	default:
 		return 0;
 	}
@@ -120,7 +123,7 @@ static int get_basic_size(const char type)
 static bool is_fixed_size(const char *sig_start, const char *sig_end)
 {
 	while (sig_start <= sig_end) {
-		if (*sig_start == 'a' || *sig_start == 's')
+		if (*sig_start == 'a' || *sig_start == 's' || *sig_start == 'v')
 			return false;
 
 		sig_start++;
@@ -1449,6 +1452,26 @@ static bool append_arguments(struct mbim_message *message,
 
 			if (!mbim_message_builder_append_basic(builder, *s, &u))
 				goto error;
+
+			break;
+		}
+		case 'v': /* Structure with variable signature */
+		{
+			if (stack_index == MAX_NESTING)
+				goto error;
+
+			str = va_arg(args, const char *);
+			if (!str)
+				goto error;
+
+			if (!mbim_message_builder_enter_struct(builder, str))
+				goto error;
+
+			stack_index += 1;
+			stack[stack_index].sig_start = str;
+			stack[stack_index].sig_end = str + strlen(str);
+			stack[stack_index].n_items = 0;
+			stack[stack_index].type = CONTAINER_TYPE_STRUCT;
 
 			break;
 		}
