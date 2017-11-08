@@ -30,6 +30,13 @@
 /* Start WDS network interface */
 #define QMI_WDS_PARAM_APN			0x14	/* string */
 #define QMI_WDS_PARAM_IP_FAMILY			0x19	/* uint8 */
+#define QMI_WDS_PARAM_USERNAME			0x17	/* string */
+#define QMI_WDS_PARAM_PASSWORD			0x18	/* string */
+#define QMI_WDS_PARAM_AUTHENTICATION_PREFERENCE	0x16	/* uint8 */
+
+#define QMI_WDS_AUTHENTICATION_NONE		0x0
+#define QMI_WDS_AUTHENTICATION_PAP		0x1
+#define QMI_WDS_AUTHENTICATION_CHAP		0x2
 
 #define QMI_WDS_RESULT_PKT_HANDLE		0x01	/* uint32 */
 
@@ -51,10 +58,12 @@ struct qmi_wds_notify_conn_status {
 
 /* Get the runtime data session settings */
 #define QMI_WDS_RESULT_PDP_TYPE			0x11	/* uint8 */
+#define QMI_WDS_RESULT_APN			0x14	/* string */
 #define QMI_WDS_RESULT_PRIMARY_DNS		0x15	/* uint32 IPv4 */
 #define QMI_WDS_RESULT_SECONDARY_DNS		0x16	/* uint32 IPv4 */
 #define QMI_WDS_RESULT_IP_ADDRESS		0x1e	/* uint32 IPv4 */
 #define QMI_WDS_RESULT_GATEWAY			0x20	/* uint32 IPv4 */
+#define QMI_WDS_RESULT_GATEWAY_NETMASK		0x21	/* uint32 IPv4 */
 #define QMI_WDS_RESULT_IP_FAMILY		0x2b	/* uint8 */
 
 #define QMI_WDS_PDP_TYPE_IPV4			0x00

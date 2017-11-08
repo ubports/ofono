@@ -19,7 +19,7 @@ Besides the kernel coding style above, oFono has special flavors for its own.
 Some of them are mandatory (marked as 'M'), while some others are optional
 (marked as 'O'), but generally preferred.
 
-M1: Blank line before and after an if/while/do/for statement
+M1: Blank line before and after an if/while/do/for/switch statement
 ============================================================
 There should be a blank line before if statement unless the if is nested and
 not preceded by an expression or variable declaration.

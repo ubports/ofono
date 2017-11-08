@@ -130,10 +130,15 @@ static void ril_radio_state_changed(struct ril_msg *message,
 static int ril_probe(struct ofono_modem *modem)
 {
 	struct ril_data *rd;
+	ofono_bool_t lte_cap;
 
 	DBG("");
 
 	rd = g_new0(struct ril_data, 1);
+
+	lte_cap = getenv("OFONO_RIL_RAT_LTE") ? TRUE : FALSE;
+	ofono_modem_set_boolean(modem, MODEM_PROP_LTE_CAPABLE, lte_cap);
+
 	ofono_modem_set_data(modem, rd);
 
 	return 0;
@@ -437,7 +442,10 @@ static void ril_post_sim(struct ofono_modem *modem)
 	struct ofono_gprs *gprs;
 	struct ofono_gprs_context *gc;
 
-	ofono_sms_create(modem, OFONO_RIL_VENDOR_IMC_SOFIA3GR,
+	if (ofono_modem_get_boolean(modem, MODEM_PROP_LTE_CAPABLE))
+		ofono_sms_create(modem, 0, "rilmodem", rd->ril);
+	else
+		ofono_sms_create(modem, OFONO_RIL_VENDOR_IMC_SOFIA3GR,
 					"rilmodem", rd->ril);
 
 	gprs = ofono_gprs_create(modem, 0, "rilmodem", rd->ril);
@@ -448,6 +456,11 @@ static void ril_post_sim(struct ofono_modem *modem)
 					OFONO_GPRS_CONTEXT_TYPE_INTERNET);
 		ofono_gprs_add_context(gprs, gc);
 	}
+
+	if (ofono_modem_get_boolean(modem, MODEM_PROP_LTE_CAPABLE))
+		ofono_lte_create(modem, "rilmodem", rd->ril);
+
+	ofono_stk_create(modem, 0, "rilmodem", rd->ril);
 }
 
 static void ril_post_online(struct ofono_modem *modem)
@@ -455,8 +468,13 @@ static void ril_post_online(struct ofono_modem *modem)
 	struct ril_data *rd = ofono_modem_get_data(modem);
 
 	ofono_netreg_create(modem, 0, "rilmodem", rd->ril);
-	ofono_radio_settings_create(modem, OFONO_RIL_VENDOR_IMC_SOFIA3GR,
-					"rilmodem", rd->ril);
+
+	if (ofono_modem_get_boolean(modem, MODEM_PROP_LTE_CAPABLE))
+		ofono_radio_settings_create(modem, 0, "rilmodem", rd->ril);
+	else
+		ofono_radio_settings_create(modem, OFONO_RIL_VENDOR_IMC_SOFIA3GR,
+						"rilmodem", rd->ril);
+
 	ofono_ussd_create(modem, 0, "rilmodem", rd->ril);
 	ofono_netmon_create(modem, 0, "rilmodem", rd->ril);
 }
@@ -528,7 +546,7 @@ static int ril_enable(struct ofono_modem *modem)
 		g_ril_set_trace(rd->ril, TRUE);
 
 	if (getenv("OFONO_RIL_HEX_TRACE"))
-		g_ril_set_debugf(rd->ril, ril_debug, "Sofia3GR:");
+		g_ril_set_debugf(rd->ril, ril_debug, "IntelModem:");
 
 	g_ril_register(rd->ril, RIL_UNSOL_RIL_CONNECTED,
 						ril_connected, modem);
@@ -581,7 +599,7 @@ static int ril_disable(struct ofono_modem *modem)
 }
 
 static struct ofono_modem_driver ril_driver = {
-	.name = "ril_sofia3gr",
+	.name = "ril_intel",
 	.probe = ril_probe,
 	.remove = ril_remove,
 	.enable = ril_enable,
@@ -602,5 +620,5 @@ static void ril_exit(void)
 	ofono_modem_driver_unregister(&ril_driver);
 }
 
-OFONO_PLUGIN_DEFINE(ril_sofia3gr, "SoFiA 3GR RIL-based modem driver", VERSION,
+OFONO_PLUGIN_DEFINE(ril_intel, "Intel RIL-based modem driver", VERSION,
 			OFONO_PLUGIN_PRIORITY_DEFAULT, ril_init, ril_exit)

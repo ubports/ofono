@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2017  Kerlink SA. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -13,17 +13,13 @@
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
  *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
- *
  */
 
-#ifdef HAVE_CONFIG_H
-#include <config.h>
-#endif
+#define QMI_WDA_SET_DATA_FORMAT	32	/* Set data format */
+#define QMI_WDA_GET_DATA_FORMAT	33	/* Get data format */
 
-int main(int argc, char **argv)
-{
-	return 0;
-}
+/* Get and set data format interface */
+#define QMI_WDA_LL_PROTOCOL	0x11	/* uint32_t */
+#define QMI_WDA_DATA_LINK_PROTOCOL_UNKNOWN	0
+#define QMI_WDA_DATA_LINK_PROTOCOL_802_3	1
+#define QMI_WDA_DATA_LINK_PROTOCOL_RAW_IP	2

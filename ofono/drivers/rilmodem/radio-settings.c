@@ -111,7 +111,7 @@ static void ril_set_rat_mode(struct ofono_radio_settings *rs,
 	struct radio_data *rd = ofono_radio_settings_get_data(rs);
 	struct cb_data *cbd = cb_data_new(cb, data, rs);
 	struct parcel rilp;
-	int pref = PREF_NET_TYPE_GSM_WCDMA;
+	int pref = PREF_NET_TYPE_LTE_GSM_WCDMA;
 
 	switch (mode) {
 	case OFONO_RADIO_ACCESS_MODE_ANY:

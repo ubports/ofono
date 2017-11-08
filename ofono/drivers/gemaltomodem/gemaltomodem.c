@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2017 Vincent Cesson. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -30,22 +30,20 @@
 #include <ofono/plugin.h>
 #include <ofono/types.h>
 
-#include "telitmodem.h"
+#include "gemaltomodem.h"
 
-static int telitmodem_init(void)
+static int gemaltomodem_init(void)
 {
-	telit_location_reporting_init();
-	telitncm_gprs_context_init();
+	gemalto_location_reporting_init();
 
 	return 0;
 }
 
-static void telitmodem_exit(void)
+static void gemaltomodem_exit(void)
 {
-	telit_location_reporting_exit();
-	telitncm_gprs_context_exit();
+	gemalto_location_reporting_exit();
 }
 
-OFONO_PLUGIN_DEFINE(telitmodem, "Telit modem driver", VERSION,
+OFONO_PLUGIN_DEFINE(gemaltomodem, "Gemalto modem driver", VERSION,
 			OFONO_PLUGIN_PRIORITY_DEFAULT,
-			telitmodem_init, telitmodem_exit)
+			gemaltomodem_init, gemaltomodem_exit)

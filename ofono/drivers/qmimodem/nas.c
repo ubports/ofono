@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2017  Jonas Bonn. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -19,33 +19,20 @@
  *
  */
 
-#ifdef HAVE_CONFIG_H
-#include <config.h>
-#endif
+#include "nas.h"
 
-#include <glib.h>
-#include <gatchat.h>
+#include "src/common.h"
 
-#define OFONO_API_SUBJECT_TO_CHANGE
-#include <ofono/plugin.h>
-#include <ofono/types.h>
-
-#include "telitmodem.h"
-
-static int telitmodem_init(void)
+int qmi_nas_rat_to_tech(uint8_t rat)
 {
-	telit_location_reporting_init();
-	telitncm_gprs_context_init();
+	switch (rat) {
+	case QMI_NAS_NETWORK_RAT_GSM:
+		return ACCESS_TECHNOLOGY_GSM;
+	case QMI_NAS_NETWORK_RAT_UMTS:
+		return ACCESS_TECHNOLOGY_UTRAN;
+	case QMI_NAS_NETWORK_RAT_LTE:
+		return ACCESS_TECHNOLOGY_EUTRAN;
+	}
 
-	return 0;
+	return -1;
 }
-
-static void telitmodem_exit(void)
-{
-	telit_location_reporting_exit();
-	telitncm_gprs_context_exit();
-}
-
-OFONO_PLUGIN_DEFINE(telitmodem, "Telit modem driver", VERSION,
-			OFONO_PLUGIN_PRIORITY_DEFAULT,
-			telitmodem_init, telitmodem_exit)

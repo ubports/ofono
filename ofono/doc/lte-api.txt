@@ -1,0 +1,35 @@
+LongTermEvolution Hierarchy
+
+Service		org.ofono
+Interface	org.ofono.LongTermEvolution
+Object path	[variable prefix]/{modem0,modem1,...}
+
+
+Methods		dict GetProperties()
+
+			Returns all LongTermEvolution configuration properties.
+
+		void SetProperty(string property, variant value)
+
+			Changes the value of the specified property. Only
+			properties that are listed as readwrite are
+			changeable. On success a PropertyChanged signal
+			will be emitted.
+
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.InvalidArguments
+					 [service].Error.Failed
+
+Signals		PropertyChanged(string property, variant value)
+
+			This signal indicates a changed value of the given
+			property.
+
+Properties	string DefaultAccessPointName [readwrite]
+
+			On LongTermEvolution, contexts activate automatically.
+			This property allows selection of an APN to be used on
+			next automatic activation.
+
+			Setting this property to an empty string clears the
+			default APN from the modem.

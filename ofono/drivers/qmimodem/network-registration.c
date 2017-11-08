@@ -43,20 +43,6 @@ struct netreg_data {
 	uint8_t current_rat;
 };
 
-static int rat_to_tech(uint8_t rat)
-{
-	switch (rat) {
-	case QMI_NAS_NETWORK_RAT_GSM:
-		return ACCESS_TECHNOLOGY_GSM;
-	case QMI_NAS_NETWORK_RAT_UMTS:
-		return ACCESS_TECHNOLOGY_UTRAN;
-	case QMI_NAS_NETWORK_RAT_LTE:
-		return ACCESS_TECHNOLOGY_EUTRAN;
-	}
-
-	return -1;
-}
-
 static bool extract_ss_info(struct qmi_result *result, int *status,
 				int *lac, int *cellid, int *tech,
 				struct ofono_network_operator *operator)
@@ -64,7 +50,7 @@ static bool extract_ss_info(struct qmi_result *result, int *status,
 	const struct qmi_nas_serving_system *ss;
 	const struct qmi_nas_current_plmn *plmn;
 	uint8_t i, roaming;
-	uint16_t value16, len;
+	uint16_t value16, len, opname_len;
 	uint32_t value32;
 
 	DBG("");
@@ -82,13 +68,13 @@ static bool extract_ss_info(struct qmi_result *result, int *status,
 	for (i = 0; i < ss->radio_if_count; i++) {
 		DBG("radio in use %d", ss->radio_if[i]);
 
-		*tech = rat_to_tech(ss->radio_if[i]);
+		*tech = qmi_nas_rat_to_tech(ss->radio_if[i]);
 	}
 
 	if (qmi_result_get_uint8(result, QMI_NAS_RESULT_ROAMING_STATUS,
 								&roaming)) {
 		if (ss->status == 1 && roaming == 0)
-			*status = 5;
+			*status = NETWORK_REGISTRATION_STATUS_ROAMING;
 	}
 
 	if (!operator)
@@ -100,8 +86,21 @@ static bool extract_ss_info(struct qmi_result *result, int *status,
 						GUINT16_FROM_LE(plmn->mcc));
 		snprintf(operator->mnc, OFONO_MAX_MNC_LENGTH + 1, "%02d",
 						GUINT16_FROM_LE(plmn->mnc));
-		strncpy(operator->name, plmn->desc, plmn->desc_len);
-		operator->name[plmn->desc_len] = '\0';
+		opname_len = plmn->desc_len;
+		if (opname_len > OFONO_MAX_OPERATOR_NAME_LENGTH)
+			opname_len = OFONO_MAX_OPERATOR_NAME_LENGTH;
+
+		/*
+		 * Telit QMI modems can return non-utf-8 characters in
+		 * plmn-desc. When that happens, libdbus will abort ofono.
+		 * If non-utf-8 characters are detected, use mccmnc string.
+		 */
+		if (g_utf8_validate(plmn->desc, opname_len, NULL)) {
+			strncpy(operator->name, plmn->desc, opname_len);
+			operator->name[opname_len] = '\0';
+		} else
+			snprintf(operator->name, OFONO_MAX_OPERATOR_NAME_LENGTH,
+					"%s%s",	operator->mcc, operator->mnc);
 
 		DBG("%s (%s:%s)", operator->name, operator->mcc, operator->mnc);
 	}
@@ -265,7 +264,7 @@ static void scan_nets_cb(struct qmi_result *result, void *user_data)
 		DBG("%03d:%02d %d", netrat->info[i].mcc, netrat->info[i].mnc,
 							netrat->info[i].rat);
 
-		list[i].tech = rat_to_tech(netrat->info[i].rat);
+		list[i].tech = qmi_nas_rat_to_tech(netrat->info[i].rat);
 	}
 
 done:
@@ -543,7 +542,7 @@ static int qmi_netreg_probe(struct ofono_netreg *netreg,
 
 	ofono_netreg_set_data(netreg, data);
 
-	qmi_service_create(device, QMI_SERVICE_NAS,
+	qmi_service_create_shared(device, QMI_SERVICE_NAS,
 					create_nas_cb, netreg, NULL);
 
 	return 0;

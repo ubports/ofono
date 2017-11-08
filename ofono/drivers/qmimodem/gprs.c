@@ -30,16 +30,18 @@
 #include "qmi.h"
 #include "nas.h"
 
+#include "src/common.h"
 #include "qmimodem.h"
 
 struct gprs_data {
 	struct qmi_service *nas;
 };
 
-static bool extract_ss_info(struct qmi_result *result, int *status)
+static bool extract_ss_info(struct qmi_result *result, int *status, int *tech)
 {
 	const struct qmi_nas_serving_system *ss;
 	uint16_t len;
+	int i;
 
 	DBG("");
 
@@ -47,12 +49,44 @@ static bool extract_ss_info(struct qmi_result *result, int *status)
 	if (!ss)
 		return false;
 
-	if (ss->ps_state == QMI_NAS_ATTACH_STATUS_ATTACHED)
-		*status = 0x01;
+	if (ss->ps_state == QMI_NAS_ATTACH_STATE_ATTACHED)
+		*status = NETWORK_REGISTRATION_STATUS_REGISTERED;
 	else
-		*status = 0x00;
+		*status = NETWORK_REGISTRATION_STATUS_NOT_REGISTERED;
+
+	*tech = -1;
+	for (i = 0; i < ss->radio_if_count; i++) {
+		DBG("radio in use %d", ss->radio_if[i]);
+
+		*tech = qmi_nas_rat_to_tech(ss->radio_if[i]);
+	}
 
 	return true;
+}
+
+static int handle_ss_info(struct qmi_result *result, struct ofono_gprs *gprs)
+{
+	int status;
+	int tech;
+
+	DBG("");
+
+	if (!extract_ss_info(result, &status, &tech))
+		return -1;
+
+	if (status == NETWORK_REGISTRATION_STATUS_REGISTERED)
+		if (tech == ACCESS_TECHNOLOGY_EUTRAN) {
+			/* On LTE we are effectively always attached; and
+			 * the default bearer is established as soon as the
+			 * network is joined.
+			 */
+			/* FIXME: query default profile number and APN
+			 * instead of assuming profile 1 and ""
+			 */
+			ofono_gprs_cid_activated(gprs, 1 , "automatic");
+		}
+
+	return status;
 }
 
 static void ss_info_notify(struct qmi_result *result, void *user_data)
@@ -62,10 +96,10 @@ static void ss_info_notify(struct qmi_result *result, void *user_data)
 
 	DBG("");
 
-	if (!extract_ss_info(result, &status))
-		return;
+	status = handle_ss_info(result, gprs);
 
-	ofono_gprs_status_notify(gprs, status);
+	if (status >= 0)
+		ofono_gprs_status_notify(gprs, status);
 }
 
 static void attach_detach_cb(struct qmi_result *result, void *user_data)
@@ -124,22 +158,26 @@ error:
 static void get_ss_info_cb(struct qmi_result *result, void *user_data)
 {
 	struct cb_data *cbd = user_data;
+	struct ofono_gprs *gprs = cbd->user;
 	ofono_gprs_status_cb_t cb = cbd->cb;
 	int status;
 
 	DBG("");
 
-	if (qmi_result_set_error(result, NULL)) {
-		CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
-		return;
-	}
+	if (qmi_result_set_error(result, NULL))
+		goto error;
 
-	if (!extract_ss_info(result, &status)) {
-		CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
-		return;
-	}
+	status = handle_ss_info(result, gprs);
+
+	if (status < 0)
+		goto error;
 
 	CALLBACK_WITH_SUCCESS(cb, status, cbd->data);
+
+	return;
+
+error:
+	CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
 }
 
 static void qmi_attached_status(struct ofono_gprs *gprs,
@@ -150,6 +188,7 @@ static void qmi_attached_status(struct ofono_gprs *gprs,
 
 	DBG("");
 
+	cbd->user = gprs;
 	if (qmi_service_send(data->nas, QMI_NAS_GET_SS_INFO, NULL,
 					get_ss_info_cb, cbd, g_free) > 0)
 		return;
@@ -174,6 +213,13 @@ static void create_nas_cb(struct qmi_service *service, void *user_data)
 
 	data->nas = qmi_service_ref(service);
 
+	/*
+	 * First get the SS info - the modem may already be connected,
+	 * and the state-change notification may never arrive
+	 */
+	qmi_service_send(data->nas, QMI_NAS_GET_SS_INFO, NULL,
+					ss_info_notify, gprs, NULL);
+
 	qmi_service_register(data->nas, QMI_NAS_SS_INFO_IND,
 					ss_info_notify, gprs, NULL);
 
@@ -194,7 +240,8 @@ static int qmi_gprs_probe(struct ofono_gprs *gprs,
 
 	ofono_gprs_set_data(gprs, data);
 
-	qmi_service_create(device, QMI_SERVICE_NAS, create_nas_cb, gprs, NULL);
+	qmi_service_create_shared(device, QMI_SERVICE_NAS,
+						create_nas_cb, gprs, NULL);
 
 	return 0;
 }

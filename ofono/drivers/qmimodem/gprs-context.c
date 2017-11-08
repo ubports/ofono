@@ -24,18 +24,22 @@
 #endif
 
 #include <string.h>
+#include <arpa/inet.h>
 
 #include <ofono/log.h>
 #include <ofono/modem.h>
 #include <ofono/gprs-context.h>
 
 #include "qmi.h"
+#include "wda.h"
 #include "wds.h"
 
 #include "qmimodem.h"
 
 struct gprs_context_data {
 	struct qmi_service *wds;
+	struct qmi_service *wda;
+	struct qmi_device *dev;
 	unsigned int active_context;
 	uint32_t pkt_handle;
 };
@@ -61,8 +65,12 @@ static void pkt_status_notify(struct qmi_result *result, void *user_data)
 
 	switch (status->status) {
 	case QMI_WDS_CONN_STATUS_DISCONNECTED:
-		ofono_gprs_context_deactivated(gc, data->active_context);
-		data->active_context = 0;
+		if (data->pkt_handle) {
+			/* The context has been disconnected by the network */
+			ofono_gprs_context_deactivated(gc, data->active_context);
+			data->pkt_handle = 0;
+			data->active_context = 0;
+		}
 		break;
 	}
 }
@@ -75,17 +83,67 @@ static void get_settings_cb(struct qmi_result *result, void *user_data)
 	struct ofono_modem *modem;
 	const char *interface;
 	uint8_t pdp_type, ip_family;
+	uint32_t ip_addr;
+	struct in_addr addr;
+	char* straddr;
+	char* apn;
+	const char *dns[3] = { NULL, NULL, NULL };
 
 	DBG("");
 
 	if (qmi_result_set_error(result, NULL))
 		goto done;
 
+	apn = qmi_result_get_string(result, QMI_WDS_RESULT_APN);
+	if (apn) {
+		DBG("APN: %s", apn);
+		g_free(apn);
+	}
+
 	if (qmi_result_get_uint8(result, QMI_WDS_RESULT_PDP_TYPE, &pdp_type))
 		DBG("PDP type %d", pdp_type);
 
 	if (qmi_result_get_uint8(result, QMI_WDS_RESULT_IP_FAMILY, &ip_family))
 		DBG("IP family %d", ip_family);
+
+	if (qmi_result_get_uint32(result,QMI_WDS_RESULT_IP_ADDRESS, &ip_addr)) {
+		addr.s_addr = htonl(ip_addr);
+		straddr = inet_ntoa(addr);
+		DBG("IP addr: %s", straddr);
+		ofono_gprs_context_set_ipv4_address(gc, straddr, 1);
+	}
+
+	if (qmi_result_get_uint32(result,QMI_WDS_RESULT_GATEWAY, &ip_addr)) {
+		addr.s_addr = htonl(ip_addr);
+		straddr = inet_ntoa(addr);
+		DBG("Gateway: %s", straddr);
+		ofono_gprs_context_set_ipv4_gateway(gc, straddr);
+	}
+
+	if (qmi_result_get_uint32(result,
+				QMI_WDS_RESULT_GATEWAY_NETMASK, &ip_addr)) {
+		addr.s_addr = htonl(ip_addr);
+		straddr = inet_ntoa(addr);
+		DBG("Gateway netmask: %s", straddr);
+		ofono_gprs_context_set_ipv4_netmask(gc, straddr);
+	}
+
+	if (qmi_result_get_uint32(result,
+				QMI_WDS_RESULT_PRIMARY_DNS, &ip_addr)) {
+		addr.s_addr = htonl(ip_addr);
+		dns[0] = inet_ntoa(addr);
+		DBG("Primary DNS: %s", dns[0]);
+	}
+
+	if (qmi_result_get_uint32(result,
+				QMI_WDS_RESULT_SECONDARY_DNS, &ip_addr)) {
+		addr.s_addr = htonl(ip_addr);
+		dns[1] = inet_ntoa(addr);
+		DBG("Secondary DNS: %s", dns[1]);
+	}
+
+	if (dns[0])
+		ofono_gprs_context_set_ipv4_dns_servers(gc, dns);
 
 done:
 	modem = ofono_gprs_context_get_modem(gc);
@@ -94,8 +152,6 @@ done:
 	ofono_gprs_context_set_interface(gc, interface);
 
 	CALLBACK_WITH_SUCCESS(cb, cbd->data);
-
-	g_free(cbd);
 }
 
 static void start_net_cb(struct qmi_result *result, void *user_data)
@@ -120,8 +176,12 @@ static void start_net_cb(struct qmi_result *result, void *user_data)
 
 	data->pkt_handle = handle;
 
+	/* Duplicate cbd, the old one will be freed when this method returns */
+	cbd = cb_data_new(cb, cbd->data);
+	cbd->user = gc;
+
 	if (qmi_service_send(data->wds, QMI_WDS_GET_SETTINGS, NULL,
-					get_settings_cb, cbd, NULL) > 0)
+					get_settings_cb, cbd, g_free) > 0)
 		return;
 
 	modem = ofono_gprs_context_get_modem(gc);
@@ -131,11 +191,38 @@ static void start_net_cb(struct qmi_result *result, void *user_data)
 
 	CALLBACK_WITH_SUCCESS(cb, cbd->data);
 
-	g_free(cbd);
-
 	return;
 
 error:
+	data->active_context = 0;
+	CALLBACK_WITH_FAILURE(cb, cbd->data);
+}
+
+/*
+ * This function gets called for "automatic" contexts, those which are
+ * not activated via activate_primary.  For these, we will still need
+ * to call start_net in order to get the packet handle for the context.
+ * The process for automatic contexts is essentially identical to that
+ * for others.
+ */
+static void qmi_gprs_read_settings(struct ofono_gprs_context* gc,
+					unsigned int cid,
+					ofono_gprs_context_cb_t cb,
+					void *user_data)
+{
+	struct gprs_context_data *data = ofono_gprs_context_get_data(gc);
+	struct cb_data *cbd = cb_data_new(cb, user_data);
+
+	DBG("cid %u", cid);
+
+	data->active_context = cid;
+
+	cbd->user = gc;
+
+	if (qmi_service_send(data->wds, QMI_WDS_START_NET, NULL,
+					start_net_cb, cbd, g_free) > 0)
+		return;
+
 	data->active_context = 0;
 
 	CALLBACK_WITH_FAILURE(cb, cbd->data);
@@ -151,6 +238,7 @@ static void qmi_activate_primary(struct ofono_gprs_context *gc,
 	struct cb_data *cbd = cb_data_new(cb, user_data);
 	struct qmi_param *param;
 	uint8_t ip_family;
+	uint8_t auth;
 
 	DBG("cid %u", ctx->cid);
 
@@ -178,8 +266,31 @@ static void qmi_activate_primary(struct ofono_gprs_context *gc,
 
 	qmi_param_append_uint8(param, QMI_WDS_PARAM_IP_FAMILY, ip_family);
 
+	switch (ctx->auth_method) {
+	case OFONO_GPRS_AUTH_METHOD_CHAP:
+		auth = QMI_WDS_AUTHENTICATION_CHAP;
+		break;
+	case OFONO_GPRS_AUTH_METHOD_PAP:
+		auth = QMI_WDS_AUTHENTICATION_PAP;
+		break;
+	default:
+		auth = QMI_WDS_AUTHENTICATION_NONE;
+		break;
+	}
+
+	qmi_param_append_uint8(param, QMI_WDS_PARAM_AUTHENTICATION_PREFERENCE,
+					auth);
+
+	if (ctx->username[0] != '\0')
+		qmi_param_append(param, QMI_WDS_PARAM_USERNAME,
+					strlen(ctx->username), ctx->username);
+
+	if (ctx->password[0] != '\0')
+		qmi_param_append(param, QMI_WDS_PARAM_PASSWORD,
+					strlen(ctx->password), ctx->password);
+
 	if (qmi_service_send(data->wds, QMI_WDS_START_NET, param,
-					start_net_cb, cbd, NULL) > 0)
+					start_net_cb, cbd, g_free) > 0)
 		return;
 
 	qmi_param_free(param);
@@ -202,17 +313,19 @@ static void stop_net_cb(struct qmi_result *result, void *user_data)
 	DBG("");
 
 	if (qmi_result_set_error(result, NULL)) {
-		CALLBACK_WITH_FAILURE(cb, cbd->data);
+		if (cb)
+			CALLBACK_WITH_FAILURE(cb, cbd->data);
 		return;
 	}
 
-	data->active_context = 0;
-
 	data->pkt_handle = 0;
 
-	CALLBACK_WITH_SUCCESS(cb, cbd->data);
+	if (cb)
+		CALLBACK_WITH_SUCCESS(cb, cbd->data);
+	else
+		ofono_gprs_context_deactivated(gc, data->active_context);
 
-	g_free(cbd);
+	data->active_context = 0;
 }
 
 static void qmi_deactivate_primary(struct ofono_gprs_context *gc,
@@ -233,15 +346,24 @@ static void qmi_deactivate_primary(struct ofono_gprs_context *gc,
 		goto error;
 
 	if (qmi_service_send(data->wds, QMI_WDS_STOP_NET, param,
-					stop_net_cb, cbd, NULL) > 0)
+					stop_net_cb, cbd, g_free) > 0)
 		return;
 
 	qmi_param_free(param);
 
 error:
-	CALLBACK_WITH_FAILURE(cb, cbd->data);
+	if (cb)
+		CALLBACK_WITH_FAILURE(cb, user_data);
 
 	g_free(cbd);
+}
+
+static void qmi_gprs_context_detach_shutdown(struct ofono_gprs_context *gc,
+						unsigned int cid)
+{
+	DBG("");
+
+	qmi_deactivate_primary(gc, cid, NULL, NULL);
 }
 
 static void create_wds_cb(struct qmi_service *service, void *user_data)
@@ -263,6 +385,69 @@ static void create_wds_cb(struct qmi_service *service, void *user_data)
 					pkt_status_notify, gc, NULL);
 }
 
+static void get_data_format_cb(struct qmi_result *result, void *user_data)
+{
+	struct ofono_gprs_context *gc = user_data;
+	struct gprs_context_data *data = ofono_gprs_context_get_data(gc);
+	uint32_t llproto;
+	enum qmi_device_expected_data_format expected_llproto;
+
+	DBG("");
+
+	if (qmi_result_set_error(result, NULL))
+		goto done;
+
+	if (!qmi_result_get_uint32(result, QMI_WDA_LL_PROTOCOL, &llproto))
+		goto done;
+
+	expected_llproto = qmi_device_get_expected_data_format(data->dev);
+
+	if ((llproto == QMI_WDA_DATA_LINK_PROTOCOL_802_3) &&
+			(expected_llproto ==
+				QMI_DEVICE_EXPECTED_DATA_FORMAT_RAW_IP)) {
+		if (!qmi_device_set_expected_data_format(data->dev,
+					QMI_DEVICE_EXPECTED_DATA_FORMAT_802_3))
+			DBG("Fail to set expected data to 802.3");
+		else
+			DBG("expected data set to 802.3");
+	} else if ((llproto == QMI_WDA_DATA_LINK_PROTOCOL_RAW_IP) &&
+			(expected_llproto ==
+				QMI_DEVICE_EXPECTED_DATA_FORMAT_802_3)) {
+		if (!qmi_device_set_expected_data_format(data->dev,
+					QMI_DEVICE_EXPECTED_DATA_FORMAT_RAW_IP))
+			DBG("Fail to set expected data to raw-ip");
+		else
+			DBG("expected data set to raw-ip");
+	}
+
+done:
+	qmi_service_create_shared(data->dev, QMI_SERVICE_WDS, create_wds_cb, gc,
+									NULL);
+}
+
+static void create_wda_cb(struct qmi_service *service, void *user_data)
+{
+	struct ofono_gprs_context *gc = user_data;
+	struct gprs_context_data *data = ofono_gprs_context_get_data(gc);
+
+	DBG("");
+
+	if (!service) {
+		DBG("Failed to request WDA service, continue initialization");
+		goto error;
+	}
+
+	data->wda = qmi_service_ref(service);
+
+	if (qmi_service_send(data->wda, QMI_WDA_GET_DATA_FORMAT, NULL,
+					get_data_format_cb, gc, NULL) > 0)
+		return;
+
+error:
+	qmi_service_create_shared(data->dev, QMI_SERVICE_WDS, create_wds_cb, gc,
+									NULL);
+}
+
 static int qmi_gprs_context_probe(struct ofono_gprs_context *gc,
 					unsigned int vendor, void *user_data)
 {
@@ -274,8 +459,9 @@ static int qmi_gprs_context_probe(struct ofono_gprs_context *gc,
 	data = g_new0(struct gprs_context_data, 1);
 
 	ofono_gprs_context_set_data(gc, data);
+	data->dev = device;
 
-	qmi_service_create(device, QMI_SERVICE_WDS, create_wds_cb, gc, NULL);
+	qmi_service_create(device, QMI_SERVICE_WDA, create_wda_cb, gc, NULL);
 
 	return 0;
 }
@@ -288,9 +474,15 @@ static void qmi_gprs_context_remove(struct ofono_gprs_context *gc)
 
 	ofono_gprs_context_set_data(gc, NULL);
 
-	qmi_service_unregister_all(data->wds);
+	if (data->wds) {
+		qmi_service_unregister_all(data->wds);
+		qmi_service_unref(data->wds);
+	}
 
-	qmi_service_unref(data->wds);
+	if (data->wda) {
+		qmi_service_unregister_all(data->wda);
+		qmi_service_unref(data->wda);
+	}
 
 	g_free(data);
 }
@@ -301,6 +493,8 @@ static struct ofono_gprs_context_driver driver = {
 	.remove			= qmi_gprs_context_remove,
 	.activate_primary	= qmi_activate_primary,
 	.deactivate_primary	= qmi_deactivate_primary,
+	.read_settings		= qmi_gprs_read_settings,
+	.detach_shutdown	= qmi_gprs_context_detach_shutdown,
 };
 
 void qmi_gprs_context_init(void)

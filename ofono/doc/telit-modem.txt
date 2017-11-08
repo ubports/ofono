@@ -17,3 +17,30 @@ GPS:
   After setting the configuration, a power cycle is required.
   Port Configiuration #8 is available since firmware 12.00.004. Firmware version
   can be checked using 'AT+CGMR'.
+
+LE910 V2
+========
+
+Default USB composition of LE910V2 uses PID 0x36 (AT#PORTCFG=0)
+and consists of 6 serial ports (CDC-ACM standard, /dev/ttyACMx)
+and 1 network adapter using CDC-NCM standard (wwanx or usbx).
+
+NCM interface configuration follows Telit documentation
+(both documents available on Telit Download Zone - registration required)
+"GE/HE/UE910, UL865, LE910 V2 Linux USB Driver - User Guide r0"
+(document 1VV0301255 Rev.0 - 2016-01-22)
+and "Telit LE910-V2 NCM SETUP r3"
+(document 1VV0301246 Rev.3 - 2016-11-29).
+
+After context is setup, NCM mode activated and PDP context activated
+connection configuration can be read using
+AT+CGPADDR=context_id and AT+CGCONTRDP=context_id commands.
+This is done automatically and results available via
+org.ofono.ConnectionContext.GetProperties DBus method.
+
+Then Linux network interface needs to be configured:
+    ifconfig <Interface> <Address> netmask <Netmask> up
+    route add default gw <Gateway>
+    arp -s <Gateway> 11:22:33:44:55:66
+
+Only after these steps network interface is usable.

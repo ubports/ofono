@@ -76,8 +76,8 @@ void ofono_netmon_serving_cell_notify(struct ofono_netmon *netmon,
 	DBusMessageIter dict;
 	enum ofono_netmon_info next_info_type = info_type;
 	const char *technology = cell_type_to_tech_name(type);
-	char *mcc = NULL;
-	char *mnc = NULL;
+	char *mcc;
+	char *mnc;
 	int intval;
 	netmon->reply = dbus_message_new_method_return(netmon->pending);
 
@@ -95,7 +95,8 @@ void ofono_netmon_serving_cell_notify(struct ofono_netmon *netmon,
 	if (technology == NULL)
 		goto done;
 
-	ofono_dbus_dict_append(&dict, "Technology", DBUS_TYPE_STRING, &technology);
+	ofono_dbus_dict_append(&dict, "Technology",
+						DBUS_TYPE_STRING, &technology);
 
 	while (next_info_type != OFONO_NETMON_INFO_INVALID) {
 		switch (next_info_type) {
@@ -177,6 +178,57 @@ void ofono_netmon_serving_cell_notify(struct ofono_netmon *netmon,
 			intval = va_arg(arglist, int);
 
 			CELL_INFO_DICT_APPEND(&dict, "Strength",
+					intval, uint8_t, DBUS_TYPE_BYTE);
+			break;
+
+		case OFONO_NETMON_INFO_RSCP:
+			intval = va_arg(arglist, int);
+
+			CELL_INFO_DICT_APPEND(&dict, "ReceivedSignalCodePower",
+					intval, uint8_t, DBUS_TYPE_BYTE);
+			break;
+
+		case OFONO_NETMON_INFO_ECN0:
+			intval = va_arg(arglist, int);
+
+			CELL_INFO_DICT_APPEND(&dict, "ReceivedEnergyRatio",
+					intval, uint8_t, DBUS_TYPE_BYTE);
+			break;
+
+		case OFONO_NETMON_INFO_RSRQ:
+			intval = va_arg(arglist, int);
+
+			CELL_INFO_DICT_APPEND(&dict,
+					"ReferenceSignalReceivedQuality",
+					intval, uint8_t, DBUS_TYPE_BYTE);
+			break;
+
+		case OFONO_NETMON_INFO_RSRP:
+			intval = va_arg(arglist, int);
+
+			CELL_INFO_DICT_APPEND(&dict,
+					"ReferenceSignalReceivedPower",
+					intval, uint8_t, DBUS_TYPE_BYTE);
+			break;
+
+		case OFONO_NETMON_INFO_EARFCN:
+			intval = va_arg(arglist, int);
+
+			CELL_INFO_DICT_APPEND(&dict, "EARFCN",
+					intval, uint16_t, DBUS_TYPE_UINT16);
+			break;
+
+		case OFONO_NETMON_INFO_EBAND:
+			intval = va_arg(arglist, int);
+
+			CELL_INFO_DICT_APPEND(&dict, "EBand",
+					intval, uint8_t, DBUS_TYPE_BYTE);
+			break;
+
+		case OFONO_NETMON_INFO_CQI:
+			intval = va_arg(arglist, int);
+
+			CELL_INFO_DICT_APPEND(&dict, "ChannelQualityIndicator",
 					intval, uint8_t, DBUS_TYPE_BYTE);
 			break;
 
