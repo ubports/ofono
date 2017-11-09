@@ -41,6 +41,7 @@
 #include <ofono/sim.h>
 #include <ofono/netreg.h>
 #include <ofono/sms.h>
+#include <ofono/gprs.h>
 
 #include <ell/ell.h>
 
@@ -380,6 +381,7 @@ static void mbim_post_sim(struct ofono_modem *modem)
 	DBG("%p", modem);
 
 	ofono_sms_create(modem, 0, "mbim", md->device);
+	ofono_gprs_create(modem, 0, "mbim", md->device);
 }
 
 static void mbim_post_online(struct ofono_modem *modem)
