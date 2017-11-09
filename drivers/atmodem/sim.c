@@ -1304,19 +1304,6 @@ static void at_xsim_notify(GAtResult *result, gpointer user_data)
 	sd->ready_id = 0;
 }
 
-static void at_epev_notify(GAtResult *result, gpointer user_data)
-{
-	struct cb_data *cbd = user_data;
-	struct sim_data *sd = cbd->user;
-	ofono_sim_lock_unlock_cb_t cb = cbd->cb;
-	struct ofono_error error = { .type = OFONO_ERROR_TYPE_NO_ERROR };
-
-	cb(&error, cbd->data);
-
-	g_at_chat_unregister(sd->chat, sd->ready_id);
-	sd->ready_id = 0;
-}
-
 static void at_qss_notify(GAtResult *result, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
@@ -1385,16 +1372,6 @@ static void at_pin_send_cb(gboolean ok, GAtResult *result,
 		 */
 		sd->ready_id = g_at_chat_register(sd->chat, "+XSIM",
 							at_xsim_notify,
-							FALSE, cbd, g_free);
-		return;
-	case OFONO_VENDOR_MBM:
-		/*
-		 * On the MBM modem, AT+CPIN? keeps returning SIM PIN
-		 * for a moment after successful AT+CPIN="..", but then
-		 * sends *EPEV when that changes.
-		 */
-		sd->ready_id = g_at_chat_register(sd->chat, "*EPEV",
-							at_epev_notify,
 							FALSE, cbd, g_free);
 		return;
 	case OFONO_VENDOR_TELIT:
@@ -1992,9 +1969,6 @@ static int at_sim_probe(struct ofono_sim *sim, unsigned int vendor,
 	sd = g_new0(struct sim_data, 1);
 	sd->chat = g_at_chat_clone(chat);
 	sd->vendor = vendor;
-
-	if (sd->vendor == OFONO_VENDOR_MBM)
-		g_at_chat_send(sd->chat, "AT*EPEE=1", NULL, NULL, NULL, NULL);
 
 	ofono_sim_set_data(sim, sd);
 
