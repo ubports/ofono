@@ -623,7 +623,8 @@ builtin_sources += $(mbim_sources) \
 			drivers/mbimmodem/devinfo.c \
 			drivers/mbimmodem/sim.c \
 			drivers/mbimmodem/network-registration.c \
-			drivers/mbimmodem/sms.c
+			drivers/mbimmodem/sms.c \
+			drivers/mbimmodem/gprs.c
 
 builtin_modules += mbim
 builtin_sources += plugins/mbim.c
