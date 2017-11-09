@@ -38,7 +38,7 @@
 static const char CONTAINER_TYPE_ARRAY	= 'a';
 static const char CONTAINER_TYPE_STRUCT	= 'r';
 static const char CONTAINER_TYPE_DATABUF = 'd';
-static const char *simple_types = "syqu";
+static const char *simple_types = "syqut";
 
 struct mbim_message {
 	int ref_count;
@@ -96,6 +96,8 @@ static int get_alignment(const char type)
 	case 'u':
 	case 's':
 		return 4;
+	case 't':
+		return 4;
 	case 'a':
 		return 4;
 	case 'v':
@@ -114,6 +116,8 @@ static int get_basic_size(const char type)
 		return 2;
 	case 'u':
 		return 4;
+	case 't':
+		return 8;
 	default:
 		return 0;
 	}
@@ -236,6 +240,7 @@ static bool _iter_next_entry_basic(struct mbim_message_iter *iter,
 	uint8_t uint8_val;
 	uint16_t uint16_val;
 	uint32_t uint32_val;
+	uint64_t uint64_val;
 	uint32_t offset, length;
 	const void *data;
 	size_t pos;
@@ -273,6 +278,14 @@ static bool _iter_next_entry_basic(struct mbim_message_iter *iter,
 		uint32_val = l_get_le32(data);
 		*(uint32_t *) out = uint32_val;
 		iter->pos = pos + 4;
+		break;
+	case 't':
+		if (pos + 8 > iter->len)
+			return false;
+		data = _iter_get_data(iter, pos);
+		uint64_val = l_get_le64(data);
+		*(uint64_t *) out = uint64_val;
+		iter->pos = pos + 8;
 		break;
 	case 's':
 		/*
@@ -1448,6 +1461,15 @@ static bool append_arguments(struct mbim_message *message,
 		case 'u':
 		{
 			uint32_t u = va_arg(args, uint32_t);
+
+			if (!mbim_message_builder_append_basic(builder, *s, &u))
+				goto error;
+
+			break;
+		}
+		case 't':
+		{
+			uint64_t u = va_arg(args, uint64_t);
 
 			if (!mbim_message_builder_append_basic(builder, *s, &u))
 				goto error;
