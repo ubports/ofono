@@ -401,7 +401,7 @@ static bool _iter_enter_struct(struct mbim_message_iter *iter,
 	if (iter->container_type != CONTAINER_TYPE_ARRAY)
 		iter->sig_pos += sig_end - sig_start + 2;
 
-	iter->pos = pos + len;
+	iter->pos = pos + 4;
 
 	return true;
 }
