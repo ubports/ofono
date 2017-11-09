@@ -617,6 +617,7 @@ mbim_sources =	drivers/mbimmodem/mbim.h \
 builtin_modules += mbimmodem
 builtin_sources += $(mbim_sources) \
 			drivers/mbimmodem/util.h \
+			drivers/mbimmodem/util.c \
 			drivers/mbimmodem/mbimmodem.h \
 			drivers/mbimmodem/mbimmodem.c \
 			drivers/mbimmodem/devinfo.c \
