@@ -39,8 +39,6 @@
 
 #define SIM_AUTH_MAX_RANDS	3
 
-static GSList *g_drivers = NULL;
-
 /*
  * Temporary handle used for the command authentication sequence.
  */
@@ -136,25 +134,6 @@ static void free_apps(struct ofono_sim_auth *sa)
 	g_slist_free(sa->aid_objects);
 }
 
-int ofono_sim_auth_driver_register(const struct ofono_sim_auth_driver *d)
-{
-	DBG("driver: %p, name: %s", d, d->name);
-
-	if (d->probe == NULL)
-		return -EINVAL;
-
-	g_drivers = g_slist_prepend(g_drivers, (void *) d);
-
-	return 0;
-}
-
-void ofono_sim_auth_driver_unregister(const struct ofono_sim_auth_driver *d)
-{
-	DBG("driver: %p, name: %s", d, d->name);
-
-	g_drivers = g_slist_remove(g_drivers, (void *) d);
-}
-
 static void sim_auth_unregister(struct ofono_atom *atom)
 {
 	struct ofono_sim_auth *sa = __ofono_atom_get_data(atom);
@@ -173,44 +152,7 @@ static void sim_auth_remove(struct ofono_atom *atom)
 	if (sa == NULL)
 		return;
 
-	if (sa->driver && sa->driver->remove)
-		sa->driver->remove(sa);
-
 	g_free(sa);
-}
-
-struct ofono_sim_auth *ofono_sim_auth_create(struct ofono_modem *modem,
-						unsigned int vendor,
-						const char *driver, void *data)
-{
-	struct ofono_sim_auth *sa;
-	GSList *l;
-
-	if (driver == NULL)
-		return NULL;
-
-	sa = g_new0(struct ofono_sim_auth, 1);
-
-	if (sa == NULL)
-		return NULL;
-
-	sa->atom = __ofono_modem_add_atom(modem, OFONO_ATOM_TYPE_SIM_AUTH,
-						sim_auth_remove, sa);
-
-	for (l = g_drivers; l; l = l->next) {
-		const struct ofono_sim_auth_driver *drv = l->data;
-
-		if (g_strcmp0(drv->name, driver))
-			continue;
-
-		if (drv->probe(sa, vendor, data) < 0)
-			continue;
-
-		sa->driver = drv;
-		break;
-	}
-
-	return sa;
 }
 
 /*
@@ -725,7 +667,7 @@ static char *build_nai(const char *imsi)
 	return nai;
 }
 
-void ofono_sim_auth_register(struct ofono_sim_auth *sa)
+static void sim_auth_register(struct ofono_sim_auth *sa)
 {
 	DBusConnection *conn = ofono_dbus_get_connection();
 	const char *path = __ofono_atom_get_path(sa->atom);
@@ -815,17 +757,24 @@ loop_end:
 			SIM_UST_SERVICE_GSM_SECURITY_CONTEXT);
 }
 
+struct ofono_sim_auth *ofono_sim_auth_create(struct ofono_modem *modem)
+{
+	struct ofono_sim_auth *sa;
+
+	sa = g_new0(struct ofono_sim_auth, 1);
+
+	if (sa == NULL)
+		return NULL;
+
+	sa->atom = __ofono_modem_add_atom(modem, OFONO_ATOM_TYPE_SIM_AUTH,
+						sim_auth_remove, sa);
+
+	sim_auth_register(sa);
+
+	return sa;
+}
+
 void ofono_sim_auth_remove(struct ofono_sim_auth *sa)
 {
 	__ofono_atom_free(sa->atom);
-}
-
-void ofono_sim_auth_set_data(struct ofono_sim_auth *sa, void *data)
-{
-	sa->driver_data = data;
-}
-
-void *ofono_sim_auth_get_data(struct ofono_sim_auth *sa)
-{
-	return sa->driver_data;
 }
