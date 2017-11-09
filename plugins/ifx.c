@@ -152,10 +152,7 @@ static void ifx_set_sim_state(struct ifx_data *data, int state)
 		break;
 	case 2:	/* PIN verification not needed – Ready */
 	case 3:	/* PIN verified – Ready */
-		/*
-		 * State 3 is handled in the SIM atom driver
-		 * while for state 2 we should be waiting for state 7
-		 */
+		ofono_sim_initialized_notify(data->sim);
 		break;
 	case 10: /* SIM Reactivating */
 	case 11: /* SIM Reactivated */
