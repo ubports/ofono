@@ -133,6 +133,8 @@ static void switch_sim_state_status(struct ofono_modem *modem, int status)
 			ofono_sim_inserted_notify(data->sim, TRUE);
 			data->have_sim = TRUE;
 		}
+
+		ofono_sim_initialized_notify(data->sim);
 		break;
 	default:
 		ofono_warn("Unknown SIM state %d received", status);
