@@ -341,7 +341,6 @@ builtin_sources += 	drivers/atmodem/atmodem.h \
 			drivers/atmodem/atutil.c \
 			drivers/atmodem/gprs.c \
 			drivers/atmodem/gprs-context.c \
-			drivers/atmodem/sim-auth.c \
 			drivers/atmodem/gnss.c \
 			drivers/atmodem/lte.c
 
