@@ -993,6 +993,25 @@ bool mbim_message_builder_append_basic(struct mbim_message_builder *builder,
 	}
 
 	if (len) {
+		uint16_t swapped_u16;
+		uint32_t swapped_u32;
+		uint64_t swapped_u64;
+
+		switch (len) {
+		case 2:
+			swapped_u16 = L_CPU_TO_LE16(l_get_u16(value));
+			value = &swapped_u16;
+			break;
+		case 4:
+			swapped_u32 = L_CPU_TO_LE32(l_get_u32(value));
+			value = &swapped_u32;
+			break;
+		case 8:
+			swapped_u64 = L_CPU_TO_LE64(l_get_u64(value));
+			value = &swapped_u64;
+			break;
+		}
+
 		if (array) {
 			uint32_t n_elem = l_get_le32(container->sbuf +
 					array->array_start + 4);
