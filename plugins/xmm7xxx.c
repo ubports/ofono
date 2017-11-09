@@ -325,7 +325,7 @@ static void xmm7xxx_post_sim(struct ofono_modem *modem)
 
 	ofono_lte_create(modem, "atmodem", data->chat);
 	ofono_radio_settings_create(modem, 0, "xmm7modem", data->chat);
-	ofono_sim_auth_create(modem, 0, "atmodem", data->chat);
+	ofono_sim_auth_create(modem);
 }
 
 static void xmm7xxx_post_online(struct ofono_modem *modem)
