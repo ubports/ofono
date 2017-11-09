@@ -38,7 +38,6 @@
 static const char CONTAINER_TYPE_ARRAY	= 'a';
 static const char CONTAINER_TYPE_STRUCT	= 'r';
 static const char CONTAINER_TYPE_DATABUF = 'd';
-static const char CONTAINER_TYPE_VARIANT = 'v';
 static const char *simple_types = "syqu";
 
 struct mbim_message {
