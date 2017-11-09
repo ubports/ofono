@@ -1275,25 +1275,22 @@ static void at_pin_query(struct ofono_sim *sim, ofono_sim_passwd_cb_t cb,
 
 static void sim_state_cb(gboolean present, gpointer user_data)
 {
-	struct cb_data *cbd = user_data;
-	struct sim_data *sd = cbd->user;
-	ofono_sim_lock_unlock_cb_t cb = cbd->cb;
-	void *data = cbd->data;
+	struct ofono_sim *sim = user_data;
+	struct sim_data *sd = ofono_sim_get_data(sim);
 
 	at_util_sim_state_query_free(sd->sim_state_query);
 	sd->sim_state_query = NULL;
 
 	if (present == 1)
-		CALLBACK_WITH_SUCCESS(cb, data);
-	else
-		CALLBACK_WITH_FAILURE(cb, data);
+		ofono_sim_initialized_notify(sim);
 }
 
 static void at_pin_send_cb(gboolean ok, GAtResult *result,
 				gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
-	struct sim_data *sd = cbd->user;
+	struct ofono_sim *sim = cbd->user;
+	struct sim_data *sd = ofono_sim_get_data(sim);
 	ofono_sim_lock_unlock_cb_t cb = cbd->cb;
 	struct ofono_error error;
 
@@ -1320,15 +1317,12 @@ static void at_pin_send_cb(gboolean ok, GAtResult *result,
 		 * state.
 		 */
 		sd->sim_state_query = at_util_sim_state_query_new(sd->chat,
-						2, 20, sim_state_cb, cbd,
-						g_free);
-		return;
+						2, 20, sim_state_cb, sim,
+						NULL);
 	}
 
 done:
 	cb(&error, cbd->data);
-
-	g_free(cbd);
 }
 
 static void at_pin_send(struct ofono_sim *sim, const char *passwd,
@@ -1339,12 +1333,12 @@ static void at_pin_send(struct ofono_sim *sim, const char *passwd,
 	char buf[64];
 	int ret;
 
-	cbd->user = sd;
+	cbd->user = sim;
 
 	snprintf(buf, sizeof(buf), "AT+CPIN=\"%s\"", passwd);
 
 	ret = g_at_chat_send(sd->chat, buf, none_prefix,
-				at_pin_send_cb, cbd, NULL);
+				at_pin_send_cb, cbd, g_free);
 
 	memset(buf, 0, sizeof(buf));
 
