@@ -44,32 +44,6 @@ struct netreg_data {
 	struct l_idle *delayed_register;
 };
 
-static inline int available_data_classes_to_tech(uint32_t n)
-{
-	if (n & MBIM_DATA_CLASS_LTE)
-		return ACCESS_TECHNOLOGY_EUTRAN;
-
-	if (n & (MBIM_DATA_CLASS_HSUPA | MBIM_DATA_CLASS_HSDPA))
-		return ACCESS_TECHNOLOGY_UTRAN_HSDPA_HSUPA;
-
-	if (n & MBIM_DATA_CLASS_HSUPA)
-		return ACCESS_TECHNOLOGY_UTRAN_HSUPA;
-
-	if (n & MBIM_DATA_CLASS_HSDPA)
-		return ACCESS_TECHNOLOGY_UTRAN_HSDPA;
-
-	if (n & MBIM_DATA_CLASS_UMTS)
-		return ACCESS_TECHNOLOGY_UTRAN;
-
-	if (n & MBIM_DATA_CLASS_EDGE)
-		return ACCESS_TECHNOLOGY_GSM_EGPRS;
-
-	if (n & MBIM_DATA_CLASS_GPRS)
-		return ACCESS_TECHNOLOGY_GSM;
-
-	return -1;
-}
-
 static inline int register_state_to_status(uint32_t register_state)
 {
 	switch (register_state) {
@@ -113,7 +87,7 @@ static void mbim_register_state_changed(struct mbim_message *message,
 	DBG("NwError: %u, RegisterMode: %u", nw_error, register_mode);
 
 	status = register_state_to_status(register_state);
-	tech = available_data_classes_to_tech(available_data_classes);
+	tech = mbim_data_class_to_tech(available_data_classes);
 
 	ofono_netreg_status_notify(netreg, status, -1, -1, tech);
 }
@@ -141,7 +115,7 @@ static void mbim_registration_status_cb(struct mbim_message *message,
 		goto error;
 
 	status = register_state_to_status(register_state);
-	tech = available_data_classes_to_tech(available_data_classes);
+	tech = mbim_data_class_to_tech(available_data_classes);
 
 	CALLBACK_WITH_SUCCESS(cb, status, -1, -1, tech, cbd->data);
 	return;
@@ -213,7 +187,7 @@ static void mbim_current_operator_cb(struct mbim_message *message, void *user)
 
 	/* Set to current */
 	op.status = 2;
-	op.tech = available_data_classes_to_tech(available_data_classes);
+	op.tech = mbim_data_class_to_tech(available_data_classes);
 
 	CALLBACK_WITH_SUCCESS(cb, &op, cbd->data);
 	return;

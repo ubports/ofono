@@ -19,41 +19,36 @@
  *
  */
 
-#include <ell/ell.h>
+#include <stdint.h>
+#include <stdbool.h>
 
-struct cb_data {
-	void *cb;
-	void *data;
-	void *user;
-};
+#include "src/common.h"
+#include "mbim.h"
+#include "util.h"
 
-static inline struct cb_data *cb_data_new(void *cb, void *data)
+int mbim_data_class_to_tech(uint32_t n)
 {
-	struct cb_data *ret;
+	if (n & MBIM_DATA_CLASS_LTE)
+		return ACCESS_TECHNOLOGY_EUTRAN;
 
-	ret = l_new(struct cb_data, 1);
-	ret->cb = cb;
-	ret->data = data;
-	ret->user = NULL;
+	if (n & (MBIM_DATA_CLASS_HSUPA | MBIM_DATA_CLASS_HSDPA))
+		return ACCESS_TECHNOLOGY_UTRAN_HSDPA_HSUPA;
 
-	return ret;
+	if (n & MBIM_DATA_CLASS_HSUPA)
+		return ACCESS_TECHNOLOGY_UTRAN_HSUPA;
+
+	if (n & MBIM_DATA_CLASS_HSDPA)
+		return ACCESS_TECHNOLOGY_UTRAN_HSDPA;
+
+	if (n & MBIM_DATA_CLASS_UMTS)
+		return ACCESS_TECHNOLOGY_UTRAN;
+
+	if (n & MBIM_DATA_CLASS_EDGE)
+		return ACCESS_TECHNOLOGY_GSM_EGPRS;
+
+	if (n & MBIM_DATA_CLASS_GPRS)
+		return ACCESS_TECHNOLOGY_GSM;
+
+	return -1;
 }
 
-#define CALLBACK_WITH_FAILURE(cb, args...)		\
-	do {						\
-		struct ofono_error cb_e;		\
-		cb_e.type = OFONO_ERROR_TYPE_FAILURE;	\
-		cb_e.error = 0;				\
-							\
-		cb(&cb_e, ##args);			\
-	} while (0)					\
-
-#define CALLBACK_WITH_SUCCESS(f, args...)		\
-	do {						\
-		struct ofono_error e;			\
-		e.type = OFONO_ERROR_TYPE_NO_ERROR;	\
-		e.error = 0;				\
-		f(&e, ##args);				\
-	} while (0)
-
-int mbim_data_class_to_tech(uint32_t n);
