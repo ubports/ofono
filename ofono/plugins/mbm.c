@@ -225,6 +225,15 @@ static void cfun_query(gboolean ok, GAtResult *result, gpointer user_data)
 	cfun_enable(TRUE, NULL, modem);
 }
 
+static void epev_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_modem *modem = user_data;
+	struct ofono_sim *sim = ofono_modem_get_sim(modem);
+
+	if (sim)
+		ofono_sim_initialized_notify(sim);
+}
+
 static void emrdy_notifier(GAtResult *result, gpointer user_data)
 {
 	struct ofono_modem *modem = user_data;
@@ -346,6 +355,10 @@ static int mbm_enable(struct ofono_modem *modem)
 
 	g_at_chat_send(data->modem_port, "AT*EMRDY?", none_prefix,
 				emrdy_query, modem, NULL);
+
+	g_at_chat_send(data->modem_port, "AT*EPEE=1", NULL, NULL, NULL, NULL);
+	g_at_chat_register(data->modem_port, "*EPEV", epev_notify,
+					FALSE, modem, NULL);
 
 	return -EINPROGRESS;
 }
