@@ -452,7 +452,7 @@ static void mbm_post_sim(struct ofono_modem *modem)
 	ofono_radio_settings_create(modem, 0, "stemodem", data->modem_port);
 
 	ofono_sms_create(modem, 0, "atmodem", data->modem_port);
-	ofono_sim_auth_create(modem, 0, "atmodem", data->modem_port);
+	ofono_sim_auth_create(modem);
 }
 
 static void mbm_post_online(struct ofono_modem *modem)
