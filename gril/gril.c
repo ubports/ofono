@@ -374,6 +374,12 @@ static void handle_response(struct ril_s *p, struct ril_msg *message)
 			if (req->callback)
 				req->callback(message, req->user_data);
 
+			/* gril may have been destroyed in the request callback */
+			if (p->destroyed) {
+				ril_request_destroy(req);
+				return;
+			}
+
 			len = g_queue_get_length(p->out_queue);
 
 			for (i = 0; i < len; i++) {

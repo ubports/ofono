@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2014  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2017  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -40,37 +40,29 @@
 #include <ofono/plugin.h>
 #include <ofono/log.h>
 #include <ofono/modem.h>
-#include <ofono/call-barring.h>
-#include <ofono/call-forwarding.h>
-#include <ofono/call-meter.h>
-#include <ofono/call-settings.h>
 #include <ofono/devinfo.h>
-#include <ofono/message-waiting.h>
-#include <ofono/location-reporting.h>
 #include <ofono/netreg.h>
-#include <ofono/phonebook.h>
 #include <ofono/sim.h>
 #include <ofono/gprs.h>
+#include <ofono/radio-settings.h>
 #include <ofono/gprs-context.h>
-#include <ofono/sms.h>
-#include <ofono/ussd.h>
-#include <ofono/voicecall.h>
+#include <ofono/stk.h>
+#include <ofono/lte.h>
 
 #include <drivers/atmodem/atutil.h>
 #include <drivers/atmodem/vendor.h>
 
 static const char *none_prefix[] = { NULL };
-static const char *qss_prefix[] = { "#QSS:", NULL };
+static const char *xsimstate_prefix[] = { "+XSIMSTATE:", NULL };
 
-struct he910_data {
+struct xmm7xxx_data {
 	GAtChat *chat;		/* AT chat */
-	GAtChat *modem;		/* Data port */
 	struct ofono_sim *sim;
 	ofono_bool_t have_sim;
 	ofono_bool_t sms_phonebook_added;
 };
 
-static void he910_debug(const char *str, void *user_data)
+static void xmm7xxx_debug(const char *str, void *user_data)
 {
 	const char *prefix = user_data;
 
@@ -112,37 +104,32 @@ static GAtChat *open_device(struct ofono_modem *modem,
 		return NULL;
 
 	if (getenv("OFONO_AT_DEBUG"))
-		g_at_chat_set_debug(chat, he910_debug, debug);
+		g_at_chat_set_debug(chat, xmm7xxx_debug, debug);
 
 	return chat;
 }
 
 static void switch_sim_state_status(struct ofono_modem *modem, int status)
 {
-	struct he910_data *data = ofono_modem_get_data(modem);
+	struct xmm7xxx_data *data = ofono_modem_get_data(modem);
 
 	DBG("%p, SIM status: %d", modem, status);
 
 	switch (status) {
 	case 0:	/* SIM not inserted */
+	case 9:	/* SIM removed */
 		if (data->have_sim == TRUE) {
 			ofono_sim_inserted_notify(data->sim, FALSE);
 			data->have_sim = FALSE;
 			data->sms_phonebook_added = FALSE;
 		}
 		break;
-	case 1:	/* SIM inserted */
-	case 2:	/* SIM inserted and PIN unlocked */
+	case 2:	/* SIM inserted, PIN verification not needed - READY */
+	case 3:	/* SIM inserted, PIN verified - READY */
+	case 7:
 		if (data->have_sim == FALSE) {
 			ofono_sim_inserted_notify(data->sim, TRUE);
 			data->have_sim = TRUE;
-		}
-		break;
-	case 3:	/* SIM inserted, SMS and phonebook ready */
-		if (data->sms_phonebook_added == FALSE) {
-			ofono_phonebook_create(modem, 0, "atmodem", data->chat);
-			ofono_sms_create(modem, 0, "atmodem", data->chat);
-			data->sms_phonebook_added = TRUE;
 		}
 		break;
 	default:
@@ -151,7 +138,7 @@ static void switch_sim_state_status(struct ofono_modem *modem, int status)
 	}
 }
 
-static void he910_qss_notify(GAtResult *result, gpointer user_data)
+static void xsimstate_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_modem *modem = user_data;
 	int status;
@@ -161,15 +148,18 @@ static void he910_qss_notify(GAtResult *result, gpointer user_data)
 
 	g_at_result_iter_init(&iter, result);
 
-	if (!g_at_result_iter_next(&iter, "#QSS:"))
+	if (!g_at_result_iter_next(&iter, "+XSIM:"))
 		return;
 
 	g_at_result_iter_next_number(&iter, &status);
 
+	DBG("status=%d\n", status);
+
 	switch_sim_state_status(modem, status);
 }
 
-static void qss_query_cb(gboolean ok, GAtResult *result, gpointer user_data)
+static void xsimstate_query_cb(gboolean ok, GAtResult *result,
+						gpointer user_data)
 {
 	struct ofono_modem *modem = user_data;
 	int status, mode;
@@ -182,7 +172,7 @@ static void qss_query_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 	g_at_result_iter_init(&iter, result);
 
-	if (!g_at_result_iter_next(&iter, "#QSS:"))
+	if (!g_at_result_iter_next(&iter, "+XSIMSTATE:"))
 		return;
 
 	if (!g_at_result_iter_next_number(&iter, &mode))
@@ -191,22 +181,21 @@ static void qss_query_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	if (!g_at_result_iter_next_number(&iter, &status))
 		return;
 
+	DBG("mode=%d, status=%d\n", mode, status);
+
 	switch_sim_state_status(modem, status);
 }
 
 static void cfun_enable_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_modem *modem = user_data;
-	struct he910_data *data = ofono_modem_get_data(modem);
+	struct xmm7xxx_data *data = ofono_modem_get_data(modem);
 
 	DBG("%p", modem);
 
 	if (!ok) {
 		g_at_chat_unref(data->chat);
 		data->chat = NULL;
-
-		g_at_chat_unref(data->modem);
-		data->modem = NULL;
 
 		ofono_modem_set_powered(modem, FALSE);
 		return;
@@ -224,42 +213,24 @@ static void cfun_enable_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 	ofono_modem_set_powered(modem, TRUE);
 
-	/*
-	 * Tell the modem not to automatically initiate auto-attach
-	 * proceedures on its own.
-	 */
-	g_at_chat_send(data->chat, "AT#AUTOATT=0", none_prefix,
-				NULL, NULL, NULL);
-
-	/* Follow sim state */
-	g_at_chat_register(data->chat, "#QSS:", he910_qss_notify,
+	g_at_chat_register(data->chat, "+XSIM:", xsimstate_notify,
 				FALSE, modem, NULL);
 
-	/* Enable sim state notification */
-	g_at_chat_send(data->chat, "AT#QSS=2", none_prefix, NULL, NULL, NULL);
-
-	g_at_chat_send(data->chat, "AT#QSS?", qss_prefix,
-			qss_query_cb, modem, NULL);
+	g_at_chat_send(data->chat, "AT+XSIMSTATE=1", none_prefix,
+			NULL, NULL, NULL);
+	g_at_chat_send(data->chat, "AT+XSIMSTATE?", xsimstate_prefix,
+			xsimstate_query_cb, modem, NULL);
 }
 
-static int he910_enable(struct ofono_modem *modem)
+static int xmm7xxx_enable(struct ofono_modem *modem)
 {
-	struct he910_data *data = ofono_modem_get_data(modem);
+	struct xmm7xxx_data *data = ofono_modem_get_data(modem);
 
 	DBG("%p", modem);
 
-	data->modem = open_device(modem, "Modem", "Modem: ");
-	if (data->modem == NULL)
-		return -EINVAL;
-
-	data->chat = open_device(modem, "Aux", "Aux: ");
-	if (data->chat == NULL) {
-		g_at_chat_unref(data->modem);
-		data->modem = NULL;
+	data->chat = open_device(modem, "Modem", "Modem: ");
+	if (data->chat == NULL)
 		return -EIO;
-	}
-
-	g_at_chat_set_slave(data->modem, data->chat);
 
 	/*
 	 * Disable command echo and
@@ -269,7 +240,7 @@ static int he910_enable(struct ofono_modem *modem)
 				NULL, NULL, NULL);
 
 	/* Set phone functionality */
-	g_at_chat_send(data->chat, "AT+CFUN=1", none_prefix,
+	g_at_chat_send(data->chat, "AT+CFUN=4", none_prefix,
 				cfun_enable_cb, modem, NULL);
 
 	return -EINPROGRESS;
@@ -278,7 +249,7 @@ static int he910_enable(struct ofono_modem *modem)
 static void cfun_disable_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_modem *modem = user_data;
-	struct he910_data *data = ofono_modem_get_data(modem);
+	struct xmm7xxx_data *data = ofono_modem_get_data(modem);
 
 	DBG("%p", modem);
 
@@ -289,75 +260,95 @@ static void cfun_disable_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		ofono_modem_set_powered(modem, FALSE);
 }
 
-static int he910_disable(struct ofono_modem *modem)
+static int xmm7xxx_disable(struct ofono_modem *modem)
 {
-	struct he910_data *data = ofono_modem_get_data(modem);
+	struct xmm7xxx_data *data = ofono_modem_get_data(modem);
 
 	DBG("%p", modem);
-
-	g_at_chat_cancel_all(data->modem);
-	g_at_chat_unregister_all(data->modem);
-	g_at_chat_unref(data->modem);
-	data->modem = NULL;
 
 	g_at_chat_cancel_all(data->chat);
 	g_at_chat_unregister_all(data->chat);
 
 	/* Power down modem */
-	g_at_chat_send(data->chat, "AT+CFUN=4", none_prefix,
+	g_at_chat_send(data->chat, "AT+CFUN=0", none_prefix,
 				cfun_disable_cb, modem, NULL);
 
 	return -EINPROGRESS;
 }
 
-static void he910_pre_sim(struct ofono_modem *modem)
+static void xmm7xxx_pre_sim(struct ofono_modem *modem)
 {
-	struct he910_data *data = ofono_modem_get_data(modem);
+	struct xmm7xxx_data *data = ofono_modem_get_data(modem);
 
 	DBG("%p", modem);
 
-	ofono_devinfo_create(modem, 0, "atmodem", data->chat);
-	data->sim = ofono_sim_create(modem, OFONO_VENDOR_TELIT, "atmodem",
+	ofono_devinfo_create(modem, OFONO_VENDOR_IFX, "atmodem", data->chat);
+	data->sim = ofono_sim_create(modem, OFONO_VENDOR_IFX, "atmodem",
 					data->chat);
-	ofono_location_reporting_create(modem, 0, "telitmodem", data->chat);
 }
 
-static void he910_post_online(struct ofono_modem *modem)
+static void set_online_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
-	struct he910_data *data = ofono_modem_get_data(modem);
-	struct ofono_message_waiting *mw;
+	struct cb_data *cbd = user_data;
+	ofono_modem_online_cb_t cb = cbd->cb;
+	struct ofono_error error;
+
+	decode_at_error(&error, g_at_result_final_response(result));
+	cb(&error, cbd->data);
+}
+
+static void xmm7xxx_set_online(struct ofono_modem *modem, ofono_bool_t online,
+				ofono_modem_online_cb_t cb, void *user_data)
+{
+	struct xmm7xxx_data *data = ofono_modem_get_data(modem);
+	struct cb_data *cbd = cb_data_new(cb, user_data);
+	char const *command = online ? "AT+CFUN=1" : "AT+CFUN=4";
+
+	DBG("modem %p %s", modem, online ? "online" : "offline");
+
+	if (g_at_chat_send(data->chat, command, none_prefix,
+					set_online_cb, cbd, g_free) > 0)
+		return;
+
+	CALLBACK_WITH_FAILURE(cb, cbd->data);
+
+	g_free(cbd);
+}
+
+static void xmm7xxx_post_sim(struct ofono_modem *modem)
+{
+	struct xmm7xxx_data *data = ofono_modem_get_data(modem);
+
+	ofono_lte_create(modem, "atmodem", data->chat);
+	ofono_radio_settings_create(modem, 0, "xmm7modem", data->chat);
+}
+
+static void xmm7xxx_post_online(struct ofono_modem *modem)
+{
+	struct xmm7xxx_data *data = ofono_modem_get_data(modem);
 	struct ofono_gprs *gprs;
 	struct ofono_gprs_context *gc;
 
 	DBG("%p", modem);
 
-	ofono_voicecall_create(modem, 0, "atmodem", data->chat);
-	ofono_netreg_create(modem, OFONO_VENDOR_TELIT, "atmodem", data->chat);
-	ofono_ussd_create(modem, 0, "atmodem", data->chat);
-	ofono_call_forwarding_create(modem, 0, "atmodem", data->chat);
-	ofono_call_settings_create(modem, 0, "atmodem", data->chat);
-	ofono_call_meter_create(modem, 0, "atmodem", data->chat);
-	ofono_call_barring_create(modem, 0, "atmodem", data->chat);
+	ofono_netreg_create(modem, OFONO_VENDOR_IFX, "atmodem", data->chat);
 
-	mw = ofono_message_waiting_create(modem);
-	if (mw)
-		ofono_message_waiting_register(mw);
-
-	gprs = ofono_gprs_create(modem, OFONO_VENDOR_TELIT, "atmodem",
+	gprs = ofono_gprs_create(modem, OFONO_VENDOR_IFX, "atmodem",
 					data->chat);
-	gc = ofono_gprs_context_create(modem, 0, "atmodem", data->modem);
+	gc = ofono_gprs_context_create(modem, OFONO_VENDOR_XMM, "ifxmodem",
+					data->chat);
 
 	if (gprs && gc)
 		ofono_gprs_add_context(gprs, gc);
 }
 
-static int he910_probe(struct ofono_modem *modem)
+static int xmm7xxx_probe(struct ofono_modem *modem)
 {
-	struct he910_data *data;
+	struct xmm7xxx_data *data;
 
 	DBG("%p", modem);
 
-	data = g_try_new0(struct he910_data, 1);
+	data = g_try_new0(struct xmm7xxx_data, 1);
 	if (data == NULL)
 		return -ENOMEM;
 
@@ -366,9 +357,9 @@ static int he910_probe(struct ofono_modem *modem)
 	return 0;
 }
 
-static void he910_remove(struct ofono_modem *modem)
+static void xmm7xxx_remove(struct ofono_modem *modem)
 {
-	struct he910_data *data = ofono_modem_get_data(modem);
+	struct xmm7xxx_data *data = ofono_modem_get_data(modem);
 
 	DBG("%p", modem);
 
@@ -376,32 +367,33 @@ static void he910_remove(struct ofono_modem *modem)
 
 	/* Cleanup after hot-unplug */
 	g_at_chat_unref(data->chat);
-	g_at_chat_unref(data->modem);
 
 	g_free(data);
 }
 
-static struct ofono_modem_driver he910_driver = {
-	.name		= "he910",
-	.probe		= he910_probe,
-	.remove		= he910_remove,
-	.enable		= he910_enable,
-	.disable	= he910_disable,
-	.pre_sim	= he910_pre_sim,
-	.post_online	= he910_post_online,
+static struct ofono_modem_driver xmm7xxx_driver = {
+	.name		= "xmm7xxx",
+	.probe		= xmm7xxx_probe,
+	.remove		= xmm7xxx_remove,
+	.enable		= xmm7xxx_enable,
+	.disable	= xmm7xxx_disable,
+	.set_online	= xmm7xxx_set_online,
+	.pre_sim	= xmm7xxx_pre_sim,
+	.post_sim	= xmm7xxx_post_sim,
+	.post_online	= xmm7xxx_post_online,
 };
 
-static int he910_init(void)
+static int xmm7xxx_init(void)
 {
 	DBG("");
 
-	return ofono_modem_driver_register(&he910_driver);
+	return ofono_modem_driver_register(&xmm7xxx_driver);
 }
 
-static void he910_exit(void)
+static void xmm7xxx_exit(void)
 {
-	ofono_modem_driver_unregister(&he910_driver);
+	ofono_modem_driver_unregister(&xmm7xxx_driver);
 }
 
-OFONO_PLUGIN_DEFINE(he910, "Telit HE910 driver", VERSION,
-		OFONO_PLUGIN_PRIORITY_DEFAULT, he910_init, he910_exit)
+OFONO_PLUGIN_DEFINE(xmm7xxx, "Intel XMM7xxx driver", VERSION,
+		OFONO_PLUGIN_PRIORITY_DEFAULT, xmm7xxx_init, xmm7xxx_exit)

@@ -543,7 +543,7 @@ static void at_f_cb(GAtServer *server, GAtServerRequestType type,
 						G_AT_SERVER_RESULT_ERROR);
 			return;
 		}
-		/* intentional fallback here */
+		/* fall through */
 
 	case G_AT_SERVER_REQUEST_TYPE_COMMAND_ONLY:
 		/* default behavior on AT&F same as ATZ */

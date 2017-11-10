@@ -1,0 +1,97 @@
+#!/usr/bin/python3
+
+from gi.repository import GLib
+
+import sys
+import dbus
+import dbus.service
+import dbus.mainloop.glib
+
+NETMON_INTERFACE = "org.ofono.NetworkMonitor"
+AGENT_INTERFACE = "org.ofono.NetworkMonitorAgent"
+
+class NetworkMonitorAgent(dbus.service.Object):
+	@dbus.service.method(AGENT_INTERFACE,
+				in_signature="", out_signature="")
+	def Release(self):
+		print("Agent Released")
+		mainloop.quit()
+
+	@dbus.service.method(AGENT_INTERFACE,
+				in_signature="a{sv}", out_signature="")
+	def ServingCellInformationChanged(self, servingcell):
+		print("ServingCellInformationChanged notification recieved")
+
+		tech = 'Technology'
+		mcc = 'MobileCountryCode'
+		mnc = 'MobileNetworkCode'
+		lac = 'LocationAreaCode'
+		cid = 'CellId'
+		psc = 'PrimaryScramblingCode'
+		rssi = 'Strength'
+		ber = 'BitErrorRate'
+
+		if tech in servingcell:
+			print("    [ Radio Access Technology = %s]" \
+				% (servingcell[tech]))
+
+		if mcc in servingcell:
+			print("    [ Mobile Country Code = %s]" \
+				% (servingcell[mcc]))
+
+		if mnc in servingcell:
+			print("    [ Mobile Network Code = %s]" \
+				% (servingcell[mnc]))
+
+		if lac in servingcell:
+			print("    [ Location Area Code = %d]" \
+				% (servingcell[lac]))
+
+		if cid in servingcell:
+			print("    [ Cell Identity = %d]" \
+				% (servingcell[cid]))
+
+		if psc in servingcell:
+			print("    [ Primary Scrambling Code = %d]" \
+				% (servingcell[psc]))
+
+		if rssi in servingcell:
+			print("    [ Signal Strength = %d]" \
+				% (servingcell[rssi]))
+
+		if ber in servingcell:
+			print("    [ Bit Error Rate = %d]" \
+				% (servingcell[ber]))
+
+		print('')
+
+if __name__ == '__main__':
+	dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+
+	if len(sys.argv) < 2:
+		print("Usage: %s <update_period_in_seconds>" %\
+				(sys.argv[0]))
+		sys.exit(1)
+
+	bus = dbus.SystemBus()
+	manager = dbus.Interface(bus.get_object("org.ofono", "/"),
+							"org.ofono.Manager")
+
+	modems = manager.GetModems()
+	path = modems[0][0]
+	nm = dbus.Interface(bus.get_object('org.ofono', path),
+					NETMON_INTERFACE)
+
+	path = "/test/netmonagent"
+	agent = NetworkMonitorAgent(bus, path)
+
+	try:
+		period = int(sys.argv[1])
+	except:
+		print("Error: Invalid argument %s" % (sys.argv[1]))
+		sys.exit(1)
+
+	nm.RegisterAgent(path, period)
+	print("Agent registered")
+	mainloop = GLib.MainLoop()
+	mainloop.run()

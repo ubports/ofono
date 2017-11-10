@@ -26,6 +26,14 @@ cid = 'CellId'
 psc = 'PrimaryScramblingCode'
 rssi = 'Strength'
 ber = 'BitErrorRate'
+rxlev = 'ReceivedSignalStrength'
+rscp = 'ReceivedSignalCodePower'
+ecn0 = 'ReceivedEnergyRatio'
+rsrq = 'ReferenceSignalReceivedQuality'
+rsrp = 'ReferenceSignalReceivedPower'
+earfcn = 'EARFCN'
+eband = 'EBand'
+cqi = 'ChannelQualityIndicator'
 
 print("Current serving cell information:")
 
@@ -50,7 +58,31 @@ if psc in servingcell:
 if rssi in servingcell:
 	print("    [ Signal Strength = %d]" % (servingcell[rssi]))
 
+if rxlev in servingcell:
+	print("    [ Received Signal Strength = %d]" % (servingcell[rxlev]))
+
 if ber in servingcell:
 	print("    [ Bit Error Rate = %d]" % (servingcell[ber]))
+
+if rscp in servingcell:
+	print("    [ Received Signal Code Power = %d]" % (servingcell[rscp]))
+
+if ecn0 in servingcell:
+	print("    [ Received Energy Ratio = %d]" % (servingcell[ecn0]))
+
+if rsrq in servingcell:
+	print("    [ Reference Signal Received Quality = %d]" % (servingcell[rsrq]))
+
+if rsrp in servingcell:
+	print("    [ Reference Signal Received Power = %d]" % (servingcell[rsrp]))
+
+if earfcn in servingcell:
+	print("    [ E-UTRA Absolue Radio Frequency Channel = %d ]" % (servingcell[earfcn]))
+
+if eband in servingcell:
+	print("    [ E-UTRA operating Band = %d ]" % (servingcell[eband]))
+
+if cqi in servingcell:
+	print("    [ Channel Quality Indicator = %d ]" % (servingcell[cqi]))
 
 print('')

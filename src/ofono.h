@@ -153,6 +153,7 @@ enum ofono_atom_type {
 	OFONO_ATOM_TYPE_HANDSFREE,
 	OFONO_ATOM_TYPE_SIRI,
 	OFONO_ATOM_TYPE_NETMON,
+	OFONO_ATOM_TYPE_LTE,
 };
 
 enum ofono_atom_watch_condition {
@@ -532,3 +533,4 @@ ofono_bool_t __ofono_private_network_request(ofono_private_network_cb_t cb,
 						int *id, void *data);
 
 #include <ofono/netmon.h>
+#include <ofono/lte.h>

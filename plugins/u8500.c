@@ -127,6 +127,7 @@ static void set_power_by_mce_state(struct ofono_modem *modem,
 	case MCE_NORMAL:
 		if (isi->online_cbd)
 			report_online(isi, mce_state == MCE_NORMAL);
+		/* fall through */
 	default:
 		report_powered(modem, isi, TRUE);
 	}

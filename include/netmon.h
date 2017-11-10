@@ -39,6 +39,10 @@ struct ofono_netmon_driver {
 	void (*remove)(struct ofono_netmon *netmon);
 	void (*request_update)(struct ofono_netmon *netmon,
 					ofono_netmon_cb_t cb, void *data);
+	void (*enable_periodic_update)(struct ofono_netmon *netmon,
+					unsigned int enable,
+					unsigned int period,
+					ofono_netmon_cb_t cb, void *data);
 };
 
 enum ofono_netmon_cell_type {
@@ -59,6 +63,13 @@ enum ofono_netmon_info {
 	OFONO_NETMON_INFO_RSSI, /* int */
 	OFONO_NETMON_INFO_TIMING_ADVANCE, /* int */
 	OFONO_NETMON_INFO_PSC, /* int */
+	OFONO_NETMON_INFO_RSCP, /* int */
+	OFONO_NETMON_INFO_ECN0, /* int */
+	OFONO_NETMON_INFO_RSRQ, /* int */
+	OFONO_NETMON_INFO_RSRP, /* int */
+	OFONO_NETMON_INFO_EARFCN, /* int */
+	OFONO_NETMON_INFO_EBAND, /* int */
+	OFONO_NETMON_INFO_CQI, /* int */
 	OFONO_NETMON_INFO_INVALID,
 };
 

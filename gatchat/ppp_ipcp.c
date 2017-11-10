@@ -401,9 +401,11 @@ static enum rcr_result ipcp_client_rcr(struct ipcp_data *ipcp,
 				break;
 
 			/*
-			 * Fall through, reject IP_ADDRESS if peer sends
-			 * us 0 (expecting us to provide its IP address)
+			 * Reject IP_ADDRESS if peer sends us 0 (expecting
+			 * us to provide its IP address)
 			 */
+
+			/* fall through */
 		default:
 			if (options == NULL) {
 				guint16 max_len = ntohs(packet->length) - 4;

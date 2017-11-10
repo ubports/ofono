@@ -1,0 +1,16 @@
+
+HardwareMonitor hierarchy
+=========================
+
+Service		org.ofono
+Interface	org.ofono.cinterion.HardwareMonitor
+Object path	/{device0,device1,...}
+
+Methods		array{string,variant} GetStatistics
+
+			Returns an array of dict entries representing the
+			current temperature and supply voltage of the modem.
+
+			Units:
+			Temperature: Celsius
+			Voltage: mV

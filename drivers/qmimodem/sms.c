@@ -277,7 +277,7 @@ static void qmi_bearer_query(struct ofono_sms *sms,
 
 	DBG("");
 
-	if (data->major < 1 && data->minor < 2)
+	if (data->major < 1 || (data->major == 1 && data->minor < 2))
 		goto error;
 
 	if (qmi_service_send(data->wms, QMI_WMS_GET_DOMAIN_PREF, NULL,
@@ -315,7 +315,7 @@ static void qmi_bearer_set(struct ofono_sms *sms, int bearer,
 
 	DBG("bearer %d", bearer);
 
-	if (data->major < 1 && data->minor < 2)
+	if (data->major < 1 || (data->major == 1 && data->minor < 2))
 		goto error;
 
 	domain = bearer_to_domain(bearer);
@@ -411,7 +411,7 @@ static void get_routes_cb(struct qmi_result *result, void *user_data)
 	new_list->count = GUINT16_TO_LE(1);
 	new_list->route[0].msg_type = QMI_WMS_MSG_TYPE_P2P;
 	new_list->route[0].msg_class = QMI_WMS_MSG_CLASS_NONE;
-	new_list->route[0].storage_type = QMI_WMS_STORAGE_TYPE_NV;
+	new_list->route[0].storage_type = QMI_WMS_STORAGE_TYPE_NONE;
 	new_list->route[0].action = QMI_WMS_ACTION_TRANSFER_AND_ACK;
 
 	param = qmi_param_new();

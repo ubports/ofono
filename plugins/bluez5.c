@@ -155,8 +155,10 @@ void bt_unregister_profile(DBusConnection *conn, const char *object)
 		return;
 	}
 
-	dbus_pending_call_set_notify(c, unregister_profile_cb, NULL, NULL);
-	dbus_pending_call_unref(c);
+	if (c) {
+		dbus_pending_call_set_notify(c, unregister_profile_cb, NULL, NULL);
+		dbus_pending_call_unref(c);
+	}
 
 	dbus_message_unref(msg);
 }

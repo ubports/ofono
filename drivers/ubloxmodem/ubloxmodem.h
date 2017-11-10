@@ -21,5 +21,13 @@
 
 #include <drivers/atmodem/atutil.h>
 
+#define UBLOXMODEM "ubloxmodem"
+
 extern void ublox_gprs_context_init(void);
 extern void ublox_gprs_context_exit(void);
+
+extern void ublox_netmon_init(void);
+extern void ublox_netmon_exit(void);
+
+extern void ublox_lte_init(void);
+extern void ublox_lte_exit(void);

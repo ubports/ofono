@@ -35,17 +35,31 @@
 #define QMI_SERVICE_CAT		10	/* Card application toolkit service */
 #define QMI_SERVICE_UIM		11	/* UIM service */
 #define QMI_SERVICE_PBM		12	/* Phonebook service */
+#define QMI_SERVICE_QCHAT	13
 #define QMI_SERVICE_RMTFS	14	/* Remote file system service */
+#define QMI_SERVICE_TEST	15
 #define QMI_SERVICE_LOC		16	/* Location service */
 #define QMI_SERVICE_SAR		17	/* Specific absorption rate service */
 #define QMI_SERVICE_CSD		20	/* Core sound driver service */
 #define QMI_SERVICE_EFS		21	/* Embedded file system service */
 #define QMI_SERVICE_TS		23	/* Thermal sensors service */
 #define QMI_SERVICE_TMD		24	/* Thermal mitigation device service */
+#define QMI_SERVICE_WDA		26	/* Wireless data administrative service */
+#define QMI_SERVICE_CSVT	29
+#define QMI_SERVICE_COEX	34
 #define QMI_SERVICE_PDC		36	/* Persistent device configuration service */
+#define QMI_SERVICE_RFRPE	41
+#define QMI_SERVICE_DSD		42
+#define QMI_SERVICE_SSCTL	43
 #define QMI_SERVICE_CAT_OLD	224	/* Card application toolkit service */
 #define QMI_SERVICE_RMS		225	/* Remote management service */
 #define QMI_SERVICE_OMA		226	/* OMA device management service */
+
+enum qmi_device_expected_data_format {
+	QMI_DEVICE_EXPECTED_DATA_FORMAT_UNKNOWN,
+	QMI_DEVICE_EXPECTED_DATA_FORMAT_802_3,
+	QMI_DEVICE_EXPECTED_DATA_FORMAT_RAW_IP,
+};
 
 struct qmi_version {
 	uint8_t type;
@@ -82,6 +96,10 @@ bool qmi_device_discover(struct qmi_device *device, qmi_discover_func_t func,
 bool qmi_device_shutdown(struct qmi_device *device, qmi_shutdown_func_t func,
 				void *user_data, qmi_destroy_func_t destroy);
 
+enum qmi_device_expected_data_format qmi_device_get_expected_data_format(
+						struct qmi_device *device);
+bool qmi_device_set_expected_data_format(struct qmi_device *device,
+			enum qmi_device_expected_data_format format);
 
 struct qmi_param;
 
@@ -112,13 +130,15 @@ const void *qmi_result_get(struct qmi_result *result, uint8_t type,
 char *qmi_result_get_string(struct qmi_result *result, uint8_t type);
 bool qmi_result_get_uint8(struct qmi_result *result, uint8_t type,
 							uint8_t *value);
+bool qmi_result_get_int16(struct qmi_result *result, uint8_t type,
+							int16_t *value);
 bool qmi_result_get_uint16(struct qmi_result *result, uint8_t type,
 							uint16_t *value);
 bool qmi_result_get_uint32(struct qmi_result *result, uint8_t type,
 							uint32_t *value);
 bool qmi_result_get_uint64(struct qmi_result *result, uint8_t type,
 							uint64_t *value);
-
+void qmi_result_print_tlvs(struct qmi_result *result);
 
 struct qmi_service;
 
