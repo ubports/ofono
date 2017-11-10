@@ -102,6 +102,16 @@ extern const uint8_t mbim_uuid_stk[];
 extern const uint8_t mbim_uuid_auth[];
 extern const uint8_t mbim_uuid_dss[];
 
+extern const uint8_t mbim_context_type_none[];
+extern const uint8_t mbim_context_type_internet[];
+extern const uint8_t mbim_context_type_vpn[];
+extern const uint8_t mbim_context_type_voice[];
+extern const uint8_t mbim_context_type_video_share[];
+extern const uint8_t mbim_context_type_purchase[];
+extern const uint8_t mbim_context_type_ims[];
+extern const uint8_t mbim_context_type_mms[];
+extern const uint8_t mbim_context_type_local[];
+
 struct mbim_device *mbim_device_new(int fd, uint32_t max_segment_size);
 bool mbim_device_set_close_on_unref(struct mbim_device *device, bool do_close);
 struct mbim_device *mbim_device_ref(struct mbim_device *device);
