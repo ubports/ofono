@@ -1,3 +1,46 @@
+ver 1.21:
+	Fix issue with USSD notification received handling.
+	Fix issue with crashing SIM filesystem notifications.
+	Fix issue with LTE bearer reporting and Huawei modems.
+	Fix issue with invalid memory access and QMI.
+	Add support for QMI SIM writing functionality.
+	Add support for RAT selection for QMI modems.
+	Add support for network monitor agent interface.
+	Add support for Cinterion Hardware Monitor interface.
+	Add support for LTE atom driver for Huawei modems.
+	Add support for LTE atom driver for AT modems.
+	Add support for Intel xmm7xxx series modems.
+
+ver 1.20:
+	Fix issue with context removal before activation.
+	Fix issue with update during GPRS context activation.
+	Fix issue with receiving UTF-16 encoded messages.
+	Fix issue with invalid access in CBS decoding.
+	Fix issue with signal strength on QMI modems.
+	Fix issue with PIN handling with QMI modems.
+	Fix issue with QMI notification message handling.
+	Fix issue with facility lock query on SIM removal.
+	Fix issue with parsing +CLCC and +CCWA fields.
+	Add support for obtaining IMSI via EF reading.
+	Add support for additional netmon info types.
+	Add support for provisioning via configuration files.
+	Add support for Gemalto P-family series of modems.
+	Add support for Telit HE910 and UE910 variants.
+	Add support for Intel SoFIA SIM Toolkit interfaces.
+	Add support for Intel SoFIA LTE features.
+	Add support for U-Blox TOBY-L2 LTE feature.
+	Add support for dedicated LTE atom.
+
+ver 1.19:
+	Fix issue with DHCP parsing and Huawei modems.
+	Fix issue with detecting Huawei E3372 modem.
+	Fix issue with handling serving cell info.
+	Fix issue with handling SIM SC facility lock.
+	Fix issue with Android RIL PIN retry logic.
+	Fix issue with Android RIL and RAT handling.
+	Add support for Android RIL cell broadcast.
+	Add support for SoFIA 3GR thermal management.
+
 ver 1.18:
 	Fix issue with cell broadcast and use-after-fee.
 	Fix issue with repeated held call indicator.

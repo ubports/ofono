@@ -319,26 +319,6 @@ static void at_cnma_cb(gboolean ok, GAtResult *result, gpointer user_data)
 				"Further SMS reception is not guaranteed");
 }
 
-static gboolean at_parse_cmt(GAtResult *result,	const char **pdu, int *pdulen)
-{
-	GAtResultIter iter;
-
-	g_at_result_iter_init(&iter, result);
-
-	if (!g_at_result_iter_next(&iter, "+CMT:"))
-		return FALSE;
-
-	if (!g_at_result_iter_skip_next(&iter))
-		return FALSE;
-
-	if (!g_at_result_iter_next_number(&iter, pdulen))
-		return FALSE;
-
-	*pdu = g_at_result_pdu(result);
-
-	return TRUE;
-}
-
 static inline void at_ack_delivery(struct ofono_sms *sms)
 {
 	struct sms_data *data = ofono_sms_get_data(sms);
@@ -347,11 +327,21 @@ static inline void at_ack_delivery(struct ofono_sms *sms)
 	DBG("");
 
 	/* We must acknowledge the PDU using CNMA */
-	if (data->cnma_ack_pdu)
-		snprintf(buf, sizeof(buf), "AT+CNMA=1,%d\r%s",
-				data->cnma_ack_pdu_len, data->cnma_ack_pdu);
-	else /* Should be a safe fallback */
+	if (data->cnma_ack_pdu) {
+		switch (data->vendor) {
+		case OFONO_VENDOR_CINTERION:
+			snprintf(buf, sizeof(buf), "AT+CNMA=1");
+			break;
+		default:
+			snprintf(buf, sizeof(buf), "AT+CNMA=1,%d\r%s",
+					data->cnma_ack_pdu_len,
+					data->cnma_ack_pdu);
+			break;
+		}
+	} else {
+		/* Should be a safe fallback */
 		snprintf(buf, sizeof(buf), "AT+CNMA=0");
+	}
 
 	g_at_chat_send(data->chat, buf, none_prefix, at_cnma_cb, NULL, NULL);
 }
@@ -409,15 +399,33 @@ static void at_cmt_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_sms *sms = user_data;
 	struct sms_data *data = ofono_sms_get_data(sms);
+	GAtResultIter iter;
 	const char *hexpdu;
+	unsigned char pdu[176];
 	long pdu_len;
 	int tpdu_len;
-	unsigned char pdu[176];
 
-	if (!at_parse_cmt(result, &hexpdu, &tpdu_len)) {
-		ofono_error("Unable to parse CMT notification");
-		return;
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "+CMT:"))
+		goto err;
+
+	switch (data->vendor) {
+	case OFONO_VENDOR_CINTERION:
+		if (!g_at_result_iter_next_number(&iter, &tpdu_len))
+			goto err;
+		break;
+	default:
+		if (!g_at_result_iter_skip_next(&iter))
+			goto err;
+
+		if (!g_at_result_iter_next_number(&iter, &tpdu_len))
+			goto err;
+
+		break;
 	}
+
+	hexpdu = g_at_result_pdu(result);
 
 	if (strlen(hexpdu) > sizeof(pdu) * 2) {
 		ofono_error("Bad PDU length in CMT notification");
@@ -431,6 +439,9 @@ static void at_cmt_notify(GAtResult *result, gpointer user_data)
 
 	if (data->vendor != OFONO_VENDOR_SIMCOM)
 		at_ack_delivery(sms);
+
+err:
+	ofono_error("Unable to parse CMT notification");
 }
 
 static void at_cmgr_notify(GAtResult *result, gpointer user_data)
@@ -742,7 +753,7 @@ static void at_sms_initialized(struct ofono_sms *sms)
 
 static void at_sms_not_supported(struct ofono_sms *sms)
 {
-	ofono_error("SMS not supported by this modem.  If this is in error"
+	ofono_error("SMS not supported by this modem.  If this is an error"
 			" please submit patches to support this hardware");
 
 	ofono_sms_remove(sms);

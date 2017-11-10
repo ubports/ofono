@@ -78,6 +78,8 @@ enum {
 struct huawei_data {
 	GAtChat *modem;
 	GAtChat *pcui;
+	struct ofono_gprs *gprs;
+	struct ofono_gprs_context *gc;
 	gboolean have_sim;
 	int sim_state;
 	guint sysinfo_poll_source;
@@ -584,6 +586,48 @@ static GAtChat *open_device(struct ofono_modem *modem,
 	return chat;
 }
 
+static void modem_disconnect(gpointer user_data)
+{
+	struct ofono_modem *modem = user_data;
+	struct huawei_data *data = ofono_modem_get_data(modem);
+
+	if (data == NULL) {
+		DBG("Modem has already been removed");
+		return;
+	}
+
+	ofono_warn("Modem channel disconnected");
+
+	/* clean and close modem device */
+	g_at_chat_cancel_all(data->modem);
+	g_at_chat_unregister_all(data->modem);
+	g_at_chat_unref(data->modem);
+	data->modem = NULL;
+
+	/* close gprs context driver */
+	ofono_gprs_context_remove(data->gc);
+
+	/* reopen modem channel */
+	data->modem = open_device(modem, "Modem", "Modem: ");
+
+	if (data->modem == NULL) {
+		DBG("Can't reopen device");
+		return;
+	}
+
+	/* configure modem channel */
+	g_at_chat_set_disconnect_function(data->modem, modem_disconnect, modem);
+	g_at_chat_set_slave(data->modem, data->pcui);
+	g_at_chat_send(data->modem, "ATE0 +CMEE=1", NULL, NULL, NULL, NULL);
+
+	/* reopen gprs context driver */
+	data->gc = ofono_gprs_context_create(modem, OFONO_VENDOR_HUAWEI,
+						"atmodem", data->modem);
+
+	if (data->gprs && data->gc)
+		ofono_gprs_add_context(data->gprs, data->gc);
+}
+
 static int huawei_enable(struct ofono_modem *modem)
 {
 	struct huawei_data *data = ofono_modem_get_data(modem);
@@ -593,6 +637,8 @@ static int huawei_enable(struct ofono_modem *modem)
 	data->modem = open_device(modem, "Modem", "Modem: ");
 	if (data->modem == NULL)
 		return -EINVAL;
+
+	g_at_chat_set_disconnect_function(data->modem, modem_disconnect, modem);
 
 	data->pcui = open_device(modem, "Pcui", "PCUI: ");
 	if (data->pcui == NULL) {
@@ -820,9 +866,6 @@ static void huawei_post_sim(struct ofono_modem *modem)
 	}
 
 	if (data->have_gsm == TRUE) {
-		struct ofono_gprs *gprs;
-		struct ofono_gprs_context *gc;
-
 		ofono_phonebook_create(modem, 0, "atmodem", data->pcui);
 		ofono_radio_settings_create(modem, 0,
 						"huaweimodem", data->pcui);
@@ -830,13 +873,13 @@ static void huawei_post_sim(struct ofono_modem *modem)
 		ofono_sms_create(modem, OFONO_VENDOR_HUAWEI,
 						"atmodem", data->pcui);
 
-		gprs = ofono_gprs_create(modem, OFONO_VENDOR_HUAWEI,
+		data->gprs = ofono_gprs_create(modem, OFONO_VENDOR_HUAWEI,
 						"atmodem", data->pcui);
-		gc = ofono_gprs_context_create(modem, 0,
+		data->gc = ofono_gprs_context_create(modem, 0,
 						"atmodem", data->modem);
 
-		if (gprs && gc)
-			ofono_gprs_add_context(gprs, gc);
+		if (data->gprs && data->gc)
+			ofono_gprs_add_context(data->gprs, data->gc);
 	}
 }
 

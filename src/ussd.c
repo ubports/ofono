@@ -512,6 +512,20 @@ void ofono_ussd_notify(struct ofono_ussd *ussd, int status, int dcs,
 
 		ussd_change_state(ussd, new_state);
 		goto free;
+	} else if (ussd->state == USSD_STATE_USER_ACTION &&
+				status != OFONO_USSD_STATUS_ACTION_REQUIRED) {
+		ussd_change_state(ussd, USSD_STATE_IDLE);
+
+		if (status == OFONO_USSD_STATUS_NOTIFY && str && str[0]) {
+			const char *path = __ofono_atom_get_path(ussd->atom);
+
+			g_dbus_emit_signal(conn, path,
+				OFONO_SUPPLEMENTARY_SERVICES_INTERFACE,
+				"NotificationReceived", DBUS_TYPE_STRING,
+				&str, DBUS_TYPE_INVALID);
+		}
+
+		goto free;
 	} else {
 		ofono_error("Received an unsolicited USSD but can't handle.");
 		DBG("USSD is: status: %d, %s", status, str);

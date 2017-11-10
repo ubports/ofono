@@ -23,6 +23,7 @@
 #include <config.h>
 #endif
 
+#include <endian.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -43,18 +44,36 @@ struct netreg_data {
 	uint8_t current_rat;
 };
 
-static int rat_to_tech(uint8_t rat)
+static bool extract_ss_info_time(
+		struct qmi_result *result,
+		struct ofono_network_time *time)
 {
-	switch (rat) {
-	case QMI_NAS_NETWORK_RAT_GSM:
-		return ACCESS_TECHNOLOGY_GSM;
-	case QMI_NAS_NETWORK_RAT_UMTS:
-		return ACCESS_TECHNOLOGY_UTRAN;
-	case QMI_NAS_NETWORK_RAT_LTE:
-		return ACCESS_TECHNOLOGY_EUTRAN;
+	const struct qmi_nas_3gpp_time *time_3gpp = NULL;
+	uint8_t dst_3gpp;
+	bool dst_3gpp_valid;
+	uint16_t len;
+
+	/* parse 3gpp time & dst */
+	dst_3gpp_valid = qmi_result_get_uint8(result, QMI_NAS_RESULT_3GGP_DST,
+						&dst_3gpp);
+
+	time_3gpp = qmi_result_get(result, QMI_NAS_RESULT_3GPP_TIME, &len);
+	if (time_3gpp && len == sizeof(struct qmi_nas_3gpp_time) &&
+			dst_3gpp_valid) {
+		time->year = le16toh(time_3gpp->year);
+		time->mon = time_3gpp->month;
+		time->mday = time_3gpp->day;
+		time->hour = time_3gpp->hour;
+		time->min = time_3gpp->minute;
+		time->sec = time_3gpp->second;
+		time->utcoff = time_3gpp->timezone * 15 * 60;
+		time->dst = dst_3gpp;
+		return true;
 	}
 
-	return -1;
+	/* TODO: 3gpp2 */
+
+	return false;
 }
 
 static bool extract_ss_info(struct qmi_result *result, int *status,
@@ -64,7 +83,7 @@ static bool extract_ss_info(struct qmi_result *result, int *status,
 	const struct qmi_nas_serving_system *ss;
 	const struct qmi_nas_current_plmn *plmn;
 	uint8_t i, roaming;
-	uint16_t value16, len;
+	uint16_t value16, len, opname_len;
 	uint32_t value32;
 
 	DBG("");
@@ -82,13 +101,13 @@ static bool extract_ss_info(struct qmi_result *result, int *status,
 	for (i = 0; i < ss->radio_if_count; i++) {
 		DBG("radio in use %d", ss->radio_if[i]);
 
-		*tech = rat_to_tech(ss->radio_if[i]);
+		*tech = qmi_nas_rat_to_tech(ss->radio_if[i]);
 	}
 
 	if (qmi_result_get_uint8(result, QMI_NAS_RESULT_ROAMING_STATUS,
 								&roaming)) {
 		if (ss->status == 1 && roaming == 0)
-			*status = 5;
+			*status = NETWORK_REGISTRATION_STATUS_ROAMING;
 	}
 
 	if (!operator)
@@ -100,8 +119,21 @@ static bool extract_ss_info(struct qmi_result *result, int *status,
 						GUINT16_FROM_LE(plmn->mcc));
 		snprintf(operator->mnc, OFONO_MAX_MNC_LENGTH + 1, "%02d",
 						GUINT16_FROM_LE(plmn->mnc));
-		strncpy(operator->name, plmn->desc, plmn->desc_len);
-		operator->name[plmn->desc_len] = '\0';
+		opname_len = plmn->desc_len;
+		if (opname_len > OFONO_MAX_OPERATOR_NAME_LENGTH)
+			opname_len = OFONO_MAX_OPERATOR_NAME_LENGTH;
+
+		/*
+		 * Telit QMI modems can return non-utf-8 characters in
+		 * plmn-desc. When that happens, libdbus will abort ofono.
+		 * If non-utf-8 characters are detected, use mccmnc string.
+		 */
+		if (g_utf8_validate(plmn->desc, opname_len, NULL)) {
+			strncpy(operator->name, plmn->desc, opname_len);
+			operator->name[opname_len] = '\0';
+		} else
+			snprintf(operator->name, OFONO_MAX_OPERATOR_NAME_LENGTH,
+					"%s%s",	operator->mcc, operator->mnc);
 
 		DBG("%s (%s:%s)", operator->name, operator->mcc, operator->mnc);
 	}
@@ -125,10 +157,14 @@ static bool extract_ss_info(struct qmi_result *result, int *status,
 static void ss_info_notify(struct qmi_result *result, void *user_data)
 {
 	struct ofono_netreg *netreg = user_data;
+	struct ofono_network_time net_time;
 	struct netreg_data *data = ofono_netreg_get_data(netreg);
 	int status, lac, cellid, tech;
 
 	DBG("");
+
+	if (extract_ss_info_time(result, &net_time))
+		ofono_netreg_time_notify(netreg, &net_time);
 
 	if (!extract_ss_info(result, &status, &lac, &cellid, &tech,
 							&data->operator))
@@ -265,7 +301,7 @@ static void scan_nets_cb(struct qmi_result *result, void *user_data)
 		DBG("%03d:%02d %d", netrat->info[i].mcc, netrat->info[i].mnc,
 							netrat->info[i].rat);
 
-		list[i].tech = rat_to_tech(netrat->info[i].rat);
+		list[i].tech = qmi_nas_rat_to_tech(netrat->info[i].rat);
 	}
 
 done:
@@ -357,7 +393,7 @@ static void qmi_register_manual(struct ofono_netreg *netreg,
 
 	info.mcc = atoi(mcc);
 	info.mnc = atoi(mnc);
-	info.rat = data->current_rat;
+	info.rat = QMI_NAS_NETWORK_RAT_NO_CHANGE;
 
 	qmi_param_append(param, QMI_NAS_PARAM_REGISTER_MANUAL_INFO,
 						sizeof(info), &info);
@@ -451,9 +487,10 @@ static void event_notify(struct qmi_result *result, void *user_data)
         if (ss) {
 		int strength;
 
-		DBG("signal with %d dBm on %d", ss->dbm, ss->rat);
-
 		strength = dbm_to_strength(ss->dbm);
+
+		DBG("signal with %d%%(%d dBm) on %d",
+				strength, ss->dbm, ss->rat);
 
 		ofono_netreg_strength_notify(netreg, strength);
 	}
@@ -474,10 +511,17 @@ static void event_notify(struct qmi_result *result, void *user_data)
 static void set_event_cb(struct qmi_result *result, void *user_data)
 {
 	struct ofono_netreg *netreg = user_data;
+	struct netreg_data *data = ofono_netreg_get_data(netreg);
 
 	DBG("");
 
 	ofono_netreg_register(netreg);
+
+	qmi_service_register(data->nas, QMI_NAS_EVENT,
+					event_notify, netreg, NULL);
+
+	qmi_service_register(data->nas, QMI_NAS_SS_INFO_IND,
+					ss_info_notify, netreg, NULL);
 }
 
 static void create_nas_cb(struct qmi_service *service, void *user_data)
@@ -498,12 +542,6 @@ static void create_nas_cb(struct qmi_service *service, void *user_data)
 	}
 
 	data->nas = qmi_service_ref(service);
-
-	qmi_service_register(data->nas, QMI_NAS_EVENT,
-					event_notify, netreg, NULL);
-
-	qmi_service_register(data->nas, QMI_NAS_SS_INFO_IND,
-					ss_info_notify, netreg, NULL);
 
 	param = qmi_param_new();
 	if (!param)
@@ -543,7 +581,7 @@ static int qmi_netreg_probe(struct ofono_netreg *netreg,
 
 	ofono_netreg_set_data(netreg, data);
 
-	qmi_service_create(device, QMI_SERVICE_NAS,
+	qmi_service_create_shared(device, QMI_SERVICE_NAS,
 					create_nas_cb, netreg, NULL);
 
 	return 0;

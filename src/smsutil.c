@@ -2218,6 +2218,7 @@ char *sms_decode_text(GSList *sms_list)
 	const struct sms *sms;
 	int guess_size = g_slist_length(sms_list);
 	char *utf8;
+	GByteArray *utf16 = 0;
 
 	if (guess_size == 1)
 		guess_size = 160;
@@ -2289,8 +2290,12 @@ char *sms_decode_text(GSList *sms_list)
 								NULL, NULL, 0,
 								locking_shift,
 								single_shift);
+			if (converted) {
+				g_string_append(str, converted);
+				g_free(converted);
+			}
 		} else {
-			const gchar *from = (const gchar *) (ud + taken);
+			const guint8 *from = ud + taken;
 			/*
 			 * According to the spec: A UCS2 character shall not be
 			 * split in the middle; if the length of the User Data
@@ -2300,15 +2305,33 @@ char *sms_decode_text(GSList *sms_list)
 			gssize num_ucs2_chars = (udl_in_bytes - taken) >> 1;
 			num_ucs2_chars = num_ucs2_chars << 1;
 
-			converted = g_convert(from, num_ucs2_chars,
-						"UTF-8//TRANSLIT", "UCS-2BE",
-						NULL, NULL, NULL);
+			/*
+			 * In theory SMS supports encoding using UCS2 which
+			 * is 16-bit, however in the real world messages
+			 * are encoded in UTF-16 which can be 4 bytes and
+			 * a multiple fragment message can split a 4-byte
+			 * character in the middle. So accumulate the
+			 * entire message before converting to UTF-8.
+			 */
+			if (!utf16)
+				utf16 = g_byte_array_new();
+
+			g_byte_array_append(utf16, from, num_ucs2_chars);
 		}
 
+	}
+
+	if (utf16) {
+		char *converted = g_convert_with_fallback((const gchar *)
+						utf16->data, utf16->len,
+						"UTF-8//TRANSLIT", "UTF-16BE",
+						NULL, NULL, NULL, NULL);
 		if (converted) {
 			g_string_append(str, converted);
 			g_free(converted);
 		}
+
+		g_byte_array_free(utf16, TRUE);
 	}
 
 	utf8 = g_string_free(str, FALSE);
@@ -4112,12 +4135,13 @@ char *cbs_decode_text(GSList *cbs_list, char *iso639_lang)
 			 */
 			for (; i < written; i++, bufsize++) {
 				if (unpacked[i] == '\r') {
-					int t;
+					int j;
 
-					t = strspn((const char *) unpacked + i,
-							"\r");
+					for (j = i + 1; j < written; j++)
+						if (unpacked[j] != '\r')
+							break;
 
-					if (t + i == written)
+					if (j == written)
 						break;
 				}
 

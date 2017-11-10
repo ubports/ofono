@@ -22,6 +22,7 @@ AC_DEFUN([COMPILER_FLAGS], [
 		CFLAGS="$CFLAGS -Wmissing-declarations"
 		CFLAGS="$CFLAGS -Wredundant-decls"
 		CFLAGS="$CFLAGS -Wcast-align"
+		CFLAGS="$CFLAGS -Wno-format-truncation"
 		CFLAGS="$CFLAGS -DG_DISABLE_DEPRECATED"
 	fi
 ])

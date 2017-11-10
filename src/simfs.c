@@ -226,6 +226,9 @@ void sim_fs_notify_file_watches(struct sim_fs *fs, int id)
 		struct ofono_sim_context *context = l->data;
 		GSList *k;
 
+		if (context->file_watches == NULL)
+			continue;
+
 		for (k = context->file_watches->items; k; k = k->next) {
 			struct file_watch *w = k->data;
 			ofono_sim_file_changed_cb_t notify = w->item.notify;

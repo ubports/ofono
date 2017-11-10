@@ -30,6 +30,7 @@
 #include <glib.h>
 
 #include <ofono/types.h>
+#include <ofono/gprs-context.h>
 #include "common.h"
 #include "util.h"
 
@@ -702,7 +703,13 @@ gboolean is_valid_apn(const char *apn)
 	int i;
 	int last_period = 0;
 
+	if (apn == NULL)
+		return FALSE;
+
 	if (apn[0] == '.' || apn[0] == '\0')
+		return FALSE;
+
+	if (strlen(apn) > OFONO_GPRS_MAX_APN_LENGTH)
 		return FALSE;
 
 	for (i = 0; apn[i] != '\0'; i++) {
@@ -735,4 +742,26 @@ void ofono_call_init(struct ofono_call *call)
 	memset(call, 0, sizeof(struct ofono_call));
 	call->cnap_validity = CNAP_VALIDITY_NOT_AVAILABLE;
 	call->clip_validity = CLIP_VALIDITY_NOT_AVAILABLE;
+}
+
+const char *call_status_to_string(enum call_status status)
+{
+	switch (status) {
+	case CALL_STATUS_ACTIVE:
+		return "active";
+	case CALL_STATUS_HELD:
+		return "held";
+	case CALL_STATUS_DIALING:
+		return "dialing";
+	case CALL_STATUS_ALERTING:
+		return "alerting";
+	case CALL_STATUS_INCOMING:
+		return "incoming";
+	case CALL_STATUS_WAITING:
+		return "waiting";
+	case CALL_STATUS_DISCONNECTED:
+		return "disconnected";
+	}
+
+	return "unknown";
 }

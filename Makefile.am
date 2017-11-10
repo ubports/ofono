@@ -22,7 +22,7 @@ pkginclude_HEADERS = include/log.h include/plugin.h include/history.h \
 			include/private-network.h include/cdma-netreg.h \
 			include/cdma-provision.h include/handsfree.h \
 			include/handsfree-audio.h include/siri.h \
-			include/netmon.h
+			include/netmon.h include/lte.h
 
 nodist_pkginclude_HEADERS = include/version.h
 
@@ -106,8 +106,6 @@ gril_sources = gril/gril.h gril/gril.c \
 btio_sources = btio/btio.h btio/btio.c
 
 if UDEV
-builtin_modules += udev
-builtin_sources += plugins/udev.c
 builtin_cflags += @UDEV_CFLAGS@
 builtin_libadd += @UDEV_LIBS@
 
@@ -127,8 +125,8 @@ builtin_sources += plugins/ril.c plugins/ril.h
 builtin_modules += infineon
 builtin_sources += plugins/infineon.c
 
-builtin_modules += ril_sofia3gr
-builtin_sources += plugins/ril_sofia3gr.c
+builtin_modules += ril_intel
+builtin_sources += plugins/ril_intel.c
 
 builtin_modules += rilmodem
 builtin_sources += drivers/rilmodem/rilmodem.h \
@@ -152,7 +150,9 @@ builtin_sources += drivers/rilmodem/rilmodem.h \
 			drivers/rilmodem/call-barring.c \
 			drivers/rilmodem/netmon.c \
 			drivers/rilmodem/stk.c \
-			drivers/infineonmodem/infineon_constants.h
+			drivers/rilmodem/cbs.c \
+			drivers/infineonmodem/infineon_constants.h \
+			drivers/rilmodem/lte.c
 endif
 
 if ISIMODEM
@@ -210,11 +210,13 @@ qmi_sources = drivers/qmimodem/qmi.h drivers/qmimodem/qmi.c \
 					drivers/qmimodem/ctl.h \
 					drivers/qmimodem/dms.h \
 					drivers/qmimodem/nas.h \
+					drivers/qmimodem/nas.c \
 					drivers/qmimodem/uim.h \
 					drivers/qmimodem/wms.h \
 					drivers/qmimodem/wds.h \
 					drivers/qmimodem/pds.h \
-					drivers/qmimodem/common.h
+					drivers/qmimodem/common.h \
+					drivers/qmimodem/wda.h
 
 builtin_modules += qmimodem
 builtin_sources += $(qmi_sources) \
@@ -231,7 +233,8 @@ builtin_sources += $(qmi_sources) \
 			drivers/qmimodem/gprs.c \
 			drivers/qmimodem/gprs-context.c \
 			drivers/qmimodem/radio-settings.c \
-			drivers/qmimodem/location-reporting.c
+			drivers/qmimodem/location-reporting.c \
+			drivers/qmimodem/netmon.c
 
 builtin_modules += gobi
 builtin_sources += plugins/gobi.c
@@ -262,7 +265,8 @@ builtin_sources += 	drivers/atmodem/atmodem.h \
 			drivers/atmodem/gprs.c \
 			drivers/atmodem/gprs-context.c \
 			drivers/atmodem/sim-auth.c \
-			drivers/atmodem/gnss.c
+			drivers/atmodem/gnss.c \
+			drivers/atmodem/lte.c
 
 builtin_modules += nwmodem
 builtin_sources += drivers/atmodem/atutil.h \
@@ -319,7 +323,8 @@ builtin_modules += telitmodem
 builtin_sources += drivers/atmodem/atutil.h \
 			drivers/telitmodem/telitmodem.h \
 			drivers/telitmodem/telitmodem.c \
-			drivers/telitmodem/location-reporting.c
+			drivers/telitmodem/location-reporting.c \
+			drivers/telitmodem/gprs-context-ncm.c
 
 builtin_modules += hsomodem
 builtin_sources += drivers/atmodem/atutil.h \
@@ -381,8 +386,22 @@ builtin_modules += ubloxmodem
 builtin_sources += drivers/atmodem/atutil.h \
 			drivers/ubloxmodem/ubloxmodem.h \
 			drivers/ubloxmodem/ubloxmodem.c \
-			drivers/ubloxmodem/gprs-context.c
+			drivers/ubloxmodem/gprs-context.c \
+			drivers/ubloxmodem/netmon.c \
+			drivers/ubloxmodem/lte.c
 
+
+builtin_modules += gemaltomodem
+builtin_sources += drivers/atmodem/atutil.h \
+			drivers/gemaltomodem/gemaltomodem.h \
+			drivers/gemaltomodem/gemaltomodem.c \
+			drivers/gemaltomodem/location-reporting.c
+
+builtin_modules += xmm7modem
+builtin_sources += drivers/atmodem/atutil.h \
+			drivers/xmm7modem/xmm7modem.h \
+			drivers/xmm7modem/xmm7modem.c \
+			drivers/xmm7modem/radio-settings.c
 
 if PHONESIM
 builtin_modules += phonesim
@@ -447,6 +466,9 @@ builtin_sources += plugins/caif.c
 builtin_modules += cinterion
 builtin_sources += plugins/cinterion.c
 
+builtin_modules += gemalto
+builtin_sources += plugins/gemalto.c
+
 builtin_modules += nokia
 builtin_sources += plugins/nokia.c
 
@@ -477,8 +499,8 @@ builtin_sources += plugins/sim900.c
 builtin_modules += connman
 builtin_sources += plugins/connman.c
 
-builtin_modules += he910
-builtin_sources += plugins/he910.c
+builtin_modules += telit
+builtin_sources += plugins/telit.c
 
 builtin_modules += quectel
 builtin_sources += plugins/quectel.c
@@ -486,11 +508,11 @@ builtin_sources += plugins/quectel.c
 builtin_modules += ublox
 builtin_sources += plugins/ublox.c
 
+builtin_modules += xmm7xxx
+builtin_sources += plugins/xmm7xxx.c
+
 if BLUETOOTH
 if BLUEZ4
-builtin_modules += telit
-builtin_sources += plugins/telit.c plugins/bluez4.h
-
 builtin_modules += sap
 builtin_sources += plugins/sap.c plugins/bluez4.h
 
@@ -542,6 +564,10 @@ builtin_sources += plugins/provision.c
 
 builtin_modules += cdma_provision
 builtin_sources += plugins/cdma-provision.c
+
+builtin_modules += file_provision
+builtin_sources += plugins/file-provision.c
+
 endif
 
 if MAINTAINER_MODE
@@ -604,7 +630,8 @@ src_ofonod_SOURCES = $(builtin_sources) $(gatchat_sources) src/ofono.ver \
 			src/cdma-provision.c src/handsfree.c \
 			src/handsfree-audio.c src/bluetooth.h \
 			src/hfp.h src/siri.c \
-			src/netmon.c
+			src/netmon.c src/lte.c \
+			src/netmonagent.c src/netmonagent.h
 
 src_ofonod_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
 			@GLIB_LIBS@ @DBUS_LIBS@ -ldl
@@ -651,7 +678,9 @@ doc_files = doc/overview.txt doc/ofono-paper.txt doc/release-faq.txt \
 			doc/certification.txt doc/siri-api.txt \
 			doc/telit-modem.txt \
 			doc/networkmonitor-api.txt \
-			doc/allowed-apns-api.txt
+			doc/allowed-apns-api.txt \
+			doc/lte-api.txt \
+			doc/cinterion-hardware-monitor-api.txt
 
 
 test_scripts = test/backtrace \
@@ -684,6 +713,7 @@ test_scripts = test/backtrace \
 		test/receive-sms \
 		test/remove-contexts \
 		test/send-sms \
+		test/cancel-sms \
 		test/set-mic-volume \
 		test/set-speaker-volume \
 		test/test-stk-menu \
@@ -751,7 +781,12 @@ test_scripts = test/backtrace \
 		test/set-sms-smsc \
 		test/set-sms-bearer \
 		test/get-serving-cell-info \
-		test/list-allowed-access-points
+		test/list-allowed-access-points \
+		test/enable-throttling \
+		test/disable-throttling \
+		test/set-lte-property \
+		test/test-serving-cell-info
+
 
 if TEST
 testdir = $(pkglibdir)/test
@@ -771,7 +806,8 @@ unit_tests = unit/test-common unit/test-util unit/test-idmap \
 				unit/test-sms unit/test-cdmasms \
 				unit/test-rilmodem-cs \
 				unit/test-rilmodem-sms \
-				unit/test-rilmodem-cb
+				unit/test-rilmodem-cb \
+				unit/test-rilmodem-gprs
 
 noinst_PROGRAMS = $(unit_tests) \
 			unit/test-sms-root unit/test-mux unit/test-caif
@@ -827,7 +863,10 @@ test_rilmodem_sources = $(gril_sources) src/log.c src/common.c src/util.c \
 				gatchat/ringbuffer.h gatchat/ringbuffer.c \
 				unit/rilmodem-test-server.h \
 				unit/rilmodem-test-server.c \
-				src/simutil.c
+				unit/rilmodem-test-engine.h \
+				unit/rilmodem-test-engine.c \
+				src/simutil.c \
+				drivers/rilmodem/rilutil.c
 
 unit_test_rilmodem_cs_SOURCES = $(test_rilmodem_sources) \
 					unit/test-rilmodem-cs.c \
@@ -849,6 +888,13 @@ unit_test_rilmodem_cb_SOURCES = $(test_rilmodem_sources) \
 unit_test_rilmodem_cb_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
 					@GLIB_LIBS@ @DBUS_LIBS@ -ldl
 unit_objects += $(unit_test_rilmodem_cb_OBJECTS)
+
+unit_test_rilmodem_gprs_SOURCES = $(test_rilmodem_sources) \
+					unit/test-rilmodem-gprs.c \
+					drivers/rilmodem/gprs.c
+unit_test_rilmodem_gprs_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
+					@GLIB_LIBS@ @DBUS_LIBS@ -ldl
+unit_objects += $(unit_test_rilmodem_gprs_OBJECTS)
 
 TESTS = $(unit_tests)
 
@@ -875,13 +921,6 @@ tools_lookup_provider_name_LDADD = @GLIB_LIBS@
 
 tools_tty_redirector_SOURCES = tools/tty-redirector.c
 tools_tty_redirector_LDADD = @GLIB_LIBS@
-
-if QMIMODEM
-noinst_PROGRAMS += tools/qmi
-
-tools_qmi_SOURCES = $(qmi_sources) tools/qmi.c
-tools_qmi_LDADD = @GLIB_LIBS@
-endif
 
 if MAINTAINER_MODE
 noinst_PROGRAMS += tools/stktest

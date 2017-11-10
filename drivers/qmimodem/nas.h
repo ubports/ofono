@@ -19,6 +19,8 @@
  *
  */
 
+#include <stdint.h>
+
 #define QMI_NAS_RESET			0	/* Reset NAS service state variables */
 #define QMI_NAS_ABORT			1	/* Abort previously issued NAS command */
 #define QMI_NAS_EVENT			2	/* Connection state report indication */
@@ -33,6 +35,8 @@
 #define QMI_NAS_SS_INFO_IND		36	/* Current serving system info indication */
 #define QMI_NAS_GET_HOME_INFO		37	/* Get info about home network */
 
+#define QMI_NAS_SET_SYSTEM_SELECTION_PREF 51
+#define QMI_NAS_GET_SYSTEM_SELECTION_PREF 52
 
 /* Set NAS state report conditions */
 #define QMI_NAS_PARAM_REPORT_SIGNAL_STRENGTH	0x10
@@ -63,7 +67,7 @@ struct qmi_nas_rf_info {
 } __attribute__((__packed__));
 
 /* Get the signal strength */
-#define QMI_NAS_RESULT_SIGNAL_STRENGTH		0x10
+#define QMI_NAS_RESULT_SIGNAL_STRENGTH		0x01
 
 /* Scan for visible network */
 #define QMI_NAS_PARAM_NETWORK_MASK		0x10	/* uint8 bitmask */
@@ -95,6 +99,7 @@ struct qmi_nas_network_rat {
 	} __attribute__((__packed__)) info[0];
 } __attribute__((__packed__));
 
+#define QMI_NAS_NETWORK_RAT_NONE		0x00
 #define QMI_NAS_NETWORK_RAT_GSM			0x04
 #define QMI_NAS_NETWORK_RAT_UMTS		0x05
 #define QMI_NAS_NETWORK_RAT_LTE			0x08
@@ -140,9 +145,29 @@ struct qmi_nas_current_plmn {
 #define QMI_NAS_RESULT_LOCATION_AREA_CODE	0x1d	/* uint16 */
 #define QMI_NAS_RESULT_CELL_ID			0x1e	/* uint32 */
 
-#define QMI_NAS_ATTACH_STATUS_INVALID		0x00
-#define QMI_NAS_ATTACH_STATUS_ATTACHED		0x01
-#define QMI_NAS_ATTACH_STATUS_DETACHED		0x02
+/* qmi_nas_serving_system.status */
+#define QMI_NAS_REGISTRATION_STATE_NOT_REGISTERED	0x00
+#define QMI_NAS_REGISTRATION_STATE_REGISTERED		0x01
+#define QMI_NAS_REGISTRATION_STATE_SEARCHING		0x02
+#define QMI_NAS_REGISTRATION_STATE_DENIED		0x03
+#define QMI_NAS_REGISTRATION_STATE_UNKNOWN		0x04
+
+#define QMI_NAS_RESULT_3GGP_DST 0x1b
+#define QMI_NAS_RESULT_3GPP_TIME 0x1c
+struct qmi_nas_3gpp_time {
+	uint16_t year;
+	uint8_t month;
+	uint8_t day;
+	uint8_t hour;
+	uint8_t minute;
+	uint8_t second;
+	uint8_t timezone;
+} __attribute__((__packed__));
+
+/* cs_state/ps_state */
+#define QMI_NAS_ATTACH_STATE_INVALID		0x00
+#define QMI_NAS_ATTACH_STATE_ATTACHED		0x01
+#define QMI_NAS_ATTACH_STATE_DETACHED		0x02
 
 /* Get info about home network */
 #define QMI_NAS_RESULT_HOME_NETWORK		0x01
@@ -152,3 +177,14 @@ struct qmi_nas_home_network {
 	uint8_t desc_len;
 	char desc[0];
 } __attribute__((__packed__));
+
+#define QMI_NAS_RAT_MODE_PREF_ANY		(-1)
+#define QMI_NAS_RAT_MODE_PREF_GSM		(1 << 2)
+#define QMI_NAS_RAT_MODE_PREF_UMTS		(1 << 3)
+#define QMI_NAS_RAT_MODE_PREF_LTE		(1 << 4)
+
+#define QMI_NAS_PARAM_SYSTEM_SELECTION_PREF_MODE	0x11
+
+#define QMI_NAS_RESULT_SYSTEM_SELECTION_PREF_MODE	0x11
+
+int qmi_nas_rat_to_tech(uint8_t rat);

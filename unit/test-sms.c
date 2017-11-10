@@ -1145,6 +1145,8 @@ static void test_assembly(void)
 
 	reencoded = sms_decode_text(l);
 
+	g_slist_free_full(l, g_free);
+
 	if (g_test_verbose())
 		g_printf("ReEncoded:\n%s\n", reencoded);
 
@@ -1304,6 +1306,8 @@ static void test_prepare_concat(gconstpointer data)
 	g_assert(decoded_str);
 	g_assert(strcmp(decoded_str, test->str) == 0);
 	g_free(decoded_str);
+	g_slist_free_full(pdus, g_free);
+	g_slist_free_full(r, g_free);
 	sms_assembly_free(assembly);
 }
 
@@ -1334,6 +1338,7 @@ static void test_limit(gunichar uni, int target_size, gboolean use_16bit)
 	g_assert(g_utf8_strlen(decoded, -1) == target_size);
 
 	g_free(decoded);
+	g_slist_free_full(l, g_free);
 
 	memcpy(utf8 + i, utf8_char, stride);
 	utf8[i+stride] = '\0';

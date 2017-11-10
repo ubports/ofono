@@ -43,10 +43,11 @@
 #include "atmodem.h"
 #include "vendor.h"
 
-#define TUN_SYSFS_DIR "/sys/devices/virtual/misc/tun"
+#define TUN_DEV "/dev/net/tun"
 
 #define STATIC_IP_NETMASK "255.255.255.255"
 
+static const char *cgdata_prefix[] = { "+CGDATA:", NULL };
 static const char *none_prefix[] = { NULL };
 
 enum state {
@@ -67,6 +68,7 @@ struct gprs_context_data {
 	ofono_gprs_context_cb_t cb;
 	void *cb_data;                                  /* Callback data */
 	unsigned int vendor;
+	gboolean use_atd99;
 };
 
 static void ppp_debug(const char *str, void *data)
@@ -210,7 +212,7 @@ static void at_cgdcont_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		return;
 	}
 
-	if (gcd->vendor == OFONO_VENDOR_SIMCOM_SIM900)
+	if (gcd->use_atd99)
 		sprintf(buf, "ATD*99***%u#", gcd->active_context);
 	else
 		sprintf(buf, "AT+CGDATA=\"PPP\",%u", gcd->active_context);
@@ -378,6 +380,43 @@ static void cgev_notify(GAtResult *result, gpointer user_data)
 		g_at_ppp_shutdown(gcd->ppp);
 }
 
+static void at_cgdata_test_cb(gboolean ok, GAtResult *result,
+				gpointer user_data)
+{
+	struct ofono_gprs_context *gc = user_data;
+	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
+	GAtResultIter iter;
+	const char *data_type;
+	gboolean found = FALSE;
+
+	gcd->use_atd99 = TRUE;
+
+	if (!ok) {
+		DBG("not ok");
+		goto error;
+	}
+
+	g_at_result_iter_init(&iter, result);
+	if (!g_at_result_iter_next(&iter, "+CGDATA:")) {
+		DBG("no +CGDATA line");
+		goto error;
+	}
+
+	if (!g_at_result_iter_open_list(&iter)) {
+		DBG("no list found");
+		goto error;
+	}
+
+	while (!found && g_at_result_iter_next_string(&iter, &data_type)) {
+		if (g_str_equal(data_type, "PPP")) {
+			found = TRUE;
+			gcd->use_atd99 = FALSE;
+		}
+	}
+error:
+	DBG("use_atd99:%d", gcd->use_atd99);
+}
+
 static int at_gprs_context_probe(struct ofono_gprs_context *gc,
 					unsigned int vendor, void *data)
 {
@@ -387,7 +426,7 @@ static int at_gprs_context_probe(struct ofono_gprs_context *gc,
 
 	DBG("");
 
-	if (stat(TUN_SYSFS_DIR, &st) < 0) {
+	if (stat(TUN_DEV, &st) < 0) {
 		ofono_error("Missing support for TUN/TAP devices");
 		return -ENODEV;
 	}
@@ -404,6 +443,15 @@ static int at_gprs_context_probe(struct ofono_gprs_context *gc,
 	chat = g_at_chat_get_slave(gcd->chat);
 	if (chat == NULL)
 		return 0;
+
+	switch (vendor) {
+	case OFONO_VENDOR_SIMCOM_SIM900:
+		gcd->use_atd99 = FALSE;
+		break;
+	default:
+		g_at_chat_send(chat, "AT+CGDATA=?", cgdata_prefix,
+						at_cgdata_test_cb, gc, NULL);
+	}
 
 	g_at_chat_register(chat, "+CGEV:", cgev_notify, FALSE, gc, NULL);
 

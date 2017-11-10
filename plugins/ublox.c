@@ -38,6 +38,8 @@
 #include <ofono/sim.h>
 #include <ofono/gprs.h>
 #include <ofono/gprs-context.h>
+#include <ofono/netmon.h>
+#include <ofono/lte.h>
 
 #include <drivers/atmodem/atutil.h>
 #include <drivers/atmodem/vendor.h>
@@ -46,9 +48,9 @@ static const char *none_prefix[] = { NULL };
 
 enum supported_models {
 	SARA_G270			= 1102,
-	TOBYL2_COMPATIBLE_MODE 		= 1141,
-	TOBYL2_MEDIUM_THROUGHPUT_MODE 	= 1143,
-	TOBYL2_HIGH_THROUGHPUT_MODE 	= 1146,
+	TOBYL2_COMPATIBLE_MODE		= 1141,
+	TOBYL2_MEDIUM_THROUGHPUT_MODE	= 1143,
+	TOBYL2_HIGH_THROUGHPUT_MODE	= 1146,
 };
 
 struct ublox_data {
@@ -176,6 +178,7 @@ static int ublox_enable(struct ofono_modem *modem)
 		break;
 	case TOBYL2_MEDIUM_THROUGHPUT_MODE:
 		DBG("low/medium throughtput profile unsupported");
+		break;
 	default:
 		DBG("unknown ublox model id %d", data->model_id);
 		return -EINVAL;
@@ -313,6 +316,8 @@ static void ublox_post_sim(struct ofono_modem *modem)
 
 		--ncontexts;
 	}
+
+	ofono_lte_create(modem, "ubloxmodem", data->aux);
 }
 
 static void ublox_post_online(struct ofono_modem *modem)
@@ -320,6 +325,8 @@ static void ublox_post_online(struct ofono_modem *modem)
 	struct ublox_data *data = ofono_modem_get_data(modem);
 
 	ofono_netreg_create(modem, data->vendor_family, "atmodem", data->aux);
+
+	ofono_netmon_create(modem, data->vendor_family, "ubloxmodem", data->aux);
 }
 
 static struct ofono_modem_driver ublox_driver = {

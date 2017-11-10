@@ -50,6 +50,8 @@ struct gprs_data {
 	GAtChat *chat;
 	unsigned int vendor;
 	unsigned int last_auto_context_id;
+	gboolean telit_try_reattach;
+	int attached;
 };
 
 static void at_cgatt_cb(gboolean ok, GAtResult *result, gpointer user_data)
@@ -73,8 +75,10 @@ static void at_gprs_set_attached(struct ofono_gprs *gprs, int attached,
 	snprintf(buf, sizeof(buf), "AT+CGATT=%i", attached ? 1 : 0);
 
 	if (g_at_chat_send(gd->chat, buf, none_prefix,
-				at_cgatt_cb, cbd, g_free) > 0)
+				at_cgatt_cb, cbd, g_free) > 0) {
+		gd->attached = attached;
 		return;
+	}
 
 	g_free(cbd);
 
@@ -194,6 +198,28 @@ static void cgreg_notify(GAtResult *result, gpointer user_data)
 				NULL, NULL, NULL, gd->vendor) == FALSE)
 		return;
 
+	/*
+	 * Telit AT modem firmware (tested with UE910-EUR) generates
+	 * +CGREG: 0\r\n\r\n+CGEV: NW DETACH
+	 * after a context is de-activated and ppp connection closed.
+	 * Then, after a random amount of time (observed from a few seconds
+	 * to a few hours), an unsolicited +CGREG: 1 arrives.
+	 * Attempt to fix the problem, by sending AT+CGATT=1 once.
+	 * This does not re-activate the context, but if a network connection
+	 * is still correct, will generate an immediate +CGREG: 1.
+	 */
+	if (gd->vendor == OFONO_VENDOR_TELIT) {
+		if (gd->attached && !status && !gd->telit_try_reattach) {
+			DBG("Trying to re-attach gprs network");
+			gd->telit_try_reattach = TRUE;
+			g_at_chat_send(gd->chat, "AT+CGATT=1", none_prefix,
+					NULL, NULL, NULL);
+			return;
+		}
+
+		gd->telit_try_reattach = FALSE;
+	}
+
 	ofono_gprs_status_notify(gprs, status);
 }
 
@@ -214,6 +240,11 @@ static void cgev_notify(GAtResult *result, gpointer user_data)
 
 	if (g_str_equal(event, "NW DETACH") ||
 			g_str_equal(event, "ME DETACH")) {
+		if (gd->vendor == OFONO_VENDOR_TELIT &&
+				gd->telit_try_reattach)
+			return;
+
+		gd->attached = FALSE;
 		ofono_gprs_detached_notify(gprs);
 		return;
 	} else if (g_str_has_prefix(event, "ME PDN ACT")) {
@@ -296,6 +327,26 @@ static void huawei_mode_notify(GAtResult *result, gpointer user_data)
 	ofono_gprs_bearer_notify(gprs, bearer);
 }
 
+static void huawei_hcsq_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_gprs *gprs = user_data;
+	GAtResultIter iter;
+	const char *mode;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "^HCSQ:"))
+		return;
+
+	if (!g_at_result_iter_next_string(&iter, &mode))
+		return;
+
+	if (!strcmp("LTE", mode))
+		ofono_gprs_bearer_notify(gprs, 7); /* LTE */
+
+	/* in other modes, notification ^MODE is used */
+}
+
 static void telit_mode_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_gprs *gprs = user_data;
@@ -322,6 +373,9 @@ static void telit_mode_notify(GAtResult *result, gpointer user_data)
 		break;
 	case 3:
 		bearer = 5;    /* HSDPA */
+		break;
+	case 4:
+		bearer = 7;    /* LTE */
 		break;
 	default:
 		bearer = 0;
@@ -398,6 +452,8 @@ static void gprs_initialized(gboolean ok, GAtResult *result, gpointer user_data)
 	case OFONO_VENDOR_HUAWEI:
 		g_at_chat_register(gd->chat, "^MODE:", huawei_mode_notify,
 						FALSE, gprs, NULL);
+		g_at_chat_register(gd->chat, "^HCSQ:", huawei_hcsq_notify,
+						FALSE, gprs, NULL);
 		break;
 	case OFONO_VENDOR_UBLOX:
 	case OFONO_VENDOR_UBLOX_TOBY_L2:
@@ -411,6 +467,7 @@ static void gprs_initialized(gboolean ok, GAtResult *result, gpointer user_data)
 						FALSE, gprs, NULL);
 		g_at_chat_send(gd->chat, "AT#PSNT=1", none_prefix,
 						NULL, NULL, NULL);
+		break;
 	default:
 		g_at_chat_register(gd->chat, "+CPSB:", cpsb_notify,
 						FALSE, gprs, NULL);
@@ -522,7 +579,7 @@ static void at_cgdcont_test_cb(gboolean ok, GAtResult *result,
 		if (g_at_result_iter_next_range(&iter, &min, &max) == FALSE)
 			continue;
 
-		if (!g_at_result_iter_close_list(&iter))
+		if (!g_at_result_iter_skip_next(&iter))
 			continue;
 
 		if (g_at_result_iter_open_list(&iter))

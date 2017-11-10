@@ -28,6 +28,7 @@ extern "C" {
 
 #include <ofono/types.h>
 
+struct ofono_modem;
 struct ofono_voicecall;
 
 typedef void (*ofono_voicecall_cb_t)(const struct ofono_error *error,
