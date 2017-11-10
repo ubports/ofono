@@ -12,7 +12,7 @@ Build-Depends: debhelper (>= 9.20160114~),
                udev,
                libbluetooth-dev (>= 4.30),
                mobile-broadband-provider-info
-Standards-Version: 3.9.8
+Standards-Version: 4.1.1
 Homepage: http://www.ofono.org/
 Vcs-Git: https://anonscm.debian.org/git/pkg-telepathy/ofono.git
 Vcs-Browser: https://anonscm.debian.org/gitweb/?p=pkg-telepathy/ofono.git
