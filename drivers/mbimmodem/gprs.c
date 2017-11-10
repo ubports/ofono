@@ -172,15 +172,66 @@ static void mbim_packet_service_changed(struct mbim_message *message,
 				NETWORK_REGISTRATION_STATUS_UNKNOWN);
 }
 
+static void provisioned_contexts_query_cb(struct mbim_message *message,
+								void *user)
+{
+	struct mbim_message_iter contexts;
+	uint32_t n_contexts;
+	uint32_t id;
+	uint8_t type[16];
+	char *apn;
+	char *username;
+	char *password;
+	uint32_t compression;
+	uint32_t auth_protocol;
+
+	DBG("");
+
+	if (mbim_message_get_error(message) != 0)
+		return;
+
+	if (!mbim_message_get_arguments(message, "a(u16ysssuu)",
+						&n_contexts, &contexts))
+		return;
+
+	DBG("n_contexts: %u", n_contexts);
+
+	while (mbim_message_iter_next_entry(&contexts, &id, type, &apn,
+						&username, &password,
+						&compression, &auth_protocol)) {
+		char uuidstr[37];
+
+		l_uuid_to_string(type, uuidstr, sizeof(uuidstr));
+		DBG("id: %u, type: %s", id, uuidstr);
+		DBG("apn: %s, username: %s, password: %s",
+			apn, username, password);
+		DBG("compression: %u, auth_protocol: %u",
+			compression, auth_protocol);
+
+		l_free(apn);
+		l_free(username);
+		l_free(password);
+	}
+}
+
 static void delayed_register(struct l_idle *idle, void *user_data)
 {
 	struct ofono_gprs *gprs = user_data;
 	struct gprs_data *gd = ofono_gprs_get_data(gprs);
+	struct mbim_message *message;
 
 	DBG("");
 
 	l_idle_remove(idle);
 	gd->delayed_register = NULL;
+
+	/* Query provisioned contexts for debugging purposes only */
+	message = mbim_message_new(mbim_uuid_basic_connect,
+					MBIM_CID_PROVISIONED_CONTEXTS,
+					MBIM_COMMAND_TYPE_QUERY);
+	mbim_message_set_arguments(message, "");
+	mbim_device_send(gd->device, 0, message,
+				provisioned_contexts_query_cb, gprs, NULL);
 
 	if (!mbim_device_register(gd->device, GPRS_GROUP,
 					mbim_uuid_basic_connect,
