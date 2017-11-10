@@ -200,6 +200,21 @@ static const struct message_data message_data_device_subscribe_list = {
 	.binary_len	= sizeof(message_binary_device_subscribe_list),
 };
 
+static const unsigned char message_binary_packet_service_notify[] = {
+	0x07, 0x00, 0x00, 0x80, 0x48, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xa2, 0x89, 0xcc, 0x33,
+	0xbc, 0xbb, 0x8b, 0x4f, 0xb6, 0xb0, 0x13, 0x3e, 0xc2, 0xaa, 0xe6, 0xdf,
+	0x0a, 0x00, 0x00, 0x00, 0x1c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x02, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x80, 0xf0, 0xfa, 0x02,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0xe1, 0xf5, 0x05, 0x00, 0x00, 0x00, 0x00,
+};
+
+static const struct message_data message_data_packet_service_notify = {
+	.tid		= 0,
+	.binary		= message_binary_packet_service_notify,
+	.binary_len	= sizeof(message_binary_packet_service_notify),
+};
+
 static void do_debug(const char *str, void *user_data)
 {
 	const char *prefix = user_data;
@@ -607,6 +622,28 @@ static void build_device_subscribe_list(const void *data)
 	mbim_message_unref(message);
 }
 
+static void parse_packet_service_notify(const void *data)
+{
+	struct mbim_message *msg = build_message(data);
+	uint32_t nw_error;
+	uint32_t state;
+	uint32_t data_class;
+	uint64_t uplink;
+	uint64_t downlink;
+
+	assert(mbim_message_get_arguments(msg, "uuutt",
+						&nw_error, &state, &data_class,
+						&uplink, &downlink));
+
+	assert(nw_error == 0);
+	assert(state == 2);
+	assert(data_class == MBIM_DATA_CLASS_LTE);
+	assert(uplink == 50000000);
+	assert(downlink == 100000000);
+
+	mbim_message_unref(msg);
+}
+
 int main(int argc, char *argv[])
 {
 	l_test_init(&argc, &argv);
@@ -643,6 +680,9 @@ int main(int argc, char *argv[])
 
 	l_test_add("Device Subscribe List (build)", build_device_subscribe_list,
 			&message_data_device_subscribe_list);
+
+	l_test_add("Packet Service Notify (parse)", parse_packet_service_notify,
+			&message_data_packet_service_notify);
 
 	return l_test_run();
 }
