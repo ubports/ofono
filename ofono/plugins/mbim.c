@@ -42,6 +42,7 @@
 #include <ofono/netreg.h>
 #include <ofono/sms.h>
 #include <ofono/gprs.h>
+#include <ofono/gprs-context.h>
 
 #include <ell/ell.h>
 
@@ -377,11 +378,20 @@ static void mbim_pre_sim(struct ofono_modem *modem)
 static void mbim_post_sim(struct ofono_modem *modem)
 {
 	struct mbim_data *md = ofono_modem_get_data(modem);
+	struct ofono_gprs *gprs;
+	struct ofono_gprs_context *gc;
 
 	DBG("%p", modem);
 
 	ofono_sms_create(modem, 0, "mbim", md->device);
-	ofono_gprs_create(modem, 0, "mbim", md->device);
+	gprs = ofono_gprs_create(modem, 0, "mbim", md->device);
+
+	gc = ofono_gprs_context_create(modem, 0, "mbim", md->device);
+	if (gc) {
+		ofono_gprs_context_set_type(gc,
+					OFONO_GPRS_CONTEXT_TYPE_INTERNET);
+		ofono_gprs_add_context(gprs, gc);
+	}
 }
 
 static void mbim_post_online(struct ofono_modem *modem)
