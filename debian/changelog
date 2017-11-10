@@ -13,8 +13,9 @@ ofono (1.21-1) unstable; urgency=medium
     uses /lib/lsb/init-functions
   * debian/watch: Use https and verify the signature of the tarball
   * debian/rules: Do not run the tests in parallel
+  * debian/copyright: Fix the licence, ofono is GPL, not LGPL (Closes: #853206)
 
- -- Laurent Bigonville <bigon@debian.org>  Fri, 10 Nov 2017 17:27:26 +0100
+ -- Laurent Bigonville <bigon@debian.org>  Fri, 10 Nov 2017 17:32:26 +0100
 
 ofono (1.18-1) unstable; urgency=medium
 
