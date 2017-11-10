@@ -738,7 +738,8 @@ builtin_sources += $(mbim_sources) \
 			drivers/mbimmodem/sim.c \
 			drivers/mbimmodem/network-registration.c \
 			drivers/mbimmodem/sms.c \
-			drivers/mbimmodem/gprs.c
+			drivers/mbimmodem/gprs.c \
+			drivers/mbimmodem/gprs-context.c
 
 builtin_modules += mbim
 builtin_sources += plugins/mbim.c
