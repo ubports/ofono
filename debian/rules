@@ -20,3 +20,6 @@ override_dh_install:
 	install -D -m 0644 plugins/ofono.rules debian/tmp/lib/udev/rules.d/97-ofono.rules
 	install -D -m 0644 plugins/ofono-speedup.rules debian/tmp/lib/udev/rules.d/97-ofono-speedup.rules
 	dh_install --list-missing
+
+override_dh_auto_test:
+	dh_auto_test --no-parallel
