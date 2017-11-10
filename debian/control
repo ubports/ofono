@@ -17,7 +17,7 @@ Vcs-Browser: https://anonscm.debian.org/gitweb/?p=pkg-telepathy/ofono.git
 
 Package: ofono
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, dbus
+Depends: ${shlibs:Depends}, ${misc:Depends}, dbus, lsb-base
 Recommends: udev
 Description: Mobile telephony stack (daemon)
  oFono is a stack for mobile telephony devices on Linux.  oFono supports
