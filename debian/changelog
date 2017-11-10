@@ -10,8 +10,9 @@ ofono (1.21-1) UNRELEASED; urgency=medium
     against dh-systemd and autotools-dev
   * debian/control: Add explicit dependency against lsb-base as the initscript
     uses /lib/lsb/init-functions
+  * debian/watch: Use https and verify the signature of the tarball
 
- -- Laurent Bigonville <bigon@debian.org>  Fri, 10 Nov 2017 16:52:35 +0100
+ -- Laurent Bigonville <bigon@debian.org>  Fri, 10 Nov 2017 16:55:35 +0100
 
 ofono (1.18-1) unstable; urgency=medium
 
