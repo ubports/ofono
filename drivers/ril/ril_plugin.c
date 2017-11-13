@@ -73,6 +73,7 @@
 #define RILMODEM_DEFAULT_DATA_CALL_RETRY_LIMIT 4
 #define RILMODEM_DEFAULT_DATA_CALL_RETRY_DELAY 200 /* ms */
 #define RILMODEM_DEFAULT_EMPTY_PIN_QUERY TRUE /* optimistic */
+#define RILMODEM_DEFAULT_LEGACY_IMEI_QUERY FALSE
 
 /*
  * The convention is that the keys which can only appear in the [Settings]
@@ -105,6 +106,7 @@
 #define RILCONF_DATA_CALL_RETRY_DELAY "dataCallRetryDelay"
 #define RILCONF_LOCAL_HANGUP_REASONS  "localHangupReasons"
 #define RILCONF_REMOTE_HANGUP_REASONS "remoteHangupReasons"
+#define RILCONF_DEFAULT_LEGACY_IMEI_QUERY "legacyImeiQuery"
 
 /* Modem error ids */
 #define RIL_ERROR_ID_RILD_RESTART        "rild-restart"
@@ -183,6 +185,7 @@ typedef struct sailfish_slot_impl {
 	struct ril_sim_settings *sim_settings;
 	struct ril_oem_raw *oem_raw;
 	struct ril_data *data;
+	gboolean legacy_imei_query;
 	guint start_timeout;
 	guint start_timeout_id;
 	MceDisplay *display;
@@ -440,6 +443,100 @@ static void ril_plugin_check_ready(ril_slot *slot)
 	}
 }
 
+static void ril_plugin_get_imeisv_cb(GRilIoChannel *io, int status,
+			const void *data, guint len, void *user_data)
+{
+	ril_slot *slot = user_data;
+	char *imei = NULL;
+	char *imeisv = NULL;
+
+	GASSERT(slot->imei_req_id);
+	slot->imei_req_id = 0;
+
+	if (status == RIL_E_SUCCESS) {
+		GRilIoParser rilp;
+
+		grilio_parser_init(&rilp, data, len);
+		imeisv = grilio_parser_get_utf8(&rilp);
+		DBG("%s", imeisv);
+
+		/*
+		 * slot->imei should be either NULL (when we get connected
+		 * to rild the very first time) or match the already known
+		 * IMEI (if rild crashed and we have reconnected)
+		 */
+		if (slot->imeisv && imeisv && strcmp(slot->imeisv, imeisv)) {
+			ofono_warn("IMEISV has changed \"%s\" -> \"%s\"",
+							slot->imeisv, imeisv);
+		}
+	} else {
+		ofono_error("Slot %u IMEISV query error: %s",
+			slot->config.slot, ril_error_to_string(status));
+	}
+
+	if (slot->imeisv) {
+		/* We assume that IMEISV never changes */
+		g_free(imeisv);
+	} else {
+		slot->imeisv = (imeisv ? imeisv : g_strdup(""));
+		sailfish_manager_imeisv_obtained(slot->handle, slot->imeisv);
+	}
+
+	ril_plugin_check_modem(slot);
+}
+
+static void ril_plugin_get_imei_cb(GRilIoChannel *io, int status,
+			const void *data, guint len, void *user_data)
+{
+	ril_slot *slot = user_data;
+	char *imei = NULL;
+
+	GASSERT(slot->imei_req_id);
+	slot->imei_req_id = 0;
+
+	if (status == RIL_E_SUCCESS) {
+		GRilIoParser rilp;
+
+		grilio_parser_init(&rilp, data, len);
+		imei = grilio_parser_get_utf8(&rilp);
+		DBG("%s", imei);
+
+		/*
+		 * slot->imei should be either NULL (when we get connected
+		 * to rild the very first time) or match the already known
+		 * IMEI (if rild crashed and we have reconnected)
+		 */
+		if (slot->imei && imei && strcmp(slot->imei, imei)) {
+			ofono_warn("IMEI has changed \"%s\" -> \"%s\"",
+							slot->imei, imei);
+		}
+
+		if (imei) {
+			/* IMEI query was successful, fetch IMEISV too */
+			GRilIoRequest *req = grilio_request_new();
+			slot->imei_req_id =
+				grilio_channel_send_request_full(slot->io,
+					req, RIL_REQUEST_GET_IMEISV,
+					ril_plugin_get_imeisv_cb, NULL, slot);
+			grilio_request_unref(req);
+		}
+	} else {
+		ofono_error("Slot %u IMEI query error: %s", slot->config.slot,
+						ril_error_to_string(status));
+	}
+
+	if (slot->imei) {
+		/* We assume that IMEI never changes */
+		g_free(imei);
+	} else {
+		slot->imei = imei ? imei : g_strdup_printf("%d", slot->index);
+		sailfish_manager_imei_obtained(slot->handle, slot->imei);
+	}
+
+	ril_plugin_check_modem(slot);
+	ril_plugin_check_ready(slot);
+}
+
 static void ril_plugin_device_identity_cb(GRilIoChannel *io, int status,
 			const void *data, guint len, void *user_data)
 {
@@ -505,6 +602,28 @@ static void ril_plugin_device_identity_cb(GRilIoChannel *io, int status,
 	ril_plugin_check_ready(slot);
 }
 
+static void ril_plugin_start_imei_query(ril_slot *slot, gboolean blocking,
+								int retries)
+{
+	GRilIoRequest *req = grilio_request_new();
+
+	/* There was a bug in libgrilio which was making request blocking
+	 * regardless of what we pass to grilio_request_set_blocking(),
+	 * that's why we don't call grilio_request_set_blocking() if
+	 * blocking is FALSE */
+	if (blocking) grilio_request_set_blocking(req, TRUE);
+	grilio_request_set_retry(req, RIL_RETRY_MS, retries);
+	grilio_channel_cancel_request(slot->io, slot->imei_req_id, FALSE);
+	slot->imei_req_id = (slot->legacy_imei_query ?
+		grilio_channel_send_request_full(slot->io, req,
+				RIL_REQUEST_GET_IMEI,
+				ril_plugin_get_imei_cb, NULL, slot) :
+		grilio_channel_send_request_full(slot->io, req,
+				RIL_REQUEST_DEVICE_IDENTITY,
+				ril_plugin_device_identity_cb, NULL, slot));
+	grilio_request_unref(req);
+}
+
 static enum sailfish_sim_state ril_plugin_sim_state(ril_slot *slot)
 {
 	const struct ril_sim_card_status *status = slot->sim_card->status;
@@ -551,21 +670,11 @@ static void ril_plugin_sim_state_changed(struct ril_sim_card *card, void *data)
 			 * (this time, limited number).
 			 *
 			 * Some RILs fail RIL_REQUEST_DEVICE_IDENTITY until
-			 * the modem hasn't been properly initialized.
+			 * the modem has been properly initialized.
 			 */
-			GRilIoRequest *req = grilio_request_new();
-
 			DBG("Giving slot %u last chance", slot->config.slot);
-			grilio_request_set_retry(req, RIL_RETRY_MS,
+			ril_plugin_start_imei_query(slot, FALSE,
 					 RIL_DEVICE_IDENTITY_RETRIES_LAST);
-			grilio_channel_cancel_request(slot->io,
-						slot->imei_req_id, FALSE);
-			slot->imei_req_id =
-				grilio_channel_send_request_full(slot->io,
-					req, RIL_REQUEST_DEVICE_IDENTITY,
-					ril_plugin_device_identity_cb,
-					NULL, slot);
-			grilio_request_unref(req);
 		}
 		slot->received_sim_status = TRUE;
 	}
@@ -814,7 +923,6 @@ static void ril_plugin_slot_connected(ril_slot *slot)
 	ril_plugin *plugin = slot->plugin;
 	const struct ril_plugin_settings *ps = &plugin->settings;
 	const char *log_prefix = ril_plugin_log_prefix(slot);
-	GRilIoRequest *req;
 
 	ofono_debug("%s version %u", (slot->name && slot->name[0]) ?
 				slot->name : "RIL", slot->io->ril_version);
@@ -826,19 +934,11 @@ static void ril_plugin_slot_connected(ril_slot *slot)
 	 * Modem will be registered after RIL_REQUEST_DEVICE_IDENTITY
 	 * successfully completes. By the time ofono starts, rild may
 	 * not be completely functional. Waiting until it responds to
-	 * RIL_REQUEST_DEVICE_IDENTITY (and retrying the request on
-	 * failure) gives rild time to finish whatever it's doing during
-	 * initialization.
+	 * RIL_REQUEST_DEVICE_IDENTITY (or RIL_REQUEST_GET_IMEI/SV)
+	 * and retrying the request on failure, (hopefully) gives rild
+	 * enough time to finish whatever it's doing during initialization.
 	 */
-	GASSERT(!slot->imei_req_id);
-	req = grilio_request_new();
-	/* Don't allow any other requests while this one is pending */
-	grilio_request_set_blocking(req, TRUE);
-	grilio_request_set_retry(req, RIL_RETRY_MS, -1);
-	slot->imei_req_id = grilio_channel_send_request_full(slot->io,
-				req, RIL_REQUEST_DEVICE_IDENTITY,
-				ril_plugin_device_identity_cb, NULL, slot);
-	grilio_request_unref(req);
+	ril_plugin_start_imei_query(slot, TRUE, -1);
 
 	GASSERT(!slot->radio);
 	slot->radio = ril_radio_new(slot->io);
@@ -1051,6 +1151,7 @@ static ril_slot *ril_plugin_slot_new_take(char *sockpath, char *path,
 	slot->config.enable_voicecall = RILMODEM_DEFAULT_ENABLE_VOICECALL;
 	slot->timeout = RILMODEM_DEFAULT_TIMEOUT;
 	slot->sim_flags = RILMODEM_DEFAULT_SIM_FLAGS;
+	slot->legacy_imei_query = RILMODEM_DEFAULT_LEGACY_IMEI_QUERY;
 	slot->start_timeout = RILMODEM_DEFAULT_START_TIMEOUT;
 	slot->data_opt.allow_data = RILMODEM_DEFAULT_DATA_OPT;
 	slot->data_opt.data_call_format = RILMODEM_DEFAULT_DATA_CALL_FORMAT;
@@ -1293,6 +1394,14 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 	if (sval) {
 		DBG("%s: " RILCONF_REMOTE_HANGUP_REASONS " %s", group, sval);
 		g_free(sval);
+	}
+
+	/* legacyImeiQuery */
+	if (ril_config_get_boolean(file, group,
+					RILCONF_DEFAULT_LEGACY_IMEI_QUERY,
+					&slot->legacy_imei_query)) {
+		DBG("%s: " RILCONF_DEFAULT_LEGACY_IMEI_QUERY " %s", group,
+				slot->legacy_imei_query ? "on" : "off");
 	}
 
 	return slot;
