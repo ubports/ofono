@@ -120,6 +120,8 @@ void ofono_gprs_context_set_ipv4_address(struct ofono_gprs_context *gc,
 						ofono_bool_t static_ip);
 void ofono_gprs_context_set_ipv4_netmask(struct ofono_gprs_context *gc,
 						const char *netmask);
+void ofono_gprs_context_set_ipv4_prefix_length(struct ofono_gprs_context *gc,
+						unsigned int prefix);
 void ofono_gprs_context_set_ipv4_gateway(struct ofono_gprs_context *gc,
 						const char *gateway);
 void ofono_gprs_context_set_ipv4_dns_servers(struct ofono_gprs_context *gc,
