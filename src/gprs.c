@@ -34,6 +34,7 @@
 #include <net/route.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <stdbool.h>
 
 #include <glib.h>
 #include <gdbus.h>
@@ -1599,6 +1600,20 @@ static gboolean have_active_contexts(struct ofono_gprs *gprs)
 	return FALSE;
 }
 
+static bool have_read_settings(struct ofono_gprs *gprs)
+{
+	GSList *l;
+
+	for (l = gprs->context_drivers; l; l = l->next) {
+		struct ofono_gprs_context *gc = l->data;
+
+		if (gc->driver && gc->driver->read_settings)
+			return true;
+	}
+
+	return false;
+}
+
 static void release_active_contexts(struct ofono_gprs *gprs)
 {
 	GSList *l;
@@ -1726,7 +1741,7 @@ static void gprs_netreg_update(struct ofono_gprs *gprs)
 	DBG("attach: %u, driver_attached: %u", attach, gprs->driver_attached);
 
 	if (ofono_netreg_get_technology(gprs->netreg) ==
-			ACCESS_TECHNOLOGY_EUTRAN)
+			ACCESS_TECHNOLOGY_EUTRAN && have_read_settings(gprs))
 		/*
 		 * For LTE we set attached status only on successful
 		 * context activation.
