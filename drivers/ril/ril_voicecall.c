@@ -335,13 +335,17 @@ static void ril_voicecall_clcc_poll_cb(GRilIoChannel *io, int status,
 	GASSERT(vd->clcc_poll_id);
 	vd->clcc_poll_id = 0;
 
-	if (status != RIL_E_SUCCESS) {
-		ofono_error("We are polling CLCC and received an error");
-		ofono_error("All bets are off for call management");
-		return;
+	/*
+	 * Only RIL_E_SUCCESS and RIL_E_RADIO_NOT_AVAILABLE are expected here,
+	 * all other errors are filtered out by ril_voicecall_clcc_retry()
+	 */
+	if (status == RIL_E_SUCCESS) {
+		calls = ril_voicecall_parse_clcc(data, len);
+	} else {
+		/* RADIO_NOT_AVAILABLE == no calls */
+		GASSERT(status == RIL_E_RADIO_NOT_AVAILABLE);
+		calls = NULL;
 	}
-
-	calls = ril_voicecall_parse_clcc(data, len);
 
 	n = calls;
 	o = vd->calls;
@@ -436,12 +440,25 @@ static void ril_voicecall_clcc_poll_cb(GRilIoChannel *io, int status,
 	vd->calls = calls;
 }
 
+static gboolean ril_voicecall_clcc_retry(GRilIoRequest* req, int ril_status,
+		const void* response_data, guint response_len, void* user_data)
+{
+	switch (ril_status) {
+	case RIL_E_SUCCESS:
+	case RIL_E_RADIO_NOT_AVAILABLE:
+		return FALSE;
+	default:
+		return TRUE;
+	}
+}
+
 static void ril_voicecall_clcc_poll(struct ril_voicecall *vd)
 {
 	GASSERT(vd);
 	if (!vd->clcc_poll_id) {
 		GRilIoRequest* req = grilio_request_new();
 		grilio_request_set_retry(req, RIL_RETRY_MS, -1);
+		grilio_request_set_retry_func(req, ril_voicecall_clcc_retry);
 		vd->clcc_poll_id = grilio_queue_send_request_full(vd->q,
 					req, RIL_REQUEST_GET_CURRENT_CALLS,
 					ril_voicecall_clcc_poll_cb, NULL, vd);
