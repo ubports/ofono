@@ -55,6 +55,7 @@ struct mbim_data {
 	struct mbim_device *device;
 	uint16_t max_segment;
 	uint8_t max_outstanding;
+	uint8_t max_sessions;
 };
 
 static void mbim_debug(const char *str, void *user_data)
@@ -208,6 +209,8 @@ static void mbim_device_caps_info_cb(struct mbim_message *message, void *user)
 					&firmware_info, &hardware_info);
 	if (!r)
 		goto error;
+
+	md->max_sessions = max_sessions;
 
 	DBG("DeviceId: %s", device_id);
 	DBG("FirmwareInfo: %s", firmware_info);
@@ -385,6 +388,8 @@ static void mbim_post_sim(struct ofono_modem *modem)
 
 	ofono_sms_create(modem, 0, "mbim", md->device);
 	gprs = ofono_gprs_create(modem, 0, "mbim", md->device);
+
+	ofono_gprs_set_cid_range(gprs, 0, md->max_sessions);
 
 	gc = ofono_gprs_context_create(modem, 0, "mbim", md->device);
 	if (gc) {
