@@ -18,6 +18,7 @@
 #include "ril_network.h"
 #include "ril_sim_settings.h"
 #include "ril_util.h"
+#include "ril_vendor.h"
 #include "ril_log.h"
 
 #include <gutil_strv.h>
@@ -207,10 +208,15 @@ GRilIoRequest *ril_request_deactivate_data_call_new(int cid)
  * ril_data_call
  *==========================================================================*/
 
+static struct ril_data_call *ril_data_call_new()
+{
+	return g_new0(struct ril_data_call, 1);
+}
+
 struct ril_data_call *ril_data_call_dup(const struct ril_data_call *call)
 {
 	if (call) {
-		struct ril_data_call *dc = g_new0(struct ril_data_call, 1);
+		struct ril_data_call *dc = ril_data_call_new();
 		dc->cid = call->cid;
 		dc->status = call->status;
 		dc->active = call->active;
@@ -227,13 +233,18 @@ struct ril_data_call *ril_data_call_dup(const struct ril_data_call *call)
 	}
 }
 
+static void ril_data_call_destroy(struct ril_data_call *call)
+{
+	g_free(call->ifname);
+	g_strfreev(call->dnses);
+	g_strfreev(call->addresses);
+	g_strfreev(call->gateways);
+}
+
 void ril_data_call_free(struct ril_data_call *call)
 {
 	if (call) {
-		g_free(call->ifname);
-		g_strfreev(call->dnses);
-		g_strfreev(call->addresses);
-		g_strfreev(call->gateways);
+		ril_data_call_destroy(call);
 		g_free(call);
 	}
 }
@@ -251,7 +262,7 @@ static void ril_data_call_list_free(struct ril_data_call_list *list)
 	}
 }
 
-static gint ril_data_call_parse_compare(gconstpointer a, gconstpointer b)
+static gint ril_data_call_compare(gconstpointer a, gconstpointer b)
 {
 	const struct ril_data_call *ca = a;
 	const struct ril_data_call *cb = b;
@@ -265,7 +276,7 @@ static gint ril_data_call_parse_compare(gconstpointer a, gconstpointer b)
 	}
 }
 
-static const char *ril_data_ofono_protocol_to_ril(enum ofono_gprs_proto proto)
+const char *ril_data_ofono_protocol_to_ril(enum ofono_gprs_proto proto)
 {
 	switch (proto) {
 	case OFONO_GPRS_PROTO_IPV6:
@@ -279,7 +290,7 @@ static const char *ril_data_ofono_protocol_to_ril(enum ofono_gprs_proto proto)
 	}
 }
 
-static int ril_data_protocol_to_ofono(gchar *str)
+int ril_data_protocol_to_ofono(const gchar *str)
 {
 	if (str) {
 		if (!strcmp(str, PROTO_IPV6_STR)) {
@@ -293,14 +304,13 @@ static int ril_data_protocol_to_ofono(gchar *str)
 	return -1;
 }
 
-static struct ril_data_call *ril_data_call_parse(int version,
-							GRilIoParser *rilp)
+static gboolean ril_data_call_parse_default(struct ril_data_call *call,
+					int version, GRilIoParser *rilp)
 {
 	int prot;
 	char *prot_str;
 	guint32 status = PDP_FAIL_ERROR_UNSPECIFIED;
 	guint32 active = RIL_DATA_CALL_INACTIVE;
-	struct ril_data_call *call = g_new0(struct ril_data_call, 1);
 
 	/* RIL_Data_Call_Response_v6 (see ril.h) */
 	grilio_parser_get_uint32(rilp, &status);
@@ -335,13 +345,48 @@ static struct ril_data_call *ril_data_call_parse(int version,
 	}
 
 	g_free(prot_str);
-	return call;
+	return TRUE;
+}
+
+static struct ril_data_call *ril_data_call_parse(struct ril_vendor_hook *hook,
+					int version, GRilIoParser *parser)
+{
+	GRilIoParser copy = *parser;
+	struct ril_data_call *call = ril_data_call_new();
+	gboolean parsed = ril_vendor_hook_data_call_parse(hook, call,
+							version, parser);
+
+	if (!parsed) {
+		/* Try the default parser */
+		ril_data_call_destroy(call);
+		memset(call, 0, sizeof(*call));
+		parsed = ril_data_call_parse_default(call, version, &copy);
+	}
+
+	if (parsed) {
+		DBG("[status=%d,retry=%d,cid=%d,active=%d,type=%s,ifname=%s,"
+			"mtu=%d,address=%s,dns=%s %s,gateways=%s]",
+			call->status, call->retry_time,
+			call->cid, call->active,
+			ril_data_ofono_protocol_to_ril(call->prot),
+			call->ifname, call->mtu,
+			call->addresses ? call->addresses[0] : NULL,
+			call->dnses ? call->dnses[0] : NULL,
+			(call->dnses && call->dnses[0] &&
+			call->dnses[1]) ? call->dnses[1] : "",
+			call->gateways ? call->gateways[0] : NULL);
+		return call;
+	} else {
+		ril_data_call_free(call);
+		return NULL;
+	}
 }
 
 static struct ril_data_call_list *ril_data_call_list_parse(const void *data,
-			guint len, enum ril_data_call_format format)
+				guint len, struct ril_vendor_hook *hook,
+				enum ril_data_call_format format)
 {
-	unsigned int version, n, i;
+	guint32 version, n;
 	GRilIoParser rilp;
 
 	grilio_parser_init(&rilp, data, len);
@@ -358,26 +403,23 @@ static struct ril_data_call_list *ril_data_call_list_parse(const void *data,
 			list->version = format;
 		}
 
-		for (i = 0; i < n && !grilio_parser_at_end(&rilp); i++) {
-			struct ril_data_call *call =
-				ril_data_call_parse(list->version, &rilp);
+		if (n > 0) {
+			guint i, clen = grilio_parser_bytes_remaining(&rilp)/n;
 
-			DBG("[status=%d,retry=%d,cid=%d,"
-				"active=%d,type=%s,ifname=%s,mtu=%d,"
-				"address=%s, dns=%s %s,gateways=%s]",
-				call->status, call->retry_time,
-				call->cid, call->active,
-				ril_data_ofono_protocol_to_ril(call->prot),
-				call->ifname, call->mtu,
-				call->addresses ? call->addresses[0] : NULL,
-				call->dnses ? call->dnses[0] : NULL,
-				(call->dnses && call->dnses[0] &&
-				call->dnses[1]) ? call->dnses[1] : "",
-				call->gateways ? call->gateways[0] : NULL);
+			for (i = 0; i < n; i++) {
+				GRilIoParser callp;
+				struct ril_data_call *call;
 
-			list->num++;
-			list->calls = g_slist_insert_sorted(list->calls, call,
-					ril_data_call_parse_compare);
+				grilio_parser_get_data(&rilp, &callp, clen);
+				call = ril_data_call_parse(hook, list->version,
+								&callp);
+				if (call) {
+					list->num++;
+					list->calls = g_slist_insert_sorted
+						(list->calls, call,
+							ril_data_call_compare);
+				}
+			}
 		}
 
 		if (list->calls) {
@@ -471,7 +513,7 @@ static int ril_data_call_list_move_calls(struct ril_data_call_list *dest,
 				dest->num++;
 				src->calls = g_slist_delete_link(src->calls, l);
 				dest->calls = g_slist_insert_sorted(dest->calls,
-					call, ril_data_call_parse_compare);
+					call, ril_data_call_compare);
 			}
 
 			l = next;
@@ -527,7 +569,7 @@ static void ril_data_call_list_changed_cb(GRilIoChannel *io, guint event,
 	}
 
 	ril_data_set_calls(self, ril_data_call_list_parse(data, len,
-	       				priv->options.data_call_format));
+			priv->vendor_hook, priv->options.data_call_format));
 }
 
 static void ril_data_query_data_calls_cb(GRilIoChannel *io, int ril_status,
@@ -544,7 +586,7 @@ static void ril_data_query_data_calls_cb(GRilIoChannel *io, int ril_status,
 	priv->query_id = 0;
 	if (ril_status == RIL_E_SUCCESS) {
 		ril_data_set_calls(self, ril_data_call_list_parse(data, len,
-       					priv->options.data_call_format));
+			priv->vendor_hook, priv->options.data_call_format));
 	} else {
 		/* RADIO_NOT_AVAILABLE == no calls */
 		ril_data_set_calls(self, NULL);
@@ -750,7 +792,7 @@ static void ril_data_call_setup_cb(GRilIoChannel *io, int ril_status,
 
 	if (ril_status == RIL_E_SUCCESS) {
 		list = ril_data_call_list_parse(data, len,
-					priv->options.data_call_format);
+			priv->vendor_hook, priv->options.data_call_format);
 	}
 
 	if (list) {
@@ -854,19 +896,23 @@ static gboolean ril_data_call_setup_submit(struct ril_data_request *req)
 		}
 	}
 
-	/*
-	 * TODO: add comments about tethering, other non-public
-	 * profiles...
-	 */
-	ioreq = grilio_request_new();
-	grilio_request_append_int32(ioreq, 7 /* Parameter count */);
-	grilio_request_append_format(ioreq, "%d", tech);
-	grilio_request_append_utf8(ioreq, DATA_PROFILE_DEFAULT_STR);
-	grilio_request_append_utf8(ioreq, setup->apn);
-	grilio_request_append_utf8(ioreq, setup->username);
-	grilio_request_append_utf8(ioreq, setup->password);
-	grilio_request_append_format(ioreq, "%d", auth);
-	grilio_request_append_utf8(ioreq, proto_str);
+	/* Give vendor code a chance to build a vendor specific packet */
+	ioreq = ril_vendor_hook_data_call_req(priv->vendor_hook, tech,
+			DATA_PROFILE_DEFAULT_STR, setup->apn, setup->username,
+			setup->password, auth, proto_str);
+
+	if (!ioreq) {
+		/* The default one */
+		ioreq = grilio_request_new();
+		grilio_request_append_int32(ioreq, 7 /* Parameter count */);
+		grilio_request_append_format(ioreq, "%d", tech);
+		grilio_request_append_utf8(ioreq, DATA_PROFILE_DEFAULT_STR);
+		grilio_request_append_utf8(ioreq, setup->apn);
+		grilio_request_append_utf8(ioreq, setup->username);
+		grilio_request_append_utf8(ioreq, setup->password);
+		grilio_request_append_format(ioreq, "%d", auth);
+		grilio_request_append_utf8(ioreq, proto_str);
+	}
 
 	GASSERT(!req->pending_id);
 	req->pending_id = grilio_queue_send_request_full(priv->q, ioreq,
@@ -1114,7 +1160,8 @@ static gint ril_data_compare_cb(gconstpointer a, gconstpointer b)
 struct ril_data *ril_data_new(struct ril_data_manager *dm, const char *name,
 		struct ril_radio *radio, struct ril_network *network,
 		GRilIoChannel *io, const struct ril_data_options *options,
-		const struct ril_slot_config *config)
+		const struct ril_slot_config *config,
+		struct ril_vendor_hook *vendor_hook)
 {
 	GASSERT(dm);
 	if (G_LIKELY(dm)) {
@@ -1147,6 +1194,7 @@ struct ril_data *ril_data_new(struct ril_data_manager *dm, const char *name,
 		priv->dm = ril_data_manager_ref(dm);
 		priv->radio = ril_radio_ref(radio);
 		priv->network = ril_network_ref(network);
+		priv->vendor_hook = ril_vendor_hook_ref(vendor_hook);
 		priv->io_event_id = grilio_channel_add_unsol_event_handler(io,
 				ril_data_call_list_changed_cb,
 				RIL_UNSOL_DATA_CALL_LIST_CHANGED, self);
@@ -1457,6 +1505,7 @@ static void ril_data_finalize(GObject *object)
 	ril_network_unref(priv->network);
 	ril_data_manager_unref(priv->dm);
 	ril_data_call_list_free(self->data_calls);
+	ril_vendor_hook_unref(priv->vendor_hook);
 	G_OBJECT_CLASS(ril_data_parent_class)->finalize(object);
 }
 
