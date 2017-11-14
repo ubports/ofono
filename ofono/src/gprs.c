@@ -3332,6 +3332,27 @@ void ofono_gprs_context_set_ipv4_netmask(struct ofono_gprs_context *gc,
 	settings->ipv4->netmask = g_strdup(netmask);
 }
 
+void ofono_gprs_context_set_ipv4_prefix_length(struct ofono_gprs_context *gc,
+						unsigned int length)
+{
+	struct context_settings *settings = gc->settings;
+	struct in_addr ipv4;
+	char buf[INET_ADDRSTRLEN];
+
+	if (settings->ipv4 == NULL)
+		return;
+
+	g_free(settings->ipv4->netmask);
+
+	memset(&ipv4, 0, sizeof(ipv4));
+
+	if (length)
+		ipv4.s_addr = htonl(~((1 << (32 - length)) - 1));
+
+	inet_ntop(AF_INET, &ipv4, buf, sizeof(buf));
+	settings->ipv4->netmask = g_strdup(buf);
+}
+
 void ofono_gprs_context_set_ipv4_gateway(struct ofono_gprs_context *gc,
 						const char *gateway)
 {
