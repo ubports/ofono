@@ -821,6 +821,94 @@ bool mbim_message_get_arguments(struct mbim_message *message,
 	return result;
 }
 
+static bool _mbim_message_get_data(struct mbim_message *message,
+					uint32_t offset,
+					void *dest, size_t len)
+{
+	struct mbim_message_iter iter;
+	struct mbim_message_header *hdr;
+	uint32_t type;
+	size_t begin;
+	const void *src;
+	size_t pos;
+	uint32_t i;
+
+	if (unlikely(!message))
+		return false;
+
+	if (unlikely(!message->sealed))
+		return false;
+
+	hdr = (struct mbim_message_header *) message->header;
+	type = L_LE32_TO_CPU(hdr->type);
+	begin = _mbim_information_buffer_offset(type);
+
+	_iter_init_internal(&iter, CONTAINER_TYPE_STRUCT,
+				"", NULL,
+				message->frags, message->n_frags,
+				message->info_buf_len, begin, offset, 0);
+
+	pos = align_len(iter.pos, 4);
+	if (pos + len > iter.len)
+		return false;
+
+	for (i = 0; i + 4 < len; i += 4) {
+		src = _iter_get_data(&iter, pos + i);
+		memcpy(dest + i, src, 4);
+	}
+
+	src = _iter_get_data(&iter, pos + i);
+	memcpy(dest + i, src, len - i);
+
+	return true;
+}
+
+bool mbim_message_get_ipv4_address(struct mbim_message *message,
+					uint32_t offset,
+					struct in_addr *addr)
+{
+	return _mbim_message_get_data(message, offset, &addr->s_addr, 4);
+}
+
+bool mbim_message_get_ipv4_element(struct mbim_message *message,
+					uint32_t offset,
+					uint32_t *prefix_len,
+					struct in_addr *addr)
+{
+	uint8_t buf[8];
+
+	if (!_mbim_message_get_data(message, offset, buf, 8))
+		return false;
+
+	*prefix_len = l_get_le32(buf);
+	memcpy(&addr->s_addr, buf + 4, 4);
+
+	return true;
+}
+
+bool mbim_message_get_ipv6_address(struct mbim_message *message,
+					uint32_t offset,
+					struct in6_addr *addr)
+{
+	return _mbim_message_get_data(message, offset, addr->s6_addr, 16);
+}
+
+bool mbim_message_get_ipv6_element(struct mbim_message *message,
+					uint32_t offset,
+					uint32_t *prefix_len,
+					struct in6_addr *addr)
+{
+	uint8_t buf[20];
+
+	if (!_mbim_message_get_data(message, offset, buf, 20))
+		return false;
+
+	*prefix_len = l_get_le32(buf);
+	memcpy(&addr->s6_addr, buf + 4, 16);
+
+	return true;
+}
+
 struct container {
 	void *sbuf;		/* static buffer */
 	size_t sbuf_size;
