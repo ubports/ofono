@@ -215,6 +215,29 @@ static const struct message_data message_data_packet_service_notify = {
 	.binary_len	= sizeof(message_binary_packet_service_notify),
 };
 
+static const unsigned char message_binary_ip_configuration_query[] = {
+	0x03, 0x00, 0x00, 0x80, 0xa0, 0x00, 0x00, 0x00, 0x12, 0x00, 0x00, 0x00,
+	0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xa2, 0x89, 0xcc, 0x33,
+	0xbc, 0xbb, 0x8b, 0x4f, 0xb6, 0xb0, 0x13, 0x3e, 0xc2, 0xaa, 0xe6, 0xdf,
+	0x0f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x70, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+	0x01, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+	0x4c, 0x00, 0x00, 0x00, 0x48, 0x00, 0x00, 0x00, 0x60, 0x00, 0x00, 0x00,
+	0x01, 0x00, 0x00, 0x00, 0x3c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0xac, 0x1a, 0x26, 0x01, 0x18, 0x00, 0x00, 0x00, 0x0a, 0x22, 0xd8, 0x42,
+	0x0a, 0x22, 0xd8, 0x01, 0x78, 0x00, 0x00, 0x00, 0xfe, 0x80, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0e, 0xb2, 0x8b, 0xdc, 0x01,
+	0x0a, 0x22, 0xd8, 0x42, 0xfe, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x01
+};
+
+static const struct message_data message_data_ip_configuration_query = {
+	.tid		= 0x12,
+	.binary		= message_binary_ip_configuration_query,
+	.binary_len	= sizeof(message_binary_ip_configuration_query),
+};
+
 static void do_debug(const char *str, void *user_data)
 {
 	const char *prefix = user_data;
@@ -644,6 +667,57 @@ static void parse_packet_service_notify(const void *data)
 	mbim_message_unref(msg);
 }
 
+static void parse_ip_configuration_query(const void *data)
+{
+	struct mbim_message *msg = build_message(data);
+	uint32_t session_id;
+	uint32_t ipv4_config_available;
+	uint32_t ipv6_config_available;
+	uint32_t n_ipv4_addr;
+	uint32_t ipv4_addr_offset;
+	uint32_t n_ipv6_addr;
+	uint32_t ipv6_addr_offset;
+	uint32_t ipv4_gw_offset;
+	uint32_t ipv6_gw_offset;
+	uint32_t n_ipv4_dns;
+	uint32_t ipv4_dns_offset;
+	uint32_t n_ipv6_dns;
+	uint32_t ipv6_dns_offset;
+	uint32_t ipv4_mtu;
+	uint32_t ipv6_mtu;
+
+	assert(mbim_message_get_arguments(msg, "uuuuuuuuuuuuuuu",
+				&session_id,
+				&ipv4_config_available, &ipv6_config_available,
+				&n_ipv4_addr, &ipv4_addr_offset,
+				&n_ipv6_addr, &ipv6_addr_offset,
+				&ipv4_gw_offset, &ipv6_gw_offset,
+				&n_ipv4_dns, &ipv4_dns_offset,
+				&n_ipv6_dns, &ipv6_dns_offset,
+				&ipv4_mtu, &ipv6_mtu));
+
+	assert(session_id == 0);
+	assert(ipv4_config_available == 0x7);
+	assert(ipv6_config_available == 0x3);
+
+	assert(n_ipv4_addr == 1);
+	assert(ipv4_addr_offset == 64);
+	assert(ipv4_gw_offset == 72);
+	assert(n_ipv4_dns == 1);
+	assert(ipv4_dns_offset == 60);
+
+	assert(n_ipv6_addr == 1);
+	assert(ipv6_addr_offset == 76);
+	assert(ipv6_gw_offset == 96);
+	assert(n_ipv6_dns == 0);
+	assert(ipv6_dns_offset == 0);
+
+	assert(ipv4_mtu == 0);
+	assert(ipv6_mtu == 0);
+
+	mbim_message_unref(msg);
+}
+
 int main(int argc, char *argv[])
 {
 	l_test_init(&argc, &argv);
@@ -683,6 +757,10 @@ int main(int argc, char *argv[])
 
 	l_test_add("Packet Service Notify (parse)", parse_packet_service_notify,
 			&message_data_packet_service_notify);
+
+	l_test_add("IP Configuration Query (parse)",
+				parse_ip_configuration_query,
+				&message_data_ip_configuration_query);
 
 	return l_test_run();
 }
