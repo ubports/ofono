@@ -94,6 +94,7 @@ struct ril_data_priv {
 	struct ril_network *network;
 	struct ril_data_manager *dm;
 	enum ril_data_priv_flags flags;
+	struct ril_vendor_hook *vendor_hook;
 
 	struct ril_data_request *req_queue;
 	struct ril_data_request *pending_req;
@@ -535,11 +536,18 @@ static void ril_data_query_data_calls_cb(GRilIoChannel *io, int ril_status,
 	struct ril_data *self = RIL_DATA(user_data);
 	struct ril_data_priv *priv = self->priv;
 
+	/*
+	 * Only RIL_E_SUCCESS and RIL_E_RADIO_NOT_AVAILABLE are expected here,
+	 * all other errors are filtered out by ril_voicecall_clcc_retry()
+	 */
 	GASSERT(priv->query_id);
 	priv->query_id = 0;
 	if (ril_status == RIL_E_SUCCESS) {
 		ril_data_set_calls(self, ril_data_call_list_parse(data, len,
        					priv->options.data_call_format));
+	} else {
+		/* RADIO_NOT_AVAILABLE == no calls */
+		ril_data_set_calls(self, NULL);
 	}
 }
 
@@ -1162,6 +1170,18 @@ struct ril_data *ril_data_new(struct ril_data_manager *dm, const char *name,
 	return NULL;
 }
 
+static gboolean ril_data_poll_call_state_retry(GRilIoRequest* req,
+	int ril_status, const void* resp_data, guint resp_len, void* user_data)
+{
+	switch (ril_status) {
+	case RIL_E_SUCCESS:
+	case RIL_E_RADIO_NOT_AVAILABLE:
+		return FALSE;
+	default:
+		return TRUE;
+	}
+}
+
 void ril_data_poll_call_state(struct ril_data *self)
 {
 	if (G_LIKELY(self)) {
@@ -1171,6 +1191,8 @@ void ril_data_poll_call_state(struct ril_data *self)
 			GRilIoRequest *req = grilio_request_new();
 
 			grilio_request_set_retry(req, RIL_RETRY_SECS*1000, -1);
+			grilio_request_set_retry_func(req,
+					ril_data_poll_call_state_retry);
 			priv->query_id =
 				grilio_queue_send_request_full(priv->q, req,
 					RIL_REQUEST_DATA_CALL_LIST,
