@@ -169,6 +169,9 @@ static void mbim_current_operator_cb(struct mbim_message *message, void *user)
 						&roaming_text))
 		goto error;
 
+	if (register_state < 3 || register_state > 5)
+		goto error;
+
 	DBG("provider: %s(%s)", provider_name, provider_id);
 
 	/* If MBIMRegisterStateRoaming or MBIMRegisterStatePartner */
