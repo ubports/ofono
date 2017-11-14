@@ -36,6 +36,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <ctype.h>
+#include <stdbool.h>
 
 #include <glib.h>
 #include <gdbus.h>
@@ -1952,6 +1953,22 @@ static gboolean have_active_contexts(struct ofono_gprs *gprs)
 	return FALSE;
 }
 
+#ifdef SAILFISH_OS
+static bool have_read_settings(struct ofono_gprs *gprs)
+{
+	GSList *l;
+
+	for (l = gprs->context_drivers; l; l = l->next) {
+		struct ofono_gprs_context *gc = l->data;
+
+		if (gc->driver && gc->driver->read_settings)
+			return true;
+	}
+
+	return false;
+}
+#endif
+
 static void release_active_contexts(struct ofono_gprs *gprs)
 {
 	GSList *l;
@@ -2103,9 +2120,9 @@ static void gprs_netreg_update(struct ofono_gprs *gprs)
 	 * whether context activation is possible. There won't be any
 	 * context activation if Attached stays FALSE.
 	 */
-#if 0
+#ifdef SAILFISH_OS
 	if (ofono_netreg_get_technology(gprs->netreg) ==
-			ACCESS_TECHNOLOGY_EUTRAN)
+			ACCESS_TECHNOLOGY_EUTRAN && have_read_settings(gprs))
 		/*
 		 * For LTE we set attached status only on successful
 		 * context activation.

@@ -68,7 +68,7 @@ endif
 builtin_modules =
 builtin_sources =
 builtin_libadd =
-builtin_cflags =
+builtin_cflags = -DSAILFISH_OS
 
 noinst_LTLIBRARIES += gdbus/libgdbus-internal.la
 
