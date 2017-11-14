@@ -447,7 +447,6 @@ static void ril_plugin_get_imeisv_cb(GRilIoChannel *io, int status,
 			const void *data, guint len, void *user_data)
 {
 	ril_slot *slot = user_data;
-	char *imei = NULL;
 	char *imeisv = NULL;
 
 	GASSERT(slot->imei_req_id);

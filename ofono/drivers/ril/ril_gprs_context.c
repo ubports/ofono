@@ -23,6 +23,7 @@
 
 #include <arpa/inet.h>
 
+#include "ofono.h"
 #include "common.h"
 #include "mtu-watch.h"
 
