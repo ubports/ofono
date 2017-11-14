@@ -20,6 +20,8 @@
  */
 
 #include <stdint.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
 
 struct mbim_message;
 struct mbim_message_iter;
@@ -54,6 +56,21 @@ uint32_t mbim_message_get_cid(struct mbim_message *message);
 const uint8_t *mbim_message_get_uuid(struct mbim_message *message);
 bool mbim_message_get_arguments(struct mbim_message *message,
 						const char *signature, ...);
+
+bool mbim_message_get_ipv4_address(struct mbim_message *message,
+					uint32_t offset,
+					struct in_addr *addr);
+bool mbim_message_get_ipv4_element(struct mbim_message *message,
+					uint32_t offset,
+					uint32_t *prefix_len,
+					struct in_addr *addr);
+bool mbim_message_get_ipv6_address(struct mbim_message *essage,
+					uint32_t offset,
+					struct in6_addr *addr);
+bool mbim_message_get_ipv6_element(struct mbim_message *message,
+					uint32_t offset,
+					uint32_t *prefix_len,
+					struct in6_addr *addr);
 
 bool mbim_message_iter_next_entry(struct mbim_message_iter *iter, ...);
 
