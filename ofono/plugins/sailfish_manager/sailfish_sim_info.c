@@ -23,9 +23,9 @@
 #include <gutil_misc.h>
 #include <gutil_log.h>
 
-#include "ofono.h"
-#include "common.h"
-#include "storage.h"
+#include "src/ofono.h"
+#include "src/common.h"
+#include "src/storage.h"
 
 #define SAILFISH_SIM_INFO_STORE          "cache"
 #define SAILFISH_SIM_INFO_STORE_GROUP    "sim"

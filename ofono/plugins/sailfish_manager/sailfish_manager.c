@@ -22,9 +22,8 @@
 #include <gutil_macros.h>
 #include <string.h>
 
-#define OFONO_API_SUBJECT_TO_CHANGE
-#include "ofono.h"
-#include "storage.h"
+#include "src/ofono.h"
+#include "src/storage.h"
 
 #include <sailfish_manager.h>
 #include <sailfish_cell_info.h>

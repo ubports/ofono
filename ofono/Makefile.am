@@ -24,7 +24,9 @@ pkginclude_HEADERS = include/log.h include/plugin.h include/history.h \
 			include/sim-mnclength.h \
 			include/handsfree-audio.h include/siri.h \
 			include/sms-filter.h \
-			include/netmon.h include/lte.h
+			include/netmon.h include/lte.h \
+			include/storage.h \
+			gdbus/gdbus.h
 
 nodist_pkginclude_HEADERS = include/version.h
 
@@ -1162,6 +1164,10 @@ plugins/%.rules:
 include/ofono/version.h: include/version.h
 	$(AM_V_at)$(MKDIR_P) include/ofono
 	$(AM_V_GEN)$(LN_S) $(abs_top_builddir)/$< $@
+
+include/ofono/gdbus.h: $(abs_top_srcdir)/gdbus/gdbus.h
+	$(AM_V_at)$(MKDIR_P) include/ofono
+	$(AM_V_GEN)$(LN_S) $< $@
 
 include/ofono/%.h: $(abs_top_srcdir)/include/%.h
 	$(AM_V_at)$(MKDIR_P) include/ofono
