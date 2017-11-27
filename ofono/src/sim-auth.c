@@ -369,9 +369,7 @@ static DBusMessage *usim_gsm_authenticate(DBusConnection *conn,
 	struct ofono_sim_auth *sa = data;
 	DBusMessageIter iter;
 	DBusMessageIter array;
-	int i;
 	uint8_t *aid;
-	int rands;
 
 	if (sa->pending)
 		return __ofono_error_busy(msg);
@@ -381,27 +379,22 @@ static DBusMessage *usim_gsm_authenticate(DBusConnection *conn,
 	if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_ARRAY)
 		return __ofono_error_invalid_format(msg);
 
-	rands = dbus_message_iter_get_element_count(&iter);
-
-	if (rands > 3 || rands < 2)
-		return __ofono_error_invalid_format(msg);
-
 	sa->pending = g_new0(struct auth_request, 1);
-	sa->pending->msg = dbus_message_ref(msg);
-	sa->pending->num_rands = rands;
 
 	dbus_message_iter_recurse(&iter, &array);
 
-	for (i = 0; i < sa->pending->num_rands; i++) {
+	while (dbus_message_iter_get_arg_type(&array) == DBUS_TYPE_ARRAY) {
 		int nelement;
 		DBusMessageIter in;
 
 		dbus_message_iter_recurse(&array, &in);
 
-		if (dbus_message_iter_get_arg_type(&in) != DBUS_TYPE_BYTE)
+		if (dbus_message_iter_get_arg_type(&in) != DBUS_TYPE_BYTE ||
+				sa->pending->num_rands == SIM_AUTH_MAX_RANDS)
 			goto format_error;
 
-		dbus_message_iter_get_fixed_array(&in, &sa->pending->rands[i],
+		dbus_message_iter_get_fixed_array(&in,
+				&sa->pending->rands[sa->pending->num_rands++],
 				&nelement);
 
 		if (nelement != 16)
@@ -410,12 +403,15 @@ static DBusMessage *usim_gsm_authenticate(DBusConnection *conn,
 		dbus_message_iter_next(&array);
 	}
 
+	if (sa->pending->num_rands < 2)
+		goto format_error;
+
 	/*
 	 * retrieve session from SIM
 	 */
 	aid = find_aid_by_path(sa->aid_objects, dbus_message_get_path(msg));
 	sa->pending->session = __ofono_sim_get_session_by_aid(sa->sim, aid);
-
+	sa->pending->msg = dbus_message_ref(msg);
 	sa->pending->watch_id = __ofono_sim_add_session_watch(
 			sa->pending->session, get_session_cb, sa, NULL);
 
