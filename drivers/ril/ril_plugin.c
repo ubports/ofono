@@ -46,7 +46,7 @@
 
 #define OFONO_API_SUBJECT_TO_CHANGE
 #include <ofono/plugin.h>
-#include "storage.h"
+#include <ofono/storage.h>
 
 #define OFONO_RADIO_ACCESS_MODE_ALL (OFONO_RADIO_ACCESS_MODE_GSM |\
                                      OFONO_RADIO_ACCESS_MODE_UMTS |\
@@ -1664,7 +1664,7 @@ static void ril_plugin_set_storage_perm(const char *path,
 
 static void ril_plugin_switch_identity(const struct ril_plugin_identity *id)
 {
-	ril_plugin_set_storage_perm(STORAGEDIR, id);
+	ril_plugin_set_storage_perm(ofono_storage_dir(), id);
 	if (prctl(PR_SET_KEEPCAPS, 1, 0, 0, 0) < 0) {
 		ofono_error("prctl(PR_SET_KEEPCAPS) failed: %s",
 							strerror(errno));
