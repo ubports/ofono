@@ -27,8 +27,8 @@ pkginclude_HEADERS = include/log.h include/plugin.h include/history.h \
 			include/voicecall-filter.h include/dbus-access.h \
 			include/ril-constants.h include/ril-transport.h \
 			include/storage.h include/watch.h gdbus/gdbus.h \
-			include/netmon.h include/lte.h include/ims.h
-			include/netmon.h include/lte.h include/ims.h
+			include/netmon.h include/lte.h include/ims.h \
+			include/storage.h
 
 nodist_pkginclude_HEADERS = include/version.h
 
