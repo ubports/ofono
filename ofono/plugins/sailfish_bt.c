@@ -35,7 +35,7 @@
 struct sfos_bt {
 	unsigned int emu_watch;
 	struct ofono_modem *modem;
-	struct ofono_emulator *em;
+	GSList* ems;
 	unsigned char speaker_volume;
 	unsigned char microphone_volume;
 };
@@ -43,22 +43,39 @@ struct sfos_bt {
 static GSList *modems;
 static guint modemwatch_id;
 
+static void sfos_bt_send_unsolicited(struct sfos_bt *bt,
+				const char *format, ...) G_GNUC_PRINTF(2, 3);
+
+static void sfos_bt_send_unsolicited(struct sfos_bt *bt,
+				const char *format, ...)
+{
+	if (bt->ems) {
+		GSList *l;
+		GString* buf = g_string_sized_new(15);
+
+		va_list va;
+		va_start(va, format);
+		g_string_vprintf(buf, format, va);
+		va_end(va);
+
+		for (l = bt->ems; l; l = l->next) {
+			ofono_emulator_send_unsolicited(l->data, buf->str);
+		}
+
+		g_string_free(buf, TRUE);
+	}
+}
+
 static void set_hfp_microphone_volume(struct sfos_bt *sfos_bt,
 					unsigned char gain)
 {
-	char buf[64];
-
-	snprintf(buf, sizeof(buf), "+VGM:%d", (int) gain);
-	ofono_emulator_send_unsolicited(sfos_bt->em, buf);
+	sfos_bt_send_unsolicited(sfos_bt, "+VGM:%d", (int) gain);
 }
 
 static void set_hfp_speaker_volume(struct sfos_bt *sfos_bt,
 					unsigned char gain)
 {
-	char buf[64];
-
-	snprintf(buf, sizeof(buf), "+VGS:%d", (int) gain);
-	ofono_emulator_send_unsolicited(sfos_bt->em, buf);
+	sfos_bt_send_unsolicited(sfos_bt, "+VGS:%d", (int) gain);
 }
 
 static DBusMessage *cv_set_property(DBusConnection *conn, DBusMessage *msg,
@@ -165,8 +182,8 @@ static const GDBusSignalTable cv_signals[] = {
 	{ }
 };
 
-int sfos_bt_call_volume_set(struct ofono_modem *modem, unsigned char volume,
-							const char *gain)
+static int sfos_bt_call_volume_set(struct ofono_modem *modem,
+				unsigned char volume, const char *gain)
 {
 	DBusConnection *conn = ofono_dbus_get_connection();
 	const char *path = ofono_modem_get_path(modem);
@@ -233,7 +250,7 @@ static void sfos_bt_vgs_cb(struct ofono_emulator *em,
 	set_gain(em, req, userdata, gain);
 }
 
-void sfos_bt_cv_dbus_new(struct sfos_bt *sfos_bt)
+static void sfos_bt_cv_dbus_new(struct sfos_bt *sfos_bt)
 {
 	DBusConnection *conn = ofono_dbus_get_connection();
 	struct ofono_modem *modem = sfos_bt->modem;
@@ -255,7 +272,7 @@ static void sfos_bt_remove_handler(struct ofono_emulator *em)
 	ofono_emulator_remove_handler(em, "+VGM");
 }
 
-void sfos_bt_cv_dbus_free(struct sfos_bt *sfos_bt)
+static void sfos_bt_cv_dbus_free(struct sfos_bt *sfos_bt)
 {
 	DBusConnection *conn = ofono_dbus_get_connection();
 	struct ofono_modem *modem = sfos_bt->modem;
@@ -269,19 +286,24 @@ static void sfos_bt_emu_watch_cb(struct ofono_atom *atom,
 				enum ofono_atom_watch_condition cond,
 				void *data)
 {
-	struct sfos_bt *sfos_bt = data;
+	struct sfos_bt *bt = data;
+	struct ofono_emulator *em = __ofono_atom_get_data(atom);
 
 	if (cond == OFONO_ATOM_WATCH_CONDITION_REGISTERED){
-		sfos_bt->em = __ofono_atom_get_data(atom);
-		sfos_bt_cv_dbus_new(sfos_bt);
-		ofono_emulator_add_handler(sfos_bt->em, "+VGS",
-					sfos_bt_vgs_cb, sfos_bt, NULL);
-		ofono_emulator_add_handler(sfos_bt->em, "+VGM",
-					sfos_bt_vgm_cb, sfos_bt, NULL);
+		if (!bt->ems)
+			sfos_bt_cv_dbus_new(bt);
+
+		bt->ems = g_slist_append(bt->ems, em);
+		ofono_emulator_add_handler(em, "+VGS", sfos_bt_vgs_cb, bt,
+									NULL);
+		ofono_emulator_add_handler(em, "+VGM", sfos_bt_vgm_cb, bt,
+									NULL);
 	} else {
-		sfos_bt_cv_dbus_free(sfos_bt);
-		sfos_bt_remove_handler(sfos_bt->em);
-		sfos_bt->em = NULL;
+		sfos_bt_remove_handler(em);
+		bt->ems = g_slist_remove(bt->ems, em);
+
+		if (!bt->ems)
+			sfos_bt_cv_dbus_free(bt);
 	}
 }
 
@@ -292,20 +314,25 @@ static void sfos_bt_emu_watch_destroy(void *data)
 	sfos_bt->emu_watch = 0;
 }
 
+static void sfos_bt_free_em(gpointer data)
+{
+	sfos_bt_remove_handler((struct ofono_emulator*)data);
+}
+
 static void sfos_bt_free(void *data)
 {
-	struct sfos_bt *sfos_bt = data;
+	struct sfos_bt *bt = data;
 
-	if (sfos_bt->emu_watch)
-		__ofono_modem_remove_atom_watch(sfos_bt->modem,
-							sfos_bt->emu_watch);
+	if (bt->emu_watch)
+		__ofono_modem_remove_atom_watch(bt->modem, bt->emu_watch);
 
-	if (sfos_bt->em) {
-		sfos_bt_cv_dbus_free(sfos_bt);
-		sfos_bt_remove_handler(sfos_bt->em);
+	if (bt->ems) {
+		sfos_bt_cv_dbus_free(bt);
+		g_slist_free_full(bt->ems, sfos_bt_free_em);
+		bt->ems = NULL;
 	}
 
-	g_free(sfos_bt);
+	g_free(bt);
 }
 
 static gint sfos_bt_find_modem(gconstpointer listdata, gconstpointer modem)
