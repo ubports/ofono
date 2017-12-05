@@ -1134,6 +1134,13 @@ static void discover_callback(uint16_t message, uint16_t length,
 		uint8_t type = service_list->services[i].type;
 		const char *name = __service_type_to_string(type);
 
+		if (name)
+			__debug_device(device, "found service [%s %d.%d]",
+				       name, major, minor);
+		else
+			__debug_device(device, "found service [%d %d.%d]",
+				       type, major, minor);
+
 		if (type == QMI_SERVICE_CONTROL) {
 			device->control_major = major;
 			device->control_minor = minor;
@@ -1146,13 +1153,6 @@ static void discover_callback(uint16_t message, uint16_t length,
 		list[count].name = name;
 
 		count++;
-
-		if (name)
-			__debug_device(device, "found service [%s %d.%d]",
-							name, major, minor);
-		else
-			__debug_device(device, "found service [%d %d.%d]",
-							type, major, minor);
 	}
 
 	ptr = tlv_get(buffer, length, 0x10, &len);
