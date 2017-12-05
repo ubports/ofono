@@ -476,6 +476,17 @@ static const char *__error_to_string(uint16_t error)
 	return NULL;
 }
 
+int qmi_error_to_ofono_cme(int qmi_error) {
+	switch (qmi_error) {
+	case 0x0019:
+		return 4; /* Not Supported */
+	case 0x0052:
+		return 32; /* Access Denied */
+	default:
+		return -1;
+	}
+}
+
 static void __debug_msg(const char dir, const void *buf, size_t len,
 				qmi_debug_func_t function, void *user_data)
 {

@@ -144,6 +144,8 @@ bool qmi_result_get_uint64(struct qmi_result *result, uint8_t type,
 							uint64_t *value);
 void qmi_result_print_tlvs(struct qmi_result *result);
 
+int qmi_error_to_ofono_cme(int qmi_error);
+
 struct qmi_service;
 
 typedef void (*qmi_result_func_t)(struct qmi_result *result, void *user_data);
