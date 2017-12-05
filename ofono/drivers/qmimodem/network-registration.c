@@ -332,6 +332,7 @@ static void register_net_cb(struct qmi_result *result, void *user_data)
 	struct cb_data *cbd = user_data;
 	ofono_netreg_register_cb_t cb = cbd->cb;
 	uint16_t error;
+	int cme_error;
 
 	DBG("");
 
@@ -341,7 +342,8 @@ static void register_net_cb(struct qmi_result *result, void *user_data)
 			goto done;
 		}
 
-		CALLBACK_WITH_FAILURE(cb, cbd->data);
+		cme_error = qmi_error_to_ofono_cme(error);
+		CALLBACK_WITH_CME_ERROR(cb, cme_error, cbd->data);
 		return;
 	}
 
