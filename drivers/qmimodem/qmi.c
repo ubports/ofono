@@ -1342,6 +1342,65 @@ bool qmi_device_shutdown(struct qmi_device *device, qmi_shutdown_func_t func,
 	return true;
 }
 
+struct sync_data {
+	qmi_sync_func_t func;
+	void *user_data;
+};
+
+static void qmi_device_sync_callback(uint16_t message, uint16_t length,
+				     const void *buffer, void *user_data)
+{
+	struct sync_data *data = user_data;
+
+	if (data->func)
+		data->func(data->user_data);
+
+	g_free(data);
+}
+
+/* sync will release all previous clients */
+bool qmi_device_sync(struct qmi_device *device,
+		     qmi_sync_func_t func, void *user_data)
+{
+	struct qmi_request *req;
+	struct qmi_control_hdr *hdr;
+	struct sync_data *func_data;
+
+	if (!device)
+		return false;
+
+	__debug_device(device, "Sending sync to reset QMI");
+
+	func_data = g_new0(struct sync_data, 1);
+	func_data->func = func;
+	func_data->user_data = user_data;
+
+	req = __request_alloc(QMI_SERVICE_CONTROL, 0x00,
+			QMI_CTL_SYNC, QMI_CONTROL_HDR_SIZE,
+			NULL, 0,
+			qmi_device_sync_callback, func_data, (void **) &hdr);
+
+	if (device->next_control_tid < 1)
+		device->next_control_tid = 1;
+
+	hdr->type = 0x00;
+	hdr->transaction = device->next_control_tid++;
+
+	__request_submit(device, req, hdr->transaction);
+
+	return true;
+}
+
+/* if the device support the QMI call SYNC over the CTL interface */
+bool qmi_device_is_sync_supported(struct qmi_device *device)
+{
+	if (device == NULL)
+		return false;
+
+	return (device->control_major > 1 ||
+		(device->control_major == 1 && device->control_minor >= 5));
+}
+
 static bool get_device_file_name(struct qmi_device *device,
 					char *file_name, int size)
 {
