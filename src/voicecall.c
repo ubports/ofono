@@ -1592,6 +1592,7 @@ static void manager_dial_last_callback(const struct ofono_error *error,
 	if (!v)
 		goto error;
 
+	path = voicecall_build_path(vc, v->call);
 	reply = dbus_message_new_method_return(vc->pending);
 	dbus_message_append_args(reply, DBUS_TYPE_OBJECT_PATH, &path,
 						DBUS_TYPE_INVALID);
