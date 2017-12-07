@@ -58,8 +58,6 @@ struct ril_modem_data {
 	char *imeisv;
 	char *imei;
 	char *ecclist_file;
-	gboolean pre_sim_done;
-	gboolean allow_data;
 	gulong imsi_event_id;
 
 	guint online_check_id;
@@ -249,7 +247,6 @@ static void ril_modem_pre_sim(struct ofono_modem *modem)
 	struct ril_modem_data *md = ril_modem_data_from_ofono(modem);
 
 	DBG("%s", ofono_modem_get_path(modem));
-	md->pre_sim_done = TRUE;
 	ofono_devinfo_create(modem, 0, RILMODEM_DRIVER, md);
 	ofono_sim_create(modem, 0, RILMODEM_DRIVER, md);
 	if (md->modem.config.enable_voicecall) {
