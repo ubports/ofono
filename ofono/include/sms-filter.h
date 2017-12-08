@@ -120,6 +120,13 @@ typedef void (*ofono_sms_filter_recv_datagram_cb_t)
 #define OFONO_SMS_FILTER_PRIORITY_HIGH    (100)
 
 /*
+ * The api_version field makes it possible to keep using old plugins
+ * even if struct ofono_sms_filter gets extended with new callbacks.
+ */
+
+#define OFONO_SMS_FILTER_API_VERSION      (0)
+
+/*
  * The filter callbacks either invoke the completion callback directly
  * or return the id of the cancellable asynchronous operation (but never
  * both). If non-zero value is returned, the completion callback has to
@@ -135,6 +142,7 @@ typedef void (*ofono_sms_filter_recv_datagram_cb_t)
  */
 struct ofono_sms_filter {
 	const char *name;
+	int api_version;        /* OFONO_SMS_FILTER_API_VERSION */
 	int priority;
 	unsigned int (*filter_send_text)(struct ofono_modem *modem,
 				const struct ofono_sms_address *addr,
