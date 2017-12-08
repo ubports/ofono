@@ -2200,6 +2200,9 @@ static void sim_efli_efpl_changed(int id, void *userdata)
 	if (sim->efli != NULL) /* This shouldn't happen */
 		return;
 
+	if (sim->language_prefs_update)
+		return;
+
 	if (sim->language_prefs) {
 		g_strfreev(sim->language_prefs);
 		sim->language_prefs = NULL;
