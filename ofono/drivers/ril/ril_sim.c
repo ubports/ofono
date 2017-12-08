@@ -18,6 +18,7 @@
 #include "ril_util.h"
 #include "ril_log.h"
 
+#include "sailfish_watch.h"
 #include "simutil.h"
 #include "util.h"
 #include "ofono.h"
@@ -75,12 +76,15 @@ struct ril_sim {
 	int retries[OFONO_SIM_PASSWORD_INVALID];
 	gboolean empty_pin_query_allowed;
 	gboolean inserted;
-	guint idle_id;
+	guint idle_id; /* Used by register and SIM reset callbacks */
 	gulong card_event_id[SIM_CARD_EVENT_COUNT];
 	guint query_pin_retries_id;
 
 	const char *log_prefix;
 	char *allocated_log_prefix;
+
+	struct sailfish_watch *watch;
+	gulong sim_state_watch_id;
 
 	/* query_passwd_state context */
 	ofono_sim_passwd_cb_t query_passwd_state_cb;
@@ -850,6 +854,34 @@ static void ril_sim_status_changed_cb(struct ril_sim_card *sc, void *user_data)
 	}
 }
 
+static gboolean ril_sim_reinsert_cb(gpointer data)
+{
+	struct ril_sim *sd = data;
+	const enum ofono_sim_state state = ofono_sim_get_state(sd->watch->sim);
+
+	GASSERT(sd->idle_id);
+	sd->idle_id = 0;
+
+	if (state == OFONO_SIM_STATE_RESETTING && sd->inserted) {
+		DBG_(sd, "reinserting SIM");
+		ofono_sim_inserted_notify(sd->sim, TRUE);
+	}
+
+	return G_SOURCE_REMOVE;
+}
+
+static void ril_sim_state_changed_cb(struct sailfish_watch *watch, void *data)
+{
+	struct ril_sim *sd = data;
+	const enum ofono_sim_state state = ofono_sim_get_state(watch->sim);
+
+	DBG_(sd, "%d %d", state, sd->inserted);
+	if (state == OFONO_SIM_STATE_RESETTING && sd->inserted &&
+							!sd->idle_id) {
+		sd->idle_id = g_idle_add(ril_sim_reinsert_cb, sd);
+	}
+}
+
 static int ril_sim_parse_retry_count(const void *data, guint len)
 {
 	int retry_count = -1;
@@ -1391,6 +1423,9 @@ static gboolean ril_sim_register(gpointer user)
 	sd->card_event_id[SIM_CARD_APP_EVENT] =
 		ril_sim_card_add_app_changed_handler(sd->card,
 					ril_sim_app_changed_cb, sd);
+	sd->sim_state_watch_id =
+		sailfish_watch_add_sim_state_changed_handler(sd->watch,
+					ril_sim_state_changed_cb, sd);
 
 	/* Check the current state */
 	ril_sim_status_changed_cb(sd->card, sd);
@@ -1409,6 +1444,7 @@ static int ril_sim_probe(struct ofono_sim *sim, unsigned int vendor,
 	sd->io = grilio_channel_ref(ril_modem_io(modem));
 	sd->card = ril_sim_card_ref(modem->sim_card);
 	sd->q = grilio_queue_new(sd->io);
+	sd->watch = sailfish_watch_new(ril_modem_get_path(modem));
 
 	if (modem->log_prefix && modem->log_prefix[0]) {
 		sd->log_prefix = sd->allocated_log_prefix =
@@ -1444,6 +1480,9 @@ static void ril_sim_remove(struct ofono_sim *sim)
 		ril_sim_card_remove_handler(sd->card,
 			sd->query_passwd_state_sim_status_refresh_id);
 	}
+
+	sailfish_watch_remove_handler(sd->watch, sd->sim_state_watch_id);
+	sailfish_watch_unref(sd->watch);
 
 	ril_sim_card_remove_handlers(sd->card, sd->card_event_id,
 					G_N_ELEMENTS(sd->card_event_id));
