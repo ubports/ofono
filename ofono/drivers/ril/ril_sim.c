@@ -24,6 +24,9 @@
 #include "ofono.h"
 
 #define SIM_STATE_CHANGE_TIMEOUT_SECS (5)
+#define FAC_LOCK_QUERY_TIMEOUT_SECS   (10)
+#define FAC_LOCK_QUERY_RETRIES        (1)
+#define SIM_IO_TIMEOUT_SECS           (20)
 
 #define EF_STATUS_INVALIDATED 0
 #define EF_STATUS_VALID 1
@@ -489,6 +492,7 @@ static void ril_sim_request_io(struct ril_sim *sd, guint cmd, int fileid,
 	grilio_request_append_utf8(req, ril_sim_app_id(sd));
 
 	grilio_request_set_blocking(req, TRUE);
+	grilio_request_set_timeout(req, SIM_IO_TIMEOUT_SECS * 1000);
 	cbd->req_id = grilio_queue_send_request_full(sd->q, req,
 				RIL_REQUEST_SIM_IO, cb, ril_sim_cbd_free, cbd);
 	ril_sim_card_sim_io_started(sd->card, cbd->req_id);
@@ -1388,6 +1392,13 @@ static void ril_sim_query_facility_lock_cb(GRilIoChannel *io, int status,
 	cb(ril_error_failure(&error), FALSE, cbd->data);
 }
 
+static gboolean ril_sim_query_facility_lock_retry(GRilIoRequest* req,
+				int ril_status, const void* response_data,
+				guint response_len, void* user_data)
+{
+	return (ril_status == GRILIO_STATUS_TIMEOUT);
+}
+
 static void ril_sim_query_facility_lock(struct ofono_sim *sim,
 				enum ofono_sim_password_type type,
 				ofono_query_facility_lock_cb_t cb, void *data)
@@ -1397,6 +1408,11 @@ static void ril_sim_query_facility_lock(struct ofono_sim *sim,
 	struct ril_sim_cbd *cbd = ril_sim_cbd_new(sd, cb, data);
 	GRilIoRequest *req = grilio_request_array_utf8_new(4,
 			type_str, "", "0" /* class */, ril_sim_app_id(sd));
+
+	/* Make sure that this request gets completed sooner or later */
+	grilio_request_set_timeout(req, FAC_LOCK_QUERY_TIMEOUT_SECS * 1000);
+	grilio_request_set_retry(req, RIL_RETRY_MS, FAC_LOCK_QUERY_RETRIES);
+	grilio_request_set_retry_func(req, ril_sim_query_facility_lock_retry);
 
 	DBG_(sd, "%s", type_str);
 	cbd->req_id = grilio_queue_send_request_full(sd->q, req,
