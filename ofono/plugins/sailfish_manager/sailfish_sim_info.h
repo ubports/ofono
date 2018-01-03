@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2017 Jolla Ltd.
+ *  Copyright (C) 2017-2018 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -48,7 +48,6 @@ typedef void (*sailfish_sim_info_cb_t)(struct sailfish_sim_info *si,
 struct sailfish_sim_info *sailfish_sim_info_new(const char *path);
 struct sailfish_sim_info *sailfish_sim_info_ref(struct sailfish_sim_info *si);
 void sailfish_sim_info_unref(struct sailfish_sim_info *si);
-void sailfish_sim_info_invalidate(struct sailfish_sim_info *si);
 gulong sailfish_sim_info_add_iccid_changed_handler(struct sailfish_sim_info *si,
 				sailfish_sim_info_cb_t cb, void *user_data);
 gulong sailfish_sim_info_add_imsi_changed_handler(struct sailfish_sim_info *si,

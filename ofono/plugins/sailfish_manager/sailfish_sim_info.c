@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2017 Jolla Ltd.
+ *  Copyright (C) 2017-2018 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -65,6 +65,7 @@ struct sailfish_sim_info_priv {
 	guint netreg_status_watch_id;
 	gboolean update_imsi_cache;
 	gboolean update_iccid_map;
+	int queued_signals;
 };
 
 enum sailfish_sim_info_signal {
@@ -94,10 +95,35 @@ G_DEFINE_TYPE(SailfishSimInfo, sailfish_sim_info, G_TYPE_OBJECT)
 /* Skip the leading slash from the modem path: */
 #define DBG_(obj,fmt,args...) DBG("%s " fmt, (obj)->path+1, ##args)
 
+static int sailfish_sim_info_signal_bit(enum sailfish_sim_info_signal id)
+{
+	return (1 << id);
+}
+
 static void sailfish_sim_info_signal_emit(struct sailfish_sim_info *self,
 					enum sailfish_sim_info_signal id)
 {
+	self->priv->queued_signals &= ~sailfish_sim_info_signal_bit(id);
 	g_signal_emit(self, sailfish_sim_info_signals[id], 0);
+}
+
+static void sailfish_sim_info_signal_queue(struct sailfish_sim_info *self,
+					enum sailfish_sim_info_signal id)
+{
+	self->priv->queued_signals |= sailfish_sim_info_signal_bit(id);
+}
+
+static void sailfish_sim_info_emit_queued_signals
+					(struct sailfish_sim_info *self)
+{
+	struct sailfish_sim_info_priv *priv = self->priv;
+	int i;
+
+	for (i = 0; priv->queued_signals && i < SIGNAL_COUNT; i++) {
+		if (priv->queued_signals & sailfish_sim_info_signal_bit(i)) {
+			sailfish_sim_info_signal_emit(self, i);
+		}
+	}
 }
 
 static void sailfish_sim_info_update_imsi_cache(struct sailfish_sim_info *self)
@@ -178,8 +204,15 @@ static void sailfish_sim_info_update_public_spn(struct sailfish_sim_info *self)
 
 	if (g_strcmp0(priv->public_spn, spn)) {
 		g_free(priv->public_spn);
-		self->spn = priv->public_spn = g_strdup(spn);
-		sailfish_sim_info_signal_emit(self, SIGNAL_SPN_CHANGED);
+		if (spn && spn[0]) {
+			DBG_(self, "public spn \"%s\"", spn);
+			priv->public_spn = g_strdup(spn);
+		} else {
+			DBG_(self, "no public spn");
+			priv->public_spn = NULL;
+		}
+		self->spn = priv->public_spn;
+		sailfish_sim_info_signal_queue(self, SIGNAL_SPN_CHANGED);
 	}
 }
 
@@ -254,29 +287,25 @@ static void sailfish_sim_info_update_default_spn(struct sailfish_sim_info *self)
 	}
 }
 
-static void sailfish_sim_info_set_imsi(struct sailfish_sim_info *self,
-							const char *imsi)
-{
-	struct sailfish_sim_info_priv *priv = self->priv;
-
-	if (g_strcmp0(priv->imsi, imsi)) {
-		DBG_(self, "%s", imsi);
-		g_free(priv->imsi);
-		self->imsi = priv->imsi = g_strdup(imsi);
-		priv->update_iccid_map = TRUE;
-		sailfish_sim_info_update_iccid_map(self);
-		sailfish_sim_info_update_imsi_cache(self);
-		sailfish_sim_info_signal_emit(self, SIGNAL_IMSI_CHANGED);
-	}
-}
-
 static void sailfish_sim_info_update_imsi(struct sailfish_sim_info *self)
 {
-	struct sailfish_watch *watch = self->priv->watch;
+	struct sailfish_sim_info_priv *priv = self->priv;
+	const char *imsi = priv->watch->imsi;
 
-	if (watch->imsi && watch->imsi[0]) {
-		sailfish_sim_info_set_imsi(self, watch->imsi);
+	if (g_strcmp0(priv->imsi, imsi)) {
+		g_free(priv->imsi);
+		self->imsi = priv->imsi = g_strdup(imsi);
+		if (imsi && imsi[0]) {
+			DBG_(self, "%s", imsi);
+			priv->update_iccid_map = TRUE;
+			sailfish_sim_info_update_iccid_map(self);
+			sailfish_sim_info_update_imsi_cache(self);
+		}
+		sailfish_sim_info_signal_queue(self, SIGNAL_IMSI_CHANGED);
 	}
+
+	/* Check if MCC/MNC have changed */
+	sailfish_sim_info_update_default_spn(self);
 }
 
 static void sailfish_sim_info_network_check(struct sailfish_sim_info *self)
@@ -333,7 +362,8 @@ static void sailfish_sim_info_load_cache(struct sailfish_sim_info *self)
 			self->imsi = priv->imsi = imsi;
 			DBG_(self, "imsi[%s] = %s", priv->iccid, imsi);
 			sailfish_sim_info_update_iccid_map(self);
-			sailfish_sim_info_signal_emit(self,
+			sailfish_sim_info_update_default_spn(self);
+			sailfish_sim_info_signal_queue(self,
 						SIGNAL_IMSI_CHANGED);
 		} else if (imsi) {
 			g_free(imsi);
@@ -378,14 +408,15 @@ static void sailfish_sim_info_set_iccid(struct sailfish_sim_info *self,
 	if (g_strcmp0(priv->iccid, iccid)) {
 		g_free(priv->iccid);
 		self->iccid = priv->iccid = g_strdup(iccid);
-		sailfish_sim_info_signal_emit(self, SIGNAL_ICCID_CHANGED);
+		sailfish_sim_info_signal_queue(self, SIGNAL_ICCID_CHANGED);
 		if (iccid) {
 			sailfish_sim_info_load_cache(self);
 		} else {
+			DBG_(self, "no more iccid");
 			if (priv->imsi) {
 				g_free(priv->imsi);
 				self->imsi = priv->imsi = NULL;
-				sailfish_sim_info_signal_emit(self,
+				sailfish_sim_info_signal_queue(self,
 							SIGNAL_IMSI_CHANGED);
 			}
 			if (priv->sim_spn) {
@@ -393,21 +424,11 @@ static void sailfish_sim_info_set_iccid(struct sailfish_sim_info *self,
 				priv->sim_spn = NULL;
 				sailfish_sim_info_set_cached_spn(self, NULL);
 			}
+			/* No more default SPN too */
+			priv->default_spn[0] = 0;
+			sailfish_sim_info_update_public_spn(self);
 		}
 	}
-}
-
-static void sailfish_sim_info_sim_watch_cb(struct sailfish_watch *watch,
-								void *data)
-{
-	struct sailfish_sim_info *self = SAILFISH_SIMINFO(data);
-	struct ofono_sim *sim = self->priv->watch->sim;
-
-	sailfish_sim_info_update_default_spn(self);
-	if (ofono_sim_get_state(sim) == OFONO_SIM_STATE_NOT_PRESENT) {
-		sailfish_sim_info_set_iccid(self, NULL);
-	}
-	sailfish_sim_info_network_check(self);
 }
 
 static void sailfish_sim_info_iccid_watch_cb(struct sailfish_watch *watch,
@@ -417,24 +438,34 @@ static void sailfish_sim_info_iccid_watch_cb(struct sailfish_watch *watch,
 
 	DBG_(self, "%s", watch->iccid);
 	sailfish_sim_info_set_iccid(self, watch->iccid);
+	sailfish_sim_info_emit_queued_signals(self);
 }
 
 static void sailfish_sim_info_imsi_watch_cb(struct sailfish_watch *watch,
 								void *data)
 {
-	sailfish_sim_info_update_imsi(SAILFISH_SIMINFO(data));
+	struct sailfish_sim_info *self = SAILFISH_SIMINFO(data);
+
+	sailfish_sim_info_update_imsi(self);
+	sailfish_sim_info_emit_queued_signals(self);
 }
 
 static void sailfish_sim_info_spn_watch_cb(struct sailfish_watch *watch,
 								void *data)
 {
-	sailfish_sim_info_update_spn(SAILFISH_SIMINFO(data));
+	struct sailfish_sim_info *self = SAILFISH_SIMINFO(data);
+
+	sailfish_sim_info_update_spn(self);
+	sailfish_sim_info_emit_queued_signals(self);
 }
 
 static void sailfish_sim_info_netreg_watch(int status, int lac, int ci,
 		int tech, const char *mcc, const char *mnc, void *data)
 {
-	sailfish_sim_info_network_check(SAILFISH_SIMINFO(data));
+	struct sailfish_sim_info *self = SAILFISH_SIMINFO(data);
+
+	sailfish_sim_info_network_check(self);
+	sailfish_sim_info_emit_queued_signals(self);
 }
 
 static void sailfish_sim_info_netreg_watch_done(void *data)
@@ -475,7 +506,10 @@ static void sailfish_sim_info_set_netreg(struct sailfish_sim_info *self,
 static void sailfish_sim_info_netreg_changed(struct sailfish_watch *watch,
 								void *data)
 {
-	sailfish_sim_info_set_netreg(SAILFISH_SIMINFO(data), watch->netreg);
+	struct sailfish_sim_info *self = SAILFISH_SIMINFO(data);
+
+	sailfish_sim_info_set_netreg(self, watch->netreg);
+	sailfish_sim_info_emit_queued_signals(self);
 }
 
 struct sailfish_sim_info *sailfish_sim_info_new(const char *path)
@@ -490,12 +524,6 @@ struct sailfish_sim_info *sailfish_sim_info_new(const char *path)
 		priv = self->priv;
 		priv->watch = watch;
 		self->path = watch->path;
-		priv->watch_event_id[WATCH_EVENT_SIM] =
-			sailfish_watch_add_sim_changed_handler(watch,
-				sailfish_sim_info_sim_watch_cb, self);
-		priv->watch_event_id[WATCH_EVENT_SIM_STATE] =
-			sailfish_watch_add_sim_state_changed_handler(watch,
-				sailfish_sim_info_sim_watch_cb, self);
 		priv->watch_event_id[WATCH_EVENT_ICCID] =
 			sailfish_watch_add_iccid_changed_handler(watch,
 				sailfish_sim_info_iccid_watch_cb, self);
@@ -513,6 +541,9 @@ struct sailfish_sim_info *sailfish_sim_info_new(const char *path)
 		sailfish_sim_info_update_imsi(self);
 		sailfish_sim_info_update_spn(self);
 		sailfish_sim_info_network_check(self);
+
+		/* Clear queued events, if any */
+		priv->queued_signals = 0;
 	}
 	return self;
 }
@@ -531,13 +562,6 @@ void sailfish_sim_info_unref(struct sailfish_sim_info *self)
 {
 	if (self) {
 		g_object_unref(SAILFISH_SIMINFO(self));
-	}
-}
-
-void sailfish_sim_info_invalidate(struct sailfish_sim_info *self)
-{
-	if (self) {
-		sailfish_sim_info_set_iccid(self, NULL);
 	}
 }
 
