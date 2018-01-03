@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2017 Jolla Ltd.
+ *  Copyright (C) 2017-2018 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -795,9 +795,6 @@ void sailfish_manager_set_sim_state(struct sailfish_slot *s,
 			slot->pub.sim_present = present;
 			sailfish_manager_dbus_signal_sim(p->dbus,
 						slot->index, present);
-			if (!present) {
-				sailfish_sim_info_invalidate(slot->siminfo);
-			}
 			sailfish_manager_update_modem_paths_full(p);
 		}
 

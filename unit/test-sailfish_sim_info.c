@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2017 Jolla Ltd.
+ *  Copyright (C) 2017-2018 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -182,7 +182,6 @@ static void test_basic(void)
 	g_assert(!sailfish_sim_info_new(NULL));
 	g_assert(!sailfish_sim_info_ref(NULL));
 	sailfish_sim_info_unref(NULL);
-	sailfish_sim_info_invalidate(NULL);
 	g_assert(!sailfish_sim_info_add_iccid_changed_handler(NULL,NULL,NULL));
 	g_assert(!sailfish_sim_info_add_imsi_changed_handler(NULL,NULL,NULL));
 	g_assert(!sailfish_sim_info_add_spn_changed_handler(NULL,NULL,NULL));
@@ -192,7 +191,6 @@ static void test_basic(void)
 	/* Very basic things (mostly to improve code coverage) */
 	si = sailfish_sim_info_new("/test");
 	g_assert(si);
-	sailfish_sim_info_invalidate(si);
 	g_assert(!sailfish_sim_info_add_iccid_changed_handler(si,NULL,NULL));
 	g_assert(!sailfish_sim_info_add_imsi_changed_handler(si,NULL,NULL));
 	g_assert(!sailfish_sim_info_add_spn_changed_handler(si,NULL,NULL));
@@ -241,6 +239,9 @@ static void test_cache(void)
 	g_assert(!count[SIM_INFO_SIGNAL_ICCID_CHANGED]);
 	g_assert(!count[SIM_INFO_SIGNAL_IMSI_CHANGED]);
 	g_assert(!count[SIM_INFO_SIGNAL_SPN_CHANGED]);
+	g_assert(!si->iccid);
+	g_assert(!si->imsi);
+	g_assert(!si->spn);
 
 	fake_sailfish_watch_set_ofono_iccid(w, TEST_ICCID);
 	fake_sailfish_watch_emit_queued_signals(w);
@@ -258,7 +259,7 @@ static void test_cache(void)
 	g_assert(!count[SIM_INFO_SIGNAL_SPN_CHANGED]);
 	g_assert(count[SIM_INFO_SIGNAL_IMSI_CHANGED] == 1);
 	count[SIM_INFO_SIGNAL_IMSI_CHANGED] = 0;
-	/* ICCID mape appears */
+	/* ICCID map appears */
 	g_assert(stat(ICCID_MAP, &st) == 0);
 	g_assert(S_ISREG(st.st_mode));
 	/* But no cache yet */
@@ -268,6 +269,7 @@ static void test_cache(void)
 	sim.mcc = TEST_MCC;
 	sim.mnc = TEST_MNC;
 	sim.state = OFONO_SIM_STATE_READY;
+	fake_sailfish_watch_signal_queue(w, WATCH_SIGNAL_IMSI_CHANGED);
 	fake_sailfish_watch_signal_queue(w, WATCH_SIGNAL_SIM_STATE_CHANGED);
 	fake_sailfish_watch_emit_queued_signals(w);
 	g_assert(!g_strcmp0(si->spn, TEST_DEFAULT_SPN));
@@ -290,6 +292,7 @@ static void test_cache(void)
 	sim.mcc = NULL;
 	sim.mnc = NULL;
 	sim.state = OFONO_SIM_STATE_NOT_PRESENT;
+	fake_sailfish_watch_signal_queue(w, WATCH_SIGNAL_IMSI_CHANGED);
 	fake_sailfish_watch_signal_queue(w, WATCH_SIGNAL_SIM_STATE_CHANGED);
 	fake_sailfish_watch_set_ofono_iccid(w, NULL);
 	fake_sailfish_watch_set_ofono_imsi(w, NULL);
@@ -298,12 +301,16 @@ static void test_cache(void)
 	g_assert(count[SIM_INFO_SIGNAL_ICCID_CHANGED] == 1);
 	g_assert(count[SIM_INFO_SIGNAL_IMSI_CHANGED] == 1);
 	g_assert(count[SIM_INFO_SIGNAL_SPN_CHANGED] == 1);
+	g_assert(!si->iccid);
+	g_assert(!si->imsi);
+	g_assert(!si->spn);
 	memset(count, 0, sizeof(count));
 
 	/* Set ICCID again, that will load the cached information */
 	sim.mcc = NULL;
 	sim.mnc = NULL;
 	sim.state = OFONO_SIM_STATE_INSERTED;
+	fake_sailfish_watch_signal_queue(w, WATCH_SIGNAL_ICCID_CHANGED);
 	fake_sailfish_watch_signal_queue(w, WATCH_SIGNAL_SIM_STATE_CHANGED);
 	fake_sailfish_watch_set_ofono_iccid(w, TEST_ICCID);
 	fake_sailfish_watch_emit_queued_signals(w);
@@ -315,12 +322,18 @@ static void test_cache(void)
 	g_assert(count[SIM_INFO_SIGNAL_SPN_CHANGED] == 1);
 	memset(count, 0, sizeof(count));
 
+	/* Make sure that removed handler doesn't get invoked */
 	sailfish_sim_info_remove_handler(si, id[SIM_INFO_SIGNAL_SPN_CHANGED]);
 	id[SIM_INFO_SIGNAL_SPN_CHANGED] = 0;
-	sailfish_sim_info_invalidate(si);
-	g_assert(!si->iccid);
-	g_assert(!si->imsi);
-	g_assert(!si->iccid);
+	sim.mcc = NULL;
+	sim.mnc = NULL;
+	sim.state = OFONO_SIM_STATE_NOT_PRESENT;
+	fake_sailfish_watch_signal_queue(w, WATCH_SIGNAL_IMSI_CHANGED);
+	fake_sailfish_watch_signal_queue(w, WATCH_SIGNAL_SIM_STATE_CHANGED);
+	fake_sailfish_watch_set_ofono_iccid(w, NULL);
+	fake_sailfish_watch_set_ofono_imsi(w, NULL);
+	fake_sailfish_watch_set_ofono_spn(w, NULL);
+	fake_sailfish_watch_emit_queued_signals(w);
 	g_assert(count[SIM_INFO_SIGNAL_ICCID_CHANGED] == 1);
 	g_assert(count[SIM_INFO_SIGNAL_IMSI_CHANGED] == 1);
 	g_assert(!count[SIM_INFO_SIGNAL_SPN_CHANGED]); /* removed ^ */

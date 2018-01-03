@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2017 Jolla Ltd.
+ *  Copyright (C) 2017-2018 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -126,24 +126,6 @@ static inline void sailfish_watch_resume_signals(struct sailfish_watch *self)
 	sailfish_watch_emit_queued_signals(self);
 }
 
-static void sailfish_watch_sim_state_notify(enum ofono_sim_state new_state,
-							void *user_data)
-{
-	struct sailfish_watch *self = SAILFISH_WATCH(user_data);
-
-	sailfish_watch_signal_queue(self, SIGNAL_SIM_STATE_CHANGED);
-	sailfish_watch_emit_queued_signals(self);
-}
-
-static void sailfish_watch_sim_state_destroy(void *user_data)
-{
-	struct sailfish_watch *self = SAILFISH_WATCH(user_data);
-	struct sailfish_watch_priv *priv = self->priv;
-
-	GASSERT(priv->sim_state_watch_id);
-	priv->sim_state_watch_id = 0;
-}
-
 static void sailfish_watch_iccid_update(struct sailfish_watch *self,
 							const char *iccid)
 {
@@ -238,6 +220,35 @@ static void sailfish_watch_imsi_destroy(void *user_data)
 	priv->imsi_watch_id = 0;
 }
 
+static void sailfish_watch_sim_state_notify(enum ofono_sim_state new_state,
+							void *user_data)
+{
+	struct sailfish_watch *self = SAILFISH_WATCH(user_data);
+
+	/*
+	 * ofono core doesn't notify SIM watches when SIM card gets removed.
+	 * So we have to reset things here based on the SIM state.
+	 */
+	if (new_state == OFONO_SIM_STATE_NOT_PRESENT) {
+		sailfish_watch_iccid_update(self, NULL);
+	}
+	if (new_state != OFONO_SIM_STATE_READY) {
+		sailfish_watch_imsi_update(self, NULL);
+		sailfish_watch_spn_update(self, NULL);
+	}
+	sailfish_watch_signal_queue(self, SIGNAL_SIM_STATE_CHANGED);
+	sailfish_watch_emit_queued_signals(self);
+}
+
+static void sailfish_watch_sim_state_destroy(void *user_data)
+{
+	struct sailfish_watch *self = SAILFISH_WATCH(user_data);
+	struct sailfish_watch_priv *priv = self->priv;
+
+	GASSERT(priv->sim_state_watch_id);
+	priv->sim_state_watch_id = 0;
+}
+
 static void sailfish_watch_set_sim(struct sailfish_watch *self,
 						struct ofono_sim *sim)
 {
@@ -271,6 +282,11 @@ static void sailfish_watch_set_sim(struct sailfish_watch *self,
 		self->sim = sim;
 		sailfish_watch_signal_queue(self, SIGNAL_SIM_CHANGED);
 		sailfish_watch_suspend_signals(self);
+
+		/* Reset the current state */
+		sailfish_watch_iccid_update(self, NULL);
+		sailfish_watch_imsi_update(self, NULL);
+		sailfish_watch_spn_update(self, NULL);
 		if (sim) {
 			priv->sim_state_watch_id =
 				ofono_sim_add_state_watch(sim,
@@ -293,12 +309,6 @@ static void sailfish_watch_set_sim(struct sailfish_watch *self,
 				ofono_sim_add_imsi_watch(self->sim,
 					sailfish_watch_imsi_notify, self,
 					sailfish_watch_imsi_destroy);
-		} else {
-			/* And these will just queue the signals
-			 * if necessary */
-			sailfish_watch_iccid_update(self, NULL);
-			sailfish_watch_imsi_update(self, NULL);
-			sailfish_watch_spn_update(self, NULL);
 		}
 
 		/* Emit the pending signals. */
