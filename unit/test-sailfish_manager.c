@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2017 Jolla Ltd.
+ *  Copyright (C) 2017-2018 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -919,9 +919,11 @@ static gboolean test_voice_sim_done(gpointer user_data)
 	g_assert(!g_strcmp0(m->default_voice_path, TEST_PATH));
 
 	/* Remove the SIM */
-	fake_sailfish_watch_set_ofono_sim(w, NULL);
-	fake_sailfish_watch_emit_queued_signals(w);
+	fake_sailfish_watch_set_ofono_iccid(w, NULL);
+	fake_sailfish_watch_set_ofono_imsi(w, NULL);
+	fake_sailfish_watch_set_ofono_spn(w, NULL);
 	sailfish_manager_set_sim_state(s->handle, SAILFISH_SIM_STATE_ABSENT);
+	fake_sailfish_watch_emit_queued_signals(w);
 	g_assert(!m->slots[0]->sim_present);
 	g_assert(!g_strcmp0(m->default_voice_imsi, TEST_IMSI));
 	g_assert(!m->default_voice_path);
@@ -1239,6 +1241,24 @@ static gboolean test_multisim_done(gpointer user_data)
 	g_assert(!g_strcmp0(m->default_voice_path, TEST_PATH));
 	g_assert(!m->default_data_imsi);
 	g_assert(!m->default_data_path);
+
+	/* But there is automatic voice SIM selection */
+	g_assert(!m->default_voice_imsi);
+	g_assert(!g_strcmp0(m->default_voice_path, TEST_PATH));
+
+	/* Switch the voice SIM back and forth */
+	fake_sailfish_manager_dbus.cb.set_default_voice_imsi(m, TEST_IMSI);
+	g_assert(!g_strcmp0(m->default_voice_imsi, TEST_IMSI));
+	g_assert(!g_strcmp0(m->default_voice_path, TEST_PATH));
+
+	fake_sailfish_manager_dbus.cb.set_default_voice_imsi(m, TEST_IMSI_1);
+	g_assert(!g_strcmp0(m->default_voice_imsi, TEST_IMSI_1));
+	g_assert(!g_strcmp0(m->default_voice_path, TEST_PATH_1));
+
+	/* test_1 remains the current voice slot */
+	fake_sailfish_manager_dbus.cb.set_default_voice_imsi(m, NULL);
+	g_assert(!m->default_voice_imsi);
+	g_assert(!g_strcmp0(m->default_voice_path, TEST_PATH_1));
 
 	/* Reserve the first slot for data */
 	fake_sailfish_manager_dbus.cb.set_default_data_imsi(m, TEST_IMSI);
