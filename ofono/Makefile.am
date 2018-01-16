@@ -293,7 +293,8 @@ qmi_sources = drivers/qmimodem/qmi.h drivers/qmimodem/qmi.c \
 					drivers/qmimodem/wds.h \
 					drivers/qmimodem/pds.h \
 					drivers/qmimodem/common.h \
-					drivers/qmimodem/wda.h
+					drivers/qmimodem/wda.h \
+					drivers/qmimodem/voice.h
 
 builtin_modules += qmimodem
 builtin_sources += $(qmi_sources) \
