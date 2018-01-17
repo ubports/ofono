@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2016-2017 Jolla Ltd.
+ *  Copyright (C) 2016-2018 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -27,6 +27,7 @@
 
 #define DISPLAY_ON_UPDATE_RATE  (1000)  /* 1 sec */
 #define DISPLAY_OFF_UPDATE_RATE (60000) /* 1 min */
+#define MAX_RETRIES             (5)
 
 typedef GObjectClass RilCellInfoClass;
 typedef struct ril_cell_info RilCellInfo;
@@ -296,8 +297,8 @@ static void ril_cell_info_list_cb(GRilIoChannel *io, int status,
 	DBG_(self, "");
 	GASSERT(self->query_id);
 	self->query_id = 0;
-	ril_cell_info_update_cells(self, ril_cell_info_parse_list
-						(io->ril_version, data, len));
+	ril_cell_info_update_cells(self, (status == RIL_E_SUCCESS) ?
+		ril_cell_info_parse_list(io->ril_version, data, len) : NULL);
 }
 
 static void ril_cell_info_set_rate_cb(GRilIoChannel *io, int status,
@@ -314,7 +315,7 @@ static void ril_cell_info_query(struct ril_cell_info *self)
 {
 	GRilIoRequest *req = grilio_request_new();
 
-	grilio_request_set_retry(req, RIL_RETRY_MS, -1);
+	grilio_request_set_retry(req, RIL_RETRY_MS, MAX_RETRIES);
 	grilio_channel_cancel_request(self->io, self->query_id, FALSE);
 	self->query_id = grilio_channel_send_request_full(self->io, req,
 		RIL_REQUEST_GET_CELL_INFO_LIST, ril_cell_info_list_cb,
@@ -328,7 +329,7 @@ static void ril_cell_info_set_rate(struct ril_cell_info *self, int ms)
 
 	grilio_request_append_int32(req, 1);
 	grilio_request_append_int32(req, ms);
-	grilio_request_set_retry(req, RIL_RETRY_MS, -1);
+	grilio_request_set_retry(req, RIL_RETRY_MS, MAX_RETRIES);
 	grilio_channel_cancel_request(self->io, self->set_rate_id, FALSE);
 	self->set_rate_id = grilio_channel_send_request_full(self->io, req,
 			RIL_REQUEST_SET_UNSOL_CELL_INFO_LIST_RATE,
@@ -338,18 +339,16 @@ static void ril_cell_info_set_rate(struct ril_cell_info *self, int ms)
 
 static void ril_cell_info_update_rate(struct ril_cell_info *self)
 {
-	ril_cell_info_set_rate(self,
-		(self->display->state == MCE_DISPLAY_STATE_OFF) ?
-		DISPLAY_OFF_UPDATE_RATE : DISPLAY_ON_UPDATE_RATE);
+	if (self->sim_card_ready) {
+		ril_cell_info_set_rate(self,
+			(self->display->state == MCE_DISPLAY_STATE_OFF) ?
+			DISPLAY_OFF_UPDATE_RATE : DISPLAY_ON_UPDATE_RATE);
+	}
 }
 
 static void ril_cell_info_display_state_cb(MceDisplay *display, void *arg)
 {
-	struct ril_cell_info *self = RIL_CELL_INFO(arg);
-
-	if (self->sim_card_ready) {
-		ril_cell_info_update_rate(self);
-	}
+	ril_cell_info_update_rate(RIL_CELL_INFO(arg));
 }
 
 static void ril_cell_info_refresh(struct ril_cell_info *self)
@@ -373,16 +372,11 @@ static void ril_cell_info_radio_state_cb(struct ril_radio *radio, void *arg)
 static void ril_cell_info_sim_status_cb(struct ril_sim_card *sim, void *arg)
 {
 	struct ril_cell_info *self = RIL_CELL_INFO(arg);
-	const gboolean sim_card_was_ready = self->sim_card_ready;
 
-	DBG_(self, "%sready", ril_sim_card_ready(sim) ? "" : "not ");
 	self->sim_card_ready = ril_sim_card_ready(sim);
-	if (self->sim_card_ready != sim_card_was_ready) {
-		ril_cell_info_refresh(self);
-		if (self->sim_card_ready) {
-			ril_cell_info_update_rate(self);
-		}
-	}
+	DBG_(self, "%sready", self->sim_card_ready ? "" : "not ");
+	ril_cell_info_refresh(self);
+	ril_cell_info_update_rate(self);
 }
 
 /* sailfish_cell_info interface callbacks */
@@ -483,10 +477,8 @@ struct sailfish_cell_info *ril_cell_info_new(GRilIoChannel *io,
 		ril_sim_card_add_status_changed_handler(self->sim_card,
 			ril_cell_info_sim_status_cb, self);
 	self->sim_card_ready = ril_sim_card_ready(sim_card);
-	if (self->sim_card_ready) {
-		ril_cell_info_query(self);
-		ril_cell_info_update_rate(self);
-	}
+	ril_cell_info_refresh(self);
+	ril_cell_info_update_rate(self);
 	return &self->info;
 }
 
