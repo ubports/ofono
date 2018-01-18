@@ -35,9 +35,12 @@ static void test_alloc(void)
 	idmap = idmap_new(2);
 
 	g_assert(idmap);
+	g_assert(idmap_get_min(idmap) == 1);
 
 	bit = idmap_alloc(idmap);
 	g_assert(bit == 1);
+	g_assert(idmap_find(idmap, bit));
+	g_assert(!idmap_find(idmap, idmap_get_max(idmap) + 1));
 
 	bit = idmap_alloc(idmap);
 	g_assert(bit == 2);
@@ -62,6 +65,12 @@ static void test_alloc(void)
 	bit = idmap_alloc(idmap);
 	g_assert(bit == 1);
 
+	idmap_put(idmap, 1);
+	idmap_take(idmap, 1);
+	idmap_take(idmap, 3);
+	bit = idmap_alloc(idmap);
+	g_assert(bit == 2);
+
 	idmap_free(idmap);
 }
 
@@ -80,8 +89,23 @@ static void test_alloc_next(void)
 	bit = idmap_alloc_next(idmap, 255);
 	g_assert(bit == 1);
 
+	while (idmap_alloc(idmap) < (sizeof(unsigned long) * 8) + 1);
+	bit = idmap_alloc_next(idmap, 1);
+	g_assert(bit == (sizeof(unsigned long) * 8) + 2);
+
+	idmap_free(idmap);
+
+	idmap = idmap_new(2);
+
+	g_assert(idmap);
+	g_assert(idmap_alloc_next(idmap, 0) == 3);
+	g_assert(idmap_alloc_next(idmap, 3) == 3);
+
 	bit = idmap_alloc_next(idmap, 1);
 	g_assert(bit == 2);
+
+	bit = idmap_alloc_next(idmap, 2);
+	g_assert(bit == 1);
 
 	idmap_free(idmap);
 }
