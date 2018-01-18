@@ -1876,7 +1876,7 @@ struct ofono_modem *ofono_modem_create(const char *name, const char *type)
 	else
 		snprintf(path, sizeof(path), "/%s", name);
 
-	if (__ofono_dbus_valid_object_path(path) == FALSE)
+	if (!dbus_validate_path(path, NULL))
 		return NULL;
 
 	modem = g_try_new0(struct ofono_modem, 1);
