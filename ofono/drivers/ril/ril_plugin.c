@@ -24,6 +24,7 @@
 #include "ril_radio_caps.h"
 #include "ril_data.h"
 #include "ril_util.h"
+#include "ril_vendor.h"
 #include "ril_log.h"
 
 #include <sailfish_manager.h>
@@ -102,6 +103,7 @@
 #define RILCONF_ALLOW_DATA_REQ      "allowDataReq"
 #define RILCONF_EMPTY_PIN_QUERY     "emptyPinQuery"
 #define RILCONF_DATA_CALL_FORMAT    "dataCallFormat"
+#define RILCONF_VENDOR_DRIVER       "vendorDriver"
 #define RILCONF_DATA_CALL_RETRY_LIMIT "dataCallRetryLimit"
 #define RILCONF_DATA_CALL_RETRY_DELAY "dataCallRetryDelay"
 #define RILCONF_LOCAL_HANGUP_REASONS  "localHangupReasons"
@@ -184,6 +186,8 @@ typedef struct sailfish_slot_impl {
 	struct ril_sim_card *sim_card;
 	struct ril_sim_settings *sim_settings;
 	struct ril_oem_raw *oem_raw;
+	const struct ril_vendor_driver *vendor;
+	struct ril_vendor_hook *vendor_hook;
 	struct ril_data *data;
 	gboolean legacy_imei_query;
 	guint start_timeout;
@@ -395,6 +399,11 @@ static void ril_plugin_shutdown_slot(ril_slot *slot, gboolean kill_io)
 			slot->sim_card_state_event_id = 0;
 			slot->sim_card = NULL;
 			slot->received_sim_status = FALSE;
+		}
+
+		if (slot->vendor_hook) {
+			ril_vendor_hook_unref(slot->vendor_hook);
+			slot->vendor_hook = NULL;
 		}
 
 		if (slot->io) {
@@ -715,10 +724,12 @@ static void ril_plugin_caps_switch_aborted(struct ril_radio_caps_manager *mgr,
 static void ril_plugin_trace(GRilIoChannel *io, GRILIO_PACKET_TYPE type,
 	guint id, guint code, const void *data, guint data_len, void *user_data)
 {
-	static const GLogModule *log_module = &ril_debug_trace_module;
+	ril_slot *slot = user_data;
+	struct ril_vendor_hook *hook = slot->vendor_hook;
+	static const GLogModule* log_module = &ril_debug_trace_module;
 	const char *prefix = io->name ? io->name : "";
 	const char dir = (type == GRILIO_PACKET_REQ) ? '<' : '>';
-	const char *scode;
+	const char *scode = NULL;
 
 	switch (type) {
 	case GRILIO_PACKET_REQ:
@@ -726,7 +737,10 @@ static void ril_plugin_trace(GRilIoChannel *io, GRILIO_PACKET_TYPE type,
 				code == RIL_REQUEST_V9_SET_UICC_SUBSCRIPTION) {
 			scode = "V9_SET_UICC_SUBSCRIPTION";
 		} else {
-			scode = ril_request_to_string(code);
+			scode = ril_vendor_hook_request_to_string(hook, code);
+			if (!scode) {
+				scode = ril_request_to_string(code);
+			}
 		}
 		gutil_log(log_module, GLOG_LEVEL_VERBOSE, "%s%c [%08x] %s",
 				prefix, dir, id, scode);
@@ -742,8 +756,12 @@ static void ril_plugin_trace(GRilIoChannel *io, GRILIO_PACKET_TYPE type,
 		break;
 	case GRILIO_PACKET_UNSOL:
 	case GRILIO_PACKET_UNSOL_ACK_EXP:
+		scode = ril_vendor_hook_event_to_string(hook, code);
+		if (!scode) {
+			scode = ril_unsol_event_to_string(code);
+		}
 		gutil_log(log_module, GLOG_LEVEL_VERBOSE, "%s%c %s",
-				prefix, dir, ril_unsol_event_to_string(code));
+				prefix, dir, scode);
 		break;
 	}
 }
@@ -939,6 +957,10 @@ static void ril_plugin_slot_connected(ril_slot *slot)
 	 */
 	ril_plugin_start_imei_query(slot, TRUE, -1);
 
+	GASSERT(!slot->vendor_hook);
+	slot->vendor_hook = ril_vendor_create_hook(slot->vendor, slot->io,
+						slot->path, &slot->config);
+
 	GASSERT(!slot->radio);
 	slot->radio = ril_radio_new(slot->io);
 
@@ -965,7 +987,7 @@ static void ril_plugin_slot_connected(ril_slot *slot)
 	GASSERT(!slot->data);
 	slot->data = ril_data_new(plugin->data_manager, log_prefix,
 		slot->radio, slot->network, slot->io, &slot->data_opt,
-		&slot->config);
+		&slot->config, slot->vendor_hook);
 
 	GASSERT(!slot->cell_info);
 	if (slot->io->ril_version >= 9) {
@@ -1175,6 +1197,23 @@ static ril_slot *ril_plugin_slot_new_take(char *sockpath, char *path,
 	return slot;
 }
 
+static void ril_plugin_slot_apply_vendor_defaults(ril_slot *slot)
+{
+	if (slot->vendor) {
+		struct ril_slot_config *config = &slot->config;
+		struct ril_vendor_defaults defaults;
+
+		/* Let the vendor extension to adjust (some) defaults */
+		memset(&defaults, 0, sizeof(defaults));
+		defaults.empty_pin_query = config->empty_pin_query;
+		defaults.legacy_imei_query = slot->legacy_imei_query;
+
+		ril_vendor_get_defaults(slot->vendor, &defaults);
+		config->empty_pin_query = defaults.empty_pin_query;
+		slot->legacy_imei_query = defaults.legacy_imei_query;
+	}
+}
+
 static ril_slot *ril_plugin_slot_new(const char *sockpath, const char *path,
 				const char *name, guint slot_index)
 {
@@ -1242,6 +1281,25 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 								ival >= 0) {
 		config->slot = ival;
 		DBG("%s: " RILCONF_SLOT " %u", group, config->slot);
+	}
+
+	/* vendorDriver */
+	sval = ril_config_get_string(file, group, RILCONF_VENDOR_DRIVER);
+	if (sval) {
+		const struct ril_vendor_driver *vendor;
+		RIL_VENDOR_DRIVER_FOREACH(vendor) {
+			if (!strcasecmp(vendor->name, sval)) {
+				DBG("%s: " RILCONF_VENDOR_DRIVER " %s", group,
+									sval);
+				slot->vendor = vendor;
+				ril_plugin_slot_apply_vendor_defaults(slot);
+				break;
+			}
+		}
+		if (!slot->vendor) {
+			ofono_warn("Unknown vendor '%s'", sval);
+		}
+		g_free(sval);
 	}
 
 	/* startTimeout */

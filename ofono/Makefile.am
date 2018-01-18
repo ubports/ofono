@@ -166,7 +166,11 @@ builtin_sources +=	drivers/ril/ril_call_barring.c \
 			drivers/ril/ril_stk.c \
 			drivers/ril/ril_ussd.c \
 			drivers/ril/ril_util.c \
+			drivers/ril/ril_vendor.c \
 			drivers/ril/ril_voicecall.c
+
+# Vendor specific extensions
+builtin_sources +=	drivers/ril/ril_vendor_mtk.c
 
 if DATAFILES
 dist_conf_DATA += drivers/ril/ril_subscription.conf
