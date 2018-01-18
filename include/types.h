@@ -56,6 +56,7 @@ enum ofono_error_type {
 	OFONO_ERROR_TYPE_CEER,
 	OFONO_ERROR_TYPE_SIM,
 	OFONO_ERROR_TYPE_FAILURE,
+	OFONO_ERROR_TYPE_ERRNO
 };
 
 enum ofono_disconnect_reason {
