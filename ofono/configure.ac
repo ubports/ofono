@@ -202,6 +202,13 @@ AC_ARG_ENABLE(sailfish-manager,
 					[enable_sailfish_manager=${enableval}])
 AM_CONDITIONAL(SAILFISH_MANAGER, test "${enable_sailfish_manager}" = "yes")
 
+if (test "${enable_sailfish_manager}" = "yes"); then
+	PKG_CHECK_MODULES(DBUS_GLIB, dbus-glib-1, dummy=yes,
+			AC_MSG_ERROR(dbus-glib is required by unit tests))
+	AC_SUBST(DBUS_GLIB_CFLAGS)
+	AC_SUBST(DBUS_GLIB_LIBS)
+fi
+
 AC_ARG_ENABLE(add-remove-context, AC_HELP_STRING([--disable-add-remove-context],
 		[don't allow to add or remove connection context over D-Bus]), [
 	if (test "${enableval}" = "no"); then
