@@ -912,10 +912,23 @@ if SAILFISH_MANAGER
 unit_test_sailfish_cell_info_SOURCES = unit/test-sailfish_cell_info.c \
 			plugins/sailfish_manager/sailfish_cell_info.c
 unit_test_sailfish_cell_info_CFLAGS = $(AM_CFLAGS) $(COVERAGE_OPT) \
-			-Iplugins/sailfish_cell_info
+			-Iplugins/sailfish_manager
 unit_test_sailfish_cell_info_LDADD = @GLIB_LIBS@ -ldl
 unit_objects += $(unit_test_sailfish_cell_info_OBJECTS)
 unit_tests += unit/test-sailfish_cell_info
+
+unit_test_sailfish_cell_info_dbus_SOURCES = unit/test-dbus.c \
+			unit/test-sailfish_cell_info_dbus.c \
+			unit/fake_sailfish_cell_info.c \
+			plugins/sailfish_manager/sailfish_cell_info.c \
+			plugins/sailfish_manager/sailfish_cell_info_dbus.c \
+			gdbus/object.c \
+			src/dbus.c src/log.c
+unit_test_sailfish_cell_info_dbus_CFLAGS = $(AM_CFLAGS) $(COVERAGE_OPT) \
+			@DBUS_GLIB_CFLAGS@ -Iplugins/sailfish_manager
+unit_test_sailfish_cell_info_dbus_LDADD = @DBUS_GLIB_LIBS@ @GLIB_LIBS@ -ldl
+unit_objects += $(unit_test_sailfish_cell_info_dbus_OBJECTS)
+unit_tests += unit/test-sailfish_cell_info_dbus
 
 unit_test_sailfish_sim_info_SOURCES = unit/test-sailfish_sim_info.c \
 			unit/fake_sailfish_watch.c \
