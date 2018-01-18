@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2016-2017 Jolla Ltd.
+ *  Copyright (C) 2016-2018 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -178,7 +178,7 @@ static void sailfish_cell_info_dbus_append_type(DBusMessageIter *it,
 static void sailfish_cell_info_dbus_append_registered(DBusMessageIter *it,
 				const struct sailfish_cell_entry *entry)
 {
-	dbus_bool_t registered = entry->cell.registered;
+	const dbus_bool_t registered = (entry->cell.registered != FALSE);
 
 	dbus_message_iter_append_basic(it, DBUS_TYPE_BOOLEAN, &registered);
 }
@@ -279,8 +279,8 @@ static const GDBusSignalTable sailfish_cell_info_dbus_cell_signals[] = {
 	{ }
 };
 
-static struct sailfish_cell_entry *sailfish_cell_info_dbus_find_id(
-		struct sailfish_cell_info_dbus *dbus, guint id)
+static struct sailfish_cell_entry *sailfish_cell_info_dbus_find_id
+			(struct sailfish_cell_info_dbus *dbus, guint id)
 {
 	GSList *l;
 	for (l = dbus->entries; l; l = l->next) {
@@ -376,7 +376,7 @@ static void sailfish_cell_info_dbus_property_changed
 		sailfish_cell_info_dbus_cell_properties(cell->type, &n);
 
 	if (mask & SAILFISH_CELL_PROPERTY_REGISTERED) {
-		dbus_bool_t registered = cell->registered;
+		const dbus_bool_t registered = (cell->registered != FALSE);
 		g_dbus_emit_signal(dbus->conn, entry->path,
 			CELL_DBUS_INTERFACE,
 			CELL_DBUS_REGISTERED_CHANGED_SIGNAL,
