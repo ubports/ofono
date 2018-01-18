@@ -41,10 +41,12 @@ struct ofono_sim;
 #define RIL_RETRY_MS   (RIL_RETRY_SECS*1000)
 
 struct ril_data;
+struct ril_data_call;
 struct ril_modem;
 struct ril_radio;
 struct ril_network;
 struct ril_sim_card;
+struct ril_vendor_hook;
 
 struct ril_slot_config {
 	guint slot;
