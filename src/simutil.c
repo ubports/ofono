@@ -1570,7 +1570,7 @@ GSList *sim_parse_app_template_entries(const unsigned char *buffer, int len)
 
 		memcpy(app.aid, aid, app.aid_len);
 
-		app.type = GUINT16_FROM_BE(*((unsigned short *)(app.aid + 5)));
+		app.type = (app.aid[5] << 8) & app.aid[6];
 
 		/* Find the label (optional) */
 		label = ber_tlv_find_by_tag(dataobj, 0x50, dataobj_len,
