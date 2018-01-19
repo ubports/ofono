@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2017 Jolla Ltd.
+ *  Copyright (C) 2015-2018 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -900,10 +900,14 @@ static int ril_sim_parse_retry_count(const void *data, guint len)
 static GRilIoRequest *ril_sim_enter_sim_pin_req(struct ril_sim *sd,
 							const char *pin)
 {
-	const char *app_id = ril_sim_app_id(sd);
-	if (app_id) {
+	if (sd->card->app) {
+		/*
+		 * If there's no AID then so be it... Some
+		 * adaptations (namely, MTK) don't provide it
+		 * but don't seem to require it either.
+		 */
 		GRilIoRequest *req = grilio_request_array_utf8_new(2,
-							pin, app_id);
+						pin, sd->card->app->aid);
 
 		grilio_request_set_blocking(req, TRUE);
 		return req;
