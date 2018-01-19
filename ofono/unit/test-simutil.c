@@ -568,15 +568,15 @@ static void test_auth_build_parse(void)
 			0x89, 0xab, 0xcd, 0xef, 0xfe, 0xdc, 0xba, 0x98, 0x76,
 			0x54, 0x32, 0x10, 0x08, 0xab, 0xcd, 0xef, 0x12, 0x34,
 			0x56, 0x78, 0x9a };
-	const unsigned char umts_sync_failure[] = { 0xdc, 0x10, 0xde, 0xea,
+	const unsigned char umts_sync_failure[] = { 0xdc, 0x0e, 0xde, 0xea,
 			0xbe, 0xef, 0xde, 0xea, 0xbe, 0xef, 0xde, 0xea, 0xbe,
-			0xef, 0xde, 0xea, 0xbe, 0xef };
+			0xef, 0xde, 0xea };
 	int len = 0;
 
 	/* test GSM auth command */
 	len = sim_build_gsm_authenticate(auth_cmd, 40, rand);
 
-	g_assert(len == 22);
+	g_assert(len == 23);
 	g_assert(auth_cmd[0] == 0x00);
 	g_assert(auth_cmd[1] == 0x88);
 	g_assert(auth_cmd[2] == 0x00);
@@ -618,7 +618,7 @@ static void test_auth_build_parse(void)
 						sizeof(umts_sync_failure),
 						&res_p, &ck_p, &ik_p, &auts_p,
 						&kc_p));
-	g_assert(!memcmp(auts_p, auts, 16));
+	g_assert(!memcmp(auts_p, auts, 14));
 
 	/* test UMTS success parse, with kc */
 	g_assert(sim_parse_umts_authenticate(umts_success_kc,
