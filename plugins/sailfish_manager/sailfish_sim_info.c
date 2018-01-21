@@ -221,16 +221,13 @@ static void sailfish_sim_info_set_cached_spn(struct sailfish_sim_info *self,
 {
 	struct sailfish_sim_info_priv *priv = self->priv;
 
+	GASSERT(spn);
 	if (g_strcmp0(priv->cached_spn, spn)) {
+		DBG_(self, "%s", spn);
 		g_free(priv->cached_spn);
-		if (spn) {
-			DBG_(self, "cached spn \"%s\"", spn);
-			priv->cached_spn = g_strdup(spn);
-			priv->update_imsi_cache = TRUE;
-			sailfish_sim_info_update_imsi_cache(self);
-		} else {
-			priv->cached_spn = NULL;
-		}
+		priv->cached_spn = g_strdup(spn);
+		priv->update_imsi_cache = TRUE;
+		sailfish_sim_info_update_imsi_cache(self);
 		sailfish_sim_info_update_public_spn(self);
 	}
 }
@@ -240,6 +237,7 @@ static void sailfish_sim_info_set_spn(struct sailfish_sim_info *self,
 {
 	struct sailfish_sim_info_priv *priv = self->priv;
 
+	GASSERT(spn);
 	if (g_strcmp0(priv->sim_spn, spn)) {
 		DBG_(self, "%s", spn);
 		g_free(priv->sim_spn);
@@ -292,15 +290,14 @@ static void sailfish_sim_info_update_imsi(struct sailfish_sim_info *self)
 	struct sailfish_sim_info_priv *priv = self->priv;
 	const char *imsi = priv->watch->imsi;
 
-	if (g_strcmp0(priv->imsi, imsi)) {
+	/* IMSI only gets reset when ICCID disappears, ignore NULL IMSI here */
+	if (imsi && imsi[0] && g_strcmp0(priv->imsi, imsi)) {
+		DBG_(self, "%s", imsi);
 		g_free(priv->imsi);
 		self->imsi = priv->imsi = g_strdup(imsi);
-		if (imsi && imsi[0]) {
-			DBG_(self, "%s", imsi);
-			priv->update_iccid_map = TRUE;
-			sailfish_sim_info_update_iccid_map(self);
-			sailfish_sim_info_update_imsi_cache(self);
-		}
+		priv->update_iccid_map = TRUE;
+		sailfish_sim_info_update_iccid_map(self);
+		sailfish_sim_info_update_imsi_cache(self);
 		sailfish_sim_info_signal_queue(self, SIGNAL_IMSI_CHANGED);
 	}
 
@@ -422,7 +419,10 @@ static void sailfish_sim_info_set_iccid(struct sailfish_sim_info *self,
 			if (priv->sim_spn) {
 				g_free(priv->sim_spn);
 				priv->sim_spn = NULL;
-				sailfish_sim_info_set_cached_spn(self, NULL);
+			}
+			if (priv->cached_spn) {
+				g_free(priv->cached_spn);
+				priv->cached_spn = NULL;
 			}
 			/* No more default SPN too */
 			priv->default_spn[0] = 0;
