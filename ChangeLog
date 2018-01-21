@@ -1,3 +1,16 @@
+ver 1.22:
+	Fix issue with GPIO handling and Nokia modems.
+	Fix issue with SIM state callback and AT modems.
+	Fix issue with data mode and DCD for U-Blox modems.
+	Fix issue with SMS receive on QMI based Quectel EC21.
+	Fix issue with HFP support and last call dialed request.
+	Fix issue with PIM retires handling and Gemalto modems.
+	Fix issue with atom registration and SIM state handling.
+	Add support for handling SIM card AID session management.
+	Add support for handling GSM/UMTS and IMS authentication.
+	Add support for IP Multimedia Subsystem (IMS) atom.
+	Add support for MBIM based modems.
+
 ver 1.21:
 	Fix issue with USSD notification received handling.
 	Fix issue with crashing SIM filesystem notifications.
