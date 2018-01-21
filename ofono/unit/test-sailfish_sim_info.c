@@ -27,8 +27,10 @@
 #include <unistd.h>
 
 #define TEST_PATH "/test"
-#define TEST_ICCID "1111111111111111111"
+#define TEST_ICCID "0000000000000000000"
 #define TEST_IMSI "244120000000000"
+#define TEST_ICCID_1 "1111111111111111111"
+#define TEST_IMSI_1 "244120000000001"
 #define TEST_MCC "244"
 #define TEST_MNC "12"
 #define TEST_DEFAULT_SPN TEST_MCC TEST_MNC
@@ -171,6 +173,18 @@ static void netreg_notify_status_watches(struct ofono_netreg *netreg)
 	}
 }
 
+static void test_remove_sim(struct ofono_sim* sim, struct sailfish_watch *watch)
+{
+	sim->mcc = NULL;
+	sim->mnc = NULL;
+	sim->state = OFONO_SIM_STATE_NOT_PRESENT;
+	fake_sailfish_watch_signal_queue(watch, WATCH_SIGNAL_IMSI_CHANGED);
+	fake_sailfish_watch_signal_queue(watch, WATCH_SIGNAL_SIM_STATE_CHANGED);
+	fake_sailfish_watch_set_ofono_iccid(watch, NULL);
+	fake_sailfish_watch_set_ofono_imsi(watch, NULL);
+	fake_sailfish_watch_set_ofono_spn(watch, NULL);
+	fake_sailfish_watch_emit_queued_signals(watch);
+}
 
 /* Test cases */
 
@@ -276,6 +290,39 @@ static void test_cache(void)
 	g_assert(count[SIM_INFO_SIGNAL_SPN_CHANGED] == 1);
 	count[SIM_INFO_SIGNAL_SPN_CHANGED] = 0;
 
+	/* Remove the SIM and insert it again */
+	test_remove_sim(&sim, w);
+	g_assert(count[SIM_INFO_SIGNAL_ICCID_CHANGED] == 1);
+	g_assert(count[SIM_INFO_SIGNAL_IMSI_CHANGED] == 1);
+	g_assert(count[SIM_INFO_SIGNAL_SPN_CHANGED] == 1);
+	g_assert(!si->iccid);
+	g_assert(!si->imsi);
+	g_assert(!si->spn);
+	memset(count, 0, sizeof(count));
+
+	sim.state = OFONO_SIM_STATE_INSERTED;
+	fake_sailfish_watch_signal_queue(w, WATCH_SIGNAL_SIM_STATE_CHANGED);
+	fake_sailfish_watch_emit_queued_signals(w);
+	g_assert(!count[SIM_INFO_SIGNAL_ICCID_CHANGED]);
+	g_assert(!count[SIM_INFO_SIGNAL_IMSI_CHANGED]);
+	g_assert(!count[SIM_INFO_SIGNAL_SPN_CHANGED]);
+
+	sim.mcc = TEST_MCC;
+	sim.mnc = TEST_MNC;
+	sim.state = OFONO_SIM_STATE_READY;
+	fake_sailfish_watch_signal_queue(w, WATCH_SIGNAL_SIM_STATE_CHANGED);
+	fake_sailfish_watch_set_ofono_iccid(w, TEST_ICCID);
+	fake_sailfish_watch_emit_queued_signals(w);
+
+	/* IMSI gets loaded from the cache file */
+	g_assert(!g_strcmp0(si->iccid, TEST_ICCID));
+	g_assert(!g_strcmp0(si->imsi, TEST_IMSI));
+	g_assert(!g_strcmp0(si->spn, TEST_DEFAULT_SPN));
+	g_assert(count[SIM_INFO_SIGNAL_ICCID_CHANGED] == 1);
+	g_assert(count[SIM_INFO_SIGNAL_IMSI_CHANGED] == 1);
+	g_assert(count[SIM_INFO_SIGNAL_SPN_CHANGED] == 1);
+	memset(count, 0, sizeof(count));
+
 	/* Replace default SPN with the real one */
 	fake_sailfish_watch_set_ofono_spn(w, TEST_SPN);
 	fake_sailfish_watch_emit_queued_signals(w);
@@ -288,16 +335,26 @@ static void test_cache(void)
 	g_assert(stat(SIM_CACHE, &st) == 0);
 	g_assert(S_ISREG(st.st_mode));
 
-	/* Reset the information */
-	sim.mcc = NULL;
-	sim.mnc = NULL;
-	sim.state = OFONO_SIM_STATE_NOT_PRESENT;
+	/* Stray events have no effect */
+	fake_sailfish_watch_signal_queue(w, WATCH_SIGNAL_SPN_CHANGED);
 	fake_sailfish_watch_signal_queue(w, WATCH_SIGNAL_IMSI_CHANGED);
+	fake_sailfish_watch_signal_queue(w, WATCH_SIGNAL_ICCID_CHANGED);
 	fake_sailfish_watch_signal_queue(w, WATCH_SIGNAL_SIM_STATE_CHANGED);
-	fake_sailfish_watch_set_ofono_iccid(w, NULL);
-	fake_sailfish_watch_set_ofono_imsi(w, NULL);
-	fake_sailfish_watch_set_ofono_spn(w, NULL);
 	fake_sailfish_watch_emit_queued_signals(w);
+	g_assert(!count[SIM_INFO_SIGNAL_ICCID_CHANGED]);
+	g_assert(!count[SIM_INFO_SIGNAL_IMSI_CHANGED]);
+	g_assert(!count[SIM_INFO_SIGNAL_SPN_CHANGED]);
+
+	/* Empty SPN and IMSI are ignored too */
+	fake_sailfish_watch_set_ofono_imsi(w, "");
+	fake_sailfish_watch_set_ofono_spn(w, "");
+	fake_sailfish_watch_emit_queued_signals(w);
+	g_assert(!count[SIM_INFO_SIGNAL_ICCID_CHANGED]);
+	g_assert(!count[SIM_INFO_SIGNAL_IMSI_CHANGED]);
+	g_assert(!count[SIM_INFO_SIGNAL_SPN_CHANGED]);
+
+	/* Reset the information */
+	test_remove_sim(&sim, w);
 	g_assert(count[SIM_INFO_SIGNAL_ICCID_CHANGED] == 1);
 	g_assert(count[SIM_INFO_SIGNAL_IMSI_CHANGED] == 1);
 	g_assert(count[SIM_INFO_SIGNAL_SPN_CHANGED] == 1);
@@ -313,6 +370,63 @@ static void test_cache(void)
 	fake_sailfish_watch_signal_queue(w, WATCH_SIGNAL_ICCID_CHANGED);
 	fake_sailfish_watch_signal_queue(w, WATCH_SIGNAL_SIM_STATE_CHANGED);
 	fake_sailfish_watch_set_ofono_iccid(w, TEST_ICCID);
+	fake_sailfish_watch_emit_queued_signals(w);
+	g_assert(!g_strcmp0(si->iccid, TEST_ICCID));
+	g_assert(!g_strcmp0(si->imsi, TEST_IMSI));
+	g_assert(!g_strcmp0(si->spn, TEST_SPN));
+	g_assert(count[SIM_INFO_SIGNAL_ICCID_CHANGED] == 1);
+	g_assert(count[SIM_INFO_SIGNAL_IMSI_CHANGED] == 1);
+	g_assert(count[SIM_INFO_SIGNAL_SPN_CHANGED] == 1);
+	memset(count, 0, sizeof(count));
+
+	/* Replace the SIM with a different one */
+	test_remove_sim(&sim, w);
+	g_assert(count[SIM_INFO_SIGNAL_ICCID_CHANGED] == 1);
+	g_assert(count[SIM_INFO_SIGNAL_IMSI_CHANGED] == 1);
+	g_assert(count[SIM_INFO_SIGNAL_SPN_CHANGED] == 1);
+	g_assert(!si->iccid);
+	g_assert(!si->imsi);
+	g_assert(!si->spn);
+	memset(count, 0, sizeof(count));
+
+	sim.state = OFONO_SIM_STATE_INSERTED;
+	fake_sailfish_watch_signal_queue(w, WATCH_SIGNAL_SIM_STATE_CHANGED);
+	fake_sailfish_watch_emit_queued_signals(w);
+	g_assert(!count[SIM_INFO_SIGNAL_ICCID_CHANGED]);
+	g_assert(!count[SIM_INFO_SIGNAL_IMSI_CHANGED]);
+	g_assert(!count[SIM_INFO_SIGNAL_SPN_CHANGED]);
+
+	sim.mcc = TEST_MCC;
+	sim.mnc = TEST_MNC;
+	sim.state = OFONO_SIM_STATE_READY;
+	fake_sailfish_watch_signal_queue(w, WATCH_SIGNAL_SIM_STATE_CHANGED);
+	fake_sailfish_watch_set_ofono_iccid(w, TEST_ICCID_1);
+	fake_sailfish_watch_set_ofono_imsi(w, TEST_IMSI_1);
+
+	fake_sailfish_watch_emit_queued_signals(w);
+	g_assert(!g_strcmp0(si->iccid, TEST_ICCID_1));
+	g_assert(!g_strcmp0(si->imsi, TEST_IMSI_1));
+	g_assert(!g_strcmp0(si->spn, TEST_DEFAULT_SPN));
+	g_assert(count[SIM_INFO_SIGNAL_ICCID_CHANGED] == 1);
+	g_assert(count[SIM_INFO_SIGNAL_IMSI_CHANGED] == 1);
+	g_assert(count[SIM_INFO_SIGNAL_SPN_CHANGED] == 1);
+	memset(count, 0, sizeof(count));
+
+	/* And then insert back the previous one */
+	test_remove_sim(&sim, w);
+	memset(count, 0, sizeof(count));
+
+	sim.state = OFONO_SIM_STATE_INSERTED;
+	fake_sailfish_watch_signal_queue(w, WATCH_SIGNAL_SIM_STATE_CHANGED);
+	fake_sailfish_watch_emit_queued_signals(w);
+
+	sim.mcc = TEST_MCC;
+	sim.mnc = TEST_MNC;
+	sim.state = OFONO_SIM_STATE_READY;
+	fake_sailfish_watch_signal_queue(w, WATCH_SIGNAL_SIM_STATE_CHANGED);
+	fake_sailfish_watch_set_ofono_iccid(w, TEST_ICCID);
+	fake_sailfish_watch_set_ofono_imsi(w, TEST_IMSI);
+
 	fake_sailfish_watch_emit_queued_signals(w);
 	g_assert(!g_strcmp0(si->iccid, TEST_ICCID));
 	g_assert(!g_strcmp0(si->imsi, TEST_IMSI));
