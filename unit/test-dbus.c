@@ -251,6 +251,22 @@ void test_dbus_expect_empty_reply(DBusPendingCall *call, void *data)
 	test_dbus_loop_quit_later(test->loop);
 }
 
+void test_dbus_check_string_reply(DBusPendingCall *call, const char *str)
+{
+	DBusMessage *reply = dbus_pending_call_steal_reply(call);
+	DBusMessageIter it;
+
+	DBG("");
+	g_assert(dbus_message_get_type(reply) ==
+					DBUS_MESSAGE_TYPE_METHOD_RETURN);
+
+	dbus_message_iter_init(reply, &it);
+	g_assert(!g_strcmp0(test_dbus_get_string(&it), str));
+	g_assert(dbus_message_iter_get_arg_type(&it) == DBUS_TYPE_INVALID);
+
+	dbus_message_unref(reply);
+}
+
 void test_dbus_message_unref(gpointer data)
 {
 	dbus_message_unref(data);
