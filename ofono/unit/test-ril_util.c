@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2017 Jolla Ltd.
+ *  Copyright (C) 2017-2018 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -102,6 +102,20 @@ void test_parse_int(void)
 	g_assert(!ril_parse_int("0xffffffff", 0, &value));
 }
 
+void test_strings(void)
+{
+	g_assert(!g_strcmp0(ril_error_to_string(RIL_E_SUCCESS), "OK"));
+	g_assert(!g_strcmp0(ril_error_to_string(2147483647), "2147483647"));
+	g_assert(!g_strcmp0(ril_request_to_string(RIL_RESPONSE_ACKNOWLEDGEMENT),
+	    "RESPONSE_ACK"));
+	g_assert(!g_strcmp0(ril_request_to_string(2147483647),
+            "RIL_REQUEST_2147483647"));
+	g_assert(!g_strcmp0(ril_unsol_event_to_string(2147483647),
+	    "RIL_UNSOL_2147483647"));
+	g_assert(!g_strcmp0(ril_radio_state_to_string(2147483647),
+	    "2147483647 (?)"));
+}
+
 #define TEST_(name) "/ril_util/" name
 
 int main(int argc, char *argv[])
@@ -115,6 +129,7 @@ int main(int argc, char *argv[])
 	g_test_add_func(TEST_("parse_tech"), test_parse_tech);
 	g_test_add_func(TEST_("parse_mcc_mnc"), test_parse_mcc_mnc);
 	g_test_add_func(TEST_("parse_int"), test_parse_int);
+	g_test_add_func(TEST_("strings"), test_strings);
 
 	return g_test_run();
 }
