@@ -39,6 +39,9 @@ gboolean test_dbus_get_bool(DBusMessageIter *it);
 const char *test_dbus_get_string(DBusMessageIter *it);
 const char *test_dbus_get_object_path(DBusMessageIter *it);
 
+void test_dbus_check_string_reply(DBusPendingCall *call, const char *str);
+void test_dbus_expect_empty_reply(DBusPendingCall *call, void *data);
+
 DBusMessage *test_dbus_find_signal(struct test_dbus_context *test,
 		const char *path, const char *iface, const char *member);
 DBusMessage *test_dbus_take_signal(struct test_dbus_context *test,

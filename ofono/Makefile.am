@@ -944,6 +944,19 @@ unit_test_sailfish_sim_info_LDADD = @GLIB_LIBS@ -ldl
 unit_objects += $(unit_test_sailfish_sim_info_OBJECTS)
 unit_tests += unit/test-sailfish_sim_info
 
+unit_test_sailfish_sim_info_dbus_SOURCES = unit/test-sailfish_sim_info_dbus.c \
+			unit/test-dbus.c unit/fake_sailfish_watch.c \
+			plugins/sailfish_manager/sailfish_sim_info.c \
+			plugins/sailfish_manager/sailfish_sim_info_dbus.c \
+			gdbus/object.c \
+			src/dbus.c src/storage.c src/watch.c src/log.c
+unit_test_sailfish_sim_info_dbus_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
+			@DBUS_GLIB_CFLAGS@ -DSTORAGEDIR='"/tmp/ofono"' \
+			-Iplugins/sailfish_manager
+unit_test_sailfish_sim_info_dbus_LDADD = @DBUS_GLIB_LIBS@ @GLIB_LIBS@ -ldl
+unit_objects += $(unit_test_sailfish_sim_info_dbus_OBJECTS)
+unit_tests += unit/test-sailfish_sim_info_dbus
+
 unit_test_sailfish_manager_SOURCES = unit/test-sailfish_manager.c \
 			unit/fake_sailfish_watch.c \
 			plugins/sailfish_manager/sailfish_manager.c \

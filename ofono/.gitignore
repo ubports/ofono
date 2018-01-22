@@ -51,6 +51,7 @@ unit/test-sailfish_cell_info
 unit/test-sailfish_cell_info_dbus
 unit/test-sailfish_manager
 unit/test-sailfish_sim_info
+unit/test-sailfish_sim_info_dbus
 unit/test-sms-filter
 unit/test-*.log
 unit/test-*.trs
