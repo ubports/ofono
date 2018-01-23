@@ -106,10 +106,10 @@ static struct sailfish_cell *ril_cell_info_parse_cell_gsm(GRilIoParser *rilp,
 	struct sailfish_cell_info_gsm *gsm = &cell->info.gsm;
 
 	/* Optional RIL_CellIdentityGsm_v12 part */
-	gsm->arfcn = INT_MAX;
-	gsm->bsic = INT_MAX;
+	gsm->arfcn = SAILFISH_CELL_INVALID_VALUE;
+	gsm->bsic = SAILFISH_CELL_INVALID_VALUE;
 	/* Optional RIL_GSM_SignalStrength_v12 part */
-	gsm->timingAdvance = INT_MAX;
+	gsm->timingAdvance = SAILFISH_CELL_INVALID_VALUE;
 	/* RIL_CellIdentityGsm */
 	if (grilio_parser_get_int32(rilp, &gsm->mcc) &&
 		grilio_parser_get_int32(rilp, &gsm->mnc) &&
@@ -145,7 +145,7 @@ static struct sailfish_cell *ril_cell_info_parse_cell_wcdma(GRilIoParser *rilp,
 	struct sailfish_cell_info_wcdma *wcdma = &cell->info.wcdma;
 
 	/* Optional RIL_CellIdentityWcdma_v12 part */
-	wcdma->uarfcn = INT_MAX;
+	wcdma->uarfcn = SAILFISH_CELL_INVALID_VALUE;
 	if (grilio_parser_get_int32(rilp, &wcdma->mcc) &&
 		grilio_parser_get_int32(rilp, &wcdma->mnc) &&
 		grilio_parser_get_int32(rilp, &wcdma->lac) &&
@@ -176,7 +176,7 @@ static struct sailfish_cell *ril_cell_info_parse_cell_lte(GRilIoParser *rilp,
 	struct sailfish_cell_info_lte *lte = &cell->info.lte;
 
 	/* Optional RIL_CellIdentityLte_v12 part */
-	lte->earfcn = INT_MAX;
+	lte->earfcn = SAILFISH_CELL_INVALID_VALUE;
 	if (grilio_parser_get_int32(rilp, &lte->mcc) &&
 		grilio_parser_get_int32(rilp, &lte->mnc) &&
 		grilio_parser_get_int32(rilp, &lte->ci) &&
