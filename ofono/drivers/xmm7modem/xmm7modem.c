@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2017  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -19,23 +19,32 @@
  *
  */
 
-#include <drivers/atmodem/atutil.h>
-#include <drivers/atmodem/vendor.h>
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
-extern void ifx_voicecall_init(void);
-extern void ifx_voicecall_exit(void);
+#include <glib.h>
+#include <gatchat.h>
 
-extern void ifx_audio_settings_init(void);
-extern void ifx_audio_settings_exit(void);
+#define OFONO_API_SUBJECT_TO_CHANGE
+#include <ofono/plugin.h>
+#include <ofono/types.h>
+#include <ofono/modem.h>
 
-extern void ifx_radio_settings_init(void);
-extern void ifx_radio_settings_exit(void);
+#include "xmm7modem.h"
 
-extern void ifx_gprs_context_init(void);
-extern void ifx_gprs_context_exit(void);
+static int xmm7modem_init(void)
+{
+	xmm_radio_settings_init();
 
-extern void ifx_stk_init(void);
-extern void ifx_stk_exit(void);
+	return 0;
+}
 
-extern void ifx_ctm_init(void);
-extern void ifx_ctm_exit(void);
+static void xmm7modem_exit(void)
+{
+	xmm_radio_settings_exit();
+}
+
+OFONO_PLUGIN_DEFINE(xmm7modem, "Intel xmm7xxx series modem driver",
+			VERSION, OFONO_PLUGIN_PRIORITY_DEFAULT,
+			xmm7modem_init, xmm7modem_exit)

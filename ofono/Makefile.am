@@ -298,7 +298,8 @@ builtin_sources += $(qmi_sources) \
 			drivers/qmimodem/gprs.c \
 			drivers/qmimodem/gprs-context.c \
 			drivers/qmimodem/radio-settings.c \
-			drivers/qmimodem/location-reporting.c
+			drivers/qmimodem/location-reporting.c \
+			drivers/qmimodem/netmon.c
 
 builtin_modules += gobi
 builtin_sources += plugins/gobi.c
@@ -329,7 +330,8 @@ builtin_sources += 	drivers/atmodem/atmodem.h \
 			drivers/atmodem/gprs.c \
 			drivers/atmodem/gprs-context.c \
 			drivers/atmodem/sim-auth.c \
-			drivers/atmodem/gnss.c
+			drivers/atmodem/gnss.c \
+			drivers/atmodem/lte.c
 
 builtin_modules += nwmodem
 builtin_sources += drivers/atmodem/atutil.h \
@@ -460,6 +462,11 @@ builtin_sources += drivers/atmodem/atutil.h \
 			drivers/gemaltomodem/gemaltomodem.c \
 			drivers/gemaltomodem/location-reporting.c
 
+builtin_modules += xmm7modem
+builtin_sources += drivers/atmodem/atutil.h \
+			drivers/xmm7modem/xmm7modem.h \
+			drivers/xmm7modem/xmm7modem.c \
+			drivers/xmm7modem/radio-settings.c
 
 if PHONESIM
 builtin_modules += phonesim
@@ -567,8 +574,8 @@ builtin_sources += plugins/quectel.c
 builtin_modules += ublox
 builtin_sources += plugins/ublox.c
 
-builtin_modules += he910
-builtin_sources += plugins/he910.c
+builtin_modules += xmm7xxx
+builtin_sources += plugins/xmm7xxx.c
 endif
 
 builtin_modules += connman
@@ -731,7 +738,8 @@ src_ofonod_SOURCES = $(builtin_sources) $(gatchat_sources) src/ofono.ver \
 			src/sim-mnclength.c src/voicecallagent.c \
 			src/sms-filter.c src/dbus-queue.c \
 			src/hfp.h src/siri.c \
-			src/netmon.c src/lte.c
+			src/netmon.c src/lte.c \
+			src/netmonagent.c src/netmonagent.h
 
 src_ofonod_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
 			@GLIB_LIBS@ @DBUS_LIBS@ -ldl
@@ -780,7 +788,8 @@ doc_files = doc/overview.txt doc/ofono-paper.txt doc/release-faq.txt \
 			doc/telit-modem.txt \
 			doc/networkmonitor-api.txt \
 			doc/allowed-apns-api.txt \
-			doc/lte-api.txt
+			doc/lte-api.txt \
+			doc/cinterion-hardware-monitor-api.txt
 
 
 test_scripts = test/backtrace \
@@ -888,7 +897,9 @@ test_scripts = test/backtrace \
 		test/list-allowed-access-points \
 		test/enable-throttling \
 		test/disable-throttling \
-		test/set-lte-property
+		test/set-lte-property \
+		test/test-serving-cell-info
+
 
 if TEST
 testdir = $(pkglibdir)/test

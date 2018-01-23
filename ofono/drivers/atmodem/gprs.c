@@ -327,6 +327,26 @@ static void huawei_mode_notify(GAtResult *result, gpointer user_data)
 	ofono_gprs_bearer_notify(gprs, bearer);
 }
 
+static void huawei_hcsq_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_gprs *gprs = user_data;
+	GAtResultIter iter;
+	const char *mode;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "^HCSQ:"))
+		return;
+
+	if (!g_at_result_iter_next_string(&iter, &mode))
+		return;
+
+	if (!strcmp("LTE", mode))
+		ofono_gprs_bearer_notify(gprs, 7); /* LTE */
+
+	/* in other modes, notification ^MODE is used */
+}
+
 static void telit_mode_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_gprs *gprs = user_data;
@@ -432,6 +452,8 @@ static void gprs_initialized(gboolean ok, GAtResult *result, gpointer user_data)
 	case OFONO_VENDOR_HUAWEI:
 		g_at_chat_register(gd->chat, "^MODE:", huawei_mode_notify,
 						FALSE, gprs, NULL);
+		g_at_chat_register(gd->chat, "^HCSQ:", huawei_hcsq_notify,
+						FALSE, gprs, NULL);
 		break;
 	case OFONO_VENDOR_UBLOX:
 	case OFONO_VENDOR_UBLOX_TOBY_L2:
@@ -445,6 +467,7 @@ static void gprs_initialized(gboolean ok, GAtResult *result, gpointer user_data)
 						FALSE, gprs, NULL);
 		g_at_chat_send(gd->chat, "AT#PSNT=1", none_prefix,
 						NULL, NULL, NULL);
+		break;
 	default:
 		g_at_chat_register(gd->chat, "+CPSB:", cpsb_notify,
 						FALSE, gprs, NULL);

@@ -177,26 +177,6 @@ static const char *disconnect_reason_to_string(enum ofono_disconnect_reason r)
 	}
 }
 
-static const char *call_status_to_string(int status)
-{
-	switch (status) {
-	case CALL_STATUS_ACTIVE:
-		return "active";
-	case CALL_STATUS_HELD:
-		return "held";
-	case CALL_STATUS_DIALING:
-		return "dialing";
-	case CALL_STATUS_ALERTING:
-		return "alerting";
-	case CALL_STATUS_INCOMING:
-		return "incoming";
-	case CALL_STATUS_WAITING:
-		return "waiting";
-	default:
-		return "disconnected";
-	}
-}
-
 static const char *phone_and_clip_to_string(const struct ofono_phone_number *n,
 						int clip_validity)
 {
@@ -619,10 +599,11 @@ static DBusMessage *voicecall_hangup(DBusConnection *conn,
 		}
 
 		/*
-		 * Fall through, we check if we have a single alerting,
-		 * dialing or active call and try to hang it up with
-		 * hangup_all or hangup_active
+		 * We check if we have a single alerting, dialing or activeo
+		 * call and try to hang it up with hangup_all or hangup_active
 		 */
+
+		/* fall through */
 	case CALL_STATUS_ACTIVE:
 		if (single_call == TRUE && vc->driver->hangup_all != NULL) {
 			vc->pending = dbus_message_ref(msg);
@@ -2369,9 +2350,10 @@ void ofono_voicecall_notify(struct ofono_voicecall *vc,
 	struct voicecall *v = NULL;
 	struct ofono_call *newcall;
 
-	DBG("Got a voicecall event, status: %d, id: %u, number: %s"
-			" called_number: %s, called_name %s", call->status,
-			call->id, call->phone_number.number,
+	DBG("Got a voicecall event, status: %s (%d), id: %u, number: %s"
+			" called_number: %s, called_name %s",
+			call_status_to_string(call->status),
+			call->status, call->id, call->phone_number.number,
 			call->called_number.number, call->name);
 
 	l = g_slist_find_custom(vc->call_list, GUINT_TO_POINTER(call->id),

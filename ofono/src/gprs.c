@@ -1288,9 +1288,6 @@ static DBusMessage *pri_set_apn(struct pri_context *ctx, DBusConnection *conn,
 {
 	GKeyFile *settings = ctx->gprs->settings;
 
-	if (strlen(apn) > OFONO_GPRS_MAX_APN_LENGTH)
-		return __ofono_error_invalid_format(msg);
-
 	if (g_str_equal(apn, ctx->context.apn))
 		return dbus_message_new_method_return(msg);
 
@@ -2272,6 +2269,12 @@ void ofono_gprs_cid_activated(struct ofono_gprs  *gprs, unsigned int cid,
 		return;
 	}
 
+	if (strlen(apn) > OFONO_GPRS_MAX_APN_LENGTH
+				|| is_valid_apn(apn) == FALSE) {
+		ofono_error("Context activated with an invalid APN");
+		return;
+	}
+
 	pri_ctx = find_usable_context(gprs, apn);
 
 	if (!pri_ctx) {
@@ -2296,11 +2299,22 @@ void ofono_gprs_cid_activated(struct ofono_gprs  *gprs, unsigned int cid,
 		ofono_warn("Context activated for driver that doesn't support "
 				"automatic context activation.");
 		release_context(pri_ctx);
+		return;
 	}
 
+	/*
+	 * We weren't able to find a context with a matching APN and allocated
+	 * a brand new one instead.  Set the APN accordingly
+	 */
 	if (strlen(pri_ctx->context.apn) == 0) {
 		DBusConnection *conn = ofono_dbus_get_connection();
-		pri_set_apn(pri_ctx, conn, NULL, apn);
+
+		strcpy(pri_ctx->context.apn, apn);
+
+		ofono_dbus_signal_property_changed(conn, pri_ctx->path,
+					OFONO_CONNECTION_CONTEXT_INTERFACE,
+					"AccessPointName",
+					DBUS_TYPE_STRING, &apn);
 	}
 
 	/* Prevent ofono_gprs_status_notify from changing the 'attached'
@@ -2632,9 +2646,6 @@ static void provision_context(const struct ofono_gprs_provision_data *ap,
 	if (ap->name && strlen(ap->name) > MAX_CONTEXT_NAME_LENGTH)
 		return;
 
-	if (ap->apn == NULL || strlen(ap->apn) > OFONO_GPRS_MAX_APN_LENGTH)
-		return;
-
 	if (is_valid_apn(ap->apn) == FALSE)
 		return;
 
@@ -2858,7 +2869,8 @@ void ofono_gprs_detached_notify(struct ofono_gprs *gprs)
 
 void ofono_gprs_status_notify(struct ofono_gprs *gprs, int status)
 {
-	DBG("%s status %d", __ofono_atom_get_path(gprs->atom), status);
+	DBG("%s status %s (%d)", __ofono_atom_get_path(gprs->atom),
+			registration_status_to_string(status), status);
 
 	gprs->status = status;
 
@@ -3505,9 +3517,6 @@ static gboolean load_context(struct ofono_gprs *gprs, const char *group)
 	apn = g_key_file_get_string(gprs->settings, group,
 					"AccessPointName", NULL);
 	if (apn == NULL)
-		goto error;
-
-	if (strlen(apn) > OFONO_GPRS_MAX_APN_LENGTH)
 		goto error;
 
 	if (type == OFONO_GPRS_CONTEXT_TYPE_MMS) {

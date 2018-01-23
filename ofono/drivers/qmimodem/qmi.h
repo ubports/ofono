@@ -130,13 +130,15 @@ const void *qmi_result_get(struct qmi_result *result, uint8_t type,
 char *qmi_result_get_string(struct qmi_result *result, uint8_t type);
 bool qmi_result_get_uint8(struct qmi_result *result, uint8_t type,
 							uint8_t *value);
+bool qmi_result_get_int16(struct qmi_result *result, uint8_t type,
+							int16_t *value);
 bool qmi_result_get_uint16(struct qmi_result *result, uint8_t type,
 							uint16_t *value);
 bool qmi_result_get_uint32(struct qmi_result *result, uint8_t type,
 							uint32_t *value);
 bool qmi_result_get_uint64(struct qmi_result *result, uint8_t type,
 							uint64_t *value);
-
+void qmi_result_print_tlvs(struct qmi_result *result);
 
 struct qmi_service;
 

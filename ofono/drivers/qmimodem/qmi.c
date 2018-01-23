@@ -73,6 +73,8 @@ struct qmi_device {
 	void *shutdown_user_data;
 	qmi_destroy_func_t shutdown_destroy;
 	guint shutdown_source;
+	bool shutting_down : 1;
+	bool destroyed : 1;
 };
 
 struct qmi_service {
@@ -1000,7 +1002,10 @@ void qmi_device_unref(struct qmi_device *device)
 	g_free(device->version_str);
 	g_free(device->version_list);
 
-	g_free(device);
+	if (device->shutting_down)
+		device->destroyed = true;
+	else
+		g_free(device);
 }
 
 void qmi_device_set_debug(struct qmi_device *device,
@@ -1020,6 +1025,23 @@ void qmi_device_set_close_on_unref(struct qmi_device *device, bool do_close)
 
 	device->close_on_unref = do_close;
 }
+
+void qmi_result_print_tlvs(struct qmi_result *result)
+{
+	const void *ptr = result->data;
+	uint16_t len = result->length;
+
+	while (len > QMI_TLV_HDR_SIZE) {
+		const struct qmi_tlv_hdr *tlv = ptr;
+		uint16_t tlv_length = GUINT16_FROM_LE(tlv->length);
+
+		DBG("tlv: 0x%02x len 0x%04x", tlv->type, tlv->length);
+
+		ptr += QMI_TLV_HDR_SIZE + tlv_length;
+		len -= QMI_TLV_HDR_SIZE + tlv_length;
+	}
+}
+
 
 static const void *tlv_get(const void *data, uint16_t size,
 					uint8_t type, uint16_t *length)
@@ -1255,6 +1277,9 @@ static void shutdown_destroy(gpointer user_data)
 		device->shutdown_destroy(device->shutdown_user_data);
 
 	device->shutdown_source = 0;
+
+	if (device->destroyed)
+		g_free(device);
 }
 
 static gboolean shutdown_callback(gpointer user_data)
@@ -1264,8 +1289,12 @@ static gboolean shutdown_callback(gpointer user_data)
 	if (device->release_users > 0)
 		return TRUE;
 
+	device->shutting_down = true;
+
 	if (device->shutdown_func)
 		device->shutdown_func(device->shutdown_user_data);
+
+	device->shutting_down = true;
 
 	return FALSE;
 }
@@ -1687,6 +1716,27 @@ bool qmi_result_get_uint8(struct qmi_result *result, uint8_t type,
 
 	if (value)
 		*value = *ptr;
+
+	return true;
+}
+
+bool qmi_result_get_int16(struct qmi_result *result, uint8_t type,
+							int16_t *value)
+{
+	const unsigned char *ptr;
+	uint16_t len, tmp;
+
+	if (!result || !type)
+		return false;
+
+	ptr = tlv_get(result->data, result->length, type, &len);
+	if (!ptr)
+		return false;
+
+	memcpy(&tmp, ptr, 2);
+
+	if (value)
+		*value = GINT16_FROM_LE(tmp);
 
 	return true;
 }

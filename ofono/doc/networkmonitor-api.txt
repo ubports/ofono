@@ -22,6 +22,34 @@ Methods		a{sv} GetServingCellInformation()
 			are available, their valid value ranges and
 			applicability to different cell types.
 
+		void RegisterAgent(object path)
+
+			Registers an agent which will be called whenever the
+			modem registers to or moves to a new cell.
+
+		void UnregisterAgent(object path)
+
+			Unregisters an agent.
+
+NetworkMonitorAgent Hierarchy [experimental]
+=============================
+
+Service		unique name
+Interface	org.ofono.NetworkMonitorAgent
+Object path	freely definable
+
+Methods		void ServingCellInformationChanged(a{sv}) [noreply]
+
+			This method is called whenever the serving cell
+			information has been updated.
+
+			Possible Errors: None
+
+		void Release() [noreply]
+
+			Agent is being released, possibly because of oFono
+			terminating, NetworkMonitor interface is being torn
+			down or modem off.  No UnregisterAgent call is needed.
 
 Network Monitor Property Types
 ==============================
@@ -77,7 +105,7 @@ byte TimingAdvance [optional, gsm]
 
 	Contains the Timing Advance.  Valid range of values is 0-219.
 
-byte Strength [optional, gsm, umts]
+byte Strength [optional, gsm, umts, lte]
 
 	Contains the signal strength.  Valid values are 0-31.  Refer to <rssi>
 	in 27.007, Section 8.5.

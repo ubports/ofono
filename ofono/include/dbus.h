@@ -63,6 +63,7 @@ extern "C" {
 #define OFONO_NETWORK_TIME_INTERFACE OFONO_SERVICE ".NetworkTime"
 #define OFONO_SIRI_INTERFACE OFONO_SERVICE ".Siri"
 #define OFONO_NETMON_INTERFACE OFONO_SERVICE ".NetworkMonitor"
+#define OFONO_NETMON_AGENT_INTERFACE OFONO_SERVICE ".NetworkMonitorAgent"
 #define OFONO_LTE_INTERFACE OFONO_SERVICE ".LongTermEvolution"
 
 /* CDMA Interfaces */

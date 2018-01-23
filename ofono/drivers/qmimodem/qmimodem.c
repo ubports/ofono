@@ -41,12 +41,14 @@ static int qmimodem_init(void)
 	qmi_gprs_context_init();
 	qmi_radio_settings_init();
 	qmi_location_reporting_init();
+	qmi_netmon_init();
 
 	return 0;
 }
 
 static void qmimodem_exit(void)
 {
+	qmi_netmon_exit();
 	qmi_location_reporting_exit();
 	qmi_radio_settings_exit();
 	qmi_gprs_context_exit();

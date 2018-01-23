@@ -127,6 +127,7 @@ static void add_slash(char *dest, const char *src, int len_max, int len)
 		case ';':
 		case ',':
 			dest[j++] = '\\';
+			/* fall through */
 		default:
 			dest[j] = src[i];
 			break;

@@ -25,12 +25,17 @@
 
 #include <errno.h>
 #include <stdlib.h>
+#include <stdint.h>
 
 #include <glib.h>
 #include <gatchat.h>
 #include <gattty.h>
+#include <gdbus.h>
+
+#include "ofono.h"
 
 #define OFONO_API_SUBJECT_TO_CHANGE
+#include <ofono/dbus.h>
 #include <ofono/plugin.h>
 #include <ofono/log.h>
 #include <ofono/modem.h>
@@ -46,7 +51,17 @@
 #include <drivers/atmodem/atutil.h>
 #include <drivers/atmodem/vendor.h>
 
+#define HARDWARE_MONITOR_INTERFACE OFONO_SERVICE ".cinterion.HardwareMonitor"
+
 static const char *none_prefix[] = { NULL };
+static const char *sctm_prefix[] = { "^SCTM:", NULL };
+static const char *sbv_prefix[] = { "^SBV:", NULL };
+
+struct gemalto_hardware_monitor {
+	DBusMessage *msg;
+	int32_t temperature;
+	int32_t voltage;
+};
 
 struct gemalto_data {
 	GAtChat *app;
@@ -54,6 +69,7 @@ struct gemalto_data {
 	struct ofono_sim *sim;
 	gboolean have_sim;
 	struct at_util_sim_state_query *sim_state_query;
+	struct gemalto_hardware_monitor *hm;
 };
 
 static int gemalto_probe(struct ofono_modem *modem)
@@ -142,6 +158,148 @@ static void cfun_enable(gboolean ok, GAtResult *result, gpointer user_data)
 						NULL);
 }
 
+static void gemalto_sctm_cb(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct gemalto_data *data = user_data;
+	DBusMessage *reply;
+	GAtResultIter iter;
+	DBusMessageIter dbus_iter;
+	DBusMessageIter dbus_dict;
+
+	if (data->hm->msg == NULL)
+		return;
+
+	if (!ok)
+		goto error;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "^SCTM:"))
+		goto error;
+
+	if (!g_at_result_iter_skip_next(&iter))
+		goto error;
+
+	if (!g_at_result_iter_skip_next(&iter))
+		goto error;
+
+	if (!g_at_result_iter_next_number(&iter, &data->hm->temperature))
+		goto error;
+
+	reply = dbus_message_new_method_return(data->hm->msg);
+
+	dbus_message_iter_init_append(reply, &dbus_iter);
+
+	dbus_message_iter_open_container(&dbus_iter, DBUS_TYPE_ARRAY,
+			OFONO_PROPERTIES_ARRAY_SIGNATURE,
+			&dbus_dict);
+
+	ofono_dbus_dict_append(&dbus_dict, "Temperature",
+			DBUS_TYPE_INT32, &data->hm->temperature);
+
+	ofono_dbus_dict_append(&dbus_dict, "Voltage",
+			DBUS_TYPE_UINT32, &data->hm->voltage);
+
+	dbus_message_iter_close_container(&dbus_iter, &dbus_dict);
+
+	__ofono_dbus_pending_reply(&data->hm->msg, reply);
+
+	return;
+
+error:
+	__ofono_dbus_pending_reply(&data->hm->msg,
+			__ofono_error_failed(data->hm->msg));
+}
+
+static void gemalto_sbv_cb(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct gemalto_data *data = user_data;
+	GAtResultIter iter;
+
+	if (!ok)
+		goto error;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "^SBV:"))
+		goto error;
+
+	if (!g_at_result_iter_next_number(&iter, &data->hm->voltage))
+		goto error;
+
+	if (g_at_chat_send(data->app, "AT^SCTM?", sctm_prefix, gemalto_sctm_cb,
+				data, NULL) > 0)
+		return;
+
+error:
+	__ofono_dbus_pending_reply(&data->hm->msg,
+			__ofono_error_failed(data->hm->msg));
+}
+
+static DBusMessage *hardware_monitor_get_statistics(DBusConnection *conn,
+							DBusMessage *msg,
+							void *user_data)
+{
+	struct gemalto_data *data = user_data;
+
+	DBG("");
+
+	if (data->hm->msg != NULL)
+		return __ofono_error_busy(msg);
+
+	if (!g_at_chat_send(data->app, "AT^SBV", sbv_prefix, gemalto_sbv_cb,
+			data, NULL))
+		return __ofono_error_failed(msg);
+
+	data->hm->msg = dbus_message_ref(msg);
+
+	return NULL;
+}
+
+static const GDBusMethodTable hardware_monitor_methods[] = {
+	{ GDBUS_ASYNC_METHOD("GetStatistics",
+			NULL, GDBUS_ARGS({ "Statistics", "a{sv}" }),
+			hardware_monitor_get_statistics) },
+	{}
+};
+
+static void hardware_monitor_cleanup(void *user_data)
+{
+	struct gemalto_data *data = user_data;
+	struct gemalto_hardware_monitor *hm = data->hm;
+
+	g_free(hm);
+}
+
+static int gemalto_hardware_monitor_enable(struct ofono_modem *modem)
+{
+	struct gemalto_data *data = ofono_modem_get_data(modem);
+	DBusConnection *conn = ofono_dbus_get_connection();
+	const char *path = ofono_modem_get_path(modem);
+
+	DBG("");
+
+	/* Enable temperature output */
+	g_at_chat_send(data->app, "AT^SCTM=0,1", none_prefix, NULL, NULL, NULL);
+
+	/* Create Hardware Monitor DBus interface */
+	data->hm = g_try_new0(struct gemalto_hardware_monitor, 1);
+	if (data->hm == NULL)
+		return -EIO;
+
+	if (!g_dbus_register_interface(conn, path, HARDWARE_MONITOR_INTERFACE,
+					hardware_monitor_methods, NULL, NULL,
+					data, hardware_monitor_cleanup)) {
+		ofono_error("Could not register %s interface under %s",
+					HARDWARE_MONITOR_INTERFACE, path);
+		g_free(data->hm);
+		return -EIO;
+	}
+
+	ofono_modem_add_interface(modem, HARDWARE_MONITOR_INTERFACE);
+	return 0;
+}
+
 static int gemalto_enable(struct ofono_modem *modem)
 {
 	struct gemalto_data *data = ofono_modem_get_data(modem);
@@ -181,6 +339,8 @@ static int gemalto_enable(struct ofono_modem *modem)
 	g_at_chat_send(data->app, "AT+CFUN=4", none_prefix,
 			cfun_enable, modem, NULL);
 
+	gemalto_hardware_monitor_enable(modem);
+
 	return -EINPROGRESS;
 }
 
@@ -203,11 +363,18 @@ static void gemalto_smso_cb(gboolean ok, GAtResult *result, gpointer user_data)
 static int gemalto_disable(struct ofono_modem *modem)
 {
 	struct gemalto_data *data = ofono_modem_get_data(modem);
+	DBusConnection *conn = ofono_dbus_get_connection();
+	const char *path = ofono_modem_get_path(modem);
 
 	DBG("%p", modem);
 
 	g_at_chat_cancel_all(data->app);
 	g_at_chat_unregister_all(data->app);
+
+	if (g_dbus_unregister_interface(conn, path,
+				HARDWARE_MONITOR_INTERFACE))
+		ofono_modem_remove_interface(modem,
+				HARDWARE_MONITOR_INTERFACE);
 
 	/* Shutdown the modem */
 	g_at_chat_send(data->app, "AT^SMSO", none_prefix, gemalto_smso_cb,

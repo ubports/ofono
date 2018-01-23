@@ -1226,6 +1226,9 @@ static void notify_status_watches(struct ofono_netreg *netreg)
 	const char *mcc = NULL;
 	const char *mnc = NULL;
 
+	if (netreg->status_watches == NULL)
+		return;
+
 	if (netreg->current_operator) {
 		mcc = netreg->current_operator->mcc;
 		mnc = netreg->current_operator->mnc;

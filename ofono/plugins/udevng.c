@@ -261,18 +261,34 @@ static gboolean setup_sierra(struct modem_info *modem)
 		if (g_strcmp0(info->interface, "255/255/255") == 0) {
 			if (g_strcmp0(info->number, "01") == 0)
 				diag = info->devnode;
-			if (g_strcmp0(info->number, "03") == 0)
+			else if (g_strcmp0(info->number, "03") == 0)
 				mdm = info->devnode;
 			else if (g_strcmp0(info->number, "04") == 0)
 				app = info->devnode;
 			else if (g_strcmp0(info->number, "07") == 0)
 				net = info->devnode;
-			else if (g_strcmp0(info->number, "0a") == 0) {
-				if (g_strcmp0(info->subsystem, "net") == 0)
+			else if (g_strcmp0(info->subsystem, "net") == 0) {
+				/*
+				 * When using the voice firmware on a mc7304
+				 * the second cdc-wdm interface doesn't handle
+				 * qmi messages properly.
+				 * Some modems still have a working second
+				 * cdc-wdm interface, some are not. But always
+				 * the first interface works.
+				 */
+				if (g_strcmp0(info->number, "08") == 0) {
 					net = info->devnode;
-				else if (g_strcmp0(info->subsystem,
-								"usbmisc") == 0)
+				} else if (g_strcmp0(info->number, "0a") == 0) {
+					if (net == NULL)
+						net = info->devnode;
+				}
+			} else if (g_strcmp0(info->subsystem, "usbmisc") == 0) {
+				if (g_strcmp0(info->number, "08") == 0) {
 					qmi = info->devnode;
+				} else if (g_strcmp0(info->number, "0a") == 0) {
+					if (qmi == NULL)
+						qmi = info->devnode;
+				}
 			}
 		}
 	}
@@ -860,7 +876,7 @@ static gboolean setup_quectel(struct modem_info *modem)
 
 static gboolean setup_quectelqmi(struct modem_info *modem)
 {
-	const char *qmi = NULL, *net = NULL, *gps = NULL;
+	const char *qmi = NULL, *net = NULL, *gps = NULL, *aux = NULL;
 	GSList *list;
 
 	DBG("%s", modem->syspath);
@@ -878,8 +894,11 @@ static gboolean setup_quectelqmi(struct modem_info *modem)
 			else if (g_strcmp0(info->subsystem, "usbmisc") == 0)
 				qmi = info->devnode;
 		} else if (g_strcmp0(info->interface, "255/0/0") == 0 &&
-				g_strcmp0(info->number, "02") == 0) {
+				g_strcmp0(info->number, "01") == 0) {
 			gps = info->devnode;
+		} else if (g_strcmp0(info->interface, "255/0/0") == 0 &&
+				g_strcmp0(info->number, "02") == 0) {
+			aux = info->devnode;
 		}
 	}
 
@@ -893,8 +912,12 @@ static gboolean setup_quectelqmi(struct modem_info *modem)
 	ofono_modem_set_string(modem->modem, "Device", qmi);
 	ofono_modem_set_string(modem->modem, "NetworkInterface", net);
 
+	DBG("gps=%s aux=%s", gps, aux);
+
 	if (gps)
 		ofono_modem_set_string(modem->modem, "GPS", gps);
+	if (aux)
+		ofono_modem_set_string(modem->modem, "Aux", aux);
 
 	ofono_modem_set_driver(modem->modem, "gobi");
 
@@ -989,8 +1012,6 @@ static gboolean setup_isi_serial(struct modem_info* modem)
 	value = udev_device_get_property_value(info->dev, "OFONO_ISI_ADDRESS");
 	if (value)
 		ofono_modem_set_integer(modem->modem, "Address", atoi(value));
-
-	ofono_modem_set_string(modem->modem, "Device", info->devnode);
 
 	return TRUE;
 }
@@ -1098,6 +1119,42 @@ static gboolean setup_gemalto(struct modem_info* modem)
 	return TRUE;
 }
 
+static gboolean setup_xmm7xxx(struct modem_info *modem)
+{
+	const char *mdm = NULL, *net = NULL;
+	GSList *list;
+
+	DBG("%s %s\n", __DATE__, __TIME__);
+	DBG("%s %s %s %s %s %s\n", modem->syspath, modem->devname,
+		modem->driver, modem->vendor, modem->model, modem->sysattr);
+
+	for (list = modem->devices; list; list = list->next) {
+		struct device_info *info = list->data;
+
+		DBG("%s %s %s %s %s %s %s\n", info->devpath, info->devnode,
+				info->interface, info->number, info->label,
+				info->sysattr, info->subsystem);
+
+		if (g_strcmp0(info->subsystem, "tty") == 0) {
+			if (g_strcmp0(info->number, "02") == 0)
+				mdm = info->devnode;
+		} else if (g_strcmp0(info->subsystem, "net") == 0) {
+			if (g_strcmp0(info->number, "00") == 0)
+				net = info->devnode;
+		}
+	}
+
+	if (mdm == NULL || net == NULL)
+		return FALSE;
+
+	DBG("modem=%s net=%s\n", mdm, net);
+
+	ofono_modem_set_string(modem->modem, "Modem", mdm);
+	ofono_modem_set_string(modem->modem, "NetworkInterface", net);
+
+	return TRUE;
+}
+
 static struct {
 	const char *name;
 	gboolean (*setup)(struct modem_info *modem);
@@ -1125,6 +1182,7 @@ static struct {
 	{ "quectelqmi",	setup_quectelqmi},
 	{ "ublox",	setup_ublox	},
 	{ "gemalto",	setup_gemalto	},
+	{ "xmm7xxx",	setup_xmm7xxx	},
 	/* Following are non-USB modems */
 	{ "ifx",	setup_ifx		},
 	{ "u8500",	setup_isi_serial	},
@@ -1302,7 +1360,7 @@ static void add_serial_device(struct udev_device *dev)
 
 	devnode = udev_device_get_devnode(dev);
 
-	if (!syspath || !devname || !devpath || !devnode)
+	if (!syspath || !devpath)
 		return;
 
 	modem = g_hash_table_lookup(modem_list, syspath);
@@ -1314,7 +1372,7 @@ static void add_serial_device(struct udev_device *dev)
 		modem->type = MODEM_TYPE_SERIAL;
 		modem->syspath = g_strdup(syspath);
 		modem->devname = g_strdup(devname);
-		modem->driver = g_strdup("legacy");
+		modem->driver = g_strdup(driver);
 
 		g_hash_table_replace(modem_list, modem->syspath, modem);
 	}
@@ -1334,7 +1392,7 @@ static void add_serial_device(struct udev_device *dev)
 	info->subsystem = g_strdup(subsystem);
 	info->dev = udev_device_ref(dev);
 
-	modem->devices = g_slist_append(modem->devices, info);
+	modem->serial = info;
 }
 
 static void add_device(const char *syspath, const char *devname,
@@ -1501,6 +1559,8 @@ static struct {
 	{ "gemalto",	"qmi_wwan",	"1e2d",	"0053"	},
 	{ "telit",	"cdc_ncm",	"1bc7", "0036"	},
 	{ "telit",	"cdc_acm",	"1bc7", "0036"	},
+	{ "xmm7xxx",	"cdc_acm",	"8087", "0930"	},
+	{ "xmm7xxx",	"cdc_ncm",	"8087", "0930"	},
 	{ }
 };
 

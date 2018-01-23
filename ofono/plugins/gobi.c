@@ -34,6 +34,7 @@
 #include <ofono/modem.h>
 #include <ofono/devinfo.h>
 #include <ofono/netreg.h>
+#include <ofono/netmon.h>
 #include <ofono/phonebook.h>
 #include <ofono/voicecall.h>
 #include <ofono/sim.h>
@@ -45,6 +46,7 @@
 #include <ofono/radio-settings.h>
 #include <ofono/location-reporting.h>
 #include <ofono/log.h>
+#include <ofono/message-waiting.h>
 
 #include <drivers/qmimodem/qmi.h>
 #include <drivers/qmimodem/dms.h>
@@ -483,6 +485,15 @@ static void gobi_post_sim(struct ofono_modem *modem)
 
 	if (data->features & GOBI_WMS)
 		ofono_sms_create(modem, 0, "qmimodem", data->device);
+
+	if ((data->features & GOBI_WMS) && (data->features & GOBI_UIM) &&
+			!ofono_modem_get_boolean(modem, "ForceSimLegacy")) {
+		struct ofono_message_waiting *mw =
+					ofono_message_waiting_create(modem);
+
+		if (mw)
+			ofono_message_waiting_register(mw);
+	}
 }
 
 static void gobi_post_online(struct ofono_modem *modem)
@@ -493,8 +504,10 @@ static void gobi_post_online(struct ofono_modem *modem)
 
 	DBG("%p", modem);
 
-	if (data->features & GOBI_NAS)
+	if (data->features & GOBI_NAS) {
 		ofono_netreg_create(modem, 0, "qmimodem", data->device);
+		ofono_netmon_create(modem, 0, "qmimodem", data->device);
+	}
 
 	if (data->features & GOBI_VOICE)
 		ofono_ussd_create(modem, 0, "qmimodem", data->device);

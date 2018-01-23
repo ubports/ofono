@@ -27,6 +27,7 @@
 #include <gatchat.h>
 #include <string.h>
 #include <stdlib.h>
+#include <errno.h>
 
 #define OFONO_API_SUBJECT_TO_CHANGE
 #include <ofono/log.h>
@@ -613,4 +614,43 @@ void at_util_sim_state_query_free(struct at_util_sim_state_query *req)
 		req->destroy(req->userdata);
 
 	g_free(req);
+}
+
+/*
+ * CGCONTRDP returns addr + netmask in the same string in the form
+ * of "a.b.c.d.m.m.m.m" for IPv4.
+ * address/netmask must be able to hold
+ * 255.255.255.255 + null = 16 characters
+ */
+int at_util_get_ipv4_address_and_netmask(const char *addrnetmask,
+						char *address, char *netmask)
+{
+	const char *s = addrnetmask;
+	const char *net = NULL;
+
+	int ret = -EINVAL;
+	int i;
+
+	/* Count 7 dots for ipv4, less or more means error. */
+	for (i = 0; i < 9; i++, s++) {
+		s = strchr(s, '.');
+
+		if (!s)
+			break;
+
+		if (i == 3) {
+			/* set netmask ptr and break the string */
+			net = s + 1;
+		}
+	}
+
+	if (i == 7) {
+		memcpy(address, addrnetmask, net - addrnetmask);
+		address[net - addrnetmask - 1] = '\0';
+		strcpy(netmask, net);
+
+		ret = 0;
+	}
+
+	return ret;
 }
