@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2017 Jolla Ltd.
+ *  Copyright (C) 2017-2018 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -23,6 +23,8 @@ enum sailfish_cell_type {
 	SAILFISH_CELL_TYPE_WCDMA,
 	SAILFISH_CELL_TYPE_LTE
 };
+
+#define SAILFISH_CELL_INVALID_VALUE (INT_MAX)
 
 struct sailfish_cell_info_gsm {
 	int mcc;            /* Mobile Country Code (0..999) */
