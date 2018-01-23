@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2017 Jolla Ltd.
+ *  Copyright (C) 2015-2018 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -378,7 +378,7 @@ static void ril_gprs_context_call_list_changed(struct ril_data *data, void *arg)
 		ril_gprs_context_set_dns_servers(gc, call);
 	}
 
-	ofono_gprs_context_signal_change(gc, call->cid);
+	ofono_gprs_context_signal_change(gc, gcd->active_ctx_cid);
 	ril_data_call_free(prev_call);
 }
 
