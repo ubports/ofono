@@ -195,7 +195,7 @@ static void sailfish_cell_info_dbus_append_properties(DBusMessageIter *it,
 	dbus_message_iter_open_container(it, DBUS_TYPE_ARRAY, "{sv}", &dict);
 	for (i = 0; i < n; i++) {
 		gint32 value = G_STRUCT_MEMBER(int, &cell->info, prop[i].off);
-		if (value != INT_MAX) {
+		if (value != SAILFISH_CELL_INVALID_VALUE) {
 			ofono_dbus_dict_append(&dict, prop[i].name,
 						DBUS_TYPE_INT32, &value);
 		}
