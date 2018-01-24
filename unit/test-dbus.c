@@ -18,6 +18,8 @@
 
 #include <dbus/dbus-glib-lowlevel.h>
 
+#include <unistd.h>
+
 struct test_polkit_auth_check {
 	void (*function)(dbus_bool_t authorized, void *user_data);
 	void *user_data;
@@ -307,15 +309,22 @@ static void test_dbus_connection_cb(DBusServer *server, DBusConnection *conn,
 
 void test_dbus_setup(struct test_dbus_context *test)
 {
+	char *path;
 	char *address;
 	GMainContext *context;
 
+	/* Generate unique non-existent path */
+	path = g_dir_make_tmp ("test-dbus.XXXXXX", NULL);
+	g_assert(path);
+	rmdir(path);
+
+	address = g_strconcat("unix:path=", path, NULL);
+
 	test->loop = g_main_loop_new(NULL, TRUE);
 	context = g_main_loop_get_context(test->loop);
-	test->server = dbus_server_listen("unix:runtime=yes;unix:tmpdir=/tmp",
-									NULL);
+
+	test->server = dbus_server_listen(address, NULL);
 	g_assert(test->server);
-	address = dbus_server_get_address(test->server);
 	DBG("listening on %s", address);
 
 	dbus_server_setup_with_g_main(test->server, context);
@@ -328,7 +337,8 @@ void test_dbus_setup(struct test_dbus_context *test)
 	g_assert(dbus_connection_add_filter(test->client_connection,
 				test_dbus_client_message_cb, test, NULL));
 	DBG("connected on %s", address);
-	dbus_free(address);
+	g_free(address);
+	g_free(path);
 }
 
 void test_dbus_shutdown(struct test_dbus_context *test)
