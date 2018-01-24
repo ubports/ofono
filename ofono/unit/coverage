@@ -23,7 +23,8 @@ TESTS="\
  test-sailfish_cell_info_dbus \
  test-sailfish_manager \
  test-sailfish_sim_info \
- test-sailfish_sim_info_dbus"
+ test-sailfish_sim_info_dbus \
+ test-sailfish_watch"
 
 pushd `dirname $0` > /dev/null
 TEST_DIR="$PWD"
