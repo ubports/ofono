@@ -19,13 +19,13 @@
 #include <ofono/gdbus.h>
 
 struct test_dbus_context {
-    GMainLoop *loop;
-    DBusServer *server;
-    DBusConnection *server_connection;
-    DBusConnection *client_connection;
-    GSList* client_signals;
-    void (*start)(struct test_dbus_context *test);
-    guint timeout_id;
+	GMainLoop *loop;
+	DBusServer *server;
+	DBusConnection *server_connection;
+	DBusConnection *client_connection;
+	GSList* client_signals;
+	void (*start)(struct test_dbus_context *test);
+	guint timeout_id;
 };
 
 void test_dbus_setup(struct test_dbus_context *context);
