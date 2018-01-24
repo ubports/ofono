@@ -980,6 +980,15 @@ unit_test_sailfish_manager_LDADD = @GLIB_LIBS@ -ldl
 unit_objects += $(unit_test_sailfish_manager_OBJECTS)
 unit_tests += unit/test-sailfish_manager
 
+unit_test_sailfish_watch_SOURCES = unit/test-sailfish_watch.c \
+			plugins/sailfish_manager/sailfish_watch.c \
+			src/log.c src/watch.c
+unit_test_sailfish_watch_CFLAGS = $(AM_CFLAGS) $(COVERAGE_OPT) \
+			-DSTORAGEDIR='"/tmp/ofono"' -Iplugins/sailfish_manager
+unit_test_sailfish_watch_LDADD = @GLIB_LIBS@ -ldl
+unit_objects += $(unit_test_sailfish_watch_OBJECTS)
+unit_tests += unit/test-sailfish_watch
+
 endif
 
 if RILMODEM
