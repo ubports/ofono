@@ -461,6 +461,8 @@ static void sailfish_watch_set_modem(struct sailfish_watch *self,
 		if (modem) {
 			sailfish_watch_setup_modem(self);
 		}
+		sailfish_watch_online_update(self,
+					ofono_modem_get_online(self->modem));
 		sailfish_watch_emit_queued_signals(self);
 	}
 }
