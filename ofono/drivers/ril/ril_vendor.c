@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2016-2017 Jolla Ltd.
+ *  Copyright (C) 2016-2018 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -18,7 +18,8 @@
 
 struct ril_vendor_hook *ril_vendor_create_hook
 		(const struct ril_vendor_driver *vendor, GRilIoChannel *io,
-			const char *path, const struct ril_slot_config *config)
+			const char *path, const struct ril_slot_config *config,
+			struct ril_network *network)
 {
 	if (vendor) {
 		const void *data = vendor->driver_data;
@@ -31,7 +32,8 @@ struct ril_vendor_hook *ril_vendor_create_hook
 			vendor = vendor->base;
 		}
 		if (vendor->create_hook) {
-			return vendor->create_hook(data, io, path, config);
+			return vendor->create_hook(data, io, path, config,
+								network);
 		}
 	}
 	return NULL;

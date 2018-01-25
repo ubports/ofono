@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2017 Jolla Ltd.
+ *  Copyright (C) 2015-2018 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -400,12 +400,25 @@ static void ril_network_poll_state(struct ril_network *self)
 	priv->operator_poll_id = ril_network_poll_and_retry(self,
 		priv->operator_poll_id, RIL_REQUEST_OPERATOR,
 		ril_network_poll_operator_cb);
-	priv->voice_poll_id = ril_network_poll_and_retry(self,
-		priv->voice_poll_id, RIL_REQUEST_VOICE_REGISTRATION_STATE,
-		ril_network_poll_voice_state_cb);
-	priv->data_poll_id = ril_network_poll_and_retry(self,
-		priv->data_poll_id, RIL_REQUEST_DATA_REGISTRATION_STATE,
-		ril_network_poll_data_state_cb);
+
+	ril_network_query_registration_state(self);
+}
+
+void ril_network_query_registration_state(struct ril_network *self)
+{
+	if (self) {
+		struct ril_network_priv *priv = self->priv;
+
+		DBG_(self, "");
+		priv->voice_poll_id = ril_network_poll_and_retry(self,
+			priv->voice_poll_id,
+			RIL_REQUEST_VOICE_REGISTRATION_STATE,
+			ril_network_poll_voice_state_cb);
+		priv->data_poll_id = ril_network_poll_and_retry(self,
+			priv->data_poll_id,
+			RIL_REQUEST_DATA_REGISTRATION_STATE,
+			ril_network_poll_data_state_cb);
+	}
 }
 
 static enum ofono_radio_access_mode ril_network_rat_to_mode(int rat)
