@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2017 Jolla Ltd.
+ *  Copyright (C) 2015-2018 Jolla Ltd.
  *  Contact: Slava Monich <slava.monich@jolla.com>
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -957,10 +957,6 @@ static void ril_plugin_slot_connected(ril_slot *slot)
 	 */
 	ril_plugin_start_imei_query(slot, TRUE, -1);
 
-	GASSERT(!slot->vendor_hook);
-	slot->vendor_hook = ril_vendor_create_hook(slot->vendor, slot->io,
-						slot->path, &slot->config);
-
 	GASSERT(!slot->radio);
 	slot->radio = ril_radio_new(slot->io);
 
@@ -983,6 +979,10 @@ static void ril_plugin_slot_connected(ril_slot *slot)
 	GASSERT(!slot->network);
 	slot->network = ril_network_new(slot->path, slot->io, log_prefix,
 			slot->radio, slot->sim_card, slot->sim_settings);
+
+	GASSERT(!slot->vendor_hook);
+	slot->vendor_hook = ril_vendor_create_hook(slot->vendor, slot->io,
+				slot->path, &slot->config, slot->network);
 
 	GASSERT(!slot->data);
 	slot->data = ril_data_new(plugin->data_manager, log_prefix,

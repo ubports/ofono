@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2016-2017 Jolla Ltd.
+ *  Copyright (C) 2016-2018 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -15,6 +15,7 @@
 
 #include "ril_plugin.h"
 #include "ril_vendor.h"
+#include "ril_network.h"
 #include "ril_data.h"
 #include "ril_log.h"
 
@@ -37,6 +38,7 @@ enum ril_mtk_watch_events {
 enum ril_mtk_events {
 	MTK_EVENT_REGISTRATION_SUSPENDED,
 	MTK_EVENT_SET_ATTACH_APN,
+	MTK_EVENT_PS_NETWORK_STATE_CHANGED,
 	MTK_EVENT_COUNT
 };
 
@@ -45,6 +47,7 @@ struct ril_vendor_hook_mtk {
 	const struct ril_mtk_msg *msg;
 	GRilIoQueue *q;
 	GRilIoChannel *io;
+	struct ril_network *network;
 	struct sailfish_watch *watch;
 	gulong ril_event_id[MTK_EVENT_COUNT];
 	guint slot;
@@ -221,6 +224,14 @@ static void ril_vendor_mtk_set_attach_apn(GRilIoChannel *io, guint id,
 	}
 }
 
+static void ril_vendor_mtk_ps_network_state_changed(GRilIoChannel *io,
+		guint id, const void *data, guint len, void *user_data)
+{
+	struct ril_vendor_hook_mtk *self = user_data;
+
+	ril_network_query_registration_state(self->network);
+}
+
 static GRilIoRequest* ril_vendor_mtk_data_call_req
 	(struct ril_vendor_hook *hook, int tech, const char *profile,
 		const char *apn, const char *username, const char *password,
@@ -285,7 +296,8 @@ static void ril_vendor_mtk_get_defaults(struct ril_vendor_defaults *defaults)
 
 static struct ril_vendor_hook *ril_vendor_mtk_create_hook_from_data
 		(const void *driver_data, GRilIoChannel *io, const char *path,
-					const struct ril_slot_config *config)
+					const struct ril_slot_config *config,
+					struct ril_network *network)
 {
 	const struct ril_vendor_mtk_driver_data *mtk_driver_data = driver_data;
 	const struct ril_mtk_msg *msg = mtk_driver_data->msg;
@@ -297,6 +309,7 @@ static struct ril_vendor_hook *ril_vendor_mtk_create_hook_from_data
 	self->io = grilio_channel_ref(io);
 	self->watch = sailfish_watch_new(path);
 	self->slot = config->slot;
+	self->network = ril_network_ref(network);
 	self->ril_event_id[MTK_EVENT_REGISTRATION_SUSPENDED] =
 			grilio_channel_add_unsol_event_handler(self->io,
 				ril_vendor_mtk_registration_suspended,
@@ -306,6 +319,12 @@ static struct ril_vendor_hook *ril_vendor_mtk_create_hook_from_data
 			grilio_channel_add_unsol_event_handler(self->io,
 				ril_vendor_mtk_set_attach_apn,
 				msg->unsol_set_attach_apn, self);
+	}
+	if (msg->unsol_ps_network_state_changed) {
+		self->ril_event_id[MTK_EVENT_PS_NETWORK_STATE_CHANGED] =
+			grilio_channel_add_unsol_event_handler(self->io,
+				ril_vendor_mtk_ps_network_state_changed,
+				msg->unsol_ps_network_state_changed, self);
 	}
 	DBG("%s slot %u", mtk_driver_data->name, self->slot);
 	return ril_vendor_hook_init(&self->hook, mtk_driver_data->proc);
@@ -321,6 +340,7 @@ static void ril_vendor_mtk_free(struct ril_vendor_hook *hook)
 	grilio_queue_unref(self->q);
 	grilio_channel_unref(self->io);
 	sailfish_watch_unref(self->watch);
+	ril_network_unref(self->network);
 	g_free(self);
 }
 
@@ -467,10 +487,11 @@ static const struct ril_vendor_driver *ril_vendor_mtk_detect()
 }
 
 static struct ril_vendor_hook *ril_vendor_mtk_create_hook_auto
-		(const void *driver_data, GRilIoChannel *io, const char *path,
-					const struct ril_slot_config *cfg)
+	(const void *driver_data, GRilIoChannel *io, const char *path,
+		const struct ril_slot_config *cfg, struct ril_network *network)
 {
-	return ril_vendor_create_hook(ril_vendor_mtk_detect(), io, path, cfg);
+	return ril_vendor_create_hook(ril_vendor_mtk_detect(), io, path, cfg,
+								network);
 }
 
 RIL_VENDOR_DRIVER_DEFINE(ril_vendor_driver_mtk) {
