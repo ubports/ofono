@@ -30,9 +30,16 @@
 
 #include "ofono.h"
 
+#define SET_INITIAL_ATTACH_APN_TIMEOUT (20*1000)
+
 enum ril_mtk_watch_events {
-	WATCH_EVENT_SIM_CHANGED,
+	WATCH_EVENT_IMSI_CHANGED,
 	WATCH_EVENT_COUNT
+};
+
+enum ril_mtk_network_events {
+	NETWORK_EVENT_PREF_MODE_CHANGED,
+	NETWORK_EVENT_COUNT
 };
 
 enum ril_mtk_events {
@@ -49,6 +56,10 @@ struct ril_vendor_hook_mtk {
 	GRilIoChannel *io;
 	struct ril_network *network;
 	struct sailfish_watch *watch;
+	guint set_initial_attach_apn_id;
+	gboolean initial_attach_apn_ok;
+	gulong network_event_id[NETWORK_EVENT_COUNT];
+	gulong watch_event_id[WATCH_EVENT_COUNT];
 	gulong ril_event_id[MTK_EVENT_COUNT];
 	guint slot;
 };
@@ -62,6 +73,7 @@ struct ril_vendor_mtk_driver_data {
 
 /* MTK specific RIL messages (actual codes differ from model to model!) */
 struct ril_mtk_msg {
+	gboolean attach_apn_has_roaming_protocol;
 	guint request_resume_registration;
 	guint unsol_network_info;
 	guint unsol_ps_network_state_changed;
@@ -74,6 +86,7 @@ struct ril_mtk_msg {
 
 /* Fly FS522 Cirrus 14 */
 static const struct ril_mtk_msg mtk_msg_mt6737 = {
+	.attach_apn_has_roaming_protocol = TRUE,
 	.request_resume_registration = 2050,
 	.unsol_network_info = 3001,
 	.unsol_ps_network_state_changed = 3012,
@@ -86,13 +99,15 @@ static const struct ril_mtk_msg mtk_msg_mt6737 = {
 
 /* MT8735 Tablet */
 static const struct ril_mtk_msg mtk_msg_mt8735 = {
+	.attach_apn_has_roaming_protocol = FALSE,
 	.request_resume_registration = 2065,
 	.unsol_network_info = 3001,
 	.unsol_ps_network_state_changed = 3015,
 	.unsol_ims_registration_info = 3033,
 	.unsol_volte_eps_network_feature_support = 3048,
 	.unsol_emergency_bearer_support_notify = 3059,
-	.unsol_registration_suspended = 3024
+	.unsol_registration_suspended = 3024,
+	.unsol_set_attach_apn = 3073
 };
 
 static inline struct ril_vendor_hook_mtk *ril_vendor_hook_mtk_cast
@@ -161,67 +176,153 @@ static void ril_vendor_mtk_registration_suspended(GRilIoChannel *io, guint id,
 	}
 }
 
-static void ril_vendor_mtk_set_attach_apn(GRilIoChannel *io, guint id,
-				const void *data, guint len, void *user_data)
+static GRilIoRequest *ril_vendor_mtk_build_set_attach_apn_req
+			(const struct ofono_gprs_primary_context *pc,
+						gboolean roamingProtocol)
+{
+	GRilIoRequest *req = grilio_request_new();
+	const char *proto = ril_data_ofono_protocol_to_ril(pc->proto);
+
+	DBG("%s %d", pc->apn, roamingProtocol);
+	grilio_request_append_utf8(req, pc->apn);       /* apn */
+	grilio_request_append_utf8(req, proto);         /* protocol */
+	if (roamingProtocol) {
+		grilio_request_append_utf8(req, proto); /* roamingProtocol */
+	}
+
+	if (pc->username[0]) {
+		int auth;
+
+		switch (pc->auth_method) {
+		case OFONO_GPRS_AUTH_METHOD_ANY:
+			auth = RIL_AUTH_BOTH;
+			break;
+		case OFONO_GPRS_AUTH_METHOD_NONE:
+			auth = RIL_AUTH_NONE;
+			break;
+		case OFONO_GPRS_AUTH_METHOD_CHAP:
+			auth = RIL_AUTH_CHAP;
+			break;
+		case OFONO_GPRS_AUTH_METHOD_PAP:
+			auth = RIL_AUTH_PAP;
+			break;
+		default:
+			auth = RIL_AUTH_NONE;
+			break;
+		}
+
+		grilio_request_append_int32(req, auth);
+		grilio_request_append_utf8(req, pc->username);
+		grilio_request_append_utf8(req, pc->password);
+	} else {
+		grilio_request_append_int32(req, RIL_AUTH_NONE);
+		grilio_request_append_utf8(req, "");
+		grilio_request_append_utf8(req, "");
+	}
+
+	grilio_request_append_utf8(req, ""); /* operatorNumeric */
+	grilio_request_append_int32(req, FALSE); /* canHandleIms */
+	grilio_request_append_int32(req, 0); /* Some sort of count */
+
+	return req;
+}
+
+static const struct ofono_gprs_primary_context *ril_vendor_mtk_internet_context
+					(struct ril_vendor_hook_mtk *self)
+{
+	struct sailfish_watch *watch = self->watch;
+
+	if (watch->imsi) {
+		struct ofono_atom * atom = __ofono_modem_find_atom(watch->modem,
+							OFONO_ATOM_TYPE_GPRS);
+
+		if (atom) {
+			return __ofono_gprs_context_settings_by_type
+				(__ofono_atom_get_data(atom),
+					OFONO_GPRS_CONTEXT_TYPE_INTERNET);
+		}
+	}
+
+	return NULL;
+}
+
+static void ril_vendor_mtk_initial_attach_apn_resp(GRilIoChannel *io,
+		int ril_status, const void *data, guint len, void *user_data)
 {
 	struct ril_vendor_hook_mtk *self = user_data;
-	struct sailfish_watch *watch = self->watch;
-	struct ofono_atom * gprs_atom = __ofono_modem_find_atom(watch->modem,
-							OFONO_ATOM_TYPE_GPRS);
-        struct ofono_gprs *gprs = gprs_atom ?
-		__ofono_atom_get_data(gprs_atom) : NULL;
-	const struct ofono_gprs_primary_context *pc =
-		(gprs && watch->imsi) ?
-			__ofono_gprs_context_settings_by_type(gprs,
-				OFONO_GPRS_CONTEXT_TYPE_INTERNET) : NULL;
 
-	/* authtype, username, password */
-	if (pc) {
-                GRilIoRequest *req = grilio_request_new();
-		const char *proto = ril_data_ofono_protocol_to_ril(pc->proto);
-
-		DBG("%s",pc->apn);
-                grilio_request_append_utf8(req, pc->apn); /* apn */
-                grilio_request_append_utf8(req, proto); /* protocol */
-		grilio_request_append_utf8(req, proto); /* roamingProtocol */
-
-                if (pc->username[0]) {
-                        int auth;
-
-                        switch (pc->auth_method) {
-                        case OFONO_GPRS_AUTH_METHOD_ANY:
-                                auth = RIL_AUTH_BOTH;
-                                break;
-                        case OFONO_GPRS_AUTH_METHOD_NONE:
-                                auth = RIL_AUTH_NONE;
-                                break;
-                        case OFONO_GPRS_AUTH_METHOD_CHAP:
-                                auth = RIL_AUTH_CHAP;
-                                break;
-                        case OFONO_GPRS_AUTH_METHOD_PAP:
-                                auth = RIL_AUTH_PAP;
-                                break;
-                        default:
-                                auth = RIL_AUTH_NONE;
-                                break;
-                        }
-
-                        grilio_request_append_int32(req, auth);
-                        grilio_request_append_utf8(req, pc->username);
-                        grilio_request_append_utf8(req, pc->password);
-                } else {
-                        grilio_request_append_int32(req, RIL_AUTH_NONE);
-                        grilio_request_append_utf8(req, "");
-                        grilio_request_append_utf8(req, "");
-                }
-
-		grilio_request_append_utf8(req, ""); /* operatorNumeric */
-		grilio_request_append_int32(req, FALSE); /* canHandleIms */
-		grilio_request_append_int32(req, 0); /* Some sort of count */
-                grilio_queue_send_request(self->q, req,
-                                RIL_REQUEST_SET_INITIAL_ATTACH_APN);
-                grilio_request_unref(req);
+	GASSERT(self->set_initial_attach_apn_id);
+	self->set_initial_attach_apn_id = 0;
+	if (ril_status == RIL_E_SUCCESS) {
+		DBG("ok");
+		self->initial_attach_apn_ok = TRUE;
 	}
+}
+
+static void ril_vendor_mtk_initial_attach_apn_check
+					(struct ril_vendor_hook_mtk *self)
+{
+
+	if (!self->set_initial_attach_apn_id && !self->initial_attach_apn_ok) {
+		const struct ofono_gprs_primary_context *pc =
+			ril_vendor_mtk_internet_context(self);
+
+		if (pc) {
+			GRilIoRequest *req =
+				ril_vendor_mtk_build_set_attach_apn_req(pc,
+				self->msg->attach_apn_has_roaming_protocol);
+
+			grilio_request_set_timeout(req,
+					SET_INITIAL_ATTACH_APN_TIMEOUT);
+			self->set_initial_attach_apn_id =
+				grilio_queue_send_request_full(self->q, req,
+					RIL_REQUEST_SET_INITIAL_ATTACH_APN,
+					ril_vendor_mtk_initial_attach_apn_resp,
+					NULL, self);
+			grilio_request_unref(req);
+		}
+	}
+}
+
+static void ril_vendor_mtk_initial_attach_apn_reset
+					(struct ril_vendor_hook_mtk *self)
+{
+	self->initial_attach_apn_ok = FALSE;
+	if (self->set_initial_attach_apn_id) {
+		grilio_queue_cancel_request(self->q,
+			self->set_initial_attach_apn_id, FALSE);
+		self->set_initial_attach_apn_id = 0;
+	}
+}
+
+static void ril_vendor_mtk_watch_imsi_changed(struct sailfish_watch *watch,
+							void *user_data)
+{
+	struct ril_vendor_hook_mtk *self = user_data;
+
+	if (watch->imsi) {
+		ril_vendor_mtk_initial_attach_apn_check(self);
+	} else {
+		ril_vendor_mtk_initial_attach_apn_reset(self);
+	}
+}
+
+static void ril_vendor_mtk_network_pref_mode_changed(struct ril_network *net,
+							void *user_data)
+{
+	struct ril_vendor_hook_mtk *self = user_data;
+
+	if (net->pref_mode >= OFONO_RADIO_ACCESS_MODE_LTE) {
+		ril_vendor_mtk_initial_attach_apn_check(self);
+	} else {
+		ril_vendor_mtk_initial_attach_apn_reset(self);
+	}
+}
+
+static void ril_vendor_mtk_set_attach_apn(GRilIoChannel *io, guint id,
+				const void *data, guint len, void *self)
+{
+	ril_vendor_mtk_initial_attach_apn_check(self);
 }
 
 static void ril_vendor_mtk_ps_network_state_changed(GRilIoChannel *io,
@@ -310,6 +411,12 @@ static struct ril_vendor_hook *ril_vendor_mtk_create_hook_from_data
 	self->watch = sailfish_watch_new(path);
 	self->slot = config->slot;
 	self->network = ril_network_ref(network);
+	self->watch_event_id[WATCH_EVENT_IMSI_CHANGED] =
+			sailfish_watch_add_imsi_changed_handler(self->watch,
+				ril_vendor_mtk_watch_imsi_changed, self);
+	self->network_event_id[NETWORK_EVENT_PREF_MODE_CHANGED] =
+			ril_network_add_pref_mode_changed_handler(self->network,
+				ril_vendor_mtk_network_pref_mode_changed, self);
 	self->ril_event_id[MTK_EVENT_REGISTRATION_SUSPENDED] =
 			grilio_channel_add_unsol_event_handler(self->io,
 				ril_vendor_mtk_registration_suspended,
@@ -339,7 +446,9 @@ static void ril_vendor_mtk_free(struct ril_vendor_hook *hook)
 	grilio_channel_remove_all_handlers(self->io, self->ril_event_id);
 	grilio_queue_unref(self->q);
 	grilio_channel_unref(self->io);
+	sailfish_watch_remove_all_handlers(self->watch, self->watch_event_id);
 	sailfish_watch_unref(self->watch);
+	ril_network_remove_all_handlers(self->network, self->network_event_id);
 	ril_network_unref(self->network);
 	g_free(self);
 }
