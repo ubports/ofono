@@ -68,6 +68,9 @@ gulong ril_network_add_max_pref_mode_changed_handler(struct ril_network *net,
 void ril_network_remove_handler(struct ril_network *net, gulong id);
 void ril_network_remove_handlers(struct ril_network *net, gulong *ids, int n);
 
+#define ril_network_remove_all_handlers(net, ids) \
+	ril_network_remove_handlers(net, ids, G_N_ELEMENTS(ids))
+
 #endif /* RIL_NETWORK_H */
 
 /*
