@@ -46,6 +46,7 @@ enum ril_mtk_events {
 	MTK_EVENT_REGISTRATION_SUSPENDED,
 	MTK_EVENT_SET_ATTACH_APN,
 	MTK_EVENT_PS_NETWORK_STATE_CHANGED,
+	MTK_EVENT_INCOMING_CALL_INDICATION,
 	MTK_EVENT_COUNT
 };
 
@@ -75,12 +76,9 @@ struct ril_vendor_mtk_driver_data {
 struct ril_mtk_msg {
 	gboolean attach_apn_has_roaming_protocol;
 	guint request_resume_registration;
-	guint unsol_network_info;
 	guint unsol_ps_network_state_changed;
 	guint unsol_registration_suspended;
-	guint unsol_ims_registration_info;
-	guint unsol_volte_eps_network_feature_support;
-	guint unsol_emergency_bearer_support_notify;
+	guint unsol_incoming_call_indication;
 	guint unsol_set_attach_apn;
 };
 
@@ -88,12 +86,9 @@ struct ril_mtk_msg {
 static const struct ril_mtk_msg mtk_msg_mt6737 = {
 	.attach_apn_has_roaming_protocol = TRUE,
 	.request_resume_registration = 2050,
-	.unsol_network_info = 3001,
 	.unsol_ps_network_state_changed = 3012,
 	.unsol_registration_suspended = 3021,
-	.unsol_ims_registration_info = 3029,
-	.unsol_volte_eps_network_feature_support = 3042,
-	.unsol_emergency_bearer_support_notify = 3052,
+	.unsol_incoming_call_indication = 3037,
 	.unsol_set_attach_apn = 3065
 };
 
@@ -101,12 +96,9 @@ static const struct ril_mtk_msg mtk_msg_mt6737 = {
 static const struct ril_mtk_msg mtk_msg_mt8735 = {
 	.attach_apn_has_roaming_protocol = FALSE,
 	.request_resume_registration = 2065,
-	.unsol_network_info = 3001,
 	.unsol_ps_network_state_changed = 3015,
-	.unsol_ims_registration_info = 3033,
-	.unsol_volte_eps_network_feature_support = 3048,
-	.unsol_emergency_bearer_support_notify = 3059,
 	.unsol_registration_suspended = 3024,
+	.unsol_incoming_call_indication = 3042,
 	.unsol_set_attach_apn = 3073
 };
 
@@ -135,20 +127,14 @@ static const char *ril_vendor_mtk_event_to_string(struct ril_vendor_hook *hook,
 	struct ril_vendor_hook_mtk *self = ril_vendor_hook_mtk_cast(hook);
 	const struct ril_mtk_msg *msg = self->msg;
 
-	if (event == msg->unsol_network_info) {
-		return "MTK_NETWORK_INFO";
-	} else if (event == msg->unsol_ps_network_state_changed) {
+	if (event == msg->unsol_ps_network_state_changed) {
 		return "MTK_PS_NETWORK_STATE_CHANGED";
 	} else if (event == msg->unsol_registration_suspended) {
 		return "MTK_REGISTRATION_SUSPENDED";
-	} else if (event == msg->unsol_ims_registration_info) {
-		return "MTK_IMS_REGISTRATION_INFO";
-	} else if (event == msg->unsol_volte_eps_network_feature_support) {
-		return "MTK_VOLTE_EPS_NETWORK_FEATURE_SUPPORT";
-	} else if (event == msg->unsol_emergency_bearer_support_notify) {
-		return "MTK_EMERGENCY_BEARER_SUPPORT_NOTIFY";
 	} else if (event == msg->unsol_set_attach_apn) {
 		return "MTK_SET_ATTACH_APN";
+	} else if (event == msg->unsol_incoming_call_indication) {
+		return "MTK_INCOMING_CALL_INDICATION";
 	} else {
 		return NULL;
 	}
@@ -333,6 +319,14 @@ static void ril_vendor_mtk_ps_network_state_changed(GRilIoChannel *io,
 	ril_network_query_registration_state(self->network);
 }
 
+static void ril_vendor_mtk_call_state_changed(GRilIoChannel *io,
+		guint id, const void *data, guint len, void *user_data)
+{
+	/* Ignore the payload, let ril_voicecall.c do its normal stuff */
+	grilio_channel_inject_unsol_event(io,
+			RIL_UNSOL_RESPONSE_CALL_STATE_CHANGED, NULL, 0);
+}
+
 static GRilIoRequest* ril_vendor_mtk_data_call_req
 	(struct ril_vendor_hook *hook, int tech, const char *profile,
 		const char *apn, const char *username, const char *password,
@@ -432,6 +426,12 @@ static struct ril_vendor_hook *ril_vendor_mtk_create_hook_from_data
 			grilio_channel_add_unsol_event_handler(self->io,
 				ril_vendor_mtk_ps_network_state_changed,
 				msg->unsol_ps_network_state_changed, self);
+	}
+	if (msg->unsol_incoming_call_indication) {
+		self->ril_event_id[MTK_EVENT_INCOMING_CALL_INDICATION] =
+			grilio_channel_add_unsol_event_handler(self->io,
+				ril_vendor_mtk_call_state_changed,
+				msg->unsol_incoming_call_indication, self);
 	}
 	DBG("%s slot %u", mtk_driver_data->name, self->slot);
 	return ril_vendor_hook_init(&self->hook, mtk_driver_data->proc);
