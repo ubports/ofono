@@ -64,6 +64,7 @@
 #define RILMODEM_DEFAULT_SUB        "SUB1"
 #define RILMODEM_DEFAULT_TECHS      OFONO_RADIO_ACCESS_MODE_ALL
 #define RILMODEM_DEFAULT_ENABLE_VOICECALL TRUE
+#define RILMODEM_DEFAULT_ENABLE_CBS TRUE
 #define RILMODEM_DEFAULT_SLOT       0xffffffff
 #define RILMODEM_DEFAULT_TIMEOUT    0 /* No timeout */
 #define RILMODEM_DEFAULT_SIM_FLAGS  RIL_SIM_CARD_V9_UICC_SUBSCRIPTION_WORKAROUND
@@ -97,6 +98,7 @@
 #define RILCONF_TIMEOUT             "timeout"
 #define RILCONF_4G                  "enable4G" /* Deprecated */
 #define RILCONF_ENABLE_VOICECALL    "enableVoicecall"
+#define RILCONF_ENABLE_CBS          "enableCellBroadcast"
 #define RILCONF_TECHNOLOGIES        "technologies"
 #define RILCONF_UICC_WORKAROUND     "uiccWorkaround"
 #define RILCONF_ECCLIST_FILE        "ecclistFile"
@@ -1170,6 +1172,7 @@ static ril_slot *ril_plugin_slot_new_take(char *sockpath, char *path,
 	slot->config.techs = RILMODEM_DEFAULT_TECHS;
 	slot->config.empty_pin_query = RILMODEM_DEFAULT_EMPTY_PIN_QUERY;
 	slot->config.enable_voicecall = RILMODEM_DEFAULT_ENABLE_VOICECALL;
+	slot->config.enable_cbs = RILMODEM_DEFAULT_ENABLE_CBS;
 	slot->timeout = RILMODEM_DEFAULT_TIMEOUT;
 	slot->sim_flags = RILMODEM_DEFAULT_SIM_FLAGS;
 	slot->legacy_imei_query = RILMODEM_DEFAULT_LEGACY_IMEI_QUERY;
@@ -1205,10 +1208,12 @@ static void ril_plugin_slot_apply_vendor_defaults(ril_slot *slot)
 
 		/* Let the vendor extension to adjust (some) defaults */
 		memset(&defaults, 0, sizeof(defaults));
+		defaults.enable_cbs = config->enable_cbs;
 		defaults.empty_pin_query = config->empty_pin_query;
 		defaults.legacy_imei_query = slot->legacy_imei_query;
 
 		ril_vendor_get_defaults(slot->vendor, &defaults);
+		config->enable_cbs = defaults.enable_cbs;
 		config->empty_pin_query = defaults.empty_pin_query;
 		slot->legacy_imei_query = defaults.legacy_imei_query;
 	}
@@ -1320,6 +1325,13 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 					&config->enable_voicecall)) {
 		DBG("%s: " RILCONF_ENABLE_VOICECALL " %s", group,
 				config->enable_voicecall ? "yes" : "no");
+	}
+
+	/* enableCellBroadcast */
+	if (ril_config_get_boolean(file, group, RILCONF_ENABLE_CBS,
+					&config->enable_cbs)) {
+		DBG("%s: " RILCONF_ENABLE_CBS " %s", group,
+				config->enable_cbs ? "yes" : "no");
 	}
 
 	/* technologies */

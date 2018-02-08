@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2017 Jolla Ltd.
+ *  Copyright (C) 2015-2018 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -285,8 +285,10 @@ static void ril_modem_post_sim(struct ofono_modem *modem)
 	ofono_call_forwarding_create(modem, 0, RILMODEM_DRIVER, md);
 	ofono_call_barring_create(modem, 0, RILMODEM_DRIVER, md);
 	ofono_stk_create(modem, 0, RILMODEM_DRIVER, md);
-	ofono_cbs_create(modem, 0, RILMODEM_DRIVER, md);
 	ofono_message_waiting_register(ofono_message_waiting_create(modem));
+	if (md->modem.config.enable_cbs) {
+		ofono_cbs_create(modem, 0, RILMODEM_DRIVER, md);
+	}
 }
 
 static void ril_modem_post_online(struct ofono_modem *modem)

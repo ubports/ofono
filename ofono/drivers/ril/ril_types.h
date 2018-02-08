@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2017 Jolla Ltd.
+ *  Copyright (C) 2015-2018 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -53,6 +53,7 @@ struct ril_slot_config {
 	enum ofono_radio_access_mode techs;
 	gboolean empty_pin_query;
 	gboolean enable_voicecall;
+	gboolean enable_cbs;
 	GUtilInts *local_hangup_reasons;
 	GUtilInts *remote_hangup_reasons;
 };
