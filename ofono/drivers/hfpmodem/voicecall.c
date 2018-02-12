@@ -422,6 +422,30 @@ static void hfp_dial_last(struct ofono_voicecall *vc, ofono_voicecall_cb_t cb,
 	CALLBACK_WITH_FAILURE(cb, data);
 
 }
+
+static void hfp_dial_memory(struct ofono_voicecall *vc,
+				unsigned int memory_location,
+				ofono_voicecall_cb_t cb, void *data)
+{
+	struct voicecall_data *vd = ofono_voicecall_get_data(vc);
+	struct cb_data *cbd = cb_data_new(cb, data);
+	char buf[256];
+
+	cbd->user = vc;
+	DBG("Calling memory location %d\n", memory_location);
+	snprintf(buf, sizeof(buf), "ATD>%d", memory_location);
+
+	strcat(buf, ";");
+
+	if (g_at_chat_send(vd->chat, buf, none_prefix,
+				atd_cb, cbd, g_free) > 0)
+		return;
+
+	g_free(cbd);
+	DBG("at_chat_failed");
+	CALLBACK_WITH_FAILURE(cb, data);
+}
+
 static void hfp_template(const char *cmd, struct ofono_voicecall *vc,
 			GAtResultFunc result_cb, unsigned int affected_types,
 			ofono_voicecall_cb_t cb, void *data)
@@ -1287,6 +1311,7 @@ static struct ofono_voicecall_driver driver = {
 	.remove			= hfp_voicecall_remove,
 	.dial			= hfp_dial,
 	.dial_last		= hfp_dial_last,
+	.dial_memory		= hfp_dial_memory,
 	.answer			= hfp_answer,
 	.hangup_active		= hfp_hangup,
 	.hold_all_active	= hfp_hold_all_active,
