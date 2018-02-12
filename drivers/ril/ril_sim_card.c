@@ -297,6 +297,15 @@ static void ril_sim_card_update_status(struct ril_sim_card *self,
 		}
 		ril_sim_card_status_free(old_status);
 	} else {
+		if (self->app) {
+			/*
+			 * We have received the SIM status which has confirmed
+			 * that the right SIM app has actually been selected.
+			 * We can cancel the pending SET_UICC_SUBSCRIPTION
+			 * request which some RILs never bother to reply to.
+			 */
+			ril_sim_card_subscription_done(self);
+		}
 		ril_sim_card_status_free(status);
 		g_signal_emit(self, ril_sim_card_signals
 					[SIGNAL_STATUS_RECEIVED], 0);
