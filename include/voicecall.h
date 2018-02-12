@@ -61,6 +61,10 @@ struct ofono_voicecall_driver {
 			const struct ofono_phone_number *number,
 			enum ofono_clir_option clir, ofono_voicecall_cb_t cb,
 			void *data);
+	/* dials a number at a given memory location */
+	void (*dial_memory)(struct ofono_voicecall *vc,
+			unsigned int memory_location, ofono_voicecall_cb_t cb,
+			void *data);
 	/* Dials the last number again, this handles the hfp profile last number
          * dialing with the +BLDN AT command
          */
