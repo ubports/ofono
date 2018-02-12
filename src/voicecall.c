@@ -1577,7 +1577,7 @@ static DBusMessage *manager_dial(DBusConnection *conn,
 	return __ofono_error_failed(msg);
 }
 
-static void manager_dial_last_callback(const struct ofono_error *error,
+static void manager_dial_hfp_callback(const struct ofono_error *error,
 								void *data)
 {
 	struct ofono_voicecall *vc = data;
@@ -1606,7 +1606,7 @@ error:
 					__ofono_error_failed(vc->pending));
 }
 
-static int voicecall_dial_last(struct ofono_voicecall *vc,
+static int voicecall_dial_hfp(struct ofono_voicecall *vc,
 					ofono_voicecall_cb_t cb, void *data)
 {
 	struct ofono_modem *modem = __ofono_atom_get_modem(vc->atom);
@@ -1646,7 +1646,7 @@ static DBusMessage *manager_dial_last(DBusConnection *conn,
 
 	vc->pending = dbus_message_ref(msg);
 
-	err = voicecall_dial_last(vc, manager_dial_last_callback, vc);
+	err = voicecall_dial_hfp(vc, manager_dial_hfp_callback, vc);
 
 	if (err >= 0)
 		return NULL;
