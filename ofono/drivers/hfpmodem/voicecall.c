@@ -433,9 +433,7 @@ static void hfp_dial_memory(struct ofono_voicecall *vc,
 
 	cbd->user = vc;
 	DBG("Calling memory location %d\n", memory_location);
-	snprintf(buf, sizeof(buf), "ATD>%d", memory_location);
-
-	strcat(buf, ";");
+	snprintf(buf, sizeof(buf), "ATD>%d;", memory_location);
 
 	if (g_at_chat_send(vd->chat, buf, none_prefix,
 				atd_cb, cbd, g_free) > 0)
