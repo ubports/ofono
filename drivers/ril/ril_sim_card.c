@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2017 Jolla Ltd.
+ *  Copyright (C) 2015-2018 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -438,6 +438,22 @@ static void ril_sim_card_status_cb(GRilIoChannel *io, int ril_status,
 		if (status) {
 			ril_sim_card_update_status(self, status);
 		}
+	}
+}
+
+void ril_sim_card_reset(struct ril_sim_card *self)
+{
+	if (G_LIKELY(self)) {
+		struct ril_sim_card_status *status =
+			g_new0(struct ril_sim_card_status, 1);
+
+		/* Simulate removal and re-submit the SIM status query */
+		status->card_state = RIL_CARDSTATE_ABSENT;
+		status->gsm_umts_index = -1;
+		status->cdma_index = -1;
+		status->ims_index = -1;
+		ril_sim_card_update_status(self, status);
+		ril_sim_card_request_status(self);
 	}
 }
 
