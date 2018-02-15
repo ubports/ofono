@@ -864,31 +864,15 @@ static void ril_sim_status_changed_cb(struct ril_sim_card *sc, void *user_data)
 	}
 }
 
-static gboolean ril_sim_reinsert_cb(gpointer data)
-{
-	struct ril_sim *sd = data;
-	const enum ofono_sim_state state = ofono_sim_get_state(sd->watch->sim);
-
-	GASSERT(sd->idle_id);
-	sd->idle_id = 0;
-
-	if (state == OFONO_SIM_STATE_RESETTING && sd->inserted) {
-		DBG_(sd, "reinserting SIM");
-		ofono_sim_inserted_notify(sd->sim, TRUE);
-	}
-
-	return G_SOURCE_REMOVE;
-}
-
 static void ril_sim_state_changed_cb(struct sailfish_watch *watch, void *data)
 {
 	struct ril_sim *sd = data;
 	const enum ofono_sim_state state = ofono_sim_get_state(watch->sim);
 
 	DBG_(sd, "%d %d", state, sd->inserted);
-	if (state == OFONO_SIM_STATE_RESETTING && sd->inserted &&
-							!sd->idle_id) {
-		sd->idle_id = g_idle_add(ril_sim_reinsert_cb, sd);
+	if (state == OFONO_SIM_STATE_RESETTING && sd->inserted) {
+		/* That will simulate SIM card removal: */
+		ril_sim_card_reset(sd->card);
 	}
 }
 
