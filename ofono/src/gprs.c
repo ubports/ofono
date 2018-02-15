@@ -1988,6 +1988,12 @@ static void gprs_netreg_update(struct ofono_gprs *gprs)
 
 	DBG("attach: %u, driver_attached: %u", attach, gprs->driver_attached);
 
+	/*
+	 * In Sailfish OS the Attached flag is used by connman to check
+	 * whether context activation is possible. There won't be any
+	 * context activation if Attached stays FALSE.
+	 */
+#if 0
 	if (ofono_netreg_get_technology(gprs->netreg) ==
 			ACCESS_TECHNOLOGY_EUTRAN)
 		/*
@@ -1995,6 +2001,7 @@ static void gprs_netreg_update(struct ofono_gprs *gprs)
 		 * context activation.
 		 */
                 return;
+#endif
 
 	if (gprs->driver_attached == attach)
 		return;
