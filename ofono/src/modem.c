@@ -805,6 +805,7 @@ void __ofono_modem_append_properties(struct ofono_modem *modem,
 	struct ofono_devinfo *info;
 	dbus_bool_t emergency = ofono_modem_get_emergency_mode(modem);
 	const char *strtype;
+	const char *system_path;
 
 	ofono_dbus_dict_append(dict, "Online", DBUS_TYPE_BOOLEAN,
 				&modem->online);
@@ -844,6 +845,11 @@ void __ofono_modem_append_properties(struct ofono_modem *modem,
 						DBUS_TYPE_STRING,
 						&info->svn);
 	}
+
+	system_path = ofono_modem_get_string(modem, "SystemPath");
+	if (system_path)
+		ofono_dbus_dict_append(dict, "SystemPath", DBUS_TYPE_STRING,
+					&system_path);
 
 	interfaces = g_new0(char *, g_slist_length(modem->interface_list) + 1);
 	for (i = 0, l = modem->interface_list; l; l = l->next, i++)
