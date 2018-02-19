@@ -1732,6 +1732,8 @@ static gboolean create_modem(gpointer key, gpointer value, gpointer user_data)
 			continue;
 
 		if (driver_list[i].setup(modem) == TRUE) {
+			ofono_modem_set_string(modem->modem, "SystemPath",
+								syspath);
 			ofono_modem_register(modem->modem);
 			return FALSE;
 		}
