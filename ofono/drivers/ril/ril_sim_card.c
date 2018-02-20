@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2017 Jolla Ltd.
+ *  Copyright (C) 2015-2018 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -24,6 +24,17 @@
 
 #include <gutil_misc.h>
 
+/*
+ * First we wait for USIM app to get activated by itself. If that
+ * doesn't happen within UICC_SUBSCRIPTION_START_MS we poke the SIM
+ * with SET_UICC_SUBSCRIPTION request, resubmitting it if it times out.
+ * If nothing happens within UICC_SUBSCRIPTION_TIMEOUT_MS we give up.
+ *
+ * Submitting SET_UICC_SUBSCRIPTION request when rild doesn't expect
+ * it sometimes breaks pretty much everything. Unfortunately, there no
+ * reliable way to find out when rild expects it and when it doesn't :/
+ */
+#define UICC_SUBSCRIPTION_START_MS   (10000)
 #define UICC_SUBSCRIPTION_TIMEOUT_MS (30000)
 
 /* SIM I/O idle timeout is measured in the number of idle loops.
@@ -48,6 +59,7 @@ struct ril_sim_card_priv {
 	int flags;
 	guint status_req_id;
 	guint sub_req_id;
+	guint sub_start_timer;
 	gulong event_id[EVENT_COUNT];
 	guint sim_io_idle_id;
 	guint sim_io_idle_count;
@@ -161,6 +173,11 @@ static void ril_sim_card_subscription_done(struct ril_sim_card *self)
 {
 	struct ril_sim_card_priv *priv = self->priv;
 
+	if (priv->sub_start_timer) {
+		/* Don't need this timer anymore */
+		g_source_remove(priv->sub_start_timer);
+		priv->sub_start_timer = 0;
+	}
 	if (priv->sub_req_id) {
 		/* Some RILs never reply to SET_UICC_SUBSCRIPTION requst,
 		 * so we better drop rather than cancel it (so that it gets
@@ -184,19 +201,18 @@ static void ril_sim_card_subscribe_cb(GRilIoChannel* io, int status,
 	ril_sim_card_subscription_done(self);
 }
 
-static void ril_sim_card_subscribe(struct ril_sim_card *self, int app_index,
-				enum ril_uicc_subscription_action sub_action)
+static void ril_sim_card_subscribe(struct ril_sim_card *self, int app_index)
 {
 	struct ril_sim_card_priv *priv = self->priv;
 	GRilIoRequest *req = grilio_request_sized_new(16);
 	const guint sub_id = self->slot;
 	guint code;
 
-	DBG("%u,%d,%u,%d", self->slot, app_index, sub_id, sub_action);
+	DBG("%u,%d,%u", self->slot, app_index, sub_id);
 	grilio_request_append_int32(req, self->slot);
 	grilio_request_append_int32(req, app_index);
 	grilio_request_append_int32(req, sub_id);
-	grilio_request_append_int32(req, sub_action);
+	grilio_request_append_int32(req, RIL_UICC_SUBSCRIPTION_ACTIVATE);
 
 	grilio_request_set_retry(req, 0, -1);
 	grilio_request_set_timeout(req, UICC_SUBSCRIPTION_TIMEOUT_MS);
@@ -250,9 +266,8 @@ static void ril_sim_card_update_app(struct ril_sim_card *self)
 			ril_sim_card_subscription_done(self);
 		} else {
 			app_index = ril_sim_card_select_app(status);
-			if (app_index >= 0) {
-				ril_sim_card_subscribe(self, app_index,
-						RIL_UICC_SUBSCRIPTION_ACTIVATE);
+			if (app_index >= 0 && !self->priv->sub_start_timer) {
+				ril_sim_card_subscribe(self, app_index);
 			}
 		}
 	} else {
@@ -273,6 +288,18 @@ static void ril_sim_card_update_app(struct ril_sim_card *self)
 	}
 }
 
+static gboolean ril_sim_card_sub_start_timeout(gpointer user_data)
+{
+	struct ril_sim_card *self = RIL_SIMCARD(user_data);
+	struct ril_sim_card_priv *priv = self->priv;
+
+	DBG("%u", self->slot);
+	GASSERT(priv->sub_start_timer);
+	priv->sub_start_timer = 0;
+	ril_sim_card_update_app(self);
+	return G_SOURCE_REMOVE;
+}
+
 static void ril_sim_card_update_status(struct ril_sim_card *self,
 					struct ril_sim_card_status *status)
 {
@@ -282,6 +309,21 @@ static void ril_sim_card_update_status(struct ril_sim_card *self,
 		struct ril_sim_card_status *old_status = self->status;
 
 		self->status = status;
+		if (diff & RIL_SIMCARD_STATE_CHANGED &&
+				status->card_state == RIL_CARDSTATE_PRESENT) {
+			struct ril_sim_card_priv *priv = self->priv;
+
+			/*
+			 * SIM card has just appeared, give it some time to
+			 * activate the USIM app
+			 */
+			if (priv->sub_start_timer) {
+				g_source_remove(priv->sub_start_timer);
+			}
+			priv->sub_start_timer =
+				g_timeout_add(UICC_SUBSCRIPTION_START_MS,
+					ril_sim_card_sub_start_timeout, self);
+		}
 		ril_sim_card_update_app(self);
 		g_signal_emit(self, ril_sim_card_signals
 					[SIGNAL_STATUS_RECEIVED], 0);
@@ -297,6 +339,15 @@ static void ril_sim_card_update_status(struct ril_sim_card *self,
 		}
 		ril_sim_card_status_free(old_status);
 	} else {
+		if (self->app) {
+			/*
+			 * We have received the SIM status which has confirmed
+			 * that the right SIM app has actually been selected.
+			 * We can cancel the pending SET_UICC_SUBSCRIPTION
+			 * request which some RILs never bother to reply to.
+			 */
+			ril_sim_card_subscription_done(self);
+		}
 		ril_sim_card_status_free(status);
 		g_signal_emit(self, ril_sim_card_signals
 					[SIGNAL_STATUS_RECEIVED], 0);
@@ -429,6 +480,22 @@ static void ril_sim_card_status_cb(GRilIoChannel *io, int ril_status,
 		if (status) {
 			ril_sim_card_update_status(self, status);
 		}
+	}
+}
+
+void ril_sim_card_reset(struct ril_sim_card *self)
+{
+	if (G_LIKELY(self)) {
+		struct ril_sim_card_status *status =
+			g_new0(struct ril_sim_card_status, 1);
+
+		/* Simulate removal and re-submit the SIM status query */
+		status->card_state = RIL_CARDSTATE_ABSENT;
+		status->gsm_umts_index = -1;
+		status->cdma_index = -1;
+		status->ims_index = -1;
+		ril_sim_card_update_status(self, status);
+		ril_sim_card_request_status(self);
 	}
 }
 
@@ -663,6 +730,9 @@ static void ril_sim_card_finalize(GObject *object)
 
 	if (priv->sim_io_idle_id) {
 		g_source_remove(priv->sim_io_idle_id);
+	}
+	if (priv->sub_start_timer) {
+		g_source_remove(priv->sub_start_timer);
 	}
 	g_hash_table_destroy(priv->sim_io_pending);
 	grilio_channel_unref(priv->io);
