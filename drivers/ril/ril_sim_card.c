@@ -34,7 +34,7 @@
  * it sometimes breaks pretty much everything. Unfortunately, there no
  * reliable way to find out when rild expects it and when it doesn't :/
  */
-#define UICC_SUBSCRIPTION_START_MS   (10000)
+#define UICC_SUBSCRIPTION_START_MS    (5000)
 #define UICC_SUBSCRIPTION_TIMEOUT_MS (30000)
 
 /* SIM I/O idle timeout is measured in the number of idle loops.
@@ -169,6 +169,46 @@ static void ril_sim_card_status_free(struct ril_sim_card_status *status)
 	}
 }
 
+static void ril_sim_card_tx_start(struct ril_sim_card *self)
+{
+	struct ril_sim_card_priv *priv = self->priv;
+	GRILIO_TRANSACTION_STATE tx_state =
+		grilio_queue_transaction_state(priv->q);
+
+	if (tx_state == GRILIO_TRANSACTION_NONE) {
+		tx_state = grilio_queue_transaction_start(priv->q);
+		DBG("status tx for slot %u %s", self->slot,
+			(tx_state == GRILIO_TRANSACTION_STARTED) ?
+						"started" : "starting");
+	}
+}
+
+static void ril_sim_card_tx_check(struct ril_sim_card *self)
+{
+	struct ril_sim_card_priv *priv = self->priv;
+
+	if (grilio_queue_transaction_state(priv->q) !=
+						GRILIO_TRANSACTION_NONE) {
+		const struct ril_sim_card_status *status = self->status;
+
+		if (status && status->card_state == RIL_CARDSTATE_PRESENT) {
+			/* Transaction (if there is any) is finished when
+			 * both GET_SIM_STATUS and SET_UICC_SUBSCRIPTION
+			 * complete or get dropped */
+			if (!priv->status_req_id && !priv->sub_req_id &&
+				status->gsm_umts_index >= 0 &&
+				status->gsm_umts_index < status->num_apps) {
+				DBG("status tx for slot %u finished",
+								self->slot);
+				grilio_queue_transaction_finish(priv->q);
+			}
+		} else {
+			DBG("status tx for slot %u cancelled", self->slot);
+			grilio_queue_transaction_finish(priv->q);
+		}
+	}
+}
+
 static void ril_sim_card_subscription_done(struct ril_sim_card *self)
 {
 	struct ril_sim_card_priv *priv = self->priv;
@@ -185,7 +225,7 @@ static void ril_sim_card_subscription_done(struct ril_sim_card *self)
 		grilio_channel_drop_request(priv->io, priv->sub_req_id);
 		priv->sub_req_id = 0;
 	}
-	grilio_queue_transaction_finish(priv->q);
+	ril_sim_card_tx_check(self);
 }
 
 static void ril_sim_card_subscribe_cb(GRilIoChannel* io, int status,
@@ -229,7 +269,7 @@ static void ril_sim_card_subscribe(struct ril_sim_card *self, int app_index)
 
 	/* Don't allow any requests other that GET_SIM_STATUS until
 	 * we are done with the subscription */
-	grilio_queue_transaction_start(priv->q);
+	ril_sim_card_tx_start(self);
 	priv->sub_req_id = grilio_queue_send_request_full(priv->q,
 			req, code, ril_sim_card_subscribe_cb, NULL, self);
 	grilio_request_unref(req);
@@ -320,6 +360,8 @@ static void ril_sim_card_update_status(struct ril_sim_card *self,
 			if (priv->sub_start_timer) {
 				g_source_remove(priv->sub_start_timer);
 			}
+			DBG("started subscription timeout for slot %u",
+								self->slot);
 			priv->sub_start_timer =
 				g_timeout_add(UICC_SUBSCRIPTION_START_MS,
 					ril_sim_card_sub_start_timeout, self);
@@ -339,15 +381,7 @@ static void ril_sim_card_update_status(struct ril_sim_card *self,
 		}
 		ril_sim_card_status_free(old_status);
 	} else {
-		if (self->app) {
-			/*
-			 * We have received the SIM status which has confirmed
-			 * that the right SIM app has actually been selected.
-			 * We can cancel the pending SET_UICC_SUBSCRIPTION
-			 * request which some RILs never bother to reply to.
-			 */
-			ril_sim_card_subscription_done(self);
-		}
+		ril_sim_card_update_app(self);
 		ril_sim_card_status_free(status);
 		g_signal_emit(self, ril_sim_card_signals
 					[SIGNAL_STATUS_RECEIVED], 0);
@@ -481,6 +515,8 @@ static void ril_sim_card_status_cb(GRilIoChannel *io, int ril_status,
 			ril_sim_card_update_status(self, status);
 		}
 	}
+
+	ril_sim_card_tx_check(self);
 }
 
 void ril_sim_card_reset(struct ril_sim_card *self)
@@ -512,6 +548,9 @@ void ril_sim_card_request_status(struct ril_sim_card *self)
 		} else {
 			GRilIoRequest* req = grilio_request_new();
 
+			/* Start the transaction to not allow any other
+			 * requests to interfere with SIM status query */
+			ril_sim_card_tx_start(self);
 			grilio_request_set_retry(req, RIL_RETRY_SECS*1000, -1);
 			priv->status_req_id =
 				grilio_queue_send_request_full(priv->q,
