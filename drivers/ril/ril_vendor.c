@@ -40,9 +40,11 @@ struct ril_vendor_hook *ril_vendor_create_hook
 }
 
 struct ril_vendor_hook *ril_vendor_hook_init(struct ril_vendor_hook *self,
-			const struct ril_vendor_hook_proc *proc)
+				const struct ril_vendor_hook_proc *proc,
+				ril_vendor_hook_free_proc free)
 {
 	self->proc = proc;
+	self->free = free;
 	g_atomic_int_set(&self->ref_count, 1);
 	return self;
 }
@@ -58,13 +60,8 @@ struct ril_vendor_hook *ril_vendor_hook_ref(struct ril_vendor_hook *self)
 
 static void ril_vendor_hook_free(struct ril_vendor_hook *self)
 {
-	const struct ril_vendor_hook_proc *proc = self->proc;
-
-	while (!proc->free && proc->base) {
-		proc = proc->base;
-	}
-	if (proc->free) {
-		proc->free(self);
+	if (self->free) {
+		self->free(self);
 	}
 }
 

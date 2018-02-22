@@ -72,18 +72,29 @@ struct ril_vendor_mtk_driver_data {
 	const struct ril_vendor_hook_proc *proc;
 };
 
+/* Hook with auto-detection */
+struct ril_vendor_hook_mtk_auto {
+	struct ril_vendor_hook_mtk mtk;
+	const struct ril_vendor_mtk_driver_data *type;
+	gulong detect_id;
+};
+
 /* MTK specific RIL messages (actual codes differ from model to model!) */
 struct ril_mtk_msg {
 	gboolean attach_apn_has_roaming_protocol;
 	guint request_resume_registration;
+
+	/* See ril_vendor_mtk_auto_detect_event */
+#define unsol_msgs unsol_ps_network_state_changed
+#define MTK_UNSOL_MSGS (4)
+
 	guint unsol_ps_network_state_changed;
 	guint unsol_registration_suspended;
 	guint unsol_incoming_call_indication;
 	guint unsol_set_attach_apn;
 };
 
-/* Fly FS522 Cirrus 14 */
-static const struct ril_mtk_msg mtk_msg_mt6737 = {
+static const struct ril_mtk_msg msg_mtk1 = {
 	.attach_apn_has_roaming_protocol = TRUE,
 	.request_resume_registration = 2050,
 	.unsol_ps_network_state_changed = 3012,
@@ -92,8 +103,7 @@ static const struct ril_mtk_msg mtk_msg_mt6737 = {
 	.unsol_set_attach_apn = 3065
 };
 
-/* MT8735 Tablet */
-static const struct ril_mtk_msg mtk_msg_mt8735 = {
+static const struct ril_mtk_msg msg_mtk2 = {
 	.attach_apn_has_roaming_protocol = FALSE,
 	.request_resume_registration = 2065,
 	.unsol_ps_network_state_changed = 3015,
@@ -106,6 +116,12 @@ static inline struct ril_vendor_hook_mtk *ril_vendor_hook_mtk_cast
 						(struct ril_vendor_hook *hook)
 {
 	return G_CAST(hook, struct ril_vendor_hook_mtk, hook);
+}
+
+static inline struct ril_vendor_hook_mtk_auto *ril_vendor_hook_mtk_auto_cast
+						(struct ril_vendor_hook *hook)
+{
+	return G_CAST(hook, struct ril_vendor_hook_mtk_auto, mtk.hook);
 }
 
 static const char *ril_vendor_mtk_request_to_string
@@ -121,12 +137,9 @@ static const char *ril_vendor_mtk_request_to_string
 	}
 }
 
-static const char *ril_vendor_mtk_event_to_string(struct ril_vendor_hook *hook,
+static const char *ril_vendor_mtk_unsol_msg_name(const struct ril_mtk_msg *msg,
 								guint event)
 {
-	struct ril_vendor_hook_mtk *self = ril_vendor_hook_mtk_cast(hook);
-	const struct ril_mtk_msg *msg = self->msg;
-
 	if (event == msg->unsol_ps_network_state_changed) {
 		return "MTK_PS_NETWORK_STATE_CHANGED";
 	} else if (event == msg->unsol_registration_suspended) {
@@ -138,6 +151,14 @@ static const char *ril_vendor_mtk_event_to_string(struct ril_vendor_hook *hook,
 	} else {
 		return NULL;
 	}
+}
+
+static const char *ril_vendor_mtk_event_to_string(struct ril_vendor_hook *hook,
+								guint event)
+{
+	struct ril_vendor_hook_mtk *self = ril_vendor_hook_mtk_cast(hook);
+
+	return ril_vendor_mtk_unsol_msg_name(self->msg, event);
 }
 
 static void ril_vendor_mtk_registration_suspended(GRilIoChannel *io, guint id,
@@ -152,7 +173,7 @@ static void ril_vendor_mtk_registration_suspended(GRilIoChannel *io, guint id,
 	grilio_parser_init(&rilp, data, len);
 	if (grilio_parser_get_int32(&rilp, NULL) &&
 			grilio_parser_get_int32(&rilp, &session_id)) {
-		GRilIoRequest* req = grilio_request_new();
+		GRilIoRequest *req = grilio_request_new();
 		DBG("slot=%u,session_id=%d", self->slot, session_id);
 		grilio_request_append_int32(req, 1);
 		grilio_request_append_int32(req, session_id);
@@ -219,7 +240,7 @@ static const struct ofono_gprs_primary_context *ril_vendor_mtk_internet_context
 	struct sailfish_watch *watch = self->watch;
 
 	if (watch->imsi) {
-		struct ofono_atom * atom = __ofono_modem_find_atom(watch->modem,
+		struct ofono_atom *atom = __ofono_modem_find_atom(watch->modem,
 							OFONO_ATOM_TYPE_GPRS);
 
 		if (atom) {
@@ -327,7 +348,7 @@ static void ril_vendor_mtk_call_state_changed(GRilIoChannel *io,
 			RIL_UNSOL_RESPONSE_CALL_STATE_CHANGED, NULL, 0);
 }
 
-static GRilIoRequest* ril_vendor_mtk_data_call_req
+static GRilIoRequest *ril_vendor_mtk_data_call_req
 	(struct ril_vendor_hook *hook, int tech, const char *profile,
 		const char *apn, const char *username, const char *password,
 		enum ril_auth auth, const char *proto)
@@ -389,28 +410,10 @@ static void ril_vendor_mtk_get_defaults(struct ril_vendor_defaults *defaults)
 	defaults->legacy_imei_query = TRUE;
 }
 
-static struct ril_vendor_hook *ril_vendor_mtk_create_hook_from_data
-		(const void *driver_data, GRilIoChannel *io, const char *path,
-					const struct ril_slot_config *config,
-					struct ril_network *network)
+static void ril_vendor_mtk_hook_subscribe(struct ril_vendor_hook_mtk *self)
 {
-	const struct ril_vendor_mtk_driver_data *mtk_driver_data = driver_data;
-	const struct ril_mtk_msg *msg = mtk_driver_data->msg;
-	struct ril_vendor_hook_mtk *self =
-		g_new0(struct ril_vendor_hook_mtk, 1);
+	const struct ril_mtk_msg *msg = self->msg;
 
-	self->msg = msg;
-	self->q = grilio_queue_new(io);
-	self->io = grilio_channel_ref(io);
-	self->watch = sailfish_watch_new(path);
-	self->slot = config->slot;
-	self->network = ril_network_ref(network);
-	self->watch_event_id[WATCH_EVENT_IMSI_CHANGED] =
-			sailfish_watch_add_imsi_changed_handler(self->watch,
-				ril_vendor_mtk_watch_imsi_changed, self);
-	self->network_event_id[NETWORK_EVENT_PREF_MODE_CHANGED] =
-			ril_network_add_pref_mode_changed_handler(self->network,
-				ril_vendor_mtk_network_pref_mode_changed, self);
 	self->ril_event_id[MTK_EVENT_REGISTRATION_SUSPENDED] =
 			grilio_channel_add_unsol_event_handler(self->io,
 				ril_vendor_mtk_registration_suspended,
@@ -433,15 +436,31 @@ static struct ril_vendor_hook *ril_vendor_mtk_create_hook_from_data
 				ril_vendor_mtk_call_state_changed,
 				msg->unsol_incoming_call_indication, self);
 	}
-	DBG("%s slot %u", mtk_driver_data->name, self->slot);
-	return ril_vendor_hook_init(&self->hook, mtk_driver_data->proc);
 }
 
-static void ril_vendor_mtk_free(struct ril_vendor_hook *hook)
+static void ril_vendor_mtk_hook_init(struct ril_vendor_hook_mtk *self,
+	const struct ril_vendor_mtk_driver_data *mtk_driver_data,
+	ril_vendor_hook_free_proc free, GRilIoChannel *io, const char *path,
+	const struct ril_slot_config *config, struct ril_network *network)
 {
-	struct ril_vendor_hook_mtk *self = ril_vendor_hook_mtk_cast(hook);
+	self->msg = mtk_driver_data->msg;
+	self->q = grilio_queue_new(io);
+	self->io = grilio_channel_ref(io);
+	self->watch = sailfish_watch_new(path);
+	self->slot = config->slot;
+	self->network = ril_network_ref(network);
+	self->watch_event_id[WATCH_EVENT_IMSI_CHANGED] =
+			sailfish_watch_add_imsi_changed_handler(self->watch,
+				ril_vendor_mtk_watch_imsi_changed, self);
+	self->network_event_id[NETWORK_EVENT_PREF_MODE_CHANGED] =
+			ril_network_add_pref_mode_changed_handler(self->network,
+				ril_vendor_mtk_network_pref_mode_changed, self);
+	ril_vendor_mtk_hook_subscribe(self);
+	ril_vendor_hook_init(&self->hook, mtk_driver_data->proc, free);
+}
 
-	DBG("slot %u", self->slot);
+static void ril_vendor_mtk_destroy(struct ril_vendor_hook_mtk *self)
+{
 	grilio_queue_cancel_all(self->q, FALSE);
 	grilio_channel_remove_all_handlers(self->io, self->ril_event_id);
 	grilio_queue_unref(self->q);
@@ -450,11 +469,33 @@ static void ril_vendor_mtk_free(struct ril_vendor_hook *hook)
 	sailfish_watch_unref(self->watch);
 	ril_network_remove_all_handlers(self->network, self->network_event_id);
 	ril_network_unref(self->network);
+}
+
+static void ril_vendor_mtk_free(struct ril_vendor_hook *hook)
+{
+	struct ril_vendor_hook_mtk *self = ril_vendor_hook_mtk_cast(hook);
+
+	DBG("slot %u", self->slot);
+	ril_vendor_mtk_destroy(self);
 	g_free(self);
 }
 
+static struct ril_vendor_hook *ril_vendor_mtk_create_hook_from_data
+		(const void *driver_data, GRilIoChannel *io, const char *path,
+					const struct ril_slot_config *config,
+					struct ril_network *network)
+{
+	const struct ril_vendor_mtk_driver_data *mtk_driver_data = driver_data;
+	struct ril_vendor_hook_mtk *self =
+		g_new0(struct ril_vendor_hook_mtk, 1);
+
+	ril_vendor_mtk_hook_init(self, mtk_driver_data, ril_vendor_mtk_free,
+						io, path, config, network);
+	DBG("%s slot %u", mtk_driver_data->name, self->slot);
+	return &self->hook;
+}
+
 static const struct ril_vendor_hook_proc ril_vendor_mtk_hook_base_proc = {
-	.free               = ril_vendor_mtk_free,
 	.request_to_string  = ril_vendor_mtk_request_to_string,
 	.event_to_string    = ril_vendor_mtk_event_to_string,
 	.data_call_req      = ril_vendor_mtk_data_call_req
@@ -465,142 +506,127 @@ static const struct ril_vendor_driver ril_vendor_mtk_base = {
 	.create_hook        = ril_vendor_mtk_create_hook_from_data
 };
 
-static const struct ril_vendor_mtk_driver_data ril_vendor_mtk_mt6737_data = {
-	.name               = "MT6737",
-	.msg                = &mtk_msg_mt6737,
+static const struct ril_vendor_mtk_driver_data ril_vendor_mtk1_data = {
+	.name               = "mtk1",
+	.msg                = &msg_mtk1,
 	.proc               = &ril_vendor_mtk_hook_base_proc
 };
 
-static struct ril_vendor_hook_proc ril_vendor_mtk_mt8735_proc = {
+static struct ril_vendor_hook_proc ril_vendor_mtk2_proc = {
 	.base               = &ril_vendor_mtk_hook_base_proc,
 	.data_call_parse    = ril_vendor_mtk_data_call_parse_v6
 };
 
-static const struct ril_vendor_mtk_driver_data ril_vendor_mtk_mt8735_data = {
-	.name               = "MT8735",
-	.msg                = &mtk_msg_mt8735,
-	.proc               = &ril_vendor_mtk_mt8735_proc
+static const struct ril_vendor_mtk_driver_data ril_vendor_mtk2_data = {
+	.name               = "mtk2",
+	.msg                = &msg_mtk2,
+	.proc               = &ril_vendor_mtk2_proc
 };
 
-RIL_VENDOR_DRIVER_DEFINE(ril_vendor_driver_mt6737) {
-	.name               = "mt6737t",
-	.driver_data        = &ril_vendor_mtk_mt6737_data,
+#define DEFAULT_MTK_TYPE (&ril_vendor_mtk1_data)
+
+static const struct ril_vendor_mtk_driver_data *mtk_types [] = {
+	&ril_vendor_mtk1_data,
+	&ril_vendor_mtk2_data
+};
+
+RIL_VENDOR_DRIVER_DEFINE(ril_vendor_driver_mtk1) {
+	.name               = "mtk1",
+	.driver_data        = &ril_vendor_mtk1_data,
 	.base               = &ril_vendor_mtk_base
 };
 
-RIL_VENDOR_DRIVER_DEFINE(ril_vendor_driver_mt8735) {
-	.name               = "mt8735",
-	.driver_data        = &ril_vendor_mtk_mt8735_data,
+RIL_VENDOR_DRIVER_DEFINE(ril_vendor_driver_mtk2) {
+	.name               = "mtk2",
+	.driver_data        = &ril_vendor_mtk2_data,
 	.base               = &ril_vendor_mtk_base
 };
 
-#define DEFAULT_MTK_DRIVER (&ril_vendor_driver_mt6737)
+/* Auto-selection */
 
-static const struct ril_vendor_driver *mtk_hw_drivers [] = {
-	&ril_vendor_driver_mt6737,
-	&ril_vendor_driver_mt8735
-};
-
-/* Automatic driver selection based on /proc/cpuinfo */
-
-static GString *ril_vendor_mtk_read_line(GString *buf, FILE *f)
+static gboolean ril_vendor_mtk_auto_set_type
+			(struct ril_vendor_hook_mtk_auto *self,
+				const struct ril_vendor_mtk_driver_data *type)
 {
-	int c = fgetc(f);
+	struct ril_vendor_hook_mtk *mtk = &self->mtk;
+	gboolean changed = FALSE;
 
-	g_string_truncate(buf, 0);
-	if (c != EOF) {
-		/* Read the line char by char until we hit EOF or EOL */
-		while (c != EOF && c != '\r' && c != '\n') {
-			g_string_append_c(buf, c);
-			c = fgetc(f);
-		}
-		/* Skip EOL characters */
-		while (c != EOF && (c == '\r' || c == '\n')) {
-			c = fgetc(f);
-		}
-		/* Unget the last char (the first char of the next line) */
-		if (c != EOF) {
-			ungetc(c, f);
-		}
-		return buf;
+	if (self->type != type) {
+		DBG("switching type %s -> %s", self->type->name, type->name);
+		self->type = type;
+		mtk->msg = type->msg;
+		mtk->hook.proc = type->proc;
+		grilio_channel_remove_all_handlers(mtk->io, mtk->ril_event_id);
+		ril_vendor_mtk_hook_subscribe(mtk);
+		changed = TRUE;
 	}
 
-	return NULL;
+	grilio_channel_remove_handler(mtk->io, self->detect_id);
+	self->detect_id = 0;
+	return changed;
 }
 
-static char *ril_vendor_mtk_hardware()
+static void ril_vendor_mtk_auto_detect_event(GRilIoChannel *io, guint id,
+				const void *data, guint len, void *self)
 {
-	FILE *f = fopen("/proc/cpuinfo", "r");
-	char *hardware = NULL;
+	guint i;
 
-	if (f) {
-		const char prefix[] = "Hardware\t:";
-		const gsize prefix_len = sizeof(prefix) - 1;
-		GString *buf = g_string_new("");
+	for (i = 0; i < G_N_ELEMENTS(mtk_types); i++) {
+		const struct ril_vendor_mtk_driver_data *type = mtk_types[i];
+		const struct ril_mtk_msg *msg = type->msg;
+		const guint *ids = &msg->unsol_msgs;
+		guint j;
 
-		/* Find the "Hardware:" line */
-		while (ril_vendor_mtk_read_line(buf, f) &&
-				strncmp(buf->str, prefix, prefix_len));
-
-		if (buf->len > prefix_len) {
-			/* Erase the prefix */
-			g_string_erase(buf, 0, prefix_len);
-
-			/* Remove trailing whitespaces */
-			while (buf->len > 0 &&
-				g_ascii_isspace(buf->str[buf->len - 1])) {
-				g_string_truncate(buf, buf->len - 1);
-			}
-
-			/* Extract the last word */
-			if (buf->len > 0) {
-				gsize pos = buf->len;
-
-				while (pos > 0 &&
-					!g_ascii_isspace(buf->str[pos - 1])) {
-					pos--;
+		for (j = 0; j < MTK_UNSOL_MSGS; j++) {
+			if (ids[j] == id) {
+				DBG("event %u is %s %s", id, type->name,
+					ril_vendor_mtk_unsol_msg_name(msg,id));
+				if (ril_vendor_mtk_auto_set_type(self, type)) {
+					/* And repeat the event to invoke
+					 * the handler */
+					grilio_channel_inject_unsol_event(io,
+								id, data, len);
 				}
-
-				if (buf->str[pos]) {
-					hardware = g_strdup(buf->str + pos);
-					DBG("Hardware: %s", hardware);
-				}
+				return;
 			}
 		}
-
-		g_string_free(buf, TRUE);
-		fclose(f);
 	}
-
-	return hardware;
 }
 
-static const struct ril_vendor_driver *ril_vendor_mtk_detect()
+static void ril_vendor_mtk_auto_free(struct ril_vendor_hook *hook)
 {
-	const struct ril_vendor_driver *driver = DEFAULT_MTK_DRIVER;
-	char *hw = ril_vendor_mtk_hardware();
+	struct ril_vendor_hook_mtk_auto *self =
+		ril_vendor_hook_mtk_auto_cast(hook);
+	struct ril_vendor_hook_mtk *mtk = &self->mtk;
 
-	if (hw) {
-		guint i;
-
-		for (i = 0; i < G_N_ELEMENTS(mtk_hw_drivers); i++) {
-			if (!strcasecmp(mtk_hw_drivers[i]->name, hw)) {
-				driver = mtk_hw_drivers[i];
-				DBG("Driver: %s", driver->name);
-				break;
-			}
-		}
-		g_free(hw);
-	}
-	return driver;
+	DBG("slot %u", mtk->slot);
+	grilio_channel_remove_handler(mtk->io, self->detect_id);
+	ril_vendor_mtk_destroy(mtk);
+	g_free(self);
 }
 
 static struct ril_vendor_hook *ril_vendor_mtk_create_hook_auto
 	(const void *driver_data, GRilIoChannel *io, const char *path,
 		const struct ril_slot_config *cfg, struct ril_network *network)
 {
-	return ril_vendor_create_hook(ril_vendor_mtk_detect(), io, path, cfg,
-								network);
+	struct ril_vendor_hook_mtk_auto *self =
+		g_new0(struct ril_vendor_hook_mtk_auto, 1);
+	struct ril_vendor_hook_mtk *mtk = &self->mtk;
+
+	/* Pick the default */
+	self->type = DEFAULT_MTK_TYPE;
+	ril_vendor_mtk_hook_init(mtk, self->type, ril_vendor_mtk_auto_free,
+						io, path, cfg, network);
+	DBG("%s slot %u", self->type->name, mtk->slot);
+
+	/*
+	 * Subscribe for (all) unsolicited events. Keep on listening until
+	 * we receive an MTK specific event that tells us which particular
+	 * kind of MTK adaptation we are using.
+	 */
+	self->detect_id = grilio_channel_add_unsol_event_handler(mtk->io,
+				ril_vendor_mtk_auto_detect_event, 0, self);
+	return &mtk->hook;
 }
 
 RIL_VENDOR_DRIVER_DEFINE(ril_vendor_driver_mtk) {
