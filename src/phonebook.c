@@ -428,7 +428,6 @@ static void export_phonebook_cb(const struct ofono_error *error, void *data)
 	g_slist_foreach(phonebook->merge_list, print_merged_entry,
 				phonebook->vcards);
 	g_slist_free_full(phonebook->merge_list, destroy_merged_entry);
-	g_slist_free(phonebook->merge_list);
 	phonebook->merge_list = NULL;
 
 	phonebook->storage_index++;
