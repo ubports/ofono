@@ -37,7 +37,6 @@ struct ril_vendor_driver {
 
 struct ril_vendor_hook_proc {
 	const struct ril_vendor_hook_proc *base;
-	void (*free)(struct ril_vendor_hook *hook);
 	const char *(*request_to_string)(struct ril_vendor_hook *hook,
 							guint request);
 	const char *(*event_to_string)(struct ril_vendor_hook *hook,
@@ -51,8 +50,10 @@ struct ril_vendor_hook_proc {
 			GRilIoParser *rilp);
 };
 
+typedef void (*ril_vendor_hook_free_proc)(struct ril_vendor_hook *hook);
 struct ril_vendor_hook {
 	const struct ril_vendor_hook_proc *proc;
+	ril_vendor_hook_free_proc free;
 	gint ref_count;
 };
 
@@ -64,7 +65,8 @@ void ril_vendor_get_defaults(const struct ril_vendor_driver *vendor,
 					struct ril_vendor_defaults *defaults);
 
 struct ril_vendor_hook *ril_vendor_hook_init(struct ril_vendor_hook *hook,
-			const struct ril_vendor_hook_proc *proc);
+				const struct ril_vendor_hook_proc *proc,
+				ril_vendor_hook_free_proc free);
 struct ril_vendor_hook *ril_vendor_hook_ref(struct ril_vendor_hook *hook);
 void ril_vendor_hook_unref(struct ril_vendor_hook *hook);
 
