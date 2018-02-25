@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2016-2017 Jolla Ltd.
+ *  Copyright (C) 2016-2018 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -17,6 +17,8 @@
 #define RIL_SIM_SETTINGS_H
 
 #include "ril_types.h"
+
+#include <glib-object.h>
 
 struct ril_sim_settings_priv;
 

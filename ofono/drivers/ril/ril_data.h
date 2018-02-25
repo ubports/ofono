@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2016-2017 Jolla Ltd.
+ *  Copyright (C) 2016-2018 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -17,7 +17,10 @@
 #define RIL_DATA_H
 
 #include "ril_types.h"
+
 #include <ofono/gprs-context.h>
+
+#include <glib-object.h>
 
 enum ril_data_call_active {
 	RIL_DATA_CALL_INACTIVE = 0,
