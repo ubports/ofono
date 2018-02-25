@@ -18,6 +18,8 @@
 
 #include "ril_types.h"
 
+#include <glib-object.h>
+
 struct ofono_network_operator;
 
 struct ril_registration_state {

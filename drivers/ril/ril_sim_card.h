@@ -18,6 +18,8 @@
 
 #include "ril_types.h"
 
+#include <glib-object.h>
+
 struct ril_sim_card_app {
 	enum ril_app_type app_type;
 	enum ril_app_state app_state;
