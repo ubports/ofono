@@ -500,6 +500,7 @@ static void test_application_entry_decode(void)
 	g_assert(app[1]->label != NULL);
 	g_assert(!strcmp(app[1]->label, "MIDPfiles"));
 
+	g_slist_free_full(entries, (GDestroyNotify) sim_app_record_free);
 	g_free(ef_dir);
 	g_slist_free_full(entries, (GDestroyNotify) sim_app_record_free);
 }
