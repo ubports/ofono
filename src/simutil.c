@@ -1549,6 +1549,12 @@ gboolean sim_cphs_is_active(unsigned char *cphs, enum sim_cphs_service index)
 	return ((cphs[index / 4] >> ((index % 4) * 2)) & 3) == 3;
 }
 
+void sim_app_record_free(struct sim_app_record *app)
+{
+	g_free(app->label);
+	g_free(app);
+}
+
 GSList *sim_parse_app_template_entries(const unsigned char *buffer, int len)
 {
 	GSList *ret = NULL;

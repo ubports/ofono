@@ -517,6 +517,7 @@ gboolean sim_sst_is_active(unsigned char *service_sst, unsigned char len,
 gboolean sim_cphs_is_active(unsigned char *service_cphs,
 				enum sim_cphs_service index);
 
+void sim_app_record_free(struct sim_app_record *app);
 GSList *sim_parse_app_template_entries(const unsigned char *buffer, int len);
 
 int sim_build_umts_authenticate(unsigned char *buffer, int len,
