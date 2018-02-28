@@ -139,6 +139,7 @@ static void sim_auth_unregister(struct ofono_atom *atom)
 	struct ofono_sim_auth *sa = __ofono_atom_get_data(atom);
 
 	free_apps(sa);
+	g_free(sa->nai);
 
 	g_free(sa->pending);
 }
