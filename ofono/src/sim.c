@@ -2768,8 +2768,10 @@ static void sim_free_main_state(struct ofono_sim *sim)
 	if (sim->impi)
 		g_free(sim->impi);
 
-	if (sim->aid_sessions)
+	if (sim->aid_sessions) {
 		g_slist_free_full(sim->aid_sessions, aid_session_free);
+		sim->aid_sessions = NULL;
+	}
 
 	sim->initialized = false;
 	sim->wait_initialized = false;
