@@ -43,6 +43,7 @@
 #include <ofono/ussd.h>
 #include <ofono/gprs.h>
 #include <ofono/gprs-context.h>
+#include <ofono/lte.h>
 #include <ofono/radio-settings.h>
 #include <ofono/location-reporting.h>
 #include <ofono/log.h>
@@ -482,6 +483,8 @@ static void gobi_post_sim(struct ofono_modem *modem)
 	struct gobi_data *data = ofono_modem_get_data(modem);
 
 	DBG("%p", modem);
+
+	ofono_lte_create(modem, "qmimodem", data->device);
 
 	if (data->features & GOBI_CAT)
 		ofono_stk_create(modem, 0, "qmimodem", data->device);
