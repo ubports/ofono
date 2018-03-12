@@ -484,7 +484,7 @@ static void gobi_post_sim(struct ofono_modem *modem)
 
 	DBG("%p", modem);
 
-	ofono_lte_create(modem, "qmimodem", data->device);
+	ofono_lte_create(modem, 0, "qmimodem", data->device);
 
 	if (data->features & GOBI_CAT)
 		ofono_stk_create(modem, 0, "qmimodem", data->device);
