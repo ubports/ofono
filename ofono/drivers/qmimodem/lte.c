@@ -212,7 +212,8 @@ error:
 	ofono_lte_register(lte);
 }
 
-static int qmimodem_lte_probe(struct ofono_lte *lte, void *data)
+static int qmimodem_lte_probe(struct ofono_lte *lte,
+					unsigned int vendor, void *data)
 {
 	struct qmi_device *device = data;
 	struct lte_data *ldd;
