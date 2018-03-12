@@ -186,9 +186,18 @@ GUtilInts *ril_config_get_ints(GKeyFile *file, const char *group,
 	char *value = ril_config_get_string(file, group, key);
 
 	if (value) {
-		char **values = g_strsplit(value, ",", -1);
-		char **ptr = values;
 		GUtilIntArray *array = gutil_int_array_new();
+		char **values, **ptr;
+
+		/*
+		 * Some people are thinking that # is a comment
+		 * anywhere on the line, not just at the beginning
+		 */
+		char *comment = strchr(value, '#');
+
+		if (comment) *comment = 0;
+		values = g_strsplit(value, ",", -1);
+		ptr = values;
 
 		while (*ptr) {
 			int val;
