@@ -91,7 +91,7 @@ static gboolean lte_delayed_register(gpointer user_data)
 	return FALSE;
 }
 
-static int at_lte_probe(struct ofono_lte *lte, void *data)
+static int at_lte_probe(struct ofono_lte *lte, unsigned int vendor, void *data)
 {
 	GAtChat *chat = data;
 	struct lte_driver_data *ldd;
