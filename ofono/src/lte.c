@@ -244,6 +244,7 @@ static void lte_atom_remove(struct ofono_atom *atom)
 }
 
 struct ofono_lte *ofono_lte_create(struct ofono_modem *modem,
+					unsigned int vendor,
 					const char *driver, void *data)
 {
 	struct ofono_lte *lte;
@@ -266,7 +267,7 @@ struct ofono_lte *ofono_lte_create(struct ofono_modem *modem,
 		if (g_strcmp0(drv->name, driver))
 			continue;
 
-		if (drv->probe(lte, data) < 0)
+		if (drv->probe(lte, vendor, data) < 0)
 			continue;
 
 		lte->driver = drv;
