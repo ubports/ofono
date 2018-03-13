@@ -1644,22 +1644,16 @@ static GSList *ril_plugin_parse_config_file(GKeyFile *file,
 static GSList *ril_plugin_load_config(const char *path,
 				struct ril_plugin_settings *ps)
 {
-	GError *err = NULL;
 	GSList *l, *list = NULL;
 	GKeyFile *file = g_key_file_new();
 	gboolean empty = FALSE;
 
-	if (g_key_file_load_from_file(file, path, 0, &err)) {
-		DBG("Loading %s", path);
-		if (ril_config_get_boolean(file, RILCONF_SETTINGS_GROUP,
+	ril_config_merge_files(file, path);
+	if (ril_config_get_boolean(file, RILCONF_SETTINGS_GROUP,
 				RILCONF_SETTINGS_EMPTY, &empty) && empty) {
-			DBG("Empty config");
-		} else {
-			list = ril_plugin_parse_config_file(file, ps);
-		}
+		DBG("Empty config");
 	} else {
-		DBG("conf load error: %s", err->message);
-		g_error_free(err);
+		list = ril_plugin_parse_config_file(file, ps);
 	}
 
 	if (!list && !empty) {
