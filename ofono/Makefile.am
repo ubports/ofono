@@ -919,8 +919,7 @@ unit_objects =
 
 unit_tests = unit/test-common unit/test-util unit/test-idmap \
 				unit/test-simutil unit/test-stkutil \
-				unit/test-sms unit/test-cdmasms \
-				unit/test-provision unit/test-sms-filter
+				unit/test-sms unit/test-cdmasms
 
 if SAILFISH_MANAGER
 
@@ -993,6 +992,13 @@ endif
 
 if RILMODEM
 if SAILFISH_RILMODEM
+
+unit_test_ril_config_SOURCES = unit/test-ril_config.c drivers/ril/ril_util.c \
+				drivers/ril/ril_config.c src/log.c
+unit_test_ril_config_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
+unit_test_ril_config_LDADD = @GLIB_LIBS@ -ldl
+unit_objects += $(unit_test_ril_config_OBJECTS)
+unit_tests += unit/test-ril_config
 
 unit_test_ril_util_SOURCES = unit/test-ril_util.c drivers/ril/ril_util.c \
 				src/log.c
@@ -1077,12 +1083,14 @@ unit_test_provision_SOURCES = unit/test-provision.c \
 unit_test_provision_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
 unit_test_provision_LDADD = @GLIB_LIBS@ -ldl
 unit_objects += $(unit_test_provision_OBJECTS)
+unit_tests += unit/test-provision
 
 unit_test_sms_filter_SOURCES = unit/test-sms-filter.c \
 				src/sms-filter.c src/log.c
 unit_test_sms_filter_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
 unit_test_sms_filter_LDADD = @GLIB_LIBS@ -ldl
 unit_objects += $(unit_test_sms_filter_OBJECTS)
+unit_tests += unit/test-sms-filter
 
 test_rilmodem_sources = $(gril_sources) src/log.c src/common.c src/util.c \
 				gatchat/ringbuffer.h gatchat/ringbuffer.c \

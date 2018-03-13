@@ -18,6 +18,7 @@ TESTS="\
  test-caif \
  test-provision \
  test-ril_util \
+ test-ril_config \
  test-sms-filter \
  test-sailfish_cell_info \
  test-sailfish_cell_info_dbus \
