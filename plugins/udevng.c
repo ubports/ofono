@@ -1132,6 +1132,7 @@ static gboolean setup_gemalto(struct modem_info* modem)
 		DBG("%s %s %s %s %s", info->devnode, info->interface,
 				info->number, info->label, info->subsystem);
 
+		/* PHS8-P */
 		if (g_strcmp0(info->interface, "255/255/255") == 0) {
 			if (g_strcmp0(info->number, "01") == 0)
 				gps = info->devnode;
@@ -1143,6 +1144,20 @@ static gboolean setup_gemalto(struct modem_info* modem)
 				net = info->devnode;
 			else if (g_strcmp0(info->subsystem, "usbmisc") == 0)
 				qmi = info->devnode;
+		}
+
+		/* ALS3 */
+		if (g_strcmp0(info->interface, "2/2/1") == 0) {
+			if (g_strcmp0(info->number, "00") == 0)
+				mdm = info->devnode;
+			else if (g_strcmp0(info->number, "02") == 0)
+				app = info->devnode;
+			else if (g_strcmp0(info->number, "04") == 0)
+				gps = info->devnode;
+		}
+		if (g_strcmp0(info->interface, "2/6/0") == 0) {
+			if (g_strcmp0(info->subsystem, "net") == 0)
+				net = info->devnode;
 		}
 	}
 
@@ -1156,6 +1171,7 @@ static gboolean setup_gemalto(struct modem_info* modem)
 	ofono_modem_set_string(modem->modem, "GPS", gps);
 	ofono_modem_set_string(modem->modem, "Modem", mdm);
 	ofono_modem_set_string(modem->modem, "Device", qmi);
+	ofono_modem_set_string(modem->modem, "Model", modem->model);
 	ofono_modem_set_string(modem->modem, "NetworkInterface", net);
 
 	return TRUE;
@@ -1601,6 +1617,8 @@ static struct {
 	{ "gemalto",	"option",	"1e2d",	"0053"	},
 	{ "gemalto",	"cdc_wdm",	"1e2d",	"0053"	},
 	{ "gemalto",	"qmi_wwan",	"1e2d",	"0053"	},
+	{ "gemalto",	"cdc_acm",	"1e2d",	"0061"	},
+	{ "gemalto",	"cdc_ether",	"1e2d",	"0061"	},
 	{ "telit",	"cdc_ncm",	"1bc7", "0036"	},
 	{ "telit",	"cdc_acm",	"1bc7", "0036"	},
 	{ "xmm7xxx",	"cdc_acm",	"8087", "0930"	},
