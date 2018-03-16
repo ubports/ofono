@@ -48,6 +48,7 @@ static const char *cops_prefix[] = { "+COPS:", NULL };
 static const char *csq_prefix[] = { "+CSQ:", NULL };
 static const char *cind_prefix[] = { "+CIND:", NULL };
 static const char *cmer_prefix[] = { "+CMER:", NULL };
+static const char *smoni_prefix[] = { "^SMONI:", NULL };
 static const char *zpas_prefix[] = { "+ZPAS:", NULL };
 static const char *option_tech_prefix[] = { "_OCTI:", "_OUWCTI:", NULL };
 
@@ -178,6 +179,31 @@ static int option_parse_tech(GAtResult *result)
 	return tech;
 }
 
+static int cinterion_parse_tech(GAtResult *result)
+{
+	int tech = -1;
+	GAtResultIter iter;
+	const char *technology;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "^SMONI: "))
+		return tech;
+
+	if (!g_at_result_iter_next_unquoted_string(&iter, &technology))
+		return tech;
+
+	if (strcmp(technology, "2G") == 0) {
+		tech = ACCESS_TECHNOLOGY_GSM_EGPRS;
+	} else if (strcmp(technology, "3G") == 0) {
+		tech = ACCESS_TECHNOLOGY_UTRAN;
+	} else if (strcmp(technology, "4G") == 0) {
+		tech = ACCESS_TECHNOLOGY_EUTRAN;
+	}
+
+	return tech;
+}
+
 static void at_creg_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
@@ -203,6 +229,18 @@ static void at_creg_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		tech = nd->tech;
 
 	cb(&error, status, lac, ci, tech, cbd->data);
+}
+
+static void cinterion_query_tech_cb(gboolean ok, GAtResult *result,
+                                              gpointer user_data)
+{
+	struct tech_query *tq = user_data;
+	int tech;
+
+	tech = cinterion_parse_tech(result);
+
+	ofono_netreg_status_notify(tq->netreg,
+			tq->status, tq->lac, tq->ci, tech);
 }
 
 static void zte_tech_cb(gboolean ok, GAtResult *result, gpointer user_data)
@@ -1518,6 +1556,12 @@ static void creg_notify(GAtResult *result, gpointer user_data)
 					option_query_tech_cb, tq, g_free) > 0)
 			return;
 		break;
+    case OFONO_VENDOR_CINTERION:
+              if (g_at_chat_send(nd->chat, "AT^SMONI",
+                                      smoni_prefix,
+                                      cinterion_query_tech_cb, tq, g_free) > 0)
+                      return;
+              break;
 	}
 
 	g_free(tq);
