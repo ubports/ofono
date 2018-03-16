@@ -1146,7 +1146,7 @@ static gboolean setup_gemalto(struct modem_info* modem)
 				qmi = info->devnode;
 		}
 
-		/* ALS3 */
+		/* Cinterion ALS3, PLS8-E, PLS8-X */
 		if (g_strcmp0(info->interface, "2/2/1") == 0) {
 			if (g_strcmp0(info->number, "00") == 0)
 				mdm = info->devnode;
