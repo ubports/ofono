@@ -115,6 +115,8 @@ static const GDBusMethodTable cdma_netreg_manager_methods[] = {
 };
 
 static const GDBusSignalTable cdma_netreg_manager_signals[] = {
+	{ GDBUS_SIGNAL("PropertyChanged",
+		GDBUS_ARGS({ "name", "s" }, { "value", "v" })) },
 	{ }
 };
 
