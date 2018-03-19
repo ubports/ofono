@@ -53,6 +53,10 @@
 
 #define HARDWARE_MONITOR_INTERFACE OFONO_SERVICE ".cinterion.HardwareMonitor"
 
+/* Supported gemalto's modem */
+#define GEMALTO_MODEL_PHS8P 	"0053"
+#define GEMALTO_MODEL_ALS3 	"0061"
+
 static const char *none_prefix[] = { NULL };
 static const char *sctm_prefix[] = { "^SCTM:", NULL };
 static const char *sbv_prefix[] = { "^SBV:", NULL };
@@ -70,6 +74,8 @@ struct gemalto_data {
 	gboolean have_sim;
 	struct at_util_sim_state_query *sim_state_query;
 	struct gemalto_hardware_monitor *hm;
+	guint modem_ready_id;
+	guint trial_cmd_id;
 };
 
 static int gemalto_probe(struct ofono_modem *modem)
@@ -107,10 +113,26 @@ static GAtChat *open_device(const char *device)
 	GAtSyntax *syntax;
 	GIOChannel *channel;
 	GAtChat *chat;
+	GHashTable *options;
+
+	options = g_hash_table_new(g_str_hash, g_str_equal);
+	if (options == NULL)
+		return NULL;
+
+	g_hash_table_insert(options, "Baud", "115200");
+	g_hash_table_insert(options, "StopBits", "1");
+	g_hash_table_insert(options, "DataBits", "8");
+	g_hash_table_insert(options, "Parity", "none");
+	g_hash_table_insert(options, "XonXoff", "off");
+	g_hash_table_insert(options, "RtsCts", "on");
+	g_hash_table_insert(options, "Local", "on");
+	g_hash_table_insert(options, "Read", "on");
 
 	DBG("Opening device %s", device);
 
-	channel = g_at_tty_open(device, NULL);
+	channel = g_at_tty_open(device, options);
+	g_hash_table_destroy(options);
+
 	if (channel == NULL)
 		return NULL;
 
@@ -300,6 +322,79 @@ static int gemalto_hardware_monitor_enable(struct ofono_modem *modem)
 	return 0;
 }
 
+static void gemalto_initialize(struct ofono_modem *modem)
+{
+	struct gemalto_data *data = ofono_modem_get_data(modem);
+	const char *mdm;
+
+	DBG("");
+
+	mdm = ofono_modem_get_string(modem, "Modem");
+
+	if (mdm == NULL)
+		return;
+
+	/* Open devices */
+	data->mdm = open_device(mdm);
+	if (data->mdm == NULL) {
+		g_at_chat_unref(data->app);
+		data->app = NULL;
+		return;
+	}
+
+	if (getenv("OFONO_AT_DEBUG")) {
+		g_at_chat_set_debug(data->app, gemalto_debug, "App");
+		g_at_chat_set_debug(data->mdm, gemalto_debug, "Mdm");
+	}
+
+	g_at_chat_send(data->mdm, "ATE0", none_prefix, NULL, NULL, NULL);
+	g_at_chat_send(data->app, "ATE0 +CMEE=1", none_prefix,
+			NULL, NULL, NULL);
+	g_at_chat_send(data->mdm, "AT&C0", none_prefix, NULL, NULL, NULL);
+	g_at_chat_send(data->app, "AT&C0", none_prefix, NULL, NULL, NULL);
+
+	g_at_chat_send(data->app, "AT+CFUN=4", none_prefix,
+			cfun_enable, modem, NULL);
+
+	gemalto_hardware_monitor_enable(modem);
+}
+
+static void gemalto_modem_ready(GAtResult *result, gpointer user_data)
+{
+	struct ofono_modem *modem = user_data;
+	struct gemalto_data *data = ofono_modem_get_data(modem);
+	const char *app = ofono_modem_get_string(modem, "Application");
+
+	DBG("");
+
+	/*
+	 * As the modem wasn't ready to handle AT commands when we opened
+	 * it, we have to close and reopen the device app.
+	 */
+	data->modem_ready_id = 0;
+	data->trial_cmd_id = 0;
+
+	g_at_chat_unref(data->app);
+
+	data->app = open_device(app);
+	if (data->app == NULL) {
+		ofono_modem_set_powered(modem, FALSE);
+	} else {
+		gemalto_initialize(modem);
+	}
+}
+
+static void gemalto_at_cb(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct ofono_modem *modem = user_data;
+	struct gemalto_data *data = ofono_modem_get_data(modem);
+
+	g_at_chat_unregister(data->app, data->modem_ready_id);
+	data->modem_ready_id = 0;
+
+	gemalto_initialize(modem);
+}
+
 static int gemalto_enable(struct ofono_modem *modem)
 {
 	struct gemalto_data *data = ofono_modem_get_data(modem);
@@ -318,28 +413,11 @@ static int gemalto_enable(struct ofono_modem *modem)
 	if (data->app == NULL)
 		return -EINVAL;
 
-	data->mdm = open_device(mdm);
-	if (data->mdm == NULL) {
-		g_at_chat_unref(data->app);
-		data->app = NULL;
-		return -EINVAL;
-	}
-
-	if (getenv("OFONO_AT_DEBUG")) {
-		g_at_chat_set_debug(data->app, gemalto_debug, "App");
-		g_at_chat_set_debug(data->mdm, gemalto_debug, "Mdm");
-	}
-
-	g_at_chat_send(data->mdm, "ATE0", none_prefix, NULL, NULL, NULL);
-	g_at_chat_send(data->app, "ATE0 +CMEE=1", none_prefix,
-			NULL, NULL, NULL);
-	g_at_chat_send(data->mdm, "AT&C0", none_prefix, NULL, NULL, NULL);
-	g_at_chat_send(data->app, "AT&C0", none_prefix, NULL, NULL, NULL);
-
-	g_at_chat_send(data->app, "AT+CFUN=4", none_prefix,
-			cfun_enable, modem, NULL);
-
-	gemalto_hardware_monitor_enable(modem);
+	/* Try the AT command. If it doesn't work, wait for ^SYSSTART */
+	data->modem_ready_id = g_at_chat_register(data->app, "^SYSSTART",
+				gemalto_modem_ready, FALSE, modem, NULL);
+	data->trial_cmd_id = g_at_chat_send(data->app, "ATE0 AT",
+				none_prefix, gemalto_at_cb, modem, NULL);
 
 	return -EINPROGRESS;
 }
@@ -432,6 +510,7 @@ static void gemalto_post_sim(struct ofono_modem *modem)
 	struct gemalto_data *data = ofono_modem_get_data(modem);
 	struct ofono_gprs *gprs;
 	struct ofono_gprs_context *gc;
+	const char *model = ofono_modem_get_string(modem, "Model");
 
 	DBG("%p", modem);
 
@@ -444,6 +523,10 @@ static void gemalto_post_sim(struct ofono_modem *modem)
 
 	if (gprs && gc)
 		ofono_gprs_add_context(gprs, gc);
+
+	if (!g_strcmp0(model, GEMALTO_MODEL_ALS3))
+		ofono_lte_create(modem, OFONO_VENDOR_CINTERION,
+						"atmodem", data->app);
 }
 
 static void gemalto_post_online(struct ofono_modem *modem)
