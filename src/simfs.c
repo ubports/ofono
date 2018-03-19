@@ -98,10 +98,8 @@ static void sim_fs_op_free(gpointer pointer)
 	struct sim_fs *fs = node->context->fs;
 
 	/* only release the session if there are no pending reads */
-	if (fs->session && g_queue_is_empty(fs->op_q)) {
+	if (fs->watch_id && g_queue_is_empty(fs->op_q))
 		__ofono_sim_remove_session_watch(fs->session, fs->watch_id);
-		fs->watch_id = 0;
-	}
 
 	g_free(node->buffer);
 	g_free(node);
@@ -900,6 +898,13 @@ static void session_read_info_cb(const struct ofono_error *error,
 	}
 }
 
+static void session_destroy_cb(void *userdata)
+{
+	struct sim_fs *fs = userdata;
+
+	fs->watch_id = 0;
+}
+
 static void get_session_cb(ofono_bool_t active, int session_id,
 		void *data)
 {
@@ -955,7 +960,7 @@ static gboolean sim_fs_op_next(gpointer user_data)
 			else
 				fs->watch_id = __ofono_sim_add_session_watch(
 						fs->session, get_session_cb,
-						fs, NULL);
+						fs, session_destroy_cb);
 		}
 	} else {
 		switch (op->structure) {
