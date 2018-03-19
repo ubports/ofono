@@ -595,6 +595,10 @@ static void query_passwd_state_cb(struct qmi_result *result,
 	struct sim_status sim_stat;
 	enum get_card_status_result res;
 	struct cb_data *retry_cbd;
+	unsigned int i;
+
+	for (i = 0; i < OFONO_SIM_PASSWORD_INVALID; i++)
+		sim_stat.retries[i] = -1;
 
 	res = handle_get_card_status_result(result, &sim_stat);
 	switch (res) {
@@ -650,8 +654,12 @@ static void query_pin_retries_cb(struct qmi_result *result, void *user_data)
 	struct cb_data *cbd = user_data;
 	ofono_sim_pin_retries_cb_t cb = cbd->cb;
 	struct sim_status sim_stat;
+	unsigned int i;
 
 	DBG("");
+
+	for (i = 0; i < OFONO_SIM_PASSWORD_INVALID; i++)
+		sim_stat.retries[i] = -1;
 
 	if (handle_get_card_status_result(result, &sim_stat) !=
 					GET_CARD_STATUS_RESULT_OK) {
