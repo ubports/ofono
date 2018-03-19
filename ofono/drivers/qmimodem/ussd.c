@@ -251,6 +251,7 @@ static void qmi_ussd_request(struct ofono_ussd *ussd, int dcs,
 	qmi_ussd->dcs = QMI_USSD_DCS_ASCII;
 	qmi_ussd->length = len;
 	memcpy(qmi_ussd->data, utf8, utf8_len);
+	g_free(utf8);
 
 	param = qmi_param_new();
 	if (param == NULL)
@@ -265,7 +266,6 @@ static void qmi_ussd_request(struct ofono_ussd *ussd, int dcs,
 
 	qmi_param_free(param);
 error:
-	g_free(utf8);
 	g_free(cbd);
 	CALLBACK_WITH_FAILURE(cb, data);
 }
