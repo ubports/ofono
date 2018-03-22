@@ -1092,6 +1092,13 @@ unit_test_sms_filter_LDADD = @GLIB_LIBS@ -ldl
 unit_objects += $(unit_test_sms_filter_OBJECTS)
 unit_tests += unit/test-sms-filter
 
+unit_test_gprs_filter_SOURCES = unit/test-gprs-filter.c \
+				src/gprs-filter.c src/log.c
+unit_test_gprs_filter_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
+unit_test_gprs_filter_LDADD = @GLIB_LIBS@ -ldl
+unit_objects += $(unit_test_gprs_filter_OBJECTS)
+unit_tests += unit/test-gprs-filter
+
 test_rilmodem_sources = $(gril_sources) src/log.c src/common.c src/util.c \
 				gatchat/ringbuffer.h gatchat/ringbuffer.c \
 				unit/rilmodem-test-server.h \

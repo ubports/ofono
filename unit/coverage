@@ -16,6 +16,7 @@ TESTS="\
  test-cdmasms \
  test-sms-root \
  test-caif \
+ test-gprs-filter \
  test-provision \
  test-ril_util \
  test-ril_config \

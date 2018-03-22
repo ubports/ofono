@@ -42,6 +42,7 @@ unit/test-mux
 unit/test-caif
 unit/test-stkutil
 unit/test-cdmasms
+unit/test-gprs-filter
 unit/test-ril_config
 unit/test-ril_util
 unit/test-rilmodem-cb
