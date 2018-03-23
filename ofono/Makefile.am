@@ -1076,6 +1076,14 @@ unit_test_caif_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
 unit_test_caif_LDADD = @GLIB_LIBS@
 unit_objects += $(unit_test_caif_OBJECTS)
 
+unit_test_dbus_queue_SOURCES = unit/test-dbus-queue.c unit/test-dbus.c \
+				src/dbus-queue.c gdbus/object.c \
+				src/dbus.c src/log.c
+unit_test_dbus_queue_CFLAGS =  @DBUS_GLIB_CFLAGS@ $(COVERAGE_OPT) $(AM_CFLAGS)
+unit_test_dbus_queue_LDADD = @DBUS_GLIB_LIBS@ @GLIB_LIBS@ -ldl
+unit_objects += $(unit_test_dbus_queue_OBJECTS)
+unit_tests += unit/test-dbus-queue
+
 unit_test_provision_SOURCES = unit/test-provision.c \
 				plugins/provision.h plugins/mbpi.c \
 				plugins/sailfish_provision.c \
