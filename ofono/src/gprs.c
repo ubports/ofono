@@ -117,6 +117,7 @@ struct ofono_gprs_context {
 	void *driver_data;
 	struct context_settings *settings;
 	struct ofono_atom *atom;
+	struct gprs_filter_chain *filters;
 };
 
 struct pri_context {
@@ -368,6 +369,7 @@ static void release_context(struct pri_context *ctx)
 	if (ctx == NULL || ctx->gprs == NULL || ctx->context_driver == NULL)
 		return;
 
+	__ofono_gprs_filter_chain_cancel(ctx->context_driver->filters);
 	gprs_cid_release(ctx->gprs, ctx->context.cid);
 	ctx->context.cid = 0;
 	ctx->context_driver->inuse = FALSE;
@@ -1546,6 +1548,22 @@ static DBusMessage *pri_set_auth_method(struct pri_context *ctx,
 	return NULL;
 }
 
+static void gprs_context_activate(const struct ofono_gprs_primary_context *ctx,
+								void *data)
+{
+	struct pri_context *pri = data;
+
+	if (ctx) {
+		struct ofono_gprs_context *gc = pri->context_driver;
+
+		gc->driver->activate_primary(gc, ctx, pri_activate_callback,
+									pri);
+	} else if (pri->pending != NULL) {
+		__ofono_dbus_pending_reply(&pri->pending,
+					__ofono_error_failed(pri->pending));
+	}
+}
+
 static DBusMessage *pri_set_property(DBusConnection *conn,
 					DBusMessage *msg, void *data)
 {
@@ -1601,8 +1619,9 @@ static DBusMessage *pri_set_property(DBusConnection *conn,
 		ctx->pending = dbus_message_ref(msg);
 
 		if (value)
-			gc->driver->activate_primary(gc, &ctx->context,
-						pri_activate_callback, ctx);
+			__ofono_gprs_filter_chain_activate(gc->filters,
+					&ctx->context, gprs_context_activate,
+					NULL, ctx);
 		else
 			gc->driver->deactivate_primary(gc, ctx->context.cid,
 						pri_deactivate_callback, ctx);
@@ -3075,6 +3094,7 @@ static void gprs_context_remove(struct ofono_atom *atom)
 	if (gc->driver && gc->driver->remove)
 		gc->driver->remove(gc);
 
+	__ofono_gprs_filter_chain_free(gc->filters);
 	g_free(gc);
 }
 
@@ -3106,6 +3126,7 @@ struct ofono_gprs_context *ofono_gprs_context_create(struct ofono_modem *modem,
 		if (drv->probe(gc, vendor, data) < 0)
 			continue;
 
+		gc->filters = __ofono_gprs_filter_chain_new(gc);
 		gc->driver = drv;
 		break;
 	}

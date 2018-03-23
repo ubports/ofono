@@ -23,7 +23,7 @@ pkginclude_HEADERS = include/log.h include/plugin.h include/history.h \
 			include/cdma-provision.h include/handsfree.h \
 			include/sim-mnclength.h \
 			include/handsfree-audio.h include/siri.h \
-			include/sms-filter.h \
+			include/sms-filter.h include/gprs-filter.h \
 			include/netmon.h include/lte.h \
 			include/storage.h \
 			gdbus/gdbus.h
@@ -736,7 +736,7 @@ src_ofonod_SOURCES = $(builtin_sources) $(gatchat_sources) src/ofono.ver \
 			src/cdma-provision.c src/handsfree.c \
 			src/handsfree-audio.c src/bluetooth.h \
 			src/sim-mnclength.c src/voicecallagent.c \
-			src/sms-filter.c src/dbus-queue.c \
+			src/sms-filter.c src/gprs-filter.c src/dbus-queue.c \
 			src/hfp.h src/siri.c \
 			src/netmon.c src/lte.c \
 			src/netmonagent.c src/netmonagent.h
@@ -1091,6 +1091,13 @@ unit_test_sms_filter_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
 unit_test_sms_filter_LDADD = @GLIB_LIBS@ -ldl
 unit_objects += $(unit_test_sms_filter_OBJECTS)
 unit_tests += unit/test-sms-filter
+
+unit_test_gprs_filter_SOURCES = unit/test-gprs-filter.c \
+				src/gprs-filter.c src/log.c
+unit_test_gprs_filter_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
+unit_test_gprs_filter_LDADD = @GLIB_LIBS@ -ldl
+unit_objects += $(unit_test_gprs_filter_OBJECTS)
+unit_tests += unit/test-gprs-filter
 
 test_rilmodem_sources = $(gril_sources) src/log.c src/common.c src/util.c \
 				gatchat/ringbuffer.h gatchat/ringbuffer.c \
