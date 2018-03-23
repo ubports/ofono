@@ -56,7 +56,7 @@ static void __ofono_dbus_queue_req_complete
 				(struct ofono_dbus_queue_request *req,
 					ofono_dbus_cb_t fn, void *param)
 {
-	DBusMessage *reply = fn(req->msg, param);
+	DBusMessage *reply = fn ? fn(req->msg, param) : NULL;
 
 	if (!reply)
 		reply = __ofono_error_failed(req->msg);
@@ -129,11 +129,13 @@ void __ofono_dbus_queue_reply_msg(struct ofono_dbus_queue *q,
 
 	if (!q || !q->requests) {
 		/* This should never happen */
-		dbus_message_unref(reply);
+		if (reply) {
+			dbus_message_unref(reply);
+		}
 		return;
 	}
 
-	/* De-queue the request */
+	/* De-queue one request */
 	done = q->requests;
 	next = done->next;
 	q->requests = next;
@@ -148,8 +150,19 @@ void __ofono_dbus_queue_reply_msg(struct ofono_dbus_queue *q,
 	__ofono_dbus_queue_req_free(done);
 
 	/* Submit the next request if there is any */
-	if (next) {
-		next->fn(next->msg, next->data);
+	while (next && reply) {
+		reply = next->fn(next->msg, next->data);
+		if (reply) {
+			/* The request has completed synchronously */
+			done = next;
+			next = done->next;
+			q->requests = next;
+			done->next = NULL;
+
+			/* Send the reply */
+			__ofono_dbus_pending_reply(&done->msg, reply);
+			__ofono_dbus_queue_req_free(done);
+		}
 	}
 }
 
@@ -190,7 +203,8 @@ void __ofono_dbus_queue_reply_all_fn(struct ofono_dbus_queue *q,
 						ofono_dbus_reply_cb_t fn)
 {
 	__ofono_dbus_queue_reply_all_fn_param(q,
-				__ofono_dbus_queue_reply_all_wrapper, fn);
+				__ofono_dbus_queue_reply_all_wrapper,
+				fn ? fn : __ofono_error_failed);
 }
 
 void __ofono_dbus_queue_reply_all_fn_param(struct ofono_dbus_queue *q,
