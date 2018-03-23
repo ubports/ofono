@@ -235,13 +235,11 @@ const char *test_dbus_get_object_path(DBusMessageIter *it)
 	return value;
 }
 
-void test_dbus_expect_empty_reply(DBusPendingCall *call, void *data)
+void test_dbus_check_empty_reply(DBusPendingCall *call, void *unused)
 {
-	struct test_dbus_context *test = data;
 	DBusMessage *reply = dbus_pending_call_steal_reply(call);
 	DBusMessageIter it;
 
-	DBG("");
 	g_assert(dbus_message_get_type(reply) ==
 					DBUS_MESSAGE_TYPE_METHOD_RETURN);
 
@@ -250,7 +248,27 @@ void test_dbus_expect_empty_reply(DBusPendingCall *call, void *data)
 
 	dbus_message_unref(reply);
 	dbus_pending_call_unref(call);
+}
+
+void test_dbus_expect_empty_reply(DBusPendingCall *call, void *data)
+{
+	struct test_dbus_context *test = data;
+
+	DBG("");
+	test_dbus_check_empty_reply(call, data);
 	test_dbus_loop_quit_later(test->loop);
+}
+
+void test_dbus_check_error_reply(DBusPendingCall *call, const char *error)
+{
+	DBusMessage *msg = dbus_pending_call_steal_reply(call);
+	const char *name;
+
+	g_assert(dbus_message_get_type(msg) == DBUS_MESSAGE_TYPE_ERROR);
+	name = dbus_message_get_error_name(msg);
+	g_assert(!g_strcmp0(name, error));
+	dbus_message_unref(msg);
+	dbus_pending_call_unref(call);
 }
 
 void test_dbus_check_string_reply(DBusPendingCall *call, const char *str)
