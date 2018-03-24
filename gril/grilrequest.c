@@ -1125,26 +1125,34 @@ void g_ril_request_set_initial_attach_apn(GRil *gril, const char *apn,
 	proto_str = ril_ofono_protocol_to_ril_string(proto);
 	parcel_w_string(rilp, proto_str);
 
+	g_ril_append_print_buf(gril, "(%s,%s", apn, proto_str);
+
+	if (vendor == OFONO_RIL_VENDOR_MTK2) {
+		/* roamingProtocol */
+		parcel_w_string(rilp, proto_str);
+		g_ril_append_print_buf(gril, "%s,%s", print_buf, proto_str);
+	}
+
 	parcel_w_int32(rilp, auth_type);
 	parcel_w_string(rilp, user);
 	parcel_w_string(rilp, passwd);
 
-	g_ril_append_print_buf(gril, "(%s,%s,%s,%s,%s", apn, proto_str,
+	g_ril_append_print_buf(gril, "%s,%s,%s,%s", print_buf,
 				ril_authtype_to_string(auth_type),
 				user, passwd);
 
-	if (vendor == OFONO_RIL_VENDOR_MTK || vendor == OFONO_RIL_VENDOR_MTK2) {
+	if (vendor == OFONO_RIL_VENDOR_MTK) {
 		parcel_w_string(rilp, mccmnc);
 		g_ril_append_print_buf(gril, "%s,%s", print_buf, mccmnc);
-		if (vendor == OFONO_RIL_VENDOR_MTK2) {
-			int can_handle_ims = 0;
+	} else if (vendor == OFONO_RIL_VENDOR_MTK2) {
+		int can_handle_ims = 0;
+		int num_str = 0;
 
-			parcel_w_int32(rilp, can_handle_ims);
-			/* dualApnPlmnList */
-			parcel_w_string(rilp, NULL);
-			g_ril_append_print_buf(gril, "%s,%d,(null)", print_buf,
-								can_handle_ims);
-		}
+		parcel_w_string(rilp, ""); /* operatorNumeric, should be empty? */
+		parcel_w_int32(rilp, can_handle_ims);
+		parcel_w_int32(rilp, num_str);  /* dualApnPlmnList */
+		g_ril_append_print_buf(gril, "%s,(null),%d,%d", print_buf,
+							can_handle_ims, num_str);
 	}
 
 	g_ril_append_print_buf(gril, "%s)", print_buf);
