@@ -396,6 +396,8 @@ static void ril_gprs_context_activate_primary_cb(struct ril_data *data,
 	if (ril_status != RIL_E_SUCCESS) {
 		ofono_error("GPRS context: Reply failure: %s",
 					ril_error_to_string(ril_status));
+	} else if (!call) {
+		ofono_error("Unexpected data call failure");
 	} else if (call->status != PDP_FAIL_NONE) {
 		ofono_error("Unexpected data call status %d", call->status);
 		error.type = OFONO_ERROR_TYPE_CMS;
