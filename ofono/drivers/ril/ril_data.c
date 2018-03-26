@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2016-2017 Jolla Ltd.
+ *  Copyright (C) 2016-2018 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -360,7 +360,8 @@ static struct ril_data_call *ril_data_call_parse(struct ril_vendor_hook *hook,
 		/* Try the default parser */
 		ril_data_call_destroy(call);
 		memset(call, 0, sizeof(*call));
-		parsed = ril_data_call_parse_default(call, version, &copy);
+		*parser = copy;
+		parsed = ril_data_call_parse_default(call, version, parser);
 	}
 
 	if (parsed) {
@@ -386,7 +387,7 @@ static struct ril_data_call_list *ril_data_call_list_parse(const void *data,
 				guint len, struct ril_vendor_hook *hook,
 				enum ril_data_call_format format)
 {
-	guint32 version, n;
+	guint32 version, n, i;
 	GRilIoParser rilp;
 
 	grilio_parser_init(&rilp, data, len);
@@ -403,22 +404,14 @@ static struct ril_data_call_list *ril_data_call_list_parse(const void *data,
 			list->version = format;
 		}
 
-		if (n > 0) {
-			guint i, clen = grilio_parser_bytes_remaining(&rilp)/n;
+		for (i = 0; i < n && !grilio_parser_at_end(&rilp); i++) {
+			struct ril_data_call *call = ril_data_call_parse(hook,
+							list->version, &rilp);
 
-			for (i = 0; i < n; i++) {
-				GRilIoParser callp;
-				struct ril_data_call *call;
-
-				grilio_parser_get_data(&rilp, &callp, clen);
-				call = ril_data_call_parse(hook, list->version,
-								&callp);
-				if (call) {
-					list->num++;
-					list->calls = g_slist_insert_sorted
-						(list->calls, call,
-							ril_data_call_compare);
-				}
+			if (call) {
+				list->num++;
+				list->calls = g_slist_insert_sorted(list->calls,
+						call, ril_data_call_compare);
 			}
 		}
 
