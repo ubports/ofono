@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2016 Jolla Ltd.
+ *  Copyright (C) 2015-2018 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -322,6 +322,7 @@ static int ril_netreg_get_signal_strength(const void *data, guint len)
 {
 	GRilIoParser rilp;
 	int gw_signal = 0, cdma_dbm = 0, evdo_dbm = 0, lte_signal = 0;
+	int rsrp = 0;
 
 	grilio_parser_init(&rilp, data, len);
 
@@ -341,21 +342,39 @@ static int ril_netreg_get_signal_strength(const void *data, guint len)
 
 	/* LTE_SignalStrength */
 	grilio_parser_get_int32(&rilp, &lte_signal);
-	grilio_parser_get_int32(&rilp, NULL); /* rsrp */
-	grilio_parser_get_int32(&rilp, NULL); /* rsrq */
-	grilio_parser_get_int32(&rilp, NULL); /* rssnr */
-	grilio_parser_get_int32(&rilp, NULL); /* cqi */
+	grilio_parser_get_int32(&rilp, &rsrp);
+	/* The rest is ignored */
 
-	DBG("gw: %d, cdma: %d, evdo: %d, lte: %d", gw_signal, cdma_dbm,
-							evdo_dbm, lte_signal);
+	if (rsrp == INT_MAX) {
+		DBG("gw: %d, cdma: %d, evdo: %d, lte: %d", gw_signal,
+					cdma_dbm, evdo_dbm, lte_signal);
+	}  else {
+		DBG("gw: %d, cdma: %d, evdo: %d, lte: %d rsrp: %d", gw_signal,
+					cdma_dbm, evdo_dbm, lte_signal, rsrp);
+	}
 
 	/* Return the first valid one */
-	if (gw_signal != 99 && gw_signal != -1) {
+
+	/* Some RILs (namely, from MediaTek) report 0 here AND a valid LTE
+	 * RSRP value. If we've got zero, don't report it just yet. */
+	if (gw_signal >= 1 && gw_signal <= 31) {
+		/* Valid values are (0-31, 99) as defined in TS 27.007 */
 		return (gw_signal * 100) / 31;
 	}
 
-	if (lte_signal != 99 && lte_signal != -1) {
+	/* Valid values are (0-31, 99) as defined in TS 27.007 */
+	if (lte_signal >= 0 && lte_signal <= 31) {
 		return (lte_signal * 100) / 31;
+	}
+
+	/* RSRP range: 44 to 140 dBm as defined in 3GPP TS 36.133 */
+	if (lte_signal == 99 && rsrp >= 44 && rsrp <= 140) {
+		return 140 - rsrp;
+	}
+
+	/* If we've got zero strength and no valid RSRP, then so be it */
+	if (gw_signal == 0) {
+		return 0;
 	}
 
 	/* In case of dbm, return the value directly */
