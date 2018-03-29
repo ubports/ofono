@@ -1560,7 +1560,7 @@ static void gprs_context_activate(const struct ofono_gprs_primary_context *ctx,
 									pri);
 	} else if (pri->pending != NULL) {
 		__ofono_dbus_pending_reply(&pri->pending,
-					__ofono_error_failed(pri->pending));
+				__ofono_error_access_denied(pri->pending));
 	}
 }
 
