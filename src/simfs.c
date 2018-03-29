@@ -95,11 +95,6 @@ struct sim_fs {
 static void sim_fs_op_free(gpointer pointer)
 {
 	struct sim_fs_op *node = pointer;
-	struct sim_fs *fs = node->context->fs;
-
-	/* only release the session if there are no pending reads */
-	if (fs->watch_id && g_queue_is_empty(fs->op_q))
-		__ofono_sim_remove_session_watch(fs->session, fs->watch_id);
 
 	g_free(node->buffer);
 	g_free(node);
@@ -126,6 +121,9 @@ void sim_fs_free(struct sim_fs *fs)
 
 	while (fs->contexts)
 		sim_fs_context_free(fs->contexts->data);
+
+	if (fs->watch_id)
+		__ofono_sim_remove_session_watch(fs->session, fs->watch_id);
 
 	g_free(fs);
 }
@@ -197,6 +195,7 @@ void sim_fs_context_free(struct ofono_sim_context *context)
 
 			if (n == 0) {
 				op->cb = NULL;
+				op->context = NULL;
 
 				n += 1;
 				continue;
@@ -272,6 +271,8 @@ static void sim_fs_end_current(struct sim_fs *fs)
 
 	if (g_queue_get_length(fs->op_q) > 0)
 		fs->op_source = g_idle_add(sim_fs_op_next, fs);
+	else if (fs->watch_id) /* release the session if no pending reads */
+		__ofono_sim_remove_session_watch(fs->session, fs->watch_id);
 
 	if (fs->fd != -1) {
 		TFR(close(fs->fd));
