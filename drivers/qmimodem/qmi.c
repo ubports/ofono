@@ -2238,8 +2238,6 @@ bool qmi_service_get_version(struct qmi_service *service,
 }
 
 struct service_send_data {
-	struct qmi_service *service;
-	struct qmi_param *param;
 	qmi_result_func_t func;
 	void *user_data;
 	qmi_destroy_func_t destroy;
@@ -2249,8 +2247,6 @@ static void service_send_free(struct service_send_data *data)
 {
 	if (data->destroy)
 		data->destroy(data->user_data);
-
-	qmi_param_free(data->param);
 
 	g_free(data);
 }
@@ -2308,21 +2304,22 @@ uint16_t qmi_service_send(struct qmi_service *service,
 	if (!data)
 		return 0;
 
-	data->service = service;
-	data->param = param;
 	data->func = func;
 	data->user_data = user_data;
 	data->destroy = destroy;
 
 	req = __request_alloc(service->type, service->client_id,
 				message, QMI_SERVICE_HDR_SIZE,
-				data->param ? data->param->data : NULL,
-				data->param ? data->param->length : 0,
+				param ? param->data : NULL,
+				param ? param->length : 0,
 				service_send_callback, data, (void **) &hdr);
+
 	if (!req) {
 		g_free(data);
 		return 0;
 	}
+
+	qmi_param_free(param);
 
 	if (device->next_service_tid < 256)
 		device->next_service_tid = 256;
