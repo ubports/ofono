@@ -161,17 +161,23 @@ void qmi_free(void *ptr)
 
 static struct qmi_request *__request_alloc(uint8_t service,
 				uint8_t client, uint16_t message,
-				uint16_t headroom, const void *data,
+				const void *data,
 				uint16_t length, qmi_message_func_t func,
 				void *user_data, void **head)
 {
 	struct qmi_request *req;
 	struct qmi_mux_hdr *hdr;
 	struct qmi_message_hdr *msg;
+	uint16_t headroom;
 
 	req = g_try_new0(struct qmi_request, 1);
 	if (!req)
 		return NULL;
+
+	if (service == QMI_SERVICE_CONTROL)
+		headroom = QMI_CONTROL_HDR_SIZE;
+	else
+		headroom = QMI_SERVICE_HDR_SIZE;
 
 	req->len = QMI_MUX_HDR_SIZE + headroom + QMI_MESSAGE_HDR_SIZE + length;
 
@@ -1251,7 +1257,7 @@ bool qmi_device_discover(struct qmi_device *device, qmi_discover_func_t func,
 	}
 
 	req = __request_alloc(QMI_SERVICE_CONTROL, 0x00,
-			QMI_CTL_GET_VERSION_INFO, QMI_CONTROL_HDR_SIZE,
+			QMI_CTL_GET_VERSION_INFO,
 			NULL, 0, discover_callback, data, (void **) &hdr);
 	if (!req) {
 		g_free(data);
@@ -1282,7 +1288,7 @@ static void release_client(struct qmi_device *device,
 	struct qmi_control_hdr *hdr;
 
 	req = __request_alloc(QMI_SERVICE_CONTROL, 0x00,
-			QMI_CTL_RELEASE_CLIENT_ID, QMI_CONTROL_HDR_SIZE,
+			QMI_CTL_RELEASE_CLIENT_ID,
 			release_req, sizeof(release_req),
 			func, user_data, (void **) &hdr);
 	if (!req) {
@@ -1387,7 +1393,7 @@ bool qmi_device_sync(struct qmi_device *device,
 	func_data->user_data = user_data;
 
 	req = __request_alloc(QMI_SERVICE_CONTROL, 0x00,
-			QMI_CTL_SYNC, QMI_CONTROL_HDR_SIZE,
+			QMI_CTL_SYNC,
 			NULL, 0,
 			qmi_device_sync_callback, func_data, (void **) &hdr);
 
@@ -2013,7 +2019,7 @@ static void service_create_discover(uint8_t count,
 	}
 
 	req = __request_alloc(QMI_SERVICE_CONTROL, 0x00,
-			QMI_CTL_GET_CLIENT_ID, QMI_CONTROL_HDR_SIZE,
+			QMI_CTL_GET_CLIENT_ID,
 			client_req, sizeof(client_req),
 			service_create_callback, data, (void **) &hdr);
 	if (!req) {
@@ -2309,7 +2315,7 @@ uint16_t qmi_service_send(struct qmi_service *service,
 	data->destroy = destroy;
 
 	req = __request_alloc(service->type, service->client_id,
-				message, QMI_SERVICE_HDR_SIZE,
+				message,
 				param ? param->data : NULL,
 				param ? param->length : 0,
 				service_send_callback, data, (void **) &hdr);
