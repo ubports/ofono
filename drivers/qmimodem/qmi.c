@@ -87,7 +87,6 @@ struct qmi_device {
 struct qmi_service {
 	int ref_count;
 	struct qmi_device *device;
-	bool shared;
 	uint8_t type;
 	uint16_t major;
 	uint16_t minor;
@@ -260,9 +259,6 @@ static gboolean __service_compare_shared(gpointer key, gpointer value,
 {
 	struct qmi_service *service = value;
 	uint8_t type = GPOINTER_TO_UINT(user_data);
-
-	if (!service->shared)
-		return FALSE;
 
 	if (service->type == type)
 		return TRUE;
@@ -1936,7 +1932,6 @@ bool qmi_result_get_uint64(struct qmi_result *result, uint8_t type,
 struct service_create_data {
 	struct discovery super;
 	struct qmi_device *device;
-	bool shared;
 	uint8_t type;
 	uint16_t major;
 	uint16_t minor;
@@ -2007,7 +2002,6 @@ static void service_create_callback(uint16_t message, uint16_t length,
 
 	service->ref_count = 1;
 	service->device = data->device;
-	service->shared = data->shared;
 
 	service->type = data->type;
 	service->major = data->major;
@@ -2030,7 +2024,7 @@ done:
 	__qmi_device_discovery_complete(data->device, &data->super);
 }
 
-static bool service_create(struct qmi_device *device, bool shared,
+static bool service_create(struct qmi_device *device,
 				uint8_t type, qmi_create_func_t func,
 				void *user_data, qmi_destroy_func_t destroy)
 {
@@ -2048,7 +2042,6 @@ static bool service_create(struct qmi_device *device, bool shared,
 
 	data->super.destroy = service_create_data_free;
 	data->device = device;
-	data->shared = shared;
 	data->type = type;
 	data->func = func;
 	data->user_data = user_data;
@@ -2075,19 +2068,6 @@ static bool service_create(struct qmi_device *device, bool shared,
 	__qmi_device_discovery_started(device, &data->super);
 
 	return true;
-}
-
-bool qmi_service_create(struct qmi_device *device,
-				uint8_t type, qmi_create_func_t func,
-				void *user_data, qmi_destroy_func_t destroy)
-{
-	if (!device || !func)
-		return false;
-
-	if (type == QMI_SERVICE_CONTROL)
-		return false;
-
-	return service_create(device, false, type, func, user_data, destroy);
 }
 
 struct service_create_shared_data {
@@ -2165,7 +2145,15 @@ bool qmi_service_create_shared(struct qmi_device *device,
 		return 0;
 	}
 
-	return service_create(device, true, type, func, user_data, destroy);
+	return service_create(device, type, func, user_data, destroy);
+}
+
+bool qmi_service_create(struct qmi_device *device,
+				uint8_t type, qmi_create_func_t func,
+				void *user_data, qmi_destroy_func_t destroy)
+{
+	return qmi_service_create_shared(device, type, func,
+						user_data, destroy);
 }
 
 static void service_release_callback(uint16_t message, uint16_t length,
