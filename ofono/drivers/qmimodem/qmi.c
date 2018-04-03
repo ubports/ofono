@@ -47,6 +47,13 @@ struct discovery {
 	qmi_destroy_func_t destroy;
 };
 
+struct qmi_version {
+	uint8_t type;
+	uint16_t major;
+	uint16_t minor;
+	const char *name;
+};
+
 struct qmi_device {
 	int ref_count;
 	int fd;
@@ -1102,6 +1109,41 @@ static const void *tlv_get(const void *data, uint16_t size,
 	return NULL;
 }
 
+bool qmi_device_get_service_version(struct qmi_device *device, uint8_t type,
+					uint16_t *major, uint16_t *minor)
+{
+	struct qmi_version *info;
+	int i;
+
+	for (i = 0, info = device->version_list;
+			i < device->version_count;
+			i++, info++) {
+		if (info->type == type) {
+			*major = info->major;
+			*minor = info->minor;
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool qmi_device_has_service(struct qmi_device *device, uint8_t type)
+{
+	struct qmi_version *info;
+	int i;
+
+	for (i = 0, info = device->version_list;
+			i < device->version_count;
+			i++, info++) {
+		if (info->type == type) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 struct discover_data {
 	struct discovery super;
 	struct qmi_device *device;
@@ -1201,7 +1243,7 @@ done:
 	device->version_count = count;
 
 	if (data->func)
-		data->func(count, list, data->user_data);
+		data->func(data->user_data);
 
 	__qmi_device_discovery_complete(data->device, &data->super);
 }
@@ -1237,8 +1279,7 @@ static gboolean discover_reply(gpointer user_data)
 	}
 
 	if (data->func)
-		data->func(device->version_count,
-				device->version_list, data->user_data);
+		data->func(data->user_data);
 
 	__qmi_device_discovery_complete(data->device, &data->super);
 	__request_free(req, NULL);
