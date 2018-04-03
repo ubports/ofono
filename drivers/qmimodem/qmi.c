@@ -170,9 +170,7 @@ static struct qmi_request *__request_alloc(uint8_t service,
 	struct qmi_message_hdr *msg;
 	uint16_t headroom;
 
-	req = g_try_new0(struct qmi_request, 1);
-	if (!req)
-		return NULL;
+	req = g_new0(struct qmi_request, 1);
 
 	if (service == QMI_SERVICE_CONTROL)
 		headroom = QMI_CONTROL_HDR_SIZE;
@@ -181,11 +179,7 @@ static struct qmi_request *__request_alloc(uint8_t service,
 
 	req->len = QMI_MUX_HDR_SIZE + headroom + QMI_MESSAGE_HDR_SIZE + length;
 
-	req->buf = g_try_malloc(req->len);
-	if (!req->buf) {
-		g_free(req);
-		return NULL;
-	}
+	req->buf = g_malloc(req->len);
 
 	req->client = client;
 
@@ -1282,10 +1276,6 @@ bool qmi_device_discover(struct qmi_device *device, qmi_discover_func_t func,
 	req = __request_alloc(QMI_SERVICE_CONTROL, 0x00,
 			QMI_CTL_GET_VERSION_INFO,
 			NULL, 0, discover_callback, data, (void **) &hdr);
-	if (!req) {
-		g_free(data);
-		return false;
-	}
 
 	data->tid = hdr->transaction;
 
@@ -1309,10 +1299,6 @@ static void release_client(struct qmi_device *device,
 			QMI_CTL_RELEASE_CLIENT_ID,
 			release_req, sizeof(release_req),
 			func, user_data, (void **) &hdr);
-	if (!req) {
-		func(0x0000, 0x0000, NULL, user_data);
-		return;
-	}
 
 	__request_submit(device, req);
 }
@@ -2028,15 +2014,6 @@ static void service_create_discover(uint8_t count,
 			QMI_CTL_GET_CLIENT_ID,
 			client_req, sizeof(client_req),
 			service_create_callback, data, (void **) &hdr);
-	if (!req) {
-		if (data->timeout > 0)
-			g_source_remove(data->timeout);
-
-		data->timeout = g_timeout_add_seconds(0,
-						service_create_reply, data);
-		__qmi_device_discovery_started(device, &data->super);
-		return;
-	}
 
 	__request_submit(device, req);
 }
@@ -2319,11 +2296,6 @@ uint16_t qmi_service_send(struct qmi_service *service,
 				param ? param->data : NULL,
 				param ? param->length : 0,
 				service_send_callback, data, (void **) &hdr);
-
-	if (!req) {
-		g_free(data);
-		return 0;
-	}
 
 	qmi_param_free(param);
 
