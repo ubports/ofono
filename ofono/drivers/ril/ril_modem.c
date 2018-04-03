@@ -468,11 +468,12 @@ struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *log_prefix,
 			/*
 			 * With some RIL implementations, querying available
 			 * band modes causes some magic Android properties to
-			 * appear. Otherwise this request is pretty harmless
-			 * and useless.
+			 * appear.
 			 */
-			grilio_queue_send_request(md->q, NULL,
-				RIL_REQUEST_QUERY_AVAILABLE_BAND_MODE);
+			if (config->query_available_band_mode) {
+				grilio_queue_send_request(md->q, NULL,
+					RIL_REQUEST_QUERY_AVAILABLE_BAND_MODE);
+			}
 
 			ril_modem_update_radio_settings(md);
 			return modem;

@@ -75,6 +75,7 @@
 #define RILMODEM_DEFAULT_DATA_CALL_RETRY_LIMIT 4
 #define RILMODEM_DEFAULT_DATA_CALL_RETRY_DELAY 200 /* ms */
 #define RILMODEM_DEFAULT_EMPTY_PIN_QUERY TRUE /* optimistic */
+#define RILMODEM_DEFAULT_QUERY_AVAILABLE_BAND_MODE TRUE /* Qualcomm */
 #define RILMODEM_DEFAULT_LEGACY_IMEI_QUERY FALSE
 
 /*
@@ -1164,15 +1165,18 @@ static ril_slot *ril_plugin_slot_new_take(char *sockpath, char *path,
 						char *name, guint slot_index)
 {
 	ril_slot *slot = g_new0(ril_slot, 1);
+	struct ril_slot_config *config = &slot->config;
 
 	slot->sockpath = sockpath;
 	slot->path = path;
 	slot->name = name;
-	slot->config.slot = slot_index;
-	slot->config.techs = RILMODEM_DEFAULT_TECHS;
-	slot->config.empty_pin_query = RILMODEM_DEFAULT_EMPTY_PIN_QUERY;
-	slot->config.enable_voicecall = RILMODEM_DEFAULT_ENABLE_VOICECALL;
-	slot->config.enable_cbs = RILMODEM_DEFAULT_ENABLE_CBS;
+	config->slot = slot_index;
+	config->techs = RILMODEM_DEFAULT_TECHS;
+	config->empty_pin_query = RILMODEM_DEFAULT_EMPTY_PIN_QUERY;
+	config->enable_voicecall = RILMODEM_DEFAULT_ENABLE_VOICECALL;
+	config->enable_cbs = RILMODEM_DEFAULT_ENABLE_CBS;
+	config->query_available_band_mode =
+		RILMODEM_DEFAULT_QUERY_AVAILABLE_BAND_MODE;
 	slot->timeout = RILMODEM_DEFAULT_TIMEOUT;
 	slot->sim_flags = RILMODEM_DEFAULT_SIM_FLAGS;
 	slot->legacy_imei_query = RILMODEM_DEFAULT_LEGACY_IMEI_QUERY;
@@ -1208,14 +1212,18 @@ static void ril_plugin_slot_apply_vendor_defaults(ril_slot *slot)
 
 		/* Let the vendor extension to adjust (some) defaults */
 		memset(&defaults, 0, sizeof(defaults));
+		defaults.legacy_imei_query = slot->legacy_imei_query;
 		defaults.enable_cbs = config->enable_cbs;
 		defaults.empty_pin_query = config->empty_pin_query;
-		defaults.legacy_imei_query = slot->legacy_imei_query;
+		defaults.query_available_band_mode =
+			config->query_available_band_mode;
 
 		ril_vendor_get_defaults(slot->vendor, &defaults);
+		slot->legacy_imei_query = defaults.legacy_imei_query;
 		config->enable_cbs = defaults.enable_cbs;
 		config->empty_pin_query = defaults.empty_pin_query;
-		slot->legacy_imei_query = defaults.legacy_imei_query;
+		config->query_available_band_mode =
+			defaults.query_available_band_mode;
 	}
 }
 
