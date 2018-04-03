@@ -701,10 +701,30 @@ static void wakeup_writer(struct qmi_device *device)
 				can_write_data, device, write_watch_destroy);
 }
 
-static void __request_submit(struct qmi_device *device,
-				struct qmi_request *req, uint16_t transaction)
+static void __request_submit(struct qmi_device *device, struct qmi_request *req)
 {
-	req->tid = transaction;
+	struct qmi_mux_hdr *mux;
+
+	mux = req->buf;
+
+	if (mux->service == QMI_SERVICE_CONTROL) {
+		struct qmi_control_hdr *hdr;
+
+		hdr = req->buf + QMI_MUX_HDR_SIZE;
+		hdr->type = 0x00;
+		hdr->transaction = device->next_control_tid++;
+		if (device->next_control_tid == 0)
+			device->next_control_tid = 1;
+		req->tid = hdr->transaction;
+	} else {
+		struct qmi_service_hdr *hdr;
+		hdr = req->buf + QMI_MUX_HDR_SIZE;
+		hdr->type = 0x00;
+		hdr->transaction = device->next_service_tid++;
+		if (device->next_service_tid < 256)
+			device->next_service_tid = 256;
+		req->tid = hdr->transaction;
+	}
 
 	g_queue_push_tail(device->req_queue, req);
 
@@ -966,6 +986,9 @@ struct qmi_device *qmi_device_new(int fd)
 
 	device->service_list = g_hash_table_new_full(g_direct_hash,
 					g_direct_equal, NULL, service_destroy);
+
+	device->next_control_tid = 1;
+	device->next_service_tid = 256;
 
 	return device;
 }
@@ -1264,14 +1287,9 @@ bool qmi_device_discover(struct qmi_device *device, qmi_discover_func_t func,
 		return false;
 	}
 
-	if (device->next_control_tid < 1)
-		device->next_control_tid = 1;
-
-	hdr->type = 0x00;
-	hdr->transaction = device->next_control_tid++;
 	data->tid = hdr->transaction;
 
-	__request_submit(device, req, hdr->transaction);
+	__request_submit(device, req);
 
 	data->timeout = g_timeout_add_seconds(5, discover_reply, data);
 	__qmi_device_discovery_started(device, &data->super);
@@ -1296,13 +1314,7 @@ static void release_client(struct qmi_device *device,
 		return;
 	}
 
-	if (device->next_control_tid < 1)
-		device->next_control_tid = 1;
-
-	hdr->type = 0x00;
-	hdr->transaction = device->next_control_tid++;
-
-	__request_submit(device, req, hdr->transaction);
+	__request_submit(device, req);
 }
 
 static void shutdown_destroy(gpointer user_data)
@@ -1397,13 +1409,7 @@ bool qmi_device_sync(struct qmi_device *device,
 			NULL, 0,
 			qmi_device_sync_callback, func_data, (void **) &hdr);
 
-	if (device->next_control_tid < 1)
-		device->next_control_tid = 1;
-
-	hdr->type = 0x00;
-	hdr->transaction = device->next_control_tid++;
-
-	__request_submit(device, req, hdr->transaction);
+	__request_submit(device, req);
 
 	return true;
 }
@@ -2032,13 +2038,7 @@ static void service_create_discover(uint8_t count,
 		return;
 	}
 
-	if (device->next_control_tid < 1)
-		device->next_control_tid = 1;
-
-	hdr->type = 0x00;
-	hdr->transaction = device->next_control_tid++;
-
-	__request_submit(device, req, hdr->transaction);
+	__request_submit(device, req);
 }
 
 static bool service_create(struct qmi_device *device, bool shared,
@@ -2327,13 +2327,7 @@ uint16_t qmi_service_send(struct qmi_service *service,
 
 	qmi_param_free(param);
 
-	if (device->next_service_tid < 256)
-		device->next_service_tid = 256;
-
-	hdr->type = 0x00;
-	hdr->transaction = device->next_service_tid++;
-
-	__request_submit(device, req, hdr->transaction);
+	__request_submit(device, req);
 
 	return hdr->transaction;
 }
