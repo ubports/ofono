@@ -406,6 +406,16 @@ static gboolean ril_vendor_mtk_data_call_parse_v6(struct ril_vendor_hook *hook,
 
 static void ril_vendor_mtk_get_defaults(struct ril_vendor_defaults *defaults)
 {
+	/*
+	 * With most Qualcomm RIL implementations, querying available band
+	 * modes causes some magic Android properties to appear. Otherwise
+	 * this request is pretty harmless and useless.
+	 *
+	 * Most MediaTek RIL implementations don't support this request and
+	 * don't even bother to reply which slows things down because we wait
+	 * for this request to complete at startup.
+	 */
+	defaults->query_available_band_mode = FALSE;
 	defaults->empty_pin_query = FALSE;
 	defaults->legacy_imei_query = TRUE;
 }
