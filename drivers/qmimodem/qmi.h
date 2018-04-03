@@ -61,13 +61,6 @@ enum qmi_device_expected_data_format {
 	QMI_DEVICE_EXPECTED_DATA_FORMAT_RAW_IP,
 };
 
-struct qmi_version {
-	uint8_t type;
-	uint16_t major;
-	uint16_t minor;
-	const char *name;
-};
-
 void qmi_free(void *ptr);
 
 typedef void (*qmi_destroy_func_t)(void *user_data);
@@ -78,8 +71,7 @@ struct qmi_device;
 typedef void (*qmi_debug_func_t)(const char *str, void *user_data);
 typedef void (*qmi_sync_func_t)(void *user_data);
 typedef void (*qmi_shutdown_func_t)(void *user_data);
-typedef void (*qmi_discover_func_t)(uint8_t count,
-			const struct qmi_version *list, void *user_data);
+typedef void (*qmi_discover_func_t)(void *user_data);
 
 struct qmi_device *qmi_device_new(int fd);
 
@@ -95,6 +87,10 @@ bool qmi_device_discover(struct qmi_device *device, qmi_discover_func_t func,
 				void *user_data, qmi_destroy_func_t destroy);
 bool qmi_device_shutdown(struct qmi_device *device, qmi_shutdown_func_t func,
 				void *user_data, qmi_destroy_func_t destroy);
+
+bool qmi_device_has_service(struct qmi_device *device, uint8_t type);
+bool qmi_device_get_service_version(struct qmi_device *device, uint8_t type,
+					uint16_t *major, uint16_t *minor);
 
 bool qmi_device_sync(struct qmi_device *device,
 		     qmi_sync_func_t func, void *user_data);
