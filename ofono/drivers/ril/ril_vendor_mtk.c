@@ -229,7 +229,7 @@ static GRilIoRequest *ril_vendor_mtk_build_set_attach_apn_req
 
 	grilio_request_append_utf8(req, ""); /* operatorNumeric */
 	grilio_request_append_int32(req, FALSE); /* canHandleIms */
-	grilio_request_append_int32(req, 0); /* Some sort of count */
+	grilio_request_append_int32(req, -1); /* dualApnPlmnList */
 
 	return req;
 }
