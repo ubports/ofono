@@ -612,9 +612,10 @@ static void query_passwd_state_cb(struct qmi_result *result,
 	case GET_CARD_STATUS_RESULT_OK:
 		DBG("passwd state %d", sim_stat.passwd_state);
 		data->retry_count = 0;
-		if (sim_stat.passwd_state == OFONO_SIM_PASSWORD_INVALID)
+		if (sim_stat.passwd_state == OFONO_SIM_PASSWORD_INVALID) {
 			CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
-		else
+			ofono_sim_inserted_notify(sim, FALSE);
+		} else
 			CALLBACK_WITH_SUCCESS(cb, sim_stat.passwd_state,
 								cbd->data);
 		break;
@@ -626,6 +627,7 @@ static void query_passwd_state_cb(struct qmi_result *result,
 							sim_stat.card_state);
 			data->retry_count = 0;
 			CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
+			ofono_sim_inserted_notify(sim, FALSE);
 		} else {
 			DBG("Retry command");
 			retry_cbd = cb_data_new(cb, cbd->data);
@@ -639,6 +641,7 @@ static void query_passwd_state_cb(struct qmi_result *result,
 		DBG("Command failed");
 		data->retry_count = 0;
 		CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
+		ofono_sim_inserted_notify(sim, FALSE);
 		break;
 	}
 }
