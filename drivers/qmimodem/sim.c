@@ -493,8 +493,15 @@ static bool get_card_status(const struct qmi_uim_slot_info *slot,
 	case 0x03:	/* PUK1 or PUK for UPIN is required */
 		sim_stat->passwd_state = OFONO_SIM_PASSWORD_SIM_PUK;
 		break;
+	case 0x00:	/* Unknown */
+	case 0x01:	/* Detected */
 	case 0x04:	/* Personalization state must be checked. */
-		/* This is temporary, we could retry and get another result */
+	case 0x05:	/* PIN1 blocked */
+	case 0x06:	/* Illegal */
+		/*
+		 * This could be temporary, we should retry and
+		 * expect another result
+		 */
 		sim_stat->passwd_state = OFONO_SIM_PASSWORD_INVALID;
 		need_retry = true;
 		break;
@@ -605,12 +612,18 @@ static void query_passwd_state_cb(struct qmi_result *result,
 	case GET_CARD_STATUS_RESULT_OK:
 		DBG("passwd state %d", sim_stat.passwd_state);
 		data->retry_count = 0;
-		CALLBACK_WITH_SUCCESS(cb, sim_stat.passwd_state, cbd->data);
+		if (sim_stat.passwd_state == OFONO_SIM_PASSWORD_INVALID)
+			CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
+		else
+			CALLBACK_WITH_SUCCESS(cb, sim_stat.passwd_state,
+								cbd->data);
 		break;
 	case GET_CARD_STATUS_RESULT_TEMP_ERROR:
 		data->retry_count++;
 		if (data->retry_count > MAX_RETRY_COUNT) {
-			DBG("Failed after %d attempts", data->retry_count);
+			DBG("Failed after %d attempts. Card state:%d",
+							data->retry_count,
+							sim_stat.card_state);
 			data->retry_count = 0;
 			CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
 		} else {
