@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2017 Jolla Ltd.
+ *  Copyright (C) 2017-2018 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -471,13 +471,16 @@ struct ril_radio_caps *ril_radio_caps_new(struct ril_radio_caps_manager *mgr,
 		self->simcard_event_id[SIM_EVENT_STATE_CHANGED] =
 			ril_sim_card_add_state_changed_handler(sim,
 				ril_radio_caps_simcard_event, self);
+		self->simcard_event_id[SIM_EVENT_IO_ACTIVE_CHANGED] =
+			ril_sim_card_add_sim_io_active_changed_handler(sim,
+				ril_radio_caps_simcard_event, self);
 
 		self->network = ril_network_ref(net);
 		self->settings_event_id[SETTINGS_EVENT_PREF_MODE] =
 			ril_sim_settings_add_pref_mode_changed_handler(
 				settings, ril_radio_caps_settings_event, self);
 		self->settings_event_id[SETTINGS_EVENT_IMSI] =
-			ril_sim_settings_add_pref_mode_changed_handler(
+			ril_sim_settings_add_imsi_changed_handler(
 				settings, ril_radio_caps_settings_event, self);
 
 		self->max_pref_mode_event_id =

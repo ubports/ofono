@@ -81,6 +81,9 @@ static inline enum ril_app_type
 ril_sim_card_app_type(struct ril_sim_card *sc)
 	{ return (sc && sc->app) ? sc->app->app_type : RIL_APPTYPE_UNKNOWN; }
 
+#define ril_sim_card_remove_all_handlers(net, ids) \
+	ril_sim_card_remove_handlers(net, ids, G_N_ELEMENTS(ids))
+
 #endif /* RIL_SIM_CARD_H */
 
 /*
