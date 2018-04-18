@@ -47,6 +47,12 @@ enum ril_network_radio_event {
 	RADIO_EVENT_COUNT
 };
 
+enum ril_network_sim_events {
+	SIM_EVENT_STATUS_CHANGED,
+	SIM_EVENT_IO_ACTIVE_CHANGED,
+	SIM_EVENT_COUNT
+};
+
 enum ril_network_unsol_event {
 	UNSOL_EVENT_NETWORK_STATE,
 	UNSOL_EVENT_RADIO_CAPABILITY,
@@ -57,7 +63,7 @@ struct ril_network_priv {
 	GRilIoChannel *io;
 	GRilIoQueue *q;
 	struct ril_radio *radio;
-	struct ril_sim_card *sim_card;
+	struct ril_sim_card *simcard;
 	int rat;
 	char *log_prefix;
 	guint operator_poll_id;
@@ -68,8 +74,8 @@ struct ril_network_priv {
 	gulong set_rat_id;
 	gulong unsol_event_id[UNSOL_EVENT_COUNT];
 	gulong settings_event_id;
-	gulong sim_status_event_id;
 	gulong radio_event_id[RADIO_EVENT_COUNT];
+	gulong simcard_event_id[SIM_EVENT_COUNT];
 	struct ofono_network_operator operator;
 	gboolean assert_rat;
 };
@@ -497,7 +503,12 @@ static gboolean ril_network_can_set_pref_mode(struct ril_network *self)
 {
 	struct ril_network_priv *priv = self->priv;
 
-	return priv->radio->online && ril_sim_card_ready(priv->sim_card);
+	/*
+	 * With some modems an attempt to set rat significantly slows
+	 * down SIM I/O, let's avoid that.
+	 */
+	return priv->radio->online && ril_sim_card_ready(priv->simcard) &&
+					!priv->simcard->sim_io_active;
 }
 
 static gboolean ril_network_set_rat_holdoff_cb(gpointer user_data)
@@ -826,7 +837,7 @@ static void ril_network_sim_status_changed_cb(struct ril_sim_card *sc,
 
 struct ril_network *ril_network_new(const char *path, GRilIoChannel *io,
 			const char *log_prefix, struct ril_radio *radio,
-			struct ril_sim_card *sim_card,
+			struct ril_sim_card *simcard,
 			struct ril_sim_settings *settings)
 {
 	struct ril_network *self = g_object_new(RIL_NETWORK_TYPE, NULL);
@@ -836,7 +847,7 @@ struct ril_network *ril_network_new(const char *path, GRilIoChannel *io,
 	priv->io = grilio_channel_ref(io);
 	priv->q = grilio_queue_new(priv->io);
 	priv->radio = ril_radio_ref(radio);
-	priv->sim_card = ril_sim_card_ref(sim_card);
+	priv->simcard = ril_sim_card_ref(simcard);
 	priv->log_prefix = (log_prefix && log_prefix[0]) ?
 		g_strconcat(log_prefix, " ", NULL) : g_strdup("");
 	DBG_(self, "");
@@ -854,13 +865,15 @@ struct ril_network *ril_network_new(const char *path, GRilIoChannel *io,
 	priv->radio_event_id[RADIO_EVENT_ONLINE_CHANGED] =
 		ril_radio_add_online_changed_handler(priv->radio,
 			ril_network_radio_online_cb, self);
+	priv->simcard_event_id[SIM_EVENT_STATUS_CHANGED] =
+		ril_sim_card_add_status_changed_handler(priv->simcard,
+			ril_network_sim_status_changed_cb, self);
+	priv->simcard_event_id[SIM_EVENT_IO_ACTIVE_CHANGED] =
+		ril_sim_card_add_sim_io_active_changed_handler(priv->simcard,
+			ril_network_sim_status_changed_cb, self);
 	priv->settings_event_id =
 		ril_sim_settings_add_pref_mode_changed_handler(settings,
 			ril_network_pref_mode_changed_cb, self);
-	priv->sim_status_event_id =
-		ril_sim_card_add_status_changed_handler(priv->sim_card,
-			ril_network_sim_status_changed_cb, self);
-
 	/*
 	 * Query the initial state. Querying network state before the radio
 	 * has been turned on makes RIL unhappy.
@@ -916,16 +929,13 @@ static void ril_network_finalize(GObject *object)
 	}
 
 	grilio_queue_cancel_all(priv->q, FALSE);
-	grilio_channel_remove_handlers(priv->io, priv->unsol_event_id,
-					G_N_ELEMENTS(priv->unsol_event_id));
-
+	grilio_channel_remove_all_handlers(priv->io, priv->unsol_event_id);
 	grilio_channel_unref(priv->io);
 	grilio_queue_unref(priv->q);
 	ril_radio_remove_all_handlers(priv->radio, priv->radio_event_id);
 	ril_radio_unref(priv->radio);
-	ril_sim_card_remove_handler(priv->sim_card,
-						priv->sim_status_event_id);
-	ril_sim_card_unref(priv->sim_card);
+	ril_sim_card_remove_all_handlers(priv->simcard, priv->simcard_event_id);
+	ril_sim_card_unref(priv->simcard);
 	ril_sim_settings_remove_handler(self->settings,
 						priv->settings_event_id);
 	ril_sim_settings_unref(self->settings);
