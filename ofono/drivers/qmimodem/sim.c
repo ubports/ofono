@@ -557,7 +557,7 @@ static enum get_card_status_result handle_get_card_status_result(
 
 			index = GUINT16_FROM_LE(status->index_gw_pri);
 
-			if ((index & 0xff) == i && (index >> 8) == n) {
+			if ((index & 0xff) == n && (index >> 8) == i) {
 				if (get_card_status(slot, info1, info2,
 								sim_stat))
 					res = GET_CARD_STATUS_RESULT_TEMP_ERROR;
