@@ -204,6 +204,11 @@ static void gemalto_ciev_notify(GAtResult *result, gpointer user_data)
 					NULL);
 		break;
 
+	/* USIM initialization completed. UE has finished reading USIM data. */
+	case 5:
+	        ofono_sim_initialized_notify(sim);
+		break;
+
 	default:
 		break;
 	}
