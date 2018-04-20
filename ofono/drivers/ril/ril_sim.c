@@ -108,8 +108,9 @@ struct ril_sim_io_response {
 	guint data_len;
 };
 
-struct ril_sim_cbd {
+struct ril_sim_cbd_io {
 	struct ril_sim *sd;
+	struct ril_sim_card *card;
 	union _ofono_sim_cb {
 		ofono_sim_file_info_cb_t file_info;
 		ofono_sim_read_cb_t read;
@@ -179,22 +180,41 @@ static const struct ril_sim_retry_query ril_sim_retry_query_types[] = {
 
 #define DBG_(sd,fmt,args...) DBG("%s" fmt, (sd)->log_prefix, ##args)
 
-#define ril_sim_cbd_free g_free
-
 static inline struct ril_sim *ril_sim_get_data(struct ofono_sim *sim)
 {
 	return ofono_sim_get_data(sim);
 }
 
-static struct ril_sim_cbd *ril_sim_cbd_new(struct ril_sim *sd, void *cb,
+static struct ril_sim_cbd_io *ril_sim_cbd_io_new(struct ril_sim *sd, void *cb,
 								void *data)
 {
-	struct ril_sim_cbd *cbd = g_new0(struct ril_sim_cbd, 1);
+	struct ril_sim_cbd_io *cbd = g_new0(struct ril_sim_cbd_io, 1);
 
 	cbd->sd = sd;
 	cbd->cb.ptr = cb;
 	cbd->data = data;
+	cbd->card = ril_sim_card_ref(sd->card);
 	return cbd;
+}
+
+static void ril_sim_cbd_io_free(void *data)
+{
+
+	struct ril_sim_cbd_io *cbd = data;
+
+	ril_sim_card_sim_io_finished(cbd->card, cbd->req_id);
+	ril_sim_card_unref(cbd->card);
+	g_free(cbd);
+}
+
+static void ril_sim_cbd_io_start(struct ril_sim_cbd_io *cbd, GRilIoRequest* req,
+				guint code, GRilIoChannelResponseFunc cb)
+{
+	struct ril_sim *sd = cbd->sd;
+
+	cbd->req_id = grilio_queue_send_request_full(sd->q, req, code,
+						cb, ril_sim_cbd_io_free, cbd);
+	ril_sim_card_sim_io_started(cbd->card, cbd->req_id);
 }
 
 static void ril_sim_pin_cbd_state_event_count_cb(struct ril_sim_card *sc,
@@ -429,14 +449,13 @@ static void ril_sim_io_response_free(struct ril_sim_io_response *res)
 static void ril_sim_file_info_cb(GRilIoChannel *io, int status,
 			const void *data, guint len, void *user_data)
 {
-	struct ril_sim_cbd *cbd = user_data;
+	struct ril_sim_cbd_io *cbd = user_data;
 	ofono_sim_file_info_cb_t cb = cbd->cb.file_info;
 	struct ril_sim *sd = cbd->sd;
 	struct ril_sim_io_response *res = NULL;
 	struct ofono_error error;
 
 	DBG_(sd, "");
-	ril_sim_card_sim_io_finished(sd->card, cbd->req_id);
 
 	ril_error_init_failure(&error);
 	res = ril_sim_parse_io_response(data, len);
@@ -480,7 +499,7 @@ static void ril_sim_file_info_cb(GRilIoChannel *io, int status,
 static void ril_sim_request_io(struct ril_sim *sd, guint cmd, int fileid,
 		guint p1, guint p2, guint p3, const char *hex_data,
 		const guchar *path, guint path_len,
-		GRilIoChannelResponseFunc cb, struct ril_sim_cbd *cbd)
+		GRilIoChannelResponseFunc cb, struct ril_sim_cbd_io *cbd)
 {
 	GRilIoRequest *req = grilio_request_new();
 
@@ -499,9 +518,7 @@ static void ril_sim_request_io(struct ril_sim *sd, guint cmd, int fileid,
 
 	grilio_request_set_blocking(req, TRUE);
 	grilio_request_set_timeout(req, SIM_IO_TIMEOUT_SECS * 1000);
-	cbd->req_id = grilio_queue_send_request_full(sd->q, req,
-				RIL_REQUEST_SIM_IO, cb, ril_sim_cbd_free, cbd);
-	ril_sim_card_sim_io_started(sd->card, cbd->req_id);
+	ril_sim_cbd_io_start(cbd, req, RIL_REQUEST_SIM_IO, cb);
 	grilio_request_unref(req);
 }
 
@@ -511,19 +528,19 @@ static void ril_sim_ofono_read_file_info(struct ofono_sim *sim, int fileid,
 {
 	struct ril_sim *sd = ril_sim_get_data(sim);
 	ril_sim_request_io(sd, CMD_GET_RESPONSE, fileid, 0, 0, 15, NULL,
-		path, len, ril_sim_file_info_cb, ril_sim_cbd_new(sd, cb, data));
+				path, len, ril_sim_file_info_cb,
+				ril_sim_cbd_io_new(sd, cb, data));
 }
 
 static void ril_sim_read_cb(GRilIoChannel *io, int status,
 				const void *data, guint len, void *user_data)
 {
-	struct ril_sim_cbd *cbd = user_data;
+	struct ril_sim_cbd_io *cbd = user_data;
 	ofono_sim_read_cb_t cb = cbd->cb.read;
 	struct ril_sim_io_response *res;
 	struct ofono_error err;
 
 	DBG_(cbd->sd, "");
-	ril_sim_card_sim_io_finished(cbd->sd->card, cbd->req_id);
 
 	res = ril_sim_parse_io_response(data, len);
 	if (ril_sim_io_response_ok(res) && status == RIL_E_SUCCESS) {
@@ -542,7 +559,7 @@ static void ril_sim_read(struct ofono_sim *sim, guint cmd, int fileid,
 {
 	struct ril_sim *sd = ril_sim_get_data(sim);
 	ril_sim_request_io(sd, cmd, fileid, p1, p2, p3, NULL, path, path_len,
-			ril_sim_read_cb, ril_sim_cbd_new(sd, cb, data));
+			ril_sim_read_cb, ril_sim_cbd_io_new(sd, cb, data));
 }
 
 static void ril_sim_ofono_read_file_transparent(struct ofono_sim *sim,
@@ -572,13 +589,12 @@ static void ril_sim_ofono_read_file_cyclic(struct ofono_sim *sim, int fileid,
 static void ril_sim_write_cb(GRilIoChannel *io, int status,
 				const void *data, guint len, void *user_data)
 {
-	struct ril_sim_cbd *cbd = user_data;
+	struct ril_sim_cbd_io *cbd = user_data;
 	ofono_sim_write_cb_t cb = cbd->cb.write;
 	struct ril_sim_io_response *res;
 	struct ofono_error err;
 
 	DBG_(cbd->sd, "");
-	ril_sim_card_sim_io_finished(cbd->sd->card, cbd->req_id);
 
 	res = ril_sim_parse_io_response(data, len);
 	if (ril_sim_io_response_ok(res) && status == RIL_E_SUCCESS) {
@@ -599,7 +615,7 @@ static void ril_sim_write(struct ofono_sim *sim, guint cmd, int fileid,
 	struct ril_sim *sd = ril_sim_get_data(sim);
 	char *hex_data = encode_hex(value, length, 0);
 	ril_sim_request_io(sd, cmd, fileid, p1, p2, length, hex_data, path,
-		path_len, ril_sim_write_cb, ril_sim_cbd_new(sd, cb, data));
+		path_len, ril_sim_write_cb, ril_sim_cbd_io_new(sd, cb, data));
 	g_free(hex_data);
 }
 
@@ -636,11 +652,9 @@ static void ril_sim_write_file_cyclic(struct ofono_sim *sim, int fileid,
 static void ril_sim_get_imsi_cb(GRilIoChannel *io, int status,
 				const void *data, guint len, void *user_data)
 {
-	struct ril_sim_cbd *cbd = user_data;
+	struct ril_sim_cbd_io *cbd = user_data;
 	ofono_sim_imsi_cb_t cb = cbd->cb.imsi;
 	struct ofono_error error;
-
-	ril_sim_card_sim_io_finished(cbd->sd->card, cbd->req_id);
 
 	if (status == RIL_E_SUCCESS) {
 		gchar *imsi;
@@ -667,7 +681,7 @@ static void ril_sim_read_imsi(struct ofono_sim *sim, ofono_sim_imsi_cb_t cb,
 {
 	struct ril_sim *sd = ril_sim_get_data(sim);
 	const char *app_id = ril_sim_app_id(sd);
-	struct ril_sim_cbd *cbd = ril_sim_cbd_new(sd, cb, data);
+	struct ril_sim_cbd_io *cbd = ril_sim_cbd_io_new(sd, cb, data);
 	GRilIoRequest *req = grilio_request_array_utf8_new(1, app_id);
 
 	DBG_(sd, "%s", app_id);
@@ -679,10 +693,8 @@ static void ril_sim_read_imsi(struct ofono_sim *sim, ofono_sim_imsi_cb_t cb,
 	 */
 	grilio_request_set_retry(req, RIL_RETRY_MS, -1);
 	grilio_request_set_blocking(req, TRUE);
-	cbd->req_id = grilio_queue_send_request_full(sd->q, req,
-				RIL_REQUEST_GET_IMSI, ril_sim_get_imsi_cb,
-				ril_sim_cbd_free, cbd);
-	ril_sim_card_sim_io_started(sd->card, cbd->req_id);
+	ril_sim_cbd_io_start(cbd, req, RIL_REQUEST_GET_IMSI,
+						ril_sim_get_imsi_cb);
 	grilio_request_unref(req);
 }
 
@@ -1365,10 +1377,8 @@ static void ril_sim_query_facility_lock_cb(GRilIoChannel *io, int status,
 				const void *data, guint len, void *user_data)
 {
 	struct ofono_error error;
-	struct ril_sim_cbd *cbd = user_data;
+	struct ril_sim_cbd_io *cbd = user_data;
 	ofono_query_facility_lock_cb_t cb = cbd->cb.query_facility_lock;
-
-	ril_sim_card_sim_io_finished(cbd->sd->card, cbd->req_id);
 
 	if (status == RIL_E_SUCCESS) {
 		int locked = 0;
@@ -1399,7 +1409,7 @@ static void ril_sim_query_facility_lock(struct ofono_sim *sim,
 {
 	struct ril_sim *sd = ril_sim_get_data(sim);
 	const char *type_str = ril_sim_facility_code(type);
-	struct ril_sim_cbd *cbd = ril_sim_cbd_new(sd, cb, data);
+	struct ril_sim_cbd_io *cbd = ril_sim_cbd_io_new(sd, cb, data);
 	GRilIoRequest *req = grilio_request_array_utf8_new(4,
 			type_str, "", "0" /* class */, ril_sim_app_id(sd));
 
@@ -1409,10 +1419,8 @@ static void ril_sim_query_facility_lock(struct ofono_sim *sim,
 	grilio_request_set_retry_func(req, ril_sim_query_facility_lock_retry);
 
 	DBG_(sd, "%s", type_str);
-	cbd->req_id = grilio_queue_send_request_full(sd->q, req,
-		RIL_REQUEST_QUERY_FACILITY_LOCK, ril_sim_query_facility_lock_cb,
-		ril_sim_cbd_free, cbd);
-	ril_sim_card_sim_io_started(sd->card, cbd->req_id);
+	ril_sim_cbd_io_start(cbd, req, RIL_REQUEST_QUERY_FACILITY_LOCK,
+					ril_sim_query_facility_lock_cb);
 	grilio_request_unref(req);
 }
 
