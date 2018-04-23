@@ -417,13 +417,18 @@ void ofono_ussd_notify(struct ofono_ussd *ussd, int status, int dcs,
 	}
 
 	if (status == OFONO_USSD_STATUS_TERMINATED) {
-		ussd_change_state(ussd, USSD_STATE_IDLE);
+		if (ussd->state == USSD_STATE_ACTIVE && data && data_len > 0) {
+			/* Interpret that as a Notify */
+			status = OFONO_USSD_STATUS_NOTIFY;
+		} else {
+			ussd_change_state(ussd, USSD_STATE_IDLE);
 
-		if (ussd->pending == NULL)
-			return;
+			if (ussd->pending == NULL)
+				return;
 
-		reply = __ofono_error_network_terminated(ussd->pending);
-		goto out;
+			reply = __ofono_error_network_terminated(ussd->pending);
+			goto out;
+		}
 	}
 
 	if (status == OFONO_USSD_STATUS_NOT_SUPPORTED) {
