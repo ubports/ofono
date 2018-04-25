@@ -31,7 +31,6 @@
 #include "common.h"
 
 #define SET_PREF_MODE_HOLDOFF_SEC RIL_RETRY_SECS
-#define SET_PREF_MODE_TIMEOUT_MS  (60*1000)
 
 typedef GObjectClass RilNetworkClass;
 typedef struct ril_network RilNetwork;
@@ -67,6 +66,7 @@ struct ril_network_priv {
 	struct ril_sim_card *simcard;
 	int rat;
 	int lte_network_mode;
+	int network_mode_timeout;
 	char *log_prefix;
 	guint operator_poll_id;
 	guint voice_poll_id;
@@ -560,7 +560,7 @@ static void ril_network_set_rat(struct ril_network *self, int rat)
 		grilio_request_append_int32(req, 1);   /* count */
 		grilio_request_append_int32(req, rat);
 
-		grilio_request_set_timeout(req, SET_PREF_MODE_TIMEOUT_MS);
+		grilio_request_set_timeout(req, priv->network_mode_timeout);
 		priv->set_rat_id = grilio_queue_send_request_full(priv->q, req,
 					RIL_REQUEST_SET_PREFERRED_NETWORK_TYPE,
 					ril_network_set_rat_cb, NULL, self);
@@ -865,6 +865,12 @@ struct ril_network *ril_network_new(const char *path, GRilIoChannel *io,
 	priv->log_prefix = (log_prefix && log_prefix[0]) ?
 		g_strconcat(log_prefix, " ", NULL) : g_strdup("");
 	DBG_(self, "");
+
+	/* Copy relevant config values */
+	priv->lte_network_mode = config->lte_network_mode;
+	priv->network_mode_timeout = config->network_mode_timeout;
+
+	/* Register listeners */
 	priv->unsol_event_id[UNSOL_EVENT_NETWORK_STATE] =
 		grilio_channel_add_unsol_event_handler(priv->io,
 			ril_network_state_changed_cb,
@@ -888,7 +894,6 @@ struct ril_network *ril_network_new(const char *path, GRilIoChannel *io,
 	priv->settings_event_id =
 		ril_sim_settings_add_pref_mode_changed_handler(settings,
 			ril_network_pref_mode_changed_cb, self);
-	priv->lte_network_mode = config->lte_network_mode;
 
 	/*
 	 * Query the initial state. Querying network state before the radio

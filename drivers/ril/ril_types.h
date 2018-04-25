@@ -52,6 +52,7 @@ struct ril_slot_config {
 	guint slot;
 	enum ofono_radio_access_mode techs;
 	int lte_network_mode;
+	int network_mode_timeout;
 	gboolean query_available_band_mode;
 	gboolean empty_pin_query;
 	gboolean enable_voicecall;
