@@ -63,6 +63,7 @@
 #define RILMODEM_DEFAULT_SOCK2      "/dev/socket/rild2"
 #define RILMODEM_DEFAULT_SUB        "SUB1"
 #define RILMODEM_DEFAULT_TECHS      OFONO_RADIO_ACCESS_MODE_ALL
+#define RILMODEM_DEFAULT_LTE_MODE   PREF_NET_TYPE_LTE_GSM_WCDMA
 #define RILMODEM_DEFAULT_ENABLE_VOICECALL TRUE
 #define RILMODEM_DEFAULT_ENABLE_CBS TRUE
 #define RILMODEM_DEFAULT_SLOT       0xffffffff
@@ -101,6 +102,7 @@
 #define RILCONF_ENABLE_VOICECALL    "enableVoicecall"
 #define RILCONF_ENABLE_CBS          "enableCellBroadcast"
 #define RILCONF_TECHNOLOGIES        "technologies"
+#define RILCONF_LTEMODE             "lteNetworkMode"
 #define RILCONF_UICC_WORKAROUND     "uiccWorkaround"
 #define RILCONF_ECCLIST_FILE        "ecclistFile"
 #define RILCONF_ALLOW_DATA_REQ      "allowDataReq"
@@ -981,7 +983,8 @@ static void ril_plugin_slot_connected(ril_slot *slot)
 
 	GASSERT(!slot->network);
 	slot->network = ril_network_new(slot->path, slot->io, log_prefix,
-			slot->radio, slot->sim_card, slot->sim_settings);
+			slot->radio, slot->sim_card, slot->sim_settings, 
+			&slot->config);
 
 	GASSERT(!slot->vendor_hook);
 	slot->vendor_hook = ril_vendor_create_hook(slot->vendor, slot->io,
@@ -1172,6 +1175,7 @@ static ril_slot *ril_plugin_slot_new_take(char *sockpath, char *path,
 	slot->name = name;
 	config->slot = slot_index;
 	config->techs = RILMODEM_DEFAULT_TECHS;
+	config->lte_network_mode = RILMODEM_DEFAULT_LTE_MODE;
 	config->empty_pin_query = RILMODEM_DEFAULT_EMPTY_PIN_QUERY;
 	config->enable_voicecall = RILMODEM_DEFAULT_ENABLE_VOICECALL;
 	config->enable_cbs = RILMODEM_DEFAULT_ENABLE_CBS;
@@ -1376,6 +1380,12 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 			config->techs |= m;
 		}
 		g_strfreev(strv);
+	}
+	
+	/* lteNetworkMode */
+	if (ril_config_get_integer(file, group, RILCONF_LTEMODE,
+					&config->lte_network_mode)) {
+		DBG("%s: lteNetworkMode %i", group, slot->config.lte_network_mode);
 	}
 
 	/* enable4G (deprecated but still supported) */
