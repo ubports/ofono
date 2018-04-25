@@ -66,6 +66,7 @@ struct ril_network_priv {
 	struct ril_sim_card *simcard;
 	int rat;
 	int lte_network_mode;
+	int network_mode_timeout;
 	char *log_prefix;
 	guint operator_poll_id;
 	guint voice_poll_id;
@@ -118,7 +119,8 @@ G_STATIC_ASSERT(OFONO_RADIO_ACCESS_MODE_UMTS > OFONO_RADIO_ACCESS_MODE_GSM);
 G_STATIC_ASSERT(OFONO_RADIO_ACCESS_MODE_LTE > OFONO_RADIO_ACCESS_MODE_UMTS);
 
 static void ril_network_query_pref_mode(struct ril_network *self);
-static void ril_network_set_pref_mode(struct ril_network *self, int rat);
+static void ril_network_check_pref_mode(struct ril_network *self,
+							gboolean immediate);
 
 static void ril_network_emit(struct ril_network *self,
 						enum ril_network_signal sig)
@@ -509,37 +511,23 @@ static gboolean ril_network_can_set_pref_mode(struct ril_network *self)
 	 * down SIM I/O, let's avoid that.
 	 */
 	return priv->radio->online && ril_sim_card_ready(priv->simcard) &&
-					!priv->simcard->sim_io_active;
+				!priv->simcard->sim_io_active &&
+				!priv->timer[TIMER_SET_RAT_HOLDOFF] ;
 }
 
 static gboolean ril_network_set_rat_holdoff_cb(gpointer user_data)
 {
 	struct ril_network *self = RIL_NETWORK(user_data);
 	struct ril_network_priv *priv = self->priv;
-	const int rat = ril_network_pref_mode_expected(self);
 
-	DBG_(self, "rat mode %d, expected %d", priv->rat, rat);
 	GASSERT(priv->timer[TIMER_SET_RAT_HOLDOFF]);
 	priv->timer[TIMER_SET_RAT_HOLDOFF] = 0;
 
-	/*
-	 * Don't retry the request if modem is offline or SIM card isn't
-	 * ready, to avoid spamming system log with error messages. Radio
-	 * and SIM card state change callbacks will schedule a new check
-	 * when it's appropriate.
-	 */
-	if (priv->rat != rat || priv->assert_rat) {
-		if (ril_network_can_set_pref_mode(self)) {
-			ril_network_set_pref_mode(self, rat);
-		} else {
-			DBG_(self, "giving up");
-		}
-	}
-
+	ril_network_check_pref_mode(self, FALSE);
 	return G_SOURCE_REMOVE;
 }
 
-static void ril_network_set_pref_mode_cb(GRilIoChannel *io, int status,
+static void ril_network_set_rat_cb(GRilIoChannel *io, int status,
 				const void *data, guint len, void *user_data)
 {
 	struct ril_network *self = RIL_NETWORK(user_data);
@@ -554,33 +542,53 @@ static void ril_network_set_pref_mode_cb(GRilIoChannel *io, int status,
 	ril_network_query_pref_mode(self);
 }
 
+static void ril_network_set_rat(struct ril_network *self, int rat)
+{
+	struct ril_network_priv *priv = self->priv;
+
+	if (!priv->set_rat_id && priv->radio->online &&
+		ril_sim_card_ready(priv->simcard) &&
+		/*
+		 * With some modems an attempt to set rat significantly
+		 * slows down SIM I/O, let's avoid that.
+		 */
+		!priv->simcard->sim_io_active &&
+		!priv->timer[TIMER_SET_RAT_HOLDOFF]) {
+		GRilIoRequest *req = grilio_request_sized_new(8);
+
+		DBG_(self, "setting rat mode %d", rat);
+		grilio_request_append_int32(req, 1);   /* count */
+		grilio_request_append_int32(req, rat);
+
+		grilio_request_set_timeout(req, priv->network_mode_timeout);
+		priv->set_rat_id = grilio_queue_send_request_full(priv->q, req,
+					RIL_REQUEST_SET_PREFERRED_NETWORK_TYPE,
+					ril_network_set_rat_cb, NULL, self);
+		grilio_request_unref(req);
+
+		/* We have submitted the request, clear the assertion flag */
+		priv->assert_rat = FALSE;
+
+		/* And don't do it too often */
+		priv->timer[TIMER_SET_RAT_HOLDOFF] =
+			g_timeout_add_seconds(SET_PREF_MODE_HOLDOFF_SEC,
+				ril_network_set_rat_holdoff_cb, self);
+	} else {
+		DBG_(self, "need to set rat mode %d", rat);
+	}
+}
+
 static void ril_network_set_pref_mode(struct ril_network *self, int rat)
 {
 	struct ril_network_priv *priv = self->priv;
-	GRilIoRequest *req = grilio_request_sized_new(8);
 
-	DBG_(self, "setting rat mode %d", rat);
-	grilio_request_append_int32(req, 1);    /* Number of params */
-	grilio_request_append_int32(req, rat);
-
-	grilio_queue_cancel_request(priv->q, priv->set_rat_id, FALSE);
-	priv->set_rat_id = grilio_queue_send_request_full(priv->q, req,
-				RIL_REQUEST_SET_PREFERRED_NETWORK_TYPE,
-				ril_network_set_pref_mode_cb, NULL, self);
-	grilio_request_unref(req);
-
-	/* We have submitted the request, clear the assertion flag */
-	priv->assert_rat = FALSE;
-
-	/* Don't do it too often */
-	GASSERT(!priv->timer[TIMER_SET_RAT_HOLDOFF]);
-	priv->timer[TIMER_SET_RAT_HOLDOFF] =
-		g_timeout_add_seconds(SET_PREF_MODE_HOLDOFF_SEC,
-			ril_network_set_rat_holdoff_cb, self);
+	if (priv->rat != rat || priv->assert_rat) {
+		ril_network_set_rat(self, rat);
+	}
 }
 
 static void ril_network_check_pref_mode(struct ril_network *self,
-							gboolean force)
+							gboolean immediate)
 {
 	struct ril_network_priv *priv = self->priv;
 	const int rat = ril_network_pref_mode_expected(self);
@@ -592,10 +600,14 @@ static void ril_network_check_pref_mode(struct ril_network *self,
 		 * ril_network_pref_mode_changed_cb and is meant
 		 * to force radio tech check right now.
 		 */
-		force = TRUE;
+		immediate = TRUE;
 	}
 
-	if (priv->rat == rat || force) {
+	if (priv->rat != rat) {
+		DBG_(self, "rat mode %d, expected %d", priv->rat, rat);
+	}
+
+	if (immediate) {
 		ril_network_stop_timer(self, TIMER_SET_RAT_HOLDOFF);
 	}
 
@@ -853,6 +865,12 @@ struct ril_network *ril_network_new(const char *path, GRilIoChannel *io,
 	priv->log_prefix = (log_prefix && log_prefix[0]) ?
 		g_strconcat(log_prefix, " ", NULL) : g_strdup("");
 	DBG_(self, "");
+
+	/* Copy relevant config values */
+	priv->lte_network_mode = config->lte_network_mode;
+	priv->network_mode_timeout = config->network_mode_timeout;
+
+	/* Register listeners */
 	priv->unsol_event_id[UNSOL_EVENT_NETWORK_STATE] =
 		grilio_channel_add_unsol_event_handler(priv->io,
 			ril_network_state_changed_cb,
@@ -876,7 +894,6 @@ struct ril_network *ril_network_new(const char *path, GRilIoChannel *io,
 	priv->settings_event_id =
 		ril_sim_settings_add_pref_mode_changed_handler(settings,
 			ril_network_pref_mode_changed_cb, self);
-	priv->lte_network_mode = config->lte_network_mode;
 
 	/*
 	 * Query the initial state. Querying network state before the radio

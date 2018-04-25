@@ -71,6 +71,7 @@ struct ril_radio_caps {
 	gulong max_pref_mode_event_id;
 	gulong radio_event_id;
 	int tx_id;
+	int tx_pending;
 	struct ril_data *data;
 	struct ril_radio *radio;
 	struct ril_network *network;
@@ -85,7 +86,6 @@ typedef struct ril_radio_caps_manager {
 	GObject object;
 	GPtrArray *caps_list;
 	guint check_id;
-	int tx_pending;
 	int tx_id;
 	int tx_phase_index;
 	gboolean tx_failed;
@@ -453,7 +453,7 @@ struct ril_radio_caps *ril_radio_caps_new(struct ril_radio_caps_manager *mgr,
 		struct ril_radio_caps *self =
 			g_slice_new0(struct ril_radio_caps);
 
-		self->ref_count = 1;
+		g_atomic_int_set(&self->ref_count, 1);
 		self->slot = config->slot;
 		self->log_prefix = (log_prefix && log_prefix[0]) ?
 			g_strconcat(log_prefix, " ", NULL) : g_strdup("");
@@ -563,6 +563,24 @@ static void ril_radio_caps_manager_foreach_tx
 	}
 }
 
+static gboolean ril_radio_caps_manager_tx_pending
+				(struct ril_radio_caps_manager *self)
+{
+	guint i;
+	const GPtrArray *list = self->caps_list;
+
+	for (i = 0; i < list->len; i++) {
+		const struct ril_radio_caps *caps = list->pdata[i];
+
+		/* Ignore the modems not associated with this transaction */
+		if (caps->tx_id == self->tx_id && caps->tx_pending > 0) {
+			return TRUE;
+		}
+	}
+
+	return FALSE;
+}
+
 /**
  * Checks that all radio caps have been initialized (i.e. all the initial
  * GET_RADIO_CAPABILITY requests have completed) and there's no transaction
@@ -571,7 +589,7 @@ static void ril_radio_caps_manager_foreach_tx
 static gboolean ril_radio_caps_manager_can_check
 				(struct ril_radio_caps_manager *self)
 {
-	if (self->caps_list && !self->tx_pending) {
+	if (self->caps_list && !ril_radio_caps_manager_tx_pending(self)) {
 		const GPtrArray *list = self->caps_list;
 		const struct ril_radio_caps *prev_caps = NULL;
 		gboolean all_modes_equal = TRUE;
@@ -756,6 +774,10 @@ static void ril_radio_caps_manager_issue_requests
 				phase->send_new_cap ? &caps->new_cap :
 							&caps->old_cap;
 
+			/* Count it */
+			caps->tx_pending++;
+			DBG_(caps, "tx_pending=%d", caps->tx_pending);
+
 			/* Encode and send the request */
 			grilio_request_append_int32(req,
 					RIL_RADIO_CAPABILITY_VERSION);
@@ -769,9 +791,6 @@ static void ril_radio_caps_manager_issue_requests
 					RIL_REQUEST_SET_RADIO_CAPABILITY,
 					handler, NULL, caps);
 			grilio_request_unref(req);
-
-			/* Count it */
-			self->tx_pending++;
 		}
 	}
 }
@@ -794,7 +813,6 @@ static void ril_radio_caps_manager_next_transaction
 {
 	ril_radio_caps_manager_foreach(self,
 				ril_radio_caps_manager_next_transaction_cb);
-	self->tx_pending = 0;
 	self->tx_failed = FALSE;
 	self->tx_phase_index = -1;
 	self->tx_id++;
@@ -832,8 +850,10 @@ static void ril_radio_caps_manager_abort_cb(GRilIoChannel *io,
 	struct ril_radio_caps *caps = user_data;
 	struct ril_radio_caps_manager *self = caps->mgr;
 
-	GASSERT(self->tx_pending > 0);
-	if (!(--self->tx_pending)) {
+	GASSERT(caps->tx_pending > 0);
+	caps->tx_pending--;
+	DBG_(caps, "tx_pending=%d", caps->tx_pending);
+	if (!ril_radio_caps_manager_tx_pending(self)) {
 		DBG("transaction aborted");
 		ril_radio_caps_manager_transaction_done(self);
 	}
@@ -878,7 +898,7 @@ static void ril_radio_caps_manager_next_phase_cb(GRilIoChannel *io,
 	struct ril_radio_caps_manager *self = caps->mgr;
 	gboolean ok = FALSE;
 
-	GASSERT(self->tx_pending > 0);
+	GASSERT(caps->tx_pending > 0);
 	if (ril_status == RIL_E_SUCCESS) {
 		struct ril_radio_capability cap;
 		if (ril_radio_caps_parse(caps->log_prefix, data, len, &cap) &&
@@ -895,7 +915,9 @@ static void ril_radio_caps_manager_next_phase_cb(GRilIoChannel *io,
 		}
 	}
 
-	if (!(--self->tx_pending)) {
+	caps->tx_pending--;
+	DBG_(caps, "tx_pending=%d", caps->tx_pending);
+	if (!ril_radio_caps_manager_tx_pending(self)) {
 		if (self->tx_failed) {
 			ril_radio_caps_manager_abort_transaction(self);
 		} else {
@@ -910,7 +932,7 @@ static void ril_radio_caps_manager_next_phase
 	/* Note: -1 > 2 if 2 is unsigned (which turns -1 into 4294967295) */
 	const int max_index = G_N_ELEMENTS(ril_radio_caps_tx_phase) - 1;
 
-	GASSERT(!self->tx_pending);
+	GASSERT(!ril_radio_caps_manager_tx_pending(self));
 	if (self->tx_phase_index >= max_index) {
 		DBG("transaction %d is done", self->tx_id);
 		ril_radio_caps_manager_transaction_done(self);
@@ -927,14 +949,16 @@ static void ril_radio_caps_manager_next_phase
 static void ril_radio_caps_manager_data_off_done(GRilIoChannel *io,
 		int status, const void *req_data, guint len, void *user_data)
 {
-	struct ril_radio_caps_manager *self = RADIO_CAPS_MANAGER(user_data);
+	struct ril_radio_caps *caps = user_data;
+	struct ril_radio_caps_manager *self = caps->mgr;
 
-	DBG("%d", self->tx_pending);
-	GASSERT(self->tx_pending > 0);
+	GASSERT(caps->tx_pending > 0);
 	if (status != GRILIO_STATUS_OK) {
 		self->tx_failed = TRUE;
 	}
-	if (!(--self->tx_pending)) {
+	caps->tx_pending--;
+	DBG_(caps, "tx_pending=%d", caps->tx_pending);
+	if (!ril_radio_caps_manager_tx_pending(self)) {
 		if (self->tx_failed) {
 			DBG("failed to start the transaction");
 			ril_data_manager_assert_data_on(self->data_manager);
@@ -954,13 +978,13 @@ static void ril_radio_caps_manager_data_off
 {
 	GRilIoRequest *req = ril_request_allow_data_new(FALSE);
 
-	self->tx_pending++;
-	DBG_(caps, "disallowing data");
+	caps->tx_pending++;
+	DBG_(caps, "tx_pending=%d", caps->tx_pending);
 	grilio_request_set_timeout(req, DATA_OFF_TIMEOUT_MS);
 	grilio_queue_send_request_full(caps->q, req,
 					RIL_REQUEST_ALLOW_DATA,
 					ril_radio_caps_manager_data_off_done,
-					NULL, self);
+					NULL, caps);
 	grilio_request_unref(req);
 }
 
@@ -970,14 +994,16 @@ static void ril_radio_caps_manager_deactivate_data_call_done(GRilIoChannel *io,
 	struct ril_radio_caps *caps = user_data;
 	struct ril_radio_caps_manager *self = caps->mgr;
 
-	GASSERT(self->tx_pending > 0);
+	GASSERT(caps->tx_pending > 0);
 	if (status != GRILIO_STATUS_OK) {
 		self->tx_failed = TRUE;
 		/* Something seems to be slightly broken, try requesting the
 		 * current state (later, after we release the transaction). */
 		ril_data_poll_call_state(caps->data);
 	}
-	if (!(--self->tx_pending)) {
+	caps->tx_pending--;
+	DBG_(caps, "tx_pending=%d", caps->tx_pending);
+	if (!ril_radio_caps_manager_tx_pending(self)) {
 		if (self->tx_failed) {
 			DBG("failed to start the transaction");
 			ril_radio_caps_manager_recheck_later(self);
@@ -995,8 +1021,8 @@ static void ril_radio_caps_deactivate_data_call(struct ril_radio_caps *caps,
 {
 	GRilIoRequest *req = ril_request_deactivate_data_call_new(cid);
 
-	caps->mgr->tx_pending++;
-	DBG_(caps, "deactivating call %u", cid);
+	caps->tx_pending++;
+	DBG_(caps, "cid=%u, tx_pending=%d", cid, caps->tx_pending);
 	grilio_request_set_blocking(req, TRUE);
 	grilio_request_set_timeout(req, DEACTIVATE_TIMEOUT_MS);
 	grilio_queue_send_request_full(caps->q, req,
@@ -1031,11 +1057,11 @@ static void ril_radio_caps_manager_deactivate_all
 {
 	ril_radio_caps_manager_foreach_tx(self,
 				ril_radio_caps_manager_deactivate_all_cb);
-	if (!self->tx_pending) {
+	if (!ril_radio_caps_manager_tx_pending(self)) {
 		/* No data calls, submit ALLOW_DATA requests right away */
 		ril_radio_caps_manager_foreach_tx(self,
 					ril_radio_caps_manager_data_off);
-		GASSERT(self->tx_pending);
+		GASSERT(ril_radio_caps_manager_tx_pending(self));
 	}
 }
 
@@ -1324,7 +1350,7 @@ static gboolean ril_radio_caps_manager_check_cb(gpointer data)
 static void ril_radio_caps_manager_recheck_later
 					(struct ril_radio_caps_manager *self)
 {
-	if (!self->tx_pending) {
+	if (!ril_radio_caps_manager_tx_pending(self)) {
 		if (self->check_id) {
 			g_source_remove(self->check_id);
 			self->check_id = 0;
@@ -1337,7 +1363,7 @@ static void ril_radio_caps_manager_recheck_later
 static void ril_radio_caps_manager_schedule_check
 					(struct ril_radio_caps_manager *self)
 {
-	if (!self->check_id && !self->tx_pending) {
+	if (!self->check_id && !ril_radio_caps_manager_tx_pending(self)) {
 		self->check_id = g_idle_add(ril_radio_caps_manager_check_cb,
 									self);
 	}
