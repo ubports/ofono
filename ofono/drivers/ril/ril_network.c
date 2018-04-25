@@ -65,6 +65,7 @@ struct ril_network_priv {
 	struct ril_radio *radio;
 	struct ril_sim_card *simcard;
 	int rat;
+	int lte_network_mode;
 	char *log_prefix;
 	guint operator_poll_id;
 	guint voice_poll_id;
@@ -454,7 +455,7 @@ static int ril_network_mode_to_rat(struct ril_network *self,
 	case OFONO_RADIO_ACCESS_MODE_ANY:
 	case OFONO_RADIO_ACCESS_MODE_LTE:
 		if (self->settings->techs & OFONO_RADIO_ACCESS_MODE_LTE) {
-			return PREF_NET_TYPE_LTE_GSM_WCDMA;
+			return self->priv->lte_network_mode;
 		}
 		/* no break */
 	default:
@@ -838,7 +839,8 @@ static void ril_network_sim_status_changed_cb(struct ril_sim_card *sc,
 struct ril_network *ril_network_new(const char *path, GRilIoChannel *io,
 			const char *log_prefix, struct ril_radio *radio,
 			struct ril_sim_card *simcard,
-			struct ril_sim_settings *settings)
+			struct ril_sim_settings *settings,
+			const struct ril_slot_config *config)
 {
 	struct ril_network *self = g_object_new(RIL_NETWORK_TYPE, NULL);
 	struct ril_network_priv *priv = self->priv;
@@ -874,6 +876,8 @@ struct ril_network *ril_network_new(const char *path, GRilIoChannel *io,
 	priv->settings_event_id =
 		ril_sim_settings_add_pref_mode_changed_handler(settings,
 			ril_network_pref_mode_changed_cb, self);
+	priv->lte_network_mode = config->lte_network_mode;
+
 	/*
 	 * Query the initial state. Querying network state before the radio
 	 * has been turned on makes RIL unhappy.
