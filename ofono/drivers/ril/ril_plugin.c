@@ -64,6 +64,7 @@
 #define RILMODEM_DEFAULT_SUB        "SUB1"
 #define RILMODEM_DEFAULT_TECHS      OFONO_RADIO_ACCESS_MODE_ALL
 #define RILMODEM_DEFAULT_LTE_MODE   PREF_NET_TYPE_LTE_GSM_WCDMA
+#define RILMODEM_DEFAULT_NETWORK_MODE_TIMEOUT (20*1000) /* ms */
 #define RILMODEM_DEFAULT_ENABLE_VOICECALL TRUE
 #define RILMODEM_DEFAULT_ENABLE_CBS TRUE
 #define RILMODEM_DEFAULT_SLOT       0xffffffff
@@ -85,39 +86,40 @@
  * modem section (OR in the [Settings] if they apply to all modems) start
  * with lower case.
  */
-#define RILCONF_SETTINGS_EMPTY      "EmptyConfig"
-#define RILCONF_SETTINGS_IDENTITY   "Identity"
-#define RILCONF_SETTINGS_3GHANDOVER "3GLTEHandover"
-#define RILCONF_SETTINGS_SET_RADIO_CAP "SetRadioCapability"
+#define RILCONF_SETTINGS_EMPTY              "EmptyConfig"
+#define RILCONF_SETTINGS_IDENTITY           "Identity"
+#define RILCONF_SETTINGS_3GHANDOVER         "3GLTEHandover"
+#define RILCONF_SETTINGS_SET_RADIO_CAP      "SetRadioCapability"
 
-#define RILCONF_DEV_PREFIX          "ril_"
-#define RILCONF_PATH_PREFIX         "/" RILCONF_DEV_PREFIX
-#define RILCONF_NAME                "name"
-#define RILCONF_SOCKET              "socket"
-#define RILCONF_SLOT                "slot"
-#define RILCONF_SUB                 "sub"
-#define RILCONF_START_TIMEOUT       "startTimeout"
-#define RILCONF_TIMEOUT             "timeout"
-#define RILCONF_4G                  "enable4G" /* Deprecated */
-#define RILCONF_ENABLE_VOICECALL    "enableVoicecall"
-#define RILCONF_ENABLE_CBS          "enableCellBroadcast"
-#define RILCONF_TECHNOLOGIES        "technologies"
-#define RILCONF_LTEMODE             "lteNetworkMode"
-#define RILCONF_UICC_WORKAROUND     "uiccWorkaround"
-#define RILCONF_ECCLIST_FILE        "ecclistFile"
-#define RILCONF_ALLOW_DATA_REQ      "allowDataReq"
-#define RILCONF_EMPTY_PIN_QUERY     "emptyPinQuery"
-#define RILCONF_DATA_CALL_FORMAT    "dataCallFormat"
-#define RILCONF_VENDOR_DRIVER       "vendorDriver"
-#define RILCONF_DATA_CALL_RETRY_LIMIT "dataCallRetryLimit"
-#define RILCONF_DATA_CALL_RETRY_DELAY "dataCallRetryDelay"
-#define RILCONF_LOCAL_HANGUP_REASONS  "localHangupReasons"
-#define RILCONF_REMOTE_HANGUP_REASONS "remoteHangupReasons"
-#define RILCONF_DEFAULT_LEGACY_IMEI_QUERY "legacyImeiQuery"
+#define RILCONF_DEV_PREFIX                  "ril_"
+#define RILCONF_PATH_PREFIX                 "/" RILCONF_DEV_PREFIX
+#define RILCONF_NAME                        "name"
+#define RILCONF_SOCKET                      "socket"
+#define RILCONF_SLOT                        "slot"
+#define RILCONF_SUB                         "sub"
+#define RILCONF_START_TIMEOUT               "startTimeout"
+#define RILCONF_TIMEOUT                     "timeout"
+#define RILCONF_4G                          "enable4G" /* Deprecated */
+#define RILCONF_ENABLE_VOICECALL            "enableVoicecall"
+#define RILCONF_ENABLE_CBS                  "enableCellBroadcast"
+#define RILCONF_TECHNOLOGIES                "technologies"
+#define RILCONF_LTE_MODE                    "lteNetworkMode"
+#define RILCONF_NETWORK_MODE_TIMEOUT        "networkModeTimeout"
+#define RILCONF_UICC_WORKAROUND             "uiccWorkaround"
+#define RILCONF_ECCLIST_FILE                "ecclistFile"
+#define RILCONF_ALLOW_DATA_REQ              "allowDataReq"
+#define RILCONF_EMPTY_PIN_QUERY             "emptyPinQuery"
+#define RILCONF_DATA_CALL_FORMAT            "dataCallFormat"
+#define RILCONF_VENDOR_DRIVER               "vendorDriver"
+#define RILCONF_DATA_CALL_RETRY_LIMIT       "dataCallRetryLimit"
+#define RILCONF_DATA_CALL_RETRY_DELAY       "dataCallRetryDelay"
+#define RILCONF_LOCAL_HANGUP_REASONS        "localHangupReasons"
+#define RILCONF_REMOTE_HANGUP_REASONS       "remoteHangupReasons"
+#define RILCONF_DEFAULT_LEGACY_IMEI_QUERY   "legacyImeiQuery"
 
 /* Modem error ids */
-#define RIL_ERROR_ID_RILD_RESTART        "rild-restart"
-#define RIL_ERROR_ID_CAPS_SWITCH_ABORTED "ril-caps-switch-aborted"
+#define RIL_ERROR_ID_RILD_RESTART           "rild-restart"
+#define RIL_ERROR_ID_CAPS_SWITCH_ABORTED    "ril-caps-switch-aborted"
 
 enum ril_plugin_io_events {
 	IO_EVENT_CONNECTED,
@@ -1383,9 +1385,17 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 	}
 	
 	/* lteNetworkMode */
-	if (ril_config_get_integer(file, group, RILCONF_LTEMODE,
+	if (ril_config_get_integer(file, group, RILCONF_LTE_MODE,
 					&config->lte_network_mode)) {
-		DBG("%s: lteNetworkMode %i", group, slot->config.lte_network_mode);
+		DBG("%s: " RILCONF_LTE_MODE " %d", group,
+					config->lte_network_mode);
+	}
+
+	/* networkModeTimeout */
+	if (ril_config_get_integer(file, group, RILCONF_NETWORK_MODE_TIMEOUT,
+					&config->network_mode_timeout)) {
+		DBG("%s: " RILCONF_NETWORK_MODE_TIMEOUT " %d", group,
+					config->network_mode_timeout);
 	}
 
 	/* enable4G (deprecated but still supported) */
