@@ -190,6 +190,11 @@ struct ofono_sim *ofono_modem_get_sim(struct ofono_modem *modem)
 	return __ofono_atom_find(OFONO_ATOM_TYPE_SIM, modem);
 }
 
+struct ofono_gprs *ofono_modem_get_gprs(struct ofono_modem *modem)
+{
+	return __ofono_atom_find(OFONO_ATOM_TYPE_GPRS, modem);
+}
+
 struct ofono_atom *__ofono_modem_add_atom(struct ofono_modem *modem,
 					enum ofono_atom_type type,
 					void (*destruct)(struct ofono_atom *),
