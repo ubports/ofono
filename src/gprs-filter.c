@@ -18,57 +18,67 @@
 #include <errno.h>
 #include <string.h>
 
+struct gprs_filter_request;
+struct gprs_filter_request_fn {
+	const char *name;
+	gboolean (*can_process)(const struct ofono_gprs_filter *filter);
+	guint (*process)(const struct ofono_gprs_filter *filter,
+					struct gprs_filter_request *req);
+	void (*complete)(struct gprs_filter_request *req, gboolean allow);
+	void (*free)(struct gprs_filter_request *req);
+};
+
 struct gprs_filter_request {
+	int refcount;
 	struct gprs_filter_chain *chain;
+	struct ofono_gprs_context *gc;
+	const struct gprs_filter_request_fn *fn;
 	GSList *filter_link;
 	guint pending_id;
 	guint next_id;
-	struct ofono_gprs_primary_context ctx;
-	gprs_filter_activate_cb_t act;
 	ofono_destroy_func destroy;
 	void* user_data;
 };
 
-/* There's no need to support more than one request at a time */
+struct gprs_filter_request_activate {
+	struct gprs_filter_request req;
+	struct ofono_gprs_primary_context ctx;
+	gprs_filter_activate_cb_t cb;
+};
+
+struct gprs_filter_request_check {
+	struct gprs_filter_request req;
+	ofono_gprs_filter_check_cb_t cb;
+};
 
 struct gprs_filter_chain {
-	struct ofono_gprs_context *gc;
-	struct gprs_filter_request *req;
+	struct ofono_gprs *gprs;
+	GSList *req_list;
 };
 
 static GSList *gprs_filter_list = NULL;
 
 static void gprs_filter_request_process(struct gprs_filter_request *req);
 
-static void gprs_filter_copy_context(struct ofono_gprs_primary_context *dest,
-				const struct ofono_gprs_primary_context *src)
+static void gprs_filter_request_init(struct gprs_filter_request *req,
+		const struct gprs_filter_request_fn *fn,
+		struct gprs_filter_chain *chain, struct ofono_gprs_context *gc,
+		ofono_destroy_func destroy, void *user_data)
 {
-	dest->cid = src->cid;
-	dest->proto = src->proto;
-	dest->auth_method = src->auth_method;
-	strncpy(dest->apn, src->apn, OFONO_GPRS_MAX_APN_LENGTH);
-	strncpy(dest->username, src->username, OFONO_GPRS_MAX_USERNAME_LENGTH);
-	strncpy(dest->password, src->password, OFONO_GPRS_MAX_PASSWORD_LENGTH);
-	dest->apn[OFONO_GPRS_MAX_APN_LENGTH] = 0;
-	dest->username[OFONO_GPRS_MAX_USERNAME_LENGTH] = 0;
-	dest->password[OFONO_GPRS_MAX_PASSWORD_LENGTH] = 0;
-}
-
-static struct gprs_filter_request *gprs_filter_request_new
-	(struct gprs_filter_chain *chain,
-		const struct ofono_gprs_primary_context *ctx,
-				gprs_filter_activate_cb_t act,
-				ofono_destroy_func destroy, void *user_data)
-{
-	struct gprs_filter_request *req = g_new0(struct gprs_filter_request, 1);
-
 	req->chain = chain;
+	req->fn = fn;
+	req->gc = gc;
 	req->filter_link = gprs_filter_list;
-	gprs_filter_copy_context(&req->ctx, ctx);
-	req->act = act;
 	req->destroy = destroy;
 	req->user_data = user_data;
-	return req;
+
+	/*
+	 * The list holds an implicit reference to the message. The reference
+	 * is released by gprs_filter_request_free when the message is removed
+	 * from the list.
+	 */
+	req->refcount = 1;
+	chain->req_list = g_slist_append(chain->req_list, req);
 }
 
 static void gprs_filter_request_cancel(struct gprs_filter_request *req)
@@ -89,21 +99,94 @@ static void gprs_filter_request_cancel(struct gprs_filter_request *req)
 	}
 }
 
+static void gprs_filter_request_dispose(struct gprs_filter_request *req)
+{
+	/* May be invoked several times per request */
+	if (req->destroy) {
+		ofono_destroy_func destroy = req->destroy;
+
+		req->destroy = NULL;
+		destroy(req->user_data);
+	}
+}
+
 static void gprs_filter_request_free(struct gprs_filter_request *req)
 {
-	if (req->destroy) {
-		req->destroy(req->user_data);
+	gprs_filter_request_dispose(req);
+	req->fn->free(req);
+}
+
+#define gprs_filter_request_ref(req) ((req)->refcount++, req)
+
+static int gprs_filter_request_unref(struct gprs_filter_request *req)
+{
+	const int refcount = --(req->refcount);
+
+	if (!refcount) {
+		gprs_filter_request_free(req);
 	}
-	g_free(req);
+	return refcount;
+}
+
+static void gprs_filter_request_free1(gpointer data)
+{
+	struct gprs_filter_request *req = data;
+
+	/*
+	 * This is a g_slist_free_full() callback for use by
+	 * __ofono_gprs_filter_chain_free(), meaning that the
+	 * chain is no more. Zero the pointer to it in case if
+	 * this is not the last reference.
+	 */
+	req->chain = NULL;
+	gprs_filter_request_unref(req);
+}
+
+static void gprs_filter_request_dequeue(struct gprs_filter_request *req)
+{
+	struct gprs_filter_chain *chain = req->chain;
+	GSList *l;
+
+	/*
+	 * Single-linked list is not particularly good at searching
+	 * and removing the elements but since it should be pretty
+	 * short (typically just one request), it's not worth optimization.
+	 */
+	if (chain && (l = g_slist_find(chain->req_list, req)) != NULL) {
+		gprs_filter_request_free1(l->data);
+		chain->req_list = g_slist_delete_link(chain->req_list, l);
+	}
 }
 
 static void gprs_filter_request_complete(struct gprs_filter_request *req,
 							gboolean allow)
 {
-	req->chain->req = NULL;
-	gprs_filter_request_cancel(req);
-	req->act(allow ? &req->ctx : NULL, req->user_data);
-	gprs_filter_request_free(req);
+	gprs_filter_request_ref(req);
+	req->fn->complete(req, allow);
+	gprs_filter_request_dispose(req);
+	gprs_filter_request_dequeue(req);
+	gprs_filter_request_unref(req);
+}
+
+static void gprs_filter_request_process(struct gprs_filter_request *req)
+{
+	GSList *l = req->filter_link;
+	const struct ofono_gprs_filter *f = l->data;
+	const struct gprs_filter_request_fn *fn = req->fn;
+
+	while (f && !fn->can_process(f)) {
+		l = l->next;
+		f = l ? l->data : NULL;
+	}
+
+	gprs_filter_request_ref(req);
+	if (f) {
+		req->filter_link = l;
+		req->pending_id = fn->process(f, req);
+	} else {
+		gprs_filter_request_complete(req, TRUE);
+	}
+	gprs_filter_request_unref(req);
 }
 
 static void gprs_filter_request_next(struct gprs_filter_request *req,
@@ -113,7 +196,7 @@ static void gprs_filter_request_next(struct gprs_filter_request *req,
 	req->next_id = g_idle_add(fn, req);
 }
 
-static gboolean gprs_filter_continue_cb(gpointer data)
+static gboolean gprs_filter_request_continue_cb(gpointer data)
 {
 	struct gprs_filter_request *req = data;
 
@@ -127,7 +210,7 @@ static gboolean gprs_filter_continue_cb(gpointer data)
 	return G_SOURCE_REMOVE;
 }
 
-static gboolean gprs_filter_cancel_cb(gpointer data)
+static gboolean gprs_filter_request_disallow_cb(gpointer data)
 {
 	struct gprs_filter_request *req = data;
 
@@ -136,91 +219,185 @@ static gboolean gprs_filter_cancel_cb(gpointer data)
 	return G_SOURCE_REMOVE;
 }
 
-static void gprs_filter_activate_cb
+/*==========================================================================*
+ * gprs_filter_request_activate
+ *==========================================================================*/
+
+static void gprs_filter_copy_context(struct ofono_gprs_primary_context *dest,
+				const struct ofono_gprs_primary_context *src)
+{
+	dest->cid = src->cid;
+	dest->proto = src->proto;
+	dest->auth_method = src->auth_method;
+	strncpy(dest->apn, src->apn, OFONO_GPRS_MAX_APN_LENGTH);
+	strncpy(dest->username, src->username, OFONO_GPRS_MAX_USERNAME_LENGTH);
+	strncpy(dest->password, src->password, OFONO_GPRS_MAX_PASSWORD_LENGTH);
+	dest->apn[OFONO_GPRS_MAX_APN_LENGTH] = 0;
+	dest->username[OFONO_GPRS_MAX_USERNAME_LENGTH] = 0;
+	dest->password[OFONO_GPRS_MAX_PASSWORD_LENGTH] = 0;
+}
+
+static struct gprs_filter_request_activate *gprs_filter_request_activate_cast
+					(struct gprs_filter_request *req)
+{
+	return (struct gprs_filter_request_activate *)req;
+}
+
+static gboolean gprs_filter_request_activate_can_process
+					(const struct ofono_gprs_filter *f)
+{
+	return f->filter_activate != NULL;
+}
+
+static void gprs_filter_request_activate_cb
 		(const struct ofono_gprs_primary_context *ctx, void *data)
 {
-	struct gprs_filter_request *req = data;
+	struct gprs_filter_request_activate *act = data;
+	struct gprs_filter_request *req = &act->req;
 	const struct ofono_gprs_filter *filter = req->filter_link->data;
 
 	if (ctx) {
-		if (ctx != &req->ctx) {
+		if (ctx != &act->ctx) {
 			/* The filter may have updated context settings */
-			gprs_filter_copy_context(&req->ctx, ctx);
+			gprs_filter_copy_context(&act->ctx, ctx);
 		}
-		gprs_filter_request_next(req, gprs_filter_continue_cb);
+		gprs_filter_request_next(req, gprs_filter_request_continue_cb);
 	} else {
 		DBG("%s not allowing to activate mobile data", filter->name);
-		gprs_filter_request_next(req, gprs_filter_cancel_cb);
+		gprs_filter_request_next(req, gprs_filter_request_disallow_cb);
 	}
 }
 
-static void gprs_filter_request_process(struct gprs_filter_request *req)
+static guint gprs_filter_request_activate_process
+				(const struct ofono_gprs_filter *f,
+					struct gprs_filter_request *req)
 {
-	GSList *l = req->filter_link;
-	const struct ofono_gprs_filter *f = l->data;
+	struct gprs_filter_request_activate *act =
+		gprs_filter_request_activate_cast(req);
 
-	while (f && !f->filter_activate) {
-		l = l->next;
-		f = l ? l->data : NULL;
-	}
-
-	if (f) {
-		guint id;
-
-		req->filter_link = l;
-		id = f->filter_activate(req->chain->gc, &req->ctx,
-						gprs_filter_activate_cb, req);
-		if (id) {
-			/*
-			 * If f->filter_activate returns zero, the request
-			 * may have already been deallocated. It's only
-			 * guaranteed to be alive if f->filter_activate
-			 * returns non-zero id.
-			 */
-			req->pending_id = id;
-		}
-	} else {
-		gprs_filter_request_complete(req, TRUE);
-	}
+	return f->filter_activate(req->gc, &act->ctx,
+				gprs_filter_request_activate_cb, act);
 }
 
-void __ofono_gprs_filter_chain_activate(struct gprs_filter_chain *chain,
+static void gprs_filter_request_activate_complete
+			(struct gprs_filter_request *req, gboolean allow)
+{
+	struct gprs_filter_request_activate *act =
+		gprs_filter_request_activate_cast(req);
+
+	act->cb(allow ? &act->ctx : NULL, req->user_data);
+}
+
+static void gprs_filter_request_activate_free(struct gprs_filter_request *req)
+{
+	g_slice_free1(sizeof(struct gprs_filter_request_activate), req);
+}
+
+static struct gprs_filter_request *gprs_filter_request_activate_new
+	(struct gprs_filter_chain *chain, struct ofono_gprs_context *gc,
 		const struct ofono_gprs_primary_context *ctx,
-		gprs_filter_activate_cb_t act, ofono_destroy_func destroy,
-		void *user_data)
+		gprs_filter_activate_cb_t cb, ofono_destroy_func destroy,
+		void *data)
 {
-	if (chain && gprs_filter_list && ctx && act) {
-		if (!chain->req) {
-			chain->req = gprs_filter_request_new(chain, ctx,
-						act, destroy, user_data);
-			gprs_filter_request_process(chain->req);
-			return;
-		} else {
-			/*
-			 * This shouldn't be happening - ofono core
-			 * makes sure that the next context activation
-			 * request is not submitted until the previous
-			 * has completed.
-			 */
-			ctx = NULL;
-		}
-	}
-	if (act) {
-		act(ctx, user_data);
-	}
-	if (destroy) {
-		destroy(user_data);
+	static const struct gprs_filter_request_fn activate_fn = {
+		.name = "activate",
+		.can_process = gprs_filter_request_activate_can_process,
+		.process = gprs_filter_request_activate_process,
+		.complete = gprs_filter_request_activate_complete,
+		.free = gprs_filter_request_activate_free
+	};
+
+	struct gprs_filter_request_activate *act =
+		g_slice_new0(struct gprs_filter_request_activate);
+	struct gprs_filter_request *req = &act->req;
+
+	gprs_filter_request_init(req, &activate_fn, chain, gc, destroy, data);
+	gprs_filter_copy_context(&act->ctx, ctx);
+	act->cb = cb;
+	return req;
+}
+
+/*==========================================================================*
+ * gprs_filter_request_check
+ *==========================================================================*/
+
+static struct gprs_filter_request_check *gprs_filter_request_check_cast
+					(struct gprs_filter_request *req)
+{
+	return (struct gprs_filter_request_check *)req;
+}
+
+static gboolean gprs_filter_request_check_can_process
+					(const struct ofono_gprs_filter *f)
+{
+	return f->api_version >= 1 && f->filter_check != NULL;
+}
+
+static void gprs_filter_request_check_cb(ofono_bool_t allow, void *data)
+{
+	struct gprs_filter_request_check *check = data;
+	struct gprs_filter_request *req = &check->req;
+	const struct ofono_gprs_filter *filter = req->filter_link->data;
+
+	if (allow) {
+		gprs_filter_request_next(req, gprs_filter_request_continue_cb);
+	} else {
+		DBG("%s not allowing mobile data", filter->name);
+		gprs_filter_request_next(req, gprs_filter_request_disallow_cb);
 	}
 }
 
-struct gprs_filter_chain *__ofono_gprs_filter_chain_new
-					(struct ofono_gprs_context *gc)
+static guint gprs_filter_request_check_process
+				(const struct ofono_gprs_filter *f,
+					struct gprs_filter_request *req)
+{
+	return f->filter_check(req->chain->gprs, gprs_filter_request_check_cb,
+					gprs_filter_request_check_cast(req));
+}
+
+static void gprs_filter_request_check_complete
+			(struct gprs_filter_request *req, gboolean allow)
+{
+	gprs_filter_request_check_cast(req)->cb(allow, req->user_data);
+}
+
+static void gprs_filter_request_check_free(struct gprs_filter_request *req)
+{
+	g_slice_free1(sizeof(struct gprs_filter_request_check), req);
+}
+
+static struct gprs_filter_request *gprs_filter_request_check_new
+	(struct gprs_filter_chain *chain, gprs_filter_check_cb_t cb,
+				ofono_destroy_func destroy, void *data)
+{
+	static const struct gprs_filter_request_fn check_fn = {
+		.name = "check",
+		.can_process = gprs_filter_request_check_can_process,
+		.process = gprs_filter_request_check_process,
+		.complete = gprs_filter_request_check_complete,
+		.free = gprs_filter_request_check_free
+	};
+
+	struct gprs_filter_request_check *check =
+		g_slice_new0(struct gprs_filter_request_check);
+	struct gprs_filter_request *req = &check->req;
+
+	gprs_filter_request_init(req, &check_fn, chain, NULL, destroy, data);
+	check->cb = cb;
+	return req;
+}
+
+/*==========================================================================*
+ * gprs_filter_chain
+ *==========================================================================*/
+
+struct gprs_filter_chain *__ofono_gprs_filter_chain_new(struct ofono_gprs *gp)
 {
 	struct gprs_filter_chain *chain = NULL;
 
-	if (gc) {
+	if (gp) {
 		chain = g_new0(struct gprs_filter_chain, 1);
-		chain->gc = gc;
+		chain->gprs = gp;
 	}
 	return chain;
 }
@@ -228,21 +405,99 @@ struct gprs_filter_chain *__ofono_gprs_filter_chain_new
 void __ofono_gprs_filter_chain_free(struct gprs_filter_chain *chain)
 {
 	if (chain) {
-		if (chain->req) {
-			gprs_filter_request_complete(chain->req, TRUE);
-		}
+		__ofono_gprs_filter_chain_cancel(chain, NULL);
 		g_free(chain);
 	}
 }
 
-void __ofono_gprs_filter_chain_cancel(struct gprs_filter_chain *chain)
+void __ofono_gprs_filter_chain_cancel(struct gprs_filter_chain *chain,
+					struct ofono_gprs_context *gc)
 {
-	if (chain && chain->req) {
-		gprs_filter_request_cancel(chain->req);
-		gprs_filter_request_free(chain->req);
-		chain->req = NULL;
+	if (chain) {
+		GSList *l, *canceled;
+
+		/* Move canceled requests to a separate list */
+		if (gc) {
+			GSList *prev = NULL;
+
+			canceled = NULL;
+			l = chain->req_list;
+			while (l) {
+				GSList *next = l->next;
+				struct gprs_filter_request *req = l->data;
+
+				if (req->gc == gc) {
+					/* This one will get canceled */
+					l->next = canceled;
+					canceled = l;
+					if (prev) {
+						prev->next = next;
+					} else {
+						chain->req_list = next;
+					}
+				} else {
+					/* This one survives */
+					prev = l;
+				}
+				l = next;
+			}
+		} else {
+			/* Everything is getting canceled */
+			canceled = chain->req_list;
+			chain->req_list = NULL;
+		}
+
+		/* Actually cancel each request */
+		for (l = canceled; l; l = l->next) {
+			gprs_filter_request_cancel(l->data);
+		}
+
+		/* And deallocate them */
+		g_slist_free_full(canceled, gprs_filter_request_free1);
 	}
 }
+
+void __ofono_gprs_filter_chain_activate(struct gprs_filter_chain *chain,
+		struct ofono_gprs_context *gc,
+		const struct ofono_gprs_primary_context *ctx,
+		gprs_filter_activate_cb_t cb, ofono_destroy_func destroy,
+		void *user_data)
+{
+	if (chain && gprs_filter_list && ctx && cb) {
+		gprs_filter_request_process
+			(gprs_filter_request_activate_new(chain, gc, ctx,
+						cb, destroy, user_data));
+	} else {
+		if (cb) {
+			cb(ctx, user_data);
+		}
+		if (destroy) {
+			destroy(user_data);
+		}
+	}
+}
+
+void __ofono_gprs_filter_chain_check(struct gprs_filter_chain *chain,
+		gprs_filter_check_cb_t cb, ofono_destroy_func destroy,
+		void *user_data)
+{
+	if (chain && gprs_filter_list && cb) {
+		gprs_filter_request_process
+			(gprs_filter_request_check_new(chain, cb, destroy,
+								user_data));
+	} else {
+		if (cb) {
+			cb(TRUE, user_data);
+		}
+		if (destroy) {
+			destroy(user_data);
+		}
+	}
+}
+
+/*==========================================================================*
+ * ofono_gprs_filter
+ *==========================================================================*/
 
 /**
  * Returns 0 if both are equal;
