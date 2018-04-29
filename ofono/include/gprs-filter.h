@@ -22,12 +22,14 @@ extern "C" {
 
 #include <ofono/types.h>
 
+struct ofono_gprs;
 struct ofono_gprs_context;
 struct ofono_gprs_primary_context;
 
 /* If ctx is NULL then activation gets cancelled */
 typedef void (*ofono_gprs_filter_activate_cb_t)
 		(const struct ofono_gprs_primary_context *ctx, void *data);
+typedef void (*ofono_gprs_filter_check_cb_t)(ofono_bool_t allow, void *data);
 
 #define OFONO_GPRS_FILTER_PRIORITY_LOW     (-100)
 #define OFONO_GPRS_FILTER_PRIORITY_DEFAULT (0)
@@ -38,7 +40,7 @@ typedef void (*ofono_gprs_filter_activate_cb_t)
  * even if struct ofono_gprs_filter gets extended with new callbacks.
  */
 
-#define OFONO_GPRS_FILTER_API_VERSION      (0)
+#define OFONO_GPRS_FILTER_API_VERSION      (1)
 
 /*
  * The filter callbacks either invoke the completion callback directly
@@ -59,6 +61,9 @@ struct ofono_gprs_filter {
 				const struct ofono_gprs_primary_context *ctx,
 				ofono_gprs_filter_activate_cb_t cb,
 				void *data);
+	/* API version 1 */
+	unsigned int (*filter_check)(struct ofono_gprs *gprs,
+				ofono_gprs_filter_check_cb_t cb, void *data);
 };
 
 int ofono_gprs_filter_register(const struct ofono_gprs_filter *filter);

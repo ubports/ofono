@@ -596,14 +596,18 @@ struct gprs_filter_chain;
 
 typedef void (*gprs_filter_activate_cb_t)
 	(const struct ofono_gprs_primary_context *ctx, void *user_data);
-struct gprs_filter_chain *__ofono_gprs_filter_chain_new
-					(struct ofono_gprs_context *gc);
+typedef void (*gprs_filter_check_cb_t)(ofono_bool_t allow, void *user_data);
+struct gprs_filter_chain *__ofono_gprs_filter_chain_new(struct ofono_gprs *gp);
 void __ofono_gprs_filter_chain_free(struct gprs_filter_chain *chain);
-void __ofono_gprs_filter_chain_cancel(struct gprs_filter_chain *chain);
-
+void __ofono_gprs_filter_chain_cancel(struct gprs_filter_chain *chain,
+		struct ofono_gprs_context *gc);
 void __ofono_gprs_filter_chain_activate(struct gprs_filter_chain *chain,
+		struct ofono_gprs_context *gc,
 		const struct ofono_gprs_primary_context *ctx,
 		gprs_filter_activate_cb_t act, ofono_destroy_func destroy,
+		void *user_data);
+void __ofono_gprs_filter_chain_check(struct gprs_filter_chain *chain,
+		gprs_filter_check_cb_t cb, ofono_destroy_func destroy,
 		void *user_data);
 
 #include <ofono/sim-mnclength.h>
