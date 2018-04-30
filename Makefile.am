@@ -499,6 +499,9 @@ builtin_sources += plugins/samsung.c
 builtin_modules += sim900
 builtin_sources += plugins/sim900.c
 
+builtin_modules += sim7100
+builtin_sources += plugins/sim7100.c
+
 builtin_modules += connman
 builtin_sources += plugins/connman.c
 
