@@ -137,7 +137,13 @@ struct pri_context {
 	struct ofono_gprs *gprs;
 };
 
-static void gprs_attached_update(struct ofono_gprs *gprs);
+/*
+ * In Sailfish OS fork gprs_attached_update() is exported to plugins
+ * as ofono_gprs_attached_update(). Exported functions must start
+ * with ofono_ prefix.
+ */
+#define gprs_attached_update(gprs) ofono_gprs_attached_update(gprs)
+
 static void gprs_netreg_update(struct ofono_gprs *gprs);
 static void gprs_deactivate_next(struct ofono_gprs *gprs);
 static void write_context_settings(struct ofono_gprs *gprs,
@@ -1905,7 +1911,7 @@ static void release_active_contexts(struct ofono_gprs *gprs)
 	}
 }
 
-static void gprs_attached_update(struct ofono_gprs *gprs)
+void gprs_attached_update(struct ofono_gprs *gprs)
 {
 	ofono_bool_t attached;
 
