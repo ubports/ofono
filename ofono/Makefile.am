@@ -749,7 +749,8 @@ src_ofonod_LDFLAGS = -Wl,--export-dynamic \
 
 BUILT_SOURCES = $(local_headers) src/builtin.h
 
-CLEANFILES = $(BUILT_SOURCES) $(rules_DATA)
+CLEANFILES = $(BUILT_SOURCES) $(rules_DATA) \
+	$(shell find . -name "*.gcda") $(shell find . -name "*.gcno")
 
 plugindir = $(pkglibdir)/plugins
 
