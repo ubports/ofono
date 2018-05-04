@@ -85,6 +85,7 @@ struct ofono_gprs {
 	void *driver_data;
 	struct ofono_atom *atom;
 	unsigned int spn_watch;
+	struct gprs_filter_chain *filters;
 };
 
 struct ipv4_settings {
@@ -117,7 +118,6 @@ struct ofono_gprs_context {
 	void *driver_data;
 	struct context_settings *settings;
 	struct ofono_atom *atom;
-	struct gprs_filter_chain *filters;
 };
 
 struct pri_context {
@@ -137,7 +137,13 @@ struct pri_context {
 	struct ofono_gprs *gprs;
 };
 
-static void gprs_attached_update(struct ofono_gprs *gprs);
+/*
+ * In Sailfish OS fork gprs_attached_update() is exported to plugins
+ * as ofono_gprs_attached_update(). Exported functions must start
+ * with ofono_ prefix.
+ */
+#define gprs_attached_update(gprs) ofono_gprs_attached_update(gprs)
+
 static void gprs_netreg_update(struct ofono_gprs *gprs);
 static void gprs_deactivate_next(struct ofono_gprs *gprs);
 static void write_context_settings(struct ofono_gprs *gprs,
@@ -369,7 +375,9 @@ static void release_context(struct pri_context *ctx)
 	if (ctx == NULL || ctx->gprs == NULL || ctx->context_driver == NULL)
 		return;
 
-	__ofono_gprs_filter_chain_cancel(ctx->context_driver->filters);
+	__ofono_gprs_filter_chain_cancel(ctx->gprs->filters,
+						ctx->context_driver);
+
 	gprs_cid_release(ctx->gprs, ctx->context.cid);
 	ctx->context.cid = 0;
 	ctx->context_driver->inuse = FALSE;
@@ -1049,16 +1057,17 @@ static DBusMessage *pri_provision_context(DBusConnection *conn,
 	for (i = 0; i < count; i++) {
 		const struct ofono_gprs_provision_data *ap = settings + i;
 		if (ap->type == ctx->type && ap_valid(ap)) {
-			if ((!ctx->active &&
-				!ctx->pending && !ctx->gprs->pending) ||
-					!pri_deactivation_required(ctx, ap)) {
+			if (ctx->pending || ctx->gprs->pending) {
+				/* Context is being messed with */
+				reply = __ofono_error_busy(msg);
+			} else if (ctx->active &&
+					pri_deactivation_required(ctx, ap)) {
+				/* Context needs to be deactivated first */
+				reply = __ofono_error_busy(msg);
+			} else {
 				/* Re-provision the context */
 				pri_reset_context_properties(ctx, ap);
 				reply =  dbus_message_new_method_return(msg);
-			} else {
-				/* Context should be inactive */
-				if (ctx->gprs->pending || ctx->pending)
-					reply = __ofono_error_busy(msg);
 			}
 			break;
 		}
@@ -1548,11 +1557,40 @@ static DBusMessage *pri_set_auth_method(struct pri_context *ctx,
 	return NULL;
 }
 
-static void gprs_context_activate(const struct ofono_gprs_primary_context *ctx,
-								void *data)
-{
-	struct pri_context *pri = data;
+struct pri_request_data {
+	struct pri_context *pri;
+	DBusMessage *msg;
+};
 
+static struct pri_request_data *pri_request_new(struct pri_context *pri)
+{
+	struct pri_request_data *data = g_new0(struct pri_request_data, 1);
+
+	data->pri = pri;
+	data->msg = pri->pending;
+	return data;
+}
+
+static void pri_request_free(void *user_data)
+{
+	struct pri_request_data *data = user_data;
+	struct pri_context *pri = data->pri;
+
+	if (pri->pending && pri->pending == data->msg) {
+		__ofono_dbus_pending_reply(&pri->pending,
+				__ofono_error_canceled(pri->pending));
+	}
+
+	g_free(data);
+}
+
+static void pri_activate_filt(const struct ofono_gprs_primary_context *ctx,
+							void *user_data)
+{
+	struct pri_request_data *data = user_data;
+	struct pri_context *pri = data->pri;
+
+	data->msg = NULL;
 	if (ctx) {
 		struct ofono_gprs_context *gc = pri->context_driver;
 
@@ -1619,9 +1657,9 @@ static DBusMessage *pri_set_property(DBusConnection *conn,
 		ctx->pending = dbus_message_ref(msg);
 
 		if (value)
-			__ofono_gprs_filter_chain_activate(gc->filters,
-					&ctx->context, gprs_context_activate,
-					NULL, ctx);
+			__ofono_gprs_filter_chain_activate(gc->gprs->filters,
+				gc, &ctx->context, pri_activate_filt,
+				pri_request_free, pri_request_new(ctx));
 		else
 			gc->driver->deactivate_primary(gc, ctx->context.cid,
 						pri_deactivate_callback, ctx);
@@ -1905,14 +1943,8 @@ static void release_active_contexts(struct ofono_gprs *gprs)
 	}
 }
 
-static void gprs_attached_update(struct ofono_gprs *gprs)
+static void gprs_set_attached(struct ofono_gprs *gprs, ofono_bool_t attached)
 {
-	ofono_bool_t attached;
-
-	attached = gprs->driver_attached &&
-		(gprs->status == NETWORK_REGISTRATION_STATUS_REGISTERED ||
-			gprs->status == NETWORK_REGISTRATION_STATUS_ROAMING);
-
 	if (attached == gprs->attached)
 		return;
 
@@ -1937,6 +1969,32 @@ static void gprs_attached_update(struct ofono_gprs *gprs)
 	}
 
 	gprs_set_attached_property(gprs, attached);
+}
+
+static void gprs_attached_check_cb(ofono_bool_t allow, void *user_data)
+{
+	gprs_set_attached((struct ofono_gprs *)user_data, allow);
+}
+
+void gprs_attached_update(struct ofono_gprs *gprs)
+{
+	ofono_bool_t attached = gprs->driver_attached &&
+		(gprs->status == NETWORK_REGISTRATION_STATUS_REGISTERED ||
+			gprs->status == NETWORK_REGISTRATION_STATUS_ROAMING);
+
+	if (!attached) {
+		/* Cancel all other checks - nothing is allowed if we are
+		 * not attached */
+		__ofono_gprs_filter_chain_cancel(gprs->filters, NULL);
+
+		/* We are done synchronously */
+		gprs_set_attached(gprs, FALSE);
+	} else {
+		/* This implicitely cancels the previous check if it's still
+		 * running, so that we never have two simultanous checks. */
+		__ofono_gprs_filter_chain_check(gprs->filters,
+					gprs_attached_check_cb, NULL, gprs);
+	}
 }
 
 static void registration_status_cb(const struct ofono_error *error,
@@ -3094,7 +3152,9 @@ static void gprs_context_remove(struct ofono_atom *atom)
 	if (gc->driver && gc->driver->remove)
 		gc->driver->remove(gc);
 
-	__ofono_gprs_filter_chain_free(gc->filters);
+	if (gc->gprs)
+		__ofono_gprs_filter_chain_cancel(gc->gprs->filters, gc);
+
 	g_free(gc);
 }
 
@@ -3126,7 +3186,6 @@ struct ofono_gprs_context *ofono_gprs_context_create(struct ofono_modem *modem,
 		if (drv->probe(gc, vendor, data) < 0)
 			continue;
 
-		gc->filters = __ofono_gprs_filter_chain_new(gc);
 		gc->driver = drv;
 		break;
 	}
@@ -3411,6 +3470,7 @@ static void gprs_remove(struct ofono_atom *atom)
 	if (gprs->driver && gprs->driver->remove)
 		gprs->driver->remove(gprs);
 
+	__ofono_gprs_filter_chain_free(gprs->filters);
 	g_free(gprs);
 }
 
@@ -3447,6 +3507,7 @@ struct ofono_gprs *ofono_gprs_create(struct ofono_modem *modem,
 	gprs->status = NETWORK_REGISTRATION_STATUS_UNKNOWN;
 	gprs->netreg_status = NETWORK_REGISTRATION_STATUS_UNKNOWN;
 	gprs->pid_map = idmap_new(MAX_CONTEXTS);
+	gprs->filters = __ofono_gprs_filter_chain_new(gprs);
 
 	return gprs;
 }
