@@ -1120,6 +1120,7 @@ static int at_voicecall_probe(struct ofono_voicecall *vc, unsigned int vendor,
 
 	switch (vd->vendor) {
 	case OFONO_VENDOR_QUALCOMM_MSM:
+	case OFONO_VENDOR_SIMCOM:
 		g_at_chat_send(vd->chat, "AT+COLP=0", NULL, NULL, NULL, NULL);
 		break;
 	default:
