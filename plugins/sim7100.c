@@ -214,7 +214,7 @@ static void sim7100_pre_sim(struct ofono_modem *modem)
 
 	ofono_devinfo_create(modem, 0, "atmodem", data->at);
 	sim = ofono_sim_create(modem, 0, "atmodem", data->at);
-	ofono_voicecall_create(modem, 0, "atmodem", data->at);
+	ofono_voicecall_create(modem, OFONO_VENDOR_SIMCOM, "atmodem", data->at);
 
 	if (sim)
 		ofono_sim_inserted_notify(sim, TRUE);
