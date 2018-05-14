@@ -1265,7 +1265,7 @@ static guint ril_perso_change_state(struct ofono_sim *sim,
 	if (req) {
 		id = grilio_queue_send_request_full(sd->q, req, code,
 			ril_sim_pin_change_state_cb, ril_sim_pin_req_done,
-			ril_sim_pin_cbd_new(sd, passwd_type, TRUE, cb, data));
+			ril_sim_pin_cbd_new(sd, passwd_type, FALSE, cb, data));
 		grilio_request_unref(req);
 	}
 
@@ -1321,7 +1321,7 @@ static void ril_sim_pin_change_state(struct ofono_sim *sim,
 		id = grilio_queue_send_request_full(sd->q, req,
 			RIL_REQUEST_SET_FACILITY_LOCK,
 			ril_sim_pin_change_state_cb, ril_sim_pin_req_done,
-			ril_sim_pin_cbd_new(sd, passwd_type, TRUE, cb, data));
+			ril_sim_pin_cbd_new(sd, passwd_type, FALSE, cb, data));
 		grilio_request_unref(req);
 	}
 
