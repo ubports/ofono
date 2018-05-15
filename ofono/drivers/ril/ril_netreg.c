@@ -61,6 +61,8 @@ struct ril_netreg_cbd {
 
 #define ril_netreg_cbd_free g_free
 
+#define DBG_(nd,fmt,args...) DBG("%s" fmt, (nd)->log_prefix, ##args)
+
 static inline struct ril_netreg *ril_netreg_get_data(struct ofono_netreg *ofono)
 {
 	return ofono ? ofono_netreg_get_data(ofono) : NULL;
@@ -109,7 +111,7 @@ static gboolean ril_netreg_status_notify_cb(gpointer user_data)
 	struct ril_netreg *nd = user_data;
 	const struct ril_registration_state *reg = &nd->network->voice;
 
-	DBG("%s", nd->log_prefix);
+	DBG_(nd, "");
 	GASSERT(nd->notify_id);
 	nd->notify_id = 0;
 	ofono_netreg_status_notify(nd->netreg,
@@ -124,9 +126,9 @@ static void ril_netreg_status_notify(struct ril_network *net, void *user_data)
 
 	/* Coalesce multiple notifications into one */
 	if (nd->notify_id) {
-		DBG("%snotification aready queued", nd->log_prefix);
+		DBG_(nd, "notification aready queued");
 	} else {
-		DBG("%squeuing notification", nd->log_prefix);
+		DBG_(nd, "queuing notification");
 		nd->notify_id = g_idle_add(ril_netreg_status_notify_cb, nd);
 	}
 }
@@ -138,7 +140,7 @@ static void ril_netreg_registration_status(struct ofono_netreg *netreg,
 	const struct ril_registration_state *reg = &nd->network->voice;
 	struct ofono_error error;
 
-	DBG("%s", nd->log_prefix);
+	DBG_(nd, "");
 	cb(ril_error_ok(&error),
 			ril_netreg_check_status(nd, reg->status),
 			reg->lac, reg->ci, reg->access_tech, data);
@@ -151,7 +153,7 @@ static gboolean ril_netreg_current_operator_cb(void *user_data)
 	ofono_netreg_operator_cb_t cb = cbd->cb.operator;
 	struct ofono_error error;
 
-	DBG("%s", nd->log_prefix);
+	DBG_(nd, "");
 	GASSERT(nd->current_operator_id);
 	nd->current_operator_id = 0;
 
@@ -397,7 +399,7 @@ static void ril_netreg_strength_notify(GRilIoChannel *io, guint ril_event,
 
 	GASSERT(ril_event == RIL_UNSOL_SIGNAL_STRENGTH);
 	strength = ril_netreg_get_signal_strength(data, len);
-	DBG("%d", strength);
+	DBG_(nd, "%d", strength);
 	ofono_netreg_strength_notify(nd->netreg, strength);
 }
 
@@ -446,7 +448,7 @@ static void ril_netreg_nitz_notify(GRilIoChannel *io, guint ril_event,
 	grilio_parser_init(&rilp, data, len);
 	nitz = grilio_parser_get_utf8(&rilp);
 
-	DBG("%s", nitz);
+	DBG_(nd, "%s", nitz);
 	sscanf(nitz, "%u/%u/%u,%u:%u:%u%c%u,%u", &year, &mon, &mday,
 			&hour, &min, &sec, &tzs, &tzi, &dst);
 	snprintf(tz, sizeof(tz), "%c%d", tzs, tzi);
@@ -501,10 +503,11 @@ static int ril_netreg_probe(struct ofono_netreg *netreg, unsigned int vendor,
 {
 	struct ril_modem *modem = data;
 	struct ril_netreg *nd = g_new0(struct ril_netreg, 1);
-	guint slot = ril_modem_slot(modem);
 
-	DBG("[%u] %p", slot, netreg);
-	nd->log_prefix = g_strdup_printf("%s_%u ", RILMODEM_DRIVER, slot);
+	nd->log_prefix = (modem->log_prefix && modem->log_prefix[0]) ?
+		g_strconcat(modem->log_prefix, " ", NULL) : g_strdup("");
+
+	DBG_(nd, "%p", netreg);
 	nd->io = grilio_channel_ref(ril_modem_io(modem));
 	nd->q = grilio_queue_new(nd->io);
 	nd->network = ril_network_ref(modem->network);
@@ -518,9 +521,8 @@ static int ril_netreg_probe(struct ofono_netreg *netreg, unsigned int vendor,
 static void ril_netreg_remove(struct ofono_netreg *netreg)
 {
 	struct ril_netreg *nd = ril_netreg_get_data(netreg);
-	unsigned int i;
 
-	DBG("%p", netreg);
+	DBG_(nd, "%p", netreg);
 	grilio_queue_cancel_all(nd->q, FALSE);
 	ofono_netreg_set_data(netreg, NULL);
 
@@ -536,14 +538,10 @@ static void ril_netreg_remove(struct ofono_netreg *netreg)
 		g_source_remove(nd->current_operator_id);
 	}
 
-	for (i=0; i<G_N_ELEMENTS(nd->network_event_id); i++) {
-		ril_network_remove_handler(nd->network, nd->network_event_id[i]);
-	}
+	ril_network_remove_all_handlers(nd->network, nd->network_event_id);
 	ril_network_unref(nd->network);
 
-	grilio_channel_remove_handlers(nd->io, nd->ril_event_id,
-						G_N_ELEMENTS(nd->ril_event_id));
-
+	grilio_channel_remove_all_handlers(nd->io, nd->ril_event_id);
 	grilio_channel_unref(nd->io);
 	grilio_queue_unref(nd->q);
 	g_free(nd->log_prefix);
