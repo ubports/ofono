@@ -438,9 +438,8 @@ static void ril_netreg_nitz_notify(GRilIoChannel *io, guint ril_event,
 {
 	struct ril_netreg *nd = user_data;
 	GRilIoParser rilp;
-	struct ofono_network_time time;
-	int year, mon, mday, hour, min, sec, dst, tzi;
-	char tzs, tz[4];
+	int year, mon, mday, hour, min, sec, tzi, dst = 0;
+	char tzs;
 	gchar *nitz;
 
 	GASSERT(ril_event == RIL_UNSOL_NITZ_TIME_RECEIVED);
@@ -449,20 +448,32 @@ static void ril_netreg_nitz_notify(GRilIoChannel *io, guint ril_event,
 	nitz = grilio_parser_get_utf8(&rilp);
 
 	DBG_(nd, "%s", nitz);
-	sscanf(nitz, "%u/%u/%u,%u:%u:%u%c%u,%u", &year, &mon, &mday,
-			&hour, &min, &sec, &tzs, &tzi, &dst);
-	snprintf(tz, sizeof(tz), "%c%d", tzs, tzi);
 
-	time.utcoff = atoi(tz) * 15 * 60;
-	time.dst = dst;
-	time.sec = sec;
-	time.min = min;
-	time.hour = hour;
-	time.mday = mday;
-	time.mon = mon;
-	time.year = 2000 + year;
+	/*
+	 * Format: yy/mm/dd,hh:mm:ss(+/-)tz[,ds]
+	 * The ds part is considered optional, initialized to zero.
+	 */
+	if (nitz && sscanf(nitz, "%u/%u/%u,%u:%u:%u%c%u,%u",
+			&year, &mon, &mday, &hour, &min, &sec, &tzs, &tzi,
+			&dst) >= 8 && (tzs == '+' || tzs == '-')) {
+		struct ofono_network_time time;
+		char tz[4];
 
-	ofono_netreg_time_notify(nd->netreg, &time);
+		snprintf(tz, sizeof(tz), "%c%d", tzs, tzi);
+		time.utcoff = atoi(tz) * 15 * 60;
+		time.dst = dst;
+		time.sec = sec;
+		time.min = min;
+		time.hour = hour;
+		time.mday = mday;
+		time.mon = mon;
+		time.year = 2000 + year;
+
+		ofono_netreg_time_notify(nd->netreg, &time);
+	} else {
+		ofono_warn("Failed to parse NITZ string \"%s\"", nitz);
+	}
+
 	g_free(nitz);
 }
 
