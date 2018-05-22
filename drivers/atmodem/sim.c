@@ -1359,12 +1359,12 @@ static void at_pin_send_puk(struct ofono_sim *sim, const char *puk,
 	char buf[64];
 	int ret;
 
-	cbd->user = sd;
+	cbd->user = sim;
 
 	snprintf(buf, sizeof(buf), "AT+CPIN=\"%s\",\"%s\"", puk, passwd);
 
 	ret = g_at_chat_send(sd->chat, buf, none_prefix,
-				at_pin_send_cb, cbd, NULL);
+				at_pin_send_cb, cbd, g_free);
 
 	memset(buf, 0, sizeof(buf));
 
