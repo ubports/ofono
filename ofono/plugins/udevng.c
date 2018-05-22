@@ -1801,7 +1801,11 @@ static gboolean create_modem(gpointer key, gpointer value, gpointer user_data)
 		if (driver_list[i].setup(modem) == TRUE) {
 			ofono_modem_set_string(modem->modem, "SystemPath",
 								syspath);
-			ofono_modem_register(modem->modem);
+			if (ofono_modem_register(modem->modem) < 0) {
+				DBG("could not register modem '%s'", modem->driver);
+				return TRUE;
+			}
+
 			return FALSE;
 		}
 	}
