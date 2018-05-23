@@ -1670,8 +1670,8 @@ static struct {
 	{ "gemalto",	"cdc_ether",	"1e2d",	"0061"	},
 	{ "telit",	"cdc_ncm",	"1bc7", "0036"	},
 	{ "telit",	"cdc_acm",	"1bc7", "0036"	},
-	{ "xmm7xxx",	"cdc_acm",	"8087", "0930"	},
-	{ "xmm7xxx",	"cdc_ncm",	"8087", "0930"	},
+	{ "xmm7xxx",	"cdc_acm",	"8087"		},
+	{ "xmm7xxx",	"cdc_ncm",	"8087"		},
 	{ }
 };
 
