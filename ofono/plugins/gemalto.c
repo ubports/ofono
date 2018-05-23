@@ -54,9 +54,9 @@
 #define HARDWARE_MONITOR_INTERFACE OFONO_SERVICE ".cinterion.HardwareMonitor"
 
 /* Supported gemalto's modem */
-#define GEMALTO_MODEL_PHS8P 	"0053"
+#define GEMALTO_MODEL_PHS8P	"0053"
 /* ALS3, PLS8-E, and PLS8-X family */
-#define GEMALTO_MODEL_ALS3_PLS8x 	"0061"
+#define GEMALTO_MODEL_ALS3_PLS8x	"0061"
 
 static const char *none_prefix[] = { NULL };
 static const char *sctm_prefix[] = { "^SCTM:", NULL };
@@ -206,7 +206,7 @@ static void gemalto_ciev_notify(GAtResult *result, gpointer user_data)
 
 	/* USIM initialization completed. UE has finished reading USIM data. */
 	case 5:
-	        ofono_sim_initialized_notify(sim);
+		ofono_sim_initialized_notify(sim);
 		break;
 
 	default:
