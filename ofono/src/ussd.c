@@ -813,6 +813,22 @@ static void ussd_unregister(struct ofono_atom *atom)
 	DBusConnection *conn = ofono_dbus_get_connection();
 	struct ofono_modem *modem = __ofono_atom_get_modem(atom);
 	const char *path = __ofono_atom_get_path(atom);
+	DBusMessage *reply;
+
+	if (ussd->pending) {
+		reply = __ofono_error_canceled(ussd->pending);
+		__ofono_dbus_pending_reply(&ussd->pending, reply);
+	}
+
+	if (ussd->cancel) {
+		reply = dbus_message_new_method_return(ussd->cancel);
+		__ofono_dbus_pending_reply(&ussd->cancel, reply);
+	}
+
+	if (ussd->req)
+		ussd_request_finish(ussd, -ECANCELED, 0, NULL, 0);
+
+	ussd_change_state(ussd, USSD_STATE_IDLE);
 
 	g_slist_free_full(ussd->ss_control_list, ssc_entry_destroy);
 	ussd->ss_control_list = NULL;
