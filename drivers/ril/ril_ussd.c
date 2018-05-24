@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2017 Jolla Ltd.
+ *  Copyright (C) 2015-2018 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -19,6 +19,8 @@
 
 #include "smsutil.h"
 #include "util.h"
+
+#define USSD_CANCEL_TIMEOUT_SEC (20)
 
 struct ril_ussd {
 	struct ofono_ussd *ussd;
@@ -114,11 +116,14 @@ static void ril_ussd_cancel(struct ofono_ussd *ussd,
 				ofono_ussd_cb_t cb, void *data)
 {
 	struct ril_ussd *ud = ril_ussd_get_data(ussd);
+	GRilIoRequest *req = grilio_request_new();
 
 	ofono_info("send ussd cancel");
-	grilio_queue_send_request_full(ud->q, NULL, RIL_REQUEST_CANCEL_USSD,
+	grilio_request_set_timeout(req, USSD_CANCEL_TIMEOUT_SEC * 1000);
+	grilio_queue_send_request_full(ud->q, req, RIL_REQUEST_CANCEL_USSD,
 				ril_ussd_cancel_cb, ril_ussd_cbd_free,
 				ril_ussd_cbd_new(cb, data));
+	grilio_request_unref(req);
 }
 
 static void ril_ussd_notify(GRilIoChannel *io, guint code,
