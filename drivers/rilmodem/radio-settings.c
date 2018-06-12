@@ -641,16 +641,20 @@ static void get_radio_caps_cb(struct ril_msg *message, gpointer user_data)
 	unsigned all_rats;
 
 	if (message->error != RIL_E_SUCCESS) {
-		ofono_error("%s: error %s", __func__,
+		ofono_error("%s: error %s, using fallback", __func__,
 				ril_error_to_string(message->error));
-		CALLBACK_WITH_FAILURE(cb, 0, cbd->data);
+		// Fallback to query_available_rats_cb
+		// This requires envar to use LTE, but better then staight up failing.
+		g_idle_add(query_available_rats_cb, cbd);
 		return;
 	}
 
 	caps = g_ril_reply_parse_get_radio_capability(rd->ril, message);
 	if (caps == NULL) {
-		ofono_error("%s: parse error", __func__);
-		CALLBACK_WITH_FAILURE(cb, 0, cbd->data);
+		ofono_error("%s: parse error, using fallback", __func__);
+		// Fallback to query_available_rats_cb
+		// This requires envar to use LTE, but better then staight up failing.
+		g_idle_add(query_available_rats_cb, cbd);
 		return;
 	}
 
@@ -678,14 +682,14 @@ void ril_query_available_rats(struct ofono_radio_settings *rs,
 	struct radio_data *rd = ofono_radio_settings_get_data(rs);
 	struct cb_data *cbd = cb_data_new(cb, data, rs);
 
-	//if (g_ril_get_version(rd->ril) < 11) {
+	if (g_ril_get_version(rd->ril) < 11) {
 		g_idle_add(query_available_rats_cb, cbd);
 		return;
-	//}
+	}
 
 	if (g_ril_send(rd->ril, RIL_REQUEST_GET_RADIO_CAPABILITY, NULL,
 					get_radio_caps_cb, cbd, g_free) <= 0) {
-		ofono_error("%s: YES", __func__);
+		ofono_error("%s: request radio capability failed, using fallback", __func__);
 		// Fallback to query_available_rats_cb
 		// This requires envar to use LTE, but better then staight up failing.
 		g_idle_add(query_available_rats_cb, cbd);
