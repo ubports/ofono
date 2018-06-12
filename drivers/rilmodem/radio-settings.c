@@ -645,7 +645,7 @@ static void get_radio_caps_cb(struct ril_msg *message, gpointer user_data)
 				ril_error_to_string(message->error));
 		// Fallback to query_available_rats_cb
 		// This requires envar to use LTE, but better then staight up failing.
-		g_idle_add(query_available_rats_cb, cbd);
+		query_available_rats_cb(cbd);
 		return;
 	}
 
@@ -654,7 +654,7 @@ static void get_radio_caps_cb(struct ril_msg *message, gpointer user_data)
 		ofono_error("%s: parse error, using fallback", __func__);
 		// Fallback to query_available_rats_cb
 		// This requires envar to use LTE, but better then staight up failing.
-		g_idle_add(query_available_rats_cb, cbd);
+		query_available_rats_cb(cbd);
 		return;
 	}
 
