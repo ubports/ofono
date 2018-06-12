@@ -187,7 +187,7 @@ static void send_allow_data(struct cb_data *cbd, GRil *ril, int attached)
 					gprs_allow_data_cb, cbd, NULL) == 0) {
 		ofono_error("%s: send failed, trying workaround", __func__);
 		gd->ofono_attached = attached;
-		ril_gprs_set_attached_cb(cbd);
+		g_idle_add(ril_gprs_set_attached_cb, cbd);
 	}
 }
 
