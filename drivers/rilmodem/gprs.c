@@ -158,10 +158,7 @@ static void gprs_allow_data_cb(struct ril_msg *message, gpointer user_data)
 	if (message->error != RIL_E_SUCCESS) {
 		ofono_error("%s: RIL error %s, trying fallback", __func__,
 				ril_error_to_string(message->error));
-		// Fallback
-		gd->ofono_attached = attached;
-		CALLBACK_WITH_SUCCESS(cb, cbd->data);
-		return;
+		// Fallback by ignore this
 	}
 
 	gd->ofono_attached = attach_data->set_attached;
