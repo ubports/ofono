@@ -685,9 +685,7 @@ void ril_query_available_rats(struct ofono_radio_settings *rs,
 
 	if (g_ril_send(rd->ril, RIL_REQUEST_GET_RADIO_CAPABILITY, NULL,
 					get_radio_caps_cb, cbd, g_free) <= 0) {
-		g_free(cbd);
-		CALLBACK_WITH_FAILURE(cb, 0, data);
-
+		ofono_error("%s: YES", __func__);
 		// Fallback to query_available_rats_cb
 		// This requires envar to use LTE, but better then staight up failing.
 		g_idle_add(query_available_rats_cb, cbd);
