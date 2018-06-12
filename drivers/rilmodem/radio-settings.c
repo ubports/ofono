@@ -687,6 +687,9 @@ void ril_query_available_rats(struct ofono_radio_settings *rs,
 					get_radio_caps_cb, cbd, g_free) <= 0) {
 		g_free(cbd);
 		CALLBACK_WITH_FAILURE(cb, 0, data);
+
+		// Fallback to old method
+		g_idle_add(query_available_rats_cb, cbd)
 	}
 }
 
