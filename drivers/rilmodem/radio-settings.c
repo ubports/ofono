@@ -688,8 +688,9 @@ void ril_query_available_rats(struct ofono_radio_settings *rs,
 		g_free(cbd);
 		CALLBACK_WITH_FAILURE(cb, 0, data);
 
-		// Fallback to old method
-		g_idle_add(query_available_rats_cb, cbd)
+		// Fallback to query_available_rats_cb
+		// This requires envar to use LTE, but better then staight up failing.
+		g_idle_add(query_available_rats_cb, cbd);
 	}
 }
 
