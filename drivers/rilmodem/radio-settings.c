@@ -628,8 +628,9 @@ static void query_available_rats(gpointer user_data)
 
 static ofono_bool_t query_available_rats_cb(gpointer user_data)
 {
-	query_available_rats_cb(user_data);
-	g_free(user_data);
+	struct cb_data *cbd = user_data;
+	query_available_rats_cb(cbd);
+	g_free(cbd);
 
 	return FALSE;
 }
