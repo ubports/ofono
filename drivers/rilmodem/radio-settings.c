@@ -610,7 +610,7 @@ void ril_set_fast_dormancy(struct ofono_radio_settings *rs,
 	}
 }
 
-static void query_available_rats(gpointer user_data)
+void query_available_rats(gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
 	ofono_radio_settings_available_rats_query_cb_t cb = cbd->cb;
