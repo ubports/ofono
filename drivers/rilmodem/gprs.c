@@ -172,7 +172,6 @@ static void gprs_allow_data_cb(struct ril_msg *message, gpointer user_data)
 
 static void send_allow_data(struct cb_data *cbd, GRil *ril, int attached)
 {
-	ofono_gprs_cb_t cb = cbd->cb;
 	struct gprs_attach_data *attach_data = cbd->user;
 	struct ril_gprs_data *gd = attach_data->gd;
 	struct parcel rilp;
