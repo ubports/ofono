@@ -160,7 +160,7 @@ static void gprs_allow_data_cb(struct ril_msg *message, gpointer user_data)
 				ril_error_to_string(message->error));
 		// Fallback
 		gd->ofono_attached = attached;
-		ril_gprs_set_attached_cb(cbd);
+		CALLBACK_WITH_SUCCESS(cb, cbd->data);
 		return;
 	}
 

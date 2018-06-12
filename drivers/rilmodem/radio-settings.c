@@ -610,7 +610,7 @@ void ril_set_fast_dormancy(struct ofono_radio_settings *rs,
 	}
 }
 
-static ofono_bool_t query_available_rats_cb(gpointer user_data)
+static void query_available_rats(gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
 	ofono_radio_settings_available_rats_query_cb_t cb = cbd->cb;
@@ -624,8 +624,12 @@ static ofono_bool_t query_available_rats_cb(gpointer user_data)
 		rd->available_rats |= OFONO_RADIO_ACCESS_MODE_LTE;
 
 	CALLBACK_WITH_SUCCESS(cb, rd->available_rats, cbd->data);
+}
 
-	g_free(cbd);
+static ofono_bool_t query_available_rats_cb(gpointer user_data)
+{
+	query_available_rats_cb(user_data);
+	g_free(user_data);
 
 	return FALSE;
 }
@@ -645,7 +649,7 @@ static void get_radio_caps_cb(struct ril_msg *message, gpointer user_data)
 				ril_error_to_string(message->error));
 		// Fallback to query_available_rats_cb
 		// This requires envar to use LTE, but better then staight up failing.
-		query_available_rats_cb(cbd);
+		query_available_rats(cbd);
 		return;
 	}
 
@@ -654,7 +658,7 @@ static void get_radio_caps_cb(struct ril_msg *message, gpointer user_data)
 		ofono_error("%s: parse error, using fallback", __func__);
 		// Fallback to query_available_rats_cb
 		// This requires envar to use LTE, but better then staight up failing.
-		query_available_rats_cb(cbd);
+		query_available_rats(cbd);
 		return;
 	}
 
