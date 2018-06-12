@@ -686,7 +686,7 @@ void ril_query_available_rats(struct ofono_radio_settings *rs,
 	struct radio_data *rd = ofono_radio_settings_get_data(rs);
 	struct cb_data *cbd = cb_data_new(cb, data, rs);
 
-	if (g_ril_get_version(rd->ril) < 11) {
+	if (g_ril_get_version(rd->ril) < 12) {
 		g_idle_add(query_available_rats_cb, cbd);
 		return;
 	}
