@@ -37,6 +37,8 @@
 #include <ofono/modem.h>
 #include <ofono/netreg.h>
 
+#pragma GCC diagnostic ignored "-Wrestrict"
+
 #include <gril/gril.h>
 
 #include "common.h"
