@@ -710,7 +710,8 @@ static gboolean setup_telitqmi(struct modem_info *modem)
 	return TRUE;
 }
 
-static gboolean setup_sim900(struct modem_info *modem)
+/* TODO: Not used as we have no simcom driver */
+static gboolean setup_simcom(struct modem_info *modem)
 {
 	const char *mdm = NULL, *aux = NULL, *gps = NULL, *diag = NULL;
 	GSList *list;
@@ -1280,7 +1281,7 @@ static struct {
 	{ "nokia",	setup_nokia	},
 	{ "telit",	setup_telit,	"device/interface"	},
 	{ "telitqmi",	setup_telitqmi	},
-	{ "sim900",	setup_sim900	},
+	{ "simcom",	setup_simcom	},
 	{ "sim7100",	setup_sim7100	},
 	{ "zte",	setup_zte	},
 	{ "icera",	setup_icera	},
@@ -1645,7 +1646,7 @@ static struct {
 	{ "alcatel",	"option",	"1bbb", "0017"	},
 	{ "novatel",	"option",	"1410"		},
 	{ "zte",	"option",	"19d2"		},
-	{ "sim900",	"option",	"05c6", "9000"	},
+	{ "simcom",	"option",	"05c6", "9000"	},
 	{ "sim7100",	"option",	"1e0e", "9001"	},
 	{ "telit",	"usbserial",	"1bc7"		},
 	{ "telit",	"option",	"1bc7"		},
