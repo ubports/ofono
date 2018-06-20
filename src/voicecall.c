@@ -3734,6 +3734,11 @@ void *ofono_voicecall_get_data(struct ofono_voicecall *vc)
 	return vc->driver_data;
 }
 
+struct ofono_modem *ofono_voicecall_get_modem(struct ofono_voicecall *vc)
+{
+	return __ofono_atom_get_modem(vc->atom);
+}
+
 int ofono_voicecall_get_next_callid(struct ofono_voicecall *vc)
 {
 	struct ofono_modem *modem;
