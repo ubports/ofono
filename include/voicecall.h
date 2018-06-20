@@ -153,6 +153,8 @@ void ofono_voicecall_disconnected(struct ofono_voicecall *vc, int id,
  */
 void ofono_voicecall_mpty_hint(struct ofono_voicecall *vc, unsigned int ids);
 
+struct ofono_modem *ofono_voicecall_get_modem(struct ofono_voicecall *vc);
+
 int ofono_voicecall_driver_register(const struct ofono_voicecall_driver *d);
 void ofono_voicecall_driver_unregister(const struct ofono_voicecall_driver *d);
 
