@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2017 Jolla Ltd.
+ *  Copyright (C) 2015-2018 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -811,8 +811,7 @@ static void ril_voicecall_set_udub(struct ofono_voicecall *vc,
 					ofono_voicecall_cb_t cb, void *data)
 {
 	DBG("");
-	ril_voicecall_request(RIL_REQUEST_HANGUP_WAITING_OR_BACKGROUND,
-						vc, NULL, cb, data);
+	ril_voicecall_request(RIL_REQUEST_UDUB, vc, NULL, cb, data);
 }
 
 static void ril_voicecall_enable_supp_svc(struct ril_voicecall *vd)
