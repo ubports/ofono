@@ -58,8 +58,6 @@ struct gprs_filter_chain {
 
 static GSList *gprs_filter_list = NULL;
 
-static void gprs_filter_request_process(struct gprs_filter_request *req);
-
 static void gprs_filter_request_init(struct gprs_filter_request *req,
 		const struct gprs_filter_request_fn *fn,
 		struct gprs_filter_chain *chain, struct ofono_gprs_context *gc,
