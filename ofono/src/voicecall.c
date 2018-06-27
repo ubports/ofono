@@ -78,6 +78,8 @@ struct ofono_voicecall {
 	struct ofono_emulator *pending_em;
 	unsigned int pending_id;
 	struct voicecall_agent *vc_agent;
+	struct voicecall_filter_chain *filters;
+	GSList *incoming_filter_list;
 };
 
 struct voicecall {
@@ -116,6 +118,14 @@ struct tone_queue_entry {
 struct emulator_status {
 	struct ofono_voicecall *vc;
 	int status;
+};
+
+struct dial_filter_req {
+	struct ofono_voicecall *vc;
+	struct ofono_phone_number pn;
+	enum ofono_clir_option clir;
+	ofono_voicecall_cb_t cb;
+	void *data;
 };
 
 static const char *default_en_list[] = { "911", "112", NULL };
@@ -1505,6 +1515,41 @@ static void manager_dial_callback(const struct ofono_error *error, void *data)
 		voicecalls_emit_call_added(vc, v);
 }
 
+static void dial_filter_cb(enum ofono_voicecall_filter_dial_result result,
+							void *req_data)
+{
+	struct dial_filter_req *req = req_data;
+
+	if (result == OFONO_VOICECALL_FILTER_DIAL_BLOCK) {
+		struct ofono_error error;
+
+		memset(&error, 0, sizeof(error));
+		error.type = OFONO_ERROR_TYPE_FAILURE;
+		req->cb(&error, req->data);
+	} else {
+		struct ofono_voicecall *vc = req->vc;
+
+		/* OFONO_VOICECALL_FILTER_DIAL_CONTINUE */
+		vc->driver->dial(vc, &req->pn, req->clir, req->cb, req->data);
+	}
+}
+
+static void dial_filter(struct ofono_voicecall *vc,
+					const struct ofono_phone_number *pn,
+					enum ofono_clir_option clir,
+					ofono_voicecall_cb_t cb, void *data)
+{
+	struct dial_filter_req *req = g_new0(struct dial_filter_req, 1);
+
+	req->vc = vc;
+	req->pn = *pn;
+	req->clir = clir;
+	req->cb = cb;
+	req->data = data;
+	__ofono_voicecall_filter_chain_dial(vc->filters, &req->pn, clir,
+						dial_filter_cb, g_free, req);
+}
+
 static int voicecall_dial(struct ofono_voicecall *vc, const char *number,
 					enum ofono_clir_option clir,
 					ofono_voicecall_cb_t cb, void *data)
@@ -1542,7 +1587,7 @@ static int voicecall_dial(struct ofono_voicecall *vc, const char *number,
 
 	string_to_phone_number(number, &ph);
 
-	vc->driver->dial(vc, &ph, clir, cb, vc);
+	dial_filter(vc, &ph, clir, cb, vc);
 
 	return 0;
 }
@@ -2272,6 +2317,20 @@ void ofono_voicecall_disconnected(struct ofono_voicecall *vc, int id,
 
 	__ofono_modem_callid_release(modem, id);
 
+	l = g_slist_find_custom(vc->incoming_filter_list, GUINT_TO_POINTER(id),
+				call_compare_by_id);
+
+	if (l) {
+		/* Incoming call was disconnected in the process of being
+		 * filtered. Cancel the filtering. */
+		call = l->data;
+		__ofono_voicecall_filter_chain_cancel(vc->filters, call->call);
+		vc->incoming_filter_list = g_slist_delete_link
+					(vc->incoming_filter_list, l);
+		voicecall_destroy(call);
+		return;
+	}
+
 	l = g_slist_find_custom(vc->call_list, GUINT_TO_POINTER(id),
 				call_compare_by_id);
 
@@ -2342,6 +2401,37 @@ void ofono_voicecall_disconnected(struct ofono_voicecall *vc, int id,
 	vc->call_list = g_slist_remove(vc->call_list, call);
 }
 
+static void dummy_callback(const struct ofono_error *error, void *data)
+{
+	if (error->type != OFONO_ERROR_TYPE_NO_ERROR)
+		DBG("command failed with error: %s",
+				telephony_error_to_str(error));
+}
+
+static void filter_incoming_cb(enum ofono_voicecall_filter_incoming_result res,
+				void *data)
+{
+	struct voicecall *v = data;
+	struct ofono_voicecall *vc = v->vc;
+
+	vc->incoming_filter_list = g_slist_remove(vc->incoming_filter_list, v);
+	if (res == OFONO_VOICECALL_FILTER_INCOMING_HANGUP) {
+		if (vc->driver->release_specific) {
+			vc->driver->release_specific(vc, v->call->id,
+							dummy_callback, vc);
+		}
+		voicecall_destroy(v);
+	} else if (res == OFONO_VOICECALL_FILTER_INCOMING_IGNORE) {
+		voicecall_destroy(v);
+	} else if (voicecall_dbus_register(v)) {
+		struct ofono_voicecall *vc = v->vc;
+
+		vc->call_list = g_slist_insert_sorted(vc->call_list, v,
+						      call_compare);
+		voicecalls_emit_call_added(vc, v);
+	}
+}
+
 void ofono_voicecall_notify(struct ofono_voicecall *vc,
 				const struct ofono_call *call)
 {
@@ -2355,6 +2445,26 @@ void ofono_voicecall_notify(struct ofono_voicecall *vc,
 			call_status_to_string(call->status),
 			call->status, call->id, call->phone_number.number,
 			call->called_number.number, call->name);
+
+	l = g_slist_find_custom(vc->incoming_filter_list,
+			GUINT_TO_POINTER(call->id), call_compare_by_id);
+
+	if (l) {
+		/* The call has changed in the process of being filtered. */
+		DBG("Found filtered call with id: %d", call->id);
+		v = l->data;
+
+		/* Update the call */
+		voicecall_set_call_status(v, call->status);
+		voicecall_set_call_lineid(v, &call->phone_number,
+						call->clip_validity);
+		voicecall_set_call_calledid(v, &call->called_number);
+		voicecall_set_call_name(v, call->name, call->cnap_validity);
+
+		/* And restart the filtering */
+		__ofono_voicecall_filter_chain_restart(vc->filters, v->call);
+		return;
+	}
 
 	l = g_slist_find_custom(vc->call_list, GUINT_TO_POINTER(call->id),
 				call_compare_by_id);
@@ -2420,6 +2530,16 @@ void ofono_voicecall_notify(struct ofono_voicecall *vc,
 	}
 
 	v->detect_time = time(NULL);
+
+	if (call->status == CALL_STATUS_INCOMING ||
+			call->status == CALL_STATUS_WAITING) {
+		/* Incoming calls have to go through filtering */
+		vc->incoming_filter_list = g_slist_append
+					(vc->incoming_filter_list, v);
+		__ofono_voicecall_filter_chain_incoming(vc->filters, v->call,
+						filter_incoming_cb, NULL, v);
+		return;
+	}
 
 	if (!voicecall_dbus_register(v)) {
 		ofono_error("Unable to register voice call");
@@ -2886,6 +3006,11 @@ static void voicecall_unregister(struct ofono_atom *atom)
 	g_slist_free(vc->call_list);
 	vc->call_list = NULL;
 
+	/* Cancel the filtering */
+	__ofono_voicecall_filter_chain_cancel(vc->filters, NULL);
+	g_slist_free_full(vc->incoming_filter_list, voicecall_destroy);
+	vc->incoming_filter_list = NULL;
+
 	ofono_modem_remove_interface(modem, OFONO_VOICECALL_MANAGER_INTERFACE);
 	g_dbus_unregister_interface(conn, path,
 					OFONO_VOICECALL_MANAGER_INTERFACE);
@@ -2899,6 +3024,8 @@ static void voicecall_remove(struct ofono_atom *atom)
 
 	if (vc == NULL)
 		return;
+
+	__ofono_voicecall_filter_chain_free(vc->filters);
 
 	if (vc->driver && vc->driver->remove)
 		vc->driver->remove(vc);
@@ -2954,6 +3081,7 @@ struct ofono_voicecall *ofono_voicecall_create(struct ofono_modem *modem,
 		break;
 	}
 
+	vc->filters = __ofono_voicecall_filter_chain_new(vc);
 	return vc;
 }
 
@@ -3702,6 +3830,7 @@ void ofono_voicecall_register(struct ofono_voicecall *vc)
 	vc->hfp_watch = __ofono_modem_add_atom_watch(modem,
 					OFONO_ATOM_TYPE_EMULATOR_HFP,
 					emulator_hfp_watch, vc, NULL);
+
 }
 
 void ofono_voicecall_remove(struct ofono_voicecall *vc)
@@ -3823,7 +3952,7 @@ static void dial_request(struct ofono_voicecall *vc)
 		__ofono_modem_inc_emergency_mode(modem);
 	}
 
-	vc->driver->dial(vc, &vc->dial_req->ph, OFONO_CLIR_OPTION_DEFAULT,
+	dial_filter(vc, &vc->dial_req->ph, OFONO_CLIR_OPTION_DEFAULT,
 				dial_request_cb, vc);
 }
 
