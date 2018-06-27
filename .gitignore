@@ -32,6 +32,8 @@ src/ofono.service
 dundee/dundee
 dundee/dundee.service
 
+test-driver
+test-suite.log
 unit/test-common
 unit/test-util
 unit/test-idmap
@@ -57,6 +59,7 @@ unit/test-sailfish_sim_info
 unit/test-sailfish_sim_info_dbus
 unit/test-sailfish_watch
 unit/test-sms-filter
+unit/test-voicecall-filter
 unit/test-*.log
 unit/test-*.trs
 

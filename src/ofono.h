@@ -610,6 +610,27 @@ void __ofono_gprs_filter_chain_check(struct gprs_filter_chain *chain,
 		gprs_filter_check_cb_t cb, ofono_destroy_func destroy,
 		void *user_data);
 
+#include <ofono/voicecall-filter.h>
+
+struct voicecall_filter_chain;
+
+struct voicecall_filter_chain *__ofono_voicecall_filter_chain_new
+						(struct ofono_voicecall *vc);
+void __ofono_voicecall_filter_chain_cancel(struct voicecall_filter_chain *c,
+				const struct ofono_call *call);
+void __ofono_voicecall_filter_chain_restart(struct voicecall_filter_chain *c,
+				const struct ofono_call *call);
+void __ofono_voicecall_filter_chain_free(struct voicecall_filter_chain *c);
+void __ofono_voicecall_filter_chain_dial(struct voicecall_filter_chain *c,
+				const struct ofono_phone_number *number,
+				enum ofono_clir_option clir,
+				ofono_voicecall_filter_dial_cb_t cb,
+				ofono_destroy_func destroy, void *user_data);
+void __ofono_voicecall_filter_chain_incoming(struct voicecall_filter_chain *c,
+				const struct ofono_call *call,
+				ofono_voicecall_filter_incoming_cb_t cb,
+				ofono_destroy_func destroy, void *user_data);
+
 #include <ofono/sim-mnclength.h>
 
 int __ofono_sim_mnclength_get_mnclength(const char *imsi);
