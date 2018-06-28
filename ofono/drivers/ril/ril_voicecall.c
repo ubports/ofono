@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2017 Jolla Ltd.
+ *  Copyright (C) 2015-2018 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -587,37 +587,73 @@ static void ril_voicecall_submit_hangup_req(struct ofono_voicecall *vc,
 	grilio_request_unref(ioreq);
 }
 
-static void ril_voicecall_hangup_all(struct ofono_voicecall *vc,
+static void ril_voicecall_hangup(struct ofono_voicecall *vc,
+			gboolean (*filter)(struct ofono_call *call),
 			ofono_voicecall_cb_t cb, void *data)
 {
 	struct ril_voicecall *vd = ril_voicecall_get_data(vc);
+	struct ril_voicecall_request_data *req = NULL;
+	GSList *l;
 
-	if (vd->calls) {
-		GSList *l;
-		struct ril_voicecall_request_data *req =
-			ril_voicecall_request_data_new(vc, cb, data);
+	/*
+	 * Here the idea is that we submit (potentially) multiple
+	 * hangup requests to RIL and invoke the callback after
+	 * the last request has completed (pending call count
+	 * becomes zero).
+	 */
+	for (l = vd->calls; l; l = l->next) {
+		struct ofono_call *call = l->data;
 
-		/*
-		 * Here the idea is that we submit (potentially) multiple
-		 * hangup requests to RIL and invoke the callback after
-		 * the last request has completed (pending call count
-		 * becomes zero).
-		 */
-		for (l = vd->calls; l; l = l->next) {
-			struct ofono_call *call = l->data;
+		if (!filter || filter(call)) {
+			if (!req) {
+				req = ril_voicecall_request_data_new(vc, cb,
+									data);
+			}
 
 			/* Send request to RIL */
 			DBG("Hanging up call with id %d", call->id);
 			ril_voicecall_submit_hangup_req(vc, call->id, req);
+		} else {
+			DBG("Skipping call with id %d", call->id);
 		}
+	}
 
-		/* Release our reference */
+	if (req) {
+		/* Release our reference (if any) */
 		ril_voicecall_request_data_unref(req);
 	} else {
-		/* No calls */
+		/* No requests were submitted */
 		struct ofono_error error;
 		cb(ril_error_ok(&error), data);
 	}
+}
+
+static gboolean ril_voicecall_hangup_active_filter(struct ofono_call *call)
+{
+	switch (call->status) {
+	case CALL_STATUS_ACTIVE:
+	case CALL_STATUS_DIALING:
+	case CALL_STATUS_ALERTING:
+	case CALL_STATUS_INCOMING:
+		return TRUE;
+	case CALL_STATUS_HELD:
+	case CALL_STATUS_WAITING:
+	case CALL_STATUS_DISCONNECTED:
+		break;
+	}
+	return FALSE;
+}
+
+static void ril_voicecall_hangup_active(struct ofono_voicecall *vc,
+			ofono_voicecall_cb_t cb, void *data)
+{
+	ril_voicecall_hangup(vc, ril_voicecall_hangup_active_filter, cb, data);
+}
+
+static void ril_voicecall_hangup_all(struct ofono_voicecall *vc,
+			ofono_voicecall_cb_t cb, void *data)
+{
+	ril_voicecall_hangup(vc, NULL, cb, data);
 }
 
 static void ril_voicecall_release_specific(struct ofono_voicecall *vc,
@@ -811,8 +847,7 @@ static void ril_voicecall_set_udub(struct ofono_voicecall *vc,
 					ofono_voicecall_cb_t cb, void *data)
 {
 	DBG("");
-	ril_voicecall_request(RIL_REQUEST_HANGUP_WAITING_OR_BACKGROUND,
-						vc, NULL, cb, data);
+	ril_voicecall_request(RIL_REQUEST_UDUB, vc, NULL, cb, data);
 }
 
 static void ril_voicecall_enable_supp_svc(struct ril_voicecall *vd)
@@ -946,6 +981,7 @@ const struct ofono_voicecall_driver ril_voicecall_driver = {
 	.remove                 = ril_voicecall_remove,
 	.dial                   = ril_voicecall_dial,
 	.answer                 = ril_voicecall_answer,
+	.hangup_active          = ril_voicecall_hangup_active,
 	.hangup_all             = ril_voicecall_hangup_all,
 	.release_specific       = ril_voicecall_release_specific,
 	.send_tones             = ril_voicecall_send_dtmf,
