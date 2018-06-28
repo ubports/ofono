@@ -1587,7 +1587,11 @@ static int voicecall_dial(struct ofono_voicecall *vc, const char *number,
 
 	string_to_phone_number(number, &ph);
 
-	dial_filter(vc, &ph, clir, cb, vc);
+	/* No filtering for emergency calls */
+	if (is_emergency_number(vc, number))
+		vc->driver->dial(vc, &ph, clir, cb, vc);
+	else
+		dial_filter(vc, &ph, clir, cb, vc);
 
 	return 0;
 }
@@ -3950,10 +3954,14 @@ static void dial_request(struct ofono_voicecall *vc)
 		struct ofono_modem *modem = __ofono_atom_get_modem(vc->atom);
 
 		__ofono_modem_inc_emergency_mode(modem);
-	}
 
-	dial_filter(vc, &vc->dial_req->ph, OFONO_CLIR_OPTION_DEFAULT,
+		/* No filtering for emergency calls */
+		vc->driver->dial(vc, &vc->dial_req->ph,
+			OFONO_CLIR_OPTION_DEFAULT, dial_request_cb, vc);
+	} else {
+		dial_filter(vc, &vc->dial_req->ph, OFONO_CLIR_OPTION_DEFAULT,
 				dial_request_cb, vc);
+	}
 }
 
 static void dial_req_disconnect_cb(const struct ofono_error *error, void *data)
