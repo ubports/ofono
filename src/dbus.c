@@ -37,7 +37,7 @@ struct error_mapping_entry {
 	DBusMessage *(*ofono_error_func)(DBusMessage *);
 };
 
-struct error_mapping_entry cme_errors_mapping[] = {
+static const struct error_mapping_entry cme_errors_mapping[] = {
 	{ 3,	__ofono_error_not_allowed },
 	{ 4,	__ofono_error_not_supported },
 	{ 16,	__ofono_error_incorrect_password },
@@ -422,7 +422,7 @@ DBusMessage *__ofono_error_network_terminated(DBusMessage *msg)
 DBusMessage *__ofono_error_from_error(const struct ofono_error *error,
 						DBusMessage *msg)
 {
-	struct error_mapping_entry *e;
+	const struct error_mapping_entry *e;
 	int maxentries;
 	int i;
 
