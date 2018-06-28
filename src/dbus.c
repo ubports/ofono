@@ -24,6 +24,7 @@
 #endif
 
 #include <glib.h>
+#include <errno.h>
 #include <gdbus.h>
 
 #include "ofono.h"
@@ -37,7 +38,7 @@ struct error_mapping_entry {
 	DBusMessage *(*ofono_error_func)(DBusMessage *);
 };
 
-struct error_mapping_entry cme_errors_mapping[] = {
+static const struct error_mapping_entry cme_errors_mapping[] = {
 	{ 3,	__ofono_error_not_allowed },
 	{ 4,	__ofono_error_not_supported },
 	{ 16,	__ofono_error_incorrect_password },
@@ -45,6 +46,16 @@ struct error_mapping_entry cme_errors_mapping[] = {
 	{ 31,	__ofono_error_timed_out },
 	{ 32,	__ofono_error_access_denied },
 	{ 50,	__ofono_error_invalid_args },
+	{ }
+};
+
+static const struct error_mapping_entry errno_errors_mapping[] = {
+	{ EACCES,      __ofono_error_access_denied },
+	{ EOPNOTSUPP,  __ofono_error_not_supported },
+	{ ENOSYS,      __ofono_error_not_implemented },
+	{ ETIMEDOUT,   __ofono_error_timed_out },
+	{ EINPROGRESS, __ofono_error_busy },
+	{ }
 };
 
 static void append_variant(DBusMessageIter *iter,
@@ -419,26 +430,31 @@ DBusMessage *__ofono_error_network_terminated(DBusMessage *msg)
 					" network");
 }
 
+static DBusMessage *__ofono_map_error(const struct error_mapping_entry *map,
+						int error, DBusMessage *msg)
+{
+	const struct error_mapping_entry *e;
+
+	for (e = map; e->ofono_error_func; e++)
+		if (e->error == error)
+			return e->ofono_error_func(msg);
+
+	return __ofono_error_failed(msg);
+}
+
 DBusMessage *__ofono_error_from_error(const struct ofono_error *error,
 						DBusMessage *msg)
 {
-	struct error_mapping_entry *e;
-	int maxentries;
-	int i;
-
 	switch (error->type) {
 	case OFONO_ERROR_TYPE_CME:
-		e = cme_errors_mapping;
-		maxentries = sizeof(cme_errors_mapping) /
-					sizeof(struct error_mapping_entry);
-		for (i = 0; i < maxentries; i++)
-			if (e[i].error == error->error)
-				return e[i].ofono_error_func(msg);
-		break;
+		return __ofono_map_error(cme_errors_mapping, error->error, msg);
 	case OFONO_ERROR_TYPE_CMS:
 		return __ofono_error_failed(msg);
 	case OFONO_ERROR_TYPE_CEER:
 		return __ofono_error_failed(msg);
+	case OFONO_ERROR_TYPE_ERRNO:
+		return __ofono_map_error(errno_errors_mapping,
+						ABS(error->error), msg);
 	default:
 		return __ofono_error_failed(msg);
 	}
