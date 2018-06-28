@@ -1423,6 +1423,7 @@ void ofono_emulator_send_final(struct ofono_emulator *em,
 	case OFONO_ERROR_TYPE_CEER:
 	case OFONO_ERROR_TYPE_SIM:
 	case OFONO_ERROR_TYPE_FAILURE:
+	case OFONO_ERROR_TYPE_ERRNO:
 failure:
 		g_at_server_send_final(em->server, G_AT_SERVER_RESULT_ERROR);
 		break;
