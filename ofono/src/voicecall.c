@@ -1506,7 +1506,7 @@ static void manager_dial_callback(const struct ofono_error *error, void *data)
 
 		}
 
-		reply = __ofono_error_failed(vc->pending);
+		reply = __ofono_error_from_error(error, vc->pending);
 	}
 
 	__ofono_dbus_pending_reply(&vc->pending, reply);
@@ -1523,8 +1523,8 @@ static void dial_filter_cb(enum ofono_voicecall_filter_dial_result result,
 	if (result == OFONO_VOICECALL_FILTER_DIAL_BLOCK) {
 		struct ofono_error error;
 
-		memset(&error, 0, sizeof(error));
-		error.type = OFONO_ERROR_TYPE_FAILURE;
+		error.type = OFONO_ERROR_TYPE_ERRNO;
+		error.error = EACCES;
 		req->cb(&error, req->data);
 	} else {
 		struct ofono_voicecall *vc = req->vc;
