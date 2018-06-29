@@ -1506,7 +1506,7 @@ static void manager_dial_callback(const struct ofono_error *error, void *data)
 
 		}
 
-		reply = __ofono_error_failed(vc->pending);
+		reply = __ofono_error_from_error(error, vc->pending);
 	}
 
 	__ofono_dbus_pending_reply(&vc->pending, reply);
@@ -1523,8 +1523,8 @@ static void dial_filter_cb(enum ofono_voicecall_filter_dial_result result,
 	if (result == OFONO_VOICECALL_FILTER_DIAL_BLOCK) {
 		struct ofono_error error;
 
-		memset(&error, 0, sizeof(error));
-		error.type = OFONO_ERROR_TYPE_FAILURE;
+		error.type = OFONO_ERROR_TYPE_ERRNO;
+		error.error = EACCES;
 		req->cb(&error, req->data);
 	} else {
 		struct ofono_voicecall *vc = req->vc;
@@ -1587,7 +1587,11 @@ static int voicecall_dial(struct ofono_voicecall *vc, const char *number,
 
 	string_to_phone_number(number, &ph);
 
-	dial_filter(vc, &ph, clir, cb, vc);
+	/* No filtering for emergency calls */
+	if (is_emergency_number(vc, number))
+		vc->driver->dial(vc, &ph, clir, cb, vc);
+	else
+		dial_filter(vc, &ph, clir, cb, vc);
 
 	return 0;
 }
@@ -3950,10 +3954,14 @@ static void dial_request(struct ofono_voicecall *vc)
 		struct ofono_modem *modem = __ofono_atom_get_modem(vc->atom);
 
 		__ofono_modem_inc_emergency_mode(modem);
-	}
 
-	dial_filter(vc, &vc->dial_req->ph, OFONO_CLIR_OPTION_DEFAULT,
+		/* No filtering for emergency calls */
+		vc->driver->dial(vc, &vc->dial_req->ph,
+			OFONO_CLIR_OPTION_DEFAULT, dial_request_cb, vc);
+	} else {
+		dial_filter(vc, &vc->dial_req->ph, OFONO_CLIR_OPTION_DEFAULT,
 				dial_request_cb, vc);
+	}
 }
 
 static void dial_req_disconnect_cb(const struct ofono_error *error, void *data)
