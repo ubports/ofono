@@ -704,6 +704,9 @@ static void voicecall_destroy(gpointer userdata)
 {
 	struct voicecall *voicecall = (struct voicecall *)userdata;
 
+	__ofono_voicecall_filter_chain_cancel(voicecall->vc->filters,
+							voicecall->call);
+
 	g_free(voicecall->call);
 	g_free(voicecall->message);
 
@@ -1513,6 +1516,133 @@ static void manager_dial_callback(const struct ofono_error *error, void *data)
 
 	if (need_to_emit)
 		voicecalls_emit_call_added(vc, v);
+}
+
+static void dummy_callback(const struct ofono_error *error, void *data)
+{
+	if (error->type != OFONO_ERROR_TYPE_NO_ERROR)
+		DBG("command failed with error: %s",
+				telephony_error_to_str(error));
+}
+
+static void filter_hangup(struct voicecall *v)
+{
+	struct ofono_voicecall *vc = v->vc;
+	const struct ofono_call *call = v->call;
+	const struct ofono_voicecall_driver *driver = vc->driver;
+
+	switch (call->status) {
+	case OFONO_CALL_STATUS_WAITING:
+		if (driver->set_udub) {
+			driver->set_udub(vc, dummy_callback, vc);
+			return;
+		} else if (driver->release_specific) {
+			driver->release_specific(vc, call->id,
+							dummy_callback, vc);
+			return;
+		}
+		break;
+	case OFONO_CALL_STATUS_ACTIVE:
+	case OFONO_CALL_STATUS_DIALING:
+	case OFONO_CALL_STATUS_ALERTING:
+		if (driver->hangup_active) {
+			driver->hangup_active(vc, dummy_callback, vc);
+			return;
+		}
+		/* no break */
+	default:
+		if (driver->release_specific) {
+			driver->release_specific(vc, call->id,
+							dummy_callback, vc);
+			return;
+		}
+		break;
+	}
+
+	ofono_warn("Couldn't disconnect %s call %d",
+		call_status_to_string(call->status), call->id);
+}
+
+static void filter_dial_check_cb(enum ofono_voicecall_filter_dial_result result,
+								void *data)
+{
+	struct voicecall *v = data;
+
+	if (result == OFONO_VOICECALL_FILTER_DIAL_CONTINUE) {
+		DBG("No need to release %s call %d",
+			call_status_to_string(v->call->status), v->call->id);
+	} else {
+		DBG("Need to release %s call %d",
+			call_status_to_string(v->call->status), v->call->id);
+		filter_hangup(v);
+	}
+}
+
+static void filter_incoming_check_cb
+	(enum ofono_voicecall_filter_incoming_result result, void *data)
+{
+	struct voicecall *v = data;
+
+	if (result == OFONO_VOICECALL_FILTER_INCOMING_CONTINUE) {
+		DBG("No need to release %s call %d",
+			call_status_to_string(v->call->status), v->call->id);
+	} else {
+		DBG("Need to release %s call %d",
+			call_status_to_string(v->call->status), v->call->id);
+		filter_hangup(v);
+	}
+}
+
+static void filter_incoming_cb(enum ofono_voicecall_filter_incoming_result res,
+								void *data)
+{
+	struct voicecall *v = data;
+	struct ofono_voicecall *vc = v->vc;
+
+	vc->incoming_filter_list = g_slist_remove(vc->incoming_filter_list, v);
+	if (res == OFONO_VOICECALL_FILTER_INCOMING_HANGUP) {
+		if (vc->driver->release_specific) {
+			vc->driver->release_specific(vc, v->call->id,
+							dummy_callback, vc);
+		}
+		voicecall_destroy(v);
+	} else if (res == OFONO_VOICECALL_FILTER_INCOMING_IGNORE) {
+		voicecall_destroy(v);
+	} else if (voicecall_dbus_register(v)) {
+		struct ofono_voicecall *vc = v->vc;
+
+		vc->call_list = g_slist_insert_sorted(vc->call_list, v,
+						      call_compare);
+		voicecalls_emit_call_added(vc, v);
+	}
+}
+
+void ofono_voicecall_filter_notify(struct ofono_voicecall *vc)
+{
+	GSList *l;
+	struct voicecall *v;
+
+	/* Cancel all active filtering requests */
+	__ofono_voicecall_filter_chain_cancel(vc->filters, NULL);
+
+	/* Re-check incoming_filter_list */
+	for (l = vc->incoming_filter_list; l; l = l->next) {
+		v = l->data;
+		__ofono_voicecall_filter_chain_incoming(vc->filters, v->call,
+						filter_incoming_cb, NULL, v);
+	}
+
+	/* Re-check the calls that have already passed the filter */
+	for (l = vc->call_list; l; l = l->next) {
+		v = l->data;
+		if (v->call->direction == CALL_DIRECTION_MOBILE_ORIGINATED) {
+			__ofono_voicecall_filter_chain_dial_check(vc->filters,
+				v->call, filter_dial_check_cb, NULL, v);
+                } else {
+			__ofono_voicecall_filter_chain_incoming(vc->filters,
+				v->call, filter_incoming_check_cb, NULL, v);
+                }
+	}
 }
 
 static void dial_filter_cb(enum ofono_voicecall_filter_dial_result result,
@@ -2326,12 +2456,10 @@ void ofono_voicecall_disconnected(struct ofono_voicecall *vc, int id,
 
 	if (l) {
 		/* Incoming call was disconnected in the process of being
-		 * filtered. Cancel the filtering. */
-		call = l->data;
-		__ofono_voicecall_filter_chain_cancel(vc->filters, call->call);
+		 * filtered. voicecall_destroy cancels it. */
 		vc->incoming_filter_list = g_slist_delete_link
 					(vc->incoming_filter_list, l);
-		voicecall_destroy(call);
+		voicecall_destroy(l->data);
 		return;
 	}
 
@@ -2403,37 +2531,6 @@ void ofono_voicecall_disconnected(struct ofono_voicecall *vc, int id,
 	voicecall_dbus_unregister(vc, call);
 
 	vc->call_list = g_slist_remove(vc->call_list, call);
-}
-
-static void dummy_callback(const struct ofono_error *error, void *data)
-{
-	if (error->type != OFONO_ERROR_TYPE_NO_ERROR)
-		DBG("command failed with error: %s",
-				telephony_error_to_str(error));
-}
-
-static void filter_incoming_cb(enum ofono_voicecall_filter_incoming_result res,
-				void *data)
-{
-	struct voicecall *v = data;
-	struct ofono_voicecall *vc = v->vc;
-
-	vc->incoming_filter_list = g_slist_remove(vc->incoming_filter_list, v);
-	if (res == OFONO_VOICECALL_FILTER_INCOMING_HANGUP) {
-		if (vc->driver->release_specific) {
-			vc->driver->release_specific(vc, v->call->id,
-							dummy_callback, vc);
-		}
-		voicecall_destroy(v);
-	} else if (res == OFONO_VOICECALL_FILTER_INCOMING_IGNORE) {
-		voicecall_destroy(v);
-	} else if (voicecall_dbus_register(v)) {
-		struct ofono_voicecall *vc = v->vc;
-
-		vc->call_list = g_slist_insert_sorted(vc->call_list, v,
-						      call_compare);
-		voicecalls_emit_call_added(vc, v);
-	}
 }
 
 void ofono_voicecall_notify(struct ofono_voicecall *vc,
@@ -3010,8 +3107,7 @@ static void voicecall_unregister(struct ofono_atom *atom)
 	g_slist_free(vc->call_list);
 	vc->call_list = NULL;
 
-	/* Cancel the filtering */
-	__ofono_voicecall_filter_chain_cancel(vc->filters, NULL);
+	/* voicecall_destroy cancels the filtering */
 	g_slist_free_full(vc->incoming_filter_list, voicecall_destroy);
 	vc->incoming_filter_list = NULL;
 
