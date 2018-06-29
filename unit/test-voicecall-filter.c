@@ -84,6 +84,12 @@ static void test_dial_expect_block_and_quit
 	g_main_loop_quit(test_loop);
 }
 
+static void test_dial_unexpected
+		(enum ofono_voicecall_filter_dial_result result, void *data)
+{
+	g_assert(FALSE);
+}
+
 static void test_incoming_expect_continue_inc
 	(enum ofono_voicecall_filter_incoming_result result, void *data)
 {
@@ -332,6 +338,21 @@ static void test_misc(void)
 
 	__ofono_voicecall_filter_chain_dial(NULL, NULL,
 			OFONO_CLIR_OPTION_DEFAULT,
+			test_dial_expect_continue_inc, test_inc, &count);
+	g_assert(count == 2);
+	count = 0;
+
+	__ofono_voicecall_filter_chain_dial_check(NULL, NULL, NULL,
+			test_inc, &count);
+	g_assert(count == 1);
+	count = 0;
+
+	__ofono_voicecall_filter_chain_dial_check(NULL, NULL,
+			test_dial_expect_continue_inc, NULL, &count);
+	g_assert(count == 1);
+	count = 0;
+
+	__ofono_voicecall_filter_chain_dial_check(NULL, NULL,
 			test_dial_expect_continue_inc, test_inc, &count);
 	g_assert(count == 2);
 	count = 0;
@@ -589,6 +610,69 @@ static void test_dial_block_async(void)
 	test_common_deinit();
 }
 
+/* ==== dial_check ==== */
+
+static void test_dial_check(void)
+{
+	static struct ofono_voicecall_filter filter = {
+		.name = "dial_check",
+		.api_version = OFONO_VOICECALL_FILTER_API_VERSION,
+		.priority = OFONO_VOICECALL_FILTER_PRIORITY_DEFAULT,
+		.filter_dial = filter_dial_continue
+	};
+
+	struct ofono_voicecall vc;
+	struct ofono_phone_number number;
+	struct ofono_call call;
+	int count = 0;
+
+	test_common_init();
+	test_voicecall_init(&vc);
+	string_to_phone_number("112", &number);
+	memset(&call, 0, sizeof(call));
+
+	g_assert((vc.chain = __ofono_voicecall_filter_chain_new(&vc)) != NULL);
+
+	/* This one gets ok'ed immediately because there're no filters */
+	__ofono_voicecall_filter_chain_dial_check(vc.chain, &call,
+			test_dial_expect_continue_inc,
+			test_inc, &count);
+	g_assert(count == 2);
+	count = 0;
+
+	/* Register the filter */
+	g_assert(ofono_voicecall_filter_register(&filter) == 0);
+
+	/* This one gets ok'ed immediately because there's no call (hmmm?) */
+	__ofono_voicecall_filter_chain_dial_check(vc.chain, NULL,
+			test_dial_expect_continue_inc,
+			test_inc, &count);
+	g_assert(count == 2);
+	count = 0;
+
+	/* This one does nothing because there's no callback */
+	__ofono_voicecall_filter_chain_dial_check(vc.chain, &call,
+			NULL, test_inc, &count);
+	g_assert(count == 1);
+	count = 0;
+
+	/* Completion callback will terminate the loop */
+	__ofono_voicecall_filter_chain_dial_check(vc.chain, &call,
+			test_dial_expect_continue_and_quit,
+			test_inc, &count);
+
+	g_main_loop_run(test_loop);
+	g_assert(test_filter_dial_count == 1);
+
+	/* Count is incremented by the request destructor */
+	g_assert(count == 1);
+	count = 0;
+
+	__ofono_voicecall_filter_chain_free(vc.chain);
+	ofono_voicecall_filter_unregister(&filter);
+	test_common_deinit();
+}
+
 /* ==== incoming_allow ==== */
 
 static void test_incoming_allow(void)
@@ -814,8 +898,7 @@ static void test_cancel1(void)
 	/* Submit the request */
 	__ofono_voicecall_filter_chain_dial(vc.chain, &number,
 			OFONO_CLIR_OPTION_DEFAULT,
-			test_dial_expect_continue_and_quit,
-			test_inc, &count);
+			test_dial_unexpected, test_inc, &count);
 
 	/* And immediately cancel it */
 	__ofono_voicecall_filter_chain_cancel(vc.chain, NULL);
@@ -862,7 +945,7 @@ static void test_cancel2(void)
 	/* Submit the request */
 	__ofono_voicecall_filter_chain_dial(vc.chain, &number,
 			OFONO_CLIR_OPTION_DEFAULT,
-			test_dial_expect_continue_and_quit,
+			test_dial_unexpected,
 			test_inc, &count);
 
 	/* It will be cancelled before it's completed */
@@ -911,8 +994,7 @@ static void test_cancel3(void)
 	/* Submit the request */
 	__ofono_voicecall_filter_chain_dial(vc.chain, &number,
 			OFONO_CLIR_OPTION_DEFAULT,
-			test_dial_expect_continue_and_quit,
-			test_inc, &count);
+			test_dial_unexpected, test_inc, &count);
 
 	/* It will be cancelled before it's completed */
 	g_main_loop_run(test_loop);
@@ -928,6 +1010,44 @@ static void test_cancel3(void)
 /* ==== cancel4 ==== */
 
 static void test_cancel4(void)
+{
+	static struct ofono_voicecall_filter filter = {
+		.name = "dial_allow_async",
+		.api_version = OFONO_VOICECALL_FILTER_API_VERSION,
+		.filter_dial = filter_dial_cancel3, /* Reuse */
+		.filter_cancel = filter_cancel
+	};
+
+	struct ofono_voicecall vc;
+	struct ofono_call call;
+	int count = 0;
+
+	test_common_init();
+	test_voicecall_init(&vc);
+	ofono_call_init(&call);
+	string_to_phone_number("+1234", &call.phone_number);
+
+	g_assert(ofono_voicecall_filter_register(&filter) == 0);
+	g_assert((vc.chain = __ofono_voicecall_filter_chain_new(&vc)) != NULL);
+
+	/* Submit the request */
+	__ofono_voicecall_filter_chain_dial_check(vc.chain, &call,
+			test_dial_unexpected, test_inc, &count);
+
+	/* It will be cancelled before it's completed */
+	g_main_loop_run(test_loop);
+	g_assert(!test_filter_dial_count);
+	g_assert(count == 1);
+	count = 0;
+
+	__ofono_voicecall_filter_chain_free(vc.chain);
+	ofono_voicecall_filter_unregister(&filter);
+	test_common_deinit();
+}
+
+/* ==== cancel5 ==== */
+
+static void test_cancel5(void)
 {
 	static struct ofono_voicecall_filter filter1 = {
 		.name = "incoming_allow",
@@ -984,9 +1104,9 @@ static void test_cancel4(void)
 	test_common_deinit();
 }
 
-/* ==== cancel5 ==== */
+/* ==== cancel6 ==== */
 
-static void test_cancel5(void)
+static void test_cancel6(void)
 {
 	static struct ofono_voicecall_filter filter1 = {
 		.name = "incoming_allow",
@@ -1066,6 +1186,7 @@ int main(int argc, char *argv[])
 	g_test_add_func(TEST_("dial_allow_async"), test_dial_allow_async);
 	g_test_add_func(TEST_("dial_block"), test_dial_block);
 	g_test_add_func(TEST_("dial_block_async"), test_dial_block_async);
+	g_test_add_func(TEST_("dial_check"), test_dial_check);
 	g_test_add_func(TEST_("incoming_allow"), test_incoming_allow);
 	g_test_add_func(TEST_("incoming_hangup"), test_incoming_hangup);
 	g_test_add_func(TEST_("incoming_ignore"), test_incoming_ignore);
@@ -1075,6 +1196,7 @@ int main(int argc, char *argv[])
 	g_test_add_func(TEST_("cancel3"), test_cancel3);
 	g_test_add_func(TEST_("cancel4"), test_cancel4);
 	g_test_add_func(TEST_("cancel5"), test_cancel5);
+	g_test_add_func(TEST_("cancel6"), test_cancel6);
 
 	return g_test_run();
 }

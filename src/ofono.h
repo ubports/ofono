@@ -626,6 +626,10 @@ void __ofono_voicecall_filter_chain_dial(struct voicecall_filter_chain *c,
 				enum ofono_clir_option clir,
 				ofono_voicecall_filter_dial_cb_t cb,
 				ofono_destroy_func destroy, void *user_data);
+void __ofono_voicecall_filter_chain_dial_check(struct voicecall_filter_chain *c,
+				const struct ofono_call *call,
+				ofono_voicecall_filter_dial_cb_t cb,
+				ofono_destroy_func destroy, void *user_data);
 void __ofono_voicecall_filter_chain_incoming(struct voicecall_filter_chain *c,
 				const struct ofono_call *call,
 				ofono_voicecall_filter_incoming_cb_t cb,
