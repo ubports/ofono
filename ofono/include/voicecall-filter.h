@@ -109,6 +109,7 @@ struct ofono_voicecall_filter {
 				void *data);
 };
 
+void ofono_voicecall_filter_notify(struct ofono_voicecall *vc);
 int ofono_voicecall_filter_register(const struct ofono_voicecall_filter *f);
 void ofono_voicecall_filter_unregister(const struct ofono_voicecall_filter *f);
 

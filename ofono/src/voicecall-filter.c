@@ -565,6 +565,29 @@ void __ofono_voicecall_filter_chain_dial(struct voicecall_filter_chain *chain,
 	}
 }
 
+void __ofono_voicecall_filter_chain_dial_check(struct voicecall_filter_chain *c,
+				const struct ofono_call *call,
+				ofono_voicecall_filter_dial_cb_t cb,
+				ofono_destroy_func destroy, void *user_data)
+{
+	if (c && voicecall_filters && call && cb) {
+		struct voicecall_filter_request *req =
+			voicecall_filter_request_dial_new(c,
+				&call->phone_number, OFONO_CLIR_OPTION_DEFAULT,
+				cb, destroy, user_data);
+
+		req->call = call;
+		voicecall_filter_request_process(req);
+	} else {
+		if (cb) {
+			cb(OFONO_VOICECALL_FILTER_DIAL_CONTINUE, user_data);
+		}
+		if (destroy) {
+			destroy(user_data);
+		}
+	}
+}
+
 void __ofono_voicecall_filter_chain_incoming(struct voicecall_filter_chain *fc,
 				const struct ofono_call *call,
 				ofono_voicecall_filter_incoming_cb_t cb,
