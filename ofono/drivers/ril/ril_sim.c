@@ -275,11 +275,6 @@ static void ril_sim_pin_req_done(gpointer ptr)
 	}
 }
 
-static const char *ril_sim_app_id(struct ril_sim *sd)
-{
-	return sd->card->app ? sd->card->app->aid : NULL;
-}
-
 int ril_sim_app_type(struct ofono_sim *sim)
 {
 	struct ril_sim *sd = ril_sim_get_data(sim);
@@ -504,7 +499,8 @@ static void ril_sim_request_io(struct ril_sim *sd, guint cmd, int fileid,
 	GRilIoRequest *req = grilio_request_new();
 
 	DBG_(sd, "cmd=0x%.2X,efid=0x%.4X,%d,%d,%d,%s,pin2=(null),aid=%s",
-			cmd, fileid, p1, p2, p3, hex_data, ril_sim_app_id(sd));
+					cmd, fileid, p1, p2, p3, hex_data,
+					ril_sim_card_app_aid(sd->card));
 
 	grilio_request_append_int32(req, cmd);
 	grilio_request_append_int32(req, fileid);
@@ -514,7 +510,7 @@ static void ril_sim_request_io(struct ril_sim *sd, guint cmd, int fileid,
 	grilio_request_append_int32(req, p3);       /* P3 */
 	grilio_request_append_utf8(req, hex_data);  /* data; only for writes */
 	grilio_request_append_utf8(req, NULL);      /* pin2; only for writes */
-	grilio_request_append_utf8(req, ril_sim_app_id(sd));
+	grilio_request_append_utf8(req, ril_sim_card_app_aid(sd->card));
 
 	grilio_request_set_blocking(req, TRUE);
 	grilio_request_set_timeout(req, SIM_IO_TIMEOUT_SECS * 1000);
@@ -680,7 +676,7 @@ static void ril_sim_read_imsi(struct ofono_sim *sim, ofono_sim_imsi_cb_t cb,
 				void *data)
 {
 	struct ril_sim *sd = ril_sim_get_data(sim);
-	const char *app_id = ril_sim_app_id(sd);
+	const char *app_id = ril_sim_card_app_aid(sd->card);
 	struct ril_sim_cbd_io *cbd = ril_sim_cbd_io_new(sd, cb, data);
 	GRilIoRequest *req = grilio_request_array_utf8_new(1, app_id);
 
@@ -902,25 +898,22 @@ static int ril_sim_parse_retry_count(const void *data, guint len)
 static GRilIoRequest *ril_sim_enter_sim_pin_req(struct ril_sim *sd,
 							const char *pin)
 {
-	if (sd->card->app) {
-		/*
-		 * If there's no AID then so be it... Some
-		 * adaptations (namely, MTK) don't provide it
-		 * but don't seem to require it either.
-		 */
-		GRilIoRequest *req = grilio_request_array_utf8_new(2,
-						pin, sd->card->app->aid);
+	/*
+	 * If there's no AID then so be it... Some
+	 * adaptations (namely, MTK) don't provide it
+	 * but don't seem to require it either.
+	 */
+	GRilIoRequest *req = grilio_request_array_utf8_new(2, pin,
+					ril_sim_card_app_aid(sd->card));
 
-		grilio_request_set_blocking(req, TRUE);
-		return req;
-	}
-	return NULL;
+	grilio_request_set_blocking(req, TRUE);
+	return req;
 }
 
 static GRilIoRequest *ril_sim_enter_sim_puk_req(struct ril_sim *sd,
 					const char *puk, const char *pin)
 {
-	const char *app_id = ril_sim_app_id(sd);
+	const char *app_id = ril_sim_card_app_aid(sd->card);
 	if (app_id) {
 		GRilIoRequest *req = grilio_request_array_utf8_new(3,
 							puk, pin, app_id);
@@ -1222,7 +1215,7 @@ static void ril_sim_pin_send(struct ofono_sim *sim, const char *passwd,
 	GRilIoRequest *req = ril_sim_enter_sim_pin_req(sd, passwd);
 
 	if (req) {
-		DBG_(sd, "%s,aid=%s", passwd, ril_sim_app_id(sd));
+		DBG_(sd, "%s,aid=%s", passwd, ril_sim_card_app_aid(sd->card));
 		grilio_queue_send_request_full(sd->q, req,
 			RIL_REQUEST_ENTER_SIM_PIN, ril_sim_pin_change_state_cb,
 			ril_sim_pin_req_done, ril_sim_pin_cbd_new(sd,
@@ -1301,7 +1294,7 @@ static void ril_sim_pin_change_state(struct ofono_sim *sim,
 	const char *passwd, ofono_sim_lock_unlock_cb_t cb, void *data)
 {
 	struct ril_sim *sd = ril_sim_get_data(sim);
-	const char *app_id = ril_sim_app_id(sd);
+	const char *app_id = ril_sim_card_app_aid(sd->card);
 	const char *type_str = ril_sim_facility_code(passwd_type);
 	struct ofono_error error;
 	guint id = 0;
@@ -1339,7 +1332,7 @@ static void ril_sim_pin_send_puk(struct ofono_sim *sim,
 
 	if (req) {
 		DBG_(sd, "puk=%s,pin=%s,aid=%s", puk, passwd,
-							ril_sim_app_id(sd));
+					ril_sim_card_app_aid(sd->card));
 		grilio_queue_send_request_full(sd->q, req,
 			RIL_REQUEST_ENTER_SIM_PUK, ril_sim_pin_change_state_cb,
 			ril_sim_pin_req_done, ril_sim_pin_cbd_new(sd,
@@ -1359,7 +1352,7 @@ static void ril_sim_change_passwd(struct ofono_sim *sim,
 				ofono_sim_lock_unlock_cb_t cb, void *data)
 {
 	struct ril_sim *sd = ril_sim_get_data(sim);
-	const char *app_id = ril_sim_app_id(sd);
+	const char *app_id = ril_sim_card_app_aid(sd->card);
 	GRilIoRequest *req = grilio_request_array_utf8_new(3,
 					old_passwd, new_passwd, app_id);
 
@@ -1411,7 +1404,7 @@ static void ril_sim_query_facility_lock(struct ofono_sim *sim,
 	const char *type_str = ril_sim_facility_code(type);
 	struct ril_sim_cbd_io *cbd = ril_sim_cbd_io_new(sd, cb, data);
 	GRilIoRequest *req = grilio_request_array_utf8_new(4,
-			type_str, "", "0" /* class */, ril_sim_app_id(sd));
+		type_str, "", "0" /* class */, ril_sim_card_app_aid(sd->card));
 
 	/* Make sure that this request gets completed sooner or later */
 	grilio_request_set_timeout(req, FAC_LOCK_QUERY_TIMEOUT_SECS * 1000);
