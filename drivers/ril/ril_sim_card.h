@@ -77,9 +77,10 @@ void ril_sim_card_remove_handler(struct ril_sim_card *sc, gulong id);
 void ril_sim_card_remove_handlers(struct ril_sim_card *sc, gulong *ids, int n);
 
 /* Inline wrappers */
-static inline enum ril_app_type
-ril_sim_card_app_type(struct ril_sim_card *sc)
+static inline enum ril_app_type ril_sim_card_app_type(struct ril_sim_card *sc)
 	{ return (sc && sc->app) ? sc->app->app_type : RIL_APPTYPE_UNKNOWN; }
+static inline const char *ril_sim_card_app_aid(struct ril_sim_card *sc)
+	{ return (sc && sc->app) ? sc->app->aid : NULL; }
 
 #define ril_sim_card_remove_all_handlers(net, ids) \
 	ril_sim_card_remove_handlers(net, ids, G_N_ELEMENTS(ids))
