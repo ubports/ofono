@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2017 Jolla Ltd.
+ *  Copyright (C) 2015-2018 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -14,6 +14,7 @@
  */
 
 #include "ril_plugin.h"
+#include "ril_sim_card.h"
 #include "ril_util.h"
 #include "ril_log.h"
 
@@ -26,11 +27,11 @@
  * ril.h does not state that string count must be given, but that is
  * still expected by the modem
  */
-#define RIL_QUERY_STRING_COUNT 4
 #define RIL_SET_STRING_COUNT 5
 #define RIL_SET_PW_STRING_COUNT 3
 
 struct ril_call_barring {
+	struct ril_sim_card *card;
 	GRilIoQueue *q;
 	guint timer_id;
 };
@@ -106,7 +107,7 @@ static void ril_call_barring_query(struct ofono_call_barring *b,
 {
 	struct ril_call_barring *bd = ofono_call_barring_get_data(b);
 	char cls_textual[RIL_MAX_SERVICE_LENGTH];
-	GRilIoRequest *req = grilio_request_new();
+	GRilIoRequest *req;
 
 	DBG("lock: %s, services to query: %d", lock, cls);
 
@@ -123,15 +124,9 @@ static void ril_call_barring_query(struct ofono_call_barring *b,
 
 	/*
 	 * See 3GPP 27.007 7.4 for parameter descriptions.
-	 * According to ril.h password should be empty string "" when not
-	 * needed, but in reality we only need to give string length as 0
 	 */
-	grilio_request_append_int32(req, RIL_QUERY_STRING_COUNT);
-	grilio_request_append_utf8(req, lock);    /* Facility code */
-	grilio_request_append_int32(req, 0);      /* Password length */
-	grilio_request_append_utf8(req, cls_textual);
-	grilio_request_append_utf8(req, NULL);    /* AID (not yet supported) */
-
+	req = grilio_request_array_utf8_new(4, lock, "", cls_textual,
+					ril_sim_card_app_aid(bd->card));
 	ril_call_barring_submit_request(bd, req,
 				RIL_REQUEST_QUERY_FACILITY_LOCK,
 				ril_call_barring_query_cb, cb, data);
@@ -182,7 +177,7 @@ static void ril_call_barring_set(struct ofono_call_barring *b,
 					RIL_FACILITY_UNLOCK);
 	grilio_request_append_utf8(req, passwd);
 	grilio_request_append_utf8(req, cls_textual);
-	grilio_request_append_utf8(req, NULL);  /* AID (not yet supported) */
+	grilio_request_append_utf8(req, ril_sim_card_app_aid(bd->card));
 
 	ril_call_barring_submit_request(bd, req,
 				RIL_REQUEST_SET_FACILITY_LOCK,
@@ -243,6 +238,7 @@ static int ril_call_barring_probe(struct ofono_call_barring *b,
 	struct ril_call_barring *bd = g_new0(struct ril_call_barring, 1);
 
 	DBG("");
+	bd->card = ril_sim_card_ref(modem->sim_card);
 	bd->q = grilio_queue_new(ril_modem_io(modem));
 	bd->timer_id = g_idle_add(ril_call_barring_register, b);
 	ofono_call_barring_set_data(b, bd);
@@ -260,6 +256,7 @@ static void ril_call_barring_remove(struct ofono_call_barring *b)
 		g_source_remove(bd->timer_id);
 	}
 
+	ril_sim_card_unref(bd->card);
 	grilio_queue_cancel_all(bd->q, FALSE);
 	grilio_queue_unref(bd->q);
 	g_free(bd);
