@@ -79,6 +79,7 @@
 #define RILMODEM_DEFAULT_EMPTY_PIN_QUERY TRUE /* optimistic */
 #define RILMODEM_DEFAULT_QUERY_AVAILABLE_BAND_MODE TRUE /* Qualcomm */
 #define RILMODEM_DEFAULT_LEGACY_IMEI_QUERY FALSE
+#define RILMODEM_DEFAULT_RADIO_POWER_CYCLE TRUE
 
 /*
  * The convention is that the keys which can only appear in the [Settings]
@@ -115,7 +116,8 @@
 #define RILCONF_DATA_CALL_RETRY_DELAY       "dataCallRetryDelay"
 #define RILCONF_LOCAL_HANGUP_REASONS        "localHangupReasons"
 #define RILCONF_REMOTE_HANGUP_REASONS       "remoteHangupReasons"
-#define RILCONF_DEFAULT_LEGACY_IMEI_QUERY   "legacyImeiQuery"
+#define RILCONF_LEGACY_IMEI_QUERY           "legacyImeiQuery"
+#define RILCONF_RADIO_POWER_CYCLE           "radioPowerCycle"
 
 /* Modem error ids */
 #define RIL_ERROR_ID_RILD_RESTART           "rild-restart"
@@ -1179,6 +1181,7 @@ static ril_slot *ril_plugin_slot_new_take(char *sockpath, char *path,
 	config->techs = RILMODEM_DEFAULT_TECHS;
 	config->lte_network_mode = RILMODEM_DEFAULT_LTE_MODE;
 	config->empty_pin_query = RILMODEM_DEFAULT_EMPTY_PIN_QUERY;
+	config->radio_power_cycle = RILMODEM_DEFAULT_RADIO_POWER_CYCLE;
 	config->enable_voicecall = RILMODEM_DEFAULT_ENABLE_VOICECALL;
 	config->enable_cbs = RILMODEM_DEFAULT_ENABLE_CBS;
 	config->query_available_band_mode =
@@ -1414,6 +1417,13 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 				config->empty_pin_query ? "on" : "off");
 	}
 
+	/* radioPowerCycle */
+	if (ril_config_get_boolean(file, group, RILCONF_RADIO_POWER_CYCLE,
+					&config->radio_power_cycle)) {
+		DBG("%s: " RILCONF_RADIO_POWER_CYCLE " %s", group,
+				config->radio_power_cycle ? "on" : "off");
+	}
+
 	/* uiccWorkaround */
 	if (ril_config_get_flag(file, group, RILCONF_UICC_WORKAROUND,
 			RIL_SIM_CARD_V9_UICC_SUBSCRIPTION_WORKAROUND,
@@ -1494,10 +1504,9 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 	}
 
 	/* legacyImeiQuery */
-	if (ril_config_get_boolean(file, group,
-					RILCONF_DEFAULT_LEGACY_IMEI_QUERY,
+	if (ril_config_get_boolean(file, group, RILCONF_LEGACY_IMEI_QUERY,
 					&slot->legacy_imei_query)) {
-		DBG("%s: " RILCONF_DEFAULT_LEGACY_IMEI_QUERY " %s", group,
+		DBG("%s: " RILCONF_LEGACY_IMEI_QUERY " %s", group,
 				slot->legacy_imei_query ? "on" : "off");
 	}
 

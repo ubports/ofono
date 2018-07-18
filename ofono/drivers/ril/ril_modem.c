@@ -454,8 +454,10 @@ struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *log_prefix,
 		ofono_modem_set_data(ofono, md);
 		err = ofono_modem_register(ofono);
 		if (!err) {
-			ril_radio_power_cycle(modem->radio);
 			GASSERT(io->connected);
+			if (config->radio_power_cycle) {
+				ril_radio_power_cycle(modem->radio);
+			}
 
 			/*
 			 * ofono_modem_reset sets Powered to TRUE without

@@ -55,6 +55,7 @@ struct ril_slot_config {
 	int network_mode_timeout;
 	gboolean query_available_band_mode;
 	gboolean empty_pin_query;
+	gboolean radio_power_cycle;
 	gboolean enable_voicecall;
 	gboolean enable_cbs;
 	GUtilInts *local_hangup_reasons;
