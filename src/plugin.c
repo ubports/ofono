@@ -211,17 +211,26 @@ void __ofono_plugin_cleanup(void)
 
 	DBG("");
 
+	/*
+	 * Terminate the plugins but don't unload the libraries yet.
+	 * Plugins may reference data structures allocated by each other.
+	 */
 	for (list = plugins; list; list = list->next) {
 		struct ofono_plugin *plugin = list->data;
 
 		if (plugin->active == TRUE && plugin->desc->exit)
 			plugin->desc->exit();
+	}
+
+	/* Second pass - unload the libraries */
+	for (list = plugins; list; list = list->next) {
+		struct ofono_plugin *plugin = list->data;
 
 		if (plugin->handle)
 			dlclose(plugin->handle);
-
-		g_free(plugin);
 	}
 
-	g_slist_free(plugins);
+	/* Finally, free the memory */
+	g_slist_free_full(plugins, g_free);
+	plugins = NULL;
 }
