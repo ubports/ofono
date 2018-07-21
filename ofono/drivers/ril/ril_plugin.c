@@ -80,6 +80,7 @@
 #define RILMODEM_DEFAULT_QUERY_AVAILABLE_BAND_MODE TRUE /* Qualcomm */
 #define RILMODEM_DEFAULT_LEGACY_IMEI_QUERY FALSE
 #define RILMODEM_DEFAULT_RADIO_POWER_CYCLE TRUE
+#define RILMODEM_DEFAULT_CONFIRM_RADIO_POWER_ON TRUE
 
 /*
  * The convention is that the keys which can only appear in the [Settings]
@@ -118,6 +119,7 @@
 #define RILCONF_REMOTE_HANGUP_REASONS       "remoteHangupReasons"
 #define RILCONF_LEGACY_IMEI_QUERY           "legacyImeiQuery"
 #define RILCONF_RADIO_POWER_CYCLE           "radioPowerCycle"
+#define RILCONF_CONFIRM_RADIO_POWER_ON      "confirmRadioPowerOn"
 
 /* Modem error ids */
 #define RIL_ERROR_ID_RILD_RESTART           "rild-restart"
@@ -970,10 +972,12 @@ static void ril_plugin_slot_connected(ril_slot *slot)
 	slot->radio = ril_radio_new(slot->io);
 
 	GASSERT(!slot->io_event_id[IO_EVENT_RADIO_STATE_CHANGED]);
-	slot->io_event_id[IO_EVENT_RADIO_STATE_CHANGED] =
-		grilio_channel_add_unsol_event_handler(slot->io,
+	if (slot->config.confirm_radio_power_on) {
+		slot->io_event_id[IO_EVENT_RADIO_STATE_CHANGED] =
+			grilio_channel_add_unsol_event_handler(slot->io,
 				ril_plugin_radio_state_changed,
 				RIL_UNSOL_RESPONSE_RADIO_STATE_CHANGED, slot);
+	}
 
 	GASSERT(!slot->sim_card);
 	slot->sim_card = ril_sim_card_new(slot->io, slot->config.slot,
@@ -1182,6 +1186,8 @@ static ril_slot *ril_plugin_slot_new_take(char *sockpath, char *path,
 	config->lte_network_mode = RILMODEM_DEFAULT_LTE_MODE;
 	config->empty_pin_query = RILMODEM_DEFAULT_EMPTY_PIN_QUERY;
 	config->radio_power_cycle = RILMODEM_DEFAULT_RADIO_POWER_CYCLE;
+	config->confirm_radio_power_on =
+		RILMODEM_DEFAULT_CONFIRM_RADIO_POWER_ON;
 	config->enable_voicecall = RILMODEM_DEFAULT_ENABLE_VOICECALL;
 	config->enable_cbs = RILMODEM_DEFAULT_ENABLE_CBS;
 	config->query_available_band_mode =
@@ -1422,6 +1428,13 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 					&config->radio_power_cycle)) {
 		DBG("%s: " RILCONF_RADIO_POWER_CYCLE " %s", group,
 				config->radio_power_cycle ? "on" : "off");
+	}
+
+	/* confirmRadioPowerOn */
+	if (ril_config_get_boolean(file, group, RILCONF_CONFIRM_RADIO_POWER_ON,
+					&config->confirm_radio_power_on)) {
+		DBG("%s: " RILCONF_CONFIRM_RADIO_POWER_ON " %s", group,
+				config->confirm_radio_power_on ? "on" : "off");
 	}
 
 	/* uiccWorkaround */
