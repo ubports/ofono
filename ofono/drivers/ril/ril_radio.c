@@ -77,8 +77,8 @@ static inline gboolean ril_radio_power_should_be_on(struct ril_radio *self)
 {
 	struct ril_radio_priv *priv = self->priv;
 
-	return self->online && !priv->power_cycle &&
-				g_hash_table_size(priv->req_table) > 0;
+	return (self->online || g_hash_table_size(priv->req_table) > 0) &&
+		!priv->power_cycle;
 }
 
 static inline gboolean ril_radio_state_off(enum ril_radio_state radio_state)
@@ -219,8 +219,13 @@ static void ril_radio_power_request(struct ril_radio *self, gboolean on,
 			DBG("%s%s (ignored)", priv->log_prefix, on_off);
 		}
 	} else {
-		DBG("%s%s", priv->log_prefix, on_off);
-		ril_radio_submit_power_request(self, on);
+		if (ril_radio_state_on(priv->last_known_state) == on) {
+			DBG("%s%s (already)", priv->log_prefix, on_off);
+			ril_radio_check_state(self);
+		} else {
+			DBG("%s%s", priv->log_prefix, on_off);
+			ril_radio_submit_power_request(self, on);
+		}
 	}
 }
 
