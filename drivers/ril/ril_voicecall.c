@@ -693,7 +693,7 @@ static void ril_voicecall_supp_svc_notification_event(GRilIoChannel *io,
 	grilio_parser_get_int32(&rilp, &type);
 	grilio_parser_get_int32(&rilp, &code);
 	grilio_parser_get_int32(&rilp, &index);
-	grilio_parser_get_int32(&rilp, NULL);
+	grilio_parser_get_int32(&rilp, &phone.type);
 	tmp = grilio_parser_get_utf8(&rilp);
 
 	if (tmp) {
