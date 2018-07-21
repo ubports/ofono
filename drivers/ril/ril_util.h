@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2017 Jolla Ltd.
+ *  Copyright (C) 2015-2018 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -26,7 +26,6 @@ const char *ril_unsol_event_to_string(guint event);
 const char *ril_radio_state_to_string(int radio_state);
 int ril_parse_tech(const char *stech, int *ril_tech);
 gboolean ril_parse_mcc_mnc(const char *str, struct ofono_network_operator *op);
-gboolean ril_parse_int(const char *str, int base, int *value);
 
 #define ril_error_init_ok(err) \
 	((err)->error = 0, (err)->type = OFONO_ERROR_TYPE_NO_ERROR)

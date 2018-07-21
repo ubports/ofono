@@ -81,27 +81,6 @@ void test_parse_mcc_mnc(void)
 	g_assert(!op.tech);
 }
 
-void test_parse_int(void)
-{
-	int value;
-
-	g_assert(!ril_parse_int(NULL, 0, NULL));
-	g_assert(!ril_parse_int("", 0, NULL));
-	g_assert(!ril_parse_int("garbage", 0, NULL));
-	g_assert(!ril_parse_int("0 trailing garbage", 0, NULL));
-	g_assert(ril_parse_int("0", 0, NULL));
-	g_assert(ril_parse_int("0", 0, &value));
-	g_assert(value == 0);
-	g_assert(!ril_parse_int("0x10000000000000000", 0, &value));
-	g_assert(!ril_parse_int("-2147483649", 0, &value));
-	g_assert(!ril_parse_int("4294967295", 0, &value));
-	g_assert(ril_parse_int(" 0x7fffffff ", 0, &value));
-	g_assert(value == 0x7fffffff);
-	g_assert(ril_parse_int(" 7fffffff ", 16, &value));
-	g_assert(value == 0x7fffffff);
-	g_assert(!ril_parse_int("0xffffffff", 0, &value));
-}
-
 void test_strings(void)
 {
 	g_assert(!g_strcmp0(ril_error_to_string(RIL_E_SUCCESS), "OK"));
@@ -128,7 +107,6 @@ int main(int argc, char *argv[])
 
 	g_test_add_func(TEST_("parse_tech"), test_parse_tech);
 	g_test_add_func(TEST_("parse_mcc_mnc"), test_parse_mcc_mnc);
-	g_test_add_func(TEST_("parse_int"), test_parse_int);
 	g_test_add_func(TEST_("strings"), test_strings);
 
 	return g_test_run();
