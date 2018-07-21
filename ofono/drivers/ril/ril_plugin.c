@@ -30,8 +30,11 @@
 #include <sailfish_manager.h>
 #include <sailfish_watch.h>
 
+#include <grilio_transport.h>
+
 #include <gutil_ints.h>
 #include <gutil_macros.h>
+#include <gutil_misc.h>
 
 #include <mce_display.h>
 #include <mce_log.h>
@@ -48,6 +51,7 @@
 #define OFONO_API_SUBJECT_TO_CHANGE
 #include <ofono/plugin.h>
 #include <ofono/storage.h>
+#include <ofono/ril-transport.h>
 
 #define OFONO_RADIO_ACCESS_MODE_ALL (OFONO_RADIO_ACCESS_MODE_GSM |\
                                      OFONO_RADIO_ACCESS_MODE_UMTS |\
@@ -82,6 +86,11 @@
 #define RILMODEM_DEFAULT_RADIO_POWER_CYCLE TRUE
 #define RILMODEM_DEFAULT_CONFIRM_RADIO_POWER_ON TRUE
 
+/* RIL socket transport name and parameters */
+#define RIL_TRANSPORT_SOCKET                "socket"
+#define RIL_TRANSPORT_SOCKET_PATH           "path"
+#define RIL_TRANSPORT_SOCKET_SUB            "sub"
+
 /*
  * The convention is that the keys which can only appear in the [Settings]
  * section start with the upper case, those which appear in the [ril_*]
@@ -93,8 +102,9 @@
 #define RILCONF_SETTINGS_3GHANDOVER         "3GLTEHandover"
 #define RILCONF_SETTINGS_SET_RADIO_CAP      "SetRadioCapability"
 
-#define RILCONF_DEV_PREFIX                  "ril_"
-#define RILCONF_PATH_PREFIX                 "/" RILCONF_DEV_PREFIX
+#define RILCONF_MODEM_PREFIX                "ril_"
+#define RILCONF_PATH_PREFIX                 "/" RILCONF_MODEM_PREFIX
+#define RILCONF_TRANSPORT                   "transport"
 #define RILCONF_NAME                        "name"
 #define RILCONF_SOCKET                      "socket"
 #define RILCONF_SLOT                        "slot"
@@ -182,8 +192,8 @@ typedef struct sailfish_slot_impl {
 	char *imei;
 	char *imeisv;
 	char *name;
-	char *sockpath;
-	char *sub;
+	char *transport_name;
+	GHashTable *transport_params;
 	char *ecclist_file;
 	int timeout;            /* RIL timeout, in milliseconds */
 	int index;
@@ -1054,8 +1064,8 @@ static void ril_plugin_slot_connected_cb(GRilIoChannel *io, void *user_data)
 static void ril_plugin_init_io(ril_slot *slot)
 {
 	if (!slot->io) {
-		DBG("%s %s", slot->sockpath, slot->sub);
-		slot->io = grilio_channel_new_socket(slot->sockpath, slot->sub);
+		slot->io = grilio_channel_new(ofono_ril_transport_connect
+			(slot->transport_name, slot->transport_params));
 		if (slot->io) {
 			ril_debug_trace_update(slot);
 			ril_debug_dump_update(slot);
@@ -1111,7 +1121,7 @@ static void ril_plugin_retry_init_io(ril_slot *slot)
 		g_source_remove(slot->retry_id);
 	}
 
-	DBG("%s %s", slot->sockpath, slot->sub);
+	DBG("%s", slot->path);
 	slot->retry_id = g_timeout_add_seconds(RIL_RETRY_SECS,
 					ril_plugin_retry_init_io_cb, slot);
 }
@@ -1139,7 +1149,7 @@ static void ril_slot_free(ril_slot *slot)
 {
 	ril_plugin* plugin = slot->plugin;
 
-	DBG("%s", slot->sockpath);
+	DBG("%s", slot->path);
 	ril_plugin_shutdown_slot(slot, TRUE);
 	plugin->slots = g_slist_remove(plugin->slots, slot);
 	mce_display_remove_all_handlers(slot->display, slot->display_event_id);
@@ -1153,8 +1163,8 @@ static void ril_slot_free(ril_slot *slot)
 	g_free(slot->imei);
 	g_free(slot->imeisv);
 	g_free(slot->name);
-	g_free(slot->sockpath);
-	g_free(slot->sub);
+	g_free(slot->transport_name);
+	g_hash_table_destroy(slot->transport_params);
 	g_free(slot->ecclist_file);
 	g_free(slot);
 }
@@ -1164,7 +1174,7 @@ static gboolean ril_plugin_slot_start_timeout(gpointer user_data)
 	ril_slot *slot = user_data;
 	ril_plugin* plugin = slot->plugin;
 
-	DBG("%s", slot->sockpath);
+	DBG("%s", slot->path);
 	plugin->slots = g_slist_remove(plugin->slots, slot);
 	slot->start_timeout_id = 0;
 	ril_slot_free(slot);
@@ -1172,14 +1182,16 @@ static gboolean ril_plugin_slot_start_timeout(gpointer user_data)
 	return G_SOURCE_REMOVE;
 }
 
-static ril_slot *ril_plugin_slot_new_take(char *sockpath, char *path,
-						char *name, guint slot_index)
+static ril_slot *ril_plugin_slot_new_take(char *transport,
+			GHashTable *transport_params, char *dbus_path,
+			char *name, guint slot_index)
 {
 	ril_slot *slot = g_new0(ril_slot, 1);
 	struct ril_slot_config *config = &slot->config;
 
-	slot->sockpath = sockpath;
-	slot->path = path;
+	slot->transport_name = transport;
+	slot->transport_params = transport_params;
+	slot->path = dbus_path;
 	slot->name = name;
 	config->slot = slot_index;
 	config->techs = RILMODEM_DEFAULT_TECHS;
@@ -1212,7 +1224,7 @@ static ril_slot *ril_plugin_slot_new_take(char *sockpath, char *path,
 		mce_display_add_state_changed_handler(slot->display,
 				ril_plugin_display_cb, slot);
 
-	slot->watch = sailfish_watch_new(path);
+	slot->watch = sailfish_watch_new(dbus_path);
 	slot->watch_event_id[WATCH_EVENT_MODEM] =
 		sailfish_watch_add_modem_changed_handler(slot->watch,
 			ril_plugin_slot_modem_changed, slot);
@@ -1242,11 +1254,23 @@ static void ril_plugin_slot_apply_vendor_defaults(ril_slot *slot)
 	}
 }
 
-static ril_slot *ril_plugin_slot_new(const char *sockpath, const char *path,
+static ril_slot *ril_plugin_slot_new_socket(const char *sockpath,
+				const char *sub, const char *dbus_path,
 				const char *name, guint slot_index)
 {
-	return ril_plugin_slot_new_take(g_strdup(sockpath), g_strdup(path),
-						g_strdup(name), slot_index);
+	/* RIL socket configuration */
+	GHashTable *params = g_hash_table_new_full(g_str_hash, g_str_equal,
+							g_free, g_free);
+
+	g_hash_table_insert(params, g_strdup(RIL_TRANSPORT_SOCKET_PATH),
+							g_strdup(sockpath));
+	if (sub) {
+		g_hash_table_insert(params, g_strdup(RIL_TRANSPORT_SOCKET_SUB),
+							g_strdup(sub));
+	}
+
+	return ril_plugin_slot_new_take(g_strdup(RIL_TRANSPORT_SOCKET), params,
+			g_strdup(dbus_path), g_strdup(name), slot_index);
 }
 
 static GSList *ril_plugin_create_default_config()
@@ -1255,22 +1279,73 @@ static GSList *ril_plugin_create_default_config()
 
 	if (g_file_test(RILMODEM_DEFAULT_SOCK2, G_FILE_TEST_EXISTS)) {
 		DBG("Falling back to default dual SIM config");
-		list = g_slist_append(list,
-				ril_plugin_slot_new(RILMODEM_DEFAULT_SOCK,
+		list = g_slist_append(list, ril_plugin_slot_new_socket
+				(RILMODEM_DEFAULT_SOCK, NULL,
 					RILCONF_PATH_PREFIX "0", "RIL1", 0));
-		list = g_slist_append(list,
-				ril_plugin_slot_new(RILMODEM_DEFAULT_SOCK2,
+		list = g_slist_append(list, ril_plugin_slot_new_socket
+				(RILMODEM_DEFAULT_SOCK2, NULL,
 					RILCONF_PATH_PREFIX "1", "RIL2", 1));
 	} else {
-		ril_slot *slot = ril_plugin_slot_new(RILMODEM_DEFAULT_SOCK,
-					RILCONF_PATH_PREFIX "0", "RIL", 0);
-
 		DBG("Falling back to default single SIM config");
-		slot->sub = g_strdup(RILMODEM_DEFAULT_SUB);
-		list = g_slist_append(list, slot);
+		list = g_slist_append(list, ril_plugin_slot_new_socket
+				(RILMODEM_DEFAULT_SOCK, RILMODEM_DEFAULT_SUB,
+					RILCONF_PATH_PREFIX "0", "RIL", 0));
 	}
 
 	return list;
+}
+
+/*
+ * Parse the spec according to the following grammar:
+ *
+ *   spec: transport | transport ':' parameters
+ *   params: param | params ';' param
+ *   param: name '=' value
+ *   transport: STRING
+ *   name: STRING
+ *   value: STRING
+ *
+ * For example, a RIL socket spec may look like this:
+ *
+ *   socket:path=/dev/socket/rild;sub=SUB1
+ */
+static char *ril_plugin_parse_transport_spec(const char *spec,
+							GHashTable *params)
+{
+	char *transport = NULL;
+	char *sep = strchr(spec, ':');
+
+	if (sep) {
+		transport = g_strstrip(g_strndup(spec, sep - spec));
+		if (transport[0]) {
+			char **list = g_strsplit(sep + 1, ";", 0);
+			char **ptr;
+
+			for (ptr = list; *ptr; ptr++) {
+				const char *p = *ptr;
+
+				sep = strchr(p, '=');
+				if (sep) {
+					char *name = g_strndup(p, sep - p);
+					char* value = g_strdup(sep + 1);
+
+					g_hash_table_insert(params,
+							g_strstrip(name),
+							g_strstrip(value));
+				}
+			}
+			g_strfreev(list);
+			return transport;
+		}
+	} else {
+		/* Use default transport attributes */
+		transport = g_strstrip(g_strdup(spec));
+		if (transport[0]) {
+			return transport;
+		}
+	}
+	g_free(transport);
+	return NULL;
 }
 
 static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
@@ -1281,28 +1356,56 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 	int ival;
 	char *sval;
 	char **strv;
-	char *sock = g_key_file_get_string(file, group, RILCONF_SOCKET, NULL);
+	GHashTable *transport_params = g_hash_table_new_full(g_str_hash,
+						g_str_equal, g_free, g_free);
+	char *transport = NULL;
+	char *transport_spec = g_key_file_get_string(file, group,
+						RILCONF_TRANSPORT, NULL);
 
-	if (!sock) {
-		ofono_warn("no socket path for %s", group);
+	if (transport_spec) {
+		transport = ril_plugin_parse_transport_spec(transport_spec,
+							transport_params);
+		if (transport) {
+			DBG("%s: %s:%s", group, transport,
+					strchr(transport_spec, ':') + 1);
+		}
+		g_free(transport_spec);
+	} else {
+		/* Fall back to socket transport */
+		char *sockpath = g_key_file_get_string(file, group,
+							RILCONF_SOCKET, NULL);
+
+		if (sockpath) {
+			char *sub = g_key_file_get_string(file, group,
+							RILCONF_SUB, NULL);
+
+			transport = g_strdup(RIL_TRANSPORT_SOCKET);
+			g_hash_table_insert(transport_params,
+					g_strdup(RIL_TRANSPORT_SOCKET_PATH),
+					sockpath);
+			if (sub && strlen(sub) == RIL_SUB_SIZE) {
+				DBG("%s: %s:%s", group, sockpath, sub);
+				g_hash_table_insert(transport_params,
+					g_strdup(RIL_TRANSPORT_SOCKET_SUB),
+					sub);
+			} else {
+				DBG("%s: %s", group, sockpath);
+				g_free(sub);
+			}
+		}
+	}
+
+	if (!transport) {
+		ofono_warn("No usable RIL transport defined for %s", group);
+		g_hash_table_destroy(transport_params);
 		return NULL;
 	}
 
-	slot = ril_plugin_slot_new_take(sock,
+	slot = ril_plugin_slot_new_take(transport, transport_params,
 			g_strconcat("/", group, NULL),
 			ril_config_get_string(file, group, RILCONF_NAME),
 			RILMODEM_DEFAULT_SLOT);
 	config = &slot->config;
-
-	/* sub */
-	sval = ril_config_get_string(file, group, RILCONF_SUB);
-	if (sval && strlen(sval) == RIL_SUB_SIZE) {
-		DBG("%s: %s:%s", group, sock, sval);
-		slot->sub = sval;
-	} else {
-		DBG("%s: %s", group, sock);
-		g_free(sval);
-	}
 
 	/* slot */
 	if (ril_config_get_integer(file, group, RILCONF_SLOT, &ival) &&
@@ -1597,7 +1700,7 @@ static void ril_plugin_parse_identity(struct ril_plugin_identity *identity,
 			int n;
 
 			/* Try numeric */
-			if (ril_parse_int(group, 0, &n)) {
+			if (gutil_parse_int(group, 0, &n)) {
 				gr = getgrgid(n);
 			}
 		}
@@ -1609,7 +1712,7 @@ static void ril_plugin_parse_identity(struct ril_plugin_identity *identity,
 		int n;
 
 		/* Try numeric */
-		if (ril_parse_int(user, 0, &n)) {
+		if (gutil_parse_int(user, 0, &n)) {
 			pw = getpwuid(n);
 		}
 	}
@@ -1640,7 +1743,7 @@ static GSList *ril_plugin_parse_config_file(GKeyFile *file,
 
 	for (i=0; i<n; i++) {
 		const char *group = groups[i];
-		if (g_str_has_prefix(group, RILCONF_DEV_PREFIX)) {
+		if (g_str_has_prefix(group, RILCONF_MODEM_PREFIX)) {
 			/* Modem configuration */
 			ril_slot *slot = ril_plugin_parse_config_group(file,
 									group);
@@ -1964,10 +2067,31 @@ static void ril_slot_enabled_changed(struct sailfish_slot_impl *s)
 	}
 }
 
+/**
+ * RIL socket transport factory
+ */
+static struct grilio_transport *ril_socket_transport_connect(GHashTable *args)
+{
+	const char* path = g_hash_table_lookup(args, RIL_TRANSPORT_SOCKET_PATH);
+	const char* sub = g_hash_table_lookup(args, RIL_TRANSPORT_SOCKET_SUB);
+
+	GASSERT(path);
+	if (path) {
+		DBG("%s %s", path, sub);
+		return grilio_transport_socket_new_path(path, sub);
+	}
+	return NULL;
+}
+
 /* Global part (that requires access to global variables) */
 
 static struct sailfish_slot_driver_reg *ril_driver = NULL;
 static guint ril_driver_init_id = 0;
+static const struct ofono_ril_transport ril_socket_transport = {
+	.name = RIL_TRANSPORT_SOCKET,
+	.api_version = OFONO_RIL_TRANSPORT_API_VERSION,
+	.connect = ril_socket_transport_connect
+};
 
 static void ril_debug_trace_notify(struct ofono_debug_desc *desc)
 {
@@ -2013,6 +2137,9 @@ static gboolean ril_plugin_start(gpointer user_data)
 	DBG("");
 	ril_driver_init_id = 0;
 
+	/* Socket transport can be registered right away */
+	ofono_ril_transport_register(&ril_socket_transport);
+
 	/* Register the driver */
 	ril_driver = sailfish_slot_driver_register(&ril_slot_driver);
 	return G_SOURCE_REMOVE;
@@ -2048,6 +2175,7 @@ static void ril_plugin_exit(void)
 	DBG("");
 	GASSERT(ril_driver);
 
+	ofono_ril_transport_unregister(&ril_socket_transport);
 	ofono_modem_driver_unregister(&ril_modem_driver);
 	ofono_sim_driver_unregister(&ril_sim_driver);
 	ofono_sms_driver_unregister(&ril_sms_driver);

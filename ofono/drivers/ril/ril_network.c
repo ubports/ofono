@@ -217,11 +217,11 @@ static gboolean ril_network_parse_response(struct ril_network *self,
 		reg->max_calls = 2;
 	}
 
-	if (!ril_parse_int(slac, 16, &reg->lac)) {
+	if (!gutil_parse_int(slac, 16, &reg->lac)) {
 		reg->lac = -1;
 	}
 
-	if (!ril_parse_int(sci, 16, &reg->ci)) {
+	if (!gutil_parse_int(sci, 16, &reg->ci)) {
 		reg->ci = -1;
 	}
 

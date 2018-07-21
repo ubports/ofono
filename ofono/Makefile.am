@@ -25,6 +25,7 @@ pkginclude_HEADERS = include/log.h include/plugin.h include/history.h \
 			include/handsfree-audio.h include/siri.h \
 			include/sms-filter.h include/gprs-filter.h \
 			include/voicecall-filter.h \
+			include/ril-constants.h include/ril-transport.h \
 			include/netmon.h include/lte.h \
 			include/storage.h \
 			gdbus/gdbus.h
@@ -738,7 +739,7 @@ src_ofonod_SOURCES = $(builtin_sources) $(gatchat_sources) src/ofono.ver \
 			src/handsfree-audio.c src/bluetooth.h \
 			src/sim-mnclength.c src/voicecallagent.c \
 			src/sms-filter.c src/gprs-filter.c src/dbus-queue.c \
-			src/voicecall-filter.c \
+			src/voicecall-filter.c src/ril-transport.c \
 			src/hfp.h src/siri.c \
 			src/netmon.c src/lte.c \
 			src/netmonagent.c src/netmonagent.h
@@ -1095,6 +1096,13 @@ unit_test_provision_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
 unit_test_provision_LDADD = @GLIB_LIBS@ -ldl
 unit_objects += $(unit_test_provision_OBJECTS)
 unit_tests += unit/test-provision
+
+unit_test_ril_transport_SOURCES = unit/test-ril-transport.c \
+				src/ril-transport.c src/log.c
+unit_test_ril_transport_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
+unit_test_ril_transport_LDADD = @GLIB_LIBS@ -ldl
+unit_objects += $(unit_test_ril_transport_OBJECTS)
+unit_tests += unit/test-ril-transport
 
 unit_test_sms_filter_SOURCES = unit/test-sms-filter.c \
 				src/sms-filter.c src/log.c
