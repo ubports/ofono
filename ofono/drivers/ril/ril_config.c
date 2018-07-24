@@ -19,6 +19,7 @@
 
 #include <gutil_intarray.h>
 #include <gutil_ints.h>
+#include <gutil_misc.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -206,7 +207,7 @@ GUtilInts *ril_config_get_ints(GKeyFile *file, const char *group,
 		while (*ptr) {
 			int val;
 
-			if (ril_parse_int(*ptr++, 0, &val)) {
+			if (gutil_parse_int(*ptr++, 0, &val)) {
 				gutil_int_array_append(array, val);
 			}
 		}

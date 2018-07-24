@@ -184,10 +184,10 @@ AC_ARG_ENABLE(sailfish-rilmodem, AC_HELP_STRING([--enable-sailfish-rilmodem],
 AM_CONDITIONAL(SAILFISH_RILMODEM, test "${enable_sailfish_rilmodem}" != "no")
 
 if (test "${enable_sailfish_rilmodem}" = "yes"); then
-	PKG_CHECK_MODULES(GRILIO, libgrilio >= 1.0.21, dummy=yes,
-				AC_MSG_ERROR(libgrilio >= 1.0.21 is required))
-	PKG_CHECK_MODULES(GLIBUTIL, libglibutil >= 1.0.23, dummy=yes,
-				AC_MSG_ERROR(libglibutil >= 1.0.23 is required))
+	PKG_CHECK_MODULES(GRILIO, libgrilio >= 1.0.25, dummy=yes,
+				AC_MSG_ERROR(libgrilio >= 1.0.25 is required))
+	PKG_CHECK_MODULES(GLIBUTIL, libglibutil >= 1.0.30, dummy=yes,
+				AC_MSG_ERROR(libglibutil >= 1.0.30 is required))
 	PKG_CHECK_MODULES(LIBMCE, libmce-glib >= 1.0.5, dummy=yes,
 				AC_MSG_ERROR(libmce-glib >= 1.0.5 is required))
 	CFLAGS="$CFLAGS $GRILIO_CFLAGS $LIBMCE_CFLAGS"

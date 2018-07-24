@@ -71,14 +71,16 @@ G_DEFINE_TYPE(RilRadio, ril_radio, G_TYPE_OBJECT)
 #define RIL_RADIO_TYPE (ril_radio_get_type())
 #define RIL_RADIO(obj) (G_TYPE_CHECK_INSTANCE_CAST(obj,RIL_RADIO_TYPE,RilRadio))
 
+#define DBG_(self,fmt,args...) DBG("%s" fmt, (self)->priv->log_prefix, ##args)
+
 static void ril_radio_submit_power_request(struct ril_radio *self, gboolean on);
 
 static inline gboolean ril_radio_power_should_be_on(struct ril_radio *self)
 {
 	struct ril_radio_priv *priv = self->priv;
 
-	return self->online && !priv->power_cycle &&
-				g_hash_table_size(priv->req_table) > 0;
+	return (self->online || g_hash_table_size(priv->req_table) > 0) &&
+		!priv->power_cycle;
 }
 
 static inline gboolean ril_radio_state_off(enum ril_radio_state radio_state)
@@ -102,7 +104,7 @@ static gboolean ril_radio_power_request_retry_cb(gpointer user_data)
 	struct ril_radio *self = RIL_RADIO(user_data);
 	struct ril_radio_priv *priv = self->priv;
 
-	DBG("%s", priv->log_prefix);
+	DBG_(self, "");
 	GASSERT(priv->retry_id);
 	priv->retry_id = 0;
 	ril_radio_submit_power_request(self,
@@ -116,7 +118,7 @@ static void ril_radio_cancel_retry(struct ril_radio *self)
 	struct ril_radio_priv *priv = self->priv;
 
 	if (priv->retry_id) {
-		DBG("%sretry cancelled", priv->log_prefix);
+		DBG_(self, "retry cancelled");
 		g_source_remove(priv->retry_id);
 		priv->retry_id = 0;
 	}
@@ -129,8 +131,8 @@ static void ril_radio_check_state(struct ril_radio *self)
 	if (!priv->pending_id) {
 		gboolean should_be_on = ril_radio_power_should_be_on(self);
 
-		if (ril_radio_state_on(self->priv->last_known_state) ==
-								should_be_on) {
+		if (ril_radio_state_on(priv->last_known_state) ==
+							should_be_on) {
 			/* All is good, cancel pending retry if there is one */
 			ril_radio_cancel_retry(self);
 		} else if (priv->state_changed_while_request_pending) {
@@ -138,7 +140,7 @@ static void ril_radio_check_state(struct ril_radio *self)
 			ril_radio_submit_power_request(self, should_be_on);
 		} else if (!priv->retry_id) {
 			/* There has been no reaction so far, wait a bit */
-			DBG("%sretry scheduled", priv->log_prefix);
+			DBG_(self, "retry scheduled");
 			priv->retry_id = g_timeout_add_seconds(POWER_RETRY_SECS,
 					ril_radio_power_request_retry_cb, self);
 		}
@@ -147,11 +149,24 @@ static void ril_radio_check_state(struct ril_radio *self)
 	/* Don't update public state while something is pending */
 	if (!priv->pending_id && !priv->retry_id &&
 				self->state != priv->last_known_state) {
-		DBG("%s%s -> %s", priv->log_prefix,
-			ril_radio_state_to_string(self->state),
+		DBG_(self, "%s -> %s", ril_radio_state_to_string(self->state),
 			ril_radio_state_to_string(priv->last_known_state));
 		self->state = priv->last_known_state;
 		ril_radio_emit_signal(self, SIGNAL_STATE_CHANGED);
+	}
+}
+
+static void ril_radio_power_request_done(struct ril_radio *self)
+{
+	struct ril_radio_priv *priv = self->priv;
+
+	GASSERT(priv->pending_id);
+	priv->pending_id = 0;
+
+	if (priv->next_state_valid) {
+		ril_radio_submit_power_request(self, priv->next_state);
+	} else {
+		ril_radio_check_state(self);
 	}
 }
 
@@ -159,21 +174,13 @@ static void ril_radio_power_request_cb(GRilIoChannel *channel, int ril_status,
 				const void *data, guint len, void *user_data)
 {
 	struct ril_radio *self = RIL_RADIO(user_data);
-	struct ril_radio_priv *priv = self->priv;
-
-	GASSERT(priv->pending_id);
-	priv->pending_id = 0;
 
 	if (ril_status != RIL_E_SUCCESS) {
 		ofono_error("Power request failed: %s",
 					ril_error_to_string(ril_status));
 	}
 
-	if (priv->next_state_valid) {
-		ril_radio_submit_power_request(self, priv->next_state);
-	} else {
-		ril_radio_check_state(self);
-	}
+	ril_radio_power_request_done(self);
 }
 
 static void ril_radio_submit_power_request(struct ril_radio *self, gboolean on)
@@ -214,13 +221,18 @@ static void ril_radio_power_request(struct ril_radio *self, gboolean on,
 			/* Wait for the pending request to complete */
 			priv->next_state_valid = TRUE;
 			priv->next_state = on;
-			DBG("%s%s (queued)", priv->log_prefix, on_off);
+			DBG_(self, "%s (queued)", on_off);
 		} else {
-			DBG("%s%s (ignored)", priv->log_prefix, on_off);
+			DBG_(self, "%s (ignored)", on_off);
 		}
 	} else {
-		DBG("%s%s", priv->log_prefix, on_off);
-		ril_radio_submit_power_request(self, on);
+		if (ril_radio_state_on(priv->last_known_state) == on) {
+			DBG_(self, "%s (already)", on_off);
+			ril_radio_check_state(self);
+		} else {
+			DBG_(self, "%s", on_off);
+			ril_radio_submit_power_request(self, on);
+		}
 	}
 }
 
@@ -237,12 +249,12 @@ void ril_radio_power_cycle(struct ril_radio *self)
 		struct ril_radio_priv *priv = self->priv;
 
 		if (ril_radio_state_off(priv->last_known_state)) {
-			DBG("%spower is already off", priv->log_prefix);
+			DBG_(self, "power is already off");
 			GASSERT(!priv->power_cycle);
 		} else if (priv->power_cycle) {
-			DBG("%salready in progress", priv->log_prefix);
+			DBG_(self, "already in progress");
 		} else {
-			DBG("%sinitiated", priv->log_prefix);
+			DBG_(self, "initiated");
 			priv->power_cycle = TRUE;
 			if (!priv->pending_id) {
 				ril_radio_submit_power_request(self, FALSE);
@@ -259,7 +271,7 @@ void ril_radio_power_on(struct ril_radio *self, gpointer tag)
 		if (!g_hash_table_contains(priv->req_table, tag)) {
 			gboolean was_on = ril_radio_power_should_be_on(self);
 
-			DBG("%s%p", priv->log_prefix, tag);
+			DBG_(self, "%p", tag);
 			g_hash_table_insert(priv->req_table, tag, tag);
 			if (!was_on && ril_radio_power_should_be_on(self)) {
 				ril_radio_power_request(self, TRUE, FALSE);
@@ -274,7 +286,7 @@ void ril_radio_power_off(struct ril_radio *self, gpointer tag)
 		struct ril_radio_priv *priv = self->priv;
 
 		if (g_hash_table_remove(priv->req_table, tag)) {
-			DBG("%s%p", priv->log_prefix, tag);
+			DBG_(self, "%p", tag);
 			if (!ril_radio_power_should_be_on(self)) {
 				/* The last one turns the lights off */
 				ril_radio_power_request(self, FALSE, FALSE);
@@ -346,20 +358,41 @@ static void ril_radio_state_changed(GRilIoChannel *io, guint code,
 	if (radio_state != RADIO_STATE_UNAVAILABLE) {
 		struct ril_radio_priv *priv = self->priv;
 
-		DBG("%s%s", priv->log_prefix,
-			ril_radio_state_to_string(radio_state));
+		DBG_(self, "%s", ril_radio_state_to_string(radio_state));
 		GASSERT(!priv->pending_id || !priv->retry_id);
 
 		if (priv->power_cycle && ril_radio_state_off(radio_state)) {
-			DBG("%sswitched off for power cycle", priv->log_prefix);
+			DBG_(self, "switched off for power cycle");
 			priv->power_cycle = FALSE;
 		}
 
+		priv->last_known_state = radio_state;
+
 		if (priv->pending_id) {
-			priv->state_changed_while_request_pending++;
+			if (ril_radio_state_on(radio_state) ==
+					ril_radio_power_should_be_on(self)) {
+				DBG_(self, "dropping pending request");
+				/*
+				 * All right, the modem has switched to the
+				 * desired state, drop the request.
+				 */
+				grilio_queue_cancel_request(priv->q,
+						priv->pending_id, FALSE);
+
+				/*
+				 * This will zero pending_id and call
+				 * ril_radio_check_state() if necesary:
+				 */
+				ril_radio_power_request_done(self);
+
+				/* We are done */
+				return;
+			} else {
+				/* Something weird is going on */
+				priv->state_changed_while_request_pending++;
+			}
 		}
 
-		priv->last_known_state = radio_state;
 		ril_radio_check_state(self);
 	}
 }
@@ -374,7 +407,7 @@ struct ril_radio *ril_radio_new(GRilIoChannel *io)
 	priv->log_prefix =
 		(io && io->name && io->name[0] && strcmp(io->name, "RIL")) ?
 		g_strconcat(io->name, " ", NULL) : g_strdup("");
-	DBG("%s", priv->log_prefix);
+	DBG_(self, "");
 	priv->state_event_id = grilio_channel_add_unsol_event_handler(priv->io,
 				ril_radio_state_changed,
 				RIL_UNSOL_RESPONSE_RADIO_STATE_CHANGED, self);
@@ -431,7 +464,7 @@ static void ril_radio_finalize(GObject *object)
 	struct ril_radio *self = RIL_RADIO(object);
 	struct ril_radio_priv *priv = self->priv;
 
-	DBG("%s", priv->log_prefix);
+	DBG_(self, "");
 	g_free(priv->log_prefix);
 	grilio_channel_unref(priv->io);
 	grilio_queue_unref(priv->q);
