@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2017 Jolla Ltd.
+ *  Copyright (C) 2015-2018 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -18,10 +18,10 @@
 
 #include <grilio_channel.h>
 
+#include <gutil_misc.h>
+
 #include <sys/socket.h>
 #include <ctype.h>
-#include <errno.h>
-#include <limits.h>
 
 #include "common.h"
 #include "netreg.h"
@@ -326,7 +326,7 @@ int ril_parse_tech(const char *stech, int *ril_tech)
 {
 	int access_tech = -1;
 	int tech = -1;
-	if (ril_parse_int(stech, 0, &tech)) {
+	if (gutil_parse_int(stech, 0, &tech)) {
 		switch (tech) {
 		case RADIO_TECH_GPRS:
 		case RADIO_TECH_GSM:
@@ -409,26 +409,6 @@ gboolean ril_parse_mcc_mnc(const char *str, struct ofono_network_operator *op)
 		}
 	}
 	return FALSE;
-}
-
-gboolean ril_parse_int(const char *str, int base, int *value)
-{
-	gboolean ok = FALSE;
-
-	if (str && str[0]) {
-		char *str2 = g_strstrip(g_strdup(str));
-		char *end = str2;
-		long l;
-
-		errno = 0;
-		l = strtol(str2, &end, base);
-		ok = !*end && errno != ERANGE && l >= INT_MIN && l <= INT_MAX;
-		if (ok && value) {
-			*value = (int)l;
-		}
-		g_free(str2);
-	}
-	return ok;
 }
 
 /*

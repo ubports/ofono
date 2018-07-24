@@ -1242,10 +1242,7 @@ static guint ril_perso_change_state(struct ofono_sim *sim,
 	case OFONO_SIM_PASSWORD_PHNET_PIN:
 		if (!enable) {
 			code = RIL_REQUEST_ENTER_NETWORK_DEPERSONALIZATION;
-			req = grilio_request_sized_new(12);
-			grilio_request_append_int32(req,
-					RIL_PERSOSUBSTATE_SIM_NETWORK);
-			grilio_request_append_utf8(req, passwd);
+			req = grilio_request_array_utf8_new(1, passwd);
 		} else {
 			DBG_(sd, "Not supported, enable=%d", enable);
 		}
