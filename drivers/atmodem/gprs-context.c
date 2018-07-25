@@ -461,10 +461,19 @@ static int at_gprs_context_probe(struct ofono_gprs_context *gc,
 static void at_gprs_context_remove(struct ofono_gprs_context *gc)
 {
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
+	GAtIO *io;
 
 	DBG("");
 
 	if (gcd->state != STATE_IDLE && gcd->ppp) {
+		if ((gcd->vendor == OFONO_VENDOR_HUAWEI) && gcd->chat) {
+			/* immediately send escape sequence */
+			io = g_at_chat_get_io(gcd->chat);
+
+			if (io)
+				g_at_io_write(io, "+++", 3);
+		}
+
 		g_at_ppp_unref(gcd->ppp);
 		g_at_chat_resume(gcd->chat);
 	}
