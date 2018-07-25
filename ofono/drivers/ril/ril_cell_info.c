@@ -23,6 +23,7 @@
 #include <grilio_request.h>
 #include <grilio_parser.h>
 
+#include <gutil_idlepool.h>
 #include <gutil_misc.h>
 
 #define DISPLAY_ON_UPDATE_RATE  (1000)  /* 1 sec */
@@ -75,6 +76,20 @@ static void ril_cell_free1(gpointer cell)
 	ril_cell_free(cell);
 }
 
+static const char *ril_cell_info_int_format(int value, const char *format)
+{
+	if (value == SAILFISH_CELL_INVALID_VALUE) {
+		return "";
+	} else {
+		static GUtilIdlePool *ril_cell_info_pool = NULL;
+		GUtilIdlePool *pool = gutil_idle_pool_get(&ril_cell_info_pool);
+		char *str = g_strdup_printf(format, value);
+
+		gutil_idle_pool_add(pool, str, g_free);
+		return str;
+	}
+}
+
 static gboolean ril_cell_info_list_identical(GSList *l1, GSList *l2)
 {
 	while (l1 && l2) {
@@ -123,11 +138,17 @@ static struct sailfish_cell *ril_cell_info_parse_cell_gsm(GRilIoParser *rilp,
 		grilio_parser_get_int32(rilp, &gsm->bitErrorRate) &&
 		(version < 12 || /* RIL_GSM_SignalStrength_v12 part */
 			grilio_parser_get_int32(rilp, &gsm->timingAdvance))) {
-		DBG("[gsm] reg=%d,mcc=%d,mnc=%d,lac=%d,cid=%d,arfcn=%d,"
-			"bsic=%d,strength=%d,err=%d,t=%d", registered,
-			gsm->mcc, gsm->mnc, gsm->lac, gsm->cid, gsm->arfcn,
-			gsm->bsic, gsm->signalStrength, gsm->bitErrorRate,
-			gsm->timingAdvance);
+		DBG("[gsm] reg=%d%s%s%s%s%s%s%s%s%s", registered,
+			ril_cell_info_int_format(gsm->mcc, ",mcc=%d"),
+			ril_cell_info_int_format(gsm->mnc, ",mnc=%d"),
+			ril_cell_info_int_format(gsm->lac, ",lac=%d"),
+			ril_cell_info_int_format(gsm->cid, ",cid=%d"),
+			ril_cell_info_int_format(gsm->arfcn, ",arfcn=%d"),
+			ril_cell_info_int_format(gsm->bsic, ",bsic=%d"),
+			ril_cell_info_int_format(gsm->signalStrength,
+							",strength=%d"),
+			ril_cell_info_int_format(gsm->bitErrorRate, ",err=%d"),
+			ril_cell_info_int_format(gsm->timingAdvance, ",t=%d"));
 		cell->type = SAILFISH_CELL_TYPE_GSM;
 		cell->registered = registered;
 		return cell;
@@ -155,10 +176,16 @@ static struct sailfish_cell *ril_cell_info_parse_cell_wcdma(GRilIoParser *rilp,
 			grilio_parser_get_int32(rilp, &wcdma->uarfcn)) &&
 		grilio_parser_get_int32(rilp, &wcdma->signalStrength) &&
 		grilio_parser_get_int32(rilp, &wcdma->bitErrorRate)) {
-		DBG("[wcdma] reg=%d,mcc=%d,mnc=%d,lac=%d,cid=%d,psc=%d,"
-			"strength=%d,err=%d", registered, wcdma->mcc,
-			wcdma->mnc, wcdma->lac, wcdma->cid, wcdma->psc,
-			wcdma->signalStrength, wcdma->bitErrorRate);
+		DBG("[wcdma] reg=%d%s%s%s%s%s%s%s", registered,
+			ril_cell_info_int_format(wcdma->mcc, ",mcc=%d"),
+			ril_cell_info_int_format(wcdma->mnc, ",mnc=%d"),
+			ril_cell_info_int_format(wcdma->lac, ",lac=%d"),
+			ril_cell_info_int_format(wcdma->cid, ",cid=%d"),
+			ril_cell_info_int_format(wcdma->psc, ",psc=%d"),
+			ril_cell_info_int_format(wcdma->signalStrength,
+							",strength=%d"),
+			ril_cell_info_int_format(wcdma->bitErrorRate,
+							",err=%d"));
 		cell->type = SAILFISH_CELL_TYPE_WCDMA;
 		cell->registered = registered;
 		return cell;
@@ -190,11 +217,19 @@ static struct sailfish_cell *ril_cell_info_parse_cell_lte(GRilIoParser *rilp,
 		grilio_parser_get_int32(rilp, &lte->rssnr) &&
 		grilio_parser_get_int32(rilp, &lte->cqi) &&
 		grilio_parser_get_int32(rilp, &lte->timingAdvance)) {
-		DBG("[lte] reg=%d,mcc=%d,mnc=%d,ci=%d,pci=%d,tac=%d,"
-			"strength=%d,rsrp=%d,rsrq=%d,rssnr=%d,cqi=%d,"
-			"t=0x%x", registered, lte->mcc, lte->mnc, lte->ci,
-			lte->pci, lte->tac, lte->signalStrength, lte->rsrp,
-			lte->rsrq, lte->rssnr, lte->cqi, lte->timingAdvance);
+		DBG("[lte] reg=%d%s%s%s%s%s%s%s%s%s%s%s", registered,
+			ril_cell_info_int_format(lte->mcc, ",mcc=%d"),
+			ril_cell_info_int_format(lte->mnc, ",mnc=%d"),
+			ril_cell_info_int_format(lte->ci, ",ci=%d"),
+			ril_cell_info_int_format(lte->pci, ",pci=%d"),
+			ril_cell_info_int_format(lte->tac, ",tac=%d"),
+			ril_cell_info_int_format(lte->signalStrength,
+							",strength=%d"),
+			ril_cell_info_int_format(lte->rsrp, ",rsrp=%d"),
+			ril_cell_info_int_format(lte->rsrq, ",rsrq=%d"),
+			ril_cell_info_int_format(lte->rssnr, ",rssnr=%d"),
+			ril_cell_info_int_format(lte->cqi, ",cqi=%d"),
+			ril_cell_info_int_format(lte->timingAdvance, ",t=%d"));
 		cell->type = SAILFISH_CELL_TYPE_LTE;
 		cell->registered = registered;
 		return cell;
