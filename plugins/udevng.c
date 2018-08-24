@@ -1380,11 +1380,19 @@ static gboolean check_remove(gpointer key, gpointer value, gpointer user_data)
 	const char *devpath = user_data;
 	GSList *list;
 
-	for (list = modem->devices; list; list = list->next) {
-		struct device_info *info = list->data;
+	switch (modem->type) {
+	case MODEM_TYPE_USB:
+		for (list = modem->devices; list; list = list->next) {
+			struct device_info *info = list->data;
 
-		if (g_strcmp0(info->devpath, devpath) == 0)
+			if (g_strcmp0(info->devpath, devpath) == 0)
+				return TRUE;
+		}
+		break;
+	case MODEM_TYPE_SERIAL:
+		if (g_strcmp0(modem->serial->devpath, devpath) == 0)
 			return TRUE;
+		break;
 	}
 
 	return FALSE;
