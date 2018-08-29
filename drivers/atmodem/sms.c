@@ -412,8 +412,24 @@ static void at_cmt_notify(GAtResult *result, gpointer user_data)
 
 	switch (data->vendor) {
 	case OFONO_VENDOR_CINTERION:
-		if (!g_at_result_iter_next_number(&iter, &tpdu_len))
-			goto err;
+		if (!g_at_result_iter_next_number(&iter, &tpdu_len)) {
+			/*
+			 * Some cinterions modems (ALS3,PLS8...), act in
+			 * accordance with 3GPP 27.005.  So we need to skip
+			 * the first (<alpha>) field
+			 *  \r\n+CMT: ,23\r\nCAFECAFECAFE... ...\r\n
+			 *             ^------- PDU length
+			 */
+			DBG("Retrying to find the PDU length");
+
+			if (!g_at_result_iter_skip_next(&iter))
+				goto err;
+
+			/* Next attempt at finding the PDU length. */
+			if (!g_at_result_iter_next_number(&iter, &tpdu_len))
+				goto err;
+		}
+
 		break;
 	default:
 		if (!g_at_result_iter_skip_next(&iter))
