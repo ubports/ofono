@@ -109,6 +109,7 @@ static const struct ril_mtk_msg msg_mtk1 = {
 static const struct ril_mtk_msg msg_mtk2 = {
 	.attach_apn_has_roaming_protocol = FALSE,
 	.request_resume_registration = 2065,
+	.request_set_call_indication = 2086,
 	.unsol_ps_network_state_changed = 3015,
 	.unsol_registration_suspended = 3024,
 	.unsol_incoming_call_indication = 3042,
