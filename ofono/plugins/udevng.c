@@ -1740,6 +1740,9 @@ static void check_usb_device(struct udev_device *device)
 
 		DBG("%s [%s:%s]", drv, vendor, model);
 
+		if (vendor == NULL || model == NULL)
+			return;
+
 		for (i = 0; vendor_list[i].driver; i++) {
 			if (g_str_equal(vendor_list[i].drv, drv) == FALSE)
 				continue;
