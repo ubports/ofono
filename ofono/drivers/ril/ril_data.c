@@ -76,6 +76,12 @@ enum ril_data_priv_flags {
 typedef GObjectClass RilDataClass;
 typedef struct ril_data RilData;
 
+enum ril_data_io_event_id {
+	IO_EVENT_DATA_CALL_LIST_CHANGED,
+	IO_EVENT_RESTRICTED_STATE_CHANGED,
+	IO_EVENT_COUNT
+};
+
 enum ril_data_settings_event_id {
 	SETTINGS_EVENT_IMSI_CHANGED,
 	SETTINGS_EVENT_PREF_MODE,
@@ -94,8 +100,10 @@ struct ril_data_priv {
 	struct ril_radio *radio;
 	struct ril_network *network;
 	struct ril_data_manager *dm;
-	enum ril_data_priv_flags flags;
 	struct ril_vendor_hook *vendor_hook;
+
+	enum ril_data_priv_flags flags;
+	enum ril_restricted_state restricted_state;
 
 	struct ril_data_request *req_queue;
 	struct ril_data_request *pending_req;
@@ -104,7 +112,7 @@ struct ril_data_priv {
 	guint slot;
 	char *log_prefix;
 	guint query_id;
-	gulong io_event_id;
+	gulong io_event_id[IO_EVENT_COUNT];
 	gulong settings_event_id[SETTINGS_EVENT_COUNT];
 };
 
@@ -544,6 +552,37 @@ static void ril_data_set_calls(struct ril_data *self,
 		ril_data_signal_emit(self, SIGNAL_CALLS_CHANGED);
 	} else {
 		ril_data_call_list_free(list);
+	}
+}
+
+static void ril_data_check_allowed(struct ril_data *self, gboolean was_allowed)
+{
+	if (ril_data_allowed(self) != was_allowed) {
+		ril_data_signal_emit(self, SIGNAL_ALLOW_CHANGED);
+	}
+}
+
+static void ril_data_restricted_state_changed_cb(GRilIoChannel *io, guint event,
+				const void *data, guint len, void *user_data)
+{
+	struct ril_data *self = RIL_DATA(user_data);
+	GRilIoParser rilp;
+	guint32 count, state;
+
+	GASSERT(event == RIL_UNSOL_RESTRICTED_STATE_CHANGED);
+	grilio_parser_init(&rilp, data, len);
+	if (grilio_parser_get_uint32(&rilp, &count) && count == 1 &&
+				grilio_parser_get_uint32(&rilp, &state) &&
+				grilio_parser_at_end(&rilp)) {
+		struct ril_data_priv *priv = self->priv;
+
+		if (priv->restricted_state != state) {
+			const gboolean was_allowed = ril_data_allowed(self);
+
+			DBG_(self, "restricted state 0x%02x", state);
+			priv->restricted_state = state;
+			ril_data_check_allowed(self, was_allowed);
+		}
 	}
 }
 
@@ -1070,9 +1109,7 @@ static void ril_data_allow_cb(GRilIoChannel *io, int ril_status,
 			DBG_(data, "data off");
 		}
 
-		if (ril_data_allowed(data) != was_allowed) {
-			ril_data_signal_emit(data, SIGNAL_ALLOW_CHANGED);
-		}
+		ril_data_check_allowed(data, was_allowed);
 	}
 
 	ril_data_request_finish(req);
@@ -1188,9 +1225,15 @@ struct ril_data *ril_data_new(struct ril_data_manager *dm, const char *name,
 		priv->radio = ril_radio_ref(radio);
 		priv->network = ril_network_ref(network);
 		priv->vendor_hook = ril_vendor_hook_ref(vendor_hook);
-		priv->io_event_id = grilio_channel_add_unsol_event_handler(io,
+
+		priv->io_event_id[IO_EVENT_DATA_CALL_LIST_CHANGED] =
+			grilio_channel_add_unsol_event_handler(io,
 				ril_data_call_list_changed_cb,
 				RIL_UNSOL_DATA_CALL_LIST_CHANGED, self);
+		priv->io_event_id[IO_EVENT_RESTRICTED_STATE_CHANGED] =
+			grilio_channel_add_unsol_event_handler(io,
+				ril_data_restricted_state_changed_cb,
+				RIL_UNSOL_RESTRICTED_STATE_CHANGED, self);
 
 		priv->settings_event_id[SETTINGS_EVENT_IMSI_CHANGED] =
 			ril_sim_settings_add_imsi_changed_handler(settings,
@@ -1264,6 +1307,8 @@ void ril_data_unref(struct ril_data *self)
 gboolean ril_data_allowed(struct ril_data *self)
 {
 	return G_LIKELY(self) &&
+		(self->priv->restricted_state &
+			RIL_RESTRICTED_STATE_PS_ALL) == 0 &&
 		(self->priv->flags &
 			(RIL_DATA_FLAG_ALLOWED | RIL_DATA_FLAG_ON)) ==
 			(RIL_DATA_FLAG_ALLOWED | RIL_DATA_FLAG_ON);
@@ -1348,9 +1393,7 @@ static void ril_data_disallow(struct ril_data *self)
 		ril_data_power_update(self);
 	}
 
-	if (ril_data_allowed(self) != was_allowed) {
-		ril_data_signal_emit(self, SIGNAL_ALLOW_CHANGED);
-	}
+	ril_data_check_allowed(self, was_allowed);
 }
 
 static void ril_data_max_speed_cb(gpointer data, gpointer max_speed)
@@ -1468,7 +1511,7 @@ static void ril_data_dispose(GObject *object)
 
 	ril_sim_settings_remove_handlers(settings, priv->settings_event_id,
 					G_N_ELEMENTS(priv->settings_event_id));
-	grilio_channel_remove_handlers(priv->io, &priv->io_event_id, 1);
+	grilio_channel_remove_all_handlers(priv->io, priv->io_event_id);
 	grilio_queue_cancel_all(priv->q, FALSE);
 	priv->query_id = 0;
 

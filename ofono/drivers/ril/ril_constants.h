@@ -581,6 +581,14 @@ enum ril_cell_info_type {
 /* A special request, ofono -> rild */
 #define RIL_RESPONSE_ACKNOWLEDGEMENT 800
 
+enum ril_restricted_state {
+	RIL_RESTRICTED_STATE_NONE         = 0x00,
+	RIL_RESTRICTED_STATE_CS_EMERGENCY = 0x01,
+	RIL_RESTRICTED_STATE_CS_NORMAL    = 0x02,
+	RIL_RESTRICTED_STATE_CS_ALL       = 0x04,
+	RIL_RESTRICTED_STATE_PS_ALL       = 0x10
+};
+
 /* Suplementary services Service class*/
 #define SERVICE_CLASS_NONE 0
 
