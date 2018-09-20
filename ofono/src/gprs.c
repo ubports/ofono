@@ -1317,7 +1317,7 @@ static void pri_read_settings_callback(const struct ofono_error *error,
 
 	value = pri_ctx->active;
 
-	gprs->flags &= !GPRS_FLAG_ATTACHING;
+	gprs->flags &= ~GPRS_FLAG_ATTACHING;
 
 	gprs->driver_attached = TRUE;
 	gprs_set_attached_property(gprs, TRUE);
