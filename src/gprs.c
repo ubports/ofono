@@ -1635,6 +1635,9 @@ static void release_active_contexts(struct ofono_gprs *gprs)
 
 		if (gc->driver->detach_shutdown != NULL)
 			gc->driver->detach_shutdown(gc, ctx->context.cid);
+
+		/* Make sure the context is properly cleared */
+		release_context(ctx);
 	}
 }
 
