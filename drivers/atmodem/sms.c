@@ -455,6 +455,7 @@ static void at_cmt_notify(GAtResult *result, gpointer user_data)
 
 	if (data->vendor != OFONO_VENDOR_SIMCOM)
 		at_ack_delivery(sms);
+	return;
 
 err:
 	ofono_error("Unable to parse CMT notification");
