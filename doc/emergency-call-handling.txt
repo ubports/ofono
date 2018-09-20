@@ -14,7 +14,7 @@ What oFono will do:
 	- Post online atoms will be created.
 	- Upon reception of Dial request, Emergency mode is activated.
 	- Once the call is ended, Emergency mode is deactivated.
-	- Modem remains in online mode with full funcationality.
+	- Modem remains in online mode with full functionality.
 
 Case 2: Call in SIM Present and PIN required state
 
