@@ -33,7 +33,7 @@ static int mbimmodem_init(void)
 	mbim_devinfo_init();
 	mbim_sim_init();
 	mbim_netreg_init();
-	mbim_sms_exit();
+	mbim_sms_init();
 	mbim_gprs_init();
 	mbim_gprs_context_init();
 	return 0;
