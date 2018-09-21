@@ -241,13 +241,6 @@ int main(int argc, char **argv)
 
 	event_loop = g_main_loop_new(NULL, FALSE);
 
-#ifdef NEED_THREADS
-	if (dbus_threads_init_default() == FALSE) {
-		fprintf(stderr, "Can't init usage of threads\n");
-		exit(1);
-	}
-#endif
-
 #ifdef HAVE_ELL
 	l_log_set_stderr();
 	l_debug_enable("*");
