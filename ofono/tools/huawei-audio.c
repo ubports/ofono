@@ -796,13 +796,6 @@ int main(int argc, char **argv)
 
 	main_loop = g_main_loop_new(NULL, FALSE);
 
-#ifdef NEED_THREADS
-	if (dbus_threads_init_default() == FALSE) {
-		fprintf(stderr, "Can't init usage of threads\n");
-		exit(1);
-	}
-#endif
-
 	dbus_error_init(&err);
 
 	conn = g_dbus_setup_bus(DBUS_BUS_SYSTEM, NULL, &err);
