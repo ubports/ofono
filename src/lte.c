@@ -373,3 +373,8 @@ void *ofono_lte_get_data(const struct ofono_lte *lte)
 {
 	return lte->driver_data;
 }
+
+struct ofono_modem *ofono_lte_get_modem(const struct ofono_lte *lte)
+{
+	return __ofono_atom_get_modem(lte->atom);
+}
