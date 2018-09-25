@@ -329,7 +329,7 @@ static inline void at_ack_delivery(struct ofono_sms *sms)
 	/* We must acknowledge the PDU using CNMA */
 	if (data->cnma_ack_pdu) {
 		switch (data->vendor) {
-		case OFONO_VENDOR_CINTERION:
+		case OFONO_VENDOR_GEMALTO:
 			snprintf(buf, sizeof(buf), "AT+CNMA=1");
 			break;
 		default:
@@ -411,10 +411,10 @@ static void at_cmt_notify(GAtResult *result, gpointer user_data)
 		goto err;
 
 	switch (data->vendor) {
-	case OFONO_VENDOR_CINTERION:
+	case OFONO_VENDOR_GEMALTO:
 		if (!g_at_result_iter_next_number(&iter, &tpdu_len)) {
 			/*
-			 * Some cinterions modems (ALS3,PLS8...), act in
+			 * Some Gemalto modems (ALS3,PLS8...), act in
 			 * accordance with 3GPP 27.005.  So we need to skip
 			 * the first (<alpha>) field
 			 *  \r\n+CMT: ,23\r\nCAFECAFECAFE... ...\r\n
