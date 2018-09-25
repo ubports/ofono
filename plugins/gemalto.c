@@ -589,7 +589,7 @@ static void gemalto_post_sim(struct ofono_modem *modem)
 
 	ofono_phonebook_create(modem, 0, "atmodem", data->app);
 
-	ofono_sms_create(modem, OFONO_VENDOR_CINTERION, "atmodem", data->app);
+	ofono_sms_create(modem, OFONO_VENDOR_GEMALTO, "atmodem", data->app);
 
 	gprs = ofono_gprs_create(modem, 0, "atmodem", data->app);
 	gc = ofono_gprs_context_create(modem, 0, "atmodem", data->mdm);
