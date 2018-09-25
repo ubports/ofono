@@ -571,7 +571,7 @@ static void gemalto_pre_sim(struct ofono_modem *modem)
 
 	ofono_devinfo_create(modem, 0, "atmodem", data->app);
 	ofono_location_reporting_create(modem, 0, "gemaltomodem", data->app);
-	data->sim = ofono_sim_create(modem, OFONO_VENDOR_CINTERION, "atmodem",
+	data->sim = ofono_sim_create(modem, OFONO_VENDOR_GEMALTO, "atmodem",
 						data->app);
 
 	if (data->sim && data->have_sim == TRUE)
