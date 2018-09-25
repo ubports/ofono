@@ -66,7 +66,7 @@ static const char *oercn_prefix[] = { "_OERCN:", NULL };
 static const char *cpinr_prefixes[] = { "+CPINR:", "+CPINRE:", NULL };
 static const char *epin_prefix[] = { "*EPIN:", NULL };
 static const char *simcom_spic_prefix[] = { "+SPIC:", NULL };
-static const char *cinterion_spic_prefix[] = { "^SPIC:", NULL };
+static const char *gemalto_spic_prefix[] = { "^SPIC:", NULL };
 static const char *pct_prefix[] = { "#PCT:", NULL };
 static const char *pnnm_prefix[] = { "+PNNM:", NULL };
 static const char *qpinc_prefix[] = { "+QPINC:", NULL };
@@ -1110,7 +1110,7 @@ error:
 	CALLBACK_WITH_FAILURE(cb, NULL, cbd->data);
 }
 
-static void cinterion_spic_cb(gboolean ok, GAtResult *result,
+static void gemalto_spic_cb(gboolean ok, GAtResult *result,
 							gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
@@ -1227,9 +1227,9 @@ static void at_pin_retries_query(struct ofono_sim *sim,
 					upincnt_cb, cbd, g_free) > 0)
 			return;
 		break;
-	case OFONO_VENDOR_CINTERION:
-		if (g_at_chat_send(sd->chat, "AT^SPIC", cinterion_spic_prefix,
-					cinterion_spic_cb, cbd, g_free) > 0)
+	case OFONO_VENDOR_GEMALTO:
+		if (g_at_chat_send(sd->chat, "AT^SPIC", gemalto_spic_prefix,
+					gemalto_spic_cb, cbd, g_free) > 0)
 			return;
 		break;
 	default:
