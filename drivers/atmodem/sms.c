@@ -220,9 +220,16 @@ static void at_cmgs(struct ofono_sms *sms, const unsigned char *pdu,
 	int len;
 
 	if (mms) {
-		snprintf(buf, sizeof(buf), "AT+CMMS=%d", mms);
-		g_at_chat_send(data->chat, buf, none_prefix,
-				NULL, NULL, NULL);
+		switch (data->vendor) {
+		case OFONO_VENDOR_GEMALTO:
+			/* no mms support */
+			break;
+		default:
+			snprintf(buf, sizeof(buf), "AT+CMMS=%d", mms);
+			g_at_chat_send(data->chat, buf, none_prefix,
+					NULL, NULL, NULL);
+			break;
+		}
 	}
 
 	len = snprintf(buf, sizeof(buf), "AT+CMGS=%d\r", tpdu_len);
