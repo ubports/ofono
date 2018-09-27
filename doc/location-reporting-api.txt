@@ -13,7 +13,7 @@ Methods		dict GetProperties()
 		filedescriptor Request()
 
 			Asks to turn ON the NMEA stream and supplies the
-			gps device file descriptor. The external cliend should
+			gps device file descriptor. The external client should
 			use the file descriptor to receive the NMEA data.
 
 			Possible Errors: [service].Error.InProgress
