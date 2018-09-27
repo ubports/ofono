@@ -233,10 +233,11 @@ static gboolean setup_gobi(struct modem_info *modem)
 		}
 	}
 
+	DBG("qmi=%s net=%s mdm=%s gps=%s diag=%s", qmi, net, mdm, gps, diag);
+
 	if (qmi == NULL || mdm == NULL || net == NULL)
 		return FALSE;
 
-	DBG("qmi=%s net=%s mdm=%s gps=%s diag=%s", qmi, net, mdm, gps, diag);
 
 	ofono_modem_set_string(modem->modem, "Device", qmi);
 	ofono_modem_set_string(modem->modem, "Modem", mdm);
