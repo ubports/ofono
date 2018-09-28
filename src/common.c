@@ -669,6 +669,10 @@ const char *registration_status_to_string(int status)
 		return "unknown";
 	case NETWORK_REGISTRATION_STATUS_ROAMING:
 		return "roaming";
+	case NETWORK_REGISTRATION_STATUS_REGISTERED_SMS_EUTRAN:
+		return "registered";
+	case NETWORK_REGISTRATION_STATUS_ROAMING_SMS_EUTRAN:
+		return "roaming";
 	}
 
 	return "";
