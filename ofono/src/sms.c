@@ -795,6 +795,8 @@ static void netreg_status_watch(int status, int lac, int ci, int tech,
 	switch (status) {
 	case NETWORK_REGISTRATION_STATUS_REGISTERED:
 	case NETWORK_REGISTRATION_STATUS_ROAMING:
+	case NETWORK_REGISTRATION_STATUS_REGISTERED_SMS_EUTRAN:
+	case NETWORK_REGISTRATION_STATUS_ROAMING_SMS_EUTRAN:
 		sms->registered = TRUE;
 		break;
 	default:
