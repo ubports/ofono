@@ -1,3 +1,10 @@
+ver 1.25:
+	Fix issue with handling GPRS context release.
+	Fix issue with GPRS context shutdown and Huawei modems.
+	Fix issue with roaming status report and QMI devices.
+	Add support for voice call handling of U-Blox modems
+	Add support for EUTRAN technology reporting.
+
 ver 1.24:
 	Fix issue with property changed signals and CDMA networks.
 	Fix issue with handling SIM filesystem and SIM removal.
