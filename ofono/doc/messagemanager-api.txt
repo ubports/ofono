@@ -104,6 +104,8 @@ Properties	string ServiceCenterAddress
 				"turkish" - Turkish alphabet
 				"spanish" - Spanish alphabet
 				"portuguese" - Portuguese alphabet
+				"bengali" - Bengali alphabet
+				"gujarati" - Gujarati alphabet
 
 			The standard, language-specific alphabets are defined
 			in 3GPP TS23.038, Annex A.  By default, oFono uses
