@@ -170,6 +170,10 @@ static const char *sms_alphabet_to_string(enum sms_alphabet alphabet)
 		return "spanish";
 	case SMS_ALPHABET_PORTUGUESE:
 		return "portuguese";
+	case SMS_ALPHABET_BENGALI:
+		return "bengali";
+	case SMS_ALPHABET_GUJARATI:
+                return "gujarati";
 	case SMS_ALPHABET_DEFAULT:
 		return "default";
 	}
@@ -188,6 +192,10 @@ static gboolean sms_alphabet_from_string(const char *str,
 		*alphabet = SMS_ALPHABET_SPANISH;
 	else if (g_str_equal(str, "portuguese"))
 		*alphabet = SMS_ALPHABET_PORTUGUESE;
+	else if (g_str_equal(str, "bengali"))
+                *alphabet = SMS_ALPHABET_BENGALI;
+	else if (g_str_equal(str, "gujarati"))
+                *alphabet = SMS_ALPHABET_GUJARATI;
 	else
 		return FALSE;
 
