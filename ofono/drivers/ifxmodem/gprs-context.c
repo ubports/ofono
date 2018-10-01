@@ -514,6 +514,9 @@ static void deactivate_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	if (gcd->vendor != OFONO_VENDOR_XMM)
 		g_at_chat_resume(gcd->chat);
 
+	if (!gcd->cb)
+		return;
+
 	CALLBACK_WITH_SUCCESS(gcd->cb, gcd->cb_data);
 }
 
