@@ -825,7 +825,8 @@ test_scripts = test/backtrace \
 		test/test-serving-cell-info \
 		test/ims-register \
 		test/ims-unregister \
-		test/list-applications
+		test/list-applications \
+		test/set-sms-alphabet
 
 
 if TEST
