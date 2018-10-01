@@ -24,6 +24,8 @@ enum gsm_dialect {
 	GSM_DIALECT_TURKISH,
 	GSM_DIALECT_SPANISH,
 	GSM_DIALECT_PORTUGUESE,
+	GSM_DIALECT_BENGALI,
+	GSM_DIALECT_GUJARATI,
 };
 
 char *convert_gsm_to_utf8(const unsigned char *text, long len, long *items_read,
