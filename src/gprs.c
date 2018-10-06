@@ -261,6 +261,8 @@ static const char *gprs_auth_method_to_string(enum ofono_gprs_auth_method auth)
 		return "chap";
 	case OFONO_GPRS_AUTH_METHOD_PAP:
 		return "pap";
+	case OFONO_GPRS_AUTH_METHOD_NONE:
+		return "none";
 	};
 
 	return NULL;
@@ -274,6 +276,9 @@ static gboolean gprs_auth_method_from_string(const char *str,
 		return TRUE;
 	} else if (g_str_equal(str, "pap")) {
 		*auth = OFONO_GPRS_AUTH_METHOD_PAP;
+		return TRUE;
+	} else if (g_str_equal(str, "none")) {
+		*auth = OFONO_GPRS_AUTH_METHOD_NONE;
 		return TRUE;
 	}
 
