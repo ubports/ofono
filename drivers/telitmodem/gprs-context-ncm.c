@@ -277,7 +277,8 @@ static void setup_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		return;
 	}
 
-	if (gcd->username[0] && gcd->password[0])
+	if (gcd->auth_method != AUTH_METHOD_NONE &&
+					gcd->username[0] && gcd->password[0])
 		sprintf(buf, "AT#PDPAUTH=%u,%u,\"%s\",\"%s\"",
 			gcd->active_context, gcd->auth_method,
 			gcd->username, gcd->password);
@@ -320,13 +321,18 @@ static void telitncm_gprs_activate_primary(struct ofono_gprs_context *gc,
 	gcd->state = STATE_ENABLING;
 	gcd->proto = ctx->proto;
 
-	/* We only support CHAP and PAP */
+	/* We support CHAP, PAP and NONE */
 	switch (ctx->auth_method) {
 	case OFONO_GPRS_AUTH_METHOD_CHAP:
 		gcd->auth_method = AUTH_METHOD_CHAP;
 		break;
 	case OFONO_GPRS_AUTH_METHOD_PAP:
 		gcd->auth_method = AUTH_METHOD_PAP;
+		break;
+	case OFONO_GPRS_AUTH_METHOD_NONE:
+		gcd->auth_method = AUTH_METHOD_NONE;
+		gcd->username[0] = 0;
+		gcd->password[0] = 0;
 		break;
 	default:
 		goto error;

@@ -315,9 +315,10 @@ static void ublox_send_uauthreq(struct ofono_gprs_context *gc,
 	case OFONO_GPRS_AUTH_METHOD_CHAP:
 		auth = 2;
 		break;
-	default:
-		ofono_error("Unsupported auth type %u", auth_method);
-		return;
+	case OFONO_GPRS_AUTH_METHOD_NONE:
+		auth = 0;
+		username = password = "";
+		break;
 	}
 
 	snprintf(buf, sizeof(buf), "AT+UAUTHREQ=%u,%u,\"%s\",\"%s\"",

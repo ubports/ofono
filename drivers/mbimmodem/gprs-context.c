@@ -75,9 +75,11 @@ static uint32_t auth_method_to_auth_protocol(enum ofono_gprs_auth_method method)
 		return 2; /* MBIMAuthProtocolChap */
 	case OFONO_GPRS_AUTH_METHOD_PAP:
 		return 1; /* MBIMAuthProtocolPap */
+	case OFONO_GPRS_AUTH_METHOD_NONE:
+		return 0; /* MBIMAUthProtocolNone */
 	}
 
-	return 0;
+	return 0; /* MBIMAUthProtocolNone */
 }
 
 static void mbim_deactivate_cb(struct mbim_message *message, void *user)
@@ -345,6 +347,8 @@ static void mbim_gprs_activate_primary(struct ofono_gprs_context *gc,
 {
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 	struct mbim_message *message;
+	const char *username = NULL;
+	const char *password = NULL;
 
 	DBG("cid %u", ctx->cid);
 
@@ -354,6 +358,12 @@ static void mbim_gprs_activate_primary(struct ofono_gprs_context *gc,
 	gcd->active_context = ctx->cid;
 	gcd->proto = ctx->proto;
 
+	if (ctx->auth_method != OFONO_GPRS_AUTH_METHOD_NONE && ctx->username[0])
+		username = ctx->username;
+
+	if (ctx->auth_method != OFONO_GPRS_AUTH_METHOD_NONE && ctx->password[0])
+		password = ctx->password;
+
 	message = mbim_message_new(mbim_uuid_basic_connect,
 					MBIM_CID_CONNECT,
 					MBIM_COMMAND_TYPE_SET);
@@ -361,8 +371,8 @@ static void mbim_gprs_activate_primary(struct ofono_gprs_context *gc,
 				ctx->cid,
 				1, /* MBIMActivationCommandActivate */
 				ctx->apn,
-				ctx->username[0] ? ctx->username : NULL,
-				ctx->password[0] ? ctx->password : NULL,
+				username,
+				password,
 				0, /*MBIMCompressionNone */
 				auth_method_to_auth_protocol(ctx->auth_method),
 				proto_to_context_ip_type(ctx->proto),
