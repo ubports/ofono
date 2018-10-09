@@ -28,3 +28,6 @@ extern void xmm_radio_settings_exit(void);
 
 extern void xmm_ims_init(void);
 extern void xmm_ims_exit(void);
+
+extern void xmm_netmon_init(void);
+extern void xmm_netmon_exit(void);
