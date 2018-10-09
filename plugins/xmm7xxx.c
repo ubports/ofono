@@ -52,6 +52,7 @@
 #include <ofono/sim-auth.h>
 #include <ofono/sms.h>
 #include <ofono/phonebook.h>
+#include <ofono/netmon.h>
 
 #include <drivers/atmodem/atutil.h>
 #include <drivers/atmodem/vendor.h>
@@ -356,6 +357,7 @@ static void xmm7xxx_post_online(struct ofono_modem *modem)
 		ofono_gprs_add_context(gprs, gc);
 
 	ofono_ims_create(modem, "xmm7modem", data->chat);
+	ofono_netmon_create(modem, 0, "xmm7modem", data->chat);
 }
 
 static int xmm7xxx_probe(struct ofono_modem *modem)
