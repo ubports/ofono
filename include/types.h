@@ -122,6 +122,27 @@ struct ofono_uuid {
 	unsigned char uuid[OFONO_SHA1_UUID_LEN];
 };
 
+/*
+ * ETSI 123.003, Section 9.1:
+ * the APN has, after encoding as defined in the paragraph below, a maximum
+ * length of 100 octets
+ */
+#define OFONO_GPRS_MAX_APN_LENGTH 100
+#define OFONO_GPRS_MAX_USERNAME_LENGTH 63
+#define OFONO_GPRS_MAX_PASSWORD_LENGTH 255
+
+enum ofono_gprs_proto {
+	OFONO_GPRS_PROTO_IP = 0,
+	OFONO_GPRS_PROTO_IPV6,
+	OFONO_GPRS_PROTO_IPV4V6,
+};
+
+enum ofono_gprs_auth_method {
+	OFONO_GPRS_AUTH_METHOD_CHAP = 0,
+	OFONO_GPRS_AUTH_METHOD_PAP,
+	OFONO_GPRS_AUTH_METHOD_NONE,
+};
+
 const char *ofono_uuid_to_str(const struct ofono_uuid *uuid);
 void ofono_call_init(struct ofono_call *call);
 
