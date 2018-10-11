@@ -377,6 +377,7 @@ static const struct codepoint ben_ext_gsm[] = {
 };
 
 static const struct codepoint ben_ext_unicode[] = {
+	{ 0x000C, 0x1B0A },
 	{ 0x0022, 0x1B05 },
 	{ 0X0023, 0x1B17 },
 	{ 0x0024, 0x1B02 },
@@ -536,6 +537,7 @@ static const struct codepoint guj_ext_gsm[] = {
 };
 
 static const struct codepoint guj_ext_unicode[] = {
+	{ 0x000C, 0x1B0A },
 	{ 0x0022, 0x1B05 },
 	{ 0x0023, 0x1B17 },
 	{ 0x0024, 0x1B02 },
