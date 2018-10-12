@@ -202,6 +202,7 @@ static void xmm7modem_netmon_request_update(struct ofono_netmon *netmon,
 				xmci_cb, cbd, g_free) > 0)
 		return;
 
+	g_free(cbd);
 	CALLBACK_WITH_FAILURE(cb, data);
 }
 
