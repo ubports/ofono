@@ -174,6 +174,22 @@ static const char *sms_alphabet_to_string(enum sms_alphabet alphabet)
 		return "bengali";
 	case SMS_ALPHABET_GUJARATI:
                 return "gujarati";
+	case SMS_ALPHABET_HINDI:
+		return "hindi";
+	case SMS_ALPHABET_KANNADA:
+		return "kannada";
+	case SMS_ALPHABET_MALAYALAM:
+		return "malayalam";
+	case SMS_ALPHABET_ORIYA:
+		return "oriya";
+	case SMS_ALPHABET_PUNJABI:
+		return "punjabi";
+	case SMS_ALPHABET_TAMIL:
+		return "tamil";
+	case SMS_ALPHABET_TELUGU:
+		return "telugu";
+	case SMS_ALPHABET_URDU:
+		return "urdu";
 	case SMS_ALPHABET_DEFAULT:
 		return "default";
 	}
@@ -196,6 +212,22 @@ static gboolean sms_alphabet_from_string(const char *str,
                 *alphabet = SMS_ALPHABET_BENGALI;
 	else if (g_str_equal(str, "gujarati"))
                 *alphabet = SMS_ALPHABET_GUJARATI;
+	else if (g_str_equal(str, "hindi"))
+		*alphabet = SMS_ALPHABET_HINDI;
+	else if (g_str_equal(str, "kannada"))
+		*alphabet = SMS_ALPHABET_KANNADA;
+	else if (g_str_equal(str, "malayalam"))
+		*alphabet = SMS_ALPHABET_MALAYALAM;
+	else if (g_str_equal(str, "oriya"))
+		*alphabet = SMS_ALPHABET_ORIYA;
+	else if (g_str_equal(str, "punjabi"))
+		*alphabet = SMS_ALPHABET_PUNJABI;
+	else if (g_str_equal(str, "tamil"))
+		*alphabet = SMS_ALPHABET_TAMIL;
+	else if (g_str_equal(str, "telugu"))
+		*alphabet = SMS_ALPHABET_TELUGU;
+	else if (g_str_equal(str, "urdu"))
+		*alphabet = SMS_ALPHABET_URDU;
 	else
 		return FALSE;
 
