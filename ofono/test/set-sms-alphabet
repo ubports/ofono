@@ -15,7 +15,9 @@ elif len(sys.argv) == 2:
 	path = modems[0][0]
 	alphabet = sys.argv[1]
 else:
-	print("%s [PATH] turkish|spanish|portuguese|bengali|gujarati" % (sys.argv[0]))
+	print("%s [PATH] turkish|spanish|portuguese|bengali|gujarati|hindi \
+		      |kannada|malayalam|oriya|punjabi|tamil|telugu|urdu" %
+			(sys.argv[0]))
 	sys.exit(1)
 
 print("Setting alphabet for modem %s..." % path)
