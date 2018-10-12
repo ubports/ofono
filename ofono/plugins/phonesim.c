@@ -803,6 +803,7 @@ static void phonesim_set_online(struct ofono_modem *modem, ofono_bool_t online,
 				set_online_cb, cbd, g_free) > 0)
 		return;
 
+	g_free(cbd);
 	CALLBACK_WITH_FAILURE(cb, user_data);
 }
 
