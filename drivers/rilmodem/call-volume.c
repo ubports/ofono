@@ -170,7 +170,7 @@ static void ril_call_volume_remove(struct ofono_call_volume *cv)
 	g_free(cvd);
 }
 
-static struct ofono_call_volume_driver driver = {
+static const struct ofono_call_volume_driver driver = {
 	.name = RILMODEM,
 	.probe = ril_call_volume_probe,
 	.remove = ril_call_volume_remove,

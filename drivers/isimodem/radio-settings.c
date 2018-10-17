@@ -365,7 +365,7 @@ static void isi_radio_settings_remove(struct ofono_radio_settings *rs)
 	g_free(rd);
 }
 
-static struct ofono_radio_settings_driver driver = {
+static const struct ofono_radio_settings_driver driver = {
 	.name			= "isimodem",
 	.probe			= isi_radio_settings_probe,
 	.remove			= isi_radio_settings_remove,

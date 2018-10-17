@@ -1651,7 +1651,7 @@ static void uicc_sim_remove(struct ofono_sim *sim)
 	g_free(data);
 }
 
-static struct ofono_sim_driver driver = {
+static const struct ofono_sim_driver driver = {
 	.name			= "wgmodem2.5",
 	.probe			= uicc_sim_probe,
 	.remove			= uicc_sim_remove,

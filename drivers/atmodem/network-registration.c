@@ -2155,7 +2155,7 @@ static void at_netreg_remove(struct ofono_netreg *netreg)
 	g_free(nd);
 }
 
-static struct ofono_netreg_driver driver = {
+static const struct ofono_netreg_driver driver = {
 	.name				= "atmodem",
 	.probe				= at_netreg_probe,
 	.remove				= at_netreg_remove,

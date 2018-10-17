@@ -491,7 +491,7 @@ static void qmi_gprs_context_remove(struct ofono_gprs_context *gc)
 	g_free(data);
 }
 
-static struct ofono_gprs_context_driver driver = {
+static const struct ofono_gprs_context_driver driver = {
 	.name			= "qmimodem",
 	.probe			= qmi_gprs_context_probe,
 	.remove			= qmi_gprs_context_remove,

@@ -469,7 +469,7 @@ static void telitncm_gprs_context_remove(struct ofono_gprs_context *gc)
 	g_free(gcd);
 }
 
-static struct ofono_gprs_context_driver driver = {
+static const struct ofono_gprs_context_driver driver = {
 	.name			= "telitncmmodem",
 	.probe			= telitncm_gprs_context_probe,
 	.remove			= telitncm_gprs_context_remove,

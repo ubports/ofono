@@ -642,7 +642,7 @@ static void at_gprs_remove(struct ofono_gprs *gprs)
 	g_free(gd);
 }
 
-static struct ofono_gprs_driver driver = {
+static const struct ofono_gprs_driver driver = {
 	.name			= "atmodem",
 	.probe			= at_gprs_probe,
 	.remove			= at_gprs_remove,

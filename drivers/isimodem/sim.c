@@ -969,7 +969,7 @@ static void isi_sim_remove(struct ofono_sim *sim)
 	g_free(data);
 }
 
-static struct ofono_sim_driver driver = {
+static const struct ofono_sim_driver driver = {
 	.name			= "isimodem",
 	.probe			= isi_sim_probe,
 	.remove			= isi_sim_remove,

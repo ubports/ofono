@@ -1165,7 +1165,7 @@ static void isi_netreg_remove(struct ofono_netreg *netreg)
 	g_free(data);
 }
 
-static struct ofono_netreg_driver isimodem = {
+static const struct ofono_netreg_driver isimodem = {
 	.name			= "isimodem",
 	.probe			= isi_netreg_probe,
 	.remove			= isi_netreg_remove,

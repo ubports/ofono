@@ -167,7 +167,7 @@ static void ifx_ctm_remove(struct ofono_ctm *ctm)
 	g_free(ctmd);
 }
 
-static struct ofono_ctm_driver driver = {
+static const struct ofono_ctm_driver driver = {
 	.name           = "ifxmodem",
 	.probe          = ifx_ctm_probe,
 	.remove         = ifx_ctm_remove,

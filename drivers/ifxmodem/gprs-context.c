@@ -661,7 +661,7 @@ static void ifx_gprs_context_remove(struct ofono_gprs_context *gc)
 	g_free(gcd);
 }
 
-static struct ofono_gprs_context_driver driver = {
+static const struct ofono_gprs_context_driver driver = {
 	.name			= "ifxmodem",
 	.probe			= ifx_gprs_context_probe,
 	.remove			= ifx_gprs_context_remove,

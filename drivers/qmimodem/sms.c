@@ -571,7 +571,7 @@ static void qmi_sms_remove(struct ofono_sms *sms)
 	g_free(data);
 }
 
-static struct ofono_sms_driver driver = {
+static const struct ofono_sms_driver driver = {
 	.name		= "qmimodem",
 	.probe		= qmi_sms_probe,
 	.remove		= qmi_sms_remove,

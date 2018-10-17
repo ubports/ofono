@@ -264,7 +264,7 @@ static void at_ccfc_remove(struct ofono_call_forwarding *cf)
 	ofono_call_forwarding_set_data(cf, NULL);
 }
 
-static struct ofono_call_forwarding_driver driver = {
+static const struct ofono_call_forwarding_driver driver = {
 	.name		= "atmodem",
 	.probe		= at_ccfc_probe,
 	.remove		= at_ccfc_remove,

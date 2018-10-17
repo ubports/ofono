@@ -212,7 +212,7 @@ static void ril_devinfo_remove(struct ofono_devinfo *info)
 	g_ril_unref(ril);
 }
 
-static struct ofono_devinfo_driver driver = {
+static const struct ofono_devinfo_driver driver = {
 	.name			= RILMODEM,
 	.probe			= ril_devinfo_probe,
 	.remove			= ril_devinfo_remove,

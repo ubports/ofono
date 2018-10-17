@@ -663,7 +663,7 @@ static void isi_gprs_context_remove(struct ofono_gprs_context *gc)
 	g_free(cd);
 }
 
-static struct ofono_gprs_context_driver driver = {
+static const struct ofono_gprs_context_driver driver = {
 	.name			= "isimodem",
 	.probe			= isi_gprs_context_probe,
 	.remove			= isi_gprs_context_remove,

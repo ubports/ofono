@@ -1019,7 +1019,7 @@ static void ifx_voicecall_remove(struct ofono_voicecall *vc)
 	g_free(vd);
 }
 
-static struct ofono_voicecall_driver driver = {
+static const struct ofono_voicecall_driver driver = {
 	.name			= "ifxmodem",
 	.probe			= ifx_voicecall_probe,
 	.remove			= ifx_voicecall_remove,

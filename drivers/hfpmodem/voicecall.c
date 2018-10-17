@@ -1303,7 +1303,7 @@ static void hfp_voicecall_remove(struct ofono_voicecall *vc)
 	g_free(vd);
 }
 
-static struct ofono_voicecall_driver driver = {
+static const struct ofono_voicecall_driver driver = {
 	.name			= "hfpmodem",
 	.probe			= hfp_voicecall_probe,
 	.remove			= hfp_voicecall_remove,

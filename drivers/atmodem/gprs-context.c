@@ -494,7 +494,7 @@ static void at_gprs_context_remove(struct ofono_gprs_context *gc)
 	g_free(gcd);
 }
 
-static struct ofono_gprs_context_driver driver = {
+static const struct ofono_gprs_context_driver driver = {
 	.name			= "atmodem",
 	.probe			= at_gprs_context_probe,
 	.remove			= at_gprs_context_remove,

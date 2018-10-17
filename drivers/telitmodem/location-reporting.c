@@ -295,7 +295,7 @@ static void telit_location_reporting_remove(struct ofono_location_reporting *lr)
 	g_free(gd);
 }
 
-static struct ofono_location_reporting_driver driver = {
+static const struct ofono_location_reporting_driver driver = {
 	.name			= "telitmodem",
 	.type			= OFONO_LOCATION_REPORTING_TYPE_NMEA,
 	.probe			= telit_location_reporting_probe,

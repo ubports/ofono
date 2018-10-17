@@ -857,7 +857,7 @@ static void ril_gprs_context_remove(struct ofono_gprs_context *gc)
 	g_free(gcd);
 }
 
-static struct ofono_gprs_context_driver driver = {
+static const struct ofono_gprs_context_driver driver = {
 	.name			= RILMODEM,
 	.probe			= ril_gprs_context_probe,
 	.remove			= ril_gprs_context_remove,

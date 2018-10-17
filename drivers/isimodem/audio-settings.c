@@ -117,7 +117,7 @@ static void isi_audio_settings_remove(struct ofono_audio_settings *as)
 	g_free(asd);
 }
 
-static struct ofono_audio_settings_driver driver = {
+static const struct ofono_audio_settings_driver driver = {
 	.name		= "isimodem",
 	.probe		= isi_audio_settings_probe,
 	.remove		= isi_audio_settings_remove,

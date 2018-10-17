@@ -88,7 +88,7 @@ static void mbim_devinfo_remove(struct ofono_devinfo *info)
 	l_free(dd);
 }
 
-static struct ofono_devinfo_driver driver = {
+static const struct ofono_devinfo_driver driver = {
 	.name			= "mbim",
 	.probe			= mbim_devinfo_probe,
 	.remove			= mbim_devinfo_remove,

@@ -217,7 +217,7 @@ static void gemalto_location_reporting_remove(struct ofono_location_reporting *l
 	g_free(gd);
 }
 
-static struct ofono_location_reporting_driver driver = {
+static const struct ofono_location_reporting_driver driver = {
 	.name			= "gemaltomodem",
 	.type			= OFONO_LOCATION_REPORTING_TYPE_NMEA,
 	.probe			= gemalto_location_reporting_probe,

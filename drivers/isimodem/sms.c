@@ -1121,7 +1121,7 @@ static void isi_sms_remove(struct ofono_sms *sms)
 	g_free(sd);
 }
 
-static struct ofono_sms_driver driver = {
+static const struct ofono_sms_driver driver = {
 	.name			= "isimodem",
 	.probe			= isi_sms_probe,
 	.remove			= isi_sms_remove,

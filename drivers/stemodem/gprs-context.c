@@ -427,7 +427,7 @@ out:
 	g_free(gcd);
 }
 
-static struct ofono_gprs_context_driver driver = {
+static const struct ofono_gprs_context_driver driver = {
 	.name			= "stemodem",
 	.probe			= ste_gprs_context_probe,
 	.remove			= ste_gprs_context_remove,

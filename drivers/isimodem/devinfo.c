@@ -252,7 +252,7 @@ static void isi_devinfo_remove(struct ofono_devinfo *info)
 	g_free(data);
 }
 
-static struct ofono_devinfo_driver driver = {
+static const struct ofono_devinfo_driver driver = {
 	.name			= "isimodem",
 	.probe			= isi_devinfo_probe,
 	.remove			= isi_devinfo_remove,

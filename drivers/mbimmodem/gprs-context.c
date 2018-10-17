@@ -454,7 +454,7 @@ static void mbim_gprs_context_remove(struct ofono_gprs_context *gc)
 	l_free(gcd);
 }
 
-static struct ofono_gprs_context_driver driver = {
+static const struct ofono_gprs_context_driver driver = {
 	.name			= "mbim",
 	.probe			= mbim_gprs_context_probe,
 	.remove			= mbim_gprs_context_remove,

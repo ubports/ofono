@@ -503,7 +503,7 @@ static void ril_sms_remove(struct ofono_sms *sms)
 	ofono_sms_set_data(sms, NULL);
 }
 
-static struct ofono_sms_driver driver = {
+static const struct ofono_sms_driver driver = {
 	.name		= RILMODEM,
 	.probe		= ril_sms_probe,
 	.sca_query	= ril_csca_query,
