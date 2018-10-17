@@ -141,7 +141,7 @@ static void ril_lte_remove(struct ofono_lte *lte)
 	g_free(ld);
 }
 
-static struct ofono_lte_driver driver = {
+static const struct ofono_lte_driver driver = {
 	.name				= RILMODEM,
 	.probe				= ril_lte_probe,
 	.remove				= ril_lte_remove,

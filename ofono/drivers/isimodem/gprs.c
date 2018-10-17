@@ -490,7 +490,7 @@ error:
 	g_free(cbd);
 }
 
-static struct ofono_gprs_driver driver = {
+static const struct ofono_gprs_driver driver = {
 	.name			= "isimodem",
 	.probe			= isi_gprs_probe,
 	.remove			= isi_gprs_remove,

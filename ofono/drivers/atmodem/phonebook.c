@@ -593,7 +593,7 @@ static void at_phonebook_remove(struct ofono_phonebook *pb)
 	g_free(pbd);
 }
 
-static struct ofono_phonebook_driver driver = {
+static const struct ofono_phonebook_driver driver = {
 	.name		= "atmodem",
 	.probe		= at_phonebook_probe,
 	.remove		= at_phonebook_remove,

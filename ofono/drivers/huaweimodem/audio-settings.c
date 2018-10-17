@@ -113,7 +113,7 @@ static void huawei_audio_settings_remove(struct ofono_audio_settings *as)
 	g_free(asd);
 }
 
-static struct ofono_audio_settings_driver driver = {
+static const struct ofono_audio_settings_driver driver = {
 	.name		= "huaweimodem",
 	.probe		= huawei_audio_settings_probe,
 	.remove		= huawei_audio_settings_remove,

@@ -195,7 +195,7 @@ static void zte_radio_settings_remove(struct ofono_radio_settings *rs)
 	g_free(rsd);
 }
 
-static struct ofono_radio_settings_driver driver = {
+static const struct ofono_radio_settings_driver driver = {
 	.name			= "ztemodem",
 	.probe			= zte_radio_settings_probe,
 	.remove			= zte_radio_settings_remove,

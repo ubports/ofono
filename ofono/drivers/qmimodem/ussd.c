@@ -270,7 +270,7 @@ error:
 	CALLBACK_WITH_FAILURE(cb, data);
 }
 
-static struct ofono_ussd_driver driver = {
+static const struct ofono_ussd_driver driver = {
 	.name		= "qmimodem",
 	.probe		= qmi_ussd_probe,
 	.remove		= qmi_ussd_remove,

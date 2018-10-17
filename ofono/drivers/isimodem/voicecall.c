@@ -1935,7 +1935,7 @@ static void isi_remove(struct ofono_voicecall *call)
 	g_free(data);
 }
 
-static struct ofono_voicecall_driver driver = {
+static const struct ofono_voicecall_driver driver = {
 	.name			= "isimodem",
 	.probe			= isi_probe,
 	.remove			= isi_remove,

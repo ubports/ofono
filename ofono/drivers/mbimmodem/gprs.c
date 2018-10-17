@@ -280,7 +280,7 @@ static void mbim_gprs_remove(struct ofono_gprs *gprs)
 	l_free(gd);
 }
 
-static struct ofono_gprs_driver driver = {
+static const struct ofono_gprs_driver driver = {
 	.name			= "mbim",
 	.probe			= mbim_gprs_probe,
 	.remove			= mbim_gprs_remove,

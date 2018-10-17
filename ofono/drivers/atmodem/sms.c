@@ -1320,7 +1320,7 @@ static void at_sms_remove(struct ofono_sms *sms)
 	ofono_sms_set_data(sms, NULL);
 }
 
-static struct ofono_sms_driver driver = {
+static const struct ofono_sms_driver driver = {
 	.name		= "atmodem",
 	.probe		= at_sms_probe,
 	.remove		= at_sms_remove,

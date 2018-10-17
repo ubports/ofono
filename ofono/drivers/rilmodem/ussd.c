@@ -242,7 +242,7 @@ static void ril_ussd_remove(struct ofono_ussd *ussd)
 	g_free(ud);
 }
 
-static struct ofono_ussd_driver driver = {
+static const struct ofono_ussd_driver driver = {
 	.name		= RILMODEM,
 	.probe		= ril_ussd_probe,
 	.remove		= ril_ussd_remove,

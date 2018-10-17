@@ -124,7 +124,7 @@ static void at_lte_remove(struct ofono_lte *lte)
 	g_free(ldd);
 }
 
-static struct ofono_lte_driver driver = {
+static const struct ofono_lte_driver driver = {
 	.name				= "atmodem",
 	.probe				= at_lte_probe,
 	.remove				= at_lte_remove,

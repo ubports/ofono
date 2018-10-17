@@ -91,7 +91,7 @@ static void hfp_devinfo_remove(struct ofono_devinfo *info)
 	g_free(dd);
 }
 
-static struct ofono_devinfo_driver driver = {
+static const struct ofono_devinfo_driver driver = {
 	.name			= "hfpmodem",
 	.probe			= hfp_devinfo_probe,
 	.remove			= hfp_devinfo_remove,

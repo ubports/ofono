@@ -246,7 +246,7 @@ static void xmm7modem_netmon_remove(struct ofono_netmon *netmon)
 	g_free(nmd);
 }
 
-static struct ofono_netmon_driver driver = {
+static const struct ofono_netmon_driver driver = {
 	.name			= XMM7MODEM,
 	.probe			= xmm7modem_netmon_probe,
 	.remove			= xmm7modem_netmon_remove,

@@ -411,7 +411,7 @@ static void hfp_hf_indicator(struct ofono_handsfree *hf,
 	CALLBACK_WITH_FAILURE(cb, data);
 }
 
-static struct ofono_handsfree_driver driver = {
+static const struct ofono_handsfree_driver driver = {
 	.name			= "hfpmodem",
 	.probe			= hfp_handsfree_probe,
 	.remove			= hfp_handsfree_remove,

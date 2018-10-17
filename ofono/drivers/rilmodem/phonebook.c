@@ -1037,7 +1037,7 @@ static void ril_phonebook_remove(struct ofono_phonebook *pb)
 	g_free(pbd);
 }
 
-static struct ofono_phonebook_driver driver = {
+static const struct ofono_phonebook_driver driver = {
 	.name		= RILMODEM,
 	.probe		= ril_phonebook_probe,
 	.remove		= ril_phonebook_remove,

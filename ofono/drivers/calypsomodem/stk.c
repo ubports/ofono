@@ -292,7 +292,7 @@ static void calypso_stk_remove(struct ofono_stk *stk)
 	g_free(sd);
 }
 
-static struct ofono_stk_driver driver = {
+static const struct ofono_stk_driver driver = {
 	.name			= "calypsomodem",
 	.probe			= calypso_stk_probe,
 	.remove			= calypso_stk_remove,

@@ -194,7 +194,7 @@ static void ril_cbs_remove(struct ofono_cbs *cbs)
 	g_free(data);
 }
 
-static struct ofono_cbs_driver driver = {
+static const struct ofono_cbs_driver driver = {
 	.name = RILMODEM,
 	.probe = ril_cbs_probe,
 	.remove = ril_cbs_remove,

@@ -395,7 +395,7 @@ static void mbim_netreg_remove(struct ofono_netreg *netreg)
 	l_free(nd);
 }
 
-static struct ofono_netreg_driver driver = {
+static const struct ofono_netreg_driver driver = {
 	.name				= "mbim",
 	.probe				= mbim_netreg_probe,
 	.remove				= mbim_netreg_remove,

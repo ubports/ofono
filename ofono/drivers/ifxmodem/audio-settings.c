@@ -382,7 +382,7 @@ static void ifx_audio_settings_remove(struct ofono_audio_settings *as)
 	g_free(asd);
 }
 
-static struct ofono_audio_settings_driver driver = {
+static const struct ofono_audio_settings_driver driver = {
 	.name		= "ifxmodem",
 	.probe		= ifx_audio_settings_probe,
 	.remove		= ifx_audio_settings_remove,

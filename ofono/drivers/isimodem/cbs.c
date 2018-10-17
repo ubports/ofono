@@ -229,7 +229,7 @@ static void isi_cbs_remove(struct ofono_cbs *cbs)
 	g_free(cd);
 }
 
-static struct ofono_cbs_driver driver = {
+static const struct ofono_cbs_driver driver = {
 	.name			= "isimodem",
 	.probe			= isi_cbs_probe,
 	.remove			= isi_cbs_remove,

@@ -339,7 +339,7 @@ static void huawei_gprs_context_remove(struct ofono_gprs_context *gc)
 	g_free(gcd);
 }
 
-static struct ofono_gprs_context_driver driver = {
+static const struct ofono_gprs_context_driver driver = {
 	.name			= "huaweimodem",
 	.probe			= huawei_gprs_context_probe,
 	.remove			= huawei_gprs_context_remove,

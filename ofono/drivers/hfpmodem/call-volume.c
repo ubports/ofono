@@ -218,7 +218,7 @@ static void hfp_call_volume_remove(struct ofono_call_volume *cv)
 	g_free(vd);
 }
 
-static struct ofono_call_volume_driver driver = {
+static const struct ofono_call_volume_driver driver = {
 	.name			= "hfpmodem",
 	.probe			= hfp_call_volume_probe,
 	.remove			= hfp_call_volume_remove,
