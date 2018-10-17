@@ -397,7 +397,8 @@ builtin_modules += gemaltomodem
 builtin_sources += drivers/atmodem/atutil.h \
 			drivers/gemaltomodem/gemaltomodem.h \
 			drivers/gemaltomodem/gemaltomodem.c \
-			drivers/gemaltomodem/location-reporting.c
+			drivers/gemaltomodem/location-reporting.c \
+			drivers/gemaltomodem/voicecall.c
 
 builtin_modules += xmm7modem
 builtin_sources += drivers/atmodem/atutil.h \
