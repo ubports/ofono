@@ -25,7 +25,6 @@
 
 #include <ofono/storage.h>
 
-#define _GNU_SOURCE
 #include <string.h>
 #include <stdarg.h>
 #include <sys/types.h>

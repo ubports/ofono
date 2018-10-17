@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 
 #include <glib.h>
 #include <errno.h>
