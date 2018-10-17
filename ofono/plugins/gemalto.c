@@ -3,6 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2017 Vincent Cesson. All rights reserved.
+ *  Copyright (C) 2018 Gemalto M2M
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -571,6 +572,10 @@ static void gemalto_pre_sim(struct ofono_modem *modem)
 
 	ofono_devinfo_create(modem, 0, "atmodem", data->app);
 	ofono_location_reporting_create(modem, 0, "gemaltomodem", data->app);
+
+	ofono_modem_set_integer(modem, "GemaltoVtsQuotes", 1);
+	ofono_voicecall_create(modem, 0, "gemaltomodem", data->app);
+
 	data->sim = ofono_sim_create(modem, OFONO_VENDOR_GEMALTO, "atmodem",
 						data->app);
 
@@ -596,6 +601,13 @@ static void gemalto_post_sim(struct ofono_modem *modem)
 
 	if (gprs && gc)
 		ofono_gprs_add_context(gprs, gc);
+
+	ofono_ussd_create(modem, 0, "atmodem", data->app);
+
+	ofono_call_forwarding_create(modem, 0, "atmodem", data->app);
+	ofono_call_settings_create(modem, 0, "atmodem", data->app);
+	ofono_call_meter_create(modem, 0, "atmodem", data->app);
+	ofono_call_barring_create(modem, 0, "atmodem", data->app);
 
 	if (!g_strcmp0(model, GEMALTO_MODEL_ALS3_PLS8x))
 		ofono_lte_create(modem, OFONO_VENDOR_CINTERION,
