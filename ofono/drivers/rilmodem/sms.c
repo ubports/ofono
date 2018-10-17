@@ -25,7 +25,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <ctype.h>
 #include <string.h>
 #include <stdlib.h>

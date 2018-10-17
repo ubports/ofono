@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
