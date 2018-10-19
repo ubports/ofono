@@ -33,3 +33,39 @@ Properties	string DefaultAccessPointName [readwrite]
 
 			Setting this property to an empty string clears the
 			default APN from the modem.
+
+		string Protocol [readwrite]
+
+			Holds the protocol for this context.  Valid values
+			are: "ip", "ipv6" and "dual". Default value is "ip".
+
+		string AuthenticationMethod [readwrite]
+
+			Sets the Method used for the authentication
+			for the default APN.
+
+			Available values are "none", "pap" and "chap".
+			Default is "none".
+
+			If the AuthenticationMethod is set to 'none',
+			no authentication is performed for the default attach
+			APN.  Username and Password properties are ignored,
+			even if containing a valid value.  If Username or
+			Password are empty, AuthenticationMethod is implicitly
+			assumed to be set to 'none'.
+
+			If the default APN supports authentication and it
+			fails, then it is up to the network how to proceed.
+			In general LTE access is denied and the modem can
+			fallback to a legacy technology if capable and another
+			radio technology is available.
+
+		string Username [readwrite]
+
+			Holds the username to be used for authentication
+			purposes.
+
+		string Password [readwrite]
+
+			Holds the password to be used for authentication
+			purposes.
