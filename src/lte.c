@@ -285,12 +285,18 @@ static DBusMessage *lte_set_property(DBusConnection *conn,
 
 		lte->pending_info.auth_method = auth_method;
 	} else if (strcmp(property, LTE_USERNAME) == 0) {
+		if (strlen(str) > OFONO_GPRS_MAX_USERNAME_LENGTH)
+			return __ofono_error_invalid_format(msg);
+
 		if (g_str_equal(str, lte->info.username))
 			return dbus_message_new_method_return(msg);
 
 		g_strlcpy(lte->pending_info.username, str,
 					OFONO_GPRS_MAX_USERNAME_LENGTH + 1);
 	} else if (strcmp(property, LTE_PASSWORD) == 0) {
+		if (strlen(str) > OFONO_GPRS_MAX_PASSWORD_LENGTH)
+			return __ofono_error_invalid_format(msg);
+
 		if (g_str_equal(str, lte->info.password))
 			return dbus_message_new_method_return(msg);
 
