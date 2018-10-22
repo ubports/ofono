@@ -670,3 +670,30 @@ int at_util_gprs_auth_method_to_auth_prot(
 
 	return 0;
 }
+
+const char *at_util_gprs_proto_to_pdp_type(enum ofono_gprs_proto proto)
+{
+	switch (proto) {
+	case OFONO_GPRS_PROTO_IPV6:
+		return "IPV6";
+	case OFONO_GPRS_PROTO_IPV4V6:
+		return "IPV4V6";
+		break;
+	case OFONO_GPRS_PROTO_IP:
+		return "IP";
+	}
+
+	return NULL;
+}
+
+char *at_util_get_cgdcont_command(guint cid, enum ofono_gprs_proto proto,
+								const char *apn)
+{
+	const char *pdp_type = at_util_gprs_proto_to_pdp_type(proto);
+
+	if (!apn)
+		return g_strdup_printf("AT+CGDCONT=%u", cid);
+
+	return g_strdup_printf("AT+CGDCONT=%u,\"%s\",\"%s\"", cid, pdp_type,
+									apn);
+}
