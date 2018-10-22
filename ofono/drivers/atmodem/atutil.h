@@ -90,6 +90,19 @@ int at_util_get_ipv4_address_and_netmask(const char *addrnetmask,
 int at_util_gprs_auth_method_to_auth_prot(
 				enum ofono_gprs_auth_method auth_method);
 
+const char *at_util_gprs_proto_to_pdp_type(enum ofono_gprs_proto proto);
+
+/*
+ * at_util_get_cgdcont_command
+ * if the apn pointer is NULL, the context will be removed: the resulting
+ * string will be like: AT+CGDCONT=7
+ * but if apn pointer is not NULL and the string is empty, then
+ * this function will create a normal context with empty apn, like:
+ * AT+CGDCONT=4,"IPV6",""
+ */
+char *at_util_get_cgdcont_command(guint cid, enum ofono_gprs_proto proto,
+							const char *apn);
+
 struct cb_data {
 	void *cb;
 	void *data;
