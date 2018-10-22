@@ -3,6 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2018 Gemalto M2M
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -653,4 +654,19 @@ int at_util_get_ipv4_address_and_netmask(const char *addrnetmask,
 	}
 
 	return ret;
+}
+
+int at_util_gprs_auth_method_to_auth_prot(
+					enum ofono_gprs_auth_method auth_method)
+{
+	switch (auth_method) {
+	case OFONO_GPRS_AUTH_METHOD_PAP:
+		return 1;
+	case OFONO_GPRS_AUTH_METHOD_CHAP:
+		return 2;
+	case OFONO_GPRS_AUTH_METHOD_NONE:
+		return 0;
+	}
+
+	return 0;
 }
