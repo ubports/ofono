@@ -34,12 +34,12 @@ Properties	string DefaultAccessPointName [readwrite]
 			Setting this property to an empty string clears the
 			default APN from the modem.
 
-		string Protocol [readwrite]
+		string Protocol [readwrite, experimental]
 
 			Holds the protocol for this context.  Valid values
 			are: "ip", "ipv6" and "dual". Default value is "ip".
 
-		string AuthenticationMethod [readwrite]
+		string AuthenticationMethod [readwrite, experimental]
 
 			Sets the Method used for the authentication
 			for the default APN.
@@ -60,12 +60,12 @@ Properties	string DefaultAccessPointName [readwrite]
 			fallback to a legacy technology if capable and another
 			radio technology is available.
 
-		string Username [readwrite]
+		string Username [readwrite, experimental]
 
 			Holds the username to be used for authentication
 			purposes.
 
-		string Password [readwrite]
+		string Password [readwrite, experimental]
 
 			Holds the password to be used for authentication
 			purposes.
