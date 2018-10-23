@@ -858,8 +858,18 @@ static gboolean build_cnmi_string(char *buf, int *cnmi_opts,
 					data->cnma_enabled ? "21" : "1", FALSE))
 		return FALSE;
 
+	switch (data->vendor) {
+	case OFONO_VENDOR_GEMALTO:
+		mode = "0";
+		break;
+	default:
+		/* Sounds like 2 is the sanest mode */
+		mode = "20";
+		break;
+	}
+
 	/* Always deliver CB via +CBM, otherwise don't deliver at all */
-	if (!append_cnmi_element(buf, &len, cnmi_opts[2], "20", FALSE))
+	if (!append_cnmi_element(buf, &len, cnmi_opts[2], mode, FALSE))
 		return FALSE;
 
 	/*
