@@ -1284,6 +1284,24 @@ static GSList *ril_radio_caps_manager_empty_slots
 	return found;
 }
 
+static guint ril_radio_caps_manager_sim_count
+					(struct ril_radio_caps_manager *self)
+{
+	const GPtrArray *list = self->caps_list;
+	guint i, count = 0;
+
+	for (i = 0; i < list->len; i++) {
+		const struct ril_radio_caps *caps = list->pdata[i];
+
+		if (caps->simcard->status->card_state ==
+						RIL_CARDSTATE_PRESENT) {
+			count++;
+		}
+	}
+
+	return count;
+}
+
 /**
  * There could be no capability mismatch but LTE could be enabled for
  * the slot that has no SIM card in it. That's a waste, fix it.
@@ -1327,7 +1345,7 @@ static void ril_radio_caps_manager_check(struct ril_radio_caps_manager *self)
 	if (ril_radio_caps_manager_can_check(self)) {
 		const int first = ril_radio_caps_manager_first_mismatch(self);
 
-		if (first >= 0) {
+		if (first >= 0 && ril_radio_caps_manager_sim_count(self) > 1) {
 			if (ril_radio_caps_manager_update_caps(self, first)) {
 				ril_radio_caps_manager_start_transaction(self);
 			}
