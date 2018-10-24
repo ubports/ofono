@@ -123,6 +123,9 @@ struct ril_data_request *ril_data_call_deactivate(struct ril_data *data,
 void ril_data_request_detach(struct ril_data_request *req);
 void ril_data_request_cancel(struct ril_data_request *req);
 
+gboolean ril_data_call_grab(struct ril_data *data, int cid, void *cookie);
+void ril_data_call_release(struct ril_data *data, int cid, void *cookie);
+
 void ril_data_call_free(struct ril_data_call *call);
 struct ril_data_call *ril_data_call_dup(const struct ril_data_call *call);
 struct ril_data_call *ril_data_call_find(struct ril_data_call_list *list,

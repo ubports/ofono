@@ -114,6 +114,7 @@ struct ril_data_priv {
 	guint query_id;
 	gulong io_event_id[IO_EVENT_COUNT];
 	gulong settings_event_id[SETTINGS_EVENT_COUNT];
+	GHashTable* grab;
 };
 
 enum ril_data_signal {
@@ -185,7 +186,7 @@ struct ril_data_request_allow_data {
 
 static void ril_data_manager_check_data(struct ril_data_manager *dm);
 static void ril_data_manager_check_network_mode(struct ril_data_manager *dm);
-
+static void ril_data_call_deact_cid(struct ril_data *data, int cid);
 static void ril_data_power_update(struct ril_data *self);
 static void ril_data_signal_emit(struct ril_data *self, enum ril_data_signal id)
 {
@@ -545,6 +546,10 @@ struct ril_data_call *ril_data_call_find(struct ril_data_call_list *list,
 static void ril_data_set_calls(struct ril_data *self,
 					struct ril_data_call_list *list)
 {
+	struct ril_data_priv *priv = self->priv;
+	GHashTableIter it;
+	gpointer key;
+
 	if (!ril_data_call_list_equal(self->data_calls, list)) {
 		DBG("data calls changed");
 		ril_data_call_list_free(self->data_calls);
@@ -552,6 +557,32 @@ static void ril_data_set_calls(struct ril_data *self,
 		ril_data_signal_emit(self, SIGNAL_CALLS_CHANGED);
 	} else {
 		ril_data_call_list_free(list);
+	}
+
+	/* Clean up the grab table */
+	g_hash_table_iter_init(&it, priv->grab);
+	while (g_hash_table_iter_next(&it, &key, NULL)) {
+		const int cid = GPOINTER_TO_INT(key);
+
+		if (!ril_data_call_find(self->data_calls, cid)) {
+			g_hash_table_iter_remove(&it);
+		}
+	}
+
+	if (self->data_calls) {
+		GSList *l;
+
+		/* Disconnect stray calls (one at a time) */
+		for (l = self->data_calls->calls; l; l = l->next) {
+			struct ril_data_call *dc = l->data;
+
+			key = GINT_TO_POINTER(dc->cid);
+			if (!g_hash_table_contains(priv->grab, key)) {
+				DBG_(self, "stray call %u", dc->cid);
+				ril_data_call_deact_cid(self, dc->cid);
+				break;
+			}
+		}
 	}
 }
 
@@ -1083,6 +1114,11 @@ static struct ril_data_request *ril_data_call_deact_new(struct ril_data *data,
 	return req;
 }
 
+static void ril_data_call_deact_cid(struct ril_data *data, int cid)
+{
+	ril_data_request_queue(ril_data_call_deact_new(data, cid, NULL, NULL));
+}
+
 /*==========================================================================*
  * ril_data_allow_request
  *==========================================================================*/
@@ -1323,9 +1359,7 @@ static void ril_data_deactivate_all(struct ril_data *self)
 			struct ril_data_call *call = l->data;
 			if (call->status == PDP_FAIL_NONE) {
 				DBG_(self, "deactivating call %u", call->cid);
-				ril_data_request_queue(
-					ril_data_call_deact_new(self,
-						call->cid, NULL, NULL));
+				ril_data_call_deact_cid(self, call->cid);
 			}
 		}
 	}
@@ -1492,12 +1526,39 @@ struct ril_data_request *ril_data_call_deactivate(struct ril_data *self,
 	return req;
 }
 
+gboolean ril_data_call_grab(struct ril_data *self, int cid, void *cookie)
+{
+	if (self && cookie && ril_data_call_find(self->data_calls, cid)) {
+		struct ril_data_priv *priv = self->priv;
+		gpointer key = GINT_TO_POINTER(cid);
+		void *prev = g_hash_table_lookup(priv->grab, key);
+
+		if (!prev) {
+			g_hash_table_insert(priv->grab, key, cookie);
+			return TRUE;
+		} else {
+			return (prev == cookie);
+		}
+	}
+	return FALSE;
+}
+
+void ril_data_call_release(struct ril_data *self, int cid, void *cookie)
+{
+	if (self && cookie) {
+		struct ril_data_priv *priv = self->priv;
+
+		g_hash_table_remove(priv->grab, GUINT_TO_POINTER(cid));
+	}
+}
+
 static void ril_data_init(struct ril_data *self)
 {
 	struct ril_data_priv *priv = G_TYPE_INSTANCE_GET_PRIVATE(self,
 		RIL_DATA_TYPE, struct ril_data_priv);
 
 	self->priv = priv;
+	priv->grab = g_hash_table_new(g_direct_hash, g_direct_equal);
 }
 
 static void ril_data_dispose(GObject *object)
@@ -1525,6 +1586,7 @@ static void ril_data_dispose(GObject *object)
 
 	dm->data_list = g_slist_remove(dm->data_list, self);
 	ril_data_manager_check_data(dm);
+	g_hash_table_destroy(priv->grab);
 	G_OBJECT_CLASS(ril_data_parent_class)->dispose(object);
 }
 
