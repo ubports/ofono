@@ -35,6 +35,8 @@
 
 #include "common.h"
 
+#define DEFAULT_POWERED_TIMEOUT (20)
+
 static GSList *g_devinfo_drivers = NULL;
 static GSList *g_driver_list = NULL;
 static GSList *g_modem_list = NULL;
@@ -77,6 +79,7 @@ struct ofono_modem {
 	char			*lock_owner;
 	guint			lock_watch;
 	guint			timeout;
+	guint			timeout_hint;
 	ofono_bool_t		online;
 	struct ofono_watchlist	*online_watches;
 	struct ofono_watchlist	*powered_watches;
@@ -1070,7 +1073,7 @@ static DBusMessage *set_property_lockdown(struct ofono_modem *modem,
 		}
 
 		modem->pending = dbus_message_ref(msg);
-		modem->timeout = g_timeout_add_seconds(20,
+		modem->timeout = g_timeout_add_seconds(modem->timeout_hint,
 						set_powered_timeout, modem);
 		return NULL;
 	}
@@ -1153,7 +1156,8 @@ static DBusMessage *modem_set_property(DBusConnection *conn,
 				return __ofono_error_failed(msg);
 
 			modem->pending = dbus_message_ref(msg);
-			modem->timeout = g_timeout_add_seconds(20,
+			modem->timeout = g_timeout_add_seconds(
+						modem->timeout_hint,
 						set_powered_timeout, modem);
 			return NULL;
 		}
@@ -1871,6 +1875,12 @@ ofono_bool_t ofono_modem_get_boolean(struct ofono_modem *modem, const char *key)
 	return value;
 }
 
+void ofono_modem_set_powered_timeout_hint(struct ofono_modem *modem,
+							unsigned int seconds)
+{
+	modem->timeout_hint = seconds;
+}
+
 void ofono_modem_set_name(struct ofono_modem *modem, const char *name)
 {
 	if (modem->name)
@@ -1932,6 +1942,7 @@ struct ofono_modem *ofono_modem_create(const char *name, const char *type)
 	modem->driver_type = g_strdup(type);
 	modem->properties = g_hash_table_new_full(g_str_hash, g_str_equal,
 						g_free, unregister_property);
+	modem->timeout_hint = DEFAULT_POWERED_TIMEOUT;
 
 	g_modem_list = g_slist_prepend(g_modem_list, modem);
 
