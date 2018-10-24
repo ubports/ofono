@@ -127,6 +127,9 @@ void ofono_modem_driver_unregister(const struct ofono_modem_driver *);
 struct ofono_modem *ofono_modem_find(ofono_modem_compare_cb_t func,
 					void *user_data);
 
+void ofono_modem_set_powered_timeout_hint(struct ofono_modem *modem,
+							unsigned int seconds);
+
 #ifdef __cplusplus
 }
 #endif
