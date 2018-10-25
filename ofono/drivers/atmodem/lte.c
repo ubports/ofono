@@ -3,6 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2017  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2018 Gemalto M2M
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -42,19 +43,62 @@
 
 struct lte_driver_data {
 	GAtChat *chat;
+	struct ofono_lte_default_attach_info pending_info;
 };
 
-static void at_lte_set_default_attach_info_cb(gboolean ok, GAtResult *result,
+static void at_lte_set_auth_cb(gboolean ok, GAtResult *result,
 							gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
 	ofono_lte_cb_t cb = cbd->cb;
 	struct ofono_error error;
 
-	DBG("ok %d", ok);
-
 	decode_at_error(&error, g_at_result_final_response(result));
 	cb(&error, cbd->data);
+}
+
+static void at_lte_set_default_attach_info_cb(gboolean ok, GAtResult *result,
+							gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_lte_cb_t cb = cbd->cb;
+	void *data = cbd->data;
+	struct lte_driver_data *ldd = cbd->user;
+	struct ofono_error error;
+	char buf[32 + OFONO_GPRS_MAX_USERNAME_LENGTH +
+					OFONO_GPRS_MAX_PASSWORD_LENGTH  + 1];
+	size_t buflen = sizeof(buf);
+	size_t len;
+	enum ofono_gprs_auth_method auth_method;
+
+	if (!ok) {
+		decode_at_error(&error, g_at_result_final_response(result));
+		cb(&error, data);
+		return;
+	}
+
+	auth_method = ldd->pending_info.auth_method;
+
+	/* change the authentication method if the  parameters are invalid */
+	if (!*ldd->pending_info.username || !*ldd->pending_info.password)
+		auth_method = OFONO_GPRS_AUTH_METHOD_NONE;
+
+	len = snprintf(buf, buflen, "AT+CGAUTH=0,%d",
+			at_util_gprs_auth_method_to_auth_prot(auth_method));
+	buflen -= len;
+
+	if (auth_method != OFONO_GPRS_AUTH_METHOD_NONE)
+		snprintf(buf + len, buflen, ",\"%s\",\"%s\"",
+				ldd->pending_info.username,
+				ldd->pending_info.password);
+
+	cbd = cb_data_ref(cbd);
+	if (g_at_chat_send(ldd->chat, buf, NULL,
+			at_lte_set_auth_cb, cbd, cb_data_unref) > 0)
+		return;
+
+	cb_data_unref(cbd);
+	CALLBACK_WITH_FAILURE(cb, data);
 }
 
 static void at_lte_set_default_attach_info(const struct ofono_lte *lte,
@@ -62,23 +106,21 @@ static void at_lte_set_default_attach_info(const struct ofono_lte *lte,
 			ofono_lte_cb_t cb, void *data)
 {
 	struct lte_driver_data *ldd = ofono_lte_get_data(lte);
-	char buf[32 + OFONO_GPRS_MAX_APN_LENGTH + 1];
 	struct cb_data *cbd = cb_data_new(cb, data);
+	char *buf = at_util_get_cgdcont_command(0, info->proto, info->apn);
 
-	DBG("LTE config with APN: %s", info->apn);
+	cbd->user = ldd;
+	memcpy(&ldd->pending_info, info, sizeof(ldd->pending_info));
 
-	if (strlen(info->apn) > 0)
-		snprintf(buf, sizeof(buf), "AT+CGDCONT=0,\"IP\",\"%s\"",
-				info->apn);
-	else
-		snprintf(buf, sizeof(buf), "AT+CGDCONT=0,\"IP\"");
-
-	/* We can't do much in case of failure so don't check response. */
 	if (g_at_chat_send(ldd->chat, buf, NULL,
-			at_lte_set_default_attach_info_cb, cbd, g_free) > 0)
-		return;
+					at_lte_set_default_attach_info_cb,
+					cbd, cb_data_unref) > 0)
+		goto end;
 
+	cb_data_unref(cbd);
 	CALLBACK_WITH_FAILURE(cb, data);
+end:
+	g_free(buf);
 }
 
 static gboolean lte_delayed_register(gpointer user_data)
