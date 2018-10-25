@@ -41,6 +41,8 @@
 
 #include "atmodem.h"
 
+static const char *none_prefix[] = { NULL };
+
 struct lte_driver_data {
 	GAtChat *chat;
 	struct ofono_lte_default_attach_info pending_info;
@@ -93,7 +95,7 @@ static void at_lte_set_default_attach_info_cb(gboolean ok, GAtResult *result,
 				ldd->pending_info.password);
 
 	cbd = cb_data_ref(cbd);
-	if (g_at_chat_send(ldd->chat, buf, NULL,
+	if (g_at_chat_send(ldd->chat, buf, none_prefix,
 			at_lte_set_auth_cb, cbd, cb_data_unref) > 0)
 		return;
 
@@ -112,7 +114,7 @@ static void at_lte_set_default_attach_info(const struct ofono_lte *lte,
 	cbd->user = ldd;
 	memcpy(&ldd->pending_info, info, sizeof(ldd->pending_info));
 
-	if (g_at_chat_send(ldd->chat, buf, NULL,
+	if (g_at_chat_send(ldd->chat, buf, none_prefix,
 					at_lte_set_default_attach_info_cb,
 					cbd, cb_data_unref) > 0)
 		goto end;
