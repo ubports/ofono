@@ -1,0 +1,164 @@
+Every project has its own recursive patterns, and oFono is not an exception.
+This document describes the most common ones found in the code.
+
+Typical flow for atom <-> atom driver operations
+================================================
+Most of the time, the core atom for a given request calls a function in
+the atom driver, which generally executes some commands against the modem,
+and can then return the results to the core.
+
+For example:
+
+dbus call: lte/SetProperty(DefaultAPN)
+    |
+    v
+core: check APN validity, call the modem atom for execution in the modem
+        |
+        v
+atom driver: schedules 'AT+CGDCONT=0,"IP","MyNiceAPN"' for execution
+            |
+[ break in the flow: the functions return back to the core, the dbus request ]
+[                       is not answered at this time                         ]
+                ...
+[GLibMain event loop schedules the command, it is sent to the modem and the  ]
+[                       modem's reply is obtained                            ]
+            |
+            v
+atom driver: a callback function, optionally provided when AT command was
+scheduled is now called
+        |
+        v
+core: atom driver core callback function is now called. This was passed from
+the core as an argument, earlier, when the atom driver operation was invoked,
+along with some context data (opaque info for the atom driver containing core
+atom owned data)
+    |
+    v
+the core can now answer the dbus message
+
+
+In the code, it looks like this:
+
+//core call:
+static DBusMessage *lte_set_property(DBusConnection *conn,
+					DBusMessage *msg, void *data)
+{
+	struct ofono_lte *lte = data;
+
+	/*
+	 * a block of code here processes the msg and fills the
+	 * lte->pending_info structure
+	 */
+
+	lte->driver->set_default_attach_info(lte, &lte->pending_info,
+					lte_set_default_attach_info_cb, lte);
+
+	return NULL;
+}
+// lte_set_default_attach_info_cb is the core callback function,
+// the lte structure is the parameter that it takes
+
+//atom:
+static void at_lte_set_default_attach_info(const struct ofono_lte *lte,
+			const struct ofono_lte_default_attach_info *info,
+			ofono_lte_cb_t cb, void *data)
+{
+	struct lte_driver_data *ldd = ofono_lte_get_data(lte);
+
+	// next line creates a structure for the in-atom callback
+	struct cb_data *cbd = cb_data_new(cb, data);
+
+	if (g_at_chat_send(ldd->chat, "AT", NULL,
+					at_lte_set_default_attach_info_cb,
+					cbd, g_free) > 0)
+		return;
+
+	g_free(cbd);
+	CALLBACK_WITH_FAILURE(cb, data);
+}
+// here the structure is allocate dynamically, and since it is quite common,
+// the function g_at_chat_send accepts the last 3 parameters:
+// - in-atom callback function
+// - in-atom callback data
+// - destroy function for dynamically-allocated callback data
+// NOTE: if g_at_chat_send fails, it does not free the memory, so it must be
+// done after the call.
+// Note also the callback to the core directly here if the g_at_chat_send fails.
+
+//atom callback:
+
+static void at_lte_set_default_attach_info_cb(gboolean ok, GAtResult *result,
+							gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+
+	if (result == NULL) {
+		CALLBACK_WITH_FAILURE(cbd->cb, cbd->data);
+		return;
+	}
+
+	decode_at_error(&error, g_at_result_final_response(result));
+	cbd->cb(&error, cbd->data);
+}
+// note that here cbd must not be released, it will be done by the GAtChat
+// after invoking the callback (at_lte_set_default_attach_info_cb)
+// note also that the core function will be executed before cbd is released,
+// so the last line of the code is ok.
+
+
+Use of the cb_data in AT command based atom drivers
+===================================================
+
+the cb_data can be used by creating the structure with cb_data_new,
+and then there are two possibilities:
+- use it in a single callback function, and destroy it with a call to
+  g_free.
+  Example:
+  - calling function:
+    struct cb_data *cbd = cb_data_new(cb, data);
+    if (g_at_chat_send(chat, buf, NULL, at_cgatt_cb, cbd, g_free) > 0)
+	return;
+    g_free(cbd);
+  - called function (here at_cgatt_cb):
+	static void at_cgatt_cb(gboolean ok, GAtResult *result,
+						gpointer user_data)
+	{
+		struct cb_data *cbd = user_data;
+		ofono_gprs_cb_t cb = cbd->cb;
+		struct ofono_error error;
+
+		decode_at_error(&error,
+				g_at_result_final_response(result));
+
+		cb(&error, cbd->data);
+	}
+    note the absence of explicit g_free(cbd);
+
+- pass it through a train of callback functions, adding a reference at
+  each pass cb_data_ref, and removing it with cb_data_unref.
+  the use of cb_data_ref would replace a new object creation, while the
+  use of cb_data_unref the use of g_free.
+  Example:
+  - calling function:
+	struct cb_data *cbd = cb_data_new(cb, data);
+	// no cb_ref at the creation
+	if (g_at_chat_send(chat, buf, NULL,
+				at_lte_set_default_attach_info_cb,
+				cbd, cb_data_unref) > 0)
+		goto end;
+	cb_data_unref(cbd);
+  - called function 1 (at_lte_set_default_attach_info_cb):
+	static void at_lte_set_default_attach_info_cb(gboolean ok,
+				GAtResult *result, gpointer user_data)
+	{
+		struct cb_data *cbd = user_data;
+
+		cbd = cb_data_ref(cbd);
+		if (g_at_chat_send(chat, buf, NULL,
+				at_cgatt_cb, cbd, cb_data_unref) > 0)
+			return;
+		cb_data_unref(cbd);
+	}
+  - called function 2 (at_cgatt_cb):
+    like above. no call to g_free or cb_data_unref. The terminal function
+    doesn't need to know about the reference scheme.
