@@ -104,6 +104,7 @@ char *at_util_get_cgdcont_command(guint cid, enum ofono_gprs_proto proto,
 							const char *apn);
 
 struct cb_data {
+	gint ref_count;
 	void *cb;
 	void *data;
 	void *user;
@@ -114,10 +115,27 @@ static inline struct cb_data *cb_data_new(void *cb, void *data)
 	struct cb_data *ret;
 
 	ret = g_new0(struct cb_data, 1);
+	ret->ref_count = 1;
 	ret->cb = cb;
 	ret->data = data;
 
 	return ret;
+}
+
+static inline struct cb_data *cb_data_ref(struct cb_data *cbd)
+{
+	cbd->ref_count++;
+	return cbd;
+}
+
+static inline void cb_data_unref(gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+
+	if (--cbd->ref_count)
+		return;
+
+	g_free(cbd);
 }
 
 static inline int at_util_convert_signal_strength(int strength)
