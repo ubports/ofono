@@ -104,7 +104,7 @@ static void at_csca_set(struct ofono_sms *sms,
 {
 	struct sms_data *data = ofono_sms_get_data(sms);
 	struct cb_data *cbd = cb_data_new(cb, user_data);
-	char buf[64];
+	char buf[128];
 
 	snprintf(buf, sizeof(buf), "AT+CSCA=\"%s\",%d", sca->number, sca->type);
 
