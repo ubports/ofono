@@ -164,7 +164,7 @@ static void get_default_profile_cb(struct qmi_result *result, void *user_data)
 	qmi_param_free(param);
 
 error:
-	ofono_error("Failed to reset profile %hhd", index);
+	ofono_error("Failed to reset default profile");
 	ofono_lte_remove(lte);
 }
 
