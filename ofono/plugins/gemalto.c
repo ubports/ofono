@@ -610,7 +610,7 @@ static void gemalto_post_sim(struct ofono_modem *modem)
 	ofono_call_barring_create(modem, 0, "atmodem", data->app);
 
 	if (!g_strcmp0(model, GEMALTO_MODEL_ALS3_PLS8x))
-		ofono_lte_create(modem, OFONO_VENDOR_CINTERION,
+		ofono_lte_create(modem, OFONO_VENDOR_GEMALTO,
 						"atmodem", data->app);
 }
 
