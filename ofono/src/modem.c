@@ -37,15 +37,15 @@
 
 #define DEFAULT_POWERED_TIMEOUT (20)
 
-static GSList *g_devinfo_drivers = NULL;
-static GSList *g_driver_list = NULL;
-static GSList *g_modem_list = NULL;
+static GSList *g_devinfo_drivers;
+static GSList *g_driver_list;
+static GSList *g_modem_list;
 
-static int next_modem_id = 0;
-static gboolean powering_down = FALSE;
-static int modems_remaining = 0;
+static int next_modem_id;
+static gboolean powering_down;
+static int modems_remaining;
 
-static struct ofono_watchlist *g_modemwatches = NULL;
+static struct ofono_watchlist *g_modemwatches;
 
 enum property_type {
 	PROPERTY_TYPE_INVALID = 0,
