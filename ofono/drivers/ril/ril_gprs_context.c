@@ -88,6 +88,7 @@ static int ril_gprs_context_address_family(const char *addr)
 static void ril_gprs_context_free_active_call(struct ril_gprs_context *gcd)
 {
 	if (gcd->active_call) {
+		ril_data_call_release(gcd->data, gcd->active_call->cid, gcd);
 		ril_data_call_free(gcd->active_call);
 		gcd->active_call = NULL;
 	}
@@ -111,6 +112,7 @@ static void ril_gprs_context_set_active_call(struct ril_gprs_context *gcd,
 			gcd->mtu_watch = mtu_watch_new(MAX_MTU);
 		}
 		mtu_watch_set_ifname(gcd->mtu_watch, call->ifname);
+		ril_data_call_grab(gcd->data, call->cid, gcd);
 	} else {
 		ril_gprs_context_free_active_call(gcd);
 	}
