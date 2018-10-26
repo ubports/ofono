@@ -4405,9 +4405,6 @@ static gboolean build_dataobj_ussd_string(struct stk_tlv_builder *tlv,
 	const struct stk_ussd_string *ussd = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_USSD_STRING;
 
-	if (ussd->string == NULL)
-		return TRUE;
-
 	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
 		stk_tlv_builder_append_byte(tlv, ussd->dcs) &&
 		stk_tlv_builder_append_bytes(tlv, ussd->string, ussd->len) &&
