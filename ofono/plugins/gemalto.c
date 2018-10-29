@@ -620,7 +620,7 @@ static void gemalto_post_online(struct ofono_modem *modem)
 
 	DBG("%p", modem);
 
-	ofono_netreg_create(modem, OFONO_VENDOR_CINTERION, "atmodem", data->app);
+	ofono_netreg_create(modem, OFONO_VENDOR_GEMALTO, "atmodem", data->app);
 }
 
 static struct ofono_modem_driver gemalto_driver = {
