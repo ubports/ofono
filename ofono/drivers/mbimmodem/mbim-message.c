@@ -195,10 +195,8 @@ static bool _iter_copy_string(struct mbim_message_iter *iter,
 
 	/* Strings are in UTF16-LE, so convert to UTF16-CPU first if needed */
 	if (L_CPU_TO_LE16(0x8000) != 0x8000) {
-		uint16_t *le = (uint16_t *) buf;
-
 		for (i = 0; i < len; i+= 2)
-			le[i] = __builtin_bswap16(le[i]);
+			l_put_u16(l_get_le16(buf + i), buf + i);
 	}
 
 	*out = l_utf8_from_utf16(buf, len);
