@@ -23,6 +23,7 @@
 #include <config.h>
 #endif
 
+#include <stdlib.h>
 #include <sys/uio.h>
 #include <linux/types.h>
 

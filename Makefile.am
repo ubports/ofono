@@ -3,6 +3,54 @@ AM_MAKEFLAGS = --no-print-directory
 
 noinst_LTLIBRARIES =
 
+if EXTERNAL_ELL
+ell_cflags = @ELL_CFLAGS@
+ell_ldadd = @ELL_LIBS@
+ell_dependencies =
+ell_built_sources =
+else
+ell_cflags =
+ell_ldadd = ell/libell-internal.la
+ell_dependencies = $(ell_ldadd)
+ell_built_sources = ell/internal ell/ell.h
+
+noinst_LTLIBRARIES += ell/libell-internal.la
+
+ell_headers = ell/util.h \
+			ell/test.h \
+			ell/strv.h \
+			ell/utf8.h \
+			ell/queue.h \
+			ell/main.h \
+			ell/idle.h \
+			ell/signal.h \
+			ell/io.h \
+			ell/log.h \
+			ell/checksum.h \
+			ell/random.h \
+			ell/uuid.h \
+			ell/file.h
+
+ell_sources = ell/private.h \
+			ell/missing.h \
+			ell/util.c \
+			ell/test.c \
+			ell/strv.c \
+			ell/utf8.c \
+			ell/queue.c \
+			ell/main.c \
+			ell/idle.c \
+			ell/signal.c \
+			ell/io.c \
+			ell/log.c \
+			ell/checksum.c \
+			ell/random.c \
+			ell/uuid.c \
+			ell/file.c
+
+ell_libell_internal_la_SOURCES = $(ell_headers) $(ell_sources)
+endif
+
 pkginclude_HEADERS = include/log.h include/plugin.h include/history.h \
 			include/dbus.h include/modem.h include/types.h \
 			include/call-barring.h include/call-forwarding.h \
@@ -241,6 +289,31 @@ builtin_sources += $(qmi_sources) \
 
 builtin_modules += gobi
 builtin_sources += plugins/gobi.c
+endif
+
+if MBIMMODEM
+mbim_sources =	drivers/mbimmodem/mbim.h \
+		drivers/mbimmodem/mbim.c \
+		drivers/mbimmodem/mbim-desc.h \
+		drivers/mbimmodem/mbim-desc.c \
+		drivers/mbimmodem/mbim-message.h \
+		drivers/mbimmodem/mbim-message.c
+
+builtin_modules += mbimmodem
+builtin_sources += $(mbim_sources) \
+			drivers/mbimmodem/util.h \
+			drivers/mbimmodem/util.c \
+			drivers/mbimmodem/mbimmodem.h \
+			drivers/mbimmodem/mbimmodem.c \
+			drivers/mbimmodem/devinfo.c \
+			drivers/mbimmodem/sim.c \
+			drivers/mbimmodem/network-registration.c \
+			drivers/mbimmodem/sms.c \
+			drivers/mbimmodem/gprs.c \
+			drivers/mbimmodem/gprs-context.c
+
+builtin_modules += mbim
+builtin_sources += plugins/mbim.c
 endif
 
 if ATMODEM
@@ -610,36 +683,6 @@ builtin_sources += plugins/push-notification.c
 builtin_modules += allowed_apns
 builtin_sources += plugins/allowed-apns.c
 
-if ELL
-builtin_cflags += @ELL_CFLAGS@
-builtin_libadd += @ELL_LIBS@
-
-if MBIMMODEM
-mbim_sources =	drivers/mbimmodem/mbim.h \
-		drivers/mbimmodem/mbim.c \
-		drivers/mbimmodem/mbim-desc.h \
-		drivers/mbimmodem/mbim-desc.c \
-		drivers/mbimmodem/mbim-message.h \
-		drivers/mbimmodem/mbim-message.c
-
-builtin_modules += mbimmodem
-builtin_sources += $(mbim_sources) \
-			drivers/mbimmodem/util.h \
-			drivers/mbimmodem/util.c \
-			drivers/mbimmodem/mbimmodem.h \
-			drivers/mbimmodem/mbimmodem.c \
-			drivers/mbimmodem/devinfo.c \
-			drivers/mbimmodem/sim.c \
-			drivers/mbimmodem/network-registration.c \
-			drivers/mbimmodem/sms.c \
-			drivers/mbimmodem/gprs.c \
-			drivers/mbimmodem/gprs-context.c
-
-builtin_modules += mbim
-builtin_sources += plugins/mbim.c
-endif
-endif
-
 sbin_PROGRAMS = src/ofonod
 
 src_ofonod_SOURCES = $(builtin_sources) $(gatchat_sources) src/ofono.ver \
@@ -671,13 +714,15 @@ src_ofonod_SOURCES = $(builtin_sources) $(gatchat_sources) src/ofono.ver \
 			src/netmon.c src/lte.c src/ims.c \
 			src/netmonagent.c src/netmonagent.h
 
-src_ofonod_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
+src_ofonod_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) $(ell_ldadd) \
 			@GLIB_LIBS@ @DBUS_LIBS@ -ldl
 
 src_ofonod_LDFLAGS = -Wl,--export-dynamic \
 				-Wl,--version-script=$(srcdir)/src/ofono.ver
 
-BUILT_SOURCES = $(local_headers) src/builtin.h
+src_ofonod_DEPENDENCIES = $(ell_dependencies)
+
+BUILT_SOURCES = $(local_headers) $(ell_built_sources) src/builtin.h
 
 CLEANFILES = $(BUILT_SOURCES) $(rules_DATA)
 
@@ -689,7 +734,7 @@ else
 build_plugindir = $(plugindir)
 endif
 
-AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ $(builtin_cflags) \
+AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ $(ell_cflags) $(builtin_cflags) \
 					-DOFONO_PLUGIN_BUILTIN \
 					-DPLUGINDIR=\""$(build_plugindir)"\"
 
@@ -847,17 +892,11 @@ unit_objects =
 unit_tests = unit/test-common unit/test-util unit/test-idmap \
 				unit/test-simutil unit/test-stkutil \
 				unit/test-sms unit/test-cdmasms \
+				unit/test-mbim \
 				unit/test-rilmodem-cs \
 				unit/test-rilmodem-sms \
 				unit/test-rilmodem-cb \
 				unit/test-rilmodem-gprs
-
-if ELL
-if MBIMMODEM
-unit_tests += unit/test-mbim
-endif
-endif
-
 
 noinst_PROGRAMS = $(unit_tests) \
 			unit/test-sms-root unit/test-mux unit/test-caif
@@ -949,7 +988,7 @@ unit_objects += $(unit_test_rilmodem_gprs_OBJECTS)
 unit_test_mbim_SOURCES = unit/test-mbim.c \
 			 drivers/mbimmodem/mbim-message.c \
 			 drivers/mbimmodem/mbim.c
-unit_test_mbim_LDADD = @ELL_LIBS@
+unit_test_mbim_LDADD = $(ell_ldadd)
 unit_objects += $(unit_test_mbim_OBJECTS)
 
 TESTS = $(unit_tests)
@@ -1049,6 +1088,23 @@ include/ofono/version.h: include/version.h
 include/ofono/%.h: $(abs_top_srcdir)/include/%.h
 	$(AM_V_at)$(MKDIR_P) include/ofono
 	$(AM_V_GEN)$(LN_S) $< $@
+
+ell/internal: Makefile
+	$(AM_V_at)$(MKDIR_P) ell
+	$(AM_V_GEN)for f in $(ell_headers) $(ell_sources) ; do \
+		if [ ! -f $$f ] ; then \
+			$(LN_S) -t ell -f $(abs_srcdir)/../ell/$$f ; \
+		fi \
+	done > $@
+
+ell/ell.h: Makefile
+	$(AM_V_at)echo -n > $@
+	$(AM_V_GEN)for f in $(ell_headers) ; do \
+		echo "#include <$$f>" >> $@ ; \
+	done
+
+maintainer-clean-local:
+	-rm -rf ell
 
 clean-local:
 	@$(RM) -rf include/ofono
