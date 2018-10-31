@@ -487,7 +487,7 @@ static bool command_write_handler(struct l_io *io, void *user_data)
 
 		written = TEMP_FAILURE_RETRY(write(fd, buf, pos));
 
-		l_info("n_iov: %lu, %lu", n_iov + 1, (size_t) written);
+		l_info("n_iov: %zu, %zu", n_iov + 1, (size_t) written);
 
 		if (written < 0)
 			return false;
@@ -646,8 +646,8 @@ static bool command_read_handler(struct l_io *io, void *user_data)
 
 	l_info("hdr->len: %u", L_LE32_TO_CPU(hdr->len));
 	l_info("header_size: %u", header_size);
-	l_info("header_offset: %lu", device->header_offset);
-	l_info("segment_bytes_remaining: %lu", device->segment_bytes_remaining);
+	l_info("header_offset: %zu", device->header_offset);
+	l_info("segment_bytes_remaining: %zu", device->segment_bytes_remaining);
 
 	iov[n_iov].iov_base = device->segment + L_LE32_TO_CPU(hdr->len) -
 				device->header_offset -
