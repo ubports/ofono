@@ -1192,12 +1192,22 @@ static gboolean setup_xmm7xxx(struct modem_info *modem)
 				info->interface, info->number, info->label,
 				info->sysattr, info->subsystem);
 
-		if (g_strcmp0(info->subsystem, "tty") == 0) {
-			if (g_strcmp0(info->number, "02") == 0)
-				mdm = info->devnode;
-		} else if (g_strcmp0(info->subsystem, "net") == 0) {
-			if (g_strcmp0(info->number, "00") == 0)
-				net = info->devnode;
+		if (g_strcmp0(modem->model,"095a") == 0) {
+			if (g_strcmp0(info->subsystem, "tty") == 0) {
+				if (g_strcmp0(info->number, "00") == 0)
+					mdm = info->devnode;
+			} else if (g_strcmp0(info->subsystem, "net") == 0) {
+				if (g_strcmp0(info->number, "06") == 0)
+					net = info->devnode;
+			}
+		} else {
+			if (g_strcmp0(info->subsystem, "tty") == 0) {
+				if (g_strcmp0(info->number, "02") == 0)
+					mdm = info->devnode;
+			} else if (g_strcmp0(info->subsystem, "net") == 0) {
+				if (g_strcmp0(info->number, "00") == 0)
+					net = info->devnode;
+			}
 		}
 	}
 
