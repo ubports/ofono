@@ -1129,7 +1129,7 @@ bool mbim_message_builder_append_basic(struct mbim_message_builder *builder,
 	if (L_CPU_TO_LE16(0x8000) != 0x8000) {
 		size_t i;
 
-		for (i = 0; i < len - 2; i += 2)
+		for (i = 0; i < len / 2; i++)
 			utf16[i] = __builtin_bswap16(utf16[i]);
 	}
 
