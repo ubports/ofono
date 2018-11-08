@@ -51,7 +51,9 @@ struct hfp_codec_info {
 };
 
 struct ofono_emulator {
-	struct ofono_atom *atom;
+	GList *atoms;
+	GList *registered_atoms;
+	gboolean emulator_registered;
 	enum ofono_emulator_type type;
 	GAtServer *server;
 	GAtPPP *ppp;
@@ -355,10 +357,17 @@ static struct indicator *find_indicator(struct ofono_emulator *em,
 static struct ofono_call *find_call_with_status(struct ofono_emulator *em,
 								int status)
 {
-	struct ofono_modem *modem = __ofono_atom_get_modem(em->atom);
-	struct ofono_voicecall *vc;
+	struct ofono_modem *modem;
+	struct ofono_voicecall *vc = NULL;
+	GList *i;
 
-	vc = __ofono_atom_find(OFONO_ATOM_TYPE_VOICECALL, modem);
+	for (i = em->atoms; i; i = i->next) {
+		modem = __ofono_atom_get_modem(i->data);
+		if ((vc = __ofono_atom_find(OFONO_ATOM_TYPE_VOICECALL, modem)))
+			break;
+	}
+
+
 	if (vc == NULL)
 		return NULL;
 
@@ -1153,7 +1162,20 @@ static void emulator_unregister(struct ofono_atom *atom)
 	struct ofono_emulator *em = __ofono_atom_get_data(atom);
 	GSList *l;
 
-	DBG("%p", em);
+	DBG("%p (atom %p)", em, atom);
+
+	em->registered_atoms = g_list_remove(em->registered_atoms, atom);
+	if (em->registered_atoms)
+		return;
+
+	if (!em->emulator_registered) {
+		DBG("emulator already unregistered");
+		return;
+	}
+
+	em->emulator_registered = FALSE;
+
+	DBG("%p no more atoms registered", em);
 
 	if (em->callsetup_source) {
 		g_source_remove(em->callsetup_source);
@@ -1185,11 +1207,26 @@ static void emulator_unregister(struct ofono_atom *atom)
 	em->card = NULL;
 }
 
+static void emulator_register_atom(struct ofono_emulator *em, struct ofono_atom *atom)
+{
+	if (!g_list_find(em->registered_atoms, atom)) {
+		em->registered_atoms = g_list_append(em->registered_atoms, atom);
+		DBG("%p", atom);
+		__ofono_atom_register(atom, emulator_unregister);
+	}
+}
+
 void ofono_emulator_register(struct ofono_emulator *em, int fd)
 {
 	GIOChannel *io;
+	GList *i;
 
 	DBG("%p, %d", em, fd);
+
+	if (em->emulator_registered) {
+		DBG("emulator already registered");
+		return;
+	}
 
 	if (fd < 0)
 		return;
@@ -1240,7 +1277,8 @@ void ofono_emulator_register(struct ofono_emulator *em, int fd)
 		g_at_server_register(em->server, "+BCS", bcs_cb, em, NULL);
 	}
 
-	__ofono_atom_register(em->atom, emulator_unregister);
+	for (i = em->atoms; i; i = i->next)
+		emulator_register_atom(em, i->data);
 
 	switch (em->type) {
 	case OFONO_EMULATOR_TYPE_DUN:
@@ -1254,31 +1292,41 @@ void ofono_emulator_register(struct ofono_emulator *em, int fd)
 	default:
 		break;
 	}
+
+	em->emulator_registered = TRUE;
+}
+
+static void emulator_free(struct ofono_emulator *em)
+{
+	g_assert(!em->atoms);
+
+	DBG("free emulator %p", em);
+	if (em->registered_atoms)
+		g_list_free(em->registered_atoms);
+	g_free(em);
 }
 
 static void emulator_remove(struct ofono_atom *atom)
 {
 	struct ofono_emulator *em = __ofono_atom_get_data(atom);
 
-	DBG("atom: %p", atom);
+	DBG("remove atom %p", atom);
+	em->atoms = g_list_remove(em->atoms, atom);
 
-	g_free(em);
+	if (!em->atoms)
+		emulator_free(em);
 }
 
-struct ofono_emulator *ofono_emulator_create(struct ofono_modem *modem,
-						enum ofono_emulator_type type)
+struct ofono_emulator *ofono_emulator_create(enum ofono_emulator_type type)
 {
 	struct ofono_emulator *em;
-	enum ofono_atom_type atom_t;
 
-	DBG("modem: %p, type: %d", modem, type);
-
-	if (type == OFONO_EMULATOR_TYPE_DUN)
-		atom_t = OFONO_ATOM_TYPE_EMULATOR_DUN;
-	else if (type == OFONO_EMULATOR_TYPE_HFP)
-		atom_t = OFONO_ATOM_TYPE_EMULATOR_HFP;
-	else
+	if (type != OFONO_EMULATOR_TYPE_DUN && type != OFONO_EMULATOR_TYPE_HFP) {
+		DBG("unsupported emulator type %d", type);
 		return NULL;
+	}
+
+	DBG("create emulator of type %d", type);
 
 	em = g_try_new0(struct ofono_emulator, 1);
 
@@ -1296,15 +1344,59 @@ struct ofono_emulator *ofono_emulator_create(struct ofono_modem *modem,
 	em->events_mode = 3;	/* default mode is forwarding events */
 	em->cmee_mode = 0;	/* CME ERROR disabled by default */
 
-	em->atom = __ofono_modem_add_atom_offline(modem, atom_t,
-							emulator_remove, em);
-
 	return em;
+}
+
+void ofono_emulator_add_modem(struct ofono_emulator *em,
+                              struct ofono_modem *modem)
+{
+	struct ofono_atom *atom;
+	enum ofono_atom_type atom_t;
+
+	if (em->type == OFONO_EMULATOR_TYPE_DUN)
+		atom_t = OFONO_ATOM_TYPE_EMULATOR_DUN;
+	else
+		atom_t = OFONO_ATOM_TYPE_EMULATOR_HFP;
+
+	if ((atom =  __ofono_modem_find_atom(modem, atom_t))) {
+		if (g_list_find(em->atoms, atom)) {
+			DBG("modem %p already added", modem);
+			goto register_atom;
+		}
+	}
+
+	DBG("%p", modem);
+
+	atom = __ofono_modem_add_atom_offline(modem, atom_t,
+	                                      emulator_remove, em);
+	em->atoms = g_list_append(em->atoms, atom);
+
+register_atom:
+	if (em->emulator_registered)
+		emulator_register_atom(em, atom);
 }
 
 void ofono_emulator_remove(struct ofono_emulator *em)
 {
-	__ofono_atom_free(em->atom);
+	GList *remove_list;
+	GList *i;
+
+	DBG("");
+
+	/* If emulator has atoms we make a copy of the atom list here,
+	 * as the list is modified when the atoms are being destroyed.
+	 * When last atom is gone struct ofono_emulator is freed as
+	 * well (in emulator_remove()). */
+	if (em->atoms) {
+		remove_list = g_list_copy(em->atoms);
+		for (i = remove_list; i; i = i->next) {
+			DBG("free atom %p", i->data);
+			__ofono_atom_free(i->data);
+		}
+		g_list_free(remove_list);
+	} else {
+		emulator_free(em);
+	}
 }
 
 void ofono_emulator_send_final(struct ofono_emulator *em,
