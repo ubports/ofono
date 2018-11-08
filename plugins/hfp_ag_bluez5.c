@@ -60,6 +60,7 @@ static guint modemwatch_id;
 static GList *modems;
 static GHashTable *sim_hash = NULL;
 static GHashTable *connection_hash;
+static struct ofono_emulator *emulator = NULL;
 
 static int hfp_card_probe(struct ofono_handsfree_card *card,
 					unsigned int vendor, void *data)
@@ -72,6 +73,8 @@ static int hfp_card_probe(struct ofono_handsfree_card *card,
 static void hfp_card_remove(struct ofono_handsfree_card *card)
 {
 	DBG("");
+
+	emulator = NULL;
 }
 
 static void codec_negotiation_done_cb(int err, void *data)
@@ -172,9 +175,9 @@ static DBusMessage *profile_new_connection(DBusConnection *conn,
 	struct sockaddr_rc saddr;
 	socklen_t optlen;
 	struct ofono_emulator *em;
-	struct ofono_modem *modem;
 	char local[BT_ADDR_SIZE], remote[BT_ADDR_SIZE];
 	struct ofono_handsfree_card *card;
+	GList *i;
 	int err;
 
 	DBG("Profile handler NewConnection");
@@ -202,7 +205,6 @@ static DBusMessage *profile_new_connection(DBusConnection *conn,
 		goto invalid;
 	}
 
-	/* Pick the first voicecall capable modem */
 	if (modems == NULL) {
 		close(fd);
 		return g_dbus_create_error(msg, BLUEZ_ERROR_INTERFACE
@@ -210,9 +212,7 @@ static DBusMessage *profile_new_connection(DBusConnection *conn,
 						"No voice call capable modem");
 	}
 
-	modem = modems->data;
-
-	DBG("Picked modem %p for emulator", modem);
+	DBG("Using all modems for emulator.");
 
 	memset(&saddr, 0, sizeof(saddr));
 	optlen = sizeof(saddr);
@@ -240,7 +240,7 @@ static DBusMessage *profile_new_connection(DBusConnection *conn,
 
 	bt_ba2str(&saddr.rc_bdaddr, remote);
 
-	em = ofono_emulator_create(modem, OFONO_EMULATOR_TYPE_HFP);
+	em = ofono_emulator_create(OFONO_EMULATOR_TYPE_HFP);
 	if (em == NULL) {
 		close(fd);
 		return g_dbus_create_error(msg, BLUEZ_ERROR_INTERFACE
@@ -248,6 +248,10 @@ static DBusMessage *profile_new_connection(DBusConnection *conn,
 						"Not enough resources");
 	}
 
+	for (i = modems; i; i = i->next)
+		ofono_emulator_add_modem(em, i->data);
+
+	emulator = em;
 	ofono_emulator_register(em, fd);
 
 	fd_dup = dup(fd);
@@ -366,6 +370,9 @@ static void sim_state_watch(enum ofono_sim_state new_state, void *data)
 		return;
 
 	modems = g_list_append(modems, modem);
+
+	if (emulator)
+		ofono_emulator_add_modem(emulator, modem);
 
 	if (modems->next != NULL)
 		return;
