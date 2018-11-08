@@ -54,7 +54,7 @@ static gboolean on_socket_connected(GIOChannel *chan, GIOCondition cond,
 	unsigned int len = sizeof(saddr);
 	int fd;
 	struct ofono_emulator *em;
-	struct ofono_modem *modem;
+	GList *i;
 
 	if (cond != G_IO_IN)
 		return FALSE;
@@ -63,15 +63,16 @@ static gboolean on_socket_connected(GIOChannel *chan, GIOCondition cond,
 	if (fd == -1)
 		return FALSE;
 
-	/* Pick the first powered modem */
-	modem = modems->data;
-	DBG("Picked modem %p for emulator", modem);
+	DBG("Using all modems for emulator.");
 
-	em = ofono_emulator_create(modem, GPOINTER_TO_INT(user));
-	if (em == NULL)
-		close(fd);
-	else
+	em = ofono_emulator_create(GPOINTER_TO_INT(user));
+
+	if (em) {
+		for (i = modems; i; i = i->next)
+			ofono_emulator_add_modem(em, i->data);
 		ofono_emulator_register(em, fd);
+	} else
+		close(fd);
 
 	return TRUE;
 }
