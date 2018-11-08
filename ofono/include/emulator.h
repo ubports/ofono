@@ -68,8 +68,9 @@ typedef void (*ofono_emulator_request_cb_t)(struct ofono_emulator *em,
 					struct ofono_emulator_request *req,
 					void *data);
 
-struct ofono_emulator *ofono_emulator_create(struct ofono_modem *modem,
-						enum ofono_emulator_type type);
+struct ofono_emulator *ofono_emulator_create(enum ofono_emulator_type type);
+void ofono_emulator_add_modem(struct ofono_emulator *em,
+                              struct ofono_modem *modem);
 
 void ofono_emulator_register(struct ofono_emulator *em, int fd);
 
