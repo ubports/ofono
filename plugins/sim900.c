@@ -24,6 +24,7 @@
 #endif
 
 #include <errno.h>
+#include <string.h>
 #include <stdlib.h>
 #include <glib.h>
 #include <gatchat.h>
@@ -60,12 +61,65 @@ static char *dlc_prefixes[NUM_DLC] = { "Voice: ", "Net: ", "SMS: ",
 
 static const char *none_prefix[] = { NULL };
 
+enum type {
+	SIMCOM_UNKNOWN,
+	SIM800,
+	SIM900,
+};
+
 struct sim900_data {
 	GIOChannel *device;
 	GAtMux *mux;
 	GAtChat * dlcs[NUM_DLC];
 	guint frame_size;
+	enum type modem_type;
 };
+
+static void mux_ready_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_modem *modem = user_data;
+	struct sim900_data *data = ofono_modem_get_data(modem);
+	struct ofono_gprs *gprs = NULL;
+	struct ofono_gprs_context *gc;
+
+	ofono_sms_create(modem, OFONO_VENDOR_SIMCOM, "atmodem",
+					data->dlcs[SMS_DLC]);
+
+	gprs = ofono_gprs_create(modem, 0, "atmodem", data->dlcs[GPRS_DLC]);
+	if (gprs == NULL)
+		return;
+
+	gc = ofono_gprs_context_create(modem, OFONO_VENDOR_SIMCOM,
+					"atmodem", data->dlcs[GPRS_DLC]);
+	if (gc)
+		ofono_gprs_add_context(gprs, gc);
+}
+
+static void check_model(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct ofono_modem *modem = user_data;
+	GAtResultIter iter;
+	char const *model;
+	struct sim900_data *data = ofono_modem_get_data(modem);
+
+	DBG("");
+
+	g_at_result_iter_init(&iter, result);
+
+	while (g_at_result_iter_next(&iter, NULL)) {
+		if (!g_at_result_iter_next_unquoted_string(&iter, &model))
+			continue;
+
+		DBG("setting type %s", model);
+
+		if (strstr(model, "SIM800"))
+			data->modem_type = SIM800;
+		else if (strstr(model, "SIM900"))
+			data->modem_type = SIM800;
+		else
+			data->modem_type = SIMCOM_UNKNOWN;
+	}
+}
 
 static int sim900_probe(struct ofono_modem *modem)
 {
@@ -233,6 +287,14 @@ static void setup_internal_mux(struct ofono_modem *modem)
 		}
 	}
 
+	if (data->modem_type == SIM800) {
+		for (i = 0; i<NUM_DLC; i++) {
+			g_at_chat_register(data->dlcs[i], "SMS Ready",
+						mux_ready_notify, FALSE,
+						modem, NULL);
+		}
+	}
+
 	ofono_modem_set_powered(modem, TRUE);
 
 	return;
@@ -294,6 +356,8 @@ static int sim900_enable(struct ofono_modem *modem)
 		return -EINVAL;
 
 	g_at_chat_send(data->dlcs[SETUP_DLC], "ATE0", NULL, NULL, NULL, NULL);
+	g_at_chat_send(data->dlcs[SETUP_DLC], "AT+CGMM", NULL,
+						check_model, modem, NULL);
 
 	/* For obtain correct sms service number */
 	g_at_chat_send(data->dlcs[SETUP_DLC], "AT+CSCS=\"GSM\"", NULL,
@@ -353,18 +417,24 @@ static void sim900_post_sim(struct ofono_modem *modem)
 
 	DBG("%p", modem);
 
-	ofono_phonebook_create(modem, 0, "atmodem", data->dlcs[VOICE_DLC]);
-	ofono_sms_create(modem, OFONO_VENDOR_SIMCOM, "atmodem",
+	if (data->modem_type == SIM900) {
+		ofono_phonebook_create(modem, 0, "atmodem",
+						data->dlcs[VOICE_DLC]);
+		ofono_sms_create(modem, OFONO_VENDOR_SIMCOM, "atmodem",
 						data->dlcs[SMS_DLC]);
 
-	gprs = ofono_gprs_create(modem, 0, "atmodem", data->dlcs[GPRS_DLC]);
-	if (gprs == NULL)
-		return;
+		gprs = ofono_gprs_create(modem, 0, "atmodem",
+						data->dlcs[GPRS_DLC]);
+		if (gprs == NULL)
+			return;
 
-	gc = ofono_gprs_context_create(modem, OFONO_VENDOR_SIMCOM_SIM900,
-					"atmodem", data->dlcs[GPRS_DLC]);
-	if (gc)
-		ofono_gprs_add_context(gprs, gc);
+		gc = ofono_gprs_context_create(modem,
+						OFONO_VENDOR_SIMCOM_SIM900,
+						"atmodem",
+						data->dlcs[GPRS_DLC]);
+		if (gc)
+			ofono_gprs_add_context(gprs, gc);
+	}
 }
 
 static void sim900_post_online(struct ofono_modem *modem)
