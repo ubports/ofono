@@ -91,6 +91,7 @@ static void hfp_ag_connect_cb(GIOChannel *io, GError *err, gpointer user_data)
 	struct ofono_modem *modem;
 	struct ofono_emulator *em;
 	int fd;
+	GList *i;
 
 	DBG("");
 
@@ -99,16 +100,17 @@ static void hfp_ag_connect_cb(GIOChannel *io, GError *err, gpointer user_data)
 		return;
 	}
 
-	/* Pick the first voicecall capable modem */
-	modem = modems->data;
-	if (modem == NULL)
+	if (modems == NULL)
 		return;
 
-	DBG("Picked modem %p for emulator", modem);
+	DBG("Using all modems for emulator");
 
-	em = ofono_emulator_create(modem, OFONO_EMULATOR_TYPE_HFP);
+	em = ofono_emulator_create(OFONO_EMULATOR_TYPE_HFP);
 	if (em == NULL)
 		return;
+
+	for (i = modems; i; i = i->next)
+		ofono_emulator_add_modem(em, i->data);
 
 	fd = g_io_channel_unix_get_fd(io);
 	g_io_channel_set_close_on_unref(io, FALSE);

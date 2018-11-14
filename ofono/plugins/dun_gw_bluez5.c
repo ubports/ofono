@@ -56,7 +56,7 @@ static DBusMessage *profile_new_connection(DBusConnection *conn,
 	const char *device;
 	int fd;
 	struct ofono_emulator *em;
-	struct ofono_modem *modem;
+	GList *i;
 
 	DBG("Profile handler NewConnection");
 
@@ -80,7 +80,6 @@ static DBusMessage *profile_new_connection(DBusConnection *conn,
 
 	DBG("%s", device);
 
-	/* Pick the first powered modem */
 	if (modems == NULL) {
 		close(fd);
 		return g_dbus_create_error(msg, BLUEZ_ERROR_INTERFACE
@@ -88,16 +87,18 @@ static DBusMessage *profile_new_connection(DBusConnection *conn,
 						"No GPRS capable modem");
 	}
 
-	modem = modems->data;
-	DBG("Picked modem %p for emulator", modem);
+	DBG("Using all modems for emulator.");
 
-	em = ofono_emulator_create(modem, OFONO_EMULATOR_TYPE_DUN);
+	em = ofono_emulator_create(OFONO_EMULATOR_TYPE_DUN);
 	if (em == NULL) {
 		close(fd);
 		return g_dbus_create_error(msg, BLUEZ_ERROR_INTERFACE
 						".Rejected",
 						"Not enough resources");
 	}
+
+	for (i = modems; i; i = i->next)
+		ofono_emulator_add_modem(em, i->data);
 
 	ofono_emulator_register(em, fd);
 

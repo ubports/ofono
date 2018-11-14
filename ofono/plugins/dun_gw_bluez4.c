@@ -79,7 +79,7 @@ static const gchar *dun_record =
 static void dun_gw_connect_cb(GIOChannel *io, GError *err, gpointer user_data)
 {
 	struct ofono_emulator *em = user_data;
-	struct ofono_modem *modem;
+	GList *i;
 	int fd;
 
 	DBG("");
@@ -90,15 +90,16 @@ static void dun_gw_connect_cb(GIOChannel *io, GError *err, gpointer user_data)
 		return;
 	}
 
-	/* Pick the first powered modem */
-	modem = modems->data;
-	DBG("Picked modem %p for emulator", modem);
+	DBG("Using all modems for emulator");
 
-	em = ofono_emulator_create(modem, OFONO_EMULATOR_TYPE_DUN);
+	em = ofono_emulator_create(OFONO_EMULATOR_TYPE_DUN);
 	if (em == NULL) {
 		g_io_channel_shutdown(io, TRUE, NULL);
 		return;
 	}
+
+	for (i = modems; i; i = i->next)
+		ofono_emulator_add_modem(em, i->data);
 
 	fd = g_io_channel_unix_get_fd(io);
 	g_io_channel_set_close_on_unref(io, FALSE);
