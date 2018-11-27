@@ -129,6 +129,12 @@ static void switch_sim_state_status(struct ofono_modem *modem, int status)
 			data->sms_phonebook_added = FALSE;
 		}
 		break;
+	case 1: /* SIM inserted, PIN verification needed */
+		if (data->have_sim == FALSE) {
+			ofono_sim_inserted_notify(data->sim, TRUE);
+			data->have_sim = TRUE;
+		}
+		break;
 	case 2:	/* SIM inserted, PIN verification not needed - READY */
 	case 3:	/* SIM inserted, PIN verified - READY */
 	case 7: /* SIM inserted, SMS and phonebook - READY */
