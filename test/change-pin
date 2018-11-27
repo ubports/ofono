@@ -10,7 +10,7 @@ if len(sys.argv) == 5:
 	pin_type = sys.argv[2]
 	old_pin = sys.argv[3]
 	new_pin = sys.argv[4]
-elif len(sys.argv) == 3:
+elif len(sys.argv) == 4:
 	manager = dbus.Interface(bus.get_object('org.ofono', '/'),
 					'org.ofono.Manager')
 	modems = manager.GetModems()
