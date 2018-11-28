@@ -89,6 +89,7 @@ struct sailfish_slot_priv {
 	struct sailfish_cell_info *cellinfo;
 	struct sailfish_cell_info_dbus *cellinfo_dbus;
 	enum sailfish_sim_state sim_state;
+	enum sailfish_slot_flags flags;
 	gulong watch_event_id[WATCH_EVENT_COUNT];
 	char *imei;
 	char *imeisv;
@@ -321,6 +322,17 @@ struct sailfish_slot *sailfish_manager_slot_add
 		const char *imei, const char *imeisv,
 		enum sailfish_sim_state sim_state)
 {
+	return sailfish_manager_slot_add2(m, impl, path, techs, imei, imeisv,
+					sim_state, SAILFISH_SLOT_NO_FLAGS);
+}
+
+struct sailfish_slot *sailfish_manager_slot_add2
+	(struct sailfish_slot_manager *m, struct sailfish_slot_impl *impl,
+		const char *path, enum ofono_radio_access_mode techs,
+		const char *imei, const char *imeisv,
+		enum sailfish_sim_state sim_state,
+		enum sailfish_slot_flags flags)
+{
 	/* Only accept these calls when we are starting! We have been
 	 * assuming all along that the number of slots is known right
 	 * from startup. Perhaps it wasn't a super bright idea because
@@ -339,6 +351,7 @@ struct sailfish_slot *sailfish_manager_slot_add
 		s->impl = impl;
 		s->manager = m;
 		s->sim_state = sim_state;
+		s->flags = flags;
 		s->watch = sailfish_watch_new(path);
 		s->siminfo = sailfish_sim_info_new(path);
 		s->siminfo_dbus = sailfish_sim_info_dbus_new(s->siminfo);
@@ -649,10 +662,12 @@ static int sailfish_manager_update_modem_paths(struct sailfish_manager_priv *p)
 		mms_slot = sailfish_manager_find_slot_imsi(p, p->mms_imsi);
 	}
 
-	if (mms_slot && mms_slot != slot) {
+	if (mms_slot && (mms_slot != slot ||
+			(slot->flags & SAILFISH_SLOT_SINGLE_CONTEXT))) {
 		/*
-		 * Reset default data SIM if another SIM is
-		 * temporarily selected for MMS.
+		 * Reset default data SIM if
+		 * a) another SIM is temporarily selected for MMS; or
+		 * b) this slot can't have more than one context active.
 		 */
 		slot = NULL;
 	}
