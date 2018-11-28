@@ -35,6 +35,18 @@ struct sailfish_cell_info;
 typedef void (*sailfish_slot_manager_impl_cb_t)
 		(struct sailfish_slot_manager_impl *impl, void *user_data);
 
+enum sailfish_slot_flags {
+	SAILFISH_SLOT_NO_FLAGS = 0,
+	/* Normally we should be able to have two simultaneously active
+	 * data contexts - one for mobile data and one for MMS. The flag
+	 * below says that for whatever reason it's impossible and mobile
+	 * data has to be disconnected before we can send or receive MMS.
+	 * On such devices it may not be a good idea to automatically
+	 * download MMS because that would kill active mobile data
+	 * connections. */
+	SAILFISH_SLOT_SINGLE_CONTEXT = 0x01
+};
+
 typedef struct sailfish_slot {
 	const char *path;
 	const char *imei;
@@ -81,6 +93,12 @@ struct sailfish_slot *sailfish_manager_slot_add
 			const char *path, enum ofono_radio_access_mode techs,
 			const char *imei, const char *imeisv,
 			enum sailfish_sim_state sim_state);
+struct sailfish_slot *sailfish_manager_slot_add2
+		(struct sailfish_slot_manager *m, struct sailfish_slot_impl *i,
+			const char *path, enum ofono_radio_access_mode techs,
+			const char *imei, const char *imeisv,
+			enum sailfish_sim_state sim_state,
+			enum sailfish_slot_flags flags);
 void sailfish_manager_imei_obtained(struct sailfish_slot *s, const char *imei);
 void sailfish_manager_imeisv_obtained(struct sailfish_slot *s,
 						const char *imeisv);

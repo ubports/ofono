@@ -85,6 +85,7 @@
 #define RILMODEM_DEFAULT_LEGACY_IMEI_QUERY FALSE
 #define RILMODEM_DEFAULT_RADIO_POWER_CYCLE TRUE
 #define RILMODEM_DEFAULT_CONFIRM_RADIO_POWER_ON TRUE
+#define RILMODEM_DEFAULT_SLOT_FLAGS SAILFISH_SLOT_NO_FLAGS
 
 /* RIL socket transport name and parameters */
 #define RIL_TRANSPORT_SOCKET                "socket"
@@ -130,6 +131,7 @@
 #define RILCONF_LEGACY_IMEI_QUERY           "legacyImeiQuery"
 #define RILCONF_RADIO_POWER_CYCLE           "radioPowerCycle"
 #define RILCONF_CONFIRM_RADIO_POWER_ON      "confirmRadioPowerOn"
+#define RILCONF_SINGLE_DATA_CONTEXT         "singleDataContext"
 
 /* Modem error ids */
 #define RIL_ERROR_ID_RILD_RESTART           "rild-restart"
@@ -211,6 +213,7 @@ typedef struct sailfish_slot_impl {
 	struct ril_vendor_hook *vendor_hook;
 	struct ril_data *data;
 	gboolean legacy_imei_query;
+	enum sailfish_slot_flags slot_flags;
 	guint start_timeout;
 	guint start_timeout_id;
 	MceDisplay *display;
@@ -1039,9 +1042,10 @@ static void ril_plugin_slot_connected(ril_slot *slot)
 		slot->start_timeout_id = 0;
 
 		/* Register this slot with the sailfish manager plugin */
-		slot->handle = sailfish_manager_slot_add(plugin->handle, slot,
+		slot->handle = sailfish_manager_slot_add2(plugin->handle, slot,
 				slot->path, slot->config.techs, slot->imei,
-				slot->imeisv, ril_plugin_sim_state(slot));
+				slot->imeisv, ril_plugin_sim_state(slot),
+				slot->slot_flags);
 		sailfish_manager_set_cell_info(slot->handle, slot->cell_info);
 
 		/* Check if this was the last slot we were waiting for */
@@ -1206,6 +1210,7 @@ static ril_slot *ril_plugin_slot_new_take(char *transport,
 		RILMODEM_DEFAULT_QUERY_AVAILABLE_BAND_MODE;
 	slot->timeout = RILMODEM_DEFAULT_TIMEOUT;
 	slot->sim_flags = RILMODEM_DEFAULT_SIM_FLAGS;
+	slot->slot_flags = RILMODEM_DEFAULT_SLOT_FLAGS;
 	slot->legacy_imei_query = RILMODEM_DEFAULT_LEGACY_IMEI_QUERY;
 	slot->start_timeout = RILMODEM_DEFAULT_START_TIMEOUT;
 	slot->data_opt.allow_data = RILMODEM_DEFAULT_DATA_OPT;
@@ -1353,6 +1358,7 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 {
 	ril_slot *slot;
 	struct ril_slot_config *config;
+	gboolean bval;
 	int ival;
 	char *sval;
 	char **strv;
@@ -1538,6 +1544,14 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 					&config->confirm_radio_power_on)) {
 		DBG("%s: " RILCONF_CONFIRM_RADIO_POWER_ON " %s", group,
 				config->confirm_radio_power_on ? "on" : "off");
+	}
+
+	/* singleDataContext */
+	if (ril_config_get_boolean(file, group, RILCONF_SINGLE_DATA_CONTEXT,
+							&bval) && bval) {
+		DBG("%s: " RILCONF_SINGLE_DATA_CONTEXT " %s", group,
+							bval ? "on" : "off");
+		slot->slot_flags |= SAILFISH_SLOT_SINGLE_CONTEXT;
 	}
 
 	/* uiccWorkaround */
