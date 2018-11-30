@@ -912,6 +912,7 @@ void ofono_handsfree_audio_unref(void)
 	if (agent) {
 		agent_release(agent);
 		agent_free(agent);
+		agent = NULL;
 	}
 
 	__ofono_handsfree_audio_manager_cleanup();
