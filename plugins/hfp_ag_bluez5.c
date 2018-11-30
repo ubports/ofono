@@ -47,10 +47,6 @@ typedef struct GAtResult GAtResult;
 #include "bluez5.h"
 #include "bluetooth.h"
 
-#ifndef DBUS_TYPE_UNIX_FD
-#define DBUS_TYPE_UNIX_FD -1
-#endif
-
 #define HFP_AG_EXT_PROFILE_PATH   "/bluetooth/profile/hfp_ag"
 #define BT_ADDR_SIZE 18
 
@@ -471,9 +467,6 @@ static void call_modemwatch(struct ofono_modem *modem, void *user)
 static void hfp_ag_enable(DBusConnection *conn)
 {
 	int err;
-
-	if (DBUS_TYPE_UNIX_FD < 0)
-		return -EBADF;
 
 	/* Registers External Profile handler */
 	if (!g_dbus_register_interface(conn,
