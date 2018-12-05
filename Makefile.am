@@ -24,6 +24,7 @@ ell_headers = ell/util.h \
 			ell/main.h \
 			ell/idle.h \
 			ell/signal.h \
+			ell/timeout.h \
 			ell/io.h \
 			ell/log.h \
 			ell/checksum.h \
@@ -41,6 +42,7 @@ ell_sources = ell/private.h \
 			ell/main.c \
 			ell/idle.c \
 			ell/signal.c \
+			ell/timeout.c \
 			ell/io.c \
 			ell/log.c \
 			ell/checksum.c \
