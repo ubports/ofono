@@ -88,6 +88,7 @@ static void get_settings_cb(struct qmi_result *result, void *user_data)
 	char* straddr;
 	char* apn;
 	const char *dns[3] = { NULL, NULL, NULL };
+	char dns_buf[2][INET_ADDRSTRLEN];
 
 	DBG("");
 
@@ -131,14 +132,14 @@ static void get_settings_cb(struct qmi_result *result, void *user_data)
 	if (qmi_result_get_uint32(result,
 				QMI_WDS_RESULT_PRIMARY_DNS, &ip_addr)) {
 		addr.s_addr = htonl(ip_addr);
-		dns[0] = inet_ntoa(addr);
+		dns[0] = inet_ntop(AF_INET, &addr, dns_buf[0], sizeof(dns_buf[0]));
 		DBG("Primary DNS: %s", dns[0]);
 	}
 
 	if (qmi_result_get_uint32(result,
 				QMI_WDS_RESULT_SECONDARY_DNS, &ip_addr)) {
 		addr.s_addr = htonl(ip_addr);
-		dns[1] = inet_ntoa(addr);
+		dns[1] = inet_ntop(AF_INET, &addr, dns_buf[1], sizeof(dns_buf[1]));
 		DBG("Secondary DNS: %s", dns[1]);
 	}
 
