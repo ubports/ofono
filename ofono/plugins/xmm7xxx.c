@@ -157,19 +157,19 @@ static void coex_agent_set_removed_notify(struct coex_agent *agent,
 	agent->removed_data = user_data;
 }
 
-static void coex_agent_send_noreply(struct coex_agent *agent, const char *method)
+static void coex_agent_send_noreply(struct coex_agent *agent,
+							const char *method)
 {
 	DBusConnection *conn = ofono_dbus_get_connection();
 	DBusMessage *message;
 
 	message = dbus_message_new_method_call(agent->bus, agent->path,
-					OFONO_COEX_INTERFACE,
-					method);
+						OFONO_COEX_INTERFACE,
+						method);
 	if (message == NULL)
 		return;
 
 	dbus_message_set_no_reply(message, TRUE);
-
 	g_dbus_send_message(conn, message);
 }
 
@@ -209,7 +209,7 @@ static void coex_agent_disconnect_cb(DBusConnection *conn, void *user_data)
 }
 
 static struct coex_agent *coex_agent_new(const char *path, const char *sender,
-				ofono_bool_t remove_on_terminate)
+					ofono_bool_t remove_on_terminate)
 {
 	struct coex_agent *agent = g_try_new0(struct coex_agent, 1);
 	DBusConnection *conn = ofono_dbus_get_connection();
@@ -224,14 +224,14 @@ static struct coex_agent *coex_agent_new(const char *path, const char *sender,
 	agent->remove_on_terminate = remove_on_terminate;
 
 	agent->disconnect_watch = g_dbus_add_disconnect_watch(conn, sender,
-							coex_agent_disconnect_cb,
-							agent, NULL);
+						coex_agent_disconnect_cb,
+						agent, NULL);
 
 	return agent;
 }
 
 static int coex_agent_coex_wlan_notify(struct coex_agent *agent,
-			const struct wl_coex_info wlan_info)
+					const struct wl_coex_info wlan_info)
 {
 	DBusConnection *conn = ofono_dbus_get_connection();
 	DBusMessageIter wl_args, wl_dict, wl_array;
@@ -257,20 +257,16 @@ static int coex_agent_coex_wlan_notify(struct coex_agent *agent,
 							"{sv}", &wl_dict);
 
 	value = wlan_info.safe_tx_min;
-	ofono_dbus_dict_append(&wl_dict, "SafeTxMin",
-			 DBUS_TYPE_UINT32, &value);
+	ofono_dbus_dict_append(&wl_dict, "SafeTxMin", DBUS_TYPE_UINT32, &value);
 	value = wlan_info.safe_tx_max;
-	ofono_dbus_dict_append(&wl_dict, "SafeTxMax",
-			 DBUS_TYPE_UINT32, &value);
+	ofono_dbus_dict_append(&wl_dict, "SafeTxMax", DBUS_TYPE_UINT32, &value);
 	value = wlan_info.safe_rx_min;
-	ofono_dbus_dict_append(&wl_dict, "SafeRxMin",
-			 DBUS_TYPE_UINT32, &value);
+	ofono_dbus_dict_append(&wl_dict, "SafeRxMin", DBUS_TYPE_UINT32, &value);
 	value = wlan_info.safe_rx_max;
-	ofono_dbus_dict_append(&wl_dict, "SafeRxMax",
-			 DBUS_TYPE_UINT32, &value);
+	ofono_dbus_dict_append(&wl_dict, "SafeRxMax", DBUS_TYPE_UINT32, &value);
 	value = wlan_info.num_safe_vector;
 	ofono_dbus_dict_append(&wl_dict, "NumSafeVector",
-			 DBUS_TYPE_UINT32, &value);
+					DBUS_TYPE_UINT32, &value);
 
 	dbus_message_iter_close_container(&wl_args, &wl_dict);
 	dbus_message_set_no_reply(agent->msg, TRUE);
@@ -284,7 +280,7 @@ static int coex_agent_coex_wlan_notify(struct coex_agent *agent,
 }
 
 static int coex_agent_coex_bt_notify(struct coex_agent *agent,
-			const struct bt_coex_info bt_info)
+					const struct bt_coex_info bt_info)
 {
 	DBusConnection *conn = ofono_dbus_get_connection();
 	DBusMessageIter bt_args, bt_dict, bt_array;
@@ -316,24 +312,24 @@ static int coex_agent_coex_bt_notify(struct coex_agent *agent,
 
 	value = bt_info.safe_tx_min;
 	DBG("value = %d", value);
-	ofono_dbus_dict_append(&bt_dict, "SafeTxMin",
-			DBUS_TYPE_UINT32, &value);
+	ofono_dbus_dict_append(&bt_dict, "SafeTxMin", DBUS_TYPE_UINT32, &value);
+
 	value = bt_info.safe_tx_max;
 	DBG("value = %d", value);
-	ofono_dbus_dict_append(&bt_dict, "SafeTxMax",
-			DBUS_TYPE_UINT32, &value);
+	ofono_dbus_dict_append(&bt_dict, "SafeTxMax", DBUS_TYPE_UINT32, &value);
+
 	value = bt_info.safe_rx_min;
 	DBG("value = %d", value);
-	ofono_dbus_dict_append(&bt_dict, "SafeRxMin",
-			DBUS_TYPE_UINT32, &value);
+	ofono_dbus_dict_append(&bt_dict, "SafeRxMin", DBUS_TYPE_UINT32, &value);
+
 	value = bt_info.safe_rx_max;
 	DBG("value = %d", value);
-	ofono_dbus_dict_append(&bt_dict, "SafeRxMax",
-			DBUS_TYPE_UINT32, &value);
+	ofono_dbus_dict_append(&bt_dict, "SafeRxMax", DBUS_TYPE_UINT32, &value);
+
 	value = bt_info.num_safe_vector;
 	DBG("value = %d", value);
 	ofono_dbus_dict_append(&bt_dict, "NumSafeVector",
-			DBUS_TYPE_UINT32, &value);
+						DBUS_TYPE_UINT32, &value);
 
 	dbus_message_iter_close_container(&bt_args, &bt_dict);
 
@@ -346,7 +342,7 @@ static int coex_agent_coex_bt_notify(struct coex_agent *agent,
 }
 
 static gboolean coex_wlan_bw_from_string(const char *str,
-				enum wlan_bw *band)
+							enum wlan_bw *band)
 {
 	if (g_str_equal(str, "20")) {
 		*band = WLAN_BW_20MHZ;
@@ -383,7 +379,7 @@ static void xmm_get_band_string(int lte_band, char *band)
 {
 	int band_lte;
 
-	band_lte = lte_band-NET_BAND_LTE_1+1;
+	band_lte = lte_band - NET_BAND_LTE_1 + 1;
 
 	if (lte_band >= NET_BAND_LTE_1 && lte_band <= NET_BAND_LTE_43)
 		sprintf(band, "BAND_LTE_%d", band_lte);
@@ -469,8 +465,8 @@ static void coex_set_params_cb(gboolean ok, GAtResult *result,
 
 	if (coex->wlan_bw != coex->pending_wlan_bw) {
 		const char *str_band = wlan_bw_to_string(coex->wlan_bw);
-		coex->wlan_bw = coex->pending_wlan_bw;
 
+		coex->wlan_bw = coex->pending_wlan_bw;
 		ofono_dbus_signal_property_changed(conn, path,
 				OFONO_COEX_INTERFACE, "WLANBandwidth",
 				DBUS_TYPE_STRING, &str_band);
@@ -499,7 +495,7 @@ static void coex_set_params(struct xmm7xxx_coex *coex, ofono_bool_t bt_active,
 }
 
 static DBusMessage *coex_set_property(DBusConnection *conn,
-				DBusMessage *msg, void *data)
+					DBusMessage *msg, void *data)
 {
 	struct xmm7xxx_coex *coex = data;
 	DBusMessageIter iter;
@@ -589,7 +585,7 @@ static void coex_default_agent_notify(gpointer user_data)
 }
 
 static DBusMessage *coex_register_agent(DBusConnection *conn,
-				DBusMessage *msg, void *data)
+					DBusMessage *msg, void *data)
 {
 	struct xmm7xxx_coex *coex = data;
 	const char *agent_path;
@@ -663,7 +659,7 @@ static void append_plmn_properties(struct plmn_hist *list,
 }
 
 static void append_plmn_history_struct_list(struct plmn_hist *list,
-					DBusMessageIter *arr)
+						DBusMessageIter *arr)
 {
 	DBusMessageIter iter;
 	DBusMessageIter dict;
@@ -743,7 +739,7 @@ static void coex_get_plmn_history_cb(gboolean ok, GAtResult *result,
 	reply = dbus_message_new_method_return(coex->pending);
 	__ofono_dbus_pending_reply(&coex->pending, reply);
 
-		g_free(list);
+	g_free(list);
 }
 
 static DBusMessage *coex_get_plmn_history(DBusConnection *conn,
@@ -814,9 +810,8 @@ static void xmm_coex_w_notify(GAtResult *result, gpointer user_data)
 	g_at_result_iter_skip_next(&iter);
 	g_at_result_iter_next_number(&iter, &wlan.num_safe_vector);
 
-	for (count = 0; count < wlan.num_safe_vector; count++) {
+	for (count = 0; count < wlan.num_safe_vector; count++)
 		g_at_result_iter_next_number(&iter, &wlan.safe_vector[count]);
-	}
 
 	DBG("WLAN notification");
 
@@ -842,9 +837,8 @@ static void xmm_coex_b_notify(GAtResult *result, gpointer user_data)
 	g_at_result_iter_next_number(&iter, &bt.safe_tx_max);
 	g_at_result_iter_next_number(&iter, &bt.num_safe_vector);
 
-	for (count = 0; count < bt.num_safe_vector; count++) {
+	for (count = 0; count < bt.num_safe_vector; count++)
 		g_at_result_iter_next_number(&iter, &bt.safe_vector[count]);
-	}
 
 	DBG("BT notification");
 
@@ -912,10 +906,9 @@ static void coex_cleanup(void *data)
 
 static int xmm_coex_enable(struct ofono_modem *modem, void *data)
 {
-	struct xmm7xxx_coex *coex;
+	struct xmm7xxx_coex *coex = g_new0(struct xmm7xxx_coex, 1);
 	DBusConnection *conn = ofono_dbus_get_connection();
 	const char *path = ofono_modem_get_path(modem);
-	coex = g_new0(struct xmm7xxx_coex, 1);
 
 	DBG("coex enable");
 
