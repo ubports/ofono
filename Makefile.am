@@ -894,7 +894,7 @@ dist_man_MANS = doc/ofonod.8
 
 unit_objects =
 
-unit_tests = unit/test-common unit/test-util unit/test-idmap \
+unit_tests = unit/test-common unit/test-util \
 				unit/test-simutil unit/test-stkutil \
 				unit/test-sms unit/test-cdmasms \
 				unit/test-mbim \
@@ -913,10 +913,6 @@ unit_objects += $(unit_test_common_OBJECTS)
 unit_test_util_SOURCES = unit/test-util.c src/util.c
 unit_test_util_LDADD = @GLIB_LIBS@
 unit_objects += $(unit_test_utils_OBJECTS)
-
-unit_test_idmap_SOURCES = unit/test-idmap.c src/idmap.c
-unit_test_idmap_LDADD = @GLIB_LIBS@
-unit_objects += $(unit_test_idmap_OBJECTS)
 
 unit_test_simutil_SOURCES = unit/test-simutil.c src/util.c \
                                 src/simutil.c src/smsutil.c src/storage.c
