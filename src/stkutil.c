@@ -94,7 +94,7 @@ static char *decode_text(unsigned char dcs, int len, const unsigned char *data)
 	{
 		long written;
 		unsigned long max_to_unpack = len * 8 / 7;
-		unsigned char *unpacked = unpack_7bit(data, len, 0, FALSE,
+		unsigned char *unpacked = unpack_7bit(data, len, 0, false,
 							max_to_unpack,
 							&written, 0);
 		if (unpacked == NULL)
@@ -4040,7 +4040,7 @@ static gboolean stk_tlv_builder_append_gsm_packed(struct stk_tlv_builder *iter,
 		return FALSE;
 	}
 
-	pack_7bit_own_buf(gsm, len, 0, FALSE, &written, 0,
+	pack_7bit_own_buf(gsm, len, 0, false, &written, 0,
 				iter->value + iter->len + 1);
 	g_free(gsm);
 

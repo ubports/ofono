@@ -560,7 +560,7 @@ gboolean sms_encode_address_field(const struct sms_address *in, gboolean sc,
 			return FALSE;
 		}
 
-		r = pack_7bit_own_buf(gsm, written, 0, FALSE, &packed, 0, p);
+		r = pack_7bit_own_buf(gsm, written, 0, false, &packed, 0, p);
 
 		g_free(gsm);
 
@@ -667,7 +667,7 @@ gboolean sms_decode_address_field(const unsigned char *pdu, int len,
 			return TRUE;
 		}
 
-		res = unpack_7bit(pdu + *offset, byte_len, 0, FALSE, chars,
+		res = unpack_7bit(pdu + *offset, byte_len, 0, false, chars,
 					&written, 0);
 
 		*offset = *offset + (addr_len + 1) / 2;
@@ -1330,7 +1330,7 @@ gboolean sms_decode_unpacked_stk_pdu(const unsigned char *pdu, int len,
 	if ((len - offset) < out->submit.udl)
 		return FALSE;
 
-	pack_7bit_own_buf(pdu + offset, out->submit.udl, 0, FALSE,
+	pack_7bit_own_buf(pdu + offset, out->submit.udl, 0, false,
 				NULL, 0, out->submit.ud);
 
 	return TRUE;
@@ -2265,7 +2265,7 @@ char *sms_decode_text(GSList *sms_list)
 
 			if (unpack_7bit_own_buf(ud + taken,
 						udl_in_bytes - taken,
-						taken, FALSE, max_chars,
+						taken, false, max_chars,
 						&written, 0, buf) == NULL)
 				continue;
 
@@ -3629,7 +3629,7 @@ GSList *sms_text_prepare_with_alphabet(const char *to, const char *utf8,
 
 	if (gsm_encoded && (written <= sms_text_capacity_gsm(160, offset))) {
 		template.submit.udl = written + (offset * 8 + 6) / 7;
-		pack_7bit_own_buf(gsm_encoded, written, offset, FALSE, NULL,
+		pack_7bit_own_buf(gsm_encoded, written, offset, false, NULL,
 					0, template.submit.ud + offset);
 
 		g_free(gsm_encoded);
@@ -3686,7 +3686,7 @@ GSList *sms_text_prepare_with_alphabet(const char *to, const char *utf8,
 
 			template.submit.udl = chunk + (offset * 8 + 6) / 7;
 			pack_7bit_own_buf(gsm_encoded + written, chunk,
-						offset, FALSE, NULL, 0,
+						offset, false, NULL, 0,
 						template.submit.ud + offset);
 		} else {
 			chunk = 140 - offset;
@@ -4090,7 +4090,7 @@ char *cbs_decode_text(GSList *cbs_list, char *iso639_lang)
 				taken = sms_udh_iter_get_udh_length(&iter) + 1;
 
 			unpack_7bit_own_buf(cbs->ud + taken, 82 - taken,
-						taken, FALSE, 2,
+						taken, false, 2,
 						NULL, 0,
 						(unsigned char *)iso639_lang);
 			iso639_lang[2] = '\0';
@@ -4123,7 +4123,7 @@ char *cbs_decode_text(GSList *cbs_list, char *iso639_lang)
 				sms_text_capacity_gsm(CBS_MAX_GSM_CHARS, taken);
 
 			unpack_7bit_own_buf(ud + taken, 82 - taken,
-						taken, FALSE, max_chars,
+						taken, false, max_chars,
 						&written, 0, unpacked);
 
 			i = iso639 ? 3 : 0;
@@ -4730,7 +4730,7 @@ char *ussd_decode(int dcs, int len, const unsigned char *data)
 	case SMS_CHARSET_7BIT:
 	{
 		long written;
-		unsigned char *unpacked = unpack_7bit(data, len, 0, TRUE, 0,
+		unsigned char *unpacked = unpack_7bit(data, len, 0, true, 0,
 							&written, 0);
 		if (unpacked == NULL)
 			return NULL;
@@ -4770,7 +4770,7 @@ gboolean ussd_encode(const char *str, long *items_written, unsigned char *pdu)
 		return FALSE;
 	}
 
-	pack_7bit_own_buf(converted, written, 0, TRUE, &num_packed, 0, pdu);
+	pack_7bit_own_buf(converted, written, 0, true, &num_packed, 0, pdu);
 	g_free(converted);
 
 	if (num_packed < 1)
