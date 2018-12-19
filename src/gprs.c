@@ -36,6 +36,7 @@
 #include <arpa/inet.h>
 #include <stdbool.h>
 
+#include <ell/ell.h>
 #include <glib.h>
 #include <gdbus.h>
 
@@ -43,7 +44,6 @@
 
 #include "common.h"
 #include "storage.h"
-#include "idmap.h"
 #include "simutil.h"
 #include "util.h"
 
@@ -70,9 +70,9 @@ struct ofono_gprs {
 	int flags;
 	int bearer;
 	guint suspend_timeout;
-	struct idmap *pid_map;
+	struct l_uintset *used_pids;
 	unsigned int last_context_id;
-	struct idmap *cid_map;
+	struct l_uintset *used_cids;
 	int netreg_status;
 	struct ofono_netreg *netreg;
 	unsigned int netreg_watch;
@@ -223,42 +223,22 @@ static gboolean gprs_context_string_to_type(const char *str,
 	return FALSE;
 }
 
-static unsigned int gprs_cid_alloc(struct ofono_gprs *gprs)
+static gboolean assign_context(struct pri_context *ctx, unsigned int use_cid)
 {
-	return idmap_alloc(gprs->cid_map);
-}
-
-static void gprs_cid_take(struct ofono_gprs *gprs, unsigned int id)
-{
-	idmap_take(gprs->cid_map, id);
-}
-
-static void gprs_cid_release(struct ofono_gprs *gprs, unsigned int id)
-{
-	idmap_put(gprs->cid_map, id);
-}
-
-static gboolean gprs_cid_taken(struct ofono_gprs *gprs, unsigned int id)
-{
-	return idmap_find(gprs->cid_map, id) != 0;
-}
-
-static gboolean assign_context(struct pri_context *ctx, int use_cid)
-{
-	struct idmap *cidmap = ctx->gprs->cid_map;
+	struct l_uintset *used_cids = ctx->gprs->used_cids;
 	GSList *l;
 
-	if (cidmap == NULL)
+	if (used_cids == NULL)
 		return FALSE;
 
-	if (use_cid > 0) {
-		gprs_cid_take(ctx->gprs, use_cid);
-		ctx->context.cid = use_cid;
-	} else
-		ctx->context.cid = gprs_cid_alloc(ctx->gprs);
+	if (!use_cid)
+		use_cid = l_uintset_find_unused_min(used_cids);
 
-	if (ctx->context.cid > idmap_get_max(cidmap))
+	if (use_cid > l_uintset_get_max(used_cids))
 		return FALSE;
+
+	l_uintset_put(used_cids, use_cid);
+	ctx->context.cid = use_cid;
 
 	for (l = ctx->gprs->context_drivers; l; l = l->next) {
 		struct ofono_gprs_context *gc = l->data;
@@ -299,7 +279,7 @@ static void release_context(struct pri_context *ctx)
 	if (ctx == NULL || ctx->gprs == NULL || ctx->context_driver == NULL)
 		return;
 
-	gprs_cid_release(ctx->gprs, ctx->context.cid);
+	l_uintset_take(ctx->gprs->used_cids, ctx->context.cid);
 	ctx->context.cid = 0;
 	ctx->context_driver->inuse = FALSE;
 	ctx->context_driver = NULL;
@@ -1434,7 +1414,7 @@ static gboolean context_dbus_register(struct pri_context *ctx)
 					context_methods, context_signals,
 					NULL, ctx, pri_context_destroy)) {
 		ofono_error("Could not register PrimaryContext %s", path);
-		idmap_put(ctx->gprs->pid_map, ctx->id);
+		l_uintset_take(ctx->gprs->used_pids, ctx->id);
 		pri_context_destroy(ctx);
 
 		return FALSE;
@@ -1462,7 +1442,7 @@ static gboolean context_dbus_unregister(struct pri_context *ctx)
 	}
 
 	strcpy(path, ctx->path);
-	idmap_put(ctx->gprs->pid_map, ctx->id);
+	l_uintset_take(ctx->gprs->used_pids, ctx->id);
 
 	return g_dbus_unregister_interface(conn, path,
 					OFONO_CONNECTION_CONTEXT_INTERFACE);
@@ -1918,21 +1898,17 @@ static struct pri_context *add_context(struct ofono_gprs *gprs,
 	unsigned int id;
 	struct pri_context *context;
 
-	if (gprs->last_context_id)
-		id = idmap_alloc_next(gprs->pid_map, gprs->last_context_id);
-	else
-		id = idmap_alloc(gprs->pid_map);
-
-	if (id > idmap_get_max(gprs->pid_map))
+	id = l_uintset_find_unused(gprs->used_pids, gprs->last_context_id);
+	if (id > l_uintset_get_max(gprs->used_pids))
 		return NULL;
 
 	context = pri_context_create(gprs, name, type);
 	if (context == NULL) {
-		idmap_put(gprs->pid_map, id);
 		ofono_error("Unable to allocate context struct");
 		return NULL;
 	}
 
+	l_uintset_put(gprs->used_pids, id);
 	context->id = id;
 
 	DBG("Registering new context");
@@ -1962,7 +1938,7 @@ void ofono_gprs_cid_activated(struct ofono_gprs  *gprs, unsigned int cid,
 
 	DBG("");
 
-	if (gprs_cid_taken(gprs, cid)) {
+	if (l_uintset_contains(gprs->used_cids, cid)) {
 		DBG("cid %u already activated", cid);
 		return;
 	}
@@ -2353,20 +2329,15 @@ static void provision_context(const struct ofono_gprs_provision_data *ap,
 			strlen(ap->message_center) > MAX_MESSAGE_CENTER_LENGTH)
 		return;
 
-	if (gprs->last_context_id)
-		id = idmap_alloc_next(gprs->pid_map, gprs->last_context_id);
-	else
-		id = idmap_alloc(gprs->pid_map);
-
-	if (id > idmap_get_max(gprs->pid_map))
+	id = l_uintset_find_unused(gprs->used_pids, gprs->last_context_id);
+	if (id > l_uintset_get_max(gprs->used_pids))
 		return;
 
 	context = pri_context_create(gprs, ap->name, ap->type);
-	if (context == NULL) {
-		idmap_put(gprs->pid_map, id);
+	if (context == NULL)
 		return;
-	}
 
+	l_uintset_put(gprs->used_pids, id);
 	context->id = id;
 
 	if (ap->username != NULL)
@@ -2600,10 +2571,8 @@ void ofono_gprs_set_cid_range(struct ofono_gprs *gprs,
 	if (gprs == NULL)
 		return;
 
-	if (gprs->cid_map)
-		idmap_free(gprs->cid_map);
-
-	gprs->cid_map = idmap_new_from_range(min, max);
+	l_uintset_free(gprs->used_cids);
+	gprs->used_cids = l_uintset_new_from_range(min, max);
 }
 
 static void gprs_context_unregister(struct ofono_atom *atom)
@@ -3010,10 +2979,8 @@ static void gprs_unregister(struct ofono_atom *atom)
 
 	free_contexts(gprs);
 
-	if (gprs->cid_map) {
-		idmap_free(gprs->cid_map);
-		gprs->cid_map = NULL;
-	}
+	l_uintset_free(gprs->used_cids);
+	gprs->used_cids = NULL;
 
 	if (gprs->netreg_watch) {
 		if (gprs->status_watch) {
@@ -3053,10 +3020,8 @@ static void gprs_remove(struct ofono_atom *atom)
 	if (gprs->suspend_timeout)
 		g_source_remove(gprs->suspend_timeout);
 
-	if (gprs->pid_map) {
-		idmap_free(gprs->pid_map);
-		gprs->pid_map = NULL;
-	}
+	l_uintset_free(gprs->used_pids);
+	gprs->used_pids = NULL;
 
 	for (l = gprs->context_drivers; l; l = l->next) {
 		struct ofono_gprs_context *gc = l->data;
@@ -3104,7 +3069,7 @@ struct ofono_gprs *ofono_gprs_create(struct ofono_modem *modem,
 
 	gprs->status = NETWORK_REGISTRATION_STATUS_UNKNOWN;
 	gprs->netreg_status = NETWORK_REGISTRATION_STATUS_UNKNOWN;
-	gprs->pid_map = idmap_new(MAX_CONTEXTS);
+	gprs->used_pids = l_uintset_new(MAX_CONTEXTS);
 
 	return gprs;
 }
@@ -3224,7 +3189,7 @@ static gboolean load_context(struct ofono_gprs *gprs, const char *group)
 	if (context == NULL)
 		goto error;
 
-	idmap_take(gprs->pid_map, id);
+	l_uintset_put(gprs->used_pids, id);
 	context->id = id;
 	strcpy(context->context.username, username);
 	strcpy(context->context.password, password);
