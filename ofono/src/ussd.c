@@ -34,7 +34,6 @@
 
 #include "common.h"
 #include "smsutil.h"
-#include "util.h"
 
 #define MAX_USSD_LENGTH 160
 
