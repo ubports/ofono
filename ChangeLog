@@ -1,3 +1,8 @@
+ver 1.27:
+	Add support for handling SIMCom based SIM800 modems.
+	Add support for SIM lock state with xmm7xxx modems.
+	Add support for coexistence feature with xmm7xxx modems.
+
 ver 1.26:
 	Fix issue with AT callback handler and GPRS.
 	Fix issue with handling EUTRAN SMS only states.
