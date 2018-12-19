@@ -30,7 +30,8 @@ ell_headers = ell/util.h \
 			ell/checksum.h \
 			ell/random.h \
 			ell/uuid.h \
-			ell/file.h
+			ell/file.h \
+			ell/uintset.h
 
 ell_sources = ell/private.h \
 			ell/missing.h \
@@ -48,7 +49,8 @@ ell_sources = ell/private.h \
 			ell/checksum.c \
 			ell/random.c \
 			ell/uuid.c \
-			ell/file.c
+			ell/file.c \
+			ell/uintset.c
 
 ell_libell_internal_la_SOURCES = $(ell_headers) $(ell_sources)
 endif
