@@ -27,6 +27,7 @@
 #include <stdlib.h>
 
 #include <glib.h>
+#include <ell/ell.h>
 
 #include <ofono/types.h>
 #include "simutil.h"
@@ -800,7 +801,7 @@ static char *sim_network_name_parse(const unsigned char *buffer, int length,
 
 		ret = convert_gsm_to_utf8(unpacked_buf, written, NULL, NULL, 0);
 
-		g_free(unpacked_buf);
+		l_free(unpacked_buf);
 
 		break;
 	case 0x10:

@@ -28,6 +28,7 @@
 #include <stdint.h>
 
 #include <glib.h>
+#include <ell/ell.h>
 
 #include <ofono/types.h>
 #include "smsutil.h"
@@ -102,7 +103,7 @@ static char *decode_text(unsigned char dcs, int len, const unsigned char *data)
 
 		utf8 = convert_gsm_to_utf8(unpacked, written,
 						NULL, NULL, 0);
-		g_free(unpacked);
+		l_free(unpacked);
 		break;
 	}
 	case SMS_CHARSET_8BIT:

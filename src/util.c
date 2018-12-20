@@ -3412,8 +3412,7 @@ unsigned char *unpack_7bit(const unsigned char *in, long len, int byte_offset,
 				bool ussd, long max_to_unpack,
 				long *items_written, unsigned char terminator)
 {
-	unsigned char *buf = g_new(unsigned char,
-					len * 8 / 7 + (terminator ? 1 : 0));
+	unsigned char *buf = l_malloc(len * 8 / 7 + (terminator ? 1 : 0));
 
 	return unpack_7bit_own_buf(in, len, byte_offset, ussd, max_to_unpack,
 				items_written, terminator, buf);
@@ -3520,9 +3519,9 @@ unsigned char *pack_7bit(const unsigned char *in, long len, int byte_offset,
 
 	/* Round up number of bytes, must append <cr> if true */
 	if (ussd && ((total_bits % 8) == 0) && (in[len - 1] == '\r'))
-		buf = g_new(unsigned char, (total_bits + 14) / 8);
+		buf = l_malloc((total_bits + 14) / 8);
 	else
-		buf = g_new(unsigned char, (total_bits + 7) / 8);
+		buf = l_malloc((total_bits + 7) / 8);
 
 	return pack_7bit_own_buf(in, len, byte_offset, ussd, items_written,
 					terminator, buf);

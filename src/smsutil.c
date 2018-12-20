@@ -33,6 +33,7 @@
 #include <unistd.h>
 
 #include <glib.h>
+#include <ell/ell.h>
 
 #include "util.h"
 #include "storage.h"
@@ -677,7 +678,7 @@ gboolean sms_decode_address_field(const unsigned char *pdu, int len,
 
 		utf8 = convert_gsm_to_utf8(res, written, NULL, NULL, 0);
 
-		g_free(res);
+		l_free(res);
 
 		if (utf8 == NULL)
 			return FALSE;
@@ -4736,7 +4737,7 @@ char *ussd_decode(int dcs, int len, const unsigned char *data)
 			return NULL;
 
 		utf8 = convert_gsm_to_utf8(unpacked, written, NULL, NULL, 0);
-		g_free(unpacked);
+		l_free(unpacked);
 
 		break;
 	}
