@@ -27,6 +27,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <glib.h>
+#include <ell/ell.h>
 
 #include "util.h"
 
@@ -591,7 +592,7 @@ static void test_decode_encode(void)
 	g_assert(memcmp(gsm_encoded, gsm, gsm_encoded_size) == 0);
 
 	g_free(utf8);
-	g_free(gsm);
+	l_free(gsm);
 
 	packed = pack_7bit(gsm_encoded, -1, 0, false, &packed_size, 0xff);
 
@@ -617,7 +618,7 @@ static void test_decode_encode(void)
 
 	g_assert(hex_packed != NULL);
 
-	g_free(packed);
+	l_free(packed);
 
 	if (g_test_verbose())
 		g_print("Hex encoded packed to size %ld bytes\n",
@@ -646,49 +647,49 @@ static void test_pack_size(void)
 	packed = pack_7bit(c1, 1, 0, false, &size, 0);
 	g_assert(packed != NULL);
 	g_assert(size == 1);
-	g_free(packed);
+	l_free(packed);
 
 	packed = pack_7bit(c2, 2, 0, false, &size, 0);
 	g_assert(packed != NULL);
 	g_assert(size == 2);
-	g_free(packed);
+	l_free(packed);
 
 	packed = pack_7bit(c3, 3, 0, false, &size, 0);
 	g_assert(packed != NULL);
 	g_assert(size == 3);
-	g_free(packed);
+	l_free(packed);
 
 	packed = pack_7bit(c4, 4, 0, false, &size, 0);
 	g_assert(packed != NULL);
 	g_assert(size == 4);
-	g_free(packed);
+	l_free(packed);
 
 	packed = pack_7bit(c5, 5, 0, false, &size, 0);
 	g_assert(packed != NULL);
 	g_assert(size == 5);
-	g_free(packed);
+	l_free(packed);
 
 	packed = pack_7bit(c6, 6, 0, false, &size, 0);
 	g_assert(packed != NULL);
 	g_assert(size == 6);
-	g_free(packed);
+	l_free(packed);
 
 	packed = pack_7bit(c7, 7, 0, false, &size, 0);
 	g_assert(packed != NULL);
 	g_assert(size == 7);
 	g_assert((packed[6] & 0xfe) == 0);
-	g_free(packed);
+	l_free(packed);
 
 	packed = pack_7bit(c7, 7, 0, true, &size, 0);
 	g_assert(packed != NULL);
 	g_assert(size == 7);
 	g_assert(((packed[6] & 0xfe) >> 1) == '\r');
-	g_free(packed);
+	l_free(packed);
 
 	packed = pack_7bit(c8, 8, 0, false, &size, 0);
 	g_assert(packed != NULL);
 	g_assert(size == 7);
-	g_free(packed);
+	l_free(packed);
 }
 
 static void test_cr_handling(void)
@@ -719,8 +720,8 @@ static void test_cr_handling(void)
 	g_assert(unpacked_size == 9);
 	g_assert(memcmp(c8_expected, unpacked, 9) == 0);
 
-	g_free(unpacked);
-	g_free(packed);
+	l_free(unpacked);
+	l_free(packed);
 
 	packed = pack_7bit(c7, 7, 0, true, &packed_size, 0);
 	g_assert(packed != NULL);
@@ -735,8 +736,8 @@ static void test_cr_handling(void)
 	g_assert(unpacked_size == 7);
 	g_assert(memcmp(c7, unpacked, 7) == 0);
 
-	g_free(unpacked);
-	g_free(packed);
+	l_free(unpacked);
+	l_free(packed);
 
 	/* As above, but now unpack using SMS style, we should now have cr at
 	 * the end of the stream
@@ -750,8 +751,8 @@ static void test_cr_handling(void)
 	g_assert(unpacked_size == 8);
 	g_assert(memcmp(c7_expected, unpacked, 8) == 0);
 
-	g_free(unpacked);
-	g_free(packed);
+	l_free(unpacked);
+	l_free(packed);
 }
 
 static void test_sms_handling(void)
@@ -776,8 +777,8 @@ static void test_sms_handling(void)
 	g_assert(unpacked[7] == 0);
 	g_assert(unpacked[8] == 0xff);
 
-	g_free(unpacked);
-	g_free(packed);
+	l_free(unpacked);
+	l_free(packed);
 
 	packed = pack_7bit(c7, 7, 0, FALSE, &packed_size, 0);
 	g_assert(packed != NULL);
@@ -791,8 +792,8 @@ static void test_sms_handling(void)
 	g_assert(unpacked_size == 7);
 	g_assert(unpacked[7] == 0xff);
 
-	g_free(unpacked);
-	g_free(packed);
+	l_free(unpacked);
+	l_free(packed);
 }
 
 static void test_offset_handling(void)
@@ -824,8 +825,8 @@ static void test_offset_handling(void)
 	g_assert(unpacked[0] == 'a');
 	g_assert(unpacked[5] == 'f');
 
-	g_free(unpacked);
-	g_free(packed);
+	l_free(unpacked);
+	l_free(packed);
 
 	/* Pack at offset = 6 bytes, we should be able to fit one character
 	 * into the first byte, and the other 7 characters into the following
@@ -850,8 +851,8 @@ static void test_offset_handling(void)
 	g_assert(unpacked[0] == 'a');
 	g_assert(unpacked[7] == 'h');
 
-	g_free(unpacked);
-	g_free(packed);
+	l_free(unpacked);
+	l_free(packed);
 
 	/* Same as above, but instead pack in 9 characters */
 	packed = pack_7bit(c9, 9, 6, FALSE, &packed_size, 0);
@@ -872,8 +873,8 @@ static void test_offset_handling(void)
 	g_assert(unpacked[0] == 'a');
 	g_assert(unpacked[8] == 'i');
 
-	g_free(unpacked);
-	g_free(packed);
+	l_free(unpacked);
+	l_free(packed);
 }
 
 static unsigned char sim_7bit[] = { 0x6F, 0x46, 0x6F, 0x6E, 0x6F, 0xFF, 0xFF };

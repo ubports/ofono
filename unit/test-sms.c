@@ -28,6 +28,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <ell/ell.h>
 #include <glib.h>
 #include <glib/gprintf.h>
 
@@ -211,7 +212,7 @@ static void test_simple_deliver(void)
 
 	utf8 = convert_gsm_to_utf8(unpacked, -1, NULL, NULL, 0xff);
 
-	g_free(unpacked);
+	l_free(unpacked);
 
 	g_assert(utf8);
 
@@ -282,7 +283,7 @@ static void test_alnum_sender(void)
 
 	utf8 = convert_gsm_to_utf8(unpacked, -1, NULL, NULL, 0xff);
 
-	g_free(unpacked);
+	l_free(unpacked);
 
 	g_assert(utf8);
 
@@ -456,7 +457,7 @@ static void test_simple_submit(void)
 
 	utf8 = convert_gsm_to_utf8(unpacked, -1, NULL, NULL, 0xff);
 
-	g_free(unpacked);
+	l_free(unpacked);
 
 	g_assert(utf8);
 
@@ -819,7 +820,7 @@ static void test_sms_charset(gconstpointer param)
 
 	g_assert(text);
 
-	g_free(unpacked);
+	l_free(unpacked);
 
 	g_assert(strcmp(data->expected_text, text) == 0);
 
@@ -1032,7 +1033,7 @@ static void test_ems_udh(gconstpointer data)
 
 	utf8 = convert_gsm_to_utf8(unpacked, -1, NULL, NULL, 0xff);
 
-	g_free(unpacked);
+	l_free(unpacked);
 
 	g_assert(utf8);
 
