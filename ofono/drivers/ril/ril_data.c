@@ -34,6 +34,9 @@
 #define PROTO_IPV6_STR "IPV6"
 #define PROTO_IPV4V6_STR "IPV4V6"
 
+/* Yes, it does sometimes take minutes in roaming */
+#define SETUP_DATA_CALL_TIMEOUT (300*1000) /* ms */
+
 enum ril_data_priv_flags {
 	RIL_DATA_FLAG_NONE = 0x00,
 	RIL_DATA_FLAG_ALLOWED = 0x01,
@@ -978,6 +981,7 @@ static gboolean ril_data_call_setup_submit(struct ril_data_request *req)
 	}
 
 	GASSERT(!req->pending_id);
+	grilio_request_set_timeout(ioreq, SETUP_DATA_CALL_TIMEOUT);
 	req->pending_id = grilio_queue_send_request_full(priv->q, ioreq,
 			RIL_REQUEST_SETUP_DATA_CALL, ril_data_call_setup_cb,
 			NULL, setup);
