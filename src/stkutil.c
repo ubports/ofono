@@ -4037,13 +4037,13 @@ static gboolean stk_tlv_builder_append_gsm_packed(struct stk_tlv_builder *iter,
 		return FALSE;
 
 	if (iter->len + (written * 7 + 7) / 8 >= iter->max_len) {
-		g_free(gsm);
+		l_free(gsm);
 		return FALSE;
 	}
 
 	pack_7bit_own_buf(gsm, len, 0, false, &written, 0,
 				iter->value + iter->len + 1);
-	g_free(gsm);
+	l_free(gsm);
 
 	if (written < 1 && len > 0)
 		return FALSE;
@@ -4072,7 +4072,7 @@ static gboolean stk_tlv_builder_append_gsm_unpacked(
 		return FALSE;
 
 	if (iter->len + written >= iter->max_len) {
-		g_free(gsm);
+		l_free(gsm);
 		return FALSE;
 	}
 
@@ -4080,7 +4080,7 @@ static gboolean stk_tlv_builder_append_gsm_unpacked(
 	memcpy(iter->value + iter->len, gsm, written);
 	iter->len += written;
 
-	g_free(gsm);
+	l_free(gsm);
 
 	return TRUE;
 }

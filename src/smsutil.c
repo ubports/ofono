@@ -557,13 +557,13 @@ gboolean sms_encode_address_field(const struct sms_address *in, gboolean sc,
 			return FALSE;
 
 		if (written > 11) {
-			g_free(gsm);
+			l_free(gsm);
 			return FALSE;
 		}
 
 		r = pack_7bit_own_buf(gsm, written, 0, false, &packed, 0, p);
 
-		g_free(gsm);
+		l_free(gsm);
 
 		if (r == NULL)
 			return FALSE;
@@ -3633,7 +3633,7 @@ GSList *sms_text_prepare_with_alphabet(const char *to, const char *utf8,
 		pack_7bit_own_buf(gsm_encoded, written, offset, false, NULL,
 					0, template.submit.ud + offset);
 
-		g_free(gsm_encoded);
+		l_free(gsm_encoded);
 		return sms_list_append(NULL, &template);
 	}
 
@@ -4767,12 +4767,12 @@ gboolean ussd_encode(const char *str, long *items_written, unsigned char *pdu)
 
 	converted = convert_utf8_to_gsm(str, -1, NULL, &written, 0);
 	if (converted == NULL || written > 182) {
-		g_free(converted);
+		l_free(converted);
 		return FALSE;
 	}
 
 	pack_7bit_own_buf(converted, written, 0, true, &num_packed, 0, pdu);
-	g_free(converted);
+	l_free(converted);
 
 	if (num_packed < 1)
 		return FALSE;

@@ -3042,18 +3042,18 @@ unsigned char *convert_utf8_to_gsm_with_lang(const char *text, long len,
 	res_len = 0;
 
 	while ((len < 0 || text + len - in > 0) && *in) {
-		long max = len < 0 ? 6 : text + len - in;
-		gunichar c = g_utf8_get_char_validated(in, max);
-		unsigned short converted = GUND;
+		long max = len < 0 ? 4 : text + len - in;
+		wchar_t c;
+		unsigned short converted;
+		int nread = l_utf8_get_codepoint(in, max, &c);
 
-		if (c & 0x80000000)
+		if (nread < 0)
 			goto err_out;
 
 		if (c > 0xffff)
 			goto err_out;
 
 		converted = unicode_locking_shift_lookup(&t, c);
-
 		if (converted == GUND)
 			converted = unicode_single_shift_lookup(&t, c);
 
@@ -3065,23 +3065,20 @@ unsigned char *convert_utf8_to_gsm_with_lang(const char *text, long len,
 		else
 			res_len += 1;
 
-		in = g_utf8_next_char(in);
+		in += nread;
 		nchars += 1;
 	}
 
-	res = g_try_malloc(res_len + (terminator ? 1 : 0));
-	if (res == NULL)
-		goto err_out;
-
+	res = l_malloc(res_len + (terminator ? 1 : 0));
 	in = text;
 	out = res;
-	for (i = 0; i < nchars; i++) {
-		unsigned short converted;
 
-		gunichar c = g_utf8_get_char(in);
+	for (i = 0; i < nchars; i++) {
+		wchar_t c;
+		unsigned short converted;
+		int nread = l_utf8_get_codepoint(in, 4, &c);
 
 		converted = unicode_locking_shift_lookup(&t, c);
-
 		if (converted == GUND)
 			converted = unicode_single_shift_lookup(&t, c);
 
@@ -3092,8 +3089,7 @@ unsigned char *convert_utf8_to_gsm_with_lang(const char *text, long len,
 
 		*out = converted;
 		++out;
-
-		in = g_utf8_next_char(in);
+		in += nread;
 	}
 
 	if (terminator)
