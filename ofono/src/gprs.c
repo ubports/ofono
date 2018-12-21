@@ -1162,8 +1162,6 @@ static void pri_activate_callback(const struct ofono_error *error, void *data)
 	DBusConnection *conn = ofono_dbus_get_connection();
 	dbus_bool_t value;
 
-	DBG("%p", ctx);
-
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
 		DBG("Activating context failed with error: %s",
 				telephony_error_to_str(error));
@@ -1173,6 +1171,8 @@ static void pri_activate_callback(const struct ofono_error *error, void *data)
 		release_context(ctx);
 		return;
 	}
+
+	DBG("%p", ctx);
 
 	ctx->active = TRUE;
 	__ofono_dbus_pending_reply(&ctx->pending,
@@ -1208,6 +1208,8 @@ static void pri_deactivate_callback(const struct ofono_error *error, void *data)
 					__ofono_error_failed(ctx->pending));
 		return;
 	}
+
+	DBG("%p", ctx);
 
 	__ofono_dbus_pending_reply(&ctx->pending,
 				dbus_message_new_method_return(ctx->pending));
