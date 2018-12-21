@@ -3673,9 +3673,9 @@ unsigned char *utf8_to_sim_string(const char *utf, int max_length,
 					int *out_length)
 {
 	unsigned char *result;
-	unsigned char *ucs2;
+	void *ucs2;
 	long gsm_bytes;
-	gsize converted;
+	size_t converted;
 
 	result = convert_utf8_to_gsm(utf, -1, NULL, &gsm_bytes, 0);
 	if (result) {
@@ -3691,25 +3691,21 @@ unsigned char *utf8_to_sim_string(const char *utf, int max_length,
 
 	/* NOTE: UCS2 formats with an offset are never used */
 
-	ucs2 = (guint8 *) g_convert(utf, -1, "UCS-2BE//TRANSLIT", "UTF-8",
-					NULL, &converted, NULL);
-	if (ucs2 == NULL)
+	ucs2 = l_utf8_to_ucs2be(utf, &converted);
+	if (!ucs2)
 		return NULL;
+
+	/* converted includes null terminator, drop */
+	converted -= 2;
 
 	if (max_length != -1 && (int) converted + 1 > max_length)
 		converted = (max_length - 1) & ~1;
 
-	result = g_try_malloc(converted + 1);
-	if (result == NULL) {
-		g_free(ucs2);
-		return NULL;
-	}
-
-	*out_length = converted + 1;
-
+	result = l_malloc(converted + 1);
 	result[0] = 0x80;
 	memcpy(&result[1], ucs2, converted);
-	g_free(ucs2);
+	*out_length = converted + 1;
+	l_free(ucs2);
 
 	return result;
 }

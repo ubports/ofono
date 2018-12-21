@@ -3562,7 +3562,7 @@ GSList *sms_text_prepare_with_alphabet(const char *to, const char *utf8,
 	struct sms template;
 	int offset = 0;
 	unsigned char *gsm_encoded = NULL;
-	char *ucs2_encoded = NULL;
+	void *ucs2_encoded = NULL;
 	long written;
 	long left;
 	guint8 seq;
@@ -3587,16 +3587,15 @@ GSList *sms_text_prepare_with_alphabet(const char *to, const char *utf8,
 	gsm_encoded = convert_utf8_to_gsm_best_lang(utf8, -1, NULL, &written, 0,
 							alphabet, &used_locking,
 							&used_single);
-	if (gsm_encoded == NULL) {
-		gsize converted;
+	if (!gsm_encoded) {
+		size_t converted;
 
-		ucs2_encoded = g_convert(utf8, -1, "UCS-2BE//TRANSLIT", "UTF-8",
-						NULL, &converted, NULL);
-		written = converted;
+		ucs2_encoded = l_utf8_to_ucs2be(utf8, &converted);
+		if (!ucs2_encoded)
+			return NULL;
+
+		written = converted - 2;
 	}
-
-	if (gsm_encoded == NULL && ucs2_encoded == NULL)
-		return NULL;
 
 	if (gsm_encoded != NULL)
 		template.submit.dcs = 0x00; /* Class Unspecified, 7 Bit */
@@ -3641,7 +3640,7 @@ GSList *sms_text_prepare_with_alphabet(const char *to, const char *utf8,
 		template.submit.udl = written + offset;
 		memcpy(template.submit.ud + offset, ucs2_encoded, written);
 
-		g_free(ucs2_encoded);
+		l_free(ucs2_encoded);
 		return sms_list_append(NULL, &template);
 	}
 
@@ -3716,7 +3715,7 @@ GSList *sms_text_prepare_with_alphabet(const char *to, const char *utf8,
 		g_free(gsm_encoded);
 
 	if (ucs2_encoded)
-		g_free(ucs2_encoded);
+		l_free(ucs2_encoded);
 
 	if (left > 0) {
 		g_slist_free_full(r, g_free);

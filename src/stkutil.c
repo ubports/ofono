@@ -4088,26 +4088,23 @@ static gboolean stk_tlv_builder_append_gsm_unpacked(
 static gboolean stk_tlv_builder_append_ucs2(struct stk_tlv_builder *iter,
 						const char *text)
 {
-	unsigned char *ucs2;
-	gsize gwritten;
+	L_AUTO_FREE_VAR(uint8_t *, ucs2);
+	size_t ucs2_len;
 
-	ucs2 = (unsigned char *) g_convert((const gchar *) text, -1,
-						"UCS-2BE", "UTF-8//TRANSLIT",
-						NULL, &gwritten, NULL);
-	if (ucs2 == NULL)
+	ucs2 = l_utf8_to_ucs2be(text, &ucs2_len);
+	if (!ucs2)
 		return FALSE;
 
-	if (iter->len + gwritten >= iter->max_len) {
-		g_free(ucs2);
+	/* Don't include terminating NULL */
+	ucs2_len -= 2;
+
+	if (iter->len + ucs2_len >= iter->max_len)
 		return FALSE;
-	}
 
 	iter->value[iter->len++] = 0x08;
 
-	memcpy(iter->value + iter->len, ucs2, gwritten);
-	iter->len += gwritten;
-
-	g_free(ucs2);
+	memcpy(iter->value + iter->len, ucs2, ucs2_len);
+	iter->len += ucs2_len;
 
 	return TRUE;
 }
@@ -5307,21 +5304,22 @@ static gboolean build_dataobj_registry_application_data(
 {
 	const struct stk_registry_application_data *rad = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_REGISTRY_APPLICATION_DATA;
-	guint8 dcs, *name;
-	gsize len;
+	uint8_t dcs;
+	L_AUTO_FREE_VAR(uint8_t *, name);
+	size_t len;
 	long gsmlen;
 
 	name = convert_utf8_to_gsm(rad->name, -1, NULL, &gsmlen, 0);
 	len = gsmlen;
 	dcs = 0x04;
-	if (name == NULL) {
-		name = (guint8 *) g_convert((const gchar *) rad->name, -1,
-						"UCS-2BE", "UTF-8//TRANSLIT",
-						NULL, &len, NULL);
-		dcs = 0x08;
-
-		if (name == NULL)
+	if (!name) {
+		name = l_utf8_to_ucs2be(rad->name, &len);
+		if (!name)
 			return FALSE;
+
+		/* len includes null terminator, so strip it */
+		len -= 2;
+		dcs = 0x08;
 	}
 
 	return stk_tlv_builder_open_container(tlv, cr, tag, TRUE) &&
