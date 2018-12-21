@@ -456,7 +456,7 @@ static void test_valid(void)
 			g_assert(back[0] == (c & 0x7f));
 		}
 
-		g_free(back);
+		l_free(back);
 		g_free(verify);
 		g_free(res);
 	}
@@ -520,7 +520,7 @@ static void test_valid_turkish(void)
 			g_assert(back[0] == (c & 0x7f));
 		}
 
-		g_free(back);
+		l_free(back);
 		g_free(verify);
 		g_free(res);
 	}
@@ -598,7 +598,7 @@ static void test_decode_encode(void)
 
 	packed = pack_7bit(gsm_encoded, -1, 0, false, &packed_size, 0xff);
 
-	g_free(gsm_encoded);
+	l_free(gsm_encoded);
 
 	g_assert(packed != NULL);
 
@@ -1010,7 +1010,7 @@ static void test_unicode_to_gsm(void)
 		g_assert(verify == gsm_to_unicode_map[i*2]);
 
 		l_free(res);
-		g_free(back);
+		l_free(back);
 		g_free(utf8);
 	}
 }
