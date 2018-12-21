@@ -2219,7 +2219,8 @@ char *sms_decode_text(GSList *sms_list)
 	const struct sms *sms;
 	int guess_size = g_slist_length(sms_list);
 	char *utf8;
-	GByteArray *utf16 = 0;
+	void *utf16 = NULL;
+	size_t utf16_size = 0;
 
 	if (guess_size == 1)
 		guess_size = 160;
@@ -2303,7 +2304,7 @@ char *sms_decode_text(GSList *sms_list)
 			 * Header is odd, the maximum length of the whole TP-UD
 			 * field is 139 octets
 			 */
-			gssize num_ucs2_chars = (udl_in_bytes - taken) >> 1;
+			size_t num_ucs2_chars = (udl_in_bytes - taken) >> 1;
 			num_ucs2_chars = num_ucs2_chars << 1;
 
 			/*
@@ -2314,25 +2315,32 @@ char *sms_decode_text(GSList *sms_list)
 			 * character in the middle. So accumulate the
 			 * entire message before converting to UTF-8.
 			 */
-			if (!utf16)
-				utf16 = g_byte_array_new();
-
-			g_byte_array_append(utf16, from, num_ucs2_chars);
+			utf16 = l_realloc(utf16, utf16_size + num_ucs2_chars);
+			memcpy(utf16 + utf16_size, from, num_ucs2_chars);
+			utf16_size += num_ucs2_chars;
 		}
 
 	}
 
 	if (utf16) {
-		char *converted = g_convert_with_fallback((const gchar *)
-						utf16->data, utf16->len,
-						"UTF-8//TRANSLIT", "UTF-16BE",
-						NULL, NULL, NULL, NULL);
-		if (converted) {
-			g_string_append(str, converted);
-			g_free(converted);
+		char *converted;
+
+		/* Strings are in UTF16-BE, so convert if needed */
+		if (L_CPU_TO_BE16(0x8000) != 0x8000) {
+			size_t i;
+			uint16_t *p = utf16;
+
+			for (i = 0; i < utf16_size / 2; i++)
+				p[i] = __builtin_bswap16(p[i]);
 		}
 
-		g_byte_array_free(utf16, TRUE);
+		converted = l_utf8_from_utf16(utf16, utf16_size);
+		if (converted) {
+			g_string_append(str, converted);
+			l_free(converted);
+		}
+
+		l_free(utf16);
 	}
 
 	utf8 = g_string_free(str, FALSE);
