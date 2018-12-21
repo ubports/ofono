@@ -3753,11 +3753,8 @@ unsigned char *convert_ucs2_to_gsm_with_lang(const unsigned char *text,
 	res_len = 0;
 
 	for (i = 0; i < len; i += 2) {
-		gunichar c = (in[i] << 8) | in[i + 1];
-		unsigned short converted = GUND;
-
-		if (c > 0xffff)
-			goto err_out;
+		uint16_t c = l_get_be16(in + i);
+		uint16_t converted = GUND;
 
 		converted = unicode_locking_shift_lookup(&t, c);
 
@@ -3775,16 +3772,14 @@ unsigned char *convert_ucs2_to_gsm_with_lang(const unsigned char *text,
 		nchars += 1;
 	}
 
-	res = g_try_malloc(res_len + (terminator ? 1 : 0));
-	if (res == NULL)
-		goto err_out;
+	res = l_malloc(res_len + (terminator ? 1 : 0));
 
 	in = text;
 	out = res;
 
 	for (i = 0; i < len; i += 2) {
-		gunichar c = (in[i] << 8) | in[i + 1];
-		unsigned short converted = GUND;
+		uint16_t c = l_get_be16(in + i);
+		uint16_t converted = GUND;
 
 		converted = unicode_locking_shift_lookup(&t, c);
 
