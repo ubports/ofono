@@ -1009,7 +1009,7 @@ static void test_unicode_to_gsm(void)
 
 		g_assert(verify == gsm_to_unicode_map[i*2]);
 
-		g_free(res);
+		l_free(res);
 		g_free(back);
 		g_free(utf8);
 	}
