@@ -482,24 +482,23 @@ static void ril_gprs_context_deactivate_primary_cb(struct ril_data *data,
 	 * invoked and gcd->deactivate.req will be NULL.
 	 */
 	if (gcd->deactivate.req) {
-		struct ofono_error error;
 		ofono_gprs_context_cb_t cb = gcd->deactivate.cb;
 		gpointer cb_data = gcd->deactivate.data;
 
 		if (ril_status == RIL_E_SUCCESS) {
 			GASSERT(gcd->active_call);
-			ril_error_init_ok(&error);
 			ofono_info("Deactivated data call");
 		} else {
-			ril_error_init_failure(&error);
 			ofono_error("Deactivate failure: %s",
 					ril_error_to_string(ril_status));
 		}
 
 		memset(&gcd->deactivate, 0, sizeof(gcd->deactivate));
 		if (cb) {
+			struct ofono_error error;
+
 			ril_gprs_context_free_active_call(gcd);
-			cb(&error, cb_data);
+			cb(ril_error_ok(&error), cb_data);
 			return;
 		}
 	}
@@ -513,7 +512,7 @@ static void ril_gprs_context_deactivate_primary(struct ofono_gprs_context *gc,
 {
 	struct ril_gprs_context *gcd = ril_gprs_context_get_data(gc);
 
-	GASSERT(gcd->active_call && gcd->active_ctx_cid == id);
+	GASSERT(gcd->active_ctx_cid == id);
 	ofono_info("Deactivating context: %u", id);
 
 	if (gcd->active_call && gcd->active_ctx_cid == id) {
