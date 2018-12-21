@@ -28,6 +28,7 @@
 #include <stdio.h>
 
 #include <glib.h>
+#include <ell/ell.h>
 
 #include <ofono/log.h>
 #include <ofono/modem.h>
@@ -87,12 +88,12 @@ static const unsigned char *ucs2_gsm_to_packed(const char *content,
 		return NULL;
 
 	if (written > 182) {
-		g_free(gsm);
+		l_free(gsm);
 		return NULL;
 	}
 
 	packed = pack_7bit_own_buf(gsm, written, 0, true, msg_len, 0, msg);
-	g_free(gsm);
+	l_free(gsm);
 
 	return packed;
 }
