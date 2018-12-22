@@ -34,6 +34,7 @@
 #include <stdint.h>
 
 #include <glib.h>
+#include <ell/ell.h>
 
 #include <ofono.h>
 #include <ofono/log.h>
@@ -180,29 +181,22 @@ static struct phonebook_entry *handle_adn(size_t len, const unsigned char *msg,
 	if (number_length != UNUSED && number_length != 0) {
 		number_length--;
 		/* '+' + number + terminator */
-		number = g_try_malloc0(2 * number_length + 2);
+		number = g_new(char, 2 * number_length + 2);
+		prefix = 0;
 
-		if (number) {
-			prefix = 0;
-
-			if ((msg[number_start + 1] & TON_MASK)
-					== TON_INTERNATIONAL) {
-				number[0] = '+';
-				prefix = 1;
-			}
-
-			for (i = 0; i < number_length; i++) {
-
-				number[2 * i + prefix] =
-					digit_to_utf8[msg[number_start + 2 + i]
-							& 0x0f];
-				number[2 * i + 1 + prefix] =
-					digit_to_utf8[msg[number_start + 2 + i]
-							>> 4];
-			}
-
-			extension_record = msg[len - 1];
+		if ((msg[number_start + 1] & TON_MASK) == TON_INTERNATIONAL) {
+			number[0] = '+';
+			prefix = 1;
 		}
+
+		for (i = 0; i < number_length; i++) {
+			number[2 * i + prefix] =
+				digit_to_utf8[msg[number_start + 2 + i] & 0x0f];
+			number[2 * i + 1 + prefix] =
+				digit_to_utf8[msg[number_start + 2 + i] >> 4];
+		}
+
+		extension_record = msg[len - 1];
 	}
 
 	DBG("ADN name %s, number %s ", name, number);
@@ -212,12 +206,7 @@ static struct phonebook_entry *handle_adn(size_t len, const unsigned char *msg,
 	if ((name == NULL || *name == '\0') && number == NULL)
 		goto end;
 
-	new_entry = g_try_malloc0(sizeof(*new_entry));
-	if (new_entry == NULL) {
-		ofono_error("%s: out of memory", __func__);
-		goto end;
-	}
-
+	new_entry = l_new(struct phonebook_entry, 1);
 	new_entry->name = name;
 	new_entry->number = number;
 
@@ -246,8 +235,8 @@ static struct phonebook_entry *handle_adn(size_t len, const unsigned char *msg,
 	return new_entry;
 
 end:
-	g_free(name);
-	g_free(number);
+	l_free(name);
+	l_free(number);
 
 	return NULL;
 }
@@ -314,17 +303,17 @@ static void handle_sne(size_t len, const unsigned char *msg,
 		if (entry) {
 			/* If one already exists, delete it */
 			if (entry->sne)
-				g_free(entry->sne);
+				l_free(entry->sne);
 
 			DBG("Adding SNE %s to %d", sne, rec_data->adn_idx);
 			DBG("name %s", entry->name);
 
 			entry->sne = sne;
 		} else {
-			g_free(sne);
+			l_free(sne);
 		}
 	} else {
-		g_free(sne);
+		l_free(sne);
 	}
 }
 
@@ -358,9 +347,7 @@ static void handle_anr(size_t len,
 
 	number_length--;
 	/* '+' + number + terminator */
-	anr = g_try_malloc0(2 * number_length + 2);
-	if (anr == NULL)
-		return;
+	anr = l_new(char, 2 * number_length + 2);
 
 	prefix = 0;
 	if ((msg[2] & TON_MASK) == TON_INTERNATIONAL) {
@@ -376,13 +363,13 @@ static void handle_anr(size_t len,
 	entry = g_tree_lookup(ref->phonebook,
 				GINT_TO_POINTER(rec_data->adn_idx));
 	if (entry == NULL) {
-		g_free(anr);
+		l_free(anr);
 		return;
 	}
 
 	/* If one already exists, delete it */
 	if (entry->anr)
-		g_free(entry->anr);
+		l_free(entry->anr);
 
 	DBG("Adding ANR %s to %d", anr, rec_data->adn_idx);
 	DBG("name %s", entry->name);
@@ -427,20 +414,20 @@ static void handle_email(size_t len, const unsigned char *msg,
 
 	email = sim_string_to_utf8(msg, len);
 	if (email == NULL || *email == '\0') {
-		g_free(email);
+		l_free(email);
 		return;
 	}
 
 	entry = g_tree_lookup(ref->phonebook,
 				GINT_TO_POINTER(rec_data->adn_idx));
 	if (entry == NULL) {
-		g_free(email);
+		l_free(email);
 		return;
 	}
 
 	/* if one already exists, delete it */
 	if (entry->email)
-		g_free(entry->email);
+		l_free(entry->email);
 
 	DBG("Adding email to entry %d", rec_data->adn_idx);
 	DBG("name %s", entry->name);
@@ -582,12 +569,12 @@ static gboolean export_entry(gpointer key, gpointer value, gpointer data)
 				entry->email,
 				NULL, NULL);
 
-	g_free(entry->name);
-	g_free(entry->number);
-	g_free(entry->email);
-	g_free(entry->anr);
-	g_free(entry->sne);
-	g_free(entry);
+	l_free(entry->name);
+	l_free(entry->number);
+	l_free(entry->email);
+	l_free(entry->anr);
+	l_free(entry->sne);
+	l_free(entry);
 
 	return FALSE;
 }
