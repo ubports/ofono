@@ -359,7 +359,7 @@ static void test_invalid(void)
 	g_assert(nread == 0);
 	g_assert(nwritten == 0);
 	g_assert(res[0] == '\0');
-	g_free(res);
+	l_free(res);
 
 	/*
 	 * In case of invalid GSM extended code, we should display
@@ -372,13 +372,13 @@ static void test_invalid(void)
 	exp_code = gsm_to_unicode_map[invalid_gsm_extended[1]*2 + 1];
 
 	exp_res_length = UTF8_LENGTH(exp_code);
-	exp_res = g_new0(char, exp_res_length + 1);
-	g_unichar_to_utf8(exp_code, exp_res);
+	exp_res = l_new(char, exp_res_length + 1);
+	l_utf8_from_wchar(exp_code, exp_res);
 
-	g_assert(g_strcmp0(res, exp_res) == 0);
+	g_assert(!strcmp(res, exp_res));
 	g_assert(nread == exp_res_length);
-	g_free(exp_res);
-	g_free(res);
+	l_free(exp_res);
+	l_free(res);
 
 	res = convert_gsm_to_utf8(invalid_gsm_extended_len,
 					sizeof(invalid_gsm_extended_len),
@@ -407,7 +407,7 @@ static void test_valid(void)
 	char *res;
 	int i;
 	long size;
-	gunichar *verify;
+	wchar_t verify;
 	unsigned char *back;
 
 	unsigned char buf[2];
@@ -436,17 +436,12 @@ static void test_valid(void)
 
 		g_assert(nread == size);
 
-		verify = g_utf8_to_ucs4(res, -1, NULL, NULL, NULL);
-
-		g_assert(verify[0] == gsm_to_unicode_map[i*2+1]);
-		g_assert(verify[1] == 0);
-
-		g_assert(nwritten == UTF8_LENGTH(verify[0]));
+		g_assert(l_utf8_get_codepoint(res, nwritten, &verify) > 0);
+		g_assert(verify == gsm_to_unicode_map[i*2+1]);
+		g_assert(nwritten == UTF8_LENGTH(verify));
 
 		back = convert_utf8_to_gsm(res, -1, &nread, &nwritten, 0);
-
 		g_assert(back);
-
 		g_assert(nwritten == size);
 
 		if (c & 0x1b00) {
@@ -457,8 +452,7 @@ static void test_valid(void)
 		}
 
 		l_free(back);
-		g_free(verify);
-		g_free(res);
+		l_free(res);
 	}
 }
 
@@ -469,7 +463,7 @@ static void test_valid_turkish(void)
 	char *res;
 	int i;
 	long size;
-	gunichar *verify;
+	wchar_t verify;
 	unsigned char *back;
 
 	unsigned char buf[2];
@@ -499,18 +493,13 @@ static void test_valid_turkish(void)
 
 		g_assert(nread == size);
 
-		verify = g_utf8_to_ucs4(res, -1, NULL, NULL, NULL);
-
-		g_assert(verify[0] == gsm_turkish_to_unicode_map[i*2+1]);
-		g_assert(verify[1] == 0);
-
-		g_assert(nwritten == UTF8_LENGTH(verify[0]));
+		g_assert(l_utf8_get_codepoint(res, nwritten, &verify) > 0);
+		g_assert(verify == gsm_turkish_to_unicode_map[i*2+1]);
+		g_assert(nwritten == UTF8_LENGTH(verify));
 
 		back = convert_utf8_to_gsm_with_lang(res, -1, &nread,
 							&nwritten, 0, 1, 1);
-
 		g_assert(back);
-
 		g_assert(nwritten == size);
 
 		if (c & 0x1b00) {
@@ -521,8 +510,7 @@ static void test_valid_turkish(void)
 		}
 
 		l_free(back);
-		g_free(verify);
-		g_free(res);
+		l_free(res);
 	}
 }
 
@@ -572,8 +560,7 @@ static void test_decode_encode(void)
 		printf("String unpacked to %ld bytes\n", unpacked_size);
 
 	utf8 = convert_gsm_to_utf8(gsm, -1, NULL, NULL, 0xff);
-
-	g_assert(utf8 != NULL);
+	g_assert(utf8);
 
 	if (VERBOSE)
 		printf("String is: -->%s<--\n", utf8);
@@ -593,7 +580,7 @@ static void test_decode_encode(void)
 	g_assert(gsm_encoded_size == unpacked_size);
 	g_assert(memcmp(gsm_encoded, gsm, gsm_encoded_size) == 0);
 
-	g_free(utf8);
+	l_free(utf8);
 	l_free(gsm);
 
 	packed = pack_7bit(gsm_encoded, -1, 0, false, &packed_size, 0xff);
@@ -907,43 +894,43 @@ static void test_sim(void)
 
 	g_assert(utf8);
 	g_assert(strcmp(utf8, "oFono") == 0);
-	g_free(utf8);
+	l_free(utf8);
 
 	utf8 = sim_string_to_utf8(sim_80_1, sizeof(sim_80_1));
 	g_assert(utf8);
 	g_assert(strcmp(utf8, "ono") == 0);
-	g_free(utf8);
+	l_free(utf8);
 
 	utf8 = sim_string_to_utf8(sim_80_2, sizeof(sim_80_2));
 	g_assert(utf8);
 	g_assert(strcmp(utf8, "ono") == 0);
-	g_free(utf8);
+	l_free(utf8);
 
 	utf8 = sim_string_to_utf8(sim_80_3, sizeof(sim_80_3));
 	g_assert(utf8);
 	g_assert(strcmp(utf8, "ono") == 0);
-	g_free(utf8);
+	l_free(utf8);
 
 	utf8 = sim_string_to_utf8(sim_81_0, sizeof(sim_81_0));
 	g_assert(utf8);
-	g_free(utf8);
+	l_free(utf8);
 
 	utf8 = sim_string_to_utf8(sim_81_2, sizeof(sim_81_2));
 	g_assert(utf8);
-	g_free(utf8);
+	l_free(utf8);
 
 	utf8 = sim_string_to_utf8(sim_81_1, sizeof(sim_81_1));
 	g_assert(utf8);
 	g_assert(strcmp(utf8, "ono") == 0);
-	g_free(utf8);
+	l_free(utf8);
 
 	utf8 = sim_string_to_utf8(sim_82_0, sizeof(sim_82_0));
 	g_assert(utf8);
-	g_free(utf8);
+	l_free(utf8);
 
 	utf8 = sim_string_to_utf8(sim_82_1, sizeof(sim_82_1));
 	g_assert(utf8);
-	g_free(utf8);
+	l_free(utf8);
 
 	utf8 = sim_string_to_utf8(sim_82_2, sizeof(sim_82_2));
 	g_assert(utf8 == NULL);
@@ -951,7 +938,7 @@ static void test_sim(void)
 	utf8 = sim_string_to_utf8(sim_7bit_empty, sizeof(sim_7bit_empty));
 	g_assert(utf8);
 	g_assert(strcmp(utf8, "") == 0);
-	g_free(utf8);
+	l_free(utf8);
 }
 
 static void test_unicode_to_gsm(void)
@@ -963,7 +950,7 @@ static void test_unicode_to_gsm(void)
 	char *utf8;
 	unsigned char buf[2];
 	unsigned char *back;
-	gunichar2 verify;
+	uint16_t verify;
 
 	static int map_size =
 		sizeof(gsm_to_unicode_map) / sizeof(unsigned short) / 2;
@@ -986,9 +973,7 @@ static void test_unicode_to_gsm(void)
 		else
 			g_assert(nwritten == 1);
 
-		utf8 = g_convert((const gchar *) buf, 2,
-				"UTF-8", "UCS-2BE",
-				NULL, NULL, NULL);
+		utf8 = l_utf8_from_ucs2be(buf, 2);
 		g_assert(utf8);
 
 		back = convert_utf8_to_gsm(utf8, strlen(utf8), &nread,
@@ -1011,7 +996,7 @@ static void test_unicode_to_gsm(void)
 
 		l_free(res);
 		l_free(back);
-		g_free(utf8);
+		l_free(utf8);
 	}
 }
 

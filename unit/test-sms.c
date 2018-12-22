@@ -222,7 +222,7 @@ static void test_simple_deliver(void)
 
 	g_assert(strcmp(utf8, "How are you?") == 0);
 
-	g_free(utf8);
+	l_free(utf8);
 }
 
 static void test_alnum_sender(void)
@@ -293,7 +293,7 @@ static void test_alnum_sender(void)
 
 	g_assert(strcmp(utf8, "Testmail") == 0);
 
-	g_free(utf8);
+	l_free(utf8);
 }
 
 static void test_deliver_encode(void)
@@ -467,7 +467,7 @@ static void test_simple_submit(void)
 
 	g_assert(strcmp(utf8, "hellohello") == 0);
 
-	g_free(utf8);
+	l_free(utf8);
 }
 
 static void test_submit_encode(void)
@@ -825,7 +825,7 @@ static void test_sms_charset(gconstpointer param)
 
 	g_assert(strcmp(data->expected_text, text) == 0);
 
-	g_free(text);
+	l_free(text);
 }
 
 struct text_format_header {
@@ -1043,7 +1043,7 @@ static void test_ems_udh(gconstpointer data)
 
 	g_assert(strcmp(utf8, test->expected) == 0);
 
-	g_free(utf8);
+	l_free(utf8);
 }
 
 static const char *assembly_pdu1 = "038121F340048155550119906041001222048C0500"
