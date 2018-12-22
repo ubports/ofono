@@ -158,10 +158,7 @@ static gboolean parse_dataobj_common_text(struct comprehension_tlv_iter *iter,
 
 	data = comprehension_tlv_iter_get_data(iter);
 
-	*text = g_try_malloc(len + 1);
-	if (*text == NULL)
-		return FALSE;
-
+	*text = l_malloc(len + 1);
 	memcpy(*text, data, len);
 	(*text)[len] = '\0';
 
@@ -182,10 +179,7 @@ static gboolean parse_dataobj_common_byte_array(
 	data = comprehension_tlv_iter_get_data(iter);
 	array->len = len;
 
-	array->array = g_try_malloc(len);
-	if (array->array == NULL)
-		return FALSE;
-
+	array->array = l_malloc(len);
 	memcpy(array->array, data, len);
 
 	return TRUE;
@@ -286,10 +280,7 @@ static gboolean parse_dataobj_address(struct comprehension_tlv_iter *iter,
 
 	data = comprehension_tlv_iter_get_data(iter);
 
-	number = g_try_malloc(len * 2 - 1);
-	if (number == NULL)
-		return FALSE;
-
+	number = l_malloc(len * 2 - 1);
 	addr->ton_npi = data[0];
 	addr->number = number;
 	sim_extract_bcd_number(data + 1, len - 1, addr->number);
@@ -504,10 +495,7 @@ static gboolean parse_dataobj_result(struct comprehension_tlv_iter *iter,
 				(data[0] == 0x3c) || (data[0] == 0x3d)))
 		return FALSE;
 
-	additional = g_try_malloc(len - 1);
-	if (additional == NULL)
-		return FALSE;
-
+	additional = l_malloc(len - 1);
 	result->type = data[0];
 	result->additional_len = len - 1;
 	result->additional = additional;
@@ -551,10 +539,7 @@ static gboolean parse_dataobj_ss(struct comprehension_tlv_iter *iter,
 
 	data = comprehension_tlv_iter_get_data(iter);
 
-	s = g_try_malloc(len * 2 - 1);
-	if (s == NULL)
-		return FALSE;
-
+	s = l_malloc(len * 2 - 1);
 	ss->ton_npi = data[0];
 	ss->ss = s;
 	sim_extract_bcd_number(data + 1, len - 1, ss->ss);
@@ -1126,10 +1111,7 @@ static gboolean parse_dataobj_dtmf_string(struct comprehension_tlv_iter *iter,
 
 	data = comprehension_tlv_iter_get_data(iter);
 
-	*dtmf = g_try_malloc(len * 2 + 1);
-	if (*dtmf == NULL)
-		return FALSE;
-
+	*dtmf = l_malloc(len * 2 + 1);
 	sim_extract_bcd_number(data, len, *dtmf);
 
 	return TRUE;
@@ -1462,10 +1444,7 @@ static gboolean parse_dataobj_service_record(
 	sr->serv_id = data[1];
 	sr->len = len - 2;
 
-	sr->serv_rec = g_try_malloc(sr->len);
-	if (sr->serv_rec == NULL)
-		return FALSE;
-
+	sr->serv_rec = l_malloc(sr->len);
 	memcpy(sr->serv_rec, data + 2, sr->len);
 
 	return TRUE;
@@ -1492,10 +1471,7 @@ static gboolean parse_dataobj_device_filter(struct comprehension_tlv_iter *iter,
 	df->tech_id = data[0];
 	df->len = len - 1;
 
-	df->dev_filter = g_try_malloc(df->len);
-	if (df->dev_filter == NULL)
-		return FALSE;
-
+	df->dev_filter = l_malloc(df->len);
 	memcpy(df->dev_filter, data + 1, df->len);
 
 	return TRUE;
@@ -1522,10 +1498,7 @@ static gboolean parse_dataobj_service_search(
 	ss->tech_id = data[0];
 	ss->len = len - 1;
 
-	ss->ser_search = g_try_malloc(ss->len);
-	if (ss->ser_search == NULL)
-		return FALSE;
-
+	ss->ser_search = l_malloc(ss->len);
 	memcpy(ss->ser_search, data + 1, ss->len);
 
 	return TRUE;
@@ -1552,10 +1525,7 @@ static gboolean parse_dataobj_attribute_info(
 	ai->tech_id = data[0];
 	ai->len = len - 1;
 
-	ai->attr_info = g_try_malloc(ai->len);
-	if (ai->attr_info == NULL)
-		return FALSE;
-
+	ai->attr_info = l_malloc(ai->len);
 	memcpy(ai->attr_info, data + 1, ai->len);
 
 	return TRUE;
@@ -1658,7 +1628,7 @@ static gboolean parse_dataobj_network_access_name(
 	}
 
 	decoded_apn[offset] = '\0';
-	*apn = g_strdup(decoded_apn);
+	*apn = l_strdup(decoded_apn);
 
 	return TRUE;
 }
@@ -2716,7 +2686,7 @@ static enum stk_command_parse_result parse_select_item(
 static void destroy_send_sms(struct stk_command *command)
 {
 	l_free(command->send_sms.alpha_id);
-	g_free(command->send_sms.cdma_sms.array);
+	l_free(command->send_sms.cdma_sms.array);
 }
 
 static enum stk_command_parse_result parse_send_sms(
@@ -2813,15 +2783,15 @@ set_addr:
 	obj->gsm_sms.sc_addr.number_type = (sc_address.ton_npi >> 4) & 7;
 
 out:
-	g_free(sc_address.number);
+	l_free(sc_address.number);
 
 	return status;
 }
 
 static void destroy_send_ss(struct stk_command *command)
 {
-	g_free(command->send_ss.ss.ss);
 	l_free(command->send_ss.alpha_id);
+	l_free(command->send_ss.ss.ss);
 }
 
 static enum stk_command_parse_result parse_send_ss(struct stk_command *command,
@@ -2886,8 +2856,8 @@ static enum stk_command_parse_result parse_send_ussd(
 
 static void destroy_setup_call(struct stk_command *command)
 {
-	g_free(command->setup_call.addr.number);
 	l_free(command->setup_call.alpha_id_usr_cfm);
+	l_free(command->setup_call.addr.number);
 	l_free(command->setup_call.alpha_id_call_setup);
 }
 
@@ -3157,8 +3127,8 @@ static enum stk_command_parse_result parse_setup_idle_mode_text(
 
 static void destroy_run_at_command(struct stk_command *command)
 {
-	g_free(command->run_at_command.at_command);
 	l_free(command->run_at_command.alpha_id);
+	l_free(command->run_at_command.at_command);
 }
 
 static enum stk_command_parse_result parse_run_at_command(
@@ -3196,8 +3166,8 @@ static enum stk_command_parse_result parse_run_at_command(
 
 static void destroy_send_dtmf(struct stk_command *command)
 {
-	g_free(command->send_dtmf.dtmf);
 	l_free(command->send_dtmf.alpha_id);
+	l_free(command->send_dtmf.dtmf);
 }
 
 static enum stk_command_parse_result parse_send_dtmf(
@@ -3253,12 +3223,12 @@ static enum stk_command_parse_result parse_language_notification(
 
 static void destroy_launch_browser(struct stk_command *command)
 {
-	g_free(command->launch_browser.url);
-	g_free(command->launch_browser.bearer.array);
+	l_free(command->launch_browser.url);
+	l_free(command->launch_browser.bearer.array);
 	g_slist_free_full(command->launch_browser.prov_file_refs, g_free);
-	g_free(command->launch_browser.network_name.array);
 	l_free(command->launch_browser.text_gateway_proxy_id);
 	l_free(command->launch_browser.alpha_id);
+	l_free(command->launch_browser.network_name.array);
 	l_free(command->launch_browser.text_usr);
 	l_free(command->launch_browser.text_passwd);
 }
@@ -3312,8 +3282,8 @@ static enum stk_command_parse_result parse_launch_browser(
 
 static void destroy_open_channel(struct stk_command *command)
 {
-	g_free(command->open_channel.apn);
 	l_free(command->open_channel.alpha_id);
+	l_free(command->open_channel.apn);
 	l_free(command->open_channel.text_usr);
 	l_free(command->open_channel.text_passwd);
 }
@@ -3451,8 +3421,8 @@ static enum stk_command_parse_result parse_receive_data(
 
 static void destroy_send_data(struct stk_command *command)
 {
-	g_free(command->send_data.data.array);
 	l_free(command->send_data.alpha_id);
+	l_free(command->send_data.data.array);
 }
 
 static enum stk_command_parse_result parse_send_data(
@@ -3507,9 +3477,9 @@ static enum stk_command_parse_result parse_get_channel_status(
 
 static void destroy_service_search(struct stk_command *command)
 {
-	g_free(command->service_search.serv_search.ser_search);
-	g_free(command->service_search.dev_filter.dev_filter);
 	l_free(command->service_search.alpha_id);
+	l_free(command->service_search.serv_search.ser_search);
+	l_free(command->service_search.dev_filter.dev_filter);
 }
 
 static enum stk_command_parse_result parse_service_search(
@@ -3544,8 +3514,8 @@ static enum stk_command_parse_result parse_service_search(
 
 static void destroy_get_service_info(struct stk_command *command)
 {
-	g_free(command->get_service_info.attr_info.attr_info);
 	l_free(command->get_service_info.alpha_id);
+	l_free(command->get_service_info.attr_info.attr_info);
 }
 
 static enum stk_command_parse_result parse_get_service_info(
@@ -3578,7 +3548,7 @@ static enum stk_command_parse_result parse_get_service_info(
 
 static void destroy_declare_service(struct stk_command *command)
 {
-	g_free(command->declare_service.serv_rec.serv_rec);
+	l_free(command->declare_service.serv_rec.serv_rec);
 }
 
 static enum stk_command_parse_result parse_declare_service(
