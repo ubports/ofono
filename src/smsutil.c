@@ -677,10 +677,9 @@ gboolean sms_decode_address_field(const unsigned char *pdu, int len,
 			return FALSE;
 
 		utf8 = convert_gsm_to_utf8(res, written, NULL, NULL, 0);
-
 		l_free(res);
 
-		if (utf8 == NULL)
+		if (!utf8)
 			return FALSE;
 
 		/*
@@ -688,13 +687,12 @@ gboolean sms_decode_address_field(const unsigned char *pdu, int len,
 		 * 22 bytes+terminator in UTF-8.
 		 */
 		if (strlen(utf8) > 22) {
-			g_free(utf8);
+			l_free(utf8);
 			return FALSE;
 		}
 
 		strcpy(out->address, utf8);
-
-		g_free(utf8);
+		l_free(utf8);
 	}
 
 	return TRUE;
@@ -2294,7 +2292,7 @@ char *sms_decode_text(GSList *sms_list)
 								single_shift);
 			if (converted) {
 				g_string_append(str, converted);
-				g_free(converted);
+				l_free(converted);
 			}
 		} else {
 			const guint8 *from = ud + taken;
@@ -4107,7 +4105,7 @@ char *cbs_decode_text(GSList *cbs_list, char *iso639_lang)
 		}
 	}
 
-	buf = g_new(unsigned char, bufsize);
+	buf = l_new(unsigned char, bufsize);
 	bufsize = 0;
 
 	for (l = cbs_list; l; l = l->next) {
@@ -4203,10 +4201,9 @@ char *cbs_decode_text(GSList *cbs_list, char *iso639_lang)
 	if (charset == SMS_CHARSET_7BIT)
 		utf8 = convert_gsm_to_utf8(buf, bufsize, NULL, NULL, 0);
 	else
-		utf8 = g_convert((char *) buf, bufsize, "UTF-8//TRANSLIT",
-					"UCS-2BE", NULL, NULL, NULL);
+		utf8 = l_utf8_from_ucs2be(buf, bufsize);
 
-	g_free(buf);
+	l_free(buf);
 	return utf8;
 }
 

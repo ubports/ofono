@@ -2965,10 +2965,7 @@ char *convert_gsm_to_utf8_with_lang(const unsigned char *text, long len,
 		res_length += UTF8_LENGTH(c);
 	}
 
-	res = g_try_malloc(res_length + 1);
-	if (res == NULL)
-		goto error;
-
+	res = l_malloc(res_length + 1);
 	out = res;
 
 	i = 0;
@@ -2983,7 +2980,7 @@ char *convert_gsm_to_utf8_with_lang(const unsigned char *text, long len,
 		} else
 			c = gsm_locking_shift_lookup(&t, text[i]);
 
-		out += g_unichar_to_utf8(c, out);
+		out += l_utf8_from_wchar(c, out);
 
 		++i;
 	}
@@ -3567,9 +3564,7 @@ char *sim_string_to_utf8(const unsigned char *buffer, int length)
 			if (buffer[i] == 0xff && buffer[i + 1] == 0xff)
 				break;
 
-		return g_convert((char *) buffer + 1, i - 1,
-					"UTF-8//TRANSLIT", "UCS-2BE",
-					NULL, NULL, NULL);
+		return l_utf8_from_ucs2be(buffer + 1, i - 1);
 	case 0x81:
 		if (length < 3 || (buffer[1] > (length - 3)))
 			return NULL;
@@ -3643,10 +3638,7 @@ char *sim_string_to_utf8(const unsigned char *buffer, int length)
 		if (buffer[i] != 0xff)
 			return NULL;
 
-	utf8 = g_try_malloc(res_len + 1);
-	if (utf8 == NULL)
-		return NULL;
-
+	utf8 = l_malloc(res_len + 1);
 	i = offset;
 	out = utf8;
 
@@ -3661,7 +3653,7 @@ char *sim_string_to_utf8(const unsigned char *buffer, int length)
 		} else
 			c = gsm_locking_shift_lookup(&t, buffer[i++]);
 
-		out += g_unichar_to_utf8(c, out);
+		out += l_utf8_from_wchar(c, out);
 	}
 
 	*out = '\0';

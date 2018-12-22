@@ -110,9 +110,7 @@ static char *decode_text(unsigned char dcs, int len, const unsigned char *data)
 		utf8 = convert_gsm_to_utf8(data, len, NULL, NULL, 0);
 		break;
 	case SMS_CHARSET_UCS2:
-		utf8 = g_convert((const gchar *) data, len,
-					"UTF-8//TRANSLIT", "UCS-2BE",
-					NULL, NULL, NULL);
+		utf8 = l_utf8_from_ucs2be(data, len);
 		break;
 	default:
 		utf8 = NULL;
@@ -574,7 +572,7 @@ static gboolean parse_dataobj_text(struct comprehension_tlv_iter *iter,
 	char *utf8;
 
 	if (len <= 1) {
-		*text = g_try_malloc0(1);
+		*text = l_new(char, 1);
 		return TRUE;
 	}
 
@@ -2256,8 +2254,8 @@ static dataobj_handler handler_for_type(enum stk_data_object_type type)
 static void destroy_stk_item(gpointer pointer)
 {
 	struct stk_item *item = pointer;
-	g_free(item->text);
-	g_free(item);
+	l_free(item->text);
+	l_free(item);
 }
 
 static gboolean parse_item_list(struct comprehension_tlv_iter *iter,
@@ -2283,7 +2281,7 @@ static gboolean parse_item_list(struct comprehension_tlv_iter *iter,
 			}
 
 			list = g_slist_prepend(list,
-						g_memdup(&item, sizeof(item)));
+						l_memdup(&item, sizeof(item)));
 		}
 	} while (comprehension_tlv_iter_next(iter) == TRUE &&
 			comprehension_tlv_iter_get_tag(iter) == tag);
@@ -2300,7 +2298,6 @@ static gboolean parse_item_list(struct comprehension_tlv_iter *iter,
 
 	g_slist_free_full(list, destroy_stk_item);
 	return FALSE;
-
 }
 
 static gboolean parse_provisioning_list(struct comprehension_tlv_iter *iter,
@@ -2432,7 +2429,7 @@ static enum stk_command_parse_result parse_dataobj(
 
 static void destroy_display_text(struct stk_command *command)
 {
-	g_free(command->display_text.text);
+	l_free(command->display_text.text);
 }
 
 static enum stk_command_parse_result parse_display_text(
@@ -2472,7 +2469,7 @@ static enum stk_command_parse_result parse_display_text(
 
 static void destroy_get_inkey(struct stk_command *command)
 {
-	g_free(command->get_inkey.text);
+	l_free(command->get_inkey.text);
 }
 
 static enum stk_command_parse_result parse_get_inkey(
@@ -2510,8 +2507,8 @@ static enum stk_command_parse_result parse_get_inkey(
 
 static void destroy_get_input(struct stk_command *command)
 {
-	g_free(command->get_input.text);
-	g_free(command->get_input.default_text);
+	l_free(command->get_input.text);
+	l_free(command->get_input.default_text);
 }
 
 static enum stk_command_parse_result parse_get_input(
@@ -2565,7 +2562,7 @@ static enum stk_command_parse_result parse_more_time(
 
 static void destroy_play_tone(struct stk_command *command)
 {
-	g_free(command->play_tone.alpha_id);
+	l_free(command->play_tone.alpha_id);
 }
 
 static enum stk_command_parse_result parse_play_tone(
@@ -2622,7 +2619,7 @@ static enum stk_command_parse_result parse_poll_interval(
 
 static void destroy_setup_menu(struct stk_command *command)
 {
-	g_free(command->setup_menu.alpha_id);
+	l_free(command->setup_menu.alpha_id);
 	g_slist_free_full(command->setup_menu.items, destroy_stk_item);
 }
 
@@ -2667,7 +2664,7 @@ static enum stk_command_parse_result parse_setup_menu(
 
 static void destroy_select_item(struct stk_command *command)
 {
-	g_free(command->select_item.alpha_id);
+	l_free(command->select_item.alpha_id);
 	g_slist_free_full(command->select_item.items, destroy_stk_item);
 }
 
@@ -2718,7 +2715,7 @@ static enum stk_command_parse_result parse_select_item(
 
 static void destroy_send_sms(struct stk_command *command)
 {
-	g_free(command->send_sms.alpha_id);
+	l_free(command->send_sms.alpha_id);
 	g_free(command->send_sms.cdma_sms.array);
 }
 
@@ -2823,8 +2820,8 @@ out:
 
 static void destroy_send_ss(struct stk_command *command)
 {
-	g_free(command->send_ss.alpha_id);
 	g_free(command->send_ss.ss.ss);
+	l_free(command->send_ss.alpha_id);
 }
 
 static enum stk_command_parse_result parse_send_ss(struct stk_command *command,
@@ -2856,7 +2853,7 @@ static enum stk_command_parse_result parse_send_ss(struct stk_command *command,
 
 static void destroy_send_ussd(struct stk_command *command)
 {
-	g_free(command->send_ussd.alpha_id);
+	l_free(command->send_ussd.alpha_id);
 }
 
 static enum stk_command_parse_result parse_send_ussd(
@@ -2889,9 +2886,9 @@ static enum stk_command_parse_result parse_send_ussd(
 
 static void destroy_setup_call(struct stk_command *command)
 {
-	g_free(command->setup_call.alpha_id_usr_cfm);
 	g_free(command->setup_call.addr.number);
-	g_free(command->setup_call.alpha_id_call_setup);
+	l_free(command->setup_call.alpha_id_usr_cfm);
+	l_free(command->setup_call.alpha_id_call_setup);
 }
 
 static enum stk_command_parse_result parse_setup_call(
@@ -2944,7 +2941,7 @@ static enum stk_command_parse_result parse_setup_call(
 static void destroy_refresh(struct stk_command *command)
 {
 	g_slist_free_full(command->refresh.file_list, g_free);
-	g_free(command->refresh.alpha_id);
+	l_free(command->refresh.alpha_id);
 }
 
 static enum stk_command_parse_result parse_refresh(
@@ -3123,7 +3120,7 @@ static enum stk_command_parse_result parse_timer_mgmt(
 
 static void destroy_setup_idle_mode_text(struct stk_command *command)
 {
-	g_free(command->setup_idle_mode_text.text);
+	l_free(command->setup_idle_mode_text.text);
 }
 
 static enum stk_command_parse_result parse_setup_idle_mode_text(
@@ -3160,8 +3157,8 @@ static enum stk_command_parse_result parse_setup_idle_mode_text(
 
 static void destroy_run_at_command(struct stk_command *command)
 {
-	g_free(command->run_at_command.alpha_id);
 	g_free(command->run_at_command.at_command);
+	l_free(command->run_at_command.alpha_id);
 }
 
 static enum stk_command_parse_result parse_run_at_command(
@@ -3199,8 +3196,8 @@ static enum stk_command_parse_result parse_run_at_command(
 
 static void destroy_send_dtmf(struct stk_command *command)
 {
-	g_free(command->send_dtmf.alpha_id);
 	g_free(command->send_dtmf.dtmf);
+	l_free(command->send_dtmf.alpha_id);
 }
 
 static enum stk_command_parse_result parse_send_dtmf(
@@ -3259,11 +3256,11 @@ static void destroy_launch_browser(struct stk_command *command)
 	g_free(command->launch_browser.url);
 	g_free(command->launch_browser.bearer.array);
 	g_slist_free_full(command->launch_browser.prov_file_refs, g_free);
-	g_free(command->launch_browser.text_gateway_proxy_id);
-	g_free(command->launch_browser.alpha_id);
 	g_free(command->launch_browser.network_name.array);
-	g_free(command->launch_browser.text_usr);
-	g_free(command->launch_browser.text_passwd);
+	l_free(command->launch_browser.text_gateway_proxy_id);
+	l_free(command->launch_browser.alpha_id);
+	l_free(command->launch_browser.text_usr);
+	l_free(command->launch_browser.text_passwd);
 }
 
 static enum stk_command_parse_result parse_launch_browser(
@@ -3315,10 +3312,10 @@ static enum stk_command_parse_result parse_launch_browser(
 
 static void destroy_open_channel(struct stk_command *command)
 {
-	g_free(command->open_channel.alpha_id);
 	g_free(command->open_channel.apn);
-	g_free(command->open_channel.text_usr);
-	g_free(command->open_channel.text_passwd);
+	l_free(command->open_channel.alpha_id);
+	l_free(command->open_channel.text_usr);
+	l_free(command->open_channel.text_passwd);
 }
 
 static enum stk_command_parse_result parse_open_channel(
@@ -3379,7 +3376,7 @@ static enum stk_command_parse_result parse_open_channel(
 
 static void destroy_close_channel(struct stk_command *command)
 {
-	g_free(command->close_channel.alpha_id);
+	l_free(command->close_channel.alpha_id);
 }
 
 static enum stk_command_parse_result parse_close_channel(
@@ -3415,7 +3412,7 @@ static enum stk_command_parse_result parse_close_channel(
 
 static void destroy_receive_data(struct stk_command *command)
 {
-	g_free(command->receive_data.alpha_id);
+	l_free(command->receive_data.alpha_id);
 }
 
 static enum stk_command_parse_result parse_receive_data(
@@ -3454,8 +3451,8 @@ static enum stk_command_parse_result parse_receive_data(
 
 static void destroy_send_data(struct stk_command *command)
 {
-	g_free(command->send_data.alpha_id);
 	g_free(command->send_data.data.array);
+	l_free(command->send_data.alpha_id);
 }
 
 static enum stk_command_parse_result parse_send_data(
@@ -3510,9 +3507,9 @@ static enum stk_command_parse_result parse_get_channel_status(
 
 static void destroy_service_search(struct stk_command *command)
 {
-	g_free(command->service_search.alpha_id);
 	g_free(command->service_search.serv_search.ser_search);
 	g_free(command->service_search.dev_filter.dev_filter);
+	l_free(command->service_search.alpha_id);
 }
 
 static enum stk_command_parse_result parse_service_search(
@@ -3547,8 +3544,8 @@ static enum stk_command_parse_result parse_service_search(
 
 static void destroy_get_service_info(struct stk_command *command)
 {
-	g_free(command->get_service_info.alpha_id);
 	g_free(command->get_service_info.attr_info.attr_info);
+	l_free(command->get_service_info.alpha_id);
 }
 
 static enum stk_command_parse_result parse_get_service_info(
@@ -3643,7 +3640,7 @@ static enum stk_command_parse_result parse_get_frames_status(
 
 static void destroy_retrieve_mms(struct stk_command *command)
 {
-	g_free(command->retrieve_mms.alpha_id);
+	l_free(command->retrieve_mms.alpha_id);
 	g_slist_free_full(command->retrieve_mms.mms_rec_files, g_free);
 }
 
@@ -3690,7 +3687,7 @@ static enum stk_command_parse_result parse_retrieve_mms(
 
 static void destroy_submit_mms(struct stk_command *command)
 {
-	g_free(command->submit_mms.alpha_id);
+	l_free(command->submit_mms.alpha_id);
 	g_slist_free_full(command->submit_mms.mms_subm_files, g_free);
 }
 
