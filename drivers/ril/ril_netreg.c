@@ -21,6 +21,9 @@
 #include "common.h"
 #include "simutil.h"
 
+#define REGISTRATION_TIMEOUT (100*1000) /* ms */
+#define REGISTRATION_MAX_RETRIES (2)
+
 enum ril_netreg_events {
 	NETREG_RIL_EVENT_NITZ_TIME_RECEIVED,
 	NETREG_RIL_EVENT_SIGNAL_STRENGTH,
@@ -296,12 +299,16 @@ static void ril_netreg_register_auto(struct ofono_netreg *netreg,
 				ofono_netreg_register_cb_t cb, void *data)
 {
 	struct ril_netreg *nd = ril_netreg_get_data(netreg);
+	GRilIoRequest *req = grilio_request_new();
 
 	ofono_info("nw select automatic");
-	grilio_queue_send_request_full(nd->q, NULL,
+	grilio_request_set_timeout(req, REGISTRATION_TIMEOUT);
+	grilio_request_set_retry(req, 0, REGISTRATION_MAX_RETRIES);
+	grilio_queue_send_request_full(nd->q, req,
 			RIL_REQUEST_SET_NETWORK_SELECTION_AUTOMATIC,
 			ril_netreg_register_cb, ril_netreg_cbd_free,
 			ril_netreg_cbd_new(nd, cb, data));
+	grilio_request_unref(req);
 }
 
 static void ril_netreg_register_manual(struct ofono_netreg *netreg,
@@ -313,6 +320,8 @@ static void ril_netreg_register_manual(struct ofono_netreg *netreg,
 
 	ofono_info("nw select manual: %s%s", mcc, mnc);
 	grilio_request_append_format(req, "%s%s+0", mcc, mnc);
+	grilio_request_set_timeout(req, REGISTRATION_TIMEOUT);
+	grilio_request_set_retry(req, 0, REGISTRATION_MAX_RETRIES);
 	grilio_queue_send_request_full(nd->q, req,
 			RIL_REQUEST_SET_NETWORK_SELECTION_MANUAL,
 			ril_netreg_register_cb, ril_netreg_cbd_free,
