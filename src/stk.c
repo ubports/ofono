@@ -34,6 +34,8 @@
 #include <time.h>
 #include <sys/time.h>
 
+#include <ell/ell.h>
+
 #include "ofono.h"
 
 #include "common.h"
@@ -363,17 +365,15 @@ static struct stk_menu *stk_menu_create(const char *title,
 	if (item_icon_ids && item_icon_ids->len && item_icon_ids->len != len)
 		return NULL;
 
-	ret = g_try_new(struct stk_menu, 1);
-	if (ret == NULL)
-		return NULL;
+	ret = l_new(struct stk_menu, 1);
 
 	ret->title = dbus_apply_text_attributes(title ? title : "",
 						title_attr);
 	if (ret->title == NULL)
-		ret->title = g_strdup(title ? title : "");
+		ret->title = l_strdup(title ? title : "");
 
 	memcpy(&ret->icon, icon, sizeof(ret->icon));
-	ret->items = g_new0(struct stk_menu_item, len + 1);
+	ret->items = l_new(struct stk_menu_item, len + 1);
 	ret->default_item = -1;
 	ret->soft_key = soft_key;
 	ret->has_help = has_help;
@@ -394,7 +394,7 @@ static struct stk_menu *stk_menu_create(const char *title,
 		}
 
 		if (text == NULL)
-			text = strdup(item->text);
+			text = l_strdup(item->text);
 
 		ret->items[i].text = text;
 
@@ -448,11 +448,11 @@ static void stk_menu_free(struct stk_menu *menu)
 	struct stk_menu_item *i;
 
 	for (i = menu->items; i->text; i++)
-		g_free(i->text);
+		l_free(i->text);
 
-	g_free(menu->items);
-	g_free(menu->title);
-	g_free(menu);
+	l_free(menu->items);
+	l_free(menu->title);
+	l_free(menu);
 }
 
 static void emit_menu_changed(struct ofono_stk *stk)
@@ -561,7 +561,7 @@ static gboolean stk_alpha_id_set(struct ofono_stk *stk,
 	else
 		stk_agent_display_action_info(stk->current_agent, alpha, icon);
 
-	g_free(alpha);
+	l_free(alpha);
 
 	return TRUE;
 }
@@ -986,7 +986,7 @@ static gboolean handle_command_set_idle_text(const struct stk_command *cmd,
 	}
 
 	if (stk->idle_mode_text)
-		g_free(stk->idle_mode_text);
+		l_free(stk->idle_mode_text);
 
 	if (sim->icon_id.id != 0 && sim->icon_id.qualifier ==
 			STK_ICON_QUALIFIER_TYPE_SELF_EXPLANATORY)
@@ -1403,7 +1403,7 @@ static gboolean handle_command_display_text(const struct stk_command *cmd,
 	err = stk_agent_display_text(stk->current_agent, text, &dt->icon_id,
 					priority, display_text_cb, stk,
 					display_text_destroy, timeout);
-	g_free(text);
+	l_free(text);
 
 	/* We most likely got an out of memory error, tell SIM to retry */
 	if (err < 0) {
@@ -1610,7 +1610,7 @@ static gboolean handle_command_get_inkey(const struct stk_command *cmd,
 						&gi->icon_id, request_key_cb,
 						stk, NULL, timeout);
 
-	g_free(text);
+	l_free(text);
 
 	if (err < 0) {
 		unsigned char no_cause_result[] = { 0x00 };
@@ -1704,7 +1704,7 @@ static gboolean handle_command_get_input(const struct stk_command *cmd,
 						request_string_cb,
 						stk, NULL, timeout);
 
-	g_free(text);
+	l_free(text);
 
 	if (err < 0) {
 		unsigned char no_cause_result[] = { 0x00 };
@@ -1829,7 +1829,7 @@ static void confirm_call_cb(enum stk_agent_result result, gboolean confirm,
 					alpha_id, sc->icon_id_call_setup.id,
 					qualifier >> 1, call_setup_connected,
 					stk);
-	g_free(alpha_id);
+	l_free(alpha_id);
 
 	if (err >= 0) {
 		stk->cancel_cmd = call_setup_cancel;
@@ -1961,7 +1961,7 @@ static gboolean handle_command_set_up_call(const struct stk_command *cmd,
 	err = stk_agent_confirm_call(stk->current_agent, alpha_id,
 					&sc->icon_id_usr_cfm, confirm_call_cb,
 					stk, NULL, stk->timeout * 1000);
-	g_free(alpha_id);
+	l_free(alpha_id);
 
 	if (err < 0) {
 		unsigned char no_cause_result[] = { 0x00 };
@@ -2148,7 +2148,7 @@ static gboolean handle_command_send_ussd(const struct stk_command *cmd,
 
 static void free_idle_mode_text(struct ofono_stk *stk)
 {
-	g_free(stk->idle_mode_text);
+	l_free(stk->idle_mode_text);
 	stk->idle_mode_text = NULL;
 
 	memset(&stk->idle_mode_icon, 0, sizeof(stk->idle_mode_icon));
@@ -2662,7 +2662,7 @@ static gboolean handle_command_play_tone(const struct stk_command *cmd,
 						play_tone_cb, stk, NULL,
 						timeout);
 
-	g_free(text);
+	l_free(text);
 
 	if (err < 0) {
 		unsigned char no_cause_result[] = { 0x00 };
@@ -2734,7 +2734,7 @@ static gboolean handle_command_launch_browser(const struct stk_command *cmd,
 						lb->icon_id.id, lb->url,
 						confirm_launch_browser_cb,
 						stk, NULL, stk->timeout * 1000);
-	g_free(alpha_id);
+	l_free(alpha_id);
 
 	if (err < 0) {
 		unsigned char no_cause_result[] = { 0x00 };
@@ -2785,7 +2785,7 @@ static gboolean handle_setup_call_confirmation_req(struct stk_command *cmd,
 					confirm_handled_call_cb,
 					stk, NULL,
 					stk->timeout * 1000);
-	g_free(alpha_id);
+	l_free(alpha_id);
 
 	if (err < 0)
 		goto out;
@@ -3150,7 +3150,7 @@ static void stk_unregister(struct ofono_atom *atom)
 		stk->cancel_cmd = NULL;
 	}
 
-	g_free(stk->idle_mode_text);
+	l_free(stk->idle_mode_text);
 	stk->idle_mode_text = NULL;
 
 	if (stk->timers_source) {
