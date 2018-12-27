@@ -29,7 +29,6 @@
 #include <ctype.h>
 #include <stdlib.h>
 
-#include <glib.h>
 #include <ell/ell.h>
 
 #include "util.h"
@@ -3293,7 +3292,7 @@ unsigned char *unpack_7bit_own_buf(const unsigned char *in, long len,
 		return NULL;
 
 	/* In the case of CB, unpack as much as possible */
-	if (ussd == TRUE)
+	if (ussd)
 		max_to_unpack = len * 8 / 7;
 
 	for (i = 0; (i < len) && ((out-buf) < max_to_unpack); i++) {
