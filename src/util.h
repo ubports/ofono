@@ -70,9 +70,6 @@ unsigned char *decode_hex_own_buf(const char *in, long len, long *items_written,
 char *encode_hex_own_buf(const unsigned char *in, long len,
 				unsigned char terminator, char *buf);
 
-char *encode_hex(const unsigned char *in, long len,
-			unsigned char terminator);
-
 unsigned char *unpack_7bit_own_buf(const unsigned char *in, long len,
 					int byte_offset, bool ussd,
 					long max_to_unpack, long *items_written,

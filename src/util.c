@@ -3278,25 +3278,6 @@ char *encode_hex_own_buf(const unsigned char *in, long len,
 	return buf;
 }
 
-char *encode_hex(const unsigned char *in, long len, unsigned char terminator)
-{
-	char *buf;
-	int i;
-
-	if (len < 0) {
-		i = 0;
-
-		while (in[i] != terminator)
-			i++;
-
-		len = i;
-	}
-
-	buf = g_new(char, len * 2 + 1);
-
-	return encode_hex_own_buf(in, len, terminator, buf);
-}
-
 unsigned char *unpack_7bit_own_buf(const unsigned char *in, long len,
 					int byte_offset, bool ussd,
 					long max_to_unpack, long *items_written,
