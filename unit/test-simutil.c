@@ -27,6 +27,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <glib.h>
+#include <ell/ell.h>
 
 #include <ofono/types.h>
 
@@ -407,12 +408,12 @@ static const char *record_ef = "62198205422100200483026F408A01058B036F0607"
 static void test_3g_status_data(void)
 {
 	unsigned char *response;
-	long len;
+	size_t len;
 	int flen, rlen, str;
 	unsigned char access[3];
 	unsigned short efid;
 
-	response = decode_hex(binary_ef, -1, &len, 0);
+	response = l_util_from_hexstring(binary_ef, &len);
 
 	sim_parse_3g_get_response(response, len, &flen, &rlen, &str,
 					access, &efid);
@@ -427,7 +428,7 @@ static void test_3g_status_data(void)
 
 	g_free(response);
 
-	response = decode_hex(record_ef, -1, &len, 0);
+	response = l_util_from_hexstring(record_ef, &len);
 
 	sim_parse_3g_get_response(response, len, &flen, &rlen, &str,
 					access, &efid);
@@ -450,11 +451,11 @@ static char *at_cuad_response = "611B4F10A0000000871002FFFFFFFF8905080000"
 static void test_application_entry_decode(void)
 {
 	unsigned char *ef_dir;
-	long len;
+	size_t len;
 	GSList *entries;
 	struct sim_app_record *app[2];
 
-	ef_dir = decode_hex(at_cuad_response, -1, &len, 0);
+	ef_dir = l_util_from_hexstring(at_cuad_response, &len);
 	entries = sim_parse_app_template_entries(ef_dir, len);
 
 	g_assert(g_slist_length(entries) == 2);

@@ -158,21 +158,18 @@ static void test_simple_deliver(void)
 {
 	struct sms sms;
 	unsigned char *decoded_pdu;
-	long pdu_len;
+	size_t pdu_len;
 	gboolean ret;
 	int data_len;
 	unsigned char *unpacked;
 	char *utf8;
 
-	decoded_pdu = decode_hex(simple_deliver, -1, &pdu_len, 0);
-
+	decoded_pdu = l_util_from_hexstring(simple_deliver, &pdu_len);
 	g_assert(decoded_pdu);
-	g_assert(pdu_len == (long)strlen(simple_deliver) / 2);
+	g_assert(pdu_len == strlen(simple_deliver) / 2);
 
 	ret = sms_decode(decoded_pdu, pdu_len, FALSE, 30, &sms);
-
-	g_free(decoded_pdu);
-
+	l_free(decoded_pdu);
 	g_assert(ret);
 	g_assert(sms.type == SMS_TYPE_DELIVER);
 
@@ -212,7 +209,6 @@ static void test_simple_deliver(void)
 	g_assert(unpacked);
 
 	utf8 = convert_gsm_to_utf8(unpacked, -1, NULL, NULL, 0xff);
-
 	l_free(unpacked);
 
 	g_assert(utf8);
@@ -221,7 +217,6 @@ static void test_simple_deliver(void)
 		printf("Decoded user data is: %s\n", utf8);
 
 	g_assert(strcmp(utf8, "How are you?") == 0);
-
 	l_free(utf8);
 }
 
@@ -229,21 +224,18 @@ static void test_alnum_sender(void)
 {
 	struct sms sms;
 	unsigned char *decoded_pdu;
-	long pdu_len;
+	size_t pdu_len;
 	gboolean ret;
 	int data_len;
 	unsigned char *unpacked;
 	char *utf8;
 
-	decoded_pdu = decode_hex(alnum_sender, -1, &pdu_len, 0);
-
+	decoded_pdu = l_util_from_hexstring(alnum_sender, &pdu_len);
 	g_assert(decoded_pdu);
-	g_assert(pdu_len == (long)strlen(alnum_sender) / 2);
+	g_assert(pdu_len == strlen(alnum_sender) / 2);
 
 	ret = sms_decode(decoded_pdu, pdu_len, FALSE, 27, &sms);
-
-	g_free(decoded_pdu);
-
+	l_free(decoded_pdu);
 	g_assert(ret);
 	g_assert(sms.type == SMS_TYPE_DELIVER);
 
@@ -272,20 +264,15 @@ static void test_alnum_sender(void)
 	g_assert(sms.deliver.scts.timezone == 4);
 
 	g_assert(sms.deliver.udl == 8);
-
 	data_len = sms_udl_in_bytes(sms.deliver.udl, sms.deliver.dcs);
-
 	g_assert(data_len == 7);
 
 	unpacked = unpack_7bit(sms.deliver.ud, data_len, 0, false,
 				sms.deliver.udl, NULL, 0xff);
-
 	g_assert(unpacked);
 
 	utf8 = convert_gsm_to_utf8(unpacked, -1, NULL, NULL, 0xff);
-
 	l_free(unpacked);
-
 	g_assert(utf8);
 
 	if (VERBOSE)
@@ -300,22 +287,19 @@ static void test_deliver_encode(void)
 {
 	struct sms sms;
 	unsigned char *decoded_pdu;
-	long pdu_len;
+	size_t pdu_len;
 	gboolean ret;
 	unsigned char pdu[176];
 	int encoded_pdu_len;
 	int encoded_tpdu_len;
 	char *encoded_pdu;
 
-	decoded_pdu = decode_hex(simple_deliver, -1, &pdu_len, 0);
-
+	decoded_pdu = l_util_from_hexstring(simple_deliver, &pdu_len);
 	g_assert(decoded_pdu);
-	g_assert(pdu_len == (long)strlen(simple_deliver) / 2);
+	g_assert(pdu_len == strlen(simple_deliver) / 2);
 
 	ret = sms_decode(decoded_pdu, pdu_len, FALSE, 30, &sms);
-
-	g_free(decoded_pdu);
-
+	l_free(decoded_pdu);
 	g_assert(ret);
 	g_assert(sms.type == SMS_TYPE_DELIVER);
 
@@ -331,23 +315,18 @@ static void test_deliver_encode(void)
 
 	g_assert(ret);
 	g_assert(encoded_tpdu_len == 30);
-	g_assert(encoded_pdu_len == pdu_len);
+	g_assert(encoded_pdu_len == (long)pdu_len);
 
 	encoded_pdu = encode_hex(pdu, encoded_pdu_len, 0);
-
 	g_assert(strcmp(simple_deliver, encoded_pdu) == 0);
-
 	g_free(encoded_pdu);
 
-	decoded_pdu = decode_hex(alnum_sender, -1, &pdu_len, 0);
-
+	decoded_pdu = l_util_from_hexstring(alnum_sender, &pdu_len);
 	g_assert(decoded_pdu);
-	g_assert(pdu_len == (long)strlen(alnum_sender) / 2);
+	g_assert(pdu_len == strlen(alnum_sender) / 2);
 
 	ret = sms_decode(decoded_pdu, pdu_len, FALSE, 27, &sms);
-
-	g_free(decoded_pdu);
-
+	l_free(decoded_pdu);
 	g_assert(ret);
 	g_assert(sms.type == SMS_TYPE_DELIVER);
 
@@ -363,7 +342,7 @@ static void test_deliver_encode(void)
 
 	g_assert(ret);
 	g_assert(encoded_tpdu_len == 27);
-	g_assert(encoded_pdu_len == pdu_len);
+	g_assert(encoded_pdu_len == (long)pdu_len);
 
 	encoded_pdu = encode_hex(pdu, encoded_pdu_len, 0);
 
@@ -372,14 +351,12 @@ static void test_deliver_encode(void)
 	g_free(encoded_pdu);
 
 	/* test unicode_deliver*/
-	decoded_pdu = decode_hex(unicode_deliver, -1, &pdu_len, 0);
+	decoded_pdu = l_util_from_hexstring(unicode_deliver, &pdu_len);
 	g_assert(decoded_pdu);
-	g_assert(pdu_len == (long)strlen(unicode_deliver) / 2);
+	g_assert(pdu_len == strlen(unicode_deliver) / 2);
 
 	ret = sms_decode(decoded_pdu, pdu_len, FALSE, 149, &sms);
-
-	g_free(decoded_pdu);
-
+	l_free(decoded_pdu);
 	g_assert(ret);
 	g_assert(sms.type == SMS_TYPE_DELIVER);
 
@@ -395,7 +372,7 @@ static void test_deliver_encode(void)
 
 	g_assert(ret);
 	g_assert(encoded_tpdu_len == 149);
-	g_assert(encoded_pdu_len == pdu_len);
+	g_assert(encoded_pdu_len == (long)pdu_len);
 
 	encoded_pdu = encode_hex(pdu, encoded_pdu_len, 0);
 
@@ -408,21 +385,18 @@ static void test_simple_submit(void)
 {
 	struct sms sms;
 	unsigned char *decoded_pdu;
-	long pdu_len;
+	size_t pdu_len;
 	gboolean ret;
 	int data_len;
 	unsigned char *unpacked;
 	char *utf8;
 
-	decoded_pdu = decode_hex(simple_submit, -1, &pdu_len, 0);
-
+	decoded_pdu = l_util_from_hexstring(simple_submit, &pdu_len);
 	g_assert(decoded_pdu);
-	g_assert(pdu_len == (long)strlen(simple_submit) / 2);
+	g_assert(pdu_len == strlen(simple_submit) / 2);
 
 	ret = sms_decode(decoded_pdu, pdu_len, TRUE, 23, &sms);
-
-	g_free(decoded_pdu);
-
+	l_free(decoded_pdu);
 	g_assert(ret);
 	g_assert(sms.type == SMS_TYPE_SUBMIT);
 
@@ -448,25 +422,19 @@ static void test_simple_submit(void)
 	g_assert(sms.submit.udl == 10);
 
 	data_len = sms_udl_in_bytes(sms.submit.udl, sms.submit.dcs);
-
 	g_assert(data_len == 9);
 
 	unpacked = unpack_7bit(sms.submit.ud, data_len, 0, false,
 				sms.submit.udl, NULL, 0xff);
-
 	g_assert(unpacked);
-
 	utf8 = convert_gsm_to_utf8(unpacked, -1, NULL, NULL, 0xff);
-
 	l_free(unpacked);
-
 	g_assert(utf8);
 
 	if (VERBOSE)
 		printf("Decoded user data is: %s\n", utf8);
 
 	g_assert(strcmp(utf8, "hellohello") == 0);
-
 	l_free(utf8);
 }
 
@@ -474,22 +442,19 @@ static void test_submit_encode(void)
 {
 	struct sms sms;
 	unsigned char *decoded_pdu;
-	long pdu_len;
+	size_t pdu_len;
 	gboolean ret;
 	unsigned char pdu[176];
 	int encoded_pdu_len;
 	int encoded_tpdu_len;
 	char *encoded_pdu;
 
-	decoded_pdu = decode_hex(simple_submit, -1, &pdu_len, 0);
-
+	decoded_pdu = l_util_from_hexstring(simple_submit, &pdu_len);
 	g_assert(decoded_pdu);
-	g_assert(pdu_len == (long)strlen(simple_submit) / 2);
+	g_assert(pdu_len == strlen(simple_submit) / 2);
 
 	ret = sms_decode(decoded_pdu, pdu_len, TRUE, 23, &sms);
-
-	g_free(decoded_pdu);
-
+	l_free(decoded_pdu);
 	g_assert(ret);
 	g_assert(sms.type == SMS_TYPE_SUBMIT);
 
@@ -505,12 +470,11 @@ static void test_submit_encode(void)
 
 	g_assert(ret);
 	g_assert(encoded_tpdu_len == 23);
-	g_assert(encoded_pdu_len == pdu_len);
+	g_assert(encoded_pdu_len == (long)pdu_len);
 
 	encoded_pdu = encode_hex(pdu, encoded_pdu_len, 0);
 
 	g_assert(strcmp(simple_submit, encoded_pdu) == 0);
-
 	g_free(encoded_pdu);
 }
 
@@ -518,21 +482,18 @@ static void test_simple_mwi(void)
 {
 	struct sms sms;
 	unsigned char *decoded_pdu;
-	long pdu_len;
+	size_t pdu_len;
 	gboolean ret;
 	enum sms_mwi_type type;
 	gboolean active;
 	gboolean discard;
 
-	decoded_pdu = decode_hex(simple_mwi, -1, &pdu_len, 0);
-
+	decoded_pdu = l_util_from_hexstring(simple_mwi, &pdu_len);
 	g_assert(decoded_pdu);
-	g_assert(pdu_len == (long)strlen(simple_mwi) / 2);
+	g_assert(pdu_len == strlen(simple_mwi) / 2);
 
 	ret = sms_decode(decoded_pdu, pdu_len, FALSE, 19, &sms);
-
-	g_free(decoded_pdu);
-
+	l_free(decoded_pdu);
 	g_assert(ret);
 	g_assert(sms.type == SMS_TYPE_DELIVER);
 
@@ -611,7 +572,6 @@ static void test_simple_mwi(void)
 	if (VERBOSE) {
 		printf("Type: %d, Active: %d, Discard: %d\n",
 				type, active, discard);
-
 	}
 }
 
@@ -780,24 +740,20 @@ static void test_sms_charset(gconstpointer param)
 	struct sms sms;
 	unsigned char *pdu;
 	unsigned char *unpacked;
-	long pdu_len;
+	size_t pdu_len;
 	int data_len;
 	enum sms_charset sms_charset;
 	gboolean sms_compressed;
 	char *text;
 	struct sms_charset_data *data = (struct sms_charset_data *)param;
 
-	pdu = decode_hex(data->pdu, -1, &pdu_len, 0);
-
+	pdu = l_util_from_hexstring(data->pdu, &pdu_len);
 	g_assert(pdu);
-	g_assert(pdu_len == (gint64)strlen(data->pdu) / 2);
+	g_assert(pdu_len == strlen(data->pdu) / 2);
 
 	ret = sms_decode(pdu, pdu_len, FALSE, pdu_len, &sms);
-
 	g_assert(ret);
-
-	g_free(pdu);
-
+	l_free(pdu);
 	g_assert(sms.type == SMS_TYPE_DELIVER);
 
 	ret = sms_dcs_decode(sms.deliver.dcs, NULL, &sms_charset,
@@ -808,23 +764,18 @@ static void test_sms_charset(gconstpointer param)
 	g_assert(sms_compressed == FALSE);
 
 	data_len = sms_udl_in_bytes(sms.deliver.udl, sms.deliver.dcs);
-
 	g_assert(data_len == data->data_len);
 
 	unpacked = unpack_7bit(sms.deliver.ud, data_len, 0, false,
 				sms.deliver.udl, NULL, 0xff);
-
 	g_assert(unpacked);
 
 	text = convert_gsm_to_utf8_with_lang(unpacked, -1, NULL, NULL, 0xff,
 		data->locking_lang, data->single_lang);
 
 	g_assert(text);
-
 	l_free(unpacked);
-
 	g_assert(strcmp(data->expected_text, text) == 0);
-
 	l_free(text);
 }
 
@@ -958,7 +909,7 @@ static void test_ems_udh(gconstpointer data)
 	const struct ems_udh_test *test = data;
 	struct sms sms;
 	unsigned char *decoded_pdu;
-	long pdu_len;
+	size_t pdu_len;
 	gboolean ret;
 	unsigned int data_len;
 	unsigned int udhl;
@@ -968,15 +919,12 @@ static void test_ems_udh(gconstpointer data)
 	char *utf8;
 	int i;
 
-	decoded_pdu = decode_hex(test->pdu, -1, &pdu_len, 0);
-
+	decoded_pdu = l_util_from_hexstring(test->pdu, &pdu_len);
 	g_assert(decoded_pdu);
-	g_assert(pdu_len == (long)strlen(test->pdu) / 2);
+	g_assert(pdu_len == strlen(test->pdu) / 2);
 
 	ret = sms_decode(decoded_pdu, pdu_len, TRUE, test->len, &sms);
-
-	g_free(decoded_pdu);
-
+	l_free(decoded_pdu);
 	g_assert(ret);
 	g_assert(sms.type == SMS_TYPE_SUBMIT);
 
@@ -1022,27 +970,21 @@ static void test_ems_udh(gconstpointer data)
 	}
 
 	data_len = sms_udl_in_bytes(sms.submit.udl, sms.submit.dcs);
-
 	g_assert(data_len == test->data_len);
 
 	max_chars = (data_len - (udhl + 1)) * 8 / 7;
-
 	unpacked = unpack_7bit(sms.submit.ud + udhl + 1, data_len - (udhl + 1),
 				udhl + 1, false, max_chars, NULL, 0xff);
-
 	g_assert(unpacked);
 
 	utf8 = convert_gsm_to_utf8(unpacked, -1, NULL, NULL, 0xff);
-
 	l_free(unpacked);
-
 	g_assert(utf8);
 
 	if (VERBOSE)
 		printf("Decoded user data is: %s\n", utf8);
 
 	g_assert(strcmp(utf8, test->expected) == 0);
-
 	l_free(utf8);
 }
 
@@ -1389,7 +1331,7 @@ static const char *cbs3 = "001000000111E280604028180E888462C168381E90886442A95"
 static void test_cbs_encode_decode(void)
 {
 	unsigned char *decoded_pdu;
-	long pdu_len;
+	size_t pdu_len;
 	gboolean ret;
 	struct cbs cbs;
 	unsigned char pdu[88];
@@ -1399,15 +1341,14 @@ static void test_cbs_encode_decode(void)
 	char iso639_lang[3];
 	char *utf8;
 
-	decoded_pdu = decode_hex(cbs1, -1, &pdu_len, 0);
+	decoded_pdu = l_util_from_hexstring(cbs1, &pdu_len);
 
 	g_assert(decoded_pdu);
-	g_assert(pdu_len == (long)strlen(cbs1) / 2);
+	g_assert(pdu_len == strlen(cbs1) / 2);
 	g_assert(pdu_len == 88);
 
 	ret = cbs_decode(decoded_pdu, pdu_len, &cbs);
-
-	g_free(decoded_pdu);
+	l_free(decoded_pdu);
 
 	g_assert(ret);
 
@@ -1436,7 +1377,7 @@ static void test_cbs_encode_decode(void)
 	g_assert(strcmp(utf8, "Belconnen") == 0);
 	g_assert(strcmp(iso639_lang, "en") == 0);
 
-	g_free(utf8);
+	l_free(utf8);
 
 	g_slist_free(l);
 
@@ -1454,7 +1395,7 @@ static void test_cbs_encode_decode(void)
 static void test_cbs_assembly(void)
 {
 	unsigned char *decoded_pdu;
-	long pdu_len;
+	size_t pdu_len;
 	struct cbs dec1;
 	struct cbs dec2;
 	struct cbs_assembly *assembly;
@@ -1466,13 +1407,13 @@ static void test_cbs_assembly(void)
 
 	g_assert(assembly);
 
-	decoded_pdu = decode_hex(cbs1, -1, &pdu_len, 0);
+	decoded_pdu = l_util_from_hexstring(cbs1, &pdu_len);
 	cbs_decode(decoded_pdu, pdu_len, &dec1);
-	g_free(decoded_pdu);
+	l_free(decoded_pdu);
 
-	decoded_pdu = decode_hex(cbs2, -1, &pdu_len, 0);
+	decoded_pdu = l_util_from_hexstring(cbs2, &pdu_len);
 	cbs_decode(decoded_pdu, pdu_len, &dec2);
-	g_free(decoded_pdu);
+	l_free(decoded_pdu);
 
 	/* Add an initial page to the assembly */
 	l = cbs_assembly_add_page(assembly, &dec1);
@@ -1530,7 +1471,7 @@ static void test_cbs_assembly(void)
 
 	g_assert(strcmp(utf8, "BelconnenFraserBelconnen") == 0);
 
-	g_free(utf8);
+	l_free(utf8);
 	g_slist_free_full(l, g_free);
 
 	cbs_assembly_free(assembly);
@@ -1539,22 +1480,19 @@ static void test_cbs_assembly(void)
 static void test_cbs_padding_character(void)
 {
 	unsigned char *decoded_pdu;
-	long pdu_len;
+	size_t pdu_len;
 	gboolean ret;
 	struct cbs cbs;
 	GSList *l;
 	char iso639_lang[3];
 	char *utf8;
 
-	decoded_pdu = decode_hex(cbs3, -1, &pdu_len, 0);
-
+	decoded_pdu = l_util_from_hexstring(cbs3, &pdu_len);
 	g_assert(decoded_pdu);
 	g_assert(pdu_len == 88);
 
 	ret = cbs_decode(decoded_pdu, pdu_len, &cbs);
-
-	g_free(decoded_pdu);
-
+	l_free(decoded_pdu);
 	g_assert(ret);
 
 	g_assert(cbs.gs == CBS_GEO_SCOPE_CELL_IMMEDIATE);
@@ -1568,7 +1506,6 @@ static void test_cbs_padding_character(void)
 	l = g_slist_append(NULL, &cbs);
 
 	utf8 = cbs_decode_text(l, iso639_lang);
-
 	g_assert(utf8);
 
 	if (VERBOSE) {
@@ -1584,7 +1521,7 @@ static void test_cbs_padding_character(void)
 				"NOPQRSTUVWXYZÄÖ") == 0);
 	g_assert(strcmp(iso639_lang, "en") == 0);
 
-	g_free(utf8);
+	l_free(utf8);
 	g_slist_free(l);
 }
 
@@ -1744,7 +1681,7 @@ static void test_wap_push(gconstpointer data)
 	struct sms sms;
 	unsigned char *decoded_pdu;
 	gboolean ret;
-	long pdu_len;
+	size_t pdu_len;
 	long data_len;
 	enum sms_class cls;
 	enum sms_charset charset;
@@ -1753,14 +1690,11 @@ static void test_wap_push(gconstpointer data)
 	int dst_port, src_port;
 	gboolean is_8bit;
 
-	decoded_pdu = decode_hex(test->pdu, -1, &pdu_len, 0);
-
+	decoded_pdu = l_util_from_hexstring(test->pdu, &pdu_len);
 	g_assert(decoded_pdu);
 
 	ret = sms_decode(decoded_pdu, pdu_len, FALSE, test->len, &sms);
-
-	g_free(decoded_pdu);
-
+	l_free(decoded_pdu);
 	g_assert(ret);
 	g_assert(sms.type == SMS_TYPE_DELIVER);
 

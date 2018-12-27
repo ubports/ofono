@@ -527,23 +527,23 @@ static void test_decode_encode(void)
 	unsigned char *decoded, *packed;
 	char *utf8, *hex_packed;
 	unsigned char *gsm, *gsm_encoded;
-	long hex_decoded_size;
+	size_t hex_decoded_size;
 	long unpacked_size, packed_size;
 	long gsm_encoded_size;
-	long i;
 
 	if (VERBOSE)
 		printf("Size of the orig string: %u\n",
 			(unsigned int)strlen(sms));
 
-	decoded = decode_hex(sms, -1, &hex_decoded_size, 0);
-
+	decoded = l_util_from_hexstring(sms, &hex_decoded_size);
 	g_assert(decoded != NULL);
 
 	if (VERBOSE)
-		printf("Decode to %ld bytes\n", hex_decoded_size);
+		printf("Decode to %zu bytes\n", hex_decoded_size);
 
 	if (VERBOSE) {
+		size_t i;
+
 		printf("%s\n", sms);
 
 		for (i = 0; i < hex_decoded_size; i++)
@@ -593,12 +593,14 @@ static void test_decode_encode(void)
 		printf("Packed GSM to size of %ld bytes\n", packed_size);
 
 	if (VERBOSE) {
+		long i;
+
 		for (i = 0; i < packed_size; i++)
 			printf("%02X", packed[i]);
 		printf("\n");
 	}
 
-	g_assert(packed_size == hex_decoded_size);
+	g_assert((size_t) packed_size == hex_decoded_size);
 	g_assert(memcmp(packed, decoded, packed_size) == 0);
 
 	g_free(decoded);
