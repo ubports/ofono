@@ -1405,7 +1405,7 @@ static DBusMessage *test_display_text_51(DBusMessage *msg,
 						unsigned char icon_id,
 						gboolean urgent)
 {
-	STKTEST_AGENT_ASSERT(g_str_equal(text, "Basic Icon"));
+	STKTEST_AGENT_ASSERT(g_str_equal(text, ""));
 	STKTEST_AGENT_ASSERT(icon_id == 1);
 	STKTEST_AGENT_ASSERT(urgent == FALSE);
 
@@ -1417,7 +1417,7 @@ static DBusMessage *test_display_text_52(DBusMessage *msg,
 						unsigned char icon_id,
 						gboolean urgent)
 {
-	STKTEST_AGENT_ASSERT(g_str_equal(text, "Colour Icon"));
+	STKTEST_AGENT_ASSERT(g_str_equal(text, ""));
 	STKTEST_AGENT_ASSERT(icon_id == 2);
 	STKTEST_AGENT_ASSERT(urgent == FALSE);
 
@@ -1854,7 +1854,7 @@ static DBusMessage *test_get_inkey_61(DBusMessage *msg,
 	DBusMessage *reply;
 	const char *ret = "+";
 
-	STKTEST_AGENT_ASSERT(g_str_equal(alpha, "&lt;NO-ICON&gt;"));
+	STKTEST_AGENT_ASSERT(g_str_equal(alpha, ""));
 	STKTEST_AGENT_ASSERT(icon_id == 1);
 
 	reply = dbus_message_new_method_return(msg);
@@ -1888,7 +1888,7 @@ static DBusMessage *test_get_inkey_63(DBusMessage *msg,
 	DBusMessage *reply;
 	const char *ret = "+";
 
-	STKTEST_AGENT_ASSERT(g_str_equal(alpha, "&lt;NO-ICON&gt;"));
+	STKTEST_AGENT_ASSERT(g_str_equal(alpha, ""));
 	STKTEST_AGENT_ASSERT(icon_id == 2);
 
 	reply = dbus_message_new_method_return(msg);
@@ -2662,7 +2662,7 @@ static DBusMessage *test_get_input_61(DBusMessage *msg,
 	DBusMessage *reply;
 	const char *ret = "+";
 
-	STKTEST_AGENT_ASSERT(g_str_equal(alpha, "&lt;NO-ICON&gt;"));
+	STKTEST_AGENT_ASSERT(g_str_equal(alpha, ""));
 	STKTEST_AGENT_ASSERT(icon_id == 1);
 	STKTEST_AGENT_ASSERT(g_str_equal(def_input, ""));
 	STKTEST_AGENT_ASSERT(min == 0);
@@ -2710,7 +2710,7 @@ static DBusMessage *test_get_input_63(DBusMessage *msg,
 	DBusMessage *reply;
 	const char *ret = "+";
 
-	STKTEST_AGENT_ASSERT(g_str_equal(alpha, "&lt;NO-ICON&gt;"));
+	STKTEST_AGENT_ASSERT(g_str_equal(alpha, ""));
 	STKTEST_AGENT_ASSERT(icon_id == 2);
 	STKTEST_AGENT_ASSERT(g_str_equal(def_input, ""));
 	STKTEST_AGENT_ASSERT(min == 0);
@@ -3168,7 +3168,7 @@ static DBusMessage *test_play_tone_31(DBusMessage *msg,
 					unsigned char icon_id)
 {
 	STKTEST_AGENT_ASSERT(g_str_equal(tone, "positive-acknowledgement"));
-	STKTEST_AGENT_ASSERT(g_str_equal(text, "&lt;BASIC-ICON&gt;"));
+	STKTEST_AGENT_ASSERT(g_str_equal(text, ""));
 	STKTEST_AGENT_ASSERT(icon_id == 1);
 
 	return dbus_message_new_method_return(msg);
@@ -3192,7 +3192,7 @@ static DBusMessage *test_play_tone_33(DBusMessage *msg,
 					unsigned char icon_id)
 {
 	STKTEST_AGENT_ASSERT(g_str_equal(tone, "positive-acknowledgement"));
-	STKTEST_AGENT_ASSERT(g_str_equal(text, "&lt;COLOUR-ICON&gt;"));
+	STKTEST_AGENT_ASSERT(g_str_equal(text, ""));
 	STKTEST_AGENT_ASSERT(icon_id == 2);
 
 	return dbus_message_new_method_return(msg);
