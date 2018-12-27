@@ -67,9 +67,6 @@ unsigned char *decode_hex_own_buf(const char *in, long len, long *items_written,
 					unsigned char terminator,
 					unsigned char *buf);
 
-unsigned char *decode_hex(const char *in, long len, long *items_written,
-				unsigned char terminator);
-
 char *encode_hex_own_buf(const unsigned char *in, long len,
 				unsigned char terminator, char *buf);
 

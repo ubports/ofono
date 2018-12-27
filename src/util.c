@@ -3234,32 +3234,6 @@ unsigned char *decode_hex_own_buf(const char *in, long len, long *items_written,
 	return buf;
 }
 
-unsigned char *decode_hex(const char *in, long len, long *items_written,
-				unsigned char terminator)
-{
-	long i;
-	char c;
-	unsigned char *buf;
-
-	if (len < 0)
-		len = strlen(in);
-
-	len &= ~0x1;
-
-	for (i = 0; i < len; i++) {
-		c = toupper(in[i]);
-
-		if ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'F'))
-			continue;
-
-		return NULL;
-	}
-
-	buf = g_new(unsigned char, (len >> 1) + (terminator ? 1 : 0));
-
-	return decode_hex_own_buf(in, len, items_written, terminator, buf);
-}
-
 /*!
  * Encodes the data using hexadecimal characters.  len can be negative,
  * in that case the terminator is used to find the last character.  This is
