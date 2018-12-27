@@ -929,7 +929,7 @@ static void sim_get_image_cb(struct ofono_sim *sim,
 	if (cache)
 		sim_fs_cache_image(sim->simfs, (const char *) xpm, id);
 
-	g_free(xpm);
+	l_free(xpm);
 }
 
 static void sim_iidf_read_clut_cb(int ok, int length, int record,

@@ -6417,7 +6417,7 @@ char *stk_image_to_xpm(const unsigned char *img, unsigned int len,
 	unsigned int ncolors, nbits, entry, cpp;
 	unsigned int i, j;
 	int bit, k;
-	GString *xpm;
+	struct l_string *xpm;
 	unsigned int pos = 0;
 	const char xpm_header[] = "/* XPM */\n";
 	const char declaration[] = "static char *xpm[] = {\n";
@@ -6470,22 +6470,20 @@ char *stk_image_to_xpm(const unsigned char *img, unsigned int len,
 	 *	pixels - width * height * cpp + height deliminators "",\n
 	 *	end of assignment - 2 chars "};"
 	 */
-	xpm = g_string_sized_new(strlen(xpm_header) + strlen(declaration) +
+	xpm = l_string_new(strlen(xpm_header) + strlen(declaration) +
 				19 + ((cpp + 14) * ncolors) +
 				(width * height * cpp) + (4 * height) + 2);
-	if (xpm == NULL)
-		return NULL;
 
 	/* add header, declaration, values */
-	g_string_append(xpm, xpm_header);
-	g_string_append(xpm, declaration);
-	g_string_append_printf(xpm, "\"%d %d %d %d\",\n", width, height,
+	l_string_append(xpm, xpm_header);
+	l_string_append(xpm, declaration);
+	l_string_append_printf(xpm, "\"%d %d %d %d\",\n", width, height,
 				ncolors, cpp);
 
 	/* create colors */
 	if (scheme == STK_IMG_SCHEME_BASIC) {
-		g_string_append(xpm, "\"0\tc #000000\",\n");
-		g_string_append(xpm, "\"1\tc #FFFFFF\",\n");
+		l_string_append(xpm, "\"0\tc #000000\",\n");
+		l_string_append(xpm, "\"1\tc #FFFFFF\",\n");
 	} else {
 		for (i = 0; i < ncolors; i++) {
 			/* lookup char representation of this number */
@@ -6500,10 +6498,10 @@ char *stk_image_to_xpm(const unsigned char *img, unsigned int len,
 
 			if ((i == (ncolors - 1)) &&
 					scheme == STK_IMG_SCHEME_TRANSPARENCY)
-				g_string_append_printf(xpm,
+				l_string_append_printf(xpm,
 					"\"%s\tc None\",\n", c);
 			else
-				g_string_append_printf(xpm,
+				l_string_append_printf(xpm,
 					"\"%s\tc #%02hhX%02hhX%02hhX\",\n",
 					c, clut[0], clut[1], clut[2]);
 			clut += 3;
@@ -6513,7 +6511,7 @@ char *stk_image_to_xpm(const unsigned char *img, unsigned int len,
 	/* height rows of width pixels */
 	k = 7;
 	for (i = 0; i < height; i++) {
-		g_string_append(xpm, "\"");
+		l_string_append(xpm, "\"");
 		for (j = 0; j < width; j++) {
 			entry = 0;
 			for (bit = nbits - 1; bit >= 0; bit--) {
@@ -6537,14 +6535,14 @@ char *stk_image_to_xpm(const unsigned char *img, unsigned int len,
 				c[1] = '\0';
 			}
 
-			g_string_append_printf(xpm, "%s", c);
+			l_string_append_printf(xpm, "%s", c);
 		}
 
-		g_string_append(xpm, "\",\n");
+		l_string_append(xpm, "\",\n");
 	}
 
-	g_string_append(xpm, "};");
+	l_string_append(xpm, "};");
 
 	/* Caller must free char data */
-	return g_string_free(xpm, FALSE);
+	return l_string_unwrap(xpm);
 }
