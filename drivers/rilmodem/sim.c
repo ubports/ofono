@@ -31,6 +31,7 @@
 #include <errno.h>
 
 #include <glib.h>
+#include <ell/ell.h>
 
 #include <ofono/log.h>
 #include <ofono/modem.h>
@@ -150,7 +151,7 @@ static void ril_file_info_cb(struct ril_msg *message, gpointer user_data)
 	int sw1, sw2;
 	char *hex_response;
 	unsigned char *response = NULL;
-	long len;
+	size_t len;
 	gboolean ok = FALSE;
 	int flen = 0, rlen = 0, str = 0;
 	guchar access[3] = { 0x00, 0x00, 0x00 };
@@ -173,7 +174,7 @@ static void ril_file_info_cb(struct ril_msg *message, gpointer user_data)
 		goto error;
 
 	if (hex_response != NULL) {
-		response = decode_hex(hex_response, -1, &len, -1);
+		response = l_util_from_hexstring(hex_response, &len);
 		g_free(hex_response);
 		hex_response = NULL;
 
@@ -217,9 +218,6 @@ static void ril_file_info_cb(struct ril_msg *message, gpointer user_data)
 		return;
 	}
 
-	if (len < 0)
-		goto error;
-
 	if (response[0] == 0x62) {
 		ok = sim_parse_3g_get_response(response, len,
 						&flen, &rlen, &str,
@@ -230,7 +228,7 @@ static void ril_file_info_cb(struct ril_msg *message, gpointer user_data)
 						&flen, &rlen, &str,
 						access, &file_status);
 
-	g_free(response);
+	l_free(response);
 
 	if (!ok)
 		goto error;
@@ -240,7 +238,7 @@ static void ril_file_info_cb(struct ril_msg *message, gpointer user_data)
 	return;
 
 error:
-	g_free(response);
+	l_free(response);
 	CALLBACK_WITH_FAILURE(cb, -1, -1, -1, NULL,
 				EF_STATUS_INVALIDATED, cbd->data);
 }
@@ -380,7 +378,7 @@ static void ril_file_io_cb(struct ril_msg *message, gpointer user_data)
 	if (hex_response == NULL)
 		goto error;
 
-	response = decode_hex(hex_response, -1, &len, -1);
+	response = l_util_from_hexstring(hex_response, &len);
 	g_free(hex_response);
 	hex_response = NULL;
 
@@ -390,11 +388,11 @@ static void ril_file_io_cb(struct ril_msg *message, gpointer user_data)
 	}
 
 	CALLBACK_WITH_SUCCESS(cb, response, len, cbd->data);
-	g_free(response);
+	l_free(response);
 	return;
 
 error:
-	g_free(response);
+	l_free(response);
 	CALLBACK_WITH_FAILURE(cb, NULL, 0, cbd->data);
 }
 

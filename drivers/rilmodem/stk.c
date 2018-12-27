@@ -27,6 +27,7 @@
 #include <stdio.h>
 
 #include <glib.h>
+#include <ell/ell.h>
 
 #include <ofono/log.h>
 #include <ofono/modem.h>
@@ -94,20 +95,21 @@ static void ril_stk_envelope_cb(struct ril_msg *message, gpointer user_data)
 	struct stk_data *sd = cbd->user;
 	struct parcel rilp;
 	unsigned char *response = NULL;
-	long len = 0;
-	char *pdu;
 
 	g_ril_print_response(sd->ril, message);
 
 	if (message->error == RIL_E_SUCCESS) {
+		char *pdu;
+		size_t len;
+
 		g_ril_init_parcel(message, &rilp);
 		pdu = parcel_r_string(&rilp);
 
 		if (pdu)
-			response = decode_hex(pdu, -1, &len, -1);
+			response = l_util_from_hexstring(pdu, &len);
 
 		CALLBACK_WITH_SUCCESS(cb, response, len, cbd->data);
-		g_free(response);
+		l_free(response);
 	} else {
 		ofono_error("%s RILD reply failure: %s",
 			g_ril_request_id_to_string(sd->ril, message->req),
@@ -145,32 +147,32 @@ static void ril_stk_proactive_cmd_notify(struct ril_msg *message,
 {
 	struct ofono_stk *stk = user_data;
 	struct parcel rilp;
-	long pdulen;
+	size_t pdulen;
 	unsigned char *pdu;
 
 	DBG("");
 
 	g_ril_init_parcel(message, &rilp);
-	pdu = decode_hex(parcel_r_string(&rilp), -1, &pdulen, -1);
+	pdu = l_util_from_hexstring(parcel_r_string(&rilp), &pdulen);
 
 	ofono_stk_proactive_command_notify(stk, pdulen, pdu);
-	g_free(pdu);
+	l_free(pdu);
 }
 
 static void ril_stk_event_notify(struct ril_msg *message, gpointer user_data)
 {
 	struct ofono_stk *stk = user_data;
 	struct parcel rilp;
-	long pdulen;
+	size_t pdulen;
 	unsigned char *pdu;
 
 	DBG("");
 
 	g_ril_init_parcel(message, &rilp);
-	pdu = decode_hex(parcel_r_string(&rilp), -1, &pdulen, -1);
+	pdu = l_util_from_hexstring(parcel_r_string(&rilp), &pdulen);
 
 	ofono_stk_proactive_command_handled_notify(stk, pdulen, pdu);
-	g_free(pdu);
+	l_free(pdu);
 }
 
 static void ril_stk_session_end_notify(struct ril_msg *message,
