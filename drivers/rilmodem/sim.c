@@ -289,7 +289,7 @@ done:
 	if (len == 0)
 		return NULL;
 
-	return encode_hex(comm_path, len, 0);
+	return l_util_hexstring(comm_path, len);
 }
 
 static void ril_sim_read_info(struct ofono_sim *sim, int fileid,
@@ -344,7 +344,7 @@ static void ril_sim_read_info(struct ofono_sim *sim, int fileid,
 					"0,0,15,(null),pin2=(null),aid=%s)",
 					CMD_GET_RESPONSE, fileid, hex_path,
 					sd->aid_str);
-	g_free(hex_path);
+	l_free(hex_path);
 
 	if (g_ril_send(sd->ril, RIL_REQUEST_SIM_IO, &rilp,
 				ril_file_info_cb, cbd, g_free) > 0)
@@ -475,7 +475,7 @@ static void ril_sim_read_binary(struct ofono_sim *sim, int fileid,
 					CMD_READ_BINARY, fileid, hex_path,
 					start >> 8, start & 0xff,
 					length, sd->aid_str);
-	g_free(hex_path);
+	l_free(hex_path);
 
 	if (g_ril_send(sd->ril, RIL_REQUEST_SIM_IO, &rilp,
 				ril_file_io_cb, cbd, g_free) > 0)
@@ -525,7 +525,7 @@ static void ril_sim_read_record(struct ofono_sim *sim, int fileid,
 					"%d,%d,%d,(null),pin2=(null),aid=%s)",
 					CMD_READ_RECORD, fileid, hex_path,
 					record, 4, length, sd->aid_str);
-	g_free(hex_path);
+	l_free(hex_path);
 
 	if (g_ril_send(sd->ril, RIL_REQUEST_SIM_IO, &rilp,
 				ril_file_io_cb, cbd, g_free) > 0)
@@ -561,7 +561,7 @@ static void ril_sim_update_binary(struct ofono_sim *sim, int fileid,
 
 	p1 = start >> 8;
 	p2 = start & 0xff;
-	hex_data = encode_hex(value, length, 0);
+	hex_data = l_util_hexstring(value, length);
 
 	parcel_init(&rilp);
 	parcel_w_int32(&rilp, CMD_UPDATE_BINARY);
@@ -582,8 +582,8 @@ static void ril_sim_update_binary(struct ofono_sim *sim, int fileid,
 					"%d,%d,%d,%s,pin2=(null),aid=%s),",
 					CMD_UPDATE_BINARY, fileid, hex_path,
 					p1, p2, length, hex_data, sd->aid_str);
-	g_free(hex_path);
-	g_free(hex_data);
+	l_free(hex_path);
+	l_free(hex_data);
 
 	if (g_ril_send(sd->ril, RIL_REQUEST_SIM_IO, &rilp,
 				ril_file_write_cb, cbd, g_free) > 0)
@@ -617,7 +617,7 @@ static void update_record(struct ofono_sim *sim, int fileid,
 		goto error;
 	}
 
-	hex_data = encode_hex(value, length, 0);
+	hex_data = l_util_hexstring(value, length);
 
 	parcel_init(&rilp);
 	parcel_w_int32(&rilp, CMD_UPDATE_RECORD);
@@ -639,8 +639,8 @@ static void update_record(struct ofono_sim *sim, int fileid,
 					CMD_UPDATE_RECORD, fileid, hex_path,
 					record, access_mode, length, hex_data,
 					sd->aid_str);
-	g_free(hex_path);
-	g_free(hex_data);
+	l_free(hex_path);
+	l_free(hex_data);
 
 	if (g_ril_send(sd->ril, RIL_REQUEST_SIM_IO, &rilp,
 				ril_file_write_cb, cbd, g_free) > 0)
@@ -949,10 +949,10 @@ static void inf_pin_retries_cb(struct ril_msg *message, gpointer user_data)
 		goto error;
 	}
 
-	hex_dump = encode_hex((unsigned char *) data, len, '\0');
+	hex_dump = l_util_hexstring((const unsigned char *) data, len);
 	g_ril_append_print_buf(sd->ril, "{%d,%s}", len, hex_dump);
 	g_ril_print_response(sd->ril, message);
-	g_free(hex_dump);
+	l_free(hex_dump);
 
 	expected = sizeof(int32_t) * 5;
 	if (len < expected) {
