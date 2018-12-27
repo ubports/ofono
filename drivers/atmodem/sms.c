@@ -28,6 +28,7 @@
 #include <stdio.h>
 
 #include <glib.h>
+#include <ell/ell.h>
 
 #include <ofono/log.h>
 #include <ofono/modem.h>
@@ -921,7 +922,7 @@ static void construct_ack_pdu(struct sms_data *d)
 	if (len != tpdu_len)
 		goto err;
 
-	d->cnma_ack_pdu = encode_hex(pdu, tpdu_len, 0);
+	d->cnma_ack_pdu = l_util_hexstring(pdu, tpdu_len);
 	if (d->cnma_ack_pdu == NULL)
 		goto err;
 
@@ -1318,7 +1319,7 @@ static void at_sms_remove(struct ofono_sms *sms)
 {
 	struct sms_data *data = ofono_sms_get_data(sms);
 
-	g_free(data->cnma_ack_pdu);
+	l_free(data->cnma_ack_pdu);
 
 	if (data->timeout_source > 0)
 		g_source_remove(data->timeout_source);
