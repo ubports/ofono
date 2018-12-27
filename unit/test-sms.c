@@ -27,6 +27,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 #include <ell/ell.h>
 #include <glib.h>
@@ -317,9 +318,9 @@ static void test_deliver_encode(void)
 	g_assert(encoded_tpdu_len == 30);
 	g_assert(encoded_pdu_len == (long)pdu_len);
 
-	encoded_pdu = encode_hex(pdu, encoded_pdu_len, 0);
-	g_assert(strcmp(simple_deliver, encoded_pdu) == 0);
-	g_free(encoded_pdu);
+	encoded_pdu = l_util_hexstring(pdu, encoded_pdu_len);
+	g_assert(strcasecmp(simple_deliver, encoded_pdu) == 0);
+	l_free(encoded_pdu);
 
 	decoded_pdu = l_util_from_hexstring(alnum_sender, &pdu_len);
 	g_assert(decoded_pdu);
@@ -344,11 +345,9 @@ static void test_deliver_encode(void)
 	g_assert(encoded_tpdu_len == 27);
 	g_assert(encoded_pdu_len == (long)pdu_len);
 
-	encoded_pdu = encode_hex(pdu, encoded_pdu_len, 0);
-
-	g_assert(strcmp(alnum_sender, encoded_pdu) == 0);
-
-	g_free(encoded_pdu);
+	encoded_pdu = l_util_hexstring(pdu, encoded_pdu_len);
+	g_assert(strcasecmp(alnum_sender, encoded_pdu) == 0);
+	l_free(encoded_pdu);
 
 	/* test unicode_deliver*/
 	decoded_pdu = l_util_from_hexstring(unicode_deliver, &pdu_len);
@@ -374,11 +373,9 @@ static void test_deliver_encode(void)
 	g_assert(encoded_tpdu_len == 149);
 	g_assert(encoded_pdu_len == (long)pdu_len);
 
-	encoded_pdu = encode_hex(pdu, encoded_pdu_len, 0);
-
-	g_assert(strcmp(unicode_deliver, encoded_pdu) == 0);
-
-	g_free(encoded_pdu);
+	encoded_pdu = l_util_hexstring(pdu, encoded_pdu_len);
+	g_assert(strcasecmp(unicode_deliver, encoded_pdu) == 0);
+	l_free(encoded_pdu);
 }
 
 static void test_simple_submit(void)
@@ -472,10 +469,9 @@ static void test_submit_encode(void)
 	g_assert(encoded_tpdu_len == 23);
 	g_assert(encoded_pdu_len == (long)pdu_len);
 
-	encoded_pdu = encode_hex(pdu, encoded_pdu_len, 0);
-
-	g_assert(strcmp(simple_submit, encoded_pdu) == 0);
-	g_free(encoded_pdu);
+	encoded_pdu = l_util_hexstring(pdu, encoded_pdu_len);
+	g_assert(strcasecmp(simple_submit, encoded_pdu) == 0);
+	l_free(encoded_pdu);
 }
 
 static void test_simple_mwi(void)
@@ -1154,11 +1150,9 @@ static void test_prepare_7bit(void)
 		printf("\n");
 	}
 
-	encoded_pdu = encode_hex(pdu, encoded_pdu_len, 0);
-
-	g_assert(strcmp(expected_no_fragmentation_7bit, encoded_pdu) == 0);
-
-	g_free(encoded_pdu);
+	encoded_pdu = l_util_hexstring(pdu, encoded_pdu_len);
+	g_assert(strcasecmp(expected_no_fragmentation_7bit, encoded_pdu) == 0);
+	l_free(encoded_pdu);
 	g_slist_free_full(r, g_free);
 }
 
@@ -1209,7 +1203,7 @@ static void test_prepare_concat(gconstpointer data)
 		sms_encode(sms, &pdu_len, &tpdu_len, pdu);
 		g_assert(pdu_len == (tpdu_len + 1));
 
-		strpdu = encode_hex(pdu, pdu_len, 0);
+		strpdu = l_util_hexstring(pdu, pdu_len);
 
 		if (VERBOSE)
 			printf("PDU: %s, len: %d, tlen: %d\n",
@@ -1250,7 +1244,7 @@ static void test_prepare_concat(gconstpointer data)
 	g_assert(decoded_str);
 	g_assert(strcmp(decoded_str, test->str) == 0);
 	g_free(decoded_str);
-	g_slist_free_full(pdus, g_free);
+	g_slist_free_full(pdus, l_free);
 	g_slist_free_full(r, g_free);
 	sms_assembly_free(assembly);
 }
@@ -1385,11 +1379,9 @@ static void test_cbs_encode_decode(void)
 
 	g_assert(ret);
 
-	encoded_pdu = encode_hex(pdu, len, 0);
-
-	g_assert(strcmp(cbs1, encoded_pdu) == 0);
-
-	g_free(encoded_pdu);
+	encoded_pdu = l_util_hexstring(pdu, len);
+	g_assert(strcasecmp(cbs1, encoded_pdu) == 0);
+	l_free(encoded_pdu);
 }
 
 static void test_cbs_assembly(void)

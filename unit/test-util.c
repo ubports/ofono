@@ -24,6 +24,7 @@
 #endif
 
 #include <string.h>
+#include <strings.h>
 #include <stdio.h>
 #include <assert.h>
 #include <glib.h>
@@ -602,13 +603,10 @@ static void test_decode_encode(void)
 
 	g_assert((size_t) packed_size == hex_decoded_size);
 	g_assert(memcmp(packed, decoded, packed_size) == 0);
-
 	g_free(decoded);
 
-	hex_packed = encode_hex(packed, packed_size, 0);
-
+	hex_packed = l_util_hexstring(packed, packed_size);
 	g_assert(hex_packed != NULL);
-
 	l_free(packed);
 
 	if (VERBOSE)
@@ -616,9 +614,9 @@ static void test_decode_encode(void)
 				(long)strlen(hex_packed));
 
 	g_assert(strlen(hex_packed) == strlen(sms));
-	g_assert(strcmp(hex_packed, sms) == 0);
+	g_assert(strcasecmp(hex_packed, sms) == 0);
 
-	g_free(hex_packed);
+	l_free(hex_packed);
 }
 
 static void test_pack_size(void)
