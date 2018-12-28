@@ -1189,30 +1189,6 @@ static void expect_response_and_not_canceled_after_3(const unsigned char *pdu,
 	g_idle_add(end_session_and_not_canceled_after_3, NULL);
 }
 
-static gboolean poweroff_and_canceled_after_21(gpointer user_data)
-{
-	__stktest_test_finish(pending == NULL);
-	return FALSE;
-}
-
-static gboolean end_session_and_canceled_after_21(gpointer user_data)
-{
-	g_at_server_send_unsolicited(emulator, "+CUSATEND");
-	g_timeout_add_seconds(21, poweroff_and_canceled_after_21, NULL);
-
-	return FALSE;
-}
-
-static void expect_response_and_canceled_after_21(const unsigned char *pdu,
-							unsigned int len)
-{
-	struct test *test = cur_test->data;
-
-	STKTEST_RESPONSE_ASSERT(test->rsp_pdu, test->rsp_len, pdu, len);
-
-	g_idle_add(end_session_and_canceled_after_21, NULL);
-}
-
 static DBusMessage *test_display_text_11(DBusMessage *msg,
 						const char *text,
 						unsigned char icon_id,
@@ -3510,7 +3486,7 @@ static void __stktest_test_init(void)
 				display_text_response_421,
 				sizeof(display_text_response_421),
 				test_display_text_42,
-				expect_response_and_canceled_after_21);
+				expect_response_and_not_canceled_after_3);
 	stktest_add_test("Display Text 4.3", "DisplayText",
 				display_text_431, sizeof(display_text_431),
 				display_text_response_431,
