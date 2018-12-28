@@ -1454,8 +1454,7 @@ static void set_get_inkey_duration(struct stk_duration *duration,
 }
 
 static void request_confirmation_cb(enum stk_agent_result result,
-					gboolean confirm,
-					void *user_data)
+					bool confirm, void *user_data)
 {
 	struct ofono_stk *stk = user_data;
 	static struct ofono_error error = { .type = OFONO_ERROR_TYPE_FAILURE };
@@ -1761,7 +1760,7 @@ static void call_setup_cancel(struct ofono_stk *stk)
 		__ofono_voicecall_dial_cancel(vc);
 }
 
-static void confirm_call_cb(enum stk_agent_result result, gboolean confirm,
+static void confirm_call_cb(enum stk_agent_result result, bool confirm,
 				void *user_data)
 {
 	struct ofono_stk *stk = user_data;
@@ -1779,7 +1778,7 @@ static void confirm_call_cb(enum stk_agent_result result, gboolean confirm,
 
 	switch (result) {
 	case STK_AGENT_RESULT_TIMEOUT:
-		confirm = FALSE;
+		confirm = false;
 		/* Fall through */
 
 	case STK_AGENT_RESULT_OK:
@@ -1865,7 +1864,7 @@ static void confirm_call_cb(enum stk_agent_result result, gboolean confirm,
 }
 
 static void confirm_handled_call_cb(enum stk_agent_result result,
-					gboolean confirm, void *user_data)
+					bool confirm, void *user_data)
 {
 	struct ofono_stk *stk = user_data;
 	const struct stk_command_setup_call *sc =
@@ -2683,7 +2682,7 @@ static gboolean handle_command_play_tone(const struct stk_command *cmd,
 }
 
 static void confirm_launch_browser_cb(enum stk_agent_result result,
-					gboolean confirm,
+					bool confirm,
 					void *user_data)
 {
 	struct ofono_stk *stk = user_data;
@@ -2693,7 +2692,7 @@ static void confirm_launch_browser_cb(enum stk_agent_result result,
 
 	switch (result) {
 	case STK_AGENT_RESULT_TIMEOUT:
-		confirm = FALSE;
+		confirm = false;
 		/* Fall through */
 
 	case STK_AGENT_RESULT_OK:
