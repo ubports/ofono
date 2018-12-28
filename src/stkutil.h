@@ -19,6 +19,8 @@
  *
  */
 
+struct l_queue;
+
 /*
  * TS 101.220, Section 7.2, Card Application Toolkit assigned templates,
  * These are the same as 3GPP 11.14 Sections 13.1 and 13.2
@@ -1177,7 +1179,7 @@ struct stk_command_poll_interval {
 
 struct stk_command_setup_menu {
 	char *alpha_id;
-	GSList *items;
+	struct l_queue *items;
 	struct stk_items_next_action_indicator next_act;
 	struct stk_icon_id icon_id;
 	struct stk_item_icon_id_list item_icon_id_list;
@@ -1187,7 +1189,7 @@ struct stk_command_setup_menu {
 
 struct stk_command_select_item {
 	char *alpha_id;
-	GSList *items;
+	struct l_queue *items;
 	struct stk_items_next_action_indicator next_act;
 	unsigned char item_id;
 	struct stk_icon_id icon_id;

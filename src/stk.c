@@ -345,15 +345,15 @@ static char *dbus_apply_text_attributes(const char *text,
 }
 
 static struct stk_menu *stk_menu_create(const char *title,
-		const struct stk_text_attribute *title_attr,
-		const struct stk_icon_id *icon, GSList *items,
-		const struct stk_item_text_attribute_list *item_attrs,
-		const struct stk_item_icon_id_list *item_icon_ids,
-		int default_id, gboolean soft_key, gboolean has_help)
+			const struct stk_text_attribute *title_attr,
+			const struct stk_icon_id *icon, struct l_queue *items,
+			const struct stk_item_text_attribute_list *item_attrs,
+			const struct stk_item_icon_id_list *item_icon_ids,
+			int default_id, bool soft_key, bool has_help)
 {
-	unsigned int len = g_slist_length(items);
+	unsigned int len = l_queue_length(items);
 	struct stk_menu *ret;
-	GSList *l;
+	const struct l_queue_entry *entry;
 	int i;
 	struct stk_text_attribute attr;
 
@@ -378,8 +378,9 @@ static struct stk_menu *stk_menu_create(const char *title,
 	ret->soft_key = soft_key;
 	ret->has_help = has_help;
 
-	for (l = items, i = 0; l; l = l->next, i++) {
-		struct stk_item *item = l->data;
+	for (entry = l_queue_get_entries(items), i = 0;
+					entry; entry = entry->next, i++) {
+		struct stk_item *item = entry->data;
 		char *text;
 
 		ret->items[i].item_id = item->id;

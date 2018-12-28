@@ -2231,42 +2231,39 @@ static void destroy_stk_item(gpointer pointer)
 static gboolean parse_item_list(struct comprehension_tlv_iter *iter,
 				void *data)
 {
-	GSList **out = data;
-	unsigned short tag = STK_DATA_OBJECT_TYPE_ITEM;
+	struct l_queue **out = data;
+	uint16_t tag = STK_DATA_OBJECT_TYPE_ITEM;
 	struct comprehension_tlv_iter iter_old;
 	struct stk_item item;
-	GSList *list = NULL;
+	struct l_queue *list = l_queue_new();
 	unsigned int count = 0;
-	gboolean has_empty = FALSE;
+	bool has_empty = FALSE;
 
 	do {
 		comprehension_tlv_iter_copy(iter, &iter_old);
 		memset(&item, 0, sizeof(item));
 		count++;
 
-		if (parse_dataobj_item(iter, &item) == TRUE) {
-			if (item.id == 0) {
-				has_empty = TRUE;
-				continue;
-			}
+		if (!parse_dataobj_item(iter, &item))
+			continue;
 
-			list = g_slist_prepend(list,
-						l_memdup(&item, sizeof(item)));
+		if (item.id == 0) {
+			has_empty = TRUE;
+			continue;
 		}
+
+		l_queue_push_tail(list, l_memdup(&item, sizeof(item)));
 	} while (comprehension_tlv_iter_next(iter) == TRUE &&
 			comprehension_tlv_iter_get_tag(iter) == tag);
 
 	comprehension_tlv_iter_copy(&iter_old, iter);
 
-	if (!has_empty) {
-		*out = g_slist_reverse(list);
+	if (!has_empty || count == 1) {
+		*out = list;
 		return TRUE;
 	}
 
-	if (count == 1)
-		return TRUE;
-
-	g_slist_free_full(list, destroy_stk_item);
+	l_queue_destroy(list, destroy_stk_item);
 	return FALSE;
 }
 
@@ -2590,7 +2587,7 @@ static enum stk_command_parse_result parse_poll_interval(
 static void destroy_setup_menu(struct stk_command *command)
 {
 	l_free(command->setup_menu.alpha_id);
-	g_slist_free_full(command->setup_menu.items, destroy_stk_item);
+	l_queue_destroy(command->setup_menu.items, destroy_stk_item);
 }
 
 static enum stk_command_parse_result parse_setup_menu(
@@ -2635,7 +2632,7 @@ static enum stk_command_parse_result parse_setup_menu(
 static void destroy_select_item(struct stk_command *command)
 {
 	l_free(command->select_item.alpha_id);
-	g_slist_free_full(command->select_item.items, destroy_stk_item);
+	l_queue_destroy(command->select_item.items, destroy_stk_item);
 }
 
 static enum stk_command_parse_result parse_select_item(
@@ -2675,7 +2672,7 @@ static enum stk_command_parse_result parse_select_item(
 
 	command->destructor = destroy_select_item;
 
-	if (status == STK_PARSE_RESULT_OK && obj->items == NULL)
+	if (status == STK_PARSE_RESULT_OK && l_queue_isempty(obj->items))
 		status = STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
 	CHECK_TEXT_AND_ICON(obj->alpha_id, obj->icon_id.id);
