@@ -20,6 +20,7 @@
  */
 
 #include <glib.h>
+#include <ell/ell.h>
 
 #define OFONO_API_SUBJECT_TO_CHANGE
 
@@ -387,9 +388,8 @@ ofono_bool_t __ofono_is_valid_sim_pin(const char *pin,
 
 ofono_bool_t __ofono_is_valid_net_pin(const char *pin);
 
-void __ofono_sim_refresh(struct ofono_sim *sim, GSList *file_list,
-				ofono_bool_t full_file_change,
-				ofono_bool_t naa_init);
+void __ofono_sim_refresh(struct ofono_sim *sim, struct l_queue *file_list,
+				bool full_file_change, bool naa_init);
 
 void __ofono_sim_recheck_pin(struct ofono_sim *sim);
 

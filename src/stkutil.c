@@ -602,7 +602,8 @@ static gboolean parse_dataobj_ussd(struct comprehension_tlv_iter *iter,
 static gboolean parse_dataobj_file_list(struct comprehension_tlv_iter *iter,
 					void *user)
 {
-	GSList **fl = user;
+	struct l_queue **out = user;
+	struct l_queue *fl;
 	const unsigned char *data;
 	unsigned int len;
 	struct stk_file *sf;
@@ -613,27 +614,24 @@ static gboolean parse_dataobj_file_list(struct comprehension_tlv_iter *iter,
 		return FALSE;
 
 	data = comprehension_tlv_iter_get_data(iter);
-
 	stk_file_iter_init(&sf_iter, data + 1, len - 1);
+	fl = l_queue_new();
 
 	while (stk_file_iter_next(&sf_iter)) {
-		sf = g_try_new0(struct stk_file, 1);
-		if (sf == NULL)
-			goto error;
-
+		sf = l_new(struct stk_file, 1);
 		sf->len = sf_iter.len;
 		memcpy(sf->file, sf_iter.file, sf_iter.len);
-		*fl = g_slist_prepend(*fl, sf);
+		l_queue_push_tail(fl, sf);
 	}
 
 	if (sf_iter.pos != sf_iter.max)
 		goto error;
 
-	*fl = g_slist_reverse(*fl);
+	*out = fl;
 	return TRUE;
 
 error:
-	g_slist_free_full(*fl, g_free);
+	l_queue_destroy(fl, l_free);
 	return FALSE;
 }
 
@@ -2270,25 +2268,25 @@ static gboolean parse_item_list(struct comprehension_tlv_iter *iter,
 static gboolean parse_provisioning_list(struct comprehension_tlv_iter *iter,
 					void *data)
 {
-	GSList **out = data;
+	struct l_queue **out = data;
 	unsigned short tag = STK_DATA_OBJECT_TYPE_PROVISIONING_FILE_REF;
 	struct comprehension_tlv_iter iter_old;
 	struct stk_file file;
-	GSList *list = NULL;
+	struct l_queue *list = l_queue_new();
 
 	do {
 		comprehension_tlv_iter_copy(iter, &iter_old);
 		memset(&file, 0, sizeof(file));
 
-		if (parse_dataobj_provisioning_file_reference(iter, &file)
-									== TRUE)
-			list = g_slist_prepend(list,
-						g_memdup(&file, sizeof(file)));
+		if (!parse_dataobj_provisioning_file_reference(iter, &file))
+			continue;
+
+		l_queue_push_tail(list, l_memdup(&file, sizeof(file)));
 	} while (comprehension_tlv_iter_next(iter) == TRUE &&
 			comprehension_tlv_iter_get_tag(iter) == tag);
 
 	comprehension_tlv_iter_copy(&iter_old, iter);
-	*out = g_slist_reverse(list);
+	*out = list;
 
 	return TRUE;
 }
@@ -2907,7 +2905,7 @@ static enum stk_command_parse_result parse_setup_call(
 
 static void destroy_refresh(struct stk_command *command)
 {
-	g_slist_free_full(command->refresh.file_list, g_free);
+	l_queue_destroy(command->refresh.file_list, l_free);
 	l_free(command->refresh.alpha_id);
 }
 
@@ -3222,7 +3220,7 @@ static void destroy_launch_browser(struct stk_command *command)
 {
 	l_free(command->launch_browser.url);
 	l_free(command->launch_browser.bearer.array);
-	g_slist_free_full(command->launch_browser.prov_file_refs, g_free);
+	l_queue_destroy(command->launch_browser.prov_file_refs, l_free);
 	l_free(command->launch_browser.text_gateway_proxy_id);
 	l_free(command->launch_browser.alpha_id);
 	l_free(command->launch_browser.network_name.array);
@@ -3608,7 +3606,7 @@ static enum stk_command_parse_result parse_get_frames_status(
 static void destroy_retrieve_mms(struct stk_command *command)
 {
 	l_free(command->retrieve_mms.alpha_id);
-	g_slist_free_full(command->retrieve_mms.mms_rec_files, g_free);
+	l_queue_destroy(command->retrieve_mms.mms_rec_files, l_free);
 }
 
 static enum stk_command_parse_result parse_retrieve_mms(
@@ -3655,7 +3653,7 @@ static enum stk_command_parse_result parse_retrieve_mms(
 static void destroy_submit_mms(struct stk_command *command)
 {
 	l_free(command->submit_mms.alpha_id);
-	g_slist_free_full(command->submit_mms.mms_subm_files, g_free);
+	l_queue_destroy(command->submit_mms.mms_subm_files, l_free);
 }
 
 static enum stk_command_parse_result parse_submit_mms(
@@ -3695,7 +3693,7 @@ static enum stk_command_parse_result parse_submit_mms(
 
 static void destroy_display_mms(struct stk_command *command)
 {
-	g_slist_free_full(command->display_mms.mms_subm_files, g_free);
+	l_queue_destroy(command->display_mms.mms_subm_files, l_free);
 }
 
 static enum stk_command_parse_result parse_display_mms(
@@ -4377,18 +4375,19 @@ static gboolean build_dataobj_ussd_string(struct stk_tlv_builder *tlv,
 static gboolean build_dataobj_file_list(struct stk_tlv_builder *tlv,
 					const void *data, gboolean cr)
 {
-	GSList *l = (void *) data;
+	struct l_queue *fl = (void *) data;
+	const struct l_queue_entry *entry = l_queue_get_entries(fl);
 	const struct stk_file *file;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_FILE_LIST;
 
 	if (stk_tlv_builder_open_container(tlv, cr, tag, TRUE) != TRUE)
 		return FALSE;
 
-	if (stk_tlv_builder_append_byte(tlv, g_slist_length(l)) != TRUE)
+	if (stk_tlv_builder_append_byte(tlv, l_queue_length(fl)) != TRUE)
 		return FALSE;
 
-	for (; l; l = l->next) {
-		file = l->data;
+	for (; entry; entry = entry->next) {
+		file = entry->data;
 
 		if (stk_tlv_builder_append_bytes(tlv, file->file,
 							file->len) != TRUE)
@@ -4402,12 +4401,14 @@ static gboolean build_dataobj_file_list(struct stk_tlv_builder *tlv,
 static gboolean build_dataobj_file(struct stk_tlv_builder *tlv,
 					const void *data, gboolean cr)
 {
-	GSList l = {
-		.data = (void *) data,
-		.next = NULL,
-	};
+	struct l_queue *fl = l_queue_new();
+	gboolean ret;
 
-	return build_dataobj_file_list(tlv, &l, cr);
+	l_queue_push_tail(fl, (void *) data);
+	ret = build_dataobj_file_list(tlv, fl, cr);
+
+	l_queue_destroy(fl, NULL);
+	return ret;
 }
 
 /* Described in TS 102.223 Section 8.19 */

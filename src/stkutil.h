@@ -1239,7 +1239,7 @@ struct stk_command_setup_call {
 };
 
 struct stk_command_refresh {
-	GSList *file_list;
+	struct l_queue *file_list;
 	struct stk_aid aid;
 	char *alpha_id;
 	struct stk_icon_id icon_id;
@@ -1291,7 +1291,7 @@ struct stk_command_launch_browser {
 	unsigned char browser_id;
 	char *url;
 	struct stk_common_byte_array bearer;
-	GSList *prov_file_refs;
+	struct l_queue *prov_file_refs;
 	char *text_gateway_proxy_id;
 	char *alpha_id;
 	struct stk_icon_id icon_id;
@@ -1372,7 +1372,7 @@ struct stk_command_retrieve_mms {
 	char *alpha_id;
 	struct stk_icon_id icon_id;
 	struct stk_mms_reference mms_ref;
-	GSList *mms_rec_files;
+	struct l_queue *mms_rec_files;
 	struct stk_mms_content_id mms_content_id;
 	struct stk_mms_id mms_id;
 	struct stk_text_attribute text_attr;
@@ -1382,14 +1382,14 @@ struct stk_command_retrieve_mms {
 struct stk_command_submit_mms {
 	char *alpha_id;
 	struct stk_icon_id icon_id;
-	GSList *mms_subm_files;
+	struct l_queue *mms_subm_files;
 	struct stk_mms_id mms_id;
 	struct stk_text_attribute text_attr;
 	struct stk_frame_id frame_id;
 };
 
 struct stk_command_display_mms {
-	GSList *mms_subm_files;
+	struct l_queue *mms_subm_files;
 	struct stk_mms_id mms_id;
 	ofono_bool_t imd_resp;
 	struct stk_frame_id frame_id;

@@ -2164,7 +2164,7 @@ static gboolean handle_command_refresh(const struct stk_command *cmd,
 	struct ofono_sim *sim;
 	uint8_t addnl_info[1];
 	int err;
-	GSList *l;
+	const struct l_queue_entry *entry;
 
 	DBG("");
 
@@ -2208,8 +2208,9 @@ static gboolean handle_command_refresh(const struct stk_command *cmd,
 	}
 
 	DBG("Files:");
-	for (l = cmd->refresh.file_list; l; l = l->next) {
-		struct stk_file *file = l->data;
+	for (entry = l_queue_get_entries(cmd->refresh.file_list);
+					entry; entry = entry->next) {
+		struct stk_file *file = entry->data;
 		char buf[17];
 
 		encode_hex_own_buf(file->file, file->len, 0, buf);
@@ -2273,7 +2274,8 @@ static gboolean handle_command_refresh(const struct stk_command *cmd,
 	 */
 	if (cmd->qualifier < 4 || rsp == NULL) {
 		int qualifier = stk->pending_cmd->qualifier;
-		GSList *file_list = stk->pending_cmd->refresh.file_list;
+		struct l_queue *file_list =
+					stk->pending_cmd->refresh.file_list;
 
 		/* Don't free the list yet */
 		stk->pending_cmd->refresh.file_list = NULL;
@@ -2316,7 +2318,7 @@ static gboolean handle_command_refresh(const struct stk_command *cmd,
 			break;
 		}
 
-		g_slist_free_full(file_list, g_free);
+		l_queue_destroy(file_list, l_free);
 
 		return FALSE;
 	}

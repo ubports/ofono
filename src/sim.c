@@ -3400,17 +3400,17 @@ static void sim_file_changed_flush(struct ofono_sim *sim, int id)
 	sim_fs_cache_flush_file(sim->simfs, id);
 }
 
-void __ofono_sim_refresh(struct ofono_sim *sim, GSList *file_list,
-			ofono_bool_t full_file_change, ofono_bool_t naa_init)
+void __ofono_sim_refresh(struct ofono_sim *sim, struct l_queue *files,
+				bool full_file_change, bool naa_init)
 {
-	GSList *l;
-	gboolean reinit_naa = naa_init || full_file_change;
+	const struct l_queue_entry *l;
+	bool reinit_naa = naa_init || full_file_change;
 
 	/*
 	 * Check if any files used in SIM initialisation procedure
 	 * are affected, except EFiccid, EFpl, EFli.
 	 */
-	for (l = file_list; l; l = l->next) {
+	for (l = l_queue_get_entries(files); l; l = l->next) {
 		struct stk_file *file = l->data;
 		uint32_t mf, df, ef;
 
@@ -3451,7 +3451,7 @@ void __ofono_sim_refresh(struct ofono_sim *sim, GSList *file_list,
 	if (full_file_change)
 		sim_fs_cache_flush(sim->simfs);
 	else {
-		for (l = file_list; l; l = l->next) {
+		for (l = l_queue_get_entries(files); l; l = l->next) {
 			struct stk_file *file = l->data;
 			int id = (file->file[file->len - 2] << 8) |
 				(file->file[file->len - 1] << 0);
@@ -3476,7 +3476,7 @@ void __ofono_sim_refresh(struct ofono_sim *sim, GSList *file_list,
 	if (full_file_change)
 		sim_fs_notify_file_watches(sim->simfs, -1);
 	else {
-		for (l = file_list; l; l = l->next) {
+		for (l = l_queue_get_entries(files); l; l = l->next) {
 			struct stk_file *file = l->data;
 			int id = (file->file[file->len - 2] << 8) |
 				(file->file[file->len - 1] << 0);
