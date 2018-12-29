@@ -364,7 +364,7 @@ static void ril_file_io_cb(struct ril_msg *message, gpointer user_data)
 	int sw1, sw2;
 	char *hex_response;
 	unsigned char *response = NULL;
-	long len;
+	size_t len;
 
 	if (message->error != RIL_E_SUCCESS) {
 		ofono_error("RILD reply failure: %s",
