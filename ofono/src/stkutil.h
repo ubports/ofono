@@ -19,6 +19,8 @@
  *
  */
 
+#include <stdbool.h>
+
 /*
  * TS 101.220, Section 7.2, Card Application Toolkit assigned templates,
  * These are the same as 3GPP 11.14 Sections 13.1 and 13.2

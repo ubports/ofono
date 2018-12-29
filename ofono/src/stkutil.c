@@ -57,9 +57,8 @@ struct stk_tlv_builder {
 	unsigned int max_len;
 };
 
-typedef gboolean (*dataobj_handler)(struct comprehension_tlv_iter *, void *);
-typedef gboolean (*dataobj_writer)(struct stk_tlv_builder *,
-					const void *, gboolean);
+typedef bool (*dataobj_handler)(struct comprehension_tlv_iter *, void *);
+typedef bool (*dataobj_writer)(struct stk_tlv_builder *, const void *, bool);
 
 /*
  * Defined in TS 102.223 Section 8.13
@@ -121,41 +120,41 @@ static char *decode_text(unsigned char dcs, int len, const unsigned char *data)
 }
 
 /* For data object only to indicate its existence */
-static gboolean parse_dataobj_common_bool(struct comprehension_tlv_iter *iter,
-						gboolean *out)
+static bool parse_dataobj_common_bool(struct comprehension_tlv_iter *iter,
+						bool *out)
 {
 	if (comprehension_tlv_iter_get_length(iter) != 0)
-		return FALSE;
+		return false;
 
-	*out = TRUE;
+	*out = true;
 
-	return TRUE;
+	return true;
 }
 
 /* For data object that only has one byte */
-static gboolean parse_dataobj_common_byte(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_common_byte(struct comprehension_tlv_iter *iter,
 						unsigned char *out)
 {
 	const unsigned char *data;
 
 	if (comprehension_tlv_iter_get_length(iter) != 1)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 	*out = data[0];
 
-	return TRUE;
+	return true;
 }
 
 /* For data object that only has text terminated by '\0' */
-static gboolean parse_dataobj_common_text(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_common_text(struct comprehension_tlv_iter *iter,
 						char **text)
 {
 	const unsigned char *data;
 	unsigned int len = comprehension_tlv_iter_get_length(iter);
 
 	if (len < 1)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 
@@ -166,19 +165,18 @@ static gboolean parse_dataobj_common_text(struct comprehension_tlv_iter *iter,
 	memcpy(*text, data, len);
 	(*text)[len] = '\0';
 
-	return TRUE;
+	return true;
 }
 
 /* For data object that only has a byte array with undetermined length */
-static gboolean parse_dataobj_common_byte_array(
-			struct comprehension_tlv_iter *iter,
-			struct stk_common_byte_array *array)
+static bool parse_dataobj_common_byte_array(struct comprehension_tlv_iter *iter,
+					struct stk_common_byte_array *array)
 {
 	const unsigned char *data;
 	unsigned int len = comprehension_tlv_iter_get_length(iter);
 
 	if (len < 1)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 	array->len = len;
@@ -189,7 +187,7 @@ static gboolean parse_dataobj_common_byte_array(
 
 	memcpy(array->array, data, len);
 
-	return TRUE;
+	return true;
 }
 
 static void stk_file_iter_init(struct stk_file_iter *iter,
@@ -200,7 +198,7 @@ static void stk_file_iter_init(struct stk_file_iter *iter,
 	iter->pos = 0;
 }
 
-static gboolean stk_file_iter_next(struct stk_file_iter *iter)
+static bool stk_file_iter_next(struct stk_file_iter *iter)
 {
 	unsigned int pos = iter->pos;
 	const unsigned int max = iter->max;
@@ -209,11 +207,11 @@ static gboolean stk_file_iter_next(struct stk_file_iter *iter)
 	unsigned char last_type;
 
 	if (pos + 2 >= max)
-		return FALSE;
+		return false;
 
 	/* SIM EFs always start with ROOT MF, 0x3f */
 	if (start[iter->pos] != 0x3f)
-		return FALSE;
+		return false;
 
 	last_type = 0x3f;
 
@@ -232,48 +230,48 @@ static gboolean stk_file_iter_next(struct stk_file_iter *iter)
 		switch (start[i]) {
 		case 0x2f:
 			if (last_type != 0x3f)
-				return FALSE;
+				return false;
 			break;
 		case 0x6f:
 			if (last_type != 0x7f)
-				return FALSE;
+				return false;
 			break;
 		case 0x4f:
 			if (last_type != 0x5f)
-				return FALSE;
+				return false;
 			break;
 		case 0x7f:
 			if (last_type != 0x3f)
-				return FALSE;
+				return false;
 			break;
 		case 0x5f:
 			if (last_type != 0x7f)
-				return FALSE;
+				return false;
 			break;
 		default:
-			return FALSE;
+			return false;
 		}
 
 		if ((start[i] == 0x2f) || (start[i] == 0x6f) ||
 						(start[i] == 0x4f)) {
 			if (i + 1 >= max)
-				return FALSE;
+				return false;
 
 			iter->file = start + pos;
 			iter->len = i - pos + 2;
 			iter->pos = i + 2;
 
-			return TRUE;
+			return true;
 		}
 
 		last_type = start[i];
 	}
 
-	return FALSE;
+	return false;
 }
 
 /* Defined in TS 102.223 Section 8.1 */
-static gboolean parse_dataobj_address(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_address(struct comprehension_tlv_iter *iter,
 					void *user)
 {
 	struct stk_address *addr = user;
@@ -283,7 +281,7 @@ static gboolean parse_dataobj_address(struct comprehension_tlv_iter *iter,
 
 	len = comprehension_tlv_iter_get_length(iter);
 	if (len < 2)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 
@@ -295,11 +293,11 @@ static gboolean parse_dataobj_address(struct comprehension_tlv_iter *iter,
 	addr->number = number;
 	sim_extract_bcd_number(data + 1, len - 1, addr->number);
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.2 */
-static gboolean parse_dataobj_alpha_id(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_alpha_id(struct comprehension_tlv_iter *iter,
 					void *user)
 {
 	char **alpha_id = user;
@@ -310,22 +308,22 @@ static gboolean parse_dataobj_alpha_id(struct comprehension_tlv_iter *iter,
 	len = comprehension_tlv_iter_get_length(iter);
 	if (len == 0) {
 		*alpha_id = NULL;
-		return TRUE;
+		return true;
 	}
 
 	data = comprehension_tlv_iter_get_data(iter);
 	utf8 = sim_string_to_utf8(data, len);
 
 	if (utf8 == NULL)
-		return FALSE;
+		return false;
 
 	*alpha_id = utf8;
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.3 */
-static gboolean parse_dataobj_subaddress(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_subaddress(struct comprehension_tlv_iter *iter,
 						void *user)
 {
 	struct stk_subaddress *subaddr = user;
@@ -334,23 +332,22 @@ static gboolean parse_dataobj_subaddress(struct comprehension_tlv_iter *iter,
 
 	len = comprehension_tlv_iter_get_length(iter);
 	if (len < 1)
-		return FALSE;
+		return false;
 
 	if (len > sizeof(subaddr->subaddr))
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 	subaddr->len = len;
 	memcpy(subaddr->subaddr, data, len);
 
-	subaddr->has_subaddr = TRUE;
+	subaddr->has_subaddr = true;
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.4 */
-static gboolean parse_dataobj_ccp(struct comprehension_tlv_iter *iter,
-					void *user)
+static bool parse_dataobj_ccp(struct comprehension_tlv_iter *iter, void *user)
 {
 	struct stk_ccp *ccp = user;
 	const unsigned char *data;
@@ -358,20 +355,20 @@ static gboolean parse_dataobj_ccp(struct comprehension_tlv_iter *iter,
 
 	len = comprehension_tlv_iter_get_length(iter);
 	if (len < 1)
-		return FALSE;
+		return false;
 
 	if (len > sizeof(ccp->ccp))
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 	ccp->len = len;
 	memcpy(ccp->ccp, data, len);
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 31.111 Section 8.5 */
-static gboolean parse_dataobj_cbs_page(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_cbs_page(struct comprehension_tlv_iter *iter,
 					void *user)
 {
 	struct stk_cbs_page *cp = user;
@@ -380,45 +377,44 @@ static gboolean parse_dataobj_cbs_page(struct comprehension_tlv_iter *iter,
 
 	len = comprehension_tlv_iter_get_length(iter);
 	if (len < 1)
-		return FALSE;
+		return false;
 
 	if (len > sizeof(cp->page))
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 	cp->len = len;
 	memcpy(cp->page, data, len);
 
-	return TRUE;
+	return true;
 }
 
 /* Described in TS 102.223 Section 8.8 */
-static gboolean parse_dataobj_duration(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_duration(struct comprehension_tlv_iter *iter,
 					void *user)
 {
 	struct stk_duration *duration = user;
 	const unsigned char *data;
 
 	if (comprehension_tlv_iter_get_length(iter) != 2)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 
 	if (data[0] > 0x02)
-		return FALSE;
+		return false;
 
 	if (data[1] == 0)
-		return FALSE;
+		return false;
 
 	duration->unit = data[0];
 	duration->interval = data[1];
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.9 */
-static gboolean parse_dataobj_item(struct comprehension_tlv_iter *iter,
-					void *user)
+static bool parse_dataobj_item(struct comprehension_tlv_iter *iter, void *user)
 {
 	struct stk_item *item = user;
 	const unsigned char *data;
@@ -428,64 +424,64 @@ static gboolean parse_dataobj_item(struct comprehension_tlv_iter *iter,
 	len = comprehension_tlv_iter_get_length(iter);
 
 	if (len == 0)
-		return TRUE;
+		return true;
 
 	if (len == 1)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 
 	/* The identifier is between 0x01 and 0xFF */
 	if (data[0] == 0)
-		return FALSE;
+		return false;
 
 	utf8 = sim_string_to_utf8(data + 1, len - 1);
 
 	if (utf8 == NULL)
-		return FALSE;
+		return false;
 
 	item->id = data[0];
 	item->text = utf8;
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.10 */
-static gboolean parse_dataobj_item_id(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_item_id(struct comprehension_tlv_iter *iter,
 					void *user)
 {
 	unsigned char *id = user;
 	const unsigned char *data;
 
 	if (comprehension_tlv_iter_get_length(iter) != 1)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 	*id = data[0];
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.11 */
-static gboolean parse_dataobj_response_len(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_response_len(struct comprehension_tlv_iter *iter,
 						void *user)
 {
 	struct stk_response_length *response_len = user;
 	const unsigned char *data;
 
 	if (comprehension_tlv_iter_get_length(iter) != 2)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 
 	response_len->min = data[0];
 	response_len->max = data[1];
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.12 */
-static gboolean parse_dataobj_result(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_result(struct comprehension_tlv_iter *iter,
 					void *user)
 {
 	struct stk_result *result = user;
@@ -495,7 +491,7 @@ static gboolean parse_dataobj_result(struct comprehension_tlv_iter *iter,
 
 	len = comprehension_tlv_iter_get_length(iter);
 	if (len < 1)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 
@@ -503,7 +499,7 @@ static gboolean parse_dataobj_result(struct comprehension_tlv_iter *iter,
 				(data[0] == 0x26) || (data[0] == 0x38) ||
 				(data[0] == 0x39) || (data[0] == 0x3a) ||
 				(data[0] == 0x3c) || (data[0] == 0x3d)))
-		return FALSE;
+		return false;
 
 	additional = g_try_malloc(len - 1);
 	if (additional == NULL)
@@ -514,11 +510,11 @@ static gboolean parse_dataobj_result(struct comprehension_tlv_iter *iter,
 	result->additional = additional;
 	memcpy(result->additional, data + 1, len - 1);
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.13 */
-static gboolean parse_dataobj_gsm_sms_tpdu(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_gsm_sms_tpdu(struct comprehension_tlv_iter *iter,
 						void *user)
 {
 	struct gsm_sms_tpdu *tpdu = user;
@@ -527,19 +523,18 @@ static gboolean parse_dataobj_gsm_sms_tpdu(struct comprehension_tlv_iter *iter,
 
 	len = comprehension_tlv_iter_get_length(iter);
 	if (len < 1 || len > sizeof(tpdu->tpdu))
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 
 	tpdu->len = len;
 	memcpy(tpdu->tpdu, data, len);
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.14 */
-static gboolean parse_dataobj_ss(struct comprehension_tlv_iter *iter,
-					void *user)
+static bool parse_dataobj_ss(struct comprehension_tlv_iter *iter, void *user)
 {
 	struct stk_ss *ss = user;
 	const unsigned char *data;
@@ -548,7 +543,7 @@ static gboolean parse_dataobj_ss(struct comprehension_tlv_iter *iter,
 
 	len = comprehension_tlv_iter_get_length(iter);
 	if (len < 2)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 
@@ -560,12 +555,11 @@ static gboolean parse_dataobj_ss(struct comprehension_tlv_iter *iter,
 	ss->ss = s;
 	sim_extract_bcd_number(data + 1, len - 1, ss->ss);
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.15 */
-static gboolean parse_dataobj_text(struct comprehension_tlv_iter *iter,
-					void *user)
+static bool parse_dataobj_text(struct comprehension_tlv_iter *iter, void *user)
 {
 	char **text = user;
 	unsigned int len = comprehension_tlv_iter_get_length(iter);
@@ -574,7 +568,7 @@ static gboolean parse_dataobj_text(struct comprehension_tlv_iter *iter,
 
 	if (len <= 1) {
 		*text = g_try_malloc0(1);
-		return TRUE;
+		return true;
 	}
 
 	data = comprehension_tlv_iter_get_data(iter);
@@ -582,40 +576,38 @@ static gboolean parse_dataobj_text(struct comprehension_tlv_iter *iter,
 	utf8 = decode_text(data[0], len - 1, data + 1);
 
 	if (utf8 == NULL)
-		return FALSE;
+		return false;
 
 	*text = utf8;
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.16 */
-static gboolean parse_dataobj_tone(struct comprehension_tlv_iter *iter,
-					void *user)
+static bool parse_dataobj_tone(struct comprehension_tlv_iter *iter, void *user)
 {
 	unsigned char *byte = user;
 	return parse_dataobj_common_byte(iter, byte);
 }
 
 /* Defined in TS 102.223 Section 8.17 */
-static gboolean parse_dataobj_ussd(struct comprehension_tlv_iter *iter,
-					void *user)
+static bool parse_dataobj_ussd(struct comprehension_tlv_iter *iter, void *user)
 {
 	struct stk_ussd_string *us = user;
 	unsigned int len = comprehension_tlv_iter_get_length(iter);
 	const unsigned char *data = comprehension_tlv_iter_get_data(iter);
 
 	if (len <= 1 || len > 161)
-		return FALSE;
+		return false;
 
 	us->dcs = data[0];
 	us->len = len - 1;
 	memcpy(us->string, data + 1, us->len);
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.18 */
-static gboolean parse_dataobj_file_list(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_file_list(struct comprehension_tlv_iter *iter,
 					void *user)
 {
 	GSList **fl = user;
@@ -626,7 +618,7 @@ static gboolean parse_dataobj_file_list(struct comprehension_tlv_iter *iter,
 
 	len = comprehension_tlv_iter_get_length(iter);
 	if (len < 5)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 
@@ -646,15 +638,15 @@ static gboolean parse_dataobj_file_list(struct comprehension_tlv_iter *iter,
 		goto error;
 
 	*fl = g_slist_reverse(*fl);
-	return TRUE;
+	return true;
 
 error:
 	g_slist_free_full(*fl, g_free);
-	return FALSE;
+	return false;
 }
 
 /* Defined in TS 102.223 Section 8.19 */
-static gboolean parse_dataobj_location_info(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_location_info(struct comprehension_tlv_iter *iter,
 						void *user)
 {
 	struct stk_location_info *li = user;
@@ -663,7 +655,7 @@ static gboolean parse_dataobj_location_info(struct comprehension_tlv_iter *iter,
 
 	len = comprehension_tlv_iter_get_length(iter);
 	if ((len != 5) && (len != 7) && (len != 9))
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 
@@ -671,16 +663,16 @@ static gboolean parse_dataobj_location_info(struct comprehension_tlv_iter *iter,
 	li->lac_tac = (data[3] << 8) + data[4];
 
 	if (len >= 7) {
-		li->has_ci = TRUE;
+		li->has_ci = true;
 		li->ci = (data[5] << 8) + data[6];
 	}
 
 	if (len == 9) {
-		li->has_ext_ci = TRUE;
+		li->has_ext_ci = true;
 		li->ext_ci = (data[7] << 8) + data[8];
 	}
 
-	return TRUE;
+	return true;
 }
 
 /*
@@ -697,7 +689,7 @@ static gboolean parse_dataobj_location_info(struct comprehension_tlv_iter *iter,
  * For example, if the IMEI is "123456789012345", then it's coded as
  * "1A 32 54 76 98 10 32 54".
  */
-static gboolean parse_dataobj_imei(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_imei(struct comprehension_tlv_iter *iter,
 					void *user)
 {
 	char *imei = user;
@@ -707,30 +699,30 @@ static gboolean parse_dataobj_imei(struct comprehension_tlv_iter *iter,
 
 	len = comprehension_tlv_iter_get_length(iter);
 	if (len != 8)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 
 	if ((data[0] & 0x0f) != 0x0a)
-		return FALSE;
+		return false;
 
 	/* Assume imei is at least 16 bytes long (15 for imei + null) */
 	imei[0] = digit_lut[(data[0] & 0xf0) >> 4];
 	extract_bcd_number(data + 1, 7, imei + 1);
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.21 */
-static gboolean parse_dataobj_help_request(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_help_request(struct comprehension_tlv_iter *iter,
 						void *user)
 {
-	gboolean *ret = user;
+	bool *ret = user;
 	return parse_dataobj_common_bool(iter, ret);
 }
 
 /* Defined in TS 102.223 Section 8.22 */
-static gboolean parse_dataobj_network_measurement_results(
+static bool parse_dataobj_network_measurement_results(
 		struct comprehension_tlv_iter *iter, void *user)
 {
 	unsigned char *nmr = user;
@@ -739,18 +731,18 @@ static gboolean parse_dataobj_network_measurement_results(
 
 	len = comprehension_tlv_iter_get_length(iter);
 	if (len != 0x10)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 
 	/* Assume network measurement result is 16 bytes long */
 	memcpy(nmr, data, len);
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.23 */
-static gboolean parse_dataobj_default_text(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_default_text(struct comprehension_tlv_iter *iter,
 						void *user)
 {
 	char **text = user;
@@ -760,19 +752,19 @@ static gboolean parse_dataobj_default_text(struct comprehension_tlv_iter *iter,
 
 	/* DCS followed by some text, cannot be 1 */
 	if (len <= 1)
-		return FALSE;
+		return false;
 
 	utf8 = decode_text(data[0], len - 1, data + 1);
 
 	if (utf8 == NULL)
-		return FALSE;
+		return false;
 
 	*text = utf8;
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.24 */
-static gboolean parse_dataobj_items_next_action_indicator(
+static bool parse_dataobj_items_next_action_indicator(
 		struct comprehension_tlv_iter *iter, void *user)
 {
 	struct stk_items_next_action_indicator *inai = user;
@@ -780,17 +772,17 @@ static gboolean parse_dataobj_items_next_action_indicator(
 	unsigned int len = comprehension_tlv_iter_get_length(iter);
 
 	if ((len < 1) || (len > sizeof(inai->list)))
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 	inai->len = len;
 	memcpy(inai->list, data, len);
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.25 */
-static gboolean parse_dataobj_event_list(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_event_list(struct comprehension_tlv_iter *iter,
 						void *user)
 {
 	struct stk_event_list *el = user;
@@ -798,20 +790,20 @@ static gboolean parse_dataobj_event_list(struct comprehension_tlv_iter *iter,
 	unsigned int len = comprehension_tlv_iter_get_length(iter);
 
 	if (len == 0)
-		return TRUE;
+		return true;
 
 	if (len > sizeof(el->list))
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 	el->len = len;
 	memcpy(el->list, data, len);
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.26 */
-static gboolean parse_dataobj_cause(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_cause(struct comprehension_tlv_iter *iter,
 					void *user)
 {
 	struct stk_cause *cause = user;
@@ -819,23 +811,23 @@ static gboolean parse_dataobj_cause(struct comprehension_tlv_iter *iter,
 	unsigned int len = comprehension_tlv_iter_get_length(iter);
 
 	if ((len == 1) || (len > sizeof(cause->cause)))
-		return FALSE;
+		return false;
 
-	cause->has_cause = TRUE;
+	cause->has_cause = true;
 
 	if (len == 0)
-		return TRUE;
+		return true;
 
 	data = comprehension_tlv_iter_get_data(iter);
 	cause->len = len;
 	memcpy(cause->cause, data, len);
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.27 */
-static gboolean parse_dataobj_location_status(
-		struct comprehension_tlv_iter *iter, void *user)
+static bool parse_dataobj_location_status(struct comprehension_tlv_iter *iter,
+						void *user)
 {
 	unsigned char *byte = user;
 
@@ -843,26 +835,26 @@ static gboolean parse_dataobj_location_status(
 }
 
 /* Defined in TS 102.223 Section 8.28 */
-static gboolean parse_dataobj_transaction_id(
-		struct comprehension_tlv_iter *iter, void *user)
+static bool parse_dataobj_transaction_id(struct comprehension_tlv_iter *iter,
+						void *user)
 {
 	struct stk_transaction_id *ti = user;
 	const unsigned char *data;
 	unsigned int len = comprehension_tlv_iter_get_length(iter);
 
 	if ((len < 1) || (len > sizeof(ti->list)))
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 	ti->len = len;
 	memcpy(ti->list, data, len);
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 31.111 Section 8.29 */
-static gboolean parse_dataobj_bcch_channel_list(
-		struct comprehension_tlv_iter *iter, void *user)
+static bool parse_dataobj_bcch_channel_list(struct comprehension_tlv_iter *iter,
+						void *user)
 {
 	struct stk_bcch_channel_list *bcl = user;
 	const unsigned char *data;
@@ -870,7 +862,7 @@ static gboolean parse_dataobj_bcch_channel_list(
 	unsigned int i;
 
 	if (len < 1)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 
@@ -884,13 +876,13 @@ static gboolean parse_dataobj_bcch_channel_list(
 					(data[index + 1] >> (6 - occupied));
 	}
 
-	bcl->has_list = TRUE;
+	bcl->has_list = true;
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.30 */
-static gboolean parse_dataobj_call_control_requested_action(
+static bool parse_dataobj_call_control_requested_action(
 		struct comprehension_tlv_iter *iter, void *user)
 {
 	struct stk_common_byte_array *array = user;
@@ -899,44 +891,44 @@ static gboolean parse_dataobj_call_control_requested_action(
 }
 
 /* Defined in TS 102.223 Section 8.31 */
-static gboolean parse_dataobj_icon_id(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_icon_id(struct comprehension_tlv_iter *iter,
 					void *user)
 {
 	struct stk_icon_id *id = user;
 	const unsigned char *data;
 
 	if (comprehension_tlv_iter_get_length(iter) != 2)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 
 	id->qualifier = data[0];
 	id->id = data[1];
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.32 */
-static gboolean parse_dataobj_item_icon_id_list(
-		struct comprehension_tlv_iter *iter, void *user)
+static bool parse_dataobj_item_icon_id_list(struct comprehension_tlv_iter *iter,
+						void *user)
 {
 	struct stk_item_icon_id_list *iiil = user;
 	const unsigned char *data;
 	unsigned int len = comprehension_tlv_iter_get_length(iter);
 
 	if ((len < 2) || (len > 127))
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 	iiil->qualifier = data[0];
 	iiil->len = len - 1;
 	memcpy(iiil->list, data + 1, iiil->len);
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.33 */
-static gboolean parse_dataobj_card_reader_status(
+static bool parse_dataobj_card_reader_status(
 		struct comprehension_tlv_iter *iter, void *user)
 {
 	unsigned char *byte = user;
@@ -945,7 +937,7 @@ static gboolean parse_dataobj_card_reader_status(
 }
 
 /* Defined in TS 102.223 Section 8.34 */
-static gboolean parse_dataobj_card_atr(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_card_atr(struct comprehension_tlv_iter *iter,
 					void *user)
 {
 	struct stk_card_atr *ca = user;
@@ -953,17 +945,17 @@ static gboolean parse_dataobj_card_atr(struct comprehension_tlv_iter *iter,
 	unsigned int len = comprehension_tlv_iter_get_length(iter);
 
 	if ((len < 1) || (len > sizeof(ca->atr)))
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 	ca->len = len;
 	memcpy(ca->atr, data, len);
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.35 */
-static gboolean parse_dataobj_c_apdu(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_c_apdu(struct comprehension_tlv_iter *iter,
 					void *user)
 {
 	struct stk_c_apdu *ca = user;
@@ -972,7 +964,7 @@ static gboolean parse_dataobj_c_apdu(struct comprehension_tlv_iter *iter,
 	unsigned int pos;
 
 	if ((len < 4) || (len > 241))
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 	ca->cla = data[0];
@@ -990,26 +982,26 @@ static gboolean parse_dataobj_c_apdu(struct comprehension_tlv_iter *iter,
 	if (len > 5) {
 		ca->lc = data[4];
 		if (ca->lc > sizeof(ca->data))
-			return FALSE;
+			return false;
 
 		pos += ca->lc + 1;
 
 		if (len - pos > 1)
-			return FALSE;
+			return false;
 
 		memcpy(ca->data, data+5, ca->lc);
 	}
 
 	if (len - pos > 0) {
 		ca->le = data[len - 1];
-		ca->has_le = TRUE;
+		ca->has_le = true;
 	}
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.36 */
-static gboolean parse_dataobj_r_apdu(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_r_apdu(struct comprehension_tlv_iter *iter,
 					void *user)
 {
 	struct stk_r_apdu *ra = user;
@@ -1017,7 +1009,7 @@ static gboolean parse_dataobj_r_apdu(struct comprehension_tlv_iter *iter,
 	unsigned int len = comprehension_tlv_iter_get_length(iter);
 
 	if ((len < 2) || (len > 239))
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 	ra->sw1 = data[len-2];
@@ -1029,11 +1021,11 @@ static gboolean parse_dataobj_r_apdu(struct comprehension_tlv_iter *iter,
 	} else
 		ra->len = 0;
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.37 */
-static gboolean parse_dataobj_timer_id(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_timer_id(struct comprehension_tlv_iter *iter,
 					void *user)
 {
 	unsigned char *byte = user;
@@ -1042,26 +1034,26 @@ static gboolean parse_dataobj_timer_id(struct comprehension_tlv_iter *iter,
 }
 
 /* Defined in TS 102.223 Section 8.38 */
-static gboolean parse_dataobj_timer_value(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_timer_value(struct comprehension_tlv_iter *iter,
 						void *user)
 {
 	struct stk_timer_value *tv = user;
 	const unsigned char *data;
 
 	if (comprehension_tlv_iter_get_length(iter) != 3)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 	tv->hour = sms_decode_semi_octet(data[0]);
 	tv->minute = sms_decode_semi_octet(data[1]);
 	tv->second = sms_decode_semi_octet(data[2]);
-	tv->has_value = TRUE;
+	tv->has_value = true;
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.39 */
-static gboolean parse_dataobj_datetime_timezone(
+static bool parse_dataobj_datetime_timezone(
 		struct comprehension_tlv_iter *iter, void *user)
 {
 	struct sms_scts *scts = user;
@@ -1069,16 +1061,16 @@ static gboolean parse_dataobj_datetime_timezone(
 	int offset = 0;
 
 	if (comprehension_tlv_iter_get_length(iter) != 7)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 	sms_decode_scts(data, 7, &offset, scts);
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.40 */
-static gboolean parse_dataobj_at_command(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_at_command(struct comprehension_tlv_iter *iter,
 						void *user)
 {
 	char **command = user;
@@ -1086,7 +1078,7 @@ static gboolean parse_dataobj_at_command(struct comprehension_tlv_iter *iter,
 }
 
 /* Defined in TS 102.223 Section 8.41 */
-static gboolean parse_dataobj_at_response(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_at_response(struct comprehension_tlv_iter *iter,
 						void *user)
 {
 	char **response = user;
@@ -1094,28 +1086,28 @@ static gboolean parse_dataobj_at_response(struct comprehension_tlv_iter *iter,
 }
 
 /* Defined in TS 102.223 Section 8.42 */
-static gboolean parse_dataobj_bc_repeat_indicator(
+static bool parse_dataobj_bc_repeat_indicator(
 		struct comprehension_tlv_iter *iter, void *user)
 {
 	struct stk_bc_repeat *bc_repeat = user;
 
-	if (parse_dataobj_common_byte(iter, &bc_repeat->value) != TRUE)
-		return FALSE;
+	if (!parse_dataobj_common_byte(iter, &bc_repeat->value))
+		return false;
 
-	bc_repeat->has_bc_repeat = TRUE;
-	return TRUE;
+	bc_repeat->has_bc_repeat = true;
+	return true;
 }
 
 /* Defined in 102.223 Section 8.43 */
-static gboolean parse_dataobj_imm_resp(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_imm_resp(struct comprehension_tlv_iter *iter,
 					void *user)
 {
-	gboolean *ret = user;
+	bool *ret = user;
 	return parse_dataobj_common_bool(iter, ret);
 }
 
 /* Defined in 102.223 Section 8.44 */
-static gboolean parse_dataobj_dtmf_string(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_dtmf_string(struct comprehension_tlv_iter *iter,
 						void *user)
 {
 	char **dtmf = user;
@@ -1123,7 +1115,7 @@ static gboolean parse_dataobj_dtmf_string(struct comprehension_tlv_iter *iter,
 	unsigned int len = comprehension_tlv_iter_get_length(iter);
 
 	if (len < 1)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 
@@ -1133,11 +1125,11 @@ static gboolean parse_dataobj_dtmf_string(struct comprehension_tlv_iter *iter,
 
 	sim_extract_bcd_number(data, len, *dtmf);
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in 102.223 Section 8.45 */
-static gboolean parse_dataobj_language(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_language(struct comprehension_tlv_iter *iter,
 					void *user)
 {
 	char *lang = user;
@@ -1145,7 +1137,7 @@ static gboolean parse_dataobj_language(struct comprehension_tlv_iter *iter,
 	unsigned int len = comprehension_tlv_iter_get_length(iter);
 
 	if (len != 2)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 
@@ -1158,58 +1150,57 @@ static gboolean parse_dataobj_language(struct comprehension_tlv_iter *iter,
 	memcpy(lang, data, len);
 	lang[len] = '\0';
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in 31.111 Section 8.46 */
-static gboolean parse_dataobj_timing_advance(
-			struct comprehension_tlv_iter *iter, void *user)
+static bool parse_dataobj_timing_advance(struct comprehension_tlv_iter *iter,
+						void *user)
 {
 	struct stk_timing_advance *ta = user;
 	const unsigned char *data;
 	unsigned int len = comprehension_tlv_iter_get_length(iter);
 
 	if (len != 2)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 
-	ta->has_value = TRUE;
+	ta->has_value = true;
 	ta->status = data[0];
 	ta->advance = data[1];
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in 102.223 Section 8.47 */
-static gboolean parse_dataobj_browser_id(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_browser_id(struct comprehension_tlv_iter *iter,
 						void *user)
 {
 	unsigned char *byte = user;
 
-	if (parse_dataobj_common_byte(iter, byte) == FALSE || *byte > 4)
-		return FALSE;
+	if (!parse_dataobj_common_byte(iter, byte) || *byte > 4)
+		return false;
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.48 */
-static gboolean parse_dataobj_url(struct comprehension_tlv_iter *iter,
-					void *user)
+static bool parse_dataobj_url(struct comprehension_tlv_iter *iter, void *user)
 {
 	char **url = user;
 	unsigned int len = comprehension_tlv_iter_get_length(iter);
 
 	if (len == 0) {
 		*url = NULL;
-		return TRUE;
+		return true;
 	}
 
 	return parse_dataobj_common_text(iter, url);
 }
 
 /* Defined in TS 102.223 Section 8.49 */
-static gboolean parse_dataobj_bearer(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_bearer(struct comprehension_tlv_iter *iter,
 					void *user)
 {
 	struct stk_common_byte_array *array = user;
@@ -1217,7 +1208,7 @@ static gboolean parse_dataobj_bearer(struct comprehension_tlv_iter *iter,
 }
 
 /* Defined in TS 102.223 Section 8.50 */
-static gboolean parse_dataobj_provisioning_file_reference(
+static bool parse_dataobj_provisioning_file_reference(
 		struct comprehension_tlv_iter *iter, void *user)
 {
 	struct stk_file *f = user;
@@ -1226,7 +1217,7 @@ static gboolean parse_dataobj_provisioning_file_reference(
 	unsigned int len = comprehension_tlv_iter_get_length(iter);
 
 	if ((len < 1) || (len > 8))
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 
@@ -1234,16 +1225,16 @@ static gboolean parse_dataobj_provisioning_file_reference(
 	stk_file_iter_next(&sf_iter);
 
 	if (sf_iter.pos != sf_iter.max)
-		return FALSE;
+		return false;
 
 	f->len = len;
 	memcpy(f->file, data, len);
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in 102.223 Section 8.51 */
-static gboolean parse_dataobj_browser_termination_cause(
+static bool parse_dataobj_browser_termination_cause(
 		struct comprehension_tlv_iter *iter, void *user)
 {
 	unsigned char *byte = user;
@@ -1251,7 +1242,7 @@ static gboolean parse_dataobj_browser_termination_cause(
 }
 
 /* Defined in TS 102.223 Section 8.52 */
-static gboolean parse_dataobj_bearer_description(
+static bool parse_dataobj_bearer_description(
 		struct comprehension_tlv_iter *iter, void *user)
 {
 	struct stk_bearer_description *bd = user;
@@ -1259,17 +1250,17 @@ static gboolean parse_dataobj_bearer_description(
 	unsigned int len = comprehension_tlv_iter_get_length(iter);
 
 	if (len < 1)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 	bd->type = data[0];
 
 	/* Parse only the packet data service bearer parameters */
 	if (bd->type != STK_BEARER_TYPE_GPRS_UTRAN)
-		return FALSE;
+		return false;
 
 	if (len < 7)
-		return FALSE;
+		return false;
 
 	bd->gprs.precedence = data[1];
 	bd->gprs.delay = data[2];
@@ -1278,11 +1269,11 @@ static gboolean parse_dataobj_bearer_description(
 	bd->gprs.mean = data[5];
 	bd->gprs.pdp_type = data[6];
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.53 */
-static gboolean parse_dataobj_channel_data(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_channel_data(struct comprehension_tlv_iter *iter,
 						void *user)
 {
 	struct stk_common_byte_array *array = user;
@@ -1290,7 +1281,7 @@ static gboolean parse_dataobj_channel_data(struct comprehension_tlv_iter *iter,
 }
 
 /* Defined in TS 102.223 Section 8.54 */
-static gboolean parse_dataobj_channel_data_length(
+static bool parse_dataobj_channel_data_length(
 		struct comprehension_tlv_iter *iter, void *user)
 {
 	unsigned char *byte = user;
@@ -1298,60 +1289,60 @@ static gboolean parse_dataobj_channel_data_length(
 }
 
 /* Defined in TS 102.223 Section 8.55 */
-static gboolean parse_dataobj_buffer_size(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_buffer_size(struct comprehension_tlv_iter *iter,
 						void *user)
 {
 	unsigned short *size = user;
 	const unsigned char *data;
 
 	if (comprehension_tlv_iter_get_length(iter) != 2)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 	*size = (data[0] << 8) + data[1];
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.56 */
-static gboolean parse_dataobj_channel_status(
+static bool parse_dataobj_channel_status(
 			struct comprehension_tlv_iter *iter, void *user)
 {
 	unsigned char *status = user;
 	const unsigned char *data;
 
 	if (comprehension_tlv_iter_get_length(iter) != 2)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 
 	/* Assume channel status is 2 bytes long */
 	memcpy(status, data, 2);
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.57 */
-static gboolean parse_dataobj_card_reader_id(
-			struct comprehension_tlv_iter *iter, void *user)
+static bool parse_dataobj_card_reader_id(struct comprehension_tlv_iter *iter,
+						void *user)
 {
 	struct stk_card_reader_id *cr_id = user;
 	const unsigned char *data;
 	unsigned int len = comprehension_tlv_iter_get_length(iter);
 
 	if (len < 1)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 	cr_id->len = len;
 	memcpy(cr_id->id, data, len);
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.58 */
-static gboolean parse_dataobj_other_address(
-		struct comprehension_tlv_iter *iter, void *user)
+static bool parse_dataobj_other_address(struct comprehension_tlv_iter *iter,
+						void *user)
 {
 	struct stk_other_address *oa = user;
 	const unsigned char *data;
@@ -1359,16 +1350,16 @@ static gboolean parse_dataobj_other_address(
 
 	if (len == 0) {
 		oa->type = STK_ADDRESS_AUTO;
-		return TRUE;
+		return true;
 	}
 
 	if ((len != 5) && (len != 17))
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 
 	if (data[0] != STK_ADDRESS_IPV4 && data[0] != STK_ADDRESS_IPV6)
-		return FALSE;
+		return false;
 
 	oa->type = data[0];
 
@@ -1377,43 +1368,42 @@ static gboolean parse_dataobj_other_address(
 	else
 		memcpy(&oa->addr.ipv6, data + 1, 16);
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.59 */
-static gboolean parse_dataobj_uicc_te_interface(
-		struct comprehension_tlv_iter *iter, void *user)
+static bool parse_dataobj_uicc_te_interface(struct comprehension_tlv_iter *iter,
+						void *user)
 {
 	struct stk_uicc_te_interface *uti = user;
 	const unsigned char *data;
 	unsigned char len = comprehension_tlv_iter_get_length(iter);
 
 	if (len != 3)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 	uti->protocol = data[0];
 	uti->port = (data[1] << 8) + data[2];
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.60 */
-static gboolean parse_dataobj_aid(struct comprehension_tlv_iter *iter,
-					void *user)
+static bool parse_dataobj_aid(struct comprehension_tlv_iter *iter, void *user)
 {
 	struct stk_aid *aid = user;
 	const unsigned char *data;
 	unsigned char len = comprehension_tlv_iter_get_length(iter);
 
 	if ((len > 16) || (len < 12))
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 	aid->len = len;
 	memcpy(aid->aid, data, len);
 
-	return TRUE;
+	return true;
 }
 
 /*
@@ -1421,7 +1411,7 @@ static gboolean parse_dataobj_aid(struct comprehension_tlv_iter *iter,
  * can have at most 127 bytes. However, all the defined values are only 1 byte,
  * so we just use 1 byte to represent it.
  */
-static gboolean parse_dataobj_access_technology(
+static bool parse_dataobj_access_technology(
 		struct comprehension_tlv_iter *iter, void *user)
 {
 	unsigned char *byte = user;
@@ -1429,26 +1419,26 @@ static gboolean parse_dataobj_access_technology(
 }
 
 /* Defined in TS 102.223 Section 8.62 */
-static gboolean parse_dataobj_display_parameters(
+static bool parse_dataobj_display_parameters(
 		struct comprehension_tlv_iter *iter, void *user)
 {
 	struct stk_display_parameters *dp = user;
 	const unsigned char *data;
 
 	if (comprehension_tlv_iter_get_length(iter) != 3)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 	dp->height = data[0];
 	dp->width = data[1];
 	dp->effects = data[2];
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.63 */
-static gboolean parse_dataobj_service_record(
-		struct comprehension_tlv_iter *iter, void *user)
+static bool parse_dataobj_service_record(struct comprehension_tlv_iter *iter,
+						void *user)
 {
 	struct stk_service_record *sr = user;
 	const unsigned char *data;
@@ -1456,7 +1446,7 @@ static gboolean parse_dataobj_service_record(
 
 	len = comprehension_tlv_iter_get_length(iter);
 	if (len < 3)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 	sr->tech_id = data[0];
@@ -1469,11 +1459,11 @@ static gboolean parse_dataobj_service_record(
 
 	memcpy(sr->serv_rec, data + 2, sr->len);
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.64 */
-static gboolean parse_dataobj_device_filter(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_device_filter(struct comprehension_tlv_iter *iter,
 						void *user)
 {
 	struct stk_device_filter *df = user;
@@ -1481,14 +1471,14 @@ static gboolean parse_dataobj_device_filter(struct comprehension_tlv_iter *iter,
 	unsigned int len = comprehension_tlv_iter_get_length(iter);
 
 	if (len < 2)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 
 	/* According to TS 102.223, everything except BT & IRDA is RFU */
 	if (data[0] != STK_TECHNOLOGY_BLUETOOTH &&
 			data[0] != STK_TECHNOLOGY_IRDA)
-		return FALSE;
+		return false;
 
 	df->tech_id = data[0];
 	df->len = len - 1;
@@ -1499,11 +1489,11 @@ static gboolean parse_dataobj_device_filter(struct comprehension_tlv_iter *iter,
 
 	memcpy(df->dev_filter, data + 1, df->len);
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.65 */
-static gboolean parse_dataobj_service_search(
+static bool parse_dataobj_service_search(
 		struct comprehension_tlv_iter *iter, void *user)
 {
 	struct stk_service_search *ss = user;
@@ -1511,14 +1501,14 @@ static gboolean parse_dataobj_service_search(
 	unsigned int len = comprehension_tlv_iter_get_length(iter);
 
 	if (len < 2)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 
 	/* According to TS 102.223, everything except BT & IRDA is RFU */
 	if (data[0] != STK_TECHNOLOGY_BLUETOOTH &&
 			data[0] != STK_TECHNOLOGY_IRDA)
-		return FALSE;
+		return false;
 
 	ss->tech_id = data[0];
 	ss->len = len - 1;
@@ -1529,26 +1519,26 @@ static gboolean parse_dataobj_service_search(
 
 	memcpy(ss->ser_search, data + 1, ss->len);
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.66 */
-static gboolean parse_dataobj_attribute_info(
-		struct comprehension_tlv_iter *iter, void *user)
+static bool parse_dataobj_attribute_info(struct comprehension_tlv_iter *iter,
+						void *user)
 {
 	struct stk_attribute_info *ai = user;
 	const unsigned char *data;
 	unsigned int len = comprehension_tlv_iter_get_length(iter);
 
 	if (len < 2)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 
 	/* According to TS 102.223, everything except BT & IRDA is RFU */
 	if (data[0] != STK_TECHNOLOGY_BLUETOOTH &&
 			data[0] != STK_TECHNOLOGY_IRDA)
-		return FALSE;
+		return false;
 
 	ai->tech_id = data[0];
 	ai->len = len - 1;
@@ -1559,11 +1549,11 @@ static gboolean parse_dataobj_attribute_info(
 
 	memcpy(ai->attr_info, data + 1, ai->len);
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.67 */
-static gboolean parse_dataobj_service_availability(
+static bool parse_dataobj_service_availability(
 		struct comprehension_tlv_iter *iter, void *user)
 {
 	struct stk_common_byte_array *array = user;
@@ -1571,7 +1561,7 @@ static gboolean parse_dataobj_service_availability(
 }
 
 /* Defined in TS 102.223 Section 8.68 */
-static gboolean parse_dataobj_remote_entity_address(
+static bool parse_dataobj_remote_entity_address(
 		struct comprehension_tlv_iter *iter, void *user)
 {
 	struct stk_remote_entity_address *rea = user;
@@ -1583,44 +1573,43 @@ static gboolean parse_dataobj_remote_entity_address(
 	switch (data[0]) {
 	case 0x00:
 		if (len != 7)
-			return FALSE;
+			return false;
 		break;
 	case 0x01:
 		if (len != 5)
-			return FALSE;
+			return false;
 		break;
 	default:
-		return FALSE;
+		return false;
 	}
 
-	rea->has_address = TRUE;
+	rea->has_address = true;
 	rea->coding_type = data[0];
 	memcpy(&rea->addr, data + 1, len - 1);
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.69 */
-static gboolean parse_dataobj_esn(struct comprehension_tlv_iter *iter,
-					void *user)
+static bool parse_dataobj_esn(struct comprehension_tlv_iter *iter, void *user)
 {
 	unsigned char *esn = user;
 	const unsigned char *data;
 	unsigned int len = comprehension_tlv_iter_get_length(iter);
 
 	if (len != 4)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 
 	/* Assume esn is 4 bytes long */
 	memcpy(esn, data, len);
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.70 */
-static gboolean parse_dataobj_network_access_name(
+static bool parse_dataobj_network_access_name(
 					struct comprehension_tlv_iter *iter,
 					void *user)
 {
@@ -1632,7 +1621,7 @@ static gboolean parse_dataobj_network_access_name(
 	char decoded_apn[100];
 
 	if (len == 0 || len > 100)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 
@@ -1646,7 +1635,7 @@ static gboolean parse_dataobj_network_access_name(
 		label_size = *data;
 
 		if (label_size == 0 || label_size > (len - 1))
-			return FALSE;
+			return false;
 
 		memcpy(decoded_apn + offset, data + 1, label_size);
 
@@ -1661,11 +1650,11 @@ static gboolean parse_dataobj_network_access_name(
 	decoded_apn[offset] = '\0';
 	*apn = g_strdup(decoded_apn);
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.71 */
-static gboolean parse_dataobj_cdma_sms_tpdu(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_cdma_sms_tpdu(struct comprehension_tlv_iter *iter,
 						void *user)
 {
 	struct stk_common_byte_array *array = user;
@@ -1673,7 +1662,7 @@ static gboolean parse_dataobj_cdma_sms_tpdu(struct comprehension_tlv_iter *iter,
 }
 
 /* Defined in TS 102.223 Section 8.72 */
-static gboolean parse_dataobj_text_attr(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_text_attr(struct comprehension_tlv_iter *iter,
 					void *user)
 {
 	struct stk_text_attribute *attr = user;
@@ -1683,18 +1672,18 @@ static gboolean parse_dataobj_text_attr(struct comprehension_tlv_iter *iter,
 	len = comprehension_tlv_iter_get_length(iter);
 
 	if (len > sizeof(attr->attributes))
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 
 	memcpy(attr->attributes, data, len);
 	attr->len = len;
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 31.111 Section 8.72 */
-static gboolean parse_dataobj_pdp_act_par(
+static bool parse_dataobj_pdp_act_par(
 			struct comprehension_tlv_iter *iter, void *user)
 {
 	struct stk_pdp_act_par *pcap = user;
@@ -1704,18 +1693,18 @@ static gboolean parse_dataobj_pdp_act_par(
 	len = comprehension_tlv_iter_get_length(iter);
 
 	if (len > sizeof(pcap->par))
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 
 	memcpy(pcap->par, data, len);
 	pcap->len = len;
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.73 */
-static gboolean parse_dataobj_item_text_attribute_list(
+static bool parse_dataobj_item_text_attribute_list(
 		struct comprehension_tlv_iter *iter, void *user)
 {
 	struct stk_item_text_attribute_list *ital = user;
@@ -1723,18 +1712,18 @@ static gboolean parse_dataobj_item_text_attribute_list(
 	unsigned int len = comprehension_tlv_iter_get_length(iter);
 
 	if ((len > sizeof(ital->list)) || (len % 4 != 0))
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 
 	memcpy(ital->list, data, len);
 	ital->len = len;
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 31.111 Section 8.73 */
-static gboolean parse_dataobj_utran_meas_qualifier(
+static bool parse_dataobj_utran_meas_qualifier(
 			struct comprehension_tlv_iter *iter, void *user)
 {
 	unsigned char *byte = user;
@@ -1755,7 +1744,7 @@ static gboolean parse_dataobj_utran_meas_qualifier(
  * For example, if the IMEISV is "1234567890123456", then it's coded as
  * "13 32 54 76 98 10 32 54 F6".
  */
-static gboolean parse_dataobj_imeisv(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_imeisv(struct comprehension_tlv_iter *iter,
 					void *user)
 {
 	char *imeisv = user;
@@ -1765,15 +1754,15 @@ static gboolean parse_dataobj_imeisv(struct comprehension_tlv_iter *iter,
 
 	len = comprehension_tlv_iter_get_length(iter);
 	if (len != 9)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 
 	if ((data[0] & 0x0f) != 0x03)
-		return FALSE;
+		return false;
 
 	if (data[8] >> 4 != 0x0f)
-		return FALSE;
+		return false;
 
 	/* Assume imeisv is at least 17 bytes long (16 for imeisv + null) */
 	imeisv[0] = digit_lut[data[0] >> 4];
@@ -1781,11 +1770,11 @@ static gboolean parse_dataobj_imeisv(struct comprehension_tlv_iter *iter,
 	imeisv[15] = digit_lut[data[8] & 0x0f];
 	imeisv[16] = '\0';
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.75 */
-static gboolean parse_dataobj_network_search_mode(
+static bool parse_dataobj_network_search_mode(
 		struct comprehension_tlv_iter *iter, void *user)
 {
 	unsigned char *byte = user;
@@ -1793,7 +1782,7 @@ static gboolean parse_dataobj_network_search_mode(
 }
 
 /* Defined in TS 102.223 Section 8.76 */
-static gboolean parse_dataobj_battery_state(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_battery_state(struct comprehension_tlv_iter *iter,
 						void *user)
 {
 	unsigned char *byte = user;
@@ -1801,7 +1790,7 @@ static gboolean parse_dataobj_battery_state(struct comprehension_tlv_iter *iter,
 }
 
 /* Defined in TS 102.223 Section 8.77 */
-static gboolean parse_dataobj_browsing_status(
+static bool parse_dataobj_browsing_status(
 		struct comprehension_tlv_iter *iter, void *user)
 {
 	struct stk_common_byte_array *array = user;
@@ -1809,7 +1798,7 @@ static gboolean parse_dataobj_browsing_status(
 }
 
 /* Defined in TS 102.223 Section 8.78 */
-static gboolean parse_dataobj_frame_layout(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_frame_layout(struct comprehension_tlv_iter *iter,
 						void *user)
 {
 	struct stk_frame_layout *fl = user;
@@ -1817,23 +1806,23 @@ static gboolean parse_dataobj_frame_layout(struct comprehension_tlv_iter *iter,
 	unsigned char len = comprehension_tlv_iter_get_length(iter);
 
 	if (len < 2)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 
 	if (data[0] != STK_LAYOUT_HORIZONTAL &&
 			data[0] != STK_LAYOUT_VERTICAL)
-		return FALSE;
+		return false;
 
 	fl->layout = data[0];
 	fl->len = len - 1;
 	memcpy(fl->size, data + 1, fl->len);
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.79 */
-static gboolean parse_dataobj_frames_info(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_frames_info(struct comprehension_tlv_iter *iter,
 						void *user)
 {
 	struct stk_frames_info *fi = user;
@@ -1842,21 +1831,21 @@ static gboolean parse_dataobj_frames_info(struct comprehension_tlv_iter *iter,
 	unsigned int i;
 
 	if (len < 1)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 
 	if (data[0] > 0x0f)
-		return FALSE;
+		return false;
 
 	if ((len == 1 && data[0] != 0) || (len > 1 && data[0] == 0))
-		return FALSE;
+		return false;
 
 	if (len % 2 == 0)
-		return FALSE;
+		return false;
 
 	if (len == 1)
-		return TRUE;
+		return true;
 
 	fi->id = data[0];
 	fi->len = (len - 1) / 2;
@@ -1865,50 +1854,50 @@ static gboolean parse_dataobj_frames_info(struct comprehension_tlv_iter *iter,
 		fi->list[i].width = data[i * 2 + 2] & 0x7f;
 	}
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.80 */
-static gboolean parse_dataobj_frame_id(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_frame_id(struct comprehension_tlv_iter *iter,
 					void *user)
 {
 	struct stk_frame_id *fi = user;
 	const unsigned char *data;
 
 	if (comprehension_tlv_iter_get_length(iter) != 1)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 
 	if (data[0] >= 0x10)
-		return FALSE;
+		return false;
 
-	fi->has_id = TRUE;
+	fi->has_id = true;
 	fi->id = data[0];
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.81 */
-static gboolean parse_dataobj_meid(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_meid(struct comprehension_tlv_iter *iter,
 					void *user)
 {
 	unsigned char *meid = user;
 	const unsigned char *data;
 
 	if (comprehension_tlv_iter_get_length(iter) != 8)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 
 	/* Assume meid is 8 bytes long */
 	memcpy(meid, data, 8);
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.82 */
-static gboolean parse_dataobj_mms_reference(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_mms_reference(struct comprehension_tlv_iter *iter,
 						void *user)
 {
 	struct stk_mms_reference *mr = user;
@@ -1916,17 +1905,17 @@ static gboolean parse_dataobj_mms_reference(struct comprehension_tlv_iter *iter,
 	unsigned int len = comprehension_tlv_iter_get_length(iter);
 
 	if (len < 1)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 	mr->len = len;
 	memcpy(mr->ref, data, len);
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.83 */
-static gboolean parse_dataobj_mms_id(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_mms_id(struct comprehension_tlv_iter *iter,
 					void *user)
 {
 	struct stk_mms_id *mi = user;
@@ -1934,17 +1923,17 @@ static gboolean parse_dataobj_mms_id(struct comprehension_tlv_iter *iter,
 	unsigned int len = comprehension_tlv_iter_get_length(iter);
 
 	if (len < 1)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 	mi->len = len;
 	memcpy(mi->id, data, len);
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.84 */
-static gboolean parse_dataobj_mms_transfer_status(
+static bool parse_dataobj_mms_transfer_status(
 		struct comprehension_tlv_iter *iter, void *user)
 {
 	struct stk_mms_transfer_status *mts = user;
@@ -1952,17 +1941,17 @@ static gboolean parse_dataobj_mms_transfer_status(
 	unsigned int len = comprehension_tlv_iter_get_length(iter);
 
 	if (len < 1)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 	mts->len = len;
 	memcpy(mts->status, data, len);
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.85 */
-static gboolean parse_dataobj_mms_content_id(
+static bool parse_dataobj_mms_content_id(
 		struct comprehension_tlv_iter *iter, void *user)
 {
 	struct stk_mms_content_id *mci = user;
@@ -1970,17 +1959,17 @@ static gboolean parse_dataobj_mms_content_id(
 	unsigned int len = comprehension_tlv_iter_get_length(iter);
 
 	if (len < 1)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 	mci->len = len;
 	memcpy(mci->id, data, len);
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.86 */
-static gboolean parse_dataobj_mms_notification(
+static bool parse_dataobj_mms_notification(
 		struct comprehension_tlv_iter *iter, void *user)
 {
 	struct stk_common_byte_array *array = user;
@@ -1988,15 +1977,15 @@ static gboolean parse_dataobj_mms_notification(
 }
 
 /* Defined in TS 102.223 Section 8.87 */
-static gboolean parse_dataobj_last_envelope(struct comprehension_tlv_iter *iter,
+static bool parse_dataobj_last_envelope(struct comprehension_tlv_iter *iter,
 						void *user)
 {
-	gboolean *ret = user;
+	bool *ret = user;
 	return parse_dataobj_common_bool(iter, ret);
 }
 
 /* Defined in TS 102.223 Section 8.88 */
-static gboolean parse_dataobj_registry_application_data(
+static bool parse_dataobj_registry_application_data(
 		struct comprehension_tlv_iter *iter, void *user)
 {
 	struct stk_registry_application_data *rad = user;
@@ -2005,44 +1994,44 @@ static gboolean parse_dataobj_registry_application_data(
 	unsigned int len = comprehension_tlv_iter_get_length(iter);
 
 	if (len < 5)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 
 	utf8 = decode_text(data[2], len - 4, data + 4);
 
 	if (utf8 == NULL)
-		return FALSE;
+		return false;
 
 	rad->name = utf8;
 	rad->port = (data[0] << 8) + data[1];
 	rad->type = data[3];
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.89 */
-static gboolean parse_dataobj_activate_descriptor(
+static bool parse_dataobj_activate_descriptor(
 		struct comprehension_tlv_iter *iter, void *user)
 {
 	unsigned char *byte = user;
 	const unsigned char *data;
 
 	if (comprehension_tlv_iter_get_length(iter) != 1)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 
 	if (data[0] != 0x01)
-		return FALSE;
+		return false;
 
 	*byte = data[0];
 
-	return TRUE;
+	return true;
 }
 
 /* Defined in TS 102.223 Section 8.90 */
-static gboolean parse_dataobj_broadcast_network_info(
+static bool parse_dataobj_broadcast_network_info(
 		struct comprehension_tlv_iter *iter, void *user)
 {
 	struct stk_broadcast_network_information *bni = user;
@@ -2050,18 +2039,18 @@ static gboolean parse_dataobj_broadcast_network_info(
 	unsigned int len = comprehension_tlv_iter_get_length(iter);
 
 	if (len < 2)
-		return FALSE;
+		return false;
 
 	data = comprehension_tlv_iter_get_data(iter);
 
 	if (data[0] > 0x03)
-		return FALSE;
+		return false;
 
 	bni->tech = data[0];
 	bni->len = len - 1;
 	memcpy(bni->loc_info, data + 1, bni->len);
 
-	return TRUE;
+	return true;
 }
 
 static dataobj_handler handler_for_type(enum stk_data_object_type type)
@@ -2259,8 +2248,7 @@ static void destroy_stk_item(gpointer pointer)
 	g_free(item);
 }
 
-static gboolean parse_item_list(struct comprehension_tlv_iter *iter,
-				void *data)
+static bool parse_item_list(struct comprehension_tlv_iter *iter, void *data)
 {
 	GSList **out = data;
 	unsigned short tag = STK_DATA_OBJECT_TYPE_ITEM;
@@ -2268,7 +2256,7 @@ static gboolean parse_item_list(struct comprehension_tlv_iter *iter,
 	struct stk_item item;
 	GSList *list = NULL;
 	unsigned int count = 0;
-	gboolean has_empty = FALSE;
+	bool has_empty = false;
 
 	do {
 		comprehension_tlv_iter_copy(iter, &iter_old);
@@ -2277,7 +2265,7 @@ static gboolean parse_item_list(struct comprehension_tlv_iter *iter,
 
 		if (parse_dataobj_item(iter, &item) == TRUE) {
 			if (item.id == 0) {
-				has_empty = TRUE;
+				has_empty = true;
 				continue;
 			}
 
@@ -2291,18 +2279,18 @@ static gboolean parse_item_list(struct comprehension_tlv_iter *iter,
 
 	if (!has_empty) {
 		*out = g_slist_reverse(list);
-		return TRUE;
+		return true;
 	}
 
 	if (count == 1)
-		return TRUE;
+		return true;
 
 	g_slist_free_full(list, destroy_stk_item);
-	return FALSE;
+	return false;
 
 }
 
-static gboolean parse_provisioning_list(struct comprehension_tlv_iter *iter,
+static bool parse_provisioning_list(struct comprehension_tlv_iter *iter,
 					void *data)
 {
 	GSList **out = data;
@@ -2325,7 +2313,7 @@ static gboolean parse_provisioning_list(struct comprehension_tlv_iter *iter,
 	comprehension_tlv_iter_copy(&iter_old, iter);
 	*out = g_slist_reverse(list);
 
-	return TRUE;
+	return true;
 }
 
 static dataobj_handler list_handler_for_type(enum stk_data_object_type type)
@@ -2353,8 +2341,8 @@ static enum stk_command_parse_result parse_dataobj(
 	GSList *entries = NULL;
 	GSList *l;
 	va_list args;
-	gboolean minimum_set = TRUE;
-	gboolean parse_error = FALSE;
+	bool minimum_set = true;
+	bool parse_error = false;
 
 	va_start(args, type);
 
@@ -2396,7 +2384,7 @@ static enum stk_command_parse_result parse_dataobj(
 
 		if (l2 == NULL) {
 			if (comprehension_tlv_get_cr(iter) == TRUE)
-				parse_error = TRUE;
+				parse_error = true;
 
 			continue;
 		}
@@ -2406,8 +2394,8 @@ static enum stk_command_parse_result parse_dataobj(
 		else
 			handler = handler_for_type(entry->type);
 
-		if (handler(iter, entry->data) == FALSE)
-			parse_error = TRUE;
+		if (!handler(iter, entry->data))
+			parse_error = true;
 
 		l = l2->next;
 	}
@@ -2416,14 +2404,14 @@ static enum stk_command_parse_result parse_dataobj(
 		struct dataobj_handler_entry *entry = l->data;
 
 		if (entry->flags & DATAOBJ_FLAG_MANDATORY)
-			minimum_set = FALSE;
+			minimum_set = false;
 	}
 
 	g_slist_free_full(entries, g_free);
 
-	if (minimum_set == FALSE)
+	if (!minimum_set)
 		return STK_PARSE_RESULT_MISSING_VALUE;
-	if (parse_error == TRUE)
+	if (parse_error)
 		return STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 
 	return STK_PARSE_RESULT_OK;
@@ -2779,9 +2767,8 @@ static enum stk_command_parse_result parse_send_sms(
 
 	/* packing is needed */
 	if (command->qualifier & 0x01) {
-		if (sms_decode_unpacked_stk_pdu(gsm_tpdu.tpdu, gsm_tpdu.len,
-							&obj->gsm_sms) !=
-				TRUE) {
+		if (!sms_decode_unpacked_stk_pdu(gsm_tpdu.tpdu, gsm_tpdu.len,
+							&obj->gsm_sms)) {
 			status = STK_PARSE_RESULT_DATA_NOT_UNDERSTOOD;
 			goto out;
 		}
@@ -3944,9 +3931,8 @@ void stk_command_free(struct stk_command *command)
 	g_free(command);
 }
 
-static gboolean stk_tlv_builder_init(struct stk_tlv_builder *iter,
-						unsigned char *pdu,
-						unsigned int size)
+static bool stk_tlv_builder_init(struct stk_tlv_builder *iter,
+					unsigned char *pdu, unsigned int size)
 {
 	iter->value = NULL;
 	iter->len = 0;
@@ -3954,7 +3940,7 @@ static gboolean stk_tlv_builder_init(struct stk_tlv_builder *iter,
 	return comprehension_tlv_builder_init(&iter->ctlv, pdu, size);
 }
 
-static gboolean stk_tlv_builder_recurse(struct stk_tlv_builder *iter,
+static bool stk_tlv_builder_recurse(struct stk_tlv_builder *iter,
 					struct ber_tlv_builder *btlv,
 					unsigned char tag)
 {
@@ -3963,31 +3949,31 @@ static gboolean stk_tlv_builder_recurse(struct stk_tlv_builder *iter,
 
 	if (ber_tlv_builder_next(btlv, tag >> 6, (tag >> 5) & 1,
 					tag & 0x1f) != TRUE)
-		return FALSE;
+		return false;
 
 	return ber_tlv_builder_recurse_comprehension(btlv, &iter->ctlv);
 }
 
-static gboolean stk_tlv_builder_open_container(struct stk_tlv_builder *iter,
-						gboolean cr,
+static bool stk_tlv_builder_open_container(struct stk_tlv_builder *iter,
+						bool cr,
 						unsigned char shorttag,
-						gboolean relocatable)
+						bool relocatable)
 {
 	if (comprehension_tlv_builder_next(&iter->ctlv, cr, shorttag) != TRUE)
-		return FALSE;
+		return false;
 
 	iter->len = 0;
 	iter->max_len = relocatable ? 0xff : 0x7f;
 	if (comprehension_tlv_builder_set_length(&iter->ctlv, iter->max_len) !=
 			TRUE)
-		return FALSE;
+		return false;
 
 	iter->value = comprehension_tlv_builder_get_data(&iter->ctlv);
 
-	return TRUE;
+	return true;
 }
 
-static gboolean stk_tlv_builder_close_container(struct stk_tlv_builder *iter)
+static bool stk_tlv_builder_close_container(struct stk_tlv_builder *iter)
 {
 	return comprehension_tlv_builder_set_length(&iter->ctlv, iter->len);
 }
@@ -3998,28 +3984,28 @@ static unsigned int stk_tlv_builder_get_length(struct stk_tlv_builder *iter)
 		iter->ctlv.pdu + iter->len;
 }
 
-static gboolean stk_tlv_builder_append_byte(struct stk_tlv_builder *iter,
+static bool stk_tlv_builder_append_byte(struct stk_tlv_builder *iter,
 						unsigned char num)
 {
 	if (iter->len >= iter->max_len)
-		return FALSE;
+		return false;
 
 	iter->value[iter->len++] = num;
-	return TRUE;
+	return true;
 }
 
-static gboolean stk_tlv_builder_append_short(struct stk_tlv_builder *iter,
+static bool stk_tlv_builder_append_short(struct stk_tlv_builder *iter,
 						unsigned short num)
 {
 	if (iter->len + 2 > iter->max_len)
-		return FALSE;
+		return false;
 
 	iter->value[iter->len++] = num >> 8;
 	iter->value[iter->len++] = num & 0xff;
-	return TRUE;
+	return true;
 }
 
-static gboolean stk_tlv_builder_append_gsm_packed(struct stk_tlv_builder *iter,
+static bool stk_tlv_builder_append_gsm_packed(struct stk_tlv_builder *iter,
 							const char *text)
 {
 	unsigned int len;
@@ -4027,17 +4013,17 @@ static gboolean stk_tlv_builder_append_gsm_packed(struct stk_tlv_builder *iter,
 	long written = 0;
 
 	if (text == NULL)
-		return TRUE;
+		return true;
 
 	len = strlen(text);
 
 	gsm = convert_utf8_to_gsm(text, len, NULL, &written, 0);
 	if (gsm == NULL && len > 0)
-		return FALSE;
+		return false;
 
 	if (iter->len + (written * 7 + 7) / 8 >= iter->max_len) {
 		g_free(gsm);
-		return FALSE;
+		return false;
 	}
 
 	pack_7bit_own_buf(gsm, len, 0, false, &written, 0,
@@ -4045,16 +4031,15 @@ static gboolean stk_tlv_builder_append_gsm_packed(struct stk_tlv_builder *iter,
 	g_free(gsm);
 
 	if (written < 1 && len > 0)
-		return FALSE;
+		return false;
 
 	iter->value[iter->len++] = 0x00;
 	iter->len += written;
 
-	return TRUE;
+	return true;
 }
 
-static gboolean stk_tlv_builder_append_gsm_unpacked(
-						struct stk_tlv_builder *iter,
+static bool stk_tlv_builder_append_gsm_unpacked(struct stk_tlv_builder *iter,
 						const char *text)
 {
 	unsigned int len;
@@ -4062,17 +4047,17 @@ static gboolean stk_tlv_builder_append_gsm_unpacked(
 	long written = 0;
 
 	if (text == NULL)
-		return TRUE;
+		return true;
 
 	len = strlen(text);
 
 	gsm = convert_utf8_to_gsm(text, len, NULL, &written, 0);
 	if (gsm == NULL && len > 0)
-		return FALSE;
+		return false;
 
 	if (iter->len + written >= iter->max_len) {
 		g_free(gsm);
-		return FALSE;
+		return false;
 	}
 
 	iter->value[iter->len++] = 0x04;
@@ -4081,10 +4066,10 @@ static gboolean stk_tlv_builder_append_gsm_unpacked(
 
 	g_free(gsm);
 
-	return TRUE;
+	return true;
 }
 
-static gboolean stk_tlv_builder_append_ucs2(struct stk_tlv_builder *iter,
+static bool stk_tlv_builder_append_ucs2(struct stk_tlv_builder *iter,
 						const char *text)
 {
 	unsigned char *ucs2;
@@ -4094,11 +4079,11 @@ static gboolean stk_tlv_builder_append_ucs2(struct stk_tlv_builder *iter,
 						"UCS-2BE", "UTF-8//TRANSLIT",
 						NULL, &gwritten, NULL);
 	if (ucs2 == NULL)
-		return FALSE;
+		return false;
 
 	if (iter->len + gwritten >= iter->max_len) {
 		g_free(ucs2);
-		return FALSE;
+		return false;
 	}
 
 	iter->value[iter->len++] = 0x08;
@@ -4108,13 +4093,13 @@ static gboolean stk_tlv_builder_append_ucs2(struct stk_tlv_builder *iter,
 
 	g_free(ucs2);
 
-	return TRUE;
+	return true;
 }
 
-static gboolean stk_tlv_builder_append_text(struct stk_tlv_builder *iter,
+static bool stk_tlv_builder_append_text(struct stk_tlv_builder *iter,
 						int dcs, const char *text)
 {
-	gboolean ret;
+	bool ret;
 
 	switch (dcs) {
 	case 0x00:
@@ -4126,31 +4111,31 @@ static gboolean stk_tlv_builder_append_text(struct stk_tlv_builder *iter,
 	case -1:
 		ret = stk_tlv_builder_append_gsm_unpacked(iter, text);
 
-		if (ret == TRUE)
+		if (ret)
 			return ret;
 
 		return stk_tlv_builder_append_ucs2(iter, text);
 	}
 
-	return FALSE;
+	return false;
 }
 
-static inline gboolean stk_tlv_builder_append_bytes(struct stk_tlv_builder *iter,
+static inline bool stk_tlv_builder_append_bytes(struct stk_tlv_builder *iter,
 						const unsigned char *data,
 						unsigned int length)
 {
 	if (iter->len + length > iter->max_len)
-		return FALSE;
+		return false;
 
 	memcpy(iter->value + iter->len, data, length);
 	iter->len += length;
 
-	return TRUE;
+	return true;
 }
 
 /* Described in TS 102.223 Section 8.1 */
-static gboolean build_dataobj_address(struct stk_tlv_builder *tlv,
-					const void *data, gboolean cr)
+static bool build_dataobj_address(struct stk_tlv_builder *tlv,
+					const void *data, bool cr)
 {
 	const struct stk_address *addr = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_ADDRESS;
@@ -4158,143 +4143,143 @@ static gboolean build_dataobj_address(struct stk_tlv_builder *tlv,
 	unsigned char number[128];
 
 	if (addr->number == NULL)
-		return TRUE;
+		return true;
 
 	len = (strlen(addr->number) + 1) / 2;
 	sim_encode_bcd_number(addr->number, number);
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_byte(tlv, addr->ton_npi) &&
 		stk_tlv_builder_append_bytes(tlv, number, len) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 102.223 Section 8.2 */
-static gboolean build_dataobj_alpha_id(struct stk_tlv_builder *tlv,
-					const void *data, gboolean cr)
+static bool build_dataobj_alpha_id(struct stk_tlv_builder *tlv,
+					const void *data, bool cr)
 {
 	unsigned char tag = STK_DATA_OBJECT_TYPE_ALPHA_ID;
 	int len;
 	unsigned char *string;
 
 	if (data == NULL)
-		return TRUE;
+		return true;
 
 	if (strlen(data) == 0)
-		return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+		return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 			stk_tlv_builder_close_container(tlv);
 
 	string = utf8_to_sim_string(data, -1, &len);
 	if (string == NULL)
-		return FALSE;
+		return false;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, TRUE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, true) &&
 		stk_tlv_builder_append_bytes(tlv, string, len) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 102.223 Section 8.3 */
-static gboolean build_dataobj_subaddress(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_subaddress(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const struct stk_subaddress *sa = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_SUBADDRESS;
 
-	if (sa->has_subaddr == FALSE)
-		return TRUE;
+	if (!sa->has_subaddr)
+		return true;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_bytes(tlv, sa->subaddr, sa->len) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 131.111 Section 8.4 */
-static gboolean build_dataobj_ccp(struct stk_tlv_builder *tlv,
-					const void *data, gboolean cr)
+static bool build_dataobj_ccp(struct stk_tlv_builder *tlv,
+					const void *data, bool cr)
 {
 	const struct stk_ccp *ccp = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_CCP;
 
 	if (ccp->len == 0)
-		return TRUE;
+		return true;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_byte(tlv, ccp->len) &&
 		stk_tlv_builder_append_bytes(tlv, ccp->ccp, ccp->len) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 131.111 Section 8.5 */
-static gboolean build_dataobj_cbs_page(struct stk_tlv_builder *tlv,
-					const void *data, gboolean cr)
+static bool build_dataobj_cbs_page(struct stk_tlv_builder *tlv,
+					const void *data, bool cr)
 {
 	const struct cbs *page = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_CBS_PAGE;
 	unsigned char pdu[88];
 
 	if (cbs_encode(page, NULL, pdu) == FALSE)
-		return FALSE;
+		return false;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, TRUE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, true) &&
 		stk_tlv_builder_append_bytes(tlv, pdu, 88) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 102.223 Section 8.6 */
-static gboolean build_dataobj_item_id(struct stk_tlv_builder *tlv,
-					const void *data, gboolean cr)
+static bool build_dataobj_item_id(struct stk_tlv_builder *tlv,
+					const void *data, bool cr)
 {
 	const unsigned char *item_id = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_ITEM_ID;
 
 	if (*item_id == 0)
-		return TRUE;
+		return true;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_byte(tlv, *item_id) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 102.223 Section 8.8 */
-static gboolean build_dataobj_duration(struct stk_tlv_builder *tlv,
-					const void *data, gboolean cr)
+static bool build_dataobj_duration(struct stk_tlv_builder *tlv,
+					const void *data, bool cr)
 {
 	const struct stk_duration *duration = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_DURATION;
 
 	if (duration->interval == 0x00)
-		return TRUE;
+		return true;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_byte(tlv, duration->unit) &&
 		stk_tlv_builder_append_byte(tlv, duration->interval) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 102.223 Section 8.12 */
-static gboolean build_dataobj_result(struct stk_tlv_builder *tlv,
-					const void *data, gboolean cr)
+static bool build_dataobj_result(struct stk_tlv_builder *tlv,
+					const void *data, bool cr)
 {
 	const struct stk_result *result = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_RESULT;
 
-	if (stk_tlv_builder_open_container(tlv, cr, tag, FALSE) == FALSE)
-		return FALSE;
+	if (!stk_tlv_builder_open_container(tlv, cr, tag, false))
+		return false;
 
-	if (stk_tlv_builder_append_byte(tlv, result->type) == FALSE)
-		return FALSE;
+	if (!stk_tlv_builder_append_byte(tlv, result->type))
+		return false;
 
 	if (result->additional_len > 0)
-		if (stk_tlv_builder_append_bytes(tlv, result->additional,
-					result->additional_len) == FALSE)
-			return FALSE;
+		if (!stk_tlv_builder_append_bytes(tlv, result->additional,
+					result->additional_len))
+			return false;
 
 	return stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 131.111 Section 8.13 */
-static gboolean build_dataobj_gsm_sms_tpdu(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_gsm_sms_tpdu(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const struct sms_deliver *msg = data;
 	struct sms sms;
@@ -4307,16 +4292,16 @@ static gboolean build_dataobj_gsm_sms_tpdu(struct stk_tlv_builder *tlv,
 	memcpy(&sms.deliver, msg, sizeof(sms.deliver));
 
 	if (sms_encode(&sms, NULL, &tpdu_len, tpdu) == FALSE)
-		return FALSE;
+		return false;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, TRUE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, true) &&
 		stk_tlv_builder_append_bytes(tlv, tpdu + 1, tpdu_len) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 131.111 Section 8.14 */
-static gboolean build_dataobj_ss_string(struct stk_tlv_builder *tlv,
-					const void *data, gboolean cr)
+static bool build_dataobj_ss_string(struct stk_tlv_builder *tlv,
+					const void *data, bool cr)
 {
 	const struct stk_address *addr = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_SS_STRING;
@@ -4324,32 +4309,32 @@ static gboolean build_dataobj_ss_string(struct stk_tlv_builder *tlv,
 	unsigned char number[128];
 
 	if (addr->number == NULL)
-		return TRUE;
+		return true;
 
 	len = (strlen(addr->number) + 1) / 2;
 	sim_encode_bcd_number(addr->number, number);
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_byte(tlv, addr->ton_npi) &&
 		stk_tlv_builder_append_bytes(tlv, number, len) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Defined in TS 102.223 Section 8.15 */
-static gboolean build_dataobj_text(struct stk_tlv_builder *tlv,
-					const void *data, gboolean cr)
+static bool build_dataobj_text(struct stk_tlv_builder *tlv,
+					const void *data, bool cr)
 {
 	const struct stk_answer_text *text = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_TEXT;
-	gboolean ret;
+	bool ret;
 
 	if (text->text == NULL && !text->yesno)
-		return TRUE;
+		return true;
 
-	if (stk_tlv_builder_open_container(tlv, cr, tag, TRUE) != TRUE)
-		return FALSE;
+	if (!stk_tlv_builder_open_container(tlv, cr, tag, true))
+		return false;
 
-	if (text->yesno == TRUE) {
+	if (text->yesno) {
 		/*
 		 * Section 6.8.5:
 		 * When the terminal issues [...] command qualifier set
@@ -4357,8 +4342,8 @@ static gboolean build_dataobj_text(struct stk_tlv_builder *tlv,
 		 * answer is "positive" and the value '00' when the
 		 * answer is "negative" in the text string data object.
 		 */
-		if (stk_tlv_builder_append_byte(tlv, 0x04) != TRUE)
-			return FALSE;
+		if (!stk_tlv_builder_append_byte(tlv, 0x04))
+			return false;
 
 		ret = stk_tlv_builder_append_byte(tlv,
 						text->text ? 0x01 : 0x00);
@@ -4367,78 +4352,76 @@ static gboolean build_dataobj_text(struct stk_tlv_builder *tlv,
 	else
 		ret = stk_tlv_builder_append_text(tlv, -1, text->text);
 
-	if (ret != TRUE)
+	if (!ret)
 		return ret;
 
 	return stk_tlv_builder_close_container(tlv);
 }
 
 /* Defined in TS 102.223 Section 8.15 - USSD specific case*/
-static gboolean build_dataobj_ussd_text(struct stk_tlv_builder *tlv,
-					const void *data, gboolean cr)
+static bool build_dataobj_ussd_text(struct stk_tlv_builder *tlv,
+					const void *data, bool cr)
 {
 	const struct stk_ussd_text *text = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_TEXT;
 
-	if (text->has_text == FALSE)
-		return TRUE;
+	if (!text->has_text)
+		return true;
 
-	if (stk_tlv_builder_open_container(tlv, cr, tag, TRUE) != TRUE)
-		return FALSE;
+	if (!stk_tlv_builder_open_container(tlv, cr, tag, true))
+		return false;
 
 	if (text->len > 0) {
-		if (stk_tlv_builder_append_byte(tlv, text->dcs) != TRUE)
-			return FALSE;
+		if (!stk_tlv_builder_append_byte(tlv, text->dcs))
+			return false;
 
-		if (stk_tlv_builder_append_bytes(tlv, text->text,
-							text->len) != TRUE)
-			return FALSE;
+		if (!stk_tlv_builder_append_bytes(tlv, text->text, text->len))
+			return false;
 	}
 
 	return stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 131.111 Section 8.17 */
-static gboolean build_dataobj_ussd_string(struct stk_tlv_builder *tlv,
-					const void *data, gboolean cr)
+static bool build_dataobj_ussd_string(struct stk_tlv_builder *tlv,
+					const void *data, bool cr)
 {
 	const struct stk_ussd_string *ussd = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_USSD_STRING;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_byte(tlv, ussd->dcs) &&
 		stk_tlv_builder_append_bytes(tlv, ussd->string, ussd->len) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 102.223 Section 8.18 */
-static gboolean build_dataobj_file_list(struct stk_tlv_builder *tlv,
-					const void *data, gboolean cr)
+static bool build_dataobj_file_list(struct stk_tlv_builder *tlv,
+					const void *data, bool cr)
 {
 	GSList *l = (void *) data;
 	const struct stk_file *file;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_FILE_LIST;
 
-	if (stk_tlv_builder_open_container(tlv, cr, tag, TRUE) != TRUE)
-		return FALSE;
+	if (!stk_tlv_builder_open_container(tlv, cr, tag, true))
+		return false;
 
 	if (stk_tlv_builder_append_byte(tlv, g_slist_length(l)) != TRUE)
-		return FALSE;
+		return false;
 
 	for (; l; l = l->next) {
 		file = l->data;
 
-		if (stk_tlv_builder_append_bytes(tlv, file->file,
-							file->len) != TRUE)
-			return FALSE;
+		if (!stk_tlv_builder_append_bytes(tlv, file->file, file->len))
+			return false;
 	}
 
 	return stk_tlv_builder_close_container(tlv);
 }
 
 /* Shortcut for a single File element */
-static gboolean build_dataobj_file(struct stk_tlv_builder *tlv,
-					const void *data, gboolean cr)
+static bool build_dataobj_file(struct stk_tlv_builder *tlv,
+					const void *data, bool cr)
 {
 	GSList l = {
 		.data = (void *) data,
@@ -4449,53 +4432,51 @@ static gboolean build_dataobj_file(struct stk_tlv_builder *tlv,
 }
 
 /* Described in TS 102.223 Section 8.19 */
-static gboolean build_dataobj_location_info(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_location_info(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const struct stk_location_info *li = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_LOCATION_INFO;
-	guint8 mccmnc[3];
+	uint8_t mccmnc[3];
 
 	if (li->mcc[0] == '\0')
-		return TRUE;
+		return true;
 
 	sim_encode_mcc_mnc(mccmnc, li->mcc, li->mnc);
 
-	if (stk_tlv_builder_open_container(tlv, cr, tag, FALSE) == FALSE)
-		return FALSE;
+	if (!stk_tlv_builder_open_container(tlv, cr, tag, false))
+		return false;
 
-	if (stk_tlv_builder_append_bytes(tlv, mccmnc, 3) == FALSE)
-		return FALSE;
+	if (!stk_tlv_builder_append_bytes(tlv, mccmnc, 3))
+		return false;
 
-	if (stk_tlv_builder_append_short(tlv, li->lac_tac) == FALSE)
-		return FALSE;
+	if (!stk_tlv_builder_append_short(tlv, li->lac_tac))
+		return false;
 
-	if (li->has_ci && stk_tlv_builder_append_short(tlv, li->ci) == FALSE)
-		return FALSE;
+	if (li->has_ci && !stk_tlv_builder_append_short(tlv, li->ci))
+		return false;
 
-	if (li->has_ext_ci &&
-			stk_tlv_builder_append_short(tlv, li->ext_ci) == FALSE)
-		return FALSE;
+	if (li->has_ext_ci && !stk_tlv_builder_append_short(tlv, li->ext_ci))
+		return false;
 
 	if (li->has_eutran_ci) {
-		if (stk_tlv_builder_append_short(tlv,
-					li->eutran_ci >> 12) == FALSE)
-			return FALSE;
+		if (!stk_tlv_builder_append_short(tlv, li->eutran_ci >> 12))
+			return false;
 
-		if (stk_tlv_builder_append_short(tlv,
-					(li->eutran_ci << 4) | 0xf) == FALSE)
-			return FALSE;
+		if (!stk_tlv_builder_append_short(tlv,
+						(li->eutran_ci << 4) | 0xf))
+			return false;
 	}
 
 	return stk_tlv_builder_close_container(tlv);
 }
 
-static gboolean build_empty_dataobj_location_info(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_empty_dataobj_location_info(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	unsigned char tag = STK_DATA_OBJECT_TYPE_LOCATION_INFO;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
@@ -4504,8 +4485,8 @@ static gboolean build_empty_dataobj_location_info(struct stk_tlv_builder *tlv,
  *
  * See format note in parse_dataobj_imei.
  */
-static gboolean build_dataobj_imei(struct stk_tlv_builder *tlv,
-					const void *data, gboolean cr)
+static bool build_dataobj_imei(struct stk_tlv_builder *tlv,
+					const void *data, bool cr)
 {
 	char byte0[3];
 	const char *imei = data;
@@ -4513,10 +4494,10 @@ static gboolean build_dataobj_imei(struct stk_tlv_builder *tlv,
 	unsigned char value[8];
 
 	if (imei == NULL)
-		return TRUE;
+		return true;
 
 	if (strlen(imei) != 15)
-		return FALSE;
+		return false;
 
 	byte0[0] = '*';
 	byte0[1] = imei[0];
@@ -4524,58 +4505,58 @@ static gboolean build_dataobj_imei(struct stk_tlv_builder *tlv,
 	sim_encode_bcd_number(byte0, value);
 	sim_encode_bcd_number(imei + 1, value + 1);
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_bytes(tlv, value, 8) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 102.223 Section 8.21 */
-static gboolean build_dataobj_help_request(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_help_request(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const ofono_bool_t *help = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_HELP_REQUEST;
 
-	if (*help != TRUE)
-		return TRUE;
+	if (*help != true)
+		return true;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 102.223 Section 8.22 */
-static gboolean build_dataobj_network_measurement_results(
+static bool build_dataobj_network_measurement_results(
 						struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+						const void *data, bool cr)
 {
 	const struct stk_common_byte_array *nmr = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_NETWORK_MEASUREMENT_RESULTS;
 
-	if (stk_tlv_builder_open_container(tlv, cr, tag, FALSE) == FALSE)
-		return FALSE;
+	if (!stk_tlv_builder_open_container(tlv, cr, tag, false))
+		return false;
 
-	if (nmr->len > 0 && stk_tlv_builder_append_bytes(tlv,
-					nmr->array, nmr->len) == FALSE)
-		return FALSE;
+	if (nmr->len > 0 && !stk_tlv_builder_append_bytes(tlv,
+					nmr->array, nmr->len))
+		return false;
 
 	return stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 102.223 Section 8.25 */
-static gboolean build_dataobj_event_list(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_event_list(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const struct stk_event_list *list = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_EVENT_LIST;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_bytes(tlv, list->list, list->len) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Shortcut for a single Event type */
-static gboolean build_dataobj_event_type(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_event_type(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const struct stk_event_list list = {
 		.list = { *(enum stk_event_type *) data },
@@ -4586,47 +4567,47 @@ static gboolean build_dataobj_event_type(struct stk_tlv_builder *tlv,
 }
 
 /* Described in TS 102.223 Section 8.26 */
-static gboolean build_dataobj_cause(struct stk_tlv_builder *tlv,
-					const void *data, gboolean cr)
+static bool build_dataobj_cause(struct stk_tlv_builder *tlv,
+					const void *data, bool cr)
 {
 	const struct stk_cause *cause = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_CAUSE;
 
-	if (cause->has_cause == FALSE)
-		return TRUE;
+	if (!cause->has_cause)
+		return true;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_bytes(tlv, cause->cause, cause->len) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 102.223 Section 8.27 */
-static gboolean build_dataobj_location_status(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_location_status(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const enum stk_service_state *state = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_LOCATION_STATUS;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_byte(tlv, *state) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 131.111 Section 8.28 */
-static gboolean build_dataobj_transaction_ids(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_transaction_ids(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const struct stk_transaction_id *id = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_TRANSACTION_ID;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_bytes(tlv, id->list, id->len) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Shortcut for a single Transaction ID */
-static gboolean build_dataobj_transaction_id(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_transaction_id(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const struct stk_transaction_id ids = {
 		.list = { *(uint8_t *) data },
@@ -4637,19 +4618,19 @@ static gboolean build_dataobj_transaction_id(struct stk_tlv_builder *tlv,
 }
 
 /* Described in 3GPP 31.111 Section 8.29 */
-static gboolean build_dataobj_bcch_channel_list(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_bcch_channel_list(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const struct stk_bcch_channel_list *list = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_BCCH_CHANNEL_LIST;
 	unsigned int i, bytes, pos, shift;
 	unsigned char value;
 
-	if (list->has_list == FALSE)
-		return TRUE;
+	if (!list->has_list)
+		return true;
 
-	if (stk_tlv_builder_open_container(tlv, cr, tag, TRUE) != TRUE)
-		return FALSE;
+	if (!stk_tlv_builder_open_container(tlv, cr, tag, true))
+		return false;
 
 	bytes = (list->num * 10 + 7) / 8;
 	for (i = 0; i < bytes; i++) {
@@ -4662,31 +4643,31 @@ static gboolean build_dataobj_bcch_channel_list(struct stk_tlv_builder *tlv,
 		if (shift > 2)
 			value |= list->channels[pos - 1] << (10 - shift);
 
-		if (stk_tlv_builder_append_byte(tlv, value) != TRUE)
-			return FALSE;
+		if (!stk_tlv_builder_append_byte(tlv, value))
+			return false;
 	}
 
 	return stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 102.223 Section 8.30 */
-static gboolean build_dataobj_cc_requested_action(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_cc_requested_action(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const struct stk_common_byte_array *action = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_CALL_CONTROL_REQUESTED_ACTION;
 
 	if (action->array == NULL)
-		return TRUE;
+		return true;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_bytes(tlv, action->array, action->len) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 102.223 Section 8.33 */
-static gboolean build_dataobj_card_reader_status(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_card_reader_status(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const struct stk_reader_status *status = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_CARD_READER_STATUS;
@@ -4699,38 +4680,38 @@ static gboolean build_dataobj_card_reader_status(struct stk_tlv_builder *tlv,
 		(status->card_present << 6) |
 		(status->card_powered << 7);
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_byte(tlv, byte) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 102.223 Section 8.37 */
-static gboolean build_dataobj_timer_id(struct stk_tlv_builder *tlv,
-					const void *data, gboolean cr)
+static bool build_dataobj_timer_id(struct stk_tlv_builder *tlv,
+					const void *data, bool cr)
 {
 	const unsigned char *id = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_TIMER_ID;
 
 	if (id[0] == 0)
-		return TRUE;
+		return true;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_byte(tlv, id[0]) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 102.223 Section 8.38 */
-static gboolean build_dataobj_timer_value(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_timer_value(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const struct stk_timer_value *value = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_TIMER_VALUE;
 
-	if (value->has_value == FALSE)
-		return TRUE;
+	if (!value->has_value)
+		return true;
 
 #define TO_BCD(bin) ((((bin) / 10) & 0xf) | (((bin) % 10) << 4))
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_byte(tlv, TO_BCD(value->hour)) &&
 		stk_tlv_builder_append_byte(tlv, TO_BCD(value->minute)) &&
 		stk_tlv_builder_append_byte(tlv, TO_BCD(value->second)) &&
@@ -4739,8 +4720,8 @@ static gboolean build_dataobj_timer_value(struct stk_tlv_builder *tlv,
 }
 
 /* Described in TS 102.223 Section 8.39 */
-static gboolean build_dataobj_datetime_timezone(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_datetime_timezone(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const struct sms_scts *scts = data;
 	unsigned char value[7];
@@ -4748,25 +4729,25 @@ static gboolean build_dataobj_datetime_timezone(struct stk_tlv_builder *tlv,
 	unsigned char tag = STK_DATA_OBJECT_TYPE_DATETIME_TIMEZONE;
 
 	if (scts->month == 0 && scts->day == 0)
-		return TRUE;
+		return true;
 
 	if (sms_encode_scts(scts, value, &offset) != TRUE)
-		return FALSE;
+		return false;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_bytes(tlv, value, 7) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 102.223 Section 8.41 */
-static gboolean build_dataobj_at_response(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_at_response(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	unsigned char tag = STK_DATA_OBJECT_TYPE_AT_RESPONSE;
 	int len;
 
 	if (data == NULL)
-		return TRUE;
+		return true;
 
 	/*
 	 * "If the AT Response string is longer than the maximum length
@@ -4777,82 +4758,82 @@ static gboolean build_dataobj_at_response(struct stk_tlv_builder *tlv,
 	if (len > 240) /* Safe pick */
 		len = 240;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, TRUE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, true) &&
 		stk_tlv_builder_append_bytes(tlv, data, len) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 131.111 Section 8.42 */
-static gboolean build_dataobj_bc_repeat(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_bc_repeat(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	unsigned char tag = STK_DATA_OBJECT_TYPE_BC_REPEAT_INDICATOR;
 	const struct stk_bc_repeat *bcr = data;
 
-	if (bcr->has_bc_repeat == FALSE)
-		return TRUE;
+	if (!bcr->has_bc_repeat)
+		return true;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, TRUE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, true) &&
 		stk_tlv_builder_append_byte(tlv, bcr->value) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 102.223 Section 8.45 */
-static gboolean build_dataobj_language(struct stk_tlv_builder *tlv,
-					const void *data, gboolean cr)
+static bool build_dataobj_language(struct stk_tlv_builder *tlv,
+					const void *data, bool cr)
 {
 	unsigned char tag = STK_DATA_OBJECT_TYPE_LANGUAGE;
 
 	if (data == NULL)
-		return TRUE;
+		return true;
 
 	/*
 	 * Coded as two GSM 7-bit characters with eighth bit clear.  Since
 	 * ISO 639-2 codes use only english alphabet letters, no conversion
 	 * from UTF-8 to GSM is needed.
 	 */
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_bytes(tlv, data, 2) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in 3GPP TS 31.111 Section 8.46 */
-static gboolean build_dataobj_timing_advance(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_timing_advance(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const struct stk_timing_advance *tadv = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_TIMING_ADVANCE;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_byte(tlv, tadv->status) &&
 		stk_tlv_builder_append_byte(tlv, tadv->advance) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 102.223 Section 8.51 */
-static gboolean build_dataobj_browser_termination_cause(
+static bool build_dataobj_browser_termination_cause(
 						struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+						const void *data, bool cr)
 {
 	const enum stk_browser_termination_cause *cause = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_BROWSER_TERMINATION_CAUSE;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_byte(tlv, *cause) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 102.223 Section 8.52 */
-static gboolean build_dataobj_bearer_description(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_bearer_description(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const struct stk_bearer_description *bd = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_BEARER_DESCRIPTION;
 
 	if (bd->type != STK_BEARER_TYPE_GPRS_UTRAN)
-		return TRUE;
+		return true;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_byte(tlv, bd->type) &&
 		stk_tlv_builder_append_byte(tlv,
 			bd->gprs.precedence) &&
@@ -4870,45 +4851,45 @@ static gboolean build_dataobj_bearer_description(struct stk_tlv_builder *tlv,
 }
 
 /* Described in TS 102.223 Section 8.53 */
-static gboolean build_dataobj_channel_data(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_channel_data(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const struct stk_common_byte_array *cd = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_CHANNEL_DATA;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, TRUE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, true) &&
 		stk_tlv_builder_append_bytes(tlv, cd->array, cd->len) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 102.223 Section 8.54 */
-static gboolean build_dataobj_channel_data_length(
+static bool build_dataobj_channel_data_length(
 						struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+						const void *data, bool cr)
 {
 	const unsigned short *length = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_CHANNEL_DATA_LENGTH;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_byte(tlv, MIN(*length, 255)) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 102.223 Section 8.55 */
-static gboolean build_dataobj_buffer_size(struct stk_tlv_builder *tlv,
-					const void *data, gboolean cr)
+static bool build_dataobj_buffer_size(struct stk_tlv_builder *tlv,
+					const void *data, bool cr)
 {
 	const unsigned short *buf_size = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_BUFFER_SIZE;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_short(tlv, *buf_size) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 102.223 Section 8.56 */
-static gboolean build_dataobj_channel_status(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_channel_status(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const struct stk_channel *channel = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_CHANNEL_STATUS;
@@ -4935,33 +4916,33 @@ static gboolean build_dataobj_channel_status(struct stk_tlv_builder *tlv,
 		break;
 	}
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 			stk_tlv_builder_append_bytes(tlv, byte, 2) &&
 			stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 102.223 Section 8.58 */
-static gboolean build_dataobj_other_address(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_other_address(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const struct stk_other_address *addr = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_OTHER_ADDRESS;
-	gboolean ok = FALSE;
+	bool ok = false;
 
 	if (!addr->type)
-		return TRUE;
+		return true;
 
-	if (stk_tlv_builder_open_container(tlv, cr, tag, FALSE) == FALSE)
-		return FALSE;
+	if (!stk_tlv_builder_open_container(tlv, cr, tag, false))
+		return false;
 
 	switch (addr->type) {
 	case STK_ADDRESS_AUTO:
-		ok = TRUE;
+		ok = true;
 		break;
 	case STK_ADDRESS_IPV4:
 		ok = stk_tlv_builder_append_byte(tlv, addr->type) &&
 			stk_tlv_builder_append_bytes(tlv,
-					(const guint8 *) &addr->addr.ipv4, 4);
+					(const uint8_t *) &addr->addr.ipv4, 4);
 		break;
 	case STK_ADDRESS_IPV6:
 		ok = stk_tlv_builder_append_byte(tlv, addr->type) &&
@@ -4970,48 +4951,48 @@ static gboolean build_dataobj_other_address(struct stk_tlv_builder *tlv,
 	}
 
 	if (!ok)
-		return FALSE;
+		return false;
 
 	return stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 102.223 Section 8.59 */
-static gboolean build_dataobj_uicc_te_interface(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_uicc_te_interface(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const struct stk_uicc_te_interface *iface = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_UICC_TE_INTERFACE;
 
 	if (iface->protocol == 0 && iface->port == 0)
-		return TRUE;
+		return true;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_byte(tlv, iface->protocol) &&
 		stk_tlv_builder_append_short(tlv, iface->port) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 102.223 Section 8.61 */
-static gboolean build_dataobj_access_technologies(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_access_technologies(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const struct stk_access_technologies *techs = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_ACCESS_TECHNOLOGY;
 	int i;
 
-	if (stk_tlv_builder_open_container(tlv, cr, tag, FALSE) != TRUE)
-		return FALSE;
+	if (!stk_tlv_builder_open_container(tlv, cr, tag, false))
+		return false;
 
 	for (i = 0; i < techs->length; i++)
-		if (stk_tlv_builder_append_byte(tlv, techs->techs[i]) != TRUE)
-			return FALSE;
+		if (!stk_tlv_builder_append_byte(tlv, techs->techs[i]))
+			return false;
 
 	return stk_tlv_builder_close_container(tlv);
 }
 
 /* Shortcut for a single Access Technology */
-static gboolean build_dataobj_access_technology(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_access_technology(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const struct stk_access_technologies techs = {
 		.techs = data,
@@ -5022,13 +5003,13 @@ static gboolean build_dataobj_access_technology(struct stk_tlv_builder *tlv,
 }
 
 /* Described in TS 102.223 Section 8.62 */
-static gboolean build_dataobj_display_parameters(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_display_parameters(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const struct stk_display_parameters *params = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_DISPLAY_PARAMETERS;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_byte(tlv, params->height) &&
 		stk_tlv_builder_append_byte(tlv, params->width) &&
 		stk_tlv_builder_append_byte(tlv, params->effects) &&
@@ -5036,13 +5017,13 @@ static gboolean build_dataobj_display_parameters(struct stk_tlv_builder *tlv,
 }
 
 /* Described in TS 102.223 Section 8.63 */
-static gboolean build_dataobj_service_record(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_service_record(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const struct stk_service_record *rec = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_SERVICE_RECORD;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, TRUE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, true) &&
 		stk_tlv_builder_append_byte(tlv, rec->tech_id) &&
 		stk_tlv_builder_append_byte(tlv, rec->serv_id) &&
 		stk_tlv_builder_append_bytes(tlv, rec->serv_rec, rec->len) &&
@@ -5050,21 +5031,21 @@ static gboolean build_dataobj_service_record(struct stk_tlv_builder *tlv,
 }
 
 /* Described in TS 102.223 Section 8.68 */
-static gboolean build_dataobj_remote_entity_address(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_remote_entity_address(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const struct stk_remote_entity_address *addr = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_REMOTE_ENTITY_ADDRESS;
-	gboolean ok = FALSE;
+	bool ok = false;
 
-	if (addr->has_address != TRUE)
-		return TRUE;
+	if (!addr->has_address)
+		return true;
 
-	if (stk_tlv_builder_open_container(tlv, cr, tag, TRUE) != TRUE)
-		return FALSE;
+	if (!stk_tlv_builder_open_container(tlv, cr, tag, true))
+		return false;
 
-	if (stk_tlv_builder_append_byte(tlv, addr->coding_type) != TRUE)
-		return FALSE;
+	if (!stk_tlv_builder_append_byte(tlv, addr->coding_type))
+		return false;
 
 	switch (addr->coding_type) {
 	case 0x00:
@@ -5076,38 +5057,38 @@ static gboolean build_dataobj_remote_entity_address(struct stk_tlv_builder *tlv,
 	}
 
 	if (!ok)
-		return FALSE;
+		return false;
 
 	return stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 102.223 Section 8.69 */
-static gboolean build_dataobj_esn(struct stk_tlv_builder *tlv,
-					const void *data, gboolean cr)
+static bool build_dataobj_esn(struct stk_tlv_builder *tlv,
+					const void *data, bool cr)
 {
-	const guint32 *esn = data;
+	const uint32_t *esn = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_ESN;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_short(tlv, *esn >> 16) &&
 		stk_tlv_builder_append_short(tlv, *esn >> 0) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 131.111 Section 8.72, 3GPP 24.008 Section 9.5.7 */
-static gboolean build_dataobj_pdp_context_params(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_pdp_context_params(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const struct stk_common_byte_array *params = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_PDP_ACTIVATION_PARAMETER;
 
 	if (params->len < 1)
-		return TRUE;
+		return true;
 
 	if (params->len > 0x7f)
-		return FALSE;
+		return false;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_bytes(tlv, params->array, params->len) &&
 		stk_tlv_builder_close_container(tlv);
 }
@@ -5117,8 +5098,8 @@ static gboolean build_dataobj_pdp_context_params(struct stk_tlv_builder *tlv,
  *
  * See format note in parse_dataobj_imeisv.
  */
-static gboolean build_dataobj_imeisv(struct stk_tlv_builder *tlv,
-					const void *data, gboolean cr)
+static bool build_dataobj_imeisv(struct stk_tlv_builder *tlv,
+					const void *data, bool cr)
 {
 	char byte0[3];
 	const char *imeisv = data;
@@ -5126,10 +5107,10 @@ static gboolean build_dataobj_imeisv(struct stk_tlv_builder *tlv,
 	unsigned char tag = STK_DATA_OBJECT_TYPE_IMEISV;
 
 	if (imeisv == NULL)
-		return TRUE;
+		return true;
 
 	if (strlen(imeisv) != 16)
-		return FALSE;
+		return false;
 
 	byte0[0] = '3';
 	byte0[1] = imeisv[0];
@@ -5137,97 +5118,95 @@ static gboolean build_dataobj_imeisv(struct stk_tlv_builder *tlv,
 	sim_encode_bcd_number(byte0, value);
 	sim_encode_bcd_number(imeisv + 1, value + 1);
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_bytes(tlv, value, 9) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 102.223 Section 8.75 */
-static gboolean build_dataobj_network_search_mode(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_network_search_mode(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const enum stk_network_search_mode *mode = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_NETWORK_SEARCH_MODE;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_byte(tlv, *mode) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 102.223 Section 8.76 */
-static gboolean build_dataobj_battery_state(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_battery_state(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const enum stk_battery_state *state = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_BATTERY_STATE;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_byte(tlv, *state) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 102.223 Section 8.77 */
-static gboolean build_dataobj_browsing_status(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_browsing_status(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const struct stk_common_byte_array *bs = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_BROWSING_STATUS;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, TRUE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, true) &&
 		stk_tlv_builder_append_bytes(tlv, bs->array, bs->len) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 102.223 Section 8.79 */
-static gboolean build_dataobj_frames_information(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_frames_information(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const struct stk_frames_info *info = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_FRAMES_INFO;
 	unsigned int i;
 
-	if (stk_tlv_builder_open_container(tlv, cr, tag, FALSE) != TRUE)
-		return FALSE;
+	if (!stk_tlv_builder_open_container(tlv, cr, tag, false))
+		return false;
 
-	if (stk_tlv_builder_append_byte(tlv, info->id) != TRUE)
-		return FALSE;
+	if (!stk_tlv_builder_append_byte(tlv, info->id))
+		return false;
 
 	for (i = 0; i < info->len; i++) {
-		if (stk_tlv_builder_append_byte(tlv,
-						info->list[i].height) != TRUE)
-			return FALSE;
-		if (stk_tlv_builder_append_byte(tlv,
-						info->list[i].width) != TRUE)
-			return FALSE;
+		if (!stk_tlv_builder_append_byte(tlv, info->list[i].height))
+			return false;
+		if (!stk_tlv_builder_append_byte(tlv, info->list[i].width))
+			return false;
 	}
 
 	return stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 102.223 Section 8.81 */
-static gboolean build_dataobj_meid(struct stk_tlv_builder *tlv,
-					const void *data, gboolean cr)
+static bool build_dataobj_meid(struct stk_tlv_builder *tlv,
+					const void *data, bool cr)
 {
 	const char *meid = data;
 	unsigned char value[8];
 	unsigned char tag = STK_DATA_OBJECT_TYPE_MEID;
 
 	if (meid == NULL)
-		return TRUE;
+		return true;
 
 	if (strlen(meid) != 16)
-		return FALSE;
+		return false;
 
 	sim_encode_bcd_number(meid, value);
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_bytes(tlv, value, 8) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 102.223 Section 8.83 */
-static gboolean build_dataobj_mms_id(struct stk_tlv_builder *tlv,
-					const void *data, gboolean cr)
+static bool build_dataobj_mms_id(struct stk_tlv_builder *tlv,
+					const void *data, bool cr)
 {
 	const struct stk_mms_id *id = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_MMS_ID;
@@ -5235,16 +5214,16 @@ static gboolean build_dataobj_mms_id(struct stk_tlv_builder *tlv,
 	/* Assume the length is never 0 for a valid ID, however the whole
 	 * data object's presence is conditional.  */
 	if (id->len == 0)
-		return TRUE;
+		return true;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_bytes(tlv, id->id, id->len) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 102.223 Section 8.84 */
-static gboolean build_dataobj_mms_transfer_status(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_mms_transfer_status(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const struct stk_mms_transfer_status *mts = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_MMS_TRANSFER_STATUS;
@@ -5254,55 +5233,55 @@ static gboolean build_dataobj_mms_transfer_status(struct stk_tlv_builder *tlv,
 	 * the whole data object's presence is conditional.
 	 */
 	if (mts->len == 0)
-		return TRUE;
+		return true;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_bytes(tlv, mts->status, mts->len) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 131.111 Section 8.84 */
-static gboolean build_dataobj_i_wlan_access_status(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_i_wlan_access_status(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const enum stk_i_wlan_access_status *status = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_I_WLAN_ACCESS_STATUS;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_byte(tlv, *status) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 102.223 Section 8.86 */
-static gboolean build_dataobj_mms_notification(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_mms_notification(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const struct stk_common_byte_array *msg = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_MMS_NOTIFICATION;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, TRUE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, true) &&
 		stk_tlv_builder_append_bytes(tlv, msg->array, msg->len) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 102.223 Section 8.87 */
-static gboolean build_dataobj_last_envelope(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_last_envelope(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const ofono_bool_t *last = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_LAST_ENVELOPE;
 
 	if (!*last)
-		return TRUE;
+		return true;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 102.223 Section 8.88 */
-static gboolean build_dataobj_registry_application_data(
+static bool build_dataobj_registry_application_data(
 						struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+						const void *data, bool cr)
 {
 	const struct stk_registry_application_data *rad = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_REGISTRY_APPLICATION_DATA;
@@ -5320,10 +5299,10 @@ static gboolean build_dataobj_registry_application_data(
 		dcs = 0x08;
 
 		if (name == NULL)
-			return FALSE;
+			return false;
 	}
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, TRUE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, true) &&
 		stk_tlv_builder_append_short(tlv, rad->port) &&
 		stk_tlv_builder_append_byte(tlv, dcs) &&
 		stk_tlv_builder_append_byte(tlv, rad->type) &&
@@ -5332,33 +5311,33 @@ static gboolean build_dataobj_registry_application_data(
 }
 
 /* Described in TS 102.223 Section 8.90 */
-static gboolean build_dataobj_broadcast_network_information(
+static bool build_dataobj_broadcast_network_information(
 						struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+						const void *data, bool cr)
 {
 	const struct stk_broadcast_network_information *bni = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_BROADCAST_NETWORK_INFO;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_byte(tlv, bni->tech) &&
 		stk_tlv_builder_append_bytes(tlv, bni->loc_info, bni->len) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 131.111 Section 8.91 / 3GPP 24.008 Section 10.5.5.15 */
-static gboolean build_dataobj_routing_area_id(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_routing_area_id(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const struct stk_routing_area_info *rai = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_ROUTING_AREA_INFO;
-	guint8 mccmnc[3];
+	uint8_t mccmnc[3];
 
 	if (rai->mcc[0] == 0)
-		return TRUE;
+		return true;
 
 	sim_encode_mcc_mnc(mccmnc, rai->mcc, rai->mnc);
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_bytes(tlv, mccmnc, 3) &&
 		stk_tlv_builder_append_short(tlv, rai->lac) &&
 		stk_tlv_builder_append_byte(tlv, rai->rac) &&
@@ -5366,67 +5345,67 @@ static gboolean build_dataobj_routing_area_id(struct stk_tlv_builder *tlv,
 }
 
 /* Described in TS 131.111 Section 8.92 */
-static gboolean build_dataobj_update_attach_type(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_update_attach_type(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const enum stk_update_attach_type *type = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_UPDATE_ATTACH_TYPE;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_byte(tlv, *type) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 131.111 Section 8.93 */
-static gboolean build_dataobj_rejection_cause_code(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_rejection_cause_code(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const enum stk_rejection_cause_code *cause = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_REJECTION_CAUSE_CODE;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_byte(tlv, *cause) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 131.111 Section 8.98, 3GPP 24.301 Section 6.5.1 */
-static gboolean build_dataobj_eps_pdn_conn_params(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_eps_pdn_conn_params(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const struct stk_common_byte_array *params = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_EPS_PDN_CONN_ACTIVATION_REQ;
 
 	if (params->len < 1)
-		return TRUE;
+		return true;
 
 	if (params->len > 0x7f)
-		return FALSE;
+		return false;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_bytes(tlv, params->array, params->len) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
 /* Described in TS 131.111 Section 8.99 / 3GPP 24.301 Section 9.9.3.32 */
-static gboolean build_dataobj_tracking_area_id(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_dataobj_tracking_area_id(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const struct stk_tracking_area_id *tai = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_TRACKING_AREA_ID;
-	guint8 mccmnc[3];
+	uint8_t mccmnc[3];
 
 	if (tai->mcc[0] == 0)
-		return TRUE;
+		return true;
 
 	sim_encode_mcc_mnc(mccmnc, tai->mcc, tai->mnc);
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_bytes(tlv, mccmnc, 3) &&
 		stk_tlv_builder_append_short(tlv, tai->tac) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
-static gboolean build_dataobj(struct stk_tlv_builder *tlv,
+static bool build_dataobj(struct stk_tlv_builder *tlv,
 				dataobj_writer builder_func, ...)
 {
 	va_list args;
@@ -5436,20 +5415,20 @@ static gboolean build_dataobj(struct stk_tlv_builder *tlv,
 	while (builder_func) {
 		unsigned int flags = va_arg(args, enum stk_data_object_flag);
 		const void *data = va_arg(args, const void *);
-		gboolean cr = (flags & DATAOBJ_FLAG_CR) ? TRUE : FALSE;
+		bool cr = (flags & DATAOBJ_FLAG_CR) ? true : false;
 
-		if (builder_func(tlv, data, cr) != TRUE)
-			return FALSE;
+		if (!builder_func(tlv, data, cr))
+			return false;
 
 		builder_func = va_arg(args, dataobj_writer);
 	}
 
 	va_end(args);
 
-	return TRUE;
+	return true;
 }
 
-static gboolean build_setup_call(struct stk_tlv_builder *builder,
+static bool build_setup_call(struct stk_tlv_builder *builder,
 					const struct stk_response *response)
 {
 	if (response->set_up_call.modified_result.cc_modified)
@@ -5469,7 +5448,7 @@ static gboolean build_setup_call(struct stk_tlv_builder *builder,
 				NULL);
 }
 
-static gboolean build_local_info(struct stk_tlv_builder *builder,
+static bool build_local_info(struct stk_tlv_builder *builder,
 					const struct stk_response *response)
 {
 	const struct stk_response_local_info *info =
@@ -5564,11 +5543,11 @@ static gboolean build_local_info(struct stk_tlv_builder *builder,
 					NULL);
 
 	case 0x0f: /* Location Information for multiple NAAs */
-		if (build_dataobj(builder,
+		if (!build_dataobj(builder,
 					build_dataobj_access_technologies,
 					0, &info->location_infos.access_techs,
-					NULL) != TRUE)
-			return FALSE;
+					NULL))
+			return false;
 
 		for (i = 0; i < info->location_infos.access_techs.length; i++) {
 			dataobj_writer location = build_dataobj_location_info;
@@ -5580,38 +5559,38 @@ static gboolean build_local_info(struct stk_tlv_builder *builder,
 			if (info->location_infos.locations[i].mcc[0] == '\0')
 				location = build_empty_dataobj_location_info;
 
-			if (build_dataobj(builder,
+			if (!build_dataobj(builder,
 					location,
 					0, &info->location_infos.locations[i],
-					NULL) != TRUE)
-				return FALSE;
+					NULL))
+				return false;
 		}
 
-		return TRUE;
+		return true;
 
 	case 0x10: /* Network Measurement results for multiple NAAs */
-		if (build_dataobj(builder,
+		if (!build_dataobj(builder,
 					build_dataobj_access_technologies,
 					0, &info->nmrs.access_techs,
-					NULL) != TRUE)
-			return FALSE;
+					NULL))
+			return false;
 
 		for (i = 0; i < info->nmrs.access_techs.length; i++)
-			if (build_dataobj(builder,
+			if (!build_dataobj(builder,
 				build_dataobj_network_measurement_results,
 				0, &info->nmrs.nmrs[i].nmr,
 				build_dataobj_bcch_channel_list,
 				0, &info->nmrs.nmrs[i].bcch_ch_list,
-				NULL) != TRUE)
-				return FALSE;
+				NULL))
+				return false;
 
-		return TRUE;
+		return true;
 	}
 
-	return FALSE;
+	return false;
 }
 
-static gboolean build_open_channel(struct stk_tlv_builder *builder,
+static bool build_open_channel(struct stk_tlv_builder *builder,
 					const struct stk_response *response)
 {
 	const struct stk_response_open_channel *open_channel =
@@ -5619,10 +5598,11 @@ static gboolean build_open_channel(struct stk_tlv_builder *builder,
 
 	/* insert channel identifier only in case of success */
 	if (response->result.type == STK_RESULT_TYPE_SUCCESS) {
-		if (build_dataobj(builder, build_dataobj_channel_status,
-						0, &open_channel->channel,
-						NULL) != TRUE)
-			return FALSE;
+		if (!build_dataobj(builder,
+					build_dataobj_channel_status,
+					0, &open_channel->channel,
+					NULL))
+			return false;
 	}
 
 	return build_dataobj(builder,
@@ -5633,7 +5613,7 @@ static gboolean build_open_channel(struct stk_tlv_builder *builder,
 				NULL);
 }
 
-static gboolean build_receive_data(struct stk_tlv_builder *builder,
+static bool build_receive_data(struct stk_tlv_builder *builder,
 					const struct stk_response *response)
 {
 	const struct stk_response_receive_data *receive_data =
@@ -5641,29 +5621,32 @@ static gboolean build_receive_data(struct stk_tlv_builder *builder,
 
 	if (response->result.type != STK_RESULT_TYPE_SUCCESS &&
 			response->result.type != STK_RESULT_TYPE_MISSING_INFO)
-		return TRUE;
+		return true;
 
 	if (receive_data->rx_data.len) {
-		if (build_dataobj(builder, build_dataobj_channel_data,
+		if (!build_dataobj(builder,
+					build_dataobj_channel_data,
 					DATAOBJ_FLAG_CR,
 					&response->receive_data.rx_data,
-					NULL) != TRUE)
-		return FALSE;
+					NULL))
+		return false;
 	}
 
-	return build_dataobj(builder, build_dataobj_channel_data_length,
+	return build_dataobj(builder,
+				build_dataobj_channel_data_length,
 				DATAOBJ_FLAG_CR,
 				&response->receive_data.rx_remaining,
 				NULL);
 }
 
-static gboolean build_send_data(struct stk_tlv_builder *builder,
+static bool build_send_data(struct stk_tlv_builder *builder,
 					const struct stk_response *response)
 {
 	if (response->result.type != STK_RESULT_TYPE_SUCCESS)
-		return TRUE;
+		return true;
 
-	return build_dataobj(builder, build_dataobj_channel_data_length,
+	return build_dataobj(builder,
+				build_dataobj_channel_data_length,
 				DATAOBJ_FLAG_CR,
 				&response->send_data.tx_avail,
 				NULL);
@@ -5673,7 +5656,7 @@ const unsigned char *stk_pdu_from_response(const struct stk_response *response,
 						unsigned int *out_length)
 {
 	struct stk_tlv_builder builder;
-	gboolean ok = TRUE;
+	bool ok = true;
 	unsigned char tag;
 	static unsigned char pdu[512];
 
@@ -5685,19 +5668,19 @@ const unsigned char *stk_pdu_from_response(const struct stk_response *response,
 	 * and the Result TLV.  Comprehension required everywhere.
 	 */
 	tag = STK_DATA_OBJECT_TYPE_COMMAND_DETAILS;
-	if (stk_tlv_builder_open_container(&builder, TRUE, tag, FALSE) == FALSE)
+	if (!stk_tlv_builder_open_container(&builder, true, tag, false))
 		return NULL;
 
-	if (stk_tlv_builder_append_byte(&builder, response->number) == FALSE)
+	if (!stk_tlv_builder_append_byte(&builder, response->number))
 		return NULL;
 
-	if (stk_tlv_builder_append_byte(&builder, response->type) == FALSE)
+	if (!stk_tlv_builder_append_byte(&builder, response->type))
 		return NULL;
 
-	if (stk_tlv_builder_append_byte(&builder, response->qualifier) == FALSE)
+	if (!stk_tlv_builder_append_byte(&builder, response->qualifier))
 		return NULL;
 
-	if (stk_tlv_builder_close_container(&builder) == FALSE)
+	if (!stk_tlv_builder_close_container(&builder))
 		return NULL;
 
 	/*
@@ -5712,19 +5695,19 @@ const unsigned char *stk_pdu_from_response(const struct stk_response *response,
 	 * data object type.
 	 */
 	tag = STK_DATA_OBJECT_TYPE_DEVICE_IDENTITIES;
-	if (stk_tlv_builder_open_container(&builder, TRUE, tag, FALSE) == FALSE)
+	if (!stk_tlv_builder_open_container(&builder, true, tag, false))
 		return NULL;
 
-	if (stk_tlv_builder_append_byte(&builder, response->src) == FALSE)
+	if (!stk_tlv_builder_append_byte(&builder, response->src))
 		return NULL;
 
-	if (stk_tlv_builder_append_byte(&builder, response->dst) == FALSE)
+	if (!stk_tlv_builder_append_byte(&builder, response->dst))
 		return NULL;
 
-	if (stk_tlv_builder_close_container(&builder) == FALSE)
+	if (!stk_tlv_builder_close_container(&builder))
 		return NULL;
 
-	if (build_dataobj_result(&builder, &response->result, TRUE) != TRUE)
+	if (!build_dataobj_result(&builder, &response->result, true))
 		return NULL;
 
 	switch (response->type) {
@@ -5826,7 +5809,7 @@ const unsigned char *stk_pdu_from_response(const struct stk_response *response,
 		return NULL;
 	};
 
-	if (ok != TRUE)
+	if (!ok)
 		return NULL;
 
 	if (out_length)
@@ -5836,57 +5819,63 @@ const unsigned char *stk_pdu_from_response(const struct stk_response *response,
 }
 
 /* Described in TS 102.223 Section 8.7 */
-static gboolean build_envelope_dataobj_device_ids(struct stk_tlv_builder *tlv,
-						const void *data, gboolean cr)
+static bool build_envelope_dataobj_device_ids(struct stk_tlv_builder *tlv,
+						const void *data, bool cr)
 {
 	const struct stk_envelope *envelope = data;
 	unsigned char tag = STK_DATA_OBJECT_TYPE_DEVICE_IDENTITIES;
 
-	return stk_tlv_builder_open_container(tlv, cr, tag, FALSE) &&
+	return stk_tlv_builder_open_container(tlv, cr, tag, false) &&
 		stk_tlv_builder_append_byte(tlv, envelope->src) &&
 		stk_tlv_builder_append_byte(tlv, envelope->dst) &&
 		stk_tlv_builder_close_container(tlv);
 }
 
-static gboolean build_envelope_call_control(
+static bool build_envelope_call_control(
 					struct stk_tlv_builder *builder,
 					const struct stk_envelope *envelope)
 {
 	const struct stk_envelope_call_control *cc = &envelope->call_control;
-	gboolean ok = FALSE;
+	bool ok = false;
 
-	if (build_dataobj(builder, build_envelope_dataobj_device_ids,
-				DATAOBJ_FLAG_CR, envelope, NULL) != TRUE)
-		return FALSE;
+	if (!build_dataobj(builder,
+				build_envelope_dataobj_device_ids,
+				DATAOBJ_FLAG_CR, envelope, NULL))
+		return false;
 
 	switch (cc->type) {
 	case STK_CC_TYPE_CALL_SETUP:
-		ok = build_dataobj(builder, build_dataobj_address,
+		ok = build_dataobj(builder,
+					build_dataobj_address,
 					DATAOBJ_FLAG_CR, &cc->address, NULL);
 		break;
 	case STK_CC_TYPE_SUPPLEMENTARY_SERVICE:
-		ok = build_dataobj(builder, build_dataobj_ss_string,
+		ok = build_dataobj(builder,
+					build_dataobj_ss_string,
 					DATAOBJ_FLAG_CR, &cc->ss_string, NULL);
 		break;
 	case STK_CC_TYPE_USSD_OP:
-		ok = build_dataobj(builder, build_dataobj_ussd_string,
+		ok = build_dataobj(builder,
+					build_dataobj_ussd_string,
 					DATAOBJ_FLAG_CR, &cc->ussd_string,
 					NULL);
 		break;
 	case STK_CC_TYPE_PDP_CTX_ACTIVATION:
-		ok = build_dataobj(builder, build_dataobj_pdp_context_params,
+		ok = build_dataobj(builder,
+					build_dataobj_pdp_context_params,
 					DATAOBJ_FLAG_CR, &cc->pdp_ctx_params,
 					NULL);
 		break;
 	case STK_CC_TYPE_EPS_PDN_CONNECTION_ACTIVATION:
-		ok = build_dataobj(builder, build_dataobj_eps_pdn_conn_params,
+		ok = build_dataobj(builder,
+					build_dataobj_eps_pdn_conn_params,
 					DATAOBJ_FLAG_CR, &cc->eps_pdn_params,
 					NULL);
 		break;
 	}
 
-	if (ok != TRUE)
-		return FALSE;
+	if (!ok)
+		return false;
 
 	return build_dataobj(builder,
 				build_dataobj_ccp, 0, &cc->ccp1,
@@ -5898,20 +5887,20 @@ static gboolean build_envelope_call_control(
 				NULL);
 }
 
-static gboolean build_envelope_event_download(struct stk_tlv_builder *builder,
+static bool build_envelope_event_download(struct stk_tlv_builder *builder,
 					const struct stk_envelope *envelope)
 {
 	const struct stk_envelope_event_download *evt =
 		&envelope->event_download;
 
-	if (build_dataobj(builder,
+	if (!build_dataobj(builder,
 				build_dataobj_event_type, DATAOBJ_FLAG_CR,
 				&evt->type,
 				build_envelope_dataobj_device_ids,
 				DATAOBJ_FLAG_CR,
 				envelope,
-				NULL) == FALSE)
-		return FALSE;
+				NULL))
+		return false;
 
 	switch (evt->type) {
 	case STK_EVENT_TYPE_MT_CALL:
@@ -5948,7 +5937,7 @@ static gboolean build_envelope_event_download(struct stk_tlv_builder *builder,
 					NULL);
 	case STK_EVENT_TYPE_USER_ACTIVITY:
 	case STK_EVENT_TYPE_IDLE_SCREEN_AVAILABLE:
-		return TRUE;
+		return true;
 	case STK_EVENT_TYPE_CARD_READER_STATUS:
 		return build_dataobj(builder,
 					build_dataobj_card_reader_status,
@@ -6055,28 +6044,28 @@ static gboolean build_envelope_event_download(struct stk_tlv_builder *builder,
 					&evt->network_rejection.cause,
 					NULL);
 	case STK_EVENT_TYPE_HCI_CONNECTIVITY_EVENT:
-		return TRUE;
+		return true;
 	default:
-		return FALSE;
+		return false;
 	}
 }
 
-static gboolean build_envelope_terminal_apps(struct stk_tlv_builder *builder,
+static bool build_envelope_terminal_apps(struct stk_tlv_builder *builder,
 					const struct stk_envelope *envelope)
 {
 	const struct stk_envelope_terminal_apps *ta = &envelope->terminal_apps;
 	int i;
 
-	if (build_dataobj(builder,
+	if (!build_dataobj(builder,
 				build_envelope_dataobj_device_ids,
-				DATAOBJ_FLAG_CR, envelope, NULL) == FALSE)
-		return FALSE;
+				DATAOBJ_FLAG_CR, envelope, NULL))
+		return false;
 
 	for (i = 0; i < ta->count; i++)
-		if (build_dataobj(builder,
+		if (!build_dataobj(builder,
 					build_dataobj_registry_application_data,
-					0, &ta->list[i], NULL) == FALSE)
-			return FALSE;
+					0, &ta->list[i], NULL))
+			return false;
 
 	return build_dataobj(builder,
 				build_dataobj_last_envelope,
@@ -6088,14 +6077,14 @@ const unsigned char *stk_pdu_from_envelope(const struct stk_envelope *envelope,
 {
 	struct ber_tlv_builder btlv;
 	struct stk_tlv_builder builder;
-	gboolean ok = TRUE;
+	bool ok = true;
 	static unsigned char buffer[512];
 	unsigned char *pdu;
 
 	if (ber_tlv_builder_init(&btlv, buffer, sizeof(buffer)) != TRUE)
 		return NULL;
 
-	if (stk_tlv_builder_recurse(&builder, &btlv, envelope->type) != TRUE)
+	if (!stk_tlv_builder_recurse(&builder, &btlv, envelope->type))
 		return NULL;
 
 	switch (envelope->type) {
@@ -6209,7 +6198,7 @@ const unsigned char *stk_pdu_from_envelope(const struct stk_envelope *envelope,
 		return NULL;
 	};
 
-	if (ok != TRUE)
+	if (!ok)
 		return NULL;
 
 	ber_tlv_builder_optimize(&btlv, &pdu, out_length);
@@ -6451,7 +6440,7 @@ char *stk_image_to_xpm(const unsigned char *img, unsigned int len,
 			enum stk_img_scheme scheme, const unsigned char *clut,
 			unsigned short clut_len)
 {
-	guint8 width, height;
+	uint8_t width, height;
 	unsigned int ncolors, nbits, entry, cpp;
 	unsigned int i, j;
 	int bit, k;
