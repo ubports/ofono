@@ -37,7 +37,9 @@
 #include <ofono/call-forwarding.h>
 #include "common.h"
 
+#if __GNUC__ > 7
 #pragma GCC diagnostic ignored "-Wrestrict"
+#endif
 
 #include "gril.h"
 
