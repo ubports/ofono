@@ -30,7 +30,7 @@
 #include <stdint.h>
 
 #include <glib.h>
-#include <glib/gprintf.h>
+#include <ell/ell.h>
 
 #include <ofono/types.h>
 #include "smsutil.h"
@@ -186,14 +186,14 @@ static inline void check_item_id(const unsigned char command,
 	check_common_byte(command, test);
 }
 
-static void check_items(GSList *command, const struct stk_item *test)
+static void check_items(struct l_queue *command, const struct stk_item *test)
 {
 	struct stk_item *si;
-	GSList *l;
+	const struct l_queue_entry *entry;
 	unsigned int i = 0;
 
-	for (l = command; l; l = l->next) {
-		si = l->data;
+	for (entry = l_queue_get_entries(command); entry; entry = entry->next) {
+		si = entry->data;
 		check_item(si, &test[i++]);
 	}
 
@@ -319,16 +319,17 @@ static inline void check_ussd(const struct stk_ussd_string *command,
 }
 
 /* Defined in TS 102.223 Section 8.18 */
-static void check_file_list(GSList *command, const struct stk_file *test)
+static void check_file_list(struct l_queue *command,
+						const struct stk_file *test)
 {
 	struct stk_file *sf;
-	GSList *l;
+	const struct l_queue_entry *entry = l_queue_get_entries(command);
 	unsigned int i = 0;
 
-	for (l = command; l; l = l->next) {
-		sf = l->data;
+	for (; entry; entry = entry->next) {
+		sf = entry->data;
 		g_assert(sf->len == test[i].len);
-		g_assert(g_mem_equal(sf->file, test[i++].file, sf->len));
+		g_assert(!memcmp(sf->file, test[i++].file, sf->len));
 	}
 
 	g_assert(test[i].len == 0);
@@ -458,14 +459,14 @@ static void check_provisioning_file_reference(const struct stk_file *command,
 	g_assert(g_mem_equal(command->file, test->file, test->len));
 }
 
-static void check_provisioning_file_references(GSList *command,
+static void check_provisioning_file_references(struct l_queue *command,
 						const struct stk_file *test)
 {
 	struct stk_file *sf;
-	GSList *l;
+	const struct l_queue_entry *l;
 	unsigned int i = 0;
 
-	for (l = command; l; l = l->next) {
+	for (l = l_queue_get_entries(command); l; l = l->next) {
 		sf = l->data;
 		check_provisioning_file_reference(sf, &test[i++]);
 	}
