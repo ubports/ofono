@@ -1898,7 +1898,12 @@ static struct pri_context *add_context(struct ofono_gprs *gprs,
 	unsigned int id;
 	struct pri_context *context;
 
-	id = l_uintset_find_unused(gprs->used_pids, gprs->last_context_id);
+	if (gprs->last_context_id)
+		id = l_uintset_find_unused(gprs->used_pids,
+							gprs->last_context_id);
+	else
+		id = l_uintset_find_unused_min(gprs->used_pids);
+
 	if (id > l_uintset_get_max(gprs->used_pids))
 		return NULL;
 
