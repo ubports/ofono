@@ -616,9 +616,11 @@ static int ifx_gprs_context_probe(struct ofono_gprs_context *gc,
 
 	DBG("");
 
-	if (stat(TUN_DEV, &st) < 0) {
-		ofono_error("Missing support for TUN/TAP devices");
-		return -ENODEV;
+	if (vendor != OFONO_VENDOR_XMM) {
+		if (stat(TUN_DEV, &st) < 0) {
+			ofono_error("Missing support for TUN/TAP devices");
+			return -ENODEV;
+		}
 	}
 
 	if (vendor != OFONO_VENDOR_XMM) {
