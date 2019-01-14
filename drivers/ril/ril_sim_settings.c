@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2016-2017 Jolla Ltd.
+ *  Copyright (C) 2016-2019 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -16,7 +16,7 @@
 #include "ril_sim_settings.h"
 #include "ril_log.h"
 
-#include "sailfish_watch.h"
+#include <ofono/watch.h>
 
 #include <gutil_misc.h>
 
@@ -30,14 +30,14 @@
 typedef GObjectClass RilSimSettingsClass;
 typedef struct ril_sim_settings RilSimSettings;
 
-enum sailfish_watch_events {
+enum ofono_watch_events {
 	WATCH_EVENT_IMSI,
 	WATCH_EVENT_COUNT
 };
 
 struct ril_sim_settings_priv {
 	gulong watch_event_id[WATCH_EVENT_COUNT];
-	struct sailfish_watch *watch;
+	struct ofono_watch *watch;
 	char *imsi;
 };
 
@@ -81,7 +81,7 @@ void ril_sim_settings_set_pref_mode(struct ril_sim_settings *self,
 	}
 }
 
-static void ril_sim_settings_imsi_changed(struct sailfish_watch *watch,
+static void ril_sim_settings_imsi_changed(struct ofono_watch *watch,
 							void *user_data)
 {
 	struct ril_sim_settings *self = RIL_SIM_SETTINGS(user_data);
@@ -106,9 +106,9 @@ struct ril_sim_settings *ril_sim_settings_new(const char *path,
 		priv = self->priv;
 		self->techs = techs;
 		self->pref_mode = RIL_PREF_MODE_DEFAULT(self);
-		priv->watch = sailfish_watch_new(path);
+		priv->watch = ofono_watch_new(path);
 		priv->watch_event_id[WATCH_EVENT_IMSI] =
-			sailfish_watch_add_imsi_changed_handler(priv->watch,
+			ofono_watch_add_imsi_changed_handler(priv->watch,
 				ril_sim_settings_imsi_changed, self);
 		self->imsi = priv->imsi = g_strdup(priv->watch->imsi);
 	}
@@ -173,8 +173,8 @@ static void ril_sim_settings_finalize(GObject *object)
 	struct ril_sim_settings *self = RIL_SIM_SETTINGS(object);
 	struct ril_sim_settings_priv *priv = self->priv;
 
-	sailfish_watch_remove_all_handlers(priv->watch, priv->watch_event_id);
-	sailfish_watch_unref(priv->watch);
+	ofono_watch_remove_all_handlers(priv->watch, priv->watch_event_id);
+	ofono_watch_unref(priv->watch);
 	g_free(priv->imsi);
 	G_OBJECT_CLASS(ril_sim_settings_parent_class)->finalize(object);
 }

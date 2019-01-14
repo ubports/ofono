@@ -19,6 +19,7 @@ TESTS="\
  test-dbus-queue \
  test-gprs-filter \
  test-provision \
+ test-watch \
  test-ril_util \
  test-ril_config \
  test-ril-transport \
@@ -28,8 +29,7 @@ TESTS="\
  test-sailfish_cell_info_dbus \
  test-sailfish_manager \
  test-sailfish_sim_info \
- test-sailfish_sim_info_dbus \
- test-sailfish_watch"
+ test-sailfish_sim_info_dbus"
 
 pushd `dirname $0` > /dev/null
 TEST_DIR="$PWD"

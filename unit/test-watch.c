@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2018 Jolla Ltd.
+ *  Copyright (C) 2018-2019 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -13,7 +13,7 @@
  *  GNU General Public License for more details.
  */
 
-#include <sailfish_watch.h>
+#include <ofono/watch.h>
 
 #include "ofono.h"
 
@@ -427,7 +427,7 @@ static void test_modem_shutdown(struct ofono_modem *modem)
 	__ofono_watchlist_free(modem->online_watches);
 }
 
-static void test_inc_cb(struct sailfish_watch *watch, void *user_data)
+static void test_inc_cb(struct ofono_watch *watch, void *user_data)
 {
 	(*((int *)user_data))++;
 }
@@ -436,25 +436,25 @@ static void test_inc_cb(struct sailfish_watch *watch, void *user_data)
 
 static void test_basic(void)
 {
-	struct sailfish_watch *watch;
-	struct sailfish_watch *watch1;
+	struct ofono_watch *watch;
+	struct ofono_watch *watch1;
 	struct ofono_modem modem, modem1;
 
 	/* NULL resistance */
-	g_assert(!sailfish_watch_new(NULL));
-	g_assert(!sailfish_watch_ref(NULL));
-	sailfish_watch_unref(NULL);
-	g_assert(!sailfish_watch_add_modem_changed_handler(NULL, NULL, NULL));
-	g_assert(!sailfish_watch_add_online_changed_handler(NULL, NULL, NULL));
-	g_assert(!sailfish_watch_add_sim_changed_handler(NULL, NULL, NULL));
-	g_assert(!sailfish_watch_add_sim_state_changed_handler(NULL, NULL,
+	g_assert(!ofono_watch_new(NULL));
+	g_assert(!ofono_watch_ref(NULL));
+	ofono_watch_unref(NULL);
+	g_assert(!ofono_watch_add_modem_changed_handler(NULL, NULL, NULL));
+	g_assert(!ofono_watch_add_online_changed_handler(NULL, NULL, NULL));
+	g_assert(!ofono_watch_add_sim_changed_handler(NULL, NULL, NULL));
+	g_assert(!ofono_watch_add_sim_state_changed_handler(NULL, NULL,
 									NULL));
-	g_assert(!sailfish_watch_add_iccid_changed_handler(NULL, NULL, NULL));
-	g_assert(!sailfish_watch_add_imsi_changed_handler(NULL, NULL, NULL));
-	g_assert(!sailfish_watch_add_spn_changed_handler(NULL, NULL, NULL));
-	g_assert(!sailfish_watch_add_netreg_changed_handler(NULL, NULL, NULL));
-	sailfish_watch_remove_handler(NULL, 0);
-	sailfish_watch_remove_handlers(NULL, NULL, 0);
+	g_assert(!ofono_watch_add_iccid_changed_handler(NULL, NULL, NULL));
+	g_assert(!ofono_watch_add_imsi_changed_handler(NULL, NULL, NULL));
+	g_assert(!ofono_watch_add_spn_changed_handler(NULL, NULL, NULL));
+	g_assert(!ofono_watch_add_netreg_changed_handler(NULL, NULL, NULL));
+	ofono_watch_remove_handler(NULL, 0);
+	ofono_watch_remove_handlers(NULL, NULL, 0);
 
 	/* Instance caching */
 	memset(&modem, 0, sizeof(modem));
@@ -462,8 +462,8 @@ static void test_basic(void)
 	__ofono_modemwatch_init();
 	test_modem_init1(&modem, TEST_PATH);
 
-	watch = sailfish_watch_new(TEST_PATH);
-	watch1 = sailfish_watch_new(TEST_PATH_1);
+	watch = ofono_watch_new(TEST_PATH);
+	watch1 = ofono_watch_new(TEST_PATH_1);
 
 	/* The second modem is added after the watch is created */
 	test_modem_init1(&modem1, TEST_PATH_1);
@@ -475,28 +475,28 @@ static void test_basic(void)
 	g_assert(watch1);
 	g_assert(watch->modem == &modem);
 	g_assert(watch1->modem == &modem1);
-	g_assert(sailfish_watch_new(TEST_PATH) == watch);
-	g_assert(sailfish_watch_new(TEST_PATH_1) == watch1);
-	sailfish_watch_unref(watch);
-	sailfish_watch_unref(watch1);
+	g_assert(ofono_watch_new(TEST_PATH) == watch);
+	g_assert(ofono_watch_new(TEST_PATH_1) == watch1);
+	ofono_watch_unref(watch);
+	ofono_watch_unref(watch1);
 
 	/* More NULLs and zeros */
-	g_assert(!sailfish_watch_add_modem_changed_handler(watch, NULL, NULL));
-	g_assert(!sailfish_watch_add_online_changed_handler(watch, NULL, NULL));
-	g_assert(!sailfish_watch_add_sim_changed_handler(watch, NULL, NULL));
-	g_assert(!sailfish_watch_add_sim_state_changed_handler(watch, NULL,
+	g_assert(!ofono_watch_add_modem_changed_handler(watch, NULL, NULL));
+	g_assert(!ofono_watch_add_online_changed_handler(watch, NULL, NULL));
+	g_assert(!ofono_watch_add_sim_changed_handler(watch, NULL, NULL));
+	g_assert(!ofono_watch_add_sim_state_changed_handler(watch, NULL,
 									NULL));
-	g_assert(!sailfish_watch_add_iccid_changed_handler(watch, NULL, NULL));
-	g_assert(!sailfish_watch_add_imsi_changed_handler(watch, NULL, NULL));
-	g_assert(!sailfish_watch_add_spn_changed_handler(watch, NULL, NULL));
-	g_assert(!sailfish_watch_add_netreg_changed_handler(watch, NULL, NULL));
-	sailfish_watch_remove_handler(watch, 0);
-	sailfish_watch_remove_handlers(watch, NULL, 0);
+	g_assert(!ofono_watch_add_iccid_changed_handler(watch, NULL, NULL));
+	g_assert(!ofono_watch_add_imsi_changed_handler(watch, NULL, NULL));
+	g_assert(!ofono_watch_add_spn_changed_handler(watch, NULL, NULL));
+	g_assert(!ofono_watch_add_netreg_changed_handler(watch, NULL, NULL));
+	ofono_watch_remove_handler(watch, 0);
+	ofono_watch_remove_handlers(watch, NULL, 0);
 
 	/* The first modem is removed when the watch is still alive */
 	test_modem_shutdown(&modem);
-	sailfish_watch_unref(watch);
-	sailfish_watch_unref(watch1);
+	ofono_watch_unref(watch);
+	ofono_watch_unref(watch1);
 	test_modem_shutdown(&modem1);
 	__ofono_modemwatch_cleanup();
 }
@@ -505,22 +505,22 @@ static void test_basic(void)
 
 static void test_modem(void)
 {
-	struct sailfish_watch *watch;
+	struct ofono_watch *watch;
 	struct ofono_modem modem;
 	gulong id;
 	int n = 0;
 
 	__ofono_modemwatch_init();
-	watch = sailfish_watch_new(TEST_PATH);
+	watch = ofono_watch_new(TEST_PATH);
 
-	id = sailfish_watch_add_modem_changed_handler(watch, test_inc_cb, &n);
+	id = ofono_watch_add_modem_changed_handler(watch, test_inc_cb, &n);
 	g_assert(id);
 	memset(&modem, 0, sizeof(modem));
 	test_modem_init(&modem);
 	g_assert(n == 1);
 
-	sailfish_watch_remove_handler(watch, id);
-	sailfish_watch_unref(watch);
+	ofono_watch_remove_handler(watch, id);
+	ofono_watch_unref(watch);
 	test_modem_shutdown(&modem);
 	__ofono_modemwatch_cleanup();
 }
@@ -529,7 +529,7 @@ static void test_modem(void)
 
 static void test_online(void)
 {
-	struct sailfish_watch *watch;
+	struct ofono_watch *watch;
 	struct ofono_modem modem;
 	gulong id;
 	int n = 0;
@@ -537,11 +537,11 @@ static void test_online(void)
 	memset(&modem, 0, sizeof(modem));
 	__ofono_modemwatch_init();
 	test_modem_init(&modem);
-	watch = sailfish_watch_new(TEST_PATH);
+	watch = ofono_watch_new(TEST_PATH);
 	g_assert(!watch->online);
 
 	modem.online = TRUE;
-	id = sailfish_watch_add_online_changed_handler(watch, test_inc_cb, &n);
+	id = ofono_watch_add_online_changed_handler(watch, test_inc_cb, &n);
 	notify_online_watches(&modem);
 	g_assert(watch->online);
 	g_assert(n == 1);
@@ -552,8 +552,8 @@ static void test_online(void)
 	g_assert(!watch->online);
 	g_assert(n == 2);
 
-	sailfish_watch_remove_handler(watch, id);
-	sailfish_watch_unref(watch);
+	ofono_watch_remove_handler(watch, id);
+	ofono_watch_unref(watch);
 	__ofono_modemwatch_cleanup();
 }
 
@@ -561,7 +561,7 @@ static void test_online(void)
 
 static void test_netreg(void)
 {
-	struct sailfish_watch *watch;
+	struct ofono_watch *watch;
 	struct ofono_modem modem;
 	gulong id;
 	int n = 0;
@@ -569,10 +569,10 @@ static void test_netreg(void)
 	memset(&modem, 0, sizeof(modem));
 	__ofono_modemwatch_init();
 	test_modem_init(&modem);
-	watch = sailfish_watch_new(TEST_PATH);
+	watch = ofono_watch_new(TEST_PATH);
 	g_assert(!watch->netreg);
 
-	id = sailfish_watch_add_netreg_changed_handler(watch, test_inc_cb, &n);
+	id = ofono_watch_add_netreg_changed_handler(watch, test_inc_cb, &n);
 	test_modem_register_atom(&modem, &modem.netreg.atom);
 	g_assert(watch->netreg == &modem.netreg);
 	g_assert(n == 1);
@@ -589,8 +589,8 @@ static void test_netreg(void)
 	g_assert(!watch->netreg);
 	g_assert(n == 4);
 
-	sailfish_watch_remove_handler(watch, id);
-	sailfish_watch_unref(watch);
+	ofono_watch_remove_handler(watch, id);
+	ofono_watch_unref(watch);
 	__ofono_modemwatch_cleanup();
 }
 
@@ -598,7 +598,7 @@ static void test_netreg(void)
 
 static void test_sim(void)
 {
-	struct sailfish_watch *watch;
+	struct ofono_watch *watch;
 	struct ofono_modem modem;
 	struct ofono_sim *sim = &modem.sim;
 	gulong id[4];
@@ -612,20 +612,20 @@ static void test_sim(void)
 	memset(&modem, 0, sizeof(modem));
 	__ofono_modemwatch_init();
 	test_modem_init(&modem);
-	watch = sailfish_watch_new(TEST_PATH);
+	watch = ofono_watch_new(TEST_PATH);
 	g_assert(!watch->iccid);
 	g_assert(!watch->imsi);
 	g_assert(!watch->spn);
 
 	memset(id, 0, sizeof(id));
 	memset(n, 0, sizeof(n));
-	id[SIM] = sailfish_watch_add_sim_changed_handler(watch,
+	id[SIM] = ofono_watch_add_sim_changed_handler(watch,
 						test_inc_cb, n + SIM);
-	id[ICCID] = sailfish_watch_add_iccid_changed_handler(watch,
+	id[ICCID] = ofono_watch_add_iccid_changed_handler(watch,
 						test_inc_cb, n + ICCID);
-	id[IMSI] = sailfish_watch_add_imsi_changed_handler(watch,
+	id[IMSI] = ofono_watch_add_imsi_changed_handler(watch,
 						test_inc_cb, n + IMSI);
-	id[SPN] = sailfish_watch_add_spn_changed_handler(watch,
+	id[SPN] = ofono_watch_add_spn_changed_handler(watch,
 						test_inc_cb, n + SPN);
 	test_modem_register_atom(&modem, &modem.sim.atom);
 	g_assert(watch->sim == &modem.sim);
@@ -673,13 +673,13 @@ static void test_sim(void)
 	g_assert(!watch->sim);
 	g_assert(n[SIM] == 2);
 
-	sailfish_watch_remove_all_handlers(watch, id);
-	sailfish_watch_unref(watch);
+	ofono_watch_remove_all_handlers(watch, id);
+	ofono_watch_unref(watch);
 	test_modem_shutdown(&modem);
 	__ofono_modemwatch_cleanup();
 }
 
-#define TEST_(name) "/sailfish_watch/" name
+#define TEST_(name) "/ofono_watch/" name
 
 int main(int argc, char *argv[])
 {
@@ -688,9 +688,8 @@ int main(int argc, char *argv[])
 	gutil_log_timestamp = FALSE;
 	gutil_log_default.level = g_test_verbose() ?
 		GLOG_LEVEL_VERBOSE : GLOG_LEVEL_NONE;
-	__ofono_log_init("test-sailfish_watch",
-				g_test_verbose() ? "*" : NULL,
-				FALSE, FALSE);
+	__ofono_log_init("test-ofono_watch", g_test_verbose() ? "*" : NULL,
+		FALSE, FALSE);
 
 	g_test_add_func(TEST_("basic"), test_basic);
 	g_test_add_func(TEST_("modem"), test_modem);

@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2018 Jolla Ltd.
+ *  Copyright (C) 2018-2019 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -14,7 +14,7 @@
  */
 
 #include "test-dbus.h"
-#include "fake_sailfish_watch.h"
+#include "fake_watch.h"
 
 #include "sailfish_sim_info.h"
 
@@ -242,7 +242,7 @@ struct test_get_all_data {
 	struct ofono_modem modem;
 	struct test_dbus_context context;
 	struct sailfish_sim_info_dbus *dbus;
-	struct sailfish_watch *watch;
+	struct ofono_watch *watch;
 	const char *iccid;
 };
 
@@ -310,14 +310,14 @@ static void test_get_all1(void)
 	memset(&test, 0, sizeof(test));
 	test.modem.path = TEST_MODEM_PATH;
 	test.context.start = test_get_all1_start;
-	test.watch = sailfish_watch_new(test.modem.path);
+	test.watch = ofono_watch_new(test.modem.path);
 	test.watch->modem = &test.modem;
 	test.iccid = "";
 	test_dbus_setup(&test.context);
 
 	g_main_loop_run(test.context.loop);
 
-	sailfish_watch_unref(test.watch);
+	ofono_watch_unref(test.watch);
 	sailfish_sim_info_dbus_free(test.dbus);
 	test_dbus_shutdown(&test.context);
 	if (timeout) {
@@ -333,18 +333,18 @@ static void test_get_all2_start(struct test_dbus_context *context)
 	struct test_get_all_data *test =
 		G_CAST(context, struct test_get_all_data, context);
 	const char *path = test->modem.path;
-	struct sailfish_watch *watch = test->watch;
+	struct ofono_watch *watch = test->watch;
 
 	DBG("");
 	test->dbus = sailfish_sim_info_dbus_new_path(path);
 	g_assert(test->dbus);
 
-	/* Tell sailfish_watch that we have a modem */
+	/* Tell ofono_watch that we have a modem */
 	test->watch->modem = &test->modem;
-	fake_sailfish_watch_set_ofono_sim(watch, &test->modem.sim);
-	fake_sailfish_watch_set_ofono_iccid(watch, test->iccid);
-	fake_sailfish_watch_signal_queue(watch, WATCH_SIGNAL_MODEM_CHANGED);
-	fake_sailfish_watch_emit_queued_signals(watch);
+	fake_watch_set_ofono_sim(watch, &test->modem.sim);
+	fake_watch_set_ofono_iccid(watch, test->iccid);
+	fake_watch_signal_queue(watch, FAKE_WATCH_SIGNAL_MODEM_CHANGED);
+	fake_watch_emit_queued_signals(watch);
 
 	test_submit_get_all_call(test, test_get_all_reply);
 }
@@ -358,7 +358,7 @@ static void test_get_all2(void)
 	memset(&test, 0, sizeof(test));
 	test.modem.path = TEST_MODEM_PATH;
 	test.context.start = test_get_all2_start;
-	test.watch = sailfish_watch_new(test.modem.path);
+	test.watch = ofono_watch_new(test.modem.path);
 	test.iccid = TEST_ICCID;
 	test_dbus_setup(&test.context);
 
@@ -368,7 +368,7 @@ static void test_get_all2(void)
 	g_assert(test_dbus_find_signal(&test.context, test.modem.path,
 		SIM_INFO_DBUS_INTERFACE, SIM_INFO_DBUS_ICCID_CHANGED_SIGNAL));
 
-	sailfish_watch_unref(test.watch);
+	ofono_watch_unref(test.watch);
 	sailfish_sim_info_dbus_free(test.dbus);
 	test_dbus_shutdown(&test.context);
 	if (timeout) {
@@ -448,7 +448,7 @@ struct test_get_iccid_data {
 	struct ofono_modem modem;
 	struct test_dbus_context context;
 	struct sailfish_sim_info_dbus *dbus;
-	struct sailfish_watch *watch;
+	struct ofono_watch *watch;
 	const char *iccid;
 	const char *result;
 };
@@ -474,8 +474,8 @@ static void test_get_iccid_start(struct test_dbus_context *context)
 
 	DBG("");
 	test->dbus = sailfish_sim_info_dbus_new_path(path);
-	fake_sailfish_watch_set_ofono_iccid(test->watch, test->iccid);
-	fake_sailfish_watch_emit_queued_signals(test->watch);
+	fake_watch_set_ofono_iccid(test->watch, test->iccid);
+	fake_watch_emit_queued_signals(test->watch);
 	g_assert(test->dbus);
 
 	msg = dbus_message_new_method_call(NULL, test->modem.path,
@@ -497,10 +497,10 @@ static void test_get_iccid(const char *init_iccid, const char *set_iccid,
 	test.result = result;
 	test.modem.path = TEST_MODEM_PATH;
 	test.context.start = test_get_iccid_start;
-	test.watch = sailfish_watch_new(test.modem.path);
+	test.watch = ofono_watch_new(test.modem.path);
 	test.watch->modem = &test.modem;
-	fake_sailfish_watch_set_ofono_iccid(test.watch, init_iccid);
-	fake_sailfish_watch_emit_queued_signals(test.watch);
+	fake_watch_set_ofono_iccid(test.watch, init_iccid);
+	fake_watch_emit_queued_signals(test.watch);
 	test_dbus_setup(&test.context);
 
 	g_main_loop_run(test.context.loop);
@@ -509,7 +509,7 @@ static void test_get_iccid(const char *init_iccid, const char *set_iccid,
 	g_assert(test_dbus_find_signal(&test.context, test.modem.path,
 		SIM_INFO_DBUS_INTERFACE, SIM_INFO_DBUS_ICCID_CHANGED_SIGNAL));
 
-	sailfish_watch_unref(test.watch);
+	ofono_watch_unref(test.watch);
 	sailfish_sim_info_dbus_free(test.dbus);
 	test_dbus_shutdown(&test.context);
 	if (timeout) {
@@ -535,7 +535,7 @@ struct test_get_string_data {
 	struct ofono_modem modem;
 	struct test_dbus_context context;
 	struct sailfish_sim_info_dbus *dbus;
-	struct sailfish_watch *watch;
+	struct ofono_watch *watch;
 	const char *method;
 	const char *result;
 };
@@ -559,16 +559,16 @@ static void test_get_string_start(struct test_dbus_context *context)
 		G_CAST(context, struct test_get_string_data, context);
 	const char *path = test->modem.path;
 	struct ofono_sim *sim = &test->modem.sim;
-	struct sailfish_watch *watch = test->watch;
+	struct ofono_watch *watch = test->watch;
 
 	DBG("%s", test->method);
 	test->dbus = sailfish_sim_info_dbus_new_path(path);
 	sim->mcc = TEST_MCC;
 	sim->mnc = TEST_MNC;
 	sim->state = OFONO_SIM_STATE_READY;
-	fake_sailfish_watch_signal_queue(watch, WATCH_SIGNAL_SIM_STATE_CHANGED);
-	fake_sailfish_watch_set_ofono_imsi(watch, TEST_IMSI);
-	fake_sailfish_watch_emit_queued_signals(watch);
+	fake_watch_signal_queue(watch, FAKE_WATCH_SIGNAL_SIM_STATE_CHANGED);
+	fake_watch_set_ofono_imsi(watch, TEST_IMSI);
+	fake_watch_emit_queued_signals(watch);
 	g_assert(test->dbus);
 
 	msg = dbus_message_new_method_call(NULL, test->modem.path,
@@ -590,11 +590,11 @@ static void test_get_string(const char *method, const char *result)
 	test.result = result;
 	test.modem.path = TEST_MODEM_PATH;
 	test.context.start = test_get_string_start;
-	test.watch = sailfish_watch_new(test.modem.path);
+	test.watch = ofono_watch_new(test.modem.path);
 	test.watch->modem = &test.modem;
-	fake_sailfish_watch_set_ofono_iccid(test.watch, TEST_ICCID);
-	fake_sailfish_watch_set_ofono_sim(test.watch, &test.modem.sim);
-	fake_sailfish_watch_emit_queued_signals(test.watch);
+	fake_watch_set_ofono_iccid(test.watch, TEST_ICCID);
+	fake_watch_set_ofono_sim(test.watch, &test.modem.sim);
+	fake_watch_emit_queued_signals(test.watch);
 	test_dbus_setup(&test.context);
 
 	g_main_loop_run(test.context.loop);
@@ -605,7 +605,7 @@ static void test_get_string(const char *method, const char *result)
 	g_assert(test_dbus_find_signal(&test.context, test.modem.path,
 		SIM_INFO_DBUS_INTERFACE, SIM_INFO_DBUS_SPN_CHANGED_SIGNAL));
 
-	sailfish_watch_unref(test.watch);
+	ofono_watch_unref(test.watch);
 	sailfish_sim_info_dbus_free(test.dbus);
 	test_dbus_shutdown(&test.context);
 	if (timeout) {

@@ -27,14 +27,14 @@ pkginclude_HEADERS = include/log.h include/plugin.h include/history.h \
 			include/voicecall-filter.h \
 			include/ril-constants.h include/ril-transport.h \
 			include/netmon.h include/lte.h \
-			include/storage.h \
+			include/storage.h include/watch.h \
 			gdbus/gdbus.h
 
 nodist_pkginclude_HEADERS = include/version.h
 
 if SAILFISH_MANAGER
 nodist_pkginclude_HEADERS += include/sailfish_cell_info.h \
-			include/sailfish_manager.h include/sailfish_watch.h
+			include/sailfish_manager.h
 endif
 
 local_headers = $(foreach file,$(pkginclude_HEADERS) \
@@ -131,8 +131,7 @@ builtin_sources += plugins/sailfish_manager/sailfish_cell_info.c \
 			plugins/sailfish_manager/sailfish_manager.c \
 			plugins/sailfish_manager/sailfish_manager_dbus.c \
 			plugins/sailfish_manager/sailfish_sim_info.c \
-			plugins/sailfish_manager/sailfish_sim_info_dbus.c \
-			plugins/sailfish_manager/sailfish_watch.c
+			plugins/sailfish_manager/sailfish_sim_info_dbus.c
 endif
 
 if RILMODEM
@@ -740,7 +739,7 @@ src_ofonod_SOURCES = $(builtin_sources) $(gatchat_sources) src/ofono.ver \
 			src/sim-mnclength.c src/voicecallagent.c \
 			src/sms-filter.c src/gprs-filter.c src/dbus-queue.c \
 			src/voicecall-filter.c src/ril-transport.c \
-			src/hfp.h src/siri.c \
+			src/hfp.h src/siri.c src/watchlist.c \
 			src/netmon.c src/lte.c \
 			src/netmonagent.c src/netmonagent.h
 
@@ -949,9 +948,9 @@ unit_objects += $(unit_test_sailfish_cell_info_dbus_OBJECTS)
 unit_tests += unit/test-sailfish_cell_info_dbus
 
 unit_test_sailfish_sim_info_SOURCES = unit/test-sailfish_sim_info.c \
-			unit/fake_sailfish_watch.c \
+			unit/fake_watch.c \
 			plugins/sailfish_manager/sailfish_sim_info.c \
-			src/storage.c src/watch.c src/log.c
+			src/storage.c src/watchlist.c src/log.c
 unit_test_sailfish_sim_info_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
 			-DSTORAGEDIR='"/tmp/ofono"' -Iplugins/sailfish_manager
 unit_test_sailfish_sim_info_LDADD = @GLIB_LIBS@ -ldl
@@ -959,11 +958,11 @@ unit_objects += $(unit_test_sailfish_sim_info_OBJECTS)
 unit_tests += unit/test-sailfish_sim_info
 
 unit_test_sailfish_sim_info_dbus_SOURCES = unit/test-sailfish_sim_info_dbus.c \
-			unit/test-dbus.c unit/fake_sailfish_watch.c \
+			unit/test-dbus.c unit/fake_watch.c \
 			plugins/sailfish_manager/sailfish_sim_info.c \
 			plugins/sailfish_manager/sailfish_sim_info_dbus.c \
 			gdbus/object.c \
-			src/dbus.c src/storage.c src/watch.c src/log.c
+			src/dbus.c src/storage.c src/watchlist.c src/log.c
 unit_test_sailfish_sim_info_dbus_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
 			@DBUS_GLIB_CFLAGS@ -DSTORAGEDIR='"/tmp/ofono"' \
 			-Iplugins/sailfish_manager
@@ -972,7 +971,7 @@ unit_objects += $(unit_test_sailfish_sim_info_dbus_OBJECTS)
 unit_tests += unit/test-sailfish_sim_info_dbus
 
 unit_test_sailfish_manager_SOURCES = unit/test-sailfish_manager.c \
-			unit/fake_sailfish_watch.c \
+			unit/fake_watch.c \
 			plugins/sailfish_manager/sailfish_manager.c \
 			plugins/sailfish_manager/sailfish_cell_info.c \
 			plugins/sailfish_manager/sailfish_sim_info.c \
@@ -983,14 +982,13 @@ unit_test_sailfish_manager_LDADD = @GLIB_LIBS@ -ldl
 unit_objects += $(unit_test_sailfish_manager_OBJECTS)
 unit_tests += unit/test-sailfish_manager
 
-unit_test_sailfish_watch_SOURCES = unit/test-sailfish_watch.c \
-			plugins/sailfish_manager/sailfish_watch.c \
-			src/log.c src/watch.c
-unit_test_sailfish_watch_CFLAGS = $(AM_CFLAGS) $(COVERAGE_OPT) \
+unit_test_watch_SOURCES = unit/test-watch.c src/watch.c \
+			src/log.c src/watchlist.c
+unit_test_watch_CFLAGS = $(AM_CFLAGS) $(COVERAGE_OPT) \
 			-DSTORAGEDIR='"/tmp/ofono"' -Iplugins/sailfish_manager
-unit_test_sailfish_watch_LDADD = @GLIB_LIBS@ -ldl
-unit_objects += $(unit_test_sailfish_watch_OBJECTS)
-unit_tests += unit/test-sailfish_watch
+unit_test_watch_LDADD = @GLIB_LIBS@ -ldl
+unit_objects += $(unit_test_watch_OBJECTS)
+unit_tests += unit/test-watch
 
 endif
 
