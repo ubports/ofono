@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2017 Jolla Ltd.
+ *  Copyright (C) 2017-2019 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -14,9 +14,9 @@
  */
 
 #include "sailfish_sim_info.h"
-#include "sailfish_watch.h"
 
 #include <ofono/dbus.h>
+#include <ofono/watch.h>
 
 #include <gdbus.h>
 
@@ -36,7 +36,7 @@ enum sim_info_event_id {
 
 struct sailfish_sim_info_dbus {
 	struct sailfish_sim_info *info;
-	struct sailfish_watch *watch;
+	struct ofono_watch *watch;
 	DBusConnection *conn;
 	gulong watch_event_id[WATCH_EVENT_COUNT];
 	gulong info_event_id[SIM_INFO_EVENT_COUNT];
@@ -165,7 +165,7 @@ static const GDBusSignalTable sailfish_sim_info_dbus_signals[] = {
 	{ }
 };
 
-static void sailfish_sim_info_dbus_modem_cb(struct sailfish_watch *watch,
+static void sailfish_sim_info_dbus_modem_cb(struct ofono_watch *watch,
 								void *data)
 {
 	if (watch->modem) {
@@ -214,7 +214,7 @@ struct sailfish_sim_info_dbus *sailfish_sim_info_dbus_new
 
 	DBG("%s", info->path);
 	dbus->info = sailfish_sim_info_ref(info);
-	dbus->watch = sailfish_watch_new(info->path);
+	dbus->watch = ofono_watch_new(info->path);
 	dbus->conn = dbus_connection_ref(ofono_dbus_get_connection());
 
 	/* Register D-Bus interface */
@@ -229,7 +229,7 @@ struct sailfish_sim_info_dbus *sailfish_sim_info_dbus_new
 		}
 
 		dbus->watch_event_id[WATCH_EVENT_MODEM] =
-			sailfish_watch_add_modem_changed_handler(dbus->watch,
+			ofono_watch_add_modem_changed_handler(dbus->watch,
 				sailfish_sim_info_dbus_modem_cb, dbus);
 		dbus->info_event_id[SIM_INFO_EVENT_ICCID] =
 			sailfish_sim_info_add_iccid_changed_handler(info,
@@ -275,9 +275,9 @@ void sailfish_sim_info_dbus_free(struct sailfish_sim_info_dbus *dbus)
 		}
 		dbus_connection_unref(dbus->conn);
 
-		sailfish_watch_remove_all_handlers(dbus->watch,
+		ofono_watch_remove_all_handlers(dbus->watch,
 						dbus->watch_event_id);
-		sailfish_watch_unref(dbus->watch);
+		ofono_watch_unref(dbus->watch);
 
 		sailfish_sim_info_remove_all_handlers(dbus->info,
 						dbus->info_event_id);

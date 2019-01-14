@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2017-2018 Jolla Ltd.
+ *  Copyright (C) 2017-2019 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -18,7 +18,7 @@
 
 #include "sailfish_sim_info.h"
 #include "sailfish_manager_dbus.h"
-#include "fake_sailfish_watch.h"
+#include "fake_watch.h"
 
 #define OFONO_API_SUBJECT_TO_CHANGE
 #include "ofono.h"
@@ -610,7 +610,7 @@ static gboolean test_sync_start_done(gpointer user_data)
 {
 	test_slot_manager *sm = user_data;
 	test_slot *s = sm->slot;
-	struct sailfish_watch *w = sailfish_watch_new(TEST_PATH);
+	struct ofono_watch *w = ofono_watch_new(TEST_PATH);
 	struct sailfish_manager *m = fake_sailfish_manager_dbus.m;
 	struct ofono_modem modem;
 	char **slots;
@@ -625,18 +625,18 @@ static gboolean test_sync_start_done(gpointer user_data)
 	memset(&modem, 0, sizeof(modem));
 	w->modem = &modem;
 	w->online = TRUE;
-	fake_sailfish_watch_signal_queue(w, WATCH_SIGNAL_ONLINE_CHANGED);
-	fake_sailfish_watch_signal_queue(w, WATCH_SIGNAL_MODEM_CHANGED);
-	fake_sailfish_watch_emit_queued_signals(w);
+	fake_watch_signal_queue(w, FAKE_WATCH_SIGNAL_ONLINE_CHANGED);
+	fake_watch_signal_queue(w, FAKE_WATCH_SIGNAL_MODEM_CHANGED);
+	fake_watch_emit_queued_signals(w);
 
 	sailfish_manager_set_cell_info(s->handle, NULL);
 	sailfish_manager_set_cell_info(s->handle, &fake_sailfish_cell_info);
 
 	w->modem = NULL;
 	w->online = FALSE;
-	fake_sailfish_watch_signal_queue(w, WATCH_SIGNAL_ONLINE_CHANGED);
-	fake_sailfish_watch_signal_queue(w, WATCH_SIGNAL_MODEM_CHANGED);
-	fake_sailfish_watch_emit_queued_signals(w);
+	fake_watch_signal_queue(w, FAKE_WATCH_SIGNAL_ONLINE_CHANGED);
+	fake_watch_signal_queue(w, FAKE_WATCH_SIGNAL_MODEM_CHANGED);
+	fake_watch_emit_queued_signals(w);
 
 	sailfish_manager_set_cell_info(s->handle, NULL);
 	g_assert(!fake_sailfish_cell_info_ref_count);
@@ -708,7 +708,7 @@ static gboolean test_sync_start_done(gpointer user_data)
 	fake_sailfish_manager_dbus.fn_block_changed =
 		test_quit_loop_when_unblocked;
 
-	sailfish_watch_unref(w);
+	ofono_watch_unref(w);
 	return G_SOURCE_REMOVE;
 }
 
@@ -885,7 +885,7 @@ static gboolean test_voice_sim_done(gpointer user_data)
 	test_slot_manager *sm = user_data;
 	test_slot *s = sm->slot;
 	struct sailfish_manager *m = fake_sailfish_manager_dbus.m;
-	struct sailfish_watch *w = sailfish_watch_new(TEST_PATH);
+	struct ofono_watch *w = ofono_watch_new(TEST_PATH);
 	struct ofono_sim sim;
 
 	memset(&sim, 0, sizeof(sim));
@@ -899,10 +899,10 @@ static gboolean test_voice_sim_done(gpointer user_data)
 	g_assert(!m->default_voice_path);
 
 	/* Once IMSI is known, default voice modem will point to this slot */
-	fake_sailfish_watch_set_ofono_sim(w, &sim);
-	fake_sailfish_watch_set_ofono_iccid(w, TEST_ICCID);
-	fake_sailfish_watch_set_ofono_imsi(w, TEST_IMSI);
-	fake_sailfish_watch_emit_queued_signals(w);
+	fake_watch_set_ofono_sim(w, &sim);
+	fake_watch_set_ofono_iccid(w, TEST_ICCID);
+	fake_watch_set_ofono_imsi(w, TEST_IMSI);
+	fake_watch_emit_queued_signals(w);
 
 	g_assert(!m->default_voice_imsi);
 	g_assert(!g_strcmp0(m->default_voice_path, TEST_PATH));
@@ -919,16 +919,16 @@ static gboolean test_voice_sim_done(gpointer user_data)
 	g_assert(!g_strcmp0(m->default_voice_path, TEST_PATH));
 
 	/* Remove the SIM */
-	fake_sailfish_watch_set_ofono_iccid(w, NULL);
-	fake_sailfish_watch_set_ofono_imsi(w, NULL);
-	fake_sailfish_watch_set_ofono_spn(w, NULL);
+	fake_watch_set_ofono_iccid(w, NULL);
+	fake_watch_set_ofono_imsi(w, NULL);
+	fake_watch_set_ofono_spn(w, NULL);
 	sailfish_manager_set_sim_state(s->handle, SAILFISH_SIM_STATE_ABSENT);
-	fake_sailfish_watch_emit_queued_signals(w);
+	fake_watch_emit_queued_signals(w);
 	g_assert(!m->slots[0]->sim_present);
 	g_assert(!g_strcmp0(m->default_voice_imsi, TEST_IMSI));
 	g_assert(!m->default_voice_path);
 
-	sailfish_watch_unref(w);
+	ofono_watch_unref(w);
 	g_main_loop_quit(test_loop);
 	return G_SOURCE_REMOVE;
 }
@@ -977,7 +977,7 @@ static gboolean test_data_sim_done(gpointer user_data)
 	test_slot_manager *sm = user_data;
 	test_slot *s = sm->slot;
 	struct sailfish_manager *m = fake_sailfish_manager_dbus.m;
-	struct sailfish_watch *w = sailfish_watch_new(TEST_PATH);
+	struct ofono_watch *w = ofono_watch_new(TEST_PATH);
 	struct ofono_modem modem;
 	struct ofono_sim sim;
 
@@ -995,10 +995,10 @@ static gboolean test_data_sim_done(gpointer user_data)
 	g_assert(!m->default_data_path);
 
 	/* Once IMSI is known, default voice modem will point to this slot */
-	fake_sailfish_watch_set_ofono_sim(w, &sim);
-	fake_sailfish_watch_set_ofono_iccid(w, TEST_ICCID);
-	fake_sailfish_watch_set_ofono_imsi(w, TEST_IMSI);
-	fake_sailfish_watch_emit_queued_signals(w);
+	fake_watch_set_ofono_sim(w, &sim);
+	fake_watch_set_ofono_iccid(w, TEST_ICCID);
+	fake_watch_set_ofono_imsi(w, TEST_IMSI);
+	fake_watch_emit_queued_signals(w);
 
 	g_assert(!g_strcmp0(m->default_voice_path, TEST_PATH));
 	g_assert(!m->default_data_path); /* No default data slot */
@@ -1011,9 +1011,9 @@ static gboolean test_data_sim_done(gpointer user_data)
 	/* Set modem online */
 	w->modem = &modem;
 	w->online = TRUE;
-	fake_sailfish_watch_signal_queue(w, WATCH_SIGNAL_ONLINE_CHANGED);
-	fake_sailfish_watch_signal_queue(w, WATCH_SIGNAL_MODEM_CHANGED);
-	fake_sailfish_watch_emit_queued_signals(w);
+	fake_watch_signal_queue(w, FAKE_WATCH_SIGNAL_ONLINE_CHANGED);
+	fake_watch_signal_queue(w, FAKE_WATCH_SIGNAL_MODEM_CHANGED);
+	fake_watch_emit_queued_signals(w);
 	/* Now is should point to our slot */
 	g_assert(!g_strcmp0(m->default_data_path, TEST_PATH));
 
@@ -1023,19 +1023,19 @@ static gboolean test_data_sim_done(gpointer user_data)
 	g_assert(!m->default_data_path);
 
 	/* Switch the SIM */
-	fake_sailfish_watch_set_ofono_imsi(w, TEST_IMSI_1);
-	fake_sailfish_watch_emit_queued_signals(w);
+	fake_watch_set_ofono_imsi(w, TEST_IMSI_1);
+	fake_watch_emit_queued_signals(w);
 	g_assert(!g_strcmp0(m->default_data_path, TEST_PATH));
 
 	/* Remove the SIM */
-	fake_sailfish_watch_set_ofono_sim(w, NULL);
-	fake_sailfish_watch_emit_queued_signals(w);
+	fake_watch_set_ofono_sim(w, NULL);
+	fake_watch_emit_queued_signals(w);
 	sailfish_manager_set_sim_state(s->handle, SAILFISH_SIM_STATE_ABSENT);
 	g_assert(!m->slots[0]->sim_present);
 	g_assert(!g_strcmp0(m->default_data_imsi, TEST_IMSI_1));
 	g_assert(!m->default_data_path);
 
-	sailfish_watch_unref(w);
+	ofono_watch_unref(w);
 	g_main_loop_quit(test_loop);
 	return G_SOURCE_REMOVE;
 }
@@ -1085,7 +1085,7 @@ static gboolean test_mms_sim_done(gpointer user_data)
 	test_slot_manager *sm = user_data;
 	test_slot *s = sm->slot;
 	struct sailfish_manager *m = fake_sailfish_manager_dbus.m;
-	struct sailfish_watch *w = sailfish_watch_new(TEST_PATH);
+	struct ofono_watch *w = ofono_watch_new(TEST_PATH);
 	struct ofono_modem modem;
 	struct ofono_sim sim;
 
@@ -1107,12 +1107,12 @@ static gboolean test_mms_sim_done(gpointer user_data)
 	/* Make the test slot the default data modem */
 	w->modem = &modem;
 	w->online = TRUE;
-	fake_sailfish_watch_signal_queue(w, WATCH_SIGNAL_ONLINE_CHANGED);
-	fake_sailfish_watch_signal_queue(w, WATCH_SIGNAL_MODEM_CHANGED);
-	fake_sailfish_watch_set_ofono_sim(w, &sim);
-	fake_sailfish_watch_set_ofono_iccid(w, TEST_ICCID);
-	fake_sailfish_watch_set_ofono_imsi(w, TEST_IMSI);
-	fake_sailfish_watch_emit_queued_signals(w);
+	fake_watch_signal_queue(w, FAKE_WATCH_SIGNAL_ONLINE_CHANGED);
+	fake_watch_signal_queue(w, FAKE_WATCH_SIGNAL_MODEM_CHANGED);
+	fake_watch_set_ofono_sim(w, &sim);
+	fake_watch_set_ofono_iccid(w, TEST_ICCID);
+	fake_watch_set_ofono_imsi(w, TEST_IMSI);
+	fake_watch_emit_queued_signals(w);
 
 	/* Data SIM gets automatically selected on a single-SIM phone */
 	g_assert(!g_strcmp0(m->default_voice_path, TEST_PATH));
@@ -1151,7 +1151,7 @@ static gboolean test_mms_sim_done(gpointer user_data)
 	g_assert(!m->mms_imsi);
 	g_assert(!m->mms_path);
 
-	sailfish_watch_unref(w);
+	ofono_watch_unref(w);
 	g_main_loop_quit(test_loop);
 	return G_SOURCE_REMOVE;
 }
@@ -1203,8 +1203,8 @@ static gboolean test_multisim_done(gpointer user_data)
 	test_slot *s = sm->slot;
 	test_slot *s2 = sm->slot2;
 	struct sailfish_manager *m = fake_sailfish_manager_dbus.m;
-	struct sailfish_watch *w = sailfish_watch_new(TEST_PATH);
-	struct sailfish_watch *w2 = sailfish_watch_new(TEST_PATH_1);
+	struct ofono_watch *w = ofono_watch_new(TEST_PATH);
+	struct ofono_watch *w2 = ofono_watch_new(TEST_PATH_1);
 	struct ofono_modem modem;
 	struct ofono_sim sim;
 	struct ofono_sim sim2;
@@ -1219,21 +1219,21 @@ static gboolean test_multisim_done(gpointer user_data)
 	/* Assign IMSI to the SIMs */
 	w->modem = &modem;
 	w->online = TRUE;
-	fake_sailfish_watch_signal_queue(w, WATCH_SIGNAL_ONLINE_CHANGED);
-	fake_sailfish_watch_signal_queue(w, WATCH_SIGNAL_MODEM_CHANGED);
-	fake_sailfish_watch_set_ofono_sim(w, &sim);
-	fake_sailfish_watch_set_ofono_iccid(w, TEST_ICCID);
-	fake_sailfish_watch_set_ofono_imsi(w, TEST_IMSI);
-	fake_sailfish_watch_emit_queued_signals(w);
+	fake_watch_signal_queue(w, FAKE_WATCH_SIGNAL_ONLINE_CHANGED);
+	fake_watch_signal_queue(w, FAKE_WATCH_SIGNAL_MODEM_CHANGED);
+	fake_watch_set_ofono_sim(w, &sim);
+	fake_watch_set_ofono_iccid(w, TEST_ICCID);
+	fake_watch_set_ofono_imsi(w, TEST_IMSI);
+	fake_watch_emit_queued_signals(w);
 
 	w2->modem = &modem;
 	w2->online = TRUE;
-	fake_sailfish_watch_signal_queue(w2, WATCH_SIGNAL_ONLINE_CHANGED);
-	fake_sailfish_watch_signal_queue(w2, WATCH_SIGNAL_MODEM_CHANGED);
-	fake_sailfish_watch_set_ofono_sim(w2, &sim2);
-	fake_sailfish_watch_set_ofono_iccid(w2, TEST_ICCID_1);
-	fake_sailfish_watch_set_ofono_imsi(w2, TEST_IMSI_1);
-	fake_sailfish_watch_emit_queued_signals(w2);
+	fake_watch_signal_queue(w2, FAKE_WATCH_SIGNAL_ONLINE_CHANGED);
+	fake_watch_signal_queue(w2, FAKE_WATCH_SIGNAL_MODEM_CHANGED);
+	fake_watch_set_ofono_sim(w2, &sim2);
+	fake_watch_set_ofono_iccid(w2, TEST_ICCID_1);
+	fake_watch_set_ofono_imsi(w2, TEST_IMSI_1);
+	fake_watch_emit_queued_signals(w2);
 
 	/* No automatic data SIM selection on a multisim phone */
 	g_assert(s->data_role == SAILFISH_DATA_ROLE_NONE);
@@ -1284,8 +1284,8 @@ static gboolean test_multisim_done(gpointer user_data)
 	g_assert(!m->mms_path);
 	g_assert(!m->mms_imsi);
 
-	sailfish_watch_unref(w);
-	sailfish_watch_unref(w2);
+	ofono_watch_unref(w);
+	ofono_watch_unref(w2);
 	g_main_loop_quit(test_loop);
 	return G_SOURCE_REMOVE;
 }
@@ -1351,8 +1351,8 @@ static void test_multisim(void)
 
 static void test_storage_init(test_slot_manager *sm)
 {
-	struct sailfish_watch *w = sailfish_watch_new(TEST_PATH);
-	struct sailfish_watch *w2 = sailfish_watch_new(TEST_PATH_1);
+	struct ofono_watch *w = ofono_watch_new(TEST_PATH);
+	struct ofono_watch *w2 = ofono_watch_new(TEST_PATH_1);
 	struct ofono_sim sim;
 	struct ofono_sim sim2;
 
@@ -1363,18 +1363,18 @@ static void test_storage_init(test_slot_manager *sm)
 	sim2 = sim;
 
 	/* Assign IMSI to the SIMs */
-	fake_sailfish_watch_set_ofono_sim(w, &sim);
-	fake_sailfish_watch_set_ofono_iccid(w, TEST_ICCID);
-	fake_sailfish_watch_set_ofono_imsi(w, TEST_IMSI);
-	fake_sailfish_watch_emit_queued_signals(w);
+	fake_watch_set_ofono_sim(w, &sim);
+	fake_watch_set_ofono_iccid(w, TEST_ICCID);
+	fake_watch_set_ofono_imsi(w, TEST_IMSI);
+	fake_watch_emit_queued_signals(w);
 
-	fake_sailfish_watch_set_ofono_sim(w2, &sim2);
-	fake_sailfish_watch_set_ofono_iccid(w2, TEST_ICCID_1);
-	fake_sailfish_watch_set_ofono_imsi(w2, TEST_IMSI_1);
-	fake_sailfish_watch_emit_queued_signals(w2);
+	fake_watch_set_ofono_sim(w2, &sim2);
+	fake_watch_set_ofono_iccid(w2, TEST_ICCID_1);
+	fake_watch_set_ofono_imsi(w2, TEST_IMSI_1);
+	fake_watch_emit_queued_signals(w2);
 
-	sailfish_watch_unref(w);
-	sailfish_watch_unref(w2);
+	ofono_watch_unref(w);
+	ofono_watch_unref(w2);
 }
 
 static void test_storage_add_slots(test_slot_manager *sm)

@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2016-2018 Jolla Ltd.
+ *  Copyright (C) 2016-2019 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -19,8 +19,6 @@
 #include "ril_data.h"
 #include "ril_log.h"
 
-#include "sailfish_watch.h"
-
 #include <grilio_channel.h>
 #include <grilio_parser.h>
 #include <grilio_request.h>
@@ -28,6 +26,8 @@
 
 #include <gutil_macros.h>
 #include <gutil_misc.h>
+
+#include <ofono/watch.h>
 
 #include "ofono.h"
 
@@ -57,7 +57,7 @@ struct ril_vendor_hook_mtk {
 	GRilIoQueue *q;
 	GRilIoChannel *io;
 	struct ril_network *network;
-	struct sailfish_watch *watch;
+	struct ofono_watch *watch;
 	guint set_initial_attach_apn_id;
 	gboolean initial_attach_apn_ok;
 	gulong network_event_id[NETWORK_EVENT_COUNT];
@@ -243,7 +243,7 @@ static GRilIoRequest *ril_vendor_mtk_build_set_attach_apn_req
 static const struct ofono_gprs_primary_context *ril_vendor_mtk_internet_context
 					(struct ril_vendor_hook_mtk *self)
 {
-	struct sailfish_watch *watch = self->watch;
+	struct ofono_watch *watch = self->watch;
 
 	if (watch->imsi) {
 		struct ofono_atom *atom = __ofono_modem_find_atom(watch->modem,
@@ -308,7 +308,7 @@ static void ril_vendor_mtk_initial_attach_apn_reset
 	}
 }
 
-static void ril_vendor_mtk_watch_imsi_changed(struct sailfish_watch *watch,
+static void ril_vendor_mtk_watch_imsi_changed(struct ofono_watch *watch,
 							void *user_data)
 {
 	struct ril_vendor_hook_mtk *self = user_data;
@@ -505,11 +505,11 @@ static void ril_vendor_mtk_hook_init(struct ril_vendor_hook_mtk *self,
 	self->msg = mtk_driver_data->msg;
 	self->q = grilio_queue_new(io);
 	self->io = grilio_channel_ref(io);
-	self->watch = sailfish_watch_new(path);
+	self->watch = ofono_watch_new(path);
 	self->slot = config->slot;
 	self->network = ril_network_ref(network);
 	self->watch_event_id[WATCH_EVENT_IMSI_CHANGED] =
-			sailfish_watch_add_imsi_changed_handler(self->watch,
+			ofono_watch_add_imsi_changed_handler(self->watch,
 				ril_vendor_mtk_watch_imsi_changed, self);
 	self->network_event_id[NETWORK_EVENT_PREF_MODE_CHANGED] =
 			ril_network_add_pref_mode_changed_handler(self->network,
@@ -524,8 +524,8 @@ static void ril_vendor_mtk_destroy(struct ril_vendor_hook_mtk *self)
 	grilio_channel_remove_all_handlers(self->io, self->ril_event_id);
 	grilio_queue_unref(self->q);
 	grilio_channel_unref(self->io);
-	sailfish_watch_remove_all_handlers(self->watch, self->watch_event_id);
-	sailfish_watch_unref(self->watch);
+	ofono_watch_remove_all_handlers(self->watch, self->watch_event_id);
+	ofono_watch_unref(self->watch);
 	ril_network_remove_all_handlers(self->network, self->network_event_id);
 	ril_network_unref(self->network);
 }

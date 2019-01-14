@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2017-2018 Jolla Ltd.
+ *  Copyright (C) 2017-2019 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -17,8 +17,9 @@
 #include <config.h>
 #endif
 
+#include <ofono/watch.h>
+
 #include "sailfish_sim_info.h"
-#include "sailfish_watch.h"
 
 #include <gutil_misc.h>
 #include <gutil_log.h>
@@ -42,7 +43,7 @@ G_STATIC_ASSERT(DEFAULT_SPN_BUFSIZE >= \
 typedef GObjectClass SailfishSimInfoClass;
 typedef struct sailfish_sim_info SailfishSimInfo;
 
-enum sailfish_watch_events {
+enum ofono_watch_events {
 	WATCH_EVENT_SIM,
 	WATCH_EVENT_SIM_STATE,
 	WATCH_EVENT_ICCID,
@@ -53,7 +54,7 @@ enum sailfish_watch_events {
 };
 
 struct sailfish_sim_info_priv {
-	struct sailfish_watch *watch;
+	struct ofono_watch *watch;
 	struct ofono_netreg *netreg;
 	char *iccid;
 	char *imsi;
@@ -251,7 +252,7 @@ static void sailfish_sim_info_set_spn(struct sailfish_sim_info *self,
 
 static void sailfish_sim_info_update_spn(struct sailfish_sim_info *self)
 {
-	struct sailfish_watch *watch = self->priv->watch;
+	struct ofono_watch *watch = self->priv->watch;
 
 	if (watch->spn && watch->spn[0]) {
 		sailfish_sim_info_set_spn(self, watch->spn);
@@ -431,7 +432,7 @@ static void sailfish_sim_info_set_iccid(struct sailfish_sim_info *self,
 	}
 }
 
-static void sailfish_sim_info_iccid_watch_cb(struct sailfish_watch *watch,
+static void sailfish_sim_info_iccid_watch_cb(struct ofono_watch *watch,
 								void *data)
 {
 	struct sailfish_sim_info *self = SAILFISH_SIMINFO(data);
@@ -441,7 +442,7 @@ static void sailfish_sim_info_iccid_watch_cb(struct sailfish_watch *watch,
 	sailfish_sim_info_emit_queued_signals(self);
 }
 
-static void sailfish_sim_info_imsi_watch_cb(struct sailfish_watch *watch,
+static void sailfish_sim_info_imsi_watch_cb(struct ofono_watch *watch,
 								void *data)
 {
 	struct sailfish_sim_info *self = SAILFISH_SIMINFO(data);
@@ -450,7 +451,7 @@ static void sailfish_sim_info_imsi_watch_cb(struct sailfish_watch *watch,
 	sailfish_sim_info_emit_queued_signals(self);
 }
 
-static void sailfish_sim_info_spn_watch_cb(struct sailfish_watch *watch,
+static void sailfish_sim_info_spn_watch_cb(struct ofono_watch *watch,
 								void *data)
 {
 	struct sailfish_sim_info *self = SAILFISH_SIMINFO(data);
@@ -503,7 +504,7 @@ static void sailfish_sim_info_set_netreg(struct sailfish_sim_info *self,
 	}
 }
 
-static void sailfish_sim_info_netreg_changed(struct sailfish_watch *watch,
+static void sailfish_sim_info_netreg_changed(struct ofono_watch *watch,
 								void *data)
 {
 	struct sailfish_sim_info *self = SAILFISH_SIMINFO(data);
@@ -517,7 +518,7 @@ struct sailfish_sim_info *sailfish_sim_info_new(const char *path)
 	struct sailfish_sim_info *self = NULL;
 
 	if (path) {
-		struct sailfish_watch *watch = sailfish_watch_new(path);
+		struct ofono_watch *watch = ofono_watch_new(path);
 		struct sailfish_sim_info_priv *priv;
 
 		self = g_object_new(SAILFISH_SIMINFO_TYPE, NULL);
@@ -525,16 +526,16 @@ struct sailfish_sim_info *sailfish_sim_info_new(const char *path)
 		priv->watch = watch;
 		self->path = watch->path;
 		priv->watch_event_id[WATCH_EVENT_ICCID] =
-			sailfish_watch_add_iccid_changed_handler(watch,
+			ofono_watch_add_iccid_changed_handler(watch,
 				sailfish_sim_info_iccid_watch_cb, self);
 		priv->watch_event_id[WATCH_EVENT_IMSI] =
-			sailfish_watch_add_imsi_changed_handler(watch,
+			ofono_watch_add_imsi_changed_handler(watch,
 				sailfish_sim_info_imsi_watch_cb, self);
 		priv->watch_event_id[WATCH_EVENT_SPN] =
-			sailfish_watch_add_spn_changed_handler(watch,
+			ofono_watch_add_spn_changed_handler(watch,
 				sailfish_sim_info_spn_watch_cb, self);
 		priv->watch_event_id[WATCH_EVENT_NETREG] =
-			sailfish_watch_add_netreg_changed_handler(watch,
+			ofono_watch_add_netreg_changed_handler(watch,
 				sailfish_sim_info_netreg_changed, self);
 		sailfish_sim_info_set_iccid(self, watch->iccid);
 		sailfish_sim_info_set_netreg(self, watch->netreg);
@@ -610,8 +611,8 @@ static void sailfish_sim_info_finalize(GObject *object)
 	struct sailfish_sim_info *self = SAILFISH_SIMINFO(object);
 	struct sailfish_sim_info_priv *priv = self->priv;
 
-	sailfish_watch_remove_all_handlers(priv->watch, priv->watch_event_id);
-	sailfish_watch_unref(priv->watch);
+	ofono_watch_remove_all_handlers(priv->watch, priv->watch_event_id);
+	ofono_watch_unref(priv->watch);
 	g_free(priv->iccid);
 	g_free(priv->imsi);
 	g_free(priv->sim_spn);

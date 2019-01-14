@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2017-2018 Jolla Ltd.
+ *  Copyright (C) 2017-2019 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -22,6 +22,8 @@
 #include <gutil_macros.h>
 #include <string.h>
 
+#include <ofono/watch.h>
+
 #include "src/ofono.h"
 #include "src/storage.h"
 
@@ -31,12 +33,11 @@
 #include "sailfish_manager_dbus.h"
 #include "sailfish_cell_info_dbus.h"
 #include "sailfish_sim_info.h"
-#include "sailfish_watch.h"
 
 /* How long we wait for all drivers to register (number of idle loops) */
 #define SF_INIT_IDLE_COUNT (5)
 
-enum sailfish_watch_events {
+enum ofono_watch_events {
 	WATCH_EVENT_MODEM,
 	WATCH_EVENT_ONLINE,
 	WATCH_EVENT_IMSI,
@@ -83,7 +84,7 @@ struct sailfish_slot_priv {
 	struct sailfish_slot_priv *next;
 	struct sailfish_slot_manager *manager;
 	struct sailfish_slot_impl *impl;
-	struct sailfish_watch *watch;
+	struct ofono_watch *watch;
 	struct sailfish_sim_info *siminfo;
 	struct sailfish_sim_info_dbus *siminfo_dbus;
 	struct sailfish_cell_info *cellinfo;
@@ -231,7 +232,7 @@ static void sailfish_manager_slot_update_cell_info_dbus
 	}
 }
 
-static void sailfish_manager_slot_modem_changed(struct sailfish_watch *w,
+static void sailfish_manager_slot_modem_changed(struct ofono_watch *w,
 							void *user_data)
 {
 	struct sailfish_slot_priv *s = user_data;
@@ -242,7 +243,7 @@ static void sailfish_manager_slot_modem_changed(struct sailfish_watch *w,
 	sailfish_manager_update_ready(p);
 }
 
-static void sailfish_manager_slot_imsi_changed(struct sailfish_watch *w,
+static void sailfish_manager_slot_imsi_changed(struct ofono_watch *w,
 							void *user_data)
 {
 	struct sailfish_slot_priv *slot = user_data;
@@ -352,7 +353,7 @@ struct sailfish_slot *sailfish_manager_slot_add2
 		s->manager = m;
 		s->sim_state = sim_state;
 		s->flags = flags;
-		s->watch = sailfish_watch_new(path);
+		s->watch = ofono_watch_new(path);
 		s->siminfo = sailfish_sim_info_new(path);
 		s->siminfo_dbus = sailfish_sim_info_dbus_new(s->siminfo);
 		s->pub.path = s->watch->path;
@@ -402,13 +403,13 @@ struct sailfish_slot *sailfish_manager_slot_add2
 
 		/* Register for events */
 		s->watch_event_id[WATCH_EVENT_MODEM] =
-			sailfish_watch_add_modem_changed_handler(s->watch,
+			ofono_watch_add_modem_changed_handler(s->watch,
 				sailfish_manager_slot_modem_changed, s);
 		s->watch_event_id[WATCH_EVENT_ONLINE] =
-			sailfish_watch_add_online_changed_handler(s->watch,
+			ofono_watch_add_online_changed_handler(s->watch,
 				sailfish_manager_slot_modem_changed, s);
 		s->watch_event_id[WATCH_EVENT_IMSI] =
-			sailfish_watch_add_imsi_changed_handler(s->watch,
+			ofono_watch_add_imsi_changed_handler(s->watch,
 				sailfish_manager_slot_imsi_changed, s);
 
 		return &s->pub;
@@ -439,8 +440,8 @@ static void sailfish_slot_free(struct sailfish_slot_priv *s)
 	sailfish_sim_info_dbus_free(s->siminfo_dbus);
 	sailfish_cell_info_dbus_free(s->cellinfo_dbus);
 	sailfish_cell_info_unref(s->cellinfo);
-	sailfish_watch_remove_all_handlers(s->watch, s->watch_event_id);
-	sailfish_watch_unref(s->watch);
+	ofono_watch_remove_all_handlers(s->watch, s->watch_event_id);
+	ofono_watch_unref(s->watch);
 	g_free(s->imei);
 	g_free(s->imeisv);
 	s->next = NULL;
