@@ -6,6 +6,7 @@ Group:      Communications/Connectivity Adaptation
 License:    GPLv2
 URL:        https://git.merproject.org/mer-core/ofono
 Source:     %{name}-%{version}.tar.bz2
+
 Requires:   dbus
 Requires:   systemd
 Requires:   ofono-configs
@@ -15,6 +16,9 @@ Requires:   mobile-broadband-provider-info
 Requires(preun): systemd
 Requires(post): systemd
 Requires(postun): systemd
+
+# %license requires reasonably fresh rpm
+BuildRequires:  rpm >= 4.11
 BuildRequires:  pkgconfig(dbus-1)
 BuildRequires:  pkgconfig(dbus-glib-1)
 BuildRequires:  pkgconfig(glib-2.0)
