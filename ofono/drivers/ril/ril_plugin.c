@@ -1,8 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2018 Jolla Ltd.
- *  Contact: Slava Monich <slava.monich@jolla.com>
+ *  Copyright (C) 2015-2019 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -27,8 +26,8 @@
 #include "ril_vendor.h"
 #include "ril_log.h"
 
-#include <sailfish_manager.h>
-#include <sailfish_watch.h>
+#include <ofono/sailfish_manager.h>
+#include <ofono/watch.h>
 
 #include <grilio_transport.h>
 
@@ -188,7 +187,7 @@ typedef struct sailfish_slot_impl {
 	ril_plugin* plugin;
 	struct sailfish_slot *handle;
 	struct sailfish_cell_info *cell_info;
-	struct sailfish_watch *watch;
+	struct ofono_watch *watch;
 	gulong watch_event_id[WATCH_EVENT_COUNT];
 	char *path;
 	char *imei;
@@ -1130,7 +1129,7 @@ static void ril_plugin_retry_init_io(ril_slot *slot)
 					ril_plugin_retry_init_io_cb, slot);
 }
 
-static void ril_plugin_slot_modem_changed(struct sailfish_watch *w,
+static void ril_plugin_slot_modem_changed(struct ofono_watch *w,
 							void *user_data)
 {
 	ril_slot *slot = user_data;
@@ -1158,8 +1157,8 @@ static void ril_slot_free(ril_slot *slot)
 	plugin->slots = g_slist_remove(plugin->slots, slot);
 	mce_display_remove_all_handlers(slot->display, slot->display_event_id);
 	mce_display_unref(slot->display);
-	sailfish_watch_remove_all_handlers(slot->watch, slot->watch_event_id);
-	sailfish_watch_unref(slot->watch);
+	ofono_watch_remove_all_handlers(slot->watch, slot->watch_event_id);
+	ofono_watch_unref(slot->watch);
 	ril_sim_settings_unref(slot->sim_settings);
 	gutil_ints_unref(slot->config.local_hangup_reasons);
 	gutil_ints_unref(slot->config.remote_hangup_reasons);
@@ -1229,9 +1228,9 @@ static ril_slot *ril_plugin_slot_new_take(char *transport,
 		mce_display_add_state_changed_handler(slot->display,
 				ril_plugin_display_cb, slot);
 
-	slot->watch = sailfish_watch_new(dbus_path);
+	slot->watch = ofono_watch_new(dbus_path);
 	slot->watch_event_id[WATCH_EVENT_MODEM] =
-		sailfish_watch_add_modem_changed_handler(slot->watch,
+		ofono_watch_add_modem_changed_handler(slot->watch,
 			ril_plugin_slot_modem_changed, slot);
 	return slot;
 }

@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2018 Jolla Ltd.
+ *  Copyright (C) 2015-2019 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -18,7 +18,8 @@
 #include "ril_util.h"
 #include "ril_log.h"
 
-#include "sailfish_watch.h"
+#include <ofono/watch.h>
+
 #include "simutil.h"
 #include "util.h"
 #include "ofono.h"
@@ -92,7 +93,7 @@ struct ril_sim {
 	const char *log_prefix;
 	char *allocated_log_prefix;
 
-	struct sailfish_watch *watch;
+	struct ofono_watch *watch;
 	gulong sim_state_watch_id;
 
 	/* query_passwd_state context */
@@ -872,7 +873,7 @@ static void ril_sim_status_changed_cb(struct ril_sim_card *sc, void *user_data)
 	}
 }
 
-static void ril_sim_state_changed_cb(struct sailfish_watch *watch, void *data)
+static void ril_sim_state_changed_cb(struct ofono_watch *watch, void *data)
 {
 	struct ril_sim *sd = data;
 	const enum ofono_sim_state state = ofono_sim_get_state(watch->sim);
@@ -1445,7 +1446,7 @@ static gboolean ril_sim_register(gpointer user)
 		ril_sim_card_add_app_changed_handler(sd->card,
 					ril_sim_app_changed_cb, sd);
 	sd->sim_state_watch_id =
-		sailfish_watch_add_sim_state_changed_handler(sd->watch,
+		ofono_watch_add_sim_state_changed_handler(sd->watch,
 					ril_sim_state_changed_cb, sd);
 
 	/* And RIL events */
@@ -1470,7 +1471,7 @@ static int ril_sim_probe(struct ofono_sim *sim, unsigned int vendor,
 	sd->io = grilio_channel_ref(ril_modem_io(modem));
 	sd->card = ril_sim_card_ref(modem->sim_card);
 	sd->q = grilio_queue_new(sd->io);
-	sd->watch = sailfish_watch_new(ril_modem_get_path(modem));
+	sd->watch = ofono_watch_new(ril_modem_get_path(modem));
 
 	if (modem->log_prefix && modem->log_prefix[0]) {
 		sd->log_prefix = sd->allocated_log_prefix =
@@ -1508,8 +1509,8 @@ static void ril_sim_remove(struct ofono_sim *sim)
 			sd->query_passwd_state_sim_status_refresh_id);
 	}
 
-	sailfish_watch_remove_handler(sd->watch, sd->sim_state_watch_id);
-	sailfish_watch_unref(sd->watch);
+	ofono_watch_remove_handler(sd->watch, sd->sim_state_watch_id);
+	ofono_watch_unref(sd->watch);
 
 	ril_sim_card_remove_handlers(sd->card, sd->card_event_id,
 					G_N_ELEMENTS(sd->card_event_id));

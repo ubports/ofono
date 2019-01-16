@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2018 Jolla Ltd.
+ *  Copyright (C) 2015-2019 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -25,7 +25,7 @@
 
 #include "ofono.h"
 
-#include "sailfish_watch.h"
+#include <ofono/watch.h>
 
 #define MAX_PDP_CONTEXTS        (2)
 #define ONLINE_TIMEOUT_SECS     (15) /* 20 sec is hardcoded in ofono core */
@@ -52,7 +52,7 @@ struct ril_modem_online_request {
 
 struct ril_modem_data {
 	struct ril_modem modem;
-	struct sailfish_watch *watch;
+	struct ofono_watch *watch;
 	GRilIoQueue *q;
 	char *log_prefix;
 	char *imeisv;
@@ -234,7 +234,7 @@ static void ril_modem_radio_state_cb(struct ril_radio *radio, void *data)
 	ril_modem_update_online_state(md);
 }
 
-static void ril_modem_imsi_cb(struct sailfish_watch *watch, void *data)
+static void ril_modem_imsi_cb(struct ofono_watch *watch, void *data)
 {
 	struct ril_modem_data *md = data;
 
@@ -374,8 +374,8 @@ static void ril_modem_remove(struct ofono_modem *ofono)
 	ril_radio_unref(modem->radio);
 	ril_sim_settings_unref(modem->sim_settings);
 
-	sailfish_watch_remove_handler(md->watch, md->imsi_event_id);
-	sailfish_watch_unref(md->watch);
+	ofono_watch_remove_handler(md->watch, md->imsi_event_id);
+	ofono_watch_unref(md->watch);
 
 	if (md->online_check_id) {
 		g_source_remove(md->online_check_id);
@@ -443,10 +443,10 @@ struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *log_prefix,
 		modem->data = ril_data_ref(data);
 		modem->io = grilio_channel_ref(io);
 		md->q = grilio_queue_new(io);
-		md->watch = sailfish_watch_new(path);
+		md->watch = ofono_watch_new(path);
 
 		md->imsi_event_id =
-			sailfish_watch_add_imsi_changed_handler(md->watch,
+			ofono_watch_add_imsi_changed_handler(md->watch,
 						ril_modem_imsi_cb, md);
 
 		md->set_online.md = md;
