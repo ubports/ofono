@@ -1,5 +1,4 @@
 Name:       ofono
-
 Summary:    Open Source Telephony
 Version:    1.21
 Release:    1
@@ -61,6 +60,14 @@ Provides:   ofono-configs
 %description configs-mer
 This package provides default configs for ofono
 
+%package doc
+Summary:   Documentation for %{name}
+Group:     Documentation
+Requires:  %{name} = %{version}-%{release}
+
+%description doc
+Man pages for %{name}.
+
 %prep
 %setup -q -n %{name}-%{version}/%{name}
 
@@ -98,6 +105,10 @@ mkdir -p %{buildroot}/%{_lib}/systemd/system/network.target.wants
 mkdir -p %{buildroot}/var/lib/ofono
 ln -s ../ofono.service %{buildroot}/%{_lib}/systemd/system/network.target.wants/ofono.service
 
+mkdir -p %{buildroot}%{_docdir}/%{name}-%{version}
+install -m0644 -t %{buildroot}%{_docdir}/%{name}-%{version} \
+        ChangeLog AUTHORS README
+
 %preun
 if [ "$1" -eq 0 ]; then
 systemctl stop ofono.service ||:
@@ -115,7 +126,7 @@ systemctl daemon-reload ||:
 
 %files
 %defattr(-,root,root,-)
-%doc COPYING ChangeLog AUTHORS README
+%license COPYING
 %config %{_sysconfdir}/dbus-1/system.d/*.conf
 %{_sbindir}/*
 /%{_lib}/systemd/system/network.target.wants/ofono.service
@@ -124,7 +135,6 @@ systemctl daemon-reload ||:
 %dir %{_sysconfdir}/ofono/push_forwarder.d
 # This file is part of phonesim and not needed with ofono.
 %exclude %{_sysconfdir}/ofono/phonesim.conf
-%doc /usr/share/man/man8/ofonod.8.gz
 %dir %attr(775,radio,radio) /var/lib/ofono
 
 %files devel
@@ -139,3 +149,8 @@ systemctl daemon-reload ||:
 %files configs-mer
 %defattr(-,root,root,-)
 %config /etc/ofono/ril_subscription.conf
+
+%files doc
+%defattr(-,root,root,-)
+%{_mandir}/man8/%{name}d.*
+%{_docdir}/%{name}-%{version}
