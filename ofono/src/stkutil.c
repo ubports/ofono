@@ -4514,7 +4514,7 @@ static bool build_dataobj_imei(struct stk_tlv_builder *tlv,
 static bool build_dataobj_help_request(struct stk_tlv_builder *tlv,
 						const void *data, bool cr)
 {
-	const ofono_bool_t *help = data;
+	const bool *help = data;
 	uint8_t tag = STK_DATA_OBJECT_TYPE_HELP_REQUEST;
 
 	if (*help != true)
