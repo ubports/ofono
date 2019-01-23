@@ -526,6 +526,10 @@ static void pin_cache_remove(const char *iccid)
 		return;
 
 	cached_pins = g_slist_remove(cached_pins, pin_cached);
+
+	g_free(pin_cached->pin);
+	g_free(pin_cached->id);
+	g_free(pin_cached);
 }
 
 static void pin_cache_enter_cb(const struct ofono_error *error, void *data)
