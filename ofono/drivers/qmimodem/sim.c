@@ -791,6 +791,7 @@ static void get_card_status_cb(struct qmi_result *result, void *user_data)
 		break;
 	case 0x01:	/* Present */
 		ofono_sim_inserted_notify(sim, TRUE);
+		ofono_sim_initialized_notify(sim);
 		break;
 	}
 }
