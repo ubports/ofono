@@ -4,7 +4,8 @@ import sys
 import dbus
 
 if (len(sys.argv) < 2):
-	print("Usage: %s [modem] <number> [hide_callerid]" % (sys.argv[0]))
+	print("Usage: %s [modem] <number> [enabled|disabled|default]" % (sys.argv[0]))
+	print("Last argument enables/disables callerid")
 	sys.exit(1)
 
 bus = dbus.SystemBus()
