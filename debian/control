@@ -2,7 +2,7 @@ Source: ofono
 Section: admin
 Priority: optional
 Maintainer: Debian Telepathy maintainers <pkg-telepathy-maintainers@lists.alioth.debian.org>
-Uploaders: Hector Oron <zumbi@debian.org>
+Uploaders: Héctor Orón Martínez <zumbi@debian.org>
 Build-Depends: debhelper (>= 10),
                libglib2.0-dev (>= 2.32),
                libdbus-glib-1-dev,
@@ -10,10 +10,11 @@ Build-Depends: debhelper (>= 10),
                udev,
                libbluetooth-dev (>= 4.30),
                mobile-broadband-provider-info
-Standards-Version: 4.1.1
+Standards-Version: 4.3.0
+Rules-Requires-Root: no
 Homepage: http://www.ofono.org/
-Vcs-Git: https://anonscm.debian.org/git/pkg-telepathy/ofono.git
-Vcs-Browser: https://anonscm.debian.org/gitweb/?p=pkg-telepathy/ofono.git
+Vcs-Git: https://salsa.debian.org/telepathy-team/ofono.git
+Vcs-Browser: https://salsa.debian.org/telepathy-team/ofono
 
 Package: ofono
 Architecture: any

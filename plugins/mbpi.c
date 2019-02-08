@@ -325,6 +325,8 @@ static void apn_handler(GMarkupParseContext *context, struct gsm_data *gsm,
 	ap->apn = g_strdup(apn);
 	ap->type = OFONO_GPRS_CONTEXT_TYPE_INTERNET;
 	ap->proto = OFONO_GPRS_PROTO_IP;
+
+	/* pre-select default authentication method */
 	ap->auth_method = OFONO_GPRS_AUTH_METHOD_CHAP;
 
 	g_markup_parse_context_push(context, &apn_parser, ap);
@@ -394,6 +396,10 @@ static void gsm_end(GMarkupParseContext *context, const gchar *element_name,
 	ap = g_markup_parse_context_pop(context);
 	if (ap == NULL)
 		return;
+
+	/* select authentication method NONE if fit */
+	if (!ap->username || !ap->password)
+		ap->auth_method = OFONO_GPRS_AUTH_METHOD_NONE;
 
 	if (gsm->allow_duplicates == FALSE) {
 		GSList *l;

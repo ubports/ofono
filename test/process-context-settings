@@ -26,17 +26,17 @@ for path, properties in modems:
 		print("Configuring %s" % (path))
 
 		settings = properties["Settings"]
-
 		interface = settings["Interface"]
-		address = settings["Address"]
-		try:
-			gateway = settings["Gateway"]
-		except:
-			gateway = "0.0.0.0";
 
 		if settings["Method"] == "dhcp":
 			print("    Run DHCP on interface %s" % (interface))
 		else:
+			address = settings["Address"]
+			try:
+				gateway = settings["Gateway"]
+			except:
+				gateway = "0.0.0.0";
+
 			print("    Interface is %s" % (interface))
 			print("    IP address is %s" % (address))
 			print("    Gateway is %s" % (gateway))

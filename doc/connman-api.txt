@@ -192,7 +192,8 @@ Properties	boolean Active [readwrite]
 
 		string AuthenticationMethod [readwrite]
 			Holds the PPP authentication method to use.  Valid
-			values are "pap" and "chap".  Defaults to "chap".
+			values are "pap", "chap" and "none".
+			Defaults to "chap".
 
 		string Username [readwrite]
 

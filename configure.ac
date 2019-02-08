@@ -1,5 +1,5 @@
 AC_PREREQ(2.60)
-AC_INIT(ofono, 1.21)
+AC_INIT(ofono, 1.28)
 
 AM_INIT_AUTOMAKE([foreign subdir-objects color-tests])
 AC_CONFIG_HEADERS(config.h)
@@ -54,9 +54,6 @@ AC_ARG_ENABLE(pie, AC_HELP_STRING([--enable-pie],
 	fi
 ])
 
-AC_ARG_ENABLE(threads, AC_HELP_STRING([--enable-threads],
-		[enable threading support]), [enable_threads=${enableval}])
-
 AC_CHECK_FUNC(signalfd, dummy=yes,
 			AC_MSG_ERROR(signalfd support is required))
 
@@ -67,14 +64,6 @@ PKG_CHECK_MODULES(GLIB, glib-2.0 >= 2.32, dummy=yes,
 				AC_MSG_ERROR(GLib >= 2.32 is required))
 AC_SUBST(GLIB_CFLAGS)
 AC_SUBST(GLIB_LIBS)
-
-if (test "${enable_threads}" = "yes"); then
-	AC_DEFINE(NEED_THREADS, 1, [Define if threading support is required])
-	PKG_CHECK_MODULES(GTHREAD, gthread-2.0 >= 2.16, dummy=yes,
-				AC_MSG_ERROR(GThread >= 2.16 is required))
-	GLIB_CFLAGS="$GLIB_CFLAGS $GTHREAD_CFLAGS"
-	GLIB_LIBS="$GLIB_LIBS $GTHREAD_LIBS"
-fi
 
 PKG_CHECK_MODULES(DBUS, dbus-1 >= 1.4, dummy=yes,
 				AC_MSG_ERROR(D-Bus >= 1.4 is required))
@@ -171,6 +160,11 @@ AC_ARG_ENABLE(qmimodem, AC_HELP_STRING([--disable-qmimodem],
 					[enable_qmimodem=${enableval}])
 AM_CONDITIONAL(QMIMODEM, test "${enable_qmimodem}" != "no")
 
+AC_ARG_ENABLE(mbimmodem, AC_HELP_STRING([--disable-mbimmodem],
+				[disable MBIM modem support]),
+					[enable_mbimmodem=${enableval}])
+AM_CONDITIONAL(MBIMMODEM, test "${enable_mbimmodem}" != "no")
+
 AC_ARG_ENABLE(bluetooth, AC_HELP_STRING([--disable-bluetooth],
 				[disable BlueZ 4 and BlueZ 5 plugins support]),
 					[enable_bluetooth=${enableval}])
@@ -217,6 +211,17 @@ AC_ARG_ENABLE(upower, AC_HELP_STRING([--disable-upower],
 			[disable UPower plugin]),
 					[enable_upower=${enableval}])
 AM_CONDITIONAL(UPOWER, test "${enable_power}" != "no")
+
+AC_ARG_ENABLE([external_ell], AC_HELP_STRING([--enable-external-ell],
+				[enable external Embedded Linux library]),
+					[enable_external_ell=${enableval}])
+if (test "${enable_external_ell}" = "yes"); then
+	PKG_CHECK_MODULES(ELL, ell >= 0.12, dummy=yes,
+		AC_MSG_ERROR(Embedded Linux library >= 0.12 is required))
+	AC_SUBST(ELL_CFLAGS)
+	AC_SUBST(ELL_LIBS)
+fi
+AM_CONDITIONAL(EXTERNAL_ELL, test "${enable_external_ell}" = "yes")
 
 AC_ARG_ENABLE(datafiles, AC_HELP_STRING([--disable-datafiles],
 			[do not install configuration and data files]),

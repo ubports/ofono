@@ -29,6 +29,9 @@ struct sim_fs *sim_fs_new(struct ofono_sim *sim,
 				const struct ofono_sim_driver *driver);
 struct ofono_sim_context *sim_fs_context_new(struct sim_fs *fs);
 
+struct ofono_sim_context *sim_fs_context_new_with_aid(struct sim_fs *fs,
+		unsigned char *aid);
+
 unsigned int sim_fs_file_watch_add(struct ofono_sim_context *context,
 					int id, ofono_sim_file_changed_cb_t cb,
 					void *userdata,

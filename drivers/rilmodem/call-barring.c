@@ -270,7 +270,7 @@ static void ril_call_barring_remove(struct ofono_call_barring *cb)
 	g_free(data);
 }
 
-static struct ofono_call_barring_driver driver = {
+static const struct ofono_call_barring_driver driver = {
 	.name			= "rilmodem",
 	.probe			= ril_call_barring_probe,
 	.remove			= ril_call_barring_remove,

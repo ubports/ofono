@@ -379,7 +379,7 @@ static void qmi_sim_remove(struct ofono_sim *sim)
 	g_free(data);
 }
 
-static struct ofono_sim_driver driver = {
+static const struct ofono_sim_driver driver = {
 	.name			= "qmimodem-legacy",
 	.probe			= qmi_sim_probe,
 	.remove			= qmi_sim_remove,

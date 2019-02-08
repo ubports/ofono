@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -398,7 +397,7 @@ static void at_call_settings_remove(struct ofono_call_settings *cs)
 	ofono_call_settings_set_data(cs, NULL);
 }
 
-static struct ofono_call_settings_driver driver = {
+static const struct ofono_call_settings_driver driver = {
 	.name = "atmodem",
 	.probe = at_call_settings_probe,
 	.remove = at_call_settings_remove,

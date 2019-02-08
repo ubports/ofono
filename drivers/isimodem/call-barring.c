@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -429,7 +428,7 @@ static void isi_call_barring_remove(struct ofono_call_barring *barr)
 	g_free(data);
 }
 
-static struct ofono_call_barring_driver driver = {
+static const struct ofono_call_barring_driver driver = {
 	.name			= "isimodem",
 	.probe			= isi_call_barring_probe,
 	.remove			= isi_call_barring_remove,

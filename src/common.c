@@ -669,6 +669,10 @@ const char *registration_status_to_string(int status)
 		return "unknown";
 	case NETWORK_REGISTRATION_STATUS_ROAMING:
 		return "roaming";
+	case NETWORK_REGISTRATION_STATUS_REGISTERED_SMS_EUTRAN:
+		return "registered";
+	case NETWORK_REGISTRATION_STATUS_ROAMING_SMS_EUTRAN:
+		return "roaming";
 	}
 
 	return "";
@@ -764,4 +768,65 @@ const char *call_status_to_string(enum call_status status)
 	}
 
 	return "unknown";
+}
+
+const char *gprs_proto_to_string(enum ofono_gprs_proto proto)
+{
+	switch (proto) {
+	case OFONO_GPRS_PROTO_IP:
+		return "ip";
+	case OFONO_GPRS_PROTO_IPV6:
+		return "ipv6";
+	case OFONO_GPRS_PROTO_IPV4V6:
+		return "dual";
+	};
+
+	return NULL;
+}
+
+gboolean gprs_proto_from_string(const char *str, enum ofono_gprs_proto *proto)
+{
+	if (g_str_equal(str, "ip")) {
+		*proto = OFONO_GPRS_PROTO_IP;
+		return TRUE;
+	} else if (g_str_equal(str, "ipv6")) {
+		*proto = OFONO_GPRS_PROTO_IPV6;
+		return TRUE;
+	} else if (g_str_equal(str, "dual")) {
+		*proto = OFONO_GPRS_PROTO_IPV4V6;
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
+const char *gprs_auth_method_to_string(enum ofono_gprs_auth_method auth)
+{
+	switch (auth) {
+	case OFONO_GPRS_AUTH_METHOD_CHAP:
+		return "chap";
+	case OFONO_GPRS_AUTH_METHOD_PAP:
+		return "pap";
+	case OFONO_GPRS_AUTH_METHOD_NONE:
+		return "none";
+	};
+
+	return NULL;
+}
+
+gboolean gprs_auth_method_from_string(const char *str,
+					enum ofono_gprs_auth_method *auth)
+{
+	if (g_str_equal(str, "chap")) {
+		*auth = OFONO_GPRS_AUTH_METHOD_CHAP;
+		return TRUE;
+	} else if (g_str_equal(str, "pap")) {
+		*auth = OFONO_GPRS_AUTH_METHOD_PAP;
+		return TRUE;
+	} else if (g_str_equal(str, "none")) {
+		*auth = OFONO_GPRS_AUTH_METHOD_NONE;
+		return TRUE;
+	}
+
+	return FALSE;
 }

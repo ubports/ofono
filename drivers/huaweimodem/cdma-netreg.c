@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <glib.h>
 #include <errno.h>
 
@@ -210,7 +209,7 @@ static void huawei_cdma_netreg_remove(struct ofono_cdma_netreg *netreg)
 	g_at_chat_unref(chat);
 }
 
-static struct ofono_cdma_netreg_driver driver = {
+static const struct ofono_cdma_netreg_driver driver = {
 	.name	= "huaweimodem",
 	.probe	= huawei_cdma_netreg_probe,
 	.remove	= huawei_cdma_netreg_remove,

@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -143,7 +142,7 @@ static void cdma_voicecall_remove(struct ofono_cdma_voicecall *vc)
 	g_free(vd);
 }
 
-static struct ofono_cdma_voicecall_driver driver = {
+static const struct ofono_cdma_voicecall_driver driver = {
 	.name			= "cdmamodem",
 	.probe			= cdma_voicecall_probe,
 	.remove			= cdma_voicecall_remove,

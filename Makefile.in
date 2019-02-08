@@ -82,11 +82,12 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-@UDEV_TRUE@am__append_1 = @UDEV_CFLAGS@
-@UDEV_TRUE@am__append_2 = @UDEV_LIBS@
-@UDEV_TRUE@am__append_3 = udevng
-@UDEV_TRUE@am__append_4 = plugins/udevng.c
-@RILMODEM_TRUE@am__append_5 = $(gril_sources) plugins/rildev.c \
+@EXTERNAL_ELL_FALSE@am__append_1 = ell/libell-internal.la
+@UDEV_TRUE@am__append_2 = @UDEV_CFLAGS@
+@UDEV_TRUE@am__append_3 = @UDEV_LIBS@
+@UDEV_TRUE@am__append_4 = udevng
+@UDEV_TRUE@am__append_5 = plugins/udevng.c
+@RILMODEM_TRUE@am__append_6 = $(gril_sources) plugins/rildev.c \
 @RILMODEM_TRUE@	plugins/ril.c plugins/ril.h plugins/infineon.c \
 @RILMODEM_TRUE@	plugins/ril_intel.c drivers/rilmodem/rilmodem.h \
 @RILMODEM_TRUE@	drivers/rilmodem/vendor.h \
@@ -110,9 +111,9 @@ host_triplet = @host@
 @RILMODEM_TRUE@	drivers/rilmodem/stk.c drivers/rilmodem/cbs.c \
 @RILMODEM_TRUE@	drivers/infineonmodem/infineon_constants.h \
 @RILMODEM_TRUE@	drivers/rilmodem/lte.c
-@RILMODEM_TRUE@am__append_6 = rildev ril infineon ril_intel rilmodem
-@ISIMODEM_TRUE@am__append_7 = isimodem isiusb n900 u8500
-@ISIMODEM_TRUE@am__append_8 = $(gisi_sources) \
+@RILMODEM_TRUE@am__append_7 = rildev ril infineon ril_intel rilmodem
+@ISIMODEM_TRUE@am__append_8 = isimodem isiusb n900 u8500
+@ISIMODEM_TRUE@am__append_9 = $(gisi_sources) \
 @ISIMODEM_TRUE@	drivers/isimodem/isimodem.h \
 @ISIMODEM_TRUE@	drivers/isimodem/isimodem.c \
 @ISIMODEM_TRUE@	drivers/isimodem/mtc.h drivers/isimodem/debug.h \
@@ -145,8 +146,8 @@ host_triplet = @host@
 @ISIMODEM_TRUE@	drivers/isimodem/uicc-util.c plugins/isiusb.c \
 @ISIMODEM_TRUE@	plugins/n900.c plugins/nokia-gpio.h \
 @ISIMODEM_TRUE@	plugins/nokia-gpio.c plugins/u8500.c
-@QMIMODEM_TRUE@am__append_9 = qmimodem gobi
-@QMIMODEM_TRUE@am__append_10 = $(qmi_sources) drivers/qmimodem/util.h \
+@QMIMODEM_TRUE@am__append_10 = qmimodem gobi
+@QMIMODEM_TRUE@am__append_11 = $(qmi_sources) drivers/qmimodem/util.h \
 @QMIMODEM_TRUE@	drivers/qmimodem/qmimodem.h \
 @QMIMODEM_TRUE@	drivers/qmimodem/qmimodem.c \
 @QMIMODEM_TRUE@	drivers/qmimodem/devinfo.c \
@@ -156,15 +157,29 @@ host_triplet = @host@
 @QMIMODEM_TRUE@	drivers/qmimodem/sim.c drivers/qmimodem/sms.c \
 @QMIMODEM_TRUE@	drivers/qmimodem/ussd.c drivers/qmimodem/gprs.c \
 @QMIMODEM_TRUE@	drivers/qmimodem/gprs-context.c \
+@QMIMODEM_TRUE@	drivers/qmimodem/lte.c \
 @QMIMODEM_TRUE@	drivers/qmimodem/radio-settings.c \
 @QMIMODEM_TRUE@	drivers/qmimodem/location-reporting.c \
 @QMIMODEM_TRUE@	drivers/qmimodem/netmon.c plugins/gobi.c
-@ATMODEM_TRUE@am__append_11 = atmodem nwmodem swmodem ztemodem \
+@MBIMMODEM_TRUE@am__append_12 = mbimmodem mbim
+@MBIMMODEM_TRUE@am__append_13 = $(mbim_sources) \
+@MBIMMODEM_TRUE@	drivers/mbimmodem/util.h \
+@MBIMMODEM_TRUE@	drivers/mbimmodem/util.c \
+@MBIMMODEM_TRUE@	drivers/mbimmodem/mbimmodem.h \
+@MBIMMODEM_TRUE@	drivers/mbimmodem/mbimmodem.c \
+@MBIMMODEM_TRUE@	drivers/mbimmodem/devinfo.c \
+@MBIMMODEM_TRUE@	drivers/mbimmodem/sim.c \
+@MBIMMODEM_TRUE@	drivers/mbimmodem/network-registration.c \
+@MBIMMODEM_TRUE@	drivers/mbimmodem/sms.c \
+@MBIMMODEM_TRUE@	drivers/mbimmodem/gprs.c \
+@MBIMMODEM_TRUE@	drivers/mbimmodem/gprs-context.c \
+@MBIMMODEM_TRUE@	plugins/mbim.c
+@ATMODEM_TRUE@am__append_14 = atmodem nwmodem swmodem ztemodem \
 @ATMODEM_TRUE@	iceramodem huaweimodem calypsomodem mbmmodem \
 @ATMODEM_TRUE@	telitmodem hsomodem ifxmodem stemodem dunmodem \
 @ATMODEM_TRUE@	hfpmodem speedupmodem ubloxmodem gemaltomodem \
 @ATMODEM_TRUE@	xmm7modem
-@ATMODEM_TRUE@am__append_12 = drivers/atmodem/atmodem.h \
+@ATMODEM_TRUE@am__append_15 = drivers/atmodem/atmodem.h \
 @ATMODEM_TRUE@	drivers/atmodem/atmodem.c \
 @ATMODEM_TRUE@	drivers/atmodem/call-settings.c \
 @ATMODEM_TRUE@	drivers/atmodem/sms.c drivers/atmodem/cbs.c \
@@ -182,7 +197,6 @@ host_triplet = @host@
 @ATMODEM_TRUE@	drivers/atmodem/atutil.h \
 @ATMODEM_TRUE@	drivers/atmodem/atutil.c drivers/atmodem/gprs.c \
 @ATMODEM_TRUE@	drivers/atmodem/gprs-context.c \
-@ATMODEM_TRUE@	drivers/atmodem/sim-auth.c \
 @ATMODEM_TRUE@	drivers/atmodem/gnss.c drivers/atmodem/lte.c \
 @ATMODEM_TRUE@	drivers/atmodem/atutil.h \
 @ATMODEM_TRUE@	drivers/nwmodem/nwmodem.h \
@@ -276,26 +290,29 @@ host_triplet = @host@
 @ATMODEM_TRUE@	drivers/gemaltomodem/gemaltomodem.h \
 @ATMODEM_TRUE@	drivers/gemaltomodem/gemaltomodem.c \
 @ATMODEM_TRUE@	drivers/gemaltomodem/location-reporting.c \
+@ATMODEM_TRUE@	drivers/gemaltomodem/voicecall.c \
 @ATMODEM_TRUE@	drivers/atmodem/atutil.h \
 @ATMODEM_TRUE@	drivers/xmm7modem/xmm7modem.h \
 @ATMODEM_TRUE@	drivers/xmm7modem/xmm7modem.c \
-@ATMODEM_TRUE@	drivers/xmm7modem/radio-settings.c
-@ATMODEM_TRUE@@PHONESIM_TRUE@am__append_13 = phonesim
-@ATMODEM_TRUE@@PHONESIM_TRUE@am__append_14 = plugins/phonesim.c
-@ATMODEM_TRUE@@DATAFILES_TRUE@@PHONESIM_TRUE@am__append_15 = plugins/phonesim.conf
-@ATMODEM_TRUE@@CDMAMODEM_TRUE@am__append_16 = cdmamodem
-@ATMODEM_TRUE@@CDMAMODEM_TRUE@am__append_17 = drivers/cdmamodem/cdmamodem.h \
+@ATMODEM_TRUE@	drivers/xmm7modem/radio-settings.c \
+@ATMODEM_TRUE@	drivers/xmm7modem/ims.c \
+@ATMODEM_TRUE@	drivers/xmm7modem/netmon.c
+@ATMODEM_TRUE@@PHONESIM_TRUE@am__append_16 = phonesim
+@ATMODEM_TRUE@@PHONESIM_TRUE@am__append_17 = plugins/phonesim.c
+@ATMODEM_TRUE@@DATAFILES_TRUE@@PHONESIM_TRUE@am__append_18 = plugins/phonesim.conf
+@ATMODEM_TRUE@@CDMAMODEM_TRUE@am__append_19 = cdmamodem
+@ATMODEM_TRUE@@CDMAMODEM_TRUE@am__append_20 = drivers/cdmamodem/cdmamodem.h \
 @ATMODEM_TRUE@@CDMAMODEM_TRUE@			drivers/cdmamodem/cdmamodem.c \
 @ATMODEM_TRUE@@CDMAMODEM_TRUE@			drivers/cdmamodem/voicecall.c \
 @ATMODEM_TRUE@@CDMAMODEM_TRUE@			drivers/cdmamodem/devinfo.c \
 @ATMODEM_TRUE@@CDMAMODEM_TRUE@			drivers/cdmamodem/connman.c
 
-@ATMODEM_TRUE@am__append_18 = g1 wavecom calypso mbm hso zte huawei \
+@ATMODEM_TRUE@am__append_21 = g1 wavecom calypso mbm hso zte huawei \
 @ATMODEM_TRUE@	sierra novatel palmpre ifx ste stemgr caif \
 @ATMODEM_TRUE@	cinterion gemalto nokia nokiacdma linktop icera \
 @ATMODEM_TRUE@	alcatel speedup speedupcdma samsung sim900 \
-@ATMODEM_TRUE@	connman telit quectel ublox xmm7xxx
-@ATMODEM_TRUE@am__append_19 = plugins/g1.c plugins/wavecom.c \
+@ATMODEM_TRUE@	sim7100 connman telit quectel ublox xmm7xxx
+@ATMODEM_TRUE@am__append_22 = plugins/g1.c plugins/wavecom.c \
 @ATMODEM_TRUE@	plugins/calypso.c plugins/mbm.c plugins/hso.c \
 @ATMODEM_TRUE@	plugins/zte.c plugins/huawei.c plugins/sierra.c \
 @ATMODEM_TRUE@	plugins/novatel.c plugins/palmpre.c \
@@ -306,50 +323,50 @@ host_triplet = @host@
 @ATMODEM_TRUE@	plugins/icera.c plugins/alcatel.c \
 @ATMODEM_TRUE@	plugins/speedup.c plugins/speedupcdma.c \
 @ATMODEM_TRUE@	plugins/samsung.c plugins/sim900.c \
-@ATMODEM_TRUE@	plugins/connman.c plugins/telit.c \
-@ATMODEM_TRUE@	plugins/quectel.c plugins/ublox.c \
-@ATMODEM_TRUE@	plugins/xmm7xxx.c
-@ATMODEM_TRUE@@BLUETOOTH_TRUE@@BLUEZ4_TRUE@am__append_20 = sap \
+@ATMODEM_TRUE@	plugins/sim7100.c plugins/connman.c \
+@ATMODEM_TRUE@	plugins/telit.c plugins/quectel.c \
+@ATMODEM_TRUE@	plugins/ublox.c plugins/xmm7xxx.c
+@ATMODEM_TRUE@@BLUETOOTH_TRUE@@BLUEZ4_TRUE@am__append_23 = sap \
 @ATMODEM_TRUE@@BLUETOOTH_TRUE@@BLUEZ4_TRUE@	hfp_bluez4 \
 @ATMODEM_TRUE@@BLUETOOTH_TRUE@@BLUEZ4_TRUE@	dun_gw_bluez4
-@ATMODEM_TRUE@@BLUETOOTH_TRUE@@BLUEZ4_TRUE@am__append_21 =  \
+@ATMODEM_TRUE@@BLUETOOTH_TRUE@@BLUEZ4_TRUE@am__append_24 =  \
 @ATMODEM_TRUE@@BLUETOOTH_TRUE@@BLUEZ4_TRUE@	plugins/sap.c \
 @ATMODEM_TRUE@@BLUETOOTH_TRUE@@BLUEZ4_TRUE@	plugins/bluez4.h \
 @ATMODEM_TRUE@@BLUETOOTH_TRUE@@BLUEZ4_TRUE@	plugins/hfp_hf_bluez4.c \
 @ATMODEM_TRUE@@BLUETOOTH_TRUE@@BLUEZ4_TRUE@	plugins/bluez4.h \
 @ATMODEM_TRUE@@BLUETOOTH_TRUE@@BLUEZ4_TRUE@	plugins/dun_gw_bluez4.c \
 @ATMODEM_TRUE@@BLUETOOTH_TRUE@@BLUEZ4_TRUE@	plugins/bluez4.h
-@ATMODEM_TRUE@@BLUETOOTH_TRUE@@BLUEZ4_FALSE@am__append_22 =  \
+@ATMODEM_TRUE@@BLUETOOTH_TRUE@@BLUEZ4_FALSE@am__append_25 =  \
 @ATMODEM_TRUE@@BLUETOOTH_TRUE@@BLUEZ4_FALSE@	hfp_bluez5 \
 @ATMODEM_TRUE@@BLUETOOTH_TRUE@@BLUEZ4_FALSE@	dun_gw_bluez5
-@ATMODEM_TRUE@@BLUETOOTH_TRUE@@BLUEZ4_FALSE@am__append_23 = plugins/hfp_hf_bluez5.c \
+@ATMODEM_TRUE@@BLUETOOTH_TRUE@@BLUEZ4_FALSE@am__append_26 = plugins/hfp_hf_bluez5.c \
 @ATMODEM_TRUE@@BLUETOOTH_TRUE@@BLUEZ4_FALSE@	plugins/bluez5.h \
 @ATMODEM_TRUE@@BLUETOOTH_TRUE@@BLUEZ4_FALSE@	plugins/dun_gw_bluez5.c \
 @ATMODEM_TRUE@@BLUETOOTH_TRUE@@BLUEZ4_FALSE@	plugins/bluez5.h
-@BLUETOOTH_TRUE@@BLUEZ4_TRUE@am__append_24 = bluez4 hfp_ag_bluez4
-@BLUETOOTH_TRUE@@BLUEZ4_TRUE@am__append_25 = plugins/bluez4.c \
+@BLUETOOTH_TRUE@@BLUEZ4_TRUE@am__append_27 = bluez4 hfp_ag_bluez4
+@BLUETOOTH_TRUE@@BLUEZ4_TRUE@am__append_28 = plugins/bluez4.c \
 @BLUETOOTH_TRUE@@BLUEZ4_TRUE@	plugins/bluez4.h \
 @BLUETOOTH_TRUE@@BLUEZ4_TRUE@	plugins/hfp_ag_bluez4.c \
 @BLUETOOTH_TRUE@@BLUEZ4_TRUE@	plugins/bluez4.h $(btio_sources)
-@BLUETOOTH_TRUE@@BLUEZ4_TRUE@am__append_26 = @BLUEZ_CFLAGS@
-@BLUETOOTH_TRUE@@BLUEZ4_TRUE@am__append_27 = @BLUEZ_LIBS@
-@BLUETOOTH_TRUE@@BLUEZ4_FALSE@am__append_28 = bluez5 hfp_ag_bluez5
-@BLUETOOTH_TRUE@@BLUEZ4_FALSE@am__append_29 = plugins/bluez5.c \
+@BLUETOOTH_TRUE@@BLUEZ4_TRUE@am__append_29 = @BLUEZ_CFLAGS@
+@BLUETOOTH_TRUE@@BLUEZ4_TRUE@am__append_30 = @BLUEZ_LIBS@
+@BLUETOOTH_TRUE@@BLUEZ4_FALSE@am__append_31 = bluez5 hfp_ag_bluez5
+@BLUETOOTH_TRUE@@BLUEZ4_FALSE@am__append_32 = plugins/bluez5.c \
 @BLUETOOTH_TRUE@@BLUEZ4_FALSE@	plugins/bluez5.h \
 @BLUETOOTH_TRUE@@BLUEZ4_FALSE@	plugins/hfp_ag_bluez5.c \
 @BLUETOOTH_TRUE@@BLUEZ4_FALSE@	plugins/bluez5.h
-@BLUETOOTH_TRUE@@UPOWER_TRUE@am__append_30 = upower
-@BLUETOOTH_TRUE@@UPOWER_TRUE@am__append_31 = plugins/upower.c
-@PROVISION_TRUE@am__append_32 = plugins/mbpi.h plugins/mbpi.c \
+@BLUETOOTH_TRUE@@UPOWER_TRUE@am__append_33 = upower
+@BLUETOOTH_TRUE@@UPOWER_TRUE@am__append_34 = plugins/upower.c
+@PROVISION_TRUE@am__append_35 = plugins/mbpi.h plugins/mbpi.c \
 @PROVISION_TRUE@	plugins/provision.c plugins/cdma-provision.c \
 @PROVISION_TRUE@	plugins/file-provision.c
-@PROVISION_TRUE@am__append_33 = provision cdma_provision \
+@PROVISION_TRUE@am__append_36 = provision cdma_provision \
 @PROVISION_TRUE@	file_provision
-@MAINTAINER_MODE_TRUE@am__append_34 = example_history example_nettime \
+@MAINTAINER_MODE_TRUE@am__append_37 = example_history example_nettime \
 @MAINTAINER_MODE_TRUE@	example_provision example_emulator \
 @MAINTAINER_MODE_TRUE@	example_private_network stktest \
 @MAINTAINER_MODE_TRUE@	emulator_fuzz
-@MAINTAINER_MODE_TRUE@am__append_35 = examples/history.c \
+@MAINTAINER_MODE_TRUE@am__append_38 = examples/history.c \
 @MAINTAINER_MODE_TRUE@	examples/nettime.c examples/provision.c \
 @MAINTAINER_MODE_TRUE@	examples/emulator.c \
 @MAINTAINER_MODE_TRUE@	examples/private-network.c \
@@ -361,14 +378,14 @@ noinst_PROGRAMS = $(am__EXEEXT_1) unit/test-sms-root$(EXEEXT) \
 	$(am__EXEEXT_3) gatchat/gsmdial$(EXEEXT) \
 	gatchat/test-server$(EXEEXT) gatchat/test-qcdm$(EXEEXT)
 TESTS = $(am__EXEEXT_1)
-@TOOLS_TRUE@am__append_36 = tools/huawei-audio tools/auto-enable \
+@TOOLS_TRUE@am__append_39 = tools/huawei-audio tools/auto-enable \
 @TOOLS_TRUE@			tools/get-location tools/lookup-apn \
 @TOOLS_TRUE@			tools/lookup-provider-name tools/tty-redirector
 
-@MAINTAINER_MODE_TRUE@@TOOLS_TRUE@am__append_37 = tools/stktest
-@BLUETOOTH_TRUE@@DUNDEE_TRUE@am__append_38 = dundee/dundee
-@BLUETOOTH_TRUE@@DATAFILES_TRUE@@DUNDEE_TRUE@am__append_39 = dundee/dundee.conf
-@BLUETOOTH_TRUE@@DATAFILES_TRUE@@DUNDEE_TRUE@@SYSTEMD_TRUE@am__append_40 = dundee/dundee.service
+@MAINTAINER_MODE_TRUE@@TOOLS_TRUE@am__append_40 = tools/stktest
+@BLUETOOTH_TRUE@@DUNDEE_TRUE@am__append_41 = dundee/dundee
+@BLUETOOTH_TRUE@@DATAFILES_TRUE@@DUNDEE_TRUE@am__append_42 = dundee/dundee.conf
+@BLUETOOTH_TRUE@@DATAFILES_TRUE@@DUNDEE_TRUE@@SYSTEMD_TRUE@am__append_43 = dundee/dundee.service
 subdir = .
 DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am \
 	$(top_srcdir)/configure $(am__configure_deps) \
@@ -392,20 +409,40 @@ CONFIG_CLEAN_FILES = include/version.h src/ofono.service ofono.pc \
 	dundee/dundee.service
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
-gdbus_libgdbus_internal_la_LIBADD =
+ell_libell_internal_la_LIBADD =
+am__ell_libell_internal_la_SOURCES_DIST = ell/util.h ell/test.h \
+	ell/strv.h ell/utf8.h ell/queue.h ell/main.h ell/idle.h \
+	ell/signal.h ell/timeout.h ell/io.h ell/log.h ell/checksum.h \
+	ell/random.h ell/uuid.h ell/file.h ell/uintset.h ell/string.h \
+	ell/private.h ell/missing.h ell/util.c ell/test.c ell/strv.c \
+	ell/utf8.c ell/queue.c ell/main.c ell/idle.c ell/signal.c \
+	ell/timeout.c ell/io.c ell/log.c ell/checksum.c ell/random.c \
+	ell/uuid.c ell/file.c ell/uintset.c ell/string.c
+am__objects_1 =
 am__dirstamp = $(am__leading_dot)dirstamp
-am_gdbus_libgdbus_internal_la_OBJECTS = gdbus/mainloop.lo \
-	gdbus/watch.lo gdbus/object.lo gdbus/client.lo gdbus/polkit.lo
-gdbus_libgdbus_internal_la_OBJECTS =  \
-	$(am_gdbus_libgdbus_internal_la_OBJECTS)
+@EXTERNAL_ELL_FALSE@am__objects_2 = ell/util.lo ell/test.lo \
+@EXTERNAL_ELL_FALSE@	ell/strv.lo ell/utf8.lo ell/queue.lo \
+@EXTERNAL_ELL_FALSE@	ell/main.lo ell/idle.lo ell/signal.lo \
+@EXTERNAL_ELL_FALSE@	ell/timeout.lo ell/io.lo ell/log.lo \
+@EXTERNAL_ELL_FALSE@	ell/checksum.lo ell/random.lo ell/uuid.lo \
+@EXTERNAL_ELL_FALSE@	ell/file.lo ell/uintset.lo ell/string.lo
+@EXTERNAL_ELL_FALSE@am_ell_libell_internal_la_OBJECTS =  \
+@EXTERNAL_ELL_FALSE@	$(am__objects_1) $(am__objects_2)
+ell_libell_internal_la_OBJECTS = $(am_ell_libell_internal_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
+@EXTERNAL_ELL_FALSE@am_ell_libell_internal_la_rpath =
+gdbus_libgdbus_internal_la_LIBADD =
+am_gdbus_libgdbus_internal_la_OBJECTS = gdbus/mainloop.lo \
+	gdbus/watch.lo gdbus/object.lo gdbus/client.lo gdbus/polkit.lo
+gdbus_libgdbus_internal_la_OBJECTS =  \
+	$(am_gdbus_libgdbus_internal_la_OBJECTS)
 am__EXEEXT_1 = unit/test-common$(EXEEXT) unit/test-util$(EXEEXT) \
-	unit/test-idmap$(EXEEXT) unit/test-simutil$(EXEEXT) \
-	unit/test-stkutil$(EXEEXT) unit/test-sms$(EXEEXT) \
-	unit/test-cdmasms$(EXEEXT) unit/test-rilmodem-cs$(EXEEXT) \
+	unit/test-simutil$(EXEEXT) unit/test-stkutil$(EXEEXT) \
+	unit/test-sms$(EXEEXT) unit/test-cdmasms$(EXEEXT) \
+	unit/test-mbim$(EXEEXT) unit/test-rilmodem-cs$(EXEEXT) \
 	unit/test-rilmodem-sms$(EXEEXT) unit/test-rilmodem-cb$(EXEEXT) \
 	unit/test-rilmodem-gprs$(EXEEXT)
 @TOOLS_TRUE@am__EXEEXT_2 = tools/huawei-audio$(EXEEXT) \
@@ -439,7 +476,7 @@ am__dundee_dundee_SOURCES_DIST = gatchat/gatchat.h gatchat/gatchat.c \
 	dundee/dundee.h dundee/main.c dundee/dbus.c dundee/manager.c \
 	dundee/device.c plugins/bluez5.c dundee/bluez5.c btio/btio.h \
 	btio/btio.c plugins/bluez4.c dundee/bluez4.c
-am__objects_1 = gatchat/gatchat.$(OBJEXT) gatchat/gatresult.$(OBJEXT) \
+am__objects_3 = gatchat/gatchat.$(OBJEXT) gatchat/gatresult.$(OBJEXT) \
 	gatchat/gatsyntax.$(OBJEXT) gatchat/ringbuffer.$(OBJEXT) \
 	gatchat/gatio.$(OBJEXT) gatchat/crc-ccitt.$(OBJEXT) \
 	gatchat/gatmux.$(OBJEXT) gatchat/gsm0710.$(OBJEXT) \
@@ -449,21 +486,21 @@ am__objects_1 = gatchat/gatchat.$(OBJEXT) gatchat/gatresult.$(OBJEXT) \
 	gatchat/ppp_cp.$(OBJEXT) gatchat/ppp_lcp.$(OBJEXT) \
 	gatchat/ppp_auth.$(OBJEXT) gatchat/ppp_net.$(OBJEXT) \
 	gatchat/ppp_ipcp.$(OBJEXT) gatchat/ppp_ipv6cp.$(OBJEXT)
-@BLUETOOTH_TRUE@@DUNDEE_TRUE@am__objects_2 = $(am__objects_1) \
+@BLUETOOTH_TRUE@@DUNDEE_TRUE@am__objects_4 = $(am__objects_3) \
 @BLUETOOTH_TRUE@@DUNDEE_TRUE@	src/log.$(OBJEXT) \
 @BLUETOOTH_TRUE@@DUNDEE_TRUE@	src/dbus.$(OBJEXT) \
 @BLUETOOTH_TRUE@@DUNDEE_TRUE@	dundee/main.$(OBJEXT) \
 @BLUETOOTH_TRUE@@DUNDEE_TRUE@	dundee/dbus.$(OBJEXT) \
 @BLUETOOTH_TRUE@@DUNDEE_TRUE@	dundee/manager.$(OBJEXT) \
 @BLUETOOTH_TRUE@@DUNDEE_TRUE@	dundee/device.$(OBJEXT)
-am__objects_3 = btio/btio.$(OBJEXT)
+am__objects_5 = btio/btio.$(OBJEXT)
 @BLUETOOTH_TRUE@@BLUEZ4_FALSE@@DUNDEE_TRUE@am_dundee_dundee_OBJECTS =  \
-@BLUETOOTH_TRUE@@BLUEZ4_FALSE@@DUNDEE_TRUE@	$(am__objects_2) \
+@BLUETOOTH_TRUE@@BLUEZ4_FALSE@@DUNDEE_TRUE@	$(am__objects_4) \
 @BLUETOOTH_TRUE@@BLUEZ4_FALSE@@DUNDEE_TRUE@	plugins/bluez5.$(OBJEXT) \
 @BLUETOOTH_TRUE@@BLUEZ4_FALSE@@DUNDEE_TRUE@	dundee/bluez5.$(OBJEXT)
 @BLUETOOTH_TRUE@@BLUEZ4_TRUE@@DUNDEE_TRUE@am_dundee_dundee_OBJECTS =  \
-@BLUETOOTH_TRUE@@BLUEZ4_TRUE@@DUNDEE_TRUE@	$(am__objects_2) \
-@BLUETOOTH_TRUE@@BLUEZ4_TRUE@@DUNDEE_TRUE@	$(am__objects_3) \
+@BLUETOOTH_TRUE@@BLUEZ4_TRUE@@DUNDEE_TRUE@	$(am__objects_4) \
+@BLUETOOTH_TRUE@@BLUEZ4_TRUE@@DUNDEE_TRUE@	$(am__objects_5) \
 @BLUETOOTH_TRUE@@BLUEZ4_TRUE@@DUNDEE_TRUE@	plugins/bluez4.$(OBJEXT) \
 @BLUETOOTH_TRUE@@BLUEZ4_TRUE@@DUNDEE_TRUE@	dundee/bluez4.$(OBJEXT)
 dundee_dundee_OBJECTS = $(am_dundee_dundee_OBJECTS)
@@ -473,15 +510,15 @@ am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
 @BLUETOOTH_TRUE@@DUNDEE_TRUE@	$(am__DEPENDENCIES_2) \
 @BLUETOOTH_TRUE@@DUNDEE_TRUE@	gdbus/libgdbus-internal.la
 am_gatchat_gsmdial_OBJECTS = gatchat/gsmdial.$(OBJEXT) \
-	$(am__objects_1)
+	$(am__objects_3)
 gatchat_gsmdial_OBJECTS = $(am_gatchat_gsmdial_OBJECTS)
 gatchat_gsmdial_DEPENDENCIES =
 am_gatchat_test_qcdm_OBJECTS = gatchat/test-qcdm.$(OBJEXT) \
-	$(am__objects_1)
+	$(am__objects_3)
 gatchat_test_qcdm_OBJECTS = $(am_gatchat_test_qcdm_OBJECTS)
 gatchat_test_qcdm_DEPENDENCIES =
 am_gatchat_test_server_OBJECTS = gatchat/test-server.$(OBJEXT) \
-	$(am__objects_1)
+	$(am__objects_3)
 gatchat_test_server_OBJECTS = $(am_gatchat_test_server_OBJECTS)
 gatchat_test_server_DEPENDENCIES =
 am__src_ofonod_SOURCES_DIST = plugins/udevng.c gril/gril.h gril/gril.c \
@@ -535,16 +572,26 @@ am__src_ofonod_SOURCES_DIST = plugins/udevng.c gril/gril.h gril/gril.c \
 	drivers/qmimodem/uim.h drivers/qmimodem/wms.h \
 	drivers/qmimodem/wds.h drivers/qmimodem/pds.h \
 	drivers/qmimodem/common.h drivers/qmimodem/wda.h \
-	drivers/qmimodem/util.h drivers/qmimodem/qmimodem.h \
-	drivers/qmimodem/qmimodem.c drivers/qmimodem/devinfo.c \
-	drivers/qmimodem/voicecall.c \
+	drivers/qmimodem/voice.h drivers/qmimodem/util.h \
+	drivers/qmimodem/qmimodem.h drivers/qmimodem/qmimodem.c \
+	drivers/qmimodem/devinfo.c drivers/qmimodem/voicecall.c \
 	drivers/qmimodem/network-registration.c \
 	drivers/qmimodem/sim-legacy.c drivers/qmimodem/sim.c \
 	drivers/qmimodem/sms.c drivers/qmimodem/ussd.c \
 	drivers/qmimodem/gprs.c drivers/qmimodem/gprs-context.c \
-	drivers/qmimodem/radio-settings.c \
+	drivers/qmimodem/lte.c drivers/qmimodem/radio-settings.c \
 	drivers/qmimodem/location-reporting.c \
 	drivers/qmimodem/netmon.c plugins/gobi.c \
+	drivers/mbimmodem/mbim.h drivers/mbimmodem/mbim.c \
+	drivers/mbimmodem/mbim-private.h drivers/mbimmodem/mbim-desc.h \
+	drivers/mbimmodem/mbim-desc.c drivers/mbimmodem/mbim-message.h \
+	drivers/mbimmodem/mbim-message.c drivers/mbimmodem/util.h \
+	drivers/mbimmodem/util.c drivers/mbimmodem/mbimmodem.h \
+	drivers/mbimmodem/mbimmodem.c drivers/mbimmodem/devinfo.c \
+	drivers/mbimmodem/sim.c \
+	drivers/mbimmodem/network-registration.c \
+	drivers/mbimmodem/sms.c drivers/mbimmodem/gprs.c \
+	drivers/mbimmodem/gprs-context.c plugins/mbim.c \
 	drivers/atmodem/atmodem.h drivers/atmodem/atmodem.c \
 	drivers/atmodem/call-settings.c drivers/atmodem/sms.c \
 	drivers/atmodem/cbs.c drivers/atmodem/call-forwarding.c \
@@ -556,13 +603,12 @@ am__src_ofonod_SOURCES_DIST = plugins/udevng.c gril/gril.h gril/gril.c \
 	drivers/atmodem/devinfo.c drivers/atmodem/call-volume.c \
 	drivers/atmodem/vendor.h drivers/atmodem/atutil.h \
 	drivers/atmodem/atutil.c drivers/atmodem/gprs.c \
-	drivers/atmodem/gprs-context.c drivers/atmodem/sim-auth.c \
-	drivers/atmodem/gnss.c drivers/atmodem/lte.c \
-	drivers/nwmodem/nwmodem.h drivers/nwmodem/nwmodem.c \
-	drivers/nwmodem/radio-settings.c drivers/swmodem/swmodem.h \
-	drivers/swmodem/swmodem.c drivers/swmodem/gprs-context.c \
-	drivers/ztemodem/ztemodem.h drivers/ztemodem/ztemodem.c \
-	drivers/ztemodem/radio-settings.c \
+	drivers/atmodem/gprs-context.c drivers/atmodem/gnss.c \
+	drivers/atmodem/lte.c drivers/nwmodem/nwmodem.h \
+	drivers/nwmodem/nwmodem.c drivers/nwmodem/radio-settings.c \
+	drivers/swmodem/swmodem.h drivers/swmodem/swmodem.c \
+	drivers/swmodem/gprs-context.c drivers/ztemodem/ztemodem.h \
+	drivers/ztemodem/ztemodem.c drivers/ztemodem/radio-settings.c \
 	drivers/iceramodem/iceramodem.h \
 	drivers/iceramodem/iceramodem.c \
 	drivers/iceramodem/gprs-context.c \
@@ -612,8 +658,10 @@ am__src_ofonod_SOURCES_DIST = plugins/udevng.c gril/gril.h gril/gril.c \
 	drivers/ubloxmodem/lte.c drivers/gemaltomodem/gemaltomodem.h \
 	drivers/gemaltomodem/gemaltomodem.c \
 	drivers/gemaltomodem/location-reporting.c \
-	drivers/xmm7modem/xmm7modem.h drivers/xmm7modem/xmm7modem.c \
-	drivers/xmm7modem/radio-settings.c plugins/phonesim.c \
+	drivers/gemaltomodem/voicecall.c drivers/xmm7modem/xmm7modem.h \
+	drivers/xmm7modem/xmm7modem.c \
+	drivers/xmm7modem/radio-settings.c drivers/xmm7modem/ims.c \
+	drivers/xmm7modem/netmon.c plugins/phonesim.c \
 	drivers/cdmamodem/cdmamodem.h drivers/cdmamodem/cdmamodem.c \
 	drivers/cdmamodem/voicecall.c drivers/cdmamodem/devinfo.c \
 	drivers/cdmamodem/connman.c plugins/g1.c plugins/wavecom.c \
@@ -624,9 +672,9 @@ am__src_ofonod_SOURCES_DIST = plugins/udevng.c gril/gril.h gril/gril.c \
 	plugins/nokia.c plugins/nokiacdma.c plugins/linktop.c \
 	plugins/icera.c plugins/alcatel.c plugins/speedup.c \
 	plugins/speedupcdma.c plugins/samsung.c plugins/sim900.c \
-	plugins/connman.c plugins/telit.c plugins/quectel.c \
-	plugins/ublox.c plugins/xmm7xxx.c plugins/sap.c \
-	plugins/bluez4.h plugins/hfp_hf_bluez4.c \
+	plugins/sim7100.c plugins/connman.c plugins/telit.c \
+	plugins/quectel.c plugins/ublox.c plugins/xmm7xxx.c \
+	plugins/sap.c plugins/bluez4.h plugins/hfp_hf_bluez4.c \
 	plugins/dun_gw_bluez4.c plugins/hfp_hf_bluez5.c \
 	plugins/bluez5.h plugins/dun_gw_bluez5.c plugins/bluez4.c \
 	plugins/hfp_ag_bluez4.c btio/btio.h btio/btio.c \
@@ -657,22 +705,23 @@ am__src_ofonod_SOURCES_DIST = plugins/udevng.c gril/gril.h gril/gril.c \
 	src/smsutil.h src/smsutil.c src/call-barring.c src/sim.c \
 	src/stk.c src/phonebook.c src/history.c src/message-waiting.c \
 	src/simutil.h src/simutil.c src/storage.h src/storage.c \
-	src/cbs.c src/watch.c src/call-volume.c src/gprs.c src/idmap.h \
-	src/idmap.c src/radio-settings.c src/stkutil.h src/stkutil.c \
-	src/nettime.c src/stkagent.c src/stkagent.h src/simfs.c \
-	src/simfs.h src/audio-settings.c src/smsagent.c src/smsagent.h \
-	src/ctm.c src/cdma-voicecall.c src/sim-auth.c src/message.h \
+	src/cbs.c src/watch.c src/call-volume.c src/gprs.c \
+	src/radio-settings.c src/stkutil.h src/stkutil.c src/nettime.c \
+	src/stkagent.c src/stkagent.h src/simfs.c src/simfs.h \
+	src/audio-settings.c src/smsagent.c src/smsagent.h src/ctm.c \
+	src/cdma-voicecall.c src/sim-auth.c src/message.h \
 	src/message.c src/gprs-provision.c src/emulator.c \
 	src/location-reporting.c src/cdma-connman.c src/gnss.c \
 	src/gnssagent.c src/gnssagent.h src/cdma-smsutil.h \
 	src/cdma-smsutil.c src/cdma-sms.c src/private-network.c \
 	src/cdma-netreg.c src/cdma-provision.c src/handsfree.c \
 	src/handsfree-audio.c src/bluetooth.h src/hfp.h src/siri.c \
-	src/netmon.c src/lte.c src/netmonagent.c src/netmonagent.h
-@UDEV_TRUE@am__objects_4 = plugins/udevng.$(OBJEXT)
-am__objects_5 = gril/gril.$(OBJEXT) gril/grilio.$(OBJEXT) \
+	src/netmon.c src/lte.c src/ims.c src/netmonagent.c \
+	src/netmonagent.h
+@UDEV_TRUE@am__objects_6 = plugins/udevng.$(OBJEXT)
+am__objects_7 = gril/gril.$(OBJEXT) gril/grilio.$(OBJEXT) \
 	gril/grilutil.$(OBJEXT) gril/parcel.$(OBJEXT)
-@RILMODEM_TRUE@am__objects_6 = $(am__objects_5) \
+@RILMODEM_TRUE@am__objects_8 = $(am__objects_7) \
 @RILMODEM_TRUE@	plugins/rildev.$(OBJEXT) plugins/ril.$(OBJEXT) \
 @RILMODEM_TRUE@	plugins/infineon.$(OBJEXT) \
 @RILMODEM_TRUE@	plugins/ril_intel.$(OBJEXT) \
@@ -695,11 +744,11 @@ am__objects_5 = gril/gril.$(OBJEXT) gril/grilio.$(OBJEXT) \
 @RILMODEM_TRUE@	drivers/rilmodem/stk.$(OBJEXT) \
 @RILMODEM_TRUE@	drivers/rilmodem/cbs.$(OBJEXT) \
 @RILMODEM_TRUE@	drivers/rilmodem/lte.$(OBJEXT)
-am__objects_7 = gisi/client.$(OBJEXT) gisi/iter.$(OBJEXT) \
+am__objects_9 = gisi/client.$(OBJEXT) gisi/iter.$(OBJEXT) \
 	gisi/message.$(OBJEXT) gisi/modem.$(OBJEXT) \
 	gisi/netlink.$(OBJEXT) gisi/pep.$(OBJEXT) gisi/pipe.$(OBJEXT) \
 	gisi/server.$(OBJEXT) gisi/socket.$(OBJEXT)
-@ISIMODEM_TRUE@am__objects_8 = $(am__objects_7) \
+@ISIMODEM_TRUE@am__objects_10 = $(am__objects_9) \
 @ISIMODEM_TRUE@	drivers/isimodem/isimodem.$(OBJEXT) \
 @ISIMODEM_TRUE@	drivers/isimodem/debug.$(OBJEXT) \
 @ISIMODEM_TRUE@	drivers/isimodem/phonebook.$(OBJEXT) \
@@ -724,9 +773,9 @@ am__objects_7 = gisi/client.$(OBJEXT) gisi/iter.$(OBJEXT) \
 @ISIMODEM_TRUE@	plugins/isiusb.$(OBJEXT) plugins/n900.$(OBJEXT) \
 @ISIMODEM_TRUE@	plugins/nokia-gpio.$(OBJEXT) \
 @ISIMODEM_TRUE@	plugins/u8500.$(OBJEXT)
-@QMIMODEM_TRUE@am__objects_9 = drivers/qmimodem/qmi.$(OBJEXT) \
+@QMIMODEM_TRUE@am__objects_11 = drivers/qmimodem/qmi.$(OBJEXT) \
 @QMIMODEM_TRUE@	drivers/qmimodem/nas.$(OBJEXT)
-@QMIMODEM_TRUE@am__objects_10 = $(am__objects_9) \
+@QMIMODEM_TRUE@am__objects_12 = $(am__objects_11) \
 @QMIMODEM_TRUE@	drivers/qmimodem/qmimodem.$(OBJEXT) \
 @QMIMODEM_TRUE@	drivers/qmimodem/devinfo.$(OBJEXT) \
 @QMIMODEM_TRUE@	drivers/qmimodem/voicecall.$(OBJEXT) \
@@ -737,11 +786,25 @@ am__objects_7 = gisi/client.$(OBJEXT) gisi/iter.$(OBJEXT) \
 @QMIMODEM_TRUE@	drivers/qmimodem/ussd.$(OBJEXT) \
 @QMIMODEM_TRUE@	drivers/qmimodem/gprs.$(OBJEXT) \
 @QMIMODEM_TRUE@	drivers/qmimodem/gprs-context.$(OBJEXT) \
+@QMIMODEM_TRUE@	drivers/qmimodem/lte.$(OBJEXT) \
 @QMIMODEM_TRUE@	drivers/qmimodem/radio-settings.$(OBJEXT) \
 @QMIMODEM_TRUE@	drivers/qmimodem/location-reporting.$(OBJEXT) \
 @QMIMODEM_TRUE@	drivers/qmimodem/netmon.$(OBJEXT) \
 @QMIMODEM_TRUE@	plugins/gobi.$(OBJEXT)
-@ATMODEM_TRUE@am__objects_11 = drivers/atmodem/atmodem.$(OBJEXT) \
+@MBIMMODEM_TRUE@am__objects_13 = drivers/mbimmodem/mbim.$(OBJEXT) \
+@MBIMMODEM_TRUE@	drivers/mbimmodem/mbim-desc.$(OBJEXT) \
+@MBIMMODEM_TRUE@	drivers/mbimmodem/mbim-message.$(OBJEXT)
+@MBIMMODEM_TRUE@am__objects_14 = $(am__objects_13) \
+@MBIMMODEM_TRUE@	drivers/mbimmodem/util.$(OBJEXT) \
+@MBIMMODEM_TRUE@	drivers/mbimmodem/mbimmodem.$(OBJEXT) \
+@MBIMMODEM_TRUE@	drivers/mbimmodem/devinfo.$(OBJEXT) \
+@MBIMMODEM_TRUE@	drivers/mbimmodem/sim.$(OBJEXT) \
+@MBIMMODEM_TRUE@	drivers/mbimmodem/network-registration.$(OBJEXT) \
+@MBIMMODEM_TRUE@	drivers/mbimmodem/sms.$(OBJEXT) \
+@MBIMMODEM_TRUE@	drivers/mbimmodem/gprs.$(OBJEXT) \
+@MBIMMODEM_TRUE@	drivers/mbimmodem/gprs-context.$(OBJEXT) \
+@MBIMMODEM_TRUE@	plugins/mbim.$(OBJEXT)
+@ATMODEM_TRUE@am__objects_15 = drivers/atmodem/atmodem.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/atmodem/call-settings.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/atmodem/sms.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/atmodem/cbs.$(OBJEXT) \
@@ -759,7 +822,6 @@ am__objects_7 = gisi/client.$(OBJEXT) gisi/iter.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/atmodem/atutil.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/atmodem/gprs.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/atmodem/gprs-context.$(OBJEXT) \
-@ATMODEM_TRUE@	drivers/atmodem/sim-auth.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/atmodem/gnss.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/atmodem/lte.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/nwmodem/nwmodem.$(OBJEXT) \
@@ -822,15 +884,18 @@ am__objects_7 = gisi/client.$(OBJEXT) gisi/iter.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/ubloxmodem/lte.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/gemaltomodem/gemaltomodem.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/gemaltomodem/location-reporting.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/gemaltomodem/voicecall.$(OBJEXT) \
 @ATMODEM_TRUE@	drivers/xmm7modem/xmm7modem.$(OBJEXT) \
-@ATMODEM_TRUE@	drivers/xmm7modem/radio-settings.$(OBJEXT)
-@ATMODEM_TRUE@@PHONESIM_TRUE@am__objects_12 =  \
+@ATMODEM_TRUE@	drivers/xmm7modem/radio-settings.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/xmm7modem/ims.$(OBJEXT) \
+@ATMODEM_TRUE@	drivers/xmm7modem/netmon.$(OBJEXT)
+@ATMODEM_TRUE@@PHONESIM_TRUE@am__objects_16 =  \
 @ATMODEM_TRUE@@PHONESIM_TRUE@	plugins/phonesim.$(OBJEXT)
-@ATMODEM_TRUE@@CDMAMODEM_TRUE@am__objects_13 = drivers/cdmamodem/cdmamodem.$(OBJEXT) \
+@ATMODEM_TRUE@@CDMAMODEM_TRUE@am__objects_17 = drivers/cdmamodem/cdmamodem.$(OBJEXT) \
 @ATMODEM_TRUE@@CDMAMODEM_TRUE@	drivers/cdmamodem/voicecall.$(OBJEXT) \
 @ATMODEM_TRUE@@CDMAMODEM_TRUE@	drivers/cdmamodem/devinfo.$(OBJEXT) \
 @ATMODEM_TRUE@@CDMAMODEM_TRUE@	drivers/cdmamodem/connman.$(OBJEXT)
-@ATMODEM_TRUE@am__objects_14 = plugins/g1.$(OBJEXT) \
+@ATMODEM_TRUE@am__objects_18 = plugins/g1.$(OBJEXT) \
 @ATMODEM_TRUE@	plugins/wavecom.$(OBJEXT) \
 @ATMODEM_TRUE@	plugins/calypso.$(OBJEXT) plugins/mbm.$(OBJEXT) \
 @ATMODEM_TRUE@	plugins/hso.$(OBJEXT) plugins/zte.$(OBJEXT) \
@@ -851,45 +916,46 @@ am__objects_7 = gisi/client.$(OBJEXT) gisi/iter.$(OBJEXT) \
 @ATMODEM_TRUE@	plugins/speedupcdma.$(OBJEXT) \
 @ATMODEM_TRUE@	plugins/samsung.$(OBJEXT) \
 @ATMODEM_TRUE@	plugins/sim900.$(OBJEXT) \
+@ATMODEM_TRUE@	plugins/sim7100.$(OBJEXT) \
 @ATMODEM_TRUE@	plugins/connman.$(OBJEXT) \
 @ATMODEM_TRUE@	plugins/telit.$(OBJEXT) \
 @ATMODEM_TRUE@	plugins/quectel.$(OBJEXT) \
 @ATMODEM_TRUE@	plugins/ublox.$(OBJEXT) \
 @ATMODEM_TRUE@	plugins/xmm7xxx.$(OBJEXT)
-@ATMODEM_TRUE@@BLUETOOTH_TRUE@@BLUEZ4_TRUE@am__objects_15 = plugins/sap.$(OBJEXT) \
+@ATMODEM_TRUE@@BLUETOOTH_TRUE@@BLUEZ4_TRUE@am__objects_19 = plugins/sap.$(OBJEXT) \
 @ATMODEM_TRUE@@BLUETOOTH_TRUE@@BLUEZ4_TRUE@	plugins/hfp_hf_bluez4.$(OBJEXT) \
 @ATMODEM_TRUE@@BLUETOOTH_TRUE@@BLUEZ4_TRUE@	plugins/dun_gw_bluez4.$(OBJEXT)
-@ATMODEM_TRUE@@BLUETOOTH_TRUE@@BLUEZ4_FALSE@am__objects_16 = plugins/hfp_hf_bluez5.$(OBJEXT) \
+@ATMODEM_TRUE@@BLUETOOTH_TRUE@@BLUEZ4_FALSE@am__objects_20 = plugins/hfp_hf_bluez5.$(OBJEXT) \
 @ATMODEM_TRUE@@BLUETOOTH_TRUE@@BLUEZ4_FALSE@	plugins/dun_gw_bluez5.$(OBJEXT)
-@BLUETOOTH_TRUE@@BLUEZ4_TRUE@am__objects_17 =  \
+@BLUETOOTH_TRUE@@BLUEZ4_TRUE@am__objects_21 =  \
 @BLUETOOTH_TRUE@@BLUEZ4_TRUE@	plugins/bluez4.$(OBJEXT) \
 @BLUETOOTH_TRUE@@BLUEZ4_TRUE@	plugins/hfp_ag_bluez4.$(OBJEXT) \
-@BLUETOOTH_TRUE@@BLUEZ4_TRUE@	$(am__objects_3)
-@BLUETOOTH_TRUE@@BLUEZ4_FALSE@am__objects_18 =  \
+@BLUETOOTH_TRUE@@BLUEZ4_TRUE@	$(am__objects_5)
+@BLUETOOTH_TRUE@@BLUEZ4_FALSE@am__objects_22 =  \
 @BLUETOOTH_TRUE@@BLUEZ4_FALSE@	plugins/bluez5.$(OBJEXT) \
 @BLUETOOTH_TRUE@@BLUEZ4_FALSE@	plugins/hfp_ag_bluez5.$(OBJEXT)
-@BLUETOOTH_TRUE@@UPOWER_TRUE@am__objects_19 =  \
+@BLUETOOTH_TRUE@@UPOWER_TRUE@am__objects_23 =  \
 @BLUETOOTH_TRUE@@UPOWER_TRUE@	plugins/upower.$(OBJEXT)
-@PROVISION_TRUE@am__objects_20 = plugins/mbpi.$(OBJEXT) \
+@PROVISION_TRUE@am__objects_24 = plugins/mbpi.$(OBJEXT) \
 @PROVISION_TRUE@	plugins/provision.$(OBJEXT) \
 @PROVISION_TRUE@	plugins/cdma-provision.$(OBJEXT) \
 @PROVISION_TRUE@	plugins/file-provision.$(OBJEXT)
-@MAINTAINER_MODE_TRUE@am__objects_21 = examples/history.$(OBJEXT) \
+@MAINTAINER_MODE_TRUE@am__objects_25 = examples/history.$(OBJEXT) \
 @MAINTAINER_MODE_TRUE@	examples/nettime.$(OBJEXT) \
 @MAINTAINER_MODE_TRUE@	examples/provision.$(OBJEXT) \
 @MAINTAINER_MODE_TRUE@	examples/emulator.$(OBJEXT) \
 @MAINTAINER_MODE_TRUE@	examples/private-network.$(OBJEXT) \
 @MAINTAINER_MODE_TRUE@	plugins/stktest.$(OBJEXT) \
 @MAINTAINER_MODE_TRUE@	plugins/emulator_fuzz.$(OBJEXT)
-am__objects_22 = $(am__objects_4) $(am__objects_6) $(am__objects_8) \
-	$(am__objects_10) $(am__objects_11) $(am__objects_12) \
-	$(am__objects_13) $(am__objects_14) $(am__objects_15) \
+am__objects_26 = $(am__objects_6) $(am__objects_8) $(am__objects_10) \
+	$(am__objects_12) $(am__objects_14) $(am__objects_15) \
 	$(am__objects_16) $(am__objects_17) $(am__objects_18) \
 	$(am__objects_19) $(am__objects_20) $(am__objects_21) \
-	plugins/smart-messaging.$(OBJEXT) \
+	$(am__objects_22) $(am__objects_23) $(am__objects_24) \
+	$(am__objects_25) plugins/smart-messaging.$(OBJEXT) \
 	plugins/push-notification.$(OBJEXT) \
 	plugins/allowed-apns.$(OBJEXT)
-am_src_ofonod_OBJECTS = $(am__objects_22) $(am__objects_1) \
+am_src_ofonod_OBJECTS = $(am__objects_26) $(am__objects_3) \
 	src/main.$(OBJEXT) src/log.$(OBJEXT) src/plugin.$(OBJEXT) \
 	src/modem.$(OBJEXT) src/common.$(OBJEXT) src/manager.$(OBJEXT) \
 	src/dbus.$(OBJEXT) src/util.$(OBJEXT) src/network.$(OBJEXT) \
@@ -901,24 +967,22 @@ am_src_ofonod_OBJECTS = $(am__objects_22) $(am__objects_1) \
 	src/message-waiting.$(OBJEXT) src/simutil.$(OBJEXT) \
 	src/storage.$(OBJEXT) src/cbs.$(OBJEXT) src/watch.$(OBJEXT) \
 	src/call-volume.$(OBJEXT) src/gprs.$(OBJEXT) \
-	src/idmap.$(OBJEXT) src/radio-settings.$(OBJEXT) \
-	src/stkutil.$(OBJEXT) src/nettime.$(OBJEXT) \
-	src/stkagent.$(OBJEXT) src/simfs.$(OBJEXT) \
-	src/audio-settings.$(OBJEXT) src/smsagent.$(OBJEXT) \
-	src/ctm.$(OBJEXT) src/cdma-voicecall.$(OBJEXT) \
-	src/sim-auth.$(OBJEXT) src/message.$(OBJEXT) \
-	src/gprs-provision.$(OBJEXT) src/emulator.$(OBJEXT) \
-	src/location-reporting.$(OBJEXT) src/cdma-connman.$(OBJEXT) \
-	src/gnss.$(OBJEXT) src/gnssagent.$(OBJEXT) \
-	src/cdma-smsutil.$(OBJEXT) src/cdma-sms.$(OBJEXT) \
-	src/private-network.$(OBJEXT) src/cdma-netreg.$(OBJEXT) \
-	src/cdma-provision.$(OBJEXT) src/handsfree.$(OBJEXT) \
-	src/handsfree-audio.$(OBJEXT) src/siri.$(OBJEXT) \
-	src/netmon.$(OBJEXT) src/lte.$(OBJEXT) \
-	src/netmonagent.$(OBJEXT)
+	src/radio-settings.$(OBJEXT) src/stkutil.$(OBJEXT) \
+	src/nettime.$(OBJEXT) src/stkagent.$(OBJEXT) \
+	src/simfs.$(OBJEXT) src/audio-settings.$(OBJEXT) \
+	src/smsagent.$(OBJEXT) src/ctm.$(OBJEXT) \
+	src/cdma-voicecall.$(OBJEXT) src/sim-auth.$(OBJEXT) \
+	src/message.$(OBJEXT) src/gprs-provision.$(OBJEXT) \
+	src/emulator.$(OBJEXT) src/location-reporting.$(OBJEXT) \
+	src/cdma-connman.$(OBJEXT) src/gnss.$(OBJEXT) \
+	src/gnssagent.$(OBJEXT) src/cdma-smsutil.$(OBJEXT) \
+	src/cdma-sms.$(OBJEXT) src/private-network.$(OBJEXT) \
+	src/cdma-netreg.$(OBJEXT) src/cdma-provision.$(OBJEXT) \
+	src/handsfree.$(OBJEXT) src/handsfree-audio.$(OBJEXT) \
+	src/siri.$(OBJEXT) src/netmon.$(OBJEXT) src/lte.$(OBJEXT) \
+	src/ims.$(OBJEXT) src/netmonagent.$(OBJEXT)
 src_ofonod_OBJECTS = $(am_src_ofonod_OBJECTS)
-src_ofonod_DEPENDENCIES = gdbus/libgdbus-internal.la \
-	$(am__DEPENDENCIES_2)
+@EXTERNAL_ELL_FALSE@am__DEPENDENCIES_3 = ell/libell-internal.la
 src_ofonod_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
 	$(src_ofonod_LDFLAGS) $(LDFLAGS) -o $@
@@ -968,7 +1032,7 @@ am__tools_stktest_SOURCES_DIST = gatchat/gatchat.h gatchat/gatchat.c \
 	gatchat/ppp_ipcp.c gatchat/ppp_ipv6cp.c tools/stktest.c \
 	unit/stk-test-data.h
 @MAINTAINER_MODE_TRUE@@TOOLS_TRUE@am_tools_stktest_OBJECTS =  \
-@MAINTAINER_MODE_TRUE@@TOOLS_TRUE@	$(am__objects_1) \
+@MAINTAINER_MODE_TRUE@@TOOLS_TRUE@	$(am__objects_3) \
 @MAINTAINER_MODE_TRUE@@TOOLS_TRUE@	tools/stktest.$(OBJEXT)
 tools_stktest_OBJECTS = $(am_tools_stktest_OBJECTS)
 @MAINTAINER_MODE_TRUE@@TOOLS_TRUE@tools_stktest_DEPENDENCIES =  \
@@ -978,77 +1042,78 @@ am__tools_tty_redirector_SOURCES_DIST = tools/tty-redirector.c
 @TOOLS_TRUE@	tools/tty-redirector.$(OBJEXT)
 tools_tty_redirector_OBJECTS = $(am_tools_tty_redirector_OBJECTS)
 tools_tty_redirector_DEPENDENCIES =
-am_unit_test_caif_OBJECTS = unit/test-caif.$(OBJEXT) $(am__objects_1)
+am_unit_test_caif_OBJECTS = unit/test-caif.$(OBJEXT) $(am__objects_3)
 unit_test_caif_OBJECTS = $(am_unit_test_caif_OBJECTS)
 unit_test_caif_DEPENDENCIES =
 am_unit_test_cdmasms_OBJECTS = unit/test-cdmasms.$(OBJEXT) \
 	src/cdma-smsutil.$(OBJEXT)
 unit_test_cdmasms_OBJECTS = $(am_unit_test_cdmasms_OBJECTS)
-unit_test_cdmasms_DEPENDENCIES =
+unit_test_cdmasms_DEPENDENCIES = $(am__DEPENDENCIES_3)
 am_unit_test_common_OBJECTS = unit/test-common.$(OBJEXT) \
 	src/common.$(OBJEXT) src/util.$(OBJEXT)
 unit_test_common_OBJECTS = $(am_unit_test_common_OBJECTS)
-unit_test_common_DEPENDENCIES =
-am_unit_test_idmap_OBJECTS = unit/test-idmap.$(OBJEXT) \
-	src/idmap.$(OBJEXT)
-unit_test_idmap_OBJECTS = $(am_unit_test_idmap_OBJECTS)
-unit_test_idmap_DEPENDENCIES =
-am_unit_test_mux_OBJECTS = unit/test-mux.$(OBJEXT) $(am__objects_1)
+unit_test_common_DEPENDENCIES = $(am__DEPENDENCIES_3)
+am_unit_test_mbim_OBJECTS = unit/test-mbim.$(OBJEXT) \
+	drivers/mbimmodem/mbim-message.$(OBJEXT) \
+	drivers/mbimmodem/mbim.$(OBJEXT)
+unit_test_mbim_OBJECTS = $(am_unit_test_mbim_OBJECTS)
+unit_test_mbim_DEPENDENCIES = $(am__DEPENDENCIES_3)
+am_unit_test_mux_OBJECTS = unit/test-mux.$(OBJEXT) $(am__objects_3)
 unit_test_mux_OBJECTS = $(am_unit_test_mux_OBJECTS)
 unit_test_mux_DEPENDENCIES =
-am__objects_23 = $(am__objects_5) src/log.$(OBJEXT) \
+am__objects_27 = $(am__objects_7) src/log.$(OBJEXT) \
 	src/common.$(OBJEXT) src/util.$(OBJEXT) \
 	gatchat/ringbuffer.$(OBJEXT) \
 	unit/rilmodem-test-server.$(OBJEXT) \
 	unit/rilmodem-test-engine.$(OBJEXT) src/simutil.$(OBJEXT) \
 	drivers/rilmodem/rilutil.$(OBJEXT)
-am_unit_test_rilmodem_cb_OBJECTS = $(am__objects_23) \
+am_unit_test_rilmodem_cb_OBJECTS = $(am__objects_27) \
 	unit/test-rilmodem-cb.$(OBJEXT) \
 	drivers/rilmodem/call-barring.$(OBJEXT)
 unit_test_rilmodem_cb_OBJECTS = $(am_unit_test_rilmodem_cb_OBJECTS)
 unit_test_rilmodem_cb_DEPENDENCIES = gdbus/libgdbus-internal.la \
-	$(am__DEPENDENCIES_2)
-am_unit_test_rilmodem_cs_OBJECTS = $(am__objects_23) \
+	$(am__DEPENDENCIES_2) $(am__DEPENDENCIES_3)
+am_unit_test_rilmodem_cs_OBJECTS = $(am__objects_27) \
 	unit/test-rilmodem-cs.$(OBJEXT) \
 	drivers/rilmodem/call-settings.$(OBJEXT)
 unit_test_rilmodem_cs_OBJECTS = $(am_unit_test_rilmodem_cs_OBJECTS)
 unit_test_rilmodem_cs_DEPENDENCIES = gdbus/libgdbus-internal.la \
-	$(am__DEPENDENCIES_2)
-am_unit_test_rilmodem_gprs_OBJECTS = $(am__objects_23) \
+	$(am__DEPENDENCIES_2) $(am__DEPENDENCIES_3)
+am_unit_test_rilmodem_gprs_OBJECTS = $(am__objects_27) \
 	unit/test-rilmodem-gprs.$(OBJEXT) \
 	drivers/rilmodem/gprs.$(OBJEXT)
 unit_test_rilmodem_gprs_OBJECTS =  \
 	$(am_unit_test_rilmodem_gprs_OBJECTS)
 unit_test_rilmodem_gprs_DEPENDENCIES = gdbus/libgdbus-internal.la \
-	$(am__DEPENDENCIES_2)
-am_unit_test_rilmodem_sms_OBJECTS = $(am__objects_23) \
+	$(am__DEPENDENCIES_2) $(am__DEPENDENCIES_3)
+am_unit_test_rilmodem_sms_OBJECTS = $(am__objects_27) \
 	unit/test-rilmodem-sms.$(OBJEXT) \
 	drivers/rilmodem/sms.$(OBJEXT)
 unit_test_rilmodem_sms_OBJECTS = $(am_unit_test_rilmodem_sms_OBJECTS)
 unit_test_rilmodem_sms_DEPENDENCIES = gdbus/libgdbus-internal.la \
-	$(am__DEPENDENCIES_2)
+	$(am__DEPENDENCIES_2) $(am__DEPENDENCIES_3)
 am_unit_test_simutil_OBJECTS = unit/test-simutil.$(OBJEXT) \
 	src/util.$(OBJEXT) src/simutil.$(OBJEXT) src/smsutil.$(OBJEXT) \
 	src/storage.$(OBJEXT)
 unit_test_simutil_OBJECTS = $(am_unit_test_simutil_OBJECTS)
-unit_test_simutil_DEPENDENCIES =
+unit_test_simutil_DEPENDENCIES = $(am__DEPENDENCIES_3)
 am_unit_test_sms_OBJECTS = unit/test-sms.$(OBJEXT) src/util.$(OBJEXT) \
 	src/smsutil.$(OBJEXT) src/storage.$(OBJEXT)
 unit_test_sms_OBJECTS = $(am_unit_test_sms_OBJECTS)
-unit_test_sms_DEPENDENCIES =
+unit_test_sms_DEPENDENCIES = $(am__DEPENDENCIES_3)
 am_unit_test_sms_root_OBJECTS = unit/test-sms-root.$(OBJEXT) \
 	src/util.$(OBJEXT) src/smsutil.$(OBJEXT) src/storage.$(OBJEXT)
 unit_test_sms_root_OBJECTS = $(am_unit_test_sms_root_OBJECTS)
-unit_test_sms_root_DEPENDENCIES =
+unit_test_sms_root_DEPENDENCIES = $(am__DEPENDENCIES_3)
 am_unit_test_stkutil_OBJECTS = unit/test-stkutil.$(OBJEXT) \
 	src/util.$(OBJEXT) src/storage.$(OBJEXT) src/smsutil.$(OBJEXT) \
 	src/simutil.$(OBJEXT) src/stkutil.$(OBJEXT)
 unit_test_stkutil_OBJECTS = $(am_unit_test_stkutil_OBJECTS)
-unit_test_stkutil_DEPENDENCIES =
+unit_test_stkutil_DEPENDENCIES = $(am__DEPENDENCIES_3)
 am_unit_test_util_OBJECTS = unit/test-util.$(OBJEXT) \
 	src/util.$(OBJEXT)
 unit_test_util_OBJECTS = $(am_unit_test_util_OBJECTS)
-unit_test_util_DEPENDENCIES =
+unit_test_util_DEPENDENCIES = $(am__DEPENDENCIES_3)
 am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
 am__vpath_adj = case $$p in \
     $(srcdir)/*) f=`echo "$$p" | sed "s|^$$srcdirstrip/||"`;; \
@@ -1111,23 +1176,24 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(gdbus_libgdbus_internal_la_SOURCES) \
-	$(dundee_dundee_SOURCES) $(gatchat_gsmdial_SOURCES) \
-	$(gatchat_test_qcdm_SOURCES) $(gatchat_test_server_SOURCES) \
-	$(src_ofonod_SOURCES) $(tools_auto_enable_SOURCES) \
-	$(tools_get_location_SOURCES) $(tools_huawei_audio_SOURCES) \
-	$(tools_lookup_apn_SOURCES) \
+SOURCES = $(ell_libell_internal_la_SOURCES) \
+	$(gdbus_libgdbus_internal_la_SOURCES) $(dundee_dundee_SOURCES) \
+	$(gatchat_gsmdial_SOURCES) $(gatchat_test_qcdm_SOURCES) \
+	$(gatchat_test_server_SOURCES) $(src_ofonod_SOURCES) \
+	$(tools_auto_enable_SOURCES) $(tools_get_location_SOURCES) \
+	$(tools_huawei_audio_SOURCES) $(tools_lookup_apn_SOURCES) \
 	$(tools_lookup_provider_name_SOURCES) $(tools_stktest_SOURCES) \
 	$(tools_tty_redirector_SOURCES) $(unit_test_caif_SOURCES) \
 	$(unit_test_cdmasms_SOURCES) $(unit_test_common_SOURCES) \
-	$(unit_test_idmap_SOURCES) $(unit_test_mux_SOURCES) \
+	$(unit_test_mbim_SOURCES) $(unit_test_mux_SOURCES) \
 	$(unit_test_rilmodem_cb_SOURCES) \
 	$(unit_test_rilmodem_cs_SOURCES) \
 	$(unit_test_rilmodem_gprs_SOURCES) \
 	$(unit_test_rilmodem_sms_SOURCES) $(unit_test_simutil_SOURCES) \
 	$(unit_test_sms_SOURCES) $(unit_test_sms_root_SOURCES) \
 	$(unit_test_stkutil_SOURCES) $(unit_test_util_SOURCES)
-DIST_SOURCES = $(gdbus_libgdbus_internal_la_SOURCES) \
+DIST_SOURCES = $(am__ell_libell_internal_la_SOURCES_DIST) \
+	$(gdbus_libgdbus_internal_la_SOURCES) \
 	$(am__dundee_dundee_SOURCES_DIST) $(gatchat_gsmdial_SOURCES) \
 	$(gatchat_test_qcdm_SOURCES) $(gatchat_test_server_SOURCES) \
 	$(am__src_ofonod_SOURCES_DIST) \
@@ -1139,7 +1205,7 @@ DIST_SOURCES = $(gdbus_libgdbus_internal_la_SOURCES) \
 	$(am__tools_stktest_SOURCES_DIST) \
 	$(am__tools_tty_redirector_SOURCES_DIST) \
 	$(unit_test_caif_SOURCES) $(unit_test_cdmasms_SOURCES) \
-	$(unit_test_common_SOURCES) $(unit_test_idmap_SOURCES) \
+	$(unit_test_common_SOURCES) $(unit_test_mbim_SOURCES) \
 	$(unit_test_mux_SOURCES) $(unit_test_rilmodem_cb_SOURCES) \
 	$(unit_test_rilmodem_cs_SOURCES) \
 	$(unit_test_rilmodem_gprs_SOURCES) \
@@ -1403,13 +1469,13 @@ ECHO_C = @ECHO_C@
 ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
 EGREP = @EGREP@
+ELL_CFLAGS = @ELL_CFLAGS@
+ELL_LIBS = @ELL_LIBS@
 EXEEXT = @EXEEXT@
 FGREP = @FGREP@
 GLIB_CFLAGS = @GLIB_CFLAGS@
 GLIB_LIBS = @GLIB_LIBS@
 GREP = @GREP@
-GTHREAD_CFLAGS = @GTHREAD_CFLAGS@
-GTHREAD_LIBS = @GTHREAD_LIBS@
 INSTALL = @INSTALL@
 INSTALL_DATA = @INSTALL_DATA@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
@@ -1507,7 +1573,54 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 AM_MAKEFLAGS = --no-print-directory
-noinst_LTLIBRARIES = gdbus/libgdbus-internal.la
+noinst_LTLIBRARIES = $(am__append_1) gdbus/libgdbus-internal.la
+@EXTERNAL_ELL_FALSE@ell_cflags = 
+@EXTERNAL_ELL_TRUE@ell_cflags = @ELL_CFLAGS@
+@EXTERNAL_ELL_FALSE@ell_ldadd = ell/libell-internal.la
+@EXTERNAL_ELL_TRUE@ell_ldadd = @ELL_LIBS@
+@EXTERNAL_ELL_FALSE@ell_dependencies = $(ell_ldadd)
+@EXTERNAL_ELL_TRUE@ell_dependencies = 
+@EXTERNAL_ELL_FALSE@ell_built_sources = ell/internal ell/ell.h
+@EXTERNAL_ELL_TRUE@ell_built_sources = 
+@EXTERNAL_ELL_FALSE@ell_headers = ell/util.h \
+@EXTERNAL_ELL_FALSE@			ell/test.h \
+@EXTERNAL_ELL_FALSE@			ell/strv.h \
+@EXTERNAL_ELL_FALSE@			ell/utf8.h \
+@EXTERNAL_ELL_FALSE@			ell/queue.h \
+@EXTERNAL_ELL_FALSE@			ell/main.h \
+@EXTERNAL_ELL_FALSE@			ell/idle.h \
+@EXTERNAL_ELL_FALSE@			ell/signal.h \
+@EXTERNAL_ELL_FALSE@			ell/timeout.h \
+@EXTERNAL_ELL_FALSE@			ell/io.h \
+@EXTERNAL_ELL_FALSE@			ell/log.h \
+@EXTERNAL_ELL_FALSE@			ell/checksum.h \
+@EXTERNAL_ELL_FALSE@			ell/random.h \
+@EXTERNAL_ELL_FALSE@			ell/uuid.h \
+@EXTERNAL_ELL_FALSE@			ell/file.h \
+@EXTERNAL_ELL_FALSE@			ell/uintset.h \
+@EXTERNAL_ELL_FALSE@			ell/string.h
+
+@EXTERNAL_ELL_FALSE@ell_sources = ell/private.h \
+@EXTERNAL_ELL_FALSE@			ell/missing.h \
+@EXTERNAL_ELL_FALSE@			ell/util.c \
+@EXTERNAL_ELL_FALSE@			ell/test.c \
+@EXTERNAL_ELL_FALSE@			ell/strv.c \
+@EXTERNAL_ELL_FALSE@			ell/utf8.c \
+@EXTERNAL_ELL_FALSE@			ell/queue.c \
+@EXTERNAL_ELL_FALSE@			ell/main.c \
+@EXTERNAL_ELL_FALSE@			ell/idle.c \
+@EXTERNAL_ELL_FALSE@			ell/signal.c \
+@EXTERNAL_ELL_FALSE@			ell/timeout.c \
+@EXTERNAL_ELL_FALSE@			ell/io.c \
+@EXTERNAL_ELL_FALSE@			ell/log.c \
+@EXTERNAL_ELL_FALSE@			ell/checksum.c \
+@EXTERNAL_ELL_FALSE@			ell/random.c \
+@EXTERNAL_ELL_FALSE@			ell/uuid.c \
+@EXTERNAL_ELL_FALSE@			ell/file.c \
+@EXTERNAL_ELL_FALSE@			ell/uintset.c \
+@EXTERNAL_ELL_FALSE@			ell/string.c
+
+@EXTERNAL_ELL_FALSE@ell_libell_internal_la_SOURCES = $(ell_headers) $(ell_sources)
 pkginclude_HEADERS = include/log.h include/plugin.h include/history.h \
 			include/dbus.h include/modem.h include/types.h \
 			include/call-barring.h include/call-forwarding.h \
@@ -1527,7 +1640,8 @@ pkginclude_HEADERS = include/log.h include/plugin.h include/history.h \
 			include/private-network.h include/cdma-netreg.h \
 			include/cdma-provision.h include/handsfree.h \
 			include/handsfree-audio.h include/siri.h \
-			include/netmon.h include/lte.h
+			include/netmon.h include/lte.h include/ims.h \
+			include/storage.h
 
 nodist_pkginclude_HEADERS = include/version.h
 local_headers = $(foreach file,$(pkginclude_HEADERS) \
@@ -1537,29 +1651,30 @@ local_headers = $(foreach file,$(pkginclude_HEADERS) \
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = ofono.pc
 @DATAFILES_TRUE@dbusconfdir = @DBUS_CONFDIR@
-@DATAFILES_TRUE@dist_dbusconf_DATA = src/ofono.conf $(am__append_39)
+@DATAFILES_TRUE@dist_dbusconf_DATA = src/ofono.conf $(am__append_42)
 @DATAFILES_TRUE@@SYSTEMD_TRUE@systemdunitdir = @SYSTEMD_UNITDIR@
 @DATAFILES_TRUE@@SYSTEMD_TRUE@systemdunit_DATA = src/ofono.service \
-@DATAFILES_TRUE@@SYSTEMD_TRUE@	$(am__append_40)
+@DATAFILES_TRUE@@SYSTEMD_TRUE@	$(am__append_43)
 @DATAFILES_TRUE@confdir = $(sysconfdir)/ofono
-@DATAFILES_TRUE@dist_conf_DATA = $(am__append_15)
+@DATAFILES_TRUE@dist_conf_DATA = $(am__append_18)
 @DATAFILES_TRUE@statedir = $(localstatedir)/lib/ofono
 @DATAFILES_TRUE@state_DATA = 
-builtin_modules = $(am__append_3) $(am__append_6) $(am__append_7) \
-	$(am__append_9) $(am__append_11) $(am__append_13) \
-	$(am__append_16) $(am__append_18) $(am__append_20) \
-	$(am__append_22) $(am__append_24) $(am__append_28) \
-	$(am__append_30) $(am__append_33) $(am__append_34) \
-	smart_messaging push_notification allowed_apns
-builtin_sources = $(am__append_4) $(am__append_5) $(am__append_8) \
+builtin_modules = $(am__append_4) $(am__append_7) $(am__append_8) \
 	$(am__append_10) $(am__append_12) $(am__append_14) \
-	$(am__append_17) $(am__append_19) $(am__append_21) \
-	$(am__append_23) $(am__append_25) $(am__append_29) \
-	$(am__append_31) $(am__append_32) $(am__append_35) \
-	plugins/smart-messaging.c plugins/push-notification.c \
-	plugins/allowed-apns.c
-builtin_libadd = $(am__append_2) $(am__append_27)
-builtin_cflags = $(am__append_1) $(am__append_26)
+	$(am__append_16) $(am__append_19) $(am__append_21) \
+	$(am__append_23) $(am__append_25) $(am__append_27) \
+	$(am__append_31) $(am__append_33) $(am__append_36) \
+	$(am__append_37) smart_messaging push_notification \
+	allowed_apns
+builtin_sources = $(am__append_5) $(am__append_6) $(am__append_9) \
+	$(am__append_11) $(am__append_13) $(am__append_15) \
+	$(am__append_17) $(am__append_20) $(am__append_22) \
+	$(am__append_24) $(am__append_26) $(am__append_28) \
+	$(am__append_32) $(am__append_34) $(am__append_35) \
+	$(am__append_38) plugins/smart-messaging.c \
+	plugins/push-notification.c plugins/allowed-apns.c
+builtin_libadd = $(am__append_3) $(am__append_30)
+builtin_cflags = $(am__append_2) $(am__append_29)
 gdbus_libgdbus_internal_la_SOURCES = gdbus/gdbus.h \
 				gdbus/mainloop.c gdbus/watch.c \
 				gdbus/object.c gdbus/client.c gdbus/polkit.c
@@ -1613,7 +1728,16 @@ btio_sources = btio/btio.h btio/btio.c
 @QMIMODEM_TRUE@					drivers/qmimodem/wds.h \
 @QMIMODEM_TRUE@					drivers/qmimodem/pds.h \
 @QMIMODEM_TRUE@					drivers/qmimodem/common.h \
-@QMIMODEM_TRUE@					drivers/qmimodem/wda.h
+@QMIMODEM_TRUE@					drivers/qmimodem/wda.h \
+@QMIMODEM_TRUE@					drivers/qmimodem/voice.h
+
+@MBIMMODEM_TRUE@mbim_sources = drivers/mbimmodem/mbim.h \
+@MBIMMODEM_TRUE@		drivers/mbimmodem/mbim.c \
+@MBIMMODEM_TRUE@		drivers/mbimmodem/mbim-private.h \
+@MBIMMODEM_TRUE@		drivers/mbimmodem/mbim-desc.h \
+@MBIMMODEM_TRUE@		drivers/mbimmodem/mbim-desc.c \
+@MBIMMODEM_TRUE@		drivers/mbimmodem/mbim-message.h \
+@MBIMMODEM_TRUE@		drivers/mbimmodem/mbim-message.c
 
 src_ofonod_SOURCES = $(builtin_sources) $(gatchat_sources) src/ofono.ver \
 			src/main.c src/ofono.h src/log.c src/plugin.c \
@@ -1626,8 +1750,8 @@ src_ofonod_SOURCES = $(builtin_sources) $(gatchat_sources) src/ofono.ver \
 			src/phonebook.c src/history.c src/message-waiting.c \
 			src/simutil.h src/simutil.c src/storage.h \
 			src/storage.c src/cbs.c src/watch.c src/call-volume.c \
-			src/gprs.c src/idmap.h src/idmap.c \
-			src/radio-settings.c src/stkutil.h src/stkutil.c \
+			src/gprs.c src/radio-settings.c \
+			src/stkutil.h src/stkutil.c \
 			src/nettime.c src/stkagent.c src/stkagent.h \
 			src/simfs.c src/simfs.h src/audio-settings.c \
 			src/smsagent.c src/smsagent.h src/ctm.c \
@@ -1641,21 +1765,22 @@ src_ofonod_SOURCES = $(builtin_sources) $(gatchat_sources) src/ofono.ver \
 			src/cdma-provision.c src/handsfree.c \
 			src/handsfree-audio.c src/bluetooth.h \
 			src/hfp.h src/siri.c \
-			src/netmon.c src/lte.c \
+			src/netmon.c src/lte.c src/ims.c \
 			src/netmonagent.c src/netmonagent.h
 
-src_ofonod_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
+src_ofonod_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) $(ell_ldadd) \
 			@GLIB_LIBS@ @DBUS_LIBS@ -ldl
 
 src_ofonod_LDFLAGS = -Wl,--export-dynamic \
 				-Wl,--version-script=$(srcdir)/src/ofono.ver
 
-BUILT_SOURCES = $(local_headers) src/builtin.h
+src_ofonod_DEPENDENCIES = $(ell_dependencies)
+BUILT_SOURCES = $(local_headers) $(ell_built_sources) src/builtin.h
 CLEANFILES = $(BUILT_SOURCES) $(rules_DATA)
 plugindir = $(pkglibdir)/plugins
 @MAINTAINER_MODE_FALSE@build_plugindir = $(plugindir)
 @MAINTAINER_MODE_TRUE@build_plugindir = $(abs_top_srcdir)/plugins/.libs
-AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ $(builtin_cflags) \
+AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ $(ell_cflags) $(builtin_cflags) \
 					-DOFONO_PLUGIN_BUILTIN \
 					-DPLUGINDIR=\""$(build_plugindir)"\"
 
@@ -1684,7 +1809,8 @@ doc_files = doc/overview.txt doc/ofono-paper.txt doc/release-faq.txt \
 			doc/networkmonitor-api.txt \
 			doc/allowed-apns-api.txt \
 			doc/lte-api.txt \
-			doc/cinterion-hardware-monitor-api.txt
+			doc/cinterion-hardware-monitor-api.txt \
+			doc/ims-api.txt
 
 test_scripts = test/backtrace \
 		test/create-internet-context \
@@ -1788,7 +1914,11 @@ test_scripts = test/backtrace \
 		test/enable-throttling \
 		test/disable-throttling \
 		test/set-lte-property \
-		test/test-serving-cell-info
+		test/test-serving-cell-info \
+		test/ims-register \
+		test/ims-unregister \
+		test/list-applications \
+		test/set-sms-alphabet
 
 @TEST_TRUE@testdir = $(pkglibdir)/test
 @TEST_TRUE@test_SCRIPTS = $(test_scripts)
@@ -1797,46 +1927,44 @@ EXTRA_DIST = src/genbuiltin plugins/ofono.rules plugins/ofono-speedup.rules \
 
 dist_man_MANS = doc/ofonod.8
 unit_objects = $(unit_test_common_OBJECTS) $(unit_test_utils_OBJECTS) \
-	$(unit_test_idmap_OBJECTS) $(unit_test_simutil_OBJECTS) \
-	$(unit_test_stkutil_OBJECTS) $(unit_test_sms_OBJECTS) \
-	$(unit_test_cdmasms_OBJECTS) $(unit_test_sms_root_OBJECTS) \
-	$(unit_test_mux_OBJECTS) $(unit_test_caif_OBJECTS) \
-	$(unit_test_rilmodem_cs_OBJECTS) \
+	$(unit_test_simutil_OBJECTS) $(unit_test_stkutil_OBJECTS) \
+	$(unit_test_sms_OBJECTS) $(unit_test_cdmasms_OBJECTS) \
+	$(unit_test_sms_root_OBJECTS) $(unit_test_mux_OBJECTS) \
+	$(unit_test_caif_OBJECTS) $(unit_test_rilmodem_cs_OBJECTS) \
 	$(unit_test_rilmodem_sms_OBJECTS) \
 	$(unit_test_rilmodem_cb_OBJECTS) \
-	$(unit_test_rilmodem_gprs_OBJECTS)
-unit_tests = unit/test-common unit/test-util unit/test-idmap \
+	$(unit_test_rilmodem_gprs_OBJECTS) $(unit_test_mbim_OBJECTS)
+unit_tests = unit/test-common unit/test-util \
 				unit/test-simutil unit/test-stkutil \
 				unit/test-sms unit/test-cdmasms \
+				unit/test-mbim \
 				unit/test-rilmodem-cs \
 				unit/test-rilmodem-sms \
 				unit/test-rilmodem-cb \
 				unit/test-rilmodem-gprs
 
 unit_test_common_SOURCES = unit/test-common.c src/common.c src/util.c
-unit_test_common_LDADD = @GLIB_LIBS@
+unit_test_common_LDADD = @GLIB_LIBS@ $(ell_ldadd)
 unit_test_util_SOURCES = unit/test-util.c src/util.c
-unit_test_util_LDADD = @GLIB_LIBS@
-unit_test_idmap_SOURCES = unit/test-idmap.c src/idmap.c
-unit_test_idmap_LDADD = @GLIB_LIBS@
+unit_test_util_LDADD = @GLIB_LIBS@ $(ell_ldadd)
 unit_test_simutil_SOURCES = unit/test-simutil.c src/util.c \
                                 src/simutil.c src/smsutil.c src/storage.c
 
-unit_test_simutil_LDADD = @GLIB_LIBS@
+unit_test_simutil_LDADD = @GLIB_LIBS@ $(ell_ldadd)
 unit_test_stkutil_SOURCES = unit/test-stkutil.c unit/stk-test-data.h \
 				src/util.c \
                                 src/storage.c src/smsutil.c \
                                 src/simutil.c src/stkutil.c
 
-unit_test_stkutil_LDADD = @GLIB_LIBS@
+unit_test_stkutil_LDADD = @GLIB_LIBS@ $(ell_ldadd)
 unit_test_sms_SOURCES = unit/test-sms.c src/util.c src/smsutil.c src/storage.c
-unit_test_sms_LDADD = @GLIB_LIBS@
+unit_test_sms_LDADD = @GLIB_LIBS@ $(ell_ldadd)
 unit_test_cdmasms_SOURCES = unit/test-cdmasms.c src/cdma-smsutil.c
-unit_test_cdmasms_LDADD = @GLIB_LIBS@
+unit_test_cdmasms_LDADD = @GLIB_LIBS@ $(ell_ldadd)
 unit_test_sms_root_SOURCES = unit/test-sms-root.c \
 					src/util.c src/smsutil.c src/storage.c
 
-unit_test_sms_root_LDADD = @GLIB_LIBS@
+unit_test_sms_root_LDADD = @GLIB_LIBS@ $(ell_ldadd)
 unit_test_mux_SOURCES = unit/test-mux.c $(gatchat_sources)
 unit_test_mux_LDADD = @GLIB_LIBS@
 unit_test_caif_SOURCES = unit/test-caif.c $(gatchat_sources) \
@@ -1858,29 +1986,38 @@ unit_test_rilmodem_cs_SOURCES = $(test_rilmodem_sources) \
 					drivers/rilmodem/call-settings.c
 
 unit_test_rilmodem_cs_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
-					@GLIB_LIBS@ @DBUS_LIBS@ -ldl
+					@GLIB_LIBS@ @DBUS_LIBS@ \
+					$(ell_ldadd) -ldl
 
 unit_test_rilmodem_sms_SOURCES = $(test_rilmodem_sources) \
 					unit/test-rilmodem-sms.c \
 					drivers/rilmodem/sms.c
 
 unit_test_rilmodem_sms_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
-					@GLIB_LIBS@ @DBUS_LIBS@ -ldl
+					@GLIB_LIBS@ @DBUS_LIBS@ \
+					$(ell_ldadd) -ldl
 
 unit_test_rilmodem_cb_SOURCES = $(test_rilmodem_sources) \
 					unit/test-rilmodem-cb.c \
 					drivers/rilmodem/call-barring.c
 
 unit_test_rilmodem_cb_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
-					@GLIB_LIBS@ @DBUS_LIBS@ -ldl
+					@GLIB_LIBS@ @DBUS_LIBS@ \
+					$(ell_ldadd) -ldl
 
 unit_test_rilmodem_gprs_SOURCES = $(test_rilmodem_sources) \
 					unit/test-rilmodem-gprs.c \
 					drivers/rilmodem/gprs.c
 
 unit_test_rilmodem_gprs_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
-					@GLIB_LIBS@ @DBUS_LIBS@ -ldl
+					@GLIB_LIBS@ @DBUS_LIBS@ \
+					$(ell_ldadd) -ldl
 
+unit_test_mbim_SOURCES = unit/test-mbim.c \
+			 drivers/mbimmodem/mbim-message.c \
+			 drivers/mbimmodem/mbim.c
+
+unit_test_mbim_LDADD = $(ell_ldadd)
 @TOOLS_TRUE@tools_huawei_audio_SOURCES = tools/huawei-audio.c
 @TOOLS_TRUE@tools_huawei_audio_LDADD = gdbus/libgdbus-internal.la @GLIB_LIBS@ @DBUS_LIBS@
 @TOOLS_TRUE@tools_auto_enable_SOURCES = tools/auto-enable.c
@@ -1998,6 +2135,32 @@ clean-noinstLTLIBRARIES:
 	  echo rm -f $${locs}; \
 	  rm -f $${locs}; \
 	}
+ell/$(am__dirstamp):
+	@$(MKDIR_P) ell
+	@: > ell/$(am__dirstamp)
+ell/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) ell/$(DEPDIR)
+	@: > ell/$(DEPDIR)/$(am__dirstamp)
+ell/util.lo: ell/$(am__dirstamp) ell/$(DEPDIR)/$(am__dirstamp)
+ell/test.lo: ell/$(am__dirstamp) ell/$(DEPDIR)/$(am__dirstamp)
+ell/strv.lo: ell/$(am__dirstamp) ell/$(DEPDIR)/$(am__dirstamp)
+ell/utf8.lo: ell/$(am__dirstamp) ell/$(DEPDIR)/$(am__dirstamp)
+ell/queue.lo: ell/$(am__dirstamp) ell/$(DEPDIR)/$(am__dirstamp)
+ell/main.lo: ell/$(am__dirstamp) ell/$(DEPDIR)/$(am__dirstamp)
+ell/idle.lo: ell/$(am__dirstamp) ell/$(DEPDIR)/$(am__dirstamp)
+ell/signal.lo: ell/$(am__dirstamp) ell/$(DEPDIR)/$(am__dirstamp)
+ell/timeout.lo: ell/$(am__dirstamp) ell/$(DEPDIR)/$(am__dirstamp)
+ell/io.lo: ell/$(am__dirstamp) ell/$(DEPDIR)/$(am__dirstamp)
+ell/log.lo: ell/$(am__dirstamp) ell/$(DEPDIR)/$(am__dirstamp)
+ell/checksum.lo: ell/$(am__dirstamp) ell/$(DEPDIR)/$(am__dirstamp)
+ell/random.lo: ell/$(am__dirstamp) ell/$(DEPDIR)/$(am__dirstamp)
+ell/uuid.lo: ell/$(am__dirstamp) ell/$(DEPDIR)/$(am__dirstamp)
+ell/file.lo: ell/$(am__dirstamp) ell/$(DEPDIR)/$(am__dirstamp)
+ell/uintset.lo: ell/$(am__dirstamp) ell/$(DEPDIR)/$(am__dirstamp)
+ell/string.lo: ell/$(am__dirstamp) ell/$(DEPDIR)/$(am__dirstamp)
+
+ell/libell-internal.la: $(ell_libell_internal_la_OBJECTS) $(ell_libell_internal_la_DEPENDENCIES) $(EXTRA_ell_libell_internal_la_DEPENDENCIES) ell/$(am__dirstamp)
+	$(AM_V_CCLD)$(LINK) $(am_ell_libell_internal_la_rpath) $(ell_libell_internal_la_OBJECTS) $(ell_libell_internal_la_LIBADD) $(LIBS)
 gdbus/$(am__dirstamp):
 	@$(MKDIR_P) gdbus
 	@: > gdbus/$(am__dirstamp)
@@ -2385,6 +2548,8 @@ drivers/qmimodem/gprs.$(OBJEXT): drivers/qmimodem/$(am__dirstamp) \
 drivers/qmimodem/gprs-context.$(OBJEXT):  \
 	drivers/qmimodem/$(am__dirstamp) \
 	drivers/qmimodem/$(DEPDIR)/$(am__dirstamp)
+drivers/qmimodem/lte.$(OBJEXT): drivers/qmimodem/$(am__dirstamp) \
+	drivers/qmimodem/$(DEPDIR)/$(am__dirstamp)
 drivers/qmimodem/radio-settings.$(OBJEXT):  \
 	drivers/qmimodem/$(am__dirstamp) \
 	drivers/qmimodem/$(DEPDIR)/$(am__dirstamp)
@@ -2394,6 +2559,42 @@ drivers/qmimodem/location-reporting.$(OBJEXT):  \
 drivers/qmimodem/netmon.$(OBJEXT): drivers/qmimodem/$(am__dirstamp) \
 	drivers/qmimodem/$(DEPDIR)/$(am__dirstamp)
 plugins/gobi.$(OBJEXT): plugins/$(am__dirstamp) \
+	plugins/$(DEPDIR)/$(am__dirstamp)
+drivers/mbimmodem/$(am__dirstamp):
+	@$(MKDIR_P) drivers/mbimmodem
+	@: > drivers/mbimmodem/$(am__dirstamp)
+drivers/mbimmodem/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) drivers/mbimmodem/$(DEPDIR)
+	@: > drivers/mbimmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/mbimmodem/mbim.$(OBJEXT): drivers/mbimmodem/$(am__dirstamp) \
+	drivers/mbimmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/mbimmodem/mbim-desc.$(OBJEXT):  \
+	drivers/mbimmodem/$(am__dirstamp) \
+	drivers/mbimmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/mbimmodem/mbim-message.$(OBJEXT):  \
+	drivers/mbimmodem/$(am__dirstamp) \
+	drivers/mbimmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/mbimmodem/util.$(OBJEXT): drivers/mbimmodem/$(am__dirstamp) \
+	drivers/mbimmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/mbimmodem/mbimmodem.$(OBJEXT):  \
+	drivers/mbimmodem/$(am__dirstamp) \
+	drivers/mbimmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/mbimmodem/devinfo.$(OBJEXT):  \
+	drivers/mbimmodem/$(am__dirstamp) \
+	drivers/mbimmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/mbimmodem/sim.$(OBJEXT): drivers/mbimmodem/$(am__dirstamp) \
+	drivers/mbimmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/mbimmodem/network-registration.$(OBJEXT):  \
+	drivers/mbimmodem/$(am__dirstamp) \
+	drivers/mbimmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/mbimmodem/sms.$(OBJEXT): drivers/mbimmodem/$(am__dirstamp) \
+	drivers/mbimmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/mbimmodem/gprs.$(OBJEXT): drivers/mbimmodem/$(am__dirstamp) \
+	drivers/mbimmodem/$(DEPDIR)/$(am__dirstamp)
+drivers/mbimmodem/gprs-context.$(OBJEXT):  \
+	drivers/mbimmodem/$(am__dirstamp) \
+	drivers/mbimmodem/$(DEPDIR)/$(am__dirstamp)
+plugins/mbim.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
 drivers/atmodem/$(am__dirstamp):
 	@$(MKDIR_P) drivers/atmodem
@@ -2442,8 +2643,6 @@ drivers/atmodem/gprs.$(OBJEXT): drivers/atmodem/$(am__dirstamp) \
 	drivers/atmodem/$(DEPDIR)/$(am__dirstamp)
 drivers/atmodem/gprs-context.$(OBJEXT):  \
 	drivers/atmodem/$(am__dirstamp) \
-	drivers/atmodem/$(DEPDIR)/$(am__dirstamp)
-drivers/atmodem/sim-auth.$(OBJEXT): drivers/atmodem/$(am__dirstamp) \
 	drivers/atmodem/$(DEPDIR)/$(am__dirstamp)
 drivers/atmodem/gnss.$(OBJEXT): drivers/atmodem/$(am__dirstamp) \
 	drivers/atmodem/$(DEPDIR)/$(am__dirstamp)
@@ -2708,6 +2907,9 @@ drivers/gemaltomodem/gemaltomodem.$(OBJEXT):  \
 drivers/gemaltomodem/location-reporting.$(OBJEXT):  \
 	drivers/gemaltomodem/$(am__dirstamp) \
 	drivers/gemaltomodem/$(DEPDIR)/$(am__dirstamp)
+drivers/gemaltomodem/voicecall.$(OBJEXT):  \
+	drivers/gemaltomodem/$(am__dirstamp) \
+	drivers/gemaltomodem/$(DEPDIR)/$(am__dirstamp)
 drivers/xmm7modem/$(am__dirstamp):
 	@$(MKDIR_P) drivers/xmm7modem
 	@: > drivers/xmm7modem/$(am__dirstamp)
@@ -2719,6 +2921,10 @@ drivers/xmm7modem/xmm7modem.$(OBJEXT):  \
 	drivers/xmm7modem/$(DEPDIR)/$(am__dirstamp)
 drivers/xmm7modem/radio-settings.$(OBJEXT):  \
 	drivers/xmm7modem/$(am__dirstamp) \
+	drivers/xmm7modem/$(DEPDIR)/$(am__dirstamp)
+drivers/xmm7modem/ims.$(OBJEXT): drivers/xmm7modem/$(am__dirstamp) \
+	drivers/xmm7modem/$(DEPDIR)/$(am__dirstamp)
+drivers/xmm7modem/netmon.$(OBJEXT): drivers/xmm7modem/$(am__dirstamp) \
 	drivers/xmm7modem/$(DEPDIR)/$(am__dirstamp)
 plugins/phonesim.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
@@ -2789,6 +2995,8 @@ plugins/speedupcdma.$(OBJEXT): plugins/$(am__dirstamp) \
 plugins/samsung.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
 plugins/sim900.$(OBJEXT): plugins/$(am__dirstamp) \
+	plugins/$(DEPDIR)/$(am__dirstamp)
+plugins/sim7100.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
 plugins/connman.$(OBJEXT): plugins/$(am__dirstamp) \
 	plugins/$(DEPDIR)/$(am__dirstamp)
@@ -2892,7 +3100,6 @@ src/watch.$(OBJEXT): src/$(am__dirstamp) src/$(DEPDIR)/$(am__dirstamp)
 src/call-volume.$(OBJEXT): src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
 src/gprs.$(OBJEXT): src/$(am__dirstamp) src/$(DEPDIR)/$(am__dirstamp)
-src/idmap.$(OBJEXT): src/$(am__dirstamp) src/$(DEPDIR)/$(am__dirstamp)
 src/radio-settings.$(OBJEXT): src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
 src/stkutil.$(OBJEXT): src/$(am__dirstamp) \
@@ -2942,6 +3149,7 @@ src/siri.$(OBJEXT): src/$(am__dirstamp) src/$(DEPDIR)/$(am__dirstamp)
 src/netmon.$(OBJEXT): src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
 src/lte.$(OBJEXT): src/$(am__dirstamp) src/$(DEPDIR)/$(am__dirstamp)
+src/ims.$(OBJEXT): src/$(am__dirstamp) src/$(DEPDIR)/$(am__dirstamp)
 src/netmonagent.$(OBJEXT): src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
 
@@ -3020,12 +3228,12 @@ unit/test-common.$(OBJEXT): unit/$(am__dirstamp) \
 unit/test-common$(EXEEXT): $(unit_test_common_OBJECTS) $(unit_test_common_DEPENDENCIES) $(EXTRA_unit_test_common_DEPENDENCIES) unit/$(am__dirstamp)
 	@rm -f unit/test-common$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(unit_test_common_OBJECTS) $(unit_test_common_LDADD) $(LIBS)
-unit/test-idmap.$(OBJEXT): unit/$(am__dirstamp) \
+unit/test-mbim.$(OBJEXT): unit/$(am__dirstamp) \
 	unit/$(DEPDIR)/$(am__dirstamp)
 
-unit/test-idmap$(EXEEXT): $(unit_test_idmap_OBJECTS) $(unit_test_idmap_DEPENDENCIES) $(EXTRA_unit_test_idmap_DEPENDENCIES) unit/$(am__dirstamp)
-	@rm -f unit/test-idmap$(EXEEXT)
-	$(AM_V_CCLD)$(LINK) $(unit_test_idmap_OBJECTS) $(unit_test_idmap_LDADD) $(LIBS)
+unit/test-mbim$(EXEEXT): $(unit_test_mbim_OBJECTS) $(unit_test_mbim_DEPENDENCIES) $(EXTRA_unit_test_mbim_DEPENDENCIES) unit/$(am__dirstamp)
+	@rm -f unit/test-mbim$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(unit_test_mbim_OBJECTS) $(unit_test_mbim_LDADD) $(LIBS)
 unit/test-mux.$(OBJEXT): unit/$(am__dirstamp) \
 	unit/$(DEPDIR)/$(am__dirstamp)
 
@@ -3140,6 +3348,7 @@ mostlyclean-compile:
 	-rm -f drivers/iceramodem/*.$(OBJEXT)
 	-rm -f drivers/ifxmodem/*.$(OBJEXT)
 	-rm -f drivers/isimodem/*.$(OBJEXT)
+	-rm -f drivers/mbimmodem/*.$(OBJEXT)
 	-rm -f drivers/mbmmodem/*.$(OBJEXT)
 	-rm -f drivers/nwmodem/*.$(OBJEXT)
 	-rm -f drivers/qmimodem/*.$(OBJEXT)
@@ -3152,6 +3361,8 @@ mostlyclean-compile:
 	-rm -f drivers/xmm7modem/*.$(OBJEXT)
 	-rm -f drivers/ztemodem/*.$(OBJEXT)
 	-rm -f dundee/*.$(OBJEXT)
+	-rm -f ell/*.$(OBJEXT)
+	-rm -f ell/*.lo
 	-rm -f examples/*.$(OBJEXT)
 	-rm -f gatchat/*.$(OBJEXT)
 	-rm -f gdbus/*.$(OBJEXT)
@@ -3182,7 +3393,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/lte.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/network-registration.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/phonebook.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/sim-auth.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/sim.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/sms.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/atmodem/$(DEPDIR)/stk.Po@am__quote@
@@ -3200,6 +3410,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/dunmodem/$(DEPDIR)/network-registration.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/gemaltomodem/$(DEPDIR)/gemaltomodem.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/gemaltomodem/$(DEPDIR)/location-reporting.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/gemaltomodem/$(DEPDIR)/voicecall.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/hfpmodem/$(DEPDIR)/call-volume.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/hfpmodem/$(DEPDIR)/devinfo.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/hfpmodem/$(DEPDIR)/handsfree.Po@am__quote@
@@ -3249,6 +3460,17 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/isimodem/$(DEPDIR)/uicc.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/isimodem/$(DEPDIR)/ussd.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/isimodem/$(DEPDIR)/voicecall.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/mbimmodem/$(DEPDIR)/devinfo.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/mbimmodem/$(DEPDIR)/gprs-context.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/mbimmodem/$(DEPDIR)/gprs.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/mbimmodem/$(DEPDIR)/mbim-desc.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/mbimmodem/$(DEPDIR)/mbim-message.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/mbimmodem/$(DEPDIR)/mbim.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/mbimmodem/$(DEPDIR)/mbimmodem.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/mbimmodem/$(DEPDIR)/network-registration.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/mbimmodem/$(DEPDIR)/sim.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/mbimmodem/$(DEPDIR)/sms.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/mbimmodem/$(DEPDIR)/util.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/mbmmodem/$(DEPDIR)/gprs-context.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/mbmmodem/$(DEPDIR)/location-reporting.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/mbmmodem/$(DEPDIR)/mbmmodem.Po@am__quote@
@@ -3259,6 +3481,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/qmimodem/$(DEPDIR)/gprs-context.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/qmimodem/$(DEPDIR)/gprs.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/qmimodem/$(DEPDIR)/location-reporting.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/qmimodem/$(DEPDIR)/lte.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/qmimodem/$(DEPDIR)/nas.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/qmimodem/$(DEPDIR)/netmon.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/qmimodem/$(DEPDIR)/network-registration.Po@am__quote@
@@ -3305,6 +3528,8 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/ubloxmodem/$(DEPDIR)/lte.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/ubloxmodem/$(DEPDIR)/netmon.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/ubloxmodem/$(DEPDIR)/ubloxmodem.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/xmm7modem/$(DEPDIR)/ims.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/xmm7modem/$(DEPDIR)/netmon.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/xmm7modem/$(DEPDIR)/radio-settings.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/xmm7modem/$(DEPDIR)/xmm7modem.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/ztemodem/$(DEPDIR)/radio-settings.Po@am__quote@
@@ -3315,6 +3540,23 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@dundee/$(DEPDIR)/device.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@dundee/$(DEPDIR)/main.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@dundee/$(DEPDIR)/manager.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@ell/$(DEPDIR)/checksum.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@ell/$(DEPDIR)/file.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@ell/$(DEPDIR)/idle.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@ell/$(DEPDIR)/io.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@ell/$(DEPDIR)/log.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@ell/$(DEPDIR)/main.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@ell/$(DEPDIR)/queue.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@ell/$(DEPDIR)/random.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@ell/$(DEPDIR)/signal.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@ell/$(DEPDIR)/string.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@ell/$(DEPDIR)/strv.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@ell/$(DEPDIR)/test.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@ell/$(DEPDIR)/timeout.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@ell/$(DEPDIR)/uintset.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@ell/$(DEPDIR)/utf8.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@ell/$(DEPDIR)/util.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@ell/$(DEPDIR)/uuid.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@examples/$(DEPDIR)/emulator.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@examples/$(DEPDIR)/history.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@examples/$(DEPDIR)/nettime.Po@am__quote@
@@ -3388,6 +3630,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/infineon.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/isiusb.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/linktop.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/mbim.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/mbm.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/mbpi.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/n900.Po@am__quote@
@@ -3406,6 +3649,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/samsung.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/sap.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/sierra.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/sim7100.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/sim900.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/smart-messaging.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@plugins/$(DEPDIR)/speedup.Po@am__quote@
@@ -3445,7 +3689,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/handsfree-audio.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/handsfree.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/history.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/idmap.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/ims.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/location-reporting.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/log.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/lte.Po@am__quote@
@@ -3490,7 +3734,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@unit/$(DEPDIR)/test-caif.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@unit/$(DEPDIR)/test-cdmasms.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@unit/$(DEPDIR)/test-common.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@unit/$(DEPDIR)/test-idmap.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@unit/$(DEPDIR)/test-mbim.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@unit/$(DEPDIR)/test-mux.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@unit/$(DEPDIR)/test-rilmodem-cb.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@unit/$(DEPDIR)/test-rilmodem-cs.Po@am__quote@
@@ -3532,6 +3776,7 @@ mostlyclean-libtool:
 clean-libtool:
 	-rm -rf .libs _libs
 	-rm -rf dundee/.libs dundee/_libs
+	-rm -rf ell/.libs ell/_libs
 	-rm -rf gatchat/.libs gatchat/_libs
 	-rm -rf gdbus/.libs gdbus/_libs
 	-rm -rf src/.libs src/_libs
@@ -3945,13 +4190,6 @@ unit/test-util.log: unit/test-util$(EXEEXT)
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
 	"$$tst" $(AM_TESTS_FD_REDIRECT)
-unit/test-idmap.log: unit/test-idmap$(EXEEXT)
-	@p='unit/test-idmap$(EXEEXT)'; \
-	b='unit/test-idmap'; \
-	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
-	--log-file $$b.log --trs-file $$b.trs \
-	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
-	"$$tst" $(AM_TESTS_FD_REDIRECT)
 unit/test-simutil.log: unit/test-simutil$(EXEEXT)
 	@p='unit/test-simutil$(EXEEXT)'; \
 	b='unit/test-simutil'; \
@@ -3976,6 +4214,13 @@ unit/test-sms.log: unit/test-sms$(EXEEXT)
 unit/test-cdmasms.log: unit/test-cdmasms$(EXEEXT)
 	@p='unit/test-cdmasms$(EXEEXT)'; \
 	b='unit/test-cdmasms'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+unit/test-mbim.log: unit/test-mbim$(EXEEXT)
+	@p='unit/test-mbim$(EXEEXT)'; \
+	b='unit/test-mbim'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
@@ -4251,6 +4496,8 @@ distclean-generic:
 	-rm -f drivers/ifxmodem/$(am__dirstamp)
 	-rm -f drivers/isimodem/$(DEPDIR)/$(am__dirstamp)
 	-rm -f drivers/isimodem/$(am__dirstamp)
+	-rm -f drivers/mbimmodem/$(DEPDIR)/$(am__dirstamp)
+	-rm -f drivers/mbimmodem/$(am__dirstamp)
 	-rm -f drivers/mbmmodem/$(DEPDIR)/$(am__dirstamp)
 	-rm -f drivers/mbmmodem/$(am__dirstamp)
 	-rm -f drivers/nwmodem/$(DEPDIR)/$(am__dirstamp)
@@ -4275,6 +4522,8 @@ distclean-generic:
 	-rm -f drivers/ztemodem/$(am__dirstamp)
 	-rm -f dundee/$(DEPDIR)/$(am__dirstamp)
 	-rm -f dundee/$(am__dirstamp)
+	-rm -f ell/$(DEPDIR)/$(am__dirstamp)
+	-rm -f ell/$(am__dirstamp)
 	-rm -f examples/$(DEPDIR)/$(am__dirstamp)
 	-rm -f examples/$(am__dirstamp)
 	-rm -f gatchat/$(DEPDIR)/$(am__dirstamp)
@@ -4307,7 +4556,7 @@ clean-am: clean-generic clean-libtool clean-local \
 
 distclean: distclean-am
 	-rm -f $(am__CONFIG_DISTCLEAN_FILES)
-	-rm -rf btio/$(DEPDIR) drivers/atmodem/$(DEPDIR) drivers/calypsomodem/$(DEPDIR) drivers/cdmamodem/$(DEPDIR) drivers/dunmodem/$(DEPDIR) drivers/gemaltomodem/$(DEPDIR) drivers/hfpmodem/$(DEPDIR) drivers/hsomodem/$(DEPDIR) drivers/huaweimodem/$(DEPDIR) drivers/iceramodem/$(DEPDIR) drivers/ifxmodem/$(DEPDIR) drivers/isimodem/$(DEPDIR) drivers/mbmmodem/$(DEPDIR) drivers/nwmodem/$(DEPDIR) drivers/qmimodem/$(DEPDIR) drivers/rilmodem/$(DEPDIR) drivers/speedupmodem/$(DEPDIR) drivers/stemodem/$(DEPDIR) drivers/swmodem/$(DEPDIR) drivers/telitmodem/$(DEPDIR) drivers/ubloxmodem/$(DEPDIR) drivers/xmm7modem/$(DEPDIR) drivers/ztemodem/$(DEPDIR) dundee/$(DEPDIR) examples/$(DEPDIR) gatchat/$(DEPDIR) gdbus/$(DEPDIR) gisi/$(DEPDIR) gril/$(DEPDIR) plugins/$(DEPDIR) src/$(DEPDIR) tools/$(DEPDIR) unit/$(DEPDIR)
+	-rm -rf btio/$(DEPDIR) drivers/atmodem/$(DEPDIR) drivers/calypsomodem/$(DEPDIR) drivers/cdmamodem/$(DEPDIR) drivers/dunmodem/$(DEPDIR) drivers/gemaltomodem/$(DEPDIR) drivers/hfpmodem/$(DEPDIR) drivers/hsomodem/$(DEPDIR) drivers/huaweimodem/$(DEPDIR) drivers/iceramodem/$(DEPDIR) drivers/ifxmodem/$(DEPDIR) drivers/isimodem/$(DEPDIR) drivers/mbimmodem/$(DEPDIR) drivers/mbmmodem/$(DEPDIR) drivers/nwmodem/$(DEPDIR) drivers/qmimodem/$(DEPDIR) drivers/rilmodem/$(DEPDIR) drivers/speedupmodem/$(DEPDIR) drivers/stemodem/$(DEPDIR) drivers/swmodem/$(DEPDIR) drivers/telitmodem/$(DEPDIR) drivers/ubloxmodem/$(DEPDIR) drivers/xmm7modem/$(DEPDIR) drivers/ztemodem/$(DEPDIR) dundee/$(DEPDIR) ell/$(DEPDIR) examples/$(DEPDIR) gatchat/$(DEPDIR) gdbus/$(DEPDIR) gisi/$(DEPDIR) gril/$(DEPDIR) plugins/$(DEPDIR) src/$(DEPDIR) tools/$(DEPDIR) unit/$(DEPDIR)
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-hdr distclean-libtool distclean-tags
@@ -4358,9 +4607,10 @@ installcheck-am:
 maintainer-clean: maintainer-clean-am
 	-rm -f $(am__CONFIG_DISTCLEAN_FILES)
 	-rm -rf $(top_srcdir)/autom4te.cache
-	-rm -rf btio/$(DEPDIR) drivers/atmodem/$(DEPDIR) drivers/calypsomodem/$(DEPDIR) drivers/cdmamodem/$(DEPDIR) drivers/dunmodem/$(DEPDIR) drivers/gemaltomodem/$(DEPDIR) drivers/hfpmodem/$(DEPDIR) drivers/hsomodem/$(DEPDIR) drivers/huaweimodem/$(DEPDIR) drivers/iceramodem/$(DEPDIR) drivers/ifxmodem/$(DEPDIR) drivers/isimodem/$(DEPDIR) drivers/mbmmodem/$(DEPDIR) drivers/nwmodem/$(DEPDIR) drivers/qmimodem/$(DEPDIR) drivers/rilmodem/$(DEPDIR) drivers/speedupmodem/$(DEPDIR) drivers/stemodem/$(DEPDIR) drivers/swmodem/$(DEPDIR) drivers/telitmodem/$(DEPDIR) drivers/ubloxmodem/$(DEPDIR) drivers/xmm7modem/$(DEPDIR) drivers/ztemodem/$(DEPDIR) dundee/$(DEPDIR) examples/$(DEPDIR) gatchat/$(DEPDIR) gdbus/$(DEPDIR) gisi/$(DEPDIR) gril/$(DEPDIR) plugins/$(DEPDIR) src/$(DEPDIR) tools/$(DEPDIR) unit/$(DEPDIR)
+	-rm -rf btio/$(DEPDIR) drivers/atmodem/$(DEPDIR) drivers/calypsomodem/$(DEPDIR) drivers/cdmamodem/$(DEPDIR) drivers/dunmodem/$(DEPDIR) drivers/gemaltomodem/$(DEPDIR) drivers/hfpmodem/$(DEPDIR) drivers/hsomodem/$(DEPDIR) drivers/huaweimodem/$(DEPDIR) drivers/iceramodem/$(DEPDIR) drivers/ifxmodem/$(DEPDIR) drivers/isimodem/$(DEPDIR) drivers/mbimmodem/$(DEPDIR) drivers/mbmmodem/$(DEPDIR) drivers/nwmodem/$(DEPDIR) drivers/qmimodem/$(DEPDIR) drivers/rilmodem/$(DEPDIR) drivers/speedupmodem/$(DEPDIR) drivers/stemodem/$(DEPDIR) drivers/swmodem/$(DEPDIR) drivers/telitmodem/$(DEPDIR) drivers/ubloxmodem/$(DEPDIR) drivers/xmm7modem/$(DEPDIR) drivers/ztemodem/$(DEPDIR) dundee/$(DEPDIR) ell/$(DEPDIR) examples/$(DEPDIR) gatchat/$(DEPDIR) gdbus/$(DEPDIR) gisi/$(DEPDIR) gril/$(DEPDIR) plugins/$(DEPDIR) src/$(DEPDIR) tools/$(DEPDIR) unit/$(DEPDIR)
 	-rm -f Makefile
-maintainer-clean-am: distclean-am maintainer-clean-generic
+maintainer-clean-am: distclean-am maintainer-clean-generic \
+	maintainer-clean-local
 
 mostlyclean: mostlyclean-am
 
@@ -4403,11 +4653,11 @@ uninstall-man: uninstall-man8
 	install-ps-am install-sbinPROGRAMS install-stateDATA \
 	install-strip install-systemdunitDATA install-testSCRIPTS \
 	installcheck installcheck-am installdirs maintainer-clean \
-	maintainer-clean-generic mostlyclean mostlyclean-compile \
-	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
-	recheck tags tags-am uninstall uninstall-am \
-	uninstall-dist_confDATA uninstall-dist_dbusconfDATA \
-	uninstall-man uninstall-man8 \
+	maintainer-clean-generic maintainer-clean-local mostlyclean \
+	mostlyclean-compile mostlyclean-generic mostlyclean-libtool \
+	pdf pdf-am ps ps-am recheck tags tags-am uninstall \
+	uninstall-am uninstall-dist_confDATA \
+	uninstall-dist_dbusconfDATA uninstall-man uninstall-man8 \
 	uninstall-nodist_pkgincludeHEADERS uninstall-pkgconfigDATA \
 	uninstall-pkgincludeHEADERS uninstall-sbinPROGRAMS \
 	uninstall-stateDATA uninstall-systemdunitDATA \
@@ -4427,6 +4677,23 @@ include/ofono/version.h: include/version.h
 include/ofono/%.h: $(abs_top_srcdir)/include/%.h
 	$(AM_V_at)$(MKDIR_P) include/ofono
 	$(AM_V_GEN)$(LN_S) $< $@
+
+ell/internal: Makefile
+	$(AM_V_at)$(MKDIR_P) ell
+	$(AM_V_GEN)for f in $(ell_headers) $(ell_sources) ; do \
+		if [ ! -f $$f ] ; then \
+			$(LN_S) -t ell -f $(abs_srcdir)/../ell/$$f ; \
+		fi \
+	done > $@
+
+ell/ell.h: Makefile
+	$(AM_V_at)echo -n > $@
+	$(AM_V_GEN)for f in $(ell_headers) ; do \
+		echo "#include <$$f>" >> $@ ; \
+	done
+
+maintainer-clean-local:
+	-rm -rf ell
 
 clean-local:
 	@$(RM) -rf include/ofono

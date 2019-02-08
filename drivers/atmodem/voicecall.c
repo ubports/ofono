@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -1120,6 +1119,7 @@ static int at_voicecall_probe(struct ofono_voicecall *vc, unsigned int vendor,
 
 	switch (vd->vendor) {
 	case OFONO_VENDOR_QUALCOMM_MSM:
+	case OFONO_VENDOR_SIMCOM:
 		g_at_chat_send(vd->chat, "AT+COLP=0", NULL, NULL, NULL, NULL);
 		break;
 	default:
@@ -1154,7 +1154,7 @@ static void at_voicecall_remove(struct ofono_voicecall *vc)
 	g_free(vd);
 }
 
-static struct ofono_voicecall_driver driver = {
+static const struct ofono_voicecall_driver driver = {
 	.name			= "atmodem",
 	.probe			= at_voicecall_probe,
 	.remove			= at_voicecall_remove,

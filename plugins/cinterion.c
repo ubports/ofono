@@ -209,7 +209,7 @@ static void cinterion_post_online(struct ofono_modem *modem)
 	ofono_ussd_create(modem, 0, "atmodem", chat);
 	ofono_call_forwarding_create(modem, 0, "atmodem", chat);
 	ofono_call_settings_create(modem, 0, "atmodem", chat);
-	ofono_netreg_create(modem, OFONO_VENDOR_CINTERION, "atmodem", chat);
+	ofono_netreg_create(modem, OFONO_VENDOR_GEMALTO, "atmodem", chat);
 	ofono_call_meter_create(modem, 0, "atmodem", chat);
 	ofono_call_barring_create(modem, 0, "atmodem", chat);
 

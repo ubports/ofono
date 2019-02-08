@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -339,7 +338,7 @@ static void ril_netmon_periodic_update(struct ofono_netmon *netmon,
 	CALLBACK_WITH_FAILURE(cb, cbd->data);
 }
 
-static struct ofono_netmon_driver driver = {
+static const struct ofono_netmon_driver driver = {
 	.name			= RILMODEM,
 	.probe			= ril_netmon_probe,
 	.remove			= ril_netmon_remove,

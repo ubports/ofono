@@ -23,13 +23,13 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <errno.h>
 
 #include <glib.h>
+#include <ell/ell.h>
 
 #include <ofono/log.h>
 #include <ofono/modem.h>
@@ -87,16 +87,12 @@ static gboolean parse_text(GAtResultIter *iter, char **str, int encoding)
 		if (g_at_result_iter_next_hexstring(iter, &hex, &len) == FALSE)
 			return FALSE;
 
-		utf8 = g_convert((const gchar*) hex, len,
-					"UTF-8//TRANSLIT", "UCS-2BE",
-					NULL, NULL, NULL);
+		utf8 = l_utf8_from_ucs2be(hex, len);
+		if (!utf8)
+			return FALSE;
 
-		if (utf8) {
-			*str = utf8;
-			return TRUE;
-		}
-
-		return FALSE;
+		*str = utf8;
+		return TRUE;
 	}
 
 	/*
@@ -104,7 +100,7 @@ static gboolean parse_text(GAtResultIter *iter, char **str, int encoding)
 	 * characters, same as in UTF8
 	 */
 	if (g_at_result_iter_next_string(iter, &string)) {
-		*str = g_strdup(string);
+		*str = l_strdup(string);
 		return TRUE;
 	}
 
@@ -188,12 +184,12 @@ static void at_cpbr_notify(GAtResult *result, gpointer user_data)
 			adtype, secondtext, email,
 			sip_uri, tel_uri);
 
-		g_free(text);
-		g_free(group);
-		g_free(secondtext);
-		g_free(email);
-		g_free(sip_uri);
-		g_free(tel_uri);
+		l_free(text);
+		l_free(group);
+		l_free(secondtext);
+		l_free(email);
+		l_free(sip_uri);
+		l_free(tel_uri);
 	}
 }
 
@@ -593,7 +589,7 @@ static void at_phonebook_remove(struct ofono_phonebook *pb)
 	g_free(pbd);
 }
 
-static struct ofono_phonebook_driver driver = {
+static const struct ofono_phonebook_driver driver = {
 	.name		= "atmodem",
 	.probe		= at_phonebook_probe,
 	.remove		= at_phonebook_remove,

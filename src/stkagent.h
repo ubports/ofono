@@ -40,8 +40,8 @@ struct stk_menu {
 	struct stk_icon_id icon;
 	struct stk_menu_item *items;
 	int default_item;
-	gboolean soft_key;
-	gboolean has_help;
+	bool soft_key;
+	bool has_help;
 };
 
 typedef void (*stk_agent_display_text_cb)(enum stk_agent_result result,
@@ -51,7 +51,7 @@ typedef void (*stk_agent_selection_cb)(enum stk_agent_result result,
 					uint8_t id, void *user_data);
 
 typedef void (*stk_agent_confirmation_cb)(enum stk_agent_result result,
-						ofono_bool_t confirm,
+						bool confirm,
 						void *user_data);
 
 typedef void (*stk_agent_string_cb)(enum stk_agent_result result,
@@ -64,7 +64,7 @@ typedef void (*stk_agent_display_action_cb)(enum stk_agent_result result,
 						void *user_data);
 
 struct stk_agent *stk_agent_new(const char *path, const char *sender,
-					ofono_bool_t remove_on_terminate);
+					bool remove_on_terminate);
 
 void stk_agent_free(struct stk_agent *agent);
 
@@ -72,7 +72,7 @@ void stk_agent_set_removed_notify(struct stk_agent *agent,
 					ofono_destroy_func removed_cb,
 					void *user_data);
 
-ofono_bool_t stk_agent_matches(struct stk_agent *agent,
+bool stk_agent_matches(struct stk_agent *agent,
 				const char *path, const char *sender);
 
 void stk_agent_request_cancel(struct stk_agent *agent);
@@ -85,7 +85,7 @@ int stk_agent_request_selection(struct stk_agent *agent,
 
 int stk_agent_display_text(struct stk_agent *agent, const char *text,
 				const struct stk_icon_id *icon,
-				ofono_bool_t urgent,
+				bool urgent,
 				stk_agent_display_text_cb cb,
 				void *user_data, ofono_destroy_func destroy,
 				int timeout);
@@ -110,22 +110,22 @@ int stk_agent_request_quick_digit(struct stk_agent *agent, const char *text,
 
 int stk_agent_request_key(struct stk_agent *agent, const char *text,
 				const struct stk_icon_id *icon,
-				ofono_bool_t unicode_charset,
+				bool unicode_charset,
 				stk_agent_string_cb cb, void *user_data,
 				ofono_destroy_func destroy, int timeout);
 
 int stk_agent_request_digits(struct stk_agent *agent, const char *text,
 				const struct stk_icon_id *icon,
 				const char *default_text, int min, int max,
-				ofono_bool_t hidden, stk_agent_string_cb cb,
+				bool hidden, stk_agent_string_cb cb,
 				void *user_data, ofono_destroy_func destroy,
 				int timeout);
 
 int stk_agent_request_input(struct stk_agent *agent, const char *text,
 				const struct stk_icon_id *icon,
 				const char *default_text,
-				ofono_bool_t unicode_charset, int min, int max,
-				ofono_bool_t hidden, stk_agent_string_cb cb,
+				bool unicode_charset, int min, int max,
+				bool hidden, stk_agent_string_cb cb,
 				void *user_data, ofono_destroy_func destroy,
 				int timeout);
 
@@ -135,12 +135,12 @@ int stk_agent_confirm_call(struct stk_agent *agent, const char *text,
 				ofono_destroy_func destroy, int timeout);
 
 int stk_agent_play_tone(struct stk_agent *agent, const char *text,
-			const struct stk_icon_id *icon, ofono_bool_t vibrate,
+			const struct stk_icon_id *icon, bool vibrate,
 			const char *tone, stk_agent_tone_cb cb, void *user_data,
 			ofono_destroy_func destroy, int timeout);
 
 int stk_agent_loop_tone(struct stk_agent *agent, const char *text,
-			const struct stk_icon_id *icon, ofono_bool_t vibrate,
+			const struct stk_icon_id *icon, bool vibrate,
 			const char *tone, stk_agent_tone_cb cb, void *user_data,
 			ofono_destroy_func destroy, int timeout);
 

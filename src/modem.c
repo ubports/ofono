@@ -34,15 +34,17 @@
 
 #include "common.h"
 
-static GSList *g_devinfo_drivers = NULL;
-static GSList *g_driver_list = NULL;
-static GSList *g_modem_list = NULL;
+#define DEFAULT_POWERED_TIMEOUT (20)
 
-static int next_modem_id = 0;
-static gboolean powering_down = FALSE;
-static int modems_remaining = 0;
+static GSList *g_devinfo_drivers;
+static GSList *g_driver_list;
+static GSList *g_modem_list;
 
-static struct ofono_watchlist *g_modemwatches = NULL;
+static int next_modem_id;
+static gboolean powering_down;
+static int modems_remaining;
+
+static struct ofono_watchlist *g_modemwatches;
 
 enum property_type {
 	PROPERTY_TYPE_INVALID = 0,
@@ -75,6 +77,7 @@ struct ofono_modem {
 	char			*lock_owner;
 	guint			lock_watch;
 	guint			timeout;
+	guint			timeout_hint;
 	ofono_bool_t		online;
 	struct ofono_watchlist	*online_watches;
 	struct ofono_watchlist	*powered_watches;
@@ -182,6 +185,21 @@ const char *ofono_modem_get_path(struct ofono_modem *modem)
 		return modem->path;
 
 	return NULL;
+}
+
+struct ofono_sim *ofono_modem_get_sim(struct ofono_modem *modem)
+{
+	return __ofono_atom_find(OFONO_ATOM_TYPE_SIM, modem);
+}
+
+struct ofono_gprs *ofono_modem_get_gprs(struct ofono_modem *modem)
+{
+	return __ofono_atom_find(OFONO_ATOM_TYPE_GPRS, modem);
+}
+
+struct ofono_voicecall *ofono_modem_get_voicecall(struct ofono_modem *modem)
+{
+	return __ofono_atom_find(OFONO_ATOM_TYPE_VOICECALL, modem);
 }
 
 struct ofono_atom *__ofono_modem_add_atom(struct ofono_modem *modem,
@@ -787,6 +805,7 @@ void __ofono_modem_append_properties(struct ofono_modem *modem,
 	struct ofono_devinfo *info;
 	dbus_bool_t emergency = ofono_modem_get_emergency_mode(modem);
 	const char *strtype;
+	const char *system_path;
 
 	ofono_dbus_dict_append(dict, "Online", DBUS_TYPE_BOOLEAN,
 				&modem->online);
@@ -826,6 +845,11 @@ void __ofono_modem_append_properties(struct ofono_modem *modem,
 						DBUS_TYPE_STRING,
 						&info->svn);
 	}
+
+	system_path = ofono_modem_get_string(modem, "SystemPath");
+	if (system_path)
+		ofono_dbus_dict_append(dict, "SystemPath", DBUS_TYPE_STRING,
+					&system_path);
 
 	interfaces = g_new0(char *, g_slist_length(modem->interface_list) + 1);
 	for (i = 0, l = modem->interface_list; l; l = l->next, i++)
@@ -1034,7 +1058,7 @@ static DBusMessage *set_property_lockdown(struct ofono_modem *modem,
 		}
 
 		modem->pending = dbus_message_ref(msg);
-		modem->timeout = g_timeout_add_seconds(20,
+		modem->timeout = g_timeout_add_seconds(modem->timeout_hint,
 						set_powered_timeout, modem);
 		return NULL;
 	}
@@ -1112,7 +1136,8 @@ static DBusMessage *modem_set_property(DBusConnection *conn,
 				return __ofono_error_failed(msg);
 
 			modem->pending = dbus_message_ref(msg);
-			modem->timeout = g_timeout_add_seconds(20,
+			modem->timeout = g_timeout_add_seconds(
+						modem->timeout_hint,
 						set_powered_timeout, modem);
 			return NULL;
 		}
@@ -1688,6 +1713,11 @@ void *ofono_devinfo_get_data(struct ofono_devinfo *info)
 	return info->driver_data;
 }
 
+struct ofono_modem *ofono_devinfo_get_modem(struct ofono_devinfo *info)
+{
+	return __ofono_atom_get_modem(info->atom);
+}
+
 static void unregister_property(gpointer data)
 {
 	struct modem_property *property = data;
@@ -1817,6 +1847,12 @@ ofono_bool_t ofono_modem_get_boolean(struct ofono_modem *modem, const char *key)
 	return value;
 }
 
+void ofono_modem_set_powered_timeout_hint(struct ofono_modem *modem,
+							unsigned int seconds)
+{
+	modem->timeout_hint = seconds;
+}
+
 void ofono_modem_set_name(struct ofono_modem *modem, const char *name)
 {
 	if (modem->name)
@@ -1866,7 +1902,7 @@ struct ofono_modem *ofono_modem_create(const char *name, const char *type)
 	else
 		snprintf(path, sizeof(path), "/%s", name);
 
-	if (__ofono_dbus_valid_object_path(path) == FALSE)
+	if (!dbus_validate_path(path, NULL))
 		return NULL;
 
 	modem = g_try_new0(struct ofono_modem, 1);
@@ -1878,6 +1914,7 @@ struct ofono_modem *ofono_modem_create(const char *name, const char *type)
 	modem->driver_type = g_strdup(type);
 	modem->properties = g_hash_table_new_full(g_str_hash, g_str_equal,
 						g_free, unregister_property);
+	modem->timeout_hint = DEFAULT_POWERED_TIMEOUT;
 
 	g_modem_list = g_slist_prepend(g_modem_list, modem);
 
