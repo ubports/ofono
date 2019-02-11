@@ -110,7 +110,6 @@ struct ipv6_settings {
 };
 
 struct context_settings {
-	char *interface;
 	struct ipv4_settings *ipv4;
 	struct ipv6_settings *ipv6;
 };
@@ -121,6 +120,7 @@ struct ofono_gprs_context {
 	ofono_bool_t inuse;
 	const struct ofono_gprs_context_driver *driver;
 	void *driver_data;
+	char *interface;
 	struct context_settings *settings;
 	struct ofono_atom *atom;
 };
@@ -361,12 +361,10 @@ static void context_settings_free(struct context_settings *settings)
 		g_free(settings->ipv6);
 		settings->ipv6 = NULL;
 	}
-
-	g_free(settings->interface);
-	settings->interface = NULL;
 }
 
 static void context_settings_append_ipv4(struct context_settings *settings,
+						const char *interface,
 						DBusMessageIter *iter)
 {
 	DBusMessageIter variant;
@@ -391,7 +389,7 @@ static void context_settings_append_ipv4(struct context_settings *settings,
 		goto done;
 
 	ofono_dbus_dict_append(&array, "Interface",
-				DBUS_TYPE_STRING, &settings->interface);
+				DBUS_TYPE_STRING, &interface);
 
 	if (settings->ipv4->proxy)
 		ofono_dbus_dict_append(&array, "Proxy", DBUS_TYPE_STRING,
@@ -433,6 +431,7 @@ done:
 }
 
 static void context_settings_append_ipv4_dict(struct context_settings *settings,
+						const char *interface,
 						DBusMessageIter *dict)
 {
 	DBusMessageIter entry;
@@ -443,12 +442,13 @@ static void context_settings_append_ipv4_dict(struct context_settings *settings,
 
 	dbus_message_iter_append_basic(&entry, DBUS_TYPE_STRING, &key);
 
-	context_settings_append_ipv4(settings, &entry);
+	context_settings_append_ipv4(settings, interface, &entry);
 
 	dbus_message_iter_close_container(dict, &entry);
 }
 
 static void context_settings_append_ipv6(struct context_settings *settings,
+						const char *interface,
 						DBusMessageIter *iter)
 {
 	DBusMessageIter variant;
@@ -472,7 +472,7 @@ static void context_settings_append_ipv6(struct context_settings *settings,
 		goto done;
 
 	ofono_dbus_dict_append(&array, "Interface",
-				DBUS_TYPE_STRING, &settings->interface);
+				DBUS_TYPE_STRING, &interface);
 
 	if (settings->ipv6->ip)
 		ofono_dbus_dict_append(&array, "Address", DBUS_TYPE_STRING,
@@ -503,6 +503,7 @@ done:
 }
 
 static void context_settings_append_ipv6_dict(struct context_settings *settings,
+						const char *interface,
 						DBusMessageIter *dict)
 {
 	DBusMessageIter entry;
@@ -513,13 +514,14 @@ static void context_settings_append_ipv6_dict(struct context_settings *settings,
 
 	dbus_message_iter_append_basic(&entry, DBUS_TYPE_STRING, &key);
 
-	context_settings_append_ipv6(settings, &entry);
+	context_settings_append_ipv6(settings, interface, &entry);
 
 	dbus_message_iter_close_container(dict, &entry);
 }
 
 static void signal_settings(struct pri_context *ctx, const char *prop,
-		void (*append)(struct context_settings *, DBusMessageIter *))
+		void (*append)(struct context_settings *,
+					const char *, DBusMessageIter *))
 
 {
 	DBusConnection *conn = ofono_dbus_get_connection();
@@ -527,6 +529,7 @@ static void signal_settings(struct pri_context *ctx, const char *prop,
 	DBusMessage *signal;
 	DBusMessageIter iter;
 	struct context_settings *settings;
+	const char *interface;
 
 	signal = dbus_message_new_signal(path,
 					OFONO_CONNECTION_CONTEXT_INTERFACE,
@@ -538,12 +541,15 @@ static void signal_settings(struct pri_context *ctx, const char *prop,
 	dbus_message_iter_init_append(signal, &iter);
 	dbus_message_iter_append_basic(&iter, DBUS_TYPE_STRING, &prop);
 
-	if (ctx->context_driver)
+	if (ctx->context_driver) {
 		settings = ctx->context_driver->settings;
-	else
+		interface = ctx->context_driver->interface;
+	} else {
 		settings = NULL;
+		interface = NULL;
+	}
 
-	append(settings, &iter);
+	append(settings, interface, &iter);
 	g_dbus_send_message(conn, signal);
 }
 
@@ -781,17 +787,15 @@ static void pri_setproxy(const char *interface, const char *proxy)
 static void pri_reset_context_settings(struct pri_context *ctx)
 {
 	struct context_settings *settings;
-	char *interface;
+	const char *interface;
 	gboolean signal_ipv4;
 	gboolean signal_ipv6;
 
 	if (ctx->context_driver == NULL)
 		return;
 
+	interface = ctx->context_driver->interface;
 	settings = ctx->context_driver->settings;
-
-	interface = settings->interface;
-	settings->interface = NULL;
 
 	signal_ipv4 = settings->ipv4 != NULL;
 	signal_ipv6 = settings->ipv6 != NULL;
@@ -809,8 +813,6 @@ static void pri_reset_context_settings(struct pri_context *ctx)
 	}
 
 	pri_ifupdown(interface, FALSE);
-
-	g_free(interface);
 }
 
 static void pri_update_mms_context_settings(struct pri_context *ctx)
@@ -826,10 +828,10 @@ static void pri_update_mms_context_settings(struct pri_context *ctx)
 
 	DBG("proxy %s port %u", ctx->proxy_host, ctx->proxy_port);
 
-	pri_set_ipv4_addr(settings->interface, settings->ipv4->ip);
+	pri_set_ipv4_addr(gc->interface, settings->ipv4->ip);
 
 	if (ctx->proxy_host)
-		pri_setproxy(settings->interface, ctx->proxy_host);
+		pri_setproxy(gc->interface, ctx->proxy_host);
 }
 
 static gboolean pri_str_changed(const char *val, const char *newval)
@@ -1056,6 +1058,7 @@ static void append_context_properties(struct pri_context *ctx,
 	dbus_bool_t value;
 	const char *strvalue;
 	struct context_settings *settings;
+	const char *interface;
 
 	ofono_dbus_dict_append(dict, "Name", DBUS_TYPE_STRING, &name);
 
@@ -1092,13 +1095,16 @@ static void append_context_properties(struct pri_context *ctx,
 					DBUS_TYPE_STRING, &strvalue);
 	}
 
-	if (ctx->context_driver)
+	if (ctx->context_driver) {
 		settings = ctx->context_driver->settings;
-	else
+		interface = ctx->context_driver->interface;
+	} else {
 		settings = NULL;
+		interface = NULL;
+	}
 
-	context_settings_append_ipv4_dict(settings, dict);
-	context_settings_append_ipv6_dict(settings, dict);
+	context_settings_append_ipv4_dict(settings, interface, dict);
+	context_settings_append_ipv6_dict(settings, interface, dict);
 }
 
 static DBusMessage *pri_get_properties(DBusConnection *conn,
@@ -1147,8 +1153,8 @@ static void pri_activate_callback(const struct ofono_error *error, void *data)
 	__ofono_dbus_pending_reply(&ctx->pending,
 				dbus_message_new_method_return(ctx->pending));
 
-	if (gc->settings->interface != NULL) {
-		pri_ifupdown(gc->settings->interface, TRUE);
+	if (gc->interface != NULL) {
+		pri_ifupdown(gc->interface, TRUE);
 
 		if (ctx->type == OFONO_GPRS_CONTEXT_TYPE_MMS &&
 				gc->settings->ipv4)
@@ -1241,8 +1247,8 @@ static void pri_read_settings_callback(const struct ofono_error *error,
 
 	pri_ctx->active = TRUE;
 
-	if (gc->settings->interface != NULL) {
-		pri_ifupdown(gc->settings->interface, TRUE);
+	if (gc->interface != NULL) {
+		pri_ifupdown(gc->interface, TRUE);
 
 		pri_context_signal_settings(pri_ctx, gc->settings->ipv4 != NULL,
 						gc->settings->ipv6 != NULL);
@@ -1810,7 +1816,7 @@ static gboolean context_dbus_unregister(struct pri_context *ctx)
 
 	if (ctx->active == TRUE) {
 		const char *interface =
-			ctx->context_driver->settings->interface;
+			ctx->context_driver->interface;
 
 		if (ctx->type == OFONO_GPRS_CONTEXT_TYPE_MMS)
 			pri_set_ipv4_addr(interface, NULL);
@@ -3298,10 +3304,8 @@ enum ofono_gprs_context_type ofono_gprs_context_get_type(
 void ofono_gprs_context_set_interface(struct ofono_gprs_context *gc,
 					const char *interface)
 {
-	struct context_settings *settings = gc->settings;
-
-	g_free(settings->interface);
-	settings->interface = g_strdup(interface);
+	g_free(gc->interface);
+	gc->interface = g_strdup(interface);
 }
 
 void ofono_gprs_context_set_ipv4_address(struct ofono_gprs_context *gc,
