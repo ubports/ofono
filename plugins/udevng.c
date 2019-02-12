@@ -1179,7 +1179,7 @@ static gboolean setup_gemalto(struct modem_info* modem)
 
 static gboolean setup_xmm7xxx(struct modem_info *modem)
 {
-	const char *mdm = NULL, *net = NULL;
+	const char *mdm = NULL, *net = NULL, *net2 = NULL, *net3 = NULL;
 	GSList *list;
 
 	DBG("%s %s\n", __DATE__, __TIME__);
@@ -1200,6 +1200,10 @@ static gboolean setup_xmm7xxx(struct modem_info *modem)
 			} else if (g_strcmp0(info->subsystem, "net") == 0) {
 				if (g_strcmp0(info->number, "06") == 0)
 					net = info->devnode;
+				if (g_strcmp0(info->number, "08") == 0)
+					net2 = info->devnode;
+				if (g_strcmp0(info->number, "0a") == 0)
+					net3 = info->devnode;
 			}
 		} else {
 			if (g_strcmp0(info->subsystem, "tty") == 0) {
@@ -1219,6 +1223,15 @@ static gboolean setup_xmm7xxx(struct modem_info *modem)
 
 	ofono_modem_set_string(modem->modem, "Modem", mdm);
 	ofono_modem_set_string(modem->modem, "NetworkInterface", net);
+
+	if (net2)
+		ofono_modem_set_string(modem->modem, "NetworkInterface2", net2);
+
+	if (net3)
+		ofono_modem_set_string(modem->modem, "NetworkInterface3", net3);
+
+	ofono_modem_set_string(modem->modem, "CtrlPath", "/USBCDC/0");
+	ofono_modem_set_string(modem->modem, "DataPath", "/USBHS/NCM/");
 
 	return TRUE;
 }
