@@ -706,8 +706,14 @@ const char *registration_tech_to_string(enum ofono_access_technology tech)
 		return "hspa";
 	case ACCESS_TECHNOLOGY_EUTRAN:
 		return "lte";
+	case ACCESS_TECHNOLOGY_NB_IOT_M1:
+		return "lte-cat-m1";
+	case ACCESS_TECHNOLOGY_NB_IOT_NB1:
+		return "lte-cat-nb1";
 	case OFONO_ACCESS_TECHNOLOGY_NONE:
 		break;
+	default:
+		return "";
 	}
 	return "";
 }
