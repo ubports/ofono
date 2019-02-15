@@ -2811,6 +2811,11 @@ enum ofono_gprs_context_type ofono_gprs_context_get_type(
 	return gc->type;
 }
 
+const char *ofono_gprs_context_get_interface(struct ofono_gprs_context *gc)
+{
+	return gc->interface;
+}
+
 void ofono_gprs_context_set_interface(struct ofono_gprs_context *gc,
 					const char *interface)
 {
