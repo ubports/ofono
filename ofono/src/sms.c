@@ -2145,7 +2145,7 @@ int __ofono_sms_txq_submit(struct ofono_sms *sms, GSList *list,
 	g_queue_push_tail(sms->txq, entry);
 
 	if (sms->registered && g_queue_get_length(sms->txq) == 1)
-		sms->tx_source = g_timeout_add(0, tx_next, sms);
+		sms->tx_source = g_timeout_add(100, tx_next, sms);
 
 	if (uuid)
 		memcpy(uuid, &entry->uuid, sizeof(*uuid));
