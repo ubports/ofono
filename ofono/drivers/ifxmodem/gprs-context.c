@@ -276,18 +276,27 @@ static void cgdata_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	CALLBACK_WITH_SUCCESS(gcd->cb, gcd->cb_data);
 }
 
-static void get_datapath(struct ofono_modem *modem, const char *interface,
-								char* datapath)
+static const char *get_datapath(struct ofono_modem *modem,
+						const char *interface)
 {
-	if (!datapath)
-		return;
+	static char datapath[256];
+	char n;
 
-	if (!strcmp(interface, ofono_modem_get_string(modem, "NetworkInterface")))
-		sprintf(datapath, "%s0", ofono_modem_get_string(modem, "DataPath"));
-	else if (!strcmp(interface, ofono_modem_get_string(modem, "NetworkInterface2")))
-		sprintf(datapath, "%s1", ofono_modem_get_string(modem, "DataPath"));
-	else if (!strcmp(interface, ofono_modem_get_string(modem, "NetworkInterface3")))
-		sprintf(datapath, "%s2", ofono_modem_get_string(modem, "DataPath"));
+	if (!strcmp(interface,
+			ofono_modem_get_string(modem, "NetworkInterface")))
+		n = '0';
+	else if (!strcmp(interface,
+			ofono_modem_get_string(modem, "NetworkInterface2")))
+		n = '1';
+	else if (!strcmp(interface,
+			ofono_modem_get_string(modem, "NetworkInterface3")))
+		n = '2';
+	else
+		return NULL;
+
+	snprintf(datapath, sizeof(datapath), "%s%c",
+			ofono_modem_get_string(modem, "DataPath"), n);
+	return datapath;
 }
 
 static void cgcontrdp_cb(gboolean ok, GAtResult *result, gpointer user_data)
@@ -301,8 +310,8 @@ static void cgcontrdp_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	const char *gw = NULL;
 	const char *dns[3];
 	const char *ctrlpath;
-	char datapath[50];
-	char buf[100];
+	const char *datapath;
+	char buf[512];
 	const char *interface;
 
 	DBG("ok %d", ok);
@@ -362,7 +371,7 @@ static void cgcontrdp_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 	ctrlpath = ofono_modem_get_string(modem, "CtrlPath");
 	interface = ofono_gprs_context_get_interface(gc);
-	get_datapath(modem, interface, datapath);
+	datapath = get_datapath(modem, interface);
 
 	ofono_gprs_context_set_ipv4_address(gc, gcd->address, TRUE);
 
@@ -374,10 +383,11 @@ static void cgcontrdp_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 	ofono_gprs_context_set_ipv4_dns_servers(gc, dns);
 
-	sprintf(buf, "AT+XDATACHANNEL=1,1,\"%s\",\"%s\",2,%u", ctrlpath,
-				datapath, gcd->active_context);
+	snprintf(buf, sizeof(buf), "AT+XDATACHANNEL=1,1,\"%s\",\"%s\",2,%u",
+			ctrlpath, datapath, gcd->active_context);
 	g_at_chat_send(gcd->chat, buf, none_prefix, NULL, NULL, NULL);
-	sprintf(buf, "AT+CGDATA=\"M-RAW_IP\",%u", gcd->active_context);
+	snprintf(buf, sizeof(buf), "AT+CGDATA=\"M-RAW_IP\",%u",
+			gcd->active_context);
 
 	if (g_at_chat_send(gcd->chat, buf, none_prefix, cgdata_cb,
 						gc, NULL) > 0)
