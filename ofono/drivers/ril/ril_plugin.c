@@ -67,6 +67,7 @@
 #define RILMODEM_DEFAULT_SUB        "SUB1"
 #define RILMODEM_DEFAULT_TECHS      OFONO_RADIO_ACCESS_MODE_ALL
 #define RILMODEM_DEFAULT_LTE_MODE   PREF_NET_TYPE_LTE_GSM_WCDMA
+#define RILMODEM_DEFAULT_UMTS_MODE  PREF_NET_TYPE_GSM_WCDMA_AUTO
 #define RILMODEM_DEFAULT_NETWORK_MODE_TIMEOUT (20*1000) /* ms */
 #define RILMODEM_DEFAULT_ENABLE_VOICECALL TRUE
 #define RILMODEM_DEFAULT_ENABLE_CBS TRUE
@@ -116,6 +117,7 @@
 #define RILCONF_ENABLE_CBS                  "enableCellBroadcast"
 #define RILCONF_TECHNOLOGIES                "technologies"
 #define RILCONF_LTE_MODE                    "lteNetworkMode"
+#define RILCONF_UMTS_MODE                   "umtsNetworkMode"
 #define RILCONF_NETWORK_MODE_TIMEOUT        "networkModeTimeout"
 #define RILCONF_UICC_WORKAROUND             "uiccWorkaround"
 #define RILCONF_ECCLIST_FILE                "ecclistFile"
@@ -1199,6 +1201,7 @@ static ril_slot *ril_plugin_slot_new_take(char *transport,
 	config->slot = slot_index;
 	config->techs = RILMODEM_DEFAULT_TECHS;
 	config->lte_network_mode = RILMODEM_DEFAULT_LTE_MODE;
+	config->umts_network_mode = RILMODEM_DEFAULT_UMTS_MODE;
 	config->empty_pin_query = RILMODEM_DEFAULT_EMPTY_PIN_QUERY;
 	config->radio_power_cycle = RILMODEM_DEFAULT_RADIO_POWER_CYCLE;
 	config->confirm_radio_power_on =
@@ -1502,10 +1505,15 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 	}
 	
 	/* lteNetworkMode */
-	if (ril_config_get_integer(file, group, RILCONF_LTE_MODE,
-					&config->lte_network_mode)) {
-		DBG("%s: " RILCONF_LTE_MODE " %d", group,
-					config->lte_network_mode);
+	if (ril_config_get_integer(file, group, RILCONF_LTE_MODE, &ival)) {
+		DBG("%s: " RILCONF_LTE_MODE " %d", group, ival);
+		config->lte_network_mode = ival;
+	}
+
+	/* umtsNetworkMode */
+	if (ril_config_get_integer(file, group, RILCONF_UMTS_MODE, &ival)) {
+		DBG("%s: " RILCONF_UMTS_MODE " %d", group, ival);
+		config->umts_network_mode = ival;
 	}
 
 	/* networkModeTimeout */
