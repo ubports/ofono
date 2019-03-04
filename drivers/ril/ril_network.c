@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2018 Jolla Ltd.
+ *  Copyright (C) 2015-2019 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -65,7 +65,8 @@ struct ril_network_priv {
 	struct ril_radio *radio;
 	struct ril_sim_card *simcard;
 	int rat;
-	int lte_network_mode;
+	enum ril_pref_net_type lte_network_mode;
+	enum ril_pref_net_type umts_network_mode;
 	int network_mode_timeout;
 	char *log_prefix;
 	guint operator_poll_id;
@@ -453,17 +454,20 @@ static enum ofono_radio_access_mode ril_network_rat_to_mode(int rat)
 static int ril_network_mode_to_rat(struct ril_network *self,
 					enum ofono_radio_access_mode mode)
 {
+	struct ril_sim_settings *settings = self->settings;
+	struct ril_network_priv *priv = self->priv;
+
 	switch (mode) {
 	case OFONO_RADIO_ACCESS_MODE_ANY:
 	case OFONO_RADIO_ACCESS_MODE_LTE:
-		if (self->settings->techs & OFONO_RADIO_ACCESS_MODE_LTE) {
-			return self->priv->lte_network_mode;
+		if (settings->techs & OFONO_RADIO_ACCESS_MODE_LTE) {
+			return priv->lte_network_mode;
 		}
 		/* no break */
 	default:
 	case OFONO_RADIO_ACCESS_MODE_UMTS:
-		if (self->settings->techs & OFONO_RADIO_ACCESS_MODE_UMTS) {
-			return PREF_NET_TYPE_GSM_WCDMA_AUTO;
+		if (settings->techs & OFONO_RADIO_ACCESS_MODE_UMTS) {
+			return priv->umts_network_mode;
 		}
 		/* no break */
 	case OFONO_RADIO_ACCESS_MODE_GSM:
@@ -868,6 +872,7 @@ struct ril_network *ril_network_new(const char *path, GRilIoChannel *io,
 
 	/* Copy relevant config values */
 	priv->lte_network_mode = config->lte_network_mode;
+	priv->umts_network_mode = config->umts_network_mode;
 	priv->network_mode_timeout = config->network_mode_timeout;
 
 	/* Register listeners */
