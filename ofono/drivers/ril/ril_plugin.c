@@ -88,6 +88,7 @@
 #define RILMODEM_DEFAULT_SLOT_FLAGS SAILFISH_SLOT_NO_FLAGS
 
 /* RIL socket transport name and parameters */
+#define RIL_TRANSPORT_MODEM                 "modem"
 #define RIL_TRANSPORT_SOCKET                "socket"
 #define RIL_TRANSPORT_SOCKET_PATH           "path"
 #define RIL_TRANSPORT_SOCKET_SUB            "sub"
@@ -1364,6 +1365,7 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 	int ival;
 	char *sval;
 	char **strv;
+	char *modem;
 	GHashTable *transport_params = g_hash_table_new_full(g_str_hash,
 						g_str_equal, g_free, g_free);
 	char *transport = NULL;
@@ -1409,8 +1411,14 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 		return NULL;
 	}
 
-	slot = ril_plugin_slot_new_take(transport, transport_params,
-			g_strconcat("/", group, NULL),
+	/* ril_plugin_slot_new_take() will take ownership of this memory */
+	modem = g_strconcat("/", group, NULL);
+
+	/* Add "modem" entry to point to the actual modem path */
+	g_hash_table_replace(transport_params, g_strdup(RIL_TRANSPORT_MODEM),
+							g_strdup(modem));
+
+	slot = ril_plugin_slot_new_take(transport, transport_params, modem,
 			ril_config_get_string(file, group, RILCONF_NAME),
 			RILMODEM_DEFAULT_SLOT);
 	config = &slot->config;
