@@ -275,10 +275,6 @@ gboolean __ofono_call_settings_is_busy(struct ofono_call_settings *cs);
 gboolean __ofono_gprs_get_roaming_allowed(struct ofono_gprs *gprs);
 
 #include <ofono/gprs-context.h>
-
-const struct ofono_gprs_primary_context *__ofono_gprs_context_settings_by_type
-		(struct ofono_gprs *gprs, enum ofono_gprs_context_type type);
-
 #include <ofono/radio-settings.h>
 #include <ofono/audio-settings.h>
 #include <ofono/ctm.h>

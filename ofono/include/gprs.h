@@ -26,10 +26,9 @@
 extern "C" {
 #endif
 
-#include <ofono/types.h>
+#include <ofono/gprs-context.h>
 
 struct ofono_gprs;
-struct ofono_gprs_context;
 
 typedef void (*ofono_gprs_status_cb_t)(const struct ofono_error *error,
 						int status, void *data);
@@ -84,6 +83,9 @@ void ofono_gprs_cid_activated(struct ofono_gprs  *gprs, unsigned int cid,
 				const char *apn);
 
 void ofono_gprs_attached_update(struct ofono_gprs *gprs);
+
+const struct ofono_gprs_primary_context *ofono_gprs_context_settings_by_type
+		(struct ofono_gprs *gprs, enum ofono_gprs_context_type type);
 
 #ifdef __cplusplus
 }

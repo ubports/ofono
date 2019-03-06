@@ -3902,7 +3902,7 @@ gboolean __ofono_gprs_get_roaming_allowed(struct ofono_gprs *gprs)
 	return gprs->roaming_allowed;
 }
 
-const struct ofono_gprs_primary_context *__ofono_gprs_context_settings_by_type
+const struct ofono_gprs_primary_context *ofono_gprs_context_settings_by_type
 		(struct ofono_gprs *gprs, enum ofono_gprs_context_type type)
 {
 	GSList *l;
