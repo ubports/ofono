@@ -3300,7 +3300,7 @@ static void sim_pin_query_cb(const struct ofono_error *error,
 	DBusConnection *conn = ofono_dbus_get_connection();
 	const char *path = __ofono_atom_get_path(sim->atom);
 	struct cached_pin *cpins = pin_cache_lookup(sim->iccid);
-	const char *pin_name;
+	const char *pin_name = sim_passwd_name(pin_type);
 	char **locked_pins;
 	gboolean lock_changed;
 
@@ -3313,7 +3313,6 @@ static void sim_pin_query_cb(const struct ofono_error *error,
 
 	if (sim->pin_type != pin_type) {
 		sim->pin_type = pin_type;
-		pin_name = sim_passwd_name(pin_type);
 
 		if (pin_type != OFONO_SIM_PASSWORD_NONE &&
 				password_is_pin(pin_type) == FALSE)
