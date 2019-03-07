@@ -24,7 +24,7 @@ pkginclude_HEADERS = include/log.h include/plugin.h include/history.h \
 			include/sim-mnclength.h \
 			include/handsfree-audio.h include/siri.h \
 			include/sms-filter.h include/gprs-filter.h \
-			include/voicecall-filter.h \
+			include/voicecall-filter.h include/dbus-access.h \
 			include/ril-constants.h include/ril-transport.h \
 			include/netmon.h include/lte.h \
 			include/storage.h include/watch.h \
@@ -737,7 +737,8 @@ src_ofonod_SOURCES = $(builtin_sources) $(gatchat_sources) src/ofono.ver \
 			src/cdma-provision.c src/handsfree.c \
 			src/handsfree-audio.c src/bluetooth.h \
 			src/sim-mnclength.c src/voicecallagent.c \
-			src/sms-filter.c src/gprs-filter.c src/dbus-queue.c \
+			src/sms-filter.c src/gprs-filter.c \
+			src/dbus-queue.c src/dbus-access.c \
 			src/voicecall-filter.c src/ril-transport.c \
 			src/hfp.h src/siri.c src/watchlist.c \
 			src/netmon.c src/lte.c \

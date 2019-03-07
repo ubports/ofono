@@ -1034,6 +1034,13 @@ static gboolean pri_deactivation_required(struct pri_context *ctx,
 	return FALSE;
 }
 
+static gboolean connctx_allow(DBusMessage *msg,
+		enum ofono_dbus_access_connctx_method method, const char *arg)
+{
+	return __ofono_dbus_access_method_allowed(dbus_message_get_sender(msg),
+				OFONO_DBUS_ACCESS_INTF_CONNCTX, method, arg);
+}
+
 static DBusMessage *pri_provision_context(DBusConnection *conn,
 					DBusMessage *msg, void *data)
 {
@@ -1045,6 +1052,10 @@ static DBusMessage *pri_provision_context(DBusConnection *conn,
 	struct ofono_gprs_provision_data *settings;
 	DBusMessage *reply = NULL;
 	int i, count = 0;
+
+	if (!connctx_allow(msg, OFONO_DBUS_ACCESS_CONNCTX_PROVISION_CONTEXT,
+									NULL))
+		return __ofono_error_access_denied(msg);
 
 	if (sim == NULL)
 		return __ofono_error_failed(msg);
@@ -1626,6 +1637,10 @@ static DBusMessage *pri_set_property(DBusConnection *conn,
 	if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_VARIANT)
 		return __ofono_error_invalid_args(msg);
 
+	if (!connctx_allow(msg, OFONO_DBUS_ACCESS_CONNCTX_SET_PROPERTY,
+								property))
+		return __ofono_error_access_denied(msg);
+
 	dbus_message_iter_recurse(&iter, &var);
 
 	if (g_str_equal(property, "Active")) {
@@ -2156,6 +2171,13 @@ static DBusMessage *gprs_get_properties(DBusConnection *conn,
 	return reply;
 }
 
+static gboolean gprs_allow(DBusMessage *msg,
+		enum ofono_dbus_access_connmgr_method method, const char *arg)
+{
+	return __ofono_dbus_access_method_allowed(dbus_message_get_sender(msg),
+				OFONO_DBUS_ACCESS_INTF_CONNMGR, method, arg);
+}
+
 static DBusMessage *gprs_set_property(DBusConnection *conn,
 					DBusMessage *msg, void *data)
 {
@@ -2180,6 +2202,9 @@ static DBusMessage *gprs_set_property(DBusConnection *conn,
 
 	if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_VARIANT)
 		return __ofono_error_invalid_args(msg);
+
+	if (!gprs_allow(msg, OFONO_DBUS_ACCESS_CONNMGR_SET_PROPERTY, property))
+		return __ofono_error_access_denied(msg);
 
 	dbus_message_iter_recurse(&iter, &var);
 
@@ -2647,6 +2672,9 @@ static DBusMessage *gprs_deactivate_all(DBusConnection *conn,
 	GSList *l;
 	struct pri_context *ctx;
 
+	if (!gprs_allow(msg, OFONO_DBUS_ACCESS_CONNMGR_DEACTIVATE_ALL, NULL))
+		return __ofono_error_access_denied(msg);
+
 	if (gprs->pending)
 		return __ofono_error_busy(msg);
 
@@ -2850,6 +2878,9 @@ static DBusMessage *gprs_reset_contexts(DBusConnection *conn,
 	struct ofono_sim *sim = __ofono_atom_find(OFONO_ATOM_TYPE_SIM, modem);
 	DBusMessage *reply;
 	GSList *l;
+
+	if (!gprs_allow(msg, OFONO_DBUS_ACCESS_CONNMGR_RESET_CONTEXTS, NULL))
+		return __ofono_error_access_denied(msg);
 
 	if (gprs->pending)
 		return __ofono_error_busy(msg);

@@ -83,6 +83,11 @@ static DBusMessage *message_cancel(DBusConnection *conn,
 	struct message *m = data;
 	int res;
 
+	if (!__ofono_dbus_access_method_allowed(dbus_message_get_sender(msg),
+				OFONO_DBUS_ACCESS_INTF_MESSAGE,
+				OFONO_DBUS_ACCESS_MESSAGE_CANCEL, NULL))
+		return __ofono_error_access_denied(msg);
+
 	if (dbus_message_get_args(msg, NULL, DBUS_TYPE_INVALID) == FALSE)
 		return __ofono_error_invalid_args(msg);
 

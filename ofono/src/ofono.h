@@ -635,6 +635,12 @@ void __ofono_voicecall_filter_chain_incoming(struct voicecall_filter_chain *c,
 				ofono_voicecall_filter_incoming_cb_t cb,
 				ofono_destroy_func destroy, void *user_data);
 
+#include <ofono/dbus-access.h>
+
+gboolean __ofono_dbus_access_method_allowed(const char *sender,
+					enum ofono_dbus_access_intf iface,
+					int method, const char *arg);
+
 #include <ofono/sim-mnclength.h>
 
 int __ofono_sim_mnclength_get_mnclength(const char *imsi);
