@@ -1,16 +1,24 @@
 #!/usr/bin/make -f
 
-CFLAGS += -Wall -Werror -Wextra \
+CFLAGS += -Wall \
 	-Wno-unused-parameter \
 	-Wno-missing-field-initializers \
 	-Wdeclaration-after-statement \
 	-Wmissing-declarations \
-	-Wredundant-decls \
 	-Wcast-align \
 	-DG_DISABLE_DEPRECATED
 
 CONFIGURE_FLAGS := \
-	--enable-android-wakelock
+    --disable-static \
+    --enable-sailfish-bt \
+    --enable-sailfish-manager \
+    --enable-sailfish-provision \
+    --enable-sailfish-pushforwarder \
+    --enable-sailfish-rilmodem \
+    --disable-add-remove-context \
+    --disable-isimodem \
+    --disable-qmimodem \
+    --with-systemdunitdir=/lib/systemd/system
 
 %:
 	dh $@ --parallel --with=autoreconf,systemd
@@ -23,6 +31,8 @@ override_dh_installinit:
 
 override_dh_install:
 	dh_install --list-missing
+
+override_dh_auto_test:
 
 override_dh_strip:
 	dh_strip --dbg-package=ofono-dbg

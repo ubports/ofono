@@ -1,9 +1,9 @@
 Source: ofono
 Section: admin
 Priority: optional
-Maintainer: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>
+Maintainer: UBports developers
 XSBC-Original-Maintainer: Debian Telepathy maintainers <pkg-telepathy-maintainers@lists.alioth.debian.org>
-Uploaders: Jonny Lamb <jonny@debian.org>, Hector Oron <zumbi@debian.org>, Konstantinos Margaritis <markos@debian.org>
+Uploaders: TheKit <nekit1000@gmail.com>
 Build-Depends: debhelper (>= 9),
                dh-autoreconf,
                dh-systemd,
@@ -15,14 +15,15 @@ Build-Depends: debhelper (>= 9),
                libbluetooth-dev (>= 4.30),
                mobile-broadband-provider-info,
                libc-ares-dev,
-               libsystemd-dev
-Standards-Version: 3.9.4
+               libsystemd-dev,
+               libglibutil-dev,
+               libgrilio-dev,
+               libmce-glib-dev,
+               libwspcodec-dev
+Standards-Version: 4.1.1
 Homepage: http://www.ofono.org/
-# If you aren't a member of ~phablet-team but need to upload
-# packaging changes, just go ahead. ~phablet-team will notice
-# and sync up the code again.
-Vcs-Bzr: https://code.launchpad.net/~phablet-team/ofono/ubuntu
-Vcs-Browser: http://bazaar.launchpad.net/~phablet-team/ofono/ubuntu
+Vcs-Git: https://github.com/ubports/ofono.git
+Vcs-Browser: https://github.com/ubports/ofono
 
 Package: ofono
 Architecture: any
