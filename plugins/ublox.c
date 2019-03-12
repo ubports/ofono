@@ -185,19 +185,18 @@ static int ublox_enable(struct ofono_modem *modem)
 	}
 
 	data->aux = open_device(modem, "Aux", "Aux: ");
-	if (data->aux == NULL)
-		return -EINVAL;
+	/* If this is a serial modem then the device may be behind
+	 * the 'Device' attribute instead...
+	 */
+	if (data->aux == NULL) {
+		data->aux = open_device(modem, "Device", "Aux: ");
+		if (data->aux == NULL)
+			return -EINVAL;
+	}
 
-	if (data->model_id == SARA_G270) {
-		data->modem = open_device(modem, "Modem", "Modem: ");
-		if (data->modem == NULL) {
-			g_at_chat_unref(data->aux);
-			data->aux = NULL;
-			return -EIO;
-		}
-
+	data->modem = open_device(modem, "Modem", "Modem: ");
+	if (data->modem) {
 		g_at_chat_set_slave(data->modem, data->aux);
-
 		g_at_chat_send(data->modem, "ATE0 +CMEE=1", none_prefix,
 						NULL, NULL, NULL);
 
