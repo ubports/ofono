@@ -1559,12 +1559,12 @@ static void creg_notify(GAtResult *result, gpointer user_data)
 					option_query_tech_cb, tq, g_free) > 0)
 			return;
 		break;
-    case OFONO_VENDOR_GEMALTO:
-              if (g_at_chat_send(nd->chat, "AT^SMONI",
-                                      smoni_prefix,
-                                      gemalto_query_tech_cb, tq, g_free) > 0)
-                      return;
-              break;
+	case OFONO_VENDOR_GEMALTO:
+		if (g_at_chat_send(nd->chat, "AT^SMONI",
+					smoni_prefix,
+					gemalto_query_tech_cb, tq, g_free) > 0)
+			return;
+		break;
 	}
 
 	g_free(tq);
