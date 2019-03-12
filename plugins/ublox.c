@@ -169,13 +169,12 @@ static int ublox_enable(struct ofono_modem *modem)
 	 */
 	data->model_id = atoi(model_str);
 
+	data->vendor_family = OFONO_VENDOR_UBLOX;
+
 	switch (data->model_id) {
 	case SARA_G270:
-		data->vendor_family = OFONO_VENDOR_UBLOX;
-		break;
 	case TOBYL2_COMPATIBLE_MODE:
 	case TOBYL2_HIGH_THROUGHPUT_MODE:
-		data->vendor_family = OFONO_VENDOR_UBLOX_TOBY_L2;
 		break;
 	case TOBYL2_MEDIUM_THROUGHPUT_MODE:
 		DBG("low/medium throughtput profile unsupported");
@@ -189,7 +188,7 @@ static int ublox_enable(struct ofono_modem *modem)
 	if (data->aux == NULL)
 		return -EINVAL;
 
-	if (data->vendor_family == OFONO_VENDOR_UBLOX) {
+	if (data->model_id == SARA_G270) {
 		data->modem = open_device(modem, "Modem", "Modem: ");
 		if (data->modem == NULL) {
 			g_at_chat_unref(data->aux);
