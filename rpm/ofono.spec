@@ -17,7 +17,7 @@ Requires(preun): systemd
 Requires(post): systemd
 Requires(postun): systemd
 
-# %license requires reasonably fresh rpm
+# license macro requires reasonably fresh rpm
 BuildRequires:  rpm >= 4.11
 BuildRequires:  pkgconfig(dbus-1)
 BuildRequires:  pkgconfig(dbus-glib-1)
