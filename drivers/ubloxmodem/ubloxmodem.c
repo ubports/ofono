@@ -42,23 +42,23 @@ const struct ublox_model ublox_models[] = {
 	/* TOBY L2 series */
 	{
 		.name = "TOBY-L200",
-		.flags = UBLOX_F_TOBY_L2,
+		.flags = UBLOX_F_TOBY_L2|UBLOX_F_HAVE_USBCONF,
 	},
 	{
 		.name = "TOBY-L201",
-		.flags = UBLOX_F_TOBY_L2,
+		.flags = UBLOX_F_TOBY_L2|UBLOX_F_HAVE_USBCONF,
 	},
 	{
 		.name = "TOBY-L210",
-		.flags = UBLOX_F_TOBY_L2,
+		.flags = UBLOX_F_TOBY_L2|UBLOX_F_HAVE_USBCONF,
 	},
 	{
 		.name = "TOBY-L220",
-		.flags = UBLOX_F_TOBY_L2,
+		.flags = UBLOX_F_TOBY_L2|UBLOX_F_HAVE_USBCONF,
 	},
 	{
 		.name = "TOBY-L280",
-		.flags = UBLOX_F_TOBY_L2,
+		.flags = UBLOX_F_TOBY_L2|UBLOX_F_HAVE_USBCONF,
 	},
 	{ /* sentinel */ },
 };
