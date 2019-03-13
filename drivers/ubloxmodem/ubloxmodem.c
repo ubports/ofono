@@ -60,6 +60,23 @@ const struct ublox_model ublox_models[] = {
 		.name = "TOBY-L280",
 		.flags = UBLOX_F_TOBY_L2|UBLOX_F_HAVE_USBCONF,
 	},
+	/* TOBY L4 series */
+	{
+		.name = "TOBY-L4006",
+		.flags = UBLOX_F_TOBY_L4,
+	},
+	{
+		.name = "TOBY-L4106",
+		.flags = UBLOX_F_TOBY_L4,
+	},
+	{
+		.name = "TOBY-L4206",
+		.flags = UBLOX_F_TOBY_L4,
+	},
+	{
+		.name = "TOBY-L4906",
+		.flags = UBLOX_F_TOBY_L4,
+	},
 	{ /* sentinel */ },
 };
 
@@ -88,6 +105,11 @@ int ublox_model_to_id(const struct ublox_model *model)
 int ublox_is_toby_l2(const struct ublox_model *model)
 {
 	return model->flags & UBLOX_F_TOBY_L2;
+}
+
+int ublox_is_toby_l4(const struct ublox_model *model)
+{
+	return model->flags & UBLOX_F_TOBY_L4;
 }
 
 static int ubloxmodem_init(void)
