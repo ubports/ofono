@@ -49,20 +49,17 @@
 static const char *uusbconf_prefix[] = { "+UUSBCONF:", NULL };
 static const char *none_prefix[] = { NULL };
 
-enum supported_models {
-	SARA_G270			= 1102,
-	TOBYL2_COMPATIBLE_MODE		= 1141,
-	TOBYL2_MEDIUM_THROUGHPUT_MODE	= 1143,
-	TOBYL2_HIGH_THROUGHPUT_MODE	= 1146,
+enum ublox_device_flags {
+	UBLOX_DEVICE_F_HIGH_THROUGHPUT_MODE	= (1 << 0),
 };
 
 struct ublox_data {
 	GAtChat *modem;
 	GAtChat *aux;
-	int model_id;
 	enum ofono_vendor vendor_family;
 
 	const struct ublox_model *model;
+	int flags;
 };
 
 static void ublox_debug(const char *str, void *user_data)
@@ -148,7 +145,7 @@ static void cfun_enable(gboolean ok, GAtResult *result, gpointer user_data)
 		return;
 	}
 
-	if (data->model_id == TOBYL2_HIGH_THROUGHPUT_MODE)
+	if (data->flags & UBLOX_DEVICE_F_HIGH_THROUGHPUT_MODE)
 		/* use bridged mode until routed mode support is added */
 		g_at_chat_send(data->aux, "AT+UBMCONF=2", none_prefix,
 						NULL, NULL, NULL);
@@ -183,13 +180,12 @@ retry:
 	switch (profile) {
 	case 0: /* Fairly back compatible */
 	case 1: /* Fairly back compatible plus audio */
-		data->model_id =  TOBYL2_COMPATIBLE_MODE;
 		break;
 	case 2: /* Low/medium throughput */
-		data->model_id = TOBYL2_MEDIUM_THROUGHPUT_MODE;
-		break;
+		ofono_error("Medium throughput mode not supported");
+		goto error;
 	case 3: /* High throughput mode */
-		data->model_id = TOBYL2_HIGH_THROUGHPUT_MODE;
+		data->flags |= UBLOX_DEVICE_F_HIGH_THROUGHPUT_MODE;
 		break;
 	default:
 		ofono_error("Unexpected USB profile: %d", profile);
@@ -390,10 +386,10 @@ static void ublox_post_sim(struct ofono_modem *modem)
 	struct ofono_gprs *gprs;
 	struct ofono_gprs_context *gc;
 	GAtChat *chat = data->modem ? data->modem : data->aux;
-	const char *driver = data->model_id == TOBYL2_HIGH_THROUGHPUT_MODE ?
+	const char *driver = data->flags & UBLOX_DEVICE_F_HIGH_THROUGHPUT_MODE ?
 						"ubloxmodem" : "atmodem";
 	/* Toby L2: Create same number of contexts as supported PDP contexts. */
-	int ncontexts = data->model_id == TOBYL2_HIGH_THROUGHPUT_MODE ? 8 : 1;
+	int ncontexts = data->flags & UBLOX_DEVICE_F_HIGH_THROUGHPUT_MODE ? 8 : 1;
 
 	DBG("%p", modem);
 
