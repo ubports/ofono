@@ -408,7 +408,8 @@ static void ublox_post_sim(struct ofono_modem *modem)
 		--ncontexts;
 	}
 
-	ofono_lte_create(modem, 0, "ubloxmodem", data->aux);
+	ofono_lte_create(modem,
+		ublox_model_to_id(data->model), "ubloxmodem", data->aux);
 }
 
 static void ublox_post_online(struct ofono_modem *modem)
