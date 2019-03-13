@@ -42,8 +42,9 @@
 #include <ofono/lte.h>
 #include <ofono/voicecall.h>
 
-#include <drivers/atmodem/atutil.h>
 #include <drivers/atmodem/vendor.h>
+
+#include <drivers/ubloxmodem/ubloxmodem.h>
 
 static const char *none_prefix[] = { NULL };
 
@@ -59,6 +60,8 @@ struct ublox_data {
 	GAtChat *aux;
 	int model_id;
 	enum ofono_vendor vendor_family;
+
+	const struct ublox_model *model;
 };
 
 static void ublox_debug(const char *str, void *user_data)
@@ -152,37 +155,78 @@ static void cfun_enable(gboolean ok, GAtResult *result, gpointer user_data)
 	ofono_modem_set_powered(modem, TRUE);
 }
 
+static void query_model_cb(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct ofono_modem *modem = user_data;
+	struct ublox_data *data = ofono_modem_get_data(modem);
+	struct ofono_error error;
+	const char *model;
+	const struct ublox_model *m;
+	const char *model_str;
+
+	decode_at_error(&error, g_at_result_final_response(result));
+
+	if (!ok)
+		goto fail;
+
+	if (at_util_parse_attr(result, "", &model) == FALSE) {
+		ofono_error("Failed to query modem model");
+		goto fail;
+	}
+
+	m = ublox_model_from_name(model);
+	if (!m) {
+		ofono_error("Unrecognized model: %s", model);
+		goto fail;
+	}
+
+	data->model = m;
+
+	DBG("Model: %s", data->model->name);
+
+	if (data->model->flags & UBLOX_F_TOBY_L2) {
+		model_str = ofono_modem_get_string(modem, "Model");
+		if (!model_str)
+			goto fail;
+
+		/*
+		 * Toby L2 devices are more complex and special than previously
+		 * supported U-Blox devices. So they need a vendor of their own.
+		 */
+		data->model_id = strtoul(model_str, NULL, 10);
+
+		switch (data->model_id) {
+		case TOBYL2_COMPATIBLE_MODE:
+		case TOBYL2_HIGH_THROUGHPUT_MODE:
+			break;
+		case TOBYL2_MEDIUM_THROUGHPUT_MODE:
+			DBG("low/medium throughtput profile unsupported");
+			break;
+		default:
+			DBG("unknown ublox model id %d", data->model_id);
+			goto fail;
+		}
+	} else {
+		data->vendor_family = OFONO_VENDOR_UBLOX;
+	}
+
+	if (g_at_chat_send(data->aux, "AT+CFUN=4", none_prefix,
+					cfun_enable, modem, NULL))
+		return;
+
+fail:
+	g_at_chat_unref(data->aux);
+	data->aux = NULL;
+	g_at_chat_unref(data->modem);
+	data->modem = NULL;
+	ofono_modem_set_powered(modem, FALSE);
+}
+
 static int ublox_enable(struct ofono_modem *modem)
 {
 	struct ublox_data *data = ofono_modem_get_data(modem);
-	const char *model_str = NULL;
 
 	DBG("%p", modem);
-
-	model_str = ofono_modem_get_string(modem, "Model");
-	if (model_str == NULL)
-		return -EINVAL;
-
-	/*
-	 * Toby L2 devices are more complex and special than previously
-	 * supported U-Blox devices. So they need a vendor of their own.
-	 */
-	data->model_id = atoi(model_str);
-
-	data->vendor_family = OFONO_VENDOR_UBLOX;
-
-	switch (data->model_id) {
-	case SARA_G270:
-	case TOBYL2_COMPATIBLE_MODE:
-	case TOBYL2_HIGH_THROUGHPUT_MODE:
-		break;
-	case TOBYL2_MEDIUM_THROUGHPUT_MODE:
-		DBG("low/medium throughtput profile unsupported");
-		break;
-	default:
-		DBG("unknown ublox model id %d", data->model_id);
-		return -EINVAL;
-	}
 
 	data->aux = open_device(modem, "Aux", "Aux: ");
 	/* If this is a serial modem then the device may be behind
@@ -199,7 +243,6 @@ static int ublox_enable(struct ofono_modem *modem)
 		g_at_chat_set_slave(data->modem, data->aux);
 		g_at_chat_send(data->modem, "ATE0 +CMEE=1", none_prefix,
 						NULL, NULL, NULL);
-
 		g_at_chat_send(data->modem, "AT&C0", NULL, NULL, NULL, NULL);
 	}
 
@@ -209,10 +252,14 @@ static int ublox_enable(struct ofono_modem *modem)
 	g_at_chat_send(data->aux, "ATE0 +CMEE=1", none_prefix,
 					NULL, NULL, NULL);
 
-	g_at_chat_send(data->aux, "AT+CFUN=4", none_prefix,
-					cfun_enable, modem, NULL);
+	if (g_at_chat_send(data->aux, "AT+CGMM", NULL,
+				query_model_cb, modem, NULL) > 0)
+		return -EINPROGRESS;
 
-	return -EINPROGRESS;
+	g_at_chat_unref(data->aux);
+	data->aux = NULL;
+
+	return -EINVAL;
 }
 
 static void cfun_disable(gboolean ok, GAtResult *result, gpointer user_data)
