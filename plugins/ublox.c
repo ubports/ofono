@@ -282,7 +282,9 @@ static int ublox_enable(struct ofono_modem *modem)
 	/* The modem can take a while to wake up if just powered on. */
 	g_at_chat_set_wakeup_command(data->aux, "AT\r", 1000, 11000);
 
-	g_at_chat_send(data->aux, "ATE0 +CMEE=1", none_prefix,
+	g_at_chat_send(data->aux, "ATE0", none_prefix,
+					NULL, NULL, NULL);
+	g_at_chat_send(data->aux, "AT+CMEE=1", none_prefix,
 					NULL, NULL, NULL);
 
 	if (g_at_chat_send(data->aux, "AT+CGMM", NULL,
