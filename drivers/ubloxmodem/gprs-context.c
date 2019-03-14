@@ -45,6 +45,7 @@ static const char *cgcontrdp_prefix[] = { "+CGCONTRDP:", NULL };
 static const char *uipaddr_prefix[] = { "+UIPADDR:", NULL };
 
 struct gprs_context_data {
+	const struct ublox_model *model;
 	GAtChat *chat;
 	unsigned int active_context;
 	ofono_gprs_context_cb_t cb;
@@ -462,7 +463,7 @@ static void cgev_notify(GAtResult *result, gpointer user_data)
 }
 
 static int ublox_gprs_context_probe(struct ofono_gprs_context *gc,
-					unsigned int vendor, void *data)
+					unsigned int model_id, void *data)
 {
 	GAtChat *chat = data;
 	struct gprs_context_data *gcd;
@@ -472,6 +473,10 @@ static int ublox_gprs_context_probe(struct ofono_gprs_context *gc,
 	gcd = g_try_new0(struct gprs_context_data, 1);
 	if (gcd == NULL)
 		return -ENOMEM;
+
+	gcd->model = ublox_model_from_id(model_id);
+	if (!gcd->model)
+		return -EINVAL;
 
 	gcd->chat = g_at_chat_clone(chat);
 
