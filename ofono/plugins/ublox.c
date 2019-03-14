@@ -145,11 +145,6 @@ static void cfun_enable(gboolean ok, GAtResult *result, gpointer user_data)
 		return;
 	}
 
-	if (data->flags & UBLOX_DEVICE_F_HIGH_THROUGHPUT_MODE)
-		/* use bridged mode until routed mode support is added */
-		g_at_chat_send(data->aux, "AT+UBMCONF=2", none_prefix,
-						NULL, NULL, NULL);
-
 	ofono_modem_set_powered(modem, TRUE);
 }
 
