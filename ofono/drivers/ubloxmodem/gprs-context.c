@@ -240,6 +240,15 @@ static void ublox_gprs_read_settings(struct ofono_gprs_context *gc,
 
 	DBG("cid %u", cid);
 
+	if (ublox_is_toby_l4(gcd->model)) {
+		/* Use DHCP */
+		gcd->active_context = cid;
+		set_gprs_context_interface(gc);
+		ofono_gprs_context_set_ipv4_address(gc, NULL, 0);
+		CALLBACK_WITH_SUCCESS(cb, data);
+		return;
+	}
+
 	gcd->active_context = cid;
 	gcd->cb = cb;
 	gcd->cb_data = data;
