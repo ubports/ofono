@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2018 Jolla Ltd.
+ *  Copyright (C) 2015-2019 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -329,15 +329,24 @@ static void ril_netreg_register_manual(struct ofono_netreg *netreg,
 	grilio_request_unref(req);
 }
 
+static int ril_netreg_dbm_to_percentage(int dbm)
+{
+	const int min_dbm = -100; /* very weak signal, 0.0000000001 mW */
+	const int max_dbm = -60;  /* strong signal, 0.000001 mW */
+
+	return (dbm <= min_dbm) ? 1 :
+		(dbm >= max_dbm) ? 100 :
+		(100 * (dbm - min_dbm) / (max_dbm - min_dbm));
+}
+
 static int ril_netreg_get_signal_strength(const void *data, guint len)
 {
 	GRilIoParser rilp;
 	int gw_signal = 0, cdma_dbm = 0, evdo_dbm = 0, lte_signal = 0;
-	int rsrp = 0;
+	int rsrp = 0, tdscdma_dbm = 0;
 
 	grilio_parser_init(&rilp, data, len);
 
-	/* RIL_SignalStrength_v6 */
 	/* GW_SignalStrength */
 	grilio_parser_get_int32(&rilp, &gw_signal);
 	grilio_parser_get_int32(&rilp, NULL); /* bitErrorRate */
@@ -354,14 +363,25 @@ static int ril_netreg_get_signal_strength(const void *data, guint len)
 	/* LTE_SignalStrength */
 	grilio_parser_get_int32(&rilp, &lte_signal);
 	grilio_parser_get_int32(&rilp, &rsrp);
-	/* The rest is ignored */
+
+	/* Skip the rest of LTE_SignalStrength_v8 */
+	if (grilio_parser_get_int32(&rilp, NULL) && /* rsrq */
+		grilio_parser_get_int32(&rilp, NULL) && /* rssnr */
+		grilio_parser_get_int32(&rilp, NULL) && /* cqi */
+		grilio_parser_get_int32(&rilp, NULL)) { /* timingAdvance */
+
+		/* TD_SCDMA_SignalStrength */
+		grilio_parser_get_int32(&rilp, &tdscdma_dbm); /* rscp */
+	}
 
 	if (rsrp == INT_MAX) {
-		DBG("gw: %d, cdma: %d, evdo: %d, lte: %d", gw_signal,
-					cdma_dbm, evdo_dbm, lte_signal);
+		DBG("gw: %d, cdma: %d, evdo: %d, lte: %d, tdscdma: %d",
+					gw_signal, cdma_dbm, evdo_dbm,
+					lte_signal, tdscdma_dbm);
 	}  else {
-		DBG("gw: %d, cdma: %d, evdo: %d, lte: %d rsrp: %d", gw_signal,
-					cdma_dbm, evdo_dbm, lte_signal, rsrp);
+		DBG("gw: %d, cdma: %d, evdo: %d, lte: %d rsrp: %d, tdscdma: %d",
+					gw_signal, cdma_dbm, evdo_dbm,
+					lte_signal, rsrp, tdscdma_dbm);
 	}
 
 	/* Return the first valid one */
@@ -378,9 +398,14 @@ static int ril_netreg_get_signal_strength(const void *data, guint len)
 		return (lte_signal * 100) / 31;
 	}
 
+	/* RSCP range: 25 to 120 dBm as defined in 3GPP TS 25.123 */
+	if (tdscdma_dbm >= 25 && tdscdma_dbm <= 120) {
+		return ril_netreg_dbm_to_percentage(-tdscdma_dbm);
+	}
+
 	/* RSRP range: 44 to 140 dBm as defined in 3GPP TS 36.133 */
 	if (lte_signal == 99 && rsrp >= 44 && rsrp <= 140) {
-		return 140 - rsrp;
+		return ril_netreg_dbm_to_percentage(-rsrp);
 	}
 
 	/* If we've got zero strength and no valid RSRP, then so be it */
