@@ -131,6 +131,10 @@ struct ofono_sim {
 	struct ofono_atom *atom;
 	unsigned int hfp_watch;
 
+	unsigned int card_slot_count;
+	unsigned int active_card_slot;
+	unsigned int pending_active_card_slot;
+
 	GSList *aid_sessions;
 	GSList *aid_list;
 	char *impi;
@@ -473,6 +477,13 @@ static DBusMessage *sim_get_properties(DBusConnection *conn,
 	get_pin_retries(sim, &pin_retries_dict, &dbus_retries);
 	ofono_dbus_dict_append_dict(&dict, "Retries", DBUS_TYPE_BYTE,
 							&pin_retries_dict);
+
+	ofono_dbus_dict_append(&dict, "CardSlotCount", DBUS_TYPE_UINT32,
+							&sim->card_slot_count);
+
+	ofono_dbus_dict_append(&dict, "ActiveCardSlot", DBUS_TYPE_UINT32,
+							&sim->active_card_slot);
+
 	g_free(pin_retries_dict);
 	g_free(dbus_retries);
 
@@ -657,6 +668,28 @@ static gboolean set_own_numbers(struct ofono_sim *sim,
 	return TRUE;
 }
 
+static void sim_set_slot_callback(const struct ofono_error *error, void *data)
+{
+	struct ofono_sim *sim = data;
+	DBusMessage *reply;
+
+	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
+		DBG("Error setting radio access mode");
+
+		sim->pending_active_card_slot = sim->active_card_slot;
+
+		reply = __ofono_error_failed(sim->pending);
+		__ofono_dbus_pending_reply(&sim->pending, reply);
+
+		return;
+	}
+
+	sim->active_card_slot = sim->pending_active_card_slot;
+
+	reply = dbus_message_new_method_return(sim->pending);
+	__ofono_dbus_pending_reply(&sim->pending, reply);
+}
+
 static DBusMessage *sim_set_property(DBusConnection *conn, DBusMessage *msg,
 					void *data)
 {
@@ -724,6 +757,37 @@ error:
 
 		if (set_ok)
 			return NULL;
+	} else if (!strcmp(name, "ActiveCardSlot")) {
+		dbus_uint32_t value;
+
+		dbus_message_iter_next(&iter);
+
+		if (sim->driver->set_active_card_slot == NULL)
+			return __ofono_error_not_implemented(msg);
+
+		if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_VARIANT)
+			return __ofono_error_invalid_args(msg);
+
+		dbus_message_iter_recurse(&iter, &var);
+
+		if (dbus_message_iter_get_arg_type(&var) != DBUS_TYPE_UINT32)
+			return __ofono_error_invalid_args(msg);
+
+		dbus_message_iter_get_basic(&var, &value);
+
+		if (value <= 0 || value > sim->card_slot_count)
+			return __ofono_error_invalid_args(msg);
+
+		if (sim->active_card_slot == value)
+			return dbus_message_new_method_return(msg);
+
+		sim->pending = dbus_message_ref(msg);
+		sim->pending_active_card_slot = value;
+
+		sim->driver->set_active_card_slot(sim, value - 1,
+							sim_set_slot_callback,
+							sim);
+		return NULL;
 	}
 
 	return __ofono_error_invalid_args(msg);
@@ -3802,4 +3866,16 @@ int ofono_sim_logical_access(struct ofono_sim *sim, int session_id,
 	sim->driver->logical_access(sim, session_id, pdu, len, cb, data);
 
 	return 0;
+}
+
+void ofono_sim_set_card_slot_count(struct ofono_sim *sim, unsigned int val)
+{
+	if (sim)
+		sim->card_slot_count = val;
+}
+
+void ofono_sim_set_active_card_slot(struct ofono_sim *sim, unsigned int val)
+{
+	if (sim)
+		sim->active_card_slot = val;
 }
