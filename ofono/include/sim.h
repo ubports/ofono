@@ -138,6 +138,10 @@ typedef void (*ofono_sim_close_channel_cb_t)(const struct ofono_error *error,
 typedef void (*ofono_sim_logical_access_cb_t)(const struct ofono_error *error,
 		const unsigned char *resp, unsigned int len, void *data);
 
+typedef void (*ofono_sim_set_active_card_slot_cb_t)(
+					const struct ofono_error *error,
+					void *data);
+
 struct ofono_sim_driver {
 	const char *name;
 	int (*probe)(struct ofono_sim *sim, unsigned int vendor, void *data);
@@ -215,6 +219,8 @@ struct ofono_sim_driver {
 	void (*open_channel2)(struct ofono_sim *sim, const unsigned char *aid,
 			unsigned int len, ofono_sim_open_channel_cb_t cb,
 			void *data);
+	void (*set_active_card_slot)(struct ofono_sim *sim, unsigned int index,
+			ofono_sim_set_active_card_slot_cb_t cb, void *data);
 };
 
 int ofono_sim_driver_register(const struct ofono_sim_driver *d);
@@ -234,6 +240,9 @@ void ofono_sim_remove(struct ofono_sim *sim);
 
 void ofono_sim_set_data(struct ofono_sim *sim, void *data);
 void *ofono_sim_get_data(struct ofono_sim *sim);
+void ofono_sim_set_card_slot_count(struct ofono_sim *sim, unsigned int val);
+void ofono_sim_set_active_card_slot(struct ofono_sim *sim,
+					unsigned int val);
 
 const char *ofono_sim_get_imsi(struct ofono_sim *sim);
 const char *ofono_sim_get_mcc(struct ofono_sim *sim);
