@@ -776,6 +776,8 @@ static gboolean sim_allow(DBusMessage *msg,
 static void sim_set_slot_callback(const struct ofono_error *error, void *data)
 {
 	struct ofono_sim *sim = data;
+	DBusConnection *conn = ofono_dbus_get_connection();
+	const char *path = __ofono_atom_get_path(sim->atom);
 	DBusMessage *reply;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
@@ -793,6 +795,12 @@ static void sim_set_slot_callback(const struct ofono_error *error, void *data)
 
 	reply = dbus_message_new_method_return(sim->pending);
 	__ofono_dbus_pending_reply(&sim->pending, reply);
+
+	ofono_dbus_signal_property_changed(conn, path,
+						OFONO_SIM_MANAGER_INTERFACE,
+						"ActiveCardSlot",
+						DBUS_TYPE_UINT32,
+						&sim->active_card_slot);
 }
 
 static DBusMessage *sim_set_property(DBusConnection *conn, DBusMessage *msg,
