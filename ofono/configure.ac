@@ -312,6 +312,19 @@ if (test "${enable_sailfish_pushforwarder}" != "no"); then
 	need_glibutil=yes
 fi
 
+AC_ARG_ENABLE(sailfish-access, AC_HELP_STRING([--enable-sailfish-access],
+			[enable Sailfish OS access plugin]),
+			[enable_sailfish_access=${enableval}],
+			[enable_sailfish_access="no"])
+
+AM_CONDITIONAL(SAILFISH_ACCESS, test "${enable_sailfish_access}" != "no")
+if (test "${enable_sailfish_access}" == "yes"); then
+	PKG_CHECK_MODULES(DBUSACCESS, libdbusaccess, dummy=yes,
+				AC_MSG_ERROR(libdbusaccess is required))
+	CFLAGS="$CFLAGS $DBUSACCESS_CFLAGS"
+	LIBS="$LIBS $DBUSACCESS_LIBS"
+fi
+
 AC_ARG_ENABLE(sailfish-debuglog, AC_HELP_STRING([--enable-sailfish-debuglog],
 			[enable Sailfish OS debug log plugin]),
 			[enable_sailfish_debuglog=${enableval}],

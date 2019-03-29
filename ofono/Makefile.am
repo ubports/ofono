@@ -134,6 +134,12 @@ builtin_sources += plugins/sailfish_manager/sailfish_cell_info.c \
 			plugins/sailfish_manager/sailfish_sim_info_dbus.c
 endif
 
+
+if SAILFISH_ACCESS
+builtin_modules += sailfish_access
+builtin_sources += plugins/sailfish_access.c
+endif
+
 if RILMODEM
 if SAILFISH_RILMODEM
 
