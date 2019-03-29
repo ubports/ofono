@@ -999,6 +999,15 @@ unit_tests += unit/test-watch
 
 endif
 
+if SAILFISH_ACCESS
+unit_test_sailfish_access_SOURCES = unit/test-sailfish_access.c \
+			plugins/sailfish_access.c src/dbus-access.c src/log.c
+unit_test_sailfish_access_CFLAGS = $(AM_CFLAGS) $(COVERAGE_OPT)
+unit_test_sailfish_access_LDADD = @GLIB_LIBS@ -ldl
+unit_objects += $(unit_test_sailfish_access_OBJECTS)
+unit_tests += unit/test-sailfish_access
+endif
+
 unit_test_dbus_access_SOURCES = unit/test-dbus-access.c src/dbus-access.c \
 			src/log.c
 unit_test_dbus_access_CFLAGS = $(AM_CFLAGS) $(COVERAGE_OPT)
