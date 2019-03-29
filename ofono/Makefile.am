@@ -993,6 +993,13 @@ unit_tests += unit/test-watch
 
 endif
 
+unit_test_dbus_access_SOURCES = unit/test-dbus-access.c src/dbus-access.c \
+			src/log.c
+unit_test_dbus_access_CFLAGS = $(AM_CFLAGS) $(COVERAGE_OPT)
+unit_test_dbus_access_LDADD = @GLIB_LIBS@ -ldl
+unit_objects += $(unit_test_dbus_access_OBJECTS)
+unit_tests += unit/test-dbus-access
+
 if RILMODEM
 if SAILFISH_RILMODEM
 

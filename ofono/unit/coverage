@@ -17,6 +17,7 @@ TESTS="\
  test-sms-root \
  test-caif \
  test-dbus-queue \
+ test-dbus-access \
  test-gprs-filter \
  test-provision \
  test-watch \
