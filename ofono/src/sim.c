@@ -3592,6 +3592,9 @@ struct ofono_sim *ofono_sim_create(struct ofono_modem *modem,
 	for (i = 0; i < OFONO_SIM_PASSWORD_INVALID; i++)
 		sim->pin_retries[i] = -1;
 
+	sim->active_card_slot = 1;
+	sim->card_slot_count = 1;
+
 	for (l = g_drivers; l; l = l->next) {
 		const struct ofono_sim_driver *drv = l->data;
 
