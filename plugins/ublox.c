@@ -164,7 +164,7 @@ static void query_usbconf_cb(gboolean ok,
 	g_at_result_iter_init(&iter, result);
 
 retry:
-	if (!g_at_result_iter_next(&iter, "+UUSBCONF")) {
+	if (!g_at_result_iter_next(&iter, "+UUSBCONF:")) {
 		ofono_error("Unable to query USB configuration");
 		goto error;
 	}
