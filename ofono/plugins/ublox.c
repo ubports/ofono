@@ -227,6 +227,8 @@ static void query_model_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 	DBG("Model: %s", data->model->name);
 
+	data->vendor_family = OFONO_VENDOR_UBLOX;
+
 	if (data->model->flags & UBLOX_F_HAVE_USBCONF) {
 		if (g_at_chat_send(data->aux, "AT+UUSBCONF?", uusbconf_prefix,
 					query_usbconf_cb, modem, NULL))
@@ -234,8 +236,6 @@ static void query_model_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 		ofono_error("Unable to query USB configuration");
 		goto fail;
-	} else {
-		data->vendor_family = OFONO_VENDOR_UBLOX;
 	}
 
 	if (g_at_chat_send(data->aux, "AT+CFUN=4", none_prefix,
