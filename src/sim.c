@@ -680,7 +680,7 @@ static void sim_set_slot_callback(const struct ofono_error *error, void *data)
 
 		sim->pending_active_card_slot = sim->active_card_slot;
 
-		reply = __ofono_error_failed(sim->pending);
+		reply = __ofono_error_from_error(error, sim->pending);
 		__ofono_dbus_pending_reply(&sim->pending, reply);
 
 		return;
