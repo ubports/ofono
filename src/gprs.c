@@ -2340,7 +2340,11 @@ static void provision_context(const struct ofono_gprs_provision_data *ap,
 			strlen(ap->message_center) > MAX_MESSAGE_CENTER_LENGTH)
 		return;
 
-	id = l_uintset_find_unused(gprs->used_pids, gprs->last_context_id);
+	if (gprs->last_context_id)
+		id = l_uintset_find_unused(gprs->used_pids,
+							gprs->last_context_id);
+	else
+		id = l_uintset_find_unused_min(gprs->used_pids);
 	if (id > l_uintset_get_max(gprs->used_pids))
 		return;
 
