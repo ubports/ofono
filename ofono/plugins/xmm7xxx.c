@@ -1223,7 +1223,7 @@ static void xmm7xxx_pre_sim(struct ofono_modem *modem)
 	DBG("%p", modem);
 
 	ofono_devinfo_create(modem, OFONO_VENDOR_IFX, "atmodem", data->chat);
-	data->sim = ofono_sim_create(modem, OFONO_VENDOR_IFX, "atmodem",
+	data->sim = ofono_sim_create(modem, OFONO_VENDOR_XMM, "atmodem",
 					data->chat);
 }
 
