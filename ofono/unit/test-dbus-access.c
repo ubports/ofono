@@ -94,6 +94,9 @@ static const struct test_method_name_data method_name_tests[] = {
 	},{
 		OFONO_DBUS_ACCESS_INTF_CONNMGR,
 		OFONO_DBUS_ACCESS_CONNMGR_METHOD_COUNT
+	},{
+		OFONO_DBUS_ACCESS_INTF_SIMMGR,
+		OFONO_DBUS_ACCESS_SIMMGR_METHOD_COUNT
 	}
 };
 

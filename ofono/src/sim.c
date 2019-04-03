@@ -646,6 +646,13 @@ static gboolean set_own_numbers(struct ofono_sim *sim,
 	return TRUE;
 }
 
+static gboolean sim_allow(DBusMessage *msg,
+		enum ofono_dbus_access_simmgr_method method, const char *arg)
+{
+	return __ofono_dbus_access_method_allowed(dbus_message_get_sender(msg),
+				OFONO_DBUS_ACCESS_INTF_SIMMGR, method, arg);
+}
+
 static DBusMessage *sim_set_property(DBusConnection *conn, DBusMessage *msg,
 					void *data)
 {
@@ -662,6 +669,9 @@ static DBusMessage *sim_set_property(DBusConnection *conn, DBusMessage *msg,
 		return __ofono_error_invalid_args(msg);
 
 	dbus_message_iter_get_basic(&iter, &name);
+
+	if (!sim_allow(msg, OFONO_DBUS_ACCESS_SIMMGR_SET_PROPERTY, name))
+		return __ofono_error_access_denied(msg);
 
 	if (!strcmp(name, "SubscriberNumbers")) {
 		gboolean set_ok = FALSE;
@@ -826,6 +836,9 @@ static DBusMessage *sim_lock_pin(DBusConnection *conn, DBusMessage *msg,
 {
 	struct ofono_sim *sim = data;
 
+	if (!sim_allow(msg, OFONO_DBUS_ACCESS_SIMMGR_LOCK_PIN, NULL))
+		return __ofono_error_access_denied(msg);
+
 	return sim_lock_or_unlock(sim, 1, conn, msg);
 }
 
@@ -833,6 +846,9 @@ static DBusMessage *sim_unlock_pin(DBusConnection *conn, DBusMessage *msg,
 					void *data)
 {
 	struct ofono_sim *sim = data;
+
+	if (!sim_allow(msg, OFONO_DBUS_ACCESS_SIMMGR_UNLOCK_PIN, NULL))
+		return __ofono_error_access_denied(msg);
 
 	return sim_lock_or_unlock(sim, 0, conn, msg);
 }
@@ -864,6 +880,9 @@ static DBusMessage *sim_change_pin(DBusConnection *conn, DBusMessage *msg,
 	const char *typestr;
 	const char *old;
 	const char *new;
+
+	if (!sim_allow(msg, OFONO_DBUS_ACCESS_SIMMGR_CHANGE_PIN, NULL))
+		return __ofono_error_access_denied(msg);
 
 	if (sim->driver->change_passwd == NULL)
 		return __ofono_error_not_implemented(msg);
@@ -920,6 +939,9 @@ static DBusMessage *sim_enter_pin(DBusConnection *conn, DBusMessage *msg,
 	const char *typestr;
 	enum ofono_sim_password_type type;
 	const char *pin;
+
+	if (!sim_allow(msg, OFONO_DBUS_ACCESS_SIMMGR_ENTER_PIN, NULL))
+		return __ofono_error_access_denied(msg);
 
 	if (sim->driver->send_passwd == NULL)
 		return __ofono_error_not_implemented(msg);
@@ -1155,6 +1177,9 @@ static DBusMessage *sim_reset_pin(DBusConnection *conn, DBusMessage *msg,
 	enum ofono_sim_password_type type;
 	const char *puk;
 	const char *pin;
+
+	if (!sim_allow(msg, OFONO_DBUS_ACCESS_SIMMGR_RESET_PIN, NULL))
+		return __ofono_error_access_denied(msg);
 
 	if (sim->driver->reset_passwd == NULL)
 		return __ofono_error_not_implemented(msg);
