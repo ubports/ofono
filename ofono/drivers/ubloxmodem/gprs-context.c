@@ -235,6 +235,14 @@ static void ublox_read_settings(struct ofono_gprs_context *gc)
 {
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 
+	if (gcd->networking_mode == NETWORKING_MODE_ROUTER) {
+		/* Use DHCP */
+		set_gprs_context_interface(gc);
+		ofono_gprs_context_set_ipv4_address(gc, NULL, 0);
+		CALLBACK_WITH_SUCCESS(gcd->cb, gcd->cb_data);
+		return;
+	}
+
 	if (ublox_send_cgcontrdp(gc) < 0)
 		CALLBACK_WITH_FAILURE(gcd->cb, gcd->cb_data);
 }
@@ -246,15 +254,6 @@ static void ublox_gprs_read_settings(struct ofono_gprs_context *gc,
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 
 	DBG("cid %u", cid);
-
-	if (gcd->networking_mode == NETWORKING_MODE_ROUTER) {
-		/* Use DHCP */
-		gcd->active_context = cid;
-		set_gprs_context_interface(gc);
-		ofono_gprs_context_set_ipv4_address(gc, NULL, 0);
-		CALLBACK_WITH_SUCCESS(cb, data);
-		return;
-	}
 
 	gcd->active_context = cid;
 	gcd->cb = cb;
