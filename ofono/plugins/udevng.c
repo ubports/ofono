@@ -1124,7 +1124,6 @@ static gboolean setup_xmm7xxx(struct modem_info *modem)
 	const char *mdm = NULL, *net = NULL;
 	GSList *list;
 
-	DBG("%s %s\n", __DATE__, __TIME__);
 	DBG("%s %s %s %s %s %s\n", modem->syspath, modem->devname,
 		modem->driver, modem->vendor, modem->model, modem->sysattr);
 
