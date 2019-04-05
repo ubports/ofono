@@ -37,6 +37,8 @@ const char *ofono_dbus_access_intf_name(enum ofono_dbus_access_intf intf)
 		return OFONO_CONNECTION_MANAGER_INTERFACE;
 	case OFONO_DBUS_ACCESS_INTF_SIMMGR:
 		return OFONO_SIM_MANAGER_INTERFACE;
+	case OFONO_DBUS_ACCESS_INTF_MODEM:
+		return OFONO_MODEM_INTERFACE;
 	case OFONO_DBUS_ACCESS_INTF_COUNT:
 		break;
 	}
@@ -142,6 +144,14 @@ const char *ofono_dbus_access_method_name(enum ofono_dbus_access_intf intf,
 		case OFONO_DBUS_ACCESS_SIMMGR_UNLOCK_PIN:
 			return "UnlockPin";
 		case OFONO_DBUS_ACCESS_SIMMGR_METHOD_COUNT:
+			break;
+		}
+		break;
+	case OFONO_DBUS_ACCESS_INTF_MODEM:
+		switch ((enum ofono_dbus_access_modem_method)method) {
+		case OFONO_DBUS_ACCESS_MODEM_SET_PROPERTY:
+			return "SetProperty";
+		case OFONO_DBUS_ACCESS_MODEM_METHOD_COUNT:
 			break;
 		}
 		break;

@@ -36,6 +36,7 @@ enum ofono_dbus_access_intf {
 	OFONO_DBUS_ACCESS_INTF_CONNCTX,       /* org.ofono.ConnectionContext */
 	OFONO_DBUS_ACCESS_INTF_CONNMGR,       /* org.ofono.ConnectionManager */
 	OFONO_DBUS_ACCESS_INTF_SIMMGR,        /* org.ofono.SimManager */
+	OFONO_DBUS_ACCESS_INTF_MODEM,         /* org.ofono.Modem */
 	OFONO_DBUS_ACCESS_INTF_COUNT
 };
 
@@ -100,6 +101,12 @@ enum ofono_dbus_access_simmgr_method {
 	OFONO_DBUS_ACCESS_SIMMGR_LOCK_PIN,
 	OFONO_DBUS_ACCESS_SIMMGR_UNLOCK_PIN,
 	OFONO_DBUS_ACCESS_SIMMGR_METHOD_COUNT
+};
+
+/* OFONO_DBUS_ACCESS_INTF_MODEM */
+enum ofono_dbus_access_modem_method {
+	OFONO_DBUS_ACCESS_MODEM_SET_PROPERTY,
+	OFONO_DBUS_ACCESS_MODEM_METHOD_COUNT
 };
 
 #define OFONO_DBUS_ACCESS_PRIORITY_LOW     (-100)
