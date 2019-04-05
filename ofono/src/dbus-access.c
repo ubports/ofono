@@ -39,6 +39,8 @@ const char *ofono_dbus_access_intf_name(enum ofono_dbus_access_intf intf)
 		return OFONO_SIM_MANAGER_INTERFACE;
 	case OFONO_DBUS_ACCESS_INTF_MODEM:
 		return OFONO_MODEM_INTERFACE;
+	case OFONO_DBUS_ACCESS_INTF_RADIOSETTINGS:
+		return OFONO_RADIO_SETTINGS_INTERFACE;
 	case OFONO_DBUS_ACCESS_INTF_COUNT:
 		break;
 	}
@@ -152,6 +154,14 @@ const char *ofono_dbus_access_method_name(enum ofono_dbus_access_intf intf,
 		case OFONO_DBUS_ACCESS_MODEM_SET_PROPERTY:
 			return "SetProperty";
 		case OFONO_DBUS_ACCESS_MODEM_METHOD_COUNT:
+			break;
+		}
+		break;
+	case OFONO_DBUS_ACCESS_INTF_RADIOSETTINGS:
+		switch ((enum ofono_dbus_access_radiosettings_method)method) {
+		case OFONO_DBUS_ACCESS_RADIOSETTINGS_SET_PROPERTY:
+			return "SetProperty";
+		case OFONO_DBUS_ACCESS_RADIOSETTINGS_METHOD_COUNT:
 			break;
 		}
 		break;

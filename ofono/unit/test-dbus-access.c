@@ -100,6 +100,9 @@ static const struct test_method_name_data method_name_tests[] = {
 	},{
 		OFONO_DBUS_ACCESS_INTF_MODEM,
 		OFONO_DBUS_ACCESS_MODEM_METHOD_COUNT
+	},{
+		OFONO_DBUS_ACCESS_INTF_RADIOSETTINGS,
+		OFONO_DBUS_ACCESS_RADIOSETTINGS_METHOD_COUNT
 	}
 };
 

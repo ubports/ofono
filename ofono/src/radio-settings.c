@@ -552,6 +552,11 @@ static DBusMessage *radio_set_property_handler(DBusMessage *msg, void *data)
 	dbus_message_iter_get_basic(&iter, &property);
 	dbus_message_iter_next(&iter);
 
+	if (!__ofono_dbus_access_method_allowed(dbus_message_get_sender(msg),
+		OFONO_DBUS_ACCESS_INTF_RADIOSETTINGS,
+		OFONO_DBUS_ACCESS_RADIOSETTINGS_SET_PROPERTY, property))
+		return __ofono_error_access_denied(msg);
+
 	if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_VARIANT)
 		return __ofono_error_invalid_args(msg);
 
