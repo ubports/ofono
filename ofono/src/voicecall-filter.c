@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2018 Jolla Ltd.
+ *  Copyright (C) 2018-2019 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -118,7 +118,7 @@ static void voicecall_filter_request_free(struct voicecall_filter_request *req)
 	req->fn->free(req);
 }
 
-#define voicecall_filter_request_ref(req) ((req)->refcount++, req)
+#define voicecall_filter_request_ref(req) ((void)((req)->refcount++))
 
 static int voicecall_filter_request_unref(struct voicecall_filter_request *req)
 {
