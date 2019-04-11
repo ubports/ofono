@@ -60,6 +60,7 @@ struct ril_slot_config {
 	gboolean confirm_radio_power_on;
 	gboolean enable_voicecall;
 	gboolean enable_cbs;
+	gboolean network_selection_manual_0;
 	GUtilInts *local_hangup_reasons;
 	GUtilInts *remote_hangup_reasons;
 };

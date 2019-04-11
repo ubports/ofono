@@ -39,6 +39,7 @@ enum ril_netreg_network_events {
 struct ril_netreg {
 	GRilIoChannel *io;
 	GRilIoQueue *q;
+	gboolean network_selection_manual_0;
 	struct ofono_netreg *netreg;
 	struct ril_network *network;
 	char *log_prefix;
@@ -317,9 +318,10 @@ static void ril_netreg_register_manual(struct ofono_netreg *netreg,
 {
 	struct ril_netreg *nd = ril_netreg_get_data(netreg);
 	GRilIoRequest *req = grilio_request_new();
+	const char *suffix = nd->network_selection_manual_0 ? "+0" : "";
 
-	ofono_info("nw select manual: %s%s", mcc, mnc);
-	grilio_request_append_format(req, "%s%s+0", mcc, mnc);
+	ofono_info("nw select manual: %s%s%s", mcc, mnc, suffix);
+	grilio_request_append_format(req, "%s%s%s", mcc, mnc, suffix);
 	grilio_request_set_timeout(req, REGISTRATION_TIMEOUT);
 	grilio_request_set_retry(req, 0, REGISTRATION_MAX_RETRIES);
 	grilio_queue_send_request_full(nd->q, req,
@@ -548,6 +550,7 @@ static int ril_netreg_probe(struct ofono_netreg *netreg, unsigned int vendor,
 {
 	struct ril_modem *modem = data;
 	struct ril_netreg *nd = g_new0(struct ril_netreg, 1);
+	const struct ril_slot_config *config = &modem->config;
 
 	nd->log_prefix = (modem->log_prefix && modem->log_prefix[0]) ?
 		g_strconcat(modem->log_prefix, " ", NULL) : g_strdup("");
@@ -557,6 +560,7 @@ static int ril_netreg_probe(struct ofono_netreg *netreg, unsigned int vendor,
 	nd->q = grilio_queue_new(nd->io);
 	nd->network = ril_network_ref(modem->network);
 	nd->netreg = netreg;
+	nd->network_selection_manual_0 = config->network_selection_manual_0;
 
 	ofono_netreg_set_data(netreg, nd);
 	nd->timer_id = g_idle_add(ril_netreg_register, nd);
