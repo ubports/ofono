@@ -17,6 +17,7 @@ TESTS="\
  test-sms-root \
  test-caif \
  test-dbus-queue \
+ test-dbus-access \
  test-gprs-filter \
  test-provision \
  test-watch \
@@ -25,6 +26,7 @@ TESTS="\
  test-ril-transport \
  test-sms-filter \
  test-voicecall-filter \
+ test-sailfish_access \
  test-sailfish_cell_info \
  test-sailfish_cell_info_dbus \
  test-sailfish_manager \

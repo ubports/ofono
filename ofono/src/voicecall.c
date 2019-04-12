@@ -506,6 +506,13 @@ static DBusMessage *voicecall_get_properties(DBusConnection *conn,
 	return reply;
 }
 
+static gboolean voicecall_allow(DBusMessage *msg,
+			enum ofono_dbus_access_voicecall_method method)
+{
+	return __ofono_dbus_access_method_allowed(dbus_message_get_sender(msg),
+			OFONO_DBUS_ACCESS_INTF_VOICECALL, method, NULL);
+}
+
 static DBusMessage *voicecall_deflect(DBusConnection *conn,
 					DBusMessage *msg, void *data)
 {
@@ -515,6 +522,9 @@ static DBusMessage *voicecall_deflect(DBusConnection *conn,
 
 	struct ofono_phone_number ph;
 	const char *number;
+
+	if (!voicecall_allow(msg, OFONO_DBUS_ACCESS_VOICECALL_DEFLECT))
+		return __ofono_error_access_denied(msg);
 
 	if (call->status != CALL_STATUS_INCOMING &&
 			call->status != CALL_STATUS_WAITING)
@@ -550,6 +560,9 @@ static DBusMessage *voicecall_hangup(DBusConnection *conn,
 	struct ofono_call *call = v->call;
 	gboolean single_call = vc->call_list->next == 0;
 	struct tone_queue_entry *tone_entry = NULL;
+
+	if (!voicecall_allow(msg, OFONO_DBUS_ACCESS_VOICECALL_HANGUP))
+		return __ofono_error_access_denied(msg);
 
 	/* clear any remaining tones */
 	while ((tone_entry = g_queue_peek_head(vc->toneq)))
@@ -650,6 +663,9 @@ static DBusMessage *voicecall_answer(DBusConnection *conn,
 	struct voicecall *v = data;
 	struct ofono_voicecall *vc = v->vc;
 	struct ofono_call *call = v->call;
+
+	if (!voicecall_allow(msg, OFONO_DBUS_ACCESS_VOICECALL_ANSWER))
+		return __ofono_error_access_denied(msg);
 
 	if (call->status != CALL_STATUS_INCOMING)
 		return __ofono_error_failed(msg);
@@ -1727,6 +1743,13 @@ static int voicecall_dial(struct ofono_voicecall *vc, const char *number,
 	return 0;
 }
 
+static gboolean manager_allow(DBusMessage *msg,
+			enum ofono_dbus_access_voicecallmgr_method method)
+{
+	return __ofono_dbus_access_method_allowed(dbus_message_get_sender(msg),
+			OFONO_DBUS_ACCESS_INTF_VOICECALLMGR, method, NULL);
+}
+
 static DBusMessage *manager_dial(DBusConnection *conn,
 					DBusMessage *msg, void *data)
 {
@@ -1735,6 +1758,9 @@ static DBusMessage *manager_dial(DBusConnection *conn,
 	const char *clirstr;
 	enum ofono_clir_option clir;
 	int err;
+
+	if (!manager_allow(msg, OFONO_DBUS_ACCESS_VOICECALLMGR_DIAL))
+		return __ofono_error_access_denied(msg);
 
 	if (vc->pending || vc->dial_req || vc->pending_em)
 		return __ofono_error_busy(msg);
@@ -1777,6 +1803,9 @@ static DBusMessage *manager_transfer(DBusConnection *conn,
 	struct ofono_voicecall *vc = data;
 	int numactive;
 	int numheld;
+
+	if (!manager_allow(msg, OFONO_DBUS_ACCESS_VOICECALLMGR_TRANSFER))
+		return __ofono_error_access_denied(msg);
 
 	if (vc->pending || vc->dial_req || vc->pending_em)
 		return __ofono_error_busy(msg);
@@ -1833,6 +1862,9 @@ static DBusMessage *manager_swap_calls(DBusConnection *conn,
 	struct ofono_voicecall *vc = data;
 	ofono_voicecall_cb_t cb;
 
+	if (!manager_allow(msg, OFONO_DBUS_ACCESS_VOICECALLMGR_SWAP_CALLS))
+		return __ofono_error_access_denied(msg);
+
 	if (vc->driver->swap_without_accept)
 		return manager_swap_without_accept(conn, msg, data);
 
@@ -1862,6 +1894,10 @@ static DBusMessage *manager_release_and_answer(DBusConnection *conn,
 {
 	struct ofono_voicecall *vc = data;
 
+	if (!manager_allow(msg,
+		OFONO_DBUS_ACCESS_VOICECALLMGR_RELEASE_AND_ANSWER))
+		return __ofono_error_access_denied(msg);
+
 	if (vc->pending || vc->dial_req || vc->pending_em)
 		return __ofono_error_busy(msg);
 
@@ -1883,6 +1919,10 @@ static DBusMessage *manager_release_and_swap(DBusConnection *conn,
 {
 	struct ofono_voicecall *vc = data;
 
+	if (!manager_allow(msg,
+			OFONO_DBUS_ACCESS_VOICECALLMGR_RELEASE_AND_SWAP))
+		return __ofono_error_access_denied(msg);
+
 	if (vc->pending || vc->dial_req || vc->pending_em)
 		return __ofono_error_busy(msg);
 
@@ -1903,6 +1943,10 @@ static DBusMessage *manager_hold_and_answer(DBusConnection *conn,
 						DBusMessage *msg, void *data)
 {
 	struct ofono_voicecall *vc = data;
+
+	if (!manager_allow(msg,
+		OFONO_DBUS_ACCESS_VOICECALLMGR_HOLD_AND_ANSWER))
+		return __ofono_error_access_denied(msg);
 
 	if (vc->pending || vc->dial_req || vc->pending_em)
 		return __ofono_error_busy(msg);
@@ -1931,6 +1975,9 @@ static DBusMessage *manager_hangup_all(DBusConnection *conn,
 					DBusMessage *msg, void *data)
 {
 	struct ofono_voicecall *vc = data;
+
+	if (!manager_allow(msg, OFONO_DBUS_ACCESS_VOICECALLMGR_HANGUP_ALL))
+		return __ofono_error_access_denied(msg);
 
 	if (vc->pending || vc->pending_em)
 		return __ofono_error_busy(msg);
@@ -2142,6 +2189,10 @@ static DBusMessage *multiparty_create(DBusConnection *conn,
 {
 	struct ofono_voicecall *vc = data;
 
+	if (!manager_allow(msg,
+		OFONO_DBUS_ACCESS_VOICECALLMGR_CREATE_MULTIPARTY))
+		return __ofono_error_access_denied(msg);
+
 	if (vc->pending || vc->dial_req || vc->pending_em)
 		return __ofono_error_busy(msg);
 
@@ -2162,6 +2213,10 @@ static DBusMessage *multiparty_hangup(DBusConnection *conn,
 						DBusMessage *msg, void *data)
 {
 	struct ofono_voicecall *vc = data;
+
+	if (!manager_allow(msg,
+		OFONO_DBUS_ACCESS_VOICECALLMGR_HANGUP_MULTIPARTY))
+		return __ofono_error_access_denied(msg);
 
 	if (vc->pending || vc->dial_req || vc->pending_em)
 		return __ofono_error_busy(msg);
@@ -2233,6 +2288,9 @@ static DBusMessage *manager_tone(DBusConnection *conn,
 	const char *in_tones;
 	char *tones;
 	int err, len;
+
+	if (!manager_allow(msg, OFONO_DBUS_ACCESS_VOICECALLMGR_SEND_TONES))
+		return __ofono_error_access_denied(msg);
 
 	if (vc->pending)
 		return __ofono_error_busy(msg);
@@ -2331,6 +2389,10 @@ static DBusMessage *voicecall_register_agent(DBusConnection *conn,
 	struct ofono_voicecall *vc = data;
 	const char *agent_path;
 
+	if (!manager_allow(msg,
+		OFONO_DBUS_ACCESS_VOICECALLMGR_REGISTER_VOICECALL_AGENT))
+		return __ofono_error_access_denied(msg);
+
 	if (vc->vc_agent)
 		return __ofono_error_busy(msg);
 
@@ -2359,6 +2421,10 @@ static DBusMessage *voicecall_unregister_agent(DBusConnection *conn,
 	struct ofono_voicecall *vc = data;
 	const char *agent_path;
 	const char *agent_bus = dbus_message_get_sender(msg);
+
+	if (!manager_allow(msg,
+		OFONO_DBUS_ACCESS_VOICECALLMGR_UNREGISTER_VOICECALL_AGENT))
+		return __ofono_error_access_denied(msg);
 
 	if (dbus_message_get_args(msg, NULL, DBUS_TYPE_OBJECT_PATH, &agent_path,
 					DBUS_TYPE_INVALID) == FALSE)

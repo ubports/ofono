@@ -1033,6 +1033,11 @@ static DBusMessage *sms_send_message(DBusConnection *conn, DBusMessage *msg,
 	struct sms_message_data *message;
 	struct sms_address addr;
 
+	if (!__ofono_dbus_access_method_allowed(dbus_message_get_sender(msg),
+			OFONO_DBUS_ACCESS_INTF_MESSAGEMGR,
+			OFONO_DBUS_ACCESS_MESSAGEMGR_SEND_MESSAGE, NULL))
+		return __ofono_error_access_denied(msg);
+
 	if (!dbus_message_get_args(msg, NULL, DBUS_TYPE_STRING, &to,
 					DBUS_TYPE_STRING, &text,
 					DBUS_TYPE_INVALID))

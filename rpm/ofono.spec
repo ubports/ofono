@@ -28,6 +28,7 @@ BuildRequires:  pkgconfig(libgrilio) >= 1.0.25
 BuildRequires:  pkgconfig(libglibutil) >= 1.0.30
 BuildRequires:  pkgconfig(libdbuslogserver-dbus)
 BuildRequires:  pkgconfig(libmce-glib) >= 1.0.5
+BuildRequires:  pkgconfig(libdbusaccess)
 BuildRequires:  pkgconfig(mobile-broadband-provider-info)
 BuildRequires:  libtool
 BuildRequires:  automake
@@ -88,13 +89,13 @@ autoreconf --force --install
     --enable-sailfish-provision \
     --enable-sailfish-pushforwarder \
     --enable-sailfish-rilmodem \
+    --enable-sailfish-access \
     --disable-add-remove-context \
     --disable-isimodem \
     --disable-qmimodem \
     --with-systemdunitdir="/%{_lib}/systemd/system"
 
 make %{_smp_mflags}
-
 
 %check
 # run unit tests

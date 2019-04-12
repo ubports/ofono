@@ -1095,6 +1095,11 @@ static DBusMessage *modem_set_property(DBusConnection *conn,
 	if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_VARIANT)
 		return __ofono_error_invalid_args(msg);
 
+	if (!__ofono_dbus_access_method_allowed(dbus_message_get_sender(msg),
+				OFONO_DBUS_ACCESS_INTF_MODEM,
+				OFONO_DBUS_ACCESS_MODEM_SET_PROPERTY, name))
+		return __ofono_error_access_denied(msg);
+
 	if (powering_down == TRUE)
 		return __ofono_error_failed(msg);
 

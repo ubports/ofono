@@ -24,7 +24,7 @@ pkginclude_HEADERS = include/log.h include/plugin.h include/history.h \
 			include/sim-mnclength.h \
 			include/handsfree-audio.h include/siri.h \
 			include/sms-filter.h include/gprs-filter.h \
-			include/voicecall-filter.h \
+			include/voicecall-filter.h include/dbus-access.h \
 			include/ril-constants.h include/ril-transport.h \
 			include/netmon.h include/lte.h \
 			include/storage.h include/watch.h \
@@ -132,6 +132,12 @@ builtin_sources += plugins/sailfish_manager/sailfish_cell_info.c \
 			plugins/sailfish_manager/sailfish_manager_dbus.c \
 			plugins/sailfish_manager/sailfish_sim_info.c \
 			plugins/sailfish_manager/sailfish_sim_info_dbus.c
+endif
+
+
+if SAILFISH_ACCESS
+builtin_modules += sailfish_access
+builtin_sources += plugins/sailfish_access.c
 endif
 
 if RILMODEM
@@ -737,7 +743,8 @@ src_ofonod_SOURCES = $(builtin_sources) $(gatchat_sources) src/ofono.ver \
 			src/cdma-provision.c src/handsfree.c \
 			src/handsfree-audio.c src/bluetooth.h \
 			src/sim-mnclength.c src/voicecallagent.c \
-			src/sms-filter.c src/gprs-filter.c src/dbus-queue.c \
+			src/sms-filter.c src/gprs-filter.c \
+			src/dbus-queue.c src/dbus-access.c \
 			src/voicecall-filter.c src/ril-transport.c \
 			src/hfp.h src/siri.c src/watchlist.c \
 			src/netmon.c src/lte.c \
@@ -991,6 +998,22 @@ unit_objects += $(unit_test_watch_OBJECTS)
 unit_tests += unit/test-watch
 
 endif
+
+if SAILFISH_ACCESS
+unit_test_sailfish_access_SOURCES = unit/test-sailfish_access.c \
+			plugins/sailfish_access.c src/dbus-access.c src/log.c
+unit_test_sailfish_access_CFLAGS = $(AM_CFLAGS) $(COVERAGE_OPT)
+unit_test_sailfish_access_LDADD = @GLIB_LIBS@ -ldl
+unit_objects += $(unit_test_sailfish_access_OBJECTS)
+unit_tests += unit/test-sailfish_access
+endif
+
+unit_test_dbus_access_SOURCES = unit/test-dbus-access.c src/dbus-access.c \
+			src/log.c
+unit_test_dbus_access_CFLAGS = $(AM_CFLAGS) $(COVERAGE_OPT)
+unit_test_dbus_access_LDADD = @GLIB_LIBS@ -ldl
+unit_objects += $(unit_test_dbus_access_OBJECTS)
+unit_tests += unit/test-dbus-access
 
 if RILMODEM
 if SAILFISH_RILMODEM
