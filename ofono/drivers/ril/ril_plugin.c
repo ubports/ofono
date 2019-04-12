@@ -85,6 +85,7 @@
 #define RILMODEM_DEFAULT_LEGACY_IMEI_QUERY FALSE
 #define RILMODEM_DEFAULT_RADIO_POWER_CYCLE TRUE
 #define RILMODEM_DEFAULT_CONFIRM_RADIO_POWER_ON TRUE
+#define RILMODEM_DEFAULT_NETWORK_SELECTION_MANUAL_0 TRUE
 #define RILMODEM_DEFAULT_SLOT_FLAGS SAILFISH_SLOT_NO_FLAGS
 
 /* RIL socket transport name and parameters */
@@ -134,6 +135,7 @@
 #define RILCONF_RADIO_POWER_CYCLE           "radioPowerCycle"
 #define RILCONF_CONFIRM_RADIO_POWER_ON      "confirmRadioPowerOn"
 #define RILCONF_SINGLE_DATA_CONTEXT         "singleDataContext"
+#define RILCONF_NETWORK_SELECTION_MANUAL_0  "networkSelectionManual0"
 
 /* Modem error ids */
 #define RIL_ERROR_ID_RILD_RESTART           "rild-restart"
@@ -1211,6 +1213,8 @@ static ril_slot *ril_plugin_slot_new_take(char *transport,
 	config->enable_cbs = RILMODEM_DEFAULT_ENABLE_CBS;
 	config->query_available_band_mode =
 		RILMODEM_DEFAULT_QUERY_AVAILABLE_BAND_MODE;
+	config->network_selection_manual_0 =
+		RILMODEM_DEFAULT_NETWORK_SELECTION_MANUAL_0;
 	slot->timeout = RILMODEM_DEFAULT_TIMEOUT;
 	slot->sim_flags = RILMODEM_DEFAULT_SIM_FLAGS;
 	slot->slot_flags = RILMODEM_DEFAULT_SLOT_FLAGS;
@@ -1474,6 +1478,14 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 					&config->enable_cbs)) {
 		DBG("%s: " RILCONF_ENABLE_CBS " %s", group,
 				config->enable_cbs ? "yes" : "no");
+	}
+
+	/* networkSelectionManual0 */
+	if (ril_config_get_boolean(file, group,
+					RILCONF_NETWORK_SELECTION_MANUAL_0,
+					&config->network_selection_manual_0)) {
+		DBG("%s: " RILCONF_NETWORK_SELECTION_MANUAL_0 " %s", group,
+			config->network_selection_manual_0 ? "yes" : "no");
 	}
 
 	/* technologies */
