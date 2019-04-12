@@ -1,3 +1,9 @@
+ver 1.29:
+	Fix issue with QMI and SIM initialized notification.
+	Add support for multiple PDP contexts and xmm7xxx modems.
+	Add support for handling Dual SIM Single Active feature
+	Add support for SIM PIN caching feature.
+
 ver 1.28:
 	Fix issue with SIM initialization and Gemalto modems.
 
