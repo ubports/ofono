@@ -1793,7 +1793,7 @@ static DBusMessage *gprs_set_property(DBusConnection *conn,
 		gprs->roaming_allowed = value;
 
 		if (gprs->settings) {
-			g_key_file_set_integer(gprs->settings, SETTINGS_GROUP,
+			g_key_file_set_boolean(gprs->settings, SETTINGS_GROUP,
 						"RoamingAllowed",
 						gprs->roaming_allowed);
 			storage_sync(gprs->imsi, SETTINGS_STORE,
