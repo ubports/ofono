@@ -45,3 +45,9 @@ Description: Mobile telephony stack (development files)
  3GPP TS 27.007 "AT command set for User Equipment (UE)."
  .
  This package includes the header files for building oFono plugins.
+
+Package: ofono-scripts
+Architecture: all
+Depends: ${shlibs:Depends}, ${misc:Depends},
+         python3, python3-dbus, python3-gi
+Description: Mobile telephony stack (test and maintenance script files)
