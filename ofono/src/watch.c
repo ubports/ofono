@@ -13,7 +13,7 @@
  *  GNU General Public License for more details.
  */
 
-#include <ofono/watch.h>
+#include "watch_p.h"
 
 #include "ofono.h"
 
@@ -29,7 +29,9 @@ struct ofono_watch_object {
 	char *iccid;
 	char *imsi;
 	char *spn;
-	int signals_suspended;
+	char *reg_mcc;
+	char *reg_mnc;
+	char *reg_name;
 	int queued_signals;
 	guint modem_watch_id;
 	guint online_watch_id;
@@ -56,6 +58,10 @@ enum ofono_watch_signal {
 	SIGNAL_IMSI_CHANGED,
 	SIGNAL_SPN_CHANGED,
 	SIGNAL_NETREG_CHANGED,
+	SIGNAL_REG_STATUS_CHANGED,
+	SIGNAL_REG_MCC_CHANGED,
+	SIGNAL_REG_MNC_CHANGED,
+	SIGNAL_REG_NAME_CHANGED,
 	SIGNAL_COUNT
 };
 
@@ -67,6 +73,10 @@ enum ofono_watch_signal {
 #define SIGNAL_IMSI_CHANGED_NAME        "ofono-watch-imsi-changed"
 #define SIGNAL_SPN_CHANGED_NAME         "ofono-watch-spn-changed"
 #define SIGNAL_NETREG_CHANGED_NAME      "ofono-watch-netreg-changed"
+#define SIGNAL_REG_STATUS_CHANGED_NAME  "ofono-watch-reg-status-changed"
+#define SIGNAL_REG_MCC_CHANGED_NAME     "ofono-watch-reg-mcc-changed"
+#define SIGNAL_REG_MNC_CHANGED_NAME     "ofono-watch-reg-mnc-changed"
+#define SIGNAL_REG_NAME_CHANGED_NAME    "ofono-watch-reg-name-changed"
 
 static guint ofono_watch_signals[SIGNAL_COUNT] = { 0 };
 static GHashTable *ofono_watch_table = NULL;
@@ -84,7 +94,7 @@ G_DEFINE_TYPE(OfonoWatchObject, ofono_watch_object, G_TYPE_OBJECT)
 
 /* Skip the leading slash from the modem path: */
 #define DBG_(obj,fmt,args...) DBG("%s " fmt, (obj)->path+1, ##args)
-#define ASSERT(expr) ((void)(expr))
+#define ASSERT(expr) ((void)0)
 
 static inline struct ofono_watch_object *ofono_watch_object_cast
 						(struct ofono_watch *watch)
@@ -113,27 +123,13 @@ static inline void ofono_watch_signal_queue(struct ofono_watch_object *self,
 
 static void ofono_watch_emit_queued_signals(struct ofono_watch_object *self)
 {
-	if (self->signals_suspended < 1) {
-		int i;
+	int i;
 
-		for (i = 0; self->queued_signals && i < SIGNAL_COUNT; i++) {
-			if (self->queued_signals & ofono_watch_signal_bit(i)) {
-				ofono_watch_signal_emit(self, i);
-			}
+	for (i = 0; self->queued_signals && i < SIGNAL_COUNT; i++) {
+		if (self->queued_signals & ofono_watch_signal_bit(i)) {
+			ofono_watch_signal_emit(self, i);
 		}
 	}
-}
-
-static inline void ofono_watch_suspend_signals(struct ofono_watch_object *self)
-{
-	self->signals_suspended++;
-}
-
-static inline void ofono_watch_resume_signals(struct ofono_watch_object *self)
-{
-	ASSERT(self->signals_suspended > 0);
-	self->signals_suspended--;
-	ofono_watch_emit_queued_signals(self);
 }
 
 static void ofono_watch_iccid_update(struct ofono_watch_object *self,
@@ -284,7 +280,6 @@ static void ofono_watch_set_sim(struct ofono_watch_object *self,
 		}
 		watch->sim = sim;
 		ofono_watch_signal_queue(self, SIGNAL_SIM_CHANGED);
-		ofono_watch_suspend_signals(self);
 
 		/* Reset the current state */
 		ofono_watch_iccid_update(self, NULL);
@@ -313,9 +308,7 @@ static void ofono_watch_set_sim(struct ofono_watch_object *self,
 					ofono_watch_imsi_notify, self,
 					ofono_watch_imsi_destroy);
 		}
-
-		/* Emit the pending signals. */
-		ofono_watch_resume_signals(self);
+		ofono_watch_emit_queued_signals(self);
 	}
 }
 
@@ -342,6 +335,36 @@ static void ofono_watch_sim_destroy(void *user_data)
 	self->sim_watch_id = 0;
 }
 
+static void ofono_watch_netreg_update(struct ofono_watch_object *self)
+{
+	struct ofono_watch *watch = &self->pub;
+	struct ofono_netreg *netreg = watch->netreg;
+	enum ofono_netreg_status status = ofono_netreg_get_status(netreg);
+	const char *mcc = ofono_netreg_get_mcc(netreg);
+	const char *mnc = ofono_netreg_get_mnc(netreg);
+	const char *name = ofono_netreg_get_name(netreg);
+
+	if (watch->reg_status != status) {
+		watch->reg_status = status;
+		ofono_watch_signal_queue(self, SIGNAL_REG_STATUS_CHANGED);
+	}
+	if (g_strcmp0(self->reg_mcc, mcc)) {
+		g_free(self->reg_mcc);
+		watch->reg_mcc = self->reg_mcc = g_strdup(mcc);
+		ofono_watch_signal_queue(self, SIGNAL_REG_MCC_CHANGED);
+	}
+	if (g_strcmp0(self->reg_mnc, mnc)) {
+		g_free(self->reg_mnc);
+		watch->reg_mnc = self->reg_mnc = g_strdup(mnc);
+		ofono_watch_signal_queue(self, SIGNAL_REG_MNC_CHANGED);
+	}
+	if (g_strcmp0(self->reg_name, name)) {
+		g_free(self->reg_name);
+		watch->reg_name = self->reg_name = g_strdup(name);
+		ofono_watch_signal_queue(self, SIGNAL_REG_NAME_CHANGED);
+	}
+}
+
 static void ofono_watch_set_netreg(struct ofono_watch_object *self,
 						struct ofono_netreg *netreg)
 {
@@ -349,8 +372,10 @@ static void ofono_watch_set_netreg(struct ofono_watch_object *self,
 
 	if (watch->netreg != netreg) {
 		watch->netreg = netreg;
-		ofono_watch_signal_emit(self, SIGNAL_NETREG_CHANGED);
+		ofono_watch_signal_queue(self, SIGNAL_NETREG_CHANGED);
 	}
+	ofono_watch_netreg_update(self);
+	ofono_watch_emit_queued_signals(self);
 }
 
 static void ofono_watch_netreg_notify(struct ofono_atom *atom,
@@ -431,21 +456,15 @@ static void ofono_watch_setup_modem(struct ofono_watch_object *self)
 static void ofono_watch_cleanup_modem(struct ofono_watch_object *self,
 						struct ofono_modem *modem)
 {
-	/* Caller checks the self->modem isn't NULL */
-	if (self->online_watch_id) {
-		__ofono_modem_remove_online_watch(modem, self->online_watch_id);
-		ASSERT(!self->online_watch_id);
-	}
+	/* Caller checks that modem isn't NULL */
+	__ofono_modem_remove_online_watch(modem, self->online_watch_id);
+	ASSERT(!self->online_watch_id);
 
-	if (self->sim_watch_id) {
-		__ofono_modem_remove_atom_watch(modem, self->sim_watch_id);
-		ASSERT(!self->sim_watch_id);
-	}
+	__ofono_modem_remove_atom_watch(modem, self->sim_watch_id);
+	ASSERT(!self->sim_watch_id);
 
-	if (self->netreg_watch_id) {
-		__ofono_modem_remove_atom_watch(modem, self->netreg_watch_id);
-		ASSERT(!self->netreg_watch_id);
-	}
+	__ofono_modem_remove_atom_watch(modem, self->netreg_watch_id);
+	ASSERT(!self->netreg_watch_id);
 
 	ofono_watch_set_sim(self, NULL);
 	ofono_watch_set_netreg(self, NULL);
@@ -617,61 +636,23 @@ static unsigned long ofono_watch_add_signal_handler(struct ofono_watch *watch,
 	return 0;
 }
 
-unsigned long ofono_watch_add_modem_changed_handler(struct ofono_watch *watch,
-				ofono_watch_cb_t cb, void *user_data)
-{
-	return ofono_watch_add_signal_handler(watch, SIGNAL_MODEM_CHANGED,
-							cb, user_data);
-}
+#define ADD_SIGNAL_HANDLER_PROC(name,NAME) \
+unsigned long ofono_watch_add_##name##_changed_handler \
+	(struct ofono_watch *w, ofono_watch_cb_t cb, void *arg) \
+{ return ofono_watch_add_signal_handler(w, SIGNAL_##NAME##_CHANGED, cb, arg); }
 
-unsigned long ofono_watch_add_online_changed_handler(struct ofono_watch *watch,
-				ofono_watch_cb_t cb, void *user_data)
-{
-	return ofono_watch_add_signal_handler(watch, SIGNAL_ONLINE_CHANGED,
-							cb, user_data);
-}
-
-unsigned long ofono_watch_add_sim_changed_handler(struct ofono_watch *watch,
-				ofono_watch_cb_t cb, void *user_data)
-{
-	return ofono_watch_add_signal_handler(watch, SIGNAL_SIM_CHANGED,
-							cb, user_data);
-}
-
-unsigned long ofono_watch_add_sim_state_changed_handler
-	(struct ofono_watch *watch, ofono_watch_cb_t cb, void *user_data)
-{
-	return ofono_watch_add_signal_handler(watch, SIGNAL_SIM_STATE_CHANGED,
-							cb, user_data);
-}
-
-unsigned long ofono_watch_add_iccid_changed_handler(struct ofono_watch *watch,
-				ofono_watch_cb_t cb, void *user_data)
-{
-	return ofono_watch_add_signal_handler(watch, SIGNAL_ICCID_CHANGED,
-							cb, user_data);
-}
-
-unsigned long ofono_watch_add_imsi_changed_handler(struct ofono_watch *watch,
-				ofono_watch_cb_t cb, void *user_data)
-{
-	return ofono_watch_add_signal_handler(watch, SIGNAL_IMSI_CHANGED,
-							cb, user_data);
-}
-
-unsigned long ofono_watch_add_spn_changed_handler(struct ofono_watch *watch,
-				ofono_watch_cb_t cb, void *user_data)
-{
-	return ofono_watch_add_signal_handler(watch, SIGNAL_SPN_CHANGED,
-							cb, user_data);
-}
-
-unsigned long ofono_watch_add_netreg_changed_handler(struct ofono_watch *watch,
-				ofono_watch_cb_t cb, void *user_data)
-{
-	return ofono_watch_add_signal_handler(watch, SIGNAL_NETREG_CHANGED,
-							cb, user_data);
-}
+ADD_SIGNAL_HANDLER_PROC(modem,MODEM)
+ADD_SIGNAL_HANDLER_PROC(online,ONLINE)
+ADD_SIGNAL_HANDLER_PROC(sim,SIM)
+ADD_SIGNAL_HANDLER_PROC(sim_state,SIM_STATE)
+ADD_SIGNAL_HANDLER_PROC(iccid,ICCID)
+ADD_SIGNAL_HANDLER_PROC(imsi,IMSI)
+ADD_SIGNAL_HANDLER_PROC(spn,SPN)
+ADD_SIGNAL_HANDLER_PROC(netreg,NETREG)
+ADD_SIGNAL_HANDLER_PROC(reg_status,REG_STATUS)
+ADD_SIGNAL_HANDLER_PROC(reg_mcc,REG_MCC)
+ADD_SIGNAL_HANDLER_PROC(reg_mnc,REG_MNC)
+ADD_SIGNAL_HANDLER_PROC(reg_name,REG_NAME)
 
 void ofono_watch_remove_handler(struct ofono_watch *watch, unsigned long id)
 {
@@ -698,8 +679,26 @@ void ofono_watch_remove_handlers(struct ofono_watch *watch, unsigned long *ids,
 	}
 }
 
+void __ofono_watch_netreg_changed(const char *path)
+{
+	if (path && ofono_watch_table) {
+		struct ofono_watch_object *self =
+			g_hash_table_lookup(ofono_watch_table, path);
+
+		if (self) {
+			g_object_ref(self);
+			ofono_watch_netreg_update(self);
+			ofono_watch_emit_queued_signals(self);
+			g_object_unref(self);
+		}
+	}
+}
+
 static void ofono_watch_object_init(struct ofono_watch_object *self)
 {
+	struct ofono_watch *watch = &self->pub;
+
+	watch->reg_status = OFONO_NETREG_STATUS_NONE;
 }
 
 static void ofono_watch_object_finalize(GObject *object)
@@ -713,10 +712,8 @@ static void ofono_watch_object_finalize(GObject *object)
 		watch->modem = NULL;
 		ofono_watch_cleanup_modem(self, modem);
 	}
-	if (self->modem_watch_id) {
-		__ofono_modemwatch_remove(self->modem_watch_id);
-		ASSERT(!self->modem_watch_id);
-	}
+	__ofono_modemwatch_remove(self->modem_watch_id);
+	ASSERT(!self->modem_watch_id);
 	g_free(self->path);
 	G_OBJECT_CLASS(ofono_watch_object_parent_class)->finalize(object);
 }
@@ -732,6 +729,10 @@ static void ofono_watch_object_class_init(OfonoWatchObjectClass *klass)
 	NEW_SIGNAL(klass, IMSI);
 	NEW_SIGNAL(klass, SPN);
 	NEW_SIGNAL(klass, NETREG);
+	NEW_SIGNAL(klass, REG_STATUS);
+	NEW_SIGNAL(klass, REG_MCC);
+	NEW_SIGNAL(klass, REG_MNC);
+	NEW_SIGNAL(klass, REG_NAME);
 }
 
 /*

@@ -13,7 +13,7 @@
  *  GNU General Public License for more details.
  */
 
-#include <ofono/watch.h>
+#include "watch_p.h"
 
 #include "ofono.h"
 
@@ -27,6 +27,9 @@ static struct ofono_watchlist *g_modemwatches = NULL;
 #define TEST_ICCID "0000000000000000000"
 #define TEST_IMSI "244120000000000"
 #define TEST_SPN "Test"
+#define TEST_MCC "244"
+#define TEST_MNC "12"
+#define TEST_NAME "Test"
 
 /* Fake ofono_atom */
 
@@ -46,7 +49,31 @@ void *__ofono_atom_get_data(struct ofono_atom *atom)
 
 struct ofono_netreg {
 	struct ofono_atom atom;
+	enum ofono_netreg_status status;
+	const char *mcc;
+	const char *mnc;
+	const char *name;
 };
+
+int ofono_netreg_get_status(struct ofono_netreg *netreg)
+{
+	return netreg ? netreg->status : OFONO_NETREG_STATUS_NONE;
+}
+
+const char *ofono_netreg_get_mcc(struct ofono_netreg *netreg)
+{
+	return netreg ? netreg->mcc : NULL;
+}
+
+const char *ofono_netreg_get_mnc(struct ofono_netreg *netreg)
+{
+	return netreg ? netreg->mnc : NULL;
+}
+
+const char *ofono_netreg_get_name(struct ofono_netreg *netreg)
+{
+	return netreg ? netreg->name : NULL;
+}
 
 /* Fake ofono_sim */
 
@@ -439,6 +466,7 @@ static void test_basic(void)
 	struct ofono_watch *watch;
 	struct ofono_watch *watch1;
 	struct ofono_modem modem, modem1;
+	unsigned long id = 0;
 
 	/* NULL resistance */
 	g_assert(!ofono_watch_new(NULL));
@@ -453,8 +481,13 @@ static void test_basic(void)
 	g_assert(!ofono_watch_add_imsi_changed_handler(NULL, NULL, NULL));
 	g_assert(!ofono_watch_add_spn_changed_handler(NULL, NULL, NULL));
 	g_assert(!ofono_watch_add_netreg_changed_handler(NULL, NULL, NULL));
+	g_assert(!ofono_watch_add_reg_status_changed_handler(NULL, NULL, NULL));
+	g_assert(!ofono_watch_add_reg_mcc_changed_handler(NULL, NULL, NULL));
+	g_assert(!ofono_watch_add_reg_mnc_changed_handler(NULL, NULL, NULL));
+	g_assert(!ofono_watch_add_reg_name_changed_handler(NULL, NULL, NULL));
 	ofono_watch_remove_handler(NULL, 0);
 	ofono_watch_remove_handlers(NULL, NULL, 0);
+	__ofono_watch_netreg_changed(NULL);
 
 	/* Instance caching */
 	memset(&modem, 0, sizeof(modem));
@@ -477,6 +510,8 @@ static void test_basic(void)
 	g_assert(watch1->modem == &modem1);
 	g_assert(ofono_watch_new(TEST_PATH) == watch);
 	g_assert(ofono_watch_new(TEST_PATH_1) == watch1);
+	g_assert(ofono_watch_ref(watch) == watch);
+	ofono_watch_unref(watch);
 	ofono_watch_unref(watch);
 	ofono_watch_unref(watch1);
 
@@ -492,6 +527,8 @@ static void test_basic(void)
 	g_assert(!ofono_watch_add_netreg_changed_handler(watch, NULL, NULL));
 	ofono_watch_remove_handler(watch, 0);
 	ofono_watch_remove_handlers(watch, NULL, 0);
+	ofono_watch_remove_handlers(watch, &id, 0);
+	ofono_watch_remove_handlers(watch, &id, 1);
 
 	/* The first modem is removed when the watch is still alive */
 	test_modem_shutdown(&modem);
@@ -563,8 +600,17 @@ static void test_netreg(void)
 {
 	struct ofono_watch *watch;
 	struct ofono_modem modem;
-	gulong id;
-	int n = 0;
+	struct ofono_netreg *netreg = &modem.netreg;
+	gulong id[5];
+	int n[G_N_ELEMENTS(id)];
+
+#define NETREG 0
+#define REG_STATUS 1
+#define REG_MCC 2
+#define REG_MNC 3
+#define REG_NAME 4
+
+	__ofono_watch_netreg_changed(TEST_PATH); /* No effect (yet) */
 
 	memset(&modem, 0, sizeof(modem));
 	__ofono_modemwatch_init();
@@ -572,24 +618,84 @@ static void test_netreg(void)
 	watch = ofono_watch_new(TEST_PATH);
 	g_assert(!watch->netreg);
 
-	id = ofono_watch_add_netreg_changed_handler(watch, test_inc_cb, &n);
-	test_modem_register_atom(&modem, &modem.netreg.atom);
-	g_assert(watch->netreg == &modem.netreg);
-	g_assert(n == 1);
+	memset(id, 0, sizeof(id));
+	memset(n, 0, sizeof(n));
+	id[NETREG] = ofono_watch_add_netreg_changed_handler
+		(watch, test_inc_cb, n + NETREG);
+	id[REG_STATUS] = ofono_watch_add_reg_status_changed_handler
+		(watch, test_inc_cb, n + REG_STATUS);
+	id[REG_MCC] = ofono_watch_add_reg_mcc_changed_handler
+		(watch, test_inc_cb, n + REG_MCC);
+	id[REG_MNC] = ofono_watch_add_reg_mnc_changed_handler
+		(watch, test_inc_cb, n + REG_MNC);
+	id[REG_NAME] = ofono_watch_add_reg_name_changed_handler
+		(watch, test_inc_cb, n + REG_NAME);
+	test_modem_register_atom(&modem, &netreg->atom);
+	g_assert(watch->netreg == netreg);
+	g_assert(watch->reg_status == netreg->status);
+	g_assert(n[NETREG] == 1);
+	g_assert(n[REG_STATUS] == 1);
+	n[NETREG] = 0;
+	n[REG_STATUS] = 0;
 
-	test_modem_unregister_atom(&modem, &modem.netreg.atom);
+	netreg->status++;
+	__ofono_watch_netreg_changed(TEST_PATH);
+	g_assert(watch->reg_status == netreg->status);
+	g_assert(n[REG_STATUS] == 1);
+	n[REG_STATUS] = 0;
+
+	netreg->mcc = TEST_MCC;
+	netreg->mnc = TEST_MNC;
+	netreg->name = TEST_NAME;
+	__ofono_watch_netreg_changed(TEST_PATH);
+	__ofono_watch_netreg_changed(TEST_PATH); /* This one has no effect */
+	__ofono_watch_netreg_changed(TEST_PATH_1); /* This one too */
+	g_assert(!n[REG_STATUS]);
+	g_assert(n[REG_MCC] == 1);
+	g_assert(n[REG_MNC] == 1);
+	g_assert(n[REG_NAME] == 1);
+	g_assert(!g_strcmp0(watch->reg_mcc, netreg->mcc));
+	g_assert(!g_strcmp0(watch->reg_mnc, netreg->mnc));
+	g_assert(!g_strcmp0(watch->reg_name, netreg->name));
+	n[REG_MCC] = 0;
+	n[REG_MNC] = 0;
+	n[REG_NAME] = 0;
+
+	test_modem_unregister_atom(&modem, &netreg->atom);
 	g_assert(!watch->netreg);
-	g_assert(n == 2);
+	g_assert(watch->reg_status == OFONO_NETREG_STATUS_NONE);
+	g_assert(!watch->reg_mcc);
+	g_assert(!watch->reg_mnc);
+	g_assert(!watch->reg_name);
+	g_assert(n[NETREG] == 1);
+	g_assert(n[REG_STATUS] == 1);
+	g_assert(n[REG_MCC] == 1);
+	g_assert(n[REG_MNC] == 1);
+	g_assert(n[REG_NAME] == 1);
+	memset(n, 0, sizeof(n));
 
-	test_modem_register_atom(&modem, &modem.netreg.atom);
-	g_assert(watch->netreg == &modem.netreg);
-	g_assert(n == 3);
+	netreg->mcc = NULL;
+	netreg->mnc = NULL;
+	netreg->name = NULL;
+
+	test_modem_register_atom(&modem, &netreg->atom);
+	g_assert(watch->netreg == netreg);
+	g_assert(watch->reg_status == netreg->status);
+	g_assert(n[NETREG] == 1);
+	g_assert(n[REG_STATUS] == 1);
+	n[NETREG] = 0;
+	n[REG_STATUS] = 0;
 
 	test_modem_shutdown(&modem);
 	g_assert(!watch->netreg);
-	g_assert(n == 4);
+	g_assert(watch->reg_status == OFONO_NETREG_STATUS_NONE);
+	g_assert(n[NETREG] == 1);
+	g_assert(n[REG_STATUS] == 1);
+	g_assert(!n[REG_MCC]);
+	g_assert(!n[REG_MNC]);
+	g_assert(!n[REG_NAME]);
 
-	ofono_watch_remove_handler(watch, id);
+	ofono_watch_remove_all_handlers(watch, id);
 	ofono_watch_unref(watch);
 	__ofono_modemwatch_cleanup();
 }
