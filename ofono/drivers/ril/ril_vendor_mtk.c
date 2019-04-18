@@ -28,8 +28,8 @@
 #include <gutil_misc.h>
 
 #include <ofono/watch.h>
-
-#include "ofono.h"
+#include <ofono/modem.h>
+#include <ofono/gprs.h>
 
 #define SET_INITIAL_ATTACH_APN_TIMEOUT (20*1000)
 
@@ -246,14 +246,9 @@ static const struct ofono_gprs_primary_context *ril_vendor_mtk_internet_context
 	struct ofono_watch *watch = self->watch;
 
 	if (watch->imsi) {
-		struct ofono_atom *atom = __ofono_modem_find_atom(watch->modem,
-							OFONO_ATOM_TYPE_GPRS);
-
-		if (atom) {
-			return __ofono_gprs_context_settings_by_type
-				(__ofono_atom_get_data(atom),
+		return ofono_gprs_context_settings_by_type
+				(ofono_modem_get_gprs(watch->modem),
 					OFONO_GPRS_CONTEXT_TYPE_INTERNET);
-		}
 	}
 
 	return NULL;
