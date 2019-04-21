@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -331,7 +330,7 @@ static void at_caoc_remove(struct ofono_call_meter *cm)
 	ofono_call_meter_set_data(cm, NULL);
 }
 
-static struct ofono_call_meter_driver driver = {
+static const struct ofono_call_meter_driver driver = {
 	.name = "atmodem",
 	.probe = at_caoc_probe,
 	.remove = at_caoc_remove,

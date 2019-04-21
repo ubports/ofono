@@ -26,7 +26,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -36,6 +35,10 @@
 #include <ofono/log.h>
 #include <ofono/modem.h>
 #include <ofono/netreg.h>
+
+#if __GNUC__ > 7
+#pragma GCC diagnostic ignored "-Wrestrict"
+#endif
 
 #include <gril/gril.h>
 
@@ -832,7 +835,7 @@ static void ril_netreg_remove(struct ofono_netreg *netreg)
 	g_free(nd);
 }
 
-static struct ofono_netreg_driver driver = {
+static const struct ofono_netreg_driver driver = {
 	.name				= RILMODEM,
 	.probe				= ril_netreg_probe,
 	.remove				= ril_netreg_remove,

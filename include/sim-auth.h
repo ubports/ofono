@@ -26,36 +26,14 @@
 extern "C" {
 #endif
 
+#include <stdint.h>
+
 #include <ofono/types.h>
 
 struct ofono_sim_auth;
 
-typedef void (*ofono_sim_list_apps_cb_t)(const struct ofono_error *error,
-					const unsigned char *dataobj,
-					int len, void *data);
-
-struct ofono_sim_auth_driver {
-	const char *name;
-	int (*probe)(struct ofono_sim_auth *sa, unsigned int vendor,
-			void *data);
-	void (*remove)(struct ofono_sim_auth *sa);
-
-	void (*list_apps)(struct ofono_sim_auth *sa,
-				ofono_sim_list_apps_cb_t cb, void *data);
-};
-
-int ofono_sim_auth_driver_register(const struct ofono_sim_auth_driver *d);
-void ofono_sim_auth_driver_unregister(const struct ofono_sim_auth_driver *d);
-
-struct ofono_sim_auth *ofono_sim_auth_create(struct ofono_modem *modem,
-						unsigned int vendor,
-						const char *driver, void *data);
-
-void ofono_sim_auth_register(struct ofono_sim_auth *sa);
+struct ofono_sim_auth *ofono_sim_auth_create(struct ofono_modem *modem);
 void ofono_sim_auth_remove(struct ofono_sim_auth *sa);
-
-void ofono_sim_auth_set_data(struct ofono_sim_auth *sa, void *data);
-void *ofono_sim_auth_get_data(struct ofono_sim_auth *sa);
 
 #ifdef __cplusplus
 }

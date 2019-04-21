@@ -24,7 +24,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -582,7 +581,7 @@ static void ste_voicecall_remove(struct ofono_voicecall *vc)
 	g_free(vd);
 }
 
-static struct ofono_voicecall_driver driver = {
+static const struct ofono_voicecall_driver driver = {
 	.name			= "stemodem",
 	.probe			= ste_voicecall_probe,
 	.remove			= ste_voicecall_remove,

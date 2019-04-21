@@ -98,7 +98,7 @@ static void speedup_ussd_request(struct ofono_ussd *ussd, int dcs,
 
 	cbd->user = ussd;
 
-	unpack_7bit_own_buf(pdu, len, 0, TRUE, sizeof(coded_buf),
+	unpack_7bit_own_buf(pdu, len, 0, true, sizeof(coded_buf),
 				&written, 0, (unsigned char *)coded_buf);
 	if (written < 1)
 		goto error;
@@ -204,7 +204,7 @@ static void speedup_ussd_remove(struct ofono_ussd *ussd)
 	g_free(data);
 }
 
-static struct ofono_ussd_driver driver = {
+static const struct ofono_ussd_driver driver = {
 	.name		= "speedupmodem",
 	.probe		= speedup_ussd_probe,
 	.remove		= speedup_ussd_remove,

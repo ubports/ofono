@@ -40,7 +40,6 @@
 #include "crc-ccitt.h"
 #include "ppp.h"
 
-#define DEFAULT_MRU	1500
 #define DEFAULT_MTU	1500
 
 #define PPP_ADDR_FIELD	0xff
@@ -66,7 +65,6 @@ struct _GAtPPP {
 	struct ppp_chap *chap;
 	struct ppp_pap *pap;
 	GAtHDLC *hdlc;
-	gint mru;
 	gint mtu;
 	char username[256];
 	char password[256];
@@ -617,7 +615,8 @@ const char *g_at_ppp_get_password(GAtPPP *ppp)
 gboolean g_at_ppp_set_auth_method(GAtPPP *ppp, GAtPPPAuthMethod method)
 {
 	if (method != G_AT_PPP_AUTH_METHOD_CHAP &&
-					method != G_AT_PPP_AUTH_METHOD_PAP)
+					method != G_AT_PPP_AUTH_METHOD_PAP &&
+					method != G_AT_PPP_AUTH_METHOD_NONE)
 		return FALSE;
 
 	ppp->auth_method = method;
@@ -830,7 +829,6 @@ static GAtPPP *ppp_init_common(gboolean is_server, guint32 ip)
 	ppp->fd = -1;
 
 	/* set options to defaults */
-	ppp->mru = DEFAULT_MRU;
 	ppp->mtu = DEFAULT_MTU;
 
 	/* initialize the lcp state */

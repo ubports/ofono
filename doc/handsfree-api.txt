@@ -1,0 +1,92 @@
+Handsfree hierarchy
+===================
+
+Service		org.ofono
+Interface	org.ofono.Handsfree
+Object path	[variable prefix]/{modem0,modem1,...}
+
+Methods		dict GetProperties()
+
+			Returns properties for the Handsfree Interface. See the
+			properties section for available properties.
+
+		void SetProperty(string property, variant value)
+
+			Changes the value of the specified property. Only
+			properties that are listed as readwrite are
+			changeable. On success a PropertyChanged signal
+			will be emitted.
+
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.InvalidArguments
+					 [service].Error.NotImplemented
+					 [service].Error.NotSupported
+
+		string RequestPhoneNumber()
+
+			Request a phone number from the AG, corresponding to the
+			last voice tag recorded in the HF. The AG may accept or
+			reject this request depending on its internal state.
+
+			This functionality is generally implemented by using
+			the +BINP=1 AT command.
+
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.InvalidArguments
+					 [service].Error.Failed
+
+Signals		PropertyChanged(string property, variant value)
+
+			Signal is emitted whenever a property has changed.
+			The new value is passed as the signal argument.
+
+Properties	array{string} Features [readonly]
+
+			List of features supported by the AG. The currently
+			supported values are:
+				"voice-recognition"
+				"attach-voice-tag"
+				"echo-canceling-and-noise-reduction"
+				"three-way-calling"
+				"release-all-held"
+				"release-specified-active-call"
+				"private-chat"
+				"create-multiparty"
+				"transfer"
+				"hf-indicators"
+
+		boolean InbandRinging [readonly]
+
+			Boolean representing whether inband ringing is enabled.
+
+		boolean VoiceRecognition [readwrite]
+
+			Boolean representing whether voice recognition is
+			currently active in the AG. This property may be written
+			to activate or deactivate the function from the HF, or
+			the AG could autonomously initiate it.
+
+		boolean EchoCancelingNoiseReduction [readwrite, optional]
+
+			Non-persistent Boolean property representing whether
+			echo canceling and noise reduction is enabled in the
+			AG. This feature can only be disabled once from the
+			HF unit; the current specification does not allow the
+			HF unit from enabling this feature on the AG once
+			it has been disabled.
+
+		byte BatteryChargeLevel [readonly]
+
+			The current charge level of the battery.  The value
+			can be between 0 and 5 respectively.
+
+		array{string} SubscriberNumbers [readonly]
+
+			List of subscriber numbers provided by the AG.
+
+		boolean DistractedDrivingReduction [readwrite, optional]
+
+			Non-persistent property representing whether
+			distracted driving reduction mode should be enabled in
+			the AG.  Support for this feature is optional on the
+			AG.

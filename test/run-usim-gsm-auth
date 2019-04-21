@@ -1,0 +1,36 @@
+#!/usr/bin/python3
+
+import dbus
+import sys
+
+bus = dbus.SystemBus()
+
+if len(sys.argv) < 6 and len(sys.argv) > 2:
+	path = sys.argv[1]
+
+	rands = []
+	for i in sys.argv[2:]:
+		rands.append(bytearray.fromhex(i))
+
+	sim_auth = dbus.Interface(bus.get_object('org.ofono', path),
+							'org.ofono.SimAuthentication')
+	apps = sim_auth.GetApplications()
+
+	for i in apps:
+		if apps[i]['Type'] == 'Umts':
+			umts_path = i
+
+	if not umts_path:
+		print("No Umts application found")
+		quit()
+
+	umts = dbus.Interface(bus.get_object('org.ofono', umts_path),
+						'org.ofono.USimApplication')
+	av = umts.GsmAuthenticate(rands)
+
+	for i in av:
+		print('SRES: ' + ''.join('%02x' % x for x in i['SRES']))
+		print('KC: ' + ''.join('%02x' % x for x in i['Kc']))
+
+else:
+	print("./run-usim-gsm-auth <modem> <rands>...[up to 3]")

@@ -1,3 +1,68 @@
+ver 1.29:
+	Fix issue with QMI and SIM initialized notification.
+	Add support for multiple PDP contexts and xmm7xxx modems.
+	Add support for handling Dual SIM Single Active feature
+	Add support for SIM PIN caching feature.
+
+ver 1.28:
+	Fix issue with SIM initialization and Gemalto modems.
+
+ver 1.27:
+	Add support for handling SIMCom based SIM800 modems.
+	Add support for SIM lock state with xmm7xxx modems.
+	Add support for coexistence feature with xmm7xxx modems.
+
+ver 1.26:
+	Fix issue with AT callback handler and GPRS.
+	Fix issue with handling EUTRAN SMS only states.
+	Fix issue with handling MBIM strings on big endian.
+	Fix issue with missing char and SMS national language.
+	Fix issue with unsolicited notifications of +CGAUTH/+CGDCONT.
+	Add support for setting "none" authentication method.
+	Add support for SMS and phonebook with xmm7xxx modems.
+	Add support for voice features and Gemalto modems.
+	Add support for Bengali and Gujrati SMS alphabets.
+	Add support for 8 additional languages for GSM 7 bit
+	Add support for using internal Embedded Linux library.
+
+ver 1.25:
+	Fix issue with handling GPRS context release.
+	Fix issue with GPRS context shutdown and Huawei modems.
+	Fix issue with roaming status report and QMI devices.
+	Add support for voice call handling of U-Blox modems
+	Add support for EUTRAN technology reporting.
+
+ver 1.24:
+	Fix issue with property changed signals and CDMA networks.
+	Fix issue with handling SIM filesystem and SIM removal.
+	Fix issue with handling PIN state and incorrect codes.
+	Fix issue with handling of parsing AID type.
+	Fix issue with SIM detection and QMI devices.
+	Fix issue with PIN handling and QMI devices.
+	Fix issue with USSD handling and QMI devices.
+	Fix issue with handling USSD TERMINATED response.
+	Fix issue with handling USSD reset and STK REFRESH.
+	Add support for detecting Gemalto ALS3 modems.
+	Add support for SIMCom based SIM7100E modems.
+
+ver 1.23:
+	Fix issue with handling SIM AID sessions.
+	Add support for QMI LTE bearer handling.
+	Add support for memory location dialing.
+
+ver 1.22:
+	Fix issue with GPIO handling and Nokia modems.
+	Fix issue with SIM state callback and AT modems.
+	Fix issue with data mode and DCD for U-Blox modems.
+	Fix issue with SMS receive on QMI based Quectel EC21.
+	Fix issue with HFP support and last call dialed request.
+	Fix issue with PIM retires handling and Gemalto modems.
+	Fix issue with atom registration and SIM state handling.
+	Add support for handling SIM card AID session management.
+	Add support for handling GSM/UMTS and IMS authentication.
+	Add support for IP Multimedia Subsystem (IMS) atom.
+	Add support for MBIM based modems.
+
 ver 1.21:
 	Fix issue with USSD notification received handling.
 	Fix issue with crashing SIM filesystem notifications.

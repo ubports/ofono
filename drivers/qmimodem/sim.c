@@ -493,8 +493,15 @@ static bool get_card_status(const struct qmi_uim_slot_info *slot,
 	case 0x03:	/* PUK1 or PUK for UPIN is required */
 		sim_stat->passwd_state = OFONO_SIM_PASSWORD_SIM_PUK;
 		break;
+	case 0x00:	/* Unknown */
+	case 0x01:	/* Detected */
 	case 0x04:	/* Personalization state must be checked. */
-		/* This is temporary, we could retry and get another result */
+	case 0x05:	/* PIN1 blocked */
+	case 0x06:	/* Illegal */
+		/*
+		 * This could be temporary, we should retry and
+		 * expect another result
+		 */
 		sim_stat->passwd_state = OFONO_SIM_PASSWORD_INVALID;
 		need_retry = true;
 		break;
@@ -517,7 +524,7 @@ static bool get_card_status(const struct qmi_uim_slot_info *slot,
 	return need_retry;
 }
 
-static enum get_card_status_result handle_get_card_status_result(
+static enum get_card_status_result handle_get_card_status_data(
 		struct qmi_result *result, struct sim_status *sim_stat)
 {
 	const void *ptr;
@@ -525,9 +532,6 @@ static enum get_card_status_result handle_get_card_status_result(
 	uint16_t len, offset;
 	uint8_t i;
 	enum get_card_status_result res = GET_CARD_STATUS_RESULT_ERROR;
-
-	if (qmi_result_set_error(result, NULL))
-		goto done;
 
 	ptr = qmi_result_get(result, QMI_UIM_RESULT_CARD_STATUS, &len);
 	if (!ptr)
@@ -557,7 +561,7 @@ static enum get_card_status_result handle_get_card_status_result(
 
 			index = GUINT16_FROM_LE(status->index_gw_pri);
 
-			if ((index & 0xff) == i && (index >> 8) == n) {
+			if ((index & 0xff) == n && (index >> 8) == i) {
 				if (get_card_status(slot, info1, info2,
 								sim_stat))
 					res = GET_CARD_STATUS_RESULT_TEMP_ERROR;
@@ -569,6 +573,15 @@ static enum get_card_status_result handle_get_card_status_result(
 
 done:
 	return res;
+}
+
+static enum get_card_status_result handle_get_card_status_result(
+		struct qmi_result *result, struct sim_status *sim_stat)
+{
+	if (qmi_result_set_error(result, NULL))
+		return GET_CARD_STATUS_RESULT_ERROR;
+
+	return handle_get_card_status_data(result, sim_stat);
 }
 
 static gboolean query_passwd_state_retry(gpointer userdata)
@@ -595,20 +608,32 @@ static void query_passwd_state_cb(struct qmi_result *result,
 	struct sim_status sim_stat;
 	enum get_card_status_result res;
 	struct cb_data *retry_cbd;
+	unsigned int i;
+
+	for (i = 0; i < OFONO_SIM_PASSWORD_INVALID; i++)
+		sim_stat.retries[i] = -1;
 
 	res = handle_get_card_status_result(result, &sim_stat);
 	switch (res) {
 	case GET_CARD_STATUS_RESULT_OK:
 		DBG("passwd state %d", sim_stat.passwd_state);
 		data->retry_count = 0;
-		CALLBACK_WITH_SUCCESS(cb, sim_stat.passwd_state, cbd->data);
+		if (sim_stat.passwd_state == OFONO_SIM_PASSWORD_INVALID) {
+			CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
+			ofono_sim_inserted_notify(sim, FALSE);
+		} else
+			CALLBACK_WITH_SUCCESS(cb, sim_stat.passwd_state,
+								cbd->data);
 		break;
 	case GET_CARD_STATUS_RESULT_TEMP_ERROR:
 		data->retry_count++;
 		if (data->retry_count > MAX_RETRY_COUNT) {
-			DBG("Failed after %d attempts", data->retry_count);
+			DBG("Failed after %d attempts. Card state:%d",
+							data->retry_count,
+							sim_stat.card_state);
 			data->retry_count = 0;
 			CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
+			ofono_sim_inserted_notify(sim, FALSE);
 		} else {
 			DBG("Retry command");
 			retry_cbd = cb_data_new(cb, cbd->data);
@@ -622,6 +647,7 @@ static void query_passwd_state_cb(struct qmi_result *result,
 		DBG("Command failed");
 		data->retry_count = 0;
 		CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
+		ofono_sim_inserted_notify(sim, FALSE);
 		break;
 	}
 }
@@ -650,8 +676,12 @@ static void query_pin_retries_cb(struct qmi_result *result, void *user_data)
 	struct cb_data *cbd = user_data;
 	ofono_sim_pin_retries_cb_t cb = cbd->cb;
 	struct sim_status sim_stat;
+	unsigned int i;
 
 	DBG("");
+
+	for (i = 0; i < OFONO_SIM_PASSWORD_INVALID; i++)
+		sim_stat.retries[i] = -1;
 
 	if (handle_get_card_status_result(result, &sim_stat) !=
 					GET_CARD_STATUS_RESULT_OK) {
@@ -767,6 +797,34 @@ static void get_card_status_cb(struct qmi_result *result, void *user_data)
 		break;
 	case 0x01:	/* Present */
 		ofono_sim_inserted_notify(sim, TRUE);
+		ofono_sim_initialized_notify(sim);
+		break;
+	}
+}
+
+static void card_status_notify(struct qmi_result *result, void *user_data)
+{
+	struct ofono_sim *sim = user_data;
+	struct sim_data *data = ofono_sim_get_data(sim);
+	struct sim_status sim_stat;
+
+	DBG("");
+
+	if (handle_get_card_status_data(result, &sim_stat) !=
+					GET_CARD_STATUS_RESULT_OK) {
+		data->app_type = 0;	/* Unknown */
+		sim_stat.card_state = 0x00;	/* Absent */
+	} else {
+		data->app_type = sim_stat.app_type;
+	}
+
+	switch (sim_stat.card_state) {
+	case 0x00:	/* Absent */
+	case 0x02:	/* Error */
+		ofono_sim_inserted_notify(sim, FALSE);
+		break;
+	case 0x01:	/* Present */
+		ofono_sim_inserted_notify(sim, TRUE);
 		break;
 	}
 }
@@ -786,6 +844,9 @@ static void event_registration_cb(struct qmi_result *result, void *user_data)
 		goto error;
 
 	DBG("event mask 0x%04x", data->event_mask);
+	if (data->event_mask & 0x0001)
+		qmi_service_register(data->uim, QMI_UIM_GET_CARD_STATUS_EVENT,
+						card_status_notify, sim, NULL);
 
 	if (qmi_service_send(data->uim, QMI_UIM_GET_CARD_STATUS, NULL,
 					get_card_status_cb, sim, NULL) > 0)
@@ -887,7 +948,7 @@ static void qmi_sim_remove(struct ofono_sim *sim)
 	g_free(data);
 }
 
-static struct ofono_sim_driver driver = {
+static const struct ofono_sim_driver driver = {
 	.name			= "qmimodem",
 	.probe			= qmi_sim_probe,
 	.remove			= qmi_sim_remove,

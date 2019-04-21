@@ -180,6 +180,9 @@ static void switch_sim_state_status(struct ofono_modem *modem, int status)
 			data->have_sim = TRUE;
 		}
 
+		if (data->have_sim)
+			ofono_sim_initialized_notify(data->sim);
+
 		if (data->sms_phonebook_added == FALSE) {
 			ofono_phonebook_create(modem, 0, "atmodem", data->chat);
 			ofono_sms_create(modem, 0, "atmodem", data->chat);

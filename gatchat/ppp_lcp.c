@@ -279,6 +279,9 @@ static enum rcr_result lcp_rcr(struct pppcp_data *pppcp,
 				*new_len = 4;
 
 				return RCR_NAK;
+
+			case G_AT_PPP_AUTH_METHOD_NONE:
+				return RCR_REJECT;
 			}
 			break;
 		}

@@ -24,7 +24,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -343,7 +342,7 @@ static void hfp_netreg_remove(struct ofono_netreg *netreg)
 	g_free(nd);
 }
 
-static struct ofono_netreg_driver driver = {
+static const struct ofono_netreg_driver driver = {
 	.name				= "hfpmodem",
 	.probe				= hfp_netreg_probe,
 	.remove				= hfp_netreg_remove,

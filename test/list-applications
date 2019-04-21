@@ -1,0 +1,29 @@
+#!/usr/bin/python3
+
+import dbus
+
+bus = dbus.SystemBus()
+
+manager = dbus.Interface(bus.get_object('org.ofono', '/'),
+						'org.ofono.Manager')
+
+modems = manager.GetModems()
+
+for path, properties in modems:
+	print("[ %s ]" % (path))
+
+	if "org.ofono.SimAuthentication" not in properties["Interfaces"]:
+		continue
+
+	simauth = dbus.Interface(bus.get_object('org.ofono', path),
+					'org.ofono.SimAuthentication')
+
+	apps = simauth.GetApplications()
+	for path, properties in apps.items():
+		print("    [ %s ]" % (path))
+
+		for key in properties.keys():
+			val = str(properties[key])
+			print("        %s = %s" % (key, val))
+
+		print('')

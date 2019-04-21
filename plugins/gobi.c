@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -43,6 +42,7 @@
 #include <ofono/ussd.h>
 #include <ofono/gprs.h>
 #include <ofono/gprs-context.h>
+#include <ofono/lte.h>
 #include <ofono/radio-settings.h>
 #include <ofono/location-reporting.h>
 #include <ofono/log.h>
@@ -254,56 +254,47 @@ error:
 	shutdown_device(modem);
 }
 
-static void discover_cb(uint8_t count, const struct qmi_version *list,
-							void *user_data)
+static void create_shared_dms(void *user_data)
 {
 	struct ofono_modem *modem = user_data;
 	struct gobi_data *data = ofono_modem_get_data(modem);
-	uint8_t i;
+
+	qmi_service_create_shared(data->device, QMI_SERVICE_DMS,
+				  create_dms_cb, modem, NULL);
+}
+
+static void discover_cb(void *user_data)
+{
+	struct ofono_modem *modem = user_data;
+	struct gobi_data *data = ofono_modem_get_data(modem);
+	uint16_t major, minor;
 
 	DBG("");
 
-	for (i = 0; i < count; i++) {
-		DBG("%s %d.%d - %d", list[i].name, list[i].major, list[i].minor,
-				list[i].type);
-
-		switch (list[i].type) {
-		case QMI_SERVICE_DMS:
-			data->features |= GOBI_DMS;
-			break;
-		case QMI_SERVICE_NAS:
-			data->features |= GOBI_NAS;
-			break;
-		case QMI_SERVICE_WMS:
-			data->features |= GOBI_WMS;
-			break;
-		case QMI_SERVICE_WDS:
-			data->features |= GOBI_WDS;
-			break;
-		case QMI_SERVICE_WDA:
-			data->features |= GOBI_WDA;
-			break;
-		case QMI_SERVICE_PDS:
-			data->features |= GOBI_PDS;
-			break;
-		case QMI_SERVICE_PBM:
-			data->features |= GOBI_PBM;
-			break;
-		case QMI_SERVICE_UIM:
-			data->features |= GOBI_UIM;
-			break;
-		case QMI_SERVICE_CAT:
-			data->features |= GOBI_CAT;
-			break;
-		case QMI_SERVICE_CAT_OLD:
-			if (list[i].major > 0)
-				data->features |= GOBI_CAT_OLD;
-			break;
-		case QMI_SERVICE_VOICE:
+	if (qmi_device_has_service(data->device, QMI_SERVICE_DMS))
+		data->features |= GOBI_DMS;
+	if (qmi_device_has_service(data->device, QMI_SERVICE_NAS))
+		data->features |= GOBI_NAS;
+	if (qmi_device_has_service(data->device, QMI_SERVICE_WMS))
+		data->features |= GOBI_WMS;
+	if (qmi_device_has_service(data->device, QMI_SERVICE_WDS))
+		data->features |= GOBI_WDS;
+	if (qmi_device_has_service(data->device, QMI_SERVICE_WDA))
+		data->features |= GOBI_WDA;
+	if (qmi_device_has_service(data->device, QMI_SERVICE_PDS))
+		data->features |= GOBI_PDS;
+	if (qmi_device_has_service(data->device, QMI_SERVICE_PBM))
+		data->features |= GOBI_PBM;
+	if (qmi_device_has_service(data->device, QMI_SERVICE_UIM))
+		data->features |= GOBI_UIM;
+	if (qmi_device_has_service(data->device, QMI_SERVICE_CAT))
+		data->features |= GOBI_CAT;
+	if (qmi_device_get_service_version(data->device,
+				QMI_SERVICE_CAT_OLD, &major, &minor))
+		if (major > 0)
+			data->features |= GOBI_CAT_OLD;
+	if (qmi_device_has_service(data->device, QMI_SERVICE_VOICE))
 			data->features |= GOBI_VOICE;
-			break;
-		}
-	}
 
 	if (!(data->features & GOBI_DMS)) {
 		if (++data->discover_attempts < 3) {
@@ -316,8 +307,10 @@ static void discover_cb(uint8_t count, const struct qmi_version *list,
 		return;
 	}
 
-	qmi_service_create_shared(data->device, QMI_SERVICE_DMS,
-						create_dms_cb, modem, NULL);
+	if (qmi_device_is_sync_supported(data->device))
+		qmi_device_sync(data->device, create_shared_dms, modem);
+	else
+		create_shared_dms(modem);
 }
 
 static int gobi_enable(struct ofono_modem *modem)
@@ -471,6 +464,8 @@ static void gobi_post_sim(struct ofono_modem *modem)
 	struct gobi_data *data = ofono_modem_get_data(modem);
 
 	DBG("%p", modem);
+
+	ofono_lte_create(modem, 0, "qmimodem", data->device);
 
 	if (data->features & GOBI_CAT)
 		ofono_stk_create(modem, 0, "qmimodem", data->device);

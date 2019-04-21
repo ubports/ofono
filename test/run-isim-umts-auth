@@ -1,0 +1,38 @@
+#!/usr/bin/python3
+
+import dbus
+import sys
+
+bus = dbus.SystemBus()
+
+if len(sys.argv) == 4:
+	path = sys.argv[1]
+	rand = sys.argv[2]
+	autn = sys.argv[3]
+
+	sim_auth = dbus.Interface(bus.get_object('org.ofono', path),
+							'org.ofono.SimAuthentication')
+	apps = sim_auth.GetApplications()
+	for i in apps:
+		if apps[i]['Type'] == 'Ims':
+			ims_path = i
+
+	if not ims_path:
+		print("No Ims application found")
+		quit()
+
+	isim_auth = dbus.Interface(bus.get_object('org.ofono', ims_path),
+							'org.ofono.ISimApplication')
+	ret = isim_auth.ImsAuthenticate(bytearray.fromhex(rand),
+								bytearray.fromhex(autn))
+
+	if 'auts' in ret:
+		print('Sync Failure')
+		print('AUTS: ' + ''.join('%02x' % x for x in ret['AUTS']))
+	else:
+		print('Success')
+		print('RES: ' +  ''.join('%02x' % x for x in ret['RES']))
+		print('CK: ' + ''.join('%02x' % x for x in ret['CK']))
+		print('IK: ' + ''.join('%02x' % x for x in ret['IK']))
+else:
+	print("./run-isim-umts-auth <modem> <rand> <autn>")

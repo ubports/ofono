@@ -24,7 +24,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -263,7 +262,7 @@ static void at_gnss_remove(struct ofono_gnss *gnss)
 	g_free(gd);
 }
 
-static struct ofono_gnss_driver driver = {
+static const struct ofono_gnss_driver driver = {
 	.name			= "atmodem",
 	.probe			= at_gnss_probe,
 	.remove			= at_gnss_remove,

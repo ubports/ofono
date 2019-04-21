@@ -24,7 +24,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -598,9 +597,12 @@ static void ril_gprs_context_activate_primary(struct ofono_gprs_context *gc,
 	 * We do the same as in $AOSP/frameworks/opt/telephony/src/java/com/
 	 * android/internal/telephony/dataconnection/DataConnection.java,
 	 * onConnect(), and use authentication or not depending on whether
-	 * the user field is empty or not.
+	 * the user field is empty or not,
+	 * on top of the verification for the authentication method.
 	 */
-	if (ctx->username[0] != '\0')
+
+	if (ctx->auth_method != OFONO_GPRS_AUTH_METHOD_NONE &&
+						ctx->username[0] != '\0')
 		auth_type = RIL_AUTH_BOTH;
 	else
 		auth_type = RIL_AUTH_NONE;
@@ -615,8 +617,10 @@ static void ril_gprs_context_activate_primary(struct ofono_gprs_context *gc,
 		parcel_w_string(&rilp, buf);
 
 		g_ril_append_print_buf(gcd->ril, "(%d,%s,%s,%s,%s,%d,%s,%u)",
-				tech, profile, ctx->apn, ctx->username,
-				ctx->password, auth_type,
+				tech, profile, ctx->apn,
+				auth_type == RIL_AUTH_NONE ? "" : ctx->username,
+				auth_type == RIL_AUTH_NONE ? "" : ctx->password,
+				auth_type,
 				ril_util_gprs_proto_to_ril_string(ctx->proto),
 				ctx->cid);
 	} else
@@ -852,7 +856,7 @@ static void ril_gprs_context_remove(struct ofono_gprs_context *gc)
 	g_free(gcd);
 }
 
-static struct ofono_gprs_context_driver driver = {
+static const struct ofono_gprs_context_driver driver = {
 	.name			= RILMODEM,
 	.probe			= ril_gprs_context_probe,
 	.remove			= ril_gprs_context_remove,

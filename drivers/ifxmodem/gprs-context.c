@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -261,6 +260,45 @@ error:
 	failed_setup(gc, NULL, TRUE);
 }
 
+static void cgdata_cb(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct ofono_gprs_context *gc = user_data;
+	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
+
+	DBG("ok %d", ok);
+
+	if (!ok) {
+		ofono_error("Failed to establish session");
+		failed_setup(gc, result, TRUE);
+		return;
+	}
+
+	CALLBACK_WITH_SUCCESS(gcd->cb, gcd->cb_data);
+}
+
+static const char *get_datapath(struct ofono_modem *modem,
+						const char *interface)
+{
+	static char datapath[256];
+	char n;
+
+	if (!strcmp(interface,
+			ofono_modem_get_string(modem, "NetworkInterface")))
+		n = '0';
+	else if (!strcmp(interface,
+			ofono_modem_get_string(modem, "NetworkInterface2")))
+		n = '1';
+	else if (!strcmp(interface,
+			ofono_modem_get_string(modem, "NetworkInterface3")))
+		n = '2';
+	else
+		return NULL;
+
+	snprintf(datapath, sizeof(datapath), "%s%c",
+			ofono_modem_get_string(modem, "DataPath"), n);
+	return datapath;
+}
+
 static void cgcontrdp_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_gprs_context *gc = user_data;
@@ -270,8 +308,11 @@ static void cgcontrdp_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 	const char *laddrnetmask = NULL;
 	const char *gw = NULL;
-	const char *interface;
 	const char *dns[3];
+	const char *ctrlpath;
+	const char *datapath;
+	char buf[512];
+	const char *interface;
 
 	DBG("ok %d", ok);
 
@@ -328,9 +369,10 @@ static void cgcontrdp_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	DBG("DNS2: %s\n", gcd->dns2);
 	DBG("Gateway: %s\n", gcd->gateway);
 
-	interface = ofono_modem_get_string(modem, "NetworkInterface");
+	ctrlpath = ofono_modem_get_string(modem, "CtrlPath");
+	interface = ofono_gprs_context_get_interface(gc);
+	datapath = get_datapath(modem, interface);
 
-	ofono_gprs_context_set_interface(gc, interface);
 	ofono_gprs_context_set_ipv4_address(gc, gcd->address, TRUE);
 
 	if (gcd->netmask[0])
@@ -341,7 +383,17 @@ static void cgcontrdp_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 	ofono_gprs_context_set_ipv4_dns_servers(gc, dns);
 
-	CALLBACK_WITH_SUCCESS(gcd->cb, gcd->cb_data);
+	snprintf(buf, sizeof(buf), "AT+XDATACHANNEL=1,1,\"%s\",\"%s\",2,%u",
+			ctrlpath, datapath, gcd->active_context);
+	g_at_chat_send(gcd->chat, buf, none_prefix, NULL, NULL, NULL);
+	snprintf(buf, sizeof(buf), "AT+CGDATA=\"M-RAW_IP\",%u",
+			gcd->active_context);
+
+	if (g_at_chat_send(gcd->chat, buf, none_prefix, cgdata_cb,
+						gc, NULL) > 0)
+		return;
+
+	CALLBACK_WITH_FAILURE(gcd->cb, gcd->cb_data);
 }
 
 static void ifx_read_settings(struct ofono_gprs_context *gc)
@@ -466,8 +518,14 @@ static void ifx_gprs_activate_primary(struct ofono_gprs_context *gc,
 	gcd->active_context = ctx->cid;
 	gcd->cb = cb;
 	gcd->cb_data = data;
-	memcpy(gcd->username, ctx->username, sizeof(ctx->username));
-	memcpy(gcd->password, ctx->password, sizeof(ctx->password));
+
+	if (ctx->auth_method == OFONO_GPRS_AUTH_METHOD_NONE) {
+		memset(gcd->username, 0, sizeof(gcd->username));
+		memset(gcd->password, 0, sizeof(gcd->password));
+	} else {
+		memcpy(gcd->username, ctx->username, sizeof(ctx->username));
+		memcpy(gcd->password, ctx->password, sizeof(ctx->password));
+	}
 
 	gcd->state = STATE_ENABLING;
 	gcd->proto = ctx->proto;
@@ -513,6 +571,9 @@ static void deactivate_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 	if (gcd->vendor != OFONO_VENDOR_XMM)
 		g_at_chat_resume(gcd->chat);
+
+	if (!gcd->cb)
+		return;
 
 	CALLBACK_WITH_SUCCESS(gcd->cb, gcd->cb_data);
 }
@@ -608,9 +669,11 @@ static int ifx_gprs_context_probe(struct ofono_gprs_context *gc,
 
 	DBG("");
 
-	if (stat(TUN_DEV, &st) < 0) {
-		ofono_error("Missing support for TUN/TAP devices");
-		return -ENODEV;
+	if (vendor != OFONO_VENDOR_XMM) {
+		if (stat(TUN_DEV, &st) < 0) {
+			ofono_error("Missing support for TUN/TAP devices");
+			return -ENODEV;
+		}
 	}
 
 	if (vendor != OFONO_VENDOR_XMM) {
@@ -652,7 +715,7 @@ static void ifx_gprs_context_remove(struct ofono_gprs_context *gc)
 	g_free(gcd);
 }
 
-static struct ofono_gprs_context_driver driver = {
+static const struct ofono_gprs_context_driver driver = {
 	.name			= "ifxmodem",
 	.probe			= ifx_gprs_context_probe,
 	.remove			= ifx_gprs_context_remove,

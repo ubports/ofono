@@ -47,6 +47,13 @@ struct discovery {
 	qmi_destroy_func_t destroy;
 };
 
+struct qmi_version {
+	uint8_t type;
+	uint16_t major;
+	uint16_t minor;
+	const char *name;
+};
+
 struct qmi_device {
 	int ref_count;
 	int fd;
@@ -80,7 +87,6 @@ struct qmi_device {
 struct qmi_service {
 	int ref_count;
 	struct qmi_device *device;
-	bool shared;
 	uint8_t type;
 	uint16_t major;
 	uint16_t minor;
@@ -161,25 +167,25 @@ void qmi_free(void *ptr)
 
 static struct qmi_request *__request_alloc(uint8_t service,
 				uint8_t client, uint16_t message,
-				uint16_t headroom, const void *data,
+				const void *data,
 				uint16_t length, qmi_message_func_t func,
-				void *user_data, void **head)
+				void *user_data)
 {
 	struct qmi_request *req;
 	struct qmi_mux_hdr *hdr;
 	struct qmi_message_hdr *msg;
+	uint16_t headroom;
 
-	req = g_try_new0(struct qmi_request, 1);
-	if (!req)
-		return NULL;
+	req = g_new0(struct qmi_request, 1);
+
+	if (service == QMI_SERVICE_CONTROL)
+		headroom = QMI_CONTROL_HDR_SIZE;
+	else
+		headroom = QMI_SERVICE_HDR_SIZE;
 
 	req->len = QMI_MUX_HDR_SIZE + headroom + QMI_MESSAGE_HDR_SIZE + length;
 
-	req->buf = g_try_malloc(req->len);
-	if (!req->buf) {
-		g_free(req);
-		return NULL;
-	}
+	req->buf = g_malloc(req->len);
 
 	req->client = client;
 
@@ -202,8 +208,6 @@ static struct qmi_request *__request_alloc(uint8_t service,
 
 	req->callback = func;
 	req->user_data = user_data;
-
-	*head = req->buf + QMI_MUX_HDR_SIZE;
 
 	return req;
 }
@@ -255,9 +259,6 @@ static gboolean __service_compare_shared(gpointer key, gpointer value,
 {
 	struct qmi_service *service = value;
 	uint8_t type = GPOINTER_TO_UINT(user_data);
-
-	if (!service->shared)
-		return FALSE;
 
 	if (service->type == type)
 		return TRUE;
@@ -476,6 +477,17 @@ static const char *__error_to_string(uint16_t error)
 	return NULL;
 }
 
+int qmi_error_to_ofono_cme(int qmi_error) {
+	switch (qmi_error) {
+	case 0x0019:
+		return 4; /* Not Supported */
+	case 0x0052:
+		return 32; /* Access Denied */
+	default:
+		return -1;
+	}
+}
+
 static void __debug_msg(const char dir, const void *buf, size_t len,
 				qmi_debug_func_t function, void *user_data)
 {
@@ -684,14 +696,37 @@ static void wakeup_writer(struct qmi_device *device)
 				can_write_data, device, write_watch_destroy);
 }
 
-static void __request_submit(struct qmi_device *device,
-				struct qmi_request *req, uint16_t transaction)
+static uint16_t __request_submit(struct qmi_device *device,
+				struct qmi_request *req)
 {
-	req->tid = transaction;
+	struct qmi_mux_hdr *mux;
+
+	mux = req->buf;
+
+	if (mux->service == QMI_SERVICE_CONTROL) {
+		struct qmi_control_hdr *hdr;
+
+		hdr = req->buf + QMI_MUX_HDR_SIZE;
+		hdr->type = 0x00;
+		hdr->transaction = device->next_control_tid++;
+		if (device->next_control_tid == 0)
+			device->next_control_tid = 1;
+		req->tid = hdr->transaction;
+	} else {
+		struct qmi_service_hdr *hdr;
+		hdr = req->buf + QMI_MUX_HDR_SIZE;
+		hdr->type = 0x00;
+		hdr->transaction = device->next_service_tid++;
+		if (device->next_service_tid < 256)
+			device->next_service_tid = 256;
+		req->tid = hdr->transaction;
+	}
 
 	g_queue_push_tail(device->req_queue, req);
 
 	wakeup_writer(device);
+
+	return req->tid;
 }
 
 static void service_notify(gpointer key, gpointer value, gpointer user_data)
@@ -950,6 +985,9 @@ struct qmi_device *qmi_device_new(int fd)
 	device->service_list = g_hash_table_new_full(g_direct_hash,
 					g_direct_equal, NULL, service_destroy);
 
+	device->next_control_tid = 1;
+	device->next_service_tid = 256;
+
 	return device;
 }
 
@@ -1067,12 +1105,48 @@ static const void *tlv_get(const void *data, uint16_t size,
 	return NULL;
 }
 
+bool qmi_device_get_service_version(struct qmi_device *device, uint8_t type,
+					uint16_t *major, uint16_t *minor)
+{
+	struct qmi_version *info;
+	int i;
+
+	for (i = 0, info = device->version_list;
+			i < device->version_count;
+			i++, info++) {
+		if (info->type == type) {
+			*major = info->major;
+			*minor = info->minor;
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool qmi_device_has_service(struct qmi_device *device, uint8_t type)
+{
+	struct qmi_version *info;
+	int i;
+
+	for (i = 0, info = device->version_list;
+			i < device->version_count;
+			i++, info++) {
+		if (info->type == type) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 struct discover_data {
 	struct discovery super;
 	struct qmi_device *device;
 	qmi_discover_func_t func;
 	void *user_data;
 	qmi_destroy_func_t destroy;
+	uint8_t tid;
 	guint timeout;
 };
 
@@ -1133,6 +1207,13 @@ static void discover_callback(uint16_t message, uint16_t length,
 		uint8_t type = service_list->services[i].type;
 		const char *name = __service_type_to_string(type);
 
+		if (name)
+			__debug_device(device, "found service [%s %d.%d]",
+				       name, major, minor);
+		else
+			__debug_device(device, "found service [%d %d.%d]",
+				       type, major, minor);
+
 		if (type == QMI_SERVICE_CONTROL) {
 			device->control_major = major;
 			device->control_minor = minor;
@@ -1145,13 +1226,6 @@ static void discover_callback(uint16_t message, uint16_t length,
 		list[count].name = name;
 
 		count++;
-
-		if (name)
-			__debug_device(device, "found service [%s %d.%d]",
-							name, major, minor);
-		else
-			__debug_device(device, "found service [%d %d.%d]",
-							type, major, minor);
 	}
 
 	ptr = tlv_get(buffer, length, 0x10, &len);
@@ -1160,19 +1234,12 @@ static void discover_callback(uint16_t message, uint16_t length,
 
 	device->version_str = strndup(ptr + 1, *((uint8_t *) ptr));
 
-	service_list = ptr + *((uint8_t *) ptr) + 1;
-
-	for (i = 0; i < service_list->count; i++) {
-		if (service_list->services[i].type == QMI_SERVICE_CONTROL)
-			continue;
-	}
-
 done:
 	device->version_list = list;
 	device->version_count = count;
 
 	if (data->func)
-		data->func(count, list, data->user_data);
+		data->func(data->user_data);
 
 	__qmi_device_discovery_complete(data->device, &data->super);
 }
@@ -1181,14 +1248,37 @@ static gboolean discover_reply(gpointer user_data)
 {
 	struct discover_data *data = user_data;
 	struct qmi_device *device = data->device;
+	unsigned int tid = data->tid;
+	GList *list;
+	struct qmi_request *req = NULL;
 
 	data->timeout = 0;
 
+	/* remove request from queues */
+	if (tid != 0) {
+		list = g_queue_find_custom(device->req_queue,
+				GUINT_TO_POINTER(tid), __request_compare);
+
+		if (list) {
+			req = list->data;
+			g_queue_delete_link(device->req_queue, list);
+		} else {
+			list = g_queue_find_custom(device->control_queue,
+				GUINT_TO_POINTER(tid), __request_compare);
+
+			if (list) {
+				req = list->data;
+				g_queue_delete_link(device->control_queue,
+								list);
+			}
+		}
+	}
+
 	if (data->func)
-		data->func(device->version_count,
-				device->version_list, data->user_data);
+		data->func(data->user_data);
 
 	__qmi_device_discovery_complete(data->device, &data->super);
+	__request_free(req, NULL);
 
 	return FALSE;
 }
@@ -1198,7 +1288,7 @@ bool qmi_device_discover(struct qmi_device *device, qmi_discover_func_t func,
 {
 	struct discover_data *data;
 	struct qmi_request *req;
-	struct qmi_control_hdr *hdr;
+	uint8_t tid;
 
 	if (!device)
 		return false;
@@ -1222,20 +1312,12 @@ bool qmi_device_discover(struct qmi_device *device, qmi_discover_func_t func,
 	}
 
 	req = __request_alloc(QMI_SERVICE_CONTROL, 0x00,
-			QMI_CTL_GET_VERSION_INFO, QMI_CONTROL_HDR_SIZE,
-			NULL, 0, discover_callback, data, (void **) &hdr);
-	if (!req) {
-		g_free(data);
-		return false;
-	}
+			QMI_CTL_GET_VERSION_INFO,
+			NULL, 0, discover_callback, data);
 
-	if (device->next_control_tid < 1)
-		device->next_control_tid = 1;
+	tid = __request_submit(device, req);
 
-	hdr->type = 0x00;
-	hdr->transaction = device->next_control_tid++;
-
-	__request_submit(device, req, hdr->transaction);
+	data->tid = tid;
 
 	data->timeout = g_timeout_add_seconds(5, discover_reply, data);
 	__qmi_device_discovery_started(device, &data->super);
@@ -1249,24 +1331,13 @@ static void release_client(struct qmi_device *device,
 {
 	unsigned char release_req[] = { 0x01, 0x02, 0x00, type, client_id };
 	struct qmi_request *req;
-	struct qmi_control_hdr *hdr;
 
 	req = __request_alloc(QMI_SERVICE_CONTROL, 0x00,
-			QMI_CTL_RELEASE_CLIENT_ID, QMI_CONTROL_HDR_SIZE,
+			QMI_CTL_RELEASE_CLIENT_ID,
 			release_req, sizeof(release_req),
-			func, user_data, (void **) &hdr);
-	if (!req) {
-		func(0x0000, 0x0000, NULL, user_data);
-		return;
-	}
+			func, user_data);
 
-	if (device->next_control_tid < 1)
-		device->next_control_tid = 1;
-
-	hdr->type = 0x00;
-	hdr->transaction = device->next_control_tid++;
-
-	__request_submit(device, req, hdr->transaction);
+	__request_submit(device, req);
 }
 
 static void shutdown_destroy(gpointer user_data)
@@ -1321,6 +1392,58 @@ bool qmi_device_shutdown(struct qmi_device *device, qmi_shutdown_func_t func,
 	device->shutdown_destroy = destroy;
 
 	return true;
+}
+
+struct sync_data {
+	qmi_sync_func_t func;
+	void *user_data;
+};
+
+static void qmi_device_sync_callback(uint16_t message, uint16_t length,
+				     const void *buffer, void *user_data)
+{
+	struct sync_data *data = user_data;
+
+	if (data->func)
+		data->func(data->user_data);
+
+	g_free(data);
+}
+
+/* sync will release all previous clients */
+bool qmi_device_sync(struct qmi_device *device,
+		     qmi_sync_func_t func, void *user_data)
+{
+	struct qmi_request *req;
+	struct sync_data *func_data;
+
+	if (!device)
+		return false;
+
+	__debug_device(device, "Sending sync to reset QMI");
+
+	func_data = g_new0(struct sync_data, 1);
+	func_data->func = func;
+	func_data->user_data = user_data;
+
+	req = __request_alloc(QMI_SERVICE_CONTROL, 0x00,
+			QMI_CTL_SYNC,
+			NULL, 0,
+			qmi_device_sync_callback, func_data);
+
+	__request_submit(device, req);
+
+	return true;
+}
+
+/* if the device support the QMI call SYNC over the CTL interface */
+bool qmi_device_is_sync_supported(struct qmi_device *device)
+{
+	if (device == NULL)
+		return false;
+
+	return (device->control_major > 1 ||
+		(device->control_major == 1 && device->control_minor >= 5));
 }
 
 static bool get_device_file_name(struct qmi_device *device,
@@ -1809,7 +1932,6 @@ bool qmi_result_get_uint64(struct qmi_result *result, uint8_t type,
 struct service_create_data {
 	struct discovery super;
 	struct qmi_device *device;
-	bool shared;
 	uint8_t type;
 	uint16_t major;
 	uint16_t minor;
@@ -1880,7 +2002,6 @@ static void service_create_callback(uint16_t message, uint16_t length,
 
 	service->ref_count = 1;
 	service->device = data->device;
-	service->shared = data->shared;
 
 	service->type = data->type;
 	service->major = data->major;
@@ -1903,98 +2024,50 @@ done:
 	__qmi_device_discovery_complete(data->device, &data->super);
 }
 
-static void service_create_discover(uint8_t count,
-			const struct qmi_version *list, void *user_data)
-{
-	struct service_create_data *data = user_data;
-	struct qmi_device *device = data->device;
-	struct qmi_request *req;
-	struct qmi_control_hdr *hdr;
-	unsigned char client_req[] = { 0x01, 0x01, 0x00, data->type };
-	unsigned int i;
-
-	__debug_device(device, "service create [type=%d]", data->type);
-
-	for (i = 0; i < count; i++) {
-		if (list[i].type == data->type) {
-			data->major = list[i].major;
-			data->minor = list[i].minor;
-			break;
-		}
-	}
-
-	req = __request_alloc(QMI_SERVICE_CONTROL, 0x00,
-			QMI_CTL_GET_CLIENT_ID, QMI_CONTROL_HDR_SIZE,
-			client_req, sizeof(client_req),
-			service_create_callback, data, (void **) &hdr);
-	if (!req) {
-		if (data->timeout > 0)
-			g_source_remove(data->timeout);
-
-		data->timeout = g_timeout_add_seconds(0,
-						service_create_reply, data);
-		__qmi_device_discovery_started(device, &data->super);
-		return;
-	}
-
-	if (device->next_control_tid < 1)
-		device->next_control_tid = 1;
-
-	hdr->type = 0x00;
-	hdr->transaction = device->next_control_tid++;
-
-	__request_submit(device, req, hdr->transaction);
-}
-
-static bool service_create(struct qmi_device *device, bool shared,
+static bool service_create(struct qmi_device *device,
 				uint8_t type, qmi_create_func_t func,
 				void *user_data, qmi_destroy_func_t destroy)
 {
 	struct service_create_data *data;
+	unsigned char client_req[] = { 0x01, 0x01, 0x00, type };
+	struct qmi_request *req;
+	int i;
 
 	data = g_try_new0(struct service_create_data, 1);
 	if (!data)
 		return false;
 
+	if (!device->version_list)
+		return false;
+
 	data->super.destroy = service_create_data_free;
 	data->device = device;
-	data->shared = shared;
 	data->type = type;
 	data->func = func;
 	data->user_data = user_data;
 	data->destroy = destroy;
 
-	if (device->version_list) {
-		service_create_discover(device->version_count,
-						device->version_list, data);
-		goto done;
+	__debug_device(device, "service create [type=%d]", type);
+
+	for (i = 0; i < device->version_count; i++) {
+		if (device->version_list[i].type == data->type) {
+			data->major = device->version_list[i].major;
+			data->minor = device->version_list[i].minor;
+			break;
+		}
 	}
 
-	if (qmi_device_discover(device, service_create_discover, data, NULL))
-		goto done;
+	req = __request_alloc(QMI_SERVICE_CONTROL, 0x00,
+			QMI_CTL_GET_CLIENT_ID,
+			client_req, sizeof(client_req),
+			service_create_callback, data);
 
-	g_free(data);
+	__request_submit(device, req);
 
-	return false;
-
-done:
 	data->timeout = g_timeout_add_seconds(8, service_create_reply, data);
 	__qmi_device_discovery_started(device, &data->super);
 
 	return true;
-}
-
-bool qmi_service_create(struct qmi_device *device,
-				uint8_t type, qmi_create_func_t func,
-				void *user_data, qmi_destroy_func_t destroy)
-{
-	if (!device || !func)
-		return false;
-
-	if (type == QMI_SERVICE_CONTROL)
-		return false;
-
-	return service_create(device, false, type, func, user_data, destroy);
 }
 
 struct service_create_shared_data {
@@ -2072,7 +2145,15 @@ bool qmi_service_create_shared(struct qmi_device *device,
 		return 0;
 	}
 
-	return service_create(device, true, type, func, user_data, destroy);
+	return service_create(device, type, func, user_data, destroy);
+}
+
+bool qmi_service_create(struct qmi_device *device,
+				uint8_t type, qmi_create_func_t func,
+				void *user_data, qmi_destroy_func_t destroy)
+{
+	return qmi_service_create_shared(device, type, func,
+						user_data, destroy);
 }
 
 static void service_release_callback(uint16_t message, uint16_t length,
@@ -2149,8 +2230,6 @@ bool qmi_service_get_version(struct qmi_service *service,
 }
 
 struct service_send_data {
-	struct qmi_service *service;
-	struct qmi_param *param;
 	qmi_result_func_t func;
 	void *user_data;
 	qmi_destroy_func_t destroy;
@@ -2160,8 +2239,6 @@ static void service_send_free(struct service_send_data *data)
 {
 	if (data->destroy)
 		data->destroy(data->user_data);
-
-	qmi_param_free(data->param);
 
 	g_free(data);
 }
@@ -2203,7 +2280,7 @@ uint16_t qmi_service_send(struct qmi_service *service,
 	struct qmi_device *device;
 	struct service_send_data *data;
 	struct qmi_request *req;
-	struct qmi_service_hdr *hdr;
+	uint16_t tid;
 
 	if (!service)
 		return 0;
@@ -2219,31 +2296,21 @@ uint16_t qmi_service_send(struct qmi_service *service,
 	if (!data)
 		return 0;
 
-	data->service = service;
-	data->param = param;
 	data->func = func;
 	data->user_data = user_data;
 	data->destroy = destroy;
 
 	req = __request_alloc(service->type, service->client_id,
-				message, QMI_SERVICE_HDR_SIZE,
-				data->param ? data->param->data : NULL,
-				data->param ? data->param->length : 0,
-				service_send_callback, data, (void **) &hdr);
-	if (!req) {
-		g_free(data);
-		return 0;
-	}
+				message,
+				param ? param->data : NULL,
+				param ? param->length : 0,
+				service_send_callback, data);
 
-	if (device->next_service_tid < 256)
-		device->next_service_tid = 256;
+	qmi_param_free(param);
 
-	hdr->type = 0x00;
-	hdr->transaction = device->next_service_tid++;
+	tid = __request_submit(device, req);
 
-	__request_submit(device, req, hdr->transaction);
-
-	return hdr->transaction;
+	return tid;
 }
 
 bool qmi_service_cancel(struct qmi_service *service, uint16_t id)

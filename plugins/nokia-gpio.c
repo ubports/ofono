@@ -143,13 +143,6 @@ static int file_exists(char const *filename)
 	return stat(filename, &st) == 0;
 }
 
-static int dir_exists(char const *filename)
-{
-	struct stat st;
-
-	return stat(filename, &st) == 0 && S_ISDIR(st.st_mode);
-}
-
 static int file_write(char const *filename, char const *output)
 {
 	FILE *f;
@@ -632,74 +625,15 @@ static void phonet_status_cb(GIsiModem *idx, enum GIsiPhonetLinkState state,
 
 static int gpio_probe_links(void)
 {
-	char const *gpiodir = "/sys/class/gpio";
 	char const *cmtdir = "/dev/cmt";
-	DIR *gpio;
-	struct dirent *d;
 
-	if (file_exists(cmtdir)) {
-		DBG("Using %s", cmtdir);
-		return 0;
-	}
-
-	DBG("Using %s: trying to make links to %s", gpiodir, cmtdir);
-
-	if (!dir_exists(cmtdir)) {
-		if (mkdir(cmtdir, 0755) == -1) {
-			DBG("%s: %s", cmtdir, strerror(errno));
-			return -(errno = ENODEV);
-		}
-	}
-
-	gpio = opendir(gpiodir);
-	if (gpio == NULL) {
-		DBG("%s: %s", "gpiodir", strerror(errno));
+	if (!file_exists(cmtdir)) {
+		DBG("%s: %s", cmtdir, strerror(errno));
 		return -(errno = ENODEV);
 	}
 
-	while ((d = readdir(gpio)) != NULL) {
-		char nn[PATH_MAX], name[PATH_MAX], from[PATH_MAX], to[PATH_MAX];
-		FILE *nf;
-		size_t len;
-
-		snprintf(nn, sizeof nn, "%s/%s/name", gpiodir, d->d_name);
-
-		nf = fopen(nn, "rb");
-		if (nf == NULL) {
-			DBG("%s: %s", nn, strerror(errno));
-			continue;
-		}
-
-		len = fread(name, sizeof name, 1, nf);
-
-		if (ferror(nf)) {
-			DBG("read from %s: %s", nn, strerror(errno));
-			fclose(nf);
-			continue;
-		}
-
-		fclose(nf);
-
-		if (len < 4)
-			continue;
-
-		name[--len] = '\0';
-
-		if (strncmp(name, "cmt_", 4))
-			continue;
-
-		snprintf(from, sizeof from, "%s/%s", gpiodir, d->d_name);
-		snprintf(to, sizeof to, "%s/%s", cmtdir, name);
-
-		if (symlink(from, to) == -1)
-			DBG("%s: %s", to, strerror(errno));
-	}
-
-	DBG("%s: %s", "/sys/class/gpio", strerror(errno));
-
-	(void) closedir(gpio);
-
-	return -(errno = ENODEV);
+	DBG("Using %s", cmtdir);
+	return 0;
 }
 
 

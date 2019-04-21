@@ -24,7 +24,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -456,7 +455,6 @@ static void gprs_initialized(gboolean ok, GAtResult *result, gpointer user_data)
 						FALSE, gprs, NULL);
 		break;
 	case OFONO_VENDOR_UBLOX:
-	case OFONO_VENDOR_UBLOX_TOBY_L2:
 		g_at_chat_register(gd->chat, "+UREG:", ublox_ureg_notify,
 						FALSE, gprs, NULL);
 		g_at_chat_send(gd->chat, "AT+UREG=1", none_prefix,
@@ -642,7 +640,7 @@ static void at_gprs_remove(struct ofono_gprs *gprs)
 	g_free(gd);
 }
 
-static struct ofono_gprs_driver driver = {
+static const struct ofono_gprs_driver driver = {
 	.name			= "atmodem",
 	.probe			= at_gprs_probe,
 	.remove			= at_gprs_remove,

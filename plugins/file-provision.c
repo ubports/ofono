@@ -93,7 +93,9 @@ static int config_file_provision_get_settings(const char *mcc,
 	if (value != NULL)
 		(*settings)[0].password = value;
 
-	(*settings)[0].auth_method = OFONO_GPRS_AUTH_METHOD_CHAP;
+	/* select default authentication method */
+	(*settings)[0].auth_method = OFONO_GPRS_AUTH_METHOD_NONE;
+
 	value = g_key_file_get_string(key_file, setting_group,
 					"internet.AuthenticationMethod", NULL);
 
@@ -104,7 +106,7 @@ static int config_file_provision_get_settings(const char *mcc,
 		else if (g_strcmp0(value, "pap") == 0)
 			(*settings)[0].auth_method =
 						OFONO_GPRS_AUTH_METHOD_PAP;
-		else
+		else if (g_strcmp0(value, "none") != 0)
 			DBG("Unknown auth method: %s", value);
 
 		g_free(value);

@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -276,7 +275,7 @@ static void isi_ussd_remove(struct ofono_ussd *ussd)
 	g_free(data);
 }
 
-static struct ofono_ussd_driver driver = {
+static const struct ofono_ussd_driver driver = {
 	.name			= "isimodem",
 	.probe			= isi_ussd_probe,
 	.remove			= isi_ussd_remove,
