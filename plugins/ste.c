@@ -313,6 +313,15 @@ static void esimsr_notify(GAtResult *result, gpointer user_data)
 	handle_sim_status(status, modem);
 }
 
+static void epev_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_modem *modem = user_data;
+	struct ofono_sim *sim = ofono_modem_get_sim(modem);
+
+	if (sim)
+		ofono_sim_initialized_notify(sim);
+}
+
 static int ste_enable(struct ofono_modem *modem)
 {
 	struct ste_data *data = ofono_modem_get_data(modem);
@@ -353,6 +362,9 @@ static int ste_enable(struct ofono_modem *modem)
 	g_at_chat_register(data->chat[AT_SIM], "*ESIMSR:", esimsr_notify,
 				FALSE, modem, NULL);
 
+	g_at_chat_send(data->chat[AT_SIM], "AT*EPEE=1", NULL, NULL, NULL, NULL);
+	g_at_chat_register(data->chat[AT_SIM], "*EPEV", epev_notify,
+					FALSE, modem, NULL);
 	return -EINPROGRESS;
 
 error:

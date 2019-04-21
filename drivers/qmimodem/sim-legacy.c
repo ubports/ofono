@@ -250,6 +250,7 @@ static void process_uim_state(struct ofono_sim *sim, uint8_t state)
 	switch (state) {
 	case QMI_DMS_UIM_STATE_INIT_COMPLETE:
 		ofono_sim_inserted_notify(sim, TRUE);
+		ofono_sim_initialized_notify(sim);
 		break;
 	case QMI_DMS_UIM_STATE_INIT_FAILED:
 	case QMI_DMS_UIM_STATE_NOT_PRESENT:
@@ -379,7 +380,7 @@ static void qmi_sim_remove(struct ofono_sim *sim)
 	g_free(data);
 }
 
-static struct ofono_sim_driver driver = {
+static const struct ofono_sim_driver driver = {
 	.name			= "qmimodem-legacy",
 	.probe			= qmi_sim_probe,
 	.remove			= qmi_sim_remove,

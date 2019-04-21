@@ -88,6 +88,7 @@ static void get_settings_cb(struct qmi_result *result, void *user_data)
 	char* straddr;
 	char* apn;
 	const char *dns[3] = { NULL, NULL, NULL };
+	char dns_buf[2][INET_ADDRSTRLEN];
 
 	DBG("");
 
@@ -131,14 +132,14 @@ static void get_settings_cb(struct qmi_result *result, void *user_data)
 	if (qmi_result_get_uint32(result,
 				QMI_WDS_RESULT_PRIMARY_DNS, &ip_addr)) {
 		addr.s_addr = htonl(ip_addr);
-		dns[0] = inet_ntoa(addr);
+		dns[0] = inet_ntop(AF_INET, &addr, dns_buf[0], sizeof(dns_buf[0]));
 		DBG("Primary DNS: %s", dns[0]);
 	}
 
 	if (qmi_result_get_uint32(result,
 				QMI_WDS_RESULT_SECONDARY_DNS, &ip_addr)) {
 		addr.s_addr = htonl(ip_addr);
-		dns[1] = inet_ntoa(addr);
+		dns[1] = inet_ntop(AF_INET, &addr, dns_buf[1], sizeof(dns_buf[1]));
 		DBG("Secondary DNS: %s", dns[1]);
 	}
 
@@ -230,6 +231,20 @@ static void qmi_gprs_read_settings(struct ofono_gprs_context* gc,
 	g_free(cbd);
 }
 
+static uint8_t auth_method_to_qmi_auth(enum ofono_gprs_auth_method method)
+{
+	switch (method) {
+	case OFONO_GPRS_AUTH_METHOD_CHAP:
+		return QMI_WDS_AUTHENTICATION_CHAP;
+	case OFONO_GPRS_AUTH_METHOD_PAP:
+		return QMI_WDS_AUTHENTICATION_PAP;
+	case OFONO_GPRS_AUTH_METHOD_NONE:
+		return QMI_WDS_AUTHENTICATION_NONE;
+	}
+
+	return QMI_WDS_AUTHENTICATION_NONE;
+}
+
 static void qmi_activate_primary(struct ofono_gprs_context *gc,
 				const struct ofono_gprs_primary_context *ctx,
 				ofono_gprs_context_cb_t cb, void *user_data)
@@ -266,26 +281,16 @@ static void qmi_activate_primary(struct ofono_gprs_context *gc,
 
 	qmi_param_append_uint8(param, QMI_WDS_PARAM_IP_FAMILY, ip_family);
 
-	switch (ctx->auth_method) {
-	case OFONO_GPRS_AUTH_METHOD_CHAP:
-		auth = QMI_WDS_AUTHENTICATION_CHAP;
-		break;
-	case OFONO_GPRS_AUTH_METHOD_PAP:
-		auth = QMI_WDS_AUTHENTICATION_PAP;
-		break;
-	default:
-		auth = QMI_WDS_AUTHENTICATION_NONE;
-		break;
-	}
+	auth = auth_method_to_qmi_auth(ctx->auth_method);
 
 	qmi_param_append_uint8(param, QMI_WDS_PARAM_AUTHENTICATION_PREFERENCE,
 					auth);
 
-	if (ctx->username[0] != '\0')
+	if (auth != QMI_WDS_AUTHENTICATION_NONE && ctx->username[0] != '\0')
 		qmi_param_append(param, QMI_WDS_PARAM_USERNAME,
 					strlen(ctx->username), ctx->username);
 
-	if (ctx->password[0] != '\0')
+	if (auth != QMI_WDS_AUTHENTICATION_NONE &&  ctx->password[0] != '\0')
 		qmi_param_append(param, QMI_WDS_PARAM_PASSWORD,
 					strlen(ctx->password), ctx->password);
 
@@ -487,7 +492,7 @@ static void qmi_gprs_context_remove(struct ofono_gprs_context *gc)
 	g_free(data);
 }
 
-static struct ofono_gprs_context_driver driver = {
+static const struct ofono_gprs_context_driver driver = {
 	.name			= "qmimodem",
 	.probe			= qmi_gprs_context_probe,
 	.remove			= qmi_gprs_context_remove,

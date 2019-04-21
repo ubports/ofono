@@ -77,7 +77,9 @@ Properties	string Mode [readonly]
 
 		string Status [readonly]
 
-			The current registration status of a modem.
+			The current registration status of a modem. In case
+			technology is 'lte', 'registered' and 'roaming' may
+			not necessarily mean voice calling available.
 
 			The possible values are:
 				"unregistered"  Not registered to any network

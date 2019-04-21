@@ -353,7 +353,7 @@ static DBusMessage *netmon_register_agent(DBusConnection *conn,
 				DBUS_TYPE_INVALID) == FALSE)
 		return __ofono_error_invalid_args(msg);
 
-	if (!__ofono_dbus_valid_object_path(agent_path))
+	if (!dbus_validate_path(agent_path, NULL))
 		return __ofono_error_invalid_format(msg);
 
 	if (!period)

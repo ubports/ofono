@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -538,11 +537,15 @@ static void isi_gprs_activate_primary(struct ofono_gprs_context *gc,
 	strncpy(cd->apn, ctx->apn, GPDS_MAX_APN_STRING_LENGTH);
 	cd->apn[GPDS_MAX_APN_STRING_LENGTH] = '\0';
 
-	strncpy(cd->username, ctx->username, GPDS_MAX_USERNAME_LENGTH);
-	cd->username[GPDS_MAX_USERNAME_LENGTH] = '\0';
-
-	strncpy(cd->password, ctx->password, GPDS_MAX_PASSWORD_LENGTH);
-	cd->username[GPDS_MAX_PASSWORD_LENGTH] = '\0';
+	if (ctx->auth_method == OFONO_GPRS_AUTH_METHOD_NONE) {
+		memset(cd->username, 0, sizeof(cd->username));
+		memset(cd->password, 0, sizeof(cd->password));
+	} else {
+		strncpy(cd->username, ctx->username, GPDS_MAX_USERNAME_LENGTH);
+		cd->username[GPDS_MAX_USERNAME_LENGTH] = '\0';
+		strncpy(cd->password, ctx->password, GPDS_MAX_PASSWORD_LENGTH);
+		cd->username[GPDS_MAX_PASSWORD_LENGTH] = '\0';
+	}
 
 	cd->pep = g_isi_pep_create(cd->idx, NULL, NULL);
 	if (cd->pep == NULL)
@@ -659,7 +662,7 @@ static void isi_gprs_context_remove(struct ofono_gprs_context *gc)
 	g_free(cd);
 }
 
-static struct ofono_gprs_context_driver driver = {
+static const struct ofono_gprs_context_driver driver = {
 	.name			= "isimodem",
 	.probe			= isi_gprs_context_probe,
 	.remove			= isi_gprs_context_remove,

@@ -19,6 +19,8 @@
  *
  */
 
+struct l_queue;
+
 /*
  * TS 101.220, Section 7.2, Card Application Toolkit assigned templates,
  * These are the same as 3GPP 11.14 Sections 13.1 and 13.2
@@ -644,13 +646,13 @@ enum stk_transport_protocol_type {
 
 /* For data object that only has a byte array with undetermined length */
 struct stk_common_byte_array {
-	unsigned char *array;
+	uint8_t *array;
 	unsigned int len;
 };
 
 /* Defined in TS 102.223 Section 8.1 */
 struct stk_address {
-	unsigned char ton_npi;
+	uint8_t ton_npi;
 	char *number;
 };
 
@@ -669,9 +671,9 @@ struct stk_address {
  * bytes."
  */
 struct stk_subaddress {
-	ofono_bool_t has_subaddr;
-	unsigned char len;
-	unsigned char subaddr[23];
+	bool has_subaddr;
+	uint8_t len;
+	uint8_t subaddr[23];
 };
 
 /*
@@ -686,14 +688,14 @@ struct stk_subaddress {
  * The CCP structure is not decoded, but stored as is from the CTLV
  */
 struct stk_ccp {
-	unsigned char len;
-	unsigned char ccp[16];
+	uint8_t len;
+	uint8_t ccp[16];
 };
 
 /* Defined in TS 31.111 Section 8.5 */
 struct stk_cbs_page {
-	unsigned char len;
-	unsigned char page[88];
+	uint8_t len;
+	uint8_t page[88];
 };
 
 /*
@@ -702,12 +704,12 @@ struct stk_cbs_page {
  */
 struct stk_duration {
 	enum stk_duration_type unit;
-	unsigned char interval;
+	uint8_t interval;
 };
 
 /* Defined in TS 102.223 Section 8.9 */
 struct stk_item {
-	unsigned char id;
+	uint8_t id;
 	char *text;
 };
 
@@ -716,27 +718,27 @@ struct stk_item {
  * to 0.
  */
 struct stk_response_length {
-	unsigned char min;
-	unsigned char max;
+	uint8_t min;
+	uint8_t max;
 };
 
 /* Defined in TS 102.223 Section 8.12 */
 struct stk_result {
 	enum stk_result_type type;
 	unsigned int additional_len;
-	unsigned char *additional;
+	uint8_t *additional;
 };
 
 /* Defined in TS 102.223 Section 8.14 */
 struct stk_ss {
-	unsigned char ton_npi;
+	uint8_t ton_npi;
 	char *ss;
 };
 
 /* Defined in TS 131.111 Section 8.17.  Length limit of 160 chars in 23.028 */
 struct stk_ussd_string {
-	unsigned char dcs;
-	unsigned char string[160];
+	uint8_t dcs;
+	uint8_t string[160];
 	int len;
 };
 
@@ -748,7 +750,7 @@ struct stk_ussd_string {
  * 2 bytes of 2nd level Dedicated File and 2 bytes of Elementary File.
  */
 struct stk_file {
-	unsigned char file[8];
+	uint8_t file[8];
 	unsigned int len;
 };
 
@@ -756,13 +758,13 @@ struct stk_file {
 struct stk_location_info {
 	char mnc[OFONO_MAX_MNC_LENGTH + 1];
 	char mcc[OFONO_MAX_MCC_LENGTH + 1];
-	unsigned short lac_tac;
-	ofono_bool_t has_ci;
-	unsigned short ci;
-	ofono_bool_t has_ext_ci;
-	unsigned short ext_ci;
-	ofono_bool_t has_eutran_ci;
-	guint32 eutran_ci;
+	uint16_t lac_tac;
+	bool has_ci;
+	uint16_t ci;
+	bool has_ext_ci;
+	uint16_t ext_ci;
+	bool has_eutran_ci;
+	uint32_t eutran_ci;
 };
 
 /*
@@ -770,7 +772,7 @@ struct stk_location_info {
  * that the maximum size is 127 according to the rules of CTLVs.
  */
 struct stk_items_next_action_indicator {
-	unsigned char list[127];
+	uint8_t list[127];
 	unsigned int len;
 };
 
@@ -779,7 +781,7 @@ struct stk_items_next_action_indicator {
  * one should appear more than once.
  */
 struct stk_event_list {
-	unsigned char list[21];
+	uint8_t list[21];
 	unsigned int len;
 };
 
@@ -787,9 +789,9 @@ struct stk_event_list {
  * According to 102.223 Section 8.26, the maximum length of cause is 30.
  */
 struct stk_cause {
-	unsigned char cause[30];
+	uint8_t cause[30];
 	unsigned int len;
-	ofono_bool_t has_cause;
+	bool has_cause;
 };
 
 /*
@@ -797,7 +799,7 @@ struct stk_cause {
  * that the maximum size is 127 according to the rules of CTLVs.
  */
 struct stk_transaction_id {
-	unsigned char list[127];
+	uint8_t list[127];
 	unsigned int len;
 };
 
@@ -807,9 +809,9 @@ struct stk_transaction_id {
  * is represented as 10 bits, so the maximum number of channel is 127*8/10=101.
  */
 struct stk_bcch_channel_list {
-	unsigned short channels[101];
+	uint16_t channels[101];
 	unsigned int num;
-	ofono_bool_t has_list;
+	bool has_list;
 };
 
 /*
@@ -818,8 +820,8 @@ struct stk_bcch_channel_list {
  * ids of 0, we use icon_id with 0 to denote empty icon_identifier objects
  */
 struct stk_icon_id {
-	unsigned char qualifier;
-	unsigned char id;
+	uint8_t qualifier;
+	uint8_t id;
 };
 
 /*
@@ -829,19 +831,19 @@ struct stk_icon_id {
  * identifier list is 126.
  */
 struct stk_item_icon_id_list {
-	unsigned char qualifier;
-	unsigned char list[126];
+	uint8_t qualifier;
+	uint8_t list[126];
 	unsigned int len;
 };
 
 /* Defined in TS 102.223 Section 8.33 */
 struct stk_reader_status {
 	int id;
-	ofono_bool_t removable;
-	ofono_bool_t present;
-	ofono_bool_t id1_size;
-	ofono_bool_t card_present;
-	ofono_bool_t card_powered;
+	bool removable;
+	bool present;
+	bool id1_size;
+	bool card_present;
+	bool card_powered;
 };
 
 /*
@@ -849,7 +851,7 @@ struct stk_reader_status {
  * that the maximum size is 127 according to the rules of CTLVs.
  */
 struct stk_card_atr {
-	unsigned char atr[127];
+	uint8_t atr[127];
 	unsigned int len;
 };
 
@@ -858,60 +860,60 @@ struct stk_card_atr {
  * of data is 236.
  */
 struct stk_c_apdu {
-	unsigned char cla;
-	unsigned char ins;
-	unsigned char p1;
-	unsigned char p2;
-	unsigned char lc;
-	unsigned char data[236];
-	ofono_bool_t has_le;
-	unsigned char le;
+	uint8_t cla;
+	uint8_t ins;
+	uint8_t p1;
+	uint8_t p2;
+	uint8_t lc;
+	uint8_t data[236];
+	bool has_le;
+	uint8_t le;
 };
 
 /* Defined in TS 102.223 Section 8.36. According to it, the maximum size
  * of data is 237.
  */
 struct stk_r_apdu {
-	unsigned char sw1;
-	unsigned char sw2;
-	unsigned char data[237];
+	uint8_t sw1;
+	uint8_t sw2;
+	uint8_t data[237];
 	unsigned int len;
 };
 
 /* Defined in TS 102.223 Section 8.38 */
 struct stk_timer_value {
-	ofono_bool_t has_value;
-	unsigned char hour;
-	unsigned char minute;
-	unsigned char second;
+	bool has_value;
+	uint8_t hour;
+	uint8_t minute;
+	uint8_t second;
 };
 
 /* Defined in TS 102.223 Section 8.42 */
 struct stk_bc_repeat {
-	ofono_bool_t has_bc_repeat;
-	unsigned char value;
+	bool has_bc_repeat;
+	uint8_t value;
 };
 
 /* Defined in TS 31.111 Section 8.46 */
 struct stk_timing_advance {
-	ofono_bool_t has_value;
+	bool has_value;
 	enum stk_me_status status;
 	/*
 	 * Contains bit periods number according to 3GPP TS
 	 * 44.118 Section 9.3.106 / 3GPP TS 44.018 Section
 	 * 10.5.2.40.1, not microseconds
 	 */
-	unsigned char advance;
+	uint8_t advance;
 };
 
 /* Bearer parameters for GPRS/UTRAN Packet Service/E-UTRAN */
 struct stk_gprs_bearer_parameters {
-	unsigned char precedence;
-	unsigned char delay;
-	unsigned char reliability;
-	unsigned char peak;
-	unsigned char mean;
-	unsigned char pdp_type;
+	uint8_t precedence;
+	uint8_t delay;
+	uint8_t reliability;
+	uint8_t peak;
+	uint8_t mean;
+	uint8_t pdp_type;
 };
 
 /* Defined in TS 31.111 Section 8.52 */
@@ -925,8 +927,8 @@ struct stk_bearer_description {
  * that the maximum size is 127 according to the rules of CTLVs.
  */
 struct stk_card_reader_id {
-	unsigned char id[127];
-	unsigned char len;
+	uint8_t id[127];
+	uint8_t len;
 };
 
 /*
@@ -937,7 +939,7 @@ struct stk_other_address {
 	union {
 		/* Network Byte Order */
 		guint32 ipv4;
-		unsigned char ipv6[16];
+		uint8_t ipv6[16];
 	} addr;
 	enum stk_address_type type;
 };
@@ -945,7 +947,7 @@ struct stk_other_address {
 /* Defined in TS 102.223 Section 8.59 */
 struct stk_uicc_te_interface {
 	enum stk_transport_protocol_type protocol;
-	unsigned short port;
+	uint16_t port;
 };
 
 /*
@@ -955,43 +957,43 @@ struct stk_uicc_te_interface {
  * So the maximum size of aid is 16 bytes.
  */
 struct stk_aid {
-	unsigned char aid[16];
+	uint8_t aid[16];
 	unsigned int len;
 };
 
 /* Defined in TS 102.223 Section 8.62 */
 struct stk_display_parameters {
-	unsigned char height;
-	unsigned char width;
-	unsigned char effects;
+	uint8_t height;
+	uint8_t width;
+	uint8_t effects;
 };
 
 /* Defined in TS 102.223 Section 8.63 */
 struct stk_service_record {
-	unsigned char tech_id;
-	unsigned char serv_id;
-	unsigned char *serv_rec;
+	uint8_t tech_id;
+	uint8_t serv_id;
+	uint8_t *serv_rec;
 	unsigned int len;
 };
 
 /* Defined in TS 102.223 Section 8.64 */
 struct stk_device_filter {
-	unsigned char tech_id;
-	unsigned char *dev_filter;
+	uint8_t tech_id;
+	uint8_t *dev_filter;
 	unsigned int len;
 };
 
 /* Defined in TS 102.223 Section 8.65 */
 struct stk_service_search {
-	unsigned char tech_id;
-	unsigned char *ser_search;
+	uint8_t tech_id;
+	uint8_t *ser_search;
 	unsigned int len;
 };
 
 /* Defined in TS 102.223 Section 8.66 */
 struct stk_attribute_info {
-	unsigned char tech_id;
-	unsigned char *attr_info;
+	uint8_t tech_id;
+	uint8_t *attr_info;
 	unsigned int len;
 };
 
@@ -1000,11 +1002,11 @@ struct stk_attribute_info {
  * 6-bytes IEEE-802 address, or 4-bytes IrDA device address.
  */
 struct stk_remote_entity_address {
-	unsigned char coding_type;
-	ofono_bool_t has_address;
+	uint8_t coding_type;
+	bool has_address;
 	union {
-		unsigned char ieee802[6];
-		unsigned char irda[4];
+		uint8_t ieee802[6];
+		uint8_t irda[4];
 	} addr;
 };
 
@@ -1014,14 +1016,14 @@ struct stk_remote_entity_address {
  * of CTLVs.  Empty attribute options will have len of 0.
  */
 struct stk_text_attribute {
-	unsigned char attributes[127];
-	unsigned char len;
+	uint8_t attributes[127];
+	uint8_t len;
 };
 
 /* Defined in TS 31.111 Section 8.72 */
 struct stk_pdp_act_par {
-	unsigned char par[127];
-	unsigned char len;
+	uint8_t par[127];
+	uint8_t len;
 };
 
 /*
@@ -1031,8 +1033,8 @@ struct stk_pdp_act_par {
  * is 124.
  */
 struct stk_item_text_attribute_list {
-	unsigned char list[124];
-	unsigned char len;
+	uint8_t list[124];
+	uint8_t len;
 };
 
 /*
@@ -1041,8 +1043,8 @@ struct stk_item_text_attribute_list {
  * relative-sized frame. Thus the maximum length of relative size is 126 bytes.
  */
 struct stk_frame_layout {
-	unsigned char layout;
-	unsigned char size[126];
+	uint8_t layout;
+	uint8_t size[126];
 	unsigned int len;
 };
 
@@ -1053,17 +1055,17 @@ struct stk_frame_layout {
  * list is 126 bytes.
  */
 struct stk_frames_info {
-	unsigned char id;
+	uint8_t id;
 	struct {
-		unsigned char width, height;
+		uint8_t width, height;
 	} list[63];
 	unsigned int len;
 };
 
 /* Defined in TS 102.223 Section 8.80 */
 struct stk_frame_id {
-	ofono_bool_t has_id;
-	unsigned char id;
+	bool has_id;
+	uint8_t id;
 };
 
 /*
@@ -1071,8 +1073,8 @@ struct stk_frame_id {
  * that the maximum size is 127 according to the rules of CTLVs.
  */
 struct stk_mms_reference {
-	unsigned char ref[127];
-	unsigned char len;
+	uint8_t ref[127];
+	uint8_t len;
 };
 
 /*
@@ -1080,8 +1082,8 @@ struct stk_mms_reference {
  * that the maximum size is 127 according to the rules of CTLVs.
  */
 struct stk_mms_id {
-	unsigned char id[127];
-	unsigned char len;
+	uint8_t id[127];
+	uint8_t len;
 };
 
 /*
@@ -1089,8 +1091,8 @@ struct stk_mms_id {
  * that the maximum size is 127 according to the rules of CTLVs.
  */
 struct stk_mms_transfer_status {
-	unsigned char status[127];
-	unsigned char len;
+	uint8_t status[127];
+	uint8_t len;
 };
 
 /*
@@ -1098,14 +1100,14 @@ struct stk_mms_transfer_status {
  * that the maximum size is 127 according to the rules of CTLVs.
  */
 struct stk_mms_content_id {
-	unsigned char id[127];
-	unsigned char len;
+	uint8_t id[127];
+	uint8_t len;
 };
 
 /* Defined in TS 102.223 Section 8.88 */
 struct stk_registry_application_data {
-	unsigned short port;
-	unsigned char type;
+	uint16_t port;
+	uint8_t type;
 	char *name;
 };
 
@@ -1116,8 +1118,8 @@ struct stk_registry_application_data {
  * location information is 126 bytes.
  */
 struct stk_broadcast_network_information {
-	unsigned char tech;
-	unsigned char loc_info[126];
+	uint8_t tech;
+	uint8_t loc_info[126];
 	unsigned int len;
 };
 
@@ -1125,21 +1127,21 @@ struct stk_broadcast_network_information {
 struct stk_routing_area_info {
 	char mnc[OFONO_MAX_MNC_LENGTH + 1];
 	char mcc[OFONO_MAX_MCC_LENGTH + 1];
-	unsigned short lac;
-	unsigned char rac;
+	uint16_t lac;
+	uint8_t rac;
 };
 
 /* Defined in TS 131.111 Section 8.99 */
 struct stk_tracking_area_id {
 	char mnc[OFONO_MAX_MNC_LENGTH + 1];
 	char mcc[OFONO_MAX_MCC_LENGTH + 1];
-	unsigned short tac;
+	uint16_t tac;
 };
 
 struct stk_command_display_text {
 	char *text;
 	struct stk_icon_id icon_id;
-	ofono_bool_t immediate_response;
+	bool immediate_response;
 	struct stk_duration duration;
 	struct stk_text_attribute text_attr;
 	struct stk_frame_id frame_id;
@@ -1164,7 +1166,7 @@ struct stk_command_get_input {
 
 struct stk_command_play_tone {
 	char *alpha_id;
-	unsigned char tone;
+	uint8_t tone;
 	struct stk_duration duration;
 	struct stk_icon_id icon_id;
 	struct stk_text_attribute text_attr;
@@ -1177,7 +1179,7 @@ struct stk_command_poll_interval {
 
 struct stk_command_setup_menu {
 	char *alpha_id;
-	GSList *items;
+	struct l_queue *items;
 	struct stk_items_next_action_indicator next_act;
 	struct stk_icon_id icon_id;
 	struct stk_item_icon_id_list item_icon_id_list;
@@ -1187,9 +1189,9 @@ struct stk_command_setup_menu {
 
 struct stk_command_select_item {
 	char *alpha_id;
-	GSList *items;
+	struct l_queue *items;
 	struct stk_items_next_action_indicator next_act;
-	unsigned char item_id;
+	uint8_t item_id;
 	struct stk_icon_id icon_id;
 	struct stk_item_icon_id_list item_icon_id_list;
 	struct stk_text_attribute text_attr;
@@ -1237,7 +1239,7 @@ struct stk_command_setup_call {
 };
 
 struct stk_command_refresh {
-	GSList *file_list;
+	struct l_queue *file_list;
 	struct stk_aid aid;
 	char *alpha_id;
 	struct stk_icon_id icon_id;
@@ -1254,7 +1256,7 @@ struct stk_command_perform_card_apdu {
 };
 
 struct stk_command_timer_mgmt {
-	unsigned char timer_id;
+	uint8_t timer_id;
 	struct stk_timer_value timer_value;
 };
 
@@ -1286,10 +1288,10 @@ struct stk_command_language_notification {
 };
 
 struct stk_command_launch_browser {
-	unsigned char browser_id;
+	uint8_t browser_id;
 	char *url;
 	struct stk_common_byte_array bearer;
-	GSList *prov_file_refs;
+	struct l_queue *prov_file_refs;
 	char *text_gateway_proxy_id;
 	char *alpha_id;
 	struct stk_icon_id icon_id;
@@ -1304,7 +1306,7 @@ struct stk_command_open_channel {
 	char *alpha_id;
 	struct stk_icon_id icon_id;
 	struct stk_bearer_description bearer_desc;
-	unsigned short buf_size;
+	uint16_t buf_size;
 	char *apn;
 	struct stk_other_address local_addr;
 	char *text_usr;
@@ -1325,7 +1327,7 @@ struct stk_command_close_channel {
 struct stk_command_receive_data {
 	char *alpha_id;
 	struct stk_icon_id icon_id;
-	unsigned char data_len;
+	uint8_t data_len;
 	struct stk_text_attribute text_attr;
 	struct stk_frame_id frame_id;
 };
@@ -1370,7 +1372,7 @@ struct stk_command_retrieve_mms {
 	char *alpha_id;
 	struct stk_icon_id icon_id;
 	struct stk_mms_reference mms_ref;
-	GSList *mms_rec_files;
+	struct l_queue *mms_rec_files;
 	struct stk_mms_content_id mms_content_id;
 	struct stk_mms_id mms_id;
 	struct stk_text_attribute text_attr;
@@ -1380,21 +1382,21 @@ struct stk_command_retrieve_mms {
 struct stk_command_submit_mms {
 	char *alpha_id;
 	struct stk_icon_id icon_id;
-	GSList *mms_subm_files;
+	struct l_queue *mms_subm_files;
 	struct stk_mms_id mms_id;
 	struct stk_text_attribute text_attr;
 	struct stk_frame_id frame_id;
 };
 
 struct stk_command_display_mms {
-	GSList *mms_subm_files;
+	struct l_queue *mms_subm_files;
 	struct stk_mms_id mms_id;
-	ofono_bool_t imd_resp;
+	bool imd_resp;
 	struct stk_frame_id frame_id;
 };
 
 struct stk_command_activate {
-	unsigned char actv_desc;
+	uint8_t actv_desc;
 };
 
 enum stk_command_parse_result {
@@ -1405,9 +1407,9 @@ enum stk_command_parse_result {
 };
 
 struct stk_command {
-	unsigned char number;
-	unsigned char type;
-	unsigned char qualifier;
+	uint8_t number;
+	uint8_t type;
+	uint8_t qualifier;
 	enum stk_device_identity_type src;
 	enum stk_device_identity_type dst;
 	enum stk_command_parse_result status;
@@ -1456,8 +1458,8 @@ struct stk_response_generic {
 
 struct stk_answer_text {
 	char *text;
-	ofono_bool_t packed;
-	ofono_bool_t yesno;
+	bool packed;
+	bool yesno;
 	/*
 	 * If a "Yes/No" answer was requested in a GET INKEY command,
 	 * .yesno must be TRUE and text should be non-NULL to indicate
@@ -1466,14 +1468,14 @@ struct stk_answer_text {
 };
 
 struct stk_ussd_text {
-	ofono_bool_t has_text;
-	const unsigned char *text;
+	bool has_text;
+	const uint8_t *text;
 	int dcs;
 	int len;
 };
 
 struct stk_channel {
-	unsigned char id;
+	uint8_t id;
 	enum stk_channel_status status;
 };
 
@@ -1491,13 +1493,13 @@ struct stk_response_poll_interval {
 };
 
 struct stk_response_select_item {
-	unsigned char item_id;
+	uint8_t item_id;
 };
 
 struct stk_response_set_up_call {
 	struct stk_common_byte_array cc_requested_action;
 	struct {
-		ofono_bool_t cc_modified;
+		bool cc_modified;
 		struct stk_result result;
 	} modified_result;
 };
@@ -1540,7 +1542,7 @@ struct stk_response_local_info {
 };
 
 struct stk_response_timer_mgmt {
-	unsigned char id;
+	uint8_t id;
 	struct stk_timer_value value;
 };
 
@@ -1555,16 +1557,16 @@ struct stk_response_send_ussd {
 struct stk_response_open_channel {
 	struct stk_channel channel;
 	struct stk_bearer_description bearer_desc;
-	unsigned short buf_size;
+	uint16_t buf_size;
 };
 
 struct stk_response_receive_data {
 	struct stk_common_byte_array rx_data;
-	unsigned short rx_remaining;
+	uint16_t rx_remaining;
 };
 
 struct stk_response_send_data {
-	unsigned short tx_avail;
+	uint16_t tx_avail;
 };
 
 struct stk_response_channel_status {
@@ -1572,9 +1574,9 @@ struct stk_response_channel_status {
 };
 
 struct stk_response {
-	unsigned char number;
-	unsigned char type;
-	unsigned char qualifier;
+	uint8_t number;
+	uint8_t type;
+	uint8_t qualifier;
 	enum stk_device_identity_type src;
 	enum stk_device_identity_type dst;
 	struct stk_result result;
@@ -1621,8 +1623,8 @@ struct stk_envelope_cbs_pp_download {
 };
 
 struct stk_envelope_menu_selection {
-	unsigned char item_id;
-	ofono_bool_t help_request;
+	uint8_t item_id;
+	bool help_request;
 };
 
 struct stk_envelope_sms_mo_control {
@@ -1668,12 +1670,12 @@ struct stk_envelope_event_download {
 	enum stk_event_type type;
 	union {
 		struct {
-			unsigned char transaction_id;
+			uint8_t transaction_id;
 			struct stk_address caller_address;
 			struct stk_subaddress caller_subaddress;
 		} mt_call;
 		struct {
-			unsigned char transaction_id;
+			uint8_t transaction_id;
 		} call_connected;
 		struct {
 			struct stk_transaction_id transaction_ids;
@@ -1691,7 +1693,7 @@ struct stk_envelope_event_download {
 		} browser_termination;
 		struct {
 			struct stk_channel channel;
-			unsigned short channel_data_len;
+			uint16_t channel_data_len;
 		} data_available;
 		struct {
 			struct stk_channel channel;
@@ -1727,7 +1729,7 @@ struct stk_envelope_event_download {
 };
 
 struct stk_envelope_timer_expiration {
-	unsigned char id;
+	uint8_t id;
 	struct stk_timer_value value;
 };
 
@@ -1743,13 +1745,13 @@ struct stk_envelope_mms_transfer_status {
 
 struct stk_envelope_mms_notification_download {
 	struct stk_common_byte_array msg;
-	ofono_bool_t last;
+	bool last;
 };
 
 struct stk_envelope_terminal_apps {
 	struct stk_registry_application_data *list;
 	int count;
-	ofono_bool_t last;
+	bool last;
 };
 
 struct stk_envelope {
@@ -1771,16 +1773,15 @@ struct stk_envelope {
 	};
 };
 
-struct stk_command *stk_command_new_from_pdu(const unsigned char *pdu,
-						unsigned int len);
+struct stk_command *stk_command_new_from_pdu(const uint8_t *pdu,
+							unsigned int len);
 void stk_command_free(struct stk_command *command);
 
-const unsigned char *stk_pdu_from_response(const struct stk_response *response,
+const uint8_t *stk_pdu_from_response(const struct stk_response *response,
 						unsigned int *out_length);
-const unsigned char *stk_pdu_from_envelope(const struct stk_envelope *envelope,
+const uint8_t *stk_pdu_from_envelope(const struct stk_envelope *envelope,
 						unsigned int *out_length);
-char *stk_text_to_html(const char *text,
-				const unsigned short *attrs, int num_attrs);
-char *stk_image_to_xpm(const unsigned char *img, unsigned int len,
-			enum stk_img_scheme scheme, const unsigned char *clut,
-			unsigned short clut_len);
+char *stk_text_to_html(const char *text, const uint16_t *attrs, int num_attrs);
+char *stk_image_to_xpm(const uint8_t *img, unsigned int len,
+			enum stk_img_scheme scheme, const uint8_t *clut,
+			uint16_t clut_len);

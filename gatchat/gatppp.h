@@ -46,6 +46,7 @@ typedef enum _GAtPPPDisconnectReason {
 typedef enum _GAtPPPAuthMethod {
 	G_AT_PPP_AUTH_METHOD_CHAP,
 	G_AT_PPP_AUTH_METHOD_PAP,
+	G_AT_PPP_AUTH_METHOD_NONE,
 } GAtPPPAuthMethod;
 
 typedef void (*GAtPPPConnectFunc)(const char *iface, const char *local,

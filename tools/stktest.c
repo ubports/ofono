@@ -1189,30 +1189,6 @@ static void expect_response_and_not_canceled_after_3(const unsigned char *pdu,
 	g_idle_add(end_session_and_not_canceled_after_3, NULL);
 }
 
-static gboolean poweroff_and_canceled_after_21(gpointer user_data)
-{
-	__stktest_test_finish(pending == NULL);
-	return FALSE;
-}
-
-static gboolean end_session_and_canceled_after_21(gpointer user_data)
-{
-	g_at_server_send_unsolicited(emulator, "+CUSATEND");
-	g_timeout_add_seconds(21, poweroff_and_canceled_after_21, NULL);
-
-	return FALSE;
-}
-
-static void expect_response_and_canceled_after_21(const unsigned char *pdu,
-							unsigned int len)
-{
-	struct test *test = cur_test->data;
-
-	STKTEST_RESPONSE_ASSERT(test->rsp_pdu, test->rsp_len, pdu, len);
-
-	g_idle_add(end_session_and_canceled_after_21, NULL);
-}
-
 static DBusMessage *test_display_text_11(DBusMessage *msg,
 						const char *text,
 						unsigned char icon_id,
@@ -1405,7 +1381,7 @@ static DBusMessage *test_display_text_51(DBusMessage *msg,
 						unsigned char icon_id,
 						gboolean urgent)
 {
-	STKTEST_AGENT_ASSERT(g_str_equal(text, "Basic Icon"));
+	STKTEST_AGENT_ASSERT(g_str_equal(text, ""));
 	STKTEST_AGENT_ASSERT(icon_id == 1);
 	STKTEST_AGENT_ASSERT(urgent == FALSE);
 
@@ -1417,7 +1393,7 @@ static DBusMessage *test_display_text_52(DBusMessage *msg,
 						unsigned char icon_id,
 						gboolean urgent)
 {
-	STKTEST_AGENT_ASSERT(g_str_equal(text, "Colour Icon"));
+	STKTEST_AGENT_ASSERT(g_str_equal(text, ""));
 	STKTEST_AGENT_ASSERT(icon_id == 2);
 	STKTEST_AGENT_ASSERT(urgent == FALSE);
 
@@ -1854,7 +1830,7 @@ static DBusMessage *test_get_inkey_61(DBusMessage *msg,
 	DBusMessage *reply;
 	const char *ret = "+";
 
-	STKTEST_AGENT_ASSERT(g_str_equal(alpha, "&lt;NO-ICON&gt;"));
+	STKTEST_AGENT_ASSERT(g_str_equal(alpha, ""));
 	STKTEST_AGENT_ASSERT(icon_id == 1);
 
 	reply = dbus_message_new_method_return(msg);
@@ -1888,7 +1864,7 @@ static DBusMessage *test_get_inkey_63(DBusMessage *msg,
 	DBusMessage *reply;
 	const char *ret = "+";
 
-	STKTEST_AGENT_ASSERT(g_str_equal(alpha, "&lt;NO-ICON&gt;"));
+	STKTEST_AGENT_ASSERT(g_str_equal(alpha, ""));
 	STKTEST_AGENT_ASSERT(icon_id == 2);
 
 	reply = dbus_message_new_method_return(msg);
@@ -2662,7 +2638,7 @@ static DBusMessage *test_get_input_61(DBusMessage *msg,
 	DBusMessage *reply;
 	const char *ret = "+";
 
-	STKTEST_AGENT_ASSERT(g_str_equal(alpha, "&lt;NO-ICON&gt;"));
+	STKTEST_AGENT_ASSERT(g_str_equal(alpha, ""));
 	STKTEST_AGENT_ASSERT(icon_id == 1);
 	STKTEST_AGENT_ASSERT(g_str_equal(def_input, ""));
 	STKTEST_AGENT_ASSERT(min == 0);
@@ -2710,7 +2686,7 @@ static DBusMessage *test_get_input_63(DBusMessage *msg,
 	DBusMessage *reply;
 	const char *ret = "+";
 
-	STKTEST_AGENT_ASSERT(g_str_equal(alpha, "&lt;NO-ICON&gt;"));
+	STKTEST_AGENT_ASSERT(g_str_equal(alpha, ""));
 	STKTEST_AGENT_ASSERT(icon_id == 2);
 	STKTEST_AGENT_ASSERT(g_str_equal(def_input, ""));
 	STKTEST_AGENT_ASSERT(min == 0);
@@ -3168,7 +3144,7 @@ static DBusMessage *test_play_tone_31(DBusMessage *msg,
 					unsigned char icon_id)
 {
 	STKTEST_AGENT_ASSERT(g_str_equal(tone, "positive-acknowledgement"));
-	STKTEST_AGENT_ASSERT(g_str_equal(text, "&lt;BASIC-ICON&gt;"));
+	STKTEST_AGENT_ASSERT(g_str_equal(text, ""));
 	STKTEST_AGENT_ASSERT(icon_id == 1);
 
 	return dbus_message_new_method_return(msg);
@@ -3192,7 +3168,7 @@ static DBusMessage *test_play_tone_33(DBusMessage *msg,
 					unsigned char icon_id)
 {
 	STKTEST_AGENT_ASSERT(g_str_equal(tone, "positive-acknowledgement"));
-	STKTEST_AGENT_ASSERT(g_str_equal(text, "&lt;COLOUR-ICON&gt;"));
+	STKTEST_AGENT_ASSERT(g_str_equal(text, ""));
 	STKTEST_AGENT_ASSERT(icon_id == 2);
 
 	return dbus_message_new_method_return(msg);
@@ -3510,7 +3486,7 @@ static void __stktest_test_init(void)
 				display_text_response_421,
 				sizeof(display_text_response_421),
 				test_display_text_42,
-				expect_response_and_canceled_after_21);
+				expect_response_and_not_canceled_after_3);
 	stktest_add_test("Display Text 4.3", "DisplayText",
 				display_text_431, sizeof(display_text_431),
 				display_text_response_431,

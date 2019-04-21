@@ -3,6 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2017 Vincent Cesson. All rights reserved.
+ *  Copyright (C) 2018 Gemalto M2M
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -23,3 +24,6 @@
 
 extern void gemalto_location_reporting_init();
 extern void gemalto_location_reporting_exit();
+
+extern void gemalto_voicecall_init();
+extern void gemalto_voicecall_exit();

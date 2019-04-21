@@ -153,7 +153,7 @@ static void cdma_devinfo_remove(struct ofono_devinfo *info)
 	ofono_devinfo_set_data(info, NULL);
 }
 
-static struct ofono_devinfo_driver driver = {
+static const struct ofono_devinfo_driver driver = {
 	.name			= "cdmamodem",
 	.probe			= cdma_devinfo_probe,
 	.remove			= cdma_devinfo_remove,

@@ -39,6 +39,15 @@ static inline struct cb_data *cb_data_new(void *cb, void *data)
 	return ret;
 }
 
+#define CALLBACK_WITH_CME_ERROR(cb, err, args...)	\
+	do {						\
+		struct ofono_error cb_e;		\
+		cb_e.type = OFONO_ERROR_TYPE_CME;	\
+		cb_e.error = err;			\
+							\
+		cb(&cb_e, ##args);			\
+	} while (0)					\
+
 #define CALLBACK_WITH_FAILURE(cb, args...)		\
 	do {						\
 		struct ofono_error cb_e;		\

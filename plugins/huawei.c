@@ -875,7 +875,7 @@ static void huawei_post_sim(struct ofono_modem *modem)
 
 		data->gprs = ofono_gprs_create(modem, OFONO_VENDOR_HUAWEI,
 						"atmodem", data->pcui);
-		data->gc = ofono_gprs_context_create(modem, 0,
+		data->gc = ofono_gprs_context_create(modem, OFONO_VENDOR_HUAWEI,
 						"atmodem", data->modem);
 
 		if (data->gprs && data->gc)

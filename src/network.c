@@ -222,7 +222,7 @@ static void register_callback(const struct ofono_error *error, void *data)
 	if (error->type == OFONO_ERROR_TYPE_NO_ERROR)
 		reply = dbus_message_new_method_return(netreg->pending);
 	else
-		reply = __ofono_error_failed(netreg->pending);
+		reply = __ofono_error_from_error(error, netreg->pending);
 
 	__ofono_dbus_pending_reply(&netreg->pending, reply);
 

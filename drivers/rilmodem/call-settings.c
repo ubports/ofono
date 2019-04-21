@@ -26,7 +26,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -320,7 +319,7 @@ static void ril_call_settings_remove(struct ofono_call_settings *cs)
 	g_free(sd);
 }
 
-static struct ofono_call_settings_driver driver = {
+static const struct ofono_call_settings_driver driver = {
 	.name			= RILMODEM,
 	.probe			= ril_call_settings_probe,
 	.remove			= ril_call_settings_remove,

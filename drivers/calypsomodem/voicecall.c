@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -402,7 +401,7 @@ static void calypso_voicecall_remove(struct ofono_voicecall *vc)
 	g_free(vd);
 }
 
-static struct ofono_voicecall_driver driver = {
+static const struct ofono_voicecall_driver driver = {
 	.name			= "calypsomodem",
 	.probe			= calypso_voicecall_probe,
 	.remove			= calypso_voicecall_remove,

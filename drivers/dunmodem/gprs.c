@@ -73,7 +73,7 @@ static void dun_gprs_attached_status(struct ofono_gprs *gprs,
 	CALLBACK_WITH_SUCCESS(cb, 1, data);
 }
 
-static struct ofono_gprs_driver driver = {
+static const struct ofono_gprs_driver driver = {
 	.name			= "dunmodem",
 	.probe			= dun_gprs_probe,
 	.remove			= dun_gprs_remove,
