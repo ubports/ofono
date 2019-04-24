@@ -86,6 +86,9 @@ void at_util_sim_state_query_free(struct at_util_sim_state_query *req);
 
 int at_util_get_ipv4_address_and_netmask(const char *addrnetmask,
 						char *address, char *netmask);
+int at_util_get_ipv6_address_and_netmask(const char *addrnetmask,
+						char *address, char *netmask);
+
 
 int at_util_gprs_auth_method_to_auth_prot(
 				enum ofono_gprs_auth_method auth_method);

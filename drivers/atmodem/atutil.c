@@ -656,6 +656,45 @@ int at_util_get_ipv4_address_and_netmask(const char *addrnetmask,
 	return ret;
 }
 
+/*
+ * CGCONTRDP returns addr + netmask in the same string in the form
+ * of "a1.a2.a3.a4.a5.a6.a7.a8.a9.a10.a11.a12.a13.a14.a15.a16.m1.m2.
+ * m3.m4.m5.m6.m7.m8.m9.m10.m11.m12.m13.m14.m15.m16" for IPv6.
+ * address/netmask must be able to hold 64 characters.
+ */
+int at_util_get_ipv6_address_and_netmask(const char *addrnetmask,
+						char *address, char *netmask)
+{
+	const char *s = addrnetmask;
+	const char *net = NULL;
+
+	int ret = -EINVAL;
+	int i;
+
+	/* Count 31 dots for ipv6, less or more means error. */
+	for (i = 0; i < 33; i++, s++) {
+		s = strchr(s, '.');
+
+		if (!s)
+			break;
+
+		if (i == 15) {
+			/* set netmask ptr and break the string */
+			net = s + 1;
+		}
+	}
+
+	if (i == 31) {
+		memcpy(address, addrnetmask, net - addrnetmask);
+		address[net - addrnetmask - 1] = '\0';
+		strcpy(netmask, net);
+
+		ret = 0;
+	}
+
+	return ret;
+}
+
 int at_util_gprs_auth_method_to_auth_prot(
 					enum ofono_gprs_auth_method auth_method)
 {
