@@ -16,7 +16,7 @@
 #ifndef OFONO_WATCH_H
 #define OFONO_WATCH_H
 
-#include <ofono/types.h>
+#include <ofono/gprs-context.h>
 
 struct ofono_modem;
 struct ofono_sim;
@@ -50,9 +50,15 @@ struct ofono_watch {
 	const char *reg_mcc;
 	const char *reg_mnc;
 	const char *reg_name;
+	/* OFONO_ATOM_TYPE_GPRS */
+	struct ofono_gprs *gprs;
 };
 
 typedef void (*ofono_watch_cb_t)(struct ofono_watch *w, void *user_data);
+typedef void (*ofono_watch_gprs_settings_cb_t)(struct ofono_watch *watch,
+			enum ofono_gprs_context_type type,
+			const struct ofono_gprs_primary_context *settings,
+			void *user_data);
 
 struct ofono_watch *ofono_watch_new(const char *path);
 struct ofono_watch *ofono_watch_ref(struct ofono_watch *w);
@@ -90,6 +96,11 @@ unsigned long ofono_watch_add_reg_mnc_changed_handler(struct ofono_watch *w,
 				ofono_watch_cb_t cb, void *user_data);
 unsigned long ofono_watch_add_reg_name_changed_handler(struct ofono_watch *w,
 				ofono_watch_cb_t cb, void *user_data);
+unsigned long ofono_watch_add_gprs_changed_handler(struct ofono_watch *w,
+				ofono_watch_cb_t cb, void *user_data);
+unsigned long ofono_watch_add_gprs_settings_changed_handler
+		(struct ofono_watch *watch, ofono_watch_gprs_settings_cb_t cb,
+							void *user_data);
 
 #endif /* OFONO_WATCH_H */
 

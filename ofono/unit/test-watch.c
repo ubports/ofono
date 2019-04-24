@@ -45,6 +45,14 @@ void *__ofono_atom_get_data(struct ofono_atom *atom)
 	return atom->data;
 }
 
+/* Fake ofono_gprs */
+
+struct ofono_gprs {
+	struct ofono_atom atom;
+	enum ofono_gprs_context_type type;
+	const struct ofono_gprs_primary_context *settings;
+};
+
 /* Fake ofono_netreg */
 
 struct ofono_netreg {
@@ -236,6 +244,7 @@ struct ofono_modem {
 	struct ofono_watchlist *online_watches;
 	struct ofono_sim sim;
 	struct ofono_netreg netreg;
+	struct ofono_gprs gprs;
 };
 
 struct atom_watch {
@@ -408,6 +417,7 @@ static void test_modem_unregister_atom(struct ofono_modem *modem,
 static void test_modem_init1(struct ofono_modem *modem, const char *path)
 {
 	struct ofono_netreg *netreg = &modem->netreg;
+	struct ofono_gprs *gprs = &modem->gprs;
 	struct ofono_sim *sim = &modem->sim;
 
 	/* Assume that the structure has been zero-initialized */
@@ -418,6 +428,10 @@ static void test_modem_init1(struct ofono_modem *modem, const char *path)
 	netreg->atom.type = OFONO_ATOM_TYPE_NETREG;
 	netreg->atom.modem = modem;
 	netreg->atom.data = netreg;
+
+	gprs->atom.type = OFONO_ATOM_TYPE_GPRS;
+	gprs->atom.modem = modem;
+	gprs->atom.data = gprs;
 
 	sim->atom.type = OFONO_ATOM_TYPE_SIM;
 	sim->atom.modem = modem;
@@ -485,9 +499,17 @@ static void test_basic(void)
 	g_assert(!ofono_watch_add_reg_mcc_changed_handler(NULL, NULL, NULL));
 	g_assert(!ofono_watch_add_reg_mnc_changed_handler(NULL, NULL, NULL));
 	g_assert(!ofono_watch_add_reg_name_changed_handler(NULL, NULL, NULL));
+	g_assert(!ofono_watch_add_gprs_changed_handler(NULL, NULL, NULL));
+	g_assert(!ofono_watch_add_gprs_settings_changed_handler(NULL,
+								NULL, NULL));
 	ofono_watch_remove_handler(NULL, 0);
 	ofono_watch_remove_handlers(NULL, NULL, 0);
 	__ofono_watch_netreg_changed(NULL);
+	__ofono_watch_netreg_changed(TEST_PATH);
+	__ofono_watch_gprs_settings_changed
+		(NULL, OFONO_GPRS_CONTEXT_TYPE_ANY, NULL);
+	__ofono_watch_gprs_settings_changed
+		(TEST_PATH, OFONO_GPRS_CONTEXT_TYPE_ANY, NULL);
 
 	/* Instance caching */
 	memset(&modem, 0, sizeof(modem));
@@ -700,6 +722,70 @@ static void test_netreg(void)
 	__ofono_modemwatch_cleanup();
 }
 
+/* ==== gprs ==== */
+
+static void test_gprs_settings_cb(struct ofono_watch *watch,
+			enum ofono_gprs_context_type type,
+			const struct ofono_gprs_primary_context *settings,
+			void *user_data)
+{
+	struct ofono_gprs *gprs = user_data;
+
+	g_assert(gprs == watch->gprs);
+	gprs->type = type;
+	gprs->settings = settings;
+}
+
+static void test_gprs(void)
+{
+	struct ofono_watch *watch;
+	struct ofono_modem modem;
+	struct ofono_gprs *gprs = &modem.gprs;
+	struct ofono_gprs_primary_context settings;
+	gulong ids[2];
+	int n = 0;
+
+	__ofono_modemwatch_init();
+	memset(&modem, 0, sizeof(modem));
+	test_modem_init(&modem);
+	watch = ofono_watch_new(TEST_PATH);
+	g_assert(!watch->gprs);
+
+	ids[0] = ofono_watch_add_gprs_changed_handler(watch, test_inc_cb, &n);
+	ids[1] = ofono_watch_add_gprs_settings_changed_handler(watch,
+						test_gprs_settings_cb, gprs);
+
+	test_modem_register_atom(&modem, &gprs->atom);
+	g_assert(watch->gprs == gprs);
+	g_assert(n == 1);
+	test_modem_register_atom(&modem, &gprs->atom); /* No effect */
+	g_assert(n == 1);
+
+	test_modem_unregister_atom(&modem, &gprs->atom);
+	g_assert(!watch->gprs);
+	g_assert(n == 2);
+
+	test_modem_register_atom(&modem, &gprs->atom);
+	g_assert(watch->gprs == gprs);
+	g_assert(n == 3);
+
+	memset(&settings, 0, sizeof(settings));
+	__ofono_watch_gprs_settings_changed(TEST_PATH,
+				OFONO_GPRS_CONTEXT_TYPE_INTERNET, &settings);
+	__ofono_watch_gprs_settings_changed(TEST_PATH_1, /* No effect */
+				OFONO_GPRS_CONTEXT_TYPE_ANY, NULL);
+	g_assert(gprs->type == OFONO_GPRS_CONTEXT_TYPE_INTERNET);
+	g_assert(gprs->settings == &settings);
+
+	test_modem_shutdown(&modem);
+	g_assert(!watch->gprs);
+	g_assert(n == 4);
+
+	ofono_watch_remove_all_handlers(watch, ids);
+	ofono_watch_unref(watch);
+	__ofono_modemwatch_cleanup();
+}
+
 /* ==== sim ==== */
 
 static void test_sim(void)
@@ -801,6 +887,7 @@ int main(int argc, char *argv[])
 	g_test_add_func(TEST_("modem"), test_modem);
 	g_test_add_func(TEST_("online"), test_online);
 	g_test_add_func(TEST_("netreg"), test_netreg);
+	g_test_add_func(TEST_("gprs"), test_gprs);
 	g_test_add_func(TEST_("sim"), test_sim);
 
 	return g_test_run();

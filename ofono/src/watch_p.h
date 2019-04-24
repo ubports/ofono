@@ -19,6 +19,9 @@
 #include <ofono/watch.h>
 
 void __ofono_watch_netreg_changed(const char *path);
+void __ofono_watch_gprs_settings_changed(const char *path,
+			enum ofono_gprs_context_type type,
+			const struct ofono_gprs_primary_context *settings);
 
 #endif /* OFONO_WATCH_PRIVATE_H */
 
