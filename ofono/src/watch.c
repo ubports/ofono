@@ -505,18 +505,36 @@ static void ofono_watch_setup_modem(struct ofono_watch_object *self)
 static void ofono_watch_cleanup_modem(struct ofono_watch_object *self,
 						struct ofono_modem *modem)
 {
-	/* Caller checks that modem isn't NULL */
-	__ofono_modem_remove_online_watch(modem, self->online_watch_id);
-	ASSERT(!self->online_watch_id);
+	/*
+	 * Caller checks that modem isn't NULL.
+	 *
+	 * Watch ids are getting zeroed when __ofono_watchlist_free() is
+	 * called for the respective watch list. Therefore ids can be zero
+	 * even if we never explicitely removed them.
+	 *
+	 * Calling __ofono_modem_remove_online_watch() and other such
+	 * functions after respective watch lists have been deallocated
+	 * by modem_unregister() will crash the core.
+	 */
+	if (self->online_watch_id) {
+		__ofono_modem_remove_online_watch(modem, self->online_watch_id);
+		ASSERT(!self->online_watch_id);
+	}
 
-	__ofono_modem_remove_atom_watch(modem, self->sim_watch_id);
-	ASSERT(!self->sim_watch_id);
+	if (self->sim_watch_id) {
+		__ofono_modem_remove_atom_watch(modem, self->sim_watch_id);
+		ASSERT(!self->sim_watch_id);
+	}
 
-	__ofono_modem_remove_atom_watch(modem, self->netreg_watch_id);
-	ASSERT(!self->netreg_watch_id);
+	if (self->netreg_watch_id) {
+		__ofono_modem_remove_atom_watch(modem, self->netreg_watch_id);
+		ASSERT(!self->netreg_watch_id);
+	}
 
-	__ofono_modem_remove_atom_watch(modem, self->gprs_watch_id);
-	ASSERT(!self->gprs_watch_id);
+	if (self->gprs_watch_id) {
+		__ofono_modem_remove_atom_watch(modem, self->gprs_watch_id);
+		ASSERT(!self->gprs_watch_id);
+	}
 
 	ofono_watch_set_sim(self, NULL);
 	ofono_watch_set_netreg(self, NULL);
