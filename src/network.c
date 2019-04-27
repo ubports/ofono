@@ -1407,6 +1407,11 @@ void ofono_netreg_time_notify(struct ofono_netreg *netreg,
 	if (info == NULL)
 		return;
 
+	DBG("net time %d-%02d-%02d %02d:%02d:%02d utcoff %d dst %d",
+	    info->year, info->mon, info->mday,
+	    info->hour, info->min, info->sec,
+	    info->utcoff, info->dst);
+
 	__ofono_nettime_info_received(modem, info);
 }
 
