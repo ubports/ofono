@@ -1351,8 +1351,8 @@ void ofono_netreg_status_notify(struct ofono_netreg *netreg, int status,
 	if (netreg == NULL)
 		return;
 
-	DBG("%s status %d tech %d", __ofono_atom_get_path(netreg->atom),
-							status, tech);
+	DBG("%s status %d tech %d lac %d ci %d",
+	    __ofono_atom_get_path(netreg->atom), status, tech, lac, ci);
 
 	if (netreg->status != status) {
 		struct ofono_modem *modem;
