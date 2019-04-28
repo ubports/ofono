@@ -1700,7 +1700,7 @@ static void netreg_status_changed(int status, int lac, int ci, int tech,
 {
 	struct ofono_gprs *gprs = data;
 
-	DBG("%d", status);
+	DBG("%d (%s)", status, registration_status_to_string(status));
 
 	gprs->netreg_status = status;
 
