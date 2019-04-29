@@ -54,7 +54,7 @@ struct ofono_siri {
 void ofono_siri_set_status(struct ofono_siri *siri, int value)
 {
 	DBusConnection *conn = ofono_dbus_get_connection();
-	const char *path = __ofono_atom_get_path(siri->atom);
+	const char *path;
 	dbus_bool_t siri_status;
 
 	if (siri == NULL)
@@ -70,6 +70,7 @@ void ofono_siri_set_status(struct ofono_siri *siri, int value)
 	if (__ofono_atom_get_registered(siri->atom) == FALSE)
 		return;
 
+	path = __ofono_atom_get_path(siri->atom);
 	ofono_dbus_signal_property_changed(conn, path, OFONO_SIRI_INTERFACE,
 						"Enabled", DBUS_TYPE_BOOLEAN,
 						&siri_status);
