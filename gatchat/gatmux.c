@@ -952,8 +952,7 @@ gboolean g_at_mux_setup_gsm0710(GAtChat *chat,
 				mux_query_cb, msd, msd_free) > 0)
 		return TRUE;
 
-	if (msd)
-		msd_free(msd);
+	msd_free(msd);
 
 	return FALSE;
 }
