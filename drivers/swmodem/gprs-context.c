@@ -177,9 +177,7 @@ static void sw_gprs_activate_primary(struct ofono_gprs_context *gc,
 		break;
 	}
 
-	if (ctx->apn)
-		snprintf(buf + len, sizeof(buf) - len - 3,
-					",\"%s\"", ctx->apn);
+	snprintf(buf + len, sizeof(buf) - len - 3, ",\"%s\"", ctx->apn);
 
 	if (g_at_chat_send(gcd->chat, buf, none_prefix,
 				at_cgdcont_cb, cbd, g_free) > 0)
