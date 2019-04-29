@@ -5381,8 +5381,10 @@ static bool build_dataobj(struct stk_tlv_builder *tlv,
 		const void *data = va_arg(args, const void *);
 		bool cr = (flags & DATAOBJ_FLAG_CR) ? true : false;
 
-		if (!builder_func(tlv, data, cr))
+		if (!builder_func(tlv, data, cr)) {
+			va_end(args);
 			return false;
+		}
 
 		builder_func = va_arg(args, dataobj_writer);
 	}
