@@ -2464,10 +2464,12 @@ struct ofono_sim_context *ofono_sim_context_create(struct ofono_sim *sim)
 struct ofono_sim_context *ofono_sim_context_create_isim(
 		struct ofono_sim *sim)
 {
-	GSList *iter = sim->aid_sessions;
+	GSList *iter;
 
 	if (sim == NULL || sim->simfs_isim == NULL)
 		return NULL;
+
+	iter = sim->aid_sessions;
 
 	/* Find the AID */
 	while (iter) {
