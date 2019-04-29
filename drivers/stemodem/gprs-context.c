@@ -277,7 +277,6 @@ static void ste_gprs_activate_primary(struct ofono_gprs_context *gc,
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 	struct cb_data *cbd = cb_data_new(cb, data);
 	char buf[AUTH_BUF_LENGTH];
-	int len;
 
 	/* IPv6 support not implemented */
 	if (ctx->proto != OFONO_GPRS_PROTO_IP)
@@ -291,11 +290,8 @@ static void ste_gprs_activate_primary(struct ofono_gprs_context *gc,
 		goto error;
 	}
 
-	len = snprintf(buf, sizeof(buf), "AT+CGDCONT=%u,\"IP\"", ctx->cid);
-
-	if (ctx->apn)
-		snprintf(buf + len, sizeof(buf) - len, ",\"%s\"",
-				ctx->apn);
+	snprintf(buf, sizeof(buf), "AT+CGDCONT=%u,\"IP\",\"%s\"",
+			ctx->cid, ctx->apn);
 
 	if (g_at_chat_send(gcd->chat, buf, none_prefix,
 				ste_cgdcont_cb, cbd, g_free) == 0)
