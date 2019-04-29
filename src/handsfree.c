@@ -174,7 +174,7 @@ void ofono_handsfree_battchg_notify(struct ofono_handsfree *hf,
 					unsigned char level)
 {
 	DBusConnection *conn = ofono_dbus_get_connection();
-	const char *path = __ofono_atom_get_path(hf->atom);
+	const char *path;
 
 	if (hf == NULL)
 		return;
@@ -187,6 +187,7 @@ void ofono_handsfree_battchg_notify(struct ofono_handsfree *hf,
 	if (__ofono_atom_get_registered(hf->atom) == FALSE)
 		return;
 
+	path = __ofono_atom_get_path(hf->atom);
 	ofono_dbus_signal_property_changed(conn, path,
 					OFONO_HANDSFREE_INTERFACE,
 					"BatteryChargeLevel", DBUS_TYPE_BYTE,
