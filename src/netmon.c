@@ -288,7 +288,7 @@ static DBusMessage *netmon_get_serving_cell_info(DBusConnection *conn,
 {
 	struct ofono_netmon *netmon = data;
 
-	if (!netmon->driver && !netmon->driver->request_update)
+	if (!netmon->driver->request_update)
 		return __ofono_error_not_implemented(msg);
 
 	if (netmon->pending)
