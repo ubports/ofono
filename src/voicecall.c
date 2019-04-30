@@ -4021,6 +4021,9 @@ void __ofono_voicecall_tone_cancel(struct ofono_voicecall *vc, int id)
 		if (entry->id == id)
 			break;
 
+	if (!entry)
+		return;
+
 	tone_request_finish(vc, entry, 0, FALSE);
 
 	/*
