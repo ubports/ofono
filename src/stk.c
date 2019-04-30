@@ -2618,7 +2618,7 @@ static gboolean handle_command_play_tone(const struct stk_command *cmd,
 	int timeout;
 	int err;
 
-	if (pt->tone > sizeof(tone_infos) / sizeof(*tone_infos) ||
+	if (pt->tone >= L_ARRAY_SIZE(tone_infos) ||
 			tone_infos[pt->tone].name == NULL) {
 		rsp->result.type = STK_RESULT_TYPE_DATA_NOT_UNDERSTOOD;
 
