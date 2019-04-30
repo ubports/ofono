@@ -1888,7 +1888,7 @@ static struct pri_context *find_usable_context(struct ofono_gprs *gprs,
 	for (l = gprs->contexts; l; l = l->next) {
 		pri_ctx = l->data;
 
-		if (pri_ctx->context.apn == NULL)
+		if (pri_ctx->context.apn[0] == '\0')
 			return pri_ctx;
 	}
 
