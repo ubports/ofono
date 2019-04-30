@@ -149,6 +149,8 @@ static void cfun_enable(gboolean ok, GAtResult *result, gpointer user_data)
 	if (!ok) {
 		g_at_chat_unref(data->modem);
 		data->modem = NULL;
+		ofono_modem_set_powered(modem, FALSE);
+		return;
 	}
 
 	data->sim_state_query = at_util_sim_state_query_new(data->modem,
