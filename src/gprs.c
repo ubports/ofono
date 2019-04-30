@@ -719,9 +719,7 @@ static void pri_update_mms_context_settings(struct pri_context *ctx)
 	struct ofono_gprs_context *gc = ctx->context_driver;
 	struct context_settings *settings = gc->settings;
 
-	if (ctx->message_proxy)
-		settings->ipv4->proxy = g_strdup(ctx->message_proxy);
-
+	settings->ipv4->proxy = g_strdup(ctx->message_proxy);
 	pri_parse_proxy(ctx, ctx->message_proxy);
 
 	DBG("proxy %s port %u", ctx->proxy_host, ctx->proxy_port);
