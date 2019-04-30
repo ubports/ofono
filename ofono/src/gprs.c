@@ -46,6 +46,7 @@
 #include "idmap.h"
 #include "simutil.h"
 #include "util.h"
+#include "watch_p.h"
 
 #define GPRS_FLAG_ATTACHING 0x1
 #define GPRS_FLAG_RECHECK 0x2
@@ -915,6 +916,13 @@ static void pri_str_signal_change(struct pri_context *ctx,
 					name, DBUS_TYPE_STRING, &value);
 }
 
+static void pri_settings_changed(struct pri_context *ctx)
+{
+	const char *path = __ofono_atom_get_path(ctx->gprs->atom);
+
+	__ofono_watch_gprs_settings_changed(path, ctx->type, &ctx->context);
+}
+
 static void pri_reset_context_properties(struct pri_context *ctx,
 				const struct ofono_gprs_provision_data *ap)
 {
@@ -980,6 +988,10 @@ static void pri_reset_context_properties(struct pri_context *ctx,
 	if (gprs->settings && changed) {
 		write_context_settings(gprs, ctx);
 		storage_sync(gprs->imsi, SETTINGS_STORE, gprs->settings);
+	}
+
+	if (changed) {
+		pri_settings_changed(ctx);
 	}
 }
 
@@ -1334,6 +1346,7 @@ static DBusMessage *pri_set_apn(struct pri_context *ctx, DBusConnection *conn,
 					"AccessPointName",
 					DBUS_TYPE_STRING, &apn);
 
+	pri_settings_changed(ctx);
 	return NULL;
 }
 
@@ -1364,6 +1377,7 @@ static DBusMessage *pri_set_username(struct pri_context *ctx,
 					"Username",
 					DBUS_TYPE_STRING, &username);
 
+	pri_settings_changed(ctx);
 	return NULL;
 }
 
@@ -1394,6 +1408,7 @@ static DBusMessage *pri_set_password(struct pri_context *ctx,
 					"Password",
 					DBUS_TYPE_STRING, &password);
 
+	pri_settings_changed(ctx);
 	return NULL;
 }
 
@@ -1422,6 +1437,7 @@ static DBusMessage *pri_set_type(struct pri_context *ctx, DBusConnection *conn,
 					OFONO_CONNECTION_CONTEXT_INTERFACE,
 					"Type", DBUS_TYPE_STRING, &type);
 
+	pri_settings_changed(ctx);
 	return NULL;
 }
 
@@ -1451,6 +1467,7 @@ static DBusMessage *pri_set_proto(struct pri_context *ctx,
 					OFONO_CONNECTION_CONTEXT_INTERFACE,
 					"Protocol", DBUS_TYPE_STRING, &str);
 
+	pri_settings_changed(ctx);
 	return NULL;
 }
 
@@ -1567,6 +1584,7 @@ static DBusMessage *pri_set_auth_method(struct pri_context *ctx,
 					"AuthenticationMethod",
 					DBUS_TYPE_STRING, &str);
 
+	pri_settings_changed(ctx);
 	return NULL;
 }
 
@@ -2426,6 +2444,7 @@ void ofono_gprs_cid_activated(struct ofono_gprs  *gprs, unsigned int cid,
 					OFONO_CONNECTION_CONTEXT_INTERFACE,
 					"AccessPointName",
 					DBUS_TYPE_STRING, &apn);
+		pri_settings_changed(pri_ctx);
 	}
 
 	/* Prevent ofono_gprs_status_notify from changing the 'attached'

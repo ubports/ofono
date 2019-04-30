@@ -13,7 +13,7 @@
  *  GNU General Public License for more details.
  */
 
-#include <ofono/watch.h>
+#include "watch_p.h"
 
 #include "ofono.h"
 
@@ -29,7 +29,9 @@ struct ofono_watch_object {
 	char *iccid;
 	char *imsi;
 	char *spn;
-	int signals_suspended;
+	char *reg_mcc;
+	char *reg_mnc;
+	char *reg_name;
 	int queued_signals;
 	guint modem_watch_id;
 	guint online_watch_id;
@@ -39,11 +41,16 @@ struct ofono_watch_object {
 	guint imsi_watch_id;
 	guint spn_watch_id;
 	guint netreg_watch_id;
+	guint gprs_watch_id;
 };
 
 struct ofono_watch_closure {
 	GCClosure cclosure;
-	ofono_watch_cb_t cb;
+	union ofono_watch_closure_cb {
+		GCallback ptr;
+		ofono_watch_cb_t generic;
+		ofono_watch_gprs_settings_cb_t gprs_settings;
+	} cb;
 	void *user_data;
 };
 
@@ -56,17 +63,29 @@ enum ofono_watch_signal {
 	SIGNAL_IMSI_CHANGED,
 	SIGNAL_SPN_CHANGED,
 	SIGNAL_NETREG_CHANGED,
+	SIGNAL_REG_STATUS_CHANGED,
+	SIGNAL_REG_MCC_CHANGED,
+	SIGNAL_REG_MNC_CHANGED,
+	SIGNAL_REG_NAME_CHANGED,
+	SIGNAL_GPRS_CHANGED,
+	SIGNAL_GPRS_SETTINGS_CHANGED,
 	SIGNAL_COUNT
 };
 
-#define SIGNAL_MODEM_CHANGED_NAME       "ofono-watch-modem-changed"
-#define SIGNAL_ONLINE_CHANGED_NAME      "ofono-watch-online-changed"
-#define SIGNAL_SIM_CHANGED_NAME         "ofono-watch-sim-changed"
-#define SIGNAL_SIM_STATE_CHANGED_NAME   "ofono-watch-sim-state-changed"
-#define SIGNAL_ICCID_CHANGED_NAME       "ofono-watch-iccid-changed"
-#define SIGNAL_IMSI_CHANGED_NAME        "ofono-watch-imsi-changed"
-#define SIGNAL_SPN_CHANGED_NAME         "ofono-watch-spn-changed"
-#define SIGNAL_NETREG_CHANGED_NAME      "ofono-watch-netreg-changed"
+#define SIGNAL_MODEM_CHANGED_NAME         "ofono-watch-modem-changed"
+#define SIGNAL_ONLINE_CHANGED_NAME        "ofono-watch-online-changed"
+#define SIGNAL_SIM_CHANGED_NAME           "ofono-watch-sim-changed"
+#define SIGNAL_SIM_STATE_CHANGED_NAME     "ofono-watch-sim-state-changed"
+#define SIGNAL_ICCID_CHANGED_NAME         "ofono-watch-iccid-changed"
+#define SIGNAL_IMSI_CHANGED_NAME          "ofono-watch-imsi-changed"
+#define SIGNAL_SPN_CHANGED_NAME           "ofono-watch-spn-changed"
+#define SIGNAL_NETREG_CHANGED_NAME        "ofono-watch-netreg-changed"
+#define SIGNAL_REG_STATUS_CHANGED_NAME    "ofono-watch-reg-status-changed"
+#define SIGNAL_REG_MCC_CHANGED_NAME       "ofono-watch-reg-mcc-changed"
+#define SIGNAL_REG_MNC_CHANGED_NAME       "ofono-watch-reg-mnc-changed"
+#define SIGNAL_REG_NAME_CHANGED_NAME      "ofono-watch-reg-name-changed"
+#define SIGNAL_GPRS_CHANGED_NAME          "ofono-watch-gprs-changed"
+#define SIGNAL_GPRS_SETTINGS_CHANGED_NAME "ofono-watch-gprs-settings-changed"
 
 static guint ofono_watch_signals[SIGNAL_COUNT] = { 0 };
 static GHashTable *ofono_watch_table = NULL;
@@ -84,7 +103,7 @@ G_DEFINE_TYPE(OfonoWatchObject, ofono_watch_object, G_TYPE_OBJECT)
 
 /* Skip the leading slash from the modem path: */
 #define DBG_(obj,fmt,args...) DBG("%s " fmt, (obj)->path+1, ##args)
-#define ASSERT(expr) ((void)(expr))
+#define ASSERT(expr) ((void)0)
 
 static inline struct ofono_watch_object *ofono_watch_object_cast
 						(struct ofono_watch *watch)
@@ -113,27 +132,13 @@ static inline void ofono_watch_signal_queue(struct ofono_watch_object *self,
 
 static void ofono_watch_emit_queued_signals(struct ofono_watch_object *self)
 {
-	if (self->signals_suspended < 1) {
-		int i;
+	int i;
 
-		for (i = 0; self->queued_signals && i < SIGNAL_COUNT; i++) {
-			if (self->queued_signals & ofono_watch_signal_bit(i)) {
-				ofono_watch_signal_emit(self, i);
-			}
+	for (i = 0; self->queued_signals && i < SIGNAL_COUNT; i++) {
+		if (self->queued_signals & ofono_watch_signal_bit(i)) {
+			ofono_watch_signal_emit(self, i);
 		}
 	}
-}
-
-static inline void ofono_watch_suspend_signals(struct ofono_watch_object *self)
-{
-	self->signals_suspended++;
-}
-
-static inline void ofono_watch_resume_signals(struct ofono_watch_object *self)
-{
-	ASSERT(self->signals_suspended > 0);
-	self->signals_suspended--;
-	ofono_watch_emit_queued_signals(self);
 }
 
 static void ofono_watch_iccid_update(struct ofono_watch_object *self,
@@ -284,7 +289,6 @@ static void ofono_watch_set_sim(struct ofono_watch_object *self,
 		}
 		watch->sim = sim;
 		ofono_watch_signal_queue(self, SIGNAL_SIM_CHANGED);
-		ofono_watch_suspend_signals(self);
 
 		/* Reset the current state */
 		ofono_watch_iccid_update(self, NULL);
@@ -313,9 +317,7 @@ static void ofono_watch_set_sim(struct ofono_watch_object *self,
 					ofono_watch_imsi_notify, self,
 					ofono_watch_imsi_destroy);
 		}
-
-		/* Emit the pending signals. */
-		ofono_watch_resume_signals(self);
+		ofono_watch_emit_queued_signals(self);
 	}
 }
 
@@ -342,6 +344,36 @@ static void ofono_watch_sim_destroy(void *user_data)
 	self->sim_watch_id = 0;
 }
 
+static void ofono_watch_netreg_update(struct ofono_watch_object *self)
+{
+	struct ofono_watch *watch = &self->pub;
+	struct ofono_netreg *netreg = watch->netreg;
+	enum ofono_netreg_status status = ofono_netreg_get_status(netreg);
+	const char *mcc = ofono_netreg_get_mcc(netreg);
+	const char *mnc = ofono_netreg_get_mnc(netreg);
+	const char *name = ofono_netreg_get_name(netreg);
+
+	if (watch->reg_status != status) {
+		watch->reg_status = status;
+		ofono_watch_signal_queue(self, SIGNAL_REG_STATUS_CHANGED);
+	}
+	if (g_strcmp0(self->reg_mcc, mcc)) {
+		g_free(self->reg_mcc);
+		watch->reg_mcc = self->reg_mcc = g_strdup(mcc);
+		ofono_watch_signal_queue(self, SIGNAL_REG_MCC_CHANGED);
+	}
+	if (g_strcmp0(self->reg_mnc, mnc)) {
+		g_free(self->reg_mnc);
+		watch->reg_mnc = self->reg_mnc = g_strdup(mnc);
+		ofono_watch_signal_queue(self, SIGNAL_REG_MNC_CHANGED);
+	}
+	if (g_strcmp0(self->reg_name, name)) {
+		g_free(self->reg_name);
+		watch->reg_name = self->reg_name = g_strdup(name);
+		ofono_watch_signal_queue(self, SIGNAL_REG_NAME_CHANGED);
+	}
+}
+
 static void ofono_watch_set_netreg(struct ofono_watch_object *self,
 						struct ofono_netreg *netreg)
 {
@@ -349,8 +381,10 @@ static void ofono_watch_set_netreg(struct ofono_watch_object *self,
 
 	if (watch->netreg != netreg) {
 		watch->netreg = netreg;
-		ofono_watch_signal_emit(self, SIGNAL_NETREG_CHANGED);
+		ofono_watch_signal_queue(self, SIGNAL_NETREG_CHANGED);
 	}
+	ofono_watch_netreg_update(self);
+	ofono_watch_emit_queued_signals(self);
 }
 
 static void ofono_watch_netreg_notify(struct ofono_atom *atom,
@@ -374,6 +408,41 @@ static void ofono_watch_netreg_destroy(void *user_data)
 	struct ofono_watch_object *self = OFONO_WATCH_OBJECT(user_data);
 
 	self->netreg_watch_id = 0;
+}
+
+static void ofono_watch_set_gprs(struct ofono_watch_object *self,
+						struct ofono_gprs *gprs)
+{
+	struct ofono_watch *watch = &self->pub;
+
+	if (watch->gprs != gprs) {
+		watch->gprs = gprs;
+		ofono_watch_signal_queue(self, SIGNAL_GPRS_CHANGED);
+		ofono_watch_emit_queued_signals(self);
+	}
+}
+
+static void ofono_watch_gprs_notify(struct ofono_atom *atom,
+			enum ofono_atom_watch_condition cond, void *user_data)
+{
+	struct ofono_watch_object *self = OFONO_WATCH_OBJECT(user_data);
+
+	if (cond == OFONO_ATOM_WATCH_CONDITION_REGISTERED) {
+		struct ofono_gprs *gprs = __ofono_atom_get_data(atom);
+
+		DBG_(self, "gprs registered");
+		ofono_watch_set_gprs(self, gprs);
+	} else if (cond == OFONO_ATOM_WATCH_CONDITION_UNREGISTERED) {
+		DBG_(self, "gprs unregistered");
+		ofono_watch_set_gprs(self, NULL);
+	}
+}
+
+static void ofono_watch_gprs_destroy(void *user_data)
+{
+	struct ofono_watch_object *self = OFONO_WATCH_OBJECT(user_data);
+
+	self->gprs_watch_id = 0;
 }
 
 static void ofono_watch_online_update(struct ofono_watch_object *self,
@@ -426,12 +495,27 @@ static void ofono_watch_setup_modem(struct ofono_watch_object *self)
 	self->netreg_watch_id = __ofono_modem_add_atom_watch(watch->modem,
 		OFONO_ATOM_TYPE_NETREG, ofono_watch_netreg_notify,
 		self, ofono_watch_netreg_destroy);
+
+	ASSERT(!self->gprs_watch_id);
+	self->gprs_watch_id = __ofono_modem_add_atom_watch(watch->modem,
+		OFONO_ATOM_TYPE_GPRS, ofono_watch_gprs_notify,
+		self, ofono_watch_gprs_destroy);
 }
 
 static void ofono_watch_cleanup_modem(struct ofono_watch_object *self,
 						struct ofono_modem *modem)
 {
-	/* Caller checks the self->modem isn't NULL */
+	/*
+	 * Caller checks that modem isn't NULL.
+	 *
+	 * Watch ids are getting zeroed when __ofono_watchlist_free() is
+	 * called for the respective watch list. Therefore ids can be zero
+	 * even if we never explicitely removed them.
+	 *
+	 * Calling __ofono_modem_remove_online_watch() and other such
+	 * functions after respective watch lists have been deallocated
+	 * by modem_unregister() will crash the core.
+	 */
 	if (self->online_watch_id) {
 		__ofono_modem_remove_online_watch(modem, self->online_watch_id);
 		ASSERT(!self->online_watch_id);
@@ -447,8 +531,14 @@ static void ofono_watch_cleanup_modem(struct ofono_watch_object *self,
 		ASSERT(!self->netreg_watch_id);
 	}
 
+	if (self->gprs_watch_id) {
+		__ofono_modem_remove_atom_watch(modem, self->gprs_watch_id);
+		ASSERT(!self->gprs_watch_id);
+	}
+
 	ofono_watch_set_sim(self, NULL);
 	ofono_watch_set_netreg(self, NULL);
+	ofono_watch_set_gprs(self, NULL);
 }
 
 static void ofono_watch_set_modem(struct ofono_watch_object *self,
@@ -585,14 +675,13 @@ void ofono_watch_unref(struct ofono_watch *watch)
 static void ofono_watch_signal_cb(struct ofono_watch_object *source,
 					struct ofono_watch_closure *closure)
 {
-	closure->cb(&source->pub, closure->user_data);
+	closure->cb.generic(&source->pub, closure->user_data);
 }
 
-static unsigned long ofono_watch_add_signal_handler(struct ofono_watch *watch,
-	enum ofono_watch_signal signal, ofono_watch_cb_t cb, void *user_data)
+static unsigned long ofono_watch_add_handler(struct ofono_watch_object *self,
+			enum ofono_watch_signal signal, GCallback handler,
+			GCallback cb, void *user_data)
 {
-	struct ofono_watch_object *self = ofono_watch_object_cast(watch);
-
 	if (self && cb) {
 		/*
 		 * We can't directly connect the provided callback because
@@ -606,8 +695,8 @@ static unsigned long ofono_watch_add_signal_handler(struct ofono_watch *watch,
 				(sizeof(struct ofono_watch_closure), NULL);
 
 		closure->cclosure.closure.data = closure;
-		closure->cclosure.callback = G_CALLBACK(ofono_watch_signal_cb);
-		closure->cb = cb;
+		closure->cclosure.callback = handler;
+		closure->cb.ptr = cb;
 		closure->user_data = user_data;
 
 		return g_signal_connect_closure_by_id(self,
@@ -617,60 +706,48 @@ static unsigned long ofono_watch_add_signal_handler(struct ofono_watch *watch,
 	return 0;
 }
 
-unsigned long ofono_watch_add_modem_changed_handler(struct ofono_watch *watch,
-				ofono_watch_cb_t cb, void *user_data)
+static unsigned long ofono_watch_add_signal_handler(struct ofono_watch *watch,
+	enum ofono_watch_signal signal, ofono_watch_cb_t cb, void *user_data)
 {
-	return ofono_watch_add_signal_handler(watch, SIGNAL_MODEM_CHANGED,
-							cb, user_data);
+	return ofono_watch_add_handler(ofono_watch_object_cast(watch), signal,
+		G_CALLBACK(ofono_watch_signal_cb), G_CALLBACK(cb), user_data);
 }
 
-unsigned long ofono_watch_add_online_changed_handler(struct ofono_watch *watch,
-				ofono_watch_cb_t cb, void *user_data)
+#define ADD_SIGNAL_HANDLER_PROC(name,NAME) \
+unsigned long ofono_watch_add_##name##_changed_handler \
+	(struct ofono_watch *w, ofono_watch_cb_t cb, void *arg) \
+{ return ofono_watch_add_signal_handler(w, SIGNAL_##NAME##_CHANGED, cb, arg); }
+
+ADD_SIGNAL_HANDLER_PROC(modem,MODEM)
+ADD_SIGNAL_HANDLER_PROC(online,ONLINE)
+ADD_SIGNAL_HANDLER_PROC(sim,SIM)
+ADD_SIGNAL_HANDLER_PROC(sim_state,SIM_STATE)
+ADD_SIGNAL_HANDLER_PROC(iccid,ICCID)
+ADD_SIGNAL_HANDLER_PROC(imsi,IMSI)
+ADD_SIGNAL_HANDLER_PROC(spn,SPN)
+ADD_SIGNAL_HANDLER_PROC(netreg,NETREG)
+ADD_SIGNAL_HANDLER_PROC(reg_status,REG_STATUS)
+ADD_SIGNAL_HANDLER_PROC(reg_mcc,REG_MCC)
+ADD_SIGNAL_HANDLER_PROC(reg_mnc,REG_MNC)
+ADD_SIGNAL_HANDLER_PROC(reg_name,REG_NAME)
+ADD_SIGNAL_HANDLER_PROC(gprs,GPRS)
+
+static void ofono_watch_gprs_settings_signal_cb(struct ofono_watch_object *src,
+			enum ofono_gprs_context_type type,
+			const struct ofono_gprs_primary_context *ctx,
+			struct ofono_watch_closure *closure)
 {
-	return ofono_watch_add_signal_handler(watch, SIGNAL_ONLINE_CHANGED,
-							cb, user_data);
+	closure->cb.gprs_settings(&src->pub, type, ctx, closure->user_data);
 }
 
-unsigned long ofono_watch_add_sim_changed_handler(struct ofono_watch *watch,
-				ofono_watch_cb_t cb, void *user_data)
+unsigned long ofono_watch_add_gprs_settings_changed_handler
+		(struct ofono_watch *watch, ofono_watch_gprs_settings_cb_t cb,
+							void *user_data)
 {
-	return ofono_watch_add_signal_handler(watch, SIGNAL_SIM_CHANGED,
-							cb, user_data);
-}
-
-unsigned long ofono_watch_add_sim_state_changed_handler
-	(struct ofono_watch *watch, ofono_watch_cb_t cb, void *user_data)
-{
-	return ofono_watch_add_signal_handler(watch, SIGNAL_SIM_STATE_CHANGED,
-							cb, user_data);
-}
-
-unsigned long ofono_watch_add_iccid_changed_handler(struct ofono_watch *watch,
-				ofono_watch_cb_t cb, void *user_data)
-{
-	return ofono_watch_add_signal_handler(watch, SIGNAL_ICCID_CHANGED,
-							cb, user_data);
-}
-
-unsigned long ofono_watch_add_imsi_changed_handler(struct ofono_watch *watch,
-				ofono_watch_cb_t cb, void *user_data)
-{
-	return ofono_watch_add_signal_handler(watch, SIGNAL_IMSI_CHANGED,
-							cb, user_data);
-}
-
-unsigned long ofono_watch_add_spn_changed_handler(struct ofono_watch *watch,
-				ofono_watch_cb_t cb, void *user_data)
-{
-	return ofono_watch_add_signal_handler(watch, SIGNAL_SPN_CHANGED,
-							cb, user_data);
-}
-
-unsigned long ofono_watch_add_netreg_changed_handler(struct ofono_watch *watch,
-				ofono_watch_cb_t cb, void *user_data)
-{
-	return ofono_watch_add_signal_handler(watch, SIGNAL_NETREG_CHANGED,
-							cb, user_data);
+	return ofono_watch_add_handler(ofono_watch_object_cast(watch),
+			SIGNAL_GPRS_SETTINGS_CHANGED,
+			G_CALLBACK(ofono_watch_gprs_settings_signal_cb),
+			G_CALLBACK(cb), user_data);
 }
 
 void ofono_watch_remove_handler(struct ofono_watch *watch, unsigned long id)
@@ -698,8 +775,44 @@ void ofono_watch_remove_handlers(struct ofono_watch *watch, unsigned long *ids,
 	}
 }
 
+void __ofono_watch_netreg_changed(const char *path)
+{
+	if (path && ofono_watch_table) {
+		struct ofono_watch_object *self =
+			g_hash_table_lookup(ofono_watch_table, path);
+
+		if (self) {
+			g_object_ref(self);
+			ofono_watch_netreg_update(self);
+			ofono_watch_emit_queued_signals(self);
+			g_object_unref(self);
+		}
+	}
+}
+
+void __ofono_watch_gprs_settings_changed(const char *path,
+			enum ofono_gprs_context_type type,
+			const struct ofono_gprs_primary_context *settings)
+{
+	if (path && ofono_watch_table) {
+		struct ofono_watch_object *self =
+			g_hash_table_lookup(ofono_watch_table, path);
+
+		if (self) {
+			g_object_ref(self);
+			g_signal_emit(self, ofono_watch_signals
+				[SIGNAL_GPRS_SETTINGS_CHANGED], 0, type,
+					settings);
+			g_object_unref(self);
+		}
+	}
+}
+
 static void ofono_watch_object_init(struct ofono_watch_object *self)
 {
+	struct ofono_watch *watch = &self->pub;
+
+	watch->reg_status = OFONO_NETREG_STATUS_NONE;
 }
 
 static void ofono_watch_object_finalize(GObject *object)
@@ -713,10 +826,8 @@ static void ofono_watch_object_finalize(GObject *object)
 		watch->modem = NULL;
 		ofono_watch_cleanup_modem(self, modem);
 	}
-	if (self->modem_watch_id) {
-		__ofono_modemwatch_remove(self->modem_watch_id);
-		ASSERT(!self->modem_watch_id);
-	}
+	__ofono_modemwatch_remove(self->modem_watch_id);
+	ASSERT(!self->modem_watch_id);
 	g_free(self->path);
 	G_OBJECT_CLASS(ofono_watch_object_parent_class)->finalize(object);
 }
@@ -732,6 +843,16 @@ static void ofono_watch_object_class_init(OfonoWatchObjectClass *klass)
 	NEW_SIGNAL(klass, IMSI);
 	NEW_SIGNAL(klass, SPN);
 	NEW_SIGNAL(klass, NETREG);
+	NEW_SIGNAL(klass, REG_STATUS);
+	NEW_SIGNAL(klass, REG_MCC);
+	NEW_SIGNAL(klass, REG_MNC);
+	NEW_SIGNAL(klass, REG_NAME);
+	NEW_SIGNAL(klass, GPRS);
+	ofono_watch_signals[SIGNAL_GPRS_SETTINGS_CHANGED] =
+		g_signal_new(SIGNAL_GPRS_SETTINGS_CHANGED_NAME,
+			G_OBJECT_CLASS_TYPE(klass), G_SIGNAL_RUN_FIRST,
+				0, NULL, NULL, NULL, G_TYPE_NONE,
+				2, G_TYPE_INT, G_TYPE_POINTER);
 }
 
 /*
