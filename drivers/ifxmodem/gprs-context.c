@@ -29,6 +29,7 @@
 #include <errno.h>
 #include <sys/stat.h>
 
+#include <ell/ell.h>
 #include <glib.h>
 
 #include <ofono/log.h>
@@ -201,8 +202,8 @@ static void dns_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 		if ((unsigned int) cid == gcd->active_context) {
 			found = TRUE;
-			strncpy(gcd->dns1, dns1, sizeof(gcd->dns1));
-			strncpy(gcd->dns2, dns2, sizeof(gcd->dns2));
+			l_strlcpy(gcd->dns1, dns1, sizeof(gcd->dns1));
+			l_strlcpy(gcd->dns2, dns2, sizeof(gcd->dns2));
 		}
 	}
 
@@ -251,7 +252,7 @@ static void address_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	if (!g_at_result_iter_next_string(&iter, &address))
 		goto error;
 
-	strncpy(gcd->address, address, sizeof(gcd->address));
+	l_strlcpy(gcd->address, address, sizeof(gcd->address));
 
 	if (g_at_chat_send(gcd->chat, "AT+XDNS?", xdns_prefix,
 					dns_cb, gc, NULL) > 0)
@@ -347,8 +348,8 @@ static void cgcontrdp_cb(gboolean ok, GAtResult *result, gpointer user_data)
 			break;
 	}
 
-	strncpy(gcd->dns1, dns[0], sizeof(gcd->dns1));
-	strncpy(gcd->dns2, dns[1], sizeof(gcd->dns2));
+	l_strlcpy(gcd->dns1, dns[0], sizeof(gcd->dns1));
+	l_strlcpy(gcd->dns2, dns[1], sizeof(gcd->dns2));
 	dns[2] = 0;
 
 	DBG("DNS: %s, %s\n", gcd->dns1, gcd->dns2);
@@ -391,7 +392,7 @@ static void cgcontrdp_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	}
 
 	if (gw)
-		strncpy(gcd->gateway, gw, sizeof(gcd->gateway));
+		l_strlcpy(gcd->gateway, gw, sizeof(gcd->gateway));
 
 	gcd->state = STATE_ACTIVE;
 
