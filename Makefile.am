@@ -21,6 +21,7 @@ ell_headers = ell/util.h \
 			ell/strv.h \
 			ell/utf8.h \
 			ell/queue.h \
+			ell/timeout.h \
 			ell/main.h \
 			ell/idle.h \
 			ell/signal.h \
@@ -41,6 +42,7 @@ ell_sources = ell/private.h \
 			ell/strv.c \
 			ell/utf8.c \
 			ell/queue.c \
+			ell/timeout.c \
 			ell/main.c \
 			ell/idle.c \
 			ell/signal.c \
