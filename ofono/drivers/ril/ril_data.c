@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2016-2018 Jolla Ltd.
+ *  Copyright (C) 2016-2019 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -27,12 +27,6 @@
 #include <grilio_channel.h>
 #include <grilio_parser.h>
 #include <grilio_request.h>
-
-#define DATA_PROFILE_DEFAULT_STR "0"
-
-#define PROTO_IP_STR "IP"
-#define PROTO_IPV6_STR "IPV6"
-#define PROTO_IPV4V6_STR "IPV4V6"
 
 /* Yes, it does sometimes take minutes in roaming */
 #define SETUP_DATA_CALL_TIMEOUT (300*1000) /* ms */
@@ -103,7 +97,7 @@ struct ril_data_priv {
 	struct ril_radio *radio;
 	struct ril_network *network;
 	struct ril_data_manager *dm;
-	struct ril_vendor_hook *vendor_hook;
+	struct ril_vendor *vendor;
 
 	enum ril_data_priv_flags flags;
 	enum ril_restricted_state restricted_state;
@@ -288,34 +282,6 @@ static gint ril_data_call_compare(gconstpointer a, gconstpointer b)
 	}
 }
 
-const char *ril_data_ofono_protocol_to_ril(enum ofono_gprs_proto proto)
-{
-	switch (proto) {
-	case OFONO_GPRS_PROTO_IPV6:
-		return PROTO_IPV6_STR;
-	case OFONO_GPRS_PROTO_IPV4V6:
-		return PROTO_IPV4V6_STR;
-	case OFONO_GPRS_PROTO_IP:
-		return PROTO_IP_STR;
-	default:
-		return NULL;
-	}
-}
-
-int ril_data_protocol_to_ofono(const gchar *str)
-{
-	if (str) {
-		if (!strcmp(str, PROTO_IPV6_STR)) {
-			return OFONO_GPRS_PROTO_IPV6;
-		} else if (!strcmp(str, PROTO_IPV4V6_STR)) {
-			return OFONO_GPRS_PROTO_IPV4V6;
-		} else if (!strcmp(str, PROTO_IP_STR)) {
-			return OFONO_GPRS_PROTO_IP;
-		}
-	}
-	return -1;
-}
-
 static gboolean ril_data_call_parse_default(struct ril_data_call *call,
 					int version, GRilIoParser *rilp)
 {
@@ -335,7 +301,7 @@ static gboolean ril_data_call_parse_default(struct ril_data_call *call,
 	call->dnses = grilio_parser_split_utf8(rilp, " ");
 	call->gateways = grilio_parser_split_utf8(rilp, " ");
 
-	prot = ril_data_protocol_to_ofono(prot_str);
+	prot = ril_protocol_to_ofono(prot_str);
 	if (prot < 0 && status == PDP_FAIL_NONE) {
 		ofono_error("Invalid protocol: %s", prot_str);
 	}
@@ -360,12 +326,12 @@ static gboolean ril_data_call_parse_default(struct ril_data_call *call,
 	return TRUE;
 }
 
-static struct ril_data_call *ril_data_call_parse(struct ril_vendor_hook *hook,
+static struct ril_data_call *ril_data_call_parse(struct ril_vendor *vendor,
 					int version, GRilIoParser *parser)
 {
 	GRilIoParser copy = *parser;
 	struct ril_data_call *call = ril_data_call_new();
-	gboolean parsed = ril_vendor_hook_data_call_parse(hook, call,
+	gboolean parsed = ril_vendor_data_call_parse(vendor, call,
 							version, parser);
 
 	if (!parsed) {
@@ -381,7 +347,7 @@ static struct ril_data_call *ril_data_call_parse(struct ril_vendor_hook *hook,
 			"mtu=%d,address=%s,dns=%s %s,gateways=%s]",
 			call->status, call->retry_time,
 			call->cid, call->active,
-			ril_data_ofono_protocol_to_ril(call->prot),
+			ril_protocol_from_ofono(call->prot),
 			call->ifname, call->mtu,
 			call->addresses ? call->addresses[0] : NULL,
 			call->dnses ? call->dnses[0] : NULL,
@@ -396,7 +362,7 @@ static struct ril_data_call *ril_data_call_parse(struct ril_vendor_hook *hook,
 }
 
 static struct ril_data_call_list *ril_data_call_list_parse(const void *data,
-				guint len, struct ril_vendor_hook *hook,
+				guint len, struct ril_vendor *vendor,
 				enum ril_data_call_format format)
 {
 	guint32 version, n, i;
@@ -417,7 +383,7 @@ static struct ril_data_call_list *ril_data_call_list_parse(const void *data,
 		}
 
 		for (i = 0; i < n && !grilio_parser_at_end(&rilp); i++) {
-			struct ril_data_call *call = ril_data_call_parse(hook,
+			struct ril_data_call *call = ril_data_call_parse(vendor,
 							list->version, &rilp);
 
 			if (call) {
@@ -635,7 +601,7 @@ static void ril_data_call_list_changed_cb(GRilIoChannel *io, guint event,
 	}
 
 	ril_data_set_calls(self, ril_data_call_list_parse(data, len,
-			priv->vendor_hook, priv->options.data_call_format));
+			priv->vendor, priv->options.data_call_format));
 }
 
 static void ril_data_query_data_calls_cb(GRilIoChannel *io, int ril_status,
@@ -652,7 +618,7 @@ static void ril_data_query_data_calls_cb(GRilIoChannel *io, int ril_status,
 	priv->query_id = 0;
 	if (ril_status == RIL_E_SUCCESS) {
 		ril_data_set_calls(self, ril_data_call_list_parse(data, len,
-			priv->vendor_hook, priv->options.data_call_format));
+			priv->vendor, priv->options.data_call_format));
 	} else {
 		/* RADIO_NOT_AVAILABLE == no calls */
 		ril_data_set_calls(self, NULL);
@@ -857,8 +823,8 @@ static void ril_data_call_setup_cb(GRilIoChannel *io, int ril_status,
 	struct ril_data_call *call = NULL;
 
 	if (ril_status == RIL_E_SUCCESS) {
-		list = ril_data_call_list_parse(data, len,
-			priv->vendor_hook, priv->options.data_call_format);
+		list = ril_data_call_list_parse(data, len, priv->vendor,
+					priv->options.data_call_format);
 	}
 
 	if (list) {
@@ -920,7 +886,7 @@ static gboolean ril_data_call_setup_submit(struct ril_data_request *req)
 	struct ril_data_request_setup *setup =
 		G_CAST(req, struct ril_data_request_setup, req);
 	struct ril_data_priv *priv = req->data->priv;
-	const char *proto_str = ril_data_ofono_protocol_to_ril(setup->proto);
+	const char *proto_str = ril_protocol_from_ofono(setup->proto);
 	GRilIoRequest *ioreq;
 	int tech, auth = RIL_AUTH_NONE;
 
@@ -946,24 +912,11 @@ static gboolean ril_data_call_setup_submit(struct ril_data_request *req)
 	}
 
 	if (setup->username && setup->username[0]) {
-		switch (setup->auth_method) {
-		case OFONO_GPRS_AUTH_METHOD_ANY:
-			auth = RIL_AUTH_BOTH;
-			break;
-		case OFONO_GPRS_AUTH_METHOD_NONE:
-			auth = RIL_AUTH_NONE;
-			break;
-		case OFONO_GPRS_AUTH_METHOD_CHAP:
-			auth = RIL_AUTH_CHAP;
-			break;
-		case OFONO_GPRS_AUTH_METHOD_PAP:
-			auth = RIL_AUTH_PAP;
-			break;
-		}
+		auth = ril_auth_method_from_ofono(setup->auth_method);
 	}
 
 	/* Give vendor code a chance to build a vendor specific packet */
-	ioreq = ril_vendor_hook_data_call_req(priv->vendor_hook, tech,
+	ioreq = ril_vendor_data_call_req(priv->vendor, tech,
 			DATA_PROFILE_DEFAULT_STR, setup->apn, setup->username,
 			setup->password, auth, proto_str);
 
@@ -1231,7 +1184,7 @@ struct ril_data *ril_data_new(struct ril_data_manager *dm, const char *name,
 		struct ril_radio *radio, struct ril_network *network,
 		GRilIoChannel *io, const struct ril_data_options *options,
 		const struct ril_slot_config *config,
-		struct ril_vendor_hook *vendor_hook)
+		struct ril_vendor *vendor)
 {
 	GASSERT(dm);
 	if (G_LIKELY(dm)) {
@@ -1264,7 +1217,7 @@ struct ril_data *ril_data_new(struct ril_data_manager *dm, const char *name,
 		priv->dm = ril_data_manager_ref(dm);
 		priv->radio = ril_radio_ref(radio);
 		priv->network = ril_network_ref(network);
-		priv->vendor_hook = ril_vendor_hook_ref(vendor_hook);
+		priv->vendor = ril_vendor_ref(vendor);
 
 		priv->io_event_id[IO_EVENT_DATA_CALL_LIST_CHANGED] =
 			grilio_channel_add_unsol_event_handler(io,
@@ -1607,7 +1560,7 @@ static void ril_data_finalize(GObject *object)
 	ril_network_unref(priv->network);
 	ril_data_manager_unref(priv->dm);
 	ril_data_call_list_free(self->data_calls);
-	ril_vendor_hook_unref(priv->vendor_hook);
+	ril_vendor_unref(priv->vendor);
 	G_OBJECT_CLASS(ril_data_parent_class)->finalize(object);
 }
 

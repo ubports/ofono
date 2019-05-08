@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2016-2018 Jolla Ltd.
+ *  Copyright (C) 2019 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -14,145 +14,183 @@
  */
 
 #include "ril_vendor.h"
+#include "ril_vendor_impl.h"
 #include "ril_log.h"
 
-struct ril_vendor_hook *ril_vendor_create_hook
-		(const struct ril_vendor_driver *vendor, GRilIoChannel *io,
-			const char *path, const struct ril_slot_config *config,
-			struct ril_network *network)
-{
-	if (vendor) {
-		const void *data = vendor->driver_data;
+#include <grilio_channel.h>
 
-		/*
-		 * NOTE: we are looking for the callback in the base but
-		 * keeping the original driver data.
-		 */
-		while (!vendor->create_hook && vendor->base) {
-			vendor = vendor->base;
-		}
-		if (vendor->create_hook) {
-			return vendor->create_hook(data, io, path, config,
-								network);
+G_DEFINE_ABSTRACT_TYPE(RilVendor, ril_vendor, G_TYPE_OBJECT)
+
+/* Vendor driver descriptors are in the "__vendor" section */
+extern const struct ril_vendor_driver __start___vendor[];
+extern const struct ril_vendor_driver __stop___vendor[];
+
+const struct ril_vendor_driver *ril_vendor_find_driver(const char *name)
+{
+	if (name) {
+		const struct ril_vendor_driver *d;
+
+		for (d = __start___vendor; d < __stop___vendor; d++) {
+			if (!strcasecmp(d->name, name)) {
+				return d;
+			}
 		}
 	}
 	return NULL;
 }
 
-struct ril_vendor_hook *ril_vendor_hook_init(struct ril_vendor_hook *self,
-				const struct ril_vendor_hook_proc *proc,
-				ril_vendor_hook_free_proc free)
+RilVendor *ril_vendor_create(const struct ril_vendor_driver *driver,
+				GRilIoChannel *io, const char *path,
+				const struct ril_slot_config *config)
 {
-	self->proc = proc;
-	self->free = free;
-	g_atomic_int_set(&self->ref_count, 1);
-	return self;
+	return (driver && driver->create_vendor) ?
+		driver->create_vendor(driver->driver_data, io, path, config) :
+		NULL;
 }
 
-struct ril_vendor_hook *ril_vendor_hook_ref(struct ril_vendor_hook *self)
+RilVendor *ril_vendor_ref(RilVendor *self)
 {
-	if (self) {
-		GASSERT(self->ref_count > 0);
-		g_atomic_int_inc(&self->ref_count);
+	if (G_LIKELY(self)) {
+		g_object_ref(RIL_VENDOR(self));
 	}
 	return self;
 }
 
-static void ril_vendor_hook_free(struct ril_vendor_hook *self)
+void ril_vendor_unref(RilVendor *self)
 {
-	if (self->free) {
-		self->free(self);
-	}
-}
-
-void ril_vendor_hook_unref(struct ril_vendor_hook *self)
-{
-	if (self) {
-		GASSERT(self->ref_count > 0);
-		if (g_atomic_int_dec_and_test(&self->ref_count)) {
-			ril_vendor_hook_free(self);
-		}
+	if (G_LIKELY(self)) {
+		g_object_unref(RIL_VENDOR(self));
 	}
 }
 
 void ril_vendor_get_defaults(const struct ril_vendor_driver *vendor,
 					struct ril_vendor_defaults *defaults)
 {
-	if (vendor) {
-		while (!vendor->get_defaults && vendor->base) {
-			vendor = vendor->base;
-		}
-		if (vendor->get_defaults) {
-			vendor->get_defaults(defaults);
-		}
+	if (vendor && vendor->get_defaults) {
+		vendor->get_defaults(defaults);
 	}
 }
 
-const char *ril_vendor_hook_request_to_string(struct ril_vendor_hook *self,
-							guint request)
+const char *ril_vendor_request_to_string(RilVendor *self, guint request)
 {
-	if (self) {
-		const struct ril_vendor_hook_proc *proc = self->proc;
-
-		while (!proc->request_to_string && proc->base) {
-			proc = proc->base;
-		}
-		if (proc->request_to_string) {
-			return proc->request_to_string(self, request);
-		}
-	}
-	return NULL;
+	return G_LIKELY(self) ? RIL_VENDOR_GET_CLASS(self)->
+				request_to_string(self, request) : NULL;
 }
 
-const char *ril_vendor_hook_event_to_string(struct ril_vendor_hook *self,
-							guint event)
+const char *ril_vendor_event_to_string(RilVendor *self, guint event)
 {
-	if (self) {
-		const struct ril_vendor_hook_proc *proc = self->proc;
-
-		while (!proc->event_to_string && proc->base) {
-			proc = proc->base;
-		}
-		if (proc->event_to_string) {
-			return proc->event_to_string(self, event);
-		}
-	}
-	return NULL;
+	return G_LIKELY(self) ? RIL_VENDOR_GET_CLASS(self)->
+				event_to_string(self, event) : NULL;
 }
 
-GRilIoRequest *ril_vendor_hook_data_call_req(struct ril_vendor_hook *self,
+void ril_vendor_set_network(RilVendor *self, struct ril_network *nw)
+{
+	if (G_LIKELY(self)) {
+		RIL_VENDOR_GET_CLASS(self)->set_network(self, nw);
+	}
+}
+
+GRilIoRequest *ril_vendor_set_attach_apn_req(RilVendor *self,
+			const char *profile, const char *apn,
+			const char *username, const char *password,
+			enum ril_auth auth, const char *proto)
+{
+	return G_LIKELY(self) ? RIL_VENDOR_GET_CLASS(self)->
+		set_attach_apn_req(self, profile, apn, username, password,
+							auth, proto) : NULL;
+}
+
+GRilIoRequest *ril_vendor_data_call_req(RilVendor *self,
 			int tech, const char *profile, const char *apn,
 			const char *username, const char *password,
 			enum ril_auth auth, const char *proto)
 {
-	if (self) {
-		const struct ril_vendor_hook_proc *proc = self->proc;
+	return G_LIKELY(self) ? RIL_VENDOR_GET_CLASS(self)->
+		data_call_req(self, tech, profile, apn, username, password,
+							auth, proto) : NULL;
+}
 
-		while (!proc->data_call_req && proc->base) {
-			proc = proc->base;
+gboolean ril_vendor_data_call_parse(RilVendor *self,
+		struct ril_data_call *call, int ver, GRilIoParser *rilp)
+{
+	return G_LIKELY(self) && RIL_VENDOR_GET_CLASS(self)->
+				data_call_parse(self, call, ver, rilp);
+}
+
+static void ril_vendor_default_set_network(RilVendor *self,
+						struct ril_network *network)
+{
+	if (self->network != network) {
+		if (self->network) {
+			g_object_remove_weak_pointer(G_OBJECT(self->network),
+						(gpointer*) &self->network);
 		}
-		if (proc->data_call_req) {
-			return proc->data_call_req(self, tech, profile, apn,
-					username, password, auth, proto);
+		self->network = network;
+		if (self->network) {
+			g_object_add_weak_pointer(G_OBJECT(network),
+						(gpointer*) &self->network);
 		}
 	}
+}
+
+static const char *ril_vendor_default_id_to_string(RilVendor *self, guint id)
+{
 	return NULL;
 }
 
-gboolean ril_vendor_hook_data_call_parse(struct ril_vendor_hook *self,
-		struct ril_data_call *call, int ver, GRilIoParser *rilp)
+static GRilIoRequest *ril_vendor_default_set_attach_apn_req(RilVendor *self,
+			const char *profile, const char *apn,
+			const char *username, const char *password,
+			enum ril_auth auth, const char *proto)
 {
-	if (self) {
-		const struct ril_vendor_hook_proc *proc = self->proc;
+	return NULL;
+}
 
-		while (!proc->data_call_parse && proc->base) {
-			proc = proc->base;
-		}
-		if (proc->data_call_parse) {
-			return proc->data_call_parse(self, call, ver, rilp);
-		}
-	}
+static GRilIoRequest *ril_vendor_default_data_call_req(RilVendor *self,
+			int tech, const char *profile, const char *apn,
+			const char *username, const char *password,
+			enum ril_auth auth, const char *proto)
+{
+	return NULL;
+}
+
+static gboolean ril_vendor_default_data_call_parse(RilVendor *self,
+			struct ril_data_call *call, int version,
+			GRilIoParser *rilp)
+{
 	return FALSE;
+}
+
+void ril_vendor_init_base(RilVendor *self, GRilIoChannel *io)
+{
+	self->io = grilio_channel_ref(io);
+}
+
+static void ril_vendor_init(RilVendor *self)
+{
+}
+
+static void ril_vendor_finalize(GObject* object)
+{
+	RilVendor *self = RIL_VENDOR(object);
+
+	if (self->network) {
+		g_object_remove_weak_pointer(G_OBJECT(self->network),
+						(gpointer*) &self->network);
+	}
+	grilio_channel_unref(self->io);
+	G_OBJECT_CLASS(ril_vendor_parent_class)->finalize(object);
+}
+
+static void ril_vendor_class_init(RilVendorClass* klass)
+{
+    G_OBJECT_CLASS(klass)->finalize = ril_vendor_finalize;
+    klass->set_network = ril_vendor_default_set_network;
+    klass->request_to_string = ril_vendor_default_id_to_string;
+    klass->event_to_string = ril_vendor_default_id_to_string;
+    klass->set_attach_apn_req = ril_vendor_default_set_attach_apn_req;
+    klass->data_call_req = ril_vendor_default_data_call_req;
+    klass->data_call_parse = ril_vendor_default_data_call_parse;
 }
 
 /*
