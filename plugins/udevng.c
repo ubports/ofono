@@ -1241,9 +1241,11 @@ static gboolean setup_xmm7xxx(struct modem_info *modem)
 	return TRUE;
 }
 
-static gboolean setup_sim7100(struct modem_info *modem)
+static gboolean setup_sim7x00(struct modem_info *modem)
 {
-	const char *at = NULL, *ppp = NULL, *gps = NULL, *diag = NULL, *audio = NULL;
+	const char *audio = NULL, *diag = NULL, *gps = NULL;
+	const char *mdm = NULL, *net = NULL, *ppp = NULL;
+	const char *qmi = NULL;
 	GSList *list;
 
 	DBG("%s", modem->syspath);
@@ -1251,10 +1253,12 @@ static gboolean setup_sim7100(struct modem_info *modem)
 	for (list = modem->devices; list; list = list->next) {
 		struct device_info *info = list->data;
 
-		DBG("%s %s", info->devnode, info->number);
+		DBG("%s %s %s %s %s %s", info->devnode, info->interface,
+						info->number, info->label,
+						info->sysattr, info->subsystem);
 
 		/*
-		 * Serial port layout:
+		 * SIM7100 serial port layout:
 		 * 0: QCDM/DIAG
 		 * 1: NMEA
 		 * 2: AT
@@ -1263,29 +1267,52 @@ static gboolean setup_sim7100(struct modem_info *modem)
 		 *
 		 * -- https://www.spinics.net/lists/linux-usb/msg135728.html
 		 */
-		if (g_strcmp0(info->number, "00") == 0)
-			diag = info->devnode;
-		else if (g_strcmp0(info->number, "01") == 0)
-			gps = info->devnode;
-		else if (g_strcmp0(info->number, "02") == 0)
-			at = info->devnode;
-		else if (g_strcmp0(info->number, "03") == 0)
-			ppp = info->devnode;
-		else if (g_strcmp0(info->number, "04") == 0)
-			audio = info->devnode;
+		if (g_strcmp0(info->subsystem, "usbmisc") == 0) /* cdc-wdm */
+			qmi = info->devnode; /* SIM7600 */
+		else if (g_strcmp0(info->subsystem, "net") == 0) /* wwan */
+			net = info->devnode; /* SIM7600 */
+		else if (g_strcmp0(info->subsystem, "tty") == 0) {
+			if (g_strcmp0(info->interface, "255/255/255") == 0) {
+				if (g_strcmp0(info->number, "00") == 0)
+					diag = info->devnode; /* SIM7x00 */
+			} else if (g_strcmp0(info->interface, "255/0/0") == 0) {
+				if (g_strcmp0(info->number, "01") == 0)
+					gps = info->devnode; /* SIM7x00 */
+				else if (g_strcmp0(info->number, "02") == 0)
+					mdm = info->devnode; /* SIM7x00 */
+				else if (g_strcmp0(info->number, "03") == 0)
+					ppp = info->devnode; /* SIM7100 */
+				else if (g_strcmp0(info->number, "04") == 0)
+					audio = info->devnode; /* SIM7100 */
+			}
+		}
 	}
 
-	if (at == NULL)
+	if (mdm == NULL)
 		return FALSE;
 
-	DBG("at=%s ppp=%s gps=%s diag=%s, audio=%s", at, ppp, gps, diag, audio);
+	if (qmi != NULL && net != NULL) {
+		DBG("qmi=%s net=%s mdm=%s gps=%s diag=%s",
+						qmi, net, mdm, gps, diag);
 
-	ofono_modem_set_string(modem->modem, "AT", at);
-	ofono_modem_set_string(modem->modem, "PPP", ppp);
+		ofono_modem_set_driver(modem->modem, "gobi");
+
+		ofono_modem_set_string(modem->modem, "Device", qmi);
+		ofono_modem_set_string(modem->modem, "Modem", mdm);
+		ofono_modem_set_string(modem->modem, "NetworkInterface", net);
+	} else {
+		DBG("at=%s ppp=%s gps=%s diag=%s, audio=%s",
+						mdm, ppp, gps, diag, audio);
+
+		ofono_modem_set_driver(modem->modem, "sim7100");
+
+		ofono_modem_set_string(modem->modem, "AT", mdm);
+		ofono_modem_set_string(modem->modem, "PPP", ppp);
+		ofono_modem_set_string(modem->modem, "Audio", audio);
+	}
+
 	ofono_modem_set_string(modem->modem, "GPS", gps);
 	ofono_modem_set_string(modem->modem, "Diag", diag);
-	ofono_modem_set_string(modem->modem, "Audio", audio);
-
 	return TRUE;
 }
 
@@ -1309,7 +1336,7 @@ static struct {
 	{ "telit",	setup_telit,	"device/interface"	},
 	{ "telitqmi",	setup_telitqmi	},
 	{ "simcom",	setup_simcom	},
-	{ "sim7100",	setup_sim7100	},
+	{ "sim7x00",	setup_sim7x00	},
 	{ "zte",	setup_zte	},
 	{ "icera",	setup_icera	},
 	{ "samsung",	setup_samsung	},
@@ -1682,7 +1709,8 @@ static struct {
 	{ "novatel",	"option",	"1410"		},
 	{ "zte",	"option",	"19d2"		},
 	{ "simcom",	"option",	"05c6", "9000"	},
-	{ "sim7100",	"option",	"1e0e", "9001"	},
+	{ "sim7x00",	"option",	"1e0e", "9001"	},
+	{ "sim7x00",	"qmi_wwan",	"1e0e",	"9001"	},
 	{ "telit",	"usbserial",	"1bc7"		},
 	{ "telit",	"option",	"1bc7"		},
 	{ "telit",	"cdc_acm",	"1bc7", "0021"	},
