@@ -1,0 +1,13 @@
+diff --git a/Makefile.am b/Makefile.am
+index 6aa8f8f..70f9f11 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -1111,7 +1111,7 @@ ell/ell.h: Makefile
+ 	done
+ 
+ maintainer-clean-local:
+-	-rm -rf ell
++	@echo skip $@
+ 
+ clean-local:
+ 	@$(RM) -rf include/ofono
