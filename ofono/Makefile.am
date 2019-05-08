@@ -1032,6 +1032,14 @@ unit_test_ril_util_LDADD = @GLIB_LIBS@ -ldl
 unit_objects += $(unit_test_ril_util_OBJECTS)
 unit_tests += unit/test-ril_util
 
+unit_test_ril_vendor_SOURCES = unit/test-ril_vendor.c unit/fake_watch.c \
+	drivers/ril/ril_vendor.c drivers/ril/ril_vendor_mtk.c  \
+	drivers/ril/ril_util.c src/log.c
+unit_test_ril_vendor_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
+unit_test_ril_vendor_LDADD = @GLIB_LIBS@ -ldl
+unit_objects += $(unit_test_ril_vendor_OBJECTS)
+unit_tests += unit/test-ril_vendor
+
 else
 unit_tests += unit/test-rilmodem-cs \
 				unit/test-rilmodem-cs \

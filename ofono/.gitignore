@@ -49,6 +49,7 @@ unit/test-dbus-queue
 unit/test-gprs-filter
 unit/test-ril_config
 unit/test-ril_util
+unit/test-ril_vendor
 unit/test-ril-transport
 unit/test-rilmodem-cb
 unit/test-rilmodem-cs
