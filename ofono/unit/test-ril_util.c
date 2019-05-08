@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2017-2018 Jolla Ltd.
+ *  Copyright (C) 2017-2019 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -18,7 +18,11 @@
 #include "ofono.h"
 #include "common.h"
 
-void test_parse_tech(void)
+#define RIL_PROTO_IP_STR "IP"
+#define RIL_PROTO_IPV6_STR "IPV6"
+#define RIL_PROTO_IPV4V6_STR "IPV4V6"
+
+static void test_parse_tech(void)
 {
 	int tech = 0;
 
@@ -51,7 +55,7 @@ void test_parse_tech(void)
 	g_assert(tech == RADIO_TECH_LTE);
 }
 
-void test_parse_mcc_mnc(void)
+static void test_parse_mcc_mnc(void)
 {
 	struct ofono_network_operator op;
 
@@ -81,7 +85,45 @@ void test_parse_mcc_mnc(void)
 	g_assert(!op.tech);
 }
 
-void test_strings(void)
+static void test_protocol_from_ofono(void)
+{
+	g_assert(!g_strcmp0(ril_protocol_from_ofono(OFONO_GPRS_PROTO_IP),
+						RIL_PROTO_IP_STR));
+	g_assert(!g_strcmp0(ril_protocol_from_ofono(OFONO_GPRS_PROTO_IPV6),
+						RIL_PROTO_IPV6_STR));
+	g_assert(!g_strcmp0(ril_protocol_from_ofono(OFONO_GPRS_PROTO_IPV4V6),
+						RIL_PROTO_IPV4V6_STR));
+	g_assert(!ril_protocol_from_ofono((enum ofono_gprs_proto)-1));
+}
+
+static void test_protocol_to_ofono(void)
+{
+	g_assert(ril_protocol_to_ofono(NULL) < 0);
+	g_assert(ril_protocol_to_ofono("") < 0);
+	g_assert(ril_protocol_to_ofono("ip") < 0);
+	g_assert(ril_protocol_to_ofono(RIL_PROTO_IP_STR) ==
+						OFONO_GPRS_PROTO_IP);
+	g_assert(ril_protocol_to_ofono(RIL_PROTO_IPV6_STR) ==
+						OFONO_GPRS_PROTO_IPV6);
+	g_assert(ril_protocol_to_ofono(RIL_PROTO_IPV4V6_STR) ==
+						OFONO_GPRS_PROTO_IPV4V6);
+}
+
+static void test_auth_method(void)
+{
+	g_assert(ril_auth_method_from_ofono(OFONO_GPRS_AUTH_METHOD_NONE) ==
+						RIL_AUTH_NONE);
+	g_assert(ril_auth_method_from_ofono(OFONO_GPRS_AUTH_METHOD_CHAP) ==
+						RIL_AUTH_CHAP);
+	g_assert(ril_auth_method_from_ofono(OFONO_GPRS_AUTH_METHOD_PAP) ==
+						RIL_AUTH_PAP);
+	g_assert(ril_auth_method_from_ofono(OFONO_GPRS_AUTH_METHOD_ANY) ==
+						RIL_AUTH_BOTH);
+	g_assert(ril_auth_method_from_ofono((enum ofono_gprs_auth_method)-1) ==
+						RIL_AUTH_BOTH);
+}
+
+static void test_strings(void)
 {
 	g_assert(!g_strcmp0(ril_error_to_string(RIL_E_SUCCESS), "OK"));
 	g_assert(!g_strcmp0(ril_error_to_string(2147483647), "2147483647"));
@@ -107,6 +149,9 @@ int main(int argc, char *argv[])
 
 	g_test_add_func(TEST_("parse_tech"), test_parse_tech);
 	g_test_add_func(TEST_("parse_mcc_mnc"), test_parse_mcc_mnc);
+	g_test_add_func(TEST_("protocol_from_ofono"), test_protocol_from_ofono);
+	g_test_add_func(TEST_("protocol_to_ofono"), test_protocol_to_ofono);
+	g_test_add_func(TEST_("auth_method"), test_auth_method);
 	g_test_add_func(TEST_("strings"), test_strings);
 
 	return g_test_run();
