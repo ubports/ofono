@@ -1107,6 +1107,7 @@ ell/internal: Makefile
 	done > $@
 
 ell/ell.h: Makefile
+	$(AM_V_at)$(MKDIR_P) ell
 	$(AM_V_at)echo -n > $@
 	$(AM_V_GEN)for f in $(ell_headers) ; do \
 		echo "#include <$$f>" >> $@ ; \
