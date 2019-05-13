@@ -44,6 +44,12 @@ Properties	string TechnologyPreference [readwrite]
 				"gsm"	Only GSM used for radio access.
 				"umts"	Only UMTS used for radio access.
 				"lte"	Only LTE used for radio access.
+				"umts,gsm"	Dual mode operation with UMTS
+					and GSM radio access whith preference
+					for UMTS.
+				"lte,umts"	Dual mode operation with LTE
+					and UMTS radio access with preference
+					for LTE.
 
 		array{string} AvailableTechnologies [readonly, optional]
 
