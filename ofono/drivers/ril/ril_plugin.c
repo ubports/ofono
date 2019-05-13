@@ -213,8 +213,8 @@ typedef struct sailfish_slot_impl {
 	struct ril_sim_card *sim_card;
 	struct ril_sim_settings *sim_settings;
 	struct ril_oem_raw *oem_raw;
-	const struct ril_vendor_driver *vendor;
-	struct ril_vendor_hook *vendor_hook;
+	const struct ril_vendor_driver *vendor_driver;
+	struct ril_vendor *vendor;
 	struct ril_data *data;
 	gboolean legacy_imei_query;
 	enum sailfish_slot_flags slot_flags;
@@ -429,9 +429,9 @@ static void ril_plugin_shutdown_slot(ril_slot *slot, gboolean kill_io)
 			slot->received_sim_status = FALSE;
 		}
 
-		if (slot->vendor_hook) {
-			ril_vendor_hook_unref(slot->vendor_hook);
-			slot->vendor_hook = NULL;
+		if (slot->vendor) {
+			ril_vendor_unref(slot->vendor);
+			slot->vendor = NULL;
 		}
 
 		if (slot->io) {
@@ -753,7 +753,7 @@ static void ril_plugin_trace(GRilIoChannel *io, GRILIO_PACKET_TYPE type,
 	guint id, guint code, const void *data, guint data_len, void *user_data)
 {
 	ril_slot *slot = user_data;
-	struct ril_vendor_hook *hook = slot->vendor_hook;
+	struct ril_vendor *vendor = slot->vendor;
 	static const GLogModule* log_module = &ril_debug_trace_module;
 	const char *prefix = io->name ? io->name : "";
 	const char dir = (type == GRILIO_PACKET_REQ) ? '<' : '>';
@@ -765,8 +765,9 @@ static void ril_plugin_trace(GRilIoChannel *io, GRILIO_PACKET_TYPE type,
 				code == RIL_REQUEST_V9_SET_UICC_SUBSCRIPTION) {
 			scode = "V9_SET_UICC_SUBSCRIPTION";
 		} else {
-			scode = ril_vendor_hook_request_to_string(hook, code);
+			scode = ril_vendor_request_to_string(vendor, code);
 			if (!scode) {
+				/* Not a vendor specific request */
 				scode = ril_request_to_string(code);
 			}
 		}
@@ -784,8 +785,9 @@ static void ril_plugin_trace(GRilIoChannel *io, GRILIO_PACKET_TYPE type,
 		break;
 	case GRILIO_PACKET_UNSOL:
 	case GRILIO_PACKET_UNSOL_ACK_EXP:
-		scode = ril_vendor_hook_event_to_string(hook, code);
+		scode = ril_vendor_event_to_string(vendor, code);
 		if (!scode) {
+			/* Not a vendor specific event */
 			scode = ril_unsol_event_to_string(code);
 		}
 		gutil_log(log_module, GLOG_LEVEL_VERBOSE, "%s%c %s",
@@ -1006,19 +1008,19 @@ static void ril_plugin_slot_connected(ril_slot *slot)
 	GASSERT(!slot->sim_card->status);
 	GASSERT(!slot->received_sim_status);
 
+	GASSERT(!slot->vendor);
+	slot->vendor = ril_vendor_create(slot->vendor_driver, slot->io,
+				slot->path, &slot->config);
+
 	GASSERT(!slot->network);
 	slot->network = ril_network_new(slot->path, slot->io, log_prefix,
 			slot->radio, slot->sim_card, slot->sim_settings, 
-			&slot->config);
-
-	GASSERT(!slot->vendor_hook);
-	slot->vendor_hook = ril_vendor_create_hook(slot->vendor, slot->io,
-				slot->path, &slot->config, slot->network);
+			&slot->config, slot->vendor);
 
 	GASSERT(!slot->data);
 	slot->data = ril_data_new(plugin->data_manager, log_prefix,
 		slot->radio, slot->network, slot->io, &slot->data_opt,
-		&slot->config, slot->vendor_hook);
+		&slot->config, slot->vendor);
 
 	GASSERT(!slot->cell_info);
 	if (slot->io->ril_version >= 9) {
@@ -1245,7 +1247,7 @@ static ril_slot *ril_plugin_slot_new_take(char *transport,
 
 static void ril_plugin_slot_apply_vendor_defaults(ril_slot *slot)
 {
-	if (slot->vendor) {
+	if (slot->vendor_driver) {
 		struct ril_slot_config *config = &slot->config;
 		struct ril_vendor_defaults defaults;
 
@@ -1257,7 +1259,7 @@ static void ril_plugin_slot_apply_vendor_defaults(ril_slot *slot)
 		defaults.query_available_band_mode =
 			config->query_available_band_mode;
 
-		ril_vendor_get_defaults(slot->vendor, &defaults);
+		ril_vendor_get_defaults(slot->vendor_driver, &defaults);
 		slot->legacy_imei_query = defaults.legacy_imei_query;
 		config->enable_cbs = defaults.enable_cbs;
 		config->empty_pin_query = defaults.empty_pin_query;
@@ -1437,17 +1439,11 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 	/* vendorDriver */
 	sval = ril_config_get_string(file, group, RILCONF_VENDOR_DRIVER);
 	if (sval) {
-		const struct ril_vendor_driver *vendor;
-		RIL_VENDOR_DRIVER_FOREACH(vendor) {
-			if (!strcasecmp(vendor->name, sval)) {
-				DBG("%s: " RILCONF_VENDOR_DRIVER " %s", group,
-									sval);
-				slot->vendor = vendor;
-				ril_plugin_slot_apply_vendor_defaults(slot);
-				break;
-			}
-		}
-		if (!slot->vendor) {
+		slot->vendor_driver = ril_vendor_find_driver(sval);
+		if (slot->vendor_driver) {
+			DBG("%s: " RILCONF_VENDOR_DRIVER " %s", group, sval);
+			ril_plugin_slot_apply_vendor_defaults(slot);
+		} else {
 			ofono_warn("Unknown vendor '%s'", sval);
 		}
 		g_free(sval);

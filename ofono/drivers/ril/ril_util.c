@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2018 Jolla Ltd.
+ *  Copyright (C) 2015-2019 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -25,6 +25,10 @@
 
 #include "common.h"
 #include "netreg.h"
+
+#define RIL_PROTO_IP_STR "IP"
+#define RIL_PROTO_IPV6_STR "IPV6"
+#define RIL_PROTO_IPV4V6_STR "IPV4V6"
 
 const char *ril_error_to_string(int error)
 {
@@ -319,6 +323,50 @@ const char *ril_radio_state_to_string(int radio_state)
 		snprintf(unknown, sizeof(unknown), "%d (?)", radio_state);
 		return unknown;
 	}
+}
+
+const char *ril_protocol_from_ofono(enum ofono_gprs_proto proto)
+{
+	switch (proto) {
+	case OFONO_GPRS_PROTO_IPV6:
+		return RIL_PROTO_IPV6_STR;
+	case OFONO_GPRS_PROTO_IPV4V6:
+		return RIL_PROTO_IPV4V6_STR;
+	case OFONO_GPRS_PROTO_IP:
+		return RIL_PROTO_IP_STR;
+	}
+	return NULL;
+}
+
+int ril_protocol_to_ofono(const gchar *str)
+{
+	if (str) {
+		if (!strcmp(str, RIL_PROTO_IPV6_STR)) {
+			return OFONO_GPRS_PROTO_IPV6;
+		} else if (!strcmp(str, RIL_PROTO_IPV4V6_STR)) {
+			return OFONO_GPRS_PROTO_IPV4V6;
+		} else if (!strcmp(str, RIL_PROTO_IP_STR)) {
+			return OFONO_GPRS_PROTO_IP;
+		}
+	}
+	return -1;
+}
+
+enum ril_auth ril_auth_method_from_ofono(enum ofono_gprs_auth_method auth)
+{
+	switch (auth) {
+	case OFONO_GPRS_AUTH_METHOD_NONE:
+		return RIL_AUTH_NONE;
+	case OFONO_GPRS_AUTH_METHOD_CHAP:
+		return RIL_AUTH_CHAP;
+	case OFONO_GPRS_AUTH_METHOD_PAP:
+		return RIL_AUTH_PAP;
+	case OFONO_GPRS_AUTH_METHOD_ANY:
+		/* Use default */
+		break;
+	}
+	/* Default */
+	return RIL_AUTH_BOTH;
 }
 
 /* Returns enum access_technology or -1 on failure. */

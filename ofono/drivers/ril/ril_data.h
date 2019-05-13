@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2016-2018 Jolla Ltd.
+ *  Copyright (C) 2016-2019 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -100,7 +100,7 @@ struct ril_data *ril_data_new(struct ril_data_manager *dm, const char *name,
 		struct ril_radio *radio, struct ril_network *network,
 		GRilIoChannel *io, const struct ril_data_options *options,
 		const struct ril_slot_config *config,
-		struct ril_vendor_hook *vendor_hook);
+		struct ril_vendor *vendor);
 struct ril_data *ril_data_ref(struct ril_data *data);
 void ril_data_unref(struct ril_data *data);
 gboolean ril_data_allowed(struct ril_data *data);
@@ -130,9 +130,6 @@ void ril_data_call_free(struct ril_data_call *call);
 struct ril_data_call *ril_data_call_dup(const struct ril_data_call *call);
 struct ril_data_call *ril_data_call_find(struct ril_data_call_list *list,
 								int cid);
-
-const char *ril_data_ofono_protocol_to_ril(enum ofono_gprs_proto proto);
-int ril_data_protocol_to_ofono(const gchar *str);
 
 /* Constructors of various kinds of RIL requests */
 GRilIoRequest *ril_request_allow_data_new(gboolean allow);

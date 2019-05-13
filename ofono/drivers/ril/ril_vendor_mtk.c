@@ -13,10 +13,11 @@
  *  GNU General Public License for more details.
  */
 
-#include "ril_plugin.h"
 #include "ril_vendor.h"
+#include "ril_vendor_impl.h"
 #include "ril_network.h"
 #include "ril_data.h"
+#include "ril_util.h"
 #include "ril_log.h"
 
 #include <grilio_channel.h>
@@ -24,24 +25,12 @@
 #include <grilio_request.h>
 #include <grilio_queue.h>
 
-#include <gutil_macros.h>
 #include <gutil_misc.h>
 
 #include <ofono/watch.h>
-#include <ofono/modem.h>
 #include <ofono/gprs.h>
 
 #define SET_INITIAL_ATTACH_APN_TIMEOUT (20*1000)
-
-enum ril_mtk_watch_events {
-	WATCH_EVENT_IMSI_CHANGED,
-	WATCH_EVENT_COUNT
-};
-
-enum ril_mtk_network_events {
-	NETWORK_EVENT_PREF_MODE_CHANGED,
-	NETWORK_EVENT_COUNT
-};
 
 enum ril_mtk_events {
 	MTK_EVENT_REGISTRATION_SUSPENDED,
@@ -51,38 +40,49 @@ enum ril_mtk_events {
 	MTK_EVENT_COUNT
 };
 
-struct ril_vendor_hook_mtk {
-	struct ril_vendor_hook hook;
-	const struct ril_mtk_msg *msg;
+typedef struct ril_vendor_mtk {
+	RilVendor vendor;
+	const struct ril_mtk_flavor *flavor;
 	GRilIoQueue *q;
-	GRilIoChannel *io;
-	struct ril_network *network;
 	struct ofono_watch *watch;
 	guint set_initial_attach_apn_id;
 	gboolean initial_attach_apn_ok;
-	gulong network_event_id[NETWORK_EVENT_COUNT];
-	gulong watch_event_id[WATCH_EVENT_COUNT];
 	gulong ril_event_id[MTK_EVENT_COUNT];
 	guint slot;
-};
+} RilVendorMtk;
+
+typedef struct ril_vendor_mtk_auto {
+	RilVendorMtk mtk;
+	gulong detect_id;
+} RilVendorMtkAuto;
+
+typedef RilVendorClass RilVendorMtkClass;
+typedef RilVendorMtkClass RilVendorMtkAutoClass;
+
+#define RIL_VENDOR_TYPE_MTK (ril_vendor_mtk_get_type())
+#define RIL_VENDOR_TYPE_MTK_AUTO (ril_vendor_mtk_auto_get_type())
+
+G_DEFINE_TYPE(RilVendorMtk, ril_vendor_mtk, RIL_VENDOR_TYPE)
+G_DEFINE_TYPE(RilVendorMtkAuto, ril_vendor_mtk_auto, RIL_VENDOR_TYPE_MTK)
+
+#define RIL_VENDOR_MTK(obj) G_TYPE_CHECK_INSTANCE_CAST((obj), \
+	RIL_VENDOR_TYPE_MTK, RilVendorMtk)
+#define RIL_VENDOR_MTK_AUTO(obj) G_TYPE_CHECK_INSTANCE_CAST((obj), \
+	RIL_VENDOR_TYPE_MTK_AUTO, RilVendorMtkAuto)
 
 /* driver_data point this this: */
-struct ril_vendor_mtk_driver_data {
+struct ril_mtk_flavor {
 	const char *name;
 	const struct ril_mtk_msg *msg;
-	const struct ril_vendor_hook_proc *proc;
-};
-
-/* Hook with auto-detection */
-struct ril_vendor_hook_mtk_auto {
-	struct ril_vendor_hook_mtk mtk;
-	const struct ril_vendor_mtk_driver_data *type;
-	gulong detect_id;
+	void (*build_attach_apn_req_fn)(GRilIoRequest *req, const char *apn,
+				const char *username, const char *password,
+				enum ril_auth auth, const char *proto);
+	gboolean (*data_call_parse_fn)(struct ril_data_call *call,
+				int version, GRilIoParser *rilp);
 };
 
 /* MTK specific RIL messages (actual codes differ from model to model!) */
 struct ril_mtk_msg {
-	gboolean attach_apn_has_roaming_protocol;
 	guint request_resume_registration;
 	guint request_set_call_indication;
 
@@ -97,7 +97,6 @@ struct ril_mtk_msg {
 };
 
 static const struct ril_mtk_msg msg_mtk1 = {
-	.attach_apn_has_roaming_protocol = TRUE,
 	.request_resume_registration = 2050,
 	.request_set_call_indication = 2065,
 	.unsol_ps_network_state_changed = 3012,
@@ -107,7 +106,6 @@ static const struct ril_mtk_msg msg_mtk1 = {
 };
 
 static const struct ril_mtk_msg msg_mtk2 = {
-	.attach_apn_has_roaming_protocol = FALSE,
 	.request_resume_registration = 2065,
 	.request_set_call_indication = 2086,
 	.unsol_ps_network_state_changed = 3015,
@@ -116,23 +114,11 @@ static const struct ril_mtk_msg msg_mtk2 = {
 	.unsol_set_attach_apn = 3073
 };
 
-static inline struct ril_vendor_hook_mtk *ril_vendor_hook_mtk_cast
-						(struct ril_vendor_hook *hook)
+static const char *ril_vendor_mtk_request_to_string(RilVendor *vendor,
+							guint request)
 {
-	return G_CAST(hook, struct ril_vendor_hook_mtk, hook);
-}
-
-static inline struct ril_vendor_hook_mtk_auto *ril_vendor_hook_mtk_auto_cast
-						(struct ril_vendor_hook *hook)
-{
-	return G_CAST(hook, struct ril_vendor_hook_mtk_auto, mtk.hook);
-}
-
-static const char *ril_vendor_mtk_request_to_string
-				(struct ril_vendor_hook *hook, guint request)
-{
-	struct ril_vendor_hook_mtk *self = ril_vendor_hook_mtk_cast(hook);
-	const struct ril_mtk_msg *msg = self->msg;
+	RilVendorMtk *self = RIL_VENDOR_MTK(vendor);
+	const struct ril_mtk_msg *msg = self->flavor->msg;
 
 	if (request == msg->request_resume_registration) {
 		return "MTK_RESUME_REGISTRATION";
@@ -159,19 +145,19 @@ static const char *ril_vendor_mtk_unsol_msg_name(const struct ril_mtk_msg *msg,
 	}
 }
 
-static const char *ril_vendor_mtk_event_to_string(struct ril_vendor_hook *hook,
+static const char *ril_vendor_mtk_event_to_string(RilVendor *vendor,
 								guint event)
 {
-	struct ril_vendor_hook_mtk *self = ril_vendor_hook_mtk_cast(hook);
+	RilVendorMtk *self = RIL_VENDOR_MTK(vendor);
 
-	return ril_vendor_mtk_unsol_msg_name(self->msg, event);
+	return ril_vendor_mtk_unsol_msg_name(self->flavor->msg, event);
 }
 
 static void ril_vendor_mtk_registration_suspended(GRilIoChannel *io, guint id,
 				const void *data, guint len, void *user_data)
 {
-	struct ril_vendor_hook_mtk *self = user_data;
-	const struct ril_mtk_msg *msg = self->msg;
+	RilVendorMtk *self = RIL_VENDOR_MTK(user_data);
+	const struct ril_mtk_msg *msg = self->flavor->msg;
 	GRilIoParser rilp;
 	int session_id;
 
@@ -189,75 +175,41 @@ static void ril_vendor_mtk_registration_suspended(GRilIoChannel *io, guint id,
 	}
 }
 
-static GRilIoRequest *ril_vendor_mtk_build_set_attach_apn_req
-			(const struct ofono_gprs_primary_context *pc,
-						gboolean roamingProtocol)
+static void ril_vendor_mtk_build_attach_apn_req_1(GRilIoRequest *req,
+		const char *apn, const char *username, const char *password,
+		enum ril_auth auth, const char *proto)
 {
-	GRilIoRequest *req = grilio_request_new();
-	const char *proto = ril_data_ofono_protocol_to_ril(pc->proto);
-
-	DBG("%s %d", pc->apn, roamingProtocol);
-	grilio_request_append_utf8(req, pc->apn);       /* apn */
-	grilio_request_append_utf8(req, proto);         /* protocol */
-	if (roamingProtocol) {
-		grilio_request_append_utf8(req, proto); /* roamingProtocol */
-	}
-
-	if (pc->username[0]) {
-		int auth;
-
-		switch (pc->auth_method) {
-		case OFONO_GPRS_AUTH_METHOD_ANY:
-			auth = RIL_AUTH_BOTH;
-			break;
-		case OFONO_GPRS_AUTH_METHOD_NONE:
-			auth = RIL_AUTH_NONE;
-			break;
-		case OFONO_GPRS_AUTH_METHOD_CHAP:
-			auth = RIL_AUTH_CHAP;
-			break;
-		case OFONO_GPRS_AUTH_METHOD_PAP:
-			auth = RIL_AUTH_PAP;
-			break;
-		default:
-			auth = RIL_AUTH_NONE;
-			break;
-		}
-
-		grilio_request_append_int32(req, auth);
-		grilio_request_append_utf8(req, pc->username);
-		grilio_request_append_utf8(req, pc->password);
-	} else {
-		grilio_request_append_int32(req, RIL_AUTH_NONE);
-		grilio_request_append_utf8(req, "");
-		grilio_request_append_utf8(req, "");
-	}
-
+	DBG("\"%s\" %s", apn, proto);
+	grilio_request_append_utf8(req, apn);
+	grilio_request_append_utf8(req, proto);
+	grilio_request_append_utf8(req, proto); /* roamingProtocol */
+	grilio_request_append_int32(req, auth);
+	grilio_request_append_utf8(req, username);
+	grilio_request_append_utf8(req, password);
 	grilio_request_append_utf8(req, ""); /* operatorNumeric */
 	grilio_request_append_int32(req, FALSE); /* canHandleIms */
 	grilio_request_append_int32(req, -1); /* dualApnPlmnList */
-
-	return req;
 }
 
-static const struct ofono_gprs_primary_context *ril_vendor_mtk_internet_context
-					(struct ril_vendor_hook_mtk *self)
+static void ril_vendor_mtk_build_attach_apn_req_2(GRilIoRequest *req,
+		const char *apn, const char *username, const char *password,
+		enum ril_auth auth, const char *proto)
 {
-	struct ofono_watch *watch = self->watch;
-
-	if (watch->imsi) {
-		return ofono_gprs_context_settings_by_type
-				(ofono_modem_get_gprs(watch->modem),
-					OFONO_GPRS_CONTEXT_TYPE_INTERNET);
-	}
-
-	return NULL;
+	DBG("\"%s\" %s", apn, proto);
+	grilio_request_append_utf8(req, apn);
+	grilio_request_append_utf8(req, proto);
+	grilio_request_append_int32(req, auth);
+	grilio_request_append_utf8(req, username);
+	grilio_request_append_utf8(req, password);
+	grilio_request_append_utf8(req, ""); /* operatorNumeric */
+	grilio_request_append_int32(req, FALSE); /* canHandleIms */
+	grilio_request_append_int32(req, -1); /* dualApnPlmnList */
 }
 
 static void ril_vendor_mtk_initial_attach_apn_resp(GRilIoChannel *io,
 		int ril_status, const void *data, guint len, void *user_data)
 {
-	struct ril_vendor_hook_mtk *self = user_data;
+	RilVendorMtk *self = RIL_VENDOR_MTK(user_data);
 
 	GASSERT(self->set_initial_attach_apn_id);
 	self->set_initial_attach_apn_id = 0;
@@ -267,19 +219,35 @@ static void ril_vendor_mtk_initial_attach_apn_resp(GRilIoChannel *io,
 	}
 }
 
-static void ril_vendor_mtk_initial_attach_apn_check
-					(struct ril_vendor_hook_mtk *self)
+static void ril_vendor_mtk_initial_attach_apn_check(RilVendorMtk *self)
 {
 
 	if (!self->set_initial_attach_apn_id && !self->initial_attach_apn_ok) {
+		struct ofono_watch *watch = self->watch;
 		const struct ofono_gprs_primary_context *pc =
-			ril_vendor_mtk_internet_context(self);
+			ofono_gprs_context_settings_by_type(watch->gprs,
+					OFONO_GPRS_CONTEXT_TYPE_INTERNET);
 
 		if (pc) {
-			GRilIoRequest *req =
-				ril_vendor_mtk_build_set_attach_apn_req(pc,
-				self->msg->attach_apn_has_roaming_protocol);
+			const char *username;
+			const char *password;
+			enum ril_auth auth;
+			GRilIoRequest *req = grilio_request_new();
 
+			if (pc->username[0] || pc->password[0]) {
+				username = pc->username;
+				password = pc->password;
+				auth = ril_auth_method_from_ofono
+					(pc->auth_method);
+			} else {
+				username = "";
+				password = "";
+				auth = RIL_AUTH_NONE;
+			}
+
+			self->flavor->build_attach_apn_req_fn(req,
+					pc->apn, username, password, auth,
+					ril_protocol_from_ofono(pc->proto));
 			grilio_request_set_timeout(req,
 					SET_INITIAL_ATTACH_APN_TIMEOUT);
 			self->set_initial_attach_apn_id =
@@ -292,60 +260,23 @@ static void ril_vendor_mtk_initial_attach_apn_check
 	}
 }
 
-static void ril_vendor_mtk_initial_attach_apn_reset
-					(struct ril_vendor_hook_mtk *self)
-{
-	self->initial_attach_apn_ok = FALSE;
-	if (self->set_initial_attach_apn_id) {
-		grilio_queue_cancel_request(self->q,
-			self->set_initial_attach_apn_id, FALSE);
-		self->set_initial_attach_apn_id = 0;
-	}
-}
-
-static void ril_vendor_mtk_watch_imsi_changed(struct ofono_watch *watch,
-							void *user_data)
-{
-	struct ril_vendor_hook_mtk *self = user_data;
-
-	if (watch->imsi) {
-		ril_vendor_mtk_initial_attach_apn_check(self);
-	} else {
-		ril_vendor_mtk_initial_attach_apn_reset(self);
-	}
-}
-
-static void ril_vendor_mtk_network_pref_mode_changed(struct ril_network *net,
-							void *user_data)
-{
-	struct ril_vendor_hook_mtk *self = user_data;
-
-	if (net->pref_mode >= OFONO_RADIO_ACCESS_MODE_LTE) {
-		ril_vendor_mtk_initial_attach_apn_check(self);
-	} else {
-		ril_vendor_mtk_initial_attach_apn_reset(self);
-	}
-}
-
 static void ril_vendor_mtk_set_attach_apn(GRilIoChannel *io, guint id,
-				const void *data, guint len, void *self)
+				const void *data, guint len, void *user_data)
 {
-	ril_vendor_mtk_initial_attach_apn_check(self);
+	ril_vendor_mtk_initial_attach_apn_check(RIL_VENDOR_MTK(user_data));
 }
 
 static void ril_vendor_mtk_ps_network_state_changed(GRilIoChannel *io,
 		guint id, const void *data, guint len, void *user_data)
 {
-	struct ril_vendor_hook_mtk *self = user_data;
-
-	ril_network_query_registration_state(self->network);
+	ril_network_query_registration_state(RIL_VENDOR(user_data)->network);
 }
 
 static void ril_vendor_mtk_incoming_call_indication(GRilIoChannel *io, guint id,
 				const void *data, guint len, void *user_data)
 {
-	struct ril_vendor_hook_mtk *self = user_data;
-	const struct ril_mtk_msg *msg = self->msg;
+	RilVendorMtk *self = RIL_VENDOR_MTK(user_data);
+	const struct ril_mtk_msg *msg = self->flavor->msg;
 	GRilIoRequest* req = NULL;
 
 	GASSERT(id == msg->unsol_incoming_call_indication);
@@ -388,16 +319,16 @@ static void ril_vendor_mtk_incoming_call_indication(GRilIoChannel *io, guint id,
 	} else {
 		/* Let ril_voicecall.c know that something happened */
 		grilio_channel_inject_unsol_event(io,
-				RIL_UNSOL_RESPONSE_CALL_STATE_CHANGED, NULL, 0);
+			RIL_UNSOL_RESPONSE_CALL_STATE_CHANGED, NULL, 0);
 	}
 }
 
-static GRilIoRequest *ril_vendor_mtk_data_call_req
-	(struct ril_vendor_hook *hook, int tech, const char *profile,
-		const char *apn, const char *username, const char *password,
-		enum ril_auth auth, const char *proto)
+static GRilIoRequest *ril_vendor_mtk_data_call_req(RilVendor *vendor,
+			int tech, const char *profile, const char *apn,
+			const char *username, const char *password,
+			enum ril_auth auth, const char *proto)
 {
-	struct ril_vendor_hook_mtk *self = ril_vendor_hook_mtk_cast(hook);
+	RilVendorMtk *self = RIL_VENDOR_MTK(vendor);
 	GRilIoRequest *req = grilio_request_new();
 
 	grilio_request_append_int32(req, 8); /* Number of parameters */
@@ -412,9 +343,20 @@ static GRilIoRequest *ril_vendor_mtk_data_call_req
 	return req;
 }
 
-static gboolean ril_vendor_mtk_data_call_parse_v6(struct ril_vendor_hook *hook,
-			struct ril_data_call *call, int version,
-			GRilIoParser *rilp)
+static GRilIoRequest *ril_vendor_mtk_set_attach_apn_req(RilVendor *vendor,
+			const char *profile, const char *apn,
+			const char *user, const char *pass,
+			enum ril_auth auth, const char *prot)
+{
+	RilVendorMtk *self = RIL_VENDOR_MTK(vendor);
+	GRilIoRequest *req = grilio_request_new();
+
+	self->flavor->build_attach_apn_req_fn(req, apn, user, pass, auth, prot);
+	return req;
+}
+
+static gboolean ril_vendor_mtk_data_call_parse_v6(struct ril_data_call *call,
+					int version, GRilIoParser *rilp)
 {
 	if (version < 11) {
 		int prot;
@@ -429,7 +371,7 @@ static gboolean ril_vendor_mtk_data_call_parse_v6(struct ril_vendor_hook *hook,
 		grilio_parser_get_uint32(rilp, &active);
 		grilio_parser_get_int32(rilp, &call->mtu); /* MTK specific */
 		prot_str = grilio_parser_get_utf8(rilp);
-		prot = ril_data_protocol_to_ofono(prot_str);
+		prot = ril_protocol_to_ofono(prot_str);
 		g_free(prot_str);
 
 		if (prot >= 0) {
@@ -448,6 +390,18 @@ static gboolean ril_vendor_mtk_data_call_parse_v6(struct ril_vendor_hook *hook,
 	return FALSE;
 }
 
+static gboolean ril_vendor_mtk_data_call_parse(RilVendor *vendor,
+			struct ril_data_call *call, int version,
+			GRilIoParser *rilp)
+{
+	const struct ril_mtk_flavor *flavor = RIL_VENDOR_MTK(vendor)->flavor;
+
+	return flavor->data_call_parse_fn ?
+			flavor->data_call_parse_fn(call, version, rilp) :
+			RIL_VENDOR_CLASS(ril_vendor_mtk_parent_class)->
+				data_call_parse(vendor, call, version, rilp);
+}
+
 static void ril_vendor_mtk_get_defaults(struct ril_vendor_defaults *defaults)
 {
 	/*
@@ -464,229 +418,197 @@ static void ril_vendor_mtk_get_defaults(struct ril_vendor_defaults *defaults)
 	defaults->legacy_imei_query = TRUE;
 }
 
-static void ril_vendor_mtk_hook_subscribe(struct ril_vendor_hook_mtk *self)
+static void ril_vendor_mtk_base_init(RilVendorMtk *self, GRilIoChannel *io,
+		const char *path, const struct ril_slot_config *config)
 {
-	const struct ril_mtk_msg *msg = self->msg;
+	ril_vendor_init_base(&self->vendor, io);
+	self->q = grilio_queue_new(io);
+	self->watch = ofono_watch_new(path);
+	self->slot = config->slot;
+}
 
+static void ril_vendor_mtk_set_flavor(RilVendorMtk *self,
+				const struct ril_mtk_flavor *flavor)
+{
+	GRilIoChannel *io = self->vendor.io;
+	const struct ril_mtk_msg *msg = flavor->msg;
+
+	grilio_channel_remove_all_handlers(io, self->ril_event_id);
+	self->flavor = flavor;
 	self->ril_event_id[MTK_EVENT_REGISTRATION_SUSPENDED] =
-			grilio_channel_add_unsol_event_handler(self->io,
+			grilio_channel_add_unsol_event_handler(io,
 				ril_vendor_mtk_registration_suspended,
 				msg->unsol_registration_suspended, self);
 	if (msg->unsol_set_attach_apn) {
 		self->ril_event_id[MTK_EVENT_SET_ATTACH_APN] =
-			grilio_channel_add_unsol_event_handler(self->io,
+			grilio_channel_add_unsol_event_handler(io,
 				ril_vendor_mtk_set_attach_apn,
 				msg->unsol_set_attach_apn, self);
 	}
 	if (msg->unsol_ps_network_state_changed) {
 		self->ril_event_id[MTK_EVENT_PS_NETWORK_STATE_CHANGED] =
-			grilio_channel_add_unsol_event_handler(self->io,
+			grilio_channel_add_unsol_event_handler(io,
 				ril_vendor_mtk_ps_network_state_changed,
 				msg->unsol_ps_network_state_changed, self);
 	}
 	if (msg->unsol_incoming_call_indication) {
 		self->ril_event_id[MTK_EVENT_INCOMING_CALL_INDICATION] =
-			grilio_channel_add_unsol_event_handler(self->io,
+			grilio_channel_add_unsol_event_handler(io,
 				ril_vendor_mtk_incoming_call_indication,
 				msg->unsol_incoming_call_indication, self);
 	}
 }
 
-static void ril_vendor_mtk_hook_init(struct ril_vendor_hook_mtk *self,
-	const struct ril_vendor_mtk_driver_data *mtk_driver_data,
-	ril_vendor_hook_free_proc free, GRilIoChannel *io, const char *path,
-	const struct ril_slot_config *config, struct ril_network *network)
+static RilVendor *ril_vendor_mtk_create_from_data(const void *driver_data,
+					GRilIoChannel *io, const char *path,
+					const struct ril_slot_config *config)
 {
-	self->msg = mtk_driver_data->msg;
-	self->q = grilio_queue_new(io);
-	self->io = grilio_channel_ref(io);
-	self->watch = ofono_watch_new(path);
-	self->slot = config->slot;
-	self->network = ril_network_ref(network);
-	self->watch_event_id[WATCH_EVENT_IMSI_CHANGED] =
-			ofono_watch_add_imsi_changed_handler(self->watch,
-				ril_vendor_mtk_watch_imsi_changed, self);
-	self->network_event_id[NETWORK_EVENT_PREF_MODE_CHANGED] =
-			ril_network_add_pref_mode_changed_handler(self->network,
-				ril_vendor_mtk_network_pref_mode_changed, self);
-	ril_vendor_mtk_hook_subscribe(self);
-	ril_vendor_hook_init(&self->hook, mtk_driver_data->proc, free);
+	const struct ril_mtk_flavor *flavor = driver_data;
+	RilVendorMtk *mtk = g_object_new(RIL_VENDOR_TYPE_MTK, NULL);
+
+	ril_vendor_mtk_base_init(mtk, io, path, config);
+	ril_vendor_mtk_set_flavor(mtk, flavor);
+	DBG("%s slot %u", flavor->name, mtk->slot);
+	return &mtk->vendor;
 }
 
-static void ril_vendor_mtk_destroy(struct ril_vendor_hook_mtk *self)
+static void ril_vendor_mtk_init(RilVendorMtk *self)
 {
-	grilio_queue_cancel_all(self->q, FALSE);
-	grilio_channel_remove_all_handlers(self->io, self->ril_event_id);
-	grilio_queue_unref(self->q);
-	grilio_channel_unref(self->io);
-	ofono_watch_remove_all_handlers(self->watch, self->watch_event_id);
-	ofono_watch_unref(self->watch);
-	ril_network_remove_all_handlers(self->network, self->network_event_id);
-	ril_network_unref(self->network);
 }
 
-static void ril_vendor_mtk_free(struct ril_vendor_hook *hook)
+static void ril_vendor_mtk_finalize(GObject* object)
 {
-	struct ril_vendor_hook_mtk *self = ril_vendor_hook_mtk_cast(hook);
+	RilVendorMtk *self = RIL_VENDOR_MTK(object);
+	RilVendor *vendor = &self->vendor;
 
 	DBG("slot %u", self->slot);
-	ril_vendor_mtk_destroy(self);
-	g_free(self);
+	grilio_queue_cancel_all(self->q, FALSE);
+	grilio_queue_unref(self->q);
+	ofono_watch_unref(self->watch);
+	grilio_channel_remove_all_handlers(vendor->io, self->ril_event_id);
+	G_OBJECT_CLASS(ril_vendor_mtk_parent_class)->finalize(object);
 }
 
-static struct ril_vendor_hook *ril_vendor_mtk_create_hook_from_data
-		(const void *driver_data, GRilIoChannel *io, const char *path,
-					const struct ril_slot_config *config,
-					struct ril_network *network)
+static void ril_vendor_mtk_class_init(RilVendorMtkClass* klass)
 {
-	const struct ril_vendor_mtk_driver_data *mtk_driver_data = driver_data;
-	struct ril_vendor_hook_mtk *self =
-		g_new0(struct ril_vendor_hook_mtk, 1);
-
-	ril_vendor_mtk_hook_init(self, mtk_driver_data, ril_vendor_mtk_free,
-						io, path, config, network);
-	DBG("%s slot %u", mtk_driver_data->name, self->slot);
-	return &self->hook;
+	G_OBJECT_CLASS(klass)->finalize = ril_vendor_mtk_finalize;
+	klass->request_to_string = ril_vendor_mtk_request_to_string;
+	klass->event_to_string = ril_vendor_mtk_event_to_string;
+	klass->set_attach_apn_req = ril_vendor_mtk_set_attach_apn_req;
+	klass->data_call_req = ril_vendor_mtk_data_call_req;
+	klass->data_call_parse = ril_vendor_mtk_data_call_parse;
 }
 
-static const struct ril_vendor_hook_proc ril_vendor_mtk_hook_base_proc = {
-	.request_to_string  = ril_vendor_mtk_request_to_string,
-	.event_to_string    = ril_vendor_mtk_event_to_string,
-	.data_call_req      = ril_vendor_mtk_data_call_req
+static const struct ril_mtk_flavor ril_mtk_flavor1 = {
+	.name                    = "mtk1",
+	.msg                     = &msg_mtk1,
+	.build_attach_apn_req_fn = &ril_vendor_mtk_build_attach_apn_req_1,
+	.data_call_parse_fn      = NULL
 };
 
-static const struct ril_vendor_driver ril_vendor_mtk_base = {
-	.get_defaults       = ril_vendor_mtk_get_defaults,
-	.create_hook        = ril_vendor_mtk_create_hook_from_data
+static const struct ril_mtk_flavor ril_mtk_flavor2 = {
+	.name                    = "mtk2",
+	.msg                     = &msg_mtk2,
+	.build_attach_apn_req_fn = &ril_vendor_mtk_build_attach_apn_req_2,
+	.data_call_parse_fn      = &ril_vendor_mtk_data_call_parse_v6
 };
 
-static const struct ril_vendor_mtk_driver_data ril_vendor_mtk1_data = {
-	.name               = "mtk1",
-	.msg                = &msg_mtk1,
-	.proc               = &ril_vendor_mtk_hook_base_proc
-};
+#define DEFAULT_MTK_TYPE (&ril_mtk_flavor1)
 
-static struct ril_vendor_hook_proc ril_vendor_mtk2_proc = {
-	.base               = &ril_vendor_mtk_hook_base_proc,
-	.data_call_parse    = ril_vendor_mtk_data_call_parse_v6
-};
-
-static const struct ril_vendor_mtk_driver_data ril_vendor_mtk2_data = {
-	.name               = "mtk2",
-	.msg                = &msg_mtk2,
-	.proc               = &ril_vendor_mtk2_proc
-};
-
-#define DEFAULT_MTK_TYPE (&ril_vendor_mtk1_data)
-
-static const struct ril_vendor_mtk_driver_data *mtk_types [] = {
-	&ril_vendor_mtk1_data,
-	&ril_vendor_mtk2_data
+static const struct ril_mtk_flavor *mtk_flavors [] = {
+	&ril_mtk_flavor1,
+	&ril_mtk_flavor2
 };
 
 RIL_VENDOR_DRIVER_DEFINE(ril_vendor_driver_mtk1) {
 	.name               = "mtk1",
-	.driver_data        = &ril_vendor_mtk1_data,
-	.base               = &ril_vendor_mtk_base
+	.driver_data        = &ril_mtk_flavor1,
+	.get_defaults       = ril_vendor_mtk_get_defaults,
+	.create_vendor      = ril_vendor_mtk_create_from_data
 };
 
 RIL_VENDOR_DRIVER_DEFINE(ril_vendor_driver_mtk2) {
 	.name               = "mtk2",
-	.driver_data        = &ril_vendor_mtk2_data,
-	.base               = &ril_vendor_mtk_base
+	.driver_data        = &ril_mtk_flavor2,
+	.get_defaults       = ril_vendor_mtk_get_defaults,
+	.create_vendor      = ril_vendor_mtk_create_from_data
 };
 
 /* Auto-selection */
 
-static gboolean ril_vendor_mtk_auto_set_type
-			(struct ril_vendor_hook_mtk_auto *self,
-				const struct ril_vendor_mtk_driver_data *type)
-{
-	struct ril_vendor_hook_mtk *mtk = &self->mtk;
-	gboolean changed = FALSE;
-
-	if (self->type != type) {
-		DBG("switching type %s -> %s", self->type->name, type->name);
-		self->type = type;
-		mtk->msg = type->msg;
-		mtk->hook.proc = type->proc;
-		grilio_channel_remove_all_handlers(mtk->io, mtk->ril_event_id);
-		ril_vendor_mtk_hook_subscribe(mtk);
-		changed = TRUE;
-	}
-
-	grilio_channel_remove_handler(mtk->io, self->detect_id);
-	self->detect_id = 0;
-	return changed;
-}
-
 static void ril_vendor_mtk_auto_detect_event(GRilIoChannel *io, guint id,
-				const void *data, guint len, void *self)
+				const void *data, guint len, void *user_data)
 {
+	RilVendorMtkAuto *self = RIL_VENDOR_MTK_AUTO(user_data);
 	guint i;
 
-	for (i = 0; i < G_N_ELEMENTS(mtk_types); i++) {
-		const struct ril_vendor_mtk_driver_data *type = mtk_types[i];
-		const struct ril_mtk_msg *msg = type->msg;
+	for (i = 0; i < G_N_ELEMENTS(mtk_flavors); i++) {
+		const struct ril_mtk_flavor *flavor = mtk_flavors[i];
+		const struct ril_mtk_msg *msg = flavor->msg;
 		const guint *ids = &msg->unsol_msgs;
 		guint j;
 
 		for (j = 0; j < MTK_UNSOL_MSGS; j++) {
 			if (ids[j] == id) {
-				DBG("event %u is %s %s", id, type->name,
+				DBG("event %u is %s %s", id, flavor->name,
 					ril_vendor_mtk_unsol_msg_name(msg,id));
-				if (ril_vendor_mtk_auto_set_type(self, type)) {
-					/* And repeat the event to invoke
-					 * the handler */
-					grilio_channel_inject_unsol_event(io,
-								id, data, len);
-				}
+				ril_vendor_mtk_set_flavor(&self->mtk, flavor);
+				/* We are done */
+				grilio_channel_remove_handler(io,
+							self->detect_id);
+				self->detect_id = 0;
+				/* And repeat the event to invoke the handler */
+				grilio_channel_inject_unsol_event(io, id,
+								data, len);
 				return;
 			}
 		}
 	}
 }
 
-static void ril_vendor_mtk_auto_free(struct ril_vendor_hook *hook)
+static void ril_vendor_mtk_auto_init(RilVendorMtkAuto *self)
 {
-	struct ril_vendor_hook_mtk_auto *self =
-		ril_vendor_hook_mtk_auto_cast(hook);
-	struct ril_vendor_hook_mtk *mtk = &self->mtk;
-
-	DBG("slot %u", mtk->slot);
-	grilio_channel_remove_handler(mtk->io, self->detect_id);
-	ril_vendor_mtk_destroy(mtk);
-	g_free(self);
 }
 
-static struct ril_vendor_hook *ril_vendor_mtk_create_hook_auto
-	(const void *driver_data, GRilIoChannel *io, const char *path,
-		const struct ril_slot_config *cfg, struct ril_network *network)
+static void ril_vendor_mtk_auto_finalize(GObject* object)
 {
-	struct ril_vendor_hook_mtk_auto *self =
-		g_new0(struct ril_vendor_hook_mtk_auto, 1);
-	struct ril_vendor_hook_mtk *mtk = &self->mtk;
+	RilVendorMtkAuto *self = RIL_VENDOR_MTK_AUTO(object);
 
-	/* Pick the default */
-	self->type = DEFAULT_MTK_TYPE;
-	ril_vendor_mtk_hook_init(mtk, self->type, ril_vendor_mtk_auto_free,
-						io, path, cfg, network);
-	DBG("%s slot %u", self->type->name, mtk->slot);
+	DBG("slot %u", self->mtk.slot);
+	grilio_channel_remove_handler(self->mtk.vendor.io, self->detect_id);
+	G_OBJECT_CLASS(ril_vendor_mtk_auto_parent_class)->finalize(object);
+}
+
+static void ril_vendor_mtk_auto_class_init(RilVendorMtkAutoClass* klass)
+{
+	G_OBJECT_CLASS(klass)->finalize = ril_vendor_mtk_auto_finalize;
+}
+
+static RilVendor *ril_vendor_mtk_auto_create_vendor(const void *driver_data,
+					GRilIoChannel *io, const char *path,
+					const struct ril_slot_config *config)
+{
+	RilVendorMtkAuto *self = g_object_new(RIL_VENDOR_TYPE_MTK_AUTO, NULL);
+	RilVendorMtk *mtk = &self->mtk;
+
+	ril_vendor_mtk_base_init(mtk, io, path, config);
+	ril_vendor_mtk_set_flavor(mtk, DEFAULT_MTK_TYPE);
+	DBG("%s slot %u", mtk->flavor->name, mtk->slot);
 
 	/*
 	 * Subscribe for (all) unsolicited events. Keep on listening until
 	 * we receive an MTK specific event that tells us which particular
 	 * kind of MTK adaptation we are using.
 	 */
-	self->detect_id = grilio_channel_add_unsol_event_handler(mtk->io,
+	self->detect_id = grilio_channel_add_unsol_event_handler(io,
 				ril_vendor_mtk_auto_detect_event, 0, self);
-	return &mtk->hook;
+	return &mtk->vendor;
 }
 
 RIL_VENDOR_DRIVER_DEFINE(ril_vendor_driver_mtk) {
 	.name               = "mtk",
 	.get_defaults       = ril_vendor_mtk_get_defaults,
-	.create_hook        = ril_vendor_mtk_create_hook_auto
+	.create_vendor      = ril_vendor_mtk_auto_create_vendor
 };
 
 /*

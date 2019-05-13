@@ -17,6 +17,7 @@
 #include "ril_radio.h"
 #include "ril_sim_card.h"
 #include "ril_sim_settings.h"
+#include "ril_vendor.h"
 #include "ril_util.h"
 #include "ril_log.h"
 
@@ -27,6 +28,8 @@
 #include <gutil_misc.h>
 
 #include <ofono/netreg.h>
+#include <ofono/watch.h>
+#include <ofono/gprs.h>
 
 #include "common.h"
 
@@ -59,11 +62,19 @@ enum ril_network_unsol_event {
 	UNSOL_EVENT_COUNT
 };
 
+enum ril_network_watch_event {
+	WATCH_EVENT_GPRS,
+	WATCH_EVENT_GPRS_SETTINGS,
+	WATCH_EVENT_COUNT
+};
+
 struct ril_network_priv {
 	GRilIoChannel *io;
 	GRilIoQueue *q;
 	struct ril_radio *radio;
 	struct ril_sim_card *simcard;
+	struct ril_vendor *vendor;
+	struct ofono_watch *watch;
 	int rat;
 	enum ril_pref_net_type lte_network_mode;
 	enum ril_pref_net_type umts_network_mode;
@@ -79,6 +90,9 @@ struct ril_network_priv {
 	gulong settings_event_id;
 	gulong radio_event_id[RADIO_EVENT_COUNT];
 	gulong simcard_event_id[SIM_EVENT_COUNT];
+	gulong watch_ids[WATCH_EVENT_COUNT];
+	gboolean need_initial_attach_apn;
+	gboolean set_initial_attach_apn;
 	struct ofono_network_operator operator;
 	gboolean assert_rat;
 };
@@ -475,7 +489,8 @@ static int ril_network_mode_to_rat(struct ril_network *self,
 	}
 }
 
-static int ril_network_pref_mode_expected(struct ril_network *self)
+static enum ofono_radio_access_mode ril_network_actual_pref_mode
+						(struct ril_network *self)
 {
 	struct ril_sim_settings *settings = self->settings;
 	struct ril_network_priv *priv = self->priv;
@@ -498,12 +513,101 @@ static int ril_network_pref_mode_expected(struct ril_network *self)
 	 * and max_pref_mode are not ANY, we pick the smallest value.
 	 * Otherwise we take any non-zero value if there is one.
 	 */
-	const enum ofono_radio_access_mode pref_mode =
-		(settings->pref_mode && max_pref_mode) ?
+	return (settings->pref_mode && max_pref_mode) ?
 		MIN(settings->pref_mode, max_pref_mode) :
-		settings->pref_mode ? settings->pref_mode :
-		max_pref_mode;
-	return ril_network_mode_to_rat(self, pref_mode);
+		settings->pref_mode ? settings->pref_mode : max_pref_mode;
+}
+
+static gboolean ril_network_need_initial_attach_apn(struct ril_network *self)
+{
+	struct ril_network_priv *priv = self->priv;
+	struct ril_radio *radio = priv->radio;
+	struct ofono_watch *watch = priv->watch;
+
+	if (watch->gprs && radio->state == RADIO_STATE_ON) {
+		switch (ril_network_actual_pref_mode(self)) {
+		case OFONO_RADIO_ACCESS_MODE_ANY:
+		case OFONO_RADIO_ACCESS_MODE_LTE:
+			return TRUE;
+		case OFONO_RADIO_ACCESS_MODE_UMTS:
+		case OFONO_RADIO_ACCESS_MODE_GSM:
+			break;
+		}
+	}
+	return FALSE;
+}
+
+static void ril_network_set_initial_attach_apn(struct ril_network *self,
+			const struct ofono_gprs_primary_context *ctx)
+{
+	struct ril_network_priv *priv = self->priv;
+	const char *proto = ril_protocol_from_ofono(ctx->proto);
+	const char *username;
+	const char *password;
+	enum ril_auth auth;
+	GRilIoRequest *req;
+
+	if (ctx->username[0] || ctx->password[0]) {
+		auth = ril_auth_method_from_ofono(ctx->auth_method);
+		username = ctx->username;
+		password = ctx->password;
+	} else {
+		auth = RIL_AUTH_NONE;
+		username = "";
+		password = "";
+	}
+
+	req = ril_vendor_set_attach_apn_req(priv->vendor,
+					DATA_PROFILE_DEFAULT_STR, ctx->apn,
+					username, password, auth, proto);
+
+	if (!req) {
+		/* Default format */
+		req = grilio_request_new();
+		grilio_request_append_utf8(req, ctx->apn);
+		grilio_request_append_utf8(req, proto);
+		grilio_request_append_int32(req, auth);
+		grilio_request_append_utf8(req, username);
+		grilio_request_append_utf8(req, password);
+	}
+
+	DBG_(self, "\"%s\"", ctx->apn);
+	grilio_queue_send_request(priv->q, req,
+				RIL_REQUEST_SET_INITIAL_ATTACH_APN);
+	grilio_request_unref(req);
+}
+
+static void ril_network_try_set_initial_attach_apn(struct ril_network *self)
+{
+	struct ril_network_priv *priv = self->priv;
+
+	if (priv->need_initial_attach_apn && priv->set_initial_attach_apn) {
+		struct ofono_gprs *gprs = priv->watch->gprs;
+		const struct ofono_gprs_primary_context *ctx =
+				ofono_gprs_context_settings_by_type(gprs,
+					OFONO_GPRS_CONTEXT_TYPE_INTERNET);
+
+		if (ctx) {
+			priv->set_initial_attach_apn = FALSE;
+			ril_network_set_initial_attach_apn(self, ctx);
+		}
+	}
+}
+
+static void ril_network_check_initial_attach_apn(struct ril_network *self)
+{
+	const gboolean need = ril_network_need_initial_attach_apn(self);
+	struct ril_network_priv *priv = self->priv;
+
+	if (priv->need_initial_attach_apn != need) {
+		DBG_(self, "%sneed initial attach apn", need ? "" : "don't ");
+		priv->need_initial_attach_apn = need;
+		if (need) {
+			/* We didn't need initial attach APN and now we do */
+			priv->set_initial_attach_apn = TRUE;
+		}
+	}
+	ril_network_try_set_initial_attach_apn(self);
 }
 
 static gboolean ril_network_can_set_pref_mode(struct ril_network *self)
@@ -595,7 +699,8 @@ static void ril_network_check_pref_mode(struct ril_network *self,
 							gboolean immediate)
 {
 	struct ril_network_priv *priv = self->priv;
-	const int rat = ril_network_pref_mode_expected(self);
+	const int rat = ril_network_mode_to_rat
+		(self, ril_network_actual_pref_mode(self));
 
 	if (priv->timer[TIMER_FORCE_CHECK_PREF_MODE]) {
 		ril_network_stop_timer(self, TIMER_FORCE_CHECK_PREF_MODE);
@@ -710,6 +815,7 @@ void ril_network_set_max_pref_mode(struct ril_network *self,
 				ofono_radio_access_mode_to_string(max_mode));
 			self->max_pref_mode = max_mode;
 			ril_network_emit(self, SIGNAL_MAX_PREF_MODE_CHANGED);
+			ril_network_check_initial_attach_apn(self);
 		}
 		ril_network_check_pref_mode(self, TRUE);
 	}
@@ -795,6 +901,7 @@ static void ril_network_radio_state_cb(struct ril_radio *radio, void *data)
 	struct ril_network *self = RIL_NETWORK(data);
 
 	ril_network_check_pref_mode(self, FALSE);
+	ril_network_check_initial_attach_apn(self);
 	if (radio->state == RADIO_STATE_ON) {
 		ril_network_poll_state(self);
 	}
@@ -819,6 +926,7 @@ static gboolean ril_network_check_pref_mode_cb(gpointer user_data)
 
 	DBG_(self, "checking pref mode");
 	ril_network_check_pref_mode(self, TRUE);
+	ril_network_check_initial_attach_apn(self);
 
 	return G_SOURCE_REMOVE;
 }
@@ -852,11 +960,38 @@ static void ril_network_sim_status_changed_cb(struct ril_sim_card *sc,
 	}
 }
 
+static void ril_network_watch_gprs_cb(struct ofono_watch *watch,
+							void* user_data)
+{
+	struct ril_network *self = RIL_NETWORK(user_data);
+	struct ril_network_priv *priv = self->priv;
+
+	DBG_(self, "gprs %s", watch->gprs ? "appeared" : "is gone");
+	priv->set_initial_attach_apn = TRUE;
+	ril_network_check_initial_attach_apn(self);
+}
+
+static void ril_network_watch_gprs_settings_cb(struct ofono_watch *watch,
+			enum ofono_gprs_context_type type,
+			const struct ofono_gprs_primary_context *settings,
+			void *user_data)
+{
+	if (type == OFONO_GPRS_CONTEXT_TYPE_INTERNET) {
+		struct ril_network *self = RIL_NETWORK(user_data);
+		struct ril_network_priv *priv = self->priv;
+
+		priv->set_initial_attach_apn = TRUE;
+		ril_network_check_initial_attach_apn(self);
+	}
+}
+
+
 struct ril_network *ril_network_new(const char *path, GRilIoChannel *io,
 			const char *log_prefix, struct ril_radio *radio,
 			struct ril_sim_card *simcard,
 			struct ril_sim_settings *settings,
-			const struct ril_slot_config *config)
+			const struct ril_slot_config *config,
+			struct ril_vendor *vendor)
 {
 	struct ril_network *self = g_object_new(RIL_NETWORK_TYPE, NULL);
 	struct ril_network_priv *priv = self->priv;
@@ -866,6 +1001,8 @@ struct ril_network *ril_network_new(const char *path, GRilIoChannel *io,
 	priv->q = grilio_queue_new(priv->io);
 	priv->radio = ril_radio_ref(radio);
 	priv->simcard = ril_sim_card_ref(simcard);
+	priv->vendor = ril_vendor_ref(vendor);
+	priv->watch = ofono_watch_new(path);
 	priv->log_prefix = (log_prefix && log_prefix[0]) ?
 		g_strconcat(log_prefix, " ", NULL) : g_strdup("");
 	DBG_(self, "");
@@ -884,12 +1021,14 @@ struct ril_network *ril_network_new(const char *path, GRilIoChannel *io,
 		grilio_channel_add_unsol_event_handler(priv->io,
 			ril_network_radio_capability_changed_cb,
 			RIL_UNSOL_RADIO_CAPABILITY, self);
+
 	priv->radio_event_id[RADIO_EVENT_STATE_CHANGED] =
 		ril_radio_add_state_changed_handler(priv->radio,
 			ril_network_radio_state_cb, self);
 	priv->radio_event_id[RADIO_EVENT_ONLINE_CHANGED] =
 		ril_radio_add_online_changed_handler(priv->radio,
 			ril_network_radio_online_cb, self);
+
 	priv->simcard_event_id[SIM_EVENT_STATUS_CHANGED] =
 		ril_sim_card_add_status_changed_handler(priv->simcard,
 			ril_network_sim_status_changed_cb, self);
@@ -899,6 +1038,13 @@ struct ril_network *ril_network_new(const char *path, GRilIoChannel *io,
 	priv->settings_event_id =
 		ril_sim_settings_add_pref_mode_changed_handler(settings,
 			ril_network_pref_mode_changed_cb, self);
+
+	priv->watch_ids[WATCH_EVENT_GPRS] =
+		ofono_watch_add_gprs_changed_handler(priv->watch,
+			ril_network_watch_gprs_cb, self);
+	priv->watch_ids[WATCH_EVENT_GPRS_SETTINGS] =
+		ofono_watch_add_gprs_settings_changed_handler(priv->watch,
+			ril_network_watch_gprs_settings_cb, self);
 
 	/*
 	 * Query the initial state. Querying network state before the radio
@@ -911,6 +1057,12 @@ struct ril_network *ril_network_new(const char *path, GRilIoChannel *io,
 		ril_network_poll_state(self);
 	}
 
+	priv->set_initial_attach_apn = 
+	priv->need_initial_attach_apn =
+		ril_network_need_initial_attach_apn(self);
+
+	ril_vendor_set_network(vendor, self);
+	ril_network_try_set_initial_attach_apn(self);
 	return self;
 }
 
@@ -954,6 +1106,8 @@ static void ril_network_finalize(GObject *object)
 		ril_network_stop_timer(self, tid);
 	}
 
+	ofono_watch_remove_all_handlers(priv->watch, priv->watch_ids);
+	ofono_watch_unref(priv->watch);
 	grilio_queue_cancel_all(priv->q, FALSE);
 	grilio_channel_remove_all_handlers(priv->io, priv->unsol_event_id);
 	grilio_channel_unref(priv->io);
@@ -965,6 +1119,7 @@ static void ril_network_finalize(GObject *object)
 	ril_sim_settings_remove_handler(self->settings,
 						priv->settings_event_id);
 	ril_sim_settings_unref(self->settings);
+	ril_vendor_unref(priv->vendor);
 	g_free(priv->log_prefix);
 	G_OBJECT_CLASS(ril_network_parent_class)->finalize(object);
 }

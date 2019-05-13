@@ -24,6 +24,7 @@ TESTS="\
  test-ril_util \
  test-ril_config \
  test-ril-transport \
+ test-ril_vendor \
  test-sms-filter \
  test-voicecall-filter \
  test-sailfish_access \

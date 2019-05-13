@@ -1,6 +1,6 @@
 /*
  *  Copyright (C) 2013 Canonical Ltd.
- *  Copyright (C) 2013-2018 Jolla Ltd.
+ *  Copyright (C) 2013-2019 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -327,6 +327,8 @@ enum ril_restricted_state {
 	RIL_RESTRICTED_STATE_CS_ALL       = 0x04,
 	RIL_RESTRICTED_STATE_PS_ALL       = 0x10
 };
+
+#define DATA_PROFILE_DEFAULT_STR "0"
 
 /* Suplementary services Service class*/
 #define SERVICE_CLASS_NONE 0

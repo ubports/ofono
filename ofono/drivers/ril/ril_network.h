@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2018 Jolla Ltd.
+ *  Copyright (C) 2015-2019 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -49,7 +49,8 @@ struct ril_network *ril_network_new(const char *path, GRilIoChannel *io,
 			const char *log_prefix, struct ril_radio *radio,
 			struct ril_sim_card *sim_card,
 			struct ril_sim_settings *settings,
-			const struct ril_slot_config *ril_slot_config);
+			const struct ril_slot_config *ril_slot_config,
+			struct ril_vendor *vendor);
 struct ril_network *ril_network_ref(struct ril_network *net);
 void ril_network_unref(struct ril_network *net);
 
