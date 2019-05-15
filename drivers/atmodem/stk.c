@@ -191,6 +191,19 @@ static gboolean at_stk_register(gpointer user)
 		g_at_chat_register(sd->chat, "*HCMD:", phonesim_hcmd_notify,
 						FALSE, stk, NULL);
 
+	if (sd->vendor == OFONO_VENDOR_XMM) {
+		/*	enabling stk	*/
+		g_at_chat_send(sd->chat, "AT+CFUN=6", none_prefix,
+						NULL, NULL, NULL);
+		/*	Here ofono has missed stk menu proactive command
+		 *	that comes after sim initialization only. Doing a
+		 *	sim reset will enable the stk driver to get the
+		 *	missed +CUSATP notifications.
+		 */
+		g_at_chat_send(sd->chat, "AT+CFUN=27,1", none_prefix,
+						NULL, NULL, NULL);
+	}
+
 	ofono_stk_register(stk);
 
 	return FALSE;
