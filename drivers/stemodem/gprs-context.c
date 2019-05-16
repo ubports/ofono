@@ -29,6 +29,7 @@
 #include <stdio.h>
 #include <errno.h>
 
+#include <ell/ell.h>
 #include <glib.h>
 
 #include <ofono/log.h>
@@ -147,7 +148,7 @@ static void rtnl_callback(int ifindex, const char *ifname, void *user_data)
 		return;
 	}
 
-	strncpy(gcd->interface, ifname, sizeof(gcd->interface));
+	l_strlcpy(gcd->interface, ifname, sizeof(gcd->interface));
 	gcd->ifindex = ifindex;
 	gcd->created = TRUE;
 }
