@@ -656,7 +656,7 @@ static char *build_nai(const char *imsi)
 	char mnc[3];
 	char *nai;
 
-	strncpy(mcc, imsi, 3);
+	memcpy(mcc, imsi, 3);
 
 	if (strlen(imsi) == 16) {
 		memcpy(mnc, imsi + 3, 3);

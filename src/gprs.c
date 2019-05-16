@@ -579,7 +579,7 @@ static void pri_ifupdown(const char *interface, ofono_bool_t active)
 		return;
 
 	memset(&ifr, 0, sizeof(ifr));
-	strncpy(ifr.ifr_name, interface, IFNAMSIZ);
+	l_strlcpy(ifr.ifr_name, interface, IFNAMSIZ);
 
 	if (ioctl(sk, SIOCGIFFLAGS, &ifr) < 0)
 		goto done;
@@ -615,7 +615,7 @@ static void pri_set_ipv4_addr(const char *interface, const char *address)
 		return;
 
 	memset(&ifr, 0, sizeof(ifr));
-	strncpy(ifr.ifr_name, interface, IFNAMSIZ);
+	l_strlcpy(ifr.ifr_name, interface, IFNAMSIZ);
 
 	if (ioctl(sk, SIOCGIFFLAGS, &ifr) < 0)
 		goto done;

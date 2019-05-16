@@ -3607,7 +3607,7 @@ static void emulator_atd_cb(struct ofono_emulator *em,
 
 			emulator_dial(em, vc, num);
 		} else {
-			strncpy(number, str, len - 1);
+			memcpy(number, str, len - 1);
 			number[len - 1] = '\0';
 
 			emulator_dial(em, vc, number);
