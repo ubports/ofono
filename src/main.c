@@ -236,6 +236,7 @@ int main(int argc, char **argv)
 	event_loop = g_main_loop_new(NULL, FALSE);
 
 	l_log_set_stderr();
+	l_debug("");
 	l_debug_enable("*");
 	l_main_init();
 
