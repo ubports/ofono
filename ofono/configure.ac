@@ -33,7 +33,7 @@ AC_PROG_LIBTOOL
 AC_ARG_ENABLE(optimization, AC_HELP_STRING([--disable-optimization],
 			[disable code optimization through compiler]), [
 	if (test "${enableval}" = "no"); then
-		CFLAGS="$CFLAGS -O0"
+		CFLAGS="$CFLAGS -O0 -U_FORTIFY_SOURCE"
 	fi
 ])
 
