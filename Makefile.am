@@ -6,12 +6,10 @@ noinst_LTLIBRARIES =
 if EXTERNAL_ELL
 ell_cflags = @ELL_CFLAGS@
 ell_ldadd = @ELL_LIBS@
-ell_dependencies =
 ell_built_sources =
 else
 ell_cflags =
 ell_ldadd = ell/libell-internal.la
-ell_dependencies = $(ell_ldadd)
 ell_built_sources = ell/internal ell/ell.h
 
 noinst_LTLIBRARIES += ell/libell-internal.la
@@ -728,8 +726,6 @@ src_ofonod_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) $(ell_ldadd) \
 
 src_ofonod_LDFLAGS = -Wl,--export-dynamic \
 				-Wl,--version-script=$(srcdir)/src/ofono.ver
-
-src_ofonod_DEPENDENCIES = $(ell_dependencies)
 
 BUILT_SOURCES = $(local_headers) $(ell_built_sources) src/builtin.h
 
