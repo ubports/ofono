@@ -19,12 +19,6 @@
  *
  */
 
-#ifdef TEMP_FAILURE_RETRY
-#define TFR TEMP_FAILURE_RETRY
-#else
-#define TFR
-#endif
-
 #include <fcntl.h>
 #include <sys/types.h>
 
