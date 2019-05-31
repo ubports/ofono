@@ -96,42 +96,9 @@ static void icera_debug(const char *str, void *user_data)
 static GAtChat *open_device(struct ofono_modem *modem,
 					const char *key, char *debug)
 {
-	GAtChat *chat;
-	GAtSyntax *syntax;
-	GIOChannel *channel;
-	GHashTable *options;
-	const char *device;
-
-	device = ofono_modem_get_string(modem, key);
-	if (device == NULL)
-		return NULL;
-
-	options = g_hash_table_new(g_str_hash, g_str_equal);
-	if (options == NULL)
-		return NULL;
-
-	g_hash_table_insert(options, "Baud", "115200");
-
-	channel = g_at_tty_open(device, options);
-
-	g_hash_table_destroy(options);
-
-	if (channel == NULL)
-		return NULL;
-
-	syntax = g_at_syntax_new_gsm_permissive();
-	chat = g_at_chat_new(channel, syntax);
-	g_at_syntax_unref(syntax);
-
-	g_io_channel_unref(channel);
-
-	if (chat == NULL)
-		return NULL;
-
-	if (getenv("OFONO_AT_DEBUG"))
-		g_at_chat_set_debug(chat, icera_debug, debug);
-
-	return chat;
+	return at_util_open_device(modem, key, icera_debug, debug,
+					"Baud", "115200",
+					NULL);
 }
 
 static void ussdmode_query(gboolean ok, GAtResult *result,
