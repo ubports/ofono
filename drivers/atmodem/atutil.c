@@ -24,15 +24,17 @@
 #include <config.h>
 #endif
 
-#include <glib.h>
-#include <gatchat.h>
 #include <string.h>
 #include <stdlib.h>
 #include <errno.h>
 
+#include <glib.h>
+#include <gattty.h>
+
 #define OFONO_API_SUBJECT_TO_CHANGE
 #include <ofono/log.h>
 #include <ofono/types.h>
+#include <ofono/modem.h>
 
 #include "atutil.h"
 #include "vendor.h"
@@ -735,4 +737,53 @@ char *at_util_get_cgdcont_command(guint cid, enum ofono_gprs_proto proto,
 
 	return g_strdup_printf("AT+CGDCONT=%u,\"%s\",\"%s\"", cid, pdp_type,
 									apn);
+}
+
+GAtChat *at_util_open_device(struct ofono_modem *modem, const char *key,
+				GAtDebugFunc debug_func, char *debug_prefix,
+				char *tty_option, ...)
+{
+	const char *device;
+	va_list args;
+	GIOChannel *channel;
+	GAtSyntax *syntax;
+	GAtChat *chat;
+	GHashTable *options = NULL;
+
+	device = ofono_modem_get_string(modem, key);
+	if (device == NULL)
+		return NULL;
+
+	if (tty_option) {
+		options = g_hash_table_new(g_str_hash, g_str_equal);
+		if (options == NULL)
+			return NULL;
+
+		va_start(args, tty_option);
+		while (tty_option) {
+			gpointer value = (gpointer) va_arg(args, const char *);
+
+			g_hash_table_insert(options, tty_option, value);
+			tty_option = (gpointer) va_arg(args, const char *);
+		}
+	}
+
+	channel = g_at_tty_open(device, options);
+	g_hash_table_destroy(options);
+
+	if (channel == NULL)
+		return NULL;
+
+	syntax = g_at_syntax_new_gsm_permissive();
+	chat = g_at_chat_new(channel, syntax);
+	g_at_syntax_unref(syntax);
+	g_io_channel_unref(channel);
+
+	if (chat == NULL)
+		return NULL;
+
+	if (getenv("OFONO_AT_DEBUG"))
+		g_at_chat_set_debug(chat, debug_func, debug_prefix);
+
+	return chat;
 }

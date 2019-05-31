@@ -20,6 +20,10 @@
  *
  */
 
+#include <gatchat.h>
+
+struct ofono_modem;
+
 enum at_util_sms_store {
 	AT_UTIL_SMS_STORE_SM =	0,
 	AT_UTIL_SMS_STORE_ME =	1,
@@ -169,3 +173,7 @@ static inline int at_util_convert_signal_strength(int strength)
 		e.error = 0;				\
 		f(&e, ##args);				\
 	} while (0)
+
+GAtChat *at_util_open_device(struct ofono_modem *modem, const char *key,
+				GAtDebugFunc debug_func, char *debug_prefix,
+				char *tty_option, ...);
