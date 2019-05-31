@@ -38,6 +38,7 @@
 #include <ofono/cdma-connman.h>
 #include <ofono/log.h>
 
+#include "drivers/atmodem/atutil.h"
 #include "drivers/atmodem/vendor.h"
 
 struct speedupcdma_data {
@@ -102,34 +103,7 @@ static void cfun_enable(gboolean ok, GAtResult *result, gpointer user_data)
 static GAtChat *open_device(struct ofono_modem *modem,
 				const char *key, char *debug)
 {
-	const char *device;
-	GIOChannel *channel;
-	GAtSyntax *syntax;
-	GAtChat *chat;
-
-	device = ofono_modem_get_string(modem, key);
-	if (device == NULL)
-		return NULL;
-
-	DBG("%s %s", key, device);
-
-	channel = g_at_tty_open(device, NULL);
-	if (channel == NULL)
-		return NULL;
-
-	syntax = g_at_syntax_new_gsm_permissive();
-	chat = g_at_chat_new(channel, syntax);
-	g_at_syntax_unref(syntax);
-
-	g_io_channel_unref(channel);
-
-	if (chat == NULL)
-		return NULL;
-
-	if (getenv("OFONO_AT_DEBUG"))
-		g_at_chat_set_debug(chat, speedupcdma_debug, debug);
-
-	return chat;
+	return at_util_open_device(modem, key, speedupcdma_debug, debug, NULL);
 }
 
 static int speedupcdma_enable(struct ofono_modem *modem)
