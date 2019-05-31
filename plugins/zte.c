@@ -99,51 +99,16 @@ static void zte_debug(const char *str, void *user_data)
 static GAtChat *open_device(struct ofono_modem *modem,
 				const char *key, char *debug)
 {
-	const char *device;
-	GIOChannel *channel;
-	GAtSyntax *syntax;
-	GAtChat *chat;
-	GHashTable *options;
-
-	device = ofono_modem_get_string(modem, key);
-	if (device == NULL)
-		return NULL;
-
-	DBG("%s %s", key, device);
-
-	options = g_hash_table_new(g_str_hash, g_str_equal);
-	if (options == NULL)
-		return NULL;
-
-	g_hash_table_insert(options, "Baud", "115200");
-	g_hash_table_insert(options, "Parity", "none");
-	g_hash_table_insert(options, "StopBits", "1");
-	g_hash_table_insert(options, "DataBits", "8");
-	g_hash_table_insert(options, "XonXoff", "off");
-	g_hash_table_insert(options, "RtsCts", "on");
-	g_hash_table_insert(options, "Local", "on");
-	g_hash_table_insert(options, "Read", "on");
-
-	channel = g_at_tty_open(device, options);
-
-	g_hash_table_destroy(options);
-
-	if (channel == NULL)
-		return NULL;
-
-	syntax = g_at_syntax_new_gsm_permissive();
-	chat = g_at_chat_new(channel, syntax);
-	g_at_syntax_unref(syntax);
-
-	g_io_channel_unref(channel);
-
-	if (chat == NULL)
-		return NULL;
-
-	if (getenv("OFONO_AT_DEBUG"))
-		g_at_chat_set_debug(chat, zte_debug, debug);
-
-	return chat;
+	return at_util_open_device(modem, key, zte_debug, debug,
+					"Baud", "115200",
+					"Parity", "none",
+					"StopBits", "1",
+					"DataBits", "8",
+					"XonXoff", "off",
+					"RtsCts", "on",
+					"Local", "on",
+					"Read", "on",
+					NULL);
 }
 
 static void zoprt_enable(gboolean ok, GAtResult *result, gpointer user_data)
