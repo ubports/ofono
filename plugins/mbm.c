@@ -285,35 +285,12 @@ static void emrdy_query(gboolean ok, GAtResult *result, gpointer user_data)
 					cfun_query, modem, NULL);
 }
 
-static GAtChat *create_port(const char *device)
+static GAtChat *open_device(struct ofono_modem *modem, const char *key,
+				char *debug)
 {
-	GAtSyntax *syntax;
-	GIOChannel *channel;
-	GAtChat *chat;
-	GHashTable *options;
-
-	options = g_hash_table_new(g_str_hash, g_str_equal);
-	if (options == NULL)
-		return NULL;
-
-	g_hash_table_insert(options, "Baud", "115200");
-
-	channel = g_at_tty_open(device, options);
-
-	g_hash_table_destroy(options);
-
-	if (channel == NULL)
-		return NULL;
-
-	syntax = g_at_syntax_new_gsm_permissive();
-	chat = g_at_chat_new(channel, syntax);
-	g_at_syntax_unref(syntax);
-	g_io_channel_unref(channel);
-
-	if (chat == NULL)
-		return NULL;
-
-	return chat;
+	return at_util_open_device(modem, key, mbm_debug, debug,
+					"Baud", "115200",
+					NULL);
 }
 
 static int mbm_enable(struct ofono_modem *modem)
@@ -332,23 +309,17 @@ static int mbm_enable(struct ofono_modem *modem)
 	if (modem_dev == NULL || data_dev == NULL)
 		return -EINVAL;
 
-	data->modem_port = create_port(modem_dev);
+	data->modem_port = open_device(modem, "ModemDevice", "Modem: ");
 	if (data->modem_port == NULL)
 		return -EIO;
 
-	if (getenv("OFONO_AT_DEBUG"))
-		g_at_chat_set_debug(data->modem_port, mbm_debug, "Modem: ");
-
-	data->data_port = create_port(data_dev);
+	data->data_port = open_device(modem, "DataDevice", "Data: ");
 	if (data->data_port == NULL) {
 		g_at_chat_unref(data->modem_port);
 		data->modem_port = NULL;
 
 		return -EIO;
 	}
-
-	if (getenv("OFONO_AT_DEBUG"))
-		g_at_chat_set_debug(data->data_port, mbm_debug, "Data: ");
 
 	g_at_chat_register(data->modem_port, "*EMRDY:", emrdy_notifier,
 					FALSE, modem, NULL);
