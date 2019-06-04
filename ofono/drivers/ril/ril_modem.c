@@ -284,8 +284,10 @@ static void ril_modem_post_sim(struct ofono_modem *modem)
 	ofono_phonebook_create(modem, 0, RILMODEM_DRIVER, md);
 	ofono_call_forwarding_create(modem, 0, RILMODEM_DRIVER, md);
 	ofono_call_barring_create(modem, 0, RILMODEM_DRIVER, md);
-	ofono_stk_create(modem, 0, RILMODEM_DRIVER, md);
 	ofono_message_waiting_register(ofono_message_waiting_create(modem));
+	if (md->modem.config.enable_stk) {
+		ofono_stk_create(modem, 0, RILMODEM_DRIVER, md);
+	}
 	if (md->modem.config.enable_cbs) {
 		ofono_cbs_create(modem, 0, RILMODEM_DRIVER, md);
 	}
