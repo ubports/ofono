@@ -348,6 +348,8 @@ void ril_post_sim(struct ofono_modem *modem)
 	if (mw)
 		ofono_message_waiting_register(mw);
 
+	ofono_stk_create(modem, rd->vendor,
+			get_driver_type(rd, OFONO_ATOM_TYPE_STK), rd->ril);
 	ofono_phonebook_create(modem, rd->vendor,
 			get_driver_type(rd, OFONO_ATOM_TYPE_PHONEBOOK), modem);
 }
