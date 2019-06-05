@@ -25,8 +25,9 @@
 
 #define QMI_WMS_RAW_SEND		32	/* Send a raw message */
 
-#define QMI_WMS_RAW_READ		34	/* Read raw message from storage*/
-
+#define QMI_WMS_RAW_READ		34	/* Read raw message from storage */
+#define QMI_WMS_DELETE			36	/* Delete message */
+#define QMI_WMS_GET_MSG_PROTOCOL	48	/* Get message protocol */
 #define QMI_WMS_GET_MSG_LIST		49	/* Get list of messages from the device */
 #define QMI_WMS_SET_ROUTES		50	/* Set routes for message memory storage */
 #define QMI_WMS_GET_ROUTES		51	/* Get routes for message memory storage */
@@ -45,6 +46,17 @@ struct qmi_wms_result_new_msg_notify {
 	uint32_t storage_index;
 } __attribute__((__packed__));
 
+#define QMI_WMS_RESULT_MESSAGE			0x11
+struct qmi_wms_result_message {
+	uint8_t ack_required;				/* bool */
+	uint32_t transaction_id;
+	uint8_t msg_format;
+	uint16_t msg_length;
+	uint8_t msg_data[0];
+} __attribute__((__packed__));
+
+#define QMI_WMS_RESULT_MSG_MODE			0x12
+
 /* Set new message conditions */
 #define QMI_WMS_PARAM_NEW_MSG_REPORT		0x10	/* bool */
 
@@ -57,23 +69,59 @@ struct qmi_wms_param_message {
 } __attribute__((__packed__));
 #define QMI_WMS_RESULT_MESSAGE_ID		0x01	/* uint16 */
 
-/* Get list of messages from the device */
-#define QMI_WMS_PARAM_STORAGE_TYPE		0x01	/* uint8 */
-#define QMI_WMS_PARAM_MESSAGE_MODE		0x11	/* uint8 */
+/* Read a raw message */
+#define QMI_WMS_PARAM_READ_MSG			0x01
+struct qmi_wms_read_msg_id {
+	uint8_t  type;
+	uint32_t ndx;
+} __attribute__((__packed__));
 
-#define QMI_WMS_STORAGE_TYPE_UIM		0
-#define QMI_WMS_STORAGE_TYPE_NV			1
-#define QMI_WMS_STORAGE_TYPE_UNKNOWN		2
-#define QMI_WMS_STORAGE_TYPE_NONE		255
+#define QMI_WMS_PARAM_READ_MODE			0x10
 
-#define QMI_WMS_MESSAGE_MODE_GSMWCDMA		1
-
+#define QMI_WMS_RESULT_READ_MSG			0x01
 struct qmi_wms_raw_message {
 	uint8_t msg_tag;
 	uint8_t msg_format;
 	uint16_t msg_length;
 	uint8_t msg_data[0];
 } __attribute__((__packed__));
+
+/* Delete messages */
+#define QMI_WMS_PARAM_DEL_STORE			0x01
+#define QMI_WMS_PARAM_DEL_NDX			0x10
+#define QMI_WMS_PARAM_DEL_TYPE			0x11
+#define QMI_WMS_PARAM_DEL_MODE			0x12
+
+/* Get message protocol */
+#define QMI_WMS_PARAM_PROTOCOL			0x01
+
+/* Get list of messages from the device */
+#define QMI_WMS_PARAM_STORAGE_TYPE		0x01	/* uint8 */
+#define QMI_WMS_PARAM_TAG_TYPE			0x10
+#define QMI_WMS_PARAM_MESSAGE_MODE		0x11	/* uint8 */
+
+#define QMI_WMS_RESULT_MSG_LIST			0x01
+struct qmi_wms_result_msg_list {
+	uint32_t cnt;
+	struct {
+		uint32_t ndx;
+		uint8_t  type;
+	} __attribute__((__packed__)) msg[0];
+} __attribute__((__packed__));
+
+#define QMI_WMS_STORAGE_TYPE_UIM		0
+#define QMI_WMS_STORAGE_TYPE_NV			1
+#define QMI_WMS_STORAGE_TYPE_UNKNOWN		2
+#define QMI_WMS_STORAGE_TYPE_NONE		255
+
+#define QMI_WMS_MT_READ				0x00
+#define QMI_WMS_MT_NOT_READ			0x01
+#define QMI_WMS_MO_SENT				0x02
+#define QMI_WMS_MO_NOT_SENT			0x03
+#define QMI_WMS_MT_UNDEFINE			0xff
+
+#define QMI_WMS_MESSAGE_MODE_CDMA		0x00
+#define QMI_WMS_MESSAGE_MODE_GSMWCDMA		0x01
 
 /* Get routes for message memory storage */
 #define QMI_WMS_RESULT_ROUTE_LIST		0x01
@@ -89,14 +137,6 @@ struct qmi_wms_route_list {
 } __attribute__((__packed__));
 #define QMI_WMS_RESULT_STATUS_REPORT		0x10	/* bool */
 #define QMI_WMS_PARAM_STATUS_REPORT		0x10	/* bool */
-#define QMI_WMS_RESULT_MESSAGE			0x11
-struct qmi_wms_result_message {
-	uint8_t ack_required;				/* bool */
-	uint32_t transaction_id;
-	uint8_t msg_format;
-	uint16_t msg_length;
-	uint8_t msg_data[0];
-} __attribute__((__packed__));
 
 #define QMI_WMS_MSG_TYPE_P2P			0x00
 #define QMI_WMS_MSG_TYPE_BROADCAST		0x01
@@ -134,3 +174,6 @@ struct qmi_wms_result_smsc_addr {
 #define QMI_WMS_DOMAIN_PS_PREFERRED		0x01
 #define QMI_WMS_DOMAIN_CS_ONLY			0x02
 #define QMI_WMS_DOMAIN_PS_ONLY			0x03
+
+/* Error code */
+#define QMI_ERR_OP_DEVICE_UNSUPPORTED		0x19
