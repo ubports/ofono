@@ -71,6 +71,7 @@
 #define RILMODEM_DEFAULT_NETWORK_MODE_TIMEOUT (20*1000) /* ms */
 #define RILMODEM_DEFAULT_ENABLE_VOICECALL TRUE
 #define RILMODEM_DEFAULT_ENABLE_CBS TRUE
+#define RILMODEM_DEFAULT_ENABLE_STK TRUE
 #define RILMODEM_DEFAULT_SLOT       0xffffffff
 #define RILMODEM_DEFAULT_TIMEOUT    0 /* No timeout */
 #define RILMODEM_DEFAULT_SIM_FLAGS  RIL_SIM_CARD_V9_UICC_SUBSCRIPTION_WORKAROUND
@@ -117,6 +118,7 @@
 #define RILCONF_4G                          "enable4G" /* Deprecated */
 #define RILCONF_ENABLE_VOICECALL            "enableVoicecall"
 #define RILCONF_ENABLE_CBS                  "enableCellBroadcast"
+#define RILCONF_ENABLE_STK                  "enableSimToolkit"
 #define RILCONF_TECHNOLOGIES                "technologies"
 #define RILCONF_LTE_MODE                    "lteNetworkMode"
 #define RILCONF_UMTS_MODE                   "umtsNetworkMode"
@@ -1213,6 +1215,7 @@ static ril_slot *ril_plugin_slot_new_take(char *transport,
 		RILMODEM_DEFAULT_CONFIRM_RADIO_POWER_ON;
 	config->enable_voicecall = RILMODEM_DEFAULT_ENABLE_VOICECALL;
 	config->enable_cbs = RILMODEM_DEFAULT_ENABLE_CBS;
+	config->enable_stk = RILMODEM_DEFAULT_ENABLE_STK;
 	config->query_available_band_mode =
 		RILMODEM_DEFAULT_QUERY_AVAILABLE_BAND_MODE;
 	config->network_selection_manual_0 =
@@ -1255,6 +1258,7 @@ static void ril_plugin_slot_apply_vendor_defaults(ril_slot *slot)
 		memset(&defaults, 0, sizeof(defaults));
 		defaults.legacy_imei_query = slot->legacy_imei_query;
 		defaults.enable_cbs = config->enable_cbs;
+		defaults.enable_stk = config->enable_stk;
 		defaults.empty_pin_query = config->empty_pin_query;
 		defaults.query_available_band_mode =
 			config->query_available_band_mode;
@@ -1262,6 +1266,7 @@ static void ril_plugin_slot_apply_vendor_defaults(ril_slot *slot)
 		ril_vendor_get_defaults(slot->vendor_driver, &defaults);
 		slot->legacy_imei_query = defaults.legacy_imei_query;
 		config->enable_cbs = defaults.enable_cbs;
+		config->enable_stk = defaults.enable_stk;
 		config->empty_pin_query = defaults.empty_pin_query;
 		config->query_available_band_mode =
 			defaults.query_available_band_mode;
@@ -1474,6 +1479,13 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 					&config->enable_cbs)) {
 		DBG("%s: " RILCONF_ENABLE_CBS " %s", group,
 				config->enable_cbs ? "yes" : "no");
+	}
+
+	/* enableSimTookit */
+	if (ril_config_get_boolean(file, group, RILCONF_ENABLE_STK,
+					&config->enable_stk)) {
+		DBG("%s: " RILCONF_ENABLE_STK " %s", group,
+				config->enable_stk ? "yes" : "no");
 	}
 
 	/* networkSelectionManual0 */

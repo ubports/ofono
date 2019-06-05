@@ -22,6 +22,7 @@ struct ril_vendor_defaults {
 	gboolean empty_pin_query;
 	gboolean legacy_imei_query;
 	gboolean enable_cbs;
+	gboolean enable_stk;
 	gboolean query_available_band_mode;
 };
 
