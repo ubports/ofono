@@ -87,6 +87,8 @@
 #define RILMODEM_DEFAULT_RADIO_POWER_CYCLE TRUE
 #define RILMODEM_DEFAULT_CONFIRM_RADIO_POWER_ON TRUE
 #define RILMODEM_DEFAULT_NETWORK_SELECTION_MANUAL_0 TRUE
+#define RILMODEM_DEFAULT_USE_DATA_PROFILES FALSE
+#define RILMODEM_DEFAULT_MMS_DATA_PROFILE_ID RIL_DATA_PROFILE_IMS
 #define RILMODEM_DEFAULT_SLOT_FLAGS SAILFISH_SLOT_NO_FLAGS
 
 /* RIL socket transport name and parameters */
@@ -138,6 +140,8 @@
 #define RILCONF_CONFIRM_RADIO_POWER_ON      "confirmRadioPowerOn"
 #define RILCONF_SINGLE_DATA_CONTEXT         "singleDataContext"
 #define RILCONF_NETWORK_SELECTION_MANUAL_0  "networkSelectionManual0"
+#define RILCONF_USE_DATA_PROFILES           "useDataProfiles"
+#define RILCONF_MMS_DATA_PROFILE_ID         "mmsDataProfileId"
 
 /* Modem error ids */
 #define RIL_ERROR_ID_RILD_RESTART           "rild-restart"
@@ -1220,6 +1224,8 @@ static ril_slot *ril_plugin_slot_new_take(char *transport,
 		RILMODEM_DEFAULT_QUERY_AVAILABLE_BAND_MODE;
 	config->network_selection_manual_0 =
 		RILMODEM_DEFAULT_NETWORK_SELECTION_MANUAL_0;
+	config->use_data_profiles = RILMODEM_DEFAULT_USE_DATA_PROFILES;
+	config->mms_data_profile_id = RILMODEM_DEFAULT_MMS_DATA_PROFILE_ID;
 	slot->timeout = RILMODEM_DEFAULT_TIMEOUT;
 	slot->sim_flags = RILMODEM_DEFAULT_SIM_FLAGS;
 	slot->slot_flags = RILMODEM_DEFAULT_SLOT_FLAGS;
@@ -1260,6 +1266,8 @@ static void ril_plugin_slot_apply_vendor_defaults(ril_slot *slot)
 		defaults.enable_cbs = config->enable_cbs;
 		defaults.enable_stk = config->enable_stk;
 		defaults.empty_pin_query = config->empty_pin_query;
+		defaults.mms_data_profile_id = config->mms_data_profile_id;
+		defaults.use_data_profiles = config->use_data_profiles;
 		defaults.query_available_band_mode =
 			config->query_available_band_mode;
 
@@ -1268,6 +1276,8 @@ static void ril_plugin_slot_apply_vendor_defaults(ril_slot *slot)
 		config->enable_cbs = defaults.enable_cbs;
 		config->enable_stk = defaults.enable_stk;
 		config->empty_pin_query = defaults.empty_pin_query;
+		config->use_data_profiles = defaults.use_data_profiles;
+		config->mms_data_profile_id = defaults.mms_data_profile_id;
 		config->query_available_band_mode =
 			defaults.query_available_band_mode;
 	}
@@ -1494,6 +1504,21 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 					&config->network_selection_manual_0)) {
 		DBG("%s: " RILCONF_NETWORK_SELECTION_MANUAL_0 " %s", group,
 			config->network_selection_manual_0 ? "yes" : "no");
+	}
+
+	/* useDataProfiles */
+	if (ril_config_get_boolean(file, group, RILCONF_USE_DATA_PROFILES,
+					&config->use_data_profiles)) {
+		DBG("%s: " RILCONF_USE_DATA_PROFILES " %s", group,
+			config->use_data_profiles ? "yes" : "no");
+	}
+
+	/* mmsDataProfileId */
+	if (ril_config_get_integer(file, group, RILCONF_MMS_DATA_PROFILE_ID,
+							&ival) && ival >= 0) {
+		config->mms_data_profile_id = ival;
+		DBG("%s: " RILCONF_MMS_DATA_PROFILE_ID " %u", group,
+						config->mms_data_profile_id);
 	}
 
 	/* technologies */

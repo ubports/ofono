@@ -323,8 +323,8 @@ static void ril_vendor_mtk_incoming_call_indication(GRilIoChannel *io, guint id,
 	}
 }
 
-static GRilIoRequest *ril_vendor_mtk_data_call_req(RilVendor *vendor,
-			int tech, const char *profile, const char *apn,
+static GRilIoRequest *ril_vendor_mtk_data_call_req(RilVendor *vendor, int tech,
+			enum ril_data_profile profile, const char *apn,
 			const char *username, const char *password,
 			enum ril_auth auth, const char *proto)
 {
@@ -333,7 +333,7 @@ static GRilIoRequest *ril_vendor_mtk_data_call_req(RilVendor *vendor,
 
 	grilio_request_append_int32(req, 8); /* Number of parameters */
 	grilio_request_append_format(req, "%d", tech);
-	grilio_request_append_utf8(req, profile);
+	grilio_request_append_format(req, "%d", profile);
 	grilio_request_append_utf8(req, apn);
 	grilio_request_append_utf8(req, username);
 	grilio_request_append_utf8(req, password);
@@ -344,8 +344,7 @@ static GRilIoRequest *ril_vendor_mtk_data_call_req(RilVendor *vendor,
 }
 
 static GRilIoRequest *ril_vendor_mtk_set_attach_apn_req(RilVendor *vendor,
-			const char *profile, const char *apn,
-			const char *user, const char *pass,
+			const char *apn, const char *user, const char *pass,
 			enum ril_auth auth, const char *prot)
 {
 	RilVendorMtk *self = RIL_VENDOR_MTK(vendor);

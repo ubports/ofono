@@ -26,6 +26,7 @@
 #include <grilio_parser.h>
 
 #include <gutil_misc.h>
+#include <gutil_macros.h>
 
 #include <ofono/netreg.h>
 #include <ofono/watch.h>
@@ -68,6 +69,20 @@ enum ril_network_watch_event {
 	WATCH_EVENT_COUNT
 };
 
+struct ril_network_data_profile {
+	enum ril_data_profile profile_id;
+	enum ril_profile_type type;
+	const char *apn;
+	const char *user;
+	const char *password;
+	enum ofono_gprs_auth_method auth_method;
+	enum ofono_gprs_proto proto;
+	int max_conns_time;
+	int max_conns;
+	int wait_time;
+	gboolean enabled;
+};
+
 struct ril_network_priv {
 	GRilIoChannel *io;
 	GRilIoQueue *q;
@@ -95,6 +110,10 @@ struct ril_network_priv {
 	gboolean set_initial_attach_apn;
 	struct ofono_network_operator operator;
 	gboolean assert_rat;
+	gboolean use_data_profiles;
+	int mms_data_profile_id;
+	GSList *data_profiles;
+	guint set_data_profiles_id;
 };
 
 enum ril_network_signal {
@@ -557,8 +576,7 @@ static void ril_network_set_initial_attach_apn(struct ril_network *self,
 		password = "";
 	}
 
-	req = ril_vendor_set_attach_apn_req(priv->vendor,
-					DATA_PROFILE_DEFAULT_STR, ctx->apn,
+	req = ril_vendor_set_attach_apn_req(priv->vendor,ctx->apn,
 					username, password, auth, proto);
 
 	if (!req) {
@@ -608,6 +626,191 @@ static void ril_network_check_initial_attach_apn(struct ril_network *self)
 		}
 	}
 	ril_network_try_set_initial_attach_apn(self);
+}
+
+struct ril_network_data_profile *ril_network_data_profile_new
+			(const struct ofono_gprs_primary_context* context,
+					enum ril_data_profile profile_id)
+{
+	/* Allocate the whole thing as a single memory block */
+	struct ril_network_data_profile *profile;
+	const enum ofono_gprs_auth_method auth_method =
+			(context->username[0] || context->password[0]) ?
+			context->auth_method : OFONO_GPRS_AUTH_METHOD_NONE;
+	const gsize apn_size = strlen(context->apn) + 1;
+	gsize username_size = 0;
+	gsize password_size = 0;
+	gsize size = G_ALIGN8(sizeof(*profile)) + G_ALIGN8(apn_size);
+	char* ptr;
+
+	if (auth_method != OFONO_GPRS_AUTH_METHOD_NONE) {
+		username_size = strlen(context->username) + 1;
+		password_size = strlen(context->password) + 1;
+		size += G_ALIGN8(username_size) + G_ALIGN8(password_size);
+	}
+
+	ptr = g_malloc0(size);
+
+	profile = (struct ril_network_data_profile*)ptr;
+	ptr += G_ALIGN8(sizeof(*profile));
+
+	profile->profile_id = profile_id;
+	profile->type = RIL_PROFILE_3GPP;
+	profile->auth_method = auth_method;
+	profile->proto = context->proto;
+	profile->enabled = TRUE;
+
+	/* Copy strings */
+	profile->apn = ptr;
+	memcpy(ptr, context->apn, apn_size - 1);
+	ptr += G_ALIGN8(apn_size);
+
+	if (auth_method == OFONO_GPRS_AUTH_METHOD_NONE) {
+		profile->user = "";
+		profile->password = "";
+	} else {
+		profile->user = ptr;
+		memcpy(ptr, context->username, username_size - 1);
+		ptr += G_ALIGN8(username_size);
+
+		profile->password = ptr;
+		memcpy(ptr, context->password, password_size - 1);
+	}
+
+	return profile;
+}
+
+static gboolean ril_network_data_profile_equal
+		(const struct ril_network_data_profile *profile1,
+			const struct ril_network_data_profile *profile2)
+{
+	if (profile1 == profile2) {
+		return TRUE;
+	} else if (!profile1 || !profile2) {
+		return FALSE;
+	} else {
+		return profile1->profile_id == profile2->profile_id &&
+			profile1->type == profile2->type &&
+			profile1->auth_method == profile2->auth_method &&
+			profile1->proto == profile2->proto &&
+			profile1->enabled == profile2->enabled &&
+			!g_strcmp0(profile1->apn, profile2->apn) &&
+			!g_strcmp0(profile1->user, profile2->user) &&
+			!g_strcmp0(profile1->password, profile2->password);
+	}
+}
+
+static gboolean ril_network_data_profiles_equal(GSList *list1, GSList *list2)
+{
+	if (g_slist_length(list1) != g_slist_length(list2)) {
+		return FALSE;
+	} else {
+		GSList *l1 = list1;
+		GSList *l2 = list2;
+
+		while (l1 && l2) {
+			const struct ril_network_data_profile *p1 = l1->data;
+			const struct ril_network_data_profile *p2 = l2->data;
+
+			if (!ril_network_data_profile_equal(p1, p2)) {
+				return FALSE;
+			}
+			l1 = l1->next;
+			l2 = l2->next;
+		}
+
+		return TRUE;
+	}
+}
+
+static inline void ril_network_data_profiles_free(GSList *list)
+{
+	/* Profiles are allocated as single memory blocks */
+	g_slist_free_full(list, g_free);
+}
+
+static void ril_network_set_data_profiles_done(GRilIoChannel *channel,
+		int status, const void *data, guint len, void *user_data)
+{
+	struct ril_network *self = RIL_NETWORK(user_data);
+	struct ril_network_priv *priv = self->priv;
+
+	GASSERT(priv->set_data_profiles_id);
+	priv->set_data_profiles_id = 0;
+}
+
+static void ril_network_set_data_profiles(struct ril_network *self)
+{
+	struct ril_network_priv *priv = self->priv;
+	GRilIoRequest *req = grilio_request_new();
+	GSList *l = priv->data_profiles;
+
+	grilio_request_append_int32(req, g_slist_length(l));
+	while (l) {
+		const struct ril_network_data_profile *p = l->data;
+
+		grilio_request_append_int32(req, p->profile_id);
+		grilio_request_append_utf8(req, p->apn);
+		grilio_request_append_utf8(req, ril_protocol_from_ofono
+							(p->proto));
+		grilio_request_append_int32(req, ril_auth_method_from_ofono
+							(p->auth_method));
+		grilio_request_append_utf8(req, p->user);
+		grilio_request_append_utf8(req, p->password);
+		grilio_request_append_int32(req, p->type);
+		grilio_request_append_int32(req, p->max_conns_time);
+		grilio_request_append_int32(req, p->max_conns);
+		grilio_request_append_int32(req, p->wait_time);
+		grilio_request_append_int32(req, p->enabled);
+		l = l->next;
+	}
+	grilio_queue_cancel_request(priv->q, priv->set_data_profiles_id, FALSE);
+	priv->set_data_profiles_id = grilio_queue_send_request_full(priv->q,
+					req, RIL_REQUEST_SET_DATA_PROFILE,
+					ril_network_set_data_profiles_done,
+					NULL, self);
+	grilio_request_unref(req);
+}
+
+static void ril_network_check_data_profiles(struct ril_network *self)
+{
+	struct ril_network_priv *priv = self->priv;
+	struct ofono_gprs *gprs = priv->watch->gprs;
+
+	if (gprs) {
+		const struct ofono_gprs_primary_context* internet =
+			ofono_gprs_context_settings_by_type(gprs,
+				OFONO_GPRS_CONTEXT_TYPE_INTERNET);
+		const struct ofono_gprs_primary_context* mms =
+			ofono_gprs_context_settings_by_type(gprs,
+				OFONO_GPRS_CONTEXT_TYPE_MMS);
+		GSList *l = NULL;
+
+		if (internet) {
+			DBG_(self, "internet apn \"%s\"", internet->apn);
+			l = g_slist_append(l,
+				ril_network_data_profile_new(internet,
+					RIL_DATA_PROFILE_DEFAULT));
+		}
+
+		if (mms) {
+			DBG_(self, "mms apn \"%s\"", mms->apn);
+			l = g_slist_append(l,
+				ril_network_data_profile_new(mms,
+					priv->mms_data_profile_id));
+		}
+
+		if (ril_network_data_profiles_equal(priv->data_profiles, l)) {
+			ril_network_data_profiles_free(l);
+		} else {
+			ril_network_data_profiles_free(priv->data_profiles);
+			priv->data_profiles = l;
+			ril_network_set_data_profiles(self);
+		}
+	} else {
+		ril_network_data_profiles_free(priv->data_profiles);
+		priv->data_profiles = NULL;
+	}
 }
 
 static gboolean ril_network_can_set_pref_mode(struct ril_network *self)
@@ -968,6 +1171,9 @@ static void ril_network_watch_gprs_cb(struct ofono_watch *watch,
 
 	DBG_(self, "gprs %s", watch->gprs ? "appeared" : "is gone");
 	priv->set_initial_attach_apn = TRUE;
+	if (priv->use_data_profiles) {
+		ril_network_check_data_profiles(self);
+	}
 	ril_network_check_initial_attach_apn(self);
 }
 
@@ -976,15 +1182,20 @@ static void ril_network_watch_gprs_settings_cb(struct ofono_watch *watch,
 			const struct ofono_gprs_primary_context *settings,
 			void *user_data)
 {
+	struct ril_network *self = RIL_NETWORK(user_data);
+	struct ril_network_priv *priv = self->priv;
+
+	if (priv->use_data_profiles) {
+		ril_network_check_data_profiles(self);
+	}
+
 	if (type == OFONO_GPRS_CONTEXT_TYPE_INTERNET) {
-		struct ril_network *self = RIL_NETWORK(user_data);
 		struct ril_network_priv *priv = self->priv;
 
 		priv->set_initial_attach_apn = TRUE;
 		ril_network_check_initial_attach_apn(self);
 	}
 }
-
 
 struct ril_network *ril_network_new(const char *path, GRilIoChannel *io,
 			const char *log_prefix, struct ril_radio *radio,
@@ -1011,6 +1222,8 @@ struct ril_network *ril_network_new(const char *path, GRilIoChannel *io,
 	priv->lte_network_mode = config->lte_network_mode;
 	priv->umts_network_mode = config->umts_network_mode;
 	priv->network_mode_timeout = config->network_mode_timeout;
+	priv->use_data_profiles = config->use_data_profiles;
+	priv->mms_data_profile_id = config->mms_data_profile_id;
 
 	/* Register listeners */
 	priv->unsol_event_id[UNSOL_EVENT_NETWORK_STATE] =
@@ -1062,6 +1275,9 @@ struct ril_network *ril_network_new(const char *path, GRilIoChannel *io,
 		ril_network_need_initial_attach_apn(self);
 
 	ril_vendor_set_network(vendor, self);
+	if (priv->use_data_profiles) {
+		ril_network_check_data_profiles(self);
+	}
 	ril_network_try_set_initial_attach_apn(self);
 	return self;
 }
@@ -1120,6 +1336,7 @@ static void ril_network_finalize(GObject *object)
 						priv->settings_event_id);
 	ril_sim_settings_unref(self->settings);
 	ril_vendor_unref(priv->vendor);
+	g_slist_free_full(priv->data_profiles, g_free);
 	g_free(priv->log_prefix);
 	G_OBJECT_CLASS(ril_network_parent_class)->finalize(object);
 }

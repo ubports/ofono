@@ -32,11 +32,11 @@ typedef struct ril_vendor_class {
 	const char *(*request_to_string)(RilVendor *vendor, guint request);
 	const char *(*event_to_string)(RilVendor *vendor, guint event);
 	GRilIoRequest *(*set_attach_apn_req)(RilVendor *vendor,
-			const char *profile, const char *apn,
-			const char *username, const char *password,
-			enum ril_auth auth, const char *proto);
-	GRilIoRequest *(*data_call_req)(RilVendor *vendor,
-			int tech, const char *profile, const char *apn,
+			const char *apn, const char *username,
+			const char *password, enum ril_auth auth,
+			const char *proto);
+	GRilIoRequest *(*data_call_req)(RilVendor *vendor, int tech,
+			enum ril_data_profile profile, const char *apn,
 			const char *username, const char *password,
 			enum ril_auth auth, const char *proto);
 	gboolean (*data_call_parse)(RilVendor *vendor,

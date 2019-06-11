@@ -117,6 +117,7 @@ void ril_data_allow(struct ril_data *data, enum ril_data_role role);
 struct ril_data_request;
 struct ril_data_request *ril_data_call_setup(struct ril_data *data,
 				const struct ofono_gprs_primary_context *ctx,
+				enum ofono_gprs_context_type context_type,
 				ril_data_call_setup_cb_t cb, void *arg);
 struct ril_data_request *ril_data_call_deactivate(struct ril_data *data,
 			int cid, ril_data_call_deactivate_cb_t cb, void *arg);

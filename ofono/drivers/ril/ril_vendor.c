@@ -90,18 +90,17 @@ void ril_vendor_set_network(RilVendor *self, struct ril_network *nw)
 	}
 }
 
-GRilIoRequest *ril_vendor_set_attach_apn_req(RilVendor *self,
-			const char *profile, const char *apn,
-			const char *username, const char *password,
+GRilIoRequest *ril_vendor_set_attach_apn_req(RilVendor *self, const char *apn,
+			const char *user, const char *password,
 			enum ril_auth auth, const char *proto)
 {
 	return G_LIKELY(self) ? RIL_VENDOR_GET_CLASS(self)->
-		set_attach_apn_req(self, profile, apn, username, password,
-							auth, proto) : NULL;
+		set_attach_apn_req(self, apn, user, password, auth, proto) :
+		NULL;
 }
 
-GRilIoRequest *ril_vendor_data_call_req(RilVendor *self,
-			int tech, const char *profile, const char *apn,
+GRilIoRequest *ril_vendor_data_call_req(RilVendor *self, int tech,
+			enum ril_data_profile profile, const char *apn,
 			const char *username, const char *password,
 			enum ril_auth auth, const char *proto)
 {
@@ -139,16 +138,16 @@ static const char *ril_vendor_default_id_to_string(RilVendor *self, guint id)
 }
 
 static GRilIoRequest *ril_vendor_default_set_attach_apn_req(RilVendor *self,
-			const char *profile, const char *apn,
-			const char *username, const char *password,
-			enum ril_auth auth, const char *proto)
+			const char *apn, const char *username,
+			const char *password, enum ril_auth auth,
+			const char *proto)
 {
 	return NULL;
 }
 
 static GRilIoRequest *ril_vendor_default_data_call_req(RilVendor *self,
-			int tech, const char *profile, const char *apn,
-			const char *username, const char *password,
+			int tech, enum ril_data_profile profile,
+			const char *apn, const char *user, const char *passwd,
 			enum ril_auth auth, const char *proto)
 {
 	return NULL;
