@@ -3,6 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2015-2019  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -275,6 +276,10 @@ gboolean __ofono_call_settings_is_busy(struct ofono_call_settings *cs);
 gboolean __ofono_gprs_get_roaming_allowed(struct ofono_gprs *gprs);
 
 #include <ofono/gprs-context.h>
+
+enum ofono_gprs_context_type __ofono_gprs_context_get_assigned_type(
+						struct ofono_gprs_context *gc);
+
 #include <ofono/radio-settings.h>
 #include <ofono/audio-settings.h>
 #include <ofono/ctm.h>

@@ -3,6 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2015-2019  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -3937,4 +3938,22 @@ const struct ofono_gprs_primary_context *ofono_gprs_context_settings_by_type
 	}
 
 	return NULL;
+}
+
+enum ofono_gprs_context_type __ofono_gprs_context_get_assigned_type(
+						struct ofono_gprs_context *gc)
+{
+	if (gc) {
+		struct ofono_gprs *gprs = gc->gprs;
+		GSList *l;
+
+		for (l = gprs->contexts; l; l = l->next) {
+			struct pri_context *pri = l->data;
+
+			if (pri->context_driver == gc)
+				return pri->type;
+		}
+	}
+
+	return OFONO_GPRS_CONTEXT_TYPE_ANY;
 }
