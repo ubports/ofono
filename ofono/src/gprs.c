@@ -455,12 +455,9 @@ static void context_settings_append_ipv4(struct context_settings *settings,
 	ofono_dbus_dict_append(&array, "Interface",
 				DBUS_TYPE_STRING, &settings->interface);
 
-	/* If we have a Proxy, no other settings are relevant */
-	if (settings->ipv4->proxy) {
+	if (settings->ipv4->proxy)
 		ofono_dbus_dict_append(&array, "Proxy", DBUS_TYPE_STRING,
 					&settings->ipv4->proxy);
-		goto done;
-	}
 
 	if (settings->ipv4->static_ip == TRUE)
 		method = "static";
