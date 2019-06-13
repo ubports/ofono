@@ -24,6 +24,8 @@ struct ril_vendor_defaults {
 	gboolean enable_cbs;
 	gboolean enable_stk;
 	gboolean query_available_band_mode;
+	gboolean use_data_profiles;
+	guint mms_data_profile_id;
 };
 
 struct ril_vendor_driver {
@@ -51,11 +53,11 @@ const char *ril_vendor_event_to_string(struct ril_vendor *vendor,
 					guint event);
 void ril_vendor_set_network(struct ril_vendor *vendor, struct ril_network *nw);
 GRilIoRequest *ril_vendor_set_attach_apn_req(struct ril_vendor *vendor,
-			const char *profile, const char *apn,
-			const char *username, const char *password,
-			enum ril_auth auth, const char *proto);
-GRilIoRequest *ril_vendor_data_call_req(struct ril_vendor *vendor,
-			int tech, const char *profile, const char *apn,
+			const char *apn, const char *username,
+			const char *password, enum ril_auth auth,
+			const char *proto);
+GRilIoRequest *ril_vendor_data_call_req(struct ril_vendor *vendor, int tech,
+			enum ril_data_profile profile, const char *apn,
 			const char *username, const char *password,
 			enum ril_auth auth, const char *proto);
 gboolean ril_vendor_data_call_parse(struct ril_vendor *vendor,

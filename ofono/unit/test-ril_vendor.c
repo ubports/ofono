@@ -88,10 +88,10 @@ static void test_null(void)
 	g_assert(!ril_vendor_ref(NULL));
 	g_assert(!ril_vendor_request_to_string(NULL, 0));
 	g_assert(!ril_vendor_event_to_string(NULL, 0));
-	g_assert(!ril_vendor_set_attach_apn_req(NULL, NULL, NULL, NULL, NULL,
+	g_assert(!ril_vendor_set_attach_apn_req(NULL, NULL, NULL, NULL,
 						RIL_AUTH_NONE, NULL));
-	g_assert(!ril_vendor_data_call_req(NULL, 0, NULL, NULL, NULL, NULL,
-						RIL_AUTH_NONE, NULL));
+	g_assert(!ril_vendor_data_call_req(NULL, 0, RIL_DATA_PROFILE_DEFAULT,
+				NULL, NULL, NULL, RIL_AUTH_NONE, NULL));
 }
 
 static void test_drivers(void)
@@ -134,10 +134,10 @@ static void test_base(void)
 
 	g_assert(!ril_vendor_request_to_string(base, 0));
 	g_assert(!ril_vendor_event_to_string(base, 0));
-	g_assert(!ril_vendor_set_attach_apn_req(base, NULL, NULL, NULL, NULL,
+	g_assert(!ril_vendor_set_attach_apn_req(base, NULL, NULL, NULL,
 						RIL_AUTH_NONE, NULL));
-	g_assert(!ril_vendor_data_call_req(base, 0, NULL, NULL, NULL, NULL,
-						RIL_AUTH_NONE, NULL));
+	g_assert(!ril_vendor_data_call_req(base, 0, RIL_DATA_PROFILE_DEFAULT,
+				NULL, NULL, NULL, RIL_AUTH_NONE, NULL));
 	g_assert(!ril_vendor_data_call_parse(base, NULL, 0, NULL));
 
 	g_assert(ril_vendor_ref(base) == base);
@@ -205,12 +205,12 @@ static void test_mtk1(void)
 	g_assert(!ril_vendor_data_call_parse(mtk1, NULL, 0, NULL));
 
 	/* Build RIL_REQUEST_SET_INITIAL_ATTACH_APN */
-	req = ril_vendor_set_attach_apn_req(mtk1, DATA_PROFILE_DEFAULT_STR,
-			"apn", "username", "password", RIL_AUTH_NONE, "IP");
+	req = ril_vendor_set_attach_apn_req(mtk1, "apn", "username",
+					"password", RIL_AUTH_NONE, "IP");
 	grilio_request_unref(req);
 
 	/* Build RIL_REQUEST_SETUP_DATA_CALL */
-	req = ril_vendor_data_call_req(mtk1, 1, DATA_PROFILE_DEFAULT_STR,
+	req = ril_vendor_data_call_req(mtk1, 1, RIL_DATA_PROFILE_DEFAULT,
 			"apn", "username", "password", RIL_AUTH_NONE, "IP");
 	grilio_request_unref(req);
 
@@ -317,12 +317,12 @@ static void test_mtk2(void)
 					MTK_INCOMING_CALL_INDICATION));
 
 	/* Build RIL_REQUEST_SET_INITIAL_ATTACH_APN */
-	req = ril_vendor_set_attach_apn_req(mtk2, DATA_PROFILE_DEFAULT_STR,
-			"apn", "username", "password", RIL_AUTH_NONE, "IP");
+	req = ril_vendor_set_attach_apn_req(mtk2, "apn", "username",
+					"password", RIL_AUTH_NONE, "IP");
 	grilio_request_unref(req);
 
 	/* Build RIL_REQUEST_SETUP_DATA_CALL */
-	req = ril_vendor_data_call_req(mtk2, 1, DATA_PROFILE_DEFAULT_STR,
+	req = ril_vendor_data_call_req(mtk2, 1, RIL_DATA_PROFILE_DEFAULT,
 			"apn", "username", "password", RIL_AUTH_NONE, "IP");
 	grilio_request_unref(req);
 

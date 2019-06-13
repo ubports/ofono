@@ -106,6 +106,8 @@ struct ril_data_priv {
 	struct ril_data_request *pending_req;
 
 	struct ril_data_options options;
+	gboolean use_data_profiles;
+	guint mms_data_profile_id;
 	guint slot;
 	char *log_prefix;
 	guint query_id;
@@ -162,6 +164,7 @@ struct ril_data_request {
 
 struct ril_data_request_setup {
 	struct ril_data_request req;
+	guint profile_id;
 	char *apn;
 	char *username;
 	char *password;
@@ -917,7 +920,7 @@ static gboolean ril_data_call_setup_submit(struct ril_data_request *req)
 
 	/* Give vendor code a chance to build a vendor specific packet */
 	ioreq = ril_vendor_data_call_req(priv->vendor, tech,
-			DATA_PROFILE_DEFAULT_STR, setup->apn, setup->username,
+			setup->profile_id, setup->apn, setup->username,
 			setup->password, auth, proto_str);
 
 	if (!ioreq) {
@@ -925,7 +928,7 @@ static gboolean ril_data_call_setup_submit(struct ril_data_request *req)
 		ioreq = grilio_request_new();
 		grilio_request_append_int32(ioreq, 7 /* Parameter count */);
 		grilio_request_append_format(ioreq, "%d", tech);
-		grilio_request_append_utf8(ioreq, DATA_PROFILE_DEFAULT_STR);
+		grilio_request_append_format(ioreq, "%d", setup->profile_id);
 		grilio_request_append_utf8(ioreq, setup->apn);
 		grilio_request_append_utf8(ioreq, setup->username);
 		grilio_request_append_utf8(ioreq, setup->password);
@@ -955,12 +958,18 @@ static void ril_data_call_setup_free(struct ril_data_request *req)
 
 static struct ril_data_request *ril_data_call_setup_new(struct ril_data *data,
 				const struct ofono_gprs_primary_context *ctx,
+				enum ofono_gprs_context_type context_type,
 				ril_data_call_setup_cb_t cb, void *arg)
 {
+	struct ril_data_priv *priv = data->priv;
 	struct ril_data_request_setup *setup =
 		g_new0(struct ril_data_request_setup, 1);
 	struct ril_data_request *req = &setup->req;
 
+	setup->profile_id = (priv->use_data_profiles &&
+		context_type == OFONO_GPRS_CONTEXT_TYPE_MMS) ?
+			priv->mms_data_profile_id :
+			RIL_DATA_PROFILE_DEFAULT;
 	setup->apn = g_strdup(ctx->apn);
 	setup->username = g_strdup(ctx->username);
 	setup->password = g_strdup(ctx->password);
@@ -1211,6 +1220,8 @@ struct ril_data *ril_data_new(struct ril_data_manager *dm, const char *name,
 		priv->log_prefix = (name && name[0]) ?
 			g_strconcat(name, " ", NULL) : g_strdup("");
 
+		priv->use_data_profiles = config->use_data_profiles;
+		priv->mms_data_profile_id = config->mms_data_profile_id;
 		priv->slot = config->slot;
 		priv->q = grilio_queue_new(io);
 		priv->io = grilio_channel_ref(io);
@@ -1464,10 +1475,11 @@ void ril_data_allow(struct ril_data *self, enum ril_data_role role)
 
 struct ril_data_request *ril_data_call_setup(struct ril_data *self,
 				const struct ofono_gprs_primary_context *ctx,
+				enum ofono_gprs_context_type context_type,
 				ril_data_call_setup_cb_t cb, void *arg)
 {
 	struct ril_data_request *req =
-		ril_data_call_setup_new(self, ctx, cb, arg);
+		ril_data_call_setup_new(self, ctx, context_type, cb, arg);
 
 	ril_data_request_queue(req);
 	return req;

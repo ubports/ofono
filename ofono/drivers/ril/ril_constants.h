@@ -233,6 +233,12 @@ enum ril_data_profile {
 	RIL_DATA_PROFILE_INVALID = 0xFFFFFFFF
 };
 
+enum ril_profile_type {
+	RIL_PROFILE_COMMON = 0,
+	RIL_PROFILE_3GPP = 1,
+	RIL_PROFILE_3GPP2 = 2
+};
+
 enum ril_auth {
 	RIL_AUTH_NONE = 0,
 	RIL_AUTH_PAP = 1,
@@ -327,8 +333,6 @@ enum ril_restricted_state {
 	RIL_RESTRICTED_STATE_CS_ALL       = 0x04,
 	RIL_RESTRICTED_STATE_PS_ALL       = 0x10
 };
-
-#define DATA_PROFILE_DEFAULT_STR "0"
 
 /* Suplementary services Service class*/
 #define SERVICE_CLASS_NONE 0
