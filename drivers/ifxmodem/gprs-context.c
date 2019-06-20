@@ -406,7 +406,7 @@ static void cgcontrdp_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	interface = ofono_gprs_context_get_interface(gc);
 	datapath = get_datapath(modem, interface);
 
-	snprintf(buf, sizeof(buf), "AT+XDATACHANNEL=1,1,\"%s\",\"%s\",2,%u",
+	snprintf(buf, sizeof(buf), "AT+XDATACHANNEL=1,1,\"%s\",\"%s\",0,%u",
 			ctrlpath, datapath, gcd->active_context);
 	g_at_chat_send(gcd->chat, buf, none_prefix, NULL, NULL, NULL);
 	snprintf(buf, sizeof(buf), "AT+CGDATA=\"M-RAW_IP\",%u",
