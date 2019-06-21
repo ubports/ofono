@@ -902,8 +902,10 @@ static void ril_network_check_pref_mode(struct ril_network *self,
 							gboolean immediate)
 {
 	struct ril_network_priv *priv = self->priv;
-	const int rat = ril_network_mode_to_rat
-		(self, ril_network_actual_pref_mode(self));
+	const enum ofono_radio_access_mode expected_mode =
+		ril_network_actual_pref_mode(self);
+	const enum ofono_radio_access_mode current_mode =
+		ril_network_rat_to_mode(priv->rat);
 
 	if (priv->timer[TIMER_FORCE_CHECK_PREF_MODE]) {
 		ril_network_stop_timer(self, TIMER_FORCE_CHECK_PREF_MODE);
@@ -915,15 +917,19 @@ static void ril_network_check_pref_mode(struct ril_network *self,
 		immediate = TRUE;
 	}
 
-	if (priv->rat != rat) {
-		DBG_(self, "rat mode %d, expected %d", priv->rat, rat);
+	if (priv->rat >= 0 && current_mode != expected_mode) {
+		DBG_(self, "rat %d (%s), expected %s", priv->rat,
+			ofono_radio_access_mode_to_string(current_mode),
+			ofono_radio_access_mode_to_string(expected_mode));
 	}
 
 	if (immediate) {
 		ril_network_stop_timer(self, TIMER_SET_RAT_HOLDOFF);
 	}
 
-	if (priv->rat != rat || priv->assert_rat) {
+	if (current_mode != expected_mode || priv->assert_rat) {
+		const int rat = ril_network_mode_to_rat(self, expected_mode);
+
 		if (!priv->timer[TIMER_SET_RAT_HOLDOFF]) {
 			ril_network_set_pref_mode(self, rat);
 		} else {
