@@ -321,7 +321,7 @@ static void ublox_send_uauthreq(struct ofono_gprs_context *gc,
 {
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 	char buf[UBLOX_MAX_USER_LEN + UBLOX_MAX_PASS_LEN + 32];
-	unsigned auth;
+	unsigned auth = 0;
 
 	switch (auth_method) {
 	case OFONO_GPRS_AUTH_METHOD_PAP:
