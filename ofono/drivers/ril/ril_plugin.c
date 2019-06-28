@@ -1059,6 +1059,7 @@ static void ril_plugin_slot_connected(ril_slot *slot)
 				slot->imeisv, ril_plugin_sim_state(slot),
 				slot->slot_flags);
 		sailfish_manager_set_cell_info(slot->handle, slot->cell_info);
+		grilio_channel_set_enabled(slot->io, slot->handle->enabled);
 
 		/* Check if this was the last slot we were waiting for */
 		ril_plugin_check_if_started(plugin);
@@ -2136,7 +2137,9 @@ static void ril_slot_enabled_changed(struct sailfish_slot_impl *s)
 {
 	if (s->handle->enabled) {
 		ril_plugin_check_modem(s);
+		grilio_channel_set_enabled(s->io, TRUE);
 	} else {
+		grilio_channel_set_enabled(s->io, FALSE);
 		ril_plugin_shutdown_slot(s, FALSE);
 	}
 }
