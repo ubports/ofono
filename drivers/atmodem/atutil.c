@@ -769,7 +769,9 @@ GAtChat *at_util_open_device(struct ofono_modem *modem, const char *key,
 	}
 
 	channel = g_at_tty_open(device, options);
-	g_hash_table_destroy(options);
+
+	if (options)
+		g_hash_table_destroy(options);
 
 	if (channel == NULL)
 		return NULL;
