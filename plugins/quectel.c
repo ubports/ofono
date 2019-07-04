@@ -212,9 +212,9 @@ static int quectel_enable(struct ofono_modem *modem)
 
 	g_at_chat_set_slave(data->modem, data->aux);
 
-	g_at_chat_send(data->modem, "ATE0 &C0 +CMEE=1", none_prefix, NULL, NULL,
-			NULL);
-	g_at_chat_send(data->aux, "ATE0 &C0 +CMEE=1", none_prefix, NULL, NULL,
+	g_at_chat_send(data->modem, "ATE0; &C0; +CMEE=1", none_prefix, NULL,
+			NULL, NULL);
+	g_at_chat_send(data->aux, "ATE0; &C0; +CMEE=1", none_prefix, NULL, NULL,
 			NULL);
 	g_at_chat_send(data->aux, "AT+CFUN?", cfun_prefix, cfun_query, modem,
 			NULL);
