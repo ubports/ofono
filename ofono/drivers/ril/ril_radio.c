@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2017 Jolla Ltd.
+ *  Copyright (C) 2015-2019 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -411,6 +411,11 @@ struct ril_radio *ril_radio_new(GRilIoChannel *io)
 	priv->state_event_id = grilio_channel_add_unsol_event_handler(priv->io,
 				ril_radio_state_changed,
 				RIL_UNSOL_RESPONSE_RADIO_STATE_CHANGED, self);
+	/*
+	 * Some RILs like to receive power off request at startup even if
+	 * radio is already off. Make those happy.
+	 */
+	ril_radio_submit_power_request(self, FALSE);
 	return self;
 }
 
