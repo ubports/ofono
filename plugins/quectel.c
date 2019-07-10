@@ -494,7 +494,13 @@ static int open_serial(struct ofono_modem *modem)
 	 * at which point the modem is ready.
 	 */
 	g_at_chat_set_wakeup_command(data->uart, "AT\r", 500, 10000);
-	g_at_chat_send(data->uart, "ATE0", none_prefix, ate_cb, modem, NULL);
+
+	if (strcmp(rts_cts, "on") == 0)
+		g_at_chat_send(data->uart, "AT+IFC=2,2; E0", none_prefix,
+				ate_cb, modem, NULL);
+	else
+		g_at_chat_send(data->uart, "ATE0", none_prefix, ate_cb, modem,
+				NULL);
 
 	return -EINPROGRESS;
 }
