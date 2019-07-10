@@ -339,6 +339,9 @@ static inline void at_ack_delivery(struct ofono_sms *sms)
 		case OFONO_VENDOR_GEMALTO:
 			snprintf(buf, sizeof(buf), "AT+CNMA=1");
 			break;
+		case OFONO_VENDOR_QUECTEL_M95:
+			snprintf(buf, sizeof(buf), "AT+CNMA");
+			break;
 		default:
 			snprintf(buf, sizeof(buf), "AT+CNMA=1,%d\r%s",
 					data->cnma_ack_pdu_len,
@@ -1238,7 +1241,7 @@ static void at_csms_status_cb(gboolean ok, GAtResult *result,
 		if (!g_at_result_iter_next_number(&iter, &mo))
 			goto out;
 
-		if (service == 1)
+		if (service == 1 || service == 128)
 			data->cnma_enabled = TRUE;
 
 		if (mt == 1 && mo == 1)
@@ -1269,10 +1272,10 @@ static void at_csms_query_cb(gboolean ok, GAtResult *result,
 {
 	struct ofono_sms *sms = user_data;
 	struct sms_data *data = ofono_sms_get_data(sms);
-	gboolean cnma_supported = FALSE;
 	GAtResultIter iter;
 	int status_min, status_max;
 	char buf[128];
+	int csms = 0;
 
 	if (!ok)
 		return at_sms_not_supported(sms);
@@ -1285,14 +1288,25 @@ static void at_csms_query_cb(gboolean ok, GAtResult *result,
 	if (!g_at_result_iter_open_list(&iter))
 		goto out;
 
-	while (g_at_result_iter_next_range(&iter, &status_min, &status_max))
+	switch (data->vendor) {
+	case OFONO_VENDOR_QUECTEL_M95:
+		g_at_result_iter_next_number(&iter, &status_min);
+		g_at_result_iter_next_number(&iter, &status_max);
 		if (status_min <= 1 && 1 <= status_max)
-			cnma_supported = TRUE;
+			csms = 128;
+		break;
+	default:
+		while (g_at_result_iter_next_range(&iter, &status_min,
+							&status_max))
+			if (status_min <= 1 && 1 <= status_max)
+				csms = 1;
+		break;
+	}
 
 	DBG("CSMS query parsed successfully");
 
 out:
-	snprintf(buf, sizeof(buf), "AT+CSMS=%d", cnma_supported ? 1 : 0);
+	snprintf(buf, sizeof(buf), "AT+CSMS=%d", csms);
 	g_at_chat_send(data->chat, buf, csms_prefix,
 			at_csms_set_cb, sms, NULL);
 }
