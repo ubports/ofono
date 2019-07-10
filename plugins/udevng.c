@@ -837,7 +837,7 @@ static gboolean setup_samsung(struct modem_info *modem)
 	return TRUE;
 }
 
-static gboolean setup_quectel(struct modem_info *modem)
+static gboolean setup_quectel_usb(struct modem_info *modem)
 {
 	const char *aux = NULL, *mdm = NULL;
 	GSList *list;
@@ -875,6 +875,28 @@ static gboolean setup_quectel(struct modem_info *modem)
 	ofono_modem_set_string(modem->modem, "Modem", mdm);
 
 	return TRUE;
+}
+
+static gboolean setup_quectel_serial(struct modem_info *modem)
+{
+	struct serial_device_info *info = modem->serial;
+	const char *value;
+
+	value = udev_device_get_property_value(info->dev,
+						"OFONO_QUECTEL_RTSCTS");
+
+	ofono_modem_set_string(modem->modem, "RtsCts", value ? value : "off");
+	ofono_modem_set_string(modem->modem, "Device", info->devnode);
+
+	return TRUE;
+}
+
+static gboolean setup_quectel(struct modem_info *modem)
+{
+	if (modem->serial)
+		return setup_quectel_serial(modem);
+	else
+		return setup_quectel_usb(modem);
 }
 
 static gboolean setup_quectelqmi(struct modem_info *modem)
