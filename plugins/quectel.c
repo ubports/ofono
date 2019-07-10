@@ -51,6 +51,7 @@
 
 static const char *cfun_prefix[] = { "+CFUN:", NULL };
 static const char *cpin_prefix[] = { "+CPIN:", NULL };
+static const char *cgmm_prefix[] = { "UC15", "Quectel_M95", NULL };
 static const char *none_prefix[] = { NULL };
 
 static const uint8_t gsm0710_terminate[] = {
@@ -69,6 +70,7 @@ struct quectel_data {
 	GAtChat *aux;
 	guint cpin_ready;
 	bool have_sim;
+	enum ofono_vendor vendor;
 
 	/* used by quectel uart driver */
 	GAtChat *uart;
@@ -303,6 +305,35 @@ static void cfun_query(gboolean ok, GAtResult *result, gpointer user_data)
 		cfun_enable(TRUE, NULL, modem);
 }
 
+static void cgmm_cb(int ok, GAtResult *result, void *user_data)
+{
+	struct ofono_modem *modem = user_data;
+	struct quectel_data *data = ofono_modem_get_data(modem);
+	const char *model;
+
+	DBG("%p ok %d", modem, ok);
+
+	if (!at_util_parse_attr(result, "", &model)) {
+		ofono_error("Failed to query modem model");
+		close_serial(modem);
+		return;
+	}
+
+	if (strcmp(model, "UC15") == 0) {
+		DBG("%p model UC15", modem);
+		data->vendor = OFONO_VENDOR_QUECTEL;
+	} else if (strcmp(model, "Quectel_M95") == 0) {
+		DBG("%p model M95", modem);
+		data->vendor = OFONO_VENDOR_QUECTEL_M95;
+	} else {
+		ofono_warn("%p unknown model: '%s'", modem, model);
+		data->vendor = OFONO_VENDOR_QUECTEL;
+	}
+
+	g_at_chat_send(data->aux, "AT+CFUN?", cfun_prefix, cfun_query, modem,
+			NULL);
+}
+
 static int open_ttys(struct ofono_modem *modem)
 {
 	struct quectel_data *data = ofono_modem_get_data(modem);
@@ -328,7 +359,7 @@ static int open_ttys(struct ofono_modem *modem)
 			NULL, NULL);
 	g_at_chat_send(data->aux, "ATE0; &C0; +CMEE=1", none_prefix, NULL, NULL,
 			NULL);
-	g_at_chat_send(data->aux, "AT+CFUN?", cfun_prefix, cfun_query, modem,
+	g_at_chat_send(data->aux, "AT+CGMM", cgmm_prefix, cgmm_cb, modem,
 			NULL);
 
 	return -EINPROGRESS;
@@ -580,8 +611,7 @@ static void quectel_pre_sim(struct ofono_modem *modem)
 	DBG("%p", modem);
 
 	ofono_devinfo_create(modem, 0, "atmodem", data->aux);
-	sim = ofono_sim_create(modem, OFONO_VENDOR_QUECTEL, "atmodem",
-				data->aux);
+	sim = ofono_sim_create(modem, data->vendor, "atmodem", data->aux);
 
 	if (sim && data->have_sim == true)
 		ofono_sim_inserted_notify(sim, TRUE);
