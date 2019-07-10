@@ -127,7 +127,7 @@ static void cpin_notify(GAtResult *result, gpointer user_data)
 
 static void cpin_query(gboolean ok, GAtResult *result, gpointer user_data)
 {
-	DBG("ok %d", ok);
+	DBG("%p ok %d", user_data, ok);
 
 	if (ok)
 		cpin_notify(result, user_data);
@@ -138,7 +138,7 @@ static void cfun_enable(gboolean ok, GAtResult *result, gpointer user_data)
 	struct ofono_modem *modem = user_data;
 	struct quectel_data *data = ofono_modem_get_data(modem);
 
-	DBG("ok %d", ok);
+	DBG("%p ok %d", modem, ok);
 
 	if (!ok) {
 		g_at_chat_unref(data->aux);
@@ -162,7 +162,7 @@ static void cfun_query(gboolean ok, GAtResult *result, gpointer user_data)
 	GAtResultIter iter;
 	int status;
 
-	DBG("ok %d", ok);
+	DBG("%p ok %d", modem, ok);
 
 	if (!ok)
 		return;
@@ -227,7 +227,7 @@ static void cfun_disable(gboolean ok, GAtResult *result, gpointer user_data)
 	struct ofono_modem *modem = user_data;
 	struct quectel_data *data = ofono_modem_get_data(modem);
 
-	DBG("");
+	DBG("%p", modem);
 
 	g_at_chat_unref(data->aux);
 	data->aux = NULL;
@@ -262,6 +262,8 @@ static void set_online_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	struct cb_data *cbd = user_data;
 	ofono_modem_online_cb_t cb = cbd->cb;
 	struct ofono_error error;
+
+	DBG("%p", user_data);
 
 	decode_at_error(&error, g_at_result_final_response(result));
 	cb(&error, cbd->data);
@@ -318,6 +320,8 @@ static void quectel_post_sim(struct ofono_modem *modem)
 static void quectel_post_online(struct ofono_modem *modem)
 {
 	struct quectel_data *data = ofono_modem_get_data(modem);
+
+	DBG("%p", modem);
 
 	ofono_netreg_create(modem, 0, "atmodem", data->aux);
 }
