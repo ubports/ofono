@@ -91,12 +91,6 @@ static void quectel_remove(struct ofono_modem *modem)
 	g_free(data);
 }
 
-static GAtChat *open_device(struct ofono_modem *modem, const char *key,
-				char *debug)
-{
-	return at_util_open_device(modem, key, quectel_debug, debug, NULL);
-}
-
 static void cpin_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_modem *modem = user_data;
@@ -199,11 +193,13 @@ static int quectel_enable(struct ofono_modem *modem)
 
 	DBG("%p", modem);
 
-	data->modem = open_device(modem, "Modem", "Modem: ");
+	data->modem = at_util_open_device(modem, "Modem", quectel_debug,
+						"Modem: ", NULL);
 	if (data->modem == NULL)
 		return -EINVAL;
 
-	data->aux = open_device(modem, "Aux", "Aux: ");
+	data->aux = at_util_open_device(modem, "Aux", quectel_debug, "Aux: ",
+					NULL);
 	if (data->aux == NULL) {
 		g_at_chat_unref(data->modem);
 		data->modem = NULL;
