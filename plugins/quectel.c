@@ -74,6 +74,7 @@ struct quectel_data {
 	GAtChat *uart;
 	int mux_ready_count;
 	int initial_ldisc;
+	struct l_gpio_writer *gpio;
 };
 
 static void quectel_debug(const char *str, void *user_data)
@@ -81,6 +82,43 @@ static void quectel_debug(const char *str, void *user_data)
 	const char *prefix = user_data;
 
 	ofono_info("%s%s", prefix, str);
+}
+
+static int quectel_probe_gpio(struct ofono_modem *modem)
+{
+	struct quectel_data *data = ofono_modem_get_data(modem);
+	struct l_gpio_chip *gpiochip;
+	uint32_t offset;
+	const char *chip_name, *offset_str;
+	uint32_t value = 0;
+
+	DBG("%p", modem);
+
+	chip_name = ofono_modem_get_string(modem, "GpioChip");
+	if (!chip_name)
+		return 0;
+
+	offset_str = ofono_modem_get_string(modem, "GpioOffset");
+	if (!offset_str)
+		return -EINVAL;
+
+	offset = strtoul(offset_str, NULL, 0);
+	if (!offset)
+		return -EINVAL;
+
+	gpiochip = l_gpio_chip_new(chip_name);
+	if (!gpiochip)
+		return -ENODEV;
+
+	data->gpio = l_gpio_writer_new(gpiochip, "ofono", 1, &offset,
+						&value);
+
+	l_gpio_chip_free(gpiochip);
+
+	if (!data->gpio)
+		return -EIO;
+
+	return 0;
 }
 
 static int quectel_probe(struct ofono_modem *modem)
@@ -93,7 +131,7 @@ static int quectel_probe(struct ofono_modem *modem)
 
 	ofono_modem_set_data(modem, data);
 
-	return 0;
+	return quectel_probe_gpio(modem);
 }
 
 static void quectel_remove(struct ofono_modem *modem)
@@ -106,6 +144,7 @@ static void quectel_remove(struct ofono_modem *modem)
 		g_at_chat_unregister(data->aux, data->cpin_ready);
 
 	ofono_modem_set_data(modem, NULL);
+	l_gpio_writer_free(data->gpio);
 	g_at_chat_unref(data->aux);
 	g_at_chat_unref(data->modem);
 	g_at_chat_unref(data->uart);
@@ -117,6 +156,7 @@ static void close_mux_cb(struct l_timeout *timeout, void *user_data)
 	struct ofono_modem *modem = user_data;
 	struct quectel_data *data = ofono_modem_get_data(modem);
 	GIOChannel *device;
+	uint32_t gpio_value = 0;
 	ssize_t write_count;
 	int fd;
 
@@ -138,6 +178,7 @@ static void close_mux_cb(struct l_timeout *timeout, void *user_data)
 	data->uart = NULL;
 
 	l_timeout_remove(timeout);
+	l_gpio_writer_set(data->gpio, 1, &gpio_value);
 	ofono_modem_set_powered(modem, FALSE);
 }
 
@@ -393,9 +434,22 @@ static void cmux_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	}
 }
 
+static void ate_cb(int ok, GAtResult *result, void *user_data)
+{
+	struct ofono_modem *modem = user_data;
+	struct quectel_data *data = ofono_modem_get_data(modem);
+
+	DBG("%p", modem);
+
+	g_at_chat_set_wakeup_command(data->uart, NULL, 0, 0);
+	g_at_chat_send(data->uart, "AT+CMUX=0,0,5,127,10,3,30,10,2", NULL,
+			cmux_cb, modem, NULL);
+}
+
 static int open_serial(struct ofono_modem *modem)
 {
 	struct quectel_data *data = ofono_modem_get_data(modem);
+	const uint32_t gpio_value = 1;
 	const char *rts_cts;
 
 	DBG("%p", modem);
@@ -416,12 +470,31 @@ static int open_serial(struct ofono_modem *modem)
 	if (data->uart == NULL)
 		return -EINVAL;
 
-	g_at_chat_send(data->uart, "ATE0", none_prefix, NULL, NULL,
-			NULL);
+	if (data->gpio && !l_gpio_writer_set(data->gpio, 1, &gpio_value)) {
+		close_serial(modem);
+		return -EIO;
+	}
 
-	/* setup multiplexing */
-	g_at_chat_send(data->uart, "AT+CMUX=0,0,5,127,10,3,30,10,2", NULL,
-			cmux_cb, modem, NULL);
+	/*
+	 * there are three different power-up scenarios:
+	 *
+	 *  1) the gpio has just been toggled on, so the modem is not ready
+	 *     until it prints RDY
+	 *
+	 *  2) the modem has been on for a while and ready to respond to
+	 *     commands, so there will be no RDY notification
+	 *
+	 *  3) either of the previous to scenarious is the case, but the modem
+	 *     UART is not configured to a fixed bitrate. In this case it needs
+	 *     a few 'AT' bytes to detect the host UART bitrate, but the RDY is
+	 *     lost.
+	 *
+	 * the wakeup command feature is (mis)used to support all three
+	 * scenarious by sending AT commands until the modem responds with OK,
+	 * at which point the modem is ready.
+	 */
+	g_at_chat_set_wakeup_command(data->uart, "AT\r", 500, 10000);
+	g_at_chat_send(data->uart, "ATE0", none_prefix, ate_cb, modem, NULL);
 
 	return -EINPROGRESS;
 }
