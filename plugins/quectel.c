@@ -26,7 +26,7 @@
 #include <errno.h>
 #include <stdlib.h>
 
-#include <glib.h>
+#include <ell/ell.h>
 #include <gatchat.h>
 #include <gattty.h>
 
@@ -67,9 +67,7 @@ static int quectel_probe(struct ofono_modem *modem)
 
 	DBG("%p", modem);
 
-	data = g_try_new0(struct quectel_data, 1);
-	if (data == NULL)
-		return -ENOMEM;
+	data = l_new(struct quectel_data, 1);
 
 	ofono_modem_set_data(modem, data);
 
@@ -88,7 +86,7 @@ static void quectel_remove(struct ofono_modem *modem)
 	ofono_modem_set_data(modem, NULL);
 	g_at_chat_unref(data->aux);
 	g_at_chat_unref(data->modem);
-	g_free(data);
+	l_free(data);
 }
 
 static void cpin_notify(GAtResult *result, gpointer user_data)
