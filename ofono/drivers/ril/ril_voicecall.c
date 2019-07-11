@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2018 Jolla Ltd.
+ *  Copyright (C) 2015-2019 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -704,13 +704,18 @@ static void ril_voicecall_supp_svc_notification_event(GRilIoChannel *io,
 		phone.number[0] = 0;
 	}
 
-	DBG("RIL data: MT/MO: %i, code: %i, index: %i",  type, code, index);
+	DBG("RIL data: MT/MO: %d, code: %d, index: %d",  type, code, index);
 
-	/* 0 stands for MO intermediate (support TBD), 1 for MT unsolicited */
-	if (type == 1) {
+	switch (type) {
+	case 0: /* MO intermediate result code */
+		ofono_voicecall_ssn_mo_notify(vd->vc, 0, code, index);
+		break;
+	case 1: /* MT unsolicited result code */
 		ofono_voicecall_ssn_mt_notify(vd->vc, 0, code, index, &phone);
-	} else {
+		break;
+	default:
 		ofono_error("Unknown SS notification");
+		break;
 	}
 }
 
