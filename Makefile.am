@@ -31,7 +31,8 @@ ell_headers = ell/util.h \
 			ell/uuid.h \
 			ell/file.h \
 			ell/uintset.h \
-			ell/string.h
+			ell/string.h \
+			ell/gpio.h
 
 ell_sources = ell/private.h \
 			ell/missing.h \
@@ -52,7 +53,8 @@ ell_sources = ell/private.h \
 			ell/uuid.c \
 			ell/file.c \
 			ell/uintset.c \
-			ell/string.c
+			ell/string.c \
+			ell/gpio.c
 
 ell_libell_internal_la_SOURCES = $(ell_headers) $(ell_sources)
 endif
