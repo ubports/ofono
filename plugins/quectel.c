@@ -56,7 +56,8 @@
 static const char *cfun_prefix[] = { "+CFUN:", NULL };
 static const char *cpin_prefix[] = { "+CPIN:", NULL };
 static const char *qinistat_prefix[] = { "+QINISTAT:", NULL };
-static const char *cgmm_prefix[] = { "UC15", "Quectel_M95", NULL };
+static const char *cgmm_prefix[] = { "UC15", "Quectel_M95", "Quectel_MC60",
+					NULL };
 static const char *none_prefix[] = { NULL };
 
 static const uint8_t gsm0710_terminate[] = {
@@ -342,6 +343,10 @@ static void cgmm_cb(int ok, GAtResult *result, void *user_data)
 		DBG("%p model M95", modem);
 		data->vendor = OFONO_VENDOR_QUECTEL_SERIAL;
 		data->model = QUECTEL_M95;
+	} else if (strcmp(model, "Quectel_MC60") == 0) {
+		DBG("%p model MC60", modem);
+		data->vendor = OFONO_VENDOR_QUECTEL_SERIAL;
+		data->model = QUECTEL_MC60;
 	} else {
 		ofono_warn("%p unknown model: '%s'", modem, model);
 		data->vendor = OFONO_VENDOR_QUECTEL;
