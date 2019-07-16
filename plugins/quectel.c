@@ -70,6 +70,13 @@ static const uint8_t gsm0710_terminate[] = {
 	0xf9, /* close flag */
 };
 
+enum quectel_model {
+	QUECTEL_UNKNOWN,
+	QUECTEL_UC15,
+	QUECTEL_M95,
+	QUECTEL_MC60,
+};
+
 struct quectel_data {
 	GAtChat *modem;
 	GAtChat *aux;
@@ -77,6 +84,7 @@ struct quectel_data {
 	guint call_ready;
 	bool have_sim;
 	enum ofono_vendor vendor;
+	enum quectel_model model;
 	struct l_timeout *sms_ready_timer;
 
 	/* used by quectel uart driver */
@@ -329,12 +337,15 @@ static void cgmm_cb(int ok, GAtResult *result, void *user_data)
 	if (strcmp(model, "UC15") == 0) {
 		DBG("%p model UC15", modem);
 		data->vendor = OFONO_VENDOR_QUECTEL;
+		data->model = QUECTEL_UC15;
 	} else if (strcmp(model, "Quectel_M95") == 0) {
 		DBG("%p model M95", modem);
 		data->vendor = OFONO_VENDOR_QUECTEL_SERIAL;
+		data->model = QUECTEL_M95;
 	} else {
 		ofono_warn("%p unknown model: '%s'", modem, model);
 		data->vendor = OFONO_VENDOR_QUECTEL;
+		data->model = QUECTEL_UNKNOWN;
 	}
 
 	g_at_chat_send(data->aux, "AT+CFUN?", cfun_prefix, cfun_query, modem,
