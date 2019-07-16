@@ -330,7 +330,7 @@ static void cgmm_cb(int ok, GAtResult *result, void *user_data)
 		data->vendor = OFONO_VENDOR_QUECTEL;
 	} else if (strcmp(model, "Quectel_M95") == 0) {
 		DBG("%p model M95", modem);
-		data->vendor = OFONO_VENDOR_QUECTEL_M95;
+		data->vendor = OFONO_VENDOR_QUECTEL_SERIAL;
 	} else {
 		ofono_warn("%p unknown model: '%s'", modem, model);
 		data->vendor = OFONO_VENDOR_QUECTEL;

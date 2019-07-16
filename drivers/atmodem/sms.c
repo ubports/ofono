@@ -339,7 +339,7 @@ static inline void at_ack_delivery(struct ofono_sms *sms)
 		case OFONO_VENDOR_GEMALTO:
 			snprintf(buf, sizeof(buf), "AT+CNMA=1");
 			break;
-		case OFONO_VENDOR_QUECTEL_M95:
+		case OFONO_VENDOR_QUECTEL_SERIAL:
 			snprintf(buf, sizeof(buf), "AT+CNMA");
 			break;
 		default:
@@ -1289,7 +1289,7 @@ static void at_csms_query_cb(gboolean ok, GAtResult *result,
 		goto out;
 
 	switch (data->vendor) {
-	case OFONO_VENDOR_QUECTEL_M95:
+	case OFONO_VENDOR_QUECTEL_SERIAL:
 		g_at_result_iter_next_number(&iter, &status_min);
 		g_at_result_iter_next_number(&iter, &status_max);
 		if (status_min <= 1 && 1 <= status_max)
