@@ -45,6 +45,7 @@
 #include <ofono/sms.h>
 #include <ofono/phonebook.h>
 #include <ofono/voicecall.h>
+#include <ofono/call-volume.h>
 #include <ofono/gprs.h>
 #include <ofono/gprs-context.h>
 #include <ofono/log.h>
@@ -398,6 +399,7 @@ static void call_ready_notify(GAtResult *result, void *user_data)
 
 	ofono_phonebook_create(modem, 0, "atmodem", data->aux);
 	ofono_voicecall_create(modem, 0, "atmodem", data->aux);
+	ofono_call_volume_create(modem, 0, "atmodem", data->aux);
 }
 
 static int open_ttys(struct ofono_modem *modem)
