@@ -67,7 +67,7 @@ void g_at_util_debug_chat(gboolean in, const char *str, gsize len,
 
 	escaped_str[0] = type;
 	escaped_str[1] = ' ';
-	memset(escaped_str + 2, '\0', escaped - 2);
+	memset(escaped_str + 2, '\0', escaped - 1);
 
 	for (escaped = 2, i = 0; i < len; i++) {
 		unsigned char c = str[i];
