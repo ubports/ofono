@@ -359,6 +359,7 @@ static void ublox_post_sim(struct ofono_modem *modem)
 	const char *driver;
 	/* Toby L2: Create same number of contexts as supported PDP contexts. */
 	int ncontexts = data->flags & UBLOX_DEVICE_F_HIGH_THROUGHPUT_MODE ? 8 : 1;
+	const char *iface;
 	int variant;
 
 	DBG("%p", modem);
@@ -366,17 +367,10 @@ static void ublox_post_sim(struct ofono_modem *modem)
 	gprs = ofono_gprs_create(modem, data->vendor_family, "atmodem",
 					data->aux);
 
-	if (ublox_is_toby_l4(data->model)) {
+	iface = ofono_modem_get_string(modem, "NetworkInterface");
+	if (iface) {
 		driver = "ubloxmodem";
 		variant = ublox_model_to_id(data->model);
-	} else if (ublox_is_toby_l2(data->model)) {
-		if (data->flags & UBLOX_DEVICE_F_HIGH_THROUGHPUT_MODE) {
-			driver = "ubloxmodem";
-			variant = ublox_model_to_id(data->model);
-		} else {
-			driver = "atmodem";
-			variant = OFONO_VENDOR_UBLOX;
-		}
 	} else {
 		driver = "atmodem";
 		variant = OFONO_VENDOR_UBLOX;
