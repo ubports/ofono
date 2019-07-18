@@ -41,14 +41,14 @@ for path, properties in modems:
 			print("    IP address is %s" % (address))
 			print("    Gateway is %s" % (gateway))
 
-			cmd = "ifconfig " + interface + " " + address
-			cmd += " netmask 255.255.255.255"
+			cmd = "ip address add dev " + interface + " " + address
+			cmd += "/32"
 			os.system(cmd);
 
 			for i in settings["DomainNameServers"]:
 				print("    Nameserver is %s" % (i))
 
-				cmd = "route add -host " + i
+				cmd = "ip route add  " + i
 				cmd +=" dev " + interface
 				os.system(cmd);
 		print('')
