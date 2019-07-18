@@ -41,6 +41,12 @@
 #include <ofono/netmon.h>
 #include <ofono/lte.h>
 #include <ofono/voicecall.h>
+#include <ofono/call-forwarding.h>
+#include <ofono/call-settings.h>
+#include <ofono/call-meter.h>
+#include <ofono/call-barring.h>
+#include <ofono/message-waiting.h>
+#include <ofono/ussd.h>
 
 #include <drivers/atmodem/vendor.h>
 #include <drivers/ubloxmodem/ubloxmodem.h>
@@ -356,6 +362,7 @@ static void ublox_post_sim(struct ofono_modem *modem)
 	struct ofono_gprs *gprs;
 	struct ofono_gprs_context *gc;
 	GAtChat *chat = data->modem ? data->modem : data->aux;
+	struct ofono_message_waiting *mw;
 	const char *driver;
 	const char *iface;
 	int variant;
@@ -380,6 +387,16 @@ static void ublox_post_sim(struct ofono_modem *modem)
 
 	ofono_lte_create(modem,
 		ublox_model_to_id(data->model), "ubloxmodem", data->aux);
+
+	ofono_ussd_create(modem, 0, "atmodem", data->aux);
+	ofono_call_forwarding_create(modem, 0, "atmodem", data->aux);
+	ofono_call_settings_create(modem, 0, "atmodem", data->aux);
+	ofono_call_meter_create(modem, 0, "atmodem", data->aux);
+	ofono_call_barring_create(modem, 0, "atmodem", data->aux);
+
+	mw = ofono_message_waiting_create(modem);
+	if (mw)
+		ofono_message_waiting_register(mw);
 }
 
 static void ublox_post_online(struct ofono_modem *modem)
