@@ -357,8 +357,6 @@ static void ublox_post_sim(struct ofono_modem *modem)
 	struct ofono_gprs_context *gc;
 	GAtChat *chat = data->modem ? data->modem : data->aux;
 	const char *driver;
-	/* Toby L2: Create same number of contexts as supported PDP contexts. */
-	int ncontexts = data->flags & UBLOX_DEVICE_F_HIGH_THROUGHPUT_MODE ? 8 : 1;
 	const char *iface;
 	int variant;
 
@@ -376,14 +374,9 @@ static void ublox_post_sim(struct ofono_modem *modem)
 		variant = OFONO_VENDOR_UBLOX;
 	}
 
-	while (ncontexts) {
-		gc = ofono_gprs_context_create(modem, variant, driver, chat);
-
-		if (gprs && gc)
-			ofono_gprs_add_context(gprs, gc);
-
-		--ncontexts;
-	}
+	gc = ofono_gprs_context_create(modem, variant, driver, chat);
+	if (gprs && gc)
+		ofono_gprs_add_context(gprs, gc);
 
 	ofono_lte_create(modem,
 		ublox_model_to_id(data->model), "ubloxmodem", data->aux);
