@@ -40,6 +40,7 @@
 #include <ofono/gprs-context.h>
 #include <ofono/netmon.h>
 #include <ofono/lte.h>
+#include <ofono/sms.h>
 #include <ofono/voicecall.h>
 #include <ofono/call-forwarding.h>
 #include <ofono/call-settings.h>
@@ -387,6 +388,8 @@ static void ublox_post_sim(struct ofono_modem *modem)
 
 	ofono_lte_create(modem,
 		ublox_model_to_id(data->model), "ubloxmodem", data->aux);
+
+	ofono_sms_create(modem, 0, "atmodem", data->aux);
 
 	ofono_ussd_create(modem, 0, "atmodem", data->aux);
 	ofono_call_forwarding_create(modem, 0, "atmodem", data->aux);
