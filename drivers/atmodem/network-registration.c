@@ -41,6 +41,8 @@
 #include "atmodem.h"
 #include "vendor.h"
 
+#include "network-registration.h"
+
 static const char *none_prefix[] = { NULL };
 static const char *creg_prefix[] = { "+CREG:", NULL };
 static const char *cops_prefix[] = { "+COPS:", NULL };
@@ -270,7 +272,7 @@ static void option_tech_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		nd->tech = -1;
 }
 
-static void at_registration_status(struct ofono_netreg *netreg,
+void at_registration_status(struct ofono_netreg *netreg,
 					ofono_netreg_status_cb_t cb,
 					void *data)
 {
@@ -450,7 +452,7 @@ error:
 	g_free(cbd);
 }
 
-static void at_current_operator(struct ofono_netreg *netreg,
+void at_current_operator(struct ofono_netreg *netreg,
 				ofono_netreg_operator_cb_t cb, void *data)
 {
 	struct netreg_data *nd = ofono_netreg_get_data(netreg);
@@ -589,7 +591,7 @@ static void cops_list_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	g_free(list);
 }
 
-static void at_list_operators(struct ofono_netreg *netreg,
+void at_list_operators(struct ofono_netreg *netreg,
 				ofono_netreg_operator_list_cb_t cb, void *data)
 {
 	struct netreg_data *nd = ofono_netreg_get_data(netreg);
@@ -615,7 +617,7 @@ static void register_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	cb(&error, cbd->data);
 }
 
-static void at_register_auto(struct ofono_netreg *netreg,
+void at_register_auto(struct ofono_netreg *netreg,
 				ofono_netreg_register_cb_t cb, void *data)
 {
 	struct netreg_data *nd = ofono_netreg_get_data(netreg);
@@ -630,7 +632,7 @@ static void at_register_auto(struct ofono_netreg *netreg,
 	CALLBACK_WITH_FAILURE(cb, data);
 }
 
-static void at_register_manual(struct ofono_netreg *netreg,
+void at_register_manual(struct ofono_netreg *netreg,
 				const char *mcc, const char *mnc,
 				ofono_netreg_register_cb_t cb, void *data)
 {
@@ -1228,7 +1230,7 @@ static void csq_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	cb(&error, strength, cbd->data);
 }
 
-static void at_signal_strength(struct ofono_netreg *netreg,
+void at_signal_strength(struct ofono_netreg *netreg,
 				ofono_netreg_strength_cb_t cb, void *data)
 {
 	struct netreg_data *nd = ofono_netreg_get_data(netreg);
@@ -2144,7 +2146,7 @@ static int at_netreg_probe(struct ofono_netreg *netreg, unsigned int vendor,
 	return 0;
 }
 
-static void at_netreg_remove(struct ofono_netreg *netreg)
+void at_netreg_remove(struct ofono_netreg *netreg)
 {
 	struct netreg_data *nd = ofono_netreg_get_data(netreg);
 
