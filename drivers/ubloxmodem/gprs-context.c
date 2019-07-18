@@ -388,6 +388,14 @@ static void ublox_gprs_activate_primary(struct ofono_gprs_context *gc,
 {
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 
+	if (ublox_is_toby_l4(gcd->model)) {
+		/* TOBY L4 does not support IPv6 */
+		if (ctx->proto != OFONO_GPRS_PROTO_IP) {
+			CALLBACK_WITH_FAILURE(cb, data);
+			return;
+		}
+	}
+
 	/* IPv6 support not implemented */
 	if (ctx->proto != OFONO_GPRS_PROTO_IP) {
 		CALLBACK_WITH_FAILURE(cb, data);
