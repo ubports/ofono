@@ -10,6 +10,25 @@ Methods		array{string,variant} GetProperties
 			Returns hardware properties for the modem object. See
 			the properties section for available properties.
 
+Signals		PowerDown(string reason)
+
+			This signal is emitted on gracefull shutdowns initiated
+			by the modem.
+
+			Possible reasons:
+				"VoltageLow"	The supply voltage is too low
+				"Normal"	The PWRKEY pin was asserted
+				"VoltageHigh"	The supply voltage is too high
+
+		PowerWarning(string reason)
+
+			This signal is emitted when the modem detects its supply
+			voltage is close to its supported limits.
+
+			Possible reasons:
+				"VoltageLow"	The supply voltage is low
+				"VoltageHigh"	The supply voltage is high
+
 Properties	int32 Voltage [readonly]
 
 			Integer with the modem supply voltage in mV.
