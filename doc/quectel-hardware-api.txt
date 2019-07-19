@@ -1,0 +1,32 @@
+Hardware hierarchy
+==================
+
+Service		org.ofono
+Interface	org.ofono.quectel.Hardware
+Object path	/{device0,device1,...}
+
+Methods		array{string,variant} GetProperties
+
+			Returns hardware properties for the modem object. See
+			the properties section for available properties.
+
+Properties	int32 Voltage [readonly]
+
+			Integer with the modem supply voltage in mV.
+
+		int32 ChargeStatus [readonly,optional]
+
+			Integer with one of either:
+
+			0: Modem is not charging
+			1: Modem is charging
+			2: Charging is finished
+
+			This property is available on UC15
+
+		int32 ChargeLevel [readonly,optional]
+
+			Integer representing the battery charge level in
+			percent (from 0 to 100).
+
+			This property is available on UC15
