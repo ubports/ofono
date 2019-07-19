@@ -77,6 +77,15 @@ const struct ublox_model ublox_models[] = {
 		.name = "TOBY-L4906",
 		.flags = UBLOX_F_TOBY_L4,
 	},
+	/* LARA L2 series */
+	{
+		.name = "LARA-R202",
+		.flags = UBLOX_F_LARA_R2,
+	},
+	{
+		.name = "LARA-R211",
+		.flags = UBLOX_F_LARA_R2,
+	},
 	{ /* sentinel */ },
 };
 
