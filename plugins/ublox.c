@@ -406,7 +406,8 @@ static void ublox_post_online(struct ofono_modem *modem)
 {
 	struct ublox_data *data = ofono_modem_get_data(modem);
 
-	ofono_netreg_create(modem, data->vendor_family, "atmodem", data->aux);
+	ofono_netreg_create(modem,
+		ublox_model_to_id(data->model), "ubloxmodem", data->aux);
 
 	ofono_netmon_create(modem, data->vendor_family, "ubloxmodem", data->aux);
 }
