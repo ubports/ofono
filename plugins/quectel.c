@@ -37,6 +37,7 @@
 #include <gattty.h>
 
 #define OFONO_API_SUBJECT_TO_CHANGE
+#include <ofono.h>
 #include <ofono/plugin.h>
 #include <ofono/modem.h>
 #include <ofono/devinfo.h>
@@ -49,12 +50,16 @@
 #include <ofono/gprs.h>
 #include <ofono/gprs-context.h>
 #include <ofono/log.h>
+#include <ofono/dbus.h>
+
+#include <gdbus/gdbus.h>
 
 #include <drivers/atmodem/atutil.h>
 #include <drivers/atmodem/vendor.h>
 
 static const char *cfun_prefix[] = { "+CFUN:", NULL };
 static const char *cpin_prefix[] = { "+CPIN:", NULL };
+static const char *cbc_prefix[] = { "+CBC:", NULL };
 static const char *qinistat_prefix[] = { "+QINISTAT:", NULL };
 static const char *cgmm_prefix[] = { "UC15", "Quectel_M95", "Quectel_MC60",
 					NULL };
@@ -94,6 +99,16 @@ struct quectel_data {
 	int initial_ldisc;
 	struct l_gpio_writer *gpio;
 };
+
+struct dbus_hw {
+	DBusMessage *msg;
+	struct ofono_modem *modem;
+	int32_t charge_status;
+	int32_t charge_level;
+	int32_t voltage;
+};
+
+static const char dbus_hw_interface[] = OFONO_SERVICE ".quectel.Hardware";
 
 static void quectel_debug(const char *str, void *user_data)
 {
@@ -227,6 +242,142 @@ static void close_serial(struct ofono_modem *modem)
 		ofono_modem_set_powered(modem, false);
 }
 
+static void dbus_hw_reply_properties(struct dbus_hw *hw)
+{
+	struct quectel_data *data = ofono_modem_get_data(hw->modem);
+	DBusMessage *reply;
+	DBusMessageIter dbus_iter;
+	DBusMessageIter dbus_dict;
+
+	DBG("%p", hw->modem);
+
+	reply = dbus_message_new_method_return(hw->msg);
+	dbus_message_iter_init_append(reply, &dbus_iter);
+	dbus_message_iter_open_container(&dbus_iter, DBUS_TYPE_ARRAY,
+			OFONO_PROPERTIES_ARRAY_SIGNATURE,
+			&dbus_dict);
+
+	/*
+	 * the charge status/level received from m95 and mc60 are invalid so
+	 * only return those for the UC15 modem.
+	 */
+	if (data->model == QUECTEL_UC15) {
+		ofono_dbus_dict_append(&dbus_dict, "ChargeStatus",
+					DBUS_TYPE_INT32, &hw->charge_status);
+
+		ofono_dbus_dict_append(&dbus_dict, "ChargeLevel",
+					DBUS_TYPE_INT32, &hw->charge_level);
+	}
+
+	ofono_dbus_dict_append(&dbus_dict, "Voltage", DBUS_TYPE_INT32,
+				&hw->voltage);
+
+	dbus_message_iter_close_container(&dbus_iter, &dbus_dict);
+
+	__ofono_dbus_pending_reply(&hw->msg, reply);
+}
+
+static void cbc_cb(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct dbus_hw *hw = user_data;
+	GAtResultIter iter;
+
+	DBG("%p", hw->modem);
+
+	if (!hw->msg)
+		return;
+
+	if (!ok)
+		goto error;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "+CBC:"))
+		goto error;
+
+	/* the returned charge status is valid only for uc15 */
+	if (!g_at_result_iter_next_number(&iter, &hw->charge_status))
+		goto error;
+
+	/* the returned charge level is valid only for uc15 */
+	if (!g_at_result_iter_next_number(&iter, &hw->charge_level))
+		goto error;
+
+	/* now comes the millivolts */
+	if (!g_at_result_iter_next_number(&iter, &hw->voltage))
+		goto error;
+
+	dbus_hw_reply_properties(hw);
+
+	return;
+
+error:
+	__ofono_dbus_pending_reply(&hw->msg, __ofono_error_failed(hw->msg));
+}
+
+static DBusMessage *dbus_hw_get_properties(DBusConnection *conn,
+						DBusMessage *msg,
+						void *user_data)
+{
+	struct dbus_hw *hw = user_data;
+	struct quectel_data *data = ofono_modem_get_data(hw->modem);
+
+	DBG("%p", hw->modem);
+
+	if (hw->msg != NULL)
+		return __ofono_error_busy(msg);
+
+	if (!g_at_chat_send(data->aux, "AT+CBC", cbc_prefix, cbc_cb, hw, NULL))
+		return __ofono_error_failed(msg);
+
+	hw->msg = dbus_message_ref(msg);
+
+	return NULL;
+}
+
+static const GDBusMethodTable dbus_hw_methods[] = {
+	{ GDBUS_ASYNC_METHOD("GetProperties",
+				NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
+				dbus_hw_get_properties) },
+	{}
+};
+
+static void dbus_hw_cleanup(void *data)
+{
+	struct dbus_hw *hw = data;
+
+	DBG("%p", hw->modem);
+
+	if (hw->msg)
+		__ofono_dbus_pending_reply(&hw->msg,
+					__ofono_error_canceled(hw->msg));
+
+	l_free(hw);
+}
+
+static void dbus_hw_enable(struct ofono_modem *modem)
+{
+	DBusConnection *conn = ofono_dbus_get_connection();
+	const char *path = ofono_modem_get_path(modem);
+	struct dbus_hw *hw;
+
+	DBG("%p", modem);
+
+	hw = l_new(struct dbus_hw, 1);
+	hw->modem = modem;
+
+	if (!g_dbus_register_interface(conn, path, dbus_hw_interface,
+					dbus_hw_methods, NULL, NULL,
+					hw, dbus_hw_cleanup)) {
+		ofono_error("Could not register %s interface under %s",
+				dbus_hw_interface, path);
+		l_free(hw);
+		return;
+	}
+
+	ofono_modem_add_interface(modem, dbus_hw_interface);
+}
+
 static void cpin_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_modem *modem = user_data;
@@ -253,6 +404,8 @@ static void cpin_notify(GAtResult *result, gpointer user_data)
 
 	g_at_chat_unregister(data->aux, data->cpin_ready);
 	data->cpin_ready = 0;
+
+	dbus_hw_enable(modem);
 }
 
 static void cpin_query(gboolean ok, GAtResult *result, gpointer user_data)
@@ -650,6 +803,8 @@ static void cfun_disable(gboolean ok, GAtResult *result, gpointer user_data)
 static int quectel_disable(struct ofono_modem *modem)
 {
 	struct quectel_data *data = ofono_modem_get_data(modem);
+	DBusConnection *conn = ofono_dbus_get_connection();
+	const char *path = ofono_modem_get_path(modem);
 
 	DBG("%p", modem);
 
@@ -658,6 +813,9 @@ static int quectel_disable(struct ofono_modem *modem)
 
 	g_at_chat_cancel_all(data->aux);
 	g_at_chat_unregister_all(data->aux);
+
+	if (g_dbus_unregister_interface(conn, path, dbus_hw_interface))
+		ofono_modem_remove_interface(modem, dbus_hw_interface);
 
 	g_at_chat_send(data->aux, "AT+CFUN=0", cfun_prefix, cfun_disable, modem,
 			NULL);
