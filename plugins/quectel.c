@@ -717,8 +717,9 @@ static void quectel_post_sim(struct ofono_modem *modem)
 
 	DBG("%p", modem);
 
-	gprs = ofono_gprs_create(modem, 0, "atmodem", data->aux);
-	gc = ofono_gprs_context_create(modem, 0, "atmodem", data->modem);
+	gprs = ofono_gprs_create(modem, data->vendor, "atmodem", data->aux);
+	gc = ofono_gprs_context_create(modem, data->vendor, "atmodem",
+					data->modem);
 
 	if (gprs && gc)
 		ofono_gprs_add_context(gprs, gc);
