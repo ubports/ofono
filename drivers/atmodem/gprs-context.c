@@ -409,9 +409,11 @@ static void at_cgdata_test_cb(gboolean ok, GAtResult *result,
 		goto error;
 	}
 
-	if (!g_at_result_iter_open_list(&iter)) {
-		DBG("no list found");
-		goto error;
+	if (gcd->vendor != OFONO_VENDOR_QUECTEL_SERIAL) {
+		if (!g_at_result_iter_open_list(&iter)) {
+			DBG("no list found");
+			goto error;
+		}
 	}
 
 	while (!found && g_at_result_iter_next_string(&iter, &data_type)) {
