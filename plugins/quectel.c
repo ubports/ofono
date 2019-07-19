@@ -108,6 +108,14 @@ struct dbus_hw {
 	int32_t voltage;
 };
 
+enum quectel_power_event {
+	LOW_POWER_DOWN    = -2,
+	LOW_WARNING       = -1,
+	NORMAL_POWER_DOWN =  0,
+	HIGH_WARNING      =  1,
+	HIGH_POWER_DOWN   =  2,
+};
+
 static const char dbus_hw_interface[] = OFONO_SERVICE ".quectel.Hardware";
 
 static void quectel_debug(const char *str, void *user_data)
@@ -335,11 +343,123 @@ static DBusMessage *dbus_hw_get_properties(DBusConnection *conn,
 	return NULL;
 }
 
+static void voltage_handle(struct ofono_modem *modem,
+				enum quectel_power_event event)
+{
+	DBusConnection *conn = ofono_dbus_get_connection();
+	DBusMessage *signal;
+	DBusMessageIter iter;
+	const char *path = ofono_modem_get_path(modem);
+	const char *name;
+	const char *reason;
+	bool close;
+
+	DBG("%p", modem);
+
+	switch (event) {
+	case LOW_POWER_DOWN:
+		close = true;
+		name = "PowerDown";
+		reason = "VoltageLow";
+		break;
+	case LOW_WARNING:
+		close = false;
+		name = "PowerWarning";
+		reason = "VoltageLow";
+		break;
+	case NORMAL_POWER_DOWN:
+		close = true;
+		name = "PowerDown";
+		reason = "Normal";
+		break;
+	case HIGH_WARNING:
+		close = false;
+		name = "PowerWarning";
+		reason = "VoltageHigh";
+		break;
+	case HIGH_POWER_DOWN:
+		close = true;
+		name = "PowerDown";
+		reason = "VoltageHigh";
+		break;
+	default:
+		return;
+	}
+
+	signal = dbus_message_new_signal(path, dbus_hw_interface, name);
+	if (signal) {
+		dbus_message_iter_init_append(signal, &iter);
+		dbus_message_iter_append_basic(&iter, DBUS_TYPE_STRING,
+						&reason);
+		g_dbus_send_message(conn, signal);
+	}
+
+	if (close)
+		close_serial(modem);
+}
+
+static void qind_notify(GAtResult *result, void *user_data)
+{
+	struct dbus_hw *hw = user_data;
+	GAtResultIter iter;
+	enum quectel_power_event event;
+	const char *type;
+
+	DBG("%p", hw->modem);
+
+	g_at_result_iter_init(&iter, result);
+	g_at_result_iter_next(&iter, "+QIND:");
+
+	if (!g_at_result_iter_next_string(&iter, &type))
+		return;
+
+	if (!g_at_result_iter_next_number(&iter, &event))
+		return;
+
+	voltage_handle(hw->modem, event);
+}
+
+static void power_notify(GAtResult *result, void *user_data)
+{
+	struct dbus_hw *hw = user_data;
+	GAtResultIter iter;
+	const char *event;
+
+	DBG("%p", hw->modem);
+
+	g_at_result_iter_init(&iter, result);
+	g_at_result_iter_next(&iter, NULL);
+
+	if (!g_at_result_iter_next_unquoted_string(&iter, &event))
+		return;
+
+	DBG("event: %s", event);
+
+	if (g_strcmp0(event, "UNDER_VOLTAGE POWER DOWN") == 0)
+		voltage_handle(hw->modem, LOW_POWER_DOWN);
+	else if (g_strcmp0(event, "UNDER_VOLTAGE WARNING") == 0)
+		voltage_handle(hw->modem, LOW_WARNING);
+	else if (g_strcmp0(event, "NORMAL POWER DOWN") == 0)
+		voltage_handle(hw->modem, NORMAL_POWER_DOWN);
+	else if (g_strcmp0(event, "OVER_VOLTAGE WARNING") == 0)
+		voltage_handle(hw->modem, HIGH_WARNING);
+	else if (g_strcmp0(event, "OVER_VOLTAGE POWER DOWN") == 0)
+		voltage_handle(hw->modem, HIGH_POWER_DOWN);
+}
+
 static const GDBusMethodTable dbus_hw_methods[] = {
 	{ GDBUS_ASYNC_METHOD("GetProperties",
 				NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
 				dbus_hw_get_properties) },
 	{}
+};
+
+static const GDBusSignalTable dbus_hw_signals[] = {
+	{ GDBUS_SIGNAL("PowerDown",
+			GDBUS_ARGS({ "reason", "s" })) },
+	{ GDBUS_SIGNAL("PowerWarning",
+			GDBUS_ARGS({ "reason", "s" })) },
+	{ }
 };
 
 static void dbus_hw_cleanup(void *data)
@@ -358,6 +478,7 @@ static void dbus_hw_cleanup(void *data)
 static void dbus_hw_enable(struct ofono_modem *modem)
 {
 	DBusConnection *conn = ofono_dbus_get_connection();
+	struct quectel_data *data = ofono_modem_get_data(modem);
 	const char *path = ofono_modem_get_path(modem);
 	struct dbus_hw *hw;
 
@@ -367,12 +488,35 @@ static void dbus_hw_enable(struct ofono_modem *modem)
 	hw->modem = modem;
 
 	if (!g_dbus_register_interface(conn, path, dbus_hw_interface,
-					dbus_hw_methods, NULL, NULL,
+					dbus_hw_methods, dbus_hw_signals, NULL,
 					hw, dbus_hw_cleanup)) {
 		ofono_error("Could not register %s interface under %s",
 				dbus_hw_interface, path);
 		l_free(hw);
 		return;
+	}
+
+	g_at_chat_register(data->aux, "NORMAL POWER DOWN", power_notify, FALSE,
+				hw, NULL);
+
+	switch (data->model) {
+	case QUECTEL_UC15:
+		g_at_chat_register(data->aux, "+QIND",  qind_notify, FALSE, hw,
+					NULL);
+		break;
+	case QUECTEL_M95:
+	case QUECTEL_MC60:
+		g_at_chat_register(data->aux, "OVER_VOLTAGE POWER DOWN",
+					power_notify, FALSE, hw, NULL);
+		g_at_chat_register(data->aux, "UNDER_VOLTAGE POWER DOWN",
+					power_notify, FALSE, hw, NULL);
+		g_at_chat_register(data->aux, "OVER_VOLTAGE WARNING",
+					power_notify, FALSE, hw, NULL);
+		g_at_chat_register(data->aux, "UNDER_VOLTAGE WARNING",
+					power_notify, FALSE, hw, NULL);
+		break;
+	case QUECTEL_UNKNOWN:
+		break;
 	}
 
 	ofono_modem_add_interface(modem, dbus_hw_interface);
