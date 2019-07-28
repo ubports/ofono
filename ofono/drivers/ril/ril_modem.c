@@ -43,6 +43,13 @@ enum ril_modem_online_state {
 	GOING_OFFLINE
 };
 
+enum ril_modem_watch_event {
+	WATCH_IMSI,
+	WATCH_ICCID,
+	WATCH_SIM_STATE,
+	WATCH_EVENT_COUNT
+};
+
 struct ril_modem_online_request {
 	ofono_modem_online_cb_t cb;
 	struct ril_modem_data *md;
@@ -58,7 +65,10 @@ struct ril_modem_data {
 	char *imeisv;
 	char *imei;
 	char *ecclist_file;
-	gulong imsi_event_id;
+
+	gulong watch_event_id[WATCH_EVENT_COUNT];
+	char* last_known_iccid;
+	char* reset_iccid;
 
 	guint online_check_id;
 	enum ril_modem_power_state power_state;
@@ -242,6 +252,32 @@ static void ril_modem_imsi_cb(struct ofono_watch *watch, void *data)
 	ril_modem_update_radio_settings(md);
 }
 
+static void ril_modem_iccid_cb(struct ofono_watch *watch, void *data)
+{
+	struct ril_modem_data *md = data;
+
+	GASSERT(md->watch == watch);
+	if (watch->iccid) {
+		g_free(md->last_known_iccid);
+		md->last_known_iccid = g_strdup(watch->iccid);
+		DBG_(md, "%s", md->last_known_iccid);
+	}
+}
+
+static void ril_modem_sim_state_cb(struct ofono_watch *watch, void *data)
+{
+	struct ril_modem_data *md = data;
+	const enum ofono_sim_state state = ofono_sim_get_state(watch->sim);
+
+	GASSERT(md->watch == watch);
+	if (state == OFONO_SIM_STATE_RESETTING) {
+		g_free(md->reset_iccid);
+		md->reset_iccid = md->last_known_iccid;
+		md->last_known_iccid = NULL;
+		DBG_(md, "%s is resetting", md->reset_iccid);
+	}
+}
+
 static void ril_modem_pre_sim(struct ofono_modem *modem)
 {
 	struct ril_modem_data *md = ril_modem_data_from_ofono(modem);
@@ -286,7 +322,13 @@ static void ril_modem_post_sim(struct ofono_modem *modem)
 	ofono_call_barring_create(modem, 0, RILMODEM_DRIVER, md);
 	ofono_message_waiting_register(ofono_message_waiting_create(modem));
 	if (md->modem.config.enable_stk) {
-		ofono_stk_create(modem, 0, RILMODEM_DRIVER, md);
+		if (!md->reset_iccid ||
+			g_strcmp0(md->reset_iccid, md->watch->iccid)) {
+			/* This SIM was never reset */
+			ofono_stk_create(modem, 0, RILMODEM_DRIVER, md);
+		} else {
+			ofono_warn("Disabling STK after SIM reset");
+		}
 	}
 	if (md->modem.config.enable_cbs) {
 		ofono_cbs_create(modem, 0, RILMODEM_DRIVER, md);
@@ -376,7 +418,7 @@ static void ril_modem_remove(struct ofono_modem *ofono)
 	ril_radio_unref(modem->radio);
 	ril_sim_settings_unref(modem->sim_settings);
 
-	ofono_watch_remove_handler(md->watch, md->imsi_event_id);
+	ofono_watch_remove_all_handlers(md->watch, md->watch_event_id);
 	ofono_watch_unref(md->watch);
 
 	if (md->online_check_id) {
@@ -398,6 +440,8 @@ static void ril_modem_remove(struct ofono_modem *ofono)
 	grilio_channel_unref(modem->io);
 	grilio_queue_cancel_all(md->q, FALSE);
 	grilio_queue_unref(md->q);
+	g_free(md->last_known_iccid);
+	g_free(md->reset_iccid);
 	g_free(md->ecclist_file);
 	g_free(md->log_prefix);
 	g_free(md->imeisv);
@@ -446,10 +490,17 @@ struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *log_prefix,
 		modem->io = grilio_channel_ref(io);
 		md->q = grilio_queue_new(io);
 		md->watch = ofono_watch_new(path);
+		md->last_known_iccid = g_strdup(md->watch->iccid);
 
-		md->imsi_event_id =
+		md->watch_event_id[WATCH_IMSI] =
 			ofono_watch_add_imsi_changed_handler(md->watch,
 						ril_modem_imsi_cb, md);
+		md->watch_event_id[WATCH_ICCID] =
+			ofono_watch_add_iccid_changed_handler(md->watch,
+						ril_modem_iccid_cb, md);
+		md->watch_event_id[WATCH_SIM_STATE] =
+			ofono_watch_add_sim_state_changed_handler(md->watch,
+						ril_modem_sim_state_cb, md);
 
 		md->set_online.md = md;
 		md->set_offline.md = md;
