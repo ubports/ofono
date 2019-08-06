@@ -271,6 +271,9 @@ static gboolean assign_context(struct pri_context *ctx, unsigned int use_cid)
 		return TRUE;
 	}
 
+	l_uintset_take(used_cids, ctx->context.cid);
+	ctx->context.cid = 0;
+
 	return FALSE;
 }
 
