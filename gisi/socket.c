@@ -32,6 +32,8 @@
 #include <fcntl.h>
 #include <glib.h>
 
+#pragma GCC diagnostic ignored "-Waddress-of-packed-member"
+
 #include "phonet.h"
 #include "socket.h"
 
