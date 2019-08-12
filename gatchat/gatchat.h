@@ -147,6 +147,13 @@ guint g_at_chat_send_and_expect_short_prompt(GAtChat *chat, const char *cmd,
 				const char **valid_resp, GAtResultFunc func,
 				gpointer user_data, GDestroyNotify notify);
 
+/*!
+ * Retry an already created command. This does nothing if the command is
+ * still waiting in the queue. If the command has been written to the channel,
+ * but no response is received yet, the retry writes the command again.
+ */
+gboolean g_at_chat_retry(GAtChat *chat, guint id);
+
 gboolean g_at_chat_cancel(GAtChat *chat, guint id);
 gboolean g_at_chat_cancel_all(GAtChat *chat);
 

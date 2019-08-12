@@ -1047,6 +1047,29 @@ static guint at_chat_send_common(struct at_chat *chat, guint gid,
 	return c->id;
 }
 
+static gboolean at_chat_retry(struct at_chat *chat, guint id)
+{
+	struct at_command *cmd = g_queue_peek_head(chat->command_queue);
+
+	if (!cmd)
+		return FALSE;
+
+	/* do nothing if command is not yet started, or already finished */
+	if (cmd->id != id)
+		return FALSE;
+
+	/* do nothing if command is not fully written */
+	if (chat->cmd_bytes_written != strlen(cmd->cmd))
+		return FALSE;
+
+	/* reset number of written bytes to re-write command */
+	chat->cmd_bytes_written = 0;
+
+	chat_wakeup_writer(chat);
+
+	return TRUE;
+}
+
 static struct at_notify *at_notify_create(struct at_chat *chat,
 						const char *prefix,
 						gboolean pdu)
@@ -1541,6 +1564,14 @@ guint g_at_chat_send_and_expect_short_prompt(GAtChat *chat, const char *cmd,
 					cmd, prefix_list,
 					COMMAND_FLAG_EXPECT_SHORT_PROMPT,
 					NULL, func, user_data, notify);
+}
+
+gboolean g_at_chat_retry(GAtChat *chat, guint id)
+{
+	if (chat == NULL || id == 0)
+		return FALSE;
+
+	return at_chat_retry(chat->parent, id);
 }
 
 gboolean g_at_chat_cancel(GAtChat *chat, guint id)
