@@ -45,6 +45,8 @@ struct ofono_gprs_driver {
 				ofono_gprs_cb_t cb, void *data);
 	void (*attached_status)(struct ofono_gprs *gprs,
 					ofono_gprs_status_cb_t cb, void *data);
+	void (*list_active_contexts)(struct ofono_gprs *gprs,
+					ofono_gprs_cb_t cb, void *data);
 };
 
 enum gprs_suspend_cause {
