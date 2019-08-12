@@ -1,4 +1,3 @@
-#pragma once
 
 struct at_netreg_data {
 	GAtChat *chat;
