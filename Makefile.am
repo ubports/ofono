@@ -334,6 +334,7 @@ builtin_sources += 	drivers/atmodem/atmodem.h \
 			drivers/atmodem/cbs.c \
 			drivers/atmodem/call-forwarding.c \
 			drivers/atmodem/call-meter.c \
+			drivers/atmodem/network-registration.h \
 			drivers/atmodem/network-registration.c \
 			drivers/atmodem/sim.c \
 			drivers/atmodem/stk.c \
