@@ -1965,7 +1965,12 @@ void ofono_gprs_cid_activated(struct ofono_gprs  *gprs, unsigned int cid,
 	struct pri_context *pri_ctx;
 	struct ofono_gprs_context *gc;
 
-	DBG("");
+	DBG("cid %u", cid);
+
+	if (!__ofono_atom_get_registered(gprs->atom)) {
+		DBG("cid %u activated before atom registered", cid);
+		return;
+	}
 
 	if (l_uintset_contains(gprs->used_cids, cid)) {
 		DBG("cid %u already activated", cid);
@@ -3355,11 +3360,18 @@ remove:
 		storage_sync(imsi, SETTINGS_STORE, gprs->settings);
 }
 
+static void gprs_list_active_contexts_callback(const struct ofono_error *error,
+						void *data)
+{
+	DBG("error = %d", error->type);
+}
+
 static void ofono_gprs_finish_register(struct ofono_gprs *gprs)
 {
 	DBusConnection *conn = ofono_dbus_get_connection();
 	struct ofono_modem *modem = __ofono_atom_get_modem(gprs->atom);
 	const char *path = __ofono_atom_get_path(gprs->atom);
+	const struct ofono_gprs_driver *driver = gprs->driver;
 
 	if (gprs->contexts == NULL) /* Automatic provisioning failed */
 		add_context(gprs, NULL, OFONO_GPRS_CONTEXT_TYPE_INTERNET);
@@ -3383,6 +3395,12 @@ static void ofono_gprs_finish_register(struct ofono_gprs *gprs)
 					netreg_watch, gprs, NULL);
 
 	__ofono_atom_register(gprs->atom, gprs_unregister);
+
+	/* Find any context activated during init */
+	if (driver->list_active_contexts)
+		driver->list_active_contexts(gprs,
+					     gprs_list_active_contexts_callback,
+					     gprs);
 }
 
 static void spn_read_cb(const char *spn, const char *dc, void *data)
