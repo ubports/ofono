@@ -1,3 +1,9 @@
+ver 1.30:
+	Fix issue with handling of IPv6 address and xmm7xxx modems.
+	Fix issue with default context creation with an empty APN.
+	Fix issue with activation of context with CID zero.
+	Add support for Quectel MC60 modems.
+
 ver 1.29:
 	Fix issue with QMI and SIM initialized notification.
 	Add support for multiple PDP contexts and xmm7xxx modems.
