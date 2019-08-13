@@ -365,27 +365,27 @@ static void voltage_handle(struct ofono_modem *modem,
 	case LOW_POWER_DOWN:
 		close = true;
 		name = "PowerDown";
-		reason = "VoltageLow";
+		reason = "voltagelow";
 		break;
 	case LOW_WARNING:
 		close = false;
 		name = "PowerWarning";
-		reason = "VoltageLow";
+		reason = "voltagelow";
 		break;
 	case NORMAL_POWER_DOWN:
 		close = true;
 		name = "PowerDown";
-		reason = "Normal";
+		reason = "normal";
 		break;
 	case HIGH_WARNING:
 		close = false;
 		name = "PowerWarning";
-		reason = "VoltageHigh";
+		reason = "voltagehigh";
 		break;
 	case HIGH_POWER_DOWN:
 		close = true;
 		name = "PowerDown";
-		reason = "VoltageHigh";
+		reason = "voltagehigh";
 		break;
 	default:
 		return;
