@@ -16,9 +16,9 @@ Signals		PowerDown(string reason)
 			by the modem.
 
 			Possible reasons:
-				"VoltageLow"	The supply voltage is too low
-				"Normal"	The PWRKEY pin was asserted
-				"VoltageHigh"	The supply voltage is too high
+				"voltagelow"	The supply voltage is too low
+				"normal"	The PWRKEY pin was asserted
+				"voltagehigh"	The supply voltage is too high
 
 		PowerWarning(string reason)
 
@@ -26,8 +26,8 @@ Signals		PowerDown(string reason)
 			voltage is close to its supported limits.
 
 			Possible reasons:
-				"VoltageLow"	The supply voltage is low
-				"VoltageHigh"	The supply voltage is high
+				"voltagelow"	The supply voltage is low
+				"voltagehigh"	The supply voltage is high
 
 Properties	int32 Voltage [readonly]
 
