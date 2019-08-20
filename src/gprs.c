@@ -1571,13 +1571,34 @@ static void release_active_contexts(struct ofono_gprs *gprs)
 	}
 }
 
+static gboolean on_lte(struct ofono_gprs *gprs)
+{
+	if (ofono_netreg_get_technology(gprs->netreg) ==
+			ACCESS_TECHNOLOGY_EUTRAN && have_read_settings(gprs))
+		return TRUE;
+
+	return FALSE;
+}
+
 static void gprs_attached_update(struct ofono_gprs *gprs)
 {
 	ofono_bool_t attached;
+	int status = gprs->status;
 
-	attached = gprs->driver_attached &&
-		(gprs->status == NETWORK_REGISTRATION_STATUS_REGISTERED ||
-			gprs->status == NETWORK_REGISTRATION_STATUS_ROAMING);
+	if (on_lte(gprs))
+		/*
+		 * For LTE we attached status reflects successful context
+		 * activation.
+		 * Since we in gprs_netreg_update not even try to attach
+		 * to GPRS if we are running on LTE, we can on some modems
+		 * expect the gprs status to be unknown. That must not
+		 * result in detaching...
+		 */
+		attached = have_active_contexts(gprs);
+	else
+		attached = gprs->driver_attached &&
+			(status == NETWORK_REGISTRATION_STATUS_REGISTERED ||
+				status == NETWORK_REGISTRATION_STATUS_ROAMING);
 
 	if (attached == gprs->attached)
 		return;
@@ -1591,11 +1612,13 @@ static void gprs_attached_update(struct ofono_gprs *gprs)
 	if (attached == FALSE) {
 		release_active_contexts(gprs);
 		gprs->bearer = -1;
-	} else if (have_active_contexts(gprs) == TRUE) {
+	} else if (have_active_contexts(gprs) == TRUE && !on_lte(gprs)) {
 		/*
 		 * Some times the context activates after a detach event and
 		 * right before an attach. We close it to avoid unexpected open
 		 * contexts.
+		 * Skip that for LTE since the condition to be attached on LTE
+		 * is that a context gets activated
 		 */
 		release_active_contexts(gprs);
 		gprs->flags |= GPRS_FLAG_ATTACHED_UPDATE;
@@ -1658,15 +1681,6 @@ static void gprs_netreg_removed(struct ofono_gprs *gprs)
 	gprs->driver_attached = FALSE;
 
 	gprs_attached_update(gprs);
-}
-
-static gboolean on_lte(struct ofono_gprs *gprs)
-{
-	if (ofono_netreg_get_technology(gprs->netreg) ==
-			ACCESS_TECHNOLOGY_EUTRAN && have_read_settings(gprs))
-		return TRUE;
-
-	return FALSE;
 }
 
 static void gprs_netreg_update(struct ofono_gprs *gprs)
@@ -2573,16 +2587,7 @@ void ofono_gprs_status_notify(struct ofono_gprs *gprs, int status)
 
 	if (status != NETWORK_REGISTRATION_STATUS_REGISTERED &&
 			status != NETWORK_REGISTRATION_STATUS_ROAMING) {
-		/*
-		 * For LTE we attached status reflects successful context
-		 * activation.
-		 * Since we in gprs_netreg_update not even try to attach
-		 * to GPRS if we are running on LTE, we can on some modems
-		 * expect the gprs status to be unknown. That must not
-		 * result in detaching...
-		 */
-		if (!on_lte(gprs))
-			gprs_attached_update(gprs);
+		gprs_attached_update(gprs);
 		return;
 	}
 
