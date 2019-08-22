@@ -9,12 +9,14 @@ Source:     %{name}-%{version}.tar.bz2
 
 %define libgrilio_version 1.0.35
 %define libglibutil_version 1.0.30
+%define libmce_version 1.0.6
 
 Requires:   dbus
 Requires:   systemd
 Requires:   ofono-configs
 Requires:   libgrilio >= %{libgrilio_version}
 Requires:   libglibutil >= %{libglibutil_version}
+Requires:   libmce-glib >= %{libmce_version}
 Requires:   mobile-broadband-provider-info
 Requires(preun): systemd
 Requires(post): systemd
@@ -30,7 +32,7 @@ BuildRequires:  pkgconfig(libwspcodec) >= 2.0
 BuildRequires:  pkgconfig(libgrilio) >= %{libgrilio_version}
 BuildRequires:  pkgconfig(libglibutil) >= %{libglibutil_version}
 BuildRequires:  pkgconfig(libdbuslogserver-dbus)
-BuildRequires:  pkgconfig(libmce-glib) >= 1.0.5
+BuildRequires:  pkgconfig(libmce-glib) >= %{libmce_version}
 BuildRequires:  pkgconfig(libdbusaccess)
 BuildRequires:  pkgconfig(mobile-broadband-provider-info)
 BuildRequires:  libtool

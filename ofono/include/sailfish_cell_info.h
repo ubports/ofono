@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2017-2018 Jolla Ltd.
+ *  Copyright (C) 2017-2019 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -88,6 +88,7 @@ struct sailfish_cell_info_proc {
 	gulong (*add_cells_changed_handler)(struct sailfish_cell_info *info,
 					sailfish_cell_info_cb_t cb, void *arg);
 	void (*remove_handler)(struct sailfish_cell_info *info, gulong id);
+	void (*set_update_interval)(struct sailfish_cell_info *info, int ms);
 };
 
 /* Utilities */
@@ -104,6 +105,8 @@ gulong sailfish_cell_info_add_cells_changed_handler
 					sailfish_cell_info_cb_t cb, void *arg);
 void sailfish_cell_info_remove_handler(struct sailfish_cell_info *info,
 					gulong id);
+void sailfish_cell_info_set_update_interval(struct sailfish_cell_info *info,
+					int ms);
 
 #endif /* SAILFISH_CELINFO_H */
 

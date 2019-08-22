@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2017 Jolla Ltd.
+ *  Copyright (C) 2017-2019 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -117,6 +117,14 @@ void sailfish_cell_info_remove_handler(struct sailfish_cell_info *info,
 {
 	if (info) {
 		info->proc->remove_handler(info, id);
+	}
+}
+
+void sailfish_cell_info_set_update_interval(struct sailfish_cell_info *info,
+					int ms)
+{
+	if (info && info->proc->set_update_interval) {
+		info->proc->set_update_interval(info, ms);
 	}
 }
 

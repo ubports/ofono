@@ -183,14 +183,16 @@ AC_ARG_ENABLE(sailfish-rilmodem, AC_HELP_STRING([--enable-sailfish-rilmodem],
 				[enable_sailfish_rilmodem="no"])
 AM_CONDITIONAL(SAILFISH_RILMODEM, test "${enable_sailfish_rilmodem}" != "no")
 
-PKG_CHECK_MODULES(GLIBUTIL, libglibutil >= 1.0.30, dummy=yes,
-			AC_MSG_ERROR(libglibutil >= 1.0.30 is required))
+PKG_CHECK_MODULES(GLIBUTIL, libglibutil >= 1.0.35, dummy=yes,
+			AC_MSG_ERROR(libglibutil >= 1.0.35 is required))
+CFLAGS="$CFLAGS $GLIBUTIL_CFLAGS"
+LIBS="$LIBS $GLIBUTIL_LIBS"
 
 if (test "${enable_sailfish_rilmodem}" = "yes"); then
-	PKG_CHECK_MODULES(GRILIO, libgrilio >= 1.0.25, dummy=yes,
-				AC_MSG_ERROR(libgrilio >= 1.0.25 is required))
-	PKG_CHECK_MODULES(LIBMCE, libmce-glib >= 1.0.5, dummy=yes,
-				AC_MSG_ERROR(libmce-glib >= 1.0.5 is required))
+	PKG_CHECK_MODULES(GRILIO, libgrilio >= 1.0.35, dummy=yes,
+				AC_MSG_ERROR(libgrilio >= 1.0.35 is required))
+	PKG_CHECK_MODULES(LIBMCE, libmce-glib >= 1.0.6, dummy=yes,
+				AC_MSG_ERROR(libmce-glib >= 1.0.6 is required))
 	CFLAGS="$CFLAGS $GRILIO_CFLAGS $LIBMCE_CFLAGS"
 	LIBS="$LIBS $GRILIO_LIBS $LIBMCE_LIBS"
 	enable_sailfish_manager=yes
@@ -301,8 +303,6 @@ AC_ARG_ENABLE(sailfish-pushforwarder, AC_HELP_STRING([--enable-sailfish-pushforw
 			[enable_sailfish_pushforwarder="no"])
 AM_CONDITIONAL(SAILFISH_PUSHFORWARDER, test "${enable_sailfish_pushforwarder}" != "no")
 if (test "${enable_sailfish_pushforwarder}" != "no"); then
-	PKG_CHECK_MODULES(GLIBUTIL, libglibutil >= 1.0.15, dummy=yes,
-			AC_MSG_ERROR(libglibutil >= 1.0.15 is required))
 	PKG_CHECK_MODULES(WSPCODEC, libwspcodec >= 2.0, dummy=yes,
 			AC_MSG_ERROR(WSP decoder is required))
 	CFLAGS="$CFLAGS $WSPCODEC_CFLAGS"
@@ -333,9 +333,6 @@ if (test "${enable_sailfish_debuglog}" = "yes"); then
 	CFLAGS="$CFLAGS $DBUSLOG_CFLAGS"
 	LIBS="$LIBS $DBUSLOG_LIBS"
 fi
-
-CFLAGS="$CFLAGS $GLIBUTIL_CFLAGS"
-LIBS="$LIBS $GLIBUTIL_LIBS"
 
 if (test "${prefix}" = "NONE"); then
 	dnl no prefix and no localstatedir, so default to /var

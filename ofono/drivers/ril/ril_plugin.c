@@ -24,6 +24,7 @@
 #include "ril_data.h"
 #include "ril_util.h"
 #include "ril_vendor.h"
+#include "ril_devmon.h"
 #include "ril_log.h"
 
 #include <ofono/sailfish_manager.h>
@@ -35,7 +36,6 @@
 #include <gutil_macros.h>
 #include <gutil_misc.h>
 
-#include <mce_display.h>
 #include <mce_log.h>
 
 #include <linux/capability.h>
@@ -142,6 +142,7 @@
 #define RILCONF_NETWORK_SELECTION_MANUAL_0  "networkSelectionManual0"
 #define RILCONF_USE_DATA_PROFILES           "useDataProfiles"
 #define RILCONF_MMS_DATA_PROFILE_ID         "mmsDataProfileId"
+#define RILCONF_DEVMON                      "deviceStateTracking"
 
 /* Modem error ids */
 #define RIL_ERROR_ID_RILD_RESTART           "rild-restart"
@@ -155,12 +156,6 @@ enum ril_plugin_io_events {
 	IO_EVENT_COUNT
 };
 
-enum ril_plugin_display_events {
-	DISPLAY_EVENT_VALID,
-	DISPLAY_EVENT_STATE,
-	DISPLAY_EVENT_COUNT
-};
-
 enum ril_plugin_watch_events {
 	WATCH_EVENT_MODEM,
 	WATCH_EVENT_COUNT
@@ -170,6 +165,13 @@ enum ril_set_radio_cap_opt {
 	RIL_SET_RADIO_CAP_AUTO,
 	RIL_SET_RADIO_CAP_ENABLED,
 	RIL_SET_RADIO_CAP_DISABLED
+};
+
+enum ril_devmon_opt {
+	RIL_DEVMON_NONE,
+	RIL_DEVMON_AUTO,
+	RIL_DEVMON_SS,
+	RIL_DEVMON_DS
 };
 
 struct ril_plugin_identity {
@@ -190,7 +192,6 @@ typedef struct sailfish_slot_manager_impl {
 	struct ril_plugin_settings settings;
 	gulong caps_manager_event_id;
 	guint start_timeout_id;
-	MceDisplay *display;
 	GSList *slots;
 } ril_plugin;
 
@@ -226,9 +227,8 @@ typedef struct sailfish_slot_impl {
 	enum sailfish_slot_flags slot_flags;
 	guint start_timeout;
 	guint start_timeout_id;
-	MceDisplay *display;
-	gboolean display_on;
-	gulong display_event_id[DISPLAY_EVENT_COUNT];
+	struct ril_devmon *devmon;
+	struct ril_devmon_io *devmon_io;
 	GRilIoChannel *io;
 	gulong io_event_id[IO_EVENT_COUNT];
 	gulong sim_card_state_event_id;
@@ -340,41 +340,6 @@ static void ril_plugin_foreach_slot_manager(struct sailfish_slot_driver_reg *r,
 				ril_plugin_foreach_slot_manager_proc, fn);
 }
 
-static void ril_plugin_send_screen_state(ril_slot *slot)
-{
-	if (slot->io && slot->io->connected) {
-		/**
-		 * RIL_REQUEST_SCREEN_STATE (deprecated on 2017-01-10)
-		 *
-		 * ((int *)data)[0] is == 1 for "Screen On"
-		 * ((int *)data)[0] is == 0 for "Screen Off"
-		 */
-		GRilIoRequest *req = grilio_request_array_int32_new(1,
-						slot->display_on);
-
-		grilio_channel_send_request(slot->io, req,
-						RIL_REQUEST_SCREEN_STATE);
-		grilio_request_unref(req);
-	}
-}
-
-static gboolean ril_plugin_display_on(MceDisplay *display)
-{
-	return display && display->valid &&
-				display->state != MCE_DISPLAY_STATE_OFF;
-}
-
-static void ril_plugin_display_cb(MceDisplay *display, void *user_data)
-{
-	ril_slot *slot = user_data;
-	const gboolean display_was_on = slot->display_on;
-
-	slot->display_on = ril_plugin_display_on(display);
-	if (slot->display_on != display_was_on) {
-		ril_plugin_send_screen_state(slot);
-	}
-}
-
 static void ril_plugin_remove_slot_handler(ril_slot *slot, int id)
 {
 	GASSERT(id >= 0 && id<IO_EVENT_COUNT);
@@ -398,6 +363,11 @@ static void ril_plugin_shutdown_slot(ril_slot *slot, gboolean kill_io)
 		if (slot->retry_id) {
 			g_source_remove(slot->retry_id);
 			slot->retry_id = 0;
+		}
+
+		if (slot->devmon_io) {
+			ril_devmon_io_free(slot->devmon_io);
+			slot->devmon_io = NULL;
 		}
 
 		if (slot->cell_info) {
@@ -938,13 +908,6 @@ static void ril_plugin_manager_started(ril_plugin *plugin)
 {
 	ril_plugin_drop_orphan_slots(plugin);
 	sailfish_slot_manager_started(plugin->handle);
-
-	/*
-	 * We no longer need this MceDisplay reference, the slots
-	 * (if there are any) are holding references of their own.
-	 */
-	mce_display_unref(plugin->display);
-	plugin->display = NULL;
 }
 
 static void ril_plugin_all_slots_started_cb(ril_slot *slot, void *param)
@@ -1031,7 +994,7 @@ static void ril_plugin_slot_connected(ril_slot *slot)
 	GASSERT(!slot->cell_info);
 	if (slot->io->ril_version >= 9) {
 		slot->cell_info = ril_cell_info_new(slot->io, log_prefix,
-				slot->display, slot->radio, slot->sim_card);
+				slot->radio, slot->sim_card);
 	}
 
 	GASSERT(!slot->caps);
@@ -1043,6 +1006,12 @@ static void ril_plugin_slot_connected(ril_slot *slot)
 		/* Check if RIL really supports radio capability management */
 		slot->caps_check_id = ril_radio_caps_check(slot->io,
 					ril_plugin_radio_caps_cb, slot);
+	}
+
+	GASSERT(!slot->devmon_io);
+	if (slot->devmon) {
+		slot->devmon_io = ril_devmon_start_io(slot->devmon,
+						slot->io, slot->cell_info);
 	}
 
 	if (!slot->handle) {
@@ -1065,7 +1034,6 @@ static void ril_plugin_slot_connected(ril_slot *slot)
 		ril_plugin_check_if_started(plugin);
 	}
 
-	ril_plugin_send_screen_state(slot);
 	ril_plugin_check_modem(slot);
 	ril_plugin_check_ready(slot);
 }
@@ -1169,10 +1137,9 @@ static void ril_slot_free(ril_slot *slot)
 	DBG("%s", slot->path);
 	ril_plugin_shutdown_slot(slot, TRUE);
 	plugin->slots = g_slist_remove(plugin->slots, slot);
-	mce_display_remove_all_handlers(slot->display, slot->display_event_id);
-	mce_display_unref(slot->display);
 	ofono_watch_remove_all_handlers(slot->watch, slot->watch_event_id);
 	ofono_watch_unref(slot->watch);
+	ril_devmon_free(slot->devmon);
 	ril_sim_settings_unref(slot->sim_settings);
 	gutil_ints_unref(slot->config.local_hangup_reasons);
 	gutil_ints_unref(slot->config.remote_hangup_reasons);
@@ -1239,15 +1206,7 @@ static ril_slot *ril_plugin_slot_new_take(char *transport,
 	slot->data_opt.data_call_retry_delay_ms =
 		RILMODEM_DEFAULT_DATA_CALL_RETRY_DELAY;
 
-	slot->display = mce_display_new();
-	slot->display_on = ril_plugin_display_on(slot->display);
-	slot->display_event_id[DISPLAY_EVENT_VALID] =
-		mce_display_add_valid_changed_handler(slot->display,
-				ril_plugin_display_cb, slot);
-	slot->display_event_id[DISPLAY_EVENT_STATE] =
-		mce_display_add_state_changed_handler(slot->display,
-				ril_plugin_display_cb, slot);
-
+	slot->devmon = ril_devmon_auto_new();
 	slot->watch = ofono_watch_new(dbus_path);
 	slot->watch_event_id[WATCH_EVENT_MODEM] =
 		ofono_watch_add_modem_changed_handler(slot->watch,
@@ -1701,6 +1660,27 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 				slot->legacy_imei_query ? "on" : "off");
 	}
 
+	/* deviceStateTracking */
+	if (ril_config_get_enum(file, group, RILCONF_DEVMON, &ival,
+				"none", RIL_DEVMON_NONE,
+				"auto", RIL_DEVMON_AUTO,
+				"ds", RIL_DEVMON_DS,
+				"ss", RIL_DEVMON_SS, NULL)) {
+		DBG("%s: " RILCONF_DEVMON " %s", group,
+				ival == RIL_DEVMON_NONE ? "off" :
+				ival == RIL_DEVMON_DS ? "on" :
+				ival == RIL_DEVMON_SS ? "legacy" :
+				"auto");
+		if (ival != RIL_DEVMON_AUTO) {
+			/* Default is automatic, reallocate the object */
+			ril_devmon_free(slot->devmon);
+			slot->devmon =
+				(ival == RIL_DEVMON_DS ? ril_devmon_ds_new() :
+				 ival == RIL_DEVMON_SS ? ril_devmon_ss_new() :
+				 NULL);
+		}
+	}
+
 	return slot;
 }
 
@@ -2042,13 +2022,6 @@ static ril_plugin *ril_plugin_manager_create(struct sailfish_slot_manager *m)
 	struct ril_plugin_settings *ps = &plugin->settings;
 
 	DBG("");
-
-	/*
-	 * Create the MCE client instance early so that connection
-	 * to the system bus gets established before we switch the
-	 * identity.
-	 */
-	plugin->display = mce_display_new();
 	plugin->handle = m;
 	ril_plugin_parse_identity(&ps->identity, RILMODEM_DEFAULT_IDENTITY);
 	ps->dm_flags = RILMODEM_DEFAULT_DM_FLAGS;
@@ -2116,7 +2089,6 @@ static void ril_plugin_manager_free(ril_plugin *plugin)
 {
 	if (plugin) {
 		GASSERT(!plugin->slots);
-		mce_display_unref(plugin->display);
 		ril_data_manager_unref(plugin->data_manager);
 		ril_radio_caps_manager_remove_handler(plugin->caps_manager,
 					plugin->caps_manager_event_id);

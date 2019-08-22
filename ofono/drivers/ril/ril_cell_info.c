@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2016-2018 Jolla Ltd.
+ *  Copyright (C) 2016-2019 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -26,8 +26,7 @@
 #include <gutil_idlepool.h>
 #include <gutil_misc.h>
 
-#define DISPLAY_ON_UPDATE_RATE  (1000)  /* 1 sec */
-#define DISPLAY_OFF_UPDATE_RATE (60000) /* 1 min */
+#define DEFAULT_UPDATE_RATE_MS  (10000) /* 10 sec */
 #define MAX_RETRIES             (5)
 
 typedef GObjectClass RilCellInfoClass;
@@ -37,13 +36,12 @@ struct ril_cell_info {
 	GObject object;
 	struct sailfish_cell_info info;
 	GRilIoChannel *io;
-	MceDisplay *display;
 	struct ril_radio *radio;
 	struct ril_sim_card *sim_card;
-	gulong display_state_event_id;
 	gulong radio_state_event_id;
 	gulong sim_status_event_id;
 	gboolean sim_card_ready;
+	int update_rate_ms;
 	char *log_prefix;
 	gulong event_id;
 	guint query_id;
@@ -358,32 +356,17 @@ static void ril_cell_info_query(struct ril_cell_info *self)
 	grilio_request_unref(req);
 }
 
-static void ril_cell_info_set_rate(struct ril_cell_info *self, int ms)
+static void ril_cell_info_set_rate(struct ril_cell_info *self)
 {
-	GRilIoRequest *req = grilio_request_sized_new(8);
+	GRilIoRequest *req = grilio_request_array_int32_new(1,
+		(self->update_rate_ms > 0) ? self->update_rate_ms : INT_MAX);
 
-	grilio_request_append_int32(req, 1);
-	grilio_request_append_int32(req, ms);
 	grilio_request_set_retry(req, RIL_RETRY_MS, MAX_RETRIES);
 	grilio_channel_cancel_request(self->io, self->set_rate_id, FALSE);
 	self->set_rate_id = grilio_channel_send_request_full(self->io, req,
 			RIL_REQUEST_SET_UNSOL_CELL_INFO_LIST_RATE,
 			ril_cell_info_set_rate_cb, NULL, self);
 	grilio_request_unref(req);
-}
-
-static void ril_cell_info_update_rate(struct ril_cell_info *self)
-{
-	if (self->sim_card_ready) {
-		ril_cell_info_set_rate(self,
-			(self->display->state == MCE_DISPLAY_STATE_OFF) ?
-			DISPLAY_OFF_UPDATE_RATE : DISPLAY_ON_UPDATE_RATE);
-	}
-}
-
-static void ril_cell_info_display_state_cb(MceDisplay *display, void *arg)
-{
-	ril_cell_info_update_rate(RIL_CELL_INFO(arg));
 }
 
 static void ril_cell_info_refresh(struct ril_cell_info *self)
@@ -411,12 +394,15 @@ static void ril_cell_info_sim_status_cb(struct ril_sim_card *sim, void *arg)
 	self->sim_card_ready = ril_sim_card_ready(sim);
 	DBG_(self, "%sready", self->sim_card_ready ? "" : "not ");
 	ril_cell_info_refresh(self);
-	ril_cell_info_update_rate(self);
+	if (self->sim_card_ready) {
+		ril_cell_info_set_rate(self);
+	}
 }
 
 /* sailfish_cell_info interface callbacks */
 
-struct ril_cell_info_signal_data {
+struct ril_cell_info_closure {
+	GCClosure cclosure;
 	sailfish_cell_info_cb_t cb;
 	void *arg;
 };
@@ -438,17 +424,9 @@ static void ril_cell_info_unref_proc(struct sailfish_cell_info *info)
 }
 
 static void ril_cell_info_cells_changed_cb(struct ril_cell_info *self,
-							void *user_data)
+					struct ril_cell_info_closure *closure)
 {
-	struct ril_cell_info_signal_data *data = user_data;
-
-	data->cb(&self->info, data->arg);
-}
-
-static void ril_cell_info_cells_disconnect_notify(gpointer  data,
-							GClosure *closure)
-{
-	g_slice_free1(sizeof(struct ril_cell_info_signal_data), data);
+	closure->cb(&self->info, closure->arg);
 }
 
 static gulong ril_cell_info_add_cells_changed_handler_proc
@@ -456,16 +434,18 @@ static gulong ril_cell_info_add_cells_changed_handler_proc
 					sailfish_cell_info_cb_t cb, void *arg)
 {
 	if (cb) {
-		struct ril_cell_info_signal_data *data =
-			g_slice_new(struct ril_cell_info_signal_data);
+		struct ril_cell_info_closure *closure =
+			(struct ril_cell_info_closure *) g_closure_new_simple
+				(sizeof(struct ril_cell_info_closure), NULL);
+		GCClosure* cc = &closure->cclosure;
 
-		data->cb = cb;
-		data->arg = arg;
-		return g_signal_connect_data(ril_cell_info_cast(info),
-				SIGNAL_CELLS_CHANGED_NAME,
-				G_CALLBACK(ril_cell_info_cells_changed_cb),
-				data, ril_cell_info_cells_disconnect_notify,
-				G_CONNECT_AFTER);
+		cc->closure.data = closure;
+		cc->callback = G_CALLBACK(ril_cell_info_cells_changed_cb);
+		closure->cb = cb;
+		closure->arg = arg;
+		return g_signal_connect_closure_by_id(ril_cell_info_cast(info),
+				ril_cell_info_signals[SIGNAL_CELLS_CHANGED], 0,
+				&cc->closure, FALSE);
 	} else {
 		return 0;
 	}
@@ -479,22 +459,36 @@ static void ril_cell_info_remove_handler_proc(struct sailfish_cell_info *info,
 	}
 }
 
+static void ril_cell_info_set_update_interval_proc
+				(struct sailfish_cell_info *info, int ms)
+{
+	struct ril_cell_info *self = ril_cell_info_cast(info);
+
+	if (self->update_rate_ms != ms) {
+		self->update_rate_ms = ms;
+		DBG_(self, "%d ms", ms);
+		if (self->sim_card_ready) {
+			ril_cell_info_set_rate(self);
+		}
+	}
+}
+
 struct sailfish_cell_info *ril_cell_info_new(GRilIoChannel *io,
-		const char *log_prefix, MceDisplay *display,
-		struct ril_radio *radio, struct ril_sim_card *sim_card)
+			const char *log_prefix, struct ril_radio *radio,
+			struct ril_sim_card *sim_card)
 {
 	static const struct sailfish_cell_info_proc ril_cell_info_proc = {
 		ril_cell_info_ref_proc,
 		ril_cell_info_unref_proc,
 		ril_cell_info_add_cells_changed_handler_proc,
-		ril_cell_info_remove_handler_proc
+		ril_cell_info_remove_handler_proc,
+		ril_cell_info_set_update_interval_proc
 	};
 
 	struct ril_cell_info *self = g_object_new(RIL_CELL_INFO_TYPE, 0);
 
 	self->info.proc = &ril_cell_info_proc;
 	self->io = grilio_channel_ref(io);
-	self->display = mce_display_ref(display);
 	self->radio = ril_radio_ref(radio);
 	self->sim_card = ril_sim_card_ref(sim_card);
 	self->log_prefix = (log_prefix && log_prefix[0]) ?
@@ -502,9 +496,6 @@ struct sailfish_cell_info *ril_cell_info_new(GRilIoChannel *io,
 	DBG_(self, "");
 	self->event_id = grilio_channel_add_unsol_event_handler(self->io,
 		ril_cell_info_list_changed_cb, RIL_UNSOL_CELL_INFO_LIST, self);
-	self->display_state_event_id =
-		mce_display_add_state_changed_handler(display,
-			ril_cell_info_display_state_cb, self);
 	self->radio_state_event_id =
 		ril_radio_add_state_changed_handler(radio,
 			ril_cell_info_radio_state_cb, self);
@@ -513,12 +504,15 @@ struct sailfish_cell_info *ril_cell_info_new(GRilIoChannel *io,
 			ril_cell_info_sim_status_cb, self);
 	self->sim_card_ready = ril_sim_card_ready(sim_card);
 	ril_cell_info_refresh(self);
-	ril_cell_info_update_rate(self);
+	if (self->sim_card_ready) {
+		ril_cell_info_set_rate(self);
+	}
 	return &self->info;
 }
 
 static void ril_cell_info_init(struct ril_cell_info *self)
 {
+	self->update_rate_ms = DEFAULT_UPDATE_RATE_MS;
 }
 
 static void ril_cell_info_dispose(GObject *object)
@@ -535,8 +529,6 @@ static void ril_cell_info_dispose(GObject *object)
 									FALSE);
 		self->set_rate_id = 0;
 	}
-	gutil_disconnect_handlers(self->display,
-					&self->display_state_event_id, 1);
 	ril_radio_remove_handlers(self->radio, &self->radio_state_event_id, 1);
 	ril_sim_card_remove_handlers(self->sim_card,
 					&self->sim_status_event_id, 1);
@@ -550,7 +542,6 @@ static void ril_cell_info_finalize(GObject *object)
 	DBG_(self, "");
 	g_free(self->log_prefix);
 	grilio_channel_unref(self->io);
-	mce_display_unref(self->display);
 	ril_radio_unref(self->radio);
 	ril_sim_card_unref(self->sim_card);
 	g_slist_free_full(self->info.cells, ril_cell_free1);
