@@ -55,9 +55,9 @@ gint sailfish_cell_compare_location(const struct sailfish_cell *c1,
 			}
 		} else {
 			const struct sailfish_cell_info_lte *l1 =
-                            &c1->info.lte;
+				&c1->info.lte;
 			const struct sailfish_cell_info_lte *l2 =
-                            &c2->info.lte;
+				&c2->info.lte;
 
 			GASSERT(c1->type == SAILFISH_CELL_TYPE_LTE);
 			l1 = &c1->info.lte;

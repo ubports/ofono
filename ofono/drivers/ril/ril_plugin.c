@@ -258,10 +258,10 @@ GLOG_MODULE_DEFINE("rilmodem");
 static const char ril_debug_trace_name[] = "ril_trace";
 
 static GLogModule ril_debug_trace_module = {
-    .name = ril_debug_trace_name,
-    .max_level = GLOG_LEVEL_VERBOSE,
-    .level = GLOG_LEVEL_VERBOSE,
-    .flags = GLOG_FLAG_HIDE_NAME
+	.name = ril_debug_trace_name,
+	.max_level = GLOG_LEVEL_VERBOSE,
+	.level = GLOG_LEVEL_VERBOSE,
+	.flags = GLOG_FLAG_HIDE_NAME
 };
 
 static struct ofono_debug_desc ril_debug_trace OFONO_DEBUG_ATTR = {
