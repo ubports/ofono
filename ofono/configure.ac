@@ -183,17 +183,17 @@ AC_ARG_ENABLE(sailfish-rilmodem, AC_HELP_STRING([--enable-sailfish-rilmodem],
 				[enable_sailfish_rilmodem="no"])
 AM_CONDITIONAL(SAILFISH_RILMODEM, test "${enable_sailfish_rilmodem}" != "no")
 
+PKG_CHECK_MODULES(GLIBUTIL, libglibutil >= 1.0.30, dummy=yes,
+			AC_MSG_ERROR(libglibutil >= 1.0.30 is required))
+
 if (test "${enable_sailfish_rilmodem}" = "yes"); then
 	PKG_CHECK_MODULES(GRILIO, libgrilio >= 1.0.25, dummy=yes,
 				AC_MSG_ERROR(libgrilio >= 1.0.25 is required))
-	PKG_CHECK_MODULES(GLIBUTIL, libglibutil >= 1.0.30, dummy=yes,
-				AC_MSG_ERROR(libglibutil >= 1.0.30 is required))
 	PKG_CHECK_MODULES(LIBMCE, libmce-glib >= 1.0.5, dummy=yes,
 				AC_MSG_ERROR(libmce-glib >= 1.0.5 is required))
 	CFLAGS="$CFLAGS $GRILIO_CFLAGS $LIBMCE_CFLAGS"
 	LIBS="$LIBS $GRILIO_LIBS $LIBMCE_LIBS"
 	enable_sailfish_manager=yes
-	need_glibutil=yes
 fi
 
 AC_ARG_ENABLE(sailfish-manager,
@@ -202,12 +202,10 @@ AC_ARG_ENABLE(sailfish-manager,
 					[enable_sailfish_manager=${enableval}])
 AM_CONDITIONAL(SAILFISH_MANAGER, test "${enable_sailfish_manager}" = "yes")
 
-if (test "${enable_sailfish_manager}" = "yes"); then
-	PKG_CHECK_MODULES(DBUS_GLIB, dbus-glib-1, dummy=yes,
-			AC_MSG_ERROR(dbus-glib is required by unit tests))
-	AC_SUBST(DBUS_GLIB_CFLAGS)
-	AC_SUBST(DBUS_GLIB_LIBS)
-fi
+PKG_CHECK_MODULES(DBUS_GLIB, dbus-glib-1, dummy=yes,
+		AC_MSG_ERROR(dbus-glib is required by unit tests))
+		AC_SUBST(DBUS_GLIB_CFLAGS)
+		AC_SUBST(DBUS_GLIB_LIBS)
 
 AC_ARG_ENABLE(add-remove-context, AC_HELP_STRING([--disable-add-remove-context],
 		[don't allow to add or remove connection context over D-Bus]), [
@@ -309,7 +307,6 @@ if (test "${enable_sailfish_pushforwarder}" != "no"); then
 			AC_MSG_ERROR(WSP decoder is required))
 	CFLAGS="$CFLAGS $WSPCODEC_CFLAGS"
 	LIBS="$LIBS $WSPCODEC_LIBS"
-	need_glibutil=yes
 fi
 
 AC_ARG_ENABLE(sailfish-access, AC_HELP_STRING([--enable-sailfish-access],
@@ -337,10 +334,8 @@ if (test "${enable_sailfish_debuglog}" = "yes"); then
 	LIBS="$LIBS $DBUSLOG_LIBS"
 fi
 
-if (test "${need_glibutil}" = "yes"); then
-	CFLAGS="$CFLAGS $GLIBUTIL_CFLAGS"
-	LIBS="$LIBS $GLIBUTIL_LIBS"
-fi
+CFLAGS="$CFLAGS $GLIBUTIL_CFLAGS"
+LIBS="$LIBS $GLIBUTIL_LIBS"
 
 if (test "${prefix}" = "NONE"); then
 	dnl no prefix and no localstatedir, so default to /var
