@@ -3,7 +3,9 @@ Section: admin
 Priority: optional
 Maintainer: Debian Telepathy maintainers <pkg-telepathy-maintainers@lists.alioth.debian.org>
 Uploaders: Hector Oron <zumbi@debian.org>
-Build-Depends: debhelper (>= 10),
+Build-Depends: debhelper,
+               dh-autoreconf,
+               dh-systemd,
                libglib2.0-dev (>= 2.32),
                libdbus-glib-1-dev,
                libudev-dev,

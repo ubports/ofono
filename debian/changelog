@@ -1,3 +1,9 @@
+ofono (1.29+ubports1) xenial; urgency=medium
+
+  * Import to UBPorts
+
+ -- TheKit <nekit1000@gmail.com>  Thu, 29 Aug 2019 20:44:43 +0200
+
 ofono (1.29-1) unstable; urgency=medium
 
   * New upstream version
