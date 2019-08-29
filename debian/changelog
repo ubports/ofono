@@ -1,3 +1,9 @@
+ofono (1.31-2ubports1) xenial; urgency=medium
+
+  * Import to ubports 
+
+ -- Marius Gripsgard <marius@ubports.com>  Wed, 25 Mar 2020 02:04:30 +0100
+
 ofono (1.31-2) unstable; urgency=medium
 
   * Team upload

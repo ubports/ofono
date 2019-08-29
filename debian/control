@@ -2,8 +2,10 @@ Source: ofono
 Section: admin
 Priority: optional
 Maintainer: Debian Telepathy maintainers <pkg-telepathy-maintainers@lists.alioth.debian.org>
-Uploaders: Héctor Orón Martínez <zumbi@debian.org>
-Build-Depends: debhelper-compat (= 12),
+Uploaders: Hector Oron <zumbi@debian.org>
+Build-Depends: debhelper,
+               dh-autoreconf,
+               dh-systemd,
                libglib2.0-dev (>= 2.32),
                libdbus-glib-1-dev,
                libudev-dev,
