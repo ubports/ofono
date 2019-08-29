@@ -150,9 +150,14 @@ builtin_sources +=	drivers/ril/ril_call_barring.c \
 			drivers/ril/ril_call_volume.c \
 			drivers/ril/ril_cell_info.c \
 			drivers/ril/ril_config.c \
+			drivers/ril/ril_connman.c \
 			drivers/ril/ril_cbs.c \
 			drivers/ril/ril_data.c \
 			drivers/ril/ril_devinfo.c \
+			drivers/ril/ril_devmon.c \
+			drivers/ril/ril_devmon_auto.c \
+			drivers/ril/ril_devmon_ds.c \
+			drivers/ril/ril_devmon_ss.c \
 			drivers/ril/ril_ecclist.c \
 			drivers/ril/ril_gprs.c \
 			drivers/ril/ril_gprs_context.c \

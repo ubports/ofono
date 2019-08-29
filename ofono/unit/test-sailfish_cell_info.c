@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2017 Jolla Ltd.
+ *  Copyright (C) 2017-2019 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -15,6 +15,7 @@
 
 #include <sailfish_cell_info.h>
 
+#include <gutil_macros.h>
 #include <gutil_log.h>
 
 /* Fake sailfish_cell_info */
@@ -54,15 +55,37 @@ static const struct sailfish_cell_info_proc fake_sailfish_cell_info_proc = {
 	fake_sailfish_cell_info_remove_handler
 };
 
-static struct sailfish_cell_info fake_sailfish_cell_info = {
-	&fake_sailfish_cell_info_proc,
-	NULL
+struct test_sailfish_cell_info {
+	struct sailfish_cell_info info;
+	int interval;
+};
+
+static void test_sailfish_cell_info_set_update_interval
+				(struct sailfish_cell_info *info, int ms)
+{
+	G_CAST(info, struct test_sailfish_cell_info, info)->interval = ms;
+}
+
+static const struct sailfish_cell_info_proc test_sailfish_cell_info_proc = {
+	fake_sailfish_cell_info_ref,
+	fake_sailfish_cell_info_unref,
+	fake_sailfish_cell_info_add_cells_changed_handler,
+	fake_sailfish_cell_info_remove_handler,
+	test_sailfish_cell_info_set_update_interval
 };
 
 /* ==== basic ==== */
 
 static void test_basic(void)
 {
+	struct sailfish_cell_info fake_sailfish_cell_info = {
+		&fake_sailfish_cell_info_proc, NULL
+	};
+
+	struct test_sailfish_cell_info test_info = {
+		{ &test_sailfish_cell_info_proc, NULL }, 0
+	};
+
 	/* NULL resistance */
 	g_assert(!sailfish_cell_info_ref(NULL));
 	sailfish_cell_info_unref(NULL);
@@ -70,6 +93,10 @@ static void test_basic(void)
 	g_assert(!sailfish_cell_info_add_cells_changed_handler(NULL, NULL,
 								NULL));
 	sailfish_cell_info_remove_handler(NULL, 0);
+	sailfish_cell_info_set_update_interval(NULL, 0);
+
+	/* NULL set_update_interval callback is tolerated */
+	sailfish_cell_info_set_update_interval(&fake_sailfish_cell_info, 0);
 
 	/* Make sure that callbacks are being invoked */
 	g_assert(sailfish_cell_info_ref(&fake_sailfish_cell_info) ==
@@ -81,6 +108,9 @@ static void test_basic(void)
 							FAKE_HANDLER_ID);
 	sailfish_cell_info_unref(&fake_sailfish_cell_info);
 	g_assert(!fake_sailfish_cell_info_ref_count);
+
+	sailfish_cell_info_set_update_interval(&test_info.info, 10);
+	g_assert(test_info.interval == 10);
 }
 
 /* ==== compare ==== */
