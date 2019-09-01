@@ -147,6 +147,14 @@ unsigned int __ofono_modem_callid_next(struct ofono_modem *modem)
 		if (modem->call_ids & (1 << i))
 			continue;
 
+		if (getenv("OFONO_SIM7100E_HACK") != NULL) {
+			// This is a big fucking ugly hack of ugliness
+			// (for SIMCom SIM7100E which starts at 2!)
+			if (i == 1) {
+		  		i = 2;
+			}
+		}
+
 		return i;
 	}
 
