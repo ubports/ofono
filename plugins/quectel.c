@@ -849,8 +849,8 @@ static void cmux_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	 * the kernel does not yet support mapping the underlying serial device
 	 * to its virtual gsm ttys, so hard-code gsmtty1 gsmtty2 for now
 	 */
-	ofono_modem_set_string(modem, "Aux", "/dev/gsmtty1");
-	ofono_modem_set_string(modem, "Modem", "/dev/gsmtty2");
+	ofono_modem_set_string(modem, "Modem", "/dev/gsmtty1");
+	ofono_modem_set_string(modem, "Aux", "/dev/gsmtty2");
 
 	/* wait for gsmtty devices to appear */
 	if (!l_timeout_create_ms(100, mux_ready_cb, modem, NULL)) {
