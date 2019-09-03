@@ -40,6 +40,8 @@
 
 #include "ubloxmodem.h"
 
+#define UBLOX_FLAG_DEACTIVATING 0x01
+
 static const char *none_prefix[] = { NULL };
 static const char *cgcontrdp_prefix[] = { "+CGCONTRDP:", NULL };
 static const char *uipaddr_prefix[] = { "+UIPADDR:", NULL };
@@ -57,6 +59,7 @@ struct gprs_context_data {
 	ofono_gprs_context_cb_t cb;
 	void *cb_data;
 	enum netmode networking_mode;
+	int flags;
 };
 
 static void uipaddr_cb(gboolean ok, GAtResult *result, gpointer user_data)
@@ -426,6 +429,8 @@ static void cgact_disable_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 	DBG("ok %d", ok);
 
+	gcd->flags &= ~UBLOX_FLAG_DEACTIVATING;
+
 	if (!ok) {
 		CALLBACK_WITH_FAILURE(gcd->cb, gcd->cb_data);
 		return;
@@ -447,6 +452,8 @@ static void ublox_gprs_deactivate_primary(struct ofono_gprs_context *gc,
 
 	gcd->cb = cb;
 	gcd->cb_data = data;
+
+	gcd->flags |= UBLOX_FLAG_DEACTIVATING;
 
 	snprintf(buf, sizeof(buf), "AT+CGACT=0,%u", gcd->active_context);
 	g_at_chat_send(gcd->chat, buf, none_prefix,
@@ -473,10 +480,16 @@ static void cgev_notify(GAtResult *result, gpointer user_data)
 		sscanf(event, "%*s %*s %*s %u", &cid);
 	else if (g_str_has_prefix(event, "NW DEACT"))
 		sscanf(event, "%*s %*s %u", &cid);
+	else if (!(gcd->flags & UBLOX_FLAG_DEACTIVATING) &&
+		 g_str_has_prefix(event, "ME PDN DEACT"))
+		/* The modem might consider the ME deactivating without
+		 * an explicit CGACT=0 beeing sent
+		 */
+		sscanf(event, "%*s %*s %*s %u", &cid);
 	else
 		return;
 
-	DBG("cid %d", cid);
+	DBG("cid %d, active cid: %d", cid, gcd->active_context);
 
 	if ((unsigned int) cid != gcd->active_context)
 		return;
