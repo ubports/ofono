@@ -2,6 +2,7 @@
  *  oFono - Open Source Telephony - RIL-based devices
  *
  *  Copyright (C) 2015-2019 Jolla Ltd.
+ *  Copyright (C) 2019 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -51,6 +52,7 @@ enum ril_modem_watch_event {
 };
 
 struct ril_modem_online_request {
+	const char *name;
 	ofono_modem_online_cb_t cb;
 	struct ril_modem_data *md;
 	void *data;
@@ -132,13 +134,8 @@ void ril_modem_delete(struct ril_modem *md)
 	}
 }
 
-static void ril_modem_online_request_ok(struct ril_modem_online_request *req)
+static void ril_modem_online_request_done(struct ril_modem_online_request *req)
 {
-	if (req->timeout_id) {
-		g_source_remove(req->timeout_id);
-		req->timeout_id = 0;
-	}
-
 	if (req->cb) {
 		struct ofono_error error;
 		ofono_modem_online_cb_t cb = req->cb;
@@ -146,21 +143,32 @@ static void ril_modem_online_request_ok(struct ril_modem_online_request *req)
 
 		req->cb = NULL;
 		req->data = NULL;
+		DBG_(req->md, "%s", req->name);
 		cb(ril_error_ok(&error), data);
 	}
+}
+
+static void ril_modem_online_request_ok(struct ril_modem_online_request *req)
+{
+	if (req->timeout_id) {
+		g_source_remove(req->timeout_id);
+		req->timeout_id = 0;
+	}
+
+	ril_modem_online_request_done(req);
 }
 
 static void ril_modem_update_online_state(struct ril_modem_data *md)
 {
 	switch (md->modem.radio->state) {
 	case RADIO_STATE_ON:
-		DBG("online");
+		DBG_(md, "online");
 		ril_modem_online_request_ok(&md->set_online);
 		break;
 
 	case RADIO_STATE_OFF:
 	case RADIO_STATE_UNAVAILABLE:
-		DBG("offline");
+		DBG_(md, "offline");
 		ril_modem_online_request_ok(&md->set_offline);
 		break;
 
@@ -180,17 +188,11 @@ static void ril_modem_update_online_state(struct ril_modem_data *md)
 static gboolean ril_modem_online_request_timeout(gpointer data)
 {
 	struct ril_modem_online_request *req = data;
-	struct ofono_error error;
-	ofono_modem_online_cb_t cb = req->cb;
-	void *cb_data = req->data;
 
 	GASSERT(req->timeout_id);
-	GASSERT(cb);
-
 	req->timeout_id = 0;
-	req->cb = NULL;
-	req->data = NULL;
-	cb(ril_error_failure(&error), cb_data);
+	DBG_(req->md, "%s", req->name);
+	ril_modem_online_request_done(req);
 	ril_modem_update_online_state(req->md);
 
 	return G_SOURCE_REMOVE;
@@ -502,7 +504,9 @@ struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *log_prefix,
 			ofono_watch_add_sim_state_changed_handler(md->watch,
 						ril_modem_sim_state_cb, md);
 
+		md->set_online.name = "online";
 		md->set_online.md = md;
+		md->set_offline.name = "offline";
 		md->set_offline.md = md;
 		ofono_modem_set_data(ofono, md);
 		err = ofono_modem_register(ofono);
