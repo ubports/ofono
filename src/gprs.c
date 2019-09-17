@@ -1521,6 +1521,27 @@ static gboolean have_active_contexts(struct ofono_gprs *gprs)
 	return FALSE;
 }
 
+static gboolean have_detachable_active_contexts(struct ofono_gprs *gprs)
+{
+	GSList *l;
+
+	for (l = gprs->contexts; l; l = l->next) {
+		struct pri_context *ctx;
+		struct ofono_gprs_context *gc;
+
+		ctx = l->data;
+		gc = ctx->context_driver;
+
+		if (!gc || !gc->driver->detach_shutdown)
+			continue;
+
+		if (ctx->active == TRUE)
+			return TRUE;
+	}
+
+	return FALSE;
+}
+
 static bool have_read_settings(struct ofono_gprs *gprs)
 {
 	GSList *l;
@@ -1535,7 +1556,7 @@ static bool have_read_settings(struct ofono_gprs *gprs)
 	return false;
 }
 
-static void release_active_contexts(struct ofono_gprs *gprs)
+static void detach_active_contexts(struct ofono_gprs *gprs)
 {
 	GSList *l;
 	struct pri_context *ctx;
@@ -1599,22 +1620,26 @@ static void gprs_attached_update(struct ofono_gprs *gprs)
 	 * at driver level. "Attached" = TRUE property can't be signalled to
 	 * the applications registered on GPRS properties.
 	 * Active contexts have to be release at driver level.
+	 *
+	 * Skip that for LTE since the condition to be attached on LTE
+	 * is that a context gets activated
 	 */
-	if (attached == FALSE) {
-		release_active_contexts(gprs);
-		gprs->bearer = -1;
-	} else if (have_active_contexts(gprs) == TRUE && !on_lte(gprs)) {
-		/*
-		 * Some times the context activates after a detach event and
-		 * right before an attach. We close it to avoid unexpected open
-		 * contexts.
-		 * Skip that for LTE since the condition to be attached on LTE
-		 * is that a context gets activated
-		 */
-		release_active_contexts(gprs);
-		gprs->flags |= GPRS_FLAG_ATTACHED_UPDATE;
-		return;
+	if (have_detachable_active_contexts(gprs) && !on_lte(gprs)) {
+		detach_active_contexts(gprs);
+
+		if (attached == TRUE) {
+			/*
+			 * Some times the context activates after a detach event
+			 * and right before an attach. We close it to avoid
+			 * unexpected open contexts.
+			 */
+			gprs->flags |= GPRS_FLAG_ATTACHED_UPDATE;
+			return;
+		}
 	}
+
+	if (attached == FALSE)
+		gprs->bearer = -1;
 
 	gprs_set_attached_property(gprs, attached);
 }
