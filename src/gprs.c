@@ -2568,12 +2568,6 @@ void ofono_gprs_status_notify(struct ofono_gprs *gprs, int status)
 
 	gprs->status = status;
 
-	if (status != NETWORK_REGISTRATION_STATUS_REGISTERED &&
-			status != NETWORK_REGISTRATION_STATUS_ROAMING) {
-		gprs_attached_update(gprs);
-		return;
-	}
-
 	/*
 	 * If we're already taking action, e.g. attaching or detaching, then
 	 * ignore this notification for now, we will take appropriate action
@@ -2581,6 +2575,12 @@ void ofono_gprs_status_notify(struct ofono_gprs *gprs, int status)
 	 */
 	if (gprs->flags & GPRS_FLAG_ATTACHING)
 		return;
+
+	if (status != NETWORK_REGISTRATION_STATUS_REGISTERED &&
+			status != NETWORK_REGISTRATION_STATUS_ROAMING) {
+		ofono_gprs_detached_notify(gprs);
+		return;
+	}
 
 	/* We registered without being powered */
 	if (gprs->powered == FALSE)
