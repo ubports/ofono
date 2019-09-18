@@ -354,6 +354,9 @@ static void cgcontrdp_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 	DBG("DNS: %s, %s\n", gcd->dns1, gcd->dns2);
 
+	if (gw)
+		l_strlcpy(gcd->gateway, gw, sizeof(gcd->gateway));
+
 	if (gcd->proto == OFONO_GPRS_PROTO_IP) {
 		if (!laddrnetmask ||
 			at_util_get_ipv4_address_and_netmask(laddrnetmask,
@@ -390,9 +393,6 @@ static void cgcontrdp_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		ofono_gprs_context_set_ipv6_prefix_length(gc,
 						IPV6_DEFAULT_PREFIX_LEN);
 	}
-
-	if (gw)
-		l_strlcpy(gcd->gateway, gw, sizeof(gcd->gateway));
 
 	gcd->state = STATE_ACTIVE;
 
