@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2018 Jolla Ltd.
+ *  Copyright (C) 2018-2019 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -266,7 +266,7 @@ void test_dbus_check_error_reply(DBusPendingCall *call, const char *error)
 
 	g_assert(dbus_message_get_type(msg) == DBUS_MESSAGE_TYPE_ERROR);
 	name = dbus_message_get_error_name(msg);
-	g_assert(!g_strcmp0(name, error));
+	g_assert_cmpstr(name,==,error);
 	dbus_message_unref(msg);
 	dbus_pending_call_unref(call);
 }
@@ -281,7 +281,7 @@ void test_dbus_check_string_reply(DBusPendingCall *call, const char *str)
 					DBUS_MESSAGE_TYPE_METHOD_RETURN);
 
 	dbus_message_iter_init(reply, &it);
-	g_assert(!g_strcmp0(test_dbus_get_string(&it), str));
+	g_assert_cmpstr(test_dbus_get_string(&it),==,str);
 	g_assert(dbus_message_iter_get_arg_type(&it) == DBUS_TYPE_INVALID);
 
 	dbus_message_unref(reply);

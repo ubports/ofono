@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2018 Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2018-2019 Jolla Ltd. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -23,6 +23,8 @@
 #include <gutil_log.h>
 #include <gutil_macros.h>
 
+#include <errno.h>
+
 #define TEST_TIMEOUT                    (10)   /* seconds */
 #define TEST_DBUS_INTERFACE            "test.interface"
 #define TEST_DBUS_METHOD               "Test"
@@ -30,6 +32,7 @@
 
 #define TEST_ERROR_CANCELED            "org.ofono.Error.Canceled"
 #define TEST_ERROR_FAILED              "org.ofono.Error.Failed"
+#define TEST_ERROR_NOT_SUPPORTED       "org.ofono.Error.NotSupported"
 
 #define GDBUS_TEST_METHOD(fn) GDBUS_ASYNC_METHOD(TEST_DBUS_METHOD, \
 				GDBUS_ARGS( { "arg", "i" }), NULL, fn)
@@ -85,6 +88,12 @@ static void test_expect_failed(DBusPendingCall *call, void *unused)
 	test_dbus_check_error_reply(call, TEST_ERROR_FAILED);
 }
 
+static void test_expect_not_supported(DBusPendingCall *call, void *unused)
+{
+	DBG("");
+	test_dbus_check_error_reply(call, TEST_ERROR_NOT_SUPPORTED);
+}
+
 /* ==== basic ==== */
 
 static void test_basic(void)
@@ -97,6 +106,7 @@ static void test_basic(void)
 	__ofono_dbus_queue_reply_failed(NULL);
 	__ofono_dbus_queue_reply_all_ok(NULL);
 	__ofono_dbus_queue_reply_all_failed(NULL);
+	__ofono_dbus_queue_reply_all_error(NULL, NULL);
 	__ofono_dbus_queue_reply_msg(NULL, NULL);
 	g_assert(!__ofono_dbus_queue_pending(NULL));
 	g_assert(!__ofono_dbus_queue_set_pending(NULL, NULL));
@@ -423,10 +433,23 @@ static DBusMessage *test_reply_2(DBusMessage *msg, void *data)
 	return NULL;
 }
 
+static DBusMessage *test_reply_3(DBusMessage *msg, void *data)
+{
+	DBG("");
+	return NULL;
+}
+
+static DBusMessage *test_reply_4(DBusMessage *msg, void *data)
+{
+	DBG("");
+	return NULL;
+}
+
 static DBusMessage *test_reply_handler(DBusConnection *conn,
 						DBusMessage *msg, void *data)
 {
 	struct test_reply_data *test = data;
+	struct ofono_error error;
 	dbus_int32_t arg;
 
 	g_assert(dbus_message_get_args(msg, NULL, DBUS_TYPE_INT32, &arg,
@@ -456,8 +479,16 @@ static DBusMessage *test_reply_handler(DBusConnection *conn,
 								msg, NULL);
 		break;
 	case 5:
-		__ofono_dbus_queue_request(test->queue, test_reply_2,
+		__ofono_dbus_queue_request(test->queue, test_reply_3,
 								msg, NULL);
+		break;
+	case 6:
+		__ofono_dbus_queue_request(test->queue, test_reply_4,
+								msg, NULL);
+		__ofono_dbus_queue_request(test->queue, test_reply_4,
+								msg, NULL);
+		break;
+	case 7:
 		/* This completes the first one, with NULL handler */
 		__ofono_dbus_queue_reply_all_fn_param(test->queue, NULL, NULL);
 		g_assert(__ofono_dbus_queue_pending(test->queue));
@@ -473,6 +504,14 @@ static DBusMessage *test_reply_handler(DBusConnection *conn,
 
 		/* And this one fails 2 others with test_reply_2 */
 		__ofono_dbus_queue_reply_all_fn(test->queue, NULL);
+
+		/* This one test_reply_3 with Failed */
+		__ofono_dbus_queue_reply_all_error(test->queue, NULL);
+
+		/* This one test_reply_4 with NotSupported */
+		error.type = OFONO_ERROR_TYPE_ERRNO;
+		error.error = -EOPNOTSUPP;
+		__ofono_dbus_queue_reply_all_error(test->queue, &error);
 		g_assert(!__ofono_dbus_queue_pending(test->queue));
 
 		/* And this one does nothing */
@@ -500,7 +539,9 @@ static void test_reply_start(struct test_dbus_context *dbus)
 	test_client_call(dbus, 2, test_expect_canceled);
 	test_client_call(dbus, 3, test_expect_failed);
 	test_client_call(dbus, 4, test_dbus_expect_empty_reply);
-	test_client_call(dbus, 5, test_reply_last_reply);
+	test_client_call(dbus, 5, test_expect_failed);
+	test_client_call(dbus, 6, test_expect_not_supported);
+	test_client_call(dbus, 7, test_reply_last_reply);
 }
 
 static void test_reply(void)
