@@ -1147,7 +1147,6 @@ static void quectel_set_online(struct ofono_modem *modem, ofono_bool_t online,
 static void quectel_pre_sim(struct ofono_modem *modem)
 {
 	struct quectel_data *data = ofono_modem_get_data(modem);
-	struct ofono_sim *sim;
 
 	DBG("%p", modem);
 
