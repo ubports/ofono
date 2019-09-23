@@ -2576,6 +2576,15 @@ void ofono_gprs_detached_notify(struct ofono_gprs *gprs)
 {
 	DBG("%s", __ofono_atom_get_path(gprs->atom));
 
+	/*
+	 * In case we are attaching let that finish, it will update to the
+	 * correct status. If we fiddle with driver_attach and the
+	 * attach fails, the code will invert back the state to attached,
+	 * which would leave us in an incorrect state.
+	 */
+	if (gprs->flags & GPRS_FLAG_ATTACHING)
+		return;
+
 	gprs->driver_attached = FALSE;
 	gprs_attached_update(gprs);
 
