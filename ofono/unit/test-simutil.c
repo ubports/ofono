@@ -501,6 +501,7 @@ static void test_application_entry_decode(void)
 	g_assert(!strcmp(app[1]->label, "MIDPfiles"));
 
 	g_free(ef_dir);
+	g_slist_free_full(entries, (GDestroyNotify) sim_app_record_free);
 }
 
 static void test_get_3g_path(void)
