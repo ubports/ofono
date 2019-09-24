@@ -516,33 +516,42 @@ static GSList *voicecall_filter_chain_select(struct voicecall_filter_chain *c,
 	}
 }
 
-void __ofono_voicecall_filter_chain_restart(struct voicecall_filter_chain *c,
-				const struct ofono_call *call)
+static void voicecall_filter_request_restart
+		(struct voicecall_filter_request *req)
 {
-	GSList *l, *canceled = voicecall_filter_chain_select(c, call);
+	struct voicecall_filter_chain *chain = req->chain;
+
+	chain->req_list = g_slist_append(chain->req_list, req);
+	voicecall_filter_request_process(req);
+}
+
+static void voicecall_filter_chain_process(struct voicecall_filter_chain *c,
+			const struct ofono_call *call,
+			void (*process)(struct voicecall_filter_request *req))
+{
+	GSList *l, *selected = voicecall_filter_chain_select(c, call);
 
 	/* Cancel and resubmit each request */
-	for (l = canceled; l; l = l->next) {
+	for (l = selected; l; l = l->next) {
 		struct voicecall_filter_request *req = l->data;
 
 		voicecall_filter_request_cancel(req);
-		voicecall_filter_request_process(req);
+		process(req);
 	}
+	g_slist_free(selected);
+}
 
+void __ofono_voicecall_filter_chain_restart(struct voicecall_filter_chain *c,
+				const struct ofono_call *call)
+{
+	voicecall_filter_chain_process(c, call,
+					voicecall_filter_request_restart);
 }
 
 void __ofono_voicecall_filter_chain_cancel(struct voicecall_filter_chain *c,
 						const struct ofono_call *call)
 {
-	GSList *l, *canceled = voicecall_filter_chain_select(c, call);
-
-	/* Cancel and deallocate each request */
-	for (l = canceled; l; l = l->next) {
-		struct voicecall_filter_request *req = l->data;
-
-		voicecall_filter_request_cancel(req);
-		voicecall_filter_request_done(req);
-	}
+	voicecall_filter_chain_process(c, call, voicecall_filter_request_done);
 }
 
 void __ofono_voicecall_filter_chain_dial(struct voicecall_filter_chain *chain,
