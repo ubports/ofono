@@ -58,6 +58,7 @@ struct tech_query {
 	int status;
 	int lac;
 	int ci;
+	int tech;
 	struct ofono_netreg *netreg;
 };
 
@@ -235,20 +236,40 @@ static void ublox_query_tech_cb(gboolean ok, GAtResult *result,
 		return;
 
 	switch (state) {
+	case 0:
+		/* Not registered for PS, then we have to trust CREG... */
+		tech = tq->tech;
+		break;
+	case 1:
+		tech = ACCESS_TECHNOLOGY_GSM;
+		break;
+	case 2:
+		tech = ACCESS_TECHNOLOGY_GSM_EGPRS;
+		break;
+	case 3:
+		tech = ACCESS_TECHNOLOGY_UTRAN;
+		break;
 	case 4:
-		tech = 5;
+		tech = ACCESS_TECHNOLOGY_UTRAN_HSDPA;
 		break;
 	case 5:
-		tech = 4;
+		tech = ACCESS_TECHNOLOGY_UTRAN_HSUPA;
+		break;
+	case 6:
+		tech = ACCESS_TECHNOLOGY_UTRAN_HSDPA_HSUPA;
+		break;
+	case 7:
+		tech = ACCESS_TECHNOLOGY_EUTRAN;
 		break;
 	case 8:
-		tech = 1;
+		tech = ACCESS_TECHNOLOGY_GSM;
 		break;
 	case 9:
-		tech = 2;
+		tech = ACCESS_TECHNOLOGY_GSM_EGPRS;
 		break;
 	default:
-		tech = state;
+		/* Not registered for PS or something unknown, trust CREG... */
+		tech = tq->tech;
 	}
 
 error:
@@ -270,12 +291,13 @@ static void creg_notify(GAtResult *result, gpointer user_data)
 	if (status != 1 && status != 5)
 		goto notify;
 
-	if (ublox_is_toby_l4(nd->model)) {
+	if (ublox_is_toby_l4(nd->model) || ublox_is_toby_l2(nd->model)) {
 		tq = g_new0(struct tech_query, 1);
 
 		tq->status = status;
 		tq->lac = lac;
 		tq->ci = ci;
+		tq->tech = tech;
 		tq->netreg = netreg;
 
 		if (g_at_chat_send(nd->at_data.chat, "AT+UREG?", ureg_prefix,
