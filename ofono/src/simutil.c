@@ -1016,6 +1016,14 @@ void sim_eons_add_pnn_record(struct sim_eons *eons, int record,
 	int namelength;
 	struct sim_eons_operator_info *oper = &eons->pnn_list[record-1];
 
+	g_free(oper->info);
+	g_free(oper->shortname);
+	g_free(oper->longname);
+
+	oper->info = NULL;
+	oper->shortname = NULL;
+	oper->longname = NULL;
+
 	name = ber_tlv_find_by_tag(tlv, 0x43, length, &namelength);
 
 	if (name == NULL || !namelength)
@@ -1549,6 +1557,12 @@ gboolean sim_cphs_is_active(unsigned char *cphs, enum sim_cphs_service index)
 	return ((cphs[index / 4] >> ((index % 4) * 2)) & 3) == 3;
 }
 
+void sim_app_record_free(struct sim_app_record *app)
+{
+	g_free(app->label);
+	g_free(app);
+}
+
 GSList *sim_parse_app_template_entries(const unsigned char *buffer, int len)
 {
 	GSList *ret = NULL;
@@ -1570,7 +1584,7 @@ GSList *sim_parse_app_template_entries(const unsigned char *buffer, int len)
 
 		memcpy(app.aid, aid, app.aid_len);
 
-		app.type = (app.aid[5] << 8) & app.aid[6];
+		app.type = (app.aid[5] << 8) | app.aid[6];
 
 		/* Find the label (optional) */
 		label = ber_tlv_find_by_tag(dataobj, 0x50, dataobj_len,
