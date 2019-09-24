@@ -1840,6 +1840,8 @@ static void test_decode_unicode(void)
 	decoded = sms_decode_text(l);
 	sms_assembly_free(assembly);
 	g_assert(strcmp(decoded, "Test 我我") == 0);
+	g_slist_free_full(l, g_free);
+	g_free(decoded);
 
 	/* contains UTF-16 (a Unicode surrogate pair representing an emoticon) */
 	pdu = decode_hex(simple_deliver_unicode_surrogate, -1, &pdu_len, 0);
@@ -1860,6 +1862,8 @@ static void test_decode_unicode(void)
 	decoded = sms_decode_text(l);
 	sms_assembly_free(assembly);
 	g_assert(strcmp(decoded, "Test 😻") == 0);
+	g_slist_free_full(l, g_free);
+	g_free(decoded);
 }
 
 int main(int argc, char **argv)
