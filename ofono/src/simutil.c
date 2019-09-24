@@ -1016,6 +1016,14 @@ void sim_eons_add_pnn_record(struct sim_eons *eons, int record,
 	int namelength;
 	struct sim_eons_operator_info *oper = &eons->pnn_list[record-1];
 
+	g_free(oper->info);
+	g_free(oper->shortname);
+	g_free(oper->longname);
+
+	oper->info = NULL;
+	oper->shortname = NULL;
+	oper->longname = NULL;
+
 	name = ber_tlv_find_by_tag(tlv, 0x43, length, &namelength);
 
 	if (name == NULL || !namelength)
