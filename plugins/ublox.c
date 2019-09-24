@@ -102,13 +102,6 @@ static void ublox_remove(struct ofono_modem *modem)
 	g_free(data);
 }
 
-static GAtChat *open_device(struct ofono_modem *modem,
-				const char *key, char *debug)
-{
-	return at_util_open_device(modem, key, ublox_debug, debug,
-					NULL);
-}
-
 static void cfun_enable(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_modem *modem = user_data;
@@ -236,17 +229,20 @@ static int ublox_enable(struct ofono_modem *modem)
 
 	DBG("%p", modem);
 
-	data->aux = open_device(modem, "Aux", "Aux: ");
+	data->aux = at_util_open_device(modem, "Aux",
+					ublox_debug, "Aux: ", NULL);
 	/* If this is a serial modem then the device may be behind
 	 * the 'Device' attribute instead...
 	 */
 	if (data->aux == NULL) {
-		data->aux = open_device(modem, "Device", "Aux: ");
+		data->aux = at_util_open_device(modem, "Device",
+						ublox_debug, "Aux: ", NULL);
 		if (data->aux == NULL)
 			return -EINVAL;
 	}
 
-	data->modem = open_device(modem, "Modem", "Modem: ");
+	data->modem = at_util_open_device(modem, "Modem",
+						ublox_debug, "Modem: ", NULL);
 	if (data->modem) {
 		g_at_chat_set_slave(data->modem, data->aux);
 		g_at_chat_send(data->modem, "ATE0 +CMEE=1", none_prefix,
