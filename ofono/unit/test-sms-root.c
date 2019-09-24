@@ -111,6 +111,7 @@ static void test_serialize_assembly(void)
 					&sms.deliver.oaddr, ref, max, seq);
 
 	g_assert(l != NULL);
+	g_slist_free_full(l, g_free);
 
 	sms_assembly_free(assembly);
 }
