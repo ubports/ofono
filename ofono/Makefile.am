@@ -26,9 +26,9 @@ pkginclude_HEADERS = include/log.h include/plugin.h include/history.h \
 			include/sms-filter.h include/gprs-filter.h \
 			include/voicecall-filter.h include/dbus-access.h \
 			include/ril-constants.h include/ril-transport.h \
-			include/netmon.h include/lte.h \
-			include/storage.h include/watch.h \
-			gdbus/gdbus.h
+			include/watch.h gdbus/gdbus.h \
+			include/netmon.h include/lte.h include/ims.h \
+			include/storage.h
 
 nodist_pkginclude_HEADERS = include/version.h
 
@@ -68,7 +68,7 @@ endif
 builtin_modules =
 builtin_sources =
 builtin_libadd =
-builtin_cflags =
+builtin_cflags = -DSAILFISH_OS
 
 noinst_LTLIBRARIES += gdbus/libgdbus-internal.la
 
@@ -293,7 +293,8 @@ qmi_sources = drivers/qmimodem/qmi.h drivers/qmimodem/qmi.c \
 					drivers/qmimodem/wds.h \
 					drivers/qmimodem/pds.h \
 					drivers/qmimodem/common.h \
-					drivers/qmimodem/wda.h
+					drivers/qmimodem/wda.h \
+					drivers/qmimodem/voice.h
 
 builtin_modules += qmimodem
 builtin_sources += $(qmi_sources) \
@@ -341,7 +342,6 @@ builtin_sources += 	drivers/atmodem/atmodem.h \
 			drivers/atmodem/atutil.c \
 			drivers/atmodem/gprs.c \
 			drivers/atmodem/gprs-context.c \
-			drivers/atmodem/sim-auth.c \
 			drivers/atmodem/gnss.c \
 			drivers/atmodem/lte.c
 
@@ -478,7 +478,8 @@ builtin_modules += xmm7modem
 builtin_sources += drivers/atmodem/atutil.h \
 			drivers/xmm7modem/xmm7modem.h \
 			drivers/xmm7modem/xmm7modem.c \
-			drivers/xmm7modem/radio-settings.c
+			drivers/xmm7modem/radio-settings.c \
+			drivers/xmm7modem/ims.c
 
 if PHONESIM
 builtin_modules += phonesim
@@ -716,6 +717,36 @@ builtin_sources += plugins/smshistory.c
 builtin_modules += allowed_apns
 builtin_sources += plugins/allowed-apns.c
 
+if ELL
+builtin_cflags += @ELL_CFLAGS@
+builtin_libadd += @ELL_LIBS@
+
+if MBIMMODEM
+mbim_sources =	drivers/mbimmodem/mbim.h \
+		drivers/mbimmodem/mbim.c \
+		drivers/mbimmodem/mbim-desc.h \
+		drivers/mbimmodem/mbim-desc.c \
+		drivers/mbimmodem/mbim-message.h \
+		drivers/mbimmodem/mbim-message.c
+
+builtin_modules += mbimmodem
+builtin_sources += $(mbim_sources) \
+			drivers/mbimmodem/util.h \
+			drivers/mbimmodem/util.c \
+			drivers/mbimmodem/mbimmodem.h \
+			drivers/mbimmodem/mbimmodem.c \
+			drivers/mbimmodem/devinfo.c \
+			drivers/mbimmodem/sim.c \
+			drivers/mbimmodem/network-registration.c \
+			drivers/mbimmodem/sms.c \
+			drivers/mbimmodem/gprs.c \
+			drivers/mbimmodem/gprs-context.c
+
+builtin_modules += mbim
+builtin_sources += plugins/mbim.c
+endif
+endif
+
 sbin_PROGRAMS = src/ofonod
 
 src_ofonod_SOURCES = $(builtin_sources) $(gatchat_sources) src/ofono.ver \
@@ -749,7 +780,7 @@ src_ofonod_SOURCES = $(builtin_sources) $(gatchat_sources) src/ofono.ver \
 			src/dbus-queue.c src/dbus-access.c \
 			src/voicecall-filter.c src/ril-transport.c \
 			src/hfp.h src/siri.c src/watchlist.c \
-			src/netmon.c src/lte.c \
+			src/netmon.c src/lte.c src/ims.c \
 			src/netmonagent.c src/netmonagent.h
 
 src_ofonod_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
@@ -801,7 +832,8 @@ doc_files = doc/overview.txt doc/ofono-paper.txt doc/release-faq.txt \
 			doc/networkmonitor-api.txt \
 			doc/allowed-apns-api.txt \
 			doc/lte-api.txt \
-			doc/cinterion-hardware-monitor-api.txt
+			doc/cinterion-hardware-monitor-api.txt \
+			doc/ims-api.txt
 
 
 test_scripts = test/backtrace \
@@ -910,7 +942,10 @@ test_scripts = test/backtrace \
 		test/enable-throttling \
 		test/disable-throttling \
 		test/set-lte-property \
-		test/test-serving-cell-info
+		test/test-serving-cell-info \
+		test/ims-register \
+		test/ims-unregister \
+		test/list-applications
 
 
 if TEST
@@ -1051,6 +1086,13 @@ unit_tests += unit/test-rilmodem-cs \
 
 endif
 endif
+
+if ELL
+if MBIMMODEM
+unit_tests += unit/test-mbim
+endif
+endif
+
 
 noinst_PROGRAMS = $(unit_tests) \
 			unit/test-sms-root unit/test-mux unit/test-caif
@@ -1193,6 +1235,12 @@ unit_test_rilmodem_gprs_SOURCES = $(test_rilmodem_sources) \
 unit_test_rilmodem_gprs_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
 					@GLIB_LIBS@ @DBUS_LIBS@ -ldl
 unit_objects += $(unit_test_rilmodem_gprs_OBJECTS)
+
+unit_test_mbim_SOURCES = unit/test-mbim.c \
+			 drivers/mbimmodem/mbim-message.c \
+			 drivers/mbimmodem/mbim.c
+unit_test_mbim_LDADD = @ELL_LIBS@
+unit_objects += $(unit_test_mbim_OBJECTS)
 
 TESTS = $(unit_tests)
 

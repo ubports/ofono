@@ -334,9 +334,38 @@ error:
 	g_free(cbd);
 }
 
+static void raw_read_cb(struct qmi_result *result, void *user_data)
+{
+	struct ofono_sms *sms = user_data;
+	const struct qmi_wms_raw_message* msg;
+	uint16_t len;
+	uint16_t error;
+
+	if (qmi_result_set_error(result, &error)) {
+		DBG("Raw read error: %d (%s)", error,
+			qmi_result_get_error(result));
+		return;
+	}
+
+	/* Raw message data */
+	msg = qmi_result_get(result, 0x01, &len);
+	if (msg) {
+		uint16_t plen;
+		uint16_t tpdu_len;
+
+		plen = GUINT16_FROM_LE(msg->msg_length);
+		tpdu_len = plen - msg->msg_data[0] - 1;
+
+		ofono_sms_deliver_notify(sms, msg->msg_data, plen, tpdu_len);
+	} else {
+		DBG("No message data available at requested position");
+	}
+}
+
 static void event_notify(struct qmi_result *result, void *user_data)
 {
 	struct ofono_sms *sms = user_data;
+	struct sms_data *data = ofono_sms_get_data(sms);
 	const struct qmi_wms_result_new_msg_notify *notify;
 	const struct qmi_wms_result_message *message;
 	uint16_t len;
@@ -360,6 +389,34 @@ static void event_notify(struct qmi_result *result, void *user_data)
 		DBG("msg format %d PDU length %d", message->msg_format, plen);
 
 		ofono_sms_deliver_notify(sms, message->msg_data, plen, plen);
+	} else {
+		/* The Quectel EC21, at least, does not provide the
+		 * message data in the event notification, so a 'raw read'
+		 * needs to be issued in order to query the message itself
+		 */
+		struct qmi_param *param;
+
+		param = qmi_param_new();
+		if (!param)
+			return;
+
+		/* Message memory storage ID */
+		qmi_param_append(param, 0x01, sizeof(*notify), notify);
+		/* The 'message mode' parameter is documented as optional,
+		 * but the Quectel EC21 errors out with error 17 (missing
+		 * argument) if it is not provided... we default to 3GPP
+		 * here because that's what works for me and it's not clear
+		 * how to actually query what this should be otherwise...
+		 */
+		/* Message mode */
+		qmi_param_append_uint8(param, 0x10,
+				QMI_WMS_MESSAGE_MODE_GSMWCDMA);
+
+		if (qmi_service_send(data->wms, QMI_WMS_RAW_READ, param,
+					raw_read_cb, sms, NULL) > 0)
+			return;
+
+		qmi_param_free(param);
 	}
 }
 

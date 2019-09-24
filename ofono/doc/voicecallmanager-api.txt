@@ -59,6 +59,16 @@ Methods		dict GetProperties()
 					 [service].Error.NotImplemented
 					 [service].Error.Failed
 
+		object DialLast()
+
+			Initiates a new outgoing call to the last dialled number.
+
+			Possible Errors: [service].Error.InProgress
+					 [service].Error.InvalidArguments
+					 [service].Error.InvalidFormat
+					 [service].Error.NotImplemented
+					 [service].Error.Failed
+
 		void Transfer()
 
 			Joins the currently Active (or Outgoing, depending

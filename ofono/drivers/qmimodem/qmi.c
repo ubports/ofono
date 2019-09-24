@@ -476,6 +476,17 @@ static const char *__error_to_string(uint16_t error)
 	return NULL;
 }
 
+int qmi_error_to_ofono_cme(int qmi_error) {
+	switch (qmi_error) {
+	case 0x0019:
+		return 4; /* Not Supported */
+	case 0x0052:
+		return 32; /* Access Denied */
+	default:
+		return -1;
+	}
+}
+
 static void __debug_msg(const char dir, const void *buf, size_t len,
 				qmi_debug_func_t function, void *user_data)
 {
@@ -1073,6 +1084,7 @@ struct discover_data {
 	qmi_discover_func_t func;
 	void *user_data;
 	qmi_destroy_func_t destroy;
+	uint8_t tid;
 	guint timeout;
 };
 
@@ -1133,6 +1145,13 @@ static void discover_callback(uint16_t message, uint16_t length,
 		uint8_t type = service_list->services[i].type;
 		const char *name = __service_type_to_string(type);
 
+		if (name)
+			__debug_device(device, "found service [%s %d.%d]",
+				       name, major, minor);
+		else
+			__debug_device(device, "found service [%d %d.%d]",
+				       type, major, minor);
+
 		if (type == QMI_SERVICE_CONTROL) {
 			device->control_major = major;
 			device->control_minor = minor;
@@ -1145,13 +1164,6 @@ static void discover_callback(uint16_t message, uint16_t length,
 		list[count].name = name;
 
 		count++;
-
-		if (name)
-			__debug_device(device, "found service [%s %d.%d]",
-							name, major, minor);
-		else
-			__debug_device(device, "found service [%d %d.%d]",
-							type, major, minor);
 	}
 
 	ptr = tlv_get(buffer, length, 0x10, &len);
@@ -1159,13 +1171,6 @@ static void discover_callback(uint16_t message, uint16_t length,
 		goto done;
 
 	device->version_str = strndup(ptr + 1, *((uint8_t *) ptr));
-
-	service_list = ptr + *((uint8_t *) ptr) + 1;
-
-	for (i = 0; i < service_list->count; i++) {
-		if (service_list->services[i].type == QMI_SERVICE_CONTROL)
-			continue;
-	}
 
 done:
 	device->version_list = list;
@@ -1181,14 +1186,38 @@ static gboolean discover_reply(gpointer user_data)
 {
 	struct discover_data *data = user_data;
 	struct qmi_device *device = data->device;
+	unsigned int tid = data->tid;
+	GList *list;
+	struct qmi_request *req = NULL;
 
 	data->timeout = 0;
+
+	/* remove request from queues */
+	if (tid != 0) {
+		list = g_queue_find_custom(device->req_queue,
+				GUINT_TO_POINTER(tid), __request_compare);
+
+		if (list) {
+			req = list->data;
+			g_queue_delete_link(device->req_queue, list);
+		} else {
+			list = g_queue_find_custom(device->control_queue,
+				GUINT_TO_POINTER(tid), __request_compare);
+
+			if (list) {
+				req = list->data;
+				g_queue_delete_link(device->control_queue,
+								list);
+			}
+		}
+	}
 
 	if (data->func)
 		data->func(device->version_count,
 				device->version_list, data->user_data);
 
 	__qmi_device_discovery_complete(data->device, &data->super);
+	__request_free(req, NULL);
 
 	return FALSE;
 }
@@ -1234,6 +1263,7 @@ bool qmi_device_discover(struct qmi_device *device, qmi_discover_func_t func,
 
 	hdr->type = 0x00;
 	hdr->transaction = device->next_control_tid++;
+	data->tid = hdr->transaction;
 
 	__request_submit(device, req, hdr->transaction);
 
@@ -1321,6 +1351,65 @@ bool qmi_device_shutdown(struct qmi_device *device, qmi_shutdown_func_t func,
 	device->shutdown_destroy = destroy;
 
 	return true;
+}
+
+struct sync_data {
+	qmi_sync_func_t func;
+	void *user_data;
+};
+
+static void qmi_device_sync_callback(uint16_t message, uint16_t length,
+				     const void *buffer, void *user_data)
+{
+	struct sync_data *data = user_data;
+
+	if (data->func)
+		data->func(data->user_data);
+
+	g_free(data);
+}
+
+/* sync will release all previous clients */
+bool qmi_device_sync(struct qmi_device *device,
+		     qmi_sync_func_t func, void *user_data)
+{
+	struct qmi_request *req;
+	struct qmi_control_hdr *hdr;
+	struct sync_data *func_data;
+
+	if (!device)
+		return false;
+
+	__debug_device(device, "Sending sync to reset QMI");
+
+	func_data = g_new0(struct sync_data, 1);
+	func_data->func = func;
+	func_data->user_data = user_data;
+
+	req = __request_alloc(QMI_SERVICE_CONTROL, 0x00,
+			QMI_CTL_SYNC, QMI_CONTROL_HDR_SIZE,
+			NULL, 0,
+			qmi_device_sync_callback, func_data, (void **) &hdr);
+
+	if (device->next_control_tid < 1)
+		device->next_control_tid = 1;
+
+	hdr->type = 0x00;
+	hdr->transaction = device->next_control_tid++;
+
+	__request_submit(device, req, hdr->transaction);
+
+	return true;
+}
+
+/* if the device support the QMI call SYNC over the CTL interface */
+bool qmi_device_is_sync_supported(struct qmi_device *device)
+{
+	if (device == NULL)
+		return false;
+
+	return (device->control_major > 1 ||
+		(device->control_major == 1 && device->control_minor >= 5));
 }
 
 static bool get_device_file_name(struct qmi_device *device,

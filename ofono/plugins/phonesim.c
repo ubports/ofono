@@ -61,6 +61,7 @@
 #include <ofono/gnss.h>
 #include <ofono/handsfree.h>
 #include <ofono/siri.h>
+#include <ofono/sim-auth.h>
 
 #include <drivers/atmodem/vendor.h>
 #include <drivers/atmodem/atutil.h>
@@ -860,6 +861,7 @@ static void phonesim_post_sim(struct ofono_modem *modem)
 		ofono_sms_create(modem, 0, "atmodem", data->chat);
 
 	ofono_radio_settings_create(modem, 0, "phonesim", data->chat);
+	ofono_sim_auth_create(modem);
 }
 
 static void phonesim_post_online(struct ofono_modem *modem)

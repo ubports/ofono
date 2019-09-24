@@ -1,5 +1,5 @@
 AC_PREREQ(2.60)
-AC_INIT(ofono, 1.21)
+AC_INIT(ofono, 1.22)
 
 AM_INIT_AUTOMAKE([foreign subdir-objects color-tests])
 AC_CONFIG_HEADERS(config.h)
@@ -291,6 +291,25 @@ AC_ARG_ENABLE(upower, AC_HELP_STRING([--disable-upower],
 			[disable UPower plugin]),
 					[enable_upower=${enableval}])
 AM_CONDITIONAL(UPOWER, test "${enable_power}" != "no")
+
+AC_ARG_ENABLE(mbimmodem, AC_HELP_STRING([--enable-mbimmodem],
+				[enable MBIM based modem support]),
+					[enable_mbimmodem=${enableval}])
+
+AC_ARG_ENABLE(ell, AC_HELP_STRING([--enable-ell],
+				[enable support for ell]),
+					[enable_ell=${enableval}])
+
+if (test "${enable_ell}" = "yes"); then
+	AC_DEFINE(HAVE_ELL, 1, [Defined if Ell is enabled])
+	PKG_CHECK_MODULES(ELL, ell >= 0.2, dummy=yes,
+			  AC_MSG_ERROR(ell library >= 0.2 is required))
+	AC_SUBST(ELL_CFLAGS)
+	AC_SUBST(ELL_LIBS)
+fi
+
+AM_CONDITIONAL(MBIMMODEM, test "${enable_ell}" != "no" && test "${enable_mbimmodem}" = "yes")
+AM_CONDITIONAL(ELL, test "${enable_ell}" != "no")
 
 AC_ARG_ENABLE(datafiles, AC_HELP_STRING([--disable-datafiles],
 			[do not install configuration and data files]),

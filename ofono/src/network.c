@@ -222,7 +222,7 @@ static void register_callback(const struct ofono_error *error, void *data)
 	if (error->type == OFONO_ERROR_TYPE_NO_ERROR)
 		__ofono_dbus_queue_reply_ok(netreg->q);
 	else
-		__ofono_dbus_queue_reply_failed(netreg->q);
+		__ofono_dbus_queue_reply_all_error(netreg->q, error);
 
 	if (netreg->driver->registration_status == NULL)
 		return;

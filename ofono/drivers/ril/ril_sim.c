@@ -1131,6 +1131,7 @@ static void ril_sim_pin_change_state_status_cb(struct ril_sim_card *sc,
 		} else {
 			DBG_(sd, "success, passwd_state=%d", ps);
 			cbd->cb(ril_error_ok(&error), cbd->data);
+			ofono_sim_initialized_notify(sd->sim);
 		}
 
 		sd->pin_cbd_list = g_list_remove(sd->pin_cbd_list, cbd);

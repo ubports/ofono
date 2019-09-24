@@ -160,6 +160,7 @@ enum ofono_atom_type {
 	OFONO_ATOM_TYPE_SIRI,
 	OFONO_ATOM_TYPE_NETMON,
 	OFONO_ATOM_TYPE_LTE,
+	OFONO_ATOM_TYPE_IMS,
 };
 
 enum ofono_atom_watch_condition {
@@ -382,6 +383,14 @@ unsigned short __ofono_sms_get_next_ref(struct ofono_sms *sms);
 
 #include <ofono/sim.h>
 
+struct ofono_sim_aid_session;
+enum sim_app_type;
+
+typedef void (*ofono_sim_session_event_cb_t)(ofono_bool_t active,
+		int session_id, void *data);
+
+ofono_bool_t __ofono_sim_ust_service_available(struct ofono_sim *sim,
+						int ust_service);
 ofono_bool_t __ofono_sim_service_available(struct ofono_sim *sim,
 						int ust_service,
 						int sst_service);
@@ -401,6 +410,31 @@ void __ofono_sim_recheck_pin(struct ofono_sim *sim);
 
 enum ofono_sim_password_type __ofono_sim_puk2pin(
 					enum ofono_sim_password_type type);
+GSList *__ofono_sim_get_aid_list(struct ofono_sim *sim);
+
+unsigned int __ofono_sim_add_session_watch(
+		struct ofono_sim_aid_session *session,
+		ofono_sim_session_event_cb_t notify, void *data,
+		ofono_destroy_func destroy);
+
+void __ofono_sim_remove_session_watch(struct ofono_sim_aid_session *session,
+		unsigned int id);
+
+struct ofono_sim_aid_session *__ofono_sim_get_session_by_aid(
+		struct ofono_sim *sim, unsigned char *aid);
+
+struct ofono_sim_aid_session *__ofono_sim_get_session_by_type(
+		struct ofono_sim *sim, enum sim_app_type type);
+
+int __ofono_sim_session_get_id(struct ofono_sim_aid_session *session);
+
+enum sim_app_type __ofono_sim_session_get_type(
+		struct ofono_sim_aid_session *session);
+
+unsigned char *__ofono_sim_session_get_aid(
+		struct ofono_sim_aid_session *session);
+
+const char *__ofono_sim_get_impi(struct ofono_sim *sim);
 
 #include <ofono/stk.h>
 
@@ -649,3 +683,4 @@ int mnclength(int mcc, int mnc);
 
 #include <ofono/netmon.h>
 #include <ofono/lte.h>
+#include <ofono/ims.h>

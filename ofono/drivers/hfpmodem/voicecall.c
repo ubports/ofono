@@ -125,6 +125,7 @@ static struct ofono_call *create_call(struct ofono_voicecall *vc, int type,
 	if (clip != 2) {
 		strncpy(call->phone_number.number, num,
 			OFONO_MAX_PHONE_NUMBER_LENGTH);
+		call->phone_number.number[OFONO_MAX_PHONE_NUMBER_LENGTH] = '\0';
 		call->phone_number.type = num_type;
 	}
 
@@ -404,6 +405,23 @@ static void hfp_dial(struct ofono_voicecall *vc,
 	CALLBACK_WITH_FAILURE(cb, data);
 }
 
+static void hfp_dial_last(struct ofono_voicecall *vc, ofono_voicecall_cb_t cb,
+			void *data)
+{
+	struct voicecall_data *vd = ofono_voicecall_get_data(vc);
+	struct cb_data *cbd = cb_data_new(cb, data);
+
+	cbd->user = vc;
+
+	if (g_at_chat_send(vd->chat, "AT+BLDN", none_prefix,
+				atd_cb, cbd, g_free) > 0)
+		return;
+
+	g_free(cbd);
+
+	CALLBACK_WITH_FAILURE(cb, data);
+
+}
 static void hfp_template(const char *cmd, struct ofono_voicecall *vc,
 			GAtResultFunc result_cb, unsigned int affected_types,
 			ofono_voicecall_cb_t cb, void *data)
@@ -1268,6 +1286,7 @@ static struct ofono_voicecall_driver driver = {
 	.probe			= hfp_voicecall_probe,
 	.remove			= hfp_voicecall_remove,
 	.dial			= hfp_dial,
+	.dial_last		= hfp_dial_last,
 	.answer			= hfp_answer,
 	.hangup_active		= hfp_hangup,
 	.hold_all_active	= hfp_hold_all_active,

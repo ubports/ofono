@@ -66,6 +66,7 @@ unit/test-sms-filter
 unit/test-voicecall-filter
 unit/test-*.log
 unit/test-*.trs
+unit/test-mbim
 
 unit/test-grilreply
 unit/test-grilrequest

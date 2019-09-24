@@ -193,6 +193,23 @@ void __ofono_dbus_queue_reply_all_failed(struct ofono_dbus_queue *q)
 	__ofono_dbus_queue_reply_all_fn(q, __ofono_error_failed);
 }
 
+static DBusMessage * __ofono_dbus_queue_reply_all_error_cb(DBusMessage *msg,
+								void *data)
+{
+	return __ofono_error_from_error((const struct ofono_error *)data, msg);
+}
+
+void __ofono_dbus_queue_reply_all_error(struct ofono_dbus_queue *q,
+					const struct ofono_error *error)
+{
+	if (error) {
+		__ofono_dbus_queue_reply_all_fn_param(q,
+			__ofono_dbus_queue_reply_all_error_cb, (void*) error);
+	} else {
+		__ofono_dbus_queue_reply_all_fn(q, __ofono_error_failed);
+	}
+}
+
 static DBusMessage * __ofono_dbus_queue_reply_all_wrapper(DBusMessage *msg,
 								void *data)
 {
@@ -258,3 +275,11 @@ void __ofono_dbus_queue_reply_all_fn_param(struct ofono_dbus_queue *q,
 		req = next;
 	}
 }
+
+/*
+ * Local Variables:
+ * mode: C
+ * c-basic-offset: 8
+ * indent-tabs-mode: t
+ * End:
+ */

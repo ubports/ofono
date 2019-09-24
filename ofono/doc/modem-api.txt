@@ -127,6 +127,8 @@ Properties	boolean Powered [readwrite]
 				org.ofono.CallVolume
 				org.ofono.CellBroadcast
 				org.ofono.Handsfree
+				org.ofono.IpMultimediaSystem
+				org.ofono.LongTermEvolution
 				org.ofono.LocationReporting
 				org.ofono.MessageManager
 				org.ofono.MessageWaiting

@@ -65,6 +65,17 @@ enum sim_fileid {
 	SIM_DFGSM_FILEID =			0x7F20,
 };
 
+enum sim_isim_fileid {
+	SIM_ISIM_EFIMPI_FILEID =		0x6F02,
+	SIM_ISIM_EFDOMAIN_FILEID =		0x6F03,
+	SIM_ISIM_EFIMPU_FILEID =		0x6F04,
+	SIM_ISIM_EFARR_FILEID =			0x6F06,
+	SIM_ISIM_EFIST_FILEID =			0x6F07,
+	SIM_ISIM_EFPCSCF_FILEID =		0x6F09,
+	SIM_ISIM_EFSMS_FILEID =			0x6F3C,
+	SIM_ISIM_EFSMSP_FILEID =		0x6F42
+};
+
 /* 51.011 Section 9.3 */
 enum sim_file_access {
 	SIM_FILE_ACCESS_ALWAYS =	0,
@@ -261,6 +272,17 @@ enum sim_csp_entry {
 	SIM_CSP_ENTRY_INFORMATION_NUMBERS =	0xD5,
 };
 
+/* 101.220 Annex E */
+enum sim_app_type {
+	SIM_APP_TYPE_UICC =		0x1001,
+	SIM_APP_TYPE_USIM =		0x1002,
+	SIM_APP_TYPE_USIM_TOOLKIT =	0x1003,
+	SIM_APP_TYPE_ISIM =		0x1004,
+	SIM_APP_TYPE_USIM_API =		0x1005,
+	SIM_APP_TYPE_ISIM_API =		0x1006,
+	SIM_APP_TYPE_CONTACT_MGR =	0x1007
+};
+
 enum ber_tlv_data_type {
 	BER_TLV_DATA_TYPE_UNIVERSAL =		0,
 	BER_TLV_DATA_TYPE_APPLICATION =		1,
@@ -296,6 +318,7 @@ struct sim_app_record {
 	unsigned char aid[16];
 	int aid_len;
 	char *label;
+	enum sim_app_type type;
 };
 
 struct simple_tlv_iter {
@@ -495,3 +518,17 @@ gboolean sim_cphs_is_active(unsigned char *service_cphs,
 				enum sim_cphs_service index);
 
 GSList *sim_parse_app_template_entries(const unsigned char *buffer, int len);
+
+int sim_build_umts_authenticate(unsigned char *buffer, int len,
+		const unsigned char *rand, const unsigned char *autn);
+
+int sim_build_gsm_authenticate(unsigned char *buffer, int len,
+		const unsigned char *rand);
+
+gboolean sim_parse_umts_authenticate(const unsigned char *buffer,
+		int len, const unsigned char **res, const unsigned char **ck,
+		const unsigned char **ik, const unsigned char **auts,
+		const unsigned char **kc);
+
+gboolean sim_parse_gsm_authenticate(const unsigned char *buffer, int len,
+		const unsigned char **sres, const unsigned char **kc);

@@ -3,7 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
- *  Copyright (C) 2014 Jolla Ltd.
+ *  Copyright (C) 2014-2019  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -135,6 +135,11 @@ struct ofono_voicecall_driver {
 			ofono_voicecall_cb_t cb, void *data);
 	void (*send_tones)(struct ofono_voicecall *vc, const char *tones,
 			ofono_voicecall_cb_t cb, void *data);
+
+	/* Dials the last number again, this handles the hfp profile last number
+	 * dialing with the +BLDN AT command
+	 */
+	void (*dial_last)(struct ofono_voicecall *vc, ofono_voicecall_cb_t cb, void *data);
 };
 
 void ofono_voicecall_en_list_notify(struct ofono_voicecall *vc,

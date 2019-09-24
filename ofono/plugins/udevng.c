@@ -27,6 +27,7 @@
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 #include <libudev.h>
 
@@ -924,6 +925,47 @@ static gboolean setup_quectelqmi(struct modem_info *modem)
 	return TRUE;
 }
 
+static gboolean setup_mbim(struct modem_info *modem)
+{
+	const char *ctl = NULL, *net = NULL, *atcmd = NULL;
+	GSList *list;
+	char descriptors[PATH_MAX];
+
+	DBG("%s [%s:%s]", modem->syspath, modem->vendor, modem->model);
+
+	for (list = modem->devices; list; list = list->next) {
+		struct device_info *info = list->data;
+
+		DBG("%s %s %s %s %s %s", info->devnode, info->interface,
+						info->number, info->label,
+						info->sysattr, info->subsystem);
+
+		if (g_strcmp0(info->subsystem, "usbmisc") == 0) /* cdc-wdm */
+			ctl = info->devnode;
+		else if (g_strcmp0(info->subsystem, "net") == 0) /* wwan */
+			net = info->devnode;
+		else if (g_strcmp0(info->subsystem, "tty") == 0) {
+			if (g_strcmp0(info->number, "02") == 0)
+				atcmd = info->devnode;
+		}
+	}
+
+	if (ctl == NULL || net == NULL)
+		return FALSE;
+
+	DBG("ctl=%s net=%s atcmd=%s", ctl, net, atcmd);
+
+	sprintf(descriptors, "%s/descriptors", modem->syspath);
+
+	ofono_modem_set_string(modem->modem, "Device", ctl);
+	ofono_modem_set_string(modem->modem, "NetworkInterface", net);
+	ofono_modem_set_string(modem->modem, "DescriptorFile", descriptors);
+	ofono_modem_set_string(modem->modem, "Vendor", modem->vendor);
+	ofono_modem_set_string(modem->modem, "Model", modem->model);
+
+	return TRUE;
+}
+
 static gboolean setup_serial_modem(struct modem_info* modem)
 {
 	struct serial_device_info* info;
@@ -1182,6 +1224,7 @@ static struct {
 	{ "ublox",	setup_ublox	},
 	{ "gemalto",	setup_gemalto	},
 	{ "xmm7xxx",	setup_xmm7xxx	},
+	{ "mbim",	setup_mbim	},
 	/* Following are non-USB modems */
 	{ "ifx",	setup_ifx		},
 	{ "u8500",	setup_isi_serial	},
@@ -1510,6 +1553,7 @@ static struct {
 	{ "mbm",	"cdc_acm",	"413c"		},
 	{ "mbm",	"cdc_ether",	"413c"		},
 	{ "mbm",	"cdc_ncm",	"413c"		},
+	{ "mbim",	"cdc_mbim"			},
 	{ "mbm",	"cdc_acm",	"03f0"		},
 	{ "mbm",	"cdc_ether",	"03f0"		},
 	{ "mbm",	"cdc_ncm",	"03f0"		},

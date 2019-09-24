@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2017 Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2017-2019 Jolla Ltd. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -39,9 +39,19 @@ void __ofono_dbus_queue_reply_fn(struct ofono_dbus_queue *q,
 						ofono_dbus_reply_cb_t fn);
 void __ofono_dbus_queue_reply_all_ok(struct ofono_dbus_queue *q);
 void __ofono_dbus_queue_reply_all_failed(struct ofono_dbus_queue *q);
+void __ofono_dbus_queue_reply_all_error(struct ofono_dbus_queue *q,
+					const struct ofono_error *error);
 void __ofono_dbus_queue_reply_all_fn(struct ofono_dbus_queue *q,
-						ofono_dbus_reply_cb_t fn);
+					ofono_dbus_reply_cb_t fn);
 void __ofono_dbus_queue_reply_all_fn_param(struct ofono_dbus_queue *q,
 					ofono_dbus_cb_t fn, void *data);
 
 #endif /* OFONO_DBUS_QUEUE_H */
+
+/*
+ * Local Variables:
+ * mode: C
+ * c-basic-offset: 8
+ * indent-tabs-mode: t
+ * End:
+ */

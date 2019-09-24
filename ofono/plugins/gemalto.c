@@ -420,7 +420,8 @@ static void gemalto_pre_sim(struct ofono_modem *modem)
 
 	ofono_devinfo_create(modem, 0, "atmodem", data->app);
 	ofono_location_reporting_create(modem, 0, "gemaltomodem", data->app);
-	sim = ofono_sim_create(modem, 0, "atmodem", data->app);
+	sim = ofono_sim_create(modem, OFONO_VENDOR_CINTERION, "atmodem",
+						data->app);
 
 	if (sim && data->have_sim == TRUE)
 		ofono_sim_inserted_notify(sim, TRUE);

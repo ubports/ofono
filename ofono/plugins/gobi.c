@@ -254,6 +254,15 @@ error:
 	shutdown_device(modem);
 }
 
+static void create_shared_dms(void *user_data)
+{
+	struct ofono_modem *modem = user_data;
+	struct gobi_data *data = ofono_modem_get_data(modem);
+
+	qmi_service_create_shared(data->device, QMI_SERVICE_DMS,
+				  create_dms_cb, modem, NULL);
+}
+
 static void discover_cb(uint8_t count, const struct qmi_version *list,
 							void *user_data)
 {
@@ -316,8 +325,10 @@ static void discover_cb(uint8_t count, const struct qmi_version *list,
 		return;
 	}
 
-	qmi_service_create_shared(data->device, QMI_SERVICE_DMS,
-						create_dms_cb, modem, NULL);
+	if (qmi_device_is_sync_supported(data->device))
+		qmi_device_sync(data->device, create_shared_dms, modem);
+	else
+		create_shared_dms(modem);
 }
 
 static int gobi_enable(struct ofono_modem *modem)

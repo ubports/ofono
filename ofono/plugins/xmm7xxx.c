@@ -48,6 +48,8 @@
 #include <ofono/gprs-context.h>
 #include <ofono/stk.h>
 #include <ofono/lte.h>
+#include <ofono/ims.h>
+#include <ofono/sim-auth.h>
 
 #include <drivers/atmodem/atutil.h>
 #include <drivers/atmodem/vendor.h>
@@ -131,6 +133,8 @@ static void switch_sim_state_status(struct ofono_modem *modem, int status)
 			ofono_sim_inserted_notify(data->sim, TRUE);
 			data->have_sim = TRUE;
 		}
+
+		ofono_sim_initialized_notify(data->sim);
 		break;
 	default:
 		ofono_warn("Unknown SIM state %d received", status);
@@ -321,6 +325,7 @@ static void xmm7xxx_post_sim(struct ofono_modem *modem)
 
 	ofono_lte_create(modem, "atmodem", data->chat);
 	ofono_radio_settings_create(modem, 0, "xmm7modem", data->chat);
+	ofono_sim_auth_create(modem);
 }
 
 static void xmm7xxx_post_online(struct ofono_modem *modem)
@@ -340,6 +345,8 @@ static void xmm7xxx_post_online(struct ofono_modem *modem)
 
 	if (gprs && gc)
 		ofono_gprs_add_context(gprs, gc);
+
+	ofono_ims_create(modem, "xmm7modem", data->chat);
 }
 
 static int xmm7xxx_probe(struct ofono_modem *modem)
