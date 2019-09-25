@@ -409,6 +409,7 @@ int ril_parse_tech(const char *stech, int *ril_tech)
 			access_tech = ACCESS_TECHNOLOGY_UTRAN_HSDPA_HSUPA;
 			break;
 		case RADIO_TECH_LTE:
+		case RADIO_TECH_LTE_CA:
 			access_tech = ACCESS_TECHNOLOGY_EUTRAN;
 			break;
 		default:
