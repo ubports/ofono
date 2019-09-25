@@ -269,15 +269,15 @@ static int ublox_enable(struct ofono_modem *modem)
 static void cfun_disable(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_modem *modem = user_data;
-	struct ublox_data *data = ofono_modem_get_data(modem);
 
 	DBG("");
 
-	g_at_chat_unref(data->aux);
-	data->aux = NULL;
+	if (!ok) {
+		ofono_error("Failed to disable modem");
+		return;
+	}
 
-	if (ok)
-		ofono_modem_set_powered(modem, FALSE);
+	close_devices(modem);
 }
 
 static int ublox_disable(struct ofono_modem *modem)
@@ -288,8 +288,6 @@ static int ublox_disable(struct ofono_modem *modem)
 
 	g_at_chat_cancel_all(data->modem);
 	g_at_chat_unregister_all(data->modem);
-	g_at_chat_unref(data->modem);
-	data->modem = NULL;
 
 	g_at_chat_cancel_all(data->aux);
 	g_at_chat_unregister_all(data->aux);
