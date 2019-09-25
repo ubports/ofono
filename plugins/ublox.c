@@ -29,6 +29,7 @@
 #include <glib.h>
 #include <gatchat.h>
 #include <gattty.h>
+#include <ell/ell.h>
 
 #define OFONO_API_SUBJECT_TO_CHANGE
 #include <ofono/plugin.h>
@@ -66,6 +67,10 @@ struct ublox_data {
 
 	const struct ublox_model *model;
 	int flags;
+
+	struct l_timeout *init_timeout;
+	int init_count;
+	guint init_cmd;
 };
 
 static void ublox_debug(const char *str, void *user_data)
@@ -221,6 +226,72 @@ fail:
 	close_devices(modem);
 }
 
+static void init_cmd_cb(gboolean ok, GAtResult *result, void *user_data)
+{
+	struct ofono_modem *modem = user_data;
+	struct ublox_data *data = ofono_modem_get_data(modem);
+
+	DBG("%p", modem);
+
+	if (!ok)
+		goto fail;
+
+	/* When the 'init command' succeeds, we insert an additional
+	 * delay of 1 second before proceeding with the actual
+	 * intialization of the device.  We reuse the init_timeout
+	 * instance for this, just clearing the command to indicate
+	 * that additional retries aren't necessary.
+	 */
+	data->init_cmd = 0;
+	data->init_count = 0;
+	l_timeout_modify_ms(data->init_timeout, 1000);
+
+	return;
+
+fail:
+	l_timeout_remove(data->init_timeout);
+	data->init_timeout = NULL;
+
+	close_devices(modem);
+}
+
+static void init_timeout_cb(struct l_timeout *timeout, void *user_data)
+{
+	struct ofono_modem *modem = user_data;
+	struct ublox_data *data = ofono_modem_get_data(modem);
+
+	DBG("%p", modem);
+
+	/* As long as init_cmd is set we need to either keep retrying
+	 * or fail everything after excessive retries
+	 */
+	if (data->init_cmd && data->init_count++ < 20) {
+		g_at_chat_retry(data->aux, data->init_cmd);
+		l_timeout_modify_ms(timeout, 1000);
+		return;
+	}
+
+	l_timeout_remove(data->init_timeout);
+	data->init_timeout = NULL;
+
+	if (data->init_cmd) {
+		ofono_error("failed to init modem after 20 attempts");
+		goto fail;
+	}
+
+	g_at_chat_send(data->aux, "ATE0", none_prefix,
+					NULL, NULL, NULL);
+	g_at_chat_send(data->aux, "AT+CMEE=1", none_prefix,
+					NULL, NULL, NULL);
+
+	if (g_at_chat_send(data->aux, "AT+CGMM", NULL,
+				query_model_cb, modem, NULL) > 0)
+		return;
+
+fail:
+	close_devices(modem);
+}
+
 static int ublox_enable(struct ofono_modem *modem)
 {
 	struct ublox_data *data = ofono_modem_get_data(modem);
@@ -248,22 +319,34 @@ static int ublox_enable(struct ofono_modem *modem)
 		g_at_chat_send(data->modem, "AT&C0", NULL, NULL, NULL, NULL);
 	}
 
-	/* The modem can take a while to wake up if just powered on. */
-	g_at_chat_set_wakeup_command(data->aux, "AT\r", 1000, 11000);
+	/*
+	 * uBlox devices present their USB interfaces well before those
+	 * interfaces are actually ready to use.  The specs say to monitor
+	 * the 'greeting text' to detect whether the device is ready to use;
+	 * unfortunately, other than for the TOBY L4, the greeting text is
+	 * not actually specified.
+	 *
+	 * What has been determined experimentally to work is to probe with
+	 * an 'AT' command until it responds and then wait an additional
+	 * second before continuing with device initialization.  Even for
+	 * the TOBY L4 where one should wait for the '+AT: READY' URC
+	 * before intialization, this seems to be sufficient; the 'READY'
+	 * indication always arrives within this time.
+	 *
+	 * (It would be more rigorous to actually wait for the 'READY'
+	 * indication, but that would require knowing the device model
+	 * before the device model is actually queried.  Do-able via
+	 * USB Product ID, but overkill when the above seems to work
+	 * reliably.)
+	 */
 
-	g_at_chat_send(data->aux, "ATE0", none_prefix,
-					NULL, NULL, NULL);
-	g_at_chat_send(data->aux, "AT+CMEE=1", none_prefix,
-					NULL, NULL, NULL);
+	data->init_count = 0;
+	data->init_cmd = g_at_chat_send(data->aux, "AT", none_prefix,
+					init_cmd_cb, modem, NULL);
+	data->init_timeout = l_timeout_create_ms(500, init_timeout_cb, modem,
+							NULL);
 
-	if (g_at_chat_send(data->aux, "AT+CGMM", NULL,
-				query_model_cb, modem, NULL) > 0)
-		return -EINPROGRESS;
-
-	g_at_chat_unref(data->aux);
-	data->aux = NULL;
-
-	return -EINVAL;
+	return -EINPROGRESS;
 }
 
 static void cfun_disable(gboolean ok, GAtResult *result, gpointer user_data)
@@ -285,6 +368,8 @@ static int ublox_disable(struct ofono_modem *modem)
 	struct ublox_data *data = ofono_modem_get_data(modem);
 
 	DBG("%p", modem);
+
+	l_timeout_remove(data->init_timeout);
 
 	g_at_chat_cancel_all(data->modem);
 	g_at_chat_unregister_all(data->modem);
