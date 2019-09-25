@@ -102,19 +102,25 @@ static void ublox_remove(struct ofono_modem *modem)
 	g_free(data);
 }
 
+static void close_devices(struct ofono_modem* modem)
+{
+	struct ublox_data * data = ofono_modem_get_data(modem);
+
+	g_at_chat_unref(data->aux);
+	data->aux = NULL;
+	g_at_chat_unref(data->modem);
+	data->modem = NULL;
+	ofono_modem_set_powered(modem, FALSE);
+}
+
 static void cfun_enable(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_modem *modem = user_data;
-	struct ublox_data * data = ofono_modem_get_data(modem);
 
 	DBG("ok %d", ok);
 
 	if (!ok) {
-		g_at_chat_unref(data->aux);
-		data->aux = NULL;
-		g_at_chat_unref(data->modem);
-		data->modem = NULL;
-		ofono_modem_set_powered(modem, FALSE);
+		close_devices(modem);
 		return;
 	}
 
@@ -165,11 +171,7 @@ retry:
 		return;
 
 error:
-	g_at_chat_unref(data->aux);
-	data->aux = NULL;
-	g_at_chat_unref(data->modem);
-	data->modem = NULL;
-	ofono_modem_set_powered(modem, FALSE);
+	close_devices(modem);
 }
 
 static void query_model_cb(gboolean ok, GAtResult *result, gpointer user_data)
@@ -216,11 +218,7 @@ static void query_model_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		return;
 
 fail:
-	g_at_chat_unref(data->aux);
-	data->aux = NULL;
-	g_at_chat_unref(data->modem);
-	data->modem = NULL;
-	ofono_modem_set_powered(modem, FALSE);
+	close_devices(modem);
 }
 
 static int ublox_enable(struct ofono_modem *modem)
