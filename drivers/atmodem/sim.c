@@ -1354,7 +1354,6 @@ static void at_pin_send_cb(gboolean ok, GAtResult *result,
 	case OFONO_VENDOR_HUAWEI:
 	case OFONO_VENDOR_SIMCOM:
 	case OFONO_VENDOR_SIERRA:
-	case OFONO_VENDOR_QUECTEL_SERIAL:
 		/*
 		 * On ZTE modems, after pin is entered, SIM state is checked
 		 * by polling CPIN as their modem doesn't provide unsolicited
