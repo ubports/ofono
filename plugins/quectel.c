@@ -968,7 +968,6 @@ static void ate_cb(int ok, GAtResult *result, void *user_data)
 
 	DBG("%p", modem);
 
-	g_at_chat_set_wakeup_command(data->uart, NULL, 0, 0);
 	g_at_chat_send(data->uart, "AT+CMUX=0,0,5,127,10,3,30,10,2", NULL,
 			cmux_cb, modem, NULL);
 }
