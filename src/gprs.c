@@ -2794,6 +2794,7 @@ static void gprs_context_remove(struct ofono_atom *atom)
 	if (gc->driver && gc->driver->remove)
 		gc->driver->remove(gc);
 
+	g_free(gc->interface);
 	g_free(gc);
 }
 
