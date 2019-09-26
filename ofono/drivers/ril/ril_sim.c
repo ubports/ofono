@@ -1172,7 +1172,10 @@ static void ril_sim_pin_change_state_cb(GRilIoChannel *io, int ril_status,
 
 	ril_sim_check_perm_lock(sd);
 	cbd->ril_status = ril_status;
-	if (cbd->card_status_id && (!cbd->state_event_count ||
+
+	/* RIL_E_PASSWORD_INCORRECT is the final result, no need to wait */
+	if (ril_status != RIL_E_PASSWORD_INCORRECT &&
+			cbd->card_status_id && (!cbd->state_event_count ||
 					ril_sim_app_in_transient_state(sd))) {
 
 		GASSERT(!g_list_find(sd->pin_cbd_list, cbd));
@@ -1207,6 +1210,9 @@ static void ril_sim_pin_change_state_cb(GRilIoChannel *io, int ril_status,
 						cbd->card_status_id);
 			cbd->card_status_id = 0;
 		}
+
+		/* Tell the core that we are ready to accept more requests */
+		ofono_sim_initialized_notify(sd->sim);
 	}
 }
 
