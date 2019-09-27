@@ -28,6 +28,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdbool.h>
 
 #include <glib.h>
 
@@ -47,11 +48,13 @@
 static const char *none_prefix[] = { NULL };
 static const char *cmer_prefix[] = { "+CMER:", NULL };
 static const char *ureg_prefix[] = { "+UREG:", NULL };
+static const char *creg_prefix[] = { "+CREG:", NULL };
 
 struct netreg_data {
 	struct at_netreg_data at_data;
 
 	const struct ublox_model *model;
+	bool updating_status : 1;
 };
 
 struct tech_query {
@@ -213,13 +216,75 @@ static void ctze_notify(GAtResult *result, gpointer user_data)
 	ofono_netreg_time_notify(netreg, &nd->time);
 }
 
-static void ublox_query_tech_cb(gboolean ok, GAtResult *result,
+static int ublox_ureg_state_to_tech(int state)
+{
+	switch (state) {
+	case 1:
+		return ACCESS_TECHNOLOGY_GSM;
+	case 2:
+		return ACCESS_TECHNOLOGY_GSM_EGPRS;
+	case 3:
+		return ACCESS_TECHNOLOGY_UTRAN;
+	case 4:
+		return ACCESS_TECHNOLOGY_UTRAN_HSDPA;
+	case 5:
+		return ACCESS_TECHNOLOGY_UTRAN_HSUPA;
+	case 6:
+		return ACCESS_TECHNOLOGY_UTRAN_HSDPA_HSUPA;
+	case 7:
+		return ACCESS_TECHNOLOGY_EUTRAN;
+	case 8:
+		return ACCESS_TECHNOLOGY_GSM;
+	case 9:
+		return ACCESS_TECHNOLOGY_GSM_EGPRS;
+	default:
+		/* Not registered for PS (0) or something unknown (>9)... */
+		return -1;
+	}
+}
+
+static gboolean is_registered(int status)
+{
+	return status == NETWORK_REGISTRATION_STATUS_REGISTERED ||
+		status == NETWORK_REGISTRATION_STATUS_ROAMING;
+}
+
+static void ublox_creg_cb(gboolean ok, GAtResult *result,
+				gpointer user_data)
+{
+	struct tech_query *tq = user_data;
+	struct netreg_data *nd = ofono_netreg_get_data(tq->netreg);
+	int status;
+	int lac;
+	int ci;
+	int tech;
+
+	nd->updating_status = false;
+
+	if (!ok)
+		return;
+
+	if (at_util_parse_reg(result, "+CREG:", NULL, &status,
+				&lac, &ci, &tech, OFONO_VENDOR_GENERIC) == FALSE)
+		return;
+
+	/* The query provided a tech, use that */
+	if (is_registered(status) && tq->tech != -1)
+		tech = tq->tech;
+
+	ofono_netreg_status_notify(tq->netreg, status, lac, ci, tech);
+}
+
+static void ublox_ureg_cb(gboolean ok, GAtResult *result,
 							gpointer user_data)
 {
 	struct tech_query *tq = user_data;
+	struct netreg_data *nd = ofono_netreg_get_data(tq->netreg);
 	GAtResultIter iter;
 	gint enabled, state;
-	int tech = -1;
+	int tech = tq->tech;
+
+	nd->updating_status = false;
 
 	if (!ok)
 		goto error;
@@ -235,60 +300,67 @@ static void ublox_query_tech_cb(gboolean ok, GAtResult *result,
 	if (!g_at_result_iter_next_number(&iter, &state))
 		return;
 
-	switch (state) {
-	case 0:
-		/* Not registered for PS, then we have to trust CREG... */
+	tech = ublox_ureg_state_to_tech(state);
+	if (tech < 0)
+		/* No valid UREG status, we have to trust CREG... */
 		tech = tq->tech;
-		break;
-	case 1:
-		tech = ACCESS_TECHNOLOGY_GSM;
-		break;
-	case 2:
-		tech = ACCESS_TECHNOLOGY_GSM_EGPRS;
-		break;
-	case 3:
-		tech = ACCESS_TECHNOLOGY_UTRAN;
-		break;
-	case 4:
-		tech = ACCESS_TECHNOLOGY_UTRAN_HSDPA;
-		break;
-	case 5:
-		tech = ACCESS_TECHNOLOGY_UTRAN_HSUPA;
-		break;
-	case 6:
-		tech = ACCESS_TECHNOLOGY_UTRAN_HSDPA_HSUPA;
-		break;
-	case 7:
-		tech = ACCESS_TECHNOLOGY_EUTRAN;
-		break;
-	case 8:
-		tech = ACCESS_TECHNOLOGY_GSM;
-		break;
-	case 9:
-		tech = ACCESS_TECHNOLOGY_GSM_EGPRS;
-		break;
-	default:
-		/* Not registered for PS or something unknown, trust CREG... */
-		tech = tq->tech;
-	}
 
 error:
 	ofono_netreg_status_notify(tq->netreg,
 			tq->status, tq->lac, tq->ci, tech);
 }
 
+static void ureg_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_netreg *netreg = user_data;
+	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct tech_query *tq;
+	GAtResultIter iter;
+	int state;
+
+	if (nd->updating_status)
+		return;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "+UREG:"))
+		return;
+
+	if (!g_at_result_iter_next_number(&iter, &state))
+		return;
+
+	tq = g_new0(struct tech_query, 1);
+
+	tq->tech = ublox_ureg_state_to_tech(state);
+	tq->netreg = netreg;
+
+	if (g_at_chat_send(nd->at_data.chat, "AT+CREG?", creg_prefix,
+			ublox_creg_cb, tq, g_free) > 0) {
+		nd->updating_status = true;
+		return;
+	}
+
+	g_free(tq);
+}
+
 static void creg_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
-	int status, lac, ci, tech;
 	struct netreg_data *nd = ofono_netreg_get_data(netreg);
 	struct tech_query *tq;
+	int status;
+	int lac;
+	int ci;
+	int tech;
+
+	if (nd->updating_status)
+		return;
 
 	if (at_util_parse_reg_unsolicited(result, "+CREG:", &status,
 			&lac, &ci, &tech, OFONO_VENDOR_GENERIC) == FALSE)
 		return;
 
-	if (status != 1 && status != 5)
+	if (!is_registered(status))
 		goto notify;
 
 	if (ublox_is_toby_l4(nd->model) || ublox_is_toby_l2(nd->model)) {
@@ -301,13 +373,15 @@ static void creg_notify(GAtResult *result, gpointer user_data)
 		tq->netreg = netreg;
 
 		if (g_at_chat_send(nd->at_data.chat, "AT+UREG?", ureg_prefix,
-				ublox_query_tech_cb, tq, g_free) > 0)
+				ublox_ureg_cb, tq, g_free) > 0) {
+			nd->updating_status = true;
 			return;
+		}
 
 		g_free(tq);
 	}
 
-	if ((status == 1 || status == 5) && tech == -1)
+	if (tech == -1)
 		tech = nd->at_data.tech;
 
 notify:
@@ -322,24 +396,56 @@ static void at_cmer_not_supported(struct ofono_netreg *netreg)
 	ofono_netreg_remove(netreg);
 }
 
+static void ublox_finish_registration(struct ofono_netreg *netreg)
+{
+	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+
+	if (ublox_is_toby_l4(nd->model) || ublox_is_toby_l2(nd->model))
+		g_at_chat_register(nd->at_data.chat, "+UREG:",
+					ureg_notify, FALSE, netreg, NULL);
+
+	g_at_chat_register(nd->at_data.chat, "+CIEV:",
+			ciev_notify, FALSE, netreg, NULL);
+
+	g_at_chat_register(nd->at_data.chat, "+CREG:",
+				creg_notify, FALSE, netreg, NULL);
+
+	ofono_netreg_register(netreg);
+}
+
+static void ublox_ureg_set_cb(gboolean ok,
+				GAtResult *result, gpointer user_data)
+{
+	struct ofono_netreg *netreg = user_data;
+
+	if (!ok) {
+		ofono_error("Unable to initialize Network Registration");
+		ofono_netreg_remove(netreg);
+		return;
+	}
+
+	ublox_finish_registration(netreg);
+}
+
 static void ublox_cmer_set_cb(gboolean ok,
 				GAtResult *result, gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
-	struct at_netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct netreg_data *nd = ofono_netreg_get_data(netreg);
 
 	if (!ok) {
 		at_cmer_not_supported(netreg);
 		return;
 	}
 
-	g_at_chat_register(nd->chat, "+CIEV:",
-			ciev_notify, FALSE, netreg, NULL);
+	if (ublox_is_toby_l4(nd->model) || ublox_is_toby_l2(nd->model)) {
+		g_at_chat_send(nd->at_data.chat, "AT+UREG=1", none_prefix,
+			ublox_ureg_set_cb, netreg, NULL);
 
-	g_at_chat_register(nd->chat, "+CREG:",
-				creg_notify, FALSE, netreg, NULL);
+		return;
+	}
 
-	ofono_netreg_register(netreg);
+	ublox_finish_registration(netreg);
 }
 
 static void ublox_creg_set_cb(gboolean ok,
@@ -354,12 +460,9 @@ static void ublox_creg_set_cb(gboolean ok,
 		return;
 	}
 
-	if (ublox_is_toby_l4(nd->model)) {
+	if (ublox_is_toby_l4(nd->model))
 		/* FIXME */
 		ofono_error("TOBY L4 requires polling of ECSQ");
-		ofono_error("TOBY L4 wants UREG notifications for"
-				" tech updates");
-	}
 
 	/* Register for network time update reports */
 	if (ublox_is_toby_l2(nd->model)) {
