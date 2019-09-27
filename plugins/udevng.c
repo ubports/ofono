@@ -41,6 +41,7 @@
 enum modem_type {
 	MODEM_TYPE_USB,
 	MODEM_TYPE_SERIAL,
+	MODEM_TYPE_PCIE,
 };
 
 struct modem_info {
@@ -1229,26 +1230,47 @@ static gboolean setup_xmm7xxx(struct modem_info *modem)
 				info->interface, info->number, info->label,
 				info->sysattr, info->subsystem);
 
-		if (g_strcmp0(modem->model,"095a") == 0) {
-			if (g_strcmp0(info->subsystem, "tty") == 0) {
-				if (g_strcmp0(info->number, "00") == 0)
-					mdm = info->devnode;
-			} else if (g_strcmp0(info->subsystem, "net") == 0) {
-				if (g_strcmp0(info->number, "06") == 0)
-					net = info->devnode;
-				if (g_strcmp0(info->number, "08") == 0)
-					net2 = info->devnode;
-				if (g_strcmp0(info->number, "0a") == 0)
-					net3 = info->devnode;
+		if (g_strcmp0(info->subsystem, "pci") == 0) {
+			if ((g_strcmp0(modem->vendor, "0x8086") == 0) &&
+				(g_strcmp0(modem->model, "0x7560") == 0)) {
+				mdm = "/dev/iat";
+				net = "inm0";
+				net2 = "inm1";
+				net3 = "inm2";
+				ofono_modem_set_string(modem->modem,
+					"CtrlPath", "/PCIE/IOSM/CTRL/1");
+				ofono_modem_set_string(modem->modem, "DataPath",
+					"/PCIE/IOSM/IPS/");
 			}
-		} else {
-			if (g_strcmp0(info->subsystem, "tty") == 0) {
-				if (g_strcmp0(info->number, "02") == 0)
-					mdm = info->devnode;
-			} else if (g_strcmp0(info->subsystem, "net") == 0) {
-				if (g_strcmp0(info->number, "00") == 0)
-					net = info->devnode;
+		} else { /* For USB */
+			if (g_strcmp0(modem->model, "095a") == 0) {
+				if (g_strcmp0(info->subsystem, "tty") == 0) {
+					if (g_strcmp0(info->number, "00") == 0)
+						mdm = info->devnode;
+				} else if (g_strcmp0(info->subsystem, "net")
+									== 0) {
+					if (g_strcmp0(info->number, "06") == 0)
+						net = info->devnode;
+					if (g_strcmp0(info->number, "08") == 0)
+						net2 = info->devnode;
+					if (g_strcmp0(info->number, "0a") == 0)
+						net3 = info->devnode;
+				}
+			} else {
+				if (g_strcmp0(info->subsystem, "tty") == 0) {
+					if (g_strcmp0(info->number, "02") == 0)
+						mdm = info->devnode;
+				} else if (g_strcmp0(info->subsystem, "net")
+									== 0) {
+					if (g_strcmp0(info->number, "00") == 0)
+						net = info->devnode;
+				}
 			}
+
+			ofono_modem_set_string(modem->modem, "CtrlPath",
+								"/USBCDC/0");
+			ofono_modem_set_string(modem->modem, "DataPath",
+								"/USBHS/NCM/");
 		}
 	}
 
@@ -1265,9 +1287,6 @@ static gboolean setup_xmm7xxx(struct modem_info *modem)
 
 	if (net3)
 		ofono_modem_set_string(modem->modem, "NetworkInterface3", net3);
-
-	ofono_modem_set_string(modem->modem, "CtrlPath", "/USBCDC/0");
-	ofono_modem_set_string(modem->modem, "DataPath", "/USBHS/NCM/");
 
 	return TRUE;
 }
@@ -1437,6 +1456,7 @@ static void destroy_modem(gpointer data)
 
 	switch (modem->type) {
 	case MODEM_TYPE_USB:
+	case MODEM_TYPE_PCIE:
 		for (list = modem->devices; list; list = list->next) {
 			struct device_info *info = list->data;
 
@@ -1467,6 +1487,7 @@ static gboolean check_remove(gpointer key, gpointer value, gpointer user_data)
 
 	switch (modem->type) {
 	case MODEM_TYPE_USB:
+	case MODEM_TYPE_PCIE:
 		for (list = modem->devices; list; list = list->next) {
 			struct device_info *info = list->data;
 
@@ -1599,7 +1620,8 @@ static void add_serial_device(struct udev_device *dev)
 
 static void add_device(const char *syspath, const char *devname,
 			const char *driver, const char *vendor,
-			const char *model, struct udev_device *device)
+			const char *model, struct udev_device *device,
+			enum modem_type type)
 {
 	struct udev_device *usb_interface;
 	const char *devpath, *devnode, *interface, *number;
@@ -1612,25 +1634,13 @@ static void add_device(const char *syspath, const char *devname,
 	if (devpath == NULL)
 		return;
 
-	devnode = udev_device_get_devnode(device);
-	if (devnode == NULL) {
-		devnode = udev_device_get_property_value(device, "INTERFACE");
-		if (devnode == NULL)
-			return;
-	}
-
-	usb_interface = udev_device_get_parent_with_subsystem_devtype(device,
-						"usb", "usb_interface");
-	if (usb_interface == NULL)
-		return;
-
 	modem = g_hash_table_lookup(modem_list, syspath);
 	if (modem == NULL) {
 		modem = g_try_new0(struct modem_info, 1);
 		if (modem == NULL)
 			return;
 
-		modem->type = MODEM_TYPE_USB;
+		modem->type = type;
 		modem->syspath = g_strdup(syspath);
 		modem->devname = g_strdup(devname);
 		modem->driver = g_strdup(driver);
@@ -1642,8 +1652,37 @@ static void add_device(const char *syspath, const char *devname,
 		g_hash_table_replace(modem_list, modem->syspath, modem);
 	}
 
-	interface = udev_device_get_property_value(usb_interface, "INTERFACE");
-	number = udev_device_get_property_value(device, "ID_USB_INTERFACE_NUM");
+	if (modem->type == MODEM_TYPE_USB) {
+		devnode = udev_device_get_devnode(device);
+		if (devnode == NULL) {
+			devnode = udev_device_get_property_value(device,
+							"INTERFACE");
+			if (devnode == NULL)
+				return;
+		}
+
+		usb_interface = udev_device_get_parent_with_subsystem_devtype(
+							device, "usb",
+							"usb_interface");
+		if (usb_interface == NULL)
+			return;
+
+		interface = udev_device_get_property_value(usb_interface,
+							"INTERFACE");
+		number = udev_device_get_property_value(device,
+						"ID_USB_INTERFACE_NUM");
+
+		label = udev_device_get_property_value(device, "OFONO_LABEL");
+		if (!label)
+			label = udev_device_get_property_value(usb_interface,
+							"OFONO_LABEL");
+	} else {
+		devnode = NULL;
+		interface = udev_device_get_property_value(device,
+							"INTERFACE");
+		number = NULL;
+		label = NULL;
+	}
 
 	/* If environment variable is not set, get value from attributes (or parent's ones) */
 	if (number == NULL) {
@@ -1656,11 +1695,6 @@ static void add_device(const char *syspath, const char *devname,
 							"bInterfaceNumber");
 		}
 	}
-
-	label = udev_device_get_property_value(device, "OFONO_LABEL");
-	if (!label)
-		label = udev_device_get_property_value(usb_interface,
-							"OFONO_LABEL");
 
 	subsystem = udev_device_get_subsystem(device);
 
@@ -1855,9 +1889,64 @@ static void check_usb_device(struct udev_device *device)
 			return;
 	}
 
-	add_device(syspath, devname, driver, vendor, model, device);
+	add_device(syspath, devname, driver, vendor, model, device,
+			MODEM_TYPE_USB);
 }
 
+static const struct {
+	const char *driver;
+	const char *drv;
+	const char *vid;
+	const char *pid;
+} pci_driver_list[] = {
+	{ "xmm7xxx",	"imc_ipc",	"0x8086",	"0x7560"},
+	{ }
+};
+
+static void check_pci_device(struct udev_device *device)
+{
+	const char *syspath, *devname, *driver;
+	const char *vendor = NULL, *model = NULL, *drv = NULL;
+	unsigned int i;
+
+	syspath = udev_device_get_syspath(device);
+
+	if (syspath == NULL)
+		return;
+
+	devname = udev_device_get_devnode(device);
+	vendor = udev_device_get_sysattr_value(device, "vendor");
+	model = udev_device_get_sysattr_value(device, "device");
+	driver = udev_device_get_property_value(device, "OFONO_DRIVER");
+	drv = udev_device_get_property_value(device, "DRIVER");
+	DBG("%s [%s:%s]", drv, vendor, model);
+
+	if (vendor == NULL || model == NULL || drv == NULL)
+		return;
+
+	for (i = 0; pci_driver_list[i].driver; i++) {
+		if (g_str_equal(pci_driver_list[i].drv, drv) == FALSE)
+			continue;
+
+		if (pci_driver_list[i].vid) {
+			if (!g_str_equal(pci_driver_list[i].vid, vendor))
+				continue;
+		}
+
+		if (pci_driver_list[i].pid) {
+			if (!g_str_equal(pci_driver_list[i].pid, model))
+				continue;
+		}
+
+		driver = pci_driver_list[i].driver;
+	}
+
+	if (driver == NULL)
+		return;
+
+	add_device(syspath, devname, driver, vendor, model, device,
+			MODEM_TYPE_PCIE);
+}
 static void check_device(struct udev_device *device)
 {
 	const char *bus;
@@ -1872,6 +1961,8 @@ static void check_device(struct udev_device *device)
 	if ((g_str_equal(bus, "usb") == TRUE) ||
 			(g_str_equal(bus, "usbmisc") == TRUE))
 		check_usb_device(device);
+	else if (g_str_equal(bus, "pci") == TRUE)
+		check_pci_device(device);
 	else
 		add_serial_device(device);
 
@@ -1932,6 +2023,7 @@ static void enumerate_devices(struct udev *context)
 	udev_enumerate_add_match_subsystem(enumerate, "usbmisc");
 	udev_enumerate_add_match_subsystem(enumerate, "net");
 	udev_enumerate_add_match_subsystem(enumerate, "hsi");
+	udev_enumerate_add_match_subsystem(enumerate, "pci");
 
 	udev_enumerate_scan_devices(enumerate);
 
