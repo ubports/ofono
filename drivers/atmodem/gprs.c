@@ -240,7 +240,7 @@ static void at_cgdcont_read_cb(gboolean ok, GAtResult *result,
 		return;
 	}
 
-	cids = l_uintset_new(activated_cid);
+	cids = l_uintset_new_from_range(0, activated_cid);
 
 	l_uintset_put(cids, activated_cid);
 
