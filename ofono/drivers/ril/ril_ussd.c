@@ -1,7 +1,8 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2018 Jolla Ltd.
+ *  Copyright (C) 2015-2019 Jolla Ltd.
+ *  Copyright (C) 2019 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -20,35 +21,44 @@
 #include "smsutil.h"
 #include "util.h"
 
+#define USSD_REQUEST_TIMEOUT_SEC (30)
 #define USSD_CANCEL_TIMEOUT_SEC (20)
 
 struct ril_ussd {
 	struct ofono_ussd *ussd;
 	GRilIoChannel *io;
 	GRilIoQueue *q;
+	guint request_id;
+	guint cancel_id;
 	guint timer_id;
 	gulong event_id;
 };
 
 struct ril_ussd_cbd {
+	struct ril_ussd *ud;
 	ofono_ussd_cb_t cb;
 	gpointer data;
 };
-
-#define ril_ussd_cbd_free g_free
 
 static inline struct ril_ussd *ril_ussd_get_data(struct ofono_ussd *ussd)
 {
 	return ofono_ussd_get_data(ussd);
 }
 
-static struct ril_ussd_cbd *ril_ussd_cbd_new(ofono_ussd_cb_t cb, void *data)
+static struct ril_ussd_cbd *ril_ussd_cbd_new(struct ril_ussd *ud,
+					ofono_ussd_cb_t cb, void *data)
 {
-	struct ril_ussd_cbd *cbd = g_new0(struct ril_ussd_cbd, 1);
+	struct ril_ussd_cbd *cbd = g_slice_new(struct ril_ussd_cbd);
 
+	cbd->ud = ud;
 	cbd->cb = cb;
 	cbd->data = data;
 	return cbd;
+}
+
+static void ril_ussd_cbd_free(void *cbd)
+{
+	g_slice_free(struct ril_ussd_cbd, cbd);
 }
 
 static void ril_ussd_cancel_cb(GRilIoChannel *io, int status,
@@ -56,10 +66,30 @@ static void ril_ussd_cancel_cb(GRilIoChannel *io, int status,
 {
 	struct ofono_error error;
 	struct ril_ussd_cbd *cbd = user_data;
+	struct ril_ussd *ud = cbd->ud;
 
 	/* Always report sucessful completion, otherwise ofono may get
 	 * stuck in the USSD_STATE_ACTIVE state */
+	GASSERT(ud->cancel_id);
+	ud->cancel_id = 0;
 	cbd->cb(ril_error_ok(&error), cbd->data);
+}
+
+static void ril_ussd_response(GRilIoChannel* channel, int status,
+			const void* data, guint len, void* user_data)
+{
+	struct ofono_error error;
+	struct ril_ussd_cbd *cbd = user_data;
+	struct ril_ussd *ud = cbd->ud;
+
+	GASSERT(ud->request_id);
+	ud->request_id = 0;
+	if (status == RIL_E_SUCCESS) {
+		ril_error_init_ok(&error);
+	} else {
+		ril_error_init_failure(&error);
+	}
+	cbd->cb(&error, cbd->data);
 }
 
 static void ril_ussd_request(struct ofono_ussd *ussd, int dcs,
@@ -70,6 +100,12 @@ static void ril_ussd_request(struct ofono_ussd *ussd, int dcs,
 	struct ril_ussd *ud = ril_ussd_get_data(ussd);
 
 	ofono_info("send ussd, len:%d", len);
+	GASSERT(!ud->request_id);
+	if (ud->request_id) {
+		grilio_queue_cancel_request(ud->q, ud->request_id, FALSE);
+		ud->request_id = 0;
+	}
+
 	if (cbs_dcs_decode(dcs, NULL, NULL, &charset, NULL, NULL, NULL)) {
 		if (charset == SMS_CHARSET_7BIT) {
 			unsigned char unpacked_buf[182];
@@ -100,10 +136,15 @@ static void ril_ussd_request(struct ofono_ussd *ussd, int dcs,
 				}
 				grilio_request_append_utf8_chars(req, (char*)
 						unpacked_buf, length);
-				grilio_queue_send_request(ud->q, req,
-					RIL_REQUEST_SEND_USSD);
+				grilio_request_set_timeout(req,
+					USSD_REQUEST_TIMEOUT_SEC * 1000);
+				ud->request_id =
+					grilio_queue_send_request_full(ud->q,
+						req, RIL_REQUEST_SEND_USSD,
+						ril_ussd_response,
+						ril_ussd_cbd_free,
+						ril_ussd_cbd_new(ud, cb, data));
 				grilio_request_unref(req);
-				cb(ril_error_ok(&error), data);
 				return;
 			}
 		}
@@ -119,10 +160,12 @@ static void ril_ussd_cancel(struct ofono_ussd *ussd,
 	GRilIoRequest *req = grilio_request_new();
 
 	ofono_info("send ussd cancel");
+	GASSERT(!ud->cancel_id);
+	grilio_queue_cancel_request(ud->q, ud->cancel_id, FALSE);
 	grilio_request_set_timeout(req, USSD_CANCEL_TIMEOUT_SEC * 1000);
-	grilio_queue_send_request_full(ud->q, req, RIL_REQUEST_CANCEL_USSD,
-				ril_ussd_cancel_cb, ril_ussd_cbd_free,
-				ril_ussd_cbd_new(cb, data));
+	ud->cancel_id = grilio_queue_send_request_full(ud->q, req,
+			RIL_REQUEST_CANCEL_USSD, ril_ussd_cancel_cb,
+			ril_ussd_cbd_free, ril_ussd_cbd_new(ud, cb, data));
 	grilio_request_unref(req);
 }
 
