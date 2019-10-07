@@ -36,6 +36,7 @@
 #include <ell/ell.h>
 #include <gatchat.h>
 #include <gattty.h>
+#include <gatmux.h>
 
 #define OFONO_API_SUBJECT_TO_CHANGE
 #include <ofono.h>
@@ -95,7 +96,9 @@ struct quectel_data {
 	bool sim_ready;
 
 	/* used by quectel uart driver */
+	GIOChannel *device;
 	GAtChat *uart;
+	GAtMux *mux;
 	int mux_ready_count;
 	int initial_ldisc;
 	struct l_gpio_writer *gpio;
@@ -192,43 +195,48 @@ static void quectel_remove(struct ofono_modem *modem)
 	g_at_chat_unref(data->aux);
 	g_at_chat_unref(data->modem);
 	g_at_chat_unref(data->uart);
+	g_at_mux_unref(data->mux);
+
+	if (data->device)
+		g_io_channel_unref(data->device);
+
 	l_free(data);
 }
 
-static void close_mux_cb(struct l_timeout *timeout, void *user_data)
+static void close_mux(struct ofono_modem *modem)
 {
-	struct ofono_modem *modem = user_data;
 	struct quectel_data *data = ofono_modem_get_data(modem);
-	GIOChannel *device;
-	uint32_t gpio_value = 0;
-	ssize_t write_count;
+
+	DBG("%p", modem);
+
+	g_io_channel_unref(data->device);
+	data->device = NULL;
+
+	g_at_mux_unref(data->mux);
+	data->mux = NULL;
+}
+
+static void close_ngsm(struct ofono_modem *modem)
+{
+	struct quectel_data *data = ofono_modem_get_data(modem);
 	int fd;
 
 	DBG("%p", modem);
 
-	device = g_at_chat_get_channel(data->uart);
-	fd = g_io_channel_unix_get_fd(device);
+	if (!data->device)
+		return;
+
+	fd = g_io_channel_unix_get_fd(data->device);
 
 	/* restore initial tty line discipline */
 	if (ioctl(fd, TIOCSETD, &data->initial_ldisc) < 0)
 		ofono_warn("Failed to restore line discipline");
-
-	/* terminate gsm 0710 multiplexing on the modem side */
-	write_count = write(fd, gsm0710_terminate, sizeof(gsm0710_terminate));
-	if (write_count != sizeof(gsm0710_terminate))
-		ofono_warn("Failed to terminate gsm multiplexing");
-
-	g_at_chat_unref(data->uart);
-	data->uart = NULL;
-
-	l_timeout_remove(timeout);
-	l_gpio_writer_set(data->gpio, 1, &gpio_value);
-	ofono_modem_set_powered(modem, FALSE);
 }
 
 static void close_serial(struct ofono_modem *modem)
 {
 	struct quectel_data *data = ofono_modem_get_data(modem);
+	uint32_t gpio_value = 0;
 
 	DBG("%p", modem);
 
@@ -241,19 +249,16 @@ static void close_serial(struct ofono_modem *modem)
 	g_at_chat_unref(data->modem);
 	data->modem = NULL;
 
-	/*
-	 * if gsm0710 multiplexing is used, the aux and modem file descriptors
-	 * must be closed before closing the underlying serial device to avoid
-	 * an old kernel dead-lock:
-	 * https://lists.ofono.org/pipermail/ofono/2011-March/009405.html
-	 *
-	 * setup a timer to iterate the mainloop once to let gatchat close the
-	 * virtual file descriptors unreferenced above
-	 */
-	if (data->uart)
-		l_timeout_create_ms(1, close_mux_cb, modem, NULL);
+	g_at_chat_unref(data->uart);
+	data->uart = NULL;
+
+	if (data->mux)
+		close_mux(modem);
 	else
-		ofono_modem_set_powered(modem, false);
+		close_ngsm(modem);
+
+	l_gpio_writer_set(data->gpio, 1, &gpio_value);
+	ofono_modem_set_powered(modem, FALSE);
 }
 
 static void dbus_hw_reply_properties(struct dbus_hw *hw)
@@ -793,6 +798,19 @@ static void cgmm_cb(int ok, GAtResult *result, void *user_data)
 			NULL);
 }
 
+static void setup_aux(struct ofono_modem *modem)
+{
+	struct quectel_data *data = ofono_modem_get_data(modem);
+
+	DBG("%p", modem);
+
+	g_at_chat_set_slave(data->modem, data->aux);
+	g_at_chat_send(data->aux, "ATE0; &C0; +CMEE=1; +QIURC=0", none_prefix,
+			NULL, NULL, NULL);
+	g_at_chat_send(data->aux, "AT+CGMM", cgmm_prefix, cgmm_cb, modem,
+			NULL);
+}
+
 static int open_ttys(struct ofono_modem *modem)
 {
 	struct quectel_data *data = ofono_modem_get_data(modem);
@@ -812,14 +830,71 @@ static int open_ttys(struct ofono_modem *modem)
 		return -EIO;
 	}
 
-	g_at_chat_set_slave(data->modem, data->aux);
-
-	g_at_chat_send(data->aux, "ATE0; &C0; +CMEE=1; +QIURC=0", none_prefix,
-			NULL, NULL, NULL);
-	g_at_chat_send(data->aux, "AT+CGMM", cgmm_prefix, cgmm_cb, modem,
-			NULL);
+	setup_aux(modem);
 
 	return -EINPROGRESS;
+}
+
+static GAtChat *create_chat(struct ofono_modem *modem, char *debug)
+{
+	struct quectel_data *data = ofono_modem_get_data(modem);
+	GIOChannel *channel;
+	GAtSyntax *syntax;
+	GAtChat *chat;
+
+	DBG("%p", modem);
+
+	channel = g_at_mux_create_channel(data->mux);
+	if (channel == NULL)
+		return NULL;
+
+	syntax = g_at_syntax_new_gsmv1();
+	chat = g_at_chat_new(channel, syntax);
+	g_at_syntax_unref(syntax);
+	g_io_channel_unref(channel);
+
+	if (chat == NULL)
+		return NULL;
+
+	if (getenv("OFONO_AT_DEBUG"))
+		g_at_chat_set_debug(chat, quectel_debug, debug);
+
+	return chat;
+}
+
+static void cmux_gatmux(struct ofono_modem *modem)
+{
+	struct quectel_data *data = ofono_modem_get_data(modem);
+
+	DBG("%p", modem);
+
+	data->mux = g_at_mux_new_gsm0710_basic(data->device, 127);
+	if (data->mux == NULL) {
+		ofono_error("failed to create gsm0710 mux");
+		close_serial(modem);
+		return;
+	}
+
+	if (getenv("OFONO_MUX_DEBUG"))
+		g_at_mux_set_debug(data->mux, quectel_debug, "Mux: ");
+
+	g_at_mux_start(data->mux);
+
+	data->modem = create_chat(modem, "Modem: ");
+	if (!data->modem) {
+		ofono_error("failed to create modem channel");
+		close_serial(modem);
+		return;
+	}
+
+	data->aux = create_chat(modem, "Aux: ");
+	if (!data->aux) {
+		ofono_error("failed to create aux channel");
+		close_serial(modem);
+		return;
+	}
+
+	setup_aux(modem);
 }
 
 static void mux_ready_cb(struct l_timeout *timeout, void *user_data)
@@ -854,19 +929,16 @@ static void mux_ready_cb(struct l_timeout *timeout, void *user_data)
 	g_at_chat_set_slave(data->uart, data->modem);
 }
 
-static void cmux_cb(gboolean ok, GAtResult *result, gpointer user_data)
+static void cmux_ngsm(struct ofono_modem *modem)
 {
-	struct ofono_modem *modem = user_data;
 	struct quectel_data *data = ofono_modem_get_data(modem);
 	struct gsm_config gsm_config;
-	GIOChannel *device;
 	int ldisc = N_GSM0710;
 	int fd;
 
 	DBG("%p", modem);
 
-	device = g_at_chat_get_channel(data->uart);
-	fd = g_io_channel_unix_get_fd(device);
+	fd = g_io_channel_unix_get_fd(data->device);
 
 	/* get initial line discipline to restore after use */
 	if (ioctl(fd, TIOCGETD, &data->initial_ldisc) < 0) {
@@ -920,6 +992,39 @@ static void cmux_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		close_serial(modem);
 		return;
 	}
+}
+
+static void cmux_cb(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct ofono_modem *modem = user_data;
+	struct quectel_data *data = ofono_modem_get_data(modem);
+	const char *mux = ofono_modem_get_string(modem, "Mux");
+
+	DBG("%p", modem);
+
+	g_at_chat_unref(data->uart);
+	data->uart = NULL;
+
+	if (!ok) {
+		close_serial(modem);
+		return;
+	}
+
+	if (!mux)
+		mux = "internal";
+
+	if (strcmp(mux, "n_gsm") == 0) {
+		cmux_ngsm(modem);
+		return;
+	}
+
+	if (strcmp(mux, "internal") == 0) {
+		cmux_gatmux(modem);
+		return;
+	}
+
+	ofono_error("unsupported mux setting: '%s'", mux);
+	close_serial(modem);
 }
 
 static void ate_cb(int ok, GAtResult *result, void *user_data)
@@ -979,6 +1084,8 @@ static int open_serial(struct ofono_modem *modem)
 	struct quectel_data *data = ofono_modem_get_data(modem);
 	const uint32_t gpio_value = 1;
 	const char *rts_cts;
+	ssize_t written;
+	int fd;
 
 	DBG("%p", modem);
 
@@ -997,6 +1104,18 @@ static int open_serial(struct ofono_modem *modem)
 						NULL);
 	if (data->uart == NULL)
 		return -EINVAL;
+
+	data->device = g_at_chat_get_channel(data->uart);
+	g_io_channel_ref(data->device);
+
+	/*
+	 * terminate gsm 0710 multiplexing on the modem side to make sure it
+	 * responds to plain AT commands
+	 * */
+	fd = g_io_channel_unix_get_fd(data->device);
+	written = write(fd, gsm0710_terminate, sizeof(gsm0710_terminate));
+	if (written != sizeof(gsm0710_terminate))
+		ofono_warn("Failed to terminate gsm multiplexing");
 
 	if (data->gpio && !l_gpio_writer_set(data->gpio, 1, &gpio_value)) {
 		close_serial(modem);
