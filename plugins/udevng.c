@@ -894,6 +894,11 @@ static gboolean setup_quectel_serial(struct modem_info *modem)
 		ofono_modem_set_string(modem->modem, "GpioOffset", value);
 
 	value = udev_device_get_property_value(info->dev,
+						"OFONO_QUECTEL_MUX");
+	if (value)
+		ofono_modem_set_string(modem->modem, "Mux", value);
+
+	value = udev_device_get_property_value(info->dev,
 						"OFONO_QUECTEL_RTSCTS");
 	ofono_modem_set_string(modem->modem, "RtsCts", value ? value : "off");
 	ofono_modem_set_string(modem->modem, "Device", info->devnode);
