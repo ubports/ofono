@@ -231,6 +231,7 @@ static gboolean received_data(GIOChannel *channel, GIOCondition cond,
 	int i;
 	GIOStatus status;
 	gsize bytes_read;
+	gboolean buffer_full = FALSE;
 
 	if (cond & G_IO_NVAL)
 		return FALSE;
@@ -255,6 +256,8 @@ static gboolean received_data(GIOChannel *channel, GIOCondition cond,
 		if (mux->buf_used > 0)
 			memmove(mux->buf, mux->buf + nread, mux->buf_used);
 
+		g_at_mux_ref(mux);
+
 		for (i = 1; i <= MAX_CHANNELS; i++) {
 			int offset = i / 8;
 			int bit = i % 8;
@@ -267,6 +270,10 @@ static gboolean received_data(GIOChannel *channel, GIOCondition cond,
 
 			dispatch_sources(mux->dlcs[i-1], G_IO_IN);
 		}
+
+		buffer_full = mux->buf_used == sizeof(mux->buf);
+
+		g_at_mux_unref(mux);
 	}
 
 	if (cond & (G_IO_HUP | G_IO_ERR))
@@ -275,7 +282,7 @@ static gboolean received_data(GIOChannel *channel, GIOCondition cond,
 	if (status != G_IO_STATUS_NORMAL && status != G_IO_STATUS_AGAIN)
 		return FALSE;
 
-	if (mux->buf_used == sizeof(mux->buf))
+	if (buffer_full)
 		return FALSE;
 
 	return TRUE;
