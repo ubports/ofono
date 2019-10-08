@@ -2,6 +2,7 @@
  *  oFono - Open Source Telephony - RIL-based devices
  *
  *  Copyright (C) 2015-2019 Jolla Ltd.
+ *  Copyright (C) 2019 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -76,7 +77,8 @@
 #define RILMODEM_DEFAULT_TIMEOUT    0 /* No timeout */
 #define RILMODEM_DEFAULT_SIM_FLAGS  RIL_SIM_CARD_V9_UICC_SUBSCRIPTION_WORKAROUND
 #define RILMODEM_DEFAULT_DATA_OPT   RIL_ALLOW_DATA_AUTO
-#define RILMODEM_DEFAULT_DM_FLAGS   RIL_DATA_MANAGER_3GLTE_HANDOVER
+#define RILMODEM_DEFAULT_DM_FLAGS  (RIL_DATA_MANAGER_3GLTE_HANDOVER | \
+                                    RIL_DATA_MANAGER_FORCE_GSM_ON_OTHER_SLOTS)
 #define RILMODEM_DEFAULT_START_TIMEOUT 20000 /* ms */
 #define RILMODEM_DEFAULT_DATA_CALL_FORMAT RIL_DATA_CALL_FORMAT_AUTO
 #define RILMODEM_DEFAULT_DATA_CALL_RETRY_LIMIT 4
@@ -106,6 +108,7 @@
 #define RILCONF_SETTINGS_EMPTY              "EmptyConfig"
 #define RILCONF_SETTINGS_IDENTITY           "Identity"
 #define RILCONF_SETTINGS_3GHANDOVER         "3GLTEHandover"
+#define RILCONF_SETTINGS_GSM_NON_DATA_SLOTS "ForceGsmForNonDataSlots"
 #define RILCONF_SETTINGS_SET_RADIO_CAP      "SetRadioCapability"
 
 #define RILCONF_MODEM_PREFIX                "ril_"
@@ -1815,6 +1818,12 @@ static GSList *ril_plugin_parse_config_file(GKeyFile *file,
 			ril_config_get_flag(file, group,
 				RILCONF_SETTINGS_3GHANDOVER,
 				RIL_DATA_MANAGER_3GLTE_HANDOVER,
+				&ps->dm_flags);
+
+			/* ForceGsmForNonDataSlots */
+			ril_config_get_flag(file, group,
+				RILCONF_SETTINGS_GSM_NON_DATA_SLOTS,
+				RIL_DATA_MANAGER_FORCE_GSM_ON_OTHER_SLOTS,
 				&ps->dm_flags);
 
 			/* SetRadioCapability */

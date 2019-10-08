@@ -2,6 +2,7 @@
  *  oFono - Open Source Telephony - RIL-based devices
  *
  *  Copyright (C) 2016-2019 Jolla Ltd.
+ *  Copyright (C) 2019 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -54,7 +55,8 @@ struct ril_data {
 };
 
 enum ril_data_manager_flags {
-	RIL_DATA_MANAGER_3GLTE_HANDOVER = 0x01
+	RIL_DATA_MANAGER_3GLTE_HANDOVER = 0x01,
+	RIL_DATA_MANAGER_FORCE_GSM_ON_OTHER_SLOTS = 0x02
 };
 
 enum ril_data_allow_data_opt {
