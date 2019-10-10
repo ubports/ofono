@@ -2,6 +2,7 @@
  *  oFono - Open Source Telephony - RIL-based devices
  *
  *  Copyright (C) 2016-2019 Jolla Ltd.
+ *  Copyright (C) 2019 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -1646,7 +1647,8 @@ static void ril_data_manager_check_network_mode(struct ril_data_manager *self)
 {
 	GSList *l;
 
-	if (ril_data_manager_handover(self)) {
+	if ((self->flags & RIL_DATA_MANAGER_FORCE_GSM_ON_OTHER_SLOTS) &&
+		ril_data_manager_handover(self)) {
 		struct ril_network *lte_network = NULL;
 		int non_gsm_count = 0;
 
