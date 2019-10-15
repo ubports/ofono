@@ -2,6 +2,7 @@
  *  oFono - Open Source Telephony - RIL-based devices
  *
  *  Copyright (C) 2015-2019 Jolla Ltd.
+ *  Copyright (C) 2019 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -62,6 +63,7 @@ struct ril_slot_config {
 	gboolean enable_cbs;
 	gboolean enable_stk;
 	gboolean network_selection_manual_0;
+	gboolean force_gsm_when_radio_off;
 	gboolean use_data_profiles;
 	guint mms_data_profile_id;
 	GUtilInts *local_hangup_reasons;

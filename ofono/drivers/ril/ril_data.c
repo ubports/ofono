@@ -185,7 +185,6 @@ struct ril_data_request_allow_data {
 	gboolean allow;
 };
 
-static void ril_data_manager_check_data(struct ril_data_manager *dm);
 static void ril_data_manager_check_network_mode(struct ril_data_manager *dm);
 static void ril_data_call_deact_cid(struct ril_data *data, int cid);
 static void ril_data_power_update(struct ril_data *self);
@@ -1737,7 +1736,7 @@ static void ril_data_manager_switch_data_on(struct ril_data_manager *self,
 	}
 }
 
-static void ril_data_manager_check_data(struct ril_data_manager *self)
+void ril_data_manager_check_data(struct ril_data_manager *self)
 {
 	/*
 	 * Don't do anything if there any requests pending.
