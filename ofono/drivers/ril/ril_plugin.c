@@ -89,6 +89,7 @@
 #define RILMODEM_DEFAULT_RADIO_POWER_CYCLE TRUE
 #define RILMODEM_DEFAULT_CONFIRM_RADIO_POWER_ON TRUE
 #define RILMODEM_DEFAULT_NETWORK_SELECTION_MANUAL_0 TRUE
+#define RILMODEM_DEFAULT_FORCE_GSM_WHEN_RADIO_OFF TRUE
 #define RILMODEM_DEFAULT_USE_DATA_PROFILES FALSE
 #define RILMODEM_DEFAULT_MMS_DATA_PROFILE_ID RIL_DATA_PROFILE_IMS
 #define RILMODEM_DEFAULT_SLOT_FLAGS SAILFISH_SLOT_NO_FLAGS
@@ -143,6 +144,7 @@
 #define RILCONF_CONFIRM_RADIO_POWER_ON      "confirmRadioPowerOn"
 #define RILCONF_SINGLE_DATA_CONTEXT         "singleDataContext"
 #define RILCONF_NETWORK_SELECTION_MANUAL_0  "networkSelectionManual0"
+#define RILCONF_FORCE_GSM_WHEN_RADIO_OFF    "forceGsmWhenRadioOff"
 #define RILCONF_USE_DATA_PROFILES           "useDataProfiles"
 #define RILCONF_MMS_DATA_PROFILE_ID         "mmsDataProfileId"
 #define RILCONF_DEVMON                      "deviceStateTracking"
@@ -910,6 +912,7 @@ static void ril_plugin_radio_caps_cb(const struct ril_radio_capability *cap,
 static void ril_plugin_manager_started(ril_plugin *plugin)
 {
 	ril_plugin_drop_orphan_slots(plugin);
+	ril_data_manager_check_data(plugin->data_manager);
 	sailfish_slot_manager_started(plugin->handle);
 }
 
@@ -1195,6 +1198,8 @@ static ril_slot *ril_plugin_slot_new_take(char *transport,
 		RILMODEM_DEFAULT_QUERY_AVAILABLE_BAND_MODE;
 	config->network_selection_manual_0 =
 		RILMODEM_DEFAULT_NETWORK_SELECTION_MANUAL_0;
+	config->force_gsm_when_radio_off =
+		RILMODEM_DEFAULT_FORCE_GSM_WHEN_RADIO_OFF;
 	config->use_data_profiles = RILMODEM_DEFAULT_USE_DATA_PROFILES;
 	config->mms_data_profile_id = RILMODEM_DEFAULT_MMS_DATA_PROFILE_ID;
 	slot->timeout = RILMODEM_DEFAULT_TIMEOUT;
@@ -1231,6 +1236,8 @@ static void ril_plugin_slot_apply_vendor_defaults(ril_slot *slot)
 		defaults.empty_pin_query = config->empty_pin_query;
 		defaults.mms_data_profile_id = config->mms_data_profile_id;
 		defaults.use_data_profiles = config->use_data_profiles;
+		defaults.force_gsm_when_radio_off =
+			config->force_gsm_when_radio_off;
 		defaults.query_available_band_mode =
 			config->query_available_band_mode;
 
@@ -1241,6 +1248,8 @@ static void ril_plugin_slot_apply_vendor_defaults(ril_slot *slot)
 		config->empty_pin_query = defaults.empty_pin_query;
 		config->use_data_profiles = defaults.use_data_profiles;
 		config->mms_data_profile_id = defaults.mms_data_profile_id;
+		config->force_gsm_when_radio_off =
+			defaults.force_gsm_when_radio_off;
 		config->query_available_band_mode =
 			defaults.query_available_band_mode;
 	}
@@ -1467,6 +1476,14 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 					&config->network_selection_manual_0)) {
 		DBG("%s: " RILCONF_NETWORK_SELECTION_MANUAL_0 " %s", group,
 			config->network_selection_manual_0 ? "yes" : "no");
+	}
+
+	/* forceGsmWhenRadioOff */
+	if (ril_config_get_boolean(file, group,
+					RILCONF_FORCE_GSM_WHEN_RADIO_OFF,
+					&config->force_gsm_when_radio_off)) {
+		DBG("%s: " RILCONF_FORCE_GSM_WHEN_RADIO_OFF " %s", group,
+			config->force_gsm_when_radio_off ? "yes" : "no");
 	}
 
 	/* useDataProfiles */

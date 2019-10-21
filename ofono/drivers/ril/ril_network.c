@@ -2,6 +2,7 @@
  *  oFono - Open Source Telephony - RIL-based devices
  *
  *  Copyright (C) 2015-2019 Jolla Ltd.
+ *  Copyright (C) 2019 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -110,6 +111,7 @@ struct ril_network_priv {
 	gboolean set_initial_attach_apn;
 	struct ofono_network_operator operator;
 	gboolean assert_rat;
+	gboolean force_gsm_when_radio_off;
 	gboolean use_data_profiles;
 	int mms_data_profile_id;
 	GSList *data_profiles;
@@ -515,13 +517,12 @@ static enum ofono_radio_access_mode ril_network_actual_pref_mode
 	struct ril_network_priv *priv = self->priv;
 
 	/*
-	 * On dual-SIM phones such as Jolla C only one slot at a time
-	 * is allowed to use LTE. Even if the slot which has been using
-	 * LTE gets powered off, we still need to explicitely set its
-	 * preferred mode to GSM, to make LTE machinery available to
-	 * the other slot. This sort of behaviour might not be necessary
-	 * on some hardware and can (should) be made configurable when
-	 * it becomes necessary.
+	 * On most dual-SIM phones only one slot at a time is allowed
+	 * to use LTE. On some phones (such as Jolla C), even if the
+	 * slot which has been using LTE gets powered off, we still
+	 * need to explicitly set its preferred mode to GSM, to make
+	 * LTE machinery available to the other slot. This behavior is
+	 * configurable.
 	 */
 	const enum ofono_radio_access_mode max_pref_mode =
 		(priv->radio->state == RADIO_STATE_ON) ? self->max_pref_mode :
@@ -902,39 +903,52 @@ static void ril_network_check_pref_mode(struct ril_network *self,
 							gboolean immediate)
 {
 	struct ril_network_priv *priv = self->priv;
-	const enum ofono_radio_access_mode expected_mode =
-		ril_network_actual_pref_mode(self);
-	const enum ofono_radio_access_mode current_mode =
-		ril_network_rat_to_mode(priv->rat);
+	struct ril_radio *radio = priv->radio;
 
-	if (priv->timer[TIMER_FORCE_CHECK_PREF_MODE]) {
-		ril_network_stop_timer(self, TIMER_FORCE_CHECK_PREF_MODE);
-		/*
-		 * TIMER_FORCE_CHECK_PREF_MODE is scheduled by
-		 * ril_network_pref_mode_changed_cb and is meant
-		 * to force radio tech check right now.
-		 */
-		immediate = TRUE;
-	}
+	/*
+	 * On most dual-SIM phones only one slot at a time is allowed
+	 * to use LTE. On some phones (such as Jolla C), even if the
+	 * slot which has been using LTE gets powered off, we still
+	 * need to explicitly set its preferred mode to GSM, to make
+	 * LTE machinery available to the other slot. This behavior is
+	 * configurable.
+	 */
+	if (radio->state == RADIO_STATE_ON || priv->force_gsm_when_radio_off) {
+		const enum ofono_radio_access_mode expected =
+			ril_network_actual_pref_mode(self);
+		const enum ofono_radio_access_mode actual =
+			ril_network_rat_to_mode(priv->rat);
 
-	if (priv->rat >= 0 && current_mode != expected_mode) {
-		DBG_(self, "rat %d (%s), expected %s", priv->rat,
-			ofono_radio_access_mode_to_string(current_mode),
-			ofono_radio_access_mode_to_string(expected_mode));
-	}
+		if (priv->timer[TIMER_FORCE_CHECK_PREF_MODE]) {
+			ril_network_stop_timer(self,
+					TIMER_FORCE_CHECK_PREF_MODE);
+			/*
+			 * TIMER_FORCE_CHECK_PREF_MODE is scheduled by
+			 * ril_network_pref_mode_changed_cb and is meant
+			 * to force radio tech check right now.
+			 */
+			immediate = TRUE;
+		}
 
-	if (immediate) {
-		ril_network_stop_timer(self, TIMER_SET_RAT_HOLDOFF);
-	}
+		if (priv->rat >= 0 && actual != expected) {
+			DBG_(self, "rat %d (%s), expected %s", priv->rat,
+				ofono_radio_access_mode_to_string(actual),
+				ofono_radio_access_mode_to_string(expected));
+		}
 
-	if (current_mode != expected_mode || priv->assert_rat) {
-		const int rat = ril_network_mode_to_rat(self, expected_mode);
+		if (immediate) {
+			ril_network_stop_timer(self, TIMER_SET_RAT_HOLDOFF);
+		}
 
-		if (!priv->timer[TIMER_SET_RAT_HOLDOFF]) {
-			ril_network_set_pref_mode(self, rat);
-		} else {
-			/* OK, later */
-			DBG_(self, "need to set rat mode %d", rat);
+		if (actual != expected || priv->assert_rat) {
+			const int rat = ril_network_mode_to_rat(self, expected);
+
+			if (!priv->timer[TIMER_SET_RAT_HOLDOFF]) {
+				ril_network_set_pref_mode(self, rat);
+			} else {
+				/* OK, later */
+				DBG_(self, "need to set rat mode %d", rat);
+			}
 		}
 	}
 }
@@ -1228,6 +1242,7 @@ struct ril_network *ril_network_new(const char *path, GRilIoChannel *io,
 	priv->lte_network_mode = config->lte_network_mode;
 	priv->umts_network_mode = config->umts_network_mode;
 	priv->network_mode_timeout = config->network_mode_timeout;
+	priv->force_gsm_when_radio_off = config->force_gsm_when_radio_off;
 	priv->use_data_profiles = config->use_data_profiles;
 	priv->mms_data_profile_id = config->mms_data_profile_id;
 
