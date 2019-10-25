@@ -1,7 +1,8 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2017 Jolla Ltd.
+ *  Copyright (C) 2015-2019 Jolla Ltd.
+ *  Copyright (C) 2019 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -52,6 +53,7 @@ struct ril_modem {
 	const char *ecclist_file;
 	struct ofono_modem *ofono;
 	struct sailfish_cell_info *cell_info;
+	struct ril_vendor *vendor;
 	struct ril_radio *radio;
 	struct ril_data *data;
 	struct ril_network *network;
@@ -70,7 +72,7 @@ struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *log_prefix,
 		const char *ecclist_file, const struct ril_slot_config *config,
 		struct ril_radio *radio, struct ril_network *network,
 		struct ril_sim_card *card, struct ril_data *data,
-		struct ril_sim_settings *settings,
+		struct ril_sim_settings *settings, struct ril_vendor *vendor,
 		struct sailfish_cell_info *cell_info);
 void ril_modem_delete(struct ril_modem *modem);
 struct ofono_sim *ril_modem_ofono_sim(struct ril_modem *modem);

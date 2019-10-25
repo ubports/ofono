@@ -2,6 +2,7 @@
  *  oFono - Open Source Telephony - RIL-based devices
  *
  *  Copyright (C) 2015-2019 Jolla Ltd.
+ *  Copyright (C) 2019 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -16,6 +17,7 @@
 #include "ril_plugin.h"
 #include "ril_network.h"
 #include "ril_util.h"
+#include "ril_vendor.h"
 #include "ril_log.h"
 
 #include "common.h"
@@ -42,6 +44,7 @@ struct ril_netreg {
 	gboolean network_selection_manual_0;
 	struct ofono_netreg *netreg;
 	struct ril_network *network;
+	struct ril_vendor *vendor;
 	char *log_prefix;
 	guint timer_id;
 	guint notify_id;
@@ -331,100 +334,92 @@ static void ril_netreg_register_manual(struct ofono_netreg *netreg,
 	grilio_request_unref(req);
 }
 
-static int ril_netreg_dbm_to_percentage(int dbm)
+static int ril_netreg_qdbm_to_percentage(int qdbm /* 4*dBm */)
 {
-	const int min_dbm = -100; /* very weak signal, 0.0000000001 mW */
-	const int max_dbm = -60;  /* strong signal, 0.000001 mW */
+	const int min_qdbm = -4*100; /* very weak signal, 0.0000000001 mW */
+	const int max_qdbm = -4*60;  /* strong signal, 0.000001 mW */
 
-	return (dbm <= min_dbm) ? 1 :
-		(dbm >= max_dbm) ? 100 :
-		(100 * (dbm - min_dbm) / (max_dbm - min_dbm));
+	return (qdbm <= min_qdbm) ? 1 :
+		(qdbm >= max_qdbm) ? 100 :
+		(100 * (qdbm - min_qdbm) / (max_qdbm - min_qdbm));
 }
 
-static int ril_netreg_get_signal_strength(const void *data, guint len)
+static int ril_netreg_get_signal_strength(struct ril_vendor *vendor,
+					const void *data, guint len)
 {
 	GRilIoParser rilp;
-	int gw_signal = 0, cdma_dbm = 0, evdo_dbm = 0, lte_signal = 0;
-	int rsrp = 0, tdscdma_dbm = 0;
+	struct ril_vendor_signal_strength signal;
 
 	grilio_parser_init(&rilp, data, len);
+	signal.gsm = INT_MAX;
+	signal.lte = INT_MAX;
+	signal.qdbm = 0;
+	
+	if (!ril_vendor_signal_strength_parse(vendor, &signal, &rilp)) {
+		gint32 rsrp = 0, tdscdma_dbm = 0;
 
-	/* GW_SignalStrength */
-	grilio_parser_get_int32(&rilp, &gw_signal);
-	grilio_parser_get_int32(&rilp, NULL); /* bitErrorRate */
+		/* Apply default parsing algorithm */
+		grilio_parser_init(&rilp, data, len);
+		signal.gsm = INT_MAX;
+		signal.lte = INT_MAX;
+		signal.qdbm = 0;
 
-	/* CDMA_SignalStrength */
-	grilio_parser_get_int32(&rilp, &cdma_dbm);
-	grilio_parser_get_int32(&rilp, NULL); /* ecio */
+		/* GW_SignalStrength */
+		grilio_parser_get_int32(&rilp, &signal.gsm);
+		grilio_parser_get_int32(&rilp, NULL); /* bitErrorRate */
 
-	/* EVDO_SignalStrength */
-	grilio_parser_get_int32(&rilp, &evdo_dbm);
-	grilio_parser_get_int32(&rilp, NULL); /* ecio */
-	grilio_parser_get_int32(&rilp, NULL); /* signalNoiseRatio */
+		/* CDMA_SignalStrength */
+		grilio_parser_get_int32(&rilp, NULL); /* dbm */
+		grilio_parser_get_int32(&rilp, NULL); /* ecio */
 
-	/* LTE_SignalStrength */
-	grilio_parser_get_int32(&rilp, &lte_signal);
-	grilio_parser_get_int32(&rilp, &rsrp);
+		/* EVDO_SignalStrength */
+		grilio_parser_get_int32(&rilp, NULL); /* dbm */
+		grilio_parser_get_int32(&rilp, NULL); /* ecio */
+		grilio_parser_get_int32(&rilp, NULL); /* signalNoiseRatio */
 
-	/* Skip the rest of LTE_SignalStrength_v8 */
-	if (grilio_parser_get_int32(&rilp, NULL) && /* rsrq */
-		grilio_parser_get_int32(&rilp, NULL) && /* rssnr */
-		grilio_parser_get_int32(&rilp, NULL) && /* cqi */
-		grilio_parser_get_int32(&rilp, NULL)) { /* timingAdvance */
+		/* LTE_SignalStrength */
+		grilio_parser_get_int32(&rilp, &signal.lte);
+		grilio_parser_get_int32(&rilp, &rsrp);
 
-		/* TD_SCDMA_SignalStrength */
-		grilio_parser_get_int32(&rilp, &tdscdma_dbm); /* rscp */
+		/* The rest is considered optional */
+		if (grilio_parser_get_int32(&rilp, NULL) && /* rsrq */
+			grilio_parser_get_int32(&rilp, NULL) && /* rssnr */
+			grilio_parser_get_int32(&rilp, NULL) && /* cqi */
+			grilio_parser_get_int32(&rilp, NULL) && /* timingAdv */
+			/* TD_SCDMA_SignalStrength */
+			grilio_parser_get_int32(&rilp, &tdscdma_dbm) &&
+			/* RSCP range: 25 to 120 dBm per 3GPP TS 25.123 */
+			tdscdma_dbm >= 25 && tdscdma_dbm <= 120) {
+			signal.qdbm = -4 * tdscdma_dbm;
+		} else if (signal.lte == 99 && rsrp >= 44 && rsrp <= 140) {
+			/* RSRP range: 44 to 140 dBm per 3GPP TS 36.133 */
+			signal.qdbm = -rsrp;
+		}
 	}
 
-	if (rsrp == INT_MAX) {
-		DBG("gw: %d, cdma: %d, evdo: %d, lte: %d, tdscdma: %d",
-					gw_signal, cdma_dbm, evdo_dbm,
-					lte_signal, tdscdma_dbm);
-	}  else {
-		DBG("gw: %d, cdma: %d, evdo: %d, lte: %d rsrp: %d, tdscdma: %d",
-					gw_signal, cdma_dbm, evdo_dbm,
-					lte_signal, rsrp, tdscdma_dbm);
-	}
+	DBG("gw: %d, lte: %d, qdbm: %d", signal.gsm, signal.lte, signal.qdbm);
 
 	/* Return the first valid one */
 
 	/* Some RILs (namely, from MediaTek) report 0 here AND a valid LTE
 	 * RSRP value. If we've got zero, don't report it just yet. */
-	if (gw_signal >= 1 && gw_signal <= 31) {
+	if (signal.gsm >= 1 && signal.gsm <= 31) {
 		/* Valid values are (0-31, 99) as defined in TS 27.007 */
-		return (gw_signal * 100) / 31;
+		return (signal.gsm * 100) / 31;
 	}
 
 	/* Valid values are (0-31, 99) as defined in TS 27.007 */
-	if (lte_signal >= 0 && lte_signal <= 31) {
-		return (lte_signal * 100) / 31;
+	if (signal.lte >= 0 && signal.lte <= 31) {
+		return (signal.lte * 100) / 31;
 	}
 
-	/* RSCP range: 25 to 120 dBm as defined in 3GPP TS 25.123 */
-	if (tdscdma_dbm >= 25 && tdscdma_dbm <= 120) {
-		return ril_netreg_dbm_to_percentage(-tdscdma_dbm);
-	}
-
-	/* RSRP range: 44 to 140 dBm as defined in 3GPP TS 36.133 */
-	if (lte_signal == 99 && rsrp >= 44 && rsrp <= 140) {
-		return ril_netreg_dbm_to_percentage(-rsrp);
-	}
-
-	/* If we've got zero strength and no valid RSRP, then so be it */
-	if (gw_signal == 0) {
+	if (signal.qdbm < 0) {
+		return ril_netreg_qdbm_to_percentage(signal.qdbm);
+	} else if (signal.gsm == 0) {
 		return 0;
+	} else {
+		return -1;
 	}
-
-	/* In case of dbm, return the value directly */
-	if (cdma_dbm != -1) {
-		return MIN(cdma_dbm, 100);
-	}
-
-	if (evdo_dbm != -1) {
-		return MIN(evdo_dbm, 100);
-	}
-
-	return -1;
 }
 
 static void ril_netreg_strength_notify(GRilIoChannel *io, guint ril_event,
@@ -434,9 +429,11 @@ static void ril_netreg_strength_notify(GRilIoChannel *io, guint ril_event,
 	int strength;
 
 	GASSERT(ril_event == RIL_UNSOL_SIGNAL_STRENGTH);
-	strength = ril_netreg_get_signal_strength(data, len);
+	strength = ril_netreg_get_signal_strength(nd->vendor, data, len);
 	DBG_(nd, "%d", strength);
-	ofono_netreg_strength_notify(nd->netreg, strength);
+	if (strength >= 0) {
+		ofono_netreg_strength_notify(nd->netreg, strength);
+	}
 }
 
 static void ril_netreg_strength_cb(GRilIoChannel *io, int status,
@@ -447,8 +444,8 @@ static void ril_netreg_strength_cb(GRilIoChannel *io, int status,
 	struct ofono_error error;
 
 	if (status == RIL_E_SUCCESS) {
-		int strength = ril_netreg_get_signal_strength(data, len);
-		cb(ril_error_ok(&error), strength, cbd->data);
+		cb(ril_error_ok(&error), ril_netreg_get_signal_strength
+				(cbd->nd->vendor, data, len), cbd->data);
 	} else {
 		ofono_error("Failed to retrive the signal strength: %s",
 						ril_error_to_string(status));
@@ -558,6 +555,7 @@ static int ril_netreg_probe(struct ofono_netreg *netreg, unsigned int vendor,
 	DBG_(nd, "%p", netreg);
 	nd->io = grilio_channel_ref(ril_modem_io(modem));
 	nd->q = grilio_queue_new(nd->io);
+	nd->vendor = ril_vendor_ref(modem->vendor);
 	nd->network = ril_network_ref(modem->network);
 	nd->netreg = netreg;
 	nd->network_selection_manual_0 = config->network_selection_manual_0;
@@ -589,6 +587,7 @@ static void ril_netreg_remove(struct ofono_netreg *netreg)
 
 	ril_network_remove_all_handlers(nd->network, nd->network_event_id);
 	ril_network_unref(nd->network);
+	ril_vendor_unref(nd->vendor);
 
 	grilio_channel_remove_all_handlers(nd->io, nd->ril_event_id);
 	grilio_channel_unref(nd->io);

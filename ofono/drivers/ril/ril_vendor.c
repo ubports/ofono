@@ -2,6 +2,7 @@
  *  oFono - Open Source Telephony - RIL-based devices
  *
  *  Copyright (C) 2019 Jolla Ltd.
+ *  Copyright (C) 2019 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -116,6 +117,14 @@ gboolean ril_vendor_data_call_parse(RilVendor *self,
 				data_call_parse(self, call, ver, rilp);
 }
 
+gboolean ril_vendor_signal_strength_parse(RilVendor *self,
+			struct ril_vendor_signal_strength *signal_strength,
+			GRilIoParser *rilp)
+{
+	return G_LIKELY(self) && RIL_VENDOR_GET_CLASS(self)->
+			signal_strength_parse(self, signal_strength, rilp);
+}
+
 static void ril_vendor_default_set_network(RilVendor *self,
 						struct ril_network *network)
 {
@@ -160,6 +169,13 @@ static gboolean ril_vendor_default_data_call_parse(RilVendor *self,
 	return FALSE;
 }
 
+static gboolean ril_vendor_default_signal_strength_parse(RilVendor *self,
+			struct ril_vendor_signal_strength *signal_strength,
+			GRilIoParser *rilp)
+{
+	return FALSE;
+}
+
 void ril_vendor_init_base(RilVendor *self, GRilIoChannel *io)
 {
 	self->io = grilio_channel_ref(io);
@@ -190,6 +206,7 @@ static void ril_vendor_class_init(RilVendorClass* klass)
     klass->set_attach_apn_req = ril_vendor_default_set_attach_apn_req;
     klass->data_call_req = ril_vendor_default_data_call_req;
     klass->data_call_parse = ril_vendor_default_data_call_parse;
+    klass->signal_strength_parse = ril_vendor_default_signal_strength_parse;
 }
 
 /*

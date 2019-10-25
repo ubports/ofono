@@ -20,6 +20,7 @@
 #include "ril_sim_card.h"
 #include "ril_sim_settings.h"
 #include "ril_cell_info.h"
+#include "ril_vendor.h"
 #include "ril_data.h"
 #include "ril_util.h"
 #include "ril_log.h"
@@ -435,6 +436,7 @@ static void ril_modem_remove(struct ofono_modem *ofono)
 		g_source_remove(md->set_offline.timeout_id);
 	}
 
+	ril_vendor_unref(modem->vendor);
 	ril_network_unref(modem->network);
 	ril_sim_card_unref(modem->sim_card);
 	ril_data_unref(modem->data);
@@ -456,7 +458,7 @@ struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *log_prefix,
 		const char *ecclist_file, const struct ril_slot_config *config,
 		struct ril_radio *radio, struct ril_network *network,
 		struct ril_sim_card *card, struct ril_data *data,
-		struct ril_sim_settings *settings,
+		struct ril_sim_settings *settings, struct ril_vendor *vendor,
 		struct sailfish_cell_info *cell_info)
 {
 	/* Skip the slash from the path, it looks like "/ril_0" */
@@ -483,6 +485,7 @@ struct ril_modem *ril_modem_create(GRilIoChannel *io, const char *log_prefix,
 			g_strconcat(log_prefix, " ", NULL) : g_strdup("");
 
 		modem->ofono = ofono;
+		modem->vendor = ril_vendor_ref(vendor);
 		modem->radio = ril_radio_ref(radio);
 		modem->network = ril_network_ref(network);
 		modem->sim_card = ril_sim_card_ref(card);
