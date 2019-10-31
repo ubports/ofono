@@ -267,7 +267,7 @@ static void set_new_cond_list(struct ofono_call_forwarding *cf,
 	const char *number;
 	dbus_uint16_t timeout;
 	char attr[64];
-	char tattr[64];
+	char tattr[72];
 	gboolean update_sim = FALSE;
 	gboolean old_cfu;
 	gboolean new_cfu;
