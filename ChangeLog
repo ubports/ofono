@@ -1,3 +1,8 @@
+ver 1.31:
+	Fix issue with handling CID 0 context identifier.
+	Fix issue with handling detach state and running LTE.
+	Fix issue with handling SIM states and Quectel modems.
+
 ver 1.30:
 	Fix issue with handling of IPv6 address and xmm7xxx modems.
 	Fix issue with default context creation with an empty APN.
