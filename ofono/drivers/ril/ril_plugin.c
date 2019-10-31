@@ -838,7 +838,7 @@ static void ril_plugin_create_modem(ril_slot *slot)
 	modem = ril_modem_create(slot->io, log_prefix, slot->path, slot->imei,
 		slot->imeisv, slot->ecclist_file, &slot->config, slot->radio,
 		slot->network, slot->sim_card, slot->data, slot->sim_settings,
-		slot->cell_info);
+		slot->vendor, slot->cell_info);
 
 	if (modem) {
 		slot->modem = modem;

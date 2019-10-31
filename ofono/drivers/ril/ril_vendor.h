@@ -39,6 +39,12 @@ struct ril_vendor_driver {
 				const struct ril_slot_config *cfg);
 };
 
+struct ril_vendor_signal_strength {
+	gint32 gsm;   /* (0-31, 99) per TS 27.007 8.5  */
+	gint32 lte;   /* (0-31, 99) per TS 27.007 8.5 */
+	gint32 qdbm;  /* 4*dBm, 0 if none */
+};
+
 const struct ril_vendor_driver *ril_vendor_find_driver(const char *name);
 struct ril_vendor *ril_vendor_create
 		(const struct ril_vendor_driver *vendor, GRilIoChannel *io,
@@ -64,6 +70,9 @@ GRilIoRequest *ril_vendor_data_call_req(struct ril_vendor *vendor, int tech,
 			enum ril_auth auth, const char *proto);
 gboolean ril_vendor_data_call_parse(struct ril_vendor *vendor,
 			struct ril_data_call *call, int version,
+			GRilIoParser *rilp);
+gboolean ril_vendor_signal_strength_parse(struct ril_vendor *vendor,
+			struct ril_vendor_signal_strength *signal_strength,
 			GRilIoParser *rilp);
 
 /* Put vendor driver descriptors to the "__vendor" section */

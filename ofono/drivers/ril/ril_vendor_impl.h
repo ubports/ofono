@@ -2,6 +2,7 @@
  *  oFono - Open Source Telephony - RIL-based devices
  *
  *  Copyright (C) 2019 Jolla Ltd.
+ *  Copyright (C) 2019 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -41,6 +42,9 @@ typedef struct ril_vendor_class {
 			enum ril_auth auth, const char *proto);
 	gboolean (*data_call_parse)(RilVendor *vendor,
 			struct ril_data_call *call, int version,
+			GRilIoParser *rilp);
+	gboolean (*signal_strength_parse)(RilVendor *vendor,
+			struct ril_vendor_signal_strength *signal_strength,
 			GRilIoParser *rilp);
 } RilVendorClass;
 

@@ -80,6 +80,8 @@ struct ril_mtk_flavor {
 				enum ril_auth auth, const char *proto);
 	gboolean (*data_call_parse_fn)(struct ril_data_call *call,
 				int version, GRilIoParser *rilp);
+	gboolean (*signal_strength_fn)(struct ril_vendor_signal_strength *sig,
+			GRilIoParser *rilp);
 };
 
 /* MTK specific RIL messages (actual codes differ from model to model!) */
@@ -402,6 +404,96 @@ static gboolean ril_vendor_mtk_data_call_parse(RilVendor *vendor,
 				data_call_parse(vendor, call, version, rilp);
 }
 
+static gboolean ril_vendor_mtk_signal_strength_1
+		(struct ril_vendor_signal_strength *signal, GRilIoParser *rilp)
+{
+	if (grilio_parser_bytes_remaining(rilp) == 64) {
+		gint32 rsrp = 0, rssi = 0;
+
+		/* GW_SignalStrength */
+		grilio_parser_get_int32(rilp, &signal->gsm);
+		grilio_parser_get_int32(rilp, NULL);   /* bitErrorRate */
+
+		/* CDMA_SignalStrength */
+		grilio_parser_get_int32(rilp, NULL);   /* dbm */
+		grilio_parser_get_int32(rilp, NULL);   /* ecio */
+
+		/* EVDO_SignalStrength */
+		grilio_parser_get_int32(rilp, NULL);   /* dbm */
+		grilio_parser_get_int32(rilp, NULL);   /* ecio */
+		grilio_parser_get_int32(rilp, NULL);   /* signalNoiseRatio */
+
+		/* LTE_SignalStrength */
+		grilio_parser_get_int32(rilp, &signal->lte);
+		grilio_parser_get_int32(rilp, &rsrp);  /* rsrp */
+		grilio_parser_get_int32(rilp, NULL);   /* rsrq */
+		grilio_parser_get_int32(rilp, NULL);   /* rssnr */
+		grilio_parser_get_int32(rilp, NULL);   /* cqi */
+
+		/* ???? */
+		grilio_parser_get_int32(rilp, NULL);
+		grilio_parser_get_int32(rilp, &rssi);
+		grilio_parser_get_int32(rilp, NULL);
+		grilio_parser_get_int32(rilp, NULL);
+
+		signal->qdbm = (rssi > 0 && rssi != INT_MAX) ? (-4 * rssi) :
+			(rsrp >= 44 && rsrp <= 140) ? (-4 * rsrp) : 0;
+		return TRUE;
+	}
+	return FALSE;
+}
+
+static gboolean ril_vendor_mtk_signal_strength_2
+		(struct ril_vendor_signal_strength *signal, GRilIoParser *rilp)
+{
+	if (grilio_parser_bytes_remaining(rilp) == 64) {
+		gint32 rsrp = 0, is_gsm = 0, rssi_qdbm = 0;
+
+		/* GW_SignalStrength */
+		grilio_parser_get_int32(rilp, &signal->gsm);
+		grilio_parser_get_int32(rilp, NULL);   /* bitErrorRate */
+
+		/* CDMA_SignalStrength */
+		grilio_parser_get_int32(rilp, NULL);   /* dbm */
+		grilio_parser_get_int32(rilp, NULL);   /* ecio */
+
+		/* EVDO_SignalStrength */
+		grilio_parser_get_int32(rilp, NULL);   /* dbm */
+		grilio_parser_get_int32(rilp, NULL);   /* ecio */
+		grilio_parser_get_int32(rilp, NULL);   /* signalNoiseRatio */
+
+		/* LTE_SignalStrength */
+		grilio_parser_get_int32(rilp, &signal->lte);
+		grilio_parser_get_int32(rilp, &rsrp);  /* rsrp */
+		grilio_parser_get_int32(rilp, NULL);   /* rsrq */
+		grilio_parser_get_int32(rilp, NULL);   /* rssnr */
+		grilio_parser_get_int32(rilp, NULL);   /* cqi */
+
+		/* WCDMA_SignalStrength */
+		grilio_parser_get_int32(rilp, &is_gsm);    /* isGsm */
+		grilio_parser_get_int32(rilp, &rssi_qdbm); /* rssiQdbm */
+		grilio_parser_get_int32(rilp, NULL);       /* rscpQdbm */
+		grilio_parser_get_int32(rilp, NULL);       /* Ecn0Qdbm*/
+
+		signal->qdbm = (is_gsm == 1 && rssi_qdbm < 0) ? rssi_qdbm :
+			(rsrp >= 44 && rsrp <= 140) ? (-4 * rsrp) : 0;
+		return TRUE;
+	}
+	return FALSE;
+}
+
+static gboolean ril_vendor_mtk_signal_strength_parse(RilVendor *vendor,
+			struct ril_vendor_signal_strength *signal,
+			GRilIoParser *rilp)
+{
+	const struct ril_mtk_flavor *flavor = RIL_VENDOR_MTK(vendor)->flavor;
+
+	return flavor->signal_strength_fn ?
+			flavor->signal_strength_fn(signal, rilp) :
+			RIL_VENDOR_CLASS(ril_vendor_mtk_parent_class)->
+				signal_strength_parse(vendor, signal, rilp);
+}
+
 static void ril_vendor_mtk_get_defaults(struct ril_vendor_defaults *defaults)
 {
 	/*
@@ -498,20 +590,23 @@ static void ril_vendor_mtk_class_init(RilVendorMtkClass* klass)
 	klass->set_attach_apn_req = ril_vendor_mtk_set_attach_apn_req;
 	klass->data_call_req = ril_vendor_mtk_data_call_req;
 	klass->data_call_parse = ril_vendor_mtk_data_call_parse;
+	klass->signal_strength_parse = ril_vendor_mtk_signal_strength_parse;
 }
 
 static const struct ril_mtk_flavor ril_mtk_flavor1 = {
 	.name                    = "mtk1",
 	.msg                     = &msg_mtk1,
 	.build_attach_apn_req_fn = &ril_vendor_mtk_build_attach_apn_req_1,
-	.data_call_parse_fn      = NULL
+	.data_call_parse_fn      = NULL,
+	.signal_strength_fn      = &ril_vendor_mtk_signal_strength_1
 };
 
 static const struct ril_mtk_flavor ril_mtk_flavor2 = {
 	.name                    = "mtk2",
 	.msg                     = &msg_mtk2,
 	.build_attach_apn_req_fn = &ril_vendor_mtk_build_attach_apn_req_2,
-	.data_call_parse_fn      = &ril_vendor_mtk_data_call_parse_v6
+	.data_call_parse_fn      = &ril_vendor_mtk_data_call_parse_v6,
+	.signal_strength_fn      = &ril_vendor_mtk_signal_strength_2
 };
 
 #define DEFAULT_MTK_TYPE (&ril_mtk_flavor1)
