@@ -570,8 +570,6 @@ static DBusMessage *coex_set_property(DBusConnection *conn,
 	} else {
 		return __ofono_error_invalid_args(msg);
 	}
-
-	return dbus_message_new_method_return(msg);
 }
 
 static void coex_default_agent_notify(gpointer user_data)
