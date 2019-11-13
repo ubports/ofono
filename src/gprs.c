@@ -1099,7 +1099,7 @@ static DBusMessage *pri_set_name(struct pri_context *ctx, DBusConnection *conn,
 	if (strlen(name) > MAX_CONTEXT_NAME_LENGTH)
 		return __ofono_error_invalid_format(msg);
 
-	if (ctx->name && g_str_equal(ctx->name, name))
+	if (g_str_equal(ctx->name, name))
 		return dbus_message_new_method_return(msg);
 
 	strcpy(ctx->name, name);
