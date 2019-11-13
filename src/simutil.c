@@ -1701,10 +1701,6 @@ gboolean sim_parse_umts_authenticate(const unsigned char *buffer,
 
 		break;
 	case 0xdc:
-		/* 'DC' + '0E' + AUTS(14) = 16 */
-		if (len < 16)
-			goto umts_end;
-
 		/* sync error */
 		if (buffer[1] != 0x0e)
 			goto umts_end;
