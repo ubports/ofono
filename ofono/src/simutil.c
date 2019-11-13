@@ -1419,7 +1419,7 @@ gboolean sim_parse_3g_get_response(const unsigned char *data, int len,
 	if (tlv[1] != 0x21)
 		return FALSE;
 
-	switch (tlv[0] & 0x3) {
+	switch (tlv[0] & 0x7) {
 	case 1:	/* Transparent */
 		str = 0x00;
 		break;
