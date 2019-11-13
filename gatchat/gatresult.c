@@ -231,6 +231,7 @@ gboolean g_at_result_iter_next_hexstring(GAtResultIter *iter,
 	if (line[pos] == ',') {
 		end = pos;
 		iter->buf[pos] = '\0';
+		*length = 0;
 		goto out;
 	}
 
