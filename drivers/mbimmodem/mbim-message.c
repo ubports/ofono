@@ -712,7 +712,7 @@ struct mbim_message *_mbim_message_build(const void *header,
 	msg = l_new(struct mbim_message, 1);
 
 	msg->ref_count = 1;
-	memcpy(msg->header, header, HEADER_SIZE);
+	memcpy(msg->header, header, sizeof(struct mbim_message_header));
 	msg->frags = frags;
 	msg->n_frags = n_frags;
 	msg->sealed = true;
