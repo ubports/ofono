@@ -766,6 +766,7 @@ GAtChat *at_util_open_device(struct ofono_modem *modem, const char *key,
 			g_hash_table_insert(options, tty_option, value);
 			tty_option = (gpointer) va_arg(args, const char *);
 		}
+		va_end(args);
 	}
 
 	channel = g_at_tty_open(device, options);
