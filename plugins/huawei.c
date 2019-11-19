@@ -583,9 +583,6 @@ static void modem_disconnect(gpointer user_data)
 	g_at_chat_unref(data->modem);
 	data->modem = NULL;
 
-	/* close gprs context driver */
-	ofono_gprs_context_remove(data->gc);
-
 	/* reopen modem channel */
 	data->modem = open_device(modem, "Modem", "Modem: ");
 
@@ -593,6 +590,10 @@ static void modem_disconnect(gpointer user_data)
 		DBG("Can't reopen device");
 		return;
 	}
+
+	/* close previous gprs context driver */
+	if (data->gc)
+		ofono_gprs_context_remove(data->gc);
 
 	/* configure modem channel */
 	g_at_chat_set_disconnect_function(data->modem, modem_disconnect, modem);
