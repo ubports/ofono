@@ -1,7 +1,8 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2016 Jolla Ltd.
+ *  Copyright (C) 2016-2019 Jolla Ltd.
+ *  Copyright (C) 2019 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -47,6 +48,53 @@ G_DEFINE_TYPE(RilEccList, ril_ecclist, G_TYPE_OBJECT)
 #define RIL_ECCLIST(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj),\
 	RIL_ECCLIST_TYPE, RilEccList))
 
+static char **ril_ecclist_parse(const char *content)
+{
+	char **ptr;
+	char **list = NULL;
+	guint i;
+
+	/*
+	 * Some MediaTek devices use ECC,CAT;ECC,CAT kind of syntax
+	 */
+	if (strchr(content, ';')) {
+		list = g_strsplit(content, ";", 0);
+		for (ptr = list; *ptr; ptr++) {
+			char* comma;
+
+			*ptr = g_strstrip(*ptr);
+
+			/* Strip service category */
+			comma = strchr(*ptr, ',');
+			if (comma) {
+				*comma = 0;
+			}
+		}
+	} else {
+		/* The right ECC,ECC syntax is handled here */
+		list = g_strsplit(content, ",", 0);
+		for (ptr = list; *ptr; ptr++) {
+			*ptr = g_strstrip(*ptr);
+		}
+	}
+
+	/* Sort the list */
+	gutil_strv_sort(list, TRUE);
+
+	/* Remove empty strings (those are at the beginning after sorting) */
+	while (list[0] && !list[0][0]) {
+		list = gutil_strv_remove_at(list, 0, TRUE);
+	}
+
+	/* Remove duplicates */
+	for (i = 0; list[i] && list[i+1]; i++) {
+		while (list[i+1] && !strcmp(list[i], list[i+1])) {
+			list = gutil_strv_remove_at(list, i+1, TRUE);
+		}
+	}
+	return list;
+}
+
 static char **ril_ecclist_read(struct ril_ecclist *self)
 {
 	struct ril_ecclist_priv *priv = self->priv;
@@ -58,16 +106,9 @@ static char **ril_ecclist_read(struct ril_ecclist *self)
 		GError *error = NULL;
 
 		if (g_file_get_contents(priv->path, &content, &len, &error)) {
-			char **ptr;
-
 			DBG("%s = %s", priv->name, content);
-			list = g_strsplit(content, ",", 0);
-			for (ptr = list; *ptr; ptr++) {
-				*ptr = g_strstrip(*ptr);
-			}
-
-			gutil_strv_sort(list, TRUE);
-		} else if (error) {
+			list = ril_ecclist_parse(content);
+		} else {
 			DBG("%s: %s", priv->path, GERRMSG(error));
 			g_error_free(error);
 		}
@@ -89,7 +130,8 @@ static void ril_ecclist_update(struct ril_ecclist *self)
 		DBG("%s changed", priv->name);
 		g_strfreev(self->list);
 		self->list = list;
-		g_signal_emit(self, ril_ecclist_signals[SIGNAL_LIST_CHANGED], 0);
+		g_signal_emit(self, ril_ecclist_signals
+					[SIGNAL_LIST_CHANGED], 0);
 	} else {
 		g_strfreev(list);
 	}
@@ -121,10 +163,9 @@ static void ril_ecclist_dir_changed(GUtilInotifyWatch *watch, guint mask,
 		priv->file_watch = gutil_inotify_watch_callback_new(priv->path,
 					IN_MODIFY | IN_CLOSE_WRITE,
 					ril_ecclist_changed, self);
-		if (priv->file_watch) {
-			DBG("watching %s", priv->path);
-			ril_ecclist_update(self);
-		}
+		DBG("%swatching %s", priv->file_watch ? "" : "not ",
+								priv->path);
+		ril_ecclist_update(self);
 	}
 
 	if (mask & IN_IGNORED) {
