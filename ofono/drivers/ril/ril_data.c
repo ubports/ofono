@@ -434,7 +434,7 @@ static gboolean ril_data_call_list_equal(const struct ril_data_call_list *l1,
 	if (!l1 && !l2) {
 		return TRUE;
 	} else if (l1 && l2) {
-		if (l1->version == l1->version && l1->num == l2->num) {
+		if (l1->version == l2->version && l1->num == l2->num) {
 			GSList *p1 = l1->calls;
 			GSList *p2 = l2->calls;
 
