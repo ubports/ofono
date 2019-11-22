@@ -23,6 +23,7 @@ TESTS="\
  test-watch \
  test-ril_util \
  test-ril_config \
+ test-ril_ecclist \
  test-ril-transport \
  test-ril_vendor \
  test-sms-filter \
