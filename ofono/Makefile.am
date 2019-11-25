@@ -1062,6 +1062,13 @@ unit_test_ril_config_LDADD = @GLIB_LIBS@ -ldl
 unit_objects += $(unit_test_ril_config_OBJECTS)
 unit_tests += unit/test-ril_config
 
+unit_test_ril_ecclist_SOURCES = unit/test-ril_ecclist.c \
+				drivers/ril/ril_ecclist.c src/log.c
+unit_test_ril_ecclist_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
+unit_test_ril_ecclist_LDADD = @GLIB_LIBS@ -ldl
+unit_objects += $(unit_test_ril_ecclist_OBJECTS)
+unit_tests += unit/test-ril_ecclist
+
 unit_test_ril_util_SOURCES = unit/test-ril_util.c drivers/ril/ril_util.c \
 				src/log.c
 unit_test_ril_util_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
