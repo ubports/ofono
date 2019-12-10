@@ -223,22 +223,10 @@ static gboolean gprs_context_string_to_type(const char *str,
 	return FALSE;
 }
 
-static gboolean assign_context(struct pri_context *ctx, unsigned int use_cid)
+static struct ofono_gprs_context *find_avail_gprs_context(
+							struct pri_context *ctx)
 {
-	struct l_uintset *used_cids = ctx->gprs->used_cids;
 	GSList *l;
-
-	if (used_cids == NULL)
-		return FALSE;
-
-	if (!use_cid)
-		use_cid = l_uintset_find_unused_min(used_cids);
-
-	if (use_cid > l_uintset_get_max(used_cids))
-		return FALSE;
-
-	l_uintset_put(used_cids, use_cid);
-	ctx->context.cid = use_cid;
 
 	for (l = ctx->gprs->context_drivers; l; l = l->next) {
 		struct ofono_gprs_context *gc = l->data;
@@ -257,24 +245,45 @@ static gboolean assign_context(struct pri_context *ctx, unsigned int use_cid)
 				gc->type != ctx->type)
 			continue;
 
-		ctx->context_driver = gc;
-		ctx->context_driver->inuse = TRUE;
-
-		if (ctx->context.proto == OFONO_GPRS_PROTO_IPV4V6 ||
-				ctx->context.proto == OFONO_GPRS_PROTO_IP)
-			gc->settings->ipv4 = g_new0(struct ipv4_settings, 1);
-
-		if (ctx->context.proto == OFONO_GPRS_PROTO_IPV4V6 ||
-				ctx->context.proto == OFONO_GPRS_PROTO_IPV6)
-			gc->settings->ipv6 = g_new0(struct ipv6_settings, 1);
-
-		return TRUE;
+		return gc;
 	}
 
-	l_uintset_take(used_cids, ctx->context.cid);
-	ctx->context.cid = 0;
+	return NULL;
+}
 
-	return FALSE;
+static gboolean assign_context(struct pri_context *ctx, unsigned int use_cid)
+{
+	struct l_uintset *used_cids = ctx->gprs->used_cids;
+	struct ofono_gprs_context *gc;
+
+	if (used_cids == NULL)
+		return FALSE;
+
+	if (!use_cid)
+		use_cid = l_uintset_find_unused_min(used_cids);
+
+	if (use_cid > l_uintset_get_max(used_cids))
+		return FALSE;
+
+	gc = find_avail_gprs_context(ctx);
+	if (gc == NULL)
+		return FALSE;
+
+	l_uintset_put(used_cids, use_cid);
+	ctx->context.cid = use_cid;
+
+	ctx->context_driver = gc;
+	ctx->context_driver->inuse = TRUE;
+
+	if (ctx->context.proto == OFONO_GPRS_PROTO_IPV4V6 ||
+			ctx->context.proto == OFONO_GPRS_PROTO_IP)
+		gc->settings->ipv4 = g_new0(struct ipv4_settings, 1);
+
+	if (ctx->context.proto == OFONO_GPRS_PROTO_IPV4V6 ||
+			ctx->context.proto == OFONO_GPRS_PROTO_IPV6)
+		gc->settings->ipv6 = g_new0(struct ipv6_settings, 1);
+
+	return TRUE;
 }
 
 static void release_context(struct pri_context *ctx)
@@ -2032,7 +2041,6 @@ void ofono_gprs_cid_activated(struct ofono_gprs  *gprs, unsigned int cid,
 
 	if (assign_context(pri_ctx, cid) == FALSE) {
 		ofono_warn("Can't assign context to driver for APN.");
-		release_context(pri_ctx);
 		return;
 	}
 
