@@ -2738,14 +2738,15 @@ void ofono_gprs_context_deactivated(struct ofono_gprs_context *gc,
 					unsigned int cid)
 {
 	DBusConnection *conn = ofono_dbus_get_connection();
+	struct ofono_gprs *gprs = gc->gprs;
 	GSList *l;
 	struct pri_context *ctx;
 	dbus_bool_t value;
 
-	if (gc->gprs == NULL)
+	if (gprs == NULL)
 		return;
 
-	for (l = gc->gprs->contexts; l; l = l->next) {
+	for (l = gprs->contexts; l; l = l->next) {
 		ctx = l->data;
 
 		if (ctx->context.cid != cid)
@@ -2767,10 +2768,13 @@ void ofono_gprs_context_deactivated(struct ofono_gprs_context *gc,
 	 * If "Attached" property was about to be signalled as TRUE but there
 	 * were still active contexts, try again to signal "Attached" property
 	 * to registered applications after active contexts have been released.
+	 *
+	 * "Attached" could also change to FALSE in case of LTE and getting
+	 * deactivated
 	 */
-	if (gc->gprs->flags & GPRS_FLAG_ATTACHED_UPDATE) {
-		gc->gprs->flags &= ~GPRS_FLAG_ATTACHED_UPDATE;
-		gprs_attached_update(gc->gprs);
+	if (on_lte(gprs) || gprs->flags & GPRS_FLAG_ATTACHED_UPDATE) {
+		gprs->flags &= ~GPRS_FLAG_ATTACHED_UPDATE;
+		gprs_attached_update(gprs);
 	}
 }
 
