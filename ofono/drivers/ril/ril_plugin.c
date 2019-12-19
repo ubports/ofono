@@ -28,6 +28,7 @@
 #include "ril_devmon.h"
 #include "ril_log.h"
 
+#include "ofono.h"
 #include "sailfish_manager.h"
 
 #include <ofono/storage.h>
@@ -1884,7 +1885,7 @@ static GSList *ril_plugin_load_config(const char *path,
 	GKeyFile *file = g_key_file_new();
 	gboolean empty = FALSE;
 
-	ril_config_merge_files(file, path);
+	config_merge_files(file, path);
 	if (ril_config_get_boolean(file, RILCONF_SETTINGS_GROUP,
 				RILCONF_SETTINGS_EMPTY, &empty) && empty) {
 		DBG("Empty config");

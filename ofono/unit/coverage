@@ -20,6 +20,7 @@ TESTS="\
  test-dbus-access \
  test-gprs-filter \
  test-provision \
+ test-config \
  test-watch \
  test-ril_util \
  test-ril_config \
