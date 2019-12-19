@@ -106,8 +106,8 @@ struct xmm7xxx_data {
 	GAtChat *chat;		/* AT chat */
 	struct ofono_sim *sim;
 	ofono_bool_t have_sim;
-	ofono_bool_t sms_phonebook_added;
 	unsigned int netreg_watch;
+	int xsim_status;
 };
 
 /* Coex Implementation */
@@ -980,10 +980,10 @@ static void switch_sim_state_status(struct ofono_modem *modem, int status)
 		if (data->have_sim == TRUE) {
 			ofono_sim_inserted_notify(data->sim, FALSE);
 			data->have_sim = FALSE;
-			data->sms_phonebook_added = FALSE;
 		}
 		break;
 	case 1: /* SIM inserted, PIN verification needed */
+	case 4: /* SIM inserted, PUK verification needed */
 		if (data->have_sim == FALSE) {
 			ofono_sim_inserted_notify(data->sim, TRUE);
 			data->have_sim = TRUE;
@@ -991,30 +991,26 @@ static void switch_sim_state_status(struct ofono_modem *modem, int status)
 		break;
 	case 2:	/* SIM inserted, PIN verification not needed - READY */
 	case 3:	/* SIM inserted, PIN verified - READY */
-	case 7: /* SIM inserted, SMS and phonebook - READY */
+	case 7: /* SIM inserted, Ready for ATTACH - READY */
 		if (data->have_sim == FALSE) {
 			ofono_sim_inserted_notify(data->sim, TRUE);
 			data->have_sim = TRUE;
 		}
 
 		ofono_sim_initialized_notify(data->sim);
-
-		if (data->sms_phonebook_added == FALSE) {
-			ofono_phonebook_create(modem, 0, "atmodem", data->chat);
-			ofono_sms_create(modem, 0, "atmodem", data->chat);
-			data->sms_phonebook_added = TRUE;
-		}
-
 		break;
 	default:
 		ofono_warn("Unknown SIM state %d received", status);
 		break;
 	}
+
+	data->xsim_status = status;
 }
 
 static void xsimstate_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_modem *modem = user_data;
+	struct xmm7xxx_data *data = ofono_modem_get_data(modem);
 	int status;
 	GAtResultIter iter;
 
@@ -1029,7 +1025,8 @@ static void xsimstate_notify(GAtResult *result, gpointer user_data)
 
 	DBG("status=%d\n", status);
 
-	switch_sim_state_status(modem, status);
+	if (data->xsim_status != status)
+		switch_sim_state_status(modem, status);
 }
 
 static void xsimstate_query_cb(gboolean ok, GAtResult *result,
@@ -1083,7 +1080,7 @@ static void cfun_enable_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	g_at_chat_send(data->chat, "AT&C0", NULL, NULL, NULL, NULL);
 
 	data->have_sim = FALSE;
-	data->sms_phonebook_added = FALSE;
+	data->xsim_status = -1;
 
 	ofono_modem_set_powered(modem, TRUE);
 
@@ -1238,6 +1235,9 @@ static void xmm7xxx_post_online(struct ofono_modem *modem)
 	const char *interface = NULL;
 
 	DBG("%p", modem);
+
+	ofono_phonebook_create(modem, 0, "atmodem", data->chat);
+	ofono_sms_create(modem, 0, "atmodem", data->chat);
 
 	ofono_netreg_create(modem, OFONO_VENDOR_IFX, "atmodem", data->chat);
 
