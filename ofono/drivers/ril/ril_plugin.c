@@ -28,7 +28,8 @@
 #include "ril_devmon.h"
 #include "ril_log.h"
 
-#include <ofono/sailfish_manager.h>
+#include "sailfish_manager.h"
+
 #include <ofono/watch.h>
 
 #include <grilio_transport.h>

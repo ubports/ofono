@@ -32,11 +32,6 @@ pkginclude_HEADERS = include/log.h include/plugin.h include/history.h \
 
 nodist_pkginclude_HEADERS = include/version.h
 
-if SAILFISH_MANAGER
-nodist_pkginclude_HEADERS += include/sailfish_cell_info.h \
-			include/sailfish_manager.h
-endif
-
 local_headers = $(foreach file,$(pkginclude_HEADERS) \
 				$(nodist_pkginclude_HEADERS), \
 					include/ofono/$(notdir $(file)))
@@ -808,7 +803,8 @@ AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ $(builtin_cflags) \
 
 AM_CPPFLAGS = -I$(builddir)/include -I$(builddir)/src -I$(srcdir)/src \
 			-I$(srcdir)/gdbus -I$(srcdir)/gisi -I$(srcdir)/gatchat \
-			-I$(srcdir)/btio -I$(srcdir)/gril
+			-I$(srcdir)/btio -I$(srcdir)/gril \
+			-I$(srcdir)/plugins/sailfish_manager
 
 doc_files = doc/overview.txt doc/ofono-paper.txt doc/release-faq.txt \
 		doc/manager-api.txt doc/modem-api.txt doc/network-api.txt \
