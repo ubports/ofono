@@ -3,6 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2015-2019  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -36,10 +37,19 @@
 #include <glib.h>
 
 #include "storage.h"
+#include "ofono.h"
+
+static char* config_dir = NULL;
+
+void __ofono_set_config_dir(const char *dir)
+{
+	g_free(config_dir);
+	config_dir = g_strdup(dir);
+}
 
 const char *ofono_config_dir(void)
 {
-	return CONFIGDIR;
+	return config_dir ? config_dir : CONFIGDIR;
 }
 
 const char *ofono_storage_dir(void)

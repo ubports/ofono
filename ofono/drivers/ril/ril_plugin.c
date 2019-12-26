@@ -30,6 +30,7 @@
 
 #include "sailfish_manager.h"
 
+#include <ofono/storage.h>
 #include <ofono/watch.h>
 
 #include <grilio_transport.h>
@@ -62,7 +63,7 @@
 
 #define RIL_SUB_SIZE                4
 
-#define RILMODEM_CONF_FILE          CONFIGDIR "/ril_subscription.conf"
+#define RILMODEM_CONF_FILE          "ril_subscription.conf"
 #define RILMODEM_DEFAULT_IDENTITY   "radio:radio"
 #define RILMODEM_DEFAULT_SOCK       "/dev/socket/rild"
 #define RILMODEM_DEFAULT_SOCK2      "/dev/socket/rild2"
@@ -2069,12 +2070,15 @@ static guint ril_plugin_manager_start(ril_plugin *plugin)
 {
 	struct ril_plugin_settings *ps = &plugin->settings;
 	guint start_timeout = 0;
+	char* config_file = g_build_filename(ofono_config_dir(),
+						RILMODEM_CONF_FILE, NULL);
 
 	DBG("");
 	GASSERT(!plugin->start_timeout_id);
-	plugin->slots = ril_plugin_load_config(RILMODEM_CONF_FILE, ps);
+	plugin->slots = ril_plugin_load_config(config_file, ps);
 	plugin->data_manager = ril_data_manager_new(ps->dm_flags);
 	ril_plugin_init_slots(plugin);
+	g_free(config_file);
 
 	ofono_modem_driver_register(&ril_modem_driver);
 	ofono_sim_driver_register(&ril_sim_driver);

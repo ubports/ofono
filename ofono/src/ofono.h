@@ -684,3 +684,5 @@ int mnclength(int mcc, int mnc);
 #include <ofono/netmon.h>
 #include <ofono/lte.h>
 #include <ofono/ims.h>
+
+void __ofono_set_config_dir(const char *dir);
