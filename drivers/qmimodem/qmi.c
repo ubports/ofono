@@ -477,7 +477,8 @@ static const char *__error_to_string(uint16_t error)
 	return NULL;
 }
 
-int qmi_error_to_ofono_cme(int qmi_error) {
+int qmi_error_to_ofono_cme(int qmi_error)
+{
 	switch (qmi_error) {
 	case 0x0019:
 		return 4; /* Not Supported */
@@ -1209,10 +1210,10 @@ static void discover_callback(uint16_t message, uint16_t length,
 
 		if (name)
 			__debug_device(device, "found service [%s %d.%d]",
-				       name, major, minor);
+					name, major, minor);
 		else
 			__debug_device(device, "found service [%d %d.%d]",
-				       type, major, minor);
+					type, major, minor);
 
 		if (type == QMI_SERVICE_CONTROL) {
 			device->control_major = major;

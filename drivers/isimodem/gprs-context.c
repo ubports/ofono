@@ -544,7 +544,7 @@ static void isi_gprs_activate_primary(struct ofono_gprs_context *gc,
 		strncpy(cd->username, ctx->username, GPDS_MAX_USERNAME_LENGTH);
 		cd->username[GPDS_MAX_USERNAME_LENGTH] = '\0';
 		strncpy(cd->password, ctx->password, GPDS_MAX_PASSWORD_LENGTH);
-		cd->username[GPDS_MAX_PASSWORD_LENGTH] = '\0';
+		cd->password[GPDS_MAX_PASSWORD_LENGTH] = '\0';
 	}
 
 	cd->pep = g_isi_pep_create(cd->idx, NULL, NULL);

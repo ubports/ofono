@@ -289,37 +289,35 @@ static void at_gprs_activate_primary(struct ofono_gprs_context *gc,
 
 	len = snprintf(buf, sizeof(buf), "AT+CGDCONT=%u,\"IP\"", ctx->cid);
 
-	if (ctx->apn) {
-		switch (gcd->vendor) {
-		case OFONO_VENDOR_UBLOX:
-			/*
-			 * U-blox modems require a magic prefix to the APN to
-			 * specify the authentication method to use in the
-			 * network.  See UBX-13002752 - R21.
-			 *
-			 * As the response of the read command omits this magic
-			 * prefix, this is the least invasive place to set it.
-			 */
-			switch (ctx->auth_method) {
-			case OFONO_GPRS_AUTH_METHOD_CHAP:
-				snprintf(buf + len, sizeof(buf) - len - 3,
-						",\"CHAP:%s\"", ctx->apn);
-				break;
-			case OFONO_GPRS_AUTH_METHOD_PAP:
-				snprintf(buf + len, sizeof(buf) - len - 3,
-						",\"PAP:%s\"", ctx->apn);
-				break;
-			case OFONO_GPRS_AUTH_METHOD_NONE:
-				snprintf(buf + len, sizeof(buf) - len - 3,
-						",\"%s\"", ctx->apn);
-				break;
-			}
+	switch (gcd->vendor) {
+	case OFONO_VENDOR_UBLOX:
+		/*
+		 * U-blox modems require a magic prefix to the APN to
+		 * specify the authentication method to use in the
+		 * network.  See UBX-13002752 - R21.
+		 *
+		 * As the response of the read command omits this magic
+		 * prefix, this is the least invasive place to set it.
+		 */
+		switch (ctx->auth_method) {
+		case OFONO_GPRS_AUTH_METHOD_CHAP:
+			snprintf(buf + len, sizeof(buf) - len - 3,
+					",\"CHAP:%s\"", ctx->apn);
 			break;
-		default:
-			snprintf(buf + len, sizeof(buf) - len - 3, ",\"%s\"",
-					ctx->apn);
+		case OFONO_GPRS_AUTH_METHOD_PAP:
+			snprintf(buf + len, sizeof(buf) - len - 3,
+					",\"PAP:%s\"", ctx->apn);
+			break;
+		case OFONO_GPRS_AUTH_METHOD_NONE:
+			snprintf(buf + len, sizeof(buf) - len - 3,
+					",\"%s\"", ctx->apn);
 			break;
 		}
+		break;
+	default:
+		snprintf(buf + len, sizeof(buf) - len - 3, ",\"%s\"",
+				ctx->apn);
+		break;
 	}
 
 	if (g_at_chat_send(gcd->chat, buf, none_prefix,
@@ -411,9 +409,11 @@ static void at_cgdata_test_cb(gboolean ok, GAtResult *result,
 		goto error;
 	}
 
-	if (!g_at_result_iter_open_list(&iter)) {
-		DBG("no list found");
-		goto error;
+	if (gcd->vendor != OFONO_VENDOR_QUECTEL_SERIAL) {
+		if (!g_at_result_iter_open_list(&iter)) {
+			DBG("no list found");
+			goto error;
+		}
 	}
 
 	while (!found && g_at_result_iter_next_string(&iter, &data_type)) {

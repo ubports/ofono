@@ -44,6 +44,9 @@ void l_timeout_modify(struct l_timeout *timeout,
 void l_timeout_modify_ms(struct l_timeout *timeout,
 				unsigned long milliseconds);
 void l_timeout_remove(struct l_timeout *timeout);
+void l_timeout_set_callback(struct l_timeout *timeout,
+				l_timeout_notify_cb_t callback, void *user_data,
+				l_timeout_destroy_cb_t destroy);
 
 #ifdef __cplusplus
 }

@@ -285,3 +285,29 @@ LIB_EXPORT void l_timeout_remove(struct l_timeout *timeout)
 
 	l_free(timeout);
 }
+
+/**
+ * l_timeout_set_callback:
+ * @timeout: timeout object
+ * @callback: The new callback
+ * @user_data: The new user_data
+ * @destroy: The new destroy function
+ *
+ * Sets the new notify callback for @timeout.  If the old user_data object had
+ * a destroy function set, then that function will be called.
+ */
+LIB_EXPORT void l_timeout_set_callback(struct l_timeout *timeout,
+					l_timeout_notify_cb_t callback,
+					void *user_data,
+					l_timeout_destroy_cb_t destroy)
+{
+	if (unlikely(!timeout))
+		return;
+
+	if (timeout->destroy)
+		timeout->destroy(timeout->user_data);
+
+	timeout->callback = callback;
+	timeout->user_data = user_data;
+	timeout->destroy = destroy;
+}

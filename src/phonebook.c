@@ -179,7 +179,7 @@ static void vcard_printf_number(GString *vcards, const char *number, int type,
 	if ((type == TYPE_INTERNATIONAL) && (number[0] != '+'))
 		intl = "+";
 
-	snprintf(buf, sizeof(buf), "TEL;TYPE=\%s%s:\%s\%s", pref,
+	snprintf(buf, sizeof(buf), "TEL;TYPE=%s%s:%s%s", pref,
 			category_string, intl, number);
 	vcard_printf(vcards, buf, number);
 }

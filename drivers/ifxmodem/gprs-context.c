@@ -29,6 +29,7 @@
 #include <errno.h>
 #include <sys/stat.h>
 
+#include <ell/ell.h>
 #include <glib.h>
 
 #include <ofono/log.h>
@@ -44,6 +45,7 @@
 #define TUN_DEV "/dev/net/tun"
 
 #define STATIC_IP_NETMASK "255.255.255.255"
+#define IPV6_DEFAULT_PREFIX_LEN 8
 
 static const char *none_prefix[] = { NULL };
 static const char *xdns_prefix[] = { "+XDNS:", NULL };
@@ -200,8 +202,8 @@ static void dns_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 		if ((unsigned int) cid == gcd->active_context) {
 			found = TRUE;
-			strncpy(gcd->dns1, dns1, sizeof(gcd->dns1));
-			strncpy(gcd->dns2, dns2, sizeof(gcd->dns2));
+			l_strlcpy(gcd->dns1, dns1, sizeof(gcd->dns1));
+			l_strlcpy(gcd->dns2, dns2, sizeof(gcd->dns2));
 		}
 	}
 
@@ -250,7 +252,7 @@ static void address_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	if (!g_at_result_iter_next_string(&iter, &address))
 		goto error;
 
-	strncpy(gcd->address, address, sizeof(gcd->address));
+	l_strlcpy(gcd->address, address, sizeof(gcd->address));
 
 	if (g_at_chat_send(gcd->chat, "AT+XDNS?", xdns_prefix,
 					dns_cb, gc, NULL) > 0)
@@ -258,6 +260,45 @@ static void address_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 error:
 	failed_setup(gc, NULL, TRUE);
+}
+
+static void cgdata_cb(gboolean ok, GAtResult *result, gpointer user_data)
+{
+	struct ofono_gprs_context *gc = user_data;
+	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
+
+	DBG("ok %d", ok);
+
+	if (!ok) {
+		ofono_error("Failed to establish session");
+		failed_setup(gc, result, TRUE);
+		return;
+	}
+
+	CALLBACK_WITH_SUCCESS(gcd->cb, gcd->cb_data);
+}
+
+static const char *get_datapath(struct ofono_modem *modem,
+						const char *interface)
+{
+	static char datapath[256];
+	char n;
+
+	if (!strcmp(interface,
+			ofono_modem_get_string(modem, "NetworkInterface")))
+		n = '0';
+	else if (!strcmp(interface,
+			ofono_modem_get_string(modem, "NetworkInterface2")))
+		n = '1';
+	else if (!strcmp(interface,
+			ofono_modem_get_string(modem, "NetworkInterface3")))
+		n = '2';
+	else
+		return NULL;
+
+	snprintf(datapath, sizeof(datapath), "%s%c",
+			ofono_modem_get_string(modem, "DataPath"), n);
+	return datapath;
 }
 
 static void cgcontrdp_cb(gboolean ok, GAtResult *result, gpointer user_data)
@@ -269,8 +310,11 @@ static void cgcontrdp_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 	const char *laddrnetmask = NULL;
 	const char *gw = NULL;
-	const char *interface;
 	const char *dns[3];
+	const char *ctrlpath;
+	const char *datapath;
+	char buf[512];
+	const char *interface;
 
 	DBG("ok %d", ok);
 
@@ -304,20 +348,51 @@ static void cgcontrdp_cb(gboolean ok, GAtResult *result, gpointer user_data)
 			break;
 	}
 
-	strncpy(gcd->dns1, dns[0], sizeof(gcd->dns1));
-	strncpy(gcd->dns2, dns[1], sizeof(gcd->dns2));
+	l_strlcpy(gcd->dns1, dns[0], sizeof(gcd->dns1));
+	l_strlcpy(gcd->dns2, dns[1], sizeof(gcd->dns2));
 	dns[2] = 0;
 
 	DBG("DNS: %s, %s\n", gcd->dns1, gcd->dns2);
 
-	if (!laddrnetmask || at_util_get_ipv4_address_and_netmask(laddrnetmask,
+	if (gw)
+		l_strlcpy(gcd->gateway, gw, sizeof(gcd->gateway));
+
+	if (gcd->proto == OFONO_GPRS_PROTO_IP) {
+		if (!laddrnetmask ||
+			at_util_get_ipv4_address_and_netmask(laddrnetmask,
 					gcd->address, gcd->netmask) < 0) {
-		failed_setup(gc, NULL, TRUE);
-		return;
+			failed_setup(gc, NULL, TRUE);
+			return;
+		}
+
+		ofono_gprs_context_set_ipv4_address(gc, gcd->address, TRUE);
+
+		if (gcd->netmask[0])
+			ofono_gprs_context_set_ipv4_netmask(gc, gcd->netmask);
+
+		if (gcd->gateway[0])
+			ofono_gprs_context_set_ipv4_gateway(gc, gcd->gateway);
+
+		ofono_gprs_context_set_ipv4_dns_servers(gc, dns);
 	}
 
-	if (gw)
-		strncpy(gcd->gateway, gw, sizeof(gcd->gateway));
+	if (gcd->proto == OFONO_GPRS_PROTO_IPV6) {
+		if (!laddrnetmask ||
+			at_util_get_ipv6_address_and_netmask(laddrnetmask,
+					gcd->address, gcd->netmask) < 0) {
+			failed_setup(gc, NULL, TRUE);
+			return;
+		}
+
+		ofono_gprs_context_set_ipv6_address(gc, gcd->address);
+
+		if (gcd->gateway[0])
+			ofono_gprs_context_set_ipv6_gateway(gc, gcd->gateway);
+
+		ofono_gprs_context_set_ipv6_dns_servers(gc, dns);
+		ofono_gprs_context_set_ipv6_prefix_length(gc,
+						IPV6_DEFAULT_PREFIX_LEN);
+	}
 
 	gcd->state = STATE_ACTIVE;
 
@@ -327,20 +402,21 @@ static void cgcontrdp_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	DBG("DNS2: %s\n", gcd->dns2);
 	DBG("Gateway: %s\n", gcd->gateway);
 
-	interface = ofono_modem_get_string(modem, "NetworkInterface");
+	ctrlpath = ofono_modem_get_string(modem, "CtrlPath");
+	interface = ofono_gprs_context_get_interface(gc);
+	datapath = get_datapath(modem, interface);
 
-	ofono_gprs_context_set_interface(gc, interface);
-	ofono_gprs_context_set_ipv4_address(gc, gcd->address, TRUE);
+	snprintf(buf, sizeof(buf), "AT+XDATACHANNEL=1,1,\"%s\",\"%s\",0,%u",
+			ctrlpath, datapath, gcd->active_context);
+	g_at_chat_send(gcd->chat, buf, none_prefix, NULL, NULL, NULL);
+	snprintf(buf, sizeof(buf), "AT+CGDATA=\"M-RAW_IP\",%u",
+			gcd->active_context);
 
-	if (gcd->netmask[0])
-		ofono_gprs_context_set_ipv4_netmask(gc, gcd->netmask);
+	if (g_at_chat_send(gcd->chat, buf, none_prefix, cgdata_cb,
+						gc, NULL) > 0)
+		return;
 
-	if (gcd->gateway[0])
-		ofono_gprs_context_set_ipv4_gateway(gc, gcd->gateway);
-
-	ofono_gprs_context_set_ipv4_dns_servers(gc, dns);
-
-	CALLBACK_WITH_SUCCESS(gcd->cb, gcd->cb_data);
+	CALLBACK_WITH_FAILURE(gcd->cb, gcd->cb_data);
 }
 
 static void ifx_read_settings(struct ofono_gprs_context *gc)
@@ -492,9 +568,7 @@ static void ifx_gprs_activate_primary(struct ofono_gprs_context *gc,
 		break;
 	}
 
-	if (ctx->apn)
-		snprintf(buf + len, sizeof(buf) - len - 3,
-					",\"%s\"", ctx->apn);
+	snprintf(buf + len, sizeof(buf) - len - 3, ",\"%s\"", ctx->apn);
 
 	if (g_at_chat_send(gcd->chat, buf, none_prefix,
 				setup_cb, gc, NULL) > 0)

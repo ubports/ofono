@@ -131,6 +131,10 @@ struct ofono_sim {
 	struct ofono_atom *atom;
 	unsigned int hfp_watch;
 
+	unsigned int card_slot_count;
+	unsigned int active_card_slot;
+	unsigned int pending_active_card_slot;
+
 	GSList *aid_sessions;
 	GSList *aid_list;
 	char *impi;
@@ -141,6 +145,11 @@ struct ofono_sim {
 	bool sdn_ready : 1;
 	bool initialized : 1;
 	bool wait_initialized : 1;
+};
+
+struct cached_pin {
+	char *id;
+	char *pin;
 };
 
 struct msisdn_set_request {
@@ -177,6 +186,8 @@ static const char *const passwd_name[] = {
 static void sim_own_numbers_update(struct ofono_sim *sim);
 
 static GSList *g_drivers = NULL;
+
+static GSList *cached_pins = NULL;
 
 static const char *sim_passwd_name(enum ofono_sim_password_type type)
 {
@@ -466,6 +477,13 @@ static DBusMessage *sim_get_properties(DBusConnection *conn,
 	get_pin_retries(sim, &pin_retries_dict, &dbus_retries);
 	ofono_dbus_dict_append_dict(&dict, "Retries", DBUS_TYPE_BYTE,
 							&pin_retries_dict);
+
+	ofono_dbus_dict_append(&dict, "CardSlotCount", DBUS_TYPE_UINT32,
+							&sim->card_slot_count);
+
+	ofono_dbus_dict_append(&dict, "ActiveCardSlot", DBUS_TYPE_UINT32,
+							&sim->active_card_slot);
+
 	g_free(pin_retries_dict);
 	g_free(dbus_retries);
 
@@ -473,6 +491,72 @@ done:
 	dbus_message_iter_close_container(&iter, &dict);
 
 	return reply;
+}
+
+static struct cached_pin *pin_cache_lookup(const char *iccid)
+{
+	struct cached_pin *c;
+	GSList *l;
+
+	if (cached_pins == NULL)
+		return NULL;
+
+	for (l = cached_pins; l; l = l->next) {
+		c = l->data;
+
+		if (g_strcmp0(iccid, c->id) == 0)
+			return c;
+	}
+
+	return NULL;
+}
+
+static void pin_cache_update(const char *iccid, const char *pin)
+{
+	struct cached_pin *pin_cached = pin_cache_lookup(iccid);
+	struct cached_pin *cpins;
+
+	if (pin_cached != NULL) {
+		g_free(pin_cached->pin);
+		pin_cached->pin = g_strdup(pin);
+		return;
+	}
+
+	cpins = g_new0(struct cached_pin, 1);
+
+	cpins->id = g_strdup(iccid);
+	cpins->pin = g_strdup(pin);
+	cached_pins = g_slist_prepend(cached_pins, cpins);
+}
+
+static void pin_cache_remove(const char *iccid)
+{
+	struct cached_pin *pin_cached = pin_cache_lookup(iccid);
+
+	if (pin_cached == NULL)
+		return;
+
+	cached_pins = g_slist_remove(cached_pins, pin_cached);
+
+	g_free(pin_cached->pin);
+	g_free(pin_cached->id);
+	g_free(pin_cached);
+}
+
+static void pin_cache_enter_cb(const struct ofono_error *error, void *data)
+{
+	struct ofono_sim *sim = data;
+
+	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
+		pin_cache_remove(sim->iccid);
+
+		__ofono_sim_recheck_pin(sim);
+
+		return;
+	}
+
+	sim->wait_initialized = true;
+	DBG("Waiting for ofono_sim_initialized_notify");
 }
 
 static void sim_pin_retries_query_cb(const struct ofono_error *error,
@@ -584,6 +668,36 @@ static gboolean set_own_numbers(struct ofono_sim *sim,
 	return TRUE;
 }
 
+static void sim_set_slot_callback(const struct ofono_error *error, void *data)
+{
+	struct ofono_sim *sim = data;
+	DBusConnection *conn = ofono_dbus_get_connection();
+	const char *path = __ofono_atom_get_path(sim->atom);
+	DBusMessage *reply;
+
+	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
+		DBG("Error setting radio access mode");
+
+		sim->pending_active_card_slot = sim->active_card_slot;
+
+		reply = __ofono_error_from_error(error, sim->pending);
+		__ofono_dbus_pending_reply(&sim->pending, reply);
+
+		return;
+	}
+
+	sim->active_card_slot = sim->pending_active_card_slot;
+
+	reply = dbus_message_new_method_return(sim->pending);
+	__ofono_dbus_pending_reply(&sim->pending, reply);
+
+	ofono_dbus_signal_property_changed(conn, path,
+						OFONO_SIM_MANAGER_INTERFACE,
+						"ActiveCardSlot",
+						DBUS_TYPE_UINT32,
+						&sim->active_card_slot);
+}
+
 static DBusMessage *sim_set_property(DBusConnection *conn, DBusMessage *msg,
 					void *data)
 {
@@ -651,6 +765,37 @@ error:
 
 		if (set_ok)
 			return NULL;
+	} else if (!strcmp(name, "ActiveCardSlot")) {
+		dbus_uint32_t value;
+
+		dbus_message_iter_next(&iter);
+
+		if (sim->driver->set_active_card_slot == NULL)
+			return __ofono_error_not_implemented(msg);
+
+		if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_VARIANT)
+			return __ofono_error_invalid_args(msg);
+
+		dbus_message_iter_recurse(&iter, &var);
+
+		if (dbus_message_iter_get_arg_type(&var) != DBUS_TYPE_UINT32)
+			return __ofono_error_invalid_args(msg);
+
+		dbus_message_iter_get_basic(&var, &value);
+
+		if (value <= 0 || value > sim->card_slot_count)
+			return __ofono_error_invalid_args(msg);
+
+		if (sim->active_card_slot == value)
+			return dbus_message_new_method_return(msg);
+
+		sim->pending = dbus_message_ref(msg);
+		sim->pending_active_card_slot = value;
+
+		sim->driver->set_active_card_slot(sim, value - 1,
+							sim_set_slot_callback,
+							sim);
+		return NULL;
 	}
 
 	return __ofono_error_invalid_args(msg);
@@ -683,6 +828,11 @@ static void sim_locked_cb(struct ofono_sim *sim, gboolean locked)
 						OFONO_SIM_MANAGER_INTERFACE,
 						"LockedPins", DBUS_TYPE_STRING,
 						&locked_pins);
+
+	/* Cache pin only for SIM PIN type */
+	if (g_strcmp0(typestr, "pin") == 0)
+		pin_cache_update(sim->iccid, pin);
+
 	g_strfreev(locked_pins);
 
 	sim_pin_retries_check(sim);
@@ -778,6 +928,14 @@ static DBusMessage *sim_unlock_pin(DBusConnection *conn, DBusMessage *msg,
 static void sim_change_pin_cb(const struct ofono_error *error, void *data)
 {
 	struct ofono_sim *sim = data;
+	const char *typestr;
+	const char *old;
+	const char *new;
+
+	dbus_message_get_args(sim->pending, NULL, DBUS_TYPE_STRING, &typestr,
+					DBUS_TYPE_STRING, &old,
+					DBUS_TYPE_STRING, &new,
+					DBUS_TYPE_INVALID);
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
 		__ofono_dbus_pending_reply(&sim->pending,
@@ -787,6 +945,10 @@ static void sim_change_pin_cb(const struct ofono_error *error, void *data)
 
 		return;
 	}
+
+	/* Cache pin only for SIM PIN type */
+	if (g_strcmp0(typestr, "pin") == 0)
+		pin_cache_update(sim->iccid, new);
 
 	__ofono_dbus_pending_reply(&sim->pending,
 				dbus_message_new_method_return(sim->pending));
@@ -839,7 +1001,13 @@ static DBusMessage *sim_change_pin(DBusConnection *conn, DBusMessage *msg,
 static void sim_enter_pin_cb(const struct ofono_error *error, void *data)
 {
 	struct ofono_sim *sim = data;
+	const char *typestr;
+	const char *pin;
 	DBusMessage *reply;
+
+	dbus_message_get_args(sim->pending, NULL, DBUS_TYPE_STRING, &typestr,
+					DBUS_TYPE_STRING, &pin,
+					DBUS_TYPE_INVALID);
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR)
 		reply = __ofono_error_failed(sim->pending);
@@ -851,6 +1019,10 @@ static void sim_enter_pin_cb(const struct ofono_error *error, void *data)
 	/* If PIN entry fails, then recheck the PIN type */
 	if (sim->initialized || error->type != OFONO_ERROR_TYPE_NO_ERROR)
 		goto recheck;
+
+	/* Cache pin only for SIM PIN type */
+	if (g_strcmp0(typestr, "pin") == 0)
+		pin_cache_update(sim->iccid, pin);
 
 	if (sim->pin_type == OFONO_SIM_PASSWORD_SIM_PIN ||
 			sim->pin_type == OFONO_SIM_PASSWORD_SIM_PUK) {
@@ -2292,10 +2464,12 @@ struct ofono_sim_context *ofono_sim_context_create(struct ofono_sim *sim)
 struct ofono_sim_context *ofono_sim_context_create_isim(
 		struct ofono_sim *sim)
 {
-	GSList *iter = sim->aid_sessions;
+	GSList *iter;
 
 	if (sim == NULL || sim->simfs_isim == NULL)
 		return NULL;
+
+	iter = sim->aid_sessions;
 
 	/* Find the AID */
 	while (iter) {
@@ -2751,6 +2925,8 @@ void ofono_sim_inserted_notify(struct ofono_sim *sim, ofono_bool_t inserted)
 		sim->pin_retries[OFONO_SIM_PASSWORD_SIM_PIN2] = -1;
 		sim->pin_retries[OFONO_SIM_PASSWORD_SIM_PUK2] = -1;
 
+		pin_cache_remove(sim->iccid);
+
 		sim_free_state(sim);
 	}
 }
@@ -3024,7 +3200,8 @@ static void sim_pin_query_cb(const struct ofono_error *error,
 	struct ofono_sim *sim = data;
 	DBusConnection *conn = ofono_dbus_get_connection();
 	const char *path = __ofono_atom_get_path(sim->atom);
-	const char *pin_name;
+	struct cached_pin *cpins = pin_cache_lookup(sim->iccid);
+	const char *pin_name = sim_passwd_name(pin_type);
 	char **locked_pins;
 	gboolean lock_changed;
 
@@ -3037,7 +3214,6 @@ static void sim_pin_query_cb(const struct ofono_error *error,
 
 	if (sim->pin_type != pin_type) {
 		sim->pin_type = pin_type;
-		pin_name = sim_passwd_name(pin_type);
 
 		if (pin_type != OFONO_SIM_PASSWORD_NONE &&
 				password_is_pin(pin_type) == FALSE)
@@ -3067,6 +3243,10 @@ static void sim_pin_query_cb(const struct ofono_error *error,
 						"PinRequired", DBUS_TYPE_STRING,
 						&pin_name);
 	}
+
+	if (g_strcmp0(pin_name, "pin") == 0 && cpins != NULL)
+		sim->driver->send_passwd(sim, cpins->pin,
+						pin_cache_enter_cb, sim);
 
 	switch (pin_type) {
 	case OFONO_SIM_PASSWORD_NONE:
@@ -3205,6 +3385,9 @@ struct ofono_sim *ofono_sim_create(struct ofono_modem *modem,
 	for (i = 0; i < OFONO_SIM_PASSWORD_INVALID; i++)
 		sim->pin_retries[i] = -1;
 
+	sim->active_card_slot = 1;
+	sim->card_slot_count = 1;
+
 	for (l = g_drivers; l; l = l->next) {
 		const struct ofono_sim_driver *drv = l->data;
 
@@ -3299,6 +3482,14 @@ void ofono_sim_register(struct ofono_sim *sim)
 					emulator_hfp_watch, sim, NULL);
 
 	__ofono_atom_register(sim->atom, sim_unregister);
+}
+
+void __ofono_sim_clear_cached_pins(struct ofono_sim *sim)
+{
+	if (cached_pins == NULL)
+		return;
+
+	pin_cache_remove(sim->iccid);
 }
 
 void ofono_sim_remove(struct ofono_sim *sim)
@@ -3688,4 +3879,16 @@ int ofono_sim_logical_access(struct ofono_sim *sim, int session_id,
 	sim->driver->logical_access(sim, session_id, pdu, len, cb, data);
 
 	return 0;
+}
+
+void ofono_sim_set_card_slot_count(struct ofono_sim *sim, unsigned int val)
+{
+	if (sim)
+		sim->card_slot_count = val;
+}
+
+void ofono_sim_set_active_card_slot(struct ofono_sim *sim, unsigned int val)
+{
+	if (sim)
+		sim->active_card_slot = val;
 }

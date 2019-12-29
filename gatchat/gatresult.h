@@ -22,6 +22,8 @@
 #ifndef __GATCHAT_RESULT_H
 #define __GATCHAT_RESULT_H
 
+#include <glib.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif

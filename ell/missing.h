@@ -54,3 +54,11 @@
 #    define __NR_getrandom 0xffffffff
 #  endif
 #endif
+
+#ifndef HAVE_EXPLICIT_BZERO
+static inline void explicit_bzero(void *s, size_t n)
+{
+	memset(s, 0, n);
+	__asm__ __volatile__ ("" : : "r"(s) : "memory");
+}
+#endif

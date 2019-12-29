@@ -2,7 +2,7 @@
  *
  *  Embedded Linux library
  *
- *  Copyright (C) 2015  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2015-2019  Intel Corporation. All rights reserved.
  *
  *  This library is free software; you can redistribute it and/or
  *  modify it under the terms of the GNU Lesser General Public
@@ -31,6 +31,8 @@ extern "C" {
 #include <stddef.h>
 #include <stdbool.h>
 
+typedef void (*l_uintset_foreach_func_t) (uint32_t number, void *user_data);
+
 struct l_uintset;
 
 struct l_uintset *l_uintset_new_from_range(uint32_t min, uint32_t max);
@@ -49,6 +51,13 @@ uint32_t l_uintset_find_min(struct l_uintset *set);
 
 uint32_t l_uintset_find_unused_min(struct l_uintset *set);
 uint32_t l_uintset_find_unused(struct l_uintset *set, uint32_t start);
+
+void l_uintset_foreach(struct l_uintset *set,
+			l_uintset_foreach_func_t function, void *user_data);
+
+struct l_uintset *l_uintset_intersect(const struct l_uintset *set_a,
+						const struct l_uintset *set_b);
+bool l_uintset_isempty(const struct l_uintset *set);
 
 #ifdef __cplusplus
 }

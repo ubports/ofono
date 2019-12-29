@@ -231,6 +231,7 @@ static gboolean received_data(GIOChannel *channel, GIOCondition cond,
 	int i;
 	GIOStatus status;
 	gsize bytes_read;
+	gboolean buffer_full = FALSE;
 
 	if (cond & G_IO_NVAL)
 		return FALSE;
@@ -255,6 +256,8 @@ static gboolean received_data(GIOChannel *channel, GIOCondition cond,
 		if (mux->buf_used > 0)
 			memmove(mux->buf, mux->buf + nread, mux->buf_used);
 
+		g_at_mux_ref(mux);
+
 		for (i = 1; i <= MAX_CHANNELS; i++) {
 			int offset = i / 8;
 			int bit = i % 8;
@@ -267,6 +270,10 @@ static gboolean received_data(GIOChannel *channel, GIOCondition cond,
 
 			dispatch_sources(mux->dlcs[i-1], G_IO_IN);
 		}
+
+		buffer_full = mux->buf_used == sizeof(mux->buf);
+
+		g_at_mux_unref(mux);
 	}
 
 	if (cond & (G_IO_HUP | G_IO_ERR))
@@ -275,7 +282,7 @@ static gboolean received_data(GIOChannel *channel, GIOCondition cond,
 	if (status != G_IO_STATUS_NORMAL && status != G_IO_STATUS_AGAIN)
 		return FALSE;
 
-	if (mux->buf_used == sizeof(mux->buf))
+	if (buffer_full)
 		return FALSE;
 
 	return TRUE;
@@ -646,13 +653,6 @@ void g_at_mux_unref(GAtMux *mux)
 	}
 }
 
-static void read_watcher_destroy_notify(gpointer user_data)
-{
-	GAtMux *mux = user_data;
-
-	mux->read_watch = 0;
-}
-
 gboolean g_at_mux_start(GAtMux *mux)
 {
 	if (mux->channel == NULL)
@@ -666,8 +666,7 @@ gboolean g_at_mux_start(GAtMux *mux)
 
 	mux->read_watch = g_io_add_watch_full(mux->channel, G_PRIORITY_DEFAULT,
 				G_IO_IN | G_IO_HUP | G_IO_ERR | G_IO_NVAL,
-						received_data, mux,
-						read_watcher_destroy_notify);
+						received_data, mux, NULL);
 
 	mux->shutdown = FALSE;
 
@@ -684,8 +683,10 @@ gboolean g_at_mux_shutdown(GAtMux *mux)
 	if (mux->channel == NULL)
 		return FALSE;
 
-	if (mux->read_watch > 0)
+	if (mux->read_watch > 0) {
 		g_source_remove(mux->read_watch);
+		mux->read_watch = 0;
+	}
 
 	if (mux->write_watch > 0)
 		g_source_remove(mux->write_watch);
@@ -952,8 +953,7 @@ gboolean g_at_mux_setup_gsm0710(GAtChat *chat,
 				mux_query_cb, msd, msd_free) > 0)
 		return TRUE;
 
-	if (msd)
-		msd_free(msd);
+	msd_free(msd);
 
 	return FALSE;
 }

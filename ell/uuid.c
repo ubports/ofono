@@ -137,7 +137,7 @@ LIB_EXPORT bool l_uuid_v5(const uint8_t nsid[16], const void *name,
 }
 
 /* RFC 4122, Section 4.4 */
-bool l_uuid_v4(uint8_t out_uuid[16])
+LIB_EXPORT bool l_uuid_v4(uint8_t out_uuid[16])
 {
 	if (unlikely(!out_uuid))
 		return false;
@@ -222,5 +222,39 @@ LIB_EXPORT bool l_uuid_to_string(const uint8_t uuid[16],
 	if (n < 0 || (size_t) n >= dest_size)
 		return false;
 
+	return true;
+}
+
+LIB_EXPORT bool l_uuid_from_string(const char *src, uint8_t uuid[16])
+{
+	uint8_t buf[16];
+	int n;
+
+	/*
+	 * textual representation: 32 hex digits + 4 group separators
+	 */
+	if (strlen(src) < 16 * 2 + 4)
+		return false;
+
+	n = sscanf(src,
+			"%02hhx%02hhx%02hhx%02hhx-"
+			"%02hhx%02hhx-"
+			"%02hhx%02hhx-"
+			"%02hhx%02hhx-"
+			"%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx",
+			&buf[0], &buf[1], &buf[2], &buf[3],
+			&buf[4], &buf[5],
+			&buf[6], &buf[7],
+			&buf[8], &buf[9],
+			&buf[10], &buf[11], &buf[12],
+			&buf[13], &buf[14], &buf[15]);
+
+	if (n != 16)
+		return false;
+
+	if (!l_uuid_is_valid(buf))
+		return false;
+
+	memcpy(uuid, buf, sizeof(buf));
 	return true;
 }

@@ -421,7 +421,7 @@ static int receive_header(struct mbim_device *device, int fd)
 {
 	size_t to_read = sizeof(struct mbim_message_header) -
 							device->header_offset;
-	ssize_t len = TEMP_FAILURE_RETRY(read(fd,
+	ssize_t len = L_TFR(read(fd,
 					device->header + device->header_offset,
 					to_read));
 
@@ -485,7 +485,7 @@ static bool command_write_handler(struct l_io *io, void *user_data)
 			pos += body[i].iov_len;
 		}
 
-		written = TEMP_FAILURE_RETRY(write(fd, buf, pos));
+		written = L_TFR(write(fd, buf, pos));
 
 		l_info("n_iov: %zu, %zu", n_iov + 1, (size_t) written);
 
@@ -656,7 +656,7 @@ static bool command_read_handler(struct l_io *io, void *user_data)
 				(header_size - device->header_offset);
 	n_iov += 1;
 
-	len = TEMP_FAILURE_RETRY(readv(fd, iov, n_iov));
+	len = L_TFR(readv(fd, iov, n_iov));
 	if (len < 0) {
 		if (errno == EAGAIN)
 			return true;
@@ -717,7 +717,7 @@ static bool open_write_handler(struct l_io *io, void *user_data)
 
 	fd = l_io_get_fd(io);
 
-	written = TEMP_FAILURE_RETRY(write(fd, buf, sizeof(buf)));
+	written = L_TFR(write(fd, buf, sizeof(buf)));
 	if (written < 0)
 		return false;
 
@@ -758,7 +758,7 @@ static bool open_read_handler(struct l_io *io, void *user_data)
 					sizeof(struct mbim_message_header);
 	}
 
-	len = TEMP_FAILURE_RETRY(read(fd, buf,
+	len = L_TFR(read(fd, buf,
 					device->segment_bytes_remaining));
 	if (len < 0) {
 		if (errno == EAGAIN)
@@ -812,7 +812,7 @@ static bool close_write_handler(struct l_io *io, void *user_data)
 
 	fd = l_io_get_fd(io);
 
-	written = TEMP_FAILURE_RETRY(write(fd, buf, sizeof(buf)));
+	written = L_TFR(write(fd, buf, sizeof(buf)));
 	if (written < 0)
 		return false;
 
@@ -865,7 +865,7 @@ static bool close_read_handler(struct l_io *io, void *user_data)
 					sizeof(struct mbim_message_header);
 	}
 
-	len = TEMP_FAILURE_RETRY(read(fd, buf,
+	len = L_TFR(read(fd, buf,
 					device->segment_bytes_remaining));
 	if (len < 0) {
 		if (errno == EAGAIN)

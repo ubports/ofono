@@ -36,6 +36,7 @@
 
 struct devinfo_data {
 	struct qmi_service *dms;
+	bool device_is_3gpp;
 };
 
 static void string_cb(struct qmi_result *result, void *user_data)
@@ -116,7 +117,12 @@ static void qmi_query_revision(struct ofono_devinfo *devinfo,
 static void get_ids_cb(struct qmi_result *result, void *user_data)
 {
 	struct cb_data *cbd = user_data;
+	struct ofono_devinfo *devinfo = cbd->user;
+	struct devinfo_data *data = ofono_devinfo_get_data(devinfo);
 	ofono_devinfo_query_cb_t cb = cbd->cb;
+	char *esn;
+	char *imei;
+	char *meid;
 	char *str;
 
 	DBG("");
@@ -126,20 +132,28 @@ static void get_ids_cb(struct qmi_result *result, void *user_data)
 		return;
 	}
 
-	str = qmi_result_get_string(result, QMI_DMS_RESULT_ESN);
-	/* Telit qmi modems return a "0" string when ESN is not available. */
-	if (!str || strcmp(str, "0") == 0) {
-		qmi_free(str);
-		str = qmi_result_get_string(result, QMI_DMS_RESULT_IMEI);
-		if (!str) {
-			CALLBACK_WITH_FAILURE(cb, NULL, cbd->data);
-			return;
-		}
-	}
+	esn = qmi_result_get_string(result, QMI_DMS_RESULT_ESN);
+	imei = qmi_result_get_string(result, QMI_DMS_RESULT_IMEI);
+	meid = qmi_result_get_string(result, QMI_DMS_RESULT_MEID);
 
-	CALLBACK_WITH_SUCCESS(cb, str, cbd->data);
+	str = NULL;
 
-	qmi_free(str);
+	if (data->device_is_3gpp && imei && strcmp(imei, "0"))
+		str = imei;
+	else if (esn && strcmp(esn, "0"))
+		str = esn;
+
+	if (str == NULL && meid && strcmp(meid, "0"))
+		str = meid;
+
+	if (str)
+		CALLBACK_WITH_SUCCESS(cb, str, cbd->data);
+	else
+		CALLBACK_WITH_FAILURE(cb, NULL, cbd->data);
+
+	qmi_free(esn);
+	qmi_free(imei);
+	qmi_free(meid);
 }
 
 static void qmi_query_serial(struct ofono_devinfo *devinfo,
@@ -150,6 +164,8 @@ static void qmi_query_serial(struct ofono_devinfo *devinfo,
 
 	DBG("");
 
+	cbd->user = devinfo;
+
 	if (qmi_service_send(data->dms, QMI_DMS_GET_IDS, NULL,
 					get_ids_cb, cbd, g_free) > 0)
 		return;
@@ -157,6 +173,51 @@ static void qmi_query_serial(struct ofono_devinfo *devinfo,
 	CALLBACK_WITH_FAILURE(cb, NULL, cbd->data);
 
 	g_free(cbd);
+}
+
+static void get_caps_cb(struct qmi_result *result, void *user_data)
+{
+	struct ofono_devinfo *devinfo = user_data;
+	struct devinfo_data *data = ofono_devinfo_get_data(devinfo);
+	const struct qmi_dms_device_caps *caps;
+	uint8_t i;
+
+	DBG("");
+
+	if (qmi_result_set_error(result, NULL))
+		goto error;
+
+	caps = qmi_result_get(result, QMI_DMS_RESULT_DEVICE_CAPS, NULL);
+	if (caps == NULL)
+		goto error;
+
+	data->device_is_3gpp = false;
+
+	for (i = 0; i < caps->radio_if_count; i++) {
+		switch (caps->radio_if[i]) {
+		case QMI_DMS_RADIO_IF_GSM:
+		case QMI_DMS_RADIO_IF_UMTS:
+		case QMI_DMS_RADIO_IF_LTE:
+			data->device_is_3gpp = true;
+			break;
+		}
+	}
+
+error:
+	ofono_devinfo_register(devinfo);
+}
+
+static void qmi_query_caps(struct ofono_devinfo *devinfo)
+{
+	struct devinfo_data *data = ofono_devinfo_get_data(devinfo);
+
+	DBG("");
+
+	if (qmi_service_send(data->dms, QMI_DMS_GET_CAPS, NULL,
+					get_caps_cb, devinfo, NULL) > 0)
+		return;
+
+	ofono_devinfo_register(devinfo);
 }
 
 static void create_dms_cb(struct qmi_service *service, void *user_data)
@@ -173,8 +234,9 @@ static void create_dms_cb(struct qmi_service *service, void *user_data)
 	}
 
 	data->dms = qmi_service_ref(service);
+	data->device_is_3gpp = false;
 
-	ofono_devinfo_register(devinfo);
+	qmi_query_caps(devinfo);
 }
 
 static int qmi_devinfo_probe(struct ofono_devinfo *devinfo,

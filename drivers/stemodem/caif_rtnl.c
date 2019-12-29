@@ -85,7 +85,7 @@ static void parse_newlink_param(struct ifinfomsg *msg, int size,
 		if (attr->rta_type == IFLA_IFNAME &&
 				ifname != NULL) {
 
-			strncpy(ifname, RTA_DATA(attr), IF_NAMESIZE);
+			strncpy(ifname, RTA_DATA(attr), IF_NAMESIZE - 1);
 			ifname[IF_NAMESIZE-1] = '\0';
 			break;
 		}

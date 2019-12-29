@@ -495,7 +495,6 @@ LIB_EXPORT unsigned int l_queue_foreach_remove(struct l_queue *queue,
  * @queue: queue object
  * @function: callback function
  * @user_data: user data given to callback function
- * @destroy: Destructor function to call on removal
  *
  * Remove the first entry in the @queue where the function returns #true.
  *

@@ -1130,6 +1130,9 @@ static DBusMessage *modem_set_property(DBusConnection *conn,
 		if (modem->lockdown)
 			return __ofono_error_access_denied(msg);
 
+		if (!powered)
+			__ofono_sim_clear_cached_pins(modem->sim);
+
 		err = set_powered(modem, powered);
 		if (err < 0) {
 			if (err != -EINPROGRESS)
