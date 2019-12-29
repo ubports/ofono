@@ -16,8 +16,10 @@ ofono (1.31-1) UNRELEASED; urgency=medium
     is linux only and would require porting
   * debian/control: Make ofono-dev depend against libdbus-1-dev and
     libglib2.0-dev, the pkg-config file Requires them
+  * Create a new ofono-scripts package that ships the tests/ directory
+    (Closes: #868377)
 
- -- Laurent Bigonville <bigon@debian.org>  Sun, 29 Dec 2019 13:05:37 +0100
+ -- Laurent Bigonville <bigon@debian.org>  Sun, 29 Dec 2019 13:10:56 +0100
 
 ofono (1.28-1) unstable; urgency=medium
 
