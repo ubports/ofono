@@ -12,8 +12,10 @@ ofono (1.31-1) UNRELEASED; urgency=medium
     to list non-installed files
   * d/p/0002-Remove-After-syslog.target-from-systemd-.service-fil.patch:
     Remove After=syslog.target from systemd .service files, to please lintian
+  * debian/control: Make ofono architecture linux-any, it uses signalfd that
+    is linux only and would require porting
 
- -- Laurent Bigonville <bigon@debian.org>  Sun, 29 Dec 2019 12:47:05 +0100
+ -- Laurent Bigonville <bigon@debian.org>  Sun, 29 Dec 2019 12:57:42 +0100
 
 ofono (1.28-1) unstable; urgency=medium
 
