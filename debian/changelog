@@ -1,5 +1,6 @@
-ofono (1.31-1) UNRELEASED; urgency=medium
+ofono (1.31-1) unstable; urgency=medium
 
+  * Team upload
   [ Helmut Grohne ]
   * Drop libc*-dev from ofono-dev Depends.
   * Move ofono.pc to /usr/share/pkgconfig.
@@ -19,7 +20,7 @@ ofono (1.31-1) UNRELEASED; urgency=medium
   * Create a new ofono-scripts package that ships the tests/ directory
     (Closes: #868377)
 
- -- Laurent Bigonville <bigon@debian.org>  Sun, 29 Dec 2019 13:10:56 +0100
+ -- Laurent Bigonville <bigon@debian.org>  Sun, 29 Dec 2019 13:21:45 +0100
 
 ofono (1.28-1) unstable; urgency=medium
 
