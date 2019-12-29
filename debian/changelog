@@ -1,8 +1,9 @@
 ofono (1.31-1) UNRELEASED; urgency=medium
 
   * New upstream release
+  * debian/control: Bump Standards-Version to 4.4.1 (no further changes)
 
- -- Laurent Bigonville <bigon@debian.org>  Sun, 29 Dec 2019 12:00:29 +0100
+ -- Laurent Bigonville <bigon@debian.org>  Sun, 29 Dec 2019 12:03:14 +0100
 
 ofono (1.28-1) unstable; urgency=medium
 
