@@ -656,13 +656,13 @@ static char *build_nai(const char *imsi)
 	char mnc[3];
 	char *nai;
 
-	strncpy(mcc, imsi, 3);
+	memcpy(mcc, imsi, 3);
 
 	if (strlen(imsi) == 16) {
-		strncpy(mnc, imsi + 3, 3);
+		memcpy(mnc, imsi + 3, 3);
 	} else {
 		mnc[0] = '0';
-		strncpy(mnc + 1, imsi + 3, 2);
+		memcpy(mnc + 1, imsi + 3, 2);
 	}
 
 	nai = g_strdup_printf("%s@ims.mnc%.3s.mcc%.3s.3gppnetwork.org",

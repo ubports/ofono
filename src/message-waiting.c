@@ -753,8 +753,8 @@ try_cphs:
 	efmwis[0] = mw->messages[0].indication ? 0xa : 0x5;
 
 	if (mw->ef_cphs_mwis_length > 1)
-		efmwis[1] = mw->messages[1].indication ? 0xa : 0x5 |
-			mw->messages[3].indication ? 0xa0 : 0x50;
+		efmwis[1] = (mw->messages[1].indication ? 0xa : 0x5) |
+			(mw->messages[3].indication ? 0xa0 : 0x50);
 
 	if (ofono_sim_write(mw->sim_context, SIM_EF_CPHS_MWIS_FILEID,
 				mw_mwis_write_cb,

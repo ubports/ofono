@@ -6,12 +6,10 @@ noinst_LTLIBRARIES =
 if EXTERNAL_ELL
 ell_cflags = @ELL_CFLAGS@
 ell_ldadd = @ELL_LIBS@
-ell_dependencies =
 ell_built_sources =
 else
 ell_cflags =
 ell_ldadd = ell/libell-internal.la
-ell_dependencies = $(ell_ldadd)
 ell_built_sources = ell/internal ell/ell.h
 
 noinst_LTLIBRARIES += ell/libell-internal.la
@@ -21,6 +19,7 @@ ell_headers = ell/util.h \
 			ell/strv.h \
 			ell/utf8.h \
 			ell/queue.h \
+			ell/timeout.h \
 			ell/main.h \
 			ell/idle.h \
 			ell/signal.h \
@@ -32,7 +31,8 @@ ell_headers = ell/util.h \
 			ell/uuid.h \
 			ell/file.h \
 			ell/uintset.h \
-			ell/string.h
+			ell/string.h \
+			ell/gpio.h
 
 ell_sources = ell/private.h \
 			ell/missing.h \
@@ -41,6 +41,7 @@ ell_sources = ell/private.h \
 			ell/strv.c \
 			ell/utf8.c \
 			ell/queue.c \
+			ell/timeout.c \
 			ell/main.c \
 			ell/idle.c \
 			ell/signal.c \
@@ -52,7 +53,8 @@ ell_sources = ell/private.h \
 			ell/uuid.c \
 			ell/file.c \
 			ell/uintset.c \
-			ell/string.c
+			ell/string.c \
+			ell/gpio.c
 
 ell_libell_internal_la_SOURCES = $(ell_headers) $(ell_sources)
 endif
@@ -332,6 +334,7 @@ builtin_sources += 	drivers/atmodem/atmodem.h \
 			drivers/atmodem/cbs.c \
 			drivers/atmodem/call-forwarding.c \
 			drivers/atmodem/call-meter.c \
+			drivers/atmodem/network-registration.h \
 			drivers/atmodem/network-registration.c \
 			drivers/atmodem/sim.c \
 			drivers/atmodem/stk.c \
@@ -469,6 +472,7 @@ builtin_sources += drivers/atmodem/atutil.h \
 			drivers/ubloxmodem/ubloxmodem.h \
 			drivers/ubloxmodem/ubloxmodem.c \
 			drivers/ubloxmodem/gprs-context.c \
+			drivers/ubloxmodem/network-registration.c \
 			drivers/ubloxmodem/netmon.c \
 			drivers/ubloxmodem/lte.c
 
@@ -692,7 +696,8 @@ builtin_sources += plugins/allowed-apns.c
 
 sbin_PROGRAMS = src/ofonod
 
-src_ofonod_SOURCES = $(builtin_sources) $(gatchat_sources) src/ofono.ver \
+src_ofonod_SOURCES = $(builtin_sources) $(gatchat_sources) \
+			linux/gsmmux.h linux/gpio.h src/ofono.ver \
 			src/main.c src/ofono.h src/log.c src/plugin.c \
 			src/modem.c src/common.h src/common.c \
 			src/manager.c src/dbus.c src/util.h src/util.c \
@@ -726,8 +731,6 @@ src_ofonod_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) $(ell_ldadd) \
 
 src_ofonod_LDFLAGS = -Wl,--export-dynamic \
 				-Wl,--version-script=$(srcdir)/src/ofono.ver
-
-src_ofonod_DEPENDENCIES = $(ell_dependencies)
 
 BUILT_SOURCES = $(local_headers) $(ell_built_sources) src/builtin.h
 
@@ -1105,6 +1108,7 @@ ell/internal: Makefile
 	done > $@
 
 ell/ell.h: Makefile
+	$(AM_V_at)$(MKDIR_P) ell
 	$(AM_V_at)echo -n > $@
 	$(AM_V_GEN)for f in $(ell_headers) ; do \
 		echo "#include <$$f>" >> $@ ; \

@@ -24,15 +24,17 @@
 #include <config.h>
 #endif
 
-#include <glib.h>
-#include <gatchat.h>
 #include <string.h>
 #include <stdlib.h>
 #include <errno.h>
 
+#include <glib.h>
+#include <gattty.h>
+
 #define OFONO_API_SUBJECT_TO_CHANGE
 #include <ofono/log.h>
 #include <ofono/types.h>
+#include <ofono/modem.h>
 
 #include "atutil.h"
 #include "vendor.h"
@@ -656,6 +658,45 @@ int at_util_get_ipv4_address_and_netmask(const char *addrnetmask,
 	return ret;
 }
 
+/*
+ * CGCONTRDP returns addr + netmask in the same string in the form
+ * of "a1.a2.a3.a4.a5.a6.a7.a8.a9.a10.a11.a12.a13.a14.a15.a16.m1.m2.
+ * m3.m4.m5.m6.m7.m8.m9.m10.m11.m12.m13.m14.m15.m16" for IPv6.
+ * address/netmask must be able to hold 64 characters.
+ */
+int at_util_get_ipv6_address_and_netmask(const char *addrnetmask,
+						char *address, char *netmask)
+{
+	const char *s = addrnetmask;
+	const char *net = NULL;
+
+	int ret = -EINVAL;
+	int i;
+
+	/* Count 31 dots for ipv6, less or more means error. */
+	for (i = 0; i < 33; i++, s++) {
+		s = strchr(s, '.');
+
+		if (!s)
+			break;
+
+		if (i == 15) {
+			/* set netmask ptr and break the string */
+			net = s + 1;
+		}
+	}
+
+	if (i == 31) {
+		memcpy(address, addrnetmask, net - addrnetmask);
+		address[net - addrnetmask - 1] = '\0';
+		strcpy(netmask, net);
+
+		ret = 0;
+	}
+
+	return ret;
+}
+
 int at_util_gprs_auth_method_to_auth_prot(
 					enum ofono_gprs_auth_method auth_method)
 {
@@ -696,4 +737,55 @@ char *at_util_get_cgdcont_command(guint cid, enum ofono_gprs_proto proto,
 
 	return g_strdup_printf("AT+CGDCONT=%u,\"%s\",\"%s\"", cid, pdp_type,
 									apn);
+}
+
+GAtChat *at_util_open_device(struct ofono_modem *modem, const char *key,
+				GAtDebugFunc debug_func, char *debug_prefix,
+				char *tty_option, ...)
+{
+	const char *device;
+	va_list args;
+	GIOChannel *channel;
+	GAtSyntax *syntax;
+	GAtChat *chat;
+	GHashTable *options = NULL;
+
+	device = ofono_modem_get_string(modem, key);
+	if (device == NULL)
+		return NULL;
+
+	if (tty_option) {
+		options = g_hash_table_new(g_str_hash, g_str_equal);
+		if (options == NULL)
+			return NULL;
+
+		va_start(args, tty_option);
+		while (tty_option) {
+			gpointer value = (gpointer) va_arg(args, const char *);
+
+			g_hash_table_insert(options, tty_option, value);
+			tty_option = (gpointer) va_arg(args, const char *);
+		}
+	}
+
+	channel = g_at_tty_open(device, options);
+
+	if (options)
+		g_hash_table_destroy(options);
+
+	if (channel == NULL)
+		return NULL;
+
+	syntax = g_at_syntax_new_gsm_permissive();
+	chat = g_at_chat_new(channel, syntax);
+	g_at_syntax_unref(syntax);
+	g_io_channel_unref(channel);
+
+	if (chat == NULL)
+		return NULL;
+
+	if (getenv("OFONO_AT_DEBUG"))
+		g_at_chat_set_debug(chat, debug_func, debug_prefix);
+
+	return chat;
 }

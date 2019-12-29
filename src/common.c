@@ -697,6 +697,10 @@ const char *registration_tech_to_string(int tech)
 		return "hspa";
 	case ACCESS_TECHNOLOGY_EUTRAN:
 		return "lte";
+	case ACCESS_TECHNOLOGY_NB_IOT_M1:
+		return "lte-cat-m1";
+	case ACCESS_TECHNOLOGY_NB_IOT_NB1:
+		return "lte-cat-nb1";
 	default:
 		return "";
 	}

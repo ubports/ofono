@@ -2,7 +2,7 @@
  *
  *  Embedded Linux library
  *
- *  Copyright (C) 2015  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2015-2019  Intel Corporation. All rights reserved.
  *
  *  This library is free software; you can redistribute it and/or
  *  modify it under the terms of the GNU Lesser General Public
@@ -122,6 +122,49 @@ static unsigned long find_last_bit(const unsigned long *addr, unsigned int size)
 	return size;
 }
 
+static unsigned long find_next_bit(const unsigned long *addr,
+							unsigned long size,
+							unsigned long bit)
+{
+	unsigned long mask;
+	unsigned long offset;
+
+	if (bit >= size)
+		return size;
+
+	addr += bit / BITS_PER_LONG;
+	offset = bit % BITS_PER_LONG;
+	bit -= offset;
+
+	if (offset) {
+		mask = *addr & ~(~0UL >> (BITS_PER_LONG - offset));
+		if (mask)
+			return bit + __ffs(mask);
+
+		bit += BITS_PER_LONG;
+		addr++;
+	}
+
+	for (size -= bit; size >= BITS_PER_LONG;
+			size -= BITS_PER_LONG, bit += BITS_PER_LONG, addr++) {
+		if (!*addr)
+			continue;
+
+		return bit + __ffs(*addr);
+	}
+
+	if (!size)
+		return bit;
+
+	mask = *addr & (~0UL >> (BITS_PER_LONG - size));
+	if (mask)
+		bit += __ffs(mask);
+	else
+		bit += size;
+
+	return bit;
+}
+
 struct l_uintset {
 	unsigned long *bits;
 	uint16_t size;
@@ -202,10 +245,12 @@ LIB_EXPORT void l_uintset_free(struct l_uintset *set)
  **/
 LIB_EXPORT bool l_uintset_take(struct l_uintset *set, uint32_t number)
 {
-	uint32_t offset = (number - set->min) / BITS_PER_LONG;
+	uint32_t offset;
 
 	if (unlikely(!set))
 		return false;
+
+	offset = (number - set->min) / BITS_PER_LONG;
 
 	number -= set->min;
 
@@ -233,12 +278,13 @@ LIB_EXPORT bool l_uintset_take(struct l_uintset *set, uint32_t number)
  **/
 LIB_EXPORT bool l_uintset_put(struct l_uintset *set, uint32_t number)
 {
-	uint32_t bit = number - set->min;
+	uint32_t bit;
 	uint32_t offset;
 
 	if (unlikely(!set))
 		return false;
 
+	bit = number - set->min;
 	if (bit >= set->size)
 		return false;
 
@@ -257,12 +303,13 @@ LIB_EXPORT bool l_uintset_put(struct l_uintset *set, uint32_t number)
  **/
 LIB_EXPORT bool l_uintset_contains(struct l_uintset *set, uint32_t number)
 {
-	uint32_t bit = number - set->min;
+	uint32_t bit;
 	uint32_t offset;
 
 	if (unlikely(!set))
 		return false;
 
+	bit = number - set->min;
 	if (bit >= set->size)
 		return false;
 
@@ -399,4 +446,87 @@ LIB_EXPORT uint32_t l_uintset_find_min(struct l_uintset *set)
 		return set->max + 1;
 
 	return bit + set->min;
+}
+
+/**
+ * l_uintset_foreach:
+ * @set: The set of numbers
+ * @function: callback function
+ * @user_data: user data given to callback function
+ *
+ * Call @function for every given number in @set.
+ **/
+LIB_EXPORT void l_uintset_foreach(struct l_uintset *set,
+					l_uintset_foreach_func_t function,
+					void *user_data)
+{
+	unsigned int bit;
+
+	if (unlikely(!set || !function))
+		return;
+
+	for (bit = find_first_bit(set->bits, set->size); bit < set->size;
+			bit = find_next_bit(set->bits, set->size, bit + 1))
+		function(set->min + bit, user_data);
+}
+
+/**
+ * l_uintset_intersect:
+ * @set_a: The set of numbers
+ * @set_b: The set of numbers
+ *
+ * Intersects the two sets of numbers of an equal base, e.g.:
+ * l_uintset_get_min(set_a) must be equal to l_uintset_get_min(set_b) and
+ * l_uintset_get_max(set_a) must be equal to l_uintset_get_max(set_b)
+ *
+ * Returns: A newly allocated l_uintset object containing the intersection of
+ * @set_a and @set_b. If the bases are not equal returns NULL. If either @set_a
+ * or @set_b is NULL returns NULL.
+ **/
+LIB_EXPORT struct l_uintset *l_uintset_intersect(const struct l_uintset *set_a,
+						const struct l_uintset *set_b)
+{
+	struct l_uintset *intersection;
+	uint32_t offset;
+	uint32_t offset_max;
+
+	if (unlikely(!set_a || !set_b))
+		return NULL;
+
+	if (unlikely(set_a->min != set_b->min || set_a->max != set_b->max))
+		return NULL;
+
+	intersection = l_uintset_new_from_range(set_a->min, set_a->max);
+
+	offset_max = (set_a->size + BITS_PER_LONG - 1) / BITS_PER_LONG;
+
+	for (offset = 0; offset < offset_max; offset++)
+		intersection->bits[offset] =
+				set_a->bits[offset] & set_b->bits[offset];
+
+	return intersection;
+}
+
+/**
+ * l_uintset_isempty
+ * @set: The set of numbers
+ *
+ * Returns true if the uintset has no entries, or if set is NULL.
+ */
+LIB_EXPORT bool l_uintset_isempty(const struct l_uintset *set)
+{
+	uint16_t i;
+	uint32_t offset_max;
+
+	if (unlikely(!set))
+		return true;
+
+	offset_max = (set->size + BITS_PER_LONG - 1) / BITS_PER_LONG;
+
+	for (i = 0; i < offset_max; i++) {
+		if (set->bits[i])
+			return false;
+	}
+
+	return true;
 }

@@ -149,46 +149,20 @@ static void cfun_enable(gboolean ok, GAtResult *result, gpointer user_data)
 static int samsung_enable(struct ofono_modem *modem)
 {
 	struct samsung_data *data = ofono_modem_get_data(modem);
-	GAtSyntax *syntax;
-	GIOChannel *channel;
-	GHashTable *options;
-	const char *device;
 
-	device = ofono_modem_get_string(modem, "ControlPort");
-	if (device == NULL)
-		return -EINVAL;
-
-	options = g_hash_table_new(g_str_hash, g_str_equal);
-	if (options == NULL)
-		return -ENOMEM;
-
-	g_hash_table_insert(options, "Baud", "115200");
-	g_hash_table_insert(options, "Parity", "none");
-	g_hash_table_insert(options, "StopBits", "1");
-	g_hash_table_insert(options, "DataBits", "8");
-	g_hash_table_insert(options, "XonXoff", "off");
-	g_hash_table_insert(options, "RtsCts", "on");
-	g_hash_table_insert(options, "Local", "on");
-	g_hash_table_insert(options, "Read", "on");
-
-	channel = g_at_tty_open(device, options);
-
-	g_hash_table_destroy(options);
-
-	if (channel == NULL)
-		return -EIO;
-
-	syntax = g_at_syntax_new_gsm_permissive();
-	data->chat = g_at_chat_new(channel, syntax);
-	g_at_syntax_unref(syntax);
-
-	g_io_channel_unref(channel);
-
+	data->chat = at_util_open_device(modem, "ControlPort",
+						samsung_debug, "Device: ",
+						"Baud", "115200",
+						"Parity", "none",
+						"StopBits", "1",
+						"DataBits", "8",
+						"XonXoff", "off",
+						"RtsCts", "on",
+						"Local", "on",
+						"Read", "on",
+						NULL);
 	if (data->chat == NULL)
 		return -ENOMEM;
-
-	if (getenv("OFONO_AT_DEBUG"))
-		g_at_chat_set_debug(data->chat, samsung_debug, "Device: ");
 
 	g_at_chat_send(data->chat, "ATE0", NULL, NULL, NULL, NULL);
 	g_at_chat_send(data->chat, "AT+CMEE=1", NULL, NULL, NULL, NULL);

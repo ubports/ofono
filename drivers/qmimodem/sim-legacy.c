@@ -83,13 +83,13 @@ static void get_iccid_cb(struct qmi_result *result, void *user_data)
 
 	len = strlen(str);
 	if (len > 20) {
+		qmi_free(str);
 		CALLBACK_WITH_FAILURE(cb, NULL, 0, cbd->data);
 		return;
 	}
 
 	sim_encode_bcd_number(str, iccid);
 	iccid_len = len / 2;
-
 	qmi_free(str);
 
 	CALLBACK_WITH_SUCCESS(cb, iccid, iccid_len, cbd->data);
@@ -250,6 +250,7 @@ static void process_uim_state(struct ofono_sim *sim, uint8_t state)
 	switch (state) {
 	case QMI_DMS_UIM_STATE_INIT_COMPLETE:
 		ofono_sim_inserted_notify(sim, TRUE);
+		ofono_sim_initialized_notify(sim);
 		break;
 	case QMI_DMS_UIM_STATE_INIT_FAILED:
 	case QMI_DMS_UIM_STATE_NOT_PRESENT:

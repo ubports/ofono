@@ -20,6 +20,10 @@
  *
  */
 
+#include <gatchat.h>
+
+struct ofono_modem;
+
 enum at_util_sms_store {
 	AT_UTIL_SMS_STORE_SM =	0,
 	AT_UTIL_SMS_STORE_ME =	1,
@@ -86,6 +90,9 @@ void at_util_sim_state_query_free(struct at_util_sim_state_query *req);
 
 int at_util_get_ipv4_address_and_netmask(const char *addrnetmask,
 						char *address, char *netmask);
+int at_util_get_ipv6_address_and_netmask(const char *addrnetmask,
+						char *address, char *netmask);
+
 
 int at_util_gprs_auth_method_to_auth_prot(
 				enum ofono_gprs_auth_method auth_method);
@@ -166,3 +173,7 @@ static inline int at_util_convert_signal_strength(int strength)
 		e.error = 0;				\
 		f(&e, ##args);				\
 	} while (0)
+
+GAtChat *at_util_open_device(struct ofono_modem *modem, const char *key,
+				GAtDebugFunc debug_func, char *debug_prefix,
+				char *tty_option, ...);

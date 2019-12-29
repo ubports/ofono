@@ -418,6 +418,7 @@ unsigned char *__ofono_sim_session_get_aid(
 		struct ofono_sim_aid_session *session);
 
 const char *__ofono_sim_get_impi(struct ofono_sim *sim);
+void __ofono_sim_clear_cached_pins(struct ofono_sim *sim);
 
 #include <ofono/stk.h>
 

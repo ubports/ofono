@@ -41,6 +41,8 @@
 #include "atmodem.h"
 #include "vendor.h"
 
+#include "network-registration.h"
+
 static const char *none_prefix[] = { NULL };
 static const char *creg_prefix[] = { "+CREG:", NULL };
 static const char *cops_prefix[] = { "+COPS:", NULL };
@@ -50,20 +52,6 @@ static const char *cmer_prefix[] = { "+CMER:", NULL };
 static const char *smoni_prefix[] = { "^SMONI:", NULL };
 static const char *zpas_prefix[] = { "+ZPAS:", NULL };
 static const char *option_tech_prefix[] = { "_OCTI:", "_OUWCTI:", NULL };
-
-struct netreg_data {
-	GAtChat *chat;
-	char mcc[OFONO_MAX_MCC_LENGTH + 1];
-	char mnc[OFONO_MAX_MNC_LENGTH + 1];
-	int signal_index; /* If strength is reported via CIND */
-	int signal_min; /* min strength reported via CIND */
-	int signal_max; /* max strength reported via CIND */
-	int signal_invalid; /* invalid strength reported via CIND */
-	int tech;
-	struct ofono_network_time time;
-	guint nitz_timeout;
-	unsigned int vendor;
-};
 
 struct tech_query {
 	int status;
@@ -209,7 +197,7 @@ static void at_creg_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	ofono_netreg_status_cb_t cb = cbd->cb;
 	int status, lac, ci, tech;
 	struct ofono_error error;
-	struct netreg_data *nd = cbd->user;
+	struct at_netreg_data *nd = cbd->user;
 
 	decode_at_error(&error, g_at_result_final_response(result));
 
@@ -250,7 +238,7 @@ static void zte_tech_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
 	struct ofono_netreg *netreg = cbd->data;
-	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct at_netreg_data *nd = ofono_netreg_get_data(netreg);
 
 	if (ok)
 		nd->tech = zte_parse_tech(result);
@@ -262,7 +250,7 @@ static void option_tech_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
 	struct ofono_netreg *netreg = cbd->data;
-	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct at_netreg_data *nd = ofono_netreg_get_data(netreg);
 
 	if (ok)
 		nd->tech = option_parse_tech(result);
@@ -270,11 +258,11 @@ static void option_tech_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		nd->tech = -1;
 }
 
-static void at_registration_status(struct ofono_netreg *netreg,
+void at_registration_status(struct ofono_netreg *netreg,
 					ofono_netreg_status_cb_t cb,
 					void *data)
 {
-	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct at_netreg_data *nd = ofono_netreg_get_data(netreg);
 	struct cb_data *cbd = cb_data_new(cb, data);
 
 	cbd->user = nd;
@@ -337,7 +325,7 @@ static void at_registration_status(struct ofono_netreg *netreg,
 static void cops_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
-	struct netreg_data *nd = ofono_netreg_get_data(cbd->user);
+	struct at_netreg_data *nd = ofono_netreg_get_data(cbd->user);
 	ofono_netreg_operator_cb_t cb = cbd->cb;
 	struct ofono_network_operator op;
 	GAtResultIter iter;
@@ -398,7 +386,7 @@ error:
 static void cops_numeric_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
-	struct netreg_data *nd = ofono_netreg_get_data(cbd->user);
+	struct at_netreg_data *nd = ofono_netreg_get_data(cbd->user);
 	ofono_netreg_operator_cb_t cb = cbd->cb;
 	GAtResultIter iter;
 	const char *str;
@@ -450,10 +438,10 @@ error:
 	g_free(cbd);
 }
 
-static void at_current_operator(struct ofono_netreg *netreg,
+void at_current_operator(struct ofono_netreg *netreg,
 				ofono_netreg_operator_cb_t cb, void *data)
 {
-	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct at_netreg_data *nd = ofono_netreg_get_data(netreg);
 	struct cb_data *cbd = cb_data_new(cb, data);
 	gboolean ok;
 
@@ -589,10 +577,10 @@ static void cops_list_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	g_free(list);
 }
 
-static void at_list_operators(struct ofono_netreg *netreg,
+void at_list_operators(struct ofono_netreg *netreg,
 				ofono_netreg_operator_list_cb_t cb, void *data)
 {
-	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct at_netreg_data *nd = ofono_netreg_get_data(netreg);
 	struct cb_data *cbd = cb_data_new(cb, data);
 
 	if (g_at_chat_send(nd->chat, "AT+COPS=?", cops_prefix,
@@ -615,10 +603,10 @@ static void register_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	cb(&error, cbd->data);
 }
 
-static void at_register_auto(struct ofono_netreg *netreg,
+void at_register_auto(struct ofono_netreg *netreg,
 				ofono_netreg_register_cb_t cb, void *data)
 {
-	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct at_netreg_data *nd = ofono_netreg_get_data(netreg);
 	struct cb_data *cbd = cb_data_new(cb, data);
 
 	if (g_at_chat_send(nd->chat, "AT+COPS=0", none_prefix,
@@ -630,11 +618,11 @@ static void at_register_auto(struct ofono_netreg *netreg,
 	CALLBACK_WITH_FAILURE(cb, data);
 }
 
-static void at_register_manual(struct ofono_netreg *netreg,
+void at_register_manual(struct ofono_netreg *netreg,
 				const char *mcc, const char *mnc,
 				ofono_netreg_register_cb_t cb, void *data)
 {
-	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct at_netreg_data *nd = ofono_netreg_get_data(netreg);
 	struct cb_data *cbd = cb_data_new(cb, data);
 	char buf[128];
 
@@ -723,7 +711,7 @@ static void ifx_xhomezr_notify(GAtResult *result, gpointer user_data)
 static void ifx_xreg_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
-	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct at_netreg_data *nd = ofono_netreg_get_data(netreg);
 	int state;
 	const char *band;
 	GAtResultIter iter;
@@ -822,7 +810,7 @@ static void ifx_xcsq_notify(GAtResult *result, gpointer user_data)
 static void ciev_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
-	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct at_netreg_data *nd = ofono_netreg_get_data(netreg);
 	int strength, ind;
 	GAtResultIter iter;
 
@@ -851,7 +839,7 @@ static void ciev_notify(GAtResult *result, gpointer user_data)
 static void telit_ciev_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
-	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct at_netreg_data *nd = ofono_netreg_get_data(netreg);
 	const char *signal_identifier = "rssi";
 	const char *ind_str;
 	int strength;
@@ -882,7 +870,7 @@ static void telit_ciev_notify(GAtResult *result, gpointer user_data)
 static void gemalto_ciev_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
-	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct at_netreg_data *nd = ofono_netreg_get_data(netreg);
 	const char *signal_identifier = "rssi";
 	const char *ind_str;
 	int strength;
@@ -915,7 +903,7 @@ static void gemalto_ciev_notify(GAtResult *result, gpointer user_data)
 static void ctzv_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
-	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct at_netreg_data *nd = ofono_netreg_get_data(netreg);
 	const char *tz;
 	GAtResultIter iter;
 
@@ -937,7 +925,7 @@ static void ctzv_notify(GAtResult *result, gpointer user_data)
 static void tlts_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
-	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct at_netreg_data *nd = ofono_netreg_get_data(netreg);
 	int year, mon, mday, hour, min, sec;
 	char tz[4];
 	const char *time;
@@ -972,7 +960,7 @@ static void tlts_notify(GAtResult *result, gpointer user_data)
 static gboolean notify_time(gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
-	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct at_netreg_data *nd = ofono_netreg_get_data(netreg);
 
 	nd->nitz_timeout = 0;
 
@@ -984,7 +972,7 @@ static gboolean notify_time(gpointer user_data)
 static void ifx_ctzv_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
-	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct at_netreg_data *nd = ofono_netreg_get_data(netreg);
 	int year, mon, mday, hour, min, sec;
 	const char *tz, *time;
 	GAtResultIter iter;
@@ -1022,7 +1010,7 @@ static void ifx_ctzv_notify(GAtResult *result, gpointer user_data)
 static void ifx_ctzdst_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
-	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct at_netreg_data *nd = ofono_netreg_get_data(netreg);
 	int dst;
 	GAtResultIter iter;
 
@@ -1050,7 +1038,7 @@ static void cind_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
 	ofono_netreg_strength_cb_t cb = cbd->cb;
-	struct netreg_data *nd = cbd->user;
+	struct at_netreg_data *nd = cbd->user;
 	int index;
 	int strength;
 	GAtResultIter iter;
@@ -1104,7 +1092,7 @@ static void huawei_rssi_notify(GAtResult *result, gpointer user_data)
 static void huawei_mode_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
-	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct at_netreg_data *nd = ofono_netreg_get_data(netreg);
 	GAtResultIter iter;
 	int mode, submode;
 
@@ -1132,7 +1120,7 @@ static void huawei_mode_notify(GAtResult *result, gpointer user_data)
 static void huawei_hcsq_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
-	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct at_netreg_data *nd = ofono_netreg_get_data(netreg);
 	GAtResultIter iter;
 	const char *mode;
 
@@ -1153,7 +1141,7 @@ static void huawei_hcsq_notify(GAtResult *result, gpointer user_data)
 static void huawei_nwtime_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
-	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct at_netreg_data *nd = ofono_netreg_get_data(netreg);
 	int year, mon, mday, hour, min, sec;
 	char tz[4];
 	const char *date, *time, *dst;
@@ -1228,10 +1216,10 @@ static void csq_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	cb(&error, strength, cbd->data);
 }
 
-static void at_signal_strength(struct ofono_netreg *netreg,
+void at_signal_strength(struct ofono_netreg *netreg,
 				ofono_netreg_strength_cb_t cb, void *data)
 {
-	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct at_netreg_data *nd = ofono_netreg_get_data(netreg);
 	struct cb_data *cbd = cb_data_new(cb, data);
 
 	cbd->user = nd;
@@ -1258,7 +1246,7 @@ static void at_signal_strength(struct ofono_netreg *netreg,
 static void mbm_etzv_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
-	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct at_netreg_data *nd = ofono_netreg_get_data(netreg);
 	int year, mon, mday, hour, min, sec;
 	const char *tz, *time, *timestamp;
 	GAtResultIter iter;
@@ -1307,7 +1295,7 @@ static void mbm_etzv_notify(GAtResult *result, gpointer user_data)
 static void mbm_erinfo_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
-	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct at_netreg_data *nd = ofono_netreg_get_data(netreg);
 	GAtResultIter iter;
 	int mode, gsm, umts;
 
@@ -1359,7 +1347,7 @@ static void mbm_erinfo_notify(GAtResult *result, gpointer user_data)
 static void icera_nwstate_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
-	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct at_netreg_data *nd = ofono_netreg_get_data(netreg);
 	GAtResultIter iter;
 	const char *mccmnc, *tech, *state;
 	int rssi;
@@ -1427,7 +1415,7 @@ static int cnti_to_tech(const char *cnti)
 static void gobi_cnti_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
-	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct at_netreg_data *nd = ofono_netreg_get_data(netreg);
 	GAtResultIter iter;
 	const char *tech;
 	int option;
@@ -1452,7 +1440,7 @@ static void gobi_cnti_notify(GAtResult *result, gpointer user_data)
 static void nw_cnti_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
-	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct at_netreg_data *nd = ofono_netreg_get_data(netreg);
 	GAtResultIter iter;
 	const char *tech;
 	int option;
@@ -1478,7 +1466,7 @@ static void cnti_query_tech_cb(gboolean ok, GAtResult *result,
 						gpointer user_data)
 {
 	struct tech_query *tq = user_data;
-	struct netreg_data *nd = ofono_netreg_get_data(tq->netreg);
+	struct at_netreg_data *nd = ofono_netreg_get_data(tq->netreg);
 
 	ofono_netreg_status_notify(tq->netreg,
 			tq->status, tq->lac, tq->ci, nd->tech);
@@ -1518,7 +1506,7 @@ static void creg_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
 	int status, lac, ci, tech;
-	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct at_netreg_data *nd = ofono_netreg_get_data(netreg);
 	struct tech_query *tq;
 
 	if (at_util_parse_reg_unsolicited(result, "+CREG:", &status,
@@ -1559,12 +1547,12 @@ static void creg_notify(GAtResult *result, gpointer user_data)
 					option_query_tech_cb, tq, g_free) > 0)
 			return;
 		break;
-    case OFONO_VENDOR_GEMALTO:
-              if (g_at_chat_send(nd->chat, "AT^SMONI",
-                                      smoni_prefix,
-                                      gemalto_query_tech_cb, tq, g_free) > 0)
-                      return;
-              break;
+	case OFONO_VENDOR_GEMALTO:
+		if (g_at_chat_send(nd->chat, "AT^SMONI",
+					smoni_prefix,
+					gemalto_query_tech_cb, tq, g_free) > 0)
+			return;
+		break;
 	}
 
 	g_free(tq);
@@ -1587,7 +1575,7 @@ static void at_cmer_not_supported(struct ofono_netreg *netreg)
 static void at_cmer_set_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
-	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct at_netreg_data *nd = ofono_netreg_get_data(netreg);
 
 	if (!ok) {
 		at_cmer_not_supported(netreg);
@@ -1646,7 +1634,7 @@ static inline ofono_bool_t append_cmer_element(char *buf, int *len, int cap,
 }
 
 static ofono_bool_t build_cmer_string(char *buf, int *cmer_opts,
-					struct netreg_data *nd)
+					struct at_netreg_data *nd)
 {
 	const char *ind;
 	int len = sprintf(buf, "AT+CMER=");
@@ -1655,8 +1643,11 @@ static ofono_bool_t build_cmer_string(char *buf, int *cmer_opts,
 	DBG("");
 
 	switch (nd->vendor) {
-	case OFONO_VENDOR_UBLOX_TOBY_L2:
-		/* UBX-13002752 R33: TOBY L2 doesn't support mode 2 and 3 */
+	case OFONO_VENDOR_UBLOX:
+		/* For all u-blox models, mode 3 is equivalent to mode 1;
+		 * since some models do not support setting modes 2 nor 3
+		 * (see UBX-13002752), we prefer mode 1 for all models.
+		 */
 		mode = "1";
 		break;
 	default:
@@ -1712,7 +1703,7 @@ static void at_cmer_query_cb(ofono_bool_t ok, GAtResult *result,
 				gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
-	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct at_netreg_data *nd = ofono_netreg_get_data(netreg);
 	GAtResultIter iter;
 	int cmer_opts_cnt = 5; /* See 27.007 Section 8.10 */
 	int cmer_opts[cmer_opts_cnt];
@@ -1760,7 +1751,7 @@ error:
 static void cind_support_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
-	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct at_netreg_data *nd = ofono_netreg_get_data(netreg);
 	GAtResultIter iter;
 	const char *str;
 	char *signal_identifier = "signal";
@@ -1867,7 +1858,7 @@ error:
 static void at_creg_set_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
-	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct at_netreg_data *nd = ofono_netreg_get_data(netreg);
 
 	if (!ok) {
 		ofono_error("Unable to initialize Network Registration");
@@ -2070,7 +2061,7 @@ static void at_creg_set_cb(gboolean ok, GAtResult *result, gpointer user_data)
 static void at_creg_test_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
-	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct at_netreg_data *nd = ofono_netreg_get_data(netreg);
 	gint range[2];
 	GAtResultIter iter;
 	int creg1 = 0;
@@ -2118,9 +2109,9 @@ static int at_netreg_probe(struct ofono_netreg *netreg, unsigned int vendor,
 				void *data)
 {
 	GAtChat *chat = data;
-	struct netreg_data *nd;
+	struct at_netreg_data *nd;
 
-	nd = g_new0(struct netreg_data, 1);
+	nd = g_new0(struct at_netreg_data, 1);
 
 	nd->chat = g_at_chat_clone(chat);
 	nd->vendor = vendor;
@@ -2141,9 +2132,9 @@ static int at_netreg_probe(struct ofono_netreg *netreg, unsigned int vendor,
 	return 0;
 }
 
-static void at_netreg_remove(struct ofono_netreg *netreg)
+void at_netreg_remove(struct ofono_netreg *netreg)
 {
-	struct netreg_data *nd = ofono_netreg_get_data(netreg);
+	struct at_netreg_data *nd = ofono_netreg_get_data(netreg);
 
 	if (nd->nitz_timeout)
 		g_source_remove(nd->nitz_timeout);

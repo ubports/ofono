@@ -25,6 +25,7 @@
 #include <errno.h>
 #include <sys/stat.h>
 
+#include <ell/ell.h>
 #include <glib.h>
 
 #include <ofono/log.h>
@@ -171,13 +172,13 @@ static void contrdp_cb(gboolean ok, GAtResult *result, gpointer user_data)
 			found = TRUE;
 
 			if (strcmp(gcd->address, "") != 0)
-				strncpy(gcd->netmask,
+				l_strlcpy(gcd->netmask,
 					&ip_mask[strlen(gcd->address) + 1],
 					sizeof(gcd->netmask));
 
-			strncpy(gcd->gateway, gw, sizeof(gcd->gateway));
-			strncpy(gcd->dns1, dns1, sizeof(gcd->dns1));
-			strncpy(gcd->dns2, dns2, sizeof(gcd->dns2));
+			l_strlcpy(gcd->gateway, gw, sizeof(gcd->gateway));
+			l_strlcpy(gcd->dns1, dns1, sizeof(gcd->dns1));
+			l_strlcpy(gcd->dns2, dns2, sizeof(gcd->dns2));
 		}
 	}
 
@@ -229,7 +230,7 @@ static void address_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	if (!g_at_result_iter_next_string(&iter, &address))
 		goto error;
 
-	strncpy(gcd->address, address, sizeof(gcd->address));
+	l_strlcpy(gcd->address, address, sizeof(gcd->address));
 
 	sprintf(buf, "AT+CGCONTRDP=%d", gcd->active_context);
 	if (g_at_chat_send(gcd->chat, buf, cgcontrdp_prefix,
@@ -352,9 +353,7 @@ static void telitncm_gprs_activate_primary(struct ofono_gprs_context *gc,
 		break;
 	}
 
-	if (ctx->apn)
-		snprintf(buf + len, sizeof(buf) - len - 3,
-					",\"%s\"", ctx->apn);
+	snprintf(buf + len, sizeof(buf) - len - 3, ",\"%s\"", ctx->apn);
 
 	if (g_at_chat_send(gcd->chat, buf, none_prefix,
 				setup_cb, gc, NULL) > 0)

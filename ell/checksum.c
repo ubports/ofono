@@ -68,25 +68,41 @@ struct sockaddr_alg {
 #define SOL_ALG 279
 #endif
 
-static struct {
+struct checksum_info {
 	const char *name;
 	uint8_t digest_len;
 	bool supported;
+};
+
+static struct checksum_info checksum_algs[] = {
+	[L_CHECKSUM_MD4] = { .name = "md4", .digest_len = 16 },
+	[L_CHECKSUM_MD5] = { .name = "md5", .digest_len = 16 },
+	[L_CHECKSUM_SHA1] = { .name = "sha1", .digest_len = 20 },
+	[L_CHECKSUM_SHA256] = { .name = "sha256", .digest_len = 32 },
+	[L_CHECKSUM_SHA384] = { .name = "sha384", .digest_len = 48 },
+	[L_CHECKSUM_SHA512] = { .name = "sha512", .digest_len = 64 },
+};
+
+static struct checksum_info checksum_cmac_aes_alg =
+	{ .name = "cmac(aes)", .digest_len = 16 };
+
+static struct checksum_info checksum_hmac_algs[] = {
+	[L_CHECKSUM_MD4] = { .name = "hmac(md4)", .digest_len = 16 },
+	[L_CHECKSUM_MD5] = { .name = "hmac(md5)", .digest_len = 16 },
+	[L_CHECKSUM_SHA1] = { .name = "hmac(sha1)", .digest_len = 20 },
+	[L_CHECKSUM_SHA256] = { .name = "hmac(sha256)", .digest_len = 32 },
+	[L_CHECKSUM_SHA384] = { .name = "hmac(sha384)", .digest_len = 48 },
+	[L_CHECKSUM_SHA512] = { .name = "hmac(sha512)", .digest_len = 64 },
+};
+
+static const struct {
+	struct checksum_info *list;
+	size_t n;
 } checksum_info_table[] = {
-	{ .name = "md4", .digest_len = 16 },
-	{ .name = "md5", .digest_len = 16 },
-	{ .name = "sha1", .digest_len = 20 },
-	{ .name = "sha256", .digest_len = 32 },
-	{ .name = "sha384", .digest_len = 48 },
-	{ .name = "sha512", .digest_len = 64 },
-	{ .name = "cmac(aes)", .digest_len = 16 },
-	{ .name = "hmac(md4)", .digest_len = 16 },
-	{ .name = "hmac(md5)", .digest_len = 16 },
-	{ .name = "hmac(sha1)", .digest_len = 20 },
-	{ .name = "hmac(sha256)", .digest_len = 32 },
-	{ .name = "hmac(sha384)", .digest_len = 48 },
-	{ .name = "hmac(sha512)", .digest_len = 64 },
-	{ .name = NULL, .digest_len = 0 },
+	{ checksum_algs, L_ARRAY_SIZE(checksum_algs) },
+	{ &checksum_cmac_aes_alg, 1 },
+	{ checksum_hmac_algs, L_ARRAY_SIZE(checksum_hmac_algs) },
+	{}
 };
 
 /**
@@ -96,17 +112,16 @@ static struct {
  * Checksum handling
  */
 
-#define is_valid_type(type)  ((type) > L_CHECKSUM_NONE && \
-					(type) <= L_CHECKSUM_SHA512)
+#define is_valid_index(array, i) ((i) >= 0 && (i) < L_ARRAY_SIZE(array))
 
 /**
  * l_checksum:
  *
- * Opague object representing the checksum.
+ * Opaque object representing the checksum.
  */
 struct l_checksum {
 	int sk;
-	char alg_name[sizeof(((struct sockaddr_alg *) 0)->salg_name)];
+	const struct checksum_info *alg_info;
 };
 
 static int create_alg(const char *alg)
@@ -131,30 +146,6 @@ static int create_alg(const char *alg)
 	return sk;
 }
 
-static const char *checksum_type_to_name(enum l_checksum_type type)
-{
-	switch (type) {
-	case L_CHECKSUM_NONE:
-		return NULL;
-	case L_CHECKSUM_MD4:
-		return "md4";
-	case L_CHECKSUM_MD5:
-		return "md5";
-	case L_CHECKSUM_SHA1:
-		return "sha1";
-	case L_CHECKSUM_SHA224:
-		return "sha224";
-	case L_CHECKSUM_SHA256:
-		return "sha256";
-	case L_CHECKSUM_SHA384:
-		return "sha384";
-	case L_CHECKSUM_SHA512:
-		return "sha512";
-	}
-
-	return NULL;
-}
-
 /**
  * l_checksum_new:
  * @type: checksum type
@@ -166,17 +157,15 @@ static const char *checksum_type_to_name(enum l_checksum_type type)
 LIB_EXPORT struct l_checksum *l_checksum_new(enum l_checksum_type type)
 {
 	struct l_checksum *checksum;
-	const char *name;
 	int fd;
 
-	if (!is_valid_type(type))
+	if (!is_valid_index(checksum_algs, type) || !checksum_algs[type].name)
 		return NULL;
 
 	checksum = l_new(struct l_checksum, 1);
+	checksum->alg_info = &checksum_algs[type];
 
-	name = checksum_type_to_name(type);
-
-	fd = create_alg(name);
+	fd = create_alg(checksum->alg_info->name);
 	if (fd < 0)
 		goto error;
 
@@ -185,8 +174,6 @@ LIB_EXPORT struct l_checksum *l_checksum_new(enum l_checksum_type type)
 
 	if (checksum->sk < 0)
 		goto error;
-
-	strcpy(checksum->alg_name, name);
 
 	return checksum;
 
@@ -219,7 +206,7 @@ LIB_EXPORT struct l_checksum *l_checksum_new_cmac_aes(const void *key,
 		return NULL;
 	}
 
-	strcpy(checksum->alg_name, "cmac(aes)");
+	checksum->alg_info = &checksum_cmac_aes_alg;
 	return checksum;
 }
 
@@ -228,18 +215,12 @@ LIB_EXPORT struct l_checksum *l_checksum_new_hmac(enum l_checksum_type type,
 {
 	struct l_checksum *checksum;
 	int fd;
-	char name[sizeof(((struct sockaddr_alg *)0)->salg_name)];
-	unsigned int r;
 
-	if (!is_valid_type(type))
+	if (!is_valid_index(checksum_hmac_algs, type) ||
+			!checksum_hmac_algs[type].name)
 		return NULL;
 
-	r = snprintf(name, sizeof(name), "hmac(%s)",
-					checksum_type_to_name(type));
-	if (r >= sizeof(name))
-		return NULL;
-
-	fd = create_alg(name);
+	fd = create_alg(checksum_hmac_algs[type].name);
 	if (fd < 0)
 		return NULL;
 
@@ -257,7 +238,7 @@ LIB_EXPORT struct l_checksum *l_checksum_new_hmac(enum l_checksum_type type,
 		return NULL;
 	}
 
-	strcpy(checksum->alg_name, name);
+	checksum->alg_info = &checksum_hmac_algs[type];
 	return checksum;
 }
 
@@ -284,7 +265,7 @@ LIB_EXPORT struct l_checksum *l_checksum_clone(struct l_checksum *checksum)
 		return NULL;
 	}
 
-	strcpy(clone->alg_name, checksum->alg_name);
+	clone->alg_info = checksum->alg_info;
 	return clone;
 }
 
@@ -379,12 +360,14 @@ LIB_EXPORT bool l_checksum_updatev(struct l_checksum *checksum,
 /**
  * l_checksum_get_digest:
  * @checksum: checksum object
- * @digest: digest data pointer
- * @len: length of digest data
+ * @digest: output data buffer
+ * @len: length of output buffer
  *
- * Gets the digest from @checksum as raw binary data.
+ * Writes the digest from @checksum as raw binary data into the provided
+ * buffer or, if the buffer is shorter, the initial @len bytes of the digest
+ * data.
  *
- * Returns: Number of bytes read, or negative value if an error occurred.
+ * Returns: Number of bytes written, or negative value if an error occurred.
  **/
 LIB_EXPORT ssize_t l_checksum_get_digest(struct l_checksum *checksum,
 						void *digest, size_t len)
@@ -404,6 +387,9 @@ LIB_EXPORT ssize_t l_checksum_get_digest(struct l_checksum *checksum,
 	if (result < 0)
 		return -errno;
 
+	if ((size_t) result < len && result < checksum->alg_info->digest_len)
+		return -EIO;
+
 	return result;
 }
 
@@ -418,22 +404,13 @@ LIB_EXPORT ssize_t l_checksum_get_digest(struct l_checksum *checksum,
 LIB_EXPORT char *l_checksum_get_string(struct l_checksum *checksum)
 {
 	unsigned char digest[64];
-	unsigned int i;
 
 	if (unlikely(!checksum))
 		return NULL;
 
 	l_checksum_get_digest(checksum, digest, sizeof(digest));
 
-	for (i = 0; checksum_info_table[i].name; i++) {
-		if (strcmp(checksum_info_table[i].name, checksum->alg_name))
-			continue;
-
-		return l_util_hexstring(digest,
-					checksum_info_table[i].digest_len);
-	}
-
-	return NULL;
+	return l_util_hexstring(digest, checksum->alg_info->digest_len);
 }
 
 static void init_supported()
@@ -441,7 +418,7 @@ static void init_supported()
 	static bool initialized = false;
 	struct sockaddr_alg salg;
 	int sk;
-	int i;
+	unsigned int i, j;
 
 	if (likely(initialized))
 		return;
@@ -456,57 +433,57 @@ static void init_supported()
 	salg.salg_family = AF_ALG;
 	strcpy((char *) salg.salg_type, "hash");
 
-	for (i = 0; checksum_info_table[i].name; i++) {
-		strcpy((char *) salg.salg_name, checksum_info_table[i].name);
+	for (i = 0; checksum_info_table[i].list; i++)
+		for (j = 0; j < checksum_info_table[i].n; j++) {
+			struct checksum_info *info;
 
-		if (bind(sk, (struct sockaddr *) &salg, sizeof(salg)) < 0)
-			continue;
+			info = &checksum_info_table[i].list[j];
+			if (!info->name)
+				continue;
 
-		checksum_info_table[i].supported = true;
-	}
+			strcpy((char *) salg.salg_name, info->name);
+
+			if (bind(sk, (struct sockaddr *) &salg,
+						sizeof(salg)) < 0)
+				continue;
+
+			info->supported = true;
+		}
 
 	close(sk);
-}
-
-static inline bool is_supported(const char *alg)
-{
-	int i;
-
-	for (i = 0; checksum_info_table[i].name; i++) {
-		if (strcmp(checksum_info_table[i].name, alg))
-			continue;
-
-		return checksum_info_table[i].supported;
-	}
-
-	return false;
 }
 
 LIB_EXPORT bool l_checksum_is_supported(enum l_checksum_type type,
 							bool check_hmac)
 {
-	const char *name;
-	char hmac[sizeof(((struct sockaddr_alg *)0)->salg_name)];
+	const struct checksum_info *list;
 
 	init_supported();
 
-	name = checksum_type_to_name(type);
-	if (!name)
-		return false;
+	if (!check_hmac) {
+		if (!is_valid_index(checksum_algs, type))
+			return false;
 
-	if (!is_supported(name))
-		return false;
+		list = checksum_algs;
+	} else {
+		if (!is_valid_index(checksum_hmac_algs, type))
+			return false;
 
-	if (!check_hmac)
-		return true;
+		list = checksum_hmac_algs;
+	}
 
-	snprintf(hmac, sizeof(hmac) - 1, "hmac(%s)", name);
-	return is_supported(hmac);
+	return list[type].supported;
 }
 
 LIB_EXPORT bool l_checksum_cmac_aes_supported()
 {
 	init_supported();
 
-	return is_supported("cmac(aes)");
+	return checksum_cmac_aes_alg.supported;
+}
+
+LIB_EXPORT ssize_t l_checksum_digest_length(enum l_checksum_type type)
+{
+	return is_valid_index(checksum_algs, type) ?
+		checksum_algs[type].digest_len : 0;
 }

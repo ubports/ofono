@@ -35,6 +35,11 @@
 extern "C" {
 #endif
 
+#define l_container_of(ptr, type, member) ({				\
+		const __typeof__(((type *) 0)->member) *__mptr = (ptr);	\
+		(type *)((char *) __mptr - offsetof(type, member));	\
+	})
+
 #define likely(x)   __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
@@ -100,6 +105,10 @@ do {						\
 #define L_CPU_TO_BE64(val) (val)
 #else
 #error "Unknown byte order"
+#endif
+
+#if __STDC_VERSION__ <= 199409L
+#define inline __inline__
 #endif
 
 static inline uint8_t l_get_u8(const void *ptr)
@@ -294,6 +303,13 @@ void l_util_debug(l_util_hexdump_func_t function, void *user_data,
 			__attribute__((format(printf, 3, 4)));
 
 const char *l_util_get_debugfs_path(void);
+
+#define L_TFR(expression)                          \
+  (__extension__                                   \
+    ({ long int __result;                          \
+       do __result = (long int) (expression);      \
+       while (__result == -1L && errno == EINTR);  \
+       __result; }))
 
 #ifdef __cplusplus
 }

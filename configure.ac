@@ -1,5 +1,5 @@
 AC_PREREQ(2.60)
-AC_INIT(ofono, 1.28)
+AC_INIT(ofono, 1.31)
 
 AM_INIT_AUTOMAKE([foreign subdir-objects color-tests])
 AC_CONFIG_HEADERS(config.h)
@@ -53,6 +53,8 @@ AC_ARG_ENABLE(pie, AC_HELP_STRING([--enable-pie],
 		LDFLAGS="$LDFLAGS -pie"
 	fi
 ])
+
+AC_CHECK_FUNCS(explicit_bzero)
 
 AC_CHECK_FUNC(signalfd, dummy=yes,
 			AC_MSG_ERROR(signalfd support is required))

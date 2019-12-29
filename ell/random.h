@@ -29,9 +29,12 @@ extern "C" {
 
 #include <stddef.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 bool l_getrandom(void *buf, size_t len);
 bool l_getrandom_is_supported();
+
+uint32_t l_getrandom_uint32(void);
 
 #ifdef __cplusplus
 }

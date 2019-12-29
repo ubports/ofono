@@ -33,6 +33,9 @@
 #include <errno.h>
 #include <glib.h>
 
+#pragma GCC diagnostic ignored "-Wpragmas"
+#pragma GCC diagnostic ignored "-Waddress-of-packed-member"
+
 #include "message.h"
 #include "common.h"
 #include "modem.h"

@@ -43,6 +43,8 @@ struct ofono_netmon_driver {
 					unsigned int enable,
 					unsigned int period,
 					ofono_netmon_cb_t cb, void *data);
+	void (*neighbouring_cell_update)(struct ofono_netmon *netmon,
+					ofono_netmon_cb_t cb, void *data);
 };
 
 enum ofono_netmon_cell_type {
@@ -103,6 +105,10 @@ void ofono_netmon_remove(struct ofono_netmon *netmon);
 void ofono_netmon_set_data(struct ofono_netmon *netmon, void *data);
 
 void *ofono_netmon_get_data(struct ofono_netmon *netmon);
+
+void ofono_netmon_neighbouring_cell_notify(struct ofono_netmon *netmon,
+					enum ofono_netmon_cell_type type,
+					int info_type, ...);
 
 #ifdef __cplusplus
 }

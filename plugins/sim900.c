@@ -115,7 +115,7 @@ static void check_model(gboolean ok, GAtResult *result, gpointer user_data)
 		if (strstr(model, "SIM800"))
 			data->modem_type = SIM800;
 		else if (strstr(model, "SIM900"))
-			data->modem_type = SIM800;
+			data->modem_type = SIM900;
 		else
 			data->modem_type = SIMCOM_UNKNOWN;
 	}

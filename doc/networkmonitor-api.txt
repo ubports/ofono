@@ -22,6 +22,23 @@ Methods		a{sv} GetServingCellInformation()
 			are available, their valid value ranges and
 			applicability to different cell types.
 
+			a{a{sv}} GetNeighbouringCellsInformation()
+
+			Requests the neighbouring cells information and basic
+			measurements from oFono.  The returned value is a
+			dictionary with the possible key / values documented
+			below.  The type of cell is given by the 'Technology'
+			property.
+
+			Based on the type of cell, the dictionary will contain
+			additional key/value pairs.  If a given key/value pair
+			is not present, then it is not known or unsupported
+			by the underlying driver.
+
+			Refer to the sections below for which property types
+			are available, their valid value ranges and
+			applicability to different cell types.
+
 		void RegisterAgent(object path)
 
 			Registers an agent which will be called whenever the

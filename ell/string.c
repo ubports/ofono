@@ -242,7 +242,11 @@ LIB_EXPORT void l_string_append_vprintf(struct l_string *dest,
 	if (unlikely(!dest))
 		return;
 
+#if __STDC_VERSION__ > 199409L
 	va_copy(args_copy, args);
+#else
+	__va_copy(args_copy, args);
+#endif
 
 	have_space = dest->max - dest->len;
 	len = vsnprintf(dest->str + dest->len, have_space, format, args);

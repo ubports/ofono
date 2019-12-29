@@ -80,6 +80,10 @@ enum l_ascii {
 #define l_ascii_isxdigit(c) \
 	((l_ascii_table[(unsigned char) (c)] & L_ASCII_XDIGIT) != 0)
 
+#if __STDC_VERSION__ <= 199409L
+#define inline __inline__
+#endif
+
 static inline __attribute__ ((always_inline))
 					bool l_ascii_isblank(unsigned char c)
 {

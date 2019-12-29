@@ -203,6 +203,16 @@ LIB_EXPORT char *l_strjoinv(char **str_array, const char delim)
 }
 
 /**
+ * l_strv_new:
+ *
+ * Returns: new emptry string array
+ **/
+LIB_EXPORT char **l_strv_new(void)
+{
+	return l_new(char *, 1);
+}
+
+/**
  * l_strv_free:
  * @str_array: a %NULL terminated array of strings
  *
@@ -284,9 +294,68 @@ LIB_EXPORT char **l_strv_append(char **str_array, const char *str)
 	for (i = 0; i < len; i++)
 		ret[i] = str_array[i];
 
-	ret[i++] = l_strdup(str);
+	ret[i] = l_strdup(str);
 
 	l_free(str_array);
 
 	return ret;
+}
+
+LIB_EXPORT char **l_strv_append_printf(char **str_array,
+						const char *format, ...)
+{
+	va_list args;
+	char **ret;
+
+	va_start(args, format);
+	ret = l_strv_append_vprintf(str_array, format, args);
+	va_end(args);
+
+	return ret;
+}
+
+LIB_EXPORT char **l_strv_append_vprintf(char **str_array,
+					const char *format, va_list args)
+{
+	char **ret;
+	unsigned int i, len;
+
+	if (unlikely(!format))
+		return str_array;
+
+	len = l_strv_length(str_array);
+	ret = l_new(char *, len + 2);
+
+	for (i = 0; i < len; i++)
+		ret[i] = str_array[i];
+
+	ret[i] = l_strdup_vprintf(format, args);
+
+	l_free(str_array);
+
+	return ret;
+}
+
+/**
+ * l_strv_copy:
+ * @str_array: a %NULL terminated array of strings or %NULL
+ *
+ * Returns: An independent copy of @str_array.
+ */
+LIB_EXPORT char **l_strv_copy(char **str_array)
+{
+	int i, len;
+	char **copy;
+
+	if (unlikely(!str_array))
+		return NULL;
+
+	for (len = 0; str_array[len]; len++);
+
+	copy = l_malloc(sizeof(char *) * (len + 1));
+
+	for (i = len; i >= 0; i--)
+		copy[i] = l_strdup(str_array[i]);
+
+	return copy;
 }

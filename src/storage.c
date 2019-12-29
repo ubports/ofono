@@ -33,6 +33,7 @@
 #include <errno.h>
 
 #include <glib.h>
+#include <ell/ell.h>
 
 #include "storage.h"
 
@@ -95,16 +96,16 @@ ssize_t read_file(unsigned char *buffer, size_t len,
 	path = g_strdup_vprintf(path_fmt, ap);
 	va_end(ap);
 
-	fd = TFR(open(path, O_RDONLY));
+	fd = L_TFR(open(path, O_RDONLY));
 
 	g_free(path);
 
 	if (fd == -1)
 		return -1;
 
-	r = TFR(read(fd, buffer, len));
+	r = L_TFR(read(fd, buffer, len));
 
-	TFR(close(fd));
+	L_TFR(close(fd));
 
 	return r;
 }
@@ -137,13 +138,13 @@ ssize_t write_file(const unsigned char *buffer, size_t len, mode_t mode,
 	if (create_dirs(path, mode | S_IXUSR) != 0)
 		goto error_create_dirs;
 
-	fd = TFR(g_mkstemp_full(tmp_path, O_WRONLY | O_CREAT | O_TRUNC, mode));
+	fd = L_TFR(g_mkstemp_full(tmp_path, O_WRONLY | O_CREAT | O_TRUNC, mode));
 	if (fd == -1)
 		goto error_mkstemp_full;
 
-	r = TFR(write(fd, buffer, len));
+	r = L_TFR(write(fd, buffer, len));
 
-	TFR(close(fd));
+	L_TFR(close(fd));
 
 	if (r != (ssize_t) len) {
 		r = -1;

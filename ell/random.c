@@ -27,6 +27,7 @@
 #define _GNU_SOURCE
 #include <errno.h>
 #include <unistd.h>
+#include <stdlib.h>
 #include <sys/syscall.h>
 
 #include "random.h"
@@ -60,7 +61,7 @@ LIB_EXPORT bool l_getrandom(void *buf, size_t len)
 	while (len) {
 		int ret;
 
-		ret = TEMP_FAILURE_RETRY(getrandom(buf, len, 0));
+		ret = L_TFR(getrandom(buf, len, 0));
 		if (ret < 0)
 			return false;
 
@@ -88,4 +89,17 @@ LIB_EXPORT bool l_getrandom_is_supported()
 
 	initialized = true;
 	return supported;
+}
+
+LIB_EXPORT uint32_t l_getrandom_uint32(void)
+{
+	int ret;
+	uint32_t u;
+
+	ret = getrandom(&u, sizeof(u), GRND_NONBLOCK);
+
+	if (ret == sizeof(u))
+		return u;
+
+        return random() * RAND_MAX + random();
 }

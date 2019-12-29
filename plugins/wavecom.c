@@ -48,6 +48,7 @@
 #include <ofono/ussd.h>
 #include <ofono/voicecall.h>
 
+#include <drivers/atmodem/atutil.h>
 #include <drivers/atmodem/vendor.h>
 
 
@@ -70,52 +71,19 @@ static void wavecom_debug(const char *str, void *user_data)
 static int wavecom_enable(struct ofono_modem *modem)
 {
 	GAtChat *chat;
-	GIOChannel *channel;
-	GAtSyntax *syntax;
-	const char *device;
-	GHashTable *options;
 
 	DBG("%p", modem);
 
-	device = ofono_modem_get_string(modem, "Device");
-	if (device == NULL)
+	chat = at_util_open_device(modem, "Device", wavecom_debug, "",
+					"Baud", "115200",
+					"Parity", "none",
+					"StopBits", "1",
+					"DataBits", "8",
+					NULL);
+	if (!chat)
 		return -EINVAL;
 
-	options = g_hash_table_new(g_str_hash, g_str_equal);
-
-	if (options == NULL)
-		return -ENOMEM;
-
-	g_hash_table_insert(options, "Baud", "115200");
-	g_hash_table_insert(options, "Parity", "none");
-	g_hash_table_insert(options, "StopBits", "1");
-	g_hash_table_insert(options, "DataBits", "8");
-
-	channel = g_at_tty_open(device, options);
-
-	g_hash_table_destroy(options);
-
-	if (channel == NULL)
-		return -EIO;
-
-	/*
-	 * Could not figure out whether it is fully compliant or not, use
-	 * permissive for now
-	 * */
-	syntax = g_at_syntax_new_gsm_permissive();
-
-	chat = g_at_chat_new(channel, syntax);
-	g_at_syntax_unref(syntax);
-	g_io_channel_unref(channel);
-
-	if (chat == NULL)
-		return -ENOMEM;
-
 	g_at_chat_add_terminator(chat, "+CPIN:", 6, TRUE);
-
-	if (getenv("OFONO_AT_DEBUG"))
-		g_at_chat_set_debug(chat, wavecom_debug, "");
-
 	ofono_modem_set_data(modem, chat);
 
 	return 0;

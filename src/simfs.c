@@ -274,7 +274,7 @@ static void sim_fs_end_current(struct sim_fs *fs)
 		__ofono_sim_remove_session_watch(fs->session, fs->watch_id);
 
 	if (fs->fd != -1) {
-		TFR(close(fs->fd));
+		L_TFR(close(fs->fd));
 		fs->fd = -1;
 	}
 
@@ -320,7 +320,7 @@ static gboolean cache_block(struct sim_fs *fs, int block, int block_len,
 				SIM_CACHE_HEADER_SIZE, SEEK_SET) == (off_t) -1)
 		return FALSE;
 
-	r = TFR(write(fs->fd, data, num_bytes));
+	r = L_TFR(write(fs->fd, data, num_bytes));
 
 	if (r != num_bytes)
 		return FALSE;
@@ -335,7 +335,7 @@ static gboolean cache_block(struct sim_fs *fs, int block, int block_len,
 	b = fs->bitmap[offset];
 	b |= 1 << bit;
 
-	r = TFR(write(fs->fd, &b, sizeof(b)));
+	r = L_TFR(write(fs->fd, &b, sizeof(b)));
 
 	if (r != sizeof(b))
 		return FALSE;
@@ -477,7 +477,7 @@ static gboolean sim_fs_op_read_block(gpointer user_data)
 		if (lseek(fs->fd, seekoff, SEEK_SET) == (off_t) -1)
 			break;
 
-		if (TFR(read(fs->fd, op->buffer + bufoff, toread)) != toread)
+		if (L_TFR(read(fs->fd, op->buffer + bufoff, toread)) != toread)
 			break;
 
 		op->current += 1;
@@ -569,7 +569,7 @@ static gboolean sim_fs_op_read_record(gpointer user)
 				SIM_CACHE_HEADER_SIZE, SEEK_SET) == (off_t) -1)
 			break;
 
-		if (TFR(read(fs->fd, buf, op->record_length)) !=
+		if (L_TFR(read(fs->fd, buf, op->record_length)) !=
 				op->record_length)
 			break;
 
@@ -660,17 +660,17 @@ static void sim_fs_op_cache_fileinfo(struct sim_fs *fs,
 	fileinfo[6] = file_status;
 
 	path = g_strdup_printf(SIM_CACHE_PATH, imsi, phase, op->id);
-	fs->fd = TFR(open(path, O_WRONLY | O_CREAT | O_TRUNC, SIM_CACHE_MODE));
+	fs->fd = L_TFR(open(path, O_WRONLY | O_CREAT | O_TRUNC, SIM_CACHE_MODE));
 	g_free(path);
 
 	if (fs->fd == -1)
 		return;
 
-	if (TFR(write(fs->fd, fileinfo, SIM_CACHE_HEADER_SIZE)) ==
+	if (L_TFR(write(fs->fd, fileinfo, SIM_CACHE_HEADER_SIZE)) ==
 			SIM_CACHE_HEADER_SIZE)
 		return;
 
-	TFR(close(fs->fd));
+	L_TFR(close(fs->fd));
 	fs->fd = -1;
 }
 
@@ -761,7 +761,7 @@ static gboolean sim_fs_op_check_cached(struct sim_fs *fs)
 	if (path == NULL)
 		return FALSE;
 
-	fd = TFR(open(path, O_RDWR));
+	fd = L_TFR(open(path, O_RDWR));
 	g_free(path);
 
 	if (fd == -1) {
@@ -773,7 +773,7 @@ static gboolean sim_fs_op_check_cached(struct sim_fs *fs)
 		return FALSE;
 	}
 
-	len = TFR(read(fd, fileinfo, SIM_CACHE_HEADER_SIZE));
+	len = L_TFR(read(fd, fileinfo, SIM_CACHE_HEADER_SIZE));
 
 	if (len != SIM_CACHE_HEADER_SIZE)
 		goto error;
@@ -827,7 +827,7 @@ static gboolean sim_fs_op_check_cached(struct sim_fs *fs)
 	return TRUE;
 
 error:
-	TFR(close(fd));
+	L_TFR(close(fd));
 	return FALSE;
 }
 
@@ -1187,8 +1187,8 @@ char *sim_fs_get_cached_image(struct sim_fs *fs, int id)
 
 	path = g_strdup_printf(SIM_IMAGE_CACHE_PATH, imsi, phase, id);
 
-	TFR(stat(path, &st_buf));
-	fd = TFR(open(path, O_RDONLY));
+	L_TFR(stat(path, &st_buf));
+	fd = L_TFR(open(path, O_RDONLY));
 	g_free(path);
 
 	if (fd < 0)
@@ -1198,12 +1198,12 @@ char *sim_fs_get_cached_image(struct sim_fs *fs, int id)
 	buffer = g_try_new0(char, image_length + 1);
 
 	if (buffer == NULL) {
-		TFR(close(fd));
+		L_TFR(close(fd));
 		return NULL;
 	}
 
-	len = TFR(read(fd, buffer, image_length));
-	TFR(close(fd));
+	len = L_TFR(read(fd, buffer, image_length));
+	L_TFR(close(fd));
 
 	if (len != image_length) {
 		g_free(buffer);
