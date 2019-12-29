@@ -1,3 +1,9 @@
+ofono (1.31-1) UNRELEASED; urgency=medium
+
+  * New upstream release
+
+ -- Laurent Bigonville <bigon@debian.org>  Sun, 29 Dec 2019 12:00:29 +0100
+
 ofono (1.28-1) unstable; urgency=medium
 
   * New upstream version 1.28
