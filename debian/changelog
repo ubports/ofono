@@ -14,8 +14,10 @@ ofono (1.31-1) UNRELEASED; urgency=medium
     Remove After=syslog.target from systemd .service files, to please lintian
   * debian/control: Make ofono architecture linux-any, it uses signalfd that
     is linux only and would require porting
+  * debian/control: Make ofono-dev depend against libdbus-1-dev and
+    libglib2.0-dev, the pkg-config file Requires them
 
- -- Laurent Bigonville <bigon@debian.org>  Sun, 29 Dec 2019 12:57:42 +0100
+ -- Laurent Bigonville <bigon@debian.org>  Sun, 29 Dec 2019 13:05:37 +0100
 
 ofono (1.28-1) unstable; urgency=medium
 
