@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -466,8 +465,14 @@ static void ifx_gprs_activate_primary(struct ofono_gprs_context *gc,
 	gcd->active_context = ctx->cid;
 	gcd->cb = cb;
 	gcd->cb_data = data;
-	memcpy(gcd->username, ctx->username, sizeof(ctx->username));
-	memcpy(gcd->password, ctx->password, sizeof(ctx->password));
+
+	if (ctx->auth_method == OFONO_GPRS_AUTH_METHOD_NONE) {
+		memset(gcd->username, 0, sizeof(gcd->username));
+		memset(gcd->password, 0, sizeof(gcd->password));
+	} else {
+		memcpy(gcd->username, ctx->username, sizeof(ctx->username));
+		memcpy(gcd->password, ctx->password, sizeof(ctx->password));
+	}
 
 	gcd->state = STATE_ENABLING;
 	gcd->proto = ctx->proto;
@@ -513,6 +518,9 @@ static void deactivate_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 	if (gcd->vendor != OFONO_VENDOR_XMM)
 		g_at_chat_resume(gcd->chat);
+
+	if (!gcd->cb)
+		return;
 
 	CALLBACK_WITH_SUCCESS(gcd->cb, gcd->cb_data);
 }
@@ -608,9 +616,11 @@ static int ifx_gprs_context_probe(struct ofono_gprs_context *gc,
 
 	DBG("");
 
-	if (stat(TUN_DEV, &st) < 0) {
-		ofono_error("Missing support for TUN/TAP devices");
-		return -ENODEV;
+	if (vendor != OFONO_VENDOR_XMM) {
+		if (stat(TUN_DEV, &st) < 0) {
+			ofono_error("Missing support for TUN/TAP devices");
+			return -ENODEV;
+		}
 	}
 
 	if (vendor != OFONO_VENDOR_XMM) {
@@ -652,7 +662,7 @@ static void ifx_gprs_context_remove(struct ofono_gprs_context *gc)
 	g_free(gcd);
 }
 
-static struct ofono_gprs_context_driver driver = {
+static const struct ofono_gprs_context_driver driver = {
 	.name			= "ifxmodem",
 	.probe			= ifx_gprs_context_probe,
 	.remove			= ifx_gprs_context_remove,

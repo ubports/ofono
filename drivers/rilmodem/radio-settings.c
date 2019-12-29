@@ -25,7 +25,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -453,7 +452,7 @@ static void ril_radio_settings_remove(struct ofono_radio_settings *rs)
 	g_free(rd);
 }
 
-static struct ofono_radio_settings_driver driver = {
+static const struct ofono_radio_settings_driver driver = {
 	.name			= RILMODEM,
 	.probe			= ril_radio_settings_probe,
 	.remove			= ril_radio_settings_remove,

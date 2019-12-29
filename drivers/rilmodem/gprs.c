@@ -26,7 +26,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -515,7 +514,7 @@ static void ril_gprs_remove(struct ofono_gprs *gprs)
 	g_free(gd);
 }
 
-static struct ofono_gprs_driver driver = {
+static const struct ofono_gprs_driver driver = {
 	.name			= RILMODEM,
 	.probe			= ril_gprs_probe,
 	.remove			= ril_gprs_remove,

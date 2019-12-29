@@ -27,6 +27,7 @@
 #include <stdlib.h>
 
 #include <glib.h>
+#include <ell/ell.h>
 
 #include <ofono/types.h>
 #include "simutil.h"
@@ -793,14 +794,14 @@ static char *sim_network_name_parse(const unsigned char *buffer, int length,
 		spare_bits = dcs & 0x07;
 		num_char = (length * 8 - spare_bits) / 7;
 
-		unpacked_buf = unpack_7bit(buffer, length, 0, FALSE,
+		unpacked_buf = unpack_7bit(buffer, length, 0, false,
 						num_char, &written, 0);
 		if (unpacked_buf == NULL)
 			break;
 
 		ret = convert_gsm_to_utf8(unpacked_buf, written, NULL, NULL, 0);
 
-		g_free(unpacked_buf);
+		l_free(unpacked_buf);
 
 		break;
 	case 0x10:
@@ -815,9 +816,7 @@ static char *sim_network_name_parse(const unsigned char *buffer, int length,
 			if (buffer[i] == 0xff && buffer[i + 1] == 0xff)
 				break;
 
-		ret = g_convert((const char *) buffer, length,
-					"UTF-8//TRANSLIT", "UCS-2BE",
-					NULL, NULL, NULL);
+		ret = l_utf8_from_ucs2be(buffer, length);
 		break;
 	}
 
@@ -989,9 +988,9 @@ static void pnn_operator_free(struct sim_eons_operator_info *oper)
 	if (oper == NULL)
 		return;
 
-	g_free(oper->info);
-	g_free(oper->shortname);
-	g_free(oper->longname);
+	l_free(oper->info);
+	l_free(oper->shortname);
+	l_free(oper->longname);
 }
 
 struct sim_eons *sim_eons_new(int pnn_records)
@@ -1549,6 +1548,12 @@ gboolean sim_cphs_is_active(unsigned char *cphs, enum sim_cphs_service index)
 	return ((cphs[index / 4] >> ((index % 4) * 2)) & 3) == 3;
 }
 
+void sim_app_record_free(struct sim_app_record *app)
+{
+	l_free(app->label);
+	g_free(app);
+}
+
 GSList *sim_parse_app_template_entries(const unsigned char *buffer, int len)
 {
 	GSList *ret = NULL;
@@ -1569,6 +1574,8 @@ GSList *sim_parse_app_template_entries(const unsigned char *buffer, int len)
 			goto error;
 
 		memcpy(app.aid, aid, app.aid_len);
+
+		app.type = (app.aid[5] << 8) | app.aid[6];
 
 		/* Find the label (optional) */
 		label = ber_tlv_find_by_tag(dataobj, 0x50, dataobj_len,
@@ -1598,7 +1605,7 @@ error:
 		GSList *t = ret;
 		struct sim_app_record *app = ret->data;
 
-		g_free(app->label);
+		l_free(app->label);
 		g_free(app);
 
 		ret = ret->next;
@@ -1606,4 +1613,133 @@ error:
 	}
 
 	return NULL;
+}
+
+static int build_authenticate(unsigned char *buffer, const unsigned char *rand,
+		const unsigned char *autn)
+{
+	int pos = 0;
+
+	buffer[pos++] = 0x00;
+	buffer[pos++] = 0x88;
+	buffer[pos++] = 0x00;
+	buffer[pos++] = autn ? 0x81 : 0x80;
+	buffer[pos++] = autn ? 0x22 : 0x11;
+	buffer[pos++] = 0x10;
+	memcpy(buffer + pos, rand, 16);
+	pos += 16;
+
+	if (autn) {
+		buffer[pos++] = 0x10;
+		memcpy(buffer + pos, autn, 16);
+		pos += 16;
+	}
+
+	buffer[pos++] = 0x00;
+
+	return pos;
+}
+
+int sim_build_umts_authenticate(unsigned char *buffer, int len,
+		const unsigned char *rand, const unsigned char *autn)
+{
+	if (len < 40 || !rand || !autn)
+		return FALSE;
+
+	return build_authenticate(buffer, rand, autn);
+}
+
+int sim_build_gsm_authenticate(unsigned char *buffer, int len,
+		const unsigned char *rand)
+{
+	if (len < 22 || !rand)
+		return FALSE;
+
+	return build_authenticate(buffer, rand, NULL);
+}
+
+gboolean sim_parse_umts_authenticate(const unsigned char *buffer,
+		int len, const unsigned char **res, const unsigned char **ck,
+		const unsigned char **ik, const unsigned char **auts,
+		const unsigned char **kc)
+{
+	if (len < 16 || !buffer)
+		return FALSE;
+
+	switch (buffer[0]) {
+	case 0xdb:
+		/* 'DB' + '08' + RES(16) + '10' + CK(32) + '10' + IK(32) = 43 */
+		if (len < 43)
+			goto umts_end;
+
+		/* success */
+		if (buffer[1] != 0x08)
+			goto umts_end;
+
+		*res = buffer + 2;
+
+		if (buffer[10] != 0x10)
+			goto umts_end;
+
+		*ck = buffer + 11;
+
+		if (buffer[27] != 0x10)
+			goto umts_end;
+
+		*ik = buffer + 28;
+
+		if (len >= 53 && kc) {
+			if (buffer[44] != 0x08)
+				goto umts_end;
+
+			*kc = buffer + 45;
+		} else {
+			*kc = NULL;
+		}
+
+		*auts = NULL;
+
+		break;
+	case 0xdc:
+		/* 'DC' + '0E' + AUTS(14) = 16 */
+		if (len < 16)
+			goto umts_end;
+
+		/* sync error */
+		if (buffer[1] != 0x0e)
+			goto umts_end;
+
+		*auts = buffer + 2;
+
+		break;
+	default:
+		goto umts_end;
+	}
+
+	return TRUE;
+
+umts_end:
+	return FALSE;
+}
+
+gboolean sim_parse_gsm_authenticate(const unsigned char *buffer, int len,
+		const unsigned char **sres, const unsigned char **kc)
+{
+	if (len < 14 || !buffer)
+		goto gsm_end;
+
+	if (buffer[0] != 0x04)
+		goto gsm_end;
+
+	*sres = buffer + 1;
+
+	if (buffer[5] != 0x08)
+		goto gsm_end;
+
+	*kc = buffer + 6;
+
+	return TRUE;
+
+gsm_end:
+	return FALSE;
 }

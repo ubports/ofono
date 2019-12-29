@@ -24,11 +24,15 @@
 #endif
 
 #include <string.h>
+#include <strings.h>
 #include <stdio.h>
 #include <assert.h>
 #include <glib.h>
+#include <ell/ell.h>
 
 #include "util.h"
+
+static const bool VERBOSE = false;
 
 const unsigned char invalid_gsm_extended[] = {
 	0x1b, 0x15
@@ -356,7 +360,7 @@ static void test_invalid(void)
 	g_assert(nread == 0);
 	g_assert(nwritten == 0);
 	g_assert(res[0] == '\0');
-	g_free(res);
+	l_free(res);
 
 	/*
 	 * In case of invalid GSM extended code, we should display
@@ -369,13 +373,13 @@ static void test_invalid(void)
 	exp_code = gsm_to_unicode_map[invalid_gsm_extended[1]*2 + 1];
 
 	exp_res_length = UTF8_LENGTH(exp_code);
-	exp_res = g_new0(char, exp_res_length + 1);
-	g_unichar_to_utf8(exp_code, exp_res);
+	exp_res = l_new(char, exp_res_length + 1);
+	l_utf8_from_wchar(exp_code, exp_res);
 
-	g_assert(g_strcmp0(res, exp_res) == 0);
+	g_assert(!strcmp(res, exp_res));
 	g_assert(nread == exp_res_length);
-	g_free(exp_res);
-	g_free(res);
+	l_free(exp_res);
+	l_free(res);
 
 	res = convert_gsm_to_utf8(invalid_gsm_extended_len,
 					sizeof(invalid_gsm_extended_len),
@@ -404,7 +408,7 @@ static void test_valid(void)
 	char *res;
 	int i;
 	long size;
-	gunichar *verify;
+	wchar_t verify;
 	unsigned char *back;
 
 	unsigned char buf[2];
@@ -427,23 +431,18 @@ static void test_valid(void)
 		res = convert_gsm_to_utf8(buf, size, &nread, &nwritten, 0);
 		g_assert(res);
 
-		if (g_test_verbose())
-			g_print("size: %ld, nread:%ld, nwritten:%ld, %s\n",
+		if (VERBOSE)
+			printf("size: %ld, nread:%ld, nwritten:%ld, %s\n",
 				size, nread, nwritten, res);
 
 		g_assert(nread == size);
 
-		verify = g_utf8_to_ucs4(res, -1, NULL, NULL, NULL);
-
-		g_assert(verify[0] == gsm_to_unicode_map[i*2+1]);
-		g_assert(verify[1] == 0);
-
-		g_assert(nwritten == UTF8_LENGTH(verify[0]));
+		g_assert(l_utf8_get_codepoint(res, nwritten, &verify) > 0);
+		g_assert(verify == gsm_to_unicode_map[i*2+1]);
+		g_assert(nwritten == UTF8_LENGTH(verify));
 
 		back = convert_utf8_to_gsm(res, -1, &nread, &nwritten, 0);
-
 		g_assert(back);
-
 		g_assert(nwritten == size);
 
 		if (c & 0x1b00) {
@@ -453,9 +452,8 @@ static void test_valid(void)
 			g_assert(back[0] == (c & 0x7f));
 		}
 
-		g_free(back);
-		g_free(verify);
-		g_free(res);
+		l_free(back);
+		l_free(res);
 	}
 }
 
@@ -466,7 +464,7 @@ static void test_valid_turkish(void)
 	char *res;
 	int i;
 	long size;
-	gunichar *verify;
+	wchar_t verify;
 	unsigned char *back;
 
 	unsigned char buf[2];
@@ -490,24 +488,19 @@ static void test_valid_turkish(void)
 							&nwritten, 0, 1, 1);
 		g_assert(res);
 
-		if (g_test_verbose())
-			g_print("size: %ld, nread:%ld, nwritten:%ld, %s\n",
+		if (VERBOSE)
+			printf("size: %ld, nread:%ld, nwritten:%ld, %s\n",
 				size, nread, nwritten, res);
 
 		g_assert(nread == size);
 
-		verify = g_utf8_to_ucs4(res, -1, NULL, NULL, NULL);
-
-		g_assert(verify[0] == gsm_turkish_to_unicode_map[i*2+1]);
-		g_assert(verify[1] == 0);
-
-		g_assert(nwritten == UTF8_LENGTH(verify[0]));
+		g_assert(l_utf8_get_codepoint(res, nwritten, &verify) > 0);
+		g_assert(verify == gsm_turkish_to_unicode_map[i*2+1]);
+		g_assert(nwritten == UTF8_LENGTH(verify));
 
 		back = convert_utf8_to_gsm_with_lang(res, -1, &nread,
 							&nwritten, 0, 1, 1);
-
 		g_assert(back);
-
 		g_assert(nwritten == size);
 
 		if (c & 0x1b00) {
@@ -517,9 +510,8 @@ static void test_valid_turkish(void)
 			g_assert(back[0] == (c & 0x7f));
 		}
 
-		g_free(back);
-		g_free(verify);
-		g_free(res);
+		l_free(back);
+		l_free(res);
 	}
 }
 
@@ -536,44 +528,43 @@ static void test_decode_encode(void)
 	unsigned char *decoded, *packed;
 	char *utf8, *hex_packed;
 	unsigned char *gsm, *gsm_encoded;
-	long hex_decoded_size;
+	size_t hex_decoded_size;
 	long unpacked_size, packed_size;
 	long gsm_encoded_size;
-	long i;
 
-	if (g_test_verbose())
-		g_print("Size of the orig string: %u\n",
+	if (VERBOSE)
+		printf("Size of the orig string: %u\n",
 			(unsigned int)strlen(sms));
 
-	decoded = decode_hex(sms, -1, &hex_decoded_size, 0);
-
+	decoded = l_util_from_hexstring(sms, &hex_decoded_size);
 	g_assert(decoded != NULL);
 
-	if (g_test_verbose())
-		g_print("Decode to %ld bytes\n", hex_decoded_size);
+	if (VERBOSE)
+		printf("Decode to %zu bytes\n", hex_decoded_size);
 
-	if (g_test_verbose()) {
-		g_print("%s\n", sms);
+	if (VERBOSE) {
+		size_t i;
+
+		printf("%s\n", sms);
 
 		for (i = 0; i < hex_decoded_size; i++)
-			g_print("%02X", decoded[i]);
-		g_print("\n");
+			printf("%02X", decoded[i]);
+		printf("\n");
 	}
 
-	gsm = unpack_7bit(decoded, hex_decoded_size, 0, FALSE,
+	gsm = unpack_7bit(decoded, hex_decoded_size, 0, false,
 				reported_text_size, &unpacked_size, 0xff);
 
 	g_assert(gsm != NULL);
 
-	if (g_test_verbose())
-		g_print("String unpacked to %ld bytes\n", unpacked_size);
+	if (VERBOSE)
+		printf("String unpacked to %ld bytes\n", unpacked_size);
 
 	utf8 = convert_gsm_to_utf8(gsm, -1, NULL, NULL, 0xff);
+	g_assert(utf8);
 
-	g_assert(utf8 != NULL);
-
-	if (g_test_verbose())
-		g_print("String is: -->%s<--\n", utf8);
+	if (VERBOSE)
+		printf("String is: -->%s<--\n", utf8);
 
 	g_assert(strcmp(utf8, expected) == 0);
 
@@ -582,51 +573,50 @@ static void test_decode_encode(void)
 
 	g_assert(gsm_encoded != NULL);
 
-	if (g_test_verbose())
-		g_print("Converted back to GSM string of %ld bytes\n",
+	if (VERBOSE)
+		printf("Converted back to GSM string of %ld bytes\n",
 				gsm_encoded_size);
 
 	g_assert(gsm_encoded[gsm_encoded_size] == 0xff);
 	g_assert(gsm_encoded_size == unpacked_size);
 	g_assert(memcmp(gsm_encoded, gsm, gsm_encoded_size) == 0);
 
-	g_free(utf8);
-	g_free(gsm);
+	l_free(utf8);
+	l_free(gsm);
 
-	packed = pack_7bit(gsm_encoded, -1, 0, FALSE, &packed_size, 0xff);
+	packed = pack_7bit(gsm_encoded, -1, 0, false, &packed_size, 0xff);
 
-	g_free(gsm_encoded);
+	l_free(gsm_encoded);
 
 	g_assert(packed != NULL);
 
-	if (g_test_verbose())
-		g_print("Packed GSM to size of %ld bytes\n", packed_size);
+	if (VERBOSE)
+		printf("Packed GSM to size of %ld bytes\n", packed_size);
 
-	if (g_test_verbose()) {
+	if (VERBOSE) {
+		long i;
+
 		for (i = 0; i < packed_size; i++)
-			g_print("%02X", packed[i]);
-		g_print("\n");
+			printf("%02X", packed[i]);
+		printf("\n");
 	}
 
-	g_assert(packed_size == hex_decoded_size);
+	g_assert((size_t) packed_size == hex_decoded_size);
 	g_assert(memcmp(packed, decoded, packed_size) == 0);
-
 	g_free(decoded);
 
-	hex_packed = encode_hex(packed, packed_size, 0);
-
+	hex_packed = l_util_hexstring(packed, packed_size);
 	g_assert(hex_packed != NULL);
+	l_free(packed);
 
-	g_free(packed);
-
-	if (g_test_verbose())
-		g_print("Hex encoded packed to size %ld bytes\n",
+	if (VERBOSE)
+		printf("Hex encoded packed to size %ld bytes\n",
 				(long)strlen(hex_packed));
 
 	g_assert(strlen(hex_packed) == strlen(sms));
-	g_assert(strcmp(hex_packed, sms) == 0);
+	g_assert(strcasecmp(hex_packed, sms) == 0);
 
-	g_free(hex_packed);
+	l_free(hex_packed);
 }
 
 static void test_pack_size(void)
@@ -643,52 +633,52 @@ static void test_pack_size(void)
 	unsigned char *packed;
 	long size;
 
-	packed = pack_7bit(c1, 1, 0, FALSE, &size, 0);
+	packed = pack_7bit(c1, 1, 0, false, &size, 0);
 	g_assert(packed != NULL);
 	g_assert(size == 1);
-	g_free(packed);
+	l_free(packed);
 
-	packed = pack_7bit(c2, 2, 0, FALSE, &size, 0);
+	packed = pack_7bit(c2, 2, 0, false, &size, 0);
 	g_assert(packed != NULL);
 	g_assert(size == 2);
-	g_free(packed);
+	l_free(packed);
 
-	packed = pack_7bit(c3, 3, 0, FALSE, &size, 0);
+	packed = pack_7bit(c3, 3, 0, false, &size, 0);
 	g_assert(packed != NULL);
 	g_assert(size == 3);
-	g_free(packed);
+	l_free(packed);
 
-	packed = pack_7bit(c4, 4, 0, FALSE, &size, 0);
+	packed = pack_7bit(c4, 4, 0, false, &size, 0);
 	g_assert(packed != NULL);
 	g_assert(size == 4);
-	g_free(packed);
+	l_free(packed);
 
-	packed = pack_7bit(c5, 5, 0, FALSE, &size, 0);
+	packed = pack_7bit(c5, 5, 0, false, &size, 0);
 	g_assert(packed != NULL);
 	g_assert(size == 5);
-	g_free(packed);
+	l_free(packed);
 
-	packed = pack_7bit(c6, 6, 0, FALSE, &size, 0);
+	packed = pack_7bit(c6, 6, 0, false, &size, 0);
 	g_assert(packed != NULL);
 	g_assert(size == 6);
-	g_free(packed);
+	l_free(packed);
 
-	packed = pack_7bit(c7, 7, 0, FALSE, &size, 0);
+	packed = pack_7bit(c7, 7, 0, false, &size, 0);
 	g_assert(packed != NULL);
 	g_assert(size == 7);
 	g_assert((packed[6] & 0xfe) == 0);
-	g_free(packed);
+	l_free(packed);
 
-	packed = pack_7bit(c7, 7, 0, TRUE, &size, 0);
+	packed = pack_7bit(c7, 7, 0, true, &size, 0);
 	g_assert(packed != NULL);
 	g_assert(size == 7);
 	g_assert(((packed[6] & 0xfe) >> 1) == '\r');
-	g_free(packed);
+	l_free(packed);
 
-	packed = pack_7bit(c8, 8, 0, FALSE, &size, 0);
+	packed = pack_7bit(c8, 8, 0, false, &size, 0);
 	g_assert(packed != NULL);
 	g_assert(size == 7);
-	g_free(packed);
+	l_free(packed);
 }
 
 static void test_cr_handling(void)
@@ -705,53 +695,53 @@ static void test_cr_handling(void)
 	long packed_size;
 	long unpacked_size;
 
-	packed = pack_7bit(c8, 8, 0, TRUE, &packed_size, 0);
+	packed = pack_7bit(c8, 8, 0, true, &packed_size, 0);
 	g_assert(packed != NULL);
 	g_assert(packed_size == 8);
 	g_assert(((packed[6] & 0xfe) >> 1) == '\r');
 	g_assert((packed[7] & 0x7f) == '\r');
 
-	unpacked = unpack_7bit(packed, 8, 0, TRUE, -1, &unpacked_size, 0);
-	if (g_test_verbose())
-		g_print("Unpacked to size: %ld\n", unpacked_size);
+	unpacked = unpack_7bit(packed, 8, 0, true, -1, &unpacked_size, 0);
+	if (VERBOSE)
+		printf("Unpacked to size: %ld\n", unpacked_size);
 
 	g_assert(unpacked != NULL);
 	g_assert(unpacked_size == 9);
 	g_assert(memcmp(c8_expected, unpacked, 9) == 0);
 
-	g_free(unpacked);
-	g_free(packed);
+	l_free(unpacked);
+	l_free(packed);
 
-	packed = pack_7bit(c7, 7, 0, TRUE, &packed_size, 0);
+	packed = pack_7bit(c7, 7, 0, true, &packed_size, 0);
 	g_assert(packed != NULL);
 	g_assert(packed_size == 7);
 	g_assert(((packed[6] & 0xfe) >> 1) == '\r');
 
-	unpacked = unpack_7bit(packed, 7, 0, TRUE, -1, &unpacked_size, 0);
-	if (g_test_verbose())
-		g_print("Unpacked to size: %ld\n", unpacked_size);
+	unpacked = unpack_7bit(packed, 7, 0, true, -1, &unpacked_size, 0);
+	if (VERBOSE)
+		printf("Unpacked to size: %ld\n", unpacked_size);
 
 	g_assert(unpacked != NULL);
 	g_assert(unpacked_size == 7);
 	g_assert(memcmp(c7, unpacked, 7) == 0);
 
-	g_free(unpacked);
-	g_free(packed);
+	l_free(unpacked);
+	l_free(packed);
 
 	/* As above, but now unpack using SMS style, we should now have cr at
 	 * the end of the stream
 	 */
-	packed = pack_7bit(c7, 7, 0, TRUE, &packed_size, 0);
-	unpacked = unpack_7bit(packed, 7, 0, FALSE, 8, &unpacked_size, 0);
-	if (g_test_verbose())
-		g_print("Unpacked to size: %ld\n", unpacked_size);
+	packed = pack_7bit(c7, 7, 0, true, &packed_size, 0);
+	unpacked = unpack_7bit(packed, 7, 0, false, 8, &unpacked_size, 0);
+	if (VERBOSE)
+		printf("Unpacked to size: %ld\n", unpacked_size);
 
 	g_assert(unpacked != NULL);
 	g_assert(unpacked_size == 8);
 	g_assert(memcmp(c7_expected, unpacked, 8) == 0);
 
-	g_free(unpacked);
-	g_free(packed);
+	l_free(unpacked);
+	l_free(packed);
 }
 
 static void test_sms_handling(void)
@@ -768,31 +758,31 @@ static void test_sms_handling(void)
 	g_assert(packed_size == 7);
 
 	unpacked = unpack_7bit(packed, 7, 0, FALSE, 8, &unpacked_size, 0xff);
-	if (g_test_verbose())
-		g_print("Unpacked to size: %ld\n", unpacked_size);
+	if (VERBOSE)
+		printf("Unpacked to size: %ld\n", unpacked_size);
 
 	g_assert(unpacked != NULL);
 	g_assert(unpacked_size == 8);
 	g_assert(unpacked[7] == 0);
 	g_assert(unpacked[8] == 0xff);
 
-	g_free(unpacked);
-	g_free(packed);
+	l_free(unpacked);
+	l_free(packed);
 
 	packed = pack_7bit(c7, 7, 0, FALSE, &packed_size, 0);
 	g_assert(packed != NULL);
 	g_assert(packed_size == 7);
 
 	unpacked = unpack_7bit(packed, 7, 0, FALSE, 7, &unpacked_size, 0xff);
-	if (g_test_verbose())
-		g_print("Unpacked to size: %ld\n", unpacked_size);
+	if (VERBOSE)
+		printf("Unpacked to size: %ld\n", unpacked_size);
 
 	g_assert(unpacked != NULL);
 	g_assert(unpacked_size == 7);
 	g_assert(unpacked[7] == 0xff);
 
-	g_free(unpacked);
-	g_free(packed);
+	l_free(unpacked);
+	l_free(packed);
 }
 
 static void test_offset_handling(void)
@@ -808,15 +798,15 @@ static void test_offset_handling(void)
 	/* Pack at offset = 2 bytes, e.g. starting with 21st bit */
 	packed = pack_7bit(c7, 6, 2, FALSE, &packed_size, 0);
 
-	if (g_test_verbose())
-		g_print("Packed to size: %ld\n", packed_size);
+	if (VERBOSE)
+		printf("Packed to size: %ld\n", packed_size);
 
 	g_assert(packed != NULL);
 	g_assert(packed_size == 6);
 
 	unpacked = unpack_7bit(packed, 6, 2, FALSE, 6, &unpacked_size, 0xff);
-	if (g_test_verbose())
-		g_print("Unpacked to size: %ld\n", unpacked_size);
+	if (VERBOSE)
+		printf("Unpacked to size: %ld\n", unpacked_size);
 
 	g_assert(unpacked != NULL);
 	g_assert(unpacked_size == 6);
@@ -824,8 +814,8 @@ static void test_offset_handling(void)
 	g_assert(unpacked[0] == 'a');
 	g_assert(unpacked[5] == 'f');
 
-	g_free(unpacked);
-	g_free(packed);
+	l_free(unpacked);
+	l_free(packed);
 
 	/* Pack at offset = 6 bytes, we should be able to fit one character
 	 * into the first byte, and the other 7 characters into the following
@@ -834,15 +824,15 @@ static void test_offset_handling(void)
 	 */
 	packed = pack_7bit(c8, 8, 6, FALSE, &packed_size, 0);
 
-	if (g_test_verbose())
-		g_print("Packed to size: %ld\n", packed_size);
+	if (VERBOSE)
+		printf("Packed to size: %ld\n", packed_size);
 
 	g_assert(packed != NULL);
 	g_assert(packed_size == 8);
 
 	unpacked = unpack_7bit(packed, 8, 6, FALSE, 8, &unpacked_size, 0xff);
-	if (g_test_verbose())
-		g_print("Unpacked to size: %ld\n", unpacked_size);
+	if (VERBOSE)
+		printf("Unpacked to size: %ld\n", unpacked_size);
 
 	g_assert(unpacked != NULL);
 	g_assert(unpacked_size == 8);
@@ -850,21 +840,21 @@ static void test_offset_handling(void)
 	g_assert(unpacked[0] == 'a');
 	g_assert(unpacked[7] == 'h');
 
-	g_free(unpacked);
-	g_free(packed);
+	l_free(unpacked);
+	l_free(packed);
 
 	/* Same as above, but instead pack in 9 characters */
 	packed = pack_7bit(c9, 9, 6, FALSE, &packed_size, 0);
 
-	if (g_test_verbose())
-		g_print("Packed to size: %ld\n", packed_size);
+	if (VERBOSE)
+		printf("Packed to size: %ld\n", packed_size);
 
 	g_assert(packed != NULL);
 	g_assert(packed_size == 8);
 
 	unpacked = unpack_7bit(packed, 8, 6, FALSE, 9, &unpacked_size, 0xff);
-	if (g_test_verbose())
-		g_print("Unpacked to size: %ld\n", unpacked_size);
+	if (VERBOSE)
+		printf("Unpacked to size: %ld\n", unpacked_size);
 
 	g_assert(unpacked != NULL);
 	g_assert(unpacked_size == 9);
@@ -872,8 +862,8 @@ static void test_offset_handling(void)
 	g_assert(unpacked[0] == 'a');
 	g_assert(unpacked[8] == 'i');
 
-	g_free(unpacked);
-	g_free(packed);
+	l_free(unpacked);
+	l_free(packed);
 }
 
 static unsigned char sim_7bit[] = { 0x6F, 0x46, 0x6F, 0x6E, 0x6F, 0xFF, 0xFF };
@@ -904,43 +894,43 @@ static void test_sim(void)
 
 	g_assert(utf8);
 	g_assert(strcmp(utf8, "oFono") == 0);
-	g_free(utf8);
+	l_free(utf8);
 
 	utf8 = sim_string_to_utf8(sim_80_1, sizeof(sim_80_1));
 	g_assert(utf8);
 	g_assert(strcmp(utf8, "ono") == 0);
-	g_free(utf8);
+	l_free(utf8);
 
 	utf8 = sim_string_to_utf8(sim_80_2, sizeof(sim_80_2));
 	g_assert(utf8);
 	g_assert(strcmp(utf8, "ono") == 0);
-	g_free(utf8);
+	l_free(utf8);
 
 	utf8 = sim_string_to_utf8(sim_80_3, sizeof(sim_80_3));
 	g_assert(utf8);
 	g_assert(strcmp(utf8, "ono") == 0);
-	g_free(utf8);
+	l_free(utf8);
 
 	utf8 = sim_string_to_utf8(sim_81_0, sizeof(sim_81_0));
 	g_assert(utf8);
-	g_free(utf8);
+	l_free(utf8);
 
 	utf8 = sim_string_to_utf8(sim_81_2, sizeof(sim_81_2));
 	g_assert(utf8);
-	g_free(utf8);
+	l_free(utf8);
 
 	utf8 = sim_string_to_utf8(sim_81_1, sizeof(sim_81_1));
 	g_assert(utf8);
 	g_assert(strcmp(utf8, "ono") == 0);
-	g_free(utf8);
+	l_free(utf8);
 
 	utf8 = sim_string_to_utf8(sim_82_0, sizeof(sim_82_0));
 	g_assert(utf8);
-	g_free(utf8);
+	l_free(utf8);
 
 	utf8 = sim_string_to_utf8(sim_82_1, sizeof(sim_82_1));
 	g_assert(utf8);
-	g_free(utf8);
+	l_free(utf8);
 
 	utf8 = sim_string_to_utf8(sim_82_2, sizeof(sim_82_2));
 	g_assert(utf8 == NULL);
@@ -948,7 +938,7 @@ static void test_sim(void)
 	utf8 = sim_string_to_utf8(sim_7bit_empty, sizeof(sim_7bit_empty));
 	g_assert(utf8);
 	g_assert(strcmp(utf8, "") == 0);
-	g_free(utf8);
+	l_free(utf8);
 }
 
 static void test_unicode_to_gsm(void)
@@ -960,7 +950,7 @@ static void test_unicode_to_gsm(void)
 	char *utf8;
 	unsigned char buf[2];
 	unsigned char *back;
-	gunichar2 verify;
+	uint16_t verify;
 
 	static int map_size =
 		sizeof(gsm_to_unicode_map) / sizeof(unsigned short) / 2;
@@ -974,8 +964,8 @@ static void test_unicode_to_gsm(void)
 		res = convert_ucs2_to_gsm(buf, 2, &nread, &nwritten, 0);
 		g_assert(res);
 
-		if (g_test_verbose())
-			g_print("nread:%ld, nwritten:%ld, %s\n",
+		if (VERBOSE)
+			printf("nread:%ld, nwritten:%ld, %s\n",
 				nread, nwritten, res);
 
 		if (res[0] == 0x1B)
@@ -983,9 +973,7 @@ static void test_unicode_to_gsm(void)
 		else
 			g_assert(nwritten == 1);
 
-		utf8 = g_convert((const gchar *) buf, 2,
-				"UTF-8", "UCS-2BE",
-				NULL, NULL, NULL);
+		utf8 = l_utf8_from_ucs2be(buf, 2);
 		g_assert(utf8);
 
 		back = convert_utf8_to_gsm(utf8, strlen(utf8), &nread,
@@ -1000,15 +988,15 @@ static void test_unicode_to_gsm(void)
 			verify = back[0];
 		}
 
-		if (g_test_verbose())
-			g_print("nwritten:%ld, verify: 0x%x\n",
+		if (VERBOSE)
+			printf("nwritten:%ld, verify: 0x%x\n",
 				nwritten, verify);
 
 		g_assert(verify == gsm_to_unicode_map[i*2]);
 
-		g_free(res);
-		g_free(back);
-		g_free(utf8);
+		l_free(res);
+		l_free(back);
+		l_free(utf8);
 	}
 }
 

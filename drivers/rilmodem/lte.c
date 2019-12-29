@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -108,7 +107,8 @@ static gboolean lte_delayed_register(gpointer user_data)
 	return FALSE;
 }
 
-static int ril_lte_probe(struct ofono_lte *lte, void *user_data)
+static int ril_lte_probe(struct ofono_lte *lte,
+				unsigned int vendor, void *user_data)
 {
 	GRil *ril = user_data;
 	struct ril_lte_data *ld;
@@ -140,7 +140,7 @@ static void ril_lte_remove(struct ofono_lte *lte)
 	g_free(ld);
 }
 
-static struct ofono_lte_driver driver = {
+static const struct ofono_lte_driver driver = {
 	.name				= RILMODEM,
 	.probe				= ril_lte_probe,
 	.remove				= ril_lte_remove,

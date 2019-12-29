@@ -25,13 +25,13 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <errno.h>
 
 #include <glib.h>
+#include <ell/ell.h>
 
 #include <ofono/log.h>
 #include <ofono/modem.h>
@@ -151,7 +151,7 @@ static void ril_file_info_cb(struct ril_msg *message, gpointer user_data)
 	int sw1, sw2;
 	char *hex_response;
 	unsigned char *response = NULL;
-	long len;
+	size_t len;
 	gboolean ok = FALSE;
 	int flen = 0, rlen = 0, str = 0;
 	guchar access[3] = { 0x00, 0x00, 0x00 };
@@ -174,7 +174,7 @@ static void ril_file_info_cb(struct ril_msg *message, gpointer user_data)
 		goto error;
 
 	if (hex_response != NULL) {
-		response = decode_hex(hex_response, -1, &len, -1);
+		response = l_util_from_hexstring(hex_response, &len);
 		g_free(hex_response);
 		hex_response = NULL;
 
@@ -218,9 +218,6 @@ static void ril_file_info_cb(struct ril_msg *message, gpointer user_data)
 		return;
 	}
 
-	if (len < 0)
-		goto error;
-
 	if (response[0] == 0x62) {
 		ok = sim_parse_3g_get_response(response, len,
 						&flen, &rlen, &str,
@@ -231,7 +228,7 @@ static void ril_file_info_cb(struct ril_msg *message, gpointer user_data)
 						&flen, &rlen, &str,
 						access, &file_status);
 
-	g_free(response);
+	l_free(response);
 
 	if (!ok)
 		goto error;
@@ -241,7 +238,7 @@ static void ril_file_info_cb(struct ril_msg *message, gpointer user_data)
 	return;
 
 error:
-	g_free(response);
+	l_free(response);
 	CALLBACK_WITH_FAILURE(cb, -1, -1, -1, NULL,
 				EF_STATUS_INVALIDATED, cbd->data);
 }
@@ -292,7 +289,7 @@ done:
 	if (len == 0)
 		return NULL;
 
-	return encode_hex(comm_path, len, 0);
+	return l_util_hexstring(comm_path, len);
 }
 
 static void ril_sim_read_info(struct ofono_sim *sim, int fileid,
@@ -347,7 +344,7 @@ static void ril_sim_read_info(struct ofono_sim *sim, int fileid,
 					"0,0,15,(null),pin2=(null),aid=%s)",
 					CMD_GET_RESPONSE, fileid, hex_path,
 					sd->aid_str);
-	g_free(hex_path);
+	l_free(hex_path);
 
 	if (g_ril_send(sd->ril, RIL_REQUEST_SIM_IO, &rilp,
 				ril_file_info_cb, cbd, g_free) > 0)
@@ -367,7 +364,7 @@ static void ril_file_io_cb(struct ril_msg *message, gpointer user_data)
 	int sw1, sw2;
 	char *hex_response;
 	unsigned char *response = NULL;
-	long len;
+	size_t len;
 
 	if (message->error != RIL_E_SUCCESS) {
 		ofono_error("RILD reply failure: %s",
@@ -381,7 +378,7 @@ static void ril_file_io_cb(struct ril_msg *message, gpointer user_data)
 	if (hex_response == NULL)
 		goto error;
 
-	response = decode_hex(hex_response, -1, &len, -1);
+	response = l_util_from_hexstring(hex_response, &len);
 	g_free(hex_response);
 	hex_response = NULL;
 
@@ -391,11 +388,11 @@ static void ril_file_io_cb(struct ril_msg *message, gpointer user_data)
 	}
 
 	CALLBACK_WITH_SUCCESS(cb, response, len, cbd->data);
-	g_free(response);
+	l_free(response);
 	return;
 
 error:
-	g_free(response);
+	l_free(response);
 	CALLBACK_WITH_FAILURE(cb, NULL, 0, cbd->data);
 }
 
@@ -478,7 +475,7 @@ static void ril_sim_read_binary(struct ofono_sim *sim, int fileid,
 					CMD_READ_BINARY, fileid, hex_path,
 					start >> 8, start & 0xff,
 					length, sd->aid_str);
-	g_free(hex_path);
+	l_free(hex_path);
 
 	if (g_ril_send(sd->ril, RIL_REQUEST_SIM_IO, &rilp,
 				ril_file_io_cb, cbd, g_free) > 0)
@@ -528,7 +525,7 @@ static void ril_sim_read_record(struct ofono_sim *sim, int fileid,
 					"%d,%d,%d,(null),pin2=(null),aid=%s)",
 					CMD_READ_RECORD, fileid, hex_path,
 					record, 4, length, sd->aid_str);
-	g_free(hex_path);
+	l_free(hex_path);
 
 	if (g_ril_send(sd->ril, RIL_REQUEST_SIM_IO, &rilp,
 				ril_file_io_cb, cbd, g_free) > 0)
@@ -564,7 +561,7 @@ static void ril_sim_update_binary(struct ofono_sim *sim, int fileid,
 
 	p1 = start >> 8;
 	p2 = start & 0xff;
-	hex_data = encode_hex(value, length, 0);
+	hex_data = l_util_hexstring(value, length);
 
 	parcel_init(&rilp);
 	parcel_w_int32(&rilp, CMD_UPDATE_BINARY);
@@ -585,8 +582,8 @@ static void ril_sim_update_binary(struct ofono_sim *sim, int fileid,
 					"%d,%d,%d,%s,pin2=(null),aid=%s),",
 					CMD_UPDATE_BINARY, fileid, hex_path,
 					p1, p2, length, hex_data, sd->aid_str);
-	g_free(hex_path);
-	g_free(hex_data);
+	l_free(hex_path);
+	l_free(hex_data);
 
 	if (g_ril_send(sd->ril, RIL_REQUEST_SIM_IO, &rilp,
 				ril_file_write_cb, cbd, g_free) > 0)
@@ -620,7 +617,7 @@ static void update_record(struct ofono_sim *sim, int fileid,
 		goto error;
 	}
 
-	hex_data = encode_hex(value, length, 0);
+	hex_data = l_util_hexstring(value, length);
 
 	parcel_init(&rilp);
 	parcel_w_int32(&rilp, CMD_UPDATE_RECORD);
@@ -642,8 +639,8 @@ static void update_record(struct ofono_sim *sim, int fileid,
 					CMD_UPDATE_RECORD, fileid, hex_path,
 					record, access_mode, length, hex_data,
 					sd->aid_str);
-	g_free(hex_path);
-	g_free(hex_data);
+	l_free(hex_path);
+	l_free(hex_data);
 
 	if (g_ril_send(sd->ril, RIL_REQUEST_SIM_IO, &rilp,
 				ril_file_write_cb, cbd, g_free) > 0)
@@ -952,10 +949,10 @@ static void inf_pin_retries_cb(struct ril_msg *message, gpointer user_data)
 		goto error;
 	}
 
-	hex_dump = encode_hex((unsigned char *) data, len, '\0');
+	hex_dump = l_util_hexstring((const unsigned char *) data, len);
 	g_ril_append_print_buf(sd->ril, "{%d,%s}", len, hex_dump);
 	g_ril_print_response(sd->ril, message);
-	g_free(hex_dump);
+	l_free(hex_dump);
 
 	expected = sizeof(int32_t) * 5;
 	if (len < expected) {
@@ -1483,7 +1480,7 @@ static void ril_sim_remove(struct ofono_sim *sim)
 	g_free(sd);
 }
 
-static struct ofono_sim_driver driver = {
+static const struct ofono_sim_driver driver = {
 	.name			= RILMODEM,
 	.probe			= ril_sim_probe,
 	.remove			= ril_sim_remove,

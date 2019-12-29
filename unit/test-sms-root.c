@@ -29,10 +29,11 @@
 #include <string.h>
 
 #include <glib.h>
-#include <glib/gprintf.h>
 
 #include "util.h"
 #include "smsutil.h"
+
+static const bool VERBOSE = false;
 
 static const char *assembly_pdu1 = "038121F340048155550119906041001222048C0500"
 					"031E0301041804420430043A002C002004100"
@@ -81,10 +82,10 @@ static void test_serialize_assembly(void)
 	l = sms_assembly_add_fragment(assembly, &sms, time(NULL),
 					&sms.deliver.oaddr, ref, max, seq);
 
-	if (g_test_verbose()) {
-		g_print("Ref: %u\n", ref);
-		g_print("Max: %u\n", max);
-		g_print("From: %s\n",
+	if (VERBOSE) {
+		printf("Ref: %u\n", ref);
+		printf("Max: %u\n", max);
+		printf("From: %s\n",
 				sms_address_to_string(&sms.deliver.oaddr));
 	}
 

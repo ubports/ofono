@@ -37,9 +37,6 @@
    */
 #undef LT_OBJDIR
 
-/* Define if threading support is required */
-#undef NEED_THREADS
-
 /* Name of package */
 #undef PACKAGE
 

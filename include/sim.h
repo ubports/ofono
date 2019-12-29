@@ -121,6 +121,17 @@ typedef void (*ofono_sim_lock_unlock_cb_t)(const struct ofono_error *error,
 typedef void (*ofono_query_facility_lock_cb_t)(const struct ofono_error *error,
 					ofono_bool_t status, void *data);
 
+typedef void (*ofono_sim_list_apps_cb_t)(const struct ofono_error *error,
+					const unsigned char *dataobj,
+					int len, void *data);
+typedef void (*ofono_sim_open_channel_cb_t)(const struct ofono_error *error,
+					int session_id, void *data);
+typedef void (*ofono_sim_close_channel_cb_t)(const struct ofono_error *error,
+					void *data);
+
+typedef void (*ofono_sim_logical_access_cb_t)(const struct ofono_error *error,
+		const unsigned char *resp, unsigned int len, void *data);
+
 struct ofono_sim_driver {
 	const char *name;
 	int (*probe)(struct ofono_sim *sim, unsigned int vendor, void *data);
@@ -173,6 +184,27 @@ struct ofono_sim_driver {
 	void (*query_facility_lock)(struct ofono_sim *sim,
 			enum ofono_sim_password_type lock,
 			ofono_query_facility_lock_cb_t cb, void *data);
+	void (*list_apps)(struct ofono_sim *sim,
+			ofono_sim_list_apps_cb_t cb, void *data);
+	void (*open_channel)(struct ofono_sim *sim, const unsigned char *aid,
+			ofono_sim_open_channel_cb_t cb, void *data);
+	void (*close_channel)(struct ofono_sim *sim, int session_id,
+			ofono_sim_close_channel_cb_t cb, void *data);
+	void (*session_read_binary)(struct ofono_sim *sim, int session,
+			int fileid, int start, int length,
+			const unsigned char *path, unsigned int path_len,
+			ofono_sim_read_cb_t cb, void *data);
+	void (*session_read_record)(struct ofono_sim *sim, int session_id,
+			int fileid, int record, int length,
+			const unsigned char *path, unsigned int path_len,
+			ofono_sim_read_cb_t cb, void *data);
+	void (*session_read_info)(struct ofono_sim *sim, int session_id,
+			int fileid, const unsigned char *path,
+			unsigned int path_len, ofono_sim_file_info_cb_t cb,
+			void *data);
+	void (*logical_access)(struct ofono_sim *sim, int session_id,
+			const unsigned char *pdu, unsigned int len,
+			ofono_sim_logical_access_cb_t cb, void *data);
 };
 
 int ofono_sim_driver_register(const struct ofono_sim_driver *d);
@@ -215,9 +247,26 @@ ofono_bool_t ofono_sim_add_spn_watch(struct ofono_sim *sim, unsigned int *id,
 
 ofono_bool_t ofono_sim_remove_spn_watch(struct ofono_sim *sim, unsigned int *id);
 
+/*
+ * It is assumed that when ofono_sim_inserted_notify is called, the SIM is
+ * ready to be queried for files that are always available even if SIM
+ * PIN has not been entered.  This is EFiccid and a few others
+ */
 void ofono_sim_inserted_notify(struct ofono_sim *sim, ofono_bool_t inserted);
 
+/*
+ * When the SIM PIN has been entered, many devices require some time to
+ * initialize the SIM and calls to CPIN? will return a SIM BUSY error.  Or
+ * sometimes report ready but fail in any subsequent SIM requests.  This is
+ * used to notify oFono core when the SIM / firmware is truly ready
+ */
+void ofono_sim_initialized_notify(struct ofono_sim *sim);
+
 struct ofono_sim_context *ofono_sim_context_create(struct ofono_sim *sim);
+
+struct ofono_sim_context *ofono_sim_context_create_isim(
+		struct ofono_sim *sim);
+
 void ofono_sim_context_free(struct ofono_sim_context *context);
 
 /* This will queue an operation to read all available records with id from the
@@ -247,6 +296,10 @@ unsigned int ofono_sim_add_file_watch(struct ofono_sim_context *context,
 					ofono_destroy_func destroy);
 void ofono_sim_remove_file_watch(struct ofono_sim_context *context,
 					unsigned int id);
+
+int ofono_sim_logical_access(struct ofono_sim *sim, int session_id,
+		unsigned char *pdu, unsigned int len,
+		ofono_sim_logical_access_cb_t cb, void *data);
 
 #ifdef __cplusplus
 }

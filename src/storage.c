@@ -23,7 +23,8 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
+#include <ofono/storage.h>
+
 #include <string.h>
 #include <stdarg.h>
 #include <sys/types.h>
@@ -34,6 +35,16 @@
 #include <glib.h>
 
 #include "storage.h"
+
+const char *ofono_config_dir(void)
+{
+	return CONFIGDIR;
+}
+
+const char *ofono_storage_dir(void)
+{
+	return STORAGEDIR;
+}
 
 int create_dirs(const char *filename, const mode_t mode)
 {

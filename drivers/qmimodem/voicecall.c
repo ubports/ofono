@@ -95,7 +95,7 @@ static void qmi_voicecall_remove(struct ofono_voicecall *vc)
 	g_free(data);
 }
 
-static struct ofono_voicecall_driver driver = {
+static const struct ofono_voicecall_driver driver = {
 	.name		= "qmimodem",
 	.probe		= qmi_voicecall_probe,
 	.remove		= qmi_voicecall_remove,

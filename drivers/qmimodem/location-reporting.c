@@ -278,7 +278,7 @@ static void qmi_location_reporting_remove(struct ofono_location_reporting *lr)
 	g_free(data);
 }
 
-static struct ofono_location_reporting_driver driver = {
+static const struct ofono_location_reporting_driver driver = {
 	.name		= "qmimodem",
 	.type		= OFONO_LOCATION_REPORTING_TYPE_NMEA,
 	.probe		= qmi_location_reporting_probe,

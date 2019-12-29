@@ -40,6 +40,7 @@
 #include <ofono/gprs-context.h>
 #include <ofono/netmon.h>
 #include <ofono/lte.h>
+#include <ofono/voicecall.h>
 
 #include <drivers/atmodem/atutil.h>
 #include <drivers/atmodem/vendor.h>
@@ -200,6 +201,8 @@ static int ublox_enable(struct ofono_modem *modem)
 
 		g_at_chat_send(data->modem, "ATE0 +CMEE=1", none_prefix,
 						NULL, NULL, NULL);
+
+		g_at_chat_send(data->modem, "AT&C0", NULL, NULL, NULL, NULL);
 	}
 
 	/* The modem can take a while to wake up if just powered on. */
@@ -284,6 +287,14 @@ static void ublox_pre_sim(struct ofono_modem *modem)
 	DBG("%p", modem);
 
 	ofono_devinfo_create(modem, 0, "atmodem", data->aux);
+	/*
+	 * Call support is technically possible only after sim insertion
+	 * with the module online. However the EMERGENCY_SETUP procedure of
+	 * the 3GPP TS_24.008 is triggered by the same AT command,
+	 * and namely 'ATD112;' and 'ATD911;'. Therefore it makes sense to
+	 * add the voice support as soon as possible.
+	 */
+	ofono_voicecall_create(modem, 0, "atmodem", data->aux);
 	sim = ofono_sim_create(modem, data->vendor_family, "atmodem",
 					data->aux);
 
@@ -317,7 +328,7 @@ static void ublox_post_sim(struct ofono_modem *modem)
 		--ncontexts;
 	}
 
-	ofono_lte_create(modem, "ubloxmodem", data->aux);
+	ofono_lte_create(modem, 0, "ubloxmodem", data->aux);
 }
 
 static void ublox_post_online(struct ofono_modem *modem)

@@ -25,6 +25,8 @@
 
 #define QMI_WMS_RAW_SEND		32	/* Send a raw message */
 
+#define QMI_WMS_RAW_READ		34	/* Read raw message from storage*/
+
 #define QMI_WMS_GET_MSG_LIST		49	/* Get list of messages from the device */
 #define QMI_WMS_SET_ROUTES		50	/* Set routes for message memory storage */
 #define QMI_WMS_GET_ROUTES		51	/* Get routes for message memory storage */
@@ -65,6 +67,13 @@ struct qmi_wms_param_message {
 #define QMI_WMS_STORAGE_TYPE_NONE		255
 
 #define QMI_WMS_MESSAGE_MODE_GSMWCDMA		1
+
+struct qmi_wms_raw_message {
+	uint8_t msg_tag;
+	uint8_t msg_format;
+	uint16_t msg_length;
+	uint8_t msg_data[0];
+} __attribute__((__packed__));
 
 /* Get routes for message memory storage */
 #define QMI_WMS_RESULT_ROUTE_LIST		0x01

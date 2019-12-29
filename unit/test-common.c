@@ -29,9 +29,13 @@
 #include <assert.h>
 #include <glib.h>
 
+#include <ell/ell.h>
+
 #include <ofono/types.h>
 
 #include "common.h"
+
+static const bool VERBOSE = false;
 
 static const char *invalid_strings[] = {
 	"33",
@@ -71,8 +75,8 @@ static void test_invalid(void)
 	gboolean ret;
 
 	for (i = 0; invalid_strings[i]; i++) {
-		if (g_test_verbose())
-			g_print("%s...\n", invalid_strings[i]);
+		if (VERBOSE)
+			printf("%s...\n", invalid_strings[i]);
 
 		str = strdup(invalid_strings[i]);
 
@@ -122,8 +126,8 @@ static void test_valid(void)
 	int i;
 
 	for (i = 0; valid_strings[i]; i++) {
-		if (g_test_verbose())
-			g_print("%s...", valid_strings[i]);
+		if (VERBOSE)
+			printf("%s...", valid_strings[i]);
 
 		str = strdup(valid_strings[i]);
 
@@ -134,8 +138,8 @@ static void test_valid(void)
 
 		g_assert(ret == TRUE);
 
-		if (g_test_verbose())
-			g_print("parsed as: %d, %s, %s, %s, %s, %s\n",
+		if (VERBOSE)
+			printf("parsed as: %d, %s, %s, %s, %s, %s\n",
 					type, sc, sia, sib, sic, dn);
 
 		free(str);
@@ -164,8 +168,8 @@ static void test_apn(void)
 	gboolean res;
 
 	for (i = 0; valid_apns[i]; i++) {
-		if (g_test_verbose())
-			g_print("Test Valid:%s\n", valid_apns[i]);
+		if (VERBOSE)
+			printf("Test Valid:%s\n", valid_apns[i]);
 
 		res = is_valid_apn(valid_apns[i]);
 
@@ -173,8 +177,8 @@ static void test_apn(void)
 	}
 
 	for (i = 0; invalid_apns[i]; i++) {
-		if (g_test_verbose())
-			g_print("Test Invalid:%s\n", invalid_apns[i]);
+		if (VERBOSE)
+			printf("Test Invalid:%s\n", invalid_apns[i]);
 
 		res = is_valid_apn(invalid_apns[i]);
 

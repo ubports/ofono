@@ -2,7 +2,7 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2017  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -19,15 +19,35 @@
  *
  */
 
-struct idmap;
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
-struct idmap *idmap_new(unsigned int size);
-void idmap_free(struct idmap *idmap);
-void idmap_put(struct idmap *idmap, unsigned int id);
-void idmap_take(struct idmap *idmap, unsigned int id);
-int idmap_find(struct idmap *idmap, unsigned int id);
-unsigned int idmap_alloc(struct idmap *idmap);
-unsigned int idmap_alloc_next(struct idmap *idmap, unsigned int last);
-struct idmap *idmap_new_from_range(unsigned int min, unsigned int max);
-unsigned int idmap_get_min(struct idmap *idmap);
-unsigned int idmap_get_max(struct idmap *idmap);
+#define OFONO_API_SUBJECT_TO_CHANGE
+#include <ofono/plugin.h>
+
+#include "mbimmodem.h"
+
+static int mbimmodem_init(void)
+{
+	mbim_devinfo_init();
+	mbim_sim_init();
+	mbim_netreg_init();
+	mbim_sms_init();
+	mbim_gprs_init();
+	mbim_gprs_context_init();
+	return 0;
+}
+
+static void mbimmodem_exit(void)
+{
+	mbim_gprs_context_exit();
+	mbim_gprs_exit();
+	mbim_sms_exit();
+	mbim_netreg_exit();
+	mbim_sim_exit();
+	mbim_devinfo_exit();
+}
+
+OFONO_PLUGIN_DEFINE(mbimmodem, "MBIM modem driver", VERSION,
+		OFONO_PLUGIN_PRIORITY_DEFAULT, mbimmodem_init, mbimmodem_exit)

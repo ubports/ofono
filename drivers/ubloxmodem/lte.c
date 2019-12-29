@@ -22,7 +22,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -91,7 +90,8 @@ static gboolean lte_delayed_register(gpointer user_data)
 	return FALSE;
 }
 
-static int ublox_lte_probe(struct ofono_lte *lte, void *data)
+static int ublox_lte_probe(struct ofono_lte *lte,
+					unsigned int vendor, void *data)
 {
 	GAtChat *chat = data;
 	struct lte_driver_data *ldd;
@@ -124,7 +124,7 @@ static void ublox_lte_remove(struct ofono_lte *lte)
 	g_free(ldd);
 }
 
-static struct ofono_lte_driver driver = {
+static const struct ofono_lte_driver driver = {
 	.name				= UBLOXMODEM,
 	.probe				= ublox_lte_probe,
 	.remove				= ublox_lte_remove,

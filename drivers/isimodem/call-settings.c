@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -405,7 +404,7 @@ static void isi_call_settings_remove(struct ofono_call_settings *cs)
 	g_free(data);
 }
 
-static struct ofono_call_settings_driver driver = {
+static const struct ofono_call_settings_driver driver = {
 	.name			= "isimodem",
 	.probe			= isi_call_settings_probe,
 	.remove			= isi_call_settings_remove,

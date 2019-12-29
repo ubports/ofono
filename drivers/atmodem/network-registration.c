@@ -24,7 +24,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -48,6 +47,7 @@ static const char *cops_prefix[] = { "+COPS:", NULL };
 static const char *csq_prefix[] = { "+CSQ:", NULL };
 static const char *cind_prefix[] = { "+CIND:", NULL };
 static const char *cmer_prefix[] = { "+CMER:", NULL };
+static const char *smoni_prefix[] = { "^SMONI:", NULL };
 static const char *zpas_prefix[] = { "+ZPAS:", NULL };
 static const char *option_tech_prefix[] = { "_OCTI:", "_OUWCTI:", NULL };
 
@@ -178,6 +178,31 @@ static int option_parse_tech(GAtResult *result)
 	return tech;
 }
 
+static int gemalto_parse_tech(GAtResult *result)
+{
+	int tech = -1;
+	GAtResultIter iter;
+	const char *technology;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "^SMONI: "))
+		return tech;
+
+	if (!g_at_result_iter_next_unquoted_string(&iter, &technology))
+		return tech;
+
+	if (strcmp(technology, "2G") == 0) {
+		tech = ACCESS_TECHNOLOGY_GSM_EGPRS;
+	} else if (strcmp(technology, "3G") == 0) {
+		tech = ACCESS_TECHNOLOGY_UTRAN;
+	} else if (strcmp(technology, "4G") == 0) {
+		tech = ACCESS_TECHNOLOGY_EUTRAN;
+	}
+
+	return tech;
+}
+
 static void at_creg_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
@@ -202,7 +227,23 @@ static void at_creg_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	if ((status == 1 || status == 5) && (tech == -1))
 		tech = nd->tech;
 
+	/* 6-10 is EUTRAN, with 8 being emergency bearer case */
+	if (status > 5 && tech == -1)
+		tech = ACCESS_TECHNOLOGY_EUTRAN;
+
 	cb(&error, status, lac, ci, tech, cbd->data);
+}
+
+static void gemalto_query_tech_cb(gboolean ok, GAtResult *result,
+                                              gpointer user_data)
+{
+	struct tech_query *tq = user_data;
+	int tech;
+
+	tech = gemalto_parse_tech(result);
+
+	ofono_netreg_status_notify(tq->netreg,
+			tq->status, tq->lac, tq->ci, tech);
 }
 
 static void zte_tech_cb(gboolean ok, GAtResult *result, gpointer user_data)
@@ -838,7 +879,7 @@ static void telit_ciev_notify(GAtResult *result, gpointer user_data)
 	ofono_netreg_strength_notify(netreg, strength);
 }
 
-static void cinterion_ciev_notify(GAtResult *result, gpointer user_data)
+static void gemalto_ciev_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
 	struct netreg_data *nd = ofono_netreg_get_data(netreg);
@@ -1518,6 +1559,12 @@ static void creg_notify(GAtResult *result, gpointer user_data)
 					option_query_tech_cb, tq, g_free) > 0)
 			return;
 		break;
+    case OFONO_VENDOR_GEMALTO:
+              if (g_at_chat_send(nd->chat, "AT^SMONI",
+                                      smoni_prefix,
+                                      gemalto_query_tech_cb, tq, g_free) > 0)
+                      return;
+              break;
 	}
 
 	g_free(tq);
@@ -1984,12 +2031,12 @@ static void at_creg_set_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		g_at_chat_send(nd->chat, "AT*TLTS=1", none_prefix,
 						NULL, NULL, NULL);
 		break;
-	case OFONO_VENDOR_CINTERION:
+	case OFONO_VENDOR_GEMALTO:
 		/*
-		 * We can't set rssi bounds from Cinterion responses
+		 * We can't set rssi bounds from Gemalto responses
 		 * so set them up to specified values here
 		 *
-		 * Cinterion rssi signal strength specified as:
+		 * Gemalto rssi signal strength specified as:
 		 * 0      <= -112dBm
 		 * 1 - 4  signal strengh in 15 dB steps
 		 * 5      >= -51 dBm
@@ -2003,7 +2050,7 @@ static void at_creg_set_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		g_at_chat_send(nd->chat, "AT^SIND=\"rssi\",1", none_prefix,
 				NULL, NULL, NULL);
 		g_at_chat_register(nd->chat, "+CIEV:",
-				cinterion_ciev_notify, FALSE, netreg, NULL);
+				gemalto_ciev_notify, FALSE, netreg, NULL);
 		break;
 	case OFONO_VENDOR_NOKIA:
 	case OFONO_VENDOR_SAMSUNG:
@@ -2107,7 +2154,7 @@ static void at_netreg_remove(struct ofono_netreg *netreg)
 	g_free(nd);
 }
 
-static struct ofono_netreg_driver driver = {
+static const struct ofono_netreg_driver driver = {
 	.name				= "atmodem",
 	.probe				= at_netreg_probe,
 	.remove				= at_netreg_remove,

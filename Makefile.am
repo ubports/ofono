@@ -3,6 +3,60 @@ AM_MAKEFLAGS = --no-print-directory
 
 noinst_LTLIBRARIES =
 
+if EXTERNAL_ELL
+ell_cflags = @ELL_CFLAGS@
+ell_ldadd = @ELL_LIBS@
+ell_dependencies =
+ell_built_sources =
+else
+ell_cflags =
+ell_ldadd = ell/libell-internal.la
+ell_dependencies = $(ell_ldadd)
+ell_built_sources = ell/internal ell/ell.h
+
+noinst_LTLIBRARIES += ell/libell-internal.la
+
+ell_headers = ell/util.h \
+			ell/test.h \
+			ell/strv.h \
+			ell/utf8.h \
+			ell/queue.h \
+			ell/main.h \
+			ell/idle.h \
+			ell/signal.h \
+			ell/timeout.h \
+			ell/io.h \
+			ell/log.h \
+			ell/checksum.h \
+			ell/random.h \
+			ell/uuid.h \
+			ell/file.h \
+			ell/uintset.h \
+			ell/string.h
+
+ell_sources = ell/private.h \
+			ell/missing.h \
+			ell/util.c \
+			ell/test.c \
+			ell/strv.c \
+			ell/utf8.c \
+			ell/queue.c \
+			ell/main.c \
+			ell/idle.c \
+			ell/signal.c \
+			ell/timeout.c \
+			ell/io.c \
+			ell/log.c \
+			ell/checksum.c \
+			ell/random.c \
+			ell/uuid.c \
+			ell/file.c \
+			ell/uintset.c \
+			ell/string.c
+
+ell_libell_internal_la_SOURCES = $(ell_headers) $(ell_sources)
+endif
+
 pkginclude_HEADERS = include/log.h include/plugin.h include/history.h \
 			include/dbus.h include/modem.h include/types.h \
 			include/call-barring.h include/call-forwarding.h \
@@ -22,7 +76,8 @@ pkginclude_HEADERS = include/log.h include/plugin.h include/history.h \
 			include/private-network.h include/cdma-netreg.h \
 			include/cdma-provision.h include/handsfree.h \
 			include/handsfree-audio.h include/siri.h \
-			include/netmon.h include/lte.h
+			include/netmon.h include/lte.h include/ims.h \
+			include/storage.h
 
 nodist_pkginclude_HEADERS = include/version.h
 
@@ -216,7 +271,8 @@ qmi_sources = drivers/qmimodem/qmi.h drivers/qmimodem/qmi.c \
 					drivers/qmimodem/wds.h \
 					drivers/qmimodem/pds.h \
 					drivers/qmimodem/common.h \
-					drivers/qmimodem/wda.h
+					drivers/qmimodem/wda.h \
+					drivers/qmimodem/voice.h
 
 builtin_modules += qmimodem
 builtin_sources += $(qmi_sources) \
@@ -232,12 +288,39 @@ builtin_sources += $(qmi_sources) \
 			drivers/qmimodem/ussd.c \
 			drivers/qmimodem/gprs.c \
 			drivers/qmimodem/gprs-context.c \
+			drivers/qmimodem/lte.c \
 			drivers/qmimodem/radio-settings.c \
 			drivers/qmimodem/location-reporting.c \
 			drivers/qmimodem/netmon.c
 
 builtin_modules += gobi
 builtin_sources += plugins/gobi.c
+endif
+
+if MBIMMODEM
+mbim_sources =	drivers/mbimmodem/mbim.h \
+		drivers/mbimmodem/mbim.c \
+		drivers/mbimmodem/mbim-private.h \
+		drivers/mbimmodem/mbim-desc.h \
+		drivers/mbimmodem/mbim-desc.c \
+		drivers/mbimmodem/mbim-message.h \
+		drivers/mbimmodem/mbim-message.c
+
+builtin_modules += mbimmodem
+builtin_sources += $(mbim_sources) \
+			drivers/mbimmodem/util.h \
+			drivers/mbimmodem/util.c \
+			drivers/mbimmodem/mbimmodem.h \
+			drivers/mbimmodem/mbimmodem.c \
+			drivers/mbimmodem/devinfo.c \
+			drivers/mbimmodem/sim.c \
+			drivers/mbimmodem/network-registration.c \
+			drivers/mbimmodem/sms.c \
+			drivers/mbimmodem/gprs.c \
+			drivers/mbimmodem/gprs-context.c
+
+builtin_modules += mbim
+builtin_sources += plugins/mbim.c
 endif
 
 if ATMODEM
@@ -264,7 +347,6 @@ builtin_sources += 	drivers/atmodem/atmodem.h \
 			drivers/atmodem/atutil.c \
 			drivers/atmodem/gprs.c \
 			drivers/atmodem/gprs-context.c \
-			drivers/atmodem/sim-auth.c \
 			drivers/atmodem/gnss.c \
 			drivers/atmodem/lte.c
 
@@ -395,13 +477,16 @@ builtin_modules += gemaltomodem
 builtin_sources += drivers/atmodem/atutil.h \
 			drivers/gemaltomodem/gemaltomodem.h \
 			drivers/gemaltomodem/gemaltomodem.c \
-			drivers/gemaltomodem/location-reporting.c
+			drivers/gemaltomodem/location-reporting.c \
+			drivers/gemaltomodem/voicecall.c
 
 builtin_modules += xmm7modem
 builtin_sources += drivers/atmodem/atutil.h \
 			drivers/xmm7modem/xmm7modem.h \
 			drivers/xmm7modem/xmm7modem.c \
-			drivers/xmm7modem/radio-settings.c
+			drivers/xmm7modem/radio-settings.c \
+			drivers/xmm7modem/ims.c \
+			drivers/xmm7modem/netmon.c
 
 if PHONESIM
 builtin_modules += phonesim
@@ -495,6 +580,9 @@ builtin_sources += plugins/samsung.c
 
 builtin_modules += sim900
 builtin_sources += plugins/sim900.c
+
+builtin_modules += sim7100
+builtin_sources += plugins/sim7100.c
 
 builtin_modules += connman
 builtin_sources += plugins/connman.c
@@ -615,8 +703,8 @@ src_ofonod_SOURCES = $(builtin_sources) $(gatchat_sources) src/ofono.ver \
 			src/phonebook.c src/history.c src/message-waiting.c \
 			src/simutil.h src/simutil.c src/storage.h \
 			src/storage.c src/cbs.c src/watch.c src/call-volume.c \
-			src/gprs.c src/idmap.h src/idmap.c \
-			src/radio-settings.c src/stkutil.h src/stkutil.c \
+			src/gprs.c src/radio-settings.c \
+			src/stkutil.h src/stkutil.c \
 			src/nettime.c src/stkagent.c src/stkagent.h \
 			src/simfs.c src/simfs.h src/audio-settings.c \
 			src/smsagent.c src/smsagent.h src/ctm.c \
@@ -630,16 +718,18 @@ src_ofonod_SOURCES = $(builtin_sources) $(gatchat_sources) src/ofono.ver \
 			src/cdma-provision.c src/handsfree.c \
 			src/handsfree-audio.c src/bluetooth.h \
 			src/hfp.h src/siri.c \
-			src/netmon.c src/lte.c \
+			src/netmon.c src/lte.c src/ims.c \
 			src/netmonagent.c src/netmonagent.h
 
-src_ofonod_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
+src_ofonod_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) $(ell_ldadd) \
 			@GLIB_LIBS@ @DBUS_LIBS@ -ldl
 
 src_ofonod_LDFLAGS = -Wl,--export-dynamic \
 				-Wl,--version-script=$(srcdir)/src/ofono.ver
 
-BUILT_SOURCES = $(local_headers) src/builtin.h
+src_ofonod_DEPENDENCIES = $(ell_dependencies)
+
+BUILT_SOURCES = $(local_headers) $(ell_built_sources) src/builtin.h
 
 CLEANFILES = $(BUILT_SOURCES) $(rules_DATA)
 
@@ -651,7 +741,7 @@ else
 build_plugindir = $(plugindir)
 endif
 
-AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ $(builtin_cflags) \
+AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ $(ell_cflags) $(builtin_cflags) \
 					-DOFONO_PLUGIN_BUILTIN \
 					-DPLUGINDIR=\""$(build_plugindir)"\"
 
@@ -680,7 +770,8 @@ doc_files = doc/overview.txt doc/ofono-paper.txt doc/release-faq.txt \
 			doc/networkmonitor-api.txt \
 			doc/allowed-apns-api.txt \
 			doc/lte-api.txt \
-			doc/cinterion-hardware-monitor-api.txt
+			doc/cinterion-hardware-monitor-api.txt \
+			doc/ims-api.txt
 
 
 test_scripts = test/backtrace \
@@ -785,7 +876,11 @@ test_scripts = test/backtrace \
 		test/enable-throttling \
 		test/disable-throttling \
 		test/set-lte-property \
-		test/test-serving-cell-info
+		test/test-serving-cell-info \
+		test/ims-register \
+		test/ims-unregister \
+		test/list-applications \
+		test/set-sms-alphabet
 
 
 if TEST
@@ -801,9 +896,10 @@ dist_man_MANS = doc/ofonod.8
 
 unit_objects =
 
-unit_tests = unit/test-common unit/test-util unit/test-idmap \
+unit_tests = unit/test-common unit/test-util \
 				unit/test-simutil unit/test-stkutil \
 				unit/test-sms unit/test-cdmasms \
+				unit/test-mbim \
 				unit/test-rilmodem-cs \
 				unit/test-rilmodem-sms \
 				unit/test-rilmodem-cb \
@@ -813,40 +909,36 @@ noinst_PROGRAMS = $(unit_tests) \
 			unit/test-sms-root unit/test-mux unit/test-caif
 
 unit_test_common_SOURCES = unit/test-common.c src/common.c src/util.c
-unit_test_common_LDADD = @GLIB_LIBS@
+unit_test_common_LDADD = @GLIB_LIBS@ $(ell_ldadd)
 unit_objects += $(unit_test_common_OBJECTS)
 
 unit_test_util_SOURCES = unit/test-util.c src/util.c
-unit_test_util_LDADD = @GLIB_LIBS@
+unit_test_util_LDADD = @GLIB_LIBS@ $(ell_ldadd)
 unit_objects += $(unit_test_utils_OBJECTS)
-
-unit_test_idmap_SOURCES = unit/test-idmap.c src/idmap.c
-unit_test_idmap_LDADD = @GLIB_LIBS@
-unit_objects += $(unit_test_idmap_OBJECTS)
 
 unit_test_simutil_SOURCES = unit/test-simutil.c src/util.c \
                                 src/simutil.c src/smsutil.c src/storage.c
-unit_test_simutil_LDADD = @GLIB_LIBS@
+unit_test_simutil_LDADD = @GLIB_LIBS@ $(ell_ldadd)
 unit_objects += $(unit_test_simutil_OBJECTS)
 
 unit_test_stkutil_SOURCES = unit/test-stkutil.c unit/stk-test-data.h \
 				src/util.c \
                                 src/storage.c src/smsutil.c \
                                 src/simutil.c src/stkutil.c
-unit_test_stkutil_LDADD = @GLIB_LIBS@
+unit_test_stkutil_LDADD = @GLIB_LIBS@ $(ell_ldadd)
 unit_objects += $(unit_test_stkutil_OBJECTS)
 
 unit_test_sms_SOURCES = unit/test-sms.c src/util.c src/smsutil.c src/storage.c
-unit_test_sms_LDADD = @GLIB_LIBS@
+unit_test_sms_LDADD = @GLIB_LIBS@ $(ell_ldadd)
 unit_objects += $(unit_test_sms_OBJECTS)
 
 unit_test_cdmasms_SOURCES = unit/test-cdmasms.c src/cdma-smsutil.c
-unit_test_cdmasms_LDADD = @GLIB_LIBS@
+unit_test_cdmasms_LDADD = @GLIB_LIBS@ $(ell_ldadd)
 unit_objects += $(unit_test_cdmasms_OBJECTS)
 
 unit_test_sms_root_SOURCES = unit/test-sms-root.c \
 					src/util.c src/smsutil.c src/storage.c
-unit_test_sms_root_LDADD = @GLIB_LIBS@
+unit_test_sms_root_LDADD = @GLIB_LIBS@ $(ell_ldadd)
 unit_objects += $(unit_test_sms_root_OBJECTS)
 
 unit_test_mux_SOURCES = unit/test-mux.c $(gatchat_sources)
@@ -872,29 +964,39 @@ unit_test_rilmodem_cs_SOURCES = $(test_rilmodem_sources) \
 					unit/test-rilmodem-cs.c \
 					drivers/rilmodem/call-settings.c
 unit_test_rilmodem_cs_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
-					@GLIB_LIBS@ @DBUS_LIBS@ -ldl
+					@GLIB_LIBS@ @DBUS_LIBS@ \
+					$(ell_ldadd) -ldl
 unit_objects += $(unit_test_rilmodem_cs_OBJECTS)
 
 unit_test_rilmodem_sms_SOURCES = $(test_rilmodem_sources) \
 					unit/test-rilmodem-sms.c \
 					drivers/rilmodem/sms.c
 unit_test_rilmodem_sms_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
-					@GLIB_LIBS@ @DBUS_LIBS@ -ldl
+					@GLIB_LIBS@ @DBUS_LIBS@ \
+					$(ell_ldadd) -ldl
 unit_objects += $(unit_test_rilmodem_sms_OBJECTS)
 
 unit_test_rilmodem_cb_SOURCES = $(test_rilmodem_sources) \
 					unit/test-rilmodem-cb.c \
 					drivers/rilmodem/call-barring.c
 unit_test_rilmodem_cb_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
-					@GLIB_LIBS@ @DBUS_LIBS@ -ldl
+					@GLIB_LIBS@ @DBUS_LIBS@ \
+					$(ell_ldadd) -ldl
 unit_objects += $(unit_test_rilmodem_cb_OBJECTS)
 
 unit_test_rilmodem_gprs_SOURCES = $(test_rilmodem_sources) \
 					unit/test-rilmodem-gprs.c \
 					drivers/rilmodem/gprs.c
 unit_test_rilmodem_gprs_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
-					@GLIB_LIBS@ @DBUS_LIBS@ -ldl
+					@GLIB_LIBS@ @DBUS_LIBS@ \
+					$(ell_ldadd) -ldl
 unit_objects += $(unit_test_rilmodem_gprs_OBJECTS)
+
+unit_test_mbim_SOURCES = unit/test-mbim.c \
+			 drivers/mbimmodem/mbim-message.c \
+			 drivers/mbimmodem/mbim.c
+unit_test_mbim_LDADD = $(ell_ldadd)
+unit_objects += $(unit_test_mbim_OBJECTS)
 
 TESTS = $(unit_tests)
 
@@ -993,6 +1095,23 @@ include/ofono/version.h: include/version.h
 include/ofono/%.h: $(abs_top_srcdir)/include/%.h
 	$(AM_V_at)$(MKDIR_P) include/ofono
 	$(AM_V_GEN)$(LN_S) $< $@
+
+ell/internal: Makefile
+	$(AM_V_at)$(MKDIR_P) ell
+	$(AM_V_GEN)for f in $(ell_headers) $(ell_sources) ; do \
+		if [ ! -f $$f ] ; then \
+			$(LN_S) -t ell -f $(abs_srcdir)/../ell/$$f ; \
+		fi \
+	done > $@
+
+ell/ell.h: Makefile
+	$(AM_V_at)echo -n > $@
+	$(AM_V_GEN)for f in $(ell_headers) ; do \
+		echo "#include <$$f>" >> $@ ; \
+	done
+
+maintainer-clean-local:
+	-rm -rf ell
 
 clean-local:
 	@$(RM) -rf include/ofono

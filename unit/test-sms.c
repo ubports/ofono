@@ -27,12 +27,15 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
+#include <ell/ell.h>
 #include <glib.h>
-#include <glib/gprintf.h>
 
 #include "util.h"
 #include "smsutil.h"
+
+static const bool VERBOSE = false;
 
 static const char *simple_deliver = "07911326040000F0"
 		"040B911346610089F60000208062917314480CC8F71D14969741F977FD07";
@@ -56,13 +59,13 @@ static void print_scts(struct sms_scts *scts, const char *prefix)
 	struct tm remote;
 	char buf[128];
 
-	g_print("%s: (YY-MM-DD) %02d-%02d-%02d\n", prefix,
+	printf("%s: (YY-MM-DD) %02d-%02d-%02d\n", prefix,
 		(int)scts->year, (int)scts->month, (int)scts->day);
 
-	g_print("%s: (HH-MM-SS) %02d:%02d:%02d\n", prefix,
+	printf("%s: (HH-MM-SS) %02d:%02d:%02d\n", prefix,
 		(int)scts->hour, (int)scts->minute, (int)scts->second);
 
-	g_print("%s: Timezone %d hours %d minutes\n", prefix,
+	printf("%s: Timezone %d hours %d minutes\n", prefix,
 		(int)scts->timezone / 4,
 		(int)((abs(scts->timezone) % 4) * 15));
 
@@ -71,32 +74,32 @@ static void print_scts(struct sms_scts *scts, const char *prefix)
 	strftime(buf, 127, "%Y-%m-%dT%H:%M:%S%z", localtime(&ts));
 	buf[127] = '\0';
 
-	g_print("local time: %s\n", buf);
+	printf("local time: %s\n", buf);
 
 	strftime(buf, 127, "%Y-%m-%dT%H:%M:%S%z", &remote);
 	buf[127] = '\0';
 
-	g_print("remote time: %s\n", buf);
+	printf("remote time: %s\n", buf);
 }
 
 static void print_vpf(enum sms_validity_period_format vpf,
 			struct sms_validity_period *vp)
 {
-	g_print("Validity Period Format: %d\n", (int)vpf);
+	printf("Validity Period Format: %d\n", (int)vpf);
 
 	switch (vpf) {
 	case SMS_VALIDITY_PERIOD_FORMAT_ABSENT:
-		g_print("Validity-Period: Absent\n");
+		printf("Validity-Period: Absent\n");
 		break;
 	case SMS_VALIDITY_PERIOD_FORMAT_RELATIVE:
-		g_print("Validity-Period: %d\n",
+		printf("Validity-Period: %d\n",
 			(int)vp->relative);
 		break;
 	case SMS_VALIDITY_PERIOD_FORMAT_ABSOLUTE:
 		print_scts(&vp->absolute, "Validity-Period:");
 		break;
 	case SMS_VALIDITY_PERIOD_FORMAT_ENHANCED:
-		g_print("Validity-Period: Enhanced");
+		printf("Validity-Period: Enhanced");
 		break;
 	}
 }
@@ -104,39 +107,39 @@ static void print_vpf(enum sms_validity_period_format vpf,
 static void dump_details(struct sms *sms)
 {
 	if (sms->sc_addr.address[0] == '\0')
-		g_print("SMSC Address absent, default will be used\n");
+		printf("SMSC Address absent, default will be used\n");
 	else
-		g_print("SMSC Address number_type: %d, number_plan: %d, %s\n",
+		printf("SMSC Address number_type: %d, number_plan: %d, %s\n",
 			(int)sms->sc_addr.number_type,
 			(int)sms->sc_addr.numbering_plan, sms->sc_addr.address);
 
 	switch (sms->type) {
 	case SMS_TYPE_DELIVER:
-		g_print("Type: Deliver\n");
+		printf("Type: Deliver\n");
 
-		g_print("Originator-Address: %d, %d, %s\n",
+		printf("Originator-Address: %d, %d, %s\n",
 			(int)sms->deliver.oaddr.number_type,
 			(int)sms->deliver.oaddr.numbering_plan,
 			sms->deliver.oaddr.address);
 
-		g_print("PID: %d\n", (int)sms->deliver.pid);
-		g_print("DCS: %d\n", (int)sms->deliver.dcs);
+		printf("PID: %d\n", (int)sms->deliver.pid);
+		printf("DCS: %d\n", (int)sms->deliver.dcs);
 
 		print_scts(&sms->deliver.scts, "Timestamp");
 
 		break;
 	case SMS_TYPE_SUBMIT:
-		g_print("Type: Submit\n");
+		printf("Type: Submit\n");
 
-		g_print("Message Reference: %u\n", (int)sms->submit.mr);
+		printf("Message Reference: %u\n", (int)sms->submit.mr);
 
-		g_print("Destination-Address: %d, %d, %s\n",
+		printf("Destination-Address: %d, %d, %s\n",
 			(int)sms->submit.daddr.number_type,
 			(int)sms->submit.daddr.numbering_plan,
 			sms->submit.daddr.address);
 
-		g_print("PID: %d\n", (int)sms->submit.pid);
-		g_print("DCS: %d\n", (int)sms->submit.dcs);
+		printf("PID: %d\n", (int)sms->submit.pid);
+		printf("DCS: %d\n", (int)sms->submit.dcs);
 
 		print_vpf(sms->submit.vpf, &sms->submit.vp);
 
@@ -156,25 +159,22 @@ static void test_simple_deliver(void)
 {
 	struct sms sms;
 	unsigned char *decoded_pdu;
-	long pdu_len;
+	size_t pdu_len;
 	gboolean ret;
 	int data_len;
 	unsigned char *unpacked;
 	char *utf8;
 
-	decoded_pdu = decode_hex(simple_deliver, -1, &pdu_len, 0);
-
+	decoded_pdu = l_util_from_hexstring(simple_deliver, &pdu_len);
 	g_assert(decoded_pdu);
-	g_assert(pdu_len == (long)strlen(simple_deliver) / 2);
+	g_assert(pdu_len == strlen(simple_deliver) / 2);
 
 	ret = sms_decode(decoded_pdu, pdu_len, FALSE, 30, &sms);
-
-	g_free(decoded_pdu);
-
+	l_free(decoded_pdu);
 	g_assert(ret);
 	g_assert(sms.type == SMS_TYPE_DELIVER);
 
-	if (g_test_verbose())
+	if (VERBOSE)
 		dump_details(&sms);
 
 	g_assert(sms.sc_addr.number_type == SMS_NUMBER_TYPE_INTERNATIONAL);
@@ -204,48 +204,43 @@ static void test_simple_deliver(void)
 
 	g_assert(data_len == 11);
 
-	unpacked = unpack_7bit(sms.deliver.ud, data_len, 0, FALSE,
+	unpacked = unpack_7bit(sms.deliver.ud, data_len, 0, false,
 				sms.deliver.udl, NULL, 0xff);
 
 	g_assert(unpacked);
 
 	utf8 = convert_gsm_to_utf8(unpacked, -1, NULL, NULL, 0xff);
-
-	g_free(unpacked);
+	l_free(unpacked);
 
 	g_assert(utf8);
 
-	if (g_test_verbose())
-		g_print("Decoded user data is: %s\n", utf8);
+	if (VERBOSE)
+		printf("Decoded user data is: %s\n", utf8);
 
 	g_assert(strcmp(utf8, "How are you?") == 0);
-
-	g_free(utf8);
+	l_free(utf8);
 }
 
 static void test_alnum_sender(void)
 {
 	struct sms sms;
 	unsigned char *decoded_pdu;
-	long pdu_len;
+	size_t pdu_len;
 	gboolean ret;
 	int data_len;
 	unsigned char *unpacked;
 	char *utf8;
 
-	decoded_pdu = decode_hex(alnum_sender, -1, &pdu_len, 0);
-
+	decoded_pdu = l_util_from_hexstring(alnum_sender, &pdu_len);
 	g_assert(decoded_pdu);
-	g_assert(pdu_len == (long)strlen(alnum_sender) / 2);
+	g_assert(pdu_len == strlen(alnum_sender) / 2);
 
 	ret = sms_decode(decoded_pdu, pdu_len, FALSE, 27, &sms);
-
-	g_free(decoded_pdu);
-
+	l_free(decoded_pdu);
 	g_assert(ret);
 	g_assert(sms.type == SMS_TYPE_DELIVER);
 
-	if (g_test_verbose())
+	if (VERBOSE)
 		dump_details(&sms);
 
 	g_assert(sms.sc_addr.number_type == SMS_NUMBER_TYPE_INTERNATIONAL);
@@ -270,161 +265,139 @@ static void test_alnum_sender(void)
 	g_assert(sms.deliver.scts.timezone == 4);
 
 	g_assert(sms.deliver.udl == 8);
-
 	data_len = sms_udl_in_bytes(sms.deliver.udl, sms.deliver.dcs);
-
 	g_assert(data_len == 7);
 
-	unpacked = unpack_7bit(sms.deliver.ud, data_len, 0, FALSE,
+	unpacked = unpack_7bit(sms.deliver.ud, data_len, 0, false,
 				sms.deliver.udl, NULL, 0xff);
-
 	g_assert(unpacked);
 
 	utf8 = convert_gsm_to_utf8(unpacked, -1, NULL, NULL, 0xff);
-
-	g_free(unpacked);
-
+	l_free(unpacked);
 	g_assert(utf8);
 
-	if (g_test_verbose())
-		g_print("Decoded user data is: %s\n", utf8);
+	if (VERBOSE)
+		printf("Decoded user data is: %s\n", utf8);
 
 	g_assert(strcmp(utf8, "Testmail") == 0);
 
-	g_free(utf8);
+	l_free(utf8);
 }
 
 static void test_deliver_encode(void)
 {
 	struct sms sms;
 	unsigned char *decoded_pdu;
-	long pdu_len;
+	size_t pdu_len;
 	gboolean ret;
 	unsigned char pdu[176];
 	int encoded_pdu_len;
 	int encoded_tpdu_len;
 	char *encoded_pdu;
 
-	decoded_pdu = decode_hex(simple_deliver, -1, &pdu_len, 0);
-
+	decoded_pdu = l_util_from_hexstring(simple_deliver, &pdu_len);
 	g_assert(decoded_pdu);
-	g_assert(pdu_len == (long)strlen(simple_deliver) / 2);
+	g_assert(pdu_len == strlen(simple_deliver) / 2);
 
 	ret = sms_decode(decoded_pdu, pdu_len, FALSE, 30, &sms);
-
-	g_free(decoded_pdu);
-
+	l_free(decoded_pdu);
 	g_assert(ret);
 	g_assert(sms.type == SMS_TYPE_DELIVER);
 
 	ret = sms_encode(&sms, &encoded_pdu_len, &encoded_tpdu_len, pdu);
 
-	if (g_test_verbose()) {
+	if (VERBOSE) {
 		int i;
 
 		for (i = 0; i < encoded_pdu_len; i++)
-			g_print("%02X", pdu[i]);
-		g_print("\n");
+			printf("%02X", pdu[i]);
+		printf("\n");
 	}
 
 	g_assert(ret);
 	g_assert(encoded_tpdu_len == 30);
-	g_assert(encoded_pdu_len == pdu_len);
+	g_assert(encoded_pdu_len == (long)pdu_len);
 
-	encoded_pdu = encode_hex(pdu, encoded_pdu_len, 0);
+	encoded_pdu = l_util_hexstring(pdu, encoded_pdu_len);
+	g_assert(strcasecmp(simple_deliver, encoded_pdu) == 0);
+	l_free(encoded_pdu);
 
-	g_assert(strcmp(simple_deliver, encoded_pdu) == 0);
-
-	g_free(encoded_pdu);
-
-	decoded_pdu = decode_hex(alnum_sender, -1, &pdu_len, 0);
-
+	decoded_pdu = l_util_from_hexstring(alnum_sender, &pdu_len);
 	g_assert(decoded_pdu);
-	g_assert(pdu_len == (long)strlen(alnum_sender) / 2);
+	g_assert(pdu_len == strlen(alnum_sender) / 2);
 
 	ret = sms_decode(decoded_pdu, pdu_len, FALSE, 27, &sms);
-
-	g_free(decoded_pdu);
-
+	l_free(decoded_pdu);
 	g_assert(ret);
 	g_assert(sms.type == SMS_TYPE_DELIVER);
 
 	ret = sms_encode(&sms, &encoded_pdu_len, &encoded_tpdu_len, pdu);
 
-	if (g_test_verbose()) {
+	if (VERBOSE) {
 		int i;
 
 		for (i = 0; i < encoded_pdu_len; i++)
-			g_print("%02X", pdu[i]);
-		g_print("\n");
+			printf("%02X", pdu[i]);
+		printf("\n");
 	}
 
 	g_assert(ret);
 	g_assert(encoded_tpdu_len == 27);
-	g_assert(encoded_pdu_len == pdu_len);
+	g_assert(encoded_pdu_len == (long)pdu_len);
 
-	encoded_pdu = encode_hex(pdu, encoded_pdu_len, 0);
-
-	g_assert(strcmp(alnum_sender, encoded_pdu) == 0);
-
-	g_free(encoded_pdu);
+	encoded_pdu = l_util_hexstring(pdu, encoded_pdu_len);
+	g_assert(strcasecmp(alnum_sender, encoded_pdu) == 0);
+	l_free(encoded_pdu);
 
 	/* test unicode_deliver*/
-	decoded_pdu = decode_hex(unicode_deliver, -1, &pdu_len, 0);
+	decoded_pdu = l_util_from_hexstring(unicode_deliver, &pdu_len);
 	g_assert(decoded_pdu);
-	g_assert(pdu_len == (long)strlen(unicode_deliver) / 2);
+	g_assert(pdu_len == strlen(unicode_deliver) / 2);
 
 	ret = sms_decode(decoded_pdu, pdu_len, FALSE, 149, &sms);
-
-	g_free(decoded_pdu);
-
+	l_free(decoded_pdu);
 	g_assert(ret);
 	g_assert(sms.type == SMS_TYPE_DELIVER);
 
 	ret = sms_encode(&sms, &encoded_pdu_len, &encoded_tpdu_len, pdu);
 
-	if (g_test_verbose()) {
+	if (VERBOSE) {
 		int i;
 
 		for (i = 0; i < encoded_pdu_len; i++)
-			g_print("%02X", pdu[i]);
-		g_print("\n");
+			printf("%02X", pdu[i]);
+		printf("\n");
 	}
 
 	g_assert(ret);
 	g_assert(encoded_tpdu_len == 149);
-	g_assert(encoded_pdu_len == pdu_len);
+	g_assert(encoded_pdu_len == (long)pdu_len);
 
-	encoded_pdu = encode_hex(pdu, encoded_pdu_len, 0);
-
-	g_assert(strcmp(unicode_deliver, encoded_pdu) == 0);
-
-	g_free(encoded_pdu);
+	encoded_pdu = l_util_hexstring(pdu, encoded_pdu_len);
+	g_assert(strcasecmp(unicode_deliver, encoded_pdu) == 0);
+	l_free(encoded_pdu);
 }
 
 static void test_simple_submit(void)
 {
 	struct sms sms;
 	unsigned char *decoded_pdu;
-	long pdu_len;
+	size_t pdu_len;
 	gboolean ret;
 	int data_len;
 	unsigned char *unpacked;
 	char *utf8;
 
-	decoded_pdu = decode_hex(simple_submit, -1, &pdu_len, 0);
-
+	decoded_pdu = l_util_from_hexstring(simple_submit, &pdu_len);
 	g_assert(decoded_pdu);
-	g_assert(pdu_len == (long)strlen(simple_submit) / 2);
+	g_assert(pdu_len == strlen(simple_submit) / 2);
 
 	ret = sms_decode(decoded_pdu, pdu_len, TRUE, 23, &sms);
-
-	g_free(decoded_pdu);
-
+	l_free(decoded_pdu);
 	g_assert(ret);
 	g_assert(sms.type == SMS_TYPE_SUBMIT);
 
-	if (g_test_verbose())
+	if (VERBOSE)
 		dump_details(&sms);
 
 	g_assert(strlen(sms.sc_addr.address) == 0);
@@ -446,95 +419,81 @@ static void test_simple_submit(void)
 	g_assert(sms.submit.udl == 10);
 
 	data_len = sms_udl_in_bytes(sms.submit.udl, sms.submit.dcs);
-
 	g_assert(data_len == 9);
 
-	unpacked = unpack_7bit(sms.submit.ud, data_len, 0, FALSE,
+	unpacked = unpack_7bit(sms.submit.ud, data_len, 0, false,
 				sms.submit.udl, NULL, 0xff);
-
 	g_assert(unpacked);
-
 	utf8 = convert_gsm_to_utf8(unpacked, -1, NULL, NULL, 0xff);
-
-	g_free(unpacked);
-
+	l_free(unpacked);
 	g_assert(utf8);
 
-	if (g_test_verbose())
-		g_print("Decoded user data is: %s\n", utf8);
+	if (VERBOSE)
+		printf("Decoded user data is: %s\n", utf8);
 
 	g_assert(strcmp(utf8, "hellohello") == 0);
-
-	g_free(utf8);
+	l_free(utf8);
 }
 
 static void test_submit_encode(void)
 {
 	struct sms sms;
 	unsigned char *decoded_pdu;
-	long pdu_len;
+	size_t pdu_len;
 	gboolean ret;
 	unsigned char pdu[176];
 	int encoded_pdu_len;
 	int encoded_tpdu_len;
 	char *encoded_pdu;
 
-	decoded_pdu = decode_hex(simple_submit, -1, &pdu_len, 0);
-
+	decoded_pdu = l_util_from_hexstring(simple_submit, &pdu_len);
 	g_assert(decoded_pdu);
-	g_assert(pdu_len == (long)strlen(simple_submit) / 2);
+	g_assert(pdu_len == strlen(simple_submit) / 2);
 
 	ret = sms_decode(decoded_pdu, pdu_len, TRUE, 23, &sms);
-
-	g_free(decoded_pdu);
-
+	l_free(decoded_pdu);
 	g_assert(ret);
 	g_assert(sms.type == SMS_TYPE_SUBMIT);
 
 	ret = sms_encode(&sms, &encoded_pdu_len, &encoded_tpdu_len, pdu);
 
-	if (g_test_verbose()) {
+	if (VERBOSE) {
 		int i;
 
 		for (i = 0; i < encoded_pdu_len; i++)
-			g_print("%02X", pdu[i]);
-		g_print("\n");
+			printf("%02X", pdu[i]);
+		printf("\n");
 	}
 
 	g_assert(ret);
 	g_assert(encoded_tpdu_len == 23);
-	g_assert(encoded_pdu_len == pdu_len);
+	g_assert(encoded_pdu_len == (long)pdu_len);
 
-	encoded_pdu = encode_hex(pdu, encoded_pdu_len, 0);
-
-	g_assert(strcmp(simple_submit, encoded_pdu) == 0);
-
-	g_free(encoded_pdu);
+	encoded_pdu = l_util_hexstring(pdu, encoded_pdu_len);
+	g_assert(strcasecmp(simple_submit, encoded_pdu) == 0);
+	l_free(encoded_pdu);
 }
 
 static void test_simple_mwi(void)
 {
 	struct sms sms;
 	unsigned char *decoded_pdu;
-	long pdu_len;
+	size_t pdu_len;
 	gboolean ret;
 	enum sms_mwi_type type;
 	gboolean active;
 	gboolean discard;
 
-	decoded_pdu = decode_hex(simple_mwi, -1, &pdu_len, 0);
-
+	decoded_pdu = l_util_from_hexstring(simple_mwi, &pdu_len);
 	g_assert(decoded_pdu);
-	g_assert(pdu_len == (long)strlen(simple_mwi) / 2);
+	g_assert(pdu_len == strlen(simple_mwi) / 2);
 
 	ret = sms_decode(decoded_pdu, pdu_len, FALSE, 19, &sms);
-
-	g_free(decoded_pdu);
-
+	l_free(decoded_pdu);
 	g_assert(ret);
 	g_assert(sms.type == SMS_TYPE_DELIVER);
 
-	if (g_test_verbose())
+	if (VERBOSE)
 		dump_details(&sms);
 
 	g_assert(sms.sc_addr.number_type == SMS_NUMBER_TYPE_INTERNATIONAL);
@@ -576,8 +535,8 @@ static void test_simple_mwi(void)
 				sms_udh_iter_get_ie_data(&iter, evm_iei);
 				sms_udh_iter_get_ie_length(&iter);
 
-				if (g_test_verbose())
-					g_print("Enhanced Voicemail IEI\n");
+				if (VERBOSE)
+					printf("Enhanced Voicemail IEI\n");
 				break;
 			}
 
@@ -588,8 +547,8 @@ static void test_simple_mwi(void)
 				sms_udh_iter_get_ie_data(&iter, special_iei);
 				sms_udh_iter_get_ie_length(&iter);
 
-				if (g_test_verbose())
-					g_print("Special Voicemail IEI\n");
+				if (VERBOSE)
+					printf("Special Voicemail IEI\n");
 
 				break;
 			}
@@ -606,10 +565,9 @@ static void test_simple_mwi(void)
 					&discard);
 	g_assert(ret);
 
-	if (g_test_verbose()) {
-		g_print("Type: %d, Active: %d, Discard: %d\n",
+	if (VERBOSE) {
+		printf("Type: %d, Active: %d, Discard: %d\n",
 				type, active, discard);
-
 	}
 }
 
@@ -778,24 +736,20 @@ static void test_sms_charset(gconstpointer param)
 	struct sms sms;
 	unsigned char *pdu;
 	unsigned char *unpacked;
-	long pdu_len;
+	size_t pdu_len;
 	int data_len;
 	enum sms_charset sms_charset;
 	gboolean sms_compressed;
 	char *text;
 	struct sms_charset_data *data = (struct sms_charset_data *)param;
 
-	pdu = decode_hex(data->pdu, -1, &pdu_len, 0);
-
+	pdu = l_util_from_hexstring(data->pdu, &pdu_len);
 	g_assert(pdu);
-	g_assert(pdu_len == (gint64)strlen(data->pdu) / 2);
+	g_assert(pdu_len == strlen(data->pdu) / 2);
 
 	ret = sms_decode(pdu, pdu_len, FALSE, pdu_len, &sms);
-
 	g_assert(ret);
-
-	g_free(pdu);
-
+	l_free(pdu);
 	g_assert(sms.type == SMS_TYPE_DELIVER);
 
 	ret = sms_dcs_decode(sms.deliver.dcs, NULL, &sms_charset,
@@ -806,24 +760,19 @@ static void test_sms_charset(gconstpointer param)
 	g_assert(sms_compressed == FALSE);
 
 	data_len = sms_udl_in_bytes(sms.deliver.udl, sms.deliver.dcs);
-
 	g_assert(data_len == data->data_len);
 
-	unpacked = unpack_7bit(sms.deliver.ud, data_len, 0, FALSE,
+	unpacked = unpack_7bit(sms.deliver.ud, data_len, 0, false,
 				sms.deliver.udl, NULL, 0xff);
-
 	g_assert(unpacked);
 
 	text = convert_gsm_to_utf8_with_lang(unpacked, -1, NULL, NULL, 0xff,
 		data->locking_lang, data->single_lang);
 
 	g_assert(text);
-
-	g_free(unpacked);
-
+	l_free(unpacked);
 	g_assert(strcmp(data->expected_text, text) == 0);
-
-	g_free(text);
+	l_free(text);
 }
 
 struct text_format_header {
@@ -956,7 +905,7 @@ static void test_ems_udh(gconstpointer data)
 	const struct ems_udh_test *test = data;
 	struct sms sms;
 	unsigned char *decoded_pdu;
-	long pdu_len;
+	size_t pdu_len;
 	gboolean ret;
 	unsigned int data_len;
 	unsigned int udhl;
@@ -966,19 +915,16 @@ static void test_ems_udh(gconstpointer data)
 	char *utf8;
 	int i;
 
-	decoded_pdu = decode_hex(test->pdu, -1, &pdu_len, 0);
-
+	decoded_pdu = l_util_from_hexstring(test->pdu, &pdu_len);
 	g_assert(decoded_pdu);
-	g_assert(pdu_len == (long)strlen(test->pdu) / 2);
+	g_assert(pdu_len == strlen(test->pdu) / 2);
 
 	ret = sms_decode(decoded_pdu, pdu_len, TRUE, test->len, &sms);
-
-	g_free(decoded_pdu);
-
+	l_free(decoded_pdu);
 	g_assert(ret);
 	g_assert(sms.type == SMS_TYPE_SUBMIT);
 
-	if (g_test_verbose())
+	if (VERBOSE)
 		dump_details(&sms);
 	udhl = sms.submit.ud[0];
 
@@ -990,17 +936,17 @@ static void test_ems_udh(gconstpointer data)
 	g_assert(ret);
 
 	for (i = 0; test->formats[i].len; i++) {
-		if (g_test_verbose()) {
+		if (VERBOSE) {
 			int j;
 			unsigned char ie_data[4];
 
 			sms_udh_iter_get_ie_data(&iter, ie_data);
 
-			g_print("Header:\n");
+			printf("Header:\n");
 			for (j = 0; j < sms_udh_iter_get_ie_length(&iter); j++)
-				g_print("0x%02x ", ie_data[j]);
+				printf("0x%02x ", ie_data[j]);
 
-			g_print("\n");
+			printf("\n");
 		}
 
 		g_assert(sms_udh_iter_get_ie_type(&iter) ==
@@ -1020,28 +966,22 @@ static void test_ems_udh(gconstpointer data)
 	}
 
 	data_len = sms_udl_in_bytes(sms.submit.udl, sms.submit.dcs);
-
 	g_assert(data_len == test->data_len);
 
 	max_chars = (data_len - (udhl + 1)) * 8 / 7;
-
 	unpacked = unpack_7bit(sms.submit.ud + udhl + 1, data_len - (udhl + 1),
-				udhl + 1, FALSE, max_chars, NULL, 0xff);
-
+				udhl + 1, false, max_chars, NULL, 0xff);
 	g_assert(unpacked);
 
 	utf8 = convert_gsm_to_utf8(unpacked, -1, NULL, NULL, 0xff);
-
-	g_free(unpacked);
-
+	l_free(unpacked);
 	g_assert(utf8);
 
-	if (g_test_verbose())
-		g_print("Decoded user data is: %s\n", utf8);
+	if (VERBOSE)
+		printf("Decoded user data is: %s\n", utf8);
 
 	g_assert(strcmp(utf8, test->expected) == 0);
-
-	g_free(utf8);
+	l_free(utf8);
 }
 
 static const char *assembly_pdu1 = "038121F340048155550119906041001222048C0500"
@@ -1093,10 +1033,10 @@ static void test_assembly(void)
 	l = sms_assembly_add_fragment(assembly, &sms, time(NULL),
 					&sms.deliver.oaddr, ref, max, seq);
 
-	if (g_test_verbose()) {
-		g_print("Ref: %u\n", ref);
-		g_print("Max: %u\n", max);
-		g_print("From: %s\n",
+	if (VERBOSE) {
+		printf("Ref: %u\n", ref);
+		printf("Max: %u\n", max);
+		printf("From: %s\n",
 				sms_address_to_string(&sms.deliver.oaddr));
 	}
 
@@ -1136,8 +1076,8 @@ static void test_assembly(void)
 
 	sms_assembly_free(assembly);
 
-	if (g_test_verbose())
-		g_printf("Text:\n%s\n", utf8);
+	if (VERBOSE)
+		printf("Text:\n%s\n", utf8);
 
 	l = sms_text_prepare("555", utf8, ref, TRUE, FALSE);
 	g_assert(l);
@@ -1147,8 +1087,8 @@ static void test_assembly(void)
 
 	g_slist_free_full(l, g_free);
 
-	if (g_test_verbose())
-		g_printf("ReEncoded:\n%s\n", reencoded);
+	if (VERBOSE)
+		printf("ReEncoded:\n%s\n", reencoded);
 
 	g_assert(strcmp(utf8, reencoded) == 0);
 
@@ -1182,8 +1122,8 @@ static void test_prepare_7bit(void)
 	sms->sc_addr.numbering_plan = SMS_NUMBERING_PLAN_ISDN;
 	strcpy(sms->sc_addr.address, sc_addr+1);
 
-	if (g_test_verbose())
-		g_print("sc_addr: %s\n", sms_address_to_string(&sms->sc_addr));
+	if (VERBOSE)
+		printf("sc_addr: %s\n", sms_address_to_string(&sms->sc_addr));
 
 	g_assert(!strcmp(sc_addr, sms_address_to_string(&sms->sc_addr)));
 
@@ -1191,8 +1131,8 @@ static void test_prepare_7bit(void)
 	sms->submit.daddr.numbering_plan = SMS_NUMBERING_PLAN_ISDN;
 	strcpy(sms->submit.daddr.address, da_addr+1);
 
-	if (g_test_verbose())
-		g_print("da_addr: %s\n",
+	if (VERBOSE)
+		printf("da_addr: %s\n",
 			sms_address_to_string(&sms->submit.daddr));
 
 	g_assert(!strcmp(da_addr,
@@ -1202,19 +1142,17 @@ static void test_prepare_7bit(void)
 
 	g_assert(ret);
 
-	if (g_test_verbose()) {
+	if (VERBOSE) {
 		int i;
 
 		for (i = 0; i < encoded_pdu_len; i++)
-			g_print("%02X", pdu[i]);
-		g_print("\n");
+			printf("%02X", pdu[i]);
+		printf("\n");
 	}
 
-	encoded_pdu = encode_hex(pdu, encoded_pdu_len, 0);
-
-	g_assert(strcmp(expected_no_fragmentation_7bit, encoded_pdu) == 0);
-
-	g_free(encoded_pdu);
+	encoded_pdu = l_util_hexstring(pdu, encoded_pdu_len);
+	g_assert(strcasecmp(expected_no_fragmentation_7bit, encoded_pdu) == 0);
+	l_free(encoded_pdu);
 	g_slist_free_full(r, g_free);
 }
 
@@ -1250,8 +1188,8 @@ static void test_prepare_concat(gconstpointer data)
 	guint8 max;
 	guint8 seq;
 
-	if (g_test_verbose())
-		g_print("strlen: %zd\n", strlen(test->str));
+	if (VERBOSE)
+		printf("strlen: %zd\n", strlen(test->str));
 
 	r = sms_text_prepare("+15554449999", test->str, 0, TRUE, FALSE);
 	g_assert(r);
@@ -1265,10 +1203,10 @@ static void test_prepare_concat(gconstpointer data)
 		sms_encode(sms, &pdu_len, &tpdu_len, pdu);
 		g_assert(pdu_len == (tpdu_len + 1));
 
-		strpdu = encode_hex(pdu, pdu_len, 0);
+		strpdu = l_util_hexstring(pdu, pdu_len);
 
-		if (g_test_verbose())
-			g_printf("PDU: %s, len: %d, tlen: %d\n",
+		if (VERBOSE)
+			printf("PDU: %s, len: %d, tlen: %d\n",
 				strpdu, pdu_len, tpdu_len);
 		pdus = g_slist_append(pdus, strpdu);
 	}
@@ -1281,14 +1219,14 @@ static void test_prepare_concat(gconstpointer data)
 
 		decode_hex_own_buf((char *)l->data, -1, &len, 0, pdu);
 
-		if (g_test_verbose())
-			g_print("PDU Len: %ld\n", len);
+		if (VERBOSE)
+			printf("PDU Len: %ld\n", len);
 
 		ok = sms_decode(pdu, len, TRUE, len - 1, &decoded);
 		g_assert(ok);
 
-		if (g_test_verbose())
-			g_print("Pdu udl: %d\n", (int)decoded.submit.udl);
+		if (VERBOSE)
+			printf("Pdu udl: %d\n", (int)decoded.submit.udl);
 
 		sms_extract_concatenation(&decoded, &ref, &max, &seq);
 		r = sms_assembly_add_fragment(assembly, &decoded, time(NULL),
@@ -1300,13 +1238,13 @@ static void test_prepare_concat(gconstpointer data)
 
 	decoded_str = sms_decode_text(r);
 
-	if (g_test_verbose())
-		g_printf("Decoded String: %s\n", decoded_str);
+	if (VERBOSE)
+		printf("Decoded String: %s\n", decoded_str);
 
 	g_assert(decoded_str);
 	g_assert(strcmp(decoded_str, test->str) == 0);
 	g_free(decoded_str);
-	g_slist_free_full(pdus, g_free);
+	g_slist_free_full(pdus, l_free);
 	g_slist_free_full(r, g_free);
 	sms_assembly_free(assembly);
 }
@@ -1387,7 +1325,7 @@ static const char *cbs3 = "001000000111E280604028180E888462C168381E90886442A95"
 static void test_cbs_encode_decode(void)
 {
 	unsigned char *decoded_pdu;
-	long pdu_len;
+	size_t pdu_len;
 	gboolean ret;
 	struct cbs cbs;
 	unsigned char pdu[88];
@@ -1397,15 +1335,14 @@ static void test_cbs_encode_decode(void)
 	char iso639_lang[3];
 	char *utf8;
 
-	decoded_pdu = decode_hex(cbs1, -1, &pdu_len, 0);
+	decoded_pdu = l_util_from_hexstring(cbs1, &pdu_len);
 
 	g_assert(decoded_pdu);
-	g_assert(pdu_len == (long)strlen(cbs1) / 2);
+	g_assert(pdu_len == strlen(cbs1) / 2);
 	g_assert(pdu_len == 88);
 
 	ret = cbs_decode(decoded_pdu, pdu_len, &cbs);
-
-	g_free(decoded_pdu);
+	l_free(decoded_pdu);
 
 	g_assert(ret);
 
@@ -1423,18 +1360,18 @@ static void test_cbs_encode_decode(void)
 
 	g_assert(utf8);
 
-	if (g_test_verbose()) {
-		g_printf("%s\n", utf8);
+	if (VERBOSE) {
+		printf("%s\n", utf8);
 		if (iso639_lang[0] == '\0')
-			g_printf("Lang: Unspecified\n");
+			printf("Lang: Unspecified\n");
 		else
-			g_printf("Lang: %s\n", iso639_lang);
+			printf("Lang: %s\n", iso639_lang);
 	}
 
 	g_assert(strcmp(utf8, "Belconnen") == 0);
 	g_assert(strcmp(iso639_lang, "en") == 0);
 
-	g_free(utf8);
+	l_free(utf8);
 
 	g_slist_free(l);
 
@@ -1442,17 +1379,15 @@ static void test_cbs_encode_decode(void)
 
 	g_assert(ret);
 
-	encoded_pdu = encode_hex(pdu, len, 0);
-
-	g_assert(strcmp(cbs1, encoded_pdu) == 0);
-
-	g_free(encoded_pdu);
+	encoded_pdu = l_util_hexstring(pdu, len);
+	g_assert(strcasecmp(cbs1, encoded_pdu) == 0);
+	l_free(encoded_pdu);
 }
 
 static void test_cbs_assembly(void)
 {
 	unsigned char *decoded_pdu;
-	long pdu_len;
+	size_t pdu_len;
 	struct cbs dec1;
 	struct cbs dec2;
 	struct cbs_assembly *assembly;
@@ -1464,13 +1399,13 @@ static void test_cbs_assembly(void)
 
 	g_assert(assembly);
 
-	decoded_pdu = decode_hex(cbs1, -1, &pdu_len, 0);
+	decoded_pdu = l_util_from_hexstring(cbs1, &pdu_len);
 	cbs_decode(decoded_pdu, pdu_len, &dec1);
-	g_free(decoded_pdu);
+	l_free(decoded_pdu);
 
-	decoded_pdu = decode_hex(cbs2, -1, &pdu_len, 0);
+	decoded_pdu = l_util_from_hexstring(cbs2, &pdu_len);
 	cbs_decode(decoded_pdu, pdu_len, &dec2);
-	g_free(decoded_pdu);
+	l_free(decoded_pdu);
 
 	/* Add an initial page to the assembly */
 	l = cbs_assembly_add_page(assembly, &dec1);
@@ -1518,17 +1453,17 @@ static void test_cbs_assembly(void)
 
 	g_assert(utf8);
 
-	if (g_test_verbose()) {
-		g_printf("%s\n", utf8);
+	if (VERBOSE) {
+		printf("%s\n", utf8);
 		if (iso639_lang[0] == '\0')
-			g_printf("Lang: Unspecified\n");
+			printf("Lang: Unspecified\n");
 		else
-			g_printf("Lang: %s\n", iso639_lang);
+			printf("Lang: %s\n", iso639_lang);
 	}
 
 	g_assert(strcmp(utf8, "BelconnenFraserBelconnen") == 0);
 
-	g_free(utf8);
+	l_free(utf8);
 	g_slist_free_full(l, g_free);
 
 	cbs_assembly_free(assembly);
@@ -1537,22 +1472,19 @@ static void test_cbs_assembly(void)
 static void test_cbs_padding_character(void)
 {
 	unsigned char *decoded_pdu;
-	long pdu_len;
+	size_t pdu_len;
 	gboolean ret;
 	struct cbs cbs;
 	GSList *l;
 	char iso639_lang[3];
 	char *utf8;
 
-	decoded_pdu = decode_hex(cbs3, -1, &pdu_len, 0);
-
+	decoded_pdu = l_util_from_hexstring(cbs3, &pdu_len);
 	g_assert(decoded_pdu);
 	g_assert(pdu_len == 88);
 
 	ret = cbs_decode(decoded_pdu, pdu_len, &cbs);
-
-	g_free(decoded_pdu);
-
+	l_free(decoded_pdu);
 	g_assert(ret);
 
 	g_assert(cbs.gs == CBS_GEO_SCOPE_CELL_IMMEDIATE);
@@ -1566,15 +1498,14 @@ static void test_cbs_padding_character(void)
 	l = g_slist_append(NULL, &cbs);
 
 	utf8 = cbs_decode_text(l, iso639_lang);
-
 	g_assert(utf8);
 
-	if (g_test_verbose()) {
-		g_printf("%s\n", utf8);
+	if (VERBOSE) {
+		printf("%s\n", utf8);
 		if (iso639_lang[0] == '\0')
-			g_printf("Lang: Unspecified\n");
+			printf("Lang: Unspecified\n");
 		else
-			g_printf("Lang: %s\n", iso639_lang);
+			printf("Lang: %s\n", iso639_lang);
 	}
 
 	g_assert(strcmp(utf8, "b£$¥èéùìòÇ\x0AØø\x0DÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !\"#¤"
@@ -1582,7 +1513,7 @@ static void test_cbs_padding_character(void)
 				"NOPQRSTUVWXYZÄÖ") == 0);
 	g_assert(strcmp(iso639_lang, "en") == 0);
 
-	g_free(utf8);
+	l_free(utf8);
 	g_slist_free(l);
 }
 
@@ -1616,8 +1547,8 @@ static void test_range_minimizer(void)
 
 		g_assert(rangestr);
 
-		if (g_test_verbose())
-			g_print("range: %s\n", rangestr);
+		if (VERBOSE)
+			printf("range: %s\n", rangestr);
 
 		g_free(rangestr);
 		g_slist_free_full(r, g_free);
@@ -1658,16 +1589,16 @@ static void test_sr_assembly(void)
 	decode_hex_own_buf(sr_pdu3, -1, &pdu_len, 0, pdu);
 	g_assert(sms_decode(pdu, pdu_len, FALSE, 24, &sr3) == TRUE);
 
-	if (g_test_verbose()) {
-		g_print("sr1 address: %s, mr: %d\n",
+	if (VERBOSE) {
+		printf("sr1 address: %s, mr: %d\n",
 			sms_address_to_string(&sr1.status_report.raddr),
 			sr1.status_report.mr);
 
-		g_print("sr2 address: %s, mr: %d\n",
+		printf("sr2 address: %s, mr: %d\n",
 			sms_address_to_string(&sr2.status_report.raddr),
 			sr2.status_report.mr);
 
-		g_print("sr3 address: %s, mr: %d\n",
+		printf("sr3 address: %s, mr: %d\n",
 			sms_address_to_string(&sr3.status_report.raddr),
 			sr3.status_report.mr);
 	}
@@ -1742,7 +1673,7 @@ static void test_wap_push(gconstpointer data)
 	struct sms sms;
 	unsigned char *decoded_pdu;
 	gboolean ret;
-	long pdu_len;
+	size_t pdu_len;
 	long data_len;
 	enum sms_class cls;
 	enum sms_charset charset;
@@ -1751,18 +1682,15 @@ static void test_wap_push(gconstpointer data)
 	int dst_port, src_port;
 	gboolean is_8bit;
 
-	decoded_pdu = decode_hex(test->pdu, -1, &pdu_len, 0);
-
+	decoded_pdu = l_util_from_hexstring(test->pdu, &pdu_len);
 	g_assert(decoded_pdu);
 
 	ret = sms_decode(decoded_pdu, pdu_len, FALSE, test->len, &sms);
-
-	g_free(decoded_pdu);
-
+	l_free(decoded_pdu);
 	g_assert(ret);
 	g_assert(sms.type == SMS_TYPE_DELIVER);
 
-	if (g_test_verbose())
+	if (VERBOSE)
 		dump_details(&sms);
 
 	ret = sms_dcs_decode(sms.deliver.dcs, &cls, &charset, NULL, NULL);
@@ -1772,9 +1700,9 @@ static void test_wap_push(gconstpointer data)
 
 	g_assert(sms_extract_app_port(&sms, &dst_port, &src_port, &is_8bit));
 
-	if (g_test_verbose()) {
-		g_print("8bit: %d\n", is_8bit);
-		g_print("src: %d, dst: %d\n", src_port, dst_port);
+	if (VERBOSE) {
+		printf("8bit: %d\n", is_8bit);
+		printf("src: %d, dst: %d\n", src_port, dst_port);
 	}
 
 	g_assert(is_8bit == FALSE);
@@ -1784,19 +1712,19 @@ static void test_wap_push(gconstpointer data)
 
 	wap_push = sms_decode_datagram(list, &data_len);
 
-	if (g_test_verbose()) {
+	if (VERBOSE) {
 		int i;
 
-		g_print("data_len: %ld\n", data_len);
+		printf("data_len: %ld\n", data_len);
 
 		for (i = 0; i < data_len; i++) {
-			g_print("%02x", wap_push[i]);
+			printf("%02x", wap_push[i]);
 
 			if ((i % 16) == 15)
-				g_print("\n");
+				printf("\n");
 		}
 
-		g_print("\n");
+		printf("\n");
 	}
 
 	g_assert(wap_push);

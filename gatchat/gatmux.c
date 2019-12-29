@@ -30,6 +30,9 @@
 #include <string.h>
 #include <alloca.h>
 
+#pragma GCC diagnostic ignored "-Wpragmas"
+#pragma GCC diagnostic ignored "-Wcast-function-type"
+
 #include <glib.h>
 
 #include "ringbuffer.h"
@@ -116,66 +119,109 @@ static inline void debug(GAtMux *mux, const char *format, ...)
 
 static void dispatch_sources(GAtMuxChannel *channel, GIOCondition condition)
 {
-	GAtMuxWatch *source;
 	GSList *c;
 	GSList *p;
-	GSList *t;
+	GSList *refs;
+
+	/*
+	 * Don't reference destroyed sources, they may have zero reference
+	 * count if this function is invoked from the source's finalize
+	 * callback, in which case incrementing and then decrementing
+	 * the count would result in double free (first when we decrement
+	 * the reference count and then when we return from the finalize
+	 * callback).
+	 */
+
+	p = NULL;
+	refs = NULL;
+
+	for (c = channel->sources; c; c = c->next) {
+		GSource *s = c->data;
+
+		if (!g_source_is_destroyed(s)) {
+			GSList *l = g_slist_append(NULL, g_source_ref(s));
+
+			if (p)
+				p->next = l;
+			else
+				refs = l;
+
+			p = l;
+		}
+	}
+
+	/*
+	 * Keep the references to all sources for the duration of the loop.
+	 * Callbacks may add and remove the sources, i.e. channel->sources
+	 * may keep changing during the loop.
+	 */
+
+	for (c = refs; c; c = c->next) {
+		GAtMuxWatch *w = c->data;
+		GSource *s = &w->source;
+
+		if (g_source_is_destroyed(s))
+			continue;
+
+		debug(channel->mux, "checking source: %p", s);
+
+		if (condition & w->condition) {
+			gpointer user_data = NULL;
+			GSourceFunc callback = NULL;
+			GSourceCallbackFuncs *cb_funcs = s->callback_funcs;
+			gpointer cb_data = s->callback_data;
+			gboolean destroy;
+
+			debug(channel->mux, "dispatching source: %p", s);
+
+			if (cb_funcs) {
+				cb_funcs->ref(cb_data);
+				cb_funcs->get(cb_data, s, &callback,
+								&user_data);
+			}
+
+			destroy = !s->source_funcs->dispatch(s, callback,
+								user_data);
+
+			if (cb_funcs)
+				cb_funcs->unref(cb_data);
+
+			if (destroy) {
+				debug(channel->mux, "removing source: %p", s);
+				g_source_destroy(s);
+			}
+		}
+	}
+
+	/*
+	 * Remove destroyed sources from channel->sources. During this
+	 * loop we are not invoking any callbacks, so the consistency is
+	 * guaranteed.
+	 */
 
 	p = NULL;
 	c = channel->sources;
 
 	while (c) {
-		gboolean destroy = FALSE;
+		GSList *n = c->next;
+		GSource *s = c->data;
 
-		source = c->data;
-
-		debug(channel->mux, "checking source: %p", source);
-
-		if (condition & source->condition) {
-			gpointer user_data = NULL;
-			GSourceFunc callback = NULL;
-			GSourceCallbackFuncs *cb_funcs;
-			gpointer cb_data;
-			gboolean (*dispatch) (GSource *, GSourceFunc, gpointer);
-
-			debug(channel->mux, "dispatching source: %p", source);
-
-			dispatch = source->source.source_funcs->dispatch;
-			cb_funcs = source->source.callback_funcs;
-			cb_data = source->source.callback_data;
-
-			if (cb_funcs)
-				cb_funcs->ref(cb_data);
-
-			if (cb_funcs)
-				cb_funcs->get(cb_data, (GSource *) source,
-						&callback, &user_data);
-
-			destroy = !dispatch((GSource *) source, callback,
-						user_data);
-
-			if (cb_funcs)
-				cb_funcs->unref(cb_data);
-		}
-
-		if (destroy) {
-			debug(channel->mux, "removing source: %p", source);
-
-			g_source_destroy((GSource *) source);
-
+		if (g_source_is_destroyed(s)) {
 			if (p)
-				p->next = c->next;
+				p->next = n;
 			else
-				channel->sources = c->next;
+				channel->sources = n;
 
-			t = c;
-			c = c->next;
-			g_slist_free_1(t);
+			g_slist_free_1(c);
 		} else {
 			p = c;
-			c = c->next;
 		}
+
+		c = n;
 	}
+
+	/* Release temporary references */
+	g_slist_free_full(refs, (GDestroyNotify) g_source_unref);
 }
 
 static gboolean received_data(GIOChannel *channel, GIOCondition cond,
@@ -422,7 +468,9 @@ static gboolean watch_dispatch(GSource *source, GSourceFunc callback,
 static void watch_finalize(GSource *source)
 {
 	GAtMuxWatch *watch = (GAtMuxWatch *) source;
+	GAtMuxChannel *dlc = (GAtMuxChannel *) watch->channel;
 
+	dlc->sources = g_slist_remove(dlc->sources, watch);
 	g_io_channel_unref(watch->channel);
 }
 
@@ -638,6 +686,9 @@ gboolean g_at_mux_shutdown(GAtMux *mux)
 
 	if (mux->read_watch > 0)
 		g_source_remove(mux->read_watch);
+
+	if (mux->write_watch > 0)
+		g_source_remove(mux->write_watch);
 
 	for (i = 0; i < MAX_CHANNELS; i++) {
 		if (mux->dlcs[i] == NULL)

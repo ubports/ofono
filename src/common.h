@@ -37,12 +37,14 @@ enum access_technology {
 
 /* 27.007 Section 7.2 <stat> */
 enum network_registration_status {
-	NETWORK_REGISTRATION_STATUS_NOT_REGISTERED =	0,
-	NETWORK_REGISTRATION_STATUS_REGISTERED =	1,
-	NETWORK_REGISTRATION_STATUS_SEARCHING =		2,
-	NETWORK_REGISTRATION_STATUS_DENIED =		3,
-	NETWORK_REGISTRATION_STATUS_UNKNOWN =		4,
-	NETWORK_REGISTRATION_STATUS_ROAMING =		5,
+	NETWORK_REGISTRATION_STATUS_NOT_REGISTERED =		0,
+	NETWORK_REGISTRATION_STATUS_REGISTERED =		1,
+	NETWORK_REGISTRATION_STATUS_SEARCHING =			2,
+	NETWORK_REGISTRATION_STATUS_DENIED =			3,
+	NETWORK_REGISTRATION_STATUS_UNKNOWN =			4,
+	NETWORK_REGISTRATION_STATUS_ROAMING =			5,
+	NETWORK_REGISTRATION_STATUS_REGISTERED_SMS_EUTRAN =	6,
+	NETWORK_REGISTRATION_STATUS_ROAMING_SMS_EUTRAN =	7,
 };
 
 /* 27.007 Section 7.3 <stat> */
@@ -185,3 +187,10 @@ const char *packet_bearer_to_string(int bearer);
 
 gboolean is_valid_apn(const char *apn);
 const char *call_status_to_string(enum call_status status);
+
+const char *gprs_proto_to_string(enum ofono_gprs_proto proto);
+gboolean gprs_proto_from_string(const char *str, enum ofono_gprs_proto *proto);
+
+const char *gprs_auth_method_to_string(enum ofono_gprs_auth_method auth);
+gboolean gprs_auth_method_from_string(const char *str,
+					enum ofono_gprs_auth_method *auth);
