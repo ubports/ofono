@@ -1,5 +1,11 @@
 ofono (1.31-1) UNRELEASED; urgency=medium
 
+  [ Helmut Grohne ]
+  * Drop libc*-dev from ofono-dev Depends.
+  * Move ofono.pc to /usr/share/pkgconfig.
+  * Mark ofono-dev Multi-Arch: foreign. (Closes: #893941)
+
+  [ Laurent Bigonville ]
   * New upstream release
   * debian/control: Bump Standards-Version to 4.4.1 (no further changes)
   * Bump debhelper compatibility to 12, use dh_missing instead of dh_install
