@@ -2,8 +2,10 @@ ofono (1.31-1) UNRELEASED; urgency=medium
 
   * New upstream release
   * debian/control: Bump Standards-Version to 4.4.1 (no further changes)
+  * Bump debhelper compatibility to 12, use dh_missing instead of dh_install
+    to list non-installed files
 
- -- Laurent Bigonville <bigon@debian.org>  Sun, 29 Dec 2019 12:03:14 +0100
+ -- Laurent Bigonville <bigon@debian.org>  Sun, 29 Dec 2019 12:06:29 +0100
 
 ofono (1.28-1) unstable; urgency=medium
 

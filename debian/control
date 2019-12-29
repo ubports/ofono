@@ -3,7 +3,7 @@ Section: admin
 Priority: optional
 Maintainer: Debian Telepathy maintainers <pkg-telepathy-maintainers@lists.alioth.debian.org>
 Uploaders: Héctor Orón Martínez <zumbi@debian.org>
-Build-Depends: debhelper (>= 10),
+Build-Depends: debhelper-compat (= 12),
                libglib2.0-dev (>= 2.32),
                libdbus-glib-1-dev,
                libudev-dev,
@@ -20,6 +20,7 @@ Package: ofono
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, dbus, lsb-base
 Recommends: udev
+Pre-Depends: ${misc:Pre-Depends}
 Description: Mobile telephony stack (daemon)
  oFono is a stack for mobile telephony devices on Linux.  oFono supports
  speaking to telephony devices through specific drivers, or with generic
