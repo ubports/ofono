@@ -211,6 +211,10 @@ static gboolean ril_gprs_register(gpointer user_data)
 
 	gd->max_cids = gd->network->data.max_calls;
 	if (gd->max_cids > 0) {
+		// Some MediaTek RILs support more than 1 active context on Android
+		// but report only 1 in response to RIL_REQUEST_DATA_REGISTRATION_STATE
+		if (gd->max_cids == 1)
+			gd->max_cids = 3;
 		DBG("Setting max cids to %d", gd->max_cids);
 		ofono_gprs_set_cid_range(gd->gprs, 1, gd->max_cids);
 	}
