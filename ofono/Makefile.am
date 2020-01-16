@@ -772,7 +772,7 @@ src_ofonod_SOURCES = $(builtin_sources) $(gatchat_sources) src/ofono.ver \
 			src/handsfree-audio.c src/bluetooth.h \
 			src/sim-mnclength.c src/voicecallagent.c \
 			src/sms-filter.c src/gprs-filter.c \
-			src/dbus-queue.c src/dbus-access.c \
+			src/dbus-queue.c src/dbus-access.c src/config.c \
 			src/voicecall-filter.c src/ril-transport.c \
 			src/hfp.h src/siri.c src/watchlist.c \
 			src/netmon.c src/lte.c src/ims.c \
@@ -968,8 +968,7 @@ if SAILFISH_MANAGER
 
 unit_test_sailfish_cell_info_SOURCES = unit/test-sailfish_cell_info.c \
 			plugins/sailfish_manager/sailfish_cell_info.c
-unit_test_sailfish_cell_info_CFLAGS = $(AM_CFLAGS) $(COVERAGE_OPT) \
-			-Iplugins/sailfish_manager
+unit_test_sailfish_cell_info_CFLAGS = $(AM_CFLAGS) $(COVERAGE_OPT)
 unit_test_sailfish_cell_info_LDADD = @GLIB_LIBS@ -ldl
 unit_objects += $(unit_test_sailfish_cell_info_OBJECTS)
 unit_tests += unit/test-sailfish_cell_info
@@ -982,7 +981,7 @@ unit_test_sailfish_cell_info_dbus_SOURCES = unit/test-dbus.c \
 			gdbus/object.c \
 			src/dbus.c src/log.c
 unit_test_sailfish_cell_info_dbus_CFLAGS = $(AM_CFLAGS) $(COVERAGE_OPT) \
-			@DBUS_GLIB_CFLAGS@ -Iplugins/sailfish_manager
+			@DBUS_GLIB_CFLAGS@
 unit_test_sailfish_cell_info_dbus_LDADD = @DBUS_GLIB_LIBS@ @GLIB_LIBS@ -ldl
 unit_objects += $(unit_test_sailfish_cell_info_dbus_OBJECTS)
 unit_tests += unit/test-sailfish_cell_info_dbus
@@ -992,7 +991,7 @@ unit_test_sailfish_sim_info_SOURCES = unit/test-sailfish_sim_info.c \
 			plugins/sailfish_manager/sailfish_sim_info.c \
 			src/storage.c src/watchlist.c src/log.c
 unit_test_sailfish_sim_info_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
-			-DSTORAGEDIR='"/tmp/ofono"' -Iplugins/sailfish_manager
+			-DSTORAGEDIR='"/tmp/ofono"'
 unit_test_sailfish_sim_info_LDADD = @GLIB_LIBS@ -ldl
 unit_objects += $(unit_test_sailfish_sim_info_OBJECTS)
 unit_tests += unit/test-sailfish_sim_info
@@ -1004,8 +1003,7 @@ unit_test_sailfish_sim_info_dbus_SOURCES = unit/test-sailfish_sim_info_dbus.c \
 			gdbus/object.c \
 			src/dbus.c src/storage.c src/watchlist.c src/log.c
 unit_test_sailfish_sim_info_dbus_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
-			@DBUS_GLIB_CFLAGS@ -DSTORAGEDIR='"/tmp/ofono"' \
-			-Iplugins/sailfish_manager
+			@DBUS_GLIB_CFLAGS@ -DSTORAGEDIR='"/tmp/ofono"'
 unit_test_sailfish_sim_info_dbus_LDADD = @DBUS_GLIB_LIBS@ @GLIB_LIBS@ -ldl
 unit_objects += $(unit_test_sailfish_sim_info_dbus_OBJECTS)
 unit_tests += unit/test-sailfish_sim_info_dbus
@@ -1017,7 +1015,7 @@ unit_test_sailfish_manager_SOURCES = unit/test-sailfish_manager.c \
 			plugins/sailfish_manager/sailfish_sim_info.c \
 			src/storage.c src/log.c
 unit_test_sailfish_manager_CFLAGS = $(AM_CFLAGS) $(COVERAGE_OPT) \
-			-DSTORAGEDIR='"/tmp/ofono"' -Iplugins/sailfish_manager
+			-DSTORAGEDIR='"/tmp/ofono"'
 unit_test_sailfish_manager_LDADD = @GLIB_LIBS@ -ldl
 unit_objects += $(unit_test_sailfish_manager_OBJECTS)
 unit_tests += unit/test-sailfish_manager
@@ -1025,12 +1023,19 @@ unit_tests += unit/test-sailfish_manager
 unit_test_watch_SOURCES = unit/test-watch.c src/watch.c \
 			src/log.c src/watchlist.c
 unit_test_watch_CFLAGS = $(AM_CFLAGS) $(COVERAGE_OPT) \
-			-DSTORAGEDIR='"/tmp/ofono"' -Iplugins/sailfish_manager
+			-DSTORAGEDIR='"/tmp/ofono"'
 unit_test_watch_LDADD = @GLIB_LIBS@ -ldl
 unit_objects += $(unit_test_watch_OBJECTS)
 unit_tests += unit/test-watch
 
 endif
+
+unit_test_config_SOURCES = unit/test-config.c drivers/ril/ril_util.c \
+				src/config.c src/log.c
+unit_test_config_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
+unit_test_config_LDADD = @GLIB_LIBS@ -ldl
+unit_objects += $(unit_test_config_OBJECTS)
+unit_tests += unit/test-config
 
 if SAILFISH_ACCESS
 unit_test_sailfish_access_SOURCES = unit/test-sailfish_access.c \

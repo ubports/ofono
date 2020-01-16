@@ -1,7 +1,8 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2018 Jolla Ltd.
+ *  Copyright (C) 2015-2019 Jolla Ltd.
+ *  Copyright (C) 2019 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -21,8 +22,6 @@
 /* Utilities for parsing ril_subscription.conf */
 
 #define RILCONF_SETTINGS_GROUP      "Settings"
-
-void ril_config_merge_files(GKeyFile *conf, const char *file);
 
 char *ril_config_get_string(GKeyFile *file, const char *group,
 					const char *key);

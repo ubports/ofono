@@ -4,6 +4,7 @@
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *  Copyright (C) 2015-2019  Jolla Ltd.
+ *  Copyright (C) 2019 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -686,3 +687,4 @@ int mnclength(int mcc, int mnc);
 #include <ofono/ims.h>
 
 void __ofono_set_config_dir(const char *dir);
+void config_merge_files(GKeyFile *conf, const char *file);
