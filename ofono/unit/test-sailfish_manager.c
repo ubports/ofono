@@ -1,7 +1,8 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2017-2019 Jolla Ltd.
+ *  Copyright (C) 2017-2020 Jolla Ltd.
+ *  Copyright (C) 2019-2020 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -46,6 +47,7 @@
 #define TEST_SPN "Test"
 #define TEST_ERROR_KEY "Error"
 #define TEST_SLOT_ERROR_KEY "SlotError"
+#define TEST_CONFIG_DIR_TEMPLATE "test-saifish_manager-config-XXXXXX"
 
 extern struct ofono_plugin_desc __ofono_builtin_sailfish_manager;
 static GMainLoop *test_loop = NULL;
@@ -970,6 +972,128 @@ static void test_voice_sim(void)
 	test_common_deinit();
 }
 
+/* ==== auto_data_sim ==== */
+
+static gboolean test_auto_data_sim_done(gpointer user_data)
+{
+	test_slot_manager *sm = user_data;
+	test_slot *s = sm->slot;
+	struct sailfish_manager *m = fake_sailfish_manager_dbus.m;
+	struct ofono_watch *w = ofono_watch_new(TEST_PATH);
+	struct ofono_watch *w2 = ofono_watch_new(TEST_PATH_1);
+	struct ofono_modem modem;
+	struct ofono_sim sim;
+	struct ofono_sim sim2;
+
+	memset(&modem, 0, sizeof(modem));
+	memset(&sim, 0, sizeof(sim));
+	sim.mcc = TEST_MCC;
+	sim.mnc = TEST_MNC;
+	sim.state = OFONO_SIM_STATE_READY;
+	sim2 = sim;
+
+	/* Assign IMSI to the SIMs */
+	w->modem = &modem;
+	fake_watch_signal_queue(w, FAKE_WATCH_SIGNAL_MODEM_CHANGED);
+	fake_watch_set_ofono_sim(w, &sim);
+	fake_watch_set_ofono_iccid(w, TEST_ICCID);
+	fake_watch_set_ofono_imsi(w, TEST_IMSI);
+	fake_watch_emit_queued_signals(w);
+
+	w2->modem = &modem;
+	fake_watch_signal_queue(w2, FAKE_WATCH_SIGNAL_MODEM_CHANGED);
+	fake_watch_set_ofono_sim(w2, &sim2);
+	fake_watch_set_ofono_iccid(w2, TEST_ICCID_1);
+	fake_watch_set_ofono_imsi(w2, TEST_IMSI_1);
+	fake_watch_emit_queued_signals(w2);
+
+	/* No data SIM yet, only voice SIM is assigned */
+	g_assert(s->data_role == SAILFISH_DATA_ROLE_NONE);
+	g_assert(!m->default_voice_imsi);
+	g_assert(!g_strcmp0(m->default_voice_path, TEST_PATH));
+	g_assert(!m->default_data_imsi);
+	g_assert(!m->default_data_path);
+
+	/* Set the first modem online */
+	w->online = TRUE;
+	fake_watch_signal_queue(w, FAKE_WATCH_SIGNAL_ONLINE_CHANGED);
+	fake_watch_emit_queued_signals(w);
+
+	/* Now data modem must point to the first slot */
+	g_assert(!g_strcmp0(m->default_data_path, TEST_PATH));
+
+	ofono_watch_unref(w);
+	ofono_watch_unref(w2);
+	g_main_loop_quit(test_loop);
+	return G_SOURCE_REMOVE;
+}
+
+static guint test_auto_data_sim_start(test_slot_manager *sm)
+{
+	struct sailfish_manager *m = fake_sailfish_manager_dbus.m;
+	test_slot *s = g_new0(test_slot, 1);
+	test_slot *s2 = g_new0(test_slot, 1);
+
+	DBG("");
+
+	/* Create the slots */
+	DBG("");
+	s->handle = sailfish_manager_slot_add(sm->handle, s, TEST_PATH,
+			OFONO_RADIO_ACCESS_MODE_GSM, NULL, TEST_IMEISV,
+			SAILFISH_SIM_STATE_PRESENT);
+	s2->handle = sailfish_manager_slot_add(sm->handle, s2, TEST_PATH_1,
+			OFONO_RADIO_ACCESS_MODE_GSM, NULL, TEST_IMEISV,
+			SAILFISH_SIM_STATE_PRESENT);
+	sm->slot = s;
+	sm->slot2 = s2;
+	sailfish_slot_manager_started(sm->handle);
+
+	g_assert(!m->ready);
+	sailfish_manager_imei_obtained(s->handle, TEST_IMEI);
+	g_assert(!m->ready);
+	sailfish_manager_imei_obtained(s2->handle, TEST_IMEI_1);
+	g_assert(m->ready);
+
+	g_idle_add(test_auto_data_sim_done, sm);
+	return 0;
+}
+
+static void test_auto_data_sim(gconstpointer option)
+{
+	static const struct sailfish_slot_driver test_auto_data_sim_driver = {
+		.name = "auto_data_sim",
+		.manager_create = test_slot_manager_create,
+		.manager_start = test_auto_data_sim_start,
+		.manager_free = test_slot_manager_free,
+		.slot_enabled_changed = test_slot_enabled_changed,
+		.slot_free = test_slot_free
+	};
+	char *cfg_dir = g_dir_make_tmp(TEST_CONFIG_DIR_TEMPLATE, NULL);
+	char *cfg_file = g_build_filename(cfg_dir, "main.conf", NULL);
+	GKeyFile* cfg = g_key_file_new();
+	struct sailfish_slot_driver_reg *reg;
+
+	g_key_file_set_string(cfg, "ModemManager", "AutoSelectDataSim", option);
+	g_assert(g_key_file_save_to_file(cfg, cfg_file, NULL));
+	g_key_file_unref(cfg);
+
+	__ofono_set_config_dir(cfg_dir);
+	test_common_init();
+	reg = sailfish_slot_driver_register(&test_auto_data_sim_driver);
+	g_assert(reg);
+
+	g_main_loop_run(test_loop);
+
+	sailfish_slot_driver_unregister(reg);
+	test_common_deinit();
+
+	__ofono_set_config_dir(NULL);
+	remove(cfg_file);
+	remove(cfg_dir);
+	g_free(cfg_file);
+	g_free(cfg_dir);
+}
+
 /* ==== data_sim ==== */
 
 static gboolean test_data_sim_done(gpointer user_data)
@@ -1066,8 +1190,17 @@ static void test_data_sim(void)
 		.slot_enabled_changed = test_slot_enabled_changed,
 		.slot_free = test_slot_free
 	};
+	char *cfg_dir = g_dir_make_tmp(TEST_CONFIG_DIR_TEMPLATE, NULL);
+	char *cfg_file = g_build_filename(cfg_dir, "main.conf", NULL);
+	GKeyFile* cfg = g_key_file_new();
 	struct sailfish_slot_driver_reg *reg;
 
+	/* Invalid AutoSelectDataSim option is treated as "off" */
+	g_key_file_set_string(cfg, "ModemManager", "AutoSelectDataSim", "x");
+	g_assert(g_key_file_save_to_file(cfg, cfg_file, NULL));
+	g_key_file_unref(cfg);
+
+	__ofono_set_config_dir(cfg_dir);
 	test_common_init();
 	reg = sailfish_slot_driver_register(&test_data_sim_driver);
 	g_assert(reg);
@@ -1076,6 +1209,12 @@ static void test_data_sim(void)
 
 	sailfish_slot_driver_unregister(reg);
 	test_common_deinit();
+
+	__ofono_set_config_dir(NULL);
+	remove(cfg_file);
+	remove(cfg_dir);
+	g_free(cfg_file);
+	g_free(cfg_dir);
 }
 
 /* ==== mms_sim ==== */
@@ -1511,6 +1650,12 @@ int main(int argc, char *argv[])
 	g_test_add_func(TEST_("cancel_start"), test_cancel_start);
 	g_test_add_func(TEST_("voice_sim"), test_voice_sim);
 	g_test_add_func(TEST_("data_sim"), test_data_sim);
+	g_test_add_data_func(TEST_("auto_data_sim_on"), "on",
+						test_auto_data_sim);
+	g_test_add_data_func(TEST_("auto_data_sim_always"), "always",
+						test_auto_data_sim);
+	g_test_add_data_func(TEST_("auto_data_sim_once"), "once",
+						test_auto_data_sim);
 	g_test_add_func(TEST_("mms_sim"), test_mms_sim);
 	g_test_add_func(TEST_("multisim"), test_multisim);
 	g_test_add_func(TEST_("storage"), test_storage);
