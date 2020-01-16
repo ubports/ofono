@@ -1,7 +1,8 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2017-2019 Jolla Ltd.
+ *  Copyright (C) 2017-2020 Jolla Ltd.
+ *  Copyright (C) 2019-2020 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -22,6 +23,7 @@
 #include <gutil_macros.h>
 #include <string.h>
 
+#include <ofono/storage.h>
 #include <ofono/watch.h>
 
 #include "src/ofono.h"
@@ -44,6 +46,12 @@ enum ofono_watch_events {
 	WATCH_EVENT_COUNT
 };
 
+enum sim_auto_select {
+	SIM_AUTO_SELECT_OFF,
+	SIM_AUTO_SELECT_ON,
+	SIM_AUTO_SELECT_ONCE
+};
+
 struct sailfish_manager_priv {
 	struct sailfish_manager pub; /* Public part */
 	struct sailfish_slot_driver_reg *drivers;
@@ -52,6 +60,8 @@ struct sailfish_manager_priv {
 	struct sailfish_slot_priv *data_slot;
 	struct sailfish_slot_priv *mms_slot;
 	sailfish_slot_ptr *slots;
+	enum sim_auto_select auto_data_sim;
+	gboolean auto_data_sim_done;
 	int slot_count;
 	guint init_countdown;
 	guint init_id;
@@ -99,6 +109,11 @@ struct sailfish_slot_priv {
 	int index;
 };
 
+/* Read-only config */
+#define SF_CONFIG_FILE              "main.conf"
+#define SF_CONFIG_GROUP             "ModemManager"
+#define SF_CONFIG_KEY_AUTO_DATA_SIM "AutoSelectDataSim"
+
 /* "ril" is used for historical reasons */
 #define SF_STORE                    "ril"
 #define SF_STORE_GROUP              "Settings"
@@ -106,6 +121,7 @@ struct sailfish_slot_priv {
 #define SF_STORE_DEFAULT_VOICE_SIM  "DefaultVoiceSim"
 #define SF_STORE_DEFAULT_DATA_SIM   "DefaultDataSim"
 #define SF_STORE_SLOTS_SEP          ","
+#define SF_STORE_AUTO_DATA_SIM_DONE "AutoSelectDataSimDone"
 
 /* The file where error statistics is stored. Again "rilerror" is historical */
 #define SF_ERROR_STORAGE            "rilerror" /* File name */
@@ -143,6 +159,50 @@ static inline void sailfish_slot_set_data_role(struct sailfish_slot_priv *s,
 	if (d->slot_set_data_role) {
 		d->slot_set_data_role(s->impl, role);
 	}
+}
+
+static gboolean sailfish_config_get_enum(GKeyFile *file, const char *group,
+					const char *key, int *result,
+					const char *name, int value, ...)
+{
+	char *str = g_key_file_get_string(file, group, key, NULL);
+
+	if (str) {
+		/*
+		 * Some people are thinking that # is a comment
+		 * anywhere on the line, not just at the beginning
+		 */
+		char *comment = strchr(str, '#');
+
+		if (comment) *comment = 0;
+		g_strstrip(str);
+		if (strcasecmp(str, name)) {
+			va_list args;
+			va_start(args, value);
+			while ((name = va_arg(args, char*)) != NULL) {
+				value = va_arg(args, int);
+				if (!strcasecmp(str, name)) {
+					break;
+				}
+			}
+			va_end(args);
+		}
+
+		if (!name) {
+			ofono_error("Invalid %s config value (%s)", key, str);
+		}
+
+		g_free(str);
+
+		if (name) {
+			if (result) {
+				*result = value;
+			}
+			return TRUE;
+		}
+	}
+
+	return FALSE;
 }
 
 /* Update modem paths and emit D-Bus signal if necessary */
@@ -588,6 +648,27 @@ static struct sailfish_slot_priv *sailfish_manager_find_slot_imsi
 	}
 }
 
+static gboolean sailfish_manager_all_sims_are_initialized_proc
+			(struct sailfish_slot_priv *s, void *user_data)
+{
+	if (s->pub.sim_present && s->pub.enabled && !s->watch->imsi) {
+		*((gboolean*)user_data) = FALSE;
+		return SF_LOOP_DONE;
+	} else {
+		return SF_LOOP_CONTINUE;
+	}
+}
+
+static gboolean sailfish_manager_all_sims_are_initialized
+					(struct sailfish_manager_priv *p)
+{
+	gboolean result = TRUE;
+
+	sailfish_manager_foreach_slot(p,
+		sailfish_manager_all_sims_are_initialized_proc, &result);
+	return result;
+}
+
 /* Returns the event mask to be passed to sailfish_manager_dbus_signal.
  * The caller has a chance to OR it with other bits */
 static int sailfish_manager_update_modem_paths(struct sailfish_manager_priv *p)
@@ -615,7 +696,7 @@ static int sailfish_manager_update_modem_paths(struct sailfish_manager_priv *p)
 	 * previously selected voice SIM is inserted, we will switch
 	 * back to it.
 	 *
-	 * There is no such fallback for the data.
+	 * A similar behavior can be configured for data SIM too.
 	 */
 	if (!slot) {
 		slot = sailfish_manager_find_slot_imsi(p, NULL);
@@ -648,11 +729,36 @@ static int sailfish_manager_update_modem_paths(struct sailfish_manager_priv *p)
 			slot = sailfish_manager_find_slot_imsi(p, NULL);
 		}
 	} else {
-		/*
-		 * Should we automatically select the default data sim
-		 * on a multisim phone that has only one sim inserted?
-		 */
 		slot = NULL;
+	}
+
+	/* Check if we need to auto-select data SIM (always or once) */
+	if (!slot && (p->auto_data_sim == SIM_AUTO_SELECT_ON ||
+				(p->auto_data_sim == SIM_AUTO_SELECT_ONCE &&
+						!p->auto_data_sim_done))) {
+		/*
+		 * To actually make a selection we need all present SIMs
+		 * to be initialized. Otherwise we may end up endlessly
+		 * switching data SIMs back and forth.
+		 */
+		if (sailfish_manager_all_sims_are_initialized(p)) {
+			slot = sailfish_manager_find_slot_imsi(p, NULL);
+			if (slot && slot->watch->online &&
+				p->auto_data_sim == SIM_AUTO_SELECT_ONCE) {
+				/*
+				 * Data SIM only needs to be auto-selected
+				 * once and it's done. Write that down.
+				 */
+				p->auto_data_sim_done = TRUE;
+				g_key_file_set_boolean(p->storage,
+						SF_STORE_GROUP,
+						SF_STORE_AUTO_DATA_SIM_DONE,
+						p->auto_data_sim_done);
+				storage_sync(NULL, SF_STORE, p->storage);
+			}
+		} else {
+			DBG("Skipping auto-selection of data SIM");
+		}
 	}
 
 	if (slot && !slot->watch->online) {
@@ -1274,6 +1380,29 @@ static struct sailfish_manager_priv *sailfish_manager_priv_new()
 
 	struct sailfish_manager_priv *p =
 		g_slice_new0(struct sailfish_manager_priv);
+	GKeyFile *conf = g_key_file_new();
+	char* fn = g_build_filename(ofono_config_dir(), SF_CONFIG_FILE, NULL);
+
+	/* Load config */
+	if (g_key_file_load_from_file(conf, fn, 0, NULL)) {
+		int ival;
+
+		DBG("Loading configuration file %s", fn);
+		if (sailfish_config_get_enum(conf, SF_CONFIG_GROUP,
+				SF_CONFIG_KEY_AUTO_DATA_SIM, &ival,
+				"off", SIM_AUTO_SELECT_OFF,
+				"once", SIM_AUTO_SELECT_ONCE,
+				"always", SIM_AUTO_SELECT_ON,
+				"on", SIM_AUTO_SELECT_ON, NULL)) {
+			DBG("Automatic data SIM selection: %s",
+				ival == SIM_AUTO_SELECT_ONCE ? "once":
+				ival == SIM_AUTO_SELECT_ON ? "on":
+				"off");
+			p->auto_data_sim = ival;
+		}
+	}
+	g_key_file_free(conf);
+	g_free(fn);
 
 	/* Load settings */
 	p->storage = storage_open(NULL, SF_STORE);
@@ -1283,6 +1412,8 @@ static struct sailfish_manager_priv *sailfish_manager_priv_new()
 	p->pub.default_data_imsi = p->default_data_imsi =
 		g_key_file_get_string(p->storage, SF_STORE_GROUP,
 					SF_STORE_DEFAULT_DATA_SIM, NULL);
+	p->auto_data_sim_done = g_key_file_get_boolean(p->storage,
+			SF_STORE_GROUP, SF_STORE_AUTO_DATA_SIM_DONE, NULL);
 
 	DBG("Default voice sim is %s",  p->default_voice_imsi ?
 				p->default_voice_imsi : "(auto)");
