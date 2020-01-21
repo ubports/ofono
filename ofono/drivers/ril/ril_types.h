@@ -1,8 +1,8 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2019 Jolla Ltd.
- *  Copyright (C) 2019 Open Mobile Platform LLC.
+ *  Copyright (C) 2015-2020 Jolla Ltd.
+ *  Copyright (C) 2019-2020 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -55,6 +55,8 @@ struct ril_slot_config {
 	enum ril_pref_net_type lte_network_mode;
 	enum ril_pref_net_type umts_network_mode;
 	int network_mode_timeout;
+	int signal_strength_dbm_weak;
+	int signal_strength_dbm_strong;
 	gboolean query_available_band_mode;
 	gboolean empty_pin_query;
 	gboolean radio_power_cycle;

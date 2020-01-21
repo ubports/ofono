@@ -1,8 +1,8 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2019 Jolla Ltd.
- *  Copyright (C) 2019 Open Mobile Platform LLC.
+ *  Copyright (C) 2015-2020 Jolla Ltd.
+ *  Copyright (C) 2019-2020 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -42,6 +42,8 @@ struct ril_netreg {
 	GRilIoChannel *io;
 	GRilIoQueue *q;
 	gboolean network_selection_manual_0;
+	int signal_strength_dbm_weak;
+	int signal_strength_dbm_strong;
 	struct ofono_netreg *netreg;
 	struct ril_network *network;
 	struct ril_vendor *vendor;
@@ -334,17 +336,17 @@ static void ril_netreg_register_manual(struct ofono_netreg *netreg,
 	grilio_request_unref(req);
 }
 
-static int ril_netreg_qdbm_to_percentage(int qdbm /* 4*dBm */)
+static int ril_netreg_qdbm_to_percentage(struct ril_netreg *nd, int qdbm)
 {
-	const int min_qdbm = -4*100; /* very weak signal, 0.0000000001 mW */
-	const int max_qdbm = -4*60;  /* strong signal, 0.000001 mW */
+	const int min_qdbm = 4 * nd->signal_strength_dbm_weak;    /* 4*dBm */
+	const int max_qdbm = 4 * nd->signal_strength_dbm_strong;  /* 4*dBm */
 
 	return (qdbm <= min_qdbm) ? 1 :
 		(qdbm >= max_qdbm) ? 100 :
 		(100 * (qdbm - min_qdbm) / (max_qdbm - min_qdbm));
 }
 
-static int ril_netreg_get_signal_strength(struct ril_vendor *vendor,
+static int ril_netreg_get_signal_strength(struct ril_netreg *nd,
 					const void *data, guint len)
 {
 	GRilIoParser rilp;
@@ -354,8 +356,8 @@ static int ril_netreg_get_signal_strength(struct ril_vendor *vendor,
 	signal.gsm = INT_MAX;
 	signal.lte = INT_MAX;
 	signal.qdbm = 0;
-	
-	if (!ril_vendor_signal_strength_parse(vendor, &signal, &rilp)) {
+
+	if (!ril_vendor_signal_strength_parse(nd->vendor, &signal, &rilp)) {
 		gint32 rsrp = 0, tdscdma_dbm = 0;
 
 		/* Apply default parsing algorithm */
@@ -414,7 +416,7 @@ static int ril_netreg_get_signal_strength(struct ril_vendor *vendor,
 	}
 
 	if (signal.qdbm < 0) {
-		return ril_netreg_qdbm_to_percentage(signal.qdbm);
+		return ril_netreg_qdbm_to_percentage(nd, signal.qdbm);
 	} else if (signal.gsm == 0) {
 		return 0;
 	} else {
@@ -429,7 +431,7 @@ static void ril_netreg_strength_notify(GRilIoChannel *io, guint ril_event,
 	int strength;
 
 	GASSERT(ril_event == RIL_UNSOL_SIGNAL_STRENGTH);
-	strength = ril_netreg_get_signal_strength(nd->vendor, data, len);
+	strength = ril_netreg_get_signal_strength(nd, data, len);
 	DBG_(nd, "%d", strength);
 	if (strength >= 0) {
 		ofono_netreg_strength_notify(nd->netreg, strength);
@@ -445,7 +447,7 @@ static void ril_netreg_strength_cb(GRilIoChannel *io, int status,
 
 	if (status == RIL_E_SUCCESS) {
 		cb(ril_error_ok(&error), ril_netreg_get_signal_strength
-				(cbd->nd->vendor, data, len), cbd->data);
+				(cbd->nd, data, len), cbd->data);
 	} else {
 		ofono_error("Failed to retrive the signal strength: %s",
 						ril_error_to_string(status));
@@ -559,6 +561,8 @@ static int ril_netreg_probe(struct ofono_netreg *netreg, unsigned int vendor,
 	nd->network = ril_network_ref(modem->network);
 	nd->netreg = netreg;
 	nd->network_selection_manual_0 = config->network_selection_manual_0;
+	nd->signal_strength_dbm_weak = config->signal_strength_dbm_weak;
+	nd->signal_strength_dbm_strong = config->signal_strength_dbm_strong;
 
 	ofono_netreg_set_data(netreg, nd);
 	nd->timer_id = g_idle_add(ril_netreg_register, nd);
