@@ -1,8 +1,8 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2019 Jolla Ltd.
- *  Copyright (C) 2019 Open Mobile Platform LLC.
+ *  Copyright (C) 2015-2020 Jolla Ltd.
+ *  Copyright (C) 2019-2020 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -73,6 +73,8 @@
 #define RILMODEM_DEFAULT_LTE_MODE   PREF_NET_TYPE_LTE_GSM_WCDMA
 #define RILMODEM_DEFAULT_UMTS_MODE  PREF_NET_TYPE_GSM_WCDMA_AUTO
 #define RILMODEM_DEFAULT_NETWORK_MODE_TIMEOUT (20*1000) /* ms */
+#define RILMODEM_DEFAULT_DBM_WEAK   (-100) /* very weak, 0.0000000001 mW */
+#define RILMODEM_DEFAULT_DBM_STRONG (-60)  /* strong signal, 0.000001 mW */
 #define RILMODEM_DEFAULT_ENABLE_VOICECALL TRUE
 #define RILMODEM_DEFAULT_ENABLE_CBS TRUE
 #define RILMODEM_DEFAULT_ENABLE_STK TRUE
@@ -132,6 +134,7 @@
 #define RILCONF_LTE_MODE                    "lteNetworkMode"
 #define RILCONF_UMTS_MODE                   "umtsNetworkMode"
 #define RILCONF_NETWORK_MODE_TIMEOUT        "networkModeTimeout"
+#define RILCONF_SIGNAL_STRENGTH_RANGE       "signalStrengthRange"
 #define RILCONF_UICC_WORKAROUND             "uiccWorkaround"
 #define RILCONF_ECCLIST_FILE                "ecclistFile"
 #define RILCONF_ALLOW_DATA_REQ              "allowDataReq"
@@ -1190,6 +1193,9 @@ static ril_slot *ril_plugin_slot_new_take(char *transport,
 	config->techs = RILMODEM_DEFAULT_TECHS;
 	config->lte_network_mode = RILMODEM_DEFAULT_LTE_MODE;
 	config->umts_network_mode = RILMODEM_DEFAULT_UMTS_MODE;
+	config->network_mode_timeout = RILMODEM_DEFAULT_NETWORK_MODE_TIMEOUT;
+	config->signal_strength_dbm_weak = RILMODEM_DEFAULT_DBM_WEAK;
+	config->signal_strength_dbm_strong = RILMODEM_DEFAULT_DBM_STRONG;
 	config->empty_pin_query = RILMODEM_DEFAULT_EMPTY_PIN_QUERY;
 	config->radio_power_cycle = RILMODEM_DEFAULT_RADIO_POWER_CYCLE;
 	config->confirm_radio_power_on =
@@ -1362,6 +1368,7 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 	char *sval;
 	char **strv;
 	char *modem;
+	GUtilInts *ints;
 	GHashTable *transport_params = g_hash_table_new_full(g_str_hash,
 						g_str_equal, g_free, g_free);
 	char *transport = NULL;
@@ -1558,6 +1565,21 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 		DBG("%s: " RILCONF_NETWORK_MODE_TIMEOUT " %d", group,
 					config->network_mode_timeout);
 	}
+
+	/* signalStrengthRange */
+	ints = ril_config_get_ints(file, group, RILCONF_SIGNAL_STRENGTH_RANGE);
+	if (gutil_ints_get_count(ints) == 2) {
+		const int* dbms = gutil_ints_get_data(ints, NULL);
+
+		/* MIN,MAX */
+		if (dbms[0] < dbms[1]) {
+			DBG("%s: " RILCONF_SIGNAL_STRENGTH_RANGE " [%d,%d]",
+						group, dbms[0], dbms[1]);
+			config->signal_strength_dbm_weak = dbms[0];
+			config->signal_strength_dbm_strong = dbms[1];
+		}
+	}
+	gutil_ints_unref(ints);
 
 	/* enable4G (deprecated but still supported) */
 	ival = config->techs;
