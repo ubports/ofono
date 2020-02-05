@@ -305,6 +305,7 @@ builtin_sources += $(qmi_sources) \
 			drivers/qmimodem/ussd.c \
 			drivers/qmimodem/gprs.c \
 			drivers/qmimodem/gprs-context.c \
+			drivers/qmimodem/lte.c \
 			drivers/qmimodem/radio-settings.c \
 			drivers/qmimodem/location-reporting.c \
 			drivers/qmimodem/netmon.c

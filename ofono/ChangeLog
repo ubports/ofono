@@ -1,3 +1,8 @@
+ver 1.23:
+	Fix issue with handling SIM AID sessions.
+	Add support for QMI LTE bearer handling.
+	Add support for memory location dialing.
+
 ver 1.22:
 	Fix issue with GPIO handling and Nokia modems.
 	Fix issue with SIM state callback and AT modems.

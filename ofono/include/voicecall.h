@@ -139,7 +139,12 @@ struct ofono_voicecall_driver {
 	/* Dials the last number again, this handles the hfp profile last number
 	 * dialing with the +BLDN AT command
 	 */
-	void (*dial_last)(struct ofono_voicecall *vc, ofono_voicecall_cb_t cb, void *data);
+	void (*dial_last)(struct ofono_voicecall *vc, ofono_voicecall_cb_t cb,
+			void *data);
+	/* dials a number at a given memory location */
+	void (*dial_memory)(struct ofono_voicecall *vc,
+			unsigned int memory_location, ofono_voicecall_cb_t cb,
+			void *data);
 };
 
 void ofono_voicecall_en_list_notify(struct ofono_voicecall *vc,

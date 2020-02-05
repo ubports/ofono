@@ -95,6 +95,13 @@ Properties	boolean Powered [readwrite]
 			String representing the software version number of the
 			modem device.
 
+		string SystemPath [readonly, optional]
+
+			String representing the system path for the modem
+			device.
+			For modems detected by udev events, this corresponds to
+			the modem sysfs path.
+
 		array{string} Features [readonly]
 
 			List of currently enabled features. It uses simple

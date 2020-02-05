@@ -1798,7 +1798,7 @@ static DBusMessage *manager_dial(DBusConnection *conn,
 	return __ofono_error_failed(msg);
 }
 
-static void manager_dial_last_callback(const struct ofono_error *error,
+static void manager_dial_hfp_callback(const struct ofono_error *error,
 								void *data)
 {
 	struct ofono_voicecall *vc = data;
@@ -1827,8 +1827,8 @@ error:
 					__ofono_error_failed(vc->pending));
 }
 
-static int voicecall_dial_last(struct ofono_voicecall *vc,
-					ofono_voicecall_cb_t cb, void *data)
+static int voicecall_dial_hfp(struct ofono_voicecall *vc, unsigned int position,
+				ofono_voicecall_cb_t cb, void *data)
 {
 	struct ofono_modem *modem = __ofono_atom_get_modem(vc->atom);
 
@@ -1837,9 +1837,6 @@ static int voicecall_dial_last(struct ofono_voicecall *vc,
 
 	if (ofono_modem_get_online(modem) == FALSE)
 		return -ENETDOWN;
-
-	if (vc->driver->dial_last == NULL)
-		return -ENOTSUP;
 
 	if (voicecalls_have_incoming(vc))
 		return -EBUSY;
@@ -1851,7 +1848,18 @@ static int voicecall_dial_last(struct ofono_voicecall *vc,
 	if (voicecalls_have_active(vc) && voicecalls_have_held(vc))
 		return -EBUSY;
 
-	vc->driver->dial_last(vc, cb, vc);
+	/* when position is not given we dial the last called number */
+	if (position == 0) {
+		if (vc->driver->dial_last == NULL)
+			return -ENOTSUP;
+
+		vc->driver->dial_last(vc, cb, vc);
+	} else {
+		if (vc->driver->dial_memory == NULL )
+			return -ENOTSUP;
+
+		vc->driver->dial_memory(vc, position, cb, vc);
+       }
 
 	return 0;
 }
@@ -1867,7 +1875,7 @@ static DBusMessage *manager_dial_last(DBusConnection *conn,
 
 	vc->pending = dbus_message_ref(msg);
 
-	err = voicecall_dial_last(vc, manager_dial_last_callback, vc);
+	err = voicecall_dial_hfp(vc, 0, manager_dial_hfp_callback, vc);
 
 	if (err >= 0)
 		return NULL;
@@ -1887,6 +1895,44 @@ static DBusMessage *manager_dial_last(DBusConnection *conn,
 	}
 
 	return __ofono_error_failed(msg);
+}
+
+static DBusMessage *manager_dial_memory(DBusConnection *conn,
+                                       DBusMessage *msg, void *data)
+{
+       struct ofono_voicecall *vc = data;
+       int memory_location;
+       int err;
+
+       if (vc->pending || vc->dial_req || vc->pending_em)
+               return __ofono_error_busy(msg);
+
+       if (dbus_message_get_args(msg, NULL, DBUS_TYPE_UINT32, &memory_location,
+                                       DBUS_TYPE_INVALID) == FALSE)
+               return __ofono_error_invalid_args(msg);
+
+       vc->pending = dbus_message_ref(msg);
+
+       err = voicecall_dial_hfp(vc, memory_location,
+				manager_dial_hfp_callback, vc);
+       if (err >= 0)
+               return NULL;
+
+       vc->pending = NULL;
+       dbus_message_unref(msg);
+
+       switch (err) {
+       case -EINVAL:
+               return __ofono_error_invalid_format(msg);
+
+       case -ENETDOWN:
+               return __ofono_error_not_available(msg);
+
+       case -ENOTSUP:
+               return __ofono_error_not_implemented(msg);
+       }
+
+       return __ofono_error_failed(msg);
 }
 
 static DBusMessage *manager_transfer(DBusConnection *conn,
@@ -2552,6 +2598,9 @@ static const GDBusMethodTable manager_methods[] = {
 		GDBUS_ARGS({ "path", "o" }),
 		manager_dial) },
 	{ GDBUS_ASYNC_METHOD("DialLast", NULL, NULL, manager_dial_last)},
+	{ GDBUS_ASYNC_METHOD("DialMemory",
+		GDBUS_ARGS({"memory_location", "u" }), NULL,
+		manager_dial_memory) },
 	{ GDBUS_ASYNC_METHOD("Transfer", NULL, NULL, manager_transfer) },
 	{ GDBUS_ASYNC_METHOD("SwapCalls",  NULL, NULL, manager_swap_calls) },
 	{ GDBUS_ASYNC_METHOD("ReleaseAndAnswer", NULL, NULL,
