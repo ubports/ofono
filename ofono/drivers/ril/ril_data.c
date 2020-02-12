@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2016-2019 Jolla Ltd.
+ *  Copyright (C) 2016-2020 Jolla Ltd.
  *  Copyright (C) 2019 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -28,6 +28,8 @@
 #include <grilio_channel.h>
 #include <grilio_parser.h>
 #include <grilio_request.h>
+
+#include "common.h" /* ACCESS_TECHNOLOGY_EUTRAN */
 
 /* Yes, it does sometimes take minutes in roaming */
 #define SETUP_DATA_CALL_TIMEOUT (300*1000) /* ms */
@@ -115,6 +117,7 @@ struct ril_data_priv {
 	gulong io_event_id[IO_EVENT_COUNT];
 	gulong settings_event_id[SETTINGS_EVENT_COUNT];
 	GHashTable* grab;
+	gboolean downgraded_tech; /* Status 55 workaround */
 };
 
 enum ril_data_signal {
@@ -815,6 +818,31 @@ static gboolean ril_data_call_setup_retry(void *user_data)
 	return G_SOURCE_REMOVE;
 }
 
+static gboolean ril_data_call_retry(struct ril_data_request_setup *setup)
+{
+	struct ril_data_request *req = &setup->req;
+	const struct ril_data_options *options = &req->data->priv->options;
+
+	if (setup->retry_count < options->data_call_retry_limit) {
+		req->pending_id = 0;
+		GASSERT(!setup->retry_delay_id);
+		if (!setup->retry_count) {
+			/* No delay first time */
+			setup->retry_count++;
+			DBG("silent retry %u out of %u", setup->retry_count,
+					options->data_call_retry_limit);
+			req->submit(req);
+		} else {
+			const guint ms = options->data_call_retry_delay_ms;
+			DBG("silent retry scheduled in %u ms", ms);
+			setup->retry_delay_id = g_timeout_add(ms,
+					ril_data_call_setup_retry, setup);
+		}
+		return TRUE;
+	}
+	return FALSE;
+}
+
 static void ril_data_call_setup_cb(GRilIoChannel *io, int ril_status,
 				const void *data, guint len, void *user_data)
 {
@@ -839,33 +867,49 @@ static void ril_data_call_setup_cb(GRilIoChannel *io, int ril_status,
 		}
 	}
 
-	if (call && call->status == PDP_FAIL_ERROR_UNSPECIFIED &&
-		setup->retry_count < priv->options.data_call_retry_limit) {
+	if (call) {
+		switch (call->status) {
 		/*
 		 * According to the comment from ril.h we should silently
-		 * retry. First time we retry immediately and if that doedsn't
+		 * retry. First time we retry immediately and if that doesn't
 		 * work, then after certain delay.
 		 */
-		req->pending_id = 0;
-		GASSERT(!setup->retry_delay_id);
-		if (!setup->retry_count) {
-			setup->retry_count++;
-			DBG("silent retry %u out of %u", setup->retry_count,
-					priv->options.data_call_retry_limit);
-			req->submit(req);
-		} else {
-			guint ms = priv->options.data_call_retry_delay_ms;
-			DBG("silent retry scheduled in %u ms", ms);
-			setup->retry_delay_id = g_timeout_add(ms,
-					ril_data_call_setup_retry, setup);
+		case PDP_FAIL_ERROR_UNSPECIFIED:
+			if (ril_data_call_retry(setup)) {
+				ril_data_call_list_free(list);
+				return;
+			}
+			break;
+		/*
+		 * With some networks we sometimes start getting error 55
+		 * (Multiple PDN connections for a given APN not allowed)
+		 * when trying to setup an LTE data call and this error
+		 * doesn't go away until we successfully establish a data
+		 * call over 3G. Then we can switch back to LTE.
+		 */
+		case PDP_FAIL_MULTI_CONN_TO_SAME_PDN_NOT_ALLOWED:
+			if (priv->network->data.access_tech ==
+					ACCESS_TECHNOLOGY_EUTRAN &&
+						!priv->downgraded_tech) {
+				DBG("downgrading preferred technology");
+				priv->downgraded_tech = TRUE;
+				ril_data_manager_check_network_mode(priv->dm);
+				/* And let this call fail */
+			}
+			break;
+		default:
+			break;
 		}
-		ril_data_call_list_free(list);
-		return;
 	}
 
 	ril_data_request_completed(req);
 
 	if (call && call->status == PDP_FAIL_NONE) {
+		if (priv->downgraded_tech) {
+			DBG("done with status 55 workaround");
+			priv->downgraded_tech = FALSE;
+			ril_data_manager_check_network_mode(priv->dm);
+		}
 		if (ril_data_call_list_move_calls(self->data_calls, list) > 0) {
 			DBG("data call(s) added");
 			ril_data_signal_emit(self, SIGNAL_CALLS_CHANGED);
@@ -1151,6 +1195,11 @@ static struct ril_data_request *ril_data_allow_new(struct ril_data *data,
 /*==========================================================================*
  * ril_data
  *==========================================================================*/
+static enum ofono_radio_access_mode ril_data_max_mode(struct ril_data *self)
+{
+	return self->priv->downgraded_tech ? OFONO_RADIO_ACCESS_MODE_UMTS :
+						OFONO_RADIO_ACCESS_MODE_ANY;
+}
 
 gulong ril_data_add_allow_changed_handler(struct ril_data *self,
 						ril_data_cb_t cb, void *arg)
@@ -1684,7 +1733,7 @@ static void ril_data_manager_check_network_mode(struct ril_data_manager *self)
 
 			ril_network_set_max_pref_mode(network,
 					(network == lte_network) ?
-					OFONO_RADIO_ACCESS_MODE_ANY :
+					ril_data_max_mode(data) :
 					OFONO_RADIO_ACCESS_MODE_GSM,
 					FALSE);
 		}
@@ -1694,7 +1743,7 @@ static void ril_data_manager_check_network_mode(struct ril_data_manager *self)
 		for (l= self->data_list; l; l = l->next) {
 			struct ril_data *data = l->data;
 			ril_network_set_max_pref_mode(data->priv->network,
-					OFONO_RADIO_ACCESS_MODE_ANY, FALSE);
+					ril_data_max_mode(data), FALSE);
 		}
 	}
 }
@@ -1723,7 +1772,7 @@ static void ril_data_manager_switch_data_on(struct ril_data_manager *self,
 
 	if (ril_data_manager_handover(self)) {
 		ril_network_set_max_pref_mode(priv->network,
-					OFONO_RADIO_ACCESS_MODE_ANY, TRUE);
+					ril_data_max_mode(data), TRUE);
 	}
 
 	if (priv->options.allow_data == RIL_ALLOW_DATA_ENABLED) {
