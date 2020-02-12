@@ -14,6 +14,8 @@
  *  GNU General Public License for more details.
  */
 
+#define GLIB_DISABLE_DEPRECATION_WARNINGS
+
 #include "ril_data.h"
 #include "ril_radio.h"
 #include "ril_network.h"

@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2016-2019 Jolla Ltd.
+ *  Copyright (C) 2016-2020 Jolla Ltd.
  *  Copyright (C) 2019 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -13,6 +13,8 @@
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  *  GNU General Public License for more details.
  */
+
+#define GLIB_DISABLE_DEPRECATION_WARNINGS
 
 #include "ril_ecclist.h"
 #include "ril_log.h"
