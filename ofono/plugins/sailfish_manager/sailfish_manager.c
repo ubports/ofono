@@ -743,18 +743,32 @@ static int sailfish_manager_update_modem_paths(struct sailfish_manager_priv *p)
 		 */
 		if (sailfish_manager_all_sims_are_initialized(p)) {
 			slot = sailfish_manager_find_slot_imsi(p, NULL);
-			if (slot && slot->watch->online &&
+			if (slot && slot->watch->imsi && slot->watch->online &&
 				p->auto_data_sim == SIM_AUTO_SELECT_ONCE) {
+				const char *imsi = slot->watch->imsi;
+
 				/*
 				 * Data SIM only needs to be auto-selected
 				 * once and it's done. Write that down.
 				 */
+				DBG("Default data sim set to %s once", imsi);
 				p->auto_data_sim_done = TRUE;
 				g_key_file_set_boolean(p->storage,
 						SF_STORE_GROUP,
 						SF_STORE_AUTO_DATA_SIM_DONE,
 						p->auto_data_sim_done);
+
+				g_free(p->default_data_imsi);
+				p->pub.default_data_imsi =
+				p->default_data_imsi = g_strdup(imsi);
+				g_key_file_set_string(p->storage,
+						SF_STORE_GROUP,
+						SF_STORE_DEFAULT_DATA_SIM,
+						imsi);
+
 				storage_sync(NULL, SF_STORE, p->storage);
+				sailfish_manager_dbus_signal(p->dbus,
+					SAILFISH_MANAGER_SIGNAL_DATA_IMSI);
 			}
 		} else {
 			DBG("Skipping auto-selection of data SIM");
