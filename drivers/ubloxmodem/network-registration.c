@@ -279,7 +279,7 @@ static void ublox_ureg_cb(gboolean ok, GAtResult *result,
 	struct netreg_data *nd = ofono_netreg_get_data(tq->netreg);
 	GAtResultIter iter;
 	gint enabled, state;
-	int tech = tq->tech;
+	int tech = -1;
 
 	nd->updating_status = false;
 
@@ -288,21 +288,23 @@ static void ublox_ureg_cb(gboolean ok, GAtResult *result,
 
 	g_at_result_iter_init(&iter, result);
 
-	if (!g_at_result_iter_next(&iter, "+UREG:"))
-		return;
+	while (g_at_result_iter_next(&iter, "+UREG:")) {
+		if (!g_at_result_iter_next_number(&iter, &enabled))
+			return;
 
-	if (!g_at_result_iter_next_number(&iter, &enabled))
-		return;
+		/* Sometimes we get an unsolicited UREG here, skip it */
+		if (!g_at_result_iter_next_number(&iter, &state))
+			continue;
 
-	if (!g_at_result_iter_next_number(&iter, &state))
-		return;
+		tech = ublox_ureg_state_to_tech(state);
+		break;
+	}
 
-	tech = ublox_ureg_state_to_tech(state);
+error:
 	if (tech < 0)
 		/* No valid UREG status, we have to trust CREG... */
 		tech = tq->tech;
 
-error:
 	ofono_netreg_status_notify(tq->netreg,
 			tq->status, tq->lac, tq->ci, tech);
 }
