@@ -2,7 +2,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
- *  Copyright (C) 2013-2017  Jolla Ltd.
+ *  Copyright (C) 2013-2020  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -136,38 +136,56 @@ static GSList *provision_pick_best_ap(GSList *list, const char *spn,
 	}
 }
 
-/* Returns the list containing exactly one INTERNET and one MMS access point */
+/**
+ * Returns the list containing INTERNET, MMS and IMS access points,
+ * always all three of them and always in this order.
+ */
 static GSList *provision_normalize_apn_list(GSList *apns, const char *spn)
 {
 	static const struct provision_ap_defaults internet_defaults =
 		{ OFONO_GPRS_CONTEXT_TYPE_INTERNET, "Internet", "internet" };
 	static const struct provision_ap_defaults mms_defaults =
 		{ OFONO_GPRS_CONTEXT_TYPE_MMS, "MMS", "mms" };
+	static const struct provision_ap_defaults ims_defaults =
+		{ OFONO_GPRS_CONTEXT_TYPE_IMS, "IMS", "ims" };
 
 	GSList *internet_apns = NULL;
 	GSList *mms_apns = NULL;
+	GSList *ims_apns = NULL;
 
-	/* Split internet and mms apns, delete all others */
+	/* Build separate apn list for each type */
 	while (apns) {
 		GSList *link = apns;
 		struct ofono_gprs_provision_data *ap = link->data;
 
 		apns = g_slist_remove_link(apns, link);
-		if (ap->type == OFONO_GPRS_CONTEXT_TYPE_INTERNET) {
+		switch (ap->type) {
+		case OFONO_GPRS_CONTEXT_TYPE_INTERNET:
 			internet_apns = g_slist_concat(internet_apns, link);
-		} else if (ap->type == OFONO_GPRS_CONTEXT_TYPE_MMS) {
+			break;
+		case OFONO_GPRS_CONTEXT_TYPE_MMS:
 			mms_apns = g_slist_concat(mms_apns, link);
-		} else {
+			break;
+		case OFONO_GPRS_CONTEXT_TYPE_IMS:
+			ims_apns = g_slist_concat(ims_apns, link);
+			break;
+		default:
 			g_slist_free_full(link, provision_free_ap);
+			break;
 		}
 	}
 
-	/* Pick the best ap of each type and concatenate them */
-	return g_slist_concat(
-		provision_pick_best_ap(internet_apns, spn,
-			mbpi_default_internet_proto, &internet_defaults),
-		provision_pick_best_ap(mms_apns, spn,
-			mbpi_default_mms_proto, &mms_defaults));
+	/* Pick the best ap of each type */
+	internet_apns = provision_pick_best_ap(internet_apns, spn,
+			mbpi_default_internet_proto, &internet_defaults);
+	mms_apns = provision_pick_best_ap(mms_apns, spn,
+			mbpi_default_mms_proto, &mms_defaults);
+	ims_apns = provision_pick_best_ap(ims_apns, spn,
+			mbpi_default_ims_proto, &ims_defaults);
+
+	/* And concatenate them in the right order */
+	return g_slist_concat(internet_apns, g_slist_concat(mms_apns,
+								ims_apns));
 }
 
 int provision_get_settings(const char *mcc, const char *mnc,

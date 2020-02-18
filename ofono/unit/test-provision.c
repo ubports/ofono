@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2014-2017 Jolla. All rights reserved.
+ *  Copyright (C) 2014-2020 Jolla. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -105,21 +105,21 @@ static void test_provision(gconstpointer test_data)
 
 			g_assert(actual->type == expected->type);
 			g_assert(actual->proto == expected->proto);
-			g_assert(!g_strcmp0(actual->provider_name,
-						expected->provider_name));
-			g_assert(!g_strcmp0(actual->name, expected->name));
+			g_assert_cmpstr(actual->provider_name, ==,
+						expected->provider_name);
+			g_assert_cmpstr(actual->name, ==, expected->name);
 			g_assert(actual->provider_primary ==
 						expected->provider_primary);
-			g_assert(!g_strcmp0(actual->apn, expected->apn));
-			g_assert(!g_strcmp0(actual->username,
-						expected->username));
-			g_assert(!g_strcmp0(actual->password,
-						expected->password));
+			g_assert_cmpstr(actual->apn, ==, expected->apn);
+			g_assert_cmpstr(actual->username, ==,
+						expected->username);
+			g_assert_cmpstr(actual->password, ==,
+						expected->password);
 			g_assert(actual->auth_method == expected->auth_method);
-			g_assert(!g_strcmp0(actual->message_proxy,
-						expected->message_proxy));
-			g_assert(!g_strcmp0(actual->message_center,
-						expected->message_center));
+			g_assert_cmpstr(actual->message_proxy, ==,
+						expected->message_proxy);
+			g_assert_cmpstr(actual->message_center, ==,
+						expected->message_center);
 		}
 	} else {
 		g_assert(!__ofono_gprs_provision_get_settings(test->mcc,
@@ -212,6 +212,14 @@ static char telia_fi_message_center [] = "http://mms/";
 	.apn = "mms", \
 	.auth_method = OFONO_GPRS_AUTH_METHOD_NONE
 
+/* Default IMS settings */
+#define DEFAULT_IMS_SETTINGS \
+	.type = OFONO_GPRS_CONTEXT_TYPE_IMS, \
+	.proto = OFONO_GPRS_PROTO_IPV4V6, \
+	.name = "IMS", \
+	.apn = "ims", \
+	.auth_method = OFONO_GPRS_AUTH_METHOD_NONE
+
 static const struct ofono_gprs_provision_data telia_fi_internet_mms_p[] = {
 	{
 		.type = OFONO_GPRS_CONTEXT_TYPE_INTERNET,
@@ -231,7 +239,8 @@ static const struct ofono_gprs_provision_data telia_fi_internet_mms_p[] = {
 		.auth_method = OFONO_GPRS_AUTH_METHOD_NONE,
 		.message_proxy = telia_fi_message_proxy,
 		.message_center = telia_fi_message_center
-	}
+	},
+	{ DEFAULT_IMS_SETTINGS }
 };
 
 static const struct ofono_gprs_provision_data telia_fi_internet_mms[] = {
@@ -251,7 +260,8 @@ static const struct ofono_gprs_provision_data telia_fi_internet_mms[] = {
 		.auth_method = OFONO_GPRS_AUTH_METHOD_NONE,
 		.message_proxy = telia_fi_message_proxy,
 		.message_center = telia_fi_message_center
-	}
+	},
+	{ DEFAULT_IMS_SETTINGS }
 };
 
 static const struct ofono_gprs_provision_data telia_fi_internet[] = {
@@ -263,7 +273,8 @@ static const struct ofono_gprs_provision_data telia_fi_internet[] = {
 		.apn = telia_fi_apn_internet,
 		.auth_method = OFONO_GPRS_AUTH_METHOD_NONE
 	},
-	{ DEFAULT_MMS_SETTINGS }
+	{ DEFAULT_MMS_SETTINGS },
+	{ DEFAULT_IMS_SETTINGS }
 };
 
 static const struct ofono_gprs_provision_data telia_fi_mms[] = {
@@ -277,12 +288,14 @@ static const struct ofono_gprs_provision_data telia_fi_mms[] = {
 		.auth_method = OFONO_GPRS_AUTH_METHOD_NONE,
 		.message_proxy = telia_fi_message_proxy,
 		.message_center = telia_fi_message_center
-	}
+	},
+	{ DEFAULT_IMS_SETTINGS }
 };
 
 static const struct ofono_gprs_provision_data default_settings[] = {
 	{ DEFAILT_INTERNET_SETTINGS },
-	{ DEFAULT_MMS_SETTINGS }
+	{ DEFAULT_MMS_SETTINGS },
+	{ DEFAULT_IMS_SETTINGS }
 };
 
 static const struct ofono_gprs_provision_data no_auth_settings[] = {
@@ -300,7 +313,8 @@ static const struct ofono_gprs_provision_data no_auth_settings[] = {
 		.name = "MMS",
 		.apn = "mms",
 		.auth_method = OFONO_GPRS_AUTH_METHOD_NONE
-	}
+	},
+	{ DEFAULT_IMS_SETTINGS }
 };
 
 static const struct ofono_gprs_provision_data auth_settings[] = {
@@ -318,7 +332,8 @@ static const struct ofono_gprs_provision_data auth_settings[] = {
 		.apn = "mms",
 		.password = "password",
 		.auth_method = OFONO_GPRS_AUTH_METHOD_ANY
-	}
+	},
+	{ DEFAULT_IMS_SETTINGS }
 };
 
 static const struct ofono_gprs_provision_data settings_ip[] = {
@@ -329,7 +344,8 @@ static const struct ofono_gprs_provision_data settings_ip[] = {
 		.apn = "internet",
 		.auth_method = OFONO_GPRS_AUTH_METHOD_NONE
 	},
-	{ DEFAULT_MMS_SETTINGS }
+	{ DEFAULT_MMS_SETTINGS },
+	{ DEFAULT_IMS_SETTINGS }
 };
 
 static const struct ofono_gprs_provision_data settings_ipv6[] = {
@@ -345,7 +361,8 @@ static const struct ofono_gprs_provision_data settings_ipv6[] = {
 		.name = "MMS",
 		.apn = "mms",
 		.auth_method = OFONO_GPRS_AUTH_METHOD_NONE
-	}
+	},
+	{ DEFAULT_IMS_SETTINGS }
 };
 
 static const struct ofono_gprs_provision_data settings_ipv4v6[] = {
@@ -356,7 +373,40 @@ static const struct ofono_gprs_provision_data settings_ipv4v6[] = {
 		.name = "MMS",
 		.apn = "mms",
 		.auth_method = OFONO_GPRS_AUTH_METHOD_NONE
-	}
+	},
+	{ DEFAULT_IMS_SETTINGS }
+};
+
+static char beeline_provider_name [] = "Beeline";
+static const struct ofono_gprs_provision_data beeline_ims[] = {
+	{
+		.type = OFONO_GPRS_CONTEXT_TYPE_INTERNET,
+		.proto = OFONO_GPRS_PROTO_IPV4V6,
+		.provider_name = beeline_provider_name,
+		.name = "Beeline Internet",
+		.apn = "internet.beeline.ru",
+                .username = "beeline",
+                .password = "beeline",
+		.auth_method = OFONO_GPRS_AUTH_METHOD_ANY
+	}, {
+		.type = OFONO_GPRS_CONTEXT_TYPE_MMS,
+		.proto = OFONO_GPRS_PROTO_IP,
+		.provider_name = beeline_provider_name,
+		.name = "Beeline MMS",
+		.apn = "mms.beeline.ru",
+                .username = "beeline",
+                .password = "beeline",
+		.auth_method = OFONO_GPRS_AUTH_METHOD_PAP,
+		.message_proxy = "192.168.94.23:8080",
+		.message_center = "http://mms/"
+	}, {
+		.type = OFONO_GPRS_CONTEXT_TYPE_IMS,
+		.proto = OFONO_GPRS_PROTO_IPV4V6,
+		.provider_name = beeline_provider_name,
+		.name = "Beeline IMS",
+		.apn = "ims.beeline.ru",
+		.auth_method = OFONO_GPRS_AUTH_METHOD_NONE
+        }
 };
 
 static char test_provider_name[] = "Test provider";
@@ -382,7 +432,8 @@ static const struct ofono_gprs_provision_data test_username_password[] = {
 		.auth_method = OFONO_GPRS_AUTH_METHOD_CHAP,
 		.message_proxy = test_message_proxy,
 		.message_center = test_message_center
-	}
+	},
+	{ DEFAULT_IMS_SETTINGS }
 };
 
 static const char telia_fi_internet_xml[] =
@@ -806,6 +857,42 @@ static const struct provision_test_case test_cases[] = {
 		.mnc = "91",
 		.settings = telia_fi_mms,
 		.count = G_N_ELEMENTS(telia_fi_mms)
+	},{
+		.name = TEST_SUITE "ims",
+		.xml =
+"<serviceproviders format=\"2.0\">\n\
+<country code=\"ru\">\n\
+  <provider>\n\
+    <name>Beeline</name>\n\
+    <gsm>\n\
+      <network-id mcc=\"250\" mnc=\"99\"/>\n\
+      <apn value=\"internet.beeline.ru\">\n\
+        <usage type=\"internet\"/>\n\
+        <name>Beeline Internet</name>\n\
+        <username>beeline</username>\n\
+        <password>beeline</password>\n\
+      </apn>\n\
+      <apn value=\"mms.beeline.ru\">\n\
+        <usage type=\"mms\"/>\n\
+        <name>Beeline MMS</name>\n\
+        <authentication method=\"pap\"/>\n\
+        <username>beeline</username>\n\
+        <password>beeline</password>\n\
+        <mmsc>http://mms/</mmsc>\n\
+        <mmsproxy>192.168.94.23:8080</mmsproxy>\n\
+      </apn>\n\
+      <apn value=\"ims.beeline.ru\">\n\
+        <usage type=\"ims\"/>\n\
+        <name>Beeline IMS</name>\n\
+      </apn>\n\
+    </gsm>\n\
+  </provider>\n\
+</country>\n\
+</serviceproviders>\n",
+		.mcc = "250",
+		.mnc = "99",
+		.settings = beeline_ims,
+		.count = G_N_ELEMENTS(beeline_ims)
 	},{
 		.name = TEST_SUITE "not_found_mcc",
 		.xml = telia_fi_internet_xml,
@@ -1297,3 +1384,11 @@ int main(int argc, char **argv)
 	}
 	return g_test_run();
 }
+
+/*
+ * Local Variables:
+ * mode: C
+ * c-basic-offset: 8
+ * indent-tabs-mode: t
+ * End:
+ */
