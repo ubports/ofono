@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2019 Jolla Ltd.
+ *  Copyright (C) 2015-2020 Jolla Ltd.
  *  Copyright (C) 2019 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -29,7 +29,6 @@
 
 #include <ofono/watch.h>
 
-#define MAX_PDP_CONTEXTS        (2)
 #define ONLINE_TIMEOUT_SECS     (15) /* 20 sec is hardcoded in ofono core */
 
 enum ril_modem_power_state {
@@ -307,15 +306,22 @@ static void ril_modem_post_sim(struct ofono_modem *modem)
 	ofono_sms_create(modem, 0, RILMODEM_DRIVER, md);
 	gprs = ofono_gprs_create(modem, 0, RILMODEM_DRIVER, md);
 	if (gprs) {
-		int i;
+		guint i;
+		static const enum ofono_gprs_context_type ap_types[] = {
+			OFONO_GPRS_CONTEXT_TYPE_INTERNET,
+			OFONO_GPRS_CONTEXT_TYPE_MMS,
+			OFONO_GPRS_CONTEXT_TYPE_IMS
+		};
 
-		for (i = 0; i < MAX_PDP_CONTEXTS; i++) {
+		/* Create a context for each type */
+		for (i = 0; i < G_N_ELEMENTS(ap_types); i++) {
 			struct ofono_gprs_context *gc =
 				ofono_gprs_context_create(modem, 0,
 						RILMODEM_DRIVER, md);
 			if (gc == NULL)
 				break;
 
+			ofono_gprs_context_set_type(gc, ap_types[i]);
 			ofono_gprs_add_context(gprs, gc);
 		}
 	}

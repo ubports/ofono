@@ -3,6 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2013-2020  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -22,6 +23,7 @@
 extern const char *mbpi_database;
 extern enum ofono_gprs_proto mbpi_default_internet_proto;
 extern enum ofono_gprs_proto mbpi_default_mms_proto;
+extern enum ofono_gprs_proto mbpi_default_ims_proto;
 extern enum ofono_gprs_proto mbpi_default_proto;
 extern enum ofono_gprs_auth_method mbpi_default_auth_method;
 

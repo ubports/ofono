@@ -3,7 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
- *  Copyright (C) 2015-2017  Jolla Ltd.
+ *  Copyright (C) 2015-2020  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -60,6 +60,7 @@ const char *mbpi_database = MBPI_DATABASE;
  */
 enum ofono_gprs_proto mbpi_default_internet_proto = OFONO_GPRS_PROTO_IPV4V6;
 enum ofono_gprs_proto mbpi_default_mms_proto = OFONO_GPRS_PROTO_IP;
+enum ofono_gprs_proto mbpi_default_ims_proto = OFONO_GPRS_PROTO_IPV4V6;
 enum ofono_gprs_proto mbpi_default_proto = OFONO_GPRS_PROTO_IP;
 enum ofono_gprs_auth_method mbpi_default_auth_method = OFONO_GPRS_AUTH_METHOD_ANY;
 
@@ -246,6 +247,9 @@ static void usage_start(GMarkupParseContext *context,
 	} else if (strcmp(text, "mms") == 0) {
 		apn->type = OFONO_GPRS_CONTEXT_TYPE_MMS;
 		apn->proto = mbpi_default_mms_proto;
+	} else if (strcmp(text, "ims") == 0) {
+		apn->type = OFONO_GPRS_CONTEXT_TYPE_IMS;
+		apn->proto = mbpi_default_ims_proto;
 	} else if (strcmp(text, "wap") == 0)
 		apn->type = OFONO_GPRS_CONTEXT_TYPE_WAP;
 	else
