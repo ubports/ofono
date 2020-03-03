@@ -3,6 +3,8 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2020 Jolla Ltd.
+ *  Copyright (C) 2020 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -724,6 +726,12 @@ static DBusMessage *stk_register_agent(DBusConnection *conn,
 
 	if (!dbus_validate_path(agent_path, NULL))
 		return __ofono_error_invalid_format(msg);
+
+	if (!__ofono_dbus_access_method_allowed(dbus_message_get_sender(msg),
+					OFONO_DBUS_ACCESS_INTF_STK,
+					OFONO_DBUS_ACCESS_STK_REGISTER_AGENT,
+					agent_path))
+		return __ofono_error_access_denied(msg);
 
 	stk->default_agent = stk_agent_new(agent_path,
 						dbus_message_get_sender(msg),
