@@ -51,6 +51,12 @@ struct ril_devmon *ril_devmon_ss_new(void);
 struct ril_devmon *ril_devmon_ds_new(void);
 
 /*
+ * This Device Monitor implementation controls network state updates
+ * by sending SET_UNSOLICITED_RESPONSE_FILTER.
+ */
+struct ril_devmon *ril_devmon_ur_new(void);
+
+/*
  * This one selects the type based on the RIL version.
  */
 struct ril_devmon *ril_devmon_auto_new(void);

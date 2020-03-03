@@ -153,6 +153,7 @@ builtin_sources +=	drivers/ril/ril_call_barring.c \
 			drivers/ril/ril_devmon_auto.c \
 			drivers/ril/ril_devmon_ds.c \
 			drivers/ril/ril_devmon_ss.c \
+			drivers/ril/ril_devmon_ur.c \
 			drivers/ril/ril_ecclist.c \
 			drivers/ril/ril_gprs.c \
 			drivers/ril/ril_gprs_context.c \

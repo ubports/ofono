@@ -179,7 +179,8 @@ enum ril_devmon_opt {
 	RIL_DEVMON_NONE,
 	RIL_DEVMON_AUTO,
 	RIL_DEVMON_SS,
-	RIL_DEVMON_DS
+	RIL_DEVMON_DS,
+	RIL_DEVMON_UR
 };
 
 struct ril_plugin_identity {
@@ -1688,11 +1689,13 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 				"none", RIL_DEVMON_NONE,
 				"auto", RIL_DEVMON_AUTO,
 				"ds", RIL_DEVMON_DS,
-				"ss", RIL_DEVMON_SS, NULL)) {
+				"ss", RIL_DEVMON_SS,
+				"ur", RIL_DEVMON_UR, NULL)) {
 		DBG("%s: " RILCONF_DEVMON " %s", group,
 				ival == RIL_DEVMON_NONE ? "off" :
 				ival == RIL_DEVMON_DS ? "on" :
 				ival == RIL_DEVMON_SS ? "legacy" :
+				ival == RIL_DEVMON_UR ? "filter" :
 				"auto");
 		if (ival != RIL_DEVMON_AUTO) {
 			/* Default is automatic, reallocate the object */
@@ -1700,6 +1703,7 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 			slot->devmon =
 				(ival == RIL_DEVMON_DS ? ril_devmon_ds_new() :
 				 ival == RIL_DEVMON_SS ? ril_devmon_ss_new() :
+				 ival == RIL_DEVMON_UR ? ril_devmon_ur_new() :
 				 NULL);
 		}
 	}

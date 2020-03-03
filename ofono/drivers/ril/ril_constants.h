@@ -341,6 +341,13 @@ enum ril_restricted_state {
 #define RIL_FACILITY_UNLOCK "0"
 #define RIL_FACILITY_LOCK "1"
 
+/* See RIL_REQUEST_SET_UNSOLICITED_RESPONSE_FILTER (RIL_VERSION >= 15) */
+enum  ril_unsolicited_response_filter {
+	RIL_UR_SIGNAL_STRENGTH            = 0x01,
+	RIL_UR_FULL_NETWORK_STATE         = 0x02,
+	RIL_UR_DATA_CALL_DORMANCY_CHANGED = 0x04
+};
+
 #endif /*__RIL_CONSTANTS_H */
 
 /*
