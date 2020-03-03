@@ -1,7 +1,8 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2019 Jolla Ltd.
+ *  Copyright (C) 2019-2020 Jolla Ltd.
+ *  Copyright (C) 2020 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -41,6 +42,8 @@ const char *ofono_dbus_access_intf_name(enum ofono_dbus_access_intf intf)
 		return OFONO_MODEM_INTERFACE;
 	case OFONO_DBUS_ACCESS_INTF_RADIOSETTINGS:
 		return OFONO_RADIO_SETTINGS_INTERFACE;
+	case OFONO_DBUS_ACCESS_INTF_STK:
+		return OFONO_STK_INTERFACE;
 	case OFONO_DBUS_ACCESS_INTF_COUNT:
 		break;
 	}
@@ -162,6 +165,14 @@ const char *ofono_dbus_access_method_name(enum ofono_dbus_access_intf intf,
 		case OFONO_DBUS_ACCESS_RADIOSETTINGS_SET_PROPERTY:
 			return "SetProperty";
 		case OFONO_DBUS_ACCESS_RADIOSETTINGS_METHOD_COUNT:
+			break;
+		}
+		break;
+	case OFONO_DBUS_ACCESS_INTF_STK:
+		switch ((enum ofono_dbus_access_stk_method)method) {
+		case OFONO_DBUS_ACCESS_STK_REGISTER_AGENT:
+			return "RegisterAgent";
+		case OFONO_DBUS_ACCESS_STK_METHOD_COUNT:
 			break;
 		}
 		break;
