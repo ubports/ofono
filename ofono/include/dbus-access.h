@@ -1,7 +1,8 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2019 Jolla Ltd.
+ *  Copyright (C) 2019-2020 Jolla Ltd.
+ *  Copyright (C) 2020 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -25,7 +26,7 @@ extern "C" {
 enum ofono_dbus_access {
 	OFONO_DBUS_ACCESS_DENY,       /* Deny access */
 	OFONO_DBUS_ACCESS_ALLOW,      /* Allow access */
-	OFONO_DBUS_ACCESS_DONT_CARE,  /* No decision */
+	OFONO_DBUS_ACCESS_DONT_CARE   /* No decision */
 };
 
 enum ofono_dbus_access_intf {
@@ -38,6 +39,7 @@ enum ofono_dbus_access_intf {
 	OFONO_DBUS_ACCESS_INTF_SIMMGR,        /* org.ofono.SimManager */
 	OFONO_DBUS_ACCESS_INTF_MODEM,         /* org.ofono.Modem */
 	OFONO_DBUS_ACCESS_INTF_RADIOSETTINGS, /* org.ofono.RadioSettings */
+	OFONO_DBUS_ACCESS_INTF_STK,           /* org.ofono.SimToolkit */
 	OFONO_DBUS_ACCESS_INTF_COUNT
 };
 
@@ -114,6 +116,12 @@ enum ofono_dbus_access_modem_method {
 enum ofono_dbus_access_radiosettings_method {
 	OFONO_DBUS_ACCESS_RADIOSETTINGS_SET_PROPERTY,
 	OFONO_DBUS_ACCESS_RADIOSETTINGS_METHOD_COUNT
+};
+
+/* OFONO_DBUS_ACCESS_INTF_STK */
+enum ofono_dbus_access_stk_method {
+	OFONO_DBUS_ACCESS_STK_REGISTER_AGENT,
+	OFONO_DBUS_ACCESS_STK_METHOD_COUNT
 };
 
 #define OFONO_DBUS_ACCESS_PRIORITY_LOW     (-100)
