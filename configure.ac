@@ -67,8 +67,8 @@ PKG_CHECK_MODULES(GLIB, glib-2.0 >= 2.32, dummy=yes,
 AC_SUBST(GLIB_CFLAGS)
 AC_SUBST(GLIB_LIBS)
 
-PKG_CHECK_MODULES(DBUS, dbus-1 >= 1.4, dummy=yes,
-				AC_MSG_ERROR(D-Bus >= 1.4 is required))
+PKG_CHECK_MODULES(DBUS, dbus-1 >= 1.6, dummy=yes,
+				AC_MSG_ERROR(D-Bus >= 1.6 is required))
 AC_SUBST(DBUS_CFLAGS)
 AC_SUBST(DBUS_LIBS)
 
