@@ -1,8 +1,8 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2019 Jolla Ltd.
- *  Copyright (C) 2019 Open Mobile Platform LLC.
+ *  Copyright (C) 2015-2020 Jolla Ltd.
+ *  Copyright (C) 2019-2020 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -184,6 +184,72 @@ gboolean ril_config_get_enum(GKeyFile *file, const char *group,
 	}
 
 	return FALSE;
+}
+
+gboolean ril_config_get_mask(GKeyFile *file, const char *group,
+					const char *key, int *result,
+					const char *name, int value, ...)
+{
+	char *str = ril_config_get_string(file, group, key);
+	gboolean ok = FALSE;
+	
+	if (result) {
+		*result = 0;
+	}
+
+	if (str) {
+		/*
+		 * Some people are thinking that # is a comment
+		 * anywhere on the line, not just at the beginning
+		 */
+		char *comment = strchr(str, '#');
+		char **values, **ptr;
+
+		if (comment) *comment = 0;
+		values = g_strsplit(str, "+", -1);
+
+		for (ok = TRUE, ptr = values; *ptr && ok; ptr++) {
+			const char* found_str = NULL;
+			const char* s = g_strstrip(*ptr);
+
+			if (!strcasecmp(s, name)) {
+				found_str = name;
+				if (result) {
+					*result |= value;
+				}
+			} else {
+				va_list args;
+				const char* known;
+
+				va_start(args, value);
+				while ((known = va_arg(args, char*)) != NULL) {
+					const int bit = va_arg(args, int);
+
+					if (!strcasecmp(s, known)) {
+						found_str = known;
+						if (result) {
+							*result |= bit;
+						}
+						break;
+					}
+				}
+				va_end(args);
+			}
+
+			if (!found_str) {
+				ofono_error("Unknown bit '%s' in %s", s, key);
+				ok = FALSE;
+			}
+		}
+
+		g_strfreev(values);
+		g_free(str);
+	}
+
+	if (!ok && result) {
+		*result = 0;
+	}
+	return ok;
 }
 
 GUtilInts *ril_config_get_ints(GKeyFile *file, const char *group,
