@@ -1,8 +1,8 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2018-2019 Jolla Ltd.
- *  Copyright (C) 2019 Open Mobile Platform LLC.
+ *  Copyright (C) 2018-2020 Jolla Ltd.
+ *  Copyright (C) 2019-2020 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -377,6 +377,39 @@ static void test_get_enum(void)
 	test_get_value(conf, test_get_enum_cb);
 }
 
+/* ==== get_mask ==== */
+
+static void test_get_mask_cb(GKeyFile *k)
+{
+	int v = 0;
+
+	g_assert(!ril_config_get_mask(k, "g1", "k", NULL, "x",1, "y",2, NULL));
+	g_assert(!ril_config_get_mask(k, "g1", "k", &v, "x",1, "y",2, NULL));
+	g_assert_cmpint(v, ==, 0);
+
+	g_assert(ril_config_get_mask(k, "g", "k", NULL, "x",1, "y",2, NULL));
+	g_assert(ril_config_get_mask(k, "g", "k", &v, "x",1, "y",2, NULL));
+	g_assert_cmpint(v, ==, 1);
+
+	g_assert(ril_config_get_mask(k, "g", "k1", NULL, "x",1, "y",2, NULL));
+	g_assert(ril_config_get_mask(k, "g", "k1", &v, "x",1, "y",2, NULL));
+	g_assert_cmpint(v, ==, 3);
+
+	g_assert(!ril_config_get_mask(k, "g", "k2", NULL, "x",1, "y",2, NULL));
+	g_assert(!ril_config_get_mask(k, "g", "k2", &v, "x",1, "y",2, NULL));
+	g_assert_cmpint(v, ==, 0);
+}
+
+static void test_get_mask(void)
+{
+	static const char conf [] = "[g]\n"
+		"k = x# comment\n"
+		"k1 = x+y\n"
+		"k2 = x+z+y\n";
+
+	test_get_value(conf, test_get_mask_cb);
+}
+
 /* ==== get_ints ==== */
 
 static void test_get_ints_cb(GKeyFile *k)
@@ -451,6 +484,7 @@ int main(int argc, char *argv[])
 	g_test_add_func(TEST_("get_boolean3"), test_get_boolean3);
 	g_test_add_func(TEST_("get_flag"), test_get_flag);
 	g_test_add_func(TEST_("get_enum"), test_get_enum);
+	g_test_add_func(TEST_("get_mask"), test_get_mask);
 	g_test_add_func(TEST_("get_ints"), test_get_ints);
 	g_test_add_func(TEST_("ints_to_string"), test_ints_to_string);
 
