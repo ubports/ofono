@@ -1,7 +1,8 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2019 Jolla Ltd.
+ *  Copyright (C) 2019-2020 Jolla Ltd.
+ *  Copyright (C) 2020 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -60,6 +61,11 @@ struct ril_devmon *ril_devmon_ur_new(void);
  * This one selects the type based on the RIL version.
  */
 struct ril_devmon *ril_devmon_auto_new(void);
+
+/*
+ * This one combines several methods. Takes ownership of ril_devmon objects.
+ */
+struct ril_devmon *ril_devmon_combine(struct ril_devmon *devmon[], guint n);
 
 /* Utilities (NULL tolerant) */
 struct ril_devmon_io *ril_devmon_start_io(struct ril_devmon *devmon,

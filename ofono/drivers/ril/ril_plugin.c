@@ -179,11 +179,9 @@ enum ril_set_radio_cap_opt {
 };
 
 enum ril_devmon_opt {
-	RIL_DEVMON_NONE,
-	RIL_DEVMON_AUTO,
-	RIL_DEVMON_SS,
-	RIL_DEVMON_DS,
-	RIL_DEVMON_UR
+	RIL_DEVMON_SS = 0x01,
+	RIL_DEVMON_DS = 0x02,
+	RIL_DEVMON_UR = 0x04
 };
 
 struct ril_plugin_identity {
@@ -1707,26 +1705,32 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 	}
 
 	/* deviceStateTracking */
-	if (ril_config_get_enum(file, group, RILCONF_DEVMON, &ival,
-				"none", RIL_DEVMON_NONE,
-				"auto", RIL_DEVMON_AUTO,
+	if (ril_config_get_mask(file, group, RILCONF_DEVMON, &ival,
 				"ds", RIL_DEVMON_DS,
 				"ss", RIL_DEVMON_SS,
-				"ur", RIL_DEVMON_UR, NULL)) {
-		DBG("%s: " RILCONF_DEVMON " %s", group,
-				ival == RIL_DEVMON_NONE ? "off" :
-				ival == RIL_DEVMON_DS ? "on" :
-				ival == RIL_DEVMON_SS ? "legacy" :
-				ival == RIL_DEVMON_UR ? "filter" :
-				"auto");
-		if (ival != RIL_DEVMON_AUTO) {
-			/* Default is automatic, reallocate the object */
-			ril_devmon_free(slot->devmon);
-			slot->devmon =
-				(ival == RIL_DEVMON_DS ? ril_devmon_ds_new() :
-				 ival == RIL_DEVMON_SS ? ril_devmon_ss_new() :
-				 ival == RIL_DEVMON_UR ? ril_devmon_ur_new() :
-				 NULL);
+				"ur", RIL_DEVMON_UR, NULL) && ival) {
+		int n = 0;
+		struct ril_devmon *devmon[3];
+
+		if (ival & RIL_DEVMON_DS) devmon[n++] = ril_devmon_ds_new();
+		if (ival & RIL_DEVMON_SS) devmon[n++] = ril_devmon_ss_new();
+		if (ival & RIL_DEVMON_UR) devmon[n++] = ril_devmon_ur_new();
+		DBG("%s: " RILCONF_DEVMON " 0x%x", group, ival);
+		ril_devmon_free(slot->devmon);
+		slot->devmon = ril_devmon_combine(devmon, n);
+	} else {
+		/* Try special values */
+		sval = ril_config_get_string(file, group, RILCONF_DEVMON);
+		if (sval) {
+			if (!g_ascii_strcasecmp(sval, "none")) {
+				DBG("%s: " RILCONF_DEVMON " %s", group, sval);
+				ril_devmon_free(slot->devmon);
+				slot->devmon = NULL;
+			} else if (!g_ascii_strcasecmp(sval, "auto")) {
+				DBG("%s: " RILCONF_DEVMON " %s", group, sval);
+				/* This is the default */
+			}
+			g_free(sval);
 		}
 	}
 
