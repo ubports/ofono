@@ -856,6 +856,8 @@ static void radio_settings_register(const struct ofono_error *error,
 {
 	struct ofono_radio_settings *rs = data;
 	struct radio_data *rd = ofono_radio_settings_get_data(rs);
+	struct cb_data *cbd = cb_data_new(set_safe_preferred_cb, rd,
+					rd->radio_settings);
 
 	g_ril_register(rd->ril, RIL_UNSOL_RADIO_CAPABILITY,
 							radio_caps_event, rd);
@@ -864,21 +866,7 @@ static void radio_settings_register(const struct ofono_error *error,
 		__ofono_modem_add_atom_watch(rd->modem, OFONO_ATOM_TYPE_GPRS,
 						gprs_watch_cb, rs, NULL);
 
-	/*
-	 * If the preferred technology was unknown/unsupported, change to a
-	 * valid one (midori can return PREF_NET_TYPE_CDMA_ONLY, for instance).
-	 */
-	if (rd->rat_mode == OFONO_RADIO_ACCESS_MODE_ANY) {
-		struct cb_data *cbd = cb_data_new(set_safe_preferred_cb, rd,
-							rd->radio_settings);
-
-        if (g_ril_vendor(rd->ril) == OFONO_RIL_VENDOR_MTK) {
-            set_preferred_network(rd, cbd, OFONO_RADIO_ACCESS_MODE_GSM);
-        } else {
-            set_preferred_network(rd, cbd,
-                                  get_best_available_tech(rd->available_rats));
-        }
-	}
+	set_preferred_network(rd, cbd, OFONO_RADIO_ACCESS_MODE_ANY);
 
 	/*
 	 * We register in all cases, setting FD some times fails until radio is
