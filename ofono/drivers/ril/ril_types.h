@@ -55,6 +55,7 @@ struct ril_slot_config {
 	enum ril_pref_net_type lte_network_mode;
 	enum ril_pref_net_type umts_network_mode;
 	int network_mode_timeout;
+	int network_selection_timeout;
 	gboolean query_available_band_mode;
 	gboolean empty_pin_query;
 	gboolean radio_power_cycle;
