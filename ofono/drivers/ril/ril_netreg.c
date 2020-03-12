@@ -299,10 +299,9 @@ static void ril_netreg_register_cb(GRilIoChannel *io, int status,
 	}
 }
 
-static void ril_netreg_register_auto(struct ofono_netreg *netreg,
+static void ril_netreg_set_register_auto(struct ril_netreg *nd,
 				ofono_netreg_register_cb_t cb, void *data)
 {
-	struct ril_netreg *nd = ril_netreg_get_data(netreg);
 	GRilIoRequest *req = grilio_request_new();
 
 	ofono_info("nw select automatic");
@@ -311,6 +310,44 @@ static void ril_netreg_register_auto(struct ofono_netreg *netreg,
 	grilio_queue_send_request_full(nd->q, req,
 			RIL_REQUEST_SET_NETWORK_SELECTION_AUTOMATIC,
 			ril_netreg_register_cb, ril_netreg_cbd_free,
+			ril_netreg_cbd_new(nd, cb, data));
+	grilio_request_unref(req);
+}
+
+static void ril_netreg_query_register_auto_cb(GRilIoChannel *io, int status,
+					const void *data, guint len,
+					void *user_data)
+{
+	struct ril_netreg_cbd *cbd = user_data;
+	ofono_netreg_register_cb_t cb = cbd->cb.reg;
+
+	if (status == RIL_E_SUCCESS) {
+		GRilIoParser rilp;
+		gint32 net_mode;
+
+		grilio_parser_init(&rilp, data, len);
+		if (grilio_parser_get_int32(&rilp, NULL) /* Array length */ &&
+				grilio_parser_get_int32(&rilp, &net_mode) && 
+				net_mode == RIL_NETWORK_SELECTION_MODE_AUTO) {
+			struct ofono_error error;
+			ofono_info("nw selection is already auto");
+			cb(ril_error_ok(&error), cbd->data);
+			return;
+		}
+	}
+
+	ril_netreg_set_register_auto(cbd->nd, cb, cbd->data);
+}
+
+static void ril_netreg_register_auto(struct ofono_netreg *netreg,
+				ofono_netreg_register_cb_t cb, void *data)
+{
+	struct ril_netreg *nd = ril_netreg_get_data(netreg);
+	GRilIoRequest *req = grilio_request_new();
+
+	grilio_queue_send_request_full(nd->q, req,
+			RIL_REQUEST_QUERY_NETWORK_SELECTION_MODE,
+			ril_netreg_query_register_auto_cb, ril_netreg_cbd_free,
 			ril_netreg_cbd_new(nd, cb, data));
 	grilio_request_unref(req);
 }
