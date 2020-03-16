@@ -382,6 +382,12 @@ enum  ril_unsolicited_response_filter {
 	RIL_UR_DATA_CALL_DORMANCY_CHANGED = 0x04
 };
 
+/* RIL_REQUEST_QUERY_NETWORK_SELECTION_MODE result */
+enum ril_network_selection_mode {
+	RIL_NETWORK_SELECTION_MODE_AUTO	  = 0,
+	RIL_NETWORK_SELECTION_MODE_MANUAL = 1
+};
+
 #endif /*__RIL_CONSTANTS_H */
 
 /*
