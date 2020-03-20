@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2017-2018 Jolla Ltd.
+ *  Copyright (C) 2017-2020 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -1414,7 +1414,7 @@ RilRadioCapsManager *ril_radio_caps_manager_ref(RilRadioCapsManager *self)
 void ril_radio_caps_manager_unref(RilRadioCapsManager *self)
 {
 	if (G_LIKELY(self)) {
-		g_object_ref(RADIO_CAPS_MANAGER(self));
+		g_object_unref(RADIO_CAPS_MANAGER(self));
 	}
 }
 
