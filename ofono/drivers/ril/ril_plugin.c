@@ -230,6 +230,7 @@ typedef struct sailfish_slot_impl {
 	struct ril_modem *modem;
 	struct ril_radio *radio;
 	struct ril_radio_caps *caps;
+	struct ril_radio_caps_request *caps_req;
 	struct ril_network *network;
 	struct ril_sim_card *sim_card;
 	struct ril_sim_settings *sim_settings;
@@ -392,7 +393,9 @@ static void ril_plugin_shutdown_slot(ril_slot *slot, gboolean kill_io)
 		}
 
 		if (slot->caps) {
-			ril_radio_caps_unref(slot->caps);
+			ril_radio_caps_request_free(slot->caps_req);
+			ril_radio_caps_drop(slot->caps);
+			slot->caps_req = NULL;
 			slot->caps = NULL;
 		}
 
@@ -906,7 +909,7 @@ static void ril_plugin_radio_caps_cb(const struct ril_radio_capability *cap,
 			plugin->caps_manager = ril_radio_caps_manager_new
 				(plugin->data_manager);
 			plugin->caps_manager_event_id =
-				ril_radio_caps_manager_add_aborted_handler(
+				ril_radio_caps_manager_add_tx_aborted_handler(
 					plugin->caps_manager,
 					ril_plugin_caps_switch_aborted,
 					plugin);
@@ -914,9 +917,10 @@ static void ril_plugin_radio_caps_cb(const struct ril_radio_capability *cap,
 
 		GASSERT(!slot->caps);
 		slot->caps = ril_radio_caps_new(plugin->caps_manager,
-			ril_plugin_log_prefix(slot), slot->io, slot->data,
-			slot->radio, slot->sim_card, slot->network,
-			&slot->config, cap);
+			ril_plugin_log_prefix(slot), slot->io, slot->watch,
+			slot->data, slot->radio, slot->sim_card,
+			slot->sim_settings, &slot->config, cap);
+		ril_network_set_radio_caps(slot->network, slot->caps);
 	}
 }
 
@@ -1148,6 +1152,8 @@ static void ril_plugin_slot_modem_changed(struct ofono_watch *w,
 
 		slot->modem = NULL;
 		ril_data_allow(slot->data, RIL_DATA_ROLE_NONE);
+		ril_radio_caps_request_free(slot->caps_req);
+		slot->caps_req = NULL;
 	}
 }
 
@@ -2192,10 +2198,24 @@ static void ril_plugin_manager_free(ril_plugin *plugin)
 
 static void ril_slot_set_data_role(ril_slot *slot, enum sailfish_data_role r)
 {
-	ril_data_allow(slot->data,
+	enum ril_data_role role =
 		(r == SAILFISH_DATA_ROLE_INTERNET) ? RIL_DATA_ROLE_INTERNET :
 		(r == SAILFISH_DATA_ROLE_MMS) ? RIL_DATA_ROLE_MMS :
-		RIL_DATA_ROLE_NONE);
+		RIL_DATA_ROLE_NONE;
+	ril_data_allow(slot->data, role);
+	ril_radio_caps_request_free(slot->caps_req);
+	if (role == RIL_DATA_ROLE_NONE) {
+		slot->caps_req = NULL;
+	} else {
+		const enum ofono_radio_access_mode mode =
+			(r == SAILFISH_DATA_ROLE_MMS) ?
+				OFONO_RADIO_ACCESS_MODE_GSM :
+				__ofono_radio_access_max_mode
+						(slot->sim_settings->techs);
+
+		slot->caps_req = ril_radio_caps_request_new
+			(slot->caps, mode, role);
+	}
 }
 
 static void ril_slot_enabled_changed(struct sailfish_slot_impl *s)

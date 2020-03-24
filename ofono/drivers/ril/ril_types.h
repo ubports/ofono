@@ -24,6 +24,7 @@
 #include <grilio_types.h>
 #include <gutil_macros.h>
 
+struct ofono_watch;
 struct ofono_modem;
 struct ofono_sim;
 
@@ -48,6 +49,12 @@ struct ril_radio;
 struct ril_network;
 struct ril_sim_card;
 struct ril_vendor;
+
+enum ril_data_role {
+	RIL_DATA_ROLE_NONE,    /* Mobile data not required */
+	RIL_DATA_ROLE_MMS,     /* Data is needed at any speed */
+	RIL_DATA_ROLE_INTERNET /* Data is needed at full speed */
+};
 
 struct ril_slot_config {
 	guint slot;

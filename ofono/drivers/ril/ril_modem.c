@@ -421,6 +421,7 @@ static void ril_modem_remove(struct ofono_modem *ofono)
 	ofono_modem_set_data(ofono, NULL);
 
 	ril_radio_remove_handler(modem->radio, md->radio_state_event_id);
+	ril_radio_set_online(modem->radio, FALSE);
 	ril_radio_power_off(modem->radio, RADIO_POWER_TAG(md));
 	ril_radio_set_online(modem->radio, FALSE);
 	ril_radio_unref(modem->radio);

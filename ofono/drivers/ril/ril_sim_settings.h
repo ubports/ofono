@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2016-2018 Jolla Ltd.
+ *  Copyright (C) 2016-2020 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -45,6 +45,8 @@ gulong ril_sim_settings_add_pref_mode_changed_handler(struct ril_sim_settings *s
 void ril_sim_settings_remove_handler(struct ril_sim_settings *s, gulong id);
 void ril_sim_settings_remove_handlers(struct ril_sim_settings *s, gulong *ids,
 								int count);
+#define ril_sim_settings_remove_all_handlers(s,ids) \
+	ril_sim_settings_remove_handlers(s, ids, G_N_ELEMENTS(ids))
 
 #endif /* RIL_SIM_SETTINGS_H */
 

@@ -18,6 +18,7 @@
 
 #include "ril_network.h"
 #include "ril_radio.h"
+#include "ril_radio_caps.h"
 #include "ril_sim_card.h"
 #include "ril_sim_settings.h"
 #include "ril_vendor.h"
@@ -35,6 +36,7 @@
 #include <ofono/watch.h>
 #include <ofono/gprs.h>
 
+#include "ofono.h"
 #include "common.h"
 
 #define SET_PREF_MODE_HOLDOFF_SEC RIL_RETRY_SECS
@@ -54,6 +56,12 @@ enum ril_network_radio_event {
 	RADIO_EVENT_COUNT
 };
 
+enum ril_network_radio_caps_mgr_events {
+	RADIO_CAPS_MGR_TX_DONE,
+	RADIO_CAPS_MGR_TX_ABORTED,
+	RADIO_CAPS_MGR_EVENT_COUNT
+};
+
 enum ril_network_sim_events {
 	SIM_EVENT_STATUS_CHANGED,
 	SIM_EVENT_IO_ACTIVE_CHANGED,
@@ -62,7 +70,6 @@ enum ril_network_sim_events {
 
 enum ril_network_unsol_event {
 	UNSOL_EVENT_NETWORK_STATE,
-	UNSOL_EVENT_RADIO_CAPABILITY,
 	UNSOL_EVENT_COUNT
 };
 
@@ -90,6 +97,7 @@ struct ril_network_priv {
 	GRilIoChannel *io;
 	GRilIoQueue *q;
 	struct ril_radio *radio;
+	struct ril_radio_caps *caps;
 	struct ril_sim_card *simcard;
 	struct ril_vendor *vendor;
 	struct ofono_watch *watch;
@@ -106,6 +114,8 @@ struct ril_network_priv {
 	gulong set_rat_id;
 	gulong unsol_event_id[UNSOL_EVENT_COUNT];
 	gulong settings_event_id;
+	gulong supported_modes_event_id;
+	gulong caps_mgr_event_id[RADIO_CAPS_MGR_EVENT_COUNT];
 	gulong radio_event_id[RADIO_EVENT_COUNT];
 	gulong simcard_event_id[SIM_EVENT_COUNT];
 	gulong watch_ids[WATCH_EVENT_COUNT];
@@ -125,7 +135,6 @@ enum ril_network_signal {
 	SIGNAL_VOICE_STATE_CHANGED,
 	SIGNAL_DATA_STATE_CHANGED,
 	SIGNAL_PREF_MODE_CHANGED,
-	SIGNAL_MAX_PREF_MODE_CHANGED,
 	SIGNAL_COUNT
 };
 
@@ -133,7 +142,6 @@ enum ril_network_signal {
 #define SIGNAL_VOICE_STATE_CHANGED_NAME   "ril-network-voice-state-changed"
 #define SIGNAL_DATA_STATE_CHANGED_NAME    "ril-network-data-state-changed"
 #define SIGNAL_PREF_MODE_CHANGED_NAME     "ril-network-pref-mode-changed"
-#define SIGNAL_MAX_PREF_MODE_CHANGED_NAME "ril-network-max-pref-mode-changed"
 
 static guint ril_network_signals[SIGNAL_COUNT] = { 0 };
 
@@ -530,6 +538,7 @@ static enum ofono_radio_access_mode ril_network_actual_pref_mode
 {
 	struct ril_sim_settings *settings = self->settings;
 	struct ril_network_priv *priv = self->priv;
+	const struct ril_radio_caps *caps = priv->caps;
 
 	/*
 	 * On most dual-SIM phones only one slot at a time is allowed
@@ -548,9 +557,17 @@ static enum ofono_radio_access_mode ril_network_actual_pref_mode
 	 * and max_pref_mode are not ANY, we pick the smallest value.
 	 * Otherwise we take any non-zero value if there is one.
 	 */
-	return (settings->pref_mode && max_pref_mode) ?
+	const enum ofono_radio_access_mode pref_mode =
+		(settings->pref_mode && max_pref_mode) ?
 		MIN(settings->pref_mode, max_pref_mode) :
 		settings->pref_mode ? settings->pref_mode : max_pref_mode;
+
+	/* Do not try to set unsupported mode */
+	const enum ofono_radio_access_mode max_mode = caps ?
+		__ofono_radio_access_max_mode(caps->supported_modes) :
+		__ofono_radio_access_max_mode(settings->techs);
+
+	return pref_mode ? MIN(pref_mode, max_mode) : max_mode;
 }
 
 static gboolean ril_network_need_initial_attach_apn(struct ril_network *self)
@@ -561,9 +578,9 @@ static gboolean ril_network_need_initial_attach_apn(struct ril_network *self)
 
 	if (watch->gprs && radio->state == RADIO_STATE_ON) {
 		switch (ril_network_actual_pref_mode(self)) {
-		case OFONO_RADIO_ACCESS_MODE_ANY:
 		case OFONO_RADIO_ACCESS_MODE_LTE:
 			return TRUE;
+		case OFONO_RADIO_ACCESS_MODE_ANY:
 		case OFONO_RADIO_ACCESS_MODE_UMTS:
 		case OFONO_RADIO_ACCESS_MODE_GSM:
 			break;
@@ -1053,19 +1070,87 @@ void ril_network_set_max_pref_mode(struct ril_network *self,
 			DBG_(self, "rat mode %d (%s)", max_mode,
 				ofono_radio_access_mode_to_string(max_mode));
 			self->max_pref_mode = max_mode;
-			ril_network_emit(self, SIGNAL_MAX_PREF_MODE_CHANGED);
 			ril_network_check_initial_attach_apn(self);
 		}
 		ril_network_check_pref_mode(self, TRUE);
 	}
 }
 
-void ril_network_assert_pref_mode(struct ril_network *self, gboolean immediate)
+static void ril_network_assert_pref_mode(struct ril_network *self)
 {
 	struct ril_network_priv *priv = self->priv;
 
 	priv->assert_rat = TRUE;
-	ril_network_check_pref_mode(self, immediate);
+	ril_network_check_pref_mode(self, FALSE);
+}
+
+static void ril_network_supported_modes_handler(struct ril_radio_caps *caps,
+							void *user_data)
+{
+	struct ril_network *self = RIL_NETWORK(user_data);
+
+	DBG_(self, "%s", ofono_radio_access_mode_to_string
+						(caps->supported_modes));
+	ril_network_check_pref_mode(self, TRUE);
+}
+
+static void ril_network_radio_capability_tx_done_cb
+		(struct ril_radio_caps_manager *mgr, void *user_data)
+{
+	struct ril_network *self = RIL_NETWORK(user_data);
+
+	DBG_(self, "");
+	ril_network_assert_pref_mode(self);
+}
+
+static void ril_network_release_radio_caps(struct ril_network *self)
+{
+	struct ril_network_priv *priv = self->priv;
+	struct ril_radio_caps *caps = priv->caps;
+
+	if (caps) {
+		ril_radio_caps_manager_remove_all_handlers(caps->mgr,
+					priv->caps_mgr_event_id);
+		ril_radio_caps_remove_handler(caps,
+					priv->supported_modes_event_id);
+		ril_radio_caps_unref(caps);
+
+		priv->caps = NULL;
+		priv->supported_modes_event_id = 0;
+	}
+}
+
+static void ril_network_attach_radio_caps(struct ril_network *self,
+						struct ril_radio_caps *caps)
+{
+	struct ril_network_priv *priv = self->priv;
+
+	priv->caps = ril_radio_caps_ref(caps);
+	priv->supported_modes_event_id =
+		ril_radio_caps_add_supported_modes_handler(caps,
+			ril_network_supported_modes_handler, self);
+	priv->caps_mgr_event_id[RADIO_CAPS_MGR_TX_DONE] =
+		ril_radio_caps_manager_add_tx_done_handler(caps->mgr,
+			ril_network_radio_capability_tx_done_cb, self);
+	priv->caps_mgr_event_id[RADIO_CAPS_MGR_TX_ABORTED] =
+		ril_radio_caps_manager_add_tx_aborted_handler(caps->mgr,
+			ril_network_radio_capability_tx_done_cb, self);
+}
+
+void ril_network_set_radio_caps(struct ril_network *self,
+						struct ril_radio_caps *caps)
+{
+	if (self) {
+		struct ril_network_priv *priv = self->priv;
+
+		if (priv->caps != caps) {
+			ril_network_release_radio_caps(self);
+			if (caps) {
+				ril_network_attach_radio_caps(self, caps);
+			}
+			ril_network_check_pref_mode(self, TRUE);
+		}
+	}
 }
 
 gulong ril_network_add_operator_changed_handler(struct ril_network *self,
@@ -1096,13 +1181,6 @@ gulong ril_network_add_pref_mode_changed_handler(struct ril_network *self,
 		SIGNAL_PREF_MODE_CHANGED_NAME, G_CALLBACK(cb), arg) : 0;
 }
 
-gulong ril_network_add_max_pref_mode_changed_handler(struct ril_network *self,
-					ril_network_cb_t cb, void *arg)
-{
-	return (G_LIKELY(self) && G_LIKELY(cb)) ? g_signal_connect(self,
-		SIGNAL_MAX_PREF_MODE_CHANGED_NAME, G_CALLBACK(cb), arg) : 0;
-}
-
 void ril_network_remove_handler(struct ril_network *self, gulong id)
 {
 	if (G_LIKELY(self) && G_LIKELY(id)) {
@@ -1123,16 +1201,6 @@ static void ril_network_state_changed_cb(GRilIoChannel *io, guint code,
 	DBG_(self, "");
 	GASSERT(code == RIL_UNSOL_RESPONSE_VOICE_NETWORK_STATE_CHANGED);
 	ril_network_poll_state(self);
-}
-
-static void ril_network_radio_capability_changed_cb(GRilIoChannel *io,
-		guint code, const void *data, guint len, void *user_data)
-{
-	struct ril_network *self = RIL_NETWORK(user_data);
-
-	DBG_(self, "");
-	GASSERT(code == RIL_UNSOL_RADIO_CAPABILITY);
-	ril_network_assert_pref_mode(self, FALSE);
 }
 
 static void ril_network_radio_state_cb(struct ril_radio *radio, void *data)
@@ -1267,10 +1335,6 @@ struct ril_network *ril_network_new(const char *path, GRilIoChannel *io,
 		grilio_channel_add_unsol_event_handler(priv->io,
 			ril_network_state_changed_cb,
 			RIL_UNSOL_RESPONSE_VOICE_NETWORK_STATE_CHANGED, self);
-	priv->unsol_event_id[UNSOL_EVENT_RADIO_CAPABILITY] =
-		grilio_channel_add_unsol_event_handler(priv->io,
-			ril_network_radio_capability_changed_cb,
-			RIL_UNSOL_RADIO_CAPABILITY, self);
 
 	priv->radio_event_id[RADIO_EVENT_STATE_CHANGED] =
 		ril_radio_add_state_changed_handler(priv->radio,
@@ -1365,6 +1429,7 @@ static void ril_network_finalize(GObject *object)
 	grilio_channel_remove_all_handlers(priv->io, priv->unsol_event_id);
 	grilio_channel_unref(priv->io);
 	grilio_queue_unref(priv->q);
+	ril_network_release_radio_caps(self);
 	ril_radio_remove_all_handlers(priv->radio, priv->radio_event_id);
 	ril_radio_unref(priv->radio);
 	ril_sim_card_remove_all_handlers(priv->simcard, priv->simcard_event_id);
@@ -1386,7 +1451,6 @@ static void ril_network_class_init(RilNetworkClass *klass)
 	RIL_NETWORK_SIGNAL(klass, VOICE_STATE);
 	RIL_NETWORK_SIGNAL(klass, DATA_STATE);
 	RIL_NETWORK_SIGNAL(klass, PREF_MODE);
-	RIL_NETWORK_SIGNAL(klass, MAX_PREF_MODE);
 }
 
 /*
