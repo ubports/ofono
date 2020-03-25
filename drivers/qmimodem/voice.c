@@ -57,6 +57,7 @@ int qmi_to_ofono_status(uint8_t status, int *ret) {
 	case QMI_CALL_STATE_ORIG:
 		*ret = CALL_STATUS_DIALING;
 		break;
+	case QMI_CALL_STATE_SETUP:
 	case QMI_CALL_STATE_INCOMING:
 		*ret = CALL_STATUS_INCOMING;
 		break;
@@ -64,8 +65,6 @@ int qmi_to_ofono_status(uint8_t status, int *ret) {
 		*ret = CALL_STATUS_ACTIVE;
 		break;
 	case QMI_CALL_STATE_CC_IN_PROG:
-	case QMI_CALL_STATE_SETUP:
-		/* FIXME: unsure if _SETUP is dialing or not */
 		*ret = CALL_STATUS_DIALING;
 		break;
 	case QMI_CALL_STATE_ALERTING:
