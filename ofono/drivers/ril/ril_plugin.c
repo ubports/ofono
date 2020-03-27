@@ -361,6 +361,7 @@ static void ril_plugin_remove_slot_handler(ril_slot *slot, int id)
 static void ril_plugin_shutdown_slot(ril_slot *slot, gboolean kill_io)
 {
 	if (slot->modem) {
+		ril_data_allow(slot->data, RIL_DATA_ROLE_NONE);
 		ril_modem_delete(slot->modem);
 		/* The above call is expected to result in
 		 * ril_plugin_modem_removed getting called
