@@ -241,7 +241,19 @@ static void ril_radio_power_request(struct ril_radio *self, gboolean on,
 void ril_radio_confirm_power_on(struct ril_radio *self)
 {
 	if (G_LIKELY(self) && ril_radio_power_should_be_on(self)) {
-		ril_radio_power_request(self, TRUE, TRUE);
+		struct ril_radio_priv *priv = self->priv;
+
+		if (priv->pending_id) {
+			if (!priv->next_state) {
+				/* Wait for the pending request to complete */
+				priv->next_state_valid = TRUE;
+				priv->next_state = TRUE;
+				DBG_(self, "on (queued)");
+			}
+		} else {
+			DBG_(self, "on");
+			ril_radio_submit_power_request(self, TRUE);
+		}
 	}
 }
 
