@@ -33,6 +33,11 @@ struct ril_oem_raw {
 
 #define DBG_(oem,fmt,args...) DBG("%s" fmt, (oem)->log_prefix, ##args)
 
+static void ril_oem_raw_send_done(void *msg)
+{
+	dbus_message_unref(msg);
+}
+
 static void ril_oem_raw_send_cb(GRilIoChannel *io, int ril_status,
 			const void *data, guint len, void *user_data)
 {
@@ -41,20 +46,13 @@ static void ril_oem_raw_send_cb(GRilIoChannel *io, int ril_status,
 
 	if (ril_status == RIL_E_SUCCESS) {
 		DBusMessageIter it, array;
-		const guchar* bytes = data;
-		guint i;
 
 		reply = dbus_message_new_method_return(msg);
 		dbus_message_iter_init_append(reply, &it);
 		dbus_message_iter_open_container(&it, DBUS_TYPE_ARRAY,
 					DBUS_TYPE_BYTE_AS_STRING, &array);
-
-		for (i = 0; i < len; i++) {
-			guchar byte = bytes[i];
-			dbus_message_iter_append_basic(&array, DBUS_TYPE_BYTE,
-									&byte);
-		}
-
+		dbus_message_iter_append_fixed_array(&array, DBUS_TYPE_BYTE,
+					&data, len);
 		dbus_message_iter_close_container(&it, &array);
 	} else if (ril_status == GRILIO_STATUS_TIMEOUT) {
 		DBG("Timed out");
@@ -64,7 +62,7 @@ static void ril_oem_raw_send_cb(GRilIoChannel *io, int ril_status,
 		reply = __ofono_error_failed(msg);
 	}
 
-	__ofono_dbus_pending_reply(&msg, reply);
+	g_dbus_send_message(ofono_dbus_get_connection(), reply);
 }
 
 static DBusMessage *ril_oem_raw_send(DBusConnection *conn, DBusMessage *msg,
@@ -101,7 +99,7 @@ static DBusMessage *ril_oem_raw_send(DBusConnection *conn, DBusMessage *msg,
 		grilio_request_append_bytes(req, data, data_len);
 		grilio_queue_send_request_full(oem->q, req,
 				RIL_REQUEST_OEM_HOOK_RAW, ril_oem_raw_send_cb,
-				NULL, dbus_message_ref(msg));
+				ril_oem_raw_send_done, dbus_message_ref(msg));
 		grilio_request_unref(req);
 		return NULL;
 	} else {
