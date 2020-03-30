@@ -1,8 +1,8 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2019 Jolla Ltd.
- *  Copyright (C) 2019 Open Mobile Platform LLC.
+ *  Copyright (C) 2015-2020 Jolla Ltd.
+ *  Copyright (C) 2019-2020 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -417,6 +417,18 @@ static void ril_network_poll_data_state_cb(GRilIoChannel *io, int req_status,
 	}
 }
 
+static gboolean ril_network_retry(GRilIoRequest* request, int ril_status,
+		const void* response_data, guint response_len, void* user_data)
+{
+	switch (ril_status) {
+	case RIL_E_SUCCESS:
+	case RIL_E_RADIO_NOT_AVAILABLE:
+		return FALSE;
+	default:
+		return TRUE;
+	}
+}
+
 static guint ril_network_poll_and_retry(struct ril_network *self, guint id,
 					int code, GRilIoChannelResponseFunc fn)
 {
@@ -429,6 +441,7 @@ static guint ril_network_poll_and_retry(struct ril_network *self, guint id,
 		GRilIoRequest *req = grilio_request_new();
 
 		grilio_request_set_retry(req, RIL_RETRY_SECS*1000, -1);
+		grilio_request_set_retry_func(req, ril_network_retry);
 		id = grilio_queue_send_request_full(priv->q, req, code, fn,
 								NULL, self);
 		grilio_request_unref(req);
@@ -996,22 +1009,22 @@ static void ril_network_query_pref_mode_cb(GRilIoChannel *io, int status,
 	struct ril_network_priv *priv = self->priv;
 	const enum ofono_radio_access_mode pref_mode = self->pref_mode;
 
-	/* This request never fails because in case of error it gets retried */
-	GASSERT(status == RIL_E_SUCCESS);
 	GASSERT(priv->query_rat_id);
-
 	priv->query_rat_id = 0;
-	priv->rat = ril_network_parse_pref_resp(data, len);
-	self->pref_mode = ril_network_rat_to_mode(priv->rat);
-	DBG_(self, "rat mode %d (%s)", priv->rat,
+
+	if (status == RIL_E_SUCCESS) {
+		priv->rat = ril_network_parse_pref_resp(data, len);
+		self->pref_mode = ril_network_rat_to_mode(priv->rat);
+		DBG_(self, "rat mode %d (%s)", priv->rat,
 			ofono_radio_access_mode_to_string(self->pref_mode));
 
-	if (self->pref_mode != pref_mode) {
-		ril_network_emit(self, SIGNAL_PREF_MODE_CHANGED);
-	}
+		if (self->pref_mode != pref_mode) {
+			ril_network_emit(self, SIGNAL_PREF_MODE_CHANGED);
+		}
 
-	if (ril_network_can_set_pref_mode(self)) {
-		ril_network_check_pref_mode(self, FALSE);
+		if (ril_network_can_set_pref_mode(self)) {
+			ril_network_check_pref_mode(self, FALSE);
+		}
 	}
 }
 
@@ -1021,6 +1034,7 @@ static void ril_network_query_pref_mode(struct ril_network *self)
 	GRilIoRequest *req = grilio_request_new();
 
 	grilio_request_set_retry(req, RIL_RETRY_SECS*1000, -1);
+	grilio_request_set_retry_func(req, ril_network_retry);
 	grilio_queue_cancel_request(priv->q, priv->query_rat_id, FALSE);
 	priv->query_rat_id = grilio_queue_send_request_full(priv->q, req,
 				RIL_REQUEST_GET_PREFERRED_NETWORK_TYPE,
