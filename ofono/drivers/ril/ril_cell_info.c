@@ -1,7 +1,8 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2016-2019 Jolla Ltd.
+ *  Copyright (C) 2016-2020 Jolla Ltd.
+ *  Copyright (C) 2020 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -344,11 +345,24 @@ static void ril_cell_info_set_rate_cb(GRilIoChannel *io, int status,
 	self->set_rate_id = 0;
 }
 
+static gboolean ril_cell_info_retry(GRilIoRequest* request, int ril_status,
+		const void* response_data, guint response_len, void* user_data)
+{
+	switch (ril_status) {
+	case RIL_E_SUCCESS:
+	case RIL_E_RADIO_NOT_AVAILABLE:
+		return FALSE;
+	default:
+		return TRUE;
+	}
+}
+
 static void ril_cell_info_query(struct ril_cell_info *self)
 {
 	GRilIoRequest *req = grilio_request_new();
 
 	grilio_request_set_retry(req, RIL_RETRY_MS, MAX_RETRIES);
+	grilio_request_set_retry_func(req, ril_cell_info_retry);
 	grilio_channel_cancel_request(self->io, self->query_id, FALSE);
 	self->query_id = grilio_channel_send_request_full(self->io, req,
 		RIL_REQUEST_GET_CELL_INFO_LIST, ril_cell_info_list_cb,
@@ -362,6 +376,7 @@ static void ril_cell_info_set_rate(struct ril_cell_info *self)
 		(self->update_rate_ms > 0) ? self->update_rate_ms : INT_MAX);
 
 	grilio_request_set_retry(req, RIL_RETRY_MS, MAX_RETRIES);
+	grilio_request_set_retry_func(req, ril_cell_info_retry);
 	grilio_channel_cancel_request(self->io, self->set_rate_id, FALSE);
 	self->set_rate_id = grilio_channel_send_request_full(self->io, req,
 			RIL_REQUEST_SET_UNSOL_CELL_INFO_LIST_RATE,
