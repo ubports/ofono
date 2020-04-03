@@ -191,8 +191,8 @@ LIBS="$LIBS $GLIBUTIL_LIBS"
 if (test "${enable_sailfish_rilmodem}" = "yes"); then
 	PKG_CHECK_MODULES(GRILIO, libgrilio >= 1.0.38, dummy=yes,
 				AC_MSG_ERROR(libgrilio >= 1.0.38 is required))
-	PKG_CHECK_MODULES(LIBMCE, libmce-glib >= 1.0.6, dummy=yes,
-				AC_MSG_ERROR(libmce-glib >= 1.0.6 is required))
+	PKG_CHECK_MODULES(LIBMCE, libmce-glib >= 1.0.5, dummy=yes,
+				AC_MSG_ERROR(libmce-glib >= 1.0.5 is required))
 	CFLAGS="$CFLAGS $GRILIO_CFLAGS $LIBMCE_CFLAGS"
 	LIBS="$LIBS $GRILIO_LIBS $LIBMCE_LIBS"
 	enable_sailfish_manager=yes
