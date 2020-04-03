@@ -18,8 +18,8 @@
 #include <ofono/log.h>
 #include <ofono/ril-constants.h>
 
-#include <mce_battery.h>
-#include <mce_charger.h>
+/*#include <mce_battery.h>
+#include <mce_charger.h>*/
 #include <mce_display.h>
 
 #include <grilio_channel.h>
@@ -47,16 +47,16 @@ enum ril_devmon_ss_display_event {
 
 typedef struct ril_devmon_ss {
 	struct ril_devmon pub;
-	MceBattery *battery;
-	MceCharger *charger;
+	/*MceBattery *battery;
+	MceCharger *charger;*/
 	MceDisplay *display;
 } DevMon;
 
 typedef struct ril_devmon_ss_io {
 	struct ril_devmon_io pub;
 	struct sailfish_cell_info *cell_info;
-	MceBattery *battery;
-	MceCharger *charger;
+	/*MceBattery *battery;
+	MceCharger *charger;*/
 	MceDisplay *display;
 	GRilIoChannel *io;
 	gboolean display_on;
@@ -77,7 +77,7 @@ inline static DevMonIo *ril_devmon_ss_io_cast(struct ril_devmon_io *pub)
 	return G_CAST(pub, DevMonIo, pub);
 }
 
-static inline gboolean ril_devmon_ss_battery_ok(MceBattery *battery)
+/*static inline gboolean ril_devmon_ss_battery_ok(MceBattery *battery)
 {
 	return battery->valid && battery->status >= MCE_BATTERY_OK;
 }
@@ -85,7 +85,7 @@ static inline gboolean ril_devmon_ss_battery_ok(MceBattery *battery)
 static inline gboolean ril_devmon_ss_charging(MceCharger *charger)
 {
 	return charger->valid && charger->state == MCE_CHARGER_ON;
-}
+}*/
 
 static gboolean ril_devmon_ss_display_on(MceDisplay *display)
 {
@@ -128,13 +128,13 @@ static void ril_devmon_ss_io_send_screen_state(DevMonIo *self)
 static void ril_devmon_ss_io_set_cell_info_update_interval(DevMonIo *self)
 {
 	sailfish_cell_info_set_update_interval(self->cell_info,
-		(self->display_on && (ril_devmon_ss_charging(self->charger) ||
-				ril_devmon_ss_battery_ok(self->battery))) ?
+		(self->display_on /*&& (ril_devmon_ss_charging(self->charger) ||
+				ril_devmon_ss_battery_ok(self->battery))*/) ?
 					RIL_CELL_INFO_INTERVAL_SHORT_MS :
 					RIL_CELL_INFO_INTERVAL_LONG_MS);
 }
 
-static void ril_devmon_ss_io_battery_cb(MceBattery *battery, void *user_data)
+/*static void ril_devmon_ss_io_battery_cb(MceBattery *battery, void *user_data)
 {
 	ril_devmon_ss_io_set_cell_info_update_interval(user_data);
 }
@@ -142,7 +142,7 @@ static void ril_devmon_ss_io_battery_cb(MceBattery *battery, void *user_data)
 static void ril_devmon_ss_io_charger_cb(MceCharger *charger, void *user_data)
 {
 	ril_devmon_ss_io_set_cell_info_update_interval(user_data);
-}
+}*/
 
 static void ril_devmon_ss_io_display_cb(MceDisplay *display, void *user_data)
 {
@@ -160,11 +160,11 @@ static void ril_devmon_ss_io_free(struct ril_devmon_io *devmon_io)
 {
 	DevMonIo *self = ril_devmon_ss_io_cast(devmon_io);
 
-	mce_battery_remove_all_handlers(self->battery, self->battery_event_id);
+	/*mce_battery_remove_all_handlers(self->battery, self->battery_event_id);
 	mce_battery_unref(self->battery);
 
 	mce_charger_remove_all_handlers(self->charger, self->charger_event_id);
-	mce_charger_unref(self->charger);
+	mce_charger_unref(self->charger);*/
 
 	mce_display_remove_all_handlers(self->display, self->display_event_id);
 	mce_display_unref(self->display);
@@ -187,7 +187,7 @@ static struct ril_devmon_io *ril_devmon_ss_start_io(struct ril_devmon *devmon,
 	self->io = grilio_channel_ref(io);
 	self->cell_info = sailfish_cell_info_ref(cell_info);
 
-	self->battery = mce_battery_ref(ss->battery);
+	/*self->battery = mce_battery_ref(ss->battery);
 	self->battery_event_id[BATTERY_EVENT_VALID] =
 		mce_battery_add_valid_changed_handler(self->battery,
 			ril_devmon_ss_io_battery_cb, self);
@@ -201,7 +201,7 @@ static struct ril_devmon_io *ril_devmon_ss_start_io(struct ril_devmon *devmon,
 			ril_devmon_ss_io_charger_cb, self);
 	self->charger_event_id[CHARGER_EVENT_STATE] =
 		mce_charger_add_state_changed_handler(self->charger,
-			ril_devmon_ss_io_charger_cb, self);
+			ril_devmon_ss_io_charger_cb, self);*/
 
 	self->display = mce_display_ref(ss->display);
 	self->display_on = ril_devmon_ss_display_on(self->display);
@@ -221,8 +221,8 @@ static void ril_devmon_ss_free(struct ril_devmon *devmon)
 {
 	DevMon *self = ril_devmon_ss_cast(devmon);
 
-	mce_battery_unref(self->battery);
-	mce_charger_unref(self->charger);
+	/*mce_battery_unref(self->battery);
+	mce_charger_unref(self->charger);*/
 	mce_display_unref(self->display);
 	g_free(self);
 }
@@ -233,8 +233,8 @@ struct ril_devmon *ril_devmon_ss_new()
 
 	self->pub.free = ril_devmon_ss_free;
 	self->pub.start_io = ril_devmon_ss_start_io;
-	self->battery = mce_battery_new();
-	self->charger = mce_charger_new();
+	/*self->battery = mce_battery_new();
+	self->charger = mce_charger_new();*/
 	self->display = mce_display_new();
 	return &self->pub;
 }
