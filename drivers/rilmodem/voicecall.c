@@ -177,7 +177,7 @@ static void clcc_poll_cb(struct ril_msg *message, gpointer user_data)
 		call->id = parcel_r_int32(&rilp);
 		call->phone_number.type = parcel_r_int32(&rilp);
 		parcel_r_int32(&rilp); /* isMpty */
-		parcel_r_int32(&rilp); /* isMT */
+		call->direction = parcel_r_int32(&rilp); /* isMT */
 		parcel_r_int32(&rilp); /* als */
 		call->type = parcel_r_int32(&rilp); /* isVoice */
 		parcel_r_int32(&rilp); /* isVoicePrivacy */
