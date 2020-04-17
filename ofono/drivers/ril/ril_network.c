@@ -1193,10 +1193,10 @@ static void ril_network_watch_gprs_cb(struct ofono_watch *watch,
 
 	DBG_(self, "gprs %s", watch->gprs ? "appeared" : "is gone");
 	priv->set_initial_attach_apn = TRUE;
+	ril_network_check_initial_attach_apn(self);
 	if (priv->use_data_profiles) {
 		ril_network_check_data_profiles(self);
 	}
-	ril_network_check_initial_attach_apn(self);
 }
 
 static void ril_network_watch_gprs_settings_cb(struct ofono_watch *watch,
@@ -1207,15 +1207,15 @@ static void ril_network_watch_gprs_settings_cb(struct ofono_watch *watch,
 	struct ril_network *self = RIL_NETWORK(user_data);
 	struct ril_network_priv *priv = self->priv;
 
-	if (priv->use_data_profiles) {
-		ril_network_check_data_profiles(self);
-	}
-
 	if (type == OFONO_GPRS_CONTEXT_TYPE_INTERNET) {
 		struct ril_network_priv *priv = self->priv;
 
 		priv->set_initial_attach_apn = TRUE;
 		ril_network_check_initial_attach_apn(self);
+	}
+
+	if (priv->use_data_profiles) {
+		ril_network_check_data_profiles(self);
 	}
 }
 
@@ -1298,10 +1298,10 @@ struct ril_network *ril_network_new(const char *path, GRilIoChannel *io,
 		ril_network_need_initial_attach_apn(self);
 
 	ril_vendor_set_network(vendor, self);
+	ril_network_try_set_initial_attach_apn(self);
 	if (priv->use_data_profiles) {
 		ril_network_check_data_profiles(self);
 	}
-	ril_network_try_set_initial_attach_apn(self);
 	return self;
 }
 
