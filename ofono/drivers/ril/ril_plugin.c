@@ -1064,8 +1064,11 @@ static void ril_plugin_slot_connected_cb(GRilIoChannel *io, void *user_data)
 static void ril_plugin_init_io(ril_slot *slot)
 {
 	if (!slot->io) {
-		slot->io = grilio_channel_new(ofono_ril_transport_connect
-			(slot->transport_name, slot->transport_params));
+		struct grilio_transport *transport =
+			ofono_ril_transport_connect(slot->transport_name,
+						slot->transport_params);
+
+		slot->io = grilio_channel_new(transport);
 		if (slot->io) {
 			ril_debug_trace_update(slot);
 			ril_debug_dump_update(slot);
@@ -1097,6 +1100,7 @@ static void ril_plugin_init_io(ril_slot *slot)
 						slot);
 			}
 		}
+		grilio_transport_unref(transport);
 	}
 
 	if (!slot->io) {
