@@ -384,6 +384,7 @@ static void ril_plugin_shutdown_slot(ril_slot *slot, gboolean kill_io)
 		}
 
 		if (slot->cell_info) {
+			sailfish_manager_set_cell_info(slot->handle, NULL);
 			sailfish_cell_info_unref(slot->cell_info);
 			slot->cell_info = NULL;
 		}
@@ -1041,13 +1042,13 @@ static void ril_plugin_slot_connected(ril_slot *slot)
 				slot->path, slot->config.techs, slot->imei,
 				slot->imeisv, ril_plugin_sim_state(slot),
 				slot->slot_flags);
-		sailfish_manager_set_cell_info(slot->handle, slot->cell_info);
 		grilio_channel_set_enabled(slot->io, slot->handle->enabled);
 
 		/* Check if this was the last slot we were waiting for */
 		ril_plugin_check_if_started(plugin);
 	}
 
+	sailfish_manager_set_cell_info(slot->handle, slot->cell_info);
 	ril_plugin_check_modem(slot);
 	ril_plugin_check_ready(slot);
 }
@@ -1063,8 +1064,11 @@ static void ril_plugin_slot_connected_cb(GRilIoChannel *io, void *user_data)
 static void ril_plugin_init_io(ril_slot *slot)
 {
 	if (!slot->io) {
-		slot->io = grilio_channel_new(ofono_ril_transport_connect
-			(slot->transport_name, slot->transport_params));
+		struct grilio_transport *transport =
+			ofono_ril_transport_connect(slot->transport_name,
+						slot->transport_params);
+
+		slot->io = grilio_channel_new(transport);
 		if (slot->io) {
 			ril_debug_trace_update(slot);
 			ril_debug_dump_update(slot);
@@ -1096,6 +1100,7 @@ static void ril_plugin_init_io(ril_slot *slot)
 						slot);
 			}
 		}
+		grilio_transport_unref(transport);
 	}
 
 	if (!slot->io) {
