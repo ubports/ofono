@@ -393,6 +393,7 @@ static void ril_plugin_shutdown_slot(ril_slot *slot, gboolean kill_io)
 		}
 
 		if (slot->caps) {
+			ril_network_set_radio_caps(slot->network, NULL);
 			ril_radio_caps_request_free(slot->caps_req);
 			ril_radio_caps_drop(slot->caps);
 			slot->caps_req = NULL;
