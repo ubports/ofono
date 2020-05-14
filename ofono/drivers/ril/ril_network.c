@@ -985,6 +985,14 @@ static void ril_network_check_pref_mode(struct ril_network *self,
 	}
 }
 
+static void ril_network_assert_pref_mode(struct ril_network *self)
+{
+	struct ril_network_priv *priv = self->priv;
+
+	priv->assert_rat = TRUE;
+	ril_network_check_pref_mode(self, FALSE);
+}
+
 static int ril_network_parse_pref_resp(const void *data, guint len)
 {
 	GRilIoParser rilp;
@@ -1014,10 +1022,10 @@ static void ril_network_startup_query_pref_mode_cb(GRilIoChannel *io,
 		}
 
 		/*
-		 * Unlike ril_network_query_pref_mode_cb, this one always
-		 * checks the preferred mode.
+		 * At startup, the device may have an inconsistency between
+		 * voice and data network modes, so it needs to be asserted.
 		 */
-		ril_network_check_pref_mode(self, FALSE);
+		ril_network_assert_pref_mode(self);
 	}
 }
 
@@ -1074,14 +1082,6 @@ void ril_network_set_max_pref_mode(struct ril_network *self,
 		}
 		ril_network_check_pref_mode(self, TRUE);
 	}
-}
-
-static void ril_network_assert_pref_mode(struct ril_network *self)
-{
-	struct ril_network_priv *priv = self->priv;
-
-	priv->assert_rat = TRUE;
-	ril_network_check_pref_mode(self, FALSE);
 }
 
 static void ril_network_supported_modes_handler(struct ril_radio_caps *caps,
