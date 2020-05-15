@@ -1,7 +1,8 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2017 Jolla Ltd.
+ *  Copyright (C) 2015-2020 Jolla Ltd.
+ *  Copyright (C) 2020 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -71,6 +72,12 @@ static DBusMessage *ril_oem_raw_send(DBusConnection *conn, DBusMessage *msg,
 {
 	DBusMessageIter it;
 	struct ril_oem_raw *oem = user_data;
+
+	if (!__ofono_dbus_access_method_allowed(dbus_message_get_sender(msg),
+					OFONO_DBUS_ACCESS_INTF_OEMRAW,
+					OFONO_DBUS_ACCESS_OEMRAW_SEND, NULL)) {
+		return __ofono_error_access_denied(msg);
+	}
 
 	dbus_message_iter_init(msg, &it);
 	if (dbus_message_iter_get_arg_type(&it) == DBUS_TYPE_ARRAY &&
