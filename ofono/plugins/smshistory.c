@@ -4,6 +4,7 @@
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *  Copyright (C) 2013  Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2020  Open Mobile Platform LLС. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -26,6 +27,7 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <errno.h>
 #include <glib.h>
 #include <gdbus.h>
 
@@ -40,58 +42,42 @@
 
 #define SMS_HISTORY_INTERFACE "org.ofono.SmsHistory"
 
-gboolean sms_history_interface_registered = FALSE;
-
 static const GDBusSignalTable sms_history_signals[] = {
 	{ GDBUS_SIGNAL("StatusReport",
 		GDBUS_ARGS({ "message", "s" }, { "Delivered", "a{b}" })) },
 	{ }
 };
 
-static void sms_history_cleanup(gpointer user)
+static int sms_history_probe(struct ofono_history_context *context)
 {
-	struct ofono_modem *modem = user;
-	DBG("modem %p", modem);
-	ofono_modem_remove_interface(modem, SMS_HISTORY_INTERFACE);
-	sms_history_interface_registered = FALSE;
-}
-
-static gboolean sms_history_ensure_interface(
-		struct ofono_modem *modem) {
-
-	if (sms_history_interface_registered)
-		return TRUE;
-
-	/* Late initialization of the D-Bus interface */
 	DBusConnection *conn = ofono_dbus_get_connection();
-	if (conn == NULL)
-		return FALSE;
+	struct ofono_modem *modem = context->modem;
+
+	ofono_debug("SMS History Probe for modem: %p", modem);
+
 	if (!g_dbus_register_interface(conn,
 					ofono_modem_get_path(modem),
 					SMS_HISTORY_INTERFACE,
-					NULL, sms_history_signals, NULL,
-					modem, sms_history_cleanup)) {
+					NULL, sms_history_signals,
+					NULL, NULL, NULL)) {
 		ofono_error("Could not create %s interface",
 				SMS_HISTORY_INTERFACE);
-		return FALSE;
+		return -EIO;
 	}
-	sms_history_interface_registered = TRUE;
+
 	ofono_modem_add_interface(modem, SMS_HISTORY_INTERFACE);
-
-	return TRUE;
-}
-
-
-static int sms_history_probe(struct ofono_history_context *context)
-{
-	ofono_debug("SMS History Probe for modem: %p", context->modem);
-	sms_history_ensure_interface(context->modem);
 	return 0;
 }
 
 static void sms_history_remove(struct ofono_history_context *context)
 {
-	ofono_debug("SMS History Remove for modem: %p", context->modem);
+	DBusConnection *conn = ofono_dbus_get_connection();
+	struct ofono_modem *modem = context->modem;
+
+	ofono_debug("SMS History remove for modem: %p", modem);
+	ofono_modem_remove_interface(modem, SMS_HISTORY_INTERFACE);
+	g_dbus_unregister_interface(conn, ofono_modem_get_path(modem),
+					SMS_HISTORY_INTERFACE);
 }
 
 static void sms_history_sms_send_status(
@@ -101,9 +87,6 @@ static void sms_history_sms_send_status(
 					enum ofono_history_sms_status s)
 {
 	DBG("");
-
-	if (!sms_history_ensure_interface(context->modem))
-		return;
 
 	if ((s == OFONO_HISTORY_SMS_STATUS_DELIVERED) 
 			|| (s == OFONO_HISTORY_SMS_STATUS_DELIVER_FAILED)) {
@@ -174,4 +157,3 @@ static void sms_history_exit(void)
 OFONO_PLUGIN_DEFINE(sms_history, "SMS History Plugin",
 			VERSION, OFONO_PLUGIN_PRIORITY_DEFAULT,
 			sms_history_init, sms_history_exit)
-
