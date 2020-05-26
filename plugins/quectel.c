@@ -772,8 +772,14 @@ static void setup_aux(struct ofono_modem *modem)
 	DBG("%p", modem);
 
 	g_at_chat_set_slave(data->modem, data->aux);
-	g_at_chat_send(data->aux, "ATE0; &C0; +CMEE=1; +QIURC=0", none_prefix,
-			NULL, NULL, NULL);
+
+	if (data->model == QUECTEL_EC21)
+		g_at_chat_send(data->aux, "ATE0; &C0; +CMEE=1", none_prefix,
+				NULL, NULL, NULL);
+	else
+		g_at_chat_send(data->aux, "ATE0; &C0; +CMEE=1; +QIURC=0",
+				none_prefix, NULL, NULL, NULL);
+
 	g_at_chat_send(data->aux, "AT+CFUN?", cfun_prefix, cfun_query, modem,
 			NULL);
 }
