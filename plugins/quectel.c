@@ -1270,8 +1270,10 @@ static void quectel_post_sim(struct ofono_modem *modem)
 	ofono_phonebook_create(modem, data->vendor, "atmodem", data->aux);
 	ofono_call_volume_create(modem, data->vendor, "atmodem", data->aux);
 
-	if (data->model == QUECTEL_EC21)
+	if (data->model == QUECTEL_EC21) {
+		ofono_ussd_create(modem, data->vendor, "atmodem", data->aux);
 		ofono_lte_create(modem, data->vendor, "atmodem", data->aux);
+	}
 }
 
 static void quectel_post_online(struct ofono_modem *modem)
