@@ -1113,7 +1113,9 @@ static int at_voicecall_probe(struct ofono_voicecall *vc, unsigned int vendor,
 	g_at_chat_send(vd->chat, "AT+CRC=1", NULL, NULL, NULL, NULL);
 	g_at_chat_send(vd->chat, "AT+CLIP=1", NULL, NULL, NULL, NULL);
 	g_at_chat_send(vd->chat, "AT+CDIP=1", NULL, NULL, NULL, NULL);
-	g_at_chat_send(vd->chat, "AT+CNAP=1", NULL, NULL, NULL, NULL);
+
+	if (vd->vendor != OFONO_VENDOR_QUECTEL)
+		g_at_chat_send(vd->chat, "AT+CNAP=1", NULL, NULL, NULL, NULL);
 
 	switch (vd->vendor) {
 	case OFONO_VENDOR_QUALCOMM_MSM:
