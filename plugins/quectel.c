@@ -765,46 +765,6 @@ static void cfun_query(gboolean ok, GAtResult *result, gpointer user_data)
 		cfun_enable(TRUE, NULL, modem);
 }
 
-static void cgmm_cb(int ok, GAtResult *result, void *user_data)
-{
-	struct ofono_modem *modem = user_data;
-	struct quectel_data *data = ofono_modem_get_data(modem);
-	const char *model;
-
-	DBG("%p ok %d", modem, ok);
-
-	if (!at_util_parse_attr(result, "", &model)) {
-		ofono_error("Failed to query modem model");
-		close_serial(modem);
-		return;
-	}
-
-	if (strcmp(model, "UC15") == 0) {
-		DBG("%p model UC15", modem);
-		data->vendor = OFONO_VENDOR_QUECTEL;
-		data->model = QUECTEL_UC15;
-	} else if (strcmp(model, "Quectel_M95") == 0) {
-		DBG("%p model M95", modem);
-		data->vendor = OFONO_VENDOR_QUECTEL_SERIAL;
-		data->model = QUECTEL_M95;
-	} else if (strcmp(model, "Quectel_MC60") == 0) {
-		DBG("%p model MC60", modem);
-		data->vendor = OFONO_VENDOR_QUECTEL_SERIAL;
-		data->model = QUECTEL_MC60;
-	} else if (strcmp(model, "EC21") == 0) {
-		DBG("%p model EC21", modem);
-		data->vendor = OFONO_VENDOR_QUECTEL;
-		data->model = QUECTEL_EC21;
-	} else {
-		ofono_warn("%p unknown model: '%s'", modem, model);
-		data->vendor = OFONO_VENDOR_QUECTEL;
-		data->model = QUECTEL_UNKNOWN;
-	}
-
-	g_at_chat_send(data->aux, "AT+CFUN?", cfun_prefix, cfun_query, modem,
-			NULL);
-}
-
 static void setup_aux(struct ofono_modem *modem)
 {
 	struct quectel_data *data = ofono_modem_get_data(modem);
@@ -814,7 +774,7 @@ static void setup_aux(struct ofono_modem *modem)
 	g_at_chat_set_slave(data->modem, data->aux);
 	g_at_chat_send(data->aux, "ATE0; &C0; +CMEE=1; +QIURC=0", none_prefix,
 			NULL, NULL, NULL);
-	g_at_chat_send(data->aux, "AT+CGMM", cgmm_prefix, cgmm_cb, modem,
+	g_at_chat_send(data->aux, "AT+CFUN?", cfun_prefix, cfun_query, modem,
 			NULL);
 }
 
@@ -1034,6 +994,46 @@ static void cmux_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	close_serial(modem);
 }
 
+static void cgmm_cb(int ok, GAtResult *result, void *user_data)
+{
+	struct ofono_modem *modem = user_data;
+	struct quectel_data *data = ofono_modem_get_data(modem);
+	const char *model;
+
+	DBG("%p ok %d", modem, ok);
+
+	if (!at_util_parse_attr(result, "", &model)) {
+		ofono_error("Failed to query modem model");
+		close_serial(modem);
+		return;
+	}
+
+	if (strcmp(model, "UC15") == 0) {
+		DBG("%p model UC15", modem);
+		data->vendor = OFONO_VENDOR_QUECTEL;
+		data->model = QUECTEL_UC15;
+	} else if (strcmp(model, "Quectel_M95") == 0) {
+		DBG("%p model M95", modem);
+		data->vendor = OFONO_VENDOR_QUECTEL_SERIAL;
+		data->model = QUECTEL_M95;
+	} else if (strcmp(model, "Quectel_MC60") == 0) {
+		DBG("%p model MC60", modem);
+		data->vendor = OFONO_VENDOR_QUECTEL_SERIAL;
+		data->model = QUECTEL_MC60;
+	} else if (strcmp(model, "EC21") == 0) {
+		DBG("%p model EC21", modem);
+		data->vendor = OFONO_VENDOR_QUECTEL;
+		data->model = QUECTEL_EC21;
+	} else {
+		ofono_warn("%p unknown model: '%s'", modem, model);
+		data->vendor = OFONO_VENDOR_QUECTEL;
+		data->model = QUECTEL_UNKNOWN;
+	}
+
+	g_at_chat_send(data->uart, "AT+CMUX=0,0,5,127,10,3,30,10,2", NULL,
+			cmux_cb, modem, NULL);
+}
+
 static void ate_cb(int ok, GAtResult *result, void *user_data)
 {
 	struct ofono_modem *modem = user_data;
@@ -1041,8 +1041,8 @@ static void ate_cb(int ok, GAtResult *result, void *user_data)
 
 	DBG("%p", modem);
 
-	g_at_chat_send(data->uart, "AT+CMUX=0,0,5,127,10,3,30,10,2", NULL,
-			cmux_cb, modem, NULL);
+	g_at_chat_send(data->uart, "AT+CGMM", cgmm_prefix, cgmm_cb, modem,
+			NULL);
 }
 
 static void init_cmd_cb(gboolean ok, GAtResult *result, void *user_data)
