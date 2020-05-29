@@ -78,6 +78,27 @@ static const uint8_t gsm0710_terminate[] = {
 	0xf9, /* close flag */
 };
 
+enum mux_type {
+	QUECTEL_MUX_TYPE_AUX = 0,
+	QUECTEL_MUX_TYPE_MODEM,
+	QUECTEL_MUX_TYPE_MAX,
+};
+
+struct mux_initialization_data {
+	enum mux_type mux_type;
+	char *chat_debug;
+	const char *n_gsm_key;
+	const char *n_gsm_value;
+};
+
+static const struct mux_initialization_data mux_order_default[] = {
+		{ QUECTEL_MUX_TYPE_MODEM, "Modem: ", "Modem", "/dev/gsmtty1"},
+		{ QUECTEL_MUX_TYPE_AUX, "Aux: ", "Aux", "/dev/gsmtty2"} };
+
+static const struct mux_initialization_data mux_order_ec21[] = {
+		{ QUECTEL_MUX_TYPE_AUX, "Aux: ", "Aux", "/dev/gsmtty1"},
+		{ QUECTEL_MUX_TYPE_MODEM, "Modem: ", "Modem", "/dev/gsmtty2"} };
+
 enum quectel_model {
 	QUECTEL_UNKNOWN,
 	QUECTEL_UC15,
@@ -106,6 +127,7 @@ struct quectel_data {
 	struct l_timeout *init_timeout;
 	size_t init_count;
 	guint init_cmd;
+	const struct mux_initialization_data *mux_order;
 };
 
 struct dbus_hw {
@@ -838,6 +860,7 @@ static GAtChat *create_chat(struct ofono_modem *modem, char *debug)
 static void cmux_gatmux(struct ofono_modem *modem)
 {
 	struct quectel_data *data = ofono_modem_get_data(modem);
+	GAtChat *chat;
 
 	DBG("%p", modem);
 
@@ -853,18 +876,21 @@ static void cmux_gatmux(struct ofono_modem *modem)
 
 	g_at_mux_start(data->mux);
 
-	data->modem = create_chat(modem, "Modem: ");
-	if (!data->modem) {
-		ofono_error("failed to create modem channel");
-		close_serial(modem);
-		return;
-	}
+	for (int i = 0; i < QUECTEL_MUX_TYPE_MAX; i++) {
+		chat = create_chat(modem, data->mux_order[i].chat_debug);
 
-	data->aux = create_chat(modem, "Aux: ");
-	if (!data->aux) {
-		ofono_error("failed to create aux channel");
-		close_serial(modem);
-		return;
+		if (!chat) {
+			ofono_error("failed to create %schannel",
+					data->mux_order[i].chat_debug);
+			close_serial(modem);
+			return;
+		}
+
+		if (data->mux_order[i].mux_type == QUECTEL_MUX_TYPE_AUX)
+			data->aux = chat;
+		else
+			data->modem = chat;
+
 	}
 
 	setup_aux(modem);
@@ -880,7 +906,9 @@ static void mux_ready_cb(struct l_timeout *timeout, void *user_data)
 	DBG("%p", modem);
 
 	/* check if the last (and thus all) virtual gsm tty's are created */
-	ret = stat(ofono_modem_get_string(modem, "Modem"), &st);
+	ret = stat(ofono_modem_get_string(modem,
+			data->mux_order[QUECTEL_MUX_TYPE_MAX - 1].n_gsm_key),
+			&st);
 	if (ret < 0) {
 		if (data->mux_ready_count++ < 5) {
 			/* not ready yet; try again in 100 ms*/
@@ -957,8 +985,10 @@ static void cmux_ngsm(struct ofono_modem *modem)
 	 * the kernel does not yet support mapping the underlying serial device
 	 * to its virtual gsm ttys, so hard-code gsmtty1 gsmtty2 for now
 	 */
-	ofono_modem_set_string(modem, "Modem", "/dev/gsmtty1");
-	ofono_modem_set_string(modem, "Aux", "/dev/gsmtty2");
+	for (int i = 0; i < QUECTEL_MUX_TYPE_MAX; i++) {
+		ofono_modem_set_string(modem, data->mux_order[i].n_gsm_key,
+					data->mux_order[i].n_gsm_value);
+	}
 
 	/* wait for gsmtty devices to appear */
 	if (!l_timeout_create_ms(100, mux_ready_cb, modem, NULL)) {
@@ -1014,6 +1044,8 @@ static void cgmm_cb(int ok, GAtResult *result, void *user_data)
 		return;
 	}
 
+	data->mux_order = mux_order_default;
+
 	if (strcmp(model, "UC15") == 0) {
 		DBG("%p model UC15", modem);
 		data->vendor = OFONO_VENDOR_QUECTEL;
@@ -1030,6 +1062,7 @@ static void cgmm_cb(int ok, GAtResult *result, void *user_data)
 		DBG("%p model EC21", modem);
 		data->vendor = OFONO_VENDOR_QUECTEL;
 		data->model = QUECTEL_EC21;
+		data->mux_order = mux_order_ec21;
 	} else {
 		ofono_warn("%p unknown model: '%s'", modem, model);
 		data->vendor = OFONO_VENDOR_QUECTEL;
