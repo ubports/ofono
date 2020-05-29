@@ -1424,7 +1424,7 @@ static gint ril_caps_manager_sort_requests(gconstpointer a, gconstpointer b)
 	if (r1->role == RIL_DATA_ROLE_MMS && r2->role != RIL_DATA_ROLE_MMS) {
 		return -1;
 	}
-	if (r1->role != RIL_DATA_ROLE_MMS && r1->role == RIL_DATA_ROLE_MMS) {
+	if (r1->role != RIL_DATA_ROLE_MMS && r2->role == RIL_DATA_ROLE_MMS) {
 		return 1;
 	}
 	return (int)r2->role - (int)r1->role;
