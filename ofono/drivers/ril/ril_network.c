@@ -533,12 +533,22 @@ static int ril_network_mode_to_rat(struct ril_network *self,
 	}
 }
 
-static enum ofono_radio_access_mode ril_network_actual_pref_mode
+enum ofono_radio_access_mode ril_network_max_supported_mode
 						(struct ril_network *self)
 {
 	struct ril_sim_settings *settings = self->settings;
 	struct ril_network_priv *priv = self->priv;
 	const struct ril_radio_caps *caps = priv->caps;
+
+	return caps ? __ofono_radio_access_max_mode(caps->supported_modes) :
+				__ofono_radio_access_max_mode(settings->techs);
+}
+
+static enum ofono_radio_access_mode ril_network_actual_pref_mode
+						(struct ril_network *self)
+{
+	struct ril_sim_settings *settings = self->settings;
+	struct ril_network_priv *priv = self->priv;
 
 	/*
 	 * On most dual-SIM phones only one slot at a time is allowed
@@ -563,9 +573,8 @@ static enum ofono_radio_access_mode ril_network_actual_pref_mode
 		settings->pref_mode ? settings->pref_mode : max_pref_mode;
 
 	/* Do not try to set unsupported mode */
-	const enum ofono_radio_access_mode max_mode = caps ?
-		__ofono_radio_access_max_mode(caps->supported_modes) :
-		__ofono_radio_access_max_mode(settings->techs);
+	const enum ofono_radio_access_mode max_mode =
+				ril_network_max_supported_mode(self);
 
 	return pref_mode ? MIN(pref_mode, max_mode) : max_mode;
 }

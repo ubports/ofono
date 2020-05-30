@@ -2,6 +2,7 @@
  *  oFono - Open Source Telephony - RIL-based devices
  *
  *  Copyright (C) 2015-2020 Jolla Ltd.
+ *  Copyright (C) 2020 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -59,6 +60,8 @@ void ril_network_set_radio_caps(struct ril_network *net,
 void ril_network_set_max_pref_mode(struct ril_network *net,
 				enum ofono_radio_access_mode max_pref_mode,
 				gboolean force_check);
+enum ofono_radio_access_mode ril_network_max_supported_mode
+						(struct ril_network *self);
 void ril_network_query_registration_state(struct ril_network *net);
 gulong ril_network_add_operator_changed_handler(struct ril_network *net,
 					ril_network_cb_t cb, void *arg);

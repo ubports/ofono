@@ -2,7 +2,7 @@
  *  oFono - Open Source Telephony - RIL-based devices
  *
  *  Copyright (C) 2016-2020 Jolla Ltd.
- *  Copyright (C) 2019 Open Mobile Platform LLC.
+ *  Copyright (C) 2019-2020 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -1721,34 +1721,39 @@ static void ril_data_manager_check_network_mode(struct ril_data_manager *self)
 
 	if ((self->flags & RIL_DATA_MANAGER_FORCE_GSM_ON_OTHER_SLOTS) &&
 		ril_data_manager_handover(self)) {
-		struct ril_network *lte_network = NULL;
-		int non_gsm_count = 0;
+		struct ril_network *lte_network = NULL, *best_network = NULL;
+		enum ofono_radio_access_mode best_mode =
+						OFONO_RADIO_ACCESS_MODE_ANY;
 
-		/*
-		 * Count number of SIMs for which non-GSM mode is selected
-		 */
+		/* Find a SIM for internet access */
 		for (l= self->data_list; l; l = l->next) {
 			struct ril_data *data = l->data;
 			struct ril_data_priv *priv = data->priv;
 			struct ril_network *network = priv->network;
 			struct ril_sim_settings *sim = network->settings;
+			enum ofono_radio_access_mode mode;
 
-			if (sim->pref_mode != OFONO_RADIO_ACCESS_MODE_GSM) {
-				non_gsm_count++;
-				if ((priv->flags & RIL_DATA_FLAG_MAX_SPEED) &&
-							!lte_network) {
-					lte_network = network;
-				}
+			/* Select the first network with internet role */
+			if ((sim->pref_mode != OFONO_RADIO_ACCESS_MODE_GSM) &&
+				(priv->flags & RIL_DATA_FLAG_MAX_SPEED)) {
+				lte_network = network;
+				break;
+			}
+
+			/* At the same time, look for a suitable slot */
+			mode = ril_network_max_supported_mode(network);
+			if (mode > best_mode) {
+				best_network = network;
+				best_mode = mode;
 			}
 		}
 
 		/*
 		 * If there's no SIM selected for internet access
-		 * then choose the first slot for LTE.
+		 * then use a slot with highest capabilities for LTE.
 		 */
 		if (!lte_network) {
-			struct ril_data *data = self->data_list->data;
-			lte_network = data->priv->network;
+			lte_network = best_network;
 		}
 
 		for (l= self->data_list; l; l = l->next) {
