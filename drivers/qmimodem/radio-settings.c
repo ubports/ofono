@@ -38,6 +38,8 @@ struct settings_data {
 	struct qmi_service *dms;
 	uint16_t major;
 	uint16_t minor;
+	struct qmi_device *device;
+	bool sleep;
 };
 
 static void get_system_selection_pref_cb(struct qmi_result *result,
@@ -247,6 +249,30 @@ static void create_nas_cb(struct qmi_service *service, void *user_data)
 	ofono_radio_settings_register(rs);
 }
 
+static void qmi_query_fast_dormancy(struct ofono_radio_settings *rs,
+			ofono_radio_settings_fast_dormancy_query_cb_t cb,
+			void *data)
+{
+	struct settings_data *rsd = ofono_radio_settings_get_data(rs);
+	CALLBACK_WITH_SUCCESS(cb, rsd->sleep, data);
+}
+
+static void qmi_set_fast_dormancy(struct ofono_radio_settings *rs,
+				ofono_bool_t enable,
+				ofono_radio_settings_fast_dormancy_set_cb_t cb,
+				void *data)
+{
+	struct settings_data *rsd = ofono_radio_settings_get_data(rs);
+	rsd->sleep = enable;
+
+	if (!enable)
+		qmi_device_trigger_update(rsd->device);
+
+	DBG("");
+
+	CALLBACK_WITH_SUCCESS(cb, data);
+}
+
 static int qmi_radio_settings_probe(struct ofono_radio_settings *rs,
 					unsigned int vendor, void *user_data)
 {
@@ -263,6 +289,8 @@ static int qmi_radio_settings_probe(struct ofono_radio_settings *rs,
 						create_dms_cb, rs, NULL);
 	qmi_service_create_shared(device, QMI_SERVICE_NAS,
 						create_nas_cb, rs, NULL);
+
+	data->device = device;
 
 	return 0;
 }
@@ -292,6 +320,8 @@ static const struct ofono_radio_settings_driver driver = {
 	.set_rat_mode	= qmi_set_rat_mode,
 	.query_rat_mode = qmi_query_rat_mode,
 	.query_available_rats = qmi_query_available_rats,
+	.query_fast_dormancy	= qmi_query_fast_dormancy,
+	.set_fast_dormancy	= qmi_set_fast_dormancy,
 };
 
 void qmi_radio_settings_init(void)

@@ -106,7 +106,7 @@ struct qmi_voice_all_call_status_ind {
 	const struct qmi_voice_remote_party_number_instance *remote_party_number[16];
 };
 
-enum parse_error qmi_voice_ind_call_status(
+enum parse_error qmi_voice_call_status(
 		struct qmi_result *qmi_result,
 		struct qmi_voice_all_call_status_ind *result);
 

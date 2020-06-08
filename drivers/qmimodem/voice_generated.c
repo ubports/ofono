@@ -150,18 +150,26 @@ enum parse_error qmi_voice_answer_call_parse(
 	return err;
 }
 
-enum parse_error qmi_voice_ind_call_status(
+enum parse_error qmi_voice_call_status(
 		struct qmi_result *qmi_result,
 		struct qmi_voice_all_call_status_ind *result)
 {
 	int err = NONE;
 	int offset;
 	uint16_t len;
+	bool ind = TRUE;
 	const struct qmi_voice_remote_party_number *remote_party_number;
 	const struct qmi_voice_call_information *call_information;
 
 	/* mandatory */
 	call_information = qmi_result_get(qmi_result, 0x01, &len);
+
+	/* This is so ugly! but TLV for indicator and response is different */
+	if (!call_information) {
+		call_information = qmi_result_get(qmi_result, 0x10, &len);
+		ind = FALSE;
+	}
+
 	if (call_information)
 	{
 		/* verify the length */
@@ -177,7 +185,8 @@ enum parse_error qmi_voice_ind_call_status(
 		return MISSING_MANDATORY;
 
 	/* mandatory */
-	remote_party_number = qmi_result_get(qmi_result, 0x10, &len);
+	remote_party_number = qmi_result_get(qmi_result, ind ? 0x10 : 0x11, &len);
+
 	if (remote_party_number) {
 		const struct qmi_voice_remote_party_number_instance *instance;
 		int instance_size = sizeof(struct qmi_voice_remote_party_number_instance);

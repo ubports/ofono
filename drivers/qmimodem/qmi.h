@@ -58,6 +58,8 @@
 #define QMI_SERVICE_RMS		225	/* Remote management service */
 #define QMI_SERVICE_OMA		226	/* OMA device management service */
 
+#define QMI_SERVICE_UPDATE  400
+
 enum qmi_device_expected_data_format {
 	QMI_DEVICE_EXPECTED_DATA_FORMAT_UNKNOWN,
 	QMI_DEVICE_EXPECTED_DATA_FORMAT_802_3,
@@ -77,6 +79,9 @@ typedef void (*qmi_shutdown_func_t)(void *user_data);
 typedef void (*qmi_discover_func_t)(void *user_data);
 
 struct qmi_device *qmi_device_new(int fd);
+
+void qmi_device_trigger_update(struct qmi_device *device);
+
 
 struct qmi_device *qmi_device_ref(struct qmi_device *device);
 void qmi_device_unref(struct qmi_device *device);

@@ -610,6 +610,15 @@ static void get_msg_protocol(struct ofono_sms *sms)
 				get_msg_protocol_cb, sms, NULL);
 }
 
+static void event_update(struct qmi_result *result, void *user_data)
+{
+	struct ofono_sms *sms = user_data;
+
+	DBG("");
+
+	get_msg_list(sms);
+}
+
 static void event_notify(struct qmi_result *result, void *user_data)
 {
 	struct ofono_sms *sms = user_data;
@@ -687,6 +696,10 @@ static void set_routes_cb(struct qmi_result *result, void *user_data)
 	 * query which mode is active.
 	 */
 	get_msg_protocol(sms);
+
+
+	qmi_service_register(data->wms, QMI_SERVICE_UPDATE,
+					event_update, sms, NULL);
 }
 
 static void get_routes_cb(struct qmi_result *result, void *user_data)

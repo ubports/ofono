@@ -992,6 +992,21 @@ struct qmi_device *qmi_device_new(int fd)
 	return device;
 }
 
+void qmi_device_trigger_update(struct qmi_device *device)
+{
+	struct qmi_result result;
+
+	result.result = 0;
+	result.error = 0;
+	result.message = QMI_SERVICE_UPDATE;
+	result.data = NULL;
+	result.length = 0;
+
+	DBG("");
+
+	g_hash_table_foreach(device->service_list,
+					service_notify, &result);
+}
 struct qmi_device *qmi_device_ref(struct qmi_device *device)
 {
 	if (!device)

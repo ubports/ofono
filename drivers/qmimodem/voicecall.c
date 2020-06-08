@@ -66,7 +66,7 @@ static void all_call_status_ind(struct qmi_result *result, void *user_data)
 	int size = 0;
 	struct qmi_voice_all_call_status_ind status_ind;
 
-	if (qmi_voice_ind_call_status(result, &status_ind) != NONE) {
+	if (qmi_voice_call_status(result, &status_ind) != NONE) {
 		DBG("Parsing of all call status indication failed");
 		return;
 	}
@@ -128,6 +128,17 @@ static void all_call_status_ind(struct qmi_result *result, void *user_data)
 	ofono_call_list_notify(vc, &vd->call_list, calls);
 }
 
+static void event_update(struct qmi_result *result, void *user_data)
+{
+	struct ofono_voicecall *vc = user_data;
+	struct voicecall_data *data = ofono_voicecall_get_data(vc);
+
+	DBG("");
+
+	qmi_service_send(data->voice, QMI_VOICE_GET_ALL_STATUS, NULL,
+				all_call_status_ind, vc, NULL);
+}
+
 static void create_voice_cb(struct qmi_service *service, void *user_data)
 {
 	struct ofono_voicecall *vc = user_data;
@@ -154,6 +165,9 @@ static void create_voice_cb(struct qmi_service *service, void *user_data)
 	 */
 	qmi_service_register(data->voice, QMI_VOICE_IND_ALL_STATUS,
 			     all_call_status_ind, vc, NULL);
+
+	qmi_service_register(data->voice, QMI_SERVICE_UPDATE,
+					event_update, vc, NULL);
 
 	ofono_voicecall_register(vc);
 }

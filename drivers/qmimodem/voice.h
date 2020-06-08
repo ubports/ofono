@@ -16,6 +16,7 @@
  */
 
 #define QMI_VOICE_IND_ALL_STATUS 0x2e
+#define QMI_VOICE_GET_ALL_STATUS 0x2f
 
 
 #define QMI_VOICE_PARAM_USS_DATA 0x01
