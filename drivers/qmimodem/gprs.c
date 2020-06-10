@@ -68,6 +68,28 @@ static bool extract_ss_info(struct qmi_result *result, int *status, int *tech)
 	return true;
 }
 
+static bool extract_dc_info(struct qmi_result *result, int *bearer_tech)
+{
+	const struct qmi_nas_data_capability *dc;
+	uint16_t len;
+	int i;
+
+	DBG("");
+
+	dc = qmi_result_get(result, QMI_NAS_RESULT_DATA_CAPABILITY_STATUS, &len);
+	if (!dc)
+		return false;
+
+	*bearer_tech = -1;
+	for (i = 0; i < dc->cap_count; i++) {
+		DBG("radio tech in use %d", dc->cap[i]);
+
+		*bearer_tech = qmi_nas_cap_to_bearer_tech(dc->cap[i]);
+	}
+
+	return true;
+}
+
 static void get_lte_attach_param_cb(struct qmi_result *result, void *user_data)
 {
 	struct ofono_gprs *gprs = user_data;
@@ -188,6 +210,7 @@ static int handle_ss_info(struct qmi_result *result, struct ofono_gprs *gprs)
 	struct gprs_data *data = ofono_gprs_get_data(gprs);
 	int status;
 	int tech;
+	int bearer_tech;
 
 	DBG("");
 
@@ -208,6 +231,10 @@ static int handle_ss_info(struct qmi_result *result, struct ofono_gprs *gprs)
 	} else {
 		data->last_auto_context_id = 0;
 	}
+
+	/* DC is optional so only notify on successful extraction */
+	if (extract_dc_info(result, &bearer_tech))
+		ofono_gprs_bearer_notify(gprs, bearer_tech);
 
 	return status;
 }
