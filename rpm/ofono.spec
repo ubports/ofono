@@ -7,7 +7,7 @@ License:    GPLv2
 URL:        https://git.sailfishos.org/mer-core/ofono
 Source:     %{name}-%{version}.tar.bz2
 
-%define libgrilio_version 1.0.35
+%define libgrilio_version 1.0.38
 %define libglibutil_version 1.0.30
 %define libmce_version 1.0.6
 
