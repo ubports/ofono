@@ -119,15 +119,13 @@ static void qmi_set_rat_mode(struct ofono_radio_settings *rs,
 	DBG("");
 
 	switch (mode) {
-	case OFONO_RADIO_ACCESS_MODE_ANY:
-		pref = QMI_NAS_RAT_MODE_PREF_ANY;
-		break;
 	case OFONO_RADIO_ACCESS_MODE_GSM:
 		pref = QMI_NAS_RAT_MODE_PREF_GSM;
 		break;
 	case OFONO_RADIO_ACCESS_MODE_UMTS:
 		pref = QMI_NAS_RAT_MODE_PREF_UMTS;
 		break;
+	case OFONO_RADIO_ACCESS_MODE_ANY:
 	case OFONO_RADIO_ACCESS_MODE_LTE:
 		pref = QMI_NAS_RAT_MODE_PREF_LTE;
 		break;

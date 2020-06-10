@@ -202,8 +202,8 @@ struct qmi_nas_home_network {
 
 #define QMI_NAS_RAT_MODE_PREF_ANY		(-1)
 #define QMI_NAS_RAT_MODE_PREF_GSM		(1 << 2)
-#define QMI_NAS_RAT_MODE_PREF_UMTS		(1 << 3)
-#define QMI_NAS_RAT_MODE_PREF_LTE		(1 << 4)
+#define QMI_NAS_RAT_MODE_PREF_UMTS		(1 << 3) | (1 << 2)
+#define QMI_NAS_RAT_MODE_PREF_LTE		(1 << 4) | (1 << 3) | (1 << 2)
 
 #define QMI_NAS_PARAM_SYSTEM_SELECTION_PREF_MODE	0x11
 
