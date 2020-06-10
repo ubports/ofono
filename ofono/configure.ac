@@ -189,8 +189,8 @@ CFLAGS="$CFLAGS $GLIBUTIL_CFLAGS"
 LIBS="$LIBS $GLIBUTIL_LIBS"
 
 if (test "${enable_sailfish_rilmodem}" = "yes"); then
-	PKG_CHECK_MODULES(GRILIO, libgrilio >= 1.0.35, dummy=yes,
-				AC_MSG_ERROR(libgrilio >= 1.0.35 is required))
+	PKG_CHECK_MODULES(GRILIO, libgrilio >= 1.0.38, dummy=yes,
+				AC_MSG_ERROR(libgrilio >= 1.0.38 is required))
 	PKG_CHECK_MODULES(LIBMCE, libmce-glib >= 1.0.6, dummy=yes,
 				AC_MSG_ERROR(libmce-glib >= 1.0.6 is required))
 	CFLAGS="$CFLAGS $GRILIO_CFLAGS $LIBMCE_CFLAGS"

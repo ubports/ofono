@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2017 Jolla Ltd.
+ *  Copyright (C) 2015-2020 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -144,10 +144,19 @@ static void ril_cbs_notify(GRilIoChannel *io, guint code,
 				const void *data, guint len, void *user_data)
 {
 	struct ril_cbs *cd = user_data;
+	GRilIoParser rilp;
+	guint32 pdu_len;
 
 	GASSERT(code == RIL_UNSOL_RESPONSE_NEW_BROADCAST_SMS);
-	DBG_(cd, "%u bytes", len);
-	ofono_cbs_notify(cd->cbs, data, len);
+	grilio_parser_init(&rilp, data, len);
+	if (grilio_parser_get_uint32(&rilp, &pdu_len)) {
+		const void* pdu = grilio_parser_get_bytes(&rilp, pdu_len);
+
+		if (pdu) {
+			DBG_(cd, "%u bytes", pdu_len);
+			ofono_cbs_notify(cd->cbs, pdu, pdu_len);
+		}
+	}
 }
 
 static void ril_cbs_probe_done_cb(GRilIoChannel *io, int status,
