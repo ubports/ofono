@@ -1,8 +1,8 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2016-2019 Jolla Ltd.
- *  Copyright (C) 2019 Open Mobile Platform LLC.
+ *  Copyright (C) 2016-2020 Jolla Ltd.
+ *  Copyright (C) 2019-2020 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -24,6 +24,7 @@ struct ril_vendor_defaults {
 	gboolean legacy_imei_query;
 	gboolean enable_cbs;
 	gboolean enable_stk;
+	gboolean replace_strange_oper;
 	gboolean query_available_band_mode;
 	gboolean use_data_profiles;
 	gboolean force_gsm_when_radio_off;

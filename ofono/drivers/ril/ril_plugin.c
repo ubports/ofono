@@ -94,6 +94,7 @@
 #define RILMODEM_DEFAULT_LEGACY_IMEI_QUERY FALSE
 #define RILMODEM_DEFAULT_RADIO_POWER_CYCLE TRUE
 #define RILMODEM_DEFAULT_CONFIRM_RADIO_POWER_ON TRUE
+#define RILMODEM_DEFAULT_REPLACE_STRANGE_OPER FALSE
 #define RILMODEM_DEFAULT_NETWORK_SELECTION_MANUAL_0 TRUE
 #define RILMODEM_DEFAULT_FORCE_GSM_WHEN_RADIO_OFF TRUE
 #define RILMODEM_DEFAULT_USE_DATA_PROFILES FALSE
@@ -151,6 +152,7 @@
 #define RILCONF_RADIO_POWER_CYCLE           "radioPowerCycle"
 #define RILCONF_CONFIRM_RADIO_POWER_ON      "confirmRadioPowerOn"
 #define RILCONF_SINGLE_DATA_CONTEXT         "singleDataContext"
+#define RILCONF_REPLACE_STRANGE_OPER        "replaceStrangeOperatorNames"
 #define RILCONF_NETWORK_SELECTION_MANUAL_0  "networkSelectionManual0"
 #define RILCONF_FORCE_GSM_WHEN_RADIO_OFF    "forceGsmWhenRadioOff"
 #define RILCONF_USE_DATA_PROFILES           "useDataProfiles"
@@ -1214,6 +1216,7 @@ static ril_slot *ril_plugin_slot_new_take(char *transport,
 	config->enable_stk = RILMODEM_DEFAULT_ENABLE_STK;
 	config->query_available_band_mode =
 		RILMODEM_DEFAULT_QUERY_AVAILABLE_BAND_MODE;
+	config->replace_strange_oper = RILMODEM_DEFAULT_REPLACE_STRANGE_OPER;
 	config->network_selection_manual_0 =
 		RILMODEM_DEFAULT_NETWORK_SELECTION_MANUAL_0;
 	config->force_gsm_when_radio_off =
@@ -1254,6 +1257,7 @@ static void ril_plugin_slot_apply_vendor_defaults(ril_slot *slot)
 		defaults.empty_pin_query = config->empty_pin_query;
 		defaults.mms_data_profile_id = config->mms_data_profile_id;
 		defaults.use_data_profiles = config->use_data_profiles;
+		defaults.replace_strange_oper = config->replace_strange_oper;
 		defaults.force_gsm_when_radio_off =
 			config->force_gsm_when_radio_off;
 		defaults.query_available_band_mode =
@@ -1266,6 +1270,7 @@ static void ril_plugin_slot_apply_vendor_defaults(ril_slot *slot)
 		config->empty_pin_query = defaults.empty_pin_query;
 		config->use_data_profiles = defaults.use_data_profiles;
 		config->mms_data_profile_id = defaults.mms_data_profile_id;
+		config->replace_strange_oper = defaults.replace_strange_oper;
 		config->force_gsm_when_radio_off =
 			defaults.force_gsm_when_radio_off;
 		config->query_available_band_mode =
@@ -1487,6 +1492,14 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 					&config->enable_stk)) {
 		DBG("%s: " RILCONF_ENABLE_STK " %s", group,
 				config->enable_stk ? "yes" : "no");
+	}
+
+	/* replaceStrangeOperatorNames */
+	if (ril_config_get_boolean(file, group,
+					RILCONF_REPLACE_STRANGE_OPER,
+					&config->replace_strange_oper)) {
+		DBG("%s: " RILCONF_REPLACE_STRANGE_OPER " %s", group,
+			config->replace_strange_oper ? "yes" : "no");
 	}
 
 	/* networkSelectionManual0 */
