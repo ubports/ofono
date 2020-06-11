@@ -532,6 +532,7 @@ static void syscfgex_support_cb(gboolean ok, GAtResult *result,
 	if (!ok) {
 		g_at_chat_send(rsd->chat, "AT^SYSCFG=?", syscfg_prefix,
 					syscfg_support_cb, rs, NULL);
+		return;
 	}
 
 	rsd->syscfgex_cap = 1;
