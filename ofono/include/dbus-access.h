@@ -40,6 +40,7 @@ enum ofono_dbus_access_intf {
 	OFONO_DBUS_ACCESS_INTF_MODEM,         /* org.ofono.Modem */
 	OFONO_DBUS_ACCESS_INTF_RADIOSETTINGS, /* org.ofono.RadioSettings */
 	OFONO_DBUS_ACCESS_INTF_STK,           /* org.ofono.SimToolkit */
+	OFONO_DBUS_ACCESS_INTF_OEMRAW,        /* org.ofono.OemRaw */
 	OFONO_DBUS_ACCESS_INTF_COUNT
 };
 
@@ -122,6 +123,12 @@ enum ofono_dbus_access_radiosettings_method {
 enum ofono_dbus_access_stk_method {
 	OFONO_DBUS_ACCESS_STK_REGISTER_AGENT,
 	OFONO_DBUS_ACCESS_STK_METHOD_COUNT
+};
+
+/* OFONO_DBUS_ACCESS_INTF_OEMRAW */
+enum ofono_dbus_access_oemraw_method {
+	OFONO_DBUS_ACCESS_OEMRAW_SEND,
+	OFONO_DBUS_ACCESS_OEMRAW_METHOD_COUNT
 };
 
 #define OFONO_DBUS_ACCESS_PRIORITY_LOW     (-100)

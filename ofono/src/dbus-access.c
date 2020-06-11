@@ -44,6 +44,8 @@ const char *ofono_dbus_access_intf_name(enum ofono_dbus_access_intf intf)
 		return OFONO_RADIO_SETTINGS_INTERFACE;
 	case OFONO_DBUS_ACCESS_INTF_STK:
 		return OFONO_STK_INTERFACE;
+	case OFONO_DBUS_ACCESS_INTF_OEMRAW:
+		return "org.ofono.OemRaw";
 	case OFONO_DBUS_ACCESS_INTF_COUNT:
 		break;
 	}
@@ -173,6 +175,14 @@ const char *ofono_dbus_access_method_name(enum ofono_dbus_access_intf intf,
 		case OFONO_DBUS_ACCESS_STK_REGISTER_AGENT:
 			return "RegisterAgent";
 		case OFONO_DBUS_ACCESS_STK_METHOD_COUNT:
+			break;
+		}
+		break;
+	case OFONO_DBUS_ACCESS_INTF_OEMRAW:
+		switch ((enum ofono_dbus_access_oemraw_method)method) {
+		case OFONO_DBUS_ACCESS_OEMRAW_SEND:
+			return "Send";
+		case OFONO_DBUS_ACCESS_OEMRAW_METHOD_COUNT:
 			break;
 		}
 		break;

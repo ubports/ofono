@@ -34,6 +34,12 @@ static enum ofono_dbus_access deny_method_access(const char *sender,
 	return OFONO_DBUS_ACCESS_DENY;
 }
 
+static enum ofono_dbus_access broken_method_access(const char *sender,
+	enum ofono_dbus_access_intf intf, int method, const char *arg)
+{
+	return (enum ofono_dbus_access)(-1);
+}
+
 struct ofono_dbus_access_plugin access_inval;
 struct ofono_dbus_access_plugin access_dontcare = {
 	.name = "DontCare",
@@ -49,6 +55,12 @@ struct ofono_dbus_access_plugin access_deny = {
 	.name = "Deny",
 	.priority = OFONO_DBUS_ACCESS_PRIORITY_LOW,
 	.method_access = deny_method_access
+};
+
+struct ofono_dbus_access_plugin access_broken = {
+	.name = "Broken",
+	.priority = OFONO_DBUS_ACCESS_PRIORITY_LOW,
+	.method_access = broken_method_access
 };
 
 /*==========================================================================*
@@ -107,6 +119,9 @@ static const struct test_method_name_data method_name_tests[] = {
 	},{
 		OFONO_DBUS_ACCESS_INTF_STK,
 		OFONO_DBUS_ACCESS_STK_METHOD_COUNT
+	},{
+		OFONO_DBUS_ACCESS_INTF_OEMRAW,
+		OFONO_DBUS_ACCESS_OEMRAW_METHOD_COUNT
 	}
 };
 
@@ -151,6 +166,13 @@ static void test_register()
 
 	/* Deny wins here */
 	g_assert(!ofono_dbus_access_plugin_register(&access_dontcare));
+	g_assert(!ofono_dbus_access_plugin_register(&access_deny));
+	g_assert(!__ofono_dbus_access_method_allowed(":1.0", 0, 1, NULL));
+	ofono_dbus_access_plugin_unregister(&access_deny);
+	ofono_dbus_access_plugin_unregister(&access_dontcare);
+
+	/* And here too */
+	g_assert(!ofono_dbus_access_plugin_register(&access_broken));
 	g_assert(!ofono_dbus_access_plugin_register(&access_deny));
 	g_assert(!__ofono_dbus_access_method_allowed(":1.0", 0, 1, NULL));
 	ofono_dbus_access_plugin_unregister(&access_deny);
