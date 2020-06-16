@@ -212,7 +212,7 @@ static void lte_set_default_attach_info_cb(const struct ofono_error *error,
 	}
 
 	ofono_dbus_signal_property_changed(conn, path,
-					OFONO_CONNECTION_CONTEXT_INTERFACE,
+					OFONO_LTE_INTERFACE,
 					key,
 					DBUS_TYPE_STRING, &value);
 
