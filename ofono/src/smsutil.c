@@ -3,6 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2015-2020  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -1757,7 +1758,7 @@ gboolean sms_udh_iter_init_from_cbs(const struct cbs *cbs,
 		return FALSE;
 
 	hdr = cbs->ud;
-	max_ud_len = 82;
+	max_ud_len = cbs->udlen;
 
 	/* Must have at least one information-element if udhi is true */
 	if (hdr[0] < 2)
@@ -3856,8 +3857,8 @@ gboolean cbs_dcs_decode(guint8 dcs, gboolean *udhi, enum sms_class *cls,
 
 gboolean cbs_decode(const unsigned char *pdu, int len, struct cbs *out)
 {
-	/* CBS is always a fixed length of 88 bytes */
-	if (len != 88)
+	/* CBS is (almost) always a fixed length of 88 bytes */
+	if (len < 6 || len > 88)
 		return FALSE;
 
 	out->gs = (enum cbs_geo_scope) ((pdu[0] >> 6) & 0x03);
@@ -3867,6 +3868,10 @@ gboolean cbs_decode(const unsigned char *pdu, int len, struct cbs *out)
 	out->dcs = pdu[4];
 	out->max_pages = pdu[5] & 0xf;
 	out->page = (pdu[5] >> 4) & 0xf;
+
+	/* Allow the last fragment to be truncated */
+	if (len != 88 && out->max_pages != out->page)
+		return FALSE;
 
 	/*
 	 * If a mobile receives the code 0000 in either the first field or
@@ -3879,7 +3884,10 @@ gboolean cbs_decode(const unsigned char *pdu, int len, struct cbs *out)
 		out->page = 1;
 	}
 
-	memcpy(out->ud, pdu + 6, 82);
+	out->udlen = (guint8)(len - 6);
+	memcpy(out->ud, pdu + 6, out->udlen);
+	if (out->udlen < 82)
+		memset(out->ud + out->udlen, 0, 82 - out->udlen);
 
 	return TRUE;
 }
@@ -4072,7 +4080,7 @@ char *cbs_decode_text(GSList *cbs_list, char *iso639_lang)
 			if (iso639)
 				bufsize -= 3;
 		} else {
-			bufsize += 82;
+			bufsize += cbs->udlen;
 
 			if (iso639)
 				bufsize -= 2;
@@ -4089,7 +4097,7 @@ char *cbs_decode_text(GSList *cbs_list, char *iso639_lang)
 			if (sms_udh_iter_init_from_cbs(cbs, &iter))
 				taken = sms_udh_iter_get_udh_length(&iter) + 1;
 
-			unpack_7bit_own_buf(cbs->ud + taken, 82 - taken,
+			unpack_7bit_own_buf(cbs->ud + taken, cbs->udlen - taken,
 						taken, FALSE, 2,
 						NULL, 0,
 						(unsigned char *)iso639_lang);
@@ -4122,7 +4130,7 @@ char *cbs_decode_text(GSList *cbs_list, char *iso639_lang)
 			max_chars =
 				sms_text_capacity_gsm(CBS_MAX_GSM_CHARS, taken);
 
-			unpack_7bit_own_buf(ud + taken, 82 - taken,
+			unpack_7bit_own_buf(ud + taken, cbs->udlen - taken,
 						taken, FALSE, max_chars,
 						&written, 0, unpacked);
 
@@ -4156,7 +4164,7 @@ char *cbs_decode_text(GSList *cbs_list, char *iso639_lang)
 			 * the check here since the specification isn't clear
 			 */
 		} else {
-			int num_ucs2_chars = (82 - taken) >> 1;
+			int num_ucs2_chars = (cbs->udlen - taken) >> 1;
 			int i = taken;
 			int max_offset = taken + num_ucs2_chars * 2;
 

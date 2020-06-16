@@ -3,6 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2015-2020  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -398,6 +399,7 @@ struct cbs {
 	guint8 dcs;				/* 8 bits */
 	guint8 max_pages;			/* 4 bits */
 	guint8 page;				/* 4 bits */
+	guint8 udlen;
 	guint8 ud[82];
 };
 
