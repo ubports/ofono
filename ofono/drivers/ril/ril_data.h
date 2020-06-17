@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2016-2019 Jolla Ltd.
+ *  Copyright (C) 2016-2020 Jolla Ltd.
  *  Copyright (C) 2019 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -77,12 +77,6 @@ struct ril_data_options {
 	enum ril_data_call_format data_call_format;
 	unsigned int data_call_retry_limit;
 	unsigned int data_call_retry_delay_ms;
-};
-
-enum ril_data_role {
-	RIL_DATA_ROLE_NONE,    /* Data not allowed */
-	RIL_DATA_ROLE_MMS,     /* Data is allowed at any speed */
-	RIL_DATA_ROLE_INTERNET /* Data is allowed at full speed */
 };
 
 struct ril_data_manager;

@@ -2,7 +2,8 @@
  *
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2010  Nokia Corporation and/or its subsidiary(-ies).
+ *  Copyright (C) 2010 Nokia Corporation and/or its subsidiary(-ies).
+ *  Copyright (C) 2014-2020 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -61,10 +62,22 @@ struct ofono_radio_settings {
 	struct ofono_atom *atom;
 };
 
+enum ofono_radio_access_mode __ofono_radio_access_max_mode(
+					enum ofono_radio_access_mode mask)
+{
+	return	(mask & OFONO_RADIO_ACCESS_MODE_LTE) ?
+					OFONO_RADIO_ACCESS_MODE_LTE :
+		(mask & OFONO_RADIO_ACCESS_MODE_UMTS) ?
+					OFONO_RADIO_ACCESS_MODE_UMTS :
+		(mask & OFONO_RADIO_ACCESS_MODE_GSM) ?
+					OFONO_RADIO_ACCESS_MODE_GSM :
+					OFONO_RADIO_ACCESS_MODE_ANY;
+}
+
 #define radio_access_mode_to_string ofono_radio_access_mode_to_string
 const char *ofono_radio_access_mode_to_string(enum ofono_radio_access_mode m)
 {
-	switch (m) {
+	switch (__ofono_radio_access_max_mode(m)) {
 	case OFONO_RADIO_ACCESS_MODE_ANY:
 		return "any";
 	case OFONO_RADIO_ACCESS_MODE_GSM:
@@ -76,6 +89,10 @@ const char *ofono_radio_access_mode_to_string(enum ofono_radio_access_mode m)
 	default:
 		return NULL;
 	}
+	return (m == OFONO_RADIO_ACCESS_MODE_ANY) ? "any" :
+			(m & OFONO_RADIO_ACCESS_MODE_LTE) ?  "lte" :
+			(m & OFONO_RADIO_ACCESS_MODE_UMTS) ? "umts" :
+			(m & OFONO_RADIO_ACCESS_MODE_GSM) ? "gsm" : NULL;
 }
 #define radio_access_mode_from_string ofono_radio_access_mode_from_string
 ofono_bool_t ofono_radio_access_mode_from_string(const char *str,

@@ -283,6 +283,10 @@ enum ofono_gprs_context_type __ofono_gprs_context_get_assigned_type(
 						struct ofono_gprs_context *gc);
 
 #include <ofono/radio-settings.h>
+
+enum ofono_radio_access_mode __ofono_radio_access_max_mode(
+					enum ofono_radio_access_mode modes);
+
 #include <ofono/audio-settings.h>
 #include <ofono/ctm.h>
 #include <ofono/location-reporting.h>

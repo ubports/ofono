@@ -1,7 +1,8 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2019 Jolla Ltd.
+ *  Copyright (C) 2015-2020 Jolla Ltd.
+ *  Copyright (C) 2020 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -21,6 +22,7 @@
 #include <glib-object.h>
 
 struct ofono_network_operator;
+struct ril_radio_caps;
 
 struct ril_registration_state {
 	int status;        /* enum network_registration_status */
@@ -42,7 +44,6 @@ struct ril_network {
 	struct ril_sim_settings *settings;
 };
 
-struct ofono_sim;
 typedef void (*ril_network_cb_t)(struct ril_network *net, void *arg);
 
 struct ril_network *ril_network_new(const char *path, GRilIoChannel *io,
@@ -54,10 +55,13 @@ struct ril_network *ril_network_new(const char *path, GRilIoChannel *io,
 struct ril_network *ril_network_ref(struct ril_network *net);
 void ril_network_unref(struct ril_network *net);
 
+void ril_network_set_radio_caps(struct ril_network *net,
+				struct ril_radio_caps *caps);
 void ril_network_set_max_pref_mode(struct ril_network *net,
 				enum ofono_radio_access_mode max_pref_mode,
 				gboolean force_check);
-void ril_network_assert_pref_mode(struct ril_network *net, gboolean immediate);
+enum ofono_radio_access_mode ril_network_max_supported_mode
+						(struct ril_network *self);
 void ril_network_query_registration_state(struct ril_network *net);
 gulong ril_network_add_operator_changed_handler(struct ril_network *net,
 					ril_network_cb_t cb, void *arg);
@@ -66,8 +70,6 @@ gulong ril_network_add_voice_state_changed_handler(struct ril_network *net,
 gulong ril_network_add_data_state_changed_handler(struct ril_network *net,
 					ril_network_cb_t cb, void *arg);
 gulong ril_network_add_pref_mode_changed_handler(struct ril_network *net,
-					ril_network_cb_t cb, void *arg);
-gulong ril_network_add_max_pref_mode_changed_handler(struct ril_network *net,
 					ril_network_cb_t cb, void *arg);
 void ril_network_remove_handler(struct ril_network *net, gulong id);
 void ril_network_remove_handlers(struct ril_network *net, gulong *ids, int n);

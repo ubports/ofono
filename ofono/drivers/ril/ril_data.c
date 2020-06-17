@@ -2,7 +2,7 @@
  *  oFono - Open Source Telephony - RIL-based devices
  *
  *  Copyright (C) 2016-2020 Jolla Ltd.
- *  Copyright (C) 2019 Open Mobile Platform LLC.
+ *  Copyright (C) 2019-2020 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -81,6 +81,7 @@ typedef struct ril_data RilData;
 enum ril_data_io_event_id {
 	IO_EVENT_DATA_CALL_LIST_CHANGED,
 	IO_EVENT_RESTRICTED_STATE_CHANGED,
+	IO_EVENT_EOF,
 	IO_EVENT_COUNT
 };
 
@@ -192,6 +193,7 @@ struct ril_data_request_allow_data {
 
 static void ril_data_manager_check_network_mode(struct ril_data_manager *dm);
 static void ril_data_call_deact_cid(struct ril_data *data, int cid);
+static void ril_data_cancel_all_requests(struct ril_data *self);
 static void ril_data_power_update(struct ril_data *self);
 static void ril_data_signal_emit(struct ril_data *self, enum ril_data_signal id)
 {
@@ -1230,6 +1232,17 @@ static void ril_data_settings_changed(struct ril_sim_settings *settings,
 	ril_data_manager_check_network_mode(RIL_DATA(user_data)->priv->dm);
 }
 
+static void ril_data_ril_disconnected_cb(GRilIoChannel *io, void *user_data)
+{
+	struct ril_data *self = RIL_DATA(user_data);
+	struct ril_data_priv *priv = self->priv;
+
+	DBG_(self, "disconnected");
+	priv->flags = RIL_DATA_FLAG_NONE;
+	priv->restricted_state = 0;
+	ril_data_cancel_all_requests(self);
+}
+
 static gint ril_data_compare_cb(gconstpointer a, gconstpointer b)
 {
 	const struct ril_data *d1 = a;
@@ -1289,6 +1302,9 @@ struct ril_data *ril_data_new(struct ril_data_manager *dm, const char *name,
 			grilio_channel_add_unsol_event_handler(io,
 				ril_data_restricted_state_changed_cb,
 				RIL_UNSOL_RESTRICTED_STATE_CHANGED, self);
+		priv->io_event_id[IO_EVENT_EOF] =
+			grilio_channel_add_disconnected_handler(io,
+				ril_data_ril_disconnected_cb, self);
 
 		priv->settings_event_id[SETTINGS_EVENT_IMSI_CHANGED] =
 			ril_sim_settings_add_imsi_changed_handler(settings,
@@ -1412,6 +1428,20 @@ static void ril_data_cancel_requests(struct ril_data *self,
 
 	if (priv->pending_req && (priv->pending_req->flags & flags)) {
 		ril_data_request_cancel(priv->pending_req);
+	}
+}
+
+static void ril_data_cancel_all_requests(struct ril_data *self)
+{
+	struct ril_data_priv *priv = self->priv;
+	struct ril_data_request *req = priv->req_queue;
+
+	ril_data_request_do_cancel(priv->pending_req);
+	while (req) {
+		struct ril_data_request *next = req->next;
+
+		ril_data_request_do_cancel(req);
+		req = next;
 	}
 }
 
@@ -1586,24 +1616,11 @@ static void ril_data_dispose(GObject *object)
 	struct ril_data *self = RIL_DATA(object);
 	struct ril_data_priv *priv = self->priv;
 	struct ril_data_manager	*dm = priv->dm;
-	struct ril_network *network = priv->network;
-	struct ril_sim_settings *settings = network->settings;
-	struct ril_data_request *req;
 
-	ril_sim_settings_remove_handlers(settings, priv->settings_event_id,
-					G_N_ELEMENTS(priv->settings_event_id));
-	grilio_channel_remove_all_handlers(priv->io, priv->io_event_id);
 	grilio_queue_cancel_all(priv->q, FALSE);
 	priv->query_id = 0;
 
-	ril_data_request_do_cancel(priv->pending_req);
-	req = priv->req_queue;
-	while (req) {
-		struct ril_data_request *next = req->next;
-		ril_data_request_do_cancel(req);
-		req = next;
-	}
-
+	ril_data_cancel_all_requests(self);
 	dm->data_list = g_slist_remove(dm->data_list, self);
 	ril_data_manager_check_data(dm);
 	g_hash_table_destroy(priv->grab);
@@ -1614,6 +1631,11 @@ static void ril_data_finalize(GObject *object)
 {
 	struct ril_data *self = RIL_DATA(object);
 	struct ril_data_priv *priv = self->priv;
+	struct ril_network *network = priv->network;
+	struct ril_sim_settings *settings = network->settings;
+
+	ril_sim_settings_remove_all_handlers(settings, priv->settings_event_id);
+	grilio_channel_remove_all_handlers(priv->io, priv->io_event_id);
 
 	g_free(priv->log_prefix);
 	grilio_queue_unref(priv->q);
@@ -1699,34 +1721,39 @@ static void ril_data_manager_check_network_mode(struct ril_data_manager *self)
 
 	if ((self->flags & RIL_DATA_MANAGER_FORCE_GSM_ON_OTHER_SLOTS) &&
 		ril_data_manager_handover(self)) {
-		struct ril_network *lte_network = NULL;
-		int non_gsm_count = 0;
+		struct ril_network *lte_network = NULL, *best_network = NULL;
+		enum ofono_radio_access_mode best_mode =
+						OFONO_RADIO_ACCESS_MODE_ANY;
 
-		/*
-		 * Count number of SIMs for which non-GSM mode is selected
-		 */
+		/* Find a SIM for internet access */
 		for (l= self->data_list; l; l = l->next) {
 			struct ril_data *data = l->data;
 			struct ril_data_priv *priv = data->priv;
 			struct ril_network *network = priv->network;
 			struct ril_sim_settings *sim = network->settings;
+			enum ofono_radio_access_mode mode;
 
-			if (sim->pref_mode != OFONO_RADIO_ACCESS_MODE_GSM) {
-				non_gsm_count++;
-				if ((priv->flags & RIL_DATA_FLAG_MAX_SPEED) &&
-							!lte_network) {
-					lte_network = network;
-				}
+			/* Select the first network with internet role */
+			if ((sim->pref_mode != OFONO_RADIO_ACCESS_MODE_GSM) &&
+				(priv->flags & RIL_DATA_FLAG_MAX_SPEED)) {
+				lte_network = network;
+				break;
+			}
+
+			/* At the same time, look for a suitable slot */
+			mode = ril_network_max_supported_mode(network);
+			if (mode > best_mode) {
+				best_network = network;
+				best_mode = mode;
 			}
 		}
 
 		/*
 		 * If there's no SIM selected for internet access
-		 * then choose the first slot for LTE.
+		 * then use a slot with highest capabilities for LTE.
 		 */
 		if (!lte_network) {
-			struct ril_data *data = self->data_list->data;
-			lte_network = data->priv->network;
+			lte_network = best_network;
 		}
 
 		for (l= self->data_list; l; l = l->next) {
