@@ -419,6 +419,10 @@ static void sysinfo_enable_cb(gboolean ok, GAtResult *result,
 	g_at_chat_send(data->modem, "AT&C0", NULL, NULL, NULL, NULL);
 	g_at_chat_send(data->pcui, "AT&C0", NULL, NULL, NULL, NULL);
 
+	/* Restore settings after restart */
+	g_at_chat_send(data->modem, "AT&F0", NULL, NULL, NULL, NULL);
+	g_at_chat_send(data->pcui, "AT&F0", NULL, NULL, NULL, NULL);
+
 	/*
 	 * Ensure that the modem is using GSM character set and not IRA,
 	 * otherwise weirdness with umlauts and other non-ASCII characters
