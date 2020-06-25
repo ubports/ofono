@@ -1565,6 +1565,19 @@ static bool have_read_settings(struct ofono_gprs *gprs)
 	return false;
 }
 
+static void pri_context_signal_active(struct pri_context *ctx)
+{
+	DBusConnection *conn;
+	dbus_bool_t value;
+
+	value = ctx->active;
+	conn = ofono_dbus_get_connection();
+
+	ofono_dbus_signal_property_changed(conn, ctx->path,
+					OFONO_CONNECTION_CONTEXT_INTERFACE,
+					"Active", DBUS_TYPE_BOOLEAN, &value);
+}
+
 static void detach_active_contexts(struct ofono_gprs *gprs)
 {
 	GSList *l;
@@ -1588,7 +1601,9 @@ static void detach_active_contexts(struct ofono_gprs *gprs)
 			gc->driver->detach_shutdown(gc, ctx->context.cid);
 
 		/* Make sure the context is properly cleared */
+		pri_reset_context_settings(ctx);
 		release_context(ctx);
+		pri_context_signal_active(ctx);
 	}
 }
 
@@ -2243,8 +2258,6 @@ static void gprs_deactivate_for_all(const struct ofono_error *error,
 {
 	struct pri_context *ctx = data;
 	struct ofono_gprs *gprs = ctx->gprs;
-	DBusConnection *conn;
-	dbus_bool_t value;
 
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR) {
 		__ofono_dbus_pending_reply(&gprs->pending,
@@ -2254,12 +2267,7 @@ static void gprs_deactivate_for_all(const struct ofono_error *error,
 
 	pri_reset_context_settings(ctx);
 	release_context(ctx);
-
-	value = ctx->active;
-	conn = ofono_dbus_get_connection();
-	ofono_dbus_signal_property_changed(conn, ctx->path,
-					OFONO_CONNECTION_CONTEXT_INTERFACE,
-					"Active", DBUS_TYPE_BOOLEAN, &value);
+	pri_context_signal_active(ctx);
 
 	gprs_deactivate_next(gprs);
 }
