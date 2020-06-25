@@ -165,9 +165,19 @@ static void ril_cbs_notify(GRilIoChannel *io, guint code,
 	if (grilio_parser_get_uint32(&rilp, &pdu_len)) {
 		const void* pdu = grilio_parser_get_bytes(&rilp, pdu_len);
 
-		if (pdu) {
+		/*
+		 * By default assume that it's a length followed by the
+		 * binary PDU data.
+		 */
+		if (pdu && grilio_parser_bytes_remaining(&rilp) < 4) {
 			DBG_(cd, "%u bytes", pdu_len);
 			ofono_cbs_notify(cd->cbs, pdu, pdu_len);
+		} else {
+			/*
+			 * But I've seen cell broadcasts arriving without
+			 * the length, simply as a blob.
+			 */
+			ofono_cbs_notify(cd->cbs, data, len);
 		}
 	}
 }
