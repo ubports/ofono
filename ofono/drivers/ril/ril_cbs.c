@@ -24,6 +24,7 @@ struct ril_cbs {
 	GRilIoChannel *io;
 	GRilIoQueue *q;
 	char *log_prefix;
+	guint register_id;
 	gulong event_id;
 };
 
@@ -51,6 +52,12 @@ static struct ril_cbs_cbd *ril_cbs_cbd_new(struct ril_cbs *cd,
 	return cbd;
 }
 
+static gboolean ril_cbs_retry(GRilIoRequest *request, int ril_status,
+               const void *resp_data, guint resp_len, void *user_data)
+{
+       return ril_status == RIL_E_INVALID_STATE;
+}
+
 static void ril_cbs_request_activation(struct ril_cbs *cd,
 		gboolean activate, GRilIoChannelResponseFunc response,
 		GDestroyNotify destroy, void* user_data)
@@ -61,6 +68,9 @@ static void ril_cbs_request_activation(struct ril_cbs *cd,
 	grilio_request_append_int32(req, activate ? 0 :1);
 
 	DBG_(cd, "%sactivating CB", activate ? "" : "de");
+	grilio_request_set_retry_func(req, ril_cbs_retry);
+	grilio_request_set_retry(req, RIL_CBS_CHECK_RETRY_MS,
+				RIL_CBS_CHECK_RETRY_COUNT);
 	grilio_queue_send_request_full(cd->q, req,
 				RIL_REQUEST_GSM_SMS_BROADCAST_ACTIVATION,
 				response, destroy, user_data);
@@ -97,6 +107,9 @@ static void ril_cbs_set_config(struct ril_cbs *cd, const char *topics,
 	}
 
 	DBG_(cd, "configuring CB");
+	grilio_request_set_retry_func(req, ril_cbs_retry);
+	grilio_request_set_retry(req, RIL_CBS_CHECK_RETRY_MS,
+			RIL_CBS_CHECK_RETRY_COUNT);
 	grilio_queue_send_request_full(cd->q, req,
 			RIL_REQUEST_GSM_SET_BROADCAST_SMS_CONFIG,
 			response, destroy, user_data);
@@ -152,28 +165,33 @@ static void ril_cbs_notify(GRilIoChannel *io, guint code,
 	if (grilio_parser_get_uint32(&rilp, &pdu_len)) {
 		const void* pdu = grilio_parser_get_bytes(&rilp, pdu_len);
 
-		if (pdu) {
+		/*
+		 * By default assume that it's a length followed by the
+		 * binary PDU data.
+		 */
+		if (pdu && grilio_parser_bytes_remaining(&rilp) < 4) {
 			DBG_(cd, "%u bytes", pdu_len);
 			ofono_cbs_notify(cd->cbs, pdu, pdu_len);
+		} else {
+			/*
+			 * But I've seen cell broadcasts arriving without
+			 * the length, simply as a blob.
+			 */
+			ofono_cbs_notify(cd->cbs, data, len);
 		}
 	}
 }
 
-static void ril_cbs_probe_done_cb(GRilIoChannel *io, int status,
-				const void *data, guint len, void *user_data)
+static gboolean ril_cbs_register(void *user_data)
 {
 	struct ril_cbs *cd = user_data;
 
-	if (status == RIL_E_SUCCESS) {
-		DBG_(cd, "registering for CB");
-		cd->event_id = grilio_channel_add_unsol_event_handler(cd->io,
-			ril_cbs_notify, RIL_UNSOL_RESPONSE_NEW_BROADCAST_SMS,
-									cd);
-		ofono_cbs_register(cd->cbs);
-	} else {
-		DBG_(cd, "failed to query CB config");
-		ofono_cbs_remove(cd->cbs);
-	}
+	DBG_(cd, "registering for CB");
+	cd->register_id = 0;
+	cd->event_id = grilio_channel_add_unsol_event_handler(cd->io,
+		ril_cbs_notify, RIL_UNSOL_RESPONSE_NEW_BROADCAST_SMS, cd);
+	ofono_cbs_register(cd->cbs);
+	return G_SOURCE_REMOVE;
 }
 
 static int ril_cbs_probe(struct ofono_cbs *cbs, unsigned int vendor,
@@ -181,7 +199,6 @@ static int ril_cbs_probe(struct ofono_cbs *cbs, unsigned int vendor,
 {
 	struct ril_modem *modem = data;
 	struct ril_cbs *cd = g_try_new0(struct ril_cbs, 1);
-	GRilIoRequest* req = grilio_request_new();
 
 	ofono_cbs_set_data(cbs, cd);
 	cd->log_prefix = (modem->log_prefix && modem->log_prefix[0]) ?
@@ -191,20 +208,7 @@ static int ril_cbs_probe(struct ofono_cbs *cbs, unsigned int vendor,
 	DBG_(cd, "");
 	cd->io = grilio_channel_ref(ril_modem_io(modem));
 	cd->q = grilio_queue_new(cd->io);
-
-	/*
-	 * RIL_REQUEST_GSM_GET_BROADCAST_SMS_CONFIG often fails at startup
-	 * especially if other RIL requests are running in parallel. We may
-	 * have to retry a few times. Also, make it blocking in order to
-	 * improve the chance of success.
-	 */
-	grilio_request_set_retry(req, RIL_CBS_CHECK_RETRY_MS,
-						RIL_CBS_CHECK_RETRY_COUNT);
-	grilio_request_set_blocking(req, TRUE);
-	grilio_queue_send_request_full(cd->q, req,
-				RIL_REQUEST_GSM_GET_BROADCAST_SMS_CONFIG,
-				ril_cbs_probe_done_cb, NULL, cd);
-	grilio_request_unref(req);
+	cd->register_id = g_idle_add(ril_cbs_register, cd);
 	return 0;
 }
 
@@ -213,6 +217,9 @@ static void ril_cbs_remove(struct ofono_cbs *cbs)
 	struct ril_cbs *cd = ofono_cbs_get_data(cbs);
 
 	DBG_(cd, "");
+	if (cd->register_id) {
+		g_source_remove(cd->register_id);
+	}
 	ofono_cbs_set_data(cbs, NULL);
 	grilio_channel_remove_handler(cd->io, cd->event_id);
 	grilio_channel_unref(cd->io);
