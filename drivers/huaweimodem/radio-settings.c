@@ -210,7 +210,7 @@ static void syscfgex_query_mode_cb(gboolean ok, GAtResult *result,
 	else if (strstr(acqorder, "0302"))
 		mode = (OFONO_RADIO_ACCESS_MODE_LTE | OFONO_RADIO_ACCESS_MODE_UMTS);
 	else if (strstr(acqorder, "0201"))
-		mode = (OFONO_RADIO_ACCESS_MODE_UMTS | OFONO_RADIO_ACCESS_MODE_LTE);
+		mode = (OFONO_RADIO_ACCESS_MODE_UMTS | OFONO_RADIO_ACCESS_MODE_GSM);
 	else if (strstr(acqorder, "03"))
 		mode = OFONO_RADIO_ACCESS_MODE_LTE;
 	else if (strstr(acqorder, "02"))
@@ -330,7 +330,7 @@ static void syscfgex_set_rat_mode(struct radio_settings_data *rsd,
 
 	if (mode == (OFONO_RADIO_ACCESS_MODE_LTE | OFONO_RADIO_ACCESS_MODE_UMTS))
 		acqorder = "0302";
-	else if (mode == (OFONO_RADIO_ACCESS_MODE_UMTS | OFONO_RADIO_ACCESS_MODE_LTE))
+	else if (mode == (OFONO_RADIO_ACCESS_MODE_UMTS | OFONO_RADIO_ACCESS_MODE_GSM))
 		acqorder = "0201";
 
 	snprintf(buf, sizeof(buf), atcmd, acqorder);
