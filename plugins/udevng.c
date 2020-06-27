@@ -1807,6 +1807,8 @@ static struct {
 	{ "gemalto",	"qmi_wwan",	"1e2d",	"0053"	},
 	{ "gemalto",	"cdc_acm",	"1e2d",	"0061"	},
 	{ "gemalto",	"cdc_ether",	"1e2d",	"0061"	},
+	{ "gemalto",	"cdc_acm",	"1e2d",	"005b"	},
+	{ "gemalto",	"cdc_ether",	"1e2d",	"005b"	},
 	{ "telit",	"cdc_ncm",	"1bc7", "0036"	},
 	{ "telit",	"cdc_acm",	"1bc7", "0036"	},
 	{ "xmm7xxx",	"cdc_acm",	"8087"		},
