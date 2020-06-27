@@ -58,6 +58,8 @@
 #define GEMALTO_MODEL_PHS8P	"0053"
 /* ALS3, PLS8-E, and PLS8-X family */
 #define GEMALTO_MODEL_ALS3_PLS8x	"0061"
+/* ELS81 modem */
+#define GEMALTO_MODEL_ELS81x   "005b"
 
 static const char *none_prefix[] = { NULL };
 static const char *sctm_prefix[] = { "^SCTM:", NULL };
@@ -601,7 +603,8 @@ static void gemalto_post_sim(struct ofono_modem *modem)
 
 	ofono_ussd_create(modem, 0, "atmodem", data->app);
 
-	if (!g_strcmp0(model, GEMALTO_MODEL_ALS3_PLS8x))
+	if (!g_strcmp0(model, GEMALTO_MODEL_ALS3_PLS8x) ||
+	    !g_strcmp0(model, GEMALTO_MODEL_ELS81x))
 		ofono_lte_create(modem, OFONO_VENDOR_GEMALTO,
 						"atmodem", data->app);
 }
