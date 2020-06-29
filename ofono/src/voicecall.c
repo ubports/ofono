@@ -349,12 +349,12 @@ static int tone_queue(struct ofono_voicecall *vc, const char *tone_str,
 
 	/*
 	 * Tones can be 0-9, *, #, A-D according to 27.007 C.2.11,
-	 * and p for Pause.
+	 * and p for Pause (also , for Pause as per ITU-T V.250 6.3.1.2).
 	 */
 	for (i = 0; tone_str[i]; i++)
 		if (!g_ascii_isdigit(tone_str[i]) && tone_str[i] != 'p' &&
 				tone_str[i] != 'P' && tone_str[i] != '*' &&
-				tone_str[i] != '.' && tone_str[i] != ',' &&
+				tone_str[i] != ',' &&
 				tone_str[i] != '#' && (tone_str[i] < 'A' ||
 				tone_str[i] > 'D'))
 			return -EINVAL;
@@ -4389,7 +4389,7 @@ static void tone_request_cb(const struct ofono_error *error, void *data)
 		goto done;
 	}
 
-	len = strspn(entry->left, "pP.,");
+	len = strspn(entry->left, "pP,");
 	entry->left += len;
 
 done:
@@ -4423,7 +4423,7 @@ static gboolean tone_request_run(gpointer user_data)
 	if (entry == NULL)
 		return FALSE;
 
-	len = strcspn(entry->left, "pP.,");
+	len = strcspn(entry->left, "pP,");
 
 	if (len) {
 		if (len > 8) /* Arbitrary length limit per request */
