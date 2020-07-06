@@ -35,7 +35,7 @@ struct _GAtResult {
 
 typedef struct _GAtResult GAtResult;
 
-#define G_AT_RESULT_LINE_LENGTH_MAX 2048
+#define G_AT_RESULT_LINE_LENGTH_MAX 4096
 
 struct _GAtResultIter {
 	GAtResult *result;
