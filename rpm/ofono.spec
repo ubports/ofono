@@ -2,7 +2,6 @@ Name:       ofono
 Summary:    Open Source Telephony
 Version:    1.23
 Release:    1
-Group:      Communications/Connectivity Adaptation
 License:    GPLv2
 URL:        https://git.sailfishos.org/mer-core/ofono
 Source:     %{name}-%{version}.tar.bz2
@@ -38,13 +37,13 @@ BuildRequires:  pkgconfig(mobile-broadband-provider-info)
 BuildRequires:  libtool
 BuildRequires:  automake
 BuildRequires:  autoconf
+BuildRequires:  systemd
 
 %description
 Telephony stack
 
 %package devel
 Summary:    Headers for oFono
-Group:      Development/Libraries
 Requires:   %{name} = %{version}-%{release}
 
 %description devel
@@ -52,7 +51,6 @@ Development headers and libraries for oFono
 
 %package tests
 Summary:    Test Scripts for oFono
-Group:      Development/Libraries
 Requires:   %{name} = %{version}-%{release}
 Requires:   dbus-python3
 Requires:   python3-gobject
@@ -64,7 +62,6 @@ Scripts for testing oFono and its functionality
 
 %package configs-mer
 Summary:    Package to provide default configs for ofono
-Group:      Development/Tools
 Provides:   ofono-configs
 
 %description configs-mer
@@ -72,7 +69,6 @@ This package provides default configs for ofono
 
 %package doc
 Summary:   Documentation for %{name}
-Group:     Documentation
 Requires:  %{name} = %{version}-%{release}
 
 %description doc
@@ -98,9 +94,9 @@ autoreconf --force --install
     --disable-add-remove-context \
     --disable-isimodem \
     --disable-qmimodem \
-    --with-systemdunitdir="/%{_lib}/systemd/system"
+    --with-systemdunitdir=%{_unitdir}
 
-make %{_smp_mflags}
+%make_build
 
 %check
 # run unit tests
@@ -111,9 +107,9 @@ rm -rf %{buildroot}
 %make_install
 
 mkdir -p %{buildroot}/%{_sysconfdir}/ofono/push_forwarder.d
-mkdir -p %{buildroot}/%{_lib}/systemd/system/network.target.wants
+mkdir -p %{buildroot}%{_unitdir}/network.target.wants
 mkdir -p %{buildroot}/var/lib/ofono
-ln -s ../ofono.service %{buildroot}/%{_lib}/systemd/system/network.target.wants/ofono.service
+ln -s ../ofono.service %{buildroot}%{_unitdir}/network.target.wants/ofono.service
 
 mkdir -p %{buildroot}%{_docdir}/%{name}-%{version}
 install -m0644 -t %{buildroot}%{_docdir}/%{name}-%{version} \
@@ -139,8 +135,8 @@ systemctl daemon-reload ||:
 %license COPYING
 %config %{_sysconfdir}/dbus-1/system.d/*.conf
 %{_sbindir}/*
-/%{_lib}/systemd/system/network.target.wants/ofono.service
-/%{_lib}/systemd/system/ofono.service
+%{_unitdir}/network.target.wants/ofono.service
+%{_unitdir}/ofono.service
 %dir %{_sysconfdir}/ofono/
 %dir %{_sysconfdir}/ofono/push_forwarder.d
 # This file is part of phonesim and not needed with ofono.
