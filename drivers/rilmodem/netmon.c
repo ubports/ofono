@@ -201,7 +201,7 @@ static int process_cellinfo_list(struct ril_msg *message,
 
 		lac = (lac >= 0 && lac <= 65535) ? lac : -1;
 		cid = (cid >= 0 && cid <= 268435455) ? cid : -1;
-		psc = (psc >= 0 && rssi <= 511) ? psc : -1;
+		psc = (psc >= 0 && psc <= 511) ? psc : -1;
 		rssi = (rssi >= 0 && rssi <= 31) ? rssi : -1;
 		ber = (ber >= 0 && ber <= 7) ? ber : -1;
 
