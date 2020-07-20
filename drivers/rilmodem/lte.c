@@ -71,6 +71,7 @@ static void ril_lte_set_default_attach_info(const struct ofono_lte *lte,
 	struct cb_data *cbd = cb_data_new(cb, data, (struct ofono_lte *)lte);
 	struct parcel rilp;
 	char buf[OFONO_GPRS_MAX_APN_LENGTH + 1];
+	const char *proto = ril_util_gprs_proto_to_ril_string(info->proto);
 
 	DBG("%s", info->apn);
 
@@ -80,10 +81,11 @@ static void ril_lte_set_default_attach_info(const struct ofono_lte *lte,
 	if (strlen(info->apn) > 0) {
 		sprintf(buf, "%s", info->apn);
 		parcel_w_string(&rilp, buf);
-	} else
+	} else {
 		parcel_w_string(&rilp, "");	/* apn */
+	}
 
-	parcel_w_string(&rilp, "ip");		/* protocol */
+	parcel_w_string(&rilp, proto);	/* protocol */
 	parcel_w_int32(&rilp, 0);		/* auth type */
 	parcel_w_string(&rilp, "");		/* username */
 	parcel_w_string(&rilp, "");		/* password */
