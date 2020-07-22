@@ -30,6 +30,8 @@
 
 #include "ofono.h"
 
+#pragma message("PLUGINDIR="PLUGINDIR)
+
 static GSList *plugins = NULL;
 
 struct ofono_plugin {
