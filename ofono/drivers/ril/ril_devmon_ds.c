@@ -65,6 +65,8 @@ typedef struct ril_devmon_ds {
 	MceBattery *battery;
 	MceCharger *charger;
 	MceDisplay *display;
+	int cell_info_interval_short_ms;
+	int cell_info_interval_long_ms;
 } DevMon;
 
 typedef struct ril_devmon_ds_io {
@@ -86,6 +88,8 @@ typedef struct ril_devmon_ds_io {
 	gulong charger_event_id[CHARGER_EVENT_COUNT];
 	gulong display_event_id[DISPLAY_EVENT_COUNT];
 	guint req_id;
+	int cell_info_interval_short_ms;
+	int cell_info_interval_long_ms;
 } DevMonIo;
 
 #define DBG_(self,fmt,args...) DBG("%s: " fmt, (self)->io->name, ##args)
@@ -201,8 +205,8 @@ static void ril_devmon_ds_io_set_cell_info_update_interval(DevMonIo *self)
 		(ril_devmon_ds_display_on(self->display) &&
 			(ril_devmon_ds_charging(self->charger) ||
 				ril_devmon_ds_battery_ok(self->battery))) ?
-					RIL_CELL_INFO_INTERVAL_SHORT_MS :
-					RIL_CELL_INFO_INTERVAL_LONG_MS);
+					self->cell_info_interval_short_ms :
+					self->cell_info_interval_long_ms);
 }
 
 static void ril_devmon_ds_io_connman_cb(struct ril_connman *connman,
@@ -303,6 +307,11 @@ static struct ril_devmon_io *ril_devmon_ds_start_io(struct ril_devmon *devmon,
 		mce_display_add_state_changed_handler(self->display,
 			ril_devmon_ds_io_display_cb, self);
 
+	self->cell_info_interval_short_ms =
+				ds->cell_info_interval_short_ms;
+	self->cell_info_interval_long_ms =
+				ds->cell_info_interval_long_ms;
+
 	ril_devmon_ds_io_update_low_data(self);
 	ril_devmon_ds_io_update_charging(self);
 	ril_devmon_ds_io_set_cell_info_update_interval(self);
@@ -320,7 +329,7 @@ static void ril_devmon_ds_free(struct ril_devmon *devmon)
 	g_free(self);
 }
 
-struct ril_devmon *ril_devmon_ds_new()
+struct ril_devmon *ril_devmon_ds_new(const struct ril_slot_config *config)
 {
 	DevMon *self = g_new0(DevMon, 1);
 
@@ -330,6 +339,10 @@ struct ril_devmon *ril_devmon_ds_new()
 	self->battery = mce_battery_new();
 	self->charger = mce_charger_new();
 	self->display = mce_display_new();
+	self->cell_info_interval_short_ms =
+				config->cell_info_interval_short_ms;
+	self->cell_info_interval_long_ms =
+				config->cell_info_interval_long_ms;
 	return &self->pub;
 }
 

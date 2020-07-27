@@ -55,6 +55,8 @@ typedef struct ril_devmon_ur {
 	MceBattery *battery;
 	MceCharger *charger;
 	MceDisplay *display;
+	int cell_info_interval_short_ms;
+	int cell_info_interval_long_ms;
 } DevMon;
 
 typedef struct ril_devmon_ur_io {
@@ -70,6 +72,8 @@ typedef struct ril_devmon_ur_io {
 	gulong charger_event_id[CHARGER_EVENT_COUNT];
 	gulong display_event_id[DISPLAY_EVENT_COUNT];
 	guint req_id;
+	int cell_info_interval_short_ms;
+	int cell_info_interval_long_ms;
 } DevMonIo;
 
 #define DBG_(self,fmt,args...) DBG("%s: " fmt, (self)->io->name, ##args)
@@ -136,8 +140,8 @@ static void ril_devmon_ur_io_set_cell_info_update_interval(DevMonIo *self)
 	sailfish_cell_info_set_update_interval(self->cell_info,
 		(self->display_on && (ril_devmon_ur_charging(self->charger) ||
 				ril_devmon_ur_battery_ok(self->battery))) ?
-					RIL_CELL_INFO_INTERVAL_SHORT_MS :
-					RIL_CELL_INFO_INTERVAL_LONG_MS);
+					self->cell_info_interval_short_ms :
+					self->cell_info_interval_long_ms);
 }
 
 static void ril_devmon_ur_io_battery_cb(MceBattery *battery, void *user_data)
@@ -218,6 +222,11 @@ static struct ril_devmon_io *ril_devmon_ur_start_io(struct ril_devmon *devmon,
 		mce_display_add_state_changed_handler(self->display,
 			ril_devmon_ur_io_display_cb, self);
 
+	self->cell_info_interval_short_ms =
+			ur->cell_info_interval_short_ms;
+	self->cell_info_interval_long_ms =
+			ur->cell_info_interval_long_ms;
+
 	ril_devmon_ur_io_set_unsol_response_filter(self);
 	ril_devmon_ur_io_set_cell_info_update_interval(self);
 	return &self->pub;
@@ -233,7 +242,7 @@ static void ril_devmon_ur_free(struct ril_devmon *devmon)
 	g_free(self);
 }
 
-struct ril_devmon *ril_devmon_ur_new()
+struct ril_devmon *ril_devmon_ur_new(const struct ril_slot_config *config)
 {
 	DevMon *self = g_new0(DevMon, 1);
 
@@ -242,6 +251,10 @@ struct ril_devmon *ril_devmon_ur_new()
 	self->battery = mce_battery_new();
 	self->charger = mce_charger_new();
 	self->display = mce_display_new();
+	self->cell_info_interval_short_ms =
+			config->cell_info_interval_short_ms;
+	self->cell_info_interval_long_ms =
+			config->cell_info_interval_long_ms;
 	return &self->pub;
 }
 
