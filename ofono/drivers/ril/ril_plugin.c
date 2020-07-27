@@ -100,6 +100,8 @@
 #define RILMODEM_DEFAULT_USE_DATA_PROFILES FALSE
 #define RILMODEM_DEFAULT_MMS_DATA_PROFILE_ID RIL_DATA_PROFILE_IMS
 #define RILMODEM_DEFAULT_SLOT_FLAGS SAILFISH_SLOT_NO_FLAGS
+#define RILMODEM_DEFAULT_CELL_INFO_INTERVAL_SHORT_MS (2000) /* 2 sec */
+#define RILMODEM_DEFAULT_CELL_INFO_INTERVAL_LONG_MS  (30000) /* 30 sec */
 
 /* RIL socket transport name and parameters */
 #define RIL_TRANSPORT_MODEM                 "modem"
@@ -158,6 +160,8 @@
 #define RILCONF_USE_DATA_PROFILES           "useDataProfiles"
 #define RILCONF_MMS_DATA_PROFILE_ID         "mmsDataProfileId"
 #define RILCONF_DEVMON                      "deviceStateTracking"
+#define RILCONF_CELL_INFO_INTERVAL_SHORT_MS "cellInfoIntervalShortMs"
+#define RILCONF_CELL_INFO_INTERVAL_LONG_MS  "cellInfoIntervalLongMs"
 
 /* Modem error ids */
 #define RIL_ERROR_ID_RILD_RESTART           "rild-restart"
@@ -1230,6 +1234,10 @@ static ril_slot *ril_plugin_slot_new_take(char *transport,
 		RILMODEM_DEFAULT_FORCE_GSM_WHEN_RADIO_OFF;
 	config->use_data_profiles = RILMODEM_DEFAULT_USE_DATA_PROFILES;
 	config->mms_data_profile_id = RILMODEM_DEFAULT_MMS_DATA_PROFILE_ID;
+	config->cell_info_interval_short_ms =
+				RILMODEM_DEFAULT_CELL_INFO_INTERVAL_SHORT_MS;
+	config->cell_info_interval_long_ms =
+				RILMODEM_DEFAULT_CELL_INFO_INTERVAL_LONG_MS;
 	slot->timeout = RILMODEM_DEFAULT_TIMEOUT;
 	slot->sim_flags = RILMODEM_DEFAULT_SIM_FLAGS;
 	slot->slot_flags = RILMODEM_DEFAULT_SLOT_FLAGS;
@@ -1241,8 +1249,7 @@ static ril_slot *ril_plugin_slot_new_take(char *transport,
 		RILMODEM_DEFAULT_DATA_CALL_RETRY_LIMIT;
 	slot->data_opt.data_call_retry_delay_ms =
 		RILMODEM_DEFAULT_DATA_CALL_RETRY_DELAY;
-
-	slot->devmon = ril_devmon_auto_new();
+	slot->devmon = ril_devmon_auto_new(config);
 	slot->watch = ofono_watch_new(dbus_path);
 	slot->watch_event_id[WATCH_EVENT_MODEM] =
 		ofono_watch_add_modem_changed_handler(slot->watch,
@@ -1742,6 +1749,26 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 				slot->legacy_imei_query ? "on" : "off");
 	}
 
+	/* cellInfoIntervalShortMs */
+	if (ril_config_get_integer(file, group,
+				RILCONF_CELL_INFO_INTERVAL_SHORT_MS,
+				&config->cell_info_interval_short_ms)) {
+		DBG("%s: " RILCONF_CELL_INFO_INTERVAL_SHORT_MS " %d", group,
+					config->cell_info_interval_short_ms);
+	}
+
+	/* cellInfoIntervalLongMs */
+	if (ril_config_get_integer(file, group,
+				RILCONF_CELL_INFO_INTERVAL_LONG_MS,
+				&config->cell_info_interval_long_ms)) {
+		DBG("%s: " RILCONF_CELL_INFO_INTERVAL_LONG_MS " %d",
+				group, config->cell_info_interval_long_ms);
+	}
+
+	/* Replace devmon with a new one with applied settings */
+	ril_devmon_free(slot->devmon);
+	slot->devmon = NULL;
+
 	/* deviceStateTracking */
 	if (ril_config_get_mask(file, group, RILCONF_DEVMON, &ival,
 				"ds", RIL_DEVMON_DS,
@@ -1750,11 +1777,16 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 		int n = 0;
 		struct ril_devmon *devmon[3];
 
-		if (ival & RIL_DEVMON_DS) devmon[n++] = ril_devmon_ds_new();
-		if (ival & RIL_DEVMON_SS) devmon[n++] = ril_devmon_ss_new();
-		if (ival & RIL_DEVMON_UR) devmon[n++] = ril_devmon_ur_new();
+		if (ival & RIL_DEVMON_DS) {
+			devmon[n++] = ril_devmon_ds_new(config);
+		}
+		if (ival & RIL_DEVMON_SS) {
+			devmon[n++] = ril_devmon_ss_new(config);
+		}
+		if (ival & RIL_DEVMON_UR) {
+			devmon[n++] = ril_devmon_ur_new(config);
+		}
 		DBG("%s: " RILCONF_DEVMON " 0x%x", group, ival);
-		ril_devmon_free(slot->devmon);
 		slot->devmon = ril_devmon_combine(devmon, n);
 	} else {
 		/* Try special values */
@@ -1762,13 +1794,14 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 		if (sval) {
 			if (!g_ascii_strcasecmp(sval, "none")) {
 				DBG("%s: " RILCONF_DEVMON " %s", group, sval);
-				ril_devmon_free(slot->devmon);
-				slot->devmon = NULL;
 			} else if (!g_ascii_strcasecmp(sval, "auto")) {
 				DBG("%s: " RILCONF_DEVMON " %s", group, sval);
-				/* This is the default */
+				slot->devmon = ril_devmon_auto_new(config);
 			}
 			g_free(sval);
+		} else {
+			/* This is the default */
+			slot->devmon = ril_devmon_auto_new(config);
 		}
 	}
 

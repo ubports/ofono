@@ -65,7 +65,7 @@ static void ril_devmon_auto_free(struct ril_devmon *devmon)
 	g_free(self);
 }
 
-struct ril_devmon *ril_devmon_auto_new()
+struct ril_devmon *ril_devmon_auto_new(const struct ril_slot_config *config)
 {
 	DevMon *self = g_new0(DevMon, 1);
 
@@ -78,8 +78,8 @@ struct ril_devmon *ril_devmon_auto_new()
 	 */
 	self->pub.free = ril_devmon_auto_free;
 	self->pub.start_io = ril_devmon_auto_start_io;
-	self->ss = ril_devmon_ss_new();
-	self->ds = ril_devmon_ds_new();
+	self->ss = ril_devmon_ss_new(config);
+	self->ds = ril_devmon_ds_new(config);
 	return &self->pub;
 }
 

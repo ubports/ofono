@@ -373,7 +373,7 @@ static void ril_cell_info_query(struct ril_cell_info *self)
 static void ril_cell_info_set_rate(struct ril_cell_info *self)
 {
 	GRilIoRequest *req = grilio_request_array_int32_new(1,
-		(self->update_rate_ms > 0) ? self->update_rate_ms : INT_MAX);
+		(self->update_rate_ms >= 0) ? self->update_rate_ms : INT_MAX);
 
 	grilio_request_set_retry(req, RIL_RETRY_MS, MAX_RETRIES);
 	grilio_request_set_retry_func(req, ril_cell_info_retry);

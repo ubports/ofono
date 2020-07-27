@@ -34,33 +34,29 @@ struct ril_devmon {
 		GRilIoChannel *channel, struct sailfish_cell_info *cell_info);
 };
 
-/* Cell info update intervals */
-#define RIL_CELL_INFO_INTERVAL_SHORT_MS (2000) /* 2 sec */
-#define RIL_CELL_INFO_INTERVAL_LONG_MS (30000) /* 30 sec */
-
 /*
  * Legacy Device Monitor uses RIL_REQUEST_SCREEN_STATE to tell
  * the modem when screen turns on and off.
  */
-struct ril_devmon *ril_devmon_ss_new(void);
+struct ril_devmon *ril_devmon_ss_new(const struct ril_slot_config *config);
 
 /*
  * This Device Monitor uses RIL_REQUEST_SEND_DEVICE_STATE to let
  * the modem choose the right power saving strategy. It basically
  * mirrors the logic of Android's DeviceStateMonitor class.
  */
-struct ril_devmon *ril_devmon_ds_new(void);
+struct ril_devmon *ril_devmon_ds_new(const struct ril_slot_config *config);
 
 /*
  * This Device Monitor implementation controls network state updates
  * by sending SET_UNSOLICITED_RESPONSE_FILTER.
  */
-struct ril_devmon *ril_devmon_ur_new(void);
+struct ril_devmon *ril_devmon_ur_new(const struct ril_slot_config *config);
 
 /*
  * This one selects the type based on the RIL version.
  */
-struct ril_devmon *ril_devmon_auto_new(void);
+struct ril_devmon *ril_devmon_auto_new(const struct ril_slot_config *config);
 
 /*
  * This one combines several methods. Takes ownership of ril_devmon objects.

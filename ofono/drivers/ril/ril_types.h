@@ -79,6 +79,8 @@ struct ril_slot_config {
 	guint mms_data_profile_id;
 	GUtilInts *local_hangup_reasons;
 	GUtilInts *remote_hangup_reasons;
+	int cell_info_interval_short_ms;
+	int cell_info_interval_long_ms;
 };
 
 #endif /* RIL_TYPES_H */
