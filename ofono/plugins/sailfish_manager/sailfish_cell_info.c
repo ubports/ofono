@@ -128,6 +128,14 @@ void sailfish_cell_info_set_update_interval(struct sailfish_cell_info *info,
 	}
 }
 
+void sailfish_cell_info_set_enabled(struct sailfish_cell_info *info,
+					gboolean enabled)
+{
+	if (info && info->proc->set_enabled) {
+		info->proc->set_enabled(info, enabled);
+	}
+}
+
 /*
  * Local Variables:
  * mode: C

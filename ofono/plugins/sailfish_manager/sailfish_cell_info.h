@@ -89,6 +89,7 @@ struct sailfish_cell_info_proc {
 					sailfish_cell_info_cb_t cb, void *arg);
 	void (*remove_handler)(struct sailfish_cell_info *info, gulong id);
 	void (*set_update_interval)(struct sailfish_cell_info *info, int ms);
+	void (*set_enabled)(struct sailfish_cell_info *info, gboolean enabled);
 };
 
 /* Utilities */
@@ -107,6 +108,8 @@ void sailfish_cell_info_remove_handler(struct sailfish_cell_info *info,
 					gulong id);
 void sailfish_cell_info_set_update_interval(struct sailfish_cell_info *info,
 					int ms);
+void sailfish_cell_info_set_enabled(struct sailfish_cell_info *info,
+					gboolean enabled);
 
 #endif /* SAILFISH_CELINFO_H */
 
