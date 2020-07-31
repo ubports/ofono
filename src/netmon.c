@@ -213,6 +213,27 @@ static void netmon_cell_info_dict_append(DBusMessageIter *dict,
 					intval, uint8_t, DBUS_TYPE_BYTE);
 			break;
 
+		case OFONO_NETMON_INFO_PCI:
+			intval = va_arg(*arglist, int);
+
+			CELL_INFO_DICT_APPEND(dict, "PhysicalCellId",
+					intval, uint16_t, DBUS_TYPE_UINT16);
+			break;
+
+		case OFONO_NETMON_INFO_TAC:
+			intval = va_arg(*arglist, int);
+
+			CELL_INFO_DICT_APPEND(dict, "TrackingAreaCode",
+					intval, uint16_t, DBUS_TYPE_UINT16);
+			break;
+
+		case OFONO_NETMON_INFO_SNR:
+			intval = va_arg(*arglist, int);
+
+			ofono_dbus_dict_append(dict, "SingalToNoiseRatio",
+					DBUS_TYPE_INT32, &intval);
+			break;
+
 		case OFONO_NETMON_INFO_INVALID:
 			break;
 		}

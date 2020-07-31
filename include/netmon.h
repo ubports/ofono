@@ -72,6 +72,9 @@ enum ofono_netmon_info {
 	OFONO_NETMON_INFO_EARFCN, /* int */
 	OFONO_NETMON_INFO_EBAND, /* int */
 	OFONO_NETMON_INFO_CQI, /* int */
+	OFONO_NETMON_INFO_PCI, /* int */
+	OFONO_NETMON_INFO_TAC, /* int */
+	OFONO_NETMON_INFO_SNR, /* int */
 	OFONO_NETMON_INFO_INVALID,
 };
 
