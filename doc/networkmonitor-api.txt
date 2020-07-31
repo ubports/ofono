@@ -118,7 +118,7 @@ uint16 PrimaryScramblingCode [optional, umts]
 
 	Contains the scrambling code.  Valid range of values is 0-512.
 
-byte TimingAdvance [optional, gsm]
+byte TimingAdvance [optional, gsm, lte]
 
 	Contains the Timing Advance.  Valid range of values is 0-219.
 
@@ -165,3 +165,17 @@ byte ChannelQualityIndicator [optional, lte]
 
 	Contains Channel Quality Indicator.  Refer to Channel Quality
 	Indicator definition in 36.213, Section 7.2.3 for more details.
+
+uint16 PhysicalCellId [optional, lte]
+
+    Contains Physical Cell Id.  Valid range of values is 0-503.
+
+uint16 TrackingAreaCode [optional, lte]
+
+	Contains Tracking Area Code.  Valid range of values is 0-65535.
+
+int32 SingalToNoiseRatio [optional, lte]
+
+    Contains Signal To Noise Ratio.  Valid range of values is -200 to +300.
+    The value is in 0.1 dB units. (-200 = -20.0 dB, +300 = 30dB)
+    Refer to <snr> in 36.101, Section 8.1.1 for more details.
