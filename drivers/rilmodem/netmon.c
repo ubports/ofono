@@ -109,6 +109,9 @@ static int process_cellinfo_list(struct ril_msg *message,
 	int mcc, mnc;
 	int lac, cid, psc;
 	int rssi, ber;
+	int ci, pci, tac;
+	int rsrp, rsrq, rssnr;
+	int cqi, tadv;
 	char s_mcc[OFONO_MAX_MCC_LENGTH + 1];
 	char s_mnc[OFONO_MAX_MNC_LENGTH + 1];
 	int i, j;
@@ -214,6 +217,54 @@ static int process_cellinfo_list(struct ril_msg *message,
 				OFONO_NETMON_INFO_PSC, psc,
 				OFONO_NETMON_INFO_RSSI, rssi,
 				OFONO_NETMON_INFO_BER, ber,
+				OFONO_NETMON_INFO_INVALID);
+
+	} else if (cell_type == NETMON_RIL_CELLINFO_TYPE_LTE) {
+		mcc = parcel_r_int32(&rilp);
+		mnc = parcel_r_int32(&rilp);
+		ci =  parcel_r_int32(&rilp);
+		pci = parcel_r_int32(&rilp);
+		tac = parcel_r_int32(&rilp);
+		rssi = parcel_r_int32(&rilp);
+		rsrp = parcel_r_int32(&rilp);
+		rsrq = parcel_r_int32(&rilp);
+		rssnr = parcel_r_int32(&rilp);
+		cqi = parcel_r_int32(&rilp);
+		tadv = parcel_r_int32(&rilp);
+
+		if (mcc >= 0 && mcc <= 999)
+		snprintf(s_mcc, sizeof(s_mcc), "%03d", mcc);
+		else
+		strcpy(s_mcc, "");
+
+		if (mnc >= 0 && mnc <= 999)
+		snprintf(s_mnc, sizeof(s_mnc), "%03d", mnc);
+		else
+		strcpy(s_mnc, "");
+
+		ci = (ci >= 0 && ci <= 268435455) ? ci : -1;
+		pci = (pci >= 0 && pci <= 503) ? pci : -1;
+		tac = (tac >= 0 && tac <= 65535) ? tac : -1;
+		rssi = (rssi >= 0 && rssi <= 31) ? rssi : -1;
+		rsrp = (rsrp >= 44 && rsrp <= 140) ? -rsrp : -1;
+		rsrq = (rsrq >= 3 && rsrq <= 20) ? -rsrq : -1;
+		rssnr = (rssnr >= -200 && rssnr <= 300) ? rssnr : -1;
+		cqi = (cqi >= 0 && cqi <= 15) ? cqi : -1;
+		tadv = (tadv >=0 && tadv <= 63) ? tadv : -1;
+
+		ofono_netmon_serving_cell_notify(netmon,
+				OFONO_NETMON_CELL_TYPE_LTE,
+				OFONO_NETMON_INFO_MCC, s_mcc,
+				OFONO_NETMON_INFO_MNC, s_mnc,
+				OFONO_NETMON_INFO_CI, ci,
+				OFONO_NETMON_INFO_PCI, pci,
+				OFONO_NETMON_INFO_TAC, tac,
+				OFONO_NETMON_INFO_RSSI, rssi,
+				OFONO_NETMON_INFO_RSRP, rsrp,
+				OFONO_NETMON_INFO_RSRQ, rsrq,
+				OFONO_NETMON_INFO_SNR, rssnr,
+				OFONO_NETMON_INFO_CQI, cqi,
+				OFONO_NETMON_INFO_TIMING_ADVANCE, tadv,
 				OFONO_NETMON_INFO_INVALID);
 
 	}
