@@ -425,10 +425,12 @@ static void qind_notify(GAtResult *result, void *user_data)
 	if (!g_at_result_iter_next_string(&iter, &type))
 		return;
 
-	if (!g_at_result_iter_next_number(&iter, &event))
-		return;
+	if (g_strcmp0("vbatt", type)) {
+		if (!g_at_result_iter_next_number(&iter, &event))
+			return;
 
-	voltage_handle(hw->modem, event);
+		voltage_handle(hw->modem, event);
+	}
 }
 
 static void power_notify(GAtResult *result, void *user_data)
