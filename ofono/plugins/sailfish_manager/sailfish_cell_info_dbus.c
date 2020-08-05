@@ -15,7 +15,9 @@
 
 #include "sailfish_cell_info_dbus.h"
 #include "sailfish_cell_info.h"
+#include "sailfish_dbus_clients.h"
 
+#include <ofono.h>
 #include <ofono/modem.h>
 #include <ofono/dbus.h>
 #include <ofono/log.h>
@@ -35,6 +37,7 @@ struct sailfish_cell_info_dbus {
 	gulong handler_id;
 	guint next_cell_id;
 	GSList *entries;
+	struct sailfish_dbus_clients *clients;
 };
 
 #define CELL_INFO_DBUS_INTERFACE            "org.nemomobile.ofono.CellInfo"
@@ -496,19 +499,27 @@ static DBusMessage *sailfish_cell_info_dbus_get_cells(DBusConnection *conn,
 						DBusMessage *msg, void *data)
 {
 	struct sailfish_cell_info_dbus *dbus = data;
-	DBusMessage *reply = dbus_message_new_method_return(msg);
-	DBusMessageIter it, array;
-	GSList *l;
+	struct sailfish_dbus_client *client;
 
-	dbus_message_iter_init_append(reply, &it);
-	dbus_message_iter_open_container(&it, DBUS_TYPE_ARRAY, "o", &array);
-	for (l = dbus->entries; l; l = l->next) {
-		const struct sailfish_cell_entry *entry = l->data;
-		dbus_message_iter_append_basic(&array, DBUS_TYPE_OBJECT_PATH,
-								&entry->path);
+	client = sailfish_dbus_clients_new_client(dbus->clients, msg);
+	if (client) {
+		DBusMessage *reply = dbus_message_new_method_return(msg);
+		DBusMessageIter it, array;
+		GSList *l;
+
+		sailfish_cell_info_set_enabled(dbus->info, TRUE);
+		dbus_message_iter_init_append(reply, &it);
+		dbus_message_iter_open_container(&it, DBUS_TYPE_ARRAY,
+								"o", &array);
+		for (l = dbus->entries; l; l = l->next) {
+			const struct sailfish_cell_entry *entry = l->data;
+			dbus_message_iter_append_basic(&array,
+					DBUS_TYPE_OBJECT_PATH, &entry->path);
+		}
+		dbus_message_iter_close_container(&it, &array);
+		return reply;
 	}
-	dbus_message_iter_close_container(&it, &array);
-	return reply;
+	return __ofono_error_access_denied(msg);
 }
 
 static const GDBusMethodTable sailfish_cell_info_dbus_methods[] = {
@@ -525,6 +536,12 @@ static const GDBusSignalTable sailfish_cell_info_dbus_signals[] = {
 			GDBUS_ARGS({ "paths", "ao" })) },
 	{ }
 };
+
+static void sailfish_cell_info_dbus_disable_cb(void *user_data)
+{
+	struct sailfish_cell_info_dbus *dbus = user_data;
+	sailfish_cell_info_set_enabled(dbus->info, FALSE);
+}
 
 struct sailfish_cell_info_dbus *sailfish_cell_info_dbus_new
 		(struct ofono_modem *modem, struct sailfish_cell_info *info)
@@ -550,6 +567,10 @@ struct sailfish_cell_info_dbus *sailfish_cell_info_dbus_new
 			ofono_modem_add_interface(modem,
 						CELL_INFO_DBUS_INTERFACE);
 			sailfish_cell_info_dbus_update_entries(dbus, FALSE);
+			dbus->clients =
+				sailfish_dbus_clients_new(dbus->conn,
+					sailfish_cell_info_dbus_disable_cb,
+					dbus);
 			return dbus;
 		} else {
 			ofono_error("CellInfo D-Bus register failed");
@@ -565,6 +586,7 @@ void sailfish_cell_info_dbus_free(struct sailfish_cell_info_dbus *dbus)
 		GSList *l;
 
 		DBG("%s", dbus->path);
+		sailfish_dbus_clients_free(dbus->clients);
 		g_dbus_unregister_interface(dbus->conn, dbus->path,
 					CELL_INFO_DBUS_INTERFACE);
 

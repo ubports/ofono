@@ -126,7 +126,8 @@ builtin_sources += plugins/sailfish_manager/sailfish_cell_info.c \
 			plugins/sailfish_manager/sailfish_manager.c \
 			plugins/sailfish_manager/sailfish_manager_dbus.c \
 			plugins/sailfish_manager/sailfish_sim_info.c \
-			plugins/sailfish_manager/sailfish_sim_info_dbus.c
+			plugins/sailfish_manager/sailfish_sim_info_dbus.c \
+			plugins/sailfish_manager/sailfish_dbus_clients.c
 endif
 
 
@@ -979,6 +980,7 @@ unit_tests += unit/test-sailfish_cell_info
 unit_test_sailfish_cell_info_dbus_SOURCES = unit/test-dbus.c \
 			unit/test-sailfish_cell_info_dbus.c \
 			unit/fake_sailfish_cell_info.c \
+			unit/fake_sailfish_dbus_clients.c \
 			plugins/sailfish_manager/sailfish_cell_info.c \
 			plugins/sailfish_manager/sailfish_cell_info_dbus.c \
 			gdbus/object.c \

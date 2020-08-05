@@ -542,8 +542,8 @@ struct sailfish_cell_info *ril_cell_info_new(GRilIoChannel *io,
 	self->sim_card_ready = ril_sim_card_ready(sim_card);
 	ril_cell_info_refresh(self);
 
-	/* Enable updates by default */
-	self->enabled = TRUE;
+	/* Disable updates by default */
+	self->enabled = FALSE;
 	if (self->sim_card_ready) {
 		ril_cell_info_set_rate(self);
 	}
