@@ -340,7 +340,7 @@ static void sailfish_cell_info_dbus_emit_path_list
 	}
 	dbus_message_iter_close_container(&it, &array);
 
-	g_dbus_send_message(dbus->conn, signal);
+	sailfish_dbus_clients_send(dbus->clients, signal);
 }
 
 static int sailfish_cell_info_dbus_compare(const struct sailfish_cell *c1,
@@ -390,9 +390,10 @@ static void sailfish_cell_info_dbus_property_changed
 
 	for (i = 0; i < n && mask; i++) {
 		if (mask & prop[i].flag) {
-			ofono_dbus_signal_property_changed(dbus->conn,
-				entry->path, CELL_DBUS_INTERFACE,
-				prop[i].name, DBUS_TYPE_INT32,
+			sailfish_dbus_clients_signal_property_changed(
+				dbus->clients, entry->path,
+				CELL_DBUS_INTERFACE, prop[i].name,
+				DBUS_TYPE_INT32,
 				G_STRUCT_MEMBER_P(&cell->info, prop[i].off));
 			mask &= ~prop[i].flag;
 		}
