@@ -43,6 +43,7 @@ struct sailfish_cell_info_dbus {
 #define CELL_INFO_DBUS_INTERFACE            "org.nemomobile.ofono.CellInfo"
 #define CELL_INFO_DBUS_CELLS_ADDED_SIGNAL   "CellsAdded"
 #define CELL_INFO_DBUS_CELLS_REMOVED_SIGNAL "CellsRemoved"
+#define CELL_INFO_DBUS_UNSUBSCRIBED_SIGNAL  "Unsubscribed"
 
 #define CELL_DBUS_INTERFACE_VERSION         (1)
 #define CELL_DBUS_INTERFACE                 "org.nemomobile.ofono.Cell"
@@ -522,10 +523,32 @@ static DBusMessage *sailfish_cell_info_dbus_get_cells(DBusConnection *conn,
 	return __ofono_error_access_denied(msg);
 }
 
+static DBusMessage *sailfish_cell_info_dbus_unsubscribe(DBusConnection *conn,
+						DBusMessage *msg, void *data)
+{
+	struct sailfish_cell_info_dbus *dbus = data;
+	struct sailfish_dbus_client *client;
+
+	DBG("");
+	client = sailfish_dbus_clients_lookup_client(dbus->clients, msg);
+	if (client) {
+		DBusMessage *signal = dbus_message_new_signal(
+					dbus_message_get_path(msg),
+					CELL_INFO_DBUS_INTERFACE,
+					CELL_INFO_DBUS_UNSUBSCRIBED_SIGNAL);
+		sailfish_dbus_clients_send_to(client, signal);
+		sailfish_dbus_clients_remove_client(client);
+		return dbus_message_new_method_return(msg);
+	}
+	return __ofono_error_access_denied(msg);
+}
+
 static const GDBusMethodTable sailfish_cell_info_dbus_methods[] = {
 	{ GDBUS_METHOD("GetCells", NULL,
 			GDBUS_ARGS({ "paths", "ao" }),
 			sailfish_cell_info_dbus_get_cells) },
+	{ GDBUS_METHOD("Unsubscribe", NULL, NULL,
+			sailfish_cell_info_dbus_unsubscribe) },
 	{ }
 };
 
