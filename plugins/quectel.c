@@ -1032,7 +1032,7 @@ static void cgmm_cb(int ok, GAtResult *result, void *user_data)
 		data->model = QUECTEL_MC60;
 	} else if (strcmp(model, "EC21") == 0) {
 		DBG("%p model EC21", modem);
-		data->vendor = OFONO_VENDOR_QUECTEL;
+		data->vendor = OFONO_VENDOR_QUECTEL_EC2X;
 		data->model = QUECTEL_EC21;
 	} else {
 		ofono_warn("%p unknown model: '%s'", modem, model);
