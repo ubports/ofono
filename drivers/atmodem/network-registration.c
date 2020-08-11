@@ -957,6 +957,66 @@ static void tlts_notify(GAtResult *result, gpointer user_data)
 	ofono_netreg_time_notify(netreg, &nd->time);
 }
 
+static void quectel_qind_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_netreg *netreg = user_data;
+	struct at_netreg_data *nd = ofono_netreg_get_data(netreg);
+	int rssi, ber, strength;
+	const char *str;
+	GAtResultIter iter;
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "+QIND:"))
+		return;
+
+	if (!g_at_result_iter_next_string(&iter, &str))
+		return;
+
+	if (g_str_equal("csq", str)) {
+		if (!g_at_result_iter_next_number(&iter, &rssi))
+			return;
+
+		if (!g_at_result_iter_next_number(&iter, &ber))
+			return;
+
+		DBG("rssi %d ber %d", rssi, ber);
+
+		if ((rssi == 99) || (rssi == 199))
+			strength = -1;
+		else if (rssi > 99) {
+			rssi -= 100;
+			strength = (rssi * 100) / 91;
+		} else
+			strength = (rssi * 100) / 31;
+
+		ofono_netreg_strength_notify(netreg, strength);
+		return;
+	}
+
+	if (g_str_equal("act", str)) {
+		nd->tech = -1;
+		if (!g_at_result_iter_next_string(&iter, &str))
+			return;
+
+		DBG("technology %s", str);
+		if (g_str_equal("GSM", str))
+			nd->tech = ACCESS_TECHNOLOGY_GSM;
+		else if (g_str_equal("EGPRS", str))
+			nd->tech = ACCESS_TECHNOLOGY_GSM_EGPRS;
+		else if (g_str_equal("WCDMA", str))
+			nd->tech = ACCESS_TECHNOLOGY_UTRAN;
+		else if (g_str_equal("HSDPA", str))
+			nd->tech = ACCESS_TECHNOLOGY_UTRAN_HSDPA;
+		else if (g_str_equal("HSUPA", str))
+			nd->tech = ACCESS_TECHNOLOGY_UTRAN_HSUPA;
+		else if (g_str_equal("HSDPA&HSUPA", str))
+			nd->tech = ACCESS_TECHNOLOGY_UTRAN_HSDPA_HSUPA;
+		else if (g_str_equal("LTE", str))
+			nd->tech = ACCESS_TECHNOLOGY_EUTRAN;
+	}
+}
+
 static gboolean notify_time(gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
@@ -2046,6 +2106,17 @@ static void at_creg_set_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	case OFONO_VENDOR_NOKIA:
 	case OFONO_VENDOR_SAMSUNG:
 		/* Signal strength reporting via CIND is not supported */
+		break;
+	case OFONO_VENDOR_QUECTEL_EC2X:
+		g_at_chat_register(nd->chat, "+QIND:",
+				quectel_qind_notify, FALSE, netreg, NULL);
+		/* Register for specific signal strength reports */
+		g_at_chat_send(nd->chat, "AT+QINDCFG=\"csq\",1", none_prefix,
+				NULL, NULL, NULL);
+
+		/* Register for network technology updates */
+		g_at_chat_send(nd->chat, "AT+QINDCFG=\"act\",1", none_prefix,
+				NULL, NULL, NULL);
 		break;
 	default:
 		g_at_chat_send(nd->chat, "AT+CIND=?", cind_prefix,

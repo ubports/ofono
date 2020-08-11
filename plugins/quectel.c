@@ -1286,7 +1286,7 @@ static void quectel_post_online(struct ofono_modem *modem)
 
 	DBG("%p", modem);
 
-	ofono_netreg_create(modem, 0, "atmodem", data->aux);
+	ofono_netreg_create(modem, data->vendor, "atmodem", data->aux);
 }
 
 static struct ofono_modem_driver quectel_driver = {
