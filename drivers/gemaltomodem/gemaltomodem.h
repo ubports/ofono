@@ -27,3 +27,6 @@ extern void gemalto_location_reporting_exit();
 
 extern void gemalto_voicecall_init();
 extern void gemalto_voicecall_exit();
+
+extern void gemalto_gprs_context_init();
+extern void gemalto_gprs_context_exit();
