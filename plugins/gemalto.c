@@ -588,6 +588,8 @@ static void gemalto_post_sim(struct ofono_modem *modem)
 	struct ofono_gprs *gprs;
 	struct ofono_gprs_context *gc;
 	const char *model = ofono_modem_get_string(modem, "Model");
+	const char *driver = NULL;
+	const char *iface = NULL;
 
 	DBG("%p", modem);
 
@@ -596,7 +598,15 @@ static void gemalto_post_sim(struct ofono_modem *modem)
 	ofono_sms_create(modem, OFONO_VENDOR_GEMALTO, "atmodem", data->app);
 
 	gprs = ofono_gprs_create(modem, 0, "atmodem", data->app);
-	gc = ofono_gprs_context_create(modem, 0, "atmodem", data->mdm);
+
+	iface = ofono_modem_get_string(modem, "NetworkInterface");
+	if (iface) {
+		driver = "gemaltomodem";
+	} else {
+		driver = "atmodem";
+	}
+
+	gc = ofono_gprs_context_create(modem, 0, driver, data->mdm);
 
 	if (gprs && gc)
 		ofono_gprs_add_context(gprs, gc);
