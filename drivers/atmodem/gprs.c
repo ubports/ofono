@@ -625,6 +625,7 @@ static void gprs_initialized(gboolean ok, GAtResult *result, gpointer user_data)
 						NULL, NULL, NULL);
 		break;
 	case OFONO_VENDOR_QUECTEL_EC2X:
+	case OFONO_VENDOR_QUECTEL_SERIAL:
 		break;
 	default:
 		g_at_chat_register(gd->chat, "+CPSB:", cpsb_notify,
