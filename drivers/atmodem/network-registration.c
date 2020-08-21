@@ -780,15 +780,26 @@ static void ifx_xciev_notify(GAtResult *result, gpointer user_data)
 	 */
 }
 
-static void ifx_xcsq_notify(GAtResult *result, gpointer user_data)
+static void ifx_quec_csq_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_netreg *netreg = user_data;
+	struct at_netreg_data *nd = ofono_netreg_get_data(netreg);
 	int rssi, ber, strength;
 	GAtResultIter iter;
+	const char *prefix;
 
 	g_at_result_iter_init(&iter, result);
 
-	if (!g_at_result_iter_next(&iter, "+XCSQ:"))
+	switch (nd->vendor) {
+	case  OFONO_VENDOR_QUECTEL_SERIAL:
+		prefix = "+CSQN:";
+		break;
+	default:
+		prefix = "+XCSQ:";
+		break;
+	}
+
+	if (!g_at_result_iter_next(&iter, prefix))
 		return;
 
 	if (!g_at_result_iter_next_number(&iter, &rssi))
@@ -2027,7 +2038,7 @@ static void at_creg_set_cb(gboolean ok, GAtResult *result, gpointer user_data)
 		/* Register for specific signal strength reports */
 		g_at_chat_register(nd->chat, "+XCIEV:", ifx_xciev_notify,
 						FALSE, netreg, NULL);
-		g_at_chat_register(nd->chat, "+XCSQ:", ifx_xcsq_notify,
+		g_at_chat_register(nd->chat, "+XCSQ:", ifx_quec_csq_notify,
 						FALSE, netreg, NULL);
 		g_at_chat_send(nd->chat, "AT+XCSQ=1", none_prefix,
 						NULL, NULL, NULL);
@@ -2116,6 +2127,13 @@ static void at_creg_set_cb(gboolean ok, GAtResult *result, gpointer user_data)
 
 		/* Register for network technology updates */
 		g_at_chat_send(nd->chat, "AT+QINDCFG=\"act\",1", none_prefix,
+				NULL, NULL, NULL);
+		break;
+	case OFONO_VENDOR_QUECTEL_SERIAL:
+		g_at_chat_register(nd->chat, "+CSQN:",
+				ifx_quec_csq_notify, FALSE, netreg, NULL);
+		/* Register for specific signal strength reports */
+		g_at_chat_send(nd->chat, "AT+QEXTUNSOL=\"SQ\",1", none_prefix,
 				NULL, NULL, NULL);
 		break;
 	default:
