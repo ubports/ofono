@@ -503,7 +503,7 @@ static int ril_netreg_get_signal_strength(struct ril_netreg *nd,
 			signal.qdbm = -4 * tdscdma_dbm;
 		} else if (signal.lte == 99 && rsrp >= 44 && rsrp <= 140) {
 			/* RSRP range: 44 to 140 dBm per 3GPP TS 36.133 */
-			signal.qdbm = -rsrp;
+			signal.qdbm = -4 * rsrp;
 		}
 	}
 
