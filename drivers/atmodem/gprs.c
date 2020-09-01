@@ -45,6 +45,7 @@
 #define MAX_CONTEXTS 255
 
 static const char *cgreg_prefix[] = { "+CGREG:", NULL };
+static const char *cgerep_prefix[] = { "+CGEREP:", NULL };
 static const char *cgdcont_prefix[] = { "+CGDCONT:", NULL };
 static const char *cgact_prefix[] = { "+CGACT:", NULL };
 static const char *none_prefix[] = { NULL };
@@ -648,6 +649,65 @@ static void gprs_initialized(gboolean ok, GAtResult *result, gpointer user_data)
 	ofono_gprs_register(gprs);
 }
 
+static void at_cgerep_test_cb(gboolean ok, GAtResult *result,
+				gpointer user_data)
+{
+	struct ofono_gprs *gprs = user_data;
+	struct gprs_data *gd = ofono_gprs_get_data(gprs);
+	GAtResultIter iter;
+	int min, max, arg1 = 0, arg2 = 0;
+	gboolean two_arguments = true;
+	char buf[20];
+
+	if (!ok) {
+		ofono_error("Error querying AT+CGEREP=? Failing...");
+		ofono_gprs_remove(gprs);
+		return;
+	}
+
+	g_at_result_iter_init(&iter, result);
+
+	g_at_result_iter_next(&iter, "+CGEREP:");
+
+	if (!g_at_result_iter_open_list(&iter)) {
+		ofono_error("Malformed reply from AT+CGEREP=? Failing...");
+		ofono_gprs_remove(gprs);
+		return;
+	}
+
+	while (g_at_result_iter_next_range(&iter, &min, &max)) {
+		if ((min <= 1) && (max >= 1))
+			arg1 = 1;
+
+		if ((min <= 2) && (max >= 2))
+			arg1 = 2;
+	}
+
+	if (!g_at_result_iter_close_list(&iter))
+		goto out;
+
+	if (!g_at_result_iter_open_list(&iter)) {
+		two_arguments = false;
+		goto out;
+	}
+
+	while (g_at_result_iter_next_range(&iter, &min, &max)) {
+		if ((min <= 1) && (max >= 1))
+			arg2 = 1;
+	}
+
+	g_at_result_iter_close_list(&iter);
+
+out:
+	if (two_arguments)
+		sprintf(buf, "AT+CGEREP=%u,%u", arg1, arg2);
+	else
+		sprintf(buf, "AT+CGEREP=%u", arg1);
+
+	g_at_chat_send(gd->chat, buf, none_prefix, gprs_initialized, gprs,
+		NULL);
+}
+
 static void at_cgreg_test_cb(gboolean ok, GAtResult *result,
 				gpointer user_data)
 {
@@ -702,8 +762,8 @@ retry:
 			gprs_initialized, gprs, NULL);
 		break;
 	default:
-		g_at_chat_send(gd->chat, "AT+CGEREP=2,1", none_prefix,
-			gprs_initialized, gprs, NULL);
+		g_at_chat_send(gd->chat, "AT+CGEREP=?", cgerep_prefix,
+			at_cgerep_test_cb, gprs, NULL);
 		break;
 	}
 
