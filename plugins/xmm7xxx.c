@@ -60,7 +60,6 @@
 #include "ofono.h"
 #include "gdbus.h"
 #include "util.h"
-#include "dbus.h"
 
 #define OFONO_COEX_INTERFACE OFONO_SERVICE ".intel.LteCoexistence"
 #define OFONO_COEX_AGENT_INTERFACE OFONO_SERVICE ".intel.LteCoexistenceAgent"
