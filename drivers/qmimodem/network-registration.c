@@ -128,10 +128,18 @@ static bool extract_ss_info(struct qmi_result *result, int *status,
 
 	plmn = qmi_result_get(result, QMI_NAS_RESULT_CURRENT_PLMN, &len);
 	if (plmn) {
-		snprintf(operator->mcc, OFONO_MAX_MCC_LENGTH + 1, "%03d",
-						GUINT16_FROM_LE(plmn->mcc));
-		snprintf(operator->mnc, OFONO_MAX_MNC_LENGTH + 1, "%02d",
-						GUINT16_FROM_LE(plmn->mnc));
+		uint16_t mcc = GUINT16_FROM_LE(plmn->mcc);
+		uint16_t mnc = GUINT16_FROM_LE(plmn->mnc);
+
+		if (mcc > 999)
+			mcc = 999;
+
+		if (mnc > 999)
+			mnc = 999;
+
+		snprintf(operator->mcc, OFONO_MAX_MCC_LENGTH + 1, "%03d", mcc);
+		snprintf(operator->mnc, OFONO_MAX_MNC_LENGTH + 1, "%03d", mnc);
+
 		opname_len = plmn->desc_len;
 		if (opname_len > OFONO_MAX_OPERATOR_NAME_LENGTH)
 			opname_len = OFONO_MAX_OPERATOR_NAME_LENGTH;
@@ -311,11 +319,17 @@ static void scan_nets_cb(struct qmi_result *result, void *user_data)
 
 	for (i = 0; i < num; i++) {
 		const struct qmi_nas_network_info *netinfo = ptr + offset;
+		uint16_t mcc = GUINT16_FROM_LE(netinfo->mcc);
+		uint16_t mnc = GUINT16_FROM_LE(netinfo->mnc);
 
-		snprintf(list[i].mcc, OFONO_MAX_MCC_LENGTH + 1, "%03d",
-						GUINT16_FROM_LE(netinfo->mcc));
-		snprintf(list[i].mnc, OFONO_MAX_MNC_LENGTH + 1, "%02d",
-						GUINT16_FROM_LE(netinfo->mnc));
+		if (mcc > 999)
+			mcc = 999;
+
+		if (mnc > 999)
+			mnc = 999;
+
+		snprintf(list[i].mcc, OFONO_MAX_MCC_LENGTH + 1, "%03d", mcc);
+		snprintf(list[i].mnc, OFONO_MAX_MNC_LENGTH + 1, "%03d", mnc);
 		strncpy(list[i].name, netinfo->desc, netinfo->desc_len);
 		list[i].name[netinfo->desc_len] = '\0';
 
