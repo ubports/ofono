@@ -161,6 +161,11 @@ static void clcc_poll_cb(gboolean ok, GAtResult *result, gpointer user_data)
 			goto poll_again;
 		}
 
+		if (vd->vendor == OFONO_VENDOR_DROID) {
+			poll_again = TRUE;
+			goto poll_again;
+		}
+
 		ofono_error("We are polling CLCC and received an error");
 		ofono_error("All bets are off for call management");
 		return;
