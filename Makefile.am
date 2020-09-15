@@ -604,6 +604,9 @@ builtin_sources += plugins/ublox.c
 builtin_modules += xmm7xxx
 builtin_sources += plugins/xmm7xxx.c
 
+builtin_modules += droid
+builtin_sources += plugins/droid.c
+
 if BLUETOOTH
 if BLUEZ4
 builtin_modules += sap
