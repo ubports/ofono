@@ -1086,8 +1086,8 @@ static void init_timeout_cb(struct l_timeout *timeout, void *user_data)
 
 	DBG("%p", modem);
 
-	if (data->init_count++ >= 20) {
-		ofono_error("failed to init modem after 20 attempts");
+	if (data->init_count++ >= 30) {
+		ofono_error("failed to init modem after 30 attempts");
 		close_serial(modem);
 		return;
 	}
