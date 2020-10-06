@@ -922,6 +922,11 @@ static gboolean setup_quectel_serial(struct modem_info *modem)
 		ofono_modem_set_string(modem->modem, "GpioOffset", value);
 
 	value = udev_device_get_property_value(info->dev,
+						"OFONO_QUECTEL_GPIO_LEVEL");
+	if (value)
+		ofono_modem_set_boolean(modem->modem, "GpioLevel", TRUE);
+
+	value = udev_device_get_property_value(info->dev,
 						"OFONO_QUECTEL_MUX");
 	if (value)
 		ofono_modem_set_string(modem->modem, "Mux", value);

@@ -104,6 +104,7 @@ struct quectel_data {
 	int initial_ldisc;
 	struct l_gpio_writer *gpio;
 	struct l_timeout *init_timeout;
+	struct l_timeout *gpio_timeout;
 	size_t init_count;
 	guint init_cmd;
 };
@@ -191,6 +192,7 @@ static void quectel_remove(struct ofono_modem *modem)
 
 	ofono_modem_set_data(modem, NULL);
 	l_timeout_remove(data->init_timeout);
+	l_timeout_remove(data->gpio_timeout);
 	l_gpio_writer_free(data->gpio);
 	at_util_sim_state_query_free(data->sim_state_query);
 	g_at_chat_unref(data->aux);
@@ -234,10 +236,22 @@ static void close_ngsm(struct ofono_modem *modem)
 		ofono_warn("Failed to restore line discipline");
 }
 
+static void gpio_power_off_cb(struct l_timeout *timeout, void *user_data)
+{
+	struct ofono_modem *modem = user_data;
+	struct quectel_data *data = ofono_modem_get_data(modem);
+	const uint32_t gpio_value = 0;
+
+	l_timeout_remove(timeout);
+	data->gpio_timeout = NULL;
+	l_gpio_writer_set(data->gpio, 1, &gpio_value);
+	ofono_modem_set_powered(modem, FALSE);
+}
+
 static void close_serial(struct ofono_modem *modem)
 {
 	struct quectel_data *data = ofono_modem_get_data(modem);
-	uint32_t gpio_value = 0;
+	uint32_t gpio_value = 1;
 
 	DBG("%p", modem);
 
@@ -258,7 +272,20 @@ static void close_serial(struct ofono_modem *modem)
 	else
 		close_ngsm(modem);
 
-	l_gpio_writer_set(data->gpio, 1, &gpio_value);
+	if (data->gpio) {
+		if (ofono_modem_get_boolean(modem, "GpioLevel")) {
+			gpio_value = 0;
+			l_gpio_writer_set(data->gpio, 1, &gpio_value);
+		} else {
+			l_gpio_writer_set(data->gpio, 1, &gpio_value);
+			l_timeout_remove(data->gpio_timeout);
+			data->gpio_timeout = l_timeout_create_ms(750,
+							gpio_power_off_cb,
+							modem, NULL);
+			return;
+		}
+	}
+
 	ofono_modem_set_powered(modem, FALSE);
 }
 
@@ -1096,6 +1123,16 @@ static void init_timeout_cb(struct l_timeout *timeout, void *user_data)
 	l_timeout_modify_ms(timeout, 500);
 }
 
+static void gpio_power_on_cb(struct l_timeout *timeout, void *user_data)
+{
+	struct quectel_data *data = user_data;
+	const uint32_t gpio_value = 0;
+
+	l_timeout_remove(timeout);
+	data->gpio_timeout = NULL;
+	l_gpio_writer_set(data->gpio, 1, &gpio_value);
+}
+
 static int open_serial(struct ofono_modem *modem)
 {
 	struct quectel_data *data = ofono_modem_get_data(modem);
@@ -1138,6 +1175,10 @@ static int open_serial(struct ofono_modem *modem)
 		close_serial(modem);
 		return -EIO;
 	}
+
+	if (data->gpio && !ofono_modem_get_boolean(modem, "GpioLevel"))
+		data->gpio_timeout = l_timeout_create_ms(2100, gpio_power_on_cb,
+							 data, NULL);
 
 	/*
 	 * there are three different power-up scenarios:
