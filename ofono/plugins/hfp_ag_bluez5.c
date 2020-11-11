@@ -545,8 +545,8 @@ static int hfp_ag_init(void)
 {
 	DBusConnection *conn = ofono_dbus_get_connection();
 
-	hfp_ag_enable(conn);
-
+	/* g_dbus_add_service_watch immediately checks for bluetooth service
+	 * and calls connect callback if the service exists. */
 	service_watch_id = g_dbus_add_service_watch(conn, "org.bluez",
 	                                            bluez_connect_cb,
 	                                            bluez_disconnect_cb,
