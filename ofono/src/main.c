@@ -3,6 +3,8 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2015-2020  Jolla Ltd.
+ *  Copyright (C) 2019-2020  Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -281,7 +283,7 @@ int main(int argc, char **argv)
 
 	dbus_error_init(&error);
 
-	conn = g_dbus_setup_bus(DBUS_BUS_SYSTEM, OFONO_SERVICE, &error);
+	conn = g_dbus_setup_bus(DBUS_BUS_SYSTEM, NULL, &error);
 	if (conn == NULL) {
 		if (dbus_error_is_set(&error) == TRUE) {
 			ofono_error("Unable to hop onto D-Bus: %s",
@@ -308,7 +310,12 @@ int main(int argc, char **argv)
 	g_free(option_plugin);
 	g_free(option_noplugin);
 
-	g_main_loop_run(event_loop);
+	if (g_dbus_request_name(conn, OFONO_SERVICE, &error)) {
+		g_main_loop_run(event_loop);
+	} else {
+		ofono_error("Unable to register D-Bus name: %s", error.message);
+		dbus_error_free(&error);
+	}
 
 	__ofono_plugin_cleanup();
 
