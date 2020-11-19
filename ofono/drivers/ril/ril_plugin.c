@@ -2369,7 +2369,6 @@ static int ril_plugin_init(void)
 static void ril_plugin_exit(void)
 {
 	DBG("");
-	GASSERT(ril_driver);
 
 	ofono_ril_transport_unregister(&ril_socket_transport);
 	ofono_modem_driver_unregister(&ril_modem_driver);
