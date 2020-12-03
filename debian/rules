@@ -1,0 +1,30 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@ --with=autoreconf,systemd
+
+override_dh_auto_configure:
+	dh_auto_configure -- --libdir=/usr/lib \
+                             --enable-bluetooth \
+                             --enable-dundee \
+                             --with-systemdunitdir=/lib/systemd/system
+
+override_dh_strip:
+	dh_strip --dbgsym-migration='ofono-dbg (<< 1.18-1~)'
+
+override_dh_installinit:
+	dh_installinit --name=dundee
+	dh_installinit
+
+override_dh_install:
+	install -D -m 0644 plugins/ofono.rules debian/tmp/lib/udev/rules.d/97-ofono.rules
+	install -D -m 0644 plugins/ofono-speedup.rules debian/tmp/lib/udev/rules.d/97-ofono-speedup.rules
+	dh_install
+
+override_dh_fixperms-indep:
+	chmod 0755 debian/ofono-scripts/usr/share/ofono/scripts/set-sms-alphabet
+	chmod 0755 debian/ofono-scripts/usr/share/ofono/scripts/test-serving-cell-info
+	dh_fixperms -i
+
+override_dh_auto_test:
+	dh_auto_test --no-parallel

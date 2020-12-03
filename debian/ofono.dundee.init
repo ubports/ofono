@@ -1,0 +1,63 @@
+#! /bin/sh
+
+### BEGIN INIT INFO
+# Provides:		dundee
+# Required-Start:	$syslog $remote_fs dbus
+# Required-Stop:	$syslog $remote_fs dbus
+# Default-Start:	2 3 4 5
+# Default-Stop:		0 1 6
+# Short-Description:	Bluetooth DUN daemon
+### END INIT INFO
+
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+DAEMON=/usr/sbin/dundee
+NAME=dundee
+#PIDFILE=/var/run/ofono/$NAME.pid
+DESC="Bluetooth DUN daemon"
+
+test -x $DAEMON || exit 0
+
+. /lib/lsb/init-functions
+
+# allow the admin to set DAEMON_OPTS
+if [ -f /etc/default/dundee ]; then
+	. /etc/default/dundee
+fi
+
+do_start()
+{
+	start-stop-daemon --start --quiet --oknodo --exec $DAEMON -- $DAEMON_OPTS
+}
+
+do_stop()
+{
+	start-stop-daemon --stop --quiet --oknodo --exec $DAEMON
+}
+
+case "$1" in
+  start)
+	log_daemon_msg "Starting $DESC" "$NAME"
+	do_start
+	log_end_msg $?
+	;;
+  stop)
+	log_daemon_msg "Stopping $DESC" "$NAME"
+	do_stop
+	log_end_msg $?
+	;;
+
+  restart|force-reload)
+	log_daemon_msg "Restarting $DESC" "$NAME"
+	do_stop
+	sleep 1
+	do_start
+	log_end_msg $?
+	;;
+
+  *)
+	log_success_msg "Usage: $0 {start|stop|restart|force-reload}"
+	exit 1
+	;;
+esac
+
+exit 0

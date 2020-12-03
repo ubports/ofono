@@ -1,0 +1,5 @@
+version=4
+opts="pgpmode=next,decompress" \
+https://www.kernel.org/pub/linux/network/ofono/ofono-@ANY_VERSION@@ARCHIVE_EXT@ debian
+opts="pgpmode=previous" \
+https://www.kernel.org/pub/linux/network/ofono/ofono-@ANY_VERSION@.tar.sign previous
