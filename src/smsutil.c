@@ -3575,6 +3575,7 @@ GSList *sms_text_prepare_with_alphabet(const char *to, const char *utf8,
 	GSList *r = NULL;
 	enum gsm_dialect used_locking;
 	enum gsm_dialect used_single;
+	enum gsm_dialect dialect;
 
 	memset(&template, 0, sizeof(struct sms));
 	template.type = SMS_TYPE_SUBMIT;
@@ -3586,12 +3587,14 @@ GSList *sms_text_prepare_with_alphabet(const char *to, const char *utf8,
 	template.submit.vp.relative = 0xA7; /* 24 Hours */
 	sms_address_from_string(&template.submit.daddr, to);
 
+	/* There are two enums for the same thing */
+	dialect = (enum gsm_dialect)alphabet;
 	/*
 	 * UDHI, UDL, UD and DCS actually depend on the contents of
 	 * the text, and also on the GSM dialect we use to encode it.
 	 */
 	gsm_encoded = convert_utf8_to_gsm_best_lang(utf8, -1, NULL, &written, 0,
-							alphabet, &used_locking,
+							dialect, &used_locking,
 							&used_single);
 	if (!gsm_encoded) {
 		size_t converted;
