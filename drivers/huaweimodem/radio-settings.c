@@ -104,7 +104,7 @@ static enum ofono_radio_band_gsm band_gsm_from_huawei(unsigned int band)
 	size_t i;
 
 	if (band == HUAWEI_BAND_ANY)
-		return OFONO_RADIO_BAND_UMTS_ANY;
+		return OFONO_RADIO_BAND_GSM_ANY;
 
 	for (i = ARRAY_SIZE(huawei_band_gsm_table) - 1; i > 0; i--) {
 		if (huawei_band_gsm_table[i].band_huawei & band)
