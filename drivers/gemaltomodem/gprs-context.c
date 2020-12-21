@@ -216,6 +216,8 @@ static void cgev_notify(GAtResult *result, gpointer user_data)
 
 	if (g_str_has_prefix(event, "NW PDN DEACT"))
 		sscanf(event, "%*s %*s %*s %u", &cid);
+	else if (g_str_has_prefix(event, "ME PDN DEACT"))
+		sscanf(event, "%*s %*s %*s %u", &cid);
 	else if (g_str_has_prefix(event, "NW DEACT"))
 		sscanf(event, "%*s %*s %u", &cid);
 	else
