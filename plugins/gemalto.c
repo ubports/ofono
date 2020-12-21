@@ -606,7 +606,7 @@ static void gemalto_post_sim(struct ofono_modem *modem)
 		driver = "atmodem";
 	}
 
-	gc = ofono_gprs_context_create(modem, 0, driver, data->mdm);
+	gc = ofono_gprs_context_create(modem, 0, driver, data->app);
 
 	if (gprs && gc)
 		ofono_gprs_add_context(gprs, gc);
