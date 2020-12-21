@@ -46,6 +46,7 @@ static const char *none_prefix[] = { NULL };
 struct gprs_context_data {
 	GAtChat *chat;
 	unsigned int active_context;
+	enum ofono_gprs_proto proto;
 	ofono_gprs_context_cb_t cb;
 	void *cb_data;
 };
@@ -127,15 +128,25 @@ static void gemalto_gprs_activate_primary(struct ofono_gprs_context *gc,
 
 	DBG("cid %u", ctx->cid);
 
-	/* IPv6 support not implemented */
-	if (ctx->proto != OFONO_GPRS_PROTO_IP)
-		goto error;
-
 	gcd->active_context = ctx->cid;
 	gcd->cb_data = data;
 	gcd->cb = cb;
 
-	len = snprintf(buf, sizeof(buf), "AT+CGDCONT=%u,\"IP\"", ctx->cid);
+
+	switch (ctx->proto) {
+	case OFONO_GPRS_PROTO_IP:
+		len = snprintf(buf, sizeof(buf), "AT+CGDCONT=%u,\"IP\"",
+				ctx->cid);
+		break;
+	case OFONO_GPRS_PROTO_IPV6:
+		len = snprintf(buf, sizeof(buf), "AT+CGDCONT=%u,\"IPV6\"",
+				ctx->cid);
+		break;
+	case OFONO_GPRS_PROTO_IPV4V6:
+		len = snprintf(buf, sizeof(buf), "AT+CGDCONT=%u,\"IPV4V6\"",
+				ctx->cid);
+		break;
+	}
 
 	if (ctx->apn)
 		snprintf(buf + len, sizeof(buf) - len - 3, ",\"%s\"", ctx->apn);
@@ -146,7 +157,6 @@ static void gemalto_gprs_activate_primary(struct ofono_gprs_context *gc,
 
 	return;
 
-error:
 	CALLBACK_WITH_FAILURE(cb, data);
 }
 
