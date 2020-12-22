@@ -55,6 +55,7 @@ AC_ARG_ENABLE(pie, AC_HELP_STRING([--enable-pie],
 ])
 
 AC_CHECK_FUNCS(explicit_bzero)
+AC_CHECK_FUNCS(rawmemchr)
 
 AC_CHECK_FUNC(signalfd, dummy=yes,
 			AC_MSG_ERROR(signalfd support is required))
