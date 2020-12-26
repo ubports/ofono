@@ -152,10 +152,8 @@ static void gemalto_gprs_activate_primary(struct ofono_gprs_context *gc,
 		snprintf(buf + len, sizeof(buf) - len - 3, ",\"%s\"", ctx->apn);
 
 	if (g_at_chat_send(gcd->chat, buf, none_prefix,
-				cgdcont_enable_cb, gc, NULL) == 0)
-		goto error;
-
-	return;
+				cgdcont_enable_cb, gc, NULL) > 0)
+		return;
 
 	CALLBACK_WITH_FAILURE(cb, data);
 }
