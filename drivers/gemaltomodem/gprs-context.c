@@ -46,6 +46,9 @@ static const char *none_prefix[] = { NULL };
 struct gprs_context_data {
 	GAtChat *chat;
 	unsigned int active_context;
+	char username[OFONO_GPRS_MAX_USERNAME_LENGTH + 1];
+	char password[OFONO_GPRS_MAX_PASSWORD_LENGTH + 1];
+	int auth_type;
 	enum ofono_gprs_proto proto;
 	ofono_gprs_context_cb_t cb;
 	void *cb_data;
@@ -82,7 +85,7 @@ static void swwan_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	}
 }
 
-static void cgdcont_enable_cb(gboolean ok, GAtResult *result,
+static void sgauth_enable_cb(gboolean ok, GAtResult *result,
 			gpointer user_data)
 {
 	struct ofono_gprs_context *gc = user_data;
@@ -111,6 +114,38 @@ static void cgdcont_enable_cb(gboolean ok, GAtResult *result,
 	CALLBACK_WITH_FAILURE(gcd->cb, gcd->cb_data);
 }
 
+static void cgdcont_enable_cb(gboolean ok, GAtResult *result,
+				gpointer user_data)
+{
+	struct ofono_gprs_context *gc = user_data;
+	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
+	struct ofono_error error;
+	char buf[384];
+
+	DBG("ok %d", ok);
+
+	if (!ok) {
+		gcd->active_context = 0;
+		decode_at_error(&error, g_at_result_final_response(result));
+		gcd->cb(&error, gcd->cb_data);
+		return;
+	}
+
+	if (gcd->username[0] && gcd->password[0])
+		sprintf(buf, "AT^SGAUTH=%u,%u,\"%s\",\"%s\"",
+			gcd->active_context, gcd->auth_type,
+			gcd->username, gcd->password);
+	else
+		sprintf(buf, "AT^SGAUTH=%u,%u,\"\",\"\"",
+			gcd->active_context, gcd->auth_type);
+
+	if (g_at_chat_send(gcd->chat, buf, none_prefix,
+				sgauth_enable_cb, gc, NULL) > 0)
+		return;
+
+	CALLBACK_WITH_FAILURE(gcd->cb, gcd->cb_data);
+}
+
 static void gemalto_gprs_activate_primary(struct ofono_gprs_context *gc,
 				const struct ofono_gprs_primary_context *ctx,
 				ofono_gprs_context_cb_t cb, void *data)
@@ -125,6 +160,22 @@ static void gemalto_gprs_activate_primary(struct ofono_gprs_context *gc,
 	gcd->cb_data = data;
 	gcd->cb = cb;
 
+	memcpy(gcd->username, ctx->username, sizeof(ctx->username));
+	memcpy(gcd->password, ctx->password, sizeof(ctx->password));
+	gcd->proto = ctx->proto;
+
+	switch (ctx->auth_method) {
+	case OFONO_GPRS_AUTH_METHOD_PAP:
+		gcd->auth_type = 1;
+		break;
+	case OFONO_GPRS_AUTH_METHOD_CHAP:
+		gcd->auth_type = 2;
+		break;
+	case OFONO_GPRS_AUTH_METHOD_NONE:
+	default:
+		gcd->auth_type = 0;
+		break;
+	}
 
 	switch (ctx->proto) {
 	case OFONO_GPRS_PROTO_IP:
