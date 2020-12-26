@@ -51,30 +51,10 @@ struct gprs_context_data {
 	void *cb_data;
 };
 
-static void cgact_enable_cb(gboolean ok, GAtResult *result,
-				gpointer user_data)
+static void set_gprs_context_interface(struct ofono_gprs_context *gc)
 {
-	struct ofono_gprs_context *gc = user_data;
-	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 	struct ofono_modem *modem;
 	const char *interface;
-	char buf[64];
-
-	DBG("ok %d", ok);
-
-	if (!ok) {
-		struct ofono_error error;
-
-		gcd->active_context = 0;
-
-		decode_at_error(&error, g_at_result_final_response(result));
-		gcd->cb(&error, gcd->cb_data);
-
-		return;
-	}
-
-	snprintf(buf, sizeof(buf), "AT^SWWAN=1,%u", gcd->active_context);
-	g_at_chat_send(gcd->chat, buf, none_prefix, NULL, NULL, NULL);
 
 	modem = ofono_gprs_context_get_modem(gc);
 	interface = ofono_modem_get_string(modem, "NetworkInterface");
@@ -82,39 +62,52 @@ static void cgact_enable_cb(gboolean ok, GAtResult *result,
 
 	/* Use DHCP */
 	ofono_gprs_context_set_ipv4_address(gc, NULL, 0);
-
-	CALLBACK_WITH_SUCCESS(gcd->cb, gcd->cb_data);
 }
 
-static void cgdcont_enable_cb(gboolean ok, GAtResult *result,
-				gpointer user_data)
+static void swwan_cb(gboolean ok, GAtResult *result, gpointer user_data)
 {
 	struct ofono_gprs_context *gc = user_data;
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
+	struct ofono_error error;
+
+	DBG("ok %d", ok);
+
+	if (!ok) {
+		ofono_error("Unable to activate context");
+		ofono_gprs_context_deactivated(gc, gcd->active_context);
+		gcd->active_context = 0;
+		decode_at_error(&error, g_at_result_final_response(result));
+		gcd->cb(&error, gcd->cb_data);
+		return;
+	}
+}
+
+static void cgdcont_enable_cb(gboolean ok, GAtResult *result,
+			gpointer user_data)
+{
+	struct ofono_gprs_context *gc = user_data;
+	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
+	struct ofono_error error;
 	char buf[64];
 
 	DBG("ok %d", ok);
 
 	if (!ok) {
-		struct ofono_error error;
-
 		gcd->active_context = 0;
-
 		decode_at_error(&error, g_at_result_final_response(result));
 		gcd->cb(&error, gcd->cb_data);
-
 		return;
 	}
 
-	snprintf(buf, sizeof(buf), "AT+CGACT=1,%u", gcd->active_context);
+	snprintf(buf, sizeof(buf), "AT^SWWAN=1,%u", gcd->active_context);
 
-	if (g_at_chat_send(gcd->chat, buf, none_prefix,
-				cgact_enable_cb, gc, NULL) == 0)
-		goto error;
+	if (g_at_chat_send(gcd->chat, buf, none_prefix, swwan_cb, gc, NULL)) {
+		set_gprs_context_interface(gc);
 
-	return;
+		CALLBACK_WITH_SUCCESS(gcd->cb, gcd->cb_data);
+		return;
+	}
 
-error:
 	CALLBACK_WITH_FAILURE(gcd->cb, gcd->cb_data);
 }
 
@@ -152,30 +145,26 @@ static void gemalto_gprs_activate_primary(struct ofono_gprs_context *gc,
 		snprintf(buf + len, sizeof(buf) - len - 3, ",\"%s\"", ctx->apn);
 
 	if (g_at_chat_send(gcd->chat, buf, none_prefix,
-				cgdcont_enable_cb, gc, NULL) > 0)
+				cgdcont_enable_cb, gc, NULL))
 		return;
 
 	CALLBACK_WITH_FAILURE(cb, data);
 }
 
-static void cgact_disable_cb(gboolean ok, GAtResult *result,
-				gpointer user_data)
+static void deactivate_cb(gboolean ok, GAtResult *result,
+		gpointer user_data)
 {
 	struct ofono_gprs_context *gc = user_data;
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
-	char buf[64];
 
 	DBG("ok %d", ok);
+
+	gcd->active_context = 0;
 
 	if (!ok) {
 		CALLBACK_WITH_FAILURE(gcd->cb, gcd->cb_data);
 		return;
 	}
-
-	snprintf(buf, sizeof(buf), "AT^SWWAN=0,%u", gcd->active_context);
-	g_at_chat_send(gcd->chat, buf, none_prefix, NULL, NULL, NULL);
-
-	gcd->active_context = 0;
 
 	CALLBACK_WITH_SUCCESS(gcd->cb, gcd->cb_data);
 }
@@ -193,17 +182,49 @@ static void gemalto_gprs_deactivate_primary(struct ofono_gprs_context *gc,
 	gcd->cb = cb;
 	gcd->cb_data = data;
 
-	snprintf(buf, sizeof(buf), "AT+CGACT=0,%u", cid);
+	snprintf(buf, sizeof(buf), "AT^SWWAN=0,%u", gcd->active_context);
 
 	if (g_at_chat_send(gcd->chat, buf, none_prefix,
-				cgact_disable_cb, gc, NULL) == 0)
-		goto error;
+				deactivate_cb, gc, NULL))
+		return;
 
-	return;
-
-error:
 	CALLBACK_WITH_FAILURE(cb, data);
+}
 
+static void gemalto_gprs_read_settings(struct ofono_gprs_context *gc,
+					unsigned int cid,
+					ofono_gprs_context_cb_t cb, void *data)
+{
+	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
+	char buf[64];
+
+	DBG("cid %u", cid);
+
+	gcd->active_context = cid;
+	gcd->cb = cb;
+	gcd->cb_data = data;
+
+	/*
+	 * AT^SWWAN command activates PDP context unless it has been already
+	 * activated automatically, and then starts DHCP server in the ME.
+	 * So AT^SWWAN command should be run in both cases:
+	 * - when activate context and then obtain IP address from the ME
+	 * - when obtain IP address from the automatically activated context
+	 *
+	 * Note that the ME waits until DHCP negotiation has finished before
+	 * sending the "OK" or "ERROR" result code. So success is reported
+	 * to the core before AT^SWWAN response.
+	 */
+	snprintf(buf, sizeof(buf), "AT^SWWAN=1,%u", gcd->active_context);
+
+	if (g_at_chat_send(gcd->chat, buf, none_prefix, swwan_cb, gc, NULL)) {
+		set_gprs_context_interface(gc);
+
+		CALLBACK_WITH_SUCCESS(gcd->cb, gcd->cb_data);
+		return;
+	}
+
+	CALLBACK_WITH_FAILURE(gcd->cb, gcd->cb_data);
 }
 
 static void cgev_notify(GAtResult *result, gpointer user_data)
@@ -275,6 +296,7 @@ static const struct ofono_gprs_context_driver driver = {
 	.remove			= gemalto_gprs_context_remove,
 	.activate_primary	= gemalto_gprs_activate_primary,
 	.deactivate_primary	= gemalto_gprs_deactivate_primary,
+	.read_settings		= gemalto_gprs_read_settings,
 };
 
 void gemalto_gprs_context_init(void)
