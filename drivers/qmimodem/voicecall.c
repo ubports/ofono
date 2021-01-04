@@ -259,7 +259,7 @@ static void dial(struct ofono_voicecall *vc, const struct ofono_phone_number *ph
 	memcpy(&vd->dialed, ph, sizeof(*ph));
 
 	arg.call_type_set = true;
-	arg.call_type = QMI_CALL_TYPE_VOICE_FORCE;
+	arg.call_type = QMI_CALL_TYPE_VOICE;
 
 	if (!qmi_voice_dial_call(
 				&arg,
