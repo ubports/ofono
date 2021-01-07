@@ -941,10 +941,12 @@ static gboolean setup_quectel_serial(struct modem_info *modem)
 
 static gboolean setup_quectel(struct modem_info *modem)
 {
-	if (modem->serial)
+	if (modem->type == MODEM_TYPE_SERIAL)
 		return setup_quectel_serial(modem);
-	else
+	else if (modem->type == MODEM_TYPE_USB)
 		return setup_quectel_usb(modem);
+	else
+		return FALSE;
 }
 
 static gboolean setup_quectelqmi(struct modem_info *modem)
