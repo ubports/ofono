@@ -53,6 +53,7 @@ static gint option_cid = 0;
 static gchar *option_apn = NULL;
 static gint option_offmode = 0;
 static gboolean option_legacy = FALSE;
+static gchar *option_auth_method;
 static gchar *option_username = NULL;
 static gchar *option_password = NULL;
 static gchar *option_pppdump = NULL;
@@ -369,6 +370,11 @@ static void connect_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	}
 	g_at_ppp_set_debug(ppp, gsmdial_debug, "PPP");
 
+	if (option_auth_method && strcmp(option_auth_method, "PAP") == 0)
+		g_at_ppp_set_auth_method(ppp, G_AT_PPP_AUTH_METHOD_PAP);
+	else if (option_auth_method && strcmp(option_auth_method, "NONE") == 0)
+		g_at_ppp_set_auth_method(ppp, G_AT_PPP_AUTH_METHOD_NONE);
+
 	g_at_ppp_set_credentials(ppp, option_username, option_password);
 
 	g_at_ppp_set_acfc_enabled(ppp, option_acfc);
@@ -677,6 +683,10 @@ static GOptionEntry options[] = {
 				"Use ATD*99***<cid>#" },
 	{ "bluetooth", 'b', 0, G_OPTION_ARG_NONE, &option_bluetooth,
 				"Use only ATD*99" },
+	{ "auth", 'A', 0, G_OPTION_ARG_STRING, &option_auth_method,
+				"Specify the authentication method for the PPP"
+				" connection: CHAP, PAP or NONE. CHAP is used"
+				" by default." },
 	{ "username", 'u', 0, G_OPTION_ARG_STRING, &option_username,
 				"Specify PPP username" },
 	{ "password", 'w', 0, G_OPTION_ARG_STRING, &option_password,
