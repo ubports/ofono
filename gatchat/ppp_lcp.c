@@ -121,7 +121,9 @@ static void lcp_generate_config_options(struct lcp_data *lcp)
 
 static void lcp_reset_config_options(struct lcp_data *lcp)
 {
-	/* Using the default ACCM */
+	/* Using RX ACCM = 0 instead of the default ACCM */
+	lcp->accm = 0;
+	lcp->req_options |= REQ_OPTION_ACCM;
 
 	lcp_generate_config_options(lcp);
 }
@@ -396,6 +398,17 @@ struct pppcp_data *lcp_new(GAtPPP *ppp, gboolean is_server)
 	pppcp_set_local_options(pppcp, lcp->options, lcp->options_len);
 
 	return pppcp;
+}
+
+void lcp_set_accm(struct pppcp_data *pppcp, guint32 accm)
+{
+	struct lcp_data *lcp = pppcp_get_data(pppcp);
+
+	lcp->accm = accm;
+	lcp->req_options |= REQ_OPTION_ACCM;
+
+	lcp_generate_config_options(lcp);
+	pppcp_set_local_options(pppcp, lcp->options, lcp->options_len);
 }
 
 void lcp_set_acfc_enabled(struct pppcp_data *pppcp, gboolean enabled)

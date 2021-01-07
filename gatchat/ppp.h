@@ -90,6 +90,7 @@ static inline void __put_unaligned_short(void *p, guint16 val)
 struct pppcp_data *lcp_new(GAtPPP *ppp, gboolean dormant);
 void lcp_free(struct pppcp_data *lcp);
 void lcp_protocol_reject(struct pppcp_data *lcp, guint8 *packet, gsize len);
+void lcp_set_accm(struct pppcp_data *pppcp, guint32 accm);
 void lcp_set_acfc_enabled(struct pppcp_data *pppcp, gboolean enabled);
 void lcp_set_pfc_enabled(struct pppcp_data *pppcp, gboolean enabled);
 

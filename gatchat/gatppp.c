@@ -806,6 +806,11 @@ void g_at_ppp_set_server_info(GAtPPP *ppp, const char *remote,
 	ipcp_set_server_info(ppp->ipcp, r, d1, d2);
 }
 
+void g_at_ppp_set_accm(GAtPPP *ppp, guint32 accm)
+{
+	lcp_set_accm(ppp->lcp, accm);
+}
+
 void g_at_ppp_set_acfc_enabled(GAtPPP *ppp, gboolean enabled)
 {
 	lcp_set_acfc_enabled(ppp->lcp, enabled);
