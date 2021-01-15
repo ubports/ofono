@@ -48,6 +48,7 @@
 #include <ofono/gprs.h>
 #include <ofono/gprs-context.h>
 #include <ofono/location-reporting.h>
+#include <ofono/netmon.h>
 
 #include <drivers/atmodem/atutil.h>
 #include <drivers/atmodem/vendor.h>
@@ -622,6 +623,7 @@ static void gemalto_post_sim(struct ofono_modem *modem)
 static void gemalto_post_online(struct ofono_modem *modem)
 {
 	struct gemalto_data *data = ofono_modem_get_data(modem);
+	const char *model = ofono_modem_get_string(modem, "Model");
 
 	DBG("%p", modem);
 
@@ -634,6 +636,10 @@ static void gemalto_post_online(struct ofono_modem *modem)
 	ofono_call_settings_create(modem, 0, "atmodem", data->app);
 	ofono_call_meter_create(modem, 0, "atmodem", data->app);
 	ofono_call_barring_create(modem, 0, "atmodem", data->app);
+
+	if (!g_strcmp0(model, GEMALTO_MODEL_ELS81x))
+		ofono_netmon_create(modem, OFONO_VENDOR_GEMALTO,
+					"gemaltomodem", data->app);
 }
 
 static struct ofono_modem_driver gemalto_driver = {
