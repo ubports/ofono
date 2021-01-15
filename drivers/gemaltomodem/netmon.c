@@ -128,6 +128,50 @@ static gboolean gemalto_delayed_register(gpointer user_data)
 	return FALSE;
 }
 
+static int gemalto_ecno_scale(int value)
+{
+	if (value < -24)
+		return 0;
+
+	if (value > 0)
+		return 49;
+
+	return 49 * (value + 24) / 24;
+}
+
+static int gemalto_rscp_scale(int value)
+{
+	if (value < -120)
+		return 0;
+
+	if (value > -24)
+		return 96;
+
+	return value + 120;
+}
+
+static int gemalto_rsrp_scale(int value)
+{
+	if (value < -140)
+		return 0;
+
+	if (value > -43)
+		return 97;
+
+	return value + 140;
+}
+
+static int gemalto_rsrq_scale(int value)
+{
+	if (2 * value < -39)
+		return 0;
+
+	if (2 * value > -5)
+		return 34;
+
+	return 2 * value + 39;
+}
+
 static int gemalto_parse_smoni_gsm(GAtResultIter *iter,
 					struct req_cb_data *cbd)
 {
@@ -273,13 +317,15 @@ static int gemalto_parse_smoni_umts(GAtResultIter *iter,
 		case SMONI_UMTS_ECN0:
 			if (g_at_result_iter_next_unquoted_string(iter, &str)) {
 				if (sscanf(str, "%f", &fnumber) == 1)
-					cbd->t.umts.ecno = (int)fnumber;
+					cbd->t.umts.ecno =
+						gemalto_ecno_scale((int)fnumber);
 			}
 			break;
 		case SMONI_UMTS_RSCP:
 			if (g_at_result_iter_next_unquoted_string(iter, &str)) {
 				if (sscanf(str, "%d", &number) == 1)
-					cbd->t.umts.rscp = number;
+					cbd->t.umts.rscp =
+						gemalto_rscp_scale(number);
 			}
 			break;
 		case SMONI_UMTS_MCC:
@@ -368,12 +414,12 @@ static int gemalto_parse_smoni_lte(GAtResultIter *iter,
 
 	if (g_at_result_iter_next_unquoted_string(iter, &str)) {
 		if (sscanf(str, "%d", &number) == 1)
-			cbd->t.lte.rsrp = number;
+			cbd->t.lte.rsrp = gemalto_rsrp_scale(number);
 	}
 
 	if (g_at_result_iter_next_unquoted_string(iter, &str)) {
 		if (sscanf(str, "%d", &number) == 1)
-			cbd->t.lte.rsrq = number;
+			cbd->t.lte.rsrq = gemalto_rsrq_scale(number);
 	}
 
 	DBG(" %-15s %s", "LTE.MCC", cbd->op.mcc);
