@@ -403,6 +403,7 @@ gboolean comprehension_tlv_builder_set_length(
 				unsigned int len);
 unsigned char *comprehension_tlv_builder_get_data(
 				struct comprehension_tlv_builder *builder);
+gboolean validate_utf8_tlv(const unsigned char *data);
 
 void ber_tlv_iter_init(struct ber_tlv_iter *iter, const unsigned char *pdu,
 			unsigned int len);
