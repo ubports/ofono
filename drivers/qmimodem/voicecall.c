@@ -413,6 +413,110 @@ static void hangup_active(struct ofono_voicecall *vc,
 	release_specific(vc, call->id, cb, data);
 }
 
+static void stop_cont_dtmf_cb(struct qmi_result *result, void *user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_voicecall_cb_t cb = cbd->cb;
+
+	uint16_t error;
+
+	if (qmi_result_set_error(result, &error)) {
+		DBG("QMI Error %d", error);
+		CALLBACK_WITH_FAILURE(cb, cbd->data);
+		return;
+	}
+
+	CALLBACK_WITH_SUCCESS(cb, cbd->data);
+}
+
+static void start_cont_dtmf_cb(struct qmi_result *result, void *user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_voicecall_cb_t cb = cbd->cb;
+	struct ofono_voicecall *vc = cbd->user;
+	struct voicecall_data *vd = ofono_voicecall_get_data(vc);
+	struct qmi_voice_stop_cont_dtmf_arg arg;
+	uint16_t error;
+
+	if (qmi_result_set_error(result, &error)) {
+		DBG("QMI Error %d", error);
+		CALLBACK_WITH_FAILURE(cb, cbd->data);
+		return;
+	}
+
+	arg.call_id = 0xff;
+
+	if (!qmi_voice_stop_cont_dtmf(&arg,
+								  vd->voice,
+								  stop_cont_dtmf_cb,
+								  cbd,
+								  g_free))
+		return;
+
+	CALLBACK_WITH_FAILURE(cb, cbd->data);
+}
+
+static void send_one_dtmf(struct ofono_voicecall *vc, const char dtmf,
+			ofono_voicecall_cb_t cb, void *data) {
+	struct qmi_voice_start_cont_dtmf_arg arg;
+	struct voicecall_data *vd = ofono_voicecall_get_data(vc);
+
+	arg.call_id = 0xff;
+	arg.dtmf_char = (uint8_t) dtmf;
+
+	struct cb_data *cbd = cb_data_new(cb, data);
+	cbd->user = vc;
+
+	if (!qmi_voice_start_cont_dtmf(&arg,
+								   vd->voice,
+								   start_cont_dtmf_cb,
+								   cbd,
+								   NULL))
+		return;
+
+	CALLBACK_WITH_FAILURE(cb, data);
+	g_free(cbd);
+}
+
+struct send_one_dtmf_cb_data {
+	const char *full_dtmf;
+	const char *next_dtmf;
+	struct ofono_voicecall *vc;
+};
+
+static void send_one_dtmf_cb(const struct ofono_error *error, void *data) {
+	struct cb_data *cbd = data;
+	ofono_voicecall_cb_t cb = cbd->cb;
+	struct send_one_dtmf_cb_data *send_one_dtmf_cb_data = cbd->user;
+
+	if (error->type != OFONO_ERROR_TYPE_NO_ERROR || *send_one_dtmf_cb_data->next_dtmf == 0) {
+		if (error->type == OFONO_ERROR_TYPE_NO_ERROR) {
+			CALLBACK_WITH_SUCCESS(cb, cbd->data);
+		} else {
+			CALLBACK_WITH_FAILURE(cb, cbd->data);
+		}
+		g_free((gpointer)send_one_dtmf_cb_data->full_dtmf);
+		g_free(send_one_dtmf_cb_data);
+		g_free(cbd);
+	} else {
+		send_one_dtmf(send_one_dtmf_cb_data->vc, *(send_one_dtmf_cb_data->next_dtmf++), send_one_dtmf_cb, data);
+	}
+}
+
+static void send_dtmf(struct ofono_voicecall *vc, const char *dtmf,
+			ofono_voicecall_cb_t cb, void *data)
+{
+	struct cb_data *cbd = cb_data_new(cb, data);
+	struct send_one_dtmf_cb_data *send_one_dtmf_cb_data = g_new(struct send_one_dtmf_cb_data, 1);
+
+	send_one_dtmf_cb_data->full_dtmf = g_strdup(dtmf);
+	send_one_dtmf_cb_data->next_dtmf = &send_one_dtmf_cb_data->full_dtmf[1];
+	send_one_dtmf_cb_data->vc = vc;
+	cbd->user = send_one_dtmf_cb_data;
+
+	send_one_dtmf(vc, *dtmf, send_one_dtmf_cb, cbd);
+}
+
 static const struct ofono_voicecall_driver driver = {
 	.name		= "qmimodem",
 	.probe		= qmi_voicecall_probe,
@@ -421,6 +525,7 @@ static const struct ofono_voicecall_driver driver = {
 	.answer		= answer,
 	.hangup_active  = hangup_active,
 	.release_specific  = release_specific,
+	.send_tones = send_dtmf,
 };
 
 void qmi_voicecall_init(void)
