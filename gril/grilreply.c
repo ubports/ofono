@@ -707,17 +707,32 @@ struct reply_sim_status *g_ril_reply_parse_sim_status(GRil *gril,
 		app->pin1_state = parcel_r_int32(&rilp);
 		app->pin2_state = parcel_r_int32(&rilp);
 
-		if (vendor == OFONO_RIL_VENDOR_QCOM_MSIM) {
+		if (
+			(vendor == OFONO_RIL_VENDOR_QCOM_MSIM) ||
+			(vendor == OFONO_RIL_VENDOR_SAMSUNG_MSM_8890) ||
+			(vendor == OFONO_RIL_VENDOR_SAMSUNG_MSM_822x)
+		) {
 			/* QCOM's sim status reply contains 4 more elements in
 			 * the struct: remaining_count_{pin,puk}1 and
 			 * remaining_count_{pin,puk}2. We have to read that
 			 * from the parcel.
+			 * Also true for Samsung S3 Neo and S7 Herolte
 			 * TODO: make use of this information.
 			 */
 			parcel_r_int32(&rilp);
 			parcel_r_int32(&rilp);
 			parcel_r_int32(&rilp);
 			parcel_r_int32(&rilp);
+
+			if (
+				(vendor == OFONO_RIL_VENDOR_SAMSUNG_MSM_8890) ||
+				(vendor == OFONO_RIL_VENDOR_SAMSUNG_MSM_822x)
+			) {
+					/* Samsung S3 Neo and S7 also read the value
+					 * "perso_unblock_retries"
+					 */
+					parcel_r_int32(&rilp);
+			}
 		}
 
 		g_ril_append_print_buf(gril,
@@ -1339,6 +1354,7 @@ int *g_ril_reply_parse_retries(GRil *gril, const struct ril_msg *message,
 	case OFONO_RIL_VENDOR_AOSP:
 	case OFONO_RIL_VENDOR_QCOM_MSIM:
 	case OFONO_RIL_VENDOR_SAMSUNG_MSM_822x:
+	case OFONO_RIL_VENDOR_SAMSUNG_MSM_8890:
 		/*
 		 * The number of retries is valid only when a wrong password has
 		 * been introduced in Nexus 4. TODO: check Nexus 5 behaviour.
