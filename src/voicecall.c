@@ -616,6 +616,7 @@ static DBusMessage *voicecall_hangup(DBusConnection *conn,
 		 * dialing or active call and try to hang it up with
 		 * hangup_all or hangup_active
 		 */
+		/* Fall through */
 	case CALL_STATUS_ACTIVE:
 		if (single_call == TRUE && vc->driver->hangup_all != NULL) {
 			vc->pending = dbus_message_ref(msg);
