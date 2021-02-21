@@ -58,7 +58,7 @@ const char *mbpi_database = MBPI_DATABASE;
  * Use IPv4 for MMS contexts because gprs.c assumes that MMS proxy
  * address is IPv4.
  */
-enum ofono_gprs_proto mbpi_default_internet_proto = OFONO_GPRS_PROTO_IPV4V6;
+enum ofono_gprs_proto mbpi_default_internet_proto = OFONO_GPRS_PROTO_IP;
 enum ofono_gprs_proto mbpi_default_mms_proto = OFONO_GPRS_PROTO_IP;
 enum ofono_gprs_proto mbpi_default_ims_proto = OFONO_GPRS_PROTO_IPV4V6;
 enum ofono_gprs_proto mbpi_default_proto = OFONO_GPRS_PROTO_IP;
