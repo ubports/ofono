@@ -888,13 +888,16 @@ GSList *g_ril_reply_parse_get_calls(GRil *gril, const struct ril_msg *message)
 
 		ofono_call_init(call);
 		call->status = parcel_r_int32(&rilp);
-		call->id = parcel_r_int32(&rilp);
+		call->id = parcel_r_int32(&rilp) & 0xFF;
 		call->phone_number.type = parcel_r_int32(&rilp);
 		parcel_r_int32(&rilp); /* isMpty */
 		parcel_r_int32(&rilp); /* isMT */
 		parcel_r_int32(&rilp); /* als */
 		call->type = parcel_r_int32(&rilp); /* isVoice */
-		if (g_ril_vendor(gril) == OFONO_RIL_VENDOR_SAMSUNG_MSM_822x) {
+		if (
+			(g_ril_vendor(gril) == OFONO_RIL_VENDOR_SAMSUNG_MSM_822x) ||
+			(g_ril_vendor(gril) == OFONO_RIL_VENDOR_SAMSUNG_MSM_8890)
+		) {
 			parcel_r_int32(&rilp); // CallDetails.call_type
 			parcel_r_int32(&rilp); // CallDetails.call_domain
 			parcel_r_string(&rilp); // CallDetails.getCsvFromExtras
