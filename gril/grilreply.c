@@ -552,7 +552,7 @@ struct reply_sim_io *g_ril_reply_parse_sim_io(GRil *gril,
 	 */
 	if (message->buf_len < 12) {
 		ofono_error("Invalid SIM IO reply: size too small (< 12): %d ",
-			(int) message->buf_len);
+			    (int) message->buf_len);
 		return NULL;
 	}
 
