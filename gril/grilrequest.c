@@ -820,7 +820,7 @@ void g_ril_request_dial(GRil *gril,
 	parcel_w_int32(rilp, clir);
 	if (
 		(g_ril_vendor(gril) == OFONO_RIL_VENDOR_SAMSUNG_MSM_822x) ||
-		(g_ril_vendor(gril) == OFONO_RIL_VENDOR_SAMSUNG_MSM_8890)
+		(g_ril_vendor(gril) == OFONO_RIL_VENDOR_SAMSUNG_EXYNOS_8890)
 	) {
 		int call_domain = is_emergency ? 3 : 1;
 		parcel_w_int32(rilp, 0); // CallDetails.call_type
@@ -842,7 +842,7 @@ void g_ril_request_answer(GRil *gril, struct parcel *rilp)
 	parcel_init(rilp);
 	if (
 		(g_ril_vendor(gril) == OFONO_RIL_VENDOR_SAMSUNG_MSM_822x) ||
-		(g_ril_vendor(gril) == OFONO_RIL_VENDOR_SAMSUNG_MSM_8890)
+		(g_ril_vendor(gril) == OFONO_RIL_VENDOR_SAMSUNG_EXYNOS_8890)
 	) {
 		parcel_w_int32(rilp, 1); /* Always 1 - AT+CHLD=1x */
 		parcel_w_int32(rilp, 0); /* Always 0 */

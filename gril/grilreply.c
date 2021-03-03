@@ -709,7 +709,7 @@ struct reply_sim_status *g_ril_reply_parse_sim_status(GRil *gril,
 
 		if (
 			(vendor == OFONO_RIL_VENDOR_QCOM_MSIM) ||
-			(vendor == OFONO_RIL_VENDOR_SAMSUNG_MSM_8890) ||
+			(vendor == OFONO_RIL_VENDOR_SAMSUNG_EXYNOS_8890) ||
 			(vendor == OFONO_RIL_VENDOR_SAMSUNG_MSM_822x)
 		) {
 			/* QCOM's sim status reply contains 4 more elements in
@@ -725,7 +725,7 @@ struct reply_sim_status *g_ril_reply_parse_sim_status(GRil *gril,
 			parcel_r_int32(&rilp);
 
 			if (
-				(vendor == OFONO_RIL_VENDOR_SAMSUNG_MSM_8890) ||
+				(vendor == OFONO_RIL_VENDOR_SAMSUNG_EXYNOS_8890) ||
 				(vendor == OFONO_RIL_VENDOR_SAMSUNG_MSM_822x)
 			) {
 					/* Samsung S3 Neo and S7 also read the value
@@ -896,7 +896,7 @@ GSList *g_ril_reply_parse_get_calls(GRil *gril, const struct ril_msg *message)
 		call->type = parcel_r_int32(&rilp); /* isVoice */
 		if (
 			(g_ril_vendor(gril) == OFONO_RIL_VENDOR_SAMSUNG_MSM_822x) ||
-			(g_ril_vendor(gril) == OFONO_RIL_VENDOR_SAMSUNG_MSM_8890)
+			(g_ril_vendor(gril) == OFONO_RIL_VENDOR_SAMSUNG_EXYNOS_8890)
 		) {
 			parcel_r_int32(&rilp); // CallDetails.call_type
 			parcel_r_int32(&rilp); // CallDetails.call_domain
@@ -1357,7 +1357,7 @@ int *g_ril_reply_parse_retries(GRil *gril, const struct ril_msg *message,
 	case OFONO_RIL_VENDOR_AOSP:
 	case OFONO_RIL_VENDOR_QCOM_MSIM:
 	case OFONO_RIL_VENDOR_SAMSUNG_MSM_822x:
-	case OFONO_RIL_VENDOR_SAMSUNG_MSM_8890:
+	case OFONO_RIL_VENDOR_SAMSUNG_EXYNOS_8890:
 		/*
 		 * The number of retries is valid only when a wrong password has
 		 * been introduced in Nexus 4. TODO: check Nexus 5 behaviour.

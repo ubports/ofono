@@ -18,17 +18,17 @@
 #include "gril.h"
 #include "ril.h"
 
-static int samsung_msm_8890_probe(struct ofono_modem *modem)
+static int samsung_exynos_8890_probe(struct ofono_modem *modem)
 {
-        return ril_create(modem, OFONO_RIL_VENDOR_SAMSUNG_MSM_8890,
+        return ril_create(modem, OFONO_RIL_VENDOR_SAMSUNG_EXYNOS_8890,
                                 NULL,
                                 NULL,
                                 NULL);
 }
 
-static struct ofono_modem_driver samsung_msm_8890_driver = {
-                .name = "samsung_msm_8890",
-                .probe = samsung_msm_8890_probe,
+static struct ofono_modem_driver samsung_exynos_8890_driver = {
+                .name = "samsung_exy_8890",
+                .probe = samsung_exynos_8890_probe,
                 .remove = ril_remove,
                 .enable = ril_enable,
                 .disable = ril_disable,
@@ -39,13 +39,13 @@ static struct ofono_modem_driver samsung_msm_8890_driver = {
 };
 
 /*
- * This plugin is a device plugin for Samsung's devices with MSM-8890 baseband
+ * This plugin is a device plugin for Samsung's devices with Exynos-8890 baseband
  * that use the RIL interface. The plugin 'rildev' is used to determine which
  * RIL plugin should be loaded based upon an environment variable.
  */
-static int samsung_msm_8890_init(void)
+static int samsung_exynos_8890_init(void)
 {
-        int retval = ofono_modem_driver_register(&samsung_msm_8890_driver);
+        int retval = ofono_modem_driver_register(&samsung_exynos_8890_driver);
 
         if (retval)
                 DBG("ofono_modem_driver_register returned: %d", retval);
@@ -53,17 +53,17 @@ static int samsung_msm_8890_init(void)
         return retval;
 }
 
-static void samsung_msm_8890_exit(void)
+static void samsung_exynos_8890_exit(void)
 {
         DBG(""); // TODO - To be be removed?
-        ofono_modem_driver_unregister(&samsung_msm_8890_driver);
+        ofono_modem_driver_unregister(&samsung_exynos_8890_driver);
 }
 
 OFONO_PLUGIN_DEFINE(
-                samsung_msm_8890,
-                "Modem driver for Samsung devices based on MSM-8890 baseband",
+                samsung_exy_8890,
+                "Modem driver for Samsung devices based on EXYNOS-8890 baseband",
                 VERSION,
                 OFONO_PLUGIN_PRIORITY_DEFAULT,
-                samsung_msm_8890_init,
-                samsung_msm_8890_exit
+                samsung_exynos_8890_init,
+                samsung_exynos_8890_exit
 )

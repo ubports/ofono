@@ -141,8 +141,8 @@ builtin_sources += plugins/mtk2.c
 builtin_modules += samsung_msm_822x
 builtin_sources += plugins/samsung_msm_822x.c
 
-builtin_modules += samsung_msm_8890
-builtin_sources += plugins/samsung_msm_8890.c
+builtin_modules += samsung_exy_8890
+builtin_sources += plugins/samsung_exynos_8890.c
 
 builtin_modules += infineon
 builtin_sources += plugins/infineon.c
