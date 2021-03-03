@@ -552,7 +552,7 @@ struct reply_sim_io *g_ril_reply_parse_sim_io(GRil *gril,
 	 */
 	if (message->buf_len < 12) {
 		ofono_error("Invalid SIM IO reply: size too small (< 12): %d ",
-				(int) message->buf_len);
+			(int) message->buf_len);
 		return NULL;
 	}
 
@@ -708,9 +708,9 @@ struct reply_sim_status *g_ril_reply_parse_sim_status(GRil *gril,
 		app->pin2_state = parcel_r_int32(&rilp);
 
 		if (
-			(vendor == OFONO_RIL_VENDOR_QCOM_MSIM) ||
-			(vendor == OFONO_RIL_VENDOR_SAMSUNG_EXYNOS_8890) ||
-			(vendor == OFONO_RIL_VENDOR_SAMSUNG_MSM_822x)
+			vendor == OFONO_RIL_VENDOR_QCOM_MSIM ||
+			vendor == OFONO_RIL_VENDOR_SAMSUNG_EXYNOS_8890 ||
+			vendor == OFONO_RIL_VENDOR_SAMSUNG_MSM_822x
 		) {
 			/* QCOM's sim status reply contains 4 more elements in
 			 * the struct: remaining_count_{pin,puk}1 and
@@ -725,8 +725,8 @@ struct reply_sim_status *g_ril_reply_parse_sim_status(GRil *gril,
 			parcel_r_int32(&rilp);
 
 			if (
-				(vendor == OFONO_RIL_VENDOR_SAMSUNG_EXYNOS_8890) ||
-				(vendor == OFONO_RIL_VENDOR_SAMSUNG_MSM_822x)
+				vendor == OFONO_RIL_VENDOR_SAMSUNG_EXYNOS_8890 ||
+				vendor == OFONO_RIL_VENDOR_SAMSUNG_MSM_822x
 			) {
 					/* Samsung S3 Neo and S7 also read the value
 					 * "perso_unblock_retries"
@@ -895,8 +895,8 @@ GSList *g_ril_reply_parse_get_calls(GRil *gril, const struct ril_msg *message)
 		parcel_r_int32(&rilp); /* als */
 		call->type = parcel_r_int32(&rilp); /* isVoice */
 		if (
-			(g_ril_vendor(gril) == OFONO_RIL_VENDOR_SAMSUNG_MSM_822x) ||
-			(g_ril_vendor(gril) == OFONO_RIL_VENDOR_SAMSUNG_EXYNOS_8890)
+			g_ril_vendor(gril) == OFONO_RIL_VENDOR_SAMSUNG_MSM_822x ||
+			g_ril_vendor(gril) == OFONO_RIL_VENDOR_SAMSUNG_EXYNOS_8890
 		) {
 			parcel_r_int32(&rilp); // CallDetails.call_type
 			parcel_r_int32(&rilp); // CallDetails.call_domain
