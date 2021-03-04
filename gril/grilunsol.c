@@ -546,8 +546,7 @@ int g_ril_unsol_parse_signal_strength(GRil *gril, const struct ril_msg *message,
 	int lte_signal;
 	int signal;
 
-	gboolean samsung_quirks = (
-		g_ril_vendor(gril) == OFONO_RIL_VENDOR_SAMSUNG_MSM_822x ||
+	gboolean samsung_quirks = (g_ril_vendor(gril) == OFONO_RIL_VENDOR_SAMSUNG_MSM_822x ||
 		g_ril_vendor(gril) == OFONO_RIL_VENDOR_SAMSUNG_EXYNOS_8890
 	);
 
