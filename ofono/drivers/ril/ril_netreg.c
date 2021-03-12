@@ -436,7 +436,6 @@ static void ril_netreg_register_manual(struct ofono_netreg *netreg,
 	ofono_info("nw select manual: %s%s%s", mcc, mnc, suffix);
 	grilio_request_append_format(req, "%s%s%s", mcc, mnc, suffix);
 	grilio_request_set_timeout(req, nd->network_selection_timeout);
-	grilio_request_set_retry(req, 0, REGISTRATION_MAX_RETRIES);
 	grilio_queue_send_request_full(nd->q, req,
 			RIL_REQUEST_SET_NETWORK_SELECTION_MANUAL,
 			ril_netreg_register_cb, ril_netreg_cbd_free,
