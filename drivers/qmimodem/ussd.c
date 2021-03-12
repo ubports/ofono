@@ -67,11 +67,52 @@ static int convert_qmi_dcs_gsm_dcs(int qmi_dcs, int *gsm_dcs)
 	case QMI_USSD_DCS_ASCII:
 		*gsm_dcs = USSD_DCS_8BIT;
 		break;
+	case QMI_USSD_DCS_8BIT:
+		*gsm_dcs = USSD_DCS_8BIT;
+		break;
+	case QMI_USSD_DCS_UCS2:
+		*gsm_dcs = USSD_DCS_UCS2;
+		break;
 	default:
 		return 1;
 	}
 
 	return 0;
+}
+
+static void async_ind(struct qmi_result *result, void *user_data)
+{
+	struct ofono_ussd *ussd = user_data;
+	const struct qmi_ussd_data *qmi_ussd;
+	uint8_t user_action_required = 0;
+	int notify_status = OFONO_USSD_STATUS_NOTIFY;
+	uint16_t len;
+	int gsm_dcs;
+
+	DBG("");
+
+	qmi_ussd = qmi_result_get(result, QMI_VOICE_PARAM_USSD_IND_DATA, &len);
+	if (qmi_ussd == NULL)
+		return;
+
+	if (validate_ussd_data(qmi_ussd, len))
+		goto error;
+
+	if (convert_qmi_dcs_gsm_dcs(qmi_ussd->dcs, &gsm_dcs))
+		goto error;
+
+	if (qmi_result_get_uint8(result, QMI_VOICE_PARAM_USSD_IND_USER_ACTION,
+					&user_action_required)) {
+		if (user_action_required == QMI_USSD_USER_ACTION_REQUIRED)
+			notify_status = OFONO_USSD_STATUS_ACTION_REQUIRED;
+	}
+
+	ofono_ussd_notify(ussd, notify_status, gsm_dcs,
+				qmi_ussd->data, qmi_ussd->length);
+	return;
+
+error:
+	ofono_ussd_notify(ussd, OFONO_USSD_STATUS_TERMINATED, 0, NULL, 0);
 }
 
 static void async_orig_ind(struct qmi_result *result, void *user_data)
@@ -140,6 +181,9 @@ static void create_voice_cb(struct qmi_service *service, void *user_data)
 	}
 
 	data->voice = qmi_service_ref(service);
+
+	qmi_service_register(data->voice, QMI_VOICE_USSD_IND,
+					async_ind, ussd, NULL);
 
 	qmi_service_register(data->voice, QMI_VOICE_ASYNC_ORIG_USSD,
 					async_orig_ind, ussd, NULL);
