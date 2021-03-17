@@ -121,6 +121,30 @@ void __ofono_dbus_queue_request(struct ofono_dbus_queue *q,
 	}
 }
 
+static void __ofono_dbus_queue_submit_next(struct ofono_dbus_queue *q)
+{
+	struct ofono_dbus_queue_request *next = q->requests;
+
+	while (next) {
+		struct ofono_dbus_queue_request *done;
+		DBusMessage *reply = next->fn(next->msg, next->data);
+
+		/* The request has been sent, no reply yet */
+		if (!reply)
+			break;
+
+		/* The request has completed synchronously */
+		done = next;
+		next = done->next;
+		q->requests = next;
+		done->next = NULL;
+
+		/* Send the reply */
+		__ofono_dbus_pending_reply(&done->msg, reply);
+		__ofono_dbus_queue_req_free(done);
+	}
+}
+
 /* Consumes one reference to the reply */
 void __ofono_dbus_queue_reply_msg(struct ofono_dbus_queue *q,
 							DBusMessage *reply)
@@ -150,20 +174,7 @@ void __ofono_dbus_queue_reply_msg(struct ofono_dbus_queue *q,
 	__ofono_dbus_queue_req_free(done);
 
 	/* Submit the next request if there is any */
-	while (next && reply) {
-		reply = next->fn(next->msg, next->data);
-		if (reply) {
-			/* The request has completed synchronously */
-			done = next;
-			next = done->next;
-			q->requests = next;
-			done->next = NULL;
-
-			/* Send the reply */
-			__ofono_dbus_pending_reply(&done->msg, reply);
-			__ofono_dbus_queue_req_free(done);
-		}
-	}
+	__ofono_dbus_queue_submit_next(q);
 }
 
 void __ofono_dbus_queue_reply_ok(struct ofono_dbus_queue *q)
@@ -250,8 +261,10 @@ void __ofono_dbus_queue_reply_all_fn_param(struct ofono_dbus_queue *q,
 	 * Find all other requests with the same handler and the same data
 	 * and complete those too (except when the handler is NULL)
 	 */
-	if (!handler)
+	if (!handler) {
+		__ofono_dbus_queue_submit_next(q);
 		return;
+	}
 
 	prev = NULL;
 	req = q->requests;
@@ -274,6 +287,7 @@ void __ofono_dbus_queue_reply_all_fn_param(struct ofono_dbus_queue *q,
 		
 		req = next;
 	}
+	__ofono_dbus_queue_submit_next(q);
 }
 
 /*
