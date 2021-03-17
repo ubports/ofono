@@ -417,7 +417,7 @@ static void test_reply_last_reply(DBusPendingCall *call, void *dbus)
 		G_CAST(dbus, struct test_reply_data, dbus);
 
 	DBG("");
-	test_dbus_check_error_reply(call, TEST_ERROR_FAILED);
+	test_dbus_check_empty_reply(call, NULL);
 	g_main_loop_quit(test->dbus.loop);
 }
 
@@ -443,6 +443,12 @@ static DBusMessage *test_reply_4(DBusMessage *msg, void *data)
 {
 	DBG("");
 	return NULL;
+}
+
+static DBusMessage *test_reply_5(DBusMessage *msg, void *data)
+{
+	DBG("");
+	return dbus_message_new_method_return(msg);
 }
 
 static DBusMessage *test_reply_handler(DBusConnection *conn,
@@ -485,10 +491,17 @@ static DBusMessage *test_reply_handler(DBusConnection *conn,
 	case 6:
 		__ofono_dbus_queue_request(test->queue, test_reply_4,
 								msg, NULL);
+		break;
+	case 7:
+		/* Call the same method again */
 		__ofono_dbus_queue_request(test->queue, test_reply_4,
 								msg, NULL);
 		break;
-	case 7:
+	case 8:
+		/* Call the last one */
+		__ofono_dbus_queue_request(test->queue, test_reply_5,
+								msg, NULL);
+
 		/* This completes the first one, with NULL handler */
 		__ofono_dbus_queue_reply_all_fn_param(test->queue, NULL, NULL);
 		g_assert(__ofono_dbus_queue_pending(test->queue));
@@ -508,10 +521,12 @@ static DBusMessage *test_reply_handler(DBusConnection *conn,
 		/* This one test_reply_3 with Failed */
 		__ofono_dbus_queue_reply_all_error(test->queue, NULL);
 
-		/* This one test_reply_4 with NotSupported */
+		/* This one completes all test_reply_4 with NotSupported */
 		error.type = OFONO_ERROR_TYPE_ERRNO;
 		error.error = -EOPNOTSUPP;
 		__ofono_dbus_queue_reply_all_error(test->queue, &error);
+
+		/* test_reply_5 must be already completed */
 		g_assert(!__ofono_dbus_queue_pending(test->queue));
 
 		/* And this one does nothing */
@@ -541,7 +556,8 @@ static void test_reply_start(struct test_dbus_context *dbus)
 	test_client_call(dbus, 4, test_dbus_expect_empty_reply);
 	test_client_call(dbus, 5, test_expect_failed);
 	test_client_call(dbus, 6, test_expect_not_supported);
-	test_client_call(dbus, 7, test_reply_last_reply);
+	test_client_call(dbus, 7, test_expect_not_supported);
+	test_client_call(dbus, 8, test_reply_last_reply);
 }
 
 static void test_reply(void)
