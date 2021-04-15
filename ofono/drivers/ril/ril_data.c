@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2016-2020 Jolla Ltd.
+ *  Copyright (C) 2016-2021 Jolla Ltd.
  *  Copyright (C) 2019-2020 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -1226,6 +1226,22 @@ void ril_data_remove_handler(struct ril_data *self, gulong id)
 	}
 }
 
+static void ril_data_imsi_changed(struct ril_sim_settings *settings,
+							void *user_data)
+{
+	struct ril_data *self = RIL_DATA(user_data);
+	struct ril_data_priv *priv = self->priv;
+
+	if (!settings->imsi) {
+		/*
+		 * Most likely, SIM removal. In any case, no data requests
+		 * make sense when IMSI is unavailable.
+		 */
+		ril_data_cancel_all_requests(self);
+	}
+	ril_data_manager_check_network_mode(priv->dm);
+}
+
 static void ril_data_settings_changed(struct ril_sim_settings *settings,
 							void *user_data)
 {
@@ -1308,7 +1324,7 @@ struct ril_data *ril_data_new(struct ril_data_manager *dm, const char *name,
 
 		priv->settings_event_id[SETTINGS_EVENT_IMSI_CHANGED] =
 			ril_sim_settings_add_imsi_changed_handler(settings,
-					ril_data_settings_changed, self);
+					ril_data_imsi_changed, self);
 		priv->settings_event_id[SETTINGS_EVENT_PREF_MODE] =
 			ril_sim_settings_add_pref_mode_changed_handler(settings,
 					ril_data_settings_changed, self);
