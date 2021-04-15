@@ -1196,6 +1196,31 @@ static struct ril_data_request *ril_data_allow_new(struct ril_data *data,
 	return req;
 }
 
+static gboolean ril_data_allow_can_submit(struct ril_data *self)
+{
+	if (self) {
+		switch (self->priv->options.allow_data) {
+		case RIL_ALLOW_DATA_ENABLED:
+			return TRUE;
+		case RIL_ALLOW_DATA_DISABLED:
+		case RIL_ALLOW_DATA_AUTO:
+			break;
+		}
+	}
+	return FALSE;
+}
+
+static gboolean ril_data_allow_submit_request(struct ril_data *data,
+							gboolean allow)
+{
+	if (ril_data_allow_can_submit(data)) {
+		ril_data_request_queue(ril_data_allow_new(data, allow));
+		return TRUE;
+	} else {
+		return FALSE;
+	}
+}
+
 /*==========================================================================*
  * ril_data
  *==========================================================================*/
@@ -1482,10 +1507,8 @@ static void ril_data_disallow(struct ril_data *self)
 	 */
 	ril_data_deactivate_all(self);
 
-	if (priv->options.allow_data == RIL_ALLOW_DATA_ENABLED) {
-		/* Tell rild that the data is now disabled */
-		ril_data_request_queue(ril_data_allow_new(self, FALSE));
-	} else {
+	/* Tell rild that the data is now disabled */
+	if (!ril_data_allow_submit_request(self, FALSE)) {
 		priv->flags &= ~RIL_DATA_FLAG_ON;
 		GASSERT(!ril_data_allowed(self));
 		DBG_(self, "data off");
@@ -1795,12 +1818,14 @@ static void ril_data_manager_check_network_mode(struct ril_data_manager *self)
 
 static struct ril_data *ril_data_manager_allowed(struct ril_data_manager *self)
 {
-	GSList *l;
+	if (self) {
+		GSList *l;
 
-	for (l= self->data_list; l; l = l->next) {
-		struct ril_data *data = l->data;
-		if (data->priv->flags & RIL_DATA_FLAG_ALLOWED) {
-			return data;
+		for (l= self->data_list; l; l = l->next) {
+			struct ril_data *data = l->data;
+			if (data->priv->flags & RIL_DATA_FLAG_ALLOWED) {
+				return data;
+			}
 		}
 	}
 
@@ -1820,9 +1845,7 @@ static void ril_data_manager_switch_data_on(struct ril_data_manager *self,
 					ril_data_max_mode(data), TRUE);
 	}
 
-	if (priv->options.allow_data == RIL_ALLOW_DATA_ENABLED) {
-		ril_data_request_queue(ril_data_allow_new(data, TRUE));
-	} else {
+	if (!ril_data_allow_submit_request(data, TRUE)) {
 		priv->flags |= RIL_DATA_FLAG_ON;
 		GASSERT(ril_data_allowed(data));
 		DBG_(data, "data on");
@@ -1846,12 +1869,7 @@ void ril_data_manager_check_data(struct ril_data_manager *self)
 
 void ril_data_manager_assert_data_on(struct ril_data_manager *self)
 {
-	if (self) {
-		struct ril_data *data = ril_data_manager_allowed(self);
-		if (data) {
-			ril_data_request_queue(ril_data_allow_new(data, TRUE));
-		}
-	}
+	ril_data_allow_submit_request(ril_data_manager_allowed(self), TRUE);
 }
 
 /*
