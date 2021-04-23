@@ -243,6 +243,7 @@ struct ril_data_call *ril_data_call_dup(const struct ril_data_call *call)
 		dc->dnses = g_strdupv(call->dnses);
 		dc->gateways = g_strdupv(call->gateways);
 		dc->addresses = g_strdupv(call->addresses);
+		dc->pcscf = g_strdupv(call->pcscf);
 		return dc;
 	} else {
 		return NULL;
@@ -253,8 +254,9 @@ static void ril_data_call_destroy(struct ril_data_call *call)
 {
 	g_free(call->ifname);
 	g_strfreev(call->dnses);
-	g_strfreev(call->addresses);
 	g_strfreev(call->gateways);
+	g_strfreev(call->addresses);
+	g_strfreev(call->pcscf);
 }
 
 void ril_data_call_free(struct ril_data_call *call)
@@ -322,8 +324,7 @@ static gboolean ril_data_call_parse_default(struct ril_data_call *call,
 
 	/* RIL_Data_Call_Response_v9 */
 	if (version >= 9) {
-		/* PCSCF */
-		grilio_parser_skip_string(rilp);
+		call->pcscf = grilio_parser_split_utf8(rilp, " ");
 
 		/* RIL_Data_Call_Response_v11 */
 		if (version >= 11) {
@@ -354,16 +355,19 @@ static struct ril_data_call *ril_data_call_parse(struct ril_vendor *vendor,
 
 	if (parsed) {
 		DBG("[status=%d,retry=%d,cid=%d,active=%d,type=%s,ifname=%s,"
-			"mtu=%d,address=%s,dns=%s %s,gateways=%s]",
+			"mtu=%d,address=%s,dns=%s %s,gateways=%s,pcscf=%s %s]",
 			call->status, call->retry_time,
 			call->cid, call->active,
 			ril_protocol_from_ofono(call->prot),
 			call->ifname, call->mtu,
-			call->addresses ? call->addresses[0] : NULL,
-			call->dnses ? call->dnses[0] : NULL,
+			call->addresses ? call->addresses[0] : "",
+			call->dnses ? call->dnses[0] : "",
 			(call->dnses && call->dnses[0] &&
 			call->dnses[1]) ? call->dnses[1] : "",
-			call->gateways ? call->gateways[0] : NULL);
+			call->gateways ? call->gateways[0] : "",
+			call->pcscf ? call->pcscf[0] : "",
+			(call->pcscf && call->pcscf[0] &&
+			call->pcscf[1]) ? call->pcscf[1] : "");
 		return call;
 	} else {
 		ril_data_call_free(call);
@@ -429,7 +433,8 @@ static gboolean ril_data_call_equal(const struct ril_data_call *c1,
 			!g_strcmp0(c1->ifname, c2->ifname) &&
 			gutil_strv_equal(c1->dnses, c2->dnses) &&
 			gutil_strv_equal(c1->gateways, c2->gateways) &&
-			gutil_strv_equal(c1->addresses, c2->addresses);
+			gutil_strv_equal(c1->addresses, c2->addresses) &&
+			gutil_strv_equal(c1->pcscf, c2->pcscf);
 	} else {
 		return FALSE;
 	}
@@ -951,7 +956,8 @@ static gboolean ril_data_call_setup_submit(struct ril_data_request *req)
 	 *
 	 * Makes little sense but it is what it is.
 	 */
-	tech = priv->network->data.ril_tech;
+	tech = (setup->profile_id == RIL_DATA_PROFILE_IMS) ?
+			RADIO_TECH_LTE : priv->network->data.ril_tech;
 	if (tech > 2) {
 		tech += 2;
 	} else {
@@ -1014,10 +1020,22 @@ static struct ril_data_request *ril_data_call_setup_new(struct ril_data *data,
 		g_new0(struct ril_data_request_setup, 1);
 	struct ril_data_request *req = &setup->req;
 
-	setup->profile_id = (priv->use_data_profiles &&
-		context_type == OFONO_GPRS_CONTEXT_TYPE_MMS) ?
-			priv->mms_data_profile_id :
-			RIL_DATA_PROFILE_DEFAULT;
+	setup->profile_id = RIL_DATA_PROFILE_DEFAULT;
+	if (priv->use_data_profiles) {
+		switch (context_type) {
+		case OFONO_GPRS_CONTEXT_TYPE_MMS:
+			setup->profile_id = priv->mms_data_profile_id;
+			break;
+		case OFONO_GPRS_CONTEXT_TYPE_IMS:
+			setup->profile_id = RIL_DATA_PROFILE_IMS;
+			break;
+		case OFONO_GPRS_CONTEXT_TYPE_ANY:
+		case OFONO_GPRS_CONTEXT_TYPE_INTERNET:
+		case OFONO_GPRS_CONTEXT_TYPE_WAP:
+			break;
+		}
+	}
+
 	setup->apn = g_strdup(ctx->apn);
 	setup->username = g_strdup(ctx->username);
 	setup->password = g_strdup(ctx->password);

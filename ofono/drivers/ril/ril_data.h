@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2016-2020 Jolla Ltd.
+ *  Copyright (C) 2016-2021 Jolla Ltd.
  *  Copyright (C) 2019 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -40,6 +40,7 @@ struct ril_data_call {
 	char **dnses;
 	char **gateways;
 	char **addresses;
+	char **pcscf;
 };
 
 struct ril_data_call_list {
