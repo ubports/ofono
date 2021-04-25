@@ -368,6 +368,8 @@ static void get_session_cb(ofono_bool_t active, int session_id,
 error:
 	__ofono_dbus_pending_reply(&sa->pending->msg,
 			__ofono_error_failed(sa->pending->msg));
+	__ofono_sim_remove_session_watch(sa->pending->session,
+			sa->pending->watch_id);
 	g_free(sa->pending);
 	sa->pending = NULL;
 }
