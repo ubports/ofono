@@ -3784,7 +3784,8 @@ void __ofono_sim_remove_session_watch(struct ofono_sim_aid_session *session,
 {
 	__ofono_watchlist_remove_item(session->watches, id);
 
-	if (g_slist_length(session->watches->items) == 0) {
+	if (g_slist_length(session->watches->items) == 0 &&
+			session->state == SESSION_STATE_OPEN) {
 		/* last watcher, close session */
 		session->state = SESSION_STATE_CLOSING;
 		session->sim->driver->close_channel(session->sim,
