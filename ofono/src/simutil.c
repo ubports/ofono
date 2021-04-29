@@ -1583,6 +1583,7 @@ GSList *sim_parse_app_template_entries(const unsigned char *buffer, int len)
 			goto error;
 
 		memcpy(app.aid, aid, app.aid_len);
+		memset(app.aid + app.aid_len, 0xff, 16 - app.aid_len);
 
 		app.type = (app.aid[5] << 8) | app.aid[6];
 
