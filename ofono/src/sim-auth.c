@@ -208,14 +208,10 @@ static void handle_umts(struct ofono_sim_auth *sa, const uint8_t *resp,
 	DBusMessage *reply = NULL;
 	DBusMessageIter iter;
 	DBusMessageIter dict;
-	const uint8_t *res = NULL;
-	const uint8_t *ck = NULL;
-	const uint8_t *ik = NULL;
-	const uint8_t *auts = NULL;
-	const uint8_t *kc = NULL;
+	struct data_block res, ck, ik, auts, sres, kc;
 
 	if (!sim_parse_umts_authenticate(resp, len, &res, &ck, &ik,
-			&auts, &kc))
+			&auts, &sres, &kc))
 		goto umts_end;
 
 	reply = dbus_message_new_method_return(sa->pending->msg);
@@ -225,15 +221,23 @@ static void handle_umts(struct ofono_sim_auth *sa, const uint8_t *resp,
 	dbus_message_iter_open_container(&iter, DBUS_TYPE_ARRAY,
 			"{say}", &dict);
 
-	if (auts) {
-		append_dict_byte_array(&dict, "AUTS", auts, 14);
-	} else {
-		append_dict_byte_array(&dict, "RES", res, 8);
-		append_dict_byte_array(&dict, "CK", ck, 16);
-		append_dict_byte_array(&dict, "IK", ik, 16);
-		if (kc)
-			append_dict_byte_array(&dict, "Kc", kc, 8);
-	}
+	if (auts.data)
+		append_dict_byte_array(&dict, "AUTS", auts.data, auts.len);
+
+	if (sres.data)
+		append_dict_byte_array(&dict, "SRES", sres.data, sres.len);
+
+	if (res.data)
+		append_dict_byte_array(&dict, "RES", res.data, res.len);
+
+	if (ck.data)
+		append_dict_byte_array(&dict, "CK", ck.data, ck.len);
+
+	if (ik.data)
+		append_dict_byte_array(&dict, "IK", ik.data, ik.len);
+
+	if (kc.data)
+		append_dict_byte_array(&dict, "Kc", kc.data, kc.len);
 
 	dbus_message_iter_close_container(&iter, &dict);
 

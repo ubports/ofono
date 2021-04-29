@@ -1668,67 +1668,135 @@ int sim_build_gsm_authenticate(unsigned char *buffer, int len,
 	return build_authenticate(buffer, rand, NULL);
 }
 
-gboolean sim_parse_umts_authenticate(const unsigned char *buffer,
-		int len, const unsigned char **res, const unsigned char **ck,
-		const unsigned char **ik, const unsigned char **auts,
-		const unsigned char **kc)
+gboolean sim_parse_umts_authenticate(const unsigned char *buffer, int len,
+		struct data_block *res, struct data_block *ck,
+		struct data_block *ik, struct data_block *auts,
+		struct data_block *sres, struct data_block *kc)
 {
-	if (len < 16 || !buffer)
+	const unsigned char *ptr = buffer;
+	const unsigned char *end = ptr + len;
+	unsigned int l;
+
+	if (!buffer || len < 2)
 		return FALSE;
 
-	switch (buffer[0]) {
+	memset(res, 0, sizeof(*res));
+	memset(ck, 0, sizeof(*ck));
+	memset(ik, 0, sizeof(*ik));
+	memset(kc, 0, sizeof(*kc));
+	memset(auts, 0, sizeof(*auts));
+	memset(sres, 0, sizeof(*sres));
+
+	/*
+	 * TS 31.102
+	 * 7.1.2.1 GSM/3G security context
+	 */
+	switch (*ptr++) {
 	case 0xdb:
-		/* 'DB' + '08' + RES(16) + '10' + CK(32) + '10' + IK(32) = 43 */
-		if (len < 43)
-			goto umts_end;
+		/*
+		 * Response parameters/data, case 1, 3G security context,
+		 * command successful:
+		 *
+		 * "Successful 3G authentication" tag = 'DB'
+		 * 'DB' + L3 + RES(L3) + L4 + CK(L4) + L5 + IK(L5) + 8 + Kc(8)
+		 */
+		l = *ptr++; /* L3 */
+		if ((ptr + l) > end)
+			return FALSE;
 
-		/* success */
-		if (buffer[1] != 0x08)
-			goto umts_end;
+		res->data = ptr;
+		res->len = l;
+		ptr += l;
 
-		*res = buffer + 2;
+		if (ptr == end)
+			return FALSE;
 
-		if (buffer[10] != 0x10)
-			goto umts_end;
+		l = *ptr++; /* L4 */
+		if ((ptr + l) > end)
+			return FALSE;
 
-		*ck = buffer + 11;
+		ck->data = ptr;
+		ck->len = l;
+		ptr += l;
 
-		if (buffer[27] != 0x10)
-			goto umts_end;
+		if (ptr == end)
+			return FALSE;
 
-		*ik = buffer + 28;
+		l = *ptr++; /* L5 */
+		if ((ptr + l) > end)
+			return FALSE;
 
-		if (len >= 53 && kc) {
-			if (buffer[44] != 0x08)
-				goto umts_end;
+		ik->data = ptr;
+		ik->len = l;
+		ptr += l;
 
-			*kc = buffer + 45;
-		} else {
-			*kc = NULL;
+		if (ptr < end) {
+			l = *ptr++;
+			if (l != 8 || (ptr + l) != end)
+				return FALSE;
+
+			kc->data = ptr;
+			kc->len = l;
+			ptr += l;
 		}
 
-		*auts = NULL;
+		return TRUE;
 
-		break;
 	case 0xdc:
-		/* 'DC' + '0E' + AUTS(14) = 16 */
-		if (len < 16)
-			goto umts_end;
+		/*
+		 * Response parameters/data, case 2, 3G security context,
+		 * synchronisation failure:
+		 *
+		 * "Synchronisation failure" tag = 'DC'
+		 * 'DC' + L1 + AUTS(L1)
+		 */
+		l = *ptr++; /* L1 */
+		if ((ptr + l) > end)
+			return FALSE;
 
-		/* sync error */
-		if (buffer[1] != 0x0e)
-			goto umts_end;
+		auts->data = ptr;
+		auts->len = l;
+		ptr += l;
 
-		*auts = buffer + 2;
+		if (ptr != end)
+			return FALSE;
 
-		break;
+		return TRUE;
+
+	case 0x04:
+		/*
+		 * Response parameters/data, case 3, GSM security context,
+		 * command successful:
+		 *
+		 * 4 + SRES(4) + 8 + Kc(8)
+		 */
+		l = 4; /* Already skipped this one */
+		if ((ptr + l) > end)
+			return FALSE;
+
+		sres->data = ptr;
+		sres->len = l;
+		ptr += l;
+
+		if (ptr == end)
+			return FALSE;
+
+		l = *ptr++; /* 8 */
+		if (l != 8 || (ptr + l) > end)
+			return FALSE;
+
+		kc->data = ptr;
+		kc->len = l;
+		ptr += l;
+
+		if (ptr != end)
+			return FALSE;
+
+		return TRUE;
+
 	default:
-		goto umts_end;
+		break;
 	}
-
-	return TRUE;
-
-umts_end:
 	return FALSE;
 }
 

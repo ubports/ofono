@@ -371,6 +371,11 @@ struct comprehension_tlv_builder {
 	struct ber_tlv_builder *parent;
 };
 
+struct data_block {
+	const unsigned char *data;
+	unsigned int len;
+};
+
 void simple_tlv_iter_init(struct simple_tlv_iter *iter,
 				const unsigned char *pdu, unsigned int len);
 gboolean simple_tlv_iter_next(struct simple_tlv_iter *iter);
@@ -526,10 +531,10 @@ int sim_build_umts_authenticate(unsigned char *buffer, int len,
 int sim_build_gsm_authenticate(unsigned char *buffer, int len,
 		const unsigned char *rand);
 
-gboolean sim_parse_umts_authenticate(const unsigned char *buffer,
-		int len, const unsigned char **res, const unsigned char **ck,
-		const unsigned char **ik, const unsigned char **auts,
-		const unsigned char **kc);
+gboolean sim_parse_umts_authenticate(const unsigned char *buffer, int len,
+		struct data_block *res, struct data_block *ck,
+		struct data_block *ik, struct data_block *auts,
+		struct data_block *sres, struct data_block *kc);
 
 gboolean sim_parse_gsm_authenticate(const unsigned char *buffer, int len,
 		const unsigned char **sres, const unsigned char **kc);
