@@ -998,8 +998,9 @@ static void ril_export_entries(struct ofono_phonebook *pb,
 	pbd->df_path = usim_path;
 	pbd->df_size = sizeof(usim_path);
 
-	ofono_sim_read(pbd->sim_context, SIM_EFPBR_FILEID,
+	ofono_sim_read_path(pbd->sim_context, SIM_EFPBR_FILEID,
 			OFONO_SIM_FILE_STRUCTURE_FIXED,
+			pbd->df_path, pbd->df_size,
 			pb_reference_data_cb, pb);
 }
 
