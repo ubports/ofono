@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2019 Jolla Ltd.
+ *  Copyright (C) 2015-2021 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -307,30 +307,13 @@ static void ril_sim_append_path(struct ril_sim *sd, GRilIoRequest *req,
 		grilio_request_append_utf8(req, hex_path);
 		DBG_(sd, "%s", hex_path);
 		g_free(hex_path);
-	} else if (fileid == SIM_EF_ICCID_FILEID || fileid == SIM_EFPL_FILEID) {
-		/*
-		 * Special catch-all for EF_ICCID (unique card ID)
-		 * and EF_PL files which exist in the root directory.
-		 * As the sim_info_cb function may not have yet
-		 * recorded the app_type for the SIM, and the path
-		 * for both files is the same for 2g|3g, just hard-code.
-		 *
-		 * See 'struct ef_db' in:
-		 * ../../src/simutil.c for more details.
-		 */
-		DBG_(sd, "%s", ROOTMF);
-		grilio_request_append_utf8(req, ROOTMF);
 	} else {
 		/*
-		 * The only known case of this is EFPHASE_FILED (0x6FAE).
-		 * The ef_db table ( see /src/simutil.c ) entry for
-		 * EFPHASE contains a value of 0x0000 for it's
-		 * 'parent3g' member.  This causes a NULL path to
-		 * be returned.
+		 * Catch-all for EF_ICCID, EF_PL and other files absent
+		 * from ef_db table in src/simutil.c, hard-code ROOTMF.
 		 */
-
-		DBG_(sd, "returning empty path.");
-		grilio_request_append_utf8(req, NULL);
+		DBG_(sd, "%s (default)", ROOTMF);
+		grilio_request_append_utf8(req, ROOTMF);
 	}
 }
 
