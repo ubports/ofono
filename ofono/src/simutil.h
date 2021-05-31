@@ -314,9 +314,13 @@ struct sim_ef_info {
 	enum sim_file_access perm_update;
 };
 
-struct sim_app_record {
+struct sim_aid {
 	unsigned char aid[16];
-	int aid_len;
+	unsigned int len;
+};
+
+struct sim_app_record {
+	struct sim_aid aid;
 	char *label;
 	enum sim_app_type type;
 };

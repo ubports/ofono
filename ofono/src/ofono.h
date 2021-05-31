@@ -3,7 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
- *  Copyright (C) 2015-2019  Jolla Ltd.
+ *  Copyright (C) 2015-2021  Jolla Ltd.
  *  Copyright (C) 2019 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -388,6 +388,7 @@ unsigned short __ofono_sms_get_next_ref(struct ofono_sms *sms);
 
 #include <ofono/sim.h>
 
+struct sim_aid;
 struct ofono_sim_aid_session;
 enum sim_app_type;
 
@@ -426,7 +427,7 @@ void __ofono_sim_remove_session_watch(struct ofono_sim_aid_session *session,
 		unsigned int id);
 
 struct ofono_sim_aid_session *__ofono_sim_get_session_by_aid(
-		struct ofono_sim *sim, unsigned char *aid);
+		struct ofono_sim *sim, const struct sim_aid *aid);
 
 struct ofono_sim_aid_session *__ofono_sim_get_session_by_type(
 		struct ofono_sim *sim, enum sim_app_type type);
@@ -436,7 +437,7 @@ int __ofono_sim_session_get_id(struct ofono_sim_aid_session *session);
 enum sim_app_type __ofono_sim_session_get_type(
 		struct ofono_sim_aid_session *session);
 
-unsigned char *__ofono_sim_session_get_aid(
+const struct sim_aid *__ofono_sim_session_get_aid(
 		struct ofono_sim_aid_session *session);
 
 const char *__ofono_sim_get_impi(struct ofono_sim *sim);

@@ -3,6 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2015-2021  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -62,7 +63,7 @@ struct auth_request {
 };
 
 struct aid_object {
-	uint8_t aid[16];
+	struct sim_aid aid;
 	char *path;
 	enum sim_app_type type;
 };
@@ -82,7 +83,7 @@ struct ofono_sim_auth {
 /*
  * Find an application by path. 'path' should be a DBusMessage object path.
  */
-static uint8_t *find_aid_by_path(GSList *aid_objects,
+static const struct aid_object *find_aid_by_path(GSList *aid_objects,
 		const char *path)
 {
 	GSList *iter = aid_objects;
@@ -91,7 +92,7 @@ static uint8_t *find_aid_by_path(GSList *aid_objects,
 		struct aid_object *obj = iter->data;
 
 		if (!strcmp(path, obj->path))
-			return obj->aid;
+			return obj;
 
 		iter = g_slist_next(iter);
 	}
@@ -384,7 +385,7 @@ static DBusMessage *usim_gsm_authenticate(DBusConnection *conn,
 	struct ofono_sim_auth *sa = data;
 	DBusMessageIter iter;
 	DBusMessageIter array;
-	uint8_t *aid;
+	const struct aid_object *obj;
 
 	if (sa->pending)
 		return __ofono_error_busy(msg);
@@ -424,13 +425,20 @@ static DBusMessage *usim_gsm_authenticate(DBusConnection *conn,
 	/*
 	 * retrieve session from SIM
 	 */
-	aid = find_aid_by_path(sa->aid_objects, dbus_message_get_path(msg));
-	sa->pending->session = __ofono_sim_get_session_by_aid(sa->sim, aid);
+	obj = find_aid_by_path(sa->aid_objects, dbus_message_get_path(msg));
+	sa->pending->session = __ofono_sim_get_session_by_aid(sa->sim,
+						&obj->aid);
 	sa->pending->msg = dbus_message_ref(msg);
 	sa->pending->watch_id = __ofono_sim_add_session_watch(
 			sa->pending->session, get_session_cb, sa, NULL);
 
-	return NULL;
+        if (!sa->pending->watch_id) {
+            g_free(sa->pending);
+            sa->pending = NULL;
+            return __ofono_error_not_supported(msg);
+        }
+
+        return NULL;
 
 format_error:
 	g_free(sa->pending);
@@ -446,7 +454,7 @@ static DBusMessage *umts_common(DBusConnection *conn, DBusMessage *msg,
 	uint32_t rlen;
 	uint32_t alen;
 	struct ofono_sim_auth *sa = data;
-	uint8_t *aid;
+	const struct aid_object *obj;
 
 	if (sa->pending)
 		return __ofono_error_busy(msg);
@@ -471,11 +479,17 @@ static DBusMessage *umts_common(DBusConnection *conn, DBusMessage *msg,
 	/*
 	 * retrieve session from SIM
 	 */
-	aid = find_aid_by_path(sa->aid_objects, dbus_message_get_path(msg));
-	sa->pending->session = __ofono_sim_get_session_by_aid(sa->sim, aid);
-
+	obj = find_aid_by_path(sa->aid_objects, dbus_message_get_path(msg));
+	sa->pending->session = __ofono_sim_get_session_by_aid(sa->sim,
+						&obj->aid);
 	sa->pending->watch_id = __ofono_sim_add_session_watch(
 			sa->pending->session, get_session_cb, sa, NULL);
+
+        if (!sa->pending->watch_id) {
+            g_free(sa->pending);
+            sa->pending = NULL;
+            return __ofono_error_not_supported(msg);
+        }
 
 	return NULL;
 }
@@ -706,14 +720,15 @@ static void sim_auth_register(struct ofono_sim_auth *sa)
 
 			ret = sprintf(new->path, "%s/", path);
 
-			encode_hex_own_buf(r->aid, 16, 0, new->path + ret);
+			encode_hex_own_buf(r->aid.aid, r->aid.len, 0,
+					new->path + ret);
 
 			g_dbus_register_interface(conn, new->path,
 					OFONO_USIM_APPLICATION_INTERFACE,
 					sim_auth_usim_app, NULL, NULL,
 					sa, NULL);
 
-			memcpy(new->aid, r->aid, 16);
+			new->aid = r->aid;
 
 			break;
 		case SIM_APP_TYPE_ISIM:
@@ -721,14 +736,15 @@ static void sim_auth_register(struct ofono_sim_auth *sa)
 
 			ret = sprintf(new->path, "%s/", path);
 
-			encode_hex_own_buf(r->aid, 16, 0, new->path + ret);
+			encode_hex_own_buf(r->aid.aid, r->aid.len, 0,
+					new->path + ret);
 
 			g_dbus_register_interface(conn, new->path,
 					OFONO_ISIM_APPLICATION_INTERFACE,
 					sim_auth_isim_app, NULL, NULL,
 					sa, NULL);
 
-			memcpy(new->aid, r->aid, 16);
+			new->aid = r->aid;
 
 			break;
 		default:

@@ -3,6 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2015-2021  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -1572,20 +1573,16 @@ GSList *sim_parse_app_template_entries(const unsigned char *buffer, int len)
 	/* Find all the application entries */
 	while ((dataobj = ber_tlv_find_by_tag(buffer, 0x61, len,
 						&dataobj_len)) != NULL) {
-		struct sim_app_record app;
+		struct sim_app_record *app;
 		const unsigned char *aid, *label;
-		int label_len;
+		int label_len, aid_len;
+		char *app_label;
 
 		/* Find the aid (mandatory) */
 		aid = ber_tlv_find_by_tag(dataobj, 0x4f, dataobj_len,
-						&app.aid_len);
-		if (!aid || app.aid_len < 0x01 || app.aid_len > 0x10)
+						&aid_len);
+		if (!aid || aid_len < 0x01 || aid_len > 0x10)
 			goto error;
-
-		memcpy(app.aid, aid, app.aid_len);
-		memset(app.aid + app.aid_len, 0xff, 16 - app.aid_len);
-
-		app.type = (app.aid[5] << 8) | app.aid[6];
 
 		/* Find the label (optional) */
 		label = ber_tlv_find_by_tag(dataobj, 0x50, dataobj_len,
@@ -1595,14 +1592,21 @@ GSList *sim_parse_app_template_entries(const unsigned char *buffer, int len)
 			 * Label field uses the extra complicated
 			 * encoding in 102.221 Annex A
 			 */
-			app.label = sim_string_to_utf8(label, label_len);
+			app_label = sim_string_to_utf8(label, label_len);
 
-			if (app.label == NULL)
+			if (app_label == NULL)
 				goto error;
 		} else
-			app.label = NULL;
+			app_label = NULL;
 
-		ret = g_slist_prepend(ret, g_memdup(&app, sizeof(app)));
+		app = g_new0(struct sim_app_record, 1);
+
+		memcpy(app->aid.aid, aid, aid_len);
+		app->aid.len = aid_len;
+		app->label = app_label;
+		app->type = (aid[5] << 8) | aid[6];
+
+		ret = g_slist_prepend(ret, app);
 
 		len -= (dataobj - buffer) + dataobj_len;
 		buffer = dataobj + dataobj_len;

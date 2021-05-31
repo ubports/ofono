@@ -3,6 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2015-2021  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -491,12 +492,12 @@ static void test_application_entry_decode(void)
 	app[0] = entries->next->data;
 	app[1] = entries->data;
 
-	g_assert(app[0]->aid_len == 0x10);
-	g_assert(!memcmp(app[0]->aid, &ef_dir[4], 0x10));
+	g_assert(app[0]->aid.len == 0x10);
+	g_assert(!memcmp(app[0]->aid.aid, &ef_dir[4], 0x10));
 	g_assert(app[0]->label == NULL);
 
-	g_assert(app[1]->aid_len == 0x0c);
-	g_assert(!memcmp(app[1]->aid, &ef_dir[37], 0x0c));
+	g_assert(app[1]->aid.len == 0x0c);
+	g_assert(!memcmp(app[1]->aid.aid, &ef_dir[37], 0x0c));
 	g_assert(app[1]->label != NULL);
 	g_assert(!strcmp(app[1]->label, "MIDPfiles"));
 

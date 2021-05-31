@@ -3,6 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2015-2021  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -2441,7 +2442,7 @@ struct ofono_sim_context *ofono_sim_context_create_isim(
 
 		if (session->record->type == SIM_APP_TYPE_ISIM) {
 			return sim_fs_context_new_with_aid(sim->simfs_isim,
-					session->record->aid);
+					&session->record->aid);
 		}
 
 		iter = g_slist_next(iter);
@@ -3667,6 +3668,26 @@ const char *__ofono_sim_get_impi(struct ofono_sim *sim)
 static void open_channel_cb(const struct ofono_error *error, int session_id,
 		void *data);
 
+static gboolean open_channel(struct ofono_sim_aid_session *session)
+{
+	struct ofono_sim *sim = session->sim;
+	const struct ofono_sim_driver *driver = sim->driver;
+	const struct sim_aid *aid = &session->record->aid;
+
+	if (driver->open_channel2) {
+		driver->open_channel2(sim, aid->aid, aid->len, open_channel_cb,
+								session);
+		return TRUE;
+	}
+
+	if (driver->open_channel && aid->len == 16) {
+		driver->open_channel(sim, aid->aid, open_channel_cb, session);
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
 static void close_channel_cb(const struct ofono_error *error, void *data)
 {
 	struct ofono_sim_aid_session *session = data;
@@ -3680,10 +3701,8 @@ static void close_channel_cb(const struct ofono_error *error, void *data)
 		 * An atom requested to open during a close, we can re-open
 		 * here.
 		 */
-		session->sim->driver->open_channel(session->sim,
-				session->record->aid, open_channel_cb,
-				session);
-		return;
+		if (open_channel(session))
+			return;
 	}
 
 	session->state = SESSION_STATE_INACTIVE;
@@ -3758,10 +3777,12 @@ unsigned int __ofono_sim_add_session_watch(
 		 * If the session is inactive and there are no watchers, open
 		 * a new session.
 		 */
-		session->state = SESSION_STATE_OPENING;
-		session->sim->driver->open_channel(session->sim,
-				session->record->aid, open_channel_cb,
-				session);
+		if (open_channel(session)) {
+			session->state = SESSION_STATE_OPENING;
+		} else {
+			g_free(item);
+			return 0;
+		}
 	} else if (session->state == SESSION_STATE_OPEN) {
 		/*
 		 * Session is already open and available, just call the
@@ -3794,14 +3815,15 @@ void __ofono_sim_remove_session_watch(struct ofono_sim_aid_session *session,
 }
 
 struct ofono_sim_aid_session *__ofono_sim_get_session_by_aid(
-		struct ofono_sim *sim, unsigned char *aid)
+		struct ofono_sim *sim, const struct sim_aid *aid)
 {
 	GSList *iter = sim->aid_sessions;
 
 	while (iter) {
 		struct ofono_sim_aid_session *session = iter->data;
 
-		if (!memcmp(session->record->aid, aid, 16))
+		if (session->record->aid.len == aid->len &&
+			!memcmp(session->record->aid.aid, aid, aid->len))
 			return session;
 
 		iter = g_slist_next(iter);
@@ -3838,10 +3860,10 @@ enum sim_app_type __ofono_sim_session_get_type(
 	return session->record->type;
 }
 
-unsigned char *__ofono_sim_session_get_aid(
+const struct sim_aid *__ofono_sim_session_get_aid(
 		struct ofono_sim_aid_session *session)
 {
-	return session->record->aid;
+	return &session->record->aid;
 }
 
 GSList *__ofono_sim_get_aid_list(struct ofono_sim *sim)
