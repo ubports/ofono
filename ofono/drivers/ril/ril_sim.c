@@ -20,6 +20,8 @@
 
 #include <ofono/watch.h>
 
+#include <gutil_misc.h>
+
 #include "simutil.h"
 #include "util.h"
 #include "ofono.h"
@@ -86,6 +88,7 @@ struct ril_sim {
 	gboolean empty_pin_query_allowed;
 	gboolean inserted;
 	guint idle_id; /* Used by register and SIM reset callbacks */
+	guint list_apps_id;
 	gulong card_event_id[SIM_CARD_EVENT_COUNT];
 	gulong io_event_id[IO_EVENT_COUNT];
 	guint query_pin_retries_id;
@@ -118,9 +121,22 @@ struct ril_sim_cbd_io {
 		ofono_sim_write_cb_t write;
 		ofono_sim_imsi_cb_t imsi;
 		ofono_query_facility_lock_cb_t query_facility_lock;
+		ofono_sim_open_channel_cb_t open_channel;
+		ofono_sim_close_channel_cb_t close_channel;
 		gpointer ptr;
 	} cb;
 	gpointer data;
+	guint req_id;
+};
+
+struct ril_sim_session_cbd {
+	struct ril_sim *sd;
+	struct ril_sim_card *card;
+	ofono_sim_logical_access_cb_t cb;
+	gpointer data;
+	int ref_count;
+	int session_id;
+	int cla;
 	guint req_id;
 };
 
@@ -148,6 +164,16 @@ struct ril_sim_retry_query {
 	enum ofono_sim_password_type passwd_type;
 	guint req_code;
 	GRilIoRequest *(*new_req)(struct ril_sim *sd);
+};
+
+/* TS 102.221 */
+#define APP_TEMPLATE_TAG 0x61
+#define APP_ID_TAG 0x4F
+
+struct ril_sim_list_apps {
+	struct ril_sim *sd;
+	ofono_sim_list_apps_cb_t cb;
+	void *data;
 };
 
 static GRilIoRequest *ril_sim_empty_sim_pin_req(struct ril_sim *sd);
@@ -216,6 +242,45 @@ static void ril_sim_cbd_io_start(struct ril_sim_cbd_io *cbd, GRilIoRequest* req,
 	cbd->req_id = grilio_queue_send_request_full(sd->q, req, code,
 						cb, ril_sim_cbd_io_free, cbd);
 	ril_sim_card_sim_io_started(cbd->card, cbd->req_id);
+}
+
+static struct ril_sim_session_cbd *ril_sim_session_cbd_new(struct ril_sim *sd,
+	int session_id, int cla, ofono_sim_logical_access_cb_t cb, void *data)
+{
+	struct ril_sim_session_cbd *cbd = g_new0(struct ril_sim_session_cbd, 1);
+
+	cbd->sd = sd;
+	cbd->cb = cb;
+	cbd->data = data;
+	cbd->card = ril_sim_card_ref(sd->card);
+	cbd->session_id = session_id;
+	cbd->cla = cla;
+	cbd->ref_count = 1;
+	return cbd;
+}
+
+static void ril_sim_session_cbd_unref(void *data)
+{
+	struct ril_sim_session_cbd *cbd = data;
+
+	if (--(cbd->ref_count) < 1) {
+		ril_sim_card_sim_io_finished(cbd->card, cbd->req_id);
+		ril_sim_card_unref(cbd->card);
+		g_free(cbd);
+	}
+}
+
+static void ril_sim_session_cbd_start(struct ril_sim_session_cbd *cbd,
+		GRilIoRequest* req, guint code, GRilIoChannelResponseFunc cb)
+{
+	struct ril_sim *sd = cbd->sd;
+	const guint finished_req = cbd->req_id;
+
+	cbd->ref_count++;
+	cbd->req_id = grilio_queue_send_request_full(sd->q, req, code, cb,
+					ril_sim_session_cbd_unref, cbd);
+	ril_sim_card_sim_io_started(cbd->card, cbd->req_id);
+	ril_sim_card_sim_io_finished(cbd->card, finished_req);
 }
 
 static void ril_sim_pin_cbd_state_event_count_cb(struct ril_sim_card *sc,
@@ -1405,6 +1470,294 @@ static void ril_sim_query_facility_lock(struct ofono_sim *sim,
 	grilio_request_unref(req);
 }
 
+static gboolean ril_sim_list_apps_cb(void *data)
+{
+	struct ril_sim_list_apps *rd = data;
+	struct ril_sim *sd = rd->sd;
+	const struct ril_sim_card_status *status = sd->card->status;
+	struct ofono_error error;
+
+	GASSERT(sd->list_apps_id);
+	sd->list_apps_id = 0;
+
+	if (status) {
+		int i, n = status->num_apps;
+		GByteArray *tlv = g_byte_array_sized_new(n * 20);
+
+		/* Reconstruct EFdir contents */
+		for (i = 0; i < n; i++) {
+			const char *hex = status->apps[i].aid;
+			gsize hex_len = hex ? strlen(hex) : 0;
+			long aid_size;
+			guint8 aid[16];
+
+			if (hex_len >= 2 && hex_len <= 2 * sizeof(aid) &&
+				!(hex_len & 0x01) && decode_hex_own_buf(hex,
+					hex_len, &aid_size, 0, aid)) {
+				guint8 buf[4];
+
+				/*
+				 * TS 102.221
+				 * 13 Application independent files
+				 * 13.1 EFdir
+				 *
+				 * Application template TLV object.
+				 */
+				buf[0] = APP_TEMPLATE_TAG;
+				buf[1] = (guint8)(aid_size + 2);
+				buf[2] = APP_ID_TAG;
+				buf[3] = (guint8)(aid_size);
+				g_byte_array_append(tlv, buf, sizeof(buf));
+				g_byte_array_append(tlv, aid, aid_size);
+			}
+		}
+		DBG_(sd, "reporting %u apps %u bytes", n, tlv->len);
+		rd->cb(ril_error_ok(&error), tlv->data, tlv->len, rd->data);
+		g_byte_array_unref(tlv);
+	} else {
+		DBG_(sd, "no SIM card, no apps");
+		rd->cb(ril_error_failure(&error), NULL, 0, rd->data);
+	}
+	return G_SOURCE_REMOVE;
+}
+
+static void ril_sim_list_apps(struct ofono_sim *sim,
+			ofono_sim_list_apps_cb_t cb, void *data)
+{
+	struct ril_sim *sd = ril_sim_get_data(sim);
+	struct ril_sim_list_apps *rd = g_new(struct ril_sim_list_apps, 1);
+
+	rd->sd = sd;
+	rd->cb = cb;
+	rd->data = data;
+	if (sd->list_apps_id) {
+		g_source_remove(sd->list_apps_id);
+	}
+	sd->list_apps_id = g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,
+				ril_sim_list_apps_cb, rd, g_free);
+}
+
+static void ril_sim_open_channel_cb(GRilIoChannel *io, int status,
+				const void *data, guint len, void *user_data)
+{
+	struct ril_sim_cbd_io *cbd = user_data;
+	ofono_sim_open_channel_cb_t cb = cbd->cb.open_channel;
+	struct ofono_error error;
+
+	if (status == RIL_E_SUCCESS) {
+		guint32 n, session_id;
+		GRilIoParser rilp;
+
+		grilio_parser_init(&rilp, data, len);
+		if (grilio_parser_get_uint32(&rilp, &n) && n >= 1 &&
+			grilio_parser_get_uint32(&rilp, &session_id)) {
+			DBG_(cbd->sd, "%u", session_id);
+			cb(ril_error_ok(&error), session_id, cbd->data);
+			return;
+		}
+	} else {
+		ofono_error("Open logical channel failure: %s",
+					ril_error_to_string(status));
+	}
+
+	cb(ril_error_failure(&error), 0, cbd->data);
+}
+
+static void ril_sim_open_channel(struct ofono_sim *sim,
+		const unsigned char *aid, unsigned int len,
+		ofono_sim_open_channel_cb_t cb, void *data)
+{
+	struct ril_sim *sd = ril_sim_get_data(sim);
+	struct ril_sim_cbd_io *cbd = ril_sim_cbd_io_new(sd, cb, data);
+	GRilIoRequest *req = grilio_request_new();
+	char *aid_hex = encode_hex(aid, len, 0);
+
+	DBG_(sd, "%s", aid_hex);
+	grilio_request_append_utf8(req, aid_hex);
+	grilio_request_append_int32(req, 0);
+	grilio_request_set_timeout(req, SIM_IO_TIMEOUT_SECS * 1000);
+	ril_sim_cbd_io_start(cbd, req, RIL_REQUEST_SIM_OPEN_CHANNEL,
+						ril_sim_open_channel_cb);
+	grilio_request_unref(req);
+	g_free(aid_hex);
+}
+
+static void ril_sim_close_channel_cb(GRilIoChannel *io, int status,
+				const void *data, guint len, void *user_data)
+{
+	struct ril_sim_cbd_io *cbd = user_data;
+	struct ofono_error error;
+
+	if (status == RIL_E_SUCCESS) {
+		ril_error_init_ok(&error);
+	} else {
+		ofono_error("Close logical channel failure: %s",
+					ril_error_to_string(status));
+		ril_error_init_failure(&error);
+	}
+	cbd->cb.close_channel(&error, cbd->data);
+}
+
+static void ril_sim_close_channel(struct ofono_sim *sim, int session_id,
+		ofono_sim_close_channel_cb_t cb, void *data)
+{
+	struct ril_sim *sd = ril_sim_get_data(sim);
+	struct ril_sim_cbd_io *cbd = ril_sim_cbd_io_new(sd, cb, data);
+	GRilIoRequest *req = grilio_request_new();
+
+	DBG_(sd, "%u", session_id);
+	grilio_request_append_int32(req, 1);
+	grilio_request_append_int32(req, session_id);
+	grilio_request_set_timeout(req, SIM_IO_TIMEOUT_SECS * 1000);
+	ril_sim_cbd_io_start(cbd, req, RIL_REQUEST_SIM_CLOSE_CHANNEL,
+						ril_sim_close_channel_cb);
+	grilio_request_unref(req);
+}
+
+static void ril_sim_logical_access_get_results_cb(GRilIoChannel *io, int status,
+				const void *data, guint len, void *user_data)
+{
+	struct ril_sim_session_cbd *cbd = user_data;
+	ofono_sim_logical_access_cb_t cb = cbd->cb;
+	struct ril_sim_io_response *res;
+	struct ofono_error err;
+
+	res = ril_sim_parse_io_response(data, len);
+	if (ril_sim_io_response_ok(res) && status == RIL_E_SUCCESS) {
+		cb(ril_error_ok(&err), res->data, res->data_len, cbd->data);
+	} else if (res) {
+		cb(ril_error_sim(&err, res->sw1, res->sw2), NULL, 0, cbd->data);
+	} else {
+		cb(ril_error_failure(&err), NULL, 0, cbd->data);
+	}
+	ril_sim_io_response_free(res);
+}
+
+static void ril_sim_logical_access_transmit(struct ril_sim_session_cbd *cbd,
+		int ins, int p1, int p2, int p3, const char *hex_data,
+		GRilIoChannelResponseFunc cb)
+{
+	GRilIoRequest *req = grilio_request_new();
+
+	DBG_(cbd->sd, "session=%u,cmd=%02X,%02X,%02X,%02X,%02X,%s",
+				cbd->session_id, cbd->cla, ins, p1, p2, p3,
+				hex_data ? hex_data : "");
+	grilio_request_append_int32(req, cbd->session_id);
+	grilio_request_append_int32(req, cbd->cla);
+	grilio_request_append_int32(req, ins);
+	grilio_request_append_int32(req, p1);
+	grilio_request_append_int32(req, p2);
+	grilio_request_append_int32(req, p3);
+	grilio_request_append_utf8(req, hex_data);
+	grilio_request_set_timeout(req, SIM_IO_TIMEOUT_SECS * 1000);
+	ril_sim_session_cbd_start(cbd, req,
+				RIL_REQUEST_SIM_TRANSMIT_APDU_CHANNEL, cb);
+	grilio_request_unref(req);
+}
+
+static void ril_sim_logical_access_cb(GRilIoChannel *io, int status,
+				const void *data, guint len, void *user_data)
+{
+	struct ril_sim_session_cbd *cbd = user_data;
+	ofono_sim_logical_access_cb_t cb = cbd->cb;
+	struct ril_sim_io_response *res;
+	struct ofono_error error;
+
+	DBG_(cbd->sd, "");
+	cbd->req_id = 0;
+	res = ril_sim_parse_io_response(data, len);
+	if (res && status == RIL_E_SUCCESS) {
+		/*
+		 * TS 102 221
+		 * 7.3.1.1.5.2 Case 4 commands
+		 *
+		 * If the UICC receives a case 4 command, after processing
+		 * the data sent with the C-APDU, it shall return:
+		 *
+		 * a) procedure bytes '61 xx' instructing the transport
+		 * layer of the terminal to issue a GET RESPONSE command
+		 * with a maximum length of 'xx'; or
+		 * b) status indicating a warning or error condition (but
+		 * not SW1 SW2 = '90 00').
+		 *
+		 * The GET RESPONSE command so issued is then treated as
+		 * described for case 2 commands.
+		 */
+		if (res->sw1 == 0x61) {
+			ril_sim_logical_access_transmit(cbd,
+				CMD_GET_RESPONSE, 0, 0, res->sw2, NULL,
+				ril_sim_logical_access_get_results_cb);
+		} else if (ril_sim_io_response_ok(res)) {
+			cb(ril_error_ok(&error), res->data, res->data_len,
+								cbd->data);
+		} else {
+			cb(ril_error_sim(&error, res->sw1, res->sw2), NULL, 0,
+								cbd->data);
+		}
+	} else {
+		cb(ril_error_failure(&error), NULL, 0, cbd->data);
+	}
+	ril_sim_io_response_free(res);
+}
+
+static void ril_sim_logical_access(struct ofono_sim *sim, int session_id,
+			const unsigned char *pdu, unsigned int len,
+			ofono_sim_logical_access_cb_t cb, void *data)
+{
+	/* SIM Command APDU: CLA INS P1 P2 P3 Data */
+	struct ril_sim *sd = ril_sim_get_data(sim);
+	const char* hex_data;
+	char *tmp;
+	struct ril_sim_session_cbd *cbd = ril_sim_session_cbd_new(sd,
+						session_id, pdu[0], cb, data);
+
+	GASSERT(len >= 5);
+	if (len > 5) {
+		hex_data = tmp = encode_hex(pdu + 5, len - 5, 0);
+	} else {
+		tmp = NULL;
+		hex_data = "";
+	}
+
+	ril_sim_logical_access_transmit(cbd, pdu[1], pdu[2], pdu[3], pdu[4],
+					hex_data, ril_sim_logical_access_cb);
+	ril_sim_session_cbd_unref(cbd);
+	g_free(tmp);
+}
+
+static void ril_sim_session_read_binary(struct ofono_sim *sim, int session,
+			int fileid, int start, int length,
+			const unsigned char *path, unsigned int path_len,
+			ofono_sim_read_cb_t cb, void *data)
+{
+	struct ofono_error error;
+
+	ofono_error("session_read_binary not implemented");
+	cb(ril_error_failure(&error), NULL, 0, data);
+}
+
+static void ril_sim_session_read_record(struct ofono_sim *sim, int session_id,
+			int fileid, int record, int length,
+			const unsigned char *path, unsigned int path_len,
+			ofono_sim_read_cb_t cb, void *data)
+{
+	struct ofono_error error;
+
+	ofono_error("session_read_record not implemented");
+	cb(ril_error_failure(&error), NULL, 0, data);
+}
+
+static void ril_sim_session_read_info(struct ofono_sim *sim, int session_id,
+			int fileid, const unsigned char *path,
+			unsigned int path_len, ofono_sim_file_info_cb_t cb,
+			void *data)
+{
+	struct ofono_error error;
+
+	ofono_error("session_read_info not implemented");
+	cb(ril_error_failure(&error), -1, -1, -1, NULL, 0, data);
+}
+
 static void ril_sim_refresh_cb(GRilIoChannel *io, guint code,
 				const void *data, guint len, void *user_data)
 {
@@ -1486,6 +1839,9 @@ static void ril_sim_remove(struct ofono_sim *sim)
 	grilio_queue_cancel_all(sd->q, FALSE);
 	ofono_sim_set_data(sim, NULL);
 
+	if (sd->list_apps_id) {
+		g_source_remove(sd->list_apps_id);
+	}
 	if (sd->idle_id) {
 		g_source_remove(sd->idle_id);
 	}
@@ -1530,7 +1886,14 @@ const struct ofono_sim_driver ril_sim_driver = {
 	.reset_passwd           = ril_sim_pin_send_puk,
 	.change_passwd          = ril_sim_change_passwd,
 	.query_pin_retries      = ril_sim_query_pin_retries,
-	.query_facility_lock    = ril_sim_query_facility_lock
+	.query_facility_lock    = ril_sim_query_facility_lock,
+	.list_apps              = ril_sim_list_apps,
+	.open_channel2          = ril_sim_open_channel,
+	.close_channel          = ril_sim_close_channel,
+	.session_read_binary    = ril_sim_session_read_binary,
+	.session_read_record    = ril_sim_session_read_record,
+	.session_read_info      = ril_sim_session_read_info,
+	.logical_access         = ril_sim_logical_access
 };
 
 /*

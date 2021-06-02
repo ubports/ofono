@@ -3,6 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2015-2021  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -491,12 +492,12 @@ static void test_application_entry_decode(void)
 	app[0] = entries->next->data;
 	app[1] = entries->data;
 
-	g_assert(app[0]->aid_len == 0x10);
-	g_assert(!memcmp(app[0]->aid, &ef_dir[4], 0x10));
+	g_assert(app[0]->aid.len == 0x10);
+	g_assert(!memcmp(app[0]->aid.aid, &ef_dir[4], 0x10));
 	g_assert(app[0]->label == NULL);
 
-	g_assert(app[1]->aid_len == 0x0c);
-	g_assert(!memcmp(app[1]->aid, &ef_dir[37], 0x0c));
+	g_assert(app[1]->aid.len == 0x0c);
+	g_assert(!memcmp(app[1]->aid.aid, &ef_dir[37], 0x0c));
 	g_assert(app[1]->label != NULL);
 	g_assert(!strcmp(app[1]->label, "MIDPfiles"));
 
@@ -529,32 +530,34 @@ static void test_get_2g_path(void)
 static void test_auth_build_parse(void)
 {
 	unsigned char auth_cmd[40];
-	const unsigned char rand[16] = { 0x00, 0x01, 0x02, 0x03, 0x04,0x05,
+	const unsigned char rand[] = { 0x00, 0x01, 0x02, 0x03, 0x04,0x05,
 			0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
 			0x0e, 0x0f };
-	const unsigned char sres[4] = { 0x00, 0x11, 0x22, 0x33 };
+	const unsigned char sres[] = { 0x00, 0x11, 0x22, 0x33 };
 	const unsigned char *sres_p;
+	struct data_block sres_b;
 	const unsigned char kc[8] = { 0xab, 0xcd, 0xef, 0x12, 0x34, 0x56,
 			0x78, 0x9a };
 	const unsigned char *kc_p;
+	struct data_block kc_b;
 	const unsigned char gsm_success[] = { 0x04, 0x00, 0x11, 0x22, 0x33,
 			0x08,0xab, 0xcd, 0xef, 0x12, 0x34, 0x56, 0x78, 0x9a };
-	const unsigned char autn[16] = { 0x0f, 0x0e, 0x0d, 0x0c, 0x0b, 0x0a,
+	const unsigned char autn[] = { 0x0f, 0x0e, 0x0d, 0x0c, 0x0b, 0x0a,
 			0x09, 0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02,
 			0x01, 0x00 };
-	const unsigned char res[8] = { 0xff, 0xee, 0xdd, 0xcc, 0xbb, 0xaa,
+	const unsigned char res[] = { 0xff, 0xee, 0xdd, 0xcc, 0xbb, 0xaa,
 			0x11, 0x22 };
-	const unsigned char *res_p;
-	const unsigned char ck[16] = { 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66,
+	struct data_block res_b;
+	const unsigned char ck[] = { 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66,
 			0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff };
-	const unsigned char *ck_p;
-	const unsigned char ik[16] = { 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd,
+	struct data_block ck_b;
+	const unsigned char ik[] = { 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd,
 			0xef, 0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10 };
-	const unsigned char *ik_p;
-	const unsigned char auts[16] = { 0xde, 0xea, 0xbe, 0xef, 0xde, 0xea,
-			0xbe, 0xef, 0xde, 0xea, 0xbe, 0xef, 0xde, 0xea,
-			0xbe, 0xef };
-	const unsigned char *auts_p;
+	struct data_block ik_b;
+	const unsigned char auts[] = { 0xde, 0xea,
+			0xbe, 0xef, 0xde, 0xea, 0xbe, 0xef, 0xde, 0xea, 0xbe,
+			0xef, 0xde, 0xea };
+	struct data_block auts_b;
 
 	const unsigned char umts_success[] = { 0xdb, 0x08, 0xff, 0xee, 0xdd,
 			0xcc, 0xbb, 0xaa, 0x11, 0x22, 0x10, 0x00, 0x11, 0x22,
@@ -572,6 +575,8 @@ static void test_auth_build_parse(void)
 	const unsigned char umts_sync_failure[] = { 0xdc, 0x0e, 0xde, 0xea,
 			0xbe, 0xef, 0xde, 0xea, 0xbe, 0xef, 0xde, 0xea, 0xbe,
 			0xef, 0xde, 0xea };
+	const unsigned char case3[] = { 0x04, 0x01, 0x02, 0x03, 0x04,
+			0x08, 0xab, 0xcd, 0xef, 0x12, 0x34, 0x56, 0x78, 0x9a };
 	int len = 0;
 
 	/* test GSM auth command */
@@ -606,31 +611,96 @@ static void test_auth_build_parse(void)
 	g_assert(!memcmp(sres_p, sres, 4));
 	g_assert(!memcmp(kc_p, kc, 8));
 
+	/* test truncated messages */
+	g_assert(!sim_parse_umts_authenticate(umts_success, 1,
+			&res_b, &ck_b, &ik_b, &auts_b, &sres_b, &kc_b));
+	g_assert(!sim_parse_umts_authenticate(umts_success, 2,
+			&res_b, &ck_b, &ik_b, &auts_b, &sres_b, &kc_b));
+	g_assert(!sim_parse_umts_authenticate(umts_success, 10,
+			&res_b, &ck_b, &ik_b, &auts_b, &sres_b, &kc_b));
+	g_assert(!sim_parse_umts_authenticate(umts_success, 11,
+			&res_b, &ck_b, &ik_b, &auts_b, &sres_b, &kc_b));
+	g_assert(!sim_parse_umts_authenticate(umts_success, 27,
+			&res_b, &ck_b, &ik_b, &auts_b, &sres_b, &kc_b));
+	g_assert(!sim_parse_umts_authenticate(umts_success, 28,
+			&res_b, &ck_b, &ik_b, &auts_b, &sres_b, &kc_b));
+	g_assert(!sim_parse_umts_authenticate(umts_sync_failure, 2,
+			&res_b, &ck_b, &ik_b, &auts_b, &sres_b, &kc_b));
+	g_assert(!sim_parse_umts_authenticate(case3, 2,
+			&res_b, &ck_b, &ik_b, &auts_b, &sres_b, &kc_b));
+	g_assert(!sim_parse_umts_authenticate(case3, 5,
+			&res_b, &ck_b, &ik_b, &auts_b, &sres_b, &kc_b));
+	g_assert(!sim_parse_umts_authenticate(case3, 6,
+			&res_b, &ck_b, &ik_b, &auts_b, &sres_b, &kc_b));
+
+	/* the extra byte won't actually be accessed */
+	g_assert(!sim_parse_umts_authenticate(umts_success,
+			sizeof(umts_success) + 1,
+			&res_b, &ck_b, &ik_b, &auts_b, &sres_b, &kc_b));
+	g_assert(!sim_parse_umts_authenticate(umts_sync_failure,
+			sizeof(umts_sync_failure) + 1,
+			&res_b, &ck_b, &ik_b, &auts_b, &sres_b, &kc_b));
+	g_assert(!sim_parse_umts_authenticate(case3, sizeof(case3) + 1,
+			&res_b, &ck_b, &ik_b, &auts_b, &sres_b, &kc_b));
+
+	/* unrecognized data */
+	g_assert(!sim_parse_umts_authenticate(case3 + 1, sizeof(case3) - 1,
+			&res_b, &ck_b, &ik_b, &auts_b, &sres_b, &kc_b));
+
 	/* test UMTS success parse, no kc */
 	g_assert(sim_parse_umts_authenticate(umts_success, sizeof(umts_success),
-			&res_p, &ck_p, &ik_p, &auts_p, &kc_p));
-	g_assert(!memcmp(res_p, res, 8));
-	g_assert(!memcmp(ck_p, ck, 16));
-	g_assert(!memcmp(ik_p, ik, 16));
-	g_assert(!auts_p && !kc_p);
+			&res_b, &ck_b, &ik_b, &auts_b, &sres_b, &kc_b));
+	g_assert_cmpuint(res_b.len, == , sizeof(res));
+	g_assert(!memcmp(res_b.data, res, sizeof(res)));
+	g_assert_cmpuint(ck_b.len, == , sizeof(ck));
+	g_assert(!memcmp(ck_b.data, ck, sizeof(ck)));
+	g_assert_cmpuint(ik_b.len, == , sizeof(ik));
+	g_assert(!memcmp(ik_b.data, ik, sizeof(ik)));
+	g_assert(!sres_b.len && !sres_b.data);
+	g_assert(!auts_b.len && !auts_b.data);
+	g_assert(!kc_b.len && !kc_b.data);
 
 	/* test UMTS sync failure */
 	g_assert(sim_parse_umts_authenticate(umts_sync_failure,
 						sizeof(umts_sync_failure),
-						&res_p, &ck_p, &ik_p, &auts_p,
-						&kc_p));
-	g_assert(!memcmp(auts_p, auts, 14));
+						&res_b, &ck_b, &ik_b, &auts_b,
+						&sres_b, &kc_b));
+	g_assert_cmpuint(auts_b.len, == , sizeof(auts));
+	g_assert(!memcmp(auts_b.data, auts, sizeof(auts)));
+	g_assert(!res_b.len && !res_b.data);
+	g_assert(!ck_b.len && !ck_b.data);
+	g_assert(!ik_b.len && !ik_b.data);
+	g_assert(!sres_b.len && !sres_b.data);
+	g_assert(!kc_b.len && !kc_b.data);
 
 	/* test UMTS success parse, with kc */
 	g_assert(sim_parse_umts_authenticate(umts_success_kc,
 						sizeof(umts_success_kc),
-						&res_p, &ck_p, &ik_p, &auts_p,
-						&kc_p));
-	g_assert(!memcmp(res_p, res, 8));
-	g_assert(!memcmp(ck_p, ck, 16));
-	g_assert(!memcmp(ik_p, ik, 16));
-	g_assert(!memcmp(kc_p, kc, 8));
-	g_assert(!auts_p);
+						&res_b, &ck_b, &ik_b, &auts_b,
+						&sres_b, &kc_b));
+	g_assert_cmpuint(res_b.len, == , sizeof(res));
+	g_assert(!memcmp(res_b.data, res, sizeof(res)));
+	g_assert_cmpuint(ck_b.len, == , sizeof(ck));
+	g_assert(!memcmp(ck_b.data, ck, sizeof(ck)));
+	g_assert_cmpuint(ik_b.len, == , sizeof(ik));
+	g_assert(!memcmp(ik_b.data, ik, sizeof(ik)));
+	g_assert_cmpuint(kc_b.len, == , sizeof(kc));
+	g_assert(!memcmp(kc_b.data, kc, sizeof(kc)));
+	g_assert(!sres_b.len && !sres_b.data);
+	g_assert(!auts_b.len && !auts_b.data);
+
+	/* test case3 */
+	g_assert(sim_parse_umts_authenticate(case3, sizeof(case3),
+						&res_b, &ck_b, &ik_b, &auts_b,
+						&sres_b, &kc_b));
+	g_assert(!res_b.len && !res_b.data);
+	g_assert(!ck_b.len && !ck_b.data);
+	g_assert(!ik_b.len && !ik_b.data);
+	g_assert(!auts_b.len && !auts_b.data);
+	g_assert_cmpuint(sres_b.len, == , 4);
+	g_assert(!memcmp(sres_b.data, case3 + 1, sres_b.len));
+	g_assert_cmpuint(kc_b.len, == , sizeof(kc));
+	g_assert(!memcmp(kc_b.data, kc, sizeof(kc)));
 }
 
 int main(int argc, char **argv)

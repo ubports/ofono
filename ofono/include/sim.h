@@ -3,6 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2015-2021  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -210,6 +211,10 @@ struct ofono_sim_driver {
 	void (*logical_access)(struct ofono_sim *sim, int session_id,
 			const unsigned char *pdu, unsigned int len,
 			ofono_sim_logical_access_cb_t cb, void *data);
+	/* Since mer/1.23+git28 */
+	void (*open_channel2)(struct ofono_sim *sim, const unsigned char *aid,
+			unsigned int len, ofono_sim_open_channel_cb_t cb,
+			void *data);
 };
 
 int ofono_sim_driver_register(const struct ofono_sim_driver *d);
