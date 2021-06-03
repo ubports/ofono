@@ -29,7 +29,7 @@
 
 #define CTX_ID_NONE ((unsigned int)(-1))
 
-#define MAX_MTU 1280
+#define MAX_MMS_MTU 1280
 
 struct ril_gprs_context_call {
 	struct ril_data_request *req;
@@ -108,8 +108,15 @@ static void ril_gprs_context_set_active_call(struct ril_gprs_context *gcd,
 	if (call) {
 		ril_data_call_free(gcd->active_call);
 		gcd->active_call = ril_data_call_dup(call);
-		if (!gcd->mtu_watch) {
-			gcd->mtu_watch = mtu_watch_new(MAX_MTU);
+		if (ofono_gprs_context_get_type(gcd->gc) ==
+					OFONO_GPRS_CONTEXT_TYPE_MMS) {
+			/*
+			 * Some MMS providers have a problem with MTU
+			 * greater than 1280. Let's be safe.
+			 */
+			if (!gcd->mtu_watch) {
+				gcd->mtu_watch = mtu_watch_new(MAX_MMS_MTU);
+			}
 		}
 		mtu_watch_set_ifname(gcd->mtu_watch, call->ifname);
 		ril_data_call_grab(gcd->data, call->cid, gcd);
