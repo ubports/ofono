@@ -3,7 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
- *  Copyright (C) 2015-2020  Jolla Ltd.
+ *  Copyright (C) 2015-2021  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -97,6 +97,7 @@ struct ipv4_settings {
 	char *netmask;
 	char *gateway;
 	char **dns;
+	char **pcscf;
 	char *proxy;
 };
 
@@ -105,6 +106,7 @@ struct ipv6_settings {
 	unsigned char prefix_len;
 	char *gateway;
 	char **dns;
+	char **pcscf;
 };
 
 struct context_settings {
@@ -410,6 +412,7 @@ static void context_settings_free(struct context_settings *settings)
 		g_free(settings->ipv4->netmask);
 		g_free(settings->ipv4->gateway);
 		g_strfreev(settings->ipv4->dns);
+		g_strfreev(settings->ipv4->pcscf);
 		g_free(settings->ipv4->proxy);
 
 		g_free(settings->ipv4);
@@ -420,6 +423,7 @@ static void context_settings_free(struct context_settings *settings)
 		g_free(settings->ipv6->ip);
 		g_free(settings->ipv6->gateway);
 		g_strfreev(settings->ipv6->dns);
+		g_strfreev(settings->ipv6->pcscf);
 
 		g_free(settings->ipv6);
 		settings->ipv6 = NULL;
@@ -483,6 +487,11 @@ static void context_settings_append_ipv4(struct context_settings *settings,
 		ofono_dbus_dict_append_array(&array, "DomainNameServers",
 						DBUS_TYPE_STRING,
 						&settings->ipv4->dns);
+
+	if (settings->ipv4->pcscf)
+		ofono_dbus_dict_append_array(&array, "ProxyCSCF",
+						DBUS_TYPE_STRING,
+						&settings->ipv4->pcscf);
 
 done:
 	dbus_message_iter_close_container(&variant, &array);
@@ -548,6 +557,11 @@ static void context_settings_append_ipv6(struct context_settings *settings,
 		ofono_dbus_dict_append_array(&array, "DomainNameServers",
 						DBUS_TYPE_STRING,
 						&settings->ipv6->dns);
+
+	if (settings->ipv6->pcscf)
+		ofono_dbus_dict_append_array(&array, "ProxyCSCF",
+						DBUS_TYPE_STRING,
+						&settings->ipv6->pcscf);
 
 done:
 	dbus_message_iter_close_container(&variant, &array);
@@ -3417,6 +3431,18 @@ void ofono_gprs_context_set_ipv4_dns_servers(struct ofono_gprs_context *gc,
 	settings->ipv4->dns = g_strdupv((char **) dns);
 }
 
+void ofono_gprs_context_set_ipv4_proxy_cscf(struct ofono_gprs_context *gc,
+						const char **pcscf)
+{
+	struct context_settings *settings = gc->settings;
+
+	if (settings->ipv4 == NULL)
+		return;
+
+	g_strfreev(settings->ipv4->pcscf);
+	settings->ipv4->pcscf = g_strdupv((char **) pcscf);
+}
+
 void ofono_gprs_context_set_ipv6_address(struct ofono_gprs_context *gc,
 						const char *address)
 {
@@ -3462,6 +3488,18 @@ void ofono_gprs_context_set_ipv6_dns_servers(struct ofono_gprs_context *gc,
 
 	g_strfreev(settings->ipv6->dns);
 	settings->ipv6->dns = g_strdupv((char **) dns);
+}
+
+void ofono_gprs_context_set_ipv6_proxy_cscf(struct ofono_gprs_context *gc,
+						const char **pcscf)
+{
+	struct context_settings *settings = gc->settings;
+
+	if (settings->ipv6 == NULL)
+		return;
+
+	g_strfreev(settings->ipv6->pcscf);
+	settings->ipv6->pcscf = g_strdupv((char **) pcscf);
 }
 
 void ofono_gprs_context_signal_change(struct ofono_gprs_context *gc,

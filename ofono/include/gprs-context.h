@@ -3,6 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2015-2021  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -128,6 +129,8 @@ void ofono_gprs_context_set_ipv4_gateway(struct ofono_gprs_context *gc,
 						const char *gateway);
 void ofono_gprs_context_set_ipv4_dns_servers(struct ofono_gprs_context *gc,
 						const char **dns);
+void ofono_gprs_context_set_ipv4_proxy_cscf(struct ofono_gprs_context *gc,
+				const char **pcscf); /* Since mer/1.23+git30 */
 
 void ofono_gprs_context_set_ipv6_address(struct ofono_gprs_context *gc,
 						const char *address);
@@ -137,6 +140,8 @@ void ofono_gprs_context_set_ipv6_gateway(struct ofono_gprs_context *gc,
 						const char *gateway);
 void ofono_gprs_context_set_ipv6_dns_servers(struct ofono_gprs_context *gc,
 						const char **dns);
+void ofono_gprs_context_set_ipv6_proxy_cscf(struct ofono_gprs_context *gc,
+				const char **pcscf); /* Since mer/1.23+git30 */
 
 void ofono_gprs_context_signal_change(struct ofono_gprs_context *gc,
 							unsigned int cid);
