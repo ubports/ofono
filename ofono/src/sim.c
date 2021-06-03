@@ -3823,7 +3823,7 @@ struct ofono_sim_aid_session *__ofono_sim_get_session_by_aid(
 		struct ofono_sim_aid_session *session = iter->data;
 
 		if (session->record->aid.len == aid->len &&
-			!memcmp(session->record->aid.aid, aid, aid->len))
+			!memcmp(session->record->aid.aid, aid->aid, aid->len))
 			return session;
 
 		iter = g_slist_next(iter);
