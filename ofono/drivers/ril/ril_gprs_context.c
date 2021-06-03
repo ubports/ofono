@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2019 Jolla Ltd.
+ *  Copyright (C) 2015-2021 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -247,34 +247,59 @@ static void ril_gprs_context_set_gateway(struct ofono_gprs_context *gc,
 	ofono_gprs_context_set_ipv6_gateway(gc, ipv6_gw);
 }
 
-static void ril_gprs_context_set_dns_servers(struct ofono_gprs_context *gc,
-					const struct ril_data_call *call)
+typedef void (*ofono_gprs_context_list_setter_t)(struct ofono_gprs_context *gc,
+				const char **list);
+
+static void ril_gprs_context_set_servers(struct ofono_gprs_context *gc,
+		char * const *list, ofono_gprs_context_list_setter_t set_ipv4,
+		ofono_gprs_context_list_setter_t set_ipv6)
 {
 	int i;
-	char * const *list = call->dnses;
+	const char **ip_list = NULL, **ip_ptr = NULL;
+	const char **ipv6_list = NULL, **ipv6_ptr = NULL;
 	const int n = gutil_strv_length(list);
-	const char **ip_dns = g_new0(const char *, n+1);
-	const char **ipv6_dns = g_new0(const char *, n+1);
-	const char **ip_ptr = ip_dns;
-	const char **ipv6_ptr = ipv6_dns;
 
 	for (i = 0; i < n; i++) {
 		const char *addr = list[i];
 		switch (ril_gprs_context_address_family(addr)) {
 		case AF_INET:
+			if (!ip_ptr) {
+				ip_list = g_new0(const char *, n - i + 1);
+				ip_ptr = ip_list;
+			}
 			*ip_ptr++ = addr;
 			break;
 		case AF_INET6:
+			if (!ipv6_ptr) {
+				ipv6_list = g_new0(const char *, n - i + 1);
+				ipv6_ptr = ipv6_list;
+			}
 			*ipv6_ptr++ = addr;
 			break;
 		}
 	}
 
-	ofono_gprs_context_set_ipv4_dns_servers(gc, ip_dns);
-	ofono_gprs_context_set_ipv6_dns_servers(gc, ipv6_dns);
+	set_ipv4(gc, ip_list);
+	set_ipv6(gc, ipv6_list);
 
-	g_free(ip_dns);
-	g_free(ipv6_dns);
+	g_free(ip_list);
+	g_free(ipv6_list);
+}
+
+static void ril_gprs_context_set_dns_servers(struct ofono_gprs_context *gc,
+					const struct ril_data_call *call)
+{
+	ril_gprs_context_set_servers(gc, call->dnses,
+				ofono_gprs_context_set_ipv4_dns_servers,
+				ofono_gprs_context_set_ipv6_dns_servers);
+}
+
+static void ril_gprs_context_set_proxy_cscf(struct ofono_gprs_context *gc,
+					const struct ril_data_call *call)
+{
+	ril_gprs_context_set_servers(gc, call->pcscf,
+				ofono_gprs_context_set_ipv4_proxy_cscf,
+				ofono_gprs_context_set_ipv6_proxy_cscf);
 }
 
 /* Only compares the stuff that's important to us */
@@ -282,7 +307,8 @@ static void ril_gprs_context_set_dns_servers(struct ofono_gprs_context *gc,
 #define DATA_CALL_ADDRESS_CHANGED   (0x02)
 #define DATA_CALL_GATEWAY_CHANGED   (0x04)
 #define DATA_CALL_DNS_CHANGED       (0x08)
-#define DATA_CALL_ALL_CHANGED       (0x0f)
+#define DATA_CALL_PCSCF_CHANGED     (0x10)
+#define DATA_CALL_ALL_CHANGED       (0x1f)
 static int ril_gprs_context_data_call_change(
 			const struct ril_data_call *c1,
 			const struct ril_data_call *c2)
@@ -306,6 +332,10 @@ static int ril_gprs_context_data_call_change(
 
 		if (!gutil_strv_equal(c1->dnses, c2->dnses)) {
 			changes |= DATA_CALL_DNS_CHANGED;
+		}
+
+		if (!gutil_strv_equal(c1->pcscf, c2->pcscf)) {
+			changes |= DATA_CALL_PCSCF_CHANGED;
 		}
 
 		return changes;
@@ -380,6 +410,11 @@ static void ril_gprs_context_call_list_changed(struct ril_data *data, void *arg)
 		ril_gprs_context_set_dns_servers(gc, call);
 	}
 
+	if (change & DATA_CALL_PCSCF_CHANGED) {
+		DBG("P-CSCF changed");
+		ril_gprs_context_set_proxy_cscf(gc, call);
+	}
+
 	ofono_gprs_context_signal_change(gc, gcd->active_ctx_cid);
 	ril_data_call_free(prev_call);
 }
@@ -421,6 +456,7 @@ static void ril_gprs_context_activate_primary_cb(struct ril_data *data,
 		ril_gprs_context_set_address(gc, call);
 		ril_gprs_context_set_gateway(gc, call);
 		ril_gprs_context_set_dns_servers(gc, call);
+		ril_gprs_context_set_proxy_cscf(gc, call);
 		ril_error_init_ok(&error);
 	}
 
