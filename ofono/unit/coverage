@@ -18,6 +18,7 @@ TESTS="\
  test-caif \
  test-dbus-queue \
  test-dbus-access \
+ test-dbus-clients \
  test-gprs-filter \
  test-provision \
  test-config \

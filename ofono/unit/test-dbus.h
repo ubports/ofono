@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2018 Jolla Ltd.
+ *  Copyright (C) 2018-2021 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -25,6 +25,7 @@ struct test_dbus_context {
 	DBusConnection *client_connection;
 	GSList* client_signals;
 	void (*start)(struct test_dbus_context *test);
+	void (*handle_signal)(struct test_dbus_context *test, DBusMessage *msg);
 	guint timeout_id;
 };
 

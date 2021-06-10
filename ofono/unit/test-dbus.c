@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2018-2019 Jolla Ltd.
+ *  Copyright (C) 2018-2021 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -131,6 +131,13 @@ guint g_dbus_add_signal_watch(DBusConnection *connection, const char *sender,
 		GDBusDestroyFunction destroy)
 {
     return test_dbus_add_watch(connection, NULL, destroy, user_data);
+}
+
+guint g_dbus_add_disconnect_watch(DBusConnection *connection, const char *name,
+		GDBusWatchFunction func, void *user_data,
+		GDBusDestroyFunction destroy)
+{
+	return test_dbus_add_watch(connection, func, destroy, user_data);
 }
 
 gboolean g_dbus_remove_watch(DBusConnection *connection, guint id)
@@ -303,6 +310,9 @@ static DBusHandlerResult test_dbus_client_message_cb(DBusConnection *conn,
 						dbus_message_get_path(msg));
 		test->client_signals = g_slist_append(test->client_signals,
 						dbus_message_ref(msg));
+		if (test->handle_signal) {
+			test->handle_signal(test, msg);
+		}
 		return DBUS_HANDLER_RESULT_HANDLED;
 	} else {
 		return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;

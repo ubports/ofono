@@ -3,7 +3,7 @@
  *  oFono - Open Telephony stack for Linux
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
- *  Copyright (C) 2013-2016 Jolla Ltd.
+ *  Copyright (C) 2013-2021  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -13,10 +13,6 @@
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
  */
 
@@ -83,6 +79,8 @@ extern "C" {
 					DBUS_TYPE_VARIANT_AS_STRING \
 					DBUS_DICT_ENTRY_END_CHAR_AS_STRING
 
+#define OFONO_ERROR_INTERFACE "org.ofono.Error"
+
 DBusConnection *ofono_dbus_get_connection(void);
 
 void ofono_dbus_dict_append(DBusMessageIter *dict, const char *key, int type,
@@ -110,6 +108,11 @@ int ofono_dbus_signal_dict_property_changed(DBusConnection *conn,
 						const char *name, int type,
 						const void *value);
 
+/* Since mer/1.23+git31 */
+DBusMessage *ofono_dbus_signal_new_property_changed(const char *path,
+					const char *interface,
+					const char *name,
+					int type, const void *value);
 #ifdef __cplusplus
 }
 #endif

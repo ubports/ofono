@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2018 Jolla Ltd.
+ *  Copyright (C) 2018-2021 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -31,6 +31,7 @@
 #define CELL_INFO_DBUS_INTERFACE            "org.nemomobile.ofono.CellInfo"
 #define CELL_INFO_DBUS_CELLS_ADDED_SIGNAL   "CellsAdded"
 #define CELL_INFO_DBUS_CELLS_REMOVED_SIGNAL "CellsRemoved"
+#define CELL_INFO_DBUS_UNSUBSCRIBED_SIGNAL  "Unsubscribed"
 
 #define CELL_DBUS_INTERFACE_VERSION         (1)
 #define CELL_DBUS_INTERFACE                 "org.nemomobile.ofono.Cell"
@@ -66,7 +67,7 @@ static gboolean test_timeout(gpointer param)
 
 static guint test_setup_timeout(void)
 {
-	if (!test_debug) {
+	if (test_debug) {
 		return 0;
 	} else {
 		return g_timeout_add_seconds(TEST_TIMEOUT, test_timeout, NULL);
@@ -100,6 +101,19 @@ static DBusMessage *test_new_cell_call(const char *path, const char *method)
 
 	g_assert(dbus_message_set_sender(msg, TEST_SENDER));
 	return msg;
+}
+
+static void test_submit_cell_info_call(DBusConnection* connection,
+		const char *method, DBusPendingCallNotifyFunction notify,
+		void *data)
+{
+	DBusMessage *msg = test_new_cell_info_call(method);
+	DBusPendingCall* call;
+
+	g_assert(dbus_connection_send_with_reply(connection, msg, &call,
+						DBUS_TIMEOUT_INFINITE));
+	dbus_pending_call_set_notify(call, notify, data, NULL);
+	dbus_message_unref(msg);
 }
 
 static void test_submit_get_all_call(DBusConnection* connection,
@@ -183,6 +197,26 @@ static void test_check_get_all_reply(DBusPendingCall *call,
 	dbus_message_iter_next(&it);
 	/* Validate the properties? */
 	g_assert(dbus_message_iter_get_arg_type(&it) == DBUS_TYPE_INVALID);
+	dbus_message_unref(reply);
+}
+
+static void test_check_empty_reply(DBusPendingCall *call)
+{
+	DBusMessage *reply = dbus_pending_call_steal_reply(call);
+	DBusMessageIter it;
+
+	g_assert(dbus_message_get_type(reply) ==
+					DBUS_MESSAGE_TYPE_METHOD_RETURN);
+	dbus_message_iter_init(reply, &it);
+	g_assert(dbus_message_iter_get_arg_type(&it) == DBUS_TYPE_INVALID);
+	dbus_message_unref(reply);
+}
+
+static void test_check_error(DBusPendingCall *call, const char* name)
+{
+	DBusMessage *reply = dbus_pending_call_steal_reply(call);
+
+	g_assert(dbus_message_is_error(reply, name));
 	dbus_message_unref(reply);
 }
 
@@ -311,19 +345,13 @@ struct test_get_cells_data {
 static void test_get_cells_call(struct test_get_cells_data *test,
 				DBusPendingCallNotifyFunction notify)
 {
-	DBusPendingCall *call;
-	DBusConnection *connection = test->context.client_connection;
-	DBusMessage *msg = test_new_cell_info_call("GetCells");
-
-	g_assert(dbus_connection_send_with_reply(connection, msg, &call,
-						DBUS_TIMEOUT_INFINITE));
-	dbus_pending_call_set_notify(call, notify, test, NULL);
-	dbus_message_unref(msg);
+	test_submit_cell_info_call(test->context.client_connection, "GetCells",
+								notify, test);
 }
 
 static void test_get_cells_start_reply3(DBusPendingCall *call, void *data)
 {
- 	struct test_get_cells_data *test = data;
+	struct test_get_cells_data *test = data;
 	DBusMessageIter it;
 	DBusMessage *signal = test_dbus_take_signal(&test->context,
 				test->modem.path, CELL_INFO_DBUS_INTERFACE,
@@ -344,7 +372,7 @@ static void test_get_cells_start_reply3(DBusPendingCall *call, void *data)
 
 static void test_get_cells_start_reply2(DBusPendingCall *call, void *data)
 {
- 	struct test_get_cells_data *test = data;
+	struct test_get_cells_data *test = data;
 	const char *cell_added = "/test/cell_1";
 	struct sailfish_cell cell;
 	DBusMessageIter it;
@@ -371,7 +399,7 @@ static void test_get_cells_start_reply2(DBusPendingCall *call, void *data)
 
 static void test_get_cells_start_reply1(DBusPendingCall *call, void *data)
 {
- 	struct test_get_cells_data *test = data;
+	struct test_get_cells_data *test = data;
 	struct sailfish_cell cell;
 
 	DBG("");
@@ -432,7 +460,7 @@ struct test_get_all_data {
 
 static void test_get_all_reply(DBusPendingCall *call, void *data)
 {
- 	struct test_get_all_data *test = data;
+	struct test_get_all_data *test = data;
 
 	DBG("");
 	test_check_get_all_reply(call, &test->cell, test->type);
@@ -519,7 +547,7 @@ struct test_get_version_data {
 
 static void test_get_version_reply(DBusPendingCall *call, void *data)
 {
- 	struct test_get_version_data *test = data;
+	struct test_get_version_data *test = data;
 	DBusMessage *reply = dbus_pending_call_steal_reply(call);
 	dbus_int32_t version;
 
@@ -588,7 +616,7 @@ struct test_get_type_data {
 
 static void test_get_type_reply(DBusPendingCall *call, void *data)
 {
- 	struct test_get_type_data *test = data;
+	struct test_get_type_data *test = data;
 	DBusMessage *reply = dbus_pending_call_steal_reply(call);
 	DBusMessageIter it;
 
@@ -656,7 +684,7 @@ struct test_get_registered_data {
 
 static void test_get_registered_reply(DBusPendingCall *call, void *data)
 {
- 	struct test_get_registered_data *test = data;
+	struct test_get_registered_data *test = data;
 	DBusMessage *reply = dbus_pending_call_steal_reply(call);
 	DBusMessageIter it;
 
@@ -725,7 +753,7 @@ struct test_get_properties_data {
 
 static void test_get_properties_reply(DBusPendingCall *call, void *data)
 {
- 	struct test_get_properties_data *test = data;
+	struct test_get_properties_data *test = data;
 	DBusMessage *reply = dbus_pending_call_steal_reply(call);
 	DBusMessageIter it, array;
 
@@ -801,7 +829,7 @@ struct test_registered_changed_data {
 
 static void test_registered_changed_reply(DBusPendingCall *call, void *data)
 {
- 	struct test_registered_changed_data *test = data;
+	struct test_registered_changed_data *test = data;
 
 	DBG("");
 	test_check_get_all_reply(call, &test->cell, test->type);
@@ -871,28 +899,26 @@ struct test_property_changed_data {
 	const char *cell_path;
 };
 
-static void test_property_changed_reply1(DBusPendingCall *call, void *data)
+static void test_property_changed_reply2(DBusPendingCall *call, void *data)
 {
- 	struct test_property_changed_data *test = data;
+	struct test_property_changed_data *test = data;
 
 	DBG("");
 	test_check_get_all_reply(call, &test->cell, test->type);
 	dbus_pending_call_unref(call);
 
 	test_loop_quit_later(test->context.loop);
+	test_dbus_watch_disconnect_all();
 }
 
-static void test_property_changed_start(struct test_dbus_context *context)
+static void test_property_changed_reply1(DBusPendingCall *call, void *data)
 {
-	struct test_property_changed_data *test =
-		G_CAST(context, struct test_property_changed_data, context);
+	struct test_property_changed_data *test = data;
 	struct sailfish_cell *first_cell;
 
 	DBG("");
-	test->info = fake_cell_info_new();
-	fake_cell_info_add_cell(test->info, &test->cell);
-	test->dbus = sailfish_cell_info_dbus_new(&test->modem, test->info);
-	g_assert(test->dbus);
+	test_check_get_cells_reply(call, test->cell_path, NULL);
+	dbus_pending_call_unref(call);
 
 	/* Trigger "PropertyChanged" signal */
 	first_cell = test->info->cells->data;
@@ -900,8 +926,24 @@ static void test_property_changed_start(struct test_dbus_context *context)
 		(++(first_cell->info.gsm.signalStrength));
 	fake_cell_info_cells_changed(test->info);
 
-	test_submit_get_all_call(context->client_connection, test->cell_path,
-				test_property_changed_reply1, test);
+	test_submit_get_all_call(test->context.client_connection,
+			test->cell_path, test_property_changed_reply2, test);
+}
+
+static void test_property_changed_start(struct test_dbus_context *context)
+{
+	struct test_property_changed_data *test =
+		G_CAST(context, struct test_property_changed_data, context);
+
+	DBG("");
+	test->info = fake_cell_info_new();
+	fake_cell_info_add_cell(test->info, &test->cell);
+	test->dbus = sailfish_cell_info_dbus_new(&test->modem, test->info);
+	g_assert(test->dbus);
+
+	/* Submit GetCells to enable "PropertyChanged" signals */
+	test_submit_cell_info_call(test->context.client_connection, "GetCells",
+					test_property_changed_reply1, test);
 }
 
 static void test_property_changed(void)
@@ -922,6 +964,106 @@ static void test_property_changed(void)
 	/* We must have received "PropertyChanged" signal */
 	g_assert(test_dbus_find_signal(&test.context, test.cell_path,
 		CELL_DBUS_INTERFACE, CELL_DBUS_PROPERTY_CHANGED_SIGNAL));
+
+	sailfish_cell_info_unref(test.info);
+	sailfish_cell_info_dbus_free(test.dbus);
+	test_dbus_shutdown(&test.context);
+	if (timeout) {
+		g_source_remove(timeout);
+	}
+}
+
+/* ==== Unsubscribe ==== */
+
+struct test_unsubscribe_data {
+	struct ofono_modem modem;
+	struct test_dbus_context context;
+	struct sailfish_cell_info *info;
+	struct sailfish_cell_info_dbus *dbus;
+	struct sailfish_cell cell;
+	const char *type;
+	const char *cell_path;
+};
+
+static void test_unsubscribe_reply3(DBusPendingCall *call, void *data)
+{
+	struct test_unsubscribe_data *test = data;
+
+	DBG("");
+	test_check_error(call, OFONO_ERROR_INTERFACE ".Failed");
+	dbus_pending_call_unref(call);
+
+	test_loop_quit_later(test->context.loop);
+	test_dbus_watch_disconnect_all();
+}
+
+static void test_unsubscribe_reply2(DBusPendingCall *call, void *data)
+{
+	struct test_unsubscribe_data *test = data;
+	struct sailfish_cell *first_cell;
+
+	DBG("");
+	test_check_empty_reply(call);
+	dbus_pending_call_unref(call);
+
+	/* No "PropertyChanged" signal is expected because it's disabled */
+	first_cell = test->info->cells->data;
+	test->cell.info.gsm.signalStrength =
+		(++(first_cell->info.gsm.signalStrength));
+	fake_cell_info_cells_changed(test->info);
+
+	/* Submit Unsubscribe and expect and error */
+	test_submit_cell_info_call(test->context.client_connection,
+			"Unsubscribe", test_unsubscribe_reply3, test);
+}
+
+static void test_unsubscribe_reply1(DBusPendingCall *call, void *data)
+{
+	struct test_unsubscribe_data *test = data;
+
+	DBG("");
+	test_check_get_cells_reply(call, test->cell_path, NULL);
+	dbus_pending_call_unref(call);
+
+	/* Submit Unsubscribe to disable "PropertyChanged" signals */
+	test_submit_cell_info_call(test->context.client_connection,
+			"Unsubscribe", test_unsubscribe_reply2, test);
+}
+
+static void test_unsubscribe_start(struct test_dbus_context *context)
+{
+	struct test_unsubscribe_data *test =
+		G_CAST(context, struct test_unsubscribe_data, context);
+
+	DBG("");
+	test->info = fake_cell_info_new();
+	fake_cell_info_add_cell(test->info, &test->cell);
+	test->dbus = sailfish_cell_info_dbus_new(&test->modem, test->info);
+	g_assert(test->dbus);
+
+	/* Submit GetCells to enable "PropertyChanged" signals */
+	test_submit_cell_info_call(test->context.client_connection, "GetCells",
+					test_unsubscribe_reply1, test);
+}
+
+static void test_unsubscribe(void)
+{
+	struct test_unsubscribe_data test;
+	guint timeout = test_setup_timeout();
+
+	memset(&test, 0, sizeof(test));
+	test.modem.path = TEST_MODEM_PATH;
+	test.context.start = test_unsubscribe_start;
+	test_cell_init_gsm1(&test.cell);
+	test.type = "gsm";
+	test.cell_path = "/test/cell_0";
+	test_dbus_setup(&test.context);
+
+	g_main_loop_run(test.context.loop);
+
+	/* We must have received "Unsubscribed" signal */
+	g_assert(test_dbus_find_signal(&test.context, test.modem.path,
+		CELL_INFO_DBUS_INTERFACE, CELL_INFO_DBUS_UNSUBSCRIBED_SIGNAL));
 
 	sailfish_cell_info_unref(test.info);
 	sailfish_cell_info_dbus_free(test.dbus);
@@ -966,6 +1108,7 @@ int main(int argc, char *argv[])
 	g_test_add_func(TEST_("GetProperties"), test_get_properties);
 	g_test_add_func(TEST_("RegisteredChanged"), test_registered_changed);
 	g_test_add_func(TEST_("PropertyChanged"), test_property_changed);
+	g_test_add_func(TEST_("Unsubscribe"), test_unsubscribe);
 
 	return g_test_run();
 }

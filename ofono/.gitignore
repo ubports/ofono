@@ -45,6 +45,7 @@ unit/test-caif
 unit/test-stkutil
 unit/test-cdmasms
 unit/test-dbus-access
+unit/test-dbus-clients
 unit/test-dbus-queue
 unit/test-gprs-filter
 unit/test-ril_config

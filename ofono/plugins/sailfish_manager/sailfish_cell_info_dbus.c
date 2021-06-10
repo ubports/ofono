@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2016-2018 Jolla Ltd.
+ *  Copyright (C) 2016-2021 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -15,11 +15,10 @@
 
 #include "sailfish_cell_info_dbus.h"
 #include "sailfish_cell_info.h"
-#include "sailfish_dbus_clients.h"
 
-#include <ofono.h>
 #include <ofono/modem.h>
 #include <ofono/dbus.h>
+#include <ofono/dbus-clients.h>
 #include <ofono/log.h>
 
 #include <gdbus.h>
@@ -37,7 +36,7 @@ struct sailfish_cell_info_dbus {
 	gulong handler_id;
 	guint next_cell_id;
 	GSList *entries;
-	struct sailfish_dbus_clients *clients;
+	struct ofono_dbus_clients *clients;
 };
 
 #define CELL_INFO_DBUS_INTERFACE            "org.nemomobile.ofono.CellInfo"
@@ -326,21 +325,24 @@ static void sailfish_cell_info_dbus_emit_path_list
 		(struct sailfish_cell_info_dbus *dbus, const char *name,
 							GPtrArray *list)
 {
-	guint i;
-	DBusMessageIter it, array;
-	DBusMessage *signal = dbus_message_new_signal(dbus->path,
+	if (ofono_dbus_clients_count(dbus->clients)) {
+		guint i;
+		DBusMessageIter it, a;
+		DBusMessage *signal = dbus_message_new_signal(dbus->path,
 					CELL_INFO_DBUS_INTERFACE, name);
 
-	dbus_message_iter_init_append(signal, &it);
-	dbus_message_iter_open_container(&it, DBUS_TYPE_ARRAY, "o", &array);
-	for (i = 0; i < list->len; i++) {
-		const char* path = list->pdata[i];
-		dbus_message_iter_append_basic(&array, DBUS_TYPE_OBJECT_PATH,
-								&path);
-	}
-	dbus_message_iter_close_container(&it, &array);
+		dbus_message_iter_init_append(signal, &it);
+		dbus_message_iter_open_container(&it, DBUS_TYPE_ARRAY, "o", &a);
+		for (i = 0; i < list->len; i++) {
+			const char* path = list->pdata[i];
 
-	sailfish_dbus_clients_send(dbus->clients, signal);
+			dbus_message_iter_append_basic(&a,
+					DBUS_TYPE_OBJECT_PATH, &path);
+		}
+		dbus_message_iter_close_container(&it, &a);
+		ofono_dbus_clients_signal(dbus->clients, signal);
+		dbus_message_ref(signal);
+	}
 }
 
 static int sailfish_cell_info_dbus_compare(const struct sailfish_cell *c1,
@@ -390,7 +392,7 @@ static void sailfish_cell_info_dbus_property_changed
 
 	for (i = 0; i < n && mask; i++) {
 		if (mask & prop[i].flag) {
-			sailfish_dbus_clients_signal_property_changed(
+			ofono_dbus_clients_signal_property_changed(
 				dbus->clients, entry->path,
 				CELL_DBUS_INTERFACE, prop[i].name,
 				DBUS_TYPE_INT32,
@@ -497,51 +499,56 @@ static void sailfish_cell_info_dbus_cells_changed_cb
 		((struct sailfish_cell_info_dbus *)arg, TRUE);
 }
 
+static DBusMessage *sailfish_cell_info_dbus_error_failed(DBusMessage *msg,
+						const char *explanation)
+{
+	return g_dbus_create_error(msg, OFONO_ERROR_INTERFACE ".Failed", "%s",
+								explanation);
+}
+
 static DBusMessage *sailfish_cell_info_dbus_get_cells(DBusConnection *conn,
 						DBusMessage *msg, void *data)
 {
 	struct sailfish_cell_info_dbus *dbus = data;
-	struct sailfish_dbus_client *client;
+	const char *sender = dbus_message_get_sender(msg);
 
-	client = sailfish_dbus_clients_new_client(dbus->clients, msg);
-	if (client) {
+	if (ofono_dbus_clients_add(dbus->clients, sender)) {
 		DBusMessage *reply = dbus_message_new_method_return(msg);
-		DBusMessageIter it, array;
+		DBusMessageIter it, a;
 		GSList *l;
 
 		sailfish_cell_info_set_enabled(dbus->info, TRUE);
 		dbus_message_iter_init_append(reply, &it);
-		dbus_message_iter_open_container(&it, DBUS_TYPE_ARRAY,
-								"o", &array);
+		dbus_message_iter_open_container(&it, DBUS_TYPE_ARRAY, "o", &a);
 		for (l = dbus->entries; l; l = l->next) {
 			const struct sailfish_cell_entry *entry = l->data;
-			dbus_message_iter_append_basic(&array,
+
+			dbus_message_iter_append_basic(&a,
 					DBUS_TYPE_OBJECT_PATH, &entry->path);
 		}
-		dbus_message_iter_close_container(&it, &array);
+		dbus_message_iter_close_container(&it, &a);
 		return reply;
 	}
-	return __ofono_error_access_denied(msg);
+	return sailfish_cell_info_dbus_error_failed(msg, "Operation failed");
 }
 
 static DBusMessage *sailfish_cell_info_dbus_unsubscribe(DBusConnection *conn,
 						DBusMessage *msg, void *data)
 {
 	struct sailfish_cell_info_dbus *dbus = data;
-	struct sailfish_dbus_client *client;
+	const char *sender = dbus_message_get_sender(msg);
 
-	DBG("");
-	client = sailfish_dbus_clients_lookup_client(dbus->clients, msg);
-	if (client) {
-		DBusMessage *signal = dbus_message_new_signal(
-					dbus_message_get_path(msg),
-					CELL_INFO_DBUS_INTERFACE,
-					CELL_INFO_DBUS_UNSUBSCRIBED_SIGNAL);
-		sailfish_dbus_clients_send_to(client, signal);
-		sailfish_dbus_clients_remove_client(client);
+	DBG("%s", sender);
+	if (ofono_dbus_clients_remove(dbus->clients, sender)) {
+		DBusMessage *signal = dbus_message_new_signal(dbus->path,
+			CELL_INFO_DBUS_INTERFACE,
+			CELL_INFO_DBUS_UNSUBSCRIBED_SIGNAL);
+
+		dbus_message_set_destination(msg, sender);
+		g_dbus_send_message(dbus->conn, signal);
 		return dbus_message_new_method_return(msg);
 	}
-	return __ofono_error_access_denied(msg);
+	return sailfish_cell_info_dbus_error_failed(msg, "Not subscribed");
 }
 
 static const GDBusMethodTable sailfish_cell_info_dbus_methods[] = {
@@ -558,13 +565,18 @@ static const GDBusSignalTable sailfish_cell_info_dbus_signals[] = {
 			GDBUS_ARGS({ "paths", "ao" })) },
 	{ GDBUS_SIGNAL(CELL_INFO_DBUS_CELLS_REMOVED_SIGNAL,
 			GDBUS_ARGS({ "paths", "ao" })) },
+	{ GDBUS_SIGNAL(CELL_INFO_DBUS_UNSUBSCRIBED_SIGNAL,
+			GDBUS_ARGS({})) },
 	{ }
 };
 
-static void sailfish_cell_info_dbus_disable_cb(void *user_data)
+static void sailfish_cell_info_dbus_disconnect_cb(const char *name, void *data)
 {
-	struct sailfish_cell_info_dbus *dbus = user_data;
-	sailfish_cell_info_set_enabled(dbus->info, FALSE);
+	struct sailfish_cell_info_dbus *dbus = data;
+
+	if (!ofono_dbus_clients_count(dbus->clients)) {
+		sailfish_cell_info_set_enabled(dbus->info, FALSE);
+	}
 }
 
 struct sailfish_cell_info_dbus *sailfish_cell_info_dbus_new
@@ -591,10 +603,8 @@ struct sailfish_cell_info_dbus *sailfish_cell_info_dbus_new
 			ofono_modem_add_interface(modem,
 						CELL_INFO_DBUS_INTERFACE);
 			sailfish_cell_info_dbus_update_entries(dbus, FALSE);
-			dbus->clients =
-				sailfish_dbus_clients_new(dbus->conn,
-					sailfish_cell_info_dbus_disable_cb,
-					dbus);
+			dbus->clients = ofono_dbus_clients_new(dbus->conn,
+				sailfish_cell_info_dbus_disconnect_cb, dbus);
 			return dbus;
 		} else {
 			ofono_error("CellInfo D-Bus register failed");
@@ -610,7 +620,7 @@ void sailfish_cell_info_dbus_free(struct sailfish_cell_info_dbus *dbus)
 		GSList *l;
 
 		DBG("%s", dbus->path);
-		sailfish_dbus_clients_free(dbus->clients);
+		ofono_dbus_clients_free(dbus->clients);
 		g_dbus_unregister_interface(dbus->conn, dbus->path,
 					CELL_INFO_DBUS_INTERFACE);
 

@@ -26,7 +26,7 @@ pkginclude_HEADERS = include/log.h include/plugin.h include/history.h \
 			include/sms-filter.h include/gprs-filter.h \
 			include/voicecall-filter.h include/dbus-access.h \
 			include/ril-constants.h include/ril-transport.h \
-			include/watch.h gdbus/gdbus.h \
+			include/watch.h gdbus/gdbus.h include/dbus-clients.h \
 			include/netmon.h include/lte.h include/ims.h \
 			include/storage.h
 
@@ -126,8 +126,7 @@ builtin_sources += plugins/sailfish_manager/sailfish_cell_info.c \
 			plugins/sailfish_manager/sailfish_manager.c \
 			plugins/sailfish_manager/sailfish_manager_dbus.c \
 			plugins/sailfish_manager/sailfish_sim_info.c \
-			plugins/sailfish_manager/sailfish_sim_info_dbus.c \
-			plugins/sailfish_manager/sailfish_dbus_clients.c
+			plugins/sailfish_manager/sailfish_sim_info_dbus.c
 endif
 
 
@@ -776,7 +775,8 @@ src_ofonod_SOURCES = $(builtin_sources) $(gatchat_sources) src/ofono.ver \
 			src/handsfree-audio.c src/bluetooth.h \
 			src/sim-mnclength.c src/voicecallagent.c \
 			src/sms-filter.c src/gprs-filter.c \
-			src/dbus-queue.c src/dbus-access.c src/config.c \
+			src/dbus-clients.c src/dbus-queue.c \
+			src/dbus-access.c src/config.c \
 			src/voicecall-filter.c src/ril-transport.c \
 			src/hfp.h src/siri.c src/watchlist.c \
 			src/netmon.c src/lte.c src/ims.c \
@@ -980,10 +980,9 @@ unit_tests += unit/test-sailfish_cell_info
 unit_test_sailfish_cell_info_dbus_SOURCES = unit/test-dbus.c \
 			unit/test-sailfish_cell_info_dbus.c \
 			unit/fake_sailfish_cell_info.c \
-			unit/fake_sailfish_dbus_clients.c \
 			plugins/sailfish_manager/sailfish_cell_info.c \
 			plugins/sailfish_manager/sailfish_cell_info_dbus.c \
-			gdbus/object.c \
+			gdbus/object.c src/dbus-clients.c \
 			src/dbus.c src/log.c
 unit_test_sailfish_cell_info_dbus_CFLAGS = $(AM_CFLAGS) $(COVERAGE_OPT) \
 			@DBUS_GLIB_CFLAGS@
@@ -1165,6 +1164,14 @@ unit_test_caif_SOURCES = unit/test-caif.c $(gatchat_sources) \
 unit_test_caif_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
 unit_test_caif_LDADD = @GLIB_LIBS@
 unit_objects += $(unit_test_caif_OBJECTS)
+
+unit_test_dbus_clients_SOURCES = unit/test-dbus-clients.c unit/test-dbus.c \
+				src/dbus-clients.c gdbus/object.c \
+				src/dbus.c src/log.c
+unit_test_dbus_clients_CFLAGS =  @DBUS_GLIB_CFLAGS@ $(COVERAGE_OPT) $(AM_CFLAGS)
+unit_test_dbus_clients_LDADD = @DBUS_GLIB_LIBS@ @GLIB_LIBS@ -ldl
+unit_objects += $(unit_test_dbus_clients_OBJECTS)
+unit_tests += unit/test-dbus-clients
 
 unit_test_dbus_queue_SOURCES = unit/test-dbus-queue.c unit/test-dbus.c \
 				src/dbus-queue.c gdbus/object.c \

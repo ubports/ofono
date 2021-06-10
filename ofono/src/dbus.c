@@ -3,6 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2013-2021  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -12,10 +13,6 @@
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
  */
 
@@ -28,8 +25,6 @@
 #include <gdbus.h>
 
 #include "ofono.h"
-
-#define OFONO_ERROR_INTERFACE "org.ofono.Error"
 
 static DBusConnection *g_connection;
 
@@ -209,8 +204,8 @@ void ofono_dbus_dict_append_dict(DBusMessageIter *dict, const char *key,
 	dbus_message_iter_close_container(dict, &entry);
 }
 
-int ofono_dbus_signal_property_changed(DBusConnection *conn,
-					const char *path,
+/* Since mer/1.23+git31 */
+DBusMessage *ofono_dbus_signal_new_property_changed(const char *path,
 					const char *interface,
 					const char *name,
 					int type, const void *value)
@@ -219,17 +214,32 @@ int ofono_dbus_signal_property_changed(DBusConnection *conn,
 	DBusMessageIter iter;
 
 	signal = dbus_message_new_signal(path, interface, "PropertyChanged");
-	if (signal == NULL) {
-		ofono_error("Unable to allocate new %s.PropertyChanged signal",
-				interface);
-		return -1;
-	}
+	if (signal == NULL)
+		return NULL;
 
 	dbus_message_iter_init_append(signal, &iter);
 
 	dbus_message_iter_append_basic(&iter, DBUS_TYPE_STRING, &name);
 
 	append_variant(&iter, type, value);
+
+	return signal;
+}
+
+int ofono_dbus_signal_property_changed(DBusConnection *conn,
+					const char *path,
+					const char *interface,
+					const char *name,
+					int type, const void *value)
+{
+	DBusMessage *signal = ofono_dbus_signal_new_property_changed(path,
+						interface, name, type, value);
+
+	if (signal == NULL) {
+		ofono_error("Unable to allocate new %s.PropertyChanged signal",
+				interface);
+		return -1;
+	}
 
 	return g_dbus_send_message(conn, signal);
 }
