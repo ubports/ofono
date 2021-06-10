@@ -565,7 +565,7 @@ static DBusMessage *sailfish_cell_info_dbus_unsubscribe(DBusConnection *conn,
 		if (!ofono_dbus_clients_count(dbus->clients)) {
 			sailfish_cell_info_set_enabled(dbus->info, FALSE);
 		}
-		dbus_message_set_destination(msg, sender);
+		dbus_message_set_destination(signal, sender);
 		g_dbus_send_message(dbus->conn, signal);
 		return dbus_message_new_method_return(msg);
 	}
