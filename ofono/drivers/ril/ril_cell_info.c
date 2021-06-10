@@ -47,6 +47,7 @@ struct ril_cell_info {
 	gulong event_id;
 	guint query_id;
 	guint set_rate_id;
+	gboolean enabled;
 };
 
 enum ril_cell_info_signal {
@@ -331,7 +332,8 @@ static void ril_cell_info_list_cb(GRilIoChannel *io, int status,
 	DBG_(self, "");
 	GASSERT(self->query_id);
 	self->query_id = 0;
-	ril_cell_info_update_cells(self, (status == RIL_E_SUCCESS) ?
+	ril_cell_info_update_cells(self,
+		(status == RIL_E_SUCCESS && self->enabled) ?
 		ril_cell_info_parse_list(io->ril_version, data, len) : NULL);
 }
 
@@ -348,12 +350,14 @@ static void ril_cell_info_set_rate_cb(GRilIoChannel *io, int status,
 static gboolean ril_cell_info_retry(GRilIoRequest* request, int ril_status,
 		const void* response_data, guint response_len, void* user_data)
 {
+	struct ril_cell_info *self = RIL_CELL_INFO(user_data);
+
 	switch (ril_status) {
 	case RIL_E_SUCCESS:
 	case RIL_E_RADIO_NOT_AVAILABLE:
 		return FALSE;
 	default:
-		return TRUE;
+		return self->enabled;
 	}
 }
 
@@ -373,7 +377,8 @@ static void ril_cell_info_query(struct ril_cell_info *self)
 static void ril_cell_info_set_rate(struct ril_cell_info *self)
 {
 	GRilIoRequest *req = grilio_request_array_int32_new(1,
-		(self->update_rate_ms >= 0) ? self->update_rate_ms : INT_MAX);
+		(self->update_rate_ms >= 0 && self->enabled) ?
+		self->update_rate_ms : INT_MAX);
 
 	grilio_request_set_retry(req, RIL_RETRY_MS, MAX_RETRIES);
 	grilio_request_set_retry_func(req, ril_cell_info_retry);
@@ -387,7 +392,8 @@ static void ril_cell_info_set_rate(struct ril_cell_info *self)
 static void ril_cell_info_refresh(struct ril_cell_info *self)
 {
 	/* RIL_REQUEST_GET_CELL_INFO_LIST fails without SIM card */
-	if (self->radio->state == RADIO_STATE_ON && self->sim_card_ready) {
+	if (self->enabled && self->radio->state == RADIO_STATE_ON &&
+						self->sim_card_ready) {
 		ril_cell_info_query(self);
 	} else {
 		ril_cell_info_update_cells(self, NULL);
@@ -482,6 +488,21 @@ static void ril_cell_info_set_update_interval_proc
 	if (self->update_rate_ms != ms) {
 		self->update_rate_ms = ms;
 		DBG_(self, "%d ms", ms);
+		if (self->enabled && self->sim_card_ready) {
+			ril_cell_info_set_rate(self);
+		}
+	}
+}
+
+void ril_cell_info_set_enabled_proc(struct sailfish_cell_info *info,
+							gboolean enabled)
+{
+	struct ril_cell_info *self = ril_cell_info_cast(info);
+
+	if (self->enabled != enabled) {
+		self->enabled = enabled;
+		DBG_(self, "%d", enabled);
+		ril_cell_info_refresh(self);
 		if (self->sim_card_ready) {
 			ril_cell_info_set_rate(self);
 		}
@@ -497,7 +518,8 @@ struct sailfish_cell_info *ril_cell_info_new(GRilIoChannel *io,
 		ril_cell_info_unref_proc,
 		ril_cell_info_add_cells_changed_handler_proc,
 		ril_cell_info_remove_handler_proc,
-		ril_cell_info_set_update_interval_proc
+		ril_cell_info_set_update_interval_proc,
+		ril_cell_info_set_enabled_proc
 	};
 
 	struct ril_cell_info *self = g_object_new(RIL_CELL_INFO_TYPE, 0);
@@ -519,6 +541,9 @@ struct sailfish_cell_info *ril_cell_info_new(GRilIoChannel *io,
 			ril_cell_info_sim_status_cb, self);
 	self->sim_card_ready = ril_sim_card_ready(sim_card);
 	ril_cell_info_refresh(self);
+
+	/* Disable updates by default */
+	self->enabled = FALSE;
 	if (self->sim_card_ready) {
 		ril_cell_info_set_rate(self);
 	}
