@@ -341,7 +341,7 @@ static void sailfish_cell_info_dbus_emit_path_list
 		}
 		dbus_message_iter_close_container(&it, &a);
 		ofono_dbus_clients_signal(dbus->clients, signal);
-		dbus_message_ref(signal);
+		dbus_message_unref(signal);
 	}
 }
 
@@ -372,6 +372,23 @@ static int sailfish_cell_info_dbus_compare(const struct sailfish_cell *c1,
 	}
 }
 
+static void sailfish_cell_info_dbus_emit_signal
+		(struct sailfish_cell_info_dbus *dbus,
+				const char *path, const char *intf,
+				const char *name, int type, ...)
+{
+	if (ofono_dbus_clients_count(dbus->clients)) {
+		va_list args;
+		DBusMessage *signal = dbus_message_new_signal(path, intf, name);
+
+		va_start(args, type);
+		dbus_message_append_args_valist(signal, type, args);
+		ofono_dbus_clients_signal(dbus->clients, signal);
+		dbus_message_unref(signal);
+		va_end(args);
+	}
+}
+
 static void sailfish_cell_info_dbus_property_changed
 		(struct sailfish_cell_info_dbus *dbus,
 			const struct sailfish_cell_entry *entry, int mask)
@@ -383,7 +400,8 @@ static void sailfish_cell_info_dbus_property_changed
 
 	if (mask & SAILFISH_CELL_PROPERTY_REGISTERED) {
 		const dbus_bool_t registered = (cell->registered != FALSE);
-		g_dbus_emit_signal(dbus->conn, entry->path,
+
+		sailfish_cell_info_dbus_emit_signal(dbus, entry->path,
 			CELL_DBUS_INTERFACE,
 			CELL_DBUS_REGISTERED_CHANGED_SIGNAL,
 			DBUS_TYPE_BOOLEAN, &registered, DBUS_TYPE_INVALID);
@@ -418,7 +436,7 @@ static void sailfish_cell_info_dbus_update_entries
 						sailfish_cell_compare_func)) {
 			DBG("%s removed", entry->path);
 			dbus->entries = g_slist_delete_link(dbus->entries, l);
-			g_dbus_emit_signal(dbus->conn, entry->path,
+			sailfish_cell_info_dbus_emit_signal(dbus, entry->path,
 					CELL_DBUS_INTERFACE,
 					CELL_DBUS_REMOVED_SIGNAL,
 					DBUS_TYPE_INVALID);
@@ -544,6 +562,9 @@ static DBusMessage *sailfish_cell_info_dbus_unsubscribe(DBusConnection *conn,
 			CELL_INFO_DBUS_INTERFACE,
 			CELL_INFO_DBUS_UNSUBSCRIBED_SIGNAL);
 
+		if (!ofono_dbus_clients_count(dbus->clients)) {
+			sailfish_cell_info_set_enabled(dbus->info, FALSE);
+		}
 		dbus_message_set_destination(msg, sender);
 		g_dbus_send_message(dbus->conn, signal);
 		return dbus_message_new_method_return(msg);

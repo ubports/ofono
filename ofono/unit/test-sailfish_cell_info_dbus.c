@@ -827,7 +827,7 @@ struct test_registered_changed_data {
 	const char *cell_path;
 };
 
-static void test_registered_changed_reply(DBusPendingCall *call, void *data)
+static void test_registered_changed_reply2(DBusPendingCall *call, void *data)
 {
 	struct test_registered_changed_data *test = data;
 
@@ -838,17 +838,14 @@ static void test_registered_changed_reply(DBusPendingCall *call, void *data)
 	test_loop_quit_later(test->context.loop);
 }
 
-static void test_registered_changed_start(struct test_dbus_context *context)
+static void test_registered_changed_reply1(DBusPendingCall *call, void *data)
 {
-	struct test_registered_changed_data *test =
-		G_CAST(context, struct test_registered_changed_data, context);
+	struct test_registered_changed_data *test = data;
 	struct sailfish_cell *first_cell;
 
 	DBG("");
-	test->info = fake_cell_info_new();
-	fake_cell_info_add_cell(test->info, &test->cell);
-	test->dbus = sailfish_cell_info_dbus_new(&test->modem, test->info);
-	g_assert(test->dbus);
+	test_check_get_cells_reply(call, test->cell_path, NULL);
+	dbus_pending_call_unref(call);
 
 	/* Trigger "RegisteredChanged" signal */
 	first_cell = test->info->cells->data;
@@ -856,8 +853,24 @@ static void test_registered_changed_start(struct test_dbus_context *context)
 	first_cell->registered = !first_cell->registered;
 	fake_cell_info_cells_changed(test->info);
 
-	test_submit_get_all_call(context->client_connection, test->cell_path,
-				test_registered_changed_reply, test);
+	test_submit_get_all_call(test->context.client_connection,
+		test->cell_path, test_registered_changed_reply2, test);
+}
+
+static void test_registered_changed_start(struct test_dbus_context *context)
+{
+	struct test_registered_changed_data *test =
+		G_CAST(context, struct test_registered_changed_data, context);
+
+	DBG("");
+	test->info = fake_cell_info_new();
+	fake_cell_info_add_cell(test->info, &test->cell);
+	test->dbus = sailfish_cell_info_dbus_new(&test->modem, test->info);
+	g_assert(test->dbus);
+
+	/* Submit GetCells to enable "RegisteredChanged" signals */
+	test_submit_cell_info_call(test->context.client_connection, "GetCells",
+					test_registered_changed_reply1, test);
 }
 
 static void test_registered_changed(void)
