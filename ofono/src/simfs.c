@@ -405,18 +405,18 @@ static void sim_fs_op_read_block_cb(const struct ofono_error *error,
 	}
 
 	start_block = op->offset / 256;
-	end_block = (op->offset + (op->num_bytes - 1)) / 256;
+	end_block = op->num_bytes ? (op->offset + op->num_bytes - 1) / 256 :
+								start_block;
 
 	if (op->current == start_block) {
 		bufoff = 0;
 		dataoff = op->offset % 256;
-		tocopy = MIN(256 - op->offset % 256,
-				op->num_bytes - op->current * 256);
+		tocopy = MIN(256 - dataoff, op->num_bytes);
 	} else {
-		bufoff = (op->current - start_block - 1) * 256 +
+		bufoff = (op->current - start_block) * 256 -
 				op->offset % 256;
 		dataoff = 0;
-		tocopy = MIN(256, op->num_bytes - op->current * 256);
+		tocopy = MIN(256, op->num_bytes - bufoff);
 	}
 
 	DBG("bufoff: %d, dataoff: %d, tocopy: %d",
@@ -485,13 +485,12 @@ static gboolean sim_fs_op_read_block(gpointer user_data)
 			bufoff = 0;
 			seekoff = SIM_CACHE_HEADER_SIZE + op->current * 256 +
 				op->offset % 256;
-			toread = MIN(256 - op->offset % 256,
-					op->num_bytes - op->current * 256);
+			toread = MIN(256 - op->offset % 256, op->num_bytes);
 		} else {
-			bufoff = (op->current - start_block - 1) * 256 +
+			bufoff = (op->current - start_block) * 256 -
 					op->offset % 256;
 			seekoff = SIM_CACHE_HEADER_SIZE + op->current * 256;
-			toread = MIN(256, op->num_bytes - op->current * 256);
+			toread = MIN(256, op->num_bytes - bufoff);
 		}
 
 		DBG("bufoff: %d, seekoff: %d, toread: %d",
