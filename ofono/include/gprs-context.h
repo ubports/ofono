@@ -146,6 +146,9 @@ void ofono_gprs_context_set_ipv6_proxy_cscf(struct ofono_gprs_context *gc,
 void ofono_gprs_context_signal_change(struct ofono_gprs_context *gc,
 							unsigned int cid);
 
+enum ofono_gprs_context_type ofono_gprs_context_get_assigned_type(
+		struct ofono_gprs_context *gc); /* Since mer/1.24+git2 */
+
 #ifdef __cplusplus
 }
 #endif

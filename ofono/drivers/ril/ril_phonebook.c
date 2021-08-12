@@ -5,8 +5,7 @@
  *  Copyright (C) 2009 Nokia Corporation and/or its subsidiary(-ies).
  *  Copyright (C) ST-Ericsson SA 2010.
  *  Copyright (C) 2008-2011 Intel Corporation. All rights reserved.
- *  Copyright (C) 2013-2016 Jolla Ltd
- *  Contact: Jussi Kangas <jussi.kangas@tieto.com>
+ *  Copyright (C) 2013-2021 Jolla Ltd
  *  Copyright (C) 2014  Canonical Ltd
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -21,10 +20,9 @@
 
 #include "ril_plugin.h"
 
-#include <ofono.h>
-
-#include "simutil.h"
-#include "util.h"
+#include <ofono/modem.h>
+#include <ofono/misc.h>
+#include <ofono/log.h>
 
 #define CALLBACK_WITH_FAILURE(cb, args...)		\
 	do {						\
@@ -44,6 +42,8 @@
 	} while (0)
 
 #define SIM_EFPBR_FILEID 0x4F30
+#define SIM_EFADN_FILEID 0x6F3A
+#define SIM_EFEXT1_FILEID 0x6F4A
 
 #define UNUSED	0xFF
 
@@ -148,8 +148,7 @@ static gint comp_int(gconstpointer a, gconstpointer b)
 	return a_val - b_val;
 }
 
-static const struct pb_file_info *
-ext1_info(const GSList *pb_files)
+static const struct pb_file_info *ext1_info(const GSList *pb_files)
 {
 	const GSList *l;
 	for (l = pb_files; l; l = l->next) {
@@ -170,7 +169,7 @@ static struct phonebook_entry *handle_adn(size_t len, const unsigned char *msg,
 	unsigned extension_record = UNUSED;
 	unsigned i, prefix;
 	char *number = NULL;
-	char *name = sim_string_to_utf8(msg, name_length);
+	char *name = ofono_sim_string_to_utf8(msg, name_length);
 	struct phonebook_entry *new_entry;
 
 	/* Length contains also TON & NPI */
@@ -245,7 +244,7 @@ static struct phonebook_entry *handle_adn(size_t len, const unsigned char *msg,
 	return new_entry;
 
 end:
-	g_free(name);
+	ofono_sim_string_free(name);
 	g_free(number);
 
 	return NULL;
@@ -303,7 +302,7 @@ static void handle_sne(size_t len, const unsigned char *msg,
 	if (rec_data->set_by_iap)
 		len -= 2;
 
-	sne = sim_string_to_utf8(msg, len);
+	sne = ofono_sim_string_to_utf8(msg, len);
 
 	if (sne && *sne != '\0') {
 		struct phonebook_entry *entry;
@@ -312,19 +311,17 @@ static void handle_sne(size_t len, const unsigned char *msg,
 				GINT_TO_POINTER(rec_data->adn_idx));
 		if (entry) {
 			/* If one already exists, delete it */
-			if (entry->sne)
-				g_free(entry->sne);
+			ofono_sim_string_free(entry->sne);
 
 			DBG("Adding SNE %s to %d", sne, rec_data->adn_idx);
 			DBG("name %s", entry->name);
 
 			entry->sne = sne;
-		} else {
-			g_free(sne);
+			sne = NULL;
 		}
-	} else {
-		g_free(sne);
 	}
+
+	ofono_sim_string_free(sne);
 }
 
 static void handle_anr(size_t len,
@@ -418,33 +415,31 @@ static void handle_email(size_t len, const unsigned char *msg,
 			const struct record_to_read *rec_data)
 {
 	char *email;
-	struct phonebook_entry *entry;
 
 	/* There are additional fields for type 2 files */
 	if (rec_data->set_by_iap)
 		len -= 2;
 
-	email = sim_string_to_utf8(msg, len);
-	if (email == NULL || *email == '\0') {
-		g_free(email);
-		return;
-	}
+	email = ofono_sim_string_to_utf8(msg, len);
 
-	entry = g_tree_lookup(ref->phonebook,
+	if (email && *email) {
+		struct phonebook_entry *entry;
+
+		entry = g_tree_lookup(ref->phonebook,
 				GINT_TO_POINTER(rec_data->adn_idx));
-	if (entry == NULL) {
-		g_free(email);
-		return;
+		if (entry) {
+			/* if one already exists, delete it */
+			ofono_sim_string_free(entry->email);
+
+			DBG("Adding email to entry %d", rec_data->adn_idx);
+			DBG("name %s", entry->name);
+
+			entry->email = email;
+			email = NULL;
+		}
 	}
 
-	/* if one already exists, delete it */
-	if (entry->email)
-		g_free(entry->email);
-
-	DBG("Adding email to entry %d", rec_data->adn_idx);
-	DBG("name %s", entry->name);
-
-	entry->email = email;
+	ofono_sim_string_free(email);
 }
 
 static void handle_ext1(size_t len, const unsigned char *msg,
@@ -571,11 +566,11 @@ static gboolean free_entry(gpointer key, gpointer value, gpointer data)
 {
 	struct phonebook_entry *entry = value;
 
-	g_free(entry->name);
+	ofono_sim_string_free(entry->name);
+	ofono_sim_string_free(entry->email);
+	ofono_sim_string_free(entry->sne);
 	g_free(entry->number);
-	g_free(entry->email);
 	g_free(entry->anr);
-	g_free(entry->sne);
 	g_free(entry);
 
 	return FALSE;
@@ -1022,7 +1017,7 @@ static int ril_phonebook_probe(struct ofono_phonebook *pb,
 	if (pd == NULL)
 		return -ENOMEM;
 
-	pd->sim = __ofono_atom_find(OFONO_ATOM_TYPE_SIM, modem);
+	pd->sim = ofono_modem_get_sim(modem);
 	if (pd->sim == NULL)
 		return -ENOENT;
 

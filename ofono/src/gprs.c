@@ -1062,7 +1062,7 @@ static gboolean pri_deactivation_required(struct pri_context *ctx,
 static gboolean connctx_allow(DBusMessage *msg,
 		enum ofono_dbus_access_connctx_method method, const char *arg)
 {
-	return __ofono_dbus_access_method_allowed(dbus_message_get_sender(msg),
+	return ofono_dbus_access_method_allowed(dbus_message_get_sender(msg),
 				OFONO_DBUS_ACCESS_INTF_CONNCTX, method, arg);
 }
 
@@ -1085,7 +1085,7 @@ static DBusMessage *pri_provision_context(DBusConnection *conn,
 	if (sim == NULL)
 		return __ofono_error_failed(msg);
 
-	if (__ofono_gprs_provision_get_settings(ofono_sim_get_mcc(sim),
+	if (ofono_gprs_provision_get_settings(ofono_sim_get_mcc(sim),
 				ofono_sim_get_mnc(sim), ofono_sim_get_spn(sim),
 						 &settings, &count) == FALSE)
 		return __ofono_error_failed(msg);
@@ -1109,7 +1109,7 @@ static DBusMessage *pri_provision_context(DBusConnection *conn,
 		}
 	}
 
-	__ofono_gprs_provision_free_settings(settings, count);
+	ofono_gprs_provision_free_settings(settings, count);
 
 	return reply ? reply : __ofono_error_not_available(msg);
 }
@@ -2221,7 +2221,7 @@ static DBusMessage *gprs_get_properties(DBusConnection *conn,
 static gboolean gprs_allow(DBusMessage *msg,
 		enum ofono_dbus_access_connmgr_method method, const char *arg)
 {
-	return __ofono_dbus_access_method_allowed(dbus_message_get_sender(msg),
+	return ofono_dbus_access_method_allowed(dbus_message_get_sender(msg),
 				OFONO_DBUS_ACCESS_INTF_CONNMGR, method, arg);
 }
 
@@ -2882,7 +2882,7 @@ static void provision_contexts(struct ofono_gprs *gprs, const char *mcc,
 	int count;
 	int i;
 
-	if (__ofono_gprs_provision_get_settings(mcc, mnc, spn,
+	if (ofono_gprs_provision_get_settings(mcc, mnc, spn,
 						&settings, &count) == FALSE) {
 		ofono_warn("Provisioning failed");
 		return;
@@ -2896,7 +2896,7 @@ static void provision_contexts(struct ofono_gprs *gprs, const char *mcc,
 		}
 	}
 
-	__ofono_gprs_provision_free_settings(settings, count);
+	ofono_gprs_provision_free_settings(settings, count);
 }
 
 static gboolean all_contexts_configured(struct ofono_gprs *gprs)
@@ -3987,8 +3987,8 @@ void *ofono_gprs_get_data(struct ofono_gprs *gprs)
 	return gprs->driver_data;
 }
 
-gboolean __ofono_gprs_get_roaming_allowed(struct ofono_gprs *gprs)
-{
+ofono_bool_t ofono_gprs_get_roaming_allowed(struct ofono_gprs *gprs)
+{	/* Since mer/1.24+git2 */
 	return gprs->roaming_allowed;
 }
 
@@ -4010,8 +4010,8 @@ const struct ofono_gprs_primary_context *ofono_gprs_context_settings_by_type
 	return NULL;
 }
 
-enum ofono_gprs_context_type __ofono_gprs_context_get_assigned_type(
-						struct ofono_gprs_context *gc)
+enum ofono_gprs_context_type ofono_gprs_context_get_assigned_type(
+		struct ofono_gprs_context *gc) /* Since mer/1.24+git2 */
 {
 	if (gc) {
 		struct ofono_gprs *gprs = gc->gprs;

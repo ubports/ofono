@@ -39,6 +39,8 @@
 #include "storage.h"
 #include "smsutil.h"
 
+#include <ofono/misc.h>
+
 #define uninitialized_var(x) x = x
 
 #define SMS_BACKUP_MODE 0600
@@ -4788,4 +4790,12 @@ gboolean ussd_encode(const char *str, long *items_written, unsigned char *pdu)
 		*items_written = num_packed;
 
 	return TRUE;
+}
+
+/* Public API exposed to external plugins */
+
+ofono_bool_t ofono_decode_cbs_dcs_charset(unsigned char dcs,
+			enum ofono_sms_charset *charset)
+{
+	return cbs_dcs_decode(dcs, NULL, NULL, charset, NULL, NULL, NULL);
 }

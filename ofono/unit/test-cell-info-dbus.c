@@ -15,9 +15,10 @@
 
 #include "test-dbus.h"
 
-#include "sailfish_cell_info.h"
-#include "sailfish_cell_info_dbus.h"
-#include "fake_sailfish_cell_info.h"
+#include <ofono/cell-info.h>
+
+#include "cell-info-dbus.h"
+#include "fake_cell_info.h"
 
 #include <gutil_log.h>
 #include <gutil_macros.h>
@@ -181,7 +182,7 @@ static void test_check_get_cells_reply(DBusPendingCall *call,
 }
 
 static void test_check_get_all_reply(DBusPendingCall *call,
-			const struct sailfish_cell *cell, const char *type)
+			const struct ofono_cell *cell, const char *type)
 {
 	DBusMessage *reply = dbus_pending_call_steal_reply(call);
 	DBusMessageIter it, array;
@@ -220,12 +221,12 @@ static void test_check_error(DBusPendingCall *call, const char* name)
 	dbus_message_unref(reply);
 }
 
-static struct sailfish_cell *test_cell_init_gsm1(struct sailfish_cell *cell)
+static struct ofono_cell *test_cell_init_gsm1(struct ofono_cell *cell)
 {
-	struct sailfish_cell_info_gsm *gsm = &cell->info.gsm;
+	struct ofono_cell_info_gsm *gsm = &cell->info.gsm;
 
 	memset(cell, 0, sizeof(*cell));
-	cell->type = SAILFISH_CELL_TYPE_GSM;
+	cell->type = OFONO_CELL_TYPE_GSM;
 	cell->registered = TRUE;
 	gsm->mcc = 244;
 	gsm->mnc = 5;
@@ -239,12 +240,12 @@ static struct sailfish_cell *test_cell_init_gsm1(struct sailfish_cell *cell)
 	return cell;
 }
 
-static struct sailfish_cell *test_cell_init_gsm2(struct sailfish_cell *cell)
+static struct ofono_cell *test_cell_init_gsm2(struct ofono_cell *cell)
 {
-	struct sailfish_cell_info_gsm *gsm = &cell->info.gsm;
+	struct ofono_cell_info_gsm *gsm = &cell->info.gsm;
 
 	memset(cell, 0, sizeof(*cell));
-	cell->type = SAILFISH_CELL_TYPE_GSM;
+	cell->type = OFONO_CELL_TYPE_GSM;
 	cell->registered = FALSE;
 	gsm->mcc = 244;
 	gsm->mnc = 5;
@@ -258,12 +259,12 @@ static struct sailfish_cell *test_cell_init_gsm2(struct sailfish_cell *cell)
 	return cell;
 }
 
-static struct sailfish_cell *test_cell_init_wcdma1(struct sailfish_cell *cell)
+static struct ofono_cell *test_cell_init_wcdma1(struct ofono_cell *cell)
 {
-	struct sailfish_cell_info_wcdma *wcdma = &cell->info.wcdma;
+	struct ofono_cell_info_wcdma *wcdma = &cell->info.wcdma;
 
 	memset(cell, 0, sizeof(*cell));
-	cell->type = SAILFISH_CELL_TYPE_WCDMA;
+	cell->type = OFONO_CELL_TYPE_WCDMA;
 	cell->registered = TRUE;
 	wcdma->mcc = 250;
 	wcdma->mnc = 99;
@@ -276,12 +277,12 @@ static struct sailfish_cell *test_cell_init_wcdma1(struct sailfish_cell *cell)
 	return cell;
 }
 
-static struct sailfish_cell *test_cell_init_wcdma2(struct sailfish_cell *cell)
+static struct ofono_cell *test_cell_init_wcdma2(struct ofono_cell *cell)
 {
-	struct sailfish_cell_info_wcdma *wcdma = &cell->info.wcdma;
+	struct ofono_cell_info_wcdma *wcdma = &cell->info.wcdma;
 
 	memset(cell, 0, sizeof(*cell));
-	cell->type = SAILFISH_CELL_TYPE_WCDMA;
+	cell->type = OFONO_CELL_TYPE_WCDMA;
 	cell->registered = FALSE;
 	wcdma->mcc = INT_MAX;
 	wcdma->mnc = INT_MAX;
@@ -294,12 +295,12 @@ static struct sailfish_cell *test_cell_init_wcdma2(struct sailfish_cell *cell)
 	return cell;
 }
 
-static struct sailfish_cell *test_cell_init_lte(struct sailfish_cell *cell)
+static struct ofono_cell *test_cell_init_lte(struct ofono_cell *cell)
 {
-	struct sailfish_cell_info_lte *lte = &cell->info.lte;
+	struct ofono_cell_info_lte *lte = &cell->info.lte;
 
 	memset(cell, 0, sizeof(*cell));
-	cell->type = SAILFISH_CELL_TYPE_LTE;
+	cell->type = OFONO_CELL_TYPE_LTE;
 	cell->registered = TRUE;
 	lte->mcc = 244;
 	lte->mnc = 91;
@@ -325,9 +326,9 @@ static void test_misc(void)
 	modem.path = TEST_MODEM_PATH;
 
 	/* NULL resistance */
-	g_assert(!sailfish_cell_info_dbus_new(NULL, NULL));
-	g_assert(!sailfish_cell_info_dbus_new(&modem, NULL));
-	sailfish_cell_info_dbus_free(NULL);
+	g_assert(!cell_info_dbus_new(NULL, NULL));
+	g_assert(!cell_info_dbus_new(&modem, NULL));
+	cell_info_dbus_free(NULL);
 
 	/* Calling __ofono_dbus_cleanup() without __ofono_dbus_init() is ok */
 	__ofono_dbus_cleanup();
@@ -338,8 +339,8 @@ static void test_misc(void)
 struct test_get_cells_data {
 	struct ofono_modem modem;
 	struct test_dbus_context context;
-	struct sailfish_cell_info *info;
-	struct sailfish_cell_info_dbus *dbus;
+	struct cell_info_dbus *dbus;
+	struct ofono_cell_info *info;
 };
 
 static void test_get_cells_call(struct test_get_cells_data *test,
@@ -374,7 +375,7 @@ static void test_get_cells_start_reply2(DBusPendingCall *call, void *data)
 {
 	struct test_get_cells_data *test = data;
 	const char *cell_added = "/test/cell_1";
-	struct sailfish_cell cell;
+	struct ofono_cell cell;
 	DBusMessageIter it;
 	DBusMessage *signal = test_dbus_take_signal(&test->context,
 				test->modem.path, CELL_INFO_DBUS_INTERFACE,
@@ -400,7 +401,7 @@ static void test_get_cells_start_reply2(DBusPendingCall *call, void *data)
 static void test_get_cells_start_reply1(DBusPendingCall *call, void *data)
 {
 	struct test_get_cells_data *test = data;
-	struct sailfish_cell cell;
+	struct ofono_cell cell;
 
 	DBG("");
 	test_check_get_cells_reply(call, "/test/cell_0", NULL);
@@ -414,7 +415,7 @@ static void test_get_cells_start_reply1(DBusPendingCall *call, void *data)
 
 static void test_get_cells_start(struct test_dbus_context *context)
 {
-	struct sailfish_cell cell;
+	struct ofono_cell cell;
 	struct test_get_cells_data *test =
 		G_CAST(context, struct test_get_cells_data, context);
 
@@ -422,7 +423,7 @@ static void test_get_cells_start(struct test_dbus_context *context)
 	test->info = fake_cell_info_new();
 	fake_cell_info_add_cell(test->info, test_cell_init_gsm1(&cell));
 
-	test->dbus = sailfish_cell_info_dbus_new(&test->modem, test->info);
+	test->dbus = cell_info_dbus_new(&test->modem, test->info);
 	g_assert(test->dbus);
 
 	test_get_cells_call(test, test_get_cells_start_reply1);
@@ -440,8 +441,8 @@ static void test_get_cells(void)
 
 	g_main_loop_run(test.context.loop);
 
-	sailfish_cell_info_unref(test.info);
-	sailfish_cell_info_dbus_free(test.dbus);
+	ofono_cell_info_unref(test.info);
+	cell_info_dbus_free(test.dbus);
 	test_dbus_shutdown(&test.context);
 	if (timeout) {
 		g_source_remove(timeout);
@@ -453,8 +454,8 @@ static void test_get_cells(void)
 struct test_get_all_data {
 	struct ofono_modem modem;
 	struct test_dbus_context context;
-	struct sailfish_cell_info_dbus *dbus;
-	struct sailfish_cell cell;
+	struct cell_info_dbus *dbus;
+	struct ofono_cell cell;
 	const char *type;
 };
 
@@ -471,22 +472,22 @@ static void test_get_all_reply(DBusPendingCall *call, void *data)
 
 static void test_get_all_start(struct test_dbus_context *context)
 {
-	struct sailfish_cell_info *info;
+	struct ofono_cell_info *info;
 	struct test_get_all_data *test =
 		G_CAST(context, struct test_get_all_data, context);
 
 	DBG("");
 	info = fake_cell_info_new();
 	fake_cell_info_add_cell(info, &test->cell);
-	test->dbus = sailfish_cell_info_dbus_new(&test->modem, info);
+	test->dbus = cell_info_dbus_new(&test->modem, info);
 	g_assert(test->dbus);
-	sailfish_cell_info_unref(info);
+	ofono_cell_info_unref(info);
 
 	test_submit_get_all_call(context->client_connection, "/test/cell_0",
 						test_get_all_reply, test);
 }
 
-static void test_get_all(const struct sailfish_cell *cell, const char *type)
+static void test_get_all(const struct ofono_cell *cell, const char *type)
 {
 	struct test_get_all_data test;
 	guint timeout = test_setup_timeout();
@@ -500,7 +501,7 @@ static void test_get_all(const struct sailfish_cell *cell, const char *type)
 
 	g_main_loop_run(test.context.loop);
 
-	sailfish_cell_info_dbus_free(test.dbus);
+	cell_info_dbus_free(test.dbus);
 	test_dbus_shutdown(&test.context);
 	if (timeout) {
 		g_source_remove(timeout);
@@ -509,28 +510,28 @@ static void test_get_all(const struct sailfish_cell *cell, const char *type)
 
 static void test_get_all1(void)
 {
-	struct sailfish_cell cell;
+	struct ofono_cell cell;
 
 	test_get_all(test_cell_init_gsm1(&cell), "gsm");
 }
 
 static void test_get_all2(void)
 {
-	struct sailfish_cell cell;
+	struct ofono_cell cell;
 
 	test_get_all(test_cell_init_wcdma2(&cell), "wcdma");
 }
 
 static void test_get_all3(void)
 {
-	struct sailfish_cell cell;
+	struct ofono_cell cell;
 
 	test_get_all(test_cell_init_lte(&cell), "lte");
 }
 
 static void test_get_all4(void)
 {
-	struct sailfish_cell cell;
+	struct ofono_cell cell;
 
 	/* Invalid cell */
 	memset(&cell, 0xff, sizeof(cell));
@@ -542,7 +543,7 @@ static void test_get_all4(void)
 struct test_get_version_data {
 	struct ofono_modem modem;
 	struct test_dbus_context context;
-	struct sailfish_cell_info_dbus *dbus;
+	struct cell_info_dbus *dbus;
 };
 
 static void test_get_version_reply(DBusPendingCall *call, void *data)
@@ -568,17 +569,17 @@ static void test_get_version_start(struct test_dbus_context *context)
 {
 	DBusPendingCall *call;
 	DBusMessage *msg;
-	struct sailfish_cell cell;
-	struct sailfish_cell_info *info;
+	struct ofono_cell cell;
+	struct ofono_cell_info *info;
 	struct test_get_version_data *test =
 		G_CAST(context, struct test_get_version_data, context);
 
 	DBG("");
 	info = fake_cell_info_new();
 	fake_cell_info_add_cell(info, test_cell_init_gsm1(&cell));
-	test->dbus = sailfish_cell_info_dbus_new(&test->modem, info);
+	test->dbus = cell_info_dbus_new(&test->modem, info);
 	g_assert(test->dbus);
-	sailfish_cell_info_unref(info);
+	ofono_cell_info_unref(info);
 
 	msg = test_new_cell_call("/test/cell_0", "GetInterfaceVersion");
 	g_assert(dbus_connection_send_with_reply(context->client_connection,
@@ -599,7 +600,7 @@ static void test_get_version(void)
 
 	g_main_loop_run(test.context.loop);
 
-	sailfish_cell_info_dbus_free(test.dbus);
+	cell_info_dbus_free(test.dbus);
 	test_dbus_shutdown(&test.context);
 	if (timeout) {
 		g_source_remove(timeout);
@@ -611,7 +612,7 @@ static void test_get_version(void)
 struct test_get_type_data {
 	struct ofono_modem modem;
 	struct test_dbus_context context;
-	struct sailfish_cell_info_dbus *dbus;
+	struct cell_info_dbus *dbus;
 };
 
 static void test_get_type_reply(DBusPendingCall *call, void *data)
@@ -636,17 +637,17 @@ static void test_get_type_start(struct test_dbus_context *context)
 {
 	DBusPendingCall *call;
 	DBusMessage *msg;
-	struct sailfish_cell cell;
-	struct sailfish_cell_info *info;
+	struct ofono_cell cell;
+	struct ofono_cell_info *info;
 	struct test_get_type_data *test =
 		G_CAST(context, struct test_get_type_data, context);
 
 	DBG("");
 	info = fake_cell_info_new();
 	fake_cell_info_add_cell(info, test_cell_init_wcdma1(&cell));
-	test->dbus = sailfish_cell_info_dbus_new(&test->modem, info);
+	test->dbus = cell_info_dbus_new(&test->modem, info);
 	g_assert(test->dbus);
-	sailfish_cell_info_unref(info);
+	ofono_cell_info_unref(info);
 
 	msg = test_new_cell_call("/test/cell_0", "GetType");
 	g_assert(dbus_connection_send_with_reply(context->client_connection,
@@ -667,7 +668,7 @@ static void test_get_type(void)
 
 	g_main_loop_run(test.context.loop);
 
-	sailfish_cell_info_dbus_free(test.dbus);
+	cell_info_dbus_free(test.dbus);
 	test_dbus_shutdown(&test.context);
 	if (timeout) {
 		g_source_remove(timeout);
@@ -679,7 +680,7 @@ static void test_get_type(void)
 struct test_get_registered_data {
 	struct ofono_modem modem;
 	struct test_dbus_context context;
-	struct sailfish_cell_info_dbus *dbus;
+	struct cell_info_dbus *dbus;
 };
 
 static void test_get_registered_reply(DBusPendingCall *call, void *data)
@@ -704,17 +705,17 @@ static void test_get_registered_start(struct test_dbus_context *context)
 {
 	DBusPendingCall *call;
 	DBusMessage *msg;
-	struct sailfish_cell cell;
-	struct sailfish_cell_info *info;
+	struct ofono_cell cell;
+	struct ofono_cell_info *info;
 	struct test_get_registered_data *test =
 		G_CAST(context, struct test_get_registered_data, context);
 
 	DBG("");
 	info = fake_cell_info_new();
 	fake_cell_info_add_cell(info, test_cell_init_wcdma1(&cell));
-	test->dbus = sailfish_cell_info_dbus_new(&test->modem, info);
+	test->dbus = cell_info_dbus_new(&test->modem, info);
 	g_assert(test->dbus);
-	sailfish_cell_info_unref(info);
+	ofono_cell_info_unref(info);
 
 	msg = test_new_cell_call("/test/cell_0", "GetRegistered");
 	g_assert(dbus_connection_send_with_reply(context->client_connection,
@@ -736,7 +737,7 @@ static void test_get_registered(void)
 
 	g_main_loop_run(test.context.loop);
 
-	sailfish_cell_info_dbus_free(test.dbus);
+	cell_info_dbus_free(test.dbus);
 	test_dbus_shutdown(&test.context);
 	if (timeout) {
 		g_source_remove(timeout);
@@ -748,7 +749,7 @@ static void test_get_registered(void)
 struct test_get_properties_data {
 	struct ofono_modem modem;
 	struct test_dbus_context context;
-	struct sailfish_cell_info_dbus *dbus;
+	struct cell_info_dbus *dbus;
 };
 
 static void test_get_properties_reply(DBusPendingCall *call, void *data)
@@ -776,17 +777,17 @@ static void test_get_properties_start(struct test_dbus_context *context)
 {
 	DBusPendingCall *call;
 	DBusMessage *msg;
-	struct sailfish_cell cell;
-	struct sailfish_cell_info *info;
+	struct ofono_cell cell;
+	struct ofono_cell_info *info;
 	struct test_get_properties_data *test =
 		G_CAST(context, struct test_get_properties_data, context);
 
 	DBG("");
 	info = fake_cell_info_new();
 	fake_cell_info_add_cell(info, test_cell_init_wcdma2(&cell));
-	test->dbus = sailfish_cell_info_dbus_new(&test->modem, info);
+	test->dbus = cell_info_dbus_new(&test->modem, info);
 	g_assert(test->dbus);
-	sailfish_cell_info_unref(info);
+	ofono_cell_info_unref(info);
 
 	msg = test_new_cell_call("/test/cell_0", "GetProperties");
 	g_assert(dbus_connection_send_with_reply(context->client_connection,
@@ -808,7 +809,7 @@ static void test_get_properties(void)
 
 	g_main_loop_run(test.context.loop);
 
-	sailfish_cell_info_dbus_free(test.dbus);
+	cell_info_dbus_free(test.dbus);
 	test_dbus_shutdown(&test.context);
 	if (timeout) {
 		g_source_remove(timeout);
@@ -820,9 +821,9 @@ static void test_get_properties(void)
 struct test_registered_changed_data {
 	struct ofono_modem modem;
 	struct test_dbus_context context;
-	struct sailfish_cell_info *info;
-	struct sailfish_cell_info_dbus *dbus;
-	struct sailfish_cell cell;
+	struct cell_info_dbus *dbus;
+	struct ofono_cell_info *info;
+	struct ofono_cell cell;
 	const char *type;
 	const char *cell_path;
 };
@@ -841,14 +842,14 @@ static void test_registered_changed_reply2(DBusPendingCall *call, void *data)
 static void test_registered_changed_reply1(DBusPendingCall *call, void *data)
 {
 	struct test_registered_changed_data *test = data;
-	struct sailfish_cell *first_cell;
+	struct ofono_cell *first_cell;
 
 	DBG("");
 	test_check_get_cells_reply(call, test->cell_path, NULL);
 	dbus_pending_call_unref(call);
 
 	/* Trigger "RegisteredChanged" signal */
-	first_cell = test->info->cells->data;
+	first_cell = test->info->cells[0];
 	test->cell.registered =
 	first_cell->registered = !first_cell->registered;
 	fake_cell_info_cells_changed(test->info);
@@ -865,7 +866,7 @@ static void test_registered_changed_start(struct test_dbus_context *context)
 	DBG("");
 	test->info = fake_cell_info_new();
 	fake_cell_info_add_cell(test->info, &test->cell);
-	test->dbus = sailfish_cell_info_dbus_new(&test->modem, test->info);
+	test->dbus = cell_info_dbus_new(&test->modem, test->info);
 	g_assert(test->dbus);
 
 	/* Submit GetCells to enable "RegisteredChanged" signals */
@@ -892,8 +893,8 @@ static void test_registered_changed(void)
 	g_assert(test_dbus_find_signal(&test.context, test.cell_path,
 		CELL_DBUS_INTERFACE, CELL_DBUS_REGISTERED_CHANGED_SIGNAL));
 
-	sailfish_cell_info_unref(test.info);
-	sailfish_cell_info_dbus_free(test.dbus);
+	ofono_cell_info_unref(test.info);
+	cell_info_dbus_free(test.dbus);
 	test_dbus_shutdown(&test.context);
 	if (timeout) {
 		g_source_remove(timeout);
@@ -905,9 +906,9 @@ static void test_registered_changed(void)
 struct test_property_changed_data {
 	struct ofono_modem modem;
 	struct test_dbus_context context;
-	struct sailfish_cell_info *info;
-	struct sailfish_cell_info_dbus *dbus;
-	struct sailfish_cell cell;
+	struct cell_info_dbus *dbus;
+	struct ofono_cell_info *info;
+	struct ofono_cell cell;
 	const char *type;
 	const char *cell_path;
 };
@@ -927,14 +928,14 @@ static void test_property_changed_reply2(DBusPendingCall *call, void *data)
 static void test_property_changed_reply1(DBusPendingCall *call, void *data)
 {
 	struct test_property_changed_data *test = data;
-	struct sailfish_cell *first_cell;
+	struct ofono_cell *first_cell;
 
 	DBG("");
 	test_check_get_cells_reply(call, test->cell_path, NULL);
 	dbus_pending_call_unref(call);
 
 	/* Trigger "PropertyChanged" signal */
-	first_cell = test->info->cells->data;
+	first_cell = test->info->cells[0];
 	test->cell.info.gsm.signalStrength =
 		(++(first_cell->info.gsm.signalStrength));
 	fake_cell_info_cells_changed(test->info);
@@ -951,7 +952,7 @@ static void test_property_changed_start(struct test_dbus_context *context)
 	DBG("");
 	test->info = fake_cell_info_new();
 	fake_cell_info_add_cell(test->info, &test->cell);
-	test->dbus = sailfish_cell_info_dbus_new(&test->modem, test->info);
+	test->dbus = cell_info_dbus_new(&test->modem, test->info);
 	g_assert(test->dbus);
 
 	/* Submit GetCells to enable "PropertyChanged" signals */
@@ -978,8 +979,8 @@ static void test_property_changed(void)
 	g_assert(test_dbus_find_signal(&test.context, test.cell_path,
 		CELL_DBUS_INTERFACE, CELL_DBUS_PROPERTY_CHANGED_SIGNAL));
 
-	sailfish_cell_info_unref(test.info);
-	sailfish_cell_info_dbus_free(test.dbus);
+	ofono_cell_info_unref(test.info);
+	cell_info_dbus_free(test.dbus);
 	test_dbus_shutdown(&test.context);
 	if (timeout) {
 		g_source_remove(timeout);
@@ -991,9 +992,9 @@ static void test_property_changed(void)
 struct test_unsubscribe_data {
 	struct ofono_modem modem;
 	struct test_dbus_context context;
-	struct sailfish_cell_info *info;
-	struct sailfish_cell_info_dbus *dbus;
-	struct sailfish_cell cell;
+	struct cell_info_dbus *dbus;
+	struct ofono_cell_info *info;
+	struct ofono_cell cell;
 	const char *type;
 	const char *cell_path;
 };
@@ -1013,14 +1014,14 @@ static void test_unsubscribe_reply3(DBusPendingCall *call, void *data)
 static void test_unsubscribe_reply2(DBusPendingCall *call, void *data)
 {
 	struct test_unsubscribe_data *test = data;
-	struct sailfish_cell *first_cell;
+	struct ofono_cell *first_cell;
 
 	DBG("");
 	test_check_empty_reply(call);
 	dbus_pending_call_unref(call);
 
 	/* No "PropertyChanged" signal is expected because it's disabled */
-	first_cell = test->info->cells->data;
+	first_cell = test->info->cells[0];
 	test->cell.info.gsm.signalStrength =
 		(++(first_cell->info.gsm.signalStrength));
 	fake_cell_info_cells_changed(test->info);
@@ -1051,7 +1052,7 @@ static void test_unsubscribe_start(struct test_dbus_context *context)
 	DBG("");
 	test->info = fake_cell_info_new();
 	fake_cell_info_add_cell(test->info, &test->cell);
-	test->dbus = sailfish_cell_info_dbus_new(&test->modem, test->info);
+	test->dbus = cell_info_dbus_new(&test->modem, test->info);
 	g_assert(test->dbus);
 
 	/* Submit GetCells to enable "PropertyChanged" signals */
@@ -1078,15 +1079,15 @@ static void test_unsubscribe(void)
 	g_assert(test_dbus_find_signal(&test.context, test.modem.path,
 		CELL_INFO_DBUS_INTERFACE, CELL_INFO_DBUS_UNSUBSCRIBED_SIGNAL));
 
-	sailfish_cell_info_unref(test.info);
-	sailfish_cell_info_dbus_free(test.dbus);
+	ofono_cell_info_unref(test.info);
+	cell_info_dbus_free(test.dbus);
 	test_dbus_shutdown(&test.context);
 	if (timeout) {
 		g_source_remove(timeout);
 	}
 }
 
-#define TEST_(name) "/sailfish_cell_info_dbus/" name
+#define TEST_(name) "/cell-info-dbus/" name
 
 int main(int argc, char *argv[])
 {
@@ -1105,7 +1106,7 @@ int main(int argc, char *argv[])
 	gutil_log_timestamp = FALSE;
 	gutil_log_default.level = g_test_verbose() ?
 		GLOG_LEVEL_VERBOSE : GLOG_LEVEL_NONE;
-	__ofono_log_init("test-sailfish_cell_info_dbus",
+	__ofono_log_init("test-cell-info-dbus",
 				g_test_verbose() ? "*" : NULL,
 				FALSE, FALSE);
 

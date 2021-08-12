@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2019 Jolla Ltd.
+ *  Copyright (C) 2019-2021 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -16,8 +16,7 @@
 #include "ril_connman.h"
 
 #include <ofono/log.h>
-
-#include <gdbus.h>
+#include <ofono/gdbus.h>
 
 #include <gutil_macros.h>
 #include <gutil_misc.h>

@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2019 Jolla Ltd.
+ *  Copyright (C) 2015-2021 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -18,12 +18,12 @@
 #include "ril_util.h"
 #include "ril_log.h"
 
-#include "common.h"
-
 #include <gutil_ints.h>
 #include <gutil_ring.h>
 #include <gutil_idlequeue.h>
 #include <gutil_intarray.h>
+
+#include <ofono/misc.h>
 
 #define FLAG_NEED_CLIP 1
 
@@ -138,7 +138,11 @@ static GSList *ril_voicecall_parse_clcc(const void *data, guint len)
 		gint tmp;
 
 		ofono_call_init(call);
-		grilio_parser_get_int32(&rilp, &call->status);
+
+		tmp = OFONO_CALL_STATUS_DISCONNECTED;
+		grilio_parser_get_int32(&rilp, &tmp);
+		call->status = tmp;
+
 		grilio_parser_get_uint32(&rilp, &call->id);
 		grilio_parser_get_int32(&rilp, &call->phone_number.type);
 		grilio_parser_get_int32(&rilp, NULL); /* isMpty */
@@ -146,8 +150,8 @@ static GSList *ril_voicecall_parse_clcc(const void *data, guint len)
 		tmp = 0;
 		grilio_parser_get_int32(&rilp, &tmp);
 		call->direction = (tmp ?              /* isMT */
-			CALL_DIRECTION_MOBILE_TERMINATED :
-			CALL_DIRECTION_MOBILE_ORIGINATED);
+			OFONO_CALL_DIRECTION_MOBILE_TERMINATED :
+			OFONO_CALL_DIRECTION_MOBILE_ORIGINATED);
 
 		grilio_parser_get_int32(&rilp, NULL); /* als */
 		grilio_parser_get_int32(&rilp, &call->type); /* isVoice */
@@ -293,21 +297,21 @@ static void ril_voicecall_lastcause_cb(GRilIoChannel *io, int status,
 
 		case CALL_FAIL_NORMAL_UNSPECIFIED:
 			call_status = ril_voicecall_status_with_id(vc, id);
-			if (call_status == CALL_STATUS_ACTIVE ||
-			    call_status == CALL_STATUS_HELD ||
-			    call_status == CALL_STATUS_DIALING ||
-			    call_status == CALL_STATUS_ALERTING) {
+			if (call_status == OFONO_CALL_STATUS_ACTIVE ||
+			    call_status == OFONO_CALL_STATUS_HELD ||
+			    call_status == OFONO_CALL_STATUS_DIALING ||
+			    call_status == OFONO_CALL_STATUS_ALERTING) {
 				reason = OFONO_DISCONNECT_REASON_REMOTE_HANGUP;
-			} else if (call_status == CALL_STATUS_INCOMING) {
+			} else if (call_status == OFONO_CALL_STATUS_INCOMING) {
 				reason = OFONO_DISCONNECT_REASON_LOCAL_HANGUP;
 			}
 			break;
 
 		case CALL_FAIL_ERROR_UNSPECIFIED:
 			call_status = ril_voicecall_status_with_id(vc, id);
-			if (call_status == CALL_STATUS_DIALING ||
-			    call_status == CALL_STATUS_ALERTING ||
-			    call_status == CALL_STATUS_INCOMING) {
+			if (call_status == OFONO_CALL_STATUS_DIALING ||
+			    call_status == OFONO_CALL_STATUS_ALERTING ||
+			    call_status == OFONO_CALL_STATUS_INCOMING) {
 				reason = OFONO_DISCONNECT_REASON_REMOTE_HANGUP;
 			}
 			break;
@@ -420,7 +424,7 @@ static void ril_voicecall_clcc_poll_cb(GRilIoChannel *io, int status,
 			 * arrives, or RING is used, then signal the call
 			 * here
 			 */
-			if (nc->status == CALL_STATUS_INCOMING &&
+			if (nc->status == OFONO_CALL_STATUS_INCOMING &&
 					(vd->flags & FLAG_NEED_CLIP)) {
 				if (nc->type) {
 					ofono_voicecall_notify(vd->vc, nc);
@@ -548,7 +552,8 @@ static void ril_voicecall_dial(struct ofono_voicecall *vc,
 			void *data)
 {
 	struct ril_voicecall *vd = ril_voicecall_get_data(vc);
-	const char *phstr =  phone_number_to_string(ph);
+	char phbuf[OFONO_PHONE_NUMBER_BUFFER_SIZE];
+	const char *phstr = ofono_phone_number_to_string(ph, phbuf);
 	GRilIoRequest *req = grilio_request_new();
 
 	ofono_info("dialing \"%s\"", phstr);
@@ -631,14 +636,14 @@ static void ril_voicecall_hangup(struct ofono_voicecall *vc,
 static gboolean ril_voicecall_hangup_active_filter(struct ofono_call *call)
 {
 	switch (call->status) {
-	case CALL_STATUS_ACTIVE:
-	case CALL_STATUS_DIALING:
-	case CALL_STATUS_ALERTING:
-	case CALL_STATUS_INCOMING:
+	case OFONO_CALL_STATUS_ACTIVE:
+	case OFONO_CALL_STATUS_DIALING:
+	case OFONO_CALL_STATUS_ALERTING:
+	case OFONO_CALL_STATUS_INCOMING:
 		return TRUE;
-	case CALL_STATUS_HELD:
-	case CALL_STATUS_WAITING:
-	case CALL_STATUS_DISCONNECTED:
+	case OFONO_CALL_STATUS_HELD:
+	case OFONO_CALL_STATUS_WAITING:
+	case OFONO_CALL_STATUS_DISCONNECTED:
 		break;
 	}
 	return FALSE;

@@ -4,6 +4,7 @@
  *
  *  Copyright (C) 2011  Nokia Corporation and/or its subsidiary(-ies).
  *  Copyright (C) 2013  Canonical Ltd.
+ *  Copyright (C) 2015-2021 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -27,17 +28,21 @@
 extern "C" {
 #endif
 
-
 struct ofono_sim_mnclength_driver {
 	const char *name;
 	int (*get_mnclength)(const char *imsi);
+	/* Since mer/1.24+git2 */
+	int (*get_mnclength_mccmnc)(int mcc, int mnc);
 };
 
 int ofono_sim_mnclength_driver_register(
-			struct ofono_sim_mnclength_driver *driver);
+			const struct ofono_sim_mnclength_driver *driver);
 void ofono_sim_mnclength_driver_unregister(
 			const struct ofono_sim_mnclength_driver *driver);
 
+/* Since mer/1.24+git2 */
+int ofono_sim_mnclength_get_mnclength(const char *imsi);
+int ofono_sim_mnclength_get_mnclength_mccmnc(int mcc, int mnc);
 
 #ifdef __cplusplus
 }

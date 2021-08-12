@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2019-2020 Jolla Ltd.
+ *  Copyright (C) 2019-2021 Jolla Ltd.
  *  Copyright (C) 2020 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -192,7 +192,7 @@ const char *ofono_dbus_access_method_name(enum ofono_dbus_access_intf intf,
 	return NULL;
 }
 
-gboolean __ofono_dbus_access_method_allowed(const char *sender,
+ofono_bool_t ofono_dbus_access_method_allowed(const char *sender,
 					enum ofono_dbus_access_intf intf,
 					int method, const char *arg)
 {

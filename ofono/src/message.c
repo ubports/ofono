@@ -3,6 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2015-2021  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -83,7 +84,7 @@ static DBusMessage *message_cancel(DBusConnection *conn,
 	struct message *m = data;
 	int res;
 
-	if (!__ofono_dbus_access_method_allowed(dbus_message_get_sender(msg),
+	if (!ofono_dbus_access_method_allowed(dbus_message_get_sender(msg),
 				OFONO_DBUS_ACCESS_INTF_MESSAGE,
 				OFONO_DBUS_ACCESS_MESSAGE_CANCEL, NULL))
 		return __ofono_error_access_denied(msg);

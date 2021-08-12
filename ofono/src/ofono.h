@@ -51,28 +51,28 @@ void __ofono_log_enable(struct ofono_debug_desc *start,
 int __ofono_dbus_init(DBusConnection *conn);
 void __ofono_dbus_cleanup(void);
 
-DBusMessage *__ofono_error_invalid_args(DBusMessage *msg);
-DBusMessage *__ofono_error_invalid_format(DBusMessage *msg);
-DBusMessage *__ofono_error_not_implemented(DBusMessage *msg);
-DBusMessage *__ofono_error_failed(DBusMessage *msg);
-DBusMessage *__ofono_error_busy(DBusMessage *msg);
-DBusMessage *__ofono_error_not_found(DBusMessage *msg);
-DBusMessage *__ofono_error_not_active(DBusMessage *msg);
-DBusMessage *__ofono_error_not_supported(DBusMessage *msg);
-DBusMessage *__ofono_error_not_available(DBusMessage *msg);
-DBusMessage *__ofono_error_timed_out(DBusMessage *msg);
-DBusMessage *__ofono_error_sim_not_ready(DBusMessage *msg);
-DBusMessage *__ofono_error_in_use(DBusMessage *msg);
-DBusMessage *__ofono_error_not_attached(DBusMessage *msg);
-DBusMessage *__ofono_error_attach_in_progress(DBusMessage *msg);
-DBusMessage *__ofono_error_not_registered(DBusMessage *msg);
-DBusMessage *__ofono_error_canceled(DBusMessage *msg);
-DBusMessage *__ofono_error_access_denied(DBusMessage *msg);
-DBusMessage *__ofono_error_emergency_active(DBusMessage *msg);
-DBusMessage *__ofono_error_incorrect_password(DBusMessage *msg);
-DBusMessage *__ofono_error_not_allowed(DBusMessage *msg);
-DBusMessage *__ofono_error_not_recognized(DBusMessage *msg);
-DBusMessage *__ofono_error_network_terminated(DBusMessage *msg);
+#define __ofono_error_invalid_args ofono_dbus_error_invalid_args
+#define __ofono_error_invalid_format ofono_dbus_error_invalid_format
+#define __ofono_error_not_implemented ofono_dbus_error_not_implemented
+#define __ofono_error_failed ofono_dbus_error_failed
+#define __ofono_error_busy ofono_dbus_error_busy
+#define __ofono_error_not_found ofono_dbus_error_not_found
+#define __ofono_error_not_active ofono_dbus_error_not_active
+#define __ofono_error_not_supported ofono_dbus_error_not_supported
+#define __ofono_error_not_available ofono_dbus_error_not_available
+#define __ofono_error_timed_out ofono_dbus_error_timed_out
+#define __ofono_error_sim_not_ready ofono_dbus_error_sim_not_ready
+#define __ofono_error_in_use ofono_dbus_error_in_use
+#define __ofono_error_not_attached ofono_dbus_error_not_attached
+#define __ofono_error_attach_in_progress ofono_dbus_error_attach_in_progress
+#define __ofono_error_not_registered ofono_dbus_error_not_registered
+#define __ofono_error_canceled ofono_dbus_error_canceled
+#define __ofono_error_access_denied ofono_dbus_error_access_denied
+#define __ofono_error_emergency_active ofono_dbus_error_emergency_active
+#define __ofono_error_incorrect_password ofono_dbus_error_incorrect_password
+#define __ofono_error_not_allowed ofono_dbus_error_not_allowed
+#define __ofono_error_not_recognized ofono_dbus_error_not_recognized
+#define __ofono_error_network_terminated ofono_dbus_error_network_terminated
 
 DBusMessage *__ofono_error_from_error(const struct ofono_error *error,
 						DBusMessage *msg);
@@ -274,19 +274,8 @@ gboolean __ofono_call_settings_is_busy(struct ofono_call_settings *cs);
 #include <ofono/devinfo.h>
 #include <ofono/phonebook.h>
 #include <ofono/gprs.h>
-
-gboolean __ofono_gprs_get_roaming_allowed(struct ofono_gprs *gprs);
-
 #include <ofono/gprs-context.h>
-
-enum ofono_gprs_context_type __ofono_gprs_context_get_assigned_type(
-						struct ofono_gprs_context *gc);
-
 #include <ofono/radio-settings.h>
-
-enum ofono_radio_access_mode __ofono_radio_access_max_mode(
-					enum ofono_radio_access_mode modes);
-
 #include <ofono/audio-settings.h>
 #include <ofono/ctm.h>
 #include <ofono/location-reporting.h>
@@ -552,16 +541,7 @@ void __ofono_nettime_info_received(struct ofono_modem *modem,
 #include <ofono/cdma-voicecall.h>
 #include <ofono/cdma-connman.h>
 #include <ofono/sim-auth.h>
-
 #include <ofono/gprs-provision.h>
-ofono_bool_t __ofono_gprs_provision_get_settings(const char *mcc,
-				const char *mnc, const char *spn,
-				struct ofono_gprs_provision_data **settings,
-				int *count);
-void __ofono_gprs_provision_free_settings(
-				struct ofono_gprs_provision_data *settings,
-				int count);
-
 #include <ofono/emulator.h>
 
 enum ofono_emulator_slc_condition {
@@ -677,19 +657,17 @@ void __ofono_voicecall_filter_chain_incoming(struct voicecall_filter_chain *c,
 				ofono_destroy_func destroy, void *user_data);
 
 #include <ofono/dbus-access.h>
+#include <ofono/slot.h>
 
-gboolean __ofono_dbus_access_method_allowed(const char *sender,
-					enum ofono_dbus_access_intf iface,
-					int method, const char *arg);
+void __ofono_slot_manager_init(void);
+void __ofono_slot_manager_cleanup(void);
 
+#include <ofono/cell-info.h>
 #include <ofono/sim-mnclength.h>
-
-int __ofono_sim_mnclength_get_mnclength(const char *imsi);
-int mnclength(int mcc, int mnc);
-
 #include <ofono/netmon.h>
 #include <ofono/lte.h>
 #include <ofono/ims.h>
+#include <ofono/watch.h>
+#include <ofono/storage.h>
 
 void __ofono_set_config_dir(const char *dir);
-void config_merge_files(GKeyFile *conf, const char *file);

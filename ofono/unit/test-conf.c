@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2018-2019 Jolla Ltd.
+ *  Copyright (C) 2018-2021 Jolla Ltd.
  *  Copyright (C) 2019 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -14,17 +14,17 @@
  *  GNU General Public License for more details.
  */
 
+#include <ofono/conf.h>
 #include <ofono/log.h>
 #include "ofono.h"
 
 #include <gutil_strv.h>
-#include <gutil_ints.h>
 
 #include <stdio.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#define TMP_DIR_TEMPLATE "test-config-XXXXXX"
+#define TMP_DIR_TEMPLATE "test-conf-XXXXXX"
 
 static gboolean test_keyfile_empty(GKeyFile *k)
 {
@@ -49,7 +49,7 @@ static void test_merge_ignore(const char *filename, const char *contents,
 	g_assert(g_file_set_contents(file, contents, -1, NULL));
 	g_assert(g_file_set_contents(file1, contents1, -1, NULL));
 	DBG("reading %s", file);
-	config_merge_files(k, file);
+	ofono_conf_merge_files(k, file);
 	data = g_key_file_to_data(k, NULL, NULL);
 	DBG("\n%s", data);
 	g_assert(!g_strcmp0(data, contents));
@@ -82,7 +82,7 @@ static void test_merge1(const char *conf, const char *conf1, const char *out)
 
 	DBG("reading %s", file);
 	g_key_file_set_list_separator(k, ',');
-	config_merge_files(k, file);
+	ofono_conf_merge_files(k, file);
 	data = g_key_file_to_data(k, NULL, NULL);
 	DBG("\n%s", data);
 	g_assert(!g_strcmp0(data, out));
@@ -100,6 +100,26 @@ static void test_merge1(const char *conf, const char *conf1, const char *out)
 	g_free(subdir);
 }
 
+static void test_get_value(const char *conf, void (*test)(GKeyFile *k))
+{
+	char *dir = g_dir_make_tmp(TMP_DIR_TEMPLATE, NULL);
+	char *file = g_strconcat(dir, "/test.conf", NULL);
+	GKeyFile *k = g_key_file_new();
+
+	g_assert(g_file_set_contents(file, conf, -1, NULL));
+	g_assert(g_key_file_load_from_file(k, file, 0, NULL));
+
+	DBG("%s:\n%s", file, conf);
+	test(k);
+
+	remove(file);
+	remove(dir);
+
+	g_key_file_unref(k);
+	g_free(file);
+	g_free(dir);
+}
+
 /* ==== merge_basic ==== */
 
 static void test_merge_basic(void)
@@ -107,16 +127,16 @@ static void test_merge_basic(void)
 	GKeyFile *k = g_key_file_new();
 	char *nonexistent = g_dir_make_tmp(TMP_DIR_TEMPLATE, NULL);
 
-	config_merge_files(NULL, NULL);
+	ofono_conf_merge_files(NULL, NULL);
 
 	remove(nonexistent);
-	config_merge_files(k, nonexistent);
+	ofono_conf_merge_files(k, nonexistent);
 	g_assert(test_keyfile_empty(k));
 
-	config_merge_files(k, NULL);
+	ofono_conf_merge_files(k, NULL);
 	g_assert(test_keyfile_empty(k));
 
-	config_merge_files(k, "");
+	ofono_conf_merge_files(k, "");
 	g_assert(test_keyfile_empty(k));
 
 	g_key_file_unref(k);
@@ -135,7 +155,7 @@ static void test_merge_simple(void)
 
 	g_assert(g_file_set_contents(file, contents, -1, NULL));
 	DBG("reading %s", file);
-	config_merge_files(k, file);
+	ofono_conf_merge_files(k, file);
 	data = g_key_file_to_data(k, NULL, NULL);
 	DBG("\n%s", data);
 	g_assert(!g_strcmp0(data, contents));
@@ -163,7 +183,7 @@ static void test_merge_empty_dir(void)
 	g_assert(!mkdir(subdir, 0700));
 	g_assert(g_file_set_contents(file, contents, -1, NULL));
 	DBG("reading %s", file);
-	config_merge_files(k, file);
+	ofono_conf_merge_files(k, file);
 	data = g_key_file_to_data(k, NULL, NULL);
 	DBG("\n%s", data);
 	g_assert(!g_strcmp0(data, contents));
@@ -196,7 +216,7 @@ static void test_merge_ignore0(void)
 	g_assert(!mkdir(subdir2, 0700));
 	g_assert(g_file_set_contents(file, contents, -1, NULL));
 	DBG("reading %s", file);
-	config_merge_files(k, file);
+	ofono_conf_merge_files(k, file);
 	data = g_key_file_to_data(k, NULL, NULL);
 	DBG("\n%s", data);
 	g_assert(!g_strcmp0(data, contents));
@@ -256,7 +276,7 @@ static void test_merge_sort(void)
 	g_assert(g_file_set_contents(file2, contents2, -1, NULL));
 
 	DBG("reading %s", file);
-	config_merge_files(k, file);
+	ofono_conf_merge_files(k, file);
 	data = g_key_file_to_data(k, NULL, NULL);
 	DBG("\n%s", data);
 	g_assert(!g_strcmp0(data, result));
@@ -405,15 +425,401 @@ static void test_merge_list_remove3(void)
 	test_merge1(contents, contents1, contents);
 }
 
-#define TEST_(name) "/config/" name
+/* ==== get_string ==== */
+
+static void test_get_string0_cb(GKeyFile *k)
+{
+	char *value = ofono_conf_get_string(k, "g", "k");
+
+	g_assert(!g_strcmp0(value, "v"));
+	g_free(value);
+	g_assert(!ofono_conf_get_string(k, OFONO_COMMON_SETTINGS_GROUP, "k"));
+	g_assert(!ofono_conf_get_string(k, "foo", "k"));
+}
+
+static void test_get_string0(void)
+{
+	static const char conf [] = "[g]\nk=v\n";
+
+	test_get_value(conf, test_get_string0_cb);
+}
+
+static void test_get_string1_cb(GKeyFile *k)
+{
+	char *val = ofono_conf_get_string(k,OFONO_COMMON_SETTINGS_GROUP,"k");
+
+	g_assert_cmpstr(val, == ,"v");
+	g_free(val);
+
+	val = ofono_conf_get_string(k, "g", "k");
+	g_assert_cmpstr(val, == ,"v");
+	g_free(val);
+}
+
+static void test_get_string1(void)
+{
+	static const char conf [] = "[" OFONO_COMMON_SETTINGS_GROUP "]\nk=v\n";
+
+	test_get_value(conf, test_get_string1_cb);
+}
+
+static void test_get_string2_cb(GKeyFile *k)
+{
+	char *val = ofono_conf_get_string(k,OFONO_COMMON_SETTINGS_GROUP,"k");
+
+	g_assert_cmpstr(val, == ,"v1");
+	g_free(val);
+
+	val = ofono_conf_get_string(k, "g", "k");
+	g_assert_cmpstr(val, == ,"v2");
+	g_free(val);
+
+	val = ofono_conf_get_string(k, "g1", "k");
+	g_assert_cmpstr(val, == ,"v1");
+	g_free(val);
+}
+
+static void test_get_string2(void)
+{
+	static const char conf [] =
+		"[" OFONO_COMMON_SETTINGS_GROUP "]\nk=v1\n\n"
+		"[g]\nk=v2\n";
+
+	test_get_value(conf, test_get_string2_cb);
+}
+
+/* ==== get_strings ==== */
+
+static void test_get_strings0_cb(GKeyFile *k)
+{
+	char **values = ofono_conf_get_strings(k, "g", "k", ',');
+
+	g_assert(values);
+	g_assert_cmpuint(gutil_strv_length(values), == ,0);
+	g_strfreev(values);
+
+	values = ofono_conf_get_strings(k, OFONO_COMMON_SETTINGS_GROUP,
+		"k", ',');
+	g_assert(values);
+	g_assert_cmpuint(gutil_strv_length(values), == ,0);
+	g_strfreev(values);
+}
+
+static void test_get_strings0(void)
+{
+	static const char conf [] = "[" OFONO_COMMON_SETTINGS_GROUP "]\nk=\n";
+	test_get_value(conf, test_get_strings0_cb);
+}
+
+static void test_get_strings1_cb(GKeyFile *k)
+{
+	char **values = ofono_conf_get_strings(k, "g", "k", ',');
+
+	g_assert_cmpuint(gutil_strv_length(values), == ,2);
+	g_assert_cmpstr(values[0], == ,"v0");
+	g_assert_cmpstr(values[1], == ,"v1");
+	g_strfreev(values);
+
+	g_assert(!ofono_conf_get_strings(k, OFONO_COMMON_SETTINGS_GROUP,
+		"k", ','));
+}
+
+static void test_get_strings1(void)
+{
+	static const char conf [] = "[g]\nk=v0 , v1\n";
+
+	test_get_value(conf, test_get_strings1_cb);
+}
+
+/* ==== get_integer ==== */
+
+static void test_get_integer0_cb(GKeyFile *k)
+{
+	int val = -1;
+
+	g_assert(!ofono_conf_get_integer(k, "g1", "k1", NULL));
+	g_assert(!ofono_conf_get_integer(k, "g1", "k1", &val));
+	g_assert_cmpint(val, == ,-1);
+
+	g_assert(ofono_conf_get_integer(k, "g", "k", NULL));
+	g_assert(ofono_conf_get_integer(k, "g", "k", &val));
+	g_assert_cmpint(val, == ,1);
+
+	g_assert(ofono_conf_get_integer(k, OFONO_COMMON_SETTINGS_GROUP,
+		"k", &val));
+	g_assert_cmpint(val, == ,0);
+}
+
+static void test_get_integer0(void)
+{
+	static const char conf [] =
+		"[" OFONO_COMMON_SETTINGS_GROUP "]\nk=0\n\n"
+		"[g]\nk=1\n";
+
+	test_get_value(conf, test_get_integer0_cb);
+}
+
+static void test_get_integer1_cb(GKeyFile *k)
+{
+	int val = -1;
+
+	g_assert(!ofono_conf_get_integer(k, "g", "k", NULL));
+	g_assert(!ofono_conf_get_integer(k, "g", "k", &val));
+	g_assert_cmpint(val, == ,-1);
+
+	g_assert(!ofono_conf_get_integer(k, OFONO_COMMON_SETTINGS_GROUP,
+		"k", NULL));
+	g_assert(!ofono_conf_get_integer(k, OFONO_COMMON_SETTINGS_GROUP,
+		"k", &val));
+	g_assert_cmpint(val, == ,-1);
+}
+
+static void test_get_integer1(void)
+{
+	/* Invalid integer values */
+	static const char conf [] =
+		"[" OFONO_COMMON_SETTINGS_GROUP "]\nk=foo\n\n"
+		"[g]\nk=bar\n";
+
+	test_get_value(conf, test_get_integer1_cb);
+}
+
+static void test_get_integer2_cb(GKeyFile *k)
+{
+	int val = -1;
+
+	g_assert(ofono_conf_get_integer(k, "g", "k", NULL));
+	g_assert(ofono_conf_get_integer(k, "g", "k", &val));
+	g_assert_cmpint(val, == ,1);
+
+	g_assert(ofono_conf_get_integer(k, OFONO_COMMON_SETTINGS_GROUP,
+		"k", NULL));
+	g_assert(ofono_conf_get_integer(k, OFONO_COMMON_SETTINGS_GROUP,
+		"k", &val));
+	g_assert_cmpint(val, == ,1);
+}
+
+static void test_get_integer2(void)
+{
+	/* Invalid value in [g] but a valid one in [Settings] */
+	static const char conf [] =
+		"[" OFONO_COMMON_SETTINGS_GROUP "]\nk=1\n"
+		"\n[g]\nk=foo\n";
+
+	test_get_value(conf, test_get_integer2_cb);
+}
+
+/* ==== get_boolean ==== */
+
+static void test_get_boolean0_cb(GKeyFile *k)
+{
+	gboolean val = FALSE;
+
+	g_assert(!ofono_conf_get_boolean(k, "g1", "k1", NULL));
+	g_assert(!ofono_conf_get_boolean(k, "g1", "k1", &val));
+	g_assert(!val);
+
+	g_assert(ofono_conf_get_boolean(k, "g", "k", NULL));
+	g_assert(ofono_conf_get_boolean(k, "g", "k", &val));
+	g_assert(val == TRUE);
+
+	g_assert(ofono_conf_get_boolean(k, OFONO_COMMON_SETTINGS_GROUP,
+		"k", &val));
+	g_assert(val == FALSE);
+}
+
+static void test_get_boolean0(void)
+{
+	static const char conf [] =
+		"[" OFONO_COMMON_SETTINGS_GROUP "]\nk=false\n\n"
+		"[g]\nk=true\n";
+
+	test_get_value(conf, test_get_boolean0_cb);
+}
+
+static void test_get_boolean1_cb(GKeyFile *k)
+{
+	gboolean val = TRUE;
+
+	g_assert(!ofono_conf_get_boolean(k, "g", "k", NULL));
+	g_assert(!ofono_conf_get_boolean(k, "g", "k", &val));
+	g_assert(val == TRUE);
+
+	g_assert(!ofono_conf_get_boolean(k, OFONO_COMMON_SETTINGS_GROUP,
+		"k", NULL));
+	g_assert(!ofono_conf_get_boolean(k, OFONO_COMMON_SETTINGS_GROUP,
+		"k", &val));
+	g_assert(val == TRUE);
+}
+
+static void test_get_boolean1(void)
+{
+	/* Invalid boolean values */
+	static const char conf [] =
+		"[" OFONO_COMMON_SETTINGS_GROUP "]\nk=foo\n\n"
+		"[g]\nk=bar\n";
+
+	test_get_value(conf, test_get_boolean1_cb);
+}
+
+static void test_get_boolean2_cb(GKeyFile *k)
+{
+	gboolean val = FALSE;
+
+	g_assert(ofono_conf_get_boolean(k, "g", "k", NULL));
+	g_assert(ofono_conf_get_boolean(k, "g", "k", &val));
+	g_assert(val == TRUE);
+
+	g_assert(ofono_conf_get_boolean(k, OFONO_COMMON_SETTINGS_GROUP,
+		"k", NULL));
+	g_assert(ofono_conf_get_boolean(k, OFONO_COMMON_SETTINGS_GROUP,
+		"k", &val));
+	g_assert(val == TRUE);
+}
+
+static void test_get_boolean2(void)
+{
+	/* Invalid value in [g] but a valid one in [Settings] */
+	static const char conf [] =
+		"[" OFONO_COMMON_SETTINGS_GROUP "]\nk=true\n"
+		"\n[g]\nk=foo\n";
+
+	test_get_value(conf, test_get_boolean2_cb);
+}
+
+static void test_get_boolean3_cb(GKeyFile *k)
+{
+	gboolean val = FALSE;
+
+	g_assert(ofono_conf_get_boolean(k, "g", "k", NULL));
+	g_assert(ofono_conf_get_boolean(k, "g", "k", &val));
+	g_assert(val == TRUE);
+
+	g_assert(!ofono_conf_get_boolean(k, OFONO_COMMON_SETTINGS_GROUP,
+		"k", NULL));
+	g_assert(!ofono_conf_get_boolean(k, OFONO_COMMON_SETTINGS_GROUP,
+		"k", &val));
+	g_assert(val == TRUE);
+}
+
+static void test_get_boolean3(void)
+{
+	/* Valid value in [g] and invalid one in [Settings] */
+	static const char conf [] =
+		"[" OFONO_COMMON_SETTINGS_GROUP "]\nk=foo\n\n"
+		"[g]\nk=true\n";
+
+	test_get_value(conf, test_get_boolean3_cb);
+}
+
+/* ==== get_flag ==== */
+
+static void test_get_flag_cb(GKeyFile *k)
+{
+	const int f = 0x01;
+	int mask = 0;
+
+	g_assert(!ofono_conf_get_flag(k, "g1", "k1", f, &mask));
+	g_assert(!mask);
+
+	g_assert(ofono_conf_get_flag(k, "g", "k", f, &mask));
+	g_assert(mask & f);
+
+	g_assert(ofono_conf_get_flag(k, OFONO_COMMON_SETTINGS_GROUP,
+		"k", f, &mask));
+	g_assert(!(mask & f));
+}
+
+static void test_get_flag(void)
+{
+	static const char conf [] =
+		"[" OFONO_COMMON_SETTINGS_GROUP "]\nk=false\n\n"
+		"[g]\nk=true\n";
+
+	test_get_value(conf, test_get_flag_cb);
+}
+
+/* ==== get_enum ==== */
+
+static void test_get_enum_cb(GKeyFile *k)
+{
+	int val = 0;
+
+	g_assert(!ofono_conf_get_enum(k, "g1", "k1", &val, "foo", 1, NULL));
+	g_assert_cmpint(val, == ,0);
+
+	g_assert(!ofono_conf_get_enum(k, "g", "k", NULL, "foo", 1, NULL));
+	g_assert(!ofono_conf_get_enum(k, "g", "k", &val, "foo", 1, NULL));
+	g_assert_cmpint(val, == ,0);
+
+	g_assert(ofono_conf_get_enum(k,"g","k",NULL,"foo",1,"bar",2,NULL));
+	g_assert(ofono_conf_get_enum(k,"g","k",&val,"bar",2,"foo",1,NULL));
+	g_assert_cmpint(val, == ,2);
+
+	g_assert(ofono_conf_get_enum(k, "g", "x", NULL,
+		"a", 1, "b", 2, "y", 3, NULL));
+	g_assert(ofono_conf_get_enum(k, "g", "x", &val,
+		"a", 1, "b", 2, "y", 3, NULL));
+	g_assert(val == 3);
+
+	g_assert(ofono_conf_get_enum(k, OFONO_COMMON_SETTINGS_GROUP,
+		"k", NULL, "foo", 1, NULL));
+	g_assert(ofono_conf_get_enum(k, OFONO_COMMON_SETTINGS_GROUP,
+		"k", &val, "foo", 1, NULL));
+	g_assert_cmpint(val, == ,1);
+}
+
+static void test_get_enum(void)
+{
+	static const char conf [] =
+		"[" OFONO_COMMON_SETTINGS_GROUP "]\nk= foo# comment\n\n"
+		"[g]\nk= bar \nx=y\n";
+
+	test_get_value(conf, test_get_enum_cb);
+}
+
+/* ==== get_mask ==== */
+
+static void test_get_mask_cb(GKeyFile *k)
+{
+	int v = 0;
+
+	g_assert(!ofono_conf_get_mask(k,"g1","k",NULL,"x",1,"y",2,NULL));
+	g_assert(!ofono_conf_get_mask(k,"g1","k",&v,"x",1,"y",2,NULL));
+	g_assert_cmpint(v, ==, 0);
+
+	g_assert(ofono_conf_get_mask(k,"g","k",NULL,"x",1,"y",2,NULL));
+	g_assert(ofono_conf_get_mask(k,"g","k",&v,"x",1,"y",2,NULL));
+	g_assert_cmpint(v, ==, 1);
+
+	g_assert(ofono_conf_get_mask(k,"g","k1",NULL,"x",1,"y",2,NULL));
+	g_assert(ofono_conf_get_mask(k,"g","k1",&v,"x",1,"y",2,NULL));
+	g_assert_cmpint(v, ==, 3);
+
+	g_assert(!ofono_conf_get_mask(k,"g","k2",NULL,"x",1,"y",2,NULL));
+	g_assert(!ofono_conf_get_mask(k,"g","k2",&v,"x",1,"y",2,NULL));
+	g_assert_cmpint(v, ==, 0);
+}
+
+static void test_get_mask(void)
+{
+	static const char conf [] = "[g]\n"
+		"k = x# comment\n"
+		"k1 = x+y\n"
+		"k2 = x+z+y\n";
+
+	test_get_value(conf, test_get_mask_cb);
+}
+
+#define TEST_(name) "/conf/" name
 
 int main(int argc, char *argv[])
 {
 	g_test_init(&argc, &argv, NULL);
 
-	__ofono_log_init("test-config",
-				g_test_verbose() ? "*" : NULL,
-				FALSE, FALSE);
+	__ofono_log_init("test-conf",
+		g_test_verbose() ? "*" : NULL,
+		FALSE, FALSE);
 
 	g_test_add_func(TEST_("merge_basic"), test_merge_basic);
 	g_test_add_func(TEST_("merge_simple"), test_merge_simple);
@@ -435,6 +841,21 @@ int main(int argc, char *argv[])
 	g_test_add_func(TEST_("merge_list_remove1"), test_merge_list_remove1);
 	g_test_add_func(TEST_("merge_list_remove2"), test_merge_list_remove2);
 	g_test_add_func(TEST_("merge_list_remove3"), test_merge_list_remove3);
+	g_test_add_func(TEST_("get_string0"), test_get_string0);
+	g_test_add_func(TEST_("get_string1"), test_get_string1);
+	g_test_add_func(TEST_("get_string2"), test_get_string2);
+	g_test_add_func(TEST_("get_strings0"), test_get_strings0);
+	g_test_add_func(TEST_("get_strings1"), test_get_strings1);
+	g_test_add_func(TEST_("get_integer0"), test_get_integer0);
+	g_test_add_func(TEST_("get_integer1"), test_get_integer1);
+	g_test_add_func(TEST_("get_integer2"), test_get_integer2);
+	g_test_add_func(TEST_("get_boolean0"), test_get_boolean0);
+	g_test_add_func(TEST_("get_boolean1"), test_get_boolean1);
+	g_test_add_func(TEST_("get_boolean2"), test_get_boolean2);
+	g_test_add_func(TEST_("get_boolean3"), test_get_boolean3);
+	g_test_add_func(TEST_("get_flag"), test_get_flag);
+	g_test_add_func(TEST_("get_enum"), test_get_enum);
+	g_test_add_func(TEST_("get_mask"), test_get_mask);
 
 	return g_test_run();
 }

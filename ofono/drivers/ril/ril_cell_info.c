@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2016-2020 Jolla Ltd.
+ *  Copyright (C) 2016-2021 Jolla Ltd.
  *  Copyright (C) 2020 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -25,6 +25,7 @@
 #include <grilio_parser.h>
 
 #include <gutil_idlepool.h>
+#include <gutil_macros.h>
 #include <gutil_misc.h>
 
 #define DEFAULT_UPDATE_RATE_MS  (10000) /* 10 sec */
@@ -35,7 +36,8 @@ typedef struct ril_cell_info RilCellInfo;
 
 struct ril_cell_info {
 	GObject object;
-	struct sailfish_cell_info info;
+	struct ofono_cell_info info;
+	struct ofono_cell **cells;
 	GRilIoChannel *io;
 	struct ril_radio *radio;
 	struct ril_sim_card *sim_card;
@@ -59,26 +61,18 @@ enum ril_cell_info_signal {
 
 static guint ril_cell_info_signals[SIGNAL_COUNT] = { 0 };
 
-G_DEFINE_TYPE(RilCellInfo, ril_cell_info, G_TYPE_OBJECT)
-#define RIL_CELL_INFO_TYPE (ril_cell_info_get_type())
-#define RIL_CELL_INFO(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj),\
-	RIL_CELL_INFO_TYPE, RilCellInfo))
+#define PARENT_TYPE G_TYPE_OBJECT
+#define PARENT_CLASS ril_cell_info_parent_class
+#define THIS_TYPE (ril_cell_info_get_type())
+#define THIS(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), THIS_TYPE, RilCellInfo))
+
+G_DEFINE_TYPE(RilCellInfo, ril_cell_info, PARENT_TYPE)
 
 #define DBG_(self,fmt,args...) DBG("%s" fmt, (self)->log_prefix, ##args)
 
-static inline void ril_cell_free(struct sailfish_cell *cell)
-{
-	g_slice_free(struct sailfish_cell, cell);
-}
-
-static void ril_cell_free1(gpointer cell)
-{
-	ril_cell_free(cell);
-}
-
 static const char *ril_cell_info_int_format(int value, const char *format)
 {
-	if (value == SAILFISH_CELL_INVALID_VALUE) {
+	if (value == OFONO_CELL_INVALID_VALUE) {
 		return "";
 	} else {
 		static GUtilIdlePool *ril_cell_info_pool = NULL;
@@ -90,41 +84,56 @@ static const char *ril_cell_info_int_format(int value, const char *format)
 	}
 }
 
-static gboolean ril_cell_info_list_identical(GSList *l1, GSList *l2)
+static gint ril_cell_info_list_sort_cb(gconstpointer a, gconstpointer b)
 {
-	while (l1 && l2) {
-		if (memcmp(l1->data, l2->data, sizeof(struct sailfish_cell))) {
-			return FALSE;
-		}
-		l1 = l1->next;
-		l2 = l2->next;
-	}
-	return !l1 && !l2;
+	return ofono_cell_compare_location(*(struct ofono_cell **)a,
+		*(struct ofono_cell **)b);
 }
 
-static void ril_cell_info_update_cells(struct ril_cell_info *self, GSList *l)
+static gboolean ril_cell_info_list_identical(const ofono_cell_ptr *l1,
+	const ofono_cell_ptr *l2)
 {
-	if (!ril_cell_info_list_identical(self->info.cells, l)) {
-		g_slist_free_full(self->info.cells, ril_cell_free1);
-		self->info.cells = l;
+	if (l1 && l2) {
+		while (*l1 && *l2) {
+			if (memcmp(*l1, *l2, sizeof(struct ofono_cell))) {
+				return FALSE;
+			}
+			l1++;
+			l2++;
+		}
+		return !*l1 && !*l2;
+	} else {
+		return (!l1 || !*l1) && (!l2 || !*l2);
+	}
+}
+
+/* Takes ownership of GPtrArray */
+static void ril_cell_info_update_cells(RilCellInfo *self, GPtrArray *l)
+{
+	if (l && !ril_cell_info_list_identical(self->cells,
+		(struct ofono_cell **)l->pdata)) {
+		gutil_ptrv_free((void**)self->cells);
+		self->info.cells = (struct ofono_cell **)
+			g_ptr_array_free(l, FALSE);
 		g_signal_emit(self, ril_cell_info_signals
 			[SIGNAL_CELLS_CHANGED], 0);
-	} else {
-		g_slist_free_full(l, ril_cell_free1);
+	} else if (l) {
+		g_ptr_array_set_free_func(l, g_free);
+		g_ptr_array_free(l, TRUE);
 	}
 }
 
-static struct sailfish_cell *ril_cell_info_parse_cell_gsm(GRilIoParser *rilp,
+static struct ofono_cell *ril_cell_info_parse_cell_gsm(GRilIoParser *rilp,
 					guint version, gboolean registered)
 {
-	struct sailfish_cell *cell = g_slice_new0(struct sailfish_cell);
-	struct sailfish_cell_info_gsm *gsm = &cell->info.gsm;
+	struct ofono_cell *cell = g_new0(struct ofono_cell, 1);
+	struct ofono_cell_info_gsm *gsm = &cell->info.gsm;
 
 	/* Optional RIL_CellIdentityGsm_v12 part */
-	gsm->arfcn = SAILFISH_CELL_INVALID_VALUE;
-	gsm->bsic = SAILFISH_CELL_INVALID_VALUE;
+	gsm->arfcn = OFONO_CELL_INVALID_VALUE;
+	gsm->bsic = OFONO_CELL_INVALID_VALUE;
 	/* Optional RIL_GSM_SignalStrength_v12 part */
-	gsm->timingAdvance = SAILFISH_CELL_INVALID_VALUE;
+	gsm->timingAdvance = OFONO_CELL_INVALID_VALUE;
 	/* RIL_CellIdentityGsm */
 	if (grilio_parser_get_int32(rilp, &gsm->mcc) &&
 		grilio_parser_get_int32(rilp, &gsm->mnc) &&
@@ -149,24 +158,24 @@ static struct sailfish_cell *ril_cell_info_parse_cell_gsm(GRilIoParser *rilp,
 							",strength=%d"),
 			ril_cell_info_int_format(gsm->bitErrorRate, ",err=%d"),
 			ril_cell_info_int_format(gsm->timingAdvance, ",t=%d"));
-		cell->type = SAILFISH_CELL_TYPE_GSM;
+		cell->type = OFONO_CELL_TYPE_GSM;
 		cell->registered = registered;
 		return cell;
 	}
 
 	ofono_error("failed to parse GSM cell info");
-	ril_cell_free(cell);
+	g_free(cell);
 	return NULL;
 }
 
-static struct sailfish_cell *ril_cell_info_parse_cell_wcdma(GRilIoParser *rilp,
+static struct ofono_cell *ril_cell_info_parse_cell_wcdma(GRilIoParser *rilp,
 					guint version, gboolean registered)
 {
-	struct sailfish_cell *cell = g_slice_new0(struct sailfish_cell);
-	struct sailfish_cell_info_wcdma *wcdma = &cell->info.wcdma;
+	struct ofono_cell *cell = g_new0(struct ofono_cell, 1);
+	struct ofono_cell_info_wcdma *wcdma = &cell->info.wcdma;
 
 	/* Optional RIL_CellIdentityWcdma_v12 part */
-	wcdma->uarfcn = SAILFISH_CELL_INVALID_VALUE;
+	wcdma->uarfcn = OFONO_CELL_INVALID_VALUE;
 	if (grilio_parser_get_int32(rilp, &wcdma->mcc) &&
 		grilio_parser_get_int32(rilp, &wcdma->mnc) &&
 		grilio_parser_get_int32(rilp, &wcdma->lac) &&
@@ -186,24 +195,24 @@ static struct sailfish_cell *ril_cell_info_parse_cell_wcdma(GRilIoParser *rilp,
 							",strength=%d"),
 			ril_cell_info_int_format(wcdma->bitErrorRate,
 							",err=%d"));
-		cell->type = SAILFISH_CELL_TYPE_WCDMA;
+		cell->type = OFONO_CELL_TYPE_WCDMA;
 		cell->registered = registered;
 		return cell;
 	}
 
 	ofono_error("failed to parse WCDMA cell info");
-	ril_cell_free(cell);
+	g_free(cell);
 	return NULL;
 }
 
-static struct sailfish_cell *ril_cell_info_parse_cell_lte(GRilIoParser *rilp,
+static struct ofono_cell *ril_cell_info_parse_cell_lte(GRilIoParser *rilp,
 					guint version, gboolean registered)
 {
-	struct sailfish_cell *cell = g_slice_new0(struct sailfish_cell);
-	struct sailfish_cell_info_lte *lte = &cell->info.lte;
+	struct ofono_cell *cell = g_new0(struct ofono_cell, 1);
+	struct ofono_cell_info_lte *lte = &cell->info.lte;
 
 	/* Optional RIL_CellIdentityLte_v12 part */
-	lte->earfcn = SAILFISH_CELL_INVALID_VALUE;
+	lte->earfcn = OFONO_CELL_INVALID_VALUE;
 	if (grilio_parser_get_int32(rilp, &lte->mcc) &&
 		grilio_parser_get_int32(rilp, &lte->mnc) &&
 		grilio_parser_get_int32(rilp, &lte->ci) &&
@@ -230,18 +239,18 @@ static struct sailfish_cell *ril_cell_info_parse_cell_lte(GRilIoParser *rilp,
 			ril_cell_info_int_format(lte->rssnr, ",rssnr=%d"),
 			ril_cell_info_int_format(lte->cqi, ",cqi=%d"),
 			ril_cell_info_int_format(lte->timingAdvance, ",t=%d"));
-		cell->type = SAILFISH_CELL_TYPE_LTE;
+		cell->type = OFONO_CELL_TYPE_LTE;
 		cell->registered = registered;
 		return cell;
 	}
 
 	ofono_error("failed to parse LTE cell info");
-	ril_cell_free(cell);
+	g_free(cell);
 	return NULL;
 }
 
 static gboolean ril_cell_info_parse_cell(GRilIoParser *rilp, guint v,
-					struct sailfish_cell **cell_ptr)
+					struct ofono_cell **cell_ptr)
 {
 	int type, reg;
 
@@ -250,7 +259,7 @@ static gboolean ril_cell_info_parse_cell(GRilIoParser *rilp, guint v,
 			/* Skip timestamp */
 			grilio_parser_get_int32_array(rilp, NULL, 3)) {
 		int skip = 0;
-		struct sailfish_cell *cell = NULL;
+		struct ofono_cell *cell = NULL;
 
 		/* Normalize the boolean value */
 		reg = (reg != FALSE);
@@ -291,23 +300,25 @@ static gboolean ril_cell_info_parse_cell(GRilIoParser *rilp, guint v,
 	return FALSE;
 }
 
-static GSList *ril_cell_info_parse_list(guint v, const void *data, guint len)
+static GPtrArray *ril_cell_info_parse_list(guint v, const void *data, guint len)
 {
-	GSList *l = NULL;
+	GPtrArray *l = NULL;
 	GRilIoParser rilp;
 	int i, n;
 
 	grilio_parser_init(&rilp, data, len);
 	if (grilio_parser_get_int32(&rilp, &n) && n > 0) {
-		struct sailfish_cell *c;
+		struct ofono_cell *c;
 
+		l = g_ptr_array_sized_new(n + 1);
 		DBG("%d cell(s):", n);
 		for (i=0; i<n && ril_cell_info_parse_cell(&rilp, v, &c); i++) {
 			if (c) {
-				l = g_slist_insert_sorted(l, c,
-						sailfish_cell_compare_func);
+				g_ptr_array_add(l, c);
 			}
 		}
+		g_ptr_array_sort(l, ril_cell_info_list_sort_cb);
+		g_ptr_array_add(l, NULL);
 	}
 
 	GASSERT(grilio_parser_at_end(&rilp));
@@ -317,7 +328,7 @@ static GSList *ril_cell_info_parse_list(guint v, const void *data, guint len)
 static void ril_cell_info_list_changed_cb(GRilIoChannel *io, guint code,
 				const void *data, guint len, void *user_data)
 {
-	struct ril_cell_info *self = RIL_CELL_INFO(user_data);
+	RilCellInfo *self = THIS(user_data);
 
 	DBG_(self, "");
 	ril_cell_info_update_cells(self, ril_cell_info_parse_list
@@ -327,7 +338,7 @@ static void ril_cell_info_list_changed_cb(GRilIoChannel *io, guint code,
 static void ril_cell_info_list_cb(GRilIoChannel *io, int status,
 				const void *data, guint len, void *user_data)
 {
-	struct ril_cell_info *self = RIL_CELL_INFO(user_data);
+	RilCellInfo *self = THIS(user_data);
 
 	DBG_(self, "");
 	GASSERT(self->query_id);
@@ -340,17 +351,17 @@ static void ril_cell_info_list_cb(GRilIoChannel *io, int status,
 static void ril_cell_info_set_rate_cb(GRilIoChannel *io, int status,
 				const void *data, guint len, void *user_data)
 {
-	struct ril_cell_info *self = RIL_CELL_INFO(user_data);
+	RilCellInfo *self = THIS(user_data);
 
 	DBG_(self, "");
 	GASSERT(self->set_rate_id);
 	self->set_rate_id = 0;
 }
 
-static gboolean ril_cell_info_retry(GRilIoRequest* request, int ril_status,
-		const void* response_data, guint response_len, void* user_data)
+static gboolean ril_cell_info_retry(GRilIoRequest *request, int ril_status,
+		const void *response_data, guint response_len, void *user_data)
 {
-	struct ril_cell_info *self = RIL_CELL_INFO(user_data);
+	RilCellInfo *self = THIS(user_data);
 
 	switch (ril_status) {
 	case RIL_E_SUCCESS:
@@ -361,7 +372,7 @@ static gboolean ril_cell_info_retry(GRilIoRequest* request, int ril_status,
 	}
 }
 
-static void ril_cell_info_query(struct ril_cell_info *self)
+static void ril_cell_info_query(RilCellInfo *self)
 {
 	GRilIoRequest *req = grilio_request_new();
 
@@ -374,7 +385,7 @@ static void ril_cell_info_query(struct ril_cell_info *self)
 	grilio_request_unref(req);
 }
 
-static void ril_cell_info_set_rate(struct ril_cell_info *self)
+static void ril_cell_info_set_rate(RilCellInfo *self)
 {
 	GRilIoRequest *req = grilio_request_array_int32_new(1,
 		(self->update_rate_ms >= 0 && self->enabled) ?
@@ -389,7 +400,7 @@ static void ril_cell_info_set_rate(struct ril_cell_info *self)
 	grilio_request_unref(req);
 }
 
-static void ril_cell_info_refresh(struct ril_cell_info *self)
+static void ril_cell_info_refresh(RilCellInfo *self)
 {
 	/* RIL_REQUEST_GET_CELL_INFO_LIST fails without SIM card */
 	if (self->enabled && self->radio->state == RADIO_STATE_ON &&
@@ -402,7 +413,7 @@ static void ril_cell_info_refresh(struct ril_cell_info *self)
 
 static void ril_cell_info_radio_state_cb(struct ril_radio *radio, void *arg)
 {
-	struct ril_cell_info *self = RIL_CELL_INFO(arg);
+	RilCellInfo *self = THIS(arg);
 
 	DBG_(self, "%s", ril_radio_state_to_string(radio->state));
 	ril_cell_info_refresh(self);
@@ -410,7 +421,7 @@ static void ril_cell_info_radio_state_cb(struct ril_radio *radio, void *arg)
 
 static void ril_cell_info_sim_status_cb(struct ril_sim_card *sim, void *arg)
 {
-	struct ril_cell_info *self = RIL_CELL_INFO(arg);
+	RilCellInfo *self = THIS(arg);
 
 	self->sim_card_ready = ril_sim_card_ready(sim);
 	DBG_(self, "%sready", self->sim_card_ready ? "" : "not ");
@@ -420,60 +431,57 @@ static void ril_cell_info_sim_status_cb(struct ril_sim_card *sim, void *arg)
 	}
 }
 
-/* sailfish_cell_info interface callbacks */
+/* ofono_cell_info interface callbacks */
 
-struct ril_cell_info_closure {
+typedef struct ril_cell_info_closure {
 	GCClosure cclosure;
-	sailfish_cell_info_cb_t cb;
+	ofono_cell_info_cb_t cb;
 	void *arg;
-};
+} RilCellInfoClosure;
 
-static inline struct ril_cell_info *ril_cell_info_cast
-					(struct sailfish_cell_info *info)
+static inline RilCellInfo *ril_cell_info_cast(struct ofono_cell_info *info)
 {
-	return G_CAST(info, struct ril_cell_info, info);
+	return G_CAST(info, RilCellInfo, info);
 }
 
-static void ril_cell_info_ref_proc(struct sailfish_cell_info *info)
+static void ril_cell_info_ref_proc(struct ofono_cell_info *info)
 {
 	g_object_ref(ril_cell_info_cast(info));
 }
 
-static void ril_cell_info_unref_proc(struct sailfish_cell_info *info)
+static void ril_cell_info_unref_proc(struct ofono_cell_info *info)
 {
 	g_object_unref(ril_cell_info_cast(info));
 }
 
-static void ril_cell_info_cells_changed_cb(struct ril_cell_info *self,
-					struct ril_cell_info_closure *closure)
+static void ril_cell_info_cells_changed_cb(RilCellInfo *self,
+	RilCellInfoClosure *closure)
 {
 	closure->cb(&self->info, closure->arg);
 }
 
 static gulong ril_cell_info_add_cells_changed_handler_proc
-				(struct sailfish_cell_info *info,
-					sailfish_cell_info_cb_t cb, void *arg)
+	(struct ofono_cell_info *info, ofono_cell_info_cb_t cb, void *arg)
 {
 	if (cb) {
-		struct ril_cell_info_closure *closure =
-			(struct ril_cell_info_closure *) g_closure_new_simple
-				(sizeof(struct ril_cell_info_closure), NULL);
-		GCClosure* cc = &closure->cclosure;
+		RilCellInfoClosure *closure = (RilCellInfoClosure *)
+			g_closure_new_simple(sizeof(RilCellInfoClosure), NULL);
+		GCClosure *cc = &closure->cclosure;
 
 		cc->closure.data = closure;
 		cc->callback = G_CALLBACK(ril_cell_info_cells_changed_cb);
 		closure->cb = cb;
 		closure->arg = arg;
 		return g_signal_connect_closure_by_id(ril_cell_info_cast(info),
-				ril_cell_info_signals[SIGNAL_CELLS_CHANGED], 0,
-				&cc->closure, FALSE);
+			ril_cell_info_signals[SIGNAL_CELLS_CHANGED], 0,
+			&cc->closure, FALSE);
 	} else {
 		return 0;
 	}
 }
 
-static void ril_cell_info_remove_handler_proc(struct sailfish_cell_info *info,
-								gulong id)
+static void ril_cell_info_remove_handler_proc(struct ofono_cell_info *info,
+	gulong id)
 {
 	if (G_LIKELY(id)) {
 		g_signal_handler_disconnect(ril_cell_info_cast(info), id);
@@ -481,9 +489,9 @@ static void ril_cell_info_remove_handler_proc(struct sailfish_cell_info *info,
 }
 
 static void ril_cell_info_set_update_interval_proc
-				(struct sailfish_cell_info *info, int ms)
+	(struct ofono_cell_info *info, int ms)
 {
-	struct ril_cell_info *self = ril_cell_info_cast(info);
+	RilCellInfo *self = ril_cell_info_cast(info);
 
 	if (self->update_rate_ms != ms) {
 		self->update_rate_ms = ms;
@@ -494,10 +502,10 @@ static void ril_cell_info_set_update_interval_proc
 	}
 }
 
-void ril_cell_info_set_enabled_proc(struct sailfish_cell_info *info,
-							gboolean enabled)
+void ril_cell_info_set_enabled_proc(struct ofono_cell_info *info,
+	gboolean enabled)
 {
-	struct ril_cell_info *self = ril_cell_info_cast(info);
+	RilCellInfo *self = ril_cell_info_cast(info);
 
 	if (self->enabled != enabled) {
 		self->enabled = enabled;
@@ -509,22 +517,12 @@ void ril_cell_info_set_enabled_proc(struct sailfish_cell_info *info,
 	}
 }
 
-struct sailfish_cell_info *ril_cell_info_new(GRilIoChannel *io,
-			const char *log_prefix, struct ril_radio *radio,
-			struct ril_sim_card *sim_card)
+struct ofono_cell_info *ril_cell_info_new(GRilIoChannel *io,
+	const char *log_prefix, struct ril_radio *radio,
+	struct ril_sim_card *sim_card)
 {
-	static const struct sailfish_cell_info_proc ril_cell_info_proc = {
-		ril_cell_info_ref_proc,
-		ril_cell_info_unref_proc,
-		ril_cell_info_add_cells_changed_handler_proc,
-		ril_cell_info_remove_handler_proc,
-		ril_cell_info_set_update_interval_proc,
-		ril_cell_info_set_enabled_proc
-	};
+	RilCellInfo *self = g_object_new(THIS_TYPE, 0);
 
-	struct ril_cell_info *self = g_object_new(RIL_CELL_INFO_TYPE, 0);
-
-	self->info.proc = &ril_cell_info_proc;
 	self->io = grilio_channel_ref(io);
 	self->radio = ril_radio_ref(radio);
 	self->sim_card = ril_sim_card_ref(sim_card);
@@ -550,14 +548,25 @@ struct sailfish_cell_info *ril_cell_info_new(GRilIoChannel *io,
 	return &self->info;
 }
 
-static void ril_cell_info_init(struct ril_cell_info *self)
+static void ril_cell_info_init(RilCellInfo *self)
 {
+	static const struct ofono_cell_info_proc ril_cell_info_proc = {
+		ril_cell_info_ref_proc,
+		ril_cell_info_unref_proc,
+		ril_cell_info_add_cells_changed_handler_proc,
+		ril_cell_info_remove_handler_proc,
+		ril_cell_info_set_update_interval_proc,
+		ril_cell_info_set_enabled_proc
+	};
+
 	self->update_rate_ms = DEFAULT_UPDATE_RATE_MS;
+	self->info.cells = self->cells = g_new0(struct ofono_cell*, 1);
+	self->info.proc = &ril_cell_info_proc;
 }
 
 static void ril_cell_info_dispose(GObject *object)
 {
-	struct ril_cell_info *self = RIL_CELL_INFO(object);
+	RilCellInfo *self = THIS(object);
 
 	grilio_channel_remove_handlers(self->io, &self->event_id, 1);
 	if (self->query_id) {
@@ -569,23 +578,25 @@ static void ril_cell_info_dispose(GObject *object)
 									FALSE);
 		self->set_rate_id = 0;
 	}
-	ril_radio_remove_handlers(self->radio, &self->radio_state_event_id, 1);
+	/* xxx_remove_handlers() zero the ids */
+	ril_radio_remove_handlers(self->radio,
+		&self->radio_state_event_id, 1);
 	ril_sim_card_remove_handlers(self->sim_card,
-					&self->sim_status_event_id, 1);
-	G_OBJECT_CLASS(ril_cell_info_parent_class)->dispose(object);
+		&self->sim_status_event_id, 1);
+	G_OBJECT_CLASS(PARENT_CLASS)->dispose(object);
 }
 
 static void ril_cell_info_finalize(GObject *object)
 {
-	struct ril_cell_info *self = RIL_CELL_INFO(object);
+	RilCellInfo *self = THIS(object);
 
 	DBG_(self, "");
+	gutil_ptrv_free((void**)self->cells);
 	g_free(self->log_prefix);
 	grilio_channel_unref(self->io);
 	ril_radio_unref(self->radio);
 	ril_sim_card_unref(self->sim_card);
-	g_slist_free_full(self->info.cells, ril_cell_free1);
-	G_OBJECT_CLASS(ril_cell_info_parent_class)->finalize(object);
+	G_OBJECT_CLASS(PARENT_CLASS)->finalize(object);
 }
 
 static void ril_cell_info_class_init(RilCellInfoClass *klass)

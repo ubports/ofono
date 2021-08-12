@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2019 Jolla Ltd.
+ *  Copyright (C) 2019-2021 Jolla Ltd.
  *  Copyright (C) 2020 Open Mobile Platform LLC
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -61,7 +61,7 @@ typedef struct ril_devmon_ur {
 
 typedef struct ril_devmon_ur_io {
 	struct ril_devmon_io pub;
-	struct sailfish_cell_info *cell_info;
+	struct ofono_cell_info *cell_info;
 	MceBattery *battery;
 	MceCharger *charger;
 	MceDisplay *display;
@@ -137,7 +137,7 @@ static void ril_devmon_ur_io_set_unsol_response_filter(DevMonIo *self)
 
 static void ril_devmon_ur_io_set_cell_info_update_interval(DevMonIo *self)
 {
-	sailfish_cell_info_set_update_interval(self->cell_info,
+	ofono_cell_info_set_update_interval(self->cell_info,
 		(self->display_on && (ril_devmon_ur_charging(self->charger) ||
 				ril_devmon_ur_battery_ok(self->battery))) ?
 					self->cell_info_interval_short_ms :
@@ -182,12 +182,12 @@ static void ril_devmon_ur_io_free(struct ril_devmon_io *devmon_io)
 	grilio_channel_cancel_request(self->io, self->req_id, FALSE);
 	grilio_channel_unref(self->io);
 
-	sailfish_cell_info_unref(self->cell_info);
+	ofono_cell_info_unref(self->cell_info);
 	g_free(self);
 }
 
 static struct ril_devmon_io *ril_devmon_ur_start_io(struct ril_devmon *devmon,
-		GRilIoChannel *io, struct sailfish_cell_info *cell_info)
+		GRilIoChannel *io, struct ofono_cell_info *cell_info)
 {
 	DevMon *ur = ril_devmon_ur_cast(devmon);
 	DevMonIo *self = g_new0(DevMonIo, 1);
@@ -195,7 +195,7 @@ static struct ril_devmon_io *ril_devmon_ur_start_io(struct ril_devmon *devmon,
 	self->pub.free = ril_devmon_ur_io_free;
 	self->unsol_filter_supported = TRUE;
 	self->io = grilio_channel_ref(io);
-	self->cell_info = sailfish_cell_info_ref(cell_info);
+	self->cell_info = ofono_cell_info_ref(cell_info);
 
 	self->battery = mce_battery_ref(ur->battery);
 	self->battery_event_id[BATTERY_EVENT_VALID] =

@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2017 Jolla Ltd.
+ *  Copyright (C) 2015-2021 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -17,7 +17,7 @@
 #include "ril_util.h"
 #include "ril_log.h"
 
-#include "common.h"
+#include <ofono/netreg.h>
 
 struct ril_call_forward {
 	GRilIoQueue *q;

@@ -3,6 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2015-2021  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -22,43 +23,88 @@
 #include <glib.h>
 
 #include <ofono/types.h>
+#include <ofono/netreg.h>
 
 /* 27.007 Section 7.3 <AcT> */
-enum access_technology {
-	ACCESS_TECHNOLOGY_GSM =			0,
-	ACCESS_TECHNOLOGY_GSM_COMPACT =		1,
-	ACCESS_TECHNOLOGY_UTRAN =		2,
-	ACCESS_TECHNOLOGY_GSM_EGPRS =		3,
-	ACCESS_TECHNOLOGY_UTRAN_HSDPA =		4,
-	ACCESS_TECHNOLOGY_UTRAN_HSUPA =		5,
-	ACCESS_TECHNOLOGY_UTRAN_HSDPA_HSUPA =	6,
-	ACCESS_TECHNOLOGY_EUTRAN =		7,
-};
+#define ACCESS_TECHNOLOGY_GSM \
+  OFONO_ACCESS_TECHNOLOGY_GSM /* 0 */
+#define ACCESS_TECHNOLOGY_GSM_COMPACT \
+  OFONO_ACCESS_TECHNOLOGY_GSM_COMPACT /* 1 */
+#define ACCESS_TECHNOLOGY_UTRAN \
+  OFONO_ACCESS_TECHNOLOGY_UTRAN /* 2 */
+#define ACCESS_TECHNOLOGY_GSM_EGPRS \
+  OFONO_ACCESS_TECHNOLOGY_GSM_EGPRS /* 3 */
+#define ACCESS_TECHNOLOGY_UTRAN_HSDPA \
+  OFONO_ACCESS_TECHNOLOGY_UTRAN_HSDPA /* 4 */
+#define ACCESS_TECHNOLOGY_UTRAN_HSUPA \
+  OFONO_ACCESS_TECHNOLOGY_UTRAN_HSUPA /* 5 */
+#define ACCESS_TECHNOLOGY_UTRAN_HSDPA_HSUPA \
+  OFONO_ACCESS_TECHNOLOGY_UTRAN_HSDPA_HSUPA /* 6 */
+#define ACCESS_TECHNOLOGY_EUTRAN \
+  OFONO_ACCESS_TECHNOLOGY_EUTRAN /* 7 */
 
 /* 27.007 Section 7.2 <stat> */
-enum network_registration_status {
-	NETWORK_REGISTRATION_STATUS_NOT_REGISTERED =	0,
-	NETWORK_REGISTRATION_STATUS_REGISTERED =	1,
-	NETWORK_REGISTRATION_STATUS_SEARCHING =		2,
-	NETWORK_REGISTRATION_STATUS_DENIED =		3,
-	NETWORK_REGISTRATION_STATUS_UNKNOWN =		4,
-	NETWORK_REGISTRATION_STATUS_ROAMING =		5,
-};
+#define NETWORK_REGISTRATION_STATUS_NOT_REGISTERED \
+                OFONO_NETREG_STATUS_NOT_REGISTERED /* 0 */
+#define NETWORK_REGISTRATION_STATUS_REGISTERED \
+                OFONO_NETREG_STATUS_REGISTERED /* 1 */
+#define NETWORK_REGISTRATION_STATUS_SEARCHING \
+                OFONO_NETREG_STATUS_SEARCHING /* 2 */
+#define NETWORK_REGISTRATION_STATUS_DENIED \
+                OFONO_NETREG_STATUS_DENIED /* 3 */
+#define NETWORK_REGISTRATION_STATUS_UNKNOWN \
+                OFONO_NETREG_STATUS_UNKNOWN /* 4 */
+#define NETWORK_REGISTRATION_STATUS_ROAMING \
+                OFONO_NETREG_STATUS_ROAMING /* 5 */
 
 /* 27.007 Section 7.3 <stat> */
-enum operator_status {
-	OPERATOR_STATUS_UNKNOWN =	0,
-	OPERATOR_STATUS_AVAILABLE =	1,
-	OPERATOR_STATUS_CURRENT =	2,
-	OPERATOR_STATUS_FORBIDDEN =	3,
-};
+#define OPERATOR_STATUS_UNKNOWN	\
+  OFONO_OPERATOR_STATUS_UNKNOWN /* 0 */
+#define OPERATOR_STATUS_AVAILABLE \
+  OFONO_OPERATOR_STATUS_AVAILABLE /* 1 */
+#define OPERATOR_STATUS_CURRENT \
+  OFONO_OPERATOR_STATUS_CURRENT /* 2 */
+#define OPERATOR_STATUS_FORBIDDEN \
+  OFONO_OPERATOR_STATUS_FORBIDDEN /* 3 */
 
 /* 27.007 Section 7.6 */
-enum clip_validity {
-	CLIP_VALIDITY_VALID =		0,
-	CLIP_VALIDITY_WITHHELD =	1,
-	CLIP_VALIDITY_NOT_AVAILABLE =	2,
-};
+#define CLIP_VALIDITY_VALID \
+  OFONO_CLIP_VALIDITY_VALID /* 0 */
+#define CLIP_VALIDITY_WITHHELD \
+  OFONO_CLIP_VALIDITY_WITHHELD /* 1 */
+#define CLIP_VALIDITY_NOT_AVAILABLE \
+  OFONO_CLIP_VALIDITY_NOT_AVAILABLE /* 2 */
+
+/* 27.007 Section 7.30 */
+#define CNAP_VALIDITY_VALID \
+  OFONO_CNAP_VALIDITY_VALID /* 0 */
+#define CNAP_VALIDITY_WITHHELD \
+  OFONO_CNAP_VALIDITY_WITHHELD /* 1 */
+#define CNAP_VALIDITY_NOT_AVAILABLE \
+  OFONO_CNAP_VALIDITY_NOT_AVAILABLE /* 2 */
+
+/* 27.007 Section 7.18 */
+#define call_status ofono_call_status
+#define CALL_STATUS_ACTIVE \
+  OFONO_CALL_STATUS_ACTIVE /* 0 */
+#define CALL_STATUS_HELD \
+  OFONO_CALL_STATUS_HELD /* 1 */
+#define CALL_STATUS_DIALING \
+  OFONO_CALL_STATUS_DIALING /* 2 */
+#define CALL_STATUS_ALERTING \
+  OFONO_CALL_STATUS_ALERTING /* 3 */
+#define CALL_STATUS_INCOMING \
+  OFONO_CALL_STATUS_INCOMING /* 4 */
+#define CALL_STATUS_WAITING \
+  OFONO_CALL_STATUS_WAITING /* 5 */
+#define CALL_STATUS_DISCONNECTED \
+  OFONO_CALL_STATUS_DISCONNECTED
+
+/* 27.007 Section 7.18 */
+#define CALL_DIRECTION_MOBILE_ORIGINATED \
+  OFONO_CALL_DIRECTION_MOBILE_ORIGINATED /* 0 */
+#define CALL_DIRECTION_MOBILE_TERMINATED \
+  OFONO_CALL_DIRECTION_MOBILE_TERMINATED /* 1 */
 
 /* 27.007 Section 7.29 */
 enum packet_bearer {
@@ -70,30 +116,6 @@ enum packet_bearer {
 	PACKET_BEARER_HSDPA =		5,
 	PACKET_BEARER_HSUPA_HSDPA =	6,
 	PACKET_BEARER_EPS =		7,
-};
-
-/* 27.007 Section 7.30 */
-enum cnap_validity {
-	CNAP_VALIDITY_VALID =		0,
-	CNAP_VALIDITY_WITHHELD =	1,
-	CNAP_VALIDITY_NOT_AVAILABLE =	2,
-};
-
-/* 27.007 Section 7.18 */
-enum call_status {
-	CALL_STATUS_ACTIVE =		0,
-	CALL_STATUS_HELD =		1,
-	CALL_STATUS_DIALING =		2,
-	CALL_STATUS_ALERTING =		3,
-	CALL_STATUS_INCOMING =		4,
-	CALL_STATUS_WAITING =		5,
-	CALL_STATUS_DISCONNECTED
-};
-
-/* 27.007 Section 7.18 */
-enum call_direction {
-	CALL_DIRECTION_MOBILE_ORIGINATED =	0,
-	CALL_DIRECTION_MOBILE_TERMINATED =	1,
 };
 
 /* 27.007 Section 7.11 */
@@ -179,8 +201,8 @@ const char *ss_control_type_to_string(enum ss_control_type type);
 
 const char *bearer_class_to_string(enum bearer_class cls);
 
-const char *registration_status_to_string(int status);
-const char *registration_tech_to_string(int tech);
+const char *registration_status_to_string(enum ofono_netreg_status status);
+const char *registration_tech_to_string(enum ofono_access_technology tech);
 const char *packet_bearer_to_string(int bearer);
 
 gboolean is_valid_apn(const char *apn);

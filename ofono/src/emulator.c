@@ -463,6 +463,9 @@ static gboolean notify_ring(void *user_data)
 	case CLIP_VALIDITY_WITHHELD:
 		g_at_server_send_unsolicited(em->server, "+CLIP: \"\",128");
 		break;
+
+	default:
+		break;
 	}
 
 	return TRUE;

@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2017-2019 Jolla Ltd.
+ *  Copyright (C) 2017-2021 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -17,20 +17,11 @@
 #define OFONO_WATCH_H
 
 #include <ofono/gprs-context.h>
+#include <ofono/netreg.h>
 
 struct ofono_modem;
 struct ofono_sim;
 struct ofono_netreg;
-
-enum ofono_netreg_status {
-	OFONO_NETREG_STATUS_NONE =             -1,
-	OFONO_NETREG_STATUS_NOT_REGISTERED =    0,
-	OFONO_NETREG_STATUS_REGISTERED =        1,
-	OFONO_NETREG_STATUS_SEARCHING =         2,
-	OFONO_NETREG_STATUS_DENIED =            3,
-	OFONO_NETREG_STATUS_UNKNOWN =           4,
-	OFONO_NETREG_STATUS_ROAMING =           5
-};
 
 /* This object watches ofono modem and various other things */
 struct ofono_watch {

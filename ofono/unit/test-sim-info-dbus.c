@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2018-2019 Jolla Ltd.
+ *  Copyright (C) 2018-2021 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -16,7 +16,7 @@
 #include "test-dbus.h"
 #include "fake_watch.h"
 
-#include "sailfish_sim_info.h"
+#include "sim-info.h"
 
 #include <gutil_log.h>
 #include <gutil_macros.h>
@@ -232,8 +232,8 @@ static void test_loop_quit_later(GMainLoop *loop)
 static void test_misc(void)
 {
 	/* NULL resistance */
-	g_assert(!sailfish_sim_info_dbus_new_path(NULL));
-	sailfish_sim_info_dbus_free(NULL);
+	g_assert(!sim_info_dbus_new_path(NULL));
+	sim_info_dbus_free(NULL);
 }
 
 /* ==== GetAll ==== */
@@ -241,7 +241,7 @@ static void test_misc(void)
 struct test_get_all_data {
 	struct ofono_modem modem;
 	struct test_dbus_context context;
-	struct sailfish_sim_info_dbus *dbus;
+	struct sim_info_dbus *dbus;
 	struct ofono_watch *watch;
 	const char *iccid;
 };
@@ -295,7 +295,7 @@ static void test_get_all1_start(struct test_dbus_context *context)
 	const char *path = test->modem.path;
 
 	DBG("");
-	test->dbus = sailfish_sim_info_dbus_new_path(path);
+	test->dbus = sim_info_dbus_new_path(path);
 	g_assert(test->dbus);
 
 	test_submit_get_all_call(test, test_get_all_reply);
@@ -318,7 +318,7 @@ static void test_get_all1(void)
 	g_main_loop_run(test.context.loop);
 
 	ofono_watch_unref(test.watch);
-	sailfish_sim_info_dbus_free(test.dbus);
+	sim_info_dbus_free(test.dbus);
 	test_dbus_shutdown(&test.context);
 	if (timeout) {
 		g_source_remove(timeout);
@@ -336,7 +336,7 @@ static void test_get_all2_start(struct test_dbus_context *context)
 	struct ofono_watch *watch = test->watch;
 
 	DBG("");
-	test->dbus = sailfish_sim_info_dbus_new_path(path);
+	test->dbus = sim_info_dbus_new_path(path);
 	g_assert(test->dbus);
 
 	/* Tell ofono_watch that we have a modem */
@@ -369,7 +369,7 @@ static void test_get_all2(void)
 		SIM_INFO_DBUS_INTERFACE, SIM_INFO_DBUS_ICCID_CHANGED_SIGNAL));
 
 	ofono_watch_unref(test.watch);
-	sailfish_sim_info_dbus_free(test.dbus);
+	sim_info_dbus_free(test.dbus);
 	test_dbus_shutdown(&test.context);
 	if (timeout) {
 		g_source_remove(timeout);
@@ -382,7 +382,7 @@ static void test_get_all2(void)
 struct test_get_version_data {
 	struct ofono_modem modem;
 	struct test_dbus_context context;
-	struct sailfish_sim_info_dbus *dbus;
+	struct sim_info_dbus *dbus;
 };
 
 static void test_get_version_reply(DBusPendingCall *call, void *data)
@@ -412,7 +412,7 @@ static void test_get_version_start(struct test_dbus_context *context)
 	const char *path = test->modem.path;
 
 	DBG("");
-	test->dbus = sailfish_sim_info_dbus_new_path(path);
+	test->dbus = sim_info_dbus_new_path(path);
 	g_assert(test->dbus);
 
 	msg = dbus_message_new_method_call(NULL, test->modem.path,
@@ -435,7 +435,7 @@ static void test_get_version(void)
 
 	g_main_loop_run(test.context.loop);
 
-	sailfish_sim_info_dbus_free(test.dbus);
+	sim_info_dbus_free(test.dbus);
 	test_dbus_shutdown(&test.context);
 	if (timeout) {
 		g_source_remove(timeout);
@@ -447,7 +447,7 @@ static void test_get_version(void)
 struct test_get_iccid_data {
 	struct ofono_modem modem;
 	struct test_dbus_context context;
-	struct sailfish_sim_info_dbus *dbus;
+	struct sim_info_dbus *dbus;
 	struct ofono_watch *watch;
 	const char *iccid;
 	const char *result;
@@ -473,7 +473,7 @@ static void test_get_iccid_start(struct test_dbus_context *context)
 	const char *path = test->modem.path;
 
 	DBG("");
-	test->dbus = sailfish_sim_info_dbus_new_path(path);
+	test->dbus = sim_info_dbus_new_path(path);
 	fake_watch_set_ofono_iccid(test->watch, test->iccid);
 	fake_watch_emit_queued_signals(test->watch);
 	g_assert(test->dbus);
@@ -510,7 +510,7 @@ static void test_get_iccid(const char *init_iccid, const char *set_iccid,
 		SIM_INFO_DBUS_INTERFACE, SIM_INFO_DBUS_ICCID_CHANGED_SIGNAL));
 
 	ofono_watch_unref(test.watch);
-	sailfish_sim_info_dbus_free(test.dbus);
+	sim_info_dbus_free(test.dbus);
 	test_dbus_shutdown(&test.context);
 	if (timeout) {
 		g_source_remove(timeout);
@@ -534,7 +534,7 @@ static void test_get_iccid2(void)
 struct test_get_string_data {
 	struct ofono_modem modem;
 	struct test_dbus_context context;
-	struct sailfish_sim_info_dbus *dbus;
+	struct sim_info_dbus *dbus;
 	struct ofono_watch *watch;
 	const char *method;
 	const char *result;
@@ -562,7 +562,7 @@ static void test_get_string_start(struct test_dbus_context *context)
 	struct ofono_watch *watch = test->watch;
 
 	DBG("%s", test->method);
-	test->dbus = sailfish_sim_info_dbus_new_path(path);
+	test->dbus = sim_info_dbus_new_path(path);
 	sim->mcc = TEST_MCC;
 	sim->mnc = TEST_MNC;
 	sim->state = OFONO_SIM_STATE_READY;
@@ -606,7 +606,7 @@ static void test_get_string(const char *method, const char *result)
 		SIM_INFO_DBUS_INTERFACE, SIM_INFO_DBUS_SPN_CHANGED_SIGNAL));
 
 	ofono_watch_unref(test.watch);
-	sailfish_sim_info_dbus_free(test.dbus);
+	sim_info_dbus_free(test.dbus);
 	test_dbus_shutdown(&test.context);
 	if (timeout) {
 		g_source_remove(timeout);
@@ -626,7 +626,7 @@ static void test_get_spn(void)
 	test_get_string("GetServiceProviderName", TEST_DEFAULT_SPN);
 }
 
-#define TEST_(name) "/sailfish_sim_info_dbus/" name
+#define TEST_(name) "/sim_info_dbus/" name
 
 int main(int argc, char *argv[])
 {
@@ -645,9 +645,9 @@ int main(int argc, char *argv[])
 	gutil_log_timestamp = FALSE;
 	gutil_log_default.level = g_test_verbose() ?
 		GLOG_LEVEL_VERBOSE : GLOG_LEVEL_NONE;
-	__ofono_log_init("test-sailfish_sim_info_dbus",
-				g_test_verbose() ? "*" : NULL,
-				FALSE, FALSE);
+	__ofono_log_init("test-sim-info-dbus",
+		g_test_verbose() ? "*" : NULL,
+		FALSE, FALSE);
 
 	g_test_add_func(TEST_("Misc"), test_misc);
 	g_test_add_func(TEST_("GetAll1"), test_get_all1);

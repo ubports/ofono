@@ -1,8 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2021 Jolla Ltd.
- *  Copyright (C) 2019-2020 Open Mobile Platform LLC.
+ *  Copyright (C) 2016-2021 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -14,20 +13,18 @@
  *  GNU General Public License for more details.
  */
 
-#ifndef RIL_CONFIG_H
-#define RIL_CONFIG_H
+#ifndef CELL_INFO_DBUS_H
+#define CELL_INFO_DBUS_H
 
-#include "ril_types.h"
+struct ofono_modem;
+struct ofono_cell_info;
 
-#include <ofono/conf.h>
+struct cell_info_dbus;
+struct cell_info_dbus *cell_info_dbus_new(struct ofono_modem *modem,
+					struct ofono_cell_info *ci);
+void cell_info_dbus_free(struct cell_info_dbus *dbus);
 
-#define RILCONF_SETTINGS_GROUP OFONO_COMMON_SETTINGS_GROUP
-
-GUtilInts *ril_config_get_ints(GKeyFile *file, const char *group,
-					const char *key);
-char *ril_config_ints_to_string(GUtilInts *ints, char separator);
-
-#endif /* RIL_CONFIG_H */
+#endif /* CELL_INFO_DBUS_H */
 
 /*
  * Local Variables:

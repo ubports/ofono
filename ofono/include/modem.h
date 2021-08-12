@@ -3,6 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2015-2021  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -86,6 +87,9 @@ const char *ofono_modem_get_path(struct ofono_modem *modem);
 struct ofono_sim *ofono_modem_get_sim(struct ofono_modem *modem);
 struct ofono_gprs *ofono_modem_get_gprs(struct ofono_modem *modem);
 struct ofono_voicecall *ofono_modem_get_voicecall(struct ofono_modem *modem);
+struct ofono_netreg *ofono_modem_get_netreg(struct ofono_modem *modem);
+struct ofono_radio_settings *ofono_modem_get_radio_settings
+			(struct ofono_modem *modem); /* Since mer/1.24+git2 */
 
 void ofono_modem_set_data(struct ofono_modem *modem, void *data);
 void *ofono_modem_get_data(struct ofono_modem *modem);

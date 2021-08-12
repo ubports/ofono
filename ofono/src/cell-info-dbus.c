@@ -13,9 +13,9 @@
  *  GNU General Public License for more details.
  */
 
-#include "sailfish_cell_info_dbus.h"
-#include "sailfish_cell_info.h"
+#include "cell-info-dbus.h"
 
+#include <ofono/cell-info.h>
 #include <ofono/modem.h>
 #include <ofono/dbus.h>
 #include <ofono/dbus-clients.h>
@@ -23,21 +23,23 @@
 
 #include <gdbus.h>
 
-struct sailfish_cell_entry {
+#include "ofono.h"
+
+typedef struct cell_entry {
 	guint cell_id;
 	char *path;
-	struct sailfish_cell cell;
-};
+	struct ofono_cell cell;
+} CellEntry;
 
-struct sailfish_cell_info_dbus {
-	struct sailfish_cell_info *info;
+typedef struct cell_info_dbus {
+	struct ofono_cell_info *info;
 	DBusConnection *conn;
 	char *path;
 	gulong handler_id;
 	guint next_cell_id;
 	GSList *entries;
 	struct ofono_dbus_clients *clients;
-};
+} CellInfoDBus;
 
 #define CELL_INFO_DBUS_INTERFACE            "org.nemomobile.ofono.CellInfo"
 #define CELL_INFO_DBUS_CELLS_ADDED_SIGNAL   "CellsAdded"
@@ -50,20 +52,20 @@ struct sailfish_cell_info_dbus {
 #define CELL_DBUS_PROPERTY_CHANGED_SIGNAL   "PropertyChanged"
 #define CELL_DBUS_REMOVED_SIGNAL            "Removed"
 
-struct sailfish_cell_property {
+struct cell_property {
 	const char *name;
 	glong off;
 	int flag;
 };
 
 #define CELL_GSM_PROPERTY(value,name) \
-	{ #name, G_STRUCT_OFFSET(struct sailfish_cell_info_gsm,name), value }
+	{ #name, G_STRUCT_OFFSET(struct ofono_cell_info_gsm,name), value }
 #define CELL_WCDMA_PROPERTY(value,name) \
-	{ #name, G_STRUCT_OFFSET(struct sailfish_cell_info_wcdma,name), value }
+	{ #name, G_STRUCT_OFFSET(struct ofono_cell_info_wcdma,name), value }
 #define CELL_LTE_PROPERTY(value,name) \
-	{ #name, G_STRUCT_OFFSET(struct sailfish_cell_info_lte,name), value }
+	{ #name, G_STRUCT_OFFSET(struct ofono_cell_info_lte,name), value }
 
-static const struct sailfish_cell_property sailfish_cell_gsm_properties [] = {
+static const struct cell_property cell_gsm_properties [] = {
 	CELL_GSM_PROPERTY(0x001,mcc),
 	CELL_GSM_PROPERTY(0x002,mnc),
 	CELL_GSM_PROPERTY(0x004,lac),
@@ -75,7 +77,7 @@ static const struct sailfish_cell_property sailfish_cell_gsm_properties [] = {
 	CELL_GSM_PROPERTY(0x100,timingAdvance)
 };
 
-static const struct sailfish_cell_property sailfish_cell_wcdma_properties [] = {
+static const struct cell_property cell_wcdma_properties [] = {
 	CELL_WCDMA_PROPERTY(0x01,mcc),
 	CELL_WCDMA_PROPERTY(0x02,mnc),
 	CELL_WCDMA_PROPERTY(0x04,lac),
@@ -86,7 +88,7 @@ static const struct sailfish_cell_property sailfish_cell_wcdma_properties [] = {
 	CELL_WCDMA_PROPERTY(0x80,bitErrorRate)
 };
 
-static const struct sailfish_cell_property sailfish_cell_lte_properties [] = {
+static const struct cell_property cell_lte_properties [] = {
 	CELL_LTE_PROPERTY(0x001,mcc),
 	CELL_LTE_PROPERTY(0x002,mnc),
 	CELL_LTE_PROPERTY(0x004,ci),
@@ -101,47 +103,45 @@ static const struct sailfish_cell_property sailfish_cell_lte_properties [] = {
 	CELL_LTE_PROPERTY(0x800,timingAdvance)
 };
 
-#define SAILFISH_CELL_PROPERTY_REGISTERED 0x1000
+#define CELL_PROPERTY_REGISTERED 0x1000
 
-typedef void (*sailfish_cell_info_dbus_append_fn)(DBusMessageIter *it,
-				const struct sailfish_cell_entry *entry);
+typedef void (*cell_info_dbus_append_fn)(DBusMessageIter *it,
+	const CellEntry *entry);
 
-static const char *sailfish_cell_info_dbus_cell_type_str
-						(enum sailfish_cell_type type)
+static const char *cell_info_dbus_cell_type_str(enum ofono_cell_type type)
 {
 	switch (type) {
-	case SAILFISH_CELL_TYPE_GSM:
+	case OFONO_CELL_TYPE_GSM:
 		return "gsm";
-	case SAILFISH_CELL_TYPE_WCDMA:
+	case OFONO_CELL_TYPE_WCDMA:
 		return "wcdma";
-	case SAILFISH_CELL_TYPE_LTE:
+	case OFONO_CELL_TYPE_LTE:
 		return "lte";
 	default:
 		return "unknown";
 	}
 };
 
-static const struct sailfish_cell_property *
-			sailfish_cell_info_dbus_cell_properties(
-				enum sailfish_cell_type type, int *count)
+static const struct cell_property *cell_info_dbus_cell_properties
+	(enum ofono_cell_type type, int *count)
 {
 	switch (type) {
-	case SAILFISH_CELL_TYPE_GSM:
-		*count = G_N_ELEMENTS(sailfish_cell_gsm_properties);
-		return sailfish_cell_gsm_properties;
-	case SAILFISH_CELL_TYPE_WCDMA:
-		*count = G_N_ELEMENTS(sailfish_cell_wcdma_properties);
-		return sailfish_cell_wcdma_properties;
-	case SAILFISH_CELL_TYPE_LTE:
-		*count = G_N_ELEMENTS(sailfish_cell_lte_properties);
-		return sailfish_cell_lte_properties;
+	case OFONO_CELL_TYPE_GSM:
+		*count = G_N_ELEMENTS(cell_gsm_properties);
+		return cell_gsm_properties;
+	case OFONO_CELL_TYPE_WCDMA:
+		*count = G_N_ELEMENTS(cell_wcdma_properties);
+		return cell_wcdma_properties;
+	case OFONO_CELL_TYPE_LTE:
+		*count = G_N_ELEMENTS(cell_lte_properties);
+		return cell_lte_properties;
 	default:
 		*count = 0;
 		return NULL;
 	}
 };
 
-static void sailfish_cell_info_destroy_entry(struct sailfish_cell_entry *entry)
+static void cell_info_destroy_entry(CellEntry *entry)
 {
 	if (entry) {
 		g_free(entry->path);
@@ -149,9 +149,8 @@ static void sailfish_cell_info_destroy_entry(struct sailfish_cell_entry *entry)
 	}
 }
 
-static DBusMessage *sailfish_cell_info_dbus_reply(DBusMessage *msg,
-				const struct sailfish_cell_entry *entry,
-				sailfish_cell_info_dbus_append_fn append)
+static DBusMessage *cell_info_dbus_reply(DBusMessage *msg,
+	const CellEntry *entry, cell_info_dbus_append_fn append)
 {
 	DBusMessage *reply = dbus_message_new_method_return(msg);
 	DBusMessageIter it;
@@ -161,118 +160,116 @@ static DBusMessage *sailfish_cell_info_dbus_reply(DBusMessage *msg,
 	return reply;
 }
 
-static void sailfish_cell_info_dbus_append_version(DBusMessageIter *it,
-				const struct sailfish_cell_entry *entry)
+static void cell_info_dbus_append_version(DBusMessageIter *it,
+	const CellEntry *entry)
 {
 	dbus_int32_t version = CELL_DBUS_INTERFACE_VERSION;
 
 	dbus_message_iter_append_basic(it, DBUS_TYPE_INT32, &version);
 }
 
-static void sailfish_cell_info_dbus_append_type(DBusMessageIter *it,
-				const struct sailfish_cell_entry *entry)
+static void cell_info_dbus_append_type(DBusMessageIter *it,
+	const CellEntry *entry)
 {
-	const char *type =
-		sailfish_cell_info_dbus_cell_type_str(entry->cell.type);
+	const char *type = cell_info_dbus_cell_type_str(entry->cell.type);
 
 	dbus_message_iter_append_basic(it, DBUS_TYPE_STRING, &type);
 }
 
-static void sailfish_cell_info_dbus_append_registered(DBusMessageIter *it,
-				const struct sailfish_cell_entry *entry)
+static void cell_info_dbus_append_registered(DBusMessageIter *it,
+	const CellEntry *entry)
 {
 	const dbus_bool_t registered = (entry->cell.registered != FALSE);
 
 	dbus_message_iter_append_basic(it, DBUS_TYPE_BOOLEAN, &registered);
 }
 
-static void sailfish_cell_info_dbus_append_properties(DBusMessageIter *it,
-				const struct sailfish_cell_entry *entry)
+static void cell_info_dbus_append_properties(DBusMessageIter *it,
+	const CellEntry *entry)
 {
 	int i, n;
 	DBusMessageIter dict;
-	const struct sailfish_cell *cell = &entry->cell;
-	const struct sailfish_cell_property *prop =
-		sailfish_cell_info_dbus_cell_properties(cell->type, &n);
+	const struct ofono_cell *cell = &entry->cell;
+	const struct cell_property *prop =
+		cell_info_dbus_cell_properties(cell->type, &n);
 
 	dbus_message_iter_open_container(it, DBUS_TYPE_ARRAY, "{sv}", &dict);
 	for (i = 0; i < n; i++) {
 		gint32 value = G_STRUCT_MEMBER(int, &cell->info, prop[i].off);
-		if (value != SAILFISH_CELL_INVALID_VALUE) {
+		if (value != OFONO_CELL_INVALID_VALUE) {
 			ofono_dbus_dict_append(&dict, prop[i].name,
-						DBUS_TYPE_INT32, &value);
+				DBUS_TYPE_INT32, &value);
 		}
 	}
 	dbus_message_iter_close_container(it, &dict);
 }
 
-static void sailfish_cell_info_dbus_append_all(DBusMessageIter *it,
-				const struct sailfish_cell_entry *entry)
+static void cell_info_dbus_append_all(DBusMessageIter *it, const CellEntry *ce)
 {
-	sailfish_cell_info_dbus_append_version(it, entry);
-	sailfish_cell_info_dbus_append_type(it, entry);
-	sailfish_cell_info_dbus_append_registered(it, entry);
-	sailfish_cell_info_dbus_append_properties(it, entry);
+	cell_info_dbus_append_version(it, ce);
+	cell_info_dbus_append_type(it, ce);
+	cell_info_dbus_append_registered(it, ce);
+	cell_info_dbus_append_properties(it, ce);
 }
 
-static DBusMessage *sailfish_cell_info_dbus_cell_get_all
-			(DBusConnection *conn, DBusMessage *msg, void *data)
+static DBusMessage *cell_info_dbus_cell_get_all(DBusConnection *conn,
+	DBusMessage *msg, void *data)
 {
-	return sailfish_cell_info_dbus_reply(msg, (struct sailfish_cell_entry*)
-			data, sailfish_cell_info_dbus_append_all);
+	return cell_info_dbus_reply(msg, (CellEntry*) data,
+		cell_info_dbus_append_all);
 }
 
-static DBusMessage *sailfish_cell_info_dbus_cell_get_version
-			(DBusConnection *conn, DBusMessage *msg, void *data)
+static DBusMessage *cell_info_dbus_cell_get_version(DBusConnection *conn,
+	DBusMessage *msg, void *data)
 {
-	return sailfish_cell_info_dbus_reply(msg, (struct sailfish_cell_entry*)
-			data, sailfish_cell_info_dbus_append_version);
+	return cell_info_dbus_reply(msg, (CellEntry*) data,
+		cell_info_dbus_append_version);
 }
 
-static DBusMessage *sailfish_cell_info_dbus_cell_get_type
-			(DBusConnection *conn, DBusMessage *msg, void *data)
+static DBusMessage *cell_info_dbus_cell_get_type(DBusConnection *conn,
+	DBusMessage *msg, void *data)
 {
-	return sailfish_cell_info_dbus_reply(msg, (struct sailfish_cell_entry*)
-			data, sailfish_cell_info_dbus_append_type);
+	return cell_info_dbus_reply(msg, (CellEntry*) data,
+		cell_info_dbus_append_type);
 }
 
-static DBusMessage *sailfish_cell_info_dbus_cell_get_registered
-			(DBusConnection *conn, DBusMessage *msg, void *data)
+static DBusMessage *cell_info_dbus_cell_get_registered(DBusConnection *conn,
+	DBusMessage *msg, void *data)
 {
-	return sailfish_cell_info_dbus_reply(msg, (struct sailfish_cell_entry*)
-			data, sailfish_cell_info_dbus_append_registered);
+	return cell_info_dbus_reply(msg, (CellEntry*) data,
+		cell_info_dbus_append_registered);
 }
 
-static DBusMessage *sailfish_cell_info_dbus_cell_get_properties
-			(DBusConnection *conn, DBusMessage *msg, void *data)
+static DBusMessage *cell_info_dbus_cell_get_properties(DBusConnection *conn,
+	DBusMessage *msg, void *data)
 {
-	return sailfish_cell_info_dbus_reply(msg, (struct sailfish_cell_entry*)
-			data, sailfish_cell_info_dbus_append_properties);
+	return cell_info_dbus_reply(msg, (CellEntry*) data,
+		cell_info_dbus_append_properties);
 }
 
-static const GDBusMethodTable sailfish_cell_info_dbus_cell_methods[] = {
+static const GDBusMethodTable cell_info_dbus_cell_methods[] = {
 	{ GDBUS_METHOD("GetAll", NULL,
 			GDBUS_ARGS({ "version", "i" },
 			           { "type", "s" },
 			           { "registered", "b" },
 			           { "properties", "a{sv}" }),
-			sailfish_cell_info_dbus_cell_get_all) },
+			cell_info_dbus_cell_get_all) },
 	{ GDBUS_METHOD("GetInterfaceVersion", NULL,
 			GDBUS_ARGS({ "version", "i" }),
-			sailfish_cell_info_dbus_cell_get_version) },
+			cell_info_dbus_cell_get_version) },
 	{ GDBUS_METHOD("GetType", NULL,
 			GDBUS_ARGS({ "type", "s" }),
-			sailfish_cell_info_dbus_cell_get_type) },
+			cell_info_dbus_cell_get_type) },
 	{ GDBUS_METHOD("GetRegistered", NULL,
 			GDBUS_ARGS({ "registered", "b" }),
-			sailfish_cell_info_dbus_cell_get_registered) },
+			cell_info_dbus_cell_get_registered) },
 	{ GDBUS_METHOD("GetProperties", NULL,
 			GDBUS_ARGS({ "properties", "a{sv}" }),
-			sailfish_cell_info_dbus_cell_get_properties) },
+			cell_info_dbus_cell_get_properties) },
 	{ }
 };
 
-static const GDBusSignalTable sailfish_cell_info_dbus_cell_signals[] = {
+static const GDBusSignalTable cell_info_dbus_cell_signals[] = {
 	{ GDBUS_SIGNAL(CELL_DBUS_REGISTERED_CHANGED_SIGNAL,
 			GDBUS_ARGS({ "registered", "b" })) },
 	{ GDBUS_SIGNAL(CELL_DBUS_PROPERTY_CHANGED_SIGNAL,
@@ -282,12 +279,13 @@ static const GDBusSignalTable sailfish_cell_info_dbus_cell_signals[] = {
 	{ }
 };
 
-static struct sailfish_cell_entry *sailfish_cell_info_dbus_find_id
-			(struct sailfish_cell_info_dbus *dbus, guint id)
+static CellEntry *cell_info_dbus_find_id(CellInfoDBus *dbus, guint id)
 {
 	GSList *l;
+
 	for (l = dbus->entries; l; l = l->next) {
-		struct sailfish_cell_entry *entry = l->data;
+		CellEntry *entry = l->data;
+
 		if (entry->cell_id == id) {
 			return entry;
 		}
@@ -295,41 +293,52 @@ static struct sailfish_cell_entry *sailfish_cell_info_dbus_find_id
 	return NULL;
 }
 
-static guint sailfish_cell_info_dbus_next_cell_id
-					(struct sailfish_cell_info_dbus *dbus)
+static guint cell_info_dbus_next_cell_id(CellInfoDBus *dbus)
 {
-	while (sailfish_cell_info_dbus_find_id(dbus, dbus->next_cell_id)) {
+	while (cell_info_dbus_find_id(dbus, dbus->next_cell_id)) {
 		dbus->next_cell_id++;
 	}
 	return dbus->next_cell_id++;
 }
 
-static struct sailfish_cell_entry *sailfish_cell_info_dbus_find_cell
-			(struct sailfish_cell_info_dbus *dbus,
-					const struct sailfish_cell *cell)
+static const struct ofono_cell *cell_info_dbus_find_ofono_cell
+	(struct ofono_cell_info *info, const struct ofono_cell *cell)
+{
+	const ofono_cell_ptr *c;
+
+	for (c = info->cells; *c; c++) {
+		if (!ofono_cell_compare_location(*c, cell)) {
+			return *c;
+		}
+	}
+	return NULL;
+}
+
+static CellEntry *cell_info_dbus_find_cell(CellInfoDBus *dbus,
+	const struct ofono_cell *cell)
 {
 	if (cell) {
 		GSList *l;
+
 		for (l = dbus->entries; l; l = l->next) {
-			struct sailfish_cell_entry *entry = l->data;
-			if (!sailfish_cell_compare_location(&entry->cell,
-								cell)) {
-				return entry;
+			CellEntry *e = l->data;
+
+			if (!ofono_cell_compare_location(&e->cell, cell)) {
+				return e;
 			}
 		}
 	}
 	return NULL;
 }
 
-static void sailfish_cell_info_dbus_emit_path_list
-		(struct sailfish_cell_info_dbus *dbus, const char *name,
-							GPtrArray *list)
+static void cell_info_dbus_emit_path_list(CellInfoDBus *dbus, const char *name,
+	GPtrArray *list)
 {
 	if (ofono_dbus_clients_count(dbus->clients)) {
 		guint i;
 		DBusMessageIter it, a;
 		DBusMessage *signal = dbus_message_new_signal(dbus->path,
-					CELL_INFO_DBUS_INTERFACE, name);
+			CELL_INFO_DBUS_INTERFACE, name);
 
 		dbus_message_iter_init_append(signal, &it);
 		dbus_message_iter_open_container(&it, DBUS_TYPE_ARRAY, "o", &a);
@@ -337,7 +346,7 @@ static void sailfish_cell_info_dbus_emit_path_list
 			const char* path = list->pdata[i];
 
 			dbus_message_iter_append_basic(&a,
-					DBUS_TYPE_OBJECT_PATH, &path);
+				DBUS_TYPE_OBJECT_PATH, &path);
 		}
 		dbus_message_iter_close_container(&it, &a);
 		ofono_dbus_clients_signal(dbus->clients, signal);
@@ -345,22 +354,23 @@ static void sailfish_cell_info_dbus_emit_path_list
 	}
 }
 
-static int sailfish_cell_info_dbus_compare(const struct sailfish_cell *c1,
-					const struct sailfish_cell *c2)
+static int cell_info_dbus_compare(const struct ofono_cell *c1,
+	const struct ofono_cell *c2)
 {
 	if (c1->type == c2->type) {
 		int i, n, mask = 0;
-		const struct sailfish_cell_property *prop =
-			sailfish_cell_info_dbus_cell_properties(c1->type, &n);
+		const struct cell_property *prop =
+			cell_info_dbus_cell_properties(c1->type, &n);
 
 		if (c1->registered != c2->registered) {
-			mask |= SAILFISH_CELL_PROPERTY_REGISTERED;
+			mask |= CELL_PROPERTY_REGISTERED;
 		}
 
 		for (i = 0; i < n; i++) {
 			const glong offset = prop[i].off;
 			gint32 v1 = G_STRUCT_MEMBER(int, &c1->info, offset);
 			gint32 v2 = G_STRUCT_MEMBER(int, &c2->info, offset);
+
 			if (v1 != v2) {
 				mask |= prop[i].flag;
 			}
@@ -372,10 +382,8 @@ static int sailfish_cell_info_dbus_compare(const struct sailfish_cell *c1,
 	}
 }
 
-static void sailfish_cell_info_dbus_emit_signal
-		(struct sailfish_cell_info_dbus *dbus,
-				const char *path, const char *intf,
-				const char *name, int type, ...)
+static void cell_info_dbus_emit_signal(CellInfoDBus *dbus, const char *path,
+	const char *intf, const char *name, int type, ...)
 {
 	if (ofono_dbus_clients_count(dbus->clients)) {
 		va_list args;
@@ -389,23 +397,22 @@ static void sailfish_cell_info_dbus_emit_signal
 	}
 }
 
-static void sailfish_cell_info_dbus_property_changed
-		(struct sailfish_cell_info_dbus *dbus,
-			const struct sailfish_cell_entry *entry, int mask)
+static void cell_info_dbus_property_changed(CellInfoDBus *dbus,
+	const CellEntry *entry, int mask)
 {
 	int i, n;
-	const struct sailfish_cell *cell = &entry->cell;
-	const struct sailfish_cell_property *prop =
-		sailfish_cell_info_dbus_cell_properties(cell->type, &n);
+	const struct ofono_cell *cell = &entry->cell;
+	const struct cell_property *prop =
+		cell_info_dbus_cell_properties(cell->type, &n);
 
-	if (mask & SAILFISH_CELL_PROPERTY_REGISTERED) {
+	if (mask & CELL_PROPERTY_REGISTERED) {
 		const dbus_bool_t registered = (cell->registered != FALSE);
 
-		sailfish_cell_info_dbus_emit_signal(dbus, entry->path,
+		cell_info_dbus_emit_signal(dbus, entry->path,
 			CELL_DBUS_INTERFACE,
 			CELL_DBUS_REGISTERED_CHANGED_SIGNAL,
 			DBUS_TYPE_BOOLEAN, &registered, DBUS_TYPE_INVALID);
-		mask &= ~SAILFISH_CELL_PROPERTY_REGISTERED;
+		mask &= ~CELL_PROPERTY_REGISTERED;
 	}
 
 	for (i = 0; i < n && mask; i++) {
@@ -420,74 +427,72 @@ static void sailfish_cell_info_dbus_property_changed
 	}
 }
 
-static void sailfish_cell_info_dbus_update_entries
-		(struct sailfish_cell_info_dbus *dbus, gboolean emit_signals)
+static void cell_info_dbus_update_entries(CellInfoDBus *dbus, gboolean emit)
 {
 	GSList *l;
 	GPtrArray* added = NULL;
 	GPtrArray* removed = NULL;
+	const ofono_cell_ptr *c;
 
 	/* Remove non-existent cells */
 	l = dbus->entries;
 	while (l) {
 		GSList *next = l->next;
-		struct sailfish_cell_entry *entry = l->data;
-		if (!g_slist_find_custom(dbus->info->cells, &entry->cell,
-						sailfish_cell_compare_func)) {
+		CellEntry *entry = l->data;
+
+		if (!cell_info_dbus_find_ofono_cell(dbus->info, &entry->cell)) {
 			DBG("%s removed", entry->path);
 			dbus->entries = g_slist_delete_link(dbus->entries, l);
-			sailfish_cell_info_dbus_emit_signal(dbus, entry->path,
-					CELL_DBUS_INTERFACE,
-					CELL_DBUS_REMOVED_SIGNAL,
-					DBUS_TYPE_INVALID);
+			cell_info_dbus_emit_signal(dbus, entry->path,
+				CELL_DBUS_INTERFACE,
+				CELL_DBUS_REMOVED_SIGNAL,
+				DBUS_TYPE_INVALID);
 			g_dbus_unregister_interface(dbus->conn, entry->path,
-						CELL_DBUS_INTERFACE);
-			if (emit_signals) {
+				CELL_DBUS_INTERFACE);
+			if (emit) {
 				if (!removed) {
-					removed =
-						g_ptr_array_new_with_free_func(
-								g_free);
+					removed = g_ptr_array_new_with_free_func
+						(g_free);
 				}
 				/* Steal the path */
 				g_ptr_array_add(removed, entry->path);
 				entry->path = NULL;
 			}
-			sailfish_cell_info_destroy_entry(entry);
+			cell_info_destroy_entry(entry);
 		}
 		l = next;
 	}
 
 	/* Add new cells */
-	for (l = dbus->info->cells; l; l = l->next) {
-		const struct sailfish_cell *cell = l->data;
-		struct sailfish_cell_entry *entry =
-			sailfish_cell_info_dbus_find_cell(dbus, cell);
+	for (c = dbus->info->cells; *c; c++) {
+		const struct ofono_cell *cell = *c;
+		CellEntry *entry = cell_info_dbus_find_cell(dbus, cell);
 
 		if (entry) {
-			if (emit_signals) {
-				int diff = sailfish_cell_info_dbus_compare(cell,
-								&entry->cell);
+			if (emit) {
+				const int diff = cell_info_dbus_compare(cell,
+					&entry->cell);
+
 				entry->cell = *cell;
-				sailfish_cell_info_dbus_property_changed(dbus,
-								entry, diff);
+				cell_info_dbus_property_changed(dbus, entry,
+					diff);
 			} else {
 				entry->cell = *cell;
 			}
 		} else {
-			entry = g_new0(struct sailfish_cell_entry, 1);
+			entry = g_new0(CellEntry, 1);
 			entry->cell = *cell;
-			entry->cell_id =
-				sailfish_cell_info_dbus_next_cell_id(dbus);
+			entry->cell_id = cell_info_dbus_next_cell_id(dbus);
 			entry->path = g_strdup_printf("%s/cell_%u", dbus->path,
-							entry->cell_id);
+				entry->cell_id);
 			dbus->entries = g_slist_append(dbus->entries, entry);
 			DBG("%s added", entry->path);
 			g_dbus_register_interface(dbus->conn, entry->path,
 				CELL_DBUS_INTERFACE,
-				sailfish_cell_info_dbus_cell_methods,
-				sailfish_cell_info_dbus_cell_signals, NULL,
+				cell_info_dbus_cell_methods,
+				cell_info_dbus_cell_signals, NULL,
 				entry, NULL);
-			if (emit_signals) {
+			if (emit) {
 				if (!added) {
 					added = g_ptr_array_new();
 				}
@@ -497,37 +502,36 @@ static void sailfish_cell_info_dbus_update_entries
 	}
 
 	if (removed) {
-		sailfish_cell_info_dbus_emit_path_list(dbus,
+		cell_info_dbus_emit_path_list(dbus,
 			CELL_INFO_DBUS_CELLS_REMOVED_SIGNAL, removed);
 		g_ptr_array_free(removed, TRUE);
 	}
 
 	if (added) {
-		sailfish_cell_info_dbus_emit_path_list(dbus,
+		cell_info_dbus_emit_path_list(dbus,
 			CELL_INFO_DBUS_CELLS_ADDED_SIGNAL, added);
 		g_ptr_array_free(added, TRUE);
 	}
 }
 
-static void sailfish_cell_info_dbus_cells_changed_cb
-				(struct sailfish_cell_info *info, void *arg)
+static void cell_info_dbus_cells_changed_cb(struct ofono_cell_info *info,
+	void *data)
 {
 	DBG("");
-	sailfish_cell_info_dbus_update_entries
-		((struct sailfish_cell_info_dbus *)arg, TRUE);
+	cell_info_dbus_update_entries((CellInfoDBus *) data, TRUE);
 }
 
-static DBusMessage *sailfish_cell_info_dbus_error_failed(DBusMessage *msg,
-						const char *explanation)
+static DBusMessage *cell_info_dbus_error_failed(DBusMessage *msg,
+	const char *explanation)
 {
 	return g_dbus_create_error(msg, OFONO_ERROR_INTERFACE ".Failed", "%s",
 								explanation);
 }
 
-static DBusMessage *sailfish_cell_info_dbus_get_cells(DBusConnection *conn,
-						DBusMessage *msg, void *data)
+static DBusMessage *cell_info_dbus_get_cells(DBusConnection *conn,
+	DBusMessage *msg, void *data)
 {
-	struct sailfish_cell_info_dbus *dbus = data;
+	CellInfoDBus *dbus = data;
 	const char *sender = dbus_message_get_sender(msg);
 
 	if (ofono_dbus_clients_add(dbus->clients, sender)) {
@@ -535,11 +539,11 @@ static DBusMessage *sailfish_cell_info_dbus_get_cells(DBusConnection *conn,
 		DBusMessageIter it, a;
 		GSList *l;
 
-		sailfish_cell_info_set_enabled(dbus->info, TRUE);
+		ofono_cell_info_set_enabled(dbus->info, TRUE);
 		dbus_message_iter_init_append(reply, &it);
 		dbus_message_iter_open_container(&it, DBUS_TYPE_ARRAY, "o", &a);
 		for (l = dbus->entries; l; l = l->next) {
-			const struct sailfish_cell_entry *entry = l->data;
+			const CellEntry *entry = l->data;
 
 			dbus_message_iter_append_basic(&a,
 					DBUS_TYPE_OBJECT_PATH, &entry->path);
@@ -547,13 +551,13 @@ static DBusMessage *sailfish_cell_info_dbus_get_cells(DBusConnection *conn,
 		dbus_message_iter_close_container(&it, &a);
 		return reply;
 	}
-	return sailfish_cell_info_dbus_error_failed(msg, "Operation failed");
+	return cell_info_dbus_error_failed(msg, "Operation failed");
 }
 
-static DBusMessage *sailfish_cell_info_dbus_unsubscribe(DBusConnection *conn,
-						DBusMessage *msg, void *data)
+static DBusMessage *cell_info_dbus_unsubscribe(DBusConnection *conn,
+	DBusMessage *msg, void *data)
 {
-	struct sailfish_cell_info_dbus *dbus = data;
+	CellInfoDBus *dbus = data;
 	const char *sender = dbus_message_get_sender(msg);
 
 	DBG("%s", sender);
@@ -563,25 +567,25 @@ static DBusMessage *sailfish_cell_info_dbus_unsubscribe(DBusConnection *conn,
 			CELL_INFO_DBUS_UNSUBSCRIBED_SIGNAL);
 
 		if (!ofono_dbus_clients_count(dbus->clients)) {
-			sailfish_cell_info_set_enabled(dbus->info, FALSE);
+			ofono_cell_info_set_enabled(dbus->info, FALSE);
 		}
 		dbus_message_set_destination(signal, sender);
 		g_dbus_send_message(dbus->conn, signal);
 		return dbus_message_new_method_return(msg);
 	}
-	return sailfish_cell_info_dbus_error_failed(msg, "Not subscribed");
+	return cell_info_dbus_error_failed(msg, "Not subscribed");
 }
 
-static const GDBusMethodTable sailfish_cell_info_dbus_methods[] = {
+static const GDBusMethodTable cell_info_dbus_methods[] = {
 	{ GDBUS_METHOD("GetCells", NULL,
 			GDBUS_ARGS({ "paths", "ao" }),
-			sailfish_cell_info_dbus_get_cells) },
+			cell_info_dbus_get_cells) },
 	{ GDBUS_METHOD("Unsubscribe", NULL, NULL,
-			sailfish_cell_info_dbus_unsubscribe) },
+			cell_info_dbus_unsubscribe) },
 	{ }
 };
 
-static const GDBusSignalTable sailfish_cell_info_dbus_signals[] = {
+static const GDBusSignalTable cell_info_dbus_signals[] = {
 	{ GDBUS_SIGNAL(CELL_INFO_DBUS_CELLS_ADDED_SIGNAL,
 			GDBUS_ARGS({ "paths", "ao" })) },
 	{ GDBUS_SIGNAL(CELL_INFO_DBUS_CELLS_REMOVED_SIGNAL,
@@ -591,51 +595,49 @@ static const GDBusSignalTable sailfish_cell_info_dbus_signals[] = {
 	{ }
 };
 
-static void sailfish_cell_info_dbus_disconnect_cb(const char *name, void *data)
+static void cell_info_dbus_disconnect_cb(const char *name, void *data)
 {
-	struct sailfish_cell_info_dbus *dbus = data;
+	CellInfoDBus *dbus = data;
 
 	if (!ofono_dbus_clients_count(dbus->clients)) {
-		sailfish_cell_info_set_enabled(dbus->info, FALSE);
+		ofono_cell_info_set_enabled(dbus->info, FALSE);
 	}
 }
 
-struct sailfish_cell_info_dbus *sailfish_cell_info_dbus_new
-		(struct ofono_modem *modem, struct sailfish_cell_info *info)
+CellInfoDBus *cell_info_dbus_new(struct ofono_modem *modem,
+	struct ofono_cell_info *info)
 {
 	if (modem && info) {
-		struct sailfish_cell_info_dbus *dbus =
-			g_new0(struct sailfish_cell_info_dbus, 1);
+		CellInfoDBus *dbus = g_new0(CellInfoDBus, 1);
 
 		DBG("%s", ofono_modem_get_path(modem));
 		dbus->path = g_strdup(ofono_modem_get_path(modem));
 		dbus->conn = dbus_connection_ref(ofono_dbus_get_connection());
-		dbus->info = sailfish_cell_info_ref(info);
-		dbus->handler_id =
-			sailfish_cell_info_add_cells_changed_handler(info,
-				sailfish_cell_info_dbus_cells_changed_cb, dbus);
+		dbus->info = ofono_cell_info_ref(info);
+		dbus->handler_id = ofono_cell_info_add_change_handler(info,
+			cell_info_dbus_cells_changed_cb, dbus);
 
 		/* Register D-Bus interface */
 		if (g_dbus_register_interface(dbus->conn, dbus->path,
-				CELL_INFO_DBUS_INTERFACE,
-				sailfish_cell_info_dbus_methods,
-				sailfish_cell_info_dbus_signals,
-				NULL, dbus, NULL)) {
+			CELL_INFO_DBUS_INTERFACE,
+			cell_info_dbus_methods,
+			cell_info_dbus_signals,
+			NULL, dbus, NULL)) {
 			ofono_modem_add_interface(modem,
-						CELL_INFO_DBUS_INTERFACE);
-			sailfish_cell_info_dbus_update_entries(dbus, FALSE);
+				CELL_INFO_DBUS_INTERFACE);
+			cell_info_dbus_update_entries(dbus, FALSE);
 			dbus->clients = ofono_dbus_clients_new(dbus->conn,
-				sailfish_cell_info_dbus_disconnect_cb, dbus);
+				cell_info_dbus_disconnect_cb, dbus);
 			return dbus;
 		} else {
 			ofono_error("CellInfo D-Bus register failed");
-			sailfish_cell_info_dbus_free(dbus);
+			cell_info_dbus_free(dbus);
 		}
 	}
 	return NULL;
 }
 
-void sailfish_cell_info_dbus_free(struct sailfish_cell_info_dbus *dbus)
+void cell_info_dbus_free(CellInfoDBus *dbus)
 {
 	if (dbus) {
 		GSList *l;
@@ -643,23 +645,23 @@ void sailfish_cell_info_dbus_free(struct sailfish_cell_info_dbus *dbus)
 		DBG("%s", dbus->path);
 		ofono_dbus_clients_free(dbus->clients);
 		g_dbus_unregister_interface(dbus->conn, dbus->path,
-					CELL_INFO_DBUS_INTERFACE);
+			CELL_INFO_DBUS_INTERFACE);
 
 		/* Unregister cells */
 		l = dbus->entries;
 		while (l) {
-			struct sailfish_cell_entry *entry = l->data;
+			CellEntry *entry = l->data;
 			g_dbus_unregister_interface(dbus->conn, entry->path,
-						CELL_DBUS_INTERFACE);
-			sailfish_cell_info_destroy_entry(entry);
+				CELL_DBUS_INTERFACE);
+			cell_info_destroy_entry(entry);
 			l = l->next;
 		}
 		g_slist_free(dbus->entries);
 
 		dbus_connection_unref(dbus->conn);
 
-		sailfish_cell_info_remove_handler(dbus->info, dbus->handler_id);
-		sailfish_cell_info_unref(dbus->info);
+		ofono_cell_info_remove_handler(dbus->info, dbus->handler_id);
+		ofono_cell_info_unref(dbus->info);
 
 		g_free(dbus->path);
 		g_free(dbus);

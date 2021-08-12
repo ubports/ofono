@@ -4,6 +4,7 @@
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
  *  Copyright (C) 2009-2010  Nokia Corporation and/or its subsidiary(-ies).
+ *  Copyright (C) 2015-2021  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -1506,4 +1507,38 @@ unsigned char *convert_ucs2_to_gsm(const unsigned char *text, long len,
 						terminator,
 						GSM_DIALECT_DEFAULT,
 						GSM_DIALECT_DEFAULT);
+}
+
+/* Public API exposed to external plugins */
+
+#include <ofono/misc.h>
+
+char *ofono_sim_string_to_utf8(const unsigned char *buffer, int length)
+{
+	return sim_string_to_utf8(buffer, length);
+}
+
+void ofono_sim_string_free(char *str)
+{
+	g_free(str);
+}
+
+void ofono_encode_hex(const void *in, unsigned int size, char out[])
+{
+	encode_hex_own_buf(in, size, 0, out);
+}
+
+unsigned int ofono_unpack_7bit(const void *in, unsigned int len,
+		unsigned int flags, void *out_buf, unsigned int out_buf_size)
+{
+	if (len) {
+		long written = 0;
+
+		unpack_7bit_own_buf(in, len, 0,
+			(flags & OFONO_UNPACK_7BIT_USSD) != 0,
+			out_buf_size, &written, 0, out_buf);
+		return (unsigned int) written;
+	} else {
+		return 0;
+	}
 }

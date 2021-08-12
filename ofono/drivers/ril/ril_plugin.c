@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2020 Jolla Ltd.
+ *  Copyright (C) 2015-2021 Jolla Ltd.
  *  Copyright (C) 2019-2020 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -28,9 +28,7 @@
 #include "ril_devmon.h"
 #include "ril_log.h"
 
-#include "ofono.h"
-#include "sailfish_manager.h"
-
+#include <ofono/slot.h>
 #include <ofono/storage.h>
 #include <ofono/watch.h>
 
@@ -99,7 +97,7 @@
 #define RILMODEM_DEFAULT_FORCE_GSM_WHEN_RADIO_OFF TRUE
 #define RILMODEM_DEFAULT_USE_DATA_PROFILES FALSE
 #define RILMODEM_DEFAULT_MMS_DATA_PROFILE_ID RIL_DATA_PROFILE_IMS
-#define RILMODEM_DEFAULT_SLOT_FLAGS SAILFISH_SLOT_NO_FLAGS
+#define RILMODEM_DEFAULT_SLOT_FLAGS OFONO_SLOT_NO_FLAGS
 #define RILMODEM_DEFAULT_CELL_INFO_INTERVAL_SHORT_MS (2000) /* 2 sec */
 #define RILMODEM_DEFAULT_CELL_INFO_INTERVAL_LONG_MS  (30000) /* 30 sec */
 
@@ -180,6 +178,12 @@ enum ril_plugin_watch_events {
 	WATCH_EVENT_COUNT
 };
 
+enum ril_slot_events {
+	SLOT_EVENT_ENABLED,
+	SLOT_EVENT_DATA_ROLE,
+	SLOT_EVENT_COUNT
+};
+
 enum ril_set_radio_cap_opt {
 	RIL_SET_RADIO_CAP_AUTO,
 	RIL_SET_RADIO_CAP_ENABLED,
@@ -192,33 +196,34 @@ enum ril_devmon_opt {
 	RIL_DEVMON_UR = 0x04
 };
 
-struct ril_plugin_identity {
+typedef struct ril_plugin_identity {
 	uid_t uid;
 	gid_t gid;
-};
+} RilPluginIdentity;
 
-struct ril_plugin_settings {
+typedef struct ril_plugin_settings {
 	int dm_flags;
 	enum ril_set_radio_cap_opt set_radio_cap;
-	struct ril_plugin_identity identity;
-};
+	RilPluginIdentity identity;
+} RilPluginSettings;
 
-typedef struct sailfish_slot_manager_impl {
-	struct sailfish_slot_manager *handle;
+typedef struct ofono_slot_driver_data {
+	struct ofono_slot_manager *slot_manager;
 	struct ril_data_manager *data_manager;
 	struct ril_radio_caps_manager *caps_manager;
-	struct ril_plugin_settings settings;
+	RilPluginSettings settings;
 	gulong caps_manager_event_id;
 	guint start_timeout_id;
 	GSList *slots;
-} ril_plugin;
+} RilPlugin;
 
-typedef struct sailfish_slot_impl {
-	ril_plugin* plugin;
-	struct sailfish_slot *handle;
-	struct sailfish_cell_info *cell_info;
+typedef struct ril_slot_data {
+	RilPlugin *plugin;
+	struct ofono_slot *handle;
+	struct ofono_cell_info *cell_info;
 	struct ofono_watch *watch;
 	gulong watch_event_id[WATCH_EVENT_COUNT];
+	gulong slot_event_id[SLOT_EVENT_COUNT];
 	char *path;
 	char *imei;
 	char *imeisv;
@@ -243,7 +248,7 @@ typedef struct sailfish_slot_impl {
 	struct ril_vendor *vendor;
 	struct ril_data *data;
 	gboolean legacy_imei_query;
-	enum sailfish_slot_flags slot_flags;
+	enum ofono_slot_flags slot_flags;
 	guint start_timeout;
 	guint start_timeout_id;
 	struct ril_devmon *devmon;
@@ -258,19 +263,23 @@ typedef struct sailfish_slot_impl {
 	guint trace_id;
 	guint dump_id;
 	guint retry_id;
-} ril_slot;
+} RilSlot;
 
-typedef void (*ril_plugin_slot_cb_t)(ril_slot *slot);
-typedef void (*ril_plugin_slot_param_cb_t)(ril_slot *slot, void *param);
+typedef void (*ril_plugin_slot_cb_t)(RilSlot *slot);
+typedef void (*ril_plugin_slot_param_cb_t)(RilSlot *slot, void *param);
 
 static void ril_debug_trace_notify(struct ofono_debug_desc *desc);
 static void ril_debug_dump_notify(struct ofono_debug_desc *desc);
 static void ril_debug_grilio_notify(struct ofono_debug_desc *desc);
 static void ril_debug_mce_notify(struct ofono_debug_desc *desc);
 static void ril_plugin_debug_notify(struct ofono_debug_desc *desc);
-static void ril_plugin_drop_orphan_slots(ril_plugin *plugin);
-static void ril_plugin_retry_init_io(ril_slot *slot);
-static void ril_plugin_check_modem(ril_slot *slot);
+static void ril_plugin_manager_started(RilPlugin *plugin);
+static void ril_plugin_check_if_started(RilPlugin *plugin);
+static void ril_plugin_retry_init_io(RilSlot *slot);
+static void ril_plugin_startup_check(RilSlot *slot);
+
+#define ofono_slot_remove_all_handlers(s, ids) \
+	ofono_slot_remove_handlers(s, ids, G_N_ELEMENTS(ids))
 
 GLOG_MODULE_DEFINE("rilmodem");
 
@@ -313,18 +322,18 @@ static struct ofono_debug_desc ril_plugin_debug OFONO_DEBUG_ATTR = {
 	.notify = ril_plugin_debug_notify
 };
 
-static inline const char *ril_slot_debug_prefix(const ril_slot *slot)
+static inline const char *ril_slot_debug_prefix(const RilSlot *slot)
 {
 	/* slot->path always starts with a slash, skip it */
 	return slot->path + 1;
 }
 
-static gboolean ril_plugin_multisim(ril_plugin *plugin)
+static gboolean ril_plugin_multisim(RilPlugin *plugin)
 {
 	return plugin->slots && plugin->slots->next;
 }
 
-static void ril_plugin_foreach_slot_param(ril_plugin *plugin,
+static void ril_plugin_foreach_slot_param(RilPlugin *plugin,
 				ril_plugin_slot_param_cb_t fn, void *param)
 {
 	GSList *l = plugin->slots;
@@ -332,7 +341,7 @@ static void ril_plugin_foreach_slot_param(ril_plugin *plugin,
 	while (l) {
 		GSList *next = l->next;
 
-		fn((ril_slot *)l->data, param);
+		fn((RilSlot *)l->data, param);
 		l = next;
 	}
 }
@@ -342,24 +351,12 @@ static void ril_plugin_foreach_slot_proc(gpointer data, gpointer user_data)
 	((ril_plugin_slot_cb_t)user_data)(data);
 }
 
-static void ril_plugin_foreach_slot(ril_plugin *plugin, ril_plugin_slot_cb_t fn)
+static void ril_plugin_foreach_slot(RilPlugin *plugin, ril_plugin_slot_cb_t fn)
 {
 	g_slist_foreach(plugin->slots, ril_plugin_foreach_slot_proc, fn);
 }
 
-static void ril_plugin_foreach_slot_manager_proc(ril_plugin *plugin, void *data)
-{
-	ril_plugin_foreach_slot(plugin, (ril_plugin_slot_cb_t)data);
-}
-
-static void ril_plugin_foreach_slot_manager(struct sailfish_slot_driver_reg *r,
-						ril_plugin_slot_cb_t fn)
-{
-	sailfish_manager_foreach_slot_manager(r,
-				ril_plugin_foreach_slot_manager_proc, fn);
-}
-
-static void ril_plugin_remove_slot_handler(ril_slot *slot, int id)
+static void ril_plugin_remove_slot_handler(RilSlot *slot, int id)
 {
 	GASSERT(id >= 0 && id<IO_EVENT_COUNT);
 	if (slot->io_event_id[id]) {
@@ -368,7 +365,7 @@ static void ril_plugin_remove_slot_handler(ril_slot *slot, int id)
 	}
 }
 
-static void ril_plugin_shutdown_slot(ril_slot *slot, gboolean kill_io)
+static void ril_plugin_shutdown_slot(RilSlot *slot, gboolean kill_io)
 {
 	if (slot->modem) {
 		ril_data_allow(slot->data, RIL_DATA_ROLE_NONE);
@@ -391,8 +388,8 @@ static void ril_plugin_shutdown_slot(ril_slot *slot, gboolean kill_io)
 		}
 
 		if (slot->cell_info) {
-			sailfish_manager_set_cell_info(slot->handle, NULL);
-			sailfish_cell_info_unref(slot->cell_info);
+			ofono_slot_set_cell_info(slot->handle, NULL);
+			ofono_cell_info_unref(slot->cell_info);
 			slot->cell_info = NULL;
 		}
 
@@ -471,7 +468,7 @@ static void ril_plugin_shutdown_slot(ril_slot *slot, gboolean kill_io)
 	}
 }
 
-static void ril_plugin_check_ready(ril_slot *slot)
+static void ril_plugin_check_ready(RilSlot *slot)
 {
 	if (slot->serialize_id && slot->imei && slot->sim_card &&
 						slot->sim_card->status) {
@@ -483,7 +480,7 @@ static void ril_plugin_check_ready(ril_slot *slot)
 static void ril_plugin_get_imeisv_cb(GRilIoChannel *io, int status,
 			const void *data, guint len, void *user_data)
 {
-	ril_slot *slot = user_data;
+	RilSlot *slot = user_data;
 	char *imeisv = NULL;
 
 	GASSERT(slot->imei_req_id);
@@ -515,16 +512,15 @@ static void ril_plugin_get_imeisv_cb(GRilIoChannel *io, int status,
 		g_free(imeisv);
 	} else {
 		slot->imeisv = (imeisv ? imeisv : g_strdup(""));
-		sailfish_manager_imeisv_obtained(slot->handle, slot->imeisv);
 	}
 
-	ril_plugin_check_modem(slot);
+	ril_plugin_startup_check(slot);
 }
 
 static void ril_plugin_get_imei_cb(GRilIoChannel *io, int status,
 			const void *data, guint len, void *user_data)
 {
-	ril_slot *slot = user_data;
+	RilSlot *slot = user_data;
 	char *imei = NULL;
 
 	GASSERT(slot->imei_req_id);
@@ -566,17 +562,15 @@ static void ril_plugin_get_imei_cb(GRilIoChannel *io, int status,
 		g_free(imei);
 	} else {
 		slot->imei = imei ? imei : g_strdup_printf("%d", slot->index);
-		sailfish_manager_imei_obtained(slot->handle, slot->imei);
 	}
 
-	ril_plugin_check_modem(slot);
-	ril_plugin_check_ready(slot);
+	ril_plugin_startup_check(slot);
 }
 
 static void ril_plugin_device_identity_cb(GRilIoChannel *io, int status,
 			const void *data, guint len, void *user_data)
 {
-	ril_slot *slot = user_data;
+	RilSlot *slot = user_data;
 	char *imei = NULL;
 	char *imeisv = NULL;
 
@@ -624,21 +618,18 @@ static void ril_plugin_device_identity_cb(GRilIoChannel *io, int status,
 		g_free(imei);
 	} else {
 		slot->imei = imei ? imei : g_strdup_printf("%d", slot->index);
-		sailfish_manager_imei_obtained(slot->handle, slot->imei);
 	}
 
 	if (slot->imeisv) {
 		g_free(imeisv);
 	} else {
 		slot->imeisv = (imeisv ? imeisv : g_strdup(""));
-		sailfish_manager_imeisv_obtained(slot->handle, slot->imeisv);
 	}
 
-	ril_plugin_check_modem(slot);
-	ril_plugin_check_ready(slot);
+	ril_plugin_startup_check(slot);
 }
 
-static void ril_plugin_start_imei_query(ril_slot *slot, gboolean blocking,
+static void ril_plugin_start_imei_query(RilSlot *slot, gboolean blocking,
 								int retries)
 {
 	GRilIoRequest *req = grilio_request_new();
@@ -660,37 +651,37 @@ static void ril_plugin_start_imei_query(ril_slot *slot, gboolean blocking,
 	grilio_request_unref(req);
 }
 
-static enum sailfish_sim_state ril_plugin_sim_state(ril_slot *slot)
+static enum ofono_slot_sim_presence ril_plugin_sim_presence(RilSlot *slot)
 {
 	const struct ril_sim_card_status *status = slot->sim_card->status;
 
 	if (status) {
 		switch (status->card_state) {
 		case RIL_CARDSTATE_PRESENT:
-			return SAILFISH_SIM_STATE_PRESENT;
+			return OFONO_SLOT_SIM_PRESENT;
 		case RIL_CARDSTATE_ABSENT:
-			return SAILFISH_SIM_STATE_ABSENT;
+			return OFONO_SLOT_SIM_ABSENT;
 		case RIL_CARDSTATE_ERROR:
-			return SAILFISH_SIM_STATE_ERROR;
-		default:
+		case RIL_CARDSTATE_UNKNOWN:
 			break;
 		}
 	}
 
-	return SAILFISH_SIM_STATE_UNKNOWN;
+	return OFONO_SLOT_SIM_UNKNOWN;
 }
 
 static void ril_plugin_sim_state_changed(struct ril_sim_card *card, void *data)
 {
-	ril_slot *slot = data;
-	const enum sailfish_sim_state sim_state = ril_plugin_sim_state(slot);
+	RilSlot *slot = data;
+	const enum ofono_slot_sim_presence sim_presence =
+		ril_plugin_sim_presence(slot);
 
 	if (card->status) {
-		switch (sim_state) {
-		case SAILFISH_SIM_STATE_PRESENT:
+		switch (sim_presence) {
+		case OFONO_SLOT_SIM_PRESENT:
 			DBG("SIM found in slot %u", slot->config.slot);
 			break;
-		case SAILFISH_SIM_STATE_ABSENT:
+		case OFONO_SLOT_SIM_ABSENT:
 			DBG("No SIM in slot %u", slot->config.slot);
 			break;
 		default:
@@ -715,15 +706,14 @@ static void ril_plugin_sim_state_changed(struct ril_sim_card *card, void *data)
 		slot->received_sim_status = TRUE;
 	}
 
-	sailfish_manager_set_sim_state(slot->handle, sim_state);
+	ofono_slot_set_sim_presence(slot->handle, sim_presence);
 	ril_plugin_check_ready(slot);
 }
 
-static void ril_plugin_handle_error(ril_slot *slot, const char *message)
+static void ril_plugin_handle_error(RilSlot *slot, const char *message)
 {
 	ofono_error("%s %s", ril_slot_debug_prefix(slot), message);
-	sailfish_manager_slot_error(slot->handle, RIL_ERROR_ID_RILD_RESTART,
-								message);
+	ofono_slot_error(slot->handle, RIL_ERROR_ID_RILD_RESTART, message);
 	ril_plugin_shutdown_slot(slot, TRUE);
 	ril_plugin_retry_init_io(slot);
 }
@@ -731,28 +721,29 @@ static void ril_plugin_handle_error(ril_slot *slot, const char *message)
 static void ril_plugin_slot_error(GRilIoChannel *io, const GError *error,
 								void *data)
 {
-	ril_plugin_handle_error((ril_slot *)data, GERRMSG(error));
+	ril_plugin_handle_error((RilSlot *)data, GERRMSG(error));
 }
 
 static void ril_plugin_slot_disconnected(GRilIoChannel *io, void *data)
 {
-	ril_plugin_handle_error((ril_slot *)data, "disconnected");
+	ril_plugin_handle_error((RilSlot *)data, "disconnected");
 }
 
 static void ril_plugin_caps_switch_aborted(struct ril_radio_caps_manager *mgr,
 								void *data)
 {
-	ril_plugin *plugin = data;
+	RilPlugin *plugin = data;
+
 	DBG("radio caps switch aborted");
-	sailfish_manager_error(plugin->handle,
-				RIL_ERROR_ID_CAPS_SWITCH_ABORTED,
-				"Capability switch transaction aborted");
+	ofono_slot_manager_error(plugin->slot_manager,
+		RIL_ERROR_ID_CAPS_SWITCH_ABORTED,
+		"Capability switch transaction aborted");
 }
 
 static void ril_plugin_trace(GRilIoChannel *io, GRILIO_PACKET_TYPE type,
 	guint id, guint code, const void *data, guint data_len, void *user_data)
 {
-	ril_slot *slot = user_data;
+	RilSlot *slot = user_data;
 	struct ril_vendor *vendor = slot->vendor;
 	static const GLogModule* log_module = &ril_debug_trace_module;
 	const char *prefix = io->name ? io->name : "";
@@ -796,7 +787,7 @@ static void ril_plugin_trace(GRilIoChannel *io, GRILIO_PACKET_TYPE type,
 	}
 }
 
-static void ril_debug_dump_update(ril_slot *slot)
+static void ril_debug_dump_update(RilSlot *slot)
 {
 	if (slot->io) {
 		if (ril_debug_dump.flags & OFONO_DEBUG_FLAG_PRINT) {
@@ -812,7 +803,7 @@ static void ril_debug_dump_update(ril_slot *slot)
 	}
 }
 
-static void ril_debug_trace_update(ril_slot *slot)
+static void ril_debug_trace_update(RilSlot *slot)
 {
 	if (slot->io) {
 		if (ril_debug_trace.flags & OFONO_DEBUG_FLAG_PRINT) {
@@ -839,13 +830,13 @@ static void ril_debug_trace_update(ril_slot *slot)
 	}
 }
 
-static const char *ril_plugin_log_prefix(ril_slot *slot)
+static const char *ril_plugin_log_prefix(RilSlot *slot)
 {
 	return ril_plugin_multisim(slot->plugin) ?
 					ril_slot_debug_prefix(slot) : "";
 }
 
-static void ril_plugin_create_modem(ril_slot *slot)
+static void ril_plugin_create_modem(RilSlot *slot)
 {
 	struct ril_modem *modem;
 	const char *log_prefix = ril_plugin_log_prefix(slot);
@@ -867,13 +858,88 @@ static void ril_plugin_create_modem(ril_slot *slot)
 	}
 }
 
-static void ril_plugin_check_modem(ril_slot *slot)
+static void ril_plugin_check_modem(RilSlot *slot)
 {
-	if (!slot->modem && slot->handle->enabled &&
-			slot->io && slot->io->connected &&
-			!slot->imei_req_id && slot->imei) {
+	if (!slot->modem && slot->handle && slot->handle->enabled) {
 		ril_plugin_create_modem(slot);
 	}
+}
+
+static void ril_slot_data_role_changed(struct ofono_slot *s,
+	enum ofono_slot_property property, void* user_data)
+{
+	RilSlot *slot = user_data;
+	const enum ofono_slot_data_role r = s->data_role;
+	enum ril_data_role role =
+		(r & OFONO_SLOT_DATA_INTERNET) ? RIL_DATA_ROLE_INTERNET :
+		(r & OFONO_SLOT_DATA_MMS) ? RIL_DATA_ROLE_MMS :
+		RIL_DATA_ROLE_NONE;
+
+	ril_data_allow(slot->data, role);
+	ril_radio_caps_request_free(slot->caps_req);
+	if (role == RIL_DATA_ROLE_NONE) {
+		slot->caps_req = NULL;
+	} else {
+		const enum ofono_radio_access_mode mode =
+			(r == OFONO_SLOT_DATA_MMS) ?
+				OFONO_RADIO_ACCESS_MODE_GSM :
+				ofono_radio_access_max_mode
+						(slot->sim_settings->techs);
+
+		slot->caps_req = ril_radio_caps_request_new
+			(slot->caps, mode, role);
+	}
+}
+
+static void ril_slot_enabled_changed(struct ofono_slot *s,
+	enum ofono_slot_property property, void* user_data)
+{
+	RilSlot *slot = user_data;
+
+	if (s->enabled) {
+		ril_plugin_check_modem(slot);
+		grilio_channel_set_enabled(slot->io, TRUE);
+	} else {
+		grilio_channel_set_enabled(slot->io, FALSE);
+		ril_plugin_shutdown_slot(slot, FALSE);
+	}
+}
+
+static void ril_plugin_startup_check(RilSlot *slot)
+{
+	RilPlugin *plugin = slot->plugin;
+
+	if (!slot->handle && slot->io && slot->io->connected &&
+		!slot->imei_req_id && slot->imei && slot->start_timeout_id) {
+		struct ofono_slot *s;
+
+		/* We have made it before the timeout expired */
+		g_source_remove(slot->start_timeout_id);
+		slot->start_timeout_id = 0;
+
+		/* Register this slot with the sailfish manager plugin */
+		DBG("Registering slot %s", slot->path);
+		s = slot->handle = ofono_slot_add(plugin->slot_manager,
+			slot->path, slot->config.techs, slot->imei,
+			slot->imeisv, ril_plugin_sim_presence(slot),
+			slot->slot_flags);
+		grilio_channel_set_enabled(slot->io, s->enabled);
+		if (slot->handle) {
+			ofono_slot_set_cell_info(s, slot->cell_info);
+			slot->slot_event_id[SLOT_EVENT_DATA_ROLE] =
+				ofono_slot_add_property_handler(s,
+					OFONO_SLOT_PROPERTY_DATA_ROLE,
+			 		ril_slot_data_role_changed, slot);
+			slot->slot_event_id[SLOT_EVENT_ENABLED] =
+				ofono_slot_add_property_handler(s,
+					OFONO_SLOT_PROPERTY_ENABLED,
+			 		ril_slot_enabled_changed, slot);
+		}
+	}
+
+	ril_plugin_check_modem(slot);
+	ril_plugin_check_ready(slot);
+	ril_plugin_check_if_started(plugin);
 }
 
 /*
@@ -882,7 +948,7 @@ static void ril_plugin_check_modem(ril_slot *slot)
  * Otherwise bad things may happen (like the modem never registering
  * on the network).
  */
-static void ril_plugin_power_check(ril_slot *slot)
+static void ril_plugin_power_check(RilSlot *slot)
 {
 	ril_radio_confirm_power_on(slot->radio);
 }
@@ -891,7 +957,7 @@ static void ril_plugin_radio_state_changed(GRilIoChannel *io, guint code,
 				const void *data, guint len, void *user_data)
 {
 	if (ril_radio_state_parse(data, len) == RADIO_STATE_OFF) {
-		ril_slot *slot = user_data;
+		RilSlot *slot = user_data;
 
 		DBG("power off for slot %u", slot->config.slot);
 		ril_plugin_foreach_slot(slot->plugin, ril_plugin_power_check);
@@ -901,14 +967,14 @@ static void ril_plugin_radio_state_changed(GRilIoChannel *io, guint code,
 static void ril_plugin_radio_caps_cb(const struct ril_radio_capability *cap,
 							void *user_data)
 {
-	ril_slot *slot = user_data;
+	RilSlot *slot = user_data;
 
 	DBG("radio caps %s", cap ? "ok" : "NOT supported");
 	GASSERT(slot->caps_check_id);
 	slot->caps_check_id = 0;
 
 	if (cap) {
-		ril_plugin *plugin = slot->plugin;
+		RilPlugin *plugin = slot->plugin;
 
 		if (!plugin->caps_manager) {
 			plugin->caps_manager = ril_radio_caps_manager_new
@@ -929,21 +995,14 @@ static void ril_plugin_radio_caps_cb(const struct ril_radio_capability *cap,
 	}
 }
 
-static void ril_plugin_manager_started(ril_plugin *plugin)
-{
-	ril_plugin_drop_orphan_slots(plugin);
-	ril_data_manager_check_data(plugin->data_manager);
-	sailfish_slot_manager_started(plugin->handle);
-}
-
-static void ril_plugin_all_slots_started_cb(ril_slot *slot, void *param)
+static void ril_plugin_all_slots_started_cb(RilSlot *slot, void *param)
 {
 	if (!slot->handle) {
 		(*((gboolean*)param)) = FALSE; /* Not all */
 	}
 }
 
-static void ril_plugin_check_if_started(ril_plugin* plugin)
+static void ril_plugin_check_if_started(RilPlugin *plugin)
 {
 	if (plugin->start_timeout_id) {
 		gboolean all = TRUE;
@@ -960,10 +1019,10 @@ static void ril_plugin_check_if_started(ril_plugin* plugin)
 	}
 }
 
-static void ril_plugin_slot_connected(ril_slot *slot)
+static void ril_plugin_slot_connected(RilSlot *slot)
 {
-	ril_plugin *plugin = slot->plugin;
-	const struct ril_plugin_settings *ps = &plugin->settings;
+	RilPlugin *plugin = slot->plugin;
+	const RilPluginSettings *ps = &plugin->settings;
 	const char *log_prefix = ril_plugin_log_prefix(slot);
 
 	ofono_debug("%s version %u", (slot->name && slot->name[0]) ?
@@ -1040,39 +1099,18 @@ static void ril_plugin_slot_connected(ril_slot *slot)
 						slot->io, slot->cell_info);
 	}
 
-	if (!slot->handle) {
-		GASSERT(plugin->start_timeout_id);
-		GASSERT(slot->start_timeout_id);
-
-		/* We have made it before the timeout expired */
-		g_source_remove(slot->start_timeout_id);
-		slot->start_timeout_id = 0;
-
-		/* Register this slot with the sailfish manager plugin */
-		slot->handle = sailfish_manager_slot_add2(plugin->handle, slot,
-				slot->path, slot->config.techs, slot->imei,
-				slot->imeisv, ril_plugin_sim_state(slot),
-				slot->slot_flags);
-		grilio_channel_set_enabled(slot->io, slot->handle->enabled);
-
-		/* Check if this was the last slot we were waiting for */
-		ril_plugin_check_if_started(plugin);
-	}
-
-	sailfish_manager_set_cell_info(slot->handle, slot->cell_info);
-	ril_plugin_check_modem(slot);
-	ril_plugin_check_ready(slot);
+	ril_plugin_startup_check(slot);
 }
 
 static void ril_plugin_slot_connected_cb(GRilIoChannel *io, void *user_data)
 {
-	ril_slot *slot = user_data;
+	RilSlot *slot = user_data;
 
 	ril_plugin_remove_slot_handler(slot, IO_EVENT_CONNECTED);
 	ril_plugin_slot_connected(slot);
 }
 
-static void ril_plugin_init_io(ril_slot *slot)
+static void ril_plugin_init_io(RilSlot *slot)
 {
 	if (!slot->io) {
 		struct grilio_transport *transport =
@@ -1121,7 +1159,7 @@ static void ril_plugin_init_io(ril_slot *slot)
 
 static gboolean ril_plugin_retry_init_io_cb(gpointer data)
 {
-	ril_slot *slot = data;
+	RilSlot *slot = data;
 
 	GASSERT(slot->retry_id);
 	slot->retry_id = 0;
@@ -1130,7 +1168,7 @@ static gboolean ril_plugin_retry_init_io_cb(gpointer data)
 	return G_SOURCE_REMOVE;
 }
 
-static void ril_plugin_retry_init_io(ril_slot *slot)
+static void ril_plugin_retry_init_io(RilSlot *slot)
 {
 	if (slot->retry_id) {
 		g_source_remove(slot->retry_id);
@@ -1144,7 +1182,7 @@ static void ril_plugin_retry_init_io(ril_slot *slot)
 static void ril_plugin_slot_modem_changed(struct ofono_watch *w,
 							void *user_data)
 {
-	ril_slot *slot = user_data;
+	RilSlot *slot = user_data;
 
 	DBG("%s", slot->path);
 	if (!w->modem) {
@@ -1162,15 +1200,17 @@ static void ril_plugin_slot_modem_changed(struct ofono_watch *w,
 	}
 }
 
-static void ril_slot_free(ril_slot *slot)
+static void ril_slot_free(RilSlot *slot)
 {
-	ril_plugin* plugin = slot->plugin;
+	RilPlugin *plugin = slot->plugin;
 
 	DBG("%s", slot->path);
 	ril_plugin_shutdown_slot(slot, TRUE);
 	plugin->slots = g_slist_remove(plugin->slots, slot);
 	ofono_watch_remove_all_handlers(slot->watch, slot->watch_event_id);
 	ofono_watch_unref(slot->watch);
+	ofono_slot_remove_all_handlers(slot->handle, slot->slot_event_id);
+	ofono_slot_unref(slot->handle);
 	ril_devmon_free(slot->devmon);
 	ril_sim_settings_unref(slot->sim_settings);
 	gutil_ints_unref(slot->config.local_hangup_reasons);
@@ -1187,8 +1227,8 @@ static void ril_slot_free(ril_slot *slot)
 
 static gboolean ril_plugin_slot_start_timeout(gpointer user_data)
 {
-	ril_slot *slot = user_data;
-	ril_plugin* plugin = slot->plugin;
+	RilSlot *slot = user_data;
+	RilPlugin *plugin = slot->plugin;
 
 	DBG("%s", slot->path);
 	plugin->slots = g_slist_remove(plugin->slots, slot);
@@ -1198,11 +1238,11 @@ static gboolean ril_plugin_slot_start_timeout(gpointer user_data)
 	return G_SOURCE_REMOVE;
 }
 
-static ril_slot *ril_plugin_slot_new_take(char *transport,
+static RilSlot *ril_plugin_slot_new_take(char *transport,
 			GHashTable *transport_params, char *dbus_path,
 			char *name, guint slot_index)
 {
-	ril_slot *slot = g_new0(ril_slot, 1);
+	RilSlot *slot = g_new0(RilSlot, 1);
 	struct ril_slot_config *config = &slot->config;
 
 	slot->transport_name = transport;
@@ -1257,7 +1297,7 @@ static ril_slot *ril_plugin_slot_new_take(char *transport,
 	return slot;
 }
 
-static void ril_plugin_slot_apply_vendor_defaults(ril_slot *slot)
+static void ril_plugin_slot_apply_vendor_defaults(RilSlot *slot)
 {
 	if (slot->vendor_driver) {
 		struct ril_slot_config *config = &slot->config;
@@ -1292,7 +1332,7 @@ static void ril_plugin_slot_apply_vendor_defaults(ril_slot *slot)
 	}
 }
 
-static ril_slot *ril_plugin_slot_new_socket(const char *sockpath,
+static RilSlot *ril_plugin_slot_new_socket(const char *sockpath,
 				const char *sub, const char *dbus_path,
 				const char *name, guint slot_index)
 {
@@ -1386,10 +1426,10 @@ static char *ril_plugin_parse_transport_spec(const char *spec,
 	return NULL;
 }
 
-static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
+static RilSlot *ril_plugin_parse_config_group(GKeyFile *file,
 							const char *group)
 {
-	ril_slot *slot;
+	RilSlot *slot;
 	struct ril_slot_config *config;
 	gboolean bval;
 	int ival;
@@ -1450,19 +1490,19 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 							g_strdup(modem));
 
 	slot = ril_plugin_slot_new_take(transport, transport_params, modem,
-			ril_config_get_string(file, group, RILCONF_NAME),
+			ofono_conf_get_string(file, group, RILCONF_NAME),
 			RILMODEM_DEFAULT_SLOT);
 	config = &slot->config;
 
 	/* slot */
-	if (ril_config_get_integer(file, group, RILCONF_SLOT, &ival) &&
+	if (ofono_conf_get_integer(file, group, RILCONF_SLOT, &ival) &&
 								ival >= 0) {
 		config->slot = ival;
 		DBG("%s: " RILCONF_SLOT " %u", group, config->slot);
 	}
 
 	/* vendorDriver */
-	sval = ril_config_get_string(file, group, RILCONF_VENDOR_DRIVER);
+	sval = ofono_conf_get_string(file, group, RILCONF_VENDOR_DRIVER);
 	if (sval) {
 		slot->vendor_driver = ril_vendor_find_driver(sval);
 		if (slot->vendor_driver) {
@@ -1475,41 +1515,41 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 	}
 
 	/* startTimeout */
-	if (ril_config_get_integer(file, group, RILCONF_START_TIMEOUT,
+	if (ofono_conf_get_integer(file, group, RILCONF_START_TIMEOUT,
 							&ival) && ival >= 0) {
 		DBG("%s: " RILCONF_START_TIMEOUT " %d ms", group, ival);
 		slot->start_timeout = ival;
 	}
 
 	/* timeout */
-	if (ril_config_get_integer(file, group, RILCONF_TIMEOUT,
+	if (ofono_conf_get_integer(file, group, RILCONF_TIMEOUT,
 							&slot->timeout)) {
 		DBG("%s: " RILCONF_TIMEOUT " %d", group, slot->timeout);
 	}
 
 	/* enableVoicecall */
-	if (ril_config_get_boolean(file, group, RILCONF_ENABLE_VOICECALL,
+	if (ofono_conf_get_boolean(file, group, RILCONF_ENABLE_VOICECALL,
 					&config->enable_voicecall)) {
 		DBG("%s: " RILCONF_ENABLE_VOICECALL " %s", group,
 				config->enable_voicecall ? "yes" : "no");
 	}
 
 	/* enableCellBroadcast */
-	if (ril_config_get_boolean(file, group, RILCONF_ENABLE_CBS,
+	if (ofono_conf_get_boolean(file, group, RILCONF_ENABLE_CBS,
 					&config->enable_cbs)) {
 		DBG("%s: " RILCONF_ENABLE_CBS " %s", group,
 				config->enable_cbs ? "yes" : "no");
 	}
 
 	/* enableSimTookit */
-	if (ril_config_get_boolean(file, group, RILCONF_ENABLE_STK,
+	if (ofono_conf_get_boolean(file, group, RILCONF_ENABLE_STK,
 					&config->enable_stk)) {
 		DBG("%s: " RILCONF_ENABLE_STK " %s", group,
 				config->enable_stk ? "yes" : "no");
 	}
 
 	/* replaceStrangeOperatorNames */
-	if (ril_config_get_boolean(file, group,
+	if (ofono_conf_get_boolean(file, group,
 					RILCONF_REPLACE_STRANGE_OPER,
 					&config->replace_strange_oper)) {
 		DBG("%s: " RILCONF_REPLACE_STRANGE_OPER " %s", group,
@@ -1517,7 +1557,7 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 	}
 
 	/* networkSelectionManual0 */
-	if (ril_config_get_boolean(file, group,
+	if (ofono_conf_get_boolean(file, group,
 					RILCONF_NETWORK_SELECTION_MANUAL_0,
 					&config->network_selection_manual_0)) {
 		DBG("%s: " RILCONF_NETWORK_SELECTION_MANUAL_0 " %s", group,
@@ -1525,7 +1565,7 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 	}
 
 	/* forceGsmWhenRadioOff */
-	if (ril_config_get_boolean(file, group,
+	if (ofono_conf_get_boolean(file, group,
 					RILCONF_FORCE_GSM_WHEN_RADIO_OFF,
 					&config->force_gsm_when_radio_off)) {
 		DBG("%s: " RILCONF_FORCE_GSM_WHEN_RADIO_OFF " %s", group,
@@ -1533,14 +1573,14 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 	}
 
 	/* useDataProfiles */
-	if (ril_config_get_boolean(file, group, RILCONF_USE_DATA_PROFILES,
+	if (ofono_conf_get_boolean(file, group, RILCONF_USE_DATA_PROFILES,
 					&config->use_data_profiles)) {
 		DBG("%s: " RILCONF_USE_DATA_PROFILES " %s", group,
 			config->use_data_profiles ? "yes" : "no");
 	}
 
 	/* mmsDataProfileId */
-	if (ril_config_get_integer(file, group, RILCONF_MMS_DATA_PROFILE_ID,
+	if (ofono_conf_get_integer(file, group, RILCONF_MMS_DATA_PROFILE_ID,
 							&ival) && ival >= 0) {
 		config->mms_data_profile_id = ival;
 		DBG("%s: " RILCONF_MMS_DATA_PROFILE_ID " %u", group,
@@ -1548,7 +1588,7 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 	}
 
 	/* technologies */
-	strv = ril_config_get_strings(file, group, RILCONF_TECHNOLOGIES, ',');
+	strv = ofono_conf_get_strings(file, group, RILCONF_TECHNOLOGIES, ',');
 	if (strv) {
 		char **p;
 
@@ -1584,26 +1624,26 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 	}
 	
 	/* lteNetworkMode */
-	if (ril_config_get_integer(file, group, RILCONF_LTE_MODE, &ival)) {
+	if (ofono_conf_get_integer(file, group, RILCONF_LTE_MODE, &ival)) {
 		DBG("%s: " RILCONF_LTE_MODE " %d", group, ival);
 		config->lte_network_mode = ival;
 	}
 
 	/* umtsNetworkMode */
-	if (ril_config_get_integer(file, group, RILCONF_UMTS_MODE, &ival)) {
+	if (ofono_conf_get_integer(file, group, RILCONF_UMTS_MODE, &ival)) {
 		DBG("%s: " RILCONF_UMTS_MODE " %d", group, ival);
 		config->umts_network_mode = ival;
 	}
 
 	/* networkModeTimeout */
-	if (ril_config_get_integer(file, group, RILCONF_NETWORK_MODE_TIMEOUT,
+	if (ofono_conf_get_integer(file, group, RILCONF_NETWORK_MODE_TIMEOUT,
 					&config->network_mode_timeout)) {
 		DBG("%s: " RILCONF_NETWORK_MODE_TIMEOUT " %d", group,
 					config->network_mode_timeout);
 	}
 
 	/* networkSelectionTimeout */
-	if (ril_config_get_integer(file, group,
+	if (ofono_conf_get_integer(file, group,
 				RILCONF_NETWORK_SELECTION_TIMEOUT,
 				&config->network_selection_timeout)) {
 		DBG("%s: " RILCONF_NETWORK_SELECTION_TIMEOUT " %d", group,
@@ -1627,7 +1667,7 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 
 	/* enable4G (deprecated but still supported) */
 	ival = config->techs;
-	if (ril_config_get_flag(file, group, RILCONF_4G,
+	if (ofono_conf_get_flag(file, group, RILCONF_4G,
 			OFONO_RADIO_ACCESS_MODE_LTE, &ival)) {
 		config->techs = ival;
 	}
@@ -1635,36 +1675,37 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 	DBG("%s: technologies 0x%02x", group, config->techs);
 
 	/* emptyPinQuery */
-	if (ril_config_get_boolean(file, group, RILCONF_EMPTY_PIN_QUERY,
+	if (ofono_conf_get_boolean(file, group, RILCONF_EMPTY_PIN_QUERY,
 					&config->empty_pin_query)) {
 		DBG("%s: " RILCONF_EMPTY_PIN_QUERY " %s", group,
 				config->empty_pin_query ? "on" : "off");
 	}
 
 	/* radioPowerCycle */
-	if (ril_config_get_boolean(file, group, RILCONF_RADIO_POWER_CYCLE,
+	if (ofono_conf_get_boolean(file, group, RILCONF_RADIO_POWER_CYCLE,
 					&config->radio_power_cycle)) {
 		DBG("%s: " RILCONF_RADIO_POWER_CYCLE " %s", group,
 				config->radio_power_cycle ? "on" : "off");
 	}
 
 	/* confirmRadioPowerOn */
-	if (ril_config_get_boolean(file, group, RILCONF_CONFIRM_RADIO_POWER_ON,
-					&config->confirm_radio_power_on)) {
+	if (ofono_conf_get_boolean(file, group,
+				RILCONF_CONFIRM_RADIO_POWER_ON,
+				&config->confirm_radio_power_on)) {
 		DBG("%s: " RILCONF_CONFIRM_RADIO_POWER_ON " %s", group,
 				config->confirm_radio_power_on ? "on" : "off");
 	}
 
 	/* singleDataContext */
-	if (ril_config_get_boolean(file, group, RILCONF_SINGLE_DATA_CONTEXT,
+	if (ofono_conf_get_boolean(file, group, RILCONF_SINGLE_DATA_CONTEXT,
 							&bval) && bval) {
 		DBG("%s: " RILCONF_SINGLE_DATA_CONTEXT " %s", group,
 							bval ? "on" : "off");
-		slot->slot_flags |= SAILFISH_SLOT_SINGLE_CONTEXT;
+		slot->slot_flags |= OFONO_SLOT_FLAG_SINGLE_CONTEXT;
 	}
 
 	/* uiccWorkaround */
-	if (ril_config_get_flag(file, group, RILCONF_UICC_WORKAROUND,
+	if (ofono_conf_get_flag(file, group, RILCONF_UICC_WORKAROUND,
 			RIL_SIM_CARD_V9_UICC_SUBSCRIPTION_WORKAROUND,
 			&slot->sim_flags)) {
 		DBG("%s: " RILCONF_UICC_WORKAROUND " %s",
@@ -1674,7 +1715,7 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 	}
 
 	/* allowDataReq */
-	if (ril_config_get_enum(file, group, RILCONF_ALLOW_DATA_REQ, &ival,
+	if (ofono_conf_get_enum(file, group, RILCONF_ALLOW_DATA_REQ, &ival,
 				"auto", RIL_ALLOW_DATA_AUTO,
 				"on", RIL_ALLOW_DATA_ENABLED,
 				"off", RIL_ALLOW_DATA_DISABLED, NULL)) {
@@ -1686,7 +1727,7 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 	}
 
 	/* dataCallFormat */
-	if (ril_config_get_enum(file, group, RILCONF_DATA_CALL_FORMAT, &ival,
+	if (ofono_conf_get_enum(file, group, RILCONF_DATA_CALL_FORMAT, &ival,
 				"auto", RIL_DATA_CALL_FORMAT_AUTO,
 				"6", RIL_DATA_CALL_FORMAT_6,
 				"9", RIL_DATA_CALL_FORMAT_9,
@@ -1700,21 +1741,21 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 	}
 
 	/* dataCallRetryLimit */
-	if (ril_config_get_integer(file, group, RILCONF_DATA_CALL_RETRY_LIMIT,
+	if (ofono_conf_get_integer(file, group, RILCONF_DATA_CALL_RETRY_LIMIT,
 						&ival) && ival >= 0) {
 		DBG("%s: " RILCONF_DATA_CALL_RETRY_LIMIT " %d", group, ival);
 		slot->data_opt.data_call_retry_limit = ival;
 	}
 
 	/* dataCallRetryDelay */
-	if (ril_config_get_integer(file, group, RILCONF_DATA_CALL_RETRY_DELAY,
+	if (ofono_conf_get_integer(file, group, RILCONF_DATA_CALL_RETRY_DELAY,
 						&ival) && ival >= 0) {
 		DBG("%s: " RILCONF_DATA_CALL_RETRY_DELAY " %d ms", group, ival);
 		slot->data_opt.data_call_retry_delay_ms = ival;
 	}
 
 	/* ecclistFile */
-	slot->ecclist_file = ril_config_get_string(file, group,
+	slot->ecclist_file = ofono_conf_get_string(file, group,
 						RILCONF_ECCLIST_FILE);
 	if (slot->ecclist_file && slot->ecclist_file[0]) {
 		DBG("%s: " RILCONF_ECCLIST_FILE " %s", group,
@@ -1743,14 +1784,14 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 	}
 
 	/* legacyImeiQuery */
-	if (ril_config_get_boolean(file, group, RILCONF_LEGACY_IMEI_QUERY,
+	if (ofono_conf_get_boolean(file, group, RILCONF_LEGACY_IMEI_QUERY,
 					&slot->legacy_imei_query)) {
 		DBG("%s: " RILCONF_LEGACY_IMEI_QUERY " %s", group,
 				slot->legacy_imei_query ? "on" : "off");
 	}
 
 	/* cellInfoIntervalShortMs */
-	if (ril_config_get_integer(file, group,
+	if (ofono_conf_get_integer(file, group,
 				RILCONF_CELL_INFO_INTERVAL_SHORT_MS,
 				&config->cell_info_interval_short_ms)) {
 		DBG("%s: " RILCONF_CELL_INFO_INTERVAL_SHORT_MS " %d", group,
@@ -1758,7 +1799,7 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 	}
 
 	/* cellInfoIntervalLongMs */
-	if (ril_config_get_integer(file, group,
+	if (ofono_conf_get_integer(file, group,
 				RILCONF_CELL_INFO_INTERVAL_LONG_MS,
 				&config->cell_info_interval_long_ms)) {
 		DBG("%s: " RILCONF_CELL_INFO_INTERVAL_LONG_MS " %d",
@@ -1770,7 +1811,7 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 	slot->devmon = NULL;
 
 	/* deviceStateTracking */
-	if (ril_config_get_mask(file, group, RILCONF_DEVMON, &ival,
+	if (ofono_conf_get_mask(file, group, RILCONF_DEVMON, &ival,
 				"ds", RIL_DEVMON_DS,
 				"ss", RIL_DEVMON_SS,
 				"ur", RIL_DEVMON_UR, NULL) && ival) {
@@ -1790,7 +1831,7 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 		slot->devmon = ril_devmon_combine(devmon, n);
 	} else {
 		/* Try special values */
-		sval = ril_config_get_string(file, group, RILCONF_DEVMON);
+		sval = ofono_conf_get_string(file, group, RILCONF_DEVMON);
 		if (sval) {
 			if (!g_ascii_strcasecmp(sval, "none")) {
 				DBG("%s: " RILCONF_DEVMON " %s", group, sval);
@@ -1808,14 +1849,14 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 	return slot;
 }
 
-static GSList *ril_plugin_add_slot(GSList *slots, ril_slot *new_slot)
+static GSList *ril_plugin_add_slot(GSList *slots, RilSlot *new_slot)
 {
 	GSList *link = slots;
 
 	/* Slot numbers and paths must be unique */
 	while (link) {
 		GSList *next = link->next;
-		ril_slot *slot = link->data;
+		RilSlot *slot = link->data;
 		gboolean delete_this_slot = FALSE;
 
 		if (!strcmp(slot->path, new_slot->path)) {
@@ -1838,10 +1879,10 @@ static GSList *ril_plugin_add_slot(GSList *slots, ril_slot *new_slot)
 	return g_slist_append(slots, new_slot);
 }
 
-static ril_slot *ril_plugin_find_slot_number(GSList *slots, guint number)
+static RilSlot *ril_plugin_find_slot_number(GSList *slots, guint number)
 {
 	while (slots) {
-		ril_slot *slot = slots->data;
+		RilSlot *slot = slots->data;
 
 		if (slot->config.slot == number) {
 			return slot;
@@ -1859,8 +1900,7 @@ static guint ril_plugin_find_unused_slot(GSList *slots)
 	return number;
 }
 
-static void ril_plugin_parse_identity(struct ril_plugin_identity *identity,
-							const char *value)
+static void ril_plugin_parse_identity(RilPluginIdentity *id, const char *value)
 {
 	char *sep = strchr(value, ':');
 	const char *user = value;
@@ -1898,14 +1938,14 @@ static void ril_plugin_parse_identity(struct ril_plugin_identity *identity,
 
 	if (pw) {
 		DBG("User %s -> %d", user, pw->pw_uid);
-		identity->uid = pw->pw_uid;
+		id->uid = pw->pw_uid;
 	} else {
 		ofono_warn("Invalid user '%s'", user);
 	}
 
 	if (gr) {
 		DBG("Group %s -> %d", group, gr->gr_gid);
-		identity->gid = gr->gr_gid;
+		id->gid = gr->gr_gid;
 	} else if (group) {
 		ofono_warn("Invalid group '%s'", group);
 	}
@@ -1914,7 +1954,7 @@ static void ril_plugin_parse_identity(struct ril_plugin_identity *identity,
 }
 
 static GSList *ril_plugin_parse_config_file(GKeyFile *file,
-					struct ril_plugin_settings *ps)
+	RilPluginSettings *ps)
 {
 	GSList *l, *list = NULL;
 	gsize i, n = 0;
@@ -1924,7 +1964,7 @@ static GSList *ril_plugin_parse_config_file(GKeyFile *file,
 		const char *group = groups[i];
 		if (g_str_has_prefix(group, RILCONF_MODEM_PREFIX)) {
 			/* Modem configuration */
-			ril_slot *slot = ril_plugin_parse_config_group(file,
+			RilSlot *slot = ril_plugin_parse_config_group(file,
 									group);
 
 			if (slot) {
@@ -1936,19 +1976,19 @@ static GSList *ril_plugin_parse_config_file(GKeyFile *file,
 			char *sval;
 
 			/* 3GLTEHandover */
-			ril_config_get_flag(file, group,
+			ofono_conf_get_flag(file, group,
 				RILCONF_SETTINGS_3GHANDOVER,
 				RIL_DATA_MANAGER_3GLTE_HANDOVER,
 				&ps->dm_flags);
 
 			/* ForceGsmForNonDataSlots */
-			ril_config_get_flag(file, group,
+			ofono_conf_get_flag(file, group,
 				RILCONF_SETTINGS_GSM_NON_DATA_SLOTS,
 				RIL_DATA_MANAGER_FORCE_GSM_ON_OTHER_SLOTS,
 				&ps->dm_flags);
 
 			/* SetRadioCapability */
-			if (ril_config_get_enum(file, group,
+			if (ofono_conf_get_enum(file, group,
 				RILCONF_SETTINGS_SET_RADIO_CAP, &ival,
 				"auto", RIL_SET_RADIO_CAP_AUTO,
 				"on", RIL_SET_RADIO_CAP_ENABLED,
@@ -1958,7 +1998,7 @@ static GSList *ril_plugin_parse_config_file(GKeyFile *file,
 
 			/* Identity */
 			sval = g_key_file_get_string(file, group,
-					RILCONF_SETTINGS_IDENTITY, NULL);
+				RILCONF_SETTINGS_IDENTITY, NULL);
 			if (sval) {
 				ril_plugin_parse_identity(&ps->identity, sval);
 				g_free(sval);
@@ -1968,7 +2008,7 @@ static GSList *ril_plugin_parse_config_file(GKeyFile *file,
 
 	/* Automatically assign slot numbers */
 	for (l = list; l; l = l->next) {
-		ril_slot *slot = l->data;
+		RilSlot *slot = l->data;
 
 		if (slot->config.slot == RILMODEM_DEFAULT_SLOT) {
 			slot->config.slot = ril_plugin_find_unused_slot(list);
@@ -1979,15 +2019,14 @@ static GSList *ril_plugin_parse_config_file(GKeyFile *file,
 	return list;
 }
 
-static GSList *ril_plugin_load_config(const char *path,
-				struct ril_plugin_settings *ps)
+static GSList *ril_plugin_load_config(const char *path, RilPluginSettings *ps)
 {
 	GSList *l, *list = NULL;
 	GKeyFile *file = g_key_file_new();
 	gboolean empty = FALSE;
 
-	config_merge_files(file, path);
-	if (ril_config_get_boolean(file, RILCONF_SETTINGS_GROUP,
+	ofono_conf_merge_files(file, path);
+	if (ofono_conf_get_boolean(file, RILCONF_SETTINGS_GROUP,
 				RILCONF_SETTINGS_EMPTY, &empty) && empty) {
 		DBG("Empty config");
 	} else {
@@ -2000,7 +2039,7 @@ static GSList *ril_plugin_load_config(const char *path,
 
 	/* Initialize start timeouts */
 	for (l = list; l; l = l->next) {
-		ril_slot *slot = l->data;
+		RilSlot *slot = l->data;
 
 		GASSERT(!slot->start_timeout_id);
 		slot->start_timeout_id = g_timeout_add(slot->start_timeout,
@@ -2012,21 +2051,21 @@ static GSList *ril_plugin_load_config(const char *path,
 }
 
 static void ril_plugin_set_perm(const char *path, mode_t mode,
-					const struct ril_plugin_identity *id)
+	const RilPluginIdentity *id)
 {
 	if (chmod(path, mode)) {
 		ofono_error("chmod(%s,%o) failed: %s", path, mode,
-							strerror(errno));
+			strerror(errno));
 	}
 	if (chown(path, id->uid, id->gid)) {
 		ofono_error("chown(%s,%d,%d) failed: %s", path, id->uid,
-						id->gid, strerror(errno));
+			id->gid, strerror(errno));
 	}
 }
 
 /* Recursively updates file and directory ownership and permissions */
 static void ril_plugin_set_storage_perm(const char *path,
-			const struct ril_plugin_identity *id)
+	const RilPluginIdentity *id)
 {
 	DIR *d;
 	const mode_t dir_mode = S_IRUSR | S_IWUSR | S_IXUSR;
@@ -2064,7 +2103,7 @@ static void ril_plugin_set_storage_perm(const char *path,
 	}
 }
 
-static void ril_plugin_switch_identity(const struct ril_plugin_identity *id)
+static void ril_plugin_switch_identity(const RilPluginIdentity *id)
 {
 	ril_plugin_set_storage_perm(ofono_storage_dir(), id);
 	if (prctl(PR_SET_KEEPCAPS, 1, 0, 0, 0) < 0) {
@@ -2092,13 +2131,13 @@ static void ril_plugin_switch_identity(const struct ril_plugin_identity *id)
 	}
 }
 
-static void ril_plugin_init_slots(ril_plugin *plugin)
+static void ril_plugin_init_slots(RilPlugin *plugin)
 {
 	int i;
 	GSList *link;
 
 	for (i = 0, link = plugin->slots; link; link = link->next, i++) {
-		ril_slot *slot = link->data;
+		RilSlot *slot = link->data;
 
 		slot->index = i;
 		slot->plugin = plugin;
@@ -2108,13 +2147,13 @@ static void ril_plugin_init_slots(ril_plugin *plugin)
 	}
 }
 
-static void ril_plugin_drop_orphan_slots(ril_plugin *plugin)
+static void ril_plugin_drop_orphan_slots(RilPlugin *plugin)
 {
 	GSList *l = plugin->slots;
 
 	while (l) {
 		GSList *next = l->next;
-		ril_slot *slot = l->data;
+		RilSlot *slot = l->data;
 
 		if (!slot->handle) {
 			plugin->slots = g_slist_delete_link(plugin->slots, l);
@@ -2126,7 +2165,7 @@ static void ril_plugin_drop_orphan_slots(ril_plugin *plugin)
 
 static gboolean ril_plugin_manager_start_timeout(gpointer user_data)
 {
-	ril_plugin *plugin = user_data;
+	RilPlugin *plugin = user_data;
 
 	DBG("");
 	plugin->start_timeout_id = 0;
@@ -2136,7 +2175,7 @@ static gboolean ril_plugin_manager_start_timeout(gpointer user_data)
 
 static void ril_plugin_manager_start_done(gpointer user_data)
 {
-	ril_plugin *plugin = user_data;
+	RilPlugin *plugin = user_data;
 
 	DBG("");
 	if (plugin->start_timeout_id) {
@@ -2146,20 +2185,7 @@ static void ril_plugin_manager_start_done(gpointer user_data)
 	}
 }
 
-static ril_plugin *ril_plugin_manager_create(struct sailfish_slot_manager *m)
-{
-	ril_plugin *plugin = g_new0(ril_plugin, 1);
-	struct ril_plugin_settings *ps = &plugin->settings;
-
-	DBG("");
-	plugin->handle = m;
-	ril_plugin_parse_identity(&ps->identity, RILMODEM_DEFAULT_IDENTITY);
-	ps->dm_flags = RILMODEM_DEFAULT_DM_FLAGS;
-	ps->set_radio_cap = RIL_SET_RADIO_CAP_AUTO;
-	return plugin;
-}
-
-static void ril_plugin_slot_check_timeout_cb(ril_slot *slot, void *param)
+static void ril_plugin_slot_check_timeout_cb(RilSlot *slot, void *param)
 {
 	guint *timeout = param;
 
@@ -2168,20 +2194,32 @@ static void ril_plugin_slot_check_timeout_cb(ril_slot *slot, void *param)
 	}
 }
 
-static guint ril_plugin_manager_start(ril_plugin *plugin)
+static RilPlugin *ril_plugin_slot_driver_init(struct ofono_slot_manager *m)
 {
-	struct ril_plugin_settings *ps = &plugin->settings;
-	guint start_timeout = 0;
+	RilPlugin *plugin = g_new0(RilPlugin, 1);
+	RilPluginSettings *ps = &plugin->settings;
 	char* config_file = g_build_filename(ofono_config_dir(),
-						RILMODEM_CONF_FILE, NULL);
+		RILMODEM_CONF_FILE, NULL);
 
 	DBG("");
-	GASSERT(!plugin->start_timeout_id);
+	plugin->slot_manager = m;
+	ril_plugin_parse_identity(&ps->identity, RILMODEM_DEFAULT_IDENTITY);
+	ps->dm_flags = RILMODEM_DEFAULT_DM_FLAGS;
+	ps->set_radio_cap = RIL_SET_RADIO_CAP_AUTO;
+
 	plugin->slots = ril_plugin_load_config(config_file, ps);
 	plugin->data_manager = ril_data_manager_new(ps->dm_flags);
-	ril_plugin_init_slots(plugin);
 	g_free(config_file);
+	return plugin;
+}
 
+static guint ril_plugin_slot_driver_start(RilPlugin *plugin)
+{
+	RilPluginSettings *ps = &plugin->settings;
+	guint start_timeout = 0;
+
+	DBG("");
+	ril_plugin_init_slots(plugin);
 	ofono_modem_driver_register(&ril_modem_driver);
 	ofono_sim_driver_register(&ril_sim_driver);
 	ofono_sms_driver_register(&ril_sms_driver);
@@ -2201,65 +2239,37 @@ static guint ril_plugin_manager_start(ril_plugin *plugin)
 	ofono_cbs_driver_register(&ril_cbs_driver);
 	ofono_stk_driver_register(&ril_stk_driver);
 
-	ril_plugin_foreach_slot_param(plugin, ril_plugin_slot_check_timeout_cb,
-							&start_timeout);
-
 	/* Switch the user to the one RIL expects */
 	ril_plugin_switch_identity(&ps->identity);
 
+	/* Pick the shortest timeout */
+	ril_plugin_foreach_slot_param(plugin, ril_plugin_slot_check_timeout_cb,
+		&start_timeout);
+
+	GASSERT(!plugin->start_timeout_id);
 	plugin->start_timeout_id = g_timeout_add_full(G_PRIORITY_DEFAULT,
 			start_timeout, ril_plugin_manager_start_timeout,
 			plugin, ril_plugin_manager_start_done);
+	DBG("timeout id %u", plugin->start_timeout_id);
 	return plugin->start_timeout_id;
 }
 
-static void ril_plugin_manager_cancel_start(ril_plugin *plugin, guint id)
+static void ril_plugin_slot_driver_cancel(RilPlugin *plugin, guint id)
 {
+	DBG("%u", id);
+	GASSERT(plugin->start_timeout_id == id);
 	g_source_remove(id);
 }
 
-static void ril_plugin_manager_free(ril_plugin *plugin)
+static void ril_plugin_slot_driver_cleanup(RilPlugin *plugin)
 {
 	if (plugin) {
 		GASSERT(!plugin->slots);
 		ril_data_manager_unref(plugin->data_manager);
 		ril_radio_caps_manager_remove_handler(plugin->caps_manager,
-					plugin->caps_manager_event_id);
+			plugin->caps_manager_event_id);
 		ril_radio_caps_manager_unref(plugin->caps_manager);
 		g_free(plugin);
-	}
-}
-
-static void ril_slot_set_data_role(ril_slot *slot, enum sailfish_data_role r)
-{
-	enum ril_data_role role =
-		(r == SAILFISH_DATA_ROLE_INTERNET) ? RIL_DATA_ROLE_INTERNET :
-		(r == SAILFISH_DATA_ROLE_MMS) ? RIL_DATA_ROLE_MMS :
-		RIL_DATA_ROLE_NONE;
-	ril_data_allow(slot->data, role);
-	ril_radio_caps_request_free(slot->caps_req);
-	if (role == RIL_DATA_ROLE_NONE) {
-		slot->caps_req = NULL;
-	} else {
-		const enum ofono_radio_access_mode mode =
-			(r == SAILFISH_DATA_ROLE_MMS) ?
-				OFONO_RADIO_ACCESS_MODE_GSM :
-				__ofono_radio_access_max_mode
-						(slot->sim_settings->techs);
-
-		slot->caps_req = ril_radio_caps_request_new
-			(slot->caps, mode, role);
-	}
-}
-
-static void ril_slot_enabled_changed(struct sailfish_slot_impl *s)
-{
-	if (s->handle->enabled) {
-		ril_plugin_check_modem(s);
-		grilio_channel_set_enabled(s->io, TRUE);
-	} else {
-		grilio_channel_set_enabled(s->io, FALSE);
-		ril_plugin_shutdown_slot(s, FALSE);
 	}
 }
 
@@ -2281,22 +2291,38 @@ static struct grilio_transport *ril_socket_transport_connect(GHashTable *args)
 
 /* Global part (that requires access to global variables) */
 
-static struct sailfish_slot_driver_reg *ril_driver = NULL;
 static guint ril_driver_init_id = 0;
+static struct ofono_slot_driver_reg *ril_driver = NULL;
 static const struct ofono_ril_transport ril_socket_transport = {
 	.name = RIL_TRANSPORT_SOCKET,
 	.api_version = OFONO_RIL_TRANSPORT_API_VERSION,
 	.connect = ril_socket_transport_connect
 };
 
+static void ril_plugin_manager_started(RilPlugin *plugin)
+{
+	ril_plugin_drop_orphan_slots(plugin);
+	ril_data_manager_check_data(plugin->data_manager);
+	ofono_slot_driver_started(ril_driver);
+}
+
+static void ril_plugin_foreach_driver_slot(ril_plugin_slot_cb_t fn)
+{
+	RilPlugin *plugin = ofono_slot_driver_get_data(ril_driver);
+
+	if (plugin) {
+		ril_plugin_foreach_slot(plugin, fn);
+	}
+}
+
 static void ril_debug_trace_notify(struct ofono_debug_desc *desc)
 {
-	ril_plugin_foreach_slot_manager(ril_driver, ril_debug_trace_update);
+	ril_plugin_foreach_driver_slot(ril_debug_trace_update);
 }
 
 static void ril_debug_dump_notify(struct ofono_debug_desc *desc)
 {
-	ril_plugin_foreach_slot_manager(ril_driver, ril_debug_dump_update);
+	ril_plugin_foreach_driver_slot(ril_debug_dump_update);
 }
 
 static void ril_debug_grilio_notify(struct ofono_debug_desc *desc)
@@ -2319,15 +2345,13 @@ static void ril_plugin_debug_notify(struct ofono_debug_desc *desc)
 
 static gboolean ril_plugin_start(gpointer user_data)
 {
-	static const struct sailfish_slot_driver ril_slot_driver = {
+	static const struct ofono_slot_driver ril_slot_driver = {
 		.name = RILMODEM_DRIVER,
-		.manager_create = ril_plugin_manager_create,
-		.manager_start = ril_plugin_manager_start,
-		.manager_cancel_start = ril_plugin_manager_cancel_start,
-		.manager_free = ril_plugin_manager_free,
-		.slot_enabled_changed = ril_slot_enabled_changed,
-		.slot_set_data_role = ril_slot_set_data_role,
-		.slot_free = ril_slot_free
+		.api_version = OFONO_SLOT_API_VERSION,
+		.init = ril_plugin_slot_driver_init,
+		.start = ril_plugin_slot_driver_start,
+		.cancel = ril_plugin_slot_driver_cancel,
+		.cleanup = ril_plugin_slot_driver_cleanup,
 	};
 
 	DBG("");
@@ -2337,7 +2361,7 @@ static gboolean ril_plugin_start(gpointer user_data)
 	ofono_ril_transport_register(&ril_socket_transport);
 
 	/* Register the driver */
-	ril_driver = sailfish_slot_driver_register(&ril_slot_driver);
+	ril_driver = ofono_slot_driver_register(&ril_slot_driver);
 	return G_SOURCE_REMOVE;
 }
 
@@ -2390,10 +2414,8 @@ static void ril_plugin_exit(void)
 	ofono_cbs_driver_unregister(&ril_cbs_driver);
 	ofono_stk_driver_unregister(&ril_stk_driver);
 
-	if (ril_driver) {
-		sailfish_slot_driver_unregister(ril_driver);
-		ril_driver = NULL;
-	}
+	ofono_slot_driver_unregister(ril_driver);
+	ril_driver = NULL;
 
 	if (ril_driver_init_id) {
 		g_source_remove(ril_driver_init_id);
@@ -2401,7 +2423,7 @@ static void ril_plugin_exit(void)
 	}
 }
 
-OFONO_PLUGIN_DEFINE(ril, "Sailfish OS RIL plugin", VERSION,
+OFONO_PLUGIN_DEFINE(ril, "Sailfish OS RIL plugin", OFONO_VERSION,
 	OFONO_PLUGIN_PRIORITY_DEFAULT, ril_plugin_init, ril_plugin_exit)
 
 /*

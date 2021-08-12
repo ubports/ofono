@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2020 Jolla Ltd.
+ *  Copyright (C) 2015-2021 Jolla Ltd.
  *  Copyright (C) 2020 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -18,8 +18,9 @@
 #include "ril_util.h"
 #include "ril_log.h"
 
-#include "gdbus.h"
-#include "ofono.h"
+#include <ofono/gdbus.h>
+#include <ofono/dbus.h>
+#include <ofono/dbus-access.h>
 
 #define RIL_OEM_RAW_INTERFACE "org.ofono.OemRaw"
 #define RIL_OEM_RAW_TIMEOUT   (60*1000) /* 60 sec */
@@ -56,10 +57,10 @@ static void ril_oem_raw_send_cb(GRilIoChannel *io, int ril_status,
 		dbus_message_iter_close_container(&it, &array);
 	} else if (ril_status == GRILIO_STATUS_TIMEOUT) {
 		DBG("Timed out");
-		reply = __ofono_error_timed_out(msg);
+		reply = ofono_dbus_error_timed_out(msg);
 	} else {
 		DBG("Error %s", ril_error_to_string(ril_status));
-		reply = __ofono_error_failed(msg);
+		reply = ofono_dbus_error_failed(msg);
 	}
 
 	g_dbus_send_message(ofono_dbus_get_connection(), reply);
@@ -71,10 +72,10 @@ static DBusMessage *ril_oem_raw_send(DBusConnection *conn, DBusMessage *msg,
 	DBusMessageIter it;
 	struct ril_oem_raw *oem = user_data;
 
-	if (!__ofono_dbus_access_method_allowed(dbus_message_get_sender(msg),
+	if (!ofono_dbus_access_method_allowed(dbus_message_get_sender(msg),
 					OFONO_DBUS_ACCESS_INTF_OEMRAW,
 					OFONO_DBUS_ACCESS_OEMRAW_SEND, NULL)) {
-		return __ofono_error_access_denied(msg);
+		return ofono_dbus_error_access_denied(msg);
 	}
 
 	dbus_message_iter_init(msg, &it);
@@ -104,7 +105,7 @@ static DBusMessage *ril_oem_raw_send(DBusConnection *conn, DBusMessage *msg,
 		return NULL;
 	} else {
 		DBG_(oem, "Unexpected signature");
-		return __ofono_error_invalid_args(msg);
+		return ofono_dbus_error_invalid_args(msg);
 	}
 }
 

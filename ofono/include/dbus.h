@@ -113,6 +113,31 @@ DBusMessage *ofono_dbus_signal_new_property_changed(const char *path,
 					const char *interface,
 					const char *name,
 					int type, const void *value);
+
+/* Since mer/1.24+git2 */
+DBusMessage *ofono_dbus_error_invalid_args(DBusMessage *msg);
+DBusMessage *ofono_dbus_error_invalid_format(DBusMessage *msg);
+DBusMessage *ofono_dbus_error_not_implemented(DBusMessage *msg);
+DBusMessage *ofono_dbus_error_failed(DBusMessage *msg);
+DBusMessage *ofono_dbus_error_busy(DBusMessage *msg);
+DBusMessage *ofono_dbus_error_not_found(DBusMessage *msg);
+DBusMessage *ofono_dbus_error_not_active(DBusMessage *msg);
+DBusMessage *ofono_dbus_error_not_supported(DBusMessage *msg);
+DBusMessage *ofono_dbus_error_not_available(DBusMessage *msg);
+DBusMessage *ofono_dbus_error_timed_out(DBusMessage *msg);
+DBusMessage *ofono_dbus_error_sim_not_ready(DBusMessage *msg);
+DBusMessage *ofono_dbus_error_in_use(DBusMessage *msg);
+DBusMessage *ofono_dbus_error_not_attached(DBusMessage *msg);
+DBusMessage *ofono_dbus_error_attach_in_progress(DBusMessage *msg);
+DBusMessage *ofono_dbus_error_not_registered(DBusMessage *msg);
+DBusMessage *ofono_dbus_error_canceled(DBusMessage *msg);
+DBusMessage *ofono_dbus_error_access_denied(DBusMessage *msg);
+DBusMessage *ofono_dbus_error_emergency_active(DBusMessage *msg);
+DBusMessage *ofono_dbus_error_incorrect_password(DBusMessage *msg);
+DBusMessage *ofono_dbus_error_not_allowed(DBusMessage *msg);
+DBusMessage *ofono_dbus_error_not_recognized(DBusMessage *msg);
+DBusMessage *ofono_dbus_error_network_terminated(DBusMessage *msg);
+
 #ifdef __cplusplus
 }
 #endif

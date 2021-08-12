@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2014-2020 Jolla. All rights reserved.
+ *  Copyright (C) 2014-2021 Jolla. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -94,7 +94,7 @@ static void test_provision(gconstpointer test_data)
 	g_assert(__ofono_builtin_provision.init() == 0);
 
 	if (test->settings) {
-		g_assert(__ofono_gprs_provision_get_settings(test->mcc,
+		g_assert(ofono_gprs_provision_get_settings(test->mcc,
 				test->mnc, test->spn, &settings, &count));
 		g_assert(count == test->count);
 		for (i = 0; i < count; i++) {
@@ -122,11 +122,11 @@ static void test_provision(gconstpointer test_data)
 						expected->message_center);
 		}
 	} else {
-		g_assert(!__ofono_gprs_provision_get_settings(test->mcc,
+		g_assert(!ofono_gprs_provision_get_settings(test->mcc,
 				test->mnc, test->spn, &settings, &count));
 	}
 
-	__ofono_gprs_provision_free_settings(settings, count);
+	ofono_gprs_provision_free_settings(settings, count);
 	__ofono_builtin_provision.exit();
 	if (file) {
 		g_file_delete(file, NULL, NULL);
@@ -140,7 +140,7 @@ static void test_no_driver()
 	struct ofono_gprs_provision_data *settings = NULL;
 	int count = 0;
 
-	g_assert(!__ofono_gprs_provision_get_settings("000", "01", NULL,
+	g_assert(!ofono_gprs_provision_get_settings("000", "01", NULL,
 							&settings, &count));
         g_assert(!settings);
         g_assert(!count);
@@ -162,7 +162,7 @@ static void test_bad_driver()
 	g_assert(!ofono_gprs_provision_driver_register(&bad_driver1));
 	g_assert(!ofono_gprs_provision_driver_register(&bad_driver2));
 
-	g_assert(!__ofono_gprs_provision_get_settings("000", "01", NULL,
+	g_assert(!ofono_gprs_provision_get_settings("000", "01", NULL,
 							&settings, &count));
         g_assert(!settings);
         g_assert(!count);
@@ -177,13 +177,13 @@ static void test_no_mcc_mnc()
 	int count = 0;
 
 	g_assert(__ofono_builtin_provision.init() == 0);
-	g_assert(!__ofono_gprs_provision_get_settings(NULL, NULL, NULL,
+	g_assert(!ofono_gprs_provision_get_settings(NULL, NULL, NULL,
 							&settings, &count));
-	g_assert(!__ofono_gprs_provision_get_settings("", NULL, NULL,
+	g_assert(!ofono_gprs_provision_get_settings("", NULL, NULL,
 							&settings, &count));
-	g_assert(!__ofono_gprs_provision_get_settings("123", NULL, NULL,
+	g_assert(!ofono_gprs_provision_get_settings("123", NULL, NULL,
 							&settings, &count));
-	g_assert(!__ofono_gprs_provision_get_settings("123", "", NULL,
+	g_assert(!ofono_gprs_provision_get_settings("123", "", NULL,
 							&settings, &count));
 	__ofono_builtin_provision.exit();
 }

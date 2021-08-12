@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2017-2019 Jolla Ltd.
+ *  Copyright (C) 2017-2021 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -13,7 +13,7 @@
  *  GNU General Public License for more details.
  */
 
-#include "sailfish_sim_info.h"
+#include "sim-info.h"
 #include "fake_watch.h"
 
 #define OFONO_API_SUBJECT_TO_CHANGE
@@ -79,7 +79,7 @@ struct ofono_netreg {
 	int location;
 	int cellid;
 	enum ofono_radio_access_mode technology;
-	enum network_registration_status status;
+	enum ofono_netreg_status status;
 	struct ofono_watchlist *status_watches;
 };
 
@@ -190,38 +190,38 @@ static void test_remove_sim(struct ofono_sim* sim, struct ofono_watch *watch)
 
 static void test_basic(void)
 {
-	struct sailfish_sim_info *si;
+	struct sim_info *si;
 
 	/* NULL tolerance */
-	g_assert(!sailfish_sim_info_new(NULL));
-	g_assert(!sailfish_sim_info_ref(NULL));
-	sailfish_sim_info_unref(NULL);
-	g_assert(!sailfish_sim_info_add_iccid_changed_handler(NULL,NULL,NULL));
-	g_assert(!sailfish_sim_info_add_imsi_changed_handler(NULL,NULL,NULL));
-	g_assert(!sailfish_sim_info_add_spn_changed_handler(NULL,NULL,NULL));
-	sailfish_sim_info_remove_handler(NULL, 0);
-	sailfish_sim_info_remove_handlers(NULL, NULL, 0);
+	g_assert(!sim_info_new(NULL));
+	g_assert(!sim_info_ref(NULL));
+	sim_info_unref(NULL);
+	g_assert(!sim_info_add_iccid_changed_handler(NULL,NULL,NULL));
+	g_assert(!sim_info_add_imsi_changed_handler(NULL,NULL,NULL));
+	g_assert(!sim_info_add_spn_changed_handler(NULL,NULL,NULL));
+	sim_info_remove_handler(NULL, 0);
+	sim_info_remove_handlers(NULL, NULL, 0);
 
 	/* Very basic things (mostly to improve code coverage) */
-	si = sailfish_sim_info_new("/test");
+	si = sim_info_new("/test");
 	g_assert(si);
-	g_assert(!sailfish_sim_info_add_iccid_changed_handler(si,NULL,NULL));
-	g_assert(!sailfish_sim_info_add_imsi_changed_handler(si,NULL,NULL));
-	g_assert(!sailfish_sim_info_add_spn_changed_handler(si,NULL,NULL));
-	sailfish_sim_info_remove_handler(si, 0);
-	sailfish_sim_info_remove_handlers(si, NULL, 0);
-	sailfish_sim_info_unref(sailfish_sim_info_ref(si));
-	sailfish_sim_info_unref(si);
+	g_assert(!sim_info_add_iccid_changed_handler(si,NULL,NULL));
+	g_assert(!sim_info_add_imsi_changed_handler(si,NULL,NULL));
+	g_assert(!sim_info_add_spn_changed_handler(si,NULL,NULL));
+	sim_info_remove_handler(si, 0);
+	sim_info_remove_handlers(si, NULL, 0);
+	sim_info_unref(sim_info_ref(si));
+	sim_info_unref(si);
 }
 
-static void test_signal_count_cb(struct sailfish_sim_info *si, void *data)
+static void test_signal_count_cb(struct sim_info *si, void *data)
 {
 	(*((int*)data))++;
 }
 
 static void test_cache(void)
 {
-	struct sailfish_sim_info *si;
+	struct sim_info *si;
 	struct ofono_watch *w = ofono_watch_new(TEST_PATH);
 	struct ofono_sim sim;
 	struct stat st;
@@ -234,17 +234,17 @@ static void test_cache(void)
 	sim.state = OFONO_SIM_STATE_INSERTED;
 
 	rmdir_r(STORAGEDIR);
-	si = sailfish_sim_info_new(TEST_PATH);
+	si = sim_info_new(TEST_PATH);
 	id[SIM_INFO_SIGNAL_ICCID_CHANGED] =
-		sailfish_sim_info_add_iccid_changed_handler(si,
+		sim_info_add_iccid_changed_handler(si,
 			test_signal_count_cb, count +
 			SIM_INFO_SIGNAL_ICCID_CHANGED);
 	id[SIM_INFO_SIGNAL_IMSI_CHANGED] =
-		sailfish_sim_info_add_imsi_changed_handler(si,
+		sim_info_add_imsi_changed_handler(si,
 			test_signal_count_cb, count +
 			SIM_INFO_SIGNAL_IMSI_CHANGED);
 	id[SIM_INFO_SIGNAL_SPN_CHANGED] =
-		sailfish_sim_info_add_spn_changed_handler(si,
+		sim_info_add_spn_changed_handler(si,
 			test_signal_count_cb, count +
 			SIM_INFO_SIGNAL_SPN_CHANGED);
 
@@ -437,7 +437,7 @@ static void test_cache(void)
 	memset(count, 0, sizeof(count));
 
 	/* Make sure that removed handler doesn't get invoked */
-	sailfish_sim_info_remove_handler(si, id[SIM_INFO_SIGNAL_SPN_CHANGED]);
+	sim_info_remove_handler(si, id[SIM_INFO_SIGNAL_SPN_CHANGED]);
 	id[SIM_INFO_SIGNAL_SPN_CHANGED] = 0;
 	sim.mcc = NULL;
 	sim.mnc = NULL;
@@ -453,14 +453,14 @@ static void test_cache(void)
 	g_assert(!count[SIM_INFO_SIGNAL_SPN_CHANGED]); /* removed ^ */
 	memset(count, 0, sizeof(count));
 
-	sailfish_sim_info_remove_handlers(si, id, G_N_ELEMENTS(id));
-	sailfish_sim_info_unref(si);
+	sim_info_remove_handlers(si, id, G_N_ELEMENTS(id));
+	sim_info_unref(si);
 	ofono_watch_unref(w);
 }
 
 static void test_netreg(void)
 {
-	struct sailfish_sim_info *si;
+	struct sim_info *si;
 	struct ofono_watch *w = ofono_watch_new(TEST_PATH);
 	struct ofono_sim sim;
 	struct ofono_netreg netreg;
@@ -482,17 +482,17 @@ static void test_netreg(void)
 	sim.state = OFONO_SIM_STATE_READY;
 
 	rmdir_r(STORAGEDIR);
-	si = sailfish_sim_info_new(TEST_PATH);
+	si = sim_info_new(TEST_PATH);
 	id[SIM_INFO_SIGNAL_ICCID_CHANGED] =
-		sailfish_sim_info_add_iccid_changed_handler(si,
+		sim_info_add_iccid_changed_handler(si,
 			test_signal_count_cb, count +
 			SIM_INFO_SIGNAL_ICCID_CHANGED);
 	id[SIM_INFO_SIGNAL_IMSI_CHANGED] =
-		sailfish_sim_info_add_imsi_changed_handler(si,
+		sim_info_add_imsi_changed_handler(si,
 			test_signal_count_cb, count +
 			SIM_INFO_SIGNAL_IMSI_CHANGED);
 	id[SIM_INFO_SIGNAL_SPN_CHANGED] =
-		sailfish_sim_info_add_spn_changed_handler(si,
+		sim_info_add_spn_changed_handler(si,
 			test_signal_count_cb, count +
 			SIM_INFO_SIGNAL_SPN_CHANGED);
 
@@ -535,12 +535,12 @@ static void test_netreg(void)
 	fake_watch_emit_queued_signals(w);
 
 	__ofono_watchlist_free(netreg.status_watches);
-	sailfish_sim_info_remove_handlers(si, id, G_N_ELEMENTS(id));
-	sailfish_sim_info_unref(si);
+	sim_info_remove_handlers(si, id, G_N_ELEMENTS(id));
+	sim_info_unref(si);
 	ofono_watch_unref(w);
 }
 
-#define TEST_(name) "/sailfish_sim_info/" name
+#define TEST_(name) "/sim_info/" name
 
 int main(int argc, char *argv[])
 {
@@ -549,9 +549,9 @@ int main(int argc, char *argv[])
 	gutil_log_timestamp = FALSE;
 	gutil_log_default.level = g_test_verbose() ?
 		GLOG_LEVEL_VERBOSE : GLOG_LEVEL_NONE;
-	__ofono_log_init("test-sailfish_sim_info",
-				g_test_verbose() ? "*" : NULL,
-				FALSE, FALSE);
+	__ofono_log_init("test-sim-info",
+		g_test_verbose() ? "*" : NULL,
+		FALSE, FALSE);
 
 	g_test_add_func(TEST_("basic"), test_basic);
 	g_test_add_func(TEST_("cache"), test_cache);

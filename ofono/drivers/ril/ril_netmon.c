@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2016-2018 Jolla Ltd.
+ *  Copyright (C) 2016-2021 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -17,13 +17,12 @@
 #include "ril_util.h"
 #include "ril_log.h"
 
-#include <sailfish_cell_info.h>
-
-#include "ofono.h"
+#include <ofono/sim-mnclength.h>
+#include <ofono/cell-info.h>
 
 struct ril_netmon {
 	struct ofono_netmon *netmon;
-	struct sailfish_cell_info *cell_info;
+	struct ofono_cell_info *cell_info;
 	guint register_id;
 };
 
@@ -48,7 +47,9 @@ static void ril_netmon_format_mccmnc(char *s_mcc, char *s_mnc, int mcc, int mnc)
 	if (mcc >= 0 && mcc <= 999) {
 		snprintf(s_mcc, OFONO_MAX_MCC_LENGTH + 1, "%03d", mcc);
 		if (mnc >= 0 && mnc <= 999) {
-			const unsigned int mnclen = mnclength(mcc, mnc);
+			const int mnclen =
+				ofono_sim_mnclength_get_mnclength_mccmnc(mcc,
+									mnc);
 			const char *format[] = { "%d", "%02d", "%03d" };
 			const char *fmt = (mnclen > 0 &&
 				mnclen <= G_N_ELEMENTS(format)) ? 
@@ -69,7 +70,7 @@ static void ril_netmon_notify_ofono(struct ofono_netmon *netmon,
 	/* Better not to push uninitialized data to the stack ... */
 	for (i = nparams; i < RIL_NETMON_MAX_OFONO_PARAMS; i++) {
 		params[i].type = OFONO_NETMON_INFO_INVALID;
-		params[i].value = SAILFISH_CELL_INVALID_VALUE;
+		params[i].value = OFONO_CELL_INVALID_VALUE;
 	}
 
 	ril_netmon_format_mccmnc(s_mcc, s_mnc, mcc, mnc);
@@ -88,36 +89,36 @@ static void ril_netmon_notify_ofono(struct ofono_netmon *netmon,
 }
 
 static void ril_netmon_notify_gsm(struct ofono_netmon *netmon,
-				const struct sailfish_cell_info_gsm *gsm)
+				const struct ofono_cell_info_gsm *gsm)
 {
 	struct ril_netmon_ofono_param params[RIL_NETMON_MAX_OFONO_PARAMS];
 	int n = 0;
 
-	if (gsm->lac != SAILFISH_CELL_INVALID_VALUE) {
+	if (gsm->lac != OFONO_CELL_INVALID_VALUE) {
 		params[n].type = OFONO_NETMON_INFO_LAC;
 		params[n].value = gsm->lac;
 		n++;
 	}
 
-	if (gsm->cid != SAILFISH_CELL_INVALID_VALUE) {
+	if (gsm->cid != OFONO_CELL_INVALID_VALUE) {
 		params[n].type = OFONO_NETMON_INFO_CI;
 		params[n].value = gsm->cid;
 		n++;
 	}
 
-	if (gsm->arfcn != SAILFISH_CELL_INVALID_VALUE) {
+	if (gsm->arfcn != OFONO_CELL_INVALID_VALUE) {
 		params[n].type = OFONO_NETMON_INFO_ARFCN;
 		params[n].value = gsm->arfcn;
 		n++;
 	}
 
-	if (gsm->signalStrength != SAILFISH_CELL_INVALID_VALUE) {
+	if (gsm->signalStrength != OFONO_CELL_INVALID_VALUE) {
 		params[n].type = OFONO_NETMON_INFO_RSSI;
 		params[n].value = gsm->signalStrength;
 		n++;
 	}
 
-	if (gsm->bitErrorRate != SAILFISH_CELL_INVALID_VALUE) {
+	if (gsm->bitErrorRate != OFONO_CELL_INVALID_VALUE) {
 		params[n].type = OFONO_NETMON_INFO_BER;
 		params[n].value = gsm->bitErrorRate;
 		n++;
@@ -128,42 +129,42 @@ static void ril_netmon_notify_gsm(struct ofono_netmon *netmon,
 }
 
 static void ril_netmon_notify_wcdma(struct ofono_netmon *netmon,
-				const struct sailfish_cell_info_wcdma *wcdma)
+				const struct ofono_cell_info_wcdma *wcdma)
 {
 	struct ril_netmon_ofono_param params[RIL_NETMON_MAX_OFONO_PARAMS];
 	int n = 0;
 
-	if (wcdma->lac != SAILFISH_CELL_INVALID_VALUE) {
+	if (wcdma->lac != OFONO_CELL_INVALID_VALUE) {
 		params[n].type = OFONO_NETMON_INFO_LAC;
 		params[n].value = wcdma->lac;
 		n++;
 	}
 
-	if (wcdma->cid != SAILFISH_CELL_INVALID_VALUE) {
+	if (wcdma->cid != OFONO_CELL_INVALID_VALUE) {
 		params[n].type = OFONO_NETMON_INFO_CI;
 		params[n].value = wcdma->cid;
 		n++;
 	}
 
-	if (wcdma->psc != SAILFISH_CELL_INVALID_VALUE) {
+	if (wcdma->psc != OFONO_CELL_INVALID_VALUE) {
 		params[n].type = OFONO_NETMON_INFO_PSC;
 		params[n].value = wcdma->psc;
 		n++;
 	}
 
-	if (wcdma->uarfcn != SAILFISH_CELL_INVALID_VALUE) {
+	if (wcdma->uarfcn != OFONO_CELL_INVALID_VALUE) {
 		params[n].type = OFONO_NETMON_INFO_ARFCN;
 		params[n].value = wcdma->uarfcn;
 		n++;
 	}
 
-	if (wcdma->signalStrength != SAILFISH_CELL_INVALID_VALUE) {
+	if (wcdma->signalStrength != OFONO_CELL_INVALID_VALUE) {
 		params[n].type = OFONO_NETMON_INFO_RSSI;
 		params[n].value = wcdma->signalStrength;
 		n++;
 	}
 
-	if (wcdma->bitErrorRate != SAILFISH_CELL_INVALID_VALUE) {
+	if (wcdma->bitErrorRate != OFONO_CELL_INVALID_VALUE) {
 		params[n].type = OFONO_NETMON_INFO_BER;
 		params[n].value = wcdma->bitErrorRate;
 		n++;
@@ -174,48 +175,48 @@ static void ril_netmon_notify_wcdma(struct ofono_netmon *netmon,
 }
 
 static void ril_netmon_notify_lte(struct ofono_netmon *netmon,
-				const struct sailfish_cell_info_lte *lte)
+				const struct ofono_cell_info_lte *lte)
 {
 	struct ril_netmon_ofono_param params[RIL_NETMON_MAX_OFONO_PARAMS];
 	int n = 0;
 
-	if (lte->ci != SAILFISH_CELL_INVALID_VALUE) {
+	if (lte->ci != OFONO_CELL_INVALID_VALUE) {
 		params[n].type = OFONO_NETMON_INFO_CI;
 		params[n].value = lte->ci;
 		n++;
 	}
 
-	if (lte->earfcn != SAILFISH_CELL_INVALID_VALUE) {
+	if (lte->earfcn != OFONO_CELL_INVALID_VALUE) {
 		params[n].type = OFONO_NETMON_INFO_EARFCN;
 		params[n].value = lte->earfcn;
 		n++;
 	}
 
-	if (lte->signalStrength != SAILFISH_CELL_INVALID_VALUE) {
+	if (lte->signalStrength != OFONO_CELL_INVALID_VALUE) {
 		params[n].type = OFONO_NETMON_INFO_RSSI;
 		params[n].value = lte->signalStrength;
 		n++;
 	}
 
-	if (lte->rsrp != SAILFISH_CELL_INVALID_VALUE) {
+	if (lte->rsrp != OFONO_CELL_INVALID_VALUE) {
 		params[n].type = OFONO_NETMON_INFO_RSRQ;
 		params[n].value = lte->rsrp;
 		n++;
 	}
 
-	if (lte->rsrq != SAILFISH_CELL_INVALID_VALUE) {
+	if (lte->rsrq != OFONO_CELL_INVALID_VALUE) {
 		params[n].type = OFONO_NETMON_INFO_RSRP;
 		params[n].value = lte->rsrq;
 		n++;
 	}
 
-	if (lte->cqi != SAILFISH_CELL_INVALID_VALUE) {
+	if (lte->cqi != OFONO_CELL_INVALID_VALUE) {
 		params[n].type = OFONO_NETMON_INFO_CQI;
 		params[n].value = lte->cqi;
 		n++;
 	}
 
-	if (lte->timingAdvance != SAILFISH_CELL_INVALID_VALUE) {
+	if (lte->timingAdvance != OFONO_CELL_INVALID_VALUE) {
 		params[n].type = OFONO_NETMON_INFO_TIMING_ADVANCE;
 		params[n].value = lte->timingAdvance;
 		n++;
@@ -229,28 +230,32 @@ static void ril_netmon_request_update(struct ofono_netmon *netmon,
 		ofono_netmon_cb_t cb, void *data)
 {
 	struct ril_netmon *nm = ril_netmon_get_data(netmon);
+	const ofono_cell_ptr *cells = nm->cell_info->cells;
 	struct ofono_error error;
-	GSList *l;
 
-	for (l = nm->cell_info->cells; l; l = l->next) {
-		const struct sailfish_cell *cell = l->data;
+	if (cells) {
+		const ofono_cell_ptr *ptr;
 
-		if (cell->registered) {
-			switch (cell->type) {
-			case SAILFISH_CELL_TYPE_GSM:
-				ril_netmon_notify_gsm(netmon,
-							&cell->info.gsm);
-				break;
-			case SAILFISH_CELL_TYPE_WCDMA:
-				ril_netmon_notify_wcdma(netmon,
-							&cell->info.wcdma);
-				break;
-			case SAILFISH_CELL_TYPE_LTE:
-				ril_netmon_notify_lte(netmon,
-							&cell->info.lte);
-				break;
-			default:
-				break;
+		for (ptr = cells; *ptr; ptr++) {
+			const struct ofono_cell *cell = *ptr;
+
+			if (cell->registered) {
+				switch (cell->type) {
+				case OFONO_CELL_TYPE_GSM:
+					ril_netmon_notify_gsm(netmon,
+						&cell->info.gsm);
+					break;
+				case OFONO_CELL_TYPE_WCDMA:
+					ril_netmon_notify_wcdma(netmon,
+						&cell->info.wcdma);
+					break;
+				case OFONO_CELL_TYPE_LTE:
+					ril_netmon_notify_lte(netmon,
+						&cell->info.lte);
+					break;
+				default:
+					break;
+				}
 			}
 		}
 	}
@@ -278,7 +283,7 @@ static int ril_netmon_probe(struct ofono_netmon *netmon, unsigned int vendor,
 	if (modem->cell_info) {
 		struct ril_netmon *nm = g_slice_new0(struct ril_netmon);
 
-		nm->cell_info = sailfish_cell_info_ref(modem->cell_info);
+		nm->cell_info = ofono_cell_info_ref(modem->cell_info);
 		nm->netmon = netmon;
 
 		ofono_netmon_set_data(netmon, nm);
@@ -304,7 +309,7 @@ static void ril_netmon_remove(struct ofono_netmon *netmon)
 		g_source_remove(nm->register_id);
 	}
 
-	sailfish_cell_info_unref(nm->cell_info);
+	ofono_cell_info_unref(nm->cell_info);
 	g_slice_free(struct ril_netmon, nm);
 }
 

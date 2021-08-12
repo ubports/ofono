@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2018 Jolla Ltd.
+ *  Copyright (C) 2018-2021 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -13,20 +13,20 @@
  *  GNU General Public License for more details.
  */
 
-#ifndef SAILFISH_FAKE_CELL_INFO_H
-#define SAILFISH_FAKE_CELL_INFO_H
+#ifndef FAKE_CELL_INFO_H
+#define FAKE_CELL_INFO_H
 
-#include "sailfish_cell_info.h"
+#include <ofono/cell-info.h>
 
-struct sailfish_cell_info *fake_cell_info_new(void);
-void fake_cell_info_add_cell(struct sailfish_cell_info *info,
-				  const struct sailfish_cell* cell);
-gboolean fake_cell_info_remove_cell(struct sailfish_cell_info *info,
-				  const struct sailfish_cell* cell);
-void fake_cell_info_remove_all_cells(struct sailfish_cell_info *info);
-void fake_cell_info_cells_changed(struct sailfish_cell_info *info);
+struct ofono_cell_info *fake_cell_info_new(void);
+void fake_cell_info_add_cell(struct ofono_cell_info *info,
+				  const struct ofono_cell* cell);
+ofono_bool_t fake_cell_info_remove_cell(struct ofono_cell_info *info,
+				  const struct ofono_cell* cell);
+void fake_cell_info_remove_all_cells(struct ofono_cell_info *info);
+void fake_cell_info_cells_changed(struct ofono_cell_info *info);
 
-#endif /* FAKE_SAILFISH_CELL_INFO_H */
+#endif /* FAKE_CELL_INFO_H */
 
 /*
  * Local Variables:

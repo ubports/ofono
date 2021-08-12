@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2019 Jolla Ltd.
+ *  Copyright (C) 2019-2021 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -16,7 +16,7 @@
 #include "ril_devmon.h"
 
 struct ril_devmon_io *ril_devmon_start_io(struct ril_devmon *devmon,
-		GRilIoChannel *channel, struct sailfish_cell_info *cell_info)
+		GRilIoChannel *channel, struct ofono_cell_info *cell_info)
 {
 	return devmon ? devmon->start_io(devmon, channel, cell_info) : NULL;
 }

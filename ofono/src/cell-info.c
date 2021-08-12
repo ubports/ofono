@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2017-2019 Jolla Ltd.
+ *  Copyright (C) 2017-2021 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -13,19 +13,17 @@
  *  GNU General Public License for more details.
  */
 
-#include <sailfish_cell_info.h>
+#include "ofono.h"
 
-#include <gutil_log.h>
-
-gint sailfish_cell_compare_location(const struct sailfish_cell *c1,
-					const struct sailfish_cell *c2)
+int ofono_cell_compare_location(const struct ofono_cell *c1,
+	const struct ofono_cell *c2)
 {
 	if (c1 && c2) {
 		if (c1->type != c2->type) {
 			return c1->type - c2->type;
-		} else if (c1->type == SAILFISH_CELL_TYPE_GSM) {
-			const struct sailfish_cell_info_gsm *g1;
-			const struct sailfish_cell_info_gsm *g2;
+		} else if (c1->type == OFONO_CELL_TYPE_GSM) {
+			const struct ofono_cell_info_gsm *g1;
+			const struct ofono_cell_info_gsm *g2;
 
 			g1 = &c1->info.gsm;
 			g2 = &c2->info.gsm;
@@ -38,9 +36,9 @@ gint sailfish_cell_compare_location(const struct sailfish_cell *c1,
 			} else {
 				return g1->cid - g2->cid;
 			}
-		} else if (c2->type == SAILFISH_CELL_TYPE_WCDMA) {
-			const struct sailfish_cell_info_wcdma *w1;
-			const struct sailfish_cell_info_wcdma *w2;
+		} else if (c1->type == OFONO_CELL_TYPE_WCDMA) {
+			const struct ofono_cell_info_wcdma *w1;
+			const struct ofono_cell_info_wcdma *w2;
 
 			w1 = &c1->info.wcdma;
 			w2 = &c2->info.wcdma;
@@ -53,13 +51,12 @@ gint sailfish_cell_compare_location(const struct sailfish_cell *c1,
 			} else {
 				return w1->cid - w2->cid;
 			}
-		} else {
-			const struct sailfish_cell_info_lte *l1 =
+		} else if (c1->type == OFONO_CELL_TYPE_LTE) {
+			const struct ofono_cell_info_lte *l1 =
 				&c1->info.lte;
-			const struct sailfish_cell_info_lte *l2 =
+			const struct ofono_cell_info_lte *l2 =
 				&c2->info.lte;
 
-			GASSERT(c1->type == SAILFISH_CELL_TYPE_LTE);
 			l1 = &c1->info.lte;
 			l2 = &c2->info.lte;
 			if (l1->mcc != l2->mcc) {
@@ -73,6 +70,9 @@ gint sailfish_cell_compare_location(const struct sailfish_cell *c1,
 			} else {
 				return l1->tac - l2->tac;
 			}
+		} else {
+			ofono_warn("Unexpected cell type");
+			return 0;
 		}
 	} else if (c1) {
 		return 1;
@@ -83,56 +83,48 @@ gint sailfish_cell_compare_location(const struct sailfish_cell *c1,
 	}
 }
 
-gint sailfish_cell_compare_func(gconstpointer v1, gconstpointer v2)
+struct ofono_cell_info *ofono_cell_info_ref(struct ofono_cell_info *ci)
 {
-	return sailfish_cell_compare_location(v1, v2);
-}
-
-struct sailfish_cell_info *sailfish_cell_info_ref
-				(struct sailfish_cell_info *info)
-{
-	if (info) {
-		info->proc->ref(info);
-		return info;
+	if (ci && ci->proc->ref) {
+		ci->proc->ref(ci);
 	}
-	return NULL;
+	return ci;
 }
 
-void sailfish_cell_info_unref(struct sailfish_cell_info *info)
+void ofono_cell_info_unref(struct ofono_cell_info *ci)
 {
-	if (info) {
-		info->proc->unref(info);
+	if (ci && ci->proc->unref) {
+		ci->proc->unref(ci);
 	}
 }
 
-gulong sailfish_cell_info_add_cells_changed_handler
-				(struct sailfish_cell_info *info,
-					sailfish_cell_info_cb_t cb, void *arg)
+unsigned long ofono_cell_info_add_change_handler(struct ofono_cell_info *ci,
+	ofono_cell_info_cb_t cb, void *data)
 {
-	return info ? info->proc->add_cells_changed_handler(info, cb, arg) : 0;
+	return (ci && ci->proc->add_change_handler && cb) ?
+		ci->proc->add_change_handler(ci, cb, data) : 0;
 }
 
-void sailfish_cell_info_remove_handler(struct sailfish_cell_info *info,
-					gulong id)
+void ofono_cell_info_remove_handler(struct ofono_cell_info *ci,
+	unsigned long id)
 {
-	if (info) {
-		info->proc->remove_handler(info, id);
+	if (ci && ci->proc->remove_handler && id) {
+		ci->proc->remove_handler(ci, id);
 	}
 }
 
-void sailfish_cell_info_set_update_interval(struct sailfish_cell_info *info,
-					int ms)
+void ofono_cell_info_set_update_interval(struct ofono_cell_info *ci, int ms)
 {
-	if (info && info->proc->set_update_interval) {
-		info->proc->set_update_interval(info, ms);
+	if (ci && ci->proc->set_update_interval) {
+		ci->proc->set_update_interval(ci, ms);
 	}
 }
 
-void sailfish_cell_info_set_enabled(struct sailfish_cell_info *info,
-					gboolean enabled)
+void ofono_cell_info_set_enabled(struct ofono_cell_info *ci,
+	ofono_bool_t enabled)
 {
-	if (info && info->proc->set_enabled) {
-		info->proc->set_enabled(info, enabled);
+	if (ci && ci->proc->set_enabled) {
+		ci->proc->set_enabled(ci, enabled);
 	}
 }
 

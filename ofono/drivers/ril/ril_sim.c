@@ -18,13 +18,10 @@
 #include "ril_util.h"
 #include "ril_log.h"
 
+#include <ofono/misc.h>
 #include <ofono/watch.h>
 
 #include <gutil_misc.h>
-
-#include "simutil.h"
-#include "util.h"
-#include "ofono.h"
 
 #define SIM_STATE_CHANGE_TIMEOUT_SECS (5)
 #define FAC_LOCK_QUERY_TIMEOUT_SECS   (10)
@@ -351,7 +348,7 @@ static void ril_sim_append_path(struct ril_sim *sd, GRilIoRequest *req,
 		const int fileid, const guchar *path, const guint path_len)
 {
 	const enum ril_app_type app_type = ril_sim_card_app_type(sd->card);
-	guchar db_path[6] = { 0x00 };
+	guchar db_path[OFONO_EF_PATH_BUFFER_SIZE] = { 0x00 };
 	char *hex_path = NULL;
 	int len;
 
@@ -359,16 +356,16 @@ static void ril_sim_append_path(struct ril_sim *sd, GRilIoRequest *req,
 		memcpy(db_path, path, path_len);
 		len = path_len;
 	} else if (app_type == RIL_APPTYPE_USIM) {
-		len = sim_ef_db_get_path_3g(fileid, db_path);
+		len = ofono_get_ef_path_3g(fileid, db_path);
 	} else if (app_type == RIL_APPTYPE_SIM) {
-		len = sim_ef_db_get_path_2g(fileid, db_path);
+		len = ofono_get_ef_path_2g(fileid, db_path);
 	} else {
 		ofono_error("Unsupported app type %d", app_type);
 		len = 0;
 	}
 
 	if (len > 0) {
-		hex_path = encode_hex(db_path, len, 0);
+		hex_path = ril_encode_hex(db_path, len);
 		grilio_request_append_utf8(req, hex_path);
 		DBG_(sd, "%s", hex_path);
 		g_free(hex_path);
@@ -393,17 +390,15 @@ static struct ril_sim_io_response *ril_sim_parse_io_response(const void *data,
 
 	if (grilio_parser_get_int32(&rilp, &sw1) &&
 			grilio_parser_get_int32(&rilp, &sw2)) {
-		char *hex_data = grilio_parser_get_utf8(&rilp);
+		char *hex = grilio_parser_get_utf8(&rilp);
 
-		DBG("sw1=0x%02X,sw2=0x%02X,%s", sw1, sw2, hex_data);
+		DBG("sw1=0x%02X,sw2=0x%02X,%s", sw1, sw2, hex);
 		res = g_slice_new0(struct ril_sim_io_response);
 		res->sw1 = sw1;
 		res->sw2 = sw2;
-		if (hex_data) {
-			long num_bytes = 0;
-			res->data = decode_hex(hex_data, -1, &num_bytes, 0);
-			res->data_len = num_bytes;
-			g_free(hex_data);
+		if (hex) {
+			res->data = ril_decode_hex(hex, -1, &res->data_len);
+			g_free(hex);
 		}
 	}
 
@@ -509,15 +504,15 @@ static void ril_sim_file_info_cb(GRilIoChannel *io, int status,
 		gboolean ok = FALSE;
 		guchar access[3] = { 0x00, 0x00, 0x00 };
 		guchar file_status = EF_STATUS_VALID;
-		int flen = 0, rlen = 0, str = 0;
+		unsigned int flen = 0, rlen = 0, str = 0;
 
 		if (res->data_len) {
 			if (res->data[0] == 0x62) {
-				ok = sim_parse_3g_get_response(res->data,
+				ok = ofono_parse_get_response_3g(res->data,
 					res->data_len, &flen, &rlen, &str,
 					access, NULL);
 			} else {
-				ok = sim_parse_2g_get_response(res->data,
+				ok = ofono_parse_get_response_2g(res->data,
 					res->data_len, &flen, &rlen, &str,
 					access, &file_status);
 			}
@@ -658,7 +653,8 @@ static void ril_sim_write(struct ofono_sim *sim, guint cmd, int fileid,
 			ofono_sim_write_cb_t cb, void *data)
 {
 	struct ril_sim *sd = ril_sim_get_data(sim);
-	char *hex_data = encode_hex(value, length, 0);
+	char *hex_data = ril_encode_hex(value, length);
+
 	ril_sim_request_io(sd, cmd, fileid, p1, p2, length, hex_data, path,
 		path_len, ril_sim_write_cb, ril_sim_cbd_io_new(sd, cb, data));
 	g_free(hex_data);
@@ -1201,8 +1197,7 @@ static void ril_sim_pin_change_state_cb(GRilIoChannel *io, int ril_status,
 			ril_status, cbd->passwd_type, retry_count);
 
 	if (ril_status == RIL_E_SUCCESS && retry_count == 0) {
-		enum ofono_sim_password_type associated_pin =
-						__ofono_sim_puk2pin(type);
+		enum ofono_sim_password_type pin_type = ofono_sim_puk2pin(type);
 		/*
 		 * If PIN/PUK request has succeeded, zero retry count
 		 * makes no sense, we have to assume that it's unknown.
@@ -1210,9 +1205,9 @@ static void ril_sim_pin_change_state_cb(GRilIoChannel *io, int ril_status,
 		 * it can't be queried it will remain unknown.
 		 */
 		sd->retries[type] = -1;
-		if (associated_pin != OFONO_SIM_PASSWORD_INVALID) {
+		if (pin_type != OFONO_SIM_PASSWORD_INVALID) {
 			/* Successful PUK requests affect PIN retry count */
-			sd->retries[associated_pin] = -1;
+			sd->retries[pin_type] = -1;
 		}
 	} else {
 		sd->retries[type] = retry_count;
@@ -1488,12 +1483,11 @@ static gboolean ril_sim_list_apps_cb(void *data)
 		for (i = 0; i < n; i++) {
 			const char *hex = status->apps[i].aid;
 			gsize hex_len = hex ? strlen(hex) : 0;
-			long aid_size;
 			guint8 aid[16];
 
 			if (hex_len >= 2 && hex_len <= 2 * sizeof(aid) &&
-				!(hex_len & 0x01) && decode_hex_own_buf(hex,
-					hex_len, &aid_size, 0, aid)) {
+				gutil_hex2bin(hex, hex_len, aid)) {
+				const guint8 aid_size = (guint8)hex_len/2;
 				guint8 buf[4];
 
 				/*
@@ -1504,9 +1498,9 @@ static gboolean ril_sim_list_apps_cb(void *data)
 				 * Application template TLV object.
 				 */
 				buf[0] = APP_TEMPLATE_TAG;
-				buf[1] = (guint8)(aid_size + 2);
+				buf[1] = aid_size + 2;
 				buf[2] = APP_ID_TAG;
-				buf[3] = (guint8)(aid_size);
+				buf[3] = aid_size;
 				g_byte_array_append(tlv, buf, sizeof(buf));
 				g_byte_array_append(tlv, aid, aid_size);
 			}
@@ -1570,7 +1564,7 @@ static void ril_sim_open_channel(struct ofono_sim *sim,
 	struct ril_sim *sd = ril_sim_get_data(sim);
 	struct ril_sim_cbd_io *cbd = ril_sim_cbd_io_new(sd, cb, data);
 	GRilIoRequest *req = grilio_request_new();
-	char *aid_hex = encode_hex(aid, len, 0);
+	char *aid_hex = ril_encode_hex(aid, len);
 
 	DBG_(sd, "%s", aid_hex);
 	grilio_request_append_utf8(req, aid_hex);
@@ -1713,7 +1707,7 @@ static void ril_sim_logical_access(struct ofono_sim *sim, int session_id,
 
 	GASSERT(len >= 5);
 	if (len > 5) {
-		hex_data = tmp = encode_hex(pdu + 5, len - 5, 0);
+		hex_data = tmp = ril_encode_hex(pdu + 5, len - 5);
 	} else {
 		tmp = NULL;
 		hex_data = "";
@@ -1768,7 +1762,7 @@ static void ril_sim_refresh_cb(GRilIoChannel *io, guint code,
 	 * so we could be more descrete here. However I have't actually
 	 * seen that in real life, let's just refresh everything for now.
 	 */
-	__ofono_sim_refresh(sd->sim, NULL, TRUE, TRUE);
+	ofono_sim_refresh_full(sd->sim);
 }
 
 static gboolean ril_sim_register(gpointer user)
