@@ -13,7 +13,6 @@ CONFIGURE_FLAGS := \
     --enable-sailfish-bt \
     --enable-sailfish-manager \
     --enable-sailfish-provision \
-    --enable-sailfish-pushforwarder \
     --enable-sailfish-rilmodem \
     --disable-add-remove-context \
     --disable-isimodem \
