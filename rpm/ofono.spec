@@ -130,6 +130,9 @@ systemctl daemon-reload ||:
 %postun
 systemctl daemon-reload ||:
 
+%transfiletriggerin -- %{_libdir}/ofono/plugins
+systemctl try-restart ofono.service ||:
+
 %files
 %defattr(-,root,root,-)
 %license COPYING
