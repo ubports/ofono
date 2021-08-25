@@ -994,18 +994,17 @@ static void bac_cb(GAtServer *server, GAtServerRequestType type,
 		/*
 		 * CVSD codec is mandatory and must come first.
 		 * See HFP v1.6 4.34.1
+		 * However, some headsets send the list in wrong order,
+		 * but function fine otherwise, so to get those working
+		 * let's not be pedantic about the codec order.
 		 */
-		if (g_at_result_iter_next_number(&iter, &val) == FALSE ||
-				val != HFP_CODEC_CVSD)
-			goto fail;
-
-		em->bac_received = TRUE;
-
-		em->negotiated_codec = 0;
-		em->r_codecs[CVSD_OFFSET].supported = TRUE;
-
 		while (g_at_result_iter_next_number(&iter, &val)) {
 			switch (val) {
+			case HFP_CODEC_CVSD:
+				em->bac_received = TRUE;
+				em->negotiated_codec = 0;
+				em->r_codecs[CVSD_OFFSET].supported = TRUE;
+				break;
 			case HFP_CODEC_MSBC:
 				em->r_codecs[MSBC_OFFSET].supported = TRUE;
 				break;
@@ -1013,6 +1012,11 @@ static void bac_cb(GAtServer *server, GAtServerRequestType type,
 				DBG("Unsupported HFP codec %d", val);
 				break;
 			}
+		}
+
+		if (!em->bac_received) {
+			DBG("Mandatory codec %d not received.", HFP_CODEC_CVSD);
+			goto fail;
 		}
 
 		g_at_server_send_final(server, G_AT_SERVER_RESULT_OK);
