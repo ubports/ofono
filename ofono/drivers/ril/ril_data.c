@@ -960,12 +960,6 @@ static gboolean ril_data_call_setup_submit(struct ril_data_request *req)
 			RADIO_TECH_LTE : priv->network->data.ril_tech;
 	if (tech > 2) {
 		tech += 2;
-	} else {
-		/*
-		 * This value used to be hardcoded, let's keep using it
-		 * as the default.
-		 */
-		tech = RADIO_TECH_HSPA;
 	}
 
 	if (setup->username && setup->username[0]) {
