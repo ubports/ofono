@@ -31,8 +31,6 @@
 #include <grilio_parser.h>
 #include <grilio_request.h>
 
-#include "common.h" /* ACCESS_TECHNOLOGY_EUTRAN */
-
 /* Yes, it does sometimes take minutes in roaming */
 #define SETUP_DATA_CALL_TIMEOUT (300*1000) /* ms */
 
@@ -898,7 +896,7 @@ static void ril_data_call_setup_cb(GRilIoChannel *io, int ril_status,
 		 */
 		case PDP_FAIL_MULTI_CONN_TO_SAME_PDN_NOT_ALLOWED:
 			if (priv->network->data.access_tech ==
-					ACCESS_TECHNOLOGY_EUTRAN &&
+					OFONO_ACCESS_TECHNOLOGY_EUTRAN &&
 						!priv->downgraded_tech) {
 				DBG("downgrading preferred technology");
 				priv->downgraded_tech = TRUE;

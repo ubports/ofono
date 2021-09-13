@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2019-2020 Jolla Ltd.
+ *  Copyright (C) 2019-2021 Jolla Ltd.
  *  Copyright (C) 2020 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -153,34 +153,34 @@ static void test_register()
 
 	/* Allow has higher priority */
 	g_assert(!ofono_dbus_access_plugin_register(&access_allow));
-	g_assert(__ofono_dbus_access_method_allowed(":1.0", 0, 1, NULL));
+	g_assert(ofono_dbus_access_method_allowed(":1.0", 0, 1, NULL));
 	ofono_dbus_access_plugin_unregister(&access_deny);
 	ofono_dbus_access_plugin_unregister(&access_allow);
 
 	/* Allow has higher priority */
 	g_assert(!ofono_dbus_access_plugin_register(&access_allow));
 	g_assert(!ofono_dbus_access_plugin_register(&access_deny));
-	g_assert(__ofono_dbus_access_method_allowed(":1.0", 0, 1, NULL));
+	g_assert(ofono_dbus_access_method_allowed(":1.0", 0, 1, NULL));
 	ofono_dbus_access_plugin_unregister(&access_deny);
 	ofono_dbus_access_plugin_unregister(&access_allow);
 
 	/* Deny wins here */
 	g_assert(!ofono_dbus_access_plugin_register(&access_dontcare));
 	g_assert(!ofono_dbus_access_plugin_register(&access_deny));
-	g_assert(!__ofono_dbus_access_method_allowed(":1.0", 0, 1, NULL));
+	g_assert(!ofono_dbus_access_method_allowed(":1.0", 0, 1, NULL));
 	ofono_dbus_access_plugin_unregister(&access_deny);
 	ofono_dbus_access_plugin_unregister(&access_dontcare);
 
 	/* And here too */
 	g_assert(!ofono_dbus_access_plugin_register(&access_broken));
 	g_assert(!ofono_dbus_access_plugin_register(&access_deny));
-	g_assert(!__ofono_dbus_access_method_allowed(":1.0", 0, 1, NULL));
+	g_assert(!ofono_dbus_access_method_allowed(":1.0", 0, 1, NULL));
 	ofono_dbus_access_plugin_unregister(&access_deny);
 	ofono_dbus_access_plugin_unregister(&access_dontcare);
 
 	/* DontCare will allow everything */
 	g_assert(!ofono_dbus_access_plugin_register(&access_dontcare));
-	g_assert(__ofono_dbus_access_method_allowed(":1.0", 0, 1, NULL));
+	g_assert(ofono_dbus_access_method_allowed(":1.0", 0, 1, NULL));
 	ofono_dbus_access_plugin_unregister(&access_dontcare);
 }
 
@@ -197,7 +197,7 @@ int main(int argc, char *argv[])
 
 	g_test_add_func(TEST_("intf_name"), test_intf_name);
 	for (i = 0; i < G_N_ELEMENTS(method_name_tests); i++) {
-		char* name = g_strdup_printf(TEST_("method_name/%d"), i + 1);
+		char *name = g_strdup_printf(TEST_("method_name/%d"), i + 1);
 		const struct test_method_name_data *test =
 			method_name_tests + i;
 

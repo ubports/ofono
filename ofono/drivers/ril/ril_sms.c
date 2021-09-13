@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2017 Jolla Ltd.
+ *  Copyright (C) 2015-2021 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -16,10 +16,6 @@
 #include "ril_plugin.h"
 #include "ril_util.h"
 #include "ril_log.h"
-
-#include "smsutil.h"
-#include "util.h"
-#include "simutil.h"
 
 #define RIL_SMS_ACK_RETRY_MS    1000
 #define RIL_SMS_ACK_RETRY_COUNT 10
@@ -246,10 +242,10 @@ static void ril_sms_submit(struct ofono_sms *sms, const unsigned char *pdu,
 	/* TPDU:
 	 *
 	 * 'pdu' is a raw hexadecimal string
-	 *  encode_hex() turns it into an ASCII/hex UTF8 buffer
+	 *  ril_encode_hex() turns it into an ASCII/hex buffer (subset of utf8)
 	 *  grilio_request_append_utf8() encodes utf8 -> utf16
 	 */
-	tpdu = encode_hex(pdu + smsc_len, tpdu_len, 0);
+	tpdu = ril_encode_hex(pdu + smsc_len, tpdu_len);
 	grilio_request_append_utf8(req, tpdu);
 
 	DBG("%s", tpdu);
@@ -296,7 +292,7 @@ static void ril_sms_notify(GRilIoChannel *io, guint ril_event,
 	char *ril_pdu;
 	int ril_pdu_len;
 	unsigned int smsc_len;
-	long ril_buf_len;
+	guint ril_buf_len;
 	guchar *ril_data;
 
 	ril_pdu = NULL;
@@ -312,7 +308,7 @@ static void ril_sms_notify(GRilIoChannel *io, guint ril_event,
 	ril_pdu_len = strlen(ril_pdu);
 
 	DBG("ril_pdu_len is %d", ril_pdu_len);
-	ril_data = decode_hex(ril_pdu, ril_pdu_len, &ril_buf_len, -1);
+	ril_data = ril_decode_hex(ril_pdu, ril_pdu_len, &ril_buf_len);
 	if (ril_data == NULL)
 		goto error;
 
@@ -325,14 +321,16 @@ static void ril_sms_notify(GRilIoChannel *io, guint ril_event,
 	ofono_info("sms received, smsc_len is %d", smsc_len);
 	DBG("(%s)", ril_pdu);
 
-	if (ril_event == RIL_UNSOL_RESPONSE_NEW_SMS) {
-		/* Last parameter is 'tpdu_len' ( substract SMSC length ) */
-		ofono_sms_deliver_notify(sd->sms, ril_data, ril_buf_len,
+	if (ril_buf_len >= smsc_len) {
+		if (ril_event == RIL_UNSOL_RESPONSE_NEW_SMS) {
+			/* Last parameter is tpdu_len (substract SMSC length) */
+			ofono_sms_deliver_notify(sd->sms, ril_data, ril_buf_len,
 						ril_buf_len - smsc_len);
-	} else {
-		GASSERT(ril_event == RIL_UNSOL_RESPONSE_NEW_SMS_STATUS_REPORT);
-		ofono_sms_status_notify(sd->sms, ril_data, ril_buf_len,
+		} else {
+			/* RIL_UNSOL_RESPONSE_NEW_SMS_STATUS_REPORT */
+			ofono_sms_status_notify(sd->sms, ril_data, ril_buf_len,
 						ril_buf_len - smsc_len);
+		}
 	}
 
 	g_free(ril_pdu);

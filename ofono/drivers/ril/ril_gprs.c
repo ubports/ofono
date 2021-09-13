@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2016 Jolla Ltd.
+ *  Copyright (C) 2015-2021 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -15,11 +15,12 @@
 
 #include "ril_plugin.h"
 #include "ril_network.h"
+#include "ril_netreg.h"
 #include "ril_data.h"
 #include "ril_util.h"
 #include "ril_log.h"
 
-#include "common.h"
+#include <ofono/misc.h>
 
 /*
  * This module is the ofono_gprs_driver implementation for rilmodem.
@@ -47,7 +48,7 @@ struct ril_gprs {
 	GRilIoQueue *q;
 	gboolean attached;
 	int max_cids;
-	enum network_registration_status registration_status;
+	enum ofono_netreg_status registration_status;
 	guint register_id;
 	gulong network_event_id;
 	gulong data_event_id;
@@ -78,11 +79,11 @@ static struct ril_gprs_cbd *ril_gprs_cbd_new(struct ril_gprs *gd,
 	return cbd;
 }
 
-static enum network_registration_status ril_gprs_fix_registration_status(
-		struct ril_gprs *gd, enum network_registration_status status)
+static enum ofono_netreg_status ril_gprs_fix_registration_status(
+		struct ril_gprs *gd, enum ofono_netreg_status status)
 {
 	if (!ril_data_allowed(gd->data)) {
-		return NETWORK_REGISTRATION_STATUS_NOT_REGISTERED;
+		return OFONO_NETREG_STATUS_NOT_REGISTERED;
 	} else {
 		/* TODO: need a way to make sure that SPDI information has
 		 * already been read from the SIM (i.e. sim_spdi_read_cb in
@@ -94,13 +95,13 @@ static enum network_registration_status ril_gprs_fix_registration_status(
 
 static void ril_gprs_data_update_registration_state(struct ril_gprs *gd)
 {
-	const enum network_registration_status status =
+	const enum ofono_netreg_status status =
 		ril_gprs_fix_registration_status(gd, gd->network->data.status);
 
 	if (gd->registration_status != status) {
 		ofono_info("data reg changed %d -> %d (%s), attached %d",
 				gd->registration_status, status,
-				registration_status_to_string(status),
+				ofono_netreg_status_to_string(status),
 				gd->attached);
 		gd->registration_status = status;
 		ofono_gprs_status_notify(gd->gprs, gd->registration_status);
@@ -188,12 +189,10 @@ static void ril_gprs_registration_status(struct ofono_gprs *gprs,
 {
 	struct ril_gprs *gd = ril_gprs_get_data(gprs);
 	struct ofono_error error;
-	const enum network_registration_status status = gd->attached ?
-		gd->registration_status :
-		NETWORK_REGISTRATION_STATUS_NOT_REGISTERED;
+	const enum ofono_netreg_status status = gd->attached ?
+		gd->registration_status : OFONO_NETREG_STATUS_NOT_REGISTERED;
 
-
-	DBG("%d (%s)", status, registration_status_to_string(status));
+	DBG("%d (%s)", status, ofono_netreg_status_to_string(status));
 	cb(ril_error_ok(&error), status, data);
 }
 

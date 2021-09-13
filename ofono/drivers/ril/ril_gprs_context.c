@@ -15,17 +15,16 @@
 
 #include "ril_plugin.h"
 #include "ril_network.h"
+#include "ril_netreg.h"
 #include "ril_data.h"
 #include "ril_util.h"
 #include "ril_log.h"
 
+#include <ofono/mtu-limit.h>
+
 #include <gutil_strv.h>
 
 #include <arpa/inet.h>
-
-#include "ofono.h"
-#include "common.h"
-#include "mtu-watch.h"
 
 #define CTX_ID_NONE ((unsigned int)(-1))
 
@@ -44,7 +43,7 @@ struct ril_gprs_context {
 	struct ril_data *data;
 	guint active_ctx_cid;
 	gulong calls_changed_id;
-	struct mtu_watch *mtu_watch;
+	struct ofono_mtu_limit *mtu_limit;
 	struct ril_data_call *active_call;
 	struct ril_gprs_context_call activate;
 	struct ril_gprs_context_call deactivate;
@@ -96,9 +95,9 @@ static void ril_gprs_context_free_active_call(struct ril_gprs_context *gcd)
 		ril_data_remove_handler(gcd->data, gcd->calls_changed_id);
 		gcd->calls_changed_id = 0;
 	}
-	if (gcd->mtu_watch) {
-		mtu_watch_free(gcd->mtu_watch);
-		gcd->mtu_watch = NULL;
+	if (gcd->mtu_limit) {
+		ofono_mtu_limit_free(gcd->mtu_limit);
+		gcd->mtu_limit = NULL;
 	}
 }
 
@@ -114,11 +113,12 @@ static void ril_gprs_context_set_active_call(struct ril_gprs_context *gcd,
 			 * Some MMS providers have a problem with MTU
 			 * greater than 1280. Let's be safe.
 			 */
-			if (!gcd->mtu_watch) {
-				gcd->mtu_watch = mtu_watch_new(MAX_MMS_MTU);
+			if (!gcd->mtu_limit) {
+				gcd->mtu_limit =
+					ofono_mtu_limit_new(MAX_MMS_MTU);
 			}
 		}
-		mtu_watch_set_ifname(gcd->mtu_watch, call->ifname);
+		ofono_mtu_limit_set_ifname(gcd->mtu_limit, call->ifname);
 		ril_data_call_grab(gcd->data, call->cid, gcd);
 	} else {
 		ril_gprs_context_free_active_call(gcd);
@@ -487,14 +487,14 @@ static void ril_gprs_context_activate_primary(struct ofono_gprs_context *gc,
 {
 	struct ril_gprs_context *gcd = ril_gprs_context_get_data(gc);
 	struct ofono_netreg *netreg = ril_modem_ofono_netreg(gcd->modem);
-	const int rs = ofono_netreg_get_status(netreg);
+	const enum ofono_netreg_status rs = ofono_netreg_get_status(netreg);
 
 	/* Let's make sure that we aren't connecting when roaming not allowed */
-	if (rs == NETWORK_REGISTRATION_STATUS_ROAMING) {
+	if (rs == OFONO_NETREG_STATUS_ROAMING) {
 		struct ofono_gprs *gprs = ril_modem_ofono_gprs(gcd->modem);
-		if (!__ofono_gprs_get_roaming_allowed(gprs) &&
+		if (!ofono_gprs_get_roaming_allowed(gprs) &&
 			ril_netreg_check_if_really_roaming(netreg, rs) ==
-					NETWORK_REGISTRATION_STATUS_ROAMING) {
+					OFONO_NETREG_STATUS_ROAMING) {
 			struct ofono_error error;
 			ofono_info("Can't activate context %u (roaming)",
 								ctx->cid);
@@ -511,7 +511,7 @@ static void ril_gprs_context_activate_primary(struct ofono_gprs_context *gc,
 	gcd->activate.cb = cb;
 	gcd->activate.data = data;
 	gcd->activate.req = ril_data_call_setup(gcd->data, ctx,
-				__ofono_gprs_context_get_assigned_type(gc),
+				ofono_gprs_context_get_assigned_type(gc),
 				ril_gprs_context_activate_primary_cb, gcd);
 }
 
@@ -623,7 +623,7 @@ static void ril_gprs_context_remove(struct ofono_gprs_context *gc)
 	ril_data_unref(gcd->data);
 	ril_network_unref(gcd->network);
 	ril_data_call_free(gcd->active_call);
-	mtu_watch_free(gcd->mtu_watch);
+	ofono_mtu_limit_free(gcd->mtu_limit);
 	g_free(gcd);
 }
 

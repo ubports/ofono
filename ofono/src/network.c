@@ -1799,6 +1799,12 @@ struct sim_spdi *ofono_netreg_get_spdi(struct ofono_netreg *netreg)
 	return netreg->spdi;
 }
 
+ofono_bool_t ofono_netreg_spdi_lookup(struct ofono_netreg *netreg,
+					const char *mcc, const char *mnc)
+{
+	return mcc && mnc && netreg && sim_spdi_lookup(netreg->spdi, mcc, mnc);
+}
+
 int ofono_netreg_driver_register(const struct ofono_netreg_driver *d)
 {
 	DBG("driver: %p, name: %s", d, d->name);

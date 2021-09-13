@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2019 Jolla Ltd.
+ *  Copyright (C) 2015-2021 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -20,11 +20,9 @@
 
 #include <gutil_misc.h>
 
-#include <sys/socket.h>
+#include <ofono/netreg.h>
+#include <ofono/misc.h>
 #include <ctype.h>
-
-#include "common.h"
-#include "netreg.h"
 
 #define RIL_PROTO_IP_STR "IP"
 #define RIL_PROTO_IPV6_STR "IPV6"
@@ -381,43 +379,43 @@ enum ril_auth ril_auth_method_from_ofono(enum ofono_gprs_auth_method auth)
 	return RIL_AUTH_BOTH;
 }
 
-/* Returns enum access_technology or -1 on failure. */
-int ril_parse_tech(const char *stech, int *ril_tech)
+enum ofono_access_technology ril_parse_tech(const char *stech, int *ril_tech)
 {
-	int access_tech = -1;
 	int tech = -1;
+	enum ofono_access_technology access_tech =
+		OFONO_ACCESS_TECHNOLOGY_NONE;
+
 	if (gutil_parse_int(stech, 0, &tech)) {
 		switch (tech) {
 		case RADIO_TECH_GPRS:
 		case RADIO_TECH_GSM:
-			access_tech = ACCESS_TECHNOLOGY_GSM;
+			access_tech = OFONO_ACCESS_TECHNOLOGY_GSM;
 			break;
 		case RADIO_TECH_EDGE:
-			access_tech = ACCESS_TECHNOLOGY_GSM_EGPRS;
+			access_tech = OFONO_ACCESS_TECHNOLOGY_GSM_EGPRS;
 			break;
 		case RADIO_TECH_UMTS:
-			access_tech = ACCESS_TECHNOLOGY_UTRAN;
+			access_tech = OFONO_ACCESS_TECHNOLOGY_UTRAN;
 			break;
 		case RADIO_TECH_HSDPA:
-			access_tech = ACCESS_TECHNOLOGY_UTRAN_HSDPA;
+			access_tech = OFONO_ACCESS_TECHNOLOGY_UTRAN_HSDPA;
 			break;
 		case RADIO_TECH_HSUPA:
-			access_tech = ACCESS_TECHNOLOGY_UTRAN_HSUPA;
+			access_tech = OFONO_ACCESS_TECHNOLOGY_UTRAN_HSUPA;
 			break;
 		case RADIO_TECH_HSPA:
 		case RADIO_TECH_HSPAP:
-			access_tech = ACCESS_TECHNOLOGY_UTRAN_HSDPA_HSUPA;
+			access_tech = OFONO_ACCESS_TECHNOLOGY_UTRAN_HSDPA_HSUPA;
 			break;
 		case RADIO_TECH_LTE:
 		case RADIO_TECH_LTE_CA:
-			access_tech = ACCESS_TECHNOLOGY_EUTRAN;
+			access_tech = OFONO_ACCESS_TECHNOLOGY_EUTRAN;
 			break;
 		default:
 			DBG("Unknown RIL tech %s", stech);
 			/* no break */
 		case RADIO_TECH_IWLAN:
 		case RADIO_TECH_UNKNOWN:
-			tech = -1;
 			break;
 		}
 
@@ -470,6 +468,39 @@ gboolean ril_parse_mcc_mnc(const char *str, struct ofono_network_operator *op)
 		}
 	}
 	return FALSE;
+}
+
+char* ril_encode_hex(const void *in, guint size)
+{
+	char *out = g_new(char, size * 2 + 1);
+
+	ofono_encode_hex(in, size, out);
+	return out;
+}
+
+void *ril_decode_hex(const char *hex, int len, guint *out_size)
+{
+	void *out = NULL;
+	guint size = 0;
+
+	if (hex) {
+		if (len < 0) {
+			len = (int) strlen(hex);
+		}
+		if (len > 0 && !(len & 1)) {
+			size = len/2;
+			out = g_malloc(size);
+			if (!gutil_hex2bin(hex, len, out)) {
+				g_free(out);
+				out = NULL;
+				size = 0;
+			}
+		}
+	}
+	if (out_size) {
+		*out_size = size;
+	}
+	return out;
 }
 
 /*

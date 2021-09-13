@@ -16,26 +16,26 @@ TESTS="\
  test-cdmasms \
  test-sms-root \
  test-caif \
+ test-cell-info \
+ test-cell-info-dbus \
+ test-conf \
  test-dbus-queue \
  test-dbus-access \
  test-dbus-clients \
  test-gprs-filter \
  test-provision \
- test-config \
  test-watch \
  test-ril_util \
  test-ril_config \
  test-ril_ecclist \
  test-ril-transport \
  test-ril_vendor \
- test-sms-filter \
- test-voicecall-filter \
  test-sailfish_access \
- test-sailfish_cell_info \
- test-sailfish_cell_info_dbus \
- test-sailfish_manager \
- test-sailfish_sim_info \
- test-sailfish_sim_info_dbus"
+ test-sim-info \
+ test-sim-info-dbus \
+ test-slot-manager \
+ test-sms-filter \
+ test-voicecall-filter"
 
 pushd `dirname $0` > /dev/null
 TEST_DIR="$PWD"

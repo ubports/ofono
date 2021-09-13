@@ -3,6 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2015-2021  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -28,7 +29,27 @@ extern "C" {
 
 #include <ofono/types.h>
 
+struct ofono_modem;
 struct ofono_netreg;
+
+enum ofono_netreg_status {
+	OFONO_NETREG_STATUS_NONE = -1,
+	/* 27.007 Section 7.2 <stat> */
+	OFONO_NETREG_STATUS_NOT_REGISTERED = 0,
+	OFONO_NETREG_STATUS_REGISTERED = 1,
+	OFONO_NETREG_STATUS_SEARCHING = 2,
+	OFONO_NETREG_STATUS_DENIED = 3,
+	OFONO_NETREG_STATUS_UNKNOWN = 4,
+	OFONO_NETREG_STATUS_ROAMING = 5
+}; /* Since mer/1.24+git2 */
+
+/* 27.007 Section 7.3 <stat> */
+enum ofono_operator_status {
+	OFONO_OPERATOR_STATUS_UNKNOWN =	0,
+	OFONO_OPERATOR_STATUS_AVAILABLE = 1,
+	OFONO_OPERATOR_STATUS_CURRENT = 2,
+	OFONO_OPERATOR_STATUS_FORBIDDEN = 3
+}; /* Since mer/1.24+git2 */
 
 /* Theoretical limit is 16, but each GSM char can be encoded into
  *  * 3 UTF8 characters resulting in 16*3=48 chars
@@ -39,8 +60,8 @@ struct ofono_network_operator {
 	char name[OFONO_MAX_OPERATOR_NAME_LENGTH + 1];
 	char mcc[OFONO_MAX_MCC_LENGTH + 1];
 	char mnc[OFONO_MAX_MNC_LENGTH + 1];
-	int status;
-	int tech;
+	enum ofono_operator_status status;
+	enum ofono_access_technology tech;
 };
 
 typedef void (*ofono_netreg_operator_cb_t)(const struct ofono_error *error,
@@ -110,12 +131,16 @@ void *ofono_netreg_get_data(struct ofono_netreg *netreg);
 
 int ofono_netreg_get_location(struct ofono_netreg *netreg);
 int ofono_netreg_get_cellid(struct ofono_netreg *netreg);
-int ofono_netreg_get_status(struct ofono_netreg *netreg);
+enum ofono_netreg_status ofono_netreg_get_status(struct ofono_netreg *netreg);
 int ofono_netreg_get_technology(struct ofono_netreg *netreg);
 const char *ofono_netreg_get_mcc(struct ofono_netreg *netreg);
 const char *ofono_netreg_get_mnc(struct ofono_netreg *netreg);
 const char *ofono_netreg_get_name(struct ofono_netreg *netreg);
 struct sim_spdi *ofono_netreg_get_spdi(struct ofono_netreg *netreg);
+
+/* Since mer/1.24+git2 */
+ofono_bool_t ofono_netreg_spdi_lookup(struct ofono_netreg *netreg,
+					const char *mcc, const char *mnc);
 
 #ifdef __cplusplus
 }

@@ -183,8 +183,8 @@ AC_ARG_ENABLE(sailfish-rilmodem, AC_HELP_STRING([--enable-sailfish-rilmodem],
 				[enable_sailfish_rilmodem="no"])
 AM_CONDITIONAL(SAILFISH_RILMODEM, test "${enable_sailfish_rilmodem}" != "no")
 
-PKG_CHECK_MODULES(GLIBUTIL, libglibutil >= 1.0.35, dummy=yes,
-			AC_MSG_ERROR(libglibutil >= 1.0.35 is required))
+PKG_CHECK_MODULES(GLIBUTIL, libglibutil >= 1.0.49, dummy=yes,
+			AC_MSG_ERROR(libglibutil >= 1.0.49 is required))
 CFLAGS="$CFLAGS $GLIBUTIL_CFLAGS"
 LIBS="$LIBS $GLIBUTIL_LIBS"
 

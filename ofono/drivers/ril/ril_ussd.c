@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2019 Jolla Ltd.
+ *  Copyright (C) 2015-2021 Jolla Ltd.
  *  Copyright (C) 2019 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -18,8 +18,7 @@
 #include "ril_util.h"
 #include "ril_log.h"
 
-#include "smsutil.h"
-#include "util.h"
+#include <ofono/misc.h>
 
 #define USSD_REQUEST_TIMEOUT_SEC (30)
 #define USSD_CANCEL_TIMEOUT_SEC (20)
@@ -96,7 +95,7 @@ static void ril_ussd_request(struct ofono_ussd *ussd, int dcs,
 	const unsigned char *pdu, int len, ofono_ussd_cb_t cb, void *data)
 {
 	struct ofono_error error;
-	enum sms_charset charset;
+	enum ofono_sms_charset charset;
 	struct ril_ussd *ud = ril_ussd_get_data(ussd);
 
 	ofono_info("send ussd, len:%d", len);
@@ -106,47 +105,42 @@ static void ril_ussd_request(struct ofono_ussd *ussd, int dcs,
 		ud->request_id = 0;
 	}
 
-	if (cbs_dcs_decode(dcs, NULL, NULL, &charset, NULL, NULL, NULL)) {
-		if (charset == SMS_CHARSET_7BIT) {
-			unsigned char unpacked_buf[182];
-			long written = 0;
+	if (ofono_decode_cbs_dcs_charset(dcs, &charset) &&
+		charset == OFONO_SMS_CHARSET_7BIT) {
+		char unpacked[182];
+		unsigned int written = ofono_unpack_7bit(pdu, len,
+			OFONO_UNPACK_7BIT_USSD, unpacked, sizeof(unpacked)-1);
 
-			unpack_7bit_own_buf(pdu, len, 0, TRUE,
-					sizeof(unpacked_buf)-1, &written, 0,
-					unpacked_buf);
+		unpacked[written] = 0;
+		if (written >= 1) {
+			/*
+			 * When USSD was packed, additional CR
+			 * might have been added (according to
+			 * 23.038 6.1.2.3.1). So if the last
+			 * character is CR, it should be removed
+			 * here.
+			 *
+			 * Over 2 characters long USSD string must
+			 * end with # (checked in valid_ussd_string),
+			 * so it should be safe to remove extra CR.
+			 */
+			GRilIoRequest *req = grilio_request_new();
+			int length = strlen(unpacked);
 
-			unpacked_buf[written] = 0;
-			if (written >= 1) {
-				/*
-				 * When USSD was packed, additional CR
-				 * might have been added (according to
-				 * 23.038 6.1.2.3.1). So if the last
-				 * character is CR, it should be removed
-				 * here.
-				 *
-				 * Over 2 characters long USSD string must
-				 * end with # (checked in valid_ussd_string),
-				 * so it should be safe to remove extra CR.
-				 */
-				GRilIoRequest *req = grilio_request_new();
-				int length = strlen((char *)unpacked_buf);
-				while (length > 2 &&
-					unpacked_buf[length-1] == '\r') {
-					unpacked_buf[--length] = 0;
-				}
-				grilio_request_append_utf8_chars(req, (char*)
-						unpacked_buf, length);
-				grilio_request_set_timeout(req,
-					USSD_REQUEST_TIMEOUT_SEC * 1000);
-				ud->request_id =
-					grilio_queue_send_request_full(ud->q,
-						req, RIL_REQUEST_SEND_USSD,
-						ril_ussd_response,
-						ril_ussd_cbd_free,
-						ril_ussd_cbd_new(ud, cb, data));
-				grilio_request_unref(req);
-				return;
+			while (length > 2 && unpacked[length-1] == '\r') {
+				unpacked[--length] = 0;
 			}
+			grilio_request_append_utf8_chars(req, (char*)
+					unpacked, length);
+			grilio_request_set_timeout(req,
+					USSD_REQUEST_TIMEOUT_SEC * 1000);
+			ud->request_id = grilio_queue_send_request_full(ud->q,
+					req, RIL_REQUEST_SEND_USSD,
+					ril_ussd_response,
+					ril_ussd_cbd_free,
+					ril_ussd_cbd_new(ud, cb, data));
+			grilio_request_unref(req);
+			return;
 		}
 	}
 

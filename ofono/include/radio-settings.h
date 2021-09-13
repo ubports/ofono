@@ -3,6 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2010  Nokia Corporation and/or its subsidiary(-ies).
+ *  Copyright (C) 2015-2021 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -139,6 +140,8 @@ struct ofono_modem *ofono_radio_settings_get_modem(
 const char *ofono_radio_access_mode_to_string(enum ofono_radio_access_mode m);
 ofono_bool_t ofono_radio_access_mode_from_string(const char *str,
 					enum ofono_radio_access_mode *mode);
+enum ofono_radio_access_mode ofono_radio_access_max_mode( /* mer/1.24+git2 */
+					enum ofono_radio_access_mode mask);
 
 #ifdef __cplusplus
 }

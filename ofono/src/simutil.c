@@ -29,7 +29,7 @@
 
 #include <glib.h>
 
-#include <ofono/types.h>
+#include <ofono/misc.h>
 #include "simutil.h"
 #include "util.h"
 #include "smsutil.h"
@@ -1824,4 +1824,36 @@ gboolean sim_parse_gsm_authenticate(const unsigned char *buffer, int len,
 
 gsm_end:
 	return FALSE;
+}
+
+/* Public API exposed to external plugins */
+
+unsigned int ofono_get_ef_path_2g(unsigned short id,
+			unsigned char path[/* OFONO_EF_PATH_BUFFER_SIZE */])
+{
+	return sim_ef_db_get_path_2g(id, path);
+}
+
+unsigned int ofono_get_ef_path_3g(unsigned short id,
+			unsigned char path[/* OFONO_EF_PATH_BUFFER_SIZE */])
+{
+	return sim_ef_db_get_path_3g(id, path);
+}
+
+ofono_bool_t ofono_parse_get_response_2g(const void *response, unsigned int len,
+			unsigned int *file_len, unsigned int *record_len,
+			unsigned int *structure, unsigned char *access,
+			unsigned char *status)
+{
+	return sim_parse_2g_get_response(response, len, (int *)file_len,
+			(int *)record_len, (int *)structure, access, status);
+}
+
+ofono_bool_t ofono_parse_get_response_3g(const void *response, unsigned int len,
+			unsigned int *file_len, unsigned int *record_len,
+			unsigned int *structure, unsigned char *access,
+			unsigned short *efid)
+{
+	return sim_parse_3g_get_response(response, len, (int *)file_len,
+			(int *)record_len, (int *)structure, access, efid);
 }

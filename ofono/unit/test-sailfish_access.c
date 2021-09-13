@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2019 Jolla Ltd.
+ *  Copyright (C) 2019-2021 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -117,27 +117,27 @@ static void test_default()
 	g_assert(__ofono_builtin_sailfish_access.init() == 0);
 
 	/* root and privileged are allowed to Dial by default */
-	g_assert(__ofono_dbus_access_method_allowed(ROOT_SENDER,
+	g_assert(ofono_dbus_access_method_allowed(ROOT_SENDER,
 				OFONO_DBUS_ACCESS_INTF_VOICECALLMGR,
 				OFONO_DBUS_ACCESS_VOICECALLMGR_DIAL, NULL));
-	g_assert(__ofono_dbus_access_method_allowed(PRIVILEGED_SENDER,
+	g_assert(ofono_dbus_access_method_allowed(PRIVILEGED_SENDER,
 				OFONO_DBUS_ACCESS_INTF_VOICECALLMGR,
 				OFONO_DBUS_ACCESS_VOICECALLMGR_DIAL, NULL));
 
 	/* Non-privileged and unknown users are not */
-	g_assert(!__ofono_dbus_access_method_allowed(NON_PRIVILEGED_SENDER,
+	g_assert(!ofono_dbus_access_method_allowed(NON_PRIVILEGED_SENDER,
 				OFONO_DBUS_ACCESS_INTF_VOICECALLMGR,
 				OFONO_DBUS_ACCESS_VOICECALLMGR_DIAL, NULL));
-	g_assert(!__ofono_dbus_access_method_allowed(INVALID_SENDER,
+	g_assert(!ofono_dbus_access_method_allowed(INVALID_SENDER,
 				OFONO_DBUS_ACCESS_INTF_VOICECALLMGR,
 				OFONO_DBUS_ACCESS_VOICECALLMGR_DIAL, NULL));
 
 	/* Unknown interfaces/methods are allowed */
-	g_assert(__ofono_dbus_access_method_allowed(NON_PRIVILEGED_SENDER,
+	g_assert(ofono_dbus_access_method_allowed(NON_PRIVILEGED_SENDER,
 				OFONO_DBUS_ACCESS_INTF_COUNT, 0, NULL));
-	g_assert(__ofono_dbus_access_method_allowed(NON_PRIVILEGED_SENDER,
+	g_assert(ofono_dbus_access_method_allowed(NON_PRIVILEGED_SENDER,
 				OFONO_DBUS_ACCESS_INTF_MESSAGE, -1, NULL));
-	g_assert(__ofono_dbus_access_method_allowed(NON_PRIVILEGED_SENDER,
+	g_assert(ofono_dbus_access_method_allowed(NON_PRIVILEGED_SENDER,
 				OFONO_DBUS_ACCESS_INTF_MESSAGE,
 				OFONO_DBUS_ACCESS_MESSAGE_METHOD_COUNT, NULL));
 
@@ -249,7 +249,7 @@ static void test_config(gconstpointer test_data)
 	g_assert(g_file_set_contents(file, test->config, -1, NULL));
 
 	g_assert(__ofono_builtin_sailfish_access.init() == 0);
-	g_assert(__ofono_dbus_access_method_allowed(test->sender,
+	g_assert(ofono_dbus_access_method_allowed(test->sender,
 			test->intf, test->method, NULL) == test->allowed);
 	__ofono_builtin_sailfish_access.exit();
 

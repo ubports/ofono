@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2015-2019 Jolla Ltd.
+ *  Copyright (C) 2015-2021 Jolla Ltd.
  *  Copyright (C) 2019 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -18,7 +18,8 @@
 #include <config.h>
 #endif
 
-#include "ofono.h"
+#include <ofono/conf.h>
+#include <ofono/log.h>
 
 #include <string.h>
 #include <unistd.h>
@@ -26,7 +27,7 @@
 #include <sys/stat.h>
 
 /**
- * The config_merge_files() function does the following:
+ * The ofono_conf_merge_files() function does the following:
  *
  * 1. Loads the specified key file (say, "/etc/foo.conf")
  * 2. Scans the subdirectory named after the file (e.g. "/etc/foo.d/")
@@ -76,12 +77,12 @@
  *   c=5
  *
  * Note that the list separator is assumed to be ',' (rather than default ';').
- * The keyfile passed to config_merge_files() should use the same list
+ * The keyfile passed to ofono_conf_merge_files() should use the same list
  * separator, because the default values are copied from the config files
  * as is.
  */
 
-static gint config_sort_files(gconstpointer a, gconstpointer b)
+static gint conf_sort_files(gconstpointer a, gconstpointer b)
 {
 	/* The comparison function for g_ptr_array_sort() doesn't take
 	 * the pointers from the array as arguments, it takes pointers
@@ -89,7 +90,7 @@ static gint config_sort_files(gconstpointer a, gconstpointer b)
 	return strcmp(*(char**)a, *(char**)b);
 }
 
-static char **config_collect_files(const char *path, const char *suffix)
+static char **conf_collect_files(const char *path, const char *suffix)
 {
 	/* Returns sorted list of regular files in the directory,
 	 * optionally having the specified suffix (e.g. ".conf").
@@ -119,7 +120,7 @@ static char **config_collect_files(const char *path, const char *suffix)
                 }
 
 		if (list->len > 0) {
-			g_ptr_array_sort(list, config_sort_files);
+			g_ptr_array_sort(list, conf_sort_files);
 			g_ptr_array_add(list, NULL);
 			files = (char**)g_ptr_array_free(list, FALSE);
 		} else {
@@ -131,7 +132,7 @@ static char **config_collect_files(const char *path, const char *suffix)
 	return files;
 }
 
-static int config_list_find(char **list, gsize len, const char *value)
+static int conf_list_find(char **list, gsize len, const char *value)
 {
 	guint i;
 
@@ -144,9 +145,8 @@ static int config_list_find(char **list, gsize len, const char *value)
 	return -1;
 }
 
-static void config_list_append(GKeyFile *conf, GKeyFile *k,
-				const char *group, const char *key,
-				char **values, gsize n, gboolean unique)
+static void conf_list_append(GKeyFile *conf, GKeyFile *k, const char *group,
+	const char *key, char **values, gsize n, gboolean unique)
 {
 	/* Note: will steal strings from values */
 	if (n > 0) {
@@ -163,7 +163,7 @@ static void config_list_append(GKeyFile *conf, GKeyFile *k,
 		for (i = 0; i < (int)n; i++) {
 			char *val = values[i];
 
-			if (!unique || config_list_find((char**)
+			if (!unique || conf_list_find((char**)
 				newlist->pdata, newlist->len, val) < 0) {
 				/* Move the string to the new list */
 				g_ptr_array_add(newlist, val);
@@ -186,8 +186,8 @@ static void config_list_append(GKeyFile *conf, GKeyFile *k,
 	}
 }
 
-static void config_list_remove(GKeyFile *conf, GKeyFile *k,
-		const char *group, const char *key, char **values, gsize n)
+static void conf_list_remove(GKeyFile *conf, GKeyFile *k,
+	const char *group, const char *key, char **values, gsize n)
 {
 	if (n > 0) {
 		gsize len = 0;
@@ -202,7 +202,7 @@ static void config_list_remove(GKeyFile *conf, GKeyFile *k,
 				int pos;
 
 				/* Remove all matching values */
-				while ((pos = config_list_find(list, len,
+				while ((pos = conf_list_find(list, len,
 							values[i])) >= 0) {
 					g_free(list[pos]);
 					memmove(list + pos, list + pos + 1,
@@ -221,8 +221,7 @@ static void config_list_remove(GKeyFile *conf, GKeyFile *k,
 	}
 }
 
-static void config_merge_group(GKeyFile *conf, GKeyFile *k,
-							const char *group)
+static void conf_merge_group(GKeyFile *conf, GKeyFile *k, const char *group)
 {
 	gsize i, n = 0;
 	char **keys = g_key_file_get_keys(k, group, &n, NULL);
@@ -244,7 +243,7 @@ static void config_merge_group(GKeyFile *conf, GKeyFile *k,
 						group, key, &count, NULL);
 
 				key[len-1] = 0;
-				config_list_append(conf, k, group, key,
+				conf_list_append(conf, k, group, key,
 						values, count, last == '?');
 				g_strfreev(values);
 			} else if (last == '-') {
@@ -253,7 +252,7 @@ static void config_merge_group(GKeyFile *conf, GKeyFile *k,
 						group, key, &count, NULL);
 
 				key[len-1] = 0;
-				config_list_remove(conf, k, group, key,
+				conf_list_remove(conf, k, group, key,
 							values, count);
 				g_strfreev(values);
 			} else {
@@ -281,7 +280,7 @@ static void config_merge_group(GKeyFile *conf, GKeyFile *k,
 	g_strfreev(keys);
 }
 
-static void config_merge_keyfile(GKeyFile *conf, GKeyFile *k)
+static void conf_merge_keyfile(GKeyFile *conf, GKeyFile *k)
 {
 	gsize i, n = 0;
 	char **groups = g_key_file_get_groups(k, &n);
@@ -292,27 +291,27 @@ static void config_merge_keyfile(GKeyFile *conf, GKeyFile *k)
 		if (group[0] == '!') {
 			g_key_file_remove_group(conf, group + 1, NULL);
 		} else {
-			config_merge_group(conf, k, group);
+			conf_merge_group(conf, k, group);
 		}
 	}
 
 	g_strfreev(groups);
 }
 
-static void config_merge_file(GKeyFile *conf, const char *file)
+static void conf_merge_file(GKeyFile *conf, const char *file)
 {
 	GKeyFile *k = g_key_file_new();
 
 	g_key_file_set_list_separator(k, ',');
 
 	if (g_key_file_load_from_file(k, file, 0, NULL)) {
-		config_merge_keyfile(conf, k);
+		conf_merge_keyfile(conf, k);
 	}
 
 	g_key_file_unref(k);
 }
 
-void config_merge_files(GKeyFile *conf, const char *file)
+void ofono_conf_merge_files(GKeyFile *conf, const char *file)
 {
 	if (conf && file && file[0]) {
 		char *dot = strrchr(file, '.');
@@ -334,13 +333,13 @@ void config_merge_files(GKeyFile *conf, const char *file)
 			suffix = dot + 1;
 		}
 
-		files = config_collect_files(dir, suffix);
+		files = conf_collect_files(dir, suffix);
 		g_free(dir);
 
-		/* Load the main config */
+		/* Load the main conf */
 		if (g_file_test(file, G_FILE_TEST_EXISTS)) {
 			DBG("Loading %s", file);
-			config_merge_file(conf, file);
+			conf_merge_file(conf, file);
 		}
 
 		if (files) {
@@ -348,12 +347,234 @@ void config_merge_files(GKeyFile *conf, const char *file)
 
 			for (ptr = files; *ptr; ptr++) {
 				DBG("Merging %s", *ptr);
-				config_merge_file(conf, *ptr);
+				conf_merge_file(conf, *ptr);
 			}
 
 			g_strfreev(files);
 		}
 	}
+}
+
+char *ofono_conf_get_string(GKeyFile *file, const char *group, const char *key)
+{
+	char *val = g_key_file_get_string(file, group, key, NULL);
+
+	if (!val && strcmp(group, OFONO_COMMON_SETTINGS_GROUP)) {
+		/* Check the common section */
+		val = g_key_file_get_string(file, OFONO_COMMON_SETTINGS_GROUP,
+			key, NULL);
+	}
+	return val;
+}
+
+char **ofono_conf_get_strings(GKeyFile *file, const char *group,
+					const char *key, char delimiter)
+{
+	char *str = ofono_conf_get_string(file, group, key);
+
+	if (str) {
+		char **strv, **p;
+		char delimiter_str[2];
+
+		delimiter_str[0] = delimiter;
+		delimiter_str[1] = 0;
+		strv = g_strsplit(str, delimiter_str, -1);
+
+		/* Strip whitespaces */
+		for (p = strv; *p; p++) {
+			*p = g_strstrip(*p);
+		}
+
+		g_free(str);
+		return strv;
+	}
+
+	return NULL;
+}
+
+gboolean ofono_conf_get_integer(GKeyFile *file, const char *group,
+	const char *key, int *out_value)
+{
+	GError *error = NULL;
+	int value = g_key_file_get_integer(file, group, key, &error);
+
+	if (!error) {
+		if (out_value) {
+			*out_value = value;
+		}
+		return TRUE;
+	} else {
+		g_error_free(error);
+		if (strcmp(group, OFONO_COMMON_SETTINGS_GROUP)) {
+			/* Check the common section */
+			error = NULL;
+			value = g_key_file_get_integer(file,
+				OFONO_COMMON_SETTINGS_GROUP, key, &error);
+			if (!error) {
+				if (out_value) {
+					*out_value = value;
+				}
+				return TRUE;
+			}
+			g_error_free(error);
+		}
+		return FALSE;
+	}
+}
+
+gboolean ofono_conf_get_boolean(GKeyFile *file, const char *group,
+	const char *key, gboolean *out_value)
+{
+	GError *error = NULL;
+	gboolean value = g_key_file_get_boolean(file, group, key, &error);
+
+	if (!error) {
+		if (out_value) {
+			*out_value = value;
+		}
+		return TRUE;
+	} else {
+		g_error_free(error);
+		if (strcmp(group, OFONO_COMMON_SETTINGS_GROUP)) {
+			/* Check the common section */
+			error = NULL;
+			value = g_key_file_get_boolean(file,
+				OFONO_COMMON_SETTINGS_GROUP, key, &error);
+			if (!error) {
+				if (out_value) {
+					*out_value = value;
+				}
+				return TRUE;
+			}
+			g_error_free(error);
+		}
+		return FALSE;
+	}
+}
+
+gboolean ofono_conf_get_flag(GKeyFile *file, const char *group,
+	const char *key, int flag, int *flags)
+{
+	gboolean value;
+
+	if (ofono_conf_get_boolean(file, group, key, &value)) {
+		if (value) {
+			*flags |= flag;
+		} else {
+			*flags &= ~flag;
+		}
+		return TRUE;
+	} else {
+		return FALSE;
+	}
+}
+
+gboolean ofono_conf_get_enum(GKeyFile *file, const char *group,
+	const char *key, int *result, const char *name, int value, ...)
+{
+	char *str = ofono_conf_get_string(file, group, key);
+
+	if (str) {
+		/*
+		 * Some people are thinking that # is a comment
+		 * anywhere on the line, not just at the beginning
+		 */
+		char *comment = strchr(str, '#');
+
+		if (comment) *comment = 0;
+		g_strstrip(str);
+		if (strcasecmp(str, name)) {
+			va_list args;
+			va_start(args, value);
+			while ((name = va_arg(args, char*)) != NULL) {
+				value = va_arg(args, int);
+				if (!strcasecmp(str, name)) {
+					break;
+				}
+			}
+			va_end(args);
+		}
+
+		if (!name) {
+			ofono_error("Invalid %s config value (%s)", key, str);
+		}
+
+		g_free(str);
+
+		if (name) {
+			if (result) {
+				*result = value;
+			}
+			return TRUE;
+		}
+	}
+
+	return FALSE;
+}
+
+gboolean ofono_conf_get_mask(GKeyFile *file, const char *group,
+	const char *key, int *result, const char *name, int value, ...)
+{
+	char *str = ofono_conf_get_string(file, group, key);
+	gboolean ok = FALSE;
+
+	if (result) {
+		*result = 0;
+	}
+
+	if (str) {
+		/*
+		 * Some people are thinking that # is a comment
+		 * anywhere on the line, not just at the beginning
+		 */
+		char *comment = strchr(str, '#');
+		char **values, **ptr;
+
+		if (comment) *comment = 0;
+		values = g_strsplit(str, "+", -1);
+
+		for (ok = TRUE, ptr = values; *ptr && ok; ptr++) {
+			const char* found_str = NULL;
+			const char* s = g_strstrip(*ptr);
+
+			if (!strcasecmp(s, name)) {
+				found_str = name;
+				if (result) {
+					*result |= value;
+				}
+			} else {
+				va_list args;
+				const char* known;
+
+				va_start(args, value);
+				while ((known = va_arg(args, char*)) != NULL) {
+					const int bit = va_arg(args, int);
+
+					if (!strcasecmp(s, known)) {
+						found_str = known;
+						if (result) {
+							*result |= bit;
+						}
+						break;
+					}
+				}
+				va_end(args);
+			}
+
+			if (!found_str) {
+				ofono_error("Unknown bit '%s' in %s", s, key);
+				ok = FALSE;
+			}
+		}
+
+		g_strfreev(values);
+		g_free(str);
+	}
+
+	if (!ok && result) {
+		*result = 0;
+	}
+	return ok;
 }
 
 /*

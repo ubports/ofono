@@ -3,7 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2010 Nokia Corporation and/or its subsidiary(-ies).
- *  Copyright (C) 2014-2020 Jolla Ltd.
+ *  Copyright (C) 2015-2021 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -62,7 +62,7 @@ struct ofono_radio_settings {
 	struct ofono_atom *atom;
 };
 
-enum ofono_radio_access_mode __ofono_radio_access_max_mode(
+enum ofono_radio_access_mode ofono_radio_access_max_mode(
 					enum ofono_radio_access_mode mask)
 {
 	return	(mask & OFONO_RADIO_ACCESS_MODE_LTE) ?
@@ -77,7 +77,7 @@ enum ofono_radio_access_mode __ofono_radio_access_max_mode(
 #define radio_access_mode_to_string ofono_radio_access_mode_to_string
 const char *ofono_radio_access_mode_to_string(enum ofono_radio_access_mode m)
 {
-	switch (__ofono_radio_access_max_mode(m)) {
+	switch (ofono_radio_access_max_mode(m)) {
 	case OFONO_RADIO_ACCESS_MODE_ANY:
 		return "any";
 	case OFONO_RADIO_ACCESS_MODE_GSM:
@@ -569,7 +569,7 @@ static DBusMessage *radio_set_property_handler(DBusMessage *msg, void *data)
 	dbus_message_iter_get_basic(&iter, &property);
 	dbus_message_iter_next(&iter);
 
-	if (!__ofono_dbus_access_method_allowed(dbus_message_get_sender(msg),
+	if (!ofono_dbus_access_method_allowed(dbus_message_get_sender(msg),
 		OFONO_DBUS_ACCESS_INTF_RADIOSETTINGS,
 		OFONO_DBUS_ACCESS_RADIOSETTINGS_SET_PROPERTY, property))
 		return __ofono_error_access_denied(msg);

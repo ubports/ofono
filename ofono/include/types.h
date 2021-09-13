@@ -3,6 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2015-2021  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -42,11 +43,61 @@ typedef int		ofono_bool_t;
 
 typedef void (*ofono_destroy_func)(void *data);
 
+enum ofono_access_technology {
+	OFONO_ACCESS_TECHNOLOGY_NONE = -1,
+	/* 27.007 Section 7.3 <AcT> */
+	OFONO_ACCESS_TECHNOLOGY_GSM = 0,
+	OFONO_ACCESS_TECHNOLOGY_GSM_COMPACT = 1,
+	OFONO_ACCESS_TECHNOLOGY_UTRAN = 2,
+	OFONO_ACCESS_TECHNOLOGY_GSM_EGPRS = 3,
+	OFONO_ACCESS_TECHNOLOGY_UTRAN_HSDPA = 4,
+	OFONO_ACCESS_TECHNOLOGY_UTRAN_HSUPA = 5,
+	OFONO_ACCESS_TECHNOLOGY_UTRAN_HSDPA_HSUPA = 6,
+	OFONO_ACCESS_TECHNOLOGY_EUTRAN = 7
+};
+
 /* 27.007 Section 6.2 */
 enum ofono_clir_option {
 	OFONO_CLIR_OPTION_DEFAULT = 0,
-	OFONO_CLIR_OPTION_INVOCATION,
-	OFONO_CLIR_OPTION_SUPPRESSION,
+	OFONO_CLIR_OPTION_INVOCATION = 1,
+	OFONO_CLIR_OPTION_SUPPRESSION = 2,
+};
+
+/* 27.007 Section 7.6 */
+enum ofono_clip_validity {
+	OFONO_CLIP_VALIDITY_VALID = 0,
+	OFONO_CLIP_VALIDITY_WITHHELD = 1,
+	OFONO_CLIP_VALIDITY_NOT_AVAILABLE = 2
+};
+
+/* 27.007 Section 7.30 */
+enum ofono_cnap_validity {
+	OFONO_CNAP_VALIDITY_VALID = 0,
+	OFONO_CNAP_VALIDITY_WITHHELD = 1,
+	OFONO_CNAP_VALIDITY_NOT_AVAILABLE = 2
+};
+
+/* 27.007 Section 7.18 */
+enum ofono_call_status {
+	OFONO_CALL_STATUS_ACTIVE = 0,
+	OFONO_CALL_STATUS_HELD = 1,
+	OFONO_CALL_STATUS_DIALING = 2,
+	OFONO_CALL_STATUS_ALERTING = 3,
+	OFONO_CALL_STATUS_INCOMING = 4,
+	OFONO_CALL_STATUS_WAITING = 5,
+	OFONO_CALL_STATUS_DISCONNECTED
+};
+
+/* 27.007 Section 7.18 */
+enum ofono_call_direction {
+	OFONO_CALL_DIRECTION_MOBILE_ORIGINATED = 0,
+	OFONO_CALL_DIRECTION_MOBILE_TERMINATED = 1
+};
+
+enum ofono_sms_charset {
+	OFONO_SMS_CHARSET_7BIT = 0,
+	OFONO_SMS_CHARSET_8BIT = 1,
+	OFONO_SMS_CHARSET_UCS2 = 2
 };
 
 enum ofono_error_type {
@@ -96,13 +147,13 @@ struct ofono_cdma_phone_number {
 struct ofono_call {
 	unsigned int id;
 	int type;
-	int direction;
-	int status;
+	enum ofono_call_direction direction;
+	enum ofono_call_status status;
 	struct ofono_phone_number phone_number;
 	struct ofono_phone_number called_number;
 	char name[OFONO_MAX_CALLER_NAME_LENGTH + 1];
-	int clip_validity;
-	int cnap_validity;
+	enum ofono_clip_validity clip_validity;
+	enum ofono_cnap_validity cnap_validity;
 };
 
 struct ofono_network_time {

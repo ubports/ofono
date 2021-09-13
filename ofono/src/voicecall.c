@@ -509,7 +509,7 @@ static DBusMessage *voicecall_get_properties(DBusConnection *conn,
 static gboolean voicecall_allow(DBusMessage *msg,
 			enum ofono_dbus_access_voicecall_method method)
 {
-	return __ofono_dbus_access_method_allowed(dbus_message_get_sender(msg),
+	return ofono_dbus_access_method_allowed(dbus_message_get_sender(msg),
 			OFONO_DBUS_ACCESS_INTF_VOICECALL, method, NULL);
 }
 
@@ -863,6 +863,9 @@ static void notify_emulator_call_status(struct ofono_voicecall *vc)
 
 		case CALL_STATUS_WAITING:
 			waiting = TRUE;
+			break;
+
+		case CALL_STATUS_DISCONNECTED:
 			break;
 		}
 	}
@@ -1747,7 +1750,7 @@ static int voicecall_dial(struct ofono_voicecall *vc, const char *number,
 static gboolean manager_allow(DBusMessage *msg,
 			enum ofono_dbus_access_voicecallmgr_method method)
 {
-	return __ofono_dbus_access_method_allowed(dbus_message_get_sender(msg),
+	return ofono_dbus_access_method_allowed(dbus_message_get_sender(msg),
 			OFONO_DBUS_ACCESS_INTF_VOICECALLMGR, method, NULL);
 }
 

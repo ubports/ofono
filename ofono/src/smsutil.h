@@ -3,7 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
- *  Copyright (C) 2015-2020  Jolla Ltd.
+ *  Copyright (C) 2015-2021  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -19,6 +19,8 @@
  *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
  */
+
+#include <ofono/types.h>
 
 #define CBS_MAX_GSM_CHARS 93
 #define SMS_MSGID_LEN 20
@@ -149,11 +151,10 @@ enum sms_class {
 	SMS_CLASS_UNSPECIFIED = 4,
 };
 
-enum sms_charset {
-	SMS_CHARSET_7BIT = 0,
-	SMS_CHARSET_8BIT = 1,
-	SMS_CHARSET_UCS2 = 2,
-};
+#define sms_charset ofono_sms_charset
+#define SMS_CHARSET_7BIT OFONO_SMS_CHARSET_7BIT /* 0 */
+#define SMS_CHARSET_8BIT OFONO_SMS_CHARSET_8BIT /* 1 */
+#define SMS_CHARSET_UCS2 OFONO_SMS_CHARSET_UCS2 /* 2 */
 
 enum sms_alphabet {
 	SMS_ALPHABET_DEFAULT = 0,

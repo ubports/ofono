@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2018 Jolla Ltd.
+ *  Copyright (C) 2018-2021 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -21,37 +21,6 @@ extern "C" {
 #endif
 
 #include <ofono/voicecall.h>
-
-/* 27.007 Section 7.6 */
-enum ofono_clip_validity {
-	OFONO_CLIP_VALIDITY_VALID = 0,
-	OFONO_CLIP_VALIDITY_WITHHELD,
-	OFONO_CLIP_VALIDITY_NOT_AVAILABLE
-};
-
-/* 27.007 Section 7.18 */
-enum ofono_call_status {
-	OFONO_CALL_STATUS_ACTIVE = 0,
-	OFONO_CALL_STATUS_HELD,
-	OFONO_CALL_STATUS_DIALING,
-	OFONO_CALL_STATUS_ALERTING,
-	OFONO_CALL_STATUS_INCOMING,
-	OFONO_CALL_STATUS_WAITING,
-	OFONO_CALL_STATUS_DISCONNECTED
-};
-
-/* 27.007 Section 7.18 */
-enum ofono_call_direction {
-	OFONO_CALL_DIRECTION_MOBILE_ORIGINATED = 0,
-	OFONO_CALL_DIRECTION_MOBILE_TERMINATED
-};
-
-/* 27.007 Section 7.30 */
-enum ofono_cnap_validity {
-	OFONO_CNAP_VALIDITY_VALID = 0,
-	OFONO_CNAP_VALIDITY_WITHHELD,
-	OFONO_CNAP_VALIDITY_NOT_AVAILABLE
-};
 
 enum ofono_voicecall_filter_dial_result {
 	OFONO_VOICECALL_FILTER_DIAL_CONTINUE,     /* Run the next filter */

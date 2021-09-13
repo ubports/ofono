@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2016-2017 Jolla Ltd.
+ *  Copyright (C) 2021 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -9,23 +9,21 @@
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  *  GNU General Public License for more details.
  */
 
-#ifndef SAILFISH_CELL_INFO_DBUS_H
-#define SAILFISH_CELL_INFO_DBUS_H
+#ifndef RIL_NETREG_H
+#define RIL_NETREG_H
 
-struct ofono_modem;
+#include "ril_types.h"
 
-struct sailfish_cell_info;
-struct sailfish_cell_info_dbus;
+#include <ofono/netreg.h>
 
-struct sailfish_cell_info_dbus *sailfish_cell_info_dbus_new
-		(struct ofono_modem *modem, struct sailfish_cell_info *info);
-void sailfish_cell_info_dbus_free(struct sailfish_cell_info_dbus *dbus);
+enum ofono_netreg_status ril_netreg_check_if_really_roaming
+		(struct ofono_netreg *reg, enum ofono_netreg_status status);
 
-#endif /* SAILFISH_CELL_INFO_DBUS_H */
+#endif /* RIL_NETREG_H */
 
 /*
  * Local Variables:

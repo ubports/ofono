@@ -3,6 +3,7 @@
  *  oFono - Open Telephony stack for Linux
  *
  *  Copyright (C) 2011  Nokia Corporation and/or its subsidiary(-ies).
+ *  Copyright (C) 2015-2021  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -55,6 +56,14 @@ int ofono_gprs_provision_driver_register(
 void ofono_gprs_provision_driver_unregister(
 			const struct ofono_gprs_provision_driver *driver);
 
+/* Since mer/1.24+git2 */
+ofono_bool_t ofono_gprs_provision_get_settings(const char *mcc,
+				const char *mnc, const char *spn,
+				struct ofono_gprs_provision_data **settings,
+				int *count);
+void ofono_gprs_provision_free_settings(
+				struct ofono_gprs_provision_data *settings,
+				int count);
 #ifdef __cplusplus
 }
 #endif

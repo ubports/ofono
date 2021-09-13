@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2016-2019 Jolla Ltd.
+ *  Copyright (C) 2016-2021 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -18,9 +18,9 @@
 
 #include "ril_types.h"
 
-#include <sailfish_cell_info.h>
+#include <ofono/cell-info.h>
 
-struct sailfish_cell_info *ril_cell_info_new(GRilIoChannel *io,
+struct ofono_cell_info *ril_cell_info_new(GRilIoChannel *io,
 			const char *log_prefix, struct ril_radio *radio,
 			struct ril_sim_card *sim_card);
 

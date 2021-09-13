@@ -34,10 +34,8 @@
 
 #include <ofono/netreg.h>
 #include <ofono/watch.h>
+#include <ofono/misc.h>
 #include <ofono/gprs.h>
-
-#include "ofono.h"
-#include "common.h"
 
 #define SET_PREF_MODE_HOLDOFF_SEC RIL_RETRY_SECS
 
@@ -188,7 +186,7 @@ static void ril_network_stop_timer(struct ril_network *self,
 static void ril_network_reset_state(struct ril_registration_state *reg)
 {
 	memset(reg, 0, sizeof(*reg));
-	reg->status = NETWORK_REGISTRATION_STATUS_UNKNOWN;
+	reg->status = OFONO_NETREG_STATUS_NONE;
 	reg->access_tech = -1;
 	reg->ril_tech = -1;
 	reg->lac = -1;
@@ -274,10 +272,10 @@ static gboolean ril_network_parse_response(struct ril_network *self,
 	reg->access_tech = ril_parse_tech(stech, &reg->ril_tech);
 
 	DBG_(self, "%s,%s,%s,%d,%s,%s,%s",
-				registration_status_to_string(reg->status),
-				slac, sci, reg->ril_tech,
-				registration_tech_to_string(reg->access_tech),
-				sreason, smax);
+			ofono_netreg_status_to_string(reg->status),
+			slac, sci, reg->ril_tech,
+			ofono_access_technology_to_string(reg->access_tech),
+			sreason, smax);
 
 	g_free(sstatus);
 	g_free(slac);
@@ -343,7 +341,7 @@ static void ril_network_poll_operator_cb(GRilIoChannel *io, int req_status,
 		op.tech = -1;
 		if (ril_parse_mcc_mnc(numeric, &op)) {
 			if (op.tech < 0) op.tech = self->voice.access_tech;
-			op.status = OPERATOR_STATUS_CURRENT;
+			op.status = OFONO_OPERATOR_STATUS_CURRENT;
 			op.name[0] = 0;
 			if (lalpha) {
 				strncpy(op.name, lalpha, sizeof(op.name));
@@ -372,7 +370,8 @@ static void ril_network_poll_operator_cb(GRilIoChannel *io, int req_status,
 					"%s, mcc=%s, mnc=%s, %s",
 					lalpha, salpha, numeric,
 					op.name, op.mcc, op.mnc,
-					registration_tech_to_string(op.tech));
+					ofono_access_technology_to_string
+								(op.tech));
 			} else {
 				DBG_(self, "no operator");
 			}
@@ -539,8 +538,8 @@ enum ofono_radio_access_mode ril_network_max_supported_mode
 	struct ril_network_priv *priv = self->priv;
 	const struct ril_radio_caps *caps = priv->caps;
 
-	return caps ? __ofono_radio_access_max_mode(caps->supported_modes) :
-				__ofono_radio_access_max_mode(settings->techs);
+	return caps ? ofono_radio_access_max_mode(caps->supported_modes) :
+				ofono_radio_access_max_mode(settings->techs);
 }
 
 static enum ofono_radio_access_mode ril_network_actual_pref_mode

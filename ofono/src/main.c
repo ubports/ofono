@@ -3,7 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
- *  Copyright (C) 2015-2020  Jolla Ltd.
+ *  Copyright (C) 2015-2021  Jolla Ltd.
  *  Copyright (C) 2019-2020  Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -305,6 +305,8 @@ int main(int argc, char **argv)
 
 	__ofono_manager_init();
 
+        __ofono_slot_manager_init();
+
 	__ofono_plugin_init(option_plugin, option_noplugin);
 
 	g_free(option_plugin);
@@ -318,6 +320,8 @@ int main(int argc, char **argv)
 	}
 
 	__ofono_plugin_cleanup();
+
+        __ofono_slot_manager_cleanup();
 
 	__ofono_manager_cleanup();
 

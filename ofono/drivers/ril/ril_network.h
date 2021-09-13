@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony - RIL-based devices
  *
- *  Copyright (C) 2015-2020 Jolla Ltd.
+ *  Copyright (C) 2015-2021 Jolla Ltd.
  *  Copyright (C) 2020 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -19,14 +19,16 @@
 
 #include "ril_types.h"
 
+#include <ofono/netreg.h>
+
 #include <glib-object.h>
 
 struct ofono_network_operator;
 struct ril_radio_caps;
 
 struct ril_registration_state {
-	int status;        /* enum network_registration_status */
-	int access_tech;   /* enum access_technology or -1 if none */
+	enum ofono_netreg_status status;
+	enum ofono_access_technology access_tech;
 	int ril_tech;
 	int max_calls;
 	int lac;
