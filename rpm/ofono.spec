@@ -3,7 +3,7 @@ Summary:    Open Source Telephony
 Version:    1.24
 Release:    1
 License:    GPLv2
-URL:        https://git.sailfishos.org/mer-core/ofono
+URL:        https://github.com/sailfishos/ofono
 Source:     %{name}-%{version}.tar.bz2
 
 %define libgrilio_version 1.0.38
