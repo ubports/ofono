@@ -458,7 +458,7 @@ static void ril_post_sim(struct ofono_modem *modem)
 	}
 
 	if (ofono_modem_get_boolean(modem, MODEM_PROP_LTE_CAPABLE))
-		ofono_lte_create(modem, "rilmodem", rd->ril);
+		ofono_lte_create(modem, 0, "rilmodem", rd->ril);
 
 	ofono_stk_create(modem, 0, "rilmodem", rd->ril);
 }

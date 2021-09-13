@@ -1,3 +1,16 @@
+ver 1.24:
+	Fix issue with property changed signals and CDMA networks.
+	Fix issue with handling SIM filesystem and SIM removal.
+	Fix issue with handling PIN state and incorrect codes.
+	Fix issue with handling of parsing AID type.
+	Fix issue with SIM detection and QMI devices.
+	Fix issue with PIN handling and QMI devices.
+	Fix issue with USSD handling and QMI devices.
+	Fix issue with handling USSD TERMINATED response.
+	Fix issue with handling USSD reset and STK REFRESH.
+	Add support for detecting Gemalto ALS3 modems.
+	Add support for SIMCom based SIM7100E modems.
+
 ver 1.23:
 	Fix issue with handling SIM AID sessions.
 	Add support for QMI LTE bearer handling.

@@ -48,6 +48,51 @@ struct cbs_data {
 	unsigned int vendor;
 };
 
+static void at_xmm_etw_sec_notify(GAtResult *result, gpointer user_data)
+{
+	struct ofono_cbs *cbs = user_data;
+	const char *hexpdu;
+	int pdulen;
+	GAtResultIter iter;
+	unsigned char pdu[88];
+	long hexpdulen;
+
+	DBG("");
+
+	g_at_result_iter_init(&iter, result);
+
+	if (!g_at_result_iter_next(&iter, "+XETWSECWARN:"))
+		return;
+
+	if (!g_at_result_iter_next_number(&iter, &pdulen))
+		return;
+
+	if (pdulen != 88) {
+		ofono_error("Got a CBM message with invalid PDU size!");
+		return;
+	}
+
+	hexpdu = g_at_result_pdu(result);
+	if (hexpdu == NULL) {
+		ofono_error("Got a CBM, but no PDU.  Are we in text mode?");
+		return;
+	}
+
+	DBG("Got new Cell Broadcast via XETWSECWARN: %s, %d", hexpdu, pdulen);
+
+	if (decode_hex_own_buf(hexpdu, -1, &hexpdulen, 0, pdu) == NULL) {
+		ofono_error("Unable to hex-decode the PDU");
+		return;
+	}
+
+	if (hexpdulen != pdulen) {
+		ofono_error("hexpdu length not equal to reported pdu length");
+		return;
+	}
+
+	ofono_cbs_notify(cbs, pdu, pdulen);
+}
+
 static void at_cbm_notify(GAtResult *result, gpointer user_data)
 {
 	struct ofono_cbs *cbs = user_data;
@@ -124,6 +169,10 @@ static void at_cbs_set_topics(struct ofono_cbs *cbs, const char *topics,
 		g_at_chat_send(data->chat, "AT+CSCB=0", none_prefix,
 				NULL, NULL, NULL);
 		break;
+	case OFONO_VENDOR_XMM:
+		g_at_chat_send(data->chat, "AT+XETWNTFYSTART=2", none_prefix,
+				NULL, NULL, NULL);
+		break;
 	default:
 		break;
 	}
@@ -151,6 +200,10 @@ static void at_cbs_clear_topics(struct ofono_cbs *cbs,
 
 	DBG("");
 
+	if (data->vendor == OFONO_VENDOR_XMM)
+                g_at_chat_send(data->chat, "AT+XETWNTFYSTOP=2", none_prefix,
+                                NULL, NULL, NULL);
+
 	if (g_at_chat_send(data->chat, "AT+CSCB=0", none_prefix,
 				at_cscb_set_cb, cbd, g_free) > 0)
 		return;
@@ -174,6 +227,10 @@ static void at_cbs_register(gboolean ok, GAtResult *result, gpointer user)
 	 * appropriately for us
 	 */
 	g_at_chat_register(data->chat, "+CBM:", at_cbm_notify, TRUE, cbs, NULL);
+
+	if (data->vendor == OFONO_VENDOR_XMM)
+		g_at_chat_register(data->chat, "+XETWSECWARN:",
+					at_xmm_etw_sec_notify, TRUE, cbs, NULL);
 
 	ofono_cbs_register(cbs);
 }
@@ -222,6 +279,13 @@ static int at_cbs_probe(struct ofono_cbs *cbs, unsigned int vendor,
 	data->vendor = vendor;
 
 	ofono_cbs_set_data(cbs, data);
+
+	if (vendor == OFONO_VENDOR_XMM) {
+		g_at_chat_send(data->chat, "AT+XCMAS=1", cscb_prefix,
+				NULL, NULL, NULL);
+		g_at_chat_send(data->chat, "AT+XETWCFG=1,1,0,0; ", none_prefix,
+				NULL, NULL, NULL);
+	}
 
 	g_at_chat_send(data->chat, "AT+CSCB=?", cscb_prefix,
 			at_cscb_support_cb, cbs, NULL);

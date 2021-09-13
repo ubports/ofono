@@ -329,7 +329,7 @@ static void parse_device_caps(const void *data)
 	assert(r);
 
 	assert(device_type == 1);
-	assert(cellular_class = 1);
+	assert(cellular_class == 1);
 	assert(voice_class == 1);
 	assert(sim_class == 2);
 	assert(data_class == 0x3f);

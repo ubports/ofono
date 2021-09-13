@@ -960,7 +960,8 @@ static void sim_enter_pin_cb(const struct ofono_error *error, void *data)
 
 	__ofono_dbus_pending_reply(&sim->pending, reply);
 
-	if (sim->initialized)
+	/* If PIN entry fails, then recheck the PIN type */
+	if (sim->initialized || error->type != OFONO_ERROR_TYPE_NO_ERROR)
 		goto recheck;
 
 	if (sim->pin_type == OFONO_SIM_PASSWORD_SIM_PIN ||

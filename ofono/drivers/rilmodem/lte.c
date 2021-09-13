@@ -108,7 +108,8 @@ static gboolean lte_delayed_register(gpointer user_data)
 	return FALSE;
 }
 
-static int ril_lte_probe(struct ofono_lte *lte, void *user_data)
+static int ril_lte_probe(struct ofono_lte *lte,
+				unsigned int vendor, void *user_data)
 {
 	GRil *ril = user_data;
 	struct ril_lte_data *ld;

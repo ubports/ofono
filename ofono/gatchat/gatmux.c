@@ -30,6 +30,9 @@
 #include <string.h>
 #include <alloca.h>
 
+#pragma GCC diagnostic ignored "-Wpragmas"
+#pragma GCC diagnostic ignored "-Wcast-function-type"
+
 #include <glib.h>
 
 #include "ringbuffer.h"
