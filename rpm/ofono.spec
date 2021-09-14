@@ -6,17 +6,12 @@ License:    GPLv2
 URL:        https://github.com/sailfishos/ofono
 Source:     %{name}-%{version}.tar.bz2
 
-%define libgrilio_version 1.0.38
-%define libglibutil_version 1.0.30
-%define libmce_version 1.0.6
 %define libglibutil_version 1.0.49
 
 Requires:   dbus
 Requires:   systemd
 Requires:   ofono-configs
 Requires:   libglibutil >= %{libglibutil_version}
-Requires:   libgrilio >= %{libgrilio_version}
-Requires:   libmce-glib >= %{libmce_version}
 Requires:   mobile-broadband-provider-info
 Requires(preun): systemd
 Requires(post): systemd
@@ -30,8 +25,6 @@ BuildRequires:  pkgconfig(glib-2.0)
 BuildRequires:  pkgconfig(libudev) >= 145
 BuildRequires:  pkgconfig(libwspcodec) >= 2.0
 BuildRequires:  pkgconfig(libglibutil) >= %{libglibutil_version}
-BuildRequires:  pkgconfig(libgrilio) >= %{libgrilio_version}
-BuildRequires:  pkgconfig(libmce-glib) >= %{libmce_version}
 BuildRequires:  pkgconfig(libdbuslogserver-dbus)
 BuildRequires:  pkgconfig(libdbusaccess)
 BuildRequires:  pkgconfig(mobile-broadband-provider-info)
@@ -61,13 +54,6 @@ Obsoletes:  ofono-test < 1.0
 %description tests
 Scripts for testing oFono and its functionality
 
-%package configs-mer
-Summary:    Package to provide default configs for ofono
-Provides:   ofono-configs
-
-%description configs-mer
-This package provides default configs for ofono
-
 %package doc
 Summary:   Documentation for %{name}
 Requires:  %{name} = %{version}-%{release}
@@ -89,9 +75,9 @@ autoreconf --force --install
     --enable-sailfish-debuglog \
     --enable-sailfish-provision \
     --enable-sailfish-pushforwarder \
-    --enable-sailfish-rilmodem \
     --enable-sailfish-access \
     --disable-add-remove-context \
+    --disable-rilmodem \
     --disable-isimodem \
     --disable-qmimodem \
     --with-systemdunitdir=%{_unitdir}
@@ -154,10 +140,6 @@ systemctl try-restart ofono.service ||:
 %files tests
 %defattr(-,root,root,-)
 %{_libdir}/%{name}/test/*
-
-%files configs-mer
-%defattr(-,root,root,-)
-%config /etc/ofono/ril_subscription.conf
 
 %files doc
 %defattr(-,root,root,-)

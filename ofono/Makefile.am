@@ -126,58 +126,7 @@ builtin_modules += sailfish_access
 builtin_sources += plugins/sailfish_access.c
 endif
 
-if DATAFILES
-dist_conf_DATA += drivers/ril/ril_subscription.conf
-endif
-
 if RILMODEM
-if SAILFISH_RILMODEM
-
-builtin_modules += ril
-builtin_sources +=	drivers/ril/ril_call_barring.c \
-			drivers/ril/ril_call_forward.c \
-			drivers/ril/ril_call_settings.c \
-			drivers/ril/ril_call_volume.c \
-			drivers/ril/ril_cell_info.c \
-			drivers/ril/ril_config.c \
-			drivers/ril/ril_connman.c \
-			drivers/ril/ril_cbs.c \
-			drivers/ril/ril_data.c \
-			drivers/ril/ril_devinfo.c \
-			drivers/ril/ril_devmon.c \
-			drivers/ril/ril_devmon_auto.c \
-			drivers/ril/ril_devmon_combine.c \
-			drivers/ril/ril_devmon_ds.c \
-			drivers/ril/ril_devmon_ss.c \
-			drivers/ril/ril_devmon_ur.c \
-			drivers/ril/ril_ecclist.c \
-			drivers/ril/ril_gprs.c \
-			drivers/ril/ril_gprs_context.c \
-			drivers/ril/ril_modem.c \
-			drivers/ril/ril_netmon.c \
-			drivers/ril/ril_netreg.c \
-			drivers/ril/ril_network.c \
-			drivers/ril/ril_oem_raw.c \
-			drivers/ril/ril_phonebook.c \
-			drivers/ril/ril_plugin.c \
-			drivers/ril/ril_radio.c \
-			drivers/ril/ril_radio_caps.c \
-			drivers/ril/ril_radio_settings.c \
-			drivers/ril/ril_sim.c \
-			drivers/ril/ril_sim_card.c \
-			drivers/ril/ril_sim_settings.c \
-			drivers/ril/ril_sms.c \
-			drivers/ril/ril_stk.c \
-			drivers/ril/ril_ussd.c \
-			drivers/ril/ril_util.c \
-			drivers/ril/ril_vendor.c \
-			drivers/ril/ril_voicecall.c
-
-# Vendor specific extensions
-builtin_sources +=	drivers/ril/ril_vendor_mtk.c
-
-else
-
 builtin_sources += $(gril_sources)
 
 builtin_modules += rildev
@@ -217,7 +166,6 @@ builtin_sources += drivers/rilmodem/rilmodem.h \
 			drivers/rilmodem/cbs.c \
 			drivers/infineonmodem/infineon_constants.h \
 			drivers/rilmodem/lte.c
-endif
 endif
 
 if ISIMODEM
@@ -488,7 +436,7 @@ builtin_sources += drivers/cdmamodem/cdmamodem.h \
 			drivers/cdmamodem/connman.c
 endif
 
-if !RILMODEM
+if EXTRA_MODEMS
 builtin_modules += g1
 builtin_sources += plugins/g1.c
 
@@ -566,9 +514,6 @@ builtin_sources += plugins/sim900.c
 
 builtin_modules += sim7100
 builtin_sources += plugins/sim7100.c
-
-builtin_modules += connman
-builtin_sources += plugins/connman.c
 
 builtin_modules += telit
 builtin_sources += plugins/telit.c
@@ -1036,52 +981,12 @@ unit_objects += $(unit_test_dbus_access_OBJECTS)
 unit_tests += unit/test-dbus-access
 
 if RILMODEM
-if SAILFISH_RILMODEM
-
-unit_test_conf_SOURCES = unit/test-conf.c drivers/ril/ril_util.c \
-			src/conf.c src/util.c src/log.c
-unit_test_conf_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
-unit_test_conf_LDADD = @GLIB_LIBS@ -ldl
-unit_objects += $(unit_test_conf_OBJECTS)
-unit_tests += unit/test-conf
-
-unit_test_ril_config_SOURCES = unit/test-ril_config.c drivers/ril/ril_util.c \
-			drivers/ril/ril_config.c src/conf.c src/util.c src/log.c
-unit_test_ril_config_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
-unit_test_ril_config_LDADD = @GLIB_LIBS@ -ldl
-unit_objects += $(unit_test_ril_config_OBJECTS)
-unit_tests += unit/test-ril_config
-
-unit_test_ril_ecclist_SOURCES = unit/test-ril_ecclist.c \
-				drivers/ril/ril_ecclist.c src/log.c
-unit_test_ril_ecclist_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
-unit_test_ril_ecclist_LDADD = @GLIB_LIBS@ -ldl
-unit_objects += $(unit_test_ril_ecclist_OBJECTS)
-unit_tests += unit/test-ril_ecclist
-
-unit_test_ril_util_SOURCES = unit/test-ril_util.c drivers/ril/ril_util.c \
-			src/util.c src/log.c
-unit_test_ril_util_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
-unit_test_ril_util_LDADD = @GLIB_LIBS@ -ldl
-unit_objects += $(unit_test_ril_util_OBJECTS)
-unit_tests += unit/test-ril_util
-
-unit_test_ril_vendor_SOURCES = unit/test-ril_vendor.c unit/fake_watch.c \
-	drivers/ril/ril_vendor.c drivers/ril/ril_vendor_mtk.c  \
-	drivers/ril/ril_util.c src/util.c src/log.c
-unit_test_ril_vendor_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
-unit_test_ril_vendor_LDADD = @GLIB_LIBS@ -ldl
-unit_objects += $(unit_test_ril_vendor_OBJECTS)
-unit_tests += unit/test-ril_vendor
-
-else
 unit_tests += unit/test-rilmodem-cs \
 				unit/test-rilmodem-cs \
 				unit/test-rilmodem-sms \
 				unit/test-rilmodem-cb \
 				unit/test-rilmodem-gprs
 
-endif
 endif
 
 if ELL
