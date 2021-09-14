@@ -113,7 +113,7 @@ static void ril_cell_info_update_cells(RilCellInfo *self, GPtrArray *l)
 	if (l && !ril_cell_info_list_identical(self->cells,
 		(struct ofono_cell **)l->pdata)) {
 		gutil_ptrv_free((void**)self->cells);
-		self->info.cells = (struct ofono_cell **)
+		self->info.cells = self->cells = (struct ofono_cell **)
 			g_ptr_array_free(l, FALSE);
 		g_signal_emit(self, ril_cell_info_signals
 			[SIGNAL_CELLS_CHANGED], 0);
