@@ -178,9 +178,10 @@ static guint slot_base_signals[SIGNAL_COUNT];
 static GQuark slot_base_property_quarks[MAX_PROPERTIES];
 
 static void slot_manager_reindex_slots(OfonoSlotManagerObject *mgr);
-static int slot_manager_update_modem_paths(OfonoSlotManagerObject *mgr);
 static void slot_manager_emit_all_queued_signals(OfonoSlotManagerObject *mgr);
 static void slot_manager_update_ready(OfonoSlotManagerObject *mgr);
+static enum slot_manager_dbus_signal slot_manager_update_modem_paths
+	(OfonoSlotManagerObject *mgr) G_GNUC_WARN_UNUSED_RESULT;
 
 static inline OfonoSlotBase *slot_base_cast(gpointer p)
 {
@@ -368,6 +369,13 @@ static inline void slot_emit_queued_signals(OfonoSlotObject *slot)
 	slot_base_emit_queued_signals(&slot->base);
 }
 
+static inline void slot_manager_update_modem_paths_and_notify
+	(OfonoSlotManagerObject *mgr, enum slot_manager_dbus_signal extra)
+{
+	slot_manager_dbus_signal(mgr->dbus, extra |
+		slot_manager_update_modem_paths(mgr));
+}
+
 static void slot_update_data_role(OfonoSlotObject *slot,
 					enum ofono_slot_data_role role)
 {
@@ -401,7 +409,8 @@ static void slot_manager_slot_modem_changed(struct ofono_watch *w, void *data)
 	OfonoSlotManagerObject *mgr = slot->manager;
 
 	slot_update_cell_info_dbus(slot);
-	slot_manager_update_modem_paths(mgr);
+	slot_manager_update_modem_paths_and_notify(mgr,
+		SLOT_MANAGER_DBUS_SIGNAL_NONE);
 	slot_manager_update_ready(mgr);
 	slot_manager_emit_all_queued_signals(mgr);
 }
@@ -695,9 +704,10 @@ static gboolean slot_manager_all_sims_are_initialized
  * The caller has a chance to OR it with other bits. Also updates the
  * queued signals mask but doesn't actually emit any signals.
  */
-static int slot_manager_update_modem_paths(OfonoSlotManagerObject *mgr)
+static enum slot_manager_dbus_signal slot_manager_update_modem_paths
+	(OfonoSlotManagerObject *mgr)
 {
-	int mask = 0;
+	enum slot_manager_dbus_signal mask = SLOT_MANAGER_DBUS_SIGNAL_NONE;
 	OfonoSlotObject *slot = NULL;
 	OfonoSlotObject *mms_slot = NULL;
 	OfonoSlotObject *old_data_slot = NULL;
@@ -1107,10 +1117,9 @@ static void slot_manager_dbus_set_enabled_slots(struct ofono_slot_manager *m,
 		}
 		g_strfreev(new_slots);
 
-		/* Update paths and emigt signals */
-		slot_manager_dbus_signal(mgr->dbus,
-			SLOT_MANAGER_DBUS_SIGNAL_ENABLED_SLOTS |
-			slot_manager_update_modem_paths(mgr));
+		/* Update paths and emit signals */
+		slot_manager_update_modem_paths_and_notify(mgr,
+			SLOT_MANAGER_DBUS_SIGNAL_ENABLED_SLOTS);
 		slot_manager_emit_all_queued_signals(mgr);
 	}
 }
@@ -1126,9 +1135,8 @@ static gboolean slot_manager_dbus_set_mms_imsi(struct ofono_slot_manager *m,
 				DBG("MMS sim %s", imsi);
 				g_free(mgr->mms_imsi);
 				m->mms_imsi = mgr->mms_imsi = g_strdup(imsi);
-				slot_manager_dbus_signal(mgr->dbus,
-					SLOT_MANAGER_DBUS_SIGNAL_MMS_IMSI |
-					slot_manager_update_modem_paths(mgr));
+				slot_manager_update_modem_paths_and_notify(mgr,
+					SLOT_MANAGER_DBUS_SIGNAL_MMS_IMSI);
 				slot_manager_emit_all_queued_signals(mgr);
 			} else {
 				DBG("IMSI not found: %s", imsi);
@@ -1140,9 +1148,8 @@ static gboolean slot_manager_dbus_set_mms_imsi(struct ofono_slot_manager *m,
 			DBG("No MMS sim");
 			g_free(mgr->mms_imsi);
 			m->mms_imsi = mgr->mms_imsi = NULL;
-			slot_manager_dbus_signal(mgr->dbus,
-				SLOT_MANAGER_DBUS_SIGNAL_MMS_IMSI |
-				slot_manager_update_modem_paths(mgr));
+			slot_manager_update_modem_paths_and_notify(mgr,
+				SLOT_MANAGER_DBUS_SIGNAL_MMS_IMSI);
 			slot_manager_emit_all_queued_signals(mgr);
 		}
 	}
@@ -1162,9 +1169,8 @@ static void slot_manager_dbus_set_default_voice_imsi
 		mgr->default_voice_imsi = g_strdup(imsi);
 		slot_manager_set_config_string(mgr,
 			SM_STORE_DEFAULT_VOICE_SIM, imsi);
-		slot_manager_dbus_signal(mgr->dbus,
-			SLOT_MANAGER_DBUS_SIGNAL_VOICE_IMSI |
-			slot_manager_update_modem_paths(mgr));
+		slot_manager_update_modem_paths_and_notify(mgr,
+			SLOT_MANAGER_DBUS_SIGNAL_VOICE_IMSI);
 		slot_manager_emit_all_queued_signals(mgr);
 	}
 }
@@ -1181,9 +1187,8 @@ static void slot_manager_dbus_set_default_data_imsi
 		mgr->default_data_imsi = g_strdup(imsi);
 		slot_manager_set_config_string(mgr,
 			SM_STORE_DEFAULT_DATA_SIM, imsi);
-		slot_manager_dbus_signal(mgr->dbus,
-			SLOT_MANAGER_DBUS_SIGNAL_DATA_IMSI |
-			slot_manager_update_modem_paths(mgr));
+		slot_manager_update_modem_paths_and_notify(mgr,
+			SLOT_MANAGER_DBUS_SIGNAL_DATA_IMSI);
 		slot_manager_emit_all_queued_signals(mgr);
 	}
 }
@@ -1365,7 +1370,8 @@ void ofono_slot_set_sim_presence(struct ofono_slot *s,
 			OFONO_SLOT_PROPERTY_SIM_PRESENCE);
 		slot_manager_dbus_signal_sim(mgr->dbus, slot->index,
 			SLOT_MANAGER_DBUS_SLOT_SIGNAL_PRESENT);
-		slot_manager_update_modem_paths(mgr);
+		slot_manager_update_modem_paths_and_notify(mgr,
+			SLOT_MANAGER_DBUS_SIGNAL_NONE);
 		slot_manager_update_ready(mgr);
 		slot_manager_emit_all_queued_signals(mgr);
 	}
