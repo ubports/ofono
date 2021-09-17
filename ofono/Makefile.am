@@ -911,6 +911,12 @@ unit_tests = unit/test-common unit/test-util unit/test-idmap \
 				unit/test-simutil unit/test-stkutil \
 				unit/test-sms unit/test-cdmasms
 
+unit_test_conf_SOURCES = unit/test-conf.c src/conf.c src/log.c
+unit_test_conf_CFLAGS = $(AM_CFLAGS) $(COVERAGE_OPT)
+unit_test_conf_LDADD = @GLIB_LIBS@ -ldl
+unit_objects += $(unit_test_conf_OBJECTS)
+unit_tests += unit/test-conf
+
 unit_test_cell_info_SOURCES = unit/test-cell-info.c src/cell-info.c src/log.c
 unit_test_cell_info_CFLAGS = $(AM_CFLAGS) $(COVERAGE_OPT)
 unit_test_cell_info_LDADD = @GLIB_LIBS@ -ldl

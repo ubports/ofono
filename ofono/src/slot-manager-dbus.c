@@ -263,6 +263,7 @@ static inline void slot_manager_dbus_signal_imsi(struct slot_manager_dbus *dbus,
 	const char *name, const char *imsi)
 {
 	if (!imsi) imsi = SM_DBUS_IMSI_AUTO;
+	DBG("%s %s", name, imsi);
 	g_dbus_emit_signal(dbus->conn, SM_DBUS_PATH, SM_DBUS_INTERFACE,
 		name, DBUS_TYPE_STRING, &imsi, DBUS_TYPE_INVALID);
 }
@@ -271,6 +272,7 @@ static inline void slot_manager_dbus_signal_string
 	(struct slot_manager_dbus *dbus, const char *name, const char *str)
 {
 	if (!str) str = "";
+	DBG("%s %s", name, str);
 	g_dbus_emit_signal(dbus->conn, SM_DBUS_PATH, SM_DBUS_INTERFACE,
 		name, DBUS_TYPE_STRING, &str, DBUS_TYPE_INVALID);
 }
@@ -278,6 +280,7 @@ static inline void slot_manager_dbus_signal_string
 static inline void slot_manager_dbus_signal_boolean
 	(struct slot_manager_dbus *dbus, const char *name, dbus_bool_t value)
 {
+	DBG("%s %d", name, value);
 	g_dbus_emit_signal(dbus->conn, SM_DBUS_PATH, SM_DBUS_INTERFACE,
 		name, DBUS_TYPE_BOOLEAN, &value, DBUS_TYPE_INVALID);
 }

@@ -25,11 +25,7 @@ TESTS="\
  test-gprs-filter \
  test-provision \
  test-watch \
- test-ril_util \
- test-ril_config \
- test-ril_ecclist \
  test-ril-transport \
- test-ril_vendor \
  test-sailfish_access \
  test-sim-info \
  test-sim-info-dbus \
@@ -45,14 +41,13 @@ popd > /dev/null
 popd > /dev/null
 
 FULL_COV="$TEST_DIR/full.gcov"
-DRIVERS_COV="$TEST_DIR/drivers.gcov"
 PLUGINS_COV="$TEST_DIR/plugins.gcov"
 SRC_COV="$TEST_DIR/src.gcov"
 OUT="$TEST_DIR/html"
 
 # Clean everything up
 find "$BASE_DIR" -name "*.gcda" -exec rm {} \;
-rm -f "$FULL_COV" "$DRIVERS_COV" "$PLUGINS_COV" "$SRC_COV"
+rm -f "$FULL_COV" "$PLUGINS_COV" "$SRC_COV"
 rm -fr "$OUT"
 
 # Run the tests
@@ -69,9 +64,8 @@ LCOV_OPT="--rc lcov_branch_coverage=1"
 GENHTML_OPT="--branch-coverage"
 
 lcov $LCOV_OPT -c -d "$BASE_DIR" -o "$FULL_COV" || exit 1
-lcov $LCOV_OPT -e "$FULL_COV" "$BASE_DIR/drivers/*" -o "$DRIVERS_COV" || exit 1
 lcov $LCOV_OPT -e "$FULL_COV" "$BASE_DIR/plugins/*" -o "$PLUGINS_COV" || exit 1
 lcov $LCOV_OPT -e "$FULL_COV" "$BASE_DIR/src/*" -o "$SRC_COV" || exit 1
-genhtml $GENHTML_OPT -t ofono "$DRIVERS_COV" "$PLUGINS_COV" "$SRC_COV" --output-directory "$OUT" || exit 1
+genhtml $GENHTML_OPT -t ofono "$PLUGINS_COV" "$SRC_COV" --output-directory "$OUT" || exit 1
 
 echo Coverage report: $OUT/index.html
