@@ -213,7 +213,7 @@ void slot_manager_dbus_signal_error(struct slot_manager_dbus *d,
 void slot_manager_dbus_signal_modem_error(struct slot_manager_dbus *d,
 	int index, const char *id, const char *msg) {}
 
-/* Fake sim_info */
+/* Fake sim_info_dbus */
 
 struct sim_info_dbus {
 	int unused;
@@ -1154,11 +1154,19 @@ static gboolean test_data_sim_done(gpointer user_data)
 
 	g_assert_cmpstr(m->default_voice_path, == ,TEST_PATH);
 	g_assert(!m->default_data_path); /* No default data slot */
+	g_assert(!(fake_slot_manager_dbus.signals &
+		SLOT_MANAGER_DBUS_SIGNAL_DATA_PATH));
 
 	/* Set data SIM IMSI */
 	fake_slot_manager_dbus.cb.set_default_data_imsi(m, TEST_IMSI);
 	g_assert_cmpstr(m->default_data_imsi, == ,TEST_IMSI);
 	g_assert(!m->default_data_path); /* Modem is offline */
+	/* Data IMSI is signaled, path is not */
+	g_assert_cmpuint(fake_slot_manager_dbus.signals &
+		(SLOT_MANAGER_DBUS_SIGNAL_DATA_IMSI |
+		 SLOT_MANAGER_DBUS_SIGNAL_DATA_PATH), == ,
+		 SLOT_MANAGER_DBUS_SIGNAL_DATA_IMSI);
+	fake_slot_manager_dbus.signals &= ~SLOT_MANAGER_DBUS_SIGNAL_DATA_IMSI;
 
 	/* Set modem online */
 	w->modem = &modem;
@@ -1168,16 +1176,34 @@ static gboolean test_data_sim_done(gpointer user_data)
 	fake_watch_emit_queued_signals(w);
 	/* Now is should point to our slot */
 	g_assert_cmpstr(m->default_data_path, == ,TEST_PATH);
+	/* And D-Bus clients are notified */
+	g_assert(fake_slot_manager_dbus.signals &
+		SLOT_MANAGER_DBUS_SIGNAL_DATA_PATH);
+	fake_slot_manager_dbus.signals &= ~SLOT_MANAGER_DBUS_SIGNAL_DATA_PATH;
 
 	/* Point it to a non-existent SIM */
 	fake_slot_manager_dbus.cb.set_default_data_imsi(m, TEST_IMSI_1);
 	g_assert_cmpstr(m->default_data_imsi, == ,TEST_IMSI_1);
 	g_assert(!m->default_data_path);
+	/* And D-Bus clients are notified again */
+	g_assert_cmpuint(fake_slot_manager_dbus.signals &
+		(SLOT_MANAGER_DBUS_SIGNAL_DATA_IMSI |
+		 SLOT_MANAGER_DBUS_SIGNAL_DATA_PATH), == ,
+		(SLOT_MANAGER_DBUS_SIGNAL_DATA_IMSI |
+		 SLOT_MANAGER_DBUS_SIGNAL_DATA_PATH));
+	fake_slot_manager_dbus.signals &= ~(SLOT_MANAGER_DBUS_SIGNAL_DATA_IMSI |
+		SLOT_MANAGER_DBUS_SIGNAL_DATA_PATH);
 
 	/* Switch the SIM */
 	fake_watch_set_ofono_imsi(w, TEST_IMSI_1);
 	fake_watch_emit_queued_signals(w);
 	g_assert_cmpstr(m->default_data_path, == ,TEST_PATH);
+	/* And D-Bus clients are notified of data path change */
+	g_assert_cmpuint(fake_slot_manager_dbus.signals &
+		(SLOT_MANAGER_DBUS_SIGNAL_DATA_IMSI |
+		 SLOT_MANAGER_DBUS_SIGNAL_DATA_PATH), == ,
+		 SLOT_MANAGER_DBUS_SIGNAL_DATA_PATH);
+	fake_slot_manager_dbus.signals &= ~SLOT_MANAGER_DBUS_SIGNAL_DATA_PATH;
 
 	/* Remove the SIM */
 	fake_watch_set_ofono_sim(w, NULL);
@@ -1186,6 +1212,12 @@ static gboolean test_data_sim_done(gpointer user_data)
 	g_assert_cmpint(m->slots[0]->sim_presence, == ,OFONO_SLOT_SIM_ABSENT);
 	g_assert_cmpstr(m->default_data_imsi, == ,TEST_IMSI_1);
 	g_assert(!m->default_data_path);
+	/* And D-Bus clients are notified of data path change */
+	g_assert_cmpuint(fake_slot_manager_dbus.signals &
+		(SLOT_MANAGER_DBUS_SIGNAL_DATA_IMSI |
+		 SLOT_MANAGER_DBUS_SIGNAL_DATA_PATH), == ,
+		 SLOT_MANAGER_DBUS_SIGNAL_DATA_PATH);
+	fake_slot_manager_dbus.signals &= ~SLOT_MANAGER_DBUS_SIGNAL_DATA_IMSI;
 
 	ofono_watch_unref(w);
 	g_main_loop_quit(test_loop);
