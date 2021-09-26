@@ -973,7 +973,7 @@ static void pri_reset_context_properties(struct pri_context *ctx,
 	}
 
 	if (ap->type == OFONO_GPRS_CONTEXT_TYPE_MMS ||
-		ap->type == OFONO_GPRS_CONTEXT_TYPE_INTERNET) {
+           ap->type == OFONO_GPRS_CONTEXT_TYPE_INTERNET) {
 		if (pri_str_update(ctx->message_proxy, ap->message_proxy,
 				sizeof(ctx->message_proxy))) {
 			changed = TRUE;
@@ -1040,7 +1040,7 @@ static gboolean pri_deactivation_required(struct pri_context *ctx,
 		return TRUE;
 
 	if (ap->type == OFONO_GPRS_CONTEXT_TYPE_MMS ||
-		ap->type == OFONO_GPRS_CONTEXT_TYPE_INTERNET) {
+           ap->type == OFONO_GPRS_CONTEXT_TYPE_INTERNET) {
 		if (pri_str_changed(ctx->message_proxy, ap->message_proxy))
 			return TRUE;
 
@@ -1145,6 +1145,7 @@ static void append_context_properties(struct pri_context *ctx,
 				&strvalue);
 
 	if (ctx->type == OFONO_GPRS_CONTEXT_TYPE_MMS ||
+	    ctx->type == OFONO_GPRS_CONTEXT_TYPE_INTERNET ||
 		(ctx->message_center && strlen(ctx->message_center) > 0)) {
 		strvalue = ctx->message_proxy;
 		ofono_dbus_dict_append(dict, "MessageProxy",
@@ -1214,6 +1215,7 @@ static void pri_activate_callback(const struct ofono_error *error, void *data)
 		pri_ifupdown(gc->settings->interface, TRUE);
 
 		if ((ctx->type == OFONO_GPRS_CONTEXT_TYPE_MMS ||
+                    ctx->type == OFONO_GPRS_CONTEXT_TYPE_INTERNET ||
 			(ctx->message_proxy && strlen(ctx->message_proxy) > 0)) &&
 				gc->settings->ipv4)
 			pri_update_mms_context_settings(ctx);
@@ -2370,6 +2372,7 @@ static void write_context_settings(struct ofono_gprs *gprs,
 				context->preferred);
 
 	if (context->type == OFONO_GPRS_CONTEXT_TYPE_MMS ||
+	    context->type == OFONO_GPRS_CONTEXT_TYPE_INTERNET ||
 		(context->message_center && strlen(context->message_center) > 0)) {
 		g_key_file_set_string(gprs->settings, context->key,
 					"MessageProxy",

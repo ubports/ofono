@@ -1,3 +1,10 @@
+ofono (1.21+ubports2) xenial; urgency=medium
+
+  * Enable message_proxy and message_center options
+    on internet contexts.
+
+ -- José Pekkarinen <jose.pekkarinen@foxhound.fi>  Sun, 26 Sep 2021 20:24:57 +0300
+
 ofono (1.21+ubports1) xenial; urgency=medium
 
   * Port SailfishOS ofono fork to UBPorts
