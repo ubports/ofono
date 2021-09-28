@@ -10,15 +10,15 @@ Source:     %{name}-%{version}.tar.bz2
 
 Requires:   dbus
 Requires:   systemd
-Requires:   ofono-configs
 Requires:   libglibutil >= %{libglibutil_version}
-Requires:   mobile-broadband-provider-info
+Recommends: mobile-broadband-provider-info
+Recommends: ofono-configs
 Requires(preun): systemd
 Requires(post): systemd
 Requires(postun): systemd
 
-# license macro requires reasonably fresh rpm
-BuildRequires:  rpm >= 4.11
+# license macro and Recommends tag require reasonably fresh rpm
+BuildRequires:  rpm >= 4.12
 BuildRequires:  pkgconfig(dbus-1)
 BuildRequires:  pkgconfig(dbus-glib-1)
 BuildRequires:  pkgconfig(glib-2.0)
