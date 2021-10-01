@@ -29,9 +29,11 @@
 extern "C" {
 #endif
 
+#if 0 /* Sailfish OS API must remain stable */
 #ifndef OFONO_API_SUBJECT_TO_CHANGE
 #error "Please define OFONO_API_SUBJECT_TO_CHANGE to acknowledge your \
 understanding that oFono hasn't reached a stable API."
+#endif
 #endif
 
 #define OFONO_PLUGIN_PRIORITY_LOW      -100
