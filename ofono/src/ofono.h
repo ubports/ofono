@@ -225,8 +225,6 @@ gboolean __ofono_modem_remove_atom_watch(struct ofono_modem *modem,
 
 void __ofono_atom_free(struct ofono_atom *atom);
 
-typedef void (*ofono_modemwatch_cb_t)(struct ofono_modem *modem,
-					gboolean added, void *data);
 void __ofono_modemwatch_init(void);
 void __ofono_modemwatch_cleanup(void);
 unsigned int __ofono_modemwatch_add(ofono_modemwatch_cb_t cb, void *user,

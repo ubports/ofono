@@ -2359,3 +2359,16 @@ void __ofono_modem_dec_emergency_mode(struct ofono_modem *modem)
 out:
 	modem->emergency--;
 }
+
+/* Since mer/1.25+git2 */
+
+unsigned int ofono_modem_add_watch(ofono_modemwatch_cb_t cb, void *user,
+						ofono_destroy_func destroy)
+{
+	return __ofono_modemwatch_add(cb, user, destroy);
+}
+
+ofono_bool_t ofono_modem_remove_watch(unsigned int id)
+{
+	return __ofono_modemwatch_remove(id);
+}
