@@ -220,9 +220,16 @@ static void at_cmgs(struct ofono_sms *sms, const unsigned char *pdu,
 	int len;
 
 	if (mms) {
-		snprintf(buf, sizeof(buf), "AT+CMMS=%d", mms);
-		g_at_chat_send(data->chat, buf, none_prefix,
-				NULL, NULL, NULL);
+		switch (data->vendor) {
+		case OFONO_VENDOR_GEMALTO:
+			/* no mms support */
+			break;
+		default:
+			snprintf(buf, sizeof(buf), "AT+CMMS=%d", mms);
+			g_at_chat_send(data->chat, buf, none_prefix,
+					NULL, NULL, NULL);
+			break;
+		}
 	}
 
 	len = snprintf(buf, sizeof(buf), "AT+CMGS=%d\r", tpdu_len);
@@ -329,7 +336,7 @@ static inline void at_ack_delivery(struct ofono_sms *sms)
 	/* We must acknowledge the PDU using CNMA */
 	if (data->cnma_ack_pdu) {
 		switch (data->vendor) {
-		case OFONO_VENDOR_CINTERION:
+		case OFONO_VENDOR_GEMALTO:
 			snprintf(buf, sizeof(buf), "AT+CNMA=1");
 			break;
 		default:
@@ -411,9 +418,25 @@ static void at_cmt_notify(GAtResult *result, gpointer user_data)
 		goto err;
 
 	switch (data->vendor) {
-	case OFONO_VENDOR_CINTERION:
-		if (!g_at_result_iter_next_number(&iter, &tpdu_len))
-			goto err;
+	case OFONO_VENDOR_GEMALTO:
+		if (!g_at_result_iter_next_number(&iter, &tpdu_len)) {
+			/*
+			 * Some Gemalto modems (ALS3,PLS8...), act in
+			 * accordance with 3GPP 27.005.  So we need to skip
+			 * the first (<alpha>) field
+			 *  \r\n+CMT: ,23\r\nCAFECAFECAFE... ...\r\n
+			 *             ^------- PDU length
+			 */
+			DBG("Retrying to find the PDU length");
+
+			if (!g_at_result_iter_skip_next(&iter))
+				goto err;
+
+			/* Next attempt at finding the PDU length. */
+			if (!g_at_result_iter_next_number(&iter, &tpdu_len))
+				goto err;
+		}
+
 		break;
 	default:
 		if (!g_at_result_iter_skip_next(&iter))
@@ -439,6 +462,7 @@ static void at_cmt_notify(GAtResult *result, gpointer user_data)
 
 	if (data->vendor != OFONO_VENDOR_SIMCOM)
 		at_ack_delivery(sms);
+	return;
 
 err:
 	ofono_error("Unable to parse CMT notification");

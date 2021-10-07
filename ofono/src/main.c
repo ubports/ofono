@@ -217,11 +217,6 @@ int main(int argc, char **argv)
 	struct ell_event_source *source;
 #endif
 
-#ifdef NEED_THREADS
-	if (g_thread_supported() == FALSE)
-		g_thread_init(NULL);
-#endif
-
 	context = g_option_context_new(NULL);
 	g_option_context_add_main_entries(context, options, NULL);
 
@@ -251,13 +246,6 @@ int main(int argc, char **argv)
 	}
 
 	event_loop = g_main_loop_new(NULL, FALSE);
-
-#ifdef NEED_THREADS
-	if (dbus_threads_init_default() == FALSE) {
-		fprintf(stderr, "Can't init usage of threads\n");
-		exit(1);
-	}
-#endif
 
 #ifdef HAVE_ELL
 	l_log_set_stderr();

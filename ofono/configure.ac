@@ -1,5 +1,5 @@
 AC_PREREQ(2.60)
-AC_INIT(ofono, 1.24)
+AC_INIT(ofono, 1.25)
 
 AM_INIT_AUTOMAKE([foreign subdir-objects color-tests])
 AC_CONFIG_HEADERS(config.h)
@@ -55,9 +55,6 @@ AC_ARG_ENABLE(pie, AC_HELP_STRING([--enable-pie],
 	fi
 ])
 
-AC_ARG_ENABLE(threads, AC_HELP_STRING([--enable-threads],
-		[enable threading support]), [enable_threads=${enableval}])
-
 AC_CHECK_FUNC(signalfd, dummy=yes,
 			AC_MSG_ERROR(signalfd support is required))
 
@@ -78,14 +75,6 @@ PKG_CHECK_MODULES(GIO, gio-2.0, dummy=yes,
 				AC_MSG_ERROR(GIO is required))
 GLIB_CFLAGS="$GLIB_CFLAGS $GIO_CFLAGS"
 GLIB_LIBS="$GLIB_LIBS $GIO_LIBS"
-
-if (test "${enable_threads}" = "yes"); then
-	AC_DEFINE(NEED_THREADS, 1, [Define if threading support is required])
-	PKG_CHECK_MODULES(GTHREAD, gthread-2.0 >= 2.16, dummy=yes,
-				AC_MSG_ERROR(GThread >= 2.16 is required))
-	GLIB_CFLAGS="$GLIB_CFLAGS $GTHREAD_CFLAGS"
-	GLIB_LIBS="$GLIB_LIBS $GTHREAD_LIBS"
-fi
 
 PKG_CHECK_MODULES(DBUS, dbus-1 >= 1.4, dummy=yes,
 				AC_MSG_ERROR(D-Bus >= 1.4 is required))

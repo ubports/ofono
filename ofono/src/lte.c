@@ -343,7 +343,7 @@ void ofono_lte_register(struct ofono_lte *lte)
 	const char *imsi = ofono_sim_get_imsi(sim);
 
 	if (imsi == NULL) {
-		ofono_error("No sim atom required for registering LTE atom.");
+		ofono_error("No sim atom found. It is required for registering LTE atom.");
 		return;
 	}
 
@@ -372,4 +372,9 @@ void ofono_lte_set_data(struct ofono_lte *lte, void *data)
 void *ofono_lte_get_data(const struct ofono_lte *lte)
 {
 	return lte->driver_data;
+}
+
+struct ofono_modem *ofono_lte_get_modem(const struct ofono_lte *lte)
+{
+	return __ofono_atom_get_modem(lte->atom);
 }

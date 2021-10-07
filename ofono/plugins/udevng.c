@@ -233,10 +233,11 @@ static gboolean setup_gobi(struct modem_info *modem)
 		}
 	}
 
+	DBG("qmi=%s net=%s mdm=%s gps=%s diag=%s", qmi, net, mdm, gps, diag);
+
 	if (qmi == NULL || mdm == NULL || net == NULL)
 		return FALSE;
 
-	DBG("qmi=%s net=%s mdm=%s gps=%s diag=%s", qmi, net, mdm, gps, diag);
 
 	ofono_modem_set_string(modem->modem, "Device", qmi);
 	ofono_modem_set_string(modem->modem, "Modem", mdm);
@@ -710,7 +711,8 @@ static gboolean setup_telitqmi(struct modem_info *modem)
 	return TRUE;
 }
 
-static gboolean setup_sim900(struct modem_info *modem)
+/* TODO: Not used as we have no simcom driver */
+static gboolean setup_simcom(struct modem_info *modem)
 {
 	const char *mdm = NULL, *aux = NULL, *gps = NULL, *diag = NULL;
 	GSList *list;
@@ -1279,7 +1281,7 @@ static struct {
 	{ "nokia",	setup_nokia	},
 	{ "telit",	setup_telit,	"device/interface"	},
 	{ "telitqmi",	setup_telitqmi	},
-	{ "sim900",	setup_sim900	},
+	{ "simcom",	setup_simcom	},
 	{ "sim7100",	setup_sim7100	},
 	{ "zte",	setup_zte	},
 	{ "icera",	setup_icera	},
@@ -1378,11 +1380,19 @@ static gboolean check_remove(gpointer key, gpointer value, gpointer user_data)
 	const char *devpath = user_data;
 	GSList *list;
 
-	for (list = modem->devices; list; list = list->next) {
-		struct device_info *info = list->data;
+	switch (modem->type) {
+	case MODEM_TYPE_USB:
+		for (list = modem->devices; list; list = list->next) {
+			struct device_info *info = list->data;
 
-		if (g_strcmp0(info->devpath, devpath) == 0)
+			if (g_strcmp0(info->devpath, devpath) == 0)
+				return TRUE;
+		}
+		break;
+	case MODEM_TYPE_SERIAL:
+		if (g_strcmp0(modem->serial->devpath, devpath) == 0)
 			return TRUE;
+		break;
 	}
 
 	return FALSE;
@@ -1644,7 +1654,7 @@ static struct {
 	{ "alcatel",	"option",	"1bbb", "0017"	},
 	{ "novatel",	"option",	"1410"		},
 	{ "zte",	"option",	"19d2"		},
-	{ "sim900",	"option",	"05c6", "9000"	},
+	{ "simcom",	"option",	"05c6", "9000"	},
 	{ "sim7100",	"option",	"1e0e", "9001"	},
 	{ "telit",	"usbserial",	"1bc7"		},
 	{ "telit",	"option",	"1bc7"		},
@@ -1730,6 +1740,9 @@ static void check_usb_device(struct udev_device *device)
 
 
 		DBG("%s [%s:%s]", drv, vendor, model);
+
+		if (vendor == NULL || model == NULL)
+			return;
 
 		for (i = 0; vendor_list[i].driver; i++) {
 			if (g_str_equal(vendor_list[i].drv, drv) == FALSE)

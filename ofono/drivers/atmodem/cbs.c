@@ -166,6 +166,7 @@ static void at_cbs_set_topics(struct ofono_cbs *cbs, const char *topics,
 	switch (data->vendor) {
 	case OFONO_VENDOR_GOBI:
 	case OFONO_VENDOR_QUALCOMM_MSM:
+	case OFONO_VENDOR_GEMALTO:
 		g_at_chat_send(data->chat, "AT+CSCB=0", none_prefix,
 				NULL, NULL, NULL);
 		break;

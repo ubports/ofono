@@ -228,6 +228,10 @@ static void at_creg_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	if ((status == 1 || status == 5) && (tech == -1))
 		tech = nd->tech;
 
+	/* 6-10 is EUTRAN, with 8 being emergency bearer case */
+	if (status > 5 && tech == -1)
+		tech = ACCESS_TECHNOLOGY_EUTRAN;
+
 	cb(&error, status, lac, ci, tech, cbd->data);
 }
 

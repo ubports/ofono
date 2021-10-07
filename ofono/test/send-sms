@@ -6,6 +6,7 @@ import dbus
 if len(sys.argv) < 4:
 	print("Usage: %s [modem] <to> <message> <delivery report>" %\
 					(sys.argv[0]))
+	print("  where delivery report is 0|1")
 	sys.exit(1)
 
 bus = dbus.SystemBus()
