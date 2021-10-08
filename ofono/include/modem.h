@@ -47,6 +47,9 @@ typedef void (*ofono_modem_online_cb_t)(const struct ofono_error *error,
 typedef ofono_bool_t (*ofono_modem_compare_cb_t)(struct ofono_modem *modem,
 							void *user_data);
 
+typedef void (*ofono_modemwatch_cb_t)(struct ofono_modem *modem,
+		ofono_bool_t added, void *data); /* Since mer/1.25+git2 */
+
 struct ofono_modem_driver {
 	const char *name;
 	enum ofono_modem_type modem_type;
@@ -130,6 +133,11 @@ void ofono_modem_driver_unregister(const struct ofono_modem_driver *);
 
 struct ofono_modem *ofono_modem_find(ofono_modem_compare_cb_t func,
 					void *user_data);
+
+/* Since mer/1.25+git2 */
+unsigned int ofono_modem_add_watch(ofono_modemwatch_cb_t cb, void *user,
+					ofono_destroy_func destroy);
+ofono_bool_t ofono_modem_remove_watch(unsigned int id);
 
 #ifdef __cplusplus
 }
