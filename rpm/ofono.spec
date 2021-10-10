@@ -6,7 +6,7 @@ License:    GPLv2
 URL:        https://github.com/sailfishos/ofono
 Source:     %{name}-%{version}.tar.bz2
 
-%define libglibutil_version 1.0.49
+%define libglibutil_version 1.0.51
 
 Requires:   dbus
 Requires:   systemd

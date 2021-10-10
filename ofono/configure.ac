@@ -172,8 +172,8 @@ AC_ARG_ENABLE(extra-modems,
 					[enable_extra_modems=${enableval}])
 AM_CONDITIONAL(EXTRA_MODEMS, test "${enable_extra_modems}" = "yes")
 
-PKG_CHECK_MODULES(GLIBUTIL, libglibutil >= 1.0.49, dummy=yes,
-			AC_MSG_ERROR(libglibutil >= 1.0.49 is required))
+PKG_CHECK_MODULES(GLIBUTIL, libglibutil >= 1.0.51, dummy=yes,
+			AC_MSG_ERROR(libglibutil >= 1.0.51 is required))
 CFLAGS="$CFLAGS $GLIBUTIL_CFLAGS"
 LIBS="$LIBS $GLIBUTIL_LIBS"
 
