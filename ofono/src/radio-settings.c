@@ -89,11 +89,8 @@ const char *ofono_radio_access_mode_to_string(enum ofono_radio_access_mode m)
 	default:
 		return NULL;
 	}
-	return (m == OFONO_RADIO_ACCESS_MODE_ANY) ? "any" :
-			(m & OFONO_RADIO_ACCESS_MODE_LTE) ?  "lte" :
-			(m & OFONO_RADIO_ACCESS_MODE_UMTS) ? "umts" :
-			(m & OFONO_RADIO_ACCESS_MODE_GSM) ? "gsm" : NULL;
 }
+
 #define radio_access_mode_from_string ofono_radio_access_mode_from_string
 ofono_bool_t ofono_radio_access_mode_from_string(const char *str,
 					enum ofono_radio_access_mode *mode)
