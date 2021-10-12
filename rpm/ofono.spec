@@ -28,10 +28,10 @@ BuildRequires:  pkgconfig(libglibutil) >= %{libglibutil_version}
 BuildRequires:  pkgconfig(libdbuslogserver-dbus)
 BuildRequires:  pkgconfig(libdbusaccess)
 BuildRequires:  pkgconfig(mobile-broadband-provider-info)
+BuildRequires:  pkgconfig(systemd)
 BuildRequires:  libtool
 BuildRequires:  automake
 BuildRequires:  autoconf
-BuildRequires:  systemd
 
 %description
 Telephony stack
