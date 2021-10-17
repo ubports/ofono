@@ -1,3 +1,9 @@
+ofono (1.21+ubports2) xenial; urgency=medium
+
+  * Add ril config parameter to set set_udub ril request
+
+ -- José Pekkarinen <jose.pekkarinen@foxhound.fi>  Sun, 17 Oct 2021 20:35:57 +0200
+
 ofono (1.21+ubports1) xenial; urgency=medium
 
   * Port SailfishOS ofono fork to UBPorts

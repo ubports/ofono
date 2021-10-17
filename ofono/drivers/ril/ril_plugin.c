@@ -27,6 +27,7 @@
 #include "ril_vendor.h"
 #include "ril_devmon.h"
 #include "ril_log.h"
+#include "ril-constants.h"
 
 #include "ofono.h"
 #include "sailfish_manager.h"
@@ -102,6 +103,7 @@
 #define RILMODEM_DEFAULT_SLOT_FLAGS SAILFISH_SLOT_NO_FLAGS
 #define RILMODEM_DEFAULT_CELL_INFO_INTERVAL_SHORT_MS (2000) /* 2 sec */
 #define RILMODEM_DEFAULT_CELL_INFO_INTERVAL_LONG_MS  (30000) /* 30 sec */
+#define RILMODEM_DEFAULT_RIL_REQUEST_ON_SET_UDUB     RIL_REQUEST_UDUB
 
 /* RIL socket transport name and parameters */
 #define RIL_TRANSPORT_MODEM                 "modem"
@@ -162,6 +164,7 @@
 #define RILCONF_DEVMON                      "deviceStateTracking"
 #define RILCONF_CELL_INFO_INTERVAL_SHORT_MS "cellInfoIntervalShortMs"
 #define RILCONF_CELL_INFO_INTERVAL_LONG_MS  "cellInfoIntervalLongMs"
+#define RILCONF_RIL_REQUEST_ON_SET_UDUB     "rilRequestOnSetUdub"
 
 /* Modem error ids */
 #define RIL_ERROR_ID_RILD_RESTART           "rild-restart"
@@ -1238,6 +1241,8 @@ static ril_slot *ril_plugin_slot_new_take(char *transport,
 				RILMODEM_DEFAULT_CELL_INFO_INTERVAL_SHORT_MS;
 	config->cell_info_interval_long_ms =
 				RILMODEM_DEFAULT_CELL_INFO_INTERVAL_LONG_MS;
+	config->ril_request_on_set_udub =
+				RILMODEM_DEFAULT_RIL_REQUEST_ON_SET_UDUB;
 	slot->timeout = RILMODEM_DEFAULT_TIMEOUT;
 	slot->sim_flags = RILMODEM_DEFAULT_SIM_FLAGS;
 	slot->slot_flags = RILMODEM_DEFAULT_SLOT_FLAGS;
@@ -1763,6 +1768,14 @@ static ril_slot *ril_plugin_parse_config_group(GKeyFile *file,
 				&config->cell_info_interval_long_ms)) {
 		DBG("%s: " RILCONF_CELL_INFO_INTERVAL_LONG_MS " %d",
 				group, config->cell_info_interval_long_ms);
+	}
+
+	/* rilRequestOnSetUdub */
+	if (ril_config_get_integer(file, group,
+				RILCONF_RIL_REQUEST_ON_SET_UDUB,
+				&config->ril_request_on_set_udub)) {
+		DBG("%s: " RILCONF_RIL_REQUEST_ON_SET_UDUB " %d",
+				group, config->ril_request_on_set_udub);
 	}
 
 	/* Replace devmon with a new one with applied settings */
