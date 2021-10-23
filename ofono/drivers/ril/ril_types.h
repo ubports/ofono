@@ -81,6 +81,7 @@ struct ril_slot_config {
 	GUtilInts *remote_hangup_reasons;
 	int cell_info_interval_short_ms;
 	int cell_info_interval_long_ms;
+	int ril_request_on_set_udub;
 };
 
 #endif /* RIL_TYPES_H */
