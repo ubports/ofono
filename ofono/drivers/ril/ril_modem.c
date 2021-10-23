@@ -319,6 +319,12 @@ static void ril_modem_post_sim(struct ofono_modem *modem)
 			if (gc == NULL)
 				break;
 
+			/* Check if internet context handles mms */
+			if (ap_types[i] == OFONO_GPRS_CONTEXT_TYPE_MMS &&
+				ofono_gprs_context_settings_mms_is_combined_apn(
+					gprs, OFONO_GPRS_CONTEXT_TYPE_INTERNET))
+				break;
+
 			ofono_gprs_context_set_type(gc, ap_types[i]);
 			ofono_gprs_add_context(gprs, gc);
 		}

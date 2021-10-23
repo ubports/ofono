@@ -153,6 +153,7 @@ static void gprs_netreg_update(struct ofono_gprs *gprs);
 static void gprs_deactivate_next(struct ofono_gprs *gprs);
 static void write_context_settings(struct ofono_gprs *gprs,
 						struct pri_context *context);
+static void gprs_load_settings(struct ofono_gprs *gprs, const char *imsi);
 
 static GSList *g_drivers = NULL;
 static GSList *g_context_drivers = NULL;
@@ -571,6 +572,42 @@ static void context_settings_append_ipv6_dict(struct context_settings *settings,
 	context_settings_append_ipv6(settings, &entry);
 
 	dbus_message_iter_close_container(dict, &entry);
+}
+
+gboolean ofono_gprs_context_settings_mms_is_combined_apn
+	(struct ofono_gprs *gprs, enum ofono_gprs_context_type type)
+{
+    struct ofono_modem *modem = __ofono_atom_get_modem(gprs->atom);
+    struct ofono_sim *sim = __ofono_atom_find(OFONO_ATOM_TYPE_SIM, modem);
+
+    if (sim == NULL)
+	return FALSE;
+
+    DBG("is_combined");
+
+    gprs_load_settings(gprs, ofono_sim_get_imsi(sim));
+
+    if (gprs->settings) {
+	char ** groups;
+	int i;
+
+	groups = g_key_file_get_groups(gprs->settings, NULL);
+
+	for (i = 0; groups[i]; i++) {
+		char *msgproxy;
+		char *msgcenter;
+		msgproxy = g_key_file_get_string(gprs->settings, groups[i],
+						"MessageProxy", NULL);
+
+		msgcenter = g_key_file_get_string(gprs->settings, groups[i],
+						"MessageCenter", NULL);
+		if ((msgcenter && strlen(msgcenter) > 0) ||
+		    (msgproxy && strlen(msgproxy) > 0))
+		    return TRUE;
+	}
+    }
+
+    return FALSE;
 }
 
 static void signal_settings(struct pri_context *ctx, const char *prop,
@@ -3366,6 +3403,8 @@ void ofono_gprs_context_remove(struct ofono_gprs_context *gc)
 
 void ofono_gprs_context_set_data(struct ofono_gprs_context *gc, void *data)
 {
+	if (gc == NULL || data == NULL)
+		return;
 	gc->driver_data = data;
 }
 

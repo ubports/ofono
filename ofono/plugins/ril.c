@@ -253,11 +253,16 @@ void ril_post_online(struct ofono_modem *modem)
 		ofono_gprs_add_context(gprs, gc);
 	}
 
-	gc = ofono_gprs_context_create(modem, rd->vendor, RILMODEM, rd->ril);
+	if (!ofono_gprs_context_settings_mms_is_combined_apn(
+				gprs,
+				OFONO_GPRS_CONTEXT_TYPE_INTERNET
+		)) {
+		gc = ofono_gprs_context_create(modem, rd->vendor, RILMODEM, rd->ril);
 
-	if (gc) {
-		ofono_gprs_context_set_type(gc, OFONO_GPRS_CONTEXT_TYPE_MMS);
-		ofono_gprs_add_context(gprs, gc);
+		if (gc) {
+			ofono_gprs_context_set_type(gc, OFONO_GPRS_CONTEXT_TYPE_MMS);
+			ofono_gprs_add_context(gprs, gc);
+		}
 	}
 }
 

@@ -87,6 +87,9 @@ void ofono_gprs_attached_update(struct ofono_gprs *gprs);
 const struct ofono_gprs_primary_context *ofono_gprs_context_settings_by_type
 		(struct ofono_gprs *gprs, enum ofono_gprs_context_type type);
 
+gboolean ofono_gprs_context_settings_mms_is_combined_apn
+		(struct ofono_gprs *gprs, enum ofono_gprs_context_type type);
+
 #ifdef __cplusplus
 }
 #endif
