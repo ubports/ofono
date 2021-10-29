@@ -94,6 +94,14 @@ enum ofono_call_direction {
 	OFONO_CALL_DIRECTION_MOBILE_TERMINATED = 1
 };
 
+/* 27.007 Section 7.18 <mode> */
+enum ofono_call_mode {
+	OFONO_CALL_MODE_VOICE = 0,
+	OFONO_CALL_MODE_DATA = 1,
+	OFONO_CALL_MODE_FAX = 3,
+	OFONO_CALL_MODE_UNKNOWN = 9
+}; /* Since mer/1.25+git5 */
+
 enum ofono_sms_charset {
 	OFONO_SMS_CHARSET_7BIT = 0,
 	OFONO_SMS_CHARSET_8BIT = 1,
@@ -146,7 +154,7 @@ struct ofono_cdma_phone_number {
 
 struct ofono_call {
 	unsigned int id;
-	int type;
+	enum ofono_call_mode type;
 	enum ofono_call_direction direction;
 	enum ofono_call_status status;
 	struct ofono_phone_number phone_number;
