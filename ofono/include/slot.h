@@ -152,6 +152,9 @@ void ofono_slot_remove_handlers(struct ofono_slot *s, unsigned long *ids,
 void ofono_slot_set_sim_presence(struct ofono_slot *s,
 	enum ofono_slot_sim_presence sim_presence);
 
+#define ofono_slot_remove_all_handlers(s, ids) /* Since mer/1.25+git5 */\
+	ofono_slot_remove_handlers(s, ids, G_N_ELEMENTS(ids))
+
 #ifdef __cplusplus
 }
 #endif
