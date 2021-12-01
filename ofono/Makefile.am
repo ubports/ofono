@@ -113,6 +113,9 @@ gril_sources = gril/gril.h gril/gril.c \
 
 btio_sources = btio/btio.h btio/btio.c
 
+builtin_modules += generic_phonebook
+builtin_sources += plugins/generic-phonebook.c
+
 if UDEV
 builtin_cflags += @UDEV_CFLAGS@
 builtin_libadd += @UDEV_LIBS@
