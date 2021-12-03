@@ -113,8 +113,8 @@ gril_sources = gril/gril.h gril/gril.c \
 
 btio_sources = btio/btio.h btio/btio.c
 
-builtin_modules += generic_phonebook
-builtin_sources += plugins/generic-phonebook.c
+builtin_modules += cellinfo_netmon generic_phonebook
+builtin_sources += plugins/cellinfo-netmon.c plugins/generic-phonebook.c
 
 if UDEV
 builtin_cflags += @UDEV_CFLAGS@
@@ -726,6 +726,7 @@ src_ofonod_SOURCES = $(builtin_sources) $(gatchat_sources) src/ofono.ver \
 			src/netmonagent.c src/netmonagent.h \
 			src/slot-manager.c src/slot-manager-dbus.c \
 			src/cell-info.c src/cell-info-dbus.c \
+			src/cell-info-control.c \
 			src/sim-info.c src/sim-info-dbus.c \
 			src/conf.c src/mtu-limit.c
 
@@ -926,11 +927,19 @@ unit_test_cell_info_LDADD = @GLIB_LIBS@ -ldl
 unit_objects += $(unit_test_cell_info_OBJECTS)
 unit_tests += unit/test-cell-info
 
+unit_test_cell_info_control_SOURCES = unit/test-cell-info-control.c \
+			unit/fake_cell_info.c src/cell-info.c \
+			src/cell-info-control.c src/log.c
+unit_test_cell_info_control_CFLAGS = $(AM_CFLAGS) $(COVERAGE_OPT)
+unit_test_cell_info_control_LDADD = @GLIB_LIBS@ -ldl
+unit_objects += $(unit_test_cell_info_control_OBJECTS)
+unit_tests += unit/test-cell-info-control
+
 unit_test_cell_info_dbus_SOURCES = unit/test-dbus.c \
 			unit/test-cell-info-dbus.c unit/fake_cell_info.c \
 			src/cell-info.c src/cell-info-dbus.c \
-			gdbus/object.c src/dbus-clients.c \
-			src/dbus.c src/log.c
+			src/cell-info-control.c gdbus/object.c \
+			src/dbus-clients.c src/dbus.c src/log.c
 unit_test_cell_info_dbus_CFLAGS = $(AM_CFLAGS) $(COVERAGE_OPT) \
 			@DBUS_GLIB_CFLAGS@
 unit_test_cell_info_dbus_LDADD = @DBUS_GLIB_LIBS@ @GLIB_LIBS@ -ldl
@@ -957,8 +966,9 @@ unit_objects += $(unit_test_sim_info_dbus_OBJECTS)
 unit_tests += unit/test-sim-info-dbus
 
 unit_test_slot_manager_SOURCES = unit/test-slot-manager.c unit/fake_watch.c \
-			src/slot-manager.c src/cell-info.c src/sim-info.c \
-			src/storage.c src/log.c
+			unit/fake_cell_info.c src/slot-manager.c \
+			src/cell-info.c src/cell-info-control.c \
+			src/sim-info.c src/storage.c src/log.c
 unit_test_slot_manager_CFLAGS = $(AM_CFLAGS) $(COVERAGE_OPT) \
 			-DSTORAGEDIR='"/tmp/ofono"'
 unit_test_slot_manager_LDADD = @GLIB_LIBS@ -ldl
@@ -966,6 +976,7 @@ unit_objects += $(unit_test_slot_manager_OBJECTS)
 unit_tests += unit/test-slot-manager
 
 unit_test_watch_SOURCES = unit/test-watch.c src/watch.c \
+			src/cell-info.c src/cell-info-control.c \
 			src/log.c src/watchlist.c
 unit_test_watch_CFLAGS = $(AM_CFLAGS) $(COVERAGE_OPT) \
 			-DSTORAGEDIR='"/tmp/ofono"'

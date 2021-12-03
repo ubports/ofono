@@ -152,8 +152,14 @@ void ofono_slot_remove_handlers(struct ofono_slot *s, unsigned long *ids,
 void ofono_slot_set_sim_presence(struct ofono_slot *s,
 	enum ofono_slot_sim_presence sim_presence);
 
-#define ofono_slot_remove_all_handlers(s, ids) /* Since mer/1.25+git5 */\
+/* Since mer/1.25+git5 */
+#define ofono_slot_remove_all_handlers(s, ids) \
 	ofono_slot_remove_handlers(s, ids, G_N_ELEMENTS(ids))
+
+/* Since mer/1.25+git7 */
+void ofono_slot_set_cell_info_update_interval(struct ofono_slot *s, void* tag,
+	int interval_ms);
+void ofono_slot_drop_cell_info_requests(struct ofono_slot *s, void* tag);
 
 #ifdef __cplusplus
 }

@@ -33,6 +33,7 @@ typedef struct cell_entry {
 
 typedef struct cell_info_dbus {
 	struct ofono_cell_info *info;
+	CellInfoControl *ctl;
 	DBusConnection *conn;
 	char *path;
 	gulong handler_id;
@@ -107,6 +108,12 @@ static const struct cell_property cell_lte_properties [] = {
 
 typedef void (*cell_info_dbus_append_fn)(DBusMessageIter *it,
 	const CellEntry *entry);
+
+static void cell_info_dbus_set_updates_enabled(CellInfoDBus *dbus, gboolean on)
+{
+	cell_info_control_set_enabled(dbus->ctl, dbus, on);
+	cell_info_control_set_update_interval(dbus->ctl, dbus, on ? 5000 : -1);
+}
 
 static const char *cell_info_dbus_cell_type_str(enum ofono_cell_type type)
 {
@@ -539,7 +546,7 @@ static DBusMessage *cell_info_dbus_get_cells(DBusConnection *conn,
 		DBusMessageIter it, a;
 		GSList *l;
 
-		ofono_cell_info_set_enabled(dbus->info, TRUE);
+		cell_info_dbus_set_updates_enabled(dbus, TRUE);
 		dbus_message_iter_init_append(reply, &it);
 		dbus_message_iter_open_container(&it, DBUS_TYPE_ARRAY, "o", &a);
 		for (l = dbus->entries; l; l = l->next) {
@@ -567,7 +574,7 @@ static DBusMessage *cell_info_dbus_unsubscribe(DBusConnection *conn,
 			CELL_INFO_DBUS_UNSUBSCRIBED_SIGNAL);
 
 		if (!ofono_dbus_clients_count(dbus->clients)) {
-			ofono_cell_info_set_enabled(dbus->info, FALSE);
+			cell_info_dbus_set_updates_enabled(dbus, FALSE);
 		}
 		dbus_message_set_destination(signal, sender);
 		g_dbus_send_message(dbus->conn, signal);
@@ -600,20 +607,22 @@ static void cell_info_dbus_disconnect_cb(const char *name, void *data)
 	CellInfoDBus *dbus = data;
 
 	if (!ofono_dbus_clients_count(dbus->clients)) {
-		ofono_cell_info_set_enabled(dbus->info, FALSE);
+		cell_info_dbus_set_updates_enabled(dbus, FALSE);
 	}
 }
 
 CellInfoDBus *cell_info_dbus_new(struct ofono_modem *modem,
-	struct ofono_cell_info *info)
+	CellInfoControl *ctl)
 {
-	if (modem && info) {
+	if (modem && ctl && ctl->info) {
+		struct ofono_cell_info *info = ctl->info;
 		CellInfoDBus *dbus = g_new0(CellInfoDBus, 1);
 
 		DBG("%s", ofono_modem_get_path(modem));
 		dbus->path = g_strdup(ofono_modem_get_path(modem));
 		dbus->conn = dbus_connection_ref(ofono_dbus_get_connection());
 		dbus->info = ofono_cell_info_ref(info);
+		dbus->ctl = cell_info_control_ref(ctl);
 		dbus->handler_id = ofono_cell_info_add_change_handler(info,
 			cell_info_dbus_cells_changed_cb, dbus);
 
@@ -662,6 +671,9 @@ void cell_info_dbus_free(CellInfoDBus *dbus)
 
 		ofono_cell_info_remove_handler(dbus->info, dbus->handler_id);
 		ofono_cell_info_unref(dbus->info);
+
+		cell_info_control_drop_requests(dbus->ctl, dbus);
+		cell_info_control_unref(dbus->ctl);
 
 		g_free(dbus->path);
 		g_free(dbus);

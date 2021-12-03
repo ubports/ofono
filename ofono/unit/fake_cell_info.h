@@ -19,6 +19,8 @@
 #include <ofono/cell-info.h>
 
 struct ofono_cell_info *fake_cell_info_new(void);
+int fake_cell_info_update_interval(struct ofono_cell_info *info);
+ofono_bool_t fake_cell_info_is_enabled(struct ofono_cell_info *info);
 void fake_cell_info_add_cell(struct ofono_cell_info *info,
 				  const struct ofono_cell* cell);
 ofono_bool_t fake_cell_info_remove_cell(struct ofono_cell_info *info,

@@ -17,6 +17,7 @@
 
 #include <ofono/cell-info.h>
 
+#include "cell-info-control.h"
 #include "cell-info-dbus.h"
 #include "fake_cell_info.h"
 
@@ -340,7 +341,7 @@ struct test_get_cells_data {
 	struct ofono_modem modem;
 	struct test_dbus_context context;
 	struct cell_info_dbus *dbus;
-	struct ofono_cell_info *info;
+	CellInfoControl *ctl;
 };
 
 static void test_get_cells_call(struct test_get_cells_data *test,
@@ -374,6 +375,7 @@ static void test_get_cells_start_reply3(DBusPendingCall *call, void *data)
 static void test_get_cells_start_reply2(DBusPendingCall *call, void *data)
 {
 	struct test_get_cells_data *test = data;
+	struct ofono_cell_info *info = test->ctl->info;
 	const char *cell_added = "/test/cell_1";
 	struct ofono_cell cell;
 	DBusMessageIter it;
@@ -392,15 +394,15 @@ static void test_get_cells_start_reply2(DBusPendingCall *call, void *data)
 	dbus_message_unref(signal);
 
 	/* Remove "/test/cell_0" */
-	g_assert(fake_cell_info_remove_cell(test->info,
-						test_cell_init_gsm1(&cell)));
-	fake_cell_info_cells_changed(test->info);
+	g_assert(fake_cell_info_remove_cell(info, test_cell_init_gsm1(&cell)));
+	fake_cell_info_cells_changed(info);
 	test_get_cells_call(test, test_get_cells_start_reply3);
 }
 
 static void test_get_cells_start_reply1(DBusPendingCall *call, void *data)
 {
 	struct test_get_cells_data *test = data;
+	struct ofono_cell_info *info = test->ctl->info;
 	struct ofono_cell cell;
 
 	DBG("");
@@ -408,23 +410,26 @@ static void test_get_cells_start_reply1(DBusPendingCall *call, void *data)
 	dbus_pending_call_unref(call);
 
 	/* Add "/test/cell_1" */
-	fake_cell_info_add_cell(test->info, test_cell_init_gsm2(&cell));
-	fake_cell_info_cells_changed(test->info);
+	fake_cell_info_add_cell(info, test_cell_init_gsm2(&cell));
+	fake_cell_info_cells_changed(info);
 	test_get_cells_call(test, test_get_cells_start_reply2);
 }
 
 static void test_get_cells_start(struct test_dbus_context *context)
 {
 	struct ofono_cell cell;
+	struct ofono_cell_info *info = fake_cell_info_new();
 	struct test_get_cells_data *test =
 		G_CAST(context, struct test_get_cells_data, context);
 
 	DBG("");
-	test->info = fake_cell_info_new();
-	fake_cell_info_add_cell(test->info, test_cell_init_gsm1(&cell));
+	fake_cell_info_add_cell(info, test_cell_init_gsm1(&cell));
+	test->ctl = cell_info_control_get(test->modem.path);
+	cell_info_control_set_cell_info(test->ctl, info);
 
-	test->dbus = cell_info_dbus_new(&test->modem, test->info);
+	test->dbus = cell_info_dbus_new(&test->modem, test->ctl);
 	g_assert(test->dbus);
+	ofono_cell_info_unref(info);
 
 	test_get_cells_call(test, test_get_cells_start_reply1);
 }
@@ -441,7 +446,7 @@ static void test_get_cells(void)
 
 	g_main_loop_run(test.context.loop);
 
-	ofono_cell_info_unref(test.info);
+	cell_info_control_unref(test.ctl);
 	cell_info_dbus_free(test.dbus);
 	test_dbus_shutdown(&test.context);
 	if (timeout) {
@@ -472,16 +477,18 @@ static void test_get_all_reply(DBusPendingCall *call, void *data)
 
 static void test_get_all_start(struct test_dbus_context *context)
 {
-	struct ofono_cell_info *info;
 	struct test_get_all_data *test =
 		G_CAST(context, struct test_get_all_data, context);
+	CellInfoControl *ctl = cell_info_control_get(test->modem.path);
+	struct ofono_cell_info *info = fake_cell_info_new();
 
 	DBG("");
-	info = fake_cell_info_new();
 	fake_cell_info_add_cell(info, &test->cell);
-	test->dbus = cell_info_dbus_new(&test->modem, info);
+	cell_info_control_set_cell_info(ctl, info);
+	test->dbus = cell_info_dbus_new(&test->modem, ctl);
 	g_assert(test->dbus);
 	ofono_cell_info_unref(info);
+	cell_info_control_unref(ctl);
 
 	test_submit_get_all_call(context->client_connection, "/test/cell_0",
 						test_get_all_reply, test);
@@ -570,16 +577,18 @@ static void test_get_version_start(struct test_dbus_context *context)
 	DBusPendingCall *call;
 	DBusMessage *msg;
 	struct ofono_cell cell;
-	struct ofono_cell_info *info;
 	struct test_get_version_data *test =
 		G_CAST(context, struct test_get_version_data, context);
+	CellInfoControl *ctl = cell_info_control_get(test->modem.path);
+	struct ofono_cell_info *info = fake_cell_info_new();
 
 	DBG("");
-	info = fake_cell_info_new();
 	fake_cell_info_add_cell(info, test_cell_init_gsm1(&cell));
-	test->dbus = cell_info_dbus_new(&test->modem, info);
+	cell_info_control_set_cell_info(ctl, info);
+	test->dbus = cell_info_dbus_new(&test->modem, ctl);
 	g_assert(test->dbus);
 	ofono_cell_info_unref(info);
+	cell_info_control_unref(ctl);
 
 	msg = test_new_cell_call("/test/cell_0", "GetInterfaceVersion");
 	g_assert(dbus_connection_send_with_reply(context->client_connection,
@@ -638,16 +647,18 @@ static void test_get_type_start(struct test_dbus_context *context)
 	DBusPendingCall *call;
 	DBusMessage *msg;
 	struct ofono_cell cell;
-	struct ofono_cell_info *info;
 	struct test_get_type_data *test =
 		G_CAST(context, struct test_get_type_data, context);
+	CellInfoControl *ctl = cell_info_control_get(test->modem.path);
+	struct ofono_cell_info *info = fake_cell_info_new();
 
 	DBG("");
-	info = fake_cell_info_new();
 	fake_cell_info_add_cell(info, test_cell_init_wcdma1(&cell));
-	test->dbus = cell_info_dbus_new(&test->modem, info);
+	cell_info_control_set_cell_info(ctl, info);
+	test->dbus = cell_info_dbus_new(&test->modem, ctl);
 	g_assert(test->dbus);
 	ofono_cell_info_unref(info);
+	cell_info_control_unref(ctl);
 
 	msg = test_new_cell_call("/test/cell_0", "GetType");
 	g_assert(dbus_connection_send_with_reply(context->client_connection,
@@ -706,16 +717,18 @@ static void test_get_registered_start(struct test_dbus_context *context)
 	DBusPendingCall *call;
 	DBusMessage *msg;
 	struct ofono_cell cell;
-	struct ofono_cell_info *info;
 	struct test_get_registered_data *test =
 		G_CAST(context, struct test_get_registered_data, context);
+	CellInfoControl *ctl = cell_info_control_get(test->modem.path);
+	struct ofono_cell_info *info = fake_cell_info_new();
 
 	DBG("");
-	info = fake_cell_info_new();
 	fake_cell_info_add_cell(info, test_cell_init_wcdma1(&cell));
-	test->dbus = cell_info_dbus_new(&test->modem, info);
+	cell_info_control_set_cell_info(ctl, info);
+	test->dbus = cell_info_dbus_new(&test->modem, ctl);
 	g_assert(test->dbus);
 	ofono_cell_info_unref(info);
+	cell_info_control_unref(ctl);
 
 	msg = test_new_cell_call("/test/cell_0", "GetRegistered");
 	g_assert(dbus_connection_send_with_reply(context->client_connection,
@@ -778,16 +791,18 @@ static void test_get_properties_start(struct test_dbus_context *context)
 	DBusPendingCall *call;
 	DBusMessage *msg;
 	struct ofono_cell cell;
-	struct ofono_cell_info *info;
 	struct test_get_properties_data *test =
 		G_CAST(context, struct test_get_properties_data, context);
+	CellInfoControl *ctl = cell_info_control_get(test->modem.path);
+	struct ofono_cell_info *info = fake_cell_info_new();
 
 	DBG("");
-	info = fake_cell_info_new();
 	fake_cell_info_add_cell(info, test_cell_init_wcdma2(&cell));
-	test->dbus = cell_info_dbus_new(&test->modem, info);
+	cell_info_control_set_cell_info(ctl, info);
+	test->dbus = cell_info_dbus_new(&test->modem, ctl);
 	g_assert(test->dbus);
 	ofono_cell_info_unref(info);
+	cell_info_control_unref(ctl);
 
 	msg = test_new_cell_call("/test/cell_0", "GetProperties");
 	g_assert(dbus_connection_send_with_reply(context->client_connection,
@@ -822,8 +837,8 @@ struct test_registered_changed_data {
 	struct ofono_modem modem;
 	struct test_dbus_context context;
 	struct cell_info_dbus *dbus;
-	struct ofono_cell_info *info;
 	struct ofono_cell cell;
+	CellInfoControl *ctl;
 	const char *type;
 	const char *cell_path;
 };
@@ -842,6 +857,7 @@ static void test_registered_changed_reply2(DBusPendingCall *call, void *data)
 static void test_registered_changed_reply1(DBusPendingCall *call, void *data)
 {
 	struct test_registered_changed_data *test = data;
+	struct ofono_cell_info *info = test->ctl->info;
 	struct ofono_cell *first_cell;
 
 	DBG("");
@@ -849,10 +865,10 @@ static void test_registered_changed_reply1(DBusPendingCall *call, void *data)
 	dbus_pending_call_unref(call);
 
 	/* Trigger "RegisteredChanged" signal */
-	first_cell = test->info->cells[0];
+	first_cell = info->cells[0];
 	test->cell.registered =
 	first_cell->registered = !first_cell->registered;
-	fake_cell_info_cells_changed(test->info);
+	fake_cell_info_cells_changed(info);
 
 	test_submit_get_all_call(test->context.client_connection,
 		test->cell_path, test_registered_changed_reply2, test);
@@ -860,14 +876,18 @@ static void test_registered_changed_reply1(DBusPendingCall *call, void *data)
 
 static void test_registered_changed_start(struct test_dbus_context *context)
 {
+	struct ofono_cell_info *info = fake_cell_info_new();
 	struct test_registered_changed_data *test =
 		G_CAST(context, struct test_registered_changed_data, context);
 
 	DBG("");
-	test->info = fake_cell_info_new();
-	fake_cell_info_add_cell(test->info, &test->cell);
-	test->dbus = cell_info_dbus_new(&test->modem, test->info);
+	fake_cell_info_add_cell(info, &test->cell);
+	test->ctl = cell_info_control_get(test->modem.path);
+	cell_info_control_set_cell_info(test->ctl, info);
+
+	test->dbus = cell_info_dbus_new(&test->modem, test->ctl);
 	g_assert(test->dbus);
+	ofono_cell_info_unref(info);
 
 	/* Submit GetCells to enable "RegisteredChanged" signals */
 	test_submit_cell_info_call(test->context.client_connection, "GetCells",
@@ -893,7 +913,7 @@ static void test_registered_changed(void)
 	g_assert(test_dbus_find_signal(&test.context, test.cell_path,
 		CELL_DBUS_INTERFACE, CELL_DBUS_REGISTERED_CHANGED_SIGNAL));
 
-	ofono_cell_info_unref(test.info);
+	cell_info_control_unref(test.ctl);
 	cell_info_dbus_free(test.dbus);
 	test_dbus_shutdown(&test.context);
 	if (timeout) {
@@ -907,8 +927,8 @@ struct test_property_changed_data {
 	struct ofono_modem modem;
 	struct test_dbus_context context;
 	struct cell_info_dbus *dbus;
-	struct ofono_cell_info *info;
 	struct ofono_cell cell;
+	CellInfoControl *ctl;
 	const char *type;
 	const char *cell_path;
 };
@@ -928,6 +948,7 @@ static void test_property_changed_reply2(DBusPendingCall *call, void *data)
 static void test_property_changed_reply1(DBusPendingCall *call, void *data)
 {
 	struct test_property_changed_data *test = data;
+	struct ofono_cell_info *info = test->ctl->info;
 	struct ofono_cell *first_cell;
 
 	DBG("");
@@ -935,10 +956,10 @@ static void test_property_changed_reply1(DBusPendingCall *call, void *data)
 	dbus_pending_call_unref(call);
 
 	/* Trigger "PropertyChanged" signal */
-	first_cell = test->info->cells[0];
+	first_cell = info->cells[0];
 	test->cell.info.gsm.signalStrength =
 		(++(first_cell->info.gsm.signalStrength));
-	fake_cell_info_cells_changed(test->info);
+	fake_cell_info_cells_changed(info);
 
 	test_submit_get_all_call(test->context.client_connection,
 			test->cell_path, test_property_changed_reply2, test);
@@ -946,14 +967,18 @@ static void test_property_changed_reply1(DBusPendingCall *call, void *data)
 
 static void test_property_changed_start(struct test_dbus_context *context)
 {
+	struct ofono_cell_info *info = fake_cell_info_new();
 	struct test_property_changed_data *test =
 		G_CAST(context, struct test_property_changed_data, context);
 
 	DBG("");
-	test->info = fake_cell_info_new();
-	fake_cell_info_add_cell(test->info, &test->cell);
-	test->dbus = cell_info_dbus_new(&test->modem, test->info);
+	fake_cell_info_add_cell(info, &test->cell);
+	test->ctl = cell_info_control_get(test->modem.path);
+	cell_info_control_set_cell_info(test->ctl, info);
+
+	test->dbus = cell_info_dbus_new(&test->modem, test->ctl);
 	g_assert(test->dbus);
+	ofono_cell_info_unref(info);
 
 	/* Submit GetCells to enable "PropertyChanged" signals */
 	test_submit_cell_info_call(test->context.client_connection, "GetCells",
@@ -979,7 +1004,7 @@ static void test_property_changed(void)
 	g_assert(test_dbus_find_signal(&test.context, test.cell_path,
 		CELL_DBUS_INTERFACE, CELL_DBUS_PROPERTY_CHANGED_SIGNAL));
 
-	ofono_cell_info_unref(test.info);
+	cell_info_control_unref(test.ctl);
 	cell_info_dbus_free(test.dbus);
 	test_dbus_shutdown(&test.context);
 	if (timeout) {
@@ -993,8 +1018,8 @@ struct test_unsubscribe_data {
 	struct ofono_modem modem;
 	struct test_dbus_context context;
 	struct cell_info_dbus *dbus;
-	struct ofono_cell_info *info;
 	struct ofono_cell cell;
+	CellInfoControl *ctl;
 	const char *type;
 	const char *cell_path;
 };
@@ -1014,6 +1039,7 @@ static void test_unsubscribe_reply3(DBusPendingCall *call, void *data)
 static void test_unsubscribe_reply2(DBusPendingCall *call, void *data)
 {
 	struct test_unsubscribe_data *test = data;
+	struct ofono_cell_info *info = test->ctl->info;
 	struct ofono_cell *first_cell;
 
 	DBG("");
@@ -1021,10 +1047,10 @@ static void test_unsubscribe_reply2(DBusPendingCall *call, void *data)
 	dbus_pending_call_unref(call);
 
 	/* No "PropertyChanged" signal is expected because it's disabled */
-	first_cell = test->info->cells[0];
+	first_cell = info->cells[0];
 	test->cell.info.gsm.signalStrength =
 		(++(first_cell->info.gsm.signalStrength));
-	fake_cell_info_cells_changed(test->info);
+	fake_cell_info_cells_changed(info);
 
 	/* Submit Unsubscribe and expect and error */
 	test_submit_cell_info_call(test->context.client_connection,
@@ -1048,11 +1074,14 @@ static void test_unsubscribe_start(struct test_dbus_context *context)
 {
 	struct test_unsubscribe_data *test =
 		G_CAST(context, struct test_unsubscribe_data, context);
+	struct ofono_cell_info *info = fake_cell_info_new();
 
 	DBG("");
-	test->info = fake_cell_info_new();
-	fake_cell_info_add_cell(test->info, &test->cell);
-	test->dbus = cell_info_dbus_new(&test->modem, test->info);
+	fake_cell_info_add_cell(info, &test->cell);
+	test->ctl = cell_info_control_get(test->modem.path);
+	cell_info_control_set_cell_info(test->ctl, info);
+
+	test->dbus = cell_info_dbus_new(&test->modem, test->ctl);
 	g_assert(test->dbus);
 
 	/* Submit GetCells to enable "PropertyChanged" signals */
@@ -1079,7 +1108,7 @@ static void test_unsubscribe(void)
 	g_assert(test_dbus_find_signal(&test.context, test.modem.path,
 		CELL_INFO_DBUS_INTERFACE, CELL_INFO_DBUS_UNSUBSCRIBED_SIGNAL));
 
-	ofono_cell_info_unref(test.info);
+	cell_info_control_unref(test.ctl);
 	cell_info_dbus_free(test.dbus);
 	test_dbus_shutdown(&test.context);
 	if (timeout) {
