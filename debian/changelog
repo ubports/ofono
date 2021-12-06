@@ -1,9 +1,15 @@
-ofono (1.21+ubports2) xenial; urgency=medium
+ofono (1.21+ubports3) xenial; urgency=medium
 
   * Enable message_proxy and message_center options
     on internet contexts.
 
  -- José Pekkarinen <jose.pekkarinen@foxhound.fi>  Sun, 26 Sep 2021 20:24:57 +0300
+
+ofono (1.21+ubports2) xenial; urgency=medium
+
+  * Add ril config parameter to set set_udub ril request
+
+ -- José Pekkarinen <jose.pekkarinen@foxhound.fi>  Sun, 17 Oct 2021 20:35:57 +0200
 
 ofono (1.21+ubports1) xenial; urgency=medium
 

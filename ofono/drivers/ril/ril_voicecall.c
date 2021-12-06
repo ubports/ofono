@@ -15,6 +15,7 @@
 
 #include "ril_plugin.h"
 #include "ril_ecclist.h"
+#include "ril_types.h"
 #include "ril_util.h"
 #include "ril_log.h"
 
@@ -56,6 +57,7 @@ struct ril_voicecall {
 	gulong supp_svc_notification_id;
 	gulong ringback_tone_event_id;
 	gulong ecclist_change_id;
+	int ril_request_on_set_udub;
 };
 
 struct ril_voicecall_request_data {
@@ -851,8 +853,10 @@ static void ril_voicecall_release_all_active(struct ofono_voicecall *vc,
 static void ril_voicecall_set_udub(struct ofono_voicecall *vc,
 					ofono_voicecall_cb_t cb, void *data)
 {
+	struct ril_voicecall *vd = ril_voicecall_get_data(vc);
 	DBG("");
-	ril_voicecall_request(RIL_REQUEST_UDUB, vc, NULL, cb, data);
+	ril_voicecall_request(vd->ril_request_on_set_udub,
+						vc, NULL, cb, data);
 }
 
 static void ril_voicecall_enable_supp_svc(struct ril_voicecall *vd)
@@ -949,6 +953,9 @@ static int ril_voicecall_probe(struct ofono_voicecall *vc, unsigned int vendor,
 	vd->vc = vc;
 	if (modem->ecclist_file) {
 		vd->ecclist = ril_ecclist_new(modem->ecclist_file);
+	}
+	if (cfg->ril_request_on_set_udub) {
+		vd->ril_request_on_set_udub = cfg->ril_request_on_set_udub;
 	}
 	ril_voicecall_clear_dtmf_queue(vd);
 	ofono_voicecall_set_data(vc, vd);
