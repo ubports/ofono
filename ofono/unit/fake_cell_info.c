@@ -54,6 +54,7 @@ G_DEFINE_TYPE(FakeCellInfo, fake_cell_info, PARENT_TYPE)
 
 static FakeCellInfo *fake_cell_info_cast(struct ofono_cell_info *info)
 {
+	g_assert(info);
 	return G_CAST(info, FakeCellInfo, info);
 }
 
@@ -158,6 +159,16 @@ struct ofono_cell_info *fake_cell_info_new()
 
 	self->info.proc = &fake_cell_info_proc;
 	return &self->info;
+}
+
+int fake_cell_info_update_interval(struct ofono_cell_info *info)
+{
+	return fake_cell_info_cast(info)->interval;
+}
+
+ofono_bool_t fake_cell_info_is_enabled(struct ofono_cell_info *info)
+{
+	return fake_cell_info_cast(info)->enabled;
 }
 
 void fake_cell_info_add_cell(struct ofono_cell_info *info,

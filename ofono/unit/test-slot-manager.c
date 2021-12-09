@@ -19,6 +19,7 @@
 
 #include "sim-info.h"
 #include "slot-manager-dbus.h"
+#include "fake_cell_info.h"
 #include "fake_watch.h"
 
 #define OFONO_API_SUBJECT_TO_CHANGE
@@ -30,6 +31,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <limits.h>
 
 #define TEST_TIMEOUT_SEC (20)
 #define TEST_IDLE_WAIT_COUNT (10) /* Should be > SF_INIT_IDLE_COUNT */
@@ -226,46 +228,6 @@ struct sim_info_dbus *sim_info_dbus_new(struct sim_info *info)
 }
 
 void sim_info_dbus_free(struct sim_info_dbus *dbus) {}
-
-/* Fake ofono_cell_info */
-
-static int fake_ofono_cell_info_ref_count = 0;
-
-static void fake_ofono_cell_info_ref(struct ofono_cell_info *info)
-{
-	g_assert(fake_ofono_cell_info_ref_count >= 0);
-	fake_ofono_cell_info_ref_count++;
-}
-
-static void fake_ofono_cell_info_unref(struct ofono_cell_info *info)
-{
-	g_assert(fake_ofono_cell_info_ref_count > 0);
-	fake_ofono_cell_info_ref_count--;
-}
-
-static gulong fake_ofono_cell_info_add_cells_changed_handler
-	(struct ofono_cell_info *info, ofono_cell_info_cb_t cb, void *arg)
-{
-	return 1;
-}
-
-static void fake_ofono_cell_info_remove_handler(struct ofono_cell_info *info,
-	gulong id)
-{
-	g_assert(id == 1);
-}
-
-static const struct ofono_cell_info_proc fake_ofono_cell_info_proc = {
-	fake_ofono_cell_info_ref,
-	fake_ofono_cell_info_unref,
-	fake_ofono_cell_info_add_cells_changed_handler,
-	fake_ofono_cell_info_remove_handler
-};
-
-static struct ofono_cell_info fake_ofono_cell_info = {
-	&fake_ofono_cell_info_proc,
-	NULL
-};
 
 /* cell_info_dbus */
 
@@ -510,6 +472,8 @@ static void test_basic(void)
 	g_assert(!ofono_slot_ref(NULL));
 	ofono_slot_unref(NULL);
 	ofono_slot_set_cell_info(NULL, NULL);
+	ofono_slot_set_cell_info_update_interval(NULL, NULL, 0);
+	ofono_slot_drop_cell_info_requests(NULL, NULL);
 	ofono_slot_error(NULL, NULL, NULL);
 	g_assert(!ofono_slot_add_property_handler(NULL, 0, NULL, NULL));
 	ofono_slot_remove_handler(NULL, 0);
@@ -724,6 +688,7 @@ static gboolean test_sync_start_done(gpointer user_data)
 	struct ofono_slot_manager *mgr = dd->manager;
 	struct ofono_watch *w = ofono_watch_new(TEST_PATH);
 	struct ofono_slot_manager *m = fake_slot_manager_dbus.m;
+	struct ofono_cell_info *ci = fake_cell_info_new();
 	struct ofono_modem modem;
 	char **slots;
 	GHashTable *errors;
@@ -734,7 +699,13 @@ static gboolean test_sync_start_done(gpointer user_data)
 
 	/* Poke cell info API */
 	ofono_slot_set_cell_info(s, NULL);
-	ofono_slot_set_cell_info(s, &fake_ofono_cell_info);
+	ofono_slot_set_cell_info(s, ci);
+
+	g_assert_cmpint(fake_cell_info_update_interval(ci), == ,INT_MAX);
+	ofono_slot_set_cell_info_update_interval(s, s, 42);
+	g_assert_cmpint(fake_cell_info_update_interval(ci), == ,42);
+	ofono_slot_drop_cell_info_requests(s, s);
+	g_assert_cmpint(fake_cell_info_update_interval(ci), == ,INT_MAX);
 
 	memset(&modem, 0, sizeof(modem));
 	w->modem = &modem;
@@ -744,7 +715,7 @@ static gboolean test_sync_start_done(gpointer user_data)
 	fake_watch_emit_queued_signals(w);
 
 	ofono_slot_set_cell_info(s, NULL);
-	ofono_slot_set_cell_info(s, &fake_ofono_cell_info);
+	ofono_slot_set_cell_info(s, ci);
 
 	w->modem = NULL;
 	w->online = FALSE;
@@ -753,7 +724,6 @@ static gboolean test_sync_start_done(gpointer user_data)
 	fake_watch_emit_queued_signals(w);
 
 	ofono_slot_set_cell_info(s, NULL);
-	g_assert(!fake_ofono_cell_info_ref_count);
 
 	/* Poke error counters */
 	ofono_slot_manager_error(mgr, TEST_ERROR_KEY, "Aaah!");
@@ -828,6 +798,7 @@ static gboolean test_sync_start_done(gpointer user_data)
 	g_assert_cmpuint(fake_slot_manager_dbus.block, ==,
 		 SLOT_MANAGER_DBUS_BLOCK_NONE);
 
+	ofono_cell_info_unref(ci);
 	ofono_watch_unref(w);
 	g_idle_add(test_done_cb, NULL);
 	return G_SOURCE_REMOVE;
@@ -1709,7 +1680,7 @@ static gboolean test_storage_save_add_slots(gpointer user_data)
 	/* Unblocking D-Bus clients will exit the loop */
 	fake_slot_manager_dbus.fn_block_changed =
 		test_quit_loop_when_unblocked;
-	
+
 	test_storage_add_slots(dd);
 
 	fake_slot_manager_dbus.cb.set_enabled_slots(m, slots);

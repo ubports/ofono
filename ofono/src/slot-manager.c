@@ -21,7 +21,9 @@
 #include "sim-info.h"
 #include "storage.h"
 #include "slot-manager-dbus.h"
+#include "cell-info-control.h"
 #include "cell-info-dbus.h"
+#include "watch_p.h"
 
 #include <gutil_macros.h>
 #include <gutil_misc.h>
@@ -69,8 +71,8 @@ struct ofono_slot_object {
 	struct ofono_watch *watch;
 	struct sim_info *siminfo;
 	struct sim_info_dbus *siminfo_dbus;
-	struct ofono_cell_info *cellinfo;
 	struct cell_info_dbus *cellinfo_dbus;
+	CellInfoControl *cellinfo_ctl;
 	enum ofono_slot_flags flags;
 	gulong watch_event_id[WATCH_EVENT_COUNT];
 	char *imei;
@@ -390,10 +392,10 @@ static void slot_update_cell_info_dbus(OfonoSlotObject *slot)
 {
 	struct ofono_modem *modem = slot->watch->modem;
 
-	if (modem && slot->cellinfo) {
+	if (modem && slot->cellinfo_ctl && slot->cellinfo_ctl->info) {
 		if (!slot->cellinfo_dbus) {
 			slot->cellinfo_dbus = cell_info_dbus_new(modem,
-				slot->cellinfo);
+				slot->cellinfo_ctl);
 		}
 	} else {
 		if (slot->cellinfo_dbus) {
@@ -472,8 +474,7 @@ static void slot_object_finalize(GObject* obj)
 	}
 	sim_info_unref(s->siminfo);
 	sim_info_dbus_free(s->siminfo_dbus);
-	cell_info_dbus_free(s->cellinfo_dbus);
-	ofono_cell_info_unref(s->cellinfo);
+	cell_info_control_unref(s->cellinfo_ctl);
 	ofono_watch_remove_all_handlers(s->watch, s->watch_event_id);
 	ofono_watch_unref(s->watch);
 	g_free(s->imei);
@@ -497,6 +498,7 @@ static struct ofono_slot *slot_add_internal(OfonoSlotManagerObject *mgr,
 	s->watch = w;
 	s->siminfo = sim_info_new(path);
 	s->siminfo_dbus = sim_info_dbus_new(s->siminfo);
+	s->cellinfo_ctl = cell_info_control_get(path);
 	pub->path = w->path;
 	pub->imei = s->imei = g_strdup(imei);
 	pub->imeisv = s->imeisv = g_strdup(imeisv);
@@ -878,7 +880,7 @@ static enum slot_manager_dbus_signal slot_manager_update_modem_paths
 					OFONO_SLOT_DATA_MMS);
 		}
 	}
-	
+
 	return mask;
 }
 
@@ -994,7 +996,7 @@ static void ofono_slot_manager_object_finalize(GObject* obj)
 {
 	OfonoSlotManagerObject *mgr = OFONO_SLOT_MANAGER_OBJECT(obj);
 
-	/* Drivers are unregistered by __ofono_slot_manager_cleanup */ 
+	/* Drivers are unregistered by __ofono_slot_manager_cleanup */
 	GASSERT(!mgr->drivers);
 	g_slist_free_full(mgr->slots, g_object_unref);
 	g_free(mgr->pslots);
@@ -1330,12 +1332,35 @@ void ofono_slot_set_cell_info(struct ofono_slot *s, struct ofono_cell_info *ci)
 {
 	OfonoSlotObject *slot = slot_object_cast(s);
 
-	if (slot && slot->cellinfo != ci) {
-		cell_info_dbus_free(slot->cellinfo_dbus);
-		ofono_cell_info_unref(slot->cellinfo);
-		slot->cellinfo = ofono_cell_info_ref(ci);
-		slot->cellinfo_dbus = NULL;
-		slot_update_cell_info_dbus(slot);
+	if (slot) {
+		CellInfoControl *ctl = slot->cellinfo_ctl;
+
+		if (ctl->info != ci) {
+			cell_info_control_set_cell_info(ctl, ci);
+			cell_info_dbus_free(slot->cellinfo_dbus);
+			slot->cellinfo_dbus = NULL;
+			slot_update_cell_info_dbus(slot);
+		}
+	}
+}
+
+void ofono_slot_set_cell_info_update_interval(struct ofono_slot *s,
+	void* tag, int interval_ms)
+{	/* Since mer/1.25+git7 */
+	OfonoSlotObject *slot = slot_object_cast(s);
+
+	if (slot) {
+		cell_info_control_set_update_interval(slot->cellinfo_ctl, tag,
+			interval_ms);
+	}
+}
+
+void ofono_slot_drop_cell_info_requests(struct ofono_slot *s, void* tag)
+{	/* Since mer/1.25+git7 */
+	OfonoSlotObject *slot = slot_object_cast(s);
+
+	if (slot) {
+		cell_info_control_drop_requests(slot->cellinfo_ctl, tag);
 	}
 }
 

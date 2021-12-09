@@ -43,6 +43,7 @@ unit/test-simutil
 unit/test-mux
 unit/test-caif
 unit/test-cell-info
+unit/test-cell-info-control
 unit/test-cell-info-dbus
 unit/test-stkutil
 unit/test-cdmasms

@@ -17,6 +17,7 @@ TESTS="\
  test-sms-root \
  test-caif \
  test-cell-info \
+ test-cell-info-control \
  test-cell-info-dbus \
  test-conf \
  test-dbus-queue \

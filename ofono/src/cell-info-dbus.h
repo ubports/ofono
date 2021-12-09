@@ -16,12 +16,12 @@
 #ifndef CELL_INFO_DBUS_H
 #define CELL_INFO_DBUS_H
 
-struct ofono_modem;
-struct ofono_cell_info;
+#include "cell-info-control.h"
 
 struct cell_info_dbus;
+
 struct cell_info_dbus *cell_info_dbus_new(struct ofono_modem *modem,
-					struct ofono_cell_info *ci);
+					CellInfoControl *ctl);
 void cell_info_dbus_free(struct cell_info_dbus *dbus);
 
 #endif /* CELL_INFO_DBUS_H */
