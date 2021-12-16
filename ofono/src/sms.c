@@ -1043,6 +1043,60 @@ static void sms_send_message_submit(struct ofono_sms *sms,
 	message->pending = NULL;
 }
 
+static void sms_send_data_message_submit(struct ofono_sms *sms,
+			const struct sms_address *addr, int dstport,
+			int srcport, unsigned char *bytes, unsigned int len,
+			int flags, void *data)
+{
+	struct sms_message_data *message = data;
+	const char *to = sms_address_to_string(addr);
+	GSList *msg_list = NULL;
+	gboolean use_16bit_ref = FALSE;
+	gboolean use_delivery_reports;
+	int err;
+	struct ofono_uuid uuid;
+	enum ofono_sms_submit_flag submit_flags;
+
+	if (bytes == NULL) {
+		__ofono_dbus_pending_reply(&message->pending,
+				__ofono_error_invalid_format(message->pending));
+		return;
+	}
+
+	use_delivery_reports = flags & OFONO_SMS_DATA_FLAG_DELIVERY_REPORT;
+	msg_list = sms_datagram_prepare(to, bytes, len, sms->ref,
+					use_16bit_ref, srcport, dstport, TRUE,
+					use_delivery_reports);
+
+	if (msg_list == NULL) {
+		__ofono_dbus_pending_reply(&message->pending,
+			__ofono_error_invalid_format(message->pending));
+		return;
+	}
+
+	submit_flags = OFONO_SMS_SUBMIT_FLAG_RETRY;
+	submit_flags |= OFONO_SMS_SUBMIT_FLAG_EXPOSE_DBUS;
+
+	if (use_delivery_reports)
+		submit_flags |= OFONO_SMS_SUBMIT_FLAG_REQUEST_SR;
+
+	err = __ofono_sms_txq_submit(sms, msg_list, submit_flags, &uuid,
+					message_queued, message->pending);
+
+	g_slist_free_full(msg_list, g_free);
+
+	if (err < 0) {
+		__ofono_dbus_pending_reply(&message->pending,
+				__ofono_error_failed(message->pending));
+		return;
+	}
+
+	/* Ownership has been transfered to the message queue */
+	message->pending = NULL;
+
+	DBG("SMS data sent");
+}
+
 static void sms_send_message_destroy(void *data)
 {
 	struct sms_message_data *message = data;
@@ -1095,6 +1149,49 @@ static DBusMessage *sms_send_message(DBusConnection *conn, DBusMessage *msg,
 	sms_address_from_string(&addr, to);
 	__ofono_sms_filter_chain_send_text(sms->filter_chain, &addr, text,
 		sms_send_message_submit, sms_send_message_destroy, message);
+
+	return NULL;
+}
+
+static DBusMessage *sms_send_data_message(DBusConnection *conn,
+					DBusMessage *msg, void *data)
+{
+	struct ofono_sms *sms = data;
+	const char *to;
+	unsigned char *bytes = NULL;
+	struct sms_message_data *message;
+	struct sms_address addr;
+	dbus_int32_t srcport;
+	dbus_int32_t dstport;
+	dbus_uint32_t flags;
+	int len;
+
+	if (!ofono_dbus_access_method_allowed(dbus_message_get_sender(msg),
+			OFONO_DBUS_ACCESS_INTF_MESSAGEMGR,
+			OFONO_DBUS_ACCESS_MESSAGEMGR_SEND_MESSAGE, NULL))
+		return __ofono_error_access_denied(msg);
+
+	if (!dbus_message_get_args(msg, NULL, DBUS_TYPE_STRING, &to,
+					DBUS_TYPE_ARRAY, DBUS_TYPE_BYTE,
+					&bytes, &len,
+					DBUS_TYPE_INT32, &srcport,
+					DBUS_TYPE_INT32, &dstport,
+					DBUS_TYPE_UINT32, &flags,
+					DBUS_TYPE_INVALID))
+		return __ofono_error_invalid_args(msg);
+
+	if (valid_phone_number_format(to) == FALSE)
+		return __ofono_error_invalid_format(msg);
+
+	message = g_new0(struct sms_message_data, 1);
+	message->pending = dbus_message_ref(msg);
+
+	sms_address_from_string(&addr, to);
+	__ofono_sms_filter_chain_send_datagram(sms->filter_chain, &addr,
+					dstport, srcport, bytes, len, flags,
+					sms_send_data_message_submit,
+					sms_send_message_destroy, message);
+
 
 	return NULL;
 }
@@ -1216,6 +1313,15 @@ static const GDBusMethodTable sms_manager_methods[] = {
 			GDBUS_ARGS({ "to", "s" }, { "text", "s" }),
 			GDBUS_ARGS({ "path", "o" }),
 			sms_send_message) },
+	{ GDBUS_ASYNC_METHOD("SendDataMessage",
+			GDBUS_ARGS(
+				{ "to", "s" },
+				{ "data", "ay" },
+				{ "srcport", "i"},
+				{ "dstport", "i"},
+				{ "flags", "u"}),
+			GDBUS_ARGS({ "path", "o" }),
+			sms_send_data_message) },
 	{ GDBUS_METHOD("GetMessages",
 			NULL, GDBUS_ARGS({ "messages", "a(oa{sv})" }),
 			sms_get_messages) },
