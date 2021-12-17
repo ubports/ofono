@@ -8,17 +8,27 @@ Source:     %{name}-%{version}.tar.bz2
 
 %define libglibutil_version 1.0.51
 
+# license macro requires rpm >= 4.11
+# Recommends requires rpm >= 4.12
+BuildRequires: pkgconfig(rpm)
+%define license_support %(pkg-config --exists 'rpm >= 4.11'; echo $?)
+%define can_recommend %(pkg-config --exists 'rpm >= 4.12'; echo $?)
+%if %{can_recommend} == 0
+%define recommend Recommends
+%else
+%define recommend Requires
+%endif
+
 Requires:   dbus
 Requires:   systemd
 Requires:   libglibutil >= %{libglibutil_version}
-Recommends: mobile-broadband-provider-info
-Recommends: ofono-configs
+%{recommend}: mobile-broadband-provider-info
+%{recommend}: ofono-configs
 Requires(preun): systemd
 Requires(post): systemd
 Requires(postun): systemd
 
-# license macro and Recommends tag require reasonably fresh rpm
-BuildRequires:  rpm >= 4.12
+BuildRequires:  pkgconfig
 BuildRequires:  pkgconfig(dbus-1)
 BuildRequires:  pkgconfig(dbus-glib-1)
 BuildRequires:  pkgconfig(glib-2.0)
@@ -82,7 +92,7 @@ autoreconf --force --install
     --disable-qmimodem \
     --with-systemdunitdir=%{_unitdir}
 
-%make_build
+make %{_smp_mflags}
 
 %check
 # run unit tests
@@ -121,7 +131,6 @@ systemctl try-restart ofono.service ||:
 
 %files
 %defattr(-,root,root,-)
-%license COPYING
 %config %{_sysconfdir}/dbus-1/system.d/*.conf
 %{_sbindir}/*
 %{_unitdir}/network.target.wants/ofono.service
@@ -131,6 +140,9 @@ systemctl try-restart ofono.service ||:
 # This file is part of phonesim and not needed with ofono.
 %exclude %{_sysconfdir}/ofono/phonesim.conf
 %dir %attr(775,radio,radio) /var/lib/ofono
+%if %{license_support} == 0
+%license COPYING
+%endif
 
 %files devel
 %defattr(-,root,root,-)
