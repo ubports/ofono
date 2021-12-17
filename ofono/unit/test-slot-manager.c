@@ -56,6 +56,16 @@ static GSList *test_drivers = NULL;
 static struct ofono_slot_driver_reg *test_driver_reg = NULL;
 static guint test_timeout_id = 0;
 
+static gboolean test_save_key_file(GKeyFile *keyfile, const char *fname)
+{
+	gsize length;
+	gchar* contents = g_key_file_to_data(keyfile, &length, NULL);
+	gboolean success = g_file_set_contents(fname, contents, length, NULL);
+
+	g_free(contents);
+	return success;
+}
+
 /* Recursive rmdir */
 
 static int rmdir_r(const char *path)
@@ -1226,7 +1236,7 @@ static void test_data_sim(void)
 
 	/* Invalid AutoSelectDataSim option is treated as "off" */
 	g_key_file_set_string(cfg, "ModemManager", "AutoSelectDataSim", "x");
-	g_assert(g_key_file_save_to_file(cfg, cfg_file, NULL));
+	g_assert(test_save_key_file(cfg, cfg_file));
 	g_key_file_unref(cfg);
 
 	__ofono_set_config_dir(cfg_dir);
@@ -1452,7 +1462,7 @@ static void test_auto_data_sim(gconstpointer option)
 	GKeyFile* cfg = g_key_file_new();
 
 	g_key_file_set_string(cfg, "ModemManager", "AutoSelectDataSim", option);
-	g_assert(g_key_file_save_to_file(cfg, cfg_file, NULL));
+	g_assert(test_save_key_file(cfg, cfg_file));
 	g_key_file_unref(cfg);
 
 	__ofono_set_config_dir(cfg_dir);
