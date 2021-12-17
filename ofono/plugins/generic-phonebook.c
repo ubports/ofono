@@ -27,6 +27,7 @@
 
 #include <glib.h>
 #include <errno.h>
+#include <string.h>
 
 #define CALLBACK_WITH_FAILURE(cb, args...)		\
 	do {						\

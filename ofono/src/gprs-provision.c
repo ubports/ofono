@@ -25,6 +25,7 @@
 #endif
 
 #include <glib.h>
+#include <string.h>
 
 #include <ofono/gprs-provision.h>
 #include <ofono/log.h>

@@ -62,6 +62,18 @@ struct cellinfo_netmon_notify_param {
 	int value;
 };
 
+/* -Wformat-truncation was introduced in GCC 7 */
+#if __GNUC__ >= 7
+#  define BEGIN_IGNORE_FORMAT_TRUNCATION \
+	_Pragma("GCC diagnostic push") \
+	_Pragma("GCC diagnostic ignored \"-Wformat-truncation\"")
+#  define END_IGNORE_FORMAT_TRUNCATION \
+	_Pragma ("GCC diagnostic pop")
+#else
+#  define BEGIN_IGNORE_FORMAT_TRUNCATION
+#  define END_IGNORE_FORMAT_TRUNCATION
+#endif
+
 static inline struct cellinfo_netmon_data *
 cellinfo_netmon_get_data(struct ofono_netmon *ofono)
 {
@@ -75,15 +87,19 @@ static void cellinfo_netmon_format_mccmnc(char *s_mcc, char *s_mnc,
 	s_mnc[0] = 0;
 
 	if (mcc >= 0 && mcc <= 999) {
+		BEGIN_IGNORE_FORMAT_TRUNCATION
 		snprintf(s_mcc, OFONO_MAX_MCC_LENGTH + 1, "%03d", mcc);
+		END_IGNORE_FORMAT_TRUNCATION
 		if (mnc >= 0 && mnc <= 999) {
 			const int mnclen =
 				ofono_sim_mnclength_get_mnclength_mccmnc(mcc,
 									mnc);
 
 			if (mnclen >= 0) {
+				BEGIN_IGNORE_FORMAT_TRUNCATION
 				snprintf(s_mnc, OFONO_MAX_MNC_LENGTH, "%0*d",
 								mnclen, mnc);
+				END_IGNORE_FORMAT_TRUNCATION
 				s_mnc[OFONO_MAX_MNC_LENGTH] = 0;
 			}
 		}
