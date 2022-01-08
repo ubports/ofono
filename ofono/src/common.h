@@ -56,6 +56,10 @@
                 OFONO_NETREG_STATUS_UNKNOWN /* 4 */
 #define NETWORK_REGISTRATION_STATUS_ROAMING \
                 OFONO_NETREG_STATUS_ROAMING /* 5 */
+#define NETWORK_REGISTRATION_STATUS_REGISTERED_SMS_EUTRAN \
+                OFONO_NETREG_STATUS_REGISTERED_SMS_EUTRAN /* 6 */
+#define NETWORK_REGISTRATION_STATUS_ROAMING_SMS_EUTRAN \
+                OFONO_NETREG_STATUS_ROAMING_SMS_EUTRAN /* 7 */
 
 /* 27.007 Section 7.3 <stat> */
 #define OPERATOR_STATUS_UNKNOWN	\
@@ -207,3 +211,10 @@ const char *packet_bearer_to_string(int bearer);
 
 gboolean is_valid_apn(const char *apn);
 const char *call_status_to_string(enum call_status status);
+
+const char *gprs_proto_to_string(enum ofono_gprs_proto proto);
+gboolean gprs_proto_from_string(const char *str, enum ofono_gprs_proto *proto);
+
+const char *gprs_auth_method_to_string(enum ofono_gprs_auth_method auth);
+gboolean gprs_auth_method_from_string(const char *str,
+					enum ofono_gprs_auth_method *auth);

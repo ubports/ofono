@@ -509,7 +509,7 @@ static void mbim_sim_remove(struct ofono_sim *sim)
 	l_free(sd);
 }
 
-static struct ofono_sim_driver driver = {
+static const struct ofono_sim_driver driver = {
 	.name			= "mbim",
 	.probe			= mbim_sim_probe,
 	.remove			= mbim_sim_remove,

@@ -50,6 +50,9 @@
 #include <ofono/lte.h>
 #include <ofono/ims.h>
 #include <ofono/sim-auth.h>
+#include <ofono/sms.h>
+#include <ofono/phonebook.h>
+#include <ofono/netmon.h>
 
 #include <drivers/atmodem/atutil.h>
 #include <drivers/atmodem/vendor.h>
@@ -128,13 +131,20 @@ static void switch_sim_state_status(struct ofono_modem *modem, int status)
 		break;
 	case 2:	/* SIM inserted, PIN verification not needed - READY */
 	case 3:	/* SIM inserted, PIN verified - READY */
-	case 7:
+	case 7: /* SIM inserted, SMS and phonebook - READY */
 		if (data->have_sim == FALSE) {
 			ofono_sim_inserted_notify(data->sim, TRUE);
 			data->have_sim = TRUE;
 		}
 
 		ofono_sim_initialized_notify(data->sim);
+
+		if (data->sms_phonebook_added == FALSE) {
+			ofono_phonebook_create(modem, 0, "atmodem", data->chat);
+			ofono_sms_create(modem, 0, "atmodem", data->chat);
+			data->sms_phonebook_added = TRUE;
+		}
+
 		break;
 	default:
 		ofono_warn("Unknown SIM state %d received", status);
@@ -347,6 +357,7 @@ static void xmm7xxx_post_online(struct ofono_modem *modem)
 		ofono_gprs_add_context(gprs, gc);
 
 	ofono_ims_create(modem, "xmm7modem", data->chat);
+	ofono_netmon_create(modem, 0, "xmm7modem", data->chat);
 }
 
 static int xmm7xxx_probe(struct ofono_modem *modem)

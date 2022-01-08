@@ -24,7 +24,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -165,7 +164,7 @@ static void get_default_profile_cb(struct qmi_result *result, void *user_data)
 	qmi_param_free(param);
 
 error:
-	ofono_error("Failed to reset profile %hhd", index);
+	ofono_error("Failed to reset default profile");
 	ofono_lte_remove(lte);
 }
 
@@ -247,7 +246,7 @@ static void qmimodem_lte_remove(struct ofono_lte *lte)
 	g_free(ldd);
 }
 
-static struct ofono_lte_driver driver = {
+static const struct ofono_lte_driver driver = {
 	.name				= "qmimodem",
 	.probe				= qmimodem_lte_probe,
 	.remove				= qmimodem_lte_remove,

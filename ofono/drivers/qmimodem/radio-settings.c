@@ -287,7 +287,7 @@ static void qmi_radio_settings_remove(struct ofono_radio_settings *rs)
 	g_free(data);
 }
 
-static struct ofono_radio_settings_driver driver = {
+static const struct ofono_radio_settings_driver driver = {
 	.name		= "qmimodem",
 	.probe		= qmi_radio_settings_probe,
 	.remove		= qmi_radio_settings_remove,

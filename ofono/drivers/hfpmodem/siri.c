@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -196,7 +195,7 @@ static void hfp_siri_set_eyes_free_mode(struct ofono_siri *siri,
 	CALLBACK_WITH_FAILURE(cb, NULL);
 }
 
-static struct ofono_siri_driver driver = {
+static const struct ofono_siri_driver driver = {
 	.name = "hfpmodem",
 	.probe = hfp_siri_probe,
 	.remove = hfp_siri_remove,

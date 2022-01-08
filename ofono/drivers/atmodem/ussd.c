@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -327,7 +326,7 @@ static void at_ussd_remove(struct ofono_ussd *ussd)
 	g_free(data);
 }
 
-static struct ofono_ussd_driver driver = {
+static const struct ofono_ussd_driver driver = {
 	.name		= "atmodem",
 	.probe		= at_ussd_probe,
 	.remove		= at_ussd_remove,

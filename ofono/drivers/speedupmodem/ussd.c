@@ -204,7 +204,7 @@ static void speedup_ussd_remove(struct ofono_ussd *ussd)
 	g_free(data);
 }
 
-static struct ofono_ussd_driver driver = {
+static const struct ofono_ussd_driver driver = {
 	.name		= "speedupmodem",
 	.probe		= speedup_ussd_probe,
 	.remove		= speedup_ussd_remove,

@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -262,7 +261,7 @@ static void mbm_stk_remove(struct ofono_stk *stk)
 	g_free(sd);
 }
 
-static struct ofono_stk_driver driver = {
+static const struct ofono_stk_driver driver = {
 	.name			= "mbmmodem",
 	.probe			= mbm_stk_probe,
 	.remove			= mbm_stk_remove,

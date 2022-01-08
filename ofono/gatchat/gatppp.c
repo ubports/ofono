@@ -615,7 +615,8 @@ const char *g_at_ppp_get_password(GAtPPP *ppp)
 gboolean g_at_ppp_set_auth_method(GAtPPP *ppp, GAtPPPAuthMethod method)
 {
 	if (method != G_AT_PPP_AUTH_METHOD_CHAP &&
-					method != G_AT_PPP_AUTH_METHOD_PAP)
+					method != G_AT_PPP_AUTH_METHOD_PAP &&
+					method != G_AT_PPP_AUTH_METHOD_NONE)
 		return FALSE;
 
 	ppp->auth_method = method;

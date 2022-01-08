@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -212,7 +211,7 @@ static void at_call_barring_remove(struct ofono_call_barring *cb)
 	ofono_call_barring_set_data(cb, NULL);
 }
 
-static struct ofono_call_barring_driver driver = {
+static const struct ofono_call_barring_driver driver = {
 	.name		= "atmodem",
 	.probe		= at_call_barring_probe,
 	.remove		= at_call_barring_remove,

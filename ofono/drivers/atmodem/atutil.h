@@ -3,6 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2018 Gemalto M2M
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -86,7 +87,24 @@ void at_util_sim_state_query_free(struct at_util_sim_state_query *req);
 int at_util_get_ipv4_address_and_netmask(const char *addrnetmask,
 						char *address, char *netmask);
 
+int at_util_gprs_auth_method_to_auth_prot(
+				enum ofono_gprs_auth_method auth_method);
+
+const char *at_util_gprs_proto_to_pdp_type(enum ofono_gprs_proto proto);
+
+/*
+ * at_util_get_cgdcont_command
+ * if the apn pointer is NULL, the context will be removed: the resulting
+ * string will be like: AT+CGDCONT=7
+ * but if apn pointer is not NULL and the string is empty, then
+ * this function will create a normal context with empty apn, like:
+ * AT+CGDCONT=4,"IPV6",""
+ */
+char *at_util_get_cgdcont_command(guint cid, enum ofono_gprs_proto proto,
+							const char *apn);
+
 struct cb_data {
+	gint ref_count;
 	void *cb;
 	void *data;
 	void *user;
@@ -97,10 +115,27 @@ static inline struct cb_data *cb_data_new(void *cb, void *data)
 	struct cb_data *ret;
 
 	ret = g_new0(struct cb_data, 1);
+	ret->ref_count = 1;
 	ret->cb = cb;
 	ret->data = data;
 
 	return ret;
+}
+
+static inline struct cb_data *cb_data_ref(struct cb_data *cbd)
+{
+	cbd->ref_count++;
+	return cbd;
+}
+
+static inline void cb_data_unref(gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+
+	if (--cbd->ref_count)
+		return;
+
+	g_free(cbd);
 }
 
 static inline int at_util_convert_signal_strength(int strength)

@@ -1,3 +1,16 @@
+ver 1.26:
+	Fix issue with AT callback handler and GPRS.
+	Fix issue with handling EUTRAN SMS only states.
+	Fix issue with handling MBIM strings on big endian.
+	Fix issue with missing char and SMS national language.
+	Fix issue with unsolicited notifications of +CGAUTH/+CGDCONT.
+	Add support for setting "none" authentication method.
+	Add support for SMS and phonebook with xmm7xxx modems.
+	Add support for voice features and Gemalto modems.
+	Add support for Bengali and Gujrati SMS alphabets.
+	Add support for 8 additional languages for GSM 7 bit
+	Add support for using internal Embedded Linux library.
+
 ver 1.25:
 	Fix issue with handling GPRS context release.
 	Fix issue with GPRS context shutdown and Huawei modems.

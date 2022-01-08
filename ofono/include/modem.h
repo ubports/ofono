@@ -139,6 +139,9 @@ unsigned int ofono_modem_add_watch(ofono_modemwatch_cb_t cb, void *user,
 					ofono_destroy_func destroy);
 ofono_bool_t ofono_modem_remove_watch(unsigned int id);
 
+void ofono_modem_set_powered_timeout_hint(struct ofono_modem *modem,
+							unsigned int seconds);
+
 #ifdef __cplusplus
 }
 #endif

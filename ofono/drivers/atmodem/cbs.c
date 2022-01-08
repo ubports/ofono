@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <string.h>
 #include <stdio.h>
 
@@ -304,7 +303,7 @@ static void at_cbs_remove(struct ofono_cbs *cbs)
 	g_free(data);
 }
 
-static struct ofono_cbs_driver driver = {
+static const struct ofono_cbs_driver driver = {
 	.name = "atmodem",
 	.probe = at_cbs_probe,
 	.remove = at_cbs_remove,

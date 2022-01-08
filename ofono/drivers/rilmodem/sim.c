@@ -25,7 +25,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -1483,7 +1482,7 @@ static void ril_sim_remove(struct ofono_sim *sim)
 	g_free(sd);
 }
 
-static struct ofono_sim_driver driver = {
+static const struct ofono_sim_driver driver = {
 	.name			= RILMODEM,
 	.probe			= ril_sim_probe,
 	.remove			= ril_sim_remove,

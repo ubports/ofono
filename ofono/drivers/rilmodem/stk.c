@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <string.h>
 #include <stdio.h>
 
@@ -238,7 +237,7 @@ static void ril_stk_remove(struct ofono_stk *stk)
 	g_free(data);
 }
 
-static struct ofono_stk_driver driver = {
+static const struct ofono_stk_driver driver = {
 	.name = RILMODEM,
 	.probe = ril_stk_probe,
 	.remove = ril_stk_remove,

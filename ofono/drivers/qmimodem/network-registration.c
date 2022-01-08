@@ -637,7 +637,7 @@ static void qmi_netreg_remove(struct ofono_netreg *netreg)
 	g_free(data);
 }
 
-static struct ofono_netreg_driver driver = {
+static const struct ofono_netreg_driver driver = {
 	.name			= "qmimodem",
 	.probe			= qmi_netreg_probe,
 	.remove			= qmi_netreg_remove,

@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -514,6 +513,9 @@ static void deactivate_cb(gboolean ok, GAtResult *result, gpointer user_data)
 	if (gcd->vendor != OFONO_VENDOR_XMM)
 		g_at_chat_resume(gcd->chat);
 
+	if (!gcd->cb)
+		return;
+
 	CALLBACK_WITH_SUCCESS(gcd->cb, gcd->cb_data);
 }
 
@@ -652,7 +654,7 @@ static void ifx_gprs_context_remove(struct ofono_gprs_context *gc)
 	g_free(gcd);
 }
 
-static struct ofono_gprs_context_driver driver = {
+static const struct ofono_gprs_context_driver driver = {
 	.name			= "ifxmodem",
 	.probe			= ifx_gprs_context_probe,
 	.remove			= ifx_gprs_context_remove,

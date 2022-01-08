@@ -26,7 +26,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -834,7 +833,7 @@ static void ril_netreg_remove(struct ofono_netreg *netreg)
 	g_free(nd);
 }
 
-static struct ofono_netreg_driver driver = {
+static const struct ofono_netreg_driver driver = {
 	.name				= RILMODEM,
 	.probe				= ril_netreg_probe,
 	.remove				= ril_netreg_remove,

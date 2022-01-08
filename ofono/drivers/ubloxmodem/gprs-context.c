@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -497,7 +496,7 @@ static void ublox_gprs_context_remove(struct ofono_gprs_context *gc)
 	g_free(gcd);
 }
 
-static struct ofono_gprs_context_driver driver = {
+static const struct ofono_gprs_context_driver driver = {
 	.name			= "ubloxmodem",
 	.probe			= ublox_gprs_context_probe,
 	.remove			= ublox_gprs_context_remove,

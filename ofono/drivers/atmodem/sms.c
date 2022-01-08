@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -859,8 +858,18 @@ static gboolean build_cnmi_string(char *buf, int *cnmi_opts,
 					data->cnma_enabled ? "21" : "1", FALSE))
 		return FALSE;
 
+	switch (data->vendor) {
+	case OFONO_VENDOR_GEMALTO:
+		mode = "0";
+		break;
+	default:
+		/* Sounds like 2 is the sanest mode */
+		mode = "20";
+		break;
+	}
+
 	/* Always deliver CB via +CBM, otherwise don't deliver at all */
-	if (!append_cnmi_element(buf, &len, cnmi_opts[2], "20", FALSE))
+	if (!append_cnmi_element(buf, &len, cnmi_opts[2], mode, FALSE))
 		return FALSE;
 
 	/*
@@ -1320,7 +1329,7 @@ static void at_sms_remove(struct ofono_sms *sms)
 	ofono_sms_set_data(sms, NULL);
 }
 
-static struct ofono_sms_driver driver = {
+static const struct ofono_sms_driver driver = {
 	.name		= "atmodem",
 	.probe		= at_sms_probe,
 	.remove		= at_sms_remove,

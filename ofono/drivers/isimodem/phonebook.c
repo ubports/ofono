@@ -340,7 +340,7 @@ static void isi_phonebook_remove(struct ofono_phonebook *pb)
 	g_free(data);
 }
 
-static struct ofono_phonebook_driver driver = {
+static const struct ofono_phonebook_driver driver = {
 	.name			= "isimodem",
 	.probe			= isi_phonebook_probe,
 	.remove			= isi_phonebook_remove,

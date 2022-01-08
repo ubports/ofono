@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -323,7 +322,7 @@ static void cdma_connman_remove(struct ofono_cdma_connman *cm)
 	g_free(cd);
 }
 
-static struct ofono_cdma_connman_driver driver = {
+static const struct ofono_cdma_connman_driver driver = {
 	.name			= "cdmamodem",
 	.probe			= cdma_connman_probe,
 	.remove			= cdma_connman_remove,

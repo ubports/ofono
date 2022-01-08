@@ -153,7 +153,7 @@ static void at_devinfo_remove(struct ofono_devinfo *info)
 	g_at_chat_unref(chat);
 }
 
-static struct ofono_devinfo_driver driver = {
+static const struct ofono_devinfo_driver driver = {
 	.name			= "atmodem",
 	.probe			= at_devinfo_probe,
 	.remove			= at_devinfo_remove,

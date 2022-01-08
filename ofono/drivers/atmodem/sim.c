@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -1959,7 +1958,7 @@ static void at_sim_remove(struct ofono_sim *sim)
 	g_free(sd);
 }
 
-static struct ofono_sim_driver driver = {
+static const struct ofono_sim_driver driver = {
 	.name			= "atmodem",
 	.probe			= at_sim_probe,
 	.remove			= at_sim_remove,
@@ -1987,7 +1986,7 @@ static struct ofono_sim_driver driver = {
 	.logical_access		= at_logical_access
 };
 
-static struct ofono_sim_driver driver_noef = {
+static const struct ofono_sim_driver driver_noef = {
 	.name			= "atmodem-noef",
 	.probe			= at_sim_probe,
 	.remove			= at_sim_remove,

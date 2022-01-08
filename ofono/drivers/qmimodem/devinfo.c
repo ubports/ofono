@@ -208,7 +208,7 @@ static void qmi_devinfo_remove(struct ofono_devinfo *devinfo)
 	g_free(data);
 }
 
-static struct ofono_devinfo_driver driver = {
+static const struct ofono_devinfo_driver driver = {
 	.name			= "qmimodem",
 	.probe			= qmi_devinfo_probe,
 	.remove			= qmi_devinfo_remove,

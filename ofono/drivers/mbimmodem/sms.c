@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <string.h>
 #include <errno.h>
 #include <stdint.h>
@@ -496,7 +495,7 @@ static void mbim_sms_remove(struct ofono_sms *sms)
 	l_free(sd);
 }
 
-static struct ofono_sms_driver driver = {
+static const struct ofono_sms_driver driver = {
 	.name		= "mbim",
 	.probe		= mbim_sms_probe,
 	.remove		= mbim_sms_remove,

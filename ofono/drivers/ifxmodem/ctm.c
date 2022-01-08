@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -167,7 +166,7 @@ static void ifx_ctm_remove(struct ofono_ctm *ctm)
 	g_free(ctmd);
 }
 
-static struct ofono_ctm_driver driver = {
+static const struct ofono_ctm_driver driver = {
 	.name           = "ifxmodem",
 	.probe          = ifx_ctm_probe,
 	.remove         = ifx_ctm_remove,

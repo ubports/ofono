@@ -412,14 +412,16 @@ builtin_modules += gemaltomodem
 builtin_sources += drivers/atmodem/atutil.h \
 			drivers/gemaltomodem/gemaltomodem.h \
 			drivers/gemaltomodem/gemaltomodem.c \
-			drivers/gemaltomodem/location-reporting.c
+			drivers/gemaltomodem/location-reporting.c \
+			drivers/gemaltomodem/voicecall.c
 
 builtin_modules += xmm7modem
 builtin_sources += drivers/atmodem/atutil.h \
 			drivers/xmm7modem/xmm7modem.h \
 			drivers/xmm7modem/xmm7modem.c \
 			drivers/xmm7modem/radio-settings.c \
-			drivers/xmm7modem/ims.c
+			drivers/xmm7modem/ims.c \
+			drivers/xmm7modem/netmon.c
 
 if PHONESIM
 builtin_modules += phonesim
@@ -667,6 +669,7 @@ builtin_libadd += @ELL_LIBS@
 if MBIMMODEM
 mbim_sources =	drivers/mbimmodem/mbim.h \
 		drivers/mbimmodem/mbim.c \
+		drivers/mbimmodem/mbim-private.h \
 		drivers/mbimmodem/mbim-desc.h \
 		drivers/mbimmodem/mbim-desc.c \
 		drivers/mbimmodem/mbim-message.h \
@@ -892,7 +895,8 @@ test_scripts = test/backtrace \
 		test/test-serving-cell-info \
 		test/ims-register \
 		test/ims-unregister \
-		test/list-applications
+		test/list-applications \
+		test/set-sms-alphabet
 
 
 if TEST

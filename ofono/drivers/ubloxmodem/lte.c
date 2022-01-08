@@ -22,7 +22,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -125,7 +124,7 @@ static void ublox_lte_remove(struct ofono_lte *lte)
 	g_free(ldd);
 }
 
-static struct ofono_lte_driver driver = {
+static const struct ofono_lte_driver driver = {
 	.name				= UBLOXMODEM,
 	.probe				= ublox_lte_probe,
 	.remove				= ublox_lte_remove,

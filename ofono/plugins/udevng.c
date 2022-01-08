@@ -962,8 +962,6 @@ static gboolean setup_mbim(struct modem_info *modem)
 	ofono_modem_set_string(modem->modem, "Device", ctl);
 	ofono_modem_set_string(modem->modem, "NetworkInterface", net);
 	ofono_modem_set_string(modem->modem, "DescriptorFile", descriptors);
-	ofono_modem_set_string(modem->modem, "Vendor", modem->vendor);
-	ofono_modem_set_string(modem->modem, "Model", modem->model);
 
 	return TRUE;
 }
@@ -1194,12 +1192,22 @@ static gboolean setup_xmm7xxx(struct modem_info *modem)
 				info->interface, info->number, info->label,
 				info->sysattr, info->subsystem);
 
-		if (g_strcmp0(info->subsystem, "tty") == 0) {
-			if (g_strcmp0(info->number, "02") == 0)
-				mdm = info->devnode;
-		} else if (g_strcmp0(info->subsystem, "net") == 0) {
-			if (g_strcmp0(info->number, "00") == 0)
-				net = info->devnode;
+		if (g_strcmp0(modem->model,"095a") == 0) {
+			if (g_strcmp0(info->subsystem, "tty") == 0) {
+				if (g_strcmp0(info->number, "00") == 0)
+					mdm = info->devnode;
+			} else if (g_strcmp0(info->subsystem, "net") == 0) {
+				if (g_strcmp0(info->number, "06") == 0)
+					net = info->devnode;
+			}
+		} else {
+			if (g_strcmp0(info->subsystem, "tty") == 0) {
+				if (g_strcmp0(info->number, "02") == 0)
+					mdm = info->devnode;
+			} else if (g_strcmp0(info->subsystem, "net") == 0) {
+				if (g_strcmp0(info->number, "00") == 0)
+					net = info->devnode;
+			}
 		}
 	}
 

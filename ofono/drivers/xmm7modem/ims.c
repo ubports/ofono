@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -235,7 +234,7 @@ static void xmm_ims_remove(struct ofono_ims *ims)
 	g_free(idd);
 }
 
-static struct ofono_ims_driver driver = {
+static const struct ofono_ims_driver driver = {
 	.name				= "xmm7modem",
 	.probe				= xmm_ims_probe,
 	.remove				= xmm_ims_remove,

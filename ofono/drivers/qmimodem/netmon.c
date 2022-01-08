@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -268,7 +267,7 @@ static void qmi_netmon_remove(struct ofono_netmon *netmon)
 	g_free(nmd);
 }
 
-static struct ofono_netmon_driver driver = {
+static const struct ofono_netmon_driver driver = {
 	.name			= "qmimodem",
 	.probe			= qmi_netmon_probe,
 	.remove			= qmi_netmon_remove,
