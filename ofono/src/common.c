@@ -3,7 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
- *  Copyright (C) 2015-2021  Jolla Ltd.
+ *  Copyright (C) 2015-2022  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -829,6 +829,8 @@ const char *gprs_auth_method_to_string(enum ofono_gprs_auth_method auth)
 		return "chap";
 	case OFONO_GPRS_AUTH_METHOD_PAP:
 		return "pap";
+	case OFONO_GPRS_AUTH_METHOD_ANY:
+		return "any";
 	case OFONO_GPRS_AUTH_METHOD_NONE:
 		return "none";
 	};
@@ -844,6 +846,9 @@ gboolean gprs_auth_method_from_string(const char *str,
 		return TRUE;
 	} else if (g_str_equal(str, "pap")) {
 		*auth = OFONO_GPRS_AUTH_METHOD_PAP;
+		return TRUE;
+	} else if (g_str_equal(str, "any")) {
+		*auth = OFONO_GPRS_AUTH_METHOD_ANY;
 		return TRUE;
 	} else if (g_str_equal(str, "none")) {
 		*auth = OFONO_GPRS_AUTH_METHOD_NONE;

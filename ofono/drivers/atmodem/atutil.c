@@ -660,6 +660,7 @@ int at_util_gprs_auth_method_to_auth_prot(
 					enum ofono_gprs_auth_method auth_method)
 {
 	switch (auth_method) {
+	case OFONO_GPRS_AUTH_METHOD_ANY:
 	case OFONO_GPRS_AUTH_METHOD_PAP:
 		return 1;
 	case OFONO_GPRS_AUTH_METHOD_CHAP:
