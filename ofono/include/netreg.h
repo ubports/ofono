@@ -3,7 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
- *  Copyright (C) 2015-2021  Jolla Ltd.
+ *  Copyright (C) 2015-2022  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -32,7 +32,7 @@ extern "C" {
 struct ofono_modem;
 struct ofono_netreg;
 
-enum ofono_netreg_status {
+enum ofono_netreg_status { /* Since mer/1.24+git2 */
 	OFONO_NETREG_STATUS_NONE = -1,
 	/* 27.007 Section 7.2 <stat> */
 	OFONO_NETREG_STATUS_NOT_REGISTERED = 0,
@@ -41,9 +41,10 @@ enum ofono_netreg_status {
 	OFONO_NETREG_STATUS_DENIED = 3,
 	OFONO_NETREG_STATUS_UNKNOWN = 4,
 	OFONO_NETREG_STATUS_ROAMING = 5,
-    OFONO_NETREG_STATUS_REGISTERED_SMS_EUTRAN =	6,
-	OFONO_NETREG_STATUS_ROAMING_SMS_EUTRAN =	7,
-}; /* Since mer/1.24+git2 */
+        /* Since mer/1.26+git1 */
+	OFONO_NETREG_STATUS_REGISTERED_SMS_EUTRAN = 6,
+	OFONO_NETREG_STATUS_ROAMING_SMS_EUTRAN = 7
+};
 
 /* 27.007 Section 7.3 <stat> */
 enum ofono_operator_status {
