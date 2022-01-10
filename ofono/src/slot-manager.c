@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2017-2021 Jolla Ltd.
+ *  Copyright (C) 2017-2022 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -183,7 +183,8 @@ static void slot_manager_reindex_slots(OfonoSlotManagerObject *mgr);
 static void slot_manager_emit_all_queued_signals(OfonoSlotManagerObject *mgr);
 static void slot_manager_update_ready(OfonoSlotManagerObject *mgr);
 static enum slot_manager_dbus_signal slot_manager_update_modem_paths
-	(OfonoSlotManagerObject *mgr) G_GNUC_WARN_UNUSED_RESULT;
+	(OfonoSlotManagerObject *mgr, gboolean imsi_change)
+		G_GNUC_WARN_UNUSED_RESULT;
 
 static inline OfonoSlotBase *slot_base_cast(gpointer p)
 {
@@ -375,7 +376,7 @@ static inline void slot_manager_update_modem_paths_and_notify
 	(OfonoSlotManagerObject *mgr, enum slot_manager_dbus_signal extra)
 {
 	slot_manager_dbus_signal(mgr->dbus, extra |
-		slot_manager_update_modem_paths(mgr));
+		slot_manager_update_modem_paths(mgr, FALSE));
 }
 
 static void slot_update_data_role(OfonoSlotObject *slot,
@@ -421,34 +422,9 @@ static void slot_manager_slot_imsi_changed(struct ofono_watch *w, void *data)
 {
 	OfonoSlotObject *slot = OFONO_SLOT_OBJECT(data);
 	OfonoSlotManagerObject *mgr = slot->manager;
-	OfonoSlotObject *voice_slot = mgr->voice_slot;
-	OfonoSlotObject *data_slot = mgr->data_slot;
-	int signal_mask;
 
-	/*
-	 * We want the first slot to be selected by default.
-	 * However, things may become available in pretty much
-	 * any order, so reset the slot pointers to NULL and let
-	 * slot_manager_update_modem_paths() to pick them again.
-	 */
-	mgr->voice_slot = NULL;
-	mgr->data_slot = NULL;
-	mgr->pub.default_voice_path = NULL;
-	mgr->pub.default_data_path = NULL;
-	signal_mask = slot_manager_update_modem_paths(mgr);
-	if (voice_slot != mgr->voice_slot) {
-		if (!mgr->voice_slot) {
-			DBG("No default voice SIM");
-		}
-		signal_mask |= SLOT_MANAGER_DBUS_SIGNAL_VOICE_PATH;
-	}
-	if (data_slot != mgr->data_slot) {
-		if (!mgr->data_slot) {
-			DBG("No default data SIM");
-		}
-		signal_mask |= SLOT_MANAGER_DBUS_SIGNAL_DATA_PATH;
-	}
-	slot_manager_dbus_signal(mgr->dbus, signal_mask);
+	slot_manager_dbus_signal(mgr->dbus,
+		slot_manager_update_modem_paths(mgr, TRUE));
 	slot_manager_emit_all_queued_signals(mgr);
 }
 
@@ -707,7 +683,7 @@ static gboolean slot_manager_all_sims_are_initialized
  * queued signals mask but doesn't actually emit any signals.
  */
 static enum slot_manager_dbus_signal slot_manager_update_modem_paths
-	(OfonoSlotManagerObject *mgr)
+	(OfonoSlotManagerObject *mgr, gboolean imsi_change)
 {
 	enum slot_manager_dbus_signal mask = SLOT_MANAGER_DBUS_SIGNAL_NONE;
 	OfonoSlotObject *slot = NULL;
@@ -719,7 +695,7 @@ static enum slot_manager_dbus_signal slot_manager_update_modem_paths
 	if (mgr->default_voice_imsi) {
 		slot = slot_manager_find_slot_imsi(mgr,
 			mgr->default_voice_imsi);
-	} else if (mgr->voice_slot) {
+	} else if (mgr->voice_slot && !imsi_change) {
 		/* Make sure that the slot is enabled and SIM is in */
 		slot = slot_manager_find_slot_imsi(mgr,
 			mgr->voice_slot->watch->imsi);

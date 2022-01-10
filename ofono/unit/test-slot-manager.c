@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2017-2021 Jolla Ltd.
+ *  Copyright (C) 2017-2022 Jolla Ltd.
  *  Copyright (C) 2019-2020 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -1141,6 +1141,7 @@ static gboolean test_data_sim_done(gpointer user_data)
 	/* Set data SIM IMSI */
 	fake_slot_manager_dbus.cb.set_default_data_imsi(m, TEST_IMSI);
 	g_assert_cmpstr(m->default_data_imsi, == ,TEST_IMSI);
+	g_assert_cmpint(s->data_role, == ,OFONO_SLOT_DATA_NONE);
 	g_assert(!m->default_data_path); /* Modem is offline */
 	/* Data IMSI is signaled, path is not */
 	g_assert_cmpuint(fake_slot_manager_dbus.signals &
@@ -1157,6 +1158,7 @@ static gboolean test_data_sim_done(gpointer user_data)
 	fake_watch_emit_queued_signals(w);
 	/* Now is should point to our slot */
 	g_assert_cmpstr(m->default_data_path, == ,TEST_PATH);
+	g_assert_cmpint(s->data_role, == ,OFONO_SLOT_DATA_INTERNET);
 	/* And D-Bus clients are notified */
 	g_assert(fake_slot_manager_dbus.signals &
 		SLOT_MANAGER_DBUS_SIGNAL_DATA_PATH);
@@ -1166,6 +1168,7 @@ static gboolean test_data_sim_done(gpointer user_data)
 	fake_slot_manager_dbus.cb.set_default_data_imsi(m, TEST_IMSI_1);
 	g_assert_cmpstr(m->default_data_imsi, == ,TEST_IMSI_1);
 	g_assert(!m->default_data_path);
+	g_assert_cmpint(s->data_role, == ,OFONO_SLOT_DATA_NONE);
 	/* And D-Bus clients are notified again */
 	g_assert_cmpuint(fake_slot_manager_dbus.signals &
 		(SLOT_MANAGER_DBUS_SIGNAL_DATA_IMSI |
@@ -1177,8 +1180,10 @@ static gboolean test_data_sim_done(gpointer user_data)
 
 	/* Switch the SIM */
 	fake_watch_set_ofono_imsi(w, TEST_IMSI_1);
+	fake_watch_set_ofono_iccid(w, TEST_ICCID_1);
 	fake_watch_emit_queued_signals(w);
 	g_assert_cmpstr(m->default_data_path, == ,TEST_PATH);
+	g_assert_cmpint(s->data_role, == ,OFONO_SLOT_DATA_INTERNET);
 	/* And D-Bus clients are notified of data path change */
 	g_assert_cmpuint(fake_slot_manager_dbus.signals &
 		(SLOT_MANAGER_DBUS_SIGNAL_DATA_IMSI |
@@ -1193,7 +1198,22 @@ static gboolean test_data_sim_done(gpointer user_data)
 	g_assert_cmpint(m->slots[0]->sim_presence, == ,OFONO_SLOT_SIM_ABSENT);
 	g_assert_cmpstr(m->default_data_imsi, == ,TEST_IMSI_1);
 	g_assert(!m->default_data_path);
+	g_assert_cmpint(s->data_role, == ,OFONO_SLOT_DATA_NONE);
 	/* And D-Bus clients are notified of data path change */
+	g_assert_cmpuint(fake_slot_manager_dbus.signals &
+		(SLOT_MANAGER_DBUS_SIGNAL_DATA_IMSI |
+		 SLOT_MANAGER_DBUS_SIGNAL_DATA_PATH), == ,
+		 SLOT_MANAGER_DBUS_SIGNAL_DATA_PATH);
+	fake_slot_manager_dbus.signals &= ~SLOT_MANAGER_DBUS_SIGNAL_DATA_IMSI;
+
+	/* Insert the SIM back */
+	fake_watch_set_ofono_sim(w, &sim);
+	ofono_slot_set_sim_presence(s, OFONO_SLOT_SIM_PRESENT);
+	g_assert_cmpint(s->sim_presence, == ,OFONO_SLOT_SIM_PRESENT);
+	fake_watch_set_ofono_iccid(w, TEST_ICCID_1);
+	fake_watch_set_ofono_imsi(w, TEST_IMSI_1);
+	fake_watch_emit_queued_signals(w);
+	g_assert_cmpint(s->data_role, == ,OFONO_SLOT_DATA_INTERNET);
 	g_assert_cmpuint(fake_slot_manager_dbus.signals &
 		(SLOT_MANAGER_DBUS_SIGNAL_DATA_IMSI |
 		 SLOT_MANAGER_DBUS_SIGNAL_DATA_PATH), == ,
