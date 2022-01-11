@@ -4663,3 +4663,10 @@ void ofono_voicecall_ssn_mo_notify(struct ofono_voicecall *vc,
 		break;
 	}
 }
+
+/* Since mer/1.27+git3 */
+ofono_bool_t ofono_voicecall_is_emergency_number(struct ofono_voicecall *vc,
+							const char *number)
+{
+	return vc && number && is_emergency_number(vc, number);
+}

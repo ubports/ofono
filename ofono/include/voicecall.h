@@ -190,6 +190,10 @@ struct ofono_call *ofono_voicecall_find_call(struct ofono_voicecall *vc,
 void ofono_voicecall_ringback_tone_notify(struct ofono_voicecall *vc,
 						const ofono_bool_t playTone);
 
+/* Since mer/1.27+git3 */
+ofono_bool_t ofono_voicecall_is_emergency_number(struct ofono_voicecall *vc,
+						const char *number);
+
 #ifdef __cplusplus
 }
 #endif
