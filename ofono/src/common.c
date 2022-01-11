@@ -424,7 +424,7 @@ int mmi_service_code_to_bearer_class(int code)
 }
 
 const char *ofono_phone_number_to_string(const struct ofono_phone_number *ph,
-			char buffer[/* OFONO_MAX_PHONE_NUMBER_BUFFER_SIZE */])
+			char buffer[/* OFONO_PHONE_NUMBER_BUFFER_SIZE */])
 {
 	if (ph->type == 145 && (strlen(ph->number) > 0) &&
 			ph->number[0] != '+') {
