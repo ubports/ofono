@@ -36,7 +36,9 @@
 #include <ofono/modem.h>
 #include <ofono/netreg.h>
 
+#if __GNUC__ > 7
 #pragma GCC diagnostic ignored "-Wrestrict"
+#endif
 
 #include <gril/gril.h>
 

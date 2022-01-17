@@ -794,7 +794,7 @@ static char *sim_network_name_parse(const unsigned char *buffer, int length,
 		spare_bits = dcs & 0x07;
 		num_char = (length * 8 - spare_bits) / 7;
 
-		unpacked_buf = unpack_7bit(buffer, length, 0, FALSE,
+		unpacked_buf = unpack_7bit(buffer, length, 0, false,
 						num_char, &written, 0);
 		if (unpacked_buf == NULL)
 			break;

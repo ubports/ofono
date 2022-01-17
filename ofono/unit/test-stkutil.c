@@ -278,6 +278,7 @@ static void check_gsm_sms(const struct sms *command,
 			message = sms_decode_text(sms_list);
 			g_assert(g_str_equal(message, ts->ud));
 			g_free(message);
+			g_slist_free(sms_list);
 		}
 
 		break;

@@ -1,3 +1,6 @@
+ver 1.28:
+	Fix issue with SIM initialization and Gemalto modems.
+
 ver 1.27:
 	Add support for handling SIMCom based SIM800 modems.
 	Add support for SIM lock state with xmm7xxx modems.

@@ -19,6 +19,8 @@
  *
  */
 
+#include <stdbool.h>
+
 enum gsm_dialect {
 	GSM_DIALECT_DEFAULT = 0,
 	GSM_DIALECT_TURKISH,
@@ -75,23 +77,23 @@ char *encode_hex(const unsigned char *in, long len,
 			unsigned char terminator);
 
 unsigned char *unpack_7bit_own_buf(const unsigned char *in, long len,
-					int byte_offset, gboolean ussd,
+					int byte_offset, bool ussd,
 					long max_to_unpack, long *items_written,
 					unsigned char terminator,
 					unsigned char *buf);
 
 unsigned char *unpack_7bit(const unsigned char *in, long len, int byte_offset,
-				gboolean ussd, long max_to_unpack,
+				bool ussd, long max_to_unpack,
 				long *items_written, unsigned char terminator);
 
 unsigned char *pack_7bit_own_buf(const unsigned char *in, long len,
-					int byte_offset, gboolean ussd,
+					int byte_offset, bool ussd,
 					long *items_written,
 					unsigned char terminator,
 					unsigned char *buf);
 
 unsigned char *pack_7bit(const unsigned char *in, long len, int byte_offset,
-				gboolean ussd,
+				bool ussd,
 				long *items_written, unsigned char terminator);
 
 char *sim_string_to_utf8(const unsigned char *buffer, int length);

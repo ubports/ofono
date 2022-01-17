@@ -560,7 +560,7 @@ static void test_decode_encode(void)
 		g_print("\n");
 	}
 
-	gsm = unpack_7bit(decoded, hex_decoded_size, 0, FALSE,
+	gsm = unpack_7bit(decoded, hex_decoded_size, 0, false,
 				reported_text_size, &unpacked_size, 0xff);
 
 	g_assert(gsm != NULL);
@@ -593,7 +593,7 @@ static void test_decode_encode(void)
 	g_free(utf8);
 	g_free(gsm);
 
-	packed = pack_7bit(gsm_encoded, -1, 0, FALSE, &packed_size, 0xff);
+	packed = pack_7bit(gsm_encoded, -1, 0, false, &packed_size, 0xff);
 
 	g_free(gsm_encoded);
 
@@ -643,49 +643,49 @@ static void test_pack_size(void)
 	unsigned char *packed;
 	long size;
 
-	packed = pack_7bit(c1, 1, 0, FALSE, &size, 0);
+	packed = pack_7bit(c1, 1, 0, false, &size, 0);
 	g_assert(packed != NULL);
 	g_assert(size == 1);
 	g_free(packed);
 
-	packed = pack_7bit(c2, 2, 0, FALSE, &size, 0);
+	packed = pack_7bit(c2, 2, 0, false, &size, 0);
 	g_assert(packed != NULL);
 	g_assert(size == 2);
 	g_free(packed);
 
-	packed = pack_7bit(c3, 3, 0, FALSE, &size, 0);
+	packed = pack_7bit(c3, 3, 0, false, &size, 0);
 	g_assert(packed != NULL);
 	g_assert(size == 3);
 	g_free(packed);
 
-	packed = pack_7bit(c4, 4, 0, FALSE, &size, 0);
+	packed = pack_7bit(c4, 4, 0, false, &size, 0);
 	g_assert(packed != NULL);
 	g_assert(size == 4);
 	g_free(packed);
 
-	packed = pack_7bit(c5, 5, 0, FALSE, &size, 0);
+	packed = pack_7bit(c5, 5, 0, false, &size, 0);
 	g_assert(packed != NULL);
 	g_assert(size == 5);
 	g_free(packed);
 
-	packed = pack_7bit(c6, 6, 0, FALSE, &size, 0);
+	packed = pack_7bit(c6, 6, 0, false, &size, 0);
 	g_assert(packed != NULL);
 	g_assert(size == 6);
 	g_free(packed);
 
-	packed = pack_7bit(c7, 7, 0, FALSE, &size, 0);
+	packed = pack_7bit(c7, 7, 0, false, &size, 0);
 	g_assert(packed != NULL);
 	g_assert(size == 7);
 	g_assert((packed[6] & 0xfe) == 0);
 	g_free(packed);
 
-	packed = pack_7bit(c7, 7, 0, TRUE, &size, 0);
+	packed = pack_7bit(c7, 7, 0, true, &size, 0);
 	g_assert(packed != NULL);
 	g_assert(size == 7);
 	g_assert(((packed[6] & 0xfe) >> 1) == '\r');
 	g_free(packed);
 
-	packed = pack_7bit(c8, 8, 0, FALSE, &size, 0);
+	packed = pack_7bit(c8, 8, 0, false, &size, 0);
 	g_assert(packed != NULL);
 	g_assert(size == 7);
 	g_free(packed);
@@ -705,13 +705,13 @@ static void test_cr_handling(void)
 	long packed_size;
 	long unpacked_size;
 
-	packed = pack_7bit(c8, 8, 0, TRUE, &packed_size, 0);
+	packed = pack_7bit(c8, 8, 0, true, &packed_size, 0);
 	g_assert(packed != NULL);
 	g_assert(packed_size == 8);
 	g_assert(((packed[6] & 0xfe) >> 1) == '\r');
 	g_assert((packed[7] & 0x7f) == '\r');
 
-	unpacked = unpack_7bit(packed, 8, 0, TRUE, -1, &unpacked_size, 0);
+	unpacked = unpack_7bit(packed, 8, 0, true, -1, &unpacked_size, 0);
 	if (g_test_verbose())
 		g_print("Unpacked to size: %ld\n", unpacked_size);
 
@@ -722,12 +722,12 @@ static void test_cr_handling(void)
 	g_free(unpacked);
 	g_free(packed);
 
-	packed = pack_7bit(c7, 7, 0, TRUE, &packed_size, 0);
+	packed = pack_7bit(c7, 7, 0, true, &packed_size, 0);
 	g_assert(packed != NULL);
 	g_assert(packed_size == 7);
 	g_assert(((packed[6] & 0xfe) >> 1) == '\r');
 
-	unpacked = unpack_7bit(packed, 7, 0, TRUE, -1, &unpacked_size, 0);
+	unpacked = unpack_7bit(packed, 7, 0, true, -1, &unpacked_size, 0);
 	if (g_test_verbose())
 		g_print("Unpacked to size: %ld\n", unpacked_size);
 
@@ -741,8 +741,8 @@ static void test_cr_handling(void)
 	/* As above, but now unpack using SMS style, we should now have cr at
 	 * the end of the stream
 	 */
-	packed = pack_7bit(c7, 7, 0, TRUE, &packed_size, 0);
-	unpacked = unpack_7bit(packed, 7, 0, FALSE, 8, &unpacked_size, 0);
+	packed = pack_7bit(c7, 7, 0, true, &packed_size, 0);
+	unpacked = unpack_7bit(packed, 7, 0, false, 8, &unpacked_size, 0);
 	if (g_test_verbose())
 		g_print("Unpacked to size: %ld\n", unpacked_size);
 

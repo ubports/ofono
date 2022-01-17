@@ -204,7 +204,7 @@ static void test_simple_deliver(void)
 
 	g_assert(data_len == 11);
 
-	unpacked = unpack_7bit(sms.deliver.ud, data_len, 0, FALSE,
+	unpacked = unpack_7bit(sms.deliver.ud, data_len, 0, false,
 				sms.deliver.udl, NULL, 0xff);
 
 	g_assert(unpacked);
@@ -275,7 +275,7 @@ static void test_alnum_sender(void)
 
 	g_assert(data_len == 7);
 
-	unpacked = unpack_7bit(sms.deliver.ud, data_len, 0, FALSE,
+	unpacked = unpack_7bit(sms.deliver.ud, data_len, 0, false,
 				sms.deliver.udl, NULL, 0xff);
 
 	g_assert(unpacked);
@@ -449,7 +449,7 @@ static void test_simple_submit(void)
 
 	g_assert(data_len == 9);
 
-	unpacked = unpack_7bit(sms.submit.ud, data_len, 0, FALSE,
+	unpacked = unpack_7bit(sms.submit.ud, data_len, 0, false,
 				sms.submit.udl, NULL, 0xff);
 
 	g_assert(unpacked);
@@ -809,7 +809,7 @@ static void test_sms_charset(gconstpointer param)
 
 	g_assert(data_len == data->data_len);
 
-	unpacked = unpack_7bit(sms.deliver.ud, data_len, 0, FALSE,
+	unpacked = unpack_7bit(sms.deliver.ud, data_len, 0, false,
 				sms.deliver.udl, NULL, 0xff);
 
 	g_assert(unpacked);
@@ -1026,7 +1026,7 @@ static void test_ems_udh(gconstpointer data)
 	max_chars = (data_len - (udhl + 1)) * 8 / 7;
 
 	unpacked = unpack_7bit(sms.submit.ud + udhl + 1, data_len - (udhl + 1),
-				udhl + 1, FALSE, max_chars, NULL, 0xff);
+				udhl + 1, false, max_chars, NULL, 0xff);
 
 	g_assert(unpacked);
 
