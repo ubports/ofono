@@ -3,6 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2021-2022  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -68,6 +69,10 @@ void ofono_ussd_remove(struct ofono_ussd *ussd);
 
 void ofono_ussd_set_data(struct ofono_ussd *ussd, void *data);
 void *ofono_ussd_get_data(struct ofono_ussd *ussd);
+
+/* Since mer/1.28+git2 */
+char *ofono_ussd_decode(int dcs, const void *pdu, int len);
+void ofono_ussd_decode_free(char *ussd);
 
 #ifdef __cplusplus
 }
