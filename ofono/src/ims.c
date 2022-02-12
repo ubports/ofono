@@ -3,6 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2017  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2022  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -36,8 +37,8 @@
 
 #include "common.h"
 
-#define VOICE_CAPABLE_FLAG 0x1
-#define SMS_CAPABLE_FLAG 0x4
+#define VOICE_CAPABLE_FLAG OFONO_IMS_VOICE_CAPABLE
+#define SMS_CAPABLE_FLAG OFONO_IMS_SMS_CAPABLE
 
 struct ofono_ims {
 	int reg_info;
