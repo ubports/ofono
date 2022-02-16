@@ -3,7 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
- *  Copyright (C) 2015-2021  Jolla Ltd.
+ *  Copyright (C) 2015-2022  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -2371,7 +2371,7 @@ out:
 	modem->emergency--;
 }
 
-/* Since mer/1.25+git2 */
+/* Since 1.25+git2 */
 
 unsigned int ofono_modem_add_watch(ofono_modemwatch_cb_t cb, void *user,
 						ofono_destroy_func destroy)
@@ -2382,4 +2382,16 @@ unsigned int ofono_modem_add_watch(ofono_modemwatch_cb_t cb, void *user,
 ofono_bool_t ofono_modem_remove_watch(unsigned int id)
 {
 	return __ofono_modemwatch_remove(id);
+}
+
+/* Since 1.28+git4 */
+
+struct ofono_devinfo *ofono_modem_get_devinfo(struct ofono_modem *modem)
+{
+	return __ofono_atom_find(OFONO_ATOM_TYPE_DEVINFO, modem);
+}
+
+const char *ofono_devinfo_get_serial(struct ofono_devinfo *info)
+{
+	return info ? info->serial : NULL;
 }
