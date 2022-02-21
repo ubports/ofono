@@ -3,7 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
- *  Copyright (C) 2015-2021  Jolla Ltd.
+ *  Copyright (C) 2015-2022  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -173,6 +173,12 @@ static const char *const passwd_name[] = {
 	[OFONO_SIM_PASSWORD_PHSP_PUK] = "servicepuk",
 	[OFONO_SIM_PASSWORD_PHCORP_PIN] = "corp",
 	[OFONO_SIM_PASSWORD_PHCORP_PUK] = "corppuk",
+};
+
+#undef ofono_sim_driver_register
+struct ofono_sim_driver_data {
+	struct ofono_sim_driver driver; /* Must be first */
+	const struct ofono_sim_driver *d;
 };
 
 static void sim_own_numbers_update(struct ofono_sim *sim);
@@ -3279,21 +3285,52 @@ void __ofono_sim_recheck_pin(struct ofono_sim *sim)
 
 int ofono_sim_driver_register(const struct ofono_sim_driver *d)
 {
-	DBG("driver: %p, name: %s", d, d->name);
+	return ofono_sim_driver_register_version(d, 1);
+}
+
+int ofono_sim_driver_register_version(const struct ofono_sim_driver *d, int v)
+{
+	struct ofono_sim_driver_data *dd;
+
+	DBG("driver: %p, v: %d, name: %s", d, v, d->name);
 
 	if (d->probe == NULL)
 		return -EINVAL;
 
-	g_drivers = g_slist_prepend(g_drivers, (void *) d);
+	/* Pad struct ofono_sim_driver with zeros if necessary */
+	dd = g_new0(struct ofono_sim_driver_data, 1);
+	dd->d = d;
+
+	switch (v) {
+	case 0:
+		memcpy(dd, d, G_STRUCT_OFFSET(struct ofono_sim_driver,
+							open_channel2));
+		break;
+	default:
+		memcpy(dd, d, sizeof(*d));
+		break;
+	}
+
+	g_drivers = g_slist_prepend(g_drivers, dd);
 
 	return 0;
 }
 
 void ofono_sim_driver_unregister(const struct ofono_sim_driver *d)
 {
+	GSList *l;
+
 	DBG("driver: %p, name: %s", d, d->name);
 
-	g_drivers = g_slist_remove(g_drivers, (void *) d);
+	for (l = g_drivers; l; l = l->next) {
+		struct ofono_sim_driver_data *dd = l->data;
+
+		if (dd->d == d) {
+			g_drivers = g_slist_delete_link(g_drivers, l);
+			g_free(dd);
+			break;
+		}
+	}
 }
 
 static void emulator_remove_handler(struct ofono_atom *atom, void *data)
