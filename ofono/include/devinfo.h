@@ -3,6 +3,7 @@
  *  oFono - Open Telephony stack for Linux
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2015-2022  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -64,6 +65,9 @@ void ofono_devinfo_set_data(struct ofono_devinfo *info, void *data);
 void *ofono_devinfo_get_data(struct ofono_devinfo *info);
 
 struct ofono_modem *ofono_devinfo_get_modem(struct ofono_devinfo *info);
+
+/* Since 1.28+git4 */
+const char *ofono_devinfo_get_serial(struct ofono_devinfo *info);
 
 #ifdef __cplusplus
 }
