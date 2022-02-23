@@ -3,7 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
- *  Copyright (C) 2015-2021  Jolla Ltd.
+ *  Copyright (C) 2015-2022  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -211,7 +211,7 @@ struct ofono_sim_driver {
 	void (*logical_access)(struct ofono_sim *sim, int session_id,
 			const unsigned char *pdu, unsigned int len,
 			ofono_sim_logical_access_cb_t cb, void *data);
-	/* Since mer/1.23+git28 */
+	/* API version 1 (since 1.23+git28) */
 	void (*open_channel2)(struct ofono_sim *sim, const unsigned char *aid,
 			unsigned int len, ofono_sim_open_channel_cb_t cb,
 			void *data);
@@ -219,6 +219,11 @@ struct ofono_sim_driver {
 
 int ofono_sim_driver_register(const struct ofono_sim_driver *d);
 void ofono_sim_driver_unregister(const struct ofono_sim_driver *d);
+
+#define OFONO_SIM_DRIVER_API_VERSION 1
+#define ofono_sim_driver_register(d) /* Since 1.28+git4 */ \
+	ofono_sim_driver_register_version(d, OFONO_SIM_DRIVER_API_VERSION)
+int ofono_sim_driver_register_version(const struct ofono_sim_driver *d, int v);
 
 struct ofono_sim *ofono_sim_create(struct ofono_modem *modem,
 					unsigned int vendor,
@@ -241,8 +246,8 @@ const unsigned char *ofono_sim_get_cphs_service_table(struct ofono_sim *sim);
 
 enum ofono_sim_password_type ofono_sim_get_password_type(struct ofono_sim *sim);
 
-void ofono_sim_refresh_full(struct ofono_sim *sim); /* Since mer/1.24+git2 */
-enum ofono_sim_password_type ofono_sim_puk2pin( /* Since mer/1.24+git2 */
+void ofono_sim_refresh_full(struct ofono_sim *sim); /* Since 1.24+git2 */
+enum ofono_sim_password_type ofono_sim_puk2pin( /* Since 1.24+git2 */
 					enum ofono_sim_password_type type);
 
 unsigned int ofono_sim_add_state_watch(struct ofono_sim *sim,
