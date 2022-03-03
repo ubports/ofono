@@ -229,6 +229,12 @@ enum cbs_geo_scope {
 	CBS_GEO_SCOPE_CELL_NORMAL
 };
 
+enum sms_datagram_endianess {
+	SMS_DATAGRAM_ENDIANESS_GSM,
+	SMS_DATAGRAM_ENDIANESS_BIG_ENDIAN,
+	SMS_DATAGRAM_ENDIANESS_LITTLE_ENDIAN
+};
+
 struct sms_address {
 	enum sms_number_type number_type;
 	enum sms_numbering_plan numbering_plan;
@@ -573,6 +579,14 @@ GSList *sms_datagram_prepare(const char *to,
 				unsigned short src, unsigned short dst,
 				gboolean use_16bit_port,
 				gboolean use_delivery_reports);
+
+GSList *sms_datagram_prepare_with_endianess(const char *to,
+				const unsigned char *data, unsigned int len,
+				guint16 ref, gboolean use_16bit_ref,
+				unsigned short src, unsigned short dst,
+				gboolean use_16bit_port,
+				gboolean use_delivery_reports,
+				enum sms_datagram_endianess endianess);
 
 gboolean cbs_dcs_decode(guint8 dcs, gboolean *udhi, enum sms_class *cls,
 			enum sms_charset *charset, gboolean *compressed,
