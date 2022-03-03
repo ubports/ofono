@@ -62,6 +62,7 @@ struct ofono_sms_driver {
 
 enum ofono_sms_data_flag {
 	OFONO_SMS_DATA_FLAG_DELIVERY_REPORT =		0x01,
+	OFONO_SMS_DATA_FLAG_USE_LITTLE_ENDIAN =		0x02,
 };
 
 void ofono_sms_deliver_notify(struct ofono_sms *sms, const unsigned char *pdu,

@@ -1056,6 +1056,7 @@ static void sms_send_data_message_submit(struct ofono_sms *sms,
 	int err;
 	struct ofono_uuid uuid;
 	enum ofono_sms_submit_flag submit_flags;
+	enum sms_datagram_endianess endianess = SMS_DATAGRAM_ENDIANESS_GSM;
 
 	if (bytes == NULL) {
 		__ofono_dbus_pending_reply(&message->pending,
@@ -1063,10 +1064,13 @@ static void sms_send_data_message_submit(struct ofono_sms *sms,
 		return;
 	}
 
+	if (flags & OFONO_SMS_DATA_FLAG_USE_LITTLE_ENDIAN)
+		endianess = SMS_DATAGRAM_ENDIANESS_LITTLE_ENDIAN;
+
 	use_delivery_reports = flags & OFONO_SMS_DATA_FLAG_DELIVERY_REPORT;
-	msg_list = sms_datagram_prepare(to, bytes, len, sms->ref,
+	msg_list = sms_datagram_prepare_with_endianess(to, bytes, len, sms->ref,
 					use_16bit_ref, srcport, dstport, TRUE,
-					use_delivery_reports);
+					use_delivery_reports, endianess);
 
 	if (msg_list == NULL) {
 		__ofono_dbus_pending_reply(&message->pending,
