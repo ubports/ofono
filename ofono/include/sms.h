@@ -3,6 +3,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2008-2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2022  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -62,8 +63,8 @@ struct ofono_sms_driver {
 
 enum ofono_sms_data_flag {
 	OFONO_SMS_DATA_FLAG_DELIVERY_REPORT =		0x01,
-	OFONO_SMS_DATA_FLAG_USE_LITTLE_ENDIAN =		0x02,
-};
+	OFONO_SMS_DATA_FLAG_USE_LITTLE_ENDIAN =		0x02
+}; /* Since 1.28+git5 */
 
 void ofono_sms_deliver_notify(struct ofono_sms *sms, const unsigned char *pdu,
 				int len, int tpdu_len);
