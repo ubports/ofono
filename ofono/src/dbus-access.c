@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2019-2021 Jolla Ltd.
+ *  Copyright (C) 2019-2022 Jolla Ltd.
  *  Copyright (C) 2020 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -68,6 +68,8 @@ const char *ofono_dbus_access_method_name(enum ofono_dbus_access_intf intf,
 		switch ((enum ofono_dbus_access_messagemgr_method)method) {
 		case OFONO_DBUS_ACCESS_MESSAGEMGR_SEND_MESSAGE:
 			return "SendMessage";
+		case OFONO_DBUS_ACCESS_MESSAGEMGR_SEND_DATA_MESSAGE:
+			return "SendDataMessage";
 		case OFONO_DBUS_ACCESS_MESSAGEMGR_METHOD_COUNT:
 			break;
 		}

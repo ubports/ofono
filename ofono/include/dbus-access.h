@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2019-2021 Jolla Ltd.
+ *  Copyright (C) 2019-2022 Jolla Ltd.
  *  Copyright (C) 2020 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -53,6 +53,7 @@ enum ofono_dbus_access_message_method {
 /* OFONO_DBUS_ACCESS_INTF_MESSAGEMGR */
 enum ofono_dbus_access_messagemgr_method {
 	OFONO_DBUS_ACCESS_MESSAGEMGR_SEND_MESSAGE,
+	OFONO_DBUS_ACCESS_MESSAGEMGR_SEND_DATA_MESSAGE, /* Since 1.28+git5 */
 	OFONO_DBUS_ACCESS_MESSAGEMGR_METHOD_COUNT
 };
 
