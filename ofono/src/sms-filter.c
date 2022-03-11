@@ -85,6 +85,19 @@ struct sms_filter_chain_send_text {
 	struct ofono_sms_address addr;
 };
 
+struct sms_filter_chain_send_datagram {
+	struct sms_filter_message message;
+	sms_send_datagram_cb_t send;
+	ofono_destroy_func destroy;
+	void *data;
+	int dst_port;
+	int src_port;
+	unsigned char *bytes;
+	unsigned int len;
+	int flags;
+	struct ofono_sms_address addr;
+};
+
 struct sms_filter_chain_recv_text {
 	struct sms_filter_message message;
 	sms_dispatch_recv_text_cb_t default_handler;
@@ -445,6 +458,140 @@ static struct sms_filter_message *sms_filter_send_text_new
 	return &send_msg->message;
 }
 
+/* sms_filter_chain_send_datagram */
+
+static inline struct sms_filter_chain_send_datagram
+				*sms_filter_chain_send_datagram_cast
+					(struct sms_filter_message *msg)
+{
+	return CAST(msg, struct sms_filter_chain_send_datagram, message);
+}
+
+static gboolean sms_filter_chain_send_datagram_can_process
+				(const struct ofono_sms_filter *filter)
+{
+	return filter->filter_send_datagram != NULL;
+}
+
+static void sms_datagram_set_bytes(
+				struct sms_filter_chain_send_datagram *msg,
+				const unsigned char *bytes, unsigned int len)
+{
+	msg->bytes = g_malloc0(sizeof(unsigned char) * len);
+	memcpy(msg->bytes, bytes, len);
+	msg->len = len;
+}
+
+static void sms_filter_chain_send_datagram_process_cb
+				(enum ofono_sms_filter_result res,
+					const struct ofono_sms_address *addr,
+					int dst_port, int src_port,
+					const unsigned char *bytes,
+					unsigned int len, void *data)
+{
+	struct sms_filter_chain_send_datagram *msg = data;
+
+	if (res != OFONO_SMS_FILTER_DROP) {
+		/* Update the message */
+		if (&msg->addr != addr) {
+			msg->addr = *addr;
+		}
+		if (msg->bytes != bytes) {
+			g_free(msg->bytes);
+			sms_datagram_set_bytes(msg, bytes, len);
+		}
+
+		msg->dst_port = dst_port;
+		msg->src_port = src_port;
+	}
+
+	sms_filter_message_processed(&msg->message, res);
+}
+
+static guint sms_filter_chain_send_datagram_process
+				(const struct ofono_sms_filter *filter,
+					struct sms_filter_message *msg)
+{
+	struct sms_filter_chain_send_datagram *send_msg =
+		sms_filter_chain_send_datagram_cast(msg);
+	struct sms_filter_chain *chain = msg->chain;
+
+	return filter->filter_send_datagram(chain->modem, &send_msg->addr,
+				send_msg->dst_port, send_msg->src_port,
+				send_msg->bytes, send_msg->len,
+				sms_filter_chain_send_datagram_process_cb,
+				send_msg);
+}
+
+static void sms_filter_chain_send_datagram_passthrough
+					(struct sms_filter_message *msg)
+{
+	struct sms_filter_chain_send_datagram *send_msg =
+		sms_filter_chain_send_datagram_cast(msg);
+
+	if (send_msg->send) {
+		struct sms_filter_chain *chain = msg->chain;
+		struct sms_address addr;
+
+		sms_filter_convert_sms_address_back(&addr, &send_msg->addr);
+		send_msg->send(chain->sms, &addr, send_msg->dst_port,
+					send_msg->src_port, send_msg->bytes,
+					send_msg->len, send_msg->flags,
+					send_msg->data);
+	}
+}
+
+static void sms_filter_chain_send_datagram_destroy
+					(struct sms_filter_message *msg)
+{
+	struct sms_filter_chain_send_datagram *send_msg =
+		sms_filter_chain_send_datagram_cast(msg);
+
+	if (send_msg->destroy) {
+		send_msg->destroy(send_msg->data);
+	}
+}
+
+static void sms_filter_chain_send_datagram_free
+					(struct sms_filter_message *msg)
+{
+	struct sms_filter_chain_send_datagram *send_msg =
+		sms_filter_chain_send_datagram_cast(msg);
+
+	g_free(send_msg->bytes);
+	g_free(send_msg);
+}
+
+static struct sms_filter_message *sms_filter_send_datagram_new
+	(struct sms_filter_chain *chain, const struct sms_address *addr,
+		int dst_port, int src_port, unsigned char *bytes,
+		unsigned int len, int flags, sms_send_datagram_cb_t send,
+		void *data, ofono_destroy_func destroy)
+{
+	static const struct sms_filter_message_fn send_datagram_fn = {
+		.name = "outgoing SMS data message",
+		.can_process = sms_filter_chain_send_datagram_can_process,
+		.process = sms_filter_chain_send_datagram_process,
+		.passthrough = sms_filter_chain_send_datagram_passthrough,
+		.destroy = sms_filter_chain_send_datagram_destroy,
+		.free = sms_filter_chain_send_datagram_free
+	};
+
+	struct sms_filter_chain_send_datagram *send_msg =
+		g_new0(struct sms_filter_chain_send_datagram, 1);
+
+	sms_filter_message_init(&send_msg->message, chain, &send_datagram_fn);
+	sms_filter_convert_sms_address(&send_msg->addr, addr);
+	send_msg->send = send;
+	send_msg->destroy = destroy;
+	send_msg->data = data;
+	sms_datagram_set_bytes(send_msg, bytes, len);
+	send_msg->dst_port = dst_port;
+	send_msg->src_port = src_port;
+	send_msg->flags = flags;
+	return &send_msg->message;
+}
+
 /* sms_filter_chain_recv_text */
 
 static inline struct sms_filter_chain_recv_text *
@@ -704,6 +851,30 @@ void __ofono_sms_filter_chain_send_text(struct sms_filter_chain *chain,
 		}
 		if (sender) {
 			sender(chain->sms, addr, text, data);
+		}
+	}
+	if (destroy) {
+		destroy(data);
+	}
+}
+
+void __ofono_sms_filter_chain_send_datagram(struct sms_filter_chain *chain,
+			const struct sms_address *addr, int dstport,
+			int srcport, unsigned char *bytes, int len,
+			int flags, sms_send_datagram_cb_t sender,
+			ofono_destroy_func destroy, void *data)
+{
+	if (chain) {
+		if (sms_filter_list) {
+			sms_filter_message_process
+				(sms_filter_send_datagram_new(chain, addr,
+						dstport, srcport, bytes, len,
+						flags, sender, data, destroy));
+			return;
+		}
+		if (sender) {
+			sender(chain->sms, addr, dstport, srcport, bytes, len,
+								flags, data);
 		}
 	}
 	if (destroy) {

@@ -3423,19 +3423,21 @@ static inline GSList *sms_list_append(GSList *l, const struct sms *in)
 }
 
 /*
- * Prepares a datagram for transmission.  Breaks up into fragments if
- * necessary using ref as the concatenated message reference number.
+ * Prepares a datagram for transmission with requested endianess  Breaks up
+ * into fragments if necessary using ref as the concatenated message reference
+ * number.
  * Returns a list of sms messages in order.
  *
  * @use_delivery_reports: value for the Status-Report-Request field
  *     (23.040 3.2.9, 9.2.2.2)
  */
-GSList *sms_datagram_prepare(const char *to,
+GSList *sms_datagram_prepare_with_endianess(const char *to,
 				const unsigned char *data, unsigned int len,
 				guint16 ref, gboolean use_16bit_ref,
 				unsigned short src, unsigned short dst,
 				gboolean use_16bit_port,
-				gboolean use_delivery_reports)
+				gboolean use_delivery_reports,
+				enum sms_datagram_endianess endianess)
 {
 	struct sms template;
 	unsigned int offset;
@@ -3462,10 +3464,22 @@ GSList *sms_datagram_prepare(const char *to,
 		template.submit.ud[0] += 6;
 		template.submit.ud[offset] = SMS_IEI_APPLICATION_ADDRESS_16BIT;
 		template.submit.ud[offset + 1] = 4;
-		template.submit.ud[offset + 2] = (dst & 0xff00) >> 8;
-		template.submit.ud[offset + 3] = dst & 0xff;
-		template.submit.ud[offset + 4] = (src & 0xff00) >> 8;
-		template.submit.ud[offset + 5] = src & 0xff;
+
+		switch (endianess) {
+		case SMS_DATAGRAM_ENDIANESS_GSM:
+		case SMS_DATAGRAM_ENDIANESS_BIG_ENDIAN:
+			template.submit.ud[offset + 2] = (dst & 0xff00) >> 8;
+			template.submit.ud[offset + 3] = dst & 0xff;
+			template.submit.ud[offset + 4] = (src & 0xff00) >> 8;
+			template.submit.ud[offset + 5] = src & 0xff;
+			break;
+		case SMS_DATAGRAM_ENDIANESS_LITTLE_ENDIAN:
+			template.submit.ud[offset + 2] = dst & 0xff;
+			template.submit.ud[offset + 3] = (dst & 0xff00) >> 8;
+			template.submit.ud[offset + 4] = src & 0xff;
+			template.submit.ud[offset + 5] = (src & 0xff00) >> 8;
+			break;
+		}
 
 		offset += 6;
 	} else {
@@ -3489,8 +3503,18 @@ GSList *sms_datagram_prepare(const char *to,
 		template.submit.ud[0] += 6;
 		template.submit.ud[offset] = SMS_IEI_CONCATENATED_16BIT;
 		template.submit.ud[offset + 1] = 4;
-		template.submit.ud[offset + 2] = (ref & 0xff00) >> 8;
-		template.submit.ud[offset + 3] = ref & 0xff;
+
+		switch (endianess) {
+		case SMS_DATAGRAM_ENDIANESS_GSM:
+		case SMS_DATAGRAM_ENDIANESS_BIG_ENDIAN:
+			template.submit.ud[offset + 2] = (ref & 0xff00) >> 8;
+			template.submit.ud[offset + 3] = ref & 0xff;
+			break;
+		case SMS_DATAGRAM_ENDIANESS_LITTLE_ENDIAN:
+			template.submit.ud[offset + 2] = ref & 0xff;
+			template.submit.ud[offset + 3] = (ref & 0xff00) >> 8;
+			break;
+		}
 
 		offset += 6;
 	} else {
@@ -3546,6 +3570,28 @@ GSList *sms_datagram_prepare(const char *to,
 	r = g_slist_reverse(r);
 
 	return r;
+}
+
+/*
+ * Prepares a datagram for transmission  Breaks up into fragments if
+ * necessary using ref as the concatenated message reference number.
+ * Returns a list of sms messages in order.
+ *
+ * @use_delivery_reports: value for the Status-Report-Request field
+ *     (23.040 3.2.9, 9.2.2.2)
+ */
+
+GSList *sms_datagram_prepare(const char *to,
+				const unsigned char *data, unsigned int len,
+				guint16 ref, gboolean use_16bit_ref,
+				unsigned short src, unsigned short dst,
+				gboolean use_16bit_port,
+				gboolean use_delivery_reports)
+{
+	return sms_datagram_prepare_with_endianess(to, data, len, ref,
+					use_16bit_ref, src, dst,
+					use_16bit_port, use_delivery_reports,
+					SMS_DATAGRAM_ENDIANESS_GSM);
 }
 
 /*
