@@ -1,6 +1,6 @@
 Name:       ofono
 Summary:    Open Source Telephony
-Version:    1.28
+Version:    1.29
 Release:    1
 License:    GPLv2
 URL:        https://github.com/sailfishos/ofono
