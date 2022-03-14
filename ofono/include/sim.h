@@ -219,6 +219,7 @@ struct ofono_sim_driver {
 	void (*open_channel2)(struct ofono_sim *sim, const unsigned char *aid,
 			unsigned int len, ofono_sim_open_channel_cb_t cb,
 			void *data);
+	/* API version 2 (since 1.29+git1) */
 	void (*set_active_card_slot)(struct ofono_sim *sim, unsigned int index,
 			ofono_sim_set_active_card_slot_cb_t cb, void *data);
 };
@@ -226,7 +227,7 @@ struct ofono_sim_driver {
 int ofono_sim_driver_register(const struct ofono_sim_driver *d);
 void ofono_sim_driver_unregister(const struct ofono_sim_driver *d);
 
-#define OFONO_SIM_DRIVER_API_VERSION 1
+#define OFONO_SIM_DRIVER_API_VERSION 2
 #define ofono_sim_driver_register(d) /* Since 1.28+git4 */ \
 	ofono_sim_driver_register_version(d, OFONO_SIM_DRIVER_API_VERSION)
 int ofono_sim_driver_register_version(const struct ofono_sim_driver *d, int v);

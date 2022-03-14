@@ -3484,6 +3484,10 @@ int ofono_sim_driver_register_version(const struct ofono_sim_driver *d, int v)
 		memcpy(dd, d, G_STRUCT_OFFSET(struct ofono_sim_driver,
 							open_channel2));
 		break;
+	case 1:
+		memcpy(dd, d, G_STRUCT_OFFSET(struct ofono_sim_driver,
+							set_active_card_slot));
+		break;
 	default:
 		memcpy(dd, d, sizeof(*d));
 		break;
