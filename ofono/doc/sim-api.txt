@@ -205,3 +205,15 @@ Properties	boolean Present [readonly]
 
 			Contains the SIM's ImsPrivateIdentity, read from the
 			ISIM.
+
+		uint32 CardSlotCount [readonly, experimental]
+
+			Contains the count of number of SIM card slots available.
+
+		uint32 ActiveCardSlot [readwrite, experimental]
+
+			Contains the index of the currently active SIM card slot
+			for dual SIM single active mode.
+
+			This property will range from 1 (default) to
+			CardSlotCount (max) value.

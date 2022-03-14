@@ -43,12 +43,20 @@
 static const char *none_prefix[] = { NULL };
 static const char *cgcontrdp_prefix[] = { "+CGCONTRDP:", NULL };
 static const char *uipaddr_prefix[] = { "+UIPADDR:", NULL };
+static const char *ubmconf_prefix[] = { "+UBMCONF:", NULL };
+
+enum netmode {
+	NETWORKING_MODE_ROUTER,
+	NETWORKING_MODE_BRIDGE,
+};
 
 struct gprs_context_data {
+	const struct ublox_model *model;
 	GAtChat *chat;
 	unsigned int active_context;
 	ofono_gprs_context_cb_t cb;
 	void *cb_data;
+	enum netmode networking_mode;
 };
 
 static void uipaddr_cb(gboolean ok, GAtResult *result, gpointer user_data)
@@ -226,6 +234,14 @@ static int ublox_send_cgcontrdp(struct ofono_gprs_context *gc)
 static void ublox_read_settings(struct ofono_gprs_context *gc)
 {
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
+
+	if (gcd->networking_mode == NETWORKING_MODE_ROUTER) {
+		/* Use DHCP */
+		set_gprs_context_interface(gc);
+		ofono_gprs_context_set_ipv4_address(gc, NULL, 0);
+		CALLBACK_WITH_SUCCESS(gcd->cb, gcd->cb_data);
+		return;
+	}
 
 	if (ublox_send_cgcontrdp(gc) < 0)
 		CALLBACK_WITH_FAILURE(gcd->cb, gcd->cb_data);
@@ -461,8 +477,44 @@ static void cgev_notify(GAtResult *result, gpointer user_data)
 	gcd->active_context = 0;
 }
 
+static void at_ubmconf_read_cb(gboolean ok, GAtResult *result,
+				gpointer user_data)
+{
+	struct ofono_gprs_context *gc = user_data;
+	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
+	GAtResultIter iter;
+	int mode;
+
+	if (!ok)
+		goto error;
+
+	g_at_result_iter_init(&iter, result);
+	if (!g_at_result_iter_next(&iter, "+UBMCONF:"))
+		goto error;
+
+	if (!g_at_result_iter_next_number(&iter, &mode))
+		goto error;
+
+	switch (mode) {
+	case 1:
+		gcd->networking_mode = NETWORKING_MODE_ROUTER;
+		break;
+	case 2:
+		gcd->networking_mode = NETWORKING_MODE_BRIDGE;
+		break;
+	default:
+		goto error;
+	}
+
+	return;
+
+error:
+	ofono_error("AT+UBMCONF? failed; assuming router mode");
+	gcd->networking_mode = NETWORKING_MODE_ROUTER;
+}
+
 static int ublox_gprs_context_probe(struct ofono_gprs_context *gc,
-					unsigned int vendor, void *data)
+					unsigned int model_id, void *data)
 {
 	GAtChat *chat = data;
 	struct gprs_context_data *gcd;
@@ -473,9 +525,22 @@ static int ublox_gprs_context_probe(struct ofono_gprs_context *gc,
 	if (gcd == NULL)
 		return -ENOMEM;
 
+	gcd->model = ublox_model_from_id(model_id);
+	if (!gcd->model)
+		return -EINVAL;
+
 	gcd->chat = g_at_chat_clone(chat);
 
 	ofono_gprs_context_set_data(gc, gcd);
+
+	if (ublox_is_toby_l2(gcd->model)) {
+		g_at_chat_send(chat, "AT+UBMCONF?", ubmconf_prefix,
+				at_ubmconf_read_cb, gc, NULL);
+	} else if (ublox_is_toby_l4(gcd->model)) {
+		gcd->networking_mode = NETWORKING_MODE_ROUTER;
+	} else {
+		gcd->networking_mode = NETWORKING_MODE_ROUTER;
+	}
 
 	g_at_chat_register(chat, "+CGEV:", cgev_notify, FALSE, gc, NULL);
 

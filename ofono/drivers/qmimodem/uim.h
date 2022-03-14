@@ -29,7 +29,7 @@
 
 #define QMI_UIM_EVENT_REGISTRATION	46	/* Register for indications */
 #define QMI_UIM_GET_CARD_STATUS		47	/* Get card status */
-
+#define QMI_UIM_GET_CARD_STATUS_EVENT	50	/* Card status indication */
 
 /* Register for indications */
 #define QMI_UIM_PARAM_EVENT_MASK	0x01	/* uint32 */

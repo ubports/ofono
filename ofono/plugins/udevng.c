@@ -1090,11 +1090,17 @@ static gboolean setup_ublox(struct modem_info *modem)
 		 *  - high throughput profile : 224/1/3
 		 */
 		} else if (g_strcmp0(info->interface, "2/2/1") == 0) {
-			if (g_strcmp0(info->number, "02") == 0)
-				aux = info->devnode;
-			else if (g_strcmp0(info->number, "00") == 0)
+			if (!g_strcmp0(modem->model, "1010")) {
+				if (g_strcmp0(info->number, "06") == 0)
+					aux = info->devnode;
+			} else {
+				if (g_strcmp0(info->number, "02") == 0)
+					aux = info->devnode;
+			}
+			if (g_strcmp0(info->number, "00") == 0)
 				mdm = info->devnode;
 		} else if (g_strcmp0(info->interface, "2/6/0") == 0 ||
+				g_strcmp0(info->interface, "2/13/0") == 0 ||
 				g_strcmp0(info->interface, "10/0/0") == 0 ||
 				g_strcmp0(info->interface, "224/1/3") == 0) {
 			net = info->devnode;
@@ -1111,7 +1117,6 @@ static gboolean setup_ublox(struct modem_info *modem)
 
 	ofono_modem_set_string(modem->modem, "Aux", aux);
 	ofono_modem_set_string(modem->modem, "Modem", mdm);
-	ofono_modem_set_string(modem->modem, "Model", modem->model);
 	ofono_modem_set_string(modem->modem, "NetworkInterface", net);
 
 	return TRUE;
@@ -1179,7 +1184,7 @@ static gboolean setup_gemalto(struct modem_info* modem)
 
 static gboolean setup_xmm7xxx(struct modem_info *modem)
 {
-	const char *mdm = NULL, *net = NULL;
+	const char *mdm = NULL, *net = NULL, *net2 = NULL, *net3 = NULL;
 	GSList *list;
 
 	DBG("%s %s %s %s %s %s\n", modem->syspath, modem->devname,
@@ -1199,6 +1204,10 @@ static gboolean setup_xmm7xxx(struct modem_info *modem)
 			} else if (g_strcmp0(info->subsystem, "net") == 0) {
 				if (g_strcmp0(info->number, "06") == 0)
 					net = info->devnode;
+				if (g_strcmp0(info->number, "08") == 0)
+					net2 = info->devnode;
+				if (g_strcmp0(info->number, "0a") == 0)
+					net3 = info->devnode;
 			}
 		} else {
 			if (g_strcmp0(info->subsystem, "tty") == 0) {
@@ -1218,6 +1227,15 @@ static gboolean setup_xmm7xxx(struct modem_info *modem)
 
 	ofono_modem_set_string(modem->modem, "Modem", mdm);
 	ofono_modem_set_string(modem->modem, "NetworkInterface", net);
+
+	if (net2)
+		ofono_modem_set_string(modem->modem, "NetworkInterface2", net2);
+
+	if (net3)
+		ofono_modem_set_string(modem->modem, "NetworkInterface3", net3);
+
+	ofono_modem_set_string(modem->modem, "CtrlPath", "/USBCDC/0");
+	ofono_modem_set_string(modem->modem, "DataPath", "/USBHS/NCM/");
 
 	return TRUE;
 }
@@ -1678,6 +1696,8 @@ static struct {
 	{ "quectelqmi",	"qcserial",	"2c7c", "0121"	},
 	{ "quectelqmi",	"qmi_wwan",	"2c7c", "0125"	},
 	{ "quectelqmi",	"qcserial",	"2c7c", "0125"	},
+	{ "ublox",	"cdc_acm",	"1546", "1010"	},
+	{ "ublox",	"cdc_ncm",	"1546", "1010"	},
 	{ "ublox",	"cdc_acm",	"1546", "1102"	},
 	{ "ublox",	"rndis_host",	"1546", "1146"	},
 	{ "ublox",	"cdc_acm",	"1546", "1146"	},

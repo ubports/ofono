@@ -1559,12 +1559,12 @@ static void creg_notify(GAtResult *result, gpointer user_data)
 					option_query_tech_cb, tq, g_free) > 0)
 			return;
 		break;
-    case OFONO_VENDOR_GEMALTO:
-              if (g_at_chat_send(nd->chat, "AT^SMONI",
-                                      smoni_prefix,
-                                      gemalto_query_tech_cb, tq, g_free) > 0)
-                      return;
-              break;
+	case OFONO_VENDOR_GEMALTO:
+		if (g_at_chat_send(nd->chat, "AT^SMONI",
+					smoni_prefix,
+					gemalto_query_tech_cb, tq, g_free) > 0)
+			return;
+		break;
 	}
 
 	g_free(tq);
@@ -1655,8 +1655,11 @@ static ofono_bool_t build_cmer_string(char *buf, int *cmer_opts,
 	DBG("");
 
 	switch (nd->vendor) {
-	case OFONO_VENDOR_UBLOX_TOBY_L2:
-		/* UBX-13002752 R33: TOBY L2 doesn't support mode 2 and 3 */
+	case OFONO_VENDOR_UBLOX:
+		/* For all u-blox models, mode 3 is equivalent to mode 1;
+		 * since some models do not support setting modes 2 nor 3
+		 * (see UBX-13002752), we prefer mode 1 for all models.
+		 */
 		mode = "1";
 		break;
 	default:

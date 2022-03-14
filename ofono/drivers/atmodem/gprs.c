@@ -455,7 +455,6 @@ static void gprs_initialized(gboolean ok, GAtResult *result, gpointer user_data)
 						FALSE, gprs, NULL);
 		break;
 	case OFONO_VENDOR_UBLOX:
-	case OFONO_VENDOR_UBLOX_TOBY_L2:
 		g_at_chat_register(gd->chat, "+UREG:", ublox_ureg_notify,
 						FALSE, gprs, NULL);
 		g_at_chat_send(gd->chat, "AT+UREG=1", none_prefix,

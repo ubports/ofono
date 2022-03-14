@@ -1223,7 +1223,7 @@ static void xmm7xxx_pre_sim(struct ofono_modem *modem)
 	DBG("%p", modem);
 
 	ofono_devinfo_create(modem, OFONO_VENDOR_IFX, "atmodem", data->chat);
-	data->sim = ofono_sim_create(modem, OFONO_VENDOR_IFX, "atmodem",
+	data->sim = ofono_sim_create(modem, OFONO_VENDOR_XMM, "atmodem",
 					data->chat);
 }
 
@@ -1269,6 +1269,7 @@ static void xmm7xxx_post_online(struct ofono_modem *modem)
 	struct xmm7xxx_data *data = ofono_modem_get_data(modem);
 	struct ofono_gprs *gprs;
 	struct ofono_gprs_context *gc;
+	const char *interface = NULL;
 
 	DBG("%p", modem);
 
@@ -1276,11 +1277,39 @@ static void xmm7xxx_post_online(struct ofono_modem *modem)
 
 	gprs = ofono_gprs_create(modem, OFONO_VENDOR_IFX, "atmodem",
 					data->chat);
+
+	interface = ofono_modem_get_string(modem, "NetworkInterface");
 	gc = ofono_gprs_context_create(modem, OFONO_VENDOR_XMM, "ifxmodem",
 					data->chat);
 
-	if (gprs && gc)
+	if (gprs && gc) {
 		ofono_gprs_add_context(gprs, gc);
+		ofono_gprs_context_set_interface(gc, interface);
+	}
+
+	interface = ofono_modem_get_string(modem, "NetworkInterface2");
+
+	if (interface) {
+		gc = ofono_gprs_context_create(modem, OFONO_VENDOR_XMM,
+						"ifxmodem", data->chat);
+
+		if (gprs && gc) {
+			ofono_gprs_add_context(gprs, gc);
+			ofono_gprs_context_set_interface(gc, interface);
+		}
+	}
+
+	interface = ofono_modem_get_string(modem, "NetworkInterface3");
+
+	if (interface) {
+		gc = ofono_gprs_context_create(modem, OFONO_VENDOR_XMM,
+						"ifxmodem", data->chat);
+
+		if (gprs && gc) {
+			ofono_gprs_add_context(gprs, gc);
+			ofono_gprs_context_set_interface(gc, interface);
+		}
+	}
 
 	ofono_ims_create(modem, "xmm7modem", data->chat);
 	ofono_netmon_create(modem, 0, "xmm7modem", data->chat);
