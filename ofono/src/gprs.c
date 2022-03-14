@@ -3118,6 +3118,11 @@ done:
 		g_free(gc->settings);
 		gc->settings = NULL;
 	}
+
+	if (gc->interface) {
+		g_free(gc->interface);
+		gc->interface = NULL;
+	}
 }
 
 void ofono_gprs_add_context(struct ofono_gprs *gprs,
