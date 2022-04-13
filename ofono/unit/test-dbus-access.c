@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2019-2021 Jolla Ltd.
+ *  Copyright (C) 2019-2022 Jolla Ltd.
  *  Copyright (C) 2020 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -122,6 +122,9 @@ static const struct test_method_name_data method_name_tests[] = {
 	},{
 		OFONO_DBUS_ACCESS_INTF_OEMRAW,
 		OFONO_DBUS_ACCESS_OEMRAW_METHOD_COUNT
+	},{
+		OFONO_DBUS_ACCESS_INTF_IMS,
+		OFONO_DBUS_ACCESS_IMS_METHOD_COUNT
 	}
 };
 
