@@ -51,6 +51,13 @@ struct ofono_ims {
 
 static GSList *g_drivers = NULL;
 
+static inline gboolean ims_dbus_access_allowed(DBusMessage *msg,
+				enum ofono_dbus_access_ims_method method)
+{
+	return ofono_dbus_access_method_allowed(dbus_message_get_sender(msg),
+				OFONO_DBUS_ACCESS_INTF_IMS, method, NULL);
+}
+
 static DBusMessage *ims_get_properties(DBusConnection *conn,
 					DBusMessage *msg, void *data)
 {
@@ -209,6 +216,9 @@ static DBusMessage *ofono_ims_send_register(DBusConnection *conn,
 {
 	struct ofono_ims *ims = data;
 
+	if (!ims_dbus_access_allowed(msg, OFONO_DBUS_ACCESS_IMS_REGISTER))
+		return __ofono_error_access_denied(msg);
+
 	if (ims->pending)
 		return __ofono_error_busy(msg);
 
@@ -226,6 +236,9 @@ static DBusMessage *ofono_ims_unregister(DBusConnection *conn,
 						DBusMessage *msg, void *data)
 {
 	struct ofono_ims *ims = data;
+
+	if (!ims_dbus_access_allowed(msg, OFONO_DBUS_ACCESS_IMS_UNREGISTER))
+		return __ofono_error_access_denied(msg);
 
 	if (ims->pending)
 		return __ofono_error_busy(msg);
