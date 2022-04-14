@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2019 Jolla Ltd.
+ *  Copyright (C) 2019-2022 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -18,7 +18,6 @@
 
 #include <ofono/watch.h>
 
-void __ofono_watch_netreg_changed(const char *path);
 void __ofono_watch_gprs_settings_changed(const char *path,
 			enum ofono_gprs_context_type type,
 			const struct ofono_gprs_primary_context *settings);
