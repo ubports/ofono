@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2018-2019 Jolla Ltd.
+ *  Copyright (C) 2018-2022 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -57,15 +57,23 @@ struct ofono_gprs {
 
 struct ofono_netreg {
 	struct ofono_atom atom;
+	struct ofono_watchlist *status_watches;
 	enum ofono_netreg_status status;
+	enum ofono_access_technology tech;
 	const char *mcc;
 	const char *mnc;
 	const char *name;
 };
 
-int ofono_netreg_get_status(struct ofono_netreg *netreg)
+enum ofono_netreg_status ofono_netreg_get_status(struct ofono_netreg *netreg)
 {
 	return netreg ? netreg->status : OFONO_NETREG_STATUS_NONE;
+}
+
+enum ofono_access_technology
+		ofono_netreg_get_technology (struct ofono_netreg *netreg)
+{
+	return netreg ? netreg->tech : OFONO_ACCESS_TECHNOLOGY_NONE;
 }
 
 const char *ofono_netreg_get_mcc(struct ofono_netreg *netreg)
@@ -83,6 +91,44 @@ const char *ofono_netreg_get_name(struct ofono_netreg *netreg)
 	return netreg ? netreg->name : NULL;
 }
 
+static void netreg_notify(struct ofono_netreg *netreg)
+{
+	GSList *l;
+
+	for (l = netreg->status_watches->items; l; l = l->next) {
+		struct ofono_watchlist_item *item = l->data;
+		ofono_netreg_status_notify_cb_t notify = item->notify;
+
+		notify(netreg->status, -1, -1, netreg->tech, netreg->mcc,
+					netreg->mnc, item->notify_data);
+	}
+}
+
+static unsigned int add_watch_item(struct ofono_watchlist *list,
+			void *notify, void *data, ofono_destroy_func destroy)
+{
+	struct ofono_watchlist_item *watch =
+		g_new0(struct ofono_watchlist_item, 1);
+
+	watch->notify = notify;
+	watch->destroy = destroy;
+	watch->notify_data = data;
+	return __ofono_watchlist_add_item(list, watch);
+}
+
+unsigned int __ofono_netreg_add_status_watch(struct ofono_netreg *netreg,
+				ofono_netreg_status_notify_cb_t notify,
+				void *data, ofono_destroy_func destroy)
+{
+	return add_watch_item(netreg->status_watches, notify, data, destroy);
+}
+
+gboolean __ofono_netreg_remove_status_watch(struct ofono_netreg *netreg,
+						unsigned int id)
+{
+	return __ofono_watchlist_remove_item(netreg->status_watches, id);
+}
+
 /* Fake ofono_sim */
 
 struct ofono_sim {
@@ -97,18 +143,6 @@ struct ofono_sim {
 	struct ofono_watchlist *iccid_watches;
 	struct ofono_watchlist *state_watches;
 };
-
-static unsigned int add_watch_item(struct ofono_watchlist *list,
-			void *notify, void *data, ofono_destroy_func destroy)
-{
-	struct ofono_watchlist_item *watch =
-		g_new0(struct ofono_watchlist_item, 1);
-
-	watch->notify = notify;
-	watch->destroy = destroy;
-	watch->notify_data = data;
-	return __ofono_watchlist_add_item(list, watch);
-}
 
 unsigned int ofono_sim_add_iccid_watch(struct ofono_sim *sim,
 				ofono_sim_iccid_event_cb_t cb, void *data,
@@ -342,7 +376,7 @@ unsigned int __ofono_modem_add_atom_watch(struct ofono_modem *modem,
 	return id;
 }
 
-static void call_watches(struct ofono_atom *atom,
+static void atom_notify(struct ofono_atom *atom,
 				enum ofono_atom_watch_condition cond)
 {
 	GSList *l;
@@ -400,7 +434,7 @@ static void test_modem_register_atom(struct ofono_modem *modem,
 	if (!atom->registered) {
 		atom->registered = TRUE;
 		modem->atoms = g_slist_append(modem->atoms, atom);
-		call_watches(atom, OFONO_ATOM_WATCH_CONDITION_REGISTERED);
+		atom_notify(atom, OFONO_ATOM_WATCH_CONDITION_REGISTERED);
 	}
 }
 
@@ -409,7 +443,7 @@ static void test_modem_unregister_atom(struct ofono_modem *modem,
 {
 	if (atom->registered) {
 		atom->registered = FALSE;
-		call_watches(atom, OFONO_ATOM_WATCH_CONDITION_UNREGISTERED);
+		atom_notify(atom, OFONO_ATOM_WATCH_CONDITION_UNREGISTERED);
 		modem->atoms = g_slist_remove(modem->atoms, atom);
 	}
 }
@@ -428,6 +462,9 @@ static void test_modem_init1(struct ofono_modem *modem, const char *path)
 	netreg->atom.type = OFONO_ATOM_TYPE_NETREG;
 	netreg->atom.modem = modem;
 	netreg->atom.data = netreg;
+	netreg->status = OFONO_NETREG_STATUS_NOT_REGISTERED;
+	netreg->tech = OFONO_ACCESS_TECHNOLOGY_NONE;
+	netreg->status_watches = __ofono_watchlist_new(g_free);
 
 	gprs->atom.type = OFONO_ATOM_TYPE_GPRS;
 	gprs->atom.modem = modem;
@@ -455,15 +492,17 @@ static void test_modem_init(struct ofono_modem *modem)
 static void test_modem_shutdown(struct ofono_modem *modem)
 {
 	struct ofono_sim *sim = &modem->sim;
+	struct ofono_netreg *netreg = &modem->netreg;
 
 	call_modemwatches(modem, FALSE);
 	g_modem_list = g_slist_remove(g_modem_list, modem);
 	g_slist_free(modem->atoms);
+
 	__ofono_watchlist_free(sim->iccid_watches);
 	__ofono_watchlist_free(sim->imsi_watches);
 	__ofono_watchlist_free(sim->state_watches);
 	__ofono_watchlist_free(sim->spn_watches);
-
+	__ofono_watchlist_free(netreg->status_watches);
 	__ofono_watchlist_free(modem->atom_watches);
 	__ofono_watchlist_free(modem->online_watches);
 }
@@ -504,8 +543,6 @@ static void test_basic(void)
 								NULL, NULL));
 	ofono_watch_remove_handler(NULL, 0);
 	ofono_watch_remove_handlers(NULL, NULL, 0);
-	__ofono_watch_netreg_changed(NULL);
-	__ofono_watch_netreg_changed(TEST_PATH);
 	__ofono_watch_gprs_settings_changed
 		(NULL, OFONO_GPRS_CONTEXT_TYPE_ANY, NULL);
 	__ofono_watch_gprs_settings_changed
@@ -623,7 +660,7 @@ static void test_netreg(void)
 	struct ofono_watch *watch;
 	struct ofono_modem modem;
 	struct ofono_netreg *netreg = &modem.netreg;
-	gulong id[5];
+	gulong id[6];
 	int n[G_N_ELEMENTS(id)];
 
 #define NETREG 0
@@ -631,8 +668,7 @@ static void test_netreg(void)
 #define REG_MCC 2
 #define REG_MNC 3
 #define REG_NAME 4
-
-	__ofono_watch_netreg_changed(TEST_PATH); /* No effect (yet) */
+#define REG_TECH 5
 
 	memset(&modem, 0, sizeof(modem));
 	__ofono_modemwatch_init();
@@ -652,16 +688,20 @@ static void test_netreg(void)
 		(watch, test_inc_cb, n + REG_MNC);
 	id[REG_NAME] = ofono_watch_add_reg_name_changed_handler
 		(watch, test_inc_cb, n + REG_NAME);
+	id[REG_TECH] = ofono_watch_add_reg_tech_changed_handler
+		(watch, test_inc_cb, n + REG_TECH);
 	test_modem_register_atom(&modem, &netreg->atom);
 	g_assert(watch->netreg == netreg);
-	g_assert(watch->reg_status == netreg->status);
-	g_assert(n[NETREG] == 1);
-	g_assert(n[REG_STATUS] == 1);
+	g_assert_cmpint(watch->reg_status, == ,netreg->status);
+	g_assert_cmpint(watch->reg_tech, == ,netreg->tech);
+	g_assert_cmpint(n[NETREG], == ,1);
+	g_assert_cmpint(n[REG_STATUS], == ,1);
+	g_assert_cmpint(n[REG_TECH], == ,0);
 	n[NETREG] = 0;
 	n[REG_STATUS] = 0;
 
 	netreg->status++;
-	__ofono_watch_netreg_changed(TEST_PATH);
+	netreg_notify(netreg);
 	g_assert(watch->reg_status == netreg->status);
 	g_assert(n[REG_STATUS] == 1);
 	n[REG_STATUS] = 0;
@@ -669,31 +709,35 @@ static void test_netreg(void)
 	netreg->mcc = TEST_MCC;
 	netreg->mnc = TEST_MNC;
 	netreg->name = TEST_NAME;
-	__ofono_watch_netreg_changed(TEST_PATH);
-	__ofono_watch_netreg_changed(TEST_PATH); /* This one has no effect */
-	__ofono_watch_netreg_changed(TEST_PATH_1); /* This one too */
-	g_assert(!n[REG_STATUS]);
-	g_assert(n[REG_MCC] == 1);
-	g_assert(n[REG_MNC] == 1);
-	g_assert(n[REG_NAME] == 1);
-	g_assert(!g_strcmp0(watch->reg_mcc, netreg->mcc));
-	g_assert(!g_strcmp0(watch->reg_mnc, netreg->mnc));
-	g_assert(!g_strcmp0(watch->reg_name, netreg->name));
+	netreg->tech = OFONO_ACCESS_TECHNOLOGY_EUTRAN;
+	netreg_notify(netreg);
+	netreg_notify(netreg); /* This one has no effect */
+	g_assert_cmpint(n[REG_STATUS], == ,0);
+	g_assert_cmpint(n[REG_MCC], == ,1);
+	g_assert_cmpint(n[REG_MNC], == ,1);
+	g_assert_cmpint(n[REG_NAME], == ,1);
+	g_assert_cmpint(n[REG_TECH], == ,1);
+	g_assert_cmpstr(watch->reg_mcc, == ,netreg->mcc);
+	g_assert_cmpstr(watch->reg_mnc, == ,netreg->mnc);
+	g_assert_cmpstr(watch->reg_name, == ,netreg->name);
 	n[REG_MCC] = 0;
 	n[REG_MNC] = 0;
 	n[REG_NAME] = 0;
+	n[REG_TECH] = 0;
 
 	test_modem_unregister_atom(&modem, &netreg->atom);
 	g_assert(!watch->netreg);
-	g_assert(watch->reg_status == OFONO_NETREG_STATUS_NONE);
+	g_assert_cmpint(watch->reg_status, == ,OFONO_NETREG_STATUS_NONE);
+	g_assert_cmpint(watch->reg_tech, == ,OFONO_ACCESS_TECHNOLOGY_NONE);
 	g_assert(!watch->reg_mcc);
 	g_assert(!watch->reg_mnc);
 	g_assert(!watch->reg_name);
-	g_assert(n[NETREG] == 1);
-	g_assert(n[REG_STATUS] == 1);
-	g_assert(n[REG_MCC] == 1);
-	g_assert(n[REG_MNC] == 1);
-	g_assert(n[REG_NAME] == 1);
+	g_assert_cmpint(n[NETREG], == ,1);
+	g_assert_cmpint(n[REG_STATUS], == ,1);
+	g_assert_cmpint(n[REG_MCC], == ,1);
+	g_assert_cmpint(n[REG_MNC], == ,1);
+	g_assert_cmpint(n[REG_NAME], == ,1);
+	g_assert_cmpint(n[REG_TECH], == ,1);
 	memset(n, 0, sizeof(n));
 
 	netreg->mcc = NULL;
@@ -702,20 +746,24 @@ static void test_netreg(void)
 
 	test_modem_register_atom(&modem, &netreg->atom);
 	g_assert(watch->netreg == netreg);
-	g_assert(watch->reg_status == netreg->status);
-	g_assert(n[NETREG] == 1);
-	g_assert(n[REG_STATUS] == 1);
+	g_assert_cmpint(watch->reg_status, == ,netreg->status);
+	g_assert_cmpint(watch->reg_tech, == ,netreg->tech);
+	g_assert_cmpint(n[NETREG], == ,1);
+	g_assert_cmpint(n[REG_STATUS], == ,1);
 	n[NETREG] = 0;
 	n[REG_STATUS] = 0;
+	n[REG_TECH] = 0;
 
 	test_modem_shutdown(&modem);
 	g_assert(!watch->netreg);
-	g_assert(watch->reg_status == OFONO_NETREG_STATUS_NONE);
-	g_assert(n[NETREG] == 1);
-	g_assert(n[REG_STATUS] == 1);
-	g_assert(!n[REG_MCC]);
-	g_assert(!n[REG_MNC]);
-	g_assert(!n[REG_NAME]);
+	g_assert_cmpint(watch->reg_status, == ,OFONO_NETREG_STATUS_NONE);
+	g_assert_cmpint(watch->reg_tech, == ,OFONO_ACCESS_TECHNOLOGY_NONE);
+	g_assert_cmpint(n[NETREG], == ,1);
+	g_assert_cmpint(n[REG_STATUS], == ,1);
+	g_assert_cmpint(n[REG_TECH], == ,1);
+	g_assert_cmpint(n[REG_MCC], == ,0);
+	g_assert_cmpint(n[REG_MNC], == ,0);
+	g_assert_cmpint(n[REG_NAME], == ,0);
 
 	ofono_watch_remove_all_handlers(watch, id);
 	ofono_watch_unref(watch);
