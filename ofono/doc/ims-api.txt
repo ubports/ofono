@@ -16,7 +16,7 @@ Methods		dict GetProperties()
 			changeable. On success a PropertyChanged signal
 			will be emitted.
 
-			Possible Errors: [service].Error.InProgress
+			Possible Errors: [service].Error.AccessDenied
 					 [service].Error.InvalidArguments
 					 [service].Error.Failed
 
@@ -27,8 +27,10 @@ Methods		dict GetProperties()
 			initiated successfully. The actual registration state
 			will be reflected by the 'Registered' property.
 
-			Possible Errors: [service].Error.InProgress
+			Possible Errors: [service].Error.AccessDenied
+					 [service].Error.NotAllowed
 					 [service].Error.NotImplemented
+					 [service].Error.Failed
 
 		void Unregister()
 
@@ -37,8 +39,9 @@ Methods		dict GetProperties()
 			be initiated successfully. The actual unregistration
 			state will be reflected by the 'Registered' property.
 
-			Possible Errors: [service].Error.InProgress
+			Possible Errors: [service].Error.AccessDenied
 					 [service].Error.NotImplemented
+					 [service].Error.Failed
 
 Signals		PropertyChanged(string property, variant value)
 
@@ -57,3 +60,15 @@ Properties	boolean Registered [readonly]
 		boolean SmsCapable [readonly, optional]
 
 			Boolean representing whether SMS-over-IMS is available.
+
+		string Registration [readwrite, Sailfish OS specific]
+
+			The IMS registration strategy. Valid values are:
+
+				"disabled" keep registration off
+				"enabled"  manual registration
+				"auto"     keep registration on
+
+			The Register() method, if implemented, will fail
+			with [service].Error.NotAllowed if the value of
+			this property is "disabled".
