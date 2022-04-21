@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2017-2021 Jolla Ltd.
+ *  Copyright (C) 2017-2022 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -36,13 +36,15 @@ struct ofono_watch {
 	const char *spn;
 	/* OFONO_ATOM_TYPE_NETREG */
 	struct ofono_netreg *netreg;
-	/* Since mer/1.21+git47 */
+	/* Since 1.21+git47 */
 	enum ofono_netreg_status reg_status;
 	const char *reg_mcc;
 	const char *reg_mnc;
 	const char *reg_name;
 	/* OFONO_ATOM_TYPE_GPRS */
 	struct ofono_gprs *gprs;
+	/* Since 1.29+git3 */
+	enum ofono_access_technology reg_tech;
 };
 
 typedef void (*ofono_watch_cb_t)(struct ofono_watch *w, void *user_data);
@@ -78,7 +80,7 @@ void ofono_watch_remove_handlers(struct ofono_watch *w, unsigned long *ids,
 #define ofono_watch_remove_all_handlers(w,ids) \
 	ofono_watch_remove_handlers(w, ids, sizeof(ids)/sizeof((ids)[0]))
 
-/* Since mer/1.21+git47 */
+/* Since 1.21+git47 */
 unsigned long ofono_watch_add_reg_status_changed_handler(struct ofono_watch *w,
 				ofono_watch_cb_t cb, void *user_data);
 unsigned long ofono_watch_add_reg_mcc_changed_handler(struct ofono_watch *w,
@@ -92,6 +94,10 @@ unsigned long ofono_watch_add_gprs_changed_handler(struct ofono_watch *w,
 unsigned long ofono_watch_add_gprs_settings_changed_handler
 		(struct ofono_watch *watch, ofono_watch_gprs_settings_cb_t cb,
 							void *user_data);
+
+/* Since 1.29+git3 */
+unsigned long ofono_watch_add_reg_tech_changed_handler(struct ofono_watch *w,
+				ofono_watch_cb_t cb, void *user_data);
 
 #endif /* OFONO_WATCH_H */
 

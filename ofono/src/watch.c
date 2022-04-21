@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2017-2021 Jolla Ltd.
+ *  Copyright (C) 2017-2022 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -41,6 +41,7 @@ struct ofono_watch_object {
 	guint imsi_watch_id;
 	guint spn_watch_id;
 	guint netreg_watch_id;
+	guint netreg_status_watch_id;
 	guint gprs_watch_id;
 };
 
@@ -67,6 +68,7 @@ enum ofono_watch_signal {
 	SIGNAL_REG_MCC_CHANGED,
 	SIGNAL_REG_MNC_CHANGED,
 	SIGNAL_REG_NAME_CHANGED,
+	SIGNAL_REG_TECH_CHANGED,
 	SIGNAL_GPRS_CHANGED,
 	SIGNAL_GPRS_SETTINGS_CHANGED,
 	SIGNAL_COUNT
@@ -84,6 +86,7 @@ enum ofono_watch_signal {
 #define SIGNAL_REG_MCC_CHANGED_NAME       "ofono-watch-reg-mcc-changed"
 #define SIGNAL_REG_MNC_CHANGED_NAME       "ofono-watch-reg-mnc-changed"
 #define SIGNAL_REG_NAME_CHANGED_NAME      "ofono-watch-reg-name-changed"
+#define SIGNAL_REG_TECH_CHANGED_NAME      "ofono-watch-reg-tech-changed"
 #define SIGNAL_GPRS_CHANGED_NAME          "ofono-watch-gprs-changed"
 #define SIGNAL_GPRS_SETTINGS_CHANGED_NAME "ofono-watch-gprs-settings-changed"
 
@@ -134,11 +137,13 @@ static void ofono_watch_emit_queued_signals(struct ofono_watch_object *self)
 {
 	int i;
 
+	g_object_ref(self);
 	for (i = 0; self->queued_signals && i < SIGNAL_COUNT; i++) {
 		if (self->queued_signals & ofono_watch_signal_bit(i)) {
 			ofono_watch_signal_emit(self, i);
 		}
 	}
+	g_object_unref(self);
 }
 
 static void ofono_watch_iccid_update(struct ofono_watch_object *self,
@@ -349,6 +354,7 @@ static void ofono_watch_netreg_update(struct ofono_watch_object *self)
 	struct ofono_watch *watch = &self->pub;
 	struct ofono_netreg *netreg = watch->netreg;
 	enum ofono_netreg_status status = ofono_netreg_get_status(netreg);
+	enum ofono_access_technology act = ofono_netreg_get_technology(netreg);
 	const char *mcc = ofono_netreg_get_mcc(netreg);
 	const char *mnc = ofono_netreg_get_mnc(netreg);
 	const char *name = ofono_netreg_get_name(netreg);
@@ -356,6 +362,10 @@ static void ofono_watch_netreg_update(struct ofono_watch_object *self)
 	if (watch->reg_status != status) {
 		watch->reg_status = status;
 		ofono_watch_signal_queue(self, SIGNAL_REG_STATUS_CHANGED);
+	}
+	if (watch->reg_tech != act) {
+		watch->reg_tech = act;
+		ofono_watch_signal_queue(self, SIGNAL_REG_TECH_CHANGED);
 	}
 	if (g_strcmp0(self->reg_mcc, mcc)) {
 		g_free(self->reg_mcc);
@@ -374,17 +384,49 @@ static void ofono_watch_netreg_update(struct ofono_watch_object *self)
 	}
 }
 
+static void ofono_watch_netreg_status_notify(int status, int lac, int ci,
+		int tech, const char *mcc, const char *mnc, void *user_data)
+{
+	struct ofono_watch_object *self = OFONO_WATCH_OBJECT(user_data);
+
+	ofono_watch_netreg_update(self);
+	ofono_watch_emit_queued_signals(self);
+}
+
+static void ofono_watch_netreg_status_destroy(void *user_data)
+{
+	struct ofono_watch_object *self = OFONO_WATCH_OBJECT(user_data);
+
+	ASSERT(self->netreg_status_watch_id);
+	self->netreg_status_watch_id = 0;
+}
+
 static void ofono_watch_set_netreg(struct ofono_watch_object *self,
 						struct ofono_netreg *netreg)
 {
 	struct ofono_watch *watch = &self->pub;
 
 	if (watch->netreg != netreg) {
+		if (self->netreg_status_watch_id) {
+			__ofono_netreg_remove_status_watch(watch->netreg,
+						self->netreg_status_watch_id);
+			/* The destroy callback clears it */
+			ASSERT(!self->netreg_status_watch_id);
+		}
+
 		watch->netreg = netreg;
 		ofono_watch_signal_queue(self, SIGNAL_NETREG_CHANGED);
+
+		if (netreg) {
+			self->netreg_status_watch_id =
+				__ofono_netreg_add_status_watch(netreg,
+					ofono_watch_netreg_status_notify, self,
+					ofono_watch_netreg_status_destroy);
+		}
+
+		ofono_watch_netreg_update(self);
+		ofono_watch_emit_queued_signals(self);
 	}
-	ofono_watch_netreg_update(self);
-	ofono_watch_emit_queued_signals(self);
 }
 
 static void ofono_watch_netreg_notify(struct ofono_atom *atom,
@@ -417,6 +459,7 @@ static void ofono_watch_set_gprs(struct ofono_watch_object *self,
 
 	if (watch->gprs != gprs) {
 		watch->gprs = gprs;
+
 		ofono_watch_signal_queue(self, SIGNAL_GPRS_CHANGED);
 		ofono_watch_emit_queued_signals(self);
 	}
@@ -730,6 +773,7 @@ ADD_SIGNAL_HANDLER_PROC(reg_status,REG_STATUS)
 ADD_SIGNAL_HANDLER_PROC(reg_mcc,REG_MCC)
 ADD_SIGNAL_HANDLER_PROC(reg_mnc,REG_MNC)
 ADD_SIGNAL_HANDLER_PROC(reg_name,REG_NAME)
+ADD_SIGNAL_HANDLER_PROC(reg_tech,REG_TECH)
 ADD_SIGNAL_HANDLER_PROC(gprs,GPRS)
 
 static void ofono_watch_gprs_settings_signal_cb(struct ofono_watch_object *src,
@@ -775,21 +819,6 @@ void ofono_watch_remove_handlers(struct ofono_watch *watch, unsigned long *ids,
 	}
 }
 
-void __ofono_watch_netreg_changed(const char *path)
-{
-	if (path && ofono_watch_table) {
-		struct ofono_watch_object *self =
-			g_hash_table_lookup(ofono_watch_table, path);
-
-		if (self) {
-			g_object_ref(self);
-			ofono_watch_netreg_update(self);
-			ofono_watch_emit_queued_signals(self);
-			g_object_unref(self);
-		}
-	}
-}
-
 void __ofono_watch_gprs_settings_changed(const char *path,
 			enum ofono_gprs_context_type type,
 			const struct ofono_gprs_primary_context *settings)
@@ -813,6 +842,7 @@ static void ofono_watch_object_init(struct ofono_watch_object *self)
 	struct ofono_watch *watch = &self->pub;
 
 	watch->reg_status = OFONO_NETREG_STATUS_NONE;
+	watch->reg_tech = OFONO_ACCESS_TECHNOLOGY_NONE;
 }
 
 static void ofono_watch_object_finalize(GObject *object)
@@ -847,6 +877,7 @@ static void ofono_watch_object_class_init(OfonoWatchObjectClass *klass)
 	NEW_SIGNAL(klass, REG_MCC);
 	NEW_SIGNAL(klass, REG_MNC);
 	NEW_SIGNAL(klass, REG_NAME);
+	NEW_SIGNAL(klass, REG_TECH);
 	NEW_SIGNAL(klass, GPRS);
 	ofono_watch_signals[SIGNAL_GPRS_SETTINGS_CHANGED] =
 		g_signal_new(SIGNAL_GPRS_SETTINGS_CHANGED_NAME,
