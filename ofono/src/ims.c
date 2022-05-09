@@ -48,7 +48,7 @@ enum ims_reg_strategy {
 	IMS_REG_DISABLED,
 	IMS_REG_ENABLED,
 	IMS_REG_AUTO
-#define IMS_REG_DEFAULT IMS_REG_AUTO
+#define IMS_REG_DEFAULT IMS_REG_DISABLED
 };
 
 enum ims_watch_events {
