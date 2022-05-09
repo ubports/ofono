@@ -262,8 +262,7 @@ static void ims_registration_check(struct ofono_ims *ims)
 		/* Any state is acceptable */
 		DBG("ims is enabled, no action needed");
 		return;
-	case IMS_REG_DEFAULT:
-		/* IMS_REG_AUTO */
+	case IMS_REG_AUTO:
 		break;
 	}
 
