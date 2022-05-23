@@ -1,3 +1,9 @@
+ofono (1.29+git3+ubports1) xenial; urgency=medium
+
+  * New upstream release 1.29+git3
+
+ -- TheKit <nekit1000@gmail.com>  Mon, 23 May 2022 13:39:05 +0300
+
 ofono (1.21+ubports1) xenial; urgency=medium
 
   * Port SailfishOS ofono fork to UBPorts
