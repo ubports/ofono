@@ -38,6 +38,7 @@
 #include <gril.h>
 #include <parcel.h>
 
+#include "rilutil.h"
 #include "rilmodem.h"
 #include "vendor.h"
 
