@@ -398,6 +398,7 @@ struct cbs {
 	guint8 dcs;				/* 8 bits */
 	guint8 max_pages;			/* 4 bits */
 	guint8 page;				/* 4 bits */
+	guint8 udlen;
 	guint8 ud[82];
 };
 

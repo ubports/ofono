@@ -363,6 +363,8 @@ void ril_post_online(struct ofono_modem *modem)
 	struct ril_gprs_context_data
 		mms_ctx = { rd->ril, modem, OFONO_GPRS_CONTEXT_TYPE_MMS };
 
+    ofono_cbs_create(modem, rd->vendor,
+            get_driver_type(rd, OFONO_ATOM_TYPE_CBS), rd->ril);
 	ofono_netreg_create(modem, rd->vendor,
 			get_driver_type(rd, OFONO_ATOM_TYPE_NETREG), rd->ril);
 	ofono_ussd_create(modem, rd->vendor,
