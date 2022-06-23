@@ -38,6 +38,7 @@
 #include "util.h"
 #include "storage.h"
 #include "smsutil.h"
+#include "cbs.h"
 
 #define uninitialized_var(x) x = x
 
@@ -4565,7 +4566,7 @@ GSList *cbs_optimize_ranges(GSList *ranges)
 
 	range = NULL;
 
-	for (i = 0; i <= 999; i++) {
+	for (i = 0; i <= CBS_MAX_TOPIC; i++) {
 		int byte_offset = i / 8;
 		int bit = i % 8;
 
@@ -4605,10 +4606,10 @@ GSList *cbs_extract_topic_ranges(const char *ranges)
 	GSList *tmp;
 
 	while (next_range(ranges, &offset, &min, &max) == TRUE) {
-		if (min < 0 || min > 999)
+		if (min < 0 || min > CBS_MAX_TOPIC)
 			return NULL;
 
-		if (max < 0 || max > 999)
+		if (max < 0 || max > CBS_MAX_TOPIC)
 			return NULL;
 
 		if (max < min)
