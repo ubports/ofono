@@ -4546,7 +4546,7 @@ out:
 GSList *cbs_optimize_ranges(GSList *ranges)
 {
 	struct cbs_topic_range *range;
-	unsigned char bitmap[125];
+	unsigned char bitmap[CBS_MAX_TOPIC / 8 + 1];
 	GSList *l;
 	unsigned short i;
 	GSList *ret = NULL;
