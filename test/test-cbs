@@ -6,6 +6,8 @@ import sys
 from gi.repository import GLib
 import os
 
+MAX_TOPIC = 9999
+
 def print_menu():
 	print("Select test case")
 	print("----------------------------------------------------------------")
@@ -92,9 +94,9 @@ def set_topics(cbs):
 			break
 
 		if topicTemp:
-			if int(topicTemp) > 999:
+			if int(topicTemp) > MAX_TOPIC:
 				invalidData = True
-				print("Invalid Topic ID %s (range 0-999). \
+				print("Invalid Topic ID %s (range 0-{MAX_TOPIC}). \
 					\nCould not register." % topicTemp)
 
 		index = index + 1
