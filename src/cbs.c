@@ -52,6 +52,10 @@ enum etws_topic_type {
 	ETWS_TOPIC_TYPE_EMERGENCY =		4356,
 };
 
+enum cmas_topic_type {
+    CMAS_TOPIC_TYPE_PRESIDENTIAL = 4370
+};
+
 struct ofono_cbs {
 	DBusMessage *pending;
 	struct cbs_assembly *assembly;
@@ -311,6 +315,7 @@ static char *cbs_topics_to_str(struct ofono_cbs *cbs, GSList *user_topics)
 	GSList *topics = NULL;
 	char *topic_str;
 	struct cbs_topic_range etws_range = { 4352, 4356 };
+	struct cbs_topic_range cmas_mandatory_range = { CMAS_TOPIC_TYPE_PRESIDENTIAL, CMAS_TOPIC_TYPE_PRESIDENTIAL };
 
 	if (user_topics != NULL)
 		topics = g_slist_concat(topics,
@@ -321,6 +326,7 @@ static char *cbs_topics_to_str(struct ofono_cbs *cbs, GSList *user_topics)
 					g_slist_copy(cbs->efcbmid_contents));
 
 	topics = g_slist_append(topics, &etws_range);
+	topics = g_slist_append(topics, &cmas_mandatory_range);
 
 	topic_str = cbs_topic_ranges_to_string(topics);
 	g_slist_free(topics);
