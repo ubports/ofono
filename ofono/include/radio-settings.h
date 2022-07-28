@@ -34,6 +34,7 @@ enum ofono_radio_access_mode {
 	OFONO_RADIO_ACCESS_MODE_GSM	= 0x1,
 	OFONO_RADIO_ACCESS_MODE_UMTS	= 0x2,
 	OFONO_RADIO_ACCESS_MODE_LTE	= 0x4,
+	OFONO_RADIO_ACCESS_MODE_NR	= 0x8,
 };
 
 enum ofono_radio_band_gsm {

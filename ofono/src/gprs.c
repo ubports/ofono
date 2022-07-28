@@ -176,6 +176,8 @@ const char *packet_bearer_to_string(int bearer)
 		return "hspa";
 	case PACKET_BEARER_EPS:
 		return "lte";
+	case PACKET_BEARER_5GS;
+		return "nr_5g";
 	}
 	return "";
 }

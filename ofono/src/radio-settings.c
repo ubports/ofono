@@ -86,6 +86,8 @@ const char *ofono_radio_access_mode_to_string(enum ofono_radio_access_mode m)
 		return "umts";
 	case OFONO_RADIO_ACCESS_MODE_LTE:
 		return "lte";
+	case OFONO_RADIO_ACCESS_MODE_NR:
+		return "nr_5g"; 
 	default:
 		return NULL;
 	}
