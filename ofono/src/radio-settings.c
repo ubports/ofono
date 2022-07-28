@@ -65,7 +65,9 @@ struct ofono_radio_settings {
 enum ofono_radio_access_mode ofono_radio_access_max_mode(
 					enum ofono_radio_access_mode mask)
 {
-	return	(mask & OFONO_RADIO_ACCESS_MODE_LTE) ?
+	return (mask & OFONO_RADIO_ACCESS_MODE_NR) ?
+					OFONO_RADIO_ACCESS_MODE_NR :
+		(mask & OFONO_RADIO_ACCESS_MODE_LTE) ?
 					OFONO_RADIO_ACCESS_MODE_LTE :
 		(mask & OFONO_RADIO_ACCESS_MODE_UMTS) ?
 					OFONO_RADIO_ACCESS_MODE_UMTS :
@@ -111,6 +113,9 @@ ofono_bool_t ofono_radio_access_mode_from_string(const char *str,
 		return TRUE;
 	} else if (g_str_equal(str, "lte")) {
 		*mode = OFONO_RADIO_ACCESS_MODE_LTE;
+		return TRUE;
+	} else if (g_str_equal(str, "nr_5g")) {
+		*mode = OFONO_RADIO_ACCESS_MODE_NR;
 		return TRUE;
 	}
 
