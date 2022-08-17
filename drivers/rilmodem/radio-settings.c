@@ -134,22 +134,24 @@ static void set_preferred_network(struct radio_data *rd, struct cb_data *cbd,
 {
 	ofono_radio_settings_rat_mode_set_cb_t cb = cbd->cb;
 	struct parcel rilp;
-	int pref = PREF_NET_TYPE_GSM_WCDMA;
+	int pref = PREF_NET_TYPE_TD_SCDMA_LTE_CDMA_EVDO_GSM_WCDMA;
 
 	switch (mode) {
 	case OFONO_RADIO_ACCESS_MODE_ANY:
-		pref = PREF_NET_TYPE_LTE_GSM_WCDMA;
+		pref = PREF_NET_TYPE_TD_SCDMA_LTE_CDMA_EVDO_GSM_WCDMA;
 		break;
 	case OFONO_RADIO_ACCESS_MODE_GSM:
 		pref = PREF_NET_TYPE_GSM_ONLY;
 		break;
 	case OFONO_RADIO_ACCESS_MODE_UMTS:
-		pref = PREF_NET_TYPE_GSM_WCDMA;
+		pref = PREF_NET_TYPE_TD_SCDMA_GSM_WCDMA_CDMA_EVDO_AUTO;
 		break;
 	case OFONO_RADIO_ACCESS_MODE_LTE:
-		pref = PREF_NET_TYPE_LTE_GSM_WCDMA;
+		pref = PREF_NET_TYPE_TD_SCDMA_LTE_CDMA_EVDO_GSM_WCDMA;
 		break;
 	}
+
+	ofono_info("%s:%s: mode :%d, pref:%d", __FILE__, __func__, mode, pref);
 
 	rd->pending_mode = mode;
 
@@ -644,12 +646,15 @@ static void ril_rat_mode_cb(struct ril_msg *message, gpointer user_data)
 	switch (pref) {
 	case PREF_NET_TYPE_GSM_WCDMA:
 	case PREF_NET_TYPE_GSM_WCDMA_AUTO:
+	case PREF_NET_TYPE_TD_SCDMA_GSM_WCDMA_CDMA_EVDO_AUTO:
 		mode = OFONO_RADIO_ACCESS_MODE_UMTS;
 		break;
 	case PREF_NET_TYPE_GSM_ONLY:
+	case PREF_NET_TYPE_CDMA_ONLY:
 		mode = OFONO_RADIO_ACCESS_MODE_GSM;
 		break;
 	case PREF_NET_TYPE_LTE_GSM_WCDMA:
+	case PREF_NET_TYPE_TD_SCDMA_LTE_CDMA_EVDO_GSM_WCDMA:
 		mode = OFONO_RADIO_ACCESS_MODE_LTE;
 		break;
 	default:

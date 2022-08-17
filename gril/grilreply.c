@@ -1222,7 +1222,7 @@ int g_ril_reply_parse_get_preferred_network_type(GRil *gril,
 		}
 	}
 
-	if (net_type < 0 || net_type > PREF_NET_TYPE_LTE_ONLY) {
+	if (net_type < 0 || net_type > PREF_NET_TYPE_TD_SCDMA_LTE_CDMA_EVDO_GSM_WCDMA) {
 		ofono_error("%s: unknown network type", __func__);
 		goto error;
 	}
