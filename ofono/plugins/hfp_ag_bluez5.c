@@ -2,6 +2,7 @@
  *  oFono - Open Source Telephony
  *
  *  Copyright (C) 2011  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2018-2022  Jolla Ltd. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -51,6 +52,11 @@ typedef struct GAtResult GAtResult;
 #define BT_ADDR_SIZE 18
 
 #define HFP_AG_DRIVER		"hfp-ag-driver"
+
+struct watch_fd {
+    guint id;
+    int fd;
+};
 
 static gboolean hfp_ag_enabled;
 static guint service_watch_id;
@@ -145,11 +151,12 @@ static struct ofono_handsfree_card_driver hfp_ag_driver = {
 
 static void connection_destroy(gpointer data)
 {
-	int fd = GPOINTER_TO_INT(data);
+	struct watch_fd *watch = data;
 
-	DBG("fd %d", fd);
+	DBG("fd %d", watch->fd);
 
-	close(fd);
+	g_source_remove(watch->id);
+	g_free(watch);
 }
 
 static gboolean io_hup_cb(GIOChannel *io, GIOCondition cond, gpointer data)
@@ -169,7 +176,8 @@ static DBusMessage *profile_new_connection(DBusConnection *conn,
 	DBusMessageIter entry;
 	const char *device;
 	GIOChannel *io;
-	int fd, fd_dup;
+	int fd;
+	struct watch_fd *watch;
 	struct sockaddr_rc saddr;
 	socklen_t optlen;
 	struct ofono_emulator *em;
@@ -252,10 +260,12 @@ static DBusMessage *profile_new_connection(DBusConnection *conn,
 	emulator = em;
 	ofono_emulator_register(em, fd);
 
-	fd_dup = dup(fd);
-	io = g_io_channel_unix_new(fd_dup);
-	g_io_add_watch_full(io, G_PRIORITY_DEFAULT, G_IO_HUP, io_hup_cb,
-						g_strdup(device), g_free);
+	watch = g_new(struct watch_fd, 1);
+	watch->fd = dup(fd);
+	io = g_io_channel_unix_new(watch->fd);
+	g_io_channel_set_close_on_unref(io, TRUE);
+        watch->id = g_io_add_watch_full(io, G_PRIORITY_DEFAULT, G_IO_HUP,
+					io_hup_cb, g_strdup(device), g_free);
 	g_io_channel_unref(io);
 
 	card = ofono_handsfree_card_create(0,
@@ -269,8 +279,7 @@ static DBusMessage *profile_new_connection(DBusConnection *conn,
 
 	ofono_emulator_set_handsfree_card(em, card);
 
-	g_hash_table_insert(connection_hash, g_strdup(device),
-						GINT_TO_POINTER(fd_dup));
+	g_hash_table_insert(connection_hash, g_strdup(device), watch);
 
 	return dbus_message_new_method_return(msg);
 
@@ -304,7 +313,7 @@ static DBusMessage *profile_disconnection(DBusConnection *conn,
 {
 	DBusMessageIter iter;
 	const char *device;
-	gpointer fd;
+	struct watch_fd *watch;
 
 	DBG("Profile handler RequestDisconnection");
 
@@ -318,11 +327,11 @@ static DBusMessage *profile_disconnection(DBusConnection *conn,
 
 	DBG("%s", device);
 
-	fd = g_hash_table_lookup(connection_hash, device);
-	if (fd == NULL)
+	watch = g_hash_table_lookup(connection_hash, device);
+	if (watch == NULL)
 		goto invalid;
 
-	shutdown(GPOINTER_TO_INT(fd), SHUT_RDWR);
+	shutdown(watch->fd, SHUT_RDWR);
 
 	g_hash_table_remove(connection_hash, device);
 
