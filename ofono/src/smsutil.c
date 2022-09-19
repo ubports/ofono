@@ -4546,12 +4546,13 @@ out:
 GSList *cbs_optimize_ranges(GSList *ranges)
 {
 	struct cbs_topic_range *range;
-	unsigned char bitmap[CBS_MAX_TOPIC / 8 + 1];
+	int bitmap_len = CBS_MAX_TOPIC / 8 + 1;
+	unsigned char (*bitmap)[bitmap_len];
 	GSList *l;
 	unsigned short i;
 	GSList *ret = NULL;
 
-	memset(bitmap, 0, sizeof(bitmap));
+	bitmap = g_malloc0(bitmap_len);
 
 	for (l = ranges; l; l = l->next) {
 		range = l->data;
@@ -4560,7 +4561,7 @@ GSList *cbs_optimize_ranges(GSList *ranges)
 			int byte_offset = i / 8;
 			int bit = i % 8;
 
-			bitmap[byte_offset] |= 1 << bit;
+			*bitmap[byte_offset] |= 1 << bit;
 		}
 	}
 
@@ -4570,7 +4571,7 @@ GSList *cbs_optimize_ranges(GSList *ranges)
 		int byte_offset = i / 8;
 		int bit = i % 8;
 
-		if (is_bit_set(bitmap[byte_offset], bit) == FALSE) {
+		if (is_bit_set(*bitmap[byte_offset], bit) == FALSE) {
 			if (range) {
 				ret = g_slist_prepend(ret, range);
 				range = NULL;
@@ -4594,6 +4595,7 @@ GSList *cbs_optimize_ranges(GSList *ranges)
 
 	ret = g_slist_reverse(ret);
 
+	g_free(bitmap);
 	return ret;
 }
 
