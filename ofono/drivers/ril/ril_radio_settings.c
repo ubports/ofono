@@ -38,6 +38,7 @@ struct ril_radio_settings {
 	guint source_id;
 	ofono_bool_t fast_dormancy;
 	GRilIoQueue *q;
+	int ril_version;
 };
 
 struct ril_radio_settings_cbd {
@@ -122,12 +123,21 @@ static void ril_radio_settings_set_fast_dormancy(struct ofono_radio_settings *rs
 	DBG_(rsd, "set fast dormancy %s",  enable ? "on" : "off");
 	GRilIoRequest *req = grilio_request_sized_new(12); /* 4 + 2x4 bytes size */
 
-	grilio_request_append_int32(req, 2); /* Number of params */
-	grilio_request_append_int32(req, RIL_DST_POWER_SAVE_MODE); /* Param 1: Kind of device state */
-	grilio_request_append_int32(req, enable); /* Param 2: enable/disable */
+	if (rsd->ril_version >= 15) {
+		grilio_request_append_int32(req, 2); /* Number of params */
+		grilio_request_append_int32(req, RIL_DST_POWER_SAVE_MODE); /* Param 1: Kind of device state */
+		grilio_request_append_int32(req, enable); /* Param 2: enable/disable */
+		ril_radio_settings_submit_req(rsd, req, RIL_REQUEST_SEND_DEVICE_STATE,
+						ril_radio_settings_set_cb, cb, data);
+	} else {
+		grilio_request_append_int32(req, 1); /* Number of params */
+		grilio_request_append_int32(req, enable); /* Param 2: enable/disable */
+		ril_radio_settings_submit_req(rsd, req, RIL_REQUEST_SCREEN_STATE,
+						ril_radio_settings_set_cb, cb, data);
 
-	ril_radio_settings_submit_req(rsd, req, RIL_REQUEST_SEND_DEVICE_STATE,
-					ril_radio_settings_set_cb, cb, data);
+	}
+
+
 	grilio_request_unref(req);
 
 }
@@ -243,7 +253,9 @@ static int ril_radio_settings_probe(struct ofono_radio_settings *rs,
 	struct ril_radio_settings *rsd = g_new0(struct ril_radio_settings, 1);
 
 	DBG("%s", modem->log_prefix);
-	rsd->q = grilio_queue_new(ril_modem_io(modem));
+	auto ioChannel = ril_modem_io(modem);
+	rsd->ril_version = ioChannel->ril_version;
+	rsd->q = grilio_queue_new(ioChannel);
 	rsd->rs = rs;
 	rsd->settings = ril_sim_settings_ref(modem->sim_settings);
 	rsd->source_id = g_idle_add(ril_radio_settings_register, rsd);
