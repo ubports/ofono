@@ -37,7 +37,6 @@
 #include "smsutil.h"
 #include "simutil.h"
 #include "storage.h"
-#include "smsutil.h"
 
 #define SETTINGS_STORE "cbs"
 #define SETTINGS_GROUP "Settings"
