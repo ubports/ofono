@@ -1589,7 +1589,7 @@ static void test_cbs_padding_character(void)
 static const char *ranges[] = { "1-5, 2, 3, 600, 569-900, 999",
 				"0-20, 33, 44, 50-60, 20-50, 1-5, 5, 3, 5",
 				NULL };
-static const char *inv_ranges[] = { "1-5, 3333", "1-5, afbcd", "1-5, 3-5,,",
+static const char *inv_ranges[] = { "1-5, 33333", "1-5, afbcd", "1-5, 3-5,,",
 					"1-5, 3-5, c", NULL };
 
 static void test_range_minimizer(void)

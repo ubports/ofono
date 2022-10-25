@@ -4545,12 +4545,10 @@ out:
 GSList *cbs_optimize_ranges(GSList *ranges)
 {
 	struct cbs_topic_range *range;
-	unsigned char bitmap[125];
+	unsigned char *bitmap = g_malloc0(CBS_MAX_TOPIC / 8 + 1);
 	GSList *l;
 	unsigned short i;
 	GSList *ret = NULL;
-
-	memset(bitmap, 0, sizeof(bitmap));
 
 	for (l = ranges; l; l = l->next) {
 		range = l->data;
@@ -4565,7 +4563,7 @@ GSList *cbs_optimize_ranges(GSList *ranges)
 
 	range = NULL;
 
-	for (i = 0; i <= 999; i++) {
+	for (i = 0; i <= CBS_MAX_TOPIC; i++) {
 		int byte_offset = i / 8;
 		int bit = i % 8;
 
@@ -4593,6 +4591,7 @@ GSList *cbs_optimize_ranges(GSList *ranges)
 
 	ret = g_slist_reverse(ret);
 
+	g_free(bitmap);
 	return ret;
 }
 
@@ -4605,10 +4604,10 @@ GSList *cbs_extract_topic_ranges(const char *ranges)
 	GSList *tmp;
 
 	while (next_range(ranges, &offset, &min, &max) == TRUE) {
-		if (min < 0 || min > 999)
+		if (min < 0 || min > CBS_MAX_TOPIC)
 			return NULL;
 
-		if (max < 0 || max > 999)
+		if (max < 0 || max > CBS_MAX_TOPIC)
 			return NULL;
 
 		if (max < min)
