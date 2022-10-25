@@ -92,9 +92,9 @@ def set_topics(cbs):
 			break
 
 		if topicTemp:
-			if int(topicTemp) > 999:
+			if int(topicTemp) > 9999:
 				invalidData = True
-				print("Invalid Topic ID %s (range 0-999). \
+				print("Invalid Topic ID %s (range 0-9999). \
 					\nCould not register." % topicTemp)
 
 		index = index + 1

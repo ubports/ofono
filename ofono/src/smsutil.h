@@ -23,6 +23,7 @@
 #include <ofono/types.h>
 
 #define CBS_MAX_GSM_CHARS 93
+#define CBS_MAX_TOPIC 9999
 #define SMS_MSGID_LEN 20
 
 enum sms_type {
