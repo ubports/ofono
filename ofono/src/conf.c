@@ -1,7 +1,7 @@
 /*
  *  oFono - Open Source Telephony
  *
- *  Copyright (C) 2015-2021 Jolla Ltd.
+ *  Copyright (C) 2015-2022 Jolla Ltd.
  *  Copyright (C) 2019 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -243,6 +243,7 @@ static void conf_merge_group(GKeyFile *conf, GKeyFile *k, const char *group)
 						group, key, &count, NULL);
 
 				key[len-1] = 0;
+				g_strchomp(key); /* Strip spaces before + */
 				conf_list_append(conf, k, group, key,
 						values, count, last == '?');
 				g_strfreev(values);
@@ -252,6 +253,7 @@ static void conf_merge_group(GKeyFile *conf, GKeyFile *k, const char *group)
 						group, key, &count, NULL);
 
 				key[len-1] = 0;
+				g_strchomp(key); /* Strip spaces before - */
 				conf_list_remove(conf, k, group, key,
 							values, count);
 				g_strfreev(values);
@@ -531,13 +533,16 @@ gboolean ofono_conf_get_mask(GKeyFile *file, const char *group,
 		char **values, **ptr;
 
 		if (comment) *comment = 0;
-		values = g_strsplit(str, "+", -1);
+		values = g_strsplit_set(str, "+,", -1);
 
 		for (ok = TRUE, ptr = values; *ptr && ok; ptr++) {
 			const char* found_str = NULL;
 			const char* s = g_strstrip(*ptr);
 
-			if (!strcasecmp(s, name)) {
+			if (!s[0]) {
+				/* Ignore empty entries */
+				continue;
+			} else if (!strcasecmp(s, name)) {
 				found_str = name;
 				if (result) {
 					*result |= value;
