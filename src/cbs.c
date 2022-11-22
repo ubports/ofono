@@ -37,7 +37,6 @@
 #include "smsutil.h"
 #include "simutil.h"
 #include "storage.h"
-#include "cbs.h"
 
 #define SETTINGS_STORE "cbs"
 #define SETTINGS_GROUP "Settings"
@@ -778,7 +777,7 @@ static void sim_cbmi_read_cb(int ok, int length, int record,
 
 		mi = (data[i] << 8) + data[i+1];
 
-		if (mi > CBS_MAX_TOPIC)
+		if (mi > 999)
 			continue;
 
 		range = g_new0(struct cbs_topic_range, 1);
@@ -825,7 +824,7 @@ static void sim_cbmir_read_cb(int ok, int length, int record,
 		min = (data[i] << 8) + data[i+1];
 		max = (data[i+2] << 8) + data[i+3];
 
-		if (min > CBS_MAX_TOPIC || max > CBS_MAX_TOPIC || min > max)
+		if (min > 999 || max > 999 || min > max)
 			continue;
 
 		range = g_new0(struct cbs_topic_range, 1);

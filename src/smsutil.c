@@ -37,7 +37,6 @@
 #include "util.h"
 #include "storage.h"
 #include "smsutil.h"
-#include "cbs.h"
 
 #define uninitialized_var(x) x = x
 
@@ -4535,7 +4534,7 @@ out:
 GSList *cbs_optimize_ranges(GSList *ranges)
 {
 	struct cbs_topic_range *range;
-	unsigned char bitmap[CBS_MAX_TOPIC / 8 + 1];
+	unsigned char bitmap[125];
 	GSList *l;
 	unsigned short i;
 	GSList *ret = NULL;
@@ -4555,7 +4554,7 @@ GSList *cbs_optimize_ranges(GSList *ranges)
 
 	range = NULL;
 
-	for (i = 0; i <= CBS_MAX_TOPIC; i++) {
+	for (i = 0; i <= 999; i++) {
 		int byte_offset = i / 8;
 		int bit = i % 8;
 
@@ -4595,10 +4594,10 @@ GSList *cbs_extract_topic_ranges(const char *ranges)
 	GSList *tmp;
 
 	while (next_range(ranges, &offset, &min, &max) == TRUE) {
-		if (min < 0 || min > CBS_MAX_TOPIC)
+		if (min < 0 || min > 999)
 			return NULL;
 
-		if (max < 0 || max > CBS_MAX_TOPIC)
+		if (max < 0 || max > 999)
 			return NULL;
 
 		if (max < min)
